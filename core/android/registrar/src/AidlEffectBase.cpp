@@ -320,6 +320,11 @@ void AidlEffectBase::processOnce() {
     if (!mEfGroup || ::android::OK != mEfGroup->wait(kEventFlagDataMqNotEmpty, &efState,
                                                      kEfWaitTimeoutNs, true /* retry */) ||
         !(efState & kEventFlagDataMqNotEmpty)) {
+        static std::atomic<int> waitMiss{0};
+        if (mState == State::PROCESSING && ++waitMiss % 100 == 1) {
+            ALOGW("%s dataPlane: wait miss (flag not set) state=%d", mName.c_str(),
+                  static_cast<int>(mState));
+        }
         return;
     }
     if (mExit) return;
@@ -330,7 +335,14 @@ void AidlEffectBase::processOnce() {
 
     const int ch = channelCount(mCommon.input.base.channelMask);
     const int safeCh = ch > 0 ? ch : 1;
-    const size_t samples = std::min(mInputMQ->availableToRead(), mOutputMQ->availableToWrite());
+    const size_t inAvail = mInputMQ->availableToRead();
+    const size_t outAvailW = mOutputMQ->availableToWrite();
+    const size_t samples = std::min(inAvail, outAvailW);
+    static std::atomic<int> dbgCount{0};
+    const bool dbg = ++dbgCount % 200 == 1;  // throttled data-plane trace
+    if (dbg) {
+        ALOGW("%s dataPlane: in=%zu outW=%zu", mName.c_str(), inAvail, outAvailW);
+    }
     if (samples == 0) return;
 
     const size_t n = mInputMQ->read(mWorkBuffer.data(), samples);
@@ -346,7 +358,13 @@ void AidlEffectBase::processOnce() {
     /* Bounded: a full status MQ (framework stopped consuming) must never hold
      * mMutex forever — that was the close()-deadlock that rebooted the phone. */
     if (!mStatusMQ->writeBlocking(&status, 1, kStatusWriteTimeoutNs)) {
-        ALOGW("%s: status MQ write timeout (framework not consuming)", mName.c_str());
+        static std::atomic<int> stDrop{0};
+        if (++stDrop % 20 == 1)
+            ALOGW("%s dataPlane: status write TIMEOUT (framework not consuming)",
+                  mName.c_str());
+    } else if (dbg) {
+        ALOGW("%s dataPlane: wrote status consumed=%zu produced=%zu", mName.c_str(), n,
+              produced);
     }
 }
 
