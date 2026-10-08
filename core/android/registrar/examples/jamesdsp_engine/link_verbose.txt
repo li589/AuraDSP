@@ -1,0 +1,6 @@
+Android (14475230, based on r574158) clang version 21.0.0 (https://android.googlesource.com/toolchain/llvm-project 9f872551d3c681d06fd303b36f16ed5c274735eb)
+Target: aarch64-unknown-linux-android34
+Thread model: posix
+InstalledDir: D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/bin
+Found CUDA installation: C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.4, version 12.4
+clang++: error: no such file or directory: 'D:/temp_desktop/Proj/JamesDSP/core/android/registrar/examples/jamesdsp_engine/out/obj_cpp/*.o'

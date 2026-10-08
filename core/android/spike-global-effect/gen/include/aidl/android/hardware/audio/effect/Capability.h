@@ -1,0 +1,77 @@
+/*
+ * This file is auto-generated.  DO NOT MODIFY.
+ * Using: D:\\myPrograms\\AndroidDevelop\\Android-SDK\\build-tools\\37.0.0\\aidl.exe --lang=ndk --structured --stability=vintf --version 3 --min_sdk_version=34 -o D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\gen\\gen-src -h D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\gen\\include -ID:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl -ID:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\common\\aidl -ID:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\common\\fmq\\aidl -ID:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\platform_system_hardware_interfaces\\media\\aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\AcousticEchoCanceler.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\AutomaticGainControlV1.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\AutomaticGainControlV2.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\BassBoost.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Capability.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\CommandId.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\DefaultExtension.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Descriptor.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Downmix.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\DynamicsProcessing.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\EnvironmentalReverb.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Equalizer.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Eraser.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Flags.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\HapticGenerator.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\IEffect.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\IFactory.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\LoudnessEnhancer.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\NoiseSuppression.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Parameter.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\PresetReverb.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Processing.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Range.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Spatializer.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\State.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\VendorExtension.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Virtualizer.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Visualizer.aidl D:\\temp_desktop\\Proj\\JamesDSP\\core\\android\\spike-global-effect\\aidl-src\\android_hardware_interfaces\\audio\\aidl\\android\\hardware\\audio\\effect\\Volume.aidl
+ *
+ * DO NOT CHECK THIS FILE INTO A CODE TREE (e.g. git, etc..).
+ * ALWAYS GENERATE THIS FILE FROM UPDATED AIDL COMPILER
+ * AS A BUILD INTERMEDIATE ONLY. THIS IS NOT SOURCE CODE.
+ */
+#pragma once
+
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+#include <android/binder_interface_utils.h>
+#include <android/binder_parcelable_utils.h>
+#include <android/binder_to_string.h>
+#include <aidl/android/hardware/audio/effect/Range.h>
+#include <aidl/android/hardware/audio/effect/VendorExtension.h>
+#ifdef BINDER_STABILITY_SUPPORT
+#include <android/binder_stability.h>
+#endif  // BINDER_STABILITY_SUPPORT
+
+namespace aidl::android::hardware::audio::effect {
+class VendorExtension;
+}  // namespace aidl::android::hardware::audio::effect
+namespace aidl {
+namespace android {
+namespace hardware {
+namespace audio {
+namespace effect {
+class Capability {
+public:
+  typedef std::false_type fixed_size;
+  static const char* descriptor;
+
+  ::aidl::android::hardware::audio::effect::VendorExtension vendorExtension;
+  ::aidl::android::hardware::audio::effect::Range range;
+
+  binder_status_t readFromParcel(const AParcel* parcel);
+  binder_status_t writeToParcel(AParcel* parcel) const;
+
+  inline bool operator==(const Capability& _rhs) const {
+    return std::tie(vendorExtension, range) == std::tie(_rhs.vendorExtension, _rhs.range);
+  }
+  inline bool operator<(const Capability& _rhs) const {
+    return std::tie(vendorExtension, range) < std::tie(_rhs.vendorExtension, _rhs.range);
+  }
+  inline bool operator!=(const Capability& _rhs) const {
+    return !(*this == _rhs);
+  }
+  inline bool operator>(const Capability& _rhs) const {
+    return _rhs < *this;
+  }
+  inline bool operator>=(const Capability& _rhs) const {
+    return !(*this < _rhs);
+  }
+  inline bool operator<=(const Capability& _rhs) const {
+    return !(_rhs < *this);
+  }
+
+  static const ::ndk::parcelable_stability_t _aidl_stability = ::ndk::STABILITY_VINTF;
+  inline std::string toString() const {
+    std::ostringstream _aidl_os;
+    _aidl_os << "Capability{";
+    _aidl_os << "vendorExtension: " << ::android::internal::ToString(vendorExtension);
+    _aidl_os << ", range: " << ::android::internal::ToString(range);
+    _aidl_os << "}";
+    return _aidl_os.str();
+  }
+};
+}  // namespace effect
+}  // namespace audio
+}  // namespace hardware
+}  // namespace android
+}  // namespace aidl

@@ -1,0 +1,46 @@
+== effect config files ==
+* daemon not running; starting now at tcp:5037
+* daemon started successfully
+----
+-rw-r--r--  1 root root    7544 2026-06-15 21:46 audio_effects.xml
+----
+-rw-r--r--  1 root root    6307 2026-06-15 23:07 audio_effects_config.xml
+== soundfx dirs ==
+libaudiopreprocessing.so
+libbundleaidl.so
+libbundlewrapper.so
+libdownmix.so
+libdownmixaidl.so
+libdynamicsprocessingaidl.so
+libdynproc.so
+libeffectproxy.so
+libhapticgenerator.so
+libldnhncr.so
+libloudnessenhanceraidl.so
+libqcompostprocbundle.so
+libqcomvisualizer.so
+libqcomvoiceprocessing.so
+libquasar.so
+libreverbaidl.so
+libreverbwrapper.so
+libvisualizer.so
+libvisualizeraidl.so
+libvolumelistener.so
+----
+----
+libaudiopreprocessing.so
+libbundleaidl.so
+libbundlewrapper.so
+libdownmix.so
+libdownmixaidl.so
+libdynamicsprocessingaidl.so
+libdynproc.so
+libeffectproxy.so
+libhapticgenerator.so
+libldnhncr.so
+libloudnessenhanceraidl.so
+libreverbaidl.so
+libreverbwrapper.so
+libvisualizer.so
+libvisualizeraidl.so
+== audio_effects.xml (vendor) ==

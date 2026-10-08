@@ -1,0 +1,212 @@
+== true identity (oplus) ==
+
+V16.1.0
+google/cheetah/cheetah:16/CP1A.260405.005/15001963:user/release-keys
+SM8845
+== audio HAL services (ps) ==
+media          586     1    2184348   4360 do_sys_poll         0 S audioadsprpcd
+audioserver   3352     1    4138776  15268 binder_thread_read  0 S audiohalservice.qti
+mediacodec    3438     1    2635812   5532 binder_thread_read  0 S media.audio.qc.codec
+audioserver   3671     1    3550124  19864 binder_thread_read  0 S audioserver
+== audio props ==
+[aaudio.hw_burst_min_usec]: [2000]
+[aaudio.mmap_exclusive_policy]: [2]
+[aaudio.mmap_policy]: [2]
+[audio.deep_buffer.media]: [true]
+[audio.offload.min.duration.secs]: [30]
+[audio.offload.video]: [true]
+[audio.spatializer.pose_predictor_type]: [1]
+[audio.sys.mute.latency.factor]: [2]
+[audio.sys.noisy.broadcast.delay]: [500]
+[audio.sys.offload.pstimeout.secs]: [3]
+[audio.sys.routing.latency]: [0]
+[audio.timecheck.timeout_duration_ms]: [8000]
+[bluetooth.core.le_audio.codec_extension_aidl.enabled]: [true]
+[bluetooth.leaudio.dual_bidirection_swb.supported]: [true]
+[init.svc.audioserver]: [running]
+[init.svc.vendor-qti-media-c2audio-hal-1-0]: [running]
+[init.svc.vendor.audio-hal-aidl]: [running]
+[init.svc.vendor.audioadsprpcd_audiopd]: [running]
+[init.svc_debug_pid.audioserver]: [3671]
+[init.svc_debug_pid.vendor-qti-media-c2audio-hal-1-0]: [3438]
+[init.svc_debug_pid.vendor.audio-hal-aidl]: [3352]
+[init.svc_debug_pid.vendor.audioadsprpcd_audiopd]: [586]
+[log.tag.APM_AudioPolicyManager]: [D]
+[log.tag.AudioBoost]: [D]
+[log.tag.AudioFlinger]: [D]
+[log.tag.AudioPolicyManagerExtImpl]: [D]
+[log.tag.AudioRecord]: [D]
+[log.tag.AudioTrack]: [D]
+[log.tag.GameAudioEffects]: [D]
+[media.stagefright.audio.deep]: [false]
+[persist.bluetooth.leaudio.bypass_allow_list]: [true]
+[persist.bluetooth.leaudio.notify.idle.during.call]: [true]
+[persist.bluetooth.leaudio_offload.disabled]: [false]
+[persist.bluetooth.maxconnectedaudiodevices]: []
+[persist.bluetooth.smart_audio.delay_report_ext]: [true]
+[persist.bluetooth.smart_audio.feature_mask]: [0x0FDA]
+[persist.bluetooth.spatial_audio_support]: [true]
+[persist.logd.log.load.audiohalservice.qti.lower_limit]: [300]
+[persist.logd.log.load.audiohalservice.qti.threshold]: [50000]
+[persist.logd.log.load.audiohalservice.qti.upper_limit]: [1000]
+[persist.oplus.audio.spllimit.support]: [true]
+[persist.oplus.software.audio.right_volume_key]: [true]
+[persist.sys.audio_detection_type]: [511]
+[persist.sys.oplus.bt.le_audio]: [true]
+[persist.sys.oplus.bt.le_audio_over_spp]: [true]
+[persist.sys.oplus.bt.le_audio_white_list_enable]: [true]
+[persist.vendor.audio.spf_restart]: [true]
+[persist.vendor.bluetooth.leaudio_mode]: [ums-cg]
+[ro.audio.asyncdump.support]: [1]
+[ro.audio.flinger_standbytime_ms]: [1000]
+[ro.audio.ihaladaptervendorextension_enabled]: [true]
+[ro.audio.monitorRotation]: [1]
+[ro.audio.spatializer_enabled]: [true]
+[ro.audio.spatializer_type]: [oplus]
+[ro.audio.usecase_validator_enabled]: [true]
+[ro.bluetooth.leaudio_offload.supported]: [true]
+[ro.boot.vendor.qspa.audio]: [enabled]
+[ro.boottime.audioserver]: [10599660203]
+[ro.boottime.vendor-qti-media-c2audio-hal-1-0]: [10461180723]
+[ro.boottime.vendor.audio-hal-aidl]: [10412808119]
+[ro.boottime.vendor.audioadsprpcd_audiopd]: [1597724894]
+[ro.oplus.audio.aidl_volume]: [true]
+[ro.oplus.audio.detection.support]: [1]
+[ro.oplus.audio.effect.speaker_geq]: [true]
+[ro.oplus.audio.effect.type]: [audiox_merge]
+[ro.oplus.audio.game_low_latency]: [true]
+[ro.oplus.audio.holo_audio_version]: [2.0]
+[ro.oplus.audio.odm.para]: [Macan_20260401_V15]
+[ro.oplus.audio.pop_noise_optimized]: [true]
+[ro.oplus.audio.product.para]: [Macan_20250822_V01]
+[ro.oplus.audio.ring_output_setting_support]: [true]
+[ro.oplus.audio.ringermodeinfo.feedback.support]: [1]
+[ro.oplus.audio.speaker_clean]: [true]
+[ro.oplus.audio.support.LHDC_RING]: [true]
+[ro.oplus.audio.support.a2dp_lea_delay_optimize]: [true]
+[ro.oplus.audio.support.audio_sharing]: [true]
+[ro.oplus.audio.support.low_latency_game_effect]: [true]
+[ro.oplus.audio.support.low_latency_game_effect.show_ui]: [true]
+[ro.oplus.audio.support.meta_audio]: [1]
+[ro.oplus.audio.support.meta_audio_soundbed]: [1]
+[ro.oplus.audio.support.meta_audio_voip]: [1]
+[ro.oplus.audio.support.mss]: [1]
+[ro.oplus.audio.support.ocar]: [1]
+[ro.oplus.audio.support.reverse_in_hal]: [1]
+[ro.oplus.audio.support.stepless_volume]: [true]
+[ro.oplus.audio.thermal_control]: [1]
+[ro.oplus.audio.third_party_playback_capture]: [1]
+[ro.oplus.audio.voip_record_white_app_support]: [true]
+[sys.oplus.audio.systemready]: [1]
+[tunnel.audio.encode]: [true]
+[vendor.audio.adm.buffering.ms]: [3]
+[vendor.audio.c2.preferred]: [true]
+[vendor.audio.compress_capture.aac]: [true]
+[vendor.audio.compress_capture.enabled]: [true]
+[vendor.audio.daemon.agm]: [1]
+[vendor.audio.feature.a2dp_offload.enable]: [true]
+[vendor.audio.feature.battery_listener.enable]: [true]
+[vendor.audio.feature.dmabuf.cma.memory.enable]: [false]
+[vendor.audio.feature.hfp.enable]: [true]
+[vendor.audio.feature.kpi_optimize.enable]: [true]
+[vendor.audio.flac.sw.decoder.24bit]: [true]
+[vendor.audio.hal.aidl.enabled]: [true]
+[vendor.audio.hal.output.suspend.supported]: [true]
+[vendor.audio.hal.stubmode]: [4]
+[vendor.audio.hdr.record.enable]: [false]
+[vendor.audio.hdr.spf.record.enable]: [false]
+[vendor.audio.hw.aac.encoder]: [false]
+[vendor.audio.offload.buffer.size.kb]: [32]
+[vendor.audio.offload.multiple.enabled]: [false]
+[vendor.audio.offload.track.enable]: [true]
+[vendor.audio.speaker.pm]: [1]
+[vendor.audio.ull_record_period_multiplier]: [2]
+[vendor.audio.use.sw.alac.decoder]: [true]
+[vendor.audio.use.sw.ape.decoder]: [true]
+[vendor.audio.use.sw.mpegh.decoder]: [true]
+[vendor.audio.volume.headset.gain.depcal]: [true]
+[vendor.audio_hal.period_size]: [192]
+[vendor.audio_hal.timecheck_timeoutMS]: [8000]
+[vendor.qc2audio.per_frame.flac.dec.enabled]: [true]
+[vendor.qc2audio.suspend.enabled]: [true]
+== apex audio ==
+apex-info-list.xml
+com.android.adbd
+com.android.adbd@360499999
+com.android.adservices
+com.android.adservices@360499999
+com.android.apex.cts.shim
+com.android.apex.cts.shim@1
+com.android.appsearch
+com.android.appsearch@360499999
+com.android.art
+com.android.art@360499999
+com.android.cellbroadcast
+com.android.cellbroadcast@360499999
+com.android.compos
+com.android.compos@3
+com.android.configinfrastructure
+com.android.configinfrastructure@360499999
+com.android.conscrypt
+com.android.conscrypt@360499999
+com.android.crashrecovery
+com.android.crashrecovery@360499999
+com.android.devicelock
+com.android.devicelock@1
+com.android.extservices
+com.android.extservices@360499999
+com.android.hardware.cas
+com.android.hardware.cas@1
+com.android.healthfitness
+com.android.healthfitness@360499999
+com.android.i18n
+com.android.i18n@1
+com.android.ipsec
+com.android.ipsec@360499999
+com.android.media
+com.android.media.swcodec
+com.android.media.swcodec@360499999
+com.android.media@360499999
+com.android.mediaprovider
+com.android.mediaprovider@360499999
+com.android.neuralnetworks
+com.android.neuralnetworks@360499999
+com.android.ondevicepersonalization
+com.android.ondevicepersonalization@360499999
+com.android.os.statsd
+com.android.os.statsd@360499999
+com.android.permission
+com.android.permission@360499999
+com.android.profiling
+com.android.profiling@360499999
+com.android.resolv
+com.android.resolv@360499999
+com.android.rkpd
+com.android.rkpd@360499999
+com.android.runtime
+com.android.runtime@1
+com.android.scheduling
+com.android.scheduling@360499999
+com.android.sdkext
+com.android.sdkext@360499999
+com.android.tethering
+com.android.tethering@360499999
+com.android.tzdata
+com.android.tzdata@360499999
+com.android.uprobestats
+com.android.uprobestats@360499999
+com.android.uwb
+com.android.uwb@360499999
+com.android.virt
+com.android.virt@3
+com.android.wifi
+com.android.wifi@360499999
+com.google.android.widevine
+com.google.android.widevine@190250226
+sharedlibs
+vendor.oplus.hardware.engineer.aidl
+vendor.oplus.hardware.engineer.aidl@1
+vendor.oplus.hardware.stability.aidl
+vendor.oplus.hardware.stability.aidl@1
+== getenforce ==
+Enforcing

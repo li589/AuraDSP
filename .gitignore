@@ -1,0 +1,24 @@
+# --- 第三方源码克隆区（各自是独立 git 仓库，不入主库） ---
+source/
+
+# --- 本机环境 ---
+venv/
+.workbuddy/
+.codegraph/
+
+# --- 构建产物 ---
+**/out/
+*.o
+*.so
+*.a
+obj/
+build_log*.txt
+xtrace.txt
+c_sources.txt
+cpp_sources.txt
+
+# --- 编辑器/系统 ---
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
