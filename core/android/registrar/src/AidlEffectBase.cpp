@@ -13,6 +13,15 @@
 
 /* Constants aligned with system/audio_effects/aidl_effects_utils.h */
 static constexpr uint32_t kEventFlagDataMqNotEmpty = 0x1 << 11;
+/* Worker EventFlag wait timeout: bounds how long a worker can stay stuck in
+ * wait() after mExit is set. AOSP relies on wake() alone; we add a timeout
+ * as belt-and-braces (crash postmortem 2026-10-08: close() joined a worker
+ * blocked in no-timeout wait -> audioserver TimeCheck timeout -> reboot). */
+static constexpr int64_t kEfWaitTimeoutNs = 100'000'000;   // 100ms
+/* Status MQ depth is 1; if the framework stops consuming status while audio
+ * still flows, an unbounded writeBlocking would hold mMutex forever and
+ * deadlock close(). Bound it and treat failure as best-effort. */
+static constexpr int64_t kStatusWriteTimeoutNs = 50'000'000;  // 50ms
 
 namespace jamesdsp::registrar {
 
@@ -22,16 +31,20 @@ AidlEffectBase::AidlEffectBase(const Descriptor& desc, std::shared_ptr<IAudioEng
       mEngine(std::move(engine)) {}
 
 AidlEffectBase::~AidlEffectBase() {
-    std::lock_guard lg(mMutex);
-    if (mState != State::INIT) {
+    /* Same ordering as close(): wake flags/worker first, join without
+     * holding mMutex, then clean up. */
+    {
+        std::lock_guard tl(mThreadMutex);
         mStop = true;
         mExit = true;
-        mCv.notify_all();
-        if (mThread.joinable()) mThread.join();
-        if (mEfGroup) {
-            EventFlag::deleteEventFlag(&mEfGroup);
-            mEfGroup = nullptr;
-        }
+    }
+    mCv.notify_all();
+    if (mEfGroup) mEfGroup->wake(kEventFlagDataMqNotEmpty);
+    if (mThread.joinable()) mThread.join();
+    std::lock_guard lg(mMutex);
+    if (mEfGroup) {
+        EventFlag::deleteEventFlag(&mEfGroup);
+        mEfGroup = nullptr;
     }
 }
 
@@ -117,14 +130,29 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
 }
 
 ::ndk::ScopedAStatus AidlEffectBase::close() {
-    std::lock_guard lg(mMutex);
-    if (mState == State::INIT) {
-        return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+    /* AOSP EffectImpl::close pattern (audio/aidl/default/EffectImpl.cpp):
+     * 1. take mutex ONLY to flip state -> worker stops entering process;
+     * 2. wake the EventFlag so a worker blocked in wait() can observe exit;
+     * 3. set stop/exit + join WITHOUT holding mMutex (the worker takes
+     *    mMutex inside processOnce — holding it here deadlocks, which is
+     *    exactly the audioserver TimeCheck-reboot crash of 2026-10-08);
+     * 4. retake mutex to release resources. */
+    {
+        std::lock_guard lg(mMutex);
+        if (mState == State::INIT) {
+            return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_STATE);
+        }
+        mState = State::INIT;
     }
-    mStop = true;
-    mExit = true;
+    if (mEfGroup) mEfGroup->wake(kEventFlagDataMqNotEmpty);
+    {
+        std::lock_guard tl(mThreadMutex);
+        mStop = true;
+        mExit = true;
+    }
     mCv.notify_all();
     if (mThread.joinable()) mThread.join();
+    std::lock_guard lg(mMutex);
     if (mEfGroup) {
         EventFlag::deleteEventFlag(&mEfGroup);
         mEfGroup = nullptr;
@@ -133,7 +161,6 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
     mStatusMQ.reset();
     mInputMQ.reset();
     mOutputMQ.reset();
-    mState = State::INIT;
     ALOGI("%s close: OK", mName.c_str());
     return ::ndk::ScopedAStatus::ok();
 }
@@ -155,6 +182,7 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
                     mStop = false;
                 }
                 mCv.notify_all();
+                if (mEfGroup) mEfGroup->wake(kEventFlagDataMqNotEmpty);  // AOSP: notifyEventFlag
                 mState = State::PROCESSING;
             }
             break;
@@ -162,6 +190,7 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
             if (mState == State::PROCESSING || mState == State::DRAINING) {
                 mStop = true;
                 mState = State::IDLE;
+                if (mEfGroup) mEfGroup->wake(kEventFlagDataMqNotEmpty);  // unstick wait()
             }
             break;
         case CommandId::RESET:
@@ -170,6 +199,7 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
                 if (mInputMQ) mInputMQ->read(mWorkBuffer.data(), mInputMQ->availableToRead());
                 if (mOutputMQ) mOutputMQ->read(mWorkBuffer.data(), mOutputMQ->availableToRead());
                 if (mState == State::PROCESSING) mState = State::IDLE;
+                if (mEfGroup) mEfGroup->wake(kEventFlagDataMqNotEmpty);
             }
             break;
         default:
@@ -285,11 +315,14 @@ void AidlEffectBase::threadLoop() {
 
 void AidlEffectBase::processOnce() {
     uint32_t efState = 0;
+    /* Bounded wait (AOSP uses no-timeout + explicit wake; we add a timeout so
+     * mExit is always observed within one cycle regardless of wake ordering). */
     if (!mEfGroup || ::android::OK != mEfGroup->wait(kEventFlagDataMqNotEmpty, &efState,
-                                                     0 /* no timeout */, true /* retry */) ||
+                                                     kEfWaitTimeoutNs, true /* retry */) ||
         !(efState & kEventFlagDataMqNotEmpty)) {
         return;
     }
+    if (mExit) return;
 
     std::lock_guard lg(mMutex);
     if (mState != State::PROCESSING && mState != State::DRAINING) return;
@@ -310,7 +343,11 @@ void AidlEffectBase::processOnce() {
     status.status = 0;  // STATUS_OK
     status.fmqConsumed = static_cast<int32_t>(n);
     status.fmqProduced = static_cast<int32_t>(produced);
-    mStatusMQ->writeBlocking(&status, 1);
+    /* Bounded: a full status MQ (framework stopped consuming) must never hold
+     * mMutex forever — that was the close()-deadlock that rebooted the phone. */
+    if (!mStatusMQ->writeBlocking(&status, 1, kStatusWriteTimeoutNs)) {
+        ALOGW("%s: status MQ write timeout (framework not consuming)", mName.c_str());
+    }
 }
 
 }  // namespace jamesdsp::registrar
