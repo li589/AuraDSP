@@ -30,6 +30,27 @@ class GuardRejection {
   GuardRejection(this.paramId, this.message, this.rc);
 }
 
+/// 集中式出厂默认值真相源（与 C++ 引擎 auradsp_create 初始状态严格对齐）
+abstract class ParamDefaults {
+  static const double bassGain = 0.0;        // [0, 15] dB
+  static const double stereoMix = 0.0;       // [0, 1] (0% ~ 100%)
+  static const double convMix = 1.0;         // [0, 1] (100% 纯湿)
+  static const double postGain = 0.0;        // [-15, 15] dB
+
+  // Freeverb 空间混响
+  static const double fvDecay = 0.5;         // 50%
+  static const double fvDamp = 0.5;          // 50%
+  static const double fvWet = 0.3;           // 30%
+  static const double fvDry = 1.0;           // 100%
+
+  // 低频搁架 (Shelf)
+  static const double shelfFreq = 100.0;     // 100 Hz
+  static const double shelfGain = 0.0;       // 0.0 dB
+
+  // 声场分带
+  static const double stereoBand = 0.5;      // 50%
+}
+
 class AppModel extends ChangeNotifier {
   /// 声场展宽的引擎侧安全上限。
   /// libjamesdsp 的展宽在 mix=1.0 时执行 `band - centre`（中置完全剥离），
@@ -52,7 +73,9 @@ class AppModel extends ChangeNotifier {
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
   bool bassOn = false, eqOn = false, limiterOn = true;
-  double bassGain = 0, stereoMix = 0.5, postGain = 0;
+  double bassGain = ParamDefaults.bassGain,
+      stereoMix = ParamDefaults.stereoMix,
+      postGain = ParamDefaults.postGain;
   int reverbPreset = -1;
   int channelsMode = 0;
 
@@ -332,6 +355,17 @@ class AppModel extends ChangeNotifier {
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }
+  }
+
+  /// 双击主滑块时重置声场展宽并清除分带模式（恢复 5 个子带为 0.5 中性）
+  void resetStereoWiden() {
+    setFloat('stereo.mix', ParamDefaults.stereoMix);
+    for (var i = 0; i < 5; i++) {
+      stereoBands[i] = ParamDefaults.stereoBand;
+      setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand);
+    }
+    stereoBandUsed = false;
+    notifyListeners();
   }
 
   /* ---- Liveprog 命令（v1.1） ---- */

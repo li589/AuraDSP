@@ -22,6 +22,8 @@ cpp_sources.txt
 .idea/
 Thumbs.db
 .DS_Store
+__pycache__/
+*.pyc
 
 # --- Flutter APP 构建产物 ---
 .tmp/

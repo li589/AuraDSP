@@ -203,7 +203,7 @@ class _BassCard extends StatelessWidget {
           ValueSlider(
             label: l.bassGain,
             value: model.bassGain,
-            defaultValue: 0,
+            defaultValue: ParamDefaults.bassGain,
             min: 0,
             max: 15,
             unit: 'dB',
@@ -276,37 +276,30 @@ class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
             child: ListenableBuilder(
               listenable: m,
               builder: (_, _) => Column(children: [
-                Row(children: [
-                  SizedBox(width: 60,
-                      child: Text('频点', style: labelOf(p, color: p.textDim))),
-                  Expanded(
-                    child: Slider(
-                      value: m.shelfFreq.clamp(40, 400),
-                      min: 40, max: 400,
-                      onChanged: (v) => m.setFloat('shelf.freq', v),
-                    ),
-                  ),
-                  SizedBox(width: 60,
-                      child: Text('${m.shelfFreq.toStringAsFixed(0)}Hz',
-                          textAlign: TextAlign.right,
-                          style: monoOf(p, size: 12, color: p.text))),
-                ]),
-                Row(children: [
-                  SizedBox(width: 60,
-                      child: Text('增益', style: labelOf(p, color: p.textDim))),
-                  Expanded(
-                    child: Slider(
-                      value: m.shelfGain.clamp(-15, 15),
-                      min: -15, max: 15,
-                      onChanged: (v) => m.setFloat('shelf.gain', v),
-                    ),
-                  ),
-                  SizedBox(width: 60,
-                      child: Text(
-                          '${m.shelfGain >= 0 ? "+" : ""}${m.shelfGain.toStringAsFixed(1)}dB',
-                          textAlign: TextAlign.right,
-                          style: monoOf(p, size: 12, color: p.text))),
-                ]),
+                ValueSlider(
+                  label: '频点',
+                  value: m.shelfFreq,
+                  defaultValue: ParamDefaults.shelfFreq,
+                  min: 40,
+                  max: 400,
+                  unit: 'Hz',
+                  enabled: m.shelfOn,
+                  format: (v) => v.toStringAsFixed(0),
+                  onChanged: (v) => m.setFloat('shelf.freq', v),
+                  onChangedEnd: (v) => m.setFloat('shelf.freq', v),
+                ),
+                ValueSlider(
+                  label: '增益',
+                  value: m.shelfGain,
+                  defaultValue: ParamDefaults.shelfGain,
+                  min: -15,
+                  max: 15,
+                  unit: 'dB',
+                  enabled: m.shelfOn,
+                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                  onChanged: (v) => m.setFloat('shelf.gain', v),
+                  onChangedEnd: (v) => m.setFloat('shelf.gain', v),
+                ),
                 const SizedBox(height: AuraSpace.xs),
                 Text('独立 low-shelf 滤波器（位于链头，先于低音增强）；'
                     'f0 为半增益点；强正增益可能被输出限幅器收峰',
@@ -437,17 +430,29 @@ class _FreeverbCard extends StatelessWidget {
           children: [
             _Freeverb3DStage(model: model),
             const SizedBox(height: AuraSpace.md),
-            _FvSlider(model: model, label: l.fvDecayLabel,
+            _FvSlider(
+                model: model,
+                label: l.fvDecayLabel,
                 value: model.fvDecay,
+                defaultValue: ParamDefaults.fvDecay,
                 onChanged: (v) => model.setFloat('freeverb.decay', v)),
-            _FvSlider(model: model, label: l.fvDampLabel,
+            _FvSlider(
+                model: model,
+                label: l.fvDampLabel,
                 value: model.fvDamp,
+                defaultValue: ParamDefaults.fvDamp,
                 onChanged: (v) => model.setFloat('freeverb.damp', v)),
-            _FvSlider(model: model, label: l.fvWetLabel,
+            _FvSlider(
+                model: model,
+                label: l.fvWetLabel,
                 value: model.fvWet,
+                defaultValue: ParamDefaults.fvWet,
                 onChanged: (v) => model.setFloat('freeverb.wet', v)),
-            _FvSlider(model: model, label: l.fvDryLabel,
+            _FvSlider(
+                model: model,
+                label: l.fvDryLabel,
                 value: model.fvDry,
+                defaultValue: ParamDefaults.fvDry,
                 onChanged: (v) => model.setFloat('freeverb.dry', v)),
           ],
         ),
@@ -460,35 +465,50 @@ class _FvSlider extends StatelessWidget {
   final AppModel model;
   final String label;
   final double value;
+  final double? defaultValue;
   final ValueChanged<double> onChanged;
   const _FvSlider({
     required this.model,
     required this.label,
     required this.value,
     required this.onChanged,
+    this.defaultValue,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return Row(children: [
-      SizedBox(
-          width: 64,
-          child: Text(label, style: labelOf(p, color: p.textDim))),
-      Expanded(
-        child: Slider(
-          value: value.clamp(0.0, 1.0),
-          min: 0, max: 1,
-          onChanged: onChanged,
-        ),
+    final enabled = model.fvOn;
+    return MouseRegion(
+      cursor: defaultValue != null ? SystemMouseCursors.click : MouseCursor.defer,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onDoubleTap: (enabled && defaultValue != null)
+            ? () => onChanged(defaultValue!)
+            : null,
+        child: Row(children: [
+          SizedBox(
+              width: 64,
+              child: Text(label,
+                  style: labelOf(p, color: enabled ? p.text : p.textDim))),
+          Expanded(
+            child: Slider(
+              value: value.clamp(0.0, 1.0),
+              min: 0,
+              max: 1,
+              onChanged: enabled ? onChanged : null,
+            ),
+          ),
+          SizedBox(
+            width: 44,
+            child: Text('${(value * 100).toStringAsFixed(0)}%',
+                textAlign: TextAlign.right,
+                style: monoOf(p,
+                    size: 12, color: enabled ? p.text : p.textDim)),
+          ),
+        ]),
       ),
-      SizedBox(
-        width: 44,
-        child: Text('${(value * 100).toStringAsFixed(0)}%',
-            textAlign: TextAlign.right,
-            style: monoOf(p, size: 12, color: p.text)),
-      ),
-    ]);
+    );
   }
 }
 
@@ -556,7 +576,7 @@ class _ConvolverCard extends StatelessWidget {
               ValueSlider(
                 label: l.convMix,
                 value: model.convMix,
-                defaultValue: 1.0,
+                defaultValue: ParamDefaults.convMix,
                 min: 0,
                 max: 1,
                 unit: '%',
@@ -687,7 +707,8 @@ class _StereoCard extends StatelessWidget {
           ValueSlider(
             label: l.stereoWiden,
             value: model.stereoMix,
-            defaultValue: 0,
+            defaultValue: ParamDefaults.stereoMix,
+            onResetToDefault: model.resetStereoWiden,
             overridden: model.stereoBandUsed,
             overriddenNote: model.stereoBandUsed ? '分带生效中' : null,
             min: 0,
@@ -787,41 +808,43 @@ class _BandSlider extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final m = model;
-    return Row(children: [
-      SizedBox(
-        width: 60,
-        child: Text(label,
-            style: labelOf(p, color: p.textDim)),
-      ),
-      Expanded(
-        child: ListenableBuilder(
-          listenable: m,
-          builder: (_, _) {
-            final v = m.stereoBands[index];
-            return GestureDetector(
-              // 双击归位中性值
-              onDoubleTap: () => m.setFloat('stereo.band${index + 1}', 0.5),
-              child: Slider(
-                value: v.clamp(0.0, 1.0),
-                min: 0,
-                max: 1,
-                onChanged: (v) => m.setFloat('stereo.band${index + 1}', v),
+    return ListenableBuilder(
+      listenable: m,
+      builder: (_, _) {
+        final v = m.stereoBands[index];
+        return MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            // 双击整行归位中性值 50%
+            onDoubleTap: () =>
+                m.setFloat('stereo.band${index + 1}', ParamDefaults.stereoBand),
+            child: Row(children: [
+              SizedBox(
+                width: 60,
+                child: Text(label, style: labelOf(p, color: p.textDim)),
               ),
-            );
-          },
-        ),
-      ),
-      SizedBox(
-        width: 44,
-        child: ListenableBuilder(
-          listenable: m,
-          builder: (_, _) => Text(
-              '${(m.stereoBands[index] * 100).toStringAsFixed(0)}%',
-              textAlign: TextAlign.right,
-              style: monoOf(p, size: 12, color: p.text)),
-        ),
-      ),
-    ]);
+              Expanded(
+                child: Slider(
+                  value: v.clamp(0.0, 1.0),
+                  min: 0,
+                  max: 1,
+                  onChanged: (val) =>
+                      m.setFloat('stereo.band${index + 1}', val),
+                ),
+              ),
+              SizedBox(
+                width: 44,
+                child: Text(
+                    '${(v * 100).toStringAsFixed(0)}%',
+                    textAlign: TextAlign.right,
+                    style: monoOf(p, size: 12, color: p.text)),
+              ),
+            ]),
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -843,7 +866,7 @@ class _PostCard extends StatelessWidget {
           ValueSlider(
             label: l.postGain,
             value: model.postGain,
-            defaultValue: 0,
+            defaultValue: ParamDefaults.postGain,
             min: -15,
             max: 15,
             unit: 'dB',
@@ -878,6 +901,9 @@ class ValueSlider extends StatefulWidget {
   /// 双击归位的默认值（null = 不启用双击归位）
   final double? defaultValue;
 
+  /// 双击归位时的扩展回调（如声场总滑块双击归位时联动重置子带）
+  final VoidCallback? onResetToDefault;
+
   /// 被高级参数覆盖时置灰 + 尾注（如分带模式生效时主展宽滑块）
   final bool overridden;
   final String? overriddenNote;
@@ -901,6 +927,7 @@ class ValueSlider extends StatefulWidget {
     this.onChanged,
     this.enabled = true,
     this.defaultValue,
+    this.onResetToDefault,
     this.overridden = false,
     this.overriddenNote,
   });
@@ -935,6 +962,7 @@ class _ValueSliderState extends State<ValueSlider> {
     if (d == null) return;
     setState(() => _drag = d);
     widget.onChangedEnd(d);
+    widget.onResetToDefault?.call();
   }
 
   @override
@@ -950,9 +978,9 @@ class _ValueSliderState extends State<ValueSlider> {
           ? SystemMouseCursors.click
           : MouseCursor.defer,
       child: GestureDetector(
-        // 双击归位默认值（Slider 自身不吃 double tap，可与拖拽共存）
+        // 双击归位默认值（整行 opaque，保证 label 与留白区均可响应）
         onDoubleTap: widget.enabled ? _resetToDefault : null,
-        behavior: HitTestBehavior.deferToChild,
+        behavior: HitTestBehavior.opaque,
         child: _sliderRow(p, c),
       ),
     );

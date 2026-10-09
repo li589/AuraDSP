@@ -44,7 +44,11 @@
 
 ### 2.3 分期
 
-- **一期（M3.5 落地后）**：通用交互规范（双击归位/高级区修复）+ 脉冲响应改名与混合比例 + VDC 加载（vendor ddc.c 暴露小补丁）；
+- **一期【已全量完成并验证通过】**：
+  - **集中式默认值真相源**：在 `lib/core/state.dart` 建立 `ParamDefaults`（严格对齐 C++ 引擎初始状态）；
+  - **全量滑块双击归位出厂值**：`ValueSlider` 升级为整行 `HitTestBehavior.opaque` 手势捕获；低音主滑块、低频搁架频点/增益、Freeverb（衰减/阻尼/湿声/干声）、脉冲混合比例、声场展宽（含联动清除子带）及输出增益全部支持双击恢复出厂默认值；
+  - **高级区交互与解耦**：展开箭头常亮 accent 色，去除冗余状态字，声场展宽双击恢复时联动重置 5 个子带为 0.5 中性；
+  - **置顶前置测试闭环**：`tools/ui_verify_slider_reset.py`（每次模拟交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS，生成截图 `20-bass-dragged.png` ~ `24-postgain-doubletap-reset.png` 留档；
 - **二期【已完成并验证通过】**：
   - **IR 多声道频谱可视化**（C++ 引擎层复用 viz FFT `WDL_real_fft` + 32 对数频带 `kBandEdges`，施加单侧平顶 Tukey 窗防时域首冲激截断；FFI 暴露 `convolver.ir.spectrum`；Dart 端 `_IrSpectrumGraph` 支持 1~8 声道分色绘制、渐变面积图与 20Hz~20kHz 对数频轴刻度）；
   - **Freeverb 3D 声学室空间渲染**（`_Freeverb3DStage` + `_Freeverb3DPainter`，实现透视 3D 房间线框、网格地板、虚拟发声源与听者节点、反射射线束与声波脉冲，实时联动 `decay`/`damp`/`wet`/电平）；
