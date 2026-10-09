@@ -61,12 +61,16 @@ typedef enum auradsp_state {
 /* 可视化帧：引擎 RT 线程每处理块写入 SPSC ring，UI 拉取。
  * spectrum 为 32 段对数频带归一化幅度 [0,1]，levels 为 dBFS。 */
 #define AURADSP_VIZ_BANDS 32
+#define AURADSP_STAGE_MAX 16
 typedef struct auradsp_viz_frame {
     uint64_t seq;
     double   timestamp_ms;
     float    spectrum[AURADSP_VIZ_BANDS];
     float    level_l_dbfs;
     float    level_r_dbfs;
+    /* [M3.5-c] 12 个 stage 的实时双声道峰值 (dBFS) */
+    float    stage_levels_l[AURADSP_STAGE_MAX];
+    float    stage_levels_r[AURADSP_STAGE_MAX];
 } auradsp_viz_frame;
 
 /* ---- 生命周期（控制线程） ---- */

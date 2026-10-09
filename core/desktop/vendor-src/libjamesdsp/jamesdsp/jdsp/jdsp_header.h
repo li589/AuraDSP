@@ -508,6 +508,7 @@ typedef struct
 {
 	JDSPStageFn fn;
 	char lock;
+	unsigned char stageIdx; /* [PATCHED-AuraDSP M3.5-c] 0..11 对应固定 stage ID */
 } JDSPChainItem;
 typedef struct dspsys
 {
@@ -562,9 +563,11 @@ typedef struct dspsys
 	float *tmpBuffer[6];
 	// Internal function pointer
 	void(*processInternal)(struct dspsys *, size_t);
-	/* [PATCHED-AuraDSP P-004] */
+	/* [PATCHED-AuraDSP P-004 / M3.5-c] */
 	JDSPChainItem chain[16];
 	int chainLen;
+	float stagePeakL[16];
+	float stagePeakR[16];
 	int32_t(*i32_from_p24)(const uint8_t *);
 	void (*p24_from_i32)(int32_t, uint8_t *);
 	// I/O function pointer

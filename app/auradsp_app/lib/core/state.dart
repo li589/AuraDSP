@@ -122,6 +122,9 @@ class AppModel extends ChangeNotifier {
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
   final levelL = ValueNotifier<double>(-90);
   final levelR = ValueNotifier<double>(-90);
+  // [M3.5-c] 12 个 stage 的实时双声道微型电平 (dBFS)
+  final stageLevelsL = ValueNotifier<List<double>>(List.filled(12, -120.0));
+  final stageLevelsR = ValueNotifier<List<double>>(List.filled(12, -120.0));
 
   // 一次性事件（shell 监听弹 snackbar）
   final eventSeq = ValueNotifier<int>(0);
@@ -259,6 +262,12 @@ class AppModel extends ChangeNotifier {
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         levelL.value = (raw['l'] as num).toDouble();
         levelR.value = (raw['r'] as num).toDouble();
+        if (raw['stageL'] != null) {
+          stageLevelsL.value = (raw['stageL'] as List).cast<num>().map((e) => e.toDouble()).toList();
+        }
+        if (raw['stageR'] != null) {
+          stageLevelsR.value = (raw['stageR'] as List).cast<num>().map((e) => e.toDouble()).toList();
+        }
         break;
       case 'error':
         lastEngineError = raw['msg'] as String;
@@ -373,6 +382,59 @@ class AppModel extends ChangeNotifier {
   void setGraphOrder(String order) {
     graphOrder = order;
     send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': order});
+  }
+
+  /// 获取某个处理链 stage 的启用状态
+  bool isStageEnabled(String stageId) {
+    return switch (stageId) {
+      'tube' => tubeOn,
+      'comp' => false,
+      'bass' => bassOn,
+      'eq' => eqOn,
+      'arbmag' => false,
+      'convolver' => convEnabled,
+      'ddc' => ddcOn,
+      'liveprog' => lpEnabled,
+      'crossfeed' => xfeedOn,
+      'stereo' => stereoMix > 0.0,
+      'reverb' => reverbPreset >= 0,
+      'output' => limiterOn,
+      _ => false,
+    };
+  }
+
+  /// 切换某个处理链 stage 的启用/旁路状态
+  void toggleStage(String stageId) {
+    switch (stageId) {
+      case 'tube':
+        setInt('tube.enable', tubeOn ? 0 : 1);
+      case 'bass':
+        setInt('bass.enable', bassOn ? 0 : 1);
+      case 'eq':
+        setInt('eq.enable', eqOn ? 0 : 1);
+      case 'convolver':
+        setInt(ParamId.convEnable, convEnabled ? 0 : 1);
+      case 'ddc':
+        setInt(ParamId.ddcEnable, ddcOn ? 0 : 1);
+      case 'liveprog':
+        setLiveprogEnabled(!lpEnabled);
+      case 'crossfeed':
+        setInt('crossfeed.enable', xfeedOn ? 0 : 1);
+      case 'stereo':
+        if (stereoMix > 0.0) {
+          setFloat('stereo.mix', 0.0);
+        } else {
+          setFloat('stereo.mix', 0.5 * stereoWidenMax);
+        }
+      case 'reverb':
+        if (reverbPreset >= 0) {
+          setInt('reverb.preset', -1);
+        } else {
+          setReverbPreset(0, autoQualityMsg: '启用混响：已自动切换到品质模式');
+        }
+      case 'output':
+        setInt('limiter.enable', limiterOn ? 0 : 1);
+    }
   }
 
   void setStringParam(String id, String text) {

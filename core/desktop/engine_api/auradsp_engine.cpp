@@ -788,6 +788,19 @@ void emit_viz(auradsp_handle h) {
         if (amp > 1e-5f) v = (20.0f * log10f(amp) + 60.0f) * (1.0f / 60.0f);
         f.spectrum[b] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
     }
+
+    /* 5) [M3.5-c] 12 个 stage 的输出峰值转 dBFS */
+    for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
+        if (i < 12) {
+            const float pl = h->jdsp.stagePeakL[i];
+            const float pr = h->jdsp.stagePeakR[i];
+            f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;
+            f.stage_levels_r[i] = pr > 1e-6f ? 20.0f * log10f(pr) : -120.0f;
+        } else {
+            f.stage_levels_l[i] = -120.0f;
+            f.stage_levels_r[i] = -120.0f;
+        }
+    }
     h->viz.push(f);
 }
 

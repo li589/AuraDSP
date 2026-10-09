@@ -14,7 +14,7 @@
 | **效果** | 除脚本/插件外**所有效果**的参数卡；卡片按 UX 逻辑组织（**UI 显示顺序 ≠ 处理顺序**——处理顺序唯一由"处理链"页负责，效果页内不提供排序） | 本轮设计 §2 |
 | **脚本** | Liveprog 编辑器 + 对齐/格式化 + 语法飘红 + Tab 捕获 | 本轮设计 §3 |
 | **插件** | 多格式插件宿主（M1），**许可证已拍板 GPLv3.0** | 引用 M1 方案 |
-| **处理链** | Element 式模块顺序调整/开关 + 多通道电平显示 | **= M3.5 本体**，§4（**M3.5-a 引擎 + v1 页已落地**） |
+| **处理链** | Element 式模块顺序调整/开关 + 多通道电平显示 | **= M3.5 本体**，§4（**M3.5-a/b/c 引擎与 UI 均已全量落地**） |
 | **可视化** | Poweramp 式视觉偏好 + iZotope/FL Studio 式专业展示 | 后议占位 |
 
 **导航变更**：删除每页 PageHeader 的 eyebrow（"控制台/效果链/实时编程…"），页面标题直接以导航名承担；导航 rail 保持 6 项（主页/效果/脚本/插件/处理链/可视化）。现有四页映射：主页✓保留、效果=现效果页扩展、脚本=现 Liveprog 页、可视化✓保留；插件/处理链为新增。
@@ -97,8 +97,13 @@
   （含尾部溢出/缺项/重复/未知名）；探针决定性验证（liveprog 增益×2：默认位被输出
   限幅钳 1.0 → 尾置 1.3985 → 恢复 1.0）。
 - **M3.5-b ✅ v1 已落地**：处理链页（ReorderableListView 拖拽 + 应用/恢复默认 +
-  12 stage 一屏全见 + 只读信号流参照）。per-node 电平仍为占位（随 M3.5-c）。
-- **M3.5-c**：per-node 双声道电平分接 + 插件槽位入链（依赖 M1）。
+  12 stage 一屏全见 + 只读信号流参照）。
+- **M3.5-c ✅ 已全量落地并验证通过（2026-10-10）**：
+  - **引擎层零开销采样与 SPSC 环扩展**：在 `JDSPChainItem` 引入固定 `stageIdx (0..11)`，在 `JamesDSPProcess` 与 `JamesDSPProcessCheckBenchmarkReady` 表遍历中实施 $O(1)$ 常数时间峰值扫描写入 `stagePeakL/R[16]`；`auradsp_viz_frame` 扩展包含 16 声道电平数组（dBFS 转换），SPSC 无锁环高频直推，零分配、零系统调用、严格 RT-Safe；
+  - **单测全绿**：`tools/smoke_chain_meter.py` 验证默认直通（12 节点精确对齐 -10.46 dBFS）与 Liveprog 2.0x 增益节点（前置 7 节点保持 -10.46 dBFS，后置 5 节点精确放大至 -4.44 dBFS），100% PASS；6 项历史单测全量无回归；
+  - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 280 字节 `VizFrame` 结构体映射；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
+  - **置顶前置 UI 自动化验证**：`tools/ui_verify_chain_meter.py` 在物理活动桌面置顶前置测试全部 PASS，留档截图 `30-chain-initial.png` ~ `33-chain-reset.png`。
+- **M3.5-d**：插件槽位入链（依赖 M1 插件架构）。
 
 > 顺序模型说明：`graph.order` 接受**全部 12 个 stage 各一次**的逗号分隔列表；
 > 这是"完整重排"模型（非"排序权重"），非法集合一律拒绝并保持原表不变。

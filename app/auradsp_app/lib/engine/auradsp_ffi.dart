@@ -77,7 +77,7 @@ abstract final class EngineState {
   static const error = 2;
 }
 
-/// auradsp_viz_frame（152 字节：8+8+128+4+4）
+/// auradsp_viz_frame（280 字节：8+8+128+4+4+64+64）
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
@@ -92,8 +92,19 @@ final class VizFrame extends Struct {
   @Float()
   external double levelRDbfs;
 
+  @Array(16)
+  external Array<Float> stageLevelsL;
+  @Array(16)
+  external Array<Float> stageLevelsR;
+
   List<double> spectrumToList() =>
       List<double>.generate(32, (i) => spectrum[i]);
+
+  List<double> stageLevelsLToList() =>
+      List<double>.generate(12, (i) => stageLevelsL[i]);
+
+  List<double> stageLevelsRToList() =>
+      List<double>.generate(12, (i) => stageLevelsR[i]);
 }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）

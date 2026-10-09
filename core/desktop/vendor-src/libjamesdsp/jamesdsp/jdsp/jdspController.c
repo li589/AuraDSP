@@ -421,6 +421,7 @@ int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
 		{
 			tmp[i].fn = kAuraStages[i].fn;
 			tmp[i].lock = kAuraStages[i].lock;
+			tmp[i].stageIdx = (unsigned char)i;
 		}
 		len = (int)kAuraStageCount;
 	}
@@ -454,6 +455,7 @@ int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
 			used[found] = 1;
 			tmp[len].fn = kAuraStages[found].fn;
 			tmp[len].lock = kAuraStages[found].lock;
+			tmp[len].stageIdx = (unsigned char)found;
 			++len;
 			cur = comma ? comma + 1 : ((void *)0);
 		}
@@ -470,7 +472,7 @@ int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
 	return 0;
 }
 
-// Process（P-004 表驱动）
+// Process（P-004 表驱动 + M3.5-c 节点电平采样）
 void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 {
 	for (int i = 0; i < jdsp->chainLen; ++i)
@@ -480,6 +482,21 @@ void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 		jdsp->chain[i].fn(jdsp, n);
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
+		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
+		float maxL = 0.0f, maxR = 0.0f;
+		for (size_t s = 0; s < n; ++s)
+		{
+			float aL = fabsf(jdsp->tmpBuffer[0][s]);
+			float aR = fabsf(jdsp->tmpBuffer[1][s]);
+			if (aL > maxL) maxL = aL;
+			if (aR > maxR) maxR = aR;
+		}
+		unsigned char sidx = jdsp->chain[i].stageIdx;
+		if (sidx < 16)
+		{
+			jdsp->stagePeakL[sidx] = maxL;
+			jdsp->stagePeakR[sidx] = maxR;
+		}
 	}
 }
 void JamesDSPProcessCheckBenchmarkReady(JamesDSPLib *jdsp, size_t n)
@@ -492,6 +509,21 @@ void JamesDSPProcessCheckBenchmarkReady(JamesDSPLib *jdsp, size_t n)
 		jdsp->chain[i].fn(jdsp, n);
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
+		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
+		float maxL = 0.0f, maxR = 0.0f;
+		for (size_t s = 0; s < n; ++s)
+		{
+			float aL = fabsf(jdsp->tmpBuffer[0][s]);
+			float aR = fabsf(jdsp->tmpBuffer[1][s]);
+			if (aL > maxL) maxL = aL;
+			if (aR > maxR) maxR = aR;
+		}
+		unsigned char sidx = jdsp->chain[i].stageIdx;
+		if (sidx < 16)
+		{
+			jdsp->stagePeakL[sidx] = maxL;
+			jdsp->stagePeakR[sidx] = maxR;
+		}
 	}
 	if (benchmarkCompletionFlag == 1)
 	{

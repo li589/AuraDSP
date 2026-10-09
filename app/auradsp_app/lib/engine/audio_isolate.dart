@@ -790,6 +790,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   'spectrum': fr.spectrumToList(),
                   'l': fr.levelLDbfs,
                   'r': fr.levelRDbfs,
+                  'stageL': fr.stageLevelsLToList(),
+                  'stageR': fr.stageLevelsRToList(),
                   'ts': fr.timestampMs,
                   'seq': fr.seq,
                 });
