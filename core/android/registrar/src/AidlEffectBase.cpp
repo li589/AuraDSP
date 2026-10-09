@@ -9,6 +9,7 @@
 #include <aidl/android/media/audio/common/PcmType.h>
 #include <utils/Log.h>
 
+#include <cmath>
 #include <cstring>
 
 /* Constants aligned with system/audio_effects/aidl_effects_utils.h */
@@ -24,6 +25,10 @@ static constexpr int64_t kEfWaitTimeoutNs = 100'000'000;   // 100ms
 static constexpr int64_t kStatusWriteTimeoutNs = 50'000'000;  // 50ms
 
 namespace jamesdsp::registrar {
+
+using ::aidl::android::hardware::audio::effect::BassBoost;
+using ::aidl::android::hardware::audio::effect::Equalizer;
+using ::aidl::android::hardware::audio::effect::PresetReverb;
 
 AidlEffectBase::AidlEffectBase(const Descriptor& desc, std::shared_ptr<IAudioEngine> engine)
     : mDescriptor(desc),
@@ -88,9 +93,13 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
     ALOGI("%s open: sr=%d inF=%zu(ch%d) outF=%zu(ch%d)", mName.c_str(),
           common.input.base.sampleRate, inFrames, inCh, outFrames, outCh);
 
+    /* 2x slack on both data MQs: room for a full buffer even when one cycle
+     * is missed, so a transient stall self-heals on the next wake instead of
+     * wedging (real root cause of the 2026-10-09 stall was the libfmq
+     * bool-read conversion bug — see processOnce — slack is cheap insurance). */
     mStatusMQ = std::make_shared<StatusMQ>(1, true /* eventFlagWord */);
-    mInputMQ = std::make_shared<DataMQ>(inFloats);
-    mOutputMQ = std::make_shared<DataMQ>(outFloats);
+    mInputMQ = std::make_shared<DataMQ>(inFloats * 2);
+    mOutputMQ = std::make_shared<DataMQ>(outFloats * 2);
     if (!mStatusMQ->isValid() || !mInputMQ->isValid() || !mOutputMQ->isValid()) {
         ALOGE("%s open: invalid FMQ status=%d in=%d out=%d", mName.c_str(),
               mStatusMQ->isValid(), mInputMQ->isValid(), mOutputMQ->isValid());
@@ -229,9 +238,12 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
         case Parameter::source:
             mAudioSource = static_cast<int32_t>(in_param.get<Parameter::source>());
             break;
-        case Parameter::volumeStereo:
+        case Parameter::volumeStereo: {
             mVolumeStereo = in_param.get<Parameter::volumeStereo>();
+            ALOGI("%s setParameter: volumeStereo L=%.3f R=%.3f (accepted, not routed)",
+                  mName.c_str(), mVolumeStereo.left, mVolumeStereo.right);
             break;
+        }
         case Parameter::deviceDescription:
             break;  // accepted, ignored
         default:
@@ -241,8 +253,77 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
 }
 
 ::ndk::ScopedAStatus AidlEffectBase::setParameterSpecific(const Parameter::Specific& specific) {
-    (void)specific;
-    return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    /* Translate standard AIDL effect parameters onto the engine's vendor
+     * param protocol (VendorParamId in Engine.h). Our declared type UUID is
+     * the standard equalizer type, so APPs may address us through the
+     * stock android.media.audiofx.Equalizer/BassBoost/PresetReverb APIs. */
+    using Tag = Parameter::Specific::Tag;
+    switch (specific.getTag()) {
+        case Tag::bassBoost: {
+            const auto& bb = specific.get<Tag::bassBoost>();
+            if (bb.getTag() != BassBoost::strengthPm) {
+                return ::ndk::ScopedAStatus::ok();  /* vendor-only query, nothing to apply */
+            }
+            /* AIDL strength 0..1000 per-mille -> our 0..15 dB range. */
+            const float db =
+                    static_cast<float>(bb.get<BassBoost::strengthPm>()) / 1000.0f * 15.0f;
+            const int32_t on = 1;
+            mEngine->setVendorParam(VendorParamId::kBassBoostEnable, &on, sizeof(on));
+            mEngine->setVendorParam(VendorParamId::kBassBoostGainDb, &db, sizeof(db));
+            ALOGI("%s setParameter: bassBoost strengthPm=%d -> %.1f dB", mName.c_str(),
+                  bb.get<BassBoost::strengthPm>(), db);
+            return ::ndk::ScopedAStatus::ok();
+        }
+        case Tag::presetReverb: {
+            const auto& pr = specific.get<Tag::presetReverb>();
+            if (pr.getTag() != PresetReverb::preset) {
+                return ::ndk::ScopedAStatus::ok();
+            }
+            int32_t jidx = -1;
+            switch (pr.get<PresetReverb::preset>()) {
+                using P = PresetReverb::Presets;
+                case P::NONE:       jidx = -1; break;  /* disabled */
+                case P::SMALLROOM:  jidx = 7;  break;  /* SF_REVERB_PRESET_SMALLROOM1 */
+                case P::MEDIUMROOM: jidx = 9;  break;  /* SF_REVERB_PRESET_MEDIUMROOM1 */
+                case P::LARGEROOM:  jidx = 11; break;  /* SF_REVERB_PRESET_LARGEROOM1 */
+                case P::MEDIUMHALL: jidx = 3;  break;  /* SF_REVERB_PRESET_MEDIUMHALL1 */
+                case P::LARGEHALL:  jidx = 5;  break;  /* SF_REVERB_PRESET_LARGEHALL1 */
+                case P::PLATE:      jidx = 15; break;  /* SF_REVERB_PRESET_PLATEHIGH */
+            }
+            mEngine->setVendorParam(VendorParamId::kReverbPreset, &jidx, sizeof(jidx));
+            ALOGI("%s setParameter: presetReverb=%d -> jdsp preset %d", mName.c_str(),
+                  static_cast<int>(pr.get<PresetReverb::preset>()), jidx);
+            return ::ndk::ScopedAStatus::ok();
+        }
+        case Tag::equalizer: {
+            const auto& eq = specific.get<Tag::equalizer>();
+            if (eq.getTag() == Equalizer::bandLevels) {
+                /* First-cut mapping: lowest band (0) drives bass boost; the
+                 * remaining bands are accepted but unmapped until the full
+                 * MultimodalEqualizer axis table is wired (AxisInterpolation). */
+                for (const auto& bl : eq.get<Equalizer::bandLevels>()) {
+                    const float db = static_cast<float>(bl.levelMb) / 100.0f; /* mB -> dB */
+                    if (bl.index == 0) {
+                        const int32_t on = 1;
+                        mEngine->setVendorParam(VendorParamId::kBassBoostEnable, &on, sizeof(on));
+                        mEngine->setVendorParam(VendorParamId::kBassBoostGainDb, &db, sizeof(db));
+                    }
+                    ALOGI("%s setParameter: EQ band %d levelMb=%d (%.1f dB)%s", mName.c_str(),
+                          bl.index, bl.levelMb, db,
+                          bl.index == 0 ? " -> bass boost" : " (unmapped, accepted)");
+                }
+            } else if (eq.getTag() == Equalizer::preset) {
+                ALOGI("%s setParameter: EQ preset=%d (accepted, unmapped)", mName.c_str(),
+                      eq.get<Equalizer::preset>());
+            } else {
+                ALOGI("%s setParameter: EQ tag=%d (accepted, unmapped)", mName.c_str(),
+                      static_cast<int>(eq.getTag()));
+            }
+            return ::ndk::ScopedAStatus::ok();
+        }
+        default:
+            return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    }
 }
 
 ::ndk::ScopedAStatus AidlEffectBase::getParameter(const Parameter::Id& in_paramId,
@@ -285,9 +366,38 @@ int AidlEffectBase::channelCount(const AudioChannelLayout& layout) {
 
 ::ndk::ScopedAStatus AidlEffectBase::getParameterSpecific(const Parameter::Id& id,
                                                           Parameter::Specific* specific) {
-    (void)id;
-    (void)specific;
-    return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    using IdTag = Parameter::Id::Tag;
+    switch (id.getTag()) {
+        case IdTag::bassBoostTag: {
+            float db = 0.0f;
+            mEngine->getVendorParam(VendorParamId::kBassBoostGainDb, &db, sizeof(db));
+            BassBoost bb;
+            bb.set<BassBoost::strengthPm>(
+                    static_cast<int32_t>(std::lround(db / 15.0f * 1000.0f)));
+            specific->set<Parameter::Specific::bassBoost>(bb);
+            return ::ndk::ScopedAStatus::ok();
+        }
+        case IdTag::presetReverbTag: {
+            int32_t jidx = -1;
+            mEngine->getVendorParam(VendorParamId::kReverbPreset, &jidx, sizeof(jidx));
+            PresetReverb::Presets p = PresetReverb::Presets::NONE;
+            switch (jidx) {  /* inverse of setParameterSpecific's mapping */
+                case 7:  p = PresetReverb::Presets::SMALLROOM;  break;
+                case 9:  p = PresetReverb::Presets::MEDIUMROOM; break;
+                case 11: p = PresetReverb::Presets::LARGEROOM;  break;
+                case 3:  p = PresetReverb::Presets::MEDIUMHALL; break;
+                case 5:  p = PresetReverb::Presets::LARGEHALL;  break;
+                case 15: p = PresetReverb::Presets::PLATE;      break;
+                default: p = PresetReverb::Presets::NONE;       break;
+            }
+            PresetReverb pr;
+            pr.set<PresetReverb::preset>(p);
+            specific->set<Parameter::Specific::presetReverb>(pr);
+            return ::ndk::ScopedAStatus::ok();
+        }
+        default:
+            return ::ndk::ScopedAStatus::fromExceptionCode(EX_ILLEGAL_ARGUMENT);
+    }
 }
 
 ::ndk::ScopedAStatus AidlEffectBase::reopen(OpenEffectReturn* _aidl_return) {
@@ -335,26 +445,60 @@ void AidlEffectBase::processOnce() {
 
     const int ch = channelCount(mCommon.input.base.channelMask);
     const int safeCh = ch > 0 ? ch : 1;
-    const size_t inAvail = mInputMQ->availableToRead();
-    const size_t outAvailW = mOutputMQ->availableToWrite();
-    const size_t samples = std::min(inAvail, outAvailW);
     static std::atomic<int> dbgCount{0};
-    const bool dbg = ++dbgCount % 200 == 1;  // throttled data-plane trace
+    const bool dbg = (dbgCount++ % 100 == 0);  // periodic data-plane trace
     if (dbg) {
-        ALOGW("%s dataPlane: in=%zu outW=%zu", mName.c_str(), inAvail, outAvailW);
+        ALOGW("%s dataPlane: in=%zu outW=%zu", mName.c_str(),
+              mInputMQ->availableToRead(), mOutputMQ->availableToWrite());
     }
-    if (samples == 0) return;
 
-    const size_t n = mInputMQ->read(mWorkBuffer.data(), samples);
-    if (n == 0) return;
-    mEngine->process(mWorkBuffer.data(), mWorkBuffer.data(), n / static_cast<size_t>(safeCh),
-                     safeCh);
-    const size_t produced = mOutputMQ->write(mWorkBuffer.data(), n);
+    /* Drain loop: consume everything currently queued in the input MQ so the
+     * framework's next write always finds full room. Steady state is one
+     * write per wake, so consumed_total == floatsToWrite exactly (what the
+     * framework validates). Partial leftover only in recovery, and with the
+     * 2x MQ slack it re-syncs within a cycle.
+     *
+     * POSTMORTEM 2026-10-09: libfmq's read(T*, size_t)/write(const T*, size_t)
+     * return BOOL, not element counts. The old code assigned them to size_t,
+     * so every successful full-buffer read/write became "1 element" — engine
+     * processed n/ch == 0 frames and Status reported fmqConsumed=1 forever,
+     * wedging the framework ("FMQ consumed 1 (of 3840)" storm). The earlier
+     * "output MQ exactly one buffer" theory was wrong; capacity was innocent. */
+    size_t consumedTotal = 0;
+    size_t producedTotal = 0;
+    double inSq = 0.0, outSq = 0.0;  /* RMS diagnostic on dbg cycles */
+    while (mState == State::PROCESSING || mState == State::DRAINING) {
+        const size_t inAvailNow = mInputMQ->availableToRead();
+        if (inAvailNow == 0) break;
+        const size_t outRoomNow = mOutputMQ->availableToWrite();
+        if (outRoomNow == 0) break;
+        size_t chunk = std::min(inAvailNow, outRoomNow);
+        /* whole frames only: engine processes chunk/ch frames in place */
+        chunk -= chunk % static_cast<size_t>(safeCh);
+        if (chunk == 0) break;
+        if (!mInputMQ->read(mWorkBuffer.data(), chunk)) break;
+        if (dbg)
+            for (size_t i = 0; i < chunk; i++) {
+                const float v = mWorkBuffer.data()[i];
+                inSq += static_cast<double>(v) * v;
+            }
+        mEngine->process(mWorkBuffer.data(), mWorkBuffer.data(),
+                         chunk / static_cast<size_t>(safeCh), safeCh);
+        if (dbg)
+            for (size_t i = 0; i < chunk; i++) {
+                const float v = mWorkBuffer.data()[i];
+                outSq += static_cast<double>(v) * v;
+            }
+        if (!mOutputMQ->write(mWorkBuffer.data(), chunk)) break;
+        consumedTotal += chunk;
+        producedTotal += chunk;
+    }
+    if (consumedTotal == 0) return;
 
     IEffect::Status status{};
     status.status = 0;  // STATUS_OK
-    status.fmqConsumed = static_cast<int32_t>(n);
-    status.fmqProduced = static_cast<int32_t>(produced);
+    status.fmqConsumed = static_cast<int32_t>(consumedTotal);
+    status.fmqProduced = static_cast<int32_t>(producedTotal);
     /* Bounded: a full status MQ (framework stopped consuming) must never hold
      * mMutex forever — that was the close()-deadlock that rebooted the phone. */
     if (!mStatusMQ->writeBlocking(&status, 1, kStatusWriteTimeoutNs)) {
@@ -363,8 +507,14 @@ void AidlEffectBase::processOnce() {
             ALOGW("%s dataPlane: status write TIMEOUT (framework not consuming)",
                   mName.c_str());
     } else if (dbg) {
-        ALOGW("%s dataPlane: wrote status consumed=%zu produced=%zu", mName.c_str(), n,
-              produced);
+        ALOGW("%s dataPlane: wrote status consumed=%zu produced=%zu", mName.c_str(),
+              static_cast<size_t>(status.fmqConsumed), static_cast<size_t>(status.fmqProduced));
+    }
+    if (dbg && inSq > 0.0) {
+        /* Engine-side A/B evidence: >0 dB means the DSP is actually altering
+         * the stream; ~0 dB over many cycles means pass-through. */
+        ALOGW("%s dataPlane: engine rmsDiff=%+.2f dB", mName.c_str(),
+              10.0 * log10(outSq / inSq));
     }
 }
 
