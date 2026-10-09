@@ -115,7 +115,71 @@ struct Params {
     std::atomic<int32_t>  shelf_enable{0};
     std::atomic<float>    shelf_freq{100.0f};   /* Hz [40,400] */
     std::atomic<float>    shelf_gain{0.0f};     /* dB [-15,15] */
+    /* M5-c：参数化混响（Freeverb，T2 档） */
+    std::atomic<int32_t>  fv_enable{0};
+    std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
+    std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
+    std::atomic<float>    fv_wet{0.3f};         /* 0..1 */
+    std::atomic<float>    fv_dry{1.0f};         /* 0..1 */
 };
+
+/* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
+ * 经典 tuning（@44.1k）按 fs 缩放；create 分配、destroy 释放，RT 零分配。
+ * 参数换算沿用 classic freeverb：feedback = 0.7+decay*0.28，damp=damp*0.4。 */
+constexpr int kFvCombs = 8, kFvAllpasses = 4;
+constexpr int kFvCombTuning[kFvCombs] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
+constexpr int kFvAllpTuning[kFvAllpasses] = {556, 441, 341, 225};
+constexpr double kFvRateScale = 48000.0 / 44100.0;   /* 本引擎 fs 固定 48k */
+
+struct FvVoice {
+    float* combBuf[kFvCombs];
+    int    combSize[kFvCombs];
+    int    combIdx[kFvCombs];
+    float  filterstore = 0;
+    float  damp1 = 0, damp2 = 1;
+    float* apBuf[kFvAllpasses];
+    int    apSize[kFvAllpasses];
+    int    apIdx[kFvAllpasses];
+};
+
+void fv_alloc(FvVoice& v) {
+    for (int i = 0; i < kFvCombs; ++i) {
+        v.combSize[i] = (int)ceil(kFvCombTuning[i] * kFvRateScale) + 4;
+        v.combBuf[i] = (float*)calloc(v.combSize[i], sizeof(float));
+        v.combIdx[i] = 0;
+    }
+    for (int i = 0; i < kFvAllpasses; ++i) {
+        v.apSize[i] = (int)ceil(kFvAllpTuning[i] * kFvRateScale) + 4;
+        v.apBuf[i] = (float*)calloc(v.apSize[i], sizeof(float));
+        v.apIdx[i] = 0;
+    }
+    v.filterstore = 0; v.damp1 = 0; v.damp2 = 1;
+}
+
+void fv_free(FvVoice& v) {
+    for (int i = 0; i < kFvCombs; ++i) { free(v.combBuf[i]); v.combBuf[i] = nullptr; }
+    for (int i = 0; i < kFvAllpasses; ++i) { free(v.apBuf[i]); v.apBuf[i] = nullptr; }
+}
+
+/* 每样本：返回湿信号 */
+inline float fv_voice_process(FvVoice& v, float in, float feedback) {
+    float out = 0;
+    for (int i = 0; i < kFvCombs; ++i) {
+        const float y = v.combBuf[i][v.combIdx[i]];
+        v.filterstore = y * v.damp2 + v.filterstore * v.damp1;
+        v.combBuf[i][v.combIdx[i]] = in + v.filterstore * feedback;
+        if (++v.combIdx[i] >= v.combSize[i]) v.combIdx[i] = 0;
+        out += y;
+    }
+    for (int i = 0; i < kFvAllpasses; ++i) {
+        const float bufout = v.apBuf[i][v.apIdx[i]];
+        const float input2 = in + bufout * 0.5f;
+        v.apBuf[i][v.apIdx[i]] = input2;
+        if (++v.apIdx[i] >= v.apSize[i]) v.apIdx[i] = 0;
+        in = bufout - input2;
+    }
+    return out;
+}
 
 /* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
 struct LatencyItem { int tier; float ms; };
@@ -164,6 +228,9 @@ struct auradsp_handle_s {
     std::atomic<int32_t>  ir_channels{0};
     std::atomic<int32_t>  ir_src_rate{0};      /* 文件原始采样率（0=无） */
     std::atomic<float>    ir_peak{0.0f};       /* 线性峰值（归一化提示用） */
+
+    /* M5-c：Freeverb（RT 独占；create 分配） */
+    FvVoice fvL, fvR;
 
     /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰） */
     struct ShelfBiquad {
@@ -217,6 +284,9 @@ bool compute_latency(auradsp_handle h, double* out_ms, bool* over_guard) {
     }
     /* 串扰消除 = T1 ≈3ms（实时档 10ms 预算内，交由总预算判断） */
     if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += kLatCrossfeed.ms;
+    /* 参数化混响 = T2 类（无算法延迟但按档位限定，对齐混响语义） */
+    if (h->p.fv_enable.load(std::memory_order_relaxed) &&
+        h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
     if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) {
         /* compressor/convolver/arbMag 未在本 ABI v1 暴露参数，预留守卫位 */
     }
@@ -639,6 +709,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
 
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
+    fv_alloc(h->fvL);
+    fv_alloc(h->fvR);
     shelf_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
@@ -655,6 +727,8 @@ void auradsp_destroy(auradsp_handle h) {
             h->open.store(false);
         }
     }
+    fv_free(h->fvL);
+    fv_free(h->fvR);
     delete[] h->fft_scratch;
     delete[] h->viz_hist;
     delete[] h->shelf_scratch;
@@ -679,6 +753,22 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, out, (size_t)frames);
     } else {
         h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(in), out, (size_t)frames);
+    }
+    /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
+    if (h->p.fv_enable.load(std::memory_order_relaxed)) {
+        const float feedback =
+            0.7f + h->p.fv_decay.load(std::memory_order_relaxed) * 0.28f;
+        const float damp = h->p.fv_damp.load(std::memory_order_relaxed) * 0.4f;
+        const float wetG = h->p.fv_wet.load(std::memory_order_relaxed) * 0.5f;
+        const float dryG = h->p.fv_dry.load(std::memory_order_relaxed);
+        h->fvL.damp1 = damp; h->fvL.damp2 = 1.0f - damp;
+        h->fvR.damp1 = damp; h->fvR.damp2 = 1.0f - damp;
+        for (int i = 0; i < frames; ++i) {
+            const float wetL = fv_voice_process(h->fvL, out[i * 2], feedback);
+            const float wetR = fv_voice_process(h->fvR, out[i * 2 + 1], feedback);
+            out[i * 2]     = out[i * 2] * dryG + wetL * wetG;
+            out[i * 2 + 1] = out[i * 2 + 1] * dryG + wetR * wetG;
+        }
     }
 
     /* 可视化：每块写入历史窗（无条件），每 kVizInterval 帧产出一次；
@@ -923,6 +1013,44 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         shelf_recalc(h);
         return AURADSP_OK;
     }
+    /* ---- M5-c 参数化混响（T2 守卫与 reverb 同策略） ---- */
+    if (!strcmp(id, "freeverb.enable") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        const int32_t old = h->p.fv_enable.exchange(v);
+        double ms = 0.0; bool over = false;
+        if (v && !compute_latency(h, &ms, &over)) {
+            h->p.fv_enable.store(old);
+            set_error(h, "latency guard: reverb-class effect, switch to quality mode first");
+            return AURADSP_E_LATENCY_GUARD;
+        }
+        compute_latency(h, &ms, &over);
+        h->latency_ms = ms;
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "freeverb.decay") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.fv_decay.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "freeverb.damp") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.fv_damp.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "freeverb.wet") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.fv_wet.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "freeverb.dry") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.fv_dry.store(v);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) {
         h->p.xfeed_enable.store(*(const int32_t*)value ? 1 : 0);
         if (h->open.load()) apply_crossfeed(h);
@@ -981,6 +1109,11 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.gain") && bytes >= 4) { *(float*)out_value = h->p.shelf_gain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.fv_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.decay") && bytes >= 4) { *(float*)out_value = h->p.fv_decay.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.damp") && bytes >= 4) { *(float*)out_value = h->p.fv_damp.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.wet") && bytes >= 4) { *(float*)out_value = h->p.fv_wet.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.dry") && bytes >= 4) { *(float*)out_value = h->p.fv_dry.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 1024) {
         /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点

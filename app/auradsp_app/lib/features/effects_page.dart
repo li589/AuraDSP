@@ -40,6 +40,10 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _FreeverbCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _ConvolverCard(model: model),
         ),
         ListenableBuilder(
@@ -403,7 +407,88 @@ class _GuardActionChipState extends State<_GuardActionChip> {
   }
 }
 
-/* ---- 03 Convolver / IR（T2，品质档限定；门卫在引擎 load_ir_file） ---- */
+/* ---- 03 参数化混响（Freeverb，T2；独立于预设混响可并存） ---- */
+
+class _FreeverbCard extends StatelessWidget {
+  final AppModel model;
+  const _FreeverbCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    return SectionCard(
+      index: '03',
+      title: l.fvTitle,
+      hint: l.fvHint,
+      trailing: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => AuraSwitch(
+          value: model.fvOn,
+          onChanged: (v) => model.setFreeverbEnabled(
+              v, autoQualityMsg: l.convAutoQuality),
+        ),
+      ),
+      child: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _FvSlider(model: model, label: l.fvDecayLabel,
+                value: model.fvDecay,
+                onChanged: (v) => model.setFloat('freeverb.decay', v)),
+            _FvSlider(model: model, label: l.fvDampLabel,
+                value: model.fvDamp,
+                onChanged: (v) => model.setFloat('freeverb.damp', v)),
+            _FvSlider(model: model, label: l.fvWetLabel,
+                value: model.fvWet,
+                onChanged: (v) => model.setFloat('freeverb.wet', v)),
+            _FvSlider(model: model, label: l.fvDryLabel,
+                value: model.fvDry,
+                onChanged: (v) => model.setFloat('freeverb.dry', v)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FvSlider extends StatelessWidget {
+  final AppModel model;
+  final String label;
+  final double value;
+  final ValueChanged<double> onChanged;
+  const _FvSlider({
+    required this.model,
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Row(children: [
+      SizedBox(
+          width: 64,
+          child: Text(label, style: labelOf(p, color: p.textDim))),
+      Expanded(
+        child: Slider(
+          value: value.clamp(0.0, 1.0),
+          min: 0, max: 1,
+          onChanged: onChanged,
+        ),
+      ),
+      SizedBox(
+        width: 44,
+        child: Text('${(value * 100).toStringAsFixed(0)}%',
+            textAlign: TextAlign.right,
+            style: monoOf(p, size: 12, color: p.text)),
+      ),
+    ]);
+  }
+}
+
+/* ---- 04 Convolver / IR（T2，品质档限定；门卫在引擎 load_ir_file） ---- */
 
 class _ConvolverCard extends StatelessWidget {
   final AppModel model;
@@ -414,7 +499,7 @@ class _ConvolverCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '03',
+      index: '04',
       title: l.convTitle,
       trailing: ListenableBuilder(
         listenable: model,
@@ -497,7 +582,7 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '04',
+      index: '05',
       title: l.equalizer,
       trailing: AuraSwitch(
         value: model.eqOn,
@@ -652,7 +737,7 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '05',
+      index: '06',
       title: l.postGain,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

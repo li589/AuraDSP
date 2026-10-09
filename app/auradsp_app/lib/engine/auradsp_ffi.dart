@@ -46,6 +46,12 @@ abstract final class ParamId {
   static const shelfEnable = 'shelf.enable';
   static const shelfFreq = 'shelf.freq';
   static const shelfGain = 'shelf.gain';
+  // M5-c：参数化混响（Freeverb）
+  static const fvEnable = 'freeverb.enable';
+  static const fvDecay = 'freeverb.decay';
+  static const fvDamp = 'freeverb.damp';
+  static const fvWet = 'freeverb.wet';
+  static const fvDry = 'freeverb.dry';
 }
 
 /// auradsp_status（engine_api 枚举）

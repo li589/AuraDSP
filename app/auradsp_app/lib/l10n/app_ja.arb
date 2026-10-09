@@ -121,5 +121,11 @@
   "convNoIr": "IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）",
   "convResampled": "ソースのサンプルレートが異なるため自動リサンプルしました（明示）",
   "convAutoQuality": "コンボルバーを有効にするため品質モードへ自動切替しました",
-  "signalFlow": "シグナルフロー"
+  "signalFlow": "シグナルフロー",
+  "fvTitle": "パラメトリックリバーブ",
+  "fvHint": "Freeverb アルゴリズム（8 コム + 4 オールパス/CH）。プリセットリバーブと併用可。品質モード限定",
+  "fvDecayLabel": "減衰",
+  "fvDampLabel": "ダンピング",
+  "fvWetLabel": "ウェット",
+  "fvDryLabel": "ドライ"
 }

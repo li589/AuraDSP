@@ -729,6 +729,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'信号流'**
   String get signalFlow;
+
+  /// No description provided for @fvTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数化混响'**
+  String get fvTitle;
+
+  /// No description provided for @fvHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'Freeverb 算法（8 组合梳 + 4 全通/声道），与预设混响可并存；品质档限定'**
+  String get fvHint;
+
+  /// No description provided for @fvDecayLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'衰减'**
+  String get fvDecayLabel;
+
+  /// No description provided for @fvDampLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'阻尼'**
+  String get fvDampLabel;
+
+  /// No description provided for @fvWetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'湿声'**
+  String get fvWetLabel;
+
+  /// No description provided for @fvDryLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'干声'**
+  String get fvDryLabel;
 }
 
 class _AppLocalizationsDelegate

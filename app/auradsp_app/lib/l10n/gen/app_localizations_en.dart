@@ -344,4 +344,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get signalFlow => 'Signal Flow';
+
+  @override
+  String get fvTitle => 'Parametric Reverb';
+
+  @override
+  String get fvHint =>
+      'Freeverb algorithm (8 combs + 4 allpasses/ch), stacks with preset reverb; quality tier only';
+
+  @override
+  String get fvDecayLabel => 'Decay';
+
+  @override
+  String get fvDampLabel => 'Damping';
+
+  @override
+  String get fvWetLabel => 'Wet';
+
+  @override
+  String get fvDryLabel => 'Dry';
 }

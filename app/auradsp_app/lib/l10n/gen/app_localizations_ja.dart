@@ -332,4 +332,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get signalFlow => 'シグナルフロー';
+
+  @override
+  String get fvTitle => 'パラメトリックリバーブ';
+
+  @override
+  String get fvHint =>
+      'Freeverb アルゴリズム（8 コム + 4 オールパス/CH）。プリセットリバーブと併用可。品質モード限定';
+
+  @override
+  String get fvDecayLabel => '減衰';
+
+  @override
+  String get fvDampLabel => 'ダンピング';
+
+  @override
+  String get fvWetLabel => 'ウェット';
+
+  @override
+  String get fvDryLabel => 'ドライ';
 }

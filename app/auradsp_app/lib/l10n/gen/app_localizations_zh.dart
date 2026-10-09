@@ -330,4 +330,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get signalFlow => '信号流';
+
+  @override
+  String get fvTitle => '参数化混响';
+
+  @override
+  String get fvHint => 'Freeverb 算法（8 组合梳 + 4 全通/声道），与预设混响可并存；品质档限定';
+
+  @override
+  String get fvDecayLabel => '衰减';
+
+  @override
+  String get fvDampLabel => '阻尼';
+
+  @override
+  String get fvWetLabel => '湿声';
+
+  @override
+  String get fvDryLabel => '干声';
 }

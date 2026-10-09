@@ -121,5 +121,11 @@
   "convNoIr": "No IR loaded (WAV / FLAC; sniffed, size-capped, sanity-checked)",
   "convResampled": "Source rate differs from device — resampled automatically (disclosed, not silent)",
   "convAutoQuality": "Switched to Quality latency mode to enable convolver",
-  "signalFlow": "Signal Flow"
+  "signalFlow": "Signal Flow",
+  "fvTitle": "Parametric Reverb",
+  "fvHint": "Freeverb algorithm (8 combs + 4 allpasses/ch), stacks with preset reverb; quality tier only",
+  "fvDecayLabel": "Decay",
+  "fvDampLabel": "Damping",
+  "fvWetLabel": "Wet",
+  "fvDryLabel": "Dry"
 }

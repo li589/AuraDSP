@@ -121,5 +121,11 @@
   "convNoIr": "未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）",
   "convResampled": "源采样率与设备不同，已自动重采样（诚实明示，不静默）",
   "convAutoQuality": "已自动切换到品质延迟档以启用卷积",
-  "signalFlow": "信号流"
+  "signalFlow": "信号流",
+  "fvTitle": "参数化混响",
+  "fvHint": "Freeverb 算法（8 组合梳 + 4 全通/声道），与预设混响可并存；品质档限定",
+  "fvDecayLabel": "衰减",
+  "fvDampLabel": "阻尼",
+  "fvWetLabel": "湿声",
+  "fvDryLabel": "干声"
 }

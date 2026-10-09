@@ -78,6 +78,10 @@ class AppModel extends ChangeNotifier {
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
 
+  // M5-c：参数化混响（Freeverb）
+  bool fvOn = false;
+  double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.3, fvDry = 1.0;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -160,6 +164,11 @@ class AppModel extends ChangeNotifier {
         shelfOn = (raw['shelfEnable'] as int) != 0;
         shelfFreq = (raw['shelfFreq'] as num).toDouble();
         shelfGain = (raw['shelfGain'] as num).toDouble();
+        fvOn = (raw['fvEnable'] as int) != 0;
+        fvDecay = (raw['fvDecay'] as num).toDouble();
+        fvDamp = (raw['fvDamp'] as num).toDouble();
+        fvWet = (raw['fvWet'] as num).toDouble();
+        fvDry = (raw['fvDry'] as num).toDouble();
         notifyListeners();
         break;
       case 'liveprog':
@@ -291,6 +300,11 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
         if (id == ParamId.shelfFreq) { shelfFreq = v; break; }
         if (id == ParamId.shelfGain) { shelfGain = v; break; }
+        if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
+        if (id == ParamId.fvDecay) { fvDecay = v; break; }
+        if (id == ParamId.fvDamp) { fvDamp = v; break; }
+        if (id == ParamId.fvWet) { fvWet = v; break; }
+        if (id == ParamId.fvDry) { fvDry = v; break; }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }
@@ -352,6 +366,22 @@ class AppModel extends ChangeNotifier {
 
   void setCrossfeedEnabled(bool on) {
     setInt(ParamId.xfeedEnable, on ? 1 : 0);
+  }
+
+  /// 参数化混响使能（T2 类）：自动升档同混响策略
+  void setFreeverbEnabled(bool on, {required String autoQualityMsg}) {
+    if (on && reverbBlockedNow()) {
+      latencyMode = 2;
+      notifyListeners();
+      _markSent('mode.latency');
+      send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
+      lastInfo = autoQualityMsg;
+      eventSeq.value = ++_guardSeq;
+    }
+    fvOn = on;
+    notifyListeners();
+    _markSent(ParamId.fvEnable);
+    send({'cmd': 'setParam', 'id': ParamId.fvEnable, 'value': on ? 1 : 0, 'isFloat': false});
   }
 
   void clearConvolver() {
