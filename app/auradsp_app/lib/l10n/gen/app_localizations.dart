@@ -891,6 +891,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'清除'**
   String get ddcClear;
+
+  /// No description provided for @lpFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式化'**
+  String get lpFormat;
 }
 
 class _AppLocalizationsDelegate

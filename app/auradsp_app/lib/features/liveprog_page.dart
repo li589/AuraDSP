@@ -9,10 +9,12 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import 'eel_editor_support.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -25,6 +27,10 @@ class LiveprogPage extends StatefulWidget {
 }
 
 class _LiveprogPageState extends State<LiveprogPage> {
+  final _editorFocus = FocusNode();
+  int _cursorLine = 1, _cursorCol = 1;
+  List<EelLintIssue> _issues = const [];
+
   late final TextEditingController _code = TextEditingController(
       text: LiveprogLibrary.template);
   List<String> _library = const [];
@@ -33,10 +39,109 @@ class _LiveprogPageState extends State<LiveprogPage> {
   void initState() {
     super.initState();
     _refreshLibrary();
+    _runLint();
   }
 
   void _refreshLibrary() {
     setState(() => _library = LiveprogLibrary.list());
+  }
+
+  /// 即时 lint（括号/字符串，毫秒级）+ 光标行列
+  void _onCodeChanged(String text) {
+    _runLint();
+    final sel = _code.selection;
+    if (sel.isValid) {
+      final before = text.substring(0, sel.baseOffset.clamp(0, text.length));
+      final nl = before.lastIndexOf('\n');
+      setState(() {
+        _cursorLine = nl < 0 ? 1 : before.split('\n').length;
+        _cursorCol = before.length - (nl < 0 ? 0 : nl);
+      });
+    }
+  }
+
+  void _runLint() {
+    setState(() => _issues = EelLinter.lint(_code.text));
+  }
+
+  void _gotoLine(int line) {
+    final text = _code.text;
+    var offset = 0;
+    for (var i = 1; i < line; i++) {
+      final nl = text.indexOf('\n', offset);
+      if (nl < 0) {
+        offset = text.length;
+        break;
+      }
+      offset = nl + 1;
+    }
+    _code.selection = TextSelection.collapsed(offset: offset);
+    _editorFocus.requestFocus();
+  }
+
+  void _formatCode() {
+    final sel = _code.selection;
+    final formatted = EelFormatter.format(_code.text);
+    _code.value = TextEditingValue(
+      text: formatted,
+      selection: sel.isValid
+          ? sel.copyWith(
+              baseOffset: sel.baseOffset.clamp(0, formatted.length),
+              extentOffset: sel.extentOffset.clamp(0, formatted.length))
+          : const TextSelection.collapsed(offset: 0),
+    );
+    _runLint();
+  }
+
+  void _insertTab({required bool indentLess}) {
+    final text = _code.text;
+    final sel = _code.selection;
+    if (!sel.isValid || sel.isCollapsed) {
+      // 单光标：Shift+Tab 把当前行整体左移一格，否则插入 Tab
+      if (!indentLess) {
+        final pos = sel.baseOffset.clamp(0, text.length);
+        final newText = '${text.substring(0, pos)}\t${text.substring(pos)}';
+        _code.value = TextEditingValue(
+          text: newText,
+          selection: TextSelection.collapsed(offset: pos + 1),
+        );
+      } else {
+        final lineStart = text.lastIndexOf('\n', sel.baseOffset - 1) + 1;
+        if (text.startsWith('\t', lineStart)) {
+          final newText = text.substring(0, lineStart) +
+              text.substring(lineStart + 1);
+          _code.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(
+                offset: (sel.baseOffset - 1).clamp(0, newText.length)),
+          );
+        }
+      }
+      return;
+    }
+    // 选区：逐行加/去一级缩进
+    final start = sel.start.clamp(0, text.length);
+    final end = sel.end.clamp(0, text.length);
+    final lineStart = text.lastIndexOf('\n', start <= 0 ? 0 : start - 1) + 1;
+    final affected = text.substring(lineStart, end);
+    final lines = affected.split('\n');
+    final rebuilt = lines.map((l) {
+      if (indentLess) {
+        return l.startsWith('\t') ? l.substring(1) : l;
+      }
+      return '\t$l';
+    }).join('\n');
+    final newText = text.substring(0, lineStart) +
+        rebuilt +
+        text.substring(end);
+    _code.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection(
+        baseOffset: lineStart,
+        extentOffset: lineStart + rebuilt.length,
+      ),
+    );
+    _runLint();
   }
 
   void _apply() {
@@ -64,6 +169,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   @override
   void dispose() {
+    _editorFocus.dispose();
     _code.dispose();
     _libraryNameController.dispose();
     super.dispose();
@@ -104,6 +210,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       onTap: () => m.unloadLiveprog()),
                   AuraChip(l.lpNew, icon: Icons.note_add_outlined,
                       onTap: () => _code.text = LiveprogLibrary.template),
+                  AuraChip(l.lpFormat, icon: Icons.format_align_left_rounded,
+                      onTap: _formatCode),
                 ],
               ),
               const SizedBox(height: AuraSpace.md),
@@ -116,19 +224,90 @@ class _LiveprogPageState extends State<LiveprogPage> {
                   border: Border.all(color: p.hairline),
                 ),
                 padding: const EdgeInsets.all(AuraSpace.md),
-                child: TextField(
-                  controller: _code,
-                  maxLines: null,
-                  expands: true,
-                  style: monoOf(p, size: 12.5, color: p.text),
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: InputBorder.none,
-                    hintText: '@init\n...\n@sample\n...',
+                child: Shortcuts(
+                  // 拦截 Tab/Shift+Tab（覆盖 DefaultTextEditingShortcuts 的
+                  // 焦点遍历），改为编辑器内缩进
+                  shortcuts: const {
+                    SingleActivator(LogicalKeyboardKey.tab): _EelTabIntent(),
+                    SingleActivator(LogicalKeyboardKey.tab, shift: true):
+                        _EelTabIntent(shift: true),
+                  },
+                  child: Actions(
+                    actions: <Type, Action<Intent>>{
+                      _EelTabIntent: _EelTabAction(),
+                    },
+                    child: Focus(
+                      // 注意：这里必须用 Focus 自己创建的节点，不能与
+                      // TextField 共用 _editorFocus——同一 FocusNode 被两个
+                      // widget attach，debug 下 assert，release 下死循环
+                      // （无限 rebuild，双核满转，差点卡死整机——2026-10-10）
+                      onKeyEvent: (_, event) {
+                        // Shortcuts 已消费 Tab；这里再拦一层防焦点遍历
+                        if (event is KeyDownEvent &&
+                            event.logicalKey == LogicalKeyboardKey.tab) {
+                          return KeyEventResult.handled;
+                        }
+                        return KeyEventResult.ignored;
+                      },
+                      child: TextField(
+                        controller: _code,
+                        focusNode: _editorFocus,
+                        maxLines: null,
+                        expands: true,
+                        style: monoOf(p, size: 12.5, color: p.text),
+                        onChanged: _onCodeChanged,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: InputBorder.none,
+                          hintText: '@init\\n...\\n@sample\\n...',
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
               const SizedBox(height: AuraSpace.sm),
+              // 光标位置 + 语法检查（lint）列表：点击问题跳转到对应行
+              Row(children: [
+                Text('行 $_cursorLine · 列 $_cursorCol',
+                    style: monoOf(p, size: 11, color: p.textDim)),
+                const SizedBox(width: AuraSpace.md),
+                Text(
+                    _issues.isEmpty
+                        ? '语法检查：通过'
+                        : '语法检查：$_issues 处问题',
+                    style: monoOf(p,
+                        size: 11,
+                        color: _issues.isEmpty ? p.success : p.error)),
+              ]),
+              if (_issues.isNotEmpty) ...[
+                const SizedBox(height: AuraSpace.xs),
+                for (final issue in _issues.take(4))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 2),
+                    child: MouseRegion(
+                      cursor: SystemMouseCursors.click,
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: issue.line > 0 ? () => _gotoLine(issue.line) : null,
+                        child: Row(children: [
+                          Icon(Icons.error_outline,
+                              size: 12, color: p.error),
+                          const SizedBox(width: AuraSpace.xs),
+                          Text(
+                              issue.line > 0
+                                  ? '第 ${issue.line} 行 · ${issue.message}'
+                                  : issue.message,
+                              style: monoOf(p, size: 11, color: p.error)),
+                        ]),
+                      ),
+                    ),
+                  ),
+                if (_issues.length > 4)
+                  Text('… 共 ${_issues.length} 处',
+                      style: monoOf(p, size: 11, color: p.error)),
+              ],
+              const SizedBox(height: AuraSpace.xs),
               // 编译反馈（内联标红 / 绿色 OK）
               ListenableBuilder(
                 listenable: m,
@@ -336,4 +515,26 @@ dbg = 0;
 spl0 *= slider1;
 spl1 *= slider1;
 ''';
+}
+
+/* ---- Tab 缩进意图（覆盖 DefaultTextEditingShortcuts 的焦点遍历） ---- */
+
+class _EelTabIntent extends Intent {
+  final bool shift;
+  const _EelTabIntent({this.shift = false});
+}
+
+class _EelTabAction extends Action<_EelTabIntent> {
+  // Action 无 const 构造——actions 映射改为非常量
+  _EelTabAction();
+
+  @override
+  Object? invoke(covariant _EelTabIntent intent) {
+    final ctx = primaryFocus?.context;
+    if (ctx != null) {
+      final state = ctx.findAncestorStateOfType<_LiveprogPageState>();
+      state?._insertTab(indentLess: intent.shift);
+    }
+    return null;
+  }
 }

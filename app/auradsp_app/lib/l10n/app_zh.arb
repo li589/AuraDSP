@@ -148,5 +148,6 @@
   "ddcOpen": "打开 VDC 文件",
   "ddcNoFile": "未加载校正文件（.vdc：耳机/扬声器空间校正系数，兼容蝰蛇音效 DDC）",
   "ddcLoaded": "已加载",
-  "ddcClear": "清除"
+  "ddcClear": "清除",
+  "lpFormat": "格式化"
 }

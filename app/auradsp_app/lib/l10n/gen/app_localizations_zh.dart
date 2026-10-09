@@ -412,4 +412,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ddcClear => '清除';
+
+  @override
+  String get lpFormat => '格式化';
 }

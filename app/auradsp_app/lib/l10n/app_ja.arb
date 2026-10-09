@@ -148,5 +148,6 @@
   "ddcOpen": "VDC ファイルを開く",
   "ddcNoFile": "補正ファイル未読込（.vdc：イヤホン/スピーカー空間補正、ViPER DDC 互換）",
   "ddcLoaded": "読込済",
-  "ddcClear": "クリア"
+  "ddcClear": "クリア",
+  "lpFormat": "整形"
 }

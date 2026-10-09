@@ -148,5 +148,6 @@
   "ddcOpen": "Open VDC file",
   "ddcNoFile": "No correction file loaded (.vdc: earphone/speaker spatial correction, ViPER DDC compatible)",
   "ddcLoaded": "Loaded",
-  "ddcClear": "Clear"
+  "ddcClear": "Clear",
+  "lpFormat": "Format"
 }

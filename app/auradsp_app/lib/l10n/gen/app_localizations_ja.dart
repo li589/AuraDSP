@@ -415,4 +415,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ddcClear => 'クリア';
+
+  @override
+  String get lpFormat => '整形';
 }

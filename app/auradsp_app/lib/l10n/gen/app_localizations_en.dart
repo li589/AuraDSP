@@ -430,4 +430,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ddcClear => 'Clear';
+
+  @override
+  String get lpFormat => 'Format';
 }
