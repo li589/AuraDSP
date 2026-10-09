@@ -139,5 +139,7 @@
   "presetDeleted": "预设已删除",
   "presetDeleteFail": "删除失败",
   "presetLoaded": "预设已载入",
-  "presetLoadFail": "预设读取失败"
+  "presetLoadFail": "预设读取失败",
+  "navPlugins": "插件",
+  "navChain": "处理链"
 }

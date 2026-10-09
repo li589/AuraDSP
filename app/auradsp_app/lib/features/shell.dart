@@ -13,9 +13,11 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import 'chain_page.dart';
 import 'effects_page.dart';
 import 'home_page.dart';
 import 'liveprog_page.dart';
+import 'plugins_page.dart';
 import 'settings_page.dart';
 import 'visualizer_page.dart';
 import 'widgets.dart';
@@ -36,8 +38,9 @@ class _AppShellState extends State<AppShell> {
     (icon: Icons.home_outlined, active: Icons.home),
     (icon: Icons.tune_outlined, active: Icons.tune),
     (icon: Icons.code_rounded, active: Icons.code),
+    (icon: Icons.extension_outlined, active: Icons.extension),
+    (icon: Icons.account_tree_rounded, active: Icons.account_tree),
     (icon: Icons.bar_chart_outlined, active: Icons.bar_chart),
-    (icon: Icons.settings_outlined, active: Icons.settings),
   ];
 
   @override
@@ -45,21 +48,16 @@ class _AppShellState extends State<AppShell> {
     final p = paletteOf(context);
     final m = widget.model;
     final l = l10nOf(context);
-    final labels = [l.navHome, l.navEffects, l.navLiveprog, l.navVisualizer, l.navSettings];
-    final eyebrows = [
-      l.pageHomeEyebrow,
-      l.pageEffectsEyebrow,
-      l.pageLiveprogEyebrow,
-      l.pageVisualizerEyebrow,
-      l.pageSettingsEyebrow,
-    ];
+    final labels = [l.navHome, l.navEffects, l.navLiveprog, l.navPlugins, l.navChain, l.navVisualizer];
+
 
     final pages = [
       HomePage(model: m),
       EffectsPage(model: m),
       LiveprogPage(model: m),
+      PluginsPage(model: m),
+      ChainPage(model: m),
       VisualizerPage(model: m),
-      SettingsPage(model: m),
     ];
 
     return Scaffold(
@@ -73,13 +71,13 @@ class _AppShellState extends State<AppShell> {
             model: m,
             collapsed: _railCollapsed,
             onToggle: () => setState(() => _railCollapsed = !_railCollapsed),
+            onOpenSettings: _openSettings,
           ),
           Container(width: 1, color: p.hairline),
           Expanded(
             child: Column(
               children: [
                 _TopBar(
-                  eyebrow: eyebrows[_index],
                   model: m,
                   onCycleTheme: _cycleTheme,
                 ),
@@ -120,6 +118,19 @@ class _AppShellState extends State<AppShell> {
     );
   }
 
+  void _openSettings() {
+    showDialog<void>(
+      context: context,
+      builder: (_) => Dialog(
+        backgroundColor: Colors.transparent,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
+          child: SettingsPage(model: widget.model),
+        ),
+      ),
+    );
+  }
+
   void _cycleTheme() {
     final all = AuraThemeId.values;
     final next = all[(widget.model.themeId.index + 1) % all.length];
@@ -137,6 +148,7 @@ class _Rail extends StatelessWidget {
   final AppModel model;
   final bool collapsed;
   final VoidCallback onToggle;
+  final VoidCallback onOpenSettings;
 
   const _Rail({
     required this.labels,
@@ -146,6 +158,7 @@ class _Rail extends StatelessWidget {
     required this.model,
     required this.collapsed,
     required this.onToggle,
+    required this.onOpenSettings,
   });
 
   @override
@@ -215,6 +228,16 @@ class _Rail extends StatelessWidget {
             ),
           ),
           const Spacer(),
+          // 设置入口（六页之外，rail 底部）
+          Padding(
+            padding: EdgeInsets.only(
+                left: collapsed ? 0 : AuraSpace.lg,
+                bottom: AuraSpace.md),
+            child: SizedBox(
+              width: collapsed ? AuraSize.railMinW - AuraSpace.sm * 2 : double.infinity,
+              child: _RailSettingsButton(model: model),
+            ),
+          ),
           // 底部装置信息（收起时隐藏）
           if (!collapsed)
             Padding(
@@ -437,11 +460,9 @@ class _NavItemState extends State<_NavItem> {
 /* ==================== 顶栏（常驻状态） ==================== */
 
 class _TopBar extends StatelessWidget {
-  final String eyebrow;
   final AppModel model;
   final VoidCallback onCycleTheme;
   const _TopBar({
-    required this.eyebrow,
     required this.model,
     required this.onCycleTheme,
   });
@@ -460,10 +481,6 @@ class _TopBar extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: AuraSpace.pageX),
             child: Row(
               children: [
-                Text(eyebrow, style: eyebrowOf(p)),
-                const SizedBox(width: AuraSpace.lg),
-                Container(width: 1, height: 14, color: p.hairline),
-                const SizedBox(width: AuraSpace.lg),
                 // 引擎形态摘要（安静的一行等宽小字）
                 ListenableBuilder(
                   listenable: model,
@@ -560,6 +577,65 @@ class _IconActionState extends State<_IconAction> {
                   size: 18, color: _hover ? p.text : p.textDim),
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// rail 底部设置按钮：全宽（收起时方形），打开设置对话框
+class _RailSettingsButton extends StatefulWidget {
+  final AppModel model;
+  const _RailSettingsButton({required this.model});
+
+  @override
+  State<_RailSettingsButton> createState() => _RailSettingsButtonState();
+}
+
+class _RailSettingsButtonState extends State<_RailSettingsButton> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (_) => Dialog(
+            backgroundColor: Colors.transparent,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
+              child: SettingsPage(model: widget.model),
+            ),
+          ),
+        ),
+        child: AnimatedContainer(
+          duration: AuraDur.fast,
+          height: 34,
+          decoration: BoxDecoration(
+            color: _hover ? hoverOn(p, alpha: 0.07) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(
+                color: _hover ? p.textDim.withValues(alpha: 0.4) : p.hairline),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center, children: [
+            Icon(Icons.settings_outlined,
+                size: 16,
+                color: _hover ? p.text : p.textDim),
+            const SizedBox(width: AuraSpace.sm),
+            Text(l.navSettings,
+                style: TextStyle(
+                    fontSize: 12,
+                    color: _hover ? p.text : p.textDim)),
+            const SizedBox(width: AuraSpace.sm),
+          ]),
         ),
       ),
     );

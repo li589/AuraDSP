@@ -139,5 +139,7 @@
   "presetDeleted": "プリセットを削除しました",
   "presetDeleteFail": "削除失敗",
   "presetLoaded": "プリセットを適用しました",
-  "presetLoadFail": "プリセット読込失敗"
+  "presetLoadFail": "プリセット読込失敗",
+  "navPlugins": "プラグイン",
+  "navChain": "チェーン"
 }

@@ -1077,6 +1077,20 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         shelf_recalc(h);
         return AURADSP_OK;
     }
+    /* ---- M3.5-a：处理顺序（P-004 表驱动链） ---- */
+    if (!strcmp(id, "graph.order") && bytes >= 16) {
+        char* ord = (char*)malloc((size_t)bytes + 1);
+        if (!ord) { set_error(h, "graph.order: OOM"); return AURADSP_E_IO; }
+        memcpy(ord, value, bytes);
+        ord[bytes] = 0;
+        const int rc = JamesDSPRebuildChain(&h->jdsp, ord);
+        free(ord);
+        if (rc != 0) {
+            set_error(h, "graph.order: invalid list (need all 12 stages exactly once)");
+            return AURADSP_E_PARAM;
+        }
+        return AURADSP_OK;
+    }
     /* ---- M5-c 参数化混响（T2 守卫与 reverb 同策略） ---- */
     if (!strcmp(id, "freeverb.enable") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value ? 1 : 0;

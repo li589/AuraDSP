@@ -837,6 +837,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'预设读取失败'**
   String get presetLoadFail;
+
+  /// No description provided for @navPlugins.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件'**
+  String get navPlugins;
+
+  /// No description provided for @navChain.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理链'**
+  String get navChain;
 }
 
 class _AppLocalizationsDelegate

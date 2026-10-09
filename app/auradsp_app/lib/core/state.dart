@@ -82,6 +82,9 @@ class AppModel extends ChangeNotifier {
   bool fvOn = false;
   double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.3, fvDry = 1.0;
 
+  // M3.5-a：处理顺序（Dart 镜像；引擎侧表驱动 P-004）
+  String? graphOrder;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -311,6 +314,11 @@ class AppModel extends ChangeNotifier {
   }
 
   /* ---- Liveprog 命令（v1.1） ---- */
+
+  void setGraphOrder(String order) {
+    graphOrder = order;
+    send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': order});
+  }
 
   void setStringParam(String id, String text) {
     send({'cmd': 'setParamStr', 'id': id, 'text': text});

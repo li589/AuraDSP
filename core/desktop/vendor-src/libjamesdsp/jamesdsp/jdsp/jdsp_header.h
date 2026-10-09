@@ -499,6 +499,16 @@ typedef struct
 	float *impulseResponse;
 	unsigned int impChannels, impulseLengthActual;
 } tmpIRData;
+/* [PATCHED-AuraDSP 2026-10-09 P-004] 表驱动处理链：顺序由宿主经
+ * JamesDSPRebuildChain 重建（graph.order）。stage fn 内含各自 enabled 判断；
+ * lock=1 的段（convolver/ddc/liveprog）逐段加解锁——与上游"三段连续一次
+ * 加解锁"相比锁粒度更细（竞态窗口变化，数值输出等价）。 */
+typedef void (*JDSPStageFn)(struct dspsys *jdsp, size_t n);
+typedef struct
+{
+	JDSPStageFn fn;
+	char lock;
+} JDSPChainItem;
 typedef struct dspsys
 {
 	// Sys var
@@ -546,6 +556,9 @@ typedef struct dspsys
 	float *tmpBuffer[6];
 	// Internal function pointer
 	void(*processInternal)(struct dspsys *, size_t);
+	/* [PATCHED-AuraDSP P-004] */
+	JDSPChainItem chain[16];
+	int chainLen;
 	int32_t(*i32_from_p24)(const uint8_t *);
 	void (*p24_from_i32)(int32_t, uint8_t *);
 	// I/O function pointer
@@ -650,6 +663,7 @@ extern void CrossfeedChangeMode(JamesDSPLib *jdsp, int nMode);
 extern void CrossfeedProcess(JamesDSPLib *jdsp, size_t n);
 // Convolver
 extern void Convolver1DEnable(JamesDSPLib *jdsp);
+extern int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids); /* [PATCHED-AuraDSP P-004] */
 extern void Convolver1DDisable(JamesDSPLib *jdsp);
 extern void Convolver1DConstructor(JamesDSPLib *jdsp);
 extern void Convolver1DDestructor(JamesDSPLib *jdsp);

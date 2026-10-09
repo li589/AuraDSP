@@ -385,4 +385,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get presetLoadFail => '预设读取失败';
+
+  @override
+  String get navPlugins => '插件';
+
+  @override
+  String get navChain => '处理链';
 }

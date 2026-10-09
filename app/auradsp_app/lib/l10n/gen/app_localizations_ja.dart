@@ -388,4 +388,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get presetLoadFail => 'プリセット読込失敗';
+
+  @override
+  String get navPlugins => 'プラグイン';
+
+  @override
+  String get navChain => 'チェーン';
 }

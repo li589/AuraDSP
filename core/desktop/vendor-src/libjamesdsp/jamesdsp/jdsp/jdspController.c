@@ -285,46 +285,66 @@ void jdsp_unlock(JamesDSPLib *jdsp)
 	if (jdsp->isMutexSuccess)
 		pthread_mutex_unlock(&jdsp->m_in_processing);
 }
-// Process
-void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
+/* [PATCHED-AuraDSP P-004] stage 封装：enabled 判断收进 stage，表项恒 on；
+ * 输出级（postGain+limiter）从内联代码抽成函数供表驱动复用 */
+static void stage_tube(JamesDSPLib *jdsp, size_t n)
 {
-	// Analog modelling
 	if (jdsp->tubeEnabled)
 		VacuumTubeProcess(jdsp, n);
-	// Input / Compressor
+}
+static void stage_comp(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->compEnabled)
 		CompressorProcess(jdsp, n);
-	// IIR bass boost
+}
+static void stage_bass(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->bassBoostEnabled)
 		BassBoostProcess(jdsp, n);
-	// Equalizer
+}
+static void stage_eq(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->equalizerEnabled)
 		MultimodalEqualizerProcess(jdsp, n);
-	// Arbitrary magnitude eq
+}
+static void stage_arbmag(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->arbitraryMagEnabled)
 		ArbitraryResponseEqualizerProcess(jdsp, n);
-	jdsp_lock(jdsp);
-	// Convolver
+}
+static void stage_conv(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->convolverEnabled)
 		if (jdsp->conv.process)
 			jdsp->conv.process(jdsp, n);
-	// Viper DDC
+}
+static void stage_ddc(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->ddcEnabled)
 		DDCProcess(jdsp, n);
-	// Live programmable
+}
+static void stage_liveprog(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->liveprogEnabled)
 		LiveProgProcess(jdsp, n);
-	jdsp_unlock(jdsp);
-	// BS2B
+}
+static void stage_crossfeed(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->crossfeedEnabled)
 		CrossfeedProcess(jdsp, n);
-	// Stereo widening
+}
+static void stage_stereo(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->sterEnhEnabled)
 		StereoEnhancementProcess(jdsp, n);
-	// Reverb
+}
+static void stage_reverb(JamesDSPLib *jdsp, size_t n)
+{
 	if (jdsp->reverbEnabled)
 		ReverbProcess(jdsp, n);
-	// Output
+}
+static void stage_output(JamesDSPLib *jdsp, size_t n)
+{
 	for (size_t i = 0; i < n; i++)
 	{
 		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain;
@@ -345,63 +365,114 @@ void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 		jdsp->tmpBuffer[1][i] = rect2;
 	}
 }
+
+static const struct
+{
+	const char *id;
+	JDSPStageFn fn;
+	char lock;
+} kAuraStages[] = {
+	{"tube", stage_tube, 0},
+	{"comp", stage_comp, 0},
+	{"bass", stage_bass, 0},
+	{"eq", stage_eq, 0},
+	{"arbmag", stage_arbmag, 0},
+	{"convolver", stage_conv, 1},
+	{"ddc", stage_ddc, 1},
+	{"liveprog", stage_liveprog, 1},
+	{"crossfeed", stage_crossfeed, 0},
+	{"stereo", stage_stereo, 0},
+	{"reverb", stage_reverb, 0},
+	{"output", stage_output, 0},
+};
+#define kAuraStageCount (sizeof(kAuraStages) / sizeof(kAuraStages[0]))
+
+/* 重建处理链：ids=NULL 用默认序；否则逗号分隔 id 列表（必须恰好包含
+ * 全部 stage 各一次，集合校验失败返回 -1 且保持原表）。 */
+int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
+{
+	int used[kAuraStageCount];
+	for (unsigned int i = 0; i < kAuraStageCount; ++i)
+		used[i] = 0;
+	int len = 0;
+	JDSPChainItem tmp[64];
+	if (!ids)
+	{
+		for (unsigned int i = 0; i < kAuraStageCount; ++i)
+		{
+			tmp[i].fn = kAuraStages[i].fn;
+			tmp[i].lock = kAuraStages[i].lock;
+		}
+		len = (int)kAuraStageCount;
+	}
+	else
+	{
+		char *txt = (char *)malloc(strlen(ids) + 1);
+		if (!txt)
+			return -1;
+		strcpy(txt, ids);
+		char *cur = txt;
+		/* [PATCHED-AuraDSP P-004] 烟囱抓回：循环上限不能是 stage 数
+		 * （多出的尾部项会静默逃过集合校验），容量放大、解析后校验
+		 * 项数与集合双重把关 */
+		while (cur && len < 64)
+		{
+			char *comma = strchr(cur, ',');
+			if (comma)
+				*comma = 0;
+			int found = -1;
+			for (unsigned int i = 0; i < kAuraStageCount; ++i)
+				if (!strcmp(cur, kAuraStages[i].id))
+				{
+					found = (int)i;
+					break;
+				}
+			if (found < 0 || used[found])
+			{
+				free(txt);
+				return -1;
+			}
+			used[found] = 1;
+			tmp[len].fn = kAuraStages[found].fn;
+			tmp[len].lock = kAuraStages[found].lock;
+			++len;
+			cur = comma ? comma + 1 : ((void *)0);
+		}
+		free(txt);
+		if (len != (int)kAuraStageCount)
+			return -1;
+		for (unsigned int i = 0; i < kAuraStageCount; ++i)
+			if (!used[i])
+				return -1;
+	}
+	for (int i = 0; i < len; ++i)
+		jdsp->chain[i] = tmp[i];
+	jdsp->chainLen = len;
+	return 0;
+}
+
+// Process（P-004 表驱动）
+void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
+{
+	for (int i = 0; i < jdsp->chainLen; ++i)
+	{
+		if (jdsp->chain[i].lock)
+			jdsp_lock(jdsp);
+		jdsp->chain[i].fn(jdsp, n);
+		if (jdsp->chain[i].lock)
+			jdsp_unlock(jdsp);
+	}
+}
 void JamesDSPProcessCheckBenchmarkReady(JamesDSPLib *jdsp, size_t n)
 {
-	// Analog modelling
-	if (jdsp->tubeEnabled)
-		VacuumTubeProcess(jdsp, n);
-	// Input / Compressor
-	if (jdsp->compEnabled)
-		CompressorProcess(jdsp, n);
-	// IIR bass boost
-	if (jdsp->bassBoostEnabled)
-		BassBoostProcess(jdsp, n);
-	// Equalizer
-	if (jdsp->equalizerEnabled)
-		MultimodalEqualizerProcess(jdsp, n);
-	// Arbitrary magnitude eq
-	if (jdsp->arbitraryMagEnabled)
-		ArbitraryResponseEqualizerProcess(jdsp, n);
-	jdsp_lock(jdsp);
-	// Convolver
-	if (jdsp->convolverEnabled)
-		if (jdsp->conv.process)
-			jdsp->conv.process(jdsp, n);
-	// Viper DDC
-	if (jdsp->ddcEnabled)
-		DDCProcess(jdsp, n);
-	// Live programmable
-	if (jdsp->liveprogEnabled)
-		LiveProgProcess(jdsp, n);
-	jdsp_unlock(jdsp);
-	// BS2B
-	if (jdsp->crossfeedEnabled)
-		CrossfeedProcess(jdsp, n);
-	// Stereo widening
-	if (jdsp->sterEnhEnabled)
-		StereoEnhancementProcess(jdsp, n);
-	// Reverb
-	if (jdsp->reverbEnabled)
-		ReverbProcess(jdsp, n);
-	// Output
-	for (size_t i = 0; i < n; i++)
+	/* [PATCHED-AuraDSP P-004] 链体表驱动（与 JamesDSPProcess 同表） */
+	for (int i = 0; i < jdsp->chainLen; ++i)
 	{
-		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain;
-		float xR = jdsp->tmpBuffer[1][i] * jdsp->postGain;
-		float rect1 = fabsf(xL);
-		float rect2 = fabsf(xR);
-		float maxLR = max(rect1, rect2);
-		if (maxLR < jdsp->limiter.threshold)
-			maxLR = jdsp->limiter.threshold;
-		if (maxLR > jdsp->limiter.envOverThreshold)
-			jdsp->limiter.envOverThreshold = maxLR;
-		else
-			jdsp->limiter.envOverThreshold = maxLR + jdsp->limiter.relCoef * (jdsp->limiter.envOverThreshold - maxLR);
-		float gR = jdsp->limiter.threshold / jdsp->limiter.envOverThreshold;
-		rect1 = xL * gR;
-		rect2 = xR * gR;
-		jdsp->tmpBuffer[0][i] = rect1;
-		jdsp->tmpBuffer[1][i] = rect2;
+		if (jdsp->chain[i].lock)
+			jdsp_lock(jdsp);
+		jdsp->chain[i].fn(jdsp, n);
+		if (jdsp->chain[i].lock)
+			jdsp_unlock(jdsp);
 	}
 	if (benchmarkCompletionFlag == 1)
 	{
@@ -1044,6 +1115,8 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	jdsp->processInt8_24Deinterleaved = pint8_24;
 	jdsp->processInt24PackedDeinterleaved = pintp24;
 	jdsp->processInternal = JamesDSPProcessCheckBenchmarkReady;
+	/* [PATCHED-AuraDSP P-004] 默认处理序 */
+	JamesDSPRebuildChain(jdsp, (void *)0);
 	//
 	const unsigned int asrc_taps = 64;
 	char isminphase = 1;

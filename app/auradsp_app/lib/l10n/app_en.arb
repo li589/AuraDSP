@@ -139,5 +139,7 @@
   "presetDeleted": "Preset deleted",
   "presetDeleteFail": "Delete failed",
   "presetLoaded": "Preset loaded",
-  "presetLoadFail": "Preset read failed"
+  "presetLoadFail": "Preset read failed",
+  "navPlugins": "Plugins",
+  "navChain": "Chain"
 }

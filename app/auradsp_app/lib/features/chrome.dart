@@ -20,8 +20,8 @@ import '../core/theme.dart';
 /* ==================== 1. 页面骨架 ==================== */
 
 class PageScaffold extends StatefulWidget {
-  /// 眉标（等宽小字，如 "CONSOLE" / "DSP CHAIN"）
-  final String eyebrow;
+  /// 眉标（等宽小字）——六页架构后默认不传（去小标题设计）
+  final String? eyebrow;
 
   /// 页面主标题
   final String title;
@@ -40,7 +40,7 @@ class PageScaffold extends StatefulWidget {
 
   const PageScaffold({
     super.key,
-    required this.eyebrow,
+    this.eyebrow,
     required this.title,
     required this.children,
     this.trailing,
@@ -124,11 +124,19 @@ class _PageScaffoldState extends State<PageScaffold>
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  PageHeader(
-                    eyebrow: widget.eyebrow,
-                    title: widget.title,
-                    trailing: widget.trailing,
-                  ),
+                  if (widget.eyebrow != null)
+                    PageHeader(
+                      eyebrow: widget.eyebrow!,
+                      title: widget.title,
+                      trailing: widget.trailing,
+                    )
+                  else
+                    PageHeader(
+                      eyebrow: '',
+                      title: widget.title,
+                      trailing: widget.trailing,
+                      bare: true,
+                    ),
                   const SizedBox(height: AuraSpace.xl),
                   ...body,
                 ],
@@ -145,16 +153,43 @@ class PageHeader extends StatelessWidget {
   final String eyebrow;
   final String title;
   final Widget? trailing;
+
+  /// bare=true：无眉标模式（六页架构）——标题字号提升，保留分隔线
+  final bool bare;
   const PageHeader({
     super.key,
     required this.eyebrow,
     required this.title,
     this.trailing,
+    this.bare = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    if (bare) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: displayOf(p, size: 30)),
+          const SizedBox(height: AuraSpace.md),
+          Row(
+            children: [
+              Container(
+                width: 22,
+                height: 2,
+                decoration: BoxDecoration(
+                  color: p.accent,
+                  borderRadius: BorderRadius.circular(1),
+                ),
+              ),
+              const SizedBox(width: AuraSpace.sm),
+              Expanded(child: Container(height: 1, color: p.hairline)),
+            ],
+          ),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

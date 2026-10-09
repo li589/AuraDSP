@@ -401,4 +401,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get presetLoadFail => 'Preset read failed';
+
+  @override
+  String get navPlugins => 'Plugins';
+
+  @override
+  String get navChain => 'Chain';
 }
