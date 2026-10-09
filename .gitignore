@@ -22,3 +22,10 @@ cpp_sources.txt
 .idea/
 Thumbs.db
 .DS_Store
+
+# --- Flutter APP 构建产物 ---
+.tmp/
+**/build/
+**/.dart_tool/
+**/windows/flutter/ephemeral/
+**/.plugin_symlinks/

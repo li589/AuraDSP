@@ -1,0 +1,13 @@
+LIBRARY auradsp_engine
+EXPORTS
+    auradsp_create
+    auradsp_destroy
+    auradsp_process
+    auradsp_set_param
+    auradsp_get_param
+    auradsp_get_state
+    auradsp_get_latency_ms
+    auradsp_last_error
+    auradsp_viz_read
+    auradsp_version
+    auradsp_abi

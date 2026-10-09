@@ -1,0 +1,131 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "$description": "AuraDSP 设计令牌真相源 v1.0 — 供 Flutter 代码生成 ThemeData；间距 8pt 网格；圆角 6/10/14 三级；禁用阴影堆叠，层次靠明度阶梯 + 1px hairline。",
+  "color": {
+    "aura-dark": {
+      "bg": { "value": "#0E0F13" },
+      "panel": { "value": "#171A21" },
+      "panel-raised": { "value": "#1E222B" },
+      "hairline": { "value": "#2A2F3A" },
+      "text": { "value": "#E8EAF0" },
+      "text-dim": { "value": "#9AA3B2" },
+      "accent": { "value": "#D4FF3F" },
+      "accent-contrast": { "value": "#10130A" },
+      "accent-2": { "value": "#FF6B35" },
+      "success": { "value": "#5AD19B" },
+      "warning": { "value": "#E8B93E" },
+      "error": { "value": "#F05A5A" },
+      "viz-spectrum": { "value": "#D4FF3F" },
+      "viz-grid": { "value": "#232838" }
+    },
+    "aura-light": {
+      "bg": { "value": "#F4F1EA" },
+      "panel": { "value": "#FFFFFF" },
+      "panel-raised": { "value": "#FBFAF6" },
+      "hairline": { "value": "#E2DDCF" },
+      "text": { "value": "#1A1A1A" },
+      "text-dim": { "value": "#6E6A60" },
+      "accent": { "value": "#E63B2E" },
+      "accent-contrast": { "value": "#FFF7F6" },
+      "accent-2": { "value": "#22335C" },
+      "success": { "value": "#1E7A4E" },
+      "warning": { "value": "#9A6D00" },
+      "error": { "value": "#C0271B" },
+      "viz-spectrum": { "value": "#E63B2E" },
+      "viz-grid": { "value": "#E7E2D6" }
+    },
+    "aurora": {
+      "bg": { "value": "#070B14" },
+      "panel": { "value": "#0D1522" },
+      "panel-raised": { "value": "#122036" },
+      "hairline": { "value": "#1B2A44" },
+      "text": { "value": "#DCE6F5" },
+      "text-dim": { "value": "#7C8CA6" },
+      "accent": { "value": "#64F0DC" },
+      "accent-contrast": { "value": "#04110E" },
+      "accent-2": { "value": "#FF5EA8" },
+      "success": { "value": "#4FDE9E" },
+      "warning": { "value": "#F0C24B" },
+      "error": { "value": "#FF6B6B" },
+      "viz-spectrum": { "value": "#64F0DC" },
+      "viz-grid": { "value": "#142033" }
+    }
+  },
+  "spacing": {
+    "xxs": { "value": "2px" },
+    "xs": { "value": "4px" },
+    "sm": { "value": "8px" },
+    "md": { "value": "12px" },
+    "lg": { "value": "16px" },
+    "xl": { "value": "24px" },
+    "xxl": { "value": "32px" },
+    "hero": { "value": "48px" },
+    "semantic": {
+      "$description": "语义化间距——组件与「外框」留白的一致性来源",
+      "page-x": { "value": "32px" },
+      "page-top": { "value": "26px" },
+      "page-bottom": { "value": "32px" },
+      "card-pad": { "value": "20px" },
+      "card-head-gap": { "value": "16px" },
+      "card-gap": { "value": "16px" },
+      "row-gap": { "value": "12px" },
+      "content-max-w": { "value": "1080px" }
+    }
+  },
+  "radius": {
+    "xs": { "value": "4px" },
+    "sm": { "value": "6px" },
+    "md": { "value": "10px" },
+    "lg": { "value": "14px" }
+  },
+  "size": {
+    "$description": "组件尺寸——统一控件高度/图标/滑块，避免各组件各自为政",
+    "rail-w": { "value": "216px" },
+    "top-bar-h": { "value": "56px" },
+    "nav-item-h": { "value": "40px" },
+    "nav-icon": { "value": "18px" },
+    "chip-h": { "value": "30px" },
+    "switch-w": { "value": "38px" },
+    "switch-h": { "value": "22px" },
+    "switch-thumb": { "value": "16px" },
+    "slider-thumb": { "value": "6px" },
+    "slider-track": { "value": "4px" },
+    "hero-h": { "value": "156px" }
+  },
+  "motion": {
+    "$description": "动效节奏——时长与曲线集中管理，禁止散落魔法数",
+    "duration": {
+      "instant": { "value": "90ms" },
+      "fast": { "value": "140ms" },
+      "base": { "value": "220ms" },
+      "slow": { "value": "380ms" },
+      "page": { "value": "260ms" },
+      "stagger-step": { "value": "55ms" },
+      "stagger-span": { "value": "620ms" }
+    },
+    "curve": {
+      "standard": { "value": "easeOutCubic" },
+      "emphasized": { "value": "cubic-bezier(0.2, 0, 0, 1)" },
+      "entrance": { "value": "cubic-bezier(0.16, 1, 0.3, 1)" }
+    }
+  },
+  "typography": {
+    "$description": "字体分工铁律：正文/控件用系统黑体，只有标题/品牌用得意黑",
+    "display": { "latin": { "value": "Bricolage Grotesque" }, "cjk": { "value": "Smiley Sans" } },
+    "body": { "latin": { "value": "Bricolage Grotesque" }, "cjk": { "value": "Microsoft YaHei UI" } },
+    "mono": { "latin": { "value": "IBM Plex Mono" }, "cjk": { "value": "Microsoft YaHei UI" } },
+    "scale": {
+      "hero": { "value": "40px" },
+      "display": { "value": "26px" },
+      "title": { "value": "18px" },
+      "body": { "value": "14px" },
+      "caption": { "value": "12px" },
+      "micro": { "value": "11px" }
+    }
+  },
+  "state-badges": {
+    "processing": { "glyph": "●", "color-ref": "{color.aura-dark.accent}" },
+    "bypass": { "glyph": "○", "color-ref": "{color.aura-dark.text-dim}" },
+    "error": { "glyph": "✕", "color-ref": "{color.aura-dark.error}" }
+  }
+}

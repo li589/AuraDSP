@@ -1,0 +1,37 @@
+name: auradsp_app
+description: "AuraDSP — 跨平台音频效果应用（UI 层）。APP = AuraDSP Engines + UI 主体框架。"
+publish_to: "none"
+version: 0.5.0+1
+
+environment:
+  sdk: ^3.13.5
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  intl: any
+  cupertino_icons: ^1.0.8
+  file_selector: ^1.0.3
+  ffi: ^2.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  fonts:
+    - family: AuraDisplay
+      fonts:
+        - asset: assets/fonts/BricolageGrotesque.ttf
+    - family: AuraDisplayCJK
+      fonts:
+        - asset: assets/fonts/SmileySans-Oblique.ttf
+    - family: AuraMono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-Regular.ttf
