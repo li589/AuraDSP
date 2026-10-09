@@ -593,6 +593,26 @@ class _StereoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // M5 第二批：EQ 频率轴曲线（multimodalEQ makima 插值，15 点）
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            children: [
+              for (final c in const [
+                ('平直', '20:0;100:0;440:0;1000:0;4000:0;10000:0;20000:0'),
+                ('低音', '20:6;100:5;440:1;1000:0;4000:0;10000:0;20000:0'),
+                ('人声', '20:0;100:0;440:2;1000:4;4000:3;10000:0;20000:0'),
+                ('微笑', '20:5;100:4;440:0;1000:-2;4000:3;10000:5;20000:5'),
+              ])
+                AuraChip(c.$1,
+                    icon: Icons.equalizer_rounded,
+                    onTap: () {
+                      model.setInt('eq.enable', 1);
+                      model.setStringParam('eq.curve', c.$2);
+                    }),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
           ValueSlider(
             label: l.stereoWiden,
             value: model.stereoMix,

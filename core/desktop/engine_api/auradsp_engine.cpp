@@ -849,6 +849,70 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_eq(h);   /* 只动 EQ 链 */
         return AURADSP_OK;
     }
+    /* ---- M5 第二批：EQ 频率轴曲线（multimodalEQ 轴注入） ----
+     * value = "f:g;f:g;..."（≤15 点，freq 升序，gain dB [-64,64]）。
+     * 不足 NUMPTS 用末端值线性补齐；MultimodalEqualizerAxisInterpolation
+     * 内部 memcpy 恰好 NUMPTS 点。operatingMode=0 立即重建 IR，
+     * interpolationMode=1（makima，上游默认）。 */
+    if (!strcmp(id, "eq.curve")) {
+        if (!h->open.load()) { set_error(h, "eq.curve: engine closed"); return AURADSP_E_STATE; }
+        if (bytes == 0 || bytes > 4096) {
+            set_error(h, "eq.curve: invalid length");
+            return AURADSP_E_PARAM;
+        }
+        char* txt = (char*)malloc((size_t)bytes + 1);
+        if (!txt) { set_error(h, "eq.curve: OOM"); return AURADSP_E_IO; }
+        memcpy(txt, value, bytes);
+        txt[bytes] = 0;
+        /* 解析点对（手写分词，避免 MSVC 无 strtok_r） */
+        double pf[64], pg[64];
+        int n = 0;
+        char* cur = txt;
+        while (cur && n < 64) {
+            char* semi = strchr(cur, ';');
+            if (semi) *semi = 0;
+            char* colon = strchr(cur, ':');
+            if (colon) {
+                *colon = 0;
+                const double f = atof(cur), g = atof(colon + 1);
+                if (f > 0 && f <= 96000) {
+                    pf[n] = f;
+                    pg[n] = g < -64 ? -64 : (g > 64 ? 64 : g);
+                    ++n;
+                }
+            }
+            cur = semi ? semi + 1 : nullptr;
+        }
+        free(txt);
+        if (n < 2) {
+            set_error(h, "eq.curve: need >= 2 points (f:g;f:g;...)");
+            return AURADSP_E_PARAM;
+        }
+        /* 简易插入排序按 freq 升序 */
+        for (int i = 1; i < n; ++i) {
+            const double kf = pf[i], kg = pg[i];
+            int j = i - 1;
+            while (j >= 0 && pf[j] > kf) { pf[j + 1] = pf[j]; pg[j + 1] = pg[j]; --j; }
+            pf[j + 1] = kf; pg[j + 1] = kg;
+        }
+        /* 补齐到 NUMPTS：对数频率域均匀重采样（EQ 插值工作在 log-f 域，
+         * 线性采样会把 UI 轴点挤掉——烟囱测试抓回） */
+        double freqAx[NUMPTS], gainAx[NUMPTS];
+        const double lf0 = log(pf[0]), lf1 = log(pf[n - 1]);
+        for (int i = 0; i < NUMPTS; ++i) {
+            const double t = (NUMPTS == 1) ? 0.0 : (double)i / (double)(NUMPTS - 1);
+            const double target = exp(lf0 + t * (lf1 - lf0));
+            int seg = 0;
+            while (seg < n - 2 && pf[seg + 1] < target) ++seg;
+            const double ls0 = log(pf[seg]), ls1 = log(pf[seg + 1]);
+            const double k = (ls1 - ls0) > 1e-9
+                ? (log(target) - ls0) / (ls1 - ls0) : 0.0;
+            freqAx[i] = target;
+            gainAx[i] = pg[seg] + k * (pg[seg + 1] - pg[seg]);
+        }
+        MultimodalEqualizerAxisInterpolation(&h->jdsp, 1, 0, freqAx, gainAx);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) {
         h->p.limiter_enable.store(*(const int32_t*)value ? 1 : 0);
         return AURADSP_OK;

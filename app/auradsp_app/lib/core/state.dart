@@ -312,6 +312,10 @@ class AppModel extends ChangeNotifier {
 
   /* ---- Liveprog 命令（v1.1） ---- */
 
+  void setStringParam(String id, String text) {
+    send({'cmd': 'setParamStr', 'id': id, 'text': text});
+  }
+
   void setLiveprogCode(String text) {
     lpError = null;
     send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
