@@ -1,34 +1,26 @@
-# tools/ — 可复用工具脚本
+# tools/ — 开发辅助工具与小组件
 
-> 从 `.tmp/` 沉淀的可复用验证工具（2026-10-09）。引擎烟囱测试用 Python 3.12
-> 运行（ctypes 直调 `core/desktop/windows/out/Release/auradsp_engine.dll`，
-> 路径已内置）。**UI 验证脚本需先启动 APP 再在同一条命令里运行**（沙箱会
-> 在命令结束时清杀子进程）。
+> 职责划分说明（2026-10-10 更新）：
+> - `tools/`：存放开发调试辅助工具、生成器、诊断小组件（如 API 推送、图标诊断、IR 生成等）；
+> - `test/`：存放全量测试脚本（`test/smoke/` C++ 引擎烟囱测试、`test/ui/` 前置置顶 UI 自动化验证与断言）与测试数据（`test/data/`）。
 
-## 引擎烟囱测试（ctypes，无需音频设备）
+## 常用工具列表
 
-| 脚本 | 覆盖 |
+| 工具 | 用途 |
 |---|---|
-| `smoke_viz_lowfreq.py` | 可视化低频频段：相位连续 60Hz → band5 峰值/无 DC 泄漏（4096-FFT + 每块写历史回归） |
-| `smoke_liveprog.py` | Liveprog 全流程 7 项：加载/增益×2/停用直通/语法错误文案/滑块保持/回读/unload |
-| `smoke_convolver.py` | 卷积 + 文件门卫 7 组：4 类恶意样本拒绝/delta 直通/44.1k 重采样/T2 守卫/直通恢复 |
-| `smoke_guard_flow.py` | 守卫自动升档等效链路：音乐档拒 → 品质档放行 → 延迟 30ms → 回落 |
-| `smoke_block1056.py` | 1056 帧大块压测（对齐 WASAPI pump 块长） |
+| `run_tests.py` | 统一测试执行入口桥接（自动调用 `test/runner.py`） |
+| `push_via_api.py` | GitHub REST API 离线/受限网络直推工具（支持 blob/tree/commit 组装） |
+| `gen_test_irs.py` | 生成各规格测试脉冲响应（IR）文件工具 |
+| `bench_effects.py` | 各 DSP 算法 CPU/内存开销基准评测工具 |
+| `diag_rail_icons.py` | Flutter Material 图标字体子集化与 tree-shake 诊断工具 |
+| `fft_probe.cpp` / `emit_probe.cpp` | FFT 输出布局与 emit 采样轻量 C++ 探针 |
 
-运行示例：`"C:/Program Files/Python/Python312/python.exe" tools/smoke_liveprog.py`
+## 测试执行说明
 
-## UI 运行时验证（DPI-aware 截图 + 像素断言）
-
-| 脚本 | 用途 |
-|---|---|
-| `ui_verify2.py` | RailToggle 可见性/导航指示条落位/收起往返 + 截图 05-09 |
-| `ui_verify.py` | 旧版首页布局验证（保留对照） |
-| `ui_assert.py` | 对已存截图做像素断言（收起往返/hero 位置/背景模糊） |
-
-依赖 `PIL`（`C:\Program Files\Python\Python312` 自带）。
-
-## FFT 输出布局探针（C++，独立编译）
-
-`fft_probe.cpp` / `emit_probe.cpp`：验证 WDL_real_fft 的 permute 读回与
-emit_viz 逻辑复刻。构建参考 `.tmp/probe` 时代的 CMake（vendor fft.c + 探针
-cpp，`project(fft_probe C CXX)` + `/utf-8`）。
+运行全量测试请使用：
+```bash
+python tools/run_tests.py --smoke      # 运行 C++ 引擎烟囱测试
+python tools/run_tests.py --ui         # 运行置顶前置 UI 自动化验证测试
+# 或者直接使用 test 目录原生入口：
+python test/runner.py --smoke
+```

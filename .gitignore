@@ -3,7 +3,7 @@ source/
 
 # --- 本机环境 ---
 venv/
-.workbuddy/
+# .workbuddy/ (已迁移至 .ai/，由各类智能体自治管理)
 .codegraph/
 
 # --- 构建产物 ---
