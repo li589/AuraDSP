@@ -199,6 +199,7 @@ class _BassCard extends StatelessWidget {
           ValueSlider(
             label: l.bassGain,
             value: model.bassGain,
+            defaultValue: 0,
             min: 0,
             max: 15,
             unit: 'dB',
@@ -244,24 +245,19 @@ class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
                 duration: AuraDur.fast,
                 turns: _open ? 0.25 : 0,
                 child: Icon(Icons.expand_more_rounded,
-                    size: 16, color: p.textDim),
+                    size: 20, color: p.accent),
               ),
-              const SizedBox(width: AuraSpace.xs + 2),
+              const SizedBox(width: AuraSpace.sm),
               Text('高级 · 低频搁架',
-                  style: labelOf(p, color: p.textDim)),
+                  style: labelOf(p,
+                      color: m.shelfOn ? p.accent : p.text)),
               const Spacer(),
-              ListenableBuilder(
-                listenable: m,
-                builder: (_, _) => Row(mainAxisSize: MainAxisSize.min, children: [
-                  Text('搁架',
-                      style: labelOf(p, color: p.textDim)),
-                  const SizedBox(width: AuraSpace.sm),
-                  AuraSwitch(
-                    value: m.shelfOn,
-                    onChanged: (v) => m.setInt('shelf.enable', v ? 1 : 0),
-                  ),
-                ]),
+              // 开关保留（功能必需），但不加状态文字
+              AuraSwitch(
+                value: m.shelfOn,
+                onChanged: (v) => m.setInt('shelf.enable', v ? 1 : 0),
               ),
+              const SizedBox(width: AuraSpace.sm),
             ]),
           ),
         ),
@@ -616,6 +612,9 @@ class _StereoCard extends StatelessWidget {
           ValueSlider(
             label: l.stereoWiden,
             value: model.stereoMix,
+            defaultValue: 0,
+            overridden: model.stereoBandUsed,
+            overriddenNote: model.stereoBandUsed ? '分带生效中' : null,
             min: 0,
             max: 1,
             unit: '%',
@@ -667,19 +666,17 @@ class _StereoAdvancedState extends State<_StereoAdvanced> {
                 duration: AuraDur.fast,
                 turns: _open ? 0.25 : 0,
                 child: Icon(Icons.expand_more_rounded,
-                    size: 16, color: p.textDim),
+                    size: 20, color: p.accent),
               ),
-              const SizedBox(width: AuraSpace.xs + 2),
-              Text('高级 · 分带宽度',
-                  style: labelOf(p, color: p.textDim)),
-              const Spacer(),
+              const SizedBox(width: AuraSpace.sm),
+              // 生效态用标题颜色表达（去掉右侧状态文字）
               ListenableBuilder(
                 listenable: m,
-                builder: (_, _) => Text(
-                    '分带模式：${m.stereoBandUsed ? "开" : "关"}',
-                    style: monoOf(p, size: 10.5,
-                        color: p.textDim.withValues(alpha: 0.7))),
+                builder: (_, _) => Text('高级 · 分带宽度',
+                    style: labelOf(p,
+                        color: m.stereoBandUsed ? p.accent : p.text)),
               ),
+              const Spacer(),
             ]),
           ),
         ),
@@ -726,11 +723,15 @@ class _BandSlider extends StatelessWidget {
           listenable: m,
           builder: (_, _) {
             final v = m.stereoBands[index];
-            return Slider(
-              value: v.clamp(0.0, 1.0),
-              min: 0,
-              max: 1,
-              onChanged: (v) => m.setFloat('stereo.band${index + 1}', v),
+            return GestureDetector(
+              // 双击归位中性值
+              onDoubleTap: () => m.setFloat('stereo.band${index + 1}', 0.5),
+              child: Slider(
+                value: v.clamp(0.0, 1.0),
+                min: 0,
+                max: 1,
+                onChanged: (v) => m.setFloat('stereo.band${index + 1}', v),
+              ),
             );
           },
         ),
@@ -767,6 +768,7 @@ class _PostCard extends StatelessWidget {
           ValueSlider(
             label: l.postGain,
             value: model.postGain,
+            defaultValue: 0,
             min: -15,
             max: 15,
             unit: 'dB',
@@ -798,6 +800,13 @@ class ValueSlider extends StatefulWidget {
   final String unit;
   final String Function(double) format;
 
+  /// 双击归位的默认值（null = 不启用双击归位）
+  final double? defaultValue;
+
+  /// 被高级参数覆盖时置灰 + 尾注（如分带模式生效时主展宽滑块）
+  final bool overridden;
+  final String? overriddenNote;
+
   /// 拖动中提交（节流，默认 40ms）；为 null 则只在松手时提交
   final ValueChanged<double>? onChanged;
 
@@ -816,6 +825,9 @@ class ValueSlider extends StatefulWidget {
     required this.onChangedEnd,
     this.onChanged,
     this.enabled = true,
+    this.defaultValue,
+    this.overridden = false,
+    this.overriddenNote,
   });
 
   @override
@@ -843,12 +855,35 @@ class _ValueSliderState extends State<ValueSlider> {
     cb(v);
   }
 
+  void _resetToDefault() {
+    final d = widget.defaultValue;
+    if (d == null) return;
+    setState(() => _drag = d);
+    widget.onChangedEnd(d);
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final c = !widget.enabled
         ? p.textDim
-        : (_dragging ? p.accent : p.text);
+        : widget.overridden
+            ? p.textDim.withValues(alpha: 0.55)
+            : (_dragging ? p.accent : p.text);
+    return MouseRegion(
+      cursor: widget.defaultValue != null
+          ? SystemMouseCursors.click
+          : MouseCursor.defer,
+      child: GestureDetector(
+        // 双击归位默认值（Slider 自身不吃 double tap，可与拖拽共存）
+        onDoubleTap: widget.enabled ? _resetToDefault : null,
+        behavior: HitTestBehavior.deferToChild,
+        child: _sliderRow(p, c),
+      ),
+    );
+  }
+
+  Widget _sliderRow(AuraPalette p, Color c) {
     return Row(children: [
       SizedBox(
         width: 96,
@@ -879,14 +914,17 @@ class _ValueSliderState extends State<ValueSlider> {
       ),
       const SizedBox(width: AuraSpace.md),
       SizedBox(
-        width: 72,
+        width: widget.overridden && widget.overriddenNote != null ? 104 : 72,
         child: AnimatedDefaultTextStyle(
           duration: AuraDur.fast,
           style: monoOf(p, size: 13, color: c),
           child: Text(
-            '${widget.format(_drag)}${widget.unit}',
+            widget.overridden && widget.overriddenNote != null
+                ? widget.overriddenNote!
+                : '${widget.format(_drag)}${widget.unit}',
             textAlign: TextAlign.right,
             maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ),
       ),

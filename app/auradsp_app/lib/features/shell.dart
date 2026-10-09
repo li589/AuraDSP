@@ -38,8 +38,8 @@ class _AppShellState extends State<AppShell> {
     (icon: Icons.home_outlined, active: Icons.home),
     (icon: Icons.tune_outlined, active: Icons.tune),
     (icon: Icons.code_rounded, active: Icons.code),
-    (icon: Icons.extension_outlined, active: Icons.extension),
-    (icon: Icons.account_tree_rounded, active: Icons.account_tree),
+    (icon: Icons.extension, active: Icons.extension),
+    (icon: Icons.swap_vert, active: Icons.swap_vert),
     (icon: Icons.bar_chart_outlined, active: Icons.bar_chart),
   ];
 
@@ -80,6 +80,7 @@ class _AppShellState extends State<AppShell> {
                 _TopBar(
                   model: m,
                   onCycleTheme: _cycleTheme,
+                  onOpenSettings: _openSettings,
                 ),
                 Container(height: 1, color: p.hairline),
                 Expanded(
@@ -179,13 +180,9 @@ class _Rail extends StatelessWidget {
             padding: EdgeInsets.fromLTRB(collapsed ? AuraSpace.sm : AuraSpace.lg,
                 AuraSpace.xl + AuraSpace.xs, collapsed ? AuraSpace.sm : AuraSpace.lg, 0),
             child: collapsed
-                ? Column(
-                    children: [
-                      _BrandMark(p: p),
-                      const SizedBox(height: AuraSpace.sm),
-                      _RailToggle(collapsed: true, onTap: onToggle),
-                    ],
-                  )
+                // 收起态：品牌标记即展开入口（去掉独立按钮，避免与导航项挤在一起）
+                ? _BrandTapTarget(onTap: onToggle, tip: l10nOf(context).railExpandTip,
+                    child: _BrandMark(p: p))
                 : Row(
                     children: [
                       _BrandMark(p: p),
@@ -276,6 +273,53 @@ class _Rail extends StatelessWidget {
 }
 
 /// 同心方块几何标记（呼应 "aura" 的环）
+/// 收起态的品牌标记：可点击展开（hover 有反馈）
+class _BrandTapTarget extends StatefulWidget {
+  final VoidCallback onTap;
+  final String tip;
+  final Widget child;
+  const _BrandTapTarget({required this.onTap, required this.tip, required this.child});
+
+  @override
+  State<_BrandTapTarget> createState() => _BrandTapTargetState();
+}
+
+class _BrandTapTargetState extends State<_BrandTapTarget> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Center(
+      child: Tooltip(
+        message: widget.tip,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) => setState(() => _hover = true),
+          onExit: (_) => setState(() => _hover = false),
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: widget.onTap,
+            child: AnimatedContainer(
+              duration: AuraDur.fast,
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                color: _hover ? hoverOn(p, alpha: 0.08) : Colors.transparent,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: Border.all(
+                  color: _hover ? p.accent.withValues(alpha: 0.5) : Colors.transparent,
+                ),
+              ),
+              child: Center(child: widget.child),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BrandMark extends StatelessWidget {
   final AuraPalette p;
   const _BrandMark({required this.p});
@@ -438,7 +482,11 @@ class _NavItemState extends State<_NavItem> {
                     Expanded(
                       child: AnimatedDefaultTextStyle(
                         duration: AuraDur.fast,
+                        // 字体族必须显式带（DefaultTextStyle 是替换而非合并：
+                        // 漏掉 fontFamily 会让中文回退到系统字体，与全站不一致）
                         style: TextStyle(
+                          fontFamily: 'AuraDisplay',
+                          fontFamilyFallback: kBodyCjkFallback,
                           fontSize: 13,
                           fontWeight:
                               widget.selected ? FontWeight.w600 : FontWeight.w500,
@@ -462,9 +510,11 @@ class _NavItemState extends State<_NavItem> {
 class _TopBar extends StatelessWidget {
   final AppModel model;
   final VoidCallback onCycleTheme;
+  final VoidCallback onOpenSettings;
   const _TopBar({
     required this.model,
     required this.onCycleTheme,
+    required this.onOpenSettings,
   });
 
   @override
@@ -511,6 +561,12 @@ class _TopBar extends StatelessWidget {
                         icon: Icons.palette_outlined,
                         tooltip: l.themeSwitchTip,
                         onTap: onCycleTheme,
+                      ),
+                      const SizedBox(width: AuraSpace.sm),
+                      _IconAction(
+                        icon: Icons.settings_outlined,
+                        tooltip: l.navSettings,
+                        onTap: onOpenSettings,
                       ),
                     ],
                   ),
@@ -632,7 +688,10 @@ class _RailSettingsButtonState extends State<_RailSettingsButton> {
             const SizedBox(width: AuraSpace.sm),
             Text(l.navSettings,
                 style: TextStyle(
+                    fontFamily: 'AuraDisplay',
+                    fontFamilyFallback: kBodyCjkFallback,
                     fontSize: 12,
+                    fontWeight: FontWeight.w500,
                     color: _hover ? p.text : p.textDim)),
             const SizedBox(width: AuraSpace.sm),
           ]),

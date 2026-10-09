@@ -286,6 +286,9 @@ class AppModel extends ChangeNotifier {
       case 'stereo.mix':
         // UI 刻度 0..1 → 存显示值；引擎侧收到 v * stereoWidenMax
         stereoMix = (v / stereoWidenMax).clamp(0.0, 1.0);
+        // 总滑块语义 = 回统一模式（引擎侧同时清 vendor bandMixUsed），
+        // UI 镜像必须同步清，否则会一直显示"分带生效中"而造成与主滑块冲突
+        stereoBandUsed = false;
         break;
       case 'eq.enable': eqOn = v != 0; break;
       case 'post.gain': postGain = v; break;
