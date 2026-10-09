@@ -29,6 +29,7 @@ class EffectsPage extends StatelessWidget {
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
       children: [
+        _SignalFlowBar(model: model), // M3：vendor 固定顺序的可视化（重排序后置 M3.5）
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _BassCard(model: model),
@@ -64,6 +65,108 @@ class EffectsPage extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/* ---- 信号流条：vendor 固定顺序的单行可视化，启用节点亮色 ---- */
+
+class _SignalFlowBar extends StatelessWidget {
+  final AppModel model;
+  const _SignalFlowBar({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) {
+        // vendor process 顺序（limiter/post 合并为输出级）
+        const nodes = [
+          ('tube', 'TUBE'),
+          ('bass', 'BASS'),
+          ('eq', 'EQ'),
+          ('convolver', 'IR'),
+          ('liveprog', 'SCRIPT'),
+          ('crossfeed', 'XFEED'),
+          ('stereo', 'WIDTH'),
+          ('reverb', 'REVERB'),
+          ('out', 'OUT'),
+        ];
+        bool on(String id) => switch (id) {
+              'tube' => model.tubeOn,
+              'bass' => model.bassOn,
+              'eq' => model.eqOn,
+              'convolver' => model.convEnabled && model.convReady,
+              'liveprog' => model.lpEnabled,
+              'crossfeed' => model.xfeedOn,
+              'stereo' => model.stereoMix > 0,
+              'reverb' => model.reverbPreset >= 0,
+              _ => true, // 输出级常亮
+            };
+        return Container(
+          padding: const EdgeInsets.symmetric(
+              horizontal: AuraSpace.md, vertical: AuraSpace.sm + 2),
+          decoration: BoxDecoration(
+            color: p.panel,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(color: p.hairline),
+          ),
+          child: Row(
+            children: [
+              Text(l.signalFlow.toUpperCase(), style: eyebrowOf(p)),
+              const SizedBox(width: AuraSpace.md),
+              Expanded(
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < nodes.length; i++) ...[
+                        if (i > 0)
+                          Icon(Icons.arrow_forward_rounded,
+                              size: 12, color: p.textDim.withValues(alpha: 0.5)),
+                        const SizedBox(width: AuraSpace.xs + 2),
+                        _FlowNode(
+                            label: nodes[i].$2,
+                            active: on(nodes[i].$1)),
+                        const SizedBox(width: AuraSpace.xs + 2),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _FlowNode extends StatelessWidget {
+  final String label;
+  final bool active;
+  const _FlowNode({required this.label, required this.active});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return AnimatedContainer(
+      duration: AuraDur.fast,
+      curve: AuraCurve.standard,
+      padding: const EdgeInsets.symmetric(
+          horizontal: AuraSpace.sm, vertical: AuraSpace.xxs + 1),
+      decoration: BoxDecoration(
+        color: active ? p.accent.withValues(alpha: 0.14) : Colors.transparent,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        border: Border.all(
+          color: active ? p.accent.withValues(alpha: 0.55) : p.hairline,
+        ),
+      ),
+      child: Text(label,
+          style: monoOf(p, size: 10, color: active ? p.accent : p.textDim)),
     );
   }
 }

@@ -327,4 +327,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get convAutoQuality => '已自动切换到品质延迟档以启用卷积';
+
+  @override
+  String get signalFlow => '信号流';
 }

@@ -723,6 +723,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已自动切换到品质延迟档以启用卷积'**
   String get convAutoQuality;
+
+  /// No description provided for @signalFlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号流'**
+  String get signalFlow;
 }
 
 class _AppLocalizationsDelegate

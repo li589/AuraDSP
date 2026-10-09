@@ -329,4 +329,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get convAutoQuality => 'コンボルバーを有効にするため品質モードへ自動切替しました';
+
+  @override
+  String get signalFlow => 'シグナルフロー';
 }

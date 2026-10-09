@@ -341,4 +341,7 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get convAutoQuality =>
       'Switched to Quality latency mode to enable convolver';
+
+  @override
+  String get signalFlow => 'Signal Flow';
 }

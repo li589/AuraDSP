@@ -67,6 +67,9 @@ class AppModel extends ChangeNotifier {
   int convFrames = 0, convChannels = 0, convSrcRate = 0;
   double convPeak = 0.0;
 
+  // M3-a：轻量效果
+  bool tubeOn = false, xfeedOn = false;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -143,6 +146,8 @@ class AppModel extends ChangeNotifier {
         convChannels = raw['convChannels'] as int;
         convSrcRate = raw['convSrcRate'] as int;
         convPeak = (raw['convPeak'] as num).toDouble();
+        tubeOn = (raw['tubeEnable'] as int) != 0;
+        xfeedOn = (raw['xfeedEnable'] as int) != 0;
         notifyListeners();
         break;
       case 'liveprog':
@@ -262,6 +267,8 @@ class AppModel extends ChangeNotifier {
       case 'post.gain': postGain = v; break;
       case 'limiter.enable': limiterOn = v != 0; break;
       case 'channels.mode': channelsMode = v.toInt(); break;
+      case 'tube.enable': tubeOn = v != 0; break;
+      case 'crossfeed.enable': xfeedOn = v != 0; break;
       default:
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
@@ -316,6 +323,14 @@ class AppModel extends ChangeNotifier {
   void loadConvolverIr(String path) {
     // 字符串参数复用 setParamStr 通道；meta 由 paramResult→getParams 回读
     send({'cmd': 'setParamStr', 'id': ParamId.convIrPath, 'text': path});
+  }
+
+  void setTubeEnabled(bool on) {
+    setInt(ParamId.tubeEnable, on ? 1 : 0);
+  }
+
+  void setCrossfeedEnabled(bool on) {
+    setInt(ParamId.xfeedEnable, on ? 1 : 0);
   }
 
   void clearConvolver() {

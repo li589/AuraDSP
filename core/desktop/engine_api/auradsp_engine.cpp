@@ -23,6 +23,10 @@
 #include <mutex>
 #include <new>
 
+#ifdef _WIN32
+#include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
+#endif
+
 extern "C" {
 #include "jdsp/jdsp_header.h"
 #include "jdsp/Effects/eel2/fft.h"
@@ -101,6 +105,9 @@ struct Params {
     std::atomic<float>    lp_param[8];          /* slider1..8（C++20 值初始化 = 0） */
     /* 卷积 / 脉冲响应（v1.1 M4） */
     std::atomic<int32_t>  conv_enable{0};
+    /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
+    std::atomic<int32_t>  tube_enable{0};       /* T0 */
+    std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
 };
 
 /* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
@@ -194,6 +201,8 @@ bool compute_latency(auradsp_handle h, double* out_ms, bool* over_guard) {
         ms += kLatConvolver.ms;
         if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
     }
+    /* 串扰消除 = T1 ≈3ms（实时档 10ms 预算内，交由总预算判断） */
+    if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += kLatCrossfeed.ms;
     if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) {
         /* compressor/convolver/arbMag 未在本 ABI v1 暴露参数，预留守卫位 */
     }
@@ -259,6 +268,19 @@ void apply_liveprog(auradsp_handle h) {
         LiveProgDisable(&h->jdsp);
 }
 
+void apply_tube(auradsp_handle h) {
+    if (h->p.tube_enable.load(std::memory_order_relaxed))
+        VacuumTubeEnable(&h->jdsp);
+    else
+        VacuumTubeDisable(&h->jdsp);
+}
+
+void apply_crossfeed(auradsp_handle h) {
+    /* vendor lazy-build：enable 时用内置 HRTF blobs 建卷积（首次有一次性开销） */
+    CrossfeedEnable(&h->jdsp,
+                    h->p.xfeed_enable.load(std::memory_order_relaxed) ? 1 : 0);
+}
+
 void apply_convolver(auradsp_handle h) {
     if (h->p.conv_enable.load(std::memory_order_relaxed) &&
         h->ir_ready.load(std::memory_order_relaxed))
@@ -275,7 +297,19 @@ void apply_convolver(auradsp_handle h) {
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
+    /* 审查修复 R-1：Windows fopen 走 ANSI 代码页，中文路径必挂——
+     * UTF-8 → UTF-16 后走 _wfopen */
+#ifdef _WIN32
+    int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
+    if (wlen <= 0) { set_error(h, "convolver.ir.path: invalid encoding"); return AURADSP_E_PARAM; }
+    wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
+    if (!wpath) { set_error(h, "convolver.ir.path: OOM"); return AURADSP_E_IO; }
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
+    FILE* fp = _wfopen(wpath, L"rb");
+    free(wpath);
+#else
     FILE* fp = fopen(path, "rb");
+#endif
     if (!fp) { set_error(h, "convolver.ir: cannot open file"); return AURADSP_E_IO; }
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: seek failed"); return AURADSP_E_IO; }
     const long fsize = ftell(fp);
@@ -311,9 +345,10 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
             set_error(h, "convolver.ir: invalid WAV channels/frames");
             return AURADSP_E_PARAM;
         }
-        if (frames > 16u * 1024 * 1024) {
+        /* 审查修复 R-2：总样本量上限（16M 帧 × 8ch 会要 512MB 分配） */
+        if (frames > 16u * 1024 * 1024 || (unsigned long long)frames * ch > 64ull * 1024 * 1024) {
             drwav_uninit(&wav); free(bytes);
-            set_error(h, "convolver.ir: too long (max 16M frames)");
+            set_error(h, "convolver.ir: too long (max 16M frames / 64M samples)");
             return AURADSP_E_PARAM;
         }
         data = (float*)malloc(frames * ch * sizeof(float));
@@ -325,7 +360,9 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
         drflac* flac = drflac_open_memory(bytes, (size_t)fsize, nullptr);
         if (!flac) { free(bytes); set_error(h, "convolver.ir: FLAC corrupt"); return AURADSP_E_PARAM; }
         ch = flac->channels; src_rate = (unsigned int)flac->sampleRate; frames = (size_t)flac->totalPCMFrameCount;
-        if (ch < 1 || ch > 8 || frames == 0 || frames > 16u * 1024 * 1024) {
+        if (ch < 1 || ch > 8 || frames == 0 ||
+            frames > 16u * 1024 * 1024 ||
+            (unsigned long long)frames * ch > 64ull * 1024 * 1024) {
             drflac_close(flac); free(bytes);
             set_error(h, "convolver.ir: invalid FLAC channels/frames/length");
             return AURADSP_E_PARAM;
@@ -399,6 +436,8 @@ void apply_params_locked(auradsp_handle h) {
     apply_post(h);
     apply_liveprog(h);
     apply_convolver(h);
+    apply_tube(h);
+    apply_crossfeed(h);
 }
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
@@ -761,6 +800,20 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_convolver(h);
         return AURADSP_OK;
     }
+    /* ---- M3-a：轻量效果开关 ---- */
+    if (!strcmp(id, "tube.enable") && bytes >= 4) {
+        h->p.tube_enable.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_tube(h);   /* T0，无守卫 */
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "crossfeed.enable") && bytes >= 4) {
+        h->p.xfeed_enable.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_crossfeed(h);
+        double ms; bool over;
+        compute_latency(h, &ms, &over);   /* T1：超实时档总预算时 UI 会看到延迟徽标变色 */
+        h->latency_ms = ms;
+        return AURADSP_OK;
+    }
     set_error(h, "unknown param id");
     return AURADSP_E_PARAM;
 }
@@ -799,6 +852,33 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "convolver.ir.channels") && bytes >= 4) { *(int32_t*)out_value = h->ir_channels.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.srcRate") && bytes >= 4) { *(int32_t*)out_value = h->ir_src_rate.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.peak") && bytes >= 4) { *(float*)out_value = h->ir_peak.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
+    /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
+    if (!strcmp(id, "graph.effects") && bytes >= 1024) {
+        /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
+         * 在链视图里展示为"参数开放中"占位） */
+        const char* reg =
+            "["
+            "{\"id\":\"tube\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"bass\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"eq\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"convolver\",\"tier\":2,\"exposed\":true},"
+            "{\"id\":\"liveprog\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"crossfeed\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"stereo\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"reverb\",\"tier\":2,\"exposed\":true},"
+            "{\"id\":\"post\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"limiter\",\"tier\":0,\"exposed\":true},"
+            "{\"id\":\"comp\",\"tier\":2,\"exposed\":false},"
+            "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
+            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":false},"
+            "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
+            "]";
+        snprintf((char*)out_value, bytes, "%s", reg);
+        return AURADSP_OK;
+        return AURADSP_OK;
+    }
     return AURADSP_E_PARAM;
 }
 
