@@ -43,3 +43,17 @@
 - 参考价值最高的三份：**element**（插件宿主 + 图视图，M1/M6 直接蓝本）、**equalizerAPO64**（Windows APO，Phase 7b）、**RootlessJamesDSP**（Phase 6）。
 - lsp-plugins 的加入补齐了 **M5 细化的算法对照源**（LGPLv3，只读参考不链接无许可冲突）。
 - 建议动作顺序：先处理 P-2（可能克隆错仓）→ P-1（统一剥 .git + ORIGIN 登记）→ P-3 浅克隆策略。
+
+---
+
+## 5. 处理结果（2026-10-09 22:18 追加）
+
+| # | 处理 |
+|---|---|
+| P-1 | ✅ 已执行：10 仓 URL+HEAD 登记至 `source/ORIGIN.md`，嵌套 .git 全部剥除 |
+| P-2 | ✅ 已核实结案：ShadoV90/RootJamesDSP 是 **timschneeb/RootlessJamesDSP 的 fork**（root 变体文档在仓库内 BUILD_ROOT.md），README 复用为上游现状，**非克隆错误，无需重克隆** |
+| P-3 | 按指示不做（保留完整 .git 历史） |
+| P-4 | 已登记（element 含上游 CLAUDE.md，无害） |
+| P-5 | ✅ 已核验：lsp-plugins 主仓库是**元仓库**（各插件为独立仓库，modules.mk 声明，如 lsp-plugins-loud-comp）；bass_enhancer 算法在 LSP 独立插件仓库（pulseeffects/src/bass_enhancer.cpp 是其 glib wrapper，非算法本体）；需算法对照时按 modules.mk 的 URL 单独克隆对应插件仓 |
+
+补充登记：pulseeffects 实为 **mikhailnov/pulseeffects** fork（官方上游 wwmm/pulseeffects→EasyEffects），已记入 ORIGIN.md。
