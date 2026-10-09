@@ -69,7 +69,7 @@ while IFS= read -r in; do
   rel="${in#$GEN_SRC/}"
   b=$(echo "$rel" | tr "/" "_")
   out="$OUT_DIR/obj_cpp/${b%.cpp}.o"
-  if [ ! -f "$out" ]; then
+  if [ ! -f "$out" ] || [ "$in" -nt "$out" ]; then
     "$CXX" $CXXFLAGS -c "$(cygpath -w "$in")" -o "$(cygpath -w "$out")"
   fi
 done < "$CPP_LIST"
@@ -85,7 +85,7 @@ for f in "$CORE_W/vendor-src/libfmq/EventFlag.cpp" \
          "$HERE_W/main.cpp"; do
   b="$(basename $f .cpp)"
   out="$OUT_DIR/obj_cpp/reg_$b.o"
-  if [ ! -f "$out" ]; then
+  if [ ! -f "$out" ] || [ "$f" -nt "$out" ]; then
     echo "  -- $b"
     "$CXX" $CXXFLAGS -c "$(cygpath -w "$f")" -o "$(cygpath -w "$out")"
   fi

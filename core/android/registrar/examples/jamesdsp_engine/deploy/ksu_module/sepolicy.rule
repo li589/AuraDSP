@@ -1,0 +1,15 @@
+# AuraDSP — FMQ memfd cross-domain sharing under SELinux Enforcing
+# Syntax: magiskpolicy style (allow <source> <target> <class> <perms>) —
+# verified live via `ksud sepolicy patch` on 2026-10-09 (colon syntax
+# `allow s t:class perm` silently does nothing; NO colon).
+# Root cause chain: libjdsp creates memfd-backed FMQs in hal_audio_default;
+# audioserver receives the fds over binder and must map them.
+allow hal_audio_default self file { create open read write getattr setattr lock map }
+allow hal_audio_default tmpfs file { create open read write getattr setattr lock map }
+allow hal_audio_default unlabeled file { create open read write getattr setattr lock map }
+allow audioserver hal_audio_default fd use
+allow audioserver hal_audio_default file { read write map getattr ioctl lock }
+allow audioserver tmpfs fd use
+allow audioserver tmpfs file { read write map getattr ioctl lock }
+allow audioserver unlabeled fd use
+allow audioserver unlabeled file { read write map getattr ioctl lock }

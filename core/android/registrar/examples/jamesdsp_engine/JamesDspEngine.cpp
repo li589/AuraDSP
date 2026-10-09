@@ -141,6 +141,7 @@ void JamesDspEngine::applyParamsLocked() {
     if (mEqEnabled.load(std::memory_order_relaxed)) {
         MultimodalEqualizerEnable(mJdsp, 1);
     }
+    JamesDSPSetPostGain(mJdsp, mPostGainDb.load(std::memory_order_relaxed));
 }
 
 void JamesDspEngine::close() {
@@ -155,8 +156,8 @@ void JamesDspEngine::close() {
 
 bool JamesDspEngine::setVendorParam(int32_t id, const void* data, size_t bytes) {
     std::lock_guard<std::mutex> lk(mEngineMutex);
-    switch (static_cast<ParamId>(id)) {
-        case ParamId::kBassBoostEnable:
+    switch (id) {
+        case VendorParamId::kBassBoostEnable:
             if (bytes < sizeof(int32_t)) return false;
             mBassEnabled.store(*static_cast<const int32_t*>(data) != 0);
             if (mJdsp) {
@@ -169,13 +170,17 @@ bool JamesDspEngine::setVendorParam(int32_t id, const void* data, size_t bytes) 
             }
             ALOGI("bass boost -> %s", mBassEnabled.load() ? "on" : "off");
             return true;
-        case ParamId::kBassBoostGainDb:
+        case VendorParamId::kBassBoostGainDb: {
             if (bytes < sizeof(float)) return false;
-            mBassGainDb.store(*static_cast<const float*>(data));
-            if (mJdsp && mBassEnabled.load())
-                BassBoostSetParam(mJdsp, mBassGainDb.load());
+            float db = *static_cast<const float*>(data);
+            if (db < 0.0f) db = 0.0f;
+            if (db > 15.0f) db = 15.0f;
+            mBassGainDb.store(db);
+            if (mJdsp && mBassEnabled.load()) BassBoostSetParam(mJdsp, mBassGainDb.load());
+            ALOGI("bass boost gain -> %.1f dB", db);
             return true;
-        case ParamId::kReverbPreset:
+        }
+        case VendorParamId::kReverbPreset:
             if (bytes < sizeof(int32_t)) return false;
             mReverbPreset.store(*static_cast<const int32_t*>(data));
             if (mJdsp) {
@@ -185,8 +190,9 @@ bool JamesDspEngine::setVendorParam(int32_t id, const void* data, size_t bytes) 
                     ReverbEnable(mJdsp);
                 }
             }
+            ALOGI("reverb preset -> %d", mReverbPreset.load());
             return true;
-        case ParamId::kStereoMix:
+        case VendorParamId::kStereoMix:
             if (bytes < sizeof(float)) return false;
             mStereoMix.store(*static_cast<const float*>(data));
             if (mJdsp) {
@@ -197,11 +203,21 @@ bool JamesDspEngine::setVendorParam(int32_t id, const void* data, size_t bytes) 
                 }
             }
             return true;
-        case ParamId::kEqEnable:
+        case VendorParamId::kEqEnable:
             if (bytes < sizeof(int32_t)) return false;
             mEqEnabled.store(*static_cast<const int32_t*>(data) != 0);
             if (mJdsp) MultimodalEqualizerEnable(mJdsp, mEqEnabled.load() ? 1 : 0);
             return true;
+        case VendorParamId::kPostGainDb: {
+            if (bytes < sizeof(float)) return false;
+            float db = *static_cast<const float*>(data);
+            if (db < -15.0f) db = -15.0f;
+            if (db > 15.0f) db = 15.0f;
+            mPostGainDb.store(db);
+            if (mJdsp) JamesDSPSetPostGain(mJdsp, mPostGainDb.load());
+            ALOGI("post gain -> %.1f dB", db);
+            return true;
+        }
     }
     ALOGW("unknown vendor param id=%d", id);
     return false;
@@ -209,26 +225,30 @@ bool JamesDspEngine::setVendorParam(int32_t id, const void* data, size_t bytes) 
 
 bool JamesDspEngine::getVendorParam(int32_t id, void* out, size_t bytes) const {
     std::lock_guard<std::mutex> lk(mEngineMutex);
-    switch (static_cast<ParamId>(id)) {
-        case ParamId::kBassBoostEnable:
+    switch (id) {
+        case VendorParamId::kBassBoostEnable:
             if (bytes < sizeof(int32_t)) return false;
             *static_cast<int32_t*>(out) = mBassEnabled.load() ? 1 : 0;
             return true;
-        case ParamId::kBassBoostGainDb:
+        case VendorParamId::kBassBoostGainDb:
             if (bytes < sizeof(float)) return false;
             *static_cast<float*>(out) = mBassGainDb.load();
             return true;
-        case ParamId::kReverbPreset:
+        case VendorParamId::kReverbPreset:
             if (bytes < sizeof(int32_t)) return false;
             *static_cast<int32_t*>(out) = mReverbPreset.load();
             return true;
-        case ParamId::kStereoMix:
+        case VendorParamId::kStereoMix:
             if (bytes < sizeof(float)) return false;
             *static_cast<float*>(out) = mStereoMix.load();
             return true;
-        case ParamId::kEqEnable:
+        case VendorParamId::kEqEnable:
             if (bytes < sizeof(int32_t)) return false;
             *static_cast<int32_t*>(out) = mEqEnabled.load();
+            return true;
+        case VendorParamId::kPostGainDb:
+            if (bytes < sizeof(float)) return false;
+            *static_cast<float*>(out) = mPostGainDb.load();
             return true;
     }
     return false;

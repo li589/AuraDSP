@@ -1,0 +1,6 @@
+id=auradsp_jdsp
+name=AuraDSP Engines (Root)
+version=v0.4.0
+versionCode=4
+author=AuraDSP Project
+description=AuraDSP Engines (Root) — global audio effects engine (JamesDSP core) injected as an AIDL effects HAL library. Persists across reboot: tmpfs overlay on /vendor/lib64/soundfx, odm audio_effects_config.xml bind-mount, and 9 SELinux rules permitting FMQ memfd sharing between hal_audio_default and audioserver. Companion app: AuraDSP.

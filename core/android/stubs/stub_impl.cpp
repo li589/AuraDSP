@@ -74,11 +74,21 @@ extern "C" int memfd_create(const char* name, unsigned int flags);
 
 /* Path 3: regular file inside the audio HAL's own writable directory.
  * A MAP_SHARED mmap of a regular file is shared across processes when the
- * fd travels over binder, so it is a fully valid FMQ backing store. */
+ * fd travels over binder, so it is a fully valid FMQ backing store.
+ *
+ * NOTE: libfmq names every queue "MessageQueue" (MessageQueueBase.h), so the
+ * caller-supplied name is NOT unique across the status/in/out MQs of one
+ * effect. Disambiguate with pid + a monotonic counter, and unlink right after
+ * creation: the inode lives as long as any fd is open (framework mmaps the
+ * fd it receives over binder), so nothing is lost and no stale files pile up
+ * in the audio vendor dir (postmortem 2026-10-08: 3 MQs sharing one file
+ * meant all queues aliased the same memory). */
 static int file_backed_region(const char* n, size_t size) {
-    char path[128];
-    snprintf(path, sizeof(path), "/data/vendor/audio/.spike_fmq_%s", n);
-    int fd = open(path, O_RDWR | O_CREAT | O_CLOEXEC, 0644);
+    static _Atomic int seq = 0;
+    char path[160];
+    snprintf(path, sizeof(path), "/data/vendor/audio/.spike_fmq_%d_%d_%s",
+             static_cast<int>(getpid()), ++seq, n ? n : "anon");
+    int fd = open(path, O_RDWR | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
     if (fd < 0) {
         __android_log_print(ANDROID_LOG_WARN, "spike_stubs",
                             "open %s failed errno=%d", path, errno);
@@ -90,6 +100,9 @@ static int file_backed_region(const char* n, size_t size) {
         close(fd);
         return -1;
     }
+    /* Backing inode is now sized and fd-held; drop the directory entry so
+     * repeated effect attach/detach cycles never accumulate files. */
+    unlink(path);
     __android_log_print(ANDROID_LOG_INFO, "spike_stubs",
                         "ashmem_create_region(%s,%zu): file-backed fd=%d", n, size, fd);
     return fd;
@@ -98,7 +111,11 @@ static int file_backed_region(const char* n, size_t size) {
 int ashmem_create_region(const char* name, size_t size) {
     const char* n = name ? name : "spike_ashmem";
 
-    /* 1st choice: memfd_create */
+    /* 1st choice: memfd_create. This is the backing store the framework's own
+     * libfmq expects (memfd fds travel over binder and are mmap'ed by
+     * audioserver); a regular-file fd fails framework-side validation and
+     * leaves the framework EventFlag group null ("invalid efGroup" -> silence,
+     * postmortem 2026-10-08 crash1/round-2). */
     int fd = memfd_create(n, MFD_CLOEXEC | MFD_ALLOW_SEALING);
     if (fd >= 0) {
         if (ftruncate(fd, static_cast<off_t>(size)) == 0) {
@@ -106,8 +123,24 @@ int ashmem_create_region(const char* name, size_t size) {
                                 "ashmem_create_region(%s,%zu): memfd fd=%d", n, size, fd);
             return fd;
         }
-        __android_log_print(ANDROID_LOG_WARN, "spike_stubs",
-                            "memfd ftruncate failed errno=%d, trying fallbacks", errno);
+        /* Oplus policy denies ftruncate on memfd (errno=13). Grow the memfd via
+         * lseek+write instead — write() carries no ftruncate permission. */
+        if (lseek(fd, static_cast<off_t>(size - 1), SEEK_SET) ==
+                static_cast<off_t>(size - 1)) {
+            char zero = 0;
+            ssize_t wr = write(fd, &zero, 1);
+            if (wr == 1) {
+                __android_log_print(ANDROID_LOG_INFO, "spike_stubs",
+                                    "ashmem_create_region(%s,%zu): memfd(lseek+write) fd=%d",
+                                    n, size, fd);
+                return fd;
+            }
+            __android_log_print(ANDROID_LOG_WARN, "spike_stubs",
+                                "memfd lseek+write failed ret=%zd errno=%d", wr, errno);
+        } else {
+            __android_log_print(ANDROID_LOG_WARN, "spike_stubs", "memfd lseek failed errno=%d",
+                                errno);
+        }
         close(fd);
         fd = -1;
     }

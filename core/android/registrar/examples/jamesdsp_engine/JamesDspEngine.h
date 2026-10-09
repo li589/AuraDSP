@@ -11,8 +11,10 @@
  * additional locks on the process path.
  *
  * Engine defaults (validation build):
- *   - Bass boost enabled at +6.0 dB on open(), so an on-device run
- *     produces an audible pass/fail signal without any parameter call.
+ *   - Bass boost enabled at +15.0 dB (API ceiling) on open(). +6 dB was
+ *     inaudible on the phone speaker (physically rolls off below ~300 Hz);
+ *     15 dB makes the processing chain unambiguously audible for A/B tests.
+ *   - Reverb enabled with SF_REVERB_PRESET_LARGEHALL1 for the same reason.
  *   - All other effects disabled.
  * Tunables via setVendorParam() (see ParamId).
  */
@@ -34,14 +36,10 @@ namespace jamesdsp::registrar {
 
 class JamesDspEngine final : public IAudioEngine {
 public:
-    /* Vendor parameter ids for setVendorParam/getVendorParam. */
-    enum class ParamId : int32_t {
-        kBassBoostEnable = 1,   /* payload int32: 0/1 */
-        kBassBoostGainDb = 2,   /* payload float: dB (max gain) */
-        kReverbPreset    = 3,   /* payload int32: preset index (Reverb_SetParam) */
-        kStereoMix       = 4,   /* payload float: 0..1 mix amount */
-        kEqEnable        = 5,   /* payload int32: 0/1 (flat EQ until configured) */
-    };
+    /* Vendor param ids come from registrar/Engine.h VendorParamId:
+     *   kBassBoostEnable(1) int32 0/1     kBassBoostGainDb(2) float dB[0,15]
+     *   kReverbPreset(3)    int32 -1/idx  kStereoMix(4)       float 0..1
+     *   kEqEnable(5)        int32 0/1     kPostGainDb(6)      float dB[-15,15] */
 
     JamesDspEngine() = default;
     ~JamesDspEngine() override;
@@ -53,10 +51,9 @@ public:
     void close() override;
     const char* name() const override { return "JamesDSP"; }
 
-    /* Vendor parameter plumbing (called from effect subclass hook on
-     * binder thread; internally takes engine mutex — NOT on process path). */
-    bool setVendorParam(int32_t id, const void* data, size_t bytes);
-    bool getVendorParam(int32_t id, void* out, size_t bytes) const;
+    /* Vendor parameter plumbing (see VendorParamId in Engine.h). */
+    bool setVendorParam(int32_t id, const void* data, size_t bytes) override;
+    bool getVendorParam(int32_t id, void* out, size_t bytes) const override;
 
 private:
     bool reinitLocked();     /* caller holds mEngineMutex */
@@ -69,10 +66,11 @@ private:
 
     /* Persisted vendor params (re-applied on reset/open). */
     std::atomic<bool> mBassEnabled{true};
-    std::atomic<float> mBassGainDb{6.0f};
-    std::atomic<int32_t> mReverbPreset{-1};   /* -1 = disabled */
+    std::atomic<float> mBassGainDb{15.0f};    /* dB [0-15], API ceiling for A/B audibility */
+    std::atomic<int32_t> mReverbPreset{5};    /* SF_REVERB_PRESET_LARGEHALL1 (audible test default) */
     std::atomic<float> mStereoMix{0.0f};
     std::atomic<int32_t> mEqEnabled{0};
+    std::atomic<float> mPostGainDb{0.0f};     /* 0 dB = unity */
 
     /* Guards init/teardown/param application. Not taken by process(). */
     mutable std::mutex mEngineMutex;
