@@ -12,6 +12,7 @@ import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/presets.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
@@ -54,6 +55,7 @@ class EffectsPage extends StatelessWidget {
           listenable: model,
           builder: (_, _) => _PostCard(model: model),
         ),
+        _PresetCard(model: model),
         // 收尾说明（静音，不加卡片）
         Padding(
           padding: const EdgeInsets.fromLTRB(
@@ -869,5 +871,129 @@ class _ValueSliderState extends State<ValueSlider> {
         ),
       ),
     ]);
+  }
+}
+
+
+/* ---- 07 预设：引擎全量参数快照 ---- */
+
+class _PresetCard extends StatefulWidget {
+  final AppModel model;
+  const _PresetCard({required this.model});
+
+  @override
+  State<_PresetCard> createState() => _PresetCardState();
+}
+
+class _PresetCardState extends State<_PresetCard> {
+  final TextEditingController _name = TextEditingController(text: 'my-preset');
+  List<String> _presets = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  void _refresh() {
+    if (mounted) setState(() => _presets = PresetLibrary.list());
+  }
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _toast(String msg) {
+    if (!mounted) return;
+    final p = paletteOf(context);
+    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+      content: Text(msg, style: TextStyle(color: p.text, fontSize: 13)),
+      duration: const Duration(seconds: 2),
+    ));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final m = widget.model;
+    return SectionCard(
+      index: '07',
+      title: l.presetTitle,
+      hint: l.presetHint,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_presets.isEmpty)
+            Text(l.presetEmpty, style: captionOf(p))
+          else ...[
+            Text(l.presetLoadHint, style: captionOf(p)),
+            const SizedBox(height: AuraSpace.sm),
+            Wrap(
+              spacing: AuraSpace.sm,
+              runSpacing: AuraSpace.sm,
+              children: [
+                for (final f in _presets)
+                  AuraChip(
+                    f.replaceAll('.json', ''),
+                    icon: Icons.tune_rounded,
+                    onTap: () {
+                      final params = PresetLibrary.load(f);
+                      if (params == null) {
+                        _toast(l.presetLoadFail);
+                        return;
+                      }
+                      PresetLibrary.apply(m, params);
+                      _toast(l.presetLoaded);
+                    },
+                  ),
+              ],
+            ),
+            const SizedBox(height: AuraSpace.md),
+          ],
+          Row(children: [
+            SizedBox(
+              width: 180,
+              child: TextField(
+                controller: _name,
+                style: monoOf(p, size: 12.5, color: p.text),
+                decoration: InputDecoration(
+                  isDense: true,
+                  hintText: 'my-preset',
+                  hintStyle: monoOf(p, size: 12.5, color: p.textDim),
+                  contentPadding: const EdgeInsets.symmetric(
+                      horizontal: AuraSpace.md, vertical: AuraSpace.sm),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                    borderSide: BorderSide(color: p.hairline),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+            AuraChip(l.presetSave, icon: Icons.save_outlined,
+                onTap: () {
+                  final ok = PresetLibrary.save(
+                      _name.text.trim(), PresetLibrary.snapshot(m));
+                  _refresh();
+                  _toast(ok ? l.presetSaved : l.presetSaveFail);
+                }),
+            const SizedBox(width: AuraSpace.sm),
+            AuraChip(l.presetDelete, icon: Icons.delete_outline, danger: true,
+                onTap: () {
+                  final name = _name.text.trim();
+                  final f = name.toLowerCase().endsWith('.json')
+                      ? name
+                      : '$name.json';
+                  final ok = PresetLibrary.delete(f);
+                  _refresh();
+                  _toast(ok ? l.presetDeleted : l.presetDeleteFail);
+                }),
+          ]),
+        ],
+      ),
+    );
   }
 }

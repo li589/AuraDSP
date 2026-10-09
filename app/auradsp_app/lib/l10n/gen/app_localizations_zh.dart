@@ -348,4 +348,41 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fvDryLabel => '干声';
+
+  @override
+  String get presetTitle => '预设';
+
+  @override
+  String get presetHint =>
+      '保存/载入引擎全量参数快照（%APPDATA%/AuraDSP/presets）；T2 效果在音乐档下会被守卫拒绝（诚实提示）';
+
+  @override
+  String get presetLoadHint => '点击载入：';
+
+  @override
+  String get presetEmpty => '库为空 — 调好参数后用下方名称框保存';
+
+  @override
+  String get presetSave => '保存当前';
+
+  @override
+  String get presetDelete => '删除';
+
+  @override
+  String get presetSaved => '预设已保存';
+
+  @override
+  String get presetSaveFail => '保存失败（名称非法或磁盘不可写）';
+
+  @override
+  String get presetDeleted => '预设已删除';
+
+  @override
+  String get presetDeleteFail => '删除失败';
+
+  @override
+  String get presetLoaded => '预设已载入';
+
+  @override
+  String get presetLoadFail => '预设读取失败';
 }

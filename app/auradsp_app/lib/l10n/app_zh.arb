@@ -127,5 +127,17 @@
   "fvDecayLabel": "衰减",
   "fvDampLabel": "阻尼",
   "fvWetLabel": "湿声",
-  "fvDryLabel": "干声"
+  "fvDryLabel": "干声",
+  "presetTitle": "预设",
+  "presetHint": "保存/载入引擎全量参数快照（%APPDATA%/AuraDSP/presets）；T2 效果在音乐档下会被守卫拒绝（诚实提示）",
+  "presetLoadHint": "点击载入：",
+  "presetEmpty": "库为空 — 调好参数后用下方名称框保存",
+  "presetSave": "保存当前",
+  "presetDelete": "删除",
+  "presetSaved": "预设已保存",
+  "presetSaveFail": "保存失败（名称非法或磁盘不可写）",
+  "presetDeleted": "预设已删除",
+  "presetDeleteFail": "删除失败",
+  "presetLoaded": "预设已载入",
+  "presetLoadFail": "预设读取失败"
 }

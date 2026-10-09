@@ -765,6 +765,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'干声'**
   String get fvDryLabel;
+
+  /// No description provided for @presetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设'**
+  String get presetTitle;
+
+  /// No description provided for @presetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存/载入引擎全量参数快照（%APPDATA%/AuraDSP/presets）；T2 效果在音乐档下会被守卫拒绝（诚实提示）'**
+  String get presetHint;
+
+  /// No description provided for @presetLoadHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击载入：'**
+  String get presetLoadHint;
+
+  /// No description provided for @presetEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'库为空 — 调好参数后用下方名称框保存'**
+  String get presetEmpty;
+
+  /// No description provided for @presetSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前'**
+  String get presetSave;
+
+  /// No description provided for @presetDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get presetDelete;
+
+  /// No description provided for @presetSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设已保存'**
+  String get presetSaved;
+
+  /// No description provided for @presetSaveFail.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存失败（名称非法或磁盘不可写）'**
+  String get presetSaveFail;
+
+  /// No description provided for @presetDeleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设已删除'**
+  String get presetDeleted;
+
+  /// No description provided for @presetDeleteFail.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除失败'**
+  String get presetDeleteFail;
+
+  /// No description provided for @presetLoaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设已载入'**
+  String get presetLoaded;
+
+  /// No description provided for @presetLoadFail.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设读取失败'**
+  String get presetLoadFail;
 }
 
 class _AppLocalizationsDelegate

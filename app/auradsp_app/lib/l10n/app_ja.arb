@@ -127,5 +127,17 @@
   "fvDecayLabel": "減衰",
   "fvDampLabel": "ダンピング",
   "fvWetLabel": "ウェット",
-  "fvDryLabel": "ドライ"
+  "fvDryLabel": "ドライ",
+  "presetTitle": "プリセット",
+  "presetHint": "エンジン全パラメータのスナップショット保存/読込（%APPDATA%/AuraDSP/presets）。T2 効果は音楽モードでガード拒否（明示）",
+  "presetLoadHint": "クリックで読込：",
+  "presetEmpty": "ライブラリは空です — 設定後に下の名前欄から保存",
+  "presetSave": "現在を保存",
+  "presetDelete": "削除",
+  "presetSaved": "プリセットを保存しました",
+  "presetSaveFail": "保存失敗（名式またはディスク）",
+  "presetDeleted": "プリセットを削除しました",
+  "presetDeleteFail": "削除失敗",
+  "presetLoaded": "プリセットを適用しました",
+  "presetLoadFail": "プリセット読込失敗"
 }

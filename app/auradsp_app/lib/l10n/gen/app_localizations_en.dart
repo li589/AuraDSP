@@ -363,4 +363,42 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fvDryLabel => 'Dry';
+
+  @override
+  String get presetTitle => 'Presets';
+
+  @override
+  String get presetHint =>
+      'Save/load full engine parameter snapshots (%APPDATA%/AuraDSP/presets); T2 effects get guard-rejected in Music tier (honest, not silent)';
+
+  @override
+  String get presetLoadHint => 'Click to load:';
+
+  @override
+  String get presetEmpty =>
+      'Library is empty — dial in settings and save with the name field below';
+
+  @override
+  String get presetSave => 'Save current';
+
+  @override
+  String get presetDelete => 'Delete';
+
+  @override
+  String get presetSaved => 'Preset saved';
+
+  @override
+  String get presetSaveFail => 'Save failed (invalid name or disk)';
+
+  @override
+  String get presetDeleted => 'Preset deleted';
+
+  @override
+  String get presetDeleteFail => 'Delete failed';
+
+  @override
+  String get presetLoaded => 'Preset loaded';
+
+  @override
+  String get presetLoadFail => 'Preset read failed';
 }

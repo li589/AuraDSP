@@ -127,5 +127,17 @@
   "fvDecayLabel": "Decay",
   "fvDampLabel": "Damping",
   "fvWetLabel": "Wet",
-  "fvDryLabel": "Dry"
+  "fvDryLabel": "Dry",
+  "presetTitle": "Presets",
+  "presetHint": "Save/load full engine parameter snapshots (%APPDATA%/AuraDSP/presets); T2 effects get guard-rejected in Music tier (honest, not silent)",
+  "presetLoadHint": "Click to load:",
+  "presetEmpty": "Library is empty — dial in settings and save with the name field below",
+  "presetSave": "Save current",
+  "presetDelete": "Delete",
+  "presetSaved": "Preset saved",
+  "presetSaveFail": "Save failed (invalid name or disk)",
+  "presetDeleted": "Preset deleted",
+  "presetDeleteFail": "Delete failed",
+  "presetLoaded": "Preset loaded",
+  "presetLoadFail": "Preset read failed"
 }

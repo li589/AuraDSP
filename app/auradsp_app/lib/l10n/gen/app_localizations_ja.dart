@@ -351,4 +351,41 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fvDryLabel => 'ドライ';
+
+  @override
+  String get presetTitle => 'プリセット';
+
+  @override
+  String get presetHint =>
+      'エンジン全パラメータのスナップショット保存/読込（%APPDATA%/AuraDSP/presets）。T2 効果は音楽モードでガード拒否（明示）';
+
+  @override
+  String get presetLoadHint => 'クリックで読込：';
+
+  @override
+  String get presetEmpty => 'ライブラリは空です — 設定後に下の名前欄から保存';
+
+  @override
+  String get presetSave => '現在を保存';
+
+  @override
+  String get presetDelete => '削除';
+
+  @override
+  String get presetSaved => 'プリセットを保存しました';
+
+  @override
+  String get presetSaveFail => '保存失敗（名式またはディスク）';
+
+  @override
+  String get presetDeleted => 'プリセットを削除しました';
+
+  @override
+  String get presetDeleteFail => '削除失敗';
+
+  @override
+  String get presetLoaded => 'プリセットを適用しました';
+
+  @override
+  String get presetLoadFail => 'プリセット読込失敗';
 }
