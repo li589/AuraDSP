@@ -45,7 +45,10 @@
 ### 2.3 分期
 
 - **一期（M3.5 落地后）**：通用交互规范（双击归位/高级区修复）+ 脉冲响应改名与混合比例 + VDC 加载（vendor ddc.c 暴露小补丁）；
-- **二期**：IR 多声道频谱（viz 基建复用）+ Freeverb 3D 渲染（纯 UI）；
+- **二期【已完成并验证通过】**：
+  - **IR 多声道频谱可视化**（C++ 引擎层复用 viz FFT `WDL_real_fft` + 32 对数频带 `kBandEdges`，施加单侧平顶 Tukey 窗防时域首冲激截断；FFI 暴露 `convolver.ir.spectrum`；Dart 端 `_IrSpectrumGraph` 支持 1~8 声道分色绘制、渐变面积图与 20Hz~20kHz 对数频轴刻度）；
+  - **Freeverb 3D 声学室空间渲染**（`_Freeverb3DStage` + `_Freeverb3DPainter`，实现透视 3D 房间线框、网格地板、虚拟发声源与听者节点、反射射线束与声波脉冲，实时联动 `decay`/`damp`/`wet`/电平）；
+  - **置顶前置测试闭环**：`tools/smoke_convolver_spectrum.py`（引擎层单测）与 `tools/ui_verify_effects_3d.py`（每次交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS；
 - **三期**：扬声器优化（多实例卷积）+ 听力保护（响度护栏算法选型）。
 
 ---

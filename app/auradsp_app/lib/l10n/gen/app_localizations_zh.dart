@@ -415,4 +415,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpFormat => '格式化';
+
+  @override
+  String get convSpectrumTitle => '脉冲频响包络';
+
+  @override
+  String get fv3DTitle => '3D 声场渲染';
 }

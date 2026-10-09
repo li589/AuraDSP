@@ -232,6 +232,7 @@ struct auradsp_handle_s {
     std::atomic<int32_t>  ir_channels{0};
     std::atomic<int32_t>  ir_src_rate{0};      /* 文件原始采样率（0=无） */
     std::atomic<float>    ir_peak{0.0f};       /* 线性峰值（归一化提示用） */
+    float                 ir_spectrum[8][AURADSP_VIZ_BANDS] = {};
 
     /* M5-c：Freeverb（RT 独占；create 分配） */
     FvVoice fvL, fvR;
@@ -476,6 +477,70 @@ char* read_text_file(auradsp_handle h, const char* path, long max_bytes,
     return buf;
 }
 
+/* 离线计算 IR 多声道频谱包络（复用 viz FFT 基建：WDL_real_fft + 32 对数带） */
+void compute_ir_spectrum(auradsp_handle h, const float* data, size_t frames, int ch) {
+    if (!h || !data || frames == 0 || ch <= 0) return;
+    const int safe_ch = ch > 8 ? 8 : ch;
+    memset(h->ir_spectrum, 0, sizeof(h->ir_spectrum));
+
+    const int kN = kVizFftSize;
+    const int half = kN / 2;
+    const int nmag = half < 2048 ? half : 2048;
+    const int32_t* perm = WDL_fft_permute_tab(half);
+    const float bin_hz = h->sample_rate / (float)kN;
+
+    float* buf = (float*)malloc(kN * sizeof(float));
+    if (!buf) return;
+
+    for (int c = 0; c < safe_ch; ++c) {
+        const size_t take = frames < (size_t)kN ? frames : (size_t)kN;
+        // IR 特性：t=0 往往是核心直达声/脉冲尖峰，不能用对称 Hann 窗压制。
+        // 采用单侧平顶 Tukey 窗：前段直通 (w=1.0)，仅尾部 64 帧施加平滑余弦衰减防截断跳变。
+        const size_t fade_len = take > 128 ? 64 : (take > 4 ? take / 4 : 0);
+        const size_t fade_start = take - fade_len;
+        for (size_t i = 0; i < take; ++i) {
+            float w = 1.0f;
+            if (i >= fade_start && fade_len > 0) {
+                const float frac = (float)(i - fade_start) / (float)fade_len;
+                w = 0.5f * (1.0f + cosf(3.14159265358979f * frac));
+            }
+            buf[i] = data[i * ch + c] * w;
+        }
+        for (size_t i = take; i < (size_t)kN; ++i) {
+            buf[i] = 0.0f;
+        }
+
+        WDL_real_fft(buf, kN, 0);
+
+        float mag[2048];
+        float max_m = 1e-9f;
+        for (int i = 0; i < nmag; ++i) {
+            const int pi = perm ? perm[i] : i;
+            const float re = buf[pi * 2];
+            const float im = buf[pi * 2 + 1];
+            const float m = sqrtf(re * re + im * im);
+            mag[i] = m;
+            if (m > max_m) max_m = m;
+        }
+
+        for (int b = 0; b < AURADSP_VIZ_BANDS; ++b) {
+            const int lo = (int)(kBandEdges[b] / bin_hz);
+            const int hi = (int)(kBandEdges[b + 1] / bin_hz);
+            if (hi <= lo || lo >= nmag) { h->ir_spectrum[c][b] = 0.0f; continue; }
+            const int hb = hi > nmag ? nmag : hi;
+            float m = 0.0f;
+            for (int i = lo; i < hb; ++i) if (mag[i] > m) m = mag[i];
+            const float rel = m / max_m;
+            float v = 0.0f;
+            if (rel > 1e-4f) {
+                v = (20.0f * log10f(rel) + 50.0f) * (1.0f / 50.0f);
+            }
+            h->ir_spectrum[c][b] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
+        }
+    }
+    free(buf);
+}
+
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
@@ -596,11 +661,13 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
 
     /* 交给 vendor：updateOld=1 → 存入 impulseResponseStorage（fs 变化可重建） */
     const int rc = Convolver1DLoadImpulseResponse(&h->jdsp, proc, ch, out_frames, 1);
-    free(proc);
     if (rc != 1) {
+        free(proc);
         set_error(h, "convolver.ir: vendor load failed (partition select?)");
         return AURADSP_E_STATE;
     }
+    compute_ir_spectrum(h, proc, out_frames, (int)ch);
+    free(proc);
     h->ir_ready.store(true);
     h->ir_frames.store((int32_t)out_frames);
     h->ir_channels.store((int32_t)ch);
@@ -1119,6 +1186,7 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->ir_channels.store(0);
         h->ir_src_rate.store(0);
         h->ir_peak.store(0.0f);
+        memset(h->ir_spectrum, 0, sizeof(h->ir_spectrum));
         if (h->open.load()) apply_convolver(h);
         return AURADSP_OK;
     }
@@ -1295,6 +1363,18 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "convolver.ir.channels") && bytes >= 4) { *(int32_t*)out_value = h->ir_channels.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.srcRate") && bytes >= 4) { *(int32_t*)out_value = h->ir_src_rate.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.peak") && bytes >= 4) { *(float*)out_value = h->ir_peak.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ir.spectrum")) {
+        if (!h->ir_ready.load()) return AURADSP_E_STATE;
+        const int ch = h->ir_channels.load();
+        if (ch <= 0 || ch > 8) return AURADSP_E_STATE;
+        const size_t req = (size_t)ch * AURADSP_VIZ_BANDS * sizeof(float);
+        if (bytes < req) {
+            set_error(h, "convolver.ir.spectrum: buffer too small");
+            return AURADSP_E_PARAM;
+        }
+        memcpy(out_value, h->ir_spectrum, req);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "convolver.mix") && bytes >= 4) { *(float*)out_value = h->p.conv_mix.load(); return AURADSP_OK; }
     if (!strcmp(id, "ddc.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "ddc.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_ready.load(); return AURADSP_OK; }

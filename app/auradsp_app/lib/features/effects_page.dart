@@ -435,6 +435,8 @@ class _FreeverbCard extends StatelessWidget {
         builder: (_, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            _Freeverb3DStage(model: model),
+            const SizedBox(height: AuraSpace.md),
             _FvSlider(model: model, label: l.fvDecayLabel,
                 value: model.fvDecay,
                 onChanged: (v) => model.setFloat('freeverb.decay', v)),
@@ -544,6 +546,13 @@ class _ConvolverCard extends StatelessWidget {
                     onTap: () => model.clearConvolver()),
               ]),
               const SizedBox(height: AuraSpace.md),
+              if (model.convSpectrum.isNotEmpty) ...[
+                _IrSpectrumGraph(
+                  spectrum: model.convSpectrum,
+                  channels: model.convChannels,
+                ),
+                const SizedBox(height: AuraSpace.md),
+              ],
               ValueSlider(
                 label: l.convMix,
                 value: model.convMix,
@@ -1119,5 +1128,508 @@ class _PresetCardState extends State<_PresetCard> {
         ],
       ),
     );
+  }
+}
+
+/* ---- 多声道 IR 频响包络图（复用 viz FFT 基础设施） ---- */
+
+class _IrSpectrumGraph extends StatelessWidget {
+  final List<List<double>> spectrum;
+  final int channels;
+
+  const _IrSpectrumGraph({
+    required this.spectrum,
+    required this.channels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final chCount = spectrum.length;
+
+    final channelColors = [
+      p.vizSpectrum,                       // Ch1 / L: Cyan
+      const Color(0xFFFF5EA8),             // Ch2 / R: Pink
+      const Color(0xFFFFB86C),             // Ch3 / C: Orange
+      const Color(0xFFBD93F9),             // Ch4 / LFE: Purple
+      const Color(0xFF50FA7B),             // Ch5: Green
+      const Color(0xFF8BE9FD),             // Ch6: Sky
+      const Color(0xFFFF79C6),             // Ch7: Magenta
+      const Color(0xFFF1FA8C),             // Ch8: Yellow
+    ];
+
+    String channelLabel(int c) {
+      if (channels == 1) return 'Mono';
+      if (channels == 2) return c == 0 ? 'L' : 'R';
+      if (channels == 6) {
+        const labels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
+        return c < labels.length ? labels[c] : 'Ch${c + 1}';
+      }
+      return 'Ch${c + 1}';
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: p.bg.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.hairline),
+      ),
+      padding: const EdgeInsets.fromLTRB(AuraSpace.md, AuraSpace.sm, AuraSpace.md, AuraSpace.xs),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(l.convSpectrumTitle, style: captionOf(p, color: p.textDim)),
+              Wrap(
+                spacing: AuraSpace.sm,
+                children: [
+                  for (var c = 0; c < chCount; c++)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: channelColors[c % channelColors.length],
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          channelLabel(c),
+                          style: monoOf(p, size: 10, color: p.textDim),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          SizedBox(
+            height: 72,
+            child: CustomPaint(
+              painter: _IrSpectrumPainter(
+                spectrum: spectrum,
+                channelColors: channelColors,
+                gridColor: p.hairline.withValues(alpha: 0.6),
+                freqTextColor: p.textDim.withValues(alpha: 0.6),
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('20Hz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
+                Text('100Hz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
+                Text('1kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
+                Text('10kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
+                Text('20kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _IrSpectrumPainter extends CustomPainter {
+  final List<List<double>> spectrum;
+  final List<Color> channelColors;
+  final Color gridColor;
+  final Color freqTextColor;
+
+  _IrSpectrumPainter({
+    required this.spectrum,
+    required this.channelColors,
+    required this.gridColor,
+    required this.freqTextColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final gp = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+
+    for (var i = 1; i < 4; i++) {
+      final y = size.height * i / 4;
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), gp);
+    }
+    for (final frac in [0.22, 0.55, 0.88]) {
+      final x = size.width * frac;
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gp);
+    }
+
+    if (spectrum.isEmpty) return;
+
+    for (var c = 0; c < spectrum.length; c++) {
+      final bands = spectrum[c];
+      if (bands.isEmpty) continue;
+      final color = channelColors[c % channelColors.length];
+      final path = Path();
+      final fillPath = Path();
+
+      final n = bands.length;
+      final dx = size.width / (n - 1);
+
+      final pts = <Offset>[];
+      for (var i = 0; i < n; i++) {
+        final v = bands[i].clamp(0.0, 1.0);
+        final x = i * dx;
+        final y = size.height - (v * (size.height - 4)) - 2;
+        pts.add(Offset(x, y));
+      }
+
+      path.moveTo(pts[0].dx, pts[0].dy);
+      fillPath.moveTo(pts[0].dx, size.height);
+      fillPath.lineTo(pts[0].dx, pts[0].dy);
+
+      for (var i = 0; i < pts.length - 1; i++) {
+        final p0 = pts[i];
+        final p1 = pts[i + 1];
+        final mx = (p0.dx + p1.dx) / 2;
+        path.cubicTo(mx, p0.dy, mx, p1.dy, p1.dx, p1.dy);
+        fillPath.cubicTo(mx, p0.dy, mx, p1.dy, p1.dx, p1.dy);
+      }
+
+      fillPath.lineTo(pts.last.dx, size.height);
+      fillPath.close();
+
+      final fillPaint = Paint()
+        ..shader = LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            color.withValues(alpha: 0.22),
+            color.withValues(alpha: 0.02),
+          ],
+        ).createShader(Offset.zero & size);
+      canvas.drawPath(fillPath, fillPaint);
+
+      final strokePaint = Paint()
+        ..color = color.withValues(alpha: 0.9)
+        ..strokeWidth = 1.6
+        ..style = PaintingStyle.stroke;
+      canvas.drawPath(path, strokePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _IrSpectrumPainter old) {
+    if (old.spectrum.length != spectrum.length) return true;
+    for (var c = 0; c < spectrum.length; c++) {
+      if (old.spectrum[c] != spectrum[c]) return true;
+    }
+    return false;
+  }
+}
+
+/* ---- Freeverb 3D 空间声学室渲染 ---- */
+
+class _Freeverb3DStage extends StatelessWidget {
+  final AppModel model;
+  const _Freeverb3DStage({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return Container(
+      height: 125,
+      decoration: BoxDecoration(
+        color: p.bg.withValues(alpha: 0.7),
+        borderRadius: BorderRadius.circular(AuraRadius.md),
+        border: Border.all(
+          color: model.fvOn ? p.accent.withValues(alpha: 0.25) : p.hairline,
+        ),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          ValueListenableBuilder<double>(
+            valueListenable: model.levelL,
+            builder: (_, lvlL, _) => ValueListenableBuilder<double>(
+              valueListenable: model.levelR,
+              builder: (_, lvlR, _) => CustomPaint(
+                painter: _Freeverb3DPainter(
+                  enabled: model.fvOn,
+                  decay: model.fvDecay,
+                  damp: model.fvDamp,
+                  wet: model.fvWet,
+                  levelL: lvlL,
+                  levelR: lvlR,
+                  playing: model.playing,
+                  accentColor: p.accent,
+                  secondaryColor: const Color(0xFFFF5EA8),
+                  hairlineColor: p.hairline,
+                  gridColor: p.accent.withValues(alpha: 0.09),
+                  textColor: p.textDim,
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            top: AuraSpace.sm,
+            left: AuraSpace.md,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.view_in_ar_outlined,
+                    size: 14, color: model.fvOn ? p.accent : p.textDim),
+                const SizedBox(width: 4),
+                Text(l.fv3DTitle,
+                    style: monoOf(p, size: 11,
+                        color: model.fvOn ? p.text : p.textDim)),
+              ],
+            ),
+          ),
+          Positioned(
+            top: AuraSpace.sm,
+            right: AuraSpace.md,
+            child: Text(
+              model.fvOn
+                  ? 'RT 3D · 衰减 ${(model.fvDecay * 100).toInt()}% · 阻尼 ${(model.fvDamp * 100).toInt()}%'
+                  : '待机 (Bypass)',
+              style: monoOf(p, size: 10,
+                  color: model.fvOn ? p.accent.withValues(alpha: 0.8) : p.textDim),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Freeverb3DPainter extends CustomPainter {
+  final bool enabled;
+  final double decay;
+  final double damp;
+  final double wet;
+  final double levelL;
+  final double levelR;
+  final bool playing;
+  final Color accentColor;
+  final Color secondaryColor;
+  final Color hairlineColor;
+  final Color gridColor;
+  final Color textColor;
+
+  _Freeverb3DPainter({
+    required this.enabled,
+    required this.decay,
+    required this.damp,
+    required this.wet,
+    required this.levelL,
+    required this.levelR,
+    required this.playing,
+    required this.accentColor,
+    required this.secondaryColor,
+    required this.hairlineColor,
+    required this.gridColor,
+    required this.textColor,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width;
+    final h = size.height;
+
+    // 1) 3D 透视室地面与四壁
+    final fl = Offset(w * 0.06, h * 0.94);
+    final fr = Offset(w * 0.94, h * 0.94);
+    final bl = Offset(w * 0.30, h * 0.40);
+    final br = Offset(w * 0.70, h * 0.40);
+    final tl = Offset(w * 0.30, h * 0.16);
+    final tr = Offset(w * 0.70, h * 0.16);
+
+    final roomPaint = Paint()
+      ..color = hairlineColor.withValues(alpha: enabled ? 0.35 : 0.18)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+
+    canvas.drawRect(Rect.fromPoints(tl, br), roomPaint);
+    canvas.drawLine(bl, fl, roomPaint);
+    canvas.drawLine(br, fr, roomPaint);
+    canvas.drawLine(tl, Offset(w * 0.06, h * 0.02), roomPaint);
+    canvas.drawLine(tr, Offset(w * 0.94, h * 0.02), roomPaint);
+
+    final gridP = Paint()
+      ..color = gridColor
+      ..strokeWidth = 1;
+    for (final frac in [0.15, 0.35, 0.50, 0.65, 0.85]) {
+      final bottomPt = Offset(w * frac, h * 0.94);
+      final topPt = Offset(
+        bl.dx + (br.dx - bl.dx) * ((bottomPt.dx - fl.dx) / (fr.dx - fl.dx)),
+        bl.dy,
+      );
+      canvas.drawLine(topPt, bottomPt, gridP);
+    }
+    for (final z in [0.25, 0.50, 0.75]) {
+      final y = bl.dy + (fl.dy - bl.dy) * (z * z);
+      final leftX = bl.dx + (fl.dx - bl.dx) * (z * z);
+      final rightX = br.dx + (fr.dx - br.dx) * (z * z);
+      canvas.drawLine(Offset(leftX, y), Offset(rightX, y), gridP);
+    }
+
+    // 2) 声源与听者节点
+    final srcL = Offset(w * 0.36, h * 0.48);
+    final srcR = Offset(w * 0.64, h * 0.48);
+    final listener = Offset(w * 0.50, h * 0.86);
+
+    final listenerP = Paint()
+      ..color = textColor.withValues(alpha: 0.8)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(listener, 4.5, listenerP);
+    final headPath = Path()
+      ..moveTo(listener.dx, listener.dy - 6)
+      ..lineTo(listener.dx - 3, listener.dy - 3)
+      ..lineTo(listener.dx + 3, listener.dy - 3)
+      ..close();
+    canvas.drawPath(headPath, listenerP);
+
+    // 3) 实时动态脉冲
+    final normL = playing ? ((levelL + 60) / 60).clamp(0.0, 1.0) : 0.0;
+    final normR = playing ? ((levelR + 60) / 60).clamp(0.0, 1.0) : 0.0;
+
+    final pL = Paint()..color = accentColor;
+    canvas.drawCircle(srcL, 3.5 + normL * 3, pL);
+    if (enabled && normL > 0.05) {
+      canvas.drawCircle(
+        srcL,
+        6 + normL * 14,
+        Paint()
+          ..color = accentColor.withValues(alpha: normL * 0.28)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+    }
+
+    final pR = Paint()..color = secondaryColor;
+    canvas.drawCircle(srcR, 3.5 + normR * 3, pR);
+    if (enabled && normR > 0.05) {
+      canvas.drawCircle(
+        srcR,
+        6 + normR * 14,
+        Paint()
+          ..color = secondaryColor.withValues(alpha: normR * 0.28)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.2,
+      );
+    }
+
+    // 4) 3D 声学反射射线束
+    if (!enabled) return;
+
+    final rayLColor = Color.lerp(accentColor, const Color(0xFFFFB86C), damp * 0.6)!;
+    final rayRColor = Color.lerp(secondaryColor, const Color(0xFFFF79C6), damp * 0.4)!;
+    final baseAlpha = (0.2 + wet * 0.6).clamp(0.1, 0.9);
+    final rayWidth = 1.0 + (1.0 - damp) * 0.8;
+
+    final directPL = Paint()
+      ..color = rayLColor.withValues(alpha: baseAlpha * 0.7)
+      ..strokeWidth = rayWidth
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(srcL, listener, directPL);
+
+    final directPR = Paint()
+      ..color = rayRColor.withValues(alpha: baseAlpha * 0.7)
+      ..strokeWidth = rayWidth
+      ..style = PaintingStyle.stroke;
+    canvas.drawLine(srcR, listener, directPR);
+
+    final wallLy = h * (0.55 + 0.15 * decay);
+    final wallLx = fl.dx + (bl.dx - fl.dx) * (1.0 - (wallLy - bl.dy) / (fl.dy - bl.dy));
+    final ptWallL = Offset(wallLx, wallLy);
+
+    final rayPathL = Path()
+      ..moveTo(srcL.dx, srcL.dy)
+      ..lineTo(ptWallL.dx, ptWallL.dy)
+      ..lineTo(listener.dx, listener.dy);
+    canvas.drawPath(
+      rayPathL,
+      Paint()
+        ..color = rayLColor.withValues(alpha: baseAlpha * 0.65)
+        ..strokeWidth = rayWidth
+        ..style = PaintingStyle.stroke,
+    );
+
+    final wallRy = h * (0.55 + 0.15 * decay);
+    final wallRx = fr.dx + (br.dx - fr.dx) * (1.0 - (wallRy - br.dy) / (fr.dy - br.dy));
+    final ptWallR = Offset(wallRx, wallRy);
+
+    final rayPathR = Path()
+      ..moveTo(srcR.dx, srcR.dy)
+      ..lineTo(ptWallR.dx, ptWallR.dy)
+      ..lineTo(listener.dx, listener.dy);
+    canvas.drawPath(
+      rayPathR,
+      Paint()
+        ..color = rayRColor.withValues(alpha: baseAlpha * 0.65)
+        ..strokeWidth = rayWidth
+        ..style = PaintingStyle.stroke,
+    );
+
+    if (decay > 0.2) {
+      final backBounceXL = w * (0.35 + 0.1 * decay);
+      final ptBackL = Offset(backBounceXL, bl.dy);
+      final rayBackL = Path()
+        ..moveTo(srcL.dx, srcL.dy)
+        ..lineTo(ptBackL.dx, ptBackL.dy)
+        ..lineTo(ptWallR.dx, ptWallR.dy * 0.9)
+        ..lineTo(listener.dx, listener.dy);
+      canvas.drawPath(
+        rayBackL,
+        Paint()
+          ..color = rayLColor.withValues(alpha: baseAlpha * 0.4 * decay)
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke,
+      );
+
+      final backBounceXR = w * (0.65 - 0.1 * decay);
+      final ptBackR = Offset(backBounceXR, br.dy);
+      final rayBackR = Path()
+        ..moveTo(srcR.dx, srcR.dy)
+        ..lineTo(ptBackR.dx, ptBackR.dy)
+        ..lineTo(ptWallL.dx, ptWallL.dy * 0.9)
+        ..lineTo(listener.dx, listener.dy);
+      canvas.drawPath(
+        rayBackR,
+        Paint()
+          ..color = rayRColor.withValues(alpha: baseAlpha * 0.4 * decay)
+          ..strokeWidth = 1.0
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    final hazePaint = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          accentColor.withValues(alpha: 0.12 * wet),
+          secondaryColor.withValues(alpha: 0.08 * wet),
+          Colors.transparent,
+        ],
+      ).createShader(Rect.fromCircle(center: Offset(w * 0.5, h * 0.55), radius: w * 0.35));
+    canvas.drawCircle(Offset(w * 0.5, h * 0.55), w * 0.35, hazePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _Freeverb3DPainter old) {
+    return old.enabled != enabled ||
+        old.decay != decay ||
+        old.damp != damp ||
+        old.wet != wet ||
+        old.levelL != levelL ||
+        old.levelR != levelR ||
+        old.playing != playing;
   }
 }

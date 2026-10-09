@@ -418,4 +418,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpFormat => '整形';
+
+  @override
+  String get convSpectrumTitle => 'IR 周波数応答';
+
+  @override
+  String get fv3DTitle => '3D 音場レンダリング';
 }

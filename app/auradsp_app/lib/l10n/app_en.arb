@@ -149,5 +149,7 @@
   "ddcNoFile": "No correction file loaded (.vdc: earphone/speaker spatial correction, ViPER DDC compatible)",
   "ddcLoaded": "Loaded",
   "ddcClear": "Clear",
-  "lpFormat": "Format"
+  "lpFormat": "Format",
+  "convSpectrumTitle": "IR Frequency Response",
+  "fv3DTitle": "3D Soundfield Stage"
 }

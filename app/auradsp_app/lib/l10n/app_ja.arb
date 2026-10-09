@@ -149,5 +149,7 @@
   "ddcNoFile": "補正ファイル未読込（.vdc：イヤホン/スピーカー空間補正、ViPER DDC 互換）",
   "ddcLoaded": "読込済",
   "ddcClear": "クリア",
-  "lpFormat": "整形"
+  "lpFormat": "整形",
+  "convSpectrumTitle": "IR 周波数応答",
+  "fv3DTitle": "3D 音場レンダリング"
 }

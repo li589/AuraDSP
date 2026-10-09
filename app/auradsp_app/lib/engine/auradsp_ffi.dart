@@ -36,6 +36,7 @@ abstract final class ParamId {
   static const convChannels = 'convolver.ir.channels';
   static const convSrcRate = 'convolver.ir.srcRate';
   static const convPeak = 'convolver.ir.peak';
+  static const convIrSpectrum = 'convolver.ir.spectrum';
   // M3-a：轻量效果开关
   static const tubeEnable = 'tube.enable';
   static const xfeedEnable = 'crossfeed.enable';

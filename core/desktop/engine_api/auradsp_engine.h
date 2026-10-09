@@ -29,7 +29,7 @@
  *   convolver.enable i32  0/1 —— T2 效果，品质档限定（v1.1 M4）
  *   convolver.ir.path str UTF-8 文件路径（WAV/FLAC，门卫见 load_ir_file）
  *   convolver.clear  i32  清除 IR 并停用
- *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak   get 回读
+ *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak/ir.spectrum get 回读
  */
 #ifndef AURADSP_ENGINE_H
 #define AURADSP_ENGINE_H

@@ -562,6 +562,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
             final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
+            final iCvSpec = idp('convolver.ir.spectrum');
             final iTb = idp('tube.enable'), iXf = idp('crossfeed.enable');
             final iSbU = idp('stereo.bandUsed');
             final iCvM = idp('convolver.mix');
@@ -569,7 +570,29 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
+            List<List<double>>? readIrSpectrum(int ch) {
+              if (ch <= 0 || ch > 8) return null;
+              final count = ch * 32;
+              final ptr = malloc<Float>(count);
+              try {
+                final rc = p.getParam(h, iCvSpec, ptr.cast(), count * 4);
+                if (rc != 0) return null;
+                final res = <List<double>>[];
+                for (var c = 0; c < ch; c++) {
+                  final list = <double>[];
+                  for (var b = 0; b < 32; b++) {
+                    list.add(ptr[c * 32 + b]);
+                  }
+                  res.add(list);
+                }
+                return res;
+              } finally {
+                malloc.free(ptr);
+              }
+            }
             try {
+              final cvReady = rdInt(iCvRd) ?? 0;
+              final cvChannels = rdInt(iCvCh) ?? 0;
               send({
                 'evt': 'params',
                 'bassEnable': rdInt(iBass) ?? 0,
@@ -584,11 +607,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
                 'convEnable': rdInt(iCvEn) ?? 0,
-                'convReady': rdInt(iCvRd) ?? 0,
+                'convReady': cvReady,
                 'convFrames': rdInt(iCvF) ?? 0,
-                'convChannels': rdInt(iCvCh) ?? 0,
+                'convChannels': cvChannels,
                 'convSrcRate': rdInt(iCvSr) ?? 0,
                 'convPeak': rdFloat(iCvPk) ?? 0.0,
+                'convSpectrum': (cvReady == 1 && cvChannels > 0)
+                    ? readIrSpectrum(cvChannels)
+                    : null,
                 'tubeEnable': rdInt(iTb) ?? 0,
                 'xfeedEnable': rdInt(iXf) ?? 0,
                 'stereoBandUsed': rdInt(iSbU) ?? 0,
@@ -605,7 +631,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'fvDry': rdFloat(iFvDr) ?? 1.0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
                 malloc.free(q);
               }
             }

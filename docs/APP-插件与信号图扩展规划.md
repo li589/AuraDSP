@@ -357,12 +357,12 @@ v2 增量：
 | `steinbergmedia/vst3sdk` | VST3 host 侧（GPLv3 分支使用） | GPLv3/专有 |
 | `free-audio/clap-validator` | 插件扫描健壮性参考 | MIT |
 | `wwmm/easyeffects` | 链式 UI 交互与效果管理心智参考 | GPL-3 |
-| `LSP (lsp-plugins)` | bass_enhancer / bass_loudness 算法对照 | GPL-3 |
+| `LSP (lsp-plugins)`（已在库，66模块就绪） | 等响度补偿（loud-comp）/ 分频 / 滤波算法对照 | LGPL-3.0+ |
 | `iZotope Ozone Imager` 思路（不开源，仅行为对照） | 声场细化参数面设计 | — |
 | `vst-node / yabridge`（Linux VST 桥实现） | 桥进程 IPC 模式参考 | GPL-3 |
-| `element` / `jack-keyboard`（patchbay 交互） | 图视图交互参考 | GPL-3 |
+| `element`（已在库） / `jack-keyboard`（patchbay 交互） | 插件宿主与图视图交互参考 | Apache-2.0 / GPL-3 |
 
-（是否本轮就 clone 由你定；clone 一律浅克隆 + 剥 .git 入 `source/<name>/`，ORIGIN.md 登记。）
+（注：`element` 与 `lsp-plugins` 已克隆并在 `source/ORIGIN.md` 登记；新克隆一律浅克隆 + 剥 .git，遵循铁律。）
 
 ---
 

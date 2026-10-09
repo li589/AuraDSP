@@ -897,6 +897,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'格式化'**
   String get lpFormat;
+
+  /// No description provided for @convSpectrumTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲频响包络'**
+  String get convSpectrumTitle;
+
+  /// No description provided for @fv3DTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'3D 声场渲染'**
+  String get fv3DTitle;
 }
 
 class _AppLocalizationsDelegate

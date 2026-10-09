@@ -66,6 +66,7 @@ class AppModel extends ChangeNotifier {
   bool convEnabled = false, convReady = false;
   int convFrames = 0, convChannels = 0, convSrcRate = 0;
   double convPeak = 0.0;
+  List<List<double>> convSpectrum = [];
 
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
@@ -165,6 +166,13 @@ class AppModel extends ChangeNotifier {
         convChannels = raw['convChannels'] as int;
         convSrcRate = raw['convSrcRate'] as int;
         convPeak = (raw['convPeak'] as num).toDouble();
+        if (raw['convSpectrum'] != null) {
+          convSpectrum = (raw['convSpectrum'] as List)
+              .map((e) => (e as List).cast<double>().toList())
+              .toList();
+        } else if (!convReady) {
+          convSpectrum = [];
+        }
         tubeOn = (raw['tubeEnable'] as int) != 0;
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
@@ -422,6 +430,7 @@ class AppModel extends ChangeNotifier {
     convReady = false;
     convFrames = convChannels = convSrcRate = 0;
     convPeak = 0;
+    convSpectrum = [];
     notifyListeners();
     _markSent(ParamId.convClear);
     send({'cmd': 'setParam', 'id': ParamId.convClear, 'value': 0, 'isFloat': false});

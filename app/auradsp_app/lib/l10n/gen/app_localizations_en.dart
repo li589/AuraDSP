@@ -433,4 +433,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpFormat => 'Format';
+
+  @override
+  String get convSpectrumTitle => 'IR Frequency Response';
+
+  @override
+  String get fv3DTitle => '3D Soundfield Stage';
 }
