@@ -564,6 +564,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
             final iTb = idp('tube.enable'), iXf = idp('crossfeed.enable');
             final iSbU = idp('stereo.bandUsed');
+            final iCvM = idp('convolver.mix');
+            final iDdE = idp('ddc.enable'), iDdR = idp('ddc.ready');
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
@@ -590,6 +592,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'tubeEnable': rdInt(iTb) ?? 0,
                 'xfeedEnable': rdInt(iXf) ?? 0,
                 'stereoBandUsed': rdInt(iSbU) ?? 0,
+                'convMix': rdFloat(iCvM) ?? 1.0,
+                'ddcEnable': rdInt(iDdE) ?? 0,
+                'ddcReady': rdInt(iDdR) ?? 0,
                 'shelfEnable': rdInt(iShE) ?? 0,
                 'shelfFreq': rdFloat(iShF) ?? 100.0,
                 'shelfGain': rdFloat(iShG) ?? 0.0,
@@ -600,7 +605,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'fvDry': rdFloat(iFvDr) ?? 1.0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
                 malloc.free(q);
               }
             }

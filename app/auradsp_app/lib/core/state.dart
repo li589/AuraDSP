@@ -74,6 +74,10 @@ class AppModel extends ChangeNotifier {
   final List<double> stereoBands = List.filled(5, 0.5);
   bool stereoBandUsed = false;
 
+  // 脉冲响应干湿比 + VDC
+  double convMix = 1.0;
+  bool ddcOn = false, ddcReady = false;
+
   // M5-b：低频搁架
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
@@ -164,6 +168,9 @@ class AppModel extends ChangeNotifier {
         tubeOn = (raw['tubeEnable'] as int) != 0;
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
+        convMix = (raw['convMix'] as num).toDouble();
+        ddcOn = (raw['ddcEnable'] as int) != 0;
+        ddcReady = (raw['ddcReady'] as int) != 0;
         shelfOn = (raw['shelfEnable'] as int) != 0;
         shelfFreq = (raw['shelfFreq'] as num).toDouble();
         shelfGain = (raw['shelfGain'] as num).toDouble();
@@ -303,6 +310,9 @@ class AppModel extends ChangeNotifier {
           stereoBandUsed = true;
           break;
         }
+        if (id == ParamId.convMix) { convMix = v; break; }
+        if (id == ParamId.ddcEnable) { ddcOn = v != 0; break; }
+        if (id == ParamId.ddcReady) { ddcReady = v != 0; break; }
         if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
         if (id == ParamId.shelfFreq) { shelfFreq = v; break; }
         if (id == ParamId.shelfGain) { shelfGain = v; break; }
@@ -397,6 +407,14 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     _markSent(ParamId.fvEnable);
     send({'cmd': 'setParam', 'id': ParamId.fvEnable, 'value': on ? 1 : 0, 'isFloat': false});
+  }
+
+  void loadVdc(String path) {
+    send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': path});
+  }
+
+  void setDdcEnabled(bool on) {
+    setInt(ParamId.ddcEnable, on ? 1 : 0);
   }
 
   void clearConvolver() {

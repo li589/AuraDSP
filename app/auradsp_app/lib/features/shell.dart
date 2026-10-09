@@ -120,13 +120,26 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _openSettings() {
+    final p = paletteOf(context);
     showDialog<void>(
       context: context,
+      // 半透明深色遮罩：把内容区压暗，凸显设置面板
+      barrierColor: p.bg.withValues(alpha: 0.72),
       builder: (_) => Dialog(
-        backgroundColor: Colors.transparent,
+        // 面板自身提供底色（此前 transparent 导致"无背景"）
+        backgroundColor: p.panel,
+        surfaceTintColor: Colors.transparent,
+        insetPadding: const EdgeInsets.all(AuraSpace.xl),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(AuraRadius.lg),
+          side: BorderSide(color: p.hairline),
+        ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
-          child: SettingsPage(model: widget.model),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AuraRadius.lg),
+            child: SettingsPage(model: widget.model),
+          ),
         ),
       ),
     );
@@ -225,17 +238,7 @@ class _Rail extends StatelessWidget {
             ),
           ),
           const Spacer(),
-          // 设置入口（六页之外，rail 底部）
-          Padding(
-            padding: EdgeInsets.only(
-                left: collapsed ? 0 : AuraSpace.lg,
-                bottom: AuraSpace.md),
-            child: SizedBox(
-              width: collapsed ? AuraSize.railMinW - AuraSpace.sm * 2 : double.infinity,
-              child: _RailSettingsButton(model: model),
-            ),
-          ),
-          // 底部装置信息（收起时隐藏）
+          // 底部装置信息（收起时隐藏）；设置入口已移至顶栏右上角齿轮
           if (!collapsed)
             Padding(
               padding: const EdgeInsets.fromLTRB(
@@ -633,68 +636,6 @@ class _IconActionState extends State<_IconAction> {
                   size: 18, color: _hover ? p.text : p.textDim),
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-/// rail 底部设置按钮：全宽（收起时方形），打开设置对话框
-class _RailSettingsButton extends StatefulWidget {
-  final AppModel model;
-  const _RailSettingsButton({required this.model});
-
-  @override
-  State<_RailSettingsButton> createState() => _RailSettingsButtonState();
-}
-
-class _RailSettingsButtonState extends State<_RailSettingsButton> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: () => showDialog<void>(
-          context: context,
-          builder: (_) => Dialog(
-            backgroundColor: Colors.transparent,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
-              child: SettingsPage(model: widget.model),
-            ),
-          ),
-        ),
-        child: AnimatedContainer(
-          duration: AuraDur.fast,
-          height: 34,
-          decoration: BoxDecoration(
-            color: _hover ? hoverOn(p, alpha: 0.07) : Colors.transparent,
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(
-                color: _hover ? p.textDim.withValues(alpha: 0.4) : p.hairline),
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.settings_outlined,
-                size: 16,
-                color: _hover ? p.text : p.textDim),
-            const SizedBox(width: AuraSpace.sm),
-            Text(l.navSettings,
-                style: TextStyle(
-                    fontFamily: 'AuraDisplay',
-                    fontFamilyFallback: kBodyCjkFallback,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                    color: _hover ? p.text : p.textDim)),
-            const SizedBox(width: AuraSpace.sm),
-          ]),
         ),
       ),
     );

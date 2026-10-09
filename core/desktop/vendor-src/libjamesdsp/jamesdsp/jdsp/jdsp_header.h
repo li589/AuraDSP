@@ -539,6 +539,12 @@ typedef struct dspsys
 	Crossfeed advXF;
 	// DDC
 	int ddcEnabled, ddcForceRefresh;
+	/* [PATCHED-AuraDSP 2026-10-10 P-005] 卷积干湿比：宿主在 JamesDSPInit 后
+	 * 提供 scratch（≥ blockSizeMax*2 floats），并在启用干湿时置 mixUsed=1。
+	 * mixUsed=0 时 stage_conv 走上游原路径（零行为变化）。 */
+	float *auraConvScratch;
+	float auraConvWet, auraConvDry;
+	char auraConvMixUsed;
 	DDC vdcFl;
 	// Convolver
 	int convolverEnabled;

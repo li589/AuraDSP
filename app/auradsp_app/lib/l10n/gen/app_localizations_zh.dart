@@ -311,7 +311,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSave => '保存到库';
 
   @override
-  String get convTitle => '卷积 / 脉冲响应';
+  String get convTitle => '脉冲响应';
 
   @override
   String get convOpenIr => '打开 IR 文件';
@@ -391,4 +391,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get navChain => '处理链';
+
+  @override
+  String get convMix => '混合比例';
+
+  @override
+  String get convMixHint => '干湿比：0% = 纯原始信号，100% = 纯卷积结果（默认 100%，等同经典 IR 加载）';
+
+  @override
+  String get ddcTitle => 'VDC 空间校正';
+
+  @override
+  String get ddcOpen => '打开 VDC 文件';
+
+  @override
+  String get ddcNoFile => '未加载校正文件（.vdc：耳机/扬声器空间校正系数，兼容蝰蛇音效 DDC）';
+
+  @override
+  String get ddcLoaded => '已加载';
+
+  @override
+  String get ddcClear => '清除';
 }

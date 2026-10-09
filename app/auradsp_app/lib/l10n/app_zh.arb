@@ -115,7 +115,7 @@
   "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "库为空 — 用下方名称框保存当前代码",
   "lpSave": "保存到库",
-  "convTitle": "卷积 / 脉冲响应",
+  "convTitle": "脉冲响应",
   "convOpenIr": "打开 IR 文件",
   "convClear": "清除 IR",
   "convNoIr": "未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）",
@@ -141,5 +141,12 @@
   "presetLoaded": "预设已载入",
   "presetLoadFail": "预设读取失败",
   "navPlugins": "插件",
-  "navChain": "处理链"
+  "navChain": "处理链",
+  "convMix": "混合比例",
+  "convMixHint": "干湿比：0% = 纯原始信号，100% = 纯卷积结果（默认 100%，等同经典 IR 加载）",
+  "ddcTitle": "VDC 空间校正",
+  "ddcOpen": "打开 VDC 文件",
+  "ddcNoFile": "未加载校正文件（.vdc：耳机/扬声器空间校正系数，兼容蝰蛇音效 DDC）",
+  "ddcLoaded": "已加载",
+  "ddcClear": "清除"
 }

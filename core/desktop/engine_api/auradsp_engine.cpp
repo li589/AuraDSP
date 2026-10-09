@@ -105,6 +105,10 @@ struct Params {
     std::atomic<float>    lp_param[8];          /* slider1..8（C++20 值初始化 = 0） */
     /* 卷积 / 脉冲响应（v1.1 M4） */
     std::atomic<int32_t>  conv_enable{0};
+    std::atomic<float>    conv_mix{1.0f};      /* 干湿比 [0,1]：1=纯湿（P-005） */
+    /* VDC 空间校正（v1.2 M5-3） */
+    std::atomic<int32_t>  ddc_enable{0};
+    std::atomic<int32_t>  ddc_ready{0};
     /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
@@ -238,6 +242,7 @@ struct auradsp_handle_s {
         double z1L = 0, z2L = 0, z1R = 0, z2R = 0;   /* TDF2 状态（RT 独占） */
     } shelf;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
+    float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
     char   last_error[256] = {0};
 };
@@ -430,6 +435,47 @@ void apply_convolver(auradsp_handle h) {
  * （调用方不持锁，解码失败不连坐音频）→ L4 解码后健全性（NaN/Inf/声道/长度）。
  * 采样率不匹配 → JamesDSPOfflineResampling 重采样到引擎 fs（44.1↔48 等）。
  * 成功 → Convolver1DLoadImpulseResponse(updateOld=1) 持久化到 vendor 存储。 */
+/* 通用 UTF-8 路径文本读入（R-1 修复：Windows 走 _wfopen，避免 ANSI 代码页）。
+ * 成功返回 malloc 的 NUL 结尾内容，失败置 error 返回 nullptr。 */
+char* read_text_file(auradsp_handle h, const char* path, long max_bytes,
+                     auradsp_status* st) {
+    *st = AURADSP_OK;
+    if (!path || !path[0]) { set_error(h, "path: empty"); *st = AURADSP_E_PARAM; return nullptr; }
+#ifdef _WIN32
+    const int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
+    if (wlen <= 0) { set_error(h, "path: invalid encoding"); *st = AURADSP_E_PARAM; return nullptr; }
+    wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
+    if (!wpath) { set_error(h, "path: OOM"); *st = AURADSP_E_IO; return nullptr; }
+    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
+    FILE* fp = _wfopen(wpath, L"rb");
+    free(wpath);
+#else
+    FILE* fp = fopen(path, "rb");
+#endif
+    if (!fp) { set_error(h, "file: cannot open"); *st = AURADSP_E_IO; return nullptr; }
+    fseek(fp, 0, SEEK_END);
+    const long sz = ftell(fp);
+    if (sz <= 0 || sz > max_bytes) {
+        fclose(fp);
+        set_error(h, "file: empty or too large");
+        *st = AURADSP_E_PARAM;
+        return nullptr;
+    }
+    rewind(fp);
+    char* buf = (char*)malloc((size_t)sz + 1);
+    if (!buf) { fclose(fp); set_error(h, "file: OOM"); *st = AURADSP_E_IO; return nullptr; }
+    const size_t got = fread(buf, 1, (size_t)sz, fp);
+    fclose(fp);
+    if (got != (size_t)sz) {
+        free(buf);
+        set_error(h, "file: read failed");
+        *st = AURADSP_E_IO;
+        return nullptr;
+    }
+    buf[sz] = 0;
+    return buf;
+}
+
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
@@ -704,11 +750,24 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (!h->shelf_scratch) {
         delete[] h->fft_scratch; delete[] h->viz_hist; delete h; return nullptr;
     }
+    h->conv_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
+    if (!h->conv_scratch) {
+        delete[] h->fft_scratch; delete[] h->viz_hist;
+        delete[] h->shelf_scratch; delete h; return nullptr;
+    }
+    /* 注意：P-005 的 scratch 绑定必须放在 JamesDSPInit 之后——
+     * JamesDSPInit 内部 memset(jdsp, 0, sizeof) 会清掉提前写入的指针 */
+
     for (int i = 0; i < kVizFftSize; ++i)
         h->hann[i] = 0.5f * (1.0f - cosf(2.0f * 3.14159265358979f * i / (kVizFftSize - 1)));
 
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
+    /* P-005：scratch 绑定（必须在 memset 之后）+ 默认纯湿（=上游行为） */
+    h->jdsp.auraConvScratch = h->conv_scratch;
+    h->jdsp.auraConvWet = 1.0f;
+    h->jdsp.auraConvDry = 0.0f;
+    h->jdsp.auraConvMixUsed = 0;
     fv_alloc(h->fvL);
     fv_alloc(h->fvR);
     shelf_recalc(h);
@@ -732,6 +791,7 @@ void auradsp_destroy(auradsp_handle h) {
     delete[] h->fft_scratch;
     delete[] h->viz_hist;
     delete[] h->shelf_scratch;
+    delete[] h->conv_scratch;
     free(h->lp_code);
     delete h;
     global_unref();
@@ -1042,6 +1102,16 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             apply_convolver(h);
         return AURADSP_OK;
     }
+    if (!strcmp(id, "convolver.mix") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.conv_mix.store(v);
+        /* 干湿比 1.0 等价于上游原行为（纯湿），此时关掉混合路径省一次拷贝 */
+        h->jdsp.auraConvWet = v;
+        h->jdsp.auraConvDry = 1.0f - v;
+        h->jdsp.auraConvMixUsed = (v < 0.999f) ? 1 : 0;
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "convolver.clear") && bytes >= 4) {
         h->p.conv_enable.store(0);
         h->ir_ready.store(false);
@@ -1075,6 +1145,49 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (v < -15) v = -15; if (v > 15) v = 15;
         h->p.shelf_gain.store(v);
         shelf_recalc(h);
+        return AURADSP_OK;
+    }
+    /* ---- VDC 空间校正（M5-3） ---- */
+    if (!strcmp(id, "ddc.load")) {
+        if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
+        if (bytes == 0 || bytes > 4096) {
+            set_error(h, "ddc.load: invalid path length");
+            return AURADSP_E_PARAM;
+        }
+        char* pbuf = (char*)malloc((size_t)bytes + 1);
+        if (!pbuf) { set_error(h, "ddc.load: OOM"); return AURADSP_E_IO; }
+        memcpy(pbuf, value, bytes);
+        pbuf[bytes] = 0;
+        /* 读文件（UTF-8 路径 + 尺寸限额），内容交给 DDCStringParser */
+        auradsp_status st = AURADSP_OK;
+        char* content = read_text_file(h, pbuf, 4 * 1024 * 1024, &st);
+        free(pbuf);
+        if (!content) return st;
+        const int rc = DDCStringParser(&h->jdsp, content);
+        free(content);
+        /* vendor 语义：1=加载成功，0=与当前相同（跳过），-1=失败 */
+        if (rc < 0) {
+            h->p.ddc_ready.store(0);
+            set_error(h, "ddc.load: parse failed (need SR_44100/SR_48000 coeffs)");
+            return AURADSP_E_PARAM;
+        }
+        h->p.ddc_ready.store(1);
+        /* 加载成功不自动使能（UI 明确开） */
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "ddc.enable") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        if (v && !h->p.ddc_ready.load(std::memory_order_relaxed)) {
+            set_error(h, "ddc.enable: no VDC loaded");
+            return AURADSP_E_STATE;
+        }
+        const int rc = v ? DDCEnable(&h->jdsp, 1) : (DDCDisable(&h->jdsp), 1);
+        if (v && rc != 1) {
+            h->p.ddc_enable.store(0);
+            set_error(h, "ddc.enable: rejected by engine");
+            return AURADSP_E_STATE;
+        }
+        h->p.ddc_enable.store(v);
         return AURADSP_OK;
     }
     /* ---- M3.5-a：处理顺序（P-004 表驱动链） ---- */
@@ -1182,6 +1295,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "convolver.ir.channels") && bytes >= 4) { *(int32_t*)out_value = h->ir_channels.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.srcRate") && bytes >= 4) { *(int32_t*)out_value = h->ir_src_rate.load(); return AURADSP_OK; }
     if (!strcmp(id, "convolver.ir.peak") && bytes >= 4) { *(float*)out_value = h->ir_peak.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.mix") && bytes >= 4) { *(float*)out_value = h->p.conv_mix.load(); return AURADSP_OK; }
+    if (!strcmp(id, "ddc.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "ddc.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_ready.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
@@ -1210,7 +1326,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"limiter\",\"tier\":0,\"exposed\":true},"
             "{\"id\":\"comp\",\"tier\":2,\"exposed\":false},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
-            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":false},"
+            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
             "]";
         snprintf((char*)out_value, bytes, "%s", reg);

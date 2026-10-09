@@ -115,7 +115,7 @@
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
   "lpSave": "ライブラリに保存",
-  "convTitle": "コンボルバー / IR",
+  "convTitle": "インパルス応答",
   "convOpenIr": "IR ファイルを開く",
   "convClear": "IR をクリア",
   "convNoIr": "IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）",
@@ -141,5 +141,12 @@
   "presetLoaded": "プリセットを適用しました",
   "presetLoadFail": "プリセット読込失敗",
   "navPlugins": "プラグイン",
-  "navChain": "チェーン"
+  "navChain": "チェーン",
+  "convMix": "ミックス",
+  "convMixHint": "ドライ/ウェット：0% = 原音のみ、100% = 畳み込みのみ（既定 100%）",
+  "ddcTitle": "VDC 空間補正",
+  "ddcOpen": "VDC ファイルを開く",
+  "ddcNoFile": "補正ファイル未読込（.vdc：イヤホン/スピーカー空間補正、ViPER DDC 互換）",
+  "ddcLoaded": "読込済",
+  "ddcClear": "クリア"
 }

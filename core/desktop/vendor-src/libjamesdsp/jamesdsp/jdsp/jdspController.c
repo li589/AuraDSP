@@ -314,9 +314,28 @@ static void stage_arbmag(JamesDSPLib *jdsp, size_t n)
 }
 static void stage_conv(JamesDSPLib *jdsp, size_t n)
 {
-	if (jdsp->convolverEnabled)
-		if (jdsp->conv.process)
-			jdsp->conv.process(jdsp, n);
+	if (!jdsp->convolverEnabled)
+		return;
+	if (!jdsp->conv.process)
+		return;
+	/* [PATCHED-AuraDSP P-005] 干湿混合：先留干信号，卷积后按系数混合 */
+	if (jdsp->auraConvMixUsed && jdsp->auraConvScratch)
+	{
+		memcpy(jdsp->auraConvScratch, jdsp->tmpBuffer[0], n * sizeof(float));
+		memcpy(jdsp->auraConvScratch + n, jdsp->tmpBuffer[1], n * sizeof(float));
+		jdsp->conv.process(jdsp, n);
+		for (size_t i = 0; i < n; ++i)
+		{
+			float dryL = jdsp->auraConvScratch[i];
+			float dryR = jdsp->auraConvScratch[n + i];
+			float wetL = jdsp->tmpBuffer[0][i];
+			float wetR = jdsp->tmpBuffer[1][i];
+			jdsp->tmpBuffer[0][i] = dryL * jdsp->auraConvDry + wetL * jdsp->auraConvWet;
+			jdsp->tmpBuffer[1][i] = dryR * jdsp->auraConvDry + wetR * jdsp->auraConvWet;
+		}
+		return;
+	}
+	jdsp->conv.process(jdsp, n);
 }
 static void stage_ddc(JamesDSPLib *jdsp, size_t n)
 {

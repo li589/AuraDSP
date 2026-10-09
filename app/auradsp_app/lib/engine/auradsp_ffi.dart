@@ -42,6 +42,11 @@ abstract final class ParamId {
   // M5/P-002：声场分带
   static String stereoBand(int i) => 'stereo.band${i + 1}'; // i: 0..4
   static const stereoBandUsed = 'stereo.bandUsed';
+  // 脉冲响应干湿比（P-005）+ VDC
+  static const convMix = 'convolver.mix';
+  static const ddcLoad = 'ddc.load';
+  static const ddcEnable = 'ddc.enable';
+  static const ddcReady = 'ddc.ready';
   // M5-b：低频搁架（low-shelf，engine wrapper 自研 biquad）
   static const shelfEnable = 'shelf.enable';
   static const shelfFreq = 'shelf.freq';

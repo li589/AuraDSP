@@ -691,7 +691,7 @@ abstract class AppLocalizations {
   /// No description provided for @convTitle.
   ///
   /// In zh, this message translates to:
-  /// **'卷积 / 脉冲响应'**
+  /// **'脉冲响应'**
   String get convTitle;
 
   /// No description provided for @convOpenIr.
@@ -849,6 +849,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'处理链'**
   String get navChain;
+
+  /// No description provided for @convMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'混合比例'**
+  String get convMix;
+
+  /// No description provided for @convMixHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'干湿比：0% = 纯原始信号，100% = 纯卷积结果（默认 100%，等同经典 IR 加载）'**
+  String get convMixHint;
+
+  /// No description provided for @ddcTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'VDC 空间校正'**
+  String get ddcTitle;
+
+  /// No description provided for @ddcOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 VDC 文件'**
+  String get ddcOpen;
+
+  /// No description provided for @ddcNoFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'未加载校正文件（.vdc：耳机/扬声器空间校正系数，兼容蝰蛇音效 DDC）'**
+  String get ddcNoFile;
+
+  /// No description provided for @ddcLoaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已加载'**
+  String get ddcLoaded;
+
+  /// No description provided for @ddcClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除'**
+  String get ddcClear;
 }
 
 class _AppLocalizationsDelegate

@@ -49,6 +49,10 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _DdcCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _StereoCard(model: model),
         ),
         ListenableBuilder(
@@ -540,6 +544,20 @@ class _ConvolverCard extends StatelessWidget {
                     onTap: () => model.clearConvolver()),
               ]),
               const SizedBox(height: AuraSpace.md),
+              ValueSlider(
+                label: l.convMix,
+                value: model.convMix,
+                defaultValue: 1.0,
+                min: 0,
+                max: 1,
+                unit: '%',
+                format: (v) => (v * 100).toStringAsFixed(0),
+                onChanged: (v) => model.setFloat('convolver.mix', v),
+                onChangedEnd: (v) => model.setFloat('convolver.mix', v),
+              ),
+              const SizedBox(height: AuraSpace.xs),
+              Text(l.convMixHint, style: captionOf(p)),
+              const SizedBox(height: AuraSpace.md),
               Text(
                 '${model.convFrames} 帧 · $dur · '
                 '${model.convChannels}ch · 峰值 '
@@ -570,7 +588,55 @@ class _ConvolverCard extends StatelessWidget {
   }
 }
 
-/* ---- 04 Equalizer / Stereo ---- */
+/* ---- 04 VDC 空间校正（耳机/扬声器校正系数，兼容蝰蛇 DDC） ---- */
+
+class _DdcCard extends StatelessWidget {
+  final AppModel model;
+  const _DdcCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return SectionCard(
+      index: '04',
+      title: l.ddcTitle,
+      trailing: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => AuraSwitch(
+          value: model.ddcOn,
+          onChanged: model.ddcReady ? model.setDdcEnabled : null,
+        ),
+      ),
+      child: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
+              AuraChip(l.ddcOpen, icon: Icons.folder_open_outlined,
+                  onTap: () => _pickVdc(context)),
+              if (model.ddcReady)
+                AuraChip(l.ddcLoaded, icon: Icons.check_circle_outline,
+                    onTap: null),
+            ]),
+            const SizedBox(height: AuraSpace.sm),
+            Text(model.ddcReady ? '${l.ddcLoaded}：VDC' : l.ddcNoFile,
+                style: captionOf(p)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickVdc(BuildContext context) async {
+    const type = XTypeGroup(label: 'VDC', extensions: ['vdc']);
+    final f = await openFile(acceptedTypeGroups: [type]);
+    if (f != null) model.loadVdc(f.path);
+  }
+}
+
+/* ---- 05 Equalizer / Stereo ---- */
 
 class _StereoCard extends StatelessWidget {
   final AppModel model;
@@ -580,7 +646,7 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '05',
+      index: '06',
       title: l.equalizer,
       trailing: AuraSwitch(
         value: model.eqOn,
@@ -760,7 +826,7 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '06',
+      index: '07',
       title: l.postGain,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -978,7 +1044,7 @@ class _PresetCardState extends State<_PresetCard> {
     final l = l10nOf(context);
     final m = widget.model;
     return SectionCard(
-      index: '07',
+      index: '08',
       title: l.presetTitle,
       hint: l.presetHint,
       child: Column(

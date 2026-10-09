@@ -322,7 +322,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpSave => 'Save to library';
 
   @override
-  String get convTitle => 'Convolver / Impulse Response';
+  String get convTitle => 'Impulse Response';
 
   @override
   String get convOpenIr => 'Open IR file';
@@ -407,4 +407,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get navChain => 'Chain';
+
+  @override
+  String get convMix => 'Mix';
+
+  @override
+  String get convMixHint =>
+      'Dry/wet: 0% = original signal only, 100% = convolution only (default 100%, same as classic IR loading)';
+
+  @override
+  String get ddcTitle => 'VDC Spatial Correction';
+
+  @override
+  String get ddcOpen => 'Open VDC file';
+
+  @override
+  String get ddcNoFile =>
+      'No correction file loaded (.vdc: earphone/speaker spatial correction, ViPER DDC compatible)';
+
+  @override
+  String get ddcLoaded => 'Loaded';
+
+  @override
+  String get ddcClear => 'Clear';
 }

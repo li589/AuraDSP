@@ -313,7 +313,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSave => 'ライブラリに保存';
 
   @override
-  String get convTitle => 'コンボルバー / IR';
+  String get convTitle => 'インパルス応答';
 
   @override
   String get convOpenIr => 'IR ファイルを開く';
@@ -394,4 +394,25 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get navChain => 'チェーン';
+
+  @override
+  String get convMix => 'ミックス';
+
+  @override
+  String get convMixHint => 'ドライ/ウェット：0% = 原音のみ、100% = 畳み込みのみ（既定 100%）';
+
+  @override
+  String get ddcTitle => 'VDC 空間補正';
+
+  @override
+  String get ddcOpen => 'VDC ファイルを開く';
+
+  @override
+  String get ddcNoFile => '補正ファイル未読込（.vdc：イヤホン/スピーカー空間補正、ViPER DDC 互換）';
+
+  @override
+  String get ddcLoaded => '読込済';
+
+  @override
+  String get ddcClear => 'クリア';
 }

@@ -19,3 +19,14 @@
 - **动机**：M5 声场细化（用户诉求：iZotope Imager 式频带宽度）。上游 5 个子带共享单一 mix，无法分带调节。
 - **行为影响**：`bandMixUsed=0`（默认/Refresh 后/UseUnifiedMix 后）与上游逐字节一致；宿主显式 SetBandMix 后按带取值。gain 补偿沿用统一公式（分带时不二次补偿，UI 负责提示）。
 - **上游同步冲突风险**：中（改了 struct + Process 核心行；上游若重构此文件需人工合并）。
+
+## P-005 jdsp_header.h + jdspController.c — 卷积干湿比（2026-10-10）
+
+- **位置**：struct 加 `auraConvScratch / auraConvWet / auraConvDry / auraConvMixUsed`；
+  `stage_conv` 在 `auraConvMixUsed && auraConvScratch` 时改走"留干信号 → 卷积 → 按系数混合"。
+- **动机**：M5-3 脉冲响应混合比例（上游卷积只能全湿输出，无法与干信号混合）。
+- **scratch 归属**：由宿主提供并在 `JamesDSPInit` **之后**绑定
+  （`JamesDSPInit` 内部 `memset(jdsp,0,sizeof)` 会清掉提前写入的指针——实测踩过）。
+- **行为影响**：`auraConvMixUsed=0`（默认）时 `stage_conv` 与上游逐字节一致；
+  仅让能且 mix<1 时启用混合路径（每块两次 memcpy 的开销）。
+- **上游同步冲突风险**：低（结构体加字段 + 单函数分支）。

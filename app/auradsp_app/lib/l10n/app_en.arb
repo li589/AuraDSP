@@ -115,7 +115,7 @@
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
   "lpSave": "Save to library",
-  "convTitle": "Convolver / Impulse Response",
+  "convTitle": "Impulse Response",
   "convOpenIr": "Open IR file",
   "convClear": "Clear IR",
   "convNoIr": "No IR loaded (WAV / FLAC; sniffed, size-capped, sanity-checked)",
@@ -141,5 +141,12 @@
   "presetLoaded": "Preset loaded",
   "presetLoadFail": "Preset read failed",
   "navPlugins": "Plugins",
-  "navChain": "Chain"
+  "navChain": "Chain",
+  "convMix": "Mix",
+  "convMixHint": "Dry/wet: 0% = original signal only, 100% = convolution only (default 100%, same as classic IR loading)",
+  "ddcTitle": "VDC Spatial Correction",
+  "ddcOpen": "Open VDC file",
+  "ddcNoFile": "No correction file loaded (.vdc: earphone/speaker spatial correction, ViPER DDC compatible)",
+  "ddcLoaded": "Loaded",
+  "ddcClear": "Clear"
 }
