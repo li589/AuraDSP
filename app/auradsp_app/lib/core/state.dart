@@ -74,6 +74,10 @@ class AppModel extends ChangeNotifier {
   final List<double> stereoBands = List.filled(5, 0.5);
   bool stereoBandUsed = false;
 
+  // M5-b：低频搁架
+  bool shelfOn = false;
+  double shelfFreq = 100, shelfGain = 0;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -153,6 +157,9 @@ class AppModel extends ChangeNotifier {
         tubeOn = (raw['tubeEnable'] as int) != 0;
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
+        shelfOn = (raw['shelfEnable'] as int) != 0;
+        shelfFreq = (raw['shelfFreq'] as num).toDouble();
+        shelfGain = (raw['shelfGain'] as num).toDouble();
         notifyListeners();
         break;
       case 'liveprog':
@@ -281,6 +288,9 @@ class AppModel extends ChangeNotifier {
           stereoBandUsed = true;
           break;
         }
+        if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
+        if (id == ParamId.shelfFreq) { shelfFreq = v; break; }
+        if (id == ParamId.shelfGain) { shelfGain = v; break; }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }

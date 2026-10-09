@@ -42,6 +42,10 @@ abstract final class ParamId {
   // M5/P-002：声场分带
   static String stereoBand(int i) => 'stereo.band${i + 1}'; // i: 0..4
   static const stereoBandUsed = 'stereo.bandUsed';
+  // M5-b：低频搁架（low-shelf，engine wrapper 自研 biquad）
+  static const shelfEnable = 'shelf.enable';
+  static const shelfFreq = 'shelf.freq';
+  static const shelfGain = 'shelf.gain';
 }
 
 /// auradsp_status（engine_api 枚举）

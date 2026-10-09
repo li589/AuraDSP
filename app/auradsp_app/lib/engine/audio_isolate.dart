@@ -564,6 +564,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
             final iTb = idp('tube.enable'), iXf = idp('crossfeed.enable');
             final iSbU = idp('stereo.bandUsed');
+            final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             try {
               send({
                 'evt': 'params',
@@ -587,9 +588,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'tubeEnable': rdInt(iTb) ?? 0,
                 'xfeedEnable': rdInt(iXf) ?? 0,
                 'stereoBandUsed': rdInt(iSbU) ?? 0,
+                'shelfEnable': rdInt(iShE) ?? 0,
+                'shelfFreq': rdFloat(iShF) ?? 100.0,
+                'shelfGain': rdFloat(iShG) ?? 0.0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iTb, iXf, iSbU]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iTb, iXf, iSbU, iShE, iShF, iShG]) {
                 malloc.free(q);
               }
             }

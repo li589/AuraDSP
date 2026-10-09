@@ -187,17 +187,129 @@ class _BassCard extends StatelessWidget {
         value: model.bassOn,
         onChanged: (v) => model.setInt('bass.enable', v ? 1 : 0),
       ),
-      child: ValueSlider(
-        label: l.bassGain,
-        value: model.bassGain,
-        min: 0,
-        max: 15,
-        unit: 'dB',
-        enabled: model.bassOn,
-        format: (v) => v.toStringAsFixed(1),
-        onChanged: (v) => model.setFloat('bass.gain', v),
-        onChangedEnd: (v) => model.setFloat('bass.gain', v),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueSlider(
+            label: l.bassGain,
+            value: model.bassGain,
+            min: 0,
+            max: 15,
+            unit: 'dB',
+            enabled: model.bassOn,
+            format: (v) => v.toStringAsFixed(1),
+            onChanged: (v) => model.setFloat('bass.gain', v),
+            onChangedEnd: (v) => model.setFloat('bass.gain', v),
+          ),
+          const SizedBox(height: AuraSpace.md),
+          _BassShelfAdvanced(model: model), // M5-b：低频搁架，默认折叠
+        ],
       ),
+    );
+  }
+}
+
+/// 低频搁架（M5-b，默认折叠）：独立于 dbb 的 low-shelf，频点/增益可调
+class _BassShelfAdvanced extends StatefulWidget {
+  final AppModel model;
+  const _BassShelfAdvanced({required this.model});
+
+  @override
+  State<_BassShelfAdvanced> createState() => _BassShelfAdvancedState();
+}
+
+class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final m = widget.model;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _open = !_open),
+            child: Row(children: [
+              AnimatedRotation(
+                duration: AuraDur.fast,
+                turns: _open ? 0.25 : 0,
+                child: Icon(Icons.expand_more_rounded,
+                    size: 16, color: p.textDim),
+              ),
+              const SizedBox(width: AuraSpace.xs + 2),
+              Text('高级 · 低频搁架',
+                  style: labelOf(p, color: p.textDim)),
+              const Spacer(),
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) => Row(mainAxisSize: MainAxisSize.min, children: [
+                  Text('搁架',
+                      style: labelOf(p, color: p.textDim)),
+                  const SizedBox(width: AuraSpace.sm),
+                  AuraSwitch(
+                    value: m.shelfOn,
+                    onChanged: (v) => m.setInt('shelf.enable', v ? 1 : 0),
+                  ),
+                ]),
+              ),
+            ]),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: AuraDur.base,
+          sizeCurve: AuraCurve.standard,
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: ListenableBuilder(
+              listenable: m,
+              builder: (_, _) => Column(children: [
+                Row(children: [
+                  SizedBox(width: 60,
+                      child: Text('频点', style: labelOf(p, color: p.textDim))),
+                  Expanded(
+                    child: Slider(
+                      value: m.shelfFreq.clamp(40, 400),
+                      min: 40, max: 400,
+                      onChanged: (v) => m.setFloat('shelf.freq', v),
+                    ),
+                  ),
+                  SizedBox(width: 60,
+                      child: Text('${m.shelfFreq.toStringAsFixed(0)}Hz',
+                          textAlign: TextAlign.right,
+                          style: monoOf(p, size: 12, color: p.text))),
+                ]),
+                Row(children: [
+                  SizedBox(width: 60,
+                      child: Text('增益', style: labelOf(p, color: p.textDim))),
+                  Expanded(
+                    child: Slider(
+                      value: m.shelfGain.clamp(-15, 15),
+                      min: -15, max: 15,
+                      onChanged: (v) => m.setFloat('shelf.gain', v),
+                    ),
+                  ),
+                  SizedBox(width: 60,
+                      child: Text(
+                          '${m.shelfGain >= 0 ? "+" : ""}${m.shelfGain.toStringAsFixed(1)}dB',
+                          textAlign: TextAlign.right,
+                          style: monoOf(p, size: 12, color: p.text))),
+                ]),
+                const SizedBox(height: AuraSpace.xs),
+                Text('独立 low-shelf 滤波器（位于链头，先于低音增强）；'
+                    'f0 为半增益点；强正增益可能被输出限幅器收峰',
+                    style: captionOf(p)),
+              ]),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

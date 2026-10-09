@@ -111,6 +111,10 @@ struct Params {
     /* M5/P-002：声场分带（bandMixUsed 由宿主语义维护） */
     std::atomic<float>    stereo_band[5];
     std::atomic<int32_t>  stereo_band_used{0};
+    /* M5-b：低频搁架（low-shelf，自研 RBJ biquad，零 vendor 改动） */
+    std::atomic<int32_t>  shelf_enable{0};
+    std::atomic<float>    shelf_freq{100.0f};   /* Hz [40,400] */
+    std::atomic<float>    shelf_gain{0.0f};     /* dB [-15,15] */
 };
 
 /* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
@@ -160,6 +164,13 @@ struct auradsp_handle_s {
     std::atomic<int32_t>  ir_channels{0};
     std::atomic<int32_t>  ir_src_rate{0};      /* 文件原始采样率（0=无） */
     std::atomic<float>    ir_peak{0.0f};       /* 线性峰值（归一化提示用） */
+
+    /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰） */
+    struct ShelfBiquad {
+        std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
+        double z1L = 0, z2L = 0, z1R = 0, z2R = 0;   /* TDF2 状态（RT 独占） */
+    } shelf;
+    float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
 
     char   last_error[256] = {0};
 };
@@ -275,6 +286,52 @@ void apply_liveprog(auradsp_handle h) {
         LiveProgEnable(&h->jdsp);
     else
         LiveProgDisable(&h->jdsp);
+}
+
+/* ---- M5-b 低频搁架（RBJ cookbook low-shelf，Q=0.707）----
+ * RT 路径：DF2T 双声道，系数原子读；控制线程重算系数。 */
+void shelf_recalc(auradsp_handle h) {
+    const double f0 = h->p.shelf_freq.load(std::memory_order_relaxed);
+    const double gdb = h->p.shelf_gain.load(std::memory_order_relaxed);
+    const double A = pow(10.0, gdb / 40.0);
+    const double w0 = 2.0 * 3.14159265358979 * f0 / h->jdsp.fs;
+    const double cw = cos(w0), sw = sin(w0);
+    const double alpha = sw / (2.0 * 0.7071067811865476);
+    const double sqA2a = 2.0 * sqrt(A) * alpha;
+    const double b0 = A * ((A + 1) - (A - 1) * cw + sqA2a);
+    const double b1 = 2.0 * A * ((A - 1) - (A + 1) * cw);
+    const double b2 = A * ((A + 1) - (A - 1) * cw - sqA2a);
+    const double a0 = (A + 1) + (A - 1) * cw + sqA2a;
+    const double a1 = -2.0 * ((A - 1) + (A + 1) * cw);
+    const double a2 = (A + 1) + (A - 1) * cw - sqA2a;
+    h->shelf.b0.store(b0 / a0, std::memory_order_release);
+    h->shelf.b1.store(b1 / a0, std::memory_order_release);
+    h->shelf.b2.store(b2 / a0, std::memory_order_release);
+    h->shelf.a1.store(a1 / a0, std::memory_order_release);
+    h->shelf.a2.store(a2 / a0, std::memory_order_release);
+}
+
+void shelf_process(auradsp_handle h, float* io, int frames) {
+    const double b0 = h->shelf.b0.load(std::memory_order_acquire);
+    const double b1 = h->shelf.b1.load(std::memory_order_acquire);
+    const double b2 = h->shelf.b2.load(std::memory_order_acquire);
+    const double a1 = h->shelf.a1.load(std::memory_order_acquire);
+    const double a2 = h->shelf.a2.load(std::memory_order_acquire);
+    double z1L = h->shelf.z1L, z2L = h->shelf.z2L;
+    double z1R = h->shelf.z1R, z2R = h->shelf.z2R;
+    for (int i = 0; i < frames; ++i) {
+        const double xl = io[i * 2], xr = io[i * 2 + 1];
+        const double yl = b0 * xl + z1L;
+        z1L = b1 * xl - a1 * yl + z2L;
+        z2L = b2 * xl - a2 * yl;
+        const double yr = b0 * xr + z1R;
+        z1R = b1 * xr - a1 * yr + z2R;
+        z2R = b2 * xr - a2 * yr;
+        io[i * 2] = (float)yl;
+        io[i * 2 + 1] = (float)yr;
+    }
+    h->shelf.z1L = z1L; h->shelf.z2L = z2L;
+    h->shelf.z1R = z1R; h->shelf.z2R = z2R;
 }
 
 void apply_tube(auradsp_handle h) {
@@ -573,11 +630,16 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (!h->fft_scratch) { delete h; return nullptr; }
     h->viz_hist = new (std::nothrow) float[kVizFftSize * 2]();
     if (!h->viz_hist) { delete[] h->fft_scratch; delete h; return nullptr; }
+    h->shelf_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
+    if (!h->shelf_scratch) {
+        delete[] h->fft_scratch; delete[] h->viz_hist; delete h; return nullptr;
+    }
     for (int i = 0; i < kVizFftSize; ++i)
         h->hann[i] = 0.5f * (1.0f - cosf(2.0f * 3.14159265358979f * i / (kVizFftSize - 1)));
 
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
+    shelf_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
@@ -595,6 +657,7 @@ void auradsp_destroy(auradsp_handle h) {
     }
     delete[] h->fft_scratch;
     delete[] h->viz_hist;
+    delete[] h->shelf_scratch;
     free(h->lp_code);
     delete h;
     global_unref();
@@ -608,7 +671,15 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         return;
     }
     /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
-    h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(in), out, (size_t)frames);
+    if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
+        h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
+        /* M5-b：低频搁架在 vendor 链前（链头效果；scratch 复用 in 原位不可写） */
+        memcpy(h->shelf_scratch, in, (size_t)frames * 2 * sizeof(float));
+        shelf_process(h, h->shelf_scratch, frames);
+        h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, out, (size_t)frames);
+    } else {
+        h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(in), out, (size_t)frames);
+    }
 
     /* 可视化：每块写入历史窗（无条件），每 kVizInterval 帧产出一次；
      * 失败不影响音频路径 */
@@ -833,6 +904,25 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_tube(h);   /* T0，无守卫 */
         return AURADSP_OK;
     }
+    /* ---- M5-b 低频搁架 ---- */
+    if (!strcmp(id, "shelf.enable") && bytes >= 4) {
+        h->p.shelf_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "shelf.freq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 40) v = 40; if (v > 400) v = 400;
+        h->p.shelf_freq.store(v);
+        shelf_recalc(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "shelf.gain") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < -15) v = -15; if (v > 15) v = 15;
+        h->p.shelf_gain.store(v);
+        shelf_recalc(h);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) {
         h->p.xfeed_enable.store(*(const int32_t*)value ? 1 : 0);
         if (h->open.load()) apply_crossfeed(h);
@@ -888,6 +978,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "convolver.ir.peak") && bytes >= 4) { *(float*)out_value = h->ir_peak.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
+    if (!strcmp(id, "shelf.gain") && bytes >= 4) { *(float*)out_value = h->p.shelf_gain.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 1024) {
         /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
