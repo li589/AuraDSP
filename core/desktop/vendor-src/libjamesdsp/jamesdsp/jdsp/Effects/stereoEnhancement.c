@@ -11,6 +11,8 @@ void StereoEnhancementRefresh(JamesDSPLib *jdsp)
 	float ms = 1.2f; // 1.2 ms
 	for (unsigned int i = 0; i < 5; i++)
 		jdsp->sterEnh.emaAlpha[i] = 1.0f - powf(10.0f, (log10f(0.5f) / (ms / 1000.0f) / (jdsp->fs / (float)subband0->Sk[i])));
+	/* [PATCHED-AuraDSP P-002] 刷新时回到统一 mix（分带状态由宿主重设） */
+	jdsp->sterEnh.bandMixUsed = 0;
 }
 void StereoEnhancementSetParam(JamesDSPLib *jdsp, float mix)
 {
@@ -20,6 +22,25 @@ void StereoEnhancementSetParam(JamesDSPLib *jdsp, float mix)
 		jdsp->sterEnh.gain = 3.0f - jdsp->sterEnh.mix * 2.0f;
 	else
 		jdsp->sterEnh.gain = jdsp->sterEnh.mix * 2.0f + 1.0f;
+}
+
+/* [PATCHED-AuraDSP 2026-10-09] 分带展宽（P-002）：每子带独立 mix。
+ * bandMixUsed=0 时 Process 走上游统一 mix 路径，行为逐字节一致。 */
+void StereoEnhancementSetBandMix(JamesDSPLib *jdsp, int band, float mix)
+{
+	if (band < 0 || band > 4)
+		return;
+	if (mix < 0.0f)
+		mix = 0.0f;
+	if (mix > 1.0f)
+		mix = 1.0f;
+	jdsp->sterEnh.bandMix[band] = mix;
+	jdsp->sterEnh.bandMixUsed = 1;
+}
+
+void StereoEnhancementUseUnifiedMix(JamesDSPLib *jdsp)
+{
+	jdsp->sterEnh.bandMixUsed = 0;
 }
 void StereoEnhancementConstructor(JamesDSPLib *jdsp)
 {
@@ -62,8 +83,15 @@ void StereoEnhancementProcess(JamesDSPLib *jdsp, size_t n)
 				float centre = 0.0f;
 				if (sumSq > FLT_EPSILON)
 					centre = (0.5f - sqrtf(snh->diffStates[j] / snh->sumStates[j]) * 0.5f) * sum;
-				bandLeft[j] = (bandLeft[j] - centre) * snh->mix + centre * snh->minusMix;
-				bandRight[j] = (bandRight[j] - centre) * snh->mix + centre * snh->minusMix;
+				/* [PATCHED-AuraDSP P-002] 分带 mix：bandMixUsed=1 时按带取值 */
+				float aura_m = snh->mix, aura_mm = snh->minusMix;
+				if (snh->bandMixUsed)
+				{
+					aura_m = snh->bandMix[j];
+					aura_mm = 1.0f - aura_m;
+				}
+				bandLeft[j] = (bandLeft[j] - centre) * aura_m + centre * aura_mm;
+				bandRight[j] = (bandRight[j] - centre) * aura_m + centre * aura_mm;
 			}
 		}
 		synthesisWarpedPFBStereo(subband0, subband1, &y1, &y2);

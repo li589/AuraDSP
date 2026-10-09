@@ -70,6 +70,10 @@ class AppModel extends ChangeNotifier {
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
 
+  // M5/P-002：声场分带（0..1 每带；bandUsed=false 时随总滑块统一）
+  final List<double> stereoBands = List.filled(5, 0.5);
+  bool stereoBandUsed = false;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -148,6 +152,7 @@ class AppModel extends ChangeNotifier {
         convPeak = (raw['convPeak'] as num).toDouble();
         tubeOn = (raw['tubeEnable'] as int) != 0;
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
+        stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
         notifyListeners();
         break;
       case 'liveprog':
@@ -270,6 +275,12 @@ class AppModel extends ChangeNotifier {
       case 'tube.enable': tubeOn = v != 0; break;
       case 'crossfeed.enable': xfeedOn = v != 0; break;
       default:
+        final mb = RegExp(r'^stereo\.band([1-5])\$').firstMatch(id);
+        if (mb != null) {
+          stereoBands[int.parse(mb.group(1)!) - 1] = v.clamp(0.0, 1.0);
+          stereoBandUsed = true;
+          break;
+        }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }

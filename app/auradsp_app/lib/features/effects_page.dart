@@ -408,9 +408,125 @@ class _StereoCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.xs),
           Text(l.stereoWidenHint, style: captionOf(paletteOf(context))),
+          const SizedBox(height: AuraSpace.md),
+          _StereoAdvanced(model: model), // M5/P-002：分带细化，默认折叠
         ],
       ),
     );
+  }
+}
+
+/// 声场分带细化（默认折叠）：5 个子带独立 mix，拖总滑块回到统一模式
+class _StereoAdvanced extends StatefulWidget {
+  final AppModel model;
+  const _StereoAdvanced({required this.model});
+
+  @override
+  State<_StereoAdvanced> createState() => _StereoAdvancedState();
+}
+
+class _StereoAdvancedState extends State<_StereoAdvanced> {
+  bool _open = false;
+
+  static const _bandLabels = ['低频带', '中低带', '中频带', '中高带', '高频带'];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final m = widget.model;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 高级开关行
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _open = !_open),
+            child: Row(children: [
+              AnimatedRotation(
+                duration: AuraDur.fast,
+                turns: _open ? 0.25 : 0,
+                child: Icon(Icons.expand_more_rounded,
+                    size: 16, color: p.textDim),
+              ),
+              const SizedBox(width: AuraSpace.xs + 2),
+              Text('高级 · 分带宽度',
+                  style: labelOf(p, color: p.textDim)),
+              const Spacer(),
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) => Text(
+                    '分带模式：${m.stereoBandUsed ? "开" : "关"}',
+                    style: monoOf(p, size: 10.5,
+                        color: p.textDim.withValues(alpha: 0.7))),
+              ),
+            ]),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: AuraDur.base,
+          sizeCurve: AuraCurve.standard,
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: Column(children: [
+              for (var i = 0; i < 5; i++)
+                _BandSlider(model: m, index: i, label: _bandLabels[i]),
+              const SizedBox(height: AuraSpace.xs),
+              Text('0% = 中置全保留，100% = 该带中置全剥离；拖动总宽度滑块将回到统一模式',
+                  style: captionOf(p)),
+            ]),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _BandSlider extends StatelessWidget {
+  final AppModel model;
+  final int index;
+  final String label;
+  const _BandSlider({required this.model, required this.index, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final m = model;
+    return Row(children: [
+      SizedBox(
+        width: 60,
+        child: Text(label,
+            style: labelOf(p, color: p.textDim)),
+      ),
+      Expanded(
+        child: ListenableBuilder(
+          listenable: m,
+          builder: (_, _) {
+            final v = m.stereoBands[index];
+            return Slider(
+              value: v.clamp(0.0, 1.0),
+              min: 0,
+              max: 1,
+              onChanged: (v) => m.setFloat('stereo.band${index + 1}', v),
+            );
+          },
+        ),
+      ),
+      SizedBox(
+        width: 44,
+        child: ListenableBuilder(
+          listenable: m,
+          builder: (_, _) => Text(
+              '${(m.stereoBands[index] * 100).toStringAsFixed(0)}%',
+              textAlign: TextAlign.right,
+              style: monoOf(p, size: 12, color: p.text)),
+        ),
+      ),
+    ]);
   }
 }
 

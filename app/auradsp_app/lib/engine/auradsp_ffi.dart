@@ -39,6 +39,9 @@ abstract final class ParamId {
   // M3-a：轻量效果开关
   static const tubeEnable = 'tube.enable';
   static const xfeedEnable = 'crossfeed.enable';
+  // M5/P-002：声场分带
+  static String stereoBand(int i) => 'stereo.band${i + 1}'; // i: 0..4
+  static const stereoBandUsed = 'stereo.bandUsed';
 }
 
 /// auradsp_status（engine_api 枚举）

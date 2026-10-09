@@ -108,6 +108,9 @@ struct Params {
     /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
+    /* M5/P-002：声场分带（bandMixUsed 由宿主语义维护） */
+    std::atomic<float>    stereo_band[5];
+    std::atomic<int32_t>  stereo_band_used{0};
 };
 
 /* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
@@ -247,6 +250,12 @@ void apply_stereo(auradsp_handle h) {
     if (sm > 0.0f) {
         StereoEnhancementSetParam(j, sm);
         StereoEnhancementEnable(j);
+        /* P-002：分带状态在 Refresh 时被清，apply 后重放宿主值 */
+        if (h->p.stereo_band_used.load(std::memory_order_relaxed)) {
+            for (int i = 0; i < 5; ++i)
+                StereoEnhancementSetBandMix(j, i,
+                    h->p.stereo_band[i].load(std::memory_order_relaxed));
+        }
     } else {
         StereoEnhancementDisable(j);
     }
@@ -653,7 +662,25 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         float v = *(const float*)value;
         if (v < 0) v = 0; if (v > 1) v = 1;
         h->p.stereo_mix.store(v);
-        if (h->open.load()) apply_stereo(h);   /* 只动立体声增强链 */
+        /* 总滑块语义 = 回到统一 mix（清分带模式），UI 同步隐藏高级态覆盖。
+         * 注意：vendor 的 bandMixUsed 也必须显式清（烟囱测试抓回的真 bug：
+         * 只清 engine 侧标志会让 vendor 残留分带路径）。 */
+        h->p.stereo_band_used.store(0);
+        if (h->open.load()) {
+            StereoEnhancementUseUnifiedMix(&h->jdsp);
+            apply_stereo(h);   /* 只动立体声增强链 */
+        }
+        return AURADSP_OK;
+    }
+    if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
+        const char d = id[11];
+        if (d < '1' || d > '5' || id[12] != 0) { set_error(h, "unknown param id"); return AURADSP_E_PARAM; }
+        const int idx = d - '1';
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.stereo_band[idx].store(v, std::memory_order_relaxed);
+        h->p.stereo_band_used.store(1);
+        if (h->open.load()) apply_stereo(h);
         return AURADSP_OK;
     }
     if (!strcmp(id, "eq.enable") && bytes >= 4) {
@@ -825,6 +852,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "bass.gain") && bytes >= 4) { *(float*)out_value = h->p.bass_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.preset") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_preset.load(); return AURADSP_OK; }
     if (!strcmp(id, "stereo.mix") && bytes >= 4) { *(float*)out_value = h->p.stereo_mix.load(); return AURADSP_OK; }
+    if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
+        const char d = id[11];
+        if (d < '1' || d > '5' || id[12] != 0) return AURADSP_E_PARAM;
+        *(float*)out_value = h->p.stereo_band[d - '1'].load();
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "stereo.bandUsed") && bytes >= 4) { *(int32_t*)out_value = h->p.stereo_band_used.load(); return AURADSP_OK; }
     if (!strcmp(id, "eq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.limiter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "post.gain") && bytes >= 4) { *(float*)out_value = h->p.post_gain.load(); return AURADSP_OK; }

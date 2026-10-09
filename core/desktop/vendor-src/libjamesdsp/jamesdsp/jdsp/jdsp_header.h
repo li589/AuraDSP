@@ -388,6 +388,10 @@ typedef struct
 	float sumStates[5];
 	float diffStates[5];
 	float mix, minusMix, gain;
+	/* [PATCHED-AuraDSP 2026-10-09] 分带展宽：每子带独立 mix（P-002，见 PATCHES.md）。
+	 * bandMixUsed=0 时行为与上游完全一致（统一 mix）。 */
+	float bandMix[5];
+	char bandMixUsed;
 } stereoEnhancement;
 typedef struct
 {
@@ -612,6 +616,8 @@ extern void StereoEnhancementDestructor(JamesDSPLib *jdsp);
 extern void StereoEnhancementConstructor(JamesDSPLib *jdsp);
 extern void StereoEnhancementRefresh(JamesDSPLib *jdsp);
 extern void StereoEnhancementSetParam(JamesDSPLib *jdsp, float mix);
+extern void StereoEnhancementSetBandMix(JamesDSPLib *jdsp, int band, float mix); /* [PATCHED-AuraDSP P-002] */
+extern void StereoEnhancementUseUnifiedMix(JamesDSPLib *jdsp); /* [PATCHED-AuraDSP P-002] */
 extern void StereoEnhancementEnable(JamesDSPLib *jdsp);
 extern void StereoEnhancementDisable(JamesDSPLib *jdsp);
 extern void StereoEnhancementProcess(JamesDSPLib *jdsp, size_t n);

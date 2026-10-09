@@ -12,3 +12,10 @@
 - **内容**：编译前 `NSEEL_VM_regvar("slider1".."slider8")`，初值 0。
 - **行为影响**：脚本里可直接读写 `slider1..8`（EEL 变量），未引用的滑块无副作用。
 - **上游同步冲突风险**：低（插入块独立，上游 `LiveProgLoadCode` 结构稳定）。
+
+## P-002 stereoEnhancement.c + jdsp_header.h — 分带展宽（2026-10-09）
+
+- **位置**：struct `stereoEnhancement` 加 `bandMix[5]`/`bandMixUsed`；`StereoEnhancementRefresh` 重置标志；`StereoEnhancementProcess` 分带路径；新增 `StereoEnhancementSetBandMix/UseUnifiedMix`。
+- **动机**：M5 声场细化（用户诉求：iZotope Imager 式频带宽度）。上游 5 个子带共享单一 mix，无法分带调节。
+- **行为影响**：`bandMixUsed=0`（默认/Refresh 后/UseUnifiedMix 后）与上游逐字节一致；宿主显式 SetBandMix 后按带取值。gain 补偿沿用统一公式（分带时不二次补偿，UI 负责提示）。
+- **上游同步冲突风险**：中（改了 struct + Process 核心行；上游若重构此文件需人工合并）。
