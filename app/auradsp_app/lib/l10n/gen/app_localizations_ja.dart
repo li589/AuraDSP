@@ -311,4 +311,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpSave => 'ライブラリに保存';
+
+  @override
+  String get convTitle => 'コンボルバー / IR';
+
+  @override
+  String get convOpenIr => 'IR ファイルを開く';
+
+  @override
+  String get convClear => 'IR をクリア';
+
+  @override
+  String get convNoIr => 'IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）';
+
+  @override
+  String get convResampled => 'ソースのサンプルレートが異なるため自動リサンプルしました（明示）';
+
+  @override
+  String get convAutoQuality => 'コンボルバーを有効にするため品質モードへ自動切替しました';
 }

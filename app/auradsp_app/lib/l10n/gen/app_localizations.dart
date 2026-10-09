@@ -687,6 +687,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存到库'**
   String get lpSave;
+
+  /// No description provided for @convTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'卷积 / 脉冲响应'**
+  String get convTitle;
+
+  /// No description provided for @convOpenIr.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 IR 文件'**
+  String get convOpenIr;
+
+  /// No description provided for @convClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除 IR'**
+  String get convClear;
+
+  /// No description provided for @convNoIr.
+  ///
+  /// In zh, this message translates to:
+  /// **'未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）'**
+  String get convNoIr;
+
+  /// No description provided for @convResampled.
+  ///
+  /// In zh, this message translates to:
+  /// **'源采样率与设备不同，已自动重采样（诚实明示，不静默）'**
+  String get convResampled;
+
+  /// No description provided for @convAutoQuality.
+  ///
+  /// In zh, this message translates to:
+  /// **'已自动切换到品质延迟档以启用卷积'**
+  String get convAutoQuality;
 }
 
 class _AppLocalizationsDelegate

@@ -26,6 +26,10 @@
  *   liveprog.unload  i32  停用并清编译态
  *   liveprog.status  i32  get：0=无代码 1=编译成功 <0=语法错误码
  *   liveprog.paramN  f32  slider1..8（vendor 补丁 P-001，见 PATCHES.md）
+ *   convolver.enable i32  0/1 —— T2 效果，品质档限定（v1.1 M4）
+ *   convolver.ir.path str UTF-8 文件路径（WAV/FLAC，门卫见 load_ir_file）
+ *   convolver.clear  i32  清除 IR 并停用
+ *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak   get 回读
  */
 #ifndef AURADSP_ENGINE_H
 #define AURADSP_ENGINE_H

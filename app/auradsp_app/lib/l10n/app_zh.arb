@@ -114,5 +114,11 @@
   "lpSliderHint": "数值域 -1..+4，实际含义由脚本定义；改动实时生效",
   "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "库为空 — 用下方名称框保存当前代码",
-  "lpSave": "保存到库"
+  "lpSave": "保存到库",
+  "convTitle": "卷积 / 脉冲响应",
+  "convOpenIr": "打开 IR 文件",
+  "convClear": "清除 IR",
+  "convNoIr": "未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）",
+  "convResampled": "源采样率与设备不同，已自动重采样（诚实明示，不静默）",
+  "convAutoQuality": "已自动切换到品质延迟档以启用卷积"
 }

@@ -30,6 +30,15 @@ extern "C" {
 
 /* vendor liveprogWrapper.c 的错误码转文案（未在头文件声明，全局符号） */
 extern "C" const char* checkErrorCode(int errCode);
+/* vendor 离线重采样（nseel-compiler.c 定义，无头文件声明） */
+extern "C" void JamesDSPOfflineResampling(float const* in, float* out,
+                                          size_t lenIn, size_t lenOut,
+                                          int channels, double src_ratio);
+
+/* IR 文件解码：dr_* 为 header-only；实现已由 vendor nseel-compiler.c 提供
+ * （重复定义会 LNK2005），这里只引声明。 */
+#include "jdsp/Effects/eel2/dr_wav.h"
+#include "jdsp/Effects/eel2/dr_flac.h"
 
 #define AURADSP_VERSION "1.1.0"
 #define AURADSP_ABI 1
@@ -90,6 +99,8 @@ struct Params {
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
     std::atomic<float>    lp_param[8];          /* slider1..8（C++20 值初始化 = 0） */
+    /* 卷积 / 脉冲响应（v1.1 M4） */
+    std::atomic<int32_t>  conv_enable{0};
 };
 
 /* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
@@ -133,6 +144,13 @@ struct auradsp_handle_s {
     char*  lp_code = nullptr;         /* 已下发代码副本（get_param 回读用） */
     size_t lp_code_len = 0;
 
+    /* 卷积 IR 元数据（load 成功后填充；门卫见 load_ir_file） */
+    std::atomic<bool>     ir_ready{false};
+    std::atomic<int32_t>  ir_frames{0};        /* 引擎采样率下的帧数（重采样后） */
+    std::atomic<int32_t>  ir_channels{0};
+    std::atomic<int32_t>  ir_src_rate{0};      /* 文件原始采样率（0=无） */
+    std::atomic<float>    ir_peak{0.0f};       /* 线性峰值（归一化提示用） */
+
     char   last_error[256] = {0};
 };
 
@@ -168,6 +186,12 @@ bool compute_latency(auradsp_handle h, double* out_ms, bool* over_guard) {
     if (h->p.limiter_enable.load(std::memory_order_relaxed)) ms += kLatLimiter.ms;
     if (h->p.reverb_preset.load(std::memory_order_relaxed) >= 0) {
         ms += kLatReverb.ms;
+        if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
+    }
+    /* 卷积 = T2（ADR-002）：IR 已加载且使能时计入 */
+    if (h->p.conv_enable.load(std::memory_order_relaxed) &&
+        h->ir_ready.load(std::memory_order_relaxed)) {
+        ms += kLatConvolver.ms;
         if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
     }
     if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) {
@@ -235,6 +259,137 @@ void apply_liveprog(auradsp_handle h) {
         LiveProgDisable(&h->jdsp);
 }
 
+void apply_convolver(auradsp_handle h) {
+    if (h->p.conv_enable.load(std::memory_order_relaxed) &&
+        h->ir_ready.load(std::memory_order_relaxed))
+        Convolver1DEnable(&h->jdsp);
+    else
+        Convolver1DDisable(&h->jdsp);
+}
+
+/* ---- IR 文件加载 + 统一文件门卫（M4，规划 §5.2）----
+ * 防线：L1 magic 嗅探（不信任扩展名）→ L2 尺寸限额 → L3 本函数在控制线程
+ * （调用方不持锁，解码失败不连坐音频）→ L4 解码后健全性（NaN/Inf/声道/长度）。
+ * 采样率不匹配 → JamesDSPOfflineResampling 重采样到引擎 fs（44.1↔48 等）。
+ * 成功 → Convolver1DLoadImpulseResponse(updateOld=1) 持久化到 vendor 存储。 */
+auradsp_status load_ir_file(auradsp_handle h, const char* path) {
+    /* L2：路径与文件尺寸限额 */
+    if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
+    FILE* fp = fopen(path, "rb");
+    if (!fp) { set_error(h, "convolver.ir: cannot open file"); return AURADSP_E_IO; }
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: seek failed"); return AURADSP_E_IO; }
+    const long fsize = ftell(fp);
+    if (fsize <= 44) { fclose(fp); set_error(h, "convolver.ir: file too small"); return AURADSP_E_PARAM; }
+    if (fsize > 256 * 1024 * 1024) {
+        fclose(fp);
+        set_error(h, "convolver.ir: file too large (max 256MiB)");
+        return AURADSP_E_PARAM;
+    }
+    rewind(fp);
+    unsigned char* bytes = (unsigned char*)malloc((size_t)fsize);
+    if (!bytes) { fclose(fp); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+    const size_t got = fread(bytes, 1, (size_t)fsize, fp);
+    fclose(fp);
+    if (got != (size_t)fsize) { free(bytes); set_error(h, "convolver.ir: read failed"); return AURADSP_E_IO; }
+
+    /* L1：magic 嗅探（RIFF..WAVE / fLaC；不信任扩展名） */
+    const unsigned char* b = bytes;
+    const bool is_wav = fsize > 12 && b[0] == 'R' && b[1] == 'I' && b[2] == 'F' && b[3] == 'F'
+                        && b[8] == 'W' && b[9] == 'A' && b[10] == 'V' && b[11] == 'E';
+    const bool is_flac = fsize > 4 && b[0] == 'f' && b[1] == 'L' && b[2] == 'a' && b[3] == 'C';
+    unsigned int ch = 0, src_rate = 0;
+    size_t frames = 0;
+    float* data = nullptr;
+    if (is_wav) {
+        drwav wav;
+        if (!drwav_init_memory(&wav, bytes, (size_t)fsize, nullptr)) {
+            free(bytes); set_error(h, "convolver.ir: WAV header corrupt"); return AURADSP_E_PARAM;
+        }
+        ch = wav.channels; src_rate = (unsigned int)wav.sampleRate; frames = (size_t)wav.totalPCMFrameCount;
+        if (ch < 1 || ch > 8 || frames == 0) {
+            drwav_uninit(&wav); free(bytes);
+            set_error(h, "convolver.ir: invalid WAV channels/frames");
+            return AURADSP_E_PARAM;
+        }
+        if (frames > 16u * 1024 * 1024) {
+            drwav_uninit(&wav); free(bytes);
+            set_error(h, "convolver.ir: too long (max 16M frames)");
+            return AURADSP_E_PARAM;
+        }
+        data = (float*)malloc(frames * ch * sizeof(float));
+        if (!data) { drwav_uninit(&wav); free(bytes); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+        const drwav_uint64 rd = drwav_read_pcm_frames_f32(&wav, frames, data);
+        drwav_uninit(&wav);
+        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: WAV truncated"); return AURADSP_E_PARAM; }
+    } else if (is_flac) {
+        drflac* flac = drflac_open_memory(bytes, (size_t)fsize, nullptr);
+        if (!flac) { free(bytes); set_error(h, "convolver.ir: FLAC corrupt"); return AURADSP_E_PARAM; }
+        ch = flac->channels; src_rate = (unsigned int)flac->sampleRate; frames = (size_t)flac->totalPCMFrameCount;
+        if (ch < 1 || ch > 8 || frames == 0 || frames > 16u * 1024 * 1024) {
+            drflac_close(flac); free(bytes);
+            set_error(h, "convolver.ir: invalid FLAC channels/frames/length");
+            return AURADSP_E_PARAM;
+        }
+        data = (float*)malloc(frames * ch * sizeof(float));
+        if (!data) { drflac_close(flac); free(bytes); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+        const drflac_uint64 rd = drflac_read_pcm_frames_f32(flac, frames, data);
+        drflac_close(flac);
+        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: FLAC truncated"); return AURADSP_E_PARAM; }
+    } else {
+        free(bytes);
+        set_error(h, "convolver.ir: unknown format (need WAV/FLAC)");
+        return AURADSP_E_PARAM;
+    }
+    free(bytes);
+
+    /* L4：健全性扫描（NaN/Inf 会毒化卷积输出） */
+    const size_t n = frames * ch;
+    float peak = 0.0f;
+    for (size_t i = 0; i < n; ++i) {
+        const float v = data[i];
+        if (isnan(v) || isinf(v)) {
+            free(data);
+            set_error(h, "convolver.ir: NaN/Inf samples in file");
+            return AURADSP_E_PARAM;
+        }
+        const float a = fabsf(v);
+        if (a > peak) peak = a;
+    }
+    if (peak == 0.0f) {
+        free(data);
+        set_error(h, "convolver.ir: all-silent IR");
+        return AURADSP_E_PARAM;
+    }
+
+    /* 采样率不匹配 → 离线重采样到引擎 fs（诚实回读 src_rate 供 UI 提示） */
+    size_t out_frames = frames;
+    float* proc = data;
+    if (src_rate != 0 && fabs((double)src_rate - h->jdsp.fs) > 0.5) {
+        const double ratio = (double)h->jdsp.fs / (double)src_rate;
+        out_frames = (size_t)ceil((double)frames * ratio);
+        float* res = (float*)malloc(out_frames * ch * sizeof(float));
+        if (!res) { free(data); set_error(h, "convolver.ir: OOM (resample)"); return AURADSP_E_IO; }
+        memset(res, 0, out_frames * ch * sizeof(float));
+        JamesDSPOfflineResampling(data, res, frames, out_frames, (int)ch, ratio);
+        free(data);
+        proc = res;
+    }
+
+    /* 交给 vendor：updateOld=1 → 存入 impulseResponseStorage（fs 变化可重建） */
+    const int rc = Convolver1DLoadImpulseResponse(&h->jdsp, proc, ch, out_frames, 1);
+    free(proc);
+    if (rc != 1) {
+        set_error(h, "convolver.ir: vendor load failed (partition select?)");
+        return AURADSP_E_STATE;
+    }
+    h->ir_ready.store(true);
+    h->ir_frames.store((int32_t)out_frames);
+    h->ir_channels.store((int32_t)ch);
+    h->ir_src_rate.store((int32_t)src_rate);
+    h->ir_peak.store(peak);
+    return AURADSP_OK;
+}
+
 /* 仅 create / 需要整体重建时使用 */
 void apply_params_locked(auradsp_handle h) {
     apply_bass(h);
@@ -243,6 +398,7 @@ void apply_params_locked(auradsp_handle h) {
     apply_eq(h);
     apply_post(h);
     apply_liveprog(h);
+    apply_convolver(h);
 }
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
@@ -556,6 +712,55 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             *h->lp_slider_ptr[idx] = *(const float*)value;
         return AURADSP_OK;
     }
+    /* ---- 卷积 / IR（v1.1 M4） ---- */
+    if (!strcmp(id, "convolver.enable") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        if (v && !h->ir_ready.load(std::memory_order_relaxed)) {
+            set_error(h, "convolver.enable: no IR loaded");
+            return AURADSP_E_STATE;
+        }
+        const int32_t old = h->p.conv_enable.exchange(v);
+        double ms = 0.0; bool over = false;
+        if (v && !compute_latency(h, &ms, &over)) {
+            /* ADR-002：卷积是 T2，实时/音乐档拒绝 */
+            h->p.conv_enable.store(old);
+            set_error(h, "latency guard: convolver is T2, switch to quality mode first");
+            return AURADSP_E_LATENCY_GUARD;
+        }
+        if (h->open.load()) apply_convolver(h);
+        compute_latency(h, &ms, &over);
+        h->latency_ms = ms;
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "convolver.ir.path")) {
+        /* value = UTF-8 路径，bytes = 字节数。加载成功不自动使能（UI 明确开）。 */
+        if (!h->open.load()) { set_error(h, "convolver.ir.path: engine closed"); return AURADSP_E_STATE; }
+        if (bytes == 0 || bytes > 4096) {
+            set_error(h, "convolver.ir.path: invalid length");
+            return AURADSP_E_PARAM;
+        }
+        char* pbuf = (char*)malloc((size_t)bytes + 1);
+        if (!pbuf) { set_error(h, "convolver.ir.path: OOM"); return AURADSP_E_IO; }
+        memcpy(pbuf, value, bytes);
+        pbuf[bytes] = 0;
+        const auradsp_status st = load_ir_file(h, pbuf);
+        free(pbuf);
+        if (st != AURADSP_OK) return st;
+        /* 若已在使能态，重载 IR 后保持生效 */
+        if (h->p.conv_enable.load(std::memory_order_relaxed) && h->open.load())
+            apply_convolver(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "convolver.clear") && bytes >= 4) {
+        h->p.conv_enable.store(0);
+        h->ir_ready.store(false);
+        h->ir_frames.store(0);
+        h->ir_channels.store(0);
+        h->ir_src_rate.store(0);
+        h->ir_peak.store(0.0f);
+        if (h->open.load()) apply_convolver(h);
+        return AURADSP_OK;
+    }
     set_error(h, "unknown param id");
     return AURADSP_E_PARAM;
 }
@@ -587,6 +792,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
         *(float*)out_value = h->p.lp_param[d - '1'].load();
         return AURADSP_OK;
     }
+    /* ---- 卷积 / IR 回读（v1.1 M4） ---- */
+    if (!strcmp(id, "convolver.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.conv_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ready") && bytes >= 4) { *(int32_t*)out_value = h->ir_ready.load() ? 1 : 0; return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ir.frames") && bytes >= 4) { *(int32_t*)out_value = h->ir_frames.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ir.channels") && bytes >= 4) { *(int32_t*)out_value = h->ir_channels.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ir.srcRate") && bytes >= 4) { *(int32_t*)out_value = h->ir_src_rate.load(); return AURADSP_OK; }
+    if (!strcmp(id, "convolver.ir.peak") && bytes >= 4) { *(float*)out_value = h->ir_peak.load(); return AURADSP_OK; }
     return AURADSP_E_PARAM;
 }
 

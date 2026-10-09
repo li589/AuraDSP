@@ -320,4 +320,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpSave => 'Save to library';
+
+  @override
+  String get convTitle => 'Convolver / Impulse Response';
+
+  @override
+  String get convOpenIr => 'Open IR file';
+
+  @override
+  String get convClear => 'Clear IR';
+
+  @override
+  String get convNoIr =>
+      'No IR loaded (WAV / FLAC; sniffed, size-capped, sanity-checked)';
+
+  @override
+  String get convResampled =>
+      'Source rate differs from device — resampled automatically (disclosed, not silent)';
+
+  @override
+  String get convAutoQuality =>
+      'Switched to Quality latency mode to enable convolver';
 }

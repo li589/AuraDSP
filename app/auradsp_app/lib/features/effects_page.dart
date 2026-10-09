@@ -6,6 +6,9 @@
  *
  * 层级：每张卡 = 序号 + 效果名 + 启用开关；卡内一行一个参数，标签/读数固定列宽。
  */
+import 'dart:math' as math;
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
@@ -33,6 +36,10 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _ReverbCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
+          builder: (_, _) => _ConvolverCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
@@ -181,7 +188,91 @@ class _GuardActionChipState extends State<_GuardActionChip> {
   }
 }
 
-/* ---- 03 Equalizer / Stereo ---- */
+/* ---- 03 Convolver / IR（T2，品质档限定；门卫在引擎 load_ir_file） ---- */
+
+class _ConvolverCard extends StatelessWidget {
+  final AppModel model;
+  const _ConvolverCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return SectionCard(
+      index: '03',
+      title: l.convTitle,
+      trailing: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => AuraSwitch(
+          value: model.convEnabled,
+          onChanged: model.convReady
+              ? (v) => model.setConvolverEnabled(
+                      v, autoQualityMsg: l.convAutoQuality)
+              : null,
+        ),
+      ),
+      child: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) {
+          if (!model.convReady) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
+                  AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
+                      onTap: () => _pickIr(context)),
+                ]),
+                const SizedBox(height: AuraSpace.sm),
+                Text(l.convNoIr, style: captionOf(p)),
+              ],
+            );
+          }
+          final durMs = model.convFrames * 1000.0 / 48000.0;
+          final dur = durMs >= 1000
+              ? '${(durMs / 1000).toStringAsFixed(2)} s'
+              : '${durMs.toStringAsFixed(0)} ms';
+          final resampled = model.convSrcRate != 0 && model.convSrcRate != 48000;
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
+                AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
+                    onTap: () => _pickIr(context)),
+                AuraChip(l.convClear, icon: Icons.delete_outline, danger: true,
+                    onTap: () => model.clearConvolver()),
+              ]),
+              const SizedBox(height: AuraSpace.md),
+              Text(
+                '${model.convFrames} 帧 · $dur · '
+                '${model.convChannels}ch · 峰值 '
+                '${(20 * math.log(model.convPeak <= 1e-6 ? 1e-6 : model.convPeak) / math.ln10).toStringAsFixed(1)} dBFS'
+                ' · 源 ${model.convSrcRate}Hz',
+                style: monoOf(p, size: 12, color: p.text),
+              ),
+              if (resampled) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Row(children: [
+                  Icon(Icons.info_outline, size: 13, color: p.warning),
+                  const SizedBox(width: AuraSpace.xs + 2),
+                  Text(l.convResampled, style: captionOf(p)),
+                ]),
+              ],
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _pickIr(BuildContext context) async {
+    const type = XTypeGroup(label: 'Audio IR',
+        extensions: ['wav', 'flac']);
+    final f = await openFile(acceptedTypeGroups: [type]);
+    if (f != null) model.loadConvolverIr(f.path);
+  }
+}
+
+/* ---- 04 Equalizer / Stereo ---- */
 
 class _StereoCard extends StatelessWidget {
   final AppModel model;
@@ -191,7 +282,7 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '03',
+      index: '04',
       title: l.equalizer,
       trailing: AuraSwitch(
         value: model.eqOn,
@@ -230,7 +321,7 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '04',
+      index: '05',
       title: l.postGain,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

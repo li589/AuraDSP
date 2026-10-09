@@ -309,4 +309,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpSave => '保存到库';
+
+  @override
+  String get convTitle => '卷积 / 脉冲响应';
+
+  @override
+  String get convOpenIr => '打开 IR 文件';
+
+  @override
+  String get convClear => '清除 IR';
+
+  @override
+  String get convNoIr => '未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）';
+
+  @override
+  String get convResampled => '源采样率与设备不同，已自动重采样（诚实明示，不静默）';
+
+  @override
+  String get convAutoQuality => '已自动切换到品质延迟档以启用卷积';
 }

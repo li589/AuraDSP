@@ -114,5 +114,11 @@
   "lpSliderHint": "Range -1..+4; meaning is defined by the script; changes apply live",
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
-  "lpSave": "Save to library"
+  "lpSave": "Save to library",
+  "convTitle": "Convolver / Impulse Response",
+  "convOpenIr": "Open IR file",
+  "convClear": "Clear IR",
+  "convNoIr": "No IR loaded (WAV / FLAC; sniffed, size-capped, sanity-checked)",
+  "convResampled": "Source rate differs from device — resampled automatically (disclosed, not silent)",
+  "convAutoQuality": "Switched to Quality latency mode to enable convolver"
 }

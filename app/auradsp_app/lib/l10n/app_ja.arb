@@ -114,5 +114,11 @@
   "lpSliderHint": "範囲 -1..+4。意味はスクリプト次第。変更はリアルタイム反映",
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
-  "lpSave": "ライブラリに保存"
+  "lpSave": "ライブラリに保存",
+  "convTitle": "コンボルバー / IR",
+  "convOpenIr": "IR ファイルを開く",
+  "convClear": "IR をクリア",
+  "convNoIr": "IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）",
+  "convResampled": "ソースのサンプルレートが異なるため自動リサンプルしました（明示）",
+  "convAutoQuality": "コンボルバーを有効にするため品質モードへ自動切替しました"
 }

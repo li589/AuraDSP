@@ -559,6 +559,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iLim = idp('limiter.enable'), iMode = idp('mode.latency');
             final iCh = idp('channels.mode');
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
+            final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
+            final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
+            final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
             try {
               send({
                 'evt': 'params',
@@ -573,9 +576,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'channelsMode': rdInt(iCh) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
+                'convEnable': rdInt(iCvEn) ?? 0,
+                'convReady': rdInt(iCvRd) ?? 0,
+                'convFrames': rdInt(iCvF) ?? 0,
+                'convChannels': rdInt(iCvCh) ?? 0,
+                'convSrcRate': rdInt(iCvSr) ?? 0,
+                'convPeak': rdFloat(iCvPk) ?? 0.0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk]) {
                 malloc.free(q);
               }
             }
@@ -596,7 +605,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               err = e == nullptr ? null : e.toDartString();
             }
             send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err});
-            if (rc == Status.ok) {
+            if (rc == Status.ok && m['id'] == 'liveprog.code') {
               final st = AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});
             }

@@ -62,6 +62,11 @@ class AppModel extends ChangeNotifier {
   String? lpError; // 最近一次编译错误文案（事件条已显示，这里供编辑页内联标红）
   final List<double> lpParams = List.filled(8, 0);
 
+  // 卷积 / IR（v1.1 M4）：meta 由引擎门卫校验后回读
+  bool convEnabled = false, convReady = false;
+  int convFrames = 0, convChannels = 0, convSrcRate = 0;
+  double convPeak = 0.0;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
@@ -132,6 +137,12 @@ class AppModel extends ChangeNotifier {
         latencyMode = raw['latencyMode'] as int;
         lpEnabled = (raw['lpEnable'] as int) != 0;
         lpStatus = raw['lpStatus'] as int;
+        convEnabled = (raw['convEnable'] as int) != 0;
+        convReady = (raw['convReady'] as int) != 0;
+        convFrames = raw['convFrames'] as int;
+        convChannels = raw['convChannels'] as int;
+        convSrcRate = raw['convSrcRate'] as int;
+        convPeak = (raw['convPeak'] as num).toDouble();
         notifyListeners();
         break;
       case 'liveprog':
@@ -171,6 +182,9 @@ class AppModel extends ChangeNotifier {
           notifyListeners();
           // 引擎拒绝 → 回读引擎真相，抹掉 _mirror 的乐观假象
           // （否则界面会一直显示"已选中"，但引擎里根本没生效）
+          _toIso?.send({'cmd': 'getParams'});
+        } else if (id == ParamId.convIrPath) {
+          // IR 加载成功 → 回读 meta（frames/channels/srcRate/peak）
           _toIso?.send({'cmd': 'getParams'});
         }
         break;
@@ -279,6 +293,39 @@ class AppModel extends ChangeNotifier {
 
   void setLiveprogParam(int index, double v) {
     setFloat('liveprog.param${index + 1}', v);
+  }
+
+  /* ---- 卷积 / IR 命令（v1.1 M4） ---- */
+
+  /// 卷积使能（T2 效果）：音乐/实时档自动先切品质档（与混响同策略）
+  void setConvolverEnabled(bool on, {required String autoQualityMsg}) {
+    if (on && reverbBlockedNow()) {
+      latencyMode = 2;
+      notifyListeners();
+      _markSent('mode.latency');
+      send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
+      lastInfo = autoQualityMsg;
+      eventSeq.value = ++_guardSeq;
+    }
+    convEnabled = on;
+    notifyListeners();
+    _markSent(ParamId.convEnable);
+    send({'cmd': 'setParam', 'id': ParamId.convEnable, 'value': on ? 1 : 0, 'isFloat': false});
+  }
+
+  void loadConvolverIr(String path) {
+    // 字符串参数复用 setParamStr 通道；meta 由 paramResult→getParams 回读
+    send({'cmd': 'setParamStr', 'id': ParamId.convIrPath, 'text': path});
+  }
+
+  void clearConvolver() {
+    convEnabled = false;
+    convReady = false;
+    convFrames = convChannels = convSrcRate = 0;
+    convPeak = 0;
+    notifyListeners();
+    _markSent(ParamId.convClear);
+    send({'cmd': 'setParam', 'id': ParamId.convClear, 'value': 0, 'isFloat': false});
   }
 
   void setSource(String kind, {String? path}) {

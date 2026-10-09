@@ -27,6 +27,15 @@ abstract final class ParamId {
   static const lpUnload = 'liveprog.unload';
   static const lpStatus = 'liveprog.status';
   static List<String> lpParams() => List.generate(8, (i) => 'liveprog.param${i + 1}');
+  // v1.1：卷积 / 脉冲响应（M4）
+  static const convEnable = 'convolver.enable';
+  static const convIrPath = 'convolver.ir.path';
+  static const convClear = 'convolver.clear';
+  static const convReady = 'convolver.ready';
+  static const convFrames = 'convolver.ir.frames';
+  static const convChannels = 'convolver.ir.channels';
+  static const convSrcRate = 'convolver.ir.srcRate';
+  static const convPeak = 'convolver.ir.peak';
 }
 
 /// auradsp_status（engine_api 枚举）
