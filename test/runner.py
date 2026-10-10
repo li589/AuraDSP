@@ -76,6 +76,7 @@ def run_ui_tests(target=None):
             os.path.join(UI_DIR, "ui_verify_preset_and_memory.py"),
             os.path.join(UI_DIR, "ui_verify_plugins.py"),
             os.path.join(UI_DIR, "ui_verify_vst_and_eel.py"),
+            os.path.join(UI_DIR, "ui_verify_advanced_sections.py"),
         ]
     all_pass = True
     for tp in targets:
