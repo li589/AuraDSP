@@ -131,15 +131,12 @@ public:
     // Process single slot (RT-Safe)
     void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
 
-    // Legacy Single-Slot API (delegates to Slot 0 for 100% backward compatibility)
+    // Legacy single-slot helper. Only loadPlugin() is still referenced
+    // (test/smoke/test_plugin_direct.cpp); the other six forwards were removed
+    // as dead code -- the C ABI keeps its own single-slot compatibility symbols
+    // (auradsp_plugin_load etc.), which forward to the *Slot functions
+    // directly and never went through these members.
     bool loadPlugin(const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize);
-    void unloadPlugin();
-    void setBypass(bool bypass);
-    bool isBypassed() const;
-    uint32_t getLatency() const;
-    bool hasActivePlugin() const;
-    std::string getStatusJson() const;
-    void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames);
 
     // Sample rate / block size update
     void updateFormat(double sampleRate, uint32_t maxBlockSize);

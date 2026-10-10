@@ -65,7 +65,10 @@ class AuraSize {
   static const switchThumb = 16.0;
   static const sliderThumb = 6.0;
   static const sliderTrack = 4.0;
-  static const heroH = 156.0;
+  /// 紧凑 hero 按钮（首页引擎状态卡）的高度。
+  /// 此前误用 AuraSpace.hero（间距网格里的间距量）当高度；此处按类别归位，
+  /// 数值保持 48.0 不变，以免改变视觉。
+  static const heroCompact = 48.0;
 }
 
 /* ---------- 动效节奏 ---------- */

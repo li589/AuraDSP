@@ -10,6 +10,8 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
+import 'config.dart';
+
 /// 插件格式枚举
 enum PluginFormat {
   vst3,
@@ -214,11 +216,6 @@ class PluginManager extends ChangeNotifier {
   PluginManager({PluginCommandSender? commandSender}) {
     _commandSender = commandSender;
   }
-
-  void attachSender(PluginCommandSender sender) {
-    _commandSender = sender;
-  }
-
   // --- Getters ---
   List<PluginMetadata> get plugins => List.unmodifiable(_plugins);
   int get selectedSlot => _selectedSlot;
@@ -309,21 +306,6 @@ class PluginManager extends ChangeNotifier {
     _customDirs = List.from(dirs);
     notifyListeners();
   }
-
-  void addCustomDir(String dir) {
-    final trimmed = dir.trim();
-    if (trimmed.isNotEmpty && !_customDirs.contains(trimmed)) {
-      _customDirs.add(trimmed);
-      notifyListeners();
-    }
-  }
-
-  void removeCustomDir(String dir) {
-    if (_customDirs.remove(dir)) {
-      notifyListeners();
-    }
-  }
-
   /// 启动扫描（支持快扫、深扫与多目录聚合）
   void scan({String dir = '', bool deep = false}) {
     _isScanning = true;
@@ -439,11 +421,9 @@ class PluginManager extends ChangeNotifier {
 
   // --- 插件预设系统管理 ---
   static Directory _getPresetsDir(String pluginName) {
-    final appData = Platform.environment['APPDATA'] ?? '.';
     final safeName = pluginName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    final dir = Directory('$appData/AuraDSP/plugin_presets/$safeName');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
-    return dir;
+    return ConfigManager.subDir(
+        'plugin_presets${Platform.pathSeparator}$safeName');
   }
 
   /// 列出指定插件所有已保存的预设
@@ -627,14 +607,8 @@ class PluginManager extends ChangeNotifier {
   }
 
   // --- 本地磁盘缓存持久化 ---
-  static File _getCacheFile() {
-    final appData = Platform.environment['APPDATA'] ?? '.';
-    final dir = Directory('$appData/AuraDSP/plugins');
-    if (!dir.existsSync()) {
-      dir.createSync(recursive: true);
-    }
-    return File('${dir.path}/plugin_cache.json');
-  }
+  static File _getCacheFile() => File(ConfigManager.path(
+      'plugins${Platform.pathSeparator}plugin_cache.json'));
 
   /// 加载磁盘缓存（启动时秒级恢复历史扫描结果）
   Future<void> loadCache() async {

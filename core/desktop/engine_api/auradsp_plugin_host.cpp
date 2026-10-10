@@ -1627,37 +1627,14 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     }
 }
 
-// Legacy single-slot forwards (slot 0)
+// Legacy single-slot forward (slot 0).
+// Only loadPlugin survives: it is the one still referenced by
+// test/smoke/test_plugin_direct.cpp. The other six (unloadPlugin, setBypass,
+// isBypassed, getLatency, hasActivePlugin, getStatusJson, process) had no
+// callers anywhere in the repo -- the C ABI's own single-slot compatibility
+// symbols forward straight to the *Slot functions and never used them.
 bool PluginHostManager::loadPlugin(const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize) {
     return loadPluginSlot(0, path, pluginId, sampleRate, maxBlockSize);
-}
-
-void PluginHostManager::unloadPlugin() {
-    unloadPluginSlot(0);
-}
-
-void PluginHostManager::setBypass(bool bypass) {
-    setBypassSlot(0, bypass);
-}
-
-bool PluginHostManager::isBypassed() const {
-    return isBypassedSlot(0);
-}
-
-uint32_t PluginHostManager::getLatency() const {
-    return getLatencySlot(0);
-}
-
-bool PluginHostManager::hasActivePlugin() const {
-    return hasActivePluginSlot(0);
-}
-
-std::string PluginHostManager::getStatusJson() const {
-    return getStatusJsonSlot(0);
-}
-
-void PluginHostManager::process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
-    processSlot(0, inChannels, outChannels, numFrames);
 }
 
 void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {

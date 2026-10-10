@@ -508,11 +508,6 @@ final class AuraDspLib {
 
   // ---- 多插槽与编辑器、预设管理包装方法 ----
 
-  /// 获取支持的最大插槽数量
-  static int pluginGetNumSlotsWrap(AuraDspLib lib, Pointer<Void> handle) {
-    return lib.pluginGetNumSlots(handle);
-  }
-
   /// 槽位加载插件
   static int pluginSlotLoadWrap(AuraDspLib lib, Pointer<Void> handle, int slot,
       String path, {String id = ''}) {
@@ -535,12 +530,6 @@ final class AuraDspLib {
   static int pluginSlotSetBypassWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot, bool bypass) {
     return lib.pluginSlotSetBypass(handle, slot, bypass ? 1 : 0);
-  }
-
-  /// 槽位获取延迟（采样点）
-  static int pluginSlotGetLatencyWrap(
-      AuraDspLib lib, Pointer<Void> handle, int slot) {
-    return lib.pluginSlotGetLatency(handle, slot);
   }
 
   /// 槽位获取状态 JSON
@@ -573,12 +562,6 @@ final class AuraDspLib {
   static int pluginSlotCloseEditorWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotCloseEditor(handle, slot);
-  }
-
-  /// 检查插件 GUI 编辑器是否打开
-  static bool pluginSlotIsEditorOpenWrap(
-      AuraDspLib lib, Pointer<Void> handle, int slot) {
-    return lib.pluginSlotIsEditorOpen(handle, slot) == 1;
   }
 
   /// 保存插件预设

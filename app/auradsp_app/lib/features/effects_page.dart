@@ -311,118 +311,71 @@ class _BassCard extends StatelessWidget {
   }
 }
 
-class _BassAdvanced extends StatefulWidget {
+class _BassAdvanced extends StatelessWidget {
   final AppModel model;
   const _BassAdvanced({required this.model});
 
   @override
-  State<_BassAdvanced> createState() => _BassAdvancedState();
-}
-
-class _BassAdvancedState extends State<_BassAdvanced> {
-  bool _open = false;
-
-  @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
-    final m = widget.model;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _open = !_open),
-            child: Row(
-              children: [
-                AnimatedRotation(
-                  duration: AuraDur.fast,
-                  turns: _open ? 0.25 : 0,
-                  child: Icon(Icons.expand_more_rounded,
-                      size: 20, color: p.accent),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                Text(l.advanced, style: labelOf(p, color: p.text)),
-                const Spacer(),
-                Text(
-                  '${m.bassCutoff.toStringAsFixed(0)} Hz · ${(m.bassHarmonics * 100).toStringAsFixed(0)}%',
-                  style: monoOf(p, size: 10, color: p.textDim),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedCrossFade(
-          duration: AuraDur.base,
-          sizeCurve: AuraCurve.standard,
-          crossFadeState:
-              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Padding(
-            padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: Column(
-              children: [
-                ValueSlider(
-                  label: l.bassCutoff,
-                  value: m.bassCutoff,
-                  defaultValue: ParamDefaults.bassCutoff,
-                  min: 30,
-                  max: 300,
-                  unit: 'Hz',
-                  enabled: m.bassOn,
-                  format: (v) => v.toStringAsFixed(0),
-                  onChanged: m.setBassCutoff,
-                  onChangedEnd: m.setBassCutoff,
-                ),
-                ValueSlider(
-                  label: l.bassHarmonics,
-                  value: m.bassHarmonics,
-                  defaultValue: ParamDefaults.bassHarmonics,
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: m.bassOn,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: m.setBassHarmonics,
-                  onChangedEnd: m.setBassHarmonics,
-                ),
-                ValueSlider(
-                  label: l.bassBlend,
-                  value: m.bassHarmonicBlend,
-                  defaultValue: ParamDefaults.bassHarmonicBlend,
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: m.bassOn,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: m.setBassHarmonicBlend,
-                  onChangedEnd: m.setBassHarmonicBlend,
-                ),
-                ValueSlider(
-                  label: l.bassSubFloor,
-                  value: m.bassSubFloor,
-                  defaultValue: ParamDefaults.bassSubFloor,
-                  min: 10,
-                  max: 40,
-                  unit: 'Hz',
-                  enabled: m.bassOn,
-                  format: (v) => v.toStringAsFixed(0),
-                  onChanged: m.setBassSubFloor,
-                  onChangedEnd: m.setBassSubFloor,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+    final m = model;
+    return AdvancedSection(
+      summary: '${m.bassCutoff.toStringAsFixed(0)} Hz · ${(m.bassHarmonics * 100).toStringAsFixed(0)}%',
+      builder: (context) => Column(
+        children: [
+              ValueSlider(
+                label: l.bassCutoff,
+                value: m.bassCutoff,
+                defaultValue: ParamDefaults.bassCutoff,
+                min: 30,
+                max: 300,
+                unit: 'Hz',
+                enabled: m.bassOn,
+                format: (v) => v.toStringAsFixed(0),
+                onChanged: m.setBassCutoff,
+                onChangedEnd: m.setBassCutoff,
+              ),
+              ValueSlider(
+                label: l.bassHarmonics,
+                value: m.bassHarmonics,
+                defaultValue: ParamDefaults.bassHarmonics,
+                min: 0,
+                max: 1,
+                unit: '%',
+                enabled: m.bassOn,
+                format: (v) => (v * 100).toStringAsFixed(0),
+                onChanged: m.setBassHarmonics,
+                onChangedEnd: m.setBassHarmonics,
+              ),
+              ValueSlider(
+                label: l.bassBlend,
+                value: m.bassHarmonicBlend,
+                defaultValue: ParamDefaults.bassHarmonicBlend,
+                min: 0,
+                max: 1,
+                unit: '%',
+                enabled: m.bassOn,
+                format: (v) => (v * 100).toStringAsFixed(0),
+                onChanged: m.setBassHarmonicBlend,
+                onChangedEnd: m.setBassHarmonicBlend,
+              ),
+              ValueSlider(
+                label: l.bassSubFloor,
+                value: m.bassSubFloor,
+                defaultValue: ParamDefaults.bassSubFloor,
+                min: 10,
+                max: 40,
+                unit: 'Hz',
+                enabled: m.bassOn,
+                format: (v) => v.toStringAsFixed(0),
+                onChanged: m.setBassSubFloor,
+                onChangedEnd: m.setBassSubFloor,
+              ),
+        ],
+      ),
     );
   }
 }
-
-/* ---- 02 空间混响 (Spatial Reverb，统一预设与参数精调架构) ---- */
 
 class _SpatialReverbCard extends StatefulWidget {
   final AppModel model;
@@ -913,74 +866,33 @@ class _StereoCard extends StatelessWidget {
 }
 
 /// 声场分带细化（默认折叠）：5 个子带独立 mix
-class _StereoAdvanced extends StatefulWidget {
+class _StereoAdvanced extends StatelessWidget {
   final AppModel model;
   const _StereoAdvanced({required this.model});
 
-  @override
-  State<_StereoAdvanced> createState() => _StereoAdvancedState();
-}
-
-class _StereoAdvancedState extends State<_StereoAdvanced> {
-  bool _open = false;
-  static const _bandLabels = ['低频带', '中低带', '中频带', '中高带', '高频带'];
+  static const _bandLabels = ['低频段', '中低频', '中频', '中高频', '高频'];
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    final m = widget.model;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _open = !_open),
-            child: Row(children: [
-              AnimatedRotation(
-                duration: AuraDur.fast,
-                turns: _open ? 0.25 : 0,
-                child: Icon(Icons.expand_more_rounded,
-                    size: 20, color: p.accent),
+    final m = model;
+    return AdvancedSection(
+      summary: '${(m.stereoMix * 100).toStringAsFixed(0)}%',
+      builder: (context) {
+        final p = paletteOf(context);
+        return Column(
+          children: [
+            for (var i = 0; i < 5; i++)
+              _BandSlider(
+                model: m,
+                index: i,
+                label: _bandLabels[i],
               ),
-              const SizedBox(width: AuraSpace.sm),
-              Text(l.advanced,
-                  style: labelOf(p,
-                      color: m.stereoBandUsed ? p.accent : p.text)),
-              const Spacer(),
-              if (m.stereoBandUsed)
-                AuraChip('重置分带',
-                    icon: Icons.restore_rounded,
-                    onTap: m.resetStereoBandsToGlobal),
-            ]),
-          ),
-        ),
-        AnimatedCrossFade(
-          duration: AuraDur.base,
-          sizeCurve: AuraCurve.standard,
-          crossFadeState:
-              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Padding(
-            padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: Column(
-              children: [
-                for (var i = 0; i < 5; i++)
-                  _BandSlider(
-                    model: m,
-                    index: i,
-                    label: _bandLabels[i],
-                  ),
-                const SizedBox(height: AuraSpace.xs),
-                Text('独立调节各频段展开度；调节任一带即脱离全局总滑块',
-                    style: captionOf(p)),
-              ],
-            ),
-          ),
-        ),
-      ],
+            const SizedBox(height: AuraSpace.xs),
+            Text('独立调节各频段展开度；调节任一带即脱离全局总滑块',
+                style: captionOf(p)),
+          ],
+        );
+      },
     );
   }
 }
@@ -1111,109 +1023,64 @@ class _TubeCard extends StatelessWidget {
   }
 }
 
-class _TubeAdvanced extends StatefulWidget {
+class _TubeAdvanced extends StatelessWidget {
   final AppModel model;
   const _TubeAdvanced({required this.model});
 
   @override
-  State<_TubeAdvanced> createState() => _TubeAdvancedState();
-}
-
-class _TubeAdvancedState extends State<_TubeAdvanced> {
-  bool _open = false;
-
-  @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
-    final m = widget.model;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => setState(() => _open = !_open),
-            child: Row(
+    final m = model;
+    return AdvancedSection(
+      summary: '${m.tubeOversampling}x · ${(m.tubeCompensation >= 0 ? '+' : '')}${m.tubeCompensation.toStringAsFixed(1)} dB',
+      builder: (context) {
+        final p = paletteOf(context);
+        return Column(
+          children: [
+            Text(l.tubeOversampling, style: captionOf(p)),
+            const SizedBox(height: AuraSpace.xs),
+            Wrap(
+              spacing: AuraSpace.sm,
               children: [
-                AnimatedRotation(
-                  duration: AuraDur.fast,
-                  turns: _open ? 0.25 : 0,
-                  child: Icon(Icons.expand_more_rounded,
-                      size: 20, color: p.accent),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                Text(l.advanced, style: labelOf(p, color: p.text)),
-                const Spacer(),
-                Text(
-                  '${m.tubeOversampling}x · ${(m.tubeCompensation >= 0 ? '+' : '')}${m.tubeCompensation.toStringAsFixed(1)} dB',
-                  style: monoOf(p, size: 10, color: p.textDim),
-                ),
-              ],
-            ),
-          ),
-        ),
-        AnimatedCrossFade(
-          duration: AuraDur.base,
-          sizeCurve: AuraCurve.standard,
-          crossFadeState:
-              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Padding(
-            padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l.tubeOversampling, style: captionOf(p)),
-                const SizedBox(height: AuraSpace.xs),
-                Wrap(
-                  spacing: AuraSpace.sm,
-                  children: [
-                    for (final os in const [1, 2, 4])
-                      _ChoiceChip(
-                        label: '${os}x',
-                        selected: m.tubeOversampling == os,
-                        onTap: () => m.setTubeOversampling(os),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: AuraSpace.md),
-                ValueSlider(
-                  label: l.tubeCompensation,
-                  value: m.tubeCompensation,
-                  defaultValue: ParamDefaults.tubeCompensation,
-                  min: -6,
-                  max: 6,
-                  unit: 'dB',
-                  enabled: m.tubeOn,
-                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                  onChanged: m.setTubeCompensation,
-                  onChangedEnd: m.setTubeCompensation,
-                ),
-                ValueSlider(
-                  label: l.tubeMix,
-                  value: m.tubeMix,
-                  defaultValue: ParamDefaults.tubeMix,
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: m.tubeOn,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: m.setTubeMix,
-                  onChangedEnd: m.setTubeMix,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
+                for (final os in const [1, 2, 4])
+                  _ChoiceChip(
+                    label: '${os}x',
+                      selected: m.tubeOversampling == os,
+                      onTap: () => m.setTubeOversampling(os),
+                    ),
+                ],
+              ),
+              const SizedBox(height: AuraSpace.md),
+              ValueSlider(
+                label: l.tubeCompensation,
+                value: m.tubeCompensation,
+                defaultValue: ParamDefaults.tubeCompensation,
+                min: -6,
+                max: 6,
+                unit: 'dB',
+                enabled: m.tubeOn,
+                format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                onChanged: m.setTubeCompensation,
+                onChangedEnd: m.setTubeCompensation,
+              ),
+              ValueSlider(
+                label: l.tubeMix,
+                value: m.tubeMix,
+                defaultValue: ParamDefaults.tubeMix,
+                min: 0,
+                max: 1,
+                unit: '%',
+                enabled: m.tubeOn,
+                format: (v) => (v * 100).toStringAsFixed(0),
+                onChanged: m.setTubeMix,
+                onChangedEnd: m.setTubeMix,
+              ),
+          ],
+        );
+      },
     );
   }
 }
-
-/* ---- 08 Post Gain / Limiter ---- */
 
 class _PostCard extends StatelessWidget {
   final AppModel model;

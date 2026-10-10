@@ -148,13 +148,9 @@ abstract final class PresetLibrary {
   /// 保存为用户预设
   static bool saveUserPreset(AuraPreset preset) {
     try {
-      final uDir = Directory(userDir);
-      if (!uDir.existsSync()) uDir.createSync(recursive: true);
       final filename = '${_safeFileName(preset.name)}.json';
-      final file = File('$userDir${Platform.pathSeparator}$filename');
-      final content = const JsonEncoder.withIndent('  ').convert(preset.toJson());
-      file.writeAsStringSync(content);
-      return true;
+      return ConfigManager.writeJsonFile(
+          '$userDir${Platform.pathSeparator}$filename', preset.toJson());
     } catch (_) {
       return false;
     }
@@ -185,10 +181,7 @@ abstract final class PresetLibrary {
   /// 导出预设为文件
   static bool exportToFile(AuraPreset preset, String destPath) {
     try {
-      final file = File(destPath);
-      final content = const JsonEncoder.withIndent('  ').convert(preset.toJson());
-      file.writeAsStringSync(content);
-      return true;
+      return ConfigManager.writeJsonFile(destPath, preset.toJson());
     } catch (_) {
       return false;
     }

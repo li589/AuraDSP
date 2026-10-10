@@ -124,6 +124,39 @@ abstract final class ConfigManager {
     return _baseDir!;
   }
 
+  /// 统一的子目录/文件路径拼接（跨平台）。
+  /// baseDir 是全应用唯一根目录（Windows: %APPDATA%/AuraDSP，
+  /// 其它: ~/.config/auradsp）。此前 plugin_manager / liveprog_page
+  /// 各自用 APPDATA 拼路径，在非 Windows 上会退化成相对路径 ./AuraDSP，
+  /// 预设/缓存/脚本就散落到三个不同根目录。
+  static String path(String relative) =>
+      baseDir + Platform.pathSeparator + relative;
+
+  static Directory subDir(String relative) {
+    final d = Directory(path(relative));
+    if (!d.existsSync()) d.createSync(recursive: true);
+    return d;
+  }
+
+  /// 以两空格缩进把 [value] 写成 JSON 文件，自动建父目录。
+  ///
+  /// 此前 config / presets / session_memory 各自重复「mkdir + JsonEncoder +
+  /// writeAsStringSync」三行样板（6 处），格式与错误处理容易各自漂移。
+  /// 返回是否写成功——**绝不抛异常**，调用方多数在 try/catch 里做持久化，
+  /// 一次磁盘错误不该把 UI 逻辑打断。
+  static bool writeJsonFile(String filePath, Object? value) {
+    try {
+      final dir = Directory(filePath.substring(0, filePath.lastIndexOf(
+          Platform.pathSeparator)));
+      if (!dir.existsSync()) dir.createSync(recursive: true);
+      File(filePath).writeAsStringSync(
+          const JsonEncoder.withIndent('  ').convert(value));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String get configPath =>
       '$baseDir${Platform.pathSeparator}config.json';
 
@@ -144,11 +177,7 @@ abstract final class ConfigManager {
 
   static bool save(AppConfig config) {
     try {
-      final dir = Directory(baseDir);
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-      final jsonStr = const JsonEncoder.withIndent('  ').convert(config.toJson());
-      File(configPath).writeAsStringSync(jsonStr);
-      return true;
+      return writeJsonFile(configPath, config.toJson());
     } catch (_) {
       return false;
     }

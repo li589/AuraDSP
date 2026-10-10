@@ -245,6 +245,81 @@ class LatencyBadge extends StatelessWidget {
 }
 
 /// 组件级微型延迟徽标：[ 0.0 ms  ↻ ]
+/// 效果卡片的「高级参数」折叠区。
+///
+/// 此前 Bass / Stereo / Tube 三处各抄了一份**逐字节相同**的折叠头
+/// （MouseRegion → GestureDetector(opaque) → Row[AnimatedRotation(0.25),
+/// expand_more, 「高级」, Spacer, 等宽摘要] → AnimatedCrossFade），
+/// 唯一差别只有右侧那行摘要文字。抽到这里后改一次三处同步生效。
+class AdvancedSection extends StatefulWidget {
+  /// 右侧等宽小字摘要（各效果不同，例如 "120 Hz · 35%"）
+  final String summary;
+  /// 展开内容的构建函数。签名带 BuildContext，便于内部自行取 palette/l10n。
+  final Widget Function(BuildContext context) builder;
+
+  /// 初始是否展开。各卡片的历史默认态由调用方决定。
+  final bool initOpen;
+
+  const AdvancedSection({
+    super.key,
+    required this.summary,
+    required this.builder,
+    this.initOpen = false,
+  });
+
+  @override
+  State<AdvancedSection> createState() => _AdvancedSectionState();
+}
+
+class _AdvancedSectionState extends State<AdvancedSection> {
+  late bool _open = widget.initOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _open = !_open),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  duration: AuraDur.fast,
+                  turns: _open ? 0.25 : 0,
+                  child: Icon(Icons.expand_more_rounded,
+                      size: 20, color: p.accent),
+                ),
+                const SizedBox(width: AuraSpace.sm),
+                Text(l.advanced, style: labelOf(p, color: p.text)),
+                const Spacer(),
+                Text(widget.summary,
+                    style: monoOf(p, size: 10, color: p.textDim)),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: AuraDur.base,
+          sizeCurve: AuraCurve.standard,
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          // 收起时用零高占位，避免布局跳动
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: widget.builder(context),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class ComponentLatencyBadge extends StatefulWidget {
   final double latencyMs;
   /// 该数值是否来自真实脉冲响应实测。false 表示解析估算或未测量。

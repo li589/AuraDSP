@@ -160,7 +160,6 @@ class _InteractiveSpectrumEQPanelState
                                     spectrumBands: model.spectrum.value,
                                     frequencies: model.eqFrequencies,
                                     gains: model.eqGains,
-                                    qFactor: model.eqQ,
                                     hoveredIndex: _draggedIndex ?? _hoveredIndex,
                                     hoverPos: _hoverPos,
                                     isBypassed: model.eqBypass,
@@ -638,7 +637,6 @@ class _SpectrumEQPainter extends CustomPainter {
   final List<double> spectrumBands;
   final List<double> frequencies;
   final List<double> gains;
-  final double qFactor;
   final int? hoveredIndex;
   final Offset? hoverPos;
   final bool isBypassed;
@@ -648,7 +646,6 @@ class _SpectrumEQPainter extends CustomPainter {
     required this.spectrumBands,
     required this.frequencies,
     required this.gains,
-    required this.qFactor,
     required this.hoveredIndex,
     required this.hoverPos,
     required this.isBypassed,

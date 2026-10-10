@@ -212,7 +212,7 @@ class _BypassButtonState extends State<_BypassButton> {
               child: AnimatedContainer(
                 duration: AuraDur.base,
                 curve: AuraCurve.emphasized,
-                height: AuraSpace.hero,
+                height: AuraSize.heroCompact,
                 padding: const EdgeInsets.symmetric(horizontal: AuraSpace.xl),
                 decoration: BoxDecoration(
                   color: bg,

@@ -30,7 +30,6 @@ class EelSliderMeta {
   final double minVal;
   final double maxVal;
   final double step;
-  final bool isReferenced;
 
   const EelSliderMeta({
     required this.index,
@@ -40,7 +39,6 @@ class EelSliderMeta {
     this.minVal = 0.0,
     this.maxVal = 1.0,
     this.step = 0.01,
-    this.isReferenced = true,
   });
 }
 
@@ -76,7 +74,6 @@ abstract final class EelSliderParser {
         minVal: minVal,
         maxVal: maxVal,
         step: step,
-        isReferenced: true,
       );
     }
 
@@ -93,8 +90,7 @@ abstract final class EelSliderParser {
             minVal: 0.0,
             maxVal: 1.0,
             step: 0.01,
-            isReferenced: true,
-          );
+              );
         }
       }
     }

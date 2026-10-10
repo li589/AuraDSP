@@ -576,13 +576,6 @@ class AppModel extends ChangeNotifier {
   void send(Map<String, dynamic> m) {
     _toIso?.send(m);
   }
-
-  void consumeEvent() {
-    lastGuard = null;
-    lastEngineError = null;
-    lastInfo = null;
-  }
-
   /* ---- 命令 ---- */
 
   /// 混响预设：废除品质档拦截限制，无条件自由放行
@@ -1056,19 +1049,6 @@ class AppModel extends ChangeNotifier {
     }
     setInt(ParamId.ddcEnable, on ? 1 : 0);
   }
-
-  void clearDdc() {
-    ddcOn = false;
-    ddcReady = false;
-    ddcPath = null;
-    ddcFileName = null;
-    ddcDetails = null;
-    setInt(ParamId.ddcEnable, 0);
-    send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': ''});
-    scheduleAutoSave();
-    notifyListeners();
-  }
-
   void clearConvolver() {
     convEnabled = false;
     convReady = false;
@@ -1434,8 +1414,6 @@ class AppModel extends ChangeNotifier {
   }
 
   /// 废除品质档限定拦截，所有效果均自由放行
-  bool reverbBlockedNow() => false;
-
   @override
   void dispose() {
     _debounceSaveTimer?.cancel();

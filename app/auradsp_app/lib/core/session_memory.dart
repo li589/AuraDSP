@@ -55,9 +55,7 @@ abstract final class SessionMemory {
         'parameters': snapshot.params,
       };
 
-      final content = const JsonEncoder.withIndent('  ').convert(payload);
-      File(sessionPath).writeAsStringSync(content);
-      return true;
+      return ConfigManager.writeJsonFile(sessionPath, payload);
     } catch (_) {
       return false;
     }

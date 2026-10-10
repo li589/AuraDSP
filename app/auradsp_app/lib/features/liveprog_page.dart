@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../core/design.dart';
+import '../core/config.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'eel_editor_support.dart';
@@ -665,16 +666,9 @@ class LiveprogItem {
 abstract final class LiveprogLibrary {
   static String? _dir;
 
-  static String get dir {
-    if (_dir != null) return _dir!;
-    final appData = Platform.environment['APPDATA'];
-    _dir = appData != null
-        ? Directory('$appData${Platform.pathSeparator}AuraDSP'
-                '${Platform.pathSeparator}liveprog')
-            .path
-        : 'liveprog';
-    return _dir!;
-  }
+  /// 统一走 ConfigManager.baseDir（此前自行拼 APPDATA，
+  /// 非 Windows 上会落到相对路径 ./AuraDSP，与其它子系统分家）
+  static String get dir => _dir ??= ConfigManager.path('liveprog');
 
   /// 聚合本地库与用户自定义外部目录
   static List<LiveprogItem> listAll(List<String> customDirs) {
