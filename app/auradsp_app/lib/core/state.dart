@@ -13,7 +13,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
-import '../engine/auradsp_ffi.dart' show ParamId;
+import '../engine/auradsp_ffi.dart' show ParamId, kEngineStageCount;
 import '../engine/debug_log.dart';
 import 'config.dart';
 import 'plugin_manager.dart';
@@ -110,6 +110,10 @@ class AppModel extends ChangeNotifier {
   EngineConn conn = EngineConn.connecting;
   String? fatalMsg;
   EngineInfo? info;
+
+  /// 设备实际采样率（插件延迟、IR 时长等「样本 → 毫秒」换算的唯一依据）。
+  /// 引擎创建后固定不变；info 尚未就绪时回退 48k。
+  int get deviceRate => info?.deviceRate ?? 48000;
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
   bool playing = false;
@@ -215,8 +219,10 @@ class AppModel extends ChangeNotifier {
   final levelL = ValueNotifier<double>(-90);
   final levelR = ValueNotifier<double>(-90);
   // [M3.5-c] 12 个 stage 的实时双声道微型电平 (dBFS)
-  final stageLevelsL = ValueNotifier<List<double>>(List.filled(12, -120.0));
-  final stageLevelsR = ValueNotifier<List<double>>(List.filled(12, -120.0));
+  final stageLevelsL =
+      ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
+  final stageLevelsR =
+      ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
 
   // 一次性事件（shell 监听弹 snackbar）
   final eventSeq = ValueNotifier<int>(0);
@@ -513,6 +519,25 @@ class AppModel extends ChangeNotifier {
         eventSeq.value = ++_guardSeq;
         scheduleAutoSave();
         notifyListeners();
+        break;
+      case 'pluginSlotEditorResult':
+        // 此前该事件被发出却无人处理：插件原生 GUI 打开失败对用户完全静默。
+        final slot = (raw['slot'] as num?)?.toInt() ?? 0;
+        final isShow = raw['action'] == 'show';
+        final ok = (raw['rc'] as num?)?.toInt() != 0;
+        if (ok) {
+          lastInfo = isShow ? '插件 ${slot + 1} 界面已打开' : '插件 ${slot + 1} 界面已关闭';
+        } else {
+          lastEngineError = isShow
+              ? '插件 ${slot + 1} 未能打开界面（该插件可能不提供 GUI，或初始化失败）'
+              : '插件 ${slot + 1} 关闭界面失败';
+        }
+        eventSeq.value = ++_guardSeq;
+        notifyListeners();
+        break;
+      default:
+        // 兜底：未知事件至少留痕，避免再次出现「发了但静默丢弃」。
+        // 绝不 notifyListeners()，未知事件不应引发 UI 重建。
         break;
     }
   }

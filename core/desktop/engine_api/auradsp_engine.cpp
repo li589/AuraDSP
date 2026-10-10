@@ -751,15 +751,16 @@ void lp_refresh_sliders(auradsp_handle h) {
  */
 void viz_write(auradsp_handle h, const float* out, int frames) {
     const int mask = kVizFftSize - 1;
-    for (int i = 0; i < frames; ++i) {
-        h->viz_hist[h->viz_hist_pos * 2]     = out[i * 2];
-        h->viz_hist[h->viz_hist_pos * 2 + 1] = out[i * 2 + 1];
-        h->viz_hist_pos = (h->viz_hist_pos + 1) & mask;
-    }
-    /* 记录本块峰值电平，供 emit_viz 使用 */
+    /* 历史写入与块峰值合并为一趟遍历：旧实现分两趟，等于把 out 多读一遍
+     *（2048 帧块 = 多读 16KB）。两趟访问的下标序列完全一致，合并安全。 */
     float lvl_l = 0.0f, lvl_r = 0.0f;
     for (int i = 0; i < frames; ++i) {
-        const float a = fabsf(out[i * 2]), b = fabsf(out[i * 2 + 1]);
+        const float l = out[i * 2];
+        const float r = out[i * 2 + 1];
+        h->viz_hist[h->viz_hist_pos * 2]     = l;
+        h->viz_hist[h->viz_hist_pos * 2 + 1] = r;
+        h->viz_hist_pos = (h->viz_hist_pos + 1) & mask;
+        const float a = fabsf(l), b = fabsf(r);
         if (a > lvl_l) lvl_l = a;
         if (b > lvl_r) lvl_r = b;
     }
@@ -830,9 +831,11 @@ void emit_viz(auradsp_handle h) {
         f.spectrum[b] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
     }
 
-    /* 5) [M3.5-c] 12 个 stage 的输出峰值转 dBFS */
+    /* 5) [M3.5-c] vendor 链各 stage 的输出峰值转 dBFS。
+     * 只有前 AURADSP_VENDOR_STAGES 项有数据；其余（到 ABI 容量上限）是保留位，
+     * 恒为 -120 dBFS，UI 不应展示。 */
     for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
-        if (i < 12) {
+        if (i < AURADSP_VENDOR_STAGES) {
             const float pl = h->jdsp.stagePeakL[i];
             const float pr = h->jdsp.stagePeakR[i];
             f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;
@@ -1027,11 +1030,16 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     process_plugin_slots_stage(h, 4, out, frames);
 
     /* 可视化：每块写入历史窗（无条件），每 kVizInterval 帧产出一次；
-     * 失败不影响音频路径 */
+     * 失败不影响音频路径。
+     *
+     * 注意这里必须 -= 而不是 = 0：块长可变（WASAPI 共享模式下常见 200~1100 帧，
+     * 上限 max_block=2048），若块 >= kVizInterval 时归零，一个块就只发一帧，
+     * 实际帧率退化成 1/块长 —— 2048 帧块时只有 23 fps、1056 帧块 45 fps，
+     * 与标称的 100 fps 无关。用 while 保证帧率只由 kVizInterval 决定。 */
     h->frames_since_viz += frames;
     viz_write(h, out, frames);
-    if (h->frames_since_viz >= kVizInterval) {
-        h->frames_since_viz = 0;
+    while (h->frames_since_viz >= kVizInterval) {
+        h->frames_since_viz -= kVizInterval;
         emit_viz(h);
     }
 }

@@ -789,7 +789,9 @@ class _ActivePluginHero extends StatelessWidget {
           );
 
     final latencySamples = manager.getSlotLatency(slot);
-    final latencyMs = (latencySamples / 48000.0 * 1000.0).toStringAsFixed(1);
+    // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
+    final latencyMs =
+        (latencySamples / model.deviceRate * 1000.0).toStringAsFixed(1);
 
     return SectionCard(
       title: '当前挂载插件 (插槽 ${slot + 1})',

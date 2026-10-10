@@ -197,6 +197,8 @@ class PluginManager extends ChangeNotifier {
     PluginInsertStage.defaultStage,
     PluginInsertStage.defaultStage,
   ];
+  /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
+  final Map<int, int> _pendingStages = {};
   int _selectedSlot = 0;
 
   List<String> _customDirs = [];
@@ -409,9 +411,14 @@ class PluginManager extends ChangeNotifier {
     });
   }
 
-  /// 调整插件在处理链上的插入阶段
+  /// 调整插件在处理链上的插入阶段。
+  ///
+  /// 保持乐观写入（UI 即时反馈），但记录下发前的值：引擎回执
+  /// [onPluginSlotInsertStage] 若带回非 0 的 rc，会回滚到该值，
+  /// 避免「引擎拒绝但 UI 显示成功」。
   void setInsertStage(int stage, {int? slot}) {
     final s = slot ?? _selectedSlot;
+    _pendingStages[s] = _slotStages[s];
     _slotStages[s] = stage;
     notifyListeners();
     _commandSender?.call({
@@ -557,11 +564,17 @@ class PluginManager extends ChangeNotifier {
     }
   }
 
+  /// 处理引擎对插入阶段的回执。
+  /// rc != 0 表示引擎拒绝，���滚到下发前的值（UI 不得显示为成功）。
   void onPluginSlotInsertStage(int slot, int stage, int rc) {
-    if (slot >= 0 && slot < kMaxSlots) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (rc != 0) {
+      _slotStages[slot] = _pendingStages.remove(slot) ?? _slotStages[slot];
+    } else {
+      _pendingStages.remove(slot);
       _slotStages[slot] = stage;
-      notifyListeners();
     }
+    notifyListeners();
   }
 
   // 向后兼容旧单槽事件

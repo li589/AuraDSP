@@ -5,9 +5,20 @@ import ctypes, math
 dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
 
 class VizFrame(ctypes.Structure):
+    # 必须与 auradsp_engine.h 的 auradsp_viz_frame 逐字节一致（280 字节）。
+    # 早期版本漏了 stage_levels_l/r（M3.5-c 才加入 ABI），结构只有 152 字节；
+    # 于是 auradsp_viz_read(out, 8) 会往 1216 字节的缓冲里写 2240 字节，
+    # 造成 1024 字节堆溢出（STATUS_HEAP_CORRUPTION 0xC0000374）。
+    # 下面的 sizeof 断言用于在 ABI 再变时立刻失败，而不是静默越界。
     _fields_ = [("seq", ctypes.c_uint64), ("timestamp_ms", ctypes.c_double),
                 ("spectrum", ctypes.c_float * 32),
-                ("level_l_dbfs", ctypes.c_float), ("level_r_dbfs", ctypes.c_float)]
+                ("level_l_dbfs", ctypes.c_float), ("level_r_dbfs", ctypes.c_float),
+                ("stage_levels_l", ctypes.c_float * 16),
+                ("stage_levels_r", ctypes.c_float * 16)]
+
+assert ctypes.sizeof(VizFrame) == 280, (
+    "VizFrame out of sync with auradsp_viz_frame: expected 280, got "
+    + str(ctypes.sizeof(VizFrame)))
 
 dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]

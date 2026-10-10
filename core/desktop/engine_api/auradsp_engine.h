@@ -61,14 +61,22 @@ typedef enum auradsp_state {
 /* 可视化帧：引擎 RT 线程每处理块写入 SPSC ring，UI 拉取。
  * spectrum 为 32 段对数频带归一化幅度 [0,1]，levels 为 dBFS。 */
 #define AURADSP_VIZ_BANDS 32
-#define AURADSP_STAGE_MAX 16
+#define AURADSP_STAGE_MAX 16   /* ABI 容量：per-stage 电平数组的物理长度（预留） */
+/* 实际在用的 vendor 处理链节点数（graph.order 的合法集合大小）。
+ * AURADSP_STAGE_MAX 是 ABI 容量，本值是真实 stage 数——两者不要混用。
+ * 改动 vendor 链长度时必须同步：此处 + Dart 的 kEngineStageCount。 */
+#define AURADSP_VENDOR_STAGES 12
+#if AURADSP_VENDOR_STAGES > AURADSP_STAGE_MAX
+#error "AURADSP_VENDOR_STAGES exceeds AURADSP_STAGE_MAX (ABI capacity)"
+#endif
 typedef struct auradsp_viz_frame {
     uint64_t seq;
     double   timestamp_ms;
     float    spectrum[AURADSP_VIZ_BANDS];
     float    level_l_dbfs;
     float    level_r_dbfs;
-    /* [M3.5-c] 12 个 stage 的实时双声道峰值 (dBFS) */
+    /* [M3.5-c] vendor 12 级链的实时双声道峰值 (dBFS)；
+     * 仅前 AURADSP_VENDOR_STAGES 项有效，其余恒为 -120.0f */
     float    stage_levels_l[AURADSP_STAGE_MAX];
     float    stage_levels_r[AURADSP_STAGE_MAX];
 } auradsp_viz_frame;

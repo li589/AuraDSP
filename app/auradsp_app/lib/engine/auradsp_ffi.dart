@@ -6,6 +6,7 @@
  * 绑定全部显式 Dart 侧签名（Int32/Uint32→int，Double/Float→double）。
  */
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
@@ -78,6 +79,14 @@ abstract final class EngineState {
   static const error = 2;
 }
 
+/// vendor 处理链的**实际** stage 数（graph.order 合法集合大小）。
+///
+/// 对应 C 侧 `AURADSP_VENDOR_STAGES`（core/desktop/engine_api/auradsp_engine.h）。
+/// 注意与 ABI 容量 `AURADSP_STAGE_MAX = 16` 区分：C 结构体的 per-stage 电平
+/// 数组物理长度是 16（预留位，恒 -120 dBFS），但只有本值这么多项有数据。
+/// 改动 vendor 链长度时，**必须同步修改这两个常量**。
+const int kEngineStageCount = 12;
+
 /// auradsp_viz_frame（280 字节：8+8+128+4+4+64+64）
 final class VizFrame extends Struct {
   @Uint64()
@@ -92,9 +101,9 @@ final class VizFrame extends Struct {
   external double levelLDbfs;
   @Float()
   external double levelRDbfs;
-
-  @Array(16)
+@Array(16)
   external Array<Float> stageLevelsL;
+
   @Array(16)
   external Array<Float> stageLevelsR;
 
@@ -102,10 +111,10 @@ final class VizFrame extends Struct {
       List<double>.generate(32, (i) => spectrum[i]);
 
   List<double> stageLevelsLToList() =>
-      List<double>.generate(12, (i) => stageLevelsL[i]);
+      List<double>.generate(kEngineStageCount, (i) => stageLevelsL[i]);
 
   List<double> stageLevelsRToList() =>
-      List<double>.generate(12, (i) => stageLevelsR[i]);
+      List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
 }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）
@@ -328,13 +337,20 @@ final class AuraDspLib {
   static AuraDspLib? _cached;
 
   /// 尝试加载引擎 DLL；找不到时抛 [StateError]（路径清单供 UI 提示）。
+  ///
+  /// 候选路径顺序：exe 同级 → `engine/` 子目录 → 环境变量
+  /// `AURADSP_ENGINE_DLL` 指定���绝对路径。
+  /// 刻意**不含**任何硬编码的开发机绝对路径——那属于本机配置，
+  /// 不是产品行为；开发期请设 `AURADSP_ENGINE_DLL` 指向
+  /// `core/desktop/windows/out/Release/auradsp_engine.dll`。
   static AuraDspLib load() {
     if (_cached != null) return _cached!;
-    const candidates = [
+    final candidates = <String>[
       'auradsp_engine.dll', // exe 旁（bundle root）
       'engine\\auradsp_engine.dll', // engine/ 子目录
-      r'D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll', // 仓库开发路径兜底
     ];
+    final envPath = Platform.environment['AURADSP_ENGINE_DLL'];
+    if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
     Object? lastErr;
     for (final path in candidates) {
       try {

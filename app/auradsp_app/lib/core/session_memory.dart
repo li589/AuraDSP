@@ -132,6 +132,12 @@ abstract final class SessionMemory {
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};
       if (params.isEmpty) return;
 
+      // PresetLibrary.apply() 末尾会执行 `m.activePresetName = preset.name`。
+      // 会话恢复不是「加载某个预设」，所以这里在 apply 之后把名字还原成
+      // 会话里存的那个（上面已从 session['activePresetName'] 恢复）。
+      // 否则每次启动 activePresetName 都会被覆盖成 '__restored__'，
+      // 效果页的预设高亮（比较 m.activePresetName == item.name）永远不命中。
+      final restoredPresetName = m.activePresetName;
       final dummyPreset = AuraPreset(
         name: '__restored__',
         createdAt: DateTime.now().toIso8601String(),
@@ -139,6 +145,7 @@ abstract final class SessionMemory {
       );
       // 静默回填 model 内存字段
       PresetLibrary.apply(m, dummyPreset);
+      m.activePresetName = restoredPresetName;
     } catch (_) {}
   }
 

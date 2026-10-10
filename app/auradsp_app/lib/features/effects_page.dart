@@ -107,8 +107,14 @@ class _SignalFlowBar extends StatelessWidget {
           ('crossfeed', 'XFEED'),
           ('stereo', 'WIDTH'),
           ('reverb', 'REVERB'),
-          ('out', 'OUT'),
+          // stage id 必须与 AppModel.isStageEnabled 的键一致：
+          // 之前这里写 'out' 而 isStageEnabled 认 'output'，落到 on() 的 `_ => true`，
+          // 导致 OUT 节点无论限幅开关如何都恒亮。
+          ('output', 'OUT'),
         ];
+        // 语义刻意与 isStageEnabled 有别：此处是"信号流上是否有信号在跑"，
+        // 卷积需 convReady（IR 真加载了才算），混响需涵盖 Freeverb 路径。
+        // 两者统一属重构（批次 D），此处只修 id 不匹配。
         bool on(String id) => switch (id) {
               'tube' => model.tubeOn,
               'bass' => model.bassOn,
@@ -118,7 +124,8 @@ class _SignalFlowBar extends StatelessWidget {
               'crossfeed' => model.xfeedOn,
               'stereo' => model.stereoMix > 0,
               'reverb' => model.isSpatialReverbOn,
-              _ => true,
+              'output' => model.limiterOn,
+              _ => false,
             };
         return Container(
           padding: const EdgeInsets.symmetric(
@@ -698,7 +705,9 @@ class _ConvolverCard extends StatelessWidget {
               ],
             );
           }
-          final durMs = model.convFrames * 1000.0 / 48000.0;
+          // convFrames 是**重采样到引擎 fs 之后**的帧数（见 load_ir_file 的离线重采样），
+          // 所以换算基准是设备采样率，不是 IR 文件原始的 convSrcRate。
+          final durMs = model.convFrames * 1000.0 / model.deviceRate;
           final dur = durMs >= 1000
               ? '${(durMs / 1000).toStringAsFixed(2)} s'
               : '${durMs.toStringAsFixed(0)} ms';
