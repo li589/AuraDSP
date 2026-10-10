@@ -65,6 +65,15 @@
    - 一期（纯 UI）：编译失败时**整段着红 + 错误行定位**（vendor 错误码→段映射，本地重编译定位到首个非法 token 附近——用 Dart 侧词法近似，不做完整语法树）；
    - 二期（vendor 小补丁 P-003）：`NSEEL_code_compile` 错误回调带**行号/列号**（NSEEL 内部有错误位置信息，需要核实暴露面），引擎 `liveprog.compile` 事件携带行列 → 编辑器精确飘红。
 
+**实施状态（2026-10-10 已落地）**
+- **Tab 捕获** ✅：`EelSyntaxTextEditingController` 接管编辑行为。
+- **格式化** ✅ `EelFormatter`——按 `;` 断句、运算符两侧空格归一（`_formatOperatorsInLine`）、连续赋值块 `=` 对齐（`_alignAssignments`）；`@init/@sample` 段缩进层级统一。
+- **语法高亮** ✅ `EelSyntaxTextEditingController.buildTextSpan` 纯 Dart 词法着色——注释、字符串、段指令（`@init/@sample/@slider/@block`）、关键字、内建（`spl0/1`、`slider1-8`、`srate`、`num_ch`、`tempo`、`play_state`）、数学函数、数值。
+- **自适应滑块** ✅ `EelSliderParser` + `EelSliderMeta`——解析 `sliderN:default<min,max,step>显示名` 声明行，并从代码体**反推**未声明但被引用的 `slider1..8`（`isReferenced`）；UI 提供"自适应(N) / 全部 8 槽"切换，按脚本自身的 min/max 渲染。
+- **外部预设文件夹** ✅ `LiveprogItem` + `LiveprogLibrary.listAll(customDirs)`——聚合 `%APPDATA%/AuraDSP/liveprog` 与外部目录递归扫描（`.eel` / `.txt`），目录以 Chip 增删，持久化进 `config.json` 的 `paths.customScriptDirs`。
+- **状态栏与 lint** ✅ `Ln/Col` + 字符数 + "语法就绪"徽标；`EelLinter` 结果以可点击告警 Chip 呈现，点击跳转。
+- **仍待办**：一期错误行精确定位与二期 P-003 vendor 补丁（带行列号的编译错误回调）。
+
 ---
 
 ## 4. 处理链页 = M3.5 本体（重排序激活）
@@ -103,7 +112,10 @@
   - **单测全绿**：`tools/smoke_chain_meter.py` 验证默认直通（12 节点精确对齐 -10.46 dBFS）与 Liveprog 2.0x 增益节点（前置 7 节点保持 -10.46 dBFS，后置 5 节点精确放大至 -4.44 dBFS），100% PASS；6 项历史单测全量无回归；
   - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 280 字节 `VizFrame` 结构体映射；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
   - **置顶前置 UI 自动化验证**：`tools/ui_verify_chain_meter.py` 在物理活动桌面置顶前置测试全部 PASS，留档截图 `30-chain-initial.png` ~ `33-chain-reset.png`。
-- **M3.5-d**：插件槽位入链（依赖 M1 插件架构）。
+- **M3.5-d ✅ 已落地（2026-10-10）**：插件槽位入链。宿主由单插槽扩为**固定 2 插槽**（`kMaxPluginSlots = 2`），每槽经 `insertStage`（0..4）选择插入锚点，形成**外部可插 + 内部可重排**的统一拓扑。决策见 [ADR-004](adr/ADR-004-plugin-multi-slot-and-stage-topology.md)。
+  - **引擎**：`auradsp_process` 由 `process_plugin_slots_stage(h, stage, ...)` 统一承担 stage 遍历——链首 `Stage 0 Pre-DSP` → 低频搁架 → `Stage 1 Pre-Vendor` → vendor 12 级链 → `Stage 2 Post-Vendor` → Freeverb → `Stage 3 Post-Reverb`（默认，行为与旧单插槽一致）→ NaN/Inf 清洗与 ±10.0 钳位 → `Stage 4 Post-Limiter`。stage 匹配只读 `std::atomic`，音频线程零分配零锁。
+  - **ABI**：新增 13 个 `auradsp_plugin_slot_*` 导出，旧单插槽符号全部保留为转发 slot 0 的薄封装，**向后兼容无破坏**。
+  - **UI（处理链页）**：`_PluginStageTopologyView` 全局阶段拓扑图——Stage 0~4 与 vendor 内部节点同屏横向信号流，活跃插槽内联渲染为 `S<n>:<插件名>` 芯片；`_PluginSlotChainCard` 每槽一张卡（阶段下拉 + GUI 打开 + bypass 胶囊 + 延迟读数）。
 
 > 顺序模型说明：`graph.order` 接受**全部 12 个 stage 各一次**的逗号分隔列表；
 > 这是"完整重排"模型（非"排序权重"），非法集合一律拒绝并保持原表不变。
@@ -114,7 +126,13 @@
 ## 5. 插件页（引用 M1，决策更新）
 
 - **GPLv3.0 已拍板** → VST3 SDK GPLv3 路线确认、CLAP MIT 一等公民、VST2 用 fst 逆向头（扩展规划 §2.3 不变）；
-- 插件页 UI：扫描状态/插件列表（身份合并）/桥进程健康/参数面板入口——按扩展规划 §2.4~2.6 执行，本文不重复。
+- **宿主形态决策已落地** → v1 采用**进程内双插槽 + 五级阶段插入**，取代扩展规划 §2.2 的桥进程首选设想（[ADR-004](adr/ADR-004-plugin-multi-slot-and-stage-topology.md)）；桥进程化推迟到 Phase 7，且需先有崩溃采集口径；
+- 插件页 UI 现状（2026-10-10 已实现）：
+  - **双插槽选择器** `_SlotSelectorBar` / `_SlotTab`——Slot 1 / Slot 2 标签页，各自显示活跃/旁路徽标、插件名与阶段短标签；
+  - **自定义扫描目录** `_CustomDirsSection`——增删目录 Chip + 重扫，持久化进 `config.json` 的 `paths.customPluginDirs`；
+  - **活跃插件卡** `_ActivePluginHero`——打开原生 GUI 界面、预设存取、插入阶段下拉；
+  - **插件列表项** `_PluginListItem`——按 `isLoadedInThisSlot` / `loadedInOtherSlot` 渲染"插槽 N 活跃中 / 已载入"徽标，按钮文案随槽位动态变化（载入至插槽 N / 从当前槽卸载）；
+  - **预设** 落盘 `%APPDATA%/AuraDSP/plugin_presets/<插件名>/*.aurapreset`，由宿主经 VST3 `getState/setState` 或 CLAP `extension_data` 流式序列化。
 
 ## 6. 可视化页（占位）
 

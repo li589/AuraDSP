@@ -8,7 +8,7 @@
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-10，`source/` 下全部 10 个参考项目均已完成嵌套 `.git` 剥除，并在 [source/ORIGIN.md](file:///d:/temp_desktop/Proj/JamesDSP/source/ORIGIN.md) 登记版本。最新实测占用与价值评估如下：
+截至 2026-10-10，`source/` 下全部 10 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 为不入库的只读克隆区，该文件仅本机可见；入库的来源登记见 [`core/desktop/vendor-src/ORIGIN.md`](../core/desktop/vendor-src/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|

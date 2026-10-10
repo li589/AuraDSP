@@ -43,4 +43,9 @@
 - **脚本页三件套 + 卡死修复（6f1b462 已推送）**：Tab 捕获（Shortcuts/Actions 覆盖焦点遍历）/EEL 格式化（printDepth 与 nextDepth 分离）/语法检查（问题列表+点击跳行）。**重大教训：同一 FocusNode 同时挂外层 Focus 与 TextField = release-only 死循环**（无 assert，双核满转 8s/4s；外层拦截层必须用自建节点）。验证：GetProcessTimes 双采样 CPU（沙箱吞 keybd_event，键盘 UI 行为不可自动化，纯 Dart 逻辑走 flutter test）。
 - **M3.5-c 处理链电平与旁路已交付（fe8e31e 已推送）**：P-004 链表注入 stageIdx，Process 循环常数时间 $O(1)$ 峰值采样无额外 FFT；280 字节定长 VizFrame 包含 16 声道 dBFS 电平并推 SPSC 无锁环；Dart 30fps 隔离订阅 + 节点独立旁路胶囊。验证：smoke_chain_meter PASS（直通 -10.46dBFS，Liveprog 放大 -4.44dBFS）。
 - **测试基建彻底根治与目录分流（2026-10-10）**：①**血泪教训**：卡片主开关（AuraSwitch）未开启时，Flutter Slider 处于 `enabled: false`，任何拖拽和双击被框架无视！必须先 `ensure_switch_on` 激活卡片；②**像素级 Thumb 定位**：严禁盲写假坐标，通过实测 1400x900 窗口下 Thumb 圆心 `(583, 529)`、低频搁架 Thumb `(866, 715)` 真实拖拽；③**全流程差分断言**：前后截图区域像素比对，差异 < 限额坚决报错；④**目录职责明确**：全量测试入 `test/`（smoke/ui/data），开发小组件入 `tools/`；记忆入 `.ai/`，根目录建立 `AGENT.md`/`CLAUDE.md`。
+- **文档导航入口 docs/README.md（2026-10-10 建）**：全文档索引。真相源仍是 `docs/项目架构与开发规范.md`（已升 v1.2）+ `docs/产品架构总览.md`；决策在 `docs/adr/`（ADR-001~004 已冻结，回退须新增编号不得原地改写）。
+- **ADR-004 插件宿主形态（2026-10-10 定案）**：v1 **进程内双插槽 + 五级阶段插入**，取代扩展规划 v0.1 的"桥进程首选"。`kMaxPluginSlots=2` 编译期常量；`insertStage` 0=Pre-DSP/1=Pre-Vendor/2=Post-Vendor/3=Post-Reverb(默认)/4=Post-Limiter；ABI 新增 13 个 `auradsp_plugin_slot_*`，**旧单插槽符号全部保留**转发 slot 0（向后兼容无破坏）。**接受的代价：插件崩溃带崩宿主**——桥进程化是 ADR-005，前置条件是"先有插件崩溃采集口径"，无数据无法论证隔离收益。
+- **新测试必须挂 test/runner.py（2026-10-10 教训）**：`smoke_multislot_and_stages.py` 与 `ui_verify_vst_and_eel.py` 写完后忘了登记，`--smoke/--ui` 跑不到——**未挂载的测试等于废测**。已补登，现为 10 项 smoke 全绿。
+- **插件预设落盘分工**：引擎只做 VST3 `getState/setState` 或 CLAP `extension_data` 流序列化；路径与命名全归 Dart（`%APPDATA%/AuraDSP/plugin_presets/<插件名>/*.aurapreset`）。引擎侧不解析路径、不碰外部文件 IO。
+- **用户裁定（2026-10-10）**：`docs/forensics/` 下 34MB 原始日志/tombstone **保留入库**（审计证据，勿删勿改），不清理。
 
