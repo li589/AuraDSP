@@ -24,9 +24,28 @@
 #include <mutex>
 #include <new>
 
+#if defined(_M_X64) || defined(__x86_64__) || defined(_M_IX86) || defined(__i386__)
+#include <xmmintrin.h>
+#endif
+
 #ifdef _WIN32
 #include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
 #endif
+
+struct ScopedFtzDazGuard {
+#if defined(_M_X64) || defined(__x86_64__)
+    unsigned int oldCsr;
+    ScopedFtzDazGuard() : oldCsr(_mm_getcsr()) {
+        _mm_setcsr(oldCsr | 0x8040); // FTZ (bit 15) | DAZ (bit 6)
+    }
+    ~ScopedFtzDazGuard() {
+        _mm_setcsr(oldCsr);
+    }
+#else
+    ScopedFtzDazGuard() = default;
+    ~ScopedFtzDazGuard() = default;
+#endif
+};
 
 extern "C" {
 #include "jdsp/jdsp_header.h"
@@ -920,6 +939,8 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
     if (frames > h->max_block) frames = h->max_block;
+
+    ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
     if (st != AURADSP_STATE_PROCESSING) {
         if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
@@ -963,6 +984,19 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         for (int i = 0; i < frames; ++i) {
             out[i * 2]     = h->plugin_buf_l[i];
             out[i * 2 + 1] = h->plugin_buf_r[i];
+        }
+    }
+
+    /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
+    const int total_samples = frames * 2;
+    for (int i = 0; i < total_samples; ++i) {
+        float s = out[i];
+        if (std::isnan(s) || std::isinf(s)) {
+            out[i] = 0.0f;
+        } else if (s > 10.0f) {
+            out[i] = 10.0f;
+        } else if (s < -10.0f) {
+            out[i] = -10.0f;
         }
     }
 
@@ -1526,17 +1560,29 @@ int auradsp_plugin_get_count(auradsp_handle h) {
 }
 
 int auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len) {
-    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    if (!h || !h->plugin_host || !out_json || max_len <= 1 || index < 0) return 0;
     std::string json = h->plugin_host->getScannedItemJson((size_t)index);
-    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
-    return written > 0 ? written : 0;
+    if ((int)json.length() >= max_len) {
+        memcpy(out_json, json.data(), (size_t)(max_len - 1));
+        out_json[max_len - 1] = '\0';
+        return max_len - 1;
+    }
+    memcpy(out_json, json.data(), json.length());
+    out_json[json.length()] = '\0';
+    return (int)json.length();
 }
 
 int auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len) {
-    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    if (!h || !h->plugin_host || !out_json || max_len <= 1) return 0;
     std::string json = h->plugin_host->getAllScannedJson();
-    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
-    return written > 0 ? written : 0;
+    if ((int)json.length() >= max_len) {
+        memcpy(out_json, json.data(), (size_t)(max_len - 1));
+        out_json[max_len - 1] = '\0';
+        return max_len - 1;
+    }
+    memcpy(out_json, json.data(), json.length());
+    out_json[json.length()] = '\0';
+    return (int)json.length();
 }
 
 int auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id) {
@@ -1569,10 +1615,16 @@ uint32_t auradsp_plugin_get_latency(auradsp_handle h) {
 }
 
 int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
-    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    if (!h || !h->plugin_host || !out_json || max_len <= 1) return 0;
     std::string json = h->plugin_host->getStatusJson();
-    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
-    return written > 0 ? written : 0;
+    if ((int)json.length() >= max_len) {
+        memcpy(out_json, json.data(), (size_t)(max_len - 1));
+        out_json[max_len - 1] = '\0';
+        return max_len - 1;
+    }
+    memcpy(out_json, json.data(), json.length());
+    out_json[json.length()] = '\0';
+    return (int)json.length();
 }
 
 } /* extern "C" */

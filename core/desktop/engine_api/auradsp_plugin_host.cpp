@@ -270,12 +270,13 @@ public:
     }
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
+        if (numFrames == 0) return;
+        if (!inChannels || !outChannels || !inChannels[0] || !inChannels[1] || !outChannels[0] || !outChannels[1]) return;
+
         if (!m_isActive || !m_plugin || m_bypassed) {
-            if (inChannels != outChannels && inChannels && outChannels) {
+            if (inChannels != outChannels) {
                 for (int ch = 0; ch < 2; ++ch) {
-                    if (inChannels[ch] && outChannels[ch]) {
-                        std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
-                    }
+                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
             }
             return;
@@ -291,10 +292,19 @@ public:
         outBuf.channel_count = 2;
         outBuf.latency = 0;
 
+        clap_event_transport_t transport = {};
+        transport.header.size = sizeof(transport);
+        transport.header.type = CLAP_EVENT_TRANSPORT;
+        transport.header.time = 0;
+        transport.flags = CLAP_TRANSPORT_IS_PLAYING | CLAP_TRANSPORT_HAS_TEMPO | CLAP_TRANSPORT_HAS_TIME_SIGNATURE;
+        transport.tempo = 120.0;
+        transport.tsig_num = 4;
+        transport.tsig_denom = 4;
+
         clap_process_t proc = {};
         proc.steady_time = -1;
         proc.frames_count = numFrames;
-        proc.transport = nullptr;
+        proc.transport = &transport;
         proc.audio_inputs = &inBuf;
         proc.audio_inputs_count = 1;
         proc.audio_outputs = &outBuf;
@@ -546,12 +556,13 @@ public:
     }
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
+        if (numFrames == 0) return;
+        if (!inChannels || !outChannels || !inChannels[0] || !inChannels[1] || !outChannels[0] || !outChannels[1]) return;
+
         if (!m_isActive || !m_processor || m_bypassed) {
-            if (inChannels != outChannels && inChannels && outChannels) {
+            if (inChannels != outChannels) {
                 for (int ch = 0; ch < 2; ++ch) {
-                    if (inChannels[ch] && outChannels[ch]) {
-                        std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
-                    }
+                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
             }
             return;
@@ -567,6 +578,16 @@ public:
         outBus.silenceFlags = 0;
         outBus.channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
 
+        Steinberg::Vst::ProcessContext context = {};
+        context.state = Steinberg::Vst::ProcessContext::kPlaying |
+                        Steinberg::Vst::ProcessContext::kProjectTimeMusicValid |
+                        Steinberg::Vst::ProcessContext::kTempoValid |
+                        Steinberg::Vst::ProcessContext::kTimeSigValid;
+        context.sampleRate = m_sampleRate;
+        context.tempo = 120.0;
+        context.timeSigNumerator = 4;
+        context.timeSigDenominator = 4;
+
         Steinberg::Vst::ProcessData data = {};
         data.processMode = Steinberg::Vst::kRealtime;
         data.symbolicSampleSize = Steinberg::Vst::kSample32;
@@ -579,7 +600,7 @@ public:
         data.outputParameterChanges = nullptr;
         data.inputEvents = nullptr;
         data.outputEvents = nullptr;
-        data.processContext = nullptr;
+        data.processContext = &context;
 
         Steinberg::tresult res = m_processor->process(data);
         if (res != Steinberg::kResultOk) {
@@ -669,20 +690,98 @@ std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, Pl
 }
 
 bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat format, std::vector<PluginMetadata>& outPlugins) {
+    std::string binaryPath = resolveBundleBinary(filePath, format);
+    std::wstring wpath = utf8ToWide(binaryPath);
+
     if (format == PluginFormat::CLAP) {
-        ClapPluginInstance instance;
-        if (instance.load(filePath, "")) {
-            outPlugins.push_back(instance.getMetadata());
-            instance.unload();
-            return true;
+        HMODULE module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!module) return false;
+
+        bool success = false;
+        try {
+            auto entry = reinterpret_cast<const clap_plugin_entry_t*>(GetProcAddress(module, "clap_entry"));
+            if (entry && entry->init && entry->init(filePath.c_str())) {
+                auto factory = reinterpret_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
+                if (factory && factory->get_plugin_count) {
+                    uint32_t count = factory->get_plugin_count(factory);
+                    for (uint32_t i = 0; i < count; ++i) {
+                        const clap_plugin_descriptor_t* d = factory->get_plugin_descriptor(factory, i);
+                        if (!d) continue;
+                        PluginMetadata meta;
+                        meta.path = filePath;
+                        meta.format = PluginFormat::CLAP;
+                        meta.is64Bit = true;
+                        meta.id = d->id ? d->id : "";
+                        meta.name = d->name ? d->name : "";
+                        meta.vendor = d->vendor ? d->vendor : "Unknown";
+                        meta.version = d->version ? d->version : "1.0";
+                        meta.category = d->description ? d->description : "AudioEffect";
+                        outPlugins.push_back(meta);
+                        success = true;
+                    }
+                }
+                if (entry->deinit) entry->deinit();
+            }
+        } catch (...) {
+            success = false;
         }
+        FreeLibrary(module);
+        return success;
     } else if (format == PluginFormat::VST3) {
-        Vst3PluginInstance instance;
-        if (instance.load(filePath, "")) {
-            outPlugins.push_back(instance.getMetadata());
-            instance.unload();
-            return true;
+        HMODULE module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        if (!module) return false;
+
+        bool success = false;
+        try {
+            typedef Steinberg::IPluginFactory* (PLUGIN_API *GetFactoryFunc)();
+            auto getFactory = reinterpret_cast<GetFactoryFunc>(GetProcAddress(module, "GetPluginFactory"));
+            if (getFactory) {
+                Steinberg::IPluginFactory* factory = getFactory();
+                if (factory) {
+                    Steinberg::int32 classCount = factory->countClasses();
+                    Steinberg::IPluginFactory2* factory2 = nullptr;
+                    factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
+
+                    for (Steinberg::int32 i = 0; i < classCount; ++i) {
+                        Steinberg::PClassInfo classInfo;
+                        if (factory->getClassInfo(i, &classInfo) != Steinberg::kResultOk) continue;
+
+                        if (std::strcmp(classInfo.category, kVstAudioEffectClass) == 0) {
+                            PluginMetadata meta;
+                            meta.path = filePath;
+                            meta.format = PluginFormat::VST3;
+                            meta.is64Bit = true;
+                            meta.id = cidToHexString(classInfo.cid);
+                            meta.name = classInfo.name;
+                            meta.vendor = "Unknown";
+                            meta.version = "1.0";
+                            meta.category = classInfo.category;
+
+                            if (factory2) {
+                                Steinberg::PClassInfo2 classInfo2;
+                                if (factory2->getClassInfo2(i, &classInfo2) == Steinberg::kResultOk) {
+                                    if (classInfo2.vendor[0]) meta.vendor = classInfo2.vendor;
+                                    if (classInfo2.version[0]) meta.version = classInfo2.version;
+                                    if (classInfo2.subCategories[0]) meta.category = classInfo2.subCategories;
+                                }
+                            }
+                            outPlugins.push_back(meta);
+                            success = true;
+                        }
+                    }
+
+                    if (factory2) factory2->release();
+
+                    typedef bool (PLUGIN_API *ExitDllFunc)();
+                    auto exitDll = reinterpret_cast<ExitDllFunc>(GetProcAddress(module, "ExitDll"));
+                    if (exitDll) exitDll();
+                }
+            }
+        } catch (...) {
+            success = false;
         }
+        FreeLibrary(module);
+        return success;
     }
     return false;
 }
@@ -694,7 +793,13 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
         if (!fs::exists(dirPath)) continue;
 
         try {
-            for (const auto& entry : fs::recursive_directory_iterator(dirPath, fs::directory_options::skip_permission_denied)) {
+            for (auto it = fs::recursive_directory_iterator(dirPath, fs::directory_options::skip_permission_denied);
+                 it != fs::recursive_directory_iterator(); ++it) {
+                if (it.depth() > 6) {
+                    it.pop();
+                    continue;
+                }
+                const auto& entry = *it;
                 std::string ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 

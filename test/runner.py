@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """runner.py — AuraDSP 测试总入口
 
 支持运行：
@@ -8,10 +7,10 @@
 3. 默认全量验证 (smoke): python test/runner.py
 """
 
-import os
-import sys
-import subprocess
 import argparse
+import os
+import subprocess
+import sys
 
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DIR = os.path.join(ROOT_DIR, "test")
@@ -32,6 +31,7 @@ def run_smoke_tests():
         "smoke_viz_lowfreq.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",
+        "test_cross_system_verify.py",
     ]
     all_pass = True
     for sf in smoke_files:
@@ -40,7 +40,7 @@ def run_smoke_tests():
             print(f"[WARN] File not found: {sf}")
             continue
         print(f"\n---> Running {sf}...")
-        res = subprocess.run([sys.executable, path], cwd=ROOT_DIR)
+        res = subprocess.run([sys.executable, path], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:
             print(f"[FAIL] {sf} returned code {res.returncode}")
             all_pass = False
@@ -77,7 +77,7 @@ def run_ui_tests(target=None):
     for tp in targets:
         name = os.path.basename(tp)
         print(f"\n---> Running UI verification: {name} (Top-most & Activated)...")
-        res = subprocess.run([sys.executable, tp], cwd=ROOT_DIR)
+        res = subprocess.run([sys.executable, tp], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:
             print(f"[FAIL] {name} failed with code {res.returncode}")
             all_pass = False
