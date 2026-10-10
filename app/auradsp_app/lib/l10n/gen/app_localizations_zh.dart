@@ -421,4 +421,103 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fv3DTitle => '3D 声场渲染';
+
+  @override
+  String get advanced => '高级';
+
+  @override
+  String get stageTube => '电子管';
+
+  @override
+  String get tubeTitle => '电子管模拟器';
+
+  @override
+  String get spatialReverbTitle => '空间混响';
+
+  @override
+  String get reverbCustom => '自定义';
+
+  @override
+  String get reverbRoomSize => '声场尺寸';
+
+  @override
+  String get reverbStereoWidth => '声场宽度';
+
+  @override
+  String get reverbMix => '混响干湿比';
+
+  @override
+  String get eqMultiBand => '多段图形均衡器';
+
+  @override
+  String get eqBands => '频段规格';
+
+  @override
+  String get eqPresets => '预设风格';
+
+  @override
+  String get eqFlat => '平直复位';
+
+  @override
+  String get eqBypass => '旁路对比';
+
+  @override
+  String get eqQFactor => 'Q值锐度';
+
+  @override
+  String get eqFilterType => '滤波器架构';
+
+  @override
+  String get eqInterpolation => '插值算法';
+
+  @override
+  String get bassIntensity => '低音增强强度';
+
+  @override
+  String get bassMode => '低音增强模式';
+
+  @override
+  String get bassModeDynamic => '动态增强 (DBB)';
+
+  @override
+  String get bassModeShelf => '纯净低架 (Shelf)';
+
+  @override
+  String get bassModeHarmonic => '心理声学谐波';
+
+  @override
+  String get bassCutoff => '截止频率';
+
+  @override
+  String get bassHarmonics => '谐波注入量';
+
+  @override
+  String get bassBlend => '谐波色彩平衡';
+
+  @override
+  String get bassSubFloor => '下潜保护切除';
+
+  @override
+  String get tubeDrive => '饱和驱动度';
+
+  @override
+  String get tubeStyle => '电子管音色风格';
+
+  @override
+  String get tubeStyleTriode => '经典三极管';
+
+  @override
+  String get tubeStylePentode => '现代五极管';
+
+  @override
+  String get tubeStyleTape => '模拟磁带温润';
+
+  @override
+  String get tubeOversampling => '高阶抗混叠过采样';
+
+  @override
+  String get tubeCompensation => '输出电平补偿';
+
+  @override
+  String get tubeMix => '干湿混合比';
 }

@@ -1,10 +1,11 @@
 /*
  * effects_page.dart — 控制页：对齐 engine_api 参数模型 v1
  *
- * 守卫哲学：UI 不预拦截——被拒的参数照样可点，引擎返回 E_LATENCY_GUARD(-3)
- * 后由 EventBanner 明示原因（ADR-002 守卫在引擎侧，UI 绕不过，可当场验证）。
- *
- * 层级：每张卡 = 序号 + 效果名 + 启用开关；卡内一行一个参数，标签/读数固定列宽。
+ * 规范落地：
+ * - Phase 1: 视觉降噪与术语规整，废除品质档拦截
+ * - Phase 2: 空间混响二合一，双向状态机联动，3D 声学室动态尺寸映射
+ * - Phase 3: 多段交互式 EQ 频谱面板与发光 Q 旋钮
+ * - Phase 4: 低音重构（谐波注入）、电子管模拟器卡片与组件级微型延迟徽标
  */
 import 'dart:math' as math;
 
@@ -16,6 +17,7 @@ import '../core/presets.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
+import 'interactive_eq.dart';
 import 'widgets.dart';
 
 class EffectsPage extends StatelessWidget {
@@ -30,18 +32,14 @@ class EffectsPage extends StatelessWidget {
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
       children: [
-        _SignalFlowBar(model: model), // M3：vendor 固定顺序的可视化（重排序后置 M3.5）
+        _SignalFlowBar(model: model), // 信号流节点
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _BassCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
-          builder: (_, _) => _ReverbCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _FreeverbCard(model: model),
+          builder: (_, _) => _SpatialReverbCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
@@ -53,7 +51,15 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _EqualizerCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _StereoCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
+          builder: (_, _) => _TubeCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
@@ -79,7 +85,7 @@ class EffectsPage extends StatelessWidget {
   }
 }
 
-/* ---- 信号流条：vendor 固定顺序的单行可视化，启用节点亮色 ---- */
+/* ---- 信号流条：单行紧凑可视化，启用节点高亮 ---- */
 
 class _SignalFlowBar extends StatelessWidget {
   final AppModel model;
@@ -92,7 +98,6 @@ class _SignalFlowBar extends StatelessWidget {
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) {
-        // vendor process 顺序（limiter/post 合并为输出级）
         const nodes = [
           ('tube', 'TUBE'),
           ('bass', 'BASS'),
@@ -112,8 +117,8 @@ class _SignalFlowBar extends StatelessWidget {
               'liveprog' => model.lpEnabled,
               'crossfeed' => model.xfeedOn,
               'stereo' => model.stereoMix > 0,
-              'reverb' => model.reverbPreset >= 0,
-              _ => true, // 输出级常亮
+              'reverb' => model.isSpatialReverbOn,
+              _ => true,
             };
         return Container(
           padding: const EdgeInsets.symmetric(
@@ -181,7 +186,48 @@ class _FlowNode extends StatelessWidget {
   }
 }
 
-/* ---- 01 Bass ---- */
+/* ---- 通用选择 Chip ---- */
+
+class _ChoiceChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ChoiceChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.xs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: Border.all(
+            color: selected ? p.accent : p.hairline,
+          ),
+        ),
+        child: Text(
+          label,
+          style: monoOf(
+            p,
+            size: 11,
+            color: selected ? p.accent : p.textDim,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/* ---- 01 Bass (低音增强重构) ---- */
 
 class _BassCard extends StatelessWidget {
   final AppModel model;
@@ -190,9 +236,13 @@ class _BassCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    final p = paletteOf(context);
     return SectionCard(
       index: '01',
       title: l.bassBoost,
+      latencyMs: model.getComponentLatency('bass'),
+      onRefreshLatency: () => model.refreshComponentLatency('bass'),
+      latencyTick: model.getComponentLatencyTick('bass'),
       trailing: AuraSwitch(
         value: model.bassOn,
         onChanged: (v) => model.setInt('bass.enable', v ? 1 : 0),
@@ -200,42 +250,71 @@ class _BassCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 主驱动：低音增强强度 (Bass Intensity)
           ValueSlider(
-            label: l.bassGain,
-            value: model.bassGain,
-            defaultValue: ParamDefaults.bassGain,
+            label: l.bassIntensity,
+            value: model.bassIntensity,
+            defaultValue: ParamDefaults.bassIntensity,
+            onResetToDefault: () =>
+                model.setBassIntensity(ParamDefaults.bassIntensity),
             min: 0,
-            max: 15,
-            unit: 'dB',
+            max: 1,
+            unit: '%',
             enabled: model.bassOn,
-            format: (v) => v.toStringAsFixed(1),
-            onChanged: (v) => model.setFloat('bass.gain', v),
-            onChangedEnd: (v) => model.setFloat('bass.gain', v),
+            format: (v) => (v * 100).toStringAsFixed(0),
+            onChanged: model.setBassIntensity,
+            onChangedEnd: model.setBassIntensity,
           ),
           const SizedBox(height: AuraSpace.md),
-          _BassShelfAdvanced(model: model), // M5-b：低频搁架，默认折叠
+          // 低音增强模式 (动态 DBB / 纯净低架 / 心理声学谐波)
+          Text(l.bassMode, style: captionOf(p)),
+          const SizedBox(height: AuraSpace.xs),
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            children: [
+              _ChoiceChip(
+                label: l.bassModeDynamic,
+                selected: model.bassMode == 0,
+                onTap: () => model.setBassMode(0),
+              ),
+              _ChoiceChip(
+                label: l.bassModeShelf,
+                selected: model.bassMode == 1,
+                onTap: () => model.setBassMode(1),
+              ),
+              _ChoiceChip(
+                label: l.bassModeHarmonic,
+                selected: model.bassMode == 2,
+                onTap: () => model.setBassMode(2),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
+          _BassAdvanced(model: model),
         ],
       ),
     );
   }
 }
 
-/// 低频搁架（M5-b，默认折叠）：独立于 dbb 的 low-shelf，频点/增益可调
-class _BassShelfAdvanced extends StatefulWidget {
+class _BassAdvanced extends StatefulWidget {
   final AppModel model;
-  const _BassShelfAdvanced({required this.model});
+  const _BassAdvanced({required this.model});
 
   @override
-  State<_BassShelfAdvanced> createState() => _BassShelfAdvancedState();
+  State<_BassAdvanced> createState() => _BassAdvancedState();
 }
 
-class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
+class _BassAdvancedState extends State<_BassAdvanced> {
   bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final m = widget.model;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -244,25 +323,23 @@ class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTap: () => setState(() => _open = !_open),
-            child: Row(children: [
-              AnimatedRotation(
-                duration: AuraDur.fast,
-                turns: _open ? 0.25 : 0,
-                child: Icon(Icons.expand_more_rounded,
-                    size: 20, color: p.accent),
-              ),
-              const SizedBox(width: AuraSpace.sm),
-              Text('高级 · 低频搁架',
-                  style: labelOf(p,
-                      color: m.shelfOn ? p.accent : p.text)),
-              const Spacer(),
-              // 开关保留（功能必需），但不加状态文字
-              AuraSwitch(
-                value: m.shelfOn,
-                onChanged: (v) => m.setInt('shelf.enable', v ? 1 : 0),
-              ),
-              const SizedBox(width: AuraSpace.sm),
-            ]),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  duration: AuraDur.fast,
+                  turns: _open ? 0.25 : 0,
+                  child: Icon(Icons.expand_more_rounded,
+                      size: 20, color: p.accent),
+                ),
+                const SizedBox(width: AuraSpace.sm),
+                Text(l.advanced, style: labelOf(p, color: p.text)),
+                const Spacer(),
+                Text(
+                  '${m.bassCutoff.toStringAsFixed(0)} Hz · ${(m.bassHarmonics * 100).toStringAsFixed(0)}%',
+                  style: monoOf(p, size: 10, color: p.textDim),
+                ),
+              ],
+            ),
           ),
         ),
         AnimatedCrossFade(
@@ -273,38 +350,57 @@ class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
           firstChild: const SizedBox(width: double.infinity),
           secondChild: Padding(
             padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: ListenableBuilder(
-              listenable: m,
-              builder: (_, _) => Column(children: [
+            child: Column(
+              children: [
                 ValueSlider(
-                  label: '频点',
-                  value: m.shelfFreq,
-                  defaultValue: ParamDefaults.shelfFreq,
-                  min: 40,
-                  max: 400,
+                  label: l.bassCutoff,
+                  value: m.bassCutoff,
+                  defaultValue: ParamDefaults.bassCutoff,
+                  min: 30,
+                  max: 300,
                   unit: 'Hz',
-                  enabled: m.shelfOn,
+                  enabled: m.bassOn,
                   format: (v) => v.toStringAsFixed(0),
-                  onChanged: (v) => m.setFloat('shelf.freq', v),
-                  onChangedEnd: (v) => m.setFloat('shelf.freq', v),
+                  onChanged: m.setBassCutoff,
+                  onChangedEnd: m.setBassCutoff,
                 ),
                 ValueSlider(
-                  label: '增益',
-                  value: m.shelfGain,
-                  defaultValue: ParamDefaults.shelfGain,
-                  min: -15,
-                  max: 15,
-                  unit: 'dB',
-                  enabled: m.shelfOn,
-                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                  onChanged: (v) => m.setFloat('shelf.gain', v),
-                  onChangedEnd: (v) => m.setFloat('shelf.gain', v),
+                  label: l.bassHarmonics,
+                  value: m.bassHarmonics,
+                  defaultValue: ParamDefaults.bassHarmonics,
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: m.bassOn,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: m.setBassHarmonics,
+                  onChangedEnd: m.setBassHarmonics,
                 ),
-                const SizedBox(height: AuraSpace.xs),
-                Text('独立 low-shelf 滤波器（位于链头，先于低音增强）；'
-                    'f0 为半增益点；强正增益可能被输出限幅器收峰',
-                    style: captionOf(p)),
-              ]),
+                ValueSlider(
+                  label: l.bassBlend,
+                  value: m.bassHarmonicBlend,
+                  defaultValue: ParamDefaults.bassHarmonicBlend,
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: m.bassOn,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: m.setBassHarmonicBlend,
+                  onChangedEnd: m.setBassHarmonicBlend,
+                ),
+                ValueSlider(
+                  label: l.bassSubFloor,
+                  value: m.bassSubFloor,
+                  defaultValue: ParamDefaults.bassSubFloor,
+                  min: 10,
+                  max: 40,
+                  unit: 'Hz',
+                  enabled: m.bassOn,
+                  format: (v) => v.toStringAsFixed(0),
+                  onChanged: m.setBassSubFloor,
+                  onChangedEnd: m.setBassSubFloor,
+                ),
+              ],
             ),
           ),
         ),
@@ -313,206 +409,249 @@ class _BassShelfAdvancedState extends State<_BassShelfAdvanced> {
   }
 }
 
-/* ---- 02 Reverb（T2，品质档限定；点击预设时自动切品质档） ---- */
+/* ---- 02 空间混响 (Spatial Reverb，统一预设与参数精调架构) ---- */
 
-class _ReverbCard extends StatelessWidget {
+class _SpatialReverbCard extends StatefulWidget {
   final AppModel model;
-  const _ReverbCard({required this.model});
+  const _SpatialReverbCard({required this.model});
+
+  @override
+  State<_SpatialReverbCard> createState() => _SpatialReverbCardState();
+}
+
+class _SpatialReverbCardState extends State<_SpatialReverbCard> {
+  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    final blocked = model.reverbBlockedNow();
+    final m = widget.model;
+    final isEnabled = m.isSpatialReverbOn;
+
     final presets = <int, String>{
-      -1: l.reverbOff,
-      0: l.reverbPreset0, 1: l.reverbPreset1, 2: l.reverbPreset2,
-      3: l.reverbPreset3, 4: l.reverbPreset4, 5: l.reverbPreset5,
-      6: l.reverbPreset6, 7: l.reverbPreset7,
+      0: l.reverbPreset0, // 大音乐厅
+      1: l.reverbPreset1, // 音乐厅
+      2: l.reverbPreset2, // 中音乐厅
+      3: l.reverbPreset3, // 小音乐厅
+      4: l.reverbPreset4, // 录音棚
+      5: l.reverbPreset5, // 房间
+      6: l.reverbPreset6, // 大礼堂
+      7: l.reverbPreset7, // 板式混响
     };
+
     return SectionCard(
       index: '02',
-      title: l.reverb,
-      hint: blocked ? l.reverbAutoQualityHint : null,
-      trailing: blocked
-          ? // 可点击的守卫徽标：直接升档，不再让用户跑去设置页
-          _GuardActionChip(
-              label: l.reverbNeedsQuality,
-              onTap: () => model.setLatencyMode(2),
-            )
-          : null,
-      child: Wrap(
-        spacing: AuraSpace.sm,
-        runSpacing: AuraSpace.sm,
+      title: l.spatialReverbTitle,
+      latencyMs: m.getComponentLatency('reverb'),
+      onRefreshLatency: () => m.refreshComponentLatency('reverb'),
+      latencyTick: m.getComponentLatencyTick('reverb'),
+      trailing: AuraSwitch(
+        value: isEnabled,
+        onChanged: (v) => m.setSpatialReverbEnabled(v),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          for (final e in presets.entries)
-            AuraChip(
-              e.value,
-              selected: model.reverbPreset == e.key,
-              onTap: () => model.setReverbPreset(
-                  e.key, autoQualityMsg: l.reverbAutoQuality),
+          // 预设空间选择
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            children: [
+              for (final e in presets.entries)
+                AuraChip(
+                  e.value,
+                  selected: isEnabled && m.reverbPreset == e.key,
+                  onTap: () => m.selectReverbPreset(e.key),
+                ),
+              AuraChip(
+                l.reverbCustom,
+                icon: Icons.tune_rounded,
+                selected: isEnabled && m.reverbPreset == -1 && m.fvOn,
+                onTap: () {
+                  if (m.reverbPreset != -1) {
+                    m.selectReverbPreset(-1);
+                  }
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
+
+          // 核心滑块：混响干湿比 (Wet/Dry Mix)
+          ValueSlider(
+            label: l.reverbMix,
+            value: m.fvWet,
+            defaultValue: ParamDefaults.fvWet,
+            onResetToDefault: () => m.setReverbCustomParam('wet', ParamDefaults.fvWet),
+            min: 0,
+            max: 1,
+            unit: '%',
+            enabled: isEnabled,
+            format: (v) => (v * 100).toStringAsFixed(0),
+            onChanged: (v) => m.setReverbCustomParam('wet', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('wet', v),
+          ),
+          const SizedBox(height: AuraSpace.md),
+
+          // 3D 声学室视效（动态联动 roomSize 与 stereoWidth）
+          RepaintBoundary(
+            child: _Freeverb3DStage(
+              decay: m.fvDecay,
+              damp: m.fvDamp,
+              roomSize: m.fvRoomSize,
+              stereoWidth: m.fvWidth,
+              active: isEnabled,
             ),
+          ),
+          const SizedBox(height: AuraSpace.md),
+
+          // 高级声学物理精调（默认折叠）
+          _SpatialReverbAdvanced(
+            model: m,
+            open: _open,
+            onToggle: () => setState(() => _open = !_open),
+          ),
         ],
       ),
     );
   }
 }
 
-/// 守卫提示徽标（可点击）：点击即切品质档
-class _GuardActionChip extends StatefulWidget {
-  final String label;
-  final VoidCallback onTap;
-  const _GuardActionChip({required this.label, required this.onTap});
-
-  @override
-  State<_GuardActionChip> createState() => _GuardActionChipState();
-}
-
-class _GuardActionChipState extends State<_GuardActionChip> {
-  bool _hover = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hover = true),
-      onExit: (_) => setState(() => _hover = false),
-      child: GestureDetector(
-        onTap: widget.onTap,
-        child: AnimatedContainer(
-          duration: AuraDur.fast,
-          padding: const EdgeInsets.symmetric(
-              horizontal: AuraSpace.sm, vertical: AuraSpace.xxs + 1),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(
-                color: p.warning
-                    .withValues(alpha: _hover ? 0.9 : 0.55)),
-            color: _hover ? p.warning.withValues(alpha: 0.10) : null,
-          ),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(Icons.bolt_rounded, size: 12, color: p.warning),
-            const SizedBox(width: AuraSpace.xxs),
-            Text(widget.label,
-                style: TextStyle(fontSize: 10.5, color: p.warning)),
-          ]),
-        ),
-      ),
-    );
-  }
-}
-
-/* ---- 03 参数化混响（Freeverb，T2；独立于预设混响可并存） ---- */
-
-class _FreeverbCard extends StatelessWidget {
+class _SpatialReverbAdvanced extends StatelessWidget {
   final AppModel model;
-  const _FreeverbCard({required this.model});
+  final bool open;
+  final VoidCallback onToggle;
 
-  @override
-  Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    return SectionCard(
-      index: '03',
-      title: l.fvTitle,
-      hint: l.fvHint,
-      trailing: ListenableBuilder(
-        listenable: model,
-        builder: (_, _) => AuraSwitch(
-          value: model.fvOn,
-          onChanged: (v) => model.setFreeverbEnabled(
-              v, autoQualityMsg: l.convAutoQuality),
-        ),
-      ),
-      child: ListenableBuilder(
-        listenable: model,
-        builder: (_, _) => Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _Freeverb3DStage(model: model),
-            const SizedBox(height: AuraSpace.md),
-            _FvSlider(
-                model: model,
-                label: l.fvDecayLabel,
-                value: model.fvDecay,
-                defaultValue: ParamDefaults.fvDecay,
-                onChanged: (v) => model.setFloat('freeverb.decay', v)),
-            _FvSlider(
-                model: model,
-                label: l.fvDampLabel,
-                value: model.fvDamp,
-                defaultValue: ParamDefaults.fvDamp,
-                onChanged: (v) => model.setFloat('freeverb.damp', v)),
-            _FvSlider(
-                model: model,
-                label: l.fvWetLabel,
-                value: model.fvWet,
-                defaultValue: ParamDefaults.fvWet,
-                onChanged: (v) => model.setFloat('freeverb.wet', v)),
-            _FvSlider(
-                model: model,
-                label: l.fvDryLabel,
-                value: model.fvDry,
-                defaultValue: ParamDefaults.fvDry,
-                onChanged: (v) => model.setFloat('freeverb.dry', v)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FvSlider extends StatelessWidget {
-  final AppModel model;
-  final String label;
-  final double value;
-  final double? defaultValue;
-  final ValueChanged<double> onChanged;
-  const _FvSlider({
+  const _SpatialReverbAdvanced({
     required this.model,
-    required this.label,
-    required this.value,
-    required this.onChanged,
-    this.defaultValue,
+    required this.open,
+    required this.onToggle,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final enabled = model.fvOn;
-    return MouseRegion(
-      cursor: defaultValue != null ? SystemMouseCursors.click : MouseCursor.defer,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onDoubleTap: (enabled && defaultValue != null)
-            ? () => onChanged(defaultValue!)
-            : null,
-        child: Row(children: [
-          SizedBox(
-              width: 64,
-              child: Text(label,
-                  style: labelOf(p, color: enabled ? p.text : p.textDim))),
-          Expanded(
-            child: Slider(
-              value: value.clamp(0.0, 1.0),
-              min: 0,
-              max: 1,
-              onChanged: enabled ? onChanged : null,
+    final l = l10nOf(context);
+    final m = model;
+    final isEnabled = m.isSpatialReverbOn;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onToggle,
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  duration: AuraDur.fast,
+                  turns: open ? 0.25 : 0,
+                  child: Icon(Icons.expand_more_rounded,
+                      size: 20, color: p.accent),
+                ),
+                const SizedBox(width: AuraSpace.sm),
+                Text(l.advanced, style: labelOf(p, color: p.text)),
+                const Spacer(),
+                Text(
+                  '${(m.fvRoomSize).toStringAsFixed(1)}x · ${(m.fvDecay * 100).toStringAsFixed(0)}%',
+                  style: monoOf(p, size: 10, color: p.textDim),
+                ),
+              ],
             ),
           ),
-          SizedBox(
-            width: 44,
-            child: Text('${(value * 100).toStringAsFixed(0)}%',
-                textAlign: TextAlign.right,
-                style: monoOf(p,
-                    size: 12, color: enabled ? p.text : p.textDim)),
+        ),
+        AnimatedCrossFade(
+          duration: AuraDur.base,
+          sizeCurve: AuraCurve.standard,
+          crossFadeState:
+              open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: Column(
+              children: [
+                ValueSlider(
+                  label: l.reverbRoomSize,
+                  value: m.fvRoomSize,
+                  defaultValue: ParamDefaults.fvRoomSize,
+                  onResetToDefault: () =>
+                      m.setReverbCustomParam('roomSize', ParamDefaults.fvRoomSize),
+                  min: 0.5,
+                  max: 2.5,
+                  unit: 'x',
+                  enabled: isEnabled,
+                  format: (v) => v.toStringAsFixed(1),
+                  onChanged: (v) => m.setReverbCustomParam('roomSize', v),
+                  onChangedEnd: (v) => m.setReverbCustomParam('roomSize', v),
+                ),
+                ValueSlider(
+                  label: l.fvDecayLabel,
+                  value: m.fvDecay,
+                  defaultValue: ParamDefaults.fvDecay,
+                  onResetToDefault: () =>
+                      m.setReverbCustomParam('decay', ParamDefaults.fvDecay),
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: isEnabled,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: (v) => m.setReverbCustomParam('decay', v),
+                  onChangedEnd: (v) => m.setReverbCustomParam('decay', v),
+                ),
+                ValueSlider(
+                  label: l.reverbStereoWidth,
+                  value: m.fvWidth,
+                  defaultValue: ParamDefaults.fvWidth,
+                  onResetToDefault: () =>
+                      m.setReverbCustomParam('width', ParamDefaults.fvWidth),
+                  min: 0.2,
+                  max: 2.0,
+                  unit: 'x',
+                  enabled: isEnabled,
+                  format: (v) => v.toStringAsFixed(1),
+                  onChanged: (v) => m.setReverbCustomParam('width', v),
+                  onChangedEnd: (v) => m.setReverbCustomParam('width', v),
+                ),
+                ValueSlider(
+                  label: l.fvDampLabel,
+                  value: m.fvDamp,
+                  defaultValue: ParamDefaults.fvDamp,
+                  onResetToDefault: () =>
+                      m.setReverbCustomParam('damp', ParamDefaults.fvDamp),
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: isEnabled,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: (v) => m.setReverbCustomParam('damp', v),
+                  onChangedEnd: (v) => m.setReverbCustomParam('damp', v),
+                ),
+                ValueSlider(
+                  label: l.fvDryLabel,
+                  value: m.fvDry,
+                  defaultValue: ParamDefaults.fvDry,
+                  onResetToDefault: () =>
+                      m.setReverbCustomParam('dry', ParamDefaults.fvDry),
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: isEnabled,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: (v) => m.setReverbCustomParam('dry', v),
+                  onChangedEnd: (v) => m.setReverbCustomParam('dry', v),
+                ),
+              ],
+            ),
           ),
-        ]),
-      ),
+        ),
+      ],
     );
   }
 }
 
-/* ---- 04 Convolver / IR（T2，品质档限定；门卫在引擎 load_ir_file） ---- */
+/* ---- 03 脉冲响应卷积 (Convolver) ---- */
 
 class _ConvolverCard extends StatelessWidget {
   final AppModel model;
@@ -523,16 +662,16 @@ class _ConvolverCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '04',
+      index: '03',
       title: l.convTitle,
+      latencyMs: model.getComponentLatency('convolver'),
+      onRefreshLatency: () => model.refreshComponentLatency('convolver'),
+      latencyTick: model.getComponentLatencyTick('convolver'),
       trailing: ListenableBuilder(
         listenable: model,
         builder: (_, _) => AuraSwitch(
           value: model.convEnabled,
-          onChanged: model.convReady
-              ? (v) => model.setConvolverEnabled(
-                      v, autoQualityMsg: l.convAutoQuality)
-              : null,
+          onChanged: model.convReady ? model.setConvolverEnabled : null,
         ),
       ),
       child: ListenableBuilder(
@@ -617,7 +756,7 @@ class _ConvolverCard extends StatelessWidget {
   }
 }
 
-/* ---- 04 VDC 空间校正（耳机/扬声器校正系数，兼容蝰蛇 DDC） ---- */
+/* ---- 04 VDC 空间校正 ---- */
 
 class _DdcCard extends StatelessWidget {
   final AppModel model;
@@ -630,6 +769,9 @@ class _DdcCard extends StatelessWidget {
     return SectionCard(
       index: '04',
       title: l.ddcTitle,
+      latencyMs: model.getComponentLatency('ddc'),
+      onRefreshLatency: () => model.refreshComponentLatency('ddc'),
+      latencyTick: model.getComponentLatencyTick('ddc'),
       trailing: ListenableBuilder(
         listenable: model,
         builder: (_, _) => AuraSwitch(
@@ -665,7 +807,31 @@ class _DdcCard extends StatelessWidget {
   }
 }
 
-/* ---- 05 Equalizer / Stereo ---- */
+/* ---- 05 Equalizer (多段图形均衡器) ---- */
+
+class _EqualizerCard extends StatelessWidget {
+  final AppModel model;
+  const _EqualizerCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    return SectionCard(
+      index: '05',
+      title: l.eqMultiBand,
+      latencyMs: model.getComponentLatency('eq'),
+      onRefreshLatency: () => model.refreshComponentLatency('eq'),
+      latencyTick: model.getComponentLatencyTick('eq'),
+      trailing: AuraSwitch(
+        value: model.eqOn,
+        onChanged: (v) => model.setInt('eq.enable', v ? 1 : 0),
+      ),
+      child: InteractiveSpectrumEQPanel(model: model),
+    );
+  }
+}
+
+/* ---- 06 Stereo (立体声声场展宽) ---- */
 
 class _StereoCard extends StatelessWidget {
   final AppModel model;
@@ -676,34 +842,13 @@ class _StereoCard extends StatelessWidget {
     final l = l10nOf(context);
     return SectionCard(
       index: '06',
-      title: l.equalizer,
-      trailing: AuraSwitch(
-        value: model.eqOn,
-        onChanged: (v) => model.setInt('eq.enable', v ? 1 : 0),
-      ),
+      title: l.stereoWiden,
+      latencyMs: model.getComponentLatency('stereo'),
+      onRefreshLatency: () => model.refreshComponentLatency('stereo'),
+      latencyTick: model.getComponentLatencyTick('stereo'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // M5 第二批：EQ 频率轴曲线（multimodalEQ makima 插值，15 点）
-          Wrap(
-            spacing: AuraSpace.sm,
-            runSpacing: AuraSpace.sm,
-            children: [
-              for (final c in const [
-                ('平直', '20:0;100:0;440:0;1000:0;4000:0;10000:0;20000:0'),
-                ('低音', '20:6;100:5;440:1;1000:0;4000:0;10000:0;20000:0'),
-                ('人声', '20:0;100:0;440:2;1000:4;4000:3;10000:0;20000:0'),
-                ('微笑', '20:5;100:4;440:0;1000:-2;4000:3;10000:5;20000:5'),
-              ])
-                AuraChip(c.$1,
-                    icon: Icons.equalizer_rounded,
-                    onTap: () {
-                      model.setInt('eq.enable', 1);
-                      model.setStringParam('eq.curve', c.$2);
-                    }),
-            ],
-          ),
-          const SizedBox(height: AuraSpace.md),
           ValueSlider(
             label: l.stereoWiden,
             value: model.stereoMix,
@@ -723,14 +868,14 @@ class _StereoCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.xs),
           Text(l.stereoWidenHint, style: captionOf(paletteOf(context))),
           const SizedBox(height: AuraSpace.md),
-          _StereoAdvanced(model: model), // M5/P-002：分带细化，默认折叠
+          _StereoAdvanced(model: model),
         ],
       ),
     );
   }
 }
 
-/// 声场分带细化（默认折叠）：5 个子带独立 mix，拖总滑块回到统一模式
+/// 声场分带细化（默认折叠）：5 个子带独立 mix
 class _StereoAdvanced extends StatefulWidget {
   final AppModel model;
   const _StereoAdvanced({required this.model});
@@ -741,17 +886,16 @@ class _StereoAdvanced extends StatefulWidget {
 
 class _StereoAdvancedState extends State<_StereoAdvanced> {
   bool _open = false;
-
   static const _bandLabels = ['低频带', '中低带', '中频带', '中高带', '高频带'];
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final m = widget.model;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // 高级开关行
         MouseRegion(
           cursor: SystemMouseCursors.click,
           child: GestureDetector(
@@ -765,14 +909,14 @@ class _StereoAdvancedState extends State<_StereoAdvanced> {
                     size: 20, color: p.accent),
               ),
               const SizedBox(width: AuraSpace.sm),
-              // 生效态用标题颜色表达（去掉右侧状态文字）
-              ListenableBuilder(
-                listenable: m,
-                builder: (_, _) => Text('高级 · 分带宽度',
-                    style: labelOf(p,
-                        color: m.stereoBandUsed ? p.accent : p.text)),
-              ),
+              Text(l.advanced,
+                  style: labelOf(p,
+                      color: m.stereoBandUsed ? p.accent : p.text)),
               const Spacer(),
+              if (m.stereoBandUsed)
+                AuraChip('重置分带',
+                    icon: Icons.restore_rounded,
+                    onTap: m.resetStereoBandsToGlobal),
             ]),
           ),
         ),
@@ -784,13 +928,19 @@ class _StereoAdvancedState extends State<_StereoAdvanced> {
           firstChild: const SizedBox(width: double.infinity),
           secondChild: Padding(
             padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: Column(children: [
-              for (var i = 0; i < 5; i++)
-                _BandSlider(model: m, index: i, label: _bandLabels[i]),
-              const SizedBox(height: AuraSpace.xs),
-              Text('0% = 中置全保留，100% = 该带中置全剥离；拖动总宽度滑块将回到统一模式',
-                  style: captionOf(p)),
-            ]),
+            child: Column(
+              children: [
+                for (var i = 0; i < 5; i++)
+                  _BandSlider(
+                    model: m,
+                    index: i,
+                    label: _bandLabels[i],
+                  ),
+                const SizedBox(height: AuraSpace.xs),
+                Text('独立调节各频段展开度；调节任一带即脱离全局总滑块',
+                    style: captionOf(p)),
+              ],
+            ),
           ),
         ),
       ],
@@ -802,7 +952,12 @@ class _BandSlider extends StatelessWidget {
   final AppModel model;
   final int index;
   final String label;
-  const _BandSlider({required this.model, required this.index, required this.label});
+
+  const _BandSlider({
+    required this.model,
+    required this.index,
+    required this.label,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -812,43 +967,209 @@ class _BandSlider extends StatelessWidget {
       listenable: m,
       builder: (_, _) {
         final v = m.stereoBands[index];
-        return MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            // 双击整行归位中性值 50%
-            onDoubleTap: () =>
-                m.setFloat('stereo.band${index + 1}', ParamDefaults.stereoBand),
-            child: Row(children: [
-              SizedBox(
-                width: 60,
-                child: Text(label, style: labelOf(p, color: p.textDim)),
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2),
+          child: Row(children: [
+            SizedBox(
+              width: 56,
+              child: Text(label, style: labelOf(p, color: p.textDim)),
+            ),
+            Expanded(
+              child: Slider(
+                value: v.clamp(0.0, 1.0),
+                min: 0,
+                max: 1,
+                onChanged: (val) =>
+                    m.setFloat('stereo.band${index + 1}', val),
               ),
-              Expanded(
-                child: Slider(
-                  value: v.clamp(0.0, 1.0),
-                  min: 0,
-                  max: 1,
-                  onChanged: (val) =>
-                      m.setFloat('stereo.band${index + 1}', val),
-                ),
-              ),
-              SizedBox(
-                width: 44,
-                child: Text(
-                    '${(v * 100).toStringAsFixed(0)}%',
-                    textAlign: TextAlign.right,
-                    style: monoOf(p, size: 12, color: p.text)),
-              ),
-            ]),
-          ),
+            ),
+            SizedBox(
+              width: 44,
+              child: Text(
+                  '${(v * 100).toStringAsFixed(0)}%',
+                  textAlign: TextAlign.right,
+                  style: monoOf(p, size: 12, color: p.text)),
+            ),
+          ]),
         );
       },
     );
   }
 }
 
-/* ---- 04 Post Gain / Limiter ---- */
+/* ---- 07 Tube Simulator (电子管模拟器) ---- */
+
+class _TubeCard extends StatelessWidget {
+  final AppModel model;
+  const _TubeCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    return SectionCard(
+      index: '07',
+      title: l.tubeTitle,
+      latencyMs: model.getComponentLatency('tube'),
+      onRefreshLatency: () => model.refreshComponentLatency('tube'),
+      latencyTick: model.getComponentLatencyTick('tube'),
+      trailing: AuraSwitch(
+        value: model.tubeOn,
+        onChanged: model.setTubeEnabled,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 饱和驱动度 (Drive / Saturation)
+          ValueSlider(
+            label: l.tubeDrive,
+            value: model.tubeGain,
+            defaultValue: ParamDefaults.tubeGain,
+            onResetToDefault: () => model.setTubeGain(ParamDefaults.tubeGain),
+            min: -3,
+            max: 12,
+            unit: 'dB',
+            enabled: model.tubeOn,
+            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+            onChanged: model.setTubeGain,
+            onChangedEnd: model.setTubeGain,
+          ),
+          const SizedBox(height: AuraSpace.md),
+          // 电子管音色风格
+          Text(l.tubeStyle, style: captionOf(p)),
+          const SizedBox(height: AuraSpace.xs),
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            children: [
+              _ChoiceChip(
+                label: l.tubeStyleTriode,
+                selected: model.tubeStyle == 0,
+                onTap: () => model.setTubeStyle(0),
+              ),
+              _ChoiceChip(
+                label: l.tubeStylePentode,
+                selected: model.tubeStyle == 1,
+                onTap: () => model.setTubeStyle(1),
+              ),
+              _ChoiceChip(
+                label: l.tubeStyleTape,
+                selected: model.tubeStyle == 2,
+                onTap: () => model.setTubeStyle(2),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
+          _TubeAdvanced(model: model),
+        ],
+      ),
+    );
+  }
+}
+
+class _TubeAdvanced extends StatefulWidget {
+  final AppModel model;
+  const _TubeAdvanced({required this.model});
+
+  @override
+  State<_TubeAdvanced> createState() => _TubeAdvancedState();
+}
+
+class _TubeAdvancedState extends State<_TubeAdvanced> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final m = widget.model;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _open = !_open),
+            child: Row(
+              children: [
+                AnimatedRotation(
+                  duration: AuraDur.fast,
+                  turns: _open ? 0.25 : 0,
+                  child: Icon(Icons.expand_more_rounded,
+                      size: 20, color: p.accent),
+                ),
+                const SizedBox(width: AuraSpace.sm),
+                Text(l.advanced, style: labelOf(p, color: p.text)),
+                const Spacer(),
+                Text(
+                  '${m.tubeOversampling}x · ${(m.tubeCompensation >= 0 ? '+' : '')}${m.tubeCompensation.toStringAsFixed(1)} dB',
+                  style: monoOf(p, size: 10, color: p.textDim),
+                ),
+              ],
+            ),
+          ),
+        ),
+        AnimatedCrossFade(
+          duration: AuraDur.base,
+          sizeCurve: AuraCurve.standard,
+          crossFadeState:
+              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          firstChild: const SizedBox(width: double.infinity),
+          secondChild: Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.tubeOversampling, style: captionOf(p)),
+                const SizedBox(height: AuraSpace.xs),
+                Wrap(
+                  spacing: AuraSpace.sm,
+                  children: [
+                    for (final os in const [1, 2, 4])
+                      _ChoiceChip(
+                        label: '${os}x',
+                        selected: m.tubeOversampling == os,
+                        onTap: () => m.setTubeOversampling(os),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.md),
+                ValueSlider(
+                  label: l.tubeCompensation,
+                  value: m.tubeCompensation,
+                  defaultValue: ParamDefaults.tubeCompensation,
+                  min: -6,
+                  max: 6,
+                  unit: 'dB',
+                  enabled: m.tubeOn,
+                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                  onChanged: m.setTubeCompensation,
+                  onChangedEnd: m.setTubeCompensation,
+                ),
+                ValueSlider(
+                  label: l.tubeMix,
+                  value: m.tubeMix,
+                  defaultValue: ParamDefaults.tubeMix,
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: m.tubeOn,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: m.setTubeMix,
+                  onChangedEnd: m.setTubeMix,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/* ---- 08 Post Gain / Limiter ---- */
 
 class _PostCard extends StatelessWidget {
   final AppModel model;
@@ -858,8 +1179,11 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '07',
+      index: '08',
       title: l.postGain,
+      latencyMs: model.getComponentLatency('post'),
+      onRefreshLatency: () => model.refreshComponentLatency('post'),
+      latencyTick: model.getComponentLatencyTick('post'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -894,40 +1218,31 @@ class _PostCard extends StatelessWidget {
 
 class ValueSlider extends StatefulWidget {
   final String label;
-  final double value, min, max;
+  final double value;
+  final double defaultValue;
+  final double min, max;
   final String unit;
-  final String Function(double) format;
-
-  /// 双击归位的默认值（null = 不启用双击归位）
-  final double? defaultValue;
-
-  /// 双击归位时的扩展回调（如声场总滑块双击归位时联动重置子带）
+  final bool enabled;
+  final String Function(double)? format;
+  final ValueChanged<double> onChanged;
+  final ValueChanged<double>? onChangedEnd;
   final VoidCallback? onResetToDefault;
-
-  /// 被高级参数覆盖时置灰 + 尾注（如分带模式生效时主展宽滑块）
   final bool overridden;
   final String? overriddenNote;
-
-  /// 拖动中提交（节流，默认 40ms）；为 null 则只在松手时提交
-  final ValueChanged<double>? onChanged;
-
-  /// 松手时最终提交（必发，保证与引擎最终一致）
-  final ValueChanged<double> onChangedEnd;
-  final bool enabled;
 
   const ValueSlider({
     super.key,
     required this.label,
     required this.value,
+    required this.defaultValue,
     required this.min,
     required this.max,
     required this.unit,
-    required this.format,
-    required this.onChangedEnd,
-    this.onChanged,
-    this.enabled = true,
-    this.defaultValue,
+    required this.onChanged,
+    this.onChangedEnd,
     this.onResetToDefault,
+    this.enabled = true,
+    this.format,
     this.overridden = false,
     this.overriddenNote,
   });
@@ -937,106 +1252,95 @@ class ValueSlider extends StatefulWidget {
 }
 
 class _ValueSliderState extends State<ValueSlider> {
-  static const _commitGapMs = 40; // ≈25Hz，既实时又不轰参数
-  late double _drag = widget.value;
-  int _lastCommitMs = 0;
-  bool _dragging = false;
-
-  @override
-  void didUpdateWidget(ValueSlider old) {
-    super.didUpdateWidget(old);
-    if (!widget.enabled) _drag = widget.value;
-  }
-
-  void _commit(double v) {
-    final cb = widget.onChanged;
-    if (cb == null) return;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (now - _lastCommitMs < _commitGapMs) return;
-    _lastCommitMs = now;
-    cb(v);
-  }
-
-  void _resetToDefault() {
-    final d = widget.defaultValue;
-    if (d == null) return;
-    setState(() => _drag = d);
-    widget.onChangedEnd(d);
-    widget.onResetToDefault?.call();
-  }
+  double? _dragging;
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final c = !widget.enabled
-        ? p.textDim
-        : widget.overridden
-            ? p.textDim.withValues(alpha: 0.55)
-            : (_dragging ? p.accent : p.text);
-    return MouseRegion(
-      cursor: widget.defaultValue != null
-          ? SystemMouseCursors.click
-          : MouseCursor.defer,
-      child: GestureDetector(
-        // 双击归位默认值（整行 opaque，保证 label 与留白区均可响应）
-        onDoubleTap: widget.enabled ? _resetToDefault : null,
-        behavior: HitTestBehavior.opaque,
-        child: _sliderRow(p, c),
+    final displayed = _dragging ?? widget.value;
+    final fmt = widget.format ?? (v) => v.toStringAsFixed(1);
+    final isCustom = (widget.value - widget.defaultValue).abs() > 1e-4;
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              SizedBox(
+                width: 140,
+                child: Text(
+                  widget.label,
+                  style: labelOf(p,
+                      color: widget.enabled ? p.text : p.textDim),
+                ),
+              ),
+              Expanded(
+                child: Slider(
+                  value: displayed.clamp(widget.min, widget.max),
+                  min: widget.min,
+                  max: widget.max,
+                  onChanged: widget.enabled
+                      ? (v) {
+                          setState(() => _dragging = v);
+                          widget.onChanged(v);
+                        }
+                      : null,
+                  onChangeEnd: widget.enabled
+                      ? (v) {
+                          setState(() => _dragging = null);
+                          widget.onChangedEnd?.call(v);
+                        }
+                      : null,
+                ),
+              ),
+              const SizedBox(width: AuraSpace.sm),
+              SizedBox(
+                width: 60,
+                child: Text(
+                  '${fmt(displayed)} ${widget.unit}',
+                  textAlign: TextAlign.right,
+                  style: monoOf(p,
+                      size: 12,
+                      color: widget.enabled ? p.text : p.textDim),
+                ),
+              ),
+              if (widget.onResetToDefault != null) ...[
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: '双击重置默认值',
+                  child: InkWell(
+                    onTap: widget.onResetToDefault,
+                    borderRadius: BorderRadius.circular(AuraRadius.xs),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4.0),
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        size: 14,
+                        color: isCustom ? p.accent : p.textDim.withValues(alpha: 0.3),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          if (widget.overridden && widget.overriddenNote != null)
+            Padding(
+              padding: const EdgeInsets.only(left: 140),
+              child: Text(
+                widget.overriddenNote!,
+                style: captionOf(p, color: p.warning),
+              ),
+            ),
+        ],
       ),
     );
   }
-
-  Widget _sliderRow(AuraPalette p, Color c) {
-    return Row(children: [
-      SizedBox(
-        width: 96,
-        child: Text(widget.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: labelOf(p, color: widget.enabled ? p.text : p.textDim)),
-      ),
-      Expanded(
-        child: Slider(
-          value: _drag.clamp(widget.min, widget.max),
-          min: widget.min,
-          max: widget.max,
-          onChangeStart:
-              widget.enabled ? (_) => setState(() => _dragging = true) : null,
-          onChanged: widget.enabled
-              ? (v) {
-                  setState(() => _drag = v); // 本地即时视觉
-                  _commit(v); // 节流提交引擎
-                }
-              : null,
-          onChangeEnd: (v) {
-            setState(() => _dragging = false);
-            _lastCommitMs = 0;
-            widget.onChangedEnd(v);
-          },
-        ),
-      ),
-      const SizedBox(width: AuraSpace.md),
-      SizedBox(
-        width: widget.overridden && widget.overriddenNote != null ? 104 : 72,
-        child: AnimatedDefaultTextStyle(
-          duration: AuraDur.fast,
-          style: monoOf(p, size: 13, color: c),
-          child: Text(
-            widget.overridden && widget.overriddenNote != null
-                ? widget.overriddenNote!
-                : '${widget.format(_drag)}${widget.unit}',
-            textAlign: TextAlign.right,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ),
-    ]);
-  }
 }
 
-
-/* ---- 07 预设：引擎全量参数快照 ---- */
+/* ---- 预设快照卡片 ---- */
 
 class _PresetCard extends StatefulWidget {
   final AppModel model;
@@ -1047,32 +1351,25 @@ class _PresetCard extends StatefulWidget {
 }
 
 class _PresetCardState extends State<_PresetCard> {
-  final TextEditingController _name = TextEditingController(text: 'my-preset');
-  List<String> _presets = const [];
+  final _saveNameCtrl = TextEditingController();
+  List<String> _presets = [];
 
   @override
   void initState() {
     super.initState();
-    _refresh();
-  }
-
-  void _refresh() {
-    if (mounted) setState(() => _presets = PresetLibrary.list());
+    _reload();
   }
 
   @override
   void dispose() {
-    _name.dispose();
+    _saveNameCtrl.dispose();
     super.dispose();
   }
 
-  void _toast(String msg) {
-    if (!mounted) return;
-    final p = paletteOf(context);
-    ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(msg, style: TextStyle(color: p.text, fontSize: 13)),
-      duration: const Duration(seconds: 2),
-    ));
+  void _reload() {
+    setState(() {
+      _presets = PresetLibrary.list();
+    });
   }
 
   @override
@@ -1080,8 +1377,8 @@ class _PresetCardState extends State<_PresetCard> {
     final p = paletteOf(context);
     final l = l10nOf(context);
     final m = widget.model;
+
     return SectionCard(
-      index: '08',
       title: l.presetTitle,
       hint: l.presetHint,
       child: Column(
@@ -1091,380 +1388,245 @@ class _PresetCardState extends State<_PresetCard> {
             Text(l.presetEmpty, style: captionOf(p))
           else ...[
             Text(l.presetLoadHint, style: captionOf(p)),
-            const SizedBox(height: AuraSpace.sm),
+            const SizedBox(height: AuraSpace.xs),
             Wrap(
               spacing: AuraSpace.sm,
               runSpacing: AuraSpace.sm,
               children: [
-                for (final f in _presets)
+                for (final name in _presets)
                   AuraChip(
-                    f.replaceAll('.json', ''),
-                    icon: Icons.tune_rounded,
+                    name.endsWith('.json')
+                        ? name.substring(0, name.length - 5)
+                        : name,
+                    icon: Icons.bookmark_border_rounded,
                     onTap: () {
-                      final params = PresetLibrary.load(f);
-                      if (params == null) {
-                        _toast(l.presetLoadFail);
-                        return;
+                      final doc = PresetLibrary.load(name);
+                      if (doc != null) {
+                        PresetLibrary.apply(m, doc);
                       }
-                      PresetLibrary.apply(m, params);
-                      _toast(l.presetLoaded);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(doc != null ? l.presetLoaded : l.presetLoadFail),
+                          duration: const Duration(milliseconds: 1400),
+                        ));
+                      }
                     },
                   ),
               ],
             ),
-            const SizedBox(height: AuraSpace.md),
           ],
-          Row(children: [
-            SizedBox(
-              width: 180,
-              child: TextField(
-                controller: _name,
-                style: monoOf(p, size: 12.5, color: p.text),
-                decoration: InputDecoration(
-                  isDense: true,
-                  hintText: 'my-preset',
-                  hintStyle: monoOf(p, size: 12.5, color: p.textDim),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpace.md, vertical: AuraSpace.sm),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AuraRadius.sm),
-                    borderSide: BorderSide(color: p.hairline),
+          const SizedBox(height: AuraSpace.md),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _saveNameCtrl,
+                  decoration: InputDecoration(
+                    hintText: '输入预设名称保存当前状态',
+                    hintStyle: captionOf(p),
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: AuraSpace.md, vertical: AuraSpace.sm),
+                    filled: true,
+                    fillColor: p.panelRaised,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(AuraRadius.sm),
+                      borderSide: BorderSide(color: p.hairline),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(width: AuraSpace.sm),
-            AuraChip(l.presetSave, icon: Icons.save_outlined,
+              const SizedBox(width: AuraSpace.sm),
+              AuraChip(
+                l.presetSave,
+                icon: Icons.save_alt_rounded,
+                selected: true,
                 onTap: () {
-                  final ok = PresetLibrary.save(
-                      _name.text.trim(), PresetLibrary.snapshot(m));
-                  _refresh();
-                  _toast(ok ? l.presetSaved : l.presetSaveFail);
-                }),
-            const SizedBox(width: AuraSpace.sm),
-            AuraChip(l.presetDelete, icon: Icons.delete_outline, danger: true,
-                onTap: () {
-                  final name = _name.text.trim();
-                  final f = name.toLowerCase().endsWith('.json')
-                      ? name
-                      : '$name.json';
-                  final ok = PresetLibrary.delete(f);
-                  _refresh();
-                  _toast(ok ? l.presetDeleted : l.presetDeleteFail);
-                }),
-          ]),
+                  final name = _saveNameCtrl.text.trim();
+                  if (name.isEmpty) return;
+                  final ok = PresetLibrary.save(name, PresetLibrary.snapshot(m));
+                  if (ok) _saveNameCtrl.clear();
+                  _reload();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok ? l.presetSaved : l.presetSaveFail),
+                      duration: const Duration(milliseconds: 1400),
+                    ));
+                  }
+                },
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/* ---- 多声道 IR 频响包络图（复用 viz FFT 基础设施） ---- */
+/* ---- 脉冲频响包络柱状图 ---- */
 
 class _IrSpectrumGraph extends StatelessWidget {
   final List<List<double>> spectrum;
   final int channels;
 
-  const _IrSpectrumGraph({
-    required this.spectrum,
-    required this.channels,
-  });
+  const _IrSpectrumGraph({required this.spectrum, required this.channels});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    final chCount = spectrum.length;
-
-    final channelColors = [
-      p.vizSpectrum,                       // Ch1 / L: Cyan
-      const Color(0xFFFF5EA8),             // Ch2 / R: Pink
-      const Color(0xFFFFB86C),             // Ch3 / C: Orange
-      const Color(0xFFBD93F9),             // Ch4 / LFE: Purple
-      const Color(0xFF50FA7B),             // Ch5: Green
-      const Color(0xFF8BE9FD),             // Ch6: Sky
-      const Color(0xFFFF79C6),             // Ch7: Magenta
-      const Color(0xFFF1FA8C),             // Ch8: Yellow
-    ];
-
-    String channelLabel(int c) {
-      if (channels == 1) return 'Mono';
-      if (channels == 2) return c == 0 ? 'L' : 'R';
-      if (channels == 6) {
-        const labels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs'];
-        return c < labels.length ? labels[c] : 'Ch${c + 1}';
-      }
-      return 'Ch${c + 1}';
-    }
-
-    return Container(
-      decoration: BoxDecoration(
-        color: p.bg.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: p.hairline),
-      ),
-      padding: const EdgeInsets.fromLTRB(AuraSpace.md, AuraSpace.sm, AuraSpace.md, AuraSpace.xs),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(l.convSpectrumTitle, style: captionOf(p, color: p.textDim)),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  for (var c = 0; c < chCount; c++)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            color: channelColors[c % channelColors.length],
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          channelLabel(c),
-                          style: monoOf(p, size: 10, color: p.textDim),
-                        ),
-                      ],
-                    ),
-                ],
-              ),
-            ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(l.convSpectrumTitle, style: captionOf(p, color: p.textDim)),
+            const Spacer(),
+            Text('32 频带 · 0..1 归一化能量',
+                style: monoOf(p, size: 10, color: p.textDim)),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        Container(
+          height: 64,
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+          decoration: BoxDecoration(
+            color: p.panelRaised,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(color: p.hairline),
           ),
-          const SizedBox(height: AuraSpace.xs),
-          SizedBox(
-            height: 72,
-            child: CustomPaint(
-              painter: _IrSpectrumPainter(
-                spectrum: spectrum,
-                channelColors: channelColors,
-                gridColor: p.hairline.withValues(alpha: 0.6),
-                freqTextColor: p.textDim.withValues(alpha: 0.6),
-              ),
-              child: const SizedBox.expand(),
-            ),
+          child: CustomPaint(
+            size: const Size(double.infinity, 56),
+            painter: _IrSpectrumPainter(spectrum: spectrum, palette: p),
           ),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('20Hz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
-                Text('100Hz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
-                Text('1kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
-                Text('10kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
-                Text('20kHz', style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6))),
-              ],
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _IrSpectrumPainter extends CustomPainter {
   final List<List<double>> spectrum;
-  final List<Color> channelColors;
-  final Color gridColor;
-  final Color freqTextColor;
+  final AuraPalette palette;
 
-  _IrSpectrumPainter({
-    required this.spectrum,
-    required this.channelColors,
-    required this.gridColor,
-    required this.freqTextColor,
-  });
+  _IrSpectrumPainter({required this.spectrum, required this.palette});
 
   @override
   void paint(Canvas canvas, Size size) {
-    final gp = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1;
-
-    for (var i = 1; i < 4; i++) {
-      final y = size.height * i / 4;
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), gp);
-    }
-    for (final frac in [0.22, 0.55, 0.88]) {
-      final x = size.width * frac;
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), gp);
-    }
-
     if (spectrum.isEmpty) return;
+    final chCount = spectrum.length;
+    final bands = spectrum.first.length;
+    if (bands == 0) return;
 
-    for (var c = 0; c < spectrum.length; c++) {
-      final bands = spectrum[c];
-      if (bands.isEmpty) continue;
-      final color = channelColors[c % channelColors.length];
-      final path = Path();
-      final fillPath = Path();
+    final w = size.width;
+    final h = size.height;
+    final slotW = w / bands;
+    final barW = (slotW * 0.75).clamp(1.0, 8.0);
 
-      final n = bands.length;
-      final dx = size.width / (n - 1);
-
-      final pts = <Offset>[];
-      for (var i = 0; i < n; i++) {
-        final v = bands[i].clamp(0.0, 1.0);
-        final x = i * dx;
-        final y = size.height - (v * (size.height - 4)) - 2;
-        pts.add(Offset(x, y));
+    for (var b = 0; b < bands; b++) {
+      var maxVal = 0.0;
+      for (var c = 0; c < chCount; c++) {
+        if (b < spectrum[c].length) {
+          maxVal = math.max(maxVal, spectrum[c][b]);
+        }
       }
+      final barH = (maxVal.clamp(0.0, 1.0) * h).clamp(1.0, h);
+      final x = b * slotW + (slotW - barW) / 2;
+      final y = h - barH;
 
-      path.moveTo(pts[0].dx, pts[0].dy);
-      fillPath.moveTo(pts[0].dx, size.height);
-      fillPath.lineTo(pts[0].dx, pts[0].dy);
+      final paint = Paint()
+        ..color = palette.accent.withValues(alpha: 0.35 + maxVal * 0.55)
+        ..style = PaintingStyle.fill;
 
-      for (var i = 0; i < pts.length - 1; i++) {
-        final p0 = pts[i];
-        final p1 = pts[i + 1];
-        final mx = (p0.dx + p1.dx) / 2;
-        path.cubicTo(mx, p0.dy, mx, p1.dy, p1.dx, p1.dy);
-        fillPath.cubicTo(mx, p0.dy, mx, p1.dy, p1.dx, p1.dy);
-      }
-
-      fillPath.lineTo(pts.last.dx, size.height);
-      fillPath.close();
-
-      final fillPaint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            color.withValues(alpha: 0.22),
-            color.withValues(alpha: 0.02),
-          ],
-        ).createShader(Offset.zero & size);
-      canvas.drawPath(fillPath, fillPaint);
-
-      final strokePaint = Paint()
-        ..color = color.withValues(alpha: 0.9)
-        ..strokeWidth = 1.6
-        ..style = PaintingStyle.stroke;
-      canvas.drawPath(path, strokePaint);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(
+          Rect.fromLTWH(x, y, barW, barH),
+          const Radius.circular(1),
+        ),
+        paint,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant _IrSpectrumPainter old) {
-    if (old.spectrum.length != spectrum.length) return true;
-    for (var c = 0; c < spectrum.length; c++) {
-      if (old.spectrum[c] != spectrum[c]) return true;
-    }
-    return false;
-  }
+  bool shouldRepaint(covariant _IrSpectrumPainter oldDelegate) =>
+      oldDelegate.spectrum != spectrum || oldDelegate.palette != palette;
 }
 
-/* ---- Freeverb 3D 空间声学室渲染 ---- */
+/* ---- 3D 声场空间渲染 (动态尺寸与声场宽度联动) ---- */
 
 class _Freeverb3DStage extends StatelessWidget {
-  final AppModel model;
-  const _Freeverb3DStage({required this.model});
+  final double decay;
+  final double damp;
+  final double roomSize;
+  final double stereoWidth;
+  final bool active;
+
+  const _Freeverb3DStage({
+    required this.decay,
+    required this.damp,
+    this.roomSize = 1.2,
+    this.stereoWidth = 1.0,
+    required this.active,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    return Container(
-      height: 125,
-      decoration: BoxDecoration(
-        color: p.bg.withValues(alpha: 0.7),
-        borderRadius: BorderRadius.circular(AuraRadius.md),
-        border: Border.all(
-          color: model.fvOn ? p.accent.withValues(alpha: 0.25) : p.hairline,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(l.fv3DTitle, style: captionOf(p, color: p.textDim)),
+            const Spacer(),
+            Text(
+              '透视网格 · 阻尼渐变 · 尺寸 ${roomSize.toStringAsFixed(1)}x',
+              style: monoOf(p, size: 10, color: p.textDim),
+            ),
+          ],
         ),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          ValueListenableBuilder<double>(
-            valueListenable: model.levelL,
-            builder: (_, lvlL, _) => ValueListenableBuilder<double>(
-              valueListenable: model.levelR,
-              builder: (_, lvlR, _) => CustomPaint(
-                painter: _Freeverb3DPainter(
-                  enabled: model.fvOn,
-                  decay: model.fvDecay,
-                  damp: model.fvDamp,
-                  wet: model.fvWet,
-                  levelL: lvlL,
-                  levelR: lvlR,
-                  playing: model.playing,
-                  accentColor: p.accent,
-                  secondaryColor: const Color(0xFFFF5EA8),
-                  hairlineColor: p.hairline,
-                  gridColor: p.accent.withValues(alpha: 0.09),
-                  textColor: p.textDim,
-                ),
-              ),
+        const SizedBox(height: AuraSpace.xs),
+        Container(
+          height: 100,
+          decoration: BoxDecoration(
+            color: p.panelRaised,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(color: p.hairline),
+          ),
+          child: CustomPaint(
+            size: const Size(double.infinity, 100),
+            painter: _Freeverb3DPainter(
+              decay: decay,
+              damp: damp,
+              roomSize: roomSize,
+              stereoWidth: stereoWidth,
+              palette: p,
+              active: active,
             ),
           ),
-          Positioned(
-            top: AuraSpace.sm,
-            left: AuraSpace.md,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.view_in_ar_outlined,
-                    size: 14, color: model.fvOn ? p.accent : p.textDim),
-                const SizedBox(width: 4),
-                Text(l.fv3DTitle,
-                    style: monoOf(p, size: 11,
-                        color: model.fvOn ? p.text : p.textDim)),
-              ],
-            ),
-          ),
-          Positioned(
-            top: AuraSpace.sm,
-            right: AuraSpace.md,
-            child: Text(
-              model.fvOn
-                  ? 'RT 3D · 衰减 ${(model.fvDecay * 100).toInt()}% · 阻尼 ${(model.fvDamp * 100).toInt()}%'
-                  : '待机 (Bypass)',
-              style: monoOf(p, size: 10,
-                  color: model.fvOn ? p.accent.withValues(alpha: 0.8) : p.textDim),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
 class _Freeverb3DPainter extends CustomPainter {
-  final bool enabled;
   final double decay;
   final double damp;
-  final double wet;
-  final double levelL;
-  final double levelR;
-  final bool playing;
-  final Color accentColor;
-  final Color secondaryColor;
-  final Color hairlineColor;
-  final Color gridColor;
-  final Color textColor;
+  final double roomSize;
+  final double stereoWidth;
+  final AuraPalette palette;
+  final bool active;
 
   _Freeverb3DPainter({
-    required this.enabled,
     required this.decay,
     required this.damp,
-    required this.wet,
-    required this.levelL,
-    required this.levelR,
-    required this.playing,
-    required this.accentColor,
-    required this.secondaryColor,
-    required this.hairlineColor,
-    required this.gridColor,
-    required this.textColor,
+    required this.roomSize,
+    required this.stereoWidth,
+    required this.palette,
+    required this.active,
   });
 
   @override
@@ -1472,192 +1634,66 @@ class _Freeverb3DPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
 
-    // 1) 3D 透视室地面与四壁
-    final fl = Offset(w * 0.06, h * 0.94);
-    final fr = Offset(w * 0.94, h * 0.94);
-    final bl = Offset(w * 0.30, h * 0.40);
-    final br = Offset(w * 0.70, h * 0.40);
-    final tl = Offset(w * 0.30, h * 0.16);
-    final tr = Offset(w * 0.70, h * 0.16);
+    final baseAlpha = active ? 1.0 : 0.25;
+    final gridColor = palette.vizGrid.withValues(alpha: 0.45 * baseAlpha);
 
-    final roomPaint = Paint()
-      ..color = hairlineColor.withValues(alpha: enabled ? 0.35 : 0.18)
-      ..strokeWidth = 1
-      ..style = PaintingStyle.stroke;
+    // 动态空间尺寸映射：0.5x ~ 2.5x 映射到透视原点与边界
+    final sizeFactor = (roomSize / 1.5).clamp(0.4, 2.0);
+    final vpX = w / 2;
+    final vpY = (h * 0.28) / sizeFactor;
 
-    canvas.drawRect(Rect.fromPoints(tl, br), roomPaint);
-    canvas.drawLine(bl, fl, roomPaint);
-    canvas.drawLine(br, fr, roomPaint);
-    canvas.drawLine(tl, Offset(w * 0.06, h * 0.02), roomPaint);
-    canvas.drawLine(tr, Offset(w * 0.94, h * 0.02), roomPaint);
+    // 地板与侧墙网格
+    final pFloorLeft = Offset(w * 0.1, h * 0.95);
+    final pFloorRight = Offset(w * 0.9, h * 0.95);
+    final pBackLeft = Offset(vpX - (w * 0.25 * sizeFactor), vpY + 20);
+    final pBackRight = Offset(vpX + (w * 0.25 * sizeFactor), vpY + 20);
 
-    final gridP = Paint()
+    final linePaint = Paint()
       ..color = gridColor
-      ..strokeWidth = 1;
-    for (final frac in [0.15, 0.35, 0.50, 0.65, 0.85]) {
-      final bottomPt = Offset(w * frac, h * 0.94);
-      final topPt = Offset(
-        bl.dx + (br.dx - bl.dx) * ((bottomPt.dx - fl.dx) / (fr.dx - fl.dx)),
-        bl.dy,
-      );
-      canvas.drawLine(topPt, bottomPt, gridP);
+      ..strokeWidth = 1.0;
+
+    canvas.drawLine(pFloorLeft, pBackLeft, linePaint);
+    canvas.drawLine(pFloorRight, pBackRight, linePaint);
+    canvas.drawLine(pFloorLeft, pFloorRight, linePaint);
+    canvas.drawLine(pBackLeft, pBackRight, linePaint);
+
+    // 室内声波粒子反弹光晕
+    if (active) {
+      final glowPaint = Paint()
+        ..color = palette.accent.withValues(alpha: (0.15 * decay).clamp(0.02, 0.4))
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+
+      canvas.drawCircle(Offset(vpX, vpY + 25), 18 * sizeFactor, glowPaint);
+
+      // 双发声源展开度 (stereoWidth)
+      final widthOffset = (w * 0.18 * stereoWidth).clamp(10.0, w * 0.4);
+      final leftSrc = Offset(vpX - widthOffset, h * 0.75);
+      final rightSrc = Offset(vpX + widthOffset, h * 0.75);
+
+      final srcPaint = Paint()
+        ..color = palette.accent.withValues(alpha: 0.75)
+        ..style = PaintingStyle.fill;
+
+      canvas.drawCircle(leftSrc, 3.5, srcPaint);
+      canvas.drawCircle(rightSrc, 3.5, srcPaint);
+
+      // 发声源向远处的反射光波
+      final wavePaint = Paint()
+        ..color = palette.accent.withValues(alpha: 0.12 * (1.0 - damp * 0.5))
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+
+      canvas.drawLine(leftSrc, pBackLeft, wavePaint);
+      canvas.drawLine(rightSrc, pBackRight, wavePaint);
     }
-    for (final z in [0.25, 0.50, 0.75]) {
-      final y = bl.dy + (fl.dy - bl.dy) * (z * z);
-      final leftX = bl.dx + (fl.dx - bl.dx) * (z * z);
-      final rightX = br.dx + (fr.dx - br.dx) * (z * z);
-      canvas.drawLine(Offset(leftX, y), Offset(rightX, y), gridP);
-    }
-
-    // 2) 声源与听者节点
-    final srcL = Offset(w * 0.36, h * 0.48);
-    final srcR = Offset(w * 0.64, h * 0.48);
-    final listener = Offset(w * 0.50, h * 0.86);
-
-    final listenerP = Paint()
-      ..color = textColor.withValues(alpha: 0.8)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(listener, 4.5, listenerP);
-    final headPath = Path()
-      ..moveTo(listener.dx, listener.dy - 6)
-      ..lineTo(listener.dx - 3, listener.dy - 3)
-      ..lineTo(listener.dx + 3, listener.dy - 3)
-      ..close();
-    canvas.drawPath(headPath, listenerP);
-
-    // 3) 实时动态脉冲
-    final normL = playing ? ((levelL + 60) / 60).clamp(0.0, 1.0) : 0.0;
-    final normR = playing ? ((levelR + 60) / 60).clamp(0.0, 1.0) : 0.0;
-
-    final pL = Paint()..color = accentColor;
-    canvas.drawCircle(srcL, 3.5 + normL * 3, pL);
-    if (enabled && normL > 0.05) {
-      canvas.drawCircle(
-        srcL,
-        6 + normL * 14,
-        Paint()
-          ..color = accentColor.withValues(alpha: normL * 0.28)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-    }
-
-    final pR = Paint()..color = secondaryColor;
-    canvas.drawCircle(srcR, 3.5 + normR * 3, pR);
-    if (enabled && normR > 0.05) {
-      canvas.drawCircle(
-        srcR,
-        6 + normR * 14,
-        Paint()
-          ..color = secondaryColor.withValues(alpha: normR * 0.28)
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2,
-      );
-    }
-
-    // 4) 3D 声学反射射线束
-    if (!enabled) return;
-
-    final rayLColor = Color.lerp(accentColor, const Color(0xFFFFB86C), damp * 0.6)!;
-    final rayRColor = Color.lerp(secondaryColor, const Color(0xFFFF79C6), damp * 0.4)!;
-    final baseAlpha = (0.2 + wet * 0.6).clamp(0.1, 0.9);
-    final rayWidth = 1.0 + (1.0 - damp) * 0.8;
-
-    final directPL = Paint()
-      ..color = rayLColor.withValues(alpha: baseAlpha * 0.7)
-      ..strokeWidth = rayWidth
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(srcL, listener, directPL);
-
-    final directPR = Paint()
-      ..color = rayRColor.withValues(alpha: baseAlpha * 0.7)
-      ..strokeWidth = rayWidth
-      ..style = PaintingStyle.stroke;
-    canvas.drawLine(srcR, listener, directPR);
-
-    final wallLy = h * (0.55 + 0.15 * decay);
-    final wallLx = fl.dx + (bl.dx - fl.dx) * (1.0 - (wallLy - bl.dy) / (fl.dy - bl.dy));
-    final ptWallL = Offset(wallLx, wallLy);
-
-    final rayPathL = Path()
-      ..moveTo(srcL.dx, srcL.dy)
-      ..lineTo(ptWallL.dx, ptWallL.dy)
-      ..lineTo(listener.dx, listener.dy);
-    canvas.drawPath(
-      rayPathL,
-      Paint()
-        ..color = rayLColor.withValues(alpha: baseAlpha * 0.65)
-        ..strokeWidth = rayWidth
-        ..style = PaintingStyle.stroke,
-    );
-
-    final wallRy = h * (0.55 + 0.15 * decay);
-    final wallRx = fr.dx + (br.dx - fr.dx) * (1.0 - (wallRy - br.dy) / (fr.dy - br.dy));
-    final ptWallR = Offset(wallRx, wallRy);
-
-    final rayPathR = Path()
-      ..moveTo(srcR.dx, srcR.dy)
-      ..lineTo(ptWallR.dx, ptWallR.dy)
-      ..lineTo(listener.dx, listener.dy);
-    canvas.drawPath(
-      rayPathR,
-      Paint()
-        ..color = rayRColor.withValues(alpha: baseAlpha * 0.65)
-        ..strokeWidth = rayWidth
-        ..style = PaintingStyle.stroke,
-    );
-
-    if (decay > 0.2) {
-      final backBounceXL = w * (0.35 + 0.1 * decay);
-      final ptBackL = Offset(backBounceXL, bl.dy);
-      final rayBackL = Path()
-        ..moveTo(srcL.dx, srcL.dy)
-        ..lineTo(ptBackL.dx, ptBackL.dy)
-        ..lineTo(ptWallR.dx, ptWallR.dy * 0.9)
-        ..lineTo(listener.dx, listener.dy);
-      canvas.drawPath(
-        rayBackL,
-        Paint()
-          ..color = rayLColor.withValues(alpha: baseAlpha * 0.4 * decay)
-          ..strokeWidth = 1.0
-          ..style = PaintingStyle.stroke,
-      );
-
-      final backBounceXR = w * (0.65 - 0.1 * decay);
-      final ptBackR = Offset(backBounceXR, br.dy);
-      final rayBackR = Path()
-        ..moveTo(srcR.dx, srcR.dy)
-        ..lineTo(ptBackR.dx, ptBackR.dy)
-        ..lineTo(ptWallL.dx, ptWallL.dy * 0.9)
-        ..lineTo(listener.dx, listener.dy);
-      canvas.drawPath(
-        rayBackR,
-        Paint()
-          ..color = rayRColor.withValues(alpha: baseAlpha * 0.4 * decay)
-          ..strokeWidth = 1.0
-          ..style = PaintingStyle.stroke,
-      );
-    }
-
-    final hazePaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          accentColor.withValues(alpha: 0.12 * wet),
-          secondaryColor.withValues(alpha: 0.08 * wet),
-          Colors.transparent,
-        ],
-      ).createShader(Rect.fromCircle(center: Offset(w * 0.5, h * 0.55), radius: w * 0.35));
-    canvas.drawCircle(Offset(w * 0.5, h * 0.55), w * 0.35, hazePaint);
   }
 
   @override
-  bool shouldRepaint(covariant _Freeverb3DPainter old) {
-    return old.enabled != enabled ||
-        old.decay != decay ||
-        old.damp != damp ||
-        old.wet != wet ||
-        old.levelL != levelL ||
-        old.levelR != levelR ||
-        old.playing != playing;
-  }
+  bool shouldRepaint(covariant _Freeverb3DPainter oldDelegate) =>
+      oldDelegate.decay != decay ||
+      oldDelegate.damp != damp ||
+      oldDelegate.roomSize != roomSize ||
+      oldDelegate.stereoWidth != stereoWidth ||
+      oldDelegate.palette != palette ||
+      oldDelegate.active != active;
 }

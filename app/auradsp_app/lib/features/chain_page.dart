@@ -14,7 +14,7 @@ import 'widgets.dart';
 
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
 const List<({String id, String label, bool exposed})> kStages = [
-  (id: 'tube', label: '真空管', exposed: true),
+  (id: 'tube', label: '电子管', exposed: true),
   (id: 'comp', label: '压限器', exposed: false),
   (id: 'bass', label: '低音增强', exposed: true),
   (id: 'eq', label: '均衡器', exposed: true),

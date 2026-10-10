@@ -439,4 +439,103 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fv3DTitle => '3D Soundfield Stage';
+
+  @override
+  String get advanced => 'Advanced';
+
+  @override
+  String get stageTube => 'Tube';
+
+  @override
+  String get tubeTitle => 'Tube Simulator';
+
+  @override
+  String get spatialReverbTitle => 'Spatial Reverb';
+
+  @override
+  String get reverbCustom => 'Custom';
+
+  @override
+  String get reverbRoomSize => 'Room Size';
+
+  @override
+  String get reverbStereoWidth => 'Stereo Width';
+
+  @override
+  String get reverbMix => 'Wet/Dry Mix';
+
+  @override
+  String get eqMultiBand => 'Multi-Band Equalizer';
+
+  @override
+  String get eqBands => 'Bands';
+
+  @override
+  String get eqPresets => 'Presets';
+
+  @override
+  String get eqFlat => 'Flat Reset';
+
+  @override
+  String get eqBypass => 'Bypass';
+
+  @override
+  String get eqQFactor => 'Q-Factor';
+
+  @override
+  String get eqFilterType => 'Filter Architecture';
+
+  @override
+  String get eqInterpolation => 'Interpolation';
+
+  @override
+  String get bassIntensity => 'Bass Intensity';
+
+  @override
+  String get bassMode => 'Bass Mode';
+
+  @override
+  String get bassModeDynamic => 'Dynamic (DBB)';
+
+  @override
+  String get bassModeShelf => 'Hi-Fi Shelf';
+
+  @override
+  String get bassModeHarmonic => 'Harmonic Exciter';
+
+  @override
+  String get bassCutoff => 'Cutoff Scope';
+
+  @override
+  String get bassHarmonics => 'Harmonics';
+
+  @override
+  String get bassBlend => 'Harmonic Blend';
+
+  @override
+  String get bassSubFloor => 'Sub Floor';
+
+  @override
+  String get tubeDrive => 'Drive / Saturation';
+
+  @override
+  String get tubeStyle => 'Tube Style';
+
+  @override
+  String get tubeStyleTriode => 'Triode 12AX7';
+
+  @override
+  String get tubeStylePentode => 'Pentode EL34';
+
+  @override
+  String get tubeStyleTape => 'Tape Warmth';
+
+  @override
+  String get tubeOversampling => 'Oversampling';
+
+  @override
+  String get tubeCompensation => 'Output Compensation';
+
+  @override
+  String get tubeMix => 'Dry/Wet Mix';
 }

@@ -424,4 +424,103 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fv3DTitle => '3D 音場レンダリング';
+
+  @override
+  String get advanced => '詳細設定';
+
+  @override
+  String get stageTube => '真空管';
+
+  @override
+  String get tubeTitle => '真空管シミュレーター';
+
+  @override
+  String get spatialReverbTitle => '空間リバーブ';
+
+  @override
+  String get reverbCustom => 'カスタム';
+
+  @override
+  String get reverbRoomSize => '部屋サイズ';
+
+  @override
+  String get reverbStereoWidth => 'ステレオ幅';
+
+  @override
+  String get reverbMix => 'リバーブミックス';
+
+  @override
+  String get eqMultiBand => 'グラフィックイコライザー';
+
+  @override
+  String get eqBands => 'バンド数';
+
+  @override
+  String get eqPresets => 'プリセット';
+
+  @override
+  String get eqFlat => 'フラットリセット';
+
+  @override
+  String get eqBypass => 'バイパス';
+
+  @override
+  String get eqQFactor => 'Q値';
+
+  @override
+  String get eqFilterType => 'フィルター形式';
+
+  @override
+  String get eqInterpolation => '補間アルゴリズム';
+
+  @override
+  String get bassIntensity => '低音強度';
+
+  @override
+  String get bassMode => '低音モード';
+
+  @override
+  String get bassModeDynamic => 'ダイナミック (DBB)';
+
+  @override
+  String get bassModeShelf => 'Hi-Fiローシェルフ';
+
+  @override
+  String get bassModeHarmonic => '心理音響ハーモニック';
+
+  @override
+  String get bassCutoff => 'カットオフ周波数';
+
+  @override
+  String get bassHarmonics => '高調波注入量';
+
+  @override
+  String get bassBlend => 'ブレンドバランス';
+
+  @override
+  String get bassSubFloor => 'サブロー保護';
+
+  @override
+  String get tubeDrive => 'ドライブ飽和度';
+
+  @override
+  String get tubeStyle => '真空管スタイル';
+
+  @override
+  String get tubeStyleTriode => '三極管 12AX7';
+
+  @override
+  String get tubeStylePentode => '五極管 EL34';
+
+  @override
+  String get tubeStyleTape => 'テープウォームス';
+
+  @override
+  String get tubeOversampling => 'オーバーサンプリング';
+
+  @override
+  String get tubeCompensation => '出力レベル補正';
+
+  @override
+  String get tubeMix => 'ドライ/ウェット';
 }

@@ -37,6 +37,11 @@ class SectionCard extends StatelessWidget {
   /// hero 卡片：更大内边距 + 强调色细边
   final bool hero;
 
+  /// 组件级微型延迟（ms）：非空时在 trailing 开关前渲染 [ 0.0 ms ↻ ] 徽标
+  final double? latencyMs;
+  final VoidCallback? onRefreshLatency;
+  final int latencyTick;
+
   const SectionCard({
     super.key,
     required this.child,
@@ -46,6 +51,9 @@ class SectionCard extends StatelessWidget {
     this.hint,
     this.trailing,
     this.hero = false,
+    this.latencyMs,
+    this.onRefreshLatency,
+    this.latencyTick = 0,
   });
 
   @override
@@ -53,7 +61,24 @@ class SectionCard extends StatelessWidget {
     final p = paletteOf(context);
     final body = <Widget>[];
     if (title != null) {
-      body.add(SectionTitle(title!, index: index, trailing: trailing));
+      final effectiveTrailing = (latencyMs != null)
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                ComponentLatencyBadge(
+                  latencyMs: latencyMs!,
+                  onRefresh: onRefreshLatency,
+                  refreshTick: latencyTick,
+                ),
+                if (trailing != null) ...[
+                  const SizedBox(width: AuraSpace.sm),
+                  trailing!,
+                ],
+              ],
+            )
+          : trailing;
+      body.add(SectionTitle(title!, index: index, trailing: effectiveTrailing));
       if (hint != null) {
         body.add(const SizedBox(height: AuraSpace.sm));
         body.add(Text(hint!, style: captionOf(p)));
@@ -177,6 +202,114 @@ class LatencyBadge extends StatelessWidget {
         child: Text(l.latencyMs(ms.round()),
             style: monoOf(p, size: 12, color: c)),
       ),
+    );
+  }
+}
+
+/// 组件级微型延迟徽标：[ 0.0 ms  ↻ ]
+class ComponentLatencyBadge extends StatefulWidget {
+  final double latencyMs;
+  final VoidCallback? onRefresh;
+  final int refreshTick;
+
+  const ComponentLatencyBadge({
+    super.key,
+    required this.latencyMs,
+    this.onRefresh,
+    this.refreshTick = 0,
+  });
+
+  @override
+  State<ComponentLatencyBadge> createState() => _ComponentLatencyBadgeState();
+}
+
+class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _pulseController;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 300),
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant ComponentLatencyBadge oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.refreshTick != oldWidget.refreshTick) {
+      _pulseController.forward(from: 0.0);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulseController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final text = '${widget.latencyMs.toStringAsFixed(1)} ms';
+    return AnimatedBuilder(
+      animation: _pulseController,
+      builder: (context, _) {
+        final pulse = _pulseController.value;
+        final glowAlpha = (math.sin(pulse * math.pi) * 0.45).clamp(0.0, 1.0);
+        final borderColor = Color.lerp(
+          p.hairline,
+          p.accent,
+          glowAlpha,
+        )!;
+
+        return Tooltip(
+          message: '组件实测处理延迟: $text\n点击 ↻ 立即进行单组件延迟探测评估',
+          waitDuration: const Duration(milliseconds: 250),
+          child: InkWell(
+            onTap: () {
+              _pulseController.forward(from: 0.0);
+              widget.onRefresh?.call();
+            },
+            borderRadius: BorderRadius.circular(AuraRadius.xs),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: p.accent.withValues(alpha: 0.05 + glowAlpha * 0.2),
+                borderRadius: BorderRadius.circular(AuraRadius.xs),
+                border: Border.all(color: borderColor, width: 1.0),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(
+                    text,
+                    style: monoOf(
+                      p,
+                      size: 10,
+                      color: widget.latencyMs > 20
+                          ? p.warning
+                          : (widget.latencyMs > 0 ? p.accent2 : p.textDim),
+                    ),
+                  ),
+                  const SizedBox(width: 3),
+                  RotationTransition(
+                    turns: _pulseController,
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      size: 11,
+                      color: p.textDim,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 }

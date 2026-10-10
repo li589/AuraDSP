@@ -64,9 +64,10 @@ struct VizRing {
 
     void push(const auradsp_viz_frame& f) {
         const uint64_t w = write_idx.load(std::memory_order_relaxed);
-        /* 覆盖最旧帧（丢帧优于阻塞 RT 线程） */
-        if (w - read_idx.load(std::memory_order_acquire) >= kVizRingCap)
-            read_idx.store(w - kVizRingCap + 1, std::memory_order_release);
+        const uint64_t r = read_idx.load(std::memory_order_acquire);
+        /* 标准 SPSC 契约：写者绝不写 read_idx，环满时安全丢弃新帧防数据竞争 */
+        if (w - r >= (uint64_t)kVizRingCap)
+            return;
         slots[w & (kVizRingCap - 1)] = f;
         write_idx.store(w + 1, std::memory_order_release);
     }
@@ -111,6 +112,7 @@ struct Params {
     std::atomic<int32_t>  ddc_ready{0};
     /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
+    std::atomic<float>    tube_gain{0.0f};      /* dB [-3, 12] 驱动度 */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
     /* M5/P-002：声场分带（bandMixUsed 由宿主语义维护） */
     std::atomic<float>    stereo_band[5];
@@ -129,35 +131,38 @@ struct Params {
 
 /* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
  * 经典 tuning（@44.1k）按 fs 缩放；create 分配、destroy 释放，RT 零分配。
- * 参数换算沿用 classic freeverb：feedback = 0.7+decay*0.28，damp=damp*0.4。 */
+ * 参数换算沿用 classic freeverb：feedback = 0.7+decay*0.28，damp=damp*0.4。
+ * 右声道施加 +23 采样点经典立体声扩展（Stereo Spread），产生自然空间去相关。 */
 constexpr int kFvCombs = 8, kFvAllpasses = 4;
 constexpr int kFvCombTuning[kFvCombs] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
 constexpr int kFvAllpTuning[kFvAllpasses] = {556, 441, 341, 225};
+constexpr int kFvStereoSpread = 23;
 constexpr double kFvRateScale = 48000.0 / 44100.0;   /* 本引擎 fs 固定 48k */
 
 struct FvVoice {
     float* combBuf[kFvCombs];
     int    combSize[kFvCombs];
     int    combIdx[kFvCombs];
-    float  filterstore = 0;
+    float  filterstore[kFvCombs];   /* 8 个 comb 独立阻尼状态，杜绝互调串扰 */
     float  damp1 = 0, damp2 = 1;
     float* apBuf[kFvAllpasses];
     int    apSize[kFvAllpasses];
     int    apIdx[kFvAllpasses];
 };
 
-void fv_alloc(FvVoice& v) {
+void fv_alloc(FvVoice& v, int spread = 0) {
     for (int i = 0; i < kFvCombs; ++i) {
-        v.combSize[i] = (int)ceil(kFvCombTuning[i] * kFvRateScale) + 4;
+        v.combSize[i] = (int)ceil((kFvCombTuning[i] + spread) * kFvRateScale) + 4;
         v.combBuf[i] = (float*)calloc(v.combSize[i], sizeof(float));
         v.combIdx[i] = 0;
+        v.filterstore[i] = 0.0f;
     }
     for (int i = 0; i < kFvAllpasses; ++i) {
-        v.apSize[i] = (int)ceil(kFvAllpTuning[i] * kFvRateScale) + 4;
+        v.apSize[i] = (int)ceil((kFvAllpTuning[i] + spread) * kFvRateScale) + 4;
         v.apBuf[i] = (float*)calloc(v.apSize[i], sizeof(float));
         v.apIdx[i] = 0;
     }
-    v.filterstore = 0; v.damp1 = 0; v.damp2 = 1;
+    v.damp1 = 0; v.damp2 = 1;
 }
 
 void fv_free(FvVoice& v) {
@@ -165,23 +170,27 @@ void fv_free(FvVoice& v) {
     for (int i = 0; i < kFvAllpasses; ++i) { free(v.apBuf[i]); v.apBuf[i] = nullptr; }
 }
 
-/* 每样本：返回湿信号 */
+/* 每样本：返回湿信号（Schroeder-Moorer 架构：8 并联 Comb 累加后串联 4 全通做扩散） */
 inline float fv_voice_process(FvVoice& v, float in, float feedback) {
-    float out = 0;
+    float out = 0.0f;
     for (int i = 0; i < kFvCombs; ++i) {
         const float y = v.combBuf[i][v.combIdx[i]];
-        v.filterstore = y * v.damp2 + v.filterstore * v.damp1;
-        v.combBuf[i][v.combIdx[i]] = in + v.filterstore * feedback;
+        v.filterstore[i] = y * v.damp2 + v.filterstore[i] * v.damp1;
+        /* 截断次正常数 (subnormal float)，防止静音时 CPU 触发微码异常陷阱 */
+        if (fabsf(v.filterstore[i]) < 1e-15f) v.filterstore[i] = 0.0f;
+        v.combBuf[i][v.combIdx[i]] = in + v.filterstore[i] * feedback;
         if (++v.combIdx[i] >= v.combSize[i]) v.combIdx[i] = 0;
         out += y;
     }
+    /* 全通扩散层：以 Comb 累加输出为输入，逐级全通相位扩散 */
     for (int i = 0; i < kFvAllpasses; ++i) {
         const float bufout = v.apBuf[i][v.apIdx[i]];
-        const float input2 = in + bufout * 0.5f;
+        const float input2 = out + bufout * 0.5f;
         v.apBuf[i][v.apIdx[i]] = input2;
         if (++v.apIdx[i] >= v.apSize[i]) v.apIdx[i] = 0;
-        in = bufout - input2;
+        out = bufout - input2;
     }
+    if (fabsf(out) < 1e-15f) out = 0.0f;
     return out;
 }
 
@@ -406,15 +415,22 @@ void shelf_process(auradsp_handle h, float* io, int frames) {
         io[i * 2] = (float)yl;
         io[i * 2 + 1] = (float)yr;
     }
+    /* 截断次正常数 (subnormal float)，防止静音时 CPU 陷入微码陷阱 */
+    if (fabs(z1L) < 1e-15) z1L = 0.0;
+    if (fabs(z2L) < 1e-15) z2L = 0.0;
+    if (fabs(z1R) < 1e-15) z1R = 0.0;
+    if (fabs(z2R) < 1e-15) z2R = 0.0;
     h->shelf.z1L = z1L; h->shelf.z2L = z2L;
     h->shelf.z1R = z1R; h->shelf.z2R = z2R;
 }
 
 void apply_tube(auradsp_handle h) {
-    if (h->p.tube_enable.load(std::memory_order_relaxed))
+    if (h->p.tube_enable.load(std::memory_order_relaxed)) {
+        VacuumTubeSetGain(&h->jdsp, (double)h->p.tube_gain.load(std::memory_order_relaxed));
         VacuumTubeEnable(&h->jdsp);
-    else
+    } else {
         VacuumTubeDisable(&h->jdsp);
+    }
 }
 
 void apply_crossfeed(auradsp_handle h) {
@@ -848,8 +864,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvWet = 1.0f;
     h->jdsp.auraConvDry = 0.0f;
     h->jdsp.auraConvMixUsed = 0;
-    fv_alloc(h->fvL);
-    fv_alloc(h->fvR);
+    fv_alloc(h->fvL, 0);
+    fv_alloc(h->fvR, kFvStereoSpread);
     shelf_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
@@ -879,6 +895,8 @@ void auradsp_destroy(auradsp_handle h) {
 
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
     if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
+    /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
+    if (frames > h->max_block) frames = h->max_block;
     const int st = h->state.load(std::memory_order_relaxed);
     if (st != AURADSP_STATE_PROCESSING) {
         if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
@@ -1209,6 +1227,14 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_tube(h);   /* T0，无守卫 */
         return AURADSP_OK;
     }
+    if (!strcmp(id, "tube.gain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -3.0f) db = -3.0f; if (db > 12.0f) db = 12.0f;
+        h->p.tube_gain.store(db);
+        if (h->open.load() && h->p.tube_enable.load(std::memory_order_relaxed))
+            VacuumTubeSetGain(&h->jdsp, (double)db);
+        return AURADSP_OK;
+    }
     /* ---- M5-b 低频搁架 ---- */
     if (!strcmp(id, "shelf.enable") && bytes >= 4) {
         h->p.shelf_enable.store(*(const int32_t*)value ? 1 : 0);
@@ -1338,6 +1364,7 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
 auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
                                  void* out_value, uint32_t bytes) {
     if (!h || !id || !out_value) return AURADSP_E_PARAM;
+    std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     if (!strcmp(id, "bass.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.bass_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bass.gain") && bytes >= 4) { *(float*)out_value = h->p.bass_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.preset") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_preset.load(); return AURADSP_OK; }
@@ -1392,6 +1419,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "ddc.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "ddc.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_ready.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.gain") && bytes >= 4) { *(float*)out_value = h->p.tube_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
@@ -1423,7 +1451,6 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
             "]";
         snprintf((char*)out_value, bytes, "%s", reg);
-        return AURADSP_OK;
         return AURADSP_OK;
     }
     return AURADSP_E_PARAM;

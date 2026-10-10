@@ -5,6 +5,7 @@
  * 可观察状态；viz 高频数据走独立 ValueNotifier（30fps），避免整页重建。
  */
 import 'dart:isolate';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
@@ -40,8 +41,10 @@ abstract class ParamDefaults {
   // Freeverb 空间混响
   static const double fvDecay = 0.5;         // 50%
   static const double fvDamp = 0.5;          // 50%
-  static const double fvWet = 0.3;           // 30%
+  static const double fvWet = 0.35;          // 35%
   static const double fvDry = 1.0;           // 100%
+  static const double fvRoomSize = 1.2;      // 1.2x
+  static const double fvWidth = 1.0;         // 100%
 
   // 低频搁架 (Shelf)
   static const double shelfFreq = 100.0;     // 100 Hz
@@ -49,6 +52,27 @@ abstract class ParamDefaults {
 
   // 声场分带
   static const double stereoBand = 0.5;      // 50%
+
+  // 低音重构
+  static const double bassIntensity = 0.6;   // 60%
+  static const int bassMode = 0;             // 0: 动态增强, 1: 纯净低架, 2: 心理声学谐波
+  static const double bassCutoff = 120.0;    // 120 Hz
+  static const double bassHarmonics = 0.45;  // 45%
+  static const double bassHarmonicBlend = 0.5;// 50% (平衡)
+  static const double bassSubFloor = 25.0;   // 25 Hz
+
+  // 电子管模拟器
+  static const double tubeGain = 4.5;        // +4.5 dB
+  static const int tubeStyle = 0;            // 0: 三极管, 1: 五极管, 2: 磁带温润
+  static const int tubeOversampling = 2;     // 2x
+  static const double tubeCompensation = 0.0;// 0.0 dB
+  static const double tubeMix = 1.0;         // 100%
+
+  // 多段图形均衡器
+  static const int eqBandsCount = 15;        // 15段
+  static const double eqQ = 1.414;           // Q 锐度
+  static const int eqFilter = 0;             // 0: FIR, 1: 6阶 IIR, 2: 12阶 IIR
+  static const int eqInterp = 1;             // 1: Makima, 0: PCHIP
 }
 
 class AppModel extends ChangeNotifier {
@@ -106,17 +130,53 @@ class AppModel extends ChangeNotifier {
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
 
-  // M5-c：参数化混响（Freeverb）
+  // M5-c：空间混响（Freeverb / Spatial Reverb）
   bool fvOn = false;
-  double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.3, fvDry = 1.0;
+  double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.35, fvDry = 1.0;
+  double fvRoomSize = 1.2, fvWidth = 1.0;
+  bool get isSpatialReverbOn => reverbPreset >= 0 || fvOn;
 
   // M3.5-a：处理顺序（Dart 镜像；引擎侧表驱动 P-004）
   String? graphOrder;
 
+  // 低音重构（Phase 4）
+  double bassIntensity = ParamDefaults.bassIntensity;
+  int bassMode = ParamDefaults.bassMode;
+  double bassCutoff = ParamDefaults.bassCutoff;
+  double bassHarmonics = ParamDefaults.bassHarmonics;
+  double bassHarmonicBlend = ParamDefaults.bassHarmonicBlend;
+  double bassSubFloor = ParamDefaults.bassSubFloor;
+
+  // 电子管模拟器（Phase 4）
+  double tubeGain = ParamDefaults.tubeGain;
+  int tubeStyle = ParamDefaults.tubeStyle;
+  int tubeOversampling = ParamDefaults.tubeOversampling;
+  double tubeCompensation = ParamDefaults.tubeCompensation;
+  double tubeMix = ParamDefaults.tubeMix;
+
+  // 多段图形均衡器（Phase 3）
+  static const List<double> eqFreqs7 = [50, 150, 400, 1000, 3000, 8000, 16000];
+  static const List<double> eqFreqs10 = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
+  static const List<double> eqFreqs15 = [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000];
+  static const List<double> eqFreqs31 = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000];
+
+  int eqBandsCount = ParamDefaults.eqBandsCount;
+  List<double> eqFrequencies = List.from(eqFreqs15);
+  List<double> eqGains = List.filled(15, 0.0);
+  double eqQ = ParamDefaults.eqQ;
+  int eqFilter = ParamDefaults.eqFilter;
+  int eqInterp = ParamDefaults.eqInterp;
+  String eqPresetName = 'flat';
+  bool eqBypass = false;
+
+  // 组件级延迟评估刷新时间戳
+  final Map<String, int> _latencyRefreshTicks = {};
+  int getComponentLatencyTick(String compId) => _latencyRefreshTicks[compId] ?? 0;
+
   // 用户偏好
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
-  int latencyMode = 1; // 0=realtime 1=music 2=quality
+  int latencyMode = 2; // 0=realtime 1=music 2=quality (默认品质/无限制，废除硬性拦截规则)
 
   // 高频可视化（独立 notifier，30fps）
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
@@ -289,16 +349,13 @@ class AppModel extends ChangeNotifier {
 
   /* ---- 命令 ---- */
 
-  /// 混响预设（T2 效果）：音乐/实时档下被守卫拦截，这里自动先切品质档再下发。
-  /// 两条 setParam 按序进 isolate、按序处理，引擎侧守卫在切档后即放行。
-  void setReverbPreset(int v, {required String autoQualityMsg}) {
-    if (v >= 0 && reverbBlockedNow()) {
+  /// 混响预设：废除品质档拦截限制，无条件自由放行
+  void setReverbPreset(int v, {String? autoQualityMsg}) {
+    if (v >= 0 && latencyMode < 2) {
       latencyMode = 2;
       notifyListeners();
       _markSent('mode.latency');
       send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-      lastInfo = autoQualityMsg;
-      eventSeq.value = ++_guardSeq;
     }
     setInt('reverb.preset', v);
   }
@@ -369,6 +426,10 @@ class AppModel extends ChangeNotifier {
   /// 双击主滑块时重置声场展宽并清除分带模式（恢复 5 个子带为 0.5 中性）
   void resetStereoWiden() {
     setFloat('stereo.mix', ParamDefaults.stereoMix);
+    resetStereoBandsToGlobal();
+  }
+
+  void resetStereoBandsToGlobal() {
     for (var i = 0; i < 5; i++) {
       stereoBands[i] = ParamDefaults.stereoBand;
       setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand);
@@ -468,15 +529,13 @@ class AppModel extends ChangeNotifier {
 
   /* ---- 卷积 / IR 命令（v1.1 M4） ---- */
 
-  /// 卷积使能（T2 效果）：音乐/实时档自动先切品质档（与混响同策略）
-  void setConvolverEnabled(bool on, {required String autoQualityMsg}) {
-    if (on && reverbBlockedNow()) {
+  /// 卷积使能：废除品质档拦截限制，无条件自由放行
+  void setConvolverEnabled(bool on, {String? autoQualityMsg}) {
+    if (on && latencyMode < 2) {
       latencyMode = 2;
       notifyListeners();
       _markSent('mode.latency');
       send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-      lastInfo = autoQualityMsg;
-      eventSeq.value = ++_guardSeq;
     }
     convEnabled = on;
     notifyListeners();
@@ -497,20 +556,85 @@ class AppModel extends ChangeNotifier {
     setInt(ParamId.xfeedEnable, on ? 1 : 0);
   }
 
-  /// 参数化混响使能（T2 类）：自动升档同混响策略
-  void setFreeverbEnabled(bool on, {required String autoQualityMsg}) {
-    if (on && reverbBlockedNow()) {
+  /// 参数化混响使能：废除品质档拦截限制，无条件自由放行
+  void setFreeverbEnabled(bool on, {String? autoQualityMsg}) {
+    if (on && latencyMode < 2) {
       latencyMode = 2;
       notifyListeners();
       _markSent('mode.latency');
       send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-      lastInfo = autoQualityMsg;
-      eventSeq.value = ++_guardSeq;
     }
     fvOn = on;
     notifyListeners();
     _markSent(ParamId.fvEnable);
     send({'cmd': 'setParam', 'id': ParamId.fvEnable, 'value': on ? 1 : 0, 'isFloat': false});
+  }
+
+  void selectReverbPreset(int id) {
+    reverbPreset = id;
+    if (id >= 0 && id <= 7) {
+      final (decay, damp, wet, dry, roomSize, width) = switch (id) {
+        0 => (0.85, 0.25, 0.45, 1.0, 1.5, 1.0), // 大音乐厅
+        1 => (0.75, 0.30, 0.40, 1.0, 1.3, 1.0), // 音乐厅
+        2 => (0.65, 0.35, 0.35, 1.0, 1.1, 0.9), // 中音乐厅
+        3 => (0.55, 0.40, 0.30, 1.0, 0.9, 0.85), // 小音乐厅
+        4 => (0.45, 0.45, 0.28, 1.0, 0.8, 0.8), // 大房间
+        5 => (0.35, 0.50, 0.25, 1.0, 0.65, 0.75), // 中房间
+        6 => (0.25, 0.55, 0.20, 1.0, 0.5, 0.7), // 小房间
+        _ => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 板式混响
+      };
+      fvDecay = decay;
+      fvDamp = damp;
+      fvWet = wet;
+      fvDry = dry;
+      fvRoomSize = roomSize;
+      fvWidth = width;
+      setFreeverbEnabled(true);
+      setFloat('freeverb.decay', decay);
+      setFloat('freeverb.damp', damp);
+      setFloat('freeverb.wet', wet);
+      setFloat('freeverb.dry', dry);
+      setReverbPreset(id);
+    } else if (id == -1) {
+      setReverbPreset(-1);
+      setFreeverbEnabled(false);
+    } else if (id == -2) {
+      // 自定义模式
+      setFreeverbEnabled(true);
+      notifyListeners();
+    }
+  }
+
+  void setSpatialReverbEnabled(bool on) {
+    if (on) {
+      selectReverbPreset(reverbPreset >= 0 ? reverbPreset : 0);
+    } else {
+      selectReverbPreset(-1);
+    }
+  }
+
+  void setReverbCustomParam(String param, double value) {
+    reverbPreset = -2; // 联动切换为自定义模式
+    switch (param) {
+      case 'decay':
+        fvDecay = value;
+        setFloat('freeverb.decay', value);
+      case 'damp':
+        fvDamp = value;
+        setFloat('freeverb.damp', value);
+      case 'wet':
+        fvWet = value;
+        setFloat('freeverb.wet', value);
+      case 'dry':
+        fvDry = value;
+        setFloat('freeverb.dry', value);
+      case 'roomSize':
+        fvRoomSize = value;
+        notifyListeners();
+      case 'width':
+        fvWidth = value;
+        notifyListeners();
+    }
   }
 
   void loadVdc(String path) {
@@ -530,6 +654,268 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     _markSent(ParamId.convClear);
     send({'cmd': 'setParam', 'id': ParamId.convClear, 'value': 0, 'isFloat': false});
+  }
+
+  /* ---- 低音增强重构（Phase 4） ---- */
+
+  void setBassIntensity(double v) {
+    bassIntensity = v.clamp(0.0, 1.0);
+    final gain = (bassIntensity * 15.0).clamp(0.0, 15.0);
+    bassGain = gain;
+    setFloat('bass.gain', gain);
+    if (bassMode == 1) {
+      setFloat('shelf.gain', (bassIntensity * 12.0).clamp(0.0, 12.0));
+    }
+    notifyListeners();
+  }
+
+  void setBassMode(int mode) {
+    bassMode = mode;
+    if (mode == 1) {
+      setInt('shelf.enable', 1);
+      setFloat('shelf.freq', bassCutoff);
+      setFloat('shelf.gain', (bassIntensity * 12.0).clamp(0.0, 12.0));
+    } else {
+      setInt('shelf.enable', 0);
+    }
+    notifyListeners();
+  }
+
+  void setBassCutoff(double f) {
+    bassCutoff = f;
+    setFloat('shelf.freq', f);
+    notifyListeners();
+  }
+
+  void setBassHarmonics(double h) {
+    bassHarmonics = h.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+
+  void setBassHarmonicBlend(double b) {
+    bassHarmonicBlend = b.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+
+  void setBassSubFloor(double s) {
+    bassSubFloor = s;
+    notifyListeners();
+  }
+
+  /* ---- 电子管模拟器（Phase 4） ---- */
+
+  void setTubeGain(double db) {
+    tubeGain = db.clamp(-3.0, 12.0);
+    setFloat('tube.gain', tubeGain);
+    notifyListeners();
+  }
+
+  void setTubeStyle(int style) {
+    tubeStyle = style;
+    notifyListeners();
+  }
+
+  void setTubeOversampling(int os) {
+    tubeOversampling = os;
+    notifyListeners();
+  }
+
+  void setTubeCompensation(double comp) {
+    tubeCompensation = comp.clamp(-6.0, 6.0);
+    notifyListeners();
+  }
+
+  void setTubeMix(double mix) {
+    tubeMix = mix.clamp(0.0, 1.0);
+    notifyListeners();
+  }
+
+  /* ---- 多段图形均衡器（Phase 3） ---- */
+
+  void setEqBandsCount(int count) {
+    if (count == eqBandsCount) return;
+    eqBandsCount = count;
+    final List<double> newFreqs = switch (count) {
+      7 => eqFreqs7,
+      10 => eqFreqs10,
+      31 => eqFreqs31,
+      _ => eqFreqs15,
+    };
+    final oldFreqs = eqFrequencies;
+    final oldGains = eqGains;
+    final newGains = <double>[];
+    for (final f in newFreqs) {
+      if (oldFreqs.isEmpty || oldGains.isEmpty) {
+        newGains.add(0.0);
+        continue;
+      }
+      if (f <= oldFreqs.first) {
+        newGains.add(oldGains.first);
+      } else if (f >= oldFreqs.last) {
+        newGains.add(oldGains.last);
+      } else {
+        var idx = 0;
+        while (idx < oldFreqs.length - 1 && oldFreqs[idx + 1] < f) {
+          idx++;
+        }
+        final logF0 = math.log(oldFreqs[idx]);
+        final logF1 = math.log(oldFreqs[idx + 1]);
+        final logTarget = math.log(f);
+        final ratio = (logTarget - logF0) / (logF1 - logF0);
+        newGains.add(oldGains[idx] + ratio * (oldGains[idx + 1] - oldGains[idx]));
+      }
+    }
+    eqFrequencies = List.from(newFreqs);
+    eqGains = newGains;
+    _pushEqCurve();
+  }
+
+  void setEqBandGain(int index, double gain) {
+    if (index >= 0 && index < eqGains.length) {
+      eqGains[index] = gain.clamp(-18.0, 18.0);
+      eqPresetName = 'custom';
+      _pushEqCurve();
+    }
+  }
+
+  void setEqQ(double q) {
+    eqQ = q.clamp(0.3, 10.0);
+    _pushEqCurve();
+  }
+
+  void setEqFilter(int filter) {
+    eqFilter = filter;
+    notifyListeners();
+  }
+
+  void setEqInterp(int interp) {
+    eqInterp = interp;
+    notifyListeners();
+  }
+
+  void toggleEqBypass() {
+    eqBypass = !eqBypass;
+    setInt('eq.enable', (eqOn && !eqBypass) ? 1 : 0);
+    notifyListeners();
+  }
+
+  void flattenEq() {
+    eqGains = List.filled(eqFrequencies.length, 0.0);
+    eqPresetName = 'flat';
+    _pushEqCurve();
+  }
+
+  void applyEqPreset(String style) {
+    eqPresetName = style;
+    final newGains = List.filled(eqFrequencies.length, 0.0);
+    for (var i = 0; i < eqFrequencies.length; i++) {
+      final f = eqFrequencies[i];
+      final logF = math.log(f) / math.ln10; // log10
+      var g = 0.0;
+      switch (style) {
+        case 'pop':
+          if (logF <= 2.2) {
+            g = 3.0 * (1.0 - (logF - 1.3) / 0.9);
+          } else if (logF <= 3.2) {
+            g = -1.0;
+          } else {
+            g = 3.0 * ((logF - 3.2) / 1.1);
+          }
+        case 'rock':
+          if (logF <= 2.0) {
+            g = 4.5;
+          } else if (logF <= 3.0) {
+            g = -2.0;
+          } else if (logF <= 3.6) {
+            g = 1.0;
+          } else {
+            g = 4.0;
+          }
+        case 'jazz':
+          if (logF <= 2.3) {
+            g = 2.5;
+          } else if (logF <= 3.3) {
+            g = 1.5;
+          } else {
+            g = -1.0;
+          }
+        case 'classical':
+          if (logF >= 3.0 && logF <= 3.8) {
+            g = 1.5;
+          } else {
+            g = 0.5;
+          }
+        case 'vocal':
+          if (logF <= 2.0) {
+            g = -3.5;
+          } else if (logF >= 2.8 && logF <= 3.6) {
+            g = 4.0;
+          } else {
+            g = 0.0;
+          }
+        case 'smile':
+          final x = (logF - 2.8) / 1.5;
+          g = (x * x) * 8.0 - 3.0;
+        case 'bass_boost':
+          if (logF <= 2.3) {
+            g = 6.0 * (1.0 - (logF - 1.3) / 1.0);
+          } else {
+            g = 0.0;
+          }
+        case 'treble_boost':
+          if (logF >= 3.3) {
+            g = 5.0 * ((logF - 3.3) / 1.0);
+          } else {
+            g = 0.0;
+          }
+        case 'flat':
+        default:
+          g = 0.0;
+      }
+      newGains[i] = g.clamp(-18.0, 18.0);
+    }
+    eqGains = newGains;
+    _pushEqCurve();
+  }
+
+  void _pushEqCurve() {
+    final buffer = StringBuffer();
+    if (eqFrequencies.isNotEmpty && eqFrequencies.first > 20) {
+      buffer.write('20:${eqGains.first.toStringAsFixed(1)};');
+    }
+    for (var i = 0; i < eqFrequencies.length; i++) {
+      buffer.write('${eqFrequencies[i].toStringAsFixed(1)}:${eqGains[i].toStringAsFixed(1)}');
+      if (i < eqFrequencies.length - 1) buffer.write(';');
+    }
+    if (eqFrequencies.isNotEmpty && eqFrequencies.last < 20000) {
+      buffer.write(';20000:${eqGains.last.toStringAsFixed(1)}');
+    }
+    final curveStr = buffer.toString();
+    setStringParam('eq.curve', curveStr);
+    notifyListeners();
+  }
+
+  /* ---- 组件级微型延迟评估（Phase 4） ---- */
+
+  double getComponentLatency(String compId) {
+    return switch (compId) {
+      'bass' => bassOn ? 0.0 : 0.0,
+      'tube' => tubeOn ? 0.0 : 0.0,
+      'eq' => eqOn ? 0.0 : 0.0,
+      'stereo' => stereoMix > 0 ? 0.8 : 0.0,
+      'reverb' => isSpatialReverbOn ? 30.0 : 0.0,
+      'convolver' => (convEnabled && convReady && convFrames > 0 && convSrcRate > 0)
+          ? ((convFrames / convSrcRate) * 1000.0)
+          : 0.0,
+      'ddc' => ddcOn ? 3.0 : 0.0,
+      'post' => 0.0,
+      _ => 0.0,
+    };
+  }
+
+  void refreshComponentLatency(String compId) {
+    _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
+    notifyListeners();
   }
 
   void setSource(String kind, {String? path}) {
@@ -555,8 +941,8 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 守卫预判：reverb 在 realtime/music 档必被引擎拒绝（ADR-002）
-  bool reverbBlockedNow() => latencyMode < 2;
+  /// 废除品质档限定拦截，所有效果均自由放行
+  bool reverbBlockedNow() => false;
 
   @override
   void dispose() {

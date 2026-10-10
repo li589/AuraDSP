@@ -909,6 +909,204 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'3D 声场渲染'**
   String get fv3DTitle;
+
+  /// No description provided for @advanced.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级'**
+  String get advanced;
+
+  /// No description provided for @stageTube.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管'**
+  String get stageTube;
+
+  /// No description provided for @tubeTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管模拟器'**
+  String get tubeTitle;
+
+  /// No description provided for @spatialReverbTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间混响'**
+  String get spatialReverbTitle;
+
+  /// No description provided for @reverbCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get reverbCustom;
+
+  /// No description provided for @reverbRoomSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场尺寸'**
+  String get reverbRoomSize;
+
+  /// No description provided for @reverbStereoWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场宽度'**
+  String get reverbStereoWidth;
+
+  /// No description provided for @reverbMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响干湿比'**
+  String get reverbMix;
+
+  /// No description provided for @eqMultiBand.
+  ///
+  /// In zh, this message translates to:
+  /// **'多段图形均衡器'**
+  String get eqMultiBand;
+
+  /// No description provided for @eqBands.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段规格'**
+  String get eqBands;
+
+  /// No description provided for @eqPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设风格'**
+  String get eqPresets;
+
+  /// No description provided for @eqFlat.
+  ///
+  /// In zh, this message translates to:
+  /// **'平直复位'**
+  String get eqFlat;
+
+  /// No description provided for @eqBypass.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路对比'**
+  String get eqBypass;
+
+  /// No description provided for @eqQFactor.
+  ///
+  /// In zh, this message translates to:
+  /// **'Q值锐度'**
+  String get eqQFactor;
+
+  /// No description provided for @eqFilterType.
+  ///
+  /// In zh, this message translates to:
+  /// **'滤波器架构'**
+  String get eqFilterType;
+
+  /// No description provided for @eqInterpolation.
+  ///
+  /// In zh, this message translates to:
+  /// **'插值算法'**
+  String get eqInterpolation;
+
+  /// No description provided for @bassIntensity.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强强度'**
+  String get bassIntensity;
+
+  /// No description provided for @bassMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强模式'**
+  String get bassMode;
+
+  /// No description provided for @bassModeDynamic.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态增强 (DBB)'**
+  String get bassModeDynamic;
+
+  /// No description provided for @bassModeShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'纯净低架 (Shelf)'**
+  String get bassModeShelf;
+
+  /// No description provided for @bassModeHarmonic.
+  ///
+  /// In zh, this message translates to:
+  /// **'心理声学谐波'**
+  String get bassModeHarmonic;
+
+  /// No description provided for @bassCutoff.
+  ///
+  /// In zh, this message translates to:
+  /// **'截止频率'**
+  String get bassCutoff;
+
+  /// No description provided for @bassHarmonics.
+  ///
+  /// In zh, this message translates to:
+  /// **'谐波注入量'**
+  String get bassHarmonics;
+
+  /// No description provided for @bassBlend.
+  ///
+  /// In zh, this message translates to:
+  /// **'谐波色彩平衡'**
+  String get bassBlend;
+
+  /// No description provided for @bassSubFloor.
+  ///
+  /// In zh, this message translates to:
+  /// **'下潜保护切除'**
+  String get bassSubFloor;
+
+  /// No description provided for @tubeDrive.
+  ///
+  /// In zh, this message translates to:
+  /// **'饱和驱动度'**
+  String get tubeDrive;
+
+  /// No description provided for @tubeStyle.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管音色风格'**
+  String get tubeStyle;
+
+  /// No description provided for @tubeStyleTriode.
+  ///
+  /// In zh, this message translates to:
+  /// **'经典三极管'**
+  String get tubeStyleTriode;
+
+  /// No description provided for @tubeStylePentode.
+  ///
+  /// In zh, this message translates to:
+  /// **'现代五极管'**
+  String get tubeStylePentode;
+
+  /// No description provided for @tubeStyleTape.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟磁带温润'**
+  String get tubeStyleTape;
+
+  /// No description provided for @tubeOversampling.
+  ///
+  /// In zh, this message translates to:
+  /// **'高阶抗混叠过采样'**
+  String get tubeOversampling;
+
+  /// No description provided for @tubeCompensation.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出电平补偿'**
+  String get tubeCompensation;
+
+  /// No description provided for @tubeMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'干湿混合比'**
+  String get tubeMix;
 }
 
 class _AppLocalizationsDelegate

@@ -727,6 +727,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final srcBuf = srcPtr.asTypedList(maxBlock * 2);
   final outPtrEng = malloc<Float>(maxBlock * 2);
   final engOut = outPtrEng.asTypedList(maxBlock * 2);
+  final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
   String? lastPumpErr;
   var lastPumpErrAt = 0;
   var pumpRounds = 0;
@@ -772,32 +773,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           final now = DateTime.now().millisecondsSinceEpoch;
           if (lastViz == null || now - lastViz! >= vizIntervalMs) {
             lastViz = now;
-            final vf = malloc<VizFrame>(8);
-            try {
-              final n = lib!.vizRead(handle!, vf, 8);
-              if (n > 0) {
-                final fr = (vf + (n - 1)).ref;
-                vizCount++;
-                if (vizCount <= 5 || vizCount % 100 == 0) {
-                  final sp = fr.spectrumToList();
-                  dbgLog('viz#$vizCount n=$n seq=${fr.seq} '
-                      'max=${sp.reduce(math.max).toStringAsFixed(3)} '
-                      'l=${fr.levelLDbfs.toStringAsFixed(1)} '
-                      'r=${fr.levelRDbfs.toStringAsFixed(1)}');
-                }
-                send({
-                  'evt': 'viz',
-                  'spectrum': fr.spectrumToList(),
-                  'l': fr.levelLDbfs,
-                  'r': fr.levelRDbfs,
-                  'stageL': fr.stageLevelsLToList(),
-                  'stageR': fr.stageLevelsRToList(),
-                  'ts': fr.timestampMs,
-                  'seq': fr.seq,
-                });
+            final n = lib!.vizRead(handle!, vizBuf, 8);
+            if (n > 0) {
+              final fr = (vizBuf + (n - 1)).ref;
+              vizCount++;
+              if (vizCount <= 5 || vizCount % 100 == 0) {
+                final sp = fr.spectrumToList();
+                dbgLog('viz#$vizCount n=$n seq=${fr.seq} '
+                    'max=${sp.reduce(math.max).toStringAsFixed(3)} '
+                    'l=${fr.levelLDbfs.toStringAsFixed(1)} '
+                    'r=${fr.levelRDbfs.toStringAsFixed(1)}');
               }
-            } finally {
-              malloc.free(vf);
+              send({
+                'evt': 'viz',
+                'spectrum': fr.spectrumToList(),
+                'l': fr.levelLDbfs,
+                'r': fr.levelRDbfs,
+                'stageL': fr.stageLevelsLToList(),
+                'stageR': fr.stageLevelsRToList(),
+                'ts': fr.timestampMs,
+                'seq': fr.seq,
+              });
             }
           }
         }
@@ -817,6 +813,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       wasapi?.stop();
       if (handle != null) lib?.destroy(handle);
+      malloc.free(srcPtr);
+      malloc.free(outPtrEng);
+      malloc.free(vizBuf);
     } catch (_) {}
   }
 
