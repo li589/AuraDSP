@@ -16,6 +16,7 @@ import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart' show ParamId;
 import '../engine/debug_log.dart';
 import 'config.dart';
+import 'plugin_manager.dart';
 import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
@@ -213,6 +214,11 @@ class AppModel extends ChangeNotifier {
     _pendingSentAt[id] = DateTime.now().millisecondsSinceEpoch;
   }
 
+  late final PluginManager pluginManager;
+  String? savedPluginPath;
+  String savedPluginId = '';
+  bool savedPluginBypass = false;
+
   ReceivePort? _fromIso;
 
   AppModel() {
@@ -223,6 +229,12 @@ class AppModel extends ChangeNotifier {
       orElse: () => AuraThemeId.auraDark,
     );
     latencyMode = config.defaultLatencyMode;
+
+    pluginManager = PluginManager(commandSender: (msg) {
+      _toIso?.send(msg);
+    });
+    pluginManager.addListener(notifyListeners);
+    pluginManager.loadCache();
 
     if (config.autoRestoreSession) {
       final session = SessionMemory.load();
@@ -376,6 +388,34 @@ class AppModel extends ChangeNotifier {
         eventSeq.value = ++_guardSeq;
         notifyListeners();
         break;
+      case 'pluginScanned':
+        pluginManager.onPluginScanned(raw['count'] as int, raw['json']);
+        notifyListeners();
+        break;
+      case 'pluginList':
+        pluginManager.onPluginList(raw['json']);
+        notifyListeners();
+        break;
+      case 'pluginLoaded':
+        pluginManager.onPluginLoaded(
+            raw['path'] as String, raw['rc'] as int, raw['status']);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginUnloaded':
+        pluginManager.onPluginUnloaded(raw['rc'] as int, raw['status']);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginBypass':
+        pluginManager.onPluginBypass(raw['bypass'] as bool, raw['status']);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginStatus':
+        pluginManager.onPluginStatus(raw['status']);
+        notifyListeners();
+        break;
     }
   }
 
@@ -478,6 +518,20 @@ class AppModel extends ChangeNotifier {
       }
       if (graphOrder != null && graphOrder!.isNotEmpty) {
         setGraphOrder(graphOrder!);
+      }
+
+      // 5. 恢复第三方插件挂载与旁路
+      if (savedPluginPath != null &&
+          savedPluginPath!.isNotEmpty &&
+          File(savedPluginPath!).existsSync()) {
+        send({
+          'cmd': 'pluginLoad',
+          'path': savedPluginPath!,
+          'id': savedPluginId,
+        });
+        if (savedPluginBypass) {
+          send({'cmd': 'pluginSetBypass', 'bypass': true});
+        }
       }
     } finally {
       _isReplayingSession = false;

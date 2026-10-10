@@ -16,6 +16,7 @@
  * 结果写 SPSC 环（引擎只写，UI 只读）。
  */
 #include "auradsp_engine.h"
+#include "auradsp_plugin_host.h"
 
 #include <atomic>
 #include <cmath>
@@ -253,6 +254,11 @@ struct auradsp_handle_s {
     } shelf;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
+
+    /* M1 插件宿主引擎与双声道平面工作区 */
+    std::unique_ptr<auradsp::PluginHostManager> plugin_host;
+    float* plugin_buf_l = nullptr;
+    float* plugin_buf_r = nullptr;
 
     char   last_error[256] = {0};
 };
@@ -851,6 +857,17 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
         delete[] h->fft_scratch; delete[] h->viz_hist;
         delete[] h->shelf_scratch; delete h; return nullptr;
     }
+    h->plugin_buf_l = new (std::nothrow) float[(size_t)max_block_frames]();
+    h->plugin_buf_r = new (std::nothrow) float[(size_t)max_block_frames]();
+    if (!h->plugin_buf_l || !h->plugin_buf_r) {
+        delete[] h->fft_scratch; delete[] h->viz_hist;
+        delete[] h->shelf_scratch; delete[] h->conv_scratch;
+        delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete h; return nullptr;
+    }
+    h->plugin_host = std::make_unique<auradsp::PluginHostManager>();
+    h->plugin_host->updateFormat(sample_rate, (uint32_t)max_block_frames);
+
     /* 注意：P-005 的 scratch 绑定必须放在 JamesDSPInit 之后——
      * JamesDSPInit 内部 memset(jdsp, 0, sizeof) 会清掉提前写入的指针 */
 
@@ -882,12 +899,18 @@ void auradsp_destroy(auradsp_handle h) {
             h->open.store(false);
         }
     }
+    if (h->plugin_host) {
+        h->plugin_host->unloadPlugin();
+        h->plugin_host.reset();
+    }
     fv_free(h->fvL);
     fv_free(h->fvR);
     delete[] h->fft_scratch;
     delete[] h->viz_hist;
     delete[] h->shelf_scratch;
     delete[] h->conv_scratch;
+    delete[] h->plugin_buf_l;
+    delete[] h->plugin_buf_r;
     free(h->lp_code);
     delete h;
     global_unref();
@@ -926,6 +949,20 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             const float wetR = fv_voice_process(h->fvR, out[i * 2 + 1], feedback);
             out[i * 2]     = out[i * 2] * dryG + wetL * wetG;
             out[i * 2 + 1] = out[i * 2 + 1] * dryG + wetR * wetG;
+        }
+    }
+
+    /* M1: 第三方插件宿主处理（在 vendor 链与混响后、可视化前） */
+    if (h->plugin_host && h->plugin_host->hasActivePlugin() && !h->plugin_host->isBypassed()) {
+        for (int i = 0; i < frames; ++i) {
+            h->plugin_buf_l[i] = out[i * 2];
+            h->plugin_buf_r[i] = out[i * 2 + 1];
+        }
+        float* planarBuffers[2] = { h->plugin_buf_l, h->plugin_buf_r };
+        h->plugin_host->process(planarBuffers, planarBuffers, (uint32_t)frames);
+        for (int i = 0; i < frames; ++i) {
+            out[i * 2]     = h->plugin_buf_l[i];
+            out[i * 2 + 1] = h->plugin_buf_r[i];
         }
     }
 
@@ -1474,6 +1511,68 @@ const char* auradsp_last_error(auradsp_handle h) {
 uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max_frames) {
     if (!h || !out || !max_frames) return 0;
     return h->viz.read(out, max_frames);
+}
+
+/* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
+int auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan) {
+    if (!h || !h->plugin_host) return 0;
+    std::string extra = extra_dirs_json ? extra_dirs_json : "";
+    return h->plugin_host->scanPlugins(extra, deep_scan != 0);
+}
+
+int auradsp_plugin_get_count(auradsp_handle h) {
+    if (!h || !h->plugin_host) return 0;
+    return (int)h->plugin_host->getScannedCount();
+}
+
+int auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len) {
+    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    std::string json = h->plugin_host->getScannedItemJson((size_t)index);
+    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
+    return written > 0 ? written : 0;
+}
+
+int auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len) {
+    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    std::string json = h->plugin_host->getAllScannedJson();
+    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
+    return written > 0 ? written : 0;
+}
+
+int auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id) {
+    if (!h || !h->plugin_host || !path) return 0;
+    std::string id = plugin_id ? plugin_id : "";
+    bool ok = h->plugin_host->loadPlugin(path, id, h->sample_rate, (uint32_t)h->max_block);
+    return ok ? 1 : 0;
+}
+
+int auradsp_plugin_unload(auradsp_handle h) {
+    if (!h || !h->plugin_host) return 0;
+    h->plugin_host->unloadPlugin();
+    return 1;
+}
+
+int auradsp_plugin_set_bypass(auradsp_handle h, int bypass) {
+    if (!h || !h->plugin_host) return 0;
+    h->plugin_host->setBypass(bypass != 0);
+    return 1;
+}
+
+int auradsp_plugin_get_bypass(auradsp_handle h) {
+    if (!h || !h->plugin_host) return 1;
+    return h->plugin_host->isBypassed() ? 1 : 0;
+}
+
+uint32_t auradsp_plugin_get_latency(auradsp_handle h) {
+    if (!h || !h->plugin_host) return 0;
+    return h->plugin_host->getLatency();
+}
+
+int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
+    if (!h || !h->plugin_host || !out_json || max_len <= 0) return 0;
+    std::string json = h->plugin_host->getStatusJson();
+    int written = snprintf(out_json, (size_t)max_len, "%s", json.c_str());
+    return written > 0 ? written : 0;
 }
 
 } /* extern "C" */

@@ -11,3 +11,13 @@ EXPORTS
     auradsp_viz_read
     auradsp_version
     auradsp_abi
+    auradsp_plugin_scan
+    auradsp_plugin_get_count
+    auradsp_plugin_get_item
+    auradsp_plugin_get_all
+    auradsp_plugin_load
+    auradsp_plugin_unload
+    auradsp_plugin_set_bypass
+    auradsp_plugin_get_bypass
+    auradsp_plugin_get_latency
+    auradsp_plugin_get_status

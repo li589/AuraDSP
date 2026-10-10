@@ -35,6 +35,9 @@ abstract final class SessionMemory {
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
+        'pluginPath': m.pluginManager.activePlugin?.path,
+        'pluginId': m.pluginManager.activePlugin?.id,
+        'pluginBypass': m.pluginManager.isBypassed,
         'parameters': snapshot.params,
       };
 
@@ -78,6 +81,11 @@ abstract final class SessionMemory {
       }
       if (session['lpCode'] is String) {
         m.lpCode = session['lpCode'] as String;
+      }
+      if (session['pluginPath'] is String) {
+        m.savedPluginPath = session['pluginPath'] as String;
+        m.savedPluginId = (session['pluginId'] as String?) ?? '';
+        m.savedPluginBypass = (session['pluginBypass'] as bool?) ?? false;
       }
 
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};

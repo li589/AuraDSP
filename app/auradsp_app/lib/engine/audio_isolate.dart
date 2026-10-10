@@ -684,6 +684,87 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'bypass':
           bypass = m['value'] as bool;
           break;
+        case 'pluginScan':
+          {
+            if (lib != null && handle != null) {
+              final dir = (m['dir'] as String?) ?? '';
+              final deep = (m['deep'] as bool?) ?? false;
+              final count = AuraDspLib.pluginScanWrap(lib, handle, dir: dir, deep: deep);
+              final allJson = AuraDspLib.pluginGetAllJson(lib, handle);
+              send({
+                'evt': 'pluginScanned',
+                'count': count,
+                'json': allJson,
+              });
+            }
+            break;
+          }
+        case 'pluginGetAll':
+          {
+            if (lib != null && handle != null) {
+              final allJson = AuraDspLib.pluginGetAllJson(lib, handle);
+              send({
+                'evt': 'pluginList',
+                'json': allJson,
+              });
+            }
+            break;
+          }
+        case 'pluginLoad':
+          {
+            if (lib != null && handle != null) {
+              final path = m['path'] as String;
+              final id = (m['id'] as String?) ?? '';
+              final rc = AuraDspLib.pluginLoadWrap(lib, handle, path, id: id);
+              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
+              send({
+                'evt': 'pluginLoaded',
+                'path': path,
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginUnload':
+          {
+            if (lib != null && handle != null) {
+              final rc = AuraDspLib.pluginUnloadWrap(lib, handle);
+              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
+              send({
+                'evt': 'pluginUnloaded',
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginSetBypass':
+          {
+            if (lib != null && handle != null) {
+              final bypassVal = m['bypass'] as bool;
+              final rc = AuraDspLib.pluginSetBypassWrap(lib, handle, bypassVal);
+              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
+              send({
+                'evt': 'pluginBypass',
+                'bypass': bypassVal,
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginGetStatus':
+          {
+            if (lib != null && handle != null) {
+              final statusJson = AuraDspLib.pluginGetStatusJson(lib, handle);
+              send({
+                'evt': 'pluginStatus',
+                'status': statusJson,
+              });
+            }
+            break;
+          }
         case 'shutdown':
           running = false;
           break;
@@ -716,6 +797,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'bufferFrames': wasapi.bufferFrames,
       'latencyMs': lib.getLatencyMs(handle),
     });
+    final initialPluginStatus = AuraDspLib.pluginGetStatusJson(lib, handle);
+    send({'evt': 'pluginStatus', 'status': initialPluginStatus});
   } catch (e) {
     send({'evt': 'fatal', 'msg': e.toString()});
     return;

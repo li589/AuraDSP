@@ -96,6 +96,18 @@ uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max
 const char* auradsp_version(void);      /* 引擎 ABI 版本，如 "1.0.0" */
 uint32_t    auradsp_abi(void);          /* ABI 序号，加载时校验 */
 
+/* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
+int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);
+int      auradsp_plugin_get_count(auradsp_handle h);
+int      auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len);
+int      auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len);
+int      auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id);
+int      auradsp_plugin_unload(auradsp_handle h);
+int      auradsp_plugin_set_bypass(auradsp_handle h, int bypass);
+int      auradsp_plugin_get_bypass(auradsp_handle h);
+uint32_t auradsp_plugin_get_latency(auradsp_handle h);
+int      auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

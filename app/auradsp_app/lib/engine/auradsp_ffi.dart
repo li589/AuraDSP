@@ -8,7 +8,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 
-import 'package:ffi/ffi.dart' show malloc, Utf8;
+import 'package:ffi/ffi.dart';
 
 /// 参数 ID 常量（engine_api 参数模型 v1 + v1.1 liveprog 增量）
 abstract final class ParamId {
@@ -176,6 +176,72 @@ final class AuraDspLib {
       .lookup<NativeFunction<Uint32 Function()>>('auradsp_abi')
       .asFunction();
 
+  // M1 第三方插件宿主导出符号
+  late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginScan =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_scan')
+          .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetCount = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_count')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>, int) pluginGetItem =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_get_item')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginGetAll =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_get_all')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<Utf8>, Pointer<Utf8>) pluginLoad =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                      Pointer<Utf8>)>>('auradsp_plugin_load')
+          .asFunction();
+
+  late final int Function(Pointer<Void>) pluginUnload = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_unload')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSetBypass = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_set_bypass')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetBypass = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_bypass')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetLatency = dylib
+      .lookup<NativeFunction<Uint32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_latency')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginGetStatus =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_get_status')
+          .asFunction();
+
   AuraDspLib._(this.dylib);
 
   static AuraDspLib? _cached;
@@ -265,6 +331,66 @@ final class AuraDspLib {
     } finally {
       malloc.free(vp);
       malloc.free(idp);
+    }
+  }
+
+  /// 插件宿主：扫描插件目录并返回发现数
+  static int pluginScanWrap(AuraDspLib lib, Pointer<Void> handle,
+      {String dir = '', bool deep = false}) {
+    final dirPtr = dir.isEmpty ? nullptr : dir.toNativeUtf8();
+    try {
+      return lib.pluginScan(handle, dirPtr, deep ? 1 : 0);
+    } finally {
+      if (dirPtr != nullptr) malloc.free(dirPtr);
+    }
+  }
+
+  /// 插件宿主：获取全部已扫描插件的 JSON 字符串
+  static String pluginGetAllJson(AuraDspLib lib, Pointer<Void> handle,
+      {int maxBytes = 262144}) {
+    final buf = malloc<Uint8>(maxBytes);
+    try {
+      final written = lib.pluginGetAll(handle, buf.cast(), maxBytes);
+      if (written <= 0) return '[]';
+      return buf.cast<Utf8>().toDartString();
+    } finally {
+      malloc.free(buf);
+    }
+  }
+
+  /// 插件宿主：加载插件
+  static int pluginLoadWrap(AuraDspLib lib, Pointer<Void> handle, String path,
+      {String id = ''}) {
+    final pathPtr = path.toNativeUtf8();
+    final idPtr = id.toNativeUtf8();
+    try {
+      return lib.pluginLoad(handle, pathPtr, idPtr);
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(idPtr);
+    }
+  }
+
+  /// 插件宿主：卸载插件
+  static int pluginUnloadWrap(AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginUnload(handle);
+  }
+
+  /// 插件宿主：设置旁路
+  static int pluginSetBypassWrap(AuraDspLib lib, Pointer<Void> handle, bool bypass) {
+    return lib.pluginSetBypass(handle, bypass ? 1 : 0);
+  }
+
+  /// 插件宿主：获取宿主状态 JSON
+  static String pluginGetStatusJson(AuraDspLib lib, Pointer<Void> handle,
+      {int maxBytes = 8192}) {
+    final buf = malloc<Uint8>(maxBytes);
+    try {
+      final written = lib.pluginGetStatus(handle, buf.cast(), maxBytes);
+      if (written <= 0) return '{}';
+      return buf.cast<Utf8>().toDartString();
+    } finally {
+      malloc.free(buf);
     }
   }
 }

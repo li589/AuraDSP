@@ -216,6 +216,64 @@ class _ChainPageState extends State<ChainPage> {
               ],
             ),
           ),
+          // M1 第三方插件插槽状态
+          SectionCard(
+            title: '第三方插件插槽 (M1 VST3/CLAP)',
+            hint: '单插件进程内宿主，挂载于内部 12 级 DSP 链路之后、最终主输出级之前。',
+            child: Container(
+              padding: const EdgeInsets.all(AuraSpace.md),
+              decoration: BoxDecoration(
+                color: p.panel,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: Border.all(color: p.hairline),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    widget.model.pluginManager.hasActivePlugin
+                        ? Icons.extension_rounded
+                        : Icons.extension_off_rounded,
+                    color: widget.model.pluginManager.hasActivePlugin
+                        ? (widget.model.pluginManager.isBypassed ? p.warning : p.accent)
+                        : p.textDim,
+                    size: 24,
+                  ),
+                  const SizedBox(width: AuraSpace.md),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          widget.model.pluginManager.hasActivePlugin
+                              ? '已挂载：${widget.model.pluginManager.activePlugin!.name} (${widget.model.pluginManager.activePlugin!.format.label})'
+                              : '当前未挂载第三方插件',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.bold,
+                            color: p.text,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          widget.model.pluginManager.hasActivePlugin
+                              ? '状态：${widget.model.pluginManager.isBypassed ? "已旁路 (直通)" : "正在处理"} • 延迟：${widget.model.pluginManager.currentLatency} 采样'
+                              : '可在“插件”页面扫描并挂载 64 位 VST3 / CLAP 效果器',
+                          style: captionOf(p, color: p.textDim),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (widget.model.pluginManager.hasActivePlugin)
+                    AuraChip(
+                      widget.model.pluginManager.isBypassed ? '已旁路' : '生效中',
+                      selected: !widget.model.pluginManager.isBypassed,
+                      danger: widget.model.pluginManager.isBypassed,
+                      onTap: () => widget.model.pluginManager.toggleBypass(),
+                    ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
