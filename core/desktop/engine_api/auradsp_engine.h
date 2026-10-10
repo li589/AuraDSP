@@ -101,6 +101,28 @@ int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int 
 int      auradsp_plugin_get_count(auradsp_handle h);
 int      auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len);
 int      auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len);
+
+/* 多插槽控制 (slot: 0..1) */
+int      auradsp_plugin_get_num_slots(auradsp_handle h);
+int      auradsp_plugin_slot_load(auradsp_handle h, int slot, const char* path, const char* plugin_id);
+int      auradsp_plugin_slot_unload(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_set_bypass(auradsp_handle h, int slot, int bypass);
+int      auradsp_plugin_slot_get_bypass(auradsp_handle h, int slot);
+uint32_t auradsp_plugin_slot_get_latency(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, int max_len);
+
+/* 界面与预设 */
+int      auradsp_plugin_slot_show_editor(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_close_editor(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_is_editor_open(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_save_preset(auradsp_handle h, int slot, const char* path);
+int      auradsp_plugin_slot_load_preset(auradsp_handle h, int slot, const char* path);
+
+/* 处理链插入阶段 (0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter) */
+int      auradsp_plugin_slot_set_insert_stage(auradsp_handle h, int slot, int stage);
+int      auradsp_plugin_slot_get_insert_stage(auradsp_handle h, int slot);
+
+/* 兼容旧版单插槽（映射至 slot 0） */
 int      auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id);
 int      auradsp_plugin_unload(auradsp_handle h);
 int      auradsp_plugin_set_bypass(auradsp_handle h, int bypass);

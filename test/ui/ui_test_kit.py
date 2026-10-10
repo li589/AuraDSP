@@ -15,7 +15,7 @@ import ctypes.wintypes as wt
 import os
 import subprocess
 import time
-from PIL import Image, ImageGrab, ImageChops
+from PIL import ImageChops, ImageGrab
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -171,10 +171,12 @@ class AuraAppSession:
         """语义化导航到指定页面"""
         # 1400x900 画布标准下的导航条相对坐标
         nav_coords = {
-            "effects": (36, 120),
-            "chain": (36, 175),
-            "plugins": (36, 230),
-            "liveprog": (36, 285),
+            "home": (90, 201),
+            "effects": (90, 267),
+            "liveprog": (90, 332),
+            "plugins": (90, 399),
+            "chain": (90, 465),
+            "visualizer": (90, 531),
             "settings": (1360, 28),  # 顶栏右上角设置齿轮
         }
         name_lower = page_name.lower()
@@ -228,6 +230,17 @@ class AuraAppSession:
             time.sleep(0.015)
         time.sleep(0.05)
         user32.mouse_event(0x0004, 0, 0, 0, 0)
+        time.sleep(delay)
+
+    def scroll(self, rel_x: int, rel_y: int, clicks: int = -5, delay=0.3):
+        """鼠标滚轮滚动 (clicks < 0 向下滚动，clicks > 0 向上滚动)"""
+        ensure_foreground(self.hwnd)
+        self.geom.refresh()
+        abs_x = self.geom.left + int(rel_x)
+        abs_y = self.geom.top + int(rel_y)
+        user32.SetCursorPos(abs_x, abs_y)
+        time.sleep(0.05)
+        user32.mouse_event(0x0800, 0, 0, int(clicks * 120), 0)
         time.sleep(delay)
 
     def capture(self, save_path: str, local_box=None):

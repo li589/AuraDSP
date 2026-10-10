@@ -687,13 +687,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'pluginScan':
           {
             if (lib != null && handle != null) {
+              final dirs = (m['dirs'] as List?)?.map((e) => e.toString()).toList();
               final dir = (m['dir'] as String?) ?? '';
               final deep = (m['deep'] as bool?) ?? false;
-              final count = AuraDspLib.pluginScanWrap(lib, handle, dir: dir, deep: deep);
+              var totalCount = 0;
+              if (dirs != null && dirs.isNotEmpty) {
+                for (final d in dirs) {
+                  totalCount += AuraDspLib.pluginScanWrap(lib, handle, dir: d, deep: deep);
+                }
+              } else {
+                totalCount = AuraDspLib.pluginScanWrap(lib, handle, dir: dir, deep: deep);
+              }
               final allJson = AuraDspLib.pluginGetAllJson(lib, handle);
               send({
                 'evt': 'pluginScanned',
-                'count': count,
+                'count': totalCount,
                 'json': allJson,
               });
             }
@@ -761,6 +769,163 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               send({
                 'evt': 'pluginStatus',
                 'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotLoad':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final path = m['path'] as String;
+              final id = (m['id'] as String?) ?? '';
+              final rc = AuraDspLib.pluginSlotLoadWrap(lib, handle, slot, path, id: id);
+              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+              final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': statusJson,
+                'stage': stage,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotUnload':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final rc = AuraDspLib.pluginSlotUnloadWrap(lib, handle, slot);
+              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotUnloaded',
+                'slot': slot,
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSetBypass':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final bypassVal = m['bypass'] as bool;
+              final rc = AuraDspLib.pluginSlotSetBypassWrap(lib, handle, slot, bypassVal);
+              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotBypass',
+                'slot': slot,
+                'bypass': bypassVal,
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotGetStatus':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+              final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotStatus',
+                'slot': slot,
+                'status': statusJson,
+                'stage': stage,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotShowEditor':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final title = (m['title'] as String?) ?? '';
+              final rc = AuraDspLib.pluginSlotShowEditorWrap(lib, handle, slot, title: title);
+              send({
+                'evt': 'pluginSlotEditorResult',
+                'slot': slot,
+                'action': 'show',
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotCloseEditor':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final rc = AuraDspLib.pluginSlotCloseEditorWrap(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotEditorResult',
+                'slot': slot,
+                'action': 'close',
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSavePreset':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final path = m['path'] as String;
+              final rc = AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotLoadPreset':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final path = m['path'] as String;
+              final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
+              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': statusJson,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSetInsertStage':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final stage = (m['stage'] as num).toInt();
+              final rc = AuraDspLib.pluginSlotSetInsertStageWrap(lib, handle, slot, stage);
+              send({
+                'evt': 'pluginSlotInsertStage',
+                'slot': slot,
+                'stage': stage,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotGetInsertStage':
+          {
+            if (lib != null && handle != null) {
+              final slot = (m['slot'] as num?)?.toInt() ?? 0;
+              final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
+              send({
+                'evt': 'pluginSlotInsertStage',
+                'slot': slot,
+                'stage': stage,
+                'rc': 1,
               });
             }
             break;

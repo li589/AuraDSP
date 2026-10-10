@@ -21,6 +21,7 @@
 #include <cstdint>
 #include <mutex>
 #include <atomic>
+#include <array>
 
 namespace auradsp {
 
@@ -60,6 +61,15 @@ public:
     virtual void setBypass(bool bypass) = 0;
     virtual uint32_t getLatency() const = 0;
     virtual const PluginMetadata& getMetadata() const = 0;
+
+    // GUI Editor Window (Win32)
+    virtual bool showEditor(void* parentHwnd = nullptr) = 0;
+    virtual void closeEditor() = 0;
+    virtual bool isEditorOpen() const = 0;
+
+    // Presets (State serialization)
+    virtual bool savePreset(const std::string& filePath) = 0;
+    virtual bool loadPreset(const std::string& filePath) = 0;
 };
 
 class PluginScanner {
@@ -72,6 +82,16 @@ public:
 
 class PluginHostManager {
 public:
+    static constexpr size_t kMaxPluginSlots = 2;
+
+    struct PluginSlot {
+        std::unique_ptr<IPluginInstance> instance;
+        std::atomic<bool> hasActive{false};
+        std::atomic<bool> bypassed{false};
+        std::atomic<uint32_t> latency{0};
+        std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
+    };
+
     PluginHostManager();
     ~PluginHostManager();
 
@@ -81,30 +101,46 @@ public:
     std::string getScannedItemJson(size_t index) const;
     std::string getAllScannedJson() const;
 
-    // Lifecycle
+    // Slot-Aware Lifecycle & Control (slot = 0 .. kMaxPluginSlots-1)
+    bool loadPluginSlot(size_t slot, const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize);
+    void unloadPluginSlot(size_t slot);
+    void setBypassSlot(size_t slot, bool bypass);
+    bool isBypassedSlot(size_t slot) const;
+    uint32_t getLatencySlot(size_t slot) const;
+    bool hasActivePluginSlot(size_t slot) const;
+    std::string getStatusJsonSlot(size_t slot) const;
+
+    // Slot GUI & Presets
+    bool showEditorSlot(size_t slot);
+    void closeEditorSlot(size_t slot);
+    bool isEditorOpenSlot(size_t slot) const;
+    bool savePresetSlot(size_t slot, const std::string& filePath);
+    bool loadPresetSlot(size_t slot, const std::string& filePath);
+
+    // Slot Chain Insertion Stage (0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter)
+    void setInsertStageSlot(size_t slot, int stage);
+    int getInsertStageSlot(size_t slot) const;
+
+    // Process single slot (RT-Safe)
+    void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
+
+    // Legacy Single-Slot API (delegates to Slot 0 for 100% backward compatibility)
     bool loadPlugin(const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize);
     void unloadPlugin();
-
-    // Runtime Control
     void setBypass(bool bypass);
     bool isBypassed() const;
     uint32_t getLatency() const;
     bool hasActivePlugin() const;
     std::string getStatusJson() const;
-
-    // RT-Safe audio processing
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames);
 
     // Sample rate / block size update
     void updateFormat(double sampleRate, uint32_t maxBlockSize);
 
-    void unloadPluginLocked();
+    void unloadPluginSlotLocked(size_t slot);
 
     std::vector<PluginMetadata> m_scannedPlugins;
-    std::unique_ptr<IPluginInstance> m_activePlugin;
-    std::atomic<bool> m_hasActivePlugin{false};
-    std::atomic<bool> m_bypassed{false};
-    std::atomic<uint32_t> m_latency{0};
+    std::array<PluginSlot, kMaxPluginSlots> m_slots;
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
     mutable std::recursive_mutex m_hostMutex;

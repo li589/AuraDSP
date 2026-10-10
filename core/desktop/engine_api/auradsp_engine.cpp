@@ -919,7 +919,9 @@ void auradsp_destroy(auradsp_handle h) {
         }
     }
     if (h->plugin_host) {
-        h->plugin_host->unloadPlugin();
+        for (size_t s = 0; s < auradsp::PluginHostManager::kMaxPluginSlots; ++s) {
+            h->plugin_host->unloadPluginSlot(s);
+        }
         h->plugin_host.reset();
     }
     fv_free(h->fvL);
@@ -935,6 +937,27 @@ void auradsp_destroy(auradsp_handle h) {
     global_unref();
 }
 
+static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float* buffer, int frames) {
+    if (!h || !h->plugin_host) return;
+    for (size_t s = 0; s < auradsp::PluginHostManager::kMaxPluginSlots; ++s) {
+        if (h->plugin_host->hasActivePluginSlot(s) &&
+            !h->plugin_host->isBypassedSlot(s) &&
+            h->plugin_host->getInsertStageSlot(s) == stage) {
+
+            for (int i = 0; i < frames; ++i) {
+                h->plugin_buf_l[i] = buffer[i * 2];
+                h->plugin_buf_r[i] = buffer[i * 2 + 1];
+            }
+            float* planarBuffers[2] = { h->plugin_buf_l, h->plugin_buf_r };
+            h->plugin_host->processSlot(s, planarBuffers, planarBuffers, static_cast<uint32_t>(frames));
+            for (int i = 0; i < frames; ++i) {
+                buffer[i * 2]     = h->plugin_buf_l[i];
+                buffer[i * 2 + 1] = h->plugin_buf_r[i];
+            }
+        }
+    }
+}
+
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
     if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
@@ -946,16 +969,27 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
         return;
     }
-    /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
+    /* 首先将输入拷入 shelf_scratch（防 in 原位不可写并作为链前置工作区） */
+    memcpy(h->shelf_scratch, in, (size_t)frames * 2 * sizeof(float));
+
+    /* Stage 0: Pre-DSP（链头，最前置） */
+    process_plugin_slots_stage(h, 0, h->shelf_scratch, frames);
+
+    /* M5-b：低频搁架在 vendor 链前 */
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
         h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
-        /* M5-b：低频搁架在 vendor 链前（链头效果；scratch 复用 in 原位不可写） */
-        memcpy(h->shelf_scratch, in, (size_t)frames * 2 * sizeof(float));
         shelf_process(h, h->shelf_scratch, frames);
-        h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, out, (size_t)frames);
-    } else {
-        h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(in), out, (size_t)frames);
     }
+
+    /* Stage 1: Pre-Vendor（主效果前） */
+    process_plugin_slots_stage(h, 1, h->shelf_scratch, frames);
+
+    /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
+    h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, out, (size_t)frames);
+
+    /* Stage 2: Post-Vendor（主效果后 / 混响前） */
+    process_plugin_slots_stage(h, 2, out, frames);
+
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
     if (h->p.fv_enable.load(std::memory_order_relaxed)) {
         const float feedback =
@@ -973,19 +1007,8 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         }
     }
 
-    /* M1: 第三方插件宿主处理（在 vendor 链与混响后、可视化前） */
-    if (h->plugin_host && h->plugin_host->hasActivePlugin() && !h->plugin_host->isBypassed()) {
-        for (int i = 0; i < frames; ++i) {
-            h->plugin_buf_l[i] = out[i * 2];
-            h->plugin_buf_r[i] = out[i * 2 + 1];
-        }
-        float* planarBuffers[2] = { h->plugin_buf_l, h->plugin_buf_r };
-        h->plugin_host->process(planarBuffers, planarBuffers, (uint32_t)frames);
-        for (int i = 0; i < frames; ++i) {
-            out[i * 2]     = h->plugin_buf_l[i];
-            out[i * 2 + 1] = h->plugin_buf_r[i];
-        }
-    }
+    /* Stage 3: Post-Reverb（混响后，默认阶段） */
+    process_plugin_slots_stage(h, 3, out, frames);
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
     const int total_samples = frames * 2;
@@ -999,6 +1022,9 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             out[i] = -10.0f;
         }
     }
+
+    /* Stage 4: Post-Limiter（链尾，最终安全输出后） */
+    process_plugin_slots_stage(h, 4, out, frames);
 
     /* 可视化：每块写入历史窗（无条件），每 kVizInterval 帧产出一次；
      * 失败不影响音频路径 */
@@ -1585,38 +1611,44 @@ int auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len) {
     return (int)json.length();
 }
 
-int auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id) {
-    if (!h || !h->plugin_host || !path) return 0;
+/* ---- 多插槽感知控制 (slot = 0..1) ---- */
+int auradsp_plugin_get_num_slots(auradsp_handle h) {
+    (void)h;
+    return (int)auradsp::PluginHostManager::kMaxPluginSlots;
+}
+
+int auradsp_plugin_slot_load(auradsp_handle h, int slot, const char* path, const char* plugin_id) {
+    if (!h || !h->plugin_host || !path || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     std::string id = plugin_id ? plugin_id : "";
-    bool ok = h->plugin_host->loadPlugin(path, id, h->sample_rate, (uint32_t)h->max_block);
+    bool ok = h->plugin_host->loadPluginSlot((size_t)slot, path, id, h->sample_rate, (uint32_t)h->max_block);
     return ok ? 1 : 0;
 }
 
-int auradsp_plugin_unload(auradsp_handle h) {
-    if (!h || !h->plugin_host) return 0;
-    h->plugin_host->unloadPlugin();
+int auradsp_plugin_slot_unload(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    h->plugin_host->unloadPluginSlot((size_t)slot);
     return 1;
 }
 
-int auradsp_plugin_set_bypass(auradsp_handle h, int bypass) {
-    if (!h || !h->plugin_host) return 0;
-    h->plugin_host->setBypass(bypass != 0);
+int auradsp_plugin_slot_set_bypass(auradsp_handle h, int slot, int bypass) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    h->plugin_host->setBypassSlot((size_t)slot, bypass != 0);
     return 1;
 }
 
-int auradsp_plugin_get_bypass(auradsp_handle h) {
-    if (!h || !h->plugin_host) return 1;
-    return h->plugin_host->isBypassed() ? 1 : 0;
+int auradsp_plugin_slot_get_bypass(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 1;
+    return h->plugin_host->isBypassedSlot((size_t)slot) ? 1 : 0;
 }
 
-uint32_t auradsp_plugin_get_latency(auradsp_handle h) {
-    if (!h || !h->plugin_host) return 0;
-    return h->plugin_host->getLatency();
+uint32_t auradsp_plugin_slot_get_latency(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->getLatencySlot((size_t)slot);
 }
 
-int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
-    if (!h || !h->plugin_host || !out_json || max_len <= 1) return 0;
-    std::string json = h->plugin_host->getStatusJson();
+int auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, int max_len) {
+    if (!h || !h->plugin_host || !out_json || max_len <= 1 || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    std::string json = h->plugin_host->getStatusJsonSlot((size_t)slot);
     if ((int)json.length() >= max_len) {
         memcpy(out_json, json.data(), (size_t)(max_len - 1));
         out_json[max_len - 1] = '\0';
@@ -1625,6 +1657,68 @@ int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
     memcpy(out_json, json.data(), json.length());
     out_json[json.length()] = '\0';
     return (int)json.length();
+}
+
+int auradsp_plugin_slot_show_editor(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->showEditorSlot((size_t)slot) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_close_editor(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    h->plugin_host->closeEditorSlot((size_t)slot);
+    return 1;
+}
+
+int auradsp_plugin_slot_is_editor_open(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->isEditorOpenSlot((size_t)slot) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_save_preset(auradsp_handle h, int slot, const char* path) {
+    if (!h || !h->plugin_host || !path || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->savePresetSlot((size_t)slot, path) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_load_preset(auradsp_handle h, int slot, const char* path) {
+    if (!h || !h->plugin_host || !path || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->loadPresetSlot((size_t)slot, path) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_set_insert_stage(auradsp_handle h, int slot, int stage) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    h->plugin_host->setInsertStageSlot((size_t)slot, stage);
+    return 1;
+}
+
+int auradsp_plugin_slot_get_insert_stage(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 3;
+    return h->plugin_host->getInsertStageSlot((size_t)slot);
+}
+
+/* 兼容旧版单插槽（映射至 slot 0） */
+int auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id) {
+    return auradsp_plugin_slot_load(h, 0, path, plugin_id);
+}
+
+int auradsp_plugin_unload(auradsp_handle h) {
+    return auradsp_plugin_slot_unload(h, 0);
+}
+
+int auradsp_plugin_set_bypass(auradsp_handle h, int bypass) {
+    return auradsp_plugin_slot_set_bypass(h, 0, bypass);
+}
+
+int auradsp_plugin_get_bypass(auradsp_handle h) {
+    return auradsp_plugin_slot_get_bypass(h, 0);
+}
+
+uint32_t auradsp_plugin_get_latency(auradsp_handle h) {
+    return auradsp_plugin_slot_get_latency(h, 0);
+}
+
+int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
+    return auradsp_plugin_slot_get_status(h, 0, out_json, max_len);
 }
 
 } /* extern "C" */

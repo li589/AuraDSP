@@ -97,4 +97,46 @@ void main() {
       expect(EelLinter.lint(''), isEmpty);
     });
   });
+
+  group('EelSliderParser Tests', () {
+    test('解析头部显式声明 slider', () {
+      const src = '''
+slider1:1.0<0,2,0.01>总音量 (Volume)
+slider3:500<20,20000,10>截止频率 (Cutoff)
+@init
+x = 0;
+@sample
+spl0 *= slider1;
+''';
+      final sliders = EelSliderParser.parse(src);
+      expect(sliders.containsKey(1), isTrue);
+      expect(sliders[1]!.displayName, '总音量 (Volume)');
+      expect(sliders[1]!.defaultVal, 1.0);
+      expect(sliders[1]!.minVal, 0.0);
+      expect(sliders[1]!.maxVal, 2.0);
+      expect(sliders[1]!.step, 0.01);
+
+      expect(sliders.containsKey(3), isTrue);
+      expect(sliders[3]!.displayName, '截止频率 (Cutoff)');
+      expect(sliders[3]!.defaultVal, 500.0);
+      expect(sliders[3]!.minVal, 20.0);
+      expect(sliders[3]!.maxVal, 20000.0);
+
+      expect(sliders.containsKey(2), isFalse);
+    });
+
+    test('解析代码中隐式引用的 slider', () {
+      const src = '''
+@init
+c = 1;
+@sample
+spl0 = spl0 * slider2 + slider4;
+''';
+      final sliders = EelSliderParser.parse(src);
+      expect(sliders.containsKey(2), isTrue);
+      expect(sliders.containsKey(4), isTrue);
+      expect(sliders.containsKey(1), isFalse);
+      expect(sliders.containsKey(3), isFalse);
+    });
+  });
 }

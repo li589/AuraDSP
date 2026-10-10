@@ -88,11 +88,21 @@ void main() {
       expect(dispatchedCmds.first['deep'], isTrue);
 
       manager.unloadPlugin();
-      expect(dispatchedCmds.last['cmd'], 'pluginUnload');
+      expect(dispatchedCmds.last['cmd'], 'pluginSlotUnload');
+      expect(dispatchedCmds.last['slot'], 0);
 
       manager.setBypass(true);
-      expect(dispatchedCmds.last['cmd'], 'pluginSetBypass');
+      expect(dispatchedCmds.last['cmd'], 'pluginSlotSetBypass');
+      expect(dispatchedCmds.last['slot'], 0);
       expect(dispatchedCmds.last['bypass'], isTrue);
+
+      // Slot 1
+      manager.selectSlot(1);
+      expect(manager.selectedSlot, 1);
+      manager.setInsertStage(PluginInsertStage.preDsp);
+      expect(dispatchedCmds.last['cmd'], 'pluginSlotSetInsertStage');
+      expect(dispatchedCmds.last['slot'], 1);
+      expect(dispatchedCmds.last['stage'], PluginInsertStage.preDsp);
     });
 
     test('PluginManager event handling and filtering', () {

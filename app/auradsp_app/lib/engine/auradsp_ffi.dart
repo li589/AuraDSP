@@ -242,6 +242,87 @@ final class AuraDspLib {
                       Int32)>>('auradsp_plugin_get_status')
           .asFunction();
 
+  // M1 多插槽与原生 GUI 编辑器、预设管理导出符号
+  late final int Function(Pointer<Void>) pluginGetNumSlots = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_num_slots')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>, Pointer<Utf8>) pluginSlotLoad =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_load')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotUnload = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_unload')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, int) pluginSlotSetBypass = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
+          'auradsp_plugin_slot_set_bypass')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotGetLatency = dylib
+      .lookup<NativeFunction<Uint32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_get_latency')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>, int) pluginSlotGetStatus =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_slot_get_status')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>) pluginSlotShowEditor =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_show_editor')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotCloseEditor = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_close_editor')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotIsEditorOpen = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_is_editor_open')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>) pluginSlotSavePreset =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_save_preset')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>) pluginSlotLoadPreset =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_load_preset')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int, int) pluginSlotSetInsertStage = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
+          'auradsp_plugin_slot_set_insert_stage')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotGetInsertStage = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_get_insert_stage')
+      .asFunction();
+
   AuraDspLib._(this.dylib);
 
   static AuraDspLib? _cached;
@@ -392,5 +473,114 @@ final class AuraDspLib {
     } finally {
       malloc.free(buf);
     }
+  }
+
+  // ---- 多插槽与编辑器、预设管理包装方法 ----
+
+  /// 获取支持的最大插槽数量
+  static int pluginGetNumSlotsWrap(AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginGetNumSlots(handle);
+  }
+
+  /// 槽位加载插件
+  static int pluginSlotLoadWrap(AuraDspLib lib, Pointer<Void> handle, int slot,
+      String path, {String id = ''}) {
+    final pathPtr = path.toNativeUtf8();
+    final idPtr = id.toNativeUtf8();
+    try {
+      return lib.pluginSlotLoad(handle, slot, pathPtr, idPtr);
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(idPtr);
+    }
+  }
+
+  /// 槽位卸载插件
+  static int pluginSlotUnloadWrap(AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotUnload(handle, slot);
+  }
+
+  /// 槽位设置旁路
+  static int pluginSlotSetBypassWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, bool bypass) {
+    return lib.pluginSlotSetBypass(handle, slot, bypass ? 1 : 0);
+  }
+
+  /// 槽位获取延迟（采样点）
+  static int pluginSlotGetLatencyWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotGetLatency(handle, slot);
+  }
+
+  /// 槽位获取状态 JSON
+  static String pluginSlotGetStatusJson(
+      AuraDspLib lib, Pointer<Void> handle, int slot,
+      {int maxBytes = 8192}) {
+    final buf = malloc<Uint8>(maxBytes);
+    try {
+      final written = lib.pluginSlotGetStatus(handle, slot, buf.cast(), maxBytes);
+      if (written <= 0) return '{}';
+      return buf.cast<Utf8>().toDartString();
+    } finally {
+      malloc.free(buf);
+    }
+  }
+
+  /// 打开插件原生 GUI 编辑器窗口
+  static int pluginSlotShowEditorWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot,
+      {String title = ''}) {
+    final titlePtr = title.isEmpty ? nullptr : title.toNativeUtf8();
+    try {
+      return lib.pluginSlotShowEditor(handle, slot, titlePtr);
+    } finally {
+      if (titlePtr != nullptr) malloc.free(titlePtr);
+    }
+  }
+
+  /// 关闭插件原生 GUI 编辑器窗口
+  static int pluginSlotCloseEditorWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotCloseEditor(handle, slot);
+  }
+
+  /// 检查插件 GUI 编辑器是否打开
+  static bool pluginSlotIsEditorOpenWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotIsEditorOpen(handle, slot) == 1;
+  }
+
+  /// 保存插件预设
+  static int pluginSlotSavePresetWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, String filePath) {
+    final pathPtr = filePath.toNativeUtf8();
+    try {
+      return lib.pluginSlotSavePreset(handle, slot, pathPtr);
+    } finally {
+      malloc.free(pathPtr);
+    }
+  }
+
+  /// 加载插件预设
+  static int pluginSlotLoadPresetWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, String filePath) {
+    final pathPtr = filePath.toNativeUtf8();
+    try {
+      return lib.pluginSlotLoadPreset(handle, slot, pathPtr);
+    } finally {
+      malloc.free(pathPtr);
+    }
+  }
+
+  /// 设置插件在处理链上的插入阶段 (0: Pre-DSP, 1: Pre-Vendor, 2: Post-Vendor, 3: Post-Reverb, 4: Post-Limiter)
+  static int pluginSlotSetInsertStageWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, int stage) {
+    return lib.pluginSlotSetInsertStage(handle, slot, stage);
+  }
+
+  /// 获取插件在处理链上的插入阶段
+  static int pluginSlotGetInsertStageWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotGetInsertStage(handle, slot);
   }
 }

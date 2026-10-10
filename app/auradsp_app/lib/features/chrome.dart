@@ -679,7 +679,9 @@ class _AuraChipState extends State<AuraChip> {
                 style: TextStyle(
                   fontSize: 12.5,
                   fontWeight:
-                      widget.selected ? FontWeight.w700 : FontWeight.w500,
+                      widget.selected ? FontWeight.w600 : FontWeight.w500,
+                  fontFamilyFallback: kBodyCjkFallback,
+                  letterSpacing: 0.1,
                   color: tint,
                 ),
                 child: Text(widget.label),

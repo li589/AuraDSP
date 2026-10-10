@@ -15,6 +15,9 @@
 #include <iomanip>
 #include <algorithm>
 #include <cstring>
+#include <thread>
+#include <future>
+#include <array>
 
 // CLAP headers
 #include <clap/clap.h>
@@ -25,6 +28,112 @@
 namespace fs = std::filesystem;
 
 namespace auradsp {
+
+//------------------------------------------------------------------------------
+// Win32 Editor Window Host
+//------------------------------------------------------------------------------
+static LRESULT CALLBACK PluginWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CLOSE) {
+        DestroyWindow(hwnd);
+        return 0;
+    }
+    if (msg == WM_DESTROY) {
+        PostQuitMessage(0);
+        return 0;
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void EnsureWindowClassRegistered() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
+        wc.lpfnWndProc = PluginWindowProc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = L"AuraDSP_Plugin_Host_Window";
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        RegisterClassExW(&wc);
+    });
+}
+
+//------------------------------------------------------------------------------
+// Steinberg VST3 Memory Stream for State / Preset Serialization
+//------------------------------------------------------------------------------
+class Vst3MemoryStream : public Steinberg::IBStream {
+public:
+    Vst3MemoryStream() = default;
+    virtual ~Vst3MemoryStream() = default;
+
+    Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::IBStream::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = this;
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+
+    Steinberg::uint32 PLUGIN_API addRef() override {
+        return ++m_ref;
+    }
+
+    Steinberg::uint32 PLUGIN_API release() override {
+        Steinberg::uint32 r = --m_ref;
+        if (r == 0) delete this;
+        return r;
+    }
+
+    Steinberg::tresult PLUGIN_API read(void* buffer, Steinberg::int32 numBytes, Steinberg::int32* numBytesRead) override {
+        if (numBytes < 0 || !buffer) return Steinberg::kInvalidArgument;
+        size_t available = (m_pos < m_data.size()) ? (m_data.size() - m_pos) : 0;
+        size_t toRead = (std::min)(static_cast<size_t>(numBytes), available);
+        if (toRead > 0) {
+            std::memcpy(buffer, m_data.data() + m_pos, toRead);
+            m_pos += toRead;
+        }
+        if (numBytesRead) *numBytesRead = static_cast<Steinberg::int32>(toRead);
+        return Steinberg::kResultOk;
+    }
+
+    Steinberg::tresult PLUGIN_API write(void* buffer, Steinberg::int32 numBytes, Steinberg::int32* numBytesWritten) override {
+        if (numBytes < 0 || !buffer) return Steinberg::kInvalidArgument;
+        if (m_pos + numBytes > m_data.size()) {
+            m_data.resize(m_pos + numBytes);
+        }
+        std::memcpy(m_data.data() + m_pos, buffer, static_cast<size_t>(numBytes));
+        m_pos += static_cast<size_t>(numBytes);
+        if (numBytesWritten) *numBytesWritten = numBytes;
+        return Steinberg::kResultOk;
+    }
+
+    Steinberg::tresult PLUGIN_API seek(Steinberg::int64 pos, Steinberg::int32 mode, Steinberg::int64* result) override {
+        Steinberg::int64 newPos = static_cast<Steinberg::int64>(m_pos);
+        switch (mode) {
+            case kIBSeekSet: newPos = pos; break;
+            case kIBSeekCur: newPos += pos; break;
+            case kIBSeekEnd: newPos = static_cast<Steinberg::int64>(m_data.size()) + pos; break;
+            default: return Steinberg::kInvalidArgument;
+        }
+        if (newPos < 0) return Steinberg::kInvalidArgument;
+        m_pos = static_cast<size_t>(newPos);
+        if (result) *result = newPos;
+        return Steinberg::kResultOk;
+    }
+
+    Steinberg::tresult PLUGIN_API tell(Steinberg::int64* pos) override {
+        if (!pos) return Steinberg::kInvalidArgument;
+        *pos = static_cast<Steinberg::int64>(m_pos);
+        return Steinberg::kResultOk;
+    }
+
+    std::vector<uint8_t> m_data;
+    size_t m_pos = 0;
+    std::atomic<Steinberg::uint32> m_ref{1};
+};
 
 //------------------------------------------------------------------------------
 // JSON Helpers
@@ -112,6 +221,11 @@ public:
         m_meta.is64Bit = true;
 
         std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::CLAP);
+        if (binaryPath.empty()) {
+            m_meta.isCompatible = false;
+            m_meta.errorMessage = "Invalid CLAP bundle or binary path";
+            return false;
+        }
         std::wstring wpath = utf8ToWide(binaryPath);
         m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!m_module) {
@@ -213,6 +327,7 @@ public:
 
     void unload() override {
         if (m_isLoaded) {
+            closeEditor();
             deactivate();
             if (m_plugin) {
                 m_plugin->destroy(m_plugin);
@@ -325,6 +440,156 @@ public:
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
 
+    bool showEditor(void* parentHwnd = nullptr) override {
+        if (!m_isLoaded || !m_plugin) return false;
+        if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
+            SetForegroundWindow(m_editorHwnd);
+            ShowWindow(m_editorHwnd, SW_SHOW);
+            return true;
+        }
+        if (m_editorThread.joinable()) {
+            m_editorThread.join();
+        }
+
+        auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+        if (!gui) return false;
+        if (!gui->is_api_supported || !gui->is_api_supported(m_plugin, CLAP_WINDOW_API_WIN32, false)) {
+            return false;
+        }
+
+        std::promise<bool> initPromise;
+        auto initFuture = initPromise.get_future();
+
+        m_editorThread = std::thread([this, gui, &initPromise]() {
+            EnsureWindowClassRegistered();
+            if (!gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false)) {
+                initPromise.set_value(false);
+                return;
+            }
+
+            uint32_t width = 800, height = 600;
+            if (gui->get_size) {
+                gui->get_size(m_plugin, &width, &height);
+            }
+            if (width < 200) width = 800;
+            if (height < 150) height = 600;
+
+            std::wstring title = L"[AuraDSP] " + utf8ToWide(m_meta.name);
+            RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+            DWORD style = WS_OVERLAPPEDWINDOW;
+            AdjustWindowRect(&rc, style, FALSE);
+
+            HWND hwnd = CreateWindowExW(
+                0, L"AuraDSP_Plugin_Host_Window", title.c_str(),
+                style, CW_USEDEFAULT, CW_USEDEFAULT,
+                rc.right - rc.left, rc.bottom - rc.top,
+                NULL, NULL, GetModuleHandleW(NULL), NULL);
+
+            if (!hwnd) {
+                if (gui->destroy) gui->destroy(m_plugin);
+                initPromise.set_value(false);
+                return;
+            }
+
+            m_editorHwnd = hwnd;
+            m_editorOpen.store(true, std::memory_order_release);
+
+            clap_window_t win = {};
+            win.api = CLAP_WINDOW_API_WIN32;
+            win.win32 = hwnd;
+            if (gui->set_parent) gui->set_parent(m_plugin, &win);
+            if (gui->show) gui->show(m_plugin);
+
+            ShowWindow(hwnd, SW_SHOW);
+            UpdateWindow(hwnd);
+
+            initPromise.set_value(true);
+
+            MSG msg;
+            while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+
+            if (gui->hide) gui->hide(m_plugin);
+            if (gui->destroy) gui->destroy(m_plugin);
+            m_editorHwnd = nullptr;
+            m_editorOpen.store(false, std::memory_order_release);
+        });
+
+        return initFuture.get();
+    }
+
+    void closeEditor() override {
+        if (m_editorHwnd && IsWindow(m_editorHwnd)) {
+            PostMessageW(m_editorHwnd, WM_CLOSE, 0, 0);
+        }
+        if (m_editorThread.joinable()) {
+            if (m_editorThread.get_id() != std::this_thread::get_id()) {
+                m_editorThread.join();
+            } else {
+                m_editorThread.detach();
+            }
+        }
+        m_editorOpen.store(false, std::memory_order_release);
+    }
+
+    bool isEditorOpen() const override {
+        return m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd != nullptr && IsWindow(m_editorHwnd);
+    }
+
+    struct ClapOstreamContext {
+        std::ofstream* ofs;
+    };
+    static int64_t clapOstreamWrite(const clap_ostream_t* stream, const void* buffer, uint64_t size) {
+        auto ctx = reinterpret_cast<ClapOstreamContext*>(stream->ctx);
+        ctx->ofs->write(reinterpret_cast<const char*>(buffer), static_cast<std::streamsize>(size));
+        return static_cast<int64_t>(size);
+    }
+
+    bool savePreset(const std::string& filePath) override {
+        if (!m_isLoaded || !m_plugin) return false;
+        auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
+        if (!stateExt || !stateExt->save) return false;
+
+        fs::path p(filePath);
+        if (p.has_parent_path() && !fs::exists(p.parent_path())) {
+            fs::create_directories(p.parent_path());
+        }
+
+        std::ofstream ofs(filePath, std::ios::binary);
+        if (!ofs) return false;
+        ClapOstreamContext ctx{&ofs};
+        clap_ostream_t ostream = { &ctx, clapOstreamWrite };
+        return stateExt->save(m_plugin, &ostream);
+    }
+
+    struct ClapIstreamContext {
+        std::ifstream* ifs;
+    };
+    static int64_t clapIstreamRead(const clap_istream_t* stream, void* buffer, uint64_t size) {
+        auto ctx = reinterpret_cast<ClapIstreamContext*>(stream->ctx);
+        ctx->ifs->read(reinterpret_cast<char*>(buffer), static_cast<std::streamsize>(size));
+        return static_cast<int64_t>(ctx->ifs->gcount());
+    }
+
+    bool loadPreset(const std::string& filePath) override {
+        if (!m_isLoaded || !m_plugin) return false;
+        if (!fs::exists(filePath)) return false;
+
+        auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
+        if (!stateExt || !stateExt->load) return false;
+
+        std::ifstream ifs(filePath, std::ios::binary);
+        if (!ifs) return false;
+        ClapIstreamContext ctx{&ifs};
+        clap_istream_t istream = { &ctx, clapIstreamRead };
+        return stateExt->load(m_plugin, &istream);
+    }
+
 private:
     void initHostStruct() {
         m_host.clap_version = CLAP_VERSION;
@@ -358,6 +623,10 @@ private:
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
+
+    std::thread m_editorThread;
+    HWND m_editorHwnd = nullptr;
+    std::atomic<bool> m_editorOpen{false};
 };
 
 //------------------------------------------------------------------------------
@@ -376,6 +645,11 @@ public:
         m_meta.is64Bit = true;
 
         std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::VST3);
+        if (binaryPath.empty()) {
+            m_meta.isCompatible = false;
+            m_meta.errorMessage = "Invalid VST3 bundle or binary path";
+            return false;
+        }
         std::wstring wpath = utf8ToWide(binaryPath);
         m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!m_module) {
@@ -484,6 +758,25 @@ public:
             return false;
         }
 
+        // Query IEditController
+        Steinberg::tresult cRes = m_component->queryInterface(
+            Steinberg::Vst::IEditController::iid,
+            reinterpret_cast<void**>(&m_controller)
+        );
+        if (cRes != Steinberg::kResultOk || !m_controller) {
+            Steinberg::TUID controllerCID;
+            if (m_component->getControllerClassId(controllerCID) == Steinberg::kResultOk) {
+                m_factory->createInstance(
+                    controllerCID,
+                    Steinberg::Vst::IEditController::iid.toTUID(),
+                    reinterpret_cast<void**>(&m_controller)
+                );
+                if (m_controller) {
+                    m_controller->initialize(nullptr);
+                }
+            }
+        }
+
         m_isLoaded = true;
         m_meta.isCompatible = true;
         return true;
@@ -491,7 +784,13 @@ public:
 
     void unload() override {
         if (m_isLoaded) {
+            closeEditor();
             deactivate();
+            if (m_controller) {
+                m_controller->terminate();
+                m_controller->release();
+                m_controller = nullptr;
+            }
             if (m_processor) {
                 m_processor->release();
                 m_processor = nullptr;
@@ -502,12 +801,6 @@ public:
                 m_component = nullptr;
             }
             m_factory = nullptr;
-
-            typedef bool (PLUGIN_API *ExitDllFunc)();
-            auto exitDll = reinterpret_cast<ExitDllFunc>(GetProcAddress(m_module, "ExitDll"));
-            if (exitDll) {
-                exitDll();
-            }
 
             if (m_module) {
                 FreeLibrary(m_module);
@@ -614,11 +907,152 @@ public:
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
 
+    bool showEditor(void* parentHwnd = nullptr) override {
+        if (!m_isLoaded || !m_component) return false;
+        if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
+            SetForegroundWindow(m_editorHwnd);
+            ShowWindow(m_editorHwnd, SW_SHOW);
+            return true;
+        }
+        if (m_editorThread.joinable()) {
+            m_editorThread.join();
+        }
+
+        if (!m_controller) return false;
+        Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
+        if (!view) return false;
+        if (view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND) != Steinberg::kResultTrue) {
+            view->release();
+            return false;
+        }
+
+        std::promise<bool> initPromise;
+        auto initFuture = initPromise.get_future();
+
+        m_editorThread = std::thread([this, view, &initPromise]() {
+            EnsureWindowClassRegistered();
+            Steinberg::ViewRect vr;
+            int width = 800, height = 600;
+            if (view->getSize(&vr) == Steinberg::kResultOk) {
+                width = vr.right - vr.left;
+                height = vr.bottom - vr.top;
+            }
+            if (width < 200) width = 800;
+            if (height < 150) height = 600;
+
+            std::wstring title = L"[AuraDSP] " + utf8ToWide(m_meta.name);
+            RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+            DWORD style = WS_OVERLAPPEDWINDOW;
+            AdjustWindowRect(&rc, style, FALSE);
+
+            HWND hwnd = CreateWindowExW(
+                0, L"AuraDSP_Plugin_Host_Window", title.c_str(),
+                style, CW_USEDEFAULT, CW_USEDEFAULT,
+                rc.right - rc.left, rc.bottom - rc.top,
+                NULL, NULL, GetModuleHandleW(NULL), NULL);
+
+            if (!hwnd) {
+                view->release();
+                initPromise.set_value(false);
+                return;
+            }
+
+            m_editorHwnd = hwnd;
+            m_editorOpen.store(true, std::memory_order_release);
+
+            view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
+
+            ShowWindow(hwnd, SW_SHOW);
+            UpdateWindow(hwnd);
+
+            initPromise.set_value(true);
+
+            MSG msg;
+            while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+                TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+
+            view->removed();
+            view->release();
+            m_editorHwnd = nullptr;
+            m_editorOpen.store(false, std::memory_order_release);
+        });
+
+        return initFuture.get();
+    }
+
+    void closeEditor() override {
+        if (m_editorHwnd && IsWindow(m_editorHwnd)) {
+            PostMessageW(m_editorHwnd, WM_CLOSE, 0, 0);
+        }
+        if (m_editorThread.joinable()) {
+            if (m_editorThread.get_id() != std::this_thread::get_id()) {
+                m_editorThread.join();
+            } else {
+                m_editorThread.detach();
+            }
+        }
+        m_editorOpen.store(false, std::memory_order_release);
+    }
+
+    bool isEditorOpen() const override {
+        return m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd != nullptr && IsWindow(m_editorHwnd);
+    }
+
+    bool savePreset(const std::string& filePath) override {
+        if (!m_isLoaded || !m_component) return false;
+        auto stream = new Vst3MemoryStream();
+        Steinberg::tresult res = m_component->getState(stream);
+        if (res != Steinberg::kResultOk) {
+            stream->release();
+            return false;
+        }
+
+        fs::path p(filePath);
+        if (p.has_parent_path() && !fs::exists(p.parent_path())) {
+            fs::create_directories(p.parent_path());
+        }
+
+        std::ofstream ofs(filePath, std::ios::binary);
+        if (!ofs) {
+            stream->release();
+            return false;
+        }
+        ofs.write(reinterpret_cast<const char*>(stream->m_data.data()), stream->m_data.size());
+        stream->release();
+        return true;
+    }
+
+    bool loadPreset(const std::string& filePath) override {
+        if (!m_isLoaded || !m_component) return false;
+        if (!fs::exists(filePath)) return false;
+
+        std::ifstream ifs(filePath, std::ios::binary);
+        if (!ifs) return false;
+        ifs.seekg(0, std::ios::end);
+        size_t sz = static_cast<size_t>(ifs.tellg());
+        ifs.seekg(0, std::ios::beg);
+        std::vector<uint8_t> buf(sz);
+        ifs.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz));
+
+        auto stream = new Vst3MemoryStream();
+        stream->m_data = std::move(buf);
+        Steinberg::tresult res = m_component->setState(stream);
+        if (res == Steinberg::kResultOk && m_controller) {
+            stream->seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
+            m_controller->setComponentState(stream);
+        }
+        stream->release();
+        return (res == Steinberg::kResultOk);
+    }
+
 private:
     HMODULE m_module = nullptr;
     Steinberg::IPluginFactory* m_factory = nullptr;
     Steinberg::Vst::IComponent* m_component = nullptr;
     Steinberg::Vst::IAudioProcessor* m_processor = nullptr;
+    Steinberg::Vst::IEditController* m_controller = nullptr;
 
     PluginMetadata m_meta;
     bool m_isLoaded = false;
@@ -626,6 +1060,10 @@ private:
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
+
+    std::thread m_editorThread;
+    HWND m_editorHwnd = nullptr;
+    std::atomic<bool> m_editorOpen{false};
 };
 
 //------------------------------------------------------------------------------
@@ -665,11 +1103,12 @@ std::vector<std::string> PluginScanner::getDefaultSearchPaths() {
 }
 
 std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, PluginFormat format) {
-    if (fs::is_directory(bundlePath)) {
+    std::error_code ec;
+    if (fs::is_directory(bundlePath, ec)) {
         if (format == PluginFormat::VST3) {
             fs::path subBinary = fs::path(bundlePath) / "Contents" / "x86_64-win";
-            if (fs::exists(subBinary)) {
-                for (const auto& entry : fs::directory_iterator(subBinary)) {
+            if (fs::exists(subBinary, ec)) {
+                for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
                     if (entry.path().extension() == ".vst3") {
                         return entry.path().string();
                     }
@@ -677,20 +1116,23 @@ std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, Pl
             }
         } else if (format == PluginFormat::CLAP) {
             fs::path subBinary = fs::path(bundlePath) / "Contents" / "x86_64-win";
-            if (fs::exists(subBinary)) {
-                for (const auto& entry : fs::directory_iterator(subBinary)) {
+            if (fs::exists(subBinary, ec)) {
+                for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
                     if (entry.path().extension() == ".clap") {
                         return entry.path().string();
                     }
                 }
             }
         }
+        // It is a directory, but does not contain a supported plugin binary -> invalid
+        return "";
     }
     return bundlePath;
 }
 
 bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat format, std::vector<PluginMetadata>& outPlugins) {
     std::string binaryPath = resolveBundleBinary(filePath, format);
+    if (binaryPath.empty()) return false;
     std::wstring wpath = utf8ToWide(binaryPath);
 
     if (format == PluginFormat::CLAP) {
@@ -771,10 +1213,6 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
                     }
 
                     if (factory2) factory2->release();
-
-                    typedef bool (PLUGIN_API *ExitDllFunc)();
-                    auto exitDll = reinterpret_cast<ExitDllFunc>(GetProcAddress(module, "ExitDll"));
-                    if (exitDll) exitDll();
                 }
             }
         } catch (...) {
@@ -813,16 +1251,13 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                 std::string pathStr;
                 std::string nameStr;
                 if (entry.is_directory()) {
-                    if (format == PluginFormat::VST3) {
-                        pathStr = resolveBundleBinary(entry.path().string(), format);
-                        if (pathStr == entry.path().string()) {
-                            // Directory without inner binary yet, skip
-                            continue;
-                        }
-                        nameStr = entry.path().stem().string();
-                    } else {
+                    it.disable_recursion_pending();
+                    pathStr = resolveBundleBinary(entry.path().string(), format);
+                    if (pathStr.empty()) {
+                        // Directory ending with .vst3 but not a valid bundle, ignore
                         continue;
                     }
+                    nameStr = entry.path().stem().string();
                 } else {
                     pathStr = entry.path().string();
                     nameStr = entry.path().stem().string();
@@ -880,7 +1315,9 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
 PluginHostManager::PluginHostManager() = default;
 
 PluginHostManager::~PluginHostManager() {
-    unloadPlugin();
+    for (size_t s = 0; s < kMaxPluginSlots; ++s) {
+        unloadPluginSlot(s);
+    }
 }
 
 int PluginHostManager::scanPlugins(const std::string& extraDirsJson, bool deepScan) {
@@ -925,25 +1362,28 @@ std::string PluginHostManager::getAllScannedJson() const {
     return ss.str();
 }
 
-void PluginHostManager::unloadPluginLocked() {
-    m_hasActivePlugin.store(false, std::memory_order_release);
-    m_latency.store(0, std::memory_order_relaxed);
-    if (m_activePlugin) {
-        m_activePlugin->deactivate();
-        m_activePlugin->unload();
-        m_activePlugin.reset();
+void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
+    if (slot >= kMaxPluginSlots) return;
+    m_slots[slot].hasActive.store(false, std::memory_order_release);
+    m_slots[slot].latency.store(0, std::memory_order_relaxed);
+    if (m_slots[slot].instance) {
+        m_slots[slot].instance->closeEditor();
+        m_slots[slot].instance->deactivate();
+        m_slots[slot].instance->unload();
+        m_slots[slot].instance.reset();
     }
 }
 
-void PluginHostManager::unloadPlugin() {
+void PluginHostManager::unloadPluginSlot(size_t slot) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-    unloadPluginLocked();
+    unloadPluginSlotLocked(slot);
 }
 
-bool PluginHostManager::loadPlugin(const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize) {
+bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize) {
+    if (slot >= kMaxPluginSlots) return false;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     try {
-        unloadPluginLocked();
+        unloadPluginSlotLocked(slot);
 
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
@@ -951,10 +1391,20 @@ bool PluginHostManager::loadPlugin(const std::string& path, const std::string& p
         std::string ext = fs::path(path).extension().string();
         std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
 
+        PluginFormat format = PluginFormat::Unknown;
+        if (ext == ".clap") format = PluginFormat::CLAP;
+        else if (ext == ".vst3") format = PluginFormat::VST3;
+        else return false;
+
+        std::string resolvedBin = PluginScanner::resolveBundleBinary(path, format);
+        if (resolvedBin.empty()) {
+            return false;
+        }
+
         std::unique_ptr<IPluginInstance> instance;
-        if (ext == ".clap") {
+        if (format == PluginFormat::CLAP) {
             instance = std::make_unique<ClapPluginInstance>();
-        } else if (ext == ".vst3") {
+        } else if (format == PluginFormat::VST3) {
             instance = std::make_unique<Vst3PluginInstance>();
         } else {
             return false;
@@ -969,46 +1419,54 @@ bool PluginHostManager::loadPlugin(const std::string& path, const std::string& p
             return false;
         }
 
-        m_latency.store(instance->getLatency(), std::memory_order_relaxed);
-        m_activePlugin = std::move(instance);
-        m_hasActivePlugin.store(true, std::memory_order_release);
-        m_bypassed.store(false, std::memory_order_release);
+        m_slots[slot].latency.store(instance->getLatency(), std::memory_order_relaxed);
+        m_slots[slot].instance = std::move(instance);
+        m_slots[slot].hasActive.store(true, std::memory_order_release);
+        m_slots[slot].bypassed.store(false, std::memory_order_release);
 
         return true;
     } catch (...) {
-        unloadPluginLocked();
+        unloadPluginSlotLocked(slot);
         return false;
     }
 }
 
-void PluginHostManager::setBypass(bool bypass) {
-    m_bypassed.store(bypass, std::memory_order_release);
-    if (m_activePlugin) {
-        m_activePlugin->setBypass(bypass);
+void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
+    if (slot >= kMaxPluginSlots) return;
+    m_slots[slot].bypassed.store(bypass, std::memory_order_release);
+    if (m_slots[slot].instance) {
+        m_slots[slot].instance->setBypass(bypass);
     }
 }
 
-bool PluginHostManager::isBypassed() const {
-    return m_bypassed.load(std::memory_order_acquire);
+bool PluginHostManager::isBypassedSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return true;
+    return m_slots[slot].bypassed.load(std::memory_order_acquire);
 }
 
-uint32_t PluginHostManager::getLatency() const {
-    return m_latency.load(std::memory_order_relaxed);
+uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return 0;
+    return m_slots[slot].latency.load(std::memory_order_relaxed);
 }
 
-bool PluginHostManager::hasActivePlugin() const {
-    return m_hasActivePlugin.load(std::memory_order_acquire);
+bool PluginHostManager::hasActivePluginSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return false;
+    return m_slots[slot].hasActive.load(std::memory_order_acquire);
 }
 
-std::string PluginHostManager::getStatusJson() const {
+std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return "{}";
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     std::ostringstream ss;
     ss << "{"
-       << "\"hasActive\":" << (m_hasActivePlugin.load() ? "true" : "false") << ","
-       << "\"bypassed\":" << (m_bypassed.load() ? "true" : "false") << ","
-       << "\"latency\":" << m_latency.load() << ",";
-    if (m_activePlugin) {
-        const auto& meta = m_activePlugin->getMetadata();
+       << "\"slot\":" << slot << ","
+       << "\"hasActive\":" << (m_slots[slot].hasActive.load() ? "true" : "false") << ","
+       << "\"bypassed\":" << (m_slots[slot].bypassed.load() ? "true" : "false") << ","
+       << "\"latency\":" << m_slots[slot].latency.load() << ","
+       << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
+       << "\"isEditorOpen\":" << ((m_slots[slot].instance && m_slots[slot].instance->isEditorOpen()) ? "true" : "false") << ",";
+    if (m_slots[slot].instance) {
+        const auto& meta = m_slots[slot].instance->getMetadata();
         ss << "\"plugin\":" << meta.toJson();
     } else {
         ss << "\"plugin\":null";
@@ -1017,18 +1475,65 @@ std::string PluginHostManager::getStatusJson() const {
     return ss.str();
 }
 
-void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
+bool PluginHostManager::showEditorSlot(size_t slot) {
+    if (slot >= kMaxPluginSlots) return false;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-    m_sampleRate = sampleRate;
-    m_maxBlockSize = maxBlockSize;
-    if (m_activePlugin && m_hasActivePlugin.load()) {
-        m_activePlugin->activate(sampleRate, maxBlockSize);
-        m_latency.store(m_activePlugin->getLatency(), std::memory_order_relaxed);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->showEditor();
+    }
+    return false;
+}
+
+void PluginHostManager::closeEditorSlot(size_t slot) {
+    if (slot >= kMaxPluginSlots) return;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance) {
+        m_slots[slot].instance->closeEditor();
     }
 }
 
-void PluginHostManager::process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
-    if (!m_hasActivePlugin.load(std::memory_order_acquire) || m_bypassed.load(std::memory_order_acquire)) {
+bool PluginHostManager::isEditorOpenSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->isEditorOpen();
+    }
+    return false;
+}
+
+bool PluginHostManager::savePresetSlot(size_t slot, const std::string& filePath) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->savePreset(filePath);
+    }
+    return false;
+}
+
+bool PluginHostManager::loadPresetSlot(size_t slot, const std::string& filePath) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->loadPreset(filePath);
+    }
+    return false;
+}
+
+void PluginHostManager::setInsertStageSlot(size_t slot, int stage) {
+    if (slot >= kMaxPluginSlots) return;
+    if (stage < 0) stage = 0;
+    if (stage > 4) stage = 4;
+    m_slots[slot].insertStage.store(stage, std::memory_order_release);
+}
+
+int PluginHostManager::getInsertStageSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return 3;
+    return m_slots[slot].insertStage.load(std::memory_order_acquire);
+}
+
+void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
+    if (slot >= kMaxPluginSlots) return;
+    if (!m_slots[slot].hasActive.load(std::memory_order_acquire) || m_slots[slot].bypassed.load(std::memory_order_acquire)) {
         if (inChannels != outChannels && inChannels && outChannels) {
             for (int ch = 0; ch < 2; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
@@ -1041,22 +1546,67 @@ void PluginHostManager::process(float* const* inChannels, float* const* outChann
 
 #if defined(_MSC_VER)
     __try {
-        if (m_activePlugin) {
-            m_activePlugin->process(inChannels, outChannels, numFrames);
+        if (m_slots[slot].instance) {
+            m_slots[slot].instance->process(inChannels, outChannels, numFrames);
         }
     } __except (EXCEPTION_EXECUTE_HANDLER) {
         // Safe bypass on unexpected SEH crash
-        m_bypassed.store(true, std::memory_order_release);
+        m_slots[slot].bypassed.store(true, std::memory_order_release);
     }
 #else
     try {
-        if (m_activePlugin) {
-            m_activePlugin->process(inChannels, outChannels, numFrames);
+        if (m_slots[slot].instance) {
+            m_slots[slot].instance->process(inChannels, outChannels, numFrames);
         }
     } catch (...) {
-        m_bypassed.store(true, std::memory_order_release);
+        m_slots[slot].bypassed.store(true, std::memory_order_release);
     }
 #endif
+}
+
+// Legacy single-slot forwards (slot 0)
+bool PluginHostManager::loadPlugin(const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize) {
+    return loadPluginSlot(0, path, pluginId, sampleRate, maxBlockSize);
+}
+
+void PluginHostManager::unloadPlugin() {
+    unloadPluginSlot(0);
+}
+
+void PluginHostManager::setBypass(bool bypass) {
+    setBypassSlot(0, bypass);
+}
+
+bool PluginHostManager::isBypassed() const {
+    return isBypassedSlot(0);
+}
+
+uint32_t PluginHostManager::getLatency() const {
+    return getLatencySlot(0);
+}
+
+bool PluginHostManager::hasActivePlugin() const {
+    return hasActivePluginSlot(0);
+}
+
+std::string PluginHostManager::getStatusJson() const {
+    return getStatusJsonSlot(0);
+}
+
+void PluginHostManager::process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
+    processSlot(0, inChannels, outChannels, numFrames);
+}
+
+void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    m_sampleRate = sampleRate;
+    m_maxBlockSize = maxBlockSize;
+    for (size_t s = 0; s < kMaxPluginSlots; ++s) {
+        if (m_slots[s].instance && m_slots[s].hasActive.load()) {
+            m_slots[s].instance->activate(sampleRate, maxBlockSize);
+            m_slots[s].latency.store(m_slots[s].instance->getLatency(), std::memory_order_relaxed);
+        }
+    }
 }
 
 } // namespace auradsp

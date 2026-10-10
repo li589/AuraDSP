@@ -7,6 +7,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
@@ -216,64 +217,327 @@ class _ChainPageState extends State<ChainPage> {
               ],
             ),
           ),
-          // M1 第三方插件插槽状态
+          // M1 第三方插件插槽状态与处理链插入阶段调整
           SectionCard(
-            title: '第三方插件插槽 (M1 VST3/CLAP)',
-            hint: '单插件进程内宿主，挂载于内部 12 级 DSP 链路之后、最终主输出级之前。',
-            child: Container(
-              padding: const EdgeInsets.all(AuraSpace.md),
-              decoration: BoxDecoration(
-                color: p.panel,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.hairline),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    widget.model.pluginManager.hasActivePlugin
-                        ? Icons.extension_rounded
-                        : Icons.extension_off_rounded,
-                    color: widget.model.pluginManager.hasActivePlugin
-                        ? (widget.model.pluginManager.isBypassed ? p.warning : p.accent)
-                        : p.textDim,
-                    size: 24,
+            title: '第三方 VST / CLAP 插件挂载槽与阶段处理顺序',
+            hint: '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. 全局音效链路阶段拓扑流示意
+                _PluginStageTopologyView(manager: widget.model.pluginManager),
+                const SizedBox(height: AuraSpace.md),
+
+                // 2. 双插槽独立控制卡片列表
+                for (var s = 0; s < PluginManager.kMaxSlots; s++) ...[
+                  _PluginSlotChainCard(
+                    model: widget.model,
+                    slot: s,
                   ),
-                  const SizedBox(width: AuraSpace.md),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.model.pluginManager.hasActivePlugin
-                              ? '已挂载：${widget.model.pluginManager.activePlugin!.name} (${widget.model.pluginManager.activePlugin!.format.label})'
-                              : '当前未挂载第三方插件',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.bold,
-                            color: p.text,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          widget.model.pluginManager.hasActivePlugin
-                              ? '状态：${widget.model.pluginManager.isBypassed ? "已旁路 (直通)" : "正在处理"} • 延迟：${widget.model.pluginManager.currentLatency} 采样'
-                              : '可在“插件”页面扫描并挂载 64 位 VST3 / CLAP 效果器',
-                          style: captionOf(p, color: p.textDim),
-                        ),
-                      ],
-                    ),
-                  ),
-                  if (widget.model.pluginManager.hasActivePlugin)
-                    AuraChip(
-                      widget.model.pluginManager.isBypassed ? '已旁路' : '生效中',
-                      selected: !widget.model.pluginManager.isBypassed,
-                      danger: widget.model.pluginManager.isBypassed,
-                      onTap: () => widget.model.pluginManager.toggleBypass(),
-                    ),
+                  if (s < PluginManager.kMaxSlots - 1)
+                    const SizedBox(height: AuraSpace.sm),
                 ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 全局音效链路阶段拓扑流示意组件
+class _PluginStageTopologyView extends StatelessWidget {
+  final PluginManager manager;
+  const _PluginStageTopologyView({required this.manager});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
+    Widget stageNode(int stage, String name, {bool isCore = false}) {
+      final activeSlots = <int>[];
+      for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+        if (manager.isSlotActive(s) && manager.getSlotStage(s) == stage) {
+          activeSlots.add(s);
+        }
+      }
+      final hasActivePlugin = activeSlots.isNotEmpty;
+
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+        decoration: BoxDecoration(
+          color: hasActivePlugin
+              ? p.accent.withValues(alpha: 0.15)
+              : (isCore ? p.panelRaised : p.panel),
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: Border.all(
+            color: hasActivePlugin
+                ? p.accent
+                : (isCore ? p.hairline : p.hairline.withValues(alpha: 0.6)),
+            width: hasActivePlugin ? 1.5 : 1.0,
+          ),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              name,
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: isCore ? FontWeight.bold : FontWeight.w500,
+                color: hasActivePlugin ? p.accent : p.text,
+              ),
+            ),
+            if (hasActivePlugin) ...[
+              const SizedBox(height: 2),
+              Wrap(
+                spacing: 2,
+                children: activeSlots.map((s) {
+                  final meta = manager.getSlotPlugin(s);
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: p.accent,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    child: Text(
+                      'S${s + 1}:${meta?.name ?? ""}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.bold,
+                        color: p.accentContrast,
+                      ),
+                    ),
+                  );
+                }).toList(),
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(AuraSpace.sm + 2),
+      decoration: BoxDecoration(
+        color: p.panel,
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.timeline_rounded, size: 14, color: p.accent),
+              const SizedBox(width: 4),
+              Text('全局信号流顺序示意 (自左至右)：',
+                  style: monoOf(p, size: 10.5, color: p.textDim)),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                stageNode(PluginInsertStage.preDsp, 'Stage 0 (Pre-DSP)'),
+                _flowArrow(p),
+                stageNode(-1, '低频搁架 EQ', isCore: true),
+                _flowArrow(p),
+                stageNode(PluginInsertStage.preVendor, 'Stage 1 (Pre-Vendor)'),
+                _flowArrow(p),
+                stageNode(-2, '12级内部 DSP 链路', isCore: true),
+                _flowArrow(p),
+                stageNode(PluginInsertStage.postVendor, 'Stage 2 (Post-Vendor)'),
+                _flowArrow(p),
+                stageNode(-3, '混响与声场', isCore: true),
+                _flowArrow(p),
+                stageNode(PluginInsertStage.postReverb, 'Stage 3 (Post-Reverb)'),
+                _flowArrow(p),
+                stageNode(-4, '主限幅 Limiter', isCore: true),
+                _flowArrow(p),
+                stageNode(PluginInsertStage.postLimiter, 'Stage 4 (Post-Limiter)'),
+                _flowArrow(p),
+                stageNode(-5, '音频输出', isCore: true),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static Widget _flowArrow(AuraPalette p) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: Icon(Icons.arrow_forward_rounded,
+          size: 11, color: p.textDim.withValues(alpha: 0.5)),
+    );
+  }
+}
+
+/// 插槽独立处理链调整卡片
+class _PluginSlotChainCard extends StatelessWidget {
+  final AppModel model;
+  final int slot;
+
+  const _PluginSlotChainCard({
+    required this.model,
+    required this.slot,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final manager = model.pluginManager;
+    final isActive = manager.isSlotActive(slot);
+    final active = manager.getSlotPlugin(slot);
+    final isBypassed = manager.isSlotBypassed(slot);
+    final currentStage = manager.getSlotStage(slot);
+
+    return Container(
+      padding: const EdgeInsets.all(AuraSpace.md),
+      decoration: BoxDecoration(
+        color: p.panel,
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(
+          color: isActive
+              ? (isBypassed ? p.warning.withValues(alpha: 0.4) : p.accent.withValues(alpha: 0.4))
+              : p.hairline,
+        ),
+      ),
+      child: Row(
+        children: [
+          // 插槽徽章
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: isActive ? p.accent.withValues(alpha: 0.15) : p.panelRaised,
+              shape: BoxShape.circle,
+              border: Border.all(color: isActive ? p.accent : p.hairline),
+            ),
+            alignment: Alignment.center,
+            child: Text(
+              '${slot + 1}',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 13,
+                color: isActive ? p.accent : p.textDim,
               ),
             ),
           ),
+          const SizedBox(width: AuraSpace.md),
+
+          // 插件详情
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      isActive
+                          ? '插槽 ${slot + 1}：${active!.name} (${active.format.label})'
+                          : '插槽 ${slot + 1}：未挂载插件',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: p.text,
+                      ),
+                    ),
+                    if (isActive && active != null) ...[
+                      const SizedBox(width: AuraSpace.sm),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: p.hairline,
+                          borderRadius: BorderRadius.circular(3),
+                        ),
+                        child: Text(
+                          active.format.label,
+                          style: monoOf(p, size: 9.5, color: p.textDim),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  isActive
+                      ? '状态：${isBypassed ? "已旁路 (直通)" : "正在处理"} • 延迟：${manager.getSlotLatency(slot)} 采样'
+                      : '可在“插件”页面选择效果器加载至本插槽',
+                  style: captionOf(p, color: p.textDim),
+                ),
+              ],
+            ),
+          ),
+
+          // 插入阶段选择器
+          if (isActive) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: p.panelRaised,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: Border.all(color: p.hairline),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: currentStage,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: const [
+                    PluginInsertStage.preDsp,
+                    PluginInsertStage.preVendor,
+                    PluginInsertStage.postVendor,
+                    PluginInsertStage.postReverb,
+                    PluginInsertStage.postLimiter,
+                  ].map<DropdownMenuItem<int>>((stg) {
+                    return DropdownMenuItem<int>(
+                      value: stg,
+                      child: Text(
+                        PluginInsertStage.labelOf(stg),
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: stg == currentStage ? p.accent : p.text,
+                          fontWeight: stg == currentStage
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                  onChanged: (val) {
+                    if (val != null) {
+                      manager.setInsertStage(val, slot: slot);
+                    }
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+            // GUI 打开按钮
+            IconButton(
+              tooltip: '打开原生界面 (GUI)',
+              icon: const Icon(Icons.open_in_new_rounded, size: 17),
+              onPressed: () => manager.showEditor(slot: slot),
+              visualDensity: VisualDensity.compact,
+            ),
+            const SizedBox(width: AuraSpace.xs),
+            // 旁路开关
+            AuraChip(
+              isBypassed ? '已旁路' : '生效中',
+              selected: !isBypassed,
+              danger: isBypassed,
+              onTap: () => manager.toggleBypass(slot: slot),
+            ),
+          ],
         ],
       ),
     );

@@ -42,6 +42,9 @@ class SectionCard extends StatelessWidget {
   final VoidCallback? onRefreshLatency;
   final int latencyTick;
 
+  /// 是否折叠卡片内容区（关闭时整条折叠，仅保留标题与开关）
+  final bool collapsed;
+
   const SectionCard({
     super.key,
     required this.child,
@@ -54,6 +57,7 @@ class SectionCard extends StatelessWidget {
     this.latencyMs,
     this.onRefreshLatency,
     this.latencyTick = 0,
+    this.collapsed = false,
   });
 
   @override
@@ -79,17 +83,43 @@ class SectionCard extends StatelessWidget {
             )
           : trailing;
       body.add(SectionTitle(title!, index: index, trailing: effectiveTrailing));
-      if (hint != null) {
-        body.add(const SizedBox(height: AuraSpace.sm));
-        body.add(Text(hint!, style: captionOf(p)));
-      }
-      body.add(const SizedBox(height: AuraSpace.cardHeadGap));
+
+      final content = Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (hint != null) ...[
+            const SizedBox(height: AuraSpace.sm),
+            Text(hint!, style: captionOf(p)),
+          ],
+          const SizedBox(height: AuraSpace.cardHeadGap),
+          child,
+        ],
+      );
+
+      body.add(
+        ClipRect(
+          child: AnimatedAlign(
+            alignment: Alignment.topCenter,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeInOutCubic,
+            heightFactor: collapsed ? 0.0 : 1.0,
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeInOut,
+              opacity: collapsed ? 0.0 : 1.0,
+              child: content,
+            ),
+          ),
+        ),
+      );
+    } else {
+      body.add(child);
     }
-    body.add(child);
 
     return Container(
       padding: padding ??
-          EdgeInsets.all(hero ? AuraSpace.xl : AuraSpace.cardPad),
+          EdgeInsets.all(hero ? AuraSpace.xl : (collapsed ? 14.0 : AuraSpace.cardPad)),
       decoration: BoxDecoration(
         color: p.panel,
         borderRadius: BorderRadius.circular(AuraRadius.md),

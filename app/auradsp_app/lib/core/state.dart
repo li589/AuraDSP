@@ -21,6 +21,21 @@ import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
 
+class SavedPluginSlot {
+  final int slot;
+  final String path;
+  final String id;
+  final bool bypass;
+  final int stage;
+  const SavedPluginSlot({
+    required this.slot,
+    required this.path,
+    this.id = '',
+    this.bypass = false,
+    this.stage = 3,
+  });
+}
+
 enum EngineConn { connecting, ready, fatal }
 
 class EngineInfo {
@@ -184,6 +199,9 @@ class AppModel extends ChangeNotifier {
   String? activePresetName;
   String? convIrPath;
   String? ddcPath;
+  String? ddcFileName;
+  String? ddcDetails;
+  double _lastStereoMix = 0.5;
   String? lpCode;
   Timer? _debounceSaveTimer;
   bool _isReplayingSession = false;
@@ -218,6 +236,7 @@ class AppModel extends ChangeNotifier {
   String? savedPluginPath;
   String savedPluginId = '';
   bool savedPluginBypass = false;
+  final List<SavedPluginSlot> savedPluginSlots = [];
 
   ReceivePort? _fromIso;
 
@@ -234,6 +253,7 @@ class AppModel extends ChangeNotifier {
       _toIso?.send(msg);
     });
     pluginManager.addListener(notifyListeners);
+    pluginManager.setCustomDirs(config.customPluginDirs);
     pluginManager.loadCache();
 
     if (config.autoRestoreSession) {
@@ -245,6 +265,40 @@ class AppModel extends ChangeNotifier {
       }
     }
     _spawn();
+  }
+
+  void addCustomPluginDir(String dir) {
+    final path = dir.trim();
+    if (path.isNotEmpty && !config.customPluginDirs.contains(path)) {
+      config.customPluginDirs.add(path);
+      ConfigManager.save(config);
+      pluginManager.setCustomDirs(config.customPluginDirs);
+      notifyListeners();
+    }
+  }
+
+  void removeCustomPluginDir(String dir) {
+    if (config.customPluginDirs.remove(dir)) {
+      ConfigManager.save(config);
+      pluginManager.setCustomDirs(config.customPluginDirs);
+      notifyListeners();
+    }
+  }
+
+  void addCustomScriptDir(String dir) {
+    final path = dir.trim();
+    if (path.isNotEmpty && !config.customScriptDirs.contains(path)) {
+      config.customScriptDirs.add(path);
+      ConfigManager.save(config);
+      notifyListeners();
+    }
+  }
+
+  void removeCustomScriptDir(String dir) {
+    if (config.customScriptDirs.remove(dir)) {
+      ConfigManager.save(config);
+      notifyListeners();
+    }
   }
 
   void scheduleAutoSave() {
@@ -416,6 +470,50 @@ class AppModel extends ChangeNotifier {
         pluginManager.onPluginStatus(raw['status']);
         notifyListeners();
         break;
+      case 'pluginSlotLoaded':
+        pluginManager.onPluginSlotLoaded(
+            raw['slot'] as int,
+            raw['path'] as String,
+            raw['rc'] as int,
+            raw['status'],
+            (raw['stage'] as num).toInt());
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginSlotUnloaded':
+        pluginManager.onPluginSlotUnloaded(
+            raw['slot'] as int, raw['rc'] as int, raw['status']);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginSlotBypass':
+        pluginManager.onPluginSlotBypass(
+            raw['slot'] as int, raw['bypass'] as bool, raw['status']);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginSlotStatus':
+        pluginManager.onPluginSlotStatus(
+            raw['slot'] as int, raw['status'], (raw['stage'] as num).toInt());
+        notifyListeners();
+        break;
+      case 'pluginSlotInsertStage':
+        pluginManager.onPluginSlotInsertStage(
+            raw['slot'] as int, (raw['stage'] as num).toInt(), raw['rc'] as int);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginSlotPresetSaved':
+        lastInfo = '预设已保存成功';
+        eventSeq.value = ++_guardSeq;
+        notifyListeners();
+        break;
+      case 'pluginSlotPresetLoaded':
+        lastInfo = '预设已载入成功';
+        eventSeq.value = ++_guardSeq;
+        scheduleAutoSave();
+        notifyListeners();
+        break;
     }
   }
 
@@ -520,17 +618,43 @@ class AppModel extends ChangeNotifier {
         setGraphOrder(graphOrder!);
       }
 
-      // 5. 恢复第三方插件挂载与旁路
-      if (savedPluginPath != null &&
+      // 5. 恢复第三方插件挂载与旁路（多插槽）
+      if (savedPluginSlots.isNotEmpty) {
+        for (final item in savedPluginSlots) {
+          if (item.path.isNotEmpty && File(item.path).existsSync()) {
+            send({
+              'cmd': 'pluginSlotLoad',
+              'slot': item.slot,
+              'path': item.path,
+              'id': item.id,
+            });
+            if (item.stage != PluginInsertStage.defaultStage) {
+              send({
+                'cmd': 'pluginSlotSetInsertStage',
+                'slot': item.slot,
+                'stage': item.stage,
+              });
+            }
+            if (item.bypass) {
+              send({
+                'cmd': 'pluginSlotSetBypass',
+                'slot': item.slot,
+                'bypass': true,
+              });
+            }
+          }
+        }
+      } else if (savedPluginPath != null &&
           savedPluginPath!.isNotEmpty &&
           File(savedPluginPath!).existsSync()) {
         send({
-          'cmd': 'pluginLoad',
+          'cmd': 'pluginSlotLoad',
+          'slot': 0,
           'path': savedPluginPath!,
           'id': savedPluginId,
         });
         if (savedPluginBypass) {
-          send({'cmd': 'pluginSetBypass', 'bypass': true});
+          send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': true});
         }
       }
     } finally {
@@ -593,6 +717,21 @@ class AppModel extends ChangeNotifier {
       setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand);
     }
     stereoBandUsed = false;
+    notifyListeners();
+  }
+
+  bool get stereoOn => stereoMix > 0.0;
+
+  void setStereoEnabled(bool on) {
+    if (on) {
+      final target = _lastStereoMix > 0.0 ? _lastStereoMix : 0.5;
+      setFloat('stereo.mix', target * stereoWidenMax);
+    } else {
+      if (stereoMix > 0.0) {
+        _lastStereoMix = stereoMix;
+      }
+      setFloat('stereo.mix', 0.0);
+    }
     notifyListeners();
   }
 
@@ -702,6 +841,11 @@ class AppModel extends ChangeNotifier {
       send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
     }
     convEnabled = on;
+    if (on && !convReady) {
+      if (convIrPath != null && convIrPath!.isNotEmpty && File(convIrPath!).existsSync()) {
+        loadConvolverIr(convIrPath!);
+      }
+    }
     notifyListeners();
     _markSent(ParamId.convEnable);
     send({'cmd': 'setParam', 'id': ParamId.convEnable, 'value': on ? 1 : 0, 'isFloat': false});
@@ -804,14 +948,65 @@ class AppModel extends ChangeNotifier {
     }
   }
 
+  void parseVdcMetadata(String path) {
+    try {
+      final f = File(path);
+      if (!f.existsSync()) return;
+      ddcFileName = path.split(RegExp(r'[\\/]')).last;
+      final lines = f.readAsLinesSync();
+      final rates = <String>[];
+      int maxPoles = 0;
+      for (final line in lines) {
+        if (line.startsWith('SR_')) {
+          final parts = line.split(':');
+          if (parts.isNotEmpty) {
+            final sr = parts[0].replaceAll('SR_', '');
+            rates.add('$sr Hz');
+            if (parts.length > 1) {
+              final coeffs = parts[1].split(',');
+              final stages = coeffs.length ~/ 5;
+              if (stages > maxPoles) maxPoles = stages;
+            }
+          }
+        }
+      }
+      ddcDetails = rates.isNotEmpty
+          ? '${rates.join(', ')} · ${maxPoles > 0 ? '$maxPoles 阶双二阶' : '校准矩阵'}'
+          : '已解析校准矩阵';
+    } catch (_) {
+      ddcFileName = path.split(RegExp(r'[\\/]')).last;
+      ddcDetails = '已加载校准文件';
+    }
+  }
+
   void loadVdc(String path) {
     ddcPath = path;
+    parseVdcMetadata(path);
     send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': path});
     scheduleAutoSave();
+    notifyListeners();
   }
 
   void setDdcEnabled(bool on) {
+    ddcOn = on;
+    if (on && !ddcReady) {
+      if (ddcPath != null && ddcPath!.isNotEmpty && File(ddcPath!).existsSync()) {
+        loadVdc(ddcPath!);
+      }
+    }
     setInt(ParamId.ddcEnable, on ? 1 : 0);
+  }
+
+  void clearDdc() {
+    ddcOn = false;
+    ddcReady = false;
+    ddcPath = null;
+    ddcFileName = null;
+    ddcDetails = null;
+    setInt(ParamId.ddcEnable, 0);
+    send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': ''});
+    scheduleAutoSave();
+    notifyListeners();
   }
 
   void clearConvolver() {

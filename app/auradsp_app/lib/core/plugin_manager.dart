@@ -134,22 +134,84 @@ class PluginHostStatus {
       };
 }
 
+/// 插入阶段定义与友好描述
+abstract final class PluginInsertStage {
+  static const preDsp = 0;
+  static const preVendor = 1;
+  static const postVendor = 2;
+  static const postReverb = 3;
+  static const postLimiter = 4;
+
+  static const defaultStage = postReverb;
+
+  static String labelOf(int stage) {
+    switch (stage) {
+      case preDsp:
+        return '输入前置 (Pre-DSP)';
+      case preVendor:
+        return '音效前置 (Pre-Vendor)';
+      case postVendor:
+        return '音效后置 (Post-Vendor)';
+      case postReverb:
+        return '混响后置 (Post-Reverb)';
+      case postLimiter:
+        return '总输出级 (Post-Limiter)';
+      default:
+        return '阶段 $stage';
+    }
+  }
+
+  static String shortLabelOf(int stage) {
+    switch (stage) {
+      case preDsp:
+        return 'Pre-DSP';
+      case preVendor:
+        return 'Pre-Vendor';
+      case postVendor:
+        return 'Post-Vendor';
+      case postReverb:
+        return 'Post-Reverb';
+      case postLimiter:
+        return 'Post-Limit';
+      default:
+        return 'Stage $stage';
+    }
+  }
+}
+
 /// 插件指令派发回调函数类型
 typedef PluginCommandSender = void Function(Map<String, dynamic> msg);
 
 /// 插件管理器
 class PluginManager extends ChangeNotifier {
+  static const int kMaxSlots = 2;
+
   PluginCommandSender? _commandSender;
 
   List<PluginMetadata> _plugins = [];
-  PluginHostStatus _hostStatus = PluginHostStatus.empty;
+  final List<PluginHostStatus> _slotStatuses = [
+    PluginHostStatus.empty,
+    PluginHostStatus.empty,
+  ];
+  final List<int> _slotStages = [
+    PluginInsertStage.defaultStage,
+    PluginInsertStage.defaultStage,
+  ];
+  int _selectedSlot = 0;
+
+  List<String> _customDirs = [];
   bool _isScanning = false;
   String _filterFormat = 'all'; // 'all', 'vst3', 'clap'
   String _searchQuery = '';
+  final Map<int, bool> _slotBusy = {};
   String? _lastError;
   int _lastScanCount = 0;
 
-  PluginManager({this._commandSender});
+  bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
+
+  PluginManager({PluginCommandSender? commandSender}) {
+    _commandSender = commandSender;
+  }
 
   void attachSender(PluginCommandSender sender) {
     _commandSender = sender;
@@ -157,17 +219,41 @@ class PluginManager extends ChangeNotifier {
 
   // --- Getters ---
   List<PluginMetadata> get plugins => List.unmodifiable(_plugins);
-  PluginHostStatus get hostStatus => _hostStatus;
+  int get selectedSlot => _selectedSlot;
+  List<String> get customDirs => List.unmodifiable(_customDirs);
   bool get isScanning => _isScanning;
   String get filterFormat => _filterFormat;
   String get searchQuery => _searchQuery;
   String? get lastError => _lastError;
   int get lastScanCount => _lastScanCount;
 
-  bool get hasActivePlugin => _hostStatus.hasActive && _hostStatus.plugin != null;
-  bool get isBypassed => _hostStatus.bypassed;
-  int get currentLatency => _hostStatus.latency;
-  PluginMetadata? get activePlugin => _hostStatus.plugin;
+  // 插槽状态读取
+  PluginHostStatus getSlotStatus(int slot) {
+    if (slot >= 0 && slot < kMaxSlots) return _slotStatuses[slot];
+    return PluginHostStatus.empty;
+  }
+
+  int getSlotStage(int slot) {
+    if (slot >= 0 && slot < kMaxSlots) return _slotStages[slot];
+    return PluginInsertStage.defaultStage;
+  }
+
+  bool isSlotActive(int slot) {
+    final s = getSlotStatus(slot);
+    return s.hasActive && s.plugin != null;
+  }
+
+  bool isSlotBypassed(int slot) => getSlotStatus(slot).bypassed;
+  int getSlotLatency(int slot) => getSlotStatus(slot).latency;
+  PluginMetadata? getSlotPlugin(int slot) => getSlotStatus(slot).plugin;
+
+  // 映射当前选中槽位（向后兼容单槽访问）
+  PluginHostStatus get hostStatus => getSlotStatus(_selectedSlot);
+  bool get hasActivePlugin => isSlotActive(_selectedSlot);
+  bool get isBypassed => isSlotBypassed(_selectedSlot);
+  int get currentLatency => getSlotLatency(_selectedSlot);
+  PluginMetadata? get activePlugin => getSlotPlugin(_selectedSlot);
+  int get currentStage => getSlotStage(_selectedSlot);
 
   int get countAll => _plugins.length;
   int get countVst3 => _plugins.where((p) => p.format == PluginFormat.vst3).length;
@@ -195,6 +281,13 @@ class PluginManager extends ChangeNotifier {
   }
 
   // --- UI 控制操作 ---
+  void selectSlot(int slot) {
+    if (slot >= 0 && slot < kMaxSlots && _selectedSlot != slot) {
+      _selectedSlot = slot;
+      notifyListeners();
+    }
+  }
+
   void setFilterFormat(String format) {
     if (_filterFormat != format) {
       _filterFormat = format;
@@ -209,15 +302,44 @@ class PluginManager extends ChangeNotifier {
     }
   }
 
-  /// 启动扫描（支持快扫与全盘深扫）
+  // 自定义扫描目录管理
+  void setCustomDirs(List<String> dirs) {
+    _customDirs = List.from(dirs);
+    notifyListeners();
+  }
+
+  void addCustomDir(String dir) {
+    final trimmed = dir.trim();
+    if (trimmed.isNotEmpty && !_customDirs.contains(trimmed)) {
+      _customDirs.add(trimmed);
+      notifyListeners();
+    }
+  }
+
+  void removeCustomDir(String dir) {
+    if (_customDirs.remove(dir)) {
+      notifyListeners();
+    }
+  }
+
+  /// 启动扫描（支持快扫、深扫与多目录聚合）
   void scan({String dir = '', bool deep = false}) {
     _isScanning = true;
     _lastError = null;
     notifyListeners();
 
+    final allDirs = <String>[];
+    if (dir.isNotEmpty) allDirs.add(dir);
+    for (final cd in _customDirs) {
+      if (!allDirs.contains(cd) && Directory(cd).existsSync()) {
+        allDirs.add(cd);
+      }
+    }
+
     _commandSender?.call({
       'cmd': 'pluginScan',
       'dir': dir,
+      'dirs': allDirs.isNotEmpty ? allDirs : null,
       'deep': deep,
     });
   }
@@ -229,41 +351,161 @@ class PluginManager extends ChangeNotifier {
     });
   }
 
-  /// 加载指定插件
-  void loadPlugin(PluginMetadata plugin) {
+  /// 加载插件到指定槽位（默认当前选中槽位）
+  void loadPlugin(PluginMetadata plugin, {int? slot}) {
+    final s = slot ?? _selectedSlot;
     _lastError = null;
     _commandSender?.call({
-      'cmd': 'pluginLoad',
+      'cmd': 'pluginSlotLoad',
+      'slot': s,
       'path': plugin.path,
       'id': plugin.id,
     });
   }
 
-  /// 卸载当前插件
-  void unloadPlugin() {
+  /// 卸载指定槽位的插件
+  void unloadPlugin({int? slot}) {
+    final s = slot ?? _selectedSlot;
     _commandSender?.call({
-      'cmd': 'pluginUnload',
+      'cmd': 'pluginSlotUnload',
+      'slot': s,
     });
   }
 
-  /// 设置插件旁路
-  void setBypass(bool bypass) {
+  /// 设置指定槽位旁路
+  void setBypass(bool bypass, {int? slot}) {
+    final s = slot ?? _selectedSlot;
     _commandSender?.call({
-      'cmd': 'pluginSetBypass',
+      'cmd': 'pluginSlotSetBypass',
+      'slot': s,
       'bypass': bypass,
     });
   }
 
-  /// 切换旁路开关
-  void toggleBypass() {
-    setBypass(!_hostStatus.bypassed);
+  /// 切换指定槽位旁路开关
+  void toggleBypass({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    setBypass(!isSlotBypassed(s), slot: s);
   }
 
-  /// 请求刷新当前状态
-  void refreshStatus() {
+  /// 打开插件原生 GUI 编辑器窗口
+  void showEditor({int? slot, String? title}) {
+    final s = slot ?? _selectedSlot;
+    final meta = getSlotPlugin(s);
+    final winTitle = title ?? (meta != null ? '${meta.name} - AuraDSP Host' : 'Plugin Editor');
     _commandSender?.call({
-      'cmd': 'pluginGetStatus',
+      'cmd': 'pluginSlotShowEditor',
+      'slot': s,
+      'title': winTitle,
     });
+  }
+
+  /// 关闭插件原生 GUI 编辑器窗口
+  void closeEditor({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _commandSender?.call({
+      'cmd': 'pluginSlotCloseEditor',
+      'slot': s,
+    });
+  }
+
+  /// 调整插件在处理链上的插入阶段
+  void setInsertStage(int stage, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _slotStages[s] = stage;
+    notifyListeners();
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetInsertStage',
+      'slot': s,
+      'stage': stage,
+    });
+  }
+
+  /// 请求刷新指定槽位当前状态
+  void refreshStatus({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _commandSender?.call({
+      'cmd': 'pluginSlotGetStatus',
+      'slot': s,
+    });
+  }
+
+  // --- 插件预设系统管理 ---
+  static Directory _getPresetsDir(String pluginName) {
+    final appData = Platform.environment['APPDATA'] ?? '.';
+    final safeName = pluginName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    final dir = Directory('$appData/AuraDSP/plugin_presets/$safeName');
+    if (!dir.existsSync()) dir.createSync(recursive: true);
+    return dir;
+  }
+
+  /// 列出指定插件所有已保存的预设
+  List<String> listPresets(String pluginName) {
+    try {
+      final dir = _getPresetsDir(pluginName);
+      if (!dir.existsSync()) return [];
+      return dir
+          .listSync()
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.aurapreset'))
+          .map((f) {
+            final filename = f.uri.pathSegments.last;
+            return filename.substring(0, filename.length - '.aurapreset'.length);
+          })
+          .toList()
+        ..sort();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /// 保存当前槽位插件的预设
+  bool savePreset(String presetName, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    final meta = getSlotPlugin(s);
+    if (meta == null || presetName.trim().isEmpty) return false;
+    try {
+      final dir = _getPresetsDir(meta.name);
+      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+      final targetFile = File('${dir.path}/$safePreset.aurapreset');
+      _commandSender?.call({
+        'cmd': 'pluginSlotSavePreset',
+        'slot': s,
+        'path': targetFile.path,
+      });
+      return true;
+    } catch (e) {
+      _lastError = '保存预设失败: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// 加载指定预设至槽位
+  bool loadPreset(String presetName, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    final meta = getSlotPlugin(s);
+    if (meta == null) return false;
+    try {
+      final dir = _getPresetsDir(meta.name);
+      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
+      final targetFile = File('${dir.path}/$safePreset.aurapreset');
+      if (!targetFile.existsSync()) {
+        _lastError = '预设文件不存在: ${targetFile.path}';
+        notifyListeners();
+        return false;
+      }
+      _commandSender?.call({
+        'cmd': 'pluginSlotLoadPreset',
+        'slot': s,
+        'path': targetFile.path,
+      });
+      return true;
+    } catch (e) {
+      _lastError = '加载预设失败: $e';
+      notifyListeners();
+      return false;
+    }
   }
 
   // --- 底层引擎事件回调处理 ---
@@ -280,30 +522,60 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onPluginLoaded(String path, int rc, dynamic rawStatus) {
-    if (rc != 1) {
-      _lastError = '加载插件失败 (rc=$rc): $path';
-    } else {
-      _lastError = null;
+  void onPluginSlotLoaded(int slot, String path, int rc, dynamic rawStatus, int stage) {
+    if (slot >= 0 && slot < kMaxSlots) {
+      if (rc != 1) {
+        _lastError = '加载插件失败 (rc=$rc, slot=$slot): $path';
+      } else {
+        _lastError = null;
+      }
+      _slotStages[slot] = stage;
+      _parseStatusJsonForSlot(slot, rawStatus);
+      notifyListeners();
     }
-    _parseStatusJson(rawStatus);
-    notifyListeners();
   }
 
-  void onPluginUnloaded(int rc, dynamic rawStatus) {
-    _parseStatusJson(rawStatus);
-    notifyListeners();
+  void onPluginSlotUnloaded(int slot, int rc, dynamic rawStatus) {
+    if (slot >= 0 && slot < kMaxSlots) {
+      _parseStatusJsonForSlot(slot, rawStatus);
+      notifyListeners();
+    }
   }
 
-  void onPluginBypass(bool bypass, dynamic rawStatus) {
-    _parseStatusJson(rawStatus);
-    notifyListeners();
+  void onPluginSlotBypass(int slot, bool bypass, dynamic rawStatus) {
+    if (slot >= 0 && slot < kMaxSlots) {
+      _parseStatusJsonForSlot(slot, rawStatus);
+      notifyListeners();
+    }
   }
 
-  void onPluginStatus(dynamic rawStatus) {
-    _parseStatusJson(rawStatus);
-    notifyListeners();
+  void onPluginSlotStatus(int slot, dynamic rawStatus, int stage) {
+    if (slot >= 0 && slot < kMaxSlots) {
+      _slotStages[slot] = stage;
+      _parseStatusJsonForSlot(slot, rawStatus);
+      notifyListeners();
+    }
   }
+
+  void onPluginSlotInsertStage(int slot, int stage, int rc) {
+    if (slot >= 0 && slot < kMaxSlots) {
+      _slotStages[slot] = stage;
+      notifyListeners();
+    }
+  }
+
+  // 向后兼容旧单槽事件
+  void onPluginLoaded(String path, int rc, dynamic rawStatus) =>
+      onPluginSlotLoaded(0, path, rc, rawStatus, PluginInsertStage.defaultStage);
+
+  void onPluginUnloaded(int rc, dynamic rawStatus) =>
+      onPluginSlotUnloaded(0, rc, rawStatus);
+
+  void onPluginBypass(bool bypass, dynamic rawStatus) =>
+      onPluginSlotBypass(0, bypass, rawStatus);
+
+  void onPluginStatus(dynamic rawStatus) =>
+      onPluginSlotStatus(0, rawStatus, PluginInsertStage.defaultStage);
 
   void _parsePluginsJson(dynamic raw) {
     try {
@@ -325,7 +597,7 @@ class PluginManager extends ChangeNotifier {
     }
   }
 
-  void _parseStatusJson(dynamic raw) {
+  void _parseStatusJsonForSlot(int slot, dynamic raw) {
     try {
       final Map<String, dynamic> map;
       if (raw is String) {
@@ -335,9 +607,9 @@ class PluginManager extends ChangeNotifier {
       } else {
         return;
       }
-      _hostStatus = PluginHostStatus.fromJson(map);
+      _slotStatuses[slot] = PluginHostStatus.fromJson(map);
     } catch (e) {
-      debugPrint('[PluginManager] Error parsing status JSON: $e');
+      debugPrint('[PluginManager] Error parsing status JSON for slot $slot: $e');
     }
   }
 

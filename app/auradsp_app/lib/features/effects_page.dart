@@ -240,6 +240,7 @@ class _BassCard extends StatelessWidget {
     return SectionCard(
       index: '01',
       title: l.bassBoost,
+      collapsed: !model.bassOn,
       latencyMs: model.getComponentLatency('bass'),
       onRefreshLatency: () => model.refreshComponentLatency('bass'),
       latencyTick: model.getComponentLatencyTick('bass'),
@@ -266,27 +267,30 @@ class _BassCard extends StatelessWidget {
             onChangedEnd: model.setBassIntensity,
           ),
           const SizedBox(height: AuraSpace.md),
-          // 低音增强模式 (动态 DBB / 纯净低架 / 心理声学谐波)
-          Text(l.bassMode, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.xs),
-          Wrap(
-            spacing: AuraSpace.sm,
-            runSpacing: AuraSpace.sm,
+          // 低音增强模式 — 标签与选项同行，选项右对齐
+          Row(
             children: [
-              _ChoiceChip(
-                label: l.bassModeDynamic,
-                selected: model.bassMode == 0,
-                onTap: () => model.setBassMode(0),
-              ),
-              _ChoiceChip(
-                label: l.bassModeShelf,
-                selected: model.bassMode == 1,
-                onTap: () => model.setBassMode(1),
-              ),
-              _ChoiceChip(
-                label: l.bassModeHarmonic,
-                selected: model.bassMode == 2,
-                onTap: () => model.setBassMode(2),
+              Text(l.bassMode, style: captionOf(p)),
+              const Spacer(),
+              Wrap(
+                spacing: AuraSpace.sm,
+                children: [
+                  _ChoiceChip(
+                    label: l.bassModeDynamic,
+                    selected: model.bassMode == 0,
+                    onTap: () => model.setBassMode(0),
+                  ),
+                  _ChoiceChip(
+                    label: l.bassModeShelf,
+                    selected: model.bassMode == 1,
+                    onTap: () => model.setBassMode(1),
+                  ),
+                  _ChoiceChip(
+                    label: l.bassModeHarmonic,
+                    selected: model.bassMode == 2,
+                    onTap: () => model.setBassMode(2),
+                  ),
+                ],
               ),
             ],
           ),
@@ -442,6 +446,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
     return SectionCard(
       index: '02',
       title: l.spatialReverbTitle,
+      collapsed: !isEnabled,
       latencyMs: m.getComponentLatency('reverb'),
       onRefreshLatency: () => m.refreshComponentLatency('reverb'),
       latencyTick: m.getComponentLatencyTick('reverb'),
@@ -466,11 +471,13 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
               AuraChip(
                 l.reverbCustom,
                 icon: Icons.tune_rounded,
-                selected: isEnabled && m.reverbPreset == -1 && m.fvOn,
+                selected: isEnabled && m.reverbPreset == -2 && m.fvOn,
                 onTap: () {
-                  if (m.reverbPreset != -1) {
-                    m.selectReverbPreset(-1);
+                  if (m.reverbPreset != -2) {
+                    m.selectReverbPreset(-2);
                   }
+                  // 自动展开高级调节面板
+                  if (!_open) setState(() => _open = true);
                 },
               ),
             ],
@@ -664,6 +671,7 @@ class _ConvolverCard extends StatelessWidget {
     return SectionCard(
       index: '03',
       title: l.convTitle,
+      collapsed: !model.convEnabled,
       latencyMs: model.getComponentLatency('convolver'),
       onRefreshLatency: () => model.refreshComponentLatency('convolver'),
       latencyTick: model.getComponentLatencyTick('convolver'),
@@ -671,7 +679,7 @@ class _ConvolverCard extends StatelessWidget {
         listenable: model,
         builder: (_, _) => AuraSwitch(
           value: model.convEnabled,
-          onChanged: model.convReady ? model.setConvolverEnabled : null,
+          onChanged: (v) => model.setConvolverEnabled(v),
         ),
       ),
       child: ListenableBuilder(
@@ -769,6 +777,7 @@ class _DdcCard extends StatelessWidget {
     return SectionCard(
       index: '04',
       title: l.ddcTitle,
+      collapsed: !model.ddcOn,
       latencyMs: model.getComponentLatency('ddc'),
       onRefreshLatency: () => model.refreshComponentLatency('ddc'),
       latencyTick: model.getComponentLatencyTick('ddc'),
@@ -776,7 +785,7 @@ class _DdcCard extends StatelessWidget {
         listenable: model,
         builder: (_, _) => AuraSwitch(
           value: model.ddcOn,
-          onChanged: model.ddcReady ? model.setDdcEnabled : null,
+          onChanged: (v) => model.setDdcEnabled(v),
         ),
       ),
       child: ListenableBuilder(
@@ -819,6 +828,7 @@ class _EqualizerCard extends StatelessWidget {
     return SectionCard(
       index: '05',
       title: l.eqMultiBand,
+      collapsed: !model.eqOn,
       latencyMs: model.getComponentLatency('eq'),
       onRefreshLatency: () => model.refreshComponentLatency('eq'),
       latencyTick: model.getComponentLatencyTick('eq'),
@@ -843,9 +853,14 @@ class _StereoCard extends StatelessWidget {
     return SectionCard(
       index: '06',
       title: l.stereoWiden,
+      collapsed: !model.stereoOn,
       latencyMs: model.getComponentLatency('stereo'),
       onRefreshLatency: () => model.refreshComponentLatency('stereo'),
       latencyTick: model.getComponentLatencyTick('stereo'),
+      trailing: AuraSwitch(
+        value: model.stereoOn,
+        onChanged: (v) => model.setStereoEnabled(v),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -859,6 +874,7 @@ class _StereoCard extends StatelessWidget {
             min: 0,
             max: 1,
             unit: '%',
+            enabled: model.stereoOn,
             format: (v) => (v * 100).toStringAsFixed(0),
             onChanged: (v) =>
                 model.setFloat('stereo.mix', v * AppModel.stereoWidenMax),
@@ -1010,6 +1026,7 @@ class _TubeCard extends StatelessWidget {
     return SectionCard(
       index: '07',
       title: l.tubeTitle,
+      collapsed: !model.tubeOn,
       latencyMs: model.getComponentLatency('tube'),
       onRefreshLatency: () => model.refreshComponentLatency('tube'),
       latencyTick: model.getComponentLatencyTick('tube'),
@@ -1036,26 +1053,30 @@ class _TubeCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.md),
           // 电子管音色风格
-          Text(l.tubeStyle, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.xs),
-          Wrap(
-            spacing: AuraSpace.sm,
-            runSpacing: AuraSpace.sm,
+          // 电子管音色风格 — 标签与选项同行，选项右对齐
+          Row(
             children: [
-              _ChoiceChip(
-                label: l.tubeStyleTriode,
-                selected: model.tubeStyle == 0,
-                onTap: () => model.setTubeStyle(0),
-              ),
-              _ChoiceChip(
-                label: l.tubeStylePentode,
-                selected: model.tubeStyle == 1,
-                onTap: () => model.setTubeStyle(1),
-              ),
-              _ChoiceChip(
-                label: l.tubeStyleTape,
-                selected: model.tubeStyle == 2,
-                onTap: () => model.setTubeStyle(2),
+              Text(l.tubeStyle, style: captionOf(p)),
+              const Spacer(),
+              Wrap(
+                spacing: AuraSpace.sm,
+                children: [
+                  _ChoiceChip(
+                    label: l.tubeStyleTriode,
+                    selected: model.tubeStyle == 0,
+                    onTap: () => model.setTubeStyle(0),
+                  ),
+                  _ChoiceChip(
+                    label: l.tubeStylePentode,
+                    selected: model.tubeStyle == 1,
+                    onTap: () => model.setTubeStyle(1),
+                  ),
+                  _ChoiceChip(
+                    label: l.tubeStyleTape,
+                    selected: model.tubeStyle == 2,
+                    onTap: () => model.setTubeStyle(2),
+                  ),
+                ],
               ),
             ],
           ),
@@ -1624,7 +1645,7 @@ class _IrSpectrumPainter extends CustomPainter {
       oldDelegate.spectrum != spectrum || oldDelegate.palette != palette;
 }
 
-/* ---- 3D 声场空间渲染 (动态尺寸与声场宽度联动) ---- */
+/* ---- 3D 声场空间渲染 (高级可视化：透视网格 + 声波扩散 + 衰减光晕) ---- */
 
 class _Freeverb3DStage extends StatelessWidget {
   final double decay;
@@ -1653,28 +1674,30 @@ class _Freeverb3DStage extends StatelessWidget {
             Text(l.fv3DTitle, style: captionOf(p, color: p.textDim)),
             const Spacer(),
             Text(
-              '透视网格 · 阻尼渐变 · 尺寸 ${roomSize.toStringAsFixed(1)}x',
+              'Room ${roomSize.toStringAsFixed(1)}x · Decay ${(decay * 100).toStringAsFixed(0)}% · Width ${stereoWidth.toStringAsFixed(1)}',
               style: monoOf(p, size: 10, color: p.textDim),
             ),
           ],
         ),
         const SizedBox(height: AuraSpace.xs),
-        Container(
-          height: 100,
-          decoration: BoxDecoration(
-            color: p.panelRaised,
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(color: p.hairline),
-          ),
-          child: CustomPaint(
-            size: const Size(double.infinity, 100),
-            painter: _Freeverb3DPainter(
-              decay: decay,
-              damp: damp,
-              roomSize: roomSize,
-              stereoWidth: stereoWidth,
-              palette: p,
-              active: active,
+        ClipRRect(
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          child: Container(
+            height: 140,
+            decoration: BoxDecoration(
+              color: p.panelRaised,
+              border: Border.all(color: p.hairline),
+            ),
+            child: CustomPaint(
+              size: const Size(double.infinity, 140),
+              painter: _Freeverb3DPainter(
+                decay: decay,
+                damp: damp,
+                roomSize: roomSize,
+                stereoWidth: stereoWidth,
+                palette: p,
+                active: active,
+              ),
             ),
           ),
         ),
@@ -1704,59 +1727,174 @@ class _Freeverb3DPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
+    final baseAlpha = active ? 1.0 : 0.2;
+    final sizeFactor = (roomSize / 1.5).clamp(0.35, 2.0);
 
-    final baseAlpha = active ? 1.0 : 0.25;
-    final gridColor = palette.vizGrid.withValues(alpha: 0.45 * baseAlpha);
-
-    // 动态空间尺寸映射：0.5x ~ 2.5x 映射到透视原点与边界
-    final sizeFactor = (roomSize / 1.5).clamp(0.4, 2.0);
+    // 消失点（透视中心）
     final vpX = w / 2;
-    final vpY = (h * 0.28) / sizeFactor;
+    final vpY = h * 0.15 / sizeFactor;
 
-    // 地板与侧墙网格
-    final pFloorLeft = Offset(w * 0.1, h * 0.95);
-    final pFloorRight = Offset(w * 0.9, h * 0.95);
-    final pBackLeft = Offset(vpX - (w * 0.25 * sizeFactor), vpY + 20);
-    final pBackRight = Offset(vpX + (w * 0.25 * sizeFactor), vpY + 20);
+    // 地面四角
+    final flL = Offset(w * 0.04, h * 0.98);
+    final flR = Offset(w * 0.96, h * 0.98);
+    final bkL = Offset(vpX - w * 0.28 * sizeFactor, vpY + 18);
+    final bkR = Offset(vpX + w * 0.28 * sizeFactor, vpY + 18);
 
-    final linePaint = Paint()
-      ..color = gridColor
-      ..strokeWidth = 1.0;
+    // ── 1. 透视地板网格 ──
+    final gridPaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.2 * baseAlpha)
+      ..strokeWidth = 0.6;
 
-    canvas.drawLine(pFloorLeft, pBackLeft, linePaint);
-    canvas.drawLine(pFloorRight, pBackRight, linePaint);
-    canvas.drawLine(pFloorLeft, pFloorRight, linePaint);
-    canvas.drawLine(pBackLeft, pBackRight, linePaint);
-
-    // 室内声波粒子反弹光晕
-    if (active) {
-      final glowPaint = Paint()
-        ..color = palette.accent.withValues(alpha: (0.15 * decay).clamp(0.02, 0.4))
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
-
-      canvas.drawCircle(Offset(vpX, vpY + 25), 18 * sizeFactor, glowPaint);
-
-      // 双发声源展开度 (stereoWidth)
-      final widthOffset = (w * 0.18 * stereoWidth).clamp(10.0, w * 0.4);
-      final leftSrc = Offset(vpX - widthOffset, h * 0.75);
-      final rightSrc = Offset(vpX + widthOffset, h * 0.75);
-
-      final srcPaint = Paint()
-        ..color = palette.accent.withValues(alpha: 0.75)
-        ..style = PaintingStyle.fill;
-
-      canvas.drawCircle(leftSrc, 3.5, srcPaint);
-      canvas.drawCircle(rightSrc, 3.5, srcPaint);
-
-      // 发声源向远处的反射光波
-      final wavePaint = Paint()
-        ..color = palette.accent.withValues(alpha: 0.12 * (1.0 - damp * 0.5))
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.2;
-
-      canvas.drawLine(leftSrc, pBackLeft, wavePaint);
-      canvas.drawLine(rightSrc, pBackRight, wavePaint);
+    // 纵深线（左→右均匀 8 条）
+    for (var i = 0; i <= 8; i++) {
+      final t = i / 8.0;
+      final botX = flL.dx + (flR.dx - flL.dx) * t;
+      final topX = bkL.dx + (bkR.dx - bkL.dx) * t;
+      canvas.drawLine(
+        Offset(botX, flL.dy),
+        Offset(topX, bkL.dy),
+        gridPaint,
+      );
     }
+    // 横向线（6 条，用透视缩放间距）
+    for (var i = 0; i <= 6; i++) {
+      final t = math.pow(i / 6.0, 1.6); // 近疏远密
+      final y = flL.dy + (bkL.dy - flL.dy) * t;
+      final lx = flL.dx + (bkL.dx - flL.dx) * t;
+      final rx = flR.dx + (bkR.dx - flR.dx) * t;
+      canvas.drawLine(Offset(lx, y), Offset(rx, y), gridPaint);
+    }
+
+    // 墙壁边框（地面 + 后墙 + 侧墙轮廓）
+    final wallPaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.35 * baseAlpha)
+      ..strokeWidth = 1.0;
+    canvas.drawLine(flL, bkL, wallPaint);
+    canvas.drawLine(flR, bkR, wallPaint);
+    canvas.drawLine(flL, flR, wallPaint);
+    canvas.drawLine(bkL, bkR, wallPaint);
+
+    // 天花板轮廓（镜像后墙上方）
+    final ceilY = vpY - 4;
+    final ceilL = Offset(bkL.dx - 2, ceilY);
+    final ceilR = Offset(bkR.dx + 2, ceilY);
+    final ceilPaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.18 * baseAlpha)
+      ..strokeWidth = 0.8;
+    canvas.drawLine(ceilL, ceilR, ceilPaint);
+    canvas.drawLine(bkL, ceilL, ceilPaint);
+    canvas.drawLine(bkR, ceilR, ceilPaint);
+
+    if (!active) return;
+
+    // ── 2. 声源位置 ──
+    final widthOff = (w * 0.2 * stereoWidth).clamp(12.0, w * 0.42);
+    final srcY = h * 0.78;
+    final srcL = Offset(vpX - widthOff, srcY);
+    final srcR = Offset(vpX + widthOff, srcY);
+
+    // 声源光晕（外圈漫反射）
+    final srcGlow = Paint()
+      ..color = palette.accent.withValues(alpha: 0.25)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+    canvas.drawCircle(srcL, 8, srcGlow);
+    canvas.drawCircle(srcR, 8, srcGlow);
+
+    // 声源实心点
+    final srcDot = Paint()
+      ..color = palette.accent.withValues(alpha: 0.9)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(srcL, 3.5, srcDot);
+    canvas.drawCircle(srcR, 3.5, srcDot);
+
+    // ── 3. 早期反射路径（声源 → 侧墙反弹点 → 远处交叉） ──
+    final reflAlpha = (0.18 * (1.0 - damp * 0.6)).clamp(0.04, 0.25) * baseAlpha;
+    final reflPaint = Paint()
+      ..color = palette.accent.withValues(alpha: reflAlpha)
+      ..strokeWidth = 0.9
+      ..style = PaintingStyle.stroke;
+
+    // 左声源 → 左墙反弹 → 远处右后
+    final wallHitL = Offset(flL.dx + (bkL.dx - flL.dx) * 0.45, flL.dy + (bkL.dy - flL.dy) * 0.45);
+    final wallHitR = Offset(flR.dx + (bkR.dx - flR.dx) * 0.45, flR.dy + (bkR.dy - flR.dy) * 0.45);
+    canvas.drawLine(srcL, wallHitL, reflPaint);
+    canvas.drawLine(wallHitL, bkR, reflPaint..strokeWidth = 0.5);
+    canvas.drawLine(srcR, wallHitR, reflPaint..strokeWidth = 0.9);
+    canvas.drawLine(wallHitR, bkL, reflPaint..strokeWidth = 0.5);
+
+    // 直达路径（到后墙中心）
+    final directPaint = Paint()
+      ..color = palette.accent.withValues(alpha: 0.12 * baseAlpha)
+      ..strokeWidth = 0.7
+      ..style = PaintingStyle.stroke;
+    final backCenter = Offset(vpX, (bkL.dy + bkR.dy) / 2);
+    canvas.drawLine(srcL, backCenter, directPaint);
+    canvas.drawLine(srcR, backCenter, directPaint);
+
+    // ── 4. 衰减扩散环（从声源向外扩展的弧形声波） ──
+    final ringCount = (3 + decay * 4).toInt().clamp(2, 7);
+    for (var i = 1; i <= ringCount; i++) {
+      final t = i / (ringCount + 1);
+      final ringAlpha = (0.15 * (1.0 - t) * decay * (1.0 - damp * 0.4)).clamp(0.02, 0.2);
+      final ringPaint = Paint()
+        ..color = palette.accent.withValues(alpha: ringAlpha * baseAlpha)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = (1.2 - t * 0.6).clamp(0.3, 1.2);
+
+      final radius = 14.0 + t * 50 * sizeFactor;
+
+      // 左声源波纹弧（上半圆）
+      canvas.drawArc(
+        Rect.fromCircle(center: srcL, radius: radius),
+        -math.pi * 0.85, math.pi * 0.7,
+        false, ringPaint,
+      );
+      // 右声源波纹弧
+      canvas.drawArc(
+        Rect.fromCircle(center: srcR, radius: radius),
+        -math.pi * 0.15, math.pi * 0.7,
+        false, ringPaint,
+      );
+    }
+
+    // ── 5. 后墙漫反射光晕 ──
+    final backGlow = Paint()
+      ..color = palette.accent.withValues(alpha: (0.08 * decay * (1.0 - damp * 0.5)).clamp(0.01, 0.15))
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 20 * sizeFactor);
+    canvas.drawOval(
+      Rect.fromCenter(center: Offset(vpX, vpY + 14), width: (bkR.dx - bkL.dx) * 0.8, height: 24 * sizeFactor),
+      backGlow,
+    );
+
+    // ── 6. 聆听位置指示（小三角底部中央） ──
+    final listenerY = h * 0.92;
+    final listenerPaint = Paint()
+      ..color = palette.accent.withValues(alpha: 0.5)
+      ..style = PaintingStyle.fill;
+    final triPath = Path()
+      ..moveTo(vpX, listenerY - 5)
+      ..lineTo(vpX - 4, listenerY + 2)
+      ..lineTo(vpX + 4, listenerY + 2)
+      ..close();
+    canvas.drawPath(triPath, listenerPaint);
+
+    // 聆听位置光晕
+    final listGlow = Paint()
+      ..color = palette.accent.withValues(alpha: 0.1)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+    canvas.drawCircle(Offset(vpX, listenerY - 2), 8, listGlow);
+
+    // ── 7. 阻尼渐变蒙层（从上往下，damp 越高顶部越暗） ──
+    final dampGrad = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.center,
+        colors: [
+          palette.bg.withValues(alpha: (damp * 0.4).clamp(0.0, 0.35)),
+          palette.bg.withValues(alpha: 0.0),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, w, h));
+    canvas.drawRect(Rect.fromLTWH(0, 0, w, h * 0.6), dampGrad);
   }
 
   @override

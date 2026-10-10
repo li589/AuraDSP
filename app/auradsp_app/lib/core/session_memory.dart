@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'config.dart';
+import 'plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
 
@@ -24,8 +25,20 @@ abstract final class SessionMemory {
       if (!dir.existsSync()) dir.createSync(recursive: true);
 
       final snapshot = PresetLibrary.snapshot(m, name: '__session_memory__');
+      final slotSnapshots = <Map<String, dynamic>>[];
+      for (var s = 0; s < PluginManager.kMaxSlots; s++) {
+        final p = m.pluginManager.getSlotPlugin(s);
+        slotSnapshots.add({
+          'slot': s,
+          'path': p?.path,
+          'id': p?.id,
+          'bypassed': m.pluginManager.isSlotBypassed(s),
+          'stage': m.pluginManager.getSlotStage(s),
+        });
+      }
+
       final payload = {
-        'version': 2,
+        'version': 3,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
         'locale': m.locale.languageCode,
@@ -35,9 +48,10 @@ abstract final class SessionMemory {
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
-        'pluginPath': m.pluginManager.activePlugin?.path,
-        'pluginId': m.pluginManager.activePlugin?.id,
-        'pluginBypass': m.pluginManager.isBypassed,
+        'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
+        'pluginId': m.pluginManager.getSlotPlugin(0)?.id,
+        'pluginBypass': m.pluginManager.isSlotBypassed(0),
+        'slots': slotSnapshots,
         'parameters': snapshot.params,
       };
 
@@ -78,14 +92,41 @@ abstract final class SessionMemory {
       }
       if (session['ddcPath'] is String) {
         m.ddcPath = session['ddcPath'] as String;
+        m.parseVdcMetadata(m.ddcPath!);
       }
       if (session['lpCode'] is String) {
         m.lpCode = session['lpCode'] as String;
       }
-      if (session['pluginPath'] is String) {
+
+      // 多插槽恢复
+      m.savedPluginSlots.clear();
+      if (session['slots'] is List) {
+        for (final item in (session['slots'] as List)) {
+          if (item is Map) {
+            final path = item['path'] as String?;
+            if (path != null && path.isNotEmpty) {
+              m.savedPluginSlots.add(SavedPluginSlot(
+                slot: (item['slot'] as num?)?.toInt() ?? 0,
+                path: path,
+                id: (item['id'] as String?) ?? '',
+                bypass: (item['bypassed'] as bool?) ?? false,
+                stage: (item['stage'] as num?)?.toInt() ?? PluginInsertStage.defaultStage,
+              ));
+            }
+          }
+        }
+      }
+      if (m.savedPluginSlots.isEmpty && session['pluginPath'] is String) {
         m.savedPluginPath = session['pluginPath'] as String;
         m.savedPluginId = (session['pluginId'] as String?) ?? '';
         m.savedPluginBypass = (session['pluginBypass'] as bool?) ?? false;
+        m.savedPluginSlots.add(SavedPluginSlot(
+          slot: 0,
+          path: m.savedPluginPath!,
+          id: m.savedPluginId,
+          bypass: m.savedPluginBypass,
+          stage: PluginInsertStage.defaultStage,
+        ));
       }
 
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};

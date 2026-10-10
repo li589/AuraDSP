@@ -28,6 +28,10 @@ class AppConfig {
   double maxIrDurationSeconds;
   double maxFileSizeMb;
 
+  // 自定义检索与外部预设目录
+  List<String> customPluginDirs;
+  List<String> customScriptDirs;
+
   AppConfig({
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
@@ -41,12 +45,16 @@ class AppConfig {
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
-  });
+    List<String>? customPluginDirs,
+    List<String>? customScriptDirs,
+  })  : customPluginDirs = customPluginDirs ?? [],
+        customScriptDirs = customScriptDirs ?? [];
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     final audio = (json['audio'] as Map<String, dynamic>?) ?? {};
     final ui = (json['ui'] as Map<String, dynamic>?) ?? {};
     final safety = (json['safety'] as Map<String, dynamic>?) ?? {};
+    final paths = (json['paths'] as Map<String, dynamic>?) ?? {};
 
     return AppConfig(
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
@@ -61,11 +69,19 @@ class AppConfig {
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
+      customPluginDirs: (paths['customPluginDirs'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
+      customScriptDirs: (paths['customScriptDirs'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [],
     );
   }
 
   Map<String, dynamic> toJson() => {
-        'version': 1,
+        'version': 2,
         'audio': {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
@@ -83,6 +99,10 @@ class AppConfig {
         'safety': {
           'maxIrDurationSeconds': maxIrDurationSeconds,
           'maxFileSizeMb': maxFileSizeMb,
+        },
+        'paths': {
+          'customPluginDirs': customPluginDirs,
+          'customScriptDirs': customScriptDirs,
         },
       };
 }

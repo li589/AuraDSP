@@ -25,6 +25,10 @@ Thumbs.db
 __pycache__/
 *.pyc
 
+# --- 智能体/工具运行时 harness 目录 ---
+.v2c/
+.video_agent/
+
 # --- Flutter APP 构建产物 ---
 .tmp/
 **/build/

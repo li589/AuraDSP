@@ -31,6 +31,7 @@ def run_smoke_tests():
         "smoke_viz_lowfreq.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",
+        "smoke_multislot_and_stages.py",
         "test_cross_system_verify.py",
     ]
     all_pass = True
@@ -72,6 +73,7 @@ def run_ui_tests(target=None):
             os.path.join(UI_DIR, "ui_verify_effects_3d.py"),
             os.path.join(UI_DIR, "ui_verify_preset_and_memory.py"),
             os.path.join(UI_DIR, "ui_verify_plugins.py"),
+            os.path.join(UI_DIR, "ui_verify_vst_and_eel.py"),
         ]
     all_pass = True
     for tp in targets:
