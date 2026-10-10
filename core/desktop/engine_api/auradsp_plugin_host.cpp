@@ -29,6 +29,55 @@ namespace fs = std::filesystem;
 
 namespace auradsp {
 
+namespace {
+
+/* RT 临界区守卫：进入时已由调用方 fetch_add(acq_rel) 计入 inFlight，
+ * 析构时递减；若是最后一个离开者且控制线程正在等排空，则唤醒它。
+ * 唤醒带 pend 检查，避免每块都触发一次无谓的 futex/WaitOnAddress 系统调用。 */
+struct InFlightGuard {
+    std::atomic<uint32_t>& counter;
+    std::atomic<bool>& pending;
+    InFlightGuard(std::atomic<uint32_t>& c, std::atomic<bool>& p) : counter(c), pending(p) {}
+    ~InFlightGuard() {
+        if (counter.fetch_sub(1, std::memory_order_release) == 1 &&
+            pending.load(std::memory_order_relaxed)) {
+            counter.notify_all();
+        }
+    }
+    InFlightGuard(const InFlightGuard&) = delete;
+    InFlightGuard& operator=(const InFlightGuard&) = delete;
+};
+
+/* 控制线程等待 RT 排空的自旋上限。正常路径 0~1 次 wait 即返回；
+ * 超过上限视为「RT 线程异常滞留」，此时选择保留实例而不是冒险释放。 */
+constexpr uint32_t kQuiesceSpinLimit = 4096;
+
+/* SEH 崩溃隔离。
+ * MSVC 限制：__try 不能出现在需要 C++ 对象展开（ unwind）的函数中（C2712），
+ * 而 processSlot 内有 InFlightGuard 析构，故把 SEH 段隔离到这个无对象函数。
+ * 返回 0 = 正常，1 = 捕获到插件异常（调用方据此自动旁路该槽）。 */
+static int processSlotGuarded(PluginHostManager::PluginSlot& s,
+                              float* const* inChannels, float* const* outChannels,
+                              uint32_t numFrames) {
+#if defined(_MSC_VER)
+    __try {
+        if (s.instance) s.instance->process(inChannels, outChannels, numFrames);
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;
+    }
+#else
+    try {
+        if (s.instance) s.instance->process(inChannels, outChannels, numFrames);
+        return 0;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
+}  // namespace
+
 //------------------------------------------------------------------------------
 // Win32 Editor Window Host
 //------------------------------------------------------------------------------
@@ -1364,13 +1413,32 @@ std::string PluginHostManager::getAllScannedJson() const {
 
 void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
-    m_slots[slot].hasActive.store(false, std::memory_order_release);
-    m_slots[slot].latency.store(0, std::memory_order_relaxed);
-    if (m_slots[slot].instance) {
-        m_slots[slot].instance->closeEditor();
-        m_slots[slot].instance->deactivate();
-        m_slots[slot].instance->unload();
-        m_slots[slot].instance.reset();
+    PluginSlot& s = m_slots[slot];
+    /* 关闭入口 → 等 RT 临界区排空 → 才允许销毁实例。
+     * acquire 栅栏是必需的：它保证下面的 inFlight 读不会被重排到
+     * hasActive=false 之前，从而堵住 Dekker 反例的最后一个窗口。 */
+    s.hasActive.store(false, std::memory_order_release);
+    s.destroyPending.store(true, std::memory_order_release);
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    uint32_t spins = 0;
+    while (s.inFlight.load(std::memory_order_relaxed) != 0 && spins < kQuiesceSpinLimit) {
+        s.inFlight.wait(0, std::memory_order_relaxed);
+        ++spins;
+    }
+    const bool quiesced = s.inFlight.load(std::memory_order_relaxed) == 0;
+    s.destroyPending.store(false, std::memory_order_relaxed);
+
+    /* 排空失败（RT 线程异常滞留）时宁可不释放：实例仍在槽内但 hasActive=false，
+     * 后续 processSlot 会走直通分支，下次卸载会重试。保内存安全优先于保内存。 */
+    if (!quiesced) return;
+
+    s.latency.store(0, std::memory_order_relaxed);
+    if (s.instance) {
+        s.instance->closeEditor();
+        s.instance->deactivate();
+        s.instance->unload();
+        s.instance.reset();
     }
 }
 
@@ -1533,7 +1601,16 @@ int PluginHostManager::getInsertStageSlot(size_t slot) const {
 
 void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
     if (slot >= kMaxPluginSlots) return;
-    if (!m_slots[slot].hasActive.load(std::memory_order_acquire) || m_slots[slot].bypassed.load(std::memory_order_acquire)) {
+    PluginSlot& s = m_slots[slot];
+    /* 先计入 RT 临界区，再读 hasActive。控制线程的卸载顺序是
+     * 「hasActive=false → 等 inFlight==0 → 销毁」，两者构成无竞态握手：
+     * 若本线程的 fetch_add 晚于控制线程的检查，本线程随后读到的
+     * hasActive 必为 false（acq_rel 与 release store 建立了 happens-before），
+     * 于是不会触碰已释放的实例。 */
+    s.inFlight.fetch_add(1, std::memory_order_acq_rel);
+    InFlightGuard guard(s.inFlight, s.destroyPending);
+
+    if (!s.hasActive.load(std::memory_order_acquire) || s.bypassed.load(std::memory_order_acquire)) {
         if (inChannels != outChannels && inChannels && outChannels) {
             for (int ch = 0; ch < 2; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
@@ -1544,24 +1621,10 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
         return;
     }
 
-#if defined(_MSC_VER)
-    __try {
-        if (m_slots[slot].instance) {
-            m_slots[slot].instance->process(inChannels, outChannels, numFrames);
-        }
-    } __except (EXCEPTION_EXECUTE_HANDLER) {
-        // Safe bypass on unexpected SEH crash
-        m_slots[slot].bypassed.store(true, std::memory_order_release);
+    /* SEH/异常段已隔离到 processSlotGuarded（MSVC C2712：无析构函数才能用 __try） */
+    if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
+        s.bypassed.store(true, std::memory_order_release);
     }
-#else
-    try {
-        if (m_slots[slot].instance) {
-            m_slots[slot].instance->process(inChannels, outChannels, numFrames);
-        }
-    } catch (...) {
-        m_slots[slot].bypassed.store(true, std::memory_order_release);
-    }
-#endif
 }
 
 // Legacy single-slot forwards (slot 0)

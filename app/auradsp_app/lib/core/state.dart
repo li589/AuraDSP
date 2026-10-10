@@ -683,7 +683,11 @@ class AppModel extends ChangeNotifier {
       case 'tube.enable': tubeOn = v != 0; break;
       case 'crossfeed.enable': xfeedOn = v != 0; break;
       default:
-        final mb = RegExp(r'^stereo\.band([1-5])\$').firstMatch(id);
+        // 注意：这里必须用 raw string 里的裸 $ 收尾。写成 r'...\$' 是
+        // 反斜杠+美元，在 ECMAScript 正则里是 IdentityEscape，匹配**字面 $ 字符**，
+        // 于是 'stereo.band1' 永远不匹配 → 分带镜像与 stereoBandUsed 全程失效
+        // （下方 liveprog.param 同类写法即为正确示范）。
+        final mb = RegExp(r'^stereo\.band([1-5])$').firstMatch(id);
         if (mb != null) {
           stereoBands[int.parse(mb.group(1)!) - 1] = v.clamp(0.0, 1.0);
           stereoBandUsed = true;
@@ -1152,6 +1156,17 @@ class AppModel extends ChangeNotifier {
   void setEqFilter(int filter) {
     eqFilter = filter;
     notifyListeners();
+  }
+
+  /// 整表写入 EQ 增益并重推曲线。
+  /// 必须走本方法而不能直接 `eqGains[i] = v`：eqGains 是裸 `List<double>`，
+  /// 直接赋值不会触发 _pushEqCurve()，引擎会继续用上一条曲线
+  /// （预设恢复 EQ 时就是这么丢增益的）。
+  void applyEqGains(List<double> gains) {
+    for (var i = 0; i < gains.length && i < eqGains.length; i++) {
+      eqGains[i] = gains[i].clamp(-18.0, 18.0);
+    }
+    _pushEqCurve();
   }
 
   void setEqInterp(int interp) {

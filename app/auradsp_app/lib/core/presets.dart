@@ -402,9 +402,9 @@ abstract final class PresetLibrary {
       }
       if (eq['gains'] is List) {
         final list = (eq['gains'] as List).map((e) => (e as num).toDouble()).toList();
-        for (var i = 0; i < list.length && i < m.eqGains.length; i++) {
-          m.eqGains[i] = list[i];
-        }
+        // 必须最后走 applyEqGains：它内部会重推 eq.curve。
+        // 直接写 m.eqGains[i] 是裸字段赋值，不会通知引擎（见 state.dart 说明）。
+        m.applyEqGains(list);
       }
       if (eq['presetName'] != null) {
         m.eqPresetName = eq['presetName'] as String;
@@ -445,6 +445,45 @@ abstract final class PresetLibrary {
     // 7. 处理链顺序
     if (p['chainOrder'] is String) {
       m.setGraphOrder(p['chainOrder'] as String);
+    }
+
+    // 8. 低频搁架 —— snapshot 会写这节，apply 必须对称读回，
+    //否则「Studio Flat Monitor」这类平直预设关不掉已开启的搁架。
+    final shelf = (p['shelf'] as Map<String, dynamic>?) ?? {};
+    if (shelf.isNotEmpty) {
+      if (shelf['freq'] != null) {
+        m.setFloat('shelf.freq', (shelf['freq'] as num).toDouble());
+      }
+      if (shelf['gain'] != null) {
+        m.setFloat('shelf.gain', (shelf['gain'] as num).toDouble());
+      }
+      // enable 必须最后下发：引擎侧先按 freq/gain 重算系数，再由它决定是否旁路
+      if (shelf['enable'] != null) {
+        m.setInt('shelf.enable', (shelf['enable'] as bool) ? 1 : 0);
+      }
+    }
+
+    // 9. 脉冲卷积（IR 路径由 convIrPath / 会话层负责重载，这里只恢复使能与混合比）
+    final conv = (p['convolver'] as Map<String, dynamic>?) ?? {};
+    if (conv.isNotEmpty) {
+      if (conv['mix'] != null) {
+        m.setFloat('convolver.mix', (conv['mix'] as num).toDouble());
+      }
+      if (conv['enable'] != null) {
+        m.setConvolverEnabled(conv['enable'] as bool);
+      }
+    }
+
+    // 10. VDC（扬声器校正）
+    final ddc = (p['ddc'] as Map<String, dynamic>?) ?? {};
+    if (ddc.isNotEmpty && ddc['enable'] != null) {
+      m.setDdcEnabled(ddc['enable'] as bool);
+    }
+
+    // 11. 交叉反馈
+    final xf = (p['crossfeed'] as Map<String, dynamic>?) ?? {};
+    if (xf.isNotEmpty && xf['enable'] != null) {
+      m.setCrossfeedEnabled(xf['enable'] as bool);
     }
 
     m.activePresetName = preset.name;

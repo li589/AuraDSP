@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/presets.dart';
 import 'package:auradsp_app/core/session_memory.dart';
+import 'package:auradsp_app/core/state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -142,6 +143,80 @@ void main() {
   group('SessionMemory Tests', () {
     test('SessionMemory file path is well-formed', () {
       expect(SessionMemory.sessionPath, contains('session_state.json'));
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // 回归测试：以下三条对应已修复的高危缺陷，删除任一会让缺陷复活。
+  // ---------------------------------------------------------------------
+  group('Regressions: stereo band mirror / preset apply symmetry / EQ curve push', () {
+    test('stereo.bandN 镜像生效（正则必须以裸美元符收尾，不能写成反斜杠转义）', () {
+      final m = AppModel();
+      // 修复前：RegExp(r'^stereo\.band([1-5])\$') 匹配的是字面美元符，
+      // 于是 stereoBands 永不更新、stereoBandUsed 永远 false。
+      expect(m.stereoBandUsed, isFalse);
+      m.setFloat('stereo.band1', 0.8);
+      expect(m.stereoBands[0], closeTo(0.8, 1e-9));
+      expect(m.stereoBandUsed, isTrue);
+      m.setFloat('stereo.band5', 0.25);
+      expect(m.stereoBands[4], closeTo(0.25, 1e-9));
+
+      // 不应误伤其它同族 id
+      m.setFloat('post.gain', 1.5);
+      expect(m.postGain, closeTo(1.5, 1e-9));
+    });
+
+    test('apply() 读回 snapshot 写出的全部区块（shelf/convolver/ddc/crossfeed）', () {
+      final m = AppModel();
+      // 先把四个效果全部打开，模拟"用户当前开着这些效果"
+      m.setInt('shelf.enable', 1);
+      m.setInt('convolver.enable', 1);
+      m.setInt('ddc.enable', 1);
+      m.setInt('crossfeed.enable', 1);
+      m.setFloat('shelf.freq', 80.0);
+      m.setFloat('shelf.gain', 6.0);
+      expect(m.shelfOn, isTrue);
+
+      final preset = AuraPreset(
+        name: '__regress_flat__',
+        createdAt: DateTime.now().toIso8601String(),
+        params: {
+          'shelf': {'enable': false, 'freq': 120.0, 'gain': 0.0},
+          'convolver': {'enable': false, 'mix': 0.4},
+          'ddc': {'enable': false},
+          'crossfeed': {'enable': false},
+        },
+      );
+      PresetLibrary.apply(m, preset);
+
+      // 修复前 apply() 完全不读这四节 → 上面打开的效果全部保持开启，
+      // "平直监听"预设关不掉搁架。
+      expect(m.shelfOn, isFalse);
+      expect(m.shelfFreq, closeTo(120.0, 1e-9));
+      expect(m.shelfGain, closeTo(0.0, 1e-9));
+      expect(m.convEnabled, isFalse);
+      expect(m.convMix, closeTo(0.4, 1e-9));
+      expect(m.ddcOn, isFalse);
+      expect(m.xfeedOn, isFalse);
+    });
+
+    test('apply() 后 eqGains 真正落到 model（裸字段赋值不再吞掉增益）', () {
+      final m = AppModel();
+      final gains = List<double>.filled(15, 0.0);
+      gains[0] = -6.0;
+      gains[7] = 9.0;
+      gains[14] = 3.0;
+      final preset = AuraPreset(
+        name: '__regress_eq__',
+        createdAt: DateTime.now().toIso8601String(),
+        params: {
+          'eq': {'bandsCount': 15, 'q': 1.414, 'gains': gains, 'enable': true},
+        },
+      );
+      PresetLibrary.apply(m, preset);
+      expect(m.eqGains[0], closeTo(-6.0, 1e-9));
+      expect(m.eqGains[7], closeTo(9.0, 1e-9));
+      expect(m.eqGains[14], closeTo(3.0, 1e-9));
     });
   });
 }

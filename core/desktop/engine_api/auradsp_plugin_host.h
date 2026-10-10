@@ -90,6 +90,13 @@ public:
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
+        /* RT 临界区握手计数器（修复 use-after-free）。
+         * 契约：RT 侧进入 processSlot 时先 fetch_add(acq_rel) 再读 hasActive；
+         * 控制侧卸载时先 hasActive=false(release) + destroyPending=true，
+         * 加 acquire 栅栏后等 inFlight 归零才允许销毁 instance。
+         * 二者构成 Dekker 式握手，杜绝「RT 已通过检查但实例被 reset」的竞争。 */
+        std::atomic<uint32_t> inFlight{0};
+        std::atomic<bool> destroyPending{false};
     };
 
     PluginHostManager();

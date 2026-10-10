@@ -499,9 +499,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int? lastSentState;
   double? lastSentLatency;
 
+  /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
+   * 无门控的同步落盘会在音频泵线程上产生上百次/秒 flushSync，
+   * 直接抬升 WASAPI 抖动、诱发 underrun。 */
+  final logSetParam = ThrottledLog('setParam');
+  final logSetParamStr = ThrottledLog('setParamStr');
+  final logCmd = ThrottledLog('cmd', head: 40, every: 200);
+
   fromMain.listen((raw) {
     final m = raw as Map;
-    dbgLog('cmd: ${m['cmd']} ${m['kind'] ?? m['id'] ?? ''} ${m['value'] ?? ''}');
+    // 命令轨迹（采样）：完整命令流对排障有用，但每帧一条会淹没日志
+    if (logCmd.shouldLog) {
+      dbgLog('cmd: ${m['cmd']} ${m['kind'] ?? m['id'] ?? ''} ${m['value'] ?? ''}');
+    }
     try {
       switch (m['cmd'] as String) {
         case 'setParam':
@@ -510,7 +520,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               isFloat: m['isFloat'] as bool, value: (m['value'] as num).toDouble());
           final tookMs = DateTime.now().difference(t0).inMilliseconds;
           // 关键证据：引擎应用耗时。旧实现全量重建混响/EQ 时这里是几十~几百 ms。
-          dbgLog('setParam ${m['id']}=${m['value']} rc=$rc took=${tookMs}ms');
+          logSetParam.admit('${m['id']}=${m['value']} rc=$rc took=${tookMs}ms');
           String? err;
           if (rc != Status.ok) {
             final e = lib.lastError(handle);
@@ -644,7 +654,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final rc = AuraDspLib.setString(
                 lib!, handle!, m['id'] as String, m['text'] as String);
             final tookMs = DateTime.now().difference(t0).inMilliseconds;
-            dbgLog('setParamStr ${m['id']} (${(m['text'] as String).length}B) '
+            logSetParamStr.admit('${m['id']} (${(m['text'] as String).length}B) '
                 'rc=$rc took=${tookMs}ms');
             String? err;
             if (rc != Status.ok) {
