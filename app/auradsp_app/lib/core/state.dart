@@ -630,7 +630,12 @@ class AppModel extends ChangeNotifier {
     _mirror(id, v.toDouble());
     _markSent(id);
     notifyListeners();
-    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
+    if (id == 'bass.enable' && v == 0) {
+      // 先渐变到 0 再关闭，避免直接置 0 造成「哒」一声。
+      _disableBassRamped();
+    } else {
+      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
+    }
     scheduleAutoSave();
   }
 
@@ -638,8 +643,77 @@ class AppModel extends ChangeNotifier {
     _mirror(id, v);
     _markSent(id);
     notifyListeners();
-    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
+    if (id == 'bass.gain') {
+      // 低音拖动约 60Hz 触发，而 BassBoostSetParam 运行在**驱动 WASAPI 的
+      // 同一线程**上（setParam 与 pump 同属一个 isolate）——不存在数据竞争，
+      // 真实成因是每次调用既阻塞音频泵、又造成系数阶跃。
+      // 单纯节流只降低频率、仍是阶跃（实测仍有「哒哒」声），故改为
+      // 20Hz 起步的**渐变爬坡**：每步最多 0.6 dB，等效于等功率交叉淡化。
+      _bassRampTarget = v;
+      _kickBassRamp();
+    } else {
+      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
+    }
     scheduleAutoSave();
+  }
+
+  void _sendBassGain(double v) {
+    _markSent('bass.gain');
+    send({'cmd': 'setParam', 'id': 'bass.gain', 'value': v, 'isFloat': true});
+  }
+
+  /// 推进一格并安排下一步；到达目标后收尾（含关闭时的延迟 disable）。
+  void _stepBassRamp() {
+    _bassGainTimer = null;
+    final target = _bassRampTarget;
+    if (target == null) return;
+    final diff = target - _bassRampCur;
+    if (diff > _bassGainStepDb) {
+      _bassRampCur += _bassGainStepDb;
+    } else if (diff < -_bassGainStepDb) {
+      _bassRampCur -= _bassGainStepDb;
+    } else {
+      _bassRampCur = target;
+    }
+    _sendBassGain(_bassRampCur);
+    _kickBassRamp();
+  }
+
+  void _kickBassRamp() {
+    final target = _bassRampTarget;
+    if (target == null) return;
+    if ((target - _bassRampCur).abs() <= _bassGainStepDb) {
+      if (_bassRampCur != target) {
+        _bassRampCur = target;
+        _sendBassGain(target);
+      }
+      _bassRampTarget = null;
+      if (_bassDisableAfterRamp) {
+        // 已渐变到 0，此时关开关才不会「哒」一声。
+        _bassDisableAfterRamp = false;
+        _markSent('bass.enable');
+        send(
+            {'cmd': 'setParam', 'id': 'bass.enable', 'value': 0, 'isFloat': false});
+      }
+      _bassGainTimer?.cancel();
+      _bassGainTimer = null;
+      return;
+    }
+    _bassGainTimer ??= Timer(
+        const Duration(milliseconds: _bassGainMinIntervalMs), _stepBassRamp);
+  }
+
+  /// 关闭低音：先把增益渐变到 0，再下发 disable（无爆音的旁路）。
+  void _disableBassRamped() {
+    if (_bassRampCur <= 0.0) {
+      _markSent('bass.enable');
+      send(
+          {'cmd': 'setParam', 'id': 'bass.enable', 'value': 0, 'isFloat': false});
+      return;
+    }
+    _bassRampTarget = 0.0;
+    _bassDisableAfterRamp = true;
+    _kickBassRamp();
   }
 
 
@@ -1357,6 +1431,13 @@ class AppModel extends ChangeNotifier {
   String? _pendingEqCurve;
   Timer? _eqCurveTimer;
   DateTime _lastEqCurveSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  static const int _bassGainMinIntervalMs = 50; // 20 Hz
+  static const double _bassGainStepDb = 0.6; // 每步最多推进 0.6 dB
+  double _bassRampCur = 0.0;
+  double? _bassRampTarget;
+  Timer? _bassGainTimer;
+  bool _bassDisableAfterRamp = false;
 
   void _pushEqCurve() {
     // C3：锚点与频点都必须落在 Nyquist 以内。引擎原先只按 f<=96000 校验，

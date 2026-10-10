@@ -372,44 +372,6 @@ class AuraAppSession:
                 f"未能于 {box} 内定位到卡片主开关（最大 accent 色块面积 {best[0]} < {min_area}）")
         return (best[1], best[2])
 
-    def find_filled_slider(self, box, min_run=200, pick='longest'):
-        """在 box 内定位「已填充的滑轨」，返回 (thumb_x, y, run_len)。
-
-        判据：某一行的 accent 水平连续长度远超其它元素（全项目只有滑轨
-        填充区能达到 200px 以上，其余 accent 元素都是几十 px 的小方块）。
-        填充区右端即为 Thumb 所在位置。
-        比硬编码行 y 稳健得多：不受滚动位置、卡片展开态、控件增减影响。
-
-        pick='longest' 取最长的一段；pick='top' 取纵坐标最靠上的一段
-        （页面有多条滑轨时，「最上面那条」比「最长那条」更符合「第一个控件」
-        的直觉，也不会因为下方某条更宽而选错）。
-        """
-        img = self.capture(_SCRATCH(), box)
-        px = img.load()
-        w, h = img.size
-        hits = []
-        for y in range(h):
-            run = 0
-            for x in range(w + 1):
-                if x < w and self._near(px[x, y], self.ACCENT):
-                    run += 1
-                else:
-                    if run >= min_run:
-                        hits.append((run, x + box[0], y + box[1]))
-                    run = 0
-        if not hits:
-            raise AssertionError(
-                f"未能于 {box} 内定位到已填充滑轨（需要 accent 连续 >= {min_run}px）。"
-                "通常是控件未渲染、卡片开关未开，或需要先滚动到该卡片")
-        hits.sort(key=lambda t: t[1] if pick == 'top' else -t[0])
-        run_len, end_x, y_abs = hits[0]
-        # 返回 Thumb 圆心而非填充段端点：横向内缩半个 Thumb，纵向取整段中线。
-        # 直接拿端点去拖会落在圆边缘，产生 0 差异的假失败。
-        ys = sorted({y for (_, _, y) in hits})
-        group = [y for y in ys if abs(y - y_abs) <= 14]
-        y_center = (min(group) + max(group)) // 2
-        return (end_x - 6, y_center, run_len)
-
     def _thumb_row_y(self, px, cols, box):
         best_y, best_n = 0, -1
         w = max(cols) + 1 if cols else 0

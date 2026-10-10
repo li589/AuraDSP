@@ -40,10 +40,16 @@
 - **症状**：操作 EQ 时爆音。eq.curve 经 uradsp_set_param 在驱动 WASAPI 的线程上
   调用 MultimodalEqualizerAxisInterpolation（makima + 最小相位 IR + FFT 卷积刷新，约 760µs），
   而同一线程的音频回调正在 FFTConvolver2x2Process(&mEQ.conv, ...)
-- **根因**：重建与处理**操作同一个卷积器对象且全程无锁** ——
-  刷新方覆写 _segmentsIRRe/Im、_current、_overlap，
-  处理方同时在读它们。ctrl_mutex 明确不挡 process。
-  这是数据竞争，不只是延迟问题，故单纯节流或挪线程无法根治
+- **根因**：重建与处理**操作同一个卷积器对象** ——
+  刷新方覆写 _segmentsIRRe/Im、_current、_overlap，处理方读的是同一个对象。
+  ctrl_mutex 明确不挡 process。
+  **注意措辞更正（2026-10-10 复盘）**：这**不是跨线程数据竞争**——
+  `setParamStr` 与 WASAPI 音频泵同属 `audio_isolate.dart` 的同一个 isolate
+  （`case 'setParamStr'` :739 与 `pump()` :1154 同函数，:1250 由
+  `unawaited(pump())` 启动），Dart isolate 单线程 ⇒ 两者同 OS 线程。
+  真实成因是 ① 每次重建**阻塞音频泵**约 760µs，导致回调赶不上；
+  ② 重建对象与处理对象**重叠**（同一块内存先被刷新再被处理）。
+  该补丁消除了②并把①移出关键路径，价值成立；「数据竞争」的原始措辞是错的。
 - **改动**：mEQ 内预分配 conv / convB 两个卷积器 + ctiveConv 指针。
   控制线程在非活动实例上完成 IR 构建与刷新，随后换指针；
   音频线程块首读一次指针即切到新 IR，块内不再触碰换出的实例
@@ -57,3 +63,16 @@
   只有 conv2 才是真正的 IR 存储。故无需为其引入第二份
 - **兼容性**：外部调用方无需改动，uradsp_set_param("eq.curve") 语义不变；
   operatingMode != 0 的 IIR 分支未触及
+
+## P-007 multimodalEQ.c — EQ 频率轴按实际 Nyquist 收尾（2026-10-10）
+
+- **位置**：两处 jdsp->mEQ.freq[NUMPTS + 1] = 24000.0
+  （MultimodalEqualizerConstructor 与 MultimodalEqualizerAxisInterpolation）
+- **症状**：采样率低于 48kHz 时，EQ 曲线最末端锚点超过 Nyquist。
+  44.1kHz 下 Nyquist 为 22050Hz，硬编码的 24000 越界。
+- **改动**：改为 (double)jdsp->fs * 0.5，按实际采样率取 Nyquist。
+- **配套**：P-006 已把 uradsp_engine.cpp 侧 eq.curve 的频点也按
+  sample_rate * 0.5 钳位，两端一致。
+- **兼容性**：req[NUMPTS]（用户最末点）已由引擎侧钳到 
+yquist * 0.999，
+  故 req[NUMPTS] < fs * 0.5 恒成立，单调性不被破坏。

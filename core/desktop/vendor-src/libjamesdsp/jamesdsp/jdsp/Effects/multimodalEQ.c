@@ -8,7 +8,9 @@ void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 {
 	double freqAx[NUMPTS] = { 25.0, 40.0, 63.0, 100.0, 160.0, 250.0, 400.0, 630.0, 1000.0, 1600.0, 2500.0, 4000.0, 6300.0, 10000.0, 16000.0 };
 	memcpy(jdsp->mEQ.freq + 1, freqAx, NUMPTS * sizeof(double));
-	jdsp->mEQ.freq[NUMPTS + 1] = 24000.0;
+	/* P-007：原先硬编码 24000.0，在 44.1kHz 下超过 Nyquist(22050)。
+	 * 改为按实际采样率的 Nyquist 取值。 */
+	jdsp->mEQ.freq[NUMPTS + 1] = (double)jdsp->fs * 0.5;
 	memset(jdsp->mEQ.z1_AL, 0, sizeof(jdsp->mEQ.z1_AL));
 	memset(jdsp->mEQ.z2_AL, 0, sizeof(jdsp->mEQ.z2_AL));
 	memset(jdsp->mEQ.z1_AR, 0, sizeof(jdsp->mEQ.z1_AR));
@@ -163,7 +165,8 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 	}
 	jdsp->mEQ.freq[0] = 0.0;
 	jdsp->mEQ.gain[0] = jdsp->mEQ.gain[1];
-	jdsp->mEQ.freq[NUMPTS + 1] = 24000.0;
+	/* P-007：同上，按实际采样率的 Nyquist 而非硬编码 24k。 */
+	jdsp->mEQ.freq[NUMPTS + 1] = (double)jdsp->fs * 0.5;
 	jdsp->mEQ.gain[NUMPTS + 1] = jdsp->mEQ.gain[NUMPTS];
 	if (!operatingMode)
 	{
