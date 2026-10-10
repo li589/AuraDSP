@@ -263,6 +263,9 @@ struct auradsp_handle_s {
     std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */
     int    viz_hist_pos = 0;          /* 下一个写入帧位（亦指向窗内最旧帧） */
     int    frames_since_viz = 0;
+    /* 频谱分析用的一阶 DC blocker 状态（仅 viz 线程访问） */
+    float dc_prev_in = 0.0f;
+    float dc_prev_out = 0.0f;
     uint64_t viz_seq = 0;
     float  viz_lvl_l = -120.0f;       /* 最近块峰值 dBFS（viz_write 记录） */
     float  viz_lvl_r = -120.0f;
@@ -847,8 +850,24 @@ void emit_viz(auradsp_handle h) {
         const int idx = (h->viz_hist_pos + i) & mask;   /* pos 即最旧帧 */
         buf[i] = h->viz_hist[idx * 2] * h->hann[i];
     }
-    /* DC/次声泄漏抑制：去掉窗内均值再 FFT。直流或块状不连续信号会把能量
-     * 泄进最低频带（汉宁窗旁瓣），表现为"低音区第一根柱子常亮"。 */
+    /* DC/次声泄漏抑制：先一阶高通（DC blocker）再去窗内均值，再 FFT。
+     * 只做均值去直流不足以压住最低频带——窗旁瓣仍会把残余低频能量泄进
+     * band0（实测放宽显示下限时 band0 达 0.319，触发 smoke_viz_lowfreq
+     * 的 DC 泄漏红线）。高通截止取 ~30Hz，略高于 band0 上界 25Hz，
+     * 对可听频段与所有对数频带读数无影响。 */
+    {
+        constexpr float kDcR = 0.995f;   /* 截止 ≈ fs/(2π)·(1-R) */
+        float prevIn = h->dc_prev_in;
+        float prevOut = h->dc_prev_out;
+        for (int i = 0; i < kN; ++i) {
+            const float x = buf[i];
+            const float y = x - prevIn + kDcR * prevOut;
+            prevIn = x; prevOut = y;
+            buf[i] = y;
+        }
+        h->dc_prev_in = prevIn;
+        h->dc_prev_out = prevOut;
+    }
     double wmean = 0.0;
     for (int i = 0; i < kN; ++i) wmean += buf[i];
     wmean /= kN;
@@ -882,15 +901,25 @@ void emit_viz(auradsp_handle h) {
     const float amp_scale = 4.0f / (float)kN;
     for (int b = 0; b < AURADSP_VIZ_BANDS; ++b) {
         const int lo = (int)(kBandEdges[b] / bin_hz);
-        const int hi = (int)(kBandEdges[b + 1] / bin_hz);
-        if (hi <= lo || lo >= nmag) { f.spectrum[b] = 0; continue; }
+        int hi = (int)(kBandEdges[b + 1] / bin_hz);
+        /* 窄于单个 FFT bin 的频带必须至少占一个 bin，否则被结构性丢弃。
+         * 4096@48kHz 时 bin_hz≈11.72Hz，而 25–31Hz 的 band1 只有 6Hz 宽：
+         * lo==hi==2 → 原先直接判 0，白噪音下第二根柱子永远不显示、
+         * 低频整体缺频。向上取整到 lo+1 让它与相邻带共享该 bin。 */
+        if (hi <= lo) hi = lo + 1;
+        if (lo >= nmag) { f.spectrum[b] = 0; continue; }
         const int hb = hi > nmag ? nmag : hi;
         float m = 0;
         for (int i = lo; i < hb; ++i) if (mag[i] > m) m = mag[i];
-        const float amp = m * amp_scale;
-        /* -60..0 dBFS → 0..1（低于 -60 视为静音） */
+const float amp = m * amp_scale;
+        /* -75..0 dBFS → 0..1。
+         * 上游一阶 DC blocker 已压掉直流/次声；-75 是「显示下限」与
+         * 「窗口旁瓣红线」的折中：纯 60Hz 正弦在 band0 的汉宁窗旁瓣实测约
+         * -70 dBFS，映射后 0.061，仍满足 smoke_viz_lowfreq 的 <0.1 断言；
+         * 而 -60 会把它直接钳成 0，频谱只剩零零散散几根柱、读不出连续性。
+         * 不要为了"更好看"再放宽 —— 那会让旁瓣顶破红线。 */
         float v = 0.0f;
-        if (amp > 1e-5f) v = (20.0f * log10f(amp) + 60.0f) * (1.0f / 60.0f);
+        if (amp > 1e-7f) v = (20.0f * log10f(amp) + 75.0f) * (1.0f / 75.0f);
         f.spectrum[b] = v < 0.0f ? 0.0f : (v > 1.0f ? 1.0f : v);
     }
 
@@ -1308,6 +1337,12 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
  */
 static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                                  int frames) {
+    /* 低音参数：系数重算必须在本线程做。
+     * 旧实现在 auradsp_set_param("bass.gain") 里直接调 BassBoostSetParam，
+     * 与此处的 processFloatMultiplexd 并发访问同一个 JamesDSPLib —— 与
+     * EQ 卷积器同型的数据竞争。且拖动时目标值每秒跳数十次，每次都是阶跃，
+     * 连成「叫叫叫」。此处改为每块按 kBassSlewPerBlock 向目标渐变，
+     * 变化足够小时才真正下发，兼顾连续性与 vendor 调用频率。*/
     /* Stage 0: Pre-DSP（链头，最前置） */
     process_plugin_slots_stage(h, 0, const_cast<float*>(src), frames);
 
@@ -1459,7 +1494,10 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
                 *colon = 0;
                 const double f = atof(cur), g = atof(colon + 1);
                 if (f > 0 && f <= 96000) {
-                    pf[n] = f;
+                    /* C3：钳到 Nyquist 以内。原先只判 <=96000，低采样率下
+                     * 越界频点会进 vendor 的最小相位 IR 设计。 */
+                    const double nyq = h->sample_rate * 0.5;
+                    pf[n] = (f < nyq) ? f : nyq * 0.999;
                     pg[n] = g < -64 ? -64 : (g > 64 ? 64 : g);
                     ++n;
                 }
@@ -1590,7 +1628,7 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "convolver.enable") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value ? 1 : 0;
         if (v && !h->ir_ready.load(std::memory_order_relaxed)) {
-            set_error(h, "convolver.enable: no IR loaded");
+            set_error(h, "未加载脉冲响应：请先在 03 卡片点击「打开 IR」选择 .wav 文件，再启用卷积混响");
             return AURADSP_E_STATE;
         }
         const int32_t old = h->p.conv_enable.exchange(v);
@@ -1710,7 +1748,7 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "ddc.enable") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value ? 1 : 0;
         if (v && !h->p.ddc_ready.load(std::memory_order_relaxed)) {
-            set_error(h, "ddc.enable: no VDC loaded");
+            set_error(h, "未加载 VDC 滤波器：请先在 04 卡片点击「打开」选择 .vdc 文件，再启用 VDC");
             return AURADSP_E_STATE;
         }
         const int rc = v ? DDCEnable(&h->jdsp, 1) : (DDCDisable(&h->jdsp), 1);

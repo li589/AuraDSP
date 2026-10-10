@@ -9,6 +9,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 class AppConfig {
   // 音频引擎参数
   int sampleRate;
@@ -123,6 +125,16 @@ abstract final class ConfigManager {
     }
     return _baseDir!;
   }
+
+  /// 仅供单元测试注入临时根目录。
+  ///
+  /// `flutter test` 不做沙箱隔离：`ConfigManager.baseDir` 会指向真实的
+  /// `%APPDATA%/AuraDSP`，任何触发 `saveCache()` / 写配置的测试都会覆盖用户
+  /// 真实数据。历史上 `plugin_manager_test.dart` 调用 `onPluginScanned()` 后
+  /// 把 3 条假插件路径写进了用户的 plugin_cache.json，导致 APP 启动后只剩
+  /// 3 个永远加载不了的插件（真实扫描为 76 个）。测试必须在 setUp 注入临时目录。
+  @visibleForTesting
+  static set baseDirOverride(String? dir) => _baseDir = dir;
 
   /// 统一的子目录/文件路径拼接（跨平台）。
   /// baseDir 是全应用唯一根目录（Windows: %APPDATA%/AuraDSP，

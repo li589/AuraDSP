@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/theme.dart';
+import '../engine/auradsp_ffi.dart' show VizBands;
 
 /* ==================== 1. 页面骨架 ==================== */
 
@@ -304,11 +305,12 @@ class _AmbientPainter extends CustomPainter {
     final src = spectrum.value;
     if (src.isEmpty) return;
 
-    // 取对数频段 + 时间平滑，避免氛围层抖动
+    // 对数频段重采样：32 条引擎对数带 -> 72 根氛围条，横坐标必须走 VizBands 的
+    // 对数刻度。旧实现用 pow(t, 1.6) 幂律，把低频拉宽、高频压扁。
     for (var i = 0; i < _bars; i++) {
       final t = i / (_bars - 1);
-      final idx = (math.pow(t, 1.6) * (src.length - 1)).round();
-      final v = src[idx.clamp(0, src.length - 1)].clamp(0.0, 1.0);
+      final idx = VizBands.sampleIndex(t);
+      final v = src[idx.round().clamp(0, src.length - 1)].clamp(0.0, 1.0);
       _smooth[i] = math.max(v, _smooth[i] * 0.82);
     }
 

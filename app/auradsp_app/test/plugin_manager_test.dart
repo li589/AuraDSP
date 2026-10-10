@@ -2,7 +2,11 @@
  * plugin_manager_test.dart — 插件管理器与数据模型单元测试
  */
 
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/plugin_manager.dart';
 
 void main() {
@@ -73,12 +77,25 @@ void main() {
   group('PluginManager State & Filtering Tests', () {
     late PluginManager manager;
     late List<Map<String, dynamic>> dispatchedCmds;
+    late Directory tempDir;
 
     setUp(() {
+      // flutter test 不沙箱化：不注入临时根目录的话，下面的 onPluginScanned()
+      // 会经 saveCache() 把测试 fixture 写进用户真实的
+      // %APPDATA%\AuraDSP\plugins\plugin_cache.json。
+      tempDir = Directory.systemTemp.createTempSync('auradsp_plugin_test');
+      ConfigManager.baseDirOverride = tempDir.path;
       dispatchedCmds = [];
       manager = PluginManager(commandSender: (msg) {
         dispatchedCmds.add(msg);
       });
+    });
+
+    tearDown(() {
+      ConfigManager.baseDirOverride = null;
+      if (tempDir.existsSync()) {
+        tempDir.deleteSync(recursive: true);
+      }
     });
 
     test('PluginManager command dispatching', () {
@@ -196,6 +213,57 @@ void main() {
       manager.onPluginUnloaded(1, unloadedJson);
       expect(manager.hasActivePlugin, isFalse);
       expect(manager.activePlugin, isNull);
+    });
+
+    test('loadCache 剔除路径已失效的条目并回写清理（A3/A4 回归）', () async {
+      final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      cacheFile.parent.createSync(recursive: true);
+      cacheFile.writeAsStringSync(jsonEncode([
+        {
+          'id': '1',
+          'name': 'Ghost Plugin',
+          'vendor': 'nobody',
+          'version': '1.0',
+          'category': '',
+          'format': 'VST3',
+          'path': r'C:\VST3\DefinitelyNotInstalled.vst3',
+          'isCompatible': true,
+          'errorMessage': '',
+        },
+      ]));
+
+      await manager.loadCache();
+
+      expect(manager.plugins, isEmpty);
+      final after = jsonDecode(cacheFile.readAsStringSync()) as List;
+      expect(after, isEmpty,
+          reason: '失效条目必须被回写清理，否则每次启动都会重复展示');
+    });
+
+    test('onPluginScanned 只写测试临时目录，不污染用户缓存（A 根因回归）',
+        () async {
+      manager.onPluginScanned(1, [
+        {
+          'id': '1',
+          'name': 'Fixture Plugin',
+          'vendor': 'x',
+          'version': '1.0',
+          'category': '',
+          'format': 'VST3',
+          'path': r'C:\VST3\Fixture.vst3',
+          'isCompatible': true,
+          'errorMessage': '',
+        },
+      ]);
+      // saveCache() 是异步且 onPluginScanned 不 await，轮询等文件落盘
+      final tmpCache = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      for (var i = 0; i < 100 && !tmpCache.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(tmpCache.existsSync(), isTrue);
+      expect(manager.plugins.length, 1);
     });
   });
 }

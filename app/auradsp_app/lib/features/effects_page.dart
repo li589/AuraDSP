@@ -624,6 +624,62 @@ class _SpatialReverbAdvanced extends StatelessWidget {
 
 /* ---- 03 脉冲响应卷积 (Convolver) ---- */
 
+/// 文件资源槽：带边框、标题行与状态位的按钮组。
+///
+/// 卷积 / VDC 两张卡片此前都是裸 `Wrap` 丢几个 chip，与下方内容既无分组也无
+/// 边界，视觉上像「随便扔在那」。这里给它们一个统一的容器，读起来是
+/// 「该效果依赖哪个外部文件」这一明确区块。
+class _ResourceSlot extends StatelessWidget {
+  const _ResourceSlot({
+    required this.icon,
+    required this.title,
+    required this.actions,
+    this.detail,
+  });
+
+  final IconData icon;
+  final String title;
+  final String? detail;
+  final List<Widget> actions;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AuraSpace.sm),
+      decoration: BoxDecoration(
+        color: p.panel,
+        border: Border.all(color: p.hairline),
+        borderRadius: BorderRadius.circular(AuraRadius.md),
+      ),
+      child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: p.textDim),
+            const SizedBox(width: 6),
+            Text(title, style: captionOf(p)),
+            const Spacer(),
+            if (detail != null)
+              Text(
+                detail!,
+                style: captionOf(p).copyWith(
+                    color: detail!.startsWith('未') ? p.textDim : p.accent),
+              ),
+            // 按钮与标题同行：文字左对齐、按钮右对齐。
+            const SizedBox(width: AuraSpace.sm),
+            Wrap(
+              spacing: AuraSpace.sm,
+              runSpacing: AuraSpace.sm,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: actions,
+            ),
+          ],
+        ),
+    );
+  }
+}
+
 class _ConvolverCard extends StatelessWidget {
   final AppModel model;
   const _ConvolverCard({required this.model});
@@ -635,6 +691,10 @@ class _ConvolverCard extends StatelessWidget {
     return SectionCard(
       index: '03',
       title: l.convTitle,
+      // 常规语义：关闭即收起。用户先前明确要求「无文件时保持开关开启、
+// 效果内部直通(旁路)，待合格文件加载成功后自动生效」，
+// 因此可达性由 state 层的 auto-bypass 解决，而不是靠改这里的折叠判据。
+      // D1 曾改成 convEnabled && convReady，导致「打开开关反而收起」的反向手感。
       collapsed: !model.convEnabled,
       latencyMs: model.componentLatency('convolver').ms,
               latencyMeasured: model.componentLatency('convolver').measured,
@@ -655,10 +715,14 @@ class _ConvolverCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
-                  AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
-                      onTap: () => _pickIr(context)),
-                ]),
+                _ResourceSlot(
+                  icon: Icons.folder_open_outlined,
+                  title: '脉冲响应 (IR)',
+                  actions: [
+                    AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
+                        onTap: () => _pickIr(context)),
+                  ],
+                ),
                 const SizedBox(height: AuraSpace.sm),
                 Text(l.convNoIr, style: captionOf(p)),
               ],
@@ -674,12 +738,17 @@ class _ConvolverCard extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
-                AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
-                    onTap: () => _pickIr(context)),
-                AuraChip(l.convClear, icon: Icons.delete_outline, danger: true,
-                    onTap: () => model.clearConvolver()),
-              ]),
+              _ResourceSlot(
+                icon: Icons.graphic_eq_outlined,
+                title: '脉冲响应 (IR)',
+                detail: '${model.convChannels}ch · $dur',
+                actions: [
+                  AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
+                      onTap: () => _pickIr(context)),
+                  AuraChip(l.convClear, icon: Icons.delete_outline, danger: true,
+                      onTap: () => model.clearConvolver()),
+                ],
+              ),
               const SizedBox(height: AuraSpace.md),
               if (model.convSpectrum.isNotEmpty) ...[
                 _IrSpectrumGraph(
@@ -745,7 +814,7 @@ class _DdcCard extends StatelessWidget {
     return SectionCard(
       index: '04',
       title: l.ddcTitle,
-      collapsed: !model.ddcOn,
+      collapsed: !model.ddcOn, // 同上：常规语义 + state 层 auto-bypass
       latencyMs: model.componentLatency('ddc').ms,
               latencyMeasured: model.componentLatency('ddc').measured,
               latencyProbing: model.isProbingLatency('ddc'),
@@ -763,16 +832,31 @@ class _DdcCard extends StatelessWidget {
         builder: (_, _) => Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Wrap(spacing: AuraSpace.sm, runSpacing: AuraSpace.sm, children: [
-              AuraChip(l.ddcOpen, icon: Icons.folder_open_outlined,
-                  onTap: () => _pickVdc(context)),
-              if (model.ddcReady)
-                AuraChip(l.ddcLoaded, icon: Icons.check_circle_outline,
-                    onTap: null),
-            ]),
+            _ResourceSlot(
+              icon: Icons.filter_alt_outlined,
+              title: 'VDC 滤波器',
+              detail: model.ddcReady ? l.ddcLoaded : null,
+              actions: [
+                AuraChip(l.ddcOpen, icon: Icons.folder_open_outlined,
+                    onTap: () => _pickVdc(context)),
+                if (model.ddcReady)
+                  AuraChip(l.ddcLoaded, icon: Icons.check_circle_outline,
+                      onTap: null),
+              ],
+            ),
             const SizedBox(height: AuraSpace.sm),
-            Text(model.ddcReady ? '${l.ddcLoaded}：VDC' : l.ddcNoFile,
-                style: captionOf(p)),
+            // D3：parseVdcMetadata 已算出文件名与采样率/长度，这里真正展示出来，
+            // 否则用户只能看到一句「已加载」，无从判断加载的是哪个文件。
+            if (model.ddcFileName != null) ...[
+              Text('${l.ddcLoaded}：${model.ddcFileName}',
+                  style: captionOf(p)),
+              if (model.ddcDetails != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 2.0),
+                  child: Text(model.ddcDetails!, style: captionOf(p)),
+                ),
+            ] else
+              Text(l.ddcNoFile, style: captionOf(p)),
           ],
         ),
       ),

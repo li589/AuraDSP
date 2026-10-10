@@ -496,6 +496,18 @@ class PluginManager extends ChangeNotifier {
   }
 
   // --- 底层引擎事件回调处理 ---
+
+  /// A5: 引擎 `auradsp_plugin_slot_load` 只返回 0/1，本身不携带诊断信息，
+  /// 旧文案把 rc/slot 抛给用户却永远只能显示 "rc=0"，等于什么都没说。
+  String _describeLoadFailure(String path) {
+    final name = path.split(RegExp(r'[\\/]')).last;
+    if (!File(path).existsSync()) {
+      return '插件文件不存在或已被移动：$name。'
+          '请重新扫描插件，或在「自定义检索目录」中重新添加其所在位置。';
+    }
+    return '插件加载失败：$name。文件存在但引擎无法完成初始化，'
+        '可能是格式不兼容、位数不符或文件已损坏。';
+  }
   void onPluginScanned(int count, dynamic rawJson) {
     _isScanning = false;
     _lastScanCount = count;
@@ -512,7 +524,7 @@ class PluginManager extends ChangeNotifier {
   void onPluginSlotLoaded(int slot, String path, int rc, dynamic rawStatus, int stage) {
     if (slot >= 0 && slot < kMaxSlots) {
       if (rc != 1) {
-        _lastError = '加载插件失败 (rc=$rc, slot=$slot): $path';
+        _lastError = _describeLoadFailure(path);
       } else {
         _lastError = null;
       }
@@ -610,16 +622,38 @@ class PluginManager extends ChangeNotifier {
   static File _getCacheFile() => File(ConfigManager.path(
       'plugins${Platform.pathSeparator}plugin_cache.json'));
 
+  /// 剔除磁盘路径已不存在的条目，返回被剔除的数量。
+  ///
+  /// A3/A4：缓存可能被手工改写，或插件在扫描后被卸载/移动。曾出现缓存只剩
+  /// 3 条伪造路径（C:\VST3\...，丢失 Program Files\Common Files）而真实扫描
+  /// 有 76 个，用户因此看到 3 个永远加载不了的插件。启动路径不在音频线程，
+  /// 此处的同步 IO 是安全的。
+  int _dropMissingPaths() {
+    if (_plugins.isEmpty) return 0;
+    final before = _plugins.length;
+    _plugins = _plugins
+        .where((p) => p.path.isNotEmpty && File(p.path).existsSync())
+        .toList();
+    return before - _plugins.length;
+  }
+
   /// 加载磁盘缓存（启动时秒级恢复历史扫描结果）
   Future<void> loadCache() async {
     try {
       final file = _getCacheFile();
-      if (await file.exists()) {
-        final text = await file.readAsString();
-        _parsePluginsJson(text);
-        if (_plugins.isNotEmpty) {
-          notifyListeners();
-        }
+      if (!await file.exists()) {
+        return;
+      }
+      final text = await file.readAsString();
+      _parsePluginsJson(text);
+      final dropped = _dropMissingPaths();
+      if (dropped > 0) {
+        // 回写清理，避免每次启动重复展示失效条目
+        await saveCache();
+        debugPrint('[PluginManager] loadCache 剔除失效插件条目 $dropped 个');
+      }
+      if (_plugins.isNotEmpty) {
+        notifyListeners();
       }
     } catch (e) {
       debugPrint('[PluginManager] loadCache error: $e');
@@ -630,6 +664,12 @@ class PluginManager extends ChangeNotifier {
   Future<void> saveCache() async {
     try {
       final file = _getCacheFile();
+      // 父目录可能不存在（全新安装、或被外部清理过）。缺了这步 writeAsString 会
+      // 抛 PathNotFoundException 并被下面的 catch 吞掉，表现为扫描结果每次启动都丢。
+      final dir = file.parent;
+      if (!await dir.exists()) {
+        await dir.create(recursive: true);
+      }
       final list = _plugins.map((p) => p.toJson()).toList();
       await file.writeAsString(jsonEncode(list), flush: true);
     } catch (e) {

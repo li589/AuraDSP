@@ -588,6 +588,33 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int? lastSentState;
   double? lastSentLatency;
 
+  // 欠载（avail<=0）或无音源时引擎不再产出 viz 帧，UI 会把最后一帧电平永久冻住。
+  // 持续空闲后补发一帧全零，使电平与频谱回落到 0。
+  //
+  // 关键：WASAPI 下 avail 间歇性 <= 0 是常态，若「每次进入空闲就补发」，
+  // 零帧会与紧随其后的真实帧在 ~200Hz 上交替，表现为频谱/电平疯狂闪烁。
+  // 故必须持续空闲满 80 轮（400ms / 每轮 5ms）才补发一次。
+  const idleVizRounds = 80;
+  var idleRounds = 0;
+  var idleVizSent = false;
+  var lastSpectrumLen = 32;
+  var lastStageLen = 5;
+
+  void sendIdleViz() {
+    if (idleVizSent) return;
+    idleVizSent = true;
+    send({
+      'evt': 'viz',
+      'spectrum': List<double>.filled(lastSpectrumLen, 0.0),
+      'l': -90.0,
+      'r': -90.0,
+      'stageL': List<double>.filled(lastStageLen, -90.0),
+      'stageR': List<double>.filled(lastStageLen, -90.0),
+      'ts': DateTime.now().millisecondsSinceEpoch,
+      'seq': -1,
+    });
+  }
+
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
    * 无门控的同步落盘会在音频泵线程上产生上百次/秒 flushSync，
    * 直接抬升 WASAPI 抖动、诱发 underrun。 */
@@ -1133,7 +1160,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         final w = wasapi!;
         final padding = w.getCurrentPaddingNow();
         final avail = w.bufferFrames - padding;
-        if (avail <= 0) continue;
+        if (avail <= 0 || source == null) {
+          idleRounds++;
+          if (idleRounds >= idleVizRounds) sendIdleViz();
+          continue;
+        }
+        idleRounds = 0;
         final frames = math.min(avail, maxBlock);
         if (pumpRounds <= 30 || pumpRounds % 2000 == 0) {
           dbgLog('pump#$pumpRounds padding=$padding avail=$avail frames=$frames '
@@ -1169,8 +1201,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (n > 0) {
               final fr = (vizBuf + (n - 1)).ref;
               vizCount++;
+              idleVizSent = false;
+              final sp = fr.spectrumToList();
+              final stageL = fr.stageLevelsLToList();
+              lastSpectrumLen = sp.length;
+              lastStageLen = stageL.length;
               if (vizCount <= 5 || vizCount % 100 == 0) {
-                final sp = fr.spectrumToList();
                 dbgLog('viz#$vizCount n=$n seq=${fr.seq} '
                     'max=${sp.reduce(math.max).toStringAsFixed(3)} '
                     'l=${fr.levelLDbfs.toStringAsFixed(1)} '
@@ -1178,10 +1214,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               }
               send({
                 'evt': 'viz',
-                'spectrum': fr.spectrumToList(),
+                'spectrum': sp,
                 'l': fr.levelLDbfs,
                 'r': fr.levelRDbfs,
-                'stageL': fr.stageLevelsLToList(),
+                'stageL': stageL,
                 'stageR': fr.stageLevelsRToList(),
                 'ts': fr.timestampMs,
                 'seq': fr.seq,

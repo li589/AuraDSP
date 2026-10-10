@@ -30,3 +30,30 @@
 - **行为影响**：`auraConvMixUsed=0`（默认）时 `stage_conv` 与上游逐字节一致；
   仅让能且 mix<1 时启用混合路径（每块两次 memcpy 的开销）。
 - **上游同步冲突风险**：低（结构体加字段 + 单函数分支）。
+
+## P-006 jdsp_header.h + multimodalEQ.c — EQ 卷积器双缓冲（2026-10-10）
+
+- **位置**：MultimodalEQ 新增 convB / ctiveConv / convProcCount / convSwapProc；
+  MultimodalEqualizerConstructor 与 Destructor 增删 convB 的 Init/Free；
+  MultimodalEqualizerAxisInterpolation 改为重建到非活动实例并原子换指针；
+  MultimodalEqualizerProcess 改用 ctiveConv
+- **症状**：操作 EQ 时爆音。eq.curve 经 uradsp_set_param 在驱动 WASAPI 的线程上
+  调用 MultimodalEqualizerAxisInterpolation（makima + 最小相位 IR + FFT 卷积刷新，约 760µs），
+  而同一线程的音频回调正在 FFTConvolver2x2Process(&mEQ.conv, ...)
+- **根因**：重建与处理**操作同一个卷积器对象且全程无锁** ——
+  刷新方覆写 _segmentsIRRe/Im、_current、_overlap，
+  处理方同时在读它们。ctrl_mutex 明确不挡 process。
+  这是数据竞争，不只是延迟问题，故单纯节流或挪线程无法根治
+- **改动**：mEQ 内预分配 conv / convB 两个卷积器 + ctiveConv 指针。
+  控制线程在非活动实例上完成 IR 构建与刷新，随后换指针；
+  音频线程块首读一次指针即切到新 IR，块内不再触碰换出的实例
+- **生命周期**：两实例均内嵌于 mEQ，由 MultimodalEqualizerDestructor 统一释放，
+  **不存在跨线程释放**
+- **在途守卫**：convProcCount 由音频线程递增，convSwapProc 记录上次换出时的快照；
+  换出后需再跑满 1 块才允许把该实例重新投入重建，
+  避免与换出瞬间尚未返回的那次 Process 调用竞争
+- **convState 未双缓冲**：已查明 FFTConvolver2x2RefreshImpulseResponse(conv1, conv2, ...)
+  中 conv1 仅用作 FFT 暂存（写 _fftBuffer、读 it/sine），IR 段不更新；
+  只有 conv2 才是真正的 IR 存储。故无需为其引入第二份
+- **兼容性**：外部调用方无需改动，uradsp_set_param("eq.curve") 语义不变；
+  operatingMode != 0 的 IIR 分支未触及

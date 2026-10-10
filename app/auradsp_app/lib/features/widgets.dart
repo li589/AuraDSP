@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../engine/auradsp_ffi.dart' show VizBands;
 import 'chrome.dart';
 
 /* ---- 区块卡片 ---- */
@@ -577,15 +578,16 @@ class _SpectrumPainter extends CustomPainter {
         final y = size.height * i / 4;
         canvas.drawLine(Offset(0, y), Offset(size.width, y), gp);
       }
-      for (var i = 1; i < 8; i++) {
-        final x = size.width * i / 8;
+      // 竖网格线必须落在对数刻度上（100/1k/10k 三个十倍频程），
+      // 否则与下方 FreqAxis 的频率标签对不齐。
+      for (final hz in const [100.0, 1000.0, 10000.0]) {
+        final x = VizBands.logX(hz) * size.width;
         canvas.drawLine(Offset(x, 0), Offset(x, size.height), gp);
       }
     }
 
     final bands = spectrum.value;
-    final n = bands.length.clamp(1, 64);
-    final bw = (size.width - gap * (n - 1)) / n;
+    final n = bands.length.clamp(1, VizBands.count);
     final paint = Paint()..color = spectrumColor;
     final cap = Paint()..color = capperColor;
     final pk = peaks?.value;
@@ -593,7 +595,11 @@ class _SpectrumPainter extends CustomPainter {
     for (var i = 0; i < n; i++) {
       final v = bands[i].clamp(0.0, 1.0);
       final h = v * size.height;
-      final x = i * (bw + gap);
+      // 横坐标取该频带的真实对数跨度，不再均分 —— 与 FreqAxis 同一套刻度。
+      final x0 = VizBands.edgeX(i) * size.width;
+      final x1 = VizBands.edgeX(i + 1) * size.width;
+      final bw = math.max(1.0, (x1 - x0) - gap);
+      final x = x0 + gap / 2;
       if (h > 0.5) {
         final rect = Rect.fromLTWH(x, size.height - h, bw, h)
             .deflate(bw < 4 ? 0 : 0.5);

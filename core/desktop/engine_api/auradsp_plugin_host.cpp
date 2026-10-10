@@ -435,11 +435,16 @@ public:
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
         if (numFrames == 0) return;
-        if (!inChannels || !outChannels || !inChannels[0] || !inChannels[1] || !outChannels[0] || !outChannels[1]) return;
+        if (!inChannels || !outChannels) return;
+
+        // 本版 CLAP SDK 无 audio-config 扩展，无法协商声道数，引擎链恒送立体声；
+        // 这里只做逐声道空指针校验，替代原先的全有全无早退。
+        const int32_t nc = 2;
+        for (int32_t ch = 0; ch < nc; ++ch) if (!inChannels[ch] || !outChannels[ch]) return;
 
         if (!m_isActive || !m_plugin || m_bypassed) {
             if (inChannels != outChannels) {
-                for (int ch = 0; ch < 2; ++ch) {
+                for (int32_t ch = 0; ch < nc; ++ch) {
                     std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
             }
@@ -866,9 +871,35 @@ public:
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
 
-        // Negotiate stereo bus arrangement
-        Steinberg::Vst::SpeakerArrangement stereo = Steinberg::Vst::SpeakerArr::kStereo;
-        m_processor->setBusArrangements(&stereo, 1, &stereo, 1);
+        // A1: 按插件声明的总线声道数协商，不得硬编码 stereo。
+        // 旧代码恒发 kStereo 且丢弃返回值，对单声道插件等于按错误的声道数驱动。
+        // 本 SDK 变体的 IAudioProcessor 不继承 IComponent，故走 getBusArrangement。
+        auto probeChannels = [&](Steinberg::Vst::BusDirection dir) -> int32_t {
+            Steinberg::Vst::SpeakerArrangement cur{};
+            if (!m_processor ||
+                m_processor->getBusArrangement(dir, 0, cur) != Steinberg::kResultOk) {
+                return 2;
+            }
+            return Steinberg::Vst::SpeakerArr::getChannelCount(cur) == 1 ? 1 : 2;
+        };
+        m_inChannels = probeChannels(Steinberg::Vst::kInput);
+        m_outChannels = probeChannels(Steinberg::Vst::kOutput);
+
+        const auto toArr = [](int32_t n) {
+            return (n == 1) ? Steinberg::Vst::SpeakerArr::kMono
+                            : Steinberg::Vst::SpeakerArr::kStereo;
+        };
+        Steinberg::Vst::SpeakerArrangement inArr = toArr(m_inChannels);
+        Steinberg::Vst::SpeakerArrangement outArr = toArr(m_outChannels);
+        if (m_processor->setBusArrangements(&inArr, 1, &outArr, 1) != Steinberg::kResultOk) {
+            // 协商被拒则回退立体声；仍失败即拒绝激活，绝不带病运行。
+            Steinberg::Vst::SpeakerArrangement stereo = Steinberg::Vst::SpeakerArr::kStereo;
+            if (m_processor->setBusArrangements(&stereo, 1, &stereo, 1) != Steinberg::kResultOk) {
+                return false;
+            }
+            m_inChannels = 2;
+            m_outChannels = 2;
+        }
 
         // Setup processing
         Steinberg::Vst::ProcessSetup setup = {};
@@ -899,24 +930,30 @@ public:
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
         if (numFrames == 0) return;
-        if (!inChannels || !outChannels || !inChannels[0] || !inChannels[1] || !outChannels[0] || !outChannels[1]) return;
+        if (!inChannels || !outChannels || !inChannels[0] || !outChannels[0]) return;
+
+        // A2: 以协商得到的声道数驱动，不再硬编码 2 与 [1] 硬索引。
+        const int32_t nc = m_inChannels;
+        for (int32_t ch = 1; ch < nc; ++ch) if (!inChannels[ch]) return;
 
         if (!m_isActive || !m_processor || m_bypassed) {
             if (inChannels != outChannels) {
-                for (int ch = 0; ch < 2; ++ch) {
-                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                for (int32_t ch = 0; ch < nc; ++ch) {
+                    if (inChannels[ch] && outChannels[ch]) {
+                        std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                    }
                 }
             }
             return;
         }
 
         Steinberg::Vst::AudioBusBuffers inBus = {};
-        inBus.numChannels = 2;
+        inBus.numChannels = nc;
         inBus.silenceFlags = 0;
         inBus.channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
 
         Steinberg::Vst::AudioBusBuffers outBus = {};
-        outBus.numChannels = 2;
+        outBus.numChannels = m_outChannels;
         outBus.silenceFlags = 0;
         outBus.channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
 
@@ -947,6 +984,9 @@ public:
         Steinberg::tresult res = m_processor->process(data);
         if (res != Steinberg::kResultOk) {
             m_bypassed = true;
+        } else if (m_outChannels == 1 && outChannels[0] && outChannels[1]) {
+            // 单声道插件：铺回 L/R，否则右声道会残留上一块数据。
+            std::memcpy(outChannels[1], outChannels[0], numFrames * sizeof(float));
         }
     }
 
@@ -1109,6 +1149,10 @@ private:
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
+    /* A1：由 activate() 按插件声明的总线协商得出（1=mono / 2=stereo）。
+     * 引擎链恒为立体声 planar 缓冲，单声道插件在实例内部做 mono→stereo 铺回。*/
+    int32_t m_inChannels = 2;
+    int32_t m_outChannels = 2;
 
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;

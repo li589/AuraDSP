@@ -378,6 +378,17 @@ class AppModel extends ChangeNotifier {
         lpStatus = raw['lpStatus'] as int;
         convEnabled = (raw['convEnable'] as int) != 0;
         convReady = (raw['convReady'] as int) != 0;
+        // auto-bypass 的另一半：资源在此刻就绪且用户开关为开 → 立即生效，
+        // 无需用户再拨一次开关。
+        if (convReady && convEnabled) {
+          _markSent(ParamId.convEnable);
+          send({
+            'cmd': 'setParam',
+            'id': ParamId.convEnable,
+            'value': 1,
+            'isFloat': false
+          });
+        }
         convFrames = raw['convFrames'] as int;
         convChannels = raw['convChannels'] as int;
         convSrcRate = raw['convSrcRate'] as int;
@@ -393,8 +404,17 @@ class AppModel extends ChangeNotifier {
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
         convMix = (raw['convMix'] as num).toDouble();
-        ddcOn = (raw['ddcEnable'] as int) != 0;
-        ddcReady = (raw['ddcReady'] as int) != 0;
+        // auto-bypass 的另一半：资源此刻就绪且用户开关为开 → 立即生效。
+        // 同样必须直接 send，绕开 _mirror 对 ddcOn 的回写（否则开关被翻回）。
+        if (ddcReady && ddcOn && (raw['ddcEnable'] as int) == 0) {
+          _markSent(ParamId.ddcEnable);
+          send({
+            'cmd': 'setParam',
+            'id': ParamId.ddcEnable,
+            'value': 1,
+            'isFloat': false
+          });
+        }
         shelfOn = (raw['shelfEnable'] as int) != 0;
         shelfFreq = (raw['shelfFreq'] as num).toDouble();
         shelfGain = (raw['shelfGain'] as num).toDouble();
@@ -559,10 +579,20 @@ class AppModel extends ChangeNotifier {
           final samples = (raw['samples'] as num?)?.toInt() ?? 0;
           _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
         } else {
-          lastInfo = rc == -3
-              ? '该组件无法测量（探针未能在空环境中使其生效）'
-              : '该组件不支持延迟探测（需外部资源）';
-          eventSeq.value = ++_guardSeq;
+          // 只在文案变化时重设：此前每轮探测都无条件赋值，导致同一条提示
+          // 反复弹出横幅（实测 VDC 卡片持续刷「不支持延迟探测」）。
+          // 同时修正措辞：VDC 的延迟测量本就未实现（kLatDdc 未接入），
+          // 说「需外部资源」是误导 —— 已加载 VDC 时它并非缺资源，而是没测。
+          final msg = switch (comp) {
+            'ddc' => 'VDC 暂不支持延迟测量（该组件的算法延迟尚未接入）',
+            _ => rc == -3
+                ? '该组件无法测量（探针未能在空环境中使其生效）'
+                : '该组件不支持延迟探测（需外部资源）',
+          };
+          if (lastInfo != msg) {
+            lastInfo = msg;
+            eventSeq.value = ++_guardSeq;
+          }
         }
         notifyListeners();
         break;
@@ -901,7 +931,15 @@ class AppModel extends ChangeNotifier {
     }
     notifyListeners();
     _markSent(ParamId.convEnable);
-    send({'cmd': 'setParam', 'id': ParamId.convEnable, 'value': on ? 1 : 0, 'isFloat': false});
+    // Auto-bypass：用户要求「开关保持开启、无文件时效果内部直通，
+    // 待合格 IR 加载成功后自动生效」。因此 UI 的开关状态与引擎的生效状态
+    // 解耦：无资源时只对引擎下发 enable=0（内部直通），UI 仍显示为开启。
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.convEnable,
+      'value': (on && convReady) ? 1 : 0,
+      'isFloat': false
+    });
     scheduleAutoSave();
   }
 
@@ -1036,6 +1074,9 @@ class AppModel extends ChangeNotifier {
     ddcPath = path;
     parseVdcMetadata(path);
     send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': path});
+    // D3：字符串参数走 meta 通道，不主动 getParams 的话 ddcReady 永远不会
+    // 翻转，卡片就一直停在「未加载」且 ddcReady 驱动的 UI 不刷新。
+    _toIso?.send({'cmd': 'getParams'});
     scheduleAutoSave();
     notifyListeners();
   }
@@ -1047,7 +1088,20 @@ class AppModel extends ChangeNotifier {
         loadVdc(ddcPath!);
       }
     }
-    setInt(ParamId.ddcEnable, on ? 1 : 0);
+    // 同卷积：auto-bypass，UI 开关与引擎生效状态解耦。
+    // 必须直接 send 而不能用 setInt —— _mirror 会把 ddcEnable 镜像回 ddcOn
+    // (state.dart:760)，下发 0 会把刚打开的开关立刻翻回关闭态。
+    _markSent(ParamId.ddcEnable);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.ddcEnable,
+      'value': (on && ddcReady) ? 1 : 0,
+      'isFloat': false
+    });
+    // 绕过 setInt 后原本由它代劳的 UI 刷新没了，必须自己通知。
+    // 漏掉这行会导致「关不掉」——模型已改但界面不重绘，直到别处触发刷新才生效。
+    notifyListeners();
+    scheduleAutoSave();
   }
   void clearConvolver() {
     convEnabled = false;
@@ -1295,21 +1349,54 @@ class AppModel extends ChangeNotifier {
     _pushEqCurve();
   }
 
+  // A3: eq.curve 合并下发。拖滑块约 60Hz 触发，而引擎侧
+  // MultimodalEqualizerAxisInterpolation（makima + 最小相位 IR + FFT 卷积刷新）
+  // 实测约 760µs，且运行在驱动 WASAPI 的音频 isolate 上，会挤掉渲染回调造成爆音。
+  // 这里合并为 ≤20Hz 并保证尾部补发；UI 的 notifyListeners 仍即时，不影响手感。
+  static const int _eqCurveMinIntervalMs = 50;
+  String? _pendingEqCurve;
+  Timer? _eqCurveTimer;
+  DateTime _lastEqCurveSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+
   void _pushEqCurve() {
+    // C3：锚点与频点都必须落在 Nyquist 以内。引擎原先只按 f<=96000 校验，
+    // 低采样率（如 32k，Nyquist=16k）下硬编码的 20000 锚点会变成越界点。
+    final nyquist = math.min(20000.0, config.sampleRate / 2.0);
     final buffer = StringBuffer();
     if (eqFrequencies.isNotEmpty && eqFrequencies.first > 20) {
       buffer.write('20:${eqGains.first.toStringAsFixed(1)};');
     }
     for (var i = 0; i < eqFrequencies.length; i++) {
-      buffer.write('${eqFrequencies[i].toStringAsFixed(1)}:${eqGains[i].toStringAsFixed(1)}');
+      final f = math.min(eqFrequencies[i], nyquist);
+      buffer.write('${f.toStringAsFixed(1)}:${eqGains[i].toStringAsFixed(1)}');
       if (i < eqFrequencies.length - 1) buffer.write(';');
     }
-    if (eqFrequencies.isNotEmpty && eqFrequencies.last < 20000) {
-      buffer.write(';20000:${eqGains.last.toStringAsFixed(1)}');
+    if (eqFrequencies.isNotEmpty && eqFrequencies.last < nyquist) {
+      buffer.write(';${nyquist.toStringAsFixed(1)}:${eqGains.last.toStringAsFixed(1)}');
     }
-    final curveStr = buffer.toString();
-    setStringParam('eq.curve', curveStr);
+    _pendingEqCurve = buffer.toString();
+    _flushEqCurve();
     notifyListeners();
+  }
+
+  /// 带尾部补发的节流。
+  ///
+  /// 注意：不能在每次调用时取消并重建定时器——持续拖拽下定时器会被无限推迟，
+  /// 曲线将永不更新。这里只在没有定时器在跑时补一个，保证每周期必发一次。
+  void _flushEqCurve() {
+    final pending = _pendingEqCurve;
+    if (pending == null) return;
+    final elapsed = DateTime.now().difference(_lastEqCurveSentAt).inMilliseconds;
+    if (elapsed >= _eqCurveMinIntervalMs) {
+      _eqCurveTimer?.cancel();
+      _eqCurveTimer = null;
+      _pendingEqCurve = null;
+      _lastEqCurveSentAt = DateTime.now();
+      setStringParam('eq.curve', pending);
+    } else {
+      _eqCurveTimer ??= Timer(
+          Duration(milliseconds: _eqCurveMinIntervalMs - elapsed), _flushEqCurve);
+    }
   }
 
   /* ---- 组件级微型延迟（真实脉冲响应实测，非查表） ---- */

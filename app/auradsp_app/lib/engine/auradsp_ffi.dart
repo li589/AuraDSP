@@ -8,6 +8,7 @@
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:ffi';
+import 'dart:math' as math;
 
 import 'package:ffi/ffi.dart';
 
@@ -90,6 +91,51 @@ const int kEngineStageCount = 12;
 /// 引擎内建的频谱 FFT 点数（auradsp_engine.cpp 的 kVizFftSize）。
 /// config.vizFftSize 与之相同时无需下发，避免无谓的缓冲区重建。
 const int kVizFftSizeDefault = 4096;
+
+/// 引擎 32 个对数频带的边界（Hz），逐值对应 `auradsp_engine.cpp` 的 `kBandEdges`。
+///
+/// 引擎侧 `emit_viz` 已把线性 FFT bin 聚合成这 32 条对数带，
+/// 因此 UI 收到的频谱**本身就是对数分布**的。
+/// UI 侧所有频谱/频轴的横坐标都必须经由本类换算 —— 否则条形、网格与频率标签
+/// 会各自用一套映射而互相对不齐（历史上 `chrome.dart` 用 `pow(t, 1.6)` 幂律
+/// 重采样 72 根条，把低频拉宽、高频压扁，与 `FreqAxis` 的对数刻度不符）。
+abstract final class VizBands {
+  static const int count = 32;
+  static const double minHz = 20.0;
+  static const double maxHz = 20000.0;
+
+  static const List<double> edges = <double>[
+    20, 25, 31, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, //
+    800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, //
+    12500, 16000, 18000, 19000, 20000,
+  ];
+
+  /// 归一化对数横坐标：log(hz/minHz) / log(maxHz/minHz)。
+  static double logX(double hz) =>
+      math.log(hz / minHz) / math.log(maxHz / minHz);
+
+  /// 第 b 条频带左边界（= 第 b-1 条右边界）的横坐标。
+  static double edgeX(int b) => logX(edges[b.clamp(0, count)]);
+
+  /// 第 b 条频带的中心横坐标。
+  static double centerX(int b) => (edgeX(b) + edgeX(b + 1)) / 2.0;
+
+  /// 给定归一化对数横坐标，返回源频带的小数下标，用于「N 条 ← 32 带」重采样。
+  static double sampleIndex(double x) {
+    final last = (count - 1).toDouble();
+    if (x <= 0) return 0;
+    if (x >= 1) return last;
+    for (var b = 0; b < count; b++) {
+      final lo = edgeX(b);
+      final hi = edgeX(b + 1);
+      if (x < hi || b == count - 1) {
+        final t = (hi - lo) <= 1e-12 ? 0.0 : (x - lo) / (hi - lo);
+        return (b + t).clamp(0.0, last);
+      }
+    }
+    return last;
+  }
+}
 
 /// auradsp_viz_frame（280 字节：8+8+128+4+4+64+64）
 final class VizFrame extends Struct {

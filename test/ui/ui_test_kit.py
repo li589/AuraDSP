@@ -14,8 +14,14 @@ import ctypes
 import ctypes.wintypes as wt
 import os
 import subprocess
+import tempfile
 import time
 from PIL import ImageChops, ImageGrab
+
+
+def _SCRATCH():
+    """像素反查用的临时落盘路径（capture 需要真实路径才能截图）。"""
+    return os.path.join(tempfile.gettempdir(), 'auradsp_ui_scratch.png')
 
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(2)
@@ -268,6 +274,147 @@ class AuraAppSession:
         diff_count = sum(1 for p in stat if p > 15)
         if diff_count < min_diff_pixels:
             raise AssertionError(
-                f"[{label}] 预期画面发生视觉更新，但实际差异像素仅 {diff_count} < {min_diff_pixels}！控件未生效或处于禁用态！"
+                f"[{label}] 预期像素差分成立，但实测差异像素 {diff_count} < {min_diff_pixels}，控件可能未在响应态"
             )
         return diff_count
+
+    # --- 像素反查：滑块 Thumb 定位 -------------------------------------------
+    # 铁律：严禁盲写假坐标。滑块 Thumb 会随卡片开关状态与当前数值移动，
+    # 硬编码 x 必然漂移（旧值 583 就因此落在轨道空白处，拖拽产生 0 差异）。
+    # 在运行时从真实像素反查：accent 色的连通块里，轨道只有 ~4px 高，
+    # 而 Thumb 是 ~13px 的圆 —— 按高度区分二者。
+    ACCENT = (212, 255, 63)
+
+    def _near(self, px, ref, tol=52):
+        return (abs(px[0] - ref[0]) <= tol and abs(px[1] - ref[1]) <= tol
+                and abs(px[2] - ref[2]) <= tol)
+
+    def find_thumb(self, box, min_height=9):
+        """在 box=(x0,y0,x1,y1)（窗口相对坐标）内定位滑块 Thumb 圆心。
+
+        返回 (x, y)；找不到抛 AssertionError，绝不静默返回 None 让调用方
+        继续用假坐标拖拽 —— 那只会得到 0 差异的假 PASS。
+        """
+        img = self.capture(_SCRATCH(), box)
+        px = img.load()
+        w, h = img.size
+        cols = {}
+        for x in range(w):
+            run = 0
+            best = 0
+            for y in range(h):
+                if self._near(px[x, y], self.ACCENT):
+                    run += 1
+                    best = max(best, run)
+                else:
+                    run = 0
+            if best >= min_height:
+                cols[x] = best
+        if not cols:
+            raise AssertionError(
+                f"未能在 {box} 内定位到滑块 Thumb（accent 色块）；"
+                "通常是控件未渲染、卡片开关未开，或 box 已随布局变化失效"
+            )
+        # 取纵向跨度最大的一簇，避免选中轨道上的细窄装饰块
+        run_len = 0
+        best_run = []
+        for x in sorted(cols):
+            if run_len == 0 or cols[x] >= 8:
+                run_len += 1
+                best_run.append(x)
+            else:
+                run_len = 1
+                best_run = [x]
+        center_x = int(sum(best_run) / len(best_run)) + box[0]
+        y = self._thumb_row_y(px, cols, box)
+        return (center_x, y)
+
+    def find_card_switch(self, box, min_area=80):
+        """在 box 内定位「卡片主开关」中心，返回 (x, y)。
+
+        与滑块 Thumb 的区分：主开关是 ~19x20 / area>140 的实心 accent 方块，
+        而滑块 Thumb 只有 ~13px 见方、面积远小于此。故取面积最大的 accent
+        色块即为开关。严禁硬编码开关坐标 —— 卡片折叠/展开时 header 位置
+        会整体平移，写死的 (x, y) 会点空，而只按颜色判断的 ensure_switch_on
+        会「点空也不报错」，导致后续所有步骤建立在错误状态上。
+        """
+        img = self.capture(_SCRATCH(), box)
+        px = img.load()
+        w, h = img.size
+        seen = [[False] * w for _ in range(h)]
+        best = (0, 0, 0)  # (area, cx, cy)
+        for y0 in range(h):
+            for x0 in range(w):
+                if seen[y0][x0] or not self._near(px[x0, y0], self.ACCENT):
+                    continue
+                stack = [(x0, y0)]
+                seen[y0][x0] = True
+                pts = []
+                while stack:
+                    x, y = stack.pop()
+                    pts.append((x, y))
+                    for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < w and 0 <= ny < h and not seen[ny][nx] \
+                                and self._near(px[nx, ny], self.ACCENT):
+                            seen[ny][nx] = True
+                            stack.append((nx, ny))
+                if len(pts) < min_area:
+                    continue
+                xs = [p[0] for p in pts]
+                ys = [p[1] for p in pts]
+                a = len(pts)
+                if a > best[0]:
+                    best = (a, int(sum(xs) / len(xs)) + box[0],
+                            int(sum(ys) / len(ys)) + box[1])
+        if best[0] < min_area:
+            raise AssertionError(
+                f"未能于 {box} 内定位到卡片主开关（最大 accent 色块面积 {best[0]} < {min_area}）")
+        return (best[1], best[2])
+
+    def find_filled_slider(self, box, min_run=200, pick='longest'):
+        """在 box 内定位「已填充的滑轨」，返回 (thumb_x, y, run_len)。
+
+        判据：某一行的 accent 水平连续长度远超其它元素（全项目只有滑轨
+        填充区能达到 200px 以上，其余 accent 元素都是几十 px 的小方块）。
+        填充区右端即为 Thumb 所在位置。
+        比硬编码行 y 稳健得多：不受滚动位置、卡片展开态、控件增减影响。
+
+        pick='longest' 取最长的一段；pick='top' 取纵坐标最靠上的一段
+        （页面有多条滑轨时，「最上面那条」比「最长那条」更符合「第一个控件」
+        的直觉，也不会因为下方某条更宽而选错）。
+        """
+        img = self.capture(_SCRATCH(), box)
+        px = img.load()
+        w, h = img.size
+        hits = []
+        for y in range(h):
+            run = 0
+            for x in range(w + 1):
+                if x < w and self._near(px[x, y], self.ACCENT):
+                    run += 1
+                else:
+                    if run >= min_run:
+                        hits.append((run, x + box[0], y + box[1]))
+                    run = 0
+        if not hits:
+            raise AssertionError(
+                f"未能于 {box} 内定位到已填充滑轨（需要 accent 连续 >= {min_run}px）。"
+                "通常是控件未渲染、卡片开关未开，或需要先滚动到该卡片")
+        hits.sort(key=lambda t: t[1] if pick == 'top' else -t[0])
+        run_len, end_x, y_abs = hits[0]
+        # 返回 Thumb 圆心而非填充段端点：横向内缩半个 Thumb，纵向取整段中线。
+        # 直接拿端点去拖会落在圆边缘，产生 0 差异的假失败。
+        ys = sorted({y for (_, _, y) in hits})
+        group = [y for y in ys if abs(y - y_abs) <= 14]
+        y_center = (min(group) + max(group)) // 2
+        return (end_x - 6, y_center, run_len)
+
+    def _thumb_row_y(self, px, cols, box):
+        best_y, best_n = 0, -1
+        w = max(cols) + 1 if cols else 0
+        for y in range(box[3] - box[1]):
+            n = sum(1 for x in range(w) if x in cols and self._near(px[x, y], self.ACCENT))
+            if n > best_n:
+                best_n, best_y = n, y
+        return best_y + box[1]

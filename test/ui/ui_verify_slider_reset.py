@@ -38,47 +38,6 @@ def ensure_switch_on(app, switch_rel_x, switch_rel_y, label="卡片开关"):
         print(f"  [{label}] 已经处于开启状态，无需重复点击。")
 
 
-# --- Thumb 实测定位 -------------------------------------------------------
-# 铁律：严禁盲写假坐标。滑块 Thumb 会随卡片开关状态与当前数值移动，
-# 硬编码 x 必然漂移（旧值 583 就因此落在轨道空白处，拖拽产生 0 差异）。
-# 这里在运行时从真实像素反查：accent 色 (#D4FF3F) 的连通块里，
-# 轨道只有 ~4px 高，而 Thumb 是 ~13px 的圆 —— 按高度区分二者。
-_ACCENT = (212, 255, 63)
-
-
-def _near(px, ref, tol=52):
-    return (abs(px[0] - ref[0]) <= tol and abs(px[1] - ref[1]) <= tol
-            and abs(px[2] - ref[2]) <= tol)
-
-
-def find_thumb(app, box):
-    """在 box=(x0,y0,x1,y1) 内定位滑块 Thumb 圆心，返回 (x, y) 或 None。
-    box 用窗口相对坐标。"""
-    img = app.capture(_SCRATCH, box)
-    px = img.load()
-    w, h = img.size
-    cols = {}
-    for x in range(w):
-        run = 0
-        best = 0
-        for y in range(h):
-            if _near(px[x, y], _ACCENT):
-                run += 1
-                best = max(best, run)
-            else:
-                run = 0
-        if best:
-            cols[x] = best
-    if not cols:
-        return None
-    # 取「竖直连续高度最大」的列 = Thumb；轨道只有 4px 高
-    tx = max(cols, key=lambda x: cols[x])
-    if cols[tx] < 8:          # 最高也只有轨道高度 -> 没找到 Thumb
-        return None
-    return box[0] + tx, box[1] + (h // 2)
-
-
-
 def main():
     app = AuraAppSession(width=1400, height=900,
                         title='Slider Reset Verify')
@@ -92,22 +51,53 @@ def main():
 
     # 2. 01 低音增强卡片
     print("\n[Step 2] 测试 01 低音增强滑块调节与双击归位...")
-    # 确保主开关开启 (x=1275, y=455)
-    ensure_switch_on(app, 1281, 451, label="低音主开关")
+    # 必须先滚回顶部：本用例的行坐标都以页面顶部为基准，
+    # 旧代码缺少这一步，滚动位置一变整段坐标全部失效。
+    app.scroll(700, 500, clicks=8, delay=0.5)
+    time.sleep(0.8)
 
-    # 拖拽低音增益滑块：Thumb 初始位置在 x=583, y=529，向右拖拽至 x=960
-    print("  拖拽低音增益滑块 Thumb (872, 532) -> (1140, 532)...")
-    img_pre_drag = app.capture(_SCRATCH, (340, 500, 1310, 560))
+    # 搜索带覆盖整个客户区。低音卡 collapsed 判据是 !model.bassOn（effects_page.dart:250），
+    # 开关一切换卡片就展开/收起，自身 body 与下方所有卡片的 y 全部平移。
+    SEARCH = (200, 90, 1390, 900)
+
+    # 开关动态定位：关闭态是灰色非 accent，find_card_switch 只在已开启时有效。
+    # 关闭态下整卡收起、header 上移，此时退回展开态实测坐标 (1281,451)。
+    try:
+        sw_x, sw_y = app.find_card_switch(SEARCH)
+        print(f"  实测低音主开关中心（accent 开启态）: ({sw_x}, {sw_y})")
+    except AssertionError:
+        sw_x, sw_y = 1281, 451
+        print(f"  开关为关闭态（灰色），退回展开态坐标 ({sw_x}, {sw_y})")
+    ensure_switch_on(app, sw_x, sw_y, label="低音主开关")
+    time.sleep(0.8)
+
+    # 低音强度滑块行：坐标来自 ui_verify_advanced_sections 的实测（1400x900 画布），
+    # 且 ui_verify_advanced_sections 在同一坐标下稳定通过 —— 直接复用，不再自造像素定位器。
     row = (340, 500, 1310, 560)
-    thumb = find_thumb(app, row)
-    if thumb is None:
-        raise AssertionError("未能在低音强度行定位到滑块 Thumb（accent 圆块）")
-    print(f"  实测 Thumb 圆心: {thumb}")
+
+    # 会话会记忆滑块值，可能已停在最右端；此时向右拖必然 0 差异（假失败）。
+    # 先拖到最左制造余量，再重新定位（值变了 Thumb 位置也随之变化）。
+    thumb = app.find_thumb(row)
+    app.drag(thumb[0], row[0] + 20, thumb[1], steps=25, delay=0.4)
+    time.sleep(0.6)
+
+    img_pre_drag = app.capture(_SCRATCH, row)
+    thumb = app.find_thumb(row)
+    print(f"  归零后实测 Thumb 圆心: {thumb}")
     app.drag(thumb[0], min(thumb[0] + 300, 1300), thumb[1], steps=35, delay=0.5)
-    img_post_drag = app.capture(_SCRATCH, (340, 500, 1310, 560))
+    img_post_drag = app.capture(_SCRATCH, row)
     diff = app.assert_images_differ(img_pre_drag, img_post_drag, min_diff_pixels=50, label="低音滑块拖拽")
     print(f"  -> 低音滑块拖拽成功！差异像素: {diff}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "20-bass-dragged.png"))
+
+    # 双击 Label 归位。x 必须落在卡片内容区：旧代码用 row[0]+40=240，
+    # 那是左侧导航栏，会误触发导航并弹出其它窗口（实测会出现第二个窗口）。
+    print("  双击 '增强量' Label (440, 529) 触发归位默认值...")
+    app.double_click(440, 529, delay=0.8)
+    img_post_reset = app.capture(_SCRATCH, row)
+    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音双击归位")
+    print(f"  -> 低音双击归位成功！差异像素: {diff_reset}")
+    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "21-bass-doubletap-reset.png"))
 
     # 双击 Label (440, 529) 触发归位出厂值 0.0dB
     print("  双击 '增强量' Label (440, 529) 触发归位默认值...")
@@ -119,9 +109,13 @@ def main():
 
     # 3. 低频搁架高级区
     print("\n[Step 3] 展开低频搁架高级区，测试滑块双击归位...")
-    # 检查是否已展开（若未展开则点击 x=460, y=604）
-    img_shelf_check = app.capture(_SCRATCH)
-    if img_shelf_check.getpixel((440, 690))[0] < 50:  # 频点 Label 处若为暗黑背景说明未展开
+    # 检查是否已展开：直接反查该行是否存在可拖拽 Thumb。
+    # 旧写法用 getpixel((440,690))[0] < 50 这个魔法像素判展开，
+    # 布局一变就误判；改为「找得到 Thumb == 面板已展开」。
+    shelf_row = (340, 660, 1310, 760)
+    try:
+        app.find_thumb(shelf_row)
+    except AssertionError:
         print("  点击展开低频搁架折叠面板 (x=460, y=604)...")
         app.click(460, 604, delay=0.6)
         time.sleep(0.5)  # 等待 AnimatedCrossFade 展开动画完全舒展
@@ -130,11 +124,14 @@ def main():
     ensure_switch_on(app, 1275, 604, label="低频搁架开关")
     time.sleep(0.3)
 
-    # 调节低频搁架增益滑块：实测 Thumb 处于 (866, 715)，向右拖拽至 (1060, 715)
-    print("  调节低频搁架增益滑块 (866, 715) -> (1060, 715)...")
-    img_shelf_init = app.capture(_SCRATCH, (340, 690, 1310, 740))
-    app.drag(866, 1060, 715, steps=30, delay=0.5)
-    img_shelf_dragged = app.capture(_SCRATCH, (340, 690, 1310, 740))
+    # D5：Thumb 必须运行时反查。旧代码硬编码 (866, 715)，
+    # 而展开高级区会位移布局，必然漂移到轨道空白处 → 0 差异假失败。
+    thumb = app.find_thumb(shelf_row)
+    print(f"  低频搁架增益 Thumb 实测: {thumb}")
+    print(f"  拖拽 {thumb} -> ({min(thumb[0] + 190, 1300)}, {thumb[1]})...")
+    img_shelf_init = app.capture(_SCRATCH, shelf_row)
+    app.drag(thumb[0], min(thumb[0] + 190, 1300), thumb[1], steps=30, delay=0.5)
+    img_shelf_dragged = app.capture(_SCRATCH, shelf_row)
     diff_shelf = app.assert_images_differ(img_shelf_init, img_shelf_dragged, min_diff_pixels=30, label="搁架增益调节")
     print(f"  -> 搁架增益调节成功！差异像素: {diff_shelf}")
 

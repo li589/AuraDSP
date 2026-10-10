@@ -18,11 +18,16 @@ void MultimodalEqualizerConstructor(JamesDSPLib *jdsp)
 	jdsp->mEQ.instance.filterLen = InitArbitraryEq(&jdsp->mEQ.instance.coeffGen, 0);
 	FFTConvolver2x2Init(&jdsp->mEQ.instance.convState);
 	FFTConvolver2x2Init(&jdsp->mEQ.conv);
+	FFTConvolver2x2Init(&jdsp->mEQ.convB);
+	jdsp->mEQ.activeConv = &jdsp->mEQ.conv;
+	jdsp->mEQ.convProcCount = 0;
+	jdsp->mEQ.convSwapProc = -2;
 	float *kDelta = (float*)malloc(jdsp->mEQ.instance.filterLen * sizeof(float));
 	memset(kDelta, 0, jdsp->mEQ.instance.filterLen * sizeof(float));
 	kDelta[0] = 1.0f;
 	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.instance.convState, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
 	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.conv, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
+	FFTConvolver2x2LoadImpulseResponse(&jdsp->mEQ.convB, (unsigned int)jdsp->blockSize, kDelta, kDelta, jdsp->mEQ.instance.filterLen);
 	free(kDelta);
 }
 void MultimodalEqualizerDestructor(JamesDSPLib *jdsp)
@@ -32,6 +37,7 @@ void MultimodalEqualizerDestructor(JamesDSPLib *jdsp)
 	EqNodesFree(&jdsp->mEQ.instance.coeffGen);
 	FFTConvolver2x2Free(&jdsp->mEQ.instance.convState);
 	FFTConvolver2x2Free(&jdsp->mEQ.conv);
+	FFTConvolver2x2Free(&jdsp->mEQ.convB);
 }
 void HSHOResponse(double fs, double fc, unsigned int filterOrder, double gain, double overallGainDb, unsigned int queryPts, double *dispFreq, double *cplxRe, double *cplxIm)
 {
@@ -172,7 +178,19 @@ void MultimodalEqualizerAxisInterpolation(JamesDSPLib *jdsp, int interpolationMo
 			makima(&jdsp->mEQ.pch2, jdsp->mEQ.freq, jdsp->mEQ.gain, NUMPTS + 2, 1, 1);
 			eqFil = InterpolatingEqMinimumPhase(&jdsp->mEQ.instance.coeffGen, (float)jdsp->fs, (void *)(&jdsp->mEQ.pch2));
 		}
-		FFTConvolver2x2RefreshImpulseResponse(&jdsp->mEQ.instance.convState, &jdsp->mEQ.conv, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
+		/* P-006：重建到「非活动」的那个卷积器，再在块边界原子换指针。
+		 * 旧代码直接重建 mEQ.conv，而音频线程同时在 FFTConvolver2x2Process 里
+		 * 读它的 IR 段指针、_current、_overlap —— 同一对象边处理边重写。
+		 * 换出后必须再跑满 1 块才允许把该实例重新投入重建，否则会与
+		 * 换出瞬间尚未返回的那次 Process 调用竞争。*/
+		FFTConvolver2x2 *buildTarget = (jdsp->mEQ.activeConv == &jdsp->mEQ.conv)
+			? &jdsp->mEQ.convB : &jdsp->mEQ.conv;
+		if (jdsp->mEQ.convProcCount - jdsp->mEQ.convSwapProc >= 1)
+		{
+			FFTConvolver2x2RefreshImpulseResponse(&jdsp->mEQ.instance.convState, buildTarget, eqFil, eqFil, jdsp->mEQ.instance.filterLen);
+			jdsp->mEQ.activeConv = buildTarget;
+			jdsp->mEQ.convSwapProc = jdsp->mEQ.convProcCount;
+		}
 	}
 	else
 	{
@@ -262,7 +280,7 @@ void MultimodalEqualizerDisable(JamesDSPLib *jdsp)
 void MultimodalEqualizerProcess(JamesDSPLib *jdsp, size_t n)
 {
 	if (!jdsp->mEQ.operatingMode)
-		FFTConvolver2x2Process(&jdsp->mEQ.conv, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
+		FFTConvolver2x2Process(jdsp->mEQ.activeConv, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n);
 	else
 	{
 		for (size_t smp = 0; smp < n; smp++)
@@ -283,8 +301,9 @@ void MultimodalEqualizerProcess(JamesDSPLib *jdsp, size_t n)
 					jdsp->mEQ.z1_AR[i * jdsp->mEQ.nSec + j] = jdsp->mEQ.z1_AR[i * jdsp->mEQ.nSec + j] + jdsp->mEQ.c1[i * jdsp->mEQ.nSec + j] * y2;
 				}
 			}
-			jdsp->tmpBuffer[0][smp] = x1 * jdsp->mEQ.overallGain;
-			jdsp->tmpBuffer[1][smp] = x2 * jdsp->mEQ.overallGain;
+jdsp->tmpBuffer[0][smp] = x1 * jdsp->mEQ.overallGain;
+		jdsp->tmpBuffer[1][smp] = x2 * jdsp->mEQ.overallGain;
 		}
 	}
+	jdsp->mEQ.convProcCount++;
 }

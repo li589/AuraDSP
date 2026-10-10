@@ -473,6 +473,15 @@ typedef struct
 	ierper pch1, pch2;
 	ArbEqConv instance;
 	FFTConvolver2x2 conv;
+	/* P-006：卷积器双缓冲。控制线程在非活动实例上重建 IR，块边界原子换指针，
+	 * 避免「边 FFTConvolver2x2Process 边 RefreshImpulseResponse」改写同一对象。
+	 * 两个实例都内嵌于 mEQ、由析构统一释放，不存在跨线程释放。
+	 * convProcCount 由音频线程递增；convSwapProc 为上次换出时的快照，
+	 * 换出后需再跑满 1 块才允许把该实例重新投入重建，防止与在途调用竞争。*/
+	FFTConvolver2x2 convB;
+	FFTConvolver2x2 *activeConv;
+	volatile long convProcCount;
+	volatile long convSwapProc;
 	double freq[NUMPTS + 2];
 	double gain[NUMPTS + 2];
 	// IIR
