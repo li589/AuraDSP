@@ -4,6 +4,8 @@
  * 职责：持有音频 isolate（唯一 auradsp_handle 所有者），把消息协议翻译为
  * 可观察状态；viz 高频数据走独立 ValueNotifier（30fps），避免整页重建。
  */
+import 'dart:async';
+import 'dart:io';
 import 'dart:isolate';
 import 'dart:math' as math;
 
@@ -13,6 +15,9 @@ import 'package:flutter/material.dart' show Color, Locale;
 import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart' show ParamId;
 import '../engine/debug_log.dart';
+import 'config.dart';
+import 'presets.dart';
+import 'session_memory.dart';
 import 'theme.dart';
 
 enum EngineConn { connecting, ready, fatal }
@@ -173,7 +178,15 @@ class AppModel extends ChangeNotifier {
   final Map<String, int> _latencyRefreshTicks = {};
   int getComponentLatencyTick(String compId) => _latencyRefreshTicks[compId] ?? 0;
 
-  // 用户偏好
+  // 用户偏好与外置配置
+  late AppConfig config;
+  String? activePresetName;
+  String? convIrPath;
+  String? ddcPath;
+  String? lpCode;
+  Timer? _debounceSaveTimer;
+  bool _isReplayingSession = false;
+
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
   int latencyMode = 2; // 0=realtime 1=music 2=quality (默认品质/无限制，废除硬性拦截规则)
@@ -203,7 +216,32 @@ class AppModel extends ChangeNotifier {
   ReceivePort? _fromIso;
 
   AppModel() {
+    config = ConfigManager.load();
+    locale = Locale(config.locale);
+    themeId = AuraThemeId.values.firstWhere(
+      (t) => t.name == config.themeId,
+      orElse: () => AuraThemeId.auraDark,
+    );
+    latencyMode = config.defaultLatencyMode;
+
+    if (config.autoRestoreSession) {
+      final session = SessionMemory.load();
+      if (session != null) {
+        SessionMemory.restoreMemoryImage(this, session);
+      } else {
+        SessionMemory.save(this);
+      }
+    }
     _spawn();
+  }
+
+  void scheduleAutoSave() {
+    if (_isReplayingSession) return;
+    _debounceSaveTimer?.cancel();
+    _debounceSaveTimer = Timer(
+      Duration(milliseconds: config.autoSaveDebounceMs),
+      () => SessionMemory.save(this),
+    );
   }
 
   void _spawn() {
@@ -231,7 +269,11 @@ class AppModel extends ChangeNotifier {
         conn = EngineConn.ready;
         engineState = 1;
         notifyListeners();
-        _toIso?.send({'cmd': 'getParams'});
+        if (config.autoRestoreSession) {
+          replaySessionToEngine();
+        } else {
+          _toIso?.send({'cmd': 'getParams'});
+        }
         break;
       case 'params':
         bassOn = (raw['bassEnable'] as int) != 0;
@@ -372,6 +414,7 @@ class AppModel extends ChangeNotifier {
     _markSent(id);
     notifyListeners();
     send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
+    scheduleAutoSave();
   }
 
   void setFloat(String id, double v) {
@@ -379,6 +422,67 @@ class AppModel extends ChangeNotifier {
     _markSent(id);
     notifyListeners();
     send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
+    scheduleAutoSave();
+  }
+
+
+  Future<void> replaySessionToEngine() async {
+    _isReplayingSession = true;
+    try {
+      // 1. 下发全量基础开关与数值
+      setInt('bass.enable', bassOn ? 1 : 0);
+      setFloat('bass.gain', bassGain);
+      setFloat('stereo.mix', stereoMix * stereoWidenMax);
+      if (stereoBandUsed) {
+        setInt('stereo.bandUsed', 1);
+        for (var i = 0; i < 5; i++) {
+          setFloat('stereo.band${i + 1}', stereoBands[i]);
+        }
+      }
+      setInt('tube.enable', tubeOn ? 1 : 0);
+      setFloat('tube.gain', tubeGain);
+      setInt('crossfeed.enable', xfeedOn ? 1 : 0);
+      setInt('shelf.enable', shelfOn ? 1 : 0);
+      setFloat('shelf.freq', shelfFreq);
+      setFloat('shelf.gain', shelfGain);
+      setInt('limiter.enable', limiterOn ? 1 : 0);
+      setFloat('post.gain', postGain);
+
+      // 2. 混响
+      if (reverbPreset >= 0) {
+        setInt('reverb.preset', reverbPreset);
+      } else if (fvOn) {
+        setFloat('freeverb.decay', fvDecay);
+        setFloat('freeverb.damp', fvDamp);
+        setFloat('freeverb.wet', fvWet);
+        setFloat('freeverb.dry', fvDry);
+        setInt(ParamId.fvEnable, 1);
+      }
+
+      // 3. EQ 状态与曲线
+      setInt('eq.enable', eqOn ? 1 : 0);
+      _pushEqCurve();
+
+      // 4. 外部文件自校验重载
+      if (convIrPath != null && convIrPath!.isNotEmpty && File(convIrPath!).existsSync()) {
+        loadConvolverIr(convIrPath!);
+        if (convEnabled) setInt(ParamId.convEnable, 1);
+      }
+      if (ddcPath != null && ddcPath!.isNotEmpty && File(ddcPath!).existsSync()) {
+        loadVdc(ddcPath!);
+        if (ddcOn) setInt(ParamId.ddcEnable, 1);
+      }
+      if (lpCode != null && lpCode!.isNotEmpty) {
+        setLiveprogCode(lpCode!);
+        if (lpEnabled) setInt(ParamId.lpEnable, 1);
+      }
+      if (graphOrder != null && graphOrder!.isNotEmpty) {
+        setGraphOrder(graphOrder!);
+      }
+    } finally {
+      _isReplayingSession = false;
+      _toIso?.send({'cmd': 'getParams'});
+    }
   }
 
   /// 乐观镜像；被守卫拒绝时由 EventBanner 明示，引擎 params/state 纠正
@@ -500,11 +604,14 @@ class AppModel extends ChangeNotifier {
 
   void setStringParam(String id, String text) {
     send({'cmd': 'setParamStr', 'id': id, 'text': text});
+    scheduleAutoSave();
   }
 
   void setLiveprogCode(String text) {
     lpError = null;
+    lpCode = text;
     send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
+    scheduleAutoSave();
   }
 
   void setLiveprogEnabled(bool on) {
@@ -512,15 +619,18 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     _markSent(ParamId.lpEnable);
     send({'cmd': 'setParam', 'id': ParamId.lpEnable, 'value': on ? 1 : 0, 'isFloat': false});
+    scheduleAutoSave();
   }
 
   void unloadLiveprog() {
     lpEnabled = false;
     lpStatus = 0;
     lpError = null;
+    lpCode = null;
     notifyListeners();
     _markSent(ParamId.lpUnload);
     send({'cmd': 'setParam', 'id': ParamId.lpUnload, 'value': 0, 'isFloat': false});
+    scheduleAutoSave();
   }
 
   void setLiveprogParam(int index, double v) {
@@ -541,11 +651,14 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     _markSent(ParamId.convEnable);
     send({'cmd': 'setParam', 'id': ParamId.convEnable, 'value': on ? 1 : 0, 'isFloat': false});
+    scheduleAutoSave();
   }
 
   void loadConvolverIr(String path) {
+    convIrPath = path;
     // 字符串参数复用 setParamStr 通道；meta 由 paramResult→getParams 回读
     send({'cmd': 'setParamStr', 'id': ParamId.convIrPath, 'text': path});
+    scheduleAutoSave();
   }
 
   void setTubeEnabled(bool on) {
@@ -638,7 +751,9 @@ class AppModel extends ChangeNotifier {
   }
 
   void loadVdc(String path) {
+    ddcPath = path;
     send({'cmd': 'setParamStr', 'id': ParamId.ddcLoad, 'text': path});
+    scheduleAutoSave();
   }
 
   void setDdcEnabled(bool on) {
@@ -648,12 +763,14 @@ class AppModel extends ChangeNotifier {
   void clearConvolver() {
     convEnabled = false;
     convReady = false;
+    convIrPath = null;
     convFrames = convChannels = convSrcRate = 0;
     convPeak = 0;
     convSpectrum = [];
     notifyListeners();
     _markSent(ParamId.convClear);
     send({'cmd': 'setParam', 'id': ParamId.convClear, 'value': 0, 'isFloat': false});
+    scheduleAutoSave();
   }
 
   /* ---- 低音增强重构（Phase 4） ---- */
@@ -931,13 +1048,50 @@ class AppModel extends ChangeNotifier {
     send({'cmd': 'bypass', 'value': bypass});
   }
 
+  bool saveAsUserPreset(String name, {String category = 'Custom', String description = ''}) {
+    final preset = PresetLibrary.snapshot(this, name: name, category: category, description: description);
+    final ok = PresetLibrary.saveUserPreset(preset);
+    if (ok) activePresetName = name;
+    notifyListeners();
+    scheduleAutoSave();
+    return ok;
+  }
+
+  void loadPreset(AuraPreset preset) {
+    PresetLibrary.apply(this, preset);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
   void setTheme(AuraThemeId id) {
     themeId = id;
+    config.themeId = id.name;
+    ConfigManager.save(config);
     notifyListeners();
+    scheduleAutoSave();
   }
 
   void setLocale(Locale l) {
     locale = l;
+    config.locale = l.languageCode;
+    ConfigManager.save(config);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setAutoRestoreSession(bool enable) {
+    config.autoRestoreSession = enable;
+    ConfigManager.save(config);
+    if (enable) {
+      SessionMemory.save(this);
+    } else {
+      SessionMemory.clear();
+    }
+    notifyListeners();
+  }
+
+  void resetConfig() {
+    config = ConfigManager.resetToDefaults();
     notifyListeners();
   }
 
@@ -946,6 +1100,8 @@ class AppModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _debounceSaveTimer?.cancel();
+    SessionMemory.save(this);
     _toIso?.send({'cmd': 'shutdown'});
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();

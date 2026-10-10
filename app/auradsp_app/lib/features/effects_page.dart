@@ -1352,7 +1352,7 @@ class _PresetCard extends StatefulWidget {
 
 class _PresetCardState extends State<_PresetCard> {
   final _saveNameCtrl = TextEditingController();
-  List<String> _presets = [];
+  List<AuraPreset> _presets = [];
 
   @override
   void initState() {
@@ -1368,7 +1368,7 @@ class _PresetCardState extends State<_PresetCard> {
 
   void _reload() {
     setState(() {
-      _presets = PresetLibrary.list();
+      _presets = PresetLibrary.listAll();
     });
   }
 
@@ -1378,35 +1378,41 @@ class _PresetCardState extends State<_PresetCard> {
     final l = l10nOf(context);
     final m = widget.model;
 
+    final factoryPresets = _presets.where((p) => p.isFactory).toList();
+    final userPresets = _presets.where((p) => !p.isFactory).toList();
+
     return SectionCard(
       title: l.presetTitle,
       hint: l.presetHint,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (_presets.isEmpty)
-            Text(l.presetEmpty, style: captionOf(p))
-          else ...[
-            Text(l.presetLoadHint, style: captionOf(p)),
+          // 出厂预设
+          if (factoryPresets.isNotEmpty) ...[
+            Row(
+              children: [
+                Icon(Icons.stars_rounded, size: 14, color: p.accent),
+                const SizedBox(width: 4),
+                Text('出厂经典调音预设',
+                    style: monoOf(p, size: 11, color: p.accent)),
+              ],
+            ),
             const SizedBox(height: AuraSpace.xs),
             Wrap(
               spacing: AuraSpace.sm,
               runSpacing: AuraSpace.sm,
               children: [
-                for (final name in _presets)
+                for (final item in factoryPresets)
                   AuraChip(
-                    name.endsWith('.json')
-                        ? name.substring(0, name.length - 5)
-                        : name,
-                    icon: Icons.bookmark_border_rounded,
+                    item.name,
+                    icon: Icons.music_note_rounded,
+                    selected: m.activePresetName == item.name,
                     onTap: () {
-                      final doc = PresetLibrary.load(name);
-                      if (doc != null) {
-                        PresetLibrary.apply(m, doc);
-                      }
+                      m.loadPreset(item);
+                      _reload();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(doc != null ? l.presetLoaded : l.presetLoadFail),
+                          content: Text('已载入出厂预设: ${item.name}'),
                           duration: const Duration(milliseconds: 1400),
                         ));
                       }
@@ -1414,15 +1420,80 @@ class _PresetCardState extends State<_PresetCard> {
                   ),
               ],
             ),
+            const SizedBox(height: AuraSpace.md),
           ],
+
+          // 用户自建预设
+          Row(
+            children: [
+              Icon(Icons.folder_shared_rounded, size: 14, color: p.accent2),
+              const SizedBox(width: 4),
+              Text('我的自定义预设',
+                  style: monoOf(p, size: 11, color: p.accent2)),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          if (userPresets.isEmpty)
+            Text('暂无用户自定义预设 — 调好参数后在下方保存',
+                style: captionOf(p, color: p.textDim))
+          else
+            Wrap(
+              spacing: AuraSpace.sm,
+              runSpacing: AuraSpace.sm,
+              children: [
+                for (final item in userPresets)
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      AuraChip(
+                        item.name,
+                        icon: Icons.bookmark_border_rounded,
+                        selected: m.activePresetName == item.name,
+                        onTap: () {
+                          m.loadPreset(item);
+                          _reload();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text('已载入自定义预设: ${item.name}'),
+                              duration: const Duration(milliseconds: 1400),
+                            ));
+                          }
+                        },
+                      ),
+                      const SizedBox(width: 2),
+                      InkWell(
+                        onTap: () {
+                          PresetLibrary.deletePreset(item);
+                          _reload();
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                              content: Text(l.presetDeleted),
+                              duration: const Duration(milliseconds: 1200),
+                            ));
+                          }
+                        },
+                        borderRadius: BorderRadius.circular(12),
+                        child: Padding(
+                          padding: const EdgeInsets.all(4),
+                          child: Icon(Icons.close_rounded,
+                              size: 13, color: p.textDim),
+                        ),
+                      ),
+                      const SizedBox(width: AuraSpace.xs),
+                    ],
+                  ),
+              ],
+            ),
+
           const SizedBox(height: AuraSpace.md),
+          // 保存栏
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _saveNameCtrl,
                   decoration: InputDecoration(
-                    hintText: '输入预设名称保存当前状态',
+                    hintText: '输入预设名称保存当前状态为用户预设',
                     hintStyle: captionOf(p),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
@@ -1444,7 +1515,7 @@ class _PresetCardState extends State<_PresetCard> {
                 onTap: () {
                   final name = _saveNameCtrl.text.trim();
                   if (name.isEmpty) return;
-                  final ok = PresetLibrary.save(name, PresetLibrary.snapshot(m));
+                  final ok = m.saveAsUserPreset(name);
                   if (ok) _saveNameCtrl.clear();
                   _reload();
                   if (context.mounted) {

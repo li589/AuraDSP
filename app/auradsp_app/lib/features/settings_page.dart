@@ -5,7 +5,9 @@
  */
 import 'package:flutter/material.dart';
 
+import '../core/config.dart';
 import '../core/design.dart';
+import '../core/session_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
@@ -18,6 +20,7 @@ class SettingsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    final p = paletteOf(context);
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) => PageScaffold(
@@ -124,6 +127,58 @@ class SettingsPage extends StatelessWidget {
             index: '05',
             title: l.engineInfo,
             child: _EngineInfo(model: model),
+          ),
+          // 06 持久化记忆与外置配置
+          SectionCard(
+            index: '06',
+            title: '持久化记忆与配置外置',
+            hint: '自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。',
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('退出时自动保存并恢复会话记忆', style: labelOf(p)),
+                    AuraSwitch(
+                      value: model.config.autoRestoreSession,
+                      onChanged: model.setAutoRestoreSession,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                Text('配置存储目录: ${ConfigManager.baseDir}',
+                    style: monoOf(p, size: 10, color: p.textDim)),
+                const SizedBox(height: AuraSpace.sm),
+                Row(
+                  children: [
+                    AuraChip(
+                      '清除会话记忆',
+                      icon: Icons.delete_outline_rounded,
+                      onTap: () {
+                        SessionMemory.clear();
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('已清除持久化会话记忆，下次启动将使用纯净默认值'),
+                          duration: Duration(milliseconds: 1400),
+                        ));
+                      },
+                    ),
+                    const SizedBox(width: AuraSpace.sm),
+                    AuraChip(
+                      '重置外置配置为默认',
+                      icon: Icons.restore_rounded,
+                      onTap: () {
+                        model.resetConfig();
+                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                          content: Text('已重置 config.json 为标准配置模板'),
+                          duration: Duration(milliseconds: 1400),
+                        ));
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
