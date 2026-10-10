@@ -35,3 +35,4 @@ EXPORTS
     auradsp_plugin_get_latency
     auradsp_plugin_get_status
     auradsp_plugin_get_num_slots
+    auradsp_probe_component

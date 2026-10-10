@@ -74,8 +74,17 @@ constexpr int kVizRingCap = 64;   /* 2 的幂 */
 /* 实数 FFT 点数：4096@48kHz → 11.7Hz/bin。
  * 曾用 1024（46.9Hz/bin）：20~50Hz 的前几个对数带连 1 个 bin 都分不到
  * （hi<=lo → 恒 0），表现为"低音区几根柱子永远不动"。 */
-constexpr int kVizFftSize = 4096;
-constexpr int kVizInterval = 480; /* 每 480 帧（10ms@48k）产出 1 帧 */
+/* 频谱工作区（RT 线程专用，create 时按 kVizFftMax 一次性分配到最大，
+ * 运行时只改 viz_fft_size 这个使用长度 —— 这样 viz.fftSize 参数随时可下发，
+ * 不需要在控制线程重分配缓冲区（那会与 RT 线程的 emit_viz 竞争）。 */
+/* [ADR-003] 多声道矩阵支持的最大声道数 */
+constexpr int kMxMaxChannels = 8;
+
+constexpr int kVizFftMax = 8192;   /* 2 的幂；缓冲区按此上限一次性分配 */
+/* 默认使用长度。11.7Hz/bin @48k：20~50Hz 的前几个对数带才分得到 bin。
+ * 曾用 1024（46.9Hz/bin），表现为"低音区几根柱子永远不动"。
+ * 可由参数 viz.fftSize 在 [1024, kVizFftMax] 内调整（不重分配缓冲区）。 */
+constexpr int kVizFftDefault = 4096;
 
 struct VizRing {
     auradsp_viz_frame slots[kVizRingCap];
@@ -157,7 +166,10 @@ constexpr int kFvCombs = 8, kFvAllpasses = 4;
 constexpr int kFvCombTuning[kFvCombs] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
 constexpr int kFvAllpTuning[kFvAllpasses] = {556, 441, 341, 225};
 constexpr int kFvStereoSpread = 23;
-constexpr double kFvRateScale = 48000.0 / 44100.0;   /* 本引擎 fs 固定 48k */
+/* Freeverb 经典梳/全通长度标定在 44.1kHz（1116/556 等即该采样率下的采样数）。
+ * 比例必须按**实际** fs 计算，不能写死 48/44.1 —— 写死意味着在 44.1k 或
+ * 96k 设备上混响音调与衰减时间整体偏移（旧实现在非 48k 下必然失准）。 */
+constexpr double kFvTuningRefRate = 44100.0;
 
 struct FvVoice {
     float* combBuf[kFvCombs];
@@ -170,15 +182,18 @@ struct FvVoice {
     int    apIdx[kFvAllpasses];
 };
 
-void fv_alloc(FvVoice& v, int spread = 0) {
+/* rateScale = fs / 44.1kHz；调用方保证 fs 合理（否则退化为 48k 比例） */
+void fv_alloc(FvVoice& v, double sampleRate, int spread = 0) {
+    double scale = (sampleRate > 8000.0) ? (sampleRate / kFvTuningRefRate)
+                                         : (48000.0 / kFvTuningRefRate);
     for (int i = 0; i < kFvCombs; ++i) {
-        v.combSize[i] = (int)ceil((kFvCombTuning[i] + spread) * kFvRateScale) + 4;
+        v.combSize[i] = (int)ceil((kFvCombTuning[i] + spread) * scale) + 4;
         v.combBuf[i] = (float*)calloc(v.combSize[i], sizeof(float));
         v.combIdx[i] = 0;
         v.filterstore[i] = 0.0f;
     }
     for (int i = 0; i < kFvAllpasses; ++i) {
-        v.apSize[i] = (int)ceil((kFvAllpTuning[i] + spread) * kFvRateScale) + 4;
+        v.apSize[i] = (int)ceil((kFvAllpTuning[i] + spread) * scale) + 4;
         v.apBuf[i] = (float*)calloc(v.apSize[i], sizeof(float));
         v.apIdx[i] = 0;
     }
@@ -240,9 +255,12 @@ struct auradsp_handle_s {
     double latency_ms = 0.0;
 
     /* 频谱工作区（RT 线程专用，create 时分配） */
-    float* fft_scratch = nullptr;     /* kVizFftSize floats */
-    float  hann[kVizFftSize];
-    float* viz_hist = nullptr;        /* kVizFftSize*2，L/R 交织环形历史窗 */
+    float* fft_scratch = nullptr;     /* kVizFftMax floats */
+    float* hann = nullptr;            /* kVizFftMax floats */
+    float* viz_hist = nullptr;        /* kVizFftMax*2，L/R 交织环形历史窗 */
+    std::atomic<int> viz_fft_size{kVizFftDefault};  /* 实际使用长度（2 的幂，<= kVizFftMax） */
+    std::atomic<int> viz_interval{480};              /* 产出间隔（帧）= fs/100，即 10ms */
+    std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */
     int    viz_hist_pos = 0;          /* 下一个写入帧位（亦指向窗内最旧帧） */
     int    frames_since_viz = 0;
     uint64_t viz_seq = 0;
@@ -263,6 +281,11 @@ struct auradsp_handle_s {
     std::atomic<float>    ir_peak{0.0f};       /* 线性峰值（归一化提示用） */
     float                 ir_spectrum[8][AURADSP_VIZ_BANDS] = {};
 
+    /* FileGate 资源上限（控制线程下发，来自 config 的安全与资源参数；
+     * 此前引擎写死 256MiB / 16M 帧，config 里的同名字段从不生效） */
+    std::atomic<float> gate_max_ir_seconds{30.0f};
+    std::atomic<float> gate_max_file_mb{64.0f};
+
     /* M5-c：Freeverb（RT 独占；create 分配） */
     FvVoice fvL, fvR;
 
@@ -278,6 +301,11 @@ struct auradsp_handle_s {
     std::unique_ptr<auradsp::PluginHostManager> plugin_host;
     float* plugin_buf_l = nullptr;
     float* plugin_buf_r = nullptr;
+
+    /* [ADR-003 Phase A] 多声道矩阵工作区 */
+    std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
+    float* mx_scratch = nullptr;         /* max_block*kMxMaxChannels，留存各声道 */
+    float* mx_stereo = nullptr;          /* max_block*2，下混后的立体声链输出 */
 
     char   last_error[256] = {0};
 };
@@ -524,7 +552,7 @@ void compute_ir_spectrum(auradsp_handle h, const float* data, size_t frames, int
     const int safe_ch = ch > 8 ? 8 : ch;
     memset(h->ir_spectrum, 0, sizeof(h->ir_spectrum));
 
-    const int kN = kVizFftSize;
+    const int kN = kVizFftDefault;
     const int half = kN / 2;
     const int nmag = half < 2048 ? half : 2048;
     const int32_t* perm = WDL_fft_permute_tab(half);
@@ -582,6 +610,28 @@ void compute_ir_spectrum(auradsp_handle h, const float* data, size_t frames, int
     free(buf);
 }
 
+/* FileGate 文件体积上限（字节）：来自 gate.maxFileMb，兜底 64MiB。
+ * 注意兜底判据必须是 "> 0" 而不是 "> 1"——set_param 已把取值夹到 [1,4096]，
+ * 用 "> 1" 会把用户显式设置的 1MB 误判成"未设置"而回退到 64MB。
+ * 控制线程下发，create 时也会按当时的值生效。 */
+static inline long long gate_file_bytes(auradsp_handle h) {
+    const float mb = h->gate_max_file_mb.load(std::memory_order_relaxed);
+    const double v = (mb > 0.0f) ? (double)mb : 64.0;
+    return (long long)(v * 1024.0 * 1024.0);
+}
+
+/* 重建汉宁窗。窗长必须**等于**实际 FFT 长度：取长窗的前 kN 个采样会只拿到
+ * 上升沿（0→1），那不是窗函数——直流泄漏与旁瓣会直接把最低频带顶满
+ * （实测 band0 从 ~0 变成 0.631）。
+ * 只能在控制线程调用，且调用方须保证尚未发生过 emit_viz（见 viz.fftSize 参数）。 */
+void rebuild_hann(auradsp_handle h, int n) {
+    if (n < 2 || n > kVizFftMax) return;
+    const double two_pi = 2.0 * 3.14159265358979;
+    for (int i = 0; i < n; ++i) {
+        h->hann[i] = (float)(0.5 * (1.0 - cos(two_pi * i / (n - 1))));
+    }
+}
+
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
@@ -602,9 +652,10 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: seek failed"); return AURADSP_E_IO; }
     const long fsize = ftell(fp);
     if (fsize <= 44) { fclose(fp); set_error(h, "convolver.ir: file too small"); return AURADSP_E_PARAM; }
-    if (fsize > 256 * 1024 * 1024) {
+    const long long maxFileBytes = gate_file_bytes(h);
+    if (fsize > maxFileBytes) {
         fclose(fp);
-        set_error(h, "convolver.ir: file too large (max 256MiB)");
+        set_error(h, "convolver.ir: file too large (exceeds configured gate.maxFileMb)");
         return AURADSP_E_PARAM;
     }
     rewind(fp);
@@ -686,6 +737,17 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
         return AURADSP_E_PARAM;
     }
 
+    /* 时长门卫：来自 config.maxIrDurationSeconds（gate.maxIrSeconds）。
+ * 放在重采样**之前**，按文件自身采样率判定用户感知的时长；
+ * 同时保留原有的硬顶（16M 帧 / 64M 样本）作为内存的最后防线。 */
+const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
+    if (maxIrSec > 0.1f && src_rate > 0 &&
+        (double)frames > (double)maxIrSec * (double)src_rate) {
+        free(data);
+        set_error(h, "convolver.ir: too long (exceeds configured gate.maxIrSeconds)");
+        return AURADSP_E_PARAM;
+    }
+
     /* 采样率不匹配 → 离线重采样到引擎 fs（诚实回读 src_rate 供 UI 提示） */
     size_t out_frames = frames;
     float* proc = data;
@@ -750,7 +812,7 @@ void lp_refresh_sliders(auradsp_handle h) {
  * 不显示 / 频段间距怪"的真正根因（自 1024-FFT 版本起就存在）。
  */
 void viz_write(auradsp_handle h, const float* out, int frames) {
-    const int mask = kVizFftSize - 1;
+    const int mask = h->viz_fft_size.load(std::memory_order_relaxed) - 1;
     /* 历史写入与块峰值合并为一趟遍历：旧实现分两趟，等于把 out 多读一遍
      *（2048 帧块 = 多读 16KB）。两趟访问的下标序列完全一致，合并安全。 */
     float lvl_l = 0.0f, lvl_r = 0.0f;
@@ -776,7 +838,7 @@ void viz_write(auradsp_handle h, const float* out, int frames) {
  * 每次对"最近 kVizFftSize 帧"做汉宁窗实数 FFT。
  */
 void emit_viz(auradsp_handle h) {
-    const int kN = kVizFftSize;
+    const int kN = h->viz_fft_size.load(std::memory_order_relaxed);
     const int mask = kN - 1;
 
     /* 1) 按时间序提取整窗 + 汉宁窗（L 声道） */
@@ -809,7 +871,8 @@ void emit_viz(auradsp_handle h) {
     auradsp_viz_frame f;
     memset(&f, 0, sizeof(f));
     f.seq = ++h->viz_seq;
-    f.timestamp_ms = f.seq * (kVizInterval * 1000.0 / h->sample_rate);
+    f.timestamp_ms =
+        f.seq * (h->viz_interval.load(std::memory_order_relaxed) * 1000.0 / h->sample_rate);
 
     /* 3) 峰值电平（最近块，dBFS；由 viz_write 记录） */
     f.level_l_dbfs = h->viz_lvl_l;
@@ -845,6 +908,7 @@ void emit_viz(auradsp_handle h) {
             f.stage_levels_r[i] = -120.0f;
         }
     }
+    h->viz_emitted.store(true, std::memory_order_relaxed);
     h->viz.push(f);
 }
 
@@ -857,6 +921,143 @@ extern "C" {
 const char* auradsp_version(void) { return AURADSP_VERSION; }
 uint32_t    auradsp_abi(void) { return AURADSP_ABI; }
 
+/* ---------------------------------------------------------------------------
+ * 组件延迟实测（D11）
+ *
+ * 做法：自建一次性探针 handle（不触碰调用方正在放音的 handle —— 实测两个 handle
+ * 可安全共存，见 tools/probe_concurrent.py），只启用目标组件，注入单位脉冲，
+ * 检测首个非零输出的样本位置。返回值是**测出来的**，不是查表来的。
+ *
+ * 先测一遍"全关基线"，再减去它——基线可能因链上零相位环节而有微小偏移，
+ * 相减后得到的是该组件自身的净算法延迟。
+ *
+ * 窗口上限 kProbeWindow：覆盖 vendor 侧最大前瞻（FFT 块级）绰绰有余；
+ * 超窗仍未出现输出即视为"无可测延迟"返回 0（纯 IIR 的正常情形）。
+ * ------------------------------------------------------------------------- */
+namespace {
+constexpr int kProbeWindow = 16384;   /* @48k ≈ 341ms */
+constexpr int kProbeBlock  = 256;
+
+/* 把探针 handle 上的所有效果关掉，只留下要测的那个 */
+void probe_isolate(auradsp_handle p, const char* comp) {
+    const struct { const char* id; int i; } zeros[] = {
+        {"bass.enable", 0}, {"eq.enable", 0}, {"tube.enable", 0},
+        {"crossfeed.enable", 0}, {"limiter.enable", 0}, {"convolver.enable", 0},
+        {"ddc.enable", 0}, {"liveprog.enable", 0}, {"shelf.enable", 0},
+    };
+    for (const auto& z : zeros) {
+        const int32_t v = 0;
+        auradsp_set_param(p, z.id, &v, 4);
+    }
+    int32_t zero = 0;
+    auradsp_set_param(p, "reverb.preset", &zero, 4);   /* -1 = off */
+    auradsp_set_param(p, "freeverb.enable", &zero, 4);
+    const float zero_f = 0.0f;
+    auradsp_set_param(p, "stereo.mix", &zero_f, 4);
+    auradsp_set_param(p, "post.gain", &zero_f, 4);
+    auradsp_set_param(p, "bass.gain", &zero_f, 4);
+
+    if (!strcmp(comp, "bass")) {
+        const int32_t one = 1; const float g = 6.0f;
+        auradsp_set_param(p, "bass.enable", &one, 4);
+        auradsp_set_param(p, "bass.gain", &g, 4);
+    } else if (!strcmp(comp, "reverb")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "reverb.preset", &one, 4);
+    } else if (!strcmp(comp, "eq")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "eq.enable", &one, 4);
+        const char* curve = "20:0;100:0;1000:0;10000:0;20000:0;";
+        auradsp_set_param(p, "eq.curve", curve, (uint32_t)strlen(curve));
+    } else if (!strcmp(comp, "tube")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "tube.enable", &one, 4);
+    } else if (!strcmp(comp, "crossfeed")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "crossfeed.enable", &one, 4);
+    } else if (!strcmp(comp, "limiter") || !strcmp(comp, "post")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "limiter.enable", &one, 4);
+    } else if (!strcmp(comp, "shelf")) {
+        const int32_t one = 1; const float g = 6.0f;
+        auradsp_set_param(p, "shelf.enable", &one, 4);
+        auradsp_set_param(p, "shelf.gain", &g, 4);
+    }
+    /* convolver / ddc / liveprog 需要外部资源（IR / VDC / 脚本），
+     * 无法在空探针上就绪，此时如实返回"不可测"而不是编一个数字。 */
+}
+
+bool probe_is_supported(const char* comp) {
+    static const char* kSupported[] = {
+        "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf"
+    };
+    for (const char* s : kSupported)
+        if (!strcmp(comp, s)) return true;
+    return false;
+}
+
+/* 打脉冲，返回首个非零输出样本下标（无则 -1），并把输出总能量写入 *energy。
+ * 能量用于判定「该组件是否真的参与了处理」——否则一个没接上的组件会被
+ * 误报成「实测 0 ms 延迟」，把「测不到」谎报成「测到了」。 */
+long probe_first_nonzero(auradsp_handle p, float threshold, double* energy) {
+    float* in = (float*)calloc(kProbeBlock * 2, sizeof(float));
+    float* out = (float*)calloc(kProbeBlock * 2, sizeof(float));
+    if (!in || !out) { free(in); free(out); return -1; }
+    long first = -1;
+    double e = 0.0;
+    bool injected = false;
+    for (int processed = 0; processed < kProbeWindow; processed += kProbeBlock) {
+        memset(in, 0, sizeof(float) * kProbeBlock * 2);
+        if (!injected) { in[0] = 1.0f; in[1] = 1.0f; injected = true; }
+        auradsp_process(p, in, out, kProbeBlock);
+        for (int i = 0; i < kProbeBlock * 2; ++i) {
+            const double a = fabs((double)out[i]);
+            if (a > (double)threshold && first < 0) first = processed + i / 2;
+            e += a * a;
+        }
+    }
+    free(in);
+    free(out);
+    if (energy) *energy = e;
+    return first;
+}
+}  // namespace
+
+int auradsp_probe_component(const char* component, double sample_rate,
+                            uint32_t* out_samples) {
+    if (!component || !out_samples) return -1;
+    *out_samples = 0;
+    if (!probe_is_supported(component)) return -1;
+    const double fs = (sample_rate > 8000.0) ? sample_rate : 48000.0;
+
+    auradsp_handle probe = auradsp_create((float)fs, kProbeBlock);
+    if (!probe) return -2;
+    const int32_t quality = 2;
+    auradsp_set_param(probe, "mode.latency", &quality, 4);
+
+    /* 基线：全关，量出链自身的零点偏移与能量 */
+    double base_energy = 0.0;
+    probe_isolate(probe, "");
+    const long baseline = probe_first_nonzero(probe, 1e-7f, &base_energy);
+
+    double energy = 0.0;
+    probe_isolate(probe, component);
+    const long first = probe_first_nonzero(probe, 1e-7f, &energy);
+
+    auradsp_destroy(probe);
+
+    /* 参与度判据：目标组件必须让输出能量偏离基线，否则说明它没真正生效
+     * （参数被守卫拒绝 / 效果未注册）。此时返回 -3「无法测量」，
+     * 而不是谎报 0 毫秒。 */
+    if (first < 0) return -3;                       /* 全程无输出：不可测 */
+    if (fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0)) return -3;
+
+    long delay = first - (baseline > 0 ? baseline : 0);
+    if (delay < 0) delay = 0;
+    *out_samples = (uint32_t)delay;
+    return 0;
+}
+
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (sample_rate < 8000 || sample_rate > 192000) return nullptr;
     if (max_block_frames <= 0 || max_block_frames > 16384) return nullptr;
@@ -866,24 +1067,33 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (!h) return nullptr;
     h->sample_rate = sample_rate;
     h->max_block = max_block_frames;
-    h->fft_scratch = new (std::nothrow) float[kVizFftSize];
+    h->fft_scratch = new (std::nothrow) float[kVizFftMax];
+    h->hann = new (std::nothrow) float[kVizFftMax];
     if (!h->fft_scratch) { delete h; return nullptr; }
-    h->viz_hist = new (std::nothrow) float[kVizFftSize * 2]();
+    h->viz_hist = new (std::nothrow) float[kVizFftMax * 2]();
     if (!h->viz_hist) { delete[] h->fft_scratch; delete h; return nullptr; }
     h->shelf_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->shelf_scratch) {
-        delete[] h->fft_scratch; delete[] h->viz_hist; delete h; return nullptr;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete h; return nullptr;
     }
     h->conv_scratch = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->conv_scratch) {
-        delete[] h->fft_scratch; delete[] h->viz_hist;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist;
         delete[] h->shelf_scratch; delete h; return nullptr;
+    }
+    h->mx_scratch = new (std::nothrow) float[(size_t)max_block_frames * kMxMaxChannels]();
+    h->mx_stereo = new (std::nothrow) float[(size_t)max_block_frames * 2]();
+    if (!h->mx_scratch || !h->mx_stereo) {
+        delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete[] h->mx_scratch; delete[] h->mx_stereo;
+        delete h; return nullptr;
     }
     h->plugin_buf_l = new (std::nothrow) float[(size_t)max_block_frames]();
     h->plugin_buf_r = new (std::nothrow) float[(size_t)max_block_frames]();
     if (!h->plugin_buf_l || !h->plugin_buf_r) {
-        delete[] h->fft_scratch; delete[] h->viz_hist;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist;
         delete[] h->shelf_scratch; delete[] h->conv_scratch;
+    delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
         delete h; return nullptr;
     }
@@ -893,8 +1103,14 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     /* 注意：P-005 的 scratch 绑定必须放在 JamesDSPInit 之后——
      * JamesDSPInit 内部 memset(jdsp, 0, sizeof) 会清掉提前写入的指针 */
 
-    for (int i = 0; i < kVizFftSize; ++i)
-        h->hann[i] = 0.5f * (1.0f - cosf(2.0f * 3.14159265358979f * i / (kVizFftSize - 1)));
+    for (int i = 0; i < kVizFftMax; ++i) h->hann[i] = 0.0f;
+    rebuild_hann(h, kVizFftDefault);
+    /* 产出间隔按实际 fs 归一到 10ms，44.1k/96k 下帧率才不会漂。
+     * 不用 std::max：Windows 头把 max 定义成宏，会把 std::max 展开坏
+     * （MSVC C2589）。 */
+    int viz_int = (int)(h->sample_rate / 100.0 + 0.5);
+    if (viz_int < 1) viz_int = 1;
+    h->viz_interval.store(viz_int);
 
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
@@ -903,8 +1119,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvWet = 1.0f;
     h->jdsp.auraConvDry = 0.0f;
     h->jdsp.auraConvMixUsed = 0;
-    fv_alloc(h->fvL, 0);
-    fv_alloc(h->fvR, kFvStereoSpread);
+    fv_alloc(h->fvL, sample_rate, 0);
+    fv_alloc(h->fvR, sample_rate, kFvStereoSpread);
     shelf_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
@@ -961,6 +1177,77 @@ static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float
     }
 }
 
+/* ---------------------------------------------------------------------------
+ * 多声道矩阵混音（ADR-003 Phase A）
+ *
+ * Phase A 不逐声道实例化 DSP，而是在引擎外层做 M→2 下混 / 2→M 上混：
+ *   下混：L = FL + k·C + k·SL[+k·BL]，R = FR + k·C + k·SR[+k·BR]
+ *   LFE **直通**，完全不进 DSP（保护低频主干与超低音相位）
+ *   上混：FL/FR 写处理后的 L/R，其余环绕声道按同系数回填处理后的 L/R
+ *
+ * 已知局限（ADR-003 已载明）：Phase A 下"立体声增强/Crossfeed"对 C/SL/SR
+ * 的作用是间接的（经并入矩阵），UI 效果说明中如实标注。
+ * 声道序遵循 WAVEFORMATEX 的标准顺序：FL FR C LFE SL SR [BL BR]。
+ * ------------------------------------------------------------------------- */
+
+/* 各声道的下混系数（0 = 该声道不并入 L/R）。索引即声道号。 */
+constexpr float kMx51[6] = { 1.0f, 0.0f, 0.7f, 0.0f, 0.7f, 0.7f }; /* FL FR C LFE SL SR */
+constexpr float kMx71[8] = { 1.0f, 0.0f, 0.7f, 0.0f, 0.7f, 0.7f, 0.7f, 0.7f };
+/* 上混回填增益：环绕声道写入处理后 L/R 的比例（1.0 = 与前置同相） */
+constexpr float kMxUpmixSurround = 0.7f;
+
+static const float* mx_coeff_for(int ch) {
+    if (ch >= 8) return kMx71;
+    if (ch >= 6) return kMx71;   /* 7 声道按 7.1 前 6 个处理 */
+    return kMx51;
+}
+
+/* M→2 下混 + 旁路声道留存。返回 false 表示 scratch 不可用（应直通）。 */
+static inline bool mx_downmix(auradsp_handle h, const float* in, float* stereo,
+                              int frames, int ch) {
+    const float* c = mx_coeff_for(ch);
+    float* keep = h->mx_scratch;                 /* frames*ch，用于存 LFE 等直通声道 */
+    if (!keep) return false;
+    for (int i = 0; i < frames; ++i) {
+        const float* sp = in + (size_t)i * ch;
+        float* kp = keep + (size_t)i * ch;
+        float l = 0.0f, r = 0.0f;
+        for (int k = 0; k < ch; ++k) {
+            const float v = sp[k];
+            kp[k] = v;                            /* 全量留存，上混时按需取用 */
+            const float g = c[k];
+            l += v * g;
+            /* 右声道增益：FL 不进右，FR 全额 */
+            r += v * ((k == 0) ? 0.0f : ((k == 1) ? 1.0f : g));
+        }
+        stereo[i * 2]     = l;
+        stereo[i * 2 + 1] = r;
+    }
+    return true;
+}
+
+/* 2→M 上混：前置写处理后 L/R，环绕按系数回填，LFE 原样还原 */
+static inline void mx_upmix(auradsp_handle h, float* out, const float* stereo,
+                            int frames, int ch) {
+    const float* keep = h->mx_scratch;
+    if (!keep) return;
+    for (int i = 0; i < frames; ++i) {
+        const float* sp = keep + (size_t)i * ch;
+        float* dp = out + (size_t)i * ch;
+        const float l = stereo[i * 2];
+        const float r = stereo[i * 2 + 1];
+        for (int k = 0; k < ch; ++k) {
+            if (k == 0)      dp[k] = l;
+            else if (k == 1) dp[k] = r;
+            else if (k == 3) dp[k] = sp[3];               /* LFE 直通还原 */
+            else             dp[k] = (k == 2 ? l : r) * kMxUpmixSurround;
+        }
+    }
+}
+
+static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
+                                 int frames);
+
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
     if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
@@ -968,30 +1255,77 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
 
     ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
+
+    /* [ADR-003 Phase A] 多声道：先把 M 声道下混成立体声，处理完再上混回 M。
+     * ch<=2 时整段跳过，立体声路径与改造前逐字节一致。 */
+    const int ch = h->channel_count.load(std::memory_order_relaxed);
+    const bool multichannel = (ch > 2);
+    if (multichannel && h->mx_scratch) {
+        if (st != AURADSP_STATE_PROCESSING) {
+            /* 非处理态：原样直通（含全部声道），不做矩阵 */
+            memcpy(out, in, (size_t)frames * ch * sizeof(float));
+            return;
+        }
+        if (!mx_downmix(h, in, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
+            memcpy(out, in, (size_t)frames * ch * sizeof(float));
+            return;
+        }
+        process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
+        mx_upmix(h, out, h->mx_stereo, frames, ch);
+        /* 可视化只统计前置立体声工作区（真实信号走向的近似，见 ADR-003） */
+        h->frames_since_viz += frames;
+        viz_write(h, h->mx_stereo, frames);
+        const int vizInt = h->viz_interval.load(std::memory_order_relaxed);
+        while (h->frames_since_viz >= vizInt) {
+            h->frames_since_viz -= vizInt;
+            emit_viz(h);
+        }
+        return;
+    }
+
     if (st != AURADSP_STATE_PROCESSING) {
         if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
         return;
     }
-    /* 首先将输入拷入 shelf_scratch（防 in 原位不可写并作为链前置工作区） */
+    /* 输入拷入 shelf_scratch（in 原位不可写，同时作为链前置工作区） */
     memcpy(h->shelf_scratch, in, (size_t)frames * 2 * sizeof(float));
+    process_stereo_chain(h, h->shelf_scratch, out, frames);
+    h->frames_since_viz += frames;
+    viz_write(h, out, frames);
+    const int vizInt2 = h->viz_interval.load(std::memory_order_relaxed);
+    while (h->frames_since_viz >= vizInt2) {
+        h->frames_since_viz -= vizInt2;
+        emit_viz(h);
+    }
+}
 
+/* 立体声处理链本体（RT 线程；src != dst 恒成立）。
+ *
+ * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
+ * src，再走这条链得到 dst，最后上混回 M —— 保证"多声道 = 立体声 + 矩阵"
+ * 这一不变式，不会出现两套效果逻辑各自漂移。
+ * src 为只读输入，dst 为就地处理的工作区与输出。
+ */
+static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
+                                 int frames) {
     /* Stage 0: Pre-DSP（链头，最前置） */
-    process_plugin_slots_stage(h, 0, h->shelf_scratch, frames);
+    process_plugin_slots_stage(h, 0, const_cast<float*>(src), frames);
 
-    /* M5-b：低频搁架在 vendor 链前 */
+    /* M5-b：低频搁架在 vendor 链前（就地改 src） */
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
         h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
-        shelf_process(h, h->shelf_scratch, frames);
+        shelf_process(h, const_cast<float*>(src), frames);
     }
 
     /* Stage 1: Pre-Vendor（主效果前） */
-    process_plugin_slots_stage(h, 1, h->shelf_scratch, frames);
+    process_plugin_slots_stage(h, 1, const_cast<float*>(src), frames);
 
     /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
-    h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, out, (size_t)frames);
+    h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(src), dst,
+                                   (size_t)frames);
 
     /* Stage 2: Post-Vendor（主效果后 / 混响前） */
-    process_plugin_slots_stage(h, 2, out, frames);
+    process_plugin_slots_stage(h, 2, dst, frames);
 
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
     if (h->p.fv_enable.load(std::memory_order_relaxed)) {
@@ -1003,45 +1337,31 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->fvL.damp1 = damp; h->fvL.damp2 = 1.0f - damp;
         h->fvR.damp1 = damp; h->fvR.damp2 = 1.0f - damp;
         for (int i = 0; i < frames; ++i) {
-            const float wetL = fv_voice_process(h->fvL, out[i * 2], feedback);
-            const float wetR = fv_voice_process(h->fvR, out[i * 2 + 1], feedback);
-            out[i * 2]     = out[i * 2] * dryG + wetL * wetG;
-            out[i * 2 + 1] = out[i * 2 + 1] * dryG + wetR * wetG;
+            const float wetL = fv_voice_process(h->fvL, dst[i * 2], feedback);
+            const float wetR = fv_voice_process(h->fvR, dst[i * 2 + 1], feedback);
+            dst[i * 2]     = dst[i * 2] * dryG + wetL * wetG;
+            dst[i * 2 + 1] = dst[i * 2 + 1] * dryG + wetR * wetG;
         }
     }
 
     /* Stage 3: Post-Reverb（混响后，默认阶段） */
-    process_plugin_slots_stage(h, 3, out, frames);
+    process_plugin_slots_stage(h, 3, dst, frames);
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
     const int total_samples = frames * 2;
     for (int i = 0; i < total_samples; ++i) {
-        float s = out[i];
+        float s = dst[i];
         if (std::isnan(s) || std::isinf(s)) {
-            out[i] = 0.0f;
+            dst[i] = 0.0f;
         } else if (s > 10.0f) {
-            out[i] = 10.0f;
+            dst[i] = 10.0f;
         } else if (s < -10.0f) {
-            out[i] = -10.0f;
+            dst[i] = -10.0f;
         }
     }
 
     /* Stage 4: Post-Limiter（链尾，最终安全输出后） */
-    process_plugin_slots_stage(h, 4, out, frames);
-
-    /* 可视化：每块写入历史窗（无条件），每 kVizInterval 帧产出一次；
-     * 失败不影响音频路径。
-     *
-     * 注意这里必须 -= 而不是 = 0：块长可变（WASAPI 共享模式下常见 200~1100 帧，
-     * 上限 max_block=2048），若块 >= kVizInterval 时归零，一个块就只发一帧，
-     * 实际帧率退化成 1/块长 —— 2048 帧块时只有 23 fps、1056 帧块 45 fps，
-     * 与标称的 100 fps 无关。用 while 保证帧率只由 kVizInterval 决定。 */
-    h->frames_since_viz += frames;
-    viz_write(h, out, frames);
-    while (h->frames_since_viz >= kVizInterval) {
-        h->frames_since_viz -= kVizInterval;
-        emit_viz(h);
-    }
+    process_plugin_slots_stage(h, 4, dst, frames);
 }
 
 auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
@@ -1402,6 +1722,54 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.ddc_enable.store(v);
         return AURADSP_OK;
     }
+    /* ---- [ADR-003 Phase A] 多声道矩阵 ---- */
+    if (!strcmp(id, "channels.count") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value;
+        /* 只接受 2 / 6 / 8（立体声 / 5.1 / 7.1）；其它值拒收而不是静默截断，
+         * 否则驱动层缓冲尺寸与引擎解释不一致会直接越界。 */
+        if (v != 2 && v != 6 && v != 8) {
+            set_error(h, "channels.count: must be 2 (stereo), 6 (5.1) or 8 (7.1)");
+            return AURADSP_E_PARAM;
+        }
+        h->channel_count.store(v);
+        return AURADSP_OK;
+    }
+
+    /* ---- 引擎配置项（来自 AppConfig，此前全部被硬编码旁路） ---- */
+    if (!strcmp(id, "gate.maxIrSeconds") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.1f) v = 0.1f;
+        if (v > 600.0f) v = 600.0f;
+        h->gate_max_ir_seconds.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "gate.maxFileMb") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 1.0f) v = 1.0f;
+        if (v > 4096.0f) v = 4096.0f;
+        h->gate_max_file_mb.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "viz.fftSize") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value;
+        /* 必须 2 的幂且落在 [1024, kVizFftMax]。缓冲区在 create 时已按
+         * kVizFftMax 一次性分配，这里只改使用长度，不重分配、不动指针。 */
+        if (v < 1024 || v > kVizFftMax || (v & (v - 1)) != 0) {
+            set_error(h, "viz.fftSize: must be a power of two within [1024, 8192]");
+            return AURADSP_E_PARAM;
+        }
+        /* 汉宁窗内容依赖窗长，重建会与 RT 的 emit_viz 竞争。因此只允许在
+         * 「尚未产出过任何频谱帧」时修改——即引擎启动初始化阶段。
+         * 这是配置项（config.vizFftSize）而非实时滑块，语义正好吻合。 */
+        if (h->viz_emitted.load(std::memory_order_relaxed)) {
+            set_error(h, "viz.fftSize: only changeable before the first viz frame");
+            return AURADSP_E_STATE;
+        }
+        rebuild_hann(h, (int)v);
+        h->viz_fft_size.store((int)v);
+        return AURADSP_OK;
+    }
+
     /* ---- M3.5-a：处理顺序（P-004 表驱动链） ---- */
     if (!strcmp(id, "graph.order") && bytes >= 16) {
         char* ord = (char*)malloc((size_t)bytes + 1);
@@ -1534,6 +1902,10 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "freeverb.damp") && bytes >= 4) { *(float*)out_value = h->p.fv_damp.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.wet") && bytes >= 4) { *(float*)out_value = h->p.fv_wet.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.dry") && bytes >= 4) { *(float*)out_value = h->p.fv_dry.load(); return AURADSP_OK; }
+    if (!strcmp(id, "channels.count") && bytes >= 4) { *(int32_t*)out_value = h->channel_count.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.maxIrSeconds") && bytes >= 4) { *(float*)out_value = h->gate_max_ir_seconds.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.maxFileMb") && bytes >= 4) { *(float*)out_value = h->gate_max_file_mb.load(); return AURADSP_OK; }
+    if (!strcmp(id, "viz.fftSize") && bytes >= 4) { *(int32_t*)out_value = h->viz_fft_size.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 1024) {
         /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点

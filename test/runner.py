@@ -32,6 +32,8 @@ def run_smoke_tests():
         "smoke_block1056.py",
         "smoke_plugin_host.py",
         "smoke_multislot_and_stages.py",
+        "smoke_config_and_matrix.py",
+        "probe_component.py",
         "test_cross_system_verify.py",
     ]
     all_pass = True

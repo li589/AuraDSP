@@ -418,7 +418,7 @@ abstract final class PresetLibrary {
     final st = (p['stereo'] as Map<String, dynamic>?) ?? {};
     if (st.isNotEmpty) {
       if (st['mix'] != null) {
-        m.setFloat('stereo.mix', (st['mix'] as num).toDouble() * AppModel.stereoWidenMax);
+        m.setFloat('stereo.mix', (st['mix'] as num).toDouble() * m.stereoWidenMax);
       }
       if (st['bandUsed'] != null && (st['bandUsed'] as bool)) {
         m.setInt('stereo.bandUsed', 1);

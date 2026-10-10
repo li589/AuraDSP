@@ -134,7 +134,30 @@ final class WavFormatEx {
         isFloat = false;
       }
     }
-    return WavFormatEx._(b, tag, ch, rate, bits, isFloat);
+    return WavFormatEx._(b, tag, ch, rate, bits, isFloat).._cbSize = cbSize;
+  }
+
+  /// 结构总字节数（18 字节固定头 + cbSize 扩展），用于整块复制后改采样率。
+  int get totalBytes => 18 + _cbSize;
+  int _cbSize = 0;
+
+  /// 复制一份，仅把 nSamplesPerSec（偏移 4）改成 [rate]。
+  ///
+  /// 这是请求非设备原生采样率的安全做法：保留 formatTag / channels /
+  /// bitsPerSample / channel mask / SubFormat GUID，只改速率，
+  /// 避免手搓 WAVEFORMATEXTENSIBLE 触发 AUDCLNT_E_INVALID_FORMAT。
+  /// shared 模式下 Windows 会自行重采样到设备原生率。
+  Pointer<Uint8> cloneWithRate(int rate) {
+    final out = malloc<Uint8>(totalBytes);
+    for (var i = 0; i < totalBytes; i++) {
+      out[i] = raw[i];
+    }
+    final b = out;
+    b[4] = rate & 0xFF;
+    b[5] = (rate >> 8) & 0xFF;
+    b[6] = (rate >> 16) & 0xFF;
+    b[7] = (rate >> 24) & 0xFF;
+    return out;
   }
 }
 
@@ -172,7 +195,7 @@ final class WasapiOut {
 
   bool started = false;
 
-  void init() {
+  void init({int? requestedSampleRate}) {
     dbgLog('WASAPI init: begin');
     final hr = coInitializeEx(0, 0x0); // COINIT_MULTITHREADED
     dbgLog('CoInitializeEx hr=$hr');
@@ -228,9 +251,10 @@ final class WasapiOut {
         .asFunction<int Function(Pointer<Void>, Pointer<Pointer<Void>>)>();
     final pFmt = malloc<Pointer<Void>>();
     _hr('GetMixFormat', getMixFormatFn(client, pFmt));
-    mix = WavFormatEx.read(pFmt.value);
-    dbgLog('mix: tag=0x${mix.formatTag.toRadixString(16)} ch=${mix.channels} '
-        'rate=${mix.sampleRate} bits=${mix.bitsPerSample} float=${mix.isFloat}');
+    final deviceMix = WavFormatEx.read(pFmt.value);
+    dbgLog('mix: tag=0x${deviceMix.formatTag.toRadixString(16)} '
+        'ch=${deviceMix.channels} rate=${deviceMix.sampleRate} '
+        'bits=${deviceMix.bitsPerSample} float=${deviceMix.isFloat}');
 
     // Initialize(shared=0, flags=0, 20ms, periodicity=0, mixFormat, NULL)
     final initializeFn = _vt<NativeFunction<
@@ -238,10 +262,45 @@ final class WasapiOut {
                 Pointer<Void>, Pointer<Void>)>>(client, 3)
         .asFunction<int Function(Pointer<Void>, int, int, int, int,
             Pointer<Void>, Pointer<Void>)>();
-    final hrInit =
-        initializeFn(client, 0, 0, 200000, 0, pFmt.value, nullptr);
+
+    // 若 config.sampleRate 指定了与设备原生不同的速率，就按该速率请求 shared
+    // 格式（config.sampleRate 此前从不被消费，引擎实际一直跟着设备走）。
+    // 这不只是"配置生效"：引擎的 Freeverb 梳状滤波长度按 fs 标定，
+    // 在 44.1k/96k 设备上混响音调与延迟都会偏。
+    Pointer<Void> fmtPtr = pFmt.value;
+    Pointer<Uint8>? customFmt;
+    var requestedRateApplied = false;
+    if (requestedSampleRate != null &&
+        requestedSampleRate > 0 &&
+        requestedSampleRate != deviceMix.sampleRate) {
+      customFmt = deviceMix.cloneWithRate(requestedSampleRate);
+      fmtPtr = customFmt.cast<Void>();
+      requestedRateApplied = true;
+    }
+
+    var hrInit = initializeFn(client, 0, 0, 200000, 0, fmtPtr, nullptr);
+    if (hrInit != 0 && requestedRateApplied) {
+      // 设备不接受该格式（部分声卡/驱动会拒），退回设备原生混音格式
+      dbgLog('Initialize(rate=$requestedSampleRate) rejected '
+          'hr=0x${(hrInit & 0xFFFFFFFF).toRadixString(16)} — fallback to device mix');
+      final rejected = customFmt!;
+      customFmt = null;
+      requestedRateApplied = false;
+      fmtPtr = pFmt.value;
+      hrInit = initializeFn(client, 0, 0, 200000, 0, fmtPtr, nullptr);
+      malloc.free(rejected);
+    }
+    // mix 必须反映**实际协商到的**格式，后续 writeToDevice 的位深换算依赖它
+    if (requestedRateApplied) {
+      mix = WavFormatEx.read(customFmt!.cast<Void>());
+      dbgLog('negotiated format: rate=${mix.sampleRate} '
+          '(device native ${deviceMix.sampleRate})');
+    } else {
+      mix = deviceMix;
+    }
     dbgLog('Initialize hr=0x${(hrInit & 0xFFFFFFFF).toRadixString(16)}');
     _hr('Initialize', hrInit);
+    if (customFmt != null) malloc.free(customFmt);
     coTaskMemFree(pFmt.value);
     malloc.free(pFmt);
 
@@ -480,11 +539,41 @@ class FileSource implements Source {
 
 /* ---------------- 消息协议 ---------------- */
 
-const vizIntervalMs = 33;
+/// 引擎配置的兜底值。AppModel 在 Isolate.spawn 时下发真实值（见 state.dart _spawn）；
+/// 缺字段时用这些，保证单独启动 isolate（如测试）也能跑。
+const int kFallbackMaxBlockFrames = 2048;
+const int kFallbackVizFps = 30;
+const int kFallbackSampleRate = 0; // 0 = 跟随设备 mix format
+const int kFallbackVizFftSize = 4096;
+const double kFallbackMaxIrSeconds = 30.0;
+const double kFallbackMaxFileMb = 64.0;
+
+int _cfgInt(Map<String, dynamic> cfg, String key, int fallback) {
+  final v = cfg[key];
+  return v is num ? v.toInt() : fallback;
+}
+
+double _cfgDouble(Map<String, dynamic> cfg, String key, double fallback) {
+  final v = cfg[key];
+  return v is num ? v.toDouble() : fallback;
+}
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
   final toMain = cfg['toMain'] as SendPort;
   final fromMain = ReceivePort();
+
+  // 真正生效的引擎配置（不再是写死在代码里的常量）
+  final maxBlockFrames =
+      _cfgInt(cfg, 'maxBlockFrames', kFallbackMaxBlockFrames).clamp(256, 8192);
+  final vizFps = _cfgInt(cfg, 'vizFps', kFallbackVizFps).clamp(5, 120);
+  final requestedRate = _cfgInt(cfg, 'sampleRate', kFallbackSampleRate);
+  final vizFftSize =
+      _cfgInt(cfg, 'vizFftSize', kFallbackVizFftSize).clamp(1024, 8192);
+  final maxIrSeconds =
+      _cfgDouble(cfg, 'maxIrDurationSeconds', kFallbackMaxIrSeconds);
+  final maxFileMb = _cfgDouble(cfg, 'maxFileSizeMb', kFallbackMaxFileMb);
+  // UI 拉取节流：与 config.vizFps 同源，不再是写死的 33ms
+  final vizIntervalMs = (1000.0 / vizFps).round();
 
   void send(Map<String, dynamic> m) => toMain.send(m);
 
@@ -943,6 +1032,40 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'shutdown':
           running = false;
           break;
+        case 'probeComponentLatency':
+          {
+            // D11：真实脉冲响应测量。引擎侧自建一次性探针 handle，不触碰正在
+            // 放音的 handle（两个 handle 可安全共存，见 tools/probe_concurrent.py）。
+            // 代价：每次约数十毫秒，故只在用户显式点击时触发，绝不进音频路径。
+            final comp = (m['comp'] as String?) ?? '';
+            final l = lib;
+            final hd = handle;
+            final rate = wasapi?.mix.sampleRate.toDouble() ?? 48000.0;
+            if (l == null || hd == null) {
+              send({
+                'evt': 'componentLatency',
+                'comp': comp,
+                'rc': -2,
+                'samples': 0,
+              });
+              break;
+            }
+            final out = malloc<Uint32>();
+            int rc;
+            try {
+              out.value = 0;
+              rc = l.probeComponent(hd, rate, out);
+              send({
+                'evt': 'componentLatency',
+                'comp': comp,
+                'rc': rc,
+                'samples': rc == 0 ? out.value.toInt() : 0,
+              });
+            } finally {
+              malloc.free(out);
+            }
+            break;
+          }
       }
     } catch (e) {
       send({'evt': 'error', 'msg': e.toString()});
@@ -954,11 +1077,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   try {
     lib = AuraDspLib.load();
     dbgLog('engine dll loaded');
-    wasapi = WasapiOut()..init();
-    handle = lib.create(wasapi.mix.sampleRate.toDouble(), 2048);
+    wasapi = WasapiOut()
+      ..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
+    handle = lib.create(wasapi.mix.sampleRate.toDouble(), maxBlockFrames);
     dbgLog('auradsp_create rate=${wasapi.mix.sampleRate} '
+        'maxBlock=$maxBlockFrames '
         'handle=${handle == nullptr ? "NULL" : "ok"}');
     if (handle == nullptr) throw StateError('auradsp_create returned null');
+    // FileGate 资源上限来自 config（此前引擎写死 256MiB / 16M 帧）
+    AuraDspLib.setValue(lib, handle, 'gate.maxIrSeconds',
+        isFloat: true, value: maxIrSeconds);
+    AuraDspLib.setValue(lib, handle, 'gate.maxFileMb',
+        isFloat: true, value: maxFileMb);
+    if (vizFftSize != kVizFftSizeDefault) {
+      AuraDspLib.setValue(lib, handle, 'viz.fftSize',
+          isFloat: false, value: vizFftSize.toDouble());
+    }
     wasapi.start();
     dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
     lastSentState = lib.getState(handle);
@@ -980,7 +1114,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   /* ---- 渲染循环（shared 轮询推） ---- */
-  const maxBlock = 2048; // 必须 ≤ auradsp_create 的 max_block_frames 契约
+  final maxBlock = maxBlockFrames; // 必须 ≤ auradsp_create 的 max_block_frames 契约
   final srcPtr = malloc<Float>(maxBlock * 2);
   final srcBuf = srcPtr.asTypedList(maxBlock * 2);
   final outPtrEng = malloc<Float>(maxBlock * 2);

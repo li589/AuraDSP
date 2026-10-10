@@ -101,7 +101,13 @@ class AppModel extends ChangeNotifier {
   /// libjamesdsp 的展宽在 mix=1.0 时执行 `band - centre`（中置完全剥离），
   /// 单声道内容会直接归零（表现为"拉满几乎没声音"）。UI 0..100% 线性映射到
   /// 引擎 0..0.75，既保留可感知的展宽，又不会把人声剥空。
-  static const stereoWidenMax = 0.75;
+  /// 声场展宽的引擎满量程（UI 0..1 → 引擎 0..本值）。
+  ///
+  /// 此前这里是 `static const = 0.75`，config 里的同名字段被持久化、被单测断言，
+  /// 却从未参与换算——改 config.json 对听感零影响。现在直接读 config。
+  /// 引擎侧上限仍是 1.0（vendor mix=1.0 会走 band-centre 中置全剥离导致静音），
+  /// 故这里夹到 1.0 以内。
+  double get stereoWidenMax => config.stereoWidenMax.clamp(0.0, 1.0);
 
   SendPort? _toIso;
   Isolate? _iso;
@@ -321,7 +327,17 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     final port = ReceivePort();
     _fromIso = port;
-    Isolate.spawn(audioIsolateMain, {'toMain': port.sendPort}).then((iso) {
+    // 把 config 里真正被引擎消费的字段随 isolate 一起传下去。
+    // 此前这些字段只被序列化到 config.json，生产代码从不读取（改配置零效果）。
+    Isolate.spawn(audioIsolateMain, {
+      'toMain': port.sendPort,
+      'maxBlockFrames': config.maxBlockFrames,
+      'vizFps': config.vizFps,
+      'sampleRate': config.sampleRate,
+      'vizFftSize': config.vizFftSize,
+      'maxIrDurationSeconds': config.maxIrDurationSeconds,
+      'maxFileSizeMb': config.maxFileSizeMb,
+    }).then((iso) {
       _iso = iso;
     });
     port.listen(_onMessage);
@@ -533,6 +549,21 @@ class AppModel extends ChangeNotifier {
               : '插件 ${slot + 1} 关闭界面失败';
         }
         eventSeq.value = ++_guardSeq;
+        notifyListeners();
+        break;
+      case 'componentLatency':
+        final comp = raw['comp'] as String? ?? '';
+        final rc = (raw['rc'] as num?)?.toInt() ?? -2;
+        _probing.remove(comp);
+        if (rc == 0) {
+          final samples = (raw['samples'] as num?)?.toInt() ?? 0;
+          _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
+        } else {
+          lastInfo = rc == -3
+              ? '该组件无法测量（探针未能在空环境中使其生效）'
+              : '该组件不支持延迟探测（需外部资源）';
+          eventSeq.value = ++_guardSeq;
+        }
         notifyListeners();
         break;
       default:
@@ -1301,28 +1332,46 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /* ---- 组件级微型延迟评估（Phase 4） ---- */
+  /* ---- 组件级微型延迟（真实脉冲响应实测，非查表） ---- */
 
-  double getComponentLatency(String compId) {
-    return switch (compId) {
-      'bass' => bassOn ? 0.0 : 0.0,
-      'tube' => tubeOn ? 0.0 : 0.0,
-      'eq' => eqOn ? 0.0 : 0.0,
-      'stereo' => stereoMix > 0 ? 0.8 : 0.0,
-      'reverb' => isSpatialReverbOn ? 30.0 : 0.0,
-      'convolver' => (convEnabled && convReady && convFrames > 0 && convSrcRate > 0)
-          ? ((convFrames / convSrcRate) * 1000.0)
-          : 0.0,
-      'ddc' => ddcOn ? 3.0 : 0.0,
-      'post' => 0.0,
-      _ => 0.0,
-    };
+  /// 实测得到的组件算法延迟（毫秒）。未探测过的组件返回 null，
+  /// UI 必须显示"未测量"而不是编一个数字。
+  final Map<String, double> _measuredLatencyMs = {};
+
+  /// 正在探测中的组件（UI 据此显示进度并禁用重复点击）。
+  final Set<String> _probing = {};
+
+  /// 该组件当前可显示的延迟。
+  ///
+  /// 优先用**实测值**；未实测时对需要外部资源的组件（卷积/VDC/Liveprog）
+  /// 才退回解析估算，并把来源标出来供 UI 如实展示。
+  ({double ms, bool measured}) componentLatency(String compId) {
+    final m = _measuredLatencyMs[compId];
+    if (m != null) return (ms: m, measured: true);
+    // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
+    if (compId == 'convolver' && convEnabled && convReady &&
+        convFrames > 0 && convSrcRate > 0) {
+      return (ms: (convFrames / convSrcRate) * 1000.0, measured: false);
+    }
+    return (ms: 0.0, measured: false);
   }
 
+  /// 触发一次真实脉冲探测（控制线程，约数十毫秒，非 RT）。
   void refreshComponentLatency(String compId) {
+    if (_probing.contains(compId)) return;
+    _probing.add(compId);
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
+    send({'cmd': 'probeComponentLatency', 'comp': compId});
   }
+
+  /// 该组件是否支持实测（卷积/VDC/Liveprog 需要外部资源，探针无法就绪）。
+  static bool isLatencyProbeSupported(String compId) =>
+      const {'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf'}
+          .contains(compId);
+
+  /// 探测进行中
+  bool isProbingLatency(String compId) => _probing.contains(compId);
 
   void setSource(String kind, {String? path}) {
     sourceKind = kind == 'stop' ? '' : kind;

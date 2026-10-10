@@ -30,6 +30,17 @@
  *   convolver.ir.path str UTF-8 文件路径（WAV/FLAC，门卫见 load_ir_file）
  *   convolver.clear  i32  清除 IR 并停用
  *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak/ir.spectrum get 回读
+ *
+ * 引擎配置项（由 AppConfig 下发；改动即时生效，但见各条约束）：
+ *   channels.count   i32  驱动层交织缓冲声道数：2=立体声 6=5.1 8=7.1。
+ *                          >2 时 auradsp_process 的 in/out 按 frames*channels
+ *                          交织解释，并走 ADR-003 Phase A 的矩阵混音。
+ *                          只接受 2/6/8，其它值拒绝。
+ *   gate.maxIrSeconds f32  FileGate 时长上限（秒，0.1~600）。此前写死 16M 帧。
+ *   gate.maxFileMb    f32  FileGate 体积上限（MiB，1~4096）。此前写死 256MiB。
+ *   viz.fftSize       i32  频谱 FFT 点数（2 的幂，1024~8192，默认 4096）。
+ *                          **仅允许在产出过第一帧频谱之前修改**（窗体重建需与
+ *                          RT 线程互斥）；属于启动期配置，不是实时滑块。
  */
 #ifndef AURADSP_ENGINE_H
 #define AURADSP_ENGINE_H
@@ -103,6 +114,17 @@ uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max
 /* ---- 元信息 ---- */
 const char* auradsp_version(void);      /* 引擎 ABI 版本，如 "1.0.0" */
 uint32_t    auradsp_abi(void);          /* ABI 序号，加载时校验 */
+
+/* ---- 组件延迟实测（控制线程；不触碰调用方正在使用的 handle） ---- */
+/* 真实脉冲响应测量，而非查表：函数内部自建一次性探针 handle，只启用目标组件，
+ * 注入单位脉冲，检测首个非零输出样本的位置。
+ *   component: bass|reverb|eq|tube|crossfeed|limiter|convolver|ddc|liveprog|shelf|post
+ *   out_samples: 输出算法延迟（样本数）；纯零相位 IIR 返回 0
+ *   返回 0 成功；-1 组件名未知；-2 探针创建失败。
+ * 代价：每次调用建/毁一个 handle 并跑一段静音，耗时约数毫秒，
+ * 因此只应在用户显式请求时调用，绝不要放进音频路径。 */
+int auradsp_probe_component(const char* component, double sample_rate,
+                            uint32_t* out_samples);
 
 /* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
 int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);

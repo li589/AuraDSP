@@ -248,7 +248,9 @@ class _BassCard extends StatelessWidget {
       index: '01',
       title: l.bassBoost,
       collapsed: !model.bassOn,
-      latencyMs: model.getComponentLatency('bass'),
+      latencyMs: model.componentLatency('bass').ms,
+              latencyMeasured: model.componentLatency('bass').measured,
+              latencyProbing: model.isProbingLatency('bass'),
       onRefreshLatency: () => model.refreshComponentLatency('bass'),
       latencyTick: model.getComponentLatencyTick('bass'),
       trailing: AuraSwitch(
@@ -454,7 +456,9 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
       index: '02',
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
-      latencyMs: m.getComponentLatency('reverb'),
+      latencyMs: m.componentLatency('reverb').ms,
+              latencyMeasured: m.componentLatency('reverb').measured,
+              latencyProbing: m.isProbingLatency('reverb'),
       onRefreshLatency: () => m.refreshComponentLatency('reverb'),
       latencyTick: m.getComponentLatencyTick('reverb'),
       trailing: AuraSwitch(
@@ -679,7 +683,9 @@ class _ConvolverCard extends StatelessWidget {
       index: '03',
       title: l.convTitle,
       collapsed: !model.convEnabled,
-      latencyMs: model.getComponentLatency('convolver'),
+      latencyMs: model.componentLatency('convolver').ms,
+              latencyMeasured: model.componentLatency('convolver').measured,
+              latencyProbing: model.isProbingLatency('convolver'),
       onRefreshLatency: () => model.refreshComponentLatency('convolver'),
       latencyTick: model.getComponentLatencyTick('convolver'),
       trailing: ListenableBuilder(
@@ -787,7 +793,9 @@ class _DdcCard extends StatelessWidget {
       index: '04',
       title: l.ddcTitle,
       collapsed: !model.ddcOn,
-      latencyMs: model.getComponentLatency('ddc'),
+      latencyMs: model.componentLatency('ddc').ms,
+              latencyMeasured: model.componentLatency('ddc').measured,
+              latencyProbing: model.isProbingLatency('ddc'),
       onRefreshLatency: () => model.refreshComponentLatency('ddc'),
       latencyTick: model.getComponentLatencyTick('ddc'),
       trailing: ListenableBuilder(
@@ -838,7 +846,9 @@ class _EqualizerCard extends StatelessWidget {
       index: '05',
       title: l.eqMultiBand,
       collapsed: !model.eqOn,
-      latencyMs: model.getComponentLatency('eq'),
+      latencyMs: model.componentLatency('eq').ms,
+              latencyMeasured: model.componentLatency('eq').measured,
+              latencyProbing: model.isProbingLatency('eq'),
       onRefreshLatency: () => model.refreshComponentLatency('eq'),
       latencyTick: model.getComponentLatencyTick('eq'),
       trailing: AuraSwitch(
@@ -863,7 +873,9 @@ class _StereoCard extends StatelessWidget {
       index: '06',
       title: l.stereoWiden,
       collapsed: !model.stereoOn,
-      latencyMs: model.getComponentLatency('stereo'),
+      latencyMs: model.componentLatency('stereo').ms,
+              latencyMeasured: model.componentLatency('stereo').measured,
+              latencyProbing: model.isProbingLatency('stereo'),
       onRefreshLatency: () => model.refreshComponentLatency('stereo'),
       latencyTick: model.getComponentLatencyTick('stereo'),
       trailing: AuraSwitch(
@@ -886,9 +898,9 @@ class _StereoCard extends StatelessWidget {
             enabled: model.stereoOn,
             format: (v) => (v * 100).toStringAsFixed(0),
             onChanged: (v) =>
-                model.setFloat('stereo.mix', v * AppModel.stereoWidenMax),
+                model.setFloat('stereo.mix', v * model.stereoWidenMax),
             onChangedEnd: (v) =>
-                model.setFloat('stereo.mix', v * AppModel.stereoWidenMax),
+                model.setFloat('stereo.mix', v * model.stereoWidenMax),
           ),
           const SizedBox(height: AuraSpace.xs),
           Text(l.stereoWidenHint, style: captionOf(paletteOf(context))),
@@ -1036,7 +1048,9 @@ class _TubeCard extends StatelessWidget {
       index: '07',
       title: l.tubeTitle,
       collapsed: !model.tubeOn,
-      latencyMs: model.getComponentLatency('tube'),
+      latencyMs: model.componentLatency('tube').ms,
+              latencyMeasured: model.componentLatency('tube').measured,
+              latencyProbing: model.isProbingLatency('tube'),
       onRefreshLatency: () => model.refreshComponentLatency('tube'),
       latencyTick: model.getComponentLatencyTick('tube'),
       trailing: AuraSwitch(
@@ -1211,7 +1225,9 @@ class _PostCard extends StatelessWidget {
     return SectionCard(
       index: '08',
       title: l.postGain,
-      latencyMs: model.getComponentLatency('post'),
+      latencyMs: model.componentLatency('post').ms,
+              latencyMeasured: model.componentLatency('post').measured,
+              latencyProbing: model.isProbingLatency('post'),
       onRefreshLatency: () => model.refreshComponentLatency('post'),
       latencyTick: model.getComponentLatencyTick('post'),
       child: Column(

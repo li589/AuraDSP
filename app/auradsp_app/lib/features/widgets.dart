@@ -39,6 +39,10 @@ class SectionCard extends StatelessWidget {
 
   /// 组件级微型延迟（ms）：非空时在 trailing 开关前渲染 [ 0.0 ms ↻ ] 徽标
   final double? latencyMs;
+  /// latencyMs 的来源标注：true = 脉冲响应实测，false/null = 未测量
+  final bool? latencyMeasured;
+  /// 测量进行中（禁用重复点击）
+  final bool? latencyProbing;
   final VoidCallback? onRefreshLatency;
   final int latencyTick;
 
@@ -55,6 +59,8 @@ class SectionCard extends StatelessWidget {
     this.trailing,
     this.hero = false,
     this.latencyMs,
+    this.latencyMeasured,
+    this.latencyProbing,
     this.onRefreshLatency,
     this.latencyTick = 0,
     this.collapsed = false,
@@ -72,6 +78,8 @@ class SectionCard extends StatelessWidget {
               children: [
                 ComponentLatencyBadge(
                   latencyMs: latencyMs!,
+                  measured: latencyMeasured ?? false,
+                  probing: latencyProbing ?? false,
                   onRefresh: onRefreshLatency,
                   refreshTick: latencyTick,
                 ),
@@ -239,14 +247,19 @@ class LatencyBadge extends StatelessWidget {
 /// 组件级微型延迟徽标：[ 0.0 ms  ↻ ]
 class ComponentLatencyBadge extends StatefulWidget {
   final double latencyMs;
+  /// 该数值是否来自真实脉冲响应实测。false 表示解析估算或未测量。
+  final bool measured;
   final VoidCallback? onRefresh;
   final int refreshTick;
+  final bool probing;
 
   const ComponentLatencyBadge({
     super.key,
     required this.latencyMs,
+    this.measured = false,
     this.onRefresh,
     this.refreshTick = 0,
+    this.probing = false,
   });
 
   @override
@@ -283,7 +296,16 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final text = '${widget.latencyMs.toStringAsFixed(1)} ms';
+    final text = widget.measured
+        ? '${widget.latencyMs.toStringAsFixed(1)} ms'
+        : '未测量';
+    // 如实标注来源：实测 / 估算 / 未测量。旧实现把查表常量标成"实测"，
+    // 而 refreshComponentLatency 只是改了个时间戳、根本没做测量。
+    final tooltip = widget.measured
+        ? '组件处理延迟（脉冲响应实测）: $text\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）'
+        : (widget.probing
+            ? '正在测量组件延迟…'
+            : '尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）');
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {
@@ -296,13 +318,15 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
         )!;
 
         return Tooltip(
-          message: '组件实测处理延迟: $text\n点击 ↻ 立即进行单组件延迟探测评估',
+          message: tooltip,
           waitDuration: const Duration(milliseconds: 250),
           child: InkWell(
-            onTap: () {
-              _pulseController.forward(from: 0.0);
-              widget.onRefresh?.call();
-            },
+            onTap: widget.probing
+                ? null
+                : () {
+                    _pulseController.forward(from: 0.0);
+                    widget.onRefresh?.call();
+                  },
             borderRadius: BorderRadius.circular(AuraRadius.xs),
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
@@ -320,9 +344,11 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
                     style: monoOf(
                       p,
                       size: 10,
-                      color: widget.latencyMs > 20
-                          ? p.warning
-                          : (widget.latencyMs > 0 ? p.accent2 : p.textDim),
+                      color: !widget.measured
+                          ? p.textDim
+                          : (widget.latencyMs > 20
+                              ? p.warning
+                              : (widget.latencyMs > 0 ? p.accent2 : p.textDim)),
                     ),
                   ),
                   const SizedBox(width: 3),

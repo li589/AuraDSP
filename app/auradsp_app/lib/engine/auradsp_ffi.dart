@@ -87,6 +87,10 @@ abstract final class EngineState {
 /// 改动 vendor 链长度时，**必须同步修改这两个常量**。
 const int kEngineStageCount = 12;
 
+/// 引擎内建的频谱 FFT 点数（auradsp_engine.cpp 的 kVizFftSize）。
+/// config.vizFftSize 与之相同时无需下发，避免无谓的缓冲区重建。
+const int kVizFftSizeDefault = 4096;
+
 /// auradsp_viz_frame（280 字节：8+8+128+4+4+64+64）
 final class VizFrame extends Struct {
   @Uint64()
@@ -331,6 +335,17 @@ final class AuraDspLib {
       .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
           'auradsp_plugin_slot_get_insert_stage')
       .asFunction();
+
+  /// 组件延迟实测：真实脉冲响应测量，返回算法延迟（样本数）。
+  /// 见 auradsp_engine.h 的 auradsp_probe_component 契约。
+  /// 每次调用约数十毫秒（引擎内部建/毁一个探针 handle），只能按需调用，
+  /// 绝不要放进音频路径。
+  late final int Function(Pointer<Void>, double, Pointer<Uint32>) probeComponent =
+      dylib
+          .lookup<NativeFunction<
+              Int32 Function(Pointer<Void>, Double, Pointer<Uint32>)>>(
+              'auradsp_probe_component')
+          .asFunction<int Function(Pointer<Void>, double, Pointer<Uint32>)>();
 
   AuraDspLib._(this.dylib);
 
