@@ -1511,14 +1511,16 @@ static int build_eq_axis(char* txt, double sample_rate,
  *
  * 无句柄纯函数，调用方可在任意线程（含 UI isolate）调用。 */
 int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
-                              double f_min, double f_max, float* out_db) {
+                              double f_max, float* out_db) {
     if (sample_rate < 8000 || sample_rate > 384000) return AURADSP_E_PARAM;
     if (!curve || !out_db || n_points < 2 || n_points > 1024) return AURADSP_E_PARAM;
     const int bytes = (int)strlen(curve);
     if (bytes == 0 || bytes > 4096) return AURADSP_E_PARAM;
     const double nyq = sample_rate * 0.5;
-    if (!(f_min > 0.0) || !(f_max > f_min)) return AURADSP_E_PARAM;
-    double f0 = f_min, f1 = f_max;
+    /* 下限固定 20 Hz：EQ 可视化的常规下限，也是 build_eq_axis 的锚点下界 */
+    const double f0 = 20.0;
+    double f1 = f_max;
+    if (!(f1 > f0)) return AURADSP_E_PARAM;
     if (f1 > nyq * 0.999) f1 = nyq * 0.999;   /* C3：与下发同一条 Nyquist 约束 */
 
     double freqAx[NUMPTS], gainAx[NUMPTS];

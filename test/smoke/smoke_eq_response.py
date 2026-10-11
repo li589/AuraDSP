@@ -24,7 +24,7 @@ lib = ctypes.CDLL(DLL)
 lib.auradsp_probe_eq_response.restype = ctypes.c_int
 lib.auradsp_probe_eq_response.argtypes = [
     ctypes.c_int, ctypes.c_char_p, ctypes.c_int,
-    ctypes.c_double, ctypes.c_double,
+    ctypes.c_double,
     ctypes.POINTER(ctypes.c_float),
 ]
 
@@ -33,10 +33,9 @@ N = 129
 FAIL = []
 
 
-def probe(curve, sr=48000, n=N, fmin=F_MIN, fmax=F_MAX):
+def probe(curve, sr=48000, n=N, fmax=F_MAX):
     buf = (ctypes.c_float * n)()
-    rc = lib.auradsp_probe_eq_response(sr, curve.encode('utf-8'), n,
-                                       fmin, fmax, buf)
+    rc = lib.auradsp_probe_eq_response(sr, curve.encode('utf-8'), n, fmax, buf)
     return rc, list(buf)
 
 

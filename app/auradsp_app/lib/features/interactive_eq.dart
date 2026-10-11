@@ -163,6 +163,8 @@ class _InteractiveSpectrumEQPanelState
                                     hoveredIndex: _draggedIndex ?? _hoveredIndex,
                                     hoverPos: _hoverPos,
                                     isBypassed: model.eqBypass,
+                                    measuredResponse: model.eqResponseDb,
+                                    measuredForCurve: model.eqResponseCurve,
                                   ),
                                 );
                               },
@@ -641,6 +643,16 @@ class _SpectrumEQPainter extends CustomPainter {
   final Offset? hoverPos;
   final bool isBypassed;
 
+  /// 引擎实测的幅度响应（dB，长度 129，log 等分 20Hz..20kHz）。
+  ///
+  /// null 或与当前曲线不匹配时，[_drawResponseCurve] 回退到本地 smoothstep
+  /// 近似 —— 探针约 29ms 且只在拖拽停下后触发，拖拽过程中必然拿不到新值，
+  /// 所以近似不是「旧代码」，而是必要的实时降级路径。
+  final List<double>? measuredResponse;
+
+  /// [measuredResponse] 对应的曲线签名；与当前不符即视为过期。
+  final String? measuredForCurve;
+
   const _SpectrumEQPainter({
     required this.palette,
     required this.spectrumBands,
@@ -649,6 +661,8 @@ class _SpectrumEQPainter extends CustomPainter {
     required this.hoveredIndex,
     required this.hoverPos,
     required this.isBypassed,
+    this.measuredResponse,
+    this.measuredForCurve,
   });
 
   @override
@@ -756,15 +770,35 @@ class _SpectrumEQPainter extends CustomPainter {
   void _drawResponseCurve(Canvas canvas, double w, double h) {
     if (frequencies.isEmpty || gains.isEmpty) return;
 
-    // 对画布采样 160 个点计算平滑 Catmull-Rom 插值频响曲线
+    // 对画布采样 160 个点。优先用引擎实测响应 —— 它是 makima + 最小相位 IR
+    // + FFT 卷积真正产生的幅度（实测与本地 smoothstep 近似最大差 2.61 dB）；
+    // 拿不到时才退回本地插值。探针约 29ms 且只在拖拽停下后触发，拖拽过程中
+    // 必然拿不到新值，所以本地插值不是「旧代码」，而是必要的实时降级路径。
     const samples = 160;
+    final measured = measuredResponse;
+    final respLen = measured?.length ?? 0;
     final curvePoints = <Offset>[];
 
     for (var i = 0; i <= samples; i++) {
       final t = i / samples;
       final x = t * w;
       final f = _xToFreq(x, w);
-      final g = isBypassed ? 0.0 : _interpolateGain(f);
+      double g;
+      if (respLen >= 2) {
+        // 探针在 [20, 20000] 上 log 等分取样，这里按同一映射反查并线性内插
+        const fMin = 20.0, fMax = 20000.0;
+        final clamped = f.clamp(fMin, fMax).toDouble();
+        final lf = (math.log(clamped) - math.log(fMin)) /
+            (math.log(fMax) - math.log(fMin));
+        final pos = lf * (respLen - 1);
+        final i0 = pos.floor().clamp(0, respLen - 1);
+        final i1 = (i0 + 1).clamp(0, respLen - 1);
+        final k = pos - i0;
+        g = measured![i0] + (measured[i1] - measured[i0]) * k;
+      } else {
+        g = _interpolateGain(f);
+      }
+      if (isBypassed) g = 0.0;
       final y = _gainToY(g, h);
       curvePoints.add(Offset(x, y));
     }

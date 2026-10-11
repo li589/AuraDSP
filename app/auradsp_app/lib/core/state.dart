@@ -13,7 +13,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
-import '../engine/auradsp_ffi.dart' show ParamId, kEngineStageCount;
+import '../engine/auradsp_ffi.dart'
+    show ParamId, kEngineStageCount, AuraDspLib;
 import '../engine/debug_log.dart';
 import 'config.dart';
 import 'plugin_manager.dart';
@@ -1457,7 +1458,68 @@ class AppModel extends ChangeNotifier {
     }
     _pendingEqCurve = buffer.toString();
     _flushEqCurve();
+    _scheduleEqResponse();
     notifyListeners();
+  }
+
+  /* ---- C2：UI 曲线消费引擎实测响应 ----
+   *
+   * UI 原本在 log-f 上做 smoothstep 插值，而引擎走 makima + 最小相位 IR +
+   * FFT 卷积 —— 最小相位化会引入过冲与频带间相互影响，两者本就不等
+   * （实测最大偏差 2.61 dB）。这里让 UI 改画引擎的实测值。
+   *
+   * 探针一次约 29 ms，因此：
+   *   - **绝不放进音频 isolate**（会挤掉渲染回调，P-006 的爆音成因）；
+   *   - 只在拖拽**停下**后防抖触发，不逐帧调；
+   *   - 按曲线字符串缓存，重复请求直接命中；
+   *   - 失败时保留上一帧，绝不让 UI 变瞎。
+   */
+  static const int eqResponsePoints = 129;
+
+  /// 引擎实测响应（dB），长度 [eqResponsePoints]；null 表示尚未取得。
+  /// 绘制时应与 [eqResponseCurve] 比对，不一致说明已过期，需回退近似。
+  List<double>? eqResponseDb;
+
+  /// [eqResponseDb] 对应的曲线字符串，用于失效判定。
+  String? eqResponseCurve;
+
+  Timer? _eqResponseTimer;
+
+  /// UI 侧的引擎句柄。探针必须由 **UI isolate** 直接调用：
+  /// 音频 isolate 正在驱动 WASAPI，在那里跑 29 ms 的探针必然造成 underrun。
+  AuraDspLib? _ffiLib;
+
+  AuraDspLib? get _probeLib {
+    _ffiLib ??= () {
+      try {
+        return AuraDspLib.load();
+      } catch (_) {
+        return null;   // DLL 缺失：UI 退回近似曲线，不崩
+      }
+    }();
+    return _ffiLib;
+  }
+
+  void _scheduleEqResponse() {
+    _eqResponseTimer?.cancel();
+    _eqResponseTimer = Timer(const Duration(milliseconds: 220), () {
+      _eqResponseTimer = null;
+      final c = _pendingEqCurve;
+      if (c == null || c == eqResponseCurve) return;   // 缓存命中，无需重算
+      final lib = _probeLib;
+      if (lib == null) return;
+      List<double>? db;
+      try {
+        db = lib.measureEqResponse(c, config.sampleRate,
+            nPoints: eqResponsePoints);
+      } catch (_) {
+        return;   // 探针异常：保留上一帧曲线
+      }
+      if (db == null) return;
+      eqResponseDb = db;
+      eqResponseCurve = c;
+      notifyListeners();
+    });
   }
 
   /// 带尾部补发的节流。

@@ -405,6 +405,53 @@ final class AuraDspLib {
               int Function(Pointer<Void>, Pointer<Utf8>, double,
                   Pointer<Uint32>)>();
 
+  /// C2：EQ 实际频率响应实测。curve 用 eq.curve 同格式（"f:g;f:g;..."）。
+  ///
+  /// **不接收 handle**，引擎内部自建私有 jdsp 实例 —— 复用调用方的会和音频
+  /// 线程争同一个卷积器的内部历史。纯函数，可在 UI isolate 调用。
+  ///
+  /// **实测约 29 ms**（129 点）：makima + 最小相位 IR 设计 + FFT 是固有开销。
+  /// 因此**绝不能**放进音频 isolate（那会挤掉渲染回调，正是 P-006 的爆音成因），
+  /// 也不能逐帧调用。调用方需自行防抖 + 缓存，详见 `AppModel.eqResponseDb`。
+  /// C 侧签名：
+///   int auradsp_probe_eq_response(int sample_rate, const char* curve,
+///                                 int n_points, double f_max, float* out_db)
+/// ——共 5 个参数，其中 [sample_rate] 与 [curve] 是 int / const char*，
+/// 在 x64 上分别占 1 个寄存器槽，与 Dart 侧的 int / Pointer 一一对应。
+late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
+    probeEqResponse = dylib
+        .lookup<
+            NativeFunction<
+                Int32 Function(Int, Pointer<Utf8>, Int, Double,
+                    Pointer<Float>)>>('auradsp_probe_eq_response')
+        .asFunction<
+            int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)>();
+
+  /// [probeEqResponse] 的安全封装：负责字符串/输出缓冲的分配与释放。
+  ///
+  /// 返回 null 表示失败（非法曲线等），此时调用方应保留上一帧曲线，
+  /// 而不是画一条空白 —— 探针失败不该让 UI 变瞎。
+  List<double>? measureEqResponse(String curve, int sampleRate,
+      {int nPoints = 129, double fMin = 20.0, double fMax = 20000.0}) {
+    if (nPoints < 2 || nPoints > 1024) return null;
+    // 用一次性 Allocator 托管两处原生内存，作用域结束即释放，
+    // 避免裸 free() 与类成员同名导致的遮蔽问题。
+    final alloc = Arena();
+    try {
+      final out = alloc<Float>(nPoints);
+      final text = curve.toNativeUtf8(allocator: alloc);
+      final hi = fMax.clamp(fMin + 1.0, sampleRate / 2.0 * 0.999).toDouble();
+      final rc = probeEqResponse(sampleRate, text, nPoints, hi, out);
+      /* 非法输入返回非 0 是**契约**，不是异常：调用方据此回退到本地插值。
+       * 刻意不写成 assert —— 那样会把「预期被拒绝」变成崩溃，
+       * 而拒绝本身正是这里要测的行为。 */
+      if (rc != 0) return null;
+      return List<double>.generate(nPoints, (i) => out[i], growable: false);
+    } finally {
+      alloc.releaseAll();
+    }
+  }
+
   AuraDspLib._(this.dylib);
 
   static AuraDspLib? _cached;
