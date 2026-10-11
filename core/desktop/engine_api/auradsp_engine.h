@@ -126,6 +126,20 @@ uint32_t    auradsp_abi(void);          /* ABI 序号，加载时校验 */
 int auradsp_probe_component(const char* component, double sample_rate,
                             uint32_t* out_samples);
 
+/* 同上，但为需要外部资源的组件（convolver / ddc）提供资源路径，
+ * 使其能在探针内就绪并被真实测量。
+ *
+ * resource_path: IR (.wav) 或 VDC (.vdc) 文件路径；其它组件可传 NULL。
+ * 返回 0 表示测得，-1 组件未知，-2 探针创建失败，
+ * -3 探针未能使该组件生效（含资源加载失败）。
+ *
+ * 保留原 auradsp_probe_component 是为了不破坏既有 ABI：对 convolver/ddc/
+ * liveprog 它仍返回 -1，调用方需显式改用本函数才是「实测」而非「不可测」。 */
+int auradsp_probe_component_with_resource(const char* component,
+                                          const char* resource_path,
+                                          double sample_rate,
+                                          uint32_t* out_samples);
+
 /* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
 int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);
 int      auradsp_plugin_get_count(auradsp_handle h);

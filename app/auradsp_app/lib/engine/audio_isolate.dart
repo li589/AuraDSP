@@ -1081,7 +1081,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             int rc;
             try {
               out.value = 0;
-              rc = l.probeComponent(hd, rate, out);
+              // convolver / ddc 需要外部资源才能在探针内就绪；有路径时走
+              // 带资源探针，才是真正的「实测」而非「不可测」。
+              final resPath = (m['resource'] as String?) ?? '';
+              if (resPath.isEmpty) {
+                rc = l.probeComponent(hd, rate, out);
+              } else {
+                final p = resPath.toNativeUtf8();
+                try {
+                  rc = l.probeComponentWithResource(hd, p, rate, out);
+                } finally {
+                  malloc.free(p);
+                }
+              }
               send({
                 'evt': 'componentLatency',
                 'comp': comp,

@@ -29,6 +29,7 @@ def run_smoke_tests():
         "smoke_guard_flow.py",
         "smoke_liveprog.py",
         "smoke_viz_lowfreq.py",
+        "smoke_latency_probe.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",
         "smoke_multislot_and_stages.py",

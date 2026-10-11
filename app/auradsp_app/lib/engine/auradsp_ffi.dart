@@ -393,6 +393,18 @@ final class AuraDspLib {
               'auradsp_probe_component')
           .asFunction<int Function(Pointer<Void>, double, Pointer<Uint32>)>();
 
+  /// 带资源探测：convolver / ddc 需要 IR / VDC 才能在探针内就绪，
+  /// 未给路径时引擎返回 -1（不可测），而不是编造数字。
+  /// resourcePath 传 null 表示走与 probeComponent 完全一致的旧行为。
+  late final int Function(Pointer<Void>, Pointer<Utf8>, double,
+      Pointer<Uint32>) probeComponentWithResource = dylib
+          .lookup<
+              NativeFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                  Double, Pointer<Uint32>)>>('auradsp_probe_component_with_resource')
+          .asFunction<
+              int Function(Pointer<Void>, Pointer<Utf8>, double,
+                  Pointer<Uint32>)>();
+
   AuraDspLib._(this.dylib);
 
   static AuraDspLib? _cached;

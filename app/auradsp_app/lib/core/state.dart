@@ -1510,13 +1510,35 @@ class AppModel extends ChangeNotifier {
     _probing.add(compId);
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
-    send({'cmd': 'probeComponentLatency', 'comp': compId});
+    // 卷积 / VDC 已支持「带资源探针」：把已加载的文件路径一并下发，
+    // 这样它们能被真正实测，而不是恒返回 -1「不支持延迟探测」。
+    send({
+      'cmd': 'probeComponentLatency',
+      'comp': compId,
+      'resource': latencyProbeResource(compId) ?? '',
+    });
   }
 
-  /// 该组件是否支持实测（卷积/VDC/Liveprog 需要外部资源，探针无法就绪）。
+  /// 该组件实测所需的外部资源路径；无则返回 null（走无资源探针）。
+  String? latencyProbeResource(String compId) {
+    switch (compId) {
+      case 'convolver':
+        final p = convIrPath;
+        return (p != null && p.isNotEmpty && File(p).existsSync()) ? p : null;
+      case 'ddc':
+        final p = ddcPath;
+        return (p != null && p.isNotEmpty && File(p).existsSync()) ? p : null;
+      default:
+        return null;
+    }
+  }
+
+  /// 该组件是否支持实测。卷积/VDC 需外部资源，但资源已加载时同样可测。
   static bool isLatencyProbeSupported(String compId) =>
-      const {'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf'}
-          .contains(compId);
+      const {
+        'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
+        'convolver', 'ddc'
+      }.contains(compId);
 
   /// 探测进行中
   bool isProbingLatency(String compId) => _probing.contains(compId);

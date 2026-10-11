@@ -36,3 +36,4 @@ EXPORTS
     auradsp_plugin_get_status
     auradsp_plugin_get_num_slots
     auradsp_probe_component
+    auradsp_probe_component_with_resource

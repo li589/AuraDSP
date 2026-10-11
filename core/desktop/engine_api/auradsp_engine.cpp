@@ -355,6 +355,12 @@ bool compute_latency(auradsp_handle h, double* out_ms, bool* over_guard) {
     }
     /* 串扰消除 = T1 ≈3ms（实时档 10ms 预算内，交由总预算判断） */
     if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += kLatCrossfeed.ms;
+    /* VDC = T1 ≈6ms（动态范围均衡器，延迟极低）。此前 kLatDdc 定义了却从未
+     * 计入，导致 VDC 开启时总延迟被低估。 */
+    if (h->p.ddc_enable.load(std::memory_order_relaxed) &&
+        h->p.ddc_ready.load(std::memory_order_relaxed)) {
+        ms += kLatDdc.ms;
+    }
     /* 参数化混响 = T2 类（无算法延迟但按档位限定，对齐混响语义） */
     if (h->p.fv_enable.load(std::memory_order_relaxed) &&
         h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
@@ -1052,13 +1058,22 @@ long probe_first_nonzero(auradsp_handle p, float threshold, double* energy) {
 }
 }  // namespace
 
-int auradsp_probe_component(const char* component, double sample_rate,
-                            uint32_t* out_samples) {
+static int probe_component_impl(const char* component, const char* resource_path,
+                                double sample_rate, uint32_t* out_samples) {
     if (!component || !out_samples) return -1;
     *out_samples = 0;
-    if (!probe_is_supported(component)) return -1;
-    const double fs = (sample_rate > 8000.0) ? sample_rate : 48000.0;
 
+    const bool is_conv = !strcmp(component, "convolver");
+    const bool is_ddc = !strcmp(component, "ddc");
+    const bool supported = probe_is_supported(component);
+    if (!supported) {
+        /* convolver / ddc 需要外部资源（IR / VDC）才能就绪。
+         * 未给路径时仍返回 -1（不可测），
+         * 而不是编一个假数字。 */
+        if (!resource_path || (!is_conv && !is_ddc)) return -1;
+    }
+
+    const double fs = (sample_rate > 8000.0) ? sample_rate : 48000.0;
     auradsp_handle probe = auradsp_create((float)fs, kProbeBlock);
     if (!probe) return -2;
     const int32_t quality = 2;
@@ -1069,22 +1084,47 @@ int auradsp_probe_component(const char* component, double sample_rate,
     probe_isolate(probe, "");
     const long baseline = probe_first_nonzero(probe, 1e-7f, &base_energy);
 
-    double energy = 0.0;
-    probe_isolate(probe, component);
-    const long first = probe_first_nonzero(probe, 1e-7f, &energy);
+    probe_isolate(probe, supported ? component : "");
+    if (!supported) {
+        /* 带资源探测：先让资源就绪，再打开组件，
+         * 否则 probe_isolate 已将它关掉且无资源时开启会被引擎拒绝。 */
+        const int32_t one = 1;
+        if (is_conv) {
+            auradsp_set_param(probe, "convolver.ir.path", resource_path,
+                              (uint32_t)strlen(resource_path));
+            auradsp_set_param(probe, "convolver.enable", &one, 4);
+        } else {
+            auradsp_set_param(probe, "ddc.load", resource_path,
+                              (uint32_t)strlen(resource_path));
+            auradsp_set_param(probe, "ddc.enable", &one, 4);
+        }
+    }
 
+    double energy = 0.0;
+    const long first = probe_first_nonzero(probe, 1e-7f, &energy);
     auradsp_destroy(probe);
 
-    /* 参与度判据：目标组件必须让输出能量偏离基线，否则说明它没真正生效
-     * （参数被守卫拒绝 / 效果未注册）。此时返回 -3「无法测量」，
-     * 而不是谎报 0 毫秒。 */
-    if (first < 0) return -3;                       /* 全程无输出：不可测 */
+    /* 数据判定与上文同：全空输出→-3（无法测），
+     * 能量与基线一致→-3（探针未能使其生效）。 */
+    if (first < 0) return -3;
     if (fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0)) return -3;
 
     long delay = first - (baseline > 0 ? baseline : 0);
     if (delay < 0) delay = 0;
     *out_samples = (uint32_t)delay;
     return 0;
+}
+
+int auradsp_probe_component(const char* component, double sample_rate,
+                            uint32_t* out_samples) {
+    return probe_component_impl(component, nullptr, sample_rate, out_samples);
+}
+
+int auradsp_probe_component_with_resource(const char* component,
+                                          const char* resource_path,
+                                          double sample_rate,
+                                          uint32_t* out_samples) {
+    return probe_component_impl(component, resource_path, sample_rate, out_samples);
 }
 
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
