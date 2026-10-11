@@ -253,9 +253,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbAutoQuality => '已自动切换到品质延迟档以启用混响';
 
   @override
-  String get reverbAutoQualityHint => '点击预设会自动切换到品质延迟档（混响为 T2 效果，需要品质档）';
-
-  @override
   String get stereoWidenHint => '展宽已限制在 75%：更高比例会剥离中置人声（类卡拉OK效应），导致几乎无声';
 
   @override

@@ -96,7 +96,6 @@
   "heroHintProcessing": "Audio is flowing through the chain — changes apply instantly",
   "heroHintIdle": "Pick a source below to start processing",
   "reverbAutoQuality": "Switched to Quality latency mode to enable reverb",
-  "reverbAutoQualityHint": "Selecting a preset auto-switches to Quality mode (reverb is a T2 effect)",
   "stereoWidenHint": "Widening capped at 75%: higher ratios strip the center image (karaoke effect) and can silence the mix",
   "railCollapseTip": "Collapse sidebar",
   "railExpandTip": "Expand sidebar",

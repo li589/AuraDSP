@@ -96,7 +96,6 @@
   "heroHintProcessing": "音声がチェーンを通過中 — 変更は即時反映",
   "heroHintIdle": "下のソースを選んで開始",
   "reverbAutoQuality": "リバーブを有効にするため品質モードへ自動切替しました",
-  "reverbAutoQualityHint": "プリセット選択で品質モードへ自動切替（リバーブは T2 効果）",
   "stereoWidenHint": "ワイドニングは 75% まで：それ以上は中央定位（ボーカル等）が打ち消されほぼ無音になります",
   "railCollapseTip": "サイドバーを折りたたむ",
   "railExpandTip": "サイドバーを展開",

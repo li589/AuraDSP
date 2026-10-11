@@ -96,7 +96,6 @@
   "heroHintProcessing": "音频正流经效果链，改动即时生效",
   "heroHintIdle": "从下方选择音源开始处理",
   "reverbAutoQuality": "已自动切换到品质延迟档以启用混响",
-  "reverbAutoQualityHint": "点击预设会自动切换到品质延迟档（混响为 T2 效果，需要品质档）",
   "stereoWidenHint": "展宽已限制在 75%：更高比例会剥离中置人声（类卡拉OK效应），导致几乎无声",
   "railCollapseTip": "收起导航栏",
   "railExpandTip": "展开导航栏",

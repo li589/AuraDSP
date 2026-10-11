@@ -260,10 +260,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Switched to Quality latency mode to enable reverb';
 
   @override
-  String get reverbAutoQualityHint =>
-      'Selecting a preset auto-switches to Quality mode (reverb is a T2 effect)';
-
-  @override
   String get stereoWidenHint =>
       'Widening capped at 75%: higher ratios strip the center image (karaoke effect) and can silence the mix';
 
