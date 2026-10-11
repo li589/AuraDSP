@@ -130,6 +130,69 @@ void main() {
       expect(dispatchedCmds.last['stage'], PluginInsertStage.preDsp);
     });
 
+    test('D2: 32-bit incompatible plugin is intercepted before dispatch', () {
+      final meta32 = PluginMetadata.fromJson({
+        'id': 'x86-1',
+        'name': 'Legacy 32bit FX',
+        'vendor': 'LegacyCo',
+        'version': '2.0',
+        'format': 'VST3',
+        'path': r'C:\VST3\Legacy.vst3',
+        'isCompatible': false,
+        'errorMessage': '32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本',
+      });
+
+      final before = dispatchedCmds.length;
+      manager.loadPlugin(meta32);
+      // 不派发 pluginSlotLoad —— Dart 侧直接拦截，引擎不被打扰
+      expect(dispatchedCmds.length, before);
+      // lastError 带精确原因 + 插件名前缀
+      expect(manager.lastError, isNotNull);
+      expect(manager.lastError, contains('Legacy 32bit FX'));
+      expect(manager.lastError, contains('32 位'));
+
+      // 兼容插件照常派发
+      final metaOk = PluginMetadata.fromJson({
+        'id': 'ok-1',
+        'name': 'Good FX',
+        'vendor': 'GoodCo',
+        'version': '1.0',
+        'format': 'VST3',
+        'path': r'C:\VST3\Good.vst3',
+        'isCompatible': true,
+      });
+      manager.loadPlugin(metaOk);
+      expect(dispatchedCmds.length, before + 1);
+      expect(dispatchedCmds.last['cmd'], 'pluginSlotLoad');
+      expect(manager.lastError, isNull);
+    });
+
+    test('D2: onPluginSlotLoaded surfaces engine 32-bit error verbatim', () {
+      // 扫描列表里已带 32 位不兼容条目；即便有其它路径绕过 Dart 拦截
+      // 走到引擎、被引擎 load() 拒绝（rc=0），错误文案也取引擎原话，
+      // 不再显示"可能位数不符"的猜测文本（A5 旧文案）。
+      manager.onPluginScanned(1, jsonEncode([
+        {
+          'id': 'x86-1',
+          'name': 'Legacy 32bit FX',
+          'vendor': 'LegacyCo',
+          'version': '2.0',
+          'format': 'VST3',
+          'path': r'C:\VST3\Legacy.vst3',
+          'isCompatible': false,
+          'errorMessage': '32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本',
+        }
+      ]));
+      manager.onPluginSlotLoaded(0, r'C:\VST3\Legacy.vst3', 0, '{}', 3);
+      expect(manager.lastError, contains('Legacy 32bit FX'));
+      expect(manager.lastError, contains('32 位插件无法加载'));
+
+      // 未知路径的失败仍走通用推断（A5 行为不回退：磁盘上不存在时
+      // 给"文件不存在"文案，存在但加载失败时给"无法完成初始化"文案）
+      manager.onPluginSlotLoaded(0, r'C:\VST3\Unknown.vst3', 0, '{}', 3);
+      expect(manager.lastError, contains('插件文件不存在或已被移动'));
+    });
+
     test('PluginManager event handling and filtering', () {
       final samplePlugins = [
         {

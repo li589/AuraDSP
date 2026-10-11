@@ -506,6 +506,8 @@
   "plugNoPlugins": "No third-party plugins detected",
   "plugNoPluginsHint": "Make sure plugins live in system VST3 / CLAP paths, or add a custom folder above and rescan",
   "plugNoMatch": "No plugins match the current search/filter",
+  "plugIncompatibleBadge": "32-bit incompatible",
+  "plugIncompatibleHint": "This is a 32-bit plugin. AuraDSP is a 64-bit host and cannot load it; please install the 64-bit version.",
   "plugSlotActive": "Slot {n} active",
   "@plugSlotActive": {
     "placeholders": {

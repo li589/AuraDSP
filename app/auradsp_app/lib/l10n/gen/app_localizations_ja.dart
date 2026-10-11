@@ -1017,6 +1017,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugNoMatch => '検索・フィルター条件に合うプラグインがありません';
 
   @override
+  String get plugIncompatibleBadge => '32ビット非対応';
+
+  @override
+  String get plugIncompatibleHint =>
+      'このプラグインは32ビット版です。AuraDSPは64ビットホストのため読み込めません。64ビット版をインストールしてください。';
+
+  @override
   String plugSlotActive(int n) {
     return 'スロット$n動作中';
   }
