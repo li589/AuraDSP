@@ -45,3 +45,6 @@ dist/
 # .eel 脚本与 manifest.json 体积极小，正常版本化
 /resource/**/*.irs
 /resource/**/*.vdc
+
+# tools/mem_baseline.py 运行时取证产物（csv + 点击切片目录）
+tools/mem_trace_*

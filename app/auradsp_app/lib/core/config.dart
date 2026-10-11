@@ -12,6 +12,10 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 
 class AppConfig {
+  /// 可视化帧率默认值。核显上 30fps 的全窗口重绘会把 GPU 顶到 ~70%
+  ///（L-15 / §13.4.27.3），默认降到 20。
+  static const int defaultVizFps = 20;
+
   // 音频引擎参数
   int sampleRate;
   int maxBlockFrames;
@@ -37,7 +41,7 @@ class AppConfig {
   AppConfig({
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
-    this.vizFps = 30,
+    this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
     this.defaultLatencyMode = 2,
@@ -61,7 +65,7 @@ class AppConfig {
     return AppConfig(
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
       maxBlockFrames: (audio['maxBlockFrames'] as num?)?.toInt() ?? 1024,
-      vizFps: (audio['vizFps'] as num?)?.toInt() ?? 30,
+      vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
       defaultLatencyMode: (audio['defaultLatencyMode'] as num?)?.toInt() ?? 2,
@@ -83,7 +87,7 @@ class AppConfig {
   }
 
   Map<String, dynamic> toJson() => {
-        'version': 2,
+        'version': 3,
         'audio': {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
@@ -185,7 +189,16 @@ abstract final class ConfigManager {
       if (file.existsSync()) {
         final content = file.readAsStringSync();
         final json = jsonDecode(content) as Map<String, dynamic>;
-        return AppConfig.fromJson(json);
+        final cfg = AppConfig.fromJson(json);
+        // v2 -> v3 迁移：可视化帧率旧默认 30 在核显上把 GPU 顶到 ~70%
+        //（30fps 全窗口重绘，见 §13.4.27.3）。旧配置里 vizFps 恒为旧默认
+        //（无 UI 可改），故按版本号安全强制降到新默认并落盘新版本。
+        final ver = (json['version'] as num?)?.toInt() ?? 0;
+        if (ver < 3) {
+          cfg.vizFps = AppConfig.defaultVizFps;
+          save(cfg);
+        }
+        return cfg;
       }
     } catch (_) {}
     // 首次运行或解析失败，生成并写入默认配置
