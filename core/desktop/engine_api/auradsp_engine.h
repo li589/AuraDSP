@@ -140,6 +140,24 @@ int auradsp_probe_component_with_resource(const char* component,
                                           double sample_rate,
                                           uint32_t* out_samples);
 
+/* ---- C2：EQ 实际频率响应实测 ----
+ *
+ * 传入 eq.curve 同格式字符串（"f:g;f:g;..."），在 [f_min, f_max] 上按
+ * **对数等分**取 n_points 个点，把引擎真实产生的幅度响应（dB）写入 out_db。
+ *
+ * 用途：UI 画的是 log-f 上的 smoothstep 插值，而引擎走 makima + 最小相位 IR
+ * + FFT 卷积，两者本就不一致（最小相位化会带来过冲与频带间相互影响）。
+ * 本接口给出地面真值，让 UI 不必再用自己的近似去猜引擎行为。
+ *
+ * 解析与重采样与实时 eq.curve 下发**共用同一段代码**，因此结果就是设备
+ * 实际会产生的响应，而不是「另一套实现的自我印证」。
+ *
+ * 不接受 handle：内部构造私有 jdsp 实例，避免与音频线程争同一个卷积器历史。
+ * 纯函数，可在任意线程调用。curve 非法或点数 <2 返回 AURADSP_E_PARAM。
+ */
+int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
+                              double f_min, double f_max, float* out_db);
+
 /* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
 int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);
 int      auradsp_plugin_get_count(auradsp_handle h);

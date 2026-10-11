@@ -37,3 +37,4 @@ EXPORTS
     auradsp_plugin_get_num_slots
     auradsp_probe_component
     auradsp_probe_component_with_resource
+    auradsp_probe_eq_response

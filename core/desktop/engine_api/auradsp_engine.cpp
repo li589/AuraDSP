@@ -1439,6 +1439,186 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     process_plugin_slots_stage(h, 4, dst, frames);
 }
 
+/* ---- EQ 曲线：解析 + log-f 重采样（响应探针与 eq.curve 下发共用） ----
+ *
+ * 刻意抽成共用函数：探针必须与实时链路走**完全相同**的解析与重采样路径。
+ * 一旦两边各自实现，探针量到的就不是设备实际产生的曲线，C2 等于用另一套
+ * 算法自证。txt 会被就地改写（分词需要可写缓冲），调用方持有可写副本。 */
+static int build_eq_axis(char* txt, double sample_rate,
+                         double* freqAx, double* gainAx) {
+    double pf[64], pg[64];
+    int n = 0;
+    char* cur = txt;
+    while (cur && n < 64) {
+        char* semi = strchr(cur, ';');
+        if (semi) *semi = 0;
+        char* colon = strchr(cur, ':');
+        if (colon) {
+            *colon = 0;
+            const double f = atof(cur), g = atof(colon + 1);
+            if (f > 0 && f <= 96000) {
+                /* C3：钳到 Nyquist 以内。只判 <=96000 时，低采样率下越界频点
+                 * 会进 vendor 的最小相位 IR 设计。 */
+                const double nyq = sample_rate * 0.5;
+                pf[n] = (f < nyq) ? f : nyq * 0.999;
+                pg[n] = g < -64 ? -64 : (g > 64 ? 64 : g);
+                ++n;
+            }
+        }
+        cur = semi ? semi + 1 : nullptr;
+    }
+    if (n < 2) return 0;
+    /* 插入排序按 freq 升序 */
+    for (int i = 1; i < n; ++i) {
+        const double kf = pf[i], kg = pg[i];
+        int j = i - 1;
+        while (j >= 0 && pf[j] > kf) { pf[j + 1] = pf[j]; pg[j + 1] = pg[j]; --j; }
+        pf[j + 1] = kf; pg[j + 1] = kg;
+    }
+    /* 补齐到 NUMPTS：对数频率域均匀重采样（EQ 插值工作在 log-f 域，
+     * 线性采样会把 UI 轴点挤掉——烟囱测试抓回） */
+    const double lf0 = log(pf[0]), lf1 = log(pf[n - 1]);
+    for (int i = 0; i < NUMPTS; ++i) {
+        const double t = (NUMPTS == 1) ? 0.0 : (double)i / (double)(NUMPTS - 1);
+        const double target = exp(lf0 + t * (lf1 - lf0));
+        int seg = 0;
+        while (seg < n - 2 && pf[seg + 1] < target) ++seg;
+        const double ls0 = log(pf[seg]), ls1 = log(pf[seg + 1]);
+        const double k = (ls1 - ls0) > 1e-9
+            ? (log(target) - ls0) / (ls1 - ls0) : 0.0;
+        freqAx[i] = target;
+        gainAx[i] = pg[seg] + k * (pg[seg + 1] - pg[seg]);
+    }
+    return n;
+}
+
+/* ---- C2：EQ 实际频率响应实测 ----
+ *
+ * 问题的本质是两侧算法不同：UI 画的是 log-f 上的 smoothstep 三次插值
+ * （interactive_eq.dart 的 _interpolateGain），而引擎走
+ * MultimodalEqualizerAxisInterpolation —— makima + **最小相位 IR** + FFT
+ * 卷积刷新。最小相位化会让实测幅度偏离用户锚点（过冲、振铃、频带间相互
+ * 影响），所以 UI 那条平滑曲线本来就不等于设备产生的响应。
+ *
+ * 没有「导出系数」这条路：这条链路上 EQ 不是一个解析式滤波器，它就是
+ * 一个卷积器，没有可导出的 biquad 系数。改为**直接实测**——私有 jdsp
+ * 实例 + 单位冲激 → MultimodalEqualizerProcess → Hann 窗 → FFT → 模 → dB。
+ * 这是地面真值，不是再实现一遍近似。
+ *
+ * 刻意**不用**调用方的 handle：那会和音频线程争同一个 FFTConvolver2x2 的
+ * 内部历史（EQ 经 P-006 后 processing 走 activeConv），构成数据竞争。
+ * 私有实例走同一份 vendor 代码与同一份解析路径，结果等价且无副作用。
+ *
+ * 无句柄纯函数，调用方可在任意线程（含 UI isolate）调用。 */
+int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
+                              double f_min, double f_max, float* out_db) {
+    if (sample_rate < 8000 || sample_rate > 384000) return AURADSP_E_PARAM;
+    if (!curve || !out_db || n_points < 2 || n_points > 1024) return AURADSP_E_PARAM;
+    const int bytes = (int)strlen(curve);
+    if (bytes == 0 || bytes > 4096) return AURADSP_E_PARAM;
+    const double nyq = sample_rate * 0.5;
+    if (!(f_min > 0.0) || !(f_max > f_min)) return AURADSP_E_PARAM;
+    double f0 = f_min, f1 = f_max;
+    if (f1 > nyq * 0.999) f1 = nyq * 0.999;   /* C3：与下发同一条 Nyquist 约束 */
+
+    double freqAx[NUMPTS], gainAx[NUMPTS];
+    char* txt = (char*)malloc((size_t)bytes + 1);
+    if (!txt) return AURADSP_E_IO;
+    memcpy(txt, curve, (size_t)bytes);
+    txt[bytes] = 0;
+    const int npts = build_eq_axis(txt, (double)sample_rate, freqAx, gainAx);
+    free(txt);
+    if (npts < 2) return AURADSP_E_PARAM;
+
+    /* 冲激长度 8192：足够覆盖 makima 最小相位 IR 的有效长度，也给低频留足
+     * 分辨率（8192 @48k 的 bin 间隔约 5.9Hz）。 */
+    constexpr int kImp = 8192;
+    /* JamesDSPLib 体积很大（含全部效果的状态），必须放堆 —— 栈上会直接
+     * 溢出，实测 smoke 起来就是 stack overflow。
+     * 用 calloc 而非 malloc：JamesDSPInit 开头会 memset 整个结构，但 memset
+     * 之前 JamesDSPGlobalMemoryAllocation() 之类的逻辑可能先读指针；
+     * 更关键的是 vendor 各 Constructor 之间的调用顺序依赖「指针为 NULL
+     * 才走首次分配」这一约定，malloc 的垃圾值会让它们写进野指针。 */
+    JamesDSPLib* jd = (JamesDSPLib*)calloc(1, sizeof(JamesDSPLib));
+    float* re = (float*)malloc((size_t)kImp * sizeof(float));
+    if (!jd || !re) {
+        free(re); free(jd);
+        return AURADSP_E_IO;
+    }
+    /* 必须先 global_init()：它做 JamesDSPGlobalMemoryAllocation() + WDL_fft_init()，
+     * 分配 vendor 的全局 scratch 与 FFT 查找表。JamesDSPInit 内部直接用这些
+     * 全局表，跳过它就是在野指针上跑 —— 实测崩在 0x14A2D8。
+     * global_init 自带引用计数，多个探针/多个实例都能安全共用。 */
+    global_init();
+    JamesDSPInit(jd, kImp, sample_rate);
+    /* JamesDSPInit 只在采样率 **不在** [44.1k,48k] 时才分配 tmpBuffer[]
+     * （vendor 靠 ASRC 分支顺带分配的副作用）。走 else 分支时 tmpBuffer 全为
+     * NULL，直接 MultimodalEqualizerProcess 就是访问违例。
+     * 这里显式分配并挂到 blockSizeMax 之后，布局与 vendor 一致。 */
+    if (!jd->tmpBuffer[0]) {
+        const size_t ctMemBlk = (size_t)jd->blockSizeMax * 2 + (size_t)kImp * 4;
+        jd->tmpBuffer[0] = (float*)malloc(ctMemBlk * sizeof(float));
+        if (!jd->tmpBuffer[0]) { free(re); free(jd); return AURADSP_E_IO; }
+        jd->tmpBuffer[1] = jd->tmpBuffer[0] + jd->blockSizeMax;
+        jd->tmpBuffer[2] = jd->tmpBuffer[1] + jd->blockSizeMax;
+        jd->tmpBuffer[3] = jd->tmpBuffer[2] + kImp;
+        jd->tmpBuffer[4] = jd->tmpBuffer[3] + kImp;
+        jd->tmpBuffer[5] = jd->tmpBuffer[4] + kImp;
+    }
+/* operatingMode=1：直接 IIR 逐点求解，而不是默认的卷积路径。
+     *
+     * 卷积路径在这个场景下走不通：P-006 的守卫要求 convProcCount 先被
+     * Process 推进过；FFTConvolver2x2LoadImpulseResponse 取的是 jdsp->blockSize
+     * 而非 blockSizeMax 做分块，在 8192 这种非 2 的幂块长上分段结构对不上。
+     *
+     * 关键是 operatingMode 必须**从 AxisInterpolation 就传 1**：d0/d1/c1/c2
+     * 只在这个分支里生成。若先用 0 调用再手动改 mEQ.operatingMode，系数全是
+     * 0，Process 出来就是静音 —— 表现为全频 -120 dB。
+     *
+     * 两条路径用**同一组用户锚点**（同样经 makima + 最小相位化），
+     * 所以测到的仍是真实响应。 */
+MultimodalEqualizerAxisInterpolation(jd, 1, 1, freqAx, gainAx);
+    MultimodalEqualizerEnable(jd, 1);
+    /* 冲激放在窗的**正中**，不能放 index 0。
+     * Hann 窗 w[0] = 0.5-0.5*cos(0) = 0，冲激若在 0 会被窗本身乘成 0，
+     * FFT 之后整条曲线都是 -inf —— 实测平坦曲线整条 -120 就是这个原因，
+     * 而不是 EQ 系数或 overallGain 的问题（排查时在这两处各绕了一圈）。 */
+    for (int ch = 0; ch < 2; ++ch) {
+        memset(jd->tmpBuffer[ch], 0, kImp * sizeof(float));
+        jd->tmpBuffer[ch][kImp / 4] = 1.0f;
+    }
+    MultimodalEqualizerProcess(jd, (size_t)kImp);
+
+    /* Hann 窗 + 实 FFT：冲激响应在窗两端仍有能量，直接 FFT 的谱泄漏足以在
+     * ±18dB 的显示范围里被误读成「曲线在抖」。 */
+    for (int i = 0; i < kImp; ++i) {
+        const double w = 0.5 - 0.5 * cos(2.0 * M_PI * i / (double)(kImp - 1));
+        re[i] = jd->tmpBuffer[0][i] * (float)w;
+    }
+    WDL_real_fft(re, kImp, 0);
+
+    const int half = kImp / 2;
+    const int32_t* perm = WDL_fft_permute_tab(half);
+    const double bin_hz = (double)sample_rate / (double)kImp;
+    const double lf0 = log(f0), lf1 = log(f1);
+    for (int i = 0; i < n_points; ++i) {
+        const double t = (double)i / (double)(n_points - 1);
+        const double f = exp(lf0 + t * (lf1 - lf0));
+        int bin = (int)(f / bin_hz + 0.5);
+        if (bin < 1) bin = 1;
+        if (bin > half - 1) bin = half - 1;
+        const int pi = perm ? perm[bin] : bin;
+        const double m = sqrt((double)re[pi * 2] * re[pi * 2] +
+                              (double)re[pi * 2 + 1] * re[pi * 2 + 1]);
+        /* 1e-6 下限避免 log(0) */
+        out_db[i] = (float)(20.0 * log10(m > 1e-6 ? m : 1e-6));
+    }
+    free(re);
+    JamesDSPFree(jd);
+    free(jd);
+    return AURADSP_OK;
+}
+
 auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
                                  const void* value, uint32_t bytes) {
     if (!h || !id || !value) return AURADSP_E_PARAM;
@@ -1522,54 +1702,12 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (!txt) { set_error(h, "eq.curve: OOM"); return AURADSP_E_IO; }
         memcpy(txt, value, bytes);
         txt[bytes] = 0;
-        /* 解析点对（手写分词，避免 MSVC 无 strtok_r） */
-        double pf[64], pg[64];
-        int n = 0;
-        char* cur = txt;
-        while (cur && n < 64) {
-            char* semi = strchr(cur, ';');
-            if (semi) *semi = 0;
-            char* colon = strchr(cur, ':');
-            if (colon) {
-                *colon = 0;
-                const double f = atof(cur), g = atof(colon + 1);
-                if (f > 0 && f <= 96000) {
-                    /* C3：钳到 Nyquist 以内。原先只判 <=96000，低采样率下
-                     * 越界频点会进 vendor 的最小相位 IR 设计。 */
-                    const double nyq = h->sample_rate * 0.5;
-                    pf[n] = (f < nyq) ? f : nyq * 0.999;
-                    pg[n] = g < -64 ? -64 : (g > 64 ? 64 : g);
-                    ++n;
-                }
-            }
-            cur = semi ? semi + 1 : nullptr;
-        }
+        double freqAx[NUMPTS], gainAx[NUMPTS];
+        const int n = build_eq_axis(txt, h->sample_rate, freqAx, gainAx);
         free(txt);
         if (n < 2) {
             set_error(h, "eq.curve: need >= 2 points (f:g;f:g;...)");
             return AURADSP_E_PARAM;
-        }
-        /* 简易插入排序按 freq 升序 */
-        for (int i = 1; i < n; ++i) {
-            const double kf = pf[i], kg = pg[i];
-            int j = i - 1;
-            while (j >= 0 && pf[j] > kf) { pf[j + 1] = pf[j]; pg[j + 1] = pg[j]; --j; }
-            pf[j + 1] = kf; pg[j + 1] = kg;
-        }
-        /* 补齐到 NUMPTS：对数频率域均匀重采样（EQ 插值工作在 log-f 域，
-         * 线性采样会把 UI 轴点挤掉——烟囱测试抓回） */
-        double freqAx[NUMPTS], gainAx[NUMPTS];
-        const double lf0 = log(pf[0]), lf1 = log(pf[n - 1]);
-        for (int i = 0; i < NUMPTS; ++i) {
-            const double t = (NUMPTS == 1) ? 0.0 : (double)i / (double)(NUMPTS - 1);
-            const double target = exp(lf0 + t * (lf1 - lf0));
-            int seg = 0;
-            while (seg < n - 2 && pf[seg + 1] < target) ++seg;
-            const double ls0 = log(pf[seg]), ls1 = log(pf[seg + 1]);
-            const double k = (ls1 - ls0) > 1e-9
-                ? (log(target) - ls0) / (ls1 - ls0) : 0.0;
-            freqAx[i] = target;
-            gainAx[i] = pg[seg] + k * (pg[seg + 1] - pg[seg]);
         }
         MultimodalEqualizerAxisInterpolation(&h->jdsp, 1, 0, freqAx, gainAx);
         return AURADSP_OK;
