@@ -38,3 +38,5 @@ __pycache__/
 
 # tools/log_clicks.py 本地手工点击日志
 clicks.csv
+
+dist/
