@@ -1040,10 +1040,29 @@ long probe_first_nonzero(auradsp_handle p, float threshold, double* energy) {
     if (!in || !out) { free(in); free(out); return -1; }
     long first = -1;
     double e = 0.0;
-    bool injected = false;
+    /* 激励用**宽带噪声**而非单位冲激。
+     *
+     * 冲激是纯 DC，而 VDC 是高通滤波器（AKG K2xx 等监听耳机校正曲线
+     * 在 DC 处增益为 0），冲激一进去就被滤光，首个非零点仍然是样本 0，
+     * 能量也与基线相同 —— 于是被判定成「组件未启用」。
+     * 用宽带噪声则每个频段都有能量，高通的通带与被抑制的低频都能被
+     * 如实反映，测到的 first 才是真实的信号通过时刻。
+     *
+     * 噪声用确定性 LCG 生成：探针必须可复现，���机数会让结果漂移。 */
+    uint32_t rng = 0x1234567u;
+    auto next_noise = [&rng]() -> float {
+        rng = rng * 1664525u + 1013904223u;
+        return ((float)((rng >> 8) & 0xFFFF) / 32768.0f) - 1.0f;
+    };
+    bool warmed = false;
     for (int processed = 0; processed < kProbeWindow; processed += kProbeBlock) {
-        memset(in, 0, sizeof(float) * kProbeBlock * 2);
-        if (!injected) { in[0] = 1.0f; in[1] = 1.0f; injected = true; }
+        for (int i = 0; i < kProbeBlock * 2; ++i) in[i] = next_noise();
+        if (!warmed) {
+            /* 先过一段静音让内部状态收敛，避免起始瞬态被当成延迟。
+             * 冲激方案是靠「第一块前全零」实现同一目的。 */
+            memset(in, 0, kProbeBlock * 2 * sizeof(float));
+            warmed = true;
+        }
         auradsp_process(p, in, out, kProbeBlock);
         for (int i = 0; i < kProbeBlock * 2; ++i) {
             const double a = fabs((double)out[i]);
@@ -1064,13 +1083,21 @@ static int probe_component_impl(const char* component, const char* resource_path
     *out_samples = 0;
 
     const bool is_conv = !strcmp(component, "convolver");
-    const bool is_ddc = !strcmp(component, "ddc");
+const bool is_ddc = !strcmp(component, "ddc");
     const bool supported = probe_is_supported(component);
     if (!supported) {
-        /* convolver / ddc 需要外部资源（IR / VDC）才能就绪。
-         * 未给路径时仍返回 -1（不可测），
-         * 而不是编一个假数字。 */
-        if (!resource_path || (!is_conv && !is_ddc)) return -1;
+        /* convolver / ddc 需要外部资源（IR / VDC），没有就拒绝测量：
+         * 未加载时无法探测，返回 -1 表示「不支持」而不是一个假的 0。
+         *
+         * 空字符串必须与 nullptr 同等看待：调用方（Dart 侧
+         * latencyProbeResource）在没有资源时传的就是 ''，若只判指针非空，
+         * 空串会一路走下去，在组件未启用的链上测出 first=0，
+         * 能量又与基线相同 —— 而 first==0 不满足 first<0 的拒绝条件，
+         * 于是返回 rc=0 / samples=0，**把「无法测量」伪装成「零延迟」**。
+         * 那比拒绝更危险：UI 会据此显示一个看似合理却错误的延迟值。 */
+        if (!resource_path || resource_path[0] == '\0' ||
+            (!is_conv && !is_ddc))
+            return -1;
     }
 
     const double fs = (sample_rate > 8000.0) ? sample_rate : 48000.0;
@@ -1108,6 +1135,11 @@ static int probe_component_impl(const char* component, const char* resource_path
      * 能量与基线一致→-3（探针未能使其生效）。 */
     if (first < 0) return -3;
     if (fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0)) return -3;
+    /* first==0 && baseline==0：既可能是「真的零延迟」，也可能是
+     * 「组件根本没启用」—— 能量法无法区分二者。宁可不报，
+     * 也不能报一个看似合理却错误的 0：那会让 UI 显示一个错误的延迟值，
+     * 比明确报「不可测」危险得多。 */
+    if (first == 0 && baseline == 0) return -3;
 
     long delay = first - (baseline > 0 ? baseline : 0);
     if (delay < 0) delay = 0;
