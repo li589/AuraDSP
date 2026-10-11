@@ -8,6 +8,9 @@
       + 明确 errorMessage，且不会从扫描结果里消失
   D3  加载路拒绝：auradsp_plugin_slot_load 对 32 位条目返回 0
       （不真的 LoadLibrary —— x64 进程加载 32 位 DLL 必 193）
+  D4  大小写扩展名 bundle 不得静默消失（审查 P1 回归）：
+      bundle 内层二进制叫 Upper64.VST3 / bundle 目录叫 MixedCase.VST3
+      都必须被扫描发现 —— Windows 文件系统不区分大小写
 
 合成 PE 只需解析到 IMAGE_FILE_MACHINE 为止：
   MZ | e_lfanew@0x3C -> PE\\0\\0 | Machine(WORD)@e_lfanew+4
@@ -94,6 +97,15 @@ def main():
         # 单文件 32 位 CLAP（无 bundle 目录）
         clap32 = os.path.join(root, "Legacy32.clap")
         make_fake_pe(clap32, IMAGE_FILE_MACHINE_I386)
+        # D4a：bundle 内层二进制大写扩展名 —— 曾因 resolveBundleBinary
+        # 严格小写比较整包静默消失（2026-10-12 审查 P1，已修）
+        write_bundle(root, "Upper64.vst3", "x86_64-win", ".VST3",
+                     IMAGE_FILE_MACHINE_AMD64)
+        # D4b：bundle 目录自身大写扩展名（scan 入口本已归一化，回归钉住）
+        mixed_dir = os.path.join(root, "MixedCase.VST3", "Contents", "x86_64-win")
+        os.makedirs(mixed_dir, exist_ok=True)
+        make_fake_pe(os.path.join(mixed_dir, "MixedCase.vst3"),
+                     IMAGE_FILE_MACHINE_AMD64)
 
         h = dll.auradsp_create(48000.0, 1024)
         if not h:
@@ -152,6 +164,17 @@ def main():
                 check(c["isCompatible"] is False, "Legacy32.clap isCompatible=false")
                 check("32 位" in c["errorMessage"], "Legacy32.clap errorMessage 指明位数问题")
 
+            # D4：大小写扩展名 bundle 不得静默消失（审查 P1 回归）
+            upper = by_name.get("Upper64")
+            check(upper is not None,
+                  "Upper64.vst3（内层 .VST3 大写）出现在扫描结果中（D4a）")
+            if upper:
+                check(upper["is64Bit"] is True, "Upper64.vst3 is64Bit=true")
+                check(upper["isCompatible"] is True, "Upper64.vst3 isCompatible=true")
+            mixed_entry = by_name.get("MixedCase")
+            check(mixed_entry is not None,
+                  "MixedCase.VST3（bundle 目录大写）出现在扫描结果中（D4b）")
+
         # ---- D3：加载路拒绝（不走到 LoadLibrary） ----
         print("\n=== 加载路拒绝 ===")
         legacy_bin = os.path.join(root, "Legacy32.vst3", "Contents", "x86-win", "Legacy32.vst3")
@@ -162,7 +185,7 @@ def main():
             h, 1, clap32.encode("utf-8"), None)
         check(rc2 == 0, f"auradsp_plugin_slot_load(32 位 CLAP) 返回 0（实测 {rc2}）")
 
-        # 扫描计数自洽：快照里我们的 4 个 bundle 共 4 条（VST3x3 + CLAPx1）
+        # 扫描计数自洽：快照里我们的 6 个 bundle 共 6 条（VST3x5 + CLAPx1）
         cnt = dll.auradsp_plugin_get_count(h)
         print(f"  [INFO] 扫描总计 {cnt} 条（含系统目录真实插件）")
     finally:
