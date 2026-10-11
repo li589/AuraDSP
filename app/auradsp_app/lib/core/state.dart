@@ -192,8 +192,44 @@ class AppModel extends ChangeNotifier {
   static const List<double> eqFreqs15 = [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000];
   static const List<double> eqFreqs31 = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000];
 
+  /// C4：按当前采样率裁掉超过 Nyquist 的频带。
+  ///
+  /// 出厂网格是硬编码常量，顶端到 20 kHz，与采样率无关。原先在
+  /// `_pushEqCurve` 里逐点 `math.min(f, nyquist)` 钳位 —— 这会让**多条
+  /// 频带塌缩到同一个频率**：24 kHz（Nyquist 12k）下 31 段网格的
+  /// 12500/16000/20000 三条全部变成 12000，连同 6300 以上的一串，
+  /// 最终 31 个点塌成大量重复。引擎拿到这条退化坐标轴后，
+  /// vendor 的 makima 在等距零点上求差分，插值结果毫无意义。
+  ///
+  /// 正确做法是**按频率裁掉整条频带**，让网格始终严格升序无重复；
+  /// 增益随频带一起丢弃（`setEqBandsCount` 的重映射已按频率对齐，
+  /// 低频段行为不受影响）。
+  ///
+  /// Nyquist 上限取 fs/2 并留一点点余量：恰好等于 Nyquist 的频点
+  /// 在最小相位 IR 设计里仍属边界，稳妥起见一并裁掉。
+  static List<double> eqGridFor(int count, int sampleRate) {
+    final List<double> base = switch (count) {
+      7 => eqFreqs7,
+      10 => eqFreqs10,
+      31 => eqFreqs31,
+      _ => eqFreqs15,
+    };
+    if (sampleRate <= 0) return List<double>.from(base);
+    final double nyq = sampleRate / 2.0;
+    if (nyq >= 20000.0) return List<double>.from(base);
+    final cut = base.where((f) => f < nyq * 0.995).toList();
+    /* 极端采样率下（如 8 kHz，Nyquist 4k）可能一条不剩。
+     * 此时退回该网格的最低频点，保住「至少一个锚点」——
+     * 空网格会让引擎拒绝整条曲线（build_eq_axis 要求 >=2 点），
+     * 那比一条退化但可用的曲线更糟。 */
+    if (cut.isEmpty) return <double>[base.first];
+    return cut;
+  }
+
   int eqBandsCount = ParamDefaults.eqBandsCount;
-  List<double> eqFrequencies = List.from(eqFreqs15);
+  /// 初值先用 48k 网格；构造函数体里 `config` 加载完后会按真实采样率重建
+  /// （字段初始化器先于构造函数体执行，那时 config 还没读出来）。
+  List<double> eqFrequencies = eqGridFor(ParamDefaults.eqBandsCount, 48000);
   List<double> eqGains = List.filled(15, 0.0);
   double eqQ = ParamDefaults.eqQ;
   int eqFilter = ParamDefaults.eqFilter;
@@ -255,6 +291,10 @@ class AppModel extends ChangeNotifier {
 
   AppModel() {
     config = ConfigManager.load();
+    /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
+     * 字段初始化器早于构造函数体，那时 config 还是默认值。
+     * 不重建的话，低采样率用户拿到的是含越界频点的出厂网格。 */
+    _rebuildEqGridForSampleRate(notify: false);
     locale = Locale(config.locale);
     themeId = AuraThemeId.values.firstWhere(
       (t) => t.name == config.themeId,
@@ -1267,15 +1307,62 @@ class AppModel extends ChangeNotifier {
 
   /* ---- 多段图形均衡器（Phase 3） ---- */
 
-  void setEqBandsCount(int count) {
+  /// C4：按当前采样率重建 EQ 频率网格，增益按**频率**重新映射。
+///
+/// 裁掉高频带时不能简单截断 gains —— 那样低频段的增益会整体错位。
+/// 这里对每个新频点取旧网格中最接近的旧频点上的增益，
+/// 于是 Nyquist 以内的部分行为完全不变，只有越界的频带连同其增益一起消失。
+void _rebuildEqGridForSampleRate({bool notify = true}) {
+  final target = eqGridFor(eqBandsCount, config.sampleRate);
+  if (target.isEmpty) return;
+  if (target.length == eqFrequencies.length) {
+    var same = true;
+    for (var i = 0; i < target.length; i++) {
+      if ((target[i] - eqFrequencies[i]).abs() > 1e-9) {
+        same = false;
+        break;
+      }
+    }
+    if (same) return;   // 无变化，不必重推曲线
+  }
+  final oldFreqs = eqFrequencies;
+  final oldGains = eqGains;
+  final newGains = <double>[];
+  for (final f in target) {
+    if (oldFreqs.isEmpty || oldGains.isEmpty) {
+      newGains.add(0.0);
+      continue;
+    }
+    var bi = 0;
+    var best = double.infinity;
+    for (var i = 0; i < oldFreqs.length; i++) {
+      final d = (oldFreqs[i] - f).abs();
+      if (d < best) {
+        best = d;
+        bi = i;
+      }
+    }
+    newGains.add(oldGains[bi]);
+  }
+  eqFrequencies = target;
+  eqGains = newGains;
+  _pushEqCurve();
+  if (notify) notifyListeners();
+}
+
+/// 采样率变更后由调用方触发，重建网格并把新值落盘。
+void setSampleRate(int rate) {
+  if (rate == config.sampleRate) return;
+  config.sampleRate = rate;
+  ConfigManager.save(config);
+  _rebuildEqGridForSampleRate();
+}
+
+void setEqBandsCount(int count) {
     if (count == eqBandsCount) return;
     eqBandsCount = count;
-    final List<double> newFreqs = switch (count) {
-      7 => eqFreqs7,
-      10 => eqFreqs10,
-      31 => eqFreqs31,
-      _ => eqFreqs15,
-    };
+    /* C4：网格按采样率裁剪，避免高频带在 Nyquist 处塌缩成重复点 */
+    final newFreqs = eqGridFor(count, config.sampleRate);
     final oldFreqs = eqFrequencies;
     final oldGains = eqGains;
     final newGains = <double>[];
@@ -1323,7 +1410,42 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// 整表写入 EQ 增益并重推曲线。
+  /// 按**频率**应用一条 EQ 曲线（C4）。
+///
+/// 预设里存的是「频点 + 增益」配对，而载入时的网格由当前采样率与段数决定，
+/// 两者不一定一致。若按下标灌入，低采样率裁掉高频带后整条曲线会错位。
+/// 这里对当前网格的每个频点，取预设中最接近的那个频点上的增益 ——
+/// 于是采样率/段数只影响取样密度，曲线形状不变。
+///
+/// 预设频点与当前网格无交集时（例如预设来自更高采样率、而当前网格低到
+/// 只能覆盖极低频）则整体取预设的第一个增益，至少不丢整条曲线。
+void applyEqCurve(List<double> freqs, List<double> gains) {
+  if (freqs.isEmpty || gains.isEmpty) return;
+  if (freqs.length != gains.length) {
+    applyEqGains(gains);
+    return;
+  }
+  final out = List<double>.filled(eqFrequencies.length, 0.0);
+  for (var i = 0; i < eqFrequencies.length; i++) {
+    final f = eqFrequencies[i];
+    var bi = 0;
+    var best = double.infinity;
+    for (var k = 0; k < freqs.length; k++) {
+      final d = (freqs[k] - f).abs();
+      if (d < best) {
+        best = d;
+        bi = k;
+      }
+    }
+    out[i] = gains[bi].clamp(-18.0, 18.0);
+  }
+  for (var i = 0; i < eqGains.length; i++) {
+    eqGains[i] = i < out.length ? out[i] : 0.0;
+  }
+  _pushEqCurve();
+}
+
+/// 整表写入 EQ 增益并重推曲线。
   /// 必须走本方法而不能直接 `eqGains[i] = v`：eqGains 是裸 `List<double>`，
   /// 直接赋值不会触发 _pushEqCurve()，引擎会继续用上一条曲线
   /// （预设恢复 EQ 时就是这么丢增益的）。

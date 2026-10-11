@@ -395,9 +395,21 @@ abstract final class PresetLibrary {
       }
       if (eq['gains'] is List) {
         final list = (eq['gains'] as List).map((e) => (e as num).toDouble()).toList();
-        // 必须最后走 applyEqGains：它内部会重推 eq.curve。
-        // 直接写 m.eqGains[i] 是裸字段赋值，不会通知引擎（见 state.dart 说明）。
-        m.applyEqGains(list);
+        /* C4：snapshot 写了 'frequencies'，apply 却一直只按 bandsCount 重建网格
+         * 再按下标灌 gains。跨采样率/跨段数时这会把增益贴到错误的频点上 ——
+         * 预设保存时的网格与载入时的网格只要不完全一致，整条曲线就错位。
+         *
+         * 正确做法是**按频率**重映射：新网格的每个频点，取预设里最接近的
+         * 那个频点上的增益。这样采样率、段数变化都只影响取样密度，
+         * 曲线形状保持不变。 */
+        final freqs = (eq['frequencies'] as List?)
+                ?.map((e) => (e as num).toDouble()).toList();
+        if (freqs != null && freqs.length == list.length && freqs.isNotEmpty) {
+          m.applyEqCurve(freqs, list);
+        } else {
+          // 老预设没有频率信息，只能按段数 + 下标还原（保持向后兼容）
+          m.applyEqGains(list);
+        }
       }
       if (eq['presetName'] != null) {
         m.eqPresetName = eq['presetName'] as String;
