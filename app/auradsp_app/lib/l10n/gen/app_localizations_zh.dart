@@ -904,7 +904,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugDeepScan => '深度遍历';
 
   @override
-  String get plugScan => '聚合扫描插件';
+  String get plugScan => '扫描';
 
   @override
   String get plugScanning => '正在扫描...';

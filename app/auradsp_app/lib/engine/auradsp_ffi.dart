@@ -386,23 +386,23 @@ final class AuraDspLib {
   /// 见 auradsp_engine.h 的 auradsp_probe_component 契约。
   /// 每次调用约数十毫秒（引擎内部建/毁一个探针 handle），只能按需调用，
   /// 绝不要放进音频路径。
-  late final int Function(Pointer<Void>, double, Pointer<Uint32>) probeComponent =
+  late final int Function(Pointer<Utf8>, double, Pointer<Uint32>) probeComponent =
       dylib
           .lookup<NativeFunction<
-              Int32 Function(Pointer<Void>, Double, Pointer<Uint32>)>>(
+              Int32 Function(Pointer<Utf8>, Double, Pointer<Uint32>)>>(
               'auradsp_probe_component')
-          .asFunction<int Function(Pointer<Void>, double, Pointer<Uint32>)>();
+          .asFunction<int Function(Pointer<Utf8>, double, Pointer<Uint32>)>();
 
   /// 带资源探测：convolver / ddc 需要 IR / VDC 才能在探针内就绪，
   /// 未给路径时引擎返回 -1（不可测），而不是编造数字。
   /// resourcePath 传 null 表示走与 probeComponent 完全一致的旧行为。
-  late final int Function(Pointer<Void>, Pointer<Utf8>, double,
+  late final int Function(Pointer<Utf8>, Pointer<Utf8>, double,
       Pointer<Uint32>) probeComponentWithResource = dylib
           .lookup<
-              NativeFunction<Int32 Function(Pointer<Void>, Pointer<Utf8>,
+              NativeFunction<Int32 Function(Pointer<Utf8>, Pointer<Utf8>,
                   Double, Pointer<Uint32>)>>('auradsp_probe_component_with_resource')
           .asFunction<
-              int Function(Pointer<Void>, Pointer<Utf8>, double,
+              int Function(Pointer<Utf8>, Pointer<Utf8>, double,
                   Pointer<Uint32>)>();
 
   /// C2：EQ 实际频率响应实测。curve 用 eq.curve 同格式（"f:g;f:g;..."）。

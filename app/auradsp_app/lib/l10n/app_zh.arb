@@ -438,7 +438,7 @@
   "plugLibTitle": "第三方效果器库",
   "plugLibHint": "系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。",
   "plugDeepScan": "深度遍历",
-  "plugScan": "聚合扫描插件",
+  "plugScan": "扫描",
   "plugScanning": "正在扫描...",
   "plugOpenFolder": "打开 VST3 标准目录",
   "plugSearchHint": "搜索插件名称、厂商或路径...",

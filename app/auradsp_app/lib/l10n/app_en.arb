@@ -438,7 +438,7 @@
   "plugLibTitle": "Third-party Effect Library",
   "plugLibHint": "Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.",
   "plugDeepScan": "Deep scan",
-  "plugScan": "Aggregate plugin scan",
+  "plugScan": "Scan",
   "plugScanning": "Scanning...",
   "plugOpenFolder": "Open Standard VST3 Folder",
   "plugSearchHint": "Search plugin name, vendor or path...",

@@ -7,6 +7,8 @@
 #include "auradsp_plugin_host.h"
 
 #include <windows.h>
+#include <winver.h>
+#pragma comment(lib, "version.lib")
 #include <shlobj.h>
 #include <filesystem>
 #include <fstream>
@@ -234,6 +236,141 @@ static std::wstring utf8ToWide(const std::string& utf8) {
     std::wstring wide(size - 1, 0);
     MultiByteToWideChar(CP_UTF8, 0, utf8.c_str(), -1, &wide[0], size);
     return wide;
+}
+
+static std::string wideToUtf8(const std::wstring& wide) {
+    if (wide.empty()) return std::string();
+    int size = WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, nullptr, 0, nullptr, nullptr);
+    if (size <= 0) return std::string();
+    std::string utf8(size - 1, 0);
+    WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, &utf8[0], size, nullptr, nullptr);
+    return utf8;
+}
+
+static std::string extractVendorFromPath(const std::string& filePath) {
+    try {
+        fs::path p(filePath);
+        while (p.has_filename() && (p.extension() == ".vst3" || p.extension() == ".clap" ||
+               p.filename() == "Contents" || p.filename() == "x86_64-win" || p.filename() == "Resources")) {
+            p = p.parent_path();
+        }
+
+        while (p.has_filename()) {
+            std::string folderName = p.filename().string();
+            std::string lowerName = folderName;
+            std::transform(lowerName.begin(), lowerName.end(), lowerName.begin(), ::tolower);
+
+            if (lowerName != "vst3" && lowerName != "clap" && lowerName != "common files" &&
+                lowerName != "plugins" && lowerName != "vstplugins" && lowerName != "program files" &&
+                lowerName != "program files (x86)" && lowerName != "steinberg" && !lowerName.empty() &&
+                folderName.back() != ':') {
+                return folderName;
+            }
+            p = p.parent_path();
+        }
+    } catch (...) {
+    }
+    return "";
+}
+
+static std::string extractVendorByKnownSignature(const std::string& name) {
+    std::string lower = name;
+    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
+    if (lower.find("zebra") != std::string::npos || lower.find("diva") != std::string::npos ||
+        lower.find("hive") != std::string::npos || lower.find("repro") != std::string::npos ||
+        lower.find("satin") != std::string::npos || lower.find("presswerk") != std::string::npos ||
+        lower.find("bazille") != std::string::npos || lower.find("twang") != std::string::npos) {
+        return "u-he";
+    }
+    if (lower.find("kv-element") != std::string::npos || lower.find("element") != std::string::npos) {
+        return "Kushview";
+    }
+    if (lower.find("fabfilter") != std::string::npos) {
+        return "FabFilter";
+    }
+    if (lower.find("valhalla") != std::string::npos) {
+        return "Valhalla DSP";
+    }
+    if (lower.find("auto-tune") != std::string::npos) {
+        return "Antares";
+    }
+    return "";
+}
+
+static std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath) {
+    try {
+        DWORD dummy = 0;
+        DWORD size = GetFileVersionInfoSizeW(binaryPath.c_str(), &dummy);
+        if (size == 0) return "";
+        std::vector<BYTE> buffer(size);
+        if (!GetFileVersionInfoW(binaryPath.c_str(), 0, size, buffer.data())) return "";
+
+        struct LANGANDCODEPAGE {
+            WORD wLanguage;
+            WORD wCodePage;
+        } *lpTranslate = nullptr;
+        UINT cbTranslate = 0;
+        if (VerQueryValueW(buffer.data(), L"\\VarFileInfo\\Translation", reinterpret_cast<LPVOID*>(&lpTranslate), &cbTranslate) &&
+            cbTranslate >= sizeof(LANGANDCODEPAGE) && lpTranslate != nullptr) {
+            for (unsigned int i = 0; i < (cbTranslate / sizeof(LANGANDCODEPAGE)); i++) {
+                wchar_t subBlock[64];
+                swprintf_s(subBlock, L"\\StringFileInfo\\%04x%04x\\CompanyName", lpTranslate[i].wLanguage, lpTranslate[i].wCodePage);
+                LPWSTR companyName = nullptr;
+                UINT companyLen = 0;
+                if (VerQueryValueW(buffer.data(), subBlock, reinterpret_cast<LPVOID*>(&companyName), &companyLen) &&
+                    companyLen > 0 && companyName && companyName[0] != L'\0') {
+                    std::string comp = wideToUtf8(companyName);
+                    if (!comp.empty()) return comp;
+                }
+            }
+        }
+
+        static const wchar_t* const defaultSubBlocks[] = {
+            L"\\StringFileInfo\\040904b0\\CompanyName",
+            L"\\StringFileInfo\\040904E4\\CompanyName",
+            L"\\StringFileInfo\\000004b0\\CompanyName",
+            L"\\StringFileInfo\\04090000\\CompanyName"
+        };
+        for (const auto* sb : defaultSubBlocks) {
+            LPWSTR companyName = nullptr;
+            UINT companyLen = 0;
+            if (VerQueryValueW(buffer.data(), sb, reinterpret_cast<LPVOID*>(&companyName), &companyLen) &&
+                companyLen > 0 && companyName && companyName[0] != L'\0') {
+                std::string comp = wideToUtf8(companyName);
+                if (!comp.empty()) return comp;
+            }
+        }
+    } catch (...) {
+    }
+    return "";
+}
+
+static std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath) {
+    try {
+        DWORD dummy = 0;
+        DWORD size = GetFileVersionInfoSizeW(binaryPath.c_str(), &dummy);
+        if (size == 0) return "";
+        std::vector<BYTE> buffer(size);
+        if (!GetFileVersionInfoW(binaryPath.c_str(), 0, size, buffer.data())) return "";
+
+        static const wchar_t* const defaultSubBlocks[] = {
+            L"\\StringFileInfo\\040904b0\\ProductVersion",
+            L"\\StringFileInfo\\040904E4\\ProductVersion",
+            L"\\StringFileInfo\\000004b0\\ProductVersion",
+            L"\\StringFileInfo\\040904b0\\FileVersion"
+        };
+        for (const auto* sb : defaultSubBlocks) {
+            LPWSTR ver = nullptr;
+            UINT verLen = 0;
+            if (VerQueryValueW(buffer.data(), sb, reinterpret_cast<LPVOID*>(&ver), &verLen) &&
+                verLen > 0 && ver && ver[0] != L'\0') {
+                std::string v = wideToUtf8(ver);
+                if (!v.empty()) return v;
+            }
+        }
+    } catch (...) {
+    }
+    return "";
 }
 
 std::string PluginMetadata::toJson() const {
@@ -1248,9 +1385,28 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
                         meta.is64Bit = true;
                         meta.id = d->id ? d->id : "";
                         meta.name = d->name ? d->name : "";
-                        meta.vendor = d->vendor ? d->vendor : "Unknown";
-                        meta.version = d->version ? d->version : "1.0";
-                        meta.category = d->description ? d->description : "AudioEffect";
+                        meta.vendor = (d->vendor && d->vendor[0] != '\0') ? d->vendor : "Unknown";
+                        meta.version = (d->version && d->version[0] != '\0') ? d->version : "1.0";
+                        meta.category = (d->description && d->description[0] != '\0') ? d->description : "AudioEffect";
+
+                        if (meta.vendor == "Unknown") {
+                            std::string peComp = extractCompanyFromVersionInfo(wpath);
+                            if (!peComp.empty()) {
+                                meta.vendor = peComp;
+                            } else {
+                                std::string dirV = extractVendorFromPath(filePath);
+                                if (!dirV.empty()) meta.vendor = dirV;
+                                else {
+                                    std::string sigV = extractVendorByKnownSignature(meta.name);
+                                    if (!sigV.empty()) meta.vendor = sigV;
+                                }
+                            }
+                        }
+                        if (meta.version == "1.0") {
+                            std::string peVer = extractProductVersionFromVersionInfo(wpath);
+                            if (!peVer.empty()) meta.version = peVer;
+                        }
+
                         outPlugins.push_back(meta);
                         success = true;
                     }
@@ -1275,7 +1431,23 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
                 if (factory) {
                     Steinberg::int32 classCount = factory->countClasses();
                     Steinberg::IPluginFactory2* factory2 = nullptr;
+                    Steinberg::IPluginFactory3* factory3 = nullptr;
                     factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
+                    factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
+
+                    // 1. 全局工厂厂商
+                    std::string factoryVendor;
+                    Steinberg::PFactoryInfo factoryInfo;
+                    if (factory->getFactoryInfo(&factoryInfo) == Steinberg::kResultOk) {
+                        if (factoryInfo.vendor[0] != '\0') {
+                            factoryVendor = factoryInfo.vendor;
+                        }
+                    }
+
+                    // 2. 预先提取 PE VersionInfo 与上级目录启发式名称
+                    std::string peVendor = extractCompanyFromVersionInfo(wpath);
+                    std::string peVersion = extractProductVersionFromVersionInfo(wpath);
+                    std::string dirVendor = extractVendorFromPath(filePath);
 
                     for (Steinberg::int32 i = 0; i < classCount; ++i) {
                         Steinberg::PClassInfo classInfo;
@@ -1292,19 +1464,66 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
                             meta.version = "1.0";
                             meta.category = classInfo.category;
 
+                            // 优先从 IPluginFactory3 读取 Unicode 类信息
+                            if (factory3) {
+                                Steinberg::PClassInfoW classInfoW;
+                                if (factory3->getClassInfoUnicode(i, &classInfoW) == Steinberg::kResultOk) {
+                                    if (classInfoW.name[0] != 0) {
+                                        std::string uName = wideToUtf8(Steinberg::wscast(classInfoW.name));
+                                        if (!uName.empty()) meta.name = uName;
+                                    }
+                                    if (classInfoW.vendor[0] != 0) {
+                                        std::string uVendor = wideToUtf8(Steinberg::wscast(classInfoW.vendor));
+                                        if (!uVendor.empty()) meta.vendor = uVendor;
+                                    }
+                                    if (classInfoW.version[0] != 0) {
+                                        std::string uVer = wideToUtf8(Steinberg::wscast(classInfoW.version));
+                                        if (!uVer.empty()) meta.version = uVer;
+                                    }
+                                    if (classInfoW.subCategories[0] != 0) {
+                                        meta.category = classInfoW.subCategories;
+                                    }
+                                }
+                            }
+
+                            // 尝试 IPluginFactory2 补充
                             if (factory2) {
                                 Steinberg::PClassInfo2 classInfo2;
                                 if (factory2->getClassInfo2(i, &classInfo2) == Steinberg::kResultOk) {
-                                    if (classInfo2.vendor[0]) meta.vendor = classInfo2.vendor;
-                                    if (classInfo2.version[0]) meta.version = classInfo2.version;
-                                    if (classInfo2.subCategories[0]) meta.category = classInfo2.subCategories;
+                                    if (meta.vendor == "Unknown" && classInfo2.vendor[0]) {
+                                        meta.vendor = classInfo2.vendor;
+                                    }
+                                    if ((meta.version.empty() || meta.version == "1.0") && classInfo2.version[0]) {
+                                        meta.version = classInfo2.version;
+                                    }
+                                    if (classInfo2.subCategories[0]) {
+                                        meta.category = classInfo2.subCategories;
+                                    }
                                 }
                             }
+
+                            // 多级回退兜底厂商：factoryVendor -> peVendor -> dirVendor -> 知名特征签名
+                            if (meta.vendor == "Unknown" || meta.vendor.empty()) {
+                                if (!factoryVendor.empty()) meta.vendor = factoryVendor;
+                                else if (!peVendor.empty()) meta.vendor = peVendor;
+                                else if (!dirVendor.empty()) meta.vendor = dirVendor;
+                                else {
+                                    std::string sigV = extractVendorByKnownSignature(meta.name);
+                                    if (!sigV.empty()) meta.vendor = sigV;
+                                }
+                            }
+
+                            // 多级回退兜底版本
+                            if ((meta.version.empty() || meta.version == "1.0") && !peVersion.empty()) {
+                                meta.version = peVersion;
+                            }
+
                             outPlugins.push_back(meta);
                             success = true;
                         }
                     }
 
+                    if (factory3) factory3->release();
                     if (factory2) factory2->release();
                 }
             }
@@ -1363,6 +1582,25 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                 }
                 if (duplicate) continue;
 
+                auto makeQuickMeta = [&](const std::string& pStr, const std::string& nStr, PluginFormat fmt) -> PluginMetadata {
+                    std::wstring wp = utf8ToWide(pStr);
+                    std::string peV = extractCompanyFromVersionInfo(wp);
+                    std::string peVer = extractProductVersionFromVersionInfo(wp);
+                    std::string dirV = extractVendorFromPath(pStr);
+
+                    std::string sigV = extractVendorByKnownSignature(nStr);
+
+                    PluginMetadata q;
+                    q.path = pStr;
+                    q.name = nStr;
+                    q.format = fmt;
+                    q.is64Bit = true;
+                    q.vendor = !peV.empty() ? peV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown"));
+                    q.version = !peVer.empty() ? peVer : "1.0";
+                    q.category = "AudioEffect";
+                    return q;
+                };
+
                 if (deepScan) {
                     std::vector<PluginMetadata> deepMeta;
                     if (queryMetadata(pathStr, format, deepMeta)) {
@@ -1370,28 +1608,10 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                             results.push_back(m);
                         }
                     } else {
-                        // Fallback to quick info
-                        PluginMetadata quick;
-                        quick.path = pathStr;
-                        quick.name = nameStr;
-                        quick.format = format;
-                        quick.is64Bit = true;
-                        quick.vendor = "Unknown";
-                        quick.version = "1.0";
-                        quick.category = "AudioEffect";
-                        results.push_back(quick);
+                        results.push_back(makeQuickMeta(pathStr, nameStr, format));
                     }
                 } else {
-                    // Quick scan
-                    PluginMetadata quick;
-                    quick.path = pathStr;
-                    quick.name = nameStr;
-                    quick.format = format;
-                    quick.is64Bit = true;
-                    quick.vendor = "Unknown";
-                    quick.version = "1.0";
-                    quick.category = "AudioEffect";
-                    results.push_back(quick);
+                    results.push_back(makeQuickMeta(pathStr, nameStr, format));
                 }
             }
         } catch (...) {

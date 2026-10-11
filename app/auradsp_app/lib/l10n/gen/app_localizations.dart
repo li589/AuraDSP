@@ -1807,7 +1807,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugScan.
   ///
   /// In zh, this message translates to:
-  /// **'聚合扫描插件'**
+  /// **'扫描'**
   String get plugScan;
 
   /// No description provided for @plugScanning.

@@ -35,6 +35,7 @@ set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
 set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 # 只导出 .def 里声明的 auradsp_* 符号（防符号泄漏，对齐 Android 侧 version_script 策略）
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
+target_link_libraries(auradsp_engine PRIVATE version)
 
 add_executable(test_plugin_direct
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/test_plugin_direct.cpp"
@@ -48,3 +49,5 @@ target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARN
 target_compile_options(test_plugin_direct PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_direct PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_direct PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_plugin_direct PRIVATE version)
+
