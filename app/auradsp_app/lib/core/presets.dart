@@ -419,19 +419,20 @@ abstract final class PresetLibrary {
       }
     }
 
-    // 5. 立体声展宽
+    // 5. 立体声扩展（按 Master-Macro 乘数联动架构还原）
     final st = (p['stereo'] as Map<String, dynamic>?) ?? {};
     if (st.isNotEmpty) {
-      if (st['mix'] != null) {
-        m.setFloat('stereo.mix', (st['mix'] as num).toDouble() * m.stereoWidenMax);
+      if (st['bands'] is List) {
+        final bands = (st['bands'] as List).map((e) => (e as num).toDouble()).toList();
+        for (var i = 0; i < bands.length && i < 5; i++) {
+          m.stereoBands[i] = bands[i].clamp(0.0, 1.0);
+        }
       }
-      if (st['bandUsed'] != null && (st['bandUsed'] as bool)) {
-        m.setInt('stereo.bandUsed', 1);
-        if (st['bands'] is List) {
-          final bands = (st['bands'] as List).map((e) => (e as num).toDouble()).toList();
-          for (var i = 0; i < bands.length && i < 5; i++) {
-            m.setFloat('stereo.band${i + 1}', bands[i]);
-          }
+      if (st['mix'] != null) {
+        m.setStereoMix((st['mix'] as num).toDouble());
+      } else if (st['bands'] is List) {
+        for (var i = 0; i < 5; i++) {
+          m.setStereoBand(i, m.stereoBands[i]);
         }
       }
     }
