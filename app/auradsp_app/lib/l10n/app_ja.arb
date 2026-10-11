@@ -444,7 +444,7 @@
   "plugSearchHint": "プラグイン名・ベンダー・パスを検索…",
   "plugM1Title": "M1プラグインホストエンジン仕様",
   "plugM1Hint": "マルチフォーマットインプロセスホスト、64ビットVST3・CLAP対応。",
-  "plugFeatSlots": "デュアルスロット (Slot 1 / Slot 2) 独立管理・並行",
+  "plugFeatSlots": "4スロット対称プラグインラック (Slot 1 〜 Slot 4) 独立管理・並行",
   "plugFeatStages": "全チェーンステージ挿入 (Pre-DSP～Post-Limiter)",
   "plugFeatGui": "ネイティブWin32 GUIは独立メッセージループ",
   "plugFeatPreset": "バイナリストリーム保存と即時復元",

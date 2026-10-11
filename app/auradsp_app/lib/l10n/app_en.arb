@@ -444,7 +444,7 @@
   "plugSearchHint": "Search plugin name, vendor or path...",
   "plugM1Title": "M1 Plugin Host Engine Spec",
   "plugM1Hint": "Multi-format in-process host with 64-bit VST3 and CLAP support.",
-  "plugFeatSlots": "Dual slots (Slot 1 / Slot 2) managed independently & concurrently",
+  "plugFeatSlots": "Quad slots (Slot 1 ~ Slot 4) managed independently & concurrently",
   "plugFeatStages": "Full-chain stage insertion (Pre-DSP ~ Post-Limiter)",
   "plugFeatGui": "Native Win32 GUI popups on a dedicated message loop",
   "plugFeatPreset": "Binary-stream preset save & instant restore",

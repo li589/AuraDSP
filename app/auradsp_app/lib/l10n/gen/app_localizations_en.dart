@@ -957,7 +957,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugFeatSlots =>
-      'Dual slots (Slot 1 / Slot 2) managed independently & concurrently';
+      'Quad slots (Slot 1 ~ Slot 4) managed independently & concurrently';
 
   @override
   String get plugFeatStages =>

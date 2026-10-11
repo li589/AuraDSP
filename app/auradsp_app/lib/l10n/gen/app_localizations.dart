@@ -1843,7 +1843,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugFeatSlots.
   ///
   /// In zh, this message translates to:
-  /// **'双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发'**
+  /// **'四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发'**
   String get plugFeatSlots;
 
   /// No description provided for @plugFeatStages.

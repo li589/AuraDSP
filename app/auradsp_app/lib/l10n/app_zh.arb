@@ -444,7 +444,7 @@
   "plugSearchHint": "搜索插件名称、厂商或路径...",
   "plugM1Title": "M1 插件宿主引擎规范",
   "plugM1Hint": "多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。",
-  "plugFeatSlots": "双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发",
+  "plugFeatSlots": "四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发",
   "plugFeatStages": "全音效链阶段插入 (Pre-DSP ~ Post-Limiter)",
   "plugFeatGui": "原生 Win32 GUI 弹窗独立消息循环",
   "plugFeatPreset": "二进制流预设保存与即时载入恢复",

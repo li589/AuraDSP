@@ -924,7 +924,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugM1Hint => 'マルチフォーマットインプロセスホスト、64ビットVST3・CLAP対応。';
 
   @override
-  String get plugFeatSlots => 'デュアルスロット (Slot 1 / Slot 2) 独立管理・並行';
+  String get plugFeatSlots => '4スロット対称プラグインラック (Slot 1 〜 Slot 4) 独立管理・並行';
 
   @override
   String get plugFeatStages => '全チェーンステージ挿入 (Pre-DSP～Post-Limiter)';
