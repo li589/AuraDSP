@@ -105,66 +105,63 @@ def main():
     print(f"  -> 低音归位成功！差异像素: {diff_reset}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "21-bass-doubletap-reset.png"))
 
-    # 双击 Label (440, 529) 触发归位出厂值 0.0dB
-    print("  双击 '增强量' Label (440, 529) 触发归位默认值...")
-    app.double_click(440, 529, delay=0.6)
-    img_post_reset = app.capture(_SCRATCH, (340, 500, 1310, 560))
-    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音归位")
-    print(f"  -> 低音归位成功！差异像素: {diff_reset}")
-    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "21-bass-doubletap-reset.png"))
-
-    # 3. 低频搁架高级区
-    print("\n[Step 3] 展开低频搁架高级区，测试滑块双击归位...")
-    # 检查是否已展开：直接反查该行是否存在可拖拽 Thumb。
-    # 旧写法用 getpixel((440,690))[0] < 50 这个魔法像素判展开，
-    # 布局一变就误判；改为「找得到 Thumb == 面板已展开」。
-    shelf_row = (340, 660, 1310, 760)
+    # 3. 低音增强「高级」区第一条滑块（截止频率）的归位
+    print("\n[Step 3] 展开低音增强高级区，测试高级区滑块归位...")
+    # 旧写法整段作废：它去找「低频搁架高级区」，并假设有一条独立的搁架卡片。
+    # 该卡片**从来不存在** —— effects_page.dart 的卡片注册表是 _BassCard /
+    # _SpatialReverbCard / _ConvolverCard / _DdcCard / _EqualizerCard /
+    # _StereoCard / _TubeCard / _PostCard / _PresetCard，没有 _ShelfCard。
+    # 低频搁架并非独立效果器，而是「纯净低架(Shelf)」模式的底层滤波器：
+    # _ChoiceChip -> setBassMode(1) -> shelf.enable=1 / shelf.freq=bassCutoff /
+    # shelf.gain=bassIntensity*12 -> audio_isolate -> 引擎 RBJ biquad。
+    # 所以这里改为验证真实存在的低音高级区。
+    adv_row = (340, 688, 1310, 722)   # 截止频率
     try:
-        app.find_thumb(shelf_row)
+        app.find_thumb(adv_row)
     except AssertionError:
-        print("  点击展开低频搁架折叠面板 (x=460, y=604)...")
-        app.click(460, 604, delay=0.6)
-        time.sleep(0.5)  # 等待 AnimatedCrossFade 展开动画完全舒展
+        print("  点击展开「高级」折叠面板 (x=432, y=649)...")
+        app.click(432, 649, delay=0.8)
+        time.sleep(0.6)  # 等待 AnimatedCrossFade 展开动画完全舒展
+        app.find_thumb(adv_row)  # 展开后必须能反查到 Thumb
 
-    # 确保低频搁架独立开关开启 (x=1275, y=604)
-    ensure_switch_on(app, 1275, 604, label="低频搁架开关")
-    time.sleep(0.3)
+    thumb = app.find_thumb(adv_row)
+    print(f"  截止频率 Thumb 实测: {thumb}")
+    img_adv_pre = app.capture(_SCRATCH, adv_row)
+    app.drag(thumb[0], min(thumb[0] + 260, 1240), thumb[1], steps=30, delay=0.5)
+    img_adv_dragged = app.capture(_SCRATCH, adv_row)
+    diff_adv = app.assert_images_differ(
+        img_adv_pre, img_adv_dragged, min_diff_pixels=30, label="截止频率调节")
+    print(f"  -> 截止频率调节成功！差异像素: {diff_adv}")
 
-    # D5：Thumb 必须运行时反查。旧代码硬编码 (866, 715)，
-    # 而展开高级区会位移布局，必然漂移到轨道空白处 → 0 差异假失败。
-    thumb = app.find_thumb(shelf_row)
-    print(f"  低频搁架增益 Thumb 实测: {thumb}")
-    print(f"  拖拽 {thumb} -> ({min(thumb[0] + 190, 1300)}, {thumb[1]})...")
-    img_shelf_init = app.capture(_SCRATCH, shelf_row)
-    app.drag(thumb[0], min(thumb[0] + 190, 1300), thumb[1], steps=30, delay=0.5)
-    img_shelf_dragged = app.capture(_SCRATCH, shelf_row)
-    diff_shelf = app.assert_images_differ(img_shelf_init, img_shelf_dragged, min_diff_pixels=30, label="搁架增益调节")
-    print(f"  -> 搁架增益调节成功！差异像素: {diff_shelf}")
-
-    # 双击 '增益' Label (440, 715) 触发归位
-    print("  双击低频搁架 '增益' Label 触发归位 0.0dB...")
-    app.double_click(440, 715, delay=0.6)
-    img_shelf_reset = app.capture(_SCRATCH, (340, 690, 1310, 740))
-    diff_shelf_reset = app.assert_images_differ(img_shelf_dragged, img_shelf_reset, min_diff_pixels=30, label="搁架增益归位")
-    print(f"  -> 搁架增益双击归位成功！差异像素: {diff_shelf_reset}")
-    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "22-shelf-doubletap-reset.png"))
+    # 高级区复位按钮：与 Step 2 同一机制 —— ValueSlider 仅在传入
+    # onResetToDefault 时才渲染行末 refresh 图标。此前 _BassAdvanced 的四条
+    # 滑块都没传，界面上根本没有归位入口；现已补齐。
+    adv_reset_box = (adv_row[2] - 70, adv_row[1], adv_row[2] + 22, adv_row[3])
+    reset_pos = app.find_thumb(adv_reset_box)
+    print(f"  高级区归位按钮实测: {reset_pos}")
+    app.click(reset_pos[0], reset_pos[1], delay=0.8)
+    img_adv_reset = app.capture(_SCRATCH, adv_row)
+    diff_adv_reset = app.assert_images_differ(
+        img_adv_dragged, img_adv_reset, min_diff_pixels=30, label="截止频率归位")
+    print(f"  -> 截止频率归位成功！差异像素: {diff_adv_reset}")
+    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "22-bass-adv-reset.png"))
 
     # 4. 滚动到 Freeverb 混响卡片
     print("\n[Step 4] 滚动至 Freeverb 混响卡片...")
-    app.scroll(700, 500, delta=-550, delay=0.6)
+    app.scroll(700, 500, clicks=-5, delay=0.6)
     time.sleep(0.3)
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "23-freeverb-doubletap-reset.png"))
     print("  -> Freeverb 混响卡片已呈现并截图留档！")
 
     # 5. 滚动至 07 输出级卡片
     print("\n[Step 5] 滚动至 07 输出级卡片...")
-    app.scroll(700, 500, delta=-700, delay=0.6)
+    app.scroll(700, 500, clicks=-7, delay=0.6)
     time.sleep(0.3)
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "24-postgain-doubletap-reset.png"))
     print("  -> 输出级卡片已呈现并截图留档！")
 
     # 还原滚动位置
-    app.scroll(700, 500, delta=1250, delay=0.4)
+    app.scroll(700, 500, clicks=8, delay=0.5)
 
     print("\n=======================================================")
     print("  [100% PASS] 全量滑块双击归位自动化运行时验证全部通过！")

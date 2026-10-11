@@ -35,3 +35,6 @@ __pycache__/
 **/.dart_tool/
 **/windows/flutter/ephemeral/
 **/.plugin_symlinks/
+
+# tools/log_clicks.py 本地手工点击日志
+clicks.csv

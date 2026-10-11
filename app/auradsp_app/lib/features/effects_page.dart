@@ -334,6 +334,7 @@ class _BassAdvanced extends StatelessWidget {
                 format: (v) => v.toStringAsFixed(0),
                 onChanged: m.setBassCutoff,
                 onChangedEnd: m.setBassCutoff,
+                onResetToDefault: () => m.setBassCutoff(ParamDefaults.bassCutoff),
               ),
               ValueSlider(
                 label: l.bassHarmonics,
@@ -346,6 +347,7 @@ class _BassAdvanced extends StatelessWidget {
                 format: (v) => (v * 100).toStringAsFixed(0),
                 onChanged: m.setBassHarmonics,
                 onChangedEnd: m.setBassHarmonics,
+                onResetToDefault: () => m.setBassHarmonics(ParamDefaults.bassHarmonics),
               ),
               ValueSlider(
                 label: l.bassBlend,
@@ -358,6 +360,8 @@ class _BassAdvanced extends StatelessWidget {
                 format: (v) => (v * 100).toStringAsFixed(0),
                 onChanged: m.setBassHarmonicBlend,
                 onChangedEnd: m.setBassHarmonicBlend,
+                onResetToDefault: () =>
+                    m.setBassHarmonicBlend(ParamDefaults.bassHarmonicBlend),
               ),
               ValueSlider(
                 label: l.bassSubFloor,
@@ -370,6 +374,7 @@ class _BassAdvanced extends StatelessWidget {
                 format: (v) => v.toStringAsFixed(0),
                 onChanged: m.setBassSubFloor,
                 onChangedEnd: m.setBassSubFloor,
+                onResetToDefault: () => m.setBassSubFloor(ParamDefaults.bassSubFloor),
               ),
         ],
       ),
