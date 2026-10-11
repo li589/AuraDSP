@@ -274,6 +274,18 @@ class AppModel extends ChangeNotifier {
   String? lastInfo; // 非错误提示（如"已自动切到品质档"）
   int _guardSeq = 0;
 
+  void clearLastInfo() {
+    lastInfo = null;
+  }
+
+  void clearLastGuard() {
+    lastGuard = null;
+  }
+
+  void clearLastEngineError() {
+    lastEngineError = null;
+  }
+
   /// 参数下发时刻（id → epoch ms），用于测量 点击→引擎确认 回环耗时
   final Map<String, int> _pendingSentAt = {};
 
@@ -620,20 +632,9 @@ class AppModel extends ChangeNotifier {
           final samples = (raw['samples'] as num?)?.toInt() ?? 0;
           _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
         } else {
-          // 只在文案变化时重设：此前每轮探测都无条件赋值，导致同一条提示
-          // 反复弹出横幅（实测 VDC 卡片持续刷「不支持延迟探测」）。
-          // 同时修正措辞：VDC 的延迟测量本就未实现（kLatDdc 未接入），
-          // 说「需外部资源」是误导 —— 已加载 VDC 时它并非缺资源，而是没测。
-          final msg = switch (comp) {
-            'ddc' => 'VDC 暂不支持延迟测量（该组件的算法延迟尚未接入）',
-            _ => rc == -3
-                ? '该组件无法测量（探针未能在空环境中使其生效）'
-                : '该组件不支持延迟探测（需外部资源）',
-          };
-          if (lastInfo != msg) {
-            lastInfo = msg;
-            eventSeq.value = ++_guardSeq;
-          }
+          // 测量失败时不强行弹窗骚扰用户，清除旧测量值，在卡片上的 Badge
+          // 静默保持「未测量」与 Tooltip 说明即可。
+          _measuredLatencyMs.remove(comp);
         }
         notifyListeners();
         break;

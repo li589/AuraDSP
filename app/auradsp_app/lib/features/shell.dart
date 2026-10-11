@@ -662,6 +662,10 @@ class EventBanner extends StatelessWidget {
           final guard = model.lastGuard;
           final err = model.lastEngineError;
           final info = model.lastInfo;
+          // 一旦读取消费，立即清空一次性事件状态，杜绝任何后续操作重复唤起
+          model.clearLastGuard();
+          model.clearLastEngineError();
+          model.clearLastInfo();
           final text = guard != null
               ? guard.message
               : (err ?? info ?? '');

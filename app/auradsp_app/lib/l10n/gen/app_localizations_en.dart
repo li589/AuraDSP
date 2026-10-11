@@ -937,7 +937,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugDeepScan => 'Deep scan';
 
   @override
-  String get plugScan => 'Aggregate plugin scan';
+  String get plugScan => 'Scan';
 
   @override
   String get plugScanning => 'Scanning...';

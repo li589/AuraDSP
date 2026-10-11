@@ -438,7 +438,7 @@
   "plugLibTitle": "サードパーティエフェクトライブラリ",
   "plugLibHint": "システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。",
   "plugDeepScan": "ディープスキャン",
-  "plugScan": "プラグイン一括スキャン",
+  "plugScan": "スキャン",
   "plugScanning": "スキャン中…",
   "plugOpenFolder": "標準VST3フォルダを開く",
   "plugSearchHint": "プラグイン名・ベンダー・パスを検索…",

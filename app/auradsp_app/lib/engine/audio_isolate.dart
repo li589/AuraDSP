@@ -1066,9 +1066,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 代价：每次约数十毫秒，故只在用户显式点击时触发，绝不进音频路径。
             final comp = (m['comp'] as String?) ?? '';
             final l = lib;
-            final hd = handle;
             final rate = wasapi?.mix.sampleRate.toDouble() ?? 48000.0;
-            if (l == null || hd == null) {
+            if (l == null || comp.isEmpty) {
               send({
                 'evt': 'componentLatency',
                 'comp': comp,
@@ -1078,6 +1077,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               break;
             }
             final out = malloc<Uint32>();
+            final compPtr = comp.toNativeUtf8();
             int rc;
             try {
               out.value = 0;
@@ -1085,11 +1085,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               // 带资源探针，才是真正的「实测」而非「不可测」。
               final resPath = (m['resource'] as String?) ?? '';
               if (resPath.isEmpty) {
-                rc = l.probeComponent(hd, rate, out);
+                rc = l.probeComponent(compPtr, rate, out);
               } else {
                 final p = resPath.toNativeUtf8();
                 try {
-                  rc = l.probeComponentWithResource(hd, p, rate, out);
+                  rc = l.probeComponentWithResource(compPtr, p, rate, out);
                 } finally {
                   malloc.free(p);
                 }
@@ -1101,6 +1101,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'samples': rc == 0 ? out.value.toInt() : 0,
               });
             } finally {
+              malloc.free(compPtr);
               malloc.free(out);
             }
             break;

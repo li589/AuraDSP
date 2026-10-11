@@ -907,7 +907,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugDeepScan => 'ディープスキャン';
 
   @override
-  String get plugScan => 'プラグイン一括スキャン';
+  String get plugScan => 'スキャン';
 
   @override
   String get plugScanning => 'スキャン中…';
