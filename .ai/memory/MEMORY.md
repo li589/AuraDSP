@@ -60,4 +60,10 @@
 - `flutter test` 不沙箱化：任何会写 `%APPDATA%` 的测试必须在 `setUp` 注入 `ConfigManager.baseDirOverride` 临时目录。
 - libfmq `read/write` 返回 **bool** 不是元素数；`DDCStringParser` 返回 1=成功 / 0=跳过 / -1=失败；P-005 卷积 scratch 必须在 `JamesDSPInit` **之后**绑定。
 - 顺序类改动的数值验证要用**跨非线性级饱和的强探针**（limiter 会淹没差异，同序两次差 0.0043 属噪声）。
+- **`GetWindowThreadProcessId(hwnd, &pid)`：返回值才是线程 ID，out 参数是进程 ID。** 搞反会得出"同线程"的假结论（2026-10-12 实际踩过，导致 CLAP 白框根因误判一轮）。
+- **VST3 `kResultTrue == kResultOk == 0`**（`vendor-src/plugin-api/steinberg/vst3/base/TUID.h`）。日志里 `isPlatformTypeSupported(HWND)` 返回 `0` 表示**支持**，不是拒绝。
+- **`std::thread::detach()` ≠ "安全放弃等待"**：它放弃 join 但线程仍持有 `this` 与插件对象引用。超时收尾若 detach，随后 `unload` 释放同一批对象 → `0xC0000374` 堆损坏。正确做法是**隔离（放弃释放）而不是 detach**。
+- **插件 GUI 的线程契约**：宿主父窗口、插件子窗口、消息泵必须在**同一个**线程。只建父窗口在本线程、`set_parent` 在别的线程 → 子窗口收不到 `WM_PAINT`（白框）+ 拖动无响应。可用"子窗口线程 ID == 父窗口线程 ID"直接断言。
+- **`plugin_cache.json` 无 schema 版本戳**，`loadCache()` 无条件加载 → 列表会永远显示两天前的数据（曾 76/76 `vendor="Unknown"`）。改缓存结构必须同时加版本戳 + 失效重扫。
+- Windows 进程退出码要看**真实值**：`0xC0000374`=堆损坏、`0xC0000005`=访问越界。Git Bash 报的 127 等低位截断值会掩盖崩溃；用 `subprocess` 包装取 `returncode`。
 
