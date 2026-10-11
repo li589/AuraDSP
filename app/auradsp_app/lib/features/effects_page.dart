@@ -16,6 +16,7 @@ import '../core/design.dart';
 import '../core/presets.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'interactive_eq.dart';
 import 'widgets.dart';
@@ -87,14 +88,28 @@ class EffectsPage extends StatelessWidget {
 
 /* ---- 信号流条：单行紧凑可视化，启用节点高亮 ---- */
 
-class _SignalFlowBar extends StatelessWidget {
+class _SignalFlowBar extends StatefulWidget {
   final AppModel model;
   const _SignalFlowBar({required this.model});
+
+  @override
+  State<_SignalFlowBar> createState() => _SignalFlowBarState();
+}
+
+class _SignalFlowBarState extends State<_SignalFlowBar> {
+  final _scroll = ScrollController();
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
+    final model = widget.model;
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) {
@@ -140,22 +155,28 @@ class _SignalFlowBar extends StatelessWidget {
               Text(l.signalFlow.toUpperCase(), style: eyebrowOf(p)),
               const SizedBox(width: AuraSpace.md),
               Expanded(
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      for (var i = 0; i < nodes.length; i++) ...[
-                        if (i > 0)
-                          Icon(Icons.arrow_forward_rounded,
-                              size: 12, color: p.textDim.withValues(alpha: 0.5)),
-                        const SizedBox(width: AuraSpace.xs + 2),
-                        _FlowNode(
-                            label: nodes[i].$2,
-                            active: on(nodes[i].$1)),
-                        const SizedBox(width: AuraSpace.xs + 2),
+                // 横向滚动 + 细滚动条（窄屏指示器；桌面端仅滚动时显现）
+                child: Scrollbar(
+                  controller: _scroll,
+                  thumbVisibility: false,
+                  child: SingleChildScrollView(
+                    controller: _scroll,
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (var i = 0; i < nodes.length; i++) ...[
+                          if (i > 0)
+                            Icon(Icons.arrow_forward_rounded,
+                                size: 12, color: p.textDim.withValues(alpha: 0.5)),
+                          const SizedBox(width: AuraSpace.xs + 2),
+                          _FlowNode(
+                              label: nodes[i].$2,
+                              active: on(nodes[i].$1)),
+                          const SizedBox(width: AuraSpace.xs + 2),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
@@ -189,47 +210,6 @@ class _FlowNode extends StatelessWidget {
       ),
       child: Text(label,
           style: monoOf(p, size: 10, color: active ? p.accent : p.textDim)),
-    );
-  }
-}
-
-/* ---- 通用选择 Chip ---- */
-
-class _ChoiceChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _ChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AuraRadius.xs),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: selected ? p.accent : p.hairline,
-          ),
-        ),
-        child: Text(
-          label,
-          style: monoOf(
-            p,
-            size: 11,
-            color: selected ? p.accent : p.textDim,
-          ),
-        ),
-      ),
     );
   }
 }
@@ -284,17 +264,17 @@ class _BassCard extends StatelessWidget {
               Wrap(
                 spacing: AuraSpace.sm,
                 children: [
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.bassModeDynamic,
                     selected: model.bassMode == 0,
                     onTap: () => model.setBassMode(0),
                   ),
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.bassModeShelf,
                     selected: model.bassMode == 1,
                     onTap: () => model.setBassMode(1),
                   ),
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.bassModeHarmonic,
                     selected: model.bassMode == 2,
                     onTap: () => model.setBassMode(2),
@@ -764,6 +744,7 @@ class _ConvolverCard extends StatelessWidget {
               ],
               ValueSlider(
                 label: l.convMix,
+                infoMessage: l.convMixHint,
                 value: model.convMix,
                 defaultValue: ParamDefaults.convMix,
                 min: 0,
@@ -773,8 +754,6 @@ class _ConvolverCard extends StatelessWidget {
                 onChanged: (v) => model.setFloat('convolver.mix', v),
                 onChangedEnd: (v) => model.setFloat('convolver.mix', v),
               ),
-              const SizedBox(height: AuraSpace.xs),
-              Text(l.convMixHint, style: captionOf(p)),
               const SizedBox(height: AuraSpace.md),
               Text(
                 '${model.convFrames} 帧 · $dur · '
@@ -929,6 +908,7 @@ class _StereoCard extends StatelessWidget {
         children: [
           ValueSlider(
             label: l.stereoWiden,
+            infoMessage: l.stereoWidenHint,
             value: model.stereoMix,
             defaultValue: ParamDefaults.stereoMix,
             onResetToDefault: model.resetStereoWiden,
@@ -944,8 +924,6 @@ class _StereoCard extends StatelessWidget {
             onChangedEnd: (v) =>
                 model.setFloat('stereo.mix', v * model.stereoWidenMax),
           ),
-          const SizedBox(height: AuraSpace.xs),
-          Text(l.stereoWidenHint, style: captionOf(paletteOf(context))),
           const SizedBox(height: AuraSpace.md),
           _StereoAdvanced(model: model),
         ],
@@ -1085,17 +1063,17 @@ class _TubeCard extends StatelessWidget {
               Wrap(
                 spacing: AuraSpace.sm,
                 children: [
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.tubeStyleTriode,
                     selected: model.tubeStyle == 0,
                     onTap: () => model.setTubeStyle(0),
                   ),
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.tubeStylePentode,
                     selected: model.tubeStyle == 1,
                     onTap: () => model.setTubeStyle(1),
                   ),
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: l.tubeStyleTape,
                     selected: model.tubeStyle == 2,
                     onTap: () => model.setTubeStyle(2),
@@ -1132,7 +1110,7 @@ class _TubeAdvanced extends StatelessWidget {
               spacing: AuraSpace.sm,
               children: [
                 for (final os in const [1, 2, 4])
-                  _ChoiceChip(
+                  AuraChoiceChip(
                     label: '${os}x',
                       selected: m.tubeOversampling == os,
                       onTap: () => m.setTubeOversampling(os),
@@ -1232,6 +1210,9 @@ class ValueSlider extends StatefulWidget {
   final bool overridden;
   final String? overriddenNote;
 
+  /// 标签旁问号徽标的说明文案（null 不渲染；用于替代滑块下方常驻 hint 行）
+  final String? infoMessage;
+
   const ValueSlider({
     super.key,
     required this.label,
@@ -1247,6 +1228,7 @@ class ValueSlider extends StatefulWidget {
     this.format,
     this.overridden = false,
     this.overriddenNote,
+    this.infoMessage,
   });
 
   @override
@@ -1264,7 +1246,7 @@ class _ValueSliderState extends State<ValueSlider> {
     final isCustom = (widget.value - widget.defaultValue).abs() > 1e-4;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 2),
+      padding: const EdgeInsets.symmetric(vertical: AuraSpace.xxs),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1272,10 +1254,23 @@ class _ValueSliderState extends State<ValueSlider> {
             children: [
               SizedBox(
                 width: 140,
-                child: Text(
-                  widget.label,
-                  style: labelOf(p,
-                      color: widget.enabled ? p.text : p.textDim),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        widget.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: labelOf(p,
+                            color: widget.enabled ? p.text : p.textDim),
+                      ),
+                    ),
+                    if (widget.infoMessage != null) ...[
+                      const SizedBox(width: AuraSpace.xxs),
+                      InfoBadge(message: widget.infoMessage!),
+                    ],
+                  ],
                 ),
               ),
               Expanded(
@@ -1309,7 +1304,7 @@ class _ValueSliderState extends State<ValueSlider> {
                 ),
               ),
               if (widget.onResetToDefault != null) ...[
-                const SizedBox(width: 4),
+                const SizedBox(width: AuraSpace.xs),
                 Tooltip(
                   message: '点击重置默认值',
                   child: InkWell(

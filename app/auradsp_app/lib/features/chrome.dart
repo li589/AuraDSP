@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 
 /* ==================== 1. 页面骨架 ==================== */
@@ -36,8 +37,8 @@ class PageScaffold extends StatefulWidget {
   /// 氛围频谱数据源；为 null 则该页无氛围层
   final ValueListenable<List<double>>? ambient;
 
-  /// 内容区最大宽度（超宽屏居中留白）
-  final double maxWidth;
+  /// 内容区最大宽度（null 时按断点自适应：mobile 480 / tablet 720 / desktop 1080）
+  final double? maxWidth;
 
   const PageScaffold({
     super.key,
@@ -46,7 +47,7 @@ class PageScaffold extends StatefulWidget {
     required this.children,
     this.trailing,
     this.ambient,
-    this.maxWidth = AuraSpace.contentMaxW,
+    this.maxWidth,
   });
 
   @override
@@ -115,13 +116,14 @@ class _PageScaffoldState extends State<PageScaffold>
           AmbientSpectrum(spectrum: widget.ambient!, palette: p),
         if (p.isDark) const GrainOverlay(),
         SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(
-              AuraSpace.pageX, AuraSpace.pageTop, AuraSpace.pageX,
-              AuraSpace.pageBottom),
+          padding: EdgeInsets.fromLTRB(
+              context.responsivePageX, AuraSpace.pageTop,
+              context.responsivePageX, AuraSpace.pageBottom),
           child: Center(
             heightFactor: 1.0,
             child: ConstrainedBox(
-              constraints: BoxConstraints(maxWidth: widget.maxWidth),
+              constraints:
+                  BoxConstraints(maxWidth: widget.maxWidth ?? context.responsiveMaxW),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [

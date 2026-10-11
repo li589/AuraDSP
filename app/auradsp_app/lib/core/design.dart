@@ -37,6 +37,9 @@ class AuraSpace {
   /// 卡片内边距（四边统一，保证内容与外框的等距留白）
   static const cardPad = 20.0;
 
+  /// 折叠态卡片内边距（P0 仅定义、P1 由 SectionCard 接入；数值沿用现状 14.0，视觉不变）
+  static const cardPadCollapsed = 14.0;
+
   /// 卡片标题 → 卡片内容
   static const cardHeadGap = 16.0;
 
@@ -98,6 +101,7 @@ class AuraCurve {
 /// 眉标（eyebrow）：等宽小字 + 大字距，用于分区/页面的上位标签
 TextStyle eyebrowOf(AuraPalette p, {Color? color}) => TextStyle(
       fontFamily: 'AuraMono',
+      fontFamilyFallback: kMonoFallback,
       fontSize: 11,
       height: 1.0,
       letterSpacing: 1.8,

@@ -44,7 +44,7 @@ const auraDark = AuraPalette(
   hairline: Color(0xFF2A2F3A),
   text: Color(0xFFE8EAF0),
   textDim: Color(0xFF9AA3B2),
-  accent: Color(0xFFD4FF3F),
+  accent: Color(0xFFD4FF3F), // 强调：选中/激活/频谱（深色底荧光绿；与 error 正红系色相分离）
   accentContrast: Color(0xFF10130A),
   accent2: Color(0xFFFF6B35),
   success: Color(0xFF5AD19B),
@@ -61,7 +61,7 @@ const auraLight = AuraPalette(
   hairline: Color(0xFFE2DDCF),
   text: Color(0xFF1A1A1A),
   textDim: Color(0xFF6E6A60),
-  accent: Color(0xFFE63B2E),
+  accent: Color(0xFFE63B2E), // 强调：选中/激活（浅色底朱红；与 error 暗红同色系，以明度区分：E63B2E vs C0271B；改色需用户定夺，见 P3）
   accentContrast: Color(0xFFFFF7F6),
   accent2: Color(0xFF22335C),
   success: Color(0xFF1E7A4E),
@@ -78,7 +78,7 @@ const aurora = AuraPalette(
   hairline: Color(0xFF1B2A44),
   text: Color(0xFFDCE6F5),
   textDim: Color(0xFF7C8CA6),
-  accent: Color(0xFF64F0DC),
+  accent: Color(0xFF64F0DC), // 强调：选中/激活/频谱（深海底青；accent2 品红仅作第二点缀，不承载状态语义）
   accentContrast: Color(0xFF04110E),
   accent2: Color(0xFFFF5EA8),
   success: Color(0xFF4FDE9E),

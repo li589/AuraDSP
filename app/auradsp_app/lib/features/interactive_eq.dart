@@ -52,7 +52,7 @@ class _InteractiveSpectrumEQPanelState
           children: [
             // 频段规格切换
             for (final b in const [7, 10, 15, 31])
-              _BandChip(
+              AuraChoiceChip(
                 label: '$b段',
                 selected: model.eqBandsCount == b,
                 onTap: () => model.setEqBandsCount(b),
@@ -192,9 +192,12 @@ class _InteractiveSpectrumEQPanelState
         ),
         const SizedBox(height: AuraSpace.sm),
 
-        // 底部提示
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        // 底部提示（Wrap：窄屏自动换行，避免 Row 在小宽度下横向溢出；
+        // 桌面端一行放下时与原来视觉一致）
+        Wrap(
+          spacing: AuraSpace.sm,
+          runSpacing: AuraSpace.xs,
+          crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
               '上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位',
@@ -282,17 +285,17 @@ class _InteractiveSpectrumEQPanelState
                     spacing: AuraSpace.sm,
                     runSpacing: AuraSpace.sm,
                     children: [
-                      _FilterChoice(
+                      AuraChoiceChip(
                         label: '最小相位 FIR',
                         selected: model.eqFilter == 0,
                         onTap: () => model.setEqFilter(0),
                       ),
-                      _FilterChoice(
+                      AuraChoiceChip(
                         label: '6阶 IIR',
                         selected: model.eqFilter == 1,
                         onTap: () => model.setEqFilter(1),
                       ),
-                      _FilterChoice(
+                      AuraChoiceChip(
                         label: '12阶 IIR',
                         selected: model.eqFilter == 2,
                         onTap: () => model.setEqFilter(2),
@@ -305,12 +308,12 @@ class _InteractiveSpectrumEQPanelState
                   Wrap(
                     spacing: AuraSpace.sm,
                     children: [
-                      _FilterChoice(
+                      AuraChoiceChip(
                         label: 'Makima (平滑防冲)',
                         selected: model.eqInterp == 1,
                         onTap: () => model.setEqInterp(1),
                       ),
-                      _FilterChoice(
+                      AuraChoiceChip(
                         label: 'PCHIP (单调保形)',
                         selected: model.eqInterp == 0,
                         onTap: () => model.setEqInterp(0),
@@ -322,48 +325,6 @@ class _InteractiveSpectrumEQPanelState
             ),
           ],
         ],
-      ),
-    );
-  }
-}
-
-/* ---- 辅助小部件：频段规格 Chip ---- */
-
-class _BandChip extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _BandChip({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AuraRadius.xs),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? p.accent.withValues(alpha: 0.18) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: selected ? p.accent : p.hairline,
-            width: 1.0,
-          ),
-        ),
-        child: Text(
-          label,
-          style: monoOf(
-            p,
-            size: 11,
-            color: selected ? p.accent : p.textDim,
-          ),
-        ),
       ),
     );
   }
@@ -436,47 +397,6 @@ class _PresetDropdown extends StatelessWidget {
             const SizedBox(width: 4),
             Icon(Icons.arrow_drop_down_rounded, size: 16, color: p.textDim),
           ],
-        ),
-      ),
-    );
-  }
-}
-
-/* ---- 单选按钮组件 ---- */
-
-class _FilterChoice extends StatelessWidget {
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  const _FilterChoice({
-    required this.label,
-    required this.selected,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(AuraRadius.xs),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-        decoration: BoxDecoration(
-          color: selected ? p.accent.withValues(alpha: 0.15) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: selected ? p.accent : p.hairline,
-          ),
-        ),
-        child: Text(
-          label,
-          style: monoOf(
-            p,
-            size: 11,
-            color: selected ? p.accent : p.textDim,
-          ),
         ),
       ),
     );
@@ -923,6 +843,7 @@ class _SpectrumEQPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           fontFamily: 'monospace',
+          fontFamilyFallback: kMonoFallback,
           fontSize: 10,
           fontWeight: FontWeight.w600,
           color: palette.accentContrast,
@@ -954,6 +875,7 @@ class _SpectrumEQPainter extends CustomPainter {
         text: text,
         style: TextStyle(
           fontFamily: 'monospace',
+          fontFamilyFallback: kMonoFallback,
           fontSize: 9,
           color: color,
         ),

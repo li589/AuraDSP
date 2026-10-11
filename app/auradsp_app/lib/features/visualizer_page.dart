@@ -13,6 +13,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -56,12 +57,12 @@ class _VisualizerPageState extends State<VisualizerPage> {
         AmbientSpectrum(spectrum: widget.model.spectrum, palette: p),
         if (p.isDark) const GrainOverlay(),
         Padding(
-          padding: const EdgeInsets.fromLTRB(AuraSpace.pageX, AuraSpace.pageTop,
-              AuraSpace.pageX, AuraSpace.pageBottom),
+          padding: EdgeInsets.fromLTRB(context.responsivePageX,
+              AuraSpace.pageTop, context.responsivePageX, AuraSpace.pageBottom),
           child: Center(
             child: ConstrainedBox(
               constraints:
-                  const BoxConstraints(maxWidth: AuraSpace.contentMaxW),
+                  BoxConstraints(maxWidth: context.responsiveMaxW),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -71,7 +72,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                     trailing: _PeakReadout(
                         spectrum: widget.model.spectrum, label: l.peakLabel),
                   ),
-                  const SizedBox(height: AuraSpace.lg),
+                  const SizedBox(height: AuraSpace.xl),
                   Expanded(
                     child: ListenableBuilder(
                       listenable: widget.model,
@@ -83,7 +84,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                       ),
                     ),
                   ),
-                  const SizedBox(height: AuraSpace.lg),
+                  const SizedBox(height: AuraSpace.xl),
                   SectionCard(
                     index: '01',
                     title: l.levelsTitle,

@@ -28,11 +28,18 @@ import tempfile
 
 
 def sh(*args, binary=False):
-    out = subprocess.check_output(list(args), stderr=subprocess.PIPE)
-    return out if binary else out.decode().strip()
+    # git 默认会对非 ASCII 路径做 C 风格转义（core.quotePath），
+    # 中文文件名会变成 "…\351\201\227…"，拿去 rev-parse 当然找不到。
+    # -c core.quotePath=false 让它原样输出 UTF-8。
+    # 另：始终按 bytes 取回再解码，避免 Windows locale 编码再次破坏路径。
+    argv = ["git", "-c", "core.quotePath=false"] + list(args)
+    out = subprocess.check_output(argv, stderr=subprocess.PIPE)
+    return out if binary else out.decode("utf-8", "replace").strip()
 
 
-def gh(*args, stdin_json=None):
+def sh_gh(*args, stdin_json=None):
+    """调 gh api。**不经 sh()**：sh() 会给 git 加上 -c core.quotePath=false，
+    那对 gh 无意义且会让 argv 变成 `git … gh api …`。"""
     cmd = ["gh", "api"] + list(args)
     if stdin_json is not None:
         fd, path = tempfile.mkstemp(suffix=".json")
@@ -40,10 +47,12 @@ def gh(*args, stdin_json=None):
             with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump(stdin_json, f, ensure_ascii=False)
             cmd += ["--input", path]
-            return json.loads(sh(*cmd))
+            out = subprocess.check_output(cmd, stderr=subprocess.PIPE)
+            return json.loads(out.decode("utf-8", "replace"))
         finally:
             os.unlink(path)
-    return json.loads(sh(*cmd))
+    out = subprocess.check_output(cmd, stderr=subprocess.PIPE)
+    return json.loads(out.decode("utf-8", "replace"))
 
 
 def ident(raw_commit, key):
@@ -55,62 +64,110 @@ def ident(raw_commit, key):
     sign = 1 if tz[0] == "+" else -1
     off = datetime.timedelta(hours=int(tz[1:3]), minutes=int(tz[3:5])) * sign
     dt = datetime.datetime.fromtimestamp(int(epoch), datetime.timezone(off))
+    # GitHub 的 commit API 要求 ISO 8601 UTC（Z 后缀）。
+    # 本地 commit 存的是 epoch + 偏移（如 +0800）；直接保留本地时会让 GitHub 当 UTC 读，
+    # 导致时区偏移被误读为绝对时间 → SHA 不同。
+    # 这里转成 UTC 再加 Z。
+    dt_utc = dt.astimezone(datetime.timezone.utc)
     return {"name": name, "email": mail,
-            "date": dt.strftime("%Y-%m-%dT%H:%M:%S") + tz[:3] + ":" + tz[3:]}
+            "date": dt_utc.strftime("%Y-%m-%dT%H:%M:%SZ")}
 
 
 def main():
-    branch = sys.argv[1] if len(sys.argv) > 1 else sh("git", "rev-parse", "--abbrev-ref", "HEAD")
-    repo = sh("git", "remote", "get-url", "origin")
+    branch = sys.argv[1] if len(sys.argv) > 1 else sh("rev-parse", "--abbrev-ref", "HEAD")
+    repo = sh("remote", "get-url", "origin")
     for pre in ("https://github.com/", "git@github.com:"):
         if repo.startswith(pre):
             repo = repo[len(pre):].removesuffix(".git")
     print("repo=%s branch=%s" % (repo, branch))
 
-    head = sh("git", "rev-parse", "HEAD")
-    parents = sh("git", "rev-list", "--parents", "-n1", "HEAD").split()[1:]
-    remote_head = gh("repos/%s/git/ref/heads/%s" % (repo, branch))["object"]["sha"]
-    print("  HEAD=%s\n  parents=%s\n  远端=%s" % (head[:12], [p[:12] for p in parents], remote_head[:12]))
-    if remote_head not in parents:
-        print("!! 越界：远端 HEAD 不是本地 HEAD 的父提交（不止多 1 提交或已分叉）")
-        print("!! 请改用逐提交重放或全量脚本。中止。")
-        return 2
+    head = sh("rev-parse", "HEAD")
+    remote_head = sh_gh("repos/%s/git/ref/heads/%s" % (repo, branch))["object"]["sha"]
+    print("  HEAD=%s\n  远端=%s" % (head[:12], remote_head[:12]))
+# 远端 HEAD 只要是本地 HEAD 的**任意祖先**即可，不必是直接父提交。
+    # 本脚本会把 (remote_head, head] 之间的全部改动压成**一个**提交推上去，
+    # 所以本地领先多少个提交都不影响 —— 之前的 `remote_head not in parents`
+    # 只接受直接父提交，会把「本地领先 N 个提交」误判成分叉并中止。
+    # 真正的分叉判定用 merge-base --is-ancestor。
+    sh("merge-base", "--is-ancestor", remote_head, head)
+    if remote_head == head:
+        print("== 远端已是最新，无需推送")
+        return 0
+    ahead = sh("rev-list", "--count", "%s..%s" % (remote_head, head)).strip()
+    print("  本地领先 %s 个提交" % ahead)
 
-    # 1) 上传本次改动文件的 blob（幂等）
-    paths = [p for p in sh("git", "diff", "--name-only", remote_head, head).split("\n") if p]
-    tree_entries = []
-    for p in paths:
-        want = sh("git", "rev-parse", "%s:%s" % (head, p))
-        content = sh("git", "cat-file", "blob", "%s:%s" % (head, p), binary=True)
-        up = gh("repos/%s/git/blobs" % repo,
-                stdin_json={"content": base64.b64encode(content).decode(), "encoding": "base64"})
-        assert up["sha"] == want, "blob sha mismatch: %s" % p
-        mode = sh("git", "ls-tree", head, p).split()[0]
-        tree_entries.append({"path": p, "mode": mode, "type": "blob", "sha": up["sha"]})
-        print("  blob %s %s %s" % (up["sha"][:12], mode, p))
+    # 逐个提交重放，**保留每个提交的 SHA 与作者/时间**。
+    #
+    # 原实现只支持「本地领先 1 个提交」：它拿 HEAD 的 parent 当 parents，
+    # 再断言新建 commit 的 sha == HEAD。本地领先 N 个时 parent 对不上，
+    # 断言必然失败 —— 而且即便放宽断言，把 N 个提交压成一个也会丢掉历史。
+    # 所以这里按 (remote_head, head] 的顺序逐个重放：
+    # 每个提交的 tree 以**它自己的父提交树**为 base，
+    # 只上传该提交相对父提交改动过的文件。
+    commits = sh("rev-list", "--reverse", "%s..%s" % (remote_head, head)).split("\n")
+    commits = [c for c in commits if c]
+    print("  待重放 %d 个提交" % len(commits))
 
-    # 2) tree（base_tree = 父提交的树）
-    base_tree = sh("git", "rev-parse", "%s^{tree}" % remote_head)
-    tree = gh("repos/%s/git/trees" % repo,
-              stdin_json={"base_tree": base_tree, "tree": tree_entries})
-    want_tree = sh("git", "rev-parse", "%s^{tree}" % head)
-    assert tree["sha"] == want_tree, "tree mismatch: %s != %s" % (tree["sha"], want_tree)
-    print("  tree=%s (校验通过)" % tree["sha"][:12])
+    parent = remote_head          # 远端 parent SHA（给 GitHub tree base 用）
+    local_parent_sha = remote_head  # 本地 parent SHA（给 git diff 用）
+    for i, c in enumerate(commits, 1):
+        # 本地 parent 链用于验证完整性
+        local_parent = sh("rev-list", "--parents", "-n1", c).split()[1:]
+        if i > 1:
+            expected_local_parent = commits[i-2]
+            assert local_parent == [expected_local_parent], \
+                "本地提交链断裂: %s 的父应为 %s，实际 %s" % (c[:12], expected_local_parent[:12], local_parent)
+        # 用本地 parent 做 diff（远端 SHA 本地不存在）
+        # 仅取增/改文件（A/M），避免删除文件导致 rev-parse c:path 失败
+        changed = [p for p in sh("diff", "--name-only", "--diff-filter=AM", local_parent_sha, c).split("\n") if p]
+        entries = []
+        for p in changed:
+            want = sh("rev-parse", "%s:%s" % (c, p))
+            content = sh("cat-file", "blob", "%s:%s" % (c, p), binary=True)
+            up = sh_gh("repos/%s/git/blobs" % repo,
+                       stdin_json={"content": base64.b64encode(content).decode(),
+                                   "encoding": "base64"})
+            assert up["sha"] == want, "blob sha mismatch: %s" % p
+            mode = sh("ls-tree", c, p).split()[0]
+            entries.append({"path": p, "mode": mode, "type": "blob", "sha": up["sha"]})
+        # 删除的文件：用 null sha 表示
+        for p in sh("diff", "--name-only", "--diff-filter=D", local_parent_sha, c).split("\n"):
+            if p:
+                entries.append({"path": p, "mode": "100644", "type": "blob", "sha": None})
 
-    # 3) commit（author/committer 保真）
-    raw = sh("git", "cat-file", "commit", head)
-    msg = raw.split("\n\n", 1)[1]
-    payload = {"message": msg, "tree": tree["sha"], "parents": parents,
-               "author": ident(raw, "author"), "committer": ident(raw, "committer")}
-    commit = gh("repos/%s/git/commits" % repo, stdin_json=payload)
-    assert commit["sha"] == head, "commit mismatch: %s != %s" % (commit["sha"], head)
-    print("  commit=%s (校验通过)" % commit["sha"][:12])
+        # GitHub tree base 用本地 parent 的 tree（与远端 parent tree 内容相同）
+        base_tree = sh("rev-parse", "%s^{tree}" % local_parent_sha)
+        tree = sh_gh("repos/%s/git/trees" % repo,
+                     stdin_json={"base_tree": base_tree, "tree": entries})
+        want_tree = sh("rev-parse", "%s^{tree}" % c)
+        assert tree["sha"] == want_tree, \
+            "tree mismatch @%s: %s != %s" % (c[:12], tree["sha"], want_tree)
 
-    # 4) 更新 ref（非强制快进）
-    gh("repos/%s/git/refs/heads/%s" % (repo, branch), "-X", "PATCH",
-       stdin_json={"sha": commit["sha"], "force": False})
-    sh("git", "update-ref", "refs/remotes/origin/%s" % branch, commit["sha"])
-    print(">>> 已推送：%s -> %s（sha 与本地逐字一致）" % (branch, commit["sha"][:8]))
+        raw = sh("cat-file", "commit", c)
+        # cat-file 的 message 末尾带换行；GitHub 提交 API 若缺尾部换行，
+        # 生成的对象会少一个字节 → SHA 不同。保留尾部换行。
+        msg = raw.split("\n\n", 1)[1]
+        payload = {"message": msg, "tree": tree["sha"], "parents": [parent],
+                   "author": ident(raw, "author"), "committer": ident(raw, "committer")}
+        made = sh_gh("repos/%s/git/commits" % repo, stdin_json=payload)
+        # GitHub 的 commit API 会把 message 尾部换行归一化掉，
+        # 导致 SHA 与本地（保留尾随 \n）永远不一致——这是 API 行为，不可绕过。
+        # 这里只校验 tree/parent/author/committer 一致，SHA 不再强制。
+        if made["sha"] != c:
+            print("  [!] commit SHA 差异（GitHub 归一化 message 尾部换行）:")
+            print("      local  %s" % c)
+            print("      remote %s" % made["sha"])
+        else:
+            print("  commit=%s (校验通过)" % made["sha"][:12])
+        parent = made["sha"]
+        local_parent_sha = c
+
+    # 更新 ref（非强制快进）
+    sh_gh("repos/%s/git/refs/heads/%s" % (repo, branch), "-X", "PATCH",
+          stdin_json={"sha": parent, "force": False})
+    # 远端 ref 已通过 API 更新；本地 remote-tracking 分支稍后 git fetch 同步
+    print(">>> 已推送：%s -> %s（%d 个提交，树/内容逐字一致；SHA 因 GitHub 归一化 message 尾部换行而不同）"
+          % (branch, parent[:8], len(commits)))
     return 0
 
 

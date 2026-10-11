@@ -110,12 +110,12 @@ class SectionCard extends StatelessWidget {
         ClipRect(
           child: AnimatedAlign(
             alignment: Alignment.topCenter,
-            duration: const Duration(milliseconds: 220),
-            curve: Curves.easeInOutCubic,
+            duration: AuraDur.base,
+            curve: AuraCurve.standard,
             heightFactor: collapsed ? 0.0 : 1.0,
             child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeInOut,
+              duration: AuraDur.fast,
+              curve: AuraCurve.standard,
               opacity: collapsed ? 0.0 : 1.0,
               child: content,
             ),
@@ -127,8 +127,11 @@ class SectionCard extends StatelessWidget {
     }
 
     return Container(
+      // hero 分支已删：唯一 hero:true 调用方（home_page 引擎状态卡）自带显式 padding，
+      // 默认分支无任何调用者走 hero ? xl。hero 字段仅保留强调色细边语义。
       padding: padding ??
-          EdgeInsets.all(hero ? AuraSpace.xl : (collapsed ? 14.0 : AuraSpace.cardPad)),
+          EdgeInsets.all(
+              collapsed ? AuraSpace.cardPadCollapsed : AuraSpace.cardPad),
       decoration: BoxDecoration(
         color: p.panel,
         borderRadius: BorderRadius.circular(AuraRadius.md),
@@ -687,6 +690,52 @@ class PeakHolder {
       }
     }
     return _peaks;
+  }
+}
+
+/* ---- 通用选择 Chip（Bass 模式 / 电子管风格 / 过采样档位共用） ---- */
+
+/// 小尺寸单选片：等宽 11px 标签，选中态强调色描边 + 淡底。
+/// 由 effects_page._ChoiceChip 迁移，并吸收 interactive_eq._FilterChoice /
+/// _BandChip（两处选中底 alpha 0.15/0.18 归一到 0.16，肉眼不可辨），供各卡片复用。
+/// 与 AuraChip 的区别：更小（无固定 30 高、无 hover 底），专用于卡片内选项组。
+class AuraChoiceChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback? onTap;
+
+  const AuraChoiceChip({
+    super.key,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.xs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: Border.all(
+            color: selected ? p.accent : p.hairline,
+          ),
+        ),
+        child: Text(
+          label,
+          style: monoOf(
+            p,
+            size: 11,
+            color: selected ? p.accent : p.textDim,
+          ),
+        ),
+      ),
+    );
   }
 }
 
