@@ -174,7 +174,9 @@ uint32_t auradsp_plugin_slot_get_latency(auradsp_handle h, int slot);
 int      auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, int max_len);
 
 /* 界面与预设 */
-int      auradsp_plugin_slot_show_editor(auradsp_handle h, int slot);
+/* show_editor 的 title：窗口标题，可传 NULL（退化为插件自报名）。
+ * E1 修正：Dart FFI 早年即传 title，但 C ABI 仅 2 参，标题被静默丢弃。 */
+int      auradsp_plugin_slot_show_editor(auradsp_handle h, int slot, const char* title);
 int      auradsp_plugin_slot_close_editor(auradsp_handle h, int slot);
 int      auradsp_plugin_slot_is_editor_open(auradsp_handle h, int slot);
 int      auradsp_plugin_slot_save_preset(auradsp_handle h, int slot, const char* path);

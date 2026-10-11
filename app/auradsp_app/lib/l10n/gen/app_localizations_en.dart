@@ -1055,6 +1055,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugNoMatch => 'No plugins match the current search/filter';
 
   @override
+  String get plugIncompatibleBadge => '32-bit incompatible';
+
+  @override
+  String get plugIncompatibleHint =>
+      'This is a 32-bit plugin. AuraDSP is a 64-bit host and cannot load it; please install the 64-bit version.';
+
+  @override
   String plugSlotActive(int n) {
     return 'Slot $n active';
   }

@@ -139,6 +139,14 @@ entries = [{format: vst3, bits: 64, path}, {format: vst2, bits: 64, path}, {form
 - 32 位条目在 64 位条目存在时默认隐藏（设置里可显示），避免列表双份污染——这正是 jBridge 时代列表混乱的反面。
 - 扫描器按 identity 聚合展示，合并信息（"3 个二进制 · 64 位 VST3 已选用"）。
 
+> **现状标注（M1.5，2026-10-12 B2 批）**：身份合并（本节）尚未实施；当前扫描键为
+> `path+format`。位数识别已落地但策略与本节设想**有意不同**：x64 进程无法加载 32 位 DLL
+> （`ERROR_BAD_EXE_FORMAT`=193），因此 32 位条目的现行契约是 **"可发现 + 明确告知不兼容
+> + 不消失不崩溃"**——`resolveBundleBinary` 按 `x86_64-win` → `x86-win` 顺序探测，PE 头
+> 判定 `IMAGE_FILE_MACHINE`，32 位条目 `is64Bit=false` / `isCompatible=false` + 中文
+> errorMessage，UI 灰显 + "32 位不兼容"角标，`load()` 在 `LoadLibrary` 之前拒绝。
+> 让 32 位插件**真正可用**需 32 位桥进程（§2.3 架构图桥进程 B / ADR-005），不属于 M1.5 范围。
+
 ### 2.6 预设、弹窗、授权、存储本地化
 
 - **预设**：插件原生预设（VST3 program list / VST2 programs / CLAP preset discover）+ 用户预设 = 引擎状态快照（序列化到 `%APPDATA%/AuraDSP/presets/`，JSON + 插件状态 blob base64）；预设里插件状态用插件自己的 chunk 存取，UI 不解析。

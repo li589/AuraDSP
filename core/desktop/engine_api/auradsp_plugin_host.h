@@ -71,7 +71,10 @@ public:
     virtual const PluginMetadata& getMetadata() const = 0;
 
     // GUI Editor Window (Win32)
-    virtual bool showEditor(void* parentHwnd = nullptr) = 0;
+    /* title: 窗口标题，由调用方（Dart）决定；为空时退化为插件自报名。
+     * 历史上此处是从未使用的 void* parentHwnd 死参数（E1），Dart FFI 的
+     * 第三个参数一直是 title 但被 C ABI 丢弃——本次一并接通。 */
+    virtual bool showEditor(const std::string& title = "") = 0;
     virtual void closeEditor() = 0;
     virtual bool isEditorOpen() const = 0;
 
@@ -85,7 +88,12 @@ public:
     static std::vector<std::string> getDefaultSearchPaths();
     static std::vector<PluginMetadata> scan(const std::vector<std::string>& searchPaths, bool deepScan);
     static bool queryMetadata(const std::string& filePath, PluginFormat format, std::vector<PluginMetadata>& outPlugins);
-    static std::string resolveBundleBinary(const std::string& bundlePath, PluginFormat format);
+    /* 解析 bundle 内的真实二进制。探测顺序：x86_64-win（本进程架构）→
+     * x86-win（32 位，仅识别不加载）。outArch 非空时写入命中目录名
+     * （"x86_64-win" / "x86-win"），未命中留空——D1 的根因就是旧实现
+     * 只探测 x86_64-win，缺失即 return ""，32 位 bundle 被静默丢弃。 */
+    static std::string resolveBundleBinary(const std::string& bundlePath, PluginFormat format,
+                                           std::string* outArch = nullptr);
 };
 
 class PluginHostManager {
@@ -126,7 +134,7 @@ public:
     std::string getStatusJsonSlot(size_t slot) const;
 
     // Slot GUI & Presets
-    bool showEditorSlot(size_t slot);
+    bool showEditorSlot(size_t slot, const std::string& title = "");
     void closeEditorSlot(size_t slot);
     bool isEditorOpenSlot(size_t slot) const;
     bool savePresetSlot(size_t slot, const std::string& filePath);

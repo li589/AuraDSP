@@ -2289,9 +2289,10 @@ int auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, i
     return (int)json.length();
 }
 
-int auradsp_plugin_slot_show_editor(auradsp_handle h, int slot) {
+int auradsp_plugin_slot_show_editor(auradsp_handle h, int slot, const char* title) {
     if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
-    return h->plugin_host->showEditorSlot((size_t)slot) ? 1 : 0;
+    // E1：title 可空；为空时 C++ 侧退化为插件自报名。
+    return h->plugin_host->showEditorSlot((size_t)slot, title ? title : "") ? 1 : 0;
 }
 
 int auradsp_plugin_slot_close_editor(auradsp_handle h, int slot) {

@@ -1229,9 +1229,15 @@ class _PluginListItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final isVst3 = plugin.format == PluginFormat.vst3;
+    // D2：扫描期判定不兼容（当前唯一情形：32 位插件）——整项灰显 +
+    // 名称后跟警示角标；点击"载入"由 PluginManager.loadPlugin 拦截并
+    // 弹出精确原因（errorMessage），不会走到引擎。
+    final isIncompatible = !plugin.isCompatible;
     final badgeColor = isVst3 ? const Color(0xFF0072FF) : const Color(0xFFE94057);
 
-    return Container(
+    return Opacity(
+      opacity: isIncompatible ? 0.55 : 1.0,
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isLoadedInThisSlot
@@ -1281,6 +1287,38 @@ class _PluginListItem extends StatelessWidget {
                         color: isLoadedInThisSlot ? p.accent : p.text,
                       ),
                     ),
+                    if (isIncompatible) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: plugin.errorMessage.isNotEmpty
+                            ? plugin.errorMessage
+                            : l10nOf(context).plugIncompatibleHint,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: p.error.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.block_rounded,
+                                  size: 10, color: p.error),
+                              const SizedBox(width: 3),
+                              Text(
+                                l10nOf(context).plugIncompatibleBadge,
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  color: p.error,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     if (isLoadedInThisSlot) ...[
                       const SizedBox(width: 8),
                       Container(
@@ -1356,6 +1394,7 @@ class _PluginListItem extends StatelessWidget {
               ),
             ),
         ],
+      ),
       ),
     );
   }

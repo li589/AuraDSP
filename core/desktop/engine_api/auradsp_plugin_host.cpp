@@ -633,7 +633,8 @@ static std::string extractVendorFromPath(const std::string& filePath) {
     try {
         fs::path p(filePath);
         while (p.has_filename() && (p.extension() == ".vst3" || p.extension() == ".clap" ||
-               p.filename() == "Contents" || p.filename() == "x86_64-win" || p.filename() == "Resources")) {
+               p.filename() == "Contents" || p.filename() == "x86_64-win" ||
+               p.filename() == "x86-win" || p.filename() == "Resources")) {
             p = p.parent_path();
         }
 
@@ -677,6 +678,36 @@ static std::string extractVendorByKnownSignature(const std::string& name) {
         return "Antares";
     }
     return "";
+}
+
+/// 读取 PE 头的 IMAGE_FILE_MACHINE。无法解析（非 PE / 读失败）返回 0。
+/// 0x014c = IMAGE_FILE_MACHINE_I386（32 位）
+/// 0x8664 = IMAGE_FILE_MACHINE_AMD64（64 位）
+/// 0xaa64 = IMAGE_FILE_MACHINE_ARM64（64 位）
+static WORD peMachineType(const std::wstring& binaryPath) {
+    std::ifstream f(binaryPath, std::ios::binary);
+    if (!f) return 0;
+    IMAGE_DOS_HEADER dos{};
+    f.read(reinterpret_cast<char*>(&dos), sizeof(dos));
+    if (!f || dos.e_magic != IMAGE_DOS_SIGNATURE) return 0;
+    if (dos.e_lfanew <= 0) return 0;
+    f.seekg(static_cast<std::streamoff>(dos.e_lfanew));
+    DWORD signature = 0;
+    f.read(reinterpret_cast<char*>(&signature), sizeof(signature));
+    if (!f || signature != IMAGE_NT_SIGNATURE) return 0;
+    WORD machine = 0;
+    f.read(reinterpret_cast<char*>(&machine), sizeof(machine));
+    if (!f) return 0;
+    return machine;
+}
+
+/// 由 PE 头判定是否为 64 位二进制。解析失败时按 64 位处理
+/// （本进程是 x64；历史行为即默认 true，缺失 PE 信息不应把插件误判为不兼容）。
+static bool peIs64Bit(const std::wstring& binaryPath) {
+    const WORD m = peMachineType(binaryPath);
+    if (m == IMAGE_FILE_MACHINE_I386) return false;
+    if (m == IMAGE_FILE_MACHINE_AMD64 || m == IMAGE_FILE_MACHINE_ARM64) return true;
+    return true;
 }
 
 static std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath) {
@@ -890,6 +921,37 @@ void seedMetadataFromScan(PluginMetadata& dst, const PluginMetadata& src) {
     dst.errorMessage.clear();
 }
 
+/// 32 位插件的"可发现但不可加载"条目（D2）。
+/// 不 LoadLibrary —— x64 进程加载 32 位 DLL 必然 ERROR_BAD_EXE_FORMAT(193)，
+/// 旧路把 193 当普通"加载失败"抛出，用户无法区分架构问题与文件损坏；
+/// 这里仅用 PE 版本资源与路径推导描述性字段，产出留在扫描结果里的
+/// 不兼容条目。errorMessage 文案与 load() 的 32 位拒绝保持一致。
+void fill32BitIncompatible(PluginMetadata& meta, const std::string& filePath,
+                           PluginFormat format, const std::wstring& wpath) {
+    meta.path = filePath;
+    meta.format = format;
+    meta.name = fs::path(filePath).stem().string();
+    // 与 makeQuickMeta / applyClapDescriptor 同一规则：bundleName = 路径 stem。
+    meta.bundleName = meta.name;
+    meta.is64Bit = false;
+    meta.isCompatible = false;
+    meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+
+    // vendor 兜底链与 makeQuickMeta / applyClapDescriptor 完全一致：
+    // PE CompanyName -> LegalCopyright -> 上级目录 -> 知名签名 -> "Unknown"
+    std::string vendor = extractCompanyFromVersionInfo(wpath);
+    if (vendor.empty()) vendor = extractVendorFromLegalCopyright(wpath);
+    if (vendor.empty()) vendor = extractVendorFromPath(filePath);
+    if (vendor.empty()) vendor = extractVendorByKnownSignature(meta.name);
+    if (vendor.empty()) vendor = "Unknown";
+    meta.vendor = vendor;
+
+    std::string peVer = extractProductVersionFromVersionInfo(wpath);
+    meta.version = !peVer.empty() ? peVer : "1.0";
+    // 与 makeQuickMeta 快扫缺省一致；深扫才有 subCategories，32 位拿不到。
+    meta.category = "AudioEffect";
+}
+
 /// 用 CLAP descriptor 填充 meta。扫描路与加载路共用同一实现。
 void applyClapDescriptor(PluginMetadata& meta,
                          const clap_plugin_descriptor_t* d,
@@ -1096,15 +1158,24 @@ public:
         if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::CLAP;
-        m_meta.is64Bit = true;
 
-        std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::CLAP);
+        std::string arch;
+        std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::CLAP, &arch);
         if (binaryPath.empty()) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "Invalid CLAP bundle or binary path";
             return false;
         }
         std::wstring wpath = utf8ToWide(binaryPath);
+        // D2：is64Bit 由 PE 头判定，不再硬编码 true。32 位在 LoadLibrary 前
+        // 明确拒绝——x64 进程加载 32 位 DLL 必然 ERROR_BAD_EXE_FORMAT(193)，
+        // 旧实现只报 "Failed to load CLAP library: 193"，用户无法判断是架构问题。
+        m_meta.is64Bit = peIs64Bit(wpath);
+        if (!m_meta.is64Bit) {
+            m_meta.isCompatible = false;
+            m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+            return false;
+        }
         m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!m_module) {
             m_meta.isCompatible = false;
@@ -1347,8 +1418,9 @@ public:
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
 
-    bool showEditor(void* parentHwnd = nullptr) override {
+    bool showEditor(const std::string& title = "") override {
         if (!m_isLoaded || !m_plugin) return false;
+        m_editorTitle = title;
         if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
             SetForegroundWindow(m_editorHwnd);
             ShowWindow(m_editorHwnd, SW_SHOW);
@@ -1404,7 +1476,10 @@ public:
             t_clapThreadType = ClapHostThreadType::Main;
             EnsureWindowClassRegistered();
 
-            std::wstring title = L"[AuraDSP] " + utf8ToWide(m_meta.name);
+            // E1：标题由调用方决定；为空时退化到插件自报名。
+            // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
+            // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
+            std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
             RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
             DWORD style = WS_OVERLAPPEDWINDOW;
             AdjustWindowRect(&rc, style, FALSE);
@@ -1861,6 +1936,10 @@ private:
 
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
+    // E1：调用方（Dart）传来的窗口标题。写入发生在 std::thread 创建之前，
+    // 线程构造本身构成 happens-before，编辑器线程读取无竞争；
+    // 为空时退化为 m_meta.name（见 showEditor 内标题构造）。
+    std::string m_editorTitle;
     std::atomic<bool> m_editorOpen{false};
     // 宿主放弃本次挂载时置位：编辑器线程在发出 hwnd 之后立即检查，
     // 从而不会进入一个永远等不到 WM_CLOSE 的消息泵（否则线程永久泄漏）。
@@ -1888,15 +1967,23 @@ public:
         if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::VST3;
-        m_meta.is64Bit = true;
 
-        std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::VST3);
+        std::string arch;
+        std::string binaryPath = PluginScanner::resolveBundleBinary(path, PluginFormat::VST3, &arch);
         if (binaryPath.empty()) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "Invalid VST3 bundle or binary path";
             return false;
         }
         std::wstring wpath = utf8ToWide(binaryPath);
+        // D2：is64Bit 由 PE 头判定（不再硬编码）；32 位明确拒绝并给出可读原因，
+        // 而不是把 ERROR_BAD_EXE_FORMAT(193) 原样抛给用户。
+        m_meta.is64Bit = peIs64Bit(wpath);
+        if (!m_meta.is64Bit) {
+            m_meta.isCompatible = false;
+            m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+            return false;
+        }
         m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
         if (!m_module) {
             m_meta.isCompatible = false;
@@ -2287,8 +2374,9 @@ public:
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
 
-    bool showEditor(void* parentHwnd = nullptr) override {
+    bool showEditor(const std::string& title = "") override {
         if (!m_isLoaded || !m_component) return false;
+        m_editorTitle = title;
         setupPluginDllDirectories(m_meta.path);
         if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
             SetForegroundWindow(m_editorHwnd);
@@ -2349,7 +2437,10 @@ public:
             if (width < 200) width = 800;
             if (height < 150) height = 600;
 
-            std::wstring title = L"[AuraDSP] " + utf8ToWide(m_meta.name);
+            // E1：标题由调用方决定；为空时退化到插件自报名。
+            // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
+            // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
+            std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
             RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
             DWORD style = WS_OVERLAPPEDWINDOW;
             AdjustWindowRect(&rc, style, FALSE);
@@ -2557,6 +2648,9 @@ private:
 
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
+    // E1：调用方（Dart）传来的窗口标题；为空时退化为 m_meta.name。
+    // 同步语义同 CLAP 实例：写于 std::thread 创建前，读于线程内。
+    std::string m_editorTitle;
     std::atomic<bool> m_editorOpen{false};
     // 宿主放弃本次挂载时置位；编辑器线程在窗口就绪后立即检查，
     // 避免进入一个永远等不到 WM_CLOSE 的消息泵。
@@ -2599,25 +2693,22 @@ std::vector<std::string> PluginScanner::getDefaultSearchPaths() {
     return paths;
 }
 
-std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, PluginFormat format) {
+std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, PluginFormat format,
+                                               std::string* outArch) {
     std::error_code ec;
+    if (outArch) outArch->clear();
     if (fs::is_directory(bundlePath, ec)) {
-        if (format == PluginFormat::VST3) {
-            fs::path subBinary = fs::path(bundlePath) / "Contents" / "x86_64-win";
-            if (fs::exists(subBinary, ec)) {
-                for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
-                    if (entry.path().extension() == ".vst3") {
-                        return entry.path().string();
-                    }
-                }
-            }
-        } else if (format == PluginFormat::CLAP) {
-            fs::path subBinary = fs::path(bundlePath) / "Contents" / "x86_64-win";
-            if (fs::exists(subBinary, ec)) {
-                for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
-                    if (entry.path().extension() == ".clap") {
-                        return entry.path().string();
-                    }
+        // 探测顺序即偏好顺序：本进程架构（x86_64-win）优先，32 位（x86-win）
+        // 作为"能发现但不能加载"的条目进入列表（isCompatible=false）。
+        static const char* const kArchDirs[] = {"x86_64-win", "x86-win"};
+        const char* const ext = (format == PluginFormat::VST3) ? ".vst3" : ".clap";
+        for (const char* arch : kArchDirs) {
+            fs::path subBinary = fs::path(bundlePath) / "Contents" / arch;
+            if (!fs::exists(subBinary, ec)) continue;
+            for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
+                if (entry.path().extension() == ext) {
+                    if (outArch) *outArch = arch;
+                    return entry.path().string();
                 }
             }
         }
@@ -2631,6 +2722,16 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
     std::string binaryPath = resolveBundleBinary(filePath, format);
     if (binaryPath.empty()) return false;
     std::wstring wpath = utf8ToWide(binaryPath);
+
+    // D2：32 位插件不进入 LoadLibrary —— x64 进程加载 32 位 DLL 必然
+    // ERROR_BAD_EXE_FORMAT(193)，旧实现把它当"打开失败"，扫描结果里直接
+    // 消失。这里提前识别，产出"可发现但不可加载"条目（isCompatible=false）。
+    if (!peIs64Bit(wpath)) {
+        PluginMetadata meta;
+        fill32BitIncompatible(meta, filePath, format, wpath);
+        outPlugins.push_back(meta);
+        return true;
+    }
 
     if (format == PluginFormat::CLAP) {
         HMODULE module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
@@ -2774,7 +2875,14 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                     // 快扫不加载 DLL，拿不到自报名，但 bundle 名不依赖 DLL。
                     q.bundleName = fs::path(pStr).stem().string();
                     q.format = fmt;
-                    q.is64Bit = true;
+                    // D2：is64Bit 由 PE 头判定（不再硬编码 true）。32 位条目
+                    // 保留在扫描结果中但标记不可加载，加载路 loadPlugin() 会
+                    // 拦截并给出同一文案，不会走到 LoadLibrary。
+                    q.is64Bit = peIs64Bit(wp);
+                    if (!q.is64Bit) {
+                        q.isCompatible = false;
+                        q.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+                    }
                     q.vendor = vendor;
                     q.version = !peVer.empty() ? peVer : "1.0";
                     q.category = "AudioEffect";
@@ -3014,11 +3122,11 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
     return ss.str();
 }
 
-bool PluginHostManager::showEditorSlot(size_t slot) {
+bool PluginHostManager::showEditorSlot(size_t slot, const std::string& title) {
     if (slot >= kMaxPluginSlots) return false;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
-        return m_slots[slot].instance->showEditor();
+        return m_slots[slot].instance->showEditor(title);
     }
     return false;
 }

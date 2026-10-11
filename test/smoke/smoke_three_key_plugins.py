@@ -42,7 +42,7 @@ lib.auradsp_plugin_slot_unload.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_unload.argtypes = [ctypes.c_void_p, ctypes.c_int32]
 
 lib.auradsp_plugin_slot_show_editor.restype = ctypes.c_int32
-lib.auradsp_plugin_slot_show_editor.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+lib.auradsp_plugin_slot_show_editor.argtypes = [ctypes.c_void_p, ctypes.c_int32, ctypes.c_char_p]
 
 lib.auradsp_plugin_slot_close_editor.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_close_editor.argtypes = [ctypes.c_void_p, ctypes.c_int32]
@@ -80,8 +80,9 @@ for name_kw, vendor_kw in targets:
     print(f"Load Slot 0 result: {res_load}")
     assert res_load == 1, f"Failed to load {target.get('name')}"
 
-    # 2. Show Editor Slot 0
-    res_editor = lib.auradsp_plugin_slot_show_editor(h, 0)
+    # 2. Show Editor Slot 0（E1：第三参 title，与 Dart FFI 同一链路）
+    editor_title = f"{target.get('name')} - AuraDSP Host".encode('utf-8')
+    res_editor = lib.auradsp_plugin_slot_show_editor(h, 0, editor_title)
     print(f"Show Editor Slot 0 result: {res_editor}")
     if "ozone" in target.get('name', '').lower() and res_editor != 1:
         print(f"[NOTE] Ozone 12 UI gracefully caught (missing system ni-platform.dll runtime)")

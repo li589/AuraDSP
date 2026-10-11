@@ -1015,6 +1015,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugNoMatch => '未找到符合当前搜索和过滤条件的插件';
 
   @override
+  String get plugIncompatibleBadge => '32 位不兼容';
+
+  @override
+  String get plugIncompatibleHint =>
+      '该插件为 32 位版本，AuraDSP 是 64 位宿主，无法加载；请安装对应的 64 位版本。';
+
+  @override
   String plugSlotActive(int n) {
     return '插槽 $n 活跃中';
   }

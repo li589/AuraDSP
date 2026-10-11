@@ -358,6 +358,16 @@ class PluginManager extends ChangeNotifier {
   void loadPlugin(PluginMetadata plugin, {int? slot}) {
     final s = slot ?? _selectedSlot;
     _lastError = null;
+    // D2：扫描期已判定不兼容的插件（当前唯一情形：32 位）在 Dart 侧
+    // 直接拦截，不走 isolate 往返。引擎侧 load() 有同样拒绝（双保险），
+    // 两侧文案一致，这里补上插件名前缀便于定位是哪一项。
+    if (!plugin.isCompatible) {
+      _lastError = plugin.errorMessage.isNotEmpty
+          ? '${plugin.name}：${plugin.errorMessage}'
+          : '${plugin.name} 与当前 AuraDSP 版本不兼容，无法加载。';
+      notifyListeners();
+      return;
+    }
     _commandSender?.call({
       'cmd': 'pluginSlotLoad',
       'slot': s,
@@ -543,7 +553,21 @@ class PluginManager extends ChangeNotifier {
   void onPluginSlotLoaded(int slot, String path, int rc, dynamic rawStatus, int stage) {
     if (slot >= 0 && slot < kMaxSlots) {
       if (rc != 1) {
-        _lastError = _describeLoadFailure(path);
+        // D2：扫描列表里已标记不兼容的插件（当前唯一情形：32 位）直接用
+        // 引擎的精确原因，不再让用户看"可能位数不符"的猜测文案。
+        // 引擎侧 load() 与 Dart loadPlugin() 都不放行，这里是最后一道兜底。
+        PluginMetadata? known;
+        for (final p in _plugins) {
+          if (p.path == path) {
+            known = p;
+            break;
+          }
+        }
+        if (known != null && !known.isCompatible && known.errorMessage.isNotEmpty) {
+          _lastError = '${known.name}：${known.errorMessage}';
+        } else {
+          _lastError = _describeLoadFailure(path);
+        }
       } else {
         _lastError = null;
       }

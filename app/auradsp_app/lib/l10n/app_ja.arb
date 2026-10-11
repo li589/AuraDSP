@@ -506,6 +506,8 @@
   "plugNoPlugins": "サードパーティプラグインが検出されません",
   "plugNoPluginsHint": "システムVST3 / CLAPパスに配置済みか確認し、上のカスタムフォルダ追加後に再スキャン",
   "plugNoMatch": "検索・フィルター条件に合うプラグインがありません",
+  "plugIncompatibleBadge": "32ビット非対応",
+  "plugIncompatibleHint": "このプラグインは32ビット版です。AuraDSPは64ビットホストのため読み込めません。64ビット版をインストールしてください。",
   "plugSlotActive": "スロット{n}動作中",
   "@plugSlotActive": {
     "placeholders": {

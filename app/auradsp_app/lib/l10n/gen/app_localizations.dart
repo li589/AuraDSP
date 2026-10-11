@@ -2002,6 +2002,18 @@ abstract class AppLocalizations {
   /// **'未找到符合当前搜索和过滤条件的插件'**
   String get plugNoMatch;
 
+  /// No description provided for @plugIncompatibleBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'32 位不兼容'**
+  String get plugIncompatibleBadge;
+
+  /// No description provided for @plugIncompatibleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'该插件为 32 位版本，AuraDSP 是 64 位宿主，无法加载；请安装对应的 64 位版本。'**
+  String get plugIncompatibleHint;
+
   /// No description provided for @plugSlotActive.
   ///
   /// In zh, this message translates to:

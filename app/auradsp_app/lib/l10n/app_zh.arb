@@ -506,6 +506,8 @@
   "plugNoPlugins": "未检测到已安装的第三方插件",
   "plugNoPluginsHint": "请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描",
   "plugNoMatch": "未找到符合当前搜索和过滤条件的插件",
+  "plugIncompatibleBadge": "32 位不兼容",
+  "plugIncompatibleHint": "该插件为 32 位版本，AuraDSP 是 64 位宿主，无法加载；请安装对应的 64 位版本。",
   "plugSlotActive": "插槽 {n} 活跃中",
   "@plugSlotActive": {
     "placeholders": {
