@@ -949,21 +949,30 @@ public:
 
     void unload() override {
         if (m_isLoaded) {
+            std::cout << "[DBG CLAP unload] step 1: closeEditor" << std::endl;
             closeEditor();
+            std::cout << "[DBG CLAP unload] step 2: deactivate" << std::endl;
             deactivate();
             if (m_plugin) {
+                std::cout << "[DBG CLAP unload] step 3: plugin->destroy" << std::endl;
                 m_plugin->destroy(m_plugin);
+                std::cout << "[DBG CLAP unload] step 3 done" << std::endl;
                 m_plugin = nullptr;
             }
             if (m_entry) {
+                std::cout << "[DBG CLAP unload] step 4: entry->deinit" << std::endl;
                 m_entry->deinit();
+                std::cout << "[DBG CLAP unload] step 4 done" << std::endl;
                 m_entry = nullptr;
             }
             if (m_module) {
+                std::cout << "[DBG CLAP unload] step 5: FreeLibrary" << std::endl;
                 FreeLibrary(m_module);
+                std::cout << "[DBG CLAP unload] step 5 done" << std::endl;
                 m_module = nullptr;
             }
             m_isLoaded = false;
+            std::cout << "[DBG CLAP unload] complete" << std::endl;
         }
     }
 
@@ -1095,6 +1104,7 @@ public:
         if (m_editorThread.joinable()) {
             m_editorThread.join();
         }
+        m_editorAbort.store(false, std::memory_order_release);
 
         auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
@@ -1116,6 +1126,7 @@ public:
         if (!createRes) {
             return false;
         }
+        m_guiCreated.store(true, std::memory_order_release);
 
         uint32_t width = 800, height = 600;
         if (gui->get_size) {
@@ -1127,10 +1138,16 @@ public:
         if (height < 150) height = 600;
         std::cout << "[DBG CLAP showEditor] gui->get_size on caller thread: " << width << "x" << height << std::endl;
 
-        std::promise<HWND> hwndPromise;
-        auto hwndFuture = hwndPromise.get_future();
+        // promise 由 shared_ptr 持有：线程在超时路径之后仍可能 set_value，
+        // 若捕获栈上对象会写已失效的栈帧（UAF）。
+        auto hwndPromise = std::make_shared<std::promise<HWND>>();
+        auto hwndFuture = hwndPromise->get_future();
 
-        m_editorThread = std::thread([this, width, height, &hwndPromise]() {
+        // 编辑器线程的职责**仅有**：创建宿主窗口 + 泵消息 + 销毁自己的窗口。
+        // 它绝不调用插件的 GUI API——JUCE 系的 hide/destroy 会取
+        // MessageManagerLock，而本线程不是 JUCE 的 message thread，
+        // 调用会永久阻塞并连带卡死后续的 plugin->destroy。
+        m_editorThread = std::thread([this, width, height, hwndPromise]() {
             t_clapThreadType = ClapHostThreadType::Main;
             EnsureWindowClassRegistered();
 
@@ -1146,7 +1163,7 @@ public:
                 NULL, NULL, GetModuleHandleW(NULL), NULL);
 
             if (!hwnd) {
-                hwndPromise.set_value(nullptr);
+                hwndPromise->set_value(nullptr);
                 return;
             }
 
@@ -1173,7 +1190,22 @@ public:
             }
 
             // Signal caller thread that hwnd is created and ready for set_parent
-            hwndPromise.set_value(hwnd);
+            hwndPromise->set_value(hwnd);
+
+            // 宿主若已放弃本次挂载（set_parent 前超时），此处直接收尾，
+            // 不进入消息泵——否则没有任何 WM_CLOSE 会到来，线程永不结束。
+            if (m_editorAbort.load(std::memory_order_acquire)) {
+                std::cout << "[DBG CLAP editorThread] abort requested before pump, bailing out" << std::endl;
+                {
+                    std::lock_guard<std::mutex> lock(m_timerMutex);
+                    for (auto& pair : m_timers) KillTimer(hwnd, pair.second);
+                    m_timerIdMap.clear();
+                }
+                if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                m_editorHwnd = nullptr;
+                m_editorOpen.store(false, std::memory_order_release);
+                return;
+            }
 
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -1205,30 +1237,45 @@ public:
                 m_timerIdMap.clear();
             }
 
-            auto guiExt = reinterpret_cast<const clap_plugin_gui_t*>(
-                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
-            try {
-                if (guiExt && guiExt->hide) guiExt->hide(m_plugin);
-                if (guiExt && guiExt->destroy) guiExt->destroy(m_plugin);
-            } catch (...) {}
-
+            // 纯 Win32 收尾。插件的 gui->hide/destroy 由调用线程（main thread）
+            // 在 closeEditor() 中完成，此处一律不碰插件对象。
+            std::cout << "[DBG CLAP editorThread] message pump exited, destroying hwnd" << std::endl;
             if (IsWindow(hwnd)) {
                 DestroyWindow(hwnd);
             }
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
+            std::cout << "[DBG CLAP editorThread] exit" << std::endl;
         });
 
         // Wait for hwnd from thread
         if (hwndFuture.wait_for(std::chrono::milliseconds(2000)) != std::future_status::ready) {
             std::cout << "[DBG CLAP showEditor] Timeout waiting for hwnd creation!" << std::endl;
-            if (gui->destroy) gui->destroy(m_plugin);
+            // 让线程在拿到 hwnd 之后直接收尾；否则它会进入一个永远等不到
+            // WM_CLOSE 的消息泵，线程与 HWND 一起泄漏。
+            m_editorAbort.store(true, std::memory_order_release);
+            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
+                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
+                if (hThread && WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
+                    m_editorThread.join();
+                } else {
+                    m_editorThread.detach();
+                    std::cout << "[DBG CLAP showEditor] WARNING: editor thread unresponsive, detached" << std::endl;
+                }
+            }
+            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+            m_guiCreated.store(false, std::memory_order_release);
             return false;
         }
         HWND hwnd = hwndFuture.get();
         if (!hwnd) {
             std::cout << "[DBG CLAP showEditor] Failed to create HWND!" << std::endl;
-            if (gui->destroy) gui->destroy(m_plugin);
+            // 线程已自行 return，此处可直接回收。
+            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
+                m_editorThread.join();
+            }
+            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+            m_guiCreated.store(false, std::memory_order_release);
             return false;
         }
 
@@ -1257,33 +1304,62 @@ public:
     }
 
     void closeEditor() override {
-        HWND hwnd = m_editorHwnd;
-        if (hwnd && IsWindow(hwnd)) {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        std::cout << "[DBG CLAP closeEditor] enter, joinable=" << m_editorThread.joinable() << std::endl;
+
+        const bool calledFromEditorThread =
+            m_editorThread.joinable() && m_editorThread.get_id() == std::this_thread::get_id();
+
+        // 第 1 步：在**调用线程**上关闭插件 GUI。
+        // CLAP 契约要求 gui->hide / gui->destroy 发生在 main thread；
+        // 把它们放进编辑器线程会因 JUCE MessageManagerLock 永久阻塞，
+        // 并连带卡死随后的 plugin->destroy（这曾让整个卸载流程挂死）。
+        // m_guiCreated 守卫：closeEditor 会被调用两次，而 gui->hide/destroy
+        // 对一次 gui->create 只能执行一次。
+        if (!calledFromEditorThread && m_plugin && m_guiCreated.exchange(false, std::memory_order_acq_rel)) {
+            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+            if (gui) {
+                try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
+                try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+                std::cout << "[DBG CLAP closeEditor] gui hide+destroy on caller thread" << std::endl;
+            }
         }
-        if (m_editorThread.joinable()) {
-            if (m_editorThread.get_id() != std::this_thread::get_id()) {
-                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
-                if (hThread) {
-                    DWORD waitRes = WaitForSingleObject(hThread, 800);
-                    if (waitRes == WAIT_OBJECT_0) {
-                        m_editorThread.join();
-                    } else {
-                        if (hwnd && IsWindow(hwnd)) {
-                            DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
-                            if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
-                        }
-                        m_editorThread.detach();
-                    }
-                } else {
-                    m_editorThread.detach();
-                }
+
+        // 第 2 步：请编辑器线程退出。WM_CLOSE 走窗口过程，WM_QUIT 兜底线程队列。
+        HWND hwnd = m_editorHwnd;
+        DWORD tid = 0;
+        if (hwnd && IsWindow(hwnd)) {
+            tid = GetWindowThreadProcessId(hwnd, NULL);
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+            std::cout << "[DBG CLAP closeEditor] WM_CLOSE posted (tid " << tid << ")" << std::endl;
+        } else {
+            std::cout << "[DBG CLAP closeEditor] no live hwnd" << std::endl;
+        }
+        if (tid) {
+            PostThreadMessageW(tid, WM_QUIT, 0, 0);
+        }
+
+        // 第 3 步：等待线程收尾。线程此时只做纯 Win32 清理，3s 是宽松上限。
+        if (m_editorThread.joinable() && !calledFromEditorThread) {
+            HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
+            DWORD waitRes = hThread ? WaitForSingleObject(hThread, 3000) : WAIT_FAILED;
+            std::cout << "[DBG CLAP closeEditor] WaitForSingleObject -> " << waitRes
+                      << (waitRes == WAIT_OBJECT_0 ? " (signaled)" :
+                          waitRes == WAIT_TIMEOUT ? " (TIMEOUT)" : " (other)") << std::endl;
+            if (waitRes == WAIT_OBJECT_0) {
+                m_editorThread.join();
+                std::cout << "[DBG CLAP closeEditor] joined" << std::endl;
             } else {
+                // 消息泵已失控。detach 后线程仍可能触碰本对象，属最后手段；
+                // 明确告警而绝不静默通过。
                 m_editorThread.detach();
+                std::cout << "[DBG CLAP closeEditor] WARNING: editor thread did not exit within 3s, detached"
+                          << std::endl;
             }
         }
         m_editorOpen.store(false, std::memory_order_release);
         m_editorHwnd = nullptr;
+        std::cout << "[DBG CLAP closeEditor] exit" << std::endl;
     }
 
     bool isEditorOpen() const override {
@@ -1533,6 +1609,13 @@ private:
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
     std::atomic<bool> m_editorOpen{false};
+    // 宿主放弃本次挂载时置位：编辑器线程在发出 hwnd 之后立即检查，
+    // 从而不会进入一个永远等不到 WM_CLOSE 的消息泵（否则线程永久泄漏）。
+    std::atomic<bool> m_editorAbort{false};
+    // gui->create 已成功且尚未 destroy。closeEditor 会被调用两次
+    // （unloadPluginSlotLocked 一次、unload() 内部一次），
+    // 靠它保证 gui->hide/destroy 对一次 create 只执行一次。
+    std::atomic<bool> m_guiCreated{false};
 };
 
 //------------------------------------------------------------------------------
@@ -1998,10 +2081,13 @@ public:
             return false;
         }
 
-        std::promise<bool> initPromise;
-        auto initFuture = initPromise.get_future();
+        // shared_ptr 承载：超时路径返回后线程仍可能 set_value，
+        // 捕获栈对象会写已失效的栈帧。
+        auto initPromise = std::make_shared<std::promise<bool>>();
+        auto initFuture = initPromise->get_future();
+        m_editorAbort.store(false, std::memory_order_release);
 
-        m_editorThread = std::thread([this, view, &initPromise]() {
+        m_editorThread = std::thread([this, view, initPromise]() {
             EnsureWindowClassRegistered();
             Steinberg::ViewRect vr;
             int width = 800, height = 600;
@@ -2025,7 +2111,7 @@ public:
 
             if (!hwnd) {
                 view->release();
-                initPromise.set_value(false);
+                initPromise->set_value(false);
                 return;
             }
 
@@ -2043,7 +2129,7 @@ public:
                     view->setFrame(nullptr);
                     view->release();
                     if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                    initPromise.set_value(false);
+                    initPromise->set_value(false);
                     return;
                 }
             } catch (const std::exception& ex) {
@@ -2051,21 +2137,33 @@ public:
                 view->setFrame(nullptr);
                 view->release();
                 if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                initPromise.set_value(false);
+                initPromise->set_value(false);
                 return;
             } catch (...) {
                 std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
                 view->setFrame(nullptr);
                 view->release();
                 if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                initPromise.set_value(false);
+                initPromise->set_value(false);
                 return;
             }
 
             ShowWindow(hwnd, SW_SHOW);
             UpdateWindow(hwnd);
 
-            initPromise.set_value(true);
+            initPromise->set_value(true);
+
+            // 宿主若已放弃（等待超时），此处直接收尾，不进消息泵。
+            if (m_editorAbort.load(std::memory_order_acquire)) {
+                std::cout << "[DBG VST3 editorThread] abort requested before pump, bailing out" << std::endl;
+                view->setFrame(nullptr);
+                view->removed();
+                view->release();
+                if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                m_editorHwnd = nullptr;
+                m_editorOpen.store(false, std::memory_order_release);
+                return;
+            }
 
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) {
@@ -2088,6 +2186,17 @@ public:
 
         if (initFuture.wait_for(std::chrono::milliseconds(3000)) != std::future_status::ready) {
             std::cout << "[DBG VST3 showEditor] Timeout waiting for editor window to open!" << std::endl;
+            // 让线程在窗口就绪后直接收尾，避免它进入无人关闭的消息泵。
+            m_editorAbort.store(true, std::memory_order_release);
+            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
+                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
+                if (hThread && WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
+                    m_editorThread.join();
+                } else {
+                    m_editorThread.detach();
+                    std::cout << "[DBG VST3 showEditor] WARNING: editor thread unresponsive, detached" << std::endl;
+                }
+            }
             return false;
         }
         return initFuture.get();
@@ -2198,6 +2307,9 @@ private:
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
     std::atomic<bool> m_editorOpen{false};
+    // 宿主放弃本次挂载时置位；编辑器线程在窗口就绪后立即检查，
+    // 避免进入一个永远等不到 WM_CLOSE 的消息泵。
+    std::atomic<bool> m_editorAbort{false};
 };
 
 //------------------------------------------------------------------------------
@@ -2617,10 +2729,17 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
 
     s.latency.store(0, std::memory_order_relaxed);
     if (s.instance) {
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor" << std::endl;
         s.instance->closeEditor();
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] deactivate" << std::endl;
         s.instance->deactivate();
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] unload" << std::endl;
         s.instance->unload();
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] reset (dtor)" << std::endl;
         s.instance.reset();
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] complete" << std::endl;
+    } else {
+        std::cout << "[DBG Slot] unloadLocked[" << slot << "] no instance" << std::endl;
     }
 }
 
