@@ -90,21 +90,27 @@ def main():
     print(f"  -> 低音滑块拖拽成功！差异像素: {diff}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "20-bass-dragged.png"))
 
-    # 双击 Label 归位。x 必须落在卡片内容区：旧代码用 row[0]+40=240，
-    # 那是左侧导航栏，会误触发导航并弹出其它窗口（实测会出现第二个窗口）。
-    print("  双击 '增强量' Label (440, 529) 触发归位默认值...")
-    app.double_click(440, 529, delay=0.8)
+    # 归位：归位入口是滑块行**最右端**的 refresh 图标（ValueSlider 里
+    # onResetToDefault -> InkWell.onTap，单击触发）。
+    # 旧代码「双击左侧 Label」与实现不符 —— Label 只是普通 Text，没有双击手势，
+    # 因此永远是 0 差异。顺带修正了产品侧误导性的 Tooltip（「双击重置默认值」）。
+    # 值被改动时该图标为 accent 色（isCustom），故用 find_thumb 在行右端反查，
+    # 不写死坐标。
+    reset_box = (row[2] - 60, row[1], row[2] + 12, row[3])
+    reset_pos = app.find_thumb(reset_box)
+    print(f"  归位按钮实测: {reset_pos}")
+    app.click(reset_pos[0], reset_pos[1], delay=0.8)
     img_post_reset = app.capture(_SCRATCH, row)
-    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音双击归位")
-    print(f"  -> 低音双击归位成功！差异像素: {diff_reset}")
+    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音归位")
+    print(f"  -> 低音归位成功！差异像素: {diff_reset}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "21-bass-doubletap-reset.png"))
 
     # 双击 Label (440, 529) 触发归位出厂值 0.0dB
     print("  双击 '增强量' Label (440, 529) 触发归位默认值...")
     app.double_click(440, 529, delay=0.6)
     img_post_reset = app.capture(_SCRATCH, (340, 500, 1310, 560))
-    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音双击归位")
-    print(f"  -> 低音双击归位成功！差异像素: {diff_reset}")
+    diff_reset = app.assert_images_differ(img_post_drag, img_post_reset, min_diff_pixels=50, label="低音归位")
+    print(f"  -> 低音归位成功！差异像素: {diff_reset}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "21-bass-doubletap-reset.png"))
 
     # 3. 低频搁架高级区

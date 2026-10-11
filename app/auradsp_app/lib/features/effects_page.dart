@@ -1306,7 +1306,7 @@ class _ValueSliderState extends State<ValueSlider> {
               if (widget.onResetToDefault != null) ...[
                 const SizedBox(width: 4),
                 Tooltip(
-                  message: '双击重置默认值',
+                  message: '点击重置默认值',
                   child: InkWell(
                     onTap: widget.onResetToDefault,
                     borderRadius: BorderRadius.circular(AuraRadius.xs),
