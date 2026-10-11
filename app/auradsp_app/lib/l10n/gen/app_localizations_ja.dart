@@ -81,7 +81,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbOff => 'オフ';
 
   @override
-  String get stereoWiden => 'ステレオワイド';
+  String get stereoWiden => 'ステレオ拡張';
 
   @override
   String get postGain => '出力ゲイン';
@@ -254,8 +254,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbAutoQuality => 'リバーブを有効にするため品質モードへ自動切替しました';
 
   @override
-  String get stereoWidenHint =>
-      'ワイドニングは 75% まで：それ以上は中央定位（ボーカル等）が打ち消されほぼ無音になります';
+  String get stereoWidenHint => '過度な拡張は中央ボーカル等を打ち消すため上限保護されています';
 
   @override
   String get railCollapseTip => 'サイドバーを折りたたむ';
@@ -832,7 +831,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stBand4 => '高域';
 
   @override
-  String get stBandHint => '各帯域の広がりを個別調整。いずれかを動かすと全体スライダーから切り離されます';
+  String get stBandHint => '帯域別微調整：各帯域の拡がり量は上のマスター拡張スライダーと連動して拡大縮小されます';
 
   @override
   String get presetFactoryTitle => '工場出荷時チューニングプリセット';

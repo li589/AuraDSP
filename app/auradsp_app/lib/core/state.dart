@@ -904,16 +904,48 @@ class AppModel extends ChangeNotifier {
     }
   }
 
-  /// 双击主滑块时重置声场展宽并清除分带模式（恢复 5 个子带为 0.5 中性）
+  void setStereoMix(double v) {
+    stereoMix = v.clamp(0.0, 1.0);
+    final macroMultiplier = stereoMix * 2.0;
+    setFloat('stereo.mix', stereoMix * stereoWidenMax);
+    for (var i = 0; i < 5; i++) {
+      final eff = (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
+      setFloat('stereo.band${i + 1}', eff);
+    }
+    notifyListeners();
+  }
+
+  void setStereoBand(int index, double baseVal) {
+    if (index < 0 || index >= 5) return;
+    stereoBands[index] = baseVal.clamp(0.0, 1.0);
+    final macroMultiplier = stereoMix * 2.0;
+    final eff = (stereoBands[index] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
+    setFloat('stereo.band${index + 1}', eff);
+    notifyListeners();
+  }
+
+  void resetStereoBand(int index) {
+    setStereoBand(index, ParamDefaults.stereoBand);
+  }
+
+  /// 双击主滑块时重置立体声扩展并恢复 5 个子带为 0.5 中性
   void resetStereoWiden() {
-    setFloat('stereo.mix', ParamDefaults.stereoMix);
-    resetStereoBandsToGlobal();
+    stereoMix = ParamDefaults.stereoMix;
+    setFloat('stereo.mix', stereoMix * stereoWidenMax);
+    for (var i = 0; i < 5; i++) {
+      stereoBands[i] = ParamDefaults.stereoBand;
+      setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand * stereoWidenMax);
+    }
+    stereoBandUsed = false;
+    notifyListeners();
   }
 
   void resetStereoBandsToGlobal() {
     for (var i = 0; i < 5; i++) {
       stereoBands[i] = ParamDefaults.stereoBand;
-      setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand);
+      final macroMultiplier = stereoMix * 2.0;
+      final eff = (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
+      setFloat('stereo.band${i + 1}', eff);
     }
     stereoBandUsed = false;
     notifyListeners();
@@ -924,14 +956,13 @@ class AppModel extends ChangeNotifier {
   void setStereoEnabled(bool on) {
     if (on) {
       final target = _lastStereoMix > 0.0 ? _lastStereoMix : 0.5;
-      setFloat('stereo.mix', target * stereoWidenMax);
+      setStereoMix(target);
     } else {
       if (stereoMix > 0.0) {
         _lastStereoMix = stereoMix;
       }
-      setFloat('stereo.mix', 0.0);
+      setStereoMix(0.0);
     }
-    notifyListeners();
   }
 
   /* ---- Liveprog 命令（v1.1） ---- */

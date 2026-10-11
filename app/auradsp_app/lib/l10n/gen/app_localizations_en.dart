@@ -84,7 +84,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reverbOff => 'Off';
 
   @override
-  String get stereoWiden => 'Stereo Widen';
+  String get stereoWiden => 'Stereo Expansion';
 
   @override
   String get postGain => 'Post Gain';
@@ -261,7 +261,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get stereoWidenHint =>
-      'Widening capped at 75%: higher ratios strip the center image (karaoke effect) and can silence the mix';
+      'Expansion is safely capped: extreme widening strips the center image (karaoke effect) and hollows the mix';
 
   @override
   String get railCollapseTip => 'Collapse sidebar';
@@ -858,7 +858,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get stBandHint =>
-      'Adjust per-band widening independently; touching any band detaches from the global slider';
+      'Per-band fine tuning: individual band amounts scale dynamically with the master expansion slider above';
 
   @override
   String get presetFactoryTitle => 'Factory tuning presets';

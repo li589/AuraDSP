@@ -81,7 +81,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbOff => '关闭';
 
   @override
-  String get stereoWiden => '声场展宽';
+  String get stereoWiden => '立体声扩展';
 
   @override
   String get postGain => '输出增益';
@@ -253,7 +253,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbAutoQuality => '已自动切换到品质延迟档以启用混响';
 
   @override
-  String get stereoWidenHint => '展宽已限制在 75%：更高比例会剥离中置人声（类卡拉OK效应），导致几乎无声';
+  String get stereoWidenHint => '扩展度已做安全上限保护：过高比例会剥离中置人声（类卡拉OK效应），导致声像空洞';
 
   @override
   String get railCollapseTip => '收起导航栏';
@@ -829,7 +829,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stBand4 => '高频';
 
   @override
-  String get stBandHint => '独立调节各频段展开度；调节任一带即脱离全局总滑块';
+  String get stBandHint => '分带微调：各频带基础扩展量将与上方总主控滑块进行动态乘数联动';
 
   @override
   String get presetFactoryTitle => '出厂经典调音预设';
