@@ -509,7 +509,7 @@ class _SlotSelectorBar extends StatelessWidget {
               ),
             ),
             if (i < PluginManager.kMaxSlots - 1)
-              const SizedBox(width: AuraSpace.md),
+              const SizedBox(width: AuraSpace.sm),
           ],
         ],
       ),

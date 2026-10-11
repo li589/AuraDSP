@@ -102,7 +102,7 @@ class _ChainPageState extends State<ChainPage> {
               AuraChip(l10nOf(context).chainReset, icon: Icons.restart_alt_rounded, onTap: _reset),
             ]),
             child: SizedBox(
-              height: 48.0 * _order.length + 8,
+              height: 56.0 * _order.length + 12,
               child: ReorderableListView.builder(
                 buildDefaultDragHandles: false,
                 itemCount: _order.length,
@@ -118,7 +118,7 @@ class _ChainPageState extends State<ChainPage> {
                   animation: anim,
                   builder: (_, c) => Material(
                     color: p.accent.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                    borderRadius: BorderRadius.circular(AuraRadius.md),
                     child: c,
                   ),
                   child: child,
@@ -134,14 +134,14 @@ class _ChainPageState extends State<ChainPage> {
                     key: ValueKey(id),
                     index: i,
                     child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 2),
+                      margin: const EdgeInsets.symmetric(vertical: 3),
                       padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpace.md, vertical: AuraSpace.xs + 2),
+                          horizontal: AuraSpace.md + 2, vertical: AuraSpace.sm + 1),
                       decoration: BoxDecoration(
                         color: isEnabled
                             ? p.panel
                             : p.panel.withValues(alpha: 0.75),
-                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        borderRadius: BorderRadius.circular(AuraRadius.md),
                         border: Border.all(
                           color: isEnabled ? p.hairline : p.hairline.withValues(alpha: 0.5),
                         ),
@@ -151,11 +151,11 @@ class _ChainPageState extends State<ChainPage> {
                             size: 16, color: p.textDim),
                         const SizedBox(width: AuraSpace.sm),
                         Container(
-                          width: 22,
+                          width: 24,
                           alignment: Alignment.center,
                           child: Text('${i + 1}',
                               style: monoOf(p,
-                                  size: 11,
+                                  size: 11.5,
                                   color: isEnabled ? p.accent : p.textDim)),
                         ),
                         const SizedBox(width: AuraSpace.sm + 2),
@@ -617,7 +617,7 @@ class _StageBypassPill extends StatelessWidget {
   }
 }
 
-/// [M3.5-c] 双声道微型实时电平表
+/// [M3.5-c] 硬件乐器合成器风格分段 LED 点阵电平表（一列灯一个声道，支持多通道扩展）
 class _StageStereoMeter extends StatelessWidget {
   final int stageIndex;
   final bool isEnabled;
@@ -644,29 +644,71 @@ class _StageStereoMeter extends StatelessWidget {
             ? levelsR[stageIndex]
             : -120.0;
 
-        return CustomPaint(
-          size: const Size(64, 12),
-          painter: _MeterPainter(
-            dbL: dbL,
-            dbR: dbR,
-            isEnabled: isEnabled,
-            palette: p,
-          ),
+        // 硬件合成器分段 LED 电平表（双声道支持，可扩展多通道）
+        return _SynthLedLadderMeter(
+          channelsDb: [dbL, dbR],
+          isEnabled: isEnabled,
+          palette: p,
         );
       },
     );
   }
 }
 
-class _MeterPainter extends CustomPainter {
-  final double dbL;
-  final double dbR;
+/// 合成器分段 LED 阶梯电平表容器组件
+class _SynthLedLadderMeter extends StatelessWidget {
+  final List<double> channelsDb;
   final bool isEnabled;
   final AuraPalette palette;
 
-  _MeterPainter({
-    required this.dbL,
-    required this.dbR,
+  const _SynthLedLadderMeter({
+    required this.channelsDb,
+    required this.isEnabled,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final chCount = channelsDb.length;
+    const colW = 4.0;
+    const colGap = 2.5;
+    const totalH = 30.0;
+    final totalW = (chCount * colW) + ((chCount - 1) * colGap) + 6.0;
+
+    return Container(
+      width: totalW,
+      height: totalH,
+      padding: const EdgeInsets.symmetric(horizontal: 2.5, vertical: 2.0),
+      decoration: BoxDecoration(
+        color: palette.bg.withValues(alpha: 0.65),
+        borderRadius: BorderRadius.circular(3),
+        border: Border.all(
+          color: palette.hairline.withValues(alpha: 0.5),
+          width: 0.8,
+        ),
+      ),
+      child: CustomPaint(
+        size: Size(totalW - 6.0, totalH - 4.0),
+        painter: _SynthLedPainter(
+          channelsDb: channelsDb,
+          isEnabled: isEnabled,
+          palette: palette,
+        ),
+      ),
+    );
+  }
+}
+
+/// 合成器分段 LED 自底向上点阵绘制器
+class _SynthLedPainter extends CustomPainter {
+  final List<double> channelsDb;
+  final bool isEnabled;
+  final AuraPalette palette;
+
+  static const int kSegments = 8; // 8 级垂直分段 LED 灯珠
+
+  _SynthLedPainter({
+    required this.channelsDb,
     required this.isEnabled,
     required this.palette,
   });
@@ -677,48 +719,73 @@ class _MeterPainter extends CustomPainter {
     return (db + 60.0) / 60.0;
   }
 
-  Color _colorFor(double frac) {
-    if (!isEnabled) return palette.textDim.withValues(alpha: 0.3);
-    if (frac >= 0.95) return palette.error;
-    if (frac >= 0.85) return palette.warning;
-    return palette.accent;
-  }
-
   @override
   void paint(Canvas canvas, Size size) {
-    final trackPaint = Paint()
-      ..color = palette.hairline.withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
+    final chCount = channelsDb.length;
+    if (chCount == 0) return;
 
-    final barH = (size.height - 2) / 2;
+    final colW = 4.0;
+    final colGap = 2.5;
+    final segH = (size.height - (kSegments - 1) * 1.5) / kSegments;
 
-    // L 声道底槽与填充
-    final rL = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, 0, size.width, barH), const Radius.circular(1.5));
-    canvas.drawRRect(rL, trackPaint);
+    for (var c = 0; c < chCount; c++) {
+      final db = channelsDb[c];
+      final normVal = _norm(db);
+      // 点亮的段数（0 ~ kSegments）
+      final litCount = isEnabled ? (normVal * kSegments).round() : 0;
+      final colLeft = c * (colW + colGap);
 
-    final fL = _norm(dbL);
-    if (fL > 0) {
-      final fillL = RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, 0, size.width * fL, barH), const Radius.circular(1.5));
-      canvas.drawRRect(fillL, Paint()..color = _colorFor(fL));
-    }
+      // 从底向上绘制每一段 LED（0 为最底端，kSegments - 1 为最顶端）
+      for (var s = 0; s < kSegments; s++) {
+        final segBottom = size.height - s * (segH + 1.5);
+        final segTop = segBottom - segH;
+        final isLit = s < litCount;
 
-    // R 声道底槽与填充
-    final topR = barH + 2;
-    final rR = RRect.fromRectAndRadius(
-        Rect.fromLTWH(0, topR, size.width, barH), const Radius.circular(1.5));
-    canvas.drawRRect(rR, trackPaint);
+        // 分段色彩：
+        // 底段 0..4: 翠绿 (安全动态)
+        // 中段 5..6: 琥珀橙/黄 (高能量预警)
+        // 顶段 7: 鲜红 (削波过载 Peak)
+        final Color litColor;
+        if (s >= 7) {
+          litColor = const Color(0xFFEF4444); // 鲜红
+        } else if (s >= 5) {
+          litColor = const Color(0xFFF59E0B); // 琥珀黄
+        } else {
+          litColor = const Color(0xFF10B981); // 翠绿
+        }
 
-    final fR = _norm(dbR);
-    if (fR > 0) {
-      final fillR = RRect.fromRectAndRadius(
-          Rect.fromLTWH(0, topR, size.width * fR, barH), const Radius.circular(1.5));
-      canvas.drawRRect(fillR, Paint()..color = _colorFor(fR));
+        final rect = RRect.fromRectAndRadius(
+          Rect.fromLTWH(colLeft, segTop, colW, segH),
+          const Radius.circular(0.8),
+        );
+
+        if (isLit) {
+          // 点亮状态：主体色填充
+          final paint = Paint()
+            ..color = litColor
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(rect, paint);
+        } else {
+          // 熄灭底座：深色半透明硬件凹槽
+          final offColor = isEnabled
+              ? litColor.withValues(alpha: 0.12)
+              : palette.textDim.withValues(alpha: 0.10);
+          final offPaint = Paint()
+            ..color = offColor
+            ..style = PaintingStyle.fill;
+          canvas.drawRRect(rect, offPaint);
+        }
+      }
     }
   }
 
   @override
-  bool shouldRepaint(covariant _MeterPainter old) =>
-      old.dbL != dbL || old.dbR != dbR || old.isEnabled != isEnabled;
+  bool shouldRepaint(covariant _SynthLedPainter old) {
+    if (old.isEnabled != isEnabled || old.palette != palette) return true;
+    if (old.channelsDb.length != channelsDb.length) return true;
+    for (var i = 0; i < channelsDb.length; i++) {
+      if (old.channelsDb[i] != channelsDb[i]) return true;
+    }
+    return false;
+  }
 }

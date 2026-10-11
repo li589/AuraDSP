@@ -922,7 +922,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugM1Hint => '多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。';
 
   @override
-  String get plugFeatSlots => '双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发';
+  String get plugFeatSlots => '四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发';
 
   @override
   String get plugFeatStages => '全音效链阶段插入 (Pre-DSP ~ Post-Limiter)';

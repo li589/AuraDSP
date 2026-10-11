@@ -82,7 +82,7 @@ public:
 
 class PluginHostManager {
 public:
-    static constexpr size_t kMaxPluginSlots = 2;
+    static constexpr size_t kMaxPluginSlots = 4;
 
     struct PluginSlot {
         std::unique_ptr<IPluginInstance> instance;

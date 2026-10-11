@@ -186,19 +186,21 @@ typedef PluginCommandSender = void Function(Map<String, dynamic> msg);
 
 /// 插件管理器
 class PluginManager extends ChangeNotifier {
-  static const int kMaxSlots = 2;
+  static const int kMaxSlots = 4;
 
   PluginCommandSender? _commandSender;
 
   List<PluginMetadata> _plugins = [];
-  final List<PluginHostStatus> _slotStatuses = [
+  final List<PluginHostStatus> _slotStatuses = List.filled(
+    kMaxSlots,
     PluginHostStatus.empty,
-    PluginHostStatus.empty,
-  ];
-  final List<int> _slotStages = [
+    growable: true,
+  );
+  final List<int> _slotStages = List.filled(
+    kMaxSlots,
     PluginInsertStage.defaultStage,
-    PluginInsertStage.defaultStage,
-  ];
+    growable: true,
+  );
   /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
   final Map<int, int> _pendingStages = {};
   int _selectedSlot = 0;
