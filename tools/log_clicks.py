@@ -95,12 +95,24 @@ def main():
     ap.add_argument('--out', default='clicks.csv')
     ap.add_argument('--margin', type=int, default=6,
                     help='点击前后取样的半边长 px')
+    ap.add_argument('--normalize', action='store_true',
+                    help='把窗口强制归一化到 (80,50) 1400x900，与 UI 测试同基准')
     args = ap.parse_args()
 
     hwnd = K.find_auradsp()
     if not hwnd:
         print('未找到 AuraDSP 窗口，请先手动启动 APP。')
         return 1
+    if args.normalize:
+        # **必须归一化**：UI 测试里 AuraAppSession 会把窗口强制设为
+        # (80,50) 1400x900，因此测试用的一切坐标都以该尺寸为基准。
+        # 用户手动打开的窗口通常更大 —— 窗口更宽则滑轨更长、Thumb 更靠右，
+        # 实测同一控件的 x 可相差 300px 以上，纵坐标却基本一致。
+        # 不归一化就拿这些坐标去改测试，必然对不上。
+        K.ensure_foreground(hwnd)
+        K.user32.MoveWindow(hwnd, 80, 50, 1400, 900, True)
+        time.sleep(0.8)
+        print('窗口已归一化到 (80,50) 1400x900（与 UI 测试同基准）')
     geom = K.WindowGeometry(hwnd)
     pid = wt.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
@@ -114,27 +126,30 @@ def main():
     t0 = time.time()
     down_prev = False
     m = args.margin
+    last_geom = (geom.left, geom.top)
     try:
         while time.time() - t0 < args.seconds:
             if user32.GetAsyncKeyState(VK_ESCAPE) & 0x8000:
                 print('\n收到 ESC，停止记录。')
                 break
+            # 窗口被移动/缩放后坐标基准会漂移，每圈刷新一次
+            geom.refresh()
+            if (geom.left, geom.top) != last_geom:
+                last_geom = (geom.left, geom.top)
+                print('  [窗口移动] -> (%d,%d)' % last_geom)
             down = bool(user32.GetAsyncKeyState(VK_LBUTTON) & 0x8000)
             if down and not down_prev:
                 # 按下瞬间：记位置与像素，并抓一张点击前的图
                 sx, sy = cursor()
                 wx, wy = sx - geom.left, sy - geom.top
-                img = K.ImageGrab.grab(
-                    bbox=(geom.left + wx - m, geom.top + wy - m,
-                          geom.left + wx + m, geom.top + wy + m))
-                img.save(SCRATCH)
+                box = (geom.left + wx - m, geom.top + wy - m,
+                       geom.left + wx + m, geom.top + wy + m)
+                img = K.ImageGrab.grab(bbox=box)
                 px = img.load()[m, m]
                 time.sleep(0.20)  # 等 UI 响应
-                after = K.ImageGrab.grab(
-                    bbox=(geom.left + wx - m, geom.top + wy - m,
-                          geom.left + wx + m, geom.top + wy + m))
+                after = K.ImageGrab.grab(bbox=box)
                 d = ImageChops.difference(img, after).convert('L')
-                diff = sum(1 for p in d.getdata() if p > 15)
+                diff = sum(1 for p in d.get_flattened_data() if p > 15)
                 mem = working_set_mb(pid.value)
                 ms = int((time.time() - t0) * 1000)
                 kind = classify(px)
