@@ -13,7 +13,7 @@ void main() {
       expect(cfg.sampleRate, 48000);
       expect(cfg.maxBlockFrames, 1024);
       expect(cfg.stereoWidenMax, 0.75);
-      expect(cfg.vizFps, 30);
+      expect(cfg.vizFps, AppConfig.defaultVizFps);
       expect(cfg.autoRestoreSession, isTrue);
       expect(cfg.defaultLatencyMode, 2);
     });
@@ -163,6 +163,26 @@ void main() {
           isTrue);
       expect(ConfigManager.baseDir, isNot(Directory.systemTemp.path));
       expect(ConfigManager.baseDir, isNot(sandbox));
+    });
+
+    test('v2 config migrates vizFps to the render-friendly default', () {
+      final prev = ConfigManager.baseDir;
+      final dir = Directory.systemTemp.createTempSync('auradsp_cfgmig_');
+      ConfigManager.baseDirOverride = dir.path;
+      try {
+        File(ConfigManager.configPath)
+            .writeAsStringSync('{"version":2,"audio":{"vizFps":30}}');
+        final cfg = ConfigManager.load();
+        expect(cfg.vizFps, AppConfig.defaultVizFps);
+        // 迁移后落盘为 v3，避免每次启动重复迁移
+        expect(File(ConfigManager.configPath).readAsStringSync(),
+            contains('"version": 3'));
+      } finally {
+        ConfigManager.baseDirOverride = prev;
+        try {
+          dir.deleteSync(recursive: true);
+        } catch (_) {}
+      }
     });
   });
 

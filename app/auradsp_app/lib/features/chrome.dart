@@ -9,7 +9,9 @@
  *   3. 动效：交错入场（一次编排的页面加载）、PulseDot 呼吸、AuraSwitch/
  *      AuraSegmented/AuraChip 的即时按压与滑动反馈。
  */
+import 'dart:async';
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
@@ -291,6 +293,17 @@ class _AmbientPainter extends CustomPainter {
   final List<double> _smooth = List.filled(_bars, 0);
   AuraPalette palette;
 
+  /// 低分图缓存：把 72 根柱子画进一张约 1/10 分辨率的离屏图，再放大绘制。
+  /// 放大自带双线性平滑（等价于廉价模糊），彻底移除原来「每柱一次
+  /// MaskFilter.blur」的写法——那是 72 次高斯模糊/帧，Windows/D3D11 下每次
+  /// 模糊都倾向分配离屏渲染目标，直接导致 GPU ~70%、内存锯齿尖峰。
+  /// 低分图重渲染节流到 ~15fps，尺寸仅约 140×90，开销可忽略。
+  ui.Image? _img;
+  bool _rendering = false;
+  bool _disposed = false;
+  int _lastRenderMs = 0;
+  static const _renderIntervalMs = 66;
+
   _AmbientPainter({required this.spectrum, required this.palette})
       : super(repaint: spectrum);
 
@@ -316,11 +329,29 @@ class _AmbientPainter extends CustomPainter {
       _smooth[i] = math.max(v, _smooth[i] * 0.82);
     }
 
+    // 节流重渲染低分图；绘制始终走缓存图。
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (_img == null || now - _lastRenderMs >= _renderIntervalMs) {
+      _lastRenderMs = now;
+      unawaited(_rerender(size));
+    }
+
+    final img = _img;
+    if (img == null) return; // 首帧尚未就绪，跳过；下一帧（≈33ms）即可用
+    canvas.drawImageRect(
+      img,
+      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
+      Offset.zero & size,
+      // 双线性放大：把低分图的硬边平滑成光晕，替代 MaskFilter.blur
+      Paint()..filterQuality = FilterQuality.medium,
+    );
+  }
+
+  void _drawBars(Canvas canvas, Size size) {
     final peak = math.max(0.35, _smooth.reduce(math.max));
     final intensity = palette.isDark ? 1.0 : 0.45;
     final baseAlpha = (0.16 * intensity * 255).round();
     final bw = size.width / _bars;
-
     for (var i = 0; i < _bars; i++) {
       final v = (_smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
@@ -334,17 +365,45 @@ class _AmbientPainter extends CustomPainter {
             palette.accent.withValues(alpha: baseAlpha / 255),
             palette.accent.withValues(alpha: 0),
           ],
-        ).createShader(rect)
-        // 高斯模糊：氛围层只做"光"，不做"形"，虚化后不与前景内容抢细节
-        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7);
+        ).createShader(rect);
       canvas.drawRect(rect, paint);
+    }
+  }
+
+  Future<void> _rerender(Size target) async {
+    if (_rendering || _disposed) return;
+    _rendering = true;
+    try {
+      final lw = math.max(72.0, target.width / 10);
+      final lh = math.max(48.0, target.height / 10);
+      final recorder = ui.PictureRecorder();
+      final c = Canvas(recorder, Rect.fromLTWH(0, 0, lw, lh));
+      _drawBars(c, Size(lw, lh));
+      final pic = recorder.endRecording();
+      final img = await pic.toImage(lw.round(), lh.round());
+      pic.dispose();
+      if (_disposed) {
+        img.dispose();
+        return;
+      }
+      final old = _img;
+      _img = img;
+      old?.dispose();
+    } catch (_) {
+      // 渲染失败不致命：下一帧重试
+    } finally {
+      _rendering = false;
     }
   }
 
   @override
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
-  void dispose() {}
+  void dispose() {
+    _disposed = true;
+    _img?.dispose();
+    _img = null;
+  }
 }
 
 /// 程序化细噪点：给大面积纯色底加一层"物质感"，非贴图、可复现。
