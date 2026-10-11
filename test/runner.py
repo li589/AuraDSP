@@ -82,6 +82,23 @@ def run_ui_tests(target=None):
     all_pass = True
     for tp in targets:
         name = os.path.basename(tp)
+        # 每个用例前统一保证 APP 在运行。各测试文件对生命周期的管理并不一致：
+        # 有的用 AuraAppSession（__enter__ 杀+重启、__exit__ 关闭），
+        # 有的用裸 Win32 并在收尾自行 kill，而 ui_verify_effects_3d 这类
+        # 只做 find_auradsp()、**要求 APP 已在运行**，否则直接 FATAL。
+        # 于是「前一个用例收尾把 APP 杀掉」会让后一个用例莫名失败。
+        if sys.path and UI_DIR not in sys.path:
+            sys.path.insert(0, UI_DIR)
+        try:
+            import ui_test_kit
+            if ui_test_kit.ensure_running() is None:
+                print(f"[FAIL] {name} 无法启动 APP，前置条件不满足")
+                all_pass = False
+                continue
+        except Exception as e:  # noqa: BLE001
+            print(f"[FAIL] {name} 前置检查异常: {e}")
+            all_pass = False
+            continue
         print(f"\n---> Running UI verification: {name} (Top-most & Activated)...")
         res = subprocess.run([sys.executable, tp], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:

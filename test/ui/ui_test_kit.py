@@ -13,6 +13,7 @@
 import ctypes
 import ctypes.wintypes as wt
 import os
+import shutil
 import subprocess
 import tempfile
 import time
@@ -103,6 +104,35 @@ def find_auradsp():
     return target["hwnd"]
 
 
+def ensure_running(timeout=12.0):
+    """确保 APP 正在运行并返回 hwnd；已在运行则直接返回。**不负责关闭。**
+
+    存在的理由：各测试文件对生命周期的管理并不一致 ——
+      * 用 AuraAppSession 的会在 __enter__ 杀进程重启、__exit__ 再关闭；
+      * 用裸 Win32 的（ui_verify_chain_meter）结束时自行 kill，退出后没有进程；
+      * 还有一类（ui_verify_effects_3d）自己 find_auradsp()，
+        **要求 APP 已经在运行**，否则直接 FATAL。
+    于是「前一个用例收尾把 APP 杀掉」会让后一个用例莫名其妙失败。
+    runner 在每个用例前调用本函数，即可把前置条件收敛到一处。
+    """
+    hwnd = find_auradsp()
+    if hwnd:
+        return hwnd
+    si = STARTUPINFO()
+    si.cb = ctypes.sizeof(STARTUPINFO)
+    si.lpDesktop = "WinSta0\\Default"
+    pi = PROCESS_INFORMATION()
+    if not kernel32.CreateProcessW(APP_EXE, None, None, None, False, 0, None,
+                                  APP_DIR, ctypes.byref(si), ctypes.byref(pi)):
+        return None
+    for _ in range(max(1, int(timeout / 0.3))):
+        time.sleep(0.3)
+        hwnd = find_auradsp()
+        if hwnd:
+            return hwnd
+    return None
+
+
 def ensure_foreground(hwnd):
     switch_to_default_desktop()
     user32.ShowWindow(hwnd, 9)  # SW_RESTORE
@@ -127,6 +157,8 @@ class AuraAppSession:
     def __enter__(self):
         if self.clean_start:
             kill_existing_instances()
+            self._state_backup = {}
+            self._stash_state()
 
         hwnd = find_auradsp()
         if not hwnd:
@@ -171,7 +203,50 @@ class AuraAppSession:
             time.sleep(0.5)
             # 若仍未退出则兜底清理
             kill_existing_instances()
+        self._restore_state()
         return False
+
+    # --- 持久化状态隔离 -------------------------------------------------
+    # 症状：`effects_3d` / `advanced_sections` 单独跑通过、全量 runner 下失败。
+    # 根因：`clean_start` 只杀进程重启，**不重置 %APPDATA% 里的持久化状态**，
+    # 于是每个用例都从上一个用例留下的开关/滑块值/滚动位置开始跑。
+    # 证据：实测同一份测试代码两次运行的控件坐标可相差 400px。
+    #
+    # 这里在 clean_start 下备份并清空可变状态文件，退出时原样恢复，
+    # 既让用例确定性可复现，又不破坏开发者自己的应用设置。
+    # 不动的文件：plugins/plugin_cache.json（派生缓存）、presets/factory（只读）。
+
+    _VOLATILE_STATE = ('config.json', 'session_state.json')
+
+    def _appdata_dir(self):
+        return os.path.join(os.environ.get('APPDATA', ''), 'AuraDSP')
+
+    def _stash_state(self):
+        self._state_backup = {}
+        base = self._appdata_dir()
+        for name in self._VOLATILE_STATE:
+            src = os.path.join(base, name)
+            if os.path.exists(src):
+                dst = os.path.join(tempfile.gettempdir(),
+                                   'auradsp_state_%s_%d' % (name, os.getpid()))
+                try:
+                    shutil.copy2(src, dst)
+                    self._state_backup[name] = dst
+                    os.remove(src)
+                except OSError as e:
+                    print(f"[{self.title}] 状态备份失败 {name}: {e}")
+
+    def _restore_state(self):
+        if not getattr(self, '_state_backup', None):
+            return
+        base = self._appdata_dir()
+        for name, dst in self._state_backup.items():
+            try:
+                shutil.copy2(dst, os.path.join(base, name))
+                os.remove(dst)
+            except OSError as e:
+                print(f"[{self.title}] 状态恢复失败 {name}: {e}")
+        self._state_backup = {}
 
     def navigate_to(self, page_name: str, delay=0.5):
         """语义化导航到指定页面"""
