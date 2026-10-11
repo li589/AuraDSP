@@ -670,10 +670,11 @@ class _SynthLedLadderMeter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chCount = channelsDb.length;
+    final safeCount = chCount > 0 ? chCount : 2;
     const colW = 4.0;
     const colGap = 2.5;
     const totalH = 30.0;
-    final totalW = (chCount * colW) + ((chCount - 1) * colGap) + 6.0;
+    final totalW = (safeCount * colW) + ((safeCount - 1) * colGap) + 6.0;
 
     return Container(
       width: totalW,
@@ -714,15 +715,15 @@ class _SynthLedPainter extends CustomPainter {
   });
 
   static double _norm(double db) {
-    if (db <= -60.0) return 0.0;
+    if (db.isNaN || db.isInfinite || db <= -60.0) return 0.0;
     if (db >= 0.0) return 1.0;
-    return (db + 60.0) / 60.0;
+    return ((db + 60.0) / 60.0).clamp(0.0, 1.0);
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     final chCount = channelsDb.length;
-    if (chCount == 0) return;
+    if (chCount == 0 || size.height <= 0 || size.width <= 0) return;
 
     final colW = 4.0;
     final colGap = 2.5;
@@ -731,8 +732,8 @@ class _SynthLedPainter extends CustomPainter {
     for (var c = 0; c < chCount; c++) {
       final db = channelsDb[c];
       final normVal = _norm(db);
-      // 点亮的段数（0 ~ kSegments）
-      final litCount = isEnabled ? (normVal * kSegments).round() : 0;
+      // 点亮的段数（0 ~ kSegments），防御 clamp 闭区间
+      final litCount = isEnabled ? (normVal * kSegments).round().clamp(0, kSegments) : 0;
       final colLeft = c * (colW + colGap);
 
       // 从底向上绘制每一段 LED（0 为最底端，kSegments - 1 为最顶端）
