@@ -239,7 +239,12 @@ class AuraAppSession:
         time.sleep(delay)
 
     def scroll(self, rel_x: int, rel_y: int, clicks: int = -5, delay=0.3):
-        """鼠标滚轮滚动 (clicks < 0 向下滚动，clicks > 0 向上滚动)"""
+        """滚轮。**符号约定极易踩坑**（已因此浪费多轮排查）：
+        clicks > 0 → 向上滚（用于「回到顶部」）；clicks < 0 → 向下滚。
+        Windows mouse_event(MOUSEEVENTF_WHEEL) 的 dwData 为正表示滚轮远离用户（即向上），
+        故**想往下滚必须传负数**；传正数且已在顶部时完全无效果，
+        很容易误判成「页面不可滚动」。
+        """
         ensure_foreground(self.hwnd)
         self.geom.refresh()
         abs_x = self.geom.left + int(rel_x)
