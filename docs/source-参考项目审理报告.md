@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.0 全面复审版**（2026-10-10）
-> 范围：`source/` 下全部 10 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.1**（2026-10-11，新增 CLAP 正典上游登记）
+> 范围：`source/` 下全部 11 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-10，`source/` 下全部 10 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 为不入库的只读克隆区，该文件仅本机可见；入库的来源登记见 [`core/desktop/vendor-src/ORIGIN.md`](../core/desktop/vendor-src/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-10-11，`source/` 下全部 11 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 为不入库的只读克隆区，该文件仅本机可见；入库的来源登记见 [`core/desktop/vendor-src/ORIGIN.md`](../core/desktop/vendor-src/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -22,8 +22,9 @@
 | 8 | **equalizerAPO64** | `TheFireKahuna/equalizerAPO64` (main@7156020) | Windows / C++, AVX2/512, Qt6 | GPL-2.0 / LGPL | 90.34 MB (488 文件) | ★★★ **Phase 7b Windows APO 唯一工程蓝本**（系统端点注入、注册表挂载、AVX 加速） |
 | 9 | **lsp-plugins** | `lsp-plugins/lsp-plugins` (master@2df6eea0) | 多平台 / C++, SIMD, 多格式 | LGPL-3.0+ | 559.99 MB (7,642 文件) | ★★★ **M5 算法对照 + 多格式构建中枢**（66 个子模块完整展开，包含 DSP 核心库） |
 | 10 | **pulseeffects** | `mikhailnov/pulseeffects` (master@b9ec88ed) | Linux / C++, GStreamer, GTK3 | GPL-3.0 | 7.45 MB (436 文件) | ★★ **效果机架与预设架构参考**（EasyEffects 前身，预设 JSON 格式与多效果编排） |
+| 11 | **clap** | `free-audio/clap` (main@a47f6ba, v1.2.10) | 跨平台 / C 头文件（ABI 标准） | MIT | 3.73 MB (101 文件) | ★★★ **M1 插件宿主 CLAP 正典上游**（引擎内置 `vendor-src/plugin-api/clap` 的来源，见 §2.5） |
 
-总计占用：**~760 MB**，约 **13,300** 个源文件与资源。
+总计占用：**~764 MB**，约 **13,400** 个源文件与资源。
 
 ---
 
@@ -73,6 +74,20 @@
   - `pulseeffects/src/bass_enhancer.cpp` 中通过 `gst_element_factory_make("calf-sourceforge-net-plugins-BassEnhancer", nullptr)` 实例化。因此 **pulseeffects 的低音增强算法实质为 Calf 插件**，其本身仅为 GStreamer/GSettings 胶水层。
   - 若 AuraDSP 在 M5 细化阶段需要对照底层的谐波合成（Harmonics Generation）与低音基频重建算法，应当对照 **Calf 原生源码** 或 **lsp-plugins-loud-comp / lsp-dsp-units**，而非参考 pulseeffects 的 wrapper。
 
+### 2.5 clap（CLAP 标准正典上游）
+
+- **背景**：AuraDSP 引擎的 CLAP 宿主（`core/desktop/engine_api/auradsp_plugin_host.cpp`，`#include <clap/clap.h>`，实现 `ClapPluginInstance`）此前依赖内置快照 `core/desktop/vendor-src/plugin-api/clap/`；该快照于 2026-10-10 自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/` 提取（`core/desktop/vendor-src/ORIGIN.md` 登记为 `clap-api`）。本次新克隆 `source/clap` 为其**正典上游**。
+- **版本落差（重要）**：
+
+  | | 正典上游 `source/clap` | 引擎内置 `vendor-src/plugin-api/clap` |
+  |---|---|---|
+  | 版本 | **1.2.10** | **1.2.6** |
+  | 头文件数 | 68 | 60 |
+  | 差异 | 多出 8 个 `ext/draft/*`：`background-activation/progress/state-context`、`flush-events`、`octave-number`、`param-hovered`、`params-origin`、`webview` | 严格子集（无独有文件） |
+
+- **同步建议**：内置快照可从 `source/clap/include/clap/` 覆盖升级至 1.2.10。**已逐文件实测 ABI 安全性**：60 个公共头中 17 个有内容变化，均为注释/文档增补（`ext/params.h` 的 enum 位值 `IS_BYPASS=1<<4`…`IS_ENUM=1<<16` 与 `clap_param_info_t` 字段布局逐条核对**完全一致**，仅行号因注释增多而偏移；`plugin.h`/`host.h`/`factory/plugin-factory.h` 0 处非注释差异），外加 8 个新增 `ext/draft/*` 头与版本号——**无任何结构/ABI 变更**。升级后更新 `core/desktop/vendor-src/ORIGIN.md` 的 `clap-api` 提取来源（lsp-plugins → source/clap）与版本号即可。**升级属引擎构建输入变更，须重编 + 冒烟验证**（草案扩展仅经 `clap/all.h` 引入，引擎目前用 `clap/clap.h`，风险极低）。
+- **许可**：MIT，与 AuraDSP 主项目 GPL-3.0 完全兼容；引擎宿主亦可对照 `source/element` 的 CLAP 实现。
+
 ---
 
 ## 3. 算法与系统能力对照矩阵
@@ -85,7 +100,7 @@
 | **响度感知 / 动态扩展** | 待开发（M5 细化） | `lsp-plugins` | `modules/lsp-plugins-loud-comp/src/main/`（工业级等响度曲线与自适应滤波） |
 | **多频段分带展宽** | P-002 补丁导出 vendor stereowide | `lsp-plugins` | `modules/lsp-plugins-crossover/`（Linkwitz-Riley 4阶分频网络参考） |
 | **卷积与 IR 管理** | FileGate 六道门卫 + convolver 节点 | `equalizerAPO64` / `lsp-plugins` | `lsp-plugins-impulse-responses/`（高吞吐卷积与 IR 预处理机制） |
-| **插件宿主 (VST3/CLAP)** | M1 规划阶段（待 D1 协议闭环） | `element` | `src/engine/` & `src/controllers/`（跨平台插件扫描、隔离与总线调度） |
+| **插件宿主 (VST3/CLAP)** | M1 引擎已实现进程内宿主（`auradsp_plugin_host.cpp`） | `clap`（协议正典）/ `element`（架构） | `source/clap/include/clap/`（CLAP C ABI 正典头）；`element/src/engine/`（跨平台宿主扫描、隔离与总线调度） |
 | **信号链重排序 / 节点图** | M3-a 线性展示 / M3.5 待 ADR | `element` / `pulseeffects` | `element` 的 Graph 连线拓扑；`pulseeffects` 的 pipeline 动态重编排 |
 | **Windows 全局音频** | 当前为进程内 WASAPI pump | `equalizerAPO64` | `EqualizerAPO/`（APO 注册表服务、驱动挂载与端点拦截） |
 | **Linux 全局音频** | Phase 7 规划中 | `JDSP4Linux` / `pulseeffects` | `JDSP4Linux/src/pipewire/`（PipeWire filter-chain 与 SPA 模块） |
@@ -109,12 +124,13 @@
 
 | # | 状态 | 涉及项 | 结论与说明 |
 |---|---|---|---|
-| **P-1** | ✅ 已闭环 | 嵌套 `.git` 剥离 | 10 个项目已统一剥除 `.git`，版本与 commit 完整登记于 `source/ORIGIN.md`。 |
+| **P-1** | ✅ 已闭环 | 嵌套 `.git` 剥离 | 11 个项目已统一剥除 `.git`，版本与 commit 完整登记于 `source/ORIGIN.md`。 |
 | **P-2** | ✅ 已闭环 | RootJamesDSP README 疑云 | 确认 ShadoV90/RootJamesDSP 为上游 fork，其 root 模式通过 `BUILD_ROOT.md` 与脚本体现，克隆源准确无误。 |
 | **P-3** | ✅ 已闭环 | 大体积仓库审计 | 体积主要由 `lsp-plugins`（全量 66 模块 + release 归档）与 `equalizerAPO64`（Qt6 DLL）构成。代码结构完整，不影响主仓库性能（已 `.gitignore`）。 |
 | **P-4** | ✅ 已闭环 | element 上游文件 | 上游 `CLAUDE.md` 为只读参考，已备案无害。 |
 | **P-5** | ✅ 已闭环 | lsp-plugins 源码定位 | **已彻底澄清并闭环**：`modules/` 下 66 个子模块源码完整在盘，无需额外克隆单个插件仓。 |
 | **P-6** | ✅ 新增闭环 | bass_enhancer 溯源 | 确认 pulseeffects 底层为 Calf 插件；算法对照锁定为 `lsp-plugins-loud-comp` 与 `lsp-dsp-units`。 |
+| **P-7** | ✅ 新增闭环 | CLAP 正典上游与内置快照落差 | 新克隆 `source/clap` 为正典上游 v1.2.10；内置快照 `vendor-src/plugin-api/clap` 为 1.2.6（落后 8 个 draft 头），可按 §2.5 建议升级。 |
 
 ---
 
@@ -123,4 +139,5 @@
 1. **M1 插件宿主推进**：在 D1（GPLv3）决策明确后，直接以 `source/element` 作为 VST3/CLAP 进程内宿主的架构蓝本。
 2. **M5 算法精细化**：全面挖掘 `source/lsp-plugins/modules/lsp-dsp-units` 与 `lsp-plugins-loud-comp`，用于自研等响度与高阶滤波器的对比验证。
 3. **磁盘轻量化（可选）**：如需节约约 300MB 空间，可清空 `source/lsp-plugins/release/` 下的离线归档包，因 `modules/` 源码已足够自洽。
+4. **CLAP 快照升级（可执行）**：将 `vendor-src/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `core/desktop/vendor-src/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
 
