@@ -406,7 +406,19 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 预设空间选择
+          // 1. 置顶 3D 声学室沉浸视效（动态联动 roomSize 与 stereoWidth）
+          RepaintBoundary(
+            child: _Freeverb3DStage(
+              decay: m.fvDecay,
+              damp: m.fvDamp,
+              roomSize: m.fvRoomSize,
+              stereoWidth: m.fvWidth,
+              active: isEnabled,
+            ),
+          ),
+          const SizedBox(height: AuraSpace.md),
+
+          // 2. 预设空间选择
           Wrap(
             spacing: AuraSpace.sm,
             runSpacing: AuraSpace.sm,
@@ -433,7 +445,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           ),
           const SizedBox(height: AuraSpace.md),
 
-          // 核心滑块：混响干湿比 (Wet/Dry Mix)
+          // 3. 核心滑块：混响干湿比 (Wet/Dry Mix)
           ValueSlider(
             label: l.reverbMix,
             value: m.fvWet,
@@ -449,19 +461,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           ),
           const SizedBox(height: AuraSpace.md),
 
-          // 3D 声学室视效（动态联动 roomSize 与 stereoWidth）
-          RepaintBoundary(
-            child: _Freeverb3DStage(
-              decay: m.fvDecay,
-              damp: m.fvDamp,
-              roomSize: m.fvRoomSize,
-              stereoWidth: m.fvWidth,
-              active: isEnabled,
-            ),
-          ),
-          const SizedBox(height: AuraSpace.md),
-
-          // 高级声学物理精调（默认折叠）
+          // 4. 高级声学物理精调（默认折叠）
           _SpatialReverbAdvanced(
             model: m,
             open: _open,
@@ -913,17 +913,13 @@ class _StereoCard extends StatelessWidget {
             value: model.stereoMix,
             defaultValue: ParamDefaults.stereoMix,
             onResetToDefault: model.resetStereoWiden,
-            overridden: model.stereoBandUsed,
-            overriddenNote: model.stereoBandUsed ? l.stereoBandActive : null,
             min: 0,
             max: 1,
             unit: '%',
             enabled: model.stereoOn,
             format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: (v) =>
-                model.setFloat('stereo.mix', v * model.stereoWidenMax),
-            onChangedEnd: (v) =>
-                model.setFloat('stereo.mix', v * model.stereoWidenMax),
+            onChanged: (v) => model.setStereoMix(v),
+            onChangedEnd: (v) => model.setStereoMix(v),
           ),
           const SizedBox(height: AuraSpace.md),
           _StereoAdvanced(model: model),
@@ -977,36 +973,23 @@ class _BandSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final m = model;
     return ListenableBuilder(
       listenable: m,
       builder: (_, _) {
         final v = m.stereoBands[index];
-        return Padding(
-          padding: const EdgeInsets.symmetric(vertical: 2),
-          child: Row(children: [
-            SizedBox(
-              width: 56,
-              child: Text(label, style: labelOf(p, color: p.textDim)),
-            ),
-            Expanded(
-              child: Slider(
-                value: v.clamp(0.0, 1.0),
-                min: 0,
-                max: 1,
-                onChanged: (val) =>
-                    m.setFloat('stereo.band${index + 1}', val),
-              ),
-            ),
-            SizedBox(
-              width: 44,
-              child: Text(
-                  '${(v * 100).toStringAsFixed(0)}%',
-                  textAlign: TextAlign.right,
-                  style: monoOf(p, size: 12, color: p.text)),
-            ),
-          ]),
+        return ValueSlider(
+          label: label,
+          value: v,
+          defaultValue: ParamDefaults.stereoBand,
+          min: 0,
+          max: 1,
+          unit: '%',
+          enabled: m.stereoOn,
+          format: (val) => (val * 100).toStringAsFixed(0),
+          onChanged: (val) => m.setStereoBand(index, val),
+          onChangedEnd: (val) => m.setStereoBand(index, val),
+          onResetToDefault: () => m.resetStereoBand(index),
         );
       },
     );
@@ -1623,6 +1606,8 @@ class _IrSpectrumPainter extends CustomPainter {
 
 /* ---- 3D 声场空间渲染 (高级可视化：透视网格 + 声波扩散 + 衰减光晕) ---- */
 
+/* ---- 3D 声学室空间渲染 (极简无框置顶视效：深度透视 + 对称声波 + 空间尺寸响应) ---- */
+
 class _Freeverb3DStage extends StatelessWidget {
   final double decay;
   final double damp;
@@ -1641,43 +1626,40 @@ class _Freeverb3DStage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final l = l10nOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      child: Container(
+        height: 140,
+        decoration: BoxDecoration(
+          color: p.panelRaised.withValues(alpha: 0.6),
+          border: Border.all(color: p.hairline.withValues(alpha: 0.6)),
+        ),
+        child: Stack(
           children: [
-            Text(l.fv3DTitle, style: captionOf(p, color: p.textDim)),
-            const Spacer(),
-            Text(
-              'Room ${roomSize.toStringAsFixed(1)}x · Decay ${(decay * 100).toStringAsFixed(0)}% · Width ${stereoWidth.toStringAsFixed(1)}',
-              style: monoOf(p, size: 10, color: p.textDim),
+            Positioned.fill(
+              child: CustomPaint(
+                painter: _Freeverb3DPainter(
+                  decay: decay,
+                  damp: damp,
+                  roomSize: roomSize,
+                  stereoWidth: stereoWidth,
+                  palette: p,
+                  active: active,
+                ),
+              ),
+            ),
+            // 右上角极简度量（微弱透明度，不喧宾夺主）
+            Positioned(
+              top: 6,
+              right: 10,
+              child: Text(
+                'Room ${roomSize.toStringAsFixed(1)}x · Decay ${(decay * 100).toStringAsFixed(0)}% · Width ${stereoWidth.toStringAsFixed(1)}',
+                style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6)),
+              ),
             ),
           ],
         ),
-        const SizedBox(height: AuraSpace.xs),
-        ClipRRect(
-          borderRadius: BorderRadius.circular(AuraRadius.sm),
-          child: Container(
-            height: 140,
-            decoration: BoxDecoration(
-              color: p.panelRaised,
-              border: Border.all(color: p.hairline),
-            ),
-            child: CustomPaint(
-              size: const Size(double.infinity, 140),
-              painter: _Freeverb3DPainter(
-                decay: decay,
-                damp: damp,
-                roomSize: roomSize,
-                stereoWidth: stereoWidth,
-                palette: p,
-                active: active,
-              ),
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
@@ -1704,21 +1686,23 @@ class _Freeverb3DPainter extends CustomPainter {
     final w = size.width;
     final h = size.height;
     final baseAlpha = active ? 1.0 : 0.2;
-    final sizeFactor = (roomSize / 1.5).clamp(0.35, 2.0);
+    // 空间尺寸增强系数：0.4 ~ 2.4
+    final sizeFactor = (roomSize / 1.2).clamp(0.4, 2.4);
 
-    // 消失点（透视中心）
+    // 消失点（透视中心）：roomSize 越大，透视深远感越强
     final vpX = w / 2;
-    final vpY = h * 0.15 / sizeFactor;
+    final vpY = (h * (0.22 - (sizeFactor - 1.0) * 0.06)).clamp(h * 0.08, h * 0.30);
 
     // 地面四角
-    final flL = Offset(w * 0.04, h * 0.98);
-    final flR = Offset(w * 0.96, h * 0.98);
-    final bkL = Offset(vpX - w * 0.28 * sizeFactor, vpY + 18);
-    final bkR = Offset(vpX + w * 0.28 * sizeFactor, vpY + 18);
+    final flL = Offset(w * 0.03, h * 0.98);
+    final flR = Offset(w * 0.97, h * 0.98);
+    final backHalfW = (w * (0.32 / math.sqrt(sizeFactor))).clamp(w * 0.16, w * 0.42);
+    final bkL = Offset(vpX - backHalfW, vpY + 16);
+    final bkR = Offset(vpX + backHalfW, vpY + 16);
 
     // ── 1. 透视地板网格 ──
     final gridPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.2 * baseAlpha)
+      ..color = palette.vizGrid.withValues(alpha: 0.22 * baseAlpha)
       ..strokeWidth = 0.6;
 
     // 纵深线（左→右均匀 8 条）
@@ -1732,39 +1716,46 @@ class _Freeverb3DPainter extends CustomPainter {
         gridPaint,
       );
     }
-    // 横向线（6 条，用透视缩放间距）
+    // 横向线（6 条，近疏远密）
     for (var i = 0; i <= 6; i++) {
-      final t = math.pow(i / 6.0, 1.6); // 近疏远密
+      final t = math.pow(i / 6.0, 1.6);
       final y = flL.dy + (bkL.dy - flL.dy) * t;
       final lx = flL.dx + (bkL.dx - flL.dx) * t;
       final rx = flR.dx + (bkR.dx - flR.dx) * t;
       canvas.drawLine(Offset(lx, y), Offset(rx, y), gridPaint);
     }
 
-    // 墙壁边框（地面 + 后墙 + 侧墙轮廓）
+    // ── 2. 3D 空间立体线框盒子（地面 + 后墙 + 天花板） ──
     final wallPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.35 * baseAlpha)
+      ..color = palette.vizGrid.withValues(alpha: 0.38 * baseAlpha)
       ..strokeWidth = 1.0;
     canvas.drawLine(flL, bkL, wallPaint);
     canvas.drawLine(flR, bkR, wallPaint);
     canvas.drawLine(flL, flR, wallPaint);
     canvas.drawLine(bkL, bkR, wallPaint);
 
-    // 天花板轮廓（镜像后墙上方）
-    final ceilY = vpY - 4;
-    final ceilL = Offset(bkL.dx - 2, ceilY);
-    final ceilR = Offset(bkR.dx + 2, ceilY);
+    // 天花板高度与后墙轮廓
+    final ceilH = (22.0 * math.sqrt(sizeFactor)).clamp(16.0, 38.0);
+    final ceilL = Offset(bkL.dx, bkL.dy - ceilH);
+    final ceilR = Offset(bkR.dx, bkR.dy - ceilH);
     final ceilPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.18 * baseAlpha)
+      ..color = palette.vizGrid.withValues(alpha: 0.22 * baseAlpha)
       ..strokeWidth = 0.8;
     canvas.drawLine(ceilL, ceilR, ceilPaint);
     canvas.drawLine(bkL, ceilL, ceilPaint);
     canvas.drawLine(bkR, ceilR, ceilPaint);
 
+    // 侧墙透视延伸线（增强立方体感）
+    final sidePaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.12 * baseAlpha)
+      ..strokeWidth = 0.5;
+    canvas.drawLine(Offset(flL.dx, flL.dy - h * 0.7), ceilL, sidePaint);
+    canvas.drawLine(Offset(flR.dx, flR.dy - h * 0.7), ceilR, sidePaint);
+
     if (!active) return;
 
-    // ── 2. 声源位置 ──
-    final widthOff = (w * 0.2 * stereoWidth).clamp(12.0, w * 0.42);
+    // ── 3. 声源位置 ──
+    final widthOff = (w * 0.22 * stereoWidth).clamp(16.0, w * 0.44);
     final srcY = h * 0.78;
     final srcL = Offset(vpX - widthOff, srcY);
     final srcR = Offset(vpX + widthOff, srcY);
@@ -1783,14 +1774,13 @@ class _Freeverb3DPainter extends CustomPainter {
     canvas.drawCircle(srcL, 3.5, srcDot);
     canvas.drawCircle(srcR, 3.5, srcDot);
 
-    // ── 3. 早期反射路径（声源 → 侧墙反弹点 → 远处交叉） ──
+    // ── 4. 早期反射路径（声源 → 侧墙反弹点 → 远处交叉） ──
     final reflAlpha = (0.18 * (1.0 - damp * 0.6)).clamp(0.04, 0.25) * baseAlpha;
     final reflPaint = Paint()
       ..color = palette.accent.withValues(alpha: reflAlpha)
       ..strokeWidth = 0.9
       ..style = PaintingStyle.stroke;
 
-    // 左声源 → 左墙反弹 → 远处右后
     final wallHitL = Offset(flL.dx + (bkL.dx - flL.dx) * 0.45, flL.dy + (bkL.dy - flL.dy) * 0.45);
     final wallHitR = Offset(flR.dx + (bkR.dx - flR.dx) * 0.45, flR.dy + (bkR.dy - flR.dy) * 0.45);
     canvas.drawLine(srcL, wallHitL, reflPaint);
@@ -1807,42 +1797,46 @@ class _Freeverb3DPainter extends CustomPainter {
     canvas.drawLine(srcL, backCenter, directPaint);
     canvas.drawLine(srcR, backCenter, directPaint);
 
-    // ── 4. 衰减扩散环（从声源向外扩展的弧形声波） ──
+    // ── 5. 衰减扩散环（修复右音箱扩散朝向：左右关于中轴对称向房间内前方扩散） ──
     final ringCount = (3 + decay * 4).toInt().clamp(2, 7);
     for (var i = 1; i <= ringCount; i++) {
       final t = i / (ringCount + 1);
-      final ringAlpha = (0.15 * (1.0 - t) * decay * (1.0 - damp * 0.4)).clamp(0.02, 0.2);
+      final ringAlpha = (0.16 * (1.0 - t) * decay * (1.0 - damp * 0.4)).clamp(0.02, 0.22);
       final ringPaint = Paint()
         ..color = palette.accent.withValues(alpha: ringAlpha * baseAlpha)
         ..style = PaintingStyle.stroke
         ..strokeWidth = (1.2 - t * 0.6).clamp(0.3, 1.2);
 
-      final radius = 14.0 + t * 50 * sizeFactor;
+      final radius = 14.0 + t * 52 * sizeFactor;
 
-      // 左声源波纹弧（上半圆）
+      // 左声源波纹弧（向右前方扩散，中心约 -0.44π）
       canvas.drawArc(
         Rect.fromCircle(center: srcL, radius: radius),
-        -math.pi * 0.85, math.pi * 0.7,
-        false, ringPaint,
+        -math.pi * 0.70,
+        math.pi * 0.52,
+        false,
+        ringPaint,
       );
-      // 右声源波纹弧
+      // 右声源波纹弧（向左前方扩散，中心约 -0.56π，绝对对称，杜绝向右下扩散错误）
       canvas.drawArc(
         Rect.fromCircle(center: srcR, radius: radius),
-        -math.pi * 0.15, math.pi * 0.7,
-        false, ringPaint,
+        -math.pi * 0.82,
+        math.pi * 0.52,
+        false,
+        ringPaint,
       );
     }
 
-    // ── 5. 后墙漫反射光晕 ──
+    // ── 6. 后墙漫反射光晕 ──
     final backGlow = Paint()
       ..color = palette.accent.withValues(alpha: (0.08 * decay * (1.0 - damp * 0.5)).clamp(0.01, 0.15))
       ..maskFilter = MaskFilter.blur(BlurStyle.normal, 20 * sizeFactor);
     canvas.drawOval(
-      Rect.fromCenter(center: Offset(vpX, vpY + 14), width: (bkR.dx - bkL.dx) * 0.8, height: 24 * sizeFactor),
+      Rect.fromCenter(center: Offset(vpX, vpY + 14), width: (bkR.dx - bkL.dx) * 0.85, height: 24 * sizeFactor),
       backGlow,
     );
 
-    // ── 6. 聆听位置指示（小三角底部中央） ──
+    // ── 7. 聆听位置指示（小三角底部中央） ──
     final listenerY = h * 0.92;
     final listenerPaint = Paint()
       ..color = palette.accent.withValues(alpha: 0.5)
@@ -1854,13 +1848,12 @@ class _Freeverb3DPainter extends CustomPainter {
       ..close();
     canvas.drawPath(triPath, listenerPaint);
 
-    // 聆听位置光晕
     final listGlow = Paint()
       ..color = palette.accent.withValues(alpha: 0.1)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
     canvas.drawCircle(Offset(vpX, listenerY - 2), 8, listGlow);
 
-    // ── 7. 阻尼渐变蒙层（从上往下，damp 越高顶部越暗） ──
+    // ── 8. 阻尼渐变蒙层 ──
     final dampGrad = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,

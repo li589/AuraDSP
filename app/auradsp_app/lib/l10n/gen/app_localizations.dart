@@ -241,7 +241,7 @@ abstract class AppLocalizations {
   /// No description provided for @stereoWiden.
   ///
   /// In zh, this message translates to:
-  /// **'声场展宽'**
+  /// **'立体声扩展'**
   String get stereoWiden;
 
   /// No description provided for @postGain.
@@ -577,7 +577,7 @@ abstract class AppLocalizations {
   /// No description provided for @stereoWidenHint.
   ///
   /// In zh, this message translates to:
-  /// **'展宽已限制在 75%：更高比例会剥离中置人声（类卡拉OK效应），导致几乎无声'**
+  /// **'扩展度已做安全上限保护：过高比例会剥离中置人声（类卡拉OK效应），导致声像空洞'**
   String get stereoWidenHint;
 
   /// No description provided for @railCollapseTip.
@@ -1675,7 +1675,7 @@ abstract class AppLocalizations {
   /// No description provided for @stBandHint.
   ///
   /// In zh, this message translates to:
-  /// **'独立调节各频段展开度；调节任一带即脱离全局总滑块'**
+  /// **'分带微调：各频带基础扩展量将与上方总主控滑块进行动态乘数联动'**
   String get stBandHint;
 
   /// No description provided for @presetFactoryTitle.
