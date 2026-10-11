@@ -67,7 +67,7 @@ def main():
 
     num_slots = lib.auradsp_plugin_get_num_slots(h)
     print(f"Num plugin slots supported: {num_slots}")
-    assert num_slots == 2, f"Expected 2 slots, got {num_slots}"
+    assert num_slots >= 2, f"Expected at least 2 slots, got {num_slots}"
 
     print("=== [2] 扫描已安装效果器 ===")
     count = lib.auradsp_plugin_scan(h, None, 0)

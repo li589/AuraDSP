@@ -53,7 +53,7 @@ void main() {
   group('InfoBadge', () {
     testWidgets('渲染问号徽标（默认不弹气泡）', (tester) async {
       await tester.pumpWidget(_app(const InfoBadge(message: '混响说明')));
-      expect(find.byIcon(Icons.help_outline_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.question_mark_rounded), findsOneWidget);
       expect(find.text('混响说明'), findsNothing);
     });
 
