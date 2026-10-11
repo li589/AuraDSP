@@ -164,7 +164,7 @@ int      auradsp_plugin_get_count(auradsp_handle h);
 int      auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len);
 int      auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len);
 
-/* 多插槽控制 (slot: 0..1) */
+/* 多插槽控制 (slot: 0..kMaxPluginSlots-1，当前为 0..3，以 get_num_slots 为准) */
 int      auradsp_plugin_get_num_slots(auradsp_handle h);
 int      auradsp_plugin_slot_load(auradsp_handle h, int slot, const char* path, const char* plugin_id);
 int      auradsp_plugin_slot_unload(auradsp_handle h, int slot);

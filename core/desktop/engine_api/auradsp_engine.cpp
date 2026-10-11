@@ -2241,7 +2241,7 @@ int auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len) {
     return (int)json.length();
 }
 
-/* ---- 多插槽感知控制 (slot = 0..1) ---- */
+/* ---- 多插槽感知控制 (slot: 0..3，以 kMaxPluginSlots 为准) ---- */
 int auradsp_plugin_get_num_slots(auradsp_handle h) {
     (void)h;
     return (int)auradsp::PluginHostManager::kMaxPluginSlots;

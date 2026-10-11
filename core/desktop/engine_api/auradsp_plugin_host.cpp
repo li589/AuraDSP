@@ -798,15 +798,268 @@ static std::string extractVendorFromLegalCopyright(const std::wstring& binaryPat
     return "";
 }
 
+//------------------------------------------------------------------------------
+// 元数据单一真相源
+//
+// 历史包袱：扫描路（PluginScanner::queryMetadata）与加载路
+// （ClapPluginInstance::load / Vst3PluginInstance::load）各自实现了一遍字段提取，
+// 且优先级不同，于是同一插件两条路给出互相矛盾的结论。实测：
+//   FabFilter Pro-Q 3  扫描 vendor='FabFilter'  加载后 vendor=''
+//   KV-Element-FX      扫描 name='Element FX' category='KV-Element-FX'
+//                      加载后 name='Element FX' category='Fx'
+// 用户看到的"厂商读不出来 / 名字对不上 / 分类是假的"全部源于此。
+//
+// 规则：
+//   1. 一条填充实现，扫描路与加载路共用；
+//   2. 静态描述符优先（CLAP descriptor / VST3 classInfo），实例化查询仅补空；
+//   3. 已有非空值一律不覆盖（fillIfEmpty）；
+//   4. category 只允许来自「分类级」来源，绝不用自由文本顶替。
+//------------------------------------------------------------------------------
+namespace {
+
+// 规范正典：source/clap/include/clap/plugin-features.h（CLAP v1.2.10）。
+// category 级 feature —— 决定插件"是什么"。
+const char* const kClapCategoryFeatures[] = {
+    "instrument", "audio-effect", "note-effect", "note-detector", "analyzer"};
+
+// sub-category 级 feature —— 决定插件"更具体是什么"，命中后追加为 "|xxx"。
+const char* const kClapSubCategoryFeatures[] = {
+    "synthesizer", "sampler", "drum", "drum-machine", "filter", "phaser",
+    "equalizer", "de-esser", "phase-vocoder", "granular", "frequency-shifter",
+    "pitch-shifter", "distortion", "transient-shaper", "compressor", "expander",
+    "gate", "limiter", "flanger", "chorus", "delay", "reverb", "tremolo", "glitch",
+    "utility", "pitch-correction", "restoration", "multi-effects", "mixing",
+    "mastering"};
+
+bool isOneOf(const std::string& s, const char* const* list, size_t n) {
+    for (size_t i = 0; i < n; ++i) {
+        if (s == list[i]) return true;
+    }
+    return false;
+}
+
+/// 从 CLAP descriptor->features 推出分类串。
+/// 例：['audio-effect']                -> "audio-effect"
+///     ['audio-effect','reverb']       -> "audio-effect|reverb"
+///     ['reverb']（只有子分类）         -> "reverb"
+/// 无任何分类级 feature 时返回空，由调用方兜底。
+std::string clapCategoryFromFeatures(const char* const* features) {
+    if (!features) return "";
+    std::vector<std::string> feats;
+    for (size_t i = 0; features[i] != nullptr; ++i) {
+        if (features[i][0] != '\0') feats.emplace_back(features[i]);
+    }
+    std::string cat;
+    std::string sub;
+    for (const auto& f : feats) {
+        if (cat.empty() && isOneOf(f, kClapCategoryFeatures,
+                                   sizeof(kClapCategoryFeatures) / sizeof(char*))) {
+            cat = f;
+        } else if (sub.empty() && isOneOf(f, kClapSubCategoryFeatures,
+                                          sizeof(kClapSubCategoryFeatures) / sizeof(char*))) {
+            sub = f;
+        }
+    }
+    if (cat.empty()) cat = sub;          // 没有分类级就退到子分类级
+    else if (!sub.empty()) cat += "|" + sub;
+    return cat;
+}
+
+/// 仅当目标为空时写入 —— "已有非空值不覆盖"的唯一执行点。
+void fillIfEmpty(std::string& dst, const std::string& src) {
+    if (dst.empty() && !src.empty()) dst = src;
+}
+
+/// 以扫描期元数据为基准初始化加载路 meta：只搬描述性字段，
+/// 运行期字段（latency / isCompatible / errorMessage）一律重置。
+/// 之后再调 applyClapDescriptor / applyVstAudioEffectClass 补空，
+/// 于是「扫描值 == 加载值」对扫描期已有的字段恒成立。
+void seedMetadataFromScan(PluginMetadata& dst, const PluginMetadata& src) {
+    dst.path = src.path;
+    dst.id = src.id;
+    dst.name = src.name;
+    dst.bundleName = src.bundleName;
+    dst.vendor = src.vendor;
+    dst.version = src.version;
+    dst.category = src.category;
+    dst.description = src.description;
+    dst.format = src.format;
+    dst.is64Bit = src.is64Bit;
+    dst.latency = 0;
+    dst.isCompatible = true;
+    dst.errorMessage.clear();
+}
+
+/// 用 CLAP descriptor 填充 meta。扫描路与加载路共用同一实现。
+void applyClapDescriptor(PluginMetadata& meta,
+                         const clap_plugin_descriptor_t* d,
+                         const std::wstring& binaryPath,
+                         const std::string& bundlePath) {
+    if (!d) return;
+    meta.format = PluginFormat::CLAP;
+
+    fillIfEmpty(meta.id, (d->id && d->id[0]) ? d->id : "");
+    fillIfEmpty(meta.name, (d->name && d->name[0]) ? d->name : "");
+    fillIfEmpty(meta.description, (d->description && d->description[0]) ? d->description : "");
+    // bundle 名单独存：KV-Element-FX.clap 的自报名是 "Element FX"，
+    // 但用户选的是文件名 KV-Element-FX —— 两者都必须可取得，不可互相顶替。
+    fillIfEmpty(meta.bundleName, fs::path(bundlePath).stem().string());
+
+    // category 只能来自 features。
+    // descriptor->description 是自由文本：实测 KV-Element-FX 的 description 就是
+    // "KV-Element-FX"（bundle 名），拿它当 category 会得出假分类。
+    std::string cat = clapCategoryFromFeatures(d->features);
+    if (cat.empty()) cat = "AudioEffect";
+    fillIfEmpty(meta.category, cat);
+
+    fillIfEmpty(meta.version, (d->version && d->version[0]) ? d->version : "");
+
+    // 厂商兜底链：descriptor -> PE 公司名 -> LegalCopyright -> 上级目录 -> 知名签名
+    std::string vendor = (d->vendor && d->vendor[0]) ? d->vendor : "";
+    if (vendor.empty()) {
+        vendor = extractCompanyFromVersionInfo(binaryPath);
+        if (vendor.empty()) vendor = extractVendorFromLegalCopyright(binaryPath);
+        if (vendor.empty()) vendor = extractVendorFromPath(bundlePath);
+        if (vendor.empty()) vendor = extractVendorByKnownSignature(meta.name);
+    }
+    fillIfEmpty(meta.vendor, vendor);
+
+    // 版本兜底：descriptor -> PE 产品版本
+    if (meta.version.empty() || meta.version == "1.0") {
+        std::string peVer = extractProductVersionFromVersionInfo(binaryPath);
+        if (!peVer.empty()) meta.version = peVer;
+    }
+    if (meta.version.empty()) meta.version = "1.0";
+    if (meta.vendor.empty()) meta.vendor = "Unknown";
+}
+
+/// 用 VST3 工厂信息填充 meta。扫描路与加载路共用同一实现。
+/// index 处的 class 若不是音频效果类则返回 false，且不修改 meta。
+/// seeded=false（扫描路）：保持历史优先级 —— factory3 先写、factory2 后覆盖，
+///   空值与占位（"Unknown"/"1.0"）允许被后续来源补写。
+/// seeded=true（加载路）：扫描种子已给的描述性字段一律是最终值（仅补空），
+///   从而「扫描值 == 加载值」逐字段成立；id 是身份键，两种模式都权威重写。
+bool applyVstAudioEffectClass(PluginMetadata& meta,
+                              Steinberg::IPluginFactory* factory,
+                              Steinberg::IPluginFactory2* factory2,
+                              Steinberg::IPluginFactory3* factory3,
+                              Steinberg::int32 index,
+                              const std::wstring& binaryPath,
+                              const std::string& bundlePath,
+                              bool seeded = false,
+                              Steinberg::TUID* outTuid = nullptr) {
+    Steinberg::PClassInfo classInfo;
+    if (factory->getClassInfo(index, &classInfo) != Steinberg::kResultOk) return false;
+    if (std::strcmp(classInfo.category, kVstAudioEffectClass) != 0) return false;
+
+    meta.format = PluginFormat::VST3;
+    // id 是实例化身份键：快扫拿不到 CID（为空），加载路必须权威解析，
+    // 深扫种子里的 id 又与目标 class 相同，重写不会造成扫描/加载分歧。
+    meta.id = cidToHexString(classInfo.cid);
+    // 描述性字段：seeded 时"已有非空值不覆盖"，否则历史的后写覆盖。
+    auto put = [seeded](std::string& dst, const std::string& src) {
+        if (src.empty()) return;
+        if (seeded) fillIfEmpty(dst, src);
+        else dst = src;
+    };
+    // 占位放行条件：扫描路允许 "Unknown"/"1.0" 被更真来源替换；
+    // 加载路不放行 —— 扫描期给出占位也是扫描期的答案。
+    auto wantVendor = [seeded](const std::string& v) {
+        return v.empty() || (!seeded && v == "Unknown");
+    };
+    auto wantVersion = [seeded](const std::string& v) {
+        return v.empty() || (!seeded && v == "1.0");
+    };
+
+    put(meta.name, classInfo.name);
+    put(meta.category, classInfo.category);
+    fillIfEmpty(meta.bundleName, fs::path(bundlePath).stem().string());
+
+    // 工厂级厂商
+    std::string factoryVendor;
+    Steinberg::PFactoryInfo factoryInfo;
+    if (factory->getFactoryInfo(&factoryInfo) == Steinberg::kResultOk &&
+        factoryInfo.vendor[0] != '\0') {
+        factoryVendor = factoryInfo.vendor;
+    }
+
+    // IPluginFactory3：Unicode 类信息，先写（优先级最高的描述符来源）
+    if (factory3) {
+        Steinberg::PClassInfoW classInfoW;
+        if (factory3->getClassInfoUnicode(index, &classInfoW) == Steinberg::kResultOk) {
+            if (classInfoW.name[0] != 0) {
+                std::string u = wideToUtf8(Steinberg::wscast(classInfoW.name));
+                put(meta.name, u);
+            }
+            if (classInfoW.vendor[0] != 0) {
+                std::string u = wideToUtf8(Steinberg::wscast(classInfoW.vendor));
+                put(meta.vendor, u);
+            }
+            if (classInfoW.version[0] != 0) {
+                std::string u = wideToUtf8(Steinberg::wscast(classInfoW.version));
+                put(meta.version, u);
+            }
+            if (classInfoW.subCategories[0] != 0) {
+                // subCategories 是 char8（ASCII），直接赋值；只有 name/vendor/version
+                // 才是 char16，需要 wideToUtf8 转换。
+                put(meta.category, classInfoW.subCategories);
+            }
+        }
+    }
+
+    // IPluginFactory2：ASCII 补充（保持历史扫描路的优先级：后写覆盖前写）
+    if (factory2) {
+        Steinberg::PClassInfo2 classInfo2;
+        if (factory2->getClassInfo2(index, &classInfo2) == Steinberg::kResultOk) {
+            if (wantVendor(meta.vendor)) {
+                if (classInfo2.vendor[0]) meta.vendor = classInfo2.vendor;
+            }
+            if (wantVersion(meta.version)) {
+                if (classInfo2.version[0]) meta.version = classInfo2.version;
+            }
+            put(meta.category, classInfo2.subCategories);
+        }
+    }
+
+    // 多级兜底厂商：factory -> PE -> 上级目录 -> 知名签名
+    if (wantVendor(meta.vendor)) {
+        if (!factoryVendor.empty()) meta.vendor = factoryVendor;
+        else {
+            std::string peV = extractCompanyFromVersionInfo(binaryPath);
+            if (!peV.empty()) meta.vendor = peV;
+            else {
+                std::string dirV = extractVendorFromPath(bundlePath);
+                if (!dirV.empty()) meta.vendor = dirV;
+                else {
+                    std::string sigV = extractVendorByKnownSignature(meta.name);
+                    if (!sigV.empty()) meta.vendor = sigV;
+                }
+            }
+        }
+    }
+    // 多级兜底版本
+    if (wantVersion(meta.version)) {
+        std::string peVer = extractProductVersionFromVersionInfo(binaryPath);
+        if (!peVer.empty()) meta.version = peVer;
+    }
+
+    if (outTuid) std::memcpy(outTuid, classInfo.cid, sizeof(Steinberg::TUID));
+    return true;
+}
+
+}  // namespace
+
 std::string PluginMetadata::toJson() const {
     std::ostringstream ss;
     ss << "{"
        << "\"path\":\"" << escapeJsonString(path) << "\","
        << "\"id\":\"" << escapeJsonString(id) << "\","
        << "\"name\":\"" << escapeJsonString(name) << "\","
+       << "\"bundleName\":\"" << escapeJsonString(bundleName) << "\","
        << "\"vendor\":\"" << escapeJsonString(vendor) << "\","
        << "\"version\":\"" << escapeJsonString(version) << "\","
        << "\"category\":\"" << escapeJsonString(category) << "\","
+       << "\"description\":\"" << escapeJsonString(description) << "\","
        << "\"format\":\"" << (format == PluginFormat::VST3 ? "VST3" : (format == PluginFormat::CLAP ? "CLAP" : "Unknown")) << "\","
        << "\"is64Bit\":" << (is64Bit ? "true" : "false") << ","
        << "\"latency\":" << latency << ","
@@ -834,10 +1087,13 @@ public:
     ClapPluginInstance() = default;
     ~ClapPluginInstance() override { unload(); }
 
-    bool load(const std::string& path, const std::string& pluginId) override {
+    bool load(const std::string& path, const std::string& pluginId,
+              const PluginMetadata* scanSeed = nullptr) override {
         unload();
         setupPluginDllDirectories(path);
 
+        m_meta = PluginMetadata{};
+        if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::CLAP;
         m_meta.is64Bit = true;
@@ -911,11 +1167,8 @@ public:
         }
 
         if (targetDesc) {
-            m_meta.id = targetDesc->id ? targetDesc->id : "";
-            m_meta.name = targetDesc->name ? targetDesc->name : "";
-            m_meta.vendor = targetDesc->vendor ? targetDesc->vendor : "";
-            m_meta.version = targetDesc->version ? targetDesc->version : "";
-            m_meta.category = targetDesc->description ? targetDesc->description : "AudioEffect";
+            // 与扫描路共用同一填充实现；scanSeed 已填的字段不会被覆盖。
+            applyClapDescriptor(m_meta, targetDesc, wpath, path);
         }
 
         initHostStruct();
@@ -1626,10 +1879,13 @@ public:
     Vst3PluginInstance() = default;
     ~Vst3PluginInstance() override { unload(); }
 
-    bool load(const std::string& path, const std::string& pluginId) override {
+    bool load(const std::string& path, const std::string& pluginId,
+              const PluginMetadata* scanSeed = nullptr) override {
         unload();
         setupPluginDllDirectories(path);
 
+        m_meta = PluginMetadata{};
+        if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::VST3;
         m_meta.is64Bit = true;
@@ -1672,34 +1928,29 @@ public:
         bool found = false;
 
         Steinberg::IPluginFactory2* factory2 = nullptr;
+        Steinberg::IPluginFactory3* factory3 = nullptr;
         m_factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
+        // IPluginFactory3 曾在此缺失 —— 这正是 D2「FabFilter 加载后 vendor 为空」的根因：
+        // 加载路只读 ASCII 的 classInfo/factory2，而 Unicode 类信息（factory3）拿不到，
+        // 于是同一插件扫描得 'FabFilter'、加载后得 ''。
+        m_factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
 
         for (Steinberg::int32 i = 0; i < classCount; ++i) {
-            Steinberg::PClassInfo classInfo;
-            if (m_factory->getClassInfo(i, &classInfo) != Steinberg::kResultOk) continue;
-
-            if (std::strcmp(classInfo.category, kVstAudioEffectClass) == 0) {
-                std::string cidHex = cidToHexString(classInfo.cid);
-                if (pluginId.empty() || cidHex == pluginId) {
-                    std::memcpy(targetCid, classInfo.cid, sizeof(Steinberg::TUID));
-                    m_meta.id = cidHex;
-                    m_meta.name = classInfo.name;
-                    m_meta.category = classInfo.category;
-
-                    if (factory2) {
-                        Steinberg::PClassInfo2 classInfo2;
-                        if (factory2->getClassInfo2(i, &classInfo2) == Steinberg::kResultOk) {
-                            m_meta.vendor = classInfo2.vendor;
-                            m_meta.version = classInfo2.version;
-                            m_meta.category = classInfo2.subCategories;
-                        }
-                    }
-                    found = true;
-                    break;
-                }
+            PluginMetadata probe;
+            if (!applyVstAudioEffectClass(probe, m_factory, factory2, factory3, i, wpath, path, false, &targetCid)) {
+                continue;
             }
+            if (!pluginId.empty() && probe.id != pluginId) continue;
+
+            // 与扫描路共用同一填充实现；seeded=true 时 scanSeed 已填的描述性字段
+            // （name/vendor/version/category/bundleName）不会被覆盖，
+            // 于是「扫描值 == 加载值」逐字段成立；id 例外，它是实例化身份键。
+            applyVstAudioEffectClass(m_meta, m_factory, factory2, factory3, i, wpath, path, true);
+            found = true;
+            break;
         }
 
+        if (factory3) factory3->release();
         if (factory2) factory2->release();
 
         if (!found) {
@@ -2397,32 +2648,9 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
                         if (!d) continue;
                         PluginMetadata meta;
                         meta.path = filePath;
-                        meta.format = PluginFormat::CLAP;
                         meta.is64Bit = true;
-                        meta.id = d->id ? d->id : "";
-                        meta.name = d->name ? d->name : "";
-                        meta.vendor = (d->vendor && d->vendor[0] != '\0') ? d->vendor : "Unknown";
-                        meta.version = (d->version && d->version[0] != '\0') ? d->version : "1.0";
-                        meta.category = (d->description && d->description[0] != '\0') ? d->description : "AudioEffect";
-
-                        if (meta.vendor == "Unknown") {
-                            std::string peComp = extractCompanyFromVersionInfo(wpath);
-                            if (!peComp.empty()) {
-                                meta.vendor = peComp;
-                            } else {
-                                std::string dirV = extractVendorFromPath(filePath);
-                                if (!dirV.empty()) meta.vendor = dirV;
-                                else {
-                                    std::string sigV = extractVendorByKnownSignature(meta.name);
-                                    if (!sigV.empty()) meta.vendor = sigV;
-                                }
-                            }
-                        }
-                        if (meta.version == "1.0") {
-                            std::string peVer = extractProductVersionFromVersionInfo(wpath);
-                            if (!peVer.empty()) meta.version = peVer;
-                        }
-
+                        meta.isCompatible = true;
+                        applyClapDescriptor(meta, d, wpath, filePath);
                         outPlugins.push_back(meta);
                         success = true;
                     }
@@ -2445,95 +2673,18 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
             if (getFactory) {
                 Steinberg::IPluginFactory* factory = getFactory();
                 if (factory) {
-                    Steinberg::int32 classCount = factory->countClasses();
                     Steinberg::IPluginFactory2* factory2 = nullptr;
                     Steinberg::IPluginFactory3* factory3 = nullptr;
                     factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
                     factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
 
-                    // 1. 全局工厂厂商
-                    std::string factoryVendor;
-                    Steinberg::PFactoryInfo factoryInfo;
-                    if (factory->getFactoryInfo(&factoryInfo) == Steinberg::kResultOk) {
-                        if (factoryInfo.vendor[0] != '\0') {
-                            factoryVendor = factoryInfo.vendor;
-                        }
-                    }
-
-                    // 2. 预先提取 PE VersionInfo 与上级目录启发式名称
-                    std::string peVendor = extractCompanyFromVersionInfo(wpath);
-                    std::string peVersion = extractProductVersionFromVersionInfo(wpath);
-                    std::string dirVendor = extractVendorFromPath(filePath);
-
+                    Steinberg::int32 classCount = factory->countClasses();
                     for (Steinberg::int32 i = 0; i < classCount; ++i) {
-                        Steinberg::PClassInfo classInfo;
-                        if (factory->getClassInfo(i, &classInfo) != Steinberg::kResultOk) continue;
-
-                        if (std::strcmp(classInfo.category, kVstAudioEffectClass) == 0) {
-                            PluginMetadata meta;
-                            meta.path = filePath;
-                            meta.format = PluginFormat::VST3;
-                            meta.is64Bit = true;
-                            meta.id = cidToHexString(classInfo.cid);
-                            meta.name = classInfo.name;
-                            meta.vendor = "Unknown";
-                            meta.version = "1.0";
-                            meta.category = classInfo.category;
-
-                            // 优先从 IPluginFactory3 读取 Unicode 类信息
-                            if (factory3) {
-                                Steinberg::PClassInfoW classInfoW;
-                                if (factory3->getClassInfoUnicode(i, &classInfoW) == Steinberg::kResultOk) {
-                                    if (classInfoW.name[0] != 0) {
-                                        std::string uName = wideToUtf8(Steinberg::wscast(classInfoW.name));
-                                        if (!uName.empty()) meta.name = uName;
-                                    }
-                                    if (classInfoW.vendor[0] != 0) {
-                                        std::string uVendor = wideToUtf8(Steinberg::wscast(classInfoW.vendor));
-                                        if (!uVendor.empty()) meta.vendor = uVendor;
-                                    }
-                                    if (classInfoW.version[0] != 0) {
-                                        std::string uVer = wideToUtf8(Steinberg::wscast(classInfoW.version));
-                                        if (!uVer.empty()) meta.version = uVer;
-                                    }
-                                    if (classInfoW.subCategories[0] != 0) {
-                                        meta.category = classInfoW.subCategories;
-                                    }
-                                }
-                            }
-
-                            // 尝试 IPluginFactory2 补充
-                            if (factory2) {
-                                Steinberg::PClassInfo2 classInfo2;
-                                if (factory2->getClassInfo2(i, &classInfo2) == Steinberg::kResultOk) {
-                                    if (meta.vendor == "Unknown" && classInfo2.vendor[0]) {
-                                        meta.vendor = classInfo2.vendor;
-                                    }
-                                    if ((meta.version.empty() || meta.version == "1.0") && classInfo2.version[0]) {
-                                        meta.version = classInfo2.version;
-                                    }
-                                    if (classInfo2.subCategories[0]) {
-                                        meta.category = classInfo2.subCategories;
-                                    }
-                                }
-                            }
-
-                            // 多级回退兜底厂商：factoryVendor -> peVendor -> dirVendor -> 知名特征签名
-                            if (meta.vendor == "Unknown" || meta.vendor.empty()) {
-                                if (!factoryVendor.empty()) meta.vendor = factoryVendor;
-                                else if (!peVendor.empty()) meta.vendor = peVendor;
-                                else if (!dirVendor.empty()) meta.vendor = dirVendor;
-                                else {
-                                    std::string sigV = extractVendorByKnownSignature(meta.name);
-                                    if (!sigV.empty()) meta.vendor = sigV;
-                                }
-                            }
-
-                            // 多级回退兜底版本
-                            if ((meta.version.empty() || meta.version == "1.0") && !peVersion.empty()) {
-                                meta.version = peVersion;
-                            }
-
+                        PluginMetadata meta;
+                        meta.path = filePath;
+                        meta.is64Bit = true;
+                        meta.isCompatible = true;
+                        if (applyVstAudioEffectClass(meta, factory, factory2, factory3, i, wpath, filePath)) {
                             outPlugins.push_back(meta);
                             success = true;
                         }
@@ -2619,6 +2770,9 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                     PluginMetadata q;
                     q.path = pStr;
                     q.name = nStr;
+                    // 与深扫/加载路同一规则：bundleName = 注册路径的 stem。
+                    // 快扫不加载 DLL，拿不到自报名，但 bundle 名不依赖 DLL。
+                    q.bundleName = fs::path(pStr).stem().string();
                     q.format = fmt;
                     q.is64Bit = true;
                     q.vendor = vendor;
@@ -2779,7 +2933,19 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             return false;
         }
 
-        bool lRet = instance->load(path, pluginId);
+        // 扫描期命中项作为种子传入：加载路以扫描值为基准，descriptor 只补空不覆盖，
+        // 于是「扫描值 == 加载值」对扫描期已有的字段恒成立（B1 的结构性保证）。
+        // 无种子（例如从会话恢复直接加载、或该路径从未扫描）时退化为纯描述符路径，
+        // 而两条路共用同一填充函数，优先级一致，结论仍相同。
+        const PluginMetadata* seed = nullptr;
+        for (const auto& p : m_scannedPlugins) {
+            if (p.path != path) continue;
+            if (!pluginId.empty() && !p.id.empty() && p.id != pluginId) continue;
+            seed = &p;
+            break;
+        }
+
+        bool lRet = instance->load(path, pluginId, seed);
         std::cout << "[DBG PluginHost] instance->load returned: " << lRet << std::endl;
         if (!lRet) {
             return false;

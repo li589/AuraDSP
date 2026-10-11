@@ -32,6 +32,7 @@ def run_smoke_tests():
         "smoke_latency_probe.py",
         "smoke_block1056.py",
         "smoke_plugin_host.py",
+        "smoke_plugin_metadata.py",
         "smoke_multislot_and_stages.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",

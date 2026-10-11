@@ -325,6 +325,13 @@ final class AuraDspLib {
           'auradsp_plugin_slot_set_bypass')
       .asFunction();
 
+  // E3：补齐读取旁路状态的绑定（set 有、get 无，导致 UI 只能盲写不能回读）。
+  // 槽位越界时引擎返回 1（旁路中），与 set 的失败语义区分。
+  late final int Function(Pointer<Void>, int) pluginSlotGetBypass = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_get_bypass')
+      .asFunction();
+
   late final int Function(Pointer<Void>, int) pluginSlotGetLatency = dylib
       .lookup<NativeFunction<Uint32 Function(Pointer<Void>, Int32)>>(
           'auradsp_plugin_slot_get_latency')
@@ -635,6 +642,12 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   static int pluginSlotSetBypassWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot, bool bypass) {
     return lib.pluginSlotSetBypass(handle, slot, bypass ? 1 : 0);
+  }
+
+  /// 槽位读取旁路状态（E3）。返回 true 表示旁路中。
+  static bool pluginSlotGetBypassWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotGetBypass(handle, slot) != 0;
   }
 
   /// 槽位获取状态 JSON

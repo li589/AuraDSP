@@ -22,28 +22,36 @@ void main() {
     test('PluginMetadata fromJson and toJson roundtrip', () {
       final json = {
         'id': 'abc-123',
-        'name': 'Test Reverb',
-        'vendor': 'AudioCorp',
-        'version': '1.2.0',
-        'category': 'Reverb',
-        'format': 'VST3',
-        'path': r'C:\Plugins\TestReverb.vst3',
+        'name': 'Element FX',
+        'vendor': 'Kushview',
+        'version': '1.0.0',
+        'category': 'audio-effect',
+        'bundleName': 'KV-Element-FX',
+        'description': 'KV-Element-FX',
+        'format': 'CLAP',
+        'path': r'C:\CLAP\KV-Element-FX.clap',
         'isCompatible': true,
         'errorMessage': '',
       };
 
       final meta = PluginMetadata.fromJson(json);
       expect(meta.id, 'abc-123');
-      expect(meta.name, 'Test Reverb');
-      expect(meta.vendor, 'AudioCorp');
-      expect(meta.version, '1.2.0');
-      expect(meta.format, PluginFormat.vst3);
-      expect(meta.path, r'C:\Plugins\TestReverb.vst3');
+      expect(meta.name, 'Element FX');
+      expect(meta.vendor, 'Kushview');
+      expect(meta.version, '1.0.0');
+      expect(meta.category, 'audio-effect');
+      // B1：自报名与 bundle 名是两个字段，不可互相顶替
+      expect(meta.bundleName, 'KV-Element-FX');
+      expect(meta.description, 'KV-Element-FX');
+      expect(meta.format, PluginFormat.clap);
+      expect(meta.path, r'C:\CLAP\KV-Element-FX.clap');
 
       final serialized = meta.toJson();
       expect(serialized['id'], 'abc-123');
-      expect(serialized['name'], 'Test Reverb');
-      expect(serialized['format'], 'VST3');
+      expect(serialized['name'], 'Element FX');
+      expect(serialized['bundleName'], 'KV-Element-FX');
+      expect(serialized['description'], 'KV-Element-FX');
+      expect(serialized['format'], 'CLAP');
     });
 
     test('PluginHostStatus parsing', () {
@@ -215,11 +223,11 @@ void main() {
       expect(manager.activePlugin, isNull);
     });
 
-    test('loadCache 剔除路径已失效的条目并回写清理（A3/A4 回归）', () async {
+    test('loadCache 丢弃旧版裸 list 缓存，不呈现陈旧数据（B1 专题四回归）', () async {
       final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
           '${Platform.pathSeparator}plugin_cache.json');
       cacheFile.parent.createSync(recursive: true);
-      cacheFile.writeAsStringSync(jsonEncode([
+      const legacy = [
         {
           'id': '1',
           'name': 'Ghost Plugin',
@@ -231,18 +239,119 @@ void main() {
           'isCompatible': true,
           'errorMessage': '',
         },
-      ]));
+      ];
+      cacheFile.writeAsStringSync(jsonEncode(legacy));
+
+      await manager.loadCache();
+
+      expect(manager.plugins, isEmpty,
+          reason: '无 schema 戳的旧缓存必须整份丢弃，由重新扫描重建');
+      // 丢弃但不改写：文件保持原样，避免把丢弃动作固化成新缓存
+      final after = jsonDecode(cacheFile.readAsStringSync());
+      expect(after, isA<List>());
+      expect((after as List).length, 1);
+    });
+
+    test('loadCache 接受 schema=2 信封并加载有效条目', () async {
+      final realPlugin = File('${tempDir.path}${Platform.pathSeparator}real.vst3');
+      realPlugin.writeAsStringSync('stub');
+      final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      cacheFile.parent.createSync(recursive: true);
+      cacheFile.writeAsStringSync(jsonEncode({
+        'schema': 2,
+        'scannedAt': '2026-10-12T01:00:00',
+        'deep': true,
+        'plugins': [
+          {
+            'id': 'abc',
+            'name': 'Real Plugin',
+            'vendor': 'RealVendor',
+            'version': '2.0',
+            'category': 'Fx',
+            'bundleName': 'real',
+            'description': '',
+            'format': 'VST3',
+            'path': realPlugin.path,
+            'isCompatible': true,
+            'errorMessage': '',
+          },
+        ],
+      }));
+
+      await manager.loadCache();
+
+      expect(manager.plugins.length, 1);
+      expect(manager.plugins.first.name, 'Real Plugin');
+      expect(manager.plugins.first.bundleName, 'real');
+    });
+
+    test('loadCache 丢弃被篡改 schema 的缓存（陈旧数据不得赢过实时状态）', () async {
+      final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      cacheFile.parent.createSync(recursive: true);
+      cacheFile.writeAsStringSync(jsonEncode({
+        'schema': 1, // 被改过的版本戳
+        'scannedAt': '2026-10-12T01:00:00',
+        'deep': false,
+        'plugins': [
+          {
+            'id': 'x',
+            'name': 'Stale Entry',
+            'vendor': 'StaleVendor',
+            'version': '9.9',
+            'category': 'Fx',
+            'format': 'VST3',
+            'path': r'C:\VST3\Stale.vst3',
+            'isCompatible': true,
+            'errorMessage': '',
+          },
+        ],
+      }));
 
       await manager.loadCache();
 
       expect(manager.plugins, isEmpty);
-      final after = jsonDecode(cacheFile.readAsStringSync()) as List;
-      expect(after, isEmpty,
-          reason: '失效条目必须被回写清理，否则每次启动都会重复展示');
     });
 
-    test('onPluginScanned 只写测试临时目录，不污染用户缓存（A 根因回归）',
-        () async {
+    test('loadCache 按 path+format 去重', () async {
+      final realPlugin = File('${tempDir.path}${Platform.pathSeparator}dup.vst3');
+      realPlugin.writeAsStringSync('stub');
+      final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      cacheFile.parent.createSync(recursive: true);
+      cacheFile.writeAsStringSync(jsonEncode({
+        'schema': 2,
+        'scannedAt': '2026-10-12T01:00:00',
+        'deep': false,
+        'plugins': [
+          {
+            'id': 'a',
+            'name': 'Dup',
+            'vendor': 'V',
+            'version': '1',
+            'format': 'VST3',
+            'path': realPlugin.path,
+          },
+          {
+            'id': 'b',
+            'name': 'Dup Again',
+            'vendor': 'V',
+            'version': '1',
+            'format': 'VST3',
+            'path': realPlugin.path,
+          },
+        ],
+      }));
+
+      await manager.loadCache();
+
+      expect(manager.plugins.length, 1,
+          reason: '同一 path+format 只保留一条，唯一键不允许重复');
+    });
+
+    test('onPluginScanned 落盘为 schema=2 信封且只写测试临时目录'
+        '（A 根因回归 + B1 信封化）', () async {
       manager.onPluginScanned(1, [
         {
           'id': '1',
@@ -264,6 +373,80 @@ void main() {
       }
       expect(tmpCache.existsSync(), isTrue);
       expect(manager.plugins.length, 1);
+
+      final envelope = jsonDecode(tmpCache.readAsStringSync()) as Map;
+      expect(envelope['schema'], 2);
+      expect(envelope['plugins'], isA<List>());
+      expect((envelope['plugins'] as List).length, 1);
+      expect(envelope['deep'], isFalse);
+      expect(envelope['scannedAt'], isA<String>());
+    });
+
+    test('saveCache 自检：vendor 全空/Unknown 的快照拒绝落盘'
+        '（伪造缓存签名回归）', () async {
+      manager.onPluginScanned(2, [
+        {
+          'id': '1',
+          'name': 'Fake One',
+          'vendor': 'Unknown',
+          'version': '1.0',
+          'category': '',
+          'format': 'VST3',
+          'path': r'C:\VST3\Fake1.vst3',
+          'isCompatible': true,
+          'errorMessage': '',
+        },
+        {
+          'id': '2',
+          'name': 'Fake Two',
+          'vendor': '',
+          'version': '1.0',
+          'category': '',
+          'format': 'VST3',
+          'path': r'C:\VST3\Fake2.vst3',
+          'isCompatible': true,
+          'errorMessage': '',
+        },
+      ]);
+      final tmpCache = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      // 轮询足够久，确认文件始终不出现
+      for (var i = 0; i < 100; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(tmpCache.existsSync(), isFalse,
+          reason: '全 Unknown 快照是伪造/损坏缓存的签名，不得固化');
+      // 内存态仍然可用（自检只拦截落盘，不影响本次会话）
+      expect(manager.plugins.length, 2);
+    });
+
+    test('saveCache 按 path+format 去重', () async {
+      manager.onPluginScanned(2, [
+        {
+          'id': 'a',
+          'name': 'Dup',
+          'vendor': 'V',
+          'version': '1',
+          'format': 'VST3',
+          'path': r'C:\VST3\Same.vst3',
+        },
+        {
+          'id': 'b',
+          'name': 'Dup Again',
+          'vendor': 'V',
+          'version': '1',
+          'format': 'VST3',
+          'path': r'C:\VST3\Same.vst3',
+        },
+      ]);
+      final tmpCache = File('${tempDir.path}${Platform.pathSeparator}plugins'
+          '${Platform.pathSeparator}plugin_cache.json');
+      for (var i = 0; i < 100 && !tmpCache.existsSync(); i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(tmpCache.existsSync(), isTrue);
+      final envelope = jsonDecode(tmpCache.readAsStringSync()) as Map;
+      expect((envelope['plugins'] as List).length, 1);
     });
   });
 }

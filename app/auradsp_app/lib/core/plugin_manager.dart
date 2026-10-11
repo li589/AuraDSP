@@ -41,9 +41,17 @@ enum PluginFormat {
 class PluginMetadata {
   final String id;
   final String name;
+  /// 插件自报名（CLAP descriptor / VST3 factory）。
   final String vendor;
   final String version;
+  /// 真实分类：CLAP features 级联 / VST3 subCategories。
+  /// 注意历史上曾被误填为 descriptor 的 description 自由文本（B1 已修）。
   final String category;
+  /// Bundle/文件名 stem —— 用户在列表里实际选中的那一个。
+  /// CLAP 的自报名与文件名可能不同（如自报名 "Element FX"、文件 KV-Element-FX）。
+  final String bundleName;
+  /// 自由文本描述，仅展示用，不参与分类判断。
+  final String description;
   final PluginFormat format;
   final String path;
   final bool isCompatible;
@@ -55,6 +63,8 @@ class PluginMetadata {
     this.vendor = '',
     this.version = '',
     this.category = '',
+    this.bundleName = '',
+    this.description = '',
     required this.format,
     required this.path,
     this.isCompatible = true,
@@ -68,6 +78,8 @@ class PluginMetadata {
       vendor: json['vendor'] as String? ?? '',
       version: json['version'] as String? ?? '',
       category: json['category'] as String? ?? '',
+      bundleName: json['bundleName'] as String? ?? '',
+      description: json['description'] as String? ?? '',
       format: PluginFormat.fromString(json['format'] as String? ?? ''),
       path: json['path'] as String? ?? '',
       isCompatible: json['isCompatible'] as bool? ?? true,
@@ -81,6 +93,8 @@ class PluginMetadata {
         'vendor': vendor,
         'version': version,
         'category': category,
+        'bundleName': bundleName,
+        'description': description,
         'format': format.label,
         'path': path,
         'isCompatible': isCompatible,
@@ -212,6 +226,8 @@ class PluginManager extends ChangeNotifier {
   final Map<int, bool> _slotBusy = {};
   String? _lastError;
   int _lastScanCount = 0;
+  /// 最近一次扫描是否为深扫（决定缓存里元数据的可信度，随信封落盘）。
+  bool _lastScanDeep = false;
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
 
@@ -311,6 +327,7 @@ class PluginManager extends ChangeNotifier {
   /// 启动扫描（支持快扫、深扫与多目录聚合）
   void scan({String dir = '', bool deep = false}) {
     _isScanning = true;
+    _lastScanDeep = deep;
     _lastError = null;
     notifyListeners();
 
@@ -621,10 +638,25 @@ class PluginManager extends ChangeNotifier {
   }
 
   // --- 本地磁盘缓存持久化 ---
+
+  /// 缓存信封结构版本（B1 专题四）。
+  ///
+  /// 病史：plugin_cache.json 曾是裸 list、无版本戳，loadCache() 无条件全量
+  /// 加载；2026-10-10 缓存被 3 条伪造数据覆盖后长期压制真实扫描结果
+  /// （E-5：mtime 2026-10-10、76 条 vendor 全为字面量 "Unknown"、id 全空）。
+  /// 现行约定：
+  ///   1. 落盘一律写信封 {schema, scannedAt, deep, plugins}；
+  ///   2. 读盘校验 schema，不符（旧裸 list / 被篡改）即整份丢弃，
+  ///      不呈现陈旧数据，由下一次扫描重建；
+  ///   3. 落盘前自检：非空快照若 vendor 全为 Unknown/空则拒绝写回
+  ///      （伪造/损坏缓存的签名）；
+  ///   4. 条目唯一键 = path + format。
+  static const int kCacheSchemaVersion = 2;
+
   static File _getCacheFile() => File(ConfigManager.path(
       'plugins${Platform.pathSeparator}plugin_cache.json'));
 
-  /// 剔除磁盘路径已不存在的条目，返回被剔除的数量。
+  /// 剔除磁盘路径已不存在的条目，并按 path+format 去重，返回被剔除的数量。
   ///
   /// A3/A4：缓存可能被手工改写，或插件在扫描后被卸载/移动。曾出现缓存只剩
   /// 3 条伪造路径（C:\VST3\...，丢失 Program Files\Common Files）而真实扫描
@@ -633,13 +665,18 @@ class PluginManager extends ChangeNotifier {
   int _dropMissingPaths() {
     if (_plugins.isEmpty) return 0;
     final before = _plugins.length;
+    final seen = <String>{};
     _plugins = _plugins
-        .where((p) => p.path.isNotEmpty && File(p.path).existsSync())
+        .where((p) =>
+            p.path.isNotEmpty &&
+            File(p.path).existsSync() &&
+            seen.add('${p.path}\u0000${p.format.label}'))
         .toList();
     return before - _plugins.length;
   }
 
-  /// 加载磁盘缓存（启动时秒级恢复历史扫描结果）
+  /// 加载磁盘缓存（启动时秒级恢复历史扫描结果）。
+  /// schema 不符的缓存整份丢弃——宁可重启后为空等重扫，也不展示陈旧数据。
   Future<void> loadCache() async {
     try {
       final file = _getCacheFile();
@@ -647,7 +684,22 @@ class PluginManager extends ChangeNotifier {
         return;
       }
       final text = await file.readAsString();
-      _parsePluginsJson(text);
+      final dynamic decoded = jsonDecode(text);
+      if (decoded is! Map<String, dynamic> ||
+          decoded['schema'] != kCacheSchemaVersion) {
+        debugPrint('[PluginManager] loadCache：缓存 schema 不符或为旧版裸 list，'
+            '整份丢弃，等待重新扫描');
+        return;
+      }
+      final list = decoded['plugins'];
+      if (list is! List) {
+        debugPrint('[PluginManager] loadCache：信封缺少 plugins 数组，丢弃');
+        return;
+      }
+      _plugins = list
+          .whereType<Map>()
+          .map((m) => PluginMetadata.fromJson(Map<String, dynamic>.from(m)))
+          .toList();
       final dropped = _dropMissingPaths();
       if (dropped > 0) {
         // 回写清理，避免每次启动重复展示失效条目
@@ -662,9 +714,17 @@ class PluginManager extends ChangeNotifier {
     }
   }
 
-  /// 保存磁盘缓存
+  /// 保存磁盘缓存（信封格式 + 落盘自检）。
   Future<void> saveCache() async {
     try {
+      // 自检：非空快照却拿不到任何厂商名，是伪造/损坏缓层的签名，
+      // 拒绝写回，避免把坏数据固化成"官方缓存"。
+      if (_plugins.isNotEmpty &&
+          _plugins.every((p) => p.vendor.isEmpty || p.vendor == 'Unknown')) {
+        debugPrint('[PluginManager] saveCache 自检未过'
+            '（vendor 全空/Unknown），拒绝写回缓存');
+        return;
+      }
       final file = _getCacheFile();
       // 父目录可能不存在（全新安装、或被外部清理过）。缺了这步 writeAsString 会
       // 抛 PathNotFoundException 并被下面的 catch 吞掉，表现为扫描结果每次启动都丢。
@@ -672,8 +732,18 @@ class PluginManager extends ChangeNotifier {
       if (!await dir.exists()) {
         await dir.create(recursive: true);
       }
-      final list = _plugins.map((p) => p.toJson()).toList();
-      await file.writeAsString(jsonEncode(list), flush: true);
+      final seen = <String>{};
+      final list = _plugins
+          .where((p) => seen.add('${p.path}\u0000${p.format.label}'))
+          .map((p) => p.toJson())
+          .toList();
+      final envelope = <String, dynamic>{
+        'schema': kCacheSchemaVersion,
+        'scannedAt': DateTime.now().toIso8601String(),
+        'deep': _lastScanDeep,
+        'plugins': list,
+      };
+      await file.writeAsString(jsonEncode(envelope), flush: true);
     } catch (e) {
       debugPrint('[PluginManager] saveCache error: $e');
     }
