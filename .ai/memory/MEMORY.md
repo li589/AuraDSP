@@ -64,6 +64,6 @@
 - **VST3 `kResultTrue == kResultOk == 0`**（`vendor-src/plugin-api/steinberg/vst3/base/TUID.h`）。日志里 `isPlatformTypeSupported(HWND)` 返回 `0` 表示**支持**，不是拒绝。
 - **`std::thread::detach()` ≠ "安全放弃等待"**：它放弃 join 但线程仍持有 `this` 与插件对象引用。超时收尾若 detach，随后 `unload` 释放同一批对象 → `0xC0000374` 堆损坏。正确做法是**隔离（放弃释放）而不是 detach**。
 - **插件 GUI 的线程契约**：宿主父窗口、插件子窗口、消息泵必须在**同一个**线程。只建父窗口在本线程、`set_parent` 在别的线程 → 子窗口收不到 `WM_PAINT`（白框）+ 拖动无响应。可用"子窗口线程 ID == 父窗口线程 ID"直接断言。
-- **`plugin_cache.json` 无 schema 版本戳**，`loadCache()` 无条件加载 → 列表会永远显示两天前的数据（曾 76/76 `vendor="Unknown"`）。改缓存结构必须同时加版本戳 + 失效重扫。
+- **`plugin_cache.json` 曾无 schema 版本戳**，`loadCache()` 无条件加载 → 列表永远显示陈旧数据（曾 76/76 `vendor="Unknown"`）。2026-10-12 B1 已修：信封 `{schema:2,...}`、不符即整份丢弃、落盘前自检拒绝全 Unknown 快照。**再改缓存结构必须同步 schema 版本 + Dart 测试 + rebuild_plugin_cache.py 三处。**
 - Windows 进程退出码要看**真实值**：`0xC0000374`=堆损坏、`0xC0000005`=访问越界。Git Bash 报的 127 等低位截断值会掩盖崩溃；用 `subprocess` 包装取 `returncode`。
 

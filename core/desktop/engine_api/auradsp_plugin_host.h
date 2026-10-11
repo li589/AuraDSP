@@ -34,24 +34,32 @@ enum class PluginFormat {
 struct PluginMetadata {
     std::string path;         // Absolute file/bundle path
     std::string id;           // Unique ID (URI for CLAP, CID hex for VST3)
-    std::string name;         // Display name
+    std::string name;         // Plugin self-reported name (CLAP descriptor->name / VST3 classInfo.name)
+    std::string bundleName;   // Bundle/file stem — what the user actually picked ("KV-Element-FX")
     std::string vendor;       // Vendor name
     std::string version;      // Version string
-    std::string category;     // e.g. "Fx|Reverb", "Effect", etc.
+    std::string category;     // Real category (CLAP features / VST3 subCategories). NOT a free-text description.
+    std::string description;  // Free-text description (CLAP descriptor->description). Display only.
     PluginFormat format = PluginFormat::Unknown;
     bool is64Bit = true;
     uint32_t latency = 0;
     bool isCompatible = true;
     std::string errorMessage;
 
+    /* 只序列化。反序列化在 Dart 侧（PluginMetadata.fromJson），C++ 侧曾有
+     * 一个从未实现的 fromJson 声明，加字段后必然失真，故直接删除而非留死代码。 */
     std::string toJson() const;
-    static PluginMetadata fromJson(const std::string& json);
 };
 
 class IPluginInstance {
 public:
     virtual ~IPluginInstance() = default;
-    virtual bool load(const std::string& path, const std::string& pluginId) = 0;
+    /* scanSeed: 扫描期已确认的元数据（PluginHostManager 的 m_scannedPlugins 命中项）。
+     * 传入后以扫描值为基准，descriptor 只补空字段、绝不覆盖 —— 这是
+     * 「扫描值 == 加载值」的结构性保证；无种子（如从会话恢复直接加载）时
+     * 完全依赖描述符路径，且两条路径共用同一填充函数，优先级一致。 */
+    virtual bool load(const std::string& path, const std::string& pluginId,
+                      const PluginMetadata* scanSeed = nullptr) = 0;
     virtual void unload() = 0;
     virtual bool activate(double sampleRate, uint32_t maxBlockSize) = 0;
     virtual void deactivate() = 0;
