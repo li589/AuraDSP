@@ -144,6 +144,26 @@ void main() {
     test('SessionMemory file path is well-formed', () {
       expect(SessionMemory.sessionPath, contains('session_state.json'));
     });
+
+    test('flutter test runs sandboxed, never touches the real user dir', () {
+      // 前提：flutter test 进程自带 FLUTTER_TEST=true（§13.4.26 根治）。
+      // 若此断言失败，说明运行环境变了，沙箱承诺即失效。
+      expect(Platform.environment['FLUTTER_TEST'], 'true');
+      // 沙箱必须落在系统临时目录，而非真实 %APPDATA%/AuraDSP。
+      expect(ConfigManager.baseDir.startsWith(Directory.systemTemp.path),
+          isTrue);
+      expect(SessionMemory.sessionPath.startsWith(ConfigManager.baseDir),
+          isTrue);
+      // 显式覆盖仍优先（plugin_manager_test 依赖此语义），且可恢复回沙箱。
+      final sandbox = ConfigManager.baseDir;
+      ConfigManager.baseDirOverride = Directory.systemTemp.path;
+      expect(ConfigManager.baseDir, Directory.systemTemp.path);
+      ConfigManager.baseDirOverride = null;
+      expect(ConfigManager.baseDir.startsWith(Directory.systemTemp.path),
+          isTrue);
+      expect(ConfigManager.baseDir, isNot(Directory.systemTemp.path));
+      expect(ConfigManager.baseDir, isNot(sandbox));
+    });
   });
 
   // ---------------------------------------------------------------------

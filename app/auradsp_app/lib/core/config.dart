@@ -114,6 +114,15 @@ abstract final class ConfigManager {
 
   static String get baseDir {
     if (_baseDir != null) return _baseDir!;
+    // 单测自动沙箱：flutter test 进程自带 FLUTTER_TEST=true，
+    // 此时一律指向系统临时目录，永不触碰用户真实数据。
+    // 根因史：plugin_cache 曾被假数据覆盖（事后补了 baseDirOverride）；
+    // AppModel 构造回放真实 session 曾让 stereoBandUsed 断言失败（§13.4.26）。
+    // 显式 baseDirOverride 仍优先（个别测试可自选目录）。
+    if (Platform.environment['FLUTTER_TEST'] == 'true') {
+      _baseDir = Directory.systemTemp.createTempSync('auradsp_test_').path;
+      return _baseDir!;
+    }
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'];
       _baseDir = appData != null
@@ -126,13 +135,11 @@ abstract final class ConfigManager {
     return _baseDir!;
   }
 
-  /// 仅供单元测试注入临时根目录。
+  /// 仅供单元测试注入临时根目录（优先于 FLUTTER_TEST 自动沙箱）。
   ///
-  /// `flutter test` 不做沙箱隔离：`ConfigManager.baseDir` 会指向真实的
-  /// `%APPDATA%/AuraDSP`，任何触发 `saveCache()` / 写配置的测试都会覆盖用户
-  /// 真实数据。历史上 `plugin_manager_test.dart` 调用 `onPluginScanned()` 后
-  /// 把 3 条假插件路径写进了用户的 plugin_cache.json，导致 APP 启动后只剩
-  /// 3 个永远加载不了的插件（真实扫描为 76 个）。测试必须在 setUp 注入临时目录。
+  /// 自 §13.4.26 起，`flutter test` 下 `baseDir` 默认即沙箱（系统临时目录），
+  /// 无需每个测试文件手动注入。本 setter 保留给需要固定目录的测试
+  ///（如 plugin_manager_test 断言缓存回写位置），语义不变：非空即优先。
   @visibleForTesting
   static set baseDirOverride(String? dir) => _baseDir = dir;
 
