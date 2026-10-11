@@ -101,8 +101,15 @@ void main() {
 
     tearDown(() {
       ConfigManager.baseDirOverride = null;
-      if (tempDir.existsSync()) {
-        tempDir.deleteSync(recursive: true);
+      // Windows 上临时目录可能被杀软实时扫描/索引器或尚未收尾的异步写句柄
+      // 短暂占用（errno 32 "另一个程序正在使用此文件"）。清理失败不该判红：
+      // 有限重试后放弃，最坏漏下一个 Temp 目录（2026-10-12 审查修复的瞬态）。
+      for (var i = 0; i < 40 && tempDir.existsSync(); i++) {
+        try {
+          tempDir.deleteSync(recursive: true);
+        } on FileSystemException {
+          sleep(const Duration(milliseconds: 50));
+        }
       }
     });
 
@@ -290,7 +297,14 @@ void main() {
       final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
           '${Platform.pathSeparator}plugin_cache.json');
       cacheFile.parent.createSync(recursive: true);
-      const legacy = [
+      // 审查加固（失败注入发现）：条目路径必须是**磁盘上真实存在**的文件。
+      // 旧版用 C:\VST3\DefinitelyNotInstalled.vst3 —— 即便 schema 门禁被旁路，
+      // 条目也会被 _dropMissingPaths 清掉，测试照样绿，门禁机制未被钉住。
+      // 现存路径下，只有"门禁真的在拦"才能得到空结果。
+      final legacyPlugin =
+          File('${tempDir.path}${Platform.pathSeparator}legacy.vst3');
+      legacyPlugin.writeAsStringSync('stub');
+      final legacy = [
         {
           'id': '1',
           'name': 'Ghost Plugin',
@@ -298,7 +312,7 @@ void main() {
           'version': '1.0',
           'category': '',
           'format': 'VST3',
-          'path': r'C:\VST3\DefinitelyNotInstalled.vst3',
+          'path': legacyPlugin.path,
           'isCompatible': true,
           'errorMessage': '',
         },
@@ -353,6 +367,12 @@ void main() {
       final cacheFile = File('${tempDir.path}${Platform.pathSeparator}plugins'
           '${Platform.pathSeparator}plugin_cache.json');
       cacheFile.parent.createSync(recursive: true);
+      // 审查加固（失败注入发现）：旧版条目用不存在的 C:\VST3\Stale.vst3，
+      // 门禁被旁路时条目会被 _dropMissingPaths 清掉 → 测试照样绿。
+      // 改用真实文件后，只有 schema 门禁真的在拦才能得到空结果。
+      final stalePlugin =
+          File('${tempDir.path}${Platform.pathSeparator}stale.vst3');
+      stalePlugin.writeAsStringSync('stub');
       cacheFile.writeAsStringSync(jsonEncode({
         'schema': 1, // 被改过的版本戳
         'scannedAt': '2026-10-12T01:00:00',
@@ -365,7 +385,7 @@ void main() {
             'version': '9.9',
             'category': 'Fx',
             'format': 'VST3',
-            'path': r'C:\VST3\Stale.vst3',
+            'path': stalePlugin.path,
             'isCompatible': true,
             'errorMessage': '',
           },
@@ -434,6 +454,9 @@ void main() {
       for (var i = 0; i < 100 && !tmpCache.existsSync(); i++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // 轮询只保证文件已被 open（创建即存在），内容可能仍在写 —— 沉降后再读，
+      // 否则可能读到半个 JSON（竞态瞬态，2026-10-12 审查修复）。
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(tmpCache.existsSync(), isTrue);
       expect(manager.plugins.length, 1);
 
@@ -507,6 +530,8 @@ void main() {
       for (var i = 0; i < 100 && !tmpCache.existsSync(); i++) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
+      // 同上：等文件出现后仍需沉降，避免读到写一半的内容。
+      await Future<void>.delayed(const Duration(milliseconds: 200));
       expect(tmpCache.existsSync(), isTrue);
       final envelope = jsonDecode(tmpCache.readAsStringSync()) as Map;
       expect((envelope['plugins'] as List).length, 1);

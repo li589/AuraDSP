@@ -629,10 +629,20 @@ static void setupPluginDllDirectories(const std::string& pluginPath) {
     } catch (...) {}
 }
 
+/// 扩展名大小写不敏感比较（lowerExt 必须已是小写）。
+/// Windows 文件系统不区分大小写：bundle 内二进制叫 foo.VST3 与 foo.vst3
+/// 必须等价。严格比较曾让大写扩展名的整包在扫描中静默消失（违反 D 类契约），
+/// scan() 入口已做 ::tolower 归一化，这里补上内层探测的同款归一化。
+static bool extensionEqualsCI(const fs::path& p, const char* lowerExt) {
+    std::string ext = p.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    return ext == lowerExt;
+}
+
 static std::string extractVendorFromPath(const std::string& filePath) {
     try {
         fs::path p(filePath);
-        while (p.has_filename() && (p.extension() == ".vst3" || p.extension() == ".clap" ||
+        while (p.has_filename() && (extensionEqualsCI(p, ".vst3") || extensionEqualsCI(p, ".clap") ||
                p.filename() == "Contents" || p.filename() == "x86_64-win" ||
                p.filename() == "x86-win" || p.filename() == "Resources")) {
             p = p.parent_path();
@@ -1104,6 +1114,13 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
         std::string peVer = extractProductVersionFromVersionInfo(binaryPath);
         if (!peVer.empty()) meta.version = peVer;
     }
+
+    // 与 applyClapDescriptor / fill32BitIncompatible 对称的末端兜底：
+    // 工厂、PE 版本资源、目录、签名全链都拿不到厂商/版本时，必须落到
+    // "Unknown"/"1.0" 占位而非空串 —— 空串会让快扫/深扫/加载三方产出
+    // 与契约占位不一致的值（UI 侧另有一套 "未知" 展示，双轨易漂移）。
+    if (meta.vendor.empty()) meta.vendor = "Unknown";
+    if (meta.version.empty()) meta.version = "1.0";
 
     if (outTuid) std::memcpy(outTuid, classInfo.cid, sizeof(Steinberg::TUID));
     return true;
@@ -2706,7 +2723,9 @@ std::string PluginScanner::resolveBundleBinary(const std::string& bundlePath, Pl
             fs::path subBinary = fs::path(bundlePath) / "Contents" / arch;
             if (!fs::exists(subBinary, ec)) continue;
             for (const auto& entry : fs::directory_iterator(subBinary, ec)) {
-                if (entry.path().extension() == ext) {
+                // 大小写不敏感：内层二进制叫 Upper.VST3 时严格比较会漏掉整包，
+                // 与 scan() 入口的 ::tolower 归一化保持一致。
+                if (extensionEqualsCI(entry.path(), ext)) {
                     if (outArch) *outArch = arch;
                     return entry.path().string();
                 }
