@@ -254,9 +254,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbAutoQuality => 'リバーブを有効にするため品質モードへ自動切替しました';
 
   @override
-  String get reverbAutoQualityHint => 'プリセット選択で品質モードへ自動切替（リバーブは T2 効果）';
-
-  @override
   String get stereoWidenHint =>
       'ワイドニングは 75% まで：それ以上は中央定位（ボーカル等）が打ち消されほぼ無音になります';
 

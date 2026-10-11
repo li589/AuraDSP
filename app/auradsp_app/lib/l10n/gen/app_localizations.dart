@@ -574,12 +574,6 @@ abstract class AppLocalizations {
   /// **'已自动切换到品质延迟档以启用混响'**
   String get reverbAutoQuality;
 
-  /// No description provided for @reverbAutoQualityHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'点击预设会自动切换到品质延迟档（混响为 T2 效果，需要品质档）'**
-  String get reverbAutoQualityHint;
-
   /// No description provided for @stereoWidenHint.
   ///
   /// In zh, this message translates to:
