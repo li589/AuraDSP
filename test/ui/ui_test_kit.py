@@ -17,7 +17,7 @@ import shutil
 import subprocess
 import tempfile
 import time
-from PIL import ImageChops, ImageGrab
+from PIL import Image, ImageChops, ImageGrab
 
 
 def _SCRATCH():
@@ -31,6 +31,7 @@ except Exception:
 
 user32 = ctypes.windll.user32
 kernel32 = ctypes.windll.kernel32
+psapi = ctypes.windll.psapi
 gdi32 = ctypes.windll.gdi32
 EP = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
 
