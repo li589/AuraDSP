@@ -184,5 +184,363 @@
   "tubeStyleTape": "Tape Warmth",
   "tubeOversampling": "Oversampling",
   "tubeCompensation": "Output Compensation",
-  "tubeMix": "Dry/Wet Mix"
+  "tubeMix": "Dry/Wet Mix",
+  "dlgCancel": "Cancel",
+  "dlgAdd": "Add",
+  "dlgSave": "Save",
+  "dlgLoad": "Load",
+  "dlgClose": "Close",
+  "dlgUnload": "Unload",
+  "dlgPreset": "Preset",
+  "memTitle": "Persistent Memory & External Config",
+  "memHint": "Automatically records all effect settings and restores them seamlessly on next launch.",
+  "memAutoRestore": "Auto-save and restore session on exit",
+  "memDir": "Config directory: {path}",
+  "@memDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "memClear": "Clear Session Memory",
+  "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
+  "memReset": "Reset External Config to Defaults",
+  "memResetDone": "config.json has been reset to the standard template",
+  "latUnmeasured": "Unmeasured",
+  "latTipMeasured": "Component latency (impulse-response measured): {text}\nTap ↻ to re-measure (tens of ms, playback unaffected)",
+  "@latTipMeasured": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "latTipProbing": "Measuring component latency…",
+  "latTipUnmeasured": "Component latency not measured yet\nTap ↻ for one impulse-response measurement (tens of ms)",
+  "eqBands": "{n} bands",
+  "@eqBands": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "eqCanvasHint": "Drag vertically for gain · double-tap a node to zero 0dB · double-tap background to flatten",
+  "eqBypassOn": "Bypass active",
+  "eqFilterMinphase": "Minimum-phase FIR",
+  "eqFilterIir6": "6th-order IIR",
+  "eqFilterIir12": "12th-order IIR",
+  "eqInterpMakima": "Makima (smooth, overshoot-free)",
+  "eqInterpPchip": "PCHIP (monotone shape-preserving)",
+  "eqPresetFlat": "Flat",
+  "eqPresetPop": "Pop",
+  "eqPresetRock": "Rock",
+  "eqPresetJazz": "Jazz",
+  "eqPresetClassical": "Classical",
+  "eqPresetVocal": "Vocal Boost",
+  "eqPresetSmile": "Smile (V-Shape)",
+  "eqPresetBass": "Bass Boost",
+  "eqPresetTreble": "Treble Clarity",
+  "eqPresetCustom": "Custom",
+  "eqPresetPick": "Pick an EQ style preset",
+  "eqQTip": "Q-Factor filter sharpness (0.3 - 10.0)\nDrag vertically · double-tap to reset 1.41",
+  "stTube": "Tube",
+  "stComp": "Limiter",
+  "stBass": "Bass Boost",
+  "stEq": "Equalizer",
+  "stArbmag": "Arbitrary-response EQ",
+  "stConv": "Impulse Response",
+  "stScript": "Script",
+  "stXfeed": "Crossfeed",
+  "stStereo": "Stereo Widening",
+  "stReverb": "Reverb",
+  "stOutput": "Output Stage",
+  "chainTitle": "Processing Chain",
+  "chainOrderTitle": "Order & Status",
+  "chainOrderHint": "Drag to reorder processing (top-down); tap \"Apply\" when changed. Each node can be bypassed/enabled independently; per-node live stereo meters on the right.",
+  "chainApply": "Apply Order",
+  "chainReset": "Reset to Defaults",
+  "chainReserved": "Reserved",
+  "chainFlowTitle": "Signal Flow (Current Order)",
+  "chainFlowCaption": "Global signal-flow overview (left to right):",
+  "chainNodeShelf": "Low-shelf EQ",
+  "chainNodeVendor": "12-stage internal DSP chain",
+  "chainNodeReverb": "Reverb & Soundstage",
+  "chainNodeLimiter": "Main Limiter",
+  "chainNodeOutput": "Audio Output",
+  "chainSlotActive": "Slot {n}: {name} ({fmt})",
+  "@chainSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "fmt": {
+        "type": "String"
+      }
+    }
+  },
+  "chainSlotEmpty": "Slot {n}: no plugin loaded",
+  "@chainSlotEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotBypassed": "Bypassed (thru)",
+  "chainSlotProcessing": "Processing",
+  "chainSlotStatusLine": "Status: {a} • latency: {b} samples",
+  "@chainSlotStatusLine": {
+    "placeholders": {
+      "a": {
+        "type": "String"
+      },
+      "b": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotHint": "Pick an effect on the Plugins page to load into this slot",
+  "chainOpenGui": "Open Native UI (GUI)",
+  "chainBypassed": "Bypassed",
+  "chainEnable": "Enable",
+  "lpSaved": "Saved: {name}.eel",
+  "@lpSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpAddDirTitle": "Add External Script Preset Folder",
+  "lpAddDirPrompt": "Enter the full folder path containing .eel / .txt script presets:",
+  "lpAddDirExample": "E.g.: D:\\AudioScripts\\EelPresets",
+  "lpChars": "{n} chars",
+  "@lpChars": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpReady": "Syntax OK",
+  "lpIssues": "{n} potential problems",
+  "@lpIssues": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpIssueAt": "Line {line}: {msg}",
+  "@lpIssueAt": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "msg": {
+        "type": "String"
+      }
+    }
+  },
+  "lpShowAll": "All 8 slots",
+  "lpAdaptive": "Adaptive ({n})",
+  "@lpAdaptive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoSliders": "Current code declares no slider1..8 params (pure algorithmic processing)",
+  "lpExpandSliders": "Expand all 8 sliders",
+  "lpAddDir": "Add External Folder",
+  "lpSlidersHint": "Sliders adapt to the slider params declared/referenced by the current script; tap top-right to switch mode.",
+  "lpLibraryHint": "Supports the local %APPDATA% library plus auto-indexed external preset folders.",
+  "convIrTitle": "Impulse Response (IR)",
+  "convFramesLine": "{frames} frames · {dur} · {ch}ch · peak {peak} dBFS · src {rate}Hz",
+  "@convFramesLine": {
+    "placeholders": {
+      "frames": {
+        "type": "int"
+      },
+      "dur": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "int"
+      },
+      "peak": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "ddcFilterTitle": "VDC Filter",
+  "stereoBandActive": "Per-band active",
+  "stBand0": "Low",
+  "stBand1": "Low-Mid",
+  "stBand2": "Mid",
+  "stBand3": "High-Mid",
+  "stBand4": "High",
+  "stBandHint": "Adjust per-band widening independently; touching any band detaches from the global slider",
+  "presetFactoryTitle": "Factory tuning presets",
+  "presetUserTitle": "My custom presets",
+  "presetUserEmpty": "No custom presets yet — save below after tuning",
+  "presetLoadedFactory": "Loaded factory preset: {name}",
+  "@presetLoadedFactory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetLoadedUser": "Loaded custom preset: {name}",
+  "@presetLoadedUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetSaveHint": "Enter a name to save current state as a user preset",
+  "convSpectrumCaption": "32 bands · 0..1 normalized energy",
+  "sliderResetTip": "Click to reset to default",
+  "plugAddDirTitle": "Add Plugin Search Folder",
+  "plugAddDirPrompt": "Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:",
+  "plugAddDirExample": "E.g.: D:\\AudioPlugins\\VST3",
+  "plugAddScan": "Add & Scan",
+  "plugPresetTitle": "Plugin presets — {name}",
+  "@plugPresetTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "plugPresetSaveLabel": "Save current parameter state",
+  "plugPresetNameHint": "Enter a new preset name...",
+  "plugPresetList": "Saved presets ({n})",
+  "@plugPresetList": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugPresetEmpty": "No saved presets yet; save via the input above.",
+  "plugTitle": "Plugin Center",
+  "plugLibTitle": "Third-party Effect Library",
+  "plugLibHint": "Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.",
+  "plugDeepScan": "Deep scan",
+  "plugScan": "Aggregate plugin scan",
+  "plugScanning": "Scanning...",
+  "plugOpenFolder": "Open Standard VST3 Folder",
+  "plugSearchHint": "Search plugin name, vendor or path...",
+  "plugM1Title": "M1 Plugin Host Engine Spec",
+  "plugM1Hint": "Multi-format in-process host with 64-bit VST3 and CLAP support.",
+  "plugFeatSlots": "Dual slots (Slot 1 / Slot 2) managed independently & concurrently",
+  "plugFeatStages": "Full-chain stage insertion (Pre-DSP ~ Post-Limiter)",
+  "plugFeatGui": "Native Win32 GUI popups on a dedicated message loop",
+  "plugFeatPreset": "Binary-stream preset save & instant restore",
+  "plugFeatDirs": "Custom plugin folder search & local state snapshots",
+  "plugFeatRt": "Flat stereo RT-Safe preallocation, zero locks",
+  "plugSlot": "Slot {n} (Slot {n})",
+  "@plugSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugBypassed": "Bypassed",
+  "plugCustomTitle": "Custom Plugin Search Folders",
+  "plugCustomHint": "Add VST3/CLAP paths from other drives or your DAW; they merge into scans automatically.",
+  "plugCustomAdd": "Add Folder",
+  "plugCustomEmpty": "No custom folders yet. Besides system defaults (C:\\Program Files\\Common Files\\VST3 etc.), add via top-right.",
+  "plugMountTitle": "Mount Status (Slot {n})",
+  "@plugMountTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmpty": "Slot {n} has no third-party plugin loaded",
+  "@plugMountEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmptyHint": "Pick an installed VST3 / CLAP plugin from the library list below to load",
+  "plugScanNow": "Scan Installed Plugins Now",
+  "plugMountedTitle": "Currently Loaded Plugin (Slot {n})",
+  "@plugMountedTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugOpenGuiBtn": "Open UI (GUI)",
+  "plugUnloadFromSlot": "Unload from This Slot",
+  "plugLoadToSlot": "Load into Slot {n}",
+  "@plugLoadToSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugLatencyLabel": "Measured Audio Latency",
+  "plugStageLabel": "Signal-chain insert stage:",
+  "plugRtNote": "Live serial chaining • RT-Safe contract kept",
+  "plugFilterAll": "All",
+  "plugNoPlugins": "No third-party plugins detected",
+  "plugNoPluginsHint": "Make sure plugins live in system VST3 / CLAP paths, or add a custom folder above and rescan",
+  "plugNoMatch": "No plugins match the current search/filter",
+  "plugSlotActive": "Slot {n} active",
+  "@plugSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugSlotLoaded": "Slot {n} loaded",
+  "@plugSlotLoaded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugUnknownVendor": "Unknown vendor",
+  "plugThirdParty": "Third-party plugin",
+  "plugSlotPluginLine": "{name} • [{stage}]",
+  "@plugSlotPluginLine": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "stage": {
+        "type": "String"
+      }
+    }
+  },
+  "plugSlotNoFx": "No effect loaded",
+  "chainActive": "Active",
+  "chainBypass": "Bypass",
+  "plugActive": "Active",
+  "lpSaveFailed": "Save failed (bad name or unwritable disk)",
+  "chainVstTitle": "Third-party VST / CLAP Plugin Slots & Stage Order",
+  "chainVstHint": "Mount multiple slots in parallel; set each plugin's insert stage and order on the global chain below."
 }

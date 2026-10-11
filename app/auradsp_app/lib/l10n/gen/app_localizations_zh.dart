@@ -450,7 +450,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get eqMultiBand => '多段图形均衡器';
 
   @override
-  String get eqBands => '频段规格';
+  String eqBands(int n) {
+    return '$n段';
+  }
 
   @override
   String get eqPresets => '预设风格';
@@ -520,4 +522,540 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tubeMix => '干湿混合比';
+
+  @override
+  String get dlgCancel => '取消';
+
+  @override
+  String get dlgAdd => '添加';
+
+  @override
+  String get dlgSave => '保存';
+
+  @override
+  String get dlgLoad => '载入';
+
+  @override
+  String get dlgClose => '关闭';
+
+  @override
+  String get dlgUnload => '卸载';
+
+  @override
+  String get dlgPreset => '预设';
+
+  @override
+  String get memTitle => '持久化记忆与配置外置';
+
+  @override
+  String get memHint => '自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。';
+
+  @override
+  String get memAutoRestore => '退出时自动保存并恢复会话记忆';
+
+  @override
+  String memDir(String path) {
+    return '配置存储目录: $path';
+  }
+
+  @override
+  String get memClear => '清除会话记忆';
+
+  @override
+  String get memCleared => '已清除持久化会话记忆，下次启动将使用纯净默认值';
+
+  @override
+  String get memReset => '重置外置配置为默认';
+
+  @override
+  String get memResetDone => '已重置 config.json 为标准配置模板';
+
+  @override
+  String get latUnmeasured => '未测量';
+
+  @override
+  String latTipMeasured(String text) {
+    return '组件处理延迟（脉冲响应实测）: $text\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）';
+  }
+
+  @override
+  String get latTipProbing => '正在测量组件延迟…';
+
+  @override
+  String get latTipUnmeasured => '尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）';
+
+  @override
+  String get eqCanvasHint => '上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位';
+
+  @override
+  String get eqBypassOn => '旁路生效中 (Bypass)';
+
+  @override
+  String get eqFilterMinphase => '最小相位 FIR';
+
+  @override
+  String get eqFilterIir6 => '6阶 IIR';
+
+  @override
+  String get eqFilterIir12 => '12阶 IIR';
+
+  @override
+  String get eqInterpMakima => 'Makima (平滑防冲)';
+
+  @override
+  String get eqInterpPchip => 'PCHIP (单调保形)';
+
+  @override
+  String get eqPresetFlat => '平直 (Flat)';
+
+  @override
+  String get eqPresetPop => '流行 (Pop)';
+
+  @override
+  String get eqPresetRock => '摇滚 (Rock)';
+
+  @override
+  String get eqPresetJazz => '爵士 (Jazz)';
+
+  @override
+  String get eqPresetClassical => '古典 (Classical)';
+
+  @override
+  String get eqPresetVocal => '人声增强 (Vocal)';
+
+  @override
+  String get eqPresetSmile => '微笑增强 (V-Shape)';
+
+  @override
+  String get eqPresetBass => '低音强化 (Bass+)';
+
+  @override
+  String get eqPresetTreble => '高音清晰 (Treble+)';
+
+  @override
+  String get eqPresetCustom => '自定义 (Custom)';
+
+  @override
+  String get eqPresetPick => '选择 EQ 风格预设';
+
+  @override
+  String get eqQTip => 'Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41';
+
+  @override
+  String get stTube => '电子管';
+
+  @override
+  String get stComp => '压限器';
+
+  @override
+  String get stBass => '低音增强';
+
+  @override
+  String get stEq => '均衡器';
+
+  @override
+  String get stArbmag => '任意响应 EQ';
+
+  @override
+  String get stConv => '脉冲响应';
+
+  @override
+  String get stScript => '脚本';
+
+  @override
+  String get stXfeed => '串扰消除';
+
+  @override
+  String get stStereo => '声场展宽';
+
+  @override
+  String get stReverb => '混响';
+
+  @override
+  String get stOutput => '输出级';
+
+  @override
+  String get chainTitle => '处理链';
+
+  @override
+  String get chainOrderTitle => '处理顺序与状态';
+
+  @override
+  String get chainOrderHint =>
+      '拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。';
+
+  @override
+  String get chainApply => '应用顺序';
+
+  @override
+  String get chainReset => '恢复默认';
+
+  @override
+  String get chainReserved => '预留';
+
+  @override
+  String get chainFlowTitle => '信号流（当前顺序）';
+
+  @override
+  String get chainFlowCaption => '全局信号流顺序示意 (自左至右)：';
+
+  @override
+  String get chainNodeShelf => '低频搁架 EQ';
+
+  @override
+  String get chainNodeVendor => '12级内部 DSP 链路';
+
+  @override
+  String get chainNodeReverb => '混响与声场';
+
+  @override
+  String get chainNodeLimiter => '主限幅 Limiter';
+
+  @override
+  String get chainNodeOutput => '音频输出';
+
+  @override
+  String chainSlotActive(int n, String name, String fmt) {
+    return '插槽 $n：$name ($fmt)';
+  }
+
+  @override
+  String chainSlotEmpty(int n) {
+    return '插槽 $n：未挂载插件';
+  }
+
+  @override
+  String get chainSlotBypassed => '已旁路 (直通)';
+
+  @override
+  String get chainSlotProcessing => '正在处理';
+
+  @override
+  String chainSlotStatusLine(String a, int b) {
+    return '状态：$a • 延迟：$b 采样';
+  }
+
+  @override
+  String get chainSlotHint => '可在“插件”页面选择效果器加载至本插槽';
+
+  @override
+  String get chainOpenGui => '打开原生界面 (GUI)';
+
+  @override
+  String get chainBypassed => '已旁路';
+
+  @override
+  String get chainEnable => '启用';
+
+  @override
+  String lpSaved(String name) {
+    return '已保存：$name.eel';
+  }
+
+  @override
+  String get lpAddDirTitle => '添加外部脚本预设目录';
+
+  @override
+  String get lpAddDirPrompt => '请输入包含 .eel / .txt 脚本预设的完整文件夹路径：';
+
+  @override
+  String get lpAddDirExample => '例：D:\\AudioScripts\\EelPresets';
+
+  @override
+  String lpChars(int n) {
+    return '$n 字符';
+  }
+
+  @override
+  String get lpReady => '语法就绪';
+
+  @override
+  String lpIssues(int n) {
+    return '$n 处潜在问题';
+  }
+
+  @override
+  String lpIssueAt(int line, String msg) {
+    return '第 $line 行：$msg';
+  }
+
+  @override
+  String get lpShowAll => '全部 8 槽';
+
+  @override
+  String lpAdaptive(int n) {
+    return '自适应 ($n)';
+  }
+
+  @override
+  String get lpNoSliders => '当前代码未声明或引用 slider1..8 参数（纯算法处理）';
+
+  @override
+  String get lpExpandSliders => '展开全部 8 槽滑块';
+
+  @override
+  String get lpAddDir => '添加外部目录';
+
+  @override
+  String get lpSlidersHint => '滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。';
+
+  @override
+  String get lpLibraryHint => '支持本地 %APPDATA% 库与外部多预设文件夹自动索引。';
+
+  @override
+  String get convIrTitle => '脉冲响应 (IR)';
+
+  @override
+  String convFramesLine(int frames, String dur, int ch, String peak, int rate) {
+    return '$frames 帧 · $dur · ${ch}ch · 峰值 $peak dBFS · 源 ${rate}Hz';
+  }
+
+  @override
+  String get ddcFilterTitle => 'VDC 滤波器';
+
+  @override
+  String get stereoBandActive => '分带生效中';
+
+  @override
+  String get stBand0 => '低频段';
+
+  @override
+  String get stBand1 => '中低频';
+
+  @override
+  String get stBand2 => '中频';
+
+  @override
+  String get stBand3 => '中高频';
+
+  @override
+  String get stBand4 => '高频';
+
+  @override
+  String get stBandHint => '独立调节各频段展开度；调节任一带即脱离全局总滑块';
+
+  @override
+  String get presetFactoryTitle => '出厂经典调音预设';
+
+  @override
+  String get presetUserTitle => '我的自定义预设';
+
+  @override
+  String get presetUserEmpty => '暂无用户自定义预设 — 调好参数后在下方保存';
+
+  @override
+  String presetLoadedFactory(String name) {
+    return '已载入出厂预设: $name';
+  }
+
+  @override
+  String presetLoadedUser(String name) {
+    return '已载入自定义预设: $name';
+  }
+
+  @override
+  String get presetSaveHint => '输入预设名称保存当前状态为用户预设';
+
+  @override
+  String get convSpectrumCaption => '32 频带 · 0..1 归一化能量';
+
+  @override
+  String get sliderResetTip => '点击重置默认值';
+
+  @override
+  String get plugAddDirTitle => '添加插件检索目录';
+
+  @override
+  String get plugAddDirPrompt => '请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：';
+
+  @override
+  String get plugAddDirExample => '例：D:\\AudioPlugins\\VST3';
+
+  @override
+  String get plugAddScan => '添加并扫描';
+
+  @override
+  String plugPresetTitle(String name) {
+    return '插件预设管理 — $name';
+  }
+
+  @override
+  String get plugPresetSaveLabel => '保存当前参数状态';
+
+  @override
+  String get plugPresetNameHint => '输入新预设名称...';
+
+  @override
+  String plugPresetList(int n) {
+    return '已有预设列表 ($n)';
+  }
+
+  @override
+  String get plugPresetEmpty => '暂无已保存预设，可通过上方输入框保存。';
+
+  @override
+  String get plugTitle => '插件中心';
+
+  @override
+  String get plugLibTitle => '第三方效果器库';
+
+  @override
+  String get plugLibHint =>
+      '系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。';
+
+  @override
+  String get plugDeepScan => '深度遍历';
+
+  @override
+  String get plugScan => '聚合扫描插件';
+
+  @override
+  String get plugScanning => '正在扫描...';
+
+  @override
+  String get plugOpenFolder => '打开 VST3 标准目录';
+
+  @override
+  String get plugSearchHint => '搜索插件名称、厂商或路径...';
+
+  @override
+  String get plugM1Title => 'M1 插件宿主引擎规范';
+
+  @override
+  String get plugM1Hint => '多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。';
+
+  @override
+  String get plugFeatSlots => '双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发';
+
+  @override
+  String get plugFeatStages => '全音效链阶段插入 (Pre-DSP ~ Post-Limiter)';
+
+  @override
+  String get plugFeatGui => '原生 Win32 GUI 弹窗独立消息循环';
+
+  @override
+  String get plugFeatPreset => '二进制流预设保存与即时载入恢复';
+
+  @override
+  String get plugFeatDirs => '可自定义插件目录检索与本地状态快照';
+
+  @override
+  String get plugFeatRt => '平面双声道 RT-Safe 预分配零锁保障';
+
+  @override
+  String plugSlot(int n) {
+    return '插槽 $n (Slot $n)';
+  }
+
+  @override
+  String get plugBypassed => '旁路';
+
+  @override
+  String get plugCustomTitle => '自定义插件检索目录';
+
+  @override
+  String get plugCustomHint => '添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。';
+
+  @override
+  String get plugCustomAdd => '添加目录';
+
+  @override
+  String get plugCustomEmpty =>
+      '暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。';
+
+  @override
+  String plugMountTitle(int n) {
+    return '挂载状态 (插槽 $n)';
+  }
+
+  @override
+  String plugMountEmpty(int n) {
+    return '插槽 $n 暂未挂载第三方插件';
+  }
+
+  @override
+  String get plugMountEmptyHint => '请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载';
+
+  @override
+  String get plugScanNow => '立即扫描本机已安装插件';
+
+  @override
+  String plugMountedTitle(int n) {
+    return '当前挂载插件 (插槽 $n)';
+  }
+
+  @override
+  String get plugOpenGuiBtn => '打开界面 (GUI)';
+
+  @override
+  String get plugUnloadFromSlot => '从当前槽卸载';
+
+  @override
+  String plugLoadToSlot(int n) {
+    return '载入至插槽 $n';
+  }
+
+  @override
+  String get plugLatencyLabel => '实测音频延迟';
+
+  @override
+  String get plugStageLabel => '信号处理链插入阶段：';
+
+  @override
+  String get plugRtNote => '实时动态串联 • 保持 RT-Safe 契约';
+
+  @override
+  String get plugFilterAll => '全部';
+
+  @override
+  String get plugNoPlugins => '未检测到已安装的第三方插件';
+
+  @override
+  String get plugNoPluginsHint =>
+      '请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描';
+
+  @override
+  String get plugNoMatch => '未找到符合当前搜索和过滤条件的插件';
+
+  @override
+  String plugSlotActive(int n) {
+    return '插槽 $n 活跃中';
+  }
+
+  @override
+  String plugSlotLoaded(int n) {
+    return '插槽 $n 已载入';
+  }
+
+  @override
+  String get plugUnknownVendor => '未知厂商';
+
+  @override
+  String get plugThirdParty => '第三方插件';
+
+  @override
+  String plugSlotPluginLine(String name, String stage) {
+    return '$name • [$stage]';
+  }
+
+  @override
+  String get plugSlotNoFx => '未挂载效果器';
+
+  @override
+  String get chainActive => '生效中';
+
+  @override
+  String get chainBypass => '旁路';
+
+  @override
+  String get plugActive => '生效';
+
+  @override
+  String get lpSaveFailed => '保存失败（名称非法或磁盘不可写）';
+
+  @override
+  String get chainVstTitle => '第三方 VST / CLAP 插件挂载槽与阶段处理顺序';
+
+  @override
+  String get chainVstHint => '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。';
 }

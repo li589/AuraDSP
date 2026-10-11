@@ -131,15 +131,15 @@ class SettingsPage extends StatelessWidget {
           // 06 持久化记忆与外置配置
           SectionCard(
             index: '06',
-            title: '持久化记忆与配置外置',
-            hint: '自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。',
+            title: l.memTitle,
+            hint: l.memHint,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text('退出时自动保存并恢复会话记忆', style: labelOf(p)),
+                    Text(l.memAutoRestore, style: labelOf(p)),
                     AuraSwitch(
                       value: model.config.autoRestoreSession,
                       onChanged: model.setAutoRestoreSession,
@@ -147,30 +147,30 @@ class SettingsPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AuraSpace.sm),
-                Text('配置存储目录: ${ConfigManager.baseDir}',
+                Text(l.memDir(ConfigManager.baseDir),
                     style: monoOf(p, size: 10, color: p.textDim)),
                 const SizedBox(height: AuraSpace.sm),
                 Row(
                   children: [
                     AuraChip(
-                      '清除会话记忆',
+                      l.memClear,
                       icon: Icons.delete_outline_rounded,
                       onTap: () {
                         SessionMemory.clear();
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('已清除持久化会话记忆，下次启动将使用纯净默认值'),
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(l.memCleared),
                           duration: Duration(milliseconds: 1400),
                         ));
                       },
                     ),
                     const SizedBox(width: AuraSpace.sm),
                     AuraChip(
-                      '重置外置配置为默认',
+                      l.memReset,
                       icon: Icons.restore_rounded,
                       onTap: () {
                         model.resetConfig();
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                          content: Text('已重置 config.json 为标准配置模板'),
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(l.memResetDone),
                           duration: Duration(milliseconds: 1400),
                         ));
                       },

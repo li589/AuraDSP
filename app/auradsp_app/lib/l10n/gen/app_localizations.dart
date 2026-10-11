@@ -967,8 +967,8 @@ abstract class AppLocalizations {
   /// No description provided for @eqBands.
   ///
   /// In zh, this message translates to:
-  /// **'频段规格'**
-  String get eqBands;
+  /// **'{n}段'**
+  String eqBands(int n);
 
   /// No description provided for @eqPresets.
   ///
@@ -1107,6 +1107,978 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'干湿混合比'**
   String get tubeMix;
+
+  /// No description provided for @dlgCancel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消'**
+  String get dlgCancel;
+
+  /// No description provided for @dlgAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加'**
+  String get dlgAdd;
+
+  /// No description provided for @dlgSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get dlgSave;
+
+  /// No description provided for @dlgLoad.
+  ///
+  /// In zh, this message translates to:
+  /// **'载入'**
+  String get dlgLoad;
+
+  /// No description provided for @dlgClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get dlgClose;
+
+  /// No description provided for @dlgUnload.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载'**
+  String get dlgUnload;
+
+  /// No description provided for @dlgPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设'**
+  String get dlgPreset;
+
+  /// No description provided for @memTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'持久化记忆与配置外置'**
+  String get memTitle;
+
+  /// No description provided for @memHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。'**
+  String get memHint;
+
+  /// No description provided for @memAutoRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出时自动保存并恢复会话记忆'**
+  String get memAutoRestore;
+
+  /// No description provided for @memDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置存储目录: {path}'**
+  String memDir(String path);
+
+  /// No description provided for @memClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除会话记忆'**
+  String get memClear;
+
+  /// No description provided for @memCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'已清除持久化会话记忆，下次启动将使用纯净默认值'**
+  String get memCleared;
+
+  /// No description provided for @memReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置外置配置为默认'**
+  String get memReset;
+
+  /// No description provided for @memResetDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已重置 config.json 为标准配置模板'**
+  String get memResetDone;
+
+  /// No description provided for @latUnmeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未测量'**
+  String get latUnmeasured;
+
+  /// No description provided for @latTipMeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'组件处理延迟（脉冲响应实测）: {text}\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）'**
+  String latTipMeasured(String text);
+
+  /// No description provided for @latTipProbing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在测量组件延迟…'**
+  String get latTipProbing;
+
+  /// No description provided for @latTipUnmeasured.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）'**
+  String get latTipUnmeasured;
+
+  /// No description provided for @eqCanvasHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位'**
+  String get eqCanvasHint;
+
+  /// No description provided for @eqBypassOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路生效中 (Bypass)'**
+  String get eqBypassOn;
+
+  /// No description provided for @eqFilterMinphase.
+  ///
+  /// In zh, this message translates to:
+  /// **'最小相位 FIR'**
+  String get eqFilterMinphase;
+
+  /// No description provided for @eqFilterIir6.
+  ///
+  /// In zh, this message translates to:
+  /// **'6阶 IIR'**
+  String get eqFilterIir6;
+
+  /// No description provided for @eqFilterIir12.
+  ///
+  /// In zh, this message translates to:
+  /// **'12阶 IIR'**
+  String get eqFilterIir12;
+
+  /// No description provided for @eqInterpMakima.
+  ///
+  /// In zh, this message translates to:
+  /// **'Makima (平滑防冲)'**
+  String get eqInterpMakima;
+
+  /// No description provided for @eqInterpPchip.
+  ///
+  /// In zh, this message translates to:
+  /// **'PCHIP (单调保形)'**
+  String get eqInterpPchip;
+
+  /// No description provided for @eqPresetFlat.
+  ///
+  /// In zh, this message translates to:
+  /// **'平直 (Flat)'**
+  String get eqPresetFlat;
+
+  /// No description provided for @eqPresetPop.
+  ///
+  /// In zh, this message translates to:
+  /// **'流行 (Pop)'**
+  String get eqPresetPop;
+
+  /// No description provided for @eqPresetRock.
+  ///
+  /// In zh, this message translates to:
+  /// **'摇滚 (Rock)'**
+  String get eqPresetRock;
+
+  /// No description provided for @eqPresetJazz.
+  ///
+  /// In zh, this message translates to:
+  /// **'爵士 (Jazz)'**
+  String get eqPresetJazz;
+
+  /// No description provided for @eqPresetClassical.
+  ///
+  /// In zh, this message translates to:
+  /// **'古典 (Classical)'**
+  String get eqPresetClassical;
+
+  /// No description provided for @eqPresetVocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'人声增强 (Vocal)'**
+  String get eqPresetVocal;
+
+  /// No description provided for @eqPresetSmile.
+  ///
+  /// In zh, this message translates to:
+  /// **'微笑增强 (V-Shape)'**
+  String get eqPresetSmile;
+
+  /// No description provided for @eqPresetBass.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音强化 (Bass+)'**
+  String get eqPresetBass;
+
+  /// No description provided for @eqPresetTreble.
+  ///
+  /// In zh, this message translates to:
+  /// **'高音清晰 (Treble+)'**
+  String get eqPresetTreble;
+
+  /// No description provided for @eqPresetCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义 (Custom)'**
+  String get eqPresetCustom;
+
+  /// No description provided for @eqPresetPick.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 EQ 风格预设'**
+  String get eqPresetPick;
+
+  /// No description provided for @eqQTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41'**
+  String get eqQTip;
+
+  /// No description provided for @stTube.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管'**
+  String get stTube;
+
+  /// No description provided for @stComp.
+  ///
+  /// In zh, this message translates to:
+  /// **'压限器'**
+  String get stComp;
+
+  /// No description provided for @stBass.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强'**
+  String get stBass;
+
+  /// No description provided for @stEq.
+  ///
+  /// In zh, this message translates to:
+  /// **'均衡器'**
+  String get stEq;
+
+  /// No description provided for @stArbmag.
+  ///
+  /// In zh, this message translates to:
+  /// **'任意响应 EQ'**
+  String get stArbmag;
+
+  /// No description provided for @stConv.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲响应'**
+  String get stConv;
+
+  /// No description provided for @stScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本'**
+  String get stScript;
+
+  /// No description provided for @stXfeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'串扰消除'**
+  String get stXfeed;
+
+  /// No description provided for @stStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场展宽'**
+  String get stStereo;
+
+  /// No description provided for @stReverb.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响'**
+  String get stReverb;
+
+  /// No description provided for @stOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出级'**
+  String get stOutput;
+
+  /// No description provided for @chainTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理链'**
+  String get chainTitle;
+
+  /// No description provided for @chainOrderTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理顺序与状态'**
+  String get chainOrderTitle;
+
+  /// No description provided for @chainOrderHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。'**
+  String get chainOrderHint;
+
+  /// No description provided for @chainApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用顺序'**
+  String get chainApply;
+
+  /// No description provided for @chainReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认'**
+  String get chainReset;
+
+  /// No description provided for @chainReserved.
+  ///
+  /// In zh, this message translates to:
+  /// **'预留'**
+  String get chainReserved;
+
+  /// No description provided for @chainFlowTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号流（当前顺序）'**
+  String get chainFlowTitle;
+
+  /// No description provided for @chainFlowCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局信号流顺序示意 (自左至右)：'**
+  String get chainFlowCaption;
+
+  /// No description provided for @chainNodeShelf.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架 EQ'**
+  String get chainNodeShelf;
+
+  /// No description provided for @chainNodeVendor.
+  ///
+  /// In zh, this message translates to:
+  /// **'12级内部 DSP 链路'**
+  String get chainNodeVendor;
+
+  /// No description provided for @chainNodeReverb.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响与声场'**
+  String get chainNodeReverb;
+
+  /// No description provided for @chainNodeLimiter.
+  ///
+  /// In zh, this message translates to:
+  /// **'主限幅 Limiter'**
+  String get chainNodeLimiter;
+
+  /// No description provided for @chainNodeOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频输出'**
+  String get chainNodeOutput;
+
+  /// No description provided for @chainSlotActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n}：{name} ({fmt})'**
+  String chainSlotActive(int n, String name, String fmt);
+
+  /// No description provided for @chainSlotEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n}：未挂载插件'**
+  String chainSlotEmpty(int n);
+
+  /// No description provided for @chainSlotBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已旁路 (直通)'**
+  String get chainSlotBypassed;
+
+  /// No description provided for @chainSlotProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在处理'**
+  String get chainSlotProcessing;
+
+  /// No description provided for @chainSlotStatusLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'状态：{a} • 延迟：{b} 采样'**
+  String chainSlotStatusLine(String a, int b);
+
+  /// No description provided for @chainSlotHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可在“插件”页面选择效果器加载至本插槽'**
+  String get chainSlotHint;
+
+  /// No description provided for @chainOpenGui.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开原生界面 (GUI)'**
+  String get chainOpenGui;
+
+  /// No description provided for @chainBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已旁路'**
+  String get chainBypassed;
+
+  /// No description provided for @chainEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用'**
+  String get chainEnable;
+
+  /// No description provided for @lpSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存：{name}.eel'**
+  String lpSaved(String name);
+
+  /// No description provided for @lpAddDirTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加外部脚本预设目录'**
+  String get lpAddDirTitle;
+
+  /// No description provided for @lpAddDirPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入包含 .eel / .txt 脚本预设的完整文件夹路径：'**
+  String get lpAddDirPrompt;
+
+  /// No description provided for @lpAddDirExample.
+  ///
+  /// In zh, this message translates to:
+  /// **'例：D:\\AudioScripts\\EelPresets'**
+  String get lpAddDirExample;
+
+  /// No description provided for @lpChars.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 字符'**
+  String lpChars(int n);
+
+  /// No description provided for @lpReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'语法就绪'**
+  String get lpReady;
+
+  /// No description provided for @lpIssues.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 处潜在问题'**
+  String lpIssues(int n);
+
+  /// No description provided for @lpIssueAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {line} 行：{msg}'**
+  String lpIssueAt(int line, String msg);
+
+  /// No description provided for @lpShowAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部 8 槽'**
+  String get lpShowAll;
+
+  /// No description provided for @lpAdaptive.
+  ///
+  /// In zh, this message translates to:
+  /// **'自适应 ({n})'**
+  String lpAdaptive(int n);
+
+  /// No description provided for @lpNoSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前代码未声明或引用 slider1..8 参数（纯算法处理）'**
+  String get lpNoSliders;
+
+  /// No description provided for @lpExpandSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开全部 8 槽滑块'**
+  String get lpExpandSliders;
+
+  /// No description provided for @lpAddDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加外部目录'**
+  String get lpAddDir;
+
+  /// No description provided for @lpSlidersHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。'**
+  String get lpSlidersHint;
+
+  /// No description provided for @lpLibraryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持本地 %APPDATA% 库与外部多预设文件夹自动索引。'**
+  String get lpLibraryHint;
+
+  /// No description provided for @convIrTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲响应 (IR)'**
+  String get convIrTitle;
+
+  /// No description provided for @convFramesLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'{frames} 帧 · {dur} · {ch}ch · 峰值 {peak} dBFS · 源 {rate}Hz'**
+  String convFramesLine(int frames, String dur, int ch, String peak, int rate);
+
+  /// No description provided for @ddcFilterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'VDC 滤波器'**
+  String get ddcFilterTitle;
+
+  /// No description provided for @stereoBandActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'分带生效中'**
+  String get stereoBandActive;
+
+  /// No description provided for @stBand0.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频段'**
+  String get stBand0;
+
+  /// No description provided for @stBand1.
+  ///
+  /// In zh, this message translates to:
+  /// **'中低频'**
+  String get stBand1;
+
+  /// No description provided for @stBand2.
+  ///
+  /// In zh, this message translates to:
+  /// **'中频'**
+  String get stBand2;
+
+  /// No description provided for @stBand3.
+  ///
+  /// In zh, this message translates to:
+  /// **'中高频'**
+  String get stBand3;
+
+  /// No description provided for @stBand4.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频'**
+  String get stBand4;
+
+  /// No description provided for @stBandHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立调节各频段展开度；调节任一带即脱离全局总滑块'**
+  String get stBandHint;
+
+  /// No description provided for @presetFactoryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'出厂经典调音预设'**
+  String get presetFactoryTitle;
+
+  /// No description provided for @presetUserTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'我的自定义预设'**
+  String get presetUserTitle;
+
+  /// No description provided for @presetUserEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无用户自定义预设 — 调好参数后在下方保存'**
+  String get presetUserEmpty;
+
+  /// No description provided for @presetLoadedFactory.
+  ///
+  /// In zh, this message translates to:
+  /// **'已载入出厂预设: {name}'**
+  String presetLoadedFactory(String name);
+
+  /// No description provided for @presetLoadedUser.
+  ///
+  /// In zh, this message translates to:
+  /// **'已载入自定义预设: {name}'**
+  String presetLoadedUser(String name);
+
+  /// No description provided for @presetSaveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入预设名称保存当前状态为用户预设'**
+  String get presetSaveHint;
+
+  /// No description provided for @convSpectrumCaption.
+  ///
+  /// In zh, this message translates to:
+  /// **'32 频带 · 0..1 归一化能量'**
+  String get convSpectrumCaption;
+
+  /// No description provided for @sliderResetTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击重置默认值'**
+  String get sliderResetTip;
+
+  /// No description provided for @plugAddDirTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加插件检索目录'**
+  String get plugAddDirTitle;
+
+  /// No description provided for @plugAddDirPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：'**
+  String get plugAddDirPrompt;
+
+  /// No description provided for @plugAddDirExample.
+  ///
+  /// In zh, this message translates to:
+  /// **'例：D:\\AudioPlugins\\VST3'**
+  String get plugAddDirExample;
+
+  /// No description provided for @plugAddScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加并扫描'**
+  String get plugAddScan;
+
+  /// No description provided for @plugPresetTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件预设管理 — {name}'**
+  String plugPresetTitle(String name);
+
+  /// No description provided for @plugPresetSaveLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前参数状态'**
+  String get plugPresetSaveLabel;
+
+  /// No description provided for @plugPresetNameHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入新预设名称...'**
+  String get plugPresetNameHint;
+
+  /// No description provided for @plugPresetList.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有预设列表 ({n})'**
+  String plugPresetList(int n);
+
+  /// No description provided for @plugPresetEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无已保存预设，可通过上方输入框保存。'**
+  String get plugPresetEmpty;
+
+  /// No description provided for @plugTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件中心'**
+  String get plugTitle;
+
+  /// No description provided for @plugLibTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'第三方效果器库'**
+  String get plugLibTitle;
+
+  /// No description provided for @plugLibHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。'**
+  String get plugLibHint;
+
+  /// No description provided for @plugDeepScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'深度遍历'**
+  String get plugDeepScan;
+
+  /// No description provided for @plugScan.
+  ///
+  /// In zh, this message translates to:
+  /// **'聚合扫描插件'**
+  String get plugScan;
+
+  /// No description provided for @plugScanning.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在扫描...'**
+  String get plugScanning;
+
+  /// No description provided for @plugOpenFolder.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 VST3 标准目录'**
+  String get plugOpenFolder;
+
+  /// No description provided for @plugSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索插件名称、厂商或路径...'**
+  String get plugSearchHint;
+
+  /// No description provided for @plugM1Title.
+  ///
+  /// In zh, this message translates to:
+  /// **'M1 插件宿主引擎规范'**
+  String get plugM1Title;
+
+  /// No description provided for @plugM1Hint.
+  ///
+  /// In zh, this message translates to:
+  /// **'多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。'**
+  String get plugM1Hint;
+
+  /// No description provided for @plugFeatSlots.
+  ///
+  /// In zh, this message translates to:
+  /// **'双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发'**
+  String get plugFeatSlots;
+
+  /// No description provided for @plugFeatStages.
+  ///
+  /// In zh, this message translates to:
+  /// **'全音效链阶段插入 (Pre-DSP ~ Post-Limiter)'**
+  String get plugFeatStages;
+
+  /// No description provided for @plugFeatGui.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生 Win32 GUI 弹窗独立消息循环'**
+  String get plugFeatGui;
+
+  /// No description provided for @plugFeatPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'二进制流预设保存与即时载入恢复'**
+  String get plugFeatPreset;
+
+  /// No description provided for @plugFeatDirs.
+  ///
+  /// In zh, this message translates to:
+  /// **'可自定义插件目录检索与本地状态快照'**
+  String get plugFeatDirs;
+
+  /// No description provided for @plugFeatRt.
+  ///
+  /// In zh, this message translates to:
+  /// **'平面双声道 RT-Safe 预分配零锁保障'**
+  String get plugFeatRt;
+
+  /// No description provided for @plugSlot.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} (Slot {n})'**
+  String plugSlot(int n);
+
+  /// No description provided for @plugBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路'**
+  String get plugBypassed;
+
+  /// No description provided for @plugCustomTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义插件检索目录'**
+  String get plugCustomTitle;
+
+  /// No description provided for @plugCustomHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。'**
+  String get plugCustomHint;
+
+  /// No description provided for @plugCustomAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加目录'**
+  String get plugCustomAdd;
+
+  /// No description provided for @plugCustomEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。'**
+  String get plugCustomEmpty;
+
+  /// No description provided for @plugMountTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'挂载状态 (插槽 {n})'**
+  String plugMountTitle(int n);
+
+  /// No description provided for @plugMountEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} 暂未挂载第三方插件'**
+  String plugMountEmpty(int n);
+
+  /// No description provided for @plugMountEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载'**
+  String get plugMountEmptyHint;
+
+  /// No description provided for @plugScanNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即扫描本机已安装插件'**
+  String get plugScanNow;
+
+  /// No description provided for @plugMountedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前挂载插件 (插槽 {n})'**
+  String plugMountedTitle(int n);
+
+  /// No description provided for @plugOpenGuiBtn.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开界面 (GUI)'**
+  String get plugOpenGuiBtn;
+
+  /// No description provided for @plugUnloadFromSlot.
+  ///
+  /// In zh, this message translates to:
+  /// **'从当前槽卸载'**
+  String get plugUnloadFromSlot;
+
+  /// No description provided for @plugLoadToSlot.
+  ///
+  /// In zh, this message translates to:
+  /// **'载入至插槽 {n}'**
+  String plugLoadToSlot(int n);
+
+  /// No description provided for @plugLatencyLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'实测音频延迟'**
+  String get plugLatencyLabel;
+
+  /// No description provided for @plugStageLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号处理链插入阶段：'**
+  String get plugStageLabel;
+
+  /// No description provided for @plugRtNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时动态串联 • 保持 RT-Safe 契约'**
+  String get plugRtNote;
+
+  /// No description provided for @plugFilterAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get plugFilterAll;
+
+  /// No description provided for @plugNoPlugins.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到已安装的第三方插件'**
+  String get plugNoPlugins;
+
+  /// No description provided for @plugNoPluginsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描'**
+  String get plugNoPluginsHint;
+
+  /// No description provided for @plugNoMatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到符合当前搜索和过滤条件的插件'**
+  String get plugNoMatch;
+
+  /// No description provided for @plugSlotActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} 活跃中'**
+  String plugSlotActive(int n);
+
+  /// No description provided for @plugSlotLoaded.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} 已载入'**
+  String plugSlotLoaded(int n);
+
+  /// No description provided for @plugUnknownVendor.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知厂商'**
+  String get plugUnknownVendor;
+
+  /// No description provided for @plugThirdParty.
+  ///
+  /// In zh, this message translates to:
+  /// **'第三方插件'**
+  String get plugThirdParty;
+
+  /// No description provided for @plugSlotPluginLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} • [{stage}]'**
+  String plugSlotPluginLine(String name, String stage);
+
+  /// No description provided for @plugSlotNoFx.
+  ///
+  /// In zh, this message translates to:
+  /// **'未挂载效果器'**
+  String get plugSlotNoFx;
+
+  /// No description provided for @chainActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'生效中'**
+  String get chainActive;
+
+  /// No description provided for @chainBypass.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路'**
+  String get chainBypass;
+
+  /// No description provided for @plugActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'生效'**
+  String get plugActive;
+
+  /// No description provided for @lpSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存失败（名称非法或磁盘不可写）'**
+  String get lpSaveFailed;
+
+  /// No description provided for @chainVstTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'第三方 VST / CLAP 插件挂载槽与阶段处理顺序'**
+  String get chainVstTitle;
+
+  /// No description provided for @chainVstHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。'**
+  String get chainVstHint;
 }
 
 class _AppLocalizationsDelegate

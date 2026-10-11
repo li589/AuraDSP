@@ -375,16 +375,17 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final text = widget.measured
         ? '${widget.latencyMs.toStringAsFixed(1)} ms'
-        : '未测量';
+        : l.latUnmeasured;
     // 如实标注来源：实测 / 估算 / 未测量。旧实现把查表常量标成"实测"，
     // 而 refreshComponentLatency 只是改了个时间戳、根本没做测量。
     final tooltip = widget.measured
-        ? '组件处理延迟（脉冲响应实测）: $text\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）'
+        ? l.latTipMeasured(text)
         : (widget.probing
-            ? '正在测量组件延迟…'
-            : '尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）');
+            ? l.latTipProbing
+            : l.latTipUnmeasured);
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {

@@ -184,5 +184,363 @@
   "tubeStyleTape": "模拟磁带温润",
   "tubeOversampling": "高阶抗混叠过采样",
   "tubeCompensation": "输出电平补偿",
-  "tubeMix": "干湿混合比"
+  "tubeMix": "干湿混合比",
+  "dlgCancel": "取消",
+  "dlgAdd": "添加",
+  "dlgSave": "保存",
+  "dlgLoad": "载入",
+  "dlgClose": "关闭",
+  "dlgUnload": "卸载",
+  "dlgPreset": "预设",
+  "memTitle": "持久化记忆与配置外置",
+  "memHint": "自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。",
+  "memAutoRestore": "退出时自动保存并恢复会话记忆",
+  "memDir": "配置存储目录: {path}",
+  "@memDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "memClear": "清除会话记忆",
+  "memCleared": "已清除持久化会话记忆，下次启动将使用纯净默认值",
+  "memReset": "重置外置配置为默认",
+  "memResetDone": "已重置 config.json 为标准配置模板",
+  "latUnmeasured": "未测量",
+  "latTipMeasured": "组件处理延迟（脉冲响应实测）: {text}\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）",
+  "@latTipMeasured": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "latTipProbing": "正在测量组件延迟…",
+  "latTipUnmeasured": "尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）",
+  "eqBands": "{n}段",
+  "@eqBands": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "eqCanvasHint": "上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位",
+  "eqBypassOn": "旁路生效中 (Bypass)",
+  "eqFilterMinphase": "最小相位 FIR",
+  "eqFilterIir6": "6阶 IIR",
+  "eqFilterIir12": "12阶 IIR",
+  "eqInterpMakima": "Makima (平滑防冲)",
+  "eqInterpPchip": "PCHIP (单调保形)",
+  "eqPresetFlat": "平直 (Flat)",
+  "eqPresetPop": "流行 (Pop)",
+  "eqPresetRock": "摇滚 (Rock)",
+  "eqPresetJazz": "爵士 (Jazz)",
+  "eqPresetClassical": "古典 (Classical)",
+  "eqPresetVocal": "人声增强 (Vocal)",
+  "eqPresetSmile": "微笑增强 (V-Shape)",
+  "eqPresetBass": "低音强化 (Bass+)",
+  "eqPresetTreble": "高音清晰 (Treble+)",
+  "eqPresetCustom": "自定义 (Custom)",
+  "eqPresetPick": "选择 EQ 风格预设",
+  "eqQTip": "Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41",
+  "stTube": "电子管",
+  "stComp": "压限器",
+  "stBass": "低音增强",
+  "stEq": "均衡器",
+  "stArbmag": "任意响应 EQ",
+  "stConv": "脉冲响应",
+  "stScript": "脚本",
+  "stXfeed": "串扰消除",
+  "stStereo": "声场展宽",
+  "stReverb": "混响",
+  "stOutput": "输出级",
+  "chainTitle": "处理链",
+  "chainOrderTitle": "处理顺序与状态",
+  "chainOrderHint": "拖拽调整信号处理先后（自上而下）；改动后点\"应用\"。支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。",
+  "chainApply": "应用顺序",
+  "chainReset": "恢复默认",
+  "chainReserved": "预留",
+  "chainFlowTitle": "信号流（当前顺序）",
+  "chainFlowCaption": "全局信号流顺序示意 (自左至右)：",
+  "chainNodeShelf": "低频搁架 EQ",
+  "chainNodeVendor": "12级内部 DSP 链路",
+  "chainNodeReverb": "混响与声场",
+  "chainNodeLimiter": "主限幅 Limiter",
+  "chainNodeOutput": "音频输出",
+  "chainSlotActive": "插槽 {n}：{name} ({fmt})",
+  "@chainSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "fmt": {
+        "type": "String"
+      }
+    }
+  },
+  "chainSlotEmpty": "插槽 {n}：未挂载插件",
+  "@chainSlotEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotBypassed": "已旁路 (直通)",
+  "chainSlotProcessing": "正在处理",
+  "chainSlotStatusLine": "状态：{a} • 延迟：{b} 采样",
+  "@chainSlotStatusLine": {
+    "placeholders": {
+      "a": {
+        "type": "String"
+      },
+      "b": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotHint": "可在“插件”页面选择效果器加载至本插槽",
+  "chainOpenGui": "打开原生界面 (GUI)",
+  "chainBypassed": "已旁路",
+  "chainEnable": "启用",
+  "lpSaved": "已保存：{name}.eel",
+  "@lpSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpAddDirTitle": "添加外部脚本预设目录",
+  "lpAddDirPrompt": "请输入包含 .eel / .txt 脚本预设的完整文件夹路径：",
+  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpChars": "{n} 字符",
+  "@lpChars": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpReady": "语法就绪",
+  "lpIssues": "{n} 处潜在问题",
+  "@lpIssues": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpIssueAt": "第 {line} 行：{msg}",
+  "@lpIssueAt": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "msg": {
+        "type": "String"
+      }
+    }
+  },
+  "lpShowAll": "全部 8 槽",
+  "lpAdaptive": "自适应 ({n})",
+  "@lpAdaptive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoSliders": "当前代码未声明或引用 slider1..8 参数（纯算法处理）",
+  "lpExpandSliders": "展开全部 8 槽滑块",
+  "lpAddDir": "添加外部目录",
+  "lpSlidersHint": "滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。",
+  "lpLibraryHint": "支持本地 %APPDATA% 库与外部多预设文件夹自动索引。",
+  "convIrTitle": "脉冲响应 (IR)",
+  "convFramesLine": "{frames} 帧 · {dur} · {ch}ch · 峰值 {peak} dBFS · 源 {rate}Hz",
+  "@convFramesLine": {
+    "placeholders": {
+      "frames": {
+        "type": "int"
+      },
+      "dur": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "int"
+      },
+      "peak": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "ddcFilterTitle": "VDC 滤波器",
+  "stereoBandActive": "分带生效中",
+  "stBand0": "低频段",
+  "stBand1": "中低频",
+  "stBand2": "中频",
+  "stBand3": "中高频",
+  "stBand4": "高频",
+  "stBandHint": "独立调节各频段展开度；调节任一带即脱离全局总滑块",
+  "presetFactoryTitle": "出厂经典调音预设",
+  "presetUserTitle": "我的自定义预设",
+  "presetUserEmpty": "暂无用户自定义预设 — 调好参数后在下方保存",
+  "presetLoadedFactory": "已载入出厂预设: {name}",
+  "@presetLoadedFactory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetLoadedUser": "已载入自定义预设: {name}",
+  "@presetLoadedUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetSaveHint": "输入预设名称保存当前状态为用户预设",
+  "convSpectrumCaption": "32 频带 · 0..1 归一化能量",
+  "sliderResetTip": "点击重置默认值",
+  "plugAddDirTitle": "添加插件检索目录",
+  "plugAddDirPrompt": "请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：",
+  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddScan": "添加并扫描",
+  "plugPresetTitle": "插件预设管理 — {name}",
+  "@plugPresetTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "plugPresetSaveLabel": "保存当前参数状态",
+  "plugPresetNameHint": "输入新预设名称...",
+  "plugPresetList": "已有预设列表 ({n})",
+  "@plugPresetList": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugPresetEmpty": "暂无已保存预设，可通过上方输入框保存。",
+  "plugTitle": "插件中心",
+  "plugLibTitle": "第三方效果器库",
+  "plugLibHint": "系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。",
+  "plugDeepScan": "深度遍历",
+  "plugScan": "聚合扫描插件",
+  "plugScanning": "正在扫描...",
+  "plugOpenFolder": "打开 VST3 标准目录",
+  "plugSearchHint": "搜索插件名称、厂商或路径...",
+  "plugM1Title": "M1 插件宿主引擎规范",
+  "plugM1Hint": "多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。",
+  "plugFeatSlots": "双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发",
+  "plugFeatStages": "全音效链阶段插入 (Pre-DSP ~ Post-Limiter)",
+  "plugFeatGui": "原生 Win32 GUI 弹窗独立消息循环",
+  "plugFeatPreset": "二进制流预设保存与即时载入恢复",
+  "plugFeatDirs": "可自定义插件目录检索与本地状态快照",
+  "plugFeatRt": "平面双声道 RT-Safe 预分配零锁保障",
+  "plugSlot": "插槽 {n} (Slot {n})",
+  "@plugSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugBypassed": "旁路",
+  "plugCustomTitle": "自定义插件检索目录",
+  "plugCustomHint": "添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。",
+  "plugCustomAdd": "添加目录",
+  "plugCustomEmpty": "暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。",
+  "plugMountTitle": "挂载状态 (插槽 {n})",
+  "@plugMountTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmpty": "插槽 {n} 暂未挂载第三方插件",
+  "@plugMountEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmptyHint": "请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载",
+  "plugScanNow": "立即扫描本机已安装插件",
+  "plugMountedTitle": "当前挂载插件 (插槽 {n})",
+  "@plugMountedTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugOpenGuiBtn": "打开界面 (GUI)",
+  "plugUnloadFromSlot": "从当前槽卸载",
+  "plugLoadToSlot": "载入至插槽 {n}",
+  "@plugLoadToSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugLatencyLabel": "实测音频延迟",
+  "plugStageLabel": "信号处理链插入阶段：",
+  "plugRtNote": "实时动态串联 • 保持 RT-Safe 契约",
+  "plugFilterAll": "全部",
+  "plugNoPlugins": "未检测到已安装的第三方插件",
+  "plugNoPluginsHint": "请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描",
+  "plugNoMatch": "未找到符合当前搜索和过滤条件的插件",
+  "plugSlotActive": "插槽 {n} 活跃中",
+  "@plugSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugSlotLoaded": "插槽 {n} 已载入",
+  "@plugSlotLoaded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugUnknownVendor": "未知厂商",
+  "plugThirdParty": "第三方插件",
+  "plugSlotPluginLine": "{name} • [{stage}]",
+  "@plugSlotPluginLine": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "stage": {
+        "type": "String"
+      }
+    }
+  },
+  "plugSlotNoFx": "未挂载效果器",
+  "chainActive": "生效中",
+  "chainBypass": "旁路",
+  "plugActive": "生效",
+  "lpSaveFailed": "保存失败（名称非法或磁盘不可写）",
+  "chainVstTitle": "第三方 VST / CLAP 插件挂载槽与阶段处理顺序",
+  "chainVstHint": "支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。"
 }

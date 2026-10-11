@@ -453,7 +453,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get eqMultiBand => 'グラフィックイコライザー';
 
   @override
-  String get eqBands => 'バンド数';
+  String eqBands(int n) {
+    return '$n段';
+  }
 
   @override
   String get eqPresets => 'プリセット';
@@ -523,4 +525,540 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tubeMix => 'ドライ/ウェット';
+
+  @override
+  String get dlgCancel => 'キャンセル';
+
+  @override
+  String get dlgAdd => '追加';
+
+  @override
+  String get dlgSave => '保存';
+
+  @override
+  String get dlgLoad => '読み込み';
+
+  @override
+  String get dlgClose => '閉じる';
+
+  @override
+  String get dlgUnload => 'アンロード';
+
+  @override
+  String get dlgPreset => 'プリセット';
+
+  @override
+  String get memTitle => '永続メモリと外部設定';
+
+  @override
+  String get memHint => '全エフェクト設定を自動記録し、次回起動時にシームレスに復元します。';
+
+  @override
+  String get memAutoRestore => '終了時にセッションを自動保存・復元';
+
+  @override
+  String memDir(String path) {
+    return '設定ディレクトリ：$path';
+  }
+
+  @override
+  String get memClear => 'セッションメモリをクリア';
+
+  @override
+  String get memCleared => '永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します';
+
+  @override
+  String get memReset => '外部設定をデフォルトにリセット';
+
+  @override
+  String get memResetDone => 'config.json を標準テンプレートにリセットしました';
+
+  @override
+  String get latUnmeasured => '未測定';
+
+  @override
+  String latTipMeasured(String text) {
+    return 'コンポーネント遅延（インパルス応答実測）: $text\n↻タップで再測定（数十ms、再生に影響しません）';
+  }
+
+  @override
+  String get latTipProbing => 'コンポーネント遅延を測定中…';
+
+  @override
+  String get latTipUnmeasured => '未測定です\n↻タップでインパルス応答を1回測定（数十ms）';
+
+  @override
+  String get eqCanvasHint => '上下ドラッグでゲイン · ノードをダブルタップで0dB · 背景をダブルタップでフラット化';
+
+  @override
+  String get eqBypassOn => 'バイパス中';
+
+  @override
+  String get eqFilterMinphase => '最小位相 FIR';
+
+  @override
+  String get eqFilterIir6 => '6次IIR';
+
+  @override
+  String get eqFilterIir12 => '12次IIR';
+
+  @override
+  String get eqInterpMakima => 'Makima（スムーズ・オーバーシュート防止）';
+
+  @override
+  String get eqInterpPchip => 'PCHIP（単調形状保持）';
+
+  @override
+  String get eqPresetFlat => 'フラット';
+
+  @override
+  String get eqPresetPop => 'ポップ';
+
+  @override
+  String get eqPresetRock => 'ロック';
+
+  @override
+  String get eqPresetJazz => 'ジャズ';
+
+  @override
+  String get eqPresetClassical => 'クラシック';
+
+  @override
+  String get eqPresetVocal => 'ボーカルブースト';
+
+  @override
+  String get eqPresetSmile => 'スマイル (V-Shape)';
+
+  @override
+  String get eqPresetBass => 'バスブースト';
+
+  @override
+  String get eqPresetTreble => 'トレブルクリア';
+
+  @override
+  String get eqPresetCustom => 'カスタム';
+
+  @override
+  String get eqPresetPick => 'EQスタイルプリセットを選択';
+
+  @override
+  String get eqQTip => 'Qファクター鮮鋭度 (0.3～10.0)\n垂直ドラッグで調整 · ダブルタップで1.41にリセット';
+
+  @override
+  String get stTube => '真空管';
+
+  @override
+  String get stComp => 'リミッター';
+
+  @override
+  String get stBass => '低音ブースト';
+
+  @override
+  String get stEq => 'イコライザー';
+
+  @override
+  String get stArbmag => '任意応答EQ';
+
+  @override
+  String get stConv => 'インパルス応答';
+
+  @override
+  String get stScript => 'スクリプト';
+
+  @override
+  String get stXfeed => 'クロスフィード';
+
+  @override
+  String get stStereo => 'ステレオワイド';
+
+  @override
+  String get stReverb => 'リバーブ';
+
+  @override
+  String get stOutput => '出力段';
+
+  @override
+  String get chainTitle => '処理チェーン';
+
+  @override
+  String get chainOrderTitle => '順序と状態';
+
+  @override
+  String get chainOrderHint =>
+      'ドラッグで処理順を調整（上から下へ）。変更後は「適用」をタップ。各ノードは独立してバイパス/有効化可能。右側にノード別ライブステレオメーター。';
+
+  @override
+  String get chainApply => '順序を適用';
+
+  @override
+  String get chainReset => 'デフォルトに戻す';
+
+  @override
+  String get chainReserved => '予約済み';
+
+  @override
+  String get chainFlowTitle => 'シグナルフロー（現在の順序）';
+
+  @override
+  String get chainFlowCaption => '全体シグナルフロー概略（左から右へ）：';
+
+  @override
+  String get chainNodeShelf => 'ローシェルフEQ';
+
+  @override
+  String get chainNodeVendor => '12段内部DSPチェーン';
+
+  @override
+  String get chainNodeReverb => 'リバーブと音場';
+
+  @override
+  String get chainNodeLimiter => 'メインリミッター';
+
+  @override
+  String get chainNodeOutput => 'オーディオ出力';
+
+  @override
+  String chainSlotActive(int n, String name, String fmt) {
+    return 'スロット$n：$name（$fmt）';
+  }
+
+  @override
+  String chainSlotEmpty(int n) {
+    return 'スロット$n：未マウント';
+  }
+
+  @override
+  String get chainSlotBypassed => 'バイパス中（スルー）';
+
+  @override
+  String get chainSlotProcessing => '処理中';
+
+  @override
+  String chainSlotStatusLine(String a, int b) {
+    return '状態：$a • 遅延：$bサンプル';
+  }
+
+  @override
+  String get chainSlotHint => '「プラグイン」ページでエフェクトを選んで本スロットにロード';
+
+  @override
+  String get chainOpenGui => 'ネイティブUIを開く (GUI)';
+
+  @override
+  String get chainBypassed => 'バイパス中';
+
+  @override
+  String get chainEnable => '有効';
+
+  @override
+  String lpSaved(String name) {
+    return '保存しました：$name.eel';
+  }
+
+  @override
+  String get lpAddDirTitle => '外部スクリプトプリセットフォルダを追加';
+
+  @override
+  String get lpAddDirPrompt => '.eel / .txt スクリプトプリセットを含むフォルダのフルパスを入力：';
+
+  @override
+  String get lpAddDirExample => '例：D:\\AudioScripts\\EelPresets';
+
+  @override
+  String lpChars(int n) {
+    return '$n文字';
+  }
+
+  @override
+  String get lpReady => '構文OK';
+
+  @override
+  String lpIssues(int n) {
+    return '$n 件の潜在的問題';
+  }
+
+  @override
+  String lpIssueAt(int line, String msg) {
+    return '$line行目：$msg';
+  }
+
+  @override
+  String get lpShowAll => '全8スロット';
+
+  @override
+  String lpAdaptive(int n) {
+    return 'アダプティブ ($n)';
+  }
+
+  @override
+  String get lpNoSliders => '現在のコードはslider1..8を宣言/参照していません（純粋なアルゴリズム処理）';
+
+  @override
+  String get lpExpandSliders => '全8スロットを展開';
+
+  @override
+  String get lpAddDir => '外部フォルダを追加';
+
+  @override
+  String get lpSlidersHint => 'スライダーは現在のスクリプトのslider宣言/参照に適応。右上でモード切替可。';
+
+  @override
+  String get lpLibraryHint => 'ローカル%APPDATA%ライブラリと外部プリセットフォルダの自動索引に対応。';
+
+  @override
+  String get convIrTitle => 'インパルス応答 (IR)';
+
+  @override
+  String convFramesLine(int frames, String dur, int ch, String peak, int rate) {
+    return '$framesフレーム · $dur · ${ch}ch · ピーク$peak dBFS · ソース${rate}Hz';
+  }
+
+  @override
+  String get ddcFilterTitle => 'VDCフィルター';
+
+  @override
+  String get stereoBandActive => '帯域別有効';
+
+  @override
+  String get stBand0 => '低域';
+
+  @override
+  String get stBand1 => '低中域';
+
+  @override
+  String get stBand2 => '中域';
+
+  @override
+  String get stBand3 => '高中域';
+
+  @override
+  String get stBand4 => '高域';
+
+  @override
+  String get stBandHint => '各帯域の広がりを個別調整。いずれかを動かすと全体スライダーから切り離されます';
+
+  @override
+  String get presetFactoryTitle => '工場出荷時チューニングプリセット';
+
+  @override
+  String get presetUserTitle => 'マイカスタムプリセット';
+
+  @override
+  String get presetUserEmpty => 'カスタムプリセットはまだありません — 調整後に下で保存';
+
+  @override
+  String presetLoadedFactory(String name) {
+    return '工場プリセットを読み込みました: $name';
+  }
+
+  @override
+  String presetLoadedUser(String name) {
+    return 'カスタムプリセットを読み込みました: $name';
+  }
+
+  @override
+  String get presetSaveHint => 'プリセット名を入力して現在の状態を保存';
+
+  @override
+  String get convSpectrumCaption => '32バンド · 0..1正規化エネルギー';
+
+  @override
+  String get sliderResetTip => 'クリックでデフォルトにリセット';
+
+  @override
+  String get plugAddDirTitle => 'プラグイン検索フォルダを追加';
+
+  @override
+  String get plugAddDirPrompt => '64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：';
+
+  @override
+  String get plugAddDirExample => '例：D:\\AudioPlugins\\VST3';
+
+  @override
+  String get plugAddScan => '追加してスキャン';
+
+  @override
+  String plugPresetTitle(String name) {
+    return 'プラグインプリセット — $name';
+  }
+
+  @override
+  String get plugPresetSaveLabel => '現在のパラメータ状態を保存';
+
+  @override
+  String get plugPresetNameHint => '新しいプリセット名を入力…';
+
+  @override
+  String plugPresetList(int n) {
+    return '保存済みプリセット ($n)';
+  }
+
+  @override
+  String get plugPresetEmpty => '保存済みプリセットはありません。上の入力欄から保存できます。';
+
+  @override
+  String get plugTitle => 'プラグインセンター';
+
+  @override
+  String get plugLibTitle => 'サードパーティエフェクトライブラリ';
+
+  @override
+  String get plugLibHint =>
+      'システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。';
+
+  @override
+  String get plugDeepScan => 'ディープスキャン';
+
+  @override
+  String get plugScan => 'プラグイン一括スキャン';
+
+  @override
+  String get plugScanning => 'スキャン中…';
+
+  @override
+  String get plugOpenFolder => '標準VST3フォルダを開く';
+
+  @override
+  String get plugSearchHint => 'プラグイン名・ベンダー・パスを検索…';
+
+  @override
+  String get plugM1Title => 'M1プラグインホストエンジン仕様';
+
+  @override
+  String get plugM1Hint => 'マルチフォーマットインプロセスホスト、64ビットVST3・CLAP対応。';
+
+  @override
+  String get plugFeatSlots => 'デュアルスロット (Slot 1 / Slot 2) 独立管理・並行';
+
+  @override
+  String get plugFeatStages => '全チェーンステージ挿入 (Pre-DSP～Post-Limiter)';
+
+  @override
+  String get plugFeatGui => 'ネイティブWin32 GUIは独立メッセージループ';
+
+  @override
+  String get plugFeatPreset => 'バイナリストリーム保存と即時復元';
+
+  @override
+  String get plugFeatDirs => 'カスタム検索フォルダとローカル状態スナップショット';
+
+  @override
+  String get plugFeatRt => 'フラットステレオRT-Safe事前確保・ゼロロック';
+
+  @override
+  String plugSlot(int n) {
+    return 'スロット$n (Slot $n)';
+  }
+
+  @override
+  String get plugBypassed => 'バイパス中';
+
+  @override
+  String get plugCustomTitle => 'カスタムプラグイン検索フォルダ';
+
+  @override
+  String get plugCustomHint => '他ドライブやDAWのVST3/CLAPパスを追加。スキャン時に自動統合。';
+
+  @override
+  String get plugCustomAdd => 'フォルダを追加';
+
+  @override
+  String get plugCustomEmpty =>
+      'カスタムフォルダはまだありません。システム既定（C:\\Program Files\\Common Files\\VST3等）のほか、右上から追加できます。';
+
+  @override
+  String plugMountTitle(int n) {
+    return 'マウント状態（スロット$n）';
+  }
+
+  @override
+  String plugMountEmpty(int n) {
+    return 'スロット$nにサードパーティプラグインがありません';
+  }
+
+  @override
+  String get plugMountEmptyHint => '下のライブラリからインストール済みVST3 / CLAPを選んでロード';
+
+  @override
+  String get plugScanNow => 'インストール済みプラグインを今すぐスキャン';
+
+  @override
+  String plugMountedTitle(int n) {
+    return '現在マウント中のプラグイン（スロット$n）';
+  }
+
+  @override
+  String get plugOpenGuiBtn => 'UIを開く (GUI)';
+
+  @override
+  String get plugUnloadFromSlot => 'このスロットからアンロード';
+
+  @override
+  String plugLoadToSlot(int n) {
+    return 'スロット$nへロード';
+  }
+
+  @override
+  String get plugLatencyLabel => '実測オーディオ遅延';
+
+  @override
+  String get plugStageLabel => 'シグナルチェーン挿入ステージ：';
+
+  @override
+  String get plugRtNote => 'ライブ直列接続 • RT-Safe契約を維持';
+
+  @override
+  String get plugFilterAll => 'すべて';
+
+  @override
+  String get plugNoPlugins => 'サードパーティプラグインが検出されません';
+
+  @override
+  String get plugNoPluginsHint =>
+      'システムVST3 / CLAPパスに配置済みか確認し、上のカスタムフォルダ追加後に再スキャン';
+
+  @override
+  String get plugNoMatch => '検索・フィルター条件に合うプラグインがありません';
+
+  @override
+  String plugSlotActive(int n) {
+    return 'スロット$n動作中';
+  }
+
+  @override
+  String plugSlotLoaded(int n) {
+    return 'スロット$nロード済み';
+  }
+
+  @override
+  String get plugUnknownVendor => '不明なベンダー';
+
+  @override
+  String get plugThirdParty => 'サードパーティプラグイン';
+
+  @override
+  String plugSlotPluginLine(String name, String stage) {
+    return '$name • [$stage]';
+  }
+
+  @override
+  String get plugSlotNoFx => 'エフェクト未マウント';
+
+  @override
+  String get chainActive => '有効中';
+
+  @override
+  String get chainBypass => 'バイパス';
+
+  @override
+  String get plugActive => '有効';
+
+  @override
+  String get lpSaveFailed => '保存に失敗しました（不正な名前または書き込み不可）';
+
+  @override
+  String get chainVstTitle => 'サードパーティVST / CLAPプラグインスロットとステージ順序';
+
+  @override
+  String get chainVstHint => '複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。';
 }

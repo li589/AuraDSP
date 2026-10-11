@@ -648,8 +648,7 @@ class _ResourceSlot extends StatelessWidget {
             if (detail != null)
               Text(
                 detail!,
-                style: captionOf(p).copyWith(
-                    color: detail!.startsWith('未') ? p.textDim : p.accent),
+                style: captionOf(p).copyWith(color: p.accent),
               ),
             // 按钮与标题同行：文字左对齐、按钮右对齐。
             const SizedBox(width: AuraSpace.sm),
@@ -702,7 +701,7 @@ class _ConvolverCard extends StatelessWidget {
               children: [
                 _ResourceSlot(
                   icon: Icons.folder_open_outlined,
-                  title: '脉冲响应 (IR)',
+                  title: l.convIrTitle,
                   actions: [
                     AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
                         onTap: () => _pickIr(context)),
@@ -725,7 +724,7 @@ class _ConvolverCard extends StatelessWidget {
             children: [
               _ResourceSlot(
                 icon: Icons.graphic_eq_outlined,
-                title: '脉冲响应 (IR)',
+                title: l.convIrTitle,
                 detail: '${model.convChannels}ch · $dur',
                 actions: [
                   AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
@@ -756,10 +755,12 @@ class _ConvolverCard extends StatelessWidget {
               ),
               const SizedBox(height: AuraSpace.md),
               Text(
-                '${model.convFrames} 帧 · $dur · '
-                '${model.convChannels}ch · 峰值 '
-                '${(20 * math.log(model.convPeak <= 1e-6 ? 1e-6 : model.convPeak) / math.ln10).toStringAsFixed(1)} dBFS'
-                ' · 源 ${model.convSrcRate}Hz',
+                l.convFramesLine(
+                    model.convFrames,
+                    dur,
+                    model.convChannels,
+                    (20 * math.log(model.convPeak <= 1e-6 ? 1e-6 : model.convPeak) / math.ln10).toStringAsFixed(1),
+                    model.convSrcRate),
                 style: monoOf(p, size: 12, color: p.text),
               ),
               if (resampled) ...[
@@ -778,8 +779,8 @@ class _ConvolverCard extends StatelessWidget {
   }
 
   Future<void> _pickIr(BuildContext context) async {
-    const type = XTypeGroup(label: 'Audio IR',
-        extensions: ['wav', 'flac']);
+    const type = XTypeGroup(label: 'Audio IR (*.irs, *.wav, *.flac)',
+        extensions: ['irs', 'wav', 'flac']);
     final f = await openFile(acceptedTypeGroups: [type]);
     if (f != null) model.loadConvolverIr(f.path);
   }
@@ -818,7 +819,7 @@ class _DdcCard extends StatelessWidget {
           children: [
             _ResourceSlot(
               icon: Icons.filter_alt_outlined,
-              title: 'VDC 滤波器',
+              title: l.ddcFilterTitle,
               detail: model.ddcReady ? l.ddcLoaded : null,
               actions: [
                 AuraChip(l.ddcOpen, icon: Icons.folder_open_outlined,
@@ -913,7 +914,7 @@ class _StereoCard extends StatelessWidget {
             defaultValue: ParamDefaults.stereoMix,
             onResetToDefault: model.resetStereoWiden,
             overridden: model.stereoBandUsed,
-            overriddenNote: model.stereoBandUsed ? '分带生效中' : null,
+            overriddenNote: model.stereoBandUsed ? l.stereoBandActive : null,
             min: 0,
             max: 1,
             unit: '%',
@@ -937,7 +938,6 @@ class _StereoAdvanced extends StatelessWidget {
   final AppModel model;
   const _StereoAdvanced({required this.model});
 
-  static const _bandLabels = ['低频段', '中低频', '中频', '中高频', '高频'];
 
   @override
   Widget build(BuildContext context) {
@@ -952,10 +952,10 @@ class _StereoAdvanced extends StatelessWidget {
               _BandSlider(
                 model: m,
                 index: i,
-                label: _bandLabels[i],
+                label: [l10nOf(context).stBand0, l10nOf(context).stBand1, l10nOf(context).stBand2, l10nOf(context).stBand3, l10nOf(context).stBand4][i],
               ),
             const SizedBox(height: AuraSpace.xs),
-            Text('独立调节各频段展开度；调节任一带即脱离全局总滑块',
+            Text(l10nOf(context).stBandHint,
                 style: captionOf(p)),
           ],
         );
@@ -1306,7 +1306,7 @@ class _ValueSliderState extends State<ValueSlider> {
               if (widget.onResetToDefault != null) ...[
                 const SizedBox(width: AuraSpace.xs),
                 Tooltip(
-                  message: '点击重置默认值',
+                  message: l10nOf(context).sliderResetTip,
                   child: InkWell(
                     onTap: widget.onResetToDefault,
                     borderRadius: BorderRadius.circular(AuraRadius.xs),
@@ -1390,7 +1390,7 @@ class _PresetCardState extends State<_PresetCard> {
               children: [
                 Icon(Icons.stars_rounded, size: 14, color: p.accent),
                 const SizedBox(width: 4),
-                Text('出厂经典调音预设',
+                Text(l.presetFactoryTitle,
                     style: monoOf(p, size: 11, color: p.accent)),
               ],
             ),
@@ -1409,7 +1409,7 @@ class _PresetCardState extends State<_PresetCard> {
                       _reload();
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text('已载入出厂预设: ${item.name}'),
+                          content: Text(l.presetLoadedFactory(item.name)),
                           duration: const Duration(milliseconds: 1400),
                         ));
                       }
@@ -1425,13 +1425,13 @@ class _PresetCardState extends State<_PresetCard> {
             children: [
               Icon(Icons.folder_shared_rounded, size: 14, color: p.accent2),
               const SizedBox(width: 4),
-              Text('我的自定义预设',
+              Text(l.presetUserTitle,
                   style: monoOf(p, size: 11, color: p.accent2)),
             ],
           ),
           const SizedBox(height: AuraSpace.xs),
           if (userPresets.isEmpty)
-            Text('暂无用户自定义预设 — 调好参数后在下方保存',
+            Text(l.presetUserEmpty,
                 style: captionOf(p, color: p.textDim))
           else
             Wrap(
@@ -1451,7 +1451,7 @@ class _PresetCardState extends State<_PresetCard> {
                           _reload();
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text('已载入自定义预设: ${item.name}'),
+                              content: Text(l.presetLoadedUser(item.name)),
                               duration: const Duration(milliseconds: 1400),
                             ));
                           }
@@ -1490,7 +1490,7 @@ class _PresetCardState extends State<_PresetCard> {
                 child: TextField(
                   controller: _saveNameCtrl,
                   decoration: InputDecoration(
-                    hintText: '输入预设名称保存当前状态为用户预设',
+                    hintText: l.presetSaveHint,
                     hintStyle: captionOf(p),
                     isDense: true,
                     contentPadding: const EdgeInsets.symmetric(
@@ -1550,7 +1550,7 @@ class _IrSpectrumGraph extends StatelessWidget {
           children: [
             Text(l.convSpectrumTitle, style: captionOf(p, color: p.textDim)),
             const Spacer(),
-            Text('32 频带 · 0..1 归一化能量',
+            Text(l.convSpectrumCaption,
                 style: monoOf(p, size: 10, color: p.textDim)),
           ],
         ),

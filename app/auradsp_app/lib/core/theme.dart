@@ -61,13 +61,13 @@ const auraLight = AuraPalette(
   hairline: Color(0xFFE2DDCF),
   text: Color(0xFF1A1A1A),
   textDim: Color(0xFF6E6A60),
-  accent: Color(0xFFE63B2E), // 强调：选中/激活（浅色底朱红；与 error 暗红同色系，以明度区分：E63B2E vs C0271B；改色需用户定夺，见 P3）
+  accent: Color(0xFF5B7A00), // 强调：选中/激活（浅色底深橄榄石灰，与 error 暗红跨色相分离；白底对比 4.97，同系深色主题荧光绿的明度适配）
   accentContrast: Color(0xFFFFF7F6),
   accent2: Color(0xFF22335C),
   success: Color(0xFF1E7A4E),
   warning: Color(0xFF9A6D00),
   error: Color(0xFFC0271B),
-  vizSpectrum: Color(0xFFE63B2E),
+  vizSpectrum: Color(0xFF5B7A00),
   vizGrid: Color(0xFFE7E2D6),
 );
 

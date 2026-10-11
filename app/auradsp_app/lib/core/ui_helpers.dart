@@ -3,14 +3,13 @@
  *
  * - AuraBreakpoint：mobile(<600) / tablet(600-900) / desktop(>900)，
  *   由 MediaQuery 宽度推导；PageScaffold 在 P2 阶段接入。
- * - InfoBadge：问号圆圈徽标。触发走 Flutter Tooltip 原生行为——
- *   桌面端 hover 300ms 弹出，Android/iOS 长按弹出、抬指后保留
- *   showDuration（滚动后暂留的近似）；Web 降级为同一 Tooltip。
- *   注：气泡无指向箭头（Tooltip 不支持）；如评审坚持要箭头，
- *   P2 再做 OverlayEntry 自定义气泡（需真机视觉验证）。
+ * - InfoBadge：问号圆圈徽标 + 定制箭头气泡（OverlayEntry + LayerLink 跟随）。
+ *   桌面 hover 300ms 弹出、离即消；触屏长按弹出、2.5s 后自动收起、
+ *   再点徽标也可关闭。空间不足自动翻转。R2 取代 P0 的 Tooltip 版。
  */
-import 'package:flutter/foundation.dart'
-    show TargetPlatform, defaultTargetPlatform, kIsWeb;
+import 'dart:async' show Timer;
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import 'design.dart';
@@ -65,6 +64,9 @@ extension AuraBreakpointX on BuildContext {
 ///   InfoBadge(message: l.stereoWidenHint),
 /// ])
 /// ```
+///
+/// 触发：桌面 hover 300ms 弹出、离即消；触屏长按弹出、2.5s 后自动收起、
+/// 再点徽标也可关闭。气泡带指向箭头，空间不足自动翻转，并跟随目标滚动。
 class InfoBadge extends StatefulWidget {
   /// 气泡内容（支持换行；请传 l10n 文案，勿硬编码）
   final String message;
@@ -72,14 +74,18 @@ class InfoBadge extends StatefulWidget {
   /// 徽标直径（默认 16；命中区另有 4px 透明外衬）
   final double size;
 
-  /// 气泡优先显示在徽标下方（默认 true；空间不足时 Tooltip 自动翻转）
+  /// 气泡优先显示在徽标下方（默认 true；空间不足自动翻转）
   final bool preferBelow;
+
+  /// 气泡最大宽度（默认 240）
+  final double maxWidth;
 
   const InfoBadge({
     super.key,
     required this.message,
     this.size = 16,
     this.preferBelow = true,
+    this.maxWidth = 240,
   });
 
   @override
@@ -87,55 +93,170 @@ class InfoBadge extends StatefulWidget {
 }
 
 class _InfoBadgeState extends State<InfoBadge> {
+  final LayerLink _link = LayerLink();
+  OverlayEntry? _entry;
+  Timer? _showTimer;
+  Timer? _hideTimer;
   bool _hover = false;
 
-  static bool get _touchFirst =>
-      !kIsWeb &&
-      (defaultTargetPlatform == TargetPlatform.android ||
-          defaultTargetPlatform == TargetPlatform.iOS);
+  static const _hoverDelay = Duration(milliseconds: 300);
+  static const _touchVisible = Duration(milliseconds: 2500);
+  static const _arrowW = 12.0;
+  static const _arrowH = 7.0;
+  static const _gap = 4.0;
+  static const _margin = 16.0;
+  static const _padH = 10.0;
+  static const _padV = 7.0;
+
+  @override
+  void dispose() {
+    _showTimer?.cancel();
+    _hideTimer?.cancel();
+    _removeEntry();
+    super.dispose();
+  }
+
+  void _removeEntry() {
+    _entry?.remove();
+    _entry = null;
+  }
+
+  void _hide() {
+    _showTimer?.cancel();
+    _hideTimer?.cancel();
+    _removeEntry();
+  }
+
+  void _show() {
+    if (_entry != null) return;
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null || !box.attached) return;
+    if (Overlay.maybeOf(context) == null) return;
+    final screen = MediaQuery.sizeOf(context);
+    final p = paletteOf(context);
+    final origin = box.localToGlobal(Offset.zero);
+    final centerX = origin.dx + box.size.width / 2;
+
+    // 先量气泡尺寸（与实际渲染同一样式、同宽约束）。
+    final maxW = math.min(widget.maxWidth, screen.width - _margin * 2).toDouble();
+    final tp = TextPainter(
+      text: TextSpan(
+          text: widget.message, style: captionOf(p, color: p.text)),
+      textDirection: Directionality.of(context),
+    )..layout(maxWidth: math.max(40.0, maxW - _padH * 2).toDouble());
+    final bubbleW = tp.width + _padH * 2;
+    final bubbleH = tp.height + _padV * 2;
+
+    final bottomEdge = origin.dy + box.size.height;
+    final fitsBelow =
+        bottomEdge + _gap + _arrowH + bubbleH + 8 <= screen.height;
+    final fitsAbove = origin.dy - _gap - _arrowH - bubbleH - 8 >= 0;
+    final below =
+        widget.preferBelow ? (fitsBelow || !fitsAbove) : !fitsAbove;
+
+    final bubbleLeft = (centerX - bubbleW / 2)
+        .clamp(_margin, math.max(_margin, screen.width - _margin - bubbleW))
+        .toDouble();
+    final bubbleTop = below
+        ? bottomEdge + _gap + _arrowH
+        : origin.dy - _gap - _arrowH - bubbleH;
+    final arrowX = (centerX - bubbleLeft)
+        .clamp(_arrowW, math.max(_arrowW, bubbleW - _arrowW))
+        .toDouble();
+    // 列宽取 max：短文案时箭头行不把列撑开、气泡不错位。
+    final colW = math.max(bubbleW, arrowX + _arrowW / 2 + _padH).toDouble();
+
+    _entry = OverlayEntry(
+      builder: (_) => CompositedTransformFollower(
+        link: _link,
+        showWhenUnlinked: false,
+        targetAnchor: Alignment.topLeft,
+        followerAnchor: Alignment.topLeft,
+        child: SizedBox(
+          width: screen.width,
+          height: screen.height,
+          child: Stack(
+            children: [
+              Positioned(
+                left: bubbleLeft,
+                top: bubbleTop,
+                child: SizedBox(
+                  width: colW,
+                  child: infoBubble(
+                    p: p,
+                    message: widget.message,
+                    below: below,
+                    arrowX: arrowX,
+                    maxWidth: maxW,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    Overlay.of(context).insert(_entry!);
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return Tooltip(
-      message: widget.message,
-      // 桌面 hover 300ms 弹出（方案A）；触屏走长按，waitDuration 不适用
-      waitDuration: const Duration(milliseconds: 300),
-      // 触屏抬指后气泡保留 2.5s（滚动后暂留的近似）；桌面离即消
-      showDuration:
-          _touchFirst ? const Duration(milliseconds: 2500) : null,
-      preferBelow: widget.preferBelow,
-      verticalOffset: 10,
-      padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
-      decoration: BoxDecoration(
-        color: p.panelRaised,
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: p.hairline, width: 1),
-      ),
-      textStyle: captionOf(p, color: p.text),
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hover = true),
-        onExit: (_) => setState(() => _hover = false),
-        // 4px 透明外衬：视觉仍是 16，触屏命中到 24
-        child: Padding(
-          padding: const EdgeInsets.all(AuraSpace.xs),
-          child: Container(
-            width: widget.size,
-            height: widget.size,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
-                width: 1.5,
-              ),
-            ),
-            child: Center(
-              child: Icon(
-                Icons.help_outline_rounded,
-                size: widget.size * 0.7,
-                color: _hover ? p.accent : p.textDim,
+    return Semantics(
+      label: widget.message,
+      button: true,
+      child: CompositedTransformTarget(
+        link: _link,
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          onEnter: (_) {
+            if (!mounted) return;
+            setState(() => _hover = true);
+            _showTimer?.cancel();
+            _showTimer = Timer(_hoverDelay, () {
+              if (mounted) _show();
+            });
+          },
+          onExit: (_) {
+            if (!mounted) return;
+            setState(() => _hover = false);
+            _hide();
+          },
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onLongPressStart: (_) {
+              _showTimer?.cancel();
+              _show();
+              _hideTimer?.cancel();
+              _hideTimer = Timer(_touchVisible, () {
+                if (mounted) _hide();
+              });
+            },
+            onTap: () {
+              // 触屏：已展开时点徽标关闭（桌面端 hover 接管，无影响）。
+              if (_entry != null) _hide();
+            },
+            // 4px 透明外衬：视觉仍是 16，触屏命中到 24
+            child: Padding(
+              padding: const EdgeInsets.all(AuraSpace.xs),
+              child: Container(
+                width: widget.size,
+                height: widget.size,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color:
+                        _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
+                    width: 1.5,
+                  ),
+                ),
+                child: Center(
+                  child: Icon(
+                    Icons.help_outline_rounded,
+                    size: widget.size * 0.7,
+                    color: _hover ? p.accent : p.textDim,
+                  ),
+                ),
               ),
             ),
           ),
@@ -143,4 +264,89 @@ class _InfoBadgeState extends State<InfoBadge> {
       ),
     );
   }
+}
+
+/// 气泡内容体（Overlay 与送审渲染共用同一套，保持一致）。
+/// below=true：箭头在上、气泡在下；反之镜像。
+Widget infoBubble({
+  required AuraPalette p,
+  required String message,
+  required bool below,
+  required double arrowX,
+  double maxWidth = 240,
+}) {
+  final bubble = Container(
+    width: double.infinity,
+    constraints: BoxConstraints(maxWidth: maxWidth),
+    decoration: BoxDecoration(
+      color: p.panelRaised,
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      border: Border.all(color: p.hairline, width: 1),
+    ),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    child: Text(message, style: captionOf(p, color: p.text)),
+  );
+  final arrow = _ArrowRow(arrowX: arrowX, pointUp: below, palette: p);
+  return Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: below ? [arrow, bubble] : [bubble, arrow],
+  );
+}
+
+/// 气泡箭头行：三角指向徽标。
+class _ArrowRow extends StatelessWidget {
+  final double arrowX;
+  final bool pointUp;
+  final AuraPalette palette;
+  const _ArrowRow(
+      {required this.arrowX, required this.pointUp, required this.palette});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(width: math.max(0.0, arrowX - 12.0 / 2).toDouble()),
+        CustomPaint(
+          size: const Size(12.0, 7.0),
+          painter: _ArrowPainter(
+              color: palette.panelRaised,
+              border: palette.hairline,
+              pointUp: pointUp),
+        ),
+      ],
+    );
+  }
+}
+
+class _ArrowPainter extends CustomPainter {
+  final Color color;
+  final Color border;
+  final bool pointUp;
+  const _ArrowPainter(
+      {required this.color, required this.border, required this.pointUp});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final w = size.width, h = size.height;
+    final path = Path()
+      ..moveTo(0, pointUp ? h : 0)
+      ..lineTo(w / 2, pointUp ? 0 : h)
+      ..lineTo(w, pointUp ? h : 0)
+      ..close();
+    canvas.drawPath(path, Paint()..color = color);
+    // 只描两条斜边：底边与气泡边框重合，不重复描。
+    final base = pointUp ? h : 0.0;
+    final apex = pointUp ? 0.0 : h;
+    final pen = Paint()
+      ..color = border
+      ..strokeWidth = 1;
+    canvas.drawLine(Offset(0.5, base), Offset(w / 2, apex), pen);
+    canvas.drawLine(Offset(w / 2, apex), Offset(w - 0.5, base), pen);
+  }
+
+  @override
+  bool shouldRepaint(_ArrowPainter old) =>
+      old.color != color || old.border != border || old.pointUp != pointUp;
 }

@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -53,7 +54,7 @@ class _InteractiveSpectrumEQPanelState
             // 频段规格切换
             for (final b in const [7, 10, 15, 31])
               AuraChoiceChip(
-                label: '$b段',
+                label: l.eqBands(b),
                 selected: model.eqBandsCount == b,
                 onTap: () => model.setEqBandsCount(b),
               ),
@@ -200,12 +201,12 @@ class _InteractiveSpectrumEQPanelState
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
             Text(
-              '上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位',
+              l.eqCanvasHint,
               style: captionOf(p),
             ),
             if (model.eqBypass)
               Text(
-                '旁路生效中 (Bypass)',
+                l.eqBypassOn,
                 style: monoOf(p, size: 11, color: p.warning),
               ),
           ],
@@ -286,17 +287,17 @@ class _InteractiveSpectrumEQPanelState
                     runSpacing: AuraSpace.sm,
                     children: [
                       AuraChoiceChip(
-                        label: '最小相位 FIR',
+                        label: l.eqFilterMinphase,
                         selected: model.eqFilter == 0,
                         onTap: () => model.setEqFilter(0),
                       ),
                       AuraChoiceChip(
-                        label: '6阶 IIR',
+                        label: l.eqFilterIir6,
                         selected: model.eqFilter == 1,
                         onTap: () => model.setEqFilter(1),
                       ),
                       AuraChoiceChip(
-                        label: '12阶 IIR',
+                        label: l.eqFilterIir12,
                         selected: model.eqFilter == 2,
                         onTap: () => model.setEqFilter(2),
                       ),
@@ -309,12 +310,12 @@ class _InteractiveSpectrumEQPanelState
                     spacing: AuraSpace.sm,
                     children: [
                       AuraChoiceChip(
-                        label: 'Makima (平滑防冲)',
+                        label: l.eqInterpMakima,
                         selected: model.eqInterp == 1,
                         onTap: () => model.setEqInterp(1),
                       ),
                       AuraChoiceChip(
-                        label: 'PCHIP (单调保形)',
+                        label: l.eqInterpPchip,
                         selected: model.eqInterp == 0,
                         onTap: () => model.setEqInterp(0),
                       ),
@@ -336,28 +337,29 @@ class _PresetDropdown extends StatelessWidget {
   final AppModel model;
   const _PresetDropdown({required this.model});
 
-  static const _presets = [
-    ('flat', '平直 (Flat)'),
-    ('pop', '流行 (Pop)'),
-    ('rock', '摇滚 (Rock)'),
-    ('jazz', '爵士 (Jazz)'),
-    ('classical', '古典 (Classical)'),
-    ('vocal', '人声增强 (Vocal)'),
-    ('smile', '微笑增强 (V-Shape)'),
-    ('bass_boost', '低音强化 (Bass+)'),
-    ('treble_boost', '高音清晰 (Treble+)'),
+  /// 预设 id → 展示名（展示名走 l10n，不能是 const）。
+  static List<(String, String)> _presetsOf(AppLocalizations l) => [
+    ('flat', l.eqPresetFlat),
+    ('pop', l.eqPresetPop),
+    ('rock', l.eqPresetRock),
+    ('jazz', l.eqPresetJazz),
+    ('classical', l.eqPresetClassical),
+    ('vocal', l.eqPresetVocal),
+    ('smile', l.eqPresetSmile),
+    ('bass_boost', l.eqPresetBass),
+    ('treble_boost', l.eqPresetTreble),
   ];
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final cur = _presets.firstWhere(
+    final cur = _presetsOf(l10nOf(context)).firstWhere(
       (e) => e.$1 == model.eqPresetName,
-      orElse: () => ('custom', '自定义 (Custom)'),
+      orElse: () => ('custom', l10nOf(context).eqPresetCustom),
     );
 
     return PopupMenuButton<String>(
-      tooltip: '选择 EQ 风格预设',
+      tooltip: l10nOf(context).eqPresetPick,
       color: p.panelRaised,
       elevation: 6,
       shape: RoundedRectangleBorder(
@@ -366,7 +368,7 @@ class _PresetDropdown extends StatelessWidget {
       ),
       onSelected: model.applyEqPreset,
       itemBuilder: (context) => [
-        for (final item in _presets)
+        for (final item in _presetsOf(l10nOf(context)))
           PopupMenuItem<String>(
             value: item.$1,
             child: Row(
@@ -448,7 +450,7 @@ class _RotaryQKnobState extends State<_RotaryQKnob> {
         _dragStartQ = null;
       },
       child: Tooltip(
-        message: 'Q-Factor 滤波器锐度 (0.3 ~ 10.0)\n垂直拖动调节 · 双击复位 1.41',
+        message: l.eqQTip,
         child: Container(
           color: Colors.transparent,
           padding: const EdgeInsets.all(8),

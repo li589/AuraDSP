@@ -89,11 +89,32 @@ def main():
     # 所以本地领先多少个提交都不影响 —— 之前的 `remote_head not in parents`
     # 只接受直接父提交，会把「本地领先 N 个提交」误判成分叉并中止。
     # 真正的分叉判定用 merge-base --is-ancestor。
-    sh("merge-base", "--is-ancestor", remote_head, head)
+    try:
+        sh("merge-base", "--is-ancestor", remote_head, head)
+        local_base = remote_head
+    except subprocess.CalledProcessError:
+        # API 重放会归一化 message 尾换行，导致远端 tip 与本地同内容提交
+        # SHA 不同、历史分叉。此时按 tree 内容找交汇点：远端 tip 的 tree
+        # 若与本地某祖先一致，则以该祖先为重放起点（远端 tip 为 parent），
+        # 只推真正新增的提交。
+        print("  [!] 远端 HEAD 非本地祖先（API 重放致 SHA 分叉），按 tree 内容找交汇点…")
+        sh("fetch", "origin", branch)
+        remote_tree = sh("log", "--format=%T", "-n", "1", remote_head)
+        local_base = None
+        for cand in sh("rev-list", "--max-count=200", head).split("\n"):
+            if not cand:
+                continue
+            if sh("log", "--format=%T", "-n", "1", cand) == remote_tree:
+                local_base = cand
+                break
+        if local_base is None:
+            print("== 200 代内无内容相同的提交，疑似真分叉，中止（请人工处理）")
+            return 1
+        print("  内容交汇点：本地 %s（tree 与远端一致）" % local_base[:12])
     if remote_head == head:
         print("== 远端已是最新，无需推送")
         return 0
-    ahead = sh("rev-list", "--count", "%s..%s" % (remote_head, head)).strip()
+    ahead = sh("rev-list", "--count", "%s..%s" % (local_base, head)).strip()
     print("  本地领先 %s 个提交" % ahead)
 
     # 逐个提交重放，**保留每个提交的 SHA 与作者/时间**。
@@ -104,12 +125,15 @@ def main():
     # 所以这里按 (remote_head, head] 的顺序逐个重放：
     # 每个提交的 tree 以**它自己的父提交树**为 base，
     # 只上传该提交相对父提交改动过的文件。
-    commits = sh("rev-list", "--reverse", "%s..%s" % (remote_head, head)).split("\n")
+    commits = sh("rev-list", "--reverse", "%s..%s" % (local_base, head)).split("\n")
     commits = [c for c in commits if c]
+    if not commits:
+        print("== 内容已一致，无需推送")
+        return 0
     print("  待重放 %d 个提交" % len(commits))
 
     parent = remote_head          # 远端 parent SHA（给 GitHub tree base 用）
-    local_parent_sha = remote_head  # 本地 parent SHA（给 git diff 用）
+    local_parent_sha = local_base  # 本地 parent SHA（给 git diff 用）
     for i, c in enumerate(commits, 1):
         # 本地 parent 链用于验证完整性
         local_parent = sh("rev-list", "--parents", "-n1", c).split()[1:]

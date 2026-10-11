@@ -468,7 +468,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get eqMultiBand => 'Multi-Band Equalizer';
 
   @override
-  String get eqBands => 'Bands';
+  String eqBands(int n) {
+    return '$n bands';
+  }
 
   @override
   String get eqPresets => 'Presets';
@@ -538,4 +540,565 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tubeMix => 'Dry/Wet Mix';
+
+  @override
+  String get dlgCancel => 'Cancel';
+
+  @override
+  String get dlgAdd => 'Add';
+
+  @override
+  String get dlgSave => 'Save';
+
+  @override
+  String get dlgLoad => 'Load';
+
+  @override
+  String get dlgClose => 'Close';
+
+  @override
+  String get dlgUnload => 'Unload';
+
+  @override
+  String get dlgPreset => 'Preset';
+
+  @override
+  String get memTitle => 'Persistent Memory & External Config';
+
+  @override
+  String get memHint =>
+      'Automatically records all effect settings and restores them seamlessly on next launch.';
+
+  @override
+  String get memAutoRestore => 'Auto-save and restore session on exit';
+
+  @override
+  String memDir(String path) {
+    return 'Config directory: $path';
+  }
+
+  @override
+  String get memClear => 'Clear Session Memory';
+
+  @override
+  String get memCleared =>
+      'Persistent session memory cleared; next launch starts from clean defaults';
+
+  @override
+  String get memReset => 'Reset External Config to Defaults';
+
+  @override
+  String get memResetDone =>
+      'config.json has been reset to the standard template';
+
+  @override
+  String get latUnmeasured => 'Unmeasured';
+
+  @override
+  String latTipMeasured(String text) {
+    return 'Component latency (impulse-response measured): $text\nTap ↻ to re-measure (tens of ms, playback unaffected)';
+  }
+
+  @override
+  String get latTipProbing => 'Measuring component latency…';
+
+  @override
+  String get latTipUnmeasured =>
+      'Component latency not measured yet\nTap ↻ for one impulse-response measurement (tens of ms)';
+
+  @override
+  String get eqCanvasHint =>
+      'Drag vertically for gain · double-tap a node to zero 0dB · double-tap background to flatten';
+
+  @override
+  String get eqBypassOn => 'Bypass active';
+
+  @override
+  String get eqFilterMinphase => 'Minimum-phase FIR';
+
+  @override
+  String get eqFilterIir6 => '6th-order IIR';
+
+  @override
+  String get eqFilterIir12 => '12th-order IIR';
+
+  @override
+  String get eqInterpMakima => 'Makima (smooth, overshoot-free)';
+
+  @override
+  String get eqInterpPchip => 'PCHIP (monotone shape-preserving)';
+
+  @override
+  String get eqPresetFlat => 'Flat';
+
+  @override
+  String get eqPresetPop => 'Pop';
+
+  @override
+  String get eqPresetRock => 'Rock';
+
+  @override
+  String get eqPresetJazz => 'Jazz';
+
+  @override
+  String get eqPresetClassical => 'Classical';
+
+  @override
+  String get eqPresetVocal => 'Vocal Boost';
+
+  @override
+  String get eqPresetSmile => 'Smile (V-Shape)';
+
+  @override
+  String get eqPresetBass => 'Bass Boost';
+
+  @override
+  String get eqPresetTreble => 'Treble Clarity';
+
+  @override
+  String get eqPresetCustom => 'Custom';
+
+  @override
+  String get eqPresetPick => 'Pick an EQ style preset';
+
+  @override
+  String get eqQTip =>
+      'Q-Factor filter sharpness (0.3 - 10.0)\nDrag vertically · double-tap to reset 1.41';
+
+  @override
+  String get stTube => 'Tube';
+
+  @override
+  String get stComp => 'Limiter';
+
+  @override
+  String get stBass => 'Bass Boost';
+
+  @override
+  String get stEq => 'Equalizer';
+
+  @override
+  String get stArbmag => 'Arbitrary-response EQ';
+
+  @override
+  String get stConv => 'Impulse Response';
+
+  @override
+  String get stScript => 'Script';
+
+  @override
+  String get stXfeed => 'Crossfeed';
+
+  @override
+  String get stStereo => 'Stereo Widening';
+
+  @override
+  String get stReverb => 'Reverb';
+
+  @override
+  String get stOutput => 'Output Stage';
+
+  @override
+  String get chainTitle => 'Processing Chain';
+
+  @override
+  String get chainOrderTitle => 'Order & Status';
+
+  @override
+  String get chainOrderHint =>
+      'Drag to reorder processing (top-down); tap \"Apply\" when changed. Each node can be bypassed/enabled independently; per-node live stereo meters on the right.';
+
+  @override
+  String get chainApply => 'Apply Order';
+
+  @override
+  String get chainReset => 'Reset to Defaults';
+
+  @override
+  String get chainReserved => 'Reserved';
+
+  @override
+  String get chainFlowTitle => 'Signal Flow (Current Order)';
+
+  @override
+  String get chainFlowCaption => 'Global signal-flow overview (left to right):';
+
+  @override
+  String get chainNodeShelf => 'Low-shelf EQ';
+
+  @override
+  String get chainNodeVendor => '12-stage internal DSP chain';
+
+  @override
+  String get chainNodeReverb => 'Reverb & Soundstage';
+
+  @override
+  String get chainNodeLimiter => 'Main Limiter';
+
+  @override
+  String get chainNodeOutput => 'Audio Output';
+
+  @override
+  String chainSlotActive(int n, String name, String fmt) {
+    return 'Slot $n: $name ($fmt)';
+  }
+
+  @override
+  String chainSlotEmpty(int n) {
+    return 'Slot $n: no plugin loaded';
+  }
+
+  @override
+  String get chainSlotBypassed => 'Bypassed (thru)';
+
+  @override
+  String get chainSlotProcessing => 'Processing';
+
+  @override
+  String chainSlotStatusLine(String a, int b) {
+    return 'Status: $a • latency: $b samples';
+  }
+
+  @override
+  String get chainSlotHint =>
+      'Pick an effect on the Plugins page to load into this slot';
+
+  @override
+  String get chainOpenGui => 'Open Native UI (GUI)';
+
+  @override
+  String get chainBypassed => 'Bypassed';
+
+  @override
+  String get chainEnable => 'Enable';
+
+  @override
+  String lpSaved(String name) {
+    return 'Saved: $name.eel';
+  }
+
+  @override
+  String get lpAddDirTitle => 'Add External Script Preset Folder';
+
+  @override
+  String get lpAddDirPrompt =>
+      'Enter the full folder path containing .eel / .txt script presets:';
+
+  @override
+  String get lpAddDirExample => 'E.g.: D:\\AudioScripts\\EelPresets';
+
+  @override
+  String lpChars(int n) {
+    return '$n chars';
+  }
+
+  @override
+  String get lpReady => 'Syntax OK';
+
+  @override
+  String lpIssues(int n) {
+    return '$n potential problems';
+  }
+
+  @override
+  String lpIssueAt(int line, String msg) {
+    return 'Line $line: $msg';
+  }
+
+  @override
+  String get lpShowAll => 'All 8 slots';
+
+  @override
+  String lpAdaptive(int n) {
+    return 'Adaptive ($n)';
+  }
+
+  @override
+  String get lpNoSliders =>
+      'Current code declares no slider1..8 params (pure algorithmic processing)';
+
+  @override
+  String get lpExpandSliders => 'Expand all 8 sliders';
+
+  @override
+  String get lpAddDir => 'Add External Folder';
+
+  @override
+  String get lpSlidersHint =>
+      'Sliders adapt to the slider params declared/referenced by the current script; tap top-right to switch mode.';
+
+  @override
+  String get lpLibraryHint =>
+      'Supports the local %APPDATA% library plus auto-indexed external preset folders.';
+
+  @override
+  String get convIrTitle => 'Impulse Response (IR)';
+
+  @override
+  String convFramesLine(int frames, String dur, int ch, String peak, int rate) {
+    return '$frames frames · $dur · ${ch}ch · peak $peak dBFS · src ${rate}Hz';
+  }
+
+  @override
+  String get ddcFilterTitle => 'VDC Filter';
+
+  @override
+  String get stereoBandActive => 'Per-band active';
+
+  @override
+  String get stBand0 => 'Low';
+
+  @override
+  String get stBand1 => 'Low-Mid';
+
+  @override
+  String get stBand2 => 'Mid';
+
+  @override
+  String get stBand3 => 'High-Mid';
+
+  @override
+  String get stBand4 => 'High';
+
+  @override
+  String get stBandHint =>
+      'Adjust per-band widening independently; touching any band detaches from the global slider';
+
+  @override
+  String get presetFactoryTitle => 'Factory tuning presets';
+
+  @override
+  String get presetUserTitle => 'My custom presets';
+
+  @override
+  String get presetUserEmpty =>
+      'No custom presets yet — save below after tuning';
+
+  @override
+  String presetLoadedFactory(String name) {
+    return 'Loaded factory preset: $name';
+  }
+
+  @override
+  String presetLoadedUser(String name) {
+    return 'Loaded custom preset: $name';
+  }
+
+  @override
+  String get presetSaveHint =>
+      'Enter a name to save current state as a user preset';
+
+  @override
+  String get convSpectrumCaption => '32 bands · 0..1 normalized energy';
+
+  @override
+  String get sliderResetTip => 'Click to reset to default';
+
+  @override
+  String get plugAddDirTitle => 'Add Plugin Search Folder';
+
+  @override
+  String get plugAddDirPrompt =>
+      'Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:';
+
+  @override
+  String get plugAddDirExample => 'E.g.: D:\\AudioPlugins\\VST3';
+
+  @override
+  String get plugAddScan => 'Add & Scan';
+
+  @override
+  String plugPresetTitle(String name) {
+    return 'Plugin presets — $name';
+  }
+
+  @override
+  String get plugPresetSaveLabel => 'Save current parameter state';
+
+  @override
+  String get plugPresetNameHint => 'Enter a new preset name...';
+
+  @override
+  String plugPresetList(int n) {
+    return 'Saved presets ($n)';
+  }
+
+  @override
+  String get plugPresetEmpty =>
+      'No saved presets yet; save via the input above.';
+
+  @override
+  String get plugTitle => 'Plugin Center';
+
+  @override
+  String get plugLibTitle => 'Third-party Effect Library';
+
+  @override
+  String get plugLibHint =>
+      'Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.';
+
+  @override
+  String get plugDeepScan => 'Deep scan';
+
+  @override
+  String get plugScan => 'Aggregate plugin scan';
+
+  @override
+  String get plugScanning => 'Scanning...';
+
+  @override
+  String get plugOpenFolder => 'Open Standard VST3 Folder';
+
+  @override
+  String get plugSearchHint => 'Search plugin name, vendor or path...';
+
+  @override
+  String get plugM1Title => 'M1 Plugin Host Engine Spec';
+
+  @override
+  String get plugM1Hint =>
+      'Multi-format in-process host with 64-bit VST3 and CLAP support.';
+
+  @override
+  String get plugFeatSlots =>
+      'Dual slots (Slot 1 / Slot 2) managed independently & concurrently';
+
+  @override
+  String get plugFeatStages =>
+      'Full-chain stage insertion (Pre-DSP ~ Post-Limiter)';
+
+  @override
+  String get plugFeatGui =>
+      'Native Win32 GUI popups on a dedicated message loop';
+
+  @override
+  String get plugFeatPreset => 'Binary-stream preset save & instant restore';
+
+  @override
+  String get plugFeatDirs =>
+      'Custom plugin folder search & local state snapshots';
+
+  @override
+  String get plugFeatRt => 'Flat stereo RT-Safe preallocation, zero locks';
+
+  @override
+  String plugSlot(int n) {
+    return 'Slot $n (Slot $n)';
+  }
+
+  @override
+  String get plugBypassed => 'Bypassed';
+
+  @override
+  String get plugCustomTitle => 'Custom Plugin Search Folders';
+
+  @override
+  String get plugCustomHint =>
+      'Add VST3/CLAP paths from other drives or your DAW; they merge into scans automatically.';
+
+  @override
+  String get plugCustomAdd => 'Add Folder';
+
+  @override
+  String get plugCustomEmpty =>
+      'No custom folders yet. Besides system defaults (C:\\Program Files\\Common Files\\VST3 etc.), add via top-right.';
+
+  @override
+  String plugMountTitle(int n) {
+    return 'Mount Status (Slot $n)';
+  }
+
+  @override
+  String plugMountEmpty(int n) {
+    return 'Slot $n has no third-party plugin loaded';
+  }
+
+  @override
+  String get plugMountEmptyHint =>
+      'Pick an installed VST3 / CLAP plugin from the library list below to load';
+
+  @override
+  String get plugScanNow => 'Scan Installed Plugins Now';
+
+  @override
+  String plugMountedTitle(int n) {
+    return 'Currently Loaded Plugin (Slot $n)';
+  }
+
+  @override
+  String get plugOpenGuiBtn => 'Open UI (GUI)';
+
+  @override
+  String get plugUnloadFromSlot => 'Unload from This Slot';
+
+  @override
+  String plugLoadToSlot(int n) {
+    return 'Load into Slot $n';
+  }
+
+  @override
+  String get plugLatencyLabel => 'Measured Audio Latency';
+
+  @override
+  String get plugStageLabel => 'Signal-chain insert stage:';
+
+  @override
+  String get plugRtNote => 'Live serial chaining • RT-Safe contract kept';
+
+  @override
+  String get plugFilterAll => 'All';
+
+  @override
+  String get plugNoPlugins => 'No third-party plugins detected';
+
+  @override
+  String get plugNoPluginsHint =>
+      'Make sure plugins live in system VST3 / CLAP paths, or add a custom folder above and rescan';
+
+  @override
+  String get plugNoMatch => 'No plugins match the current search/filter';
+
+  @override
+  String plugSlotActive(int n) {
+    return 'Slot $n active';
+  }
+
+  @override
+  String plugSlotLoaded(int n) {
+    return 'Slot $n loaded';
+  }
+
+  @override
+  String get plugUnknownVendor => 'Unknown vendor';
+
+  @override
+  String get plugThirdParty => 'Third-party plugin';
+
+  @override
+  String plugSlotPluginLine(String name, String stage) {
+    return '$name • [$stage]';
+  }
+
+  @override
+  String get plugSlotNoFx => 'No effect loaded';
+
+  @override
+  String get chainActive => 'Active';
+
+  @override
+  String get chainBypass => 'Bypass';
+
+  @override
+  String get plugActive => 'Active';
+
+  @override
+  String get lpSaveFailed => 'Save failed (bad name or unwritable disk)';
+
+  @override
+  String get chainVstTitle =>
+      'Third-party VST / CLAP Plugin Slots & Stage Order';
+
+  @override
+  String get chainVstHint =>
+      'Mount multiple slots in parallel; set each plugin\'s insert stage and order on the global chain below.';
 }

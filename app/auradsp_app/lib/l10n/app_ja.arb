@@ -184,5 +184,363 @@
   "tubeStyleTape": "テープウォームス",
   "tubeOversampling": "オーバーサンプリング",
   "tubeCompensation": "出力レベル補正",
-  "tubeMix": "ドライ/ウェット"
+  "tubeMix": "ドライ/ウェット",
+  "dlgCancel": "キャンセル",
+  "dlgAdd": "追加",
+  "dlgSave": "保存",
+  "dlgLoad": "読み込み",
+  "dlgClose": "閉じる",
+  "dlgUnload": "アンロード",
+  "dlgPreset": "プリセット",
+  "memTitle": "永続メモリと外部設定",
+  "memHint": "全エフェクト設定を自動記録し、次回起動時にシームレスに復元します。",
+  "memAutoRestore": "終了時にセッションを自動保存・復元",
+  "memDir": "設定ディレクトリ：{path}",
+  "@memDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+  "memClear": "セッションメモリをクリア",
+  "memCleared": "永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します",
+  "memReset": "外部設定をデフォルトにリセット",
+  "memResetDone": "config.json を標準テンプレートにリセットしました",
+  "latUnmeasured": "未測定",
+  "latTipMeasured": "コンポーネント遅延（インパルス応答実測）: {text}\n↻タップで再測定（数十ms、再生に影響しません）",
+  "@latTipMeasured": {
+    "placeholders": {
+      "text": {
+        "type": "String"
+      }
+    }
+  },
+  "latTipProbing": "コンポーネント遅延を測定中…",
+  "latTipUnmeasured": "未測定です\n↻タップでインパルス応答を1回測定（数十ms）",
+  "eqBands": "{n}段",
+  "@eqBands": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "eqCanvasHint": "上下ドラッグでゲイン · ノードをダブルタップで0dB · 背景をダブルタップでフラット化",
+  "eqBypassOn": "バイパス中",
+  "eqFilterMinphase": "最小位相 FIR",
+  "eqFilterIir6": "6次IIR",
+  "eqFilterIir12": "12次IIR",
+  "eqInterpMakima": "Makima（スムーズ・オーバーシュート防止）",
+  "eqInterpPchip": "PCHIP（単調形状保持）",
+  "eqPresetFlat": "フラット",
+  "eqPresetPop": "ポップ",
+  "eqPresetRock": "ロック",
+  "eqPresetJazz": "ジャズ",
+  "eqPresetClassical": "クラシック",
+  "eqPresetVocal": "ボーカルブースト",
+  "eqPresetSmile": "スマイル (V-Shape)",
+  "eqPresetBass": "バスブースト",
+  "eqPresetTreble": "トレブルクリア",
+  "eqPresetCustom": "カスタム",
+  "eqPresetPick": "EQスタイルプリセットを選択",
+  "eqQTip": "Qファクター鮮鋭度 (0.3～10.0)\n垂直ドラッグで調整 · ダブルタップで1.41にリセット",
+  "stTube": "真空管",
+  "stComp": "リミッター",
+  "stBass": "低音ブースト",
+  "stEq": "イコライザー",
+  "stArbmag": "任意応答EQ",
+  "stConv": "インパルス応答",
+  "stScript": "スクリプト",
+  "stXfeed": "クロスフィード",
+  "stStereo": "ステレオワイド",
+  "stReverb": "リバーブ",
+  "stOutput": "出力段",
+  "chainTitle": "処理チェーン",
+  "chainOrderTitle": "順序と状態",
+  "chainOrderHint": "ドラッグで処理順を調整（上から下へ）。変更後は「適用」をタップ。各ノードは独立してバイパス/有効化可能。右側にノード別ライブステレオメーター。",
+  "chainApply": "順序を適用",
+  "chainReset": "デフォルトに戻す",
+  "chainReserved": "予約済み",
+  "chainFlowTitle": "シグナルフロー（現在の順序）",
+  "chainFlowCaption": "全体シグナルフロー概略（左から右へ）：",
+  "chainNodeShelf": "ローシェルフEQ",
+  "chainNodeVendor": "12段内部DSPチェーン",
+  "chainNodeReverb": "リバーブと音場",
+  "chainNodeLimiter": "メインリミッター",
+  "chainNodeOutput": "オーディオ出力",
+  "chainSlotActive": "スロット{n}：{name}（{fmt}）",
+  "@chainSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      },
+      "fmt": {
+        "type": "String"
+      }
+    }
+  },
+  "chainSlotEmpty": "スロット{n}：未マウント",
+  "@chainSlotEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotBypassed": "バイパス中（スルー）",
+  "chainSlotProcessing": "処理中",
+  "chainSlotStatusLine": "状態：{a} • 遅延：{b}サンプル",
+  "@chainSlotStatusLine": {
+    "placeholders": {
+      "a": {
+        "type": "String"
+      },
+      "b": {
+        "type": "int"
+      }
+    }
+  },
+  "chainSlotHint": "「プラグイン」ページでエフェクトを選んで本スロットにロード",
+  "chainOpenGui": "ネイティブUIを開く (GUI)",
+  "chainBypassed": "バイパス中",
+  "chainEnable": "有効",
+  "lpSaved": "保存しました：{name}.eel",
+  "@lpSaved": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpAddDirTitle": "外部スクリプトプリセットフォルダを追加",
+  "lpAddDirPrompt": ".eel / .txt スクリプトプリセットを含むフォルダのフルパスを入力：",
+  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpChars": "{n}文字",
+  "@lpChars": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpReady": "構文OK",
+  "lpIssues": "{n} 件の潜在的問題",
+  "@lpIssues": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpIssueAt": "{line}行目：{msg}",
+  "@lpIssueAt": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "msg": {
+        "type": "String"
+      }
+    }
+  },
+  "lpShowAll": "全8スロット",
+  "lpAdaptive": "アダプティブ ({n})",
+  "@lpAdaptive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoSliders": "現在のコードはslider1..8を宣言/参照していません（純粋なアルゴリズム処理）",
+  "lpExpandSliders": "全8スロットを展開",
+  "lpAddDir": "外部フォルダを追加",
+  "lpSlidersHint": "スライダーは現在のスクリプトのslider宣言/参照に適応。右上でモード切替可。",
+  "lpLibraryHint": "ローカル%APPDATA%ライブラリと外部プリセットフォルダの自動索引に対応。",
+  "convIrTitle": "インパルス応答 (IR)",
+  "convFramesLine": "{frames}フレーム · {dur} · {ch}ch · ピーク{peak} dBFS · ソース{rate}Hz",
+  "@convFramesLine": {
+    "placeholders": {
+      "frames": {
+        "type": "int"
+      },
+      "dur": {
+        "type": "String"
+      },
+      "ch": {
+        "type": "int"
+      },
+      "peak": {
+        "type": "String"
+      },
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "ddcFilterTitle": "VDCフィルター",
+  "stereoBandActive": "帯域別有効",
+  "stBand0": "低域",
+  "stBand1": "低中域",
+  "stBand2": "中域",
+  "stBand3": "高中域",
+  "stBand4": "高域",
+  "stBandHint": "各帯域の広がりを個別調整。いずれかを動かすと全体スライダーから切り離されます",
+  "presetFactoryTitle": "工場出荷時チューニングプリセット",
+  "presetUserTitle": "マイカスタムプリセット",
+  "presetUserEmpty": "カスタムプリセットはまだありません — 調整後に下で保存",
+  "presetLoadedFactory": "工場プリセットを読み込みました: {name}",
+  "@presetLoadedFactory": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetLoadedUser": "カスタムプリセットを読み込みました: {name}",
+  "@presetLoadedUser": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "presetSaveHint": "プリセット名を入力して現在の状態を保存",
+  "convSpectrumCaption": "32バンド · 0..1正規化エネルギー",
+  "sliderResetTip": "クリックでデフォルトにリセット",
+  "plugAddDirTitle": "プラグイン検索フォルダを追加",
+  "plugAddDirPrompt": "64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：",
+  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddScan": "追加してスキャン",
+  "plugPresetTitle": "プラグインプリセット — {name}",
+  "@plugPresetTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "plugPresetSaveLabel": "現在のパラメータ状態を保存",
+  "plugPresetNameHint": "新しいプリセット名を入力…",
+  "plugPresetList": "保存済みプリセット ({n})",
+  "@plugPresetList": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugPresetEmpty": "保存済みプリセットはありません。上の入力欄から保存できます。",
+  "plugTitle": "プラグインセンター",
+  "plugLibTitle": "サードパーティエフェクトライブラリ",
+  "plugLibHint": "システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。",
+  "plugDeepScan": "ディープスキャン",
+  "plugScan": "プラグイン一括スキャン",
+  "plugScanning": "スキャン中…",
+  "plugOpenFolder": "標準VST3フォルダを開く",
+  "plugSearchHint": "プラグイン名・ベンダー・パスを検索…",
+  "plugM1Title": "M1プラグインホストエンジン仕様",
+  "plugM1Hint": "マルチフォーマットインプロセスホスト、64ビットVST3・CLAP対応。",
+  "plugFeatSlots": "デュアルスロット (Slot 1 / Slot 2) 独立管理・並行",
+  "plugFeatStages": "全チェーンステージ挿入 (Pre-DSP～Post-Limiter)",
+  "plugFeatGui": "ネイティブWin32 GUIは独立メッセージループ",
+  "plugFeatPreset": "バイナリストリーム保存と即時復元",
+  "plugFeatDirs": "カスタム検索フォルダとローカル状態スナップショット",
+  "plugFeatRt": "フラットステレオRT-Safe事前確保・ゼロロック",
+  "plugSlot": "スロット{n} (Slot {n})",
+  "@plugSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugBypassed": "バイパス中",
+  "plugCustomTitle": "カスタムプラグイン検索フォルダ",
+  "plugCustomHint": "他ドライブやDAWのVST3/CLAPパスを追加。スキャン時に自動統合。",
+  "plugCustomAdd": "フォルダを追加",
+  "plugCustomEmpty": "カスタムフォルダはまだありません。システム既定（C:\\Program Files\\Common Files\\VST3等）のほか、右上から追加できます。",
+  "plugMountTitle": "マウント状態（スロット{n}）",
+  "@plugMountTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmpty": "スロット{n}にサードパーティプラグインがありません",
+  "@plugMountEmpty": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugMountEmptyHint": "下のライブラリからインストール済みVST3 / CLAPを選んでロード",
+  "plugScanNow": "インストール済みプラグインを今すぐスキャン",
+  "plugMountedTitle": "現在マウント中のプラグイン（スロット{n}）",
+  "@plugMountedTitle": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugOpenGuiBtn": "UIを開く (GUI)",
+  "plugUnloadFromSlot": "このスロットからアンロード",
+  "plugLoadToSlot": "スロット{n}へロード",
+  "@plugLoadToSlot": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugLatencyLabel": "実測オーディオ遅延",
+  "plugStageLabel": "シグナルチェーン挿入ステージ：",
+  "plugRtNote": "ライブ直列接続 • RT-Safe契約を維持",
+  "plugFilterAll": "すべて",
+  "plugNoPlugins": "サードパーティプラグインが検出されません",
+  "plugNoPluginsHint": "システムVST3 / CLAPパスに配置済みか確認し、上のカスタムフォルダ追加後に再スキャン",
+  "plugNoMatch": "検索・フィルター条件に合うプラグインがありません",
+  "plugSlotActive": "スロット{n}動作中",
+  "@plugSlotActive": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugSlotLoaded": "スロット{n}ロード済み",
+  "@plugSlotLoaded": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "plugUnknownVendor": "不明なベンダー",
+  "plugThirdParty": "サードパーティプラグイン",
+  "plugSlotPluginLine": "{name} • [{stage}]",
+  "@plugSlotPluginLine": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "stage": {
+        "type": "String"
+      }
+    }
+  },
+  "plugSlotNoFx": "エフェクト未マウント",
+  "chainActive": "有効中",
+  "chainBypass": "バイパス",
+  "plugActive": "有効",
+  "lpSaveFailed": "保存に失敗しました（不正な名前または書き込み不可）",
+  "chainVstTitle": "サードパーティVST / CLAPプラグインスロットとステージ順序",
+  "chainVstHint": "複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。"
  }

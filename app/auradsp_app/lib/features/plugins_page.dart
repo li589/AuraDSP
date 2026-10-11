@@ -62,19 +62,19 @@ class _PluginsPageState extends State<PluginsPage> {
         final p = paletteOf(ctx);
         return AlertDialog(
           backgroundColor: p.panel,
-          title: Text('添加插件检索目录', style: sectionOf(p)),
+          title: Text(l10nOf(ctx).plugAddDirTitle, style: sectionOf(p)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：',
+              Text(l10nOf(ctx).plugAddDirPrompt,
                   style: captionOf(p)),
               const SizedBox(height: AuraSpace.sm),
               TextField(
                 controller: _customDirCtrl,
                 style: monoOf(p, size: 12),
                 decoration: InputDecoration(
-                  hintText: r'例：D:\AudioPlugins\VST3',
+                  hintText: l10nOf(ctx).plugAddDirExample,
                   hintStyle: captionOf(p),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -89,7 +89,7 @@ class _PluginsPageState extends State<PluginsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('取消', style: labelOf(p)),
+              child: Text(l10nOf(ctx).dlgCancel, style: labelOf(p)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -104,7 +104,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   widget.model.pluginManager.scan(deep: _deepScan);
                 }
               },
-              child: const Text('添加并扫描'),
+              child: Text(l10nOf(ctx).plugAddScan),
             ),
           ],
         );
@@ -128,7 +128,7 @@ class _PluginsPageState extends State<PluginsPage> {
                 children: [
                   Icon(Icons.tune_rounded, size: 20, color: p.accent),
                   const SizedBox(width: AuraSpace.sm),
-                  Text('插件预设管理 — ${plugin.name}', style: sectionOf(p)),
+                  Text(l10nOf(ctx).plugPresetTitle(plugin.name), style: sectionOf(p)),
                 ],
               ),
               content: SizedBox(
@@ -137,7 +137,7 @@ class _PluginsPageState extends State<PluginsPage> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('保存当前参数状态', style: labelOf(p)),
+                    Text(l10nOf(ctx).plugPresetSaveLabel, style: labelOf(p)),
                     const SizedBox(height: AuraSpace.xs),
                     Row(
                       children: [
@@ -146,7 +146,7 @@ class _PluginsPageState extends State<PluginsPage> {
                             controller: presetNameCtrl,
                             style: labelOf(p),
                             decoration: InputDecoration(
-                              hintText: '输入新预设名称...',
+                              hintText: l10nOf(ctx).plugPresetNameHint,
                               hintStyle: captionOf(p),
                               isDense: true,
                               border: OutlineInputBorder(
@@ -171,7 +171,7 @@ class _PluginsPageState extends State<PluginsPage> {
                             }
                           },
                           icon: const Icon(Icons.save_rounded, size: 16),
-                          label: const Text('保存'),
+                          label: Text(l10nOf(ctx).dlgSave),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: p.accent,
                             foregroundColor: p.accentContrast,
@@ -183,13 +183,13 @@ class _PluginsPageState extends State<PluginsPage> {
                     const SizedBox(height: AuraSpace.md),
                     Divider(color: p.hairline, height: 1),
                     const SizedBox(height: AuraSpace.md),
-                    Text('已有预设列表 (${presets.length})', style: labelOf(p)),
+                    Text(l10nOf(ctx).plugPresetList(presets.length), style: labelOf(p)),
                     const SizedBox(height: AuraSpace.xs),
                     if (presets.isEmpty)
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: AuraSpace.md),
                         child: Center(
-                          child: Text('暂无已保存预设，可通过上方输入框保存。',
+                          child: Text(l10nOf(ctx).plugPresetEmpty,
                               style: captionOf(p)),
                         ),
                       )
@@ -219,7 +219,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                 },
                                 icon: const Icon(Icons.file_upload_rounded,
                                     size: 14),
-                                label: const Text('载入'),
+                                label: Text(l10nOf(ctx).dlgLoad),
                                 style: ElevatedButton.styleFrom(
                                   backgroundColor: p.accent.withValues(alpha: 0.2),
                                   foregroundColor: p.accent,
@@ -237,7 +237,7 @@ class _PluginsPageState extends State<PluginsPage> {
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text('关闭', style: labelOf(p)),
+                  child: Text(l10nOf(ctx).dlgClose, style: labelOf(p)),
                 ),
               ],
             );
@@ -256,7 +256,7 @@ class _PluginsPageState extends State<PluginsPage> {
     return ListenableBuilder(
       listenable: widget.model,
       builder: (context, _) => PageScaffold(
-        title: '插件中心',
+        title: l10nOf(context).plugTitle,
         children: [
           // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
           _SlotSelectorBar(
@@ -282,9 +282,8 @@ class _PluginsPageState extends State<PluginsPage> {
 
           // 3. 插件库与扫描控制中心
           SectionCard(
-            title: '第三方效果器库',
-            hint: '系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。'
-                '支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。',
+            title: l10nOf(context).plugLibTitle,
+            hint: l10nOf(context).plugLibHint,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -299,7 +298,7 @@ class _PluginsPageState extends State<PluginsPage> {
                           : (v) => setState(() => _deepScan = v ?? false),
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    Text('深度遍历', style: captionOf(p)),
+                    Text(l10nOf(context).plugDeepScan, style: captionOf(p)),
                   ],
                 ),
                 const SizedBox(width: AuraSpace.sm),
@@ -315,7 +314,7 @@ class _PluginsPageState extends State<PluginsPage> {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.refresh_rounded, size: 16),
-                  label: Text(manager.isScanning ? '正在扫描...' : '聚合扫描插件'),
+                  label: Text(manager.isScanning ? l10nOf(context).plugScanning : l10nOf(context).plugScan),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: p.accent,
                     foregroundColor: p.accentContrast,
@@ -327,7 +326,7 @@ class _PluginsPageState extends State<PluginsPage> {
                 const SizedBox(width: AuraSpace.sm),
                 // 打开目录
                 IconButton(
-                  tooltip: '打开 VST3 标准目录',
+                  tooltip: l10nOf(context).plugOpenFolder,
                   icon: const Icon(Icons.folder_open_rounded, size: 18),
                   onPressed: _openPluginFolder,
                   visualDensity: VisualDensity.compact,
@@ -359,7 +358,7 @@ class _PluginsPageState extends State<PluginsPage> {
                                 controller: _searchCtrl,
                                 style: labelOf(p),
                                 decoration: InputDecoration(
-                                  hintText: '搜索插件名称、厂商或路径...',
+                                  hintText: l10nOf(context).plugSearchHint,
                                   hintStyle: captionOf(p),
                                   border: InputBorder.none,
                                   isDense: true,
@@ -431,8 +430,8 @@ class _PluginsPageState extends State<PluginsPage> {
 
           // 4. 宿主架构与规范说明
           SectionCard(
-            title: 'M1 插件宿主引擎规范',
-            hint: '多格式进程内宿主已支持 64 位 VST3 与 CLAP 架构。',
+            title: l10nOf(context).plugM1Title,
+            hint: l10nOf(context).plugM1Hint,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -442,32 +441,32 @@ class _PluginsPageState extends State<PluginsPage> {
                   children: [
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '双挂载槽位 (Slot 1 / Slot 2) 独立管理与并发',
+                      label: l10nOf(context).plugFeatSlots,
                       color: p.success,
                     ),
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '全音效链阶段插入 (Pre-DSP ~ Post-Limiter)',
+                      label: l10nOf(context).plugFeatStages,
                       color: p.success,
                     ),
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '原生 Win32 GUI 弹窗独立消息循环',
+                      label: l10nOf(context).plugFeatGui,
                       color: p.success,
                     ),
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '二进制流预设保存与即时载入恢复',
+                      label: l10nOf(context).plugFeatPreset,
                       color: p.success,
                     ),
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '可自定义插件目录检索与本地状态快照',
+                      label: l10nOf(context).plugFeatDirs,
                       color: p.success,
                     ),
                     _FeatureBadge(
                       icon: Icons.check_circle_rounded,
-                      label: '平面双声道 RT-Safe 预分配零锁保障',
+                      label: l10nOf(context).plugFeatRt,
                       color: p.success,
                     ),
                   ],
@@ -587,7 +586,7 @@ class _SlotTab extends StatelessWidget {
                   Row(
                     children: [
                       Text(
-                        '插槽 ${slotIdx + 1} (Slot ${slotIdx + 1})',
+                        l10nOf(context).plugSlot(slotIdx + 1),
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight:
@@ -607,7 +606,7 @@ class _SlotTab extends StatelessWidget {
                             borderRadius: BorderRadius.circular(3),
                           ),
                           child: Text(
-                            isBypassed ? '旁路' : '生效',
+                            isBypassed ? l10nOf(context).plugBypassed : l10nOf(context).plugActive,
                             style: TextStyle(
                               fontSize: 9.5,
                               color: isBypassed ? p.warning : p.success,
@@ -620,8 +619,8 @@ class _SlotTab extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     isActive
-                        ? '${plugin!.name} • [${PluginInsertStage.shortLabelOf(stage)}]'
-                        : '未挂载效果器',
+                        ? l10nOf(context).plugSlotPluginLine(plugin!.name, PluginInsertStage.shortLabelOf(stage))
+                        : l10nOf(context).plugSlotNoFx,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: captionOf(p,
@@ -655,15 +654,15 @@ class _CustomDirsSection extends StatelessWidget {
     final customDirs = model.config.customPluginDirs;
 
     return SectionCard(
-      title: '自定义插件检索目录',
-      hint: '添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。',
+      title: l10nOf(context).plugCustomTitle,
+      hint: l10nOf(context).plugCustomHint,
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           OutlinedButton.icon(
             onPressed: onAddDir,
             icon: const Icon(Icons.create_new_folder_rounded, size: 15),
-            label: const Text('添加目录'),
+            label: Text(l10nOf(context).plugCustomAdd),
             style: OutlinedButton.styleFrom(
               foregroundColor: p.accent,
               side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
@@ -677,7 +676,7 @@ class _CustomDirsSection extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: AuraSpace.sm),
               alignment: Alignment.centerLeft,
               child: Text(
-                '暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。',
+                l10nOf(context).plugCustomEmpty,
                 style: captionOf(p),
               ),
             )
@@ -728,7 +727,7 @@ class _ActivePluginHero extends StatelessWidget {
 
     if (!isActive || active == null) {
       return SectionCard(
-        title: '挂载状态 (插槽 ${slot + 1})',
+        title: l10nOf(context).plugMountTitle(slot + 1),
         child: Container(
           width: double.infinity,
           padding: const EdgeInsets.all(AuraSpace.xl),
@@ -747,12 +746,12 @@ class _ActivePluginHero extends StatelessWidget {
                   size: 40, color: p.textDim.withValues(alpha: 0.6)),
               const SizedBox(height: AuraSpace.sm),
               Text(
-                '插槽 ${slot + 1} 暂未挂载第三方插件',
+                l10nOf(context).plugMountEmpty(slot + 1),
                 style: sectionOf(p),
               ),
               const SizedBox(height: AuraSpace.xs),
               Text(
-                '请在下方效果器库列表中选择已安装的 VST3 / CLAP 插件进行加载',
+                l10nOf(context).plugMountEmptyHint,
                 style: captionOf(p),
               ),
               if (manager.plugins.isEmpty && !manager.isScanning) ...[
@@ -760,7 +759,7 @@ class _ActivePluginHero extends StatelessWidget {
                 OutlinedButton.icon(
                   onPressed: onScanTap,
                   icon: const Icon(Icons.search_rounded, size: 16),
-                  label: const Text('立即扫描本机已安装插件'),
+                  label: Text(l10nOf(context).plugScanNow),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: p.accent,
                     side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
@@ -794,7 +793,7 @@ class _ActivePluginHero extends StatelessWidget {
         (latencySamples / model.deviceRate * 1000.0).toStringAsFixed(1);
 
     return SectionCard(
-      title: '当前挂载插件 (插槽 ${slot + 1})',
+      title: l10nOf(context).plugMountedTitle(slot + 1),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -802,7 +801,7 @@ class _ActivePluginHero extends StatelessWidget {
           ElevatedButton.icon(
             onPressed: () => manager.showEditor(slot: slot),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
-            label: const Text('打开界面 (GUI)'),
+            label: Text(l10nOf(context).plugOpenGuiBtn),
             style: ElevatedButton.styleFrom(
               backgroundColor: p.accent,
               foregroundColor: p.accentContrast,
@@ -816,7 +815,7 @@ class _ActivePluginHero extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: () => onShowPresets(active),
             icon: const Icon(Icons.tune_rounded, size: 15),
-            label: const Text('预设'),
+            label: Text(l10nOf(context).dlgPreset),
             style: OutlinedButton.styleFrom(
               foregroundColor: p.text,
               side: BorderSide(color: p.hairline),
@@ -828,7 +827,7 @@ class _ActivePluginHero extends StatelessWidget {
           const SizedBox(width: AuraSpace.sm),
           // 旁路开关按钮
           AuraChip(
-            isBypassed ? '已旁路' : '生效中',
+            isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
             selected: !isBypassed,
             danger: isBypassed,
             onTap: () => manager.toggleBypass(slot: slot),
@@ -838,7 +837,7 @@ class _ActivePluginHero extends StatelessWidget {
           OutlinedButton.icon(
             onPressed: () => manager.unloadPlugin(slot: slot),
             icon: const Icon(Icons.eject_rounded, size: 15),
-            label: const Text('卸载'),
+            label: Text(l10nOf(context).dlgUnload),
             style: OutlinedButton.styleFrom(
               foregroundColor: p.error,
               side: BorderSide(color: p.error.withValues(alpha: 0.4)),
@@ -934,7 +933,7 @@ class _ActivePluginHero extends StatelessWidget {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        '${active.vendor.isNotEmpty ? active.vendor : "未知厂商"} • ${active.category.isNotEmpty ? active.category : "Fx"}',
+                        '${active.vendor.isNotEmpty ? active.vendor : l10nOf(context).plugUnknownVendor} • ${active.category.isNotEmpty ? active.category : "Fx"}',
                         style: captionOf(p, color: p.textDim),
                       ),
                       const SizedBox(height: 6),
@@ -960,7 +959,7 @@ class _ActivePluginHero extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text('实测音频延迟', style: captionOf(p, color: p.textDim)),
+                      Text(l10nOf(context).plugLatencyLabel, style: captionOf(p, color: p.textDim)),
                       const SizedBox(height: 2),
                       Row(
                         mainAxisSize: MainAxisSize.min,
@@ -988,7 +987,7 @@ class _ActivePluginHero extends StatelessWidget {
               children: [
                 Icon(Icons.alt_route_rounded, size: 16, color: p.accent),
                 const SizedBox(width: AuraSpace.xs),
-                Text('信号处理链插入阶段：', style: labelOf(p)),
+                Text(l10nOf(context).plugStageLabel, style: labelOf(p)),
                 const SizedBox(width: AuraSpace.sm),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -1035,7 +1034,7 @@ class _ActivePluginHero extends StatelessWidget {
                 ),
                 const Spacer(),
                 Text(
-                  '实时动态串联 • 保持 RT-Safe 契约',
+                  l10nOf(context).plugRtNote,
                   style: captionOf(p, color: p.textDim),
                 ),
               ],
@@ -1116,7 +1115,7 @@ class _FilterPills extends StatelessWidget {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        pill('all', '全部', countAll),
+        pill('all', l10nOf(context).plugFilterAll, countAll),
         const SizedBox(width: 6),
         pill('vst3', 'VST3', countVst3),
         const SizedBox(width: 6),
@@ -1154,10 +1153,10 @@ class _PluginListView extends StatelessWidget {
           children: [
             Icon(Icons.search_off_rounded, size: 36, color: p.textDim),
             const SizedBox(height: AuraSpace.sm),
-            Text('未检测到已安装的第三方插件', style: sectionOf(p)),
+            Text(l10nOf(context).plugNoPlugins, style: sectionOf(p)),
             const SizedBox(height: AuraSpace.xs),
             Text(
-              '请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描',
+              l10nOf(context).plugNoPluginsHint,
               style: captionOf(p),
             ),
           ],
@@ -1169,7 +1168,7 @@ class _PluginListView extends StatelessWidget {
       return Container(
         height: 140,
         alignment: Alignment.center,
-        child: Text('未找到符合当前搜索和过滤条件的插件', style: captionOf(p)),
+        child: Text(l10nOf(context).plugNoMatch, style: captionOf(p)),
       );
     }
 
@@ -1292,7 +1291,7 @@ class _PluginListItem extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '插槽 ${slot + 1} 活跃中',
+                          l10nOf(context).plugSlotActive(slot + 1),
                           style: TextStyle(
                             fontSize: 10,
                             color: p.success,
@@ -1310,7 +1309,7 @@ class _PluginListItem extends StatelessWidget {
                           borderRadius: BorderRadius.circular(4),
                         ),
                         child: Text(
-                          '插槽 ${loadedInOtherSlot! + 1} 已载入',
+                          l10nOf(context).plugSlotLoaded(loadedInOtherSlot! + 1),
                           style: TextStyle(
                             fontSize: 10,
                             color: p.accent,
@@ -1323,7 +1322,7 @@ class _PluginListItem extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${plugin.vendor.isNotEmpty ? plugin.vendor : "第三方插件"} • ${plugin.path}',
+                  '${plugin.vendor.isNotEmpty ? plugin.vendor : l10nOf(context).plugThirdParty} • ${plugin.path}',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: captionOf(p, color: p.textDim),
@@ -1337,7 +1336,7 @@ class _PluginListItem extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onUnload,
               icon: const Icon(Icons.eject_rounded, size: 14),
-              label: const Text('从当前槽卸载'),
+              label: Text(l10nOf(context).plugUnloadFromSlot),
               style: ElevatedButton.styleFrom(
                 backgroundColor: p.error.withValues(alpha: 0.15),
                 foregroundColor: p.error,
@@ -1349,7 +1348,7 @@ class _PluginListItem extends StatelessWidget {
             ElevatedButton.icon(
               onPressed: onLoad,
               icon: const Icon(Icons.arrow_upward_rounded, size: 14),
-              label: Text('载入至插槽 ${slot + 1}'),
+              label: Text(l10nOf(context).plugLoadToSlot(slot + 1)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: p.accent,
                 foregroundColor: p.accentContrast,

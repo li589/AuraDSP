@@ -171,7 +171,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
     _refreshLibrary();
     if (!mounted) return;
     ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
-      content: Text(ok ? '已保存：$name.eel' : '保存失败（名称非法或磁盘不可写）',
+      content: Text(ok ? l10nOf(context).lpSaved(name) : l10nOf(context).lpSaveFailed,
           style: TextStyle(color: paletteOf(context).text, fontSize: 13)),
       duration: const Duration(seconds: 2),
     ));
@@ -185,18 +185,18 @@ class _LiveprogPageState extends State<LiveprogPage> {
         final p = paletteOf(ctx);
         return AlertDialog(
           backgroundColor: p.panel,
-          title: Text('添加外部脚本预设目录', style: sectionOf(p)),
+          title: Text(l10nOf(ctx).lpAddDirTitle, style: sectionOf(p)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('请输入包含 .eel / .txt 脚本预设的完整文件夹路径：', style: captionOf(p)),
+              Text(l10nOf(ctx).lpAddDirPrompt, style: captionOf(p)),
               const SizedBox(height: AuraSpace.sm),
               TextField(
                 controller: ctrl,
                 style: monoOf(p, size: 12),
                 decoration: InputDecoration(
-                  hintText: r'例：D:\AudioScripts\EelPresets',
+                  hintText: l10nOf(ctx).lpAddDirExample,
                   hintStyle: captionOf(p),
                   isDense: true,
                   border: OutlineInputBorder(
@@ -212,7 +212,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: Text('取消', style: labelOf(p)),
+              child: Text(l10nOf(ctx).dlgCancel, style: labelOf(p)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -227,7 +227,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
                   _refreshLibrary();
                 }
               },
-              child: const Text('添加'),
+              child: Text(l10nOf(ctx).dlgAdd),
             ),
           ],
         );
@@ -336,7 +336,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
                   ),
                   const SizedBox(width: AuraSpace.md),
                   Text(
-                    '${_code.text.length} 字符',
+                    l.lpChars(_code.text.length),
                     style: monoOf(p, size: 11, color: p.textDim),
                   ),
                   const Spacer(),
@@ -346,7 +346,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
                         Icon(Icons.check_circle_outline_rounded,
                             size: 13, color: p.success),
                         const SizedBox(width: 4),
-                        Text('语法就绪',
+                        Text(l.lpReady,
                             style: monoOf(p, size: 11, color: p.success)),
                       ],
                     )
@@ -357,7 +357,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
                             size: 13, color: p.warning),
                         const SizedBox(width: 4),
                         Text(
-                          '${_issues.length} 处潜在问题',
+                          l.lpIssues(_issues.length),
                           style: monoOf(p, size: 11, color: p.warning),
                         ),
                       ],
@@ -383,7 +383,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
                               horizontal: 4, vertical: 2),
                           child: Text(
                             issue.line > 0
-                                ? '第 ${issue.line} 行：${issue.message}'
+                                ? l.lpIssueAt(issue.line, issue.message)
                                 : issue.message,
                             style: captionOf(p, color: p.warning),
                           ),
@@ -400,9 +400,9 @@ class _LiveprogPageState extends State<LiveprogPage> {
         SectionCard(
           index: '02',
           title: l.lpSliders,
-          hint: '滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。',
+          hint: l.lpSlidersHint,
           trailing: AuraChip(
-            _showAllSliders ? '全部 8 槽' : '自适应 (${_activeSliders.length})',
+            _showAllSliders ? l.lpShowAll : l.lpAdaptive(_activeSliders.length),
             icon: Icons.tune_rounded,
             selected: !_showAllSliders,
             onTap: () => setState(() => _showAllSliders = !_showAllSliders),
@@ -424,14 +424,14 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       Icon(Icons.tune_outlined, size: 28, color: p.textDim),
                       const SizedBox(height: 6),
                       Text(
-                        '当前代码未声明或引用 slider1..8 参数（纯算法处理）',
+                        l.lpNoSliders,
                         style: captionOf(p),
                       ),
                       const SizedBox(height: 6),
                       OutlinedButton.icon(
                         onPressed: () => setState(() => _showAllSliders = true),
                         icon: const Icon(Icons.expand_more_rounded, size: 14),
-                        label: const Text('展开全部 8 槽滑块'),
+                        label: Text(l.lpExpandSliders),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: p.accent,
                           side: BorderSide(color: p.hairline),
@@ -465,11 +465,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
         SectionCard(
           index: '03',
           title: l.lpLibrary,
-          hint: '支持本地 %APPDATA% 库与外部多预设文件夹自动索引。',
+          hint: l.lpLibraryHint,
           trailing: OutlinedButton.icon(
             onPressed: _addExternalScriptDirDialog,
             icon: const Icon(Icons.create_new_folder_rounded, size: 15),
-            label: const Text('添加外部目录'),
+            label: Text(l.lpAddDir),
             style: OutlinedButton.styleFrom(
               foregroundColor: p.accent,
               side: BorderSide(color: p.accent.withValues(alpha: 0.4)),

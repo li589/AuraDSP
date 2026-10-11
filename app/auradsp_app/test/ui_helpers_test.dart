@@ -1,4 +1,6 @@
 // ui_helpers_test.dart — P0 基础设施回归：断点 / InfoBadge / AuraChoiceChip
+import 'dart:ui' show PointerDeviceKind;
+
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/core/ui_helpers.dart';
@@ -49,12 +51,34 @@ void main() {
   });
 
   group('InfoBadge', () {
-    testWidgets('渲染问号徽标 + Tooltip 携带说明文案', (tester) async {
+    testWidgets('渲染问号徽标（默认不弹气泡）', (tester) async {
       await tester.pumpWidget(_app(const InfoBadge(message: '混响说明')));
       expect(find.byIcon(Icons.help_outline_rounded), findsOneWidget);
-      final tip = tester.widget<Tooltip>(find.byType(Tooltip));
-      expect(tip.message, '混响说明');
-      expect(tip.waitDuration, const Duration(milliseconds: 300));
+      expect(find.text('混响说明'), findsNothing);
+    });
+
+    testWidgets('桌面 hover 300ms 弹出、移出关闭', (tester) async {
+      await tester.pumpWidget(_app(const InfoBadge(message: '混响说明')));
+      final center = tester.getCenter(find.byType(InfoBadge));
+      final gesture =
+          await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: center);
+      await tester.pump(const Duration(milliseconds: 400));
+      expect(find.text('混响说明'), findsOneWidget);
+      await gesture.moveTo(Offset.zero);
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(find.text('混响说明'), findsNothing);
+      await gesture.removePointer();
+    });
+
+    testWidgets('长按弹出、点徽标关闭', (tester) async {
+      await tester.pumpWidget(_app(const InfoBadge(message: '混响说明')));
+      await tester.longPress(find.byType(InfoBadge));
+      await tester.pump();
+      expect(find.text('混响说明'), findsOneWidget);
+      await tester.tap(find.byType(InfoBadge));
+      await tester.pump();
+      expect(find.text('混响说明'), findsNothing);
     });
   });
 

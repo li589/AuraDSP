@@ -11,23 +11,41 @@ import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
+import '../l10n/gen/app_localizations.dart';
 import 'widgets.dart';
 
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
-const List<({String id, String label, bool exposed})> kStages = [
-  (id: 'tube', label: '电子管', exposed: true),
-  (id: 'comp', label: '压限器', exposed: false),
-  (id: 'bass', label: '低音增强', exposed: true),
-  (id: 'eq', label: '均衡器', exposed: true),
-  (id: 'arbmag', label: '任意响应 EQ', exposed: false),
-  (id: 'convolver', label: '脉冲响应', exposed: true),
-  (id: 'ddc', label: 'DDC', exposed: false),
-  (id: 'liveprog', label: '脚本', exposed: true),
-  (id: 'crossfeed', label: '串扰消除', exposed: true),
-  (id: 'stereo', label: '声场展宽', exposed: true),
-  (id: 'reverb', label: '混响', exposed: true),
-  (id: 'output', label: '输出级', exposed: true),
+/// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
+const List<({String id, bool exposed})> kStageMeta = [
+  (id: 'tube', exposed: true),
+  (id: 'comp', exposed: false),
+  (id: 'bass', exposed: true),
+  (id: 'eq', exposed: true),
+  (id: 'arbmag', exposed: false),
+  (id: 'convolver', exposed: true),
+  (id: 'ddc', exposed: false),
+  (id: 'liveprog', exposed: true),
+  (id: 'crossfeed', exposed: true),
+  (id: 'stereo', exposed: true),
+  (id: 'reverb', exposed: true),
+  (id: 'output', exposed: true),
 ];
+
+/// stage id → 展示名（l10n；未知 id 回退原文）。
+String stageLabelOf(AppLocalizations l, String id) => switch (id) {
+      'tube' => l.stTube,
+      'comp' => l.stComp,
+      'bass' => l.stBass,
+      'eq' => l.stEq,
+      'arbmag' => l.stArbmag,
+      'convolver' => l.stConv,
+      'liveprog' => l.stScript,
+      'crossfeed' => l.stXfeed,
+      'stereo' => l.stStereo,
+      'reverb' => l.stReverb,
+      'output' => l.stOutput,
+      _ => id,
+    };
 
 const String kDefaultOrder =
     'tube,comp,bass,eq,arbmag,convolver,ddc,liveprog,crossfeed,stereo,reverb,output';
@@ -69,20 +87,19 @@ class _ChainPageState extends State<ChainPage> {
     return ListenableBuilder(
       listenable: widget.model,
       builder: (context, _) => PageScaffold(
-        title: '处理链',
+        title: l10nOf(context).chainTitle,
         children: [
           SectionCard(
-            title: '处理顺序与状态',
-            hint: '拖拽调整信号处理先后（自上而下）；改动后点"应用"。'
-                '支持独立旁路/启用单节点；右侧显示每节点实时双声道电平。',
+            title: l10nOf(context).chainOrderTitle,
+            hint: l10nOf(context).chainOrderHint,
             trailing: Row(mainAxisSize: MainAxisSize.min, children: [
               if (_dirty)
                 Padding(
                   padding: const EdgeInsets.only(right: AuraSpace.sm),
-                  child: AuraChip('应用顺序', icon: Icons.check_rounded,
+                  child: AuraChip(l10nOf(context).chainApply, icon: Icons.check_rounded,
                       onTap: _apply),
                 ),
-              AuraChip('恢复默认', icon: Icons.restart_alt_rounded, onTap: _reset),
+              AuraChip(l10nOf(context).chainReset, icon: Icons.restart_alt_rounded, onTap: _reset),
             ]),
             child: SizedBox(
               height: 48.0 * _order.length + 8,
@@ -108,10 +125,10 @@ class _ChainPageState extends State<ChainPage> {
                 ),
                 itemBuilder: (ctx, i) {
                   final id = _order[i];
-                  final meta = kStages.firstWhere((s) => s.id == id,
-                      orElse: () => (id: id, label: id, exposed: false));
+                  final meta = kStageMeta.firstWhere((s) => s.id == id,
+                      orElse: () => (id: id, exposed: false));
                   final isEnabled = widget.model.isStageEnabled(id);
-                  final stageIdx = kStages.indexWhere((s) => s.id == id);
+                  final stageIdx = kStageMeta.indexWhere((s) => s.id == id);
 
                   return ReorderableDragStartListener(
                     key: ValueKey(id),
@@ -144,7 +161,7 @@ class _ChainPageState extends State<ChainPage> {
                         const SizedBox(width: AuraSpace.sm + 2),
                         Expanded(
                           child: Text(
-                            meta.label,
+                            stageLabelOf(l10nOf(ctx), id),
                             style: TextStyle(
                               fontSize: 12.5,
                               fontWeight: FontWeight.w600,
@@ -170,7 +187,7 @@ class _ChainPageState extends State<ChainPage> {
                               borderRadius: BorderRadius.circular(AuraRadius.xs),
                               border: Border.all(color: p.hairline),
                             ),
-                            child: Text('预留', style: captionOf(p)),
+                            child: Text(l10nOf(context).chainReserved, style: captionOf(p)),
                           ),
                           const SizedBox(width: AuraSpace.md),
                         ],
@@ -193,7 +210,7 @@ class _ChainPageState extends State<ChainPage> {
           ),
           // 信号流参照（处理顺序的可视化，只读）
           SectionCard(
-            title: '信号流（当前顺序）',
+            title: l10nOf(context).chainFlowTitle,
             child: Wrap(
               spacing: AuraSpace.xs + 2,
               runSpacing: AuraSpace.xs + 2,
@@ -219,8 +236,8 @@ class _ChainPageState extends State<ChainPage> {
           ),
           // M1 第三方插件插槽状态与处理链插入阶段调整
           SectionCard(
-            title: '第三方 VST / CLAP 插件挂载槽与阶段处理顺序',
-            hint: '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。',
+            title: l10nOf(context).chainVstTitle,
+            hint: l10nOf(context).chainVstHint,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -334,7 +351,7 @@ class _PluginStageTopologyView extends StatelessWidget {
             children: [
               Icon(Icons.timeline_rounded, size: 14, color: p.accent),
               const SizedBox(width: 4),
-              Text('全局信号流顺序示意 (自左至右)：',
+              Text(l10nOf(context).chainFlowCaption,
                   style: monoOf(p, size: 10.5, color: p.textDim)),
             ],
           ),
@@ -345,23 +362,23 @@ class _PluginStageTopologyView extends StatelessWidget {
               children: [
                 stageNode(PluginInsertStage.preDsp, 'Stage 0 (Pre-DSP)'),
                 _flowArrow(p),
-                stageNode(-1, '低频搁架 EQ', isCore: true),
+                stageNode(-1, l10nOf(context).chainNodeShelf, isCore: true),
                 _flowArrow(p),
                 stageNode(PluginInsertStage.preVendor, 'Stage 1 (Pre-Vendor)'),
                 _flowArrow(p),
-                stageNode(-2, '12级内部 DSP 链路', isCore: true),
+                stageNode(-2, l10nOf(context).chainNodeVendor, isCore: true),
                 _flowArrow(p),
                 stageNode(PluginInsertStage.postVendor, 'Stage 2 (Post-Vendor)'),
                 _flowArrow(p),
-                stageNode(-3, '混响与声场', isCore: true),
+                stageNode(-3, l10nOf(context).chainNodeReverb, isCore: true),
                 _flowArrow(p),
                 stageNode(PluginInsertStage.postReverb, 'Stage 3 (Post-Reverb)'),
                 _flowArrow(p),
-                stageNode(-4, '主限幅 Limiter', isCore: true),
+                stageNode(-4, l10nOf(context).chainNodeLimiter, isCore: true),
                 _flowArrow(p),
                 stageNode(PluginInsertStage.postLimiter, 'Stage 4 (Post-Limiter)'),
                 _flowArrow(p),
-                stageNode(-5, '音频输出', isCore: true),
+                stageNode(-5, l10nOf(context).chainNodeOutput, isCore: true),
               ],
             ),
           ),
@@ -441,8 +458,8 @@ class _PluginSlotChainCard extends StatelessWidget {
                   children: [
                     Text(
                       isActive
-                          ? '插槽 ${slot + 1}：${active!.name} (${active.format.label})'
-                          : '插槽 ${slot + 1}：未挂载插件',
+                          ? l10nOf(context).chainSlotActive(slot + 1, active!.name, active.format.label)
+                          : l10nOf(context).chainSlotEmpty(slot + 1),
                       style: TextStyle(
                         fontSize: 13,
                         fontWeight: FontWeight.bold,
@@ -468,8 +485,10 @@ class _PluginSlotChainCard extends StatelessWidget {
                 const SizedBox(height: 3),
                 Text(
                   isActive
-                      ? '状态：${isBypassed ? "已旁路 (直通)" : "正在处理"} • 延迟：${manager.getSlotLatency(slot)} 采样'
-                      : '可在“插件”页面选择效果器加载至本插槽',
+                      ? l10nOf(context).chainSlotStatusLine(
+                          isBypassed ? l10nOf(context).chainSlotBypassed : l10nOf(context).chainSlotProcessing,
+                          manager.getSlotLatency(slot))
+                      : l10nOf(context).chainSlotHint,
                   style: captionOf(p, color: p.textDim),
                 ),
               ],
@@ -524,7 +543,7 @@ class _PluginSlotChainCard extends StatelessWidget {
             const SizedBox(width: AuraSpace.sm),
             // GUI 打开按钮
             IconButton(
-              tooltip: '打开原生界面 (GUI)',
+              tooltip: l10nOf(context).chainOpenGui,
               icon: const Icon(Icons.open_in_new_rounded, size: 17),
               onPressed: () => manager.showEditor(slot: slot),
               visualDensity: VisualDensity.compact,
@@ -532,7 +551,7 @@ class _PluginSlotChainCard extends StatelessWidget {
             const SizedBox(width: AuraSpace.xs),
             // 旁路开关
             AuraChip(
-              isBypassed ? '已旁路' : '生效中',
+              isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
               selected: !isBypassed,
               danger: isBypassed,
               onTap: () => manager.toggleBypass(slot: slot),
@@ -584,7 +603,7 @@ class _StageBypassPill extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              isEnabled ? '启用' : '旁路',
+              isEnabled ? l10nOf(context).chainEnable : l10nOf(context).chainBypass,
               style: monoOf(
                 p,
                 size: 10,
