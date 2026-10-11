@@ -243,6 +243,7 @@ class _BassCard extends StatelessWidget {
           // 主驱动：低音增强强度 (Bass Intensity)
           ValueSlider(
             label: l.bassIntensity,
+            infoMessage: '增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。',
             value: model.bassIntensity,
             defaultValue: ParamDefaults.bassIntensity,
             onResetToDefault: () =>
@@ -305,6 +306,7 @@ class _BassAdvanced extends StatelessWidget {
         children: [
               ValueSlider(
                 label: l.bassCutoff,
+                infoMessage: '低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。',
                 value: m.bassCutoff,
                 defaultValue: ParamDefaults.bassCutoff,
                 min: 30,
@@ -448,6 +450,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           // 3. 核心滑块：混响干湿比 (Wet/Dry Mix)
           ValueSlider(
             label: l.reverbMix,
+            infoMessage: '混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。',
             value: m.fvWet,
             defaultValue: ParamDefaults.fvWet,
             onResetToDefault: () => m.setReverbCustomParam('wet', ParamDefaults.fvWet),
@@ -530,6 +533,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
               children: [
                 ValueSlider(
                   label: l.reverbRoomSize,
+                  infoMessage: '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。',
                   value: m.fvRoomSize,
                   defaultValue: ParamDefaults.fvRoomSize,
                   onResetToDefault: () =>
@@ -544,6 +548,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
                 ),
                 ValueSlider(
                   label: l.fvDecayLabel,
+                  infoMessage: '反射残响消散时间。数值越大，声音余韵回荡持续越久。',
                   value: m.fvDecay,
                   defaultValue: ParamDefaults.fvDecay,
                   onResetToDefault: () =>
@@ -558,6 +563,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
                 ),
                 ValueSlider(
                   label: l.reverbStereoWidth,
+                  infoMessage: '混响声的双耳立体声扩展度。让回声包围整个头部。',
                   value: m.fvWidth,
                   defaultValue: ParamDefaults.fvWidth,
                   onResetToDefault: () =>
@@ -572,6 +578,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
                 ),
                 ValueSlider(
                   label: l.fvDampLabel,
+                  infoMessage: '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。',
                   value: m.fvDamp,
                   defaultValue: ParamDefaults.fvDamp,
                   onResetToDefault: () =>
@@ -586,6 +593,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
                 ),
                 ValueSlider(
                   label: l.fvDryLabel,
+                  infoMessage: '原始直达声保留量。确保人声吐字清晰结实。',
                   value: m.fvDry,
                   defaultValue: ParamDefaults.fvDry,
                   onResetToDefault: () =>
@@ -735,7 +743,7 @@ class _ConvolverCard extends StatelessWidget {
               ),
               const SizedBox(height: AuraSpace.md),
               if (model.convSpectrum.isNotEmpty) ...[
-                _IrSpectrumGraph(
+                _IrWaveformGraph(
                   spectrum: model.convSpectrum,
                   channels: model.convChannels,
                 ),
@@ -743,7 +751,7 @@ class _ConvolverCard extends StatelessWidget {
               ],
               ValueSlider(
                 label: l.convMix,
-                infoMessage: l.convMixHint,
+                infoMessage: '卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。',
                 value: model.convMix,
                 defaultValue: ParamDefaults.convMix,
                 min: 0,
@@ -909,7 +917,7 @@ class _StereoCard extends StatelessWidget {
         children: [
           ValueSlider(
             label: l.stereoWiden,
-            infoMessage: l.stereoWidenHint,
+            infoMessage: '拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。',
             value: model.stereoMix,
             defaultValue: ParamDefaults.stereoMix,
             onResetToDefault: model.resetStereoWiden,
@@ -1025,6 +1033,7 @@ class _TubeCard extends StatelessWidget {
           // 饱和驱动度 (Drive / Saturation)
           ValueSlider(
             label: l.tubeDrive,
+            infoMessage: '模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。',
             value: model.tubeGain,
             defaultValue: ParamDefaults.tubeGain,
             onResetToDefault: () => model.setTubeGain(ParamDefaults.tubeGain),
@@ -1152,6 +1161,7 @@ class _PostCard extends StatelessWidget {
         children: [
           ValueSlider(
             label: l.postGain,
+            infoMessage: '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。',
             value: model.postGain,
             defaultValue: ParamDefaults.postGain,
             min: -15,
@@ -1514,94 +1524,277 @@ class _PresetCardState extends State<_PresetCard> {
   }
 }
 
-/* ---- 脉冲频响包络柱状图 ---- */
+/* ---- 脉冲响应波形与频响包络 (EasyEffects 风格真实双声道波形图) ---- */
 
-class _IrSpectrumGraph extends StatelessWidget {
+class _IrWaveformGraph extends StatefulWidget {
   final List<List<double>> spectrum;
   final int channels;
 
-  const _IrSpectrumGraph({required this.spectrum, required this.channels});
+  const _IrWaveformGraph({
+    required this.spectrum,
+    required this.channels,
+  });
+
+  @override
+  State<_IrWaveformGraph> createState() => _IrWaveformGraphState();
+}
+
+class _IrWaveformGraphState extends State<_IrWaveformGraph> {
+  bool _isLogScale = true;
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final l = l10nOf(context);
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text(l.convSpectrumTitle, style: captionOf(p, color: p.textDim)),
-            const Spacer(),
-            Text(l.convSpectrumCaption,
-                style: monoOf(p, size: 10, color: p.textDim)),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.xs),
-        Container(
-          height: 64,
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          decoration: BoxDecoration(
-            color: p.panelRaised,
+    final isMono = widget.channels <= 1;
+
+    return Container(
+      padding: const EdgeInsets.all(AuraSpace.sm),
+      decoration: BoxDecoration(
+        color: p.panelRaised.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(AuraRadius.md),
+        border: Border.all(color: p.hairline),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.waves_rounded, size: 14, color: p.accent),
+              const SizedBox(width: 6),
+              Text('脉冲响应包络 (EasyEffects 风格)',
+                  style: captionOf(p).copyWith(fontWeight: FontWeight.w600, color: p.text)),
+              const SizedBox(width: AuraSpace.sm),
+              // 声道指示点
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF00E5FF))),
+                  const SizedBox(width: 4),
+                  Text('L', style: monoOf(p, size: 10, color: p.textDim)),
+                  const SizedBox(width: 8),
+                  Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFF43F5E))),
+                  const SizedBox(width: 4),
+                  Text(isMono ? 'R (镜像)' : 'R', style: monoOf(p, size: 10, color: p.textDim)),
+                ],
+              ),
+              const Spacer(),
+              // 模式切换 Chip：Linear / Log dB
+              Container(
+                decoration: BoxDecoration(
+                  color: p.panel,
+                  borderRadius: BorderRadius.circular(AuraRadius.sm),
+                  border: Border.all(color: p.hairline),
+                ),
+                padding: const EdgeInsets.all(2),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _scaleButton(
+                      label: 'Linear',
+                      selected: !_isLogScale,
+                      onTap: () => setState(() => _isLogScale = false),
+                      p: p,
+                    ),
+                    _scaleButton(
+                      label: 'Log dB',
+                      selected: _isLogScale,
+                      onTap: () => setState(() => _isLogScale = true),
+                      p: p,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          ClipRRect(
             borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(color: p.hairline),
+            child: Container(
+              height: 110,
+              width: double.infinity,
+              color: Colors.black.withValues(alpha: 0.3),
+              child: CustomPaint(
+                painter: _IrWaveformPainter(
+                  spectrum: widget.spectrum,
+                  channels: widget.channels,
+                  isLogScale: _isLogScale,
+                  palette: p,
+                ),
+              ),
+            ),
           ),
-          child: CustomPaint(
-            size: const Size(double.infinity, 56),
-            painter: _IrSpectrumPainter(spectrum: spectrum, palette: p),
-          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _scaleButton({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+    required AuraPalette p,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.xs),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: selected ? p.accent.withValues(alpha: 0.25) : Colors.transparent,
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          border: selected ? Border.all(color: p.accent.withValues(alpha: 0.5), width: 1) : null,
         ),
-      ],
+        child: Text(
+          label,
+          style: monoOf(p, size: 10, color: selected ? p.accent : p.textDim),
+        ),
+      ),
     );
   }
 }
 
-class _IrSpectrumPainter extends CustomPainter {
+class _IrWaveformPainter extends CustomPainter {
   final List<List<double>> spectrum;
+  final int channels;
+  final bool isLogScale;
   final AuraPalette palette;
 
-  _IrSpectrumPainter({required this.spectrum, required this.palette});
+  _IrWaveformPainter({
+    required this.spectrum,
+    required this.channels,
+    required this.isLogScale,
+    required this.palette,
+  });
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (spectrum.isEmpty) return;
-    final chCount = spectrum.length;
-    final bands = spectrum.first.length;
-    if (bands == 0) return;
-
     final w = size.width;
     final h = size.height;
-    final slotW = w / bands;
-    final barW = (slotW * 0.75).clamp(1.0, 8.0);
+    if (w <= 0 || h <= 0 || spectrum.isEmpty) return;
 
-    for (var b = 0; b < bands; b++) {
-      var maxVal = 0.0;
-      for (var c = 0; c < chCount; c++) {
-        if (b < spectrum[c].length) {
-          maxVal = math.max(maxVal, spectrum[c][b]);
-        }
-      }
-      final barH = (maxVal.clamp(0.0, 1.0) * h).clamp(1.0, h);
-      final x = b * slotW + (slotW - barW) / 2;
-      final y = h - barH;
+    final gridPaint = Paint()
+      ..color = palette.hairline.withValues(alpha: 0.25)
+      ..strokeWidth = 1.0;
 
-      final paint = Paint()
-        ..color = palette.accent.withValues(alpha: 0.35 + maxVal * 0.55)
-        ..style = PaintingStyle.fill;
+    final textStyle = TextStyle(
+      color: palette.textDim.withValues(alpha: 0.6),
+      fontSize: 9,
+      fontFamily: 'monospace',
+    );
 
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(
-          Rect.fromLTWH(x, y, barW, barH),
-          const Radius.circular(1),
-        ),
-        paint,
-      );
+    // 绘制横向刻度线 (Grid)
+    final lines = isLogScale ? [0.0, -20.0, -40.0, -60.0] : [1.0, 0.75, 0.5, 0.25, 0.0];
+    for (final val in lines) {
+      final yFrac = isLogScale ? (1.0 - (val + 60.0) / 60.0) : (1.0 - val);
+      final y = (yFrac * (h - 16) + 6).clamp(6.0, h - 10);
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
+
+      final label = isLogScale ? '${val.toInt()}dB' : '${(val * 100).toInt()}%';
+      final tp = TextPainter(
+        text: TextSpan(text: label, style: textStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(w - tp.width - 4, y - tp.height - 1));
     }
+
+    // 频段标签：20Hz, 100Hz, 500Hz, 2kHz, 10kHz, 20kHz
+    final freqLabels = ['20Hz', '100Hz', '500Hz', '2kHz', '10kHz', '20kHz'];
+    for (var i = 0; i < freqLabels.length; i++) {
+      final x = (i / (freqLabels.length - 1)) * (w - 40) + 10;
+      final tp = TextPainter(
+        text: TextSpan(text: freqLabels[i], style: textStyle),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(x, h - tp.height - 2));
+    }
+
+    // 提取 L 和 R 数据
+    final lData = spectrum[0];
+    final rData = spectrum.length > 1 ? spectrum[1] : spectrum[0]; // 单声道自动镜像为双声道
+
+    // 绘制左右声道平滑曲线与渐变
+    _drawChannelPath(canvas, size, rData, const Color(0xFFF43F5E), isRight: true);
+    _drawChannelPath(canvas, size, lData, const Color(0xFF00E5FF), isRight: false);
+  }
+
+  void _drawChannelPath(
+    Canvas canvas,
+    Size size,
+    List<double> rawData,
+    Color color, {
+    required bool isRight,
+  }) {
+    if (rawData.isEmpty) return;
+    final w = size.width;
+    final h = size.height - 18; // 留出底端频标空间
+    final n = rawData.length;
+
+    // 坐标计算
+    final points = <Offset>[];
+    for (var i = 0; i < n; i++) {
+      final x = (i / (n - 1)) * w;
+      var rawVal = rawData[i].clamp(0.0, 1.0);
+      double yFrac;
+      if (isLogScale) {
+        // -60dB ~ 0dB
+        final db = (rawVal > 1e-3) ? (20.0 * math.log(rawVal) / math.ln10) : -60.0;
+        final clampedDb = db.clamp(-60.0, 0.0);
+        yFrac = (clampedDb + 60.0) / 60.0;
+      } else {
+        yFrac = rawVal;
+      }
+      final y = h - (yFrac * (h - 8)) - 4;
+      points.add(Offset(x, y.clamp(2.0, h)));
+    }
+
+    if (points.isEmpty) return;
+
+    // 构建平滑贝塞尔曲线
+    final path = Path();
+    path.moveTo(points[0].dx, points[0].dy);
+    for (var i = 0; i < points.length - 1; i++) {
+      final p0 = points[i];
+      final p1 = points[i + 1];
+      final cx = (p0.dx + p1.dx) / 2;
+      path.cubicTo(cx, p0.dy, cx, p1.dy, p1.dx, p1.dy);
+    }
+
+    // 填充渐变 Path
+    final fillPath = Path.from(path)
+      ..lineTo(w, h)
+      ..lineTo(0, h)
+      ..close();
+
+    final fillPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          color.withValues(alpha: isRight ? 0.20 : 0.25),
+          color.withValues(alpha: 0.02),
+        ],
+      ).createShader(Rect.fromLTWH(0, 0, w, h))
+      ..style = PaintingStyle.fill;
+
+    canvas.drawPath(fillPath, fillPaint);
+
+    // 描边主线条（带发光感）
+    final linePaint = Paint()
+      ..color = color.withValues(alpha: 0.90)
+      ..strokeWidth = 2.0
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(path, linePaint);
   }
 
   @override
-  bool shouldRepaint(covariant _IrSpectrumPainter oldDelegate) =>
-      oldDelegate.spectrum != spectrum || oldDelegate.palette != palette;
+  bool shouldRepaint(covariant _IrWaveformPainter oldDelegate) =>
+      oldDelegate.spectrum != spectrum ||
+      oldDelegate.channels != channels ||
+      oldDelegate.isLogScale != isLogScale ||
+      oldDelegate.palette != palette;
 }
 
 /* ---- 3D 声场空间渲染 (高级可视化：透视网格 + 声波扩散 + 衰减光晕) ---- */

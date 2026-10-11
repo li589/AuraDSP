@@ -187,6 +187,361 @@ public:
 };
 
 //------------------------------------------------------------------------------
+// AuraDSP VST3 Host Application & Component Handler
+//------------------------------------------------------------------------------
+class AuraComponentHandler;
+
+class AuraComponentHandler2Impl : public Steinberg::Vst::IComponentHandler2 {
+public:
+    AuraComponentHandler* parent = nullptr;
+
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override;
+    virtual Steinberg::uint32 PLUGIN_API addRef() override { return 1000; }
+    virtual Steinberg::uint32 PLUGIN_API release() override { return 1000; }
+
+    virtual Steinberg::tresult PLUGIN_API setDirty(Steinberg::TBool state) override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API requestOpenEditor(Steinberg::FIDString name = Steinberg::Vst::ViewType::kEditor) override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API startGroupEdit() override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API finishGroupEdit() override {
+        return Steinberg::kResultOk;
+    }
+};
+
+class AuraComponentHandler : public Steinberg::Vst::IComponentHandler {
+public:
+    AuraComponentHandler2Impl m_handler2;
+    AuraComponentHandler() {
+        m_handler2.parent = this;
+    }
+    virtual ~AuraComponentHandler() = default;
+
+    // FUnknown
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::Vst::IComponentHandler::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IComponentHandler*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        if (std::memcmp(_iid, Steinberg::Vst::IComponentHandler2::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IComponentHandler2*>(&m_handler2);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    virtual Steinberg::uint32 PLUGIN_API addRef() override { return 1000; }
+    virtual Steinberg::uint32 PLUGIN_API release() override { return 1000; }
+
+    // IComponentHandler
+    virtual Steinberg::tresult PLUGIN_API beginEdit(Steinberg::Vst::ParamID id) override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API performEdit(Steinberg::Vst::ParamID id, Steinberg::Vst::ParamValue valueNormalized) override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API endEdit(Steinberg::Vst::ParamID id) override {
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API restartComponent(Steinberg::int32 flags) override {
+        return Steinberg::kResultOk;
+    }
+};
+
+inline Steinberg::tresult PLUGIN_API AuraComponentHandler2Impl::queryInterface(const Steinberg::TUID _iid, void** obj) {
+    if (!parent) return Steinberg::kInvalidArgument;
+    return parent->queryInterface(_iid, obj);
+}
+
+class AuraHostApplication;
+
+class AuraPlugInterfaceSupportImpl : public Steinberg::Vst::IPlugInterfaceSupport {
+public:
+    AuraHostApplication* parent = nullptr;
+
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override;
+    virtual Steinberg::uint32 PLUGIN_API addRef() override { return 1000; }
+    virtual Steinberg::uint32 PLUGIN_API release() override { return 1000; }
+
+    virtual Steinberg::tresult PLUGIN_API isPlugInterfaceSupported(const Steinberg::TUID _iid) override {
+        return Steinberg::kResultTrue;
+    }
+};
+
+class AuraAttributeList : public Steinberg::Vst::IAttributeList {
+private:
+    std::atomic<uint32_t> m_refCount{1};
+    std::unordered_map<std::string, Steinberg::int64> m_ints;
+    std::unordered_map<std::string, double> m_floats;
+    std::unordered_map<std::string, std::vector<Steinberg::Vst::TChar>> m_strings;
+    std::unordered_map<std::string, std::vector<uint8_t>> m_binaries;
+
+public:
+    AuraAttributeList() = default;
+    virtual ~AuraAttributeList() = default;
+
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::Vst::IAttributeList::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IAttributeList*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    virtual Steinberg::uint32 PLUGIN_API addRef() override {
+        return ++m_refCount;
+    }
+    virtual Steinberg::uint32 PLUGIN_API release() override {
+        uint32_t r = --m_refCount;
+        if (r == 0) delete this;
+        return r;
+    }
+
+    virtual Steinberg::tresult PLUGIN_API setInt(AttrID id, Steinberg::int64 value) override {
+        if (!id) return Steinberg::kInvalidArgument;
+        m_ints[id] = value;
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API getInt(AttrID id, Steinberg::int64& value) override {
+        if (!id) return Steinberg::kInvalidArgument;
+        auto it = m_ints.find(id);
+        if (it != m_ints.end()) {
+            value = it->second;
+            return Steinberg::kResultOk;
+        }
+        return Steinberg::kResultFalse;
+    }
+    virtual Steinberg::tresult PLUGIN_API setFloat(AttrID id, double value) override {
+        if (!id) return Steinberg::kInvalidArgument;
+        m_floats[id] = value;
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API getFloat(AttrID id, double& value) override {
+        if (!id) return Steinberg::kInvalidArgument;
+        auto it = m_floats.find(id);
+        if (it != m_floats.end()) {
+            value = it->second;
+            return Steinberg::kResultOk;
+        }
+        return Steinberg::kResultFalse;
+    }
+    virtual Steinberg::tresult PLUGIN_API setString(AttrID id, const Steinberg::Vst::TChar* string) override {
+        if (!id || !string) return Steinberg::kInvalidArgument;
+        std::vector<Steinberg::Vst::TChar> vec;
+        while (*string) {
+            vec.push_back(*string++);
+        }
+        vec.push_back(0);
+        m_strings[id] = std::move(vec);
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API getString(AttrID id, Steinberg::Vst::TChar* string, Steinberg::uint32 sizeInBytes) override {
+        if (!id || !string || sizeInBytes == 0) return Steinberg::kInvalidArgument;
+        auto it = m_strings.find(id);
+        if (it != m_strings.end()) {
+            const auto& vec = it->second;
+            Steinberg::uint32 bytesToCopy = static_cast<Steinberg::uint32>(vec.size() * sizeof(Steinberg::Vst::TChar));
+            if (bytesToCopy > sizeInBytes) bytesToCopy = sizeInBytes;
+            std::memcpy(string, vec.data(), bytesToCopy);
+            Steinberg::uint32 maxChars = sizeInBytes / sizeof(Steinberg::Vst::TChar);
+            if (maxChars > 0) {
+                string[maxChars - 1] = 0;
+            }
+            return Steinberg::kResultOk;
+        }
+        return Steinberg::kResultFalse;
+    }
+    virtual Steinberg::tresult PLUGIN_API setBinary(AttrID id, const void* data, Steinberg::uint32 sizeInBytes) override {
+        if (!id || !data) return Steinberg::kInvalidArgument;
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        m_binaries[id] = std::vector<uint8_t>(p, p + sizeInBytes);
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API getBinary(AttrID id, const void*& data, Steinberg::uint32& sizeInBytes) override {
+        if (!id) return Steinberg::kInvalidArgument;
+        auto it = m_binaries.find(id);
+        if (it != m_binaries.end()) {
+            data = it->second.data();
+            sizeInBytes = static_cast<Steinberg::uint32>(it->second.size());
+            return Steinberg::kResultOk;
+        }
+        data = nullptr;
+        sizeInBytes = 0;
+        return Steinberg::kResultFalse;
+    }
+};
+
+class AuraMessage : public Steinberg::Vst::IMessage {
+private:
+    std::atomic<uint32_t> m_refCount{1};
+    std::string m_messageId;
+    AuraAttributeList* m_attributes = nullptr;
+
+public:
+    AuraMessage() {
+        m_attributes = new AuraAttributeList();
+    }
+    virtual ~AuraMessage() {
+        if (m_attributes) {
+            m_attributes->release();
+            m_attributes = nullptr;
+        }
+    }
+
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::Vst::IMessage::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IMessage*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    virtual Steinberg::uint32 PLUGIN_API addRef() override {
+        return ++m_refCount;
+    }
+    virtual Steinberg::uint32 PLUGIN_API release() override {
+        uint32_t r = --m_refCount;
+        if (r == 0) delete this;
+        return r;
+    }
+
+    virtual Steinberg::FIDString PLUGIN_API getMessageID() override {
+        return m_messageId.c_str();
+    }
+    virtual void PLUGIN_API setMessageID(Steinberg::FIDString id) override {
+        if (id) m_messageId = id;
+        else m_messageId.clear();
+    }
+    virtual Steinberg::Vst::IAttributeList* PLUGIN_API getAttributes() override {
+        return m_attributes;
+    }
+};
+
+class AuraPlugFrame : public Steinberg::IPlugFrame {
+public:
+    HWND m_hwnd = nullptr;
+    virtual ~AuraPlugFrame() = default;
+
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::IPlugFrame::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::IPlugFrame*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    virtual Steinberg::uint32 PLUGIN_API addRef() override { return 1000; }
+    virtual Steinberg::uint32 PLUGIN_API release() override { return 1000; }
+
+    virtual Steinberg::tresult PLUGIN_API resizeView(Steinberg::IPlugView* view, Steinberg::ViewRect* newSize) override {
+        if (!view || !newSize) return Steinberg::kInvalidArgument;
+        int newWidth = newSize->right - newSize->left;
+        int newHeight = newSize->bottom - newSize->top;
+        if (m_hwnd && IsWindow(m_hwnd)) {
+            RECT rc = {0, 0, newWidth, newHeight};
+            AdjustWindowRect(&rc, GetWindowLong(m_hwnd, GWL_STYLE), FALSE);
+            SetWindowPos(m_hwnd, NULL, 0, 0, rc.right - rc.left, rc.bottom - rc.top, SWP_NOMOVE | SWP_NOZORDER);
+        }
+        return view->onSize(newSize);
+    }
+};
+
+class AuraHostApplication : public Steinberg::Vst::IHostApplication {
+public:
+    AuraPlugInterfaceSupportImpl m_plugSupport;
+    AuraHostApplication() {
+        m_plugSupport.parent = this;
+    }
+    virtual ~AuraHostApplication() = default;
+
+    // FUnknown
+    virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
+            std::memcmp(_iid, Steinberg::Vst::IHostApplication::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IHostApplication*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        if (std::memcmp(_iid, Steinberg::Vst::IPlugInterfaceSupport::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Vst::IPlugInterfaceSupport*>(&m_plugSupport);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        *obj = nullptr;
+        return Steinberg::kNoInterface;
+    }
+    virtual Steinberg::uint32 PLUGIN_API addRef() override { return 1000; }
+    virtual Steinberg::uint32 PLUGIN_API release() override { return 1000; }
+
+    // IHostApplication
+    virtual Steinberg::tresult PLUGIN_API getName(Steinberg::Vst::String128 name) override {
+        if (!name) return Steinberg::kInvalidArgument;
+        const wchar_t* hostName = L"AuraDSP Host";
+        for (int i = 0; i < 127 && hostName[i]; ++i) {
+            name[i] = static_cast<Steinberg::Vst::TChar>(hostName[i]);
+            name[i + 1] = 0;
+        }
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API createInstance(Steinberg::TUID cid, Steinberg::TUID _iid, void** obj) override {
+        if (!obj) return Steinberg::kInvalidArgument;
+        *obj = nullptr;
+
+        if (std::memcmp(cid, Steinberg::Vst::IMessage::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            AuraMessage* msg = new AuraMessage();
+            Steinberg::tresult res = msg->queryInterface(_iid, obj);
+            msg->release();
+            std::cout << "[DBG VST3] createInstance IMessage res=" << res << " ptr=" << *obj << std::endl;
+            return res;
+        }
+        if (std::memcmp(cid, Steinberg::Vst::IAttributeList::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            AuraAttributeList* attr = new AuraAttributeList();
+            Steinberg::tresult res = attr->queryInterface(_iid, obj);
+            attr->release();
+            std::cout << "[DBG VST3] createInstance IAttributeList res=" << res << " ptr=" << *obj << std::endl;
+            return res;
+        }
+
+        char cbuf[64], ibuf[64];
+        snprintf(cbuf, sizeof(cbuf), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+            (unsigned char)cid[0], (unsigned char)cid[1], (unsigned char)cid[2], (unsigned char)cid[3],
+            (unsigned char)cid[4], (unsigned char)cid[5], (unsigned char)cid[6], (unsigned char)cid[7],
+            (unsigned char)cid[8], (unsigned char)cid[9], (unsigned char)cid[10], (unsigned char)cid[11],
+            (unsigned char)cid[12], (unsigned char)cid[13], (unsigned char)cid[14], (unsigned char)cid[15]);
+        snprintf(ibuf, sizeof(ibuf), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+            (unsigned char)_iid[0], (unsigned char)_iid[1], (unsigned char)_iid[2], (unsigned char)_iid[3],
+            (unsigned char)_iid[4], (unsigned char)_iid[5], (unsigned char)_iid[6], (unsigned char)_iid[7],
+            (unsigned char)_iid[8], (unsigned char)_iid[9], (unsigned char)_iid[10], (unsigned char)_iid[11],
+            (unsigned char)_iid[12], (unsigned char)_iid[13], (unsigned char)_iid[14], (unsigned char)_iid[15]);
+        std::cout << "[DBG VST3] AuraHostApplication::createInstance unsupported cid=" << cbuf << " iid=" << ibuf << std::endl;
+        return Steinberg::kNotImplemented;
+    }
+};
+
+inline Steinberg::tresult PLUGIN_API AuraPlugInterfaceSupportImpl::queryInterface(const Steinberg::TUID _iid, void** obj) {
+    if (!parent) return Steinberg::kInvalidArgument;
+    return parent->queryInterface(_iid, obj);
+}
+
+//------------------------------------------------------------------------------
 // JSON Helpers
 //------------------------------------------------------------------------------
 static std::string escapeJsonString(const std::string& input) {
@@ -245,6 +600,33 @@ static std::string wideToUtf8(const std::wstring& wide) {
     std::string utf8(size - 1, 0);
     WideCharToMultiByte(CP_UTF8, 0, wide.c_str(), -1, &utf8[0], size, nullptr, nullptr);
     return utf8;
+}
+
+static void setupPluginDllDirectories(const std::string& pluginPath) {
+    try {
+        SetDefaultDllDirectories(LOAD_LIBRARY_SEARCH_DEFAULT_DIRS | LOAD_LIBRARY_SEARCH_USER_DIRS);
+        fs::path p(pluginPath);
+        fs::path dir = fs::is_directory(p) ? p : p.parent_path();
+        AddDllDirectory(dir.wstring().c_str());
+
+        std::string pLow = pluginPath;
+        std::transform(pLow.begin(), pLow.end(), pLow.begin(), ::tolower);
+        if (pLow.find("izotope") != std::string::npos || pLow.find("ozone") != std::string::npos) {
+            const wchar_t* izDirs[] = {
+                L"C:\\Program Files\\iZotope\\Ozone 12\\Cores",
+                L"C:\\Program Files\\iZotope\\Ozone 12\\win64",
+                L"C:\\Program Files\\iZotope\\Ozone 12",
+                L"C:\\Program Files\\iZotope\\Ozone 12 Equalizer\\Crash Reporter",
+                L"C:\\Program Files\\iZotope\\RX 12 Audio Editor\\Cores",
+                L"C:\\Program Files\\iZotope\\RX 12 Audio Editor\\win64"
+            };
+            for (const auto* d : izDirs) {
+                if (fs::exists(d)) {
+                    AddDllDirectory(d);
+                }
+            }
+        }
+    } catch (...) {}
 }
 
 static std::string extractVendorFromPath(const std::string& filePath) {
@@ -373,6 +755,49 @@ static std::string extractProductVersionFromVersionInfo(const std::wstring& bina
     return "";
 }
 
+static std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath) {
+    try {
+        DWORD dummy = 0;
+        DWORD size = GetFileVersionInfoSizeW(binaryPath.c_str(), &dummy);
+        if (size == 0) return "";
+        std::vector<BYTE> buffer(size);
+        if (!GetFileVersionInfoW(binaryPath.c_str(), 0, size, buffer.data())) return "";
+
+        static const wchar_t* const defaultSubBlocks[] = {
+            L"\\StringFileInfo\\040904b0\\LegalCopyright",
+            L"\\StringFileInfo\\040904E4\\LegalCopyright",
+            L"\\StringFileInfo\\000004b0\\LegalCopyright",
+            L"\\StringFileInfo\\04090000\\LegalCopyright"
+        };
+        for (const auto* sb : defaultSubBlocks) {
+            LPWSTR copyText = nullptr;
+            UINT copyLen = 0;
+            if (VerQueryValueW(buffer.data(), sb, reinterpret_cast<LPVOID*>(&copyText), &copyLen) &&
+                copyLen > 0 && copyText && copyText[0] != L'\0') {
+                std::string comp = wideToUtf8(copyText);
+                if (!comp.empty()) {
+                    std::string clean = comp;
+                    const char* prefixes[] = {"Copyright (C) ", "Copyright (c) ", "Copyright ", "\xc2\xa9 "};
+                    for (const char* pfx : prefixes) {
+                        size_t pos = clean.find(pfx);
+                        if (pos != std::string::npos) {
+                            clean = clean.substr(pos + std::strlen(pfx));
+                            break;
+                        }
+                    }
+                    while (clean.size() >= 5 && isdigit((unsigned char)clean[0]) && isdigit((unsigned char)clean[1]) &&
+                           isdigit((unsigned char)clean[2]) && isdigit((unsigned char)clean[3]) && (clean[4] == ' ' || clean[4] == '-')) {
+                        clean = clean.substr(5);
+                    }
+                    if (!clean.empty()) return clean;
+                    return comp;
+                }
+            }
+        }
+    } catch (...) {}
+    return "";
+}
+
 std::string PluginMetadata::toJson() const {
     std::ostringstream ss;
     ss << "{"
@@ -394,6 +819,16 @@ std::string PluginMetadata::toJson() const {
 //------------------------------------------------------------------------------
 // CLAP Host Implementation
 //------------------------------------------------------------------------------
+enum class ClapHostThreadType {
+    Main,
+    Audio
+};
+static thread_local ClapHostThreadType t_clapThreadType = ClapHostThreadType::Main;
+
+static uint32_t CLAP_ABI emptyInEventsSize(const clap_input_events_t*) { return 0; }
+static const clap_event_header_t* CLAP_ABI emptyInEventsGet(const clap_input_events_t*, uint32_t) { return nullptr; }
+static bool CLAP_ABI emptyOutEventsTryPush(const clap_output_events_t*, const clap_event_header_t*) { return true; }
+
 class ClapPluginInstance : public IPluginInstance {
 public:
     ClapPluginInstance() = default;
@@ -401,6 +836,7 @@ public:
 
     bool load(const std::string& path, const std::string& pluginId) override {
         unload();
+        setupPluginDllDirectories(path);
 
         m_meta.path = path;
         m_meta.format = PluginFormat::CLAP;
@@ -571,13 +1007,26 @@ public:
     }
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
-        if (numFrames == 0) return;
-        if (!inChannels || !outChannels) return;
+        t_clapThreadType = ClapHostThreadType::Audio;
+        m_audioThreadId.store(std::this_thread::get_id(), std::memory_order_relaxed);
+        if (numFrames == 0) {
+            t_clapThreadType = ClapHostThreadType::Main;
+            return;
+        }
+        if (!inChannels || !outChannels) {
+            t_clapThreadType = ClapHostThreadType::Main;
+            return;
+        }
 
         // 本版 CLAP SDK 无 audio-config 扩展，无法协商声道数，引擎链恒送立体声；
         // 这里只做逐声道空指针校验，替代原先的全有全无早退。
         const int32_t nc = 2;
-        for (int32_t ch = 0; ch < nc; ++ch) if (!inChannels[ch] || !outChannels[ch]) return;
+        for (int32_t ch = 0; ch < nc; ++ch) {
+            if (!inChannels[ch] || !outChannels[ch]) {
+                t_clapThreadType = ClapHostThreadType::Main;
+                return;
+            }
+        }
 
         if (!m_isActive || !m_plugin || m_bypassed) {
             if (inChannels != outChannels) {
@@ -585,6 +1034,7 @@ public:
                     std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
             }
+            t_clapThreadType = ClapHostThreadType::Main;
             return;
         }
 
@@ -607,6 +1057,9 @@ public:
         transport.tsig_num = 4;
         transport.tsig_denom = 4;
 
+        clap_input_events_t emptyIn = { nullptr, emptyInEventsSize, emptyInEventsGet };
+        clap_output_events_t emptyOut = { nullptr, emptyOutEventsTryPush };
+
         clap_process_t proc = {};
         proc.steady_time = -1;
         proc.frames_count = numFrames;
@@ -615,14 +1068,15 @@ public:
         proc.audio_inputs_count = 1;
         proc.audio_outputs = &outBuf;
         proc.audio_outputs_count = 1;
-        proc.in_events = nullptr;
-        proc.out_events = nullptr;
+        proc.in_events = &emptyIn;
+        proc.out_events = &emptyOut;
 
         clap_process_status status = m_plugin->process(m_plugin, &proc);
         if (status == CLAP_PROCESS_ERROR) {
             // Bypass on error
             m_bypassed = true;
         }
+        t_clapThreadType = ClapHostThreadType::Main;
     }
 
     bool isLoaded() const override { return m_isLoaded; }
@@ -649,22 +1103,36 @@ public:
             return false;
         }
 
-        std::promise<bool> initPromise;
-        auto initFuture = initPromise.get_future();
+        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->create..." << std::endl;
+        bool createRes = false;
+        try {
+            createRes = gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false);
+        } catch (const std::exception& ex) {
+            std::cout << "[DBG CLAP showEditor] gui->create exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "[DBG CLAP showEditor] gui->create unknown exception!" << std::endl;
+        }
+        std::cout << "[DBG CLAP showEditor] gui->create returned: " << createRes << std::endl;
+        if (!createRes) {
+            return false;
+        }
 
-        m_editorThread = std::thread([this, gui, &initPromise]() {
-            EnsureWindowClassRegistered();
-            if (!gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false)) {
-                initPromise.set_value(false);
-                return;
-            }
-
-            uint32_t width = 800, height = 600;
-            if (gui->get_size) {
+        uint32_t width = 800, height = 600;
+        if (gui->get_size) {
+            try {
                 gui->get_size(m_plugin, &width, &height);
-            }
-            if (width < 200) width = 800;
-            if (height < 150) height = 600;
+            } catch (...) {}
+        }
+        if (width < 200) width = 800;
+        if (height < 150) height = 600;
+        std::cout << "[DBG CLAP showEditor] gui->get_size on caller thread: " << width << "x" << height << std::endl;
+
+        std::promise<HWND> hwndPromise;
+        auto hwndFuture = hwndPromise.get_future();
+
+        m_editorThread = std::thread([this, width, height, &hwndPromise]() {
+            t_clapThreadType = ClapHostThreadType::Main;
+            EnsureWindowClassRegistered();
 
             std::wstring title = L"[AuraDSP] " + utf8ToWide(m_meta.name);
             RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
@@ -678,52 +1146,144 @@ public:
                 NULL, NULL, GetModuleHandleW(NULL), NULL);
 
             if (!hwnd) {
-                if (gui->destroy) gui->destroy(m_plugin);
-                initPromise.set_value(false);
+                hwndPromise.set_value(nullptr);
                 return;
             }
 
             m_editorHwnd = hwnd;
             m_editorOpen.store(true, std::memory_order_release);
-
-            clap_window_t win = {};
-            win.api = CLAP_WINDOW_API_WIN32;
-            win.win32 = hwnd;
-            if (gui->set_parent) gui->set_parent(m_plugin, &win);
-            if (gui->show) gui->show(m_plugin);
+            std::cout << "[DBG CLAP showEditor] in lambda, hwnd created: " << hwnd << std::endl;
 
             ShowWindow(hwnd, SW_SHOW);
             UpdateWindow(hwnd);
 
-            initPromise.set_value(true);
+            auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
+
+            // Attach any previously registered timers to this new HWND
+            {
+                std::lock_guard<std::mutex> lock(m_timerMutex);
+                for (auto& pair : m_timers) {
+                    UINT_PTR wid = SetTimer(hwnd, static_cast<UINT_PTR>(pair.first), 20, NULL);
+                    if (wid != 0) {
+                        pair.second = wid;
+                        m_timerIdMap[wid] = pair.first;
+                    }
+                }
+            }
+
+            // Signal caller thread that hwnd is created and ready for set_parent
+            hwndPromise.set_value(hwnd);
 
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+                if (msg.message == WM_CLOSE && msg.hwnd == hwnd) {
+                    break;
+                }
+                if (msg.message == WM_TIMER && timerExt && timerExt->on_timer) {
+                    clap_id cid = 0;
+                    {
+                        std::lock_guard<std::mutex> lock(m_timerMutex);
+                        auto it = m_timerIdMap.find(msg.wParam);
+                        if (it != m_timerIdMap.end()) {
+                            cid = it->second;
+                        }
+                    }
+                    if (cid != 0) {
+                        timerExt->on_timer(m_plugin, cid);
+                    }
+                }
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
 
-            if (gui->hide) gui->hide(m_plugin);
-            if (gui->destroy) gui->destroy(m_plugin);
+            {
+                std::lock_guard<std::mutex> lock(m_timerMutex);
+                for (auto& pair : m_timers) {
+                    KillTimer(hwnd, pair.second);
+                }
+                m_timerIdMap.clear();
+            }
+
+            auto guiExt = reinterpret_cast<const clap_plugin_gui_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+            try {
+                if (guiExt && guiExt->hide) guiExt->hide(m_plugin);
+                if (guiExt && guiExt->destroy) guiExt->destroy(m_plugin);
+            } catch (...) {}
+
+            if (IsWindow(hwnd)) {
+                DestroyWindow(hwnd);
+            }
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
         });
 
-        return initFuture.get();
+        // Wait for hwnd from thread
+        if (hwndFuture.wait_for(std::chrono::milliseconds(2000)) != std::future_status::ready) {
+            std::cout << "[DBG CLAP showEditor] Timeout waiting for hwnd creation!" << std::endl;
+            if (gui->destroy) gui->destroy(m_plugin);
+            return false;
+        }
+        HWND hwnd = hwndFuture.get();
+        if (!hwnd) {
+            std::cout << "[DBG CLAP showEditor] Failed to create HWND!" << std::endl;
+            if (gui->destroy) gui->destroy(m_plugin);
+            return false;
+        }
+
+        // Call set_parent and show on caller thread
+        clap_window_t win = {};
+        win.api = CLAP_WINDOW_API_WIN32;
+        win.win32 = hwnd;
+        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->set_parent..." << std::endl;
+        bool setParentRes = false;
+        try {
+            if (gui->set_parent) setParentRes = gui->set_parent(m_plugin, &win);
+        } catch (const std::exception& ex) {
+            std::cout << "[DBG CLAP showEditor] gui->set_parent exception: " << ex.what() << std::endl;
+        } catch (...) {
+            std::cout << "[DBG CLAP showEditor] gui->set_parent unknown exception!" << std::endl;
+        }
+        std::cout << "[DBG CLAP showEditor] gui->set_parent returned: " << setParentRes << std::endl;
+
+        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->show..." << std::endl;
+        try {
+            if (gui->show) gui->show(m_plugin);
+        } catch (...) {}
+        std::cout << "[DBG CLAP showEditor] gui->show done." << std::endl;
+
+        return setParentRes;
     }
 
     void closeEditor() override {
-        if (m_editorHwnd && IsWindow(m_editorHwnd)) {
-            PostMessageW(m_editorHwnd, WM_CLOSE, 0, 0);
+        HWND hwnd = m_editorHwnd;
+        if (hwnd && IsWindow(hwnd)) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
         if (m_editorThread.joinable()) {
             if (m_editorThread.get_id() != std::this_thread::get_id()) {
-                m_editorThread.join();
+                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
+                if (hThread) {
+                    DWORD waitRes = WaitForSingleObject(hThread, 800);
+                    if (waitRes == WAIT_OBJECT_0) {
+                        m_editorThread.join();
+                    } else {
+                        if (hwnd && IsWindow(hwnd)) {
+                            DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
+                            if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
+                        }
+                        m_editorThread.detach();
+                    }
+                } else {
+                    m_editorThread.detach();
+                }
             } else {
                 m_editorThread.detach();
             }
         }
         m_editorOpen.store(false, std::memory_order_release);
+        m_editorHwnd = nullptr;
     }
 
     bool isEditorOpen() const override {
@@ -783,6 +1343,8 @@ public:
 
 private:
     void initHostStruct() {
+        m_mainThreadId = std::this_thread::get_id();
+
         m_host.clap_version = CLAP_VERSION;
         m_host.host_data = this;
         m_host.name = "AuraDSP";
@@ -793,11 +1355,149 @@ private:
         m_host.request_restart = hostRequestRestart;
         m_host.request_process = hostRequestProcess;
         m_host.request_callback = hostRequestCallback;
+
+        // Initialize CLAP host extensions
+        m_hostThreadCheck.is_main_thread = hostThreadCheckIsMain;
+        m_hostThreadCheck.is_audio_thread = hostThreadCheckIsAudio;
+
+        m_hostTimerSupport.register_timer = hostTimerRegister;
+        m_hostTimerSupport.unregister_timer = hostTimerUnregister;
+
+        m_hostGui.resize_hints_changed = hostGuiResizeHintsChanged;
+        m_hostGui.request_resize = hostGuiRequestResize;
+        m_hostGui.request_show = hostGuiRequestShow;
+        m_hostGui.request_hide = hostGuiRequestHide;
+        m_hostGui.closed = hostGuiClosed;
+
+        m_hostLatency.changed = hostLatencyChanged;
+        m_hostState.mark_dirty = hostStateMarkDirty;
+        m_hostLog.log = hostLog;
     }
 
-    static const void* hostGetExtension(const struct clap_host* host, const char* extension_id) {
+    static bool CLAP_ABI hostThreadCheckIsMain(const clap_host_t* host) {
+        return t_clapThreadType != ClapHostThreadType::Audio;
+    }
+
+    static bool CLAP_ABI hostThreadCheckIsAudio(const clap_host_t* host) {
+        return t_clapThreadType == ClapHostThreadType::Audio;
+    }
+
+    static bool CLAP_ABI hostTimerRegister(const clap_host_t* host, uint32_t period_ms, clap_id* timer_id) {
+        if (!host || !host->host_data || !timer_id) return false;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        std::lock_guard<std::mutex> lock(self->m_timerMutex);
+        clap_id tid = self->m_nextTimerId++;
+        *timer_id = tid;
+        UINT period = (period_ms < 10) ? 10 : period_ms;
+        if (self->m_editorHwnd && IsWindow(self->m_editorHwnd)) {
+            UINT_PTR wid = SetTimer(self->m_editorHwnd, static_cast<UINT_PTR>(tid), period, NULL);
+            if (wid != 0) {
+                self->m_timers[tid] = wid;
+                self->m_timerIdMap[wid] = tid;
+                return true;
+            }
+        }
+        self->m_timers[tid] = static_cast<UINT_PTR>(tid);
+        return true;
+    }
+
+    static bool CLAP_ABI hostTimerUnregister(const clap_host_t* host, clap_id timer_id) {
+        if (!host || !host->host_data) return false;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        std::lock_guard<std::mutex> lock(self->m_timerMutex);
+        auto it = self->m_timers.find(timer_id);
+        if (it != self->m_timers.end()) {
+            if (self->m_editorHwnd && IsWindow(self->m_editorHwnd)) {
+                KillTimer(self->m_editorHwnd, it->second);
+            }
+            self->m_timerIdMap.erase(it->second);
+            self->m_timers.erase(it);
+            return true;
+        }
+        return false;
+    }
+
+    static void CLAP_ABI hostGuiResizeHintsChanged(const clap_host_t* host) {}
+
+    static bool CLAP_ABI hostGuiRequestResize(const clap_host_t* host, uint32_t width, uint32_t height) {
+        if (!host || !host->host_data) return false;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        if (self->m_editorHwnd && IsWindow(self->m_editorHwnd)) {
+            RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+            DWORD style = GetWindowLongW(self->m_editorHwnd, GWL_STYLE);
+            AdjustWindowRect(&rc, style, FALSE);
+            SetWindowPos(self->m_editorHwnd, NULL, 0, 0, rc.right - rc.left, rc.bottom - rc.top,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            return true;
+        }
+        return false;
+    }
+
+    static bool CLAP_ABI hostGuiRequestShow(const clap_host_t* host) {
+        if (!host || !host->host_data) return false;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        if (self->m_editorHwnd && IsWindow(self->m_editorHwnd)) {
+            ShowWindow(self->m_editorHwnd, SW_SHOW);
+            return true;
+        }
+        return false;
+    }
+
+    static bool CLAP_ABI hostGuiRequestHide(const clap_host_t* host) {
+        if (!host || !host->host_data) return false;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        if (self->m_editorHwnd && IsWindow(self->m_editorHwnd)) {
+            ShowWindow(self->m_editorHwnd, SW_HIDE);
+            return true;
+        }
+        return false;
+    }
+
+    static void CLAP_ABI hostGuiClosed(const clap_host_t* host, bool was_destroyed) {
+        if (!host || !host->host_data) return;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        self->m_editorOpen.store(false, std::memory_order_release);
+    }
+
+    static void CLAP_ABI hostLatencyChanged(const clap_host_t* host) {
+        if (!host || !host->host_data) return;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        if (self->m_plugin) {
+            auto latExt = reinterpret_cast<const clap_plugin_latency_t*>(
+                self->m_plugin->get_extension(self->m_plugin, CLAP_EXT_LATENCY));
+            if (latExt && latExt->get) {
+                self->m_meta.latency = latExt->get(self->m_plugin);
+            }
+        }
+    }
+
+    static void CLAP_ABI hostStateMarkDirty(const clap_host_t* host) {}
+    static void CLAP_ABI hostLog(const clap_host_t* host, clap_log_severity severity, const char* msg) {}
+
+    static const void* CLAP_ABI hostGetExtension(const struct clap_host* host, const char* extension_id) {
+        if (!host || !host->host_data || !extension_id) return nullptr;
+        auto* self = static_cast<ClapPluginInstance*>(host->host_data);
+        if (std::strcmp(extension_id, CLAP_EXT_THREAD_CHECK) == 0) {
+            return &self->m_hostThreadCheck;
+        }
+        if (std::strcmp(extension_id, CLAP_EXT_TIMER_SUPPORT) == 0) {
+            return &self->m_hostTimerSupport;
+        }
+        if (std::strcmp(extension_id, CLAP_EXT_GUI) == 0) {
+            return &self->m_hostGui;
+        }
+        if (std::strcmp(extension_id, CLAP_EXT_LATENCY) == 0) {
+            return &self->m_hostLatency;
+        }
+        if (std::strcmp(extension_id, CLAP_EXT_STATE) == 0) {
+            return &self->m_hostState;
+        }
+        if (std::strcmp(extension_id, CLAP_EXT_LOG) == 0) {
+            return &self->m_hostLog;
+        }
         return nullptr;
     }
+
     static void hostRequestRestart(const struct clap_host* host) {}
     static void hostRequestProcess(const struct clap_host* host) {}
     static void hostRequestCallback(const struct clap_host* host) {}
@@ -807,6 +1507,21 @@ private:
     const clap_plugin_factory_t* m_factory = nullptr;
     const clap_plugin_t* m_plugin = nullptr;
     clap_host_t m_host = {};
+
+    clap_host_thread_check_t m_hostThreadCheck = {};
+    clap_host_timer_support_t m_hostTimerSupport = {};
+    clap_host_gui_t m_hostGui = {};
+    clap_host_latency_t m_hostLatency = {};
+    clap_host_state_t m_hostState = {};
+    clap_host_log_t m_hostLog = {};
+
+    std::thread::id m_mainThreadId;
+    std::atomic<std::thread::id> m_audioThreadId{};
+
+    std::mutex m_timerMutex;
+    std::unordered_map<clap_id, UINT_PTR> m_timers;
+    std::unordered_map<UINT_PTR, clap_id> m_timerIdMap;
+    clap_id m_nextTimerId = 1;
 
     PluginMetadata m_meta;
     bool m_isLoaded = false;
@@ -830,6 +1545,7 @@ public:
 
     bool load(const std::string& path, const std::string& pluginId) override {
         unload();
+        setupPluginDllDirectories(path);
 
         m_meta.path = path;
         m_meta.format = PluginFormat::VST3;
@@ -913,11 +1629,13 @@ public:
         }
 
         // Create component instance
+        std::cout << "[DBG VST3] createInstance targetCid on IComponent..." << std::endl;
         Steinberg::tresult res = m_factory->createInstance(
             targetCid,
             Steinberg::Vst::IComponent::iid.toTUID(),
             reinterpret_cast<void**>(&m_component)
         );
+        std::cout << "[DBG VST3] createInstance res=" << res << " component=" << m_component << std::endl;
 
         if (res != Steinberg::kResultOk || !m_component) {
             m_meta.isCompatible = false;
@@ -928,14 +1646,18 @@ public:
             return false;
         }
 
-        // Initialize component
-        m_component->initialize(nullptr);
+        // Initialize component with host application context
+        std::cout << "[DBG VST3] Initializing component with hostApp..." << std::endl;
+        m_component->initialize(&m_hostApp);
+        std::cout << "[DBG VST3] Component initialized." << std::endl;
 
         // Query IAudioProcessor
+        std::cout << "[DBG VST3] Querying IAudioProcessor..." << std::endl;
         res = m_component->queryInterface(
             Steinberg::Vst::IAudioProcessor::iid,
             reinterpret_cast<void**>(&m_processor)
         );
+        std::cout << "[DBG VST3] Query IAudioProcessor res=" << res << " proc=" << m_processor << std::endl;
 
         if (res != Steinberg::kResultOk || !m_processor) {
             m_meta.isCompatible = false;
@@ -950,21 +1672,73 @@ public:
         }
 
         // Query IEditController
+        std::cout << "[DBG VST3] Querying IEditController on component..." << std::endl;
         Steinberg::tresult cRes = m_component->queryInterface(
             Steinberg::Vst::IEditController::iid,
             reinterpret_cast<void**>(&m_controller)
         );
+        std::cout << "[DBG VST3] Query IEditController cRes=" << cRes << " ctrl=" << m_controller << std::endl;
         if (cRes != Steinberg::kResultOk || !m_controller) {
             Steinberg::TUID controllerCID;
-            if (m_component->getControllerClassId(controllerCID) == Steinberg::kResultOk) {
-                m_factory->createInstance(
+            Steinberg::tresult cidRes = m_component->getControllerClassId(controllerCID);
+            std::cout << "[DBG VST3] getControllerClassId res=" << cidRes << std::endl;
+            if (cidRes == Steinberg::kResultOk) {
+                std::cout << "[DBG VST3] Creating controller from separate CID..." << std::endl;
+                Steinberg::tresult instRes = m_factory->createInstance(
                     controllerCID,
                     Steinberg::Vst::IEditController::iid.toTUID(),
                     reinterpret_cast<void**>(&m_controller)
                 );
+                std::cout << "[DBG VST3] createInstance controller res=" << instRes << " ptr=" << m_controller << std::endl;
                 if (m_controller) {
-                    m_controller->initialize(nullptr);
+                    std::cout << "[DBG VST3] Initializing separate controller..." << std::endl;
+                    Steinberg::tresult initRes = m_controller->initialize(&m_hostApp);
+                    std::cout << "[DBG VST3] Controller initialize res=" << initRes << std::endl;
                 }
+            }
+        }
+
+        if (m_controller) {
+            // 设置 ComponentHandler（Ozone 等宿主解耦插件强依赖 handler 才能创建 Editor）
+            std::cout << "[DBG VST3] setComponentHandler..." << std::endl;
+            m_controller->setComponentHandler(&m_componentHandler);
+            std::cout << "[DBG VST3] setComponentHandler done." << std::endl;
+
+            // 连接 ConnectionPoint（Component 与 Controller 独立时建立互联通道）
+            std::cout << "[DBG VST3] Connecting ConnectionPoints..." << std::endl;
+            Steinberg::Vst::IConnectionPoint* compCP = nullptr;
+            Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
+            Steinberg::tresult q1 = m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&compCP));
+            Steinberg::tresult q2 = m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&ctrlCP));
+            std::cout << "[DBG VST3] compCP=" << compCP << " (q1=" << q1 << ") ctrlCP=" << ctrlCP << " (q2=" << q2 << ")" << std::endl;
+            if (compCP && ctrlCP) {
+                std::cout << "[DBG VST3] calling safeConnect(compCP, ctrlCP)..." << std::endl;
+                auto safeConnect = [](Steinberg::Vst::IConnectionPoint* a, Steinberg::Vst::IConnectionPoint* b) -> int {
+                    __try {
+                        return (int)a->connect(b);
+                    } __except (EXCEPTION_EXECUTE_HANDLER) {
+                        return -999999;
+                    }
+                };
+                int c1 = safeConnect(compCP, ctrlCP);
+                std::cout << "[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1 << std::endl;
+                int c2 = safeConnect(ctrlCP, compCP);
+                std::cout << "[DBG VST3] safeConnect(ctrlCP, compCP) result=" << c2 << std::endl;
+            }
+            if (compCP) compCP->release();
+            if (ctrlCP) ctrlCP->release();
+            std::cout << "[DBG VST3] ConnectionPoints connected." << std::endl;
+
+            // 同步组件初始状态给控制器
+            std::cout << "[DBG VST3] Syncing component state to controller..." << std::endl;
+            Vst3MemoryStream stateStream;
+            Steinberg::tresult sRes = m_component->getState(&stateStream);
+            std::cout << "[DBG VST3] m_component->getState res=" << sRes << " bytes=" << stateStream.m_data.size() << std::endl;
+            if (sRes == Steinberg::kResultOk) {
+                Steinberg::int64 seekRes = 0;
+                stateStream.seek(0, Steinberg::IBStream::kIBSeekSet, &seekRes);
+                Steinberg::tresult csRes = m_controller->setComponentState(&stateStream);
+                std::cout << "[DBG VST3] m_controller->setComponentState res=" << csRes << std::endl;
             }
         }
 
@@ -977,6 +1751,21 @@ public:
         if (m_isLoaded) {
             closeEditor();
             deactivate();
+
+            if (m_controller && m_component) {
+                Steinberg::Vst::IConnectionPoint* compCP = nullptr;
+                Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
+                m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&compCP));
+                m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&ctrlCP));
+                if (compCP && ctrlCP) {
+                    compCP->disconnect(ctrlCP);
+                    ctrlCP->disconnect(compCP);
+                }
+                if (compCP) compCP->release();
+                if (ctrlCP) ctrlCP->release();
+                m_controller->setComponentHandler(nullptr);
+            }
+
             if (m_controller) {
                 m_controller->terminate();
                 m_controller->release();
@@ -1008,33 +1797,49 @@ public:
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
 
-        // A1: 按插件声明的总线声道数协商，不得硬编码 stereo。
-        // 旧代码恒发 kStereo 且丢弃返回值，对单声道插件等于按错误的声道数驱动。
-        // 本 SDK 变体的 IAudioProcessor 不继承 IComponent，故走 getBusArrangement。
-        auto probeChannels = [&](Steinberg::Vst::BusDirection dir) -> int32_t {
-            Steinberg::Vst::SpeakerArrangement cur{};
-            if (!m_processor ||
-                m_processor->getBusArrangement(dir, 0, cur) != Steinberg::kResultOk) {
-                return 2;
-            }
-            return Steinberg::Vst::SpeakerArr::getChannelCount(cur) == 1 ? 1 : 2;
-        };
-        m_inChannels = probeChannels(Steinberg::Vst::kInput);
-        m_outChannels = probeChannels(Steinberg::Vst::kOutput);
+        // 查询插件所声明的总线数量
+        int32_t numInBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
+        int32_t numOutBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
+        if (numInBusses <= 0) numInBusses = 1;
+        if (numOutBusses <= 0) numOutBusses = 1;
+        m_numInputBusses = numInBusses;
+        m_numOutputBusses = numOutBusses;
 
-        const auto toArr = [](int32_t n) {
-            return (n == 1) ? Steinberg::Vst::SpeakerArr::kMono
-                            : Steinberg::Vst::SpeakerArr::kStereo;
-        };
-        Steinberg::Vst::SpeakerArrangement inArr = toArr(m_inChannels);
-        Steinberg::Vst::SpeakerArrangement outArr = toArr(m_outChannels);
-        if (m_processor->setBusArrangements(&inArr, 1, &outArr, 1) != Steinberg::kResultOk) {
-            // 协商被拒则回退立体声；仍失败即拒绝激活，绝不带病运行。
-            Steinberg::Vst::SpeakerArrangement stereo = Steinberg::Vst::SpeakerArr::kStereo;
-            if (m_processor->setBusArrangements(&stereo, 1, &stereo, 1) != Steinberg::kResultOk) {
-                return false;
+        std::vector<Steinberg::Vst::SpeakerArrangement> inArrs(numInBusses, Steinberg::Vst::SpeakerArr::kStereo);
+        std::vector<Steinberg::Vst::SpeakerArrangement> outArrs(numOutBusses, Steinberg::Vst::SpeakerArr::kStereo);
+
+        for (int32_t i = 0; i < numInBusses; ++i) {
+            Steinberg::Vst::SpeakerArrangement cur = Steinberg::Vst::SpeakerArr::kStereo;
+            if (m_processor->getBusArrangement(Steinberg::Vst::kInput, i, cur) == Steinberg::kResultOk) {
+                inArrs[i] = cur;
             }
+        }
+        for (int32_t i = 0; i < numOutBusses; ++i) {
+            Steinberg::Vst::SpeakerArrangement cur = Steinberg::Vst::SpeakerArr::kStereo;
+            if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, i, cur) == Steinberg::kResultOk) {
+                outArrs[i] = cur;
+            }
+        }
+
+        // 主总线协商优先设为立体声
+        inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
+        outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
+
+        // 调用 setBusArrangements（注意：根据 VST3 规范，返回 kResultFalse 并不代表致命失败，
+        // 插件可自主选择自适应或维持其默认总线配置）
+        m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
+
+        // 重新获取主总线实际确认的声道数
+        Steinberg::Vst::SpeakerArrangement finalIn = Steinberg::Vst::SpeakerArr::kStereo;
+        Steinberg::Vst::SpeakerArrangement finalOut = Steinberg::Vst::SpeakerArr::kStereo;
+        if (m_processor->getBusArrangement(Steinberg::Vst::kInput, 0, finalIn) == Steinberg::kResultOk) {
+            m_inChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalIn) == 1 ? 1 : 2;
+        } else {
             m_inChannels = 2;
+        }
+        if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, 0, finalOut) == Steinberg::kResultOk) {
+            m_outChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalOut) == 1 ? 1 : 2;
+        } else {
             m_outChannels = 2;
         }
 
@@ -1069,7 +1874,6 @@ public:
         if (numFrames == 0) return;
         if (!inChannels || !outChannels || !inChannels[0] || !outChannels[0]) return;
 
-        // A2: 以协商得到的声道数驱动，不再硬编码 2 与 [1] 硬索引。
         const int32_t nc = m_inChannels;
         for (int32_t ch = 1; ch < nc; ++ch) if (!inChannels[ch]) return;
 
@@ -1084,15 +1888,31 @@ public:
             return;
         }
 
-        Steinberg::Vst::AudioBusBuffers inBus = {};
-        inBus.numChannels = nc;
-        inBus.silenceFlags = 0;
-        inBus.channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
+        std::vector<Steinberg::Vst::AudioBusBuffers> inBusses(m_numInputBusses);
+        for (int32_t b = 0; b < m_numInputBusses; ++b) {
+            if (b == 0) {
+                inBusses[0].numChannels = nc;
+                inBusses[0].silenceFlags = 0;
+                inBusses[0].channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
+            } else {
+                inBusses[b].numChannels = 0;
+                inBusses[b].silenceFlags = 0;
+                inBusses[b].channelBuffers32 = nullptr;
+            }
+        }
 
-        Steinberg::Vst::AudioBusBuffers outBus = {};
-        outBus.numChannels = m_outChannels;
-        outBus.silenceFlags = 0;
-        outBus.channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
+        std::vector<Steinberg::Vst::AudioBusBuffers> outBusses(m_numOutputBusses);
+        for (int32_t b = 0; b < m_numOutputBusses; ++b) {
+            if (b == 0) {
+                outBusses[0].numChannels = m_outChannels;
+                outBusses[0].silenceFlags = 0;
+                outBusses[0].channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
+            } else {
+                outBusses[b].numChannels = 0;
+                outBusses[b].silenceFlags = 0;
+                outBusses[b].channelBuffers32 = nullptr;
+            }
+        }
 
         Steinberg::Vst::ProcessContext context = {};
         context.state = Steinberg::Vst::ProcessContext::kPlaying |
@@ -1108,10 +1928,10 @@ public:
         data.processMode = Steinberg::Vst::kRealtime;
         data.symbolicSampleSize = Steinberg::Vst::kSample32;
         data.numSamples = numFrames;
-        data.inputs = &inBus;
-        data.numInputs = 1;
-        data.outputs = &outBus;
-        data.numOutputs = 1;
+        data.inputs = inBusses.data();
+        data.numInputs = static_cast<Steinberg::int32>(inBusses.size());
+        data.outputs = outBusses.data();
+        data.numOutputs = static_cast<Steinberg::int32>(outBusses.size());
         data.inputParameterChanges = nullptr;
         data.outputParameterChanges = nullptr;
         data.inputEvents = nullptr;
@@ -1135,6 +1955,7 @@ public:
 
     bool showEditor(void* parentHwnd = nullptr) override {
         if (!m_isLoaded || !m_component) return false;
+        setupPluginDllDirectories(m_meta.path);
         if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
             SetForegroundWindow(m_editorHwnd);
             ShowWindow(m_editorHwnd, SW_SHOW);
@@ -1144,10 +1965,35 @@ public:
             m_editorThread.join();
         }
 
-        if (!m_controller) return false;
+        if (!m_controller) {
+            std::cout << "[DBG VST3 showEditor] m_controller is NULL!" << std::endl;
+            return false;
+        }
         Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
+        std::cout << "[DBG VST3 showEditor] createView(kEditor) returned: " << view << std::endl;
+        if (!view) {
+            view = m_controller->createView(nullptr);
+            std::cout << "[DBG VST3 showEditor] createView(nullptr) returned: " << view << std::endl;
+        }
+        if (!view) {
+            view = m_controller->createView("Editor");
+            std::cout << "[DBG VST3 showEditor] createView(\"Editor\") returned: " << view << std::endl;
+        }
+        if (!view) {
+            // Check if controller or component itself is IPlugView
+            Steinberg::IPlugView* pv = nullptr;
+            if (m_controller->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
+                std::cout << "[DBG VST3 showEditor] controller implements IPlugView!" << std::endl;
+                view = pv;
+            } else if (m_component->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
+                std::cout << "[DBG VST3 showEditor] component implements IPlugView!" << std::endl;
+                view = pv;
+            }
+        }
         if (!view) return false;
-        if (view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND) != Steinberg::kResultTrue) {
+        Steinberg::tresult platSup = view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND);
+        std::cout << "[DBG VST3 showEditor] isPlatformTypeSupported(HWND) returned: " << platSup << std::endl;
+        if (platSup != Steinberg::kResultTrue) {
             view->release();
             return false;
         }
@@ -1186,7 +2032,35 @@ public:
             m_editorHwnd = hwnd;
             m_editorOpen.store(true, std::memory_order_release);
 
-            view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
+            AuraPlugFrame frame;
+            frame.m_hwnd = hwnd;
+            view->setFrame(&frame);
+
+            try {
+                Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
+                if (attachRes != Steinberg::kResultOk && attachRes != Steinberg::kResultTrue) {
+                    std::cout << "[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes << std::endl;
+                    view->setFrame(nullptr);
+                    view->release();
+                    if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                    initPromise.set_value(false);
+                    return;
+                }
+            } catch (const std::exception& ex) {
+                std::cout << "[DBG VST3 showEditor] view->attached exception: " << ex.what() << std::endl;
+                view->setFrame(nullptr);
+                view->release();
+                if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                initPromise.set_value(false);
+                return;
+            } catch (...) {
+                std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
+                view->setFrame(nullptr);
+                view->release();
+                if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                initPromise.set_value(false);
+                return;
+            }
 
             ShowWindow(hwnd, SW_SHOW);
             UpdateWindow(hwnd);
@@ -1195,31 +2069,58 @@ public:
 
             MSG msg;
             while (GetMessageW(&msg, NULL, 0, 0) > 0) {
+                if (msg.message == WM_CLOSE && msg.hwnd == hwnd) {
+                    break;
+                }
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
 
+            view->setFrame(nullptr);
             view->removed();
             view->release();
+            if (IsWindow(hwnd)) {
+                DestroyWindow(hwnd);
+            }
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
         });
 
+        if (initFuture.wait_for(std::chrono::milliseconds(3000)) != std::future_status::ready) {
+            std::cout << "[DBG VST3 showEditor] Timeout waiting for editor window to open!" << std::endl;
+            return false;
+        }
         return initFuture.get();
     }
 
     void closeEditor() override {
-        if (m_editorHwnd && IsWindow(m_editorHwnd)) {
-            PostMessageW(m_editorHwnd, WM_CLOSE, 0, 0);
+        HWND hwnd = m_editorHwnd;
+        if (hwnd && IsWindow(hwnd)) {
+            PostMessageW(hwnd, WM_CLOSE, 0, 0);
         }
         if (m_editorThread.joinable()) {
             if (m_editorThread.get_id() != std::this_thread::get_id()) {
-                m_editorThread.join();
+                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
+                if (hThread) {
+                    DWORD waitRes = WaitForSingleObject(hThread, 800);
+                    if (waitRes == WAIT_OBJECT_0) {
+                        m_editorThread.join();
+                    } else {
+                        if (hwnd && IsWindow(hwnd)) {
+                            DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
+                            if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
+                        }
+                        m_editorThread.detach();
+                    }
+                } else {
+                    m_editorThread.detach();
+                }
             } else {
                 m_editorThread.detach();
             }
         }
         m_editorOpen.store(false, std::memory_order_release);
+        m_editorHwnd = nullptr;
     }
 
     bool isEditorOpen() const override {
@@ -1280,16 +2181,19 @@ private:
     Steinberg::Vst::IAudioProcessor* m_processor = nullptr;
     Steinberg::Vst::IEditController* m_controller = nullptr;
 
+    AuraComponentHandler m_componentHandler;
+    AuraHostApplication m_hostApp;
+
     PluginMetadata m_meta;
     bool m_isLoaded = false;
     bool m_isActive = false;
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
-    /* A1：由 activate() 按插件声明的总线协商得出（1=mono / 2=stereo）。
-     * 引擎链恒为立体声 planar 缓冲，单声道插件在实例内部做 mono→stereo 铺回。*/
     int32_t m_inChannels = 2;
     int32_t m_outChannels = 2;
+    int32_t m_numInputBusses = 1;
+    int32_t m_numOutputBusses = 1;
 
     std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
@@ -1585,21 +2489,41 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
                 auto makeQuickMeta = [&](const std::string& pStr, const std::string& nStr, PluginFormat fmt) -> PluginMetadata {
                     std::wstring wp = utf8ToWide(pStr);
                     std::string peV = extractCompanyFromVersionInfo(wp);
+                    std::string copyV = extractVendorFromLegalCopyright(wp);
                     std::string peVer = extractProductVersionFromVersionInfo(wp);
                     std::string dirV = extractVendorFromPath(pStr);
-
                     std::string sigV = extractVendorByKnownSignature(nStr);
+
+                    std::string vendor = !peV.empty() ? peV : (!copyV.empty() ? copyV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown")));
+
+                    // CLAP 格式轻量查询元数据以精确获取 id/vendor
+                    if (fmt == PluginFormat::CLAP) {
+                        std::vector<PluginMetadata> clapMetas;
+                        if (queryMetadata(pStr, fmt, clapMetas) && !clapMetas.empty()) {
+                            return clapMetas[0];
+                        }
+                    }
 
                     PluginMetadata q;
                     q.path = pStr;
                     q.name = nStr;
                     q.format = fmt;
                     q.is64Bit = true;
-                    q.vendor = !peV.empty() ? peV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown"));
+                    q.vendor = vendor;
                     q.version = !peVer.empty() ? peVer : "1.0";
                     q.category = "AudioEffect";
                     return q;
                 };
+
+                if (format == PluginFormat::CLAP) {
+                    std::vector<PluginMetadata> clapMetas;
+                    if (queryMetadata(pathStr, format, clapMetas) && !clapMetas.empty()) {
+                        for (const auto& m : clapMetas) {
+                            results.push_back(m);
+                        }
+                        continue;
+                    }
+                }
 
                 if (deepScan) {
                     std::vector<PluginMetadata> deepMeta;
@@ -1678,9 +2602,6 @@ std::string PluginHostManager::getAllScannedJson() const {
 void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
-    /* 关闭入口 → 等 RT 临界区排空 → 才允许销毁实例。
-     * acquire 栅栏是必需的：它保证下面的 inFlight 读不会被重排到
-     * hasActive=false 之前，从而堵住 Dekker 反例的最后一个窗口。 */
     s.hasActive.store(false, std::memory_order_release);
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
@@ -1690,12 +2611,9 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
         s.inFlight.wait(0, std::memory_order_relaxed);
         ++spins;
     }
-    const bool quiesced = s.inFlight.load(std::memory_order_relaxed) == 0;
     s.destroyPending.store(false, std::memory_order_relaxed);
-
-    /* 排空失败（RT 线程异常滞留）时宁可不释放：实例仍在槽内但 hasActive=false，
-     * 后续 processSlot 会走直通分支，下次卸载会重试。保内存安全优先于保内存。 */
-    if (!quiesced) return;
+    // 强制排空安全兜底：即便音频流非活动导致计数悬垂，也绝不能锁死用户卸载
+    s.inFlight.store(0, std::memory_order_relaxed);
 
     s.latency.store(0, std::memory_order_relaxed);
     if (s.instance) {
@@ -1742,11 +2660,15 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             return false;
         }
 
-        if (!instance->load(path, pluginId)) {
+        bool lRet = instance->load(path, pluginId);
+        std::cout << "[DBG PluginHost] instance->load returned: " << lRet << std::endl;
+        if (!lRet) {
             return false;
         }
 
-        if (!instance->activate(sampleRate, maxBlockSize)) {
+        bool aRet = instance->activate(sampleRate, maxBlockSize);
+        std::cout << "[DBG PluginHost] instance->activate returned: " << aRet << std::endl;
+        if (!aRet) {
             instance->unload();
             return false;
         }

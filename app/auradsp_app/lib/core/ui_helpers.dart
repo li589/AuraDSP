@@ -77,7 +77,7 @@ class InfoBadge extends StatefulWidget {
   /// 气泡优先显示在徽标下方（默认 true；空间不足自动翻转）
   final bool preferBelow;
 
-  /// 气泡最大宽度（默认 240）
+  /// 气泡最大宽度（默认 380）
   final double maxWidth;
 
   const InfoBadge({
@@ -85,7 +85,7 @@ class InfoBadge extends StatefulWidget {
     required this.message,
     this.size = 16,
     this.preferBelow = true,
-    this.maxWidth = 240,
+    this.maxWidth = 380,
   });
 
   @override
@@ -100,13 +100,13 @@ class _InfoBadgeState extends State<InfoBadge> {
   bool _hover = false;
 
   static const _hoverDelay = Duration(milliseconds: 300);
-  static const _touchVisible = Duration(milliseconds: 2500);
+  static const _touchVisible = Duration(milliseconds: 3500);
   static const _arrowW = 12.0;
   static const _arrowH = 7.0;
   static const _gap = 4.0;
   static const _margin = 16.0;
-  static const _padH = 10.0;
-  static const _padV = 7.0;
+  static const _padH = 12.0;
+  static const _padV = 8.0;
 
   @override
   void dispose() {
@@ -167,31 +167,34 @@ class _InfoBadgeState extends State<InfoBadge> {
     final colW = math.max(bubbleW, arrowX + _arrowW / 2 + _padH).toDouble();
 
     _entry = OverlayEntry(
-      builder: (_) => CompositedTransformFollower(
-        link: _link,
-        showWhenUnlinked: false,
-        targetAnchor: Alignment.topLeft,
-        followerAnchor: Alignment.topLeft,
-        child: SizedBox(
-          width: screen.width,
-          height: screen.height,
-          child: Stack(
-            children: [
-              Positioned(
-                left: bubbleLeft,
-                top: bubbleTop,
-                child: SizedBox(
-                  width: colW,
-                  child: infoBubble(
-                    p: p,
-                    message: widget.message,
-                    below: below,
-                    arrowX: arrowX,
-                    maxWidth: maxW,
+      builder: (_) => Material(
+        type: MaterialType.transparency,
+        child: CompositedTransformFollower(
+          link: _link,
+          showWhenUnlinked: false,
+          targetAnchor: Alignment.topLeft,
+          followerAnchor: Alignment.topLeft,
+          child: SizedBox(
+            width: screen.width,
+            height: screen.height,
+            child: Stack(
+              children: [
+                Positioned(
+                  left: bubbleLeft,
+                  top: bubbleTop,
+                  child: SizedBox(
+                    width: colW,
+                    child: infoBubble(
+                      p: p,
+                      message: widget.message,
+                      below: below,
+                      arrowX: arrowX,
+                      maxWidth: maxW,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -233,8 +236,12 @@ class _InfoBadgeState extends State<InfoBadge> {
               });
             },
             onTap: () {
-              // 触屏：已展开时点徽标关闭（桌面端 hover 接管，无影响）。
-              if (_entry != null) _hide();
+              // 点击切换气泡显示/隐藏
+              if (_entry != null) {
+                _hide();
+              } else {
+                _show();
+              }
             },
             // 4px 透明外衬：视觉仍是 16，触屏命中到 24
             child: Padding(
@@ -247,13 +254,13 @@ class _InfoBadgeState extends State<InfoBadge> {
                   border: Border.all(
                     color:
                         _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
-                    width: 1.5,
+                    width: 1.2,
                   ),
                 ),
                 child: Center(
                   child: Icon(
-                    Icons.help_outline_rounded,
-                    size: widget.size * 0.7,
+                    Icons.question_mark_rounded,
+                    size: widget.size * 0.65,
                     color: _hover ? p.accent : p.textDim,
                   ),
                 ),
@@ -273,7 +280,7 @@ Widget infoBubble({
   required String message,
   required bool below,
   required double arrowX,
-  double maxWidth = 240,
+  double maxWidth = 380,
 }) {
   final bubble = Container(
     width: double.infinity,
