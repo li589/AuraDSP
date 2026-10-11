@@ -1,50 +1,50 @@
-# --- 第三方源码克隆区（各自是独立 git 仓库，不入主库） ---
-source/
+# --- 第三方源码克隆区 ---
+# 源码快照不入主库；仅保留 ORIGIN.md（记录各仓库 git 链接与 HEAD）作为溯源凭证。
+source/*
+!source/ORIGIN.md
 
 # --- 本机环境 ---
 venv/
-# .workbuddy/ (已迁移至 .ai/，由各类智能体自治管理)
+
+# --- IDE / 智能体 harness 目录（AI 记忆统一在 .ai/，其余一律不入库） ---
+.workbuddy/
+.vscode/
+.idea/
 .codegraph/
+.v2c/
+.video_agent/
 
 # --- 构建产物 ---
 **/out/
+**/build/
+**/.dart_tool/
+**/windows/flutter/ephemeral/
+**/.plugin_symlinks/
 *.o
-*.so
 *.a
+*.so
+*.dll
 obj/
 build_log*.txt
 xtrace.txt
 c_sources.txt
 cpp_sources.txt
 
-# --- 编辑器/系统 ---
-.vscode/
-.idea/
+# --- 编辑器 / 系统 ---
 Thumbs.db
 .DS_Store
 __pycache__/
 *.pyc
 
-# --- 智能体/工具运行时 harness 目录 ---
-.v2c/
-.video_agent/
-
-# --- Flutter APP 构建产物 ---
+# --- 临时与运行时产物 ---
 .tmp/
-**/build/
-**/.dart_tool/
-**/windows/flutter/ephemeral/
-**/.plugin_symlinks/
-
-# tools/log_clicks.py �����ֹ������־
-clicks.csv
-
 dist/
+# tools/log_clicks.py 的点击日志
+clicks.csv
+# tools/mem_baseline.py 运行时取证（csv + 点击切片目录）
+tools/mem_trace_*
 
 # --- 声学资产包：大二进制/曲线走 release 附件，不进 git（v0.5.0 起） ---
 # .eel 脚本与 manifest.json 体积极小，正常版本化
 /resource/**/*.irs
 /resource/**/*.vdc
-
-# tools/mem_baseline.py 运行时取证产物（csv + 点击切片目录）
-tools/mem_trace_*

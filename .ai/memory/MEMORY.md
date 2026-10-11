@@ -49,3 +49,15 @@
 - **插件预设落盘分工**：引擎只做 VST3 `getState/setState` 或 CLAP `extension_data` 流序列化；路径与命名全归 Dart（`%APPDATA%/AuraDSP/plugin_presets/<插件名>/*.aurapreset`）。引擎侧不解析路径、不碰外部文件 IO。
 - **用户裁定（2026-10-10）**：`docs/forensics/` 下 34MB 原始日志/tombstone **保留入库**（审计证据，勿删勿改），不清理。
 
+## 记忆目录统一（2026-10-11 用户裁定）
+- **唯一 AI 记忆目录 = `.ai/memory/`**。曾出现第二套 `.workbuddy/memory/`（WorkBuddy 侧），已于 2026-10-11 合并后移除；`.gitignore` 中 `.workbuddy/` 由注释改为**生效忽略**，防止 IDE 侧再次生成时污染工作区。
+- 其他 IDE/工具 harness 目录（`.v2c/` `.video_agent/` `.codegraph/` `.tmp/`）一律忽略，不入库。
+
+## 高频坑速查（跨会话最先看这几条）
+- `--no-tree-shake-icons`：Flutter 构建漏了它，新增 MaterialIcons 会**静默空白**。诊断看 `flutter_assets/fonts/MaterialIcons-Regular.otf` 大小（几 KB=被子集化，正常 1.65MB）。
+- 新测试写完后**必须登记 `test/runner.py`**（smoke→`smoke_files`、ui→UI 默认列表），未挂载=废测。
+- UI 自动化：拖滑块前先 `ensure_switch_on`（`AuraSwitch` 关闭 → Slider `enabled:false` → 拖拽被框架丢弃）；必须 `HWND_TOPMOST`+`SetForegroundWindow`；必须 `assert_images_differ` 像素差分闭环。
+- `flutter test` 不沙箱化：任何会写 `%APPDATA%` 的测试必须在 `setUp` 注入 `ConfigManager.baseDirOverride` 临时目录。
+- libfmq `read/write` 返回 **bool** 不是元素数；`DDCStringParser` 返回 1=成功 / 0=跳过 / -1=失败；P-005 卷积 scratch 必须在 `JamesDSPInit` **之后**绑定。
+- 顺序类改动的数值验证要用**跨非线性级饱和的强探针**（limiter 会淹没差异，同序两次差 0.0043 属噪声）。
+
