@@ -19,9 +19,12 @@
 | ADR | 主题 | 状态 |
 |---|---|---|
 | [ADR-001](adr/ADR-001-windows-v1-process-level.md) | Windows v1 采用**进程内**真实处理链（内置播放器 → DLL → WASAPI 共享） | 已接受 |
-| [ADR-002](adr/ADR-002-latency-tiers.md) | 三档硬延迟分级（realtime ≤10ms / music ≤30ms / quality 无限），**引擎侧强制** | 已接受 |
+| [ADR-002](adr/ADR-002-latency-tiers.md) | 三档硬延迟分级（realtime ≤10ms / music ≤30ms / quality 无限），引擎侧强制 | **已被 ADR-006 取代**（原文留档） |
 | [ADR-003](adr/ADR-003-multichannel-matrix.md) | 多声道 Phase A 采用声道矩阵包络，不改 vendor-src | 已接受 |
 | [ADR-004](adr/ADR-004-plugin-multi-slot-and-stage-topology.md) | 插件**多插槽（2 路）+ 五级链阶段插入拓扑**；不引入桥进程 | 已接受 |
+| [ADR-006](adr/ADR-006-remove-latency-tier-gating.md) | **移除三档延迟硬约束**：延迟改为纯测量展示，所有效果可自由使能（**取代 ADR-002**） | 已接受 |
+
+> ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
 
 ## 3. 方案与规划（按主题）
 

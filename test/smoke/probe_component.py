@@ -70,7 +70,6 @@ print("\n=== [3] 探测不干扰调用方正在使用的 handle ===")
 # 「探测没有污染/破坏调用方的 handle」。
 live = ctypes.c_void_p(lib.auradsp_create(ctypes.c_float(RATE), 2048))
 v = ctypes.c_int32(2)
-lib.auradsp_set_param(live, b"mode.latency", ctypes.byref(v), 4)
 one = ctypes.c_int32(1)
 lib.auradsp_set_param(live, b"bass.enable", ctypes.byref(one), 4)
 gain = ctypes.c_float(9.0)
@@ -108,7 +107,6 @@ check(0.05 < rms < 2.0, f"探测后 live handle 输出量级正常 (rms={rms:.4f
 def render_fresh():
     hh = ctypes.c_void_p(lib.auradsp_create(ctypes.c_float(RATE), 2048))
     lv = ctypes.c_int32(2)
-    lib.auradsp_set_param(hh, b"mode.latency", ctypes.byref(lv), 4)
     bb = (ctypes.c_float * (N * 2))()
     oo = (ctypes.c_float * (N * 2))()
     bp = ctypes.cast(bb, ctypes.POINTER(ctypes.c_float))

@@ -32,7 +32,7 @@ def bench(label, blocks=2000):
     print("%-34s %8.1f us/块  (%5.2f%% of 10ms)" % (label, dt, dt/100))
     return dt
 
-set_i("mode.latency", 2)
+# ADR-006：延迟档已移除，无需再预设 quality 档
 print("== 每 480 帧块（10ms@48k）处理耗时 ==")
 d0 = bench("基线（vendor 链全关）")
 set_i("shelf.enable", 1); set_f("shelf.gain", 6.0)

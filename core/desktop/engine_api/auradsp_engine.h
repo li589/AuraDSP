@@ -19,14 +19,16 @@
  *   eq.enable        i32  0/1
  *   post.gain        f32  dB [-15,15]
  *   limiter.enable   i32  0/1
- *   mode.latency     i32  0=realtime(<=10ms) 1=music(<=30ms) 2=quality(不限)
+ *   mode.latency     已移除（ADR-006 撤销三档延迟硬约束）。下发/回读均返回
+ *                     AURADSP_E_PARAM，不静默忽略。延迟改由
+ *                     auradsp_get_latency_ms() 纯测量上报 + 组件级脉冲实测徽标呈现。
  *   channels.mode    i32  0=stereo 1=5.1 2=7.1（Phase A 为矩阵包络，见 ADR-003）
  *   liveprog.enable  i32  0/1 —— EEL2 实时可编程 DSP（v1.1 增量）
  *   liveprog.code    str  UTF-8 脚本全文（@init/@sample 两段），bytes=字节数
  *   liveprog.unload  i32  停用并清编译态
  *   liveprog.status  i32  get：0=无代码 1=编译成功 <0=语法错误码
  *   liveprog.paramN  f32  slider1..8（vendor 补丁 P-001，见 PATCHES.md）
- *   convolver.enable i32  0/1 —— T2 效果，品质档限定（v1.1 M4）
+ *   convolver.enable i32  0/1 —— 卷积混响，可自由使能（ADR-006 起不再受延迟档限定）
  *   convolver.ir.path str UTF-8 文件路径（WAV/FLAC，门卫见 load_ir_file）
  *   convolver.clear  i32  清除 IR 并停用
  *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak/ir.spectrum get 回读
@@ -58,7 +60,8 @@ typedef enum auradsp_status {
     AURADSP_OK = 0,
     AURADSP_E_PARAM = -1,          /* 参数 ID 未知或值越界 */
     AURADSP_E_UNSUPPORTED = -2,    /* 当前形态不支持该能力 */
-    AURADSP_E_LATENCY_GUARD = -3,  /* 超出当前延迟档预算（ADR-002） */
+    AURADSP_E_LATENCY_GUARD = -3,  /* 已废弃（ADR-006）：延迟不再有任何准入判定。
+                                    *   保留枚举值仅为不破坏既有 ABI 编号，新代码不应返回它。 */
     AURADSP_E_STATE = -4,          /* 状态机拒绝（如未 open） */
     AURADSP_E_IO = -5,
 } auradsp_status;

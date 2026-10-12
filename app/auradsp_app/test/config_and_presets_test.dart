@@ -15,7 +15,6 @@ void main() {
       expect(cfg.stereoWidenMax, 0.75);
       expect(cfg.vizFps, AppConfig.defaultVizFps);
       expect(cfg.autoRestoreSession, isTrue);
-      expect(cfg.defaultLatencyMode, 2);
     });
 
     test('AppConfig JSON round-trip preserves all values', () {
@@ -25,7 +24,6 @@ void main() {
         stereoWidenMax: 0.85,
         vizFps: 60,
         vizFftSize: 8192,
-        defaultLatencyMode: 1,
         locale: 'en',
         themeId: 'aurora',
         autoRestoreSession: false,
@@ -42,7 +40,6 @@ void main() {
       expect(restored.stereoWidenMax, 0.85);
       expect(restored.vizFps, 60);
       expect(restored.vizFftSize, 8192);
-      expect(restored.defaultLatencyMode, 1);
       expect(restored.locale, 'en');
       expect(restored.themeId, 'aurora');
       expect(restored.autoRestoreSession, isFalse);

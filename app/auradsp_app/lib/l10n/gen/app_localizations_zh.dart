@@ -45,27 +45,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get latencyTip => '算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms';
 
   @override
-  String get latencyMode => '延迟模式';
-
-  @override
-  String get latencyRealtime => '实时';
-
-  @override
-  String get latencyMusic => '音乐';
-
-  @override
-  String get latencyQuality => '品质';
-
-  @override
-  String get latencyRealtimeDesc => '≤10ms · 游戏/直播，仅低延迟效果';
-
-  @override
-  String get latencyMusicDesc => '≤30ms · 音乐欣赏（推荐）';
-
-  @override
-  String get latencyQualityDesc => '不限 · 观影/听感优先，允许混响等';
-
-  @override
   String get bassBoost => '低音增强';
 
   @override
@@ -132,9 +111,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noAudio => '空闲 — 无音频流经引擎';
 
   @override
-  String get guardBlocked => '已拦截：该效果超出当前延迟档预算，切换至品质模式后可用';
-
-  @override
   String get reverbPreset0 => '音乐厅';
 
   @override
@@ -185,9 +161,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get engineFailedBody =>
       'auradsp_engine.dll 未找到或初始化失败。若 DLL 已随包存在，请查看下方错误详情定位（常见：音频设备/COM 初始化问题）。';
-
-  @override
-  String get reverbNeedsQuality => '品质档限定';
 
   @override
   String get channelMode => '声道模式';
@@ -248,9 +221,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get heroHintIdle => '从下方选择音源开始处理';
-
-  @override
-  String get reverbAutoQuality => '已自动切换到品质延迟档以启用混响';
 
   @override
   String get stereoWidenHint => '扩展度已做安全上限保护：过高比例会剥离中置人声（类卡拉OK效应），导致声像空洞';
@@ -323,16 +293,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get convResampled => '源采样率与设备不同，已自动重采样（诚实明示，不静默）';
 
   @override
-  String get convAutoQuality => '已自动切换到品质延迟档以启用卷积';
-
-  @override
   String get signalFlow => '信号流';
 
   @override
   String get fvTitle => '参数化混响';
-
-  @override
-  String get fvHint => 'Freeverb 算法（8 组合梳 + 4 全通/声道），与预设混响可并存；品质档限定';
 
   @override
   String get fvDecayLabel => '衰减';

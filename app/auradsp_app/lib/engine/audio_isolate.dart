@@ -682,7 +682,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iBass = idp('bass.enable'), iBassG = idp('bass.gain');
             final iRev = idp('reverb.preset'), iMix = idp('stereo.mix');
             final iEq = idp('eq.enable'), iPost = idp('post.gain');
-            final iLim = idp('limiter.enable'), iMode = idp('mode.latency');
+            final iLim = idp('limiter.enable');
             final iCh = idp('channels.mode');
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
@@ -728,7 +728,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'eqEnable': rdInt(iEq) ?? 0,
                 'postGain': rdFloat(iPost) ?? 0.0,
                 'limiterEnable': rdInt(iLim) ?? 1,
-                'latencyMode': rdInt(iMode) ?? 1,
                 'channelsMode': rdInt(iCh) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
@@ -757,7 +756,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'fvDry': rdFloat(iFvDr) ?? 1.0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iMode, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
                 malloc.free(q);
               }
             }

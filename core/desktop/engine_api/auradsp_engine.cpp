@@ -128,7 +128,7 @@ struct Params {
     std::atomic<int32_t>  eq_enable{0};
     std::atomic<int32_t>  limiter_enable{0};
     std::atomic<float>    post_gain{0.0f};      /* dB [-15,15] */
-    std::atomic<int32_t>  latency_mode{1};      /* 0=realtime 1=music 2=quality */
+    /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
@@ -229,7 +229,10 @@ inline float fv_voice_process(FvVoice& v, float in, float feedback) {
     return out;
 }
 
-/* 效果延迟档位（0=T0 1=T1 2=T2）与近似附加延迟 ms（ADR-002 表） */
+/* 各效果引入的近似附加延迟 ms。
+ * ADR-006：延迟档硬约束已撤销，本表只用于「如实测量并上报」，
+ * 不参与任何准入判定（kTierBudget / over_guard 一并删除）。
+ * tier 字段保留为文档性标注，供 graph.effects 输出与 UI 排障参考。 */
 struct LatencyItem { int tier; float ms; };
 constexpr LatencyItem kLatReverb   {2, 30.0f};
 constexpr LatencyItem kLatComp     {2, 85.0f};  /* FFTCompander FFTSIZE_DRS/2 */
@@ -237,9 +240,6 @@ constexpr LatencyItem kLatConvolver{2, 10.0f};  /* 保守下限，IR 长度另�
 constexpr LatencyItem kLatCrossfeed{1, 3.0f};
 constexpr LatencyItem kLatDdc      {1, 6.0f};
 constexpr LatencyItem kLatLimiter  {0, 2.0f};
-
-/* 每档预算上限 ms */
-constexpr float kTierBudget[3] = {10.0f, 30.0f, 1e9f};
 
 }  // namespace
 
@@ -339,37 +339,28 @@ void set_error(auradsp_handle h, const char* msg) {
     if (h) { snprintf(h->last_error, sizeof(h->last_error), "%s", msg); }
 }
 
-/* 计算当前启用组合的附加延迟（ms）；超档时返回 false */
-bool compute_latency(auradsp_handle h, double* out_ms, bool* over_guard) {
+/* 计算当前启用组合的附加延迟（ms）——纯测量。
+ * ADR-006：延迟档硬约束已撤销，此函数只累加并上报，
+ * 永远不返回「超档」，也不再导致任何使能请求被拒绝。 */
+void compute_latency(auradsp_handle h, double* out_ms) {
     double ms = 0.0;
     if (h->p.limiter_enable.load(std::memory_order_relaxed)) ms += kLatLimiter.ms;
     if (h->p.reverb_preset.load(std::memory_order_relaxed) >= 0) {
         ms += kLatReverb.ms;
-        if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
     }
-    /* 卷积 = T2（ADR-002）：IR 已加载且使能时计入 */
+    /* 卷积：IR 已加载且使能时计入 */
     if (h->p.conv_enable.load(std::memory_order_relaxed) &&
         h->ir_ready.load(std::memory_order_relaxed)) {
         ms += kLatConvolver.ms;
-        if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
     }
-    /* 串扰消除 = T1 ≈3ms（实时档 10ms 预算内，交由总预算判断） */
     if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += kLatCrossfeed.ms;
-    /* VDC = T1 ≈6ms（动态范围均衡器，延迟极低）。此前 kLatDdc 定义了却从未
-     * 计入，导致 VDC 开启时总延迟被低估。 */
+    /* VDC = 动态范围均衡器，延迟极低。此前 kLatDdc 定义了却从未计入，
+     * 导致 VDC 开启时总延迟被低估。 */
     if (h->p.ddc_enable.load(std::memory_order_relaxed) &&
         h->p.ddc_ready.load(std::memory_order_relaxed)) {
         ms += kLatDdc.ms;
     }
-    /* 参数化混响 = T2 类（无算法延迟但按档位限定，对齐混响语义） */
-    if (h->p.fv_enable.load(std::memory_order_relaxed) &&
-        h->p.latency_mode.load(std::memory_order_relaxed) < 2) *over_guard = true;
-    if (h->p.latency_mode.load(std::memory_order_relaxed) < 2) {
-        /* compressor/convolver/arbMag 未在本 ABI v1 暴露参数，预留守卫位 */
-    }
-    if (ms > kTierBudget[h->p.latency_mode.load(std::memory_order_relaxed)]) *over_guard = true;
     *out_ms = ms;
-    return !*over_guard;
 }
 
 /* ---- 精准应用：只动被改的那条链 ----
@@ -1103,8 +1094,7 @@ const bool is_ddc = !strcmp(component, "ddc");
     const double fs = (sample_rate > 8000.0) ? sample_rate : 48000.0;
     auradsp_handle probe = auradsp_create((float)fs, kProbeBlock);
     if (!probe) return -2;
-    const int32_t quality = 2;
-    auradsp_set_param(probe, "mode.latency", &quality, 4);
+    /* ADR-006：延迟档已移除，探针无需再预设档位（原先下发 mode.latency=2）。 */
 
     /* 基线：全关，量出链自身的零点偏移与能量 */
     double base_energy = 0.0;
@@ -1674,21 +1664,13 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "reverb.preset") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value;
         if (v < -1) return AURADSP_E_PARAM;
-        const int32_t saved = h->p.reverb_preset.load(std::memory_order_relaxed);
-        double ms = 0.0; bool over = false;
-        if (v != saved) {
+        /* ADR-006：不再因延迟档拒绝混响，混响可自由启用。 */
+        if (v != h->p.reverb_preset.load(std::memory_order_relaxed)) {
             h->p.reverb_preset.store(v);
-            compute_latency(h, &ms, &over);
-            /* ADR-002 守卫：T2 效果禁止在实时/音乐档启用（UI 应置灰，此处兜底） */
-            if (v >= 0 && over) {
-                h->p.reverb_preset.store(saved);
-                set_error(h, "latency guard: reverb is T2, switch to quality mode first");
-                return AURADSP_E_LATENCY_GUARD;
-            }
+            compute_latency(h, &h->latency_ms);
         }
         if (h->open.load()) apply_reverb(h);   /* 只动混响链 */
-        compute_latency(h, &ms, &over);        /* 刷新延迟读数（开启/关闭都回落正确） */
-        h->latency_ms = ms;
+        compute_latency(h, &h->latency_ms);  /* 刷新延迟读数（开启/关闭都回落正确） */
         return AURADSP_OK;
     }
     if (!strcmp(id, "stereo.mix") && bytes >= 4) {
@@ -1758,18 +1740,10 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strcmp(id, "mode.latency") && bytes >= 4) {
-        const int32_t v = *(const int32_t*)value;
-        if (v < 0 || v > 2) return AURADSP_E_PARAM;
-        const int32_t old = h->p.latency_mode.exchange(v);
-        double ms; bool over = false;
-        if (!compute_latency(h, &ms, &over)) {
-            /* 组合超档：回滚（UI 需先关闭 T2 效果再切档） */
-            h->p.latency_mode.store(old);
-            set_error(h, "latency guard: disable T2 effects (reverb) before switching");
-            return AURADSP_E_LATENCY_GUARD;
-        }
-        h->latency_ms = ms;
-        return AURADSP_OK;
+        /* ADR-006：延迟档已撤销，该参数不再是合法入参。
+         * 明确返回 PARAM（而非静默忽略），让「旧版 UI 下发延迟档」成为可诊断错误。 */
+        set_error(h, "mode.latency removed by ADR-006 (latency is measurement-only)");
+        return AURADSP_E_PARAM;
     }
     if (!strcmp(id, "channels.mode") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value;
@@ -1843,17 +1817,9 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             set_error(h, "未加载脉冲响应：请先在 03 卡片点击「打开 IR」选择 .wav 文件，再启用卷积混响");
             return AURADSP_E_STATE;
         }
-        const int32_t old = h->p.conv_enable.exchange(v);
-        double ms = 0.0; bool over = false;
-        if (v && !compute_latency(h, &ms, &over)) {
-            /* ADR-002：卷积是 T2，实时/音乐档拒绝 */
-            h->p.conv_enable.store(old);
-            set_error(h, "latency guard: convolver is T2, switch to quality mode first");
-            return AURADSP_E_LATENCY_GUARD;
-        }
+        h->p.conv_enable.store(v);
         if (h->open.load()) apply_convolver(h);
-        compute_latency(h, &ms, &over);
-        h->latency_ms = ms;
+        compute_latency(h, &h->latency_ms);
         return AURADSP_OK;
     }
     if (!strcmp(id, "convolver.ir.path")) {
@@ -2034,18 +2000,12 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         }
         return AURADSP_OK;
     }
-    /* ---- M5-c 参数化混响（T2 守卫与 reverb 同策略） ---- */
+    /* ---- M5-c 参数化混响 ---- */
     if (!strcmp(id, "freeverb.enable") && bytes >= 4) {
+        /* ADR-006：不再因延迟档拒绝，可自由启用。 */
         const int32_t v = *(const int32_t*)value ? 1 : 0;
-        const int32_t old = h->p.fv_enable.exchange(v);
-        double ms = 0.0; bool over = false;
-        if (v && !compute_latency(h, &ms, &over)) {
-            h->p.fv_enable.store(old);
-            set_error(h, "latency guard: reverb-class effect, switch to quality mode first");
-            return AURADSP_E_LATENCY_GUARD;
-        }
-        compute_latency(h, &ms, &over);
-        h->latency_ms = ms;
+        h->p.fv_enable.store(v);
+        compute_latency(h, &h->latency_ms);
         return AURADSP_OK;
     }
     if (!strcmp(id, "freeverb.decay") && bytes >= 4) {
@@ -2075,9 +2035,7 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) {
         h->p.xfeed_enable.store(*(const int32_t*)value ? 1 : 0);
         if (h->open.load()) apply_crossfeed(h);
-        double ms; bool over;
-        compute_latency(h, &ms, &over);   /* T1：超实时档总预算时 UI 会看到延迟徽标变色 */
-        h->latency_ms = ms;
+        compute_latency(h, &h->latency_ms);
         return AURADSP_OK;
     }
     set_error(h, "unknown param id");
@@ -2102,7 +2060,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "eq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.limiter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "post.gain") && bytes >= 4) { *(float*)out_value = h->p.post_gain.load(); return AURADSP_OK; }
-    if (!strcmp(id, "mode.latency") && bytes >= 4) { *(int32_t*)out_value = h->p.latency_mode.load(); return AURADSP_OK; }
+    /* mode.latency 已由 ADR-006 移除：回读同样明确报错，不返回陈旧值。 */
+    if (!strcmp(id, "mode.latency") && bytes >= 4) { return AURADSP_E_PARAM; }
     if (!strcmp(id, "channels.mode") && bytes >= 4) { *(int32_t*)out_value = h->p.channels_mode.load(); return AURADSP_OK; }
     /* ---- Liveprog 回读（v1.1） ---- */
     if (!strcmp(id, "liveprog.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.lp_enable.load(); return AURADSP_OK; }
@@ -2189,8 +2148,8 @@ auradsp_state auradsp_get_state(auradsp_handle h) {
 
 double auradsp_get_latency_ms(auradsp_handle h) {
     if (!h) return 0;
-    double ms; bool over = false;
-    compute_latency(h, &ms, &over);
+    double ms = 0.0;
+    compute_latency(h, &ms);
     return ms;
 }
 

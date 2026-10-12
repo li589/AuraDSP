@@ -74,7 +74,6 @@ def new_engine(rate=48000.0, block=2048):
     if not h:
         print("FATAL: auradsp_create failed")
         sys.exit(1)
-    set_i32(h, "mode.latency", 2)
     return h
 
 
@@ -107,7 +106,6 @@ with open(ir_path, "wb") as f:
 
 h = new_engine()
 set_i32(h, "channels.mode", 0)
-set_i32(h, "mode.latency", 2)
 
 rc, v = get_f32(h, "gate.maxIrSeconds")
 check(rc == 0 and abs(v - 30.0) < 1e-4, f"gate.maxIrSeconds 默认 30s (got {v})")

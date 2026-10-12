@@ -22,7 +22,6 @@ class AppConfig {
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
-  int defaultLatencyMode;
 
   // 界面与记忆参数
   String locale;
@@ -44,8 +43,7 @@ class AppConfig {
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
-    this.defaultLatencyMode = 2,
-    this.locale = 'zh',
+        this.locale = 'zh',
     this.themeId = 'auraDark',
     this.autoRestoreSession = true,
     this.autoSaveDebounceMs = 500,
@@ -68,8 +66,7 @@ class AppConfig {
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
-      defaultLatencyMode: (audio['defaultLatencyMode'] as num?)?.toInt() ?? 2,
-      locale: (ui['locale'] as String?) ?? 'zh',
+            locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
@@ -94,8 +91,7 @@ class AppConfig {
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,
           'stereoWidenMax': stereoWidenMax,
-          'defaultLatencyMode': defaultLatencyMode,
-        },
+                  },
         'ui': {
           'locale': locale,
           'themeId': themeId,

@@ -42,14 +42,16 @@
 
 ## 2. 引擎形态矩阵（驱动层）
 
-| 平台 | 形态 | 载体 | 注入方式 | 全局性 | 延迟档 | 状态 |
+| 平台 | 形态 | 载体 | 注入方式 | 全局性 | 延迟口径 | 状态 |
 |---|---|---|---|---|---|---|
 | Android | **(Root)** | KSU/Magisk 模块 `auradsp_jdsp` | AIDL effects HAL 注入 audio HAL | 系统全局 | HAL 管线 | ✅ v0.4.0 已验证 |
-| Android | **(Rootless)** | APK 内置 `.so` | AudioEffect 挂 audio session / 进程内 FFI | 应用会话级 | ≤10ms | Phase 6 |
-| **Windows** | **(Desktop)** v1 | `auradsp_engine.dll` + WASAPI 共享模式播放链 | 应用内播放/loopback 链路 | 进程级 | ≤10ms | **← 本次 Win11 首版** |
+| Android | **(Rootless)** | APK 内置 `.so` | AudioEffect 挂 audio session / 进程内 FFI | 应用会话级 | 纯测量上报 | Phase 6 |
+| **Windows** | **(Desktop)** v1 | `auradsp_engine.dll` + WASAPI 共享模式播放链 | 应用内播放/loopback 链路 | 进程级 | 纯测量上报 | **← 本次 Win11 首版** |
 | Windows | (Desktop) v2 | SFX APO（挂声卡驱动） | APO 注册（需签名） | 系统全局 | in-place | Phase 7b |
-| Linux | (Desktop) | PipeWire filter-chain / 脉冲模块 | 会话管理器加载 | 用户会话级 | ≤10ms | Phase 7 |
+| Linux | (Desktop) | PipeWire filter-chain / 脉冲模块 | 会话管理器加载 | 用户会话级 | 纯测量上报 | Phase 7 |
 | macOS | (Desktop) | CoreAudio + AudioUnit | AU 插件/驱动 | 应用级起步 | — | 低优先级 |
+
+> 「延迟口径」列原为延迟档承诺值。ADR-006 起延迟不再设档位准入，统一为纯测量上报。
 
 **Windows 系统级的诚实结论**（写进决策，不糊弄）：纯用户态无法对"所有应用"做无驱动低延迟处理。全局路径 = SFX APO（需要代码签名，可先走测试签名验证）或虚拟声卡（需要驱动签名）。因此 Win11 首版以**进程级真实链路**交付：内置播放器 → AuraDSP 引擎 → WASAPI 输出，链路真实可听、延迟真实可测，UI 与协议与最终 APO 形态完全一致——APO 只是换掉"音频进引擎的那一截"。
 
@@ -85,31 +87,34 @@ uint32_t auradsp_viz_read(auradsp_handle, auradsp_viz_frame* out, uint32_t max);
 
 参数 ID 首批（与 Android 已验证的 VendorParamId 对齐并扩展）：`bass.enable/bass.gain/reverb.preset/stereo.mix/eq.enable/eq.bands/post.gain/limiter.enable/crossfeed.amount/tube.enable/convolver.ir/...`
 
-## 4. 商业级延迟预算（48 kHz 基准，1ms = 48 帧）
+## 4. 延迟预算（48 kHz 基准，1ms = 48 帧）
+
+> ⚠️ **本节的三档模式已于 2026-10-12 由 [ADR-006](adr/ADR-006-remove-latency-tier-gating.md) 撤销。**
+> 延迟在本产品中是**测量量与展示量，不是准入闸门**：所有效果可自由使能，
+> 不存在「因延迟拒绝」的失败路径。下表保留为**延迟实测台账**（tier 列为历史标注，不参与判定）。
 
 libjamesdsp 各模块算法延迟实测/推算（代码依据：`jdsp_header.h` FFTSIZE_DRS=8192、`TwoStageFFTConvolver`、`sf_reverb`）：
 
-| 模块 | 算法 | 附加延迟 | 档位 |
+| 模块 | 算法 | 附加延迟 | 历史档位标注 |
 |---|---|---|---|
-| MultimodalEQ | IIR biquad 级联 | ≈0 | **T0** |
-| BassBoost(DBB) | IIR | ≈0 | **T0** |
-| VacuumTube | 波形整形 | ≈0 | **T0** |
-| StereoEnhancement | 全通/短 FIR | <1ms | **T0** |
-| Limiter + PostGain | 前瞻限幅 | 1~5ms | **T0** |
-| Crossfeed | FIR 短头 | 2~5ms | **T1** |
-| DDC | FIR（冲激长度定） | 数 ms~20ms | **T1** |
-| Convolver | IR 卷积 | = IR 长度 | **T2** |
-| Reverb | 预延迟 + 梳状 | 20~120ms | **T2** |
-| Compressor(FFTCompander) | **FFT 8192 OLA** | **~85–170ms** | **T2（低延迟模式禁用）** |
-| ArbMag | FFTConvolver2x2 | 分块延迟 | **T2** |
+| MultimodalEQ | IIR biquad 级联 | ≈0 | T0 |
+| BassBoost(DBB) | IIR | ≈0 | T0 |
+| VacuumTube | 波形整形 | ≈0 | T0 |
+| StereoEnhancement | 全通/短 FIR | <1ms | T0 |
+| Limiter + PostGain | 前瞻限幅 | 1~5ms | T0 |
+| Crossfeed | FIR 短头 | 2~5ms | T1 |
+| DDC | FIR（冲激长度定） | 数 ms~20ms | T1 |
+| Convolver | IR 卷积 | = IR 长度 | T2 |
+| Reverb | 预延迟 + 梳状 | 20~120ms | T2 |
+| Compressor(FFTCompander) | **FFT 8192 OLA** | **~85–170ms** | T2 |
+| ArbMag | FFTConvolver2x2 | 分块延迟 | T2 |
 
-**三档模式（UI 常显延迟徽标）：**
+**当前口径**：引擎按启用组合**如实累加**并经 `get_latency_ms()` 上报（`compute_latency()` 只测量、
+不回滚、不拒绝）；UI 以底栏总延迟徽标 + 各效果卡的**组件级脉冲响应实测徽标**呈现毫秒级透明度。
+用户无需预判延迟即可开启任何效果。
 
-- **实时**（游戏/直播）：总附加 ≤ 10ms → 只允许 T0，超档效果自动置灰并标注原因；
-- **音乐**（默认）：≤ 30ms → T0 + T1；
-- **品质**（观影/听感优先）：不设限，允许 T2（reverb/convolver/compressor）。
-
-引擎按当前启用组合实时计算 `get_latency_ms()`；这是"商业水平"的硬验收线：**任何预设保存前引擎拒绝超过所选档位预算的组合**。
+撤销理由（用户实测反馈）：切档静默回滚导致选项「按了没反应」，且守卫方向是「先开关、后切档」，
+使「改了档位再开效果」必然撞上超档拒绝——选项与可用性互相锁死。详见 ADR-006 §1。
 
 ## 5. 多声道方案（stereo 引擎 × 声道矩阵）
 
@@ -199,7 +204,8 @@ JamesDSP/
    - 控制页：BassBoost / Reverb 预设 / StereoWiden / PostGain / EQ 开关（对齐 Android 已验证参数集）；
    - 内置播放器（WAV/FLAC → 引擎 → WASAPI 输出），A/B 旁路按钮；
    - 频谱可视化（SPSC ring → CustomPaint）；
-   - 三主题切换 + zh/en 双语 + 延迟模式三档（实时/音乐/品质，超档置灰）。
+   - 三主题切换 + zh/en 双语 + 延迟**测量展示**（总延迟徽标 + 各效果组件级脉冲实测徽标）。
+     注：延迟模式三档已由 ADR-006 移除。
 3. 桌面引擎延迟实测报告（WASAPI 事件对 + 引擎附加延迟）。
 
 ## 10. 路线图合并（更新产品架构总览 §8）

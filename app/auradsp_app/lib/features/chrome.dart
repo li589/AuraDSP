@@ -16,6 +16,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import 'package:flutter/scheduler.dart';
+
 import '../core/design.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
@@ -258,23 +260,80 @@ class AmbientSpectrum extends StatefulWidget {
   State<AmbientSpectrum> createState() => _AmbientSpectrumState();
 }
 
-class _AmbientSpectrumState extends State<AmbientSpectrum> {
+class _AmbientSpectrumState extends State<AmbientSpectrum>
+    with SingleTickerProviderStateMixin {
+  /// 驱动 painter 重绘的时钟。音频停止后引擎不再产出 viz 帧，
+  /// 而 painter 的 repaint 原本只挂在 spectrum 上 → 画面定格在最后一帧。
+  /// 由看门狗在「无新帧」时拨动它，配合 painter 内部的快速衰减归零。
+  final ValueNotifier<int> _clock = ValueNotifier<int>(0);
+
   late _AmbientPainter _painter = _AmbientPainter(
     spectrum: widget.spectrum,
     palette: widget.palette,
+    clock: _clock,
   );
+
+  Ticker? _watchdog;
+  int _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
+
+  /// 超过该时长没有新频谱帧即判定为「无信号」（音频停止/欠载）。
+  static const _staleMs = 200;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.spectrum.addListener(_onFrame);
+  }
+
+  /// 看门狗只在「有东西可能变陈旧」时跑：柱子已全部归零则完全不占用帧回调。
+  void _ensureTicking() {
+    _watchdog ??= createTicker(_onTick)..start();
+  }
+
+  void _stopTicking() {
+    _watchdog?.stop();
+    _watchdog?.dispose();
+    _watchdog = null;
+  }
+
+  void _onFrame() {
+    _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
+    // 恢复真实信号：下一帧 paint 会重新按 spectrum 重采样。
+    _painter.clearStale();
+    _ensureTicking();
+  }
+
+  void _onTick(Duration _) {
+    final idle = DateTime.now().millisecondsSinceEpoch - _lastFrameMs;
+    if (idle < _staleMs) {
+      // 仍有信号；但若柱子已全平，也无需继续监视。
+      if (_painter.maxValue <= 0) _stopTicking();
+      return;
+    }
+    // stale 期间不再吃陈旧的 spectrum 值（否则会被重新抬高、永不归零），
+    // 只做快速衰减；返回 false 表示已衰减干净，停表。
+    if (_painter.decayStale()) {
+      _clock.value++;
+    } else {
+      _stopTicking();
+    }
+  }
 
   @override
   void didUpdateWidget(AmbientSpectrum old) {
     super.didUpdateWidget(old);
     if (widget.palette != old.palette) {
       // 换主题时换 painter 实例以触发重绘，同时保留平滑缓冲
-      _painter = _painter.withPalette(widget.palette);
+      _painter.dispose();
+      _painter = _painter.withPalette(widget.palette, clock: _clock);
     }
   }
 
   @override
   void dispose() {
+    _stopTicking();
+    widget.spectrum.removeListener(_onFrame);
+    _clock.dispose();
     _painter.dispose();
     super.dispose();
   }
@@ -287,11 +346,56 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
       );
 }
 
+/// 氛围频谱包络：32 带引擎频谱 → 72 根氛围条的重采样 + 攻击/释放平滑 +
+/// 无信号期快速衰减。独立成类以便单测直接断言「音频停止后归零」。
+class AmbientEnvelope {
+  static const int bars = 72;
+  static const double release = 0.82;     // 有信号时的释放系数
+  static const double staleDecay = 0.70;  // 无信号时的快速衰减
+  static const double epsilon = 0.0008;
+
+  final List<double> smooth = List.filled(bars, 0);
+
+  /// 无信号（音频停止/欠载）状态。为 true 时不再重采样陈旧数据——
+  /// 否则最后一帧的高值会把 smooth 反复抬回去，永远不归零。
+  bool stale = false;
+
+  /// 喂入一帧真实频谱（32 带）。走 VizBands 对数刻度重采样；
+  /// 旧实现用 pow(t, 1.6) 幂律，会把低频拉宽、高频压扁。
+  void feed(List<double> src) {
+    stale = false;
+    if (src.isEmpty) return;
+    for (var i = 0; i < bars; i++) {
+      final t = i / (bars - 1);
+      final idx = VizBands.sampleIndex(t);
+      final v = src[idx.round().clamp(0, src.length - 1)].clamp(0.0, 1.0);
+      smooth[i] = math.max(v, smooth[i] * release);
+    }
+  }
+
+  /// 无信号期：只做衰减，不吃陈旧数据。返回是否仍有残留（false=已归零）。
+  bool decay() {
+    stale = true;
+    var any = false;
+    for (var i = 0; i < bars; i++) {
+      if (smooth[i] > epsilon) {
+        smooth[i] *= staleDecay;
+        any = true;
+      } else {
+        smooth[i] = 0;
+      }
+    }
+    return any;
+  }
+
+  double get maxValue => smooth.fold<double>(0.0, math.max);
+}
+
 class _AmbientPainter extends CustomPainter {
-  static const _bars = 72;
   final ValueListenable<List<double>> spectrum;
-  final List<double> _smooth = List.filled(_bars, 0);
-  AuraPalette palette;
+  final AuraPalette palette;
+  final ValueListenable<int> clock;
+  final AmbientEnvelope _env = AmbientEnvelope();
 
   /// 低分图缓存：把 72 根柱子画进一张约 1/10 分辨率的离屏图，再放大绘制。
   /// 放大自带双线性平滑（等价于廉价模糊），彻底移除原来「每柱一次
@@ -304,29 +408,40 @@ class _AmbientPainter extends CustomPainter {
   int _lastRenderMs = 0;
   static const _renderIntervalMs = 66;
 
-  _AmbientPainter({required this.spectrum, required this.palette})
-      : super(repaint: spectrum);
+  _AmbientPainter({
+    required this.spectrum,
+    required this.palette,
+    required this.clock,
+  }) : super(repaint: Listenable.merge([spectrum, clock]));
 
-  _AmbientPainter withPalette(AuraPalette p) {
-    final n = _AmbientPainter(spectrum: spectrum, palette: p);
-    for (var i = 0; i < _bars; i++) {
-      n._smooth[i] = _smooth[i];
+  _AmbientPainter withPalette(AuraPalette p,
+      {required ValueListenable<int> clock}) {
+    final n = _AmbientPainter(spectrum: spectrum, palette: p, clock: clock);
+    for (var i = 0; i < AmbientEnvelope.bars; i++) {
+      n._env.smooth[i] = _env.smooth[i];
     }
     return n;
   }
 
+  void clearStale() => _env.stale = false;
+
+  double get maxValue => _env.maxValue;
+
+  /// 无信号期衰减；返回是否仍有残留（false = 已衰减干净，可停止看门狗）。
+  bool decayStale() {
+    final any = _env.decay();
+    // 强制下一次 paint 重建低分图，否则画布仍是衰减前的旧图。
+    _lastRenderMs = 0;
+    return any;
+  }
+
   @override
   void paint(Canvas canvas, Size size) {
-    final src = spectrum.value;
-    if (src.isEmpty) return;
-
-    // 对数频段重采样：32 条引擎对数带 -> 72 根氛围条，横坐标必须走 VizBands 的
-    // 对数刻度。旧实现用 pow(t, 1.6) 幂律，把低频拉宽、高频压扁。
-    for (var i = 0; i < _bars; i++) {
-      final t = i / (_bars - 1);
-      final idx = VizBands.sampleIndex(t);
-      final v = src[idx.round().clamp(0, src.length - 1)].clamp(0.0, 1.0);
-      _smooth[i] = math.max(v, _smooth[i] * 0.82);
+    if (_env.stale) {
+      // 无信号：只衰减，不重采样陈旧数据（否则被最后一帧抬回、永不归零）。
+      _env.decay();
+    } else {
+      _env.feed(spectrum.value);
     }
 
     // 节流重渲染低分图；绘制始终走缓存图。
@@ -348,12 +463,12 @@ class _AmbientPainter extends CustomPainter {
   }
 
   void _drawBars(Canvas canvas, Size size) {
-    final peak = math.max(0.35, _smooth.reduce(math.max));
+    final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
     final baseAlpha = (0.16 * intensity * 255).round();
-    final bw = size.width / _bars;
-    for (var i = 0; i < _bars; i++) {
-      final v = (_smooth[i] / peak).clamp(0.0, 1.0);
+    final bw = size.width / AmbientEnvelope.bars;
+    for (var i = 0; i < AmbientEnvelope.bars; i++) {
+      final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * size.height * 0.92;
       final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.62, h);

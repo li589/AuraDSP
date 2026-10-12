@@ -71,7 +71,6 @@ def main():
         if not h:
             print("  create failed")
             return 1
-        set_i32(h, "mode.latency", 2)
         iters = 3000 if frames == 480 else 800
         reps = 5
 
@@ -103,7 +102,6 @@ def main():
     h = ctypes.c_void_p(lib.auradsp_create(ctypes.c_float(SR), 2048))
     curve = "".join(f"{20*(1.44**i):.1f}:{0.1*(i%5-2):.1f};" for i in range(15))
     cb = ctypes.create_string_buffer(curve.encode())
-    set_i32(h, "mode.latency", 2); set_i32(h, "eq.enable", 1)
     lib.auradsp_set_param(h, b"eq.curve", ctypes.cast(cb, ctypes.c_void_p), len(curve))
     best = float("inf")
     for _ in range(5):

@@ -242,7 +242,10 @@ effect.list      /* 枚举内建效果（把 vendor 里 11 个效果全部登记
 ```
 
 - 引擎内部从"固定链"改为 **EffectSlot[ ] 动态链**：每槽位 = `{kind, params, bypassFlag}`，process 循环按序调各槽的 process 指针（libjamesdsp 各效果本就是 `Enable/Disable/SetParam/Process` 四件套，包装成槽位是机械工作）。
-- **延迟预算联动**：`get_latency_ms()` 改为 Σ(启用槽位延迟)，ADR-002 三档守卫自动适配（图超预算 → 拒绝该节点启用并指名原因）。
+- **延迟测量联动**：`get_latency_ms()` 改为 Σ(启用槽位延迟) 并如实上报。
+  **不再有「超预算 → 拒绝该节点启用」的守卫**——该守卫随 ADR-002 于
+  [ADR-006](adr/ADR-006-remove-latency-tier-gating.md) 一并撤销；超出用户预期时以徽标数值呈现，
+  而非阻断使用。
 - 兼容策略：v1 的扁平参数保留为"主链上固定 5 效果"的糖（UI 旧页面照常工作），v2 起新页面走 graph.*。
 
 ### 4.4 UI 信息架构落地
