@@ -47,8 +47,19 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       _ => id,
     };
 
-const String kDefaultOrder =
-    'tube,comp,bass,eq,arbmag,convolver,ddc,liveprog,crossfeed,stereo,reverb,output';
+const List<String> kDefaultCoreOrder = [
+  'tube',
+  'comp',
+  'bass',
+  'eq',
+  'arbmag',
+  'convolver',
+  'ddc',
+  'liveprog',
+  'crossfeed',
+  'stereo',
+  'reverb',
+];
 
 class ChainPage extends StatefulWidget {
   final AppModel model;
@@ -65,18 +76,25 @@ class _ChainPageState extends State<ChainPage> {
   @override
   void initState() {
     super.initState();
-    _order = (widget.model.graphOrder ?? kDefaultOrder).split(',');
+    final raw = (widget.model.graphOrder ?? kDefaultCoreOrder.join(',')).split(',');
+    _order = raw.where((id) => id != 'output' && id != 'input' && kDefaultCoreOrder.contains(id)).toList();
+    for (final id in kDefaultCoreOrder) {
+      if (!_order.contains(id)) {
+        _order.add(id);
+      }
+    }
   }
 
   void _apply() {
-    final order = _order.join(',');
-    widget.model.setGraphOrder(order);
+    // 引擎底层强校验必须恰好包含全部 12 个 stages（包括 output），output 顺序钉死在末尾
+    final fullOrder = '${_order.join(',')},output';
+    widget.model.setGraphOrder(fullOrder);
     setState(() => _dirty = false);
   }
 
   void _reset() {
     setState(() {
-      _order = kDefaultOrder.split(',');
+      _order = List<String>.from(kDefaultCoreOrder);
       _dirty = true;
     });
   }
@@ -208,32 +226,7 @@ class _ChainPageState extends State<ChainPage> {
               ),
             ),
           ),
-          // 信号流参照（处理顺序的可视化，只读）
-          SectionCard(
-            title: l10nOf(context).chainFlowTitle,
-            child: Wrap(
-              spacing: AuraSpace.xs + 2,
-              runSpacing: AuraSpace.xs + 2,
-              children: [
-                for (var i = 0; i < _order.length; i++) ...[
-                  if (i > 0)
-                    Icon(Icons.arrow_forward_rounded,
-                        size: 12, color: p.textDim.withValues(alpha: 0.5)),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpace.sm, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: p.panelRaised,
-                      borderRadius: BorderRadius.circular(AuraRadius.xs),
-                      border: Border.all(color: p.hairline),
-                    ),
-                    child: Text(_order[i],
-                        style: monoOf(p, size: 10, color: p.textDim)),
-                  ),
-                ],
-              ],
-            ),
-          ),
+
           // M1 第三方插件插槽状态与处理链插入阶段调整
           SectionCard(
             title: l10nOf(context).chainVstTitle,
@@ -384,6 +377,8 @@ class _PluginStageTopologyView extends StatelessWidget {
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
+              stageNode(-6, l10nOf(context).chainNodeInput, isCore: true),
+              _flowArrow(p),
               stageNode(PluginInsertStage.preDsp, l10nOf(context).chainStagePreDsp),
               _flowArrow(p),
               stageNode(-1, l10nOf(context).chainNodeShelf, isCore: true),
@@ -402,7 +397,9 @@ class _PluginStageTopologyView extends StatelessWidget {
               _flowArrow(p),
               stageNode(PluginInsertStage.postLimiter, l10nOf(context).chainStagePostLimiter),
               _flowArrow(p),
-              stageNode(-5, l10nOf(context).chainNodeOutput, isCore: true),
+              stageNode(-5, l10nOf(context).chainNodeOutputGate, isCore: true),
+              _flowArrow(p),
+              stageNode(-7, l10nOf(context).chainNodeOutput, isCore: true),
             ],
           ),
         ],
