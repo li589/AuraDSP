@@ -97,6 +97,23 @@ public:
      * 两个具体类必须覆写为「已在泵线程，直接执行收尾」的版本；绝不可
      * 默认转发 closeEditor()（那会 postTaskAndWait 到当前线程 → 死锁）。 */
     virtual void onEditorWmClose() {}
+
+    /* C4（2026-10-12）：编辑器尺寸稳定化轮询。容器 WndProc 收到
+     * WM_SIZE 时会把子窗口铺满客户区（根治"子窗口不随容器长大"）；但
+     * 部分插件（iZotope RX 系列为代表）在 attached / set_parent 之后仍
+     * 会**异步**布局，真实尺寸在几十到几百毫秒后才稳定。宿主用一个短命
+     * 定时器（100ms 一次，最多 6 次）反复调用本方法重新取插件自报尺寸，
+     * 尺寸变化即同步容器与子窗口。默认空实现。
+     * 线程契约：在 plugin main 线程（泵线程）上被调用。 */
+    virtual void pollEditorSize() {}
+
+    /* C4（2026-10-12）：容器窗口收到 WM_SIZE 时回调。
+     * 规格差异：VST3 规范要求宿主调 `view->onSize(newSize)`，由插件自己
+     * 改它的子窗口；CLAP 规范要求宿主直接把子窗口 resize 到客户区。
+     * 无参——两个实现都用 GetClientRect 取新尺寸（不依赖 WM_SIZE 的
+     * MAKELPARAM，那在 DPI 感知窗口的缩放通知里可能带 -1）。
+     * 默认空实现。线程契约：在 plugin main 线程（泵线程）上被调用。 */
+    virtual void onEditorResize() {}
 };
 
 class PluginScanner {
