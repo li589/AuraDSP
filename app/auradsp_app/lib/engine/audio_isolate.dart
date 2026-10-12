@@ -697,6 +697,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
+            final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
+            final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
             List<List<double>>? readIrSpectrum(int ch) {
               if (ch <= 0 || ch > 8) return null;
               final count = ch * 32;
@@ -755,9 +757,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
                 'fvWet': rdFloat(iFvW) ?? 0.3,
                 'fvDry': rdFloat(iFvDr) ?? 1.0,
+                'compEnable': rdInt(iCpE) ?? 0,
+                'compTimeconstant': rdFloat(iCpT) ?? 0.14,
+                'compGranularity': rdInt(iCpG) ?? 1,
+                'compTfresolution': rdInt(iCpR) ?? 1,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR]) {
                 malloc.free(q);
               }
             }

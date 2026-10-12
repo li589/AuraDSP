@@ -18,12 +18,12 @@ import 'widgets.dart';
 /// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
 const List<({String id, bool exposed})> kStageMeta = [
   (id: 'tube', exposed: true),
-  (id: 'comp', exposed: false),
+  (id: 'comp', exposed: true),
   (id: 'bass', exposed: true),
   (id: 'eq', exposed: true),
   (id: 'arbmag', exposed: false),
   (id: 'convolver', exposed: true),
-  (id: 'ddc', exposed: false),
+  (id: 'ddc', exposed: true),
   (id: 'liveprog', exposed: true),
   (id: 'crossfeed', exposed: true),
   (id: 'stereo', exposed: true),
@@ -39,6 +39,7 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'eq' => l.stEq,
       'arbmag' => l.stArbmag,
       'convolver' => l.stConv,
+      'ddc' => l.stDdc,
       'liveprog' => l.stScript,
       'crossfeed' => l.stXfeed,
       'stereo' => l.stStereo,
@@ -119,9 +120,12 @@ class _ChainPageState extends State<ChainPage> {
                 ),
               AuraChip(l10nOf(context).chainReset, icon: Icons.restart_alt_rounded, onTap: _reset),
             ]),
-            child: SizedBox(
-              height: 56.0 * _order.length + 12,
-              child: ReorderableListView.builder(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  height: 56.0 * _order.length + 12,
+                  child: ReorderableListView.builder(
                 buildDefaultDragHandles: false,
                 itemCount: _order.length,
                 onReorder: (oldI, newI) { // ignore: deprecated_member_use
@@ -225,7 +229,11 @@ class _ChainPageState extends State<ChainPage> {
                 },
               ),
             ),
-          ),
+            const SizedBox(height: AuraSpace.md),
+            // 完整实际处理链路顺序流图（顺序钉死的输入门控 -> 动态核心节点 -> 顺序钉死的输出门控）
+            _FullChainOrderFlowView(order: _order, model: widget.model),
+          ]),
+        ),
 
           // M1 第三方插件插槽状态与处理链插入阶段调整
           SectionCard(
@@ -234,11 +242,7 @@ class _ChainPageState extends State<ChainPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 1. 全局音效链路阶段拓扑流示意
-                _PluginStageTopologyView(manager: widget.model.pluginManager),
-                const SizedBox(height: AuraSpace.md),
-
-                // 2. 双插槽独立控制卡片列表
+                // 双插槽独立控制卡片列表（插入阶段由卡片内下拉菜单精确调整）
                 for (var s = 0; s < PluginManager.kMaxSlots; s++) ...[
                   _PluginSlotChainCard(
                     model: widget.model,
@@ -256,106 +260,22 @@ class _ChainPageState extends State<ChainPage> {
   }
 }
 
-/// 全局音效链路阶段拓扑流示意组件
-class _PluginStageTopologyView extends StatelessWidget {
-  final PluginManager manager;
-  const _PluginStageTopologyView({required this.manager});
+/// 完整实际音频处理链路顺序流图组件（展示首尾钉死门控与中间动态节点）
+class _FullChainOrderFlowView extends StatelessWidget {
+  final List<String> order;
+  final AppModel model;
+
+  const _FullChainOrderFlowView({required this.order, required this.model});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-
-    Widget stageNode(int stage, String name, {bool isCore = false}) {
-      final activeSlots = <int>[];
-      for (var s = 0; s < PluginManager.kMaxSlots; s++) {
-        if (manager.isSlotActive(s) && manager.getSlotStage(s) == stage) {
-          activeSlots.add(s);
-        }
-      }
-      final hasActivePlugin = activeSlots.isNotEmpty;
-
-      // 框体即语义：插件插入位用胶囊形 + 强调色细边（含插头图标），
-      // 与内置核心节点的直角细框一眼可辨，不再用“阶段 x”文字赘述。
-      final frame = isCore
-          ? BoxDecoration(
-              color: p.panelRaised,
-              borderRadius: BorderRadius.circular(AuraRadius.xs),
-              border: Border.all(color: p.hairline),
-            )
-          : BoxDecoration(
-              color: hasActivePlugin
-                  ? p.accent.withValues(alpha: 0.15)
-                  : p.panel,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: hasActivePlugin
-                    ? p.accent
-                    : p.accent.withValues(alpha: 0.45),
-                width: hasActivePlugin ? 1.5 : 1.0,
-              ),
-            );
-
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: frame,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (!isCore)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 3),
-                    child: Icon(Icons.power_rounded,
-                        size: 10,
-                        color: hasActivePlugin ? p.accent : p.textDim),
-                  ),
-                Text(
-                  name,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: isCore ? FontWeight.bold : FontWeight.w500,
-                    color: hasActivePlugin ? p.accent : p.text,
-                  ),
-                ),
-              ],
-            ),
-            if (hasActivePlugin) ...[
-              const SizedBox(height: 2),
-              Wrap(
-                spacing: 2,
-                children: activeSlots.map((s) {
-                  final meta = manager.getSlotPlugin(s);
-                  return Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: p.accent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    child: Text(
-                      'S${s + 1}:${meta?.name ?? ""}',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.bold,
-                        color: p.accentContrast,
-                      ),
-                    ),
-                  );
-                }).toList(),
-              ),
-            ],
-          ],
-        ),
-      );
-    }
+    final l = l10nOf(context);
 
     return Container(
-      padding: const EdgeInsets.all(AuraSpace.sm + 2),
+      padding: const EdgeInsets.all(AuraSpace.sm + 3),
       decoration: BoxDecoration(
-        color: p.panel,
+        color: p.panelRaised.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
         border: Border.all(color: p.hairline),
       ),
@@ -364,42 +284,72 @@ class _PluginStageTopologyView extends StatelessWidget {
         children: [
           Row(
             children: [
-              Icon(Icons.timeline_rounded, size: 14, color: p.accent),
+              Icon(Icons.route_rounded, size: 14, color: p.accent),
               const SizedBox(width: 4),
-              Text(l10nOf(context).chainFlowCaption,
-                  style: monoOf(p, size: 10.5, color: p.textDim)),
+              Text(
+                l.chainFlowCaption,
+                style: monoOf(p, size: 11, color: p.textDim).copyWith(fontWeight: FontWeight.bold),
+              ),
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
-          // 窄屏自动换行，不断尾：宽屏仍是一行，窄屏折成多行。
           Wrap(
-            spacing: 4,
+            spacing: 5,
             runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              stageNode(-6, l10nOf(context).chainNodeInput, isCore: true),
+              // 1. 输入门控（常驻钉死首位）
+              _flowNode(
+                p: p,
+                label: l.chainNodeInput,
+                isFixed: true,
+                isActive: true,
+                tag: '首位钉死',
+              ),
               _flowArrow(p),
-              stageNode(PluginInsertStage.preDsp, l10nOf(context).chainStagePreDsp),
+
+              // 2. 核心动态音效节点（按用户拖拽顺序实时展示）
+              for (var i = 0; i < order.length; i++) ...[
+                () {
+                  final id = order[i];
+                  final label = stageLabelOf(l, id);
+                  final isEnabled = model.isStageEnabled(id);
+                  return _flowNode(
+                    p: p,
+                    label: '${i + 1}.$label',
+                    isFixed: false,
+                    isActive: isEnabled,
+                  );
+                }(),
+                _flowArrow(p),
+              ],
+
+              // 3. 输出门控（常驻钉死末位）
+              _flowNode(
+                p: p,
+                label: l.chainNodeOutputGate,
+                isFixed: true,
+                isActive: true,
+                tag: '末位钉死',
+              ),
               _flowArrow(p),
-              stageNode(-1, l10nOf(context).chainNodeShelf, isCore: true),
+
+              // 4. 主限幅器
+              _flowNode(
+                p: p,
+                label: l.chainNodeLimiter,
+                isFixed: true,
+                isActive: model.limiterOn,
+              ),
               _flowArrow(p),
-              stageNode(PluginInsertStage.preVendor, l10nOf(context).chainStagePreVendor),
-              _flowArrow(p),
-              stageNode(-2, l10nOf(context).chainNodeVendor, isCore: true),
-              _flowArrow(p),
-              stageNode(PluginInsertStage.postVendor, l10nOf(context).chainStagePostVendor),
-              _flowArrow(p),
-              stageNode(-3, l10nOf(context).chainNodeReverb, isCore: true),
-              _flowArrow(p),
-              stageNode(PluginInsertStage.postReverb, l10nOf(context).chainStagePostReverb),
-              _flowArrow(p),
-              stageNode(-4, l10nOf(context).chainNodeLimiter, isCore: true),
-              _flowArrow(p),
-              stageNode(PluginInsertStage.postLimiter, l10nOf(context).chainStagePostLimiter),
-              _flowArrow(p),
-              stageNode(-5, l10nOf(context).chainNodeOutputGate, isCore: true),
-              _flowArrow(p),
-              stageNode(-7, l10nOf(context).chainNodeOutput, isCore: true),
+
+              // 5. 最终音频输出
+              _flowNode(
+                p: p,
+                label: l.chainNodeOutput,
+                isFixed: true,
+                isActive: true,
+              ),
             ],
           ),
         ],
@@ -407,11 +357,77 @@ class _PluginStageTopologyView extends StatelessWidget {
     );
   }
 
+  static Widget _flowNode({
+    required AuraPalette p,
+    required String label,
+    required bool isFixed,
+    required bool isActive,
+    String? tag,
+  }) {
+    final bgColor = isFixed
+        ? p.accent.withValues(alpha: 0.12)
+        : (isActive ? p.panel : p.panel.withValues(alpha: 0.5));
+    final borderColor = isFixed
+        ? p.accent.withValues(alpha: 0.6)
+        : (isActive ? p.accent.withValues(alpha: 0.4) : p.hairline);
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 4),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(isFixed ? AuraRadius.xs : 10),
+        border: Border.all(color: borderColor, width: isFixed ? 1.2 : 0.9),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (isFixed)
+            Padding(
+              padding: const EdgeInsets.only(right: 3),
+              child: Icon(Icons.lock_outline_rounded, size: 10, color: p.accent),
+            )
+          else
+            Container(
+              width: 5,
+              height: 5,
+              margin: const EdgeInsets.only(right: 4),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isActive ? p.accent : p.textDim.withValues(alpha: 0.4),
+              ),
+            ),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10.5,
+              fontWeight: isFixed || isActive ? FontWeight.bold : FontWeight.normal,
+              color: isActive ? p.text : p.textDim.withValues(alpha: 0.7),
+            ),
+          ),
+          if (tag != null) ...[
+            const SizedBox(width: 3),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 0.5),
+              decoration: BoxDecoration(
+                color: p.accent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(2),
+              ),
+              child: Text(
+                tag,
+                style: TextStyle(fontSize: 8, color: p.accent, fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
   static Widget _flowArrow(AuraPalette p) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 1.5),
       child: Icon(Icons.arrow_forward_rounded,
-          size: 11, color: p.textDim.withValues(alpha: 0.5)),
+          size: 10.5, color: p.textDim.withValues(alpha: 0.5)),
     );
   }
 }

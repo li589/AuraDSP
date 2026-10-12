@@ -1195,4 +1195,37 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chainVstHint =>
       'Mount multiple slots in parallel; set each plugin\'s insert stage and order on the global chain below.';
+
+  @override
+  String get stDdc => 'VDC Spatial Correction';
+
+  @override
+  String get compTitle => 'Dynamic Compressor';
+
+  @override
+  String get compTimeconstant => 'Time Constant';
+
+  @override
+  String get compGranularity => 'Granularity';
+
+  @override
+  String get compGranularityCoarse => 'Coarse (Low Load)';
+
+  @override
+  String get compGranularityNormal => 'Standard (Balanced)';
+
+  @override
+  String get compGranularityFine => 'Fine (Multi-band)';
+
+  @override
+  String get compTfresolution => 'TF Resolution';
+
+  @override
+  String get compTfresTransient => 'Transient';
+
+  @override
+  String get compTfresBalanced => 'Balanced';
+
+  @override
+  String get compTfresFine => 'High Frequency';
 }

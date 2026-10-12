@@ -39,6 +39,10 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _CompressorCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _BassCard(model: model),
         ),
         ListenableBuilder(
@@ -760,7 +764,119 @@ class _ChannelBalanceBar extends StatelessWidget {
   }
 }
 
-/* ---- 01 Bass (低音增强重构) ---- */
+/* ---- 01 Compressor (动态压限器) ---- */
+
+class _CompressorCard extends StatelessWidget {
+  final AppModel model;
+  const _CompressorCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+
+    return SectionCard(
+      index: '01',
+      title: l.compTitle,
+      collapsed: !model.compOn,
+      latencyMs: model.componentLatency('comp').ms,
+      latencyMeasured: model.componentLatency('comp').measured,
+      latencyProbing: model.isProbingLatency('comp'),
+      onRefreshLatency: () => model.refreshComponentLatency('comp'),
+      latencyTick: model.getComponentLatencyTick('comp'),
+      trailing: AuraSwitch(
+        value: model.compOn,
+        onChanged: model.setCompEnabled,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 响应时常数（Time Constant）主滑块
+          ValueSlider(
+            label: l.compTimeconstant,
+            infoMessage: '控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。',
+            value: model.compTimeconstant,
+            defaultValue: 0.14,
+            min: 0.02,
+            max: 1.0,
+            unit: 's',
+            enabled: model.compOn,
+            format: (v) => '${(v * 1000).toStringAsFixed(0)} ms',
+            onChanged: model.setCompTimeconstant,
+            onChangedEnd: model.setCompTimeconstant,
+            onResetToDefault: () => model.setCompTimeconstant(0.14),
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          AdvancedSection(
+            summary: '${model.compGranularity == 0 ? l.compGranularityCoarse : (model.compGranularity == 1 ? l.compGranularityNormal : l.compGranularityFine)} · ${model.compTfresolution == 0 ? l.compTfresTransient : (model.compTfresolution == 1 ? l.compTfresBalanced : l.compTfresFine)}',
+            builder: (ctx) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 1. 分析颗粒度模式 (Granularity)
+                Row(
+                  children: [
+                    Text(l.compGranularity, style: captionOf(p)),
+                    const Spacer(),
+                    Wrap(
+                      spacing: AuraSpace.sm,
+                      children: [
+                        AuraChoiceChip(
+                          label: l.compGranularityCoarse,
+                          selected: model.compGranularity == 0,
+                          onTap: model.compOn ? () => model.setCompGranularity(0) : null,
+                        ),
+                        AuraChoiceChip(
+                          label: l.compGranularityNormal,
+                          selected: model.compGranularity == 1,
+                          onTap: model.compOn ? () => model.setCompGranularity(1) : null,
+                        ),
+                        AuraChoiceChip(
+                          label: l.compGranularityFine,
+                          selected: model.compGranularity == 2,
+                          onTap: model.compOn ? () => model.setCompGranularity(2) : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                // 2. 时频分辨率 (Time-Frequency Resolution)
+                Row(
+                  children: [
+                    Text(l.compTfresolution, style: captionOf(p)),
+                    const Spacer(),
+                    Wrap(
+                      spacing: AuraSpace.sm,
+                      children: [
+                        AuraChoiceChip(
+                          label: l.compTfresTransient,
+                          selected: model.compTfresolution == 0,
+                          onTap: model.compOn ? () => model.setCompTfresolution(0) : null,
+                        ),
+                        AuraChoiceChip(
+                          label: l.compTfresBalanced,
+                          selected: model.compTfresolution == 1,
+                          onTap: model.compOn ? () => model.setCompTfresolution(1) : null,
+                        ),
+                        AuraChoiceChip(
+                          label: l.compTfresFine,
+                          selected: model.compTfresolution == 2,
+                          onTap: model.compOn ? () => model.setCompTfresolution(2) : null,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---- 02 Bass (低音增强重构) ---- */
 
 class _BassCard extends StatelessWidget {
   final AppModel model;
@@ -771,7 +887,7 @@ class _BassCard extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     return SectionCard(
-      index: '01',
+      index: '02',
       title: l.bassBoost,
       collapsed: !model.bassOn,
       latencyMs: model.componentLatency('bass').ms,
@@ -943,7 +1059,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
     };
 
     return SectionCard(
-      index: '02',
+      index: '03',
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('reverb').ms,
@@ -1382,7 +1498,7 @@ class _DdcCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '04',
+      index: '05',
       title: l.ddcTitle,
       collapsed: !model.ddcOn, // 同上：常规语义 + state 层 auto-bypass
       latencyMs: model.componentLatency('ddc').ms,
@@ -1450,7 +1566,7 @@ class _EqualizerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '05',
+      index: '06',
       title: l.eqMultiBand,
       collapsed: !model.eqOn,
       latencyMs: model.componentLatency('eq').ms,
@@ -1592,7 +1708,7 @@ class _TubeCard extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     return SectionCard(
-      index: '07',
+      index: '08',
       title: l.tubeTitle,
       collapsed: !model.tubeOn,
       latencyMs: model.componentLatency('tube').ms,
@@ -1731,7 +1847,7 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '08',
+      index: '09',
       title: l.postGain,
       latencyMs: model.componentLatency('post').ms,
               latencyMeasured: model.componentLatency('post').measured,

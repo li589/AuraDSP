@@ -1156,4 +1156,37 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chainVstHint => '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。';
+
+  @override
+  String get stDdc => 'VDC 空间校正';
+
+  @override
+  String get compTitle => '动态压限器';
+
+  @override
+  String get compTimeconstant => '响应时常数';
+
+  @override
+  String get compGranularity => '分析颗粒度';
+
+  @override
+  String get compGranularityCoarse => '粗略 (低负荷)';
+
+  @override
+  String get compGranularityNormal => '标准 (平衡)';
+
+  @override
+  String get compGranularityFine => '精细 (多频带)';
+
+  @override
+  String get compTfresolution => '时频分辨率';
+
+  @override
+  String get compTfresTransient => '瞬态响应';
+
+  @override
+  String get compTfresBalanced => '平衡';
+
+  @override
+  String get compTfresFine => '高频解析';
 }

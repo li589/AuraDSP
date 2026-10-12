@@ -2253,6 +2253,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。'**
   String get chainVstHint;
+
+  /// No description provided for @stDdc.
+  ///
+  /// In zh, this message translates to:
+  /// **'VDC 空间校正'**
+  String get stDdc;
+
+  /// No description provided for @compTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态压限器'**
+  String get compTitle;
+
+  /// No description provided for @compTimeconstant.
+  ///
+  /// In zh, this message translates to:
+  /// **'响应时常数'**
+  String get compTimeconstant;
+
+  /// No description provided for @compGranularity.
+  ///
+  /// In zh, this message translates to:
+  /// **'分析颗粒度'**
+  String get compGranularity;
+
+  /// No description provided for @compGranularityCoarse.
+  ///
+  /// In zh, this message translates to:
+  /// **'粗略 (低负荷)'**
+  String get compGranularityCoarse;
+
+  /// No description provided for @compGranularityNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准 (平衡)'**
+  String get compGranularityNormal;
+
+  /// No description provided for @compGranularityFine.
+  ///
+  /// In zh, this message translates to:
+  /// **'精细 (多频带)'**
+  String get compGranularityFine;
+
+  /// No description provided for @compTfresolution.
+  ///
+  /// In zh, this message translates to:
+  /// **'时频分辨率'**
+  String get compTfresolution;
+
+  /// No description provided for @compTfresTransient.
+  ///
+  /// In zh, this message translates to:
+  /// **'瞬态响应'**
+  String get compTfresTransient;
+
+  /// No description provided for @compTfresBalanced.
+  ///
+  /// In zh, this message translates to:
+  /// **'平衡'**
+  String get compTfresBalanced;
+
+  /// No description provided for @compTfresFine.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频解析'**
+  String get compTfresFine;
 }
 
 class _AppLocalizationsDelegate

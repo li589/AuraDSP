@@ -62,6 +62,11 @@ abstract final class ParamId {
   static const fvDamp = 'freeverb.damp';
   static const fvWet = 'freeverb.wet';
   static const fvDry = 'freeverb.dry';
+  // 动态压限器（Compander）
+  static const compEnable = 'comp.enable';
+  static const compTimeconstant = 'comp.timeconstant';
+  static const compGranularity = 'comp.granularity';
+  static const compTfresolution = 'comp.tfresolution';
 }
 
 /// auradsp_status（engine_api 枚举）

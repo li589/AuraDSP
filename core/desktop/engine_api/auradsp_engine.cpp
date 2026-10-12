@@ -163,6 +163,11 @@ struct Params {
     /* 输入门控（钉死在链路最前端；全通道总增益 + 8通道单控平衡比例） */
     std::atomic<float>    input_gain{0.0f};     /* dB [-15,15] 默认 0.0 */
     std::atomic<float>    input_ch_gain[8];     /* 各声道单控比例 [0.0, 2.0]，默认 1.0 (100%) */
+    /* 动态压限器（Compressor / FFTCompander） */
+    std::atomic<int32_t>  comp_enable{0};
+    std::atomic<float>    comp_timeconstant{0.14f};  /* 秒 [0.02, 0.5] */
+    std::atomic<int32_t>  comp_granularity{1};       /* [0, 4] 频带颗粒度 */
+    std::atomic<int32_t>  comp_tfresolution{1};      /* [0, 3] 时频模式: 1=标准, 3=Gammatone零延迟 */
 };
 
 /* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
@@ -380,6 +385,9 @@ void compute_latency(auradsp_handle h, double* out_ms) {
         h->p.ddc_ready.load(std::memory_order_relaxed)) {
         ms += kLatDdc.ms;
     }
+    if (h->p.comp_enable.load(std::memory_order_relaxed)) {
+        ms += kLatComp.ms;
+    }
     *out_ms = ms;
 }
 
@@ -518,6 +526,20 @@ void apply_convolver(auradsp_handle h) {
         Convolver1DEnable(&h->jdsp);
     else
         Convolver1DDisable(&h->jdsp);
+}
+
+void apply_comp(auradsp_handle h) {
+    if (h->p.comp_enable.load(std::memory_order_relaxed)) {
+        CompressorSetParam(&h->jdsp,
+                           h->p.comp_timeconstant.load(std::memory_order_relaxed),
+                           h->p.comp_granularity.load(std::memory_order_relaxed),
+                           h->p.comp_tfresolution.load(std::memory_order_relaxed),
+                           1);
+        CompressorSetGain(&h->jdsp, 0, 0, 0);
+        CompressorEnable(&h->jdsp, 1);
+    } else {
+        CompressorDisable(&h->jdsp);
+    }
 }
 
 /* ---- IR 文件加载 + 统一文件门卫（M4，规划 §5.2）----
@@ -810,6 +832,7 @@ void apply_params_locked(auradsp_handle h) {
     apply_convolver(h);
     apply_tube(h);
     apply_crossfeed(h);
+    apply_comp(h);
 }
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
@@ -1075,6 +1098,9 @@ void probe_isolate(auradsp_handle p, const char* comp) {
         const int32_t one = 1; const float g = 6.0f;
         auradsp_set_param(p, "shelf.enable", &one, 4);
         auradsp_set_param(p, "shelf.gain", &g, 4);
+    } else if (!strcmp(comp, "comp")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "comp.enable", &one, 4);
     }
     /* convolver / ddc / liveprog 需要外部资源（IR / VDC / 脚本），
      * 无法在空探针上就绪，此时如实返回"不可测"而不是编一个数字。 */
@@ -1082,7 +1108,7 @@ void probe_isolate(auradsp_handle p, const char* comp) {
 
 bool probe_is_supported(const char* comp) {
     static const char* kSupported[] = {
-        "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf"
+        "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp"
     };
     for (const char* s : kSupported)
         if (!strcmp(comp, s)) return true;
@@ -2044,6 +2070,38 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             VacuumTubeSetGain(&h->jdsp, (double)db);
         return AURADSP_OK;
     }
+    /* ---- 动态压限器 (Compressor, FFTCompander) ---- */
+    if (!strcmp(id, "comp.enable") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        h->p.comp_enable.store(v);
+        if (h->open.load()) apply_comp(h);
+        compute_latency(h, &h->latency_ms);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "comp.timeconstant") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.02f) v = 0.02f; if (v > 0.5f) v = 0.5f;
+        h->p.comp_timeconstant.store(v);
+        if (h->open.load() && h->p.comp_enable.load(std::memory_order_relaxed))
+            apply_comp(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "comp.granularity") && bytes >= 4) {
+        int32_t v = *(const int32_t*)value;
+        if (v < 0) v = 0; if (v > 4) v = 4;
+        h->p.comp_granularity.store(v);
+        if (h->open.load() && h->p.comp_enable.load(std::memory_order_relaxed))
+            apply_comp(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "comp.tfresolution") && bytes >= 4) {
+        int32_t v = *(const int32_t*)value;
+        if (v < 0) v = 0; if (v > 3) v = 3;
+        h->p.comp_tfresolution.store(v);
+        if (h->open.load() && h->p.comp_enable.load(std::memory_order_relaxed))
+            apply_comp(h);
+        return AURADSP_OK;
+    }
     /* ---- M5-b 低频搁架 ---- */
     if (!strcmp(id, "shelf.enable") && bytes >= 4) {
         h->p.shelf_enable.store(*(const int32_t*)value ? 1 : 0);
@@ -2277,6 +2335,10 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "ddc.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_ready.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.gain") && bytes >= 4) { *(float*)out_value = h->p.tube_gain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.timeconstant") && bytes >= 4) { *(float*)out_value = h->p.comp_timeconstant.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.granularity") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_granularity.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.tfresolution") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_tfresolution.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
@@ -2306,7 +2368,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"reverb\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"post\",\"tier\":0,\"exposed\":true},"
             "{\"id\":\"limiter\",\"tier\":0,\"exposed\":true},"
-            "{\"id\":\"comp\",\"tier\":2,\"exposed\":false},"
+            "{\"id\":\"comp\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"

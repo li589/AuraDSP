@@ -1157,4 +1157,37 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chainVstHint => '複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。';
+
+  @override
+  String get stDdc => 'VDC 空間補正';
+
+  @override
+  String get compTitle => 'ダイナミックコンプレッサー';
+
+  @override
+  String get compTimeconstant => '時定数';
+
+  @override
+  String get compGranularity => '粒度';
+
+  @override
+  String get compGranularityCoarse => '低負荷';
+
+  @override
+  String get compGranularityNormal => '標準 (バランス)';
+
+  @override
+  String get compGranularityFine => '高精細 (マルチバンド)';
+
+  @override
+  String get compTfresolution => '時間周波数分解能';
+
+  @override
+  String get compTfresTransient => '過渡応答';
+
+  @override
+  String get compTfresBalanced => 'バランス';
+
+  @override
+  String get compTfresFine => '高周波';
 }

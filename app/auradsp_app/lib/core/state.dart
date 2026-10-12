@@ -186,6 +186,12 @@ class AppModel extends ChangeNotifier {
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
 
+  // 动态压限器（Compander）
+  bool compOn = false;
+  double compTimeconstant = 0.14;
+  int compGranularity = 1;
+  int compTfresolution = 1;
+
   // M5/P-002：声场分带（0..1 每带；bandUsed=false 时随总滑块统一）
   final List<double> stereoBands = List.filled(5, 0.5);
   bool stereoBandUsed = false;
@@ -625,6 +631,10 @@ class AppModel extends ChangeNotifier {
         fvDamp = (raw['fvDamp'] as num).toDouble();
         fvWet = (raw['fvWet'] as num).toDouble();
         fvDry = (raw['fvDry'] as num).toDouble();
+        if (raw['compEnable'] != null) compOn = (raw['compEnable'] as int) != 0;
+        if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
+        if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
+        if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
         notifyListeners();
         break;
       case 'liveprog':
@@ -1095,6 +1105,10 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
         if (id == ParamId.fvWet) { fvWet = v; break; }
         if (id == ParamId.fvDry) { fvDry = v; break; }
+        if (id == ParamId.compEnable) { compOn = v != 0; break; }
+        if (id == ParamId.compTimeconstant) { compTimeconstant = v; break; }
+        if (id == ParamId.compGranularity) { compGranularity = v.toInt(); break; }
+        if (id == ParamId.compTfresolution) { compTfresolution = v.toInt(); break; }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }
@@ -1187,7 +1201,7 @@ class AppModel extends ChangeNotifier {
   bool isStageEnabled(String stageId) {
     return switch (stageId) {
       'tube' => tubeOn,
-      'comp' => false,
+      'comp' => compOn,
       'bass' => bassOn,
       'eq' => eqOn,
       'arbmag' => false,
@@ -1207,6 +1221,8 @@ class AppModel extends ChangeNotifier {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
+      case 'comp':
+        setCompEnabled(!compOn);
       case 'bass':
         setInt('bass.enable', bassOn ? 0 : 1);
       case 'eq':
@@ -1214,7 +1230,7 @@ class AppModel extends ChangeNotifier {
       case 'convolver':
         setInt(ParamId.convEnable, convEnabled ? 0 : 1);
       case 'ddc':
-        setInt(ParamId.ddcEnable, ddcOn ? 0 : 1);
+        setDdcEnabled(!ddcOn);
       case 'liveprog':
         setLiveprogEnabled(!lpEnabled);
       case 'crossfeed':
@@ -1497,6 +1513,35 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
     scheduleAutoSave();
   }
+
+  void setCompEnabled(bool on) {
+    compOn = on;
+    setInt(ParamId.compEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompTimeconstant(double v) {
+    compTimeconstant = v;
+    setFloat(ParamId.compTimeconstant, v);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompGranularity(int v) {
+    compGranularity = v;
+    setInt(ParamId.compGranularity, v);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompTfresolution(int v) {
+    compTfresolution = v;
+    setInt(ParamId.compTfresolution, v);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
   void clearConvolver() {
     convEnabled = false;
     convReady = false;
@@ -2129,6 +2174,9 @@ void fillEqQ(double q) {
     if (compId == 'convolver' && convEnabled && convReady &&
         convFrames > 0 && deviceRate > 0) {
       return (ms: (convFrames / deviceRate) * 1000.0, measured: false);
+    }
+    if (compId == 'comp' && compOn) {
+      return (ms: 85.0, measured: false);
     }
     return (ms: 0.0, measured: false);
   }

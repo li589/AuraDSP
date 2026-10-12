@@ -182,7 +182,7 @@
   "reverbStereoWidth": "声场宽度",
   "reverbMix": "混响干湿比",
   "eqMultiBand": "多段图形均衡器",
-  "eqBands": "频段规格",
+  "eqBands": "{n}段",
   "eqPresets": "预设风格",
   "eqFlat": "平直复位",
   "eqBypass": "旁路对比",
@@ -239,7 +239,6 @@
   },
   "latTipProbing": "正在测量组件延迟…",
   "latTipUnmeasured": "尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）",
-  "eqBands": "{n}段",
   "@eqBands": {
     "placeholders": {
       "n": {
@@ -621,5 +620,16 @@
   "plugActive": "生效",
   "lpSaveFailed": "保存失败（名称非法或磁盘不可写）",
   "chainVstTitle": "第三方 VST / CLAP 插件挂载槽与阶段处理顺序",
-  "chainVstHint": "支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。"
+  "chainVstHint": "支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。",
+  "stDdc": "VDC 空间校正",
+  "compTitle": "动态压限器",
+  "compTimeconstant": "响应时常数",
+  "compGranularity": "分析颗粒度",
+  "compGranularityCoarse": "粗略 (低负荷)",
+  "compGranularityNormal": "标准 (平衡)",
+  "compGranularityFine": "精细 (多频带)",
+  "compTfresolution": "时频分辨率",
+  "compTfresTransient": "瞬态响应",
+  "compTfresBalanced": "平衡",
+  "compTfresFine": "高频解析"
 }
