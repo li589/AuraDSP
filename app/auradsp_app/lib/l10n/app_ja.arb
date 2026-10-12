@@ -108,7 +108,7 @@
   "convOpenIr": "IR ファイルを開く",
   "convClear": "IR をクリア",
   "convNoIr": "IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）",
-  "convResampled": "ソースのサンプルレートが異なるため自動リサンプルしました（明示）",
+  "convResampled": "ソースのサンプルレートが異なるため自動リサンプルしました",
   "signalFlow": "シグナルフロー",
   "fvTitle": "パラメトリックリバーブ",
   "fvDecayLabel": "減衰",

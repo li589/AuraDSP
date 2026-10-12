@@ -112,24 +112,36 @@ def run(sizes):
     dll.auradsp_destroy(h)
     warm = sorted(times[WARMUP:])
     r = sorted(rms[WARMUP:])
-    return warm[len(warm) // 2], r[len(r) // 2]
+    return warm[len(warm) // 2], warm[-1], r[len(r) // 2]
 
 
 print("IR = %d frames (%.2fs), max_block=%d" % (IR_FRAMES, IR_FRAMES / FS, MAX_BLOCK))
-m_const, r_const = run([MAX_BLOCK])
-m_jit, r_jit = run([MAX_BLOCK, 900, 700])
-m_j1, r_j1 = run([MAX_BLOCK, MAX_BLOCK - 1])
+m_const, _, r_const = run([MAX_BLOCK])
+m_jit, _, r_jit = run([MAX_BLOCK, 900, 700])
+m_j1, _, r_j1 = run([MAX_BLOCK, MAX_BLOCK - 1])
+m_wide, peak_wide, r_wide = run([MAX_BLOCK, 500])
+m_severe, peak_severe, r_severe = run([MAX_BLOCK, 300])
 
 print("const  n=%d   median=%.3fms  rms=%.4f" % (MAX_BLOCK, m_const, r_const))
 print("jitter 1024/900/700  median=%.3fms  rms=%.4f" % (m_jit, r_jit))
 print("jitter 1024/1023     median=%.3fms  rms=%.4f" % (m_j1, r_j1))
+print("wide   1024/500      median=%.3fms  max=%.3fms  rms=%.4f" % (m_wide, peak_wide, r_wide))
+print("severe 1024/300      median=%.3fms  max=%.3fms  rms=%.4f" % (m_severe, peak_severe, r_severe))
 
 # 修复前实测：jitter median 4.05ms vs const 0.16ms（25x），rms 低 22%
 assert m_jit < m_const * 3.0, \
     "块长抖动导致中位耗时放大 %.1fx（修复前约 25x）—— 卷积器仍在重建" % (m_jit / m_const)
+assert m_wide < m_const * 3.0, \
+    "大幅块长变化导致中位耗时放大 %.1fx —— 仍在跨 2 倍阈值时重建" % (m_wide / m_const)
+assert m_severe < m_const * 3.0, \
+    "大幅块长变化导致中位耗时放大 %.1fx —— 仍在跨 2 倍阈值时重建" % (m_severe / m_const)
 assert abs(r_jit - r_const) / r_const < 0.02, \
     "块长抖动导致输出电平偏移 %.1f%%（修复前约 -22%%）—— 卷积尾巴被截断" % (
         (r_jit - r_const) / r_const * 100)
+for label, value in (("1024/500", r_wide), ("1024/300", r_severe)):
+    assert abs(value - r_const) / r_const < 0.02, \
+        "大幅块长变化导致输出电平偏移 %.1f%% —— 卷积状态仍被重置" % (
+            abs(value - r_const) / r_const * 100)
 assert r_const > 0.05, "IR 未真正生效（RMS 过低），本用例失去意义"
 
 print("PASS: 块长抖动不再重建卷积器（P-008），代价与电平均与恒定块一致")

@@ -1006,29 +1006,23 @@ void pfloat32(JamesDSPLib *jdsp, float *x1, float *x2, float *y1, float *y2, siz
 }
 void pfloat32Multiplexed(JamesDSPLib *jdsp, float *x, float *y, size_t n)
 {
-	if (jdsp->blockSizeMax < n)
+	const size_t oldBlockSizeMax = jdsp->blockSizeMax;
+	if (oldBlockSizeMax < n)
 		JamesDSPReallocateBlock(jdsp, n);
 	if (jdsp->blockSize != n)
 	{
 		const size_t oldBlockSize = jdsp->blockSize;
 		jdsp->blockSize = n;
-		/* [PATCHED-AuraDSP P-008] 块长抖动抑制：仅在跨越 2 倍量级时才重建卷积器。
+		/* [PATCHED-AuraDSP P-008/P-009] 块长变化时不得重建卷积器，除非容量真正扩大。
 		 *
-		 * 上游此处无条件重建，其意图只是「按块长重新选择分段以优化性能」
-		 * （见下方 DEBUG 日志原文），并非正确性要求：FFTConvolver 的 Process 以
-		 * 输入 FIFO 逐块消化（while processed < len），任意 len 都输出正确。
+		 * P-008 曾用 2 倍量级滞回，但 WASAPI 可用帧数仍可能从接近满块跌到不足一半，
+		 * 于是周期性重建并没有完全消除（1024/512 实测仍有约 20 倍耗时尖峰）。
+		 * 上游重建只是「按块长重新选择分段以优化性能」，并非正确性要求：
+		 * FFTConvolver 的 Process 以输入 FIFO 逐块消化（while processed < len），
+		 * 任意不超过容量的 len 都输出正确。容量真正扩大时仍需重建并重选分段。
 		 *
-		 * AuraDSP 的 WASAPI 泵传入 n = min(avail, max_block)，avail 随 padding
-		 * 逐轮抖动，于是几乎每次调用都触发 Convolver1DLoadImpulseResponse 全量
-		 * 重建。实测（0.5s / 48kHz IR，tools/probe_ir_stability.py）：
-		 *   恒定 n=1024   中位耗时 0.160ms，输出 RMS 0.5607
-		 *   n 抖动        中位耗时 4.050ms（25x），输出 RMS 0.4360（低 22%）
-		 *   n 差 1 个样本 中位耗时 3.958ms（25x），输出 RMS 0.4577（低 18%）
-		 * 重建既吃满 CPU 预算（听感「卡顿」），又重置卷积状态把湿信号尾巴截断
-		 * （听感「变小 / 断续」）。故改为量级滞回。
-		 * 注意 jdsp->blockSize 仍照常更新——它被 selectConvPartitions 等读取，
-		 * 只是不再因此触发重建。 */
-		if (oldBlockSize == 0 || n >= oldBlockSize * 2 || oldBlockSize >= n * 2)
+		 * 注意 jdsp->blockSize 仍照常更新，只是它不再是触发重建的充分条件。 */
+		if (oldBlockSize == 0 || oldBlockSizeMax < n)
 			JamesDSPRefreshConvolutions(jdsp, 1);
 	}
 	for (size_t i = 0; i < n; i++)

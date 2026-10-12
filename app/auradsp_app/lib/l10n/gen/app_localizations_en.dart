@@ -298,7 +298,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get convResampled =>
-      'Source rate differs from device — resampled automatically (disclosed, not silent)';
+      'Source rate differs from device — resampled automatically';
 
   @override
   String get signalFlow => 'Signal Flow';
