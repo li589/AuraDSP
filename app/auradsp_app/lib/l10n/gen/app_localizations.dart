@@ -652,12 +652,6 @@ abstract class AppLocalizations {
   /// **'源采样率与设备不同，已自动重采样'**
   String get convResampled;
 
-  /// No description provided for @signalFlow.
-  ///
-  /// In zh, this message translates to:
-  /// **'信号流'**
-  String get signalFlow;
-
   /// No description provided for @fvTitle.
   ///
   /// In zh, this message translates to:
@@ -1405,31 +1399,31 @@ abstract class AppLocalizations {
   /// No description provided for @chainStagePreDsp.
   ///
   /// In zh, this message translates to:
-  /// **'阶段 0 (DSP 前置)'**
+  /// **'DSP 前置'**
   String get chainStagePreDsp;
 
   /// No description provided for @chainStagePreVendor.
   ///
   /// In zh, this message translates to:
-  /// **'阶段 1 (厂商链前置)'**
+  /// **'厂商链前置'**
   String get chainStagePreVendor;
 
   /// No description provided for @chainStagePostVendor.
   ///
   /// In zh, this message translates to:
-  /// **'阶段 2 (厂商链后置)'**
+  /// **'厂商链后置'**
   String get chainStagePostVendor;
 
   /// No description provided for @chainStagePostReverb.
   ///
   /// In zh, this message translates to:
-  /// **'阶段 3 (混响后置)'**
+  /// **'混响后置'**
   String get chainStagePostReverb;
 
   /// No description provided for @chainStagePostLimiter.
   ///
   /// In zh, this message translates to:
-  /// **'阶段 4 (限幅后置)'**
+  /// **'限幅后置'**
   String get chainStagePostLimiter;
 
   /// No description provided for @chainSlotActive.

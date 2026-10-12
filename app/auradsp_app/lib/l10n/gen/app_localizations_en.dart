@@ -301,9 +301,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Source rate differs from device — resampled automatically';
 
   @override
-  String get signalFlow => 'Signal Flow';
-
-  @override
   String get fvTitle => 'Parametric Reverb';
 
   @override
@@ -693,19 +690,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainNodeOutput => 'Audio Output';
 
   @override
-  String get chainStagePreDsp => 'Stage 0 (Pre-DSP)';
+  String get chainStagePreDsp => 'Pre-DSP';
 
   @override
-  String get chainStagePreVendor => 'Stage 1 (Pre-Vendor)';
+  String get chainStagePreVendor => 'Pre-Vendor';
 
   @override
-  String get chainStagePostVendor => 'Stage 2 (Post-Vendor)';
+  String get chainStagePostVendor => 'Post-Vendor';
 
   @override
-  String get chainStagePostReverb => 'Stage 3 (Post-Reverb)';
+  String get chainStagePostReverb => 'Post-Reverb';
 
   @override
-  String get chainStagePostLimiter => 'Stage 4 (Post-Limiter)';
+  String get chainStagePostLimiter => 'Post-Limiter';
 
   @override
   String chainSlotActive(int n, String name, String fmt) {

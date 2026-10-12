@@ -32,7 +32,6 @@ class EffectsPage extends StatelessWidget {
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
       children: [
-        _SignalFlowBar(model: model), // 信号流节点
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _BassCard(model: model),
@@ -67,134 +66,6 @@ class EffectsPage extends StatelessWidget {
         ),
         _PresetCard(model: model),
       ],
-    );
-  }
-}
-
-/* ---- 信号流条：单行紧凑可视化，启用节点高亮 ---- */
-
-class _SignalFlowBar extends StatefulWidget {
-  final AppModel model;
-  const _SignalFlowBar({required this.model});
-
-  @override
-  State<_SignalFlowBar> createState() => _SignalFlowBarState();
-}
-
-class _SignalFlowBarState extends State<_SignalFlowBar> {
-  final _scroll = ScrollController();
-
-  @override
-  void dispose() {
-    _scroll.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    final model = widget.model;
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) {
-        const nodes = [
-          ('tube', 'TUBE'),
-          ('bass', 'BASS'),
-          ('eq', 'EQ'),
-          ('convolver', 'IR'),
-          ('liveprog', 'SCRIPT'),
-          ('crossfeed', 'XFEED'),
-          ('stereo', 'WIDTH'),
-          ('reverb', 'REVERB'),
-          // stage id 必须与 AppModel.isStageEnabled 的键一致：
-          // 之前这里写 'out' 而 isStageEnabled 认 'output'，落到 on() 的 `_ => true`，
-          // 导致 OUT 节点无论限幅开关如何都恒亮。
-          ('output', 'OUT'),
-        ];
-        // 语义刻意与 isStageEnabled 有别：此处是"信号流上是否有信号在跑"，
-        // 卷积需 convReady（IR 真加载了才算），混响需涵盖 Freeverb 路径。
-        // 两者统一属重构（批次 D），此处只修 id 不匹配。
-        bool on(String id) => switch (id) {
-              'tube' => model.tubeOn,
-              'bass' => model.bassOn,
-              'eq' => model.eqOn,
-              'convolver' => model.convEnabled && model.convReady,
-              'liveprog' => model.lpEnabled,
-              'crossfeed' => model.xfeedOn,
-              'stereo' => model.stereoMix > 0,
-              'reverb' => model.isSpatialReverbOn,
-              'output' => model.limiterOn,
-              _ => false,
-            };
-        return Container(
-          padding: const EdgeInsets.symmetric(
-              horizontal: AuraSpace.md, vertical: AuraSpace.sm + 2),
-          decoration: BoxDecoration(
-            color: p.panel,
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(color: p.hairline),
-          ),
-          child: Row(
-            children: [
-              Text(l.signalFlow.toUpperCase(), style: eyebrowOf(p)),
-              const SizedBox(width: AuraSpace.md),
-              Expanded(
-                // 横向滚动 + 细滚动条（窄屏指示器；桌面端仅滚动时显现）
-                child: Scrollbar(
-                  controller: _scroll,
-                  thumbVisibility: false,
-                  child: SingleChildScrollView(
-                    controller: _scroll,
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        for (var i = 0; i < nodes.length; i++) ...[
-                          if (i > 0)
-                            Icon(Icons.arrow_forward_rounded,
-                                size: 12, color: p.textDim.withValues(alpha: 0.5)),
-                          const SizedBox(width: AuraSpace.xs + 2),
-                          _FlowNode(
-                              label: nodes[i].$2,
-                              active: on(nodes[i].$1)),
-                          const SizedBox(width: AuraSpace.xs + 2),
-                        ],
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _FlowNode extends StatelessWidget {
-  final String label;
-  final bool active;
-  const _FlowNode({required this.label, required this.active});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return AnimatedContainer(
-      duration: AuraDur.fast,
-      curve: AuraCurve.standard,
-      padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.sm, vertical: AuraSpace.xxs + 1),
-      decoration: BoxDecoration(
-        color: active ? p.accent.withValues(alpha: 0.14) : Colors.transparent,
-        borderRadius: BorderRadius.circular(AuraRadius.xs),
-        border: Border.all(
-          color: active ? p.accent.withValues(alpha: 0.55) : p.hairline,
-        ),
-      ),
-      child: Text(label,
-          style: monoOf(p, size: 10, color: active ? p.accent : p.textDim)),
     );
   }
 }
@@ -310,7 +181,10 @@ class _BassAdvanced extends StatelessWidget {
                 min: 0,
                 max: 1,
                 unit: '%',
-                enabled: m.bassOn,
+                // 引擎侧暂无 bass.harmonics 参数（只有 bass.enable/gain），
+                // 此滑块目前只存 UI/预设状态，不改变声音；置灰禁用，
+                // 待谐波合成 DSP 落地后再接线。
+                enabled: false,
                 format: (v) => (v * 100).toStringAsFixed(0),
                 onChanged: m.setBassHarmonics,
                 onChangedEnd: m.setBassHarmonics,
@@ -323,7 +197,8 @@ class _BassAdvanced extends StatelessWidget {
                 min: 0,
                 max: 1,
                 unit: '%',
-                enabled: m.bassOn,
+                // 同上：引擎侧无对应参数，置灰禁用。
+                enabled: false,
                 format: (v) => (v * 100).toStringAsFixed(0),
                 onChanged: m.setBassHarmonicBlend,
                 onChangedEnd: m.setBassHarmonicBlend,
@@ -337,7 +212,8 @@ class _BassAdvanced extends StatelessWidget {
                 min: 10,
                 max: 40,
                 unit: 'Hz',
-                enabled: m.bassOn,
+                // 同上：引擎侧无对应参数，置灰禁用。
+                enabled: false,
                 format: (v) => v.toStringAsFixed(0),
                 onChanged: m.setBassSubFloor,
                 onChangedEnd: m.setBassSubFloor,
@@ -750,23 +626,47 @@ class _ConvolverCard extends StatelessWidget {
                 onChangedEnd: (v) => model.setFloat('convolver.mix', v),
               ),
               const SizedBox(height: AuraSpace.md),
-              Text(
-                l.convFramesLine(
-                    model.convFrames,
-                    dur,
-                    model.convChannels,
-                    (20 * math.log(model.convPeak <= 1e-6 ? 1e-6 : model.convPeak) / math.ln10).toStringAsFixed(1),
-                    model.convSrcRate),
-                style: monoOf(p, size: 12, color: p.text),
-              ),
-              if (resampled) ...[
-                const SizedBox(height: AuraSpace.xs),
-                Row(children: [
-                  Icon(Icons.info_outline, size: 13, color: p.warning),
-                  const SizedBox(width: AuraSpace.xs + 2),
-                  Text(l.convResampled, style: captionOf(p)),
-                ]),
-              ],
+              // 帧数行与重采样提示同行、提示右对齐；窄屏（Android/小窗）
+              // 放不下时提示自动换到下一行并保持右对齐。
+              LayoutBuilder(builder: (context, box) {
+                final framesText = Text(
+                  l.convFramesLine(
+                      model.convFrames,
+                      dur,
+                      model.convChannels,
+                      (20 * math.log(model.convPeak <= 1e-6 ? 1e-6 : model.convPeak) / math.ln10).toStringAsFixed(1),
+                      model.convSrcRate),
+                  style: monoOf(p, size: 12, color: p.text),
+                );
+                if (!resampled) return framesText;
+                final hint = Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.info_outline, size: 13, color: p.warning),
+                    const SizedBox(width: AuraSpace.xs + 2),
+                    Flexible(
+                      child: Text(l.convResampled, style: captionOf(p)),
+                    ),
+                  ],
+                );
+                if (box.maxWidth >= 420) {
+                  return Row(
+                    children: [
+                      Expanded(child: framesText),
+                      const SizedBox(width: AuraSpace.sm),
+                      hint,
+                    ],
+                  );
+                }
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    framesText,
+                    const SizedBox(height: 2),
+                    Align(alignment: Alignment.centerRight, child: hint),
+                  ],
+                );
+              }),
             ],
           );
         },
@@ -1036,29 +936,36 @@ class _TubeCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.md),
           // 电子管音色风格
           // 电子管音色风格 — 标签与选项同行，选项右对齐
+          // 引擎侧只有 tube.enable/gain，风格选择暂无对应参数：
+          // 置灰禁用，待电子管建模落地后再接线。
           Row(
             children: [
               Text(l.tubeStyle, style: captionOf(p)),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  AuraChoiceChip(
-                    label: l.tubeStyleTriode,
-                    selected: model.tubeStyle == 0,
-                    onTap: () => model.setTubeStyle(0),
+              Opacity(
+                opacity: 0.4,
+                child: IgnorePointer(
+                  child: Wrap(
+                    spacing: AuraSpace.sm,
+                    children: [
+                      AuraChoiceChip(
+                        label: l.tubeStyleTriode,
+                        selected: model.tubeStyle == 0,
+                        onTap: () => model.setTubeStyle(0),
+                      ),
+                      AuraChoiceChip(
+                        label: l.tubeStylePentode,
+                        selected: model.tubeStyle == 1,
+                        onTap: () => model.setTubeStyle(1),
+                      ),
+                      AuraChoiceChip(
+                        label: l.tubeStyleTape,
+                        selected: model.tubeStyle == 2,
+                        onTap: () => model.setTubeStyle(2),
+                      ),
+                    ],
                   ),
-                  AuraChoiceChip(
-                    label: l.tubeStylePentode,
-                    selected: model.tubeStyle == 1,
-                    onTap: () => model.setTubeStyle(1),
-                  ),
-                  AuraChoiceChip(
-                    label: l.tubeStyleTape,
-                    selected: model.tubeStyle == 2,
-                    onTap: () => model.setTubeStyle(2),
-                  ),
-                ],
+                ),
               ),
             ],
           ),
@@ -1086,17 +993,23 @@ class _TubeAdvanced extends StatelessWidget {
           children: [
             Text(l.tubeOversampling, style: captionOf(p)),
             const SizedBox(height: AuraSpace.xs),
-            Wrap(
-              spacing: AuraSpace.sm,
-              children: [
-                for (final os in const [1, 2, 4])
-                  AuraChoiceChip(
-                    label: '${os}x',
-                      selected: m.tubeOversampling == os,
-                      onTap: () => m.setTubeOversampling(os),
-                    ),
-                ],
+            // 引擎侧 tube 固定 2x 过采样、无对应参数：置灰禁用。
+            Opacity(
+              opacity: 0.4,
+              child: IgnorePointer(
+                child: Wrap(
+                  spacing: AuraSpace.sm,
+                  children: [
+                    for (final os in const [1, 2, 4])
+                      AuraChoiceChip(
+                        label: '${os}x',
+                        selected: m.tubeOversampling == os,
+                        onTap: () => m.setTubeOversampling(os),
+                      ),
+                  ],
+                ),
               ),
+            ),
               const SizedBox(height: AuraSpace.md),
               ValueSlider(
                 label: l.tubeCompensation,
@@ -1105,7 +1018,8 @@ class _TubeAdvanced extends StatelessWidget {
                 min: -6,
                 max: 6,
                 unit: 'dB',
-                enabled: m.tubeOn,
+                // 引擎侧无对应参数，置灰禁用。
+                enabled: false,
                 format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
                 onChanged: m.setTubeCompensation,
                 onChangedEnd: m.setTubeCompensation,
@@ -1117,7 +1031,8 @@ class _TubeAdvanced extends StatelessWidget {
                 min: 0,
                 max: 1,
                 unit: '%',
-                enabled: m.tubeOn,
+                // 引擎侧无对应参数，置灰禁用。
+                enabled: false,
                 format: (v) => (v * 100).toStringAsFixed(0),
                 onChanged: m.setTubeMix,
                 onChangedEnd: m.setTubeMix,
