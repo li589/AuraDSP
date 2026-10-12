@@ -22,10 +22,12 @@
 import ctypes
 import json
 import os
-import shutil
 import struct
 import sys
 import tempfile
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _tmpcleanup import remove_tree_with_retry, warn_if_failed  # noqa: E402
 
 DLL_PATH = r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll"
 
@@ -191,7 +193,10 @@ def main():
     finally:
         if h:
             dll.auradsp_destroy(h)
-        shutil.rmtree(root, ignore_errors=True)
+        # B5 E4：健壮清理（有限重试 + 失败告警），替代静默的
+        # rmtree(ignore_errors=True)——后者正是历史泄漏无人发现的原因。
+        ok = remove_tree_with_retry(root)
+        warn_if_failed(root, ok, "smoke_plugin_arch_detect")
 
     print()
     if failures:

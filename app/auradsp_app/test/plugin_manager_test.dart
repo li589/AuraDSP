@@ -87,6 +87,26 @@ void main() {
     late List<Map<String, dynamic>> dispatchedCmds;
     late Directory tempDir;
 
+    tearDownAll(() async {
+      // B5 终局清扫兜底：个别测试收尾时仍有挂起的 saveCache 异步写，
+      // 2s 重试预算也可能输给事件循环时序（实测每轮漏 1~2 个）。
+      // 本组专用前缀 + flutter test 串行执行，清扫不会误伤别的运行。
+      final temp = Directory.systemTemp;
+      await for (final entity in temp.list(followLinks: false)) {
+        if (entity is Directory &&
+            entity.path.contains('auradsp_plugin_test')) {
+          for (var i = 0; i < 20 && entity.existsSync(); i++) {
+            try {
+              entity.deleteSync(recursive: true);
+              break;
+            } on FileSystemException {
+              await Future.delayed(const Duration(milliseconds: 50));
+            }
+          }
+        }
+      }
+    });
+
     setUp(() {
       // flutter test 不沙箱化：不注入临时根目录的话，下面的 onPluginScanned()
       // 会经 saveCache() 把测试 fixture 写进用户真实的
@@ -99,16 +119,23 @@ void main() {
       });
     });
 
-    tearDown(() {
+    tearDown(() async {
       ConfigManager.baseDirOverride = null;
       // Windows 上临时目录可能被杀软实时扫描/索引器或尚未收尾的异步写句柄
       // 短暂占用（errno 32 "另一个程序正在使用此文件"）。清理失败不该判红：
       // 有限重试后放弃，最坏漏下一个 Temp 目录（2026-10-12 审查修复的瞬态）。
+      //
+      // B5：重试必须用 `await Future.delayed` 而不是同步 `sleep()`——
+      // saveCache 是 fire-and-forget 的异步写（writeAsString flush:true），
+      // 同步睡眠不泵事件循环，挂起的写永远收不了尾、句柄一直开着，
+      // 目录必然删不掉（实测每轮 flutter test 漏 4 个）。异步等待让
+      // 挂起的 Future 完成、句柄释放，重试随即成功。
       for (var i = 0; i < 40 && tempDir.existsSync(); i++) {
         try {
           tempDir.deleteSync(recursive: true);
+          break;
         } on FileSystemException {
-          sleep(const Duration(milliseconds: 50));
+          await Future.delayed(const Duration(milliseconds: 50));
         }
       }
     });
