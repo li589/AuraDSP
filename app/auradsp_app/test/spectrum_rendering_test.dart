@@ -112,4 +112,74 @@ void main() {
       expect(ticks, lessThan(40));
     });
   });
+
+  group('氛围频谱降本：频带聚焦与预计算映射', () {
+    test('柱数仍为 72（柱形密度不变）', () {
+      expect(AmbientEnvelope.bars, 72);
+      expect(AmbientEnvelope.sourceBands.length, 72);
+    });
+
+    test('映射表单调不减（不会因聚焦范围而频率倒挂）', () {
+      final m = AmbientEnvelope.sourceBands;
+      for (var i = 1; i < m.length; i++) {
+        expect(m[i], greaterThanOrEqualTo(m[i - 1]),
+            reason: '第 $i 根柱回退到了更低的频带');
+      }
+    });
+
+    test('下标全部落在 32 个源频带内', () {
+      for (final b in AmbientEnvelope.sourceBands) {
+        expect(b, inInclusiveRange(0, VizBands.count - 1));
+      }
+    });
+
+    test('两端锚在 80Hz 与 14kHz 最近的频带上', () {
+      final m = AmbientEnvelope.sourceBands;
+      // 首根柱正好落在 [80,100] 这一带
+      expect(VizBands.edges[m.first], AmbientEnvelope.focusMinHz);
+      // 末根柱锚在 14kHz 所在的一带（14100–16800 与 14kHz 最近）
+      expect(m.last, lessThanOrEqualTo(30));
+      expect(VizBands.edges[m.last], lessThanOrEqualTo(14100));
+    });
+
+    test('省掉两端空频带：不再采样 80Hz 以下与 14kHz 以上的整带', () {
+      final m = AmbientEnvelope.sourceBands;
+      // band0..5 = 20–80Hz（音乐内容几乎全空），band31 = 16800–20000Hz
+      expect(m.any((b) => b <= 5), isFalse, reason: '仍在采样 80Hz 以下');
+      expect(m.contains(VizBands.count - 1), isFalse,
+          reason: '仍在采样 16800Hz 以上');
+      expect(m.every((b) => b >= 6 && b <= 30), isTrue);
+      // 32 个源频带里实际用到 25 个，即至少省下 7 个空带
+      expect(m.toSet().length, lessThanOrEqualTo(VizBands.count - 7));
+    });
+
+    test('feed 走预计算表：单频带输入只点亮映射到该带的柱', () {
+      final target = AmbientEnvelope.sourceBands[30];
+      final src = List<double>.filled(VizBands.count, 0.0);
+      src[target] = 1.0;
+
+      final env = AmbientEnvelope();
+      env.feed(src);
+
+      final lit = <int>[];
+      for (var i = 0; i < AmbientEnvelope.bars; i++) {
+        if (env.smooth[i] > 0.5) lit.add(i);
+      }
+      expect(lit, isNotEmpty, reason: '该频带必须有点亮的柱');
+      for (final i in lit) {
+        expect(AmbientEnvelope.sourceBands[i], target);
+      }
+    });
+
+    test('20Hz 以下与 14kHz 以上的内容不再驱动氛围柱（聚焦范围外被忽略）', () {
+      final src = List<double>.filled(VizBands.count, 0.0);
+      src[0] = 1.0; // 20–25Hz，远低于 focusMinHz
+      src[VizBands.count - 1] = 1.0; // 16800–20000Hz，远高于 focusMaxHz
+
+      final env = AmbientEnvelope();
+      env.feed(src);
+      expect(env.maxValue, 0.0,
+          reason: '聚焦范围外的能量不该再点亮氛围柱（两端是空区间）');
+    });
+  });
 }
