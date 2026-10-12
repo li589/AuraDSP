@@ -9,55 +9,124 @@ void main() {
     });
 
     test('未闭合的 ( → 报告起始行', () {
-      const src = '@sample\nspl0 *= (slider1;\n';
+      const src = '@init\nx = 1;\n@sample\nspl0 *= (slider1;\n';
       final issues = EelLinter.lint(src);
       expect(issues, isNotEmpty);
-      expect(issues.first.line, 2);
-      expect(issues.first.message, contains('未闭合'));
+      final unclosed =
+          issues.where((e) => e.message.contains('未闭合')).toList();
+      expect(unclosed, isNotEmpty);
+      expect(unclosed.first.line, 4);
     });
 
     test('多余的 ) → 报告所在行', () {
-      const src = '@sample\nspl0 = 1);\n';
+      const src = '@init\nx = 1;\n@sample\nspl0 = 1);\n';
       final issues = EelLinter.lint(src);
       expect(issues, isNotEmpty);
-      expect(issues.first.line, 2);
-      expect(issues.first.message, contains('多余的'));
+      expect(issues.any((e) => e.message.contains('多余的') && e.line == 4),
+          isTrue);
     });
 
     test('嵌套括号跨行：闭合 → 通过', () {
-      const src = '@init\nif (a > 0) {\n  b = (c + d) * 2;\n}\n';
+      const src = '@init\nif (a > 0) {\n  b = (c + d) * 2;\n}\n@sample\nspl0 = 1;\n';
       expect(EelLinter.lint(src), isEmpty);
     });
 
     test('嵌套括号：} 错配 ) → 报告', () {
-      const src = '@init\nif (a) {\n  b = 1)\n';
+      const src = '@init\nif (a) {\n  b = 1)\n@sample\nspl0 = 1;\n';
       final issues = EelLinter.lint(src);
       expect(issues, isNotEmpty);
     });
 
     test('字符串里的括号不参与配对', () {
-      const src = '@sample\ntitle = "(unclosed {\n';
+      const src = '@init\nx = 1;\n@sample\ntitle = "(unclosed {\n';
       // 字符串跨行 → 报"字符串未闭合"而不是括号问题
       final issues = EelLinter.lint(src);
       expect(issues, isNotEmpty);
-      expect(issues.first.message, contains('字符串'));
+      expect(issues.any((e) => e.message.contains('字符串')), isTrue);
     });
 
     test('字符串内闭合括号 → 不误报', () {
-      const src = '@sample\ns = "( { [";\nspl0 = 1;\n';
+      const src = '@init\nx = 1;\n@sample\ns = "( { [";\nspl0 = 1;\n';
       expect(EelLinter.lint(src), isEmpty);
     });
 
     test('注释里的括号不参与配对', () {
-      const src = '@init\n// ( { [ 未闭合注释\n/* ) } ] */\nx = 1;\n';
+      const src = '@init\n// ( { [ 未闭合注释\n/* ) } ] */\nx = 1;\n@sample\nspl0 = 1;\n';
       expect(EelLinter.lint(src), isEmpty);
     });
 
     test('块注释未闭合 → 报告', () {
-      const src = '@init\n/* 未闭合\n';
+      const src = '@init\nx = 1;\n/* 未闭合\n';
       final issues = EelLinter.lint(src);
       expect(issues, isNotEmpty);
-      expect(issues.first.message, contains('块注释'));
+      expect(issues.any((e) => e.message.contains('块注释')), isTrue);
+    });
+  });
+
+  group('EelLinter 结构预检（v1.2）', () {
+    test('缺 @init → blocking', () {
+      const src = '@sample\nspl0 = 1;\n';
+      final issues = EelLinter.lint(src);
+      final hit =
+          issues.where((e) => e.message.contains('@init')).toList();
+      expect(hit, isNotEmpty);
+      expect(hit.every((e) => e.blocking), isTrue);
+    });
+
+    test('缺 @sample → blocking', () {
+      const src = '@init\nx = 1;\n';
+      final issues = EelLinter.lint(src);
+      expect(
+          issues.any(
+              (e) => e.blocking && e.message.contains('@sample')),
+          isTrue);
+    });
+
+    test('空 @init → blocking 且定位到行', () {
+      const src = '@init\n@sample\nspl0 = 1;\n';
+      final issues = EelLinter.lint(src);
+      final hit =
+          issues.where((e) => e.message.contains('空 @init')).toList();
+      expect(hit.length, 1);
+      expect(hit.first.blocking, isTrue);
+      expect(hit.first.line, 1);
+    });
+
+    test('空 @sample → 仅警告（非 blocking）', () {
+      const src = '@init\nx = 1;\n@sample\n';
+      final issues = EelLinter.lint(src);
+      final hit =
+          issues.where((e) => e.message.contains('@sample')).toList();
+      expect(hit, isNotEmpty);
+      expect(hit.every((e) => !e.blocking), isTrue);
+    });
+
+    test('slider9 → 越界警告且定位到行', () {
+      const src = '@init\nx = 1;\n@sample\nspl0 *= slider9;\n';
+      final issues = EelLinter.lint(src);
+      final hit =
+          issues.where((e) => e.message.contains('slider9')).toList();
+      expect(hit.length, 1);
+      expect(hit.first.line, 4);
+      expect(hit.first.blocking, isFalse);
+    });
+
+    test('srate 赋值 → 只读警告；== 比较不误报', () {
+      const bad = '@init\nsrate = 48000;\n@sample\nspl0 = 1;\n';
+      final badIssues = EelLinter.lint(bad);
+      expect(
+          badIssues.any((e) => e.message.contains('srate') && e.line == 2),
+          isTrue);
+      const ok = '@init\nx = (srate == 48000);\n@sample\nspl0 = 1;\n';
+      expect(
+          EelLinter.lint(ok).where((e) => e.message.contains('srate')),
+          isEmpty);
+    });
+
+    test('注释/字符串里的 @init、slider9、srate 不误报', () {
+      const src = '@init\nx = 1;\n// @init slider9 srate = 1\n'
+          '/* slider12 srate = 2 */\n@sample\ns = "slider9";\nspl0 = 1;\n';
+      expect(EelLinter.lint(src), isEmpty);
     });
   });
 
@@ -94,7 +163,10 @@ void main() {
 
     test('空输入不崩', () {
       expect(EelFormatter.format(''), '');
-      expect(EelLinter.lint(''), isEmpty);
+      // 空文本缺两段 → 2 条 blocking 结构问题
+      final issues = EelLinter.lint('');
+      expect(issues.length, 2);
+      expect(issues.every((e) => e.blocking), isTrue);
     });
   });
 

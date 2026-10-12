@@ -592,6 +592,54 @@ abstract class AppLocalizations {
   /// **'尚未加载脚本（使能时直通）'**
   String get lpNoCode;
 
+  /// No description provided for @lpStatusOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'运行中'**
+  String get lpStatusOk;
+
+  /// No description provided for @lpStatusIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未加载'**
+  String get lpStatusIdle;
+
+  /// No description provided for @lpStatusError.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译失败'**
+  String get lpStatusError;
+
+  /// No description provided for @lpErrInitMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @init 段'**
+  String get lpErrInitMissing;
+
+  /// No description provided for @lpErrInitSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'@init 段语法错误'**
+  String get lpErrInitSyntax;
+
+  /// No description provided for @lpErrSampleMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @sample 段'**
+  String get lpErrSampleMissing;
+
+  /// No description provided for @lpErrSampleSyntax.
+  ///
+  /// In zh, this message translates to:
+  /// **'@sample 段语法错误'**
+  String get lpErrSampleSyntax;
+
+  /// No description provided for @lpBlockedByLint.
+  ///
+  /// In zh, this message translates to:
+  /// **'先修复标红的结构问题再应用'**
+  String get lpBlockedByLint;
+
   /// No description provided for @lpSliders.
   ///
   /// In zh, this message translates to:
@@ -1366,6 +1414,12 @@ abstract class AppLocalizations {
   /// **'全局信号流顺序示意 (自左至右)：'**
   String get chainFlowCaption;
 
+  /// No description provided for @chainNodeInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入门控'**
+  String get chainNodeInput;
+
   /// No description provided for @chainNodeShelf.
   ///
   /// In zh, this message translates to:
@@ -1390,11 +1444,65 @@ abstract class AppLocalizations {
   /// **'主限幅 Limiter'**
   String get chainNodeLimiter;
 
+  /// No description provided for @chainNodeOutputGate.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出门控'**
+  String get chainNodeOutputGate;
+
   /// No description provided for @chainNodeOutput.
   ///
   /// In zh, this message translates to:
   /// **'音频输出'**
   String get chainNodeOutput;
+
+  /// No description provided for @inputGate.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入门控'**
+  String get inputGate;
+
+  /// No description provided for @inputGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'总输入增益'**
+  String get inputGain;
+
+  /// No description provided for @channelBalance.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道平衡'**
+  String get channelBalance;
+
+  /// No description provided for @channelBalanceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'每个声道单独控制，默认100%。最终每个声道音量 = 总输入增益 × 单通道控制。'**
+  String get channelBalanceHint;
+
+  /// No description provided for @channelLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左声道 (L)'**
+  String get channelLeft;
+
+  /// No description provided for @channelRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右声道 (R)'**
+  String get channelRight;
+
+  /// No description provided for @inputStageIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'本级输入'**
+  String get inputStageIn;
+
+  /// No description provided for @inputStageOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'本级输出'**
+  String get inputStageOut;
 
   /// No description provided for @chainStagePreDsp.
   ///

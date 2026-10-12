@@ -160,6 +160,19 @@ class _LiveprogPageState extends State<LiveprogPage> {
   void _apply() {
     final text = _code.text;
     if (text.trim().isEmpty) return;
+    // v1.2 §3.3：引擎必拒的结构问题（缺段/空 @init）本地拦截，不下发编译。
+    final blocking = _issues.where((e) => e.blocking).toList();
+    if (blocking.isNotEmpty) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(
+            '${l10nOf(context).lpBlockedByLint}：${blocking.first.message}',
+            style:
+                TextStyle(color: paletteOf(context).text, fontSize: 13)),
+        duration: const Duration(seconds: 3),
+      ));
+      if (blocking.first.line > 0) _gotoLine(blocking.first.line);
+      return;
+    }
     widget.model.setLiveprogCode(text);
   }
 
@@ -289,6 +302,84 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 ],
               ),
               const SizedBox(height: AuraSpace.md),
+
+              // 编译状态胶囊（v1.2 §3.1：lpStatus/lpError 内联可见，
+              // 不依赖一闪而过的全局 EventBanner；status==0 且有 lpError
+              // 视为失败——引擎 rc=0（@init 缺失）与“未加载”同值，靠 lpError 区分）
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) {
+                  final st = m.lpStatus;
+                  final err = m.lpError;
+                  final failed = st < 0 || (st == 0 && err != null);
+                  final ok = st == 1;
+                  final Color c =
+                      ok ? p.success : (failed ? p.error : p.textDim);
+                  final String text;
+                  if (ok) {
+                    text = l.lpStatusOk;
+                  } else if (!failed) {
+                    text = l.lpStatusIdle;
+                  } else {
+                    final mapped = switch (st) {
+                      0 => l.lpErrInitMissing,
+                      -1 => l.lpErrInitSyntax,
+                      -2 => l.lpErrSampleMissing,
+                      -3 => l.lpErrSampleSyntax,
+                      _ => null,
+                    };
+                    text = '${l.lpStatusError}：${mapped ?? err ?? ''}';
+                  }
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: AuraSpace.md),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: c.withValues(alpha: 0.10),
+                      borderRadius:
+                          BorderRadius.circular(AuraRadius.sm),
+                      border:
+                          Border.all(color: c.withValues(alpha: 0.45)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          ok
+                              ? Icons.check_circle_outline_rounded
+                              : (failed
+                                  ? Icons.error_outline_rounded
+                                  : Icons
+                                      .radio_button_unchecked_rounded),
+                          size: 14,
+                          color: c,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            text,
+                            style: captionOf(p, color: c),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        if (failed &&
+                            (err ?? '').isNotEmpty &&
+                            !text.contains(err!))
+                          Flexible(
+                            child: Text(
+                              err,
+                              style: monoOf(p,
+                                  size: 11, color: p.textDim),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              textAlign: TextAlign.right,
+                            ),
+                          ),
+                      ],
+                    ),
+                  );
+                },
+              ),
 
               // 代码编辑器（支持语法着色）
               Container(

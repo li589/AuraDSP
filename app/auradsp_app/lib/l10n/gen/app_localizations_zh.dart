@@ -263,6 +263,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpNoCode => '尚未加载脚本（使能时直通）';
 
   @override
+  String get lpStatusOk => '运行中';
+
+  @override
+  String get lpStatusIdle => '未加载';
+
+  @override
+  String get lpStatusError => '编译失败';
+
+  @override
+  String get lpErrInitMissing => '缺少 @init 段';
+
+  @override
+  String get lpErrInitSyntax => '@init 段语法错误';
+
+  @override
+  String get lpErrSampleMissing => '缺少 @sample 段';
+
+  @override
+  String get lpErrSampleSyntax => '@sample 段语法错误';
+
+  @override
+  String get lpBlockedByLint => '先修复标红的结构问题再应用';
+
+  @override
   String get lpSliders => '脚本滑块（slider1..8）';
 
   @override
@@ -658,6 +682,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainFlowCaption => '全局信号流顺序示意 (自左至右)：';
 
   @override
+  String get chainNodeInput => '输入门控';
+
+  @override
   String get chainNodeShelf => '低频搁架 EQ';
 
   @override
@@ -670,7 +697,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainNodeLimiter => '主限幅 Limiter';
 
   @override
+  String get chainNodeOutputGate => '输出门控';
+
+  @override
   String get chainNodeOutput => '音频输出';
+
+  @override
+  String get inputGate => '输入门控';
+
+  @override
+  String get inputGain => '总输入增益';
+
+  @override
+  String get channelBalance => '声道平衡';
+
+  @override
+  String get channelBalanceHint => '每个声道单独控制，默认100%。最终每个声道音量 = 总输入增益 × 单通道控制。';
+
+  @override
+  String get channelLeft => '左声道 (L)';
+
+  @override
+  String get channelRight => '右声道 (R)';
+
+  @override
+  String get inputStageIn => '本级输入';
+
+  @override
+  String get inputStageOut => '本级输出';
 
   @override
   String get chainStagePreDsp => 'DSP 前置';
