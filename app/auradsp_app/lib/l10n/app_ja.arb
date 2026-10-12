@@ -134,6 +134,7 @@
   "lpDeleteAction": "削除",
   "lpRenameTitle": "スクリプト名変更",
   "lpOpFailed": "操作に失敗しました",
+  "lpCompiledIdle": "コンパイル済み — 右上のスイッチで適用",
   "lpSliders": "スクリプトスライダー（slider1..8）",
   "lpSliderHint": "宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映",
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",

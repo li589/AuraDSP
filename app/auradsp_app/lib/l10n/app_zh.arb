@@ -134,6 +134,7 @@
   "lpDeleteAction": "删除",
   "lpRenameTitle": "重命名脚本",
   "lpOpFailed": "操作失败，请重试",
+  "lpCompiledIdle": "已编译，打开右上角开关才生效",
   "lpSliders": "脚本滑块（slider1..8）",
   "lpSliderHint": "有声明按声明，无声明默认 0..1；改动实时生效",
   "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",
