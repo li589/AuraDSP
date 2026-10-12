@@ -900,19 +900,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             if (lib != null && handle != null) {
               final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final path = m['path'] as String;
-              final id = (m['id'] as String?) ?? '';
-              final rc = AuraDspLib.pluginSlotLoadWrap(lib, handle, slot, path, id: id);
-              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-              final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
-              send({
-                'evt': 'pluginSlotLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-                'status': statusJson,
-                'stage': stage,
-              });
+              _slotLoadAsync(lib, handle, slot, m['path'] as String,
+                  (m['id'] as String?) ?? '', send);
             }
             break;
           }
@@ -920,14 +909,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             if (lib != null && handle != null) {
               final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final rc = AuraDspLib.pluginSlotUnloadWrap(lib, handle, slot);
-              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-              send({
-                'evt': 'pluginSlotUnloaded',
-                'slot': slot,
-                'rc': rc,
-                'status': statusJson,
-              });
+              _slotUnloadAsync(lib, handle, slot, send);
             }
             break;
           }
@@ -1331,4 +1313,77 @@ void _scanChunked({
       send({'evt': 'pluginScanned', 'count': 0, 'json': '[]'});
     }
   }();
+}
+
+/// C3：异步挂载。
+///
+/// 旧实现在 isolate 事件循环上同步调 `pluginSlotLoadWrap`——实测挂载耗时
+/// p50 77.6ms、max 1144.1ms（KV-Element-FX）。而音频泵（每 5ms 一轮推 WASAPI）
+/// 与命令处理在同一事件循环上，于是 1.1s 的挂载 ≈ 跳过 220 轮泵 →
+/// buffer underrun → 用户听到的就是"挂载时卡一下"。
+///
+/// 改为：引擎侧 `slot_load_async` 只做微秒级入队（重活挪到引擎控制线程，
+/// 且不持 m_hostMutex），这里 fire-and-forget 轮询 task_state，每轮之间
+/// `await Future<void>.delayed` 让出事件循环 → 音频泵照常推进。
+void _slotLoadAsync(AuraDspLib lib, Pointer<Void> handle, int slot, String path,
+    String id, void Function(Map<String, dynamic>) send) {
+  () async {
+    final rc = await _submitAndWait(lib, handle, slot, send, isLoad: true,
+        path: path, id: id);
+    final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+    final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
+    send({
+      'evt': 'pluginSlotLoaded',
+      'slot': slot,
+      'path': path,
+      'rc': rc,
+      'status': statusJson,
+      'stage': stage,
+      'busy': false,
+    });
+  }();
+}
+
+/// C3：异步卸载。同 [_slotLoadAsync] 的根因——卸载重活（deactivate / destroy /
+/// FreeLibrary，实测 p50 18.2ms、max 231.3ms）也必须移出事件循环。
+void _slotUnloadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
+    void Function(Map<String, dynamic>) send) {
+  () async {
+    final rc = await _submitAndWait(lib, handle, slot, send, isLoad: false);
+    final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+    send({
+      'evt': 'pluginSlotUnloaded',
+      'slot': slot,
+      'rc': rc,
+      'status': statusJson,
+      'busy': false,
+    });
+  }();
+}
+
+/// C3：提交异步任务并轮询到终态。返回引擎 load/unload 的语义码（1 成功 / 0 失败）。
+///
+/// 每轮间隔 5ms（与泵节奏一致）；上限 30000 轮（150s）防悬挂。
+/// 被拒（该槽已有任务在跑）时**不发**终态事件——那个在跑的
+/// 任务自己会发，这里静默返回避免误报"失败"。
+Future<int> _submitAndWait(AuraDspLib lib, Pointer<Void> handle, int slot,
+    void Function(Map<String, dynamic>) send,
+    {required bool isLoad, String path = '', String id = ''}) async {
+  final accepted = isLoad
+      ? AuraDspLib.pluginSlotLoadAsyncWrap(lib, handle, slot, path, id: id)
+      : AuraDspLib.pluginSlotUnloadAsyncWrap(lib, handle, slot);
+  if (accepted == 0) return 0;
+
+  send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': true});
+  try {
+    for (int i = 0; i < 30000; ++i) {
+      final st = AuraDspLib.pluginSlotTaskStateWrap(lib, handle, slot);
+      if (st != 1) return st == 2 ? 1 : 0;
+      // 关键：让出事件循环，音频泵才能在这 5ms 内推进。
+      await Future<void>.delayed(const Duration(milliseconds: 5));
+    }
+  } finally {
+    send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': false});
+  }
+  return 0;
 }

@@ -24,6 +24,9 @@
 #include <array>
 #include <unordered_map>
 #include <utility>
+#include <deque>
+#include <thread>
+#include <condition_variable>
 
 namespace auradsp {
 
@@ -139,6 +142,9 @@ public:
          * 二者构成 Dekker 式握手，杜绝「RT 已通过检查但实例被 reset」的竞争。 */
         std::atomic<uint32_t> inFlight{0};
         std::atomic<bool> destroyPending{false};
+        /* C3 异步挂载/卸载任务状态（原子，供 Dart 无锁轮询）：
+         * 0=无任务 1=进行中 2=成功 3=失败。终态（2/3）在下一次提交时被清零。 */
+        std::atomic<int> taskState{0};
     };
 
     PluginHostManager();
@@ -192,6 +198,23 @@ public:
     void setInsertStageSlot(size_t slot, int stage);
     int getInsertStageSlot(size_t slot) const;
 
+    /* ---- C3 异步挂载/卸载（2026-10-12）----
+     * 背景：load/unload 是单个长 FFI 调用（实测 load p50 77ms、max 1144ms；
+     *       unload p50 18ms、max 231ms），在 Dart isolate 的事件循环上同步执行
+     *       会占满该循环——而音频 pump（每 5ms 一轮推 WASAPI）也在同一循环上，
+     *       于是 1.1s 的 load ≈ 跳过 220 轮泵 → buffer underrun → 可听爆音/停顿。
+     * 方案：重活（LoadLibrary / 工厂枚举 / createInstance / activate，
+     *       以及卸载侧的 deactivate / destroy / FreeLibrary）挪到引擎侧控制线程，
+     *       **且完全不持 m_hostMutex**；只有"把实例指针挂进/摘出槽位"这一
+     *       微秒级操作短暂持锁。音频路径 processSlot 本就不持 m_hostMutex
+     *       （靠 inFlight/hasActive 无锁握手），于是全程不阻塞。
+     * 调用方：提交后立即返回，之后轮询 slotTaskState 直到终态。 */
+    bool submitSlotLoadAsync(size_t slot, const std::string& path, const std::string& pluginId,
+                             double sampleRate, uint32_t maxBlockSize);
+    bool submitSlotUnloadAsync(size_t slot);
+    int slotTaskState(size_t slot) const;   // 0=无 1=进行中 2=成功 3=失败
+    bool slotTaskPending(size_t slot) const;
+
     // Process single slot (RT-Safe)
     void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
 
@@ -204,8 +227,40 @@ public:
 
     // Sample rate / block size update
     void updateFormat(double sampleRate, uint32_t maxBlockSize);
+    double getSampleRate() const { return m_sampleRate; }
+    uint32_t getMaxBlockSize() const { return m_maxBlockSize; }
 
+    /* 卸载的两段式拆分（C3）：detach 只做"摘出槽位 + 等 RT 退出临界区"，
+     * 必须在 m_hostMutex 下但极短；destroy 是重活（deactivate / destroy /
+     * FreeLibrary），**必须**在锁外执行，否则长耗时仍会卡住其他控制命令。 */
+    std::unique_ptr<IPluginInstance> detachInstanceLocked(size_t slot);
+    static void destroyInstance(std::unique_ptr<IPluginInstance> instance);
     void unloadPluginSlotLocked(size_t slot);
+
+    /* 加载的两段式拆分（C3）：prepare 是重活（解析 bundle / LoadLibrary /
+     * createInstance / activate），在锁外执行；commit 只把指针挂进槽位。 */
+    std::unique_ptr<IPluginInstance> prepareInstance(const std::string& path, const std::string& pluginId);
+    void commitInstanceLocked(size_t slot, std::unique_ptr<IPluginInstance> instance);
+
+    // ---- C3 异步挂载/卸载：控制线程 + 任务队列 ----
+    struct ControlTask {
+        size_t slot = 0;
+        bool isLoad = false;
+        std::string path;
+        std::string pluginId;
+        double sampleRate = 48000.0;
+        uint32_t maxBlockSize = 1024;
+    };
+    bool submitTaskLocked(ControlTask task);
+    void ensureControlThreadLocked();
+    void controlLoop();
+    void runControlTask(const ControlTask& t);
+
+    std::deque<ControlTask> m_controlQueue;
+    std::mutex m_controlMutex;
+    std::condition_variable m_controlCv;
+    std::thread m_controlThread;
+    std::atomic<bool> m_controlRunning{false};
 
     std::vector<PluginMetadata> m_scannedPlugins;
     std::array<PluginSlot, kMaxPluginSlots> m_slots;

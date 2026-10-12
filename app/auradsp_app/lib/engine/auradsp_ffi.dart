@@ -381,6 +381,27 @@ final class AuraDspLib {
           'auradsp_plugin_slot_unload')
       .asFunction();
 
+  /// C3：异步挂载/卸载。提交立即返回（微秒级），重活在引擎控制线程执行，
+  /// 不阻塞调用方（音频 isolate 的事件循环）。轮询 [pluginSlotTaskState]
+  /// 直到终态：0=无任务 1=进行中 2=成功 3=失败。
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>, Pointer<Utf8>)
+      pluginSlotLoadAsync = dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32, Pointer<Utf8>,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_load_async')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotUnloadAsync = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_unload_async')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotTaskState = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_task_state')
+      .asFunction();
+
   late final int Function(Pointer<Void>, int, int) pluginSlotSetBypass = dylib
       .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
           'auradsp_plugin_slot_set_bypass')
@@ -731,6 +752,29 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   /// 槽位卸载插件
   static int pluginSlotUnloadWrap(AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotUnload(handle, slot);
+  }
+
+  /// C3：异步提交槽位加载（非阻塞）。返回 1=已受理，0=被拒绝（该槽已有任务进行中）。
+  static int pluginSlotLoadAsyncWrap(AuraDspLib lib, Pointer<Void> handle, int slot,
+      String path, {String id = ''}) {
+    final pathPtr = path.toNativeUtf8();
+    final idPtr = id.toNativeUtf8();
+    try {
+      return lib.pluginSlotLoadAsync(handle, slot, pathPtr, idPtr);
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(idPtr);
+    }
+  }
+
+  /// C3：异步提交槽位卸载（非阻塞）。返回 1=已受理，0=被拒绝。
+  static int pluginSlotUnloadAsyncWrap(AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotUnloadAsync(handle, slot);
+  }
+
+  /// C3：查询槽位任务状态。0=无任务 1=进行中 2=成功 3=失败。
+  static int pluginSlotTaskStateWrap(AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotTaskState(handle, slot);
   }
 
   /// 槽位设置旁路

@@ -861,6 +861,10 @@ class _ActivePluginHero extends StatelessWidget {
     final active = manager.getSlotPlugin(slot);
     final isBypassed = manager.isSlotBypassed(slot);
     final currentStage = manager.getSlotStage(slot);
+    // C3：挂载/卸载进行中（异步任务）。此期间禁用所有会触碰该槽实例的按钮，
+    // 避免用户在 unload 还没跑完时就点"打开界面"——那样会去取一个正在销毁
+    // 的实例。引擎侧也会拒绝，这里先让 UI 表达出来。
+    final isBusy = manager.isSlotBusy(slot);
 
     if (!isActive || active == null) {
       return SectionCard(
@@ -926,10 +930,24 @@ class _ActivePluginHero extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
+          // C3：挂载/卸载进行中（异步任务）。所有会触碰该槽实例的按钮已禁用，
+          // 这里给出一个可见的忙态，让用户知道"正在处理，不是卡死了"。
+          if (isBusy) ...[
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: p.accent,
+                backgroundColor: p.hairline,
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+          ],
           // 原生 GUI 打开按钮
           ElevatedButton.icon(
             // C1：同一插件可挂多槽，标题必须带槽位号区分两个编辑器窗口。
-            onPressed: () => manager.showEditor(
+            onPressed: isBusy ? null : () => manager.showEditor(
               slot: slot,
               title: l10nOf(context).plugEditorTitleNamed(slot + 1, active.name),
             ),
@@ -946,7 +964,7 @@ class _ActivePluginHero extends StatelessWidget {
           const SizedBox(width: AuraSpace.sm),
           // 预设管理按钮
           OutlinedButton.icon(
-            onPressed: () => onShowPresets(active),
+            onPressed: isBusy ? null : () => onShowPresets(active),
             icon: const Icon(Icons.tune_rounded, size: 15),
             label: Text(l10nOf(context).dlgPreset),
             style: OutlinedButton.styleFrom(
@@ -963,12 +981,12 @@ class _ActivePluginHero extends StatelessWidget {
             isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
             selected: !isBypassed,
             danger: isBypassed,
-            onTap: () => manager.toggleBypass(slot: slot),
+            onTap: isBusy ? null : () => manager.toggleBypass(slot: slot),
           ),
           const SizedBox(width: AuraSpace.sm),
           // 卸载按钮
           OutlinedButton.icon(
-            onPressed: () => manager.unloadPlugin(slot: slot),
+            onPressed: isBusy ? null : () => manager.unloadPlugin(slot: slot),
             icon: const Icon(Icons.eject_rounded, size: 15),
             label: Text(l10nOf(context).dlgUnload),
             style: OutlinedButton.styleFrom(
@@ -1316,6 +1334,7 @@ class _PluginListView extends StatelessWidget {
             loadedInOtherSlot: loadedInOtherSlot,
             onLoad: () => onLoad(plugin),
             onUnload: onUnload,
+            busy: manager.isSlotBusy(slot),
           );
         },
       ),
@@ -1331,6 +1350,8 @@ class _PluginListItem extends StatelessWidget {
   final int? loadedInOtherSlot;
   final VoidCallback onLoad;
   final VoidCallback onUnload;
+  /// C3：该槽挂载/卸载任务进行中（异步）。两个操作按钮据此禁用。
+  final bool busy;
 
   const _PluginListItem({
     required this.plugin,
@@ -1339,6 +1360,7 @@ class _PluginListItem extends StatelessWidget {
     required this.loadedInOtherSlot,
     required this.onLoad,
     required this.onUnload,
+    this.busy = false,
   });
 
   @override
@@ -1350,6 +1372,9 @@ class _PluginListItem extends StatelessWidget {
     // 弹出精确原因（errorMessage），不会走到引擎。
     final isIncompatible = !plugin.isCompatible;
     final badgeColor = isVst3 ? const Color(0xFF0072FF) : const Color(0xFFE94057);
+    // C3：该槽挂载/卸载进行中——两个操作按钮都要禁用，避免重复下发
+    // （引擎侧也会拒绝，但提前禁用让 UI 不闪一下再失败）。
+    final isBusy = busy;
 
     return Opacity(
       opacity: isIncompatible ? 0.55 : 1.0,
@@ -1488,8 +1513,12 @@ class _PluginListItem extends StatelessWidget {
           // 操作按钮
           if (isLoadedInThisSlot)
             ElevatedButton.icon(
-              onPressed: onUnload,
-              icon: const Icon(Icons.eject_rounded, size: 14),
+              onPressed: isBusy ? null : onUnload,
+              icon: isBusy
+                  ? const SizedBox(
+                      width: 14, height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2))
+                  : const Icon(Icons.eject_rounded, size: 14),
               label: Text(l10nOf(context).plugUnloadFromSlot),
               style: ElevatedButton.styleFrom(
                 backgroundColor: p.error.withValues(alpha: 0.15),
@@ -1500,7 +1529,7 @@ class _PluginListItem extends StatelessWidget {
             )
           else
             ElevatedButton.icon(
-              onPressed: onLoad,
+              onPressed: isBusy ? null : onLoad,
               icon: const Icon(Icons.arrow_upward_rounded, size: 14),
               label: Text(l10nOf(context).plugLoadToSlot(slot + 1)),
               style: ElevatedButton.styleFrom(

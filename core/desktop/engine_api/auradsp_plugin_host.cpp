@@ -3294,6 +3294,11 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
 PluginHostManager::PluginHostManager() = default;
 
 PluginHostManager::~PluginHostManager() {
+    // 先停止控制线程（避免新任务进入）
+    m_controlRunning.store(false, std::memory_order_release);
+    m_controlCv.notify_all();
+    if (m_controlThread.joinable()) m_controlThread.join();
+    // 再同步卸载所有槽（控制线程已停，安全）
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         unloadPluginSlot(s);
     }
@@ -3746,6 +3751,229 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
             m_slots[s].latency.store(m_slots[s].instance->getLatency(), std::memory_order_relaxed);
         }
     }
+}
+
+//------------------------------------------------------------------------------
+
+// C3 两段式拆分：prepare（重活，锁外） / commit（微秒级，锁内）
+
+std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(const std::string& path, const std::string& pluginId) {
+    // 判断格式
+    std::string ext = fs::path(path).extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+    PluginFormat format = PluginFormat::Unknown;
+    if (ext == ".clap") format = PluginFormat::CLAP;
+    else if (ext == ".vst3") format = PluginFormat::VST3;
+    else return nullptr;
+
+    std::string resolvedBin = PluginScanner::resolveBundleBinary(path, format);
+    if (resolvedBin.empty()) return nullptr;
+
+    std::unique_ptr<IPluginInstance> instance;
+    if (format == PluginFormat::CLAP) {
+        instance = std::make_unique<ClapPluginInstance>();
+    } else {
+        instance = std::make_unique<Vst3PluginInstance>();
+    }
+
+    // 查找扫描期种子（匹配 path + pluginId）
+    const PluginMetadata* seed = nullptr;
+    {
+        std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+        for (const auto& p : m_scannedPlugins) {
+            if (p.path != path) continue;
+            if (!pluginId.empty() && !p.id.empty() && p.id != pluginId) continue;
+            seed = &p;
+            break;
+        }
+    }
+
+    bool lRet = instance->load(path, pluginId, seed);
+    if (!lRet) {
+        if (instance->abandoned()) {
+            quarantineAbandonedInstance(std::move(instance));
+        }
+        return nullptr;
+    }
+
+    bool aRet = instance->activate(m_sampleRate, m_maxBlockSize);
+    if (!aRet) {
+        instance->unload();
+        if (instance->abandoned()) {
+            quarantineAbandonedInstance(std::move(instance));
+        }
+        return nullptr;
+    }
+
+    return instance;
+}
+
+void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPluginInstance> instance) {
+    // 注意：调用方已持有 m_hostMutex
+    if (slot >= kMaxPluginSlots || !instance) return;
+    PluginSlot& s = m_slots[slot];
+    // 如果槽上已有实例，先摘出（但不销毁——销毁在锁外做）
+    auto old = std::move(s.instance);
+    s.instance = std::move(instance);
+    s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+    s.hasActive.store(true, std::memory_order_release);
+    s.bypassed.store(false, std::memory_order_release);
+
+    // 摘出的旧实例在锁外销毁
+    if (old) {
+        old->closeEditor();
+        old->deactivate();
+        old->unload();
+        if (old->abandoned()) {
+            quarantineAbandonedInstance(std::move(old));
+        }
+        // 否则 unique_ptr 在此处析构
+    }
+}
+
+//------------------------------------------------------------------------------
+
+// C3 两段式拆分：detach（摘出+等RT退出，锁内） / destroy（重活，锁外）
+
+std::unique_ptr<IPluginInstance> PluginHostManager::detachInstanceLocked(size_t slot) {
+    // 注意：调用方已持有 m_hostMutex
+    if (slot >= kMaxPluginSlots) return nullptr;
+    PluginSlot& s = m_slots[slot];
+    s.hasActive.store(false, std::memory_order_release);
+    s.destroyPending.store(true, std::memory_order_release);
+    std::atomic_thread_fence(std::memory_order_acquire);
+
+    uint32_t spins = 0;
+    while (s.inFlight.load(std::memory_order_relaxed) != 0 && spins < kQuiesceSpinLimit) {
+        s.inFlight.wait(0, std::memory_order_relaxed);
+        ++spins;
+    }
+    s.destroyPending.store(false, std::memory_order_relaxed);
+    s.inFlight.store(0, std::memory_order_relaxed);
+    s.latency.store(0, std::memory_order_relaxed);
+
+    auto instance = std::move(s.instance);
+    return instance;  // 调用方在锁外销毁
+}
+
+void PluginHostManager::destroyInstance(std::unique_ptr<IPluginInstance> instance) {
+    if (!instance) return;
+    instance->closeEditor();
+    instance->deactivate();
+    instance->unload();
+    if (instance->abandoned()) {
+        quarantineAbandonedInstance(std::move(instance));
+    }
+    // 否则 unique_ptr 析构
+}
+
+//------------------------------------------------------------------------------
+
+// C3 控制线程：异步执行 load/unload 任务
+
+bool PluginHostManager::submitTaskLocked(ControlTask task) {
+    // 注意：调用方已持有 m_hostMutex
+    // 设置任务状态为进行中
+    m_slots[task.slot].taskState.store(1, std::memory_order_release);
+    // 入队
+    {
+        std::lock_guard<std::mutex> ql(m_controlMutex);
+        m_controlQueue.push_back(std::move(task));
+    }
+    m_controlCv.notify_one();
+    return true;
+}
+
+void PluginHostManager::ensureControlThreadLocked() {
+    if (m_controlRunning.load(std::memory_order_relaxed)) return;
+    m_controlRunning.store(true, std::memory_order_release);
+    m_controlThread = std::thread([this]() { controlLoop(); });
+}
+
+void PluginHostManager::controlLoop() {
+    while (true) {
+        ControlTask task;
+        {
+            std::unique_lock<std::mutex> lk(m_controlMutex);
+            m_controlCv.wait(lk, [this]() { return !m_controlQueue.empty() || !m_controlRunning.load(); });
+            if (!m_controlRunning.load() && m_controlQueue.empty()) break;
+            task = std::move(m_controlQueue.front());
+            m_controlQueue.pop_front();
+        }
+        runControlTask(task);
+    }
+}
+
+void PluginHostManager::runControlTask(const ControlTask& t) {
+    if (t.slot >= kMaxPluginSlots) return;
+
+    if (t.isLoad) {
+        // prepare 在锁外执行（重活）
+        auto instance = prepareInstance(t.path, t.pluginId);
+        // commit 在锁内执行（微秒级）
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+            m_sampleRate = t.sampleRate;
+            m_maxBlockSize = t.maxBlockSize;
+            if (instance) {
+                commitInstanceLocked(t.slot, std::move(instance));
+                m_slots[t.slot].taskState.store(2, std::memory_order_release); // 成功
+            } else {
+                m_slots[t.slot].taskState.store(3, std::memory_order_release); // 失败
+            }
+        }
+    } else {
+        // unload：detach 在锁内（短），destroy 在锁外（重活）
+        std::unique_ptr<IPluginInstance> instance;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+            instance = detachInstanceLocked(t.slot);
+            m_slots[t.slot].taskState.store(2, std::memory_order_release); // 卸载总是"成功"
+        }
+        destroyInstance(std::move(instance)); // 锁外销毁
+    }
+}
+
+//------------------------------------------------------------------------------
+
+// C3 公开 API
+
+bool PluginHostManager::submitSlotLoadAsync(size_t slot, const std::string& path, const std::string& pluginId,
+                                             double sampleRate, uint32_t maxBlockSize) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    // 如果该槽已有进行中的任务，拒绝（调用方应先轮询确认空闲）
+    if (m_slots[slot].taskState.load(std::memory_order_acquire) == 1) return false;
+    ensureControlThreadLocked();
+    ControlTask task;
+    task.slot = slot;
+    task.isLoad = true;
+    task.path = path;
+    task.pluginId = pluginId;
+    task.sampleRate = sampleRate;
+    task.maxBlockSize = maxBlockSize;
+    return submitTaskLocked(std::move(task));
+}
+
+bool PluginHostManager::submitSlotUnloadAsync(size_t slot) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].taskState.load(std::memory_order_acquire) == 1) return false;
+    ensureControlThreadLocked();
+    ControlTask task;
+    task.slot = slot;
+    task.isLoad = false;
+    return submitTaskLocked(std::move(task));
+}
+
+int PluginHostManager::slotTaskState(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return 0;
+    return m_slots[slot].taskState.load(std::memory_order_acquire);
+}
+
+bool PluginHostManager::slotTaskPending(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return false;
+    return m_slots[slot].taskState.load(std::memory_order_acquire) == 1;
 }
 
 } // namespace auradsp

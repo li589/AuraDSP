@@ -195,6 +195,13 @@ int      auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len);
 int      auradsp_plugin_get_num_slots(auradsp_handle h);
 int      auradsp_plugin_slot_load(auradsp_handle h, int slot, const char* path, const char* plugin_id);
 int      auradsp_plugin_slot_unload(auradsp_handle h, int slot);
+
+/* ---- C3 异步挂载/卸载（2026-10-12）----
+ * 提交后立即返回（非阻塞），调用方轮询 auradsp_plugin_slot_task_state 直到终态。
+ * task_state: 0=无任务 1=进行中 2=成功 3=失败 */
+int      auradsp_plugin_slot_load_async(auradsp_handle h, int slot, const char* path, const char* plugin_id);
+int      auradsp_plugin_slot_unload_async(auradsp_handle h, int slot);
+int      auradsp_plugin_slot_task_state(auradsp_handle h, int slot);
 int      auradsp_plugin_slot_set_bypass(auradsp_handle h, int slot, int bypass);
 int      auradsp_plugin_slot_get_bypass(auradsp_handle h, int slot);
 uint32_t auradsp_plugin_slot_get_latency(auradsp_handle h, int slot);

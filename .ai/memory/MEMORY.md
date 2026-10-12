@@ -100,3 +100,26 @@
 - **分块粒度按最坏单步定**：深扫单步 p50 8.7ms 但 max 1041.8ms（长尾在大厂 DLL），
   故深扫 batch=1；快扫 batch=8。别用平均值定粒度。
 - 扫描结果**渐进 append** 到 `m_scannedPlugins`，扫描过程中 `get_all` 即返回已扫部分 → UI 边扫边长。
+
+### C3 挂载/卸载异步化（2026-10-12）
+- **"锁范围窄"不等于"可以异步"**：`processSlot` 不持 `m_hostMutex`（靠 `inFlight`/`hasActive`
+  无锁握手），所以 RT 路径不被 load 阻塞；但 `loadPluginSlot` 把整个加载都放在锁下，
+  意味着想异步化就必须整段搬线程——全有全无。**正确做法是先把 load/unload 拆成两段**：
+  `prepareInstance`（重活，锁外：解析 bundle → LoadLibrary → createInstance → activate）
+  / `commitInstanceLocked`（微秒级，锁内：把指针挂进槽位）；
+  `detachInstanceLocked`（锁内短：摘出槽位 + 等 RT 退出临界区）/
+  `destroyInstance`（锁外：deactivate / destroy / FreeLibrary）。拆完之后"只让重活上
+  控制线程、提交留在调用方线程"才成立。
+- **瓶颈是调用方线程，不是锁**：Dart isolate 内音频泵（5ms/轮推 WASAPI）与命令处理
+  在**同一事件循环**，所以挂载 p50 77.6ms / max 1144.1ms 会跳过 220 轮泵 → underrun。
+  修法是把重活挪到引擎控制线程（std::thread + deque + cv），提交端只做微秒级入队
+  （实测 0.010–0.056ms vs 同步 61.6/91.0ms）。
+- **异步任务的状态字段用原子**（`std::atomic<int> taskState`），调用方无锁轮询；
+  终态码 0 无/1 进行中/2 成功/3 失败。终态**粘性保留**直到下次提交——调用方不必
+  担心"读得太早"。
+- **被拒的任务不发终态事件**：该槽已有任务在跑时 `submit` 返回 0，此时若还发一个
+  "失败"事件，会让上层把在跑的合法任务判成失败。静默返回即可。
+- **UI 侧忙态要双向兜底**：引擎回执 `pluginSlotBusy`（真值）+ `loadPlugin` 乐观置忙
+  并拦截重复下发。`_slotBusy` 字段**原本就声明了但从未写入**——接线时发现的是死代码。
+- **门禁坑**：`flutter test` 与 `python test/runner.py --smoke` **不要并发跑**——
+  资源争用会让 Dart 测试超时（`responsive_layout_test` 报 "did not complete"），单独跑则全过。

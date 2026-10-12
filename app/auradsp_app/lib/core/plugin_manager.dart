@@ -236,6 +236,14 @@ class PluginManager extends ChangeNotifier {
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
 
+  /// C3：引擎回执挂载/卸载进行中（异步任务的"提交成功→进行中"与"终态"两次翻转）。
+  /// 用于 UI 在挂载/卸载期间显示忙态并禁用重复操作。
+  void onPluginSlotBusy(int slot, bool busy) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    _slotBusy[slot] = busy;
+    notifyListeners();
+  }
+
   PluginManager({PluginCommandSender? commandSender}) {
     _commandSender = commandSender;
   }
@@ -378,6 +386,9 @@ class PluginManager extends ChangeNotifier {
   /// 加载插件到指定槽位（默认当前选中槽位）
   void loadPlugin(PluginMetadata plugin, {int? slot}) {
     final s = slot ?? _selectedSlot;
+    // C3：该槽已有挂载/卸载任务进行中则不重复下发——引擎也会拒绝，
+    // 但提前拦截可以让 UI 不闪一下再失败。
+    if (_slotBusy[s] == true) return;
     _lastError = null;
     // D2：扫描期已判定不兼容的插件（当前唯一情形：32 位）在 Dart 侧
     // 直接拦截，不走 isolate 往返。引擎侧 load() 有同样拒绝（双保险），
@@ -389,6 +400,9 @@ class PluginManager extends ChangeNotifier {
       notifyListeners();
       return;
     }
+    // C3：乐观置忙（引擎回执 pluginSlotBusy 会再确认一次）。
+    _slotBusy[s] = true;
+    notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotLoad',
       'slot': s,
@@ -400,6 +414,10 @@ class PluginManager extends ChangeNotifier {
   /// 卸载指定槽位的插件
   void unloadPlugin({int? slot}) {
     final s = slot ?? _selectedSlot;
+    // C3：同上，避免在卸载还在进行时又发一次。
+    if (_slotBusy[s] == true) return;
+    _slotBusy[s] = true;
+    notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotUnload',
       'slot': s,
@@ -581,6 +599,7 @@ class PluginManager extends ChangeNotifier {
 
   void onPluginSlotLoaded(int slot, String path, int rc, dynamic rawStatus, int stage) {
     if (slot >= 0 && slot < kMaxSlots) {
+      _slotBusy[slot] = false; // C3：任务终态，忙态清除
       if (rc != 1) {
         // D2：扫描列表里已标记不兼容的插件（当前唯一情形：32 位）直接用
         // 引擎的精确原因，不再让用户看"可能位数不符"的猜测文案。
@@ -608,6 +627,7 @@ class PluginManager extends ChangeNotifier {
 
   void onPluginSlotUnloaded(int slot, int rc, dynamic rawStatus) {
     if (slot >= 0 && slot < kMaxSlots) {
+      _slotBusy[slot] = false; // C3：任务终态，忙态清除
       _parseStatusJsonForSlot(slot, rawStatus);
       notifyListeners();
     }

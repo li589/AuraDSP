@@ -2301,6 +2301,24 @@ int auradsp_plugin_slot_unload(auradsp_handle h, int slot) {
     return 1;
 }
 
+int auradsp_plugin_slot_load_async(auradsp_handle h, int slot, const char* path, const char* plugin_id) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    std::string p = path ? path : "";
+    std::string id = plugin_id ? plugin_id : "";
+    return h->plugin_host->submitSlotLoadAsync((size_t)slot, p, id,
+        h->plugin_host->getSampleRate(), h->plugin_host->getMaxBlockSize()) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_unload_async(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->submitSlotUnloadAsync((size_t)slot) ? 1 : 0;
+}
+
+int auradsp_plugin_slot_task_state(auradsp_handle h, int slot) {
+    if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    return h->plugin_host->slotTaskState((size_t)slot);
+}
+
 int auradsp_plugin_slot_set_bypass(auradsp_handle h, int slot, int bypass) {
     if (!h || !h->plugin_host || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     h->plugin_host->setBypassSlot((size_t)slot, bypass != 0);
