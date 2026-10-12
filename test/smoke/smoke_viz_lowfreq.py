@@ -12,12 +12,13 @@ class VizFrame(ctypes.Structure):
     # 下面的 sizeof 断言用于在 ABI 再变时立刻失败，而不是静默越界。
     _fields_ = [("seq", ctypes.c_uint64), ("timestamp_ms", ctypes.c_double),
                 ("spectrum", ctypes.c_float * 32),
+                ("eq_in_spectrum", ctypes.c_float * 32),
                 ("level_l_dbfs", ctypes.c_float), ("level_r_dbfs", ctypes.c_float),
                 ("stage_levels_l", ctypes.c_float * 16),
                 ("stage_levels_r", ctypes.c_float * 16)]
 
-assert ctypes.sizeof(VizFrame) == 280, (
-    "VizFrame out of sync with auradsp_viz_frame: expected 280, got "
+assert ctypes.sizeof(VizFrame) == 408, (
+    "VizFrame out of sync with auradsp_viz_frame: expected 408, got "
     + str(ctypes.sizeof(VizFrame)))
 
 dll.auradsp_create.restype = ctypes.c_void_p

@@ -606,6 +606,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({
       'evt': 'viz',
       'spectrum': List<double>.filled(lastSpectrumLen, 0.0),
+      'eqIn': List<double>.filled(lastSpectrumLen, 0.0),
       'l': -90.0,
       'r': -90.0,
       'stageL': List<double>.filled(lastStageLen, -90.0),
@@ -1212,6 +1213,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               vizCount++;
               idleVizSent = false;
               final sp = fr.spectrumToList();
+              final eqIn = fr.eqInSpectrumToList();
               final stageL = fr.stageLevelsLToList();
               lastSpectrumLen = sp.length;
               lastStageLen = stageL.length;
@@ -1224,6 +1226,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               send({
                 'evt': 'viz',
                 'spectrum': sp,
+                'eqIn': eqIn,
                 'l': fr.levelLDbfs,
                 'r': fr.levelRDbfs,
                 'stageL': stageL,

@@ -150,7 +150,7 @@ class _InteractiveSpectrumEQPanelState
                           child: RepaintBoundary(
                             child: ListenableBuilder(
                               listenable: Listenable.merge([
-                                model.spectrum,
+                                model.eqInSpectrum,
                                 model,
                               ]),
                               builder: (context, _) {
@@ -158,7 +158,18 @@ class _InteractiveSpectrumEQPanelState
                                   size: Size(w, h),
                                   painter: _SpectrumEQPainter(
                                     palette: p,
-                                    spectrumBands: model.spectrum.value,
+                                    // 背景柱画的是**均衡器输出**频谱，不是整链输出：
+                                    // EQ 之后的混响/卷积/Freeverb/插件全都混在
+                                    // model.spectrum 里，拿它当背景，用户看到的根本不是
+                                    // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
+                                    // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
+                                    // （eqInSpectrum）+ 实测响应合成，见
+                                    // AppModel.composeEqOutputSpectrum。
+                                    spectrumBands: AppModel.composeEqOutputSpectrum(
+                                      model.eqInSpectrum.value,
+                                      model.eqResponseDb,
+                                      bypassed: model.eqBypass,
+                                    ),
                                     frequencies: model.eqFrequencies,
                                     gains: model.eqGains,
                                     hoveredIndex: _draggedIndex ?? _hoveredIndex,
