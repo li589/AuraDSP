@@ -1435,12 +1435,6 @@ static void ResizeDirectChildren(HWND hwnd) {
 static constexpr UINT_PTR kSizeSettleTimerId = 0x4143;  // 避免与 CLAP 插件自己的定时器 ID 冲突
 static constexpr int kSizeSettleMaxTicks = 6;            // 6 * 100ms = 600ms
 
-// GWLP_USERDATA2（Vista+，值 -5）在部分 SDK 配置下不随 <windows.h> 暴露
-// （需要 WINVER >= 0x0600）。手工补齐，避免抬高全局 WINVER 带来的副作用。
-#ifndef GWLP_USERDATA2
-#define GWLP_USERDATA2 (-5)
-#endif
-
 // 编辑器容器窗口的过程函数（CLAP/VST3 共用模式）：
 // 生命周期由 plugin main 线程的泵循环管理，WM_CLOSE 经 GWLP_USERDATA 里
 // 的实例指针分发到 onEditorWmClose()（在泵线程内直接收尾，与 gui->create /
@@ -1460,13 +1454,15 @@ static LRESULT CALLBACK EditorHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPA
     if (msg == WM_TIMER && wp == kSizeSettleTimerId) {
         // C4：尺寸稳定化轮询——见 IPluginInstance::pollEditorSize 注释。
         auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
-        if (instance) instance->pollEditorSize();
-        LONG_PTR ticks = GetWindowLongPtrW(hwnd, GWLP_USERDATA2);
-        if (ticks >= kSizeSettleMaxTicks) {
+        if (instance) {
+            instance->pollEditorSize();
+            instance->incSettleTicks();
+            if (instance->getSettleTicks() >= kSizeSettleMaxTicks) {
+                KillTimer(hwnd, kSizeSettleTimerId);
+            }
+        } else {
             KillTimer(hwnd, kSizeSettleTimerId);
-            return 0;
         }
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, ticks + 1);
         return 0;
     }
     if (msg == WM_CLOSE) {
@@ -1955,7 +1951,7 @@ public:
         // 系列为代表），所以再取一次并同步容器与子窗口；异步布局的插件由
         // 尺寸稳定化定时器继续校正。
         if (setParentRes) pollEditorSizeClap(gui, width, height);
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, 0);
+        resetSettleTicks();
         SetTimer(hwnd, kSizeSettleTimerId, 100, nullptr);
 
         auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
@@ -2971,7 +2967,7 @@ public:
         pollEditorSizeOnPumpThread(view, width, height);
         // C4：异步布局的插件（iZotope RX 系列为代表）真实尺寸在几十到几百
         // 毫秒后才稳定，故再挂一个短命定时器反复校正（100ms × 6 次）。
-        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, 0);
+        resetSettleTicks();
         SetTimer(hwnd, kSizeSettleTimerId, 100, nullptr);
         return true;
     }
@@ -3941,19 +3937,21 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(const std::s
         instance = std::make_unique<Vst3PluginInstance>();
     }
 
-    // 查找扫描期种子（匹配 path + pluginId）
-    const PluginMetadata* seed = nullptr;
+    // 查找扫描期种子（匹配 path + pluginId）——值拷贝到局部变量，避免持有裸指针跨越锁外耗时 I/O 导致 UAF
+    PluginMetadata seedCopy;
+    bool hasSeed = false;
     {
         std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
         for (const auto& p : m_scannedPlugins) {
             if (p.path != path) continue;
             if (!pluginId.empty() && !p.id.empty() && p.id != pluginId) continue;
-            seed = &p;
+            seedCopy = p;
+            hasSeed = true;
             break;
         }
     }
 
-    bool lRet = instance->load(path, pluginId, seed);
+    bool lRet = instance->load(path, pluginId, hasSeed ? &seedCopy : nullptr);
     if (!lRet) {
         if (instance->abandoned()) {
             quarantineAbandonedInstance(std::move(instance));
@@ -3977,22 +3975,17 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     // 注意：调用方已持有 m_hostMutex
     if (slot >= kMaxPluginSlots || !instance) return;
     PluginSlot& s = m_slots[slot];
-    // 如果槽上已有实例，先摘出（但不销毁——销毁在锁外做）
+    // 挂入新实例（若槽上有未事先摘除的旧实例，做防御性替换）
     auto old = std::move(s.instance);
     s.instance = std::move(instance);
     s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
     s.hasActive.store(true, std::memory_order_release);
     s.bypassed.store(false, std::memory_order_release);
 
-    // 摘出的旧实例在锁外销毁
     if (old) {
-        old->closeEditor();
-        old->deactivate();
-        old->unload();
-        if (old->abandoned()) {
-            quarantineAbandonedInstance(std::move(old));
-        }
-        // 否则 unique_ptr 在此处析构
+        // 正常流程由 runControlTask 预先调用 detachInstanceLocked 摘除并在锁外销毁；
+        // 若直接调用本函数导致有残留旧实例，放入隔离区防止锁内耗时阻塞与 RT 冲突
+        quarantineAbandonedInstance(std::move(old));
     }
 }
 
@@ -4072,30 +4065,41 @@ void PluginHostManager::controlLoop() {
 void PluginHostManager::runControlTask(const ControlTask& t) {
     if (t.slot >= kMaxPluginSlots) return;
 
-    if (t.isLoad) {
-        // prepare 在锁外执行（重活）
-        auto instance = prepareInstance(t.path, t.pluginId);
-        // commit 在锁内执行（微秒级）
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-            m_sampleRate = t.sampleRate;
-            m_maxBlockSize = t.maxBlockSize;
-            if (instance) {
-                commitInstanceLocked(t.slot, std::move(instance));
-                m_slots[t.slot].taskState.store(2, std::memory_order_release); // 成功
-            } else {
-                m_slots[t.slot].taskState.store(3, std::memory_order_release); // 失败
+    try {
+        if (t.isLoad) {
+            // prepare 在锁外执行（重活）
+            auto instance = prepareInstance(t.path, t.pluginId);
+            std::unique_ptr<IPluginInstance> oldInstance;
+            // commit 在锁内执行（微秒级）
+            {
+                std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+                m_sampleRate = t.sampleRate;
+                m_maxBlockSize = t.maxBlockSize;
+                if (instance) {
+                    // 若槽上已有旧实例，先安全摘出（静默等待 RT 线程退出临界区）
+                    oldInstance = detachInstanceLocked(t.slot);
+                    commitInstanceLocked(t.slot, std::move(instance));
+                    m_slots[t.slot].taskState.store(2, std::memory_order_release); // 成功
+                } else {
+                    m_slots[t.slot].taskState.store(3, std::memory_order_release); // 失败
+                }
             }
+            if (oldInstance) {
+                destroyInstance(std::move(oldInstance)); // 旧实例在锁外销毁
+            }
+        } else {
+            // unload：detach 在锁内（短），destroy 在锁外（重活）
+            std::unique_ptr<IPluginInstance> instance;
+            {
+                std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+                instance = detachInstanceLocked(t.slot);
+                m_slots[t.slot].taskState.store(2, std::memory_order_release); // 卸载总是"成功"
+            }
+            destroyInstance(std::move(instance)); // 锁外销毁
         }
-    } else {
-        // unload：detach 在锁内（短），destroy 在锁外（重活）
-        std::unique_ptr<IPluginInstance> instance;
-        {
-            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-            instance = detachInstanceLocked(t.slot);
-            m_slots[t.slot].taskState.store(2, std::memory_order_release); // 卸载总是"成功"
-        }
-        destroyInstance(std::move(instance)); // 锁外销毁
+    } catch (...) {
+        // 防止异常抛出导致控制线程 std::terminate 终止并永久死锁
+        m_slots[t.slot].taskState.store(3, std::memory_order_release);
     }
 }
 

@@ -121,6 +121,17 @@ class AppModel extends ChangeNotifier {
   /// 设备实际采样率（插件延迟、IR 时长等「样本 → 毫秒」换算的唯一依据）。
   /// 引擎创建后固定不变；info 尚未就绪时回退 48k。
   int get deviceRate => info?.deviceRate ?? 48000;
+
+  /// EQ 建模必须使用的采样率：协商后的实际引擎采样率。
+  ///
+  /// `config.sampleRate` 只是发给设备的请求值，设备可能拒绝并回退到原生采样率。
+  /// 频率网格、曲线钳位和响应探针都必须用实际值，否则三者在不同的采样率假设下
+  /// 各自为政。info 尚未就绪时暂时用配置值，`ready` 事件到达后会按实际值重建。
+  int get engineRate {
+    final negotiated = info?.deviceRate ?? 0;
+    if (negotiated > 0) return negotiated;
+    return config.sampleRate > 0 ? config.sampleRate : 48000;
+  }
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
   bool playing = false;
@@ -146,6 +157,13 @@ class AppModel extends ChangeNotifier {
   int convFrames = 0, convChannels = 0, convSrcRate = 0;
   double convPeak = 0.0;
   List<List<double>> convSpectrum = [];
+
+  /// IR 是否经过重采样：比较文件原始采样率与协商后的实际设备采样率。
+  ///
+  /// 不能用硬编码采样率，因为请求采样率可能被设备拒绝，
+  /// 引擎实际一律按协商后的采样率工作。
+  static bool irWasResampled({required int srcRate, required int deviceRate}) =>
+      srcRate != 0 && srcRate != deviceRate;
 
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
@@ -226,16 +244,112 @@ class AppModel extends ChangeNotifier {
     return cut;
   }
 
+  /// UI 架构选项 → vendor `operatingMode`。
+  ///
+  /// 0 = 最小相位 FIR（默认，与探针同路）；
+  /// 1 = 6 阶 IIR（`operatingMode=2`）；
+  /// 2 = 12 阶 IIR（`operatingMode=5`）。
+  /// 未知值回退到 FIR，保证可听、可测。
+  static int eqOpModeForFilter(int filter) => switch (filter) {
+        1 => 2,
+        2 => 5,
+        _ => 0,
+      };
+
+  /// 单座 RBJ 峰值钟形在频率 f 处的幅度（dB）。
+  ///
+  /// Q 的语义与教科书参数均衡器一致：Q 越大钟形越窄。
+  /// 增益为 0 时恒返回 0（此时 Q 无声学意义，也不该影响目标曲线）。
+  static double eqPeakingDb({
+    required double f,
+    required double center,
+    required double gainDb,
+    required double q,
+    required int sampleRate,
+  }) {
+    if (gainDb.abs() < 1e-9) return 0.0;
+    if (f <= 0 || center <= 0 || sampleRate <= 0) return 0.0;
+    final qq = q.clamp(0.3, 10.0);
+    final a = math.pow(10.0, gainDb / 40.0);
+    final w0 = 2.0 * math.pi * center / sampleRate;
+    final alpha = math.sin(w0) / (2.0 * qq);
+    final cosW0 = math.cos(w0);
+    final b0 = 1.0 + alpha * a;
+    final b1 = -2.0 * cosW0;
+    final b2 = 1.0 - alpha * a;
+    final a0 = 1.0 + alpha / a;
+    final a1 = -2.0 * cosW0;
+    final a2 = 1.0 - alpha / a;
+    final w = 2.0 * math.pi * f / sampleRate;
+    final cosW = math.cos(w);
+    final cos2W = math.cos(2.0 * w);
+    final sinW = math.sin(w);
+    final sin2W = math.sin(2.0 * w);
+    final numRe = b0 + b1 * cosW + b2 * cos2W;
+    final numIm = -(b1 * sinW + b2 * sin2W);
+    final denRe = a0 + a1 * cosW + a2 * cos2W;
+    final denIm = -(a1 * sinW + a2 * sin2W);
+    final magSq =
+        (numRe * numRe + numIm * numIm) / (denRe * denRe + denIm * denIm);
+    if (magSq <= 0) return 0.0;
+    return 10.0 * math.log(magSq) / math.ln10;
+  }
+
+  /// 把“各频点峰值增益 + 各点 Q”合成为引擎目标曲线。
+  ///
+  /// 对目标轴上每个频点，把全部钟形按 dB 相加（级联参量均衡的幅度叠加律）。
+  /// 返回值与 [targetFreqs] 等长，可直接序列化为 `eq.curve` 的增益列。
+  static List<double> eqTargetGains({
+    required List<double> targetFreqs,
+    required List<double> centers,
+    required List<double> peakGains,
+    required List<double> qs,
+    required int sampleRate,
+  }) {
+    final n = math.min(
+        centers.length, math.min(peakGains.length, qs.length));
+    return List<double>.generate(targetFreqs.length, (i) {
+      var total = 0.0;
+      for (var b = 0; b < n; b++) {
+        total += eqPeakingDb(
+          f: targetFreqs[i],
+          center: centers[b],
+          gainDb: peakGains[b],
+          q: qs[b],
+          sampleRate: sampleRate,
+        );
+      }
+      return total;
+    });
+  }
+
   int eqBandsCount = ParamDefaults.eqBandsCount;
   /// 初值先用 48k 网格；构造函数体里 `config` 加载完后会按真实采样率重建
   /// （字段初始化器先于构造函数体执行，那时 config 还没读出来）。
   List<double> eqFrequencies = eqGridFor(ParamDefaults.eqBandsCount, 48000);
   List<double> eqGains = List.filled(15, 0.0);
+
+  /// 每个可调频点的 Q 值（与 [eqFrequencies] 等长对齐）。
+  ///
+  /// vendor 的任意幅度 FIR 路径本身没有“每点 Q”的概念，这里按参数均衡器语义
+  /// 处理：每个频点是一座 RBJ 峰值钟形，Q 决定钟形宽度；下发前先把全部钟形
+  /// 按 dB 叠加成目标曲线（见 [eqTargetGains]），再走既有的 `eq.curve` 通道。
+  /// 因此 Q 的变化一定会改变曲线签名与引擎实测响应——Q 是真参，不是摆设。
+  List<double> eqQs = List.filled(15, ParamDefaults.eqQ);
+
+  /// 旧版全局 Q（兼容旧预设/会话里的标量 `q`）：新 Q 数组的缺省填充值。
+  /// 新建频带与读到无 `qs` 的旧数据时，用它补齐。
   double eqQ = ParamDefaults.eqQ;
   int eqFilter = ParamDefaults.eqFilter;
   int eqInterp = ParamDefaults.eqInterp;
   String eqPresetName = 'flat';
   bool eqBypass = false;
+
+  /// EQ 是否真正作用于音频链：全局开关与旁路必须同时满足。
+  ///
+  /// 背景谱合成和响应曲线都要用这个统一条件，不能只看旁路，
+  /// 否则全局关闭后仍会叠加一条已失效的旧响应。
+  bool get isEqActive => eqOn && !eqBypass;
 
   // 组件级延迟评估刷新时间戳
   final Map<String, int> _latencyRefreshTicks = {};
@@ -412,6 +526,9 @@ class AppModel extends ChangeNotifier {
         info = EngineInfo(raw['abi'] as int, raw['version'] as String,
             raw['deviceRate'] as int, raw['deviceCh'] as int,
             raw['bufferFrames'] as int);
+        // 协商采样率可能与请求值不同：EQ 网格必须按实际引擎采样率重建，
+        // 否则曲线、响应和生产链使用三套不同的频率假设。
+        _rebuildEqGridForSampleRate(notify: false);
         latencyMs = (raw['latencyMs'] as num).toDouble();
         conn = EngineConn.ready;
         engineState = 1;
@@ -1343,7 +1460,7 @@ class AppModel extends ChangeNotifier {
 /// 这里对每个新频点取旧网格中最接近的旧频点上的增益，
 /// 于是 Nyquist 以内的部分行为完全不变，只有越界的频带连同其增益一起消失。
 void _rebuildEqGridForSampleRate({bool notify = true}) {
-  final target = eqGridFor(eqBandsCount, config.sampleRate);
+  final target = eqGridFor(eqBandsCount, engineRate);
   if (target.isEmpty) return;
   if (target.length == eqFrequencies.length) {
     var same = true;
@@ -1357,10 +1474,13 @@ void _rebuildEqGridForSampleRate({bool notify = true}) {
   }
   final oldFreqs = eqFrequencies;
   final oldGains = eqGains;
+  final oldQs = eqQs;
   final newGains = <double>[];
+  final newQs = <double>[];
   for (final f in target) {
     if (oldFreqs.isEmpty || oldGains.isEmpty) {
       newGains.add(0.0);
+      newQs.add(eqQ);
       continue;
     }
     var bi = 0;
@@ -1373,9 +1493,11 @@ void _rebuildEqGridForSampleRate({bool notify = true}) {
       }
     }
     newGains.add(oldGains[bi]);
+    newQs.add(bi < oldQs.length ? oldQs[bi] : eqQ);
   }
   eqFrequencies = target;
   eqGains = newGains;
+  eqQs = newQs;
   _pushEqCurve();
   if (notify) notifyListeners();
 }
@@ -1392,19 +1514,24 @@ void setEqBandsCount(int count) {
     if (count == eqBandsCount) return;
     eqBandsCount = count;
     /* C4：网格按采样率裁剪，避免高频带在 Nyquist 处塌缩成重复点 */
-    final newFreqs = eqGridFor(count, config.sampleRate);
+    final newFreqs = eqGridFor(count, engineRate);
     final oldFreqs = eqFrequencies;
     final oldGains = eqGains;
+    final oldQs = eqQs;
     final newGains = <double>[];
+    final newQs = <double>[];
     for (final f in newFreqs) {
       if (oldFreqs.isEmpty || oldGains.isEmpty) {
         newGains.add(0.0);
+        newQs.add(eqQ);
         continue;
       }
       if (f <= oldFreqs.first) {
         newGains.add(oldGains.first);
+        newQs.add(oldQs.isNotEmpty ? oldQs.first : eqQ);
       } else if (f >= oldFreqs.last) {
         newGains.add(oldGains.last);
+        newQs.add(oldQs.isNotEmpty ? oldQs.last : eqQ);
       } else {
         var idx = 0;
         while (idx < oldFreqs.length - 1 && oldFreqs[idx + 1] < f) {
@@ -1415,10 +1542,22 @@ void setEqBandsCount(int count) {
         final logTarget = math.log(f);
         final ratio = (logTarget - logF0) / (logF1 - logF0);
         newGains.add(oldGains[idx] + ratio * (oldGains[idx + 1] - oldGains[idx]));
+        // Q 是频带属性，不做对数插值：取最近频带的 Q，保持钟形宽度语义。
+        var bi = 0;
+        var best = double.infinity;
+        for (var i = 0; i < oldFreqs.length; i++) {
+          final d = (oldFreqs[i] - f).abs();
+          if (d < best) {
+            best = d;
+            bi = i;
+          }
+        }
+        newQs.add(bi < oldQs.length ? oldQs[bi] : eqQ);
       }
     }
     eqFrequencies = List.from(newFreqs);
     eqGains = newGains;
+    eqQs = newQs;
     _pushEqCurve();
   }
 
@@ -1430,12 +1569,26 @@ void setEqBandsCount(int count) {
     }
   }
 
-  void setEqQ(double q) {
-    eqQ = q.clamp(0.3, 10.0);
+  /// 设置单个频点的 Q（0.3~10.0）。
+  ///
+  /// Q 会进入目标曲线合成（见 [_pushEqCurve]），因此必然改变曲线签名、
+  /// 触发引擎重建与响应重测——与增益同一待遇。
+  void setEqBandQ(int index, double q) {
+    if (index < 0 || index >= eqQs.length) return;
+    eqQs[index] = q.clamp(0.3, 10.0);
+    eqPresetName = 'custom';
     _pushEqCurve();
   }
 
+  void setEqQ(double q) {
+    // 旧版全局 Q：只更新缺省值（新频带补齐与旧预设兼容用），不再重推曲线。
+    // 各频点的实际 Q 一律走 [eqQs] + [setEqBandQ]。
+    eqQ = q.clamp(0.3, 10.0);
+    notifyListeners();
+  }
+
   void setEqFilter(int filter) {
+    // 架构选择目前只属于 UI/预设状态，尚未映射到引擎工作模式。
     eqFilter = filter;
     notifyListeners();
   }
@@ -1475,6 +1628,43 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   _pushEqCurve();
 }
 
+/// 按**频率**应用一条 Q 曲线（与 [applyEqCurve] 同构）。
+///
+/// 预设/会话里的 `qs` 与当前网格不对齐时，按最近频点重映射；
+/// 长度对不上频率表时按下标截断对齐；缺省用 [eqQ] 补齐。
+void applyEqQs(List<double>? freqs, List<double> qs) {
+  if (qs.isEmpty) return;
+  final aligned = List<double>.filled(eqFrequencies.length, eqQ);
+  if (freqs != null && freqs.length == qs.length && freqs.isNotEmpty) {
+    for (var i = 0; i < eqFrequencies.length; i++) {
+      final f = eqFrequencies[i];
+      var bi = 0;
+      var best = double.infinity;
+      for (var k = 0; k < freqs.length; k++) {
+        final d = (freqs[k] - f).abs();
+        if (d < best) {
+          best = d;
+          bi = k;
+        }
+      }
+      aligned[i] = qs[bi].clamp(0.3, 10.0);
+    }
+  } else {
+    for (var i = 0; i < aligned.length && i < qs.length; i++) {
+      aligned[i] = qs[i].clamp(0.3, 10.0);
+    }
+  }
+  eqQs = aligned;
+  _pushEqCurve();
+}
+
+/// 用同一个 Q 填满全部频点（兼容只有标量 `q` 的旧预设/会话）。
+void fillEqQ(double q) {
+  eqQ = q.clamp(0.3, 10.0);
+  eqQs = List<double>.filled(eqFrequencies.length, eqQ);
+  _pushEqCurve();
+}
+
 /// 整表写入 EQ 增益并重推曲线。
   /// 必须走本方法而不能直接 `eqGains[i] = v`：eqGains 是裸 `List<double>`，
   /// 直接赋值不会触发 _pushEqCurve()，引擎会继续用上一条曲线
@@ -1487,6 +1677,7 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   }
 
   void setEqInterp(int interp) {
+    // 插值选择目前只属于 UI/预设状态，尚未映射到引擎工作模式。
     eqInterp = interp;
     notifyListeners();
   }
@@ -1595,20 +1786,40 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   void _pushEqCurve() {
     // C3：锚点与频点都必须落在 Nyquist 以内。引擎原先只按 f<=96000 校验，
     // 低采样率（如 32k，Nyquist=16k）下硬编码的 20000 锚点会变成越界点。
-    final nyquist = math.min(20000.0, config.sampleRate / 2.0);
-    final buffer = StringBuffer();
+    final nyquist = math.min(20000.0, engineRate / 2.0);
+    // 先列出要序列化的目标频率轴（含 20Hz 起点与 Nyquist 终点），
+    // 再按各频点峰值增益 + Q 合成该轴上的目标增益（见 [eqTargetGains]）。
+    final axis = <double>[];
     if (eqFrequencies.isNotEmpty && eqFrequencies.first > 20) {
-      buffer.write('20:${eqGains.first.toStringAsFixed(1)};');
+      axis.add(20.0);
     }
     for (var i = 0; i < eqFrequencies.length; i++) {
-      final f = math.min(eqFrequencies[i], nyquist);
-      buffer.write('${f.toStringAsFixed(1)}:${eqGains[i].toStringAsFixed(1)}');
-      if (i < eqFrequencies.length - 1) buffer.write(';');
+      axis.add(math.min(eqFrequencies[i], nyquist));
     }
     if (eqFrequencies.isNotEmpty && eqFrequencies.last < nyquist) {
-      buffer.write(';${nyquist.toStringAsFixed(1)}:${eqGains.last.toStringAsFixed(1)}');
+      axis.add(nyquist);
     }
-    _pendingEqCurve = buffer.toString();
+    final target = eqTargetGains(
+      targetFreqs: axis,
+      centers: eqFrequencies,
+      peakGains: eqGains,
+      qs: eqQs,
+      sampleRate: engineRate,
+    );
+    final buffer = StringBuffer(
+        'eqm:$eqInterp:${eqOpModeForFilter(eqFilter)};');
+    for (var i = 0; i < axis.length; i++) {
+      buffer.write('${axis[i].toStringAsFixed(1)}:${target[i].toStringAsFixed(1)}');
+      if (i < axis.length - 1) buffer.write(';');
+    }
+    final curve = buffer.toString();
+    // 内容完全相同时不再重推：Q 在平直频带上本就无声学意义，
+    // 重推只会白白触发一次 EQ 卷积重建。
+    if (curve == _pendingEqCurve || curve == eqResponseCurve) {
+      notifyListeners();
+      return;
+    }
+    _pendingEqCurve = curve;
     _flushEqCurve();
     _scheduleEqResponse();
     notifyListeners();
@@ -1632,6 +1843,10 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   /// 绘制时应与 [eqResponseCurve] 比对，不一致说明已过期，需回退近似。
   List<double>? eqResponseDb;
 
+  /// [eqResponseDb] 的实际上限频率：引擎按采样率 Nyquist 收窄，
+  /// 不能假设恒为 20000Hz。
+  double? eqResponseFMax;
+
   /// 合成「均衡器输出频谱」：把引擎下发的 EQ 输入谱叠加实测响应。
   ///
   /// EQ 位于 libjamesdsp 的单体链内部（processFloatMultiplexd 一次跑完全链），
@@ -1642,35 +1857,52 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   ///
   /// [bypassed] 为 true 时 H_eq ≡ 0（EQ 被旁路，链内不生效），
   /// 此时输出谱就等于输入谱——与 [_SpectrumEQPainter] 对曲线的处理一致。
+  /// [responseCurve] 是 [respDb] 的来源签名，[expectedCurve] 是当前待显示曲线；
+  /// 两者不一致说明响应尚未追上曲线，此时同样退化为输入谱，而不是用旧响应合成。
   static List<double> composeEqOutputSpectrum(
     List<double> eqIn,
     List<double>? respDb, {
     bool bypassed = false,
+    String? responseCurve,
+    String? expectedCurve,
+    double? responseFMax,
   }) {
     final out = List<double>.filled(VizBands.count, 0);
     final n = eqIn.length < VizBands.count ? eqIn.length : VizBands.count;
-    final flat = bypassed || respDb == null || respDb.length < 2;
+    final responseCurrent =
+        expectedCurve == null || responseCurve == expectedCurve;
+    final flat =
+        bypassed || respDb == null || respDb.length < 2 || !responseCurrent;
     for (var b = 0; b < n; b++) {
       if (flat) {
         out[b] = eqIn[b].clamp(0.0, 1.0);
         continue;
       }
       final hz = VizBands.centerHz(b);
-      final db = VizBands.toDb(eqIn[b].clamp(0.0, 1.0)) + _respDbAt(respDb, hz);
+      final db = VizBands.toDb(eqIn[b].clamp(0.0, 1.0)) +
+          VizBands.responseDbAt(respDb, hz, responseFMax: responseFMax);
       out[b] = VizBands.fromDb(db);
     }
     return out;
   }
 
-  /// 在实测响应（log 均分 fMin..fMax，129 点）上按频率线性插值取 dB。
-  static double _respDbAt(List<double> resp, double hz) {
-    const fMin = 20.0, fMax = 20000.0;
-    final t = (math.log(hz / fMin) / math.log(fMax / fMin)).clamp(0.0, 1.0);
-    final x = t * (resp.length - 1);
-    final i = x.floor();
-    if (i >= resp.length - 1) return resp[resp.length - 1];
-    final f = x - i;
-    return resp[i] * (1 - f) + resp[i + 1] * f;
+  /// 当前应显示的 EQ 曲线签名：待下发的新曲线优先，已测得的旧曲线次之。
+  ///
+  /// 响应探针有约 220ms 防抖，曲线变化后响应必然滞后。用该签名调用合成或绘制，
+  /// 才能在响应追上之前退化，而不是用旧响应合成出一条已不存在的输出谱。
+  String? get currentEqCurveSignature => _pendingEqCurve ?? eqResponseCurve;
+
+  /// 用模型当前状态合成 EQ 输出谱：全局关闭或旁路时退化为输入谱，
+  /// 响应签名过期时同样退化为输入谱。
+  List<double> eqOutputSpectrum() {
+    return composeEqOutputSpectrum(
+      eqInSpectrum.value,
+      eqResponseDb,
+      bypassed: !isEqActive,
+      responseCurve: eqResponseCurve,
+      expectedCurve: currentEqCurveSignature,
+      responseFMax: eqResponseFMax,
+    );
   }
 
   /// [eqResponseDb] 对应的曲线字符串，用于失效判定。
@@ -1703,7 +1935,7 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
       if (lib == null) return;
       List<double>? db;
       try {
-        db = lib.measureEqResponse(c, config.sampleRate,
+        db = lib.measureEqResponse(c, engineRate,
             nPoints: eqResponsePoints);
       } catch (_) {
         return;   // 探针异常：保留上一帧曲线
@@ -1711,6 +1943,7 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
       if (db == null) return;
       eqResponseDb = db;
       eqResponseCurve = c;
+      eqResponseFMax = AuraDspLib.responseFMax(sampleRate: engineRate);
       notifyListeners();
     });
   }
@@ -1753,8 +1986,8 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
     if (m != null) return (ms: m, measured: true);
     // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
     if (compId == 'convolver' && convEnabled && convReady &&
-        convFrames > 0 && convSrcRate > 0) {
-      return (ms: (convFrames / convSrcRate) * 1000.0, measured: false);
+        convFrames > 0 && deviceRate > 0) {
+      return (ms: (convFrames / deviceRate) * 1000.0, measured: false);
     }
     return (ms: 0.0, measured: false);
   }
@@ -1867,8 +2100,11 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();
     spectrum.dispose();
+    eqInSpectrum.dispose();
     levelL.dispose();
     levelR.dispose();
+    stageLevelsL.dispose();
+    stageLevelsR.dispose();
     eventSeq.dispose();
     super.dispose();
   }
