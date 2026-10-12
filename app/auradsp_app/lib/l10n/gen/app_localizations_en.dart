@@ -335,6 +335,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpOpFailed => 'Operation failed, please retry';
 
   @override
+  String get lpCompiledIdle => 'Compiled — flip the top-right switch to enable';
+
+  @override
   String get lpSliders => 'Script sliders (slider1..8)';
 
   @override

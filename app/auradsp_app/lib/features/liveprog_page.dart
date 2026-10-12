@@ -562,13 +562,21 @@ class _LiveprogPageState extends State<LiveprogPage> {
                   final err = m.lpError;
                   final failed = st < 0 || (st == 0 && err != null);
                   final ok = st == 1;
+                  // v3.1：编译成功 ≠ 在生效——右上角开关（lpEnabled）关着时
+                  // 引擎 LiveProgDisable，脚本静默。两种绿/灰必须分开，
+                  // 否则“运行中”名不副实。
+                  final running = ok && m.lpEnabled;
+                  final compiledIdle = ok && !m.lpEnabled;
                   // v3：慢编译（≥2s）降级为警告色——持锁编译饿音频泵，提醒勿连击。
-                  final slow = ok && m.lpCompileMs >= 2000;
-                  final Color c = ok
+                  // running 为真才看耗时；仅编译未启用时不谈耗时（还没进链）。
+                  final slow = running && m.lpCompileMs >= 2000;
+                  final Color c = running
                       ? (slow ? p.warning : p.success)
-                      : (failed ? p.error : p.textDim);
+                      : (failed
+                          ? p.error
+                          : p.textDim);
                   final String text;
-                  if (ok) {
+                  if (running) {
                     text = l.lpStatusOk;
                     var t = text;
                     if (m.lpCompileMs >= 0) {
@@ -580,6 +588,9 @@ class _LiveprogPageState extends State<LiveprogPage> {
                     if (slow) t = '$t · ${l.lpCompileSlow}';
                     return _capsuleBody(
                         p, c, Icons.check_circle_outline_rounded, t);
+                  } else if (compiledIdle) {
+                    return _capsuleBody(p, c,
+                        Icons.pause_circle_outline_rounded, l.lpCompiledIdle);
                   } else if (!failed) {
                     return _capsuleBody(p, c,
                         Icons.radio_button_unchecked_rounded, l.lpStatusIdle);

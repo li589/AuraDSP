@@ -134,6 +134,7 @@
   "lpDeleteAction": "Delete",
   "lpRenameTitle": "Rename script",
   "lpOpFailed": "Operation failed, please retry",
+  "lpCompiledIdle": "Compiled — flip the top-right switch to enable",
   "lpSliders": "Script sliders (slider1..8)",
   "lpSliderHint": "Declared range wins; 0..1 when undeclared; changes apply live",
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",

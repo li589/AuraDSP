@@ -331,6 +331,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpOpFailed => '操作に失敗しました';
 
   @override
+  String get lpCompiledIdle => 'コンパイル済み — 右上のスイッチで適用';
+
+  @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
 
   @override

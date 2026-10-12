@@ -718,6 +718,12 @@ abstract class AppLocalizations {
   /// **'操作失败，请重试'**
   String get lpOpFailed;
 
+  /// No description provided for @lpCompiledIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'已编译，打开右上角开关才生效'**
+  String get lpCompiledIdle;
+
   /// No description provided for @lpSliders.
   ///
   /// In zh, this message translates to:

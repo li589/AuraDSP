@@ -330,6 +330,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpOpFailed => '操作失败，请重试';
 
   @override
+  String get lpCompiledIdle => '已编译，打开右上角开关才生效';
+
+  @override
   String get lpSliders => '脚本滑块（slider1..8）';
 
   @override
