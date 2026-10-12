@@ -108,7 +108,7 @@
   "lpErrSampleSyntax": "Syntax error in @sample section",
   "lpBlockedByLint": "Fix the flagged structural issues first",
   "lpSliders": "Script sliders (slider1..8)",
-  "lpSliderHint": "Range -1..+4; meaning is defined by the script; changes apply live",
+  "lpSliderHint": "Declared range wins; 0..1 when undeclared; changes apply live",
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
   "lpSave": "Save to library",

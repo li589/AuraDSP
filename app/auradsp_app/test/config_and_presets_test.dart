@@ -256,4 +256,102 @@ void main() {
       expect(m.eqGains[14], closeTo(3.0, 1e-9));
     });
   });
+
+  group('Liveprog v2: 会话/预设带回使能与滑块', () {
+    test('snapshot 携带 liveprog{enabled,params,codeHash}（schemaVersion 3）',
+        () {
+      final m = AppModel();
+      m.lpEnabled = true;
+      m.lpParams[0] = 0.7;
+      m.lpCode = '@init\nx = 1;\n@sample\nspl0 = 1;\n';
+      final snap = PresetLibrary.snapshot(m, name: '__lp__');
+      expect(snap.schemaVersion, 3);
+      final lp = snap.params['liveprog'] as Map<String, dynamic>;
+      expect(lp['enabled'], isTrue);
+      expect((lp['params'] as List)[0], closeTo(0.7, 1e-9));
+      expect((lp['codeHash'] as String).isNotEmpty, isTrue);
+    });
+
+    test('apply 恢复使能与滑块；指纹一致 → mismatch 为 false', () {
+      final m = AppModel();
+      const code = '@init\nx = 1;\n@sample\nspl0 = 1;\n';
+      m.lpCode = code;
+      final src = AppModel()
+        ..lpCode = code
+        ..lpEnabled = true;
+      src.lpParams[2] = 0.5;
+      final snap = PresetLibrary.snapshot(src, name: '__lp_src__');
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__lp_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.lpEnabled, isTrue);
+      expect(m.lpParams[2], closeTo(0.5, 1e-9));
+      expect(m.lpPresetCodeMismatch, isFalse);
+    });
+
+    test('apply 时编辑器代码与存档不一致 → mismatch 为 true', () {
+      final m = AppModel()..lpCode = '@init\ny = 2;\n@sample\nspl0 = 1;\n';
+      final preset = AuraPreset(
+        name: '__lp_mismatch__',
+        createdAt: DateTime.now().toIso8601String(),
+        params: {
+          'liveprog': {
+            'enabled': true,
+            'params': List<double>.filled(8, 0.0),
+            'codeHash': 'deadbeef',
+          },
+        },
+      );
+      PresetLibrary.apply(m, preset);
+      expect(m.lpEnabled, isTrue);
+      expect(m.lpPresetCodeMismatch, isTrue);
+    });
+
+    test('无 liveprog 节的老预设不碰脚本态', () {
+      final m = AppModel()
+        ..lpEnabled = true
+        ..lpCode = 'keepme';
+      m.lpParams[0] = 0.9;
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__legacy__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 1.0, 'limiterEnable': true},
+              }));
+      expect(m.lpEnabled, isTrue);
+      expect(m.lpCode, 'keepme');
+      expect(m.lpParams[0], closeTo(0.9, 1e-9));
+    });
+
+    test('setLiveprogCode 采纳声明默认值；同签名重应用保留用户值', () {
+      final m = AppModel();
+      const code = 'slider1:1.5<0,2,0.01>vol\n@init\nx = 1;\n@sample\n'
+          'spl0 *= slider1;\n';
+      m.setLiveprogCode(code);
+      expect(m.lpParams[0], closeTo(1.5, 1e-9));
+      // 用户把滑块拉到 0.2 后只改注释重应用 → 保留用户值
+      m.setLiveprogParam(0, 0.2);
+      m.setLiveprogCode('$code// touched\n');
+      expect(m.lpParams[0], closeTo(0.2, 1e-9));
+      // 声明变化 → 采纳新默认值
+      m.setLiveprogCode(code.replaceFirst('slider1:1.5', 'slider1:0.8'));
+      expect(m.lpParams[0], closeTo(0.8, 1e-9));
+    });
+
+    test('unload 保留 lpCode，只关使能', () {
+      final m = AppModel()
+        ..lpEnabled = true
+        ..lpCode = 'keepme'
+        ..lpStatus = 1;
+      m.unloadLiveprog();
+      expect(m.lpEnabled, isFalse);
+      expect(m.lpStatus, 0);
+      expect(m.lpCode, 'keepme');
+    });
+  });
 }

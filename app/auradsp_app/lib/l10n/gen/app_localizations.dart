@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpSliderHint.
   ///
   /// In zh, this message translates to:
-  /// **'数值域 -1..+4，实际含义由脚本定义；改动实时生效'**
+  /// **'有声明按声明，无声明默认 0..1；改动实时生效'**
   String get lpSliderHint;
 
   /// No description provided for @lpLibrary.

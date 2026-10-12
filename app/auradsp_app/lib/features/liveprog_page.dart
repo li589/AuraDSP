@@ -673,8 +673,9 @@ class _LpSlider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final minVal = meta?.minVal ?? -1.0;
-    final maxVal = meta?.maxVal ?? 4.0;
+    // v2 §3.2：无声明时的默认域与 Parser 回填（0<0,1>）一致，不再是 -1..4。
+    final minVal = meta?.minVal ?? 0.0;
+    final maxVal = meta?.maxVal ?? 1.0;
     final displayName = meta?.displayName ?? 'slider${index + 1}';
     final rawName = 'slider${index + 1}';
     final currentVal = model.lpParams[index].clamp(minVal, maxVal);

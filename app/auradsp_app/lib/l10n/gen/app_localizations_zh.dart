@@ -290,7 +290,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSliders => '脚本滑块（slider1..8）';
 
   @override
-  String get lpSliderHint => '数值域 -1..+4，实际含义由脚本定义；改动实时生效';
+  String get lpSliderHint => '有声明按声明，无声明默认 0..1；改动实时生效';
 
   @override
   String get lpLibrary => '脚本库（%APPDATA%/AuraDSP/liveprog）';
