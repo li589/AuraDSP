@@ -287,6 +287,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpBlockedByLint => '先修复标红的结构问题再应用';
 
   @override
+  String get lpCodeMismatch => '预设存档时的脚本与当前代码不一致，滑块值可能对不上号';
+
+  @override
   String get lpSliders => '脚本滑块（slider1..8）';
 
   @override
