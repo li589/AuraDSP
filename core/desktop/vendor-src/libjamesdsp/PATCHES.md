@@ -137,3 +137,18 @@ yquist * 0.999，
   `jdsp->blockSize` 仍照常更新，但它不再是触发重建的充分条件。
 - **验收**：回归用例新增 `1024/500` 与 `1024/300` 两种大幅块长变化，中位耗时放大 < 3×；
   用临时屏蔽重建触发条件的版本验证该用例仍会变红。
+## P-010 jdsp_header.h + jdspController.c — 每效果输出增益门 + 自动增益补偿（2026-10-13）
+
+- **位置**：jdsp_header.h 的 JamesDSPLib 结构体（P-004 的 chain/stagePeak 段后）、
+  jdspController.c 的 stage 封装与 setter 区。
+- **功能**：为 vendor 链内的 tube/comp/bass/eq 四个效果提供
+  (a) 输出增益门（xOutGain，线性，控制线程写/RT 读，x86 对齐 float 原子），
+  (b) 自动增益补偿 leveler（xAutoGain 开关 + 平滑 RMS 比：输入/输出各 5% 每块平滑，
+  补偿增益 10% 每块，±12dB 限幅），全部在对应 stage 包装器内效果处理后原位应用。
+- **RT 安全**：stage_rms/stage_apply_fx_gain 纯乘加，无分配无锁；xAG* 状态 RT 独占；
+  开关切换时控制线程重置平滑状态（JamesDSPSetFxAutoGain）。
+- **新增接口**：JamesDSPSetFxOutGain / JamesDSPSetFxAutoGain / JamesDSPInitFxGains
+  （后者在引擎 create 的 JamesDSPInit 后调用，默认输出增益 1.0、自动补偿关）。
+- **配合方**：uradsp_engine.cpp 的 ass/eq/tube/comp.outgain|autogain 参数；
+  reverb 的增益/补偿在引擎侧 Freeverb（M5-c，非 vendor）实现，不占 vendor 槽。
+- **验收**：	est/smoke/smoke_fx_gain.py（输出增益 dB→线性倍率精确命中；自动补偿收敛到输入响度）。

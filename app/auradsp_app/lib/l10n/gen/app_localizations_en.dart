@@ -716,13 +716,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get haasHint =>
-      'Delayed right channel widens the stage, left stays dry';
+      'One side delayed widens the stage, the other stays dry';
 
   @override
-  String get haasDelay => 'Right delay';
+  String get haasDelay => 'Delay';
 
   @override
   String get haasMix => 'Differential mix';
+
+  @override
+  String get haasSide => 'Delay side';
+
+  @override
+  String get haasSideRight => 'Right channel';
+
+  @override
+  String get haasSideLeft => 'Left channel';
 
   @override
   String get bassmonoHint =>
@@ -1266,4 +1275,59 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get compTfresFine => 'High Frequency';
+
+  @override
+  String get autoGainCompensation => 'Auto Gain Compensation';
+
+  @override
+  String get autoGainCompensationTooltip =>
+      'Dynamically compensates output level to prevent inter-stage clipping.';
+
+  @override
+  String get outputGainGate => 'Output Gain Trim';
+
+  @override
+  String get outputGainGateTooltip =>
+      'Fine-tune the output level of this stage (-12.0 to +6.0 dB).';
+
+  @override
+  String get arbmagSubtitle =>
+      '8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves';
+
+  @override
+  String get arbmagPresetFlat => 'Flat';
+
+  @override
+  String get arbmagPresetHarman => 'Harman Target';
+
+  @override
+  String get arbmagPresetDiffuse => 'Diffuse-Field';
+
+  @override
+  String get arbmagImport => 'Import File';
+
+  @override
+  String get arbmagPaste => 'Paste';
+
+  @override
+  String get arbmagClear => 'Clear Curve';
+
+  @override
+  String get arbmagEmptyHint =>
+      'No curve loaded. Select a target preset above, import an AutoEq GraphicEQ file, or paste code.';
+
+  @override
+  String get arbmagEditor => 'GraphicEQ Code Editor';
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count nodes loaded';
+  }
+
+  @override
+  String get arbmagApply => 'Apply Code';
+
+  @override
+  String get arbmagInvalidFormat =>
+      'Invalid GraphicEQ format or no valid frequency nodes found';
 }

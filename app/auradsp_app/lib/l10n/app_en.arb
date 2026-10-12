@@ -275,9 +275,12 @@
   "exciterHint": "Harmonic air for compressed highs",
   "exciterAmount": "Amount",
   "exciterHifreq": "Pickup freq",
-  "haasHint": "Delayed right channel widens the stage, left stays dry",
-  "haasDelay": "Right delay",
+  "haasHint": "One side delayed widens the stage, the other stays dry",
+  "haasDelay": "Delay",
   "haasMix": "Differential mix",
+  "haasSide": "Delay side",
+  "haasSideRight": "Right channel",
+  "haasSideLeft": "Left channel",
   "bassmonoHint": "Chain head: mono below crossover, saves small speakers",
   "bassmonoFreq": "Crossover",
   "stEq": "Equalizer",
@@ -643,5 +646,28 @@
   "compTfresolution": "TF Resolution",
   "compTfresTransient": "Transient",
   "compTfresBalanced": "Balanced",
-  "compTfresFine": "High Frequency"
+  "compTfresFine": "High Frequency",
+  "autoGainCompensation": "Auto Gain Compensation",
+  "autoGainCompensationTooltip": "Dynamically compensates output level to prevent inter-stage clipping.",
+  "outputGainGate": "Output Gain Trim",
+  "outputGainGateTooltip": "Fine-tune the output level of this stage (-12.0 to +6.0 dB).",
+  "arbmagSubtitle": "8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves",
+  "arbmagPresetFlat": "Flat",
+  "arbmagPresetHarman": "Harman Target",
+  "arbmagPresetDiffuse": "Diffuse-Field",
+  "arbmagImport": "Import File",
+  "arbmagPaste": "Paste",
+  "arbmagClear": "Clear Curve",
+  "arbmagEmptyHint": "No curve loaded. Select a target preset above, import an AutoEq GraphicEQ file, or paste code.",
+  "arbmagEditor": "GraphicEQ Code Editor",
+  "arbmagNodes": "{count} nodes loaded",
+  "@arbmagNodes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "arbmagApply": "Apply Code",
+  "arbmagInvalidFormat": "Invalid GraphicEQ format or no valid frequency nodes found"
 }

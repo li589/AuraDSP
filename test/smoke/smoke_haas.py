@@ -102,6 +102,9 @@ def impulse_peak_ch1(nblocks=4):
 check('set enable/get', set_i('haas.enable', 1) == 0 and get_i('haas.enable') == (0, 1))
 check('set delay/get', set_f('haas.delay', 12.0) == 0 and abs(get_f('haas.delay')[1] - 12.0) < 1e-9)
 check('set mix/get', set_f('haas.mix', 0.6) == 0 and abs(get_f('haas.mix')[1] - 0.6) < 1e-6)
+check('set side/get', set_i('haas.side', 0) == 0 and get_i('haas.side') == (0, 0))
+check('side clamp non-zero ->1', set_i('haas.side', 7) == 0 and get_i('haas.side') == (0, 1))
+set_i('haas.side', 0)  # 钳位检查留在 1，复位回默认右延迟
 set_f('haas.delay', -3.0)
 check('delay low clamp 0', abs(get_f('haas.delay')[1] - 0.0) < 1e-9)
 set_f('haas.delay', 99.0)
@@ -132,6 +135,14 @@ set_i('haas.enable', 1)
 set_f('haas.delay', 5.0)
 _, ri5, _ = impulse_peak_ch1()
 check('delay 5ms -> 240 +-1', abs(ri5 - 240) <= 1, 'right=%d' % ri5)
+
+# 6. 延迟侧切到左声道：左 576 处，右回 0 处
+set_f('haas.delay', 12.0)
+set_i('haas.side', 1)
+li_side, ri_side, _ = impulse_peak_ch1()
+check('side=1: left delayed 576 +-1', abs(li_side - 576) <= 1, 'left=%d' % li_side)
+check('side=1: right dry at 0', ri_side == 0, 'right=%d' % ri_side)
+set_i('haas.side', 0)
 
 dll.auradsp_destroy(h)
 

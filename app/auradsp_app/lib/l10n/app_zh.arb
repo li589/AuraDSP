@@ -275,9 +275,12 @@
   "exciterHint": "给高频加谐波，压缩音频的空气感来源",
   "exciterAmount": "谐波量",
   "exciterHifreq": "取频点",
-  "haasHint": "右声道延迟制造声场宽度，左声道直通保兼容",
-  "haasDelay": "右声道延迟",
+  "haasHint": "延迟侧制造声场宽度，另一侧恒直通保兼容",
+  "haasDelay": "延迟量",
   "haasMix": "差分混合比",
+  "haasSide": "延迟侧",
+  "haasSideRight": "右声道",
+  "haasSideLeft": "左声道",
   "bassmonoHint": "链头处理：分频点以下单声道化，防小音箱低频破音",
   "bassmonoFreq": "分频点",
   "stEq": "均衡器",
@@ -643,5 +646,28 @@
   "compTfresolution": "时频分辨率",
   "compTfresTransient": "瞬态响应",
   "compTfresBalanced": "平衡",
-  "compTfresFine": "高频解析"
+  "compTfresFine": "高频解析",
+  "autoGainCompensation": "自动增益补偿",
+  "autoGainCompensationTooltip": "随音效提升动态平抑输出电平，防止多级叠加导致削波失真",
+  "outputGainGate": "输出增益门",
+  "outputGainGateTooltip": "微调该效果器出口电平 (-12.0 ~ +6.0 dB)",
+  "arbmagSubtitle": "8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线",
+  "arbmagPresetFlat": "平直 (Flat)",
+  "arbmagPresetHarman": "Harman 目标曲线",
+  "arbmagPresetDiffuse": "扩散场 (Diffuse-Field)",
+  "arbmagImport": "导入文件",
+  "arbmagPaste": "剪贴板粘贴",
+  "arbmagClear": "清空曲线",
+  "arbmagEmptyHint": "尚未加载曲线。可点击上方预设、导入 AutoEq GraphicEQ 文件或粘贴代码。",
+  "arbmagEditor": "GraphicEQ 代码编辑器",
+  "arbmagNodes": "已载入 {count} 个频点",
+  "@arbmagNodes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "arbmagApply": "应用代码",
+  "arbmagInvalidFormat": "GraphicEQ 格式错误或未包含有效节点"
 }

@@ -275,9 +275,12 @@
   "exciterHint": "高域に倍音を足し空気感を復元",
   "exciterAmount": "倍音量",
   "exciterHifreq": "抽出周波数",
-  "haasHint": "右を遅延させて広がりを作り、左はドライのまま",
-  "haasDelay": "右遅延",
+  "haasHint": "片側を遅延させて広がりを作り、もう片方はドライのまま",
+  "haasDelay": "遅延量",
   "haasMix": "差分ミックス",
+  "haasSide": "遅延側",
+  "haasSideRight": "右チャンネル",
+  "haasSideLeft": "左チャンネル",
   "bassmonoHint": "チェーン先頭：クロスオーバー以下をモノラル化",
   "bassmonoFreq": "クロスオーバー",
   "stEq": "イコライザー",
@@ -643,5 +646,28 @@
   "compTfresolution": "時間周波数分解能",
   "compTfresTransient": "過渡応答",
   "compTfresBalanced": "バランス",
-  "compTfresFine": "高周波"
+  "compTfresFine": "高周波",
+  "autoGainCompensation": "自動ゲイン補正",
+  "autoGainCompensationTooltip": "音量増加に応じて出力レベルを動的に調整し、クリッピングを防止します。",
+  "outputGainGate": "出力ゲインゲート",
+  "outputGainGateTooltip": "このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。",
+  "arbmagSubtitle": "8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線",
+  "arbmagPresetFlat": "フラット (Flat)",
+  "arbmagPresetHarman": "Harman ターゲット",
+  "arbmagPresetDiffuse": "拡散音場 (Diffuse-Field)",
+  "arbmagImport": "ファイルをインポート",
+  "arbmagPaste": "貼り付け",
+  "arbmagClear": "曲線をクリア",
+  "arbmagEmptyHint": "曲線が読み込まれていません。上のプリセットを選択するか、AutoEqファイルをインポートまたはコードを貼り付けてください。",
+  "arbmagEditor": "GraphicEQ コードエディタ",
+  "arbmagNodes": "{count} 個の周波数ポイントを読み込みました",
+  "@arbmagNodes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "arbmagApply": "コードを適用",
+  "arbmagInvalidFormat": "GraphicEQフォーマットが無効であるか、有効な周波数ノードがありません"
 }

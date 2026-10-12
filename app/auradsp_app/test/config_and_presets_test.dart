@@ -557,6 +557,33 @@ void main() {
       expect(m.haasMix, closeTo(0.6, 1e-9));
     });
 
+    test('延迟侧切换：setHaasSide 归一 0/1 且快照恢复', () {
+      final m = AppModel();
+      expect(m.haasSide, 0);
+      m.setHaasSide(1);
+      expect(m.haasSide, 1);
+      m.setHaasSide(9);
+      expect(m.haasSide, 1);
+      m.setHaasSide(0);
+      expect(m.haasSide, 0);
+
+      final src = AppModel()
+        ..setHaasEnabled(true)
+        ..setHaasSide(1);
+      final snap = PresetLibrary.snapshot(src, name: '__hs_side__');
+      final hs = snap.params['haas'] as Map<String, dynamic>;
+      expect(hs['side'], 1);
+
+      final m2 = AppModel();
+      PresetLibrary.apply(
+          m2,
+          AuraPreset(
+              name: '__hs_side_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m2.haasSide, 1);
+    });
+
     test('延迟标称随设定值走（底栏/徽标用）', () {
       final m = AppModel()
         ..setHaasEnabled(true)
@@ -632,4 +659,81 @@ void main() {
       expect(m.exciterOn, isTrue);
     });
   });
+
+  group('P-010: 每效果输出增益门 + 自动补偿', () {
+    test('setter 下发引擎参数（镜像闭环）', () {
+      final m = AppModel();
+      // setBassOutputGain 走 setFloat → mirror 回写同一字段
+      m.setBassOutputGain(6.0);
+      expect(m.bassOutputGain, closeTo(6.0, 1e-9));
+      m.setBassOutputGain(99.0);
+      expect(m.bassOutputGain, closeTo(6.0, 1e-9)); // 钳位 [-12,6]
+      m.setBassOutputGain(-99.0);
+      expect(m.bassOutputGain, closeTo(-12.0, 1e-9));
+      m.setBassAutoGain(true);
+      expect(m.bassAutoGain, isTrue);
+    });
+
+    test('五效果全部有独立字段与钳位', () {
+      final m = AppModel();
+      for (final setter in [
+        (double v) => m.setEqOutputGain(v),
+        (double v) => m.setTubeOutputGain(v),
+        (double v) => m.setCompOutputGain(v),
+        (double v) => m.setReverbOutputGain(v),
+      ]) {
+        setter(9.0);
+      }
+      expect(m.eqOutputGain, closeTo(6.0, 1e-9));
+      expect(m.tubeOutputGain, closeTo(6.0, 1e-9));
+      expect(m.compOutputGain, closeTo(6.0, 1e-9));
+      expect(m.reverbOutputGain, closeTo(6.0, 1e-9));
+    });
+
+    test('arbmag 有独立字段与钳位', () {
+      final m = AppModel();
+      m.setArbmagOutputGain(12.0);
+      expect(m.arbmagOutputGain, closeTo(6.0, 1e-9));
+      m.setArbmagOutputGain(-20.0);
+      expect(m.arbmagOutputGain, closeTo(-12.0, 1e-9));
+      m.setArbmagAutoGain(true);
+      expect(m.arbmagAutoGain, isTrue);
+    });
+
+    test('snapshot/apply 对称恢复 autoGain + outputGain', () {
+      final src = AppModel()
+        ..setBassAutoGain(true)
+        ..setBassOutputGain(4.5)
+        ..setEqAutoGain(true)
+        ..setEqOutputGain(-3.0)
+        ..setArbmagAutoGain(true)
+        ..setArbmagOutputGain(-1.5)
+        ..setArbmagString('GraphicEQ: 20 0; 20000 0');
+      final snap = PresetLibrary.snapshot(src, name: '__ag__');
+      final bass = snap.params['bass'] as Map<String, dynamic>;
+      expect(bass['autoGain'], isTrue);
+      expect((bass['outputGain'] as num).toDouble(), closeTo(4.5, 1e-9));
+
+      final arb = snap.params['arbmag'] as Map<String, dynamic>;
+      expect(arb['autoGain'], isTrue);
+      expect((arb['outputGain'] as num).toDouble(), closeTo(-1.5, 1e-9));
+      expect(arb['string'], 'GraphicEQ: 20 0; 20000 0');
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__ag_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.bassAutoGain, isTrue);
+      expect(m.bassOutputGain, closeTo(4.5, 1e-9));
+      expect(m.eqAutoGain, isTrue);
+      expect(m.eqOutputGain, closeTo(-3.0, 1e-9));
+      expect(m.arbmagAutoGain, isTrue);
+      expect(m.arbmagOutputGain, closeTo(-1.5, 1e-9));
+      expect(m.arbmagString, 'GraphicEQ: 20 0; 20000 0');
+    });
+  });
 }
+

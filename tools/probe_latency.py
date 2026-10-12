@@ -19,7 +19,8 @@ lib.auradsp_probe_component.argtypes = [ctypes.c_char_p, ctypes.c_double,
 
 RATE = 48000.0
 COMPONENTS = ['bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter',
-              'post', 'shelf', 'convolver', 'ddc', 'liveprog', 'bogus_name']
+              'post', 'shelf', 'comp', 'bassmono', 'haas', 'exciter', 'stereo',
+              'arbmag', 'convolver', 'ddc', 'liveprog', 'bogus_name']
 
 print(f"{'component':<14}{'samples':>10}{'ms@48k':>10}{'probe ms':>10}  note")
 print("-" * 62)

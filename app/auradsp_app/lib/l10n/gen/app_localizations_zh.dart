@@ -697,13 +697,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exciterHifreq => '取频点';
 
   @override
-  String get haasHint => '右声道延迟制造声场宽度，左声道直通保兼容';
+  String get haasHint => '延迟侧制造声场宽度，另一侧恒直通保兼容';
 
   @override
-  String get haasDelay => '右声道延迟';
+  String get haasDelay => '延迟量';
 
   @override
   String get haasMix => '差分混合比';
+
+  @override
+  String get haasSide => '延迟侧';
+
+  @override
+  String get haasSideRight => '右声道';
+
+  @override
+  String get haasSideLeft => '左声道';
 
   @override
   String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
@@ -1225,4 +1234,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get compTfresFine => '高频解析';
+
+  @override
+  String get autoGainCompensation => '自动增益补偿';
+
+  @override
+  String get autoGainCompensationTooltip => '随音效提升动态平抑输出电平，防止多级叠加导致削波失真';
+
+  @override
+  String get outputGainGate => '输出增益门';
+
+  @override
+  String get outputGainGateTooltip => '微调该效果器出口电平 (-12.0 ~ +6.0 dB)';
+
+  @override
+  String get arbmagSubtitle => '8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线';
+
+  @override
+  String get arbmagPresetFlat => '平直 (Flat)';
+
+  @override
+  String get arbmagPresetHarman => 'Harman 目标曲线';
+
+  @override
+  String get arbmagPresetDiffuse => '扩散场 (Diffuse-Field)';
+
+  @override
+  String get arbmagImport => '导入文件';
+
+  @override
+  String get arbmagPaste => '剪贴板粘贴';
+
+  @override
+  String get arbmagClear => '清空曲线';
+
+  @override
+  String get arbmagEmptyHint => '尚未加载曲线。可点击上方预设、导入 AutoEq GraphicEQ 文件或粘贴代码。';
+
+  @override
+  String get arbmagEditor => 'GraphicEQ 代码编辑器';
+
+  @override
+  String arbmagNodes(int count) {
+    return '已载入 $count 个频点';
+  }
+
+  @override
+  String get arbmagApply => '应用代码';
+
+  @override
+  String get arbmagInvalidFormat => 'GraphicEQ 格式错误或未包含有效节点';
 }

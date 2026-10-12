@@ -6,7 +6,9 @@
  */
 import 'dart:async';
 import 'dart:io';
+import 'dart:ffi';
 import 'dart:isolate';
+import 'package:ffi/ffi.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -84,6 +86,8 @@ abstract class ParamDefaults {
   // Haas 差分环绕
   static const double haasDelayMs = 12.0;    // 12 ms [0,25]
   static const double haasMix = 1.0;         // [0,1]
+  static const int haasSideRight = 0;        // 0=延迟右 1=延迟左
+  static const int haasSideLeft = 1;
 
   // 激励器
   static const double exciterAmount = 0.3;   // [0,1]
@@ -112,6 +116,24 @@ abstract class ParamDefaults {
   static const double eqQ = 1.414;           // Q 锐度
   static const int eqFilter = 0;             // 0: FIR, 1: 6阶 IIR, 2: 12阶 IIR
   static const int eqInterp = 1;             // 1: Makima, 0: PCHIP
+
+  // 自动增益补偿与输出增益门
+  static const bool bassAutoGain = false;
+  static const double bassOutputGain = 0.0;     // [-12, 6] dB
+  static const bool eqAutoGain = false;
+  static const double eqOutputGain = 0.0;       // [-12, 6] dB
+  static const bool reverbAutoGain = false;
+  static const double reverbOutputGain = 0.0;   // [-12, 6] dB
+  static const bool tubeAutoGain = false;
+  static const double tubeOutputGain = 0.0;     // [-12, 6] dB
+  static const bool compAutoGain = false;
+  static const double compOutputGain = 0.0;     // [-12, 6] dB
+  static const bool arbmagAutoGain = false;
+  static const double arbmagOutputGain = 0.0;   // [-12, 6] dB
+
+  // 任意响应 EQ (ArbMag)
+  static const bool arbmagOn = false;
+  static const String arbmagString = '';
 }
 
 class AppModel extends ChangeNotifier {
@@ -224,6 +246,7 @@ class AppModel extends ChangeNotifier {
   // Haas 差分环绕（stereo 后 / reverb 前）
   bool haasOn = false;
   double haasDelayMs = 12, haasMix = 1.0;
+  int haasSide = 0; // 0=延迟右 1=延迟左
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
   bool exciterOn = false;
   double exciterAmount = 0.3, exciterHifreq = 5000;
@@ -236,6 +259,24 @@ class AppModel extends ChangeNotifier {
 
   // M3.5-a：处理顺序（Dart 镜像；引擎侧表驱动 P-004）
   String? graphOrder;
+
+  // 自动增益补偿与输出增益门
+  bool bassAutoGain = ParamDefaults.bassAutoGain;
+  double bassOutputGain = ParamDefaults.bassOutputGain;
+  bool eqAutoGain = ParamDefaults.eqAutoGain;
+  double eqOutputGain = ParamDefaults.eqOutputGain;
+  bool reverbAutoGain = ParamDefaults.reverbAutoGain;
+  double reverbOutputGain = ParamDefaults.reverbOutputGain;
+  bool tubeAutoGain = ParamDefaults.tubeAutoGain;
+  double tubeOutputGain = ParamDefaults.tubeOutputGain;
+  bool compAutoGain = ParamDefaults.compAutoGain;
+  double compOutputGain = ParamDefaults.compOutputGain;
+  bool arbmagOn = ParamDefaults.arbmagOn;
+  String arbmagString = ParamDefaults.arbmagString;
+  bool arbmagReady = false;
+  int arbmagNodeCount = 0;
+  bool arbmagAutoGain = ParamDefaults.arbmagAutoGain;
+  double arbmagOutputGain = ParamDefaults.arbmagOutputGain;
 
   // 低音重构（Phase 4）
   double bassIntensity = ParamDefaults.bassIntensity;
@@ -661,6 +702,9 @@ class AppModel extends ChangeNotifier {
         if (raw['haasMix'] != null) {
           haasMix = (raw['haasMix'] as num).toDouble();
         }
+        if (raw['haasSide'] != null) {
+          haasSide = (raw['haasSide'] as int) != 0 ? 1 : 0;
+        }
         if (raw['exciterEnable'] != null) {
           exciterOn = (raw['exciterEnable'] as int) != 0;
         }
@@ -670,6 +714,17 @@ class AppModel extends ChangeNotifier {
         if (raw['exciterHifreq'] != null) {
           exciterHifreq = (raw['exciterHifreq'] as num).toDouble();
         }
+        // P-010：每效果输出增益门 + 自动补偿
+        if (raw['bassOutGain'] != null) bassOutputGain = (raw['bassOutGain'] as num).toDouble();
+        if (raw['bassAutoGain'] != null) bassAutoGain = (raw['bassAutoGain'] as int) != 0;
+        if (raw['eqOutGain'] != null) eqOutputGain = (raw['eqOutGain'] as num).toDouble();
+        if (raw['eqAutoGain'] != null) eqAutoGain = (raw['eqAutoGain'] as int) != 0;
+        if (raw['tubeOutGain'] != null) tubeOutputGain = (raw['tubeOutGain'] as num).toDouble();
+        if (raw['tubeAutoGain'] != null) tubeAutoGain = (raw['tubeAutoGain'] as int) != 0;
+        if (raw['compOutGain'] != null) compOutputGain = (raw['compOutGain'] as num).toDouble();
+        if (raw['compAutoGain'] != null) compAutoGain = (raw['compAutoGain'] as int) != 0;
+        if (raw['reverbOutGain'] != null) reverbOutputGain = (raw['reverbOutGain'] as num).toDouble();
+        if (raw['reverbAutoGain'] != null) reverbAutoGain = (raw['reverbAutoGain'] as int) != 0;
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -679,6 +734,18 @@ class AppModel extends ChangeNotifier {
         if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
         if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
         if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
+        if (raw['arbmagEnable'] != null) arbmagOn = (raw['arbmagEnable'] as int) != 0;
+        if (raw['arbmagReady'] != null) arbmagReady = (raw['arbmagReady'] as int) != 0;
+        if (raw['arbmagNodeCount'] != null) arbmagNodeCount = raw['arbmagNodeCount'] as int;
+        notifyListeners();
+        break;
+      case 'arbmag':
+        arbmagNodeCount = (raw['nodes'] as int?) ?? 0;
+        arbmagReady = (raw['ready'] as int?) == 1;
+        if (arbmagReady && arbmagOn) {
+          _markSent(ParamId.arbmagEnable);
+          send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 1, 'isFloat': false});
+        }
         notifyListeners();
         break;
       case 'liveprog':
@@ -863,16 +930,8 @@ class AppModel extends ChangeNotifier {
       case 'componentLatency':
         final comp = raw['comp'] as String? ?? '';
         final rc = (raw['rc'] as num?)?.toInt() ?? -2;
-        _probing.remove(comp);
-        if (rc == 0) {
-          final samples = (raw['samples'] as num?)?.toInt() ?? 0;
-          _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
-        } else {
-          // 测量失败时不强行弹窗骚扰用户，清除旧测量值，在卡片上的 Badge
-          // 静默保持「未测量」与 Tooltip 说明即可。
-          _measuredLatencyMs.remove(comp);
-        }
-        notifyListeners();
+        final samples = (raw['samples'] as num?)?.toInt() ?? 0;
+        _onComponentLatencyResult(comp, rc, samples);
         break;
       default:
         // 兜底：未知事件至少留痕，避免再次出现「发了但静默丢弃」。
@@ -1027,9 +1086,21 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.haasEnable, haasOn ? 1 : 0);
       setFloat(ParamId.haasDelay, haasDelayMs);
       setFloat(ParamId.haasMix, haasMix);
+      setInt(ParamId.haasSide, haasSide);
       setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
       setFloat(ParamId.exciterAmount, exciterAmount);
       setFloat(ParamId.exciterHifreq, exciterHifreq);
+      // P-010：每效果输出增益门 + 自动补偿
+      setFloat(ParamId.bassOutGain, bassOutputGain);
+      setInt(ParamId.bassAutoGain, bassAutoGain ? 1 : 0);
+      setFloat(ParamId.eqOutGain, eqOutputGain);
+      setInt(ParamId.eqAutoGain, eqAutoGain ? 1 : 0);
+      setFloat(ParamId.tubeOutGain, tubeOutputGain);
+      setInt(ParamId.tubeAutoGain, tubeAutoGain ? 1 : 0);
+      setFloat(ParamId.compOutGain, compOutputGain);
+      setInt(ParamId.compAutoGain, compAutoGain ? 1 : 0);
+      setFloat(ParamId.reverbOutGain, reverbOutputGain);
+      setInt(ParamId.reverbAutoGain, reverbAutoGain ? 1 : 0);
       setInt('limiter.enable', limiterOn ? 1 : 0);
       setFloat('post.gain', postGain);
 
@@ -1073,6 +1144,12 @@ class AppModel extends ChangeNotifier {
         // 否则界面显示的滑块值与引擎归零值不一致（同上）。
         for (var i = 0; i < 8 && i < lpParams.length; i++) {
           setFloat('liveprog.param${i + 1}', lpParams[i]);
+        }
+      }
+      if (arbmagString.isNotEmpty) {
+        setArbmagString(arbmagString);
+        if (arbmagOn) {
+          setInt(ParamId.arbmagEnable, 1);
         }
       }
       if (graphOrder != null && graphOrder!.isNotEmpty) {
@@ -1168,9 +1245,20 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.haasEnable) { haasOn = v != 0; break; }
         if (id == ParamId.haasDelay) { haasDelayMs = v; break; }
         if (id == ParamId.haasMix) { haasMix = v; break; }
+        if (id == ParamId.haasSide) { haasSide = v != 0 ? 1 : 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
         if (id == ParamId.exciterAmount) { exciterAmount = v; break; }
         if (id == ParamId.exciterHifreq) { exciterHifreq = v; break; }
+        if (id == ParamId.bassOutGain) { bassOutputGain = v; break; }
+        if (id == ParamId.bassAutoGain) { bassAutoGain = v != 0; break; }
+        if (id == ParamId.eqOutGain) { eqOutputGain = v; break; }
+        if (id == ParamId.eqAutoGain) { eqAutoGain = v != 0; break; }
+        if (id == ParamId.tubeOutGain) { tubeOutputGain = v; break; }
+        if (id == ParamId.tubeAutoGain) { tubeAutoGain = v != 0; break; }
+        if (id == ParamId.compOutGain) { compOutputGain = v; break; }
+        if (id == ParamId.compAutoGain) { compAutoGain = v != 0; break; }
+        if (id == ParamId.reverbOutGain) { reverbOutputGain = v; break; }
+        if (id == ParamId.reverbAutoGain) { reverbAutoGain = v != 0; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1180,6 +1268,10 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.compTimeconstant) { compTimeconstant = v; break; }
         if (id == ParamId.compGranularity) { compGranularity = v.toInt(); break; }
         if (id == ParamId.compTfresolution) { compTfresolution = v.toInt(); break; }
+        if (id == ParamId.arbmagEnable) { arbmagOn = v != 0; break; }
+        if (id == ParamId.arbmagReady) { arbmagReady = v != 0; break; }
+        if (id == ParamId.arbmagOutGain) { arbmagOutputGain = v; break; }
+        if (id == ParamId.arbmagAutoGain) { arbmagAutoGain = v != 0; break; }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }
@@ -1278,7 +1370,7 @@ class AppModel extends ChangeNotifier {
       'exciter' => exciterOn,
       'bass' => bassOn,
       'eq' => eqOn,
-      'arbmag' => false,
+      'arbmag' => arbmagOn,
       'convolver' => convEnabled,
       'ddc' => ddcOn,
       'liveprog' => lpEnabled,
@@ -1307,6 +1399,8 @@ class AppModel extends ChangeNotifier {
         setInt('bass.enable', bassOn ? 0 : 1);
       case 'eq':
         setInt('eq.enable', eqOn ? 0 : 1);
+      case 'arbmag':
+        setArbmagEnabled(!arbmagOn);
       case 'convolver':
         setInt(ParamId.convEnable, convEnabled ? 0 : 1);
       case 'ddc':
@@ -1470,6 +1564,14 @@ class AppModel extends ChangeNotifier {
   void setHaasMix(double v) {
     haasMix = v.clamp(0.0, 1.0);
     setFloat(ParamId.haasMix, haasMix);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 差分延迟侧：0=延迟右声道，1=延迟左声道（另一侧恒直通）。
+  void setHaasSide(int side) {
+    haasSide = side.clamp(0, 1);
+    setInt(ParamId.haasSide, haasSide);
     notifyListeners();
     scheduleAutoSave();
   }
@@ -1696,6 +1798,115 @@ class AppModel extends ChangeNotifier {
   }
 
   /* ---- 低音增强重构（Phase 4） ---- */
+
+  void setBassAutoGain(bool v) {
+    bassAutoGain = v;
+    setInt(ParamId.bassAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setBassOutputGain(double v) {
+    bassOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.bassOutGain, bassOutputGain);
+    notifyListeners();
+  }
+
+  void setEqAutoGain(bool v) {
+    eqAutoGain = v;
+    setInt(ParamId.eqAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setEqOutputGain(double v) {
+    eqOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.eqOutGain, eqOutputGain);
+    notifyListeners();
+  }
+
+  void setReverbAutoGain(bool v) {
+    reverbAutoGain = v;
+    setInt(ParamId.reverbAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setReverbOutputGain(double v) {
+    reverbOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.reverbOutGain, reverbOutputGain);
+    notifyListeners();
+  }
+
+  void setTubeAutoGain(bool v) {
+    tubeAutoGain = v;
+    setInt(ParamId.tubeAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setTubeOutputGain(double v) {
+    tubeOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.tubeOutGain, tubeOutputGain);
+    notifyListeners();
+  }
+
+  void setCompAutoGain(bool v) {
+    compAutoGain = v;
+    setInt(ParamId.compAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setCompOutputGain(double v) {
+    compOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.compOutGain, compOutputGain);
+    notifyListeners();
+  }
+
+  /* ---- 任意响应 EQ（ArbMag / AutoEq GraphicEQ） ---- */
+
+  void setArbmagEnabled(bool on) {
+    arbmagOn = on;
+    _markSent(ParamId.arbmagEnable);
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.arbmagEnable,
+      'value': (on && arbmagReady) ? 1 : 0,
+      'isFloat': false,
+    });
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setArbmagString(String s) {
+    arbmagString = s;
+    send({'cmd': 'setParamStr', 'id': ParamId.arbmagString, 'text': s});
+    _toIso?.send({'cmd': 'getParams'});
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void clearArbmag() {
+    arbmagOn = false;
+    arbmagReady = false;
+    arbmagNodeCount = 0;
+    arbmagString = '';
+    _markSent(ParamId.arbmagEnable);
+    send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 0, 'isFloat': false});
+    send({'cmd': 'setParamStr', 'id': ParamId.arbmagString, 'text': ''});
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setArbmagAutoGain(bool v) {
+    arbmagAutoGain = v;
+    setInt(ParamId.arbmagAutoGain, v ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setArbmagOutputGain(double v) {
+    arbmagOutputGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.arbmagOutGain, arbmagOutputGain);
+    notifyListeners();
+    scheduleAutoSave();
+  }
 
   void setBassIntensity(double v) {
     bassIntensity = v.clamp(0.0, 1.0);
@@ -2322,22 +2533,65 @@ void fillEqQ(double q) {
     if (compId == 'haas' && haasOn) {
       return (ms: haasDelayMs, measured: false);
     }
+    if (compId == 'arbmag' && arbmagOn && arbmagReady) {
+      return (ms: 2.67, measured: false);
+    }
     return (ms: 0.0, measured: false);
   }
 
-  /// 触发一次真实脉冲探测（控制线程，约数十毫秒，非 RT）。
-  void refreshComponentLatency(String compId) {
+  void _onComponentLatencyResult(String comp, int rc, int samples) {
+    _probing.remove(comp);
+    if (rc == 0) {
+      _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
+    } else {
+      // 测量失败时不强行弹窗骚扰用户，清除旧测量值，在卡片上的 Badge
+      // 静默保持「未测量」与 Tooltip 说明即可。
+      _measuredLatencyMs.remove(comp);
+    }
+    notifyListeners();
+  }
+
+  /// 触发一次真实脉冲探测。
+  /// 关键架构优化：采用独立后台 Isolate.run 异步执行，绝不塞进 audio_isolate 实时音频泵，
+  /// 彻底消除测量时因阻塞音频泵循环引发的 WASAPI 缓冲区欠载爆音与声音卡顿。
+  void refreshComponentLatency(String compId) async {
     if (_probing.contains(compId)) return;
     _probing.add(compId);
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
-    // 卷积 / VDC 已支持「带资源探针」：把已加载的文件路径一并下发，
-    // 这样它们能被真正实测，而不是恒返回 -1「不支持延迟探测」。
-    send({
-      'cmd': 'probeComponentLatency',
-      'comp': compId,
-      'resource': latencyProbeResource(compId) ?? '',
-    });
+
+    final res = latencyProbeResource(compId) ?? '';
+    final rate = info?.deviceRate.toDouble() ?? 48000.0;
+
+    try {
+      final result = await Isolate.run(() {
+        final l = AuraDspLib.load();
+        final out = malloc<Uint32>();
+        final compPtr = compId.toNativeUtf8();
+        int rc;
+        try {
+          out.value = 0;
+          if (res.isEmpty) {
+            rc = l.probeComponent(compPtr, rate, out);
+          } else {
+            final p = res.toNativeUtf8();
+            try {
+              rc = l.probeComponentWithResource(compPtr, p, rate, out);
+            } finally {
+              malloc.free(p);
+            }
+          }
+          final samples = rc == 0 ? out.value.toInt() : 0;
+          return {'rc': rc, 'samples': samples};
+        } finally {
+          malloc.free(out);
+          malloc.free(compPtr);
+        }
+      });
+      _onComponentLatencyResult(compId, result['rc'] as int, result['samples'] as int);
+    } catch (_) {
+      _onComponentLatencyResult(compId, -2, 0);
+    }
   }
 
   /// 该组件实测所需的外部资源路径；无则返回 null（走无资源探针）。
@@ -2358,7 +2612,7 @@ void fillEqQ(double q) {
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc', 'bassmono', 'haas', 'exciter'
+        'convolver', 'ddc', 'bassmono', 'haas', 'exciter', 'stereo', 'comp'
       }.contains(compId);
 
   /// 探测进行中

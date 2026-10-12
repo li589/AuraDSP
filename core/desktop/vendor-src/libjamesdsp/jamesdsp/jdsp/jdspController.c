@@ -285,28 +285,87 @@ void jdsp_unlock(JamesDSPLib *jdsp)
 	if (jdsp->isMutexSuccess)
 		pthread_mutex_unlock(&jdsp->m_in_processing);
 }
-/* [PATCHED-AuraDSP P-004] stage 封装：enabled 判断收进 stage，表项恒 on；
- * 输出级（postGain+limiter）从内联代码抽成函数供表驱动复用 */
-static void stage_tube(JamesDSPLib *jdsp, size_t n)
-{
-	if (jdsp->tubeEnabled)
-		VacuumTubeProcess(jdsp, n);
-}
-static void stage_comp(JamesDSPLib *jdsp, size_t n)
-{
-	if (jdsp->compEnabled)
-		CompressorProcess(jdsp, n);
-}
-static void stage_bass(JamesDSPLib *jdsp, size_t n)
-{
-	if (jdsp->bassBoostEnabled)
-		BassBoostProcess(jdsp, n);
-}
-static void stage_eq(JamesDSPLib *jdsp, size_t n)
-{
-	if (jdsp->equalizerEnabled)
-		MultimodalEqualizerProcess(jdsp, n);
-}
+ /* [PATCHED-AuraDSP P-004] stage 封装：enabled 判断收进 stage，表项恒 on；
+  * 输出级（postGain+limiter）从内联代码抽成函数供表驱动复用 */
+ /* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动增益补偿。
+  * 三个 helper 全部 RT 安全（纯乘加，无分配无锁）：
+  *   stage_rms          —— tmpBuffer 立体声块 RMS（自动补偿的输入/输出计量）
+  *   stage_apply_fx_gain—— 效果处理完后：按 fxOutGain 线性增益乘回；
+  *                          fxAutoGain 开时用平滑 RMS 比补偿输出响度回到输入。
+  * fx 索引：0=tube 1=comp 2=bass 3=eq。 */
+ static double stage_rms(JamesDSPLib *jdsp, size_t n)
+ {
+ 	double acc = 0.0;
+ 	for (size_t i = 0; i < n; ++i)
+ 	{
+ 		double l = (double)jdsp->tmpBuffer[0][i];
+ 		double r = (double)jdsp->tmpBuffer[1][i];
+ 		acc += l * l + r * r;
+ 	}
+ 	return sqrt(acc / (2.0 * (double)n));
+ }
+ static void stage_apply_fx_gain(JamesDSPLib *jdsp, size_t n, int fx, double rin)
+ {
+ 	float g = jdsp->fxOutGain[fx];
+ 	if (jdsp->fxAutoGain[fx])
+ 	{
+ 		double rout = stage_rms(jdsp, n);
+ 		/* 指数平滑：输入/输出各 5% 每块，补偿增益 10%——避免 pumping */
+ 		jdsp->fxAGIn[fx]  = (float)(jdsp->fxAGIn[fx]  + (rin - jdsp->fxAGIn[fx])  * 0.05);
+ 		jdsp->fxAGOut[fx] = (float)(jdsp->fxAGOut[fx] + (rout - jdsp->fxAGOut[fx]) * 0.05);
+ 		double desired = 1.0;
+ 		if (jdsp->fxAGIn[fx] > 1e-6 && jdsp->fxAGOut[fx] > 1e-6)
+ 			desired = (double)jdsp->fxAGIn[fx] / jdsp->fxAGOut[fx];
+ 		if (desired < 0.25) desired = 0.25;   /* ±12dB 补偿上限 */
+ 		if (desired > 4.0)  desired = 4.0;
+ 		jdsp->fxAGComp[fx] = (float)(jdsp->fxAGComp[fx] + (desired - jdsp->fxAGComp[fx]) * 0.1);
+ 		g *= jdsp->fxAGComp[fx];
+ 	}
+ 	if (g != 1.0f)
+ 	{
+ 		for (size_t i = 0; i < n; ++i)
+ 		{
+ 			jdsp->tmpBuffer[0][i] *= g;
+ 			jdsp->tmpBuffer[1][i] *= g;
+ 		}
+ 	}
+ }
+ static void stage_tube(JamesDSPLib *jdsp, size_t n)
+ {
+ 	if (jdsp->tubeEnabled)
+ 	{
+ 		double rin = jdsp->fxAutoGain[0] ? stage_rms(jdsp, n) : 0.0;
+ 		VacuumTubeProcess(jdsp, n);
+ 		stage_apply_fx_gain(jdsp, n, 0, rin);
+ 	}
+ }
+ static void stage_comp(JamesDSPLib *jdsp, size_t n)
+ {
+ 	if (jdsp->compEnabled)
+ 	{
+ 		double rin = jdsp->fxAutoGain[1] ? stage_rms(jdsp, n) : 0.0;
+ 		CompressorProcess(jdsp, n);
+ 		stage_apply_fx_gain(jdsp, n, 1, rin);
+ 	}
+ }
+ static void stage_bass(JamesDSPLib *jdsp, size_t n)
+ {
+ 	if (jdsp->bassBoostEnabled)
+ 	{
+ 		double rin = jdsp->fxAutoGain[2] ? stage_rms(jdsp, n) : 0.0;
+ 		BassBoostProcess(jdsp, n);
+ 		stage_apply_fx_gain(jdsp, n, 2, rin);
+ 	}
+ }
+ static void stage_eq(JamesDSPLib *jdsp, size_t n)
+ {
+ 	if (jdsp->equalizerEnabled)
+ 	{
+ 		double rin = jdsp->fxAutoGain[3] ? stage_rms(jdsp, n) : 0.0;
+ 		MultimodalEqualizerProcess(jdsp, n);
+ 		stage_apply_fx_gain(jdsp, n, 3, rin);
+ 	}
+ }
 static void stage_arbmag(JamesDSPLib *jdsp, size_t n)
 {
 	if (jdsp->arbitraryMagEnabled)
@@ -1268,6 +1327,35 @@ void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB)
 	if (pGaindB > 15.0f)
 		pGaindB = 15.0f;
 	jdsp->postGain = db2magf(pGaindB);
+}
+/* [PATCHED-AuraDSP P-010] 每效果输出增益门（线性）与自动补偿开关。
+ * 控制线程调用；fx 越界忽略。切态重置平滑状态避免从旧值爬坡。 */
+void JamesDSPSetFxOutGain(JamesDSPLib *jdsp, int fx, double linGain)
+{
+	if (fx < 0 || fx > 3) return;
+	jdsp->fxOutGain[fx] = (float)linGain;
+}
+void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on)
+{
+	if (fx < 0 || fx > 3) return;
+	jdsp->fxAutoGain[fx] = on ? 1 : 0;
+	if (on)
+	{
+		jdsp->fxAGIn[fx] = 0.0f;
+		jdsp->fxAGOut[fx] = 0.0f;
+		jdsp->fxAGComp[fx] = 1.0f;
+	}
+}
+void JamesDSPInitFxGains(JamesDSPLib *jdsp)
+{
+	for (int i = 0; i < 4; ++i)
+	{
+		jdsp->fxOutGain[i] = 1.0f;
+		jdsp->fxAutoGain[i] = 0;
+		jdsp->fxAGIn[i] = 0.0f;
+		jdsp->fxAGOut[i] = 0.0f;
+		jdsp->fxAGComp[i] = 1.0f;
+	}
 }
 int JamesDSPGetMutexStatus(JamesDSPLib *jdsp)
 {

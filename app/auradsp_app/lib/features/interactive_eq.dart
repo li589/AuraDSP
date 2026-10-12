@@ -35,7 +35,6 @@ class _InteractiveSpectrumEQPanelState
   int? _hoveredIndex;
   int? _draggedIndex;
   Offset? _hoverPos;
-  bool _advancedOpen = false;
 
   /// 用户点击选中的频点（持久选中，区别于短暂的悬停）。
   /// 选中浮框与 Q 旋钮都跟随它；点空白处清除。
@@ -313,10 +312,6 @@ class _InteractiveSpectrumEQPanelState
               ),
           ],
         ),
-        const SizedBox(height: AuraSpace.md),
-
-        // ---- 高级折叠面板：FIR/IIR 与 插值算法 ----
-        _buildAdvancedPanel(context),
       ],
     );
   }
@@ -363,109 +358,6 @@ class _InteractiveSpectrumEQPanelState
   static String _freqLabel(double f) => f >= 1000
       ? '${(f / 1000).toStringAsFixed(1)} kHz'
       : '${f.round()} Hz';
-
-  Widget _buildAdvancedPanel(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    final model = widget.model;
-
-    return Container(
-      decoration: BoxDecoration(
-        color: p.panelRaised.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: p.hairline),
-      ),
-      child: Column(
-        children: [
-          InkWell(
-            onTap: () => setState(() => _advancedOpen = !_advancedOpen),
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(
-                horizontal: AuraSpace.md,
-                vertical: AuraSpace.sm,
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    _advancedOpen
-                        ? Icons.keyboard_arrow_down_rounded
-                        : Icons.keyboard_arrow_right_rounded,
-                    size: 18,
-                    color: p.accent,
-                  ),
-                  const SizedBox(width: AuraSpace.xs),
-                  Text(l.advanced, style: labelOf(p)),
-                  const Spacer(),
-                  Text(
-                    model.eqFilter == 0
-                        ? (model.eqInterp == 1
-                            ? 'FIR · Makima'
-                            : 'FIR · PCHIP')
-                        : (model.eqFilter == 1 ? 'IIR6' : 'IIR12'),
-                    style: monoOf(p, size: 10, color: p.textDim),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_advancedOpen) ...[
-            Divider(height: 1, color: p.hairline),
-            Padding(
-              padding: const EdgeInsets.all(AuraSpace.md),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(l.eqFilterType, style: captionOf(p)),
-                  const SizedBox(height: AuraSpace.xs),
-                  Wrap(
-                    spacing: AuraSpace.sm,
-                    runSpacing: AuraSpace.sm,
-                    children: [
-                      AuraChoiceChip(
-                        label: l.eqFilterMinphase,
-                        selected: model.eqFilter == 0,
-                        onTap: () => model.setEqFilter(0),
-                      ),
-                      AuraChoiceChip(
-                        label: l.eqFilterIir6,
-                        selected: model.eqFilter == 1,
-                        onTap: () => model.setEqFilter(1),
-                      ),
-                      AuraChoiceChip(
-                        label: l.eqFilterIir12,
-                        selected: model.eqFilter == 2,
-                        onTap: () => model.setEqFilter(2),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AuraSpace.md),
-                  Text(l.eqInterpolation, style: captionOf(p)),
-                  const SizedBox(height: AuraSpace.xs),
-                  // 注：vendor 的 IIR 分支不使用插值模式，该选项只在 FIR 下生效。
-                  Wrap(
-                    spacing: AuraSpace.sm,
-                    children: [
-                      AuraChoiceChip(
-                        label: l.eqInterpMakima,
-                        selected: model.eqInterp == 1,
-                        onTap: () => model.setEqInterp(1),
-                      ),
-                      AuraChoiceChip(
-                        label: l.eqInterpPchip,
-                        selected: model.eqInterp == 0,
-                        onTap: () => model.setEqInterp(0),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
 }
 
 /* ---- 预设风格下拉菜单 ---- */
