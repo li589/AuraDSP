@@ -107,6 +107,7 @@
   "lpErrSampleMissing": "缺少 @sample 段",
   "lpErrSampleSyntax": "@sample 段语法错误",
   "lpBlockedByLint": "先修复标红的结构问题再应用",
+  "lpCodeMismatch": "预设存档时的脚本与当前代码不一致，滑块值可能对不上号",
   "lpSliders": "脚本滑块（slider1..8）",
   "lpSliderHint": "有声明按声明，无声明默认 0..1；改动实时生效",
   "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",

@@ -107,6 +107,7 @@
   "lpErrSampleMissing": "@sample セクションがありません",
   "lpErrSampleSyntax": "@sample セクションの構文エラー",
   "lpBlockedByLint": "構造上の問題を修正してから適用してください",
+  "lpCodeMismatch": "プリセット保存時とスクリプトが異なります。スライダー値が対応しない可能性があります",
   "lpSliders": "スクリプトスライダー（slider1..8）",
   "lpSliderHint": "宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映",
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",

@@ -640,6 +640,12 @@ abstract class AppLocalizations {
   /// **'先修复标红的结构问题再应用'**
   String get lpBlockedByLint;
 
+  /// No description provided for @lpCodeMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设存档时的脚本与当前代码不一致，滑块值可能对不上号'**
+  String get lpCodeMismatch;
+
   /// No description provided for @lpSliders.
   ///
   /// In zh, this message translates to:

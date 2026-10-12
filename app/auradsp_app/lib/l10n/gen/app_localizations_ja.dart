@@ -288,6 +288,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpBlockedByLint => '構造上の問題を修正してから適用してください';
 
   @override
+  String get lpCodeMismatch => 'プリセット保存時とスクリプトが異なります。スライダー値が対応しない可能性があります';
+
+  @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
 
   @override

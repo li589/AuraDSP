@@ -291,6 +291,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpBlockedByLint => 'Fix the flagged structural issues first';
 
   @override
+  String get lpCodeMismatch =>
+      'Preset was saved with different script code; slider values may not match';
+
+  @override
   String get lpSliders => 'Script sliders (slider1..8)';
 
   @override

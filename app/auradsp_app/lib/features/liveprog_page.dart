@@ -381,6 +381,43 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 },
               ),
 
+              // 指纹漂移徽标（v2：预设恢复的滑块可能对不上当前代码，醒目提示）
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) {
+                  if (!m.lpPresetCodeMismatch) {
+                    return const SizedBox.shrink();
+                  }
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: AuraSpace.md),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 10, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: p.warning.withValues(alpha: 0.10),
+                      borderRadius:
+                          BorderRadius.circular(AuraRadius.sm),
+                      border: Border.all(
+                          color: p.warning.withValues(alpha: 0.45)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            size: 14, color: p.warning),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            l.lpCodeMismatch,
+                            style: captionOf(p, color: p.warning),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+
               // 代码编辑器（支持语法着色）
               Container(
                 constraints:
