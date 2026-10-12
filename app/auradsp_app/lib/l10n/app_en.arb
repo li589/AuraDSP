@@ -108,6 +108,32 @@
   "lpErrSampleSyntax": "Syntax error in @sample section",
   "lpBlockedByLint": "Fix the flagged structural issues first",
   "lpCodeMismatch": "Preset was saved with different script code; slider values may not match",
+  "lpCompiling": "Compiling…",
+  "lpCompileTook": "Last compile took {t}",
+  "@lpCompileTook": {
+    "placeholders": {
+      "t": {
+        "type": "String"
+      }
+    }
+  },
+  "lpCompileSlow": "slow — hammering Apply may stall audio",
+  "lpSkipped": "Skipped {n} oversized or broken files",
+  "@lpSkipped": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpOverwriteTitle": "Overwrite?",
+  "lpOverwriteBody": "A script with this name exists. Overwrite it?",
+  "lpOverwriteAction": "Overwrite",
+  "lpDeleteTitle": "Delete script",
+  "lpDeleteBody": "Delete this script file? This cannot be undone.",
+  "lpDeleteAction": "Delete",
+  "lpRenameTitle": "Rename script",
+  "lpOpFailed": "Operation failed, please retry",
   "lpSliders": "Script sliders (slider1..8)",
   "lpSliderHint": "Declared range wins; 0..1 when undeclared; changes apply live",
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",

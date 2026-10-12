@@ -108,6 +108,32 @@
   "lpErrSampleSyntax": "@sample 段语法错误",
   "lpBlockedByLint": "先修复标红的结构问题再应用",
   "lpCodeMismatch": "预设存档时的脚本与当前代码不一致，滑块值可能对不上号",
+  "lpCompiling": "编译中…",
+  "lpCompileTook": "上次编译耗时 {t}",
+  "@lpCompileTook": {
+    "placeholders": {
+      "t": {
+        "type": "String"
+      }
+    }
+  },
+  "lpCompileSlow": "偏慢，连击应用可能卡音频",
+  "lpSkipped": "{n} 个超限或损坏的文件已跳过",
+  "@lpSkipped": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpOverwriteTitle": "覆盖确认",
+  "lpOverwriteBody": "已存在同名脚本，覆盖吗？",
+  "lpOverwriteAction": "覆盖",
+  "lpDeleteTitle": "删除脚本",
+  "lpDeleteBody": "确定删除该脚本文件吗？不可撤销。",
+  "lpDeleteAction": "删除",
+  "lpRenameTitle": "重命名脚本",
+  "lpOpFailed": "操作失败，请重试",
   "lpSliders": "脚本滑块（slider1..8）",
   "lpSliderHint": "有声明按声明，无声明默认 0..1；改动实时生效",
   "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",

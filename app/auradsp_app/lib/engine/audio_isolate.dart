@@ -643,7 +643,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final e = lib.lastError(handle);
             err = e == nullptr ? null : e.toDartString();
           }
-          send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err});
+          send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
           if (rc == Status.ok) {
             // 仅在状态/延迟真的变化时才回推，避免拖滑块时 UI 整页双倍重建
             final st = lib.getState(handle);
@@ -777,7 +777,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final e = lib.lastError(handle);
               err = e == nullptr ? null : e.toDartString();
             }
-            send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err});
+            send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
               final st = AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});

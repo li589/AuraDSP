@@ -646,6 +646,78 @@ abstract class AppLocalizations {
   /// **'预设存档时的脚本与当前代码不一致，滑块值可能对不上号'**
   String get lpCodeMismatch;
 
+  /// No description provided for @lpCompiling.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译中…'**
+  String get lpCompiling;
+
+  /// No description provided for @lpCompileTook.
+  ///
+  /// In zh, this message translates to:
+  /// **'上次编译耗时 {t}'**
+  String lpCompileTook(String t);
+
+  /// No description provided for @lpCompileSlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'偏慢，连击应用可能卡音频'**
+  String get lpCompileSlow;
+
+  /// No description provided for @lpSkipped.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 个超限或损坏的文件已跳过'**
+  String lpSkipped(int n);
+
+  /// No description provided for @lpOverwriteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖确认'**
+  String get lpOverwriteTitle;
+
+  /// No description provided for @lpOverwriteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'已存在同名脚本，覆盖吗？'**
+  String get lpOverwriteBody;
+
+  /// No description provided for @lpOverwriteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖'**
+  String get lpOverwriteAction;
+
+  /// No description provided for @lpDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除脚本'**
+  String get lpDeleteTitle;
+
+  /// No description provided for @lpDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除该脚本文件吗？不可撤销。'**
+  String get lpDeleteBody;
+
+  /// No description provided for @lpDeleteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get lpDeleteAction;
+
+  /// No description provided for @lpRenameTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'重命名脚本'**
+  String get lpRenameTitle;
+
+  /// No description provided for @lpOpFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作失败，请重试'**
+  String get lpOpFailed;
+
   /// No description provided for @lpSliders.
   ///
   /// In zh, this message translates to:
