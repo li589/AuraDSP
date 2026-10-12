@@ -124,6 +124,26 @@ abstract final class VizBands {
   /// 第 b 条频带的中心横坐标。
   static double centerX(int b) => (edgeX(b) + edgeX(b + 1)) / 2.0;
 
+  /// b 段频带的中心频率（Hz）。对数刻度频带用几何平均才对齐中点，
+  /// 算术平均会系统性偏高（同一组边界下 20–25Hz 算术中点是 22.5Hz，
+  /// 但它在对数轴上对应的视觉中点更接近 22.2Hz，误差在高频段更明显）。
+  static double centerHz(int b) {
+    final lo = edges[b.clamp(0, count)];
+    final hi = edges[(b + 1).clamp(0, count)];
+    return math.sqrt(lo * hi);
+  }
+
+  /// 引擎把 -75..0 dBFS 线性映射到 [0,1]（见 auradsp_engine.cpp 的 emit_viz）。
+  ///
+  /// 任何「频带值 ↔ dB」的换算都必须走这里：EQ 输出谱要把归一化值还原成
+  /// dBFS、加上实测响应、再归一化回去，三步的口径必须与引擎完全一致，
+  /// 偏一点就会让合成结果整体错位。
+  static const double dbSpan = 75.0;
+
+  static double toDb(double v) => v * dbSpan - dbSpan;
+
+  static double fromDb(double db) => ((db + dbSpan) / dbSpan).clamp(0.0, 1.0);
+
   /// 给定归一化对数横坐标，返回源频带的小数下标，用于「N 条 ← 32 带」重采样。
   static double sampleIndex(double x) {
     final last = (count - 1).toDouble();
@@ -148,28 +168,39 @@ final class VizFrame extends Struct {
   @Double()
   external double timestampMs;
 
-  @Array(32)
-  external Array<Float> spectrum;
+@Array(32)
+    external Array<Float> spectrum;
 
-  @Float()
-  external double levelLDbfs;
-  @Float()
-  external double levelRDbfs;
-@Array(16)
-  external Array<Float> stageLevelsL;
+    /// vendor 链入口（均衡器输入）的 32 段频谱，语义与 [spectrum] 相同。
+    ///
+    /// 均衡器面板的背景柱必须用它，而不是 [spectrum]（整链最终输出，
+    /// 含 EQ 之后的混响/卷积/Freeverb/插件）。EQ 在 libjamesdsp 单体链
+    /// 内部拿不到输出，输出谱由 UI 用实测响应合成。
+    @Array(32)
+    external Array<Float> eqInSpectrum;
 
-  @Array(16)
-  external Array<Float> stageLevelsR;
+    @Float()
+    external double levelLDbfs;
+    @Float()
+    external double levelRDbfs;
+    @Array(16)
+    external Array<Float> stageLevelsL;
 
-  List<double> spectrumToList() =>
-      List<double>.generate(32, (i) => spectrum[i]);
+    @Array(16)
+    external Array<Float> stageLevelsR;
 
-  List<double> stageLevelsLToList() =>
-      List<double>.generate(kEngineStageCount, (i) => stageLevelsL[i]);
+    List<double> spectrumToList() =>
+        List<double>.generate(32, (i) => spectrum[i]);
 
-  List<double> stageLevelsRToList() =>
-      List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
-}
+    List<double> eqInSpectrumToList() =>
+        List<double>.generate(32, (i) => eqInSpectrum[i]);
+
+    List<double> stageLevelsLToList() =>
+        List<double>.generate(kEngineStageCount, (i) => stageLevelsL[i]);
+
+    List<double> stageLevelsRToList() =>
+        List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
+  }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）
 final class AuraDspLib {

@@ -14,7 +14,7 @@ import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart'
-    show ParamId, kEngineStageCount, AuraDspLib;
+    show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
 import 'config.dart';
 import 'plugin_manager.dart';
@@ -260,6 +260,13 @@ class AppModel extends ChangeNotifier {
 
   // 高频可视化（独立 notifier，30fps）
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
+
+  /// vendor 链入口（= 均衡器输入）的 32 段频谱，口径与 [spectrum] 相同。
+  ///
+  /// [spectrum] 取的是整条链的**最终输出**——EQ 之后的混响 / 卷积 /
+  /// Freeverb / 插件全都算在内。拿它当均衡器面板的背景柱，用户看到的
+  /// 频谱并不是均衡器输出的东西，调 EQ 时背景柱几乎不动。
+  final eqInSpectrum = ValueNotifier<List<double>>(List.filled(32, 0));
   final levelL = ValueNotifier<double>(-90);
   final levelR = ValueNotifier<double>(-90);
   // [M3.5-c] 12 个 stage 的实时双声道微型电平 (dBFS)
@@ -521,6 +528,9 @@ class AppModel extends ChangeNotifier {
         break;
       case 'viz':
         spectrum.value = (raw['spectrum'] as List).cast<double>();
+        if (raw['eqIn'] != null) {
+          eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();
+        }
         levelL.value = (raw['l'] as num).toDouble();
         levelR.value = (raw['r'] as num).toDouble();
         if (raw['stageL'] != null) {
@@ -1617,6 +1627,47 @@ void applyEqCurve(List<double> freqs, List<double> gains) {
   /// 引擎实测响应（dB），长度 [eqResponsePoints]；null 表示尚未取得。
   /// 绘制时应与 [eqResponseCurve] 比对，不一致说明已过期，需回退近似。
   List<double>? eqResponseDb;
+
+  /// 合成「均衡器输出频谱」：把引擎下发的 EQ 输入谱叠加实测响应。
+  ///
+  /// EQ 位于 libjamesdsp 的单体链内部（processFloatMultiplexd 一次跑完全链），
+  /// 拿不到它的输出 tap。但 EQ 是 LTI 系统，逐频点有严格的
+  /// **|Y(f)| = |X(f)| · |H_eq(f)|**（这是线性系统幅度谱的乘法定理，
+  /// 与相位无关），而 |H_eq| 正好就是 [eqResponseDb] 测到的东西。
+  /// 于是输出谱 = 输入谱(dBFS) + 响应(dB)，是精确值而非近似。
+  ///
+  /// [bypassed] 为 true 时 H_eq ≡ 0（EQ 被旁路，链内不生效），
+  /// 此时输出谱就等于输入谱——与 [_SpectrumEQPainter] 对曲线的处理一致。
+  static List<double> composeEqOutputSpectrum(
+    List<double> eqIn,
+    List<double>? respDb, {
+    bool bypassed = false,
+  }) {
+    final out = List<double>.filled(VizBands.count, 0);
+    final n = eqIn.length < VizBands.count ? eqIn.length : VizBands.count;
+    final flat = bypassed || respDb == null || respDb.length < 2;
+    for (var b = 0; b < n; b++) {
+      if (flat) {
+        out[b] = eqIn[b].clamp(0.0, 1.0);
+        continue;
+      }
+      final hz = VizBands.centerHz(b);
+      final db = VizBands.toDb(eqIn[b].clamp(0.0, 1.0)) + _respDbAt(respDb, hz);
+      out[b] = VizBands.fromDb(db);
+    }
+    return out;
+  }
+
+  /// 在实测响应（log 均分 fMin..fMax，129 点）上按频率线性插值取 dB。
+  static double _respDbAt(List<double> resp, double hz) {
+    const fMin = 20.0, fMax = 20000.0;
+    final t = (math.log(hz / fMin) / math.log(fMax / fMin)).clamp(0.0, 1.0);
+    final x = t * (resp.length - 1);
+    final i = x.floor();
+    if (i >= resp.length - 1) return resp[resp.length - 1];
+    final f = x - i;
+    return resp[i] * (1 - f) + resp[i + 1] * f;
+  }
 
   /// [eqResponseDb] 对应的曲线字符串，用于失效判定。
   String? eqResponseCurve;

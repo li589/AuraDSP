@@ -87,6 +87,18 @@ typedef struct auradsp_viz_frame {
     uint64_t seq;
     double   timestamp_ms;
     float    spectrum[AURADSP_VIZ_BANDS];
+    /* [EQ tap] vendor 链入口（即均衡器输入）的同规格 32 段频谱。
+     *
+     * spectrum 取的是**整条链的最终输出**（EQ 之后的混响/卷积/Freeverb/
+     * 插件全都算在内），所以拿它当均衡器面板的背景柱是错的：面板上看到的
+     * 频谱并不是均衡器输出的东西，调整 EQ 时背景柱几乎不动。
+     *
+     * EQ 位于 libjamesdsp 的单体链内部（processFloatMultiplexd 一次跑完
+     * 全链），拿不到它的输出——但按 LTI 性质有 |Y(f)| = |X(f)|·|H_eq(f)|，
+     * 而 |H_eq| 可由 auradsp_probe_eq_response 精确测得。因此这里下发
+     * **EQ 输入**谱，输出谱由 UI 用实测响应合成。
+     * 语义与 spectrum 完全相同（同一 kBandEdges、同一 [0,1] 归一化）。 */
+    float    eq_in_spectrum[AURADSP_VIZ_BANDS];
     float    level_l_dbfs;
     float    level_r_dbfs;
     /* [M3.5-c] vendor 12 级链的实时双声道峰值 (dBFS)；

@@ -32,6 +32,7 @@ class VizFrame(ctypes.Structure):
         ("seq", ctypes.c_uint64),
         ("timestamp_ms", ctypes.c_double),
         ("spectrum", ctypes.c_float * 32),
+        ("eq_in_spectrum", ctypes.c_float * 32),
         ("level_l_dbfs", ctypes.c_float),
         ("level_r_dbfs", ctypes.c_float),
         ("stage_levels_l", ctypes.c_float * 16),
