@@ -1,11 +1,11 @@
 {
   "schema_version": "1.0.0",
   "project": "AuraDSP",
-  "build_date": "2026-10-11T16:30:00Z",
+  "build_date": "2026-10-12T04:05:47Z",
   "description": "AuraDSP 统一声学分发资源库 (去重清洗纯净版，脉冲统一为 .irs 格式)",
   "summary": {
     "total_convolver": 2007,
-    "total_ddc": 441,
+    "total_ddc": 449,
     "total_liveprog": 128,
     "core_convolver": 32,
     "core_ddc": 53
@@ -33676,6 +33676,94 @@
       "relative_path": "liveprog/dynamics/viper_dynamicbass_preset.eel",
       "hash_md5": "1e9ef5abf3c80c10d3ee91d44a8c399e",
       "tier": "core"
+    },
+    {
+      "id": "ddc-f97ba692",
+      "type": "ddc",
+      "brand": "BEHRINGER",
+      "model": "BEHRINGER ECM8000 (LUOLAN-2)",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/BEHRINGER/BEHRINGER ECM8000 (LUOLAN-2).vdc",
+      "hash_md5": "f8e513aeb51edbbdfed9b37ad4b81aa9",
+      "size_bytes": 1447,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-69bbb2b0",
+      "type": "ddc",
+      "brand": "BEHRINGER",
+      "model": "BEHRINGER ECM8000 D1303397118",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/BEHRINGER/BEHRINGER ECM8000 D1303397118.vdc",
+      "hash_md5": "f47024c5b7fa70dea3299d3b02664cec",
+      "size_bytes": 1443,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-a9a185ec",
+      "type": "ddc",
+      "brand": "BEYERDYNAMIC",
+      "model": "BEYERDYNAMIC MM1 14308 MICROPHONE BEYERFACTORY",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/BEYERDYNAMIC/BEYERDYNAMIC MM1 14308 MICROPHONE BEYERFACTORY.vdc",
+      "hash_md5": "0d023660b81dd38226f6af490bbc41e7",
+      "size_bytes": 1451,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-e38dbe75",
+      "type": "ddc",
+      "brand": "BEYERDYNAMIC",
+      "model": "BEYERDYNAMIC MM1 14308 MICROPHONE CSLABS",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/BEYERDYNAMIC/BEYERDYNAMIC MM1 14308 MICROPHONE CSLABS.vdc",
+      "hash_md5": "e104173e4fa6ef9eb3a2aace49fe2553",
+      "size_bytes": 1454,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-989990b4",
+      "type": "ddc",
+      "brand": "EARTHWORKS",
+      "model": "EARTHWORKS M23 2298J",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/EARTHWORKS/EARTHWORKS M23 2298J.vdc",
+      "hash_md5": "11d8b466329ce8dcee0e6ad9e77522b5",
+      "size_bytes": 1452,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-6dc39d31",
+      "type": "ddc",
+      "brand": "GENERIC MICROPHONE",
+      "model": "GENERIC EXAMPLE",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/GENERIC MICROPHONE/GENERIC EXAMPLE.vdc",
+      "hash_md5": "5d63a3f399e1ea76f6d1671263ec6e55",
+      "size_bytes": 1448,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-6290de3f",
+      "type": "ddc",
+      "brand": "ISEMCON",
+      "model": "ISEMCON EMX7150 2391606 270916",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/ISEMCON/ISEMCON EMX7150 2391606 270916.vdc",
+      "hash_md5": "ca45689e05d73770483a0ec76d9a98ff",
+      "size_bytes": 1432,
+      "tier": "full"
+    },
+    {
+      "id": "ddc-86a51a6e",
+      "type": "ddc",
+      "brand": "StudioSixDigital",
+      "model": "CAL SD2016 1C060BFB00323400",
+      "category": "Microphone Calibration",
+      "relative_path": "ddc/Microphone Calibration/StudioSixDigital/CAL SD2016 1C060BFB00323400.vdc",
+      "hash_md5": "7704c6dd61a89e044a6fdacdb6282dae",
+      "size_bytes": 1442,
+      "tier": "full"
     }
   ]
 }
