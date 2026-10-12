@@ -268,6 +268,11 @@
   "chainNodeReverb": "混响与声场",
   "chainNodeLimiter": "主限幅 Limiter",
   "chainNodeOutput": "音频输出",
+  "chainStagePreDsp": "阶段 0 (DSP 前置)",
+  "chainStagePreVendor": "阶段 1 (厂商链前置)",
+  "chainStagePostVendor": "阶段 2 (厂商链后置)",
+  "chainStagePostReverb": "阶段 3 (混响后置)",
+  "chainStagePostLimiter": "阶段 4 (限幅后置)",
   "chainSlotActive": "插槽 {n}：{name} ({fmt})",
   "@chainSlotActive": {
     "placeholders": {
@@ -486,6 +491,17 @@
     "placeholders": {
       "n": {
         "type": "int"
+      }
+    }
+  },
+  "plugMountedTitleNamed": "当前挂载插件 (插槽 {n})：{name}",
+  "@plugMountedTitleNamed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
       }
     }
   },

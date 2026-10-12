@@ -701,6 +701,120 @@ class _CustomDirsSection extends StatelessWidget {
   }
 }
 
+/// D4d logo 三合一：AuraDSP 品牌渐变底 + 厂商首字母 monogram + 格式角标。
+///
+/// 为什么不做"提取真实图标"：VST3 无标准 logo 接口（只能在 bundle 的
+/// Contents/Resources/ 找快照图，且 IPlugView::getSnapshot 需先建实例+建
+/// 视图，代价高不稳定）；CLAP 根本没有 logo 概念。三合一是确定性、离线、
+/// 对全部插件一致的默认方案（方案 §4.6-1）。
+///
+/// 空 vendor 时 monogram 降级取插件名首字母（方案 §4.6-2），不再显示
+/// "未知厂商"——文本行同步只保留分类。
+class _PluginTriLogo extends StatelessWidget {
+  final String vendor;
+  final String pluginName;
+  final String formatLabel;
+  final bool isVst3;
+
+  const _PluginTriLogo({
+    required this.vendor,
+    required this.pluginName,
+    required this.formatLabel,
+    required this.isVst3,
+  });
+
+  /// monogram：厂商首字母优先，空则插件名首字母，再空则 '?'。
+  /// 用 runes 取首码位，避免 surrogate pair 被切成半个代理对。
+  String get _monogram {
+    for (final s in [vendor, pluginName]) {
+      final t = s.trim();
+      if (t.isNotEmpty) {
+        return String.fromCharCode(t.runes.first).toUpperCase();
+      }
+    }
+    return '?';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final formatGradient = isVst3
+        ? const LinearGradient(
+            colors: [Color(0xFF0072FF), Color(0xFF00C6FF)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          )
+        : const LinearGradient(
+            colors: [Color(0xFF8A2387), Color(0xFFE94057)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          );
+    return SizedBox(
+      width: 60,
+      height: 60,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // 品牌底：accent → accent2 渐变（三套主题的 accentContrast 均适配）
+          Container(
+            width: 60,
+            height: 60,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [p.accent, p.accent2],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(AuraRadius.md),
+              boxShadow: [
+                BoxShadow(
+                  color: p.accent.withValues(alpha: 0.3),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Center(
+              child: Text(
+                _monogram,
+                style: TextStyle(
+                  color: p.accentContrast,
+                  fontWeight: FontWeight.w900,
+                  fontSize: 26,
+                  height: 1.0,
+                ),
+              ),
+            ),
+          ),
+          // 格式角标（右下）：VST3 蓝 / CLAP 紫，沿用原渐变
+          Positioned(
+            right: -2,
+            bottom: -2,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+              decoration: BoxDecoration(
+                gradient: formatGradient,
+                borderRadius: BorderRadius.circular(4),
+                border: Border.all(color: p.panelRaised, width: 1),
+              ),
+              child: Text(
+                formatLabel,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 7,
+                  letterSpacing: 0.4,
+                  height: 1.1,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// 活跃插件 Hero 卡片
 class _ActivePluginHero extends StatelessWidget {
   final AppModel model;
@@ -775,25 +889,17 @@ class _ActivePluginHero extends StatelessWidget {
     }
 
     final isVst3 = active.format == PluginFormat.vst3;
-    final badgeGradient = isVst3
-        ? const LinearGradient(
-            colors: [Color(0xFF0072FF), Color(0xFF00C6FF)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          )
-        : const LinearGradient(
-            colors: [Color(0xFF8A2387), Color(0xFFE94057)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          );
 
     final latencySamples = manager.getSlotLatency(slot);
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
     final latencyMs =
         (latencySamples / model.deviceRate * 1000.0).toStringAsFixed(1);
 
+    // 命名规则（D4d）：槽位卡标题显示**用户所选名**——用户在扫描列表
+    // 点选那一项的 name，与编辑器窗口标题（'<name> - AuraDSP Host'，
+    // B3 E1）同源；B1 已保证扫描值 == 加载值，三处展示不会各说各话。
     return SectionCard(
-      title: l10nOf(context).plugMountedTitle(slot + 1),
+      title: l10nOf(context).plugMountedTitleNamed(slot + 1, active.name),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -872,35 +978,14 @@ class _ActivePluginHero extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // 格式大徽章
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    gradient: badgeGradient,
-                    borderRadius: BorderRadius.circular(AuraRadius.md),
-                    boxShadow: [
-                      BoxShadow(
-                        color: (isVst3
-                                ? const Color(0xFF0072FF)
-                                : const Color(0xFFE94057))
-                            .withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Center(
-                    child: Text(
-                      active.format.label,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 15,
-                        letterSpacing: 1.1,
-                      ),
-                    ),
-                  ),
+                // logo 三合一（D4d）：AuraDSP 品牌底 + 厂商首字母 monogram
+                // + 格式角标。VST3 无标准 logo 接口、CLAP 无 logo 概念
+                // （方案 §4.6），故对全部插件用确定性、离线、一致的三合一。
+                _PluginTriLogo(
+                  vendor: active.vendor,
+                  pluginName: active.name,
+                  formatLabel: active.format.label,
+                  isVst3: isVst3,
                 ),
                 const SizedBox(width: AuraSpace.md),
 
@@ -932,8 +1017,12 @@ class _ActivePluginHero extends StatelessWidget {
                         ],
                       ),
                       const SizedBox(height: 4),
+                      // 空 vendor 不再显示空白/"未知厂商"（观感"读不出来"）：
+                      // monogram 已降级取插件名首字母，文本行只保留分类。
                       Text(
-                        '${active.vendor.isNotEmpty ? active.vendor : l10nOf(context).plugUnknownVendor} • ${active.category.isNotEmpty ? active.category : "Fx"}',
+                        active.vendor.isNotEmpty
+                            ? '${active.vendor} • ${active.category.isNotEmpty ? active.category : "Fx"}'
+                            : (active.category.isNotEmpty ? active.category : "Fx"),
                         style: captionOf(p, color: p.textDim),
                       ),
                       const SizedBox(height: 6),

@@ -714,6 +714,21 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainNodeOutput => 'オーディオ出力';
 
   @override
+  String get chainStagePreDsp => 'ステージ 0 (DSP 前)';
+
+  @override
+  String get chainStagePreVendor => 'ステージ 1 (ベンダーチェーン前)';
+
+  @override
+  String get chainStagePostVendor => 'ステージ 2 (ベンダーチェーン後)';
+
+  @override
+  String get chainStagePostReverb => 'ステージ 3 (リバーブ後)';
+
+  @override
+  String get chainStagePostLimiter => 'ステージ 4 (リミッター後)';
+
+  @override
   String chainSlotActive(int n, String name, String fmt) {
     return 'スロット$n：$name（$fmt）';
   }
@@ -981,6 +996,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String plugMountedTitle(int n) {
     return '現在マウント中のプラグイン（スロット$n）';
+  }
+
+  @override
+  String plugMountedTitleNamed(int n, String name) {
+    return '現在マウント中のプラグイン（スロット$n）：$name';
   }
 
   @override

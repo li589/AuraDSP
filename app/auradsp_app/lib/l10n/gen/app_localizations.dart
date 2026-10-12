@@ -1474,6 +1474,36 @@ abstract class AppLocalizations {
   /// **'音频输出'**
   String get chainNodeOutput;
 
+  /// No description provided for @chainStagePreDsp.
+  ///
+  /// In zh, this message translates to:
+  /// **'阶段 0 (DSP 前置)'**
+  String get chainStagePreDsp;
+
+  /// No description provided for @chainStagePreVendor.
+  ///
+  /// In zh, this message translates to:
+  /// **'阶段 1 (厂商链前置)'**
+  String get chainStagePreVendor;
+
+  /// No description provided for @chainStagePostVendor.
+  ///
+  /// In zh, this message translates to:
+  /// **'阶段 2 (厂商链后置)'**
+  String get chainStagePostVendor;
+
+  /// No description provided for @chainStagePostReverb.
+  ///
+  /// In zh, this message translates to:
+  /// **'阶段 3 (混响后置)'**
+  String get chainStagePostReverb;
+
+  /// No description provided for @chainStagePostLimiter.
+  ///
+  /// In zh, this message translates to:
+  /// **'阶段 4 (限幅后置)'**
+  String get chainStagePostLimiter;
+
   /// No description provided for @chainSlotActive.
   ///
   /// In zh, this message translates to:
@@ -1941,6 +1971,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前挂载插件 (插槽 {n})'**
   String plugMountedTitle(int n);
+
+  /// No description provided for @plugMountedTitleNamed.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前挂载插件 (插槽 {n})：{name}'**
+  String plugMountedTitleNamed(int n, String name);
 
   /// No description provided for @plugOpenGuiBtn.
   ///
