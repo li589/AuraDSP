@@ -230,6 +230,12 @@ abstract final class PresetLibrary {
       createdAt: DateTime.now().toIso8601String(),
       isFactory: false,
       params: {
+        // 输入门控（钉死首位）
+        'input': {
+          'gain': m.inputGain,
+          'balanceL': m.inputBalanceL,
+          'balanceR': m.inputBalanceR,
+        },
         // 低音增强
         'bass': {
           'enable': m.bassOn,
@@ -279,6 +285,7 @@ abstract final class PresetLibrary {
         },
         // 立体声展宽
         'stereo': {
+          'on': m.stereoOn,
           'mix': m.stereoMix,
           'bandUsed': m.stereoBandUsed,
           'bands': List<double>.of(m.stereoBands),
@@ -313,6 +320,20 @@ abstract final class PresetLibrary {
 
   static void apply(AppModel m, AuraPreset preset) {
     final p = preset.params;
+
+    // 0. 输入门控
+    final input = (p['input'] as Map<String, dynamic>?) ?? {};
+    if (input.isNotEmpty) {
+      if (input['gain'] != null) {
+        m.setInputGain((input['gain'] as num).toDouble());
+      }
+      if (input['balanceL'] != null) {
+        m.setInputBalanceL((input['balanceL'] as num).toDouble());
+      }
+      if (input['balanceR'] != null) {
+        m.setInputBalanceR((input['balanceR'] as num).toDouble());
+      }
+    }
 
     // 1. 低音增强
     final bass = (p['bass'] as Map<String, dynamic>?) ?? {};
@@ -434,6 +455,13 @@ abstract final class PresetLibrary {
     // 5. 立体声扩展（按 Master-Macro 乘数联动架构还原）
     final st = (p['stereo'] as Map<String, dynamic>?) ?? {};
     if (st.isNotEmpty) {
+      final mixVal = (st['mix'] as num?)?.toDouble();
+      if (st['on'] != null) {
+        m.stereoOn = st['on'] as bool;
+      } else if (mixVal != null) {
+        // 旧快照无开关位：沿用旧语义（mix>0 视为开），避免恢复后有值无声。
+        m.stereoOn = mixVal > 0.0;
+      }
       if (st['bands'] is List) {
         final bands = (st['bands'] as List).map((e) => (e as num).toDouble()).toList();
         for (var i = 0; i < bands.length && i < 5; i++) {

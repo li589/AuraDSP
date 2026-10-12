@@ -59,6 +59,9 @@ abstract class ParamDefaults {
   static const double stereoMix = 0.0;       // [0, 1] (0% ~ 100%)
   static const double convMix = 1.0;         // [0, 1] (100% 纯湿)
   static const double postGain = 0.0;        // [-15, 15] dB
+  static const double inputGain = 0.0;       // [-15, 15] dB
+  static const double inputBalanceL = 1.0;   // 100%
+  static const double inputBalanceR = 1.0;   // 100%
 
   // Freeverb 空间混响
   static const double fvDecay = 0.5;         // 50%
@@ -142,7 +145,10 @@ class AppModel extends ChangeNotifier {
   bool bassOn = false, eqOn = false, limiterOn = true;
   double bassGain = ParamDefaults.bassGain,
       stereoMix = ParamDefaults.stereoMix,
-      postGain = ParamDefaults.postGain;
+      postGain = ParamDefaults.postGain,
+      inputGain = ParamDefaults.inputGain,
+      inputBalanceL = ParamDefaults.inputBalanceL,
+      inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
 
@@ -171,6 +177,10 @@ class AppModel extends ChangeNotifier {
   // M5/P-002：声场分带（0..1 每带；bandUsed=false 时随总滑块统一）
   final List<double> stereoBands = List.filled(5, 0.5);
   bool stereoBandUsed = false;
+  // 声场开关（v1.2）：独立于滑块值的生效位。
+  // 旧语义 stereoOn = mix>0 导致“滑块拉到 0 即关开关→滑块被禁用→卡死”，
+  // 现开关只管是否生效，关闭时引擎侧收 0、UI 滑块值保留。
+  bool stereoOn = false;
 
   // 脉冲响应干湿比 + VDC
   double convMix = 1.0;
@@ -388,6 +398,11 @@ class AppModel extends ChangeNotifier {
       ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
   final stageLevelsR =
       ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
+  // 输入门控实时本级输入/输出电平 (dBFS)
+  final inputMeterInL = ValueNotifier<double>(-120.0);
+  final inputMeterInR = ValueNotifier<double>(-120.0);
+  final inputMeterOutL = ValueNotifier<double>(-120.0);
+  final inputMeterOutR = ValueNotifier<double>(-120.0);
 
   // 一次性事件（shell 监听弹 snackbar）
   final eventSeq = ValueNotifier<int>(0);
@@ -656,6 +671,18 @@ class AppModel extends ChangeNotifier {
         if (raw['stageR'] != null) {
           stageLevelsR.value = (raw['stageR'] as List).cast<num>().map((e) => e.toDouble()).toList();
         }
+        if (raw['inputInL'] != null) {
+          inputMeterInL.value = (raw['inputInL'] as num).toDouble();
+        }
+        if (raw['inputInR'] != null) {
+          inputMeterInR.value = (raw['inputInR'] as num).toDouble();
+        }
+        if (raw['inputOutL'] != null) {
+          inputMeterOutL.value = (raw['inputOutL'] as num).toDouble();
+        }
+        if (raw['inputOutR'] != null) {
+          inputMeterOutR.value = (raw['inputOutR'] as num).toDouble();
+        }
         break;
       case 'error':
         lastEngineError = raw['msg'] as String;
@@ -892,11 +919,27 @@ class AppModel extends ChangeNotifier {
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
       setFloat('bass.gain', bassGain);
-      setFloat('stereo.mix', stereoMix * stereoWidenMax);
+      // 声场（v1.2）：开关位独立后，直发 bypass _mirror（旧 setFloat 会把
+      // UI 的 mix/band 回写冲掉）；关闭时下发 0，UI 值保留。开时与旧行为一致。
+      final stereoK = stereoOn ? 1.0 : 0.0;
+      _markSent('stereo.mix');
+      send({
+        'cmd': 'setParam',
+        'id': 'stereo.mix',
+        'value': stereoMix * stereoWidenMax * stereoK,
+        'isFloat': true,
+      });
       if (stereoBandUsed) {
         setInt('stereo.bandUsed', 1);
         for (var i = 0; i < 5; i++) {
-          setFloat('stereo.band${i + 1}', stereoBands[i]);
+          final bandId = 'stereo.band${i + 1}';
+          _markSent(bandId);
+          send({
+            'cmd': 'setParam',
+            'id': bandId,
+            'value': stereoBands[i] * stereoK,
+            'isFloat': true,
+          });
         }
       }
       setInt('tube.enable', tubeOn ? 1 : 0);
@@ -1008,6 +1051,9 @@ class AppModel extends ChangeNotifier {
         break;
       case 'eq.enable': eqOn = v != 0; break;
       case 'post.gain': postGain = v; break;
+      case 'input.gain': inputGain = v; break;
+      case 'input.balance.1': inputBalanceL = v; break;
+      case 'input.balance.2': inputBalanceR = v; break;
       case 'limiter.enable': limiterOn = v != 0; break;
       case 'channels.mode': channelsMode = v.toInt(); break;
       case 'tube.enable': tubeOn = v != 0; break;
@@ -1039,23 +1085,42 @@ class AppModel extends ChangeNotifier {
     }
   }
 
+  /// 声场链统一推送：开关关闭时引擎侧一律收 0（静默），
+  /// UI 滑块值不动。直发 bypass _mirror，避免回写冲掉 UI 位置。
+  void _pushStereoChain() {
+    final k = stereoOn ? 1.0 : 0.0;
+    _markSent('stereo.mix');
+    send({
+      'cmd': 'setParam',
+      'id': 'stereo.mix',
+      'value': stereoMix * stereoWidenMax * k,
+      'isFloat': true,
+    });
+    final macroMultiplier = stereoMix * 2.0;
+    for (var i = 0; i < 5; i++) {
+      final id = 'stereo.band${i + 1}';
+      final eff =
+          (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax * k;
+      _markSent(id);
+      send({'cmd': 'setParam', 'id': id, 'value': eff, 'isFloat': true});
+    }
+    scheduleAutoSave();
+  }
+
   void setStereoMix(double v) {
     stereoMix = v.clamp(0.0, 1.0);
-    final macroMultiplier = stereoMix * 2.0;
-    setFloat('stereo.mix', stereoMix * stereoWidenMax);
-    for (var i = 0; i < 5; i++) {
-      final eff = (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
-      setFloat('stereo.band${i + 1}', eff);
-    }
+    // 保持旧 setFloat 路径的 _mirror 副作用：5 个分带推送曾把 bandUsed 置 true。
+    stereoBandUsed = true;
+    _pushStereoChain();
     notifyListeners();
   }
 
   void setStereoBand(int index, double baseVal) {
     if (index < 0 || index >= 5) return;
     stereoBands[index] = baseVal.clamp(0.0, 1.0);
-    final macroMultiplier = stereoMix * 2.0;
-    final eff = (stereoBands[index] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
-    setFloat('stereo.band${index + 1}', eff);
+    // 同上：旧 _mirror 分带分支置 bandUsed = true。
+    stereoBandUsed = true;
+    _pushStereoChain();
     notifyListeners();
   }
 
@@ -1066,38 +1131,34 @@ class AppModel extends ChangeNotifier {
   /// 双击主滑块时重置立体声扩展并恢复 5 个子带为 0.5 中性
   void resetStereoWiden() {
     stereoMix = ParamDefaults.stereoMix;
-    setFloat('stereo.mix', stereoMix * stereoWidenMax);
+    stereoOn = false;
     for (var i = 0; i < 5; i++) {
       stereoBands[i] = ParamDefaults.stereoBand;
-      setFloat('stereo.band${i + 1}', ParamDefaults.stereoBand * stereoWidenMax);
     }
     stereoBandUsed = false;
+    _pushStereoChain();
     notifyListeners();
   }
 
   void resetStereoBandsToGlobal() {
     for (var i = 0; i < 5; i++) {
       stereoBands[i] = ParamDefaults.stereoBand;
-      final macroMultiplier = stereoMix * 2.0;
-      final eff = (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax;
-      setFloat('stereo.band${i + 1}', eff);
     }
     stereoBandUsed = false;
+    _pushStereoChain();
     notifyListeners();
   }
 
-  bool get stereoOn => stereoMix > 0.0;
-
   void setStereoEnabled(bool on) {
-    if (on) {
-      final target = _lastStereoMix > 0.0 ? _lastStereoMix : 0.5;
-      setStereoMix(target);
-    } else {
-      if (stereoMix > 0.0) {
-        _lastStereoMix = stereoMix;
-      }
-      setStereoMix(0.0);
+    stereoOn = on;
+    if (on && stereoMix <= 0.0) {
+      stereoMix = _lastStereoMix > 0.0 ? _lastStereoMix : 0.5;
     }
+    if (!on && stereoMix > 0.0) {
+      _lastStereoMix = stereoMix;
+    }
+    _pushStereoChain();
+    notifyListeners();
   }
 
   /* ---- Liveprog 命令（v1.1） ---- */
@@ -1119,7 +1180,7 @@ class AppModel extends ChangeNotifier {
       'ddc' => ddcOn,
       'liveprog' => lpEnabled,
       'crossfeed' => xfeedOn,
-      'stereo' => stereoMix > 0.0,
+      'stereo' => stereoOn,
       'reverb' => reverbPreset >= 0,
       'output' => limiterOn,
       _ => false,
@@ -1144,11 +1205,7 @@ class AppModel extends ChangeNotifier {
       case 'crossfeed':
         setInt('crossfeed.enable', xfeedOn ? 0 : 1);
       case 'stereo':
-        if (stereoMix > 0.0) {
-          setFloat('stereo.mix', 0.0);
-        } else {
-          setFloat('stereo.mix', 0.5 * stereoWidenMax);
-        }
+        setStereoEnabled(!stereoOn);
       case 'reverb':
         if (reverbPreset >= 0) {
           setInt('reverb.preset', -1);
@@ -1232,6 +1289,24 @@ class AppModel extends ChangeNotifier {
 
   void setCrossfeedEnabled(bool on) {
     setInt(ParamId.xfeedEnable, on ? 1 : 0);
+  }
+
+  void setInputGain(double v) {
+    inputGain = v;
+    setFloat(ParamId.inputGain, v);
+    notifyListeners();
+  }
+
+  void setInputBalanceL(double v) {
+    inputBalanceL = v;
+    setFloat(ParamId.inputBalance(1), v);
+    notifyListeners();
+  }
+
+  void setInputBalanceR(double v) {
+    inputBalanceR = v;
+    setFloat(ParamId.inputBalance(2), v);
+    notifyListeners();
   }
 
   /// 参数化混响使能：废除品质档拦截限制，无条件自由放行
@@ -2122,6 +2197,10 @@ void fillEqQ(double q) {
     levelR.dispose();
     stageLevelsL.dispose();
     stageLevelsR.dispose();
+    inputMeterInL.dispose();
+    inputMeterInR.dispose();
+    inputMeterOutL.dispose();
+    inputMeterOutR.dispose();
     eventSeq.dispose();
     super.dispose();
   }
