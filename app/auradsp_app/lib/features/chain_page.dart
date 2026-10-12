@@ -17,8 +17,7 @@ import 'widgets.dart';
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
 /// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
 const List<({String id, bool exposed})> kStageMeta = [
-  (id: 'bassmono', exposed: true),
-  (id: 'tube', exposed: true),
+  (id: 'bassmono', exposed: true),  (id: 'tube', exposed: true),
   (id: 'comp', exposed: true),
   (id: 'bass', exposed: true),
   (id: 'eq', exposed: true),
@@ -28,6 +27,7 @@ const List<({String id, bool exposed})> kStageMeta = [
   (id: 'liveprog', exposed: true),
   (id: 'crossfeed', exposed: true),
   (id: 'stereo', exposed: true),
+  (id: 'haas', exposed: true),
   (id: 'reverb', exposed: true),
   (id: 'output', exposed: true),
 ];
@@ -45,6 +45,7 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'liveprog' => l.stScript,
       'crossfeed' => l.stXfeed,
       'stereo' => l.stStereo,
+      'haas' => l.stHaas,
       'reverb' => l.stReverb,
       'output' => l.stOutput,
       _ => id,
@@ -62,6 +63,7 @@ const List<String> kDefaultCoreOrder = [
   'liveprog',
   'crossfeed',
   'stereo',
+  'haas',
   'reverb',
 ];
 

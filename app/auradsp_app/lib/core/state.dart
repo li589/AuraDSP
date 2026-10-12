@@ -81,6 +81,10 @@ abstract class ParamDefaults {
   // 低频单声道化 (BassMono)
   static const double bassmonoFreq = 120.0;  // 120 Hz [20,300]
 
+  // Haas 差分环绕
+  static const double haasDelayMs = 12.0;    // 12 ms [0,25]
+  static const double haasMix = 1.0;         // [0,1]
+
   // 声场分带
   static const double stereoBand = 0.5;      // 50%
 
@@ -213,6 +217,9 @@ class AppModel extends ChangeNotifier {
   // 低频单声道化（BassMono，链头）
   bool bassmonoOn = false;
   double bassmonoFreq = 120;
+  // Haas 差分环绕（stereo 后 / reverb 前）
+  bool haasOn = false;
+  double haasDelayMs = 12, haasMix = 1.0;
 
   // M5-c：空间混响（Freeverb / Spatial Reverb）
   bool fvOn = false;
@@ -638,6 +645,15 @@ class AppModel extends ChangeNotifier {
         if (raw['bassmonoFreq'] != null) {
           bassmonoFreq = (raw['bassmonoFreq'] as num).toDouble();
         }
+        if (raw['haasEnable'] != null) {
+          haasOn = (raw['haasEnable'] as int) != 0;
+        }
+        if (raw['haasDelay'] != null) {
+          haasDelayMs = (raw['haasDelay'] as num).toDouble();
+        }
+        if (raw['haasMix'] != null) {
+          haasMix = (raw['haasMix'] as num).toDouble();
+        }
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -992,6 +1008,9 @@ class AppModel extends ChangeNotifier {
       setFloat('shelf.gain', shelfGain);
       setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
       setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+      setInt(ParamId.haasEnable, haasOn ? 1 : 0);
+      setFloat(ParamId.haasDelay, haasDelayMs);
+      setFloat(ParamId.haasMix, haasMix);
       setInt('limiter.enable', limiterOn ? 1 : 0);
       setFloat('post.gain', postGain);
 
@@ -1127,6 +1146,9 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.shelfGain) { shelfGain = v; break; }
         if (id == ParamId.bassmonoEnable) { bassmonoOn = v != 0; break; }
         if (id == ParamId.bassmonoFreq) { bassmonoFreq = v; break; }
+        if (id == ParamId.haasEnable) { haasOn = v != 0; break; }
+        if (id == ParamId.haasDelay) { haasDelayMs = v; break; }
+        if (id == ParamId.haasMix) { haasMix = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1230,6 +1252,7 @@ class AppModel extends ChangeNotifier {
       'tube' => tubeOn,
       'comp' => compOn,
       'bassmono' => bassmonoOn,
+      'haas' => haasOn,
       'bass' => bassOn,
       'eq' => eqOn,
       'arbmag' => false,
@@ -1251,6 +1274,8 @@ class AppModel extends ChangeNotifier {
         setInt('tube.enable', tubeOn ? 0 : 1);
       case 'bassmono':
         setBassmonoEnabled(!bassmonoOn);
+      case 'haas':
+        setHaasEnabled(!haasOn);
       case 'comp':
         setCompEnabled(!compOn);
       case 'bass':
@@ -1398,6 +1423,28 @@ class AppModel extends ChangeNotifier {
   void setBassmonoFreq(double v) {
     bassmonoFreq = v.clamp(20.0, 300.0);
     setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// Haas 差分环绕：右声道延迟 + 干湿混合（左声道恒直通，保单声道兼容）。
+  void setHaasEnabled(bool on) {
+    haasOn = on;
+    setInt(ParamId.haasEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setHaasDelay(double v) {
+    haasDelayMs = v.clamp(0.0, 25.0);
+    setFloat(ParamId.haasDelay, haasDelayMs);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setHaasMix(double v) {
+    haasMix = v.clamp(0.0, 1.0);
+    setFloat(ParamId.haasMix, haasMix);
     notifyListeners();
     scheduleAutoSave();
   }
@@ -2223,6 +2270,10 @@ void fillEqQ(double q) {
     }
     if (compId == 'comp' && compOn) {
       return (ms: 85.0, measured: false);
+    }
+    // Haas = 纯延迟线，按当前设定值标称（引擎 compute_latency 同值动态上报）。
+    if (compId == 'haas' && haasOn) {
+      return (ms: haasDelayMs, measured: false);
     }
     return (ms: 0.0, measured: false);
   }

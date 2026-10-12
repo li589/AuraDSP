@@ -683,6 +683,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stBassmono => '低域モノラル';
 
   @override
+  String get stHaas => '差分サラウンド';
+
+  @override
+  String get haasHint => '右を遅延させて広がりを作り、左はドライのまま';
+
+  @override
+  String get haasDelay => '右遅延';
+
+  @override
+  String get haasMix => '差分ミックス';
+
+  @override
   String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
 
   @override
