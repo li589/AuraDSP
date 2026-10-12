@@ -43,6 +43,8 @@ dist/
 clicks.csv
 # tools/mem_baseline.py 运行时取证（csv + 点击切片目录）
 tools/mem_trace_*
+# tools/probe_ir_stability.py 运行时生成的 IR 取证 wav
+tools/_probe_ir/
 
 # --- 声学资产包：大二进制/曲线走 release 附件，不进 git（v0.5.0 起） ---
 # .eel 脚本与 manifest.json 体积极小，正常版本化
