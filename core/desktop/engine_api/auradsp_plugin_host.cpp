@@ -21,6 +21,8 @@
 #include <future>
 #include <functional>
 #include <deque>
+#include <map>
+#include <set>
 #include <array>
 
 // CLAP headers
@@ -110,60 +112,6 @@ static void EnsureWindowClassRegistered() {
     });
 }
 
-//------------------------------------------------------------------------------
-// CLAP plugin main thread（B3-② 2026-10-12）
-//------------------------------------------------------------------------------
-// 唤醒泵线程执行任务队列的消息。
-constexpr UINT WM_APP_CLAP_TASK = WM_APP + 0x1A2;
-
-// CLAP 容器窗口的过程函数：生命周期完全由 plugin main 线程的泵循环管理
-// （WM_CLOSE 在泵循环里截获并触发编辑器收尾）。刻意不在 WM_DESTROY 里
-// PostQuitMessage —— 该线程是长寿命的 plugin main 线程（还承载后续的
-// unload / 重新 showEditor），绝不能被一次编辑器关闭杀掉。
-static LRESULT CALLBACK ClapHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-static void EnsureClapWindowClassRegistered() {
-    static std::once_flag flag;
-    std::call_once(flag, []() {
-        WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
-        wc.lpfnWndProc = ClapHostWindowProc;
-        wc.hInstance = GetModuleHandleW(NULL);
-        wc.lpszClassName = L"AuraDSP_CLAP_Host_Window";
-        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        RegisterClassExW(&wc);
-    });
-}
-
-//------------------------------------------------------------------------------
-// VST3 plugin main thread（B3 2026-10-12，镜像 CLAP 重构）
-//------------------------------------------------------------------------------
-// 唤醒 VST3 泵线程执行任务队列的消息。
-constexpr UINT WM_APP_VST3_TASK = WM_APP + 0x1A3;
-
-// VST3 编辑器容器窗口的过程函数：生命周期由 plugin main 线程的泵循环管理
-// （WM_CLOSE 在泵循环里截获并触发编辑器收尾）。刻意不在 WM_DESTROY 里
-// PostQuitMessage——该线程是长寿命的 plugin main 线程，绝不能被一次编辑器
-// 关闭杀掉。旧 AuraDSP_Plugin_Host_Window 的 WndProc 带 PostQuitMessage，
-// 不能承载泵线程，故 VST3 编辑器窗口改用本类。
-static LRESULT CALLBACK Vst3HostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
-    return DefWindowProcW(hwnd, msg, wp, lp);
-}
-
-static void EnsureVst3WindowClassRegistered() {
-    static std::once_flag flag;
-    std::call_once(flag, []() {
-        WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
-        wc.lpfnWndProc = Vst3HostWindowProc;
-        wc.hInstance = GetModuleHandleW(NULL);
-        wc.lpszClassName = L"AuraDSP_VST3_Host_Window";
-        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
-        RegisterClassExW(&wc);
-    });
-}
 
 //------------------------------------------------------------------------------
 // Steinberg VST3 Memory Stream for State / Preset Serialization
@@ -1214,6 +1162,298 @@ enum class ClapHostThreadType {
 };
 static thread_local ClapHostThreadType t_clapThreadType = ClapHostThreadType::Main;
 
+//------------------------------------------------------------------------------
+// ModulePumpThread —— 按插件模块（DLL）共享的 plugin main 线程（C1 2026-10-12）
+//------------------------------------------------------------------------------
+// 背景（C1 多槽挂载同一插件）：Windows LoadLibrary 对同路径返回同一模块
+// （引用计数），于是同 DLL 的两个实例共享全部静态状态——JUCE 系插件的
+// MessageManager 即其一（message thread 归属在 entry->init 首次触达并固定）。
+// B3 结构是「每实例一条泵线程」：槽 2 的实例自建第二条线程后，JUCE 的
+// MessageManager 锁在两条线程间互等 → 死锁。修复：同一二进制只建一条泵
+// 线程，实例经 shared_ptr 引用计数持有；最后一实例卸载时线程才停。
+//
+// 关键不变量：
+// - acquireModulePump(key) 幂等：同 key 的并发/重复调用返回同一条线程；
+// - PumpDeleter：stop 成功（线程 join 退出）才 delete 对象；失败则故意
+//   泄漏，保住 this 与挂死线程栈上的引用（对齐 B3 隔离区哲学）；
+// - SEH 守卫：任务内插件代码抛硬件异常（GUI 崩溃）时在本线程内捕获并
+//   毒化队列——后续任务的 future 永不兑现，各实例 postTaskAndWait
+//   超时后自行进入隔离，单插件崩溃不再炸整个进程；
+// - abandoned（毒化/停失败）的泵永不被 registry 复用，新实例建新线程。
+//
+// 唤醒泵线程执行任务队列的消息（统一替换 B3 的 WM_APP_CLAP_TASK /
+// WM_APP_VST3_TASK——泵线程已与格式解耦，不再需要每格式一条）。
+constexpr UINT WM_APP_PUMP_TASK = WM_APP + 0x1A2;
+
+class ModulePumpThread {
+public:
+    using Task = std::function<void()>;
+
+    // 按规范化二进制路径取得（必要时新建）该模块的共享泵线程。
+    // 返回 nullptr = 线程起不来（调用方按加载失败处理并释放模块）。
+    static std::shared_ptr<ModulePumpThread> acquire(const std::string& key) {
+        std::lock_guard<std::mutex> lock(s_registryMutex);
+        auto it = s_registry.find(key);
+        if (it != s_registry.end()) {
+            if (auto existing = it->second.lock()) {
+                if (!existing->m_abandoned.load(std::memory_order_acquire)) {
+                    return existing;   // 同模块第二实例：共享同一线程
+                }
+                // 毒化的泵不复用（插件 DLL 可能已处于崩溃后的不一致态）。
+            }
+        }
+        auto* raw = new ModulePumpThread();
+        std::shared_ptr<ModulePumpThread> pump(raw, PumpDeleter{});
+        if (!raw->start()) {
+            // start 内部已尽力收尾；失败置 abandoned，PumpDeleter 将再次
+            // 尝试 stop 并最终按挂死泄漏对象（绝不 delete 仍被引用的 this）。
+            raw->m_abandoned.store(true, std::memory_order_release);
+            return nullptr;
+        }
+        s_registry[key] = pump;
+        return pump;
+    }
+
+    bool isReady() const { return m_ready.load(std::memory_order_acquire); }
+    bool isAbandoned() const { return m_abandoned.load(std::memory_order_acquire); }
+    DWORD threadId() const { return m_threadId; }
+
+    // 提交任务到 plugin main 线程并等待完成（有界超时）。
+    // 返回 false = 线程停摆/毒化或超时（调用方走废弃隔离路径）。
+    bool postTaskAndWait(Task fn, DWORD timeoutMs) {
+        if (m_stopRequested.load(std::memory_order_acquire) ||
+            m_abandoned.load(std::memory_order_acquire)) {
+            return false;
+        }
+        auto task = std::make_shared<std::packaged_task<void()>>(std::move(fn));
+        auto fut = task->get_future();
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back([task]() { (*task)(); });
+        }
+        if (!PostThreadMessageW(m_threadId, WM_APP_PUMP_TASK, 0, 0)) {
+            // Ready 已置位意味着 GetMessageW 已在跑、消息队列必已建立；
+            // 此分支仅防御极端时序，短暂重试一次。
+            Sleep(20);
+            if (!PostThreadMessageW(m_threadId, WM_APP_PUMP_TASK, 0, 0)) {
+                std::cout << "[DBG Pump] PostThreadMessage failed, err=" << GetLastError() << std::endl;
+                return false;
+            }
+        }
+        return fut.wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready;
+    }
+
+    // 编辑器窗口登记：泵线程异常退出（毒化/停摆）时兜底销毁这些容器，
+    // 避免留下无人消息泵的僵尸窗口。
+    void registerEditor(HWND hwnd) {
+        std::lock_guard<std::mutex> lock(m_editorMutex);
+        m_editors.insert(hwnd);
+    }
+    void unregisterEditor(HWND hwnd) {
+        std::lock_guard<std::mutex> lock(m_editorMutex);
+        m_editors.erase(hwnd);
+    }
+
+private:
+    ModulePumpThread() = default;
+    ~ModulePumpThread() = default;
+
+    // shared_ptr 的 deleter：引用计数归零（最后一实例卸载）时触发。
+    struct PumpDeleter {
+        void operator()(ModulePumpThread* p) const {
+            if (p->stop()) {
+                delete p;   // 线程已 join 退出，无引用残留
+                return;
+            }
+            // 挂死：故意泄漏。p 仍被挂死线程的栈引用，delete = UAF。
+            std::cout << "[DBG Pump] deleter: thread unresponsive; leaking pump object (quarantine)" << std::endl;
+        }
+    };
+    friend struct PumpDeleter;
+
+    bool start() {
+        m_ready.store(false, std::memory_order_release);
+        m_stopRequested.store(false, std::memory_order_release);
+        m_abandoned.store(false, std::memory_order_release);
+        m_thread = std::thread([this]() { mainLoop(); });
+        for (int i = 0; i < 200 && !m_ready.load(std::memory_order_acquire); ++i) {
+            Sleep(10);
+        }
+        if (!m_ready.load(std::memory_order_acquire)) {
+            std::cout << "[DBG Pump] main thread failed to start" << std::endl;
+            stop();
+            return false;
+        }
+        return true;
+    }
+
+    // 请求线程退出并 join（有界）。返回 true = 已干净退出；
+    // false = 挂死（调用方按泄漏处理，本对象不得 delete）。
+    bool stop() {
+        if (!m_thread.joinable()) return true;   // 已 join 或从未启动
+        m_stopRequested.store(true, std::memory_order_release);
+        PostThreadMessageW(m_threadId, WM_QUIT, 0, 0);
+        HANDLE h = reinterpret_cast<HANDLE>(m_thread.native_handle());
+        if (h && WaitForSingleObject(h, 3000) == WAIT_OBJECT_0) {
+            m_thread.join();
+            return true;
+        }
+        m_abandoned.store(true, std::memory_order_release);
+        m_thread.detach();   // 挂死线程仍引用 this —— 对象交由 PumpDeleter 泄漏
+        return false;
+    }
+
+    void mainLoop() {
+        // CLAP host thread-check 回调据此识别 main thread（thread_local 默认
+        // 即 Main；此处显式置位，语义不依赖默认值）。
+        t_clapThreadType = ClapHostThreadType::Main;
+        m_threadId = GetCurrentThreadId();
+        m_ready.store(true, std::memory_order_release);
+        MSG msg;
+        for (;;) {
+            BOOL r = GetMessageW(&msg, NULL, 0, 0);
+            if (r <= 0) break;   // WM_QUIT（或错误）→ 退出
+            if (msg.message == WM_APP_PUMP_TASK) {
+                drainTasks();
+                if (m_abandoned.load(std::memory_order_acquire)) {
+                    break;   // 任务崩溃毒化：停止服务，让各实例超时隔离
+                }
+                continue;
+            }
+            // 编辑器容器窗口的 WM_CLOSE 由 WndProc 经 GWLP_USERDATA 分发到
+            // 实例（onEditorWmClose），此处不再截获——泵与实例已解耦。
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        destroyRegisteredEditors();
+    }
+
+    void drainTasks() {
+        for (;;) {
+            std::function<void()> task;
+            {
+                std::lock_guard<std::mutex> lock(m_taskMutex);
+                if (m_tasks.empty()) return;
+                task = std::move(m_tasks.front());
+                m_tasks.pop_front();
+            }
+            runTaskGuarded(&task);
+            if (m_abandoned.load(std::memory_order_acquire)) {
+                // 本任务崩溃：丢弃后续任务（其 packaged_task 永不兑现 →
+                // 等待方超时 → 实例隔离），避免在崩溃后的插件状态上继续执行。
+                std::lock_guard<std::mutex> lock(m_taskMutex);
+                m_tasks.clear();
+                return;
+            }
+        }
+    }
+
+    // SEH 任务守卫（C1）：MSVC 限制 __try 不能出现在需要 C++ 对象 unwind 的
+    // 函数里（C2712），故隔离到本无对象成员函数；processSlotGuarded 同款手法。
+    // 捕获 = 插件代码（多为 GUI 路径）抛硬件异常：毒化本泵（m_abandoned），
+    // drainTasks 丢弃后续任务，进程存活；各实例随后的 postTaskAndWait 立即
+    // 返回 false → 走各自的废弃隔离路径。
+    void runTaskGuarded(std::function<void()>* task) {
+#if defined(_MSC_VER)
+        __try {
+            (*task)();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {
+            std::cout << "[DBG Pump] task crashed (SEH); poisoning pump" << std::endl;
+            m_abandoned.store(true, std::memory_order_release);
+        }
+#else
+        try {
+            (*task)();
+        } catch (...) {
+            std::cout << "[DBG Pump] task threw; poisoning pump" << std::endl;
+            m_abandoned.store(true, std::memory_order_release);
+        }
+#endif
+    }
+
+    void destroyRegisteredEditors() {
+        std::lock_guard<std::mutex> lock(m_editorMutex);
+        for (HWND hwnd : m_editors) {
+            if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
+        }
+        m_editors.clear();
+    }
+
+    std::thread m_thread;
+    DWORD m_threadId = 0;
+    std::atomic<bool> m_ready{false};
+    std::atomic<bool> m_stopRequested{false};
+    std::atomic<bool> m_abandoned{false};
+    std::mutex m_taskMutex;
+    std::deque<std::function<void()>> m_tasks;
+    std::mutex m_editorMutex;
+    std::set<HWND> m_editors;
+
+    // registry：key = 规范化二进制路径（小写、canonical）。weak_ptr 使
+    // 最后一实例卸载后条目自然过期；static 生命周期同进程（绝不在 exit()
+    // 析构——泵线程可能仍挂死于插件代码）。
+    static std::mutex s_registryMutex;
+    static std::map<std::string, std::weak_ptr<ModulePumpThread>> s_registry;
+};
+
+std::mutex ModulePumpThread::s_registryMutex;
+std::map<std::string, std::weak_ptr<ModulePumpThread>> ModulePumpThread::s_registry;
+
+// 规范化模块键：Windows 路径大小写不敏感（LoadLibrary 同路径同模块），
+// canonical 化消解 junction/短名等别名。规范化失败时退化为小写原路径。
+static std::string normalizeModuleKey(const std::wstring& wpath) {
+    std::error_code ec;
+    fs::path canonical = fs::weakly_canonical(fs::path(wpath), ec);
+    std::string key = wideToUtf8(ec ? wpath : canonical.wstring());
+    std::transform(key.begin(), key.end(), key.begin(),
+                   [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+    return key;
+}
+
+// 编辑器容器窗口的过程函数（CLAP/VST3 共用模式）：
+// 生命周期由 plugin main 线程的泵循环管理，WM_CLOSE 经 GWLP_USERDATA 里
+// 的实例指针分发到 onEditorWmClose()（在泵线程内直接收尾，与 gui->create /
+// createView+attached 同线程，无锁竞争）。刻意不在 WM_DESTROY 里
+// PostQuitMessage——该线程是长寿命的共享 plugin main 线程，绝不能被一次
+// 编辑器关闭杀掉（旧 AuraDSP_Plugin_Host_Window 即因此不能承载泵线程）。
+static LRESULT CALLBACK EditorHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_CLOSE) {
+        auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (instance) {
+            instance->onEditorWmClose();
+            return 0;
+        }
+    }
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void EnsureEditorWindowClassRegistered(const wchar_t* className) {
+    // 按类名各自登记一次。曾误用函数内共享 once_flag——CLAP/VST3 两个类名
+    // 只有第一个能注册，另一个的 CreateWindowExW 必失败（2026-10-12 实测：
+    // VST3 先跑时 CLAP 编辑器全挂、close 任务挂死）。RegisterClassExW 对同名
+    // 重复注册仅报 ERROR_CLASS_ALREADY_EXISTS，故登记集合用 mutex 保护即可。
+    static std::mutex registerMutex;
+    static std::set<std::wstring> registered;
+    std::lock_guard<std::mutex> lock(registerMutex);
+    if (registered.count(className)) return;
+    WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
+    wc.lpfnWndProc = EditorHostWindowProc;
+    wc.hInstance = GetModuleHandleW(NULL);
+    wc.lpszClassName = className;
+    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+    RegisterClassExW(&wc);   // 已存在也视为完成（proc 相同），避免每次重试
+    registered.insert(className);
+}
+
+static void EnsureClapWindowClassRegistered() {
+    EnsureEditorWindowClassRegistered(L"AuraDSP_CLAP_Host_Window");
+}
+
+static void EnsureVst3WindowClassRegistered() {
+    EnsureEditorWindowClassRegistered(L"AuraDSP_VST3_Host_Window");
+}
+
 static uint32_t CLAP_ABI emptyInEventsSize(const clap_input_events_t*) { return 0; }
 static const clap_event_header_t* CLAP_ABI emptyInEventsGet(const clap_input_events_t*, uint32_t) { return nullptr; }
 static bool CLAP_ABI emptyOutEventsTryPush(const clap_output_events_t*, const clap_event_header_t*) { return true; }
@@ -1222,10 +1462,9 @@ class ClapPluginInstance : public IPluginInstance {
 public:
     ClapPluginInstance() = default;
     ~ClapPluginInstance() override {
-        // 兜底卸载（load 失败等提前析构路径）；随后确保泵线程已停。
-        // 线程已废弃（挂死隔离、detach）时 joinable 为 false，自然跳过。
+        // 兜底卸载（load 失败等提前析构路径）。unload 内部已释放共享泵引用
+        // （C1：最后一实例时 PumpDeleter 负责停线程），故此处无需再停。
         unload();
-        stopClapThread();
     }
 
     bool load(const std::string& path, const std::string& pluginId,
@@ -1277,15 +1516,17 @@ public:
         // （音频 isolate，不能泵消息），后续一切 GUI 调用因此死等或产出
         // 无泵子窗口（白框）。该线程同时承担本插件的 GUI 消息泵与全部
         // main-thread 任务，与 VST3 侧"attached 全在编辑器线程"的成功拓扑同构。
-        m_clapThreadReady.store(false, std::memory_order_release);
-        m_stopClapThread.store(false, std::memory_order_release);
-        m_clapThread = std::thread([this]() { clapMainLoop(); });
-        for (int i = 0; i < 200 && !m_clapThreadReady.load(std::memory_order_acquire); ++i) {
-            Sleep(10);
-        }
-        if (!m_clapThreadReady.load(std::memory_order_acquire)) {
+        //
+        // C1（2026-10-12）：泵线程改为按模块共享（ModulePumpThread）——同一
+        // DLL 被多槽挂载时 LoadLibrary 返回同一模块，两实例若各建一条线程，
+        // JUCE MessageManager 归属互斥 → 死锁。此处按规范化二进制路径取得
+        // （必要时新建）共享泵；引用计数归零（最后一实例卸载）时线程才停。
+        m_moduleKey = normalizeModuleKey(wpath);
+        m_pump = ModulePumpThread::acquire(m_moduleKey);
+        if (!m_pump || !m_pump->isReady()) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "CLAP main thread failed to start";
+            m_pump.reset();
             FreeLibrary(m_module);
             m_module = nullptr;
             m_entry = nullptr;
@@ -1293,7 +1534,7 @@ public:
         }
 
         std::string initErr;
-        bool taskRan = postTaskAndWait([&]() {
+        bool taskRan = m_pump->postTaskAndWait([&]() {
             if (!m_entry->init(path.c_str())) {
                 initErr = "clap_entry->init() returned false";
                 return;
@@ -1357,11 +1598,15 @@ public:
             m_meta.isCompatible = false;
             m_meta.errorMessage = taskRan ? initErr : "CLAP main thread task timeout during load";
             if (!taskRan) {
-                // 线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
+                // 泵线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
                 // 对象：登记废弃，由 manager 把整个实例移入静态隔离区。
+                // m_pump 引用保留（不 reset）——挂死线程可能仍引用泵对象。
                 m_threadAbandoned.store(true, std::memory_order_release);
                 return false;
             }
+            // init 正常返回错误：线程健康，先释放共享泵引用（可能顺带停线程），
+            // 再卸载模块。与 VST3 侧失败路径对齐（B3 时 CLAP 漏了停线程）。
+            m_pump.reset();
             FreeLibrary(m_module);
             m_module = nullptr;
             return false;
@@ -1373,6 +1618,14 @@ public:
     }
 
     void unload() override {
+        // abandoned 守卫必须最先执行：泵线程挂死后仍卡在插件代码里，此处的
+        // destroy/FreeLibrary 都会撞上它（卸载正在执行的 DLL = 0xC0000374）。
+        // 整体跳过销毁，manager 据 abandoned() 把实例移入静态隔离区。
+        if (m_threadAbandoned.load(std::memory_order_acquire)) {
+            std::cout << "[DBG CLAP unload] WARNING: pump abandoned; skipping all teardown (quarantine)" << std::endl;
+            m_isLoaded = false;
+            return;
+        }
         if (m_isLoaded) {
             std::cout << "[DBG CLAP unload] step 1: closeEditor" << std::endl;
             closeEditor();
@@ -1381,7 +1634,7 @@ public:
             // plugin->destroy + entry->deinit 移入 plugin main 线程（JUCE
             // message thread 所在线程；10-12 曾实证跨线程 destroy 死锁）。
             std::cout << "[DBG CLAP unload] step 3: destroy on clap main thread" << std::endl;
-            bool destroyed = postTaskAndWait([&]() {
+            bool destroyed = m_pump->postTaskAndWait([&]() {
                 if (m_plugin) {
                     m_plugin->destroy(m_plugin);
                     m_plugin = nullptr;
@@ -1400,7 +1653,11 @@ public:
             std::cout << "[DBG CLAP unload] step 3 done" << std::endl;
             m_isLoaded = false;
         }
-        stopClapThread();
+        // C1：释放共享泵引用。若本实例是该模块最后一持有者，PumpDeleter 在此
+        // 停线程（join 有界 3s，挂死则泄漏泵对象）；否则线程继续服务其他槽位
+        // 的同插件实例。必须在 FreeLibrary 之前——确保卸载 DLL 时其中代码
+        // 已无人执行。
+        m_pump.reset();
         if (m_module) {
             std::cout << "[DBG CLAP unload] step 5: FreeLibrary" << std::endl;
             FreeLibrary(m_module);
@@ -1537,7 +1794,7 @@ public:
             ShowWindow(m_editorHwnd, SW_SHOW);
             return true;
         }
-        if (!m_clapThreadReady.load(std::memory_order_acquire)) return false;
+        if (!m_pump || !m_pump->isReady()) return false;
 
         // B3-②：create/get_size/容器/set_parent/show 全部在 plugin main 线程
         // （= JUCE message thread = 泵线程）执行。子窗口因此归泵线程所有，
@@ -1545,7 +1802,7 @@ public:
         // 的 caller 线程，拓扑探针 tid 实证）就此消除。caller 只等待有界
         // 结果，不参与 JUCE 锁竞争。
         bool ok = false;
-        bool done = postTaskAndWait([&]() { ok = showEditorOnMainThread(); }, 5000);
+        bool done = m_pump->postTaskAndWait([&]() { ok = showEditorOnMainThread(); }, 5000);
         if (!done) {
             std::cout << "[DBG CLAP showEditor] WARNING: editor task timed out; quarantining" << std::endl;
             m_threadAbandoned.store(true, std::memory_order_release);
@@ -1599,10 +1856,24 @@ public:
             style, CW_USEDEFAULT, CW_USEDEFAULT,
             rc.right - rc.left, rc.bottom - rc.top,
             NULL, NULL, GetModuleHandleW(NULL), NULL);
-        if (!hwnd) return false;
+        if (!hwnd) {
+            // C1 修复记录：CreateWindow 失败时 gui->create 已成功，必须就地
+            // destroy 回收插件 GUI，否则插件持有一个无父窗口的 GUI——后续
+            // gui->destroy 在该状态下可能挂死（close 任务超时 → 实例被隔离）。
+            std::cout << "[DBG CLAP showEditor] CreateWindowExW failed, err=" << GetLastError() << std::endl;
+            if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
+                try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
+                try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+            }
+            return false;
+        }
 
         m_editorHwnd = hwnd;
         m_editorOpen.store(true, std::memory_order_release);
+        // C1：实例指针挂到容器窗口，WM_CLOSE 经 WndProc 分发回本实例
+        // （onEditorWmClose）；同时向共享泵登记，泵异常退出时兜底销毁。
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        m_pump->registerEditor(hwnd);
         std::cout << "[DBG CLAP showEditor] hwnd created: " << hwnd << std::endl;
 
         ShowWindow(hwnd, SW_SHOW);
@@ -1667,19 +1938,26 @@ public:
             try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
         }
         if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
+        if (m_pump) m_pump->unregisterEditor(hwnd);
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
         std::cout << "[DBG CLAP closeEditor] closed on main thread" << std::endl;
     }
 
+    // C1：用户点编辑器窗口 X —— WndProc 在泵线程上分发到此。已在 plugin
+    // main 线程，直接执行收尾（与 gui->create 同线程，无锁竞争）。
+    void onEditorWmClose() override {
+        closeEditorOnMainThread();
+    }
+
     void closeEditor() override {
         std::cout << "[DBG CLAP closeEditor] enter" << std::endl;
-        if (!m_clapThreadReady.load(std::memory_order_acquire)) {
+        if (!m_pump || !m_pump->isReady()) {
             m_editorOpen.store(false, std::memory_order_release);
             std::cout << "[DBG CLAP closeEditor] no clap main thread; skip" << std::endl;
             return;
         }
-        bool done = postTaskAndWait([&]() { closeEditorOnMainThread(); }, 3000);
+        bool done = m_pump->postTaskAndWait([&]() { closeEditorOnMainThread(); }, 3000);
         if (!done) {
             std::cout << "[DBG CLAP closeEditor] WARNING: close task timed out; quarantining" << std::endl;
             m_threadAbandoned.store(true, std::memory_order_release);
@@ -1702,10 +1980,11 @@ public:
 
     bool savePreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_plugin) return false;
+        if (!m_pump || !m_pump->isReady()) return false;
         // CLAP state 属 main-thread 操作；JUCE 系插件可能触达 MessageManager，
         // 一律移入 plugin main 线程执行。
         bool ok = false;
-        bool done = postTaskAndWait([&]() {
+        bool done = m_pump->postTaskAndWait([&]() {
             auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
                 m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
             if (!stateExt || !stateExt->save) return;
@@ -1736,9 +2015,10 @@ public:
     bool loadPreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_plugin) return false;
         if (!fs::exists(filePath)) return false;
+        if (!m_pump || !m_pump->isReady()) return false;
         // 同 savePreset：CLAP state 属 main-thread 操作，移入 plugin main 线程。
         bool ok = false;
-        bool done = postTaskAndWait([&]() {
+        bool done = m_pump->postTaskAndWait([&]() {
             auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
                 m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
             if (!stateExt || !stateExt->load) return;
@@ -1757,96 +2037,6 @@ public:
     }
 
 private:
-    // ---- CLAP plugin main 线程 ----
-    // 长寿命线程：承载 entry->init（确立 JUCE MessageManager 的 message
-    // thread 归属）、全部 main-thread 任务（GUI/状态/销毁）与本插件容器
-    // 的消息泵。任务经 WM_APP_CLAP_TASK 唤醒、在 GetMessage 循环间隙执行。
-    void clapMainLoop() {
-        t_clapThreadType = ClapHostThreadType::Main;
-        m_clapThreadId = GetCurrentThreadId();
-        m_clapThreadReady.store(true, std::memory_order_release);
-        MSG msg;
-        for (;;) {
-            BOOL r = GetMessageW(&msg, NULL, 0, 0);
-            if (r <= 0) break;   // WM_QUIT（或错误）→ 退出
-            if (msg.message == WM_APP_CLAP_TASK) {
-                runQueuedTasks();
-                continue;
-            }
-            if (msg.message == WM_CLOSE && msg.hwnd == m_editorHwnd) {
-                // 用户点编辑器窗口的 X：收尾在泵线程内直接执行
-                // （与 gui->create 同线程，无锁竞争）。
-                closeEditorOnMainThread();
-                continue;
-            }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        // 线程退出前兜底收尾（正常路径由 unload 的任务完成，此处防遗漏）。
-        if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && m_plugin) {
-            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
-                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
-            if (gui) {
-                try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
-                try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
-            }
-        }
-        if (m_editorHwnd && IsWindow(m_editorHwnd)) DestroyWindow(m_editorHwnd);
-        m_editorHwnd = nullptr;
-        m_editorOpen.store(false, std::memory_order_release);
-    }
-
-    void runQueuedTasks() {
-        for (;;) {
-            std::function<void()> task;
-            {
-                std::lock_guard<std::mutex> lock(m_taskMutex);
-                if (m_tasks.empty()) return;
-                task = std::move(m_tasks.front());
-                m_tasks.pop_front();
-            }
-            task();
-        }
-    }
-
-    // 提交任务到 plugin main 线程并等待完成（有界超时）。
-    // 返回 false = 线程未运行或超时（调用方走废弃隔离路径）。
-    bool postTaskAndWait(std::function<void()> fn, DWORD timeoutMs) {
-        if (m_stopClapThread.load(std::memory_order_acquire)) return false;
-        auto task = std::make_shared<std::packaged_task<void()>>(std::move(fn));
-        auto fut = task->get_future();
-        {
-            std::lock_guard<std::mutex> lock(m_taskMutex);
-            m_tasks.emplace_back([task]() { (*task)(); });
-        }
-        if (!PostThreadMessageW(m_clapThreadId, WM_APP_CLAP_TASK, 0, 0)) {
-            // Ready 已置位意味着 GetMessageW 已在跑、消息队列必已建立；
-            // 此分支仅防御极端时序，短暂重试一次。
-            Sleep(20);
-            if (!PostThreadMessageW(m_clapThreadId, WM_APP_CLAP_TASK, 0, 0)) {
-                std::cout << "[DBG CLAP] PostThreadMessage failed, err=" << GetLastError() << std::endl;
-                return false;
-            }
-        }
-        return fut.wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready;
-    }
-
-    void stopClapThread() {
-        if (!m_clapThread.joinable()) return;
-        m_stopClapThread.store(true, std::memory_order_release);
-        PostThreadMessageW(m_clapThreadId, WM_QUIT, 0, 0);
-        HANDLE h = reinterpret_cast<HANDLE>(m_clapThread.native_handle());
-        if (h && WaitForSingleObject(h, 3000) == WAIT_OBJECT_0) {
-            m_clapThread.join();
-        } else {
-            // 线程挂死 → 隔离（放弃释放）：detach 后对象由 manager 移入
-            // 静态隔离区，绝不在挂死线程仍引用期间析构。
-            std::cout << "[DBG CLAP] main thread unresponsive on stop; abandoning" << std::endl;
-            m_threadAbandoned.store(true, std::memory_order_release);
-            m_clapThread.detach();
-        }
-    }
-
     void initHostStruct() {
         m_mainThreadId = std::this_thread::get_id();
 
@@ -2035,16 +2225,16 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
 
-    // ---- CLAP plugin main 线程（B3-② 2026-10-12）----
-    std::thread m_clapThread;
-    DWORD m_clapThreadId = 0;
-    std::atomic<bool> m_clapThreadReady{false};
-    std::atomic<bool> m_stopClapThread{false};
+    // ---- 共享 plugin main 线程（C1 2026-10-12，按模块共享）----
+    // B3 时为每实例一条线程；C1 多槽挂载同一 DLL 时 LoadLibrary 返回同一
+    // 模块，两实例各建线程会互斥 JUCE MessageManager 归属 → 死锁，故改为
+    // 按规范化二进制路径共享（ModulePumpThread::acquire），引用计数归零时
+    // 线程才停。m_moduleKey 仅供诊断/对称性保留，acquire 的 key 即由它派生。
+    std::shared_ptr<ModulePumpThread> m_pump;
+    std::string m_moduleKey;
     // 线程挂死（任务超时）时置位：manager 据此把整个实例移入静态隔离区，
     // 而不是析构它（挂死线程仍引用 this，析构 = use-after-free）。
     std::atomic<bool> m_threadAbandoned{false};
-    std::mutex m_taskMutex;
-    std::deque<std::function<void()>> m_tasks;
 
     HWND m_editorHwnd = nullptr;
     // E1：调用方（Dart）传来的窗口标题。写入发生在任务提交之前，任务
@@ -2065,10 +2255,9 @@ class Vst3PluginInstance : public IPluginInstance {
 public:
     Vst3PluginInstance() = default;
     ~Vst3PluginInstance() override {
-        // 兜底卸载（load 失败等提前析构路径）；随后确保泵线程已停。
-        // 线程已废弃（挂死隔离、detach）时 joinable 为 false，自然跳过。
+        // 兜底卸载（load 失败等提前析构路径）。unload 内部已释放共享泵引用
+        // （C1：最后一实例时 PumpDeleter 负责停线程），故此处无需再停。
         unload();
-        stopVst3Thread();
     }
 
     bool load(const std::string& path, const std::string& pluginId,
@@ -2116,27 +2305,28 @@ public:
 
         // B3（2026-10-12）：插件对象的全部交互（GetPluginFactory、组件/控制器
         // 实例化与初始化、ConnectionPoint、状态同步）移入 VST3 plugin main
-        // 线程（每实例专用泵线程）。VST3 规范期望宿主在 main/UI 线程完成这些
+        // 线程。VST3 规范期望宿主在 main/UI 线程完成这些
         // 调用；JUCE 系插件（如 Auto-Tune EFX+）的 MessageManager 在首次触达
         // 时绑定该线程——旧结构里 initialize 在 caller、attached 在临时编辑器
         // 线程，attached 因此死等（编辑器白框），unload 又撞上挂死线程
         // （0xC0000374）。与 CLAP 侧重构同构。
-        m_vst3ThreadReady.store(false, std::memory_order_release);
-        m_stopVst3Thread.store(false, std::memory_order_release);
-        m_vst3Thread = std::thread([this]() { vst3MainLoop(); });
-        for (int i = 0; i < 200 && !m_vst3ThreadReady.load(std::memory_order_acquire); ++i) {
-            Sleep(10);
-        }
-        if (!m_vst3ThreadReady.load(std::memory_order_acquire)) {
+        //
+        // C1（2026-10-12）：泵线程按模块共享（ModulePumpThread）——同 DLL
+        // 多槽挂载时两条线程会互斥 JUCE MessageManager 归属 → 死锁。按规范化
+        // 二进制路径取得（必要时新建）共享泵；引用计数归零时线程才停。
+        m_moduleKey = normalizeModuleKey(wpath);
+        m_pump = ModulePumpThread::acquire(m_moduleKey);
+        if (!m_pump || !m_pump->isReady()) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "VST3 main thread failed to start";
+            m_pump.reset();
             FreeLibrary(m_module);
             m_module = nullptr;
             return false;
         }
 
         std::string initErr;
-        bool taskRan = postTaskAndWait([&]() {
+        bool taskRan = m_pump->postTaskAndWait([&]() {
             m_factory = getFactory();
             if (!m_factory) {
                 initErr = "GetPluginFactory returned null";
@@ -2289,13 +2479,15 @@ public:
             m_meta.isCompatible = false;
             m_meta.errorMessage = taskRan ? initErr : "VST3 main thread task timeout during load";
             if (!taskRan) {
-                // 线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
+                // 泵线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
                 // 对象：登记废弃，由 manager 把整个实例移入静态隔离区。
-                // 此时绝不能 FreeLibrary（DLL 代码可能正被执行中）。
+                // 此时绝不能 FreeLibrary（DLL 代码可能正被执行中），也不 reset
+                // m_pump（挂死线程可能仍引用泵对象）。
                 m_threadAbandoned.store(true, std::memory_order_release);
                 return false;
             }
-            stopVst3Thread();
+            // init 正常返回错误：线程健康，先释放共享泵引用再卸载模块。
+            m_pump.reset();
             FreeLibrary(m_module);
             m_module = nullptr;
             return false;
@@ -2323,7 +2515,7 @@ public:
 
             // 插件对象销毁在 plugin main 线程执行（与创建同线程）。
             std::cout << "[DBG VST3 unload] destroying plugin objects on main thread" << std::endl;
-            bool destroyed = postTaskAndWait([&]() {
+            bool destroyed = m_pump->postTaskAndWait([&]() {
                 if (m_controller && m_component) {
                     Steinberg::Vst::IConnectionPoint* compCP = nullptr;
                     Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
@@ -2361,7 +2553,9 @@ public:
             }
             m_isLoaded = false;
         }
-        stopVst3Thread();
+        // C1：释放共享泵引用（最后一实例时 PumpDeleter 停线程）。必须先于
+        // FreeLibrary——确保卸载 DLL 时其中代码已无人执行。
+        m_pump.reset();
         if (m_module) {
             FreeLibrary(m_module);
             m_module = nullptr;
@@ -2545,12 +2739,13 @@ public:
             std::cout << "[DBG VST3 showEditor] m_controller is NULL!" << std::endl;
             return false;
         }
-        // B3（2026-10-12）：GUI 交互全部在 VST3 plugin main 线程（每实例
-        // 专用泵线程）执行——与组件 initialize 同线程，JUCE 系插件的
+        if (!m_pump || !m_pump->isReady()) return false;
+        // B3（2026-10-12）：GUI 交互全部在 VST3 plugin main 线程（C1 起为
+        // 按模块共享的泵线程）执行——与组件 initialize 同线程，JUCE 系插件的
         // MessageManager 线程假设得以满足；旧结构里 attached 跑在临时编辑器
         // 线程（≠ initialize 线程），Auto-Tune EFX+ 等插件因此挂死（白框）。
         bool ok = false;
-        bool done = postTaskAndWait([&]() { ok = showEditorOnPumpThread(); }, 8000);
+        bool done = m_pump->postTaskAndWait([&]() { ok = showEditorOnPumpThread(); }, 8000);
         if (!done) {
             std::cout << "[DBG VST3 showEditor] WARNING: show task timed out; abandoning instance" << std::endl;
             m_threadAbandoned.store(true, std::memory_order_release);
@@ -2622,6 +2817,10 @@ public:
 
         m_editorHwnd = hwnd;
         m_editorOpen.store(true, std::memory_order_release);
+        // C1：实例指针挂到容器窗口，WM_CLOSE 经 WndProc 分发回本实例
+        // （onEditorWmClose）；同时向共享泵登记，泵异常退出时兜底销毁。
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
+        m_pump->registerEditor(hwnd);
 
         // frame 必须存活到编辑器关闭（插件会回调），故为成员而非局部变量。
         m_view = view;
@@ -2634,6 +2833,7 @@ public:
                 std::cout << "[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes << std::endl;
                 detachViewOnPumpThread(view);
                 if (IsWindow(hwnd)) DestroyWindow(hwnd);
+                if (m_pump) m_pump->unregisterEditor(hwnd);
                 m_editorHwnd = nullptr;
                 m_editorOpen.store(false, std::memory_order_release);
                 return false;
@@ -2642,6 +2842,7 @@ public:
             std::cout << "[DBG VST3 showEditor] view->attached exception: " << ex.what() << std::endl;
             detachViewOnPumpThread(view);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
+            if (m_pump) m_pump->unregisterEditor(hwnd);
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
             return false;
@@ -2649,6 +2850,7 @@ public:
             std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
             detachViewOnPumpThread(view);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
+            if (m_pump) m_pump->unregisterEditor(hwnd);
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
             return false;
@@ -2669,26 +2871,33 @@ public:
 
     void closeEditor() override {
         std::cout << "[DBG VST3 closeEditor] enter" << std::endl;
-        if (!m_vst3ThreadReady.load(std::memory_order_acquire)) {
+        if (!m_pump || !m_pump->isReady()) {
             m_editorOpen.store(false, std::memory_order_release);
             std::cout << "[DBG VST3 closeEditor] no plugin main thread; skip" << std::endl;
             return;
         }
-        bool done = postTaskAndWait([&]() { closeEditorOnPumpThread(); }, 3000);
+        bool done = m_pump->postTaskAndWait([&]() { closeEditorOnPumpThread(); }, 3000);
         if (!done) {
             std::cout << "[DBG VST3 closeEditor] WARNING: close task timed out; abandoning instance" << std::endl;
             m_threadAbandoned.store(true, std::memory_order_release);
         }
     }
 
+    // C1：用户点编辑器窗口 X —— WndProc 在泵线程上分发到此。已在 plugin
+    // main 线程，直接执行收尾（与 createView/attached 同线程，无锁竞争）。
+    void onEditorWmClose() override {
+        closeEditorOnPumpThread();
+    }
+
     // closeEditor 的实体（在 VST3 plugin main 线程内执行）；
-    // 泵循环截获编辑器窗口 WM_CLOSE（用户点 X）时也走这里。
+    // 用户点 X 经 WndProc 分发（onEditorWmClose）时也走这里。
     void closeEditorOnPumpThread() {
         HWND hwnd = m_editorHwnd;
         if (m_view) {
             detachViewOnPumpThread(m_view);
         }
         if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
+        if (m_pump && hwnd) m_pump->unregisterEditor(hwnd);
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
         std::cout << "[DBG VST3 closeEditor] closed on main thread" << std::endl;
@@ -2706,9 +2915,10 @@ public:
 
     bool savePreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_component) return false;
+        if (!m_pump || !m_pump->isReady()) return false;
         // getState 属插件 main 线程交互（B3：与 initialize/createView 同线程）。
         std::vector<uint8_t> data;
-        bool got = postTaskAndWait([&]() {
+        bool got = m_pump->postTaskAndWait([&]() {
             auto stream = new Vst3MemoryStream();
             Steinberg::tresult res = m_component->getState(stream);
             if (res == Steinberg::kResultOk) data = stream->m_data;
@@ -2735,6 +2945,7 @@ public:
     bool loadPreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_component) return false;
         if (!fs::exists(filePath)) return false;
+        if (!m_pump || !m_pump->isReady()) return false;
 
         std::ifstream ifs(filePath, std::ios::binary);
         if (!ifs) return false;
@@ -2746,7 +2957,7 @@ public:
 
         // setState/setComponentState 属插件 main 线程交互（B3）。
         bool ok = false;
-        bool ran = postTaskAndWait([&]() {
+        bool ran = m_pump->postTaskAndWait([&]() {
             auto stream = new Vst3MemoryStream();
             stream->m_data = std::move(buf);
             Steinberg::tresult res = m_component->setState(stream);
@@ -2798,91 +3009,12 @@ private:
     // frame 必须存活到编辑器关闭（插件会回调 setFrame 指针）。
     AuraPlugFrame m_plugFrame;
 
-    // ---- VST3 plugin main 线程（B3 2026-10-12，镜像 CLAP）----
-    // 长寿命线程：承载插件对象创建/初始化（确立 JUCE MessageManager 归属）、
-    // 全部 main-thread 任务（GUI/状态/销毁）与编辑器容器的消息泵。任务经
-    // WM_APP_VST3_TASK 唤醒、在 GetMessage 循环间隙执行。
-    std::thread m_vst3Thread;
-    DWORD m_vst3ThreadId = 0;
-    std::atomic<bool> m_vst3ThreadReady{false};
-    std::atomic<bool> m_stopVst3Thread{false};
-    std::mutex m_taskMutex;
-    std::deque<std::function<void()>> m_tasks;
-
-    void vst3MainLoop() {
-        m_vst3ThreadId = GetCurrentThreadId();
-        m_vst3ThreadReady.store(true, std::memory_order_release);
-        MSG msg;
-        for (;;) {
-            BOOL r = GetMessageW(&msg, NULL, 0, 0);
-            if (r <= 0) break;   // WM_QUIT（或错误）→ 退出
-            if (msg.message == WM_APP_VST3_TASK) {
-                runQueuedTasks();
-                continue;
-            }
-            if (msg.message == WM_CLOSE && msg.hwnd == m_editorHwnd) {
-                // 用户点编辑器窗口的 X：收尾在泵线程内直接执行
-                //（与 createView/attached 同线程，无锁竞争）。
-                closeEditorOnPumpThread();
-                continue;
-            }
-            TranslateMessage(&msg);
-            DispatchMessageW(&msg);
-        }
-        // 线程退出前兜底收尾（正常路径由 unload 的任务完成，此处防遗漏）。
-        closeEditorOnPumpThread();
-    }
-
-    void runQueuedTasks() {
-        for (;;) {
-            std::function<void()> task;
-            {
-                std::lock_guard<std::mutex> lock(m_taskMutex);
-                if (m_tasks.empty()) return;
-                task = std::move(m_tasks.front());
-                m_tasks.pop_front();
-            }
-            task();
-        }
-    }
-
-    // 提交任务到 plugin main 线程并等待完成（有界超时）。
-    // 返回 false = 线程未运行或超时（调用方走废弃隔离路径）。
-    bool postTaskAndWait(std::function<void()> fn, DWORD timeoutMs) {
-        if (m_stopVst3Thread.load(std::memory_order_acquire)) return false;
-        auto task = std::make_shared<std::packaged_task<void()>>(std::move(fn));
-        auto fut = task->get_future();
-        {
-            std::lock_guard<std::mutex> lock(m_taskMutex);
-            m_tasks.emplace_back([task]() { (*task)(); });
-        }
-        if (!PostThreadMessageW(m_vst3ThreadId, WM_APP_VST3_TASK, 0, 0)) {
-            // Ready 已置位意味着 GetMessageW 已在跑、消息队列必已建立；
-            // 此分支仅防御极端时序，短暂重试一次。
-            Sleep(20);
-            if (!PostThreadMessageW(m_vst3ThreadId, WM_APP_VST3_TASK, 0, 0)) {
-                std::cout << "[DBG VST3] PostThreadMessage failed, err=" << GetLastError() << std::endl;
-                return false;
-            }
-        }
-        return fut.wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready;
-    }
-
-    void stopVst3Thread() {
-        if (!m_vst3Thread.joinable()) return;
-        m_stopVst3Thread.store(true, std::memory_order_release);
-        PostThreadMessageW(m_vst3ThreadId, WM_QUIT, 0, 0);
-        HANDLE h = reinterpret_cast<HANDLE>(m_vst3Thread.native_handle());
-        if (h && WaitForSingleObject(h, 3000) == WAIT_OBJECT_0) {
-            m_vst3Thread.join();
-        } else {
-            // 线程挂死 → 隔离（放弃释放）：detach 后对象由 manager 移入
-            // 静态隔离区，绝不在挂死线程仍引用期间析构。
-            std::cout << "[DBG VST3] main thread unresponsive on stop; abandoning" << std::endl;
-            m_threadAbandoned.store(true, std::memory_order_release);
-            m_vst3Thread.detach();
-        }
-    }
+    // ---- 共享 plugin main 线程（C1 2026-10-12，按模块共享）----
+    // B3 时为每实例一条线程；C1 多槽挂载同一 DLL 时两条线程会互斥 JUCE
+    // MessageManager 归属 → 死锁，故改为按规范化二进制路径共享
+    // （ModulePumpThread::acquire），引用计数归零时线程才停。
+    std::shared_ptr<ModulePumpThread> m_pump;
+    std::string m_moduleKey;
 };
 
 //------------------------------------------------------------------------------

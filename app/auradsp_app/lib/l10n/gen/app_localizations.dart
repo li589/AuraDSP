@@ -1978,6 +1978,12 @@ abstract class AppLocalizations {
   /// **'当前挂载插件 (插槽 {n})：{name}'**
   String plugMountedTitleNamed(int n, String name);
 
+  /// No description provided for @plugEditorTitleNamed.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}（插槽 {n}）'**
+  String plugEditorTitleNamed(int n, String name);
+
   /// No description provided for @plugOpenGuiBtn.
   ///
   /// In zh, this message translates to:

@@ -1004,6 +1004,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String plugEditorTitleNamed(int n, String name) {
+    return '$name（スロット$n）';
+  }
+
+  @override
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
 
   @override

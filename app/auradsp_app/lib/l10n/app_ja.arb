@@ -498,6 +498,17 @@
       }
     }
   },
+  "plugEditorTitleNamed": "{name}（スロット{n}）",
+  "@plugEditorTitleNamed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "@plugMountedTitle": {
     "placeholders": {
       "n": {

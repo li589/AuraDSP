@@ -1002,6 +1002,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String plugEditorTitleNamed(int n, String name) {
+    return '$name（插槽 $n）';
+  }
+
+  @override
   String get plugOpenGuiBtn => '打开界面 (GUI)';
 
   @override
