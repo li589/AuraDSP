@@ -301,6 +301,13 @@ class _PluginsPageState extends State<PluginsPage> {
                     Text(l10nOf(context).plugDeepScan, style: captionOf(p)),
                   ],
                 ),
+                // C2：说明"快扫不打开插件"——FL Studio 那种扫描即验证的做法
+                // 慢且无必要（深扫 3.6s vs 快扫 120ms / 76 个），本引擎在挂载
+                // 时才验证插件，这里明确告知用户，避免误以为列表已验证可用。
+                Tooltip(
+                  message: l10nOf(context).plugScanNoVerify,
+                  child: const Icon(Icons.info_outline_rounded, size: 14),
+                ),
                 const SizedBox(width: AuraSpace.sm),
                 // 扫描按钮
                 ElevatedButton.icon(
@@ -336,6 +343,22 @@ class _PluginsPageState extends State<PluginsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // C2：扫描进行中 → Android 风格水平进度条 + 进度读数
+                if (manager.isScanning) ...[
+                  AuraScanProgress(
+                    done: manager.scanDone,
+                    total: manager.scanTotal,
+                  ),
+                  const SizedBox(height: AuraSpace.xs),
+                  Text(
+                    manager.scanTotal > 0
+                        ? l10nOf(context).plugScanProgressCount(
+                            manager.scanDone, manager.scanTotal, manager.scanFound)
+                        : l10nOf(context).plugScanPreparing,
+                    style: monoOf(p, size: 11, color: p.textDim),
+                  ),
+                  const SizedBox(height: AuraSpace.sm),
+                ],
                 // 搜索栏与分类药丸
                 Row(
                   children: [

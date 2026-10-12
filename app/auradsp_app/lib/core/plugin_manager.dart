@@ -229,6 +229,11 @@ class PluginManager extends ChangeNotifier {
   /// 最近一次扫描是否为深扫（决定缓存里元数据的可信度，随信封落盘）。
   bool _lastScanDeep = false;
 
+  /// C2：分块扫描进度。total<=0 表示尚未拿到总数（UI 走不确定态动画）。
+  int _scanDone = 0;
+  int _scanTotal = 0;
+  int _scanFound = 0;
+
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
 
   PluginManager({PluginCommandSender? commandSender}) {
@@ -239,6 +244,10 @@ class PluginManager extends ChangeNotifier {
   int get selectedSlot => _selectedSlot;
   List<String> get customDirs => List.unmodifiable(_customDirs);
   bool get isScanning => _isScanning;
+  /// 扫描进度：已处理候选数 / 候选总数 / 已发现插件数
+  int get scanDone => _scanDone;
+  int get scanTotal => _scanTotal;
+  int get scanFound => _scanFound;
   String get filterFormat => _filterFormat;
   String get searchQuery => _searchQuery;
   String? get lastError => _lastError;
@@ -324,9 +333,21 @@ class PluginManager extends ChangeNotifier {
     _customDirs = List.from(dirs);
     notifyListeners();
   }
+  /// C2：分块扫描进度回执。扫描过程中被反复调用，UI 据此显示确定性进度；
+  /// 列表同时在 onPluginList/渐进 get_all 中刷新。
+  void onPluginScanProgress(int done, int total, int found) {
+    _scanDone = done;
+    _scanTotal = total;
+    _scanFound = found;
+    notifyListeners();
+  }
+
   /// 启动扫描（支持快扫、深扫与多目录聚合）
   void scan({String dir = '', bool deep = false}) {
     _isScanning = true;
+    _scanDone = 0;
+    _scanTotal = 0;
+    _scanFound = 0;
     _lastScanDeep = deep;
     _lastError = null;
     notifyListeners();
@@ -546,6 +567,7 @@ class PluginManager extends ChangeNotifier {
   }
   void onPluginScanned(int count, dynamic rawJson) {
     _isScanning = false;
+    _scanDone = _scanTotal; // 收尾：进度条走满（避免停在 99% 的观感）
     _lastScanCount = count;
     _parsePluginsJson(rawJson);
     saveCache();

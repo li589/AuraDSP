@@ -745,6 +745,140 @@ class AuraChoiceChip extends StatelessWidget {
   }
 }
 
+/* ---- 扫描进度条（C2：Android 风格水平进度） ---- */
+
+/// Android/Material 风格的水平进度条。
+/// - total > 0：确定性模式，按 done/total 填充（扫描知道候选总数时用）
+/// - total <= 0：不确定模式，一段渐变沿轨道左右扫动（Android 的 indeterminate
+///   观感：加速—减速往复），用于「枚举中」「候选数未知」阶段。
+///
+/// 刻意不用 Material 的 CircularProgressIndicator：扫描是"遍历一批文件"这种
+/// 长任务，线性条更能表达"推进感"，也与插件库区块的横向布局一致。
+class AuraScanProgress extends StatefulWidget {
+  final int done;
+  final int total;
+  final double height;
+
+  const AuraScanProgress({
+    super.key,
+    required this.done,
+    required this.total,
+    this.height = 3,
+  });
+
+  @override
+  State<AuraScanProgress> createState() => _AuraScanProgressState();
+}
+
+class _AuraScanProgressState extends State<AuraScanProgress>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    );
+    if (widget.total <= 0) _ctrl.repeat();
+  }
+
+  @override
+  void didUpdateWidget(covariant AuraScanProgress old) {
+    super.didUpdateWidget(old);
+    // 从"不知道总数"变成"知道总数"时停掉扫动，切到确定性填充。
+    final wasIndeterminate = old.total <= 0;
+    final isIndeterminate = widget.total <= 0;
+    if (wasIndeterminate && !isIndeterminate) {
+      _ctrl.stop();
+      _ctrl.value = 0;
+    } else if (!wasIndeterminate && isIndeterminate && !_ctrl.isAnimating) {
+      _ctrl.repeat();
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final trackColor = p.hairline;
+    final gradient = LinearGradient(
+      colors: [
+        p.accent.withValues(alpha: 0.15),
+        p.accent,
+        p.accent.withValues(alpha: 0.15),
+      ],
+    );
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(widget.height / 2),
+      child: SizedBox(
+        height: widget.height,
+        child: Stack(
+          children: [
+            Container(color: trackColor),
+            if (widget.total > 0)
+              // 确定性：填充已处理比例（clamp 防 done>total 的越界观感）。
+              // 用 TweenAnimationBuilder 让推进是"滑动"而非"跳变"。
+              TweenAnimationBuilder<double>(
+                tween: Tween<double>(
+                    begin: (widget.done / widget.total).clamp(0.0, 1.0),
+                    end: (widget.done / widget.total).clamp(0.0, 1.0)),
+                duration: const Duration(milliseconds: 180),
+                builder: (context, frac, _) {
+                  return LayoutBuilder(builder: (context, constraints) {
+                    return Stack(
+                      children: [
+                        Positioned(
+                          left: 0,
+                          top: 0,
+                          bottom: 0,
+                          width: constraints.maxWidth * frac,
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(gradient: gradient)),
+                        ),
+                      ],
+                    );
+                  });
+                },
+              )
+            else
+              // 不确定：一段宽度 35% 的渐变沿轨道扫动（ease-in-out 往复）
+              AnimatedBuilder(
+                animation: _ctrl,
+                builder: (context, _) {
+                  final t = Curves.easeInOut.transform(_ctrl.value);
+                  return LayoutBuilder(builder: (context, constraints) {
+                    final segW = constraints.maxWidth * 0.35;
+                    final left = -segW + t * (constraints.maxWidth + segW);
+                    return Stack(
+                      children: [
+                        Positioned(
+                          left: left,
+                          width: segW,
+                          top: 0,
+                          bottom: 0,
+                          child: DecoratedBox(
+                              decoration: BoxDecoration(gradient: gradient)),
+                        ),
+                      ],
+                    );
+                  });
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /* ---- i18n 便捷入口（生成类：AppLocalizations） ---- */
 
 AppLocalizations l10nOf(BuildContext context) => AppLocalizations.of(context)!;

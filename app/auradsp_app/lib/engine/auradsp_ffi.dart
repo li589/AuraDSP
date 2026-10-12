@@ -248,6 +248,32 @@ final class AuraDspLib {
                       Int32)>>('auradsp_plugin_scan')
           .asFunction();
 
+  // C2：分块扫描（枚举 → 小步取元数据 → 收尾）。步间由 Dart 让出事件循环，
+  // 扫描不再是单个长阻塞 FFI 调用。
+  late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginScanBegin =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Pointer<Utf8>,
+                      Int32)>>('auradsp_plugin_scan_begin')
+          .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginScanStep = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_scan_step')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, Pointer<Int32>) pluginScanProgress =
+      dylib
+          .lookup<NativeFunction<Int32 Function(Pointer<Void>, Pointer<Int32>)>>(
+              'auradsp_plugin_scan_progress')
+          .asFunction();
+
+  late final int Function(Pointer<Void>) pluginScanEnd = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_scan_end')
+      .asFunction();
+
   late final int Function(Pointer<Void>) pluginGetCount = dylib
       .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
           'auradsp_plugin_get_count')
@@ -571,6 +597,40 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     } finally {
       if (dirPtr != nullptr) malloc.free(dirPtr);
     }
+  }
+
+  /// 插件宿主：分块扫描 —— 枚举候选，返回候选总数
+  static int pluginScanBeginWrap(AuraDspLib lib, Pointer<Void> handle,
+      {String dir = '', bool deep = false}) {
+    final dirPtr = dir.isEmpty ? nullptr : dir.toNativeUtf8();
+    try {
+      return lib.pluginScanBegin(handle, dirPtr, deep ? 1 : 0);
+    } finally {
+      if (dirPtr != nullptr) malloc.free(dirPtr);
+    }
+  }
+
+  /// 插件宿主：分块扫描 —— 处理至多 maxItems 个候选，返回本步处理数（<=0 结束）
+  static int pluginScanStepWrap(AuraDspLib lib, Pointer<Void> handle,
+      {int maxItems = 8}) {
+    return lib.pluginScanStep(handle, maxItems);
+  }
+
+  /// 插件宿主：分块扫描 —— 返回 (已处理, 候选总数)
+  static ({int processed, int total}) pluginScanProgressWrap(
+      AuraDspLib lib, Pointer<Void> handle) {
+    final totalPtr = malloc<Int32>();
+    try {
+      final processed = lib.pluginScanProgress(handle, totalPtr);
+      return (processed: processed, total: totalPtr.value);
+    } finally {
+      malloc.free(totalPtr);
+    }
+  }
+
+  /// 插件宿主：分块扫描 —— 收尾并返回最终插件数
+  static int pluginScanEndWrap(AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginScanEnd(handle);
   }
 
   /// 插件宿主：获取全部已扫描插件的 JSON 字符串

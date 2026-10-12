@@ -890,6 +890,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugScanning => 'スキャン中…';
 
   @override
+  String get plugScanPreparing => 'プラグインフォルダを列挙中…';
+
+  @override
+  String plugScanProgressCount(int done, int total, int found) {
+    return 'スキャン済み $done/$total · $found 件見つかりました';
+  }
+
+  @override
+  String get plugScanNoVerify => 'クイックスキャンはプラグインを読み込みません：メタデータのみ、マウント時に検証';
+
+  @override
   String get plugOpenFolder => '標準VST3フォルダを開く';
 
   @override

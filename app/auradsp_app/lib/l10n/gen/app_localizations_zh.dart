@@ -889,6 +889,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugScanning => '正在扫描...';
 
   @override
+  String get plugScanPreparing => '正在枚举插件目录…';
+
+  @override
+  String plugScanProgressCount(int done, int total, int found) {
+    return '已扫描 $done/$total · 发现 $found 个插件';
+  }
+
+  @override
+  String get plugScanNoVerify => '快扫不加载插件：仅读取文件元数据，插件在挂载时才验证';
+
+  @override
   String get plugOpenFolder => '打开 VST3 标准目录';
 
   @override

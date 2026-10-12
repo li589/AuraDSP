@@ -431,8 +431,27 @@
   "plugLibTitle": "Third-party Effect Library",
   "plugLibHint": "Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.",
   "plugDeepScan": "Deep scan",
+  "@plugDeepScan": {
+    "description": "Deep scan loads every plugin DLL to read precise metadata; noticeably slower"
+  },
   "plugScan": "Scan",
   "plugScanning": "Scanning...",
+  "plugScanPreparing": "Enumerating plugin folders…",
+  "plugScanProgressCount": "Scanned {done}/{total} · {found} plugins found",
+  "@plugScanProgressCount": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "found": {
+        "type": "int"
+      }
+    }
+  },
+  "plugScanNoVerify": "Quick scan never loads plugins: metadata only, verified on mount",
   "plugOpenFolder": "Open Standard VST3 Folder",
   "plugSearchHint": "Search plugin name, vendor or path...",
   "plugM1Title": "M1 Plugin Host Engine Spec",

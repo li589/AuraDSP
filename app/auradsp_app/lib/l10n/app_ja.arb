@@ -431,8 +431,27 @@
   "plugLibTitle": "サードパーティエフェクトライブラリ",
   "plugLibHint": "システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。",
   "plugDeepScan": "ディープスキャン",
+  "@plugDeepScan": {
+    "description": "ディープスキャンは各 DLL を読み込んで正確なメタデータを取得するため大幅に遅い"
+  },
   "plugScan": "スキャン",
   "plugScanning": "スキャン中…",
+  "plugScanPreparing": "プラグインフォルダを列挙中…",
+  "plugScanProgressCount": "スキャン済み {done}/{total} · {found} 件見つかりました",
+  "@plugScanProgressCount": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "found": {
+        "type": "int"
+      }
+    }
+  },
+  "plugScanNoVerify": "クイックスキャンはプラグインを読み込みません：メタデータのみ、マウント時に検証",
   "plugOpenFolder": "標準VST3フォルダを開く",
   "plugSearchHint": "プラグイン名・ベンダー・パスを検索…",
   "plugM1Title": "M1プラグインホストエンジン仕様",

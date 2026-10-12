@@ -2173,6 +2173,31 @@ int auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_
     return h->plugin_host->scanPlugins(extra, deep_scan != 0);
 }
 
+// C2：分块扫描。与一次性 scan 共用同一套枚举与元数据提取实现，
+// 结果一致；差别只在于可被切成小步、并在步间让出调用线程。
+int auradsp_plugin_scan_begin(auradsp_handle h, const char* extra_dirs_json, int deep_scan) {
+    if (!h || !h->plugin_host) return 0;
+    std::string extra = extra_dirs_json ? extra_dirs_json : "";
+    return h->plugin_host->scanBegin(extra, deep_scan != 0);
+}
+
+int auradsp_plugin_scan_step(auradsp_handle h, int max_items) {
+    if (!h || !h->plugin_host) return 0;
+    return h->plugin_host->scanStep(max_items);
+}
+
+int auradsp_plugin_scan_progress(auradsp_handle h, int* out_total) {
+    if (!h || !h->plugin_host) return -1;
+    int processed = h->plugin_host->scanProcessed();
+    if (out_total) *out_total = h->plugin_host->scanTotal();
+    return processed;
+}
+
+int auradsp_plugin_scan_end(auradsp_handle h) {
+    if (!h || !h->plugin_host) return 0;
+    return h->plugin_host->scanEnd();
+}
+
 int auradsp_plugin_get_count(auradsp_handle h) {
     if (!h || !h->plugin_host) return 0;
     return (int)h->plugin_host->getScannedCount();

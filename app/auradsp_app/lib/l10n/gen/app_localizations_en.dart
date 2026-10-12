@@ -916,6 +916,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugScanning => 'Scanning...';
 
   @override
+  String get plugScanPreparing => 'Enumerating plugin folders…';
+
+  @override
+  String plugScanProgressCount(int done, int total, int found) {
+    return 'Scanned $done/$total · $found plugins found';
+  }
+
+  @override
+  String get plugScanNoVerify =>
+      'Quick scan never loads plugins: metadata only, verified on mount';
+
+  @override
   String get plugOpenFolder => 'Open Standard VST3 Folder';
 
   @override
