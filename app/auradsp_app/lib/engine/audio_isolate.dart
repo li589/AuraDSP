@@ -696,6 +696,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iDdE = idp('ddc.enable'), iDdR = idp('ddc.ready');
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iBmE = idp(ParamId.bassmonoEnable), iBmF = idp(ParamId.bassmonoFreq);
+            final iHsE = idp(ParamId.haasEnable), iHsD = idp(ParamId.haasDelay), iHsM = idp(ParamId.haasMix);
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
@@ -755,6 +756,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'shelfGain': rdFloat(iShG) ?? 0.0,
                 'bassmonoEnable': rdInt(iBmE) ?? 0,
                 'bassmonoFreq': rdFloat(iBmF) ?? 120.0,
+                'haasEnable': rdInt(iHsE) ?? 0,
+                'haasDelay': rdFloat(iHsD) ?? 12.0,
+                'haasMix': rdFloat(iHsM) ?? 1.0,
                 'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
@@ -766,7 +770,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'compTfresolution': rdInt(iCpR) ?? 1,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR]) {
                 malloc.free(q);
               }
             }

@@ -682,6 +682,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stBassmono => '低频单声道';
 
   @override
+  String get stHaas => '差分环绕';
+
+  @override
+  String get haasHint => '右声道延迟制造声场宽度，左声道直通保兼容';
+
+  @override
+  String get haasDelay => '右声道延迟';
+
+  @override
+  String get haasMix => '差分混合比';
+
+  @override
   String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
 
   @override

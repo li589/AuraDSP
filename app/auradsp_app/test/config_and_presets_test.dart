@@ -504,4 +504,66 @@ void main() {
       expect(m.bassmonoOn, isTrue);
     });
   });
+
+  group('Haas: 差分环绕', () {
+    test('默认值：关闭 + 12ms + 全湿', () {
+      final m = AppModel();
+      expect(m.haasOn, isFalse);
+      expect(m.haasDelayMs, closeTo(12.0, 1e-9));
+      expect(m.haasMix, closeTo(1.0, 1e-9));
+      expect(m.isStageEnabled('haas'), isFalse);
+    });
+
+    test('延迟/混合钳位', () {
+      final m = AppModel();
+      m.setHaasDelay(-5);
+      expect(m.haasDelayMs, closeTo(0.0, 1e-9));
+      m.setHaasDelay(40);
+      expect(m.haasDelayMs, closeTo(25.0, 1e-9));
+      m.setHaasMix(1.5);
+      expect(m.haasMix, closeTo(1.0, 1e-9));
+      m.setHaasMix(-0.5);
+      expect(m.haasMix, closeTo(0.0, 1e-9));
+    });
+
+    test('toggleStage 翻转独立开关位', () {
+      final m = AppModel();
+      m.toggleStage('haas');
+      expect(m.haasOn, isTrue);
+      m.toggleStage('haas');
+      expect(m.haasOn, isFalse);
+    });
+
+    test('snapshot/apply 对称恢复三字段', () {
+      final src = AppModel()
+        ..setHaasEnabled(true)
+        ..setHaasDelay(8)
+        ..setHaasMix(0.6);
+      final snap = PresetLibrary.snapshot(src, name: '__hs__');
+      final hs = snap.params['haas'] as Map<String, dynamic>;
+      expect(hs['enable'], isTrue);
+      expect((hs['delay'] as num).toDouble(), closeTo(8.0, 1e-9));
+      expect((hs['mix'] as num).toDouble(), closeTo(0.6, 1e-9));
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__hs_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.haasOn, isTrue);
+      expect(m.haasDelayMs, closeTo(8.0, 1e-9));
+      expect(m.haasMix, closeTo(0.6, 1e-9));
+    });
+
+    test('延迟标称随设定值走（底栏/徽标用）', () {
+      final m = AppModel()
+        ..setHaasEnabled(true)
+        ..setHaasDelay(15);
+      expect(m.componentLatency('haas').ms, closeTo(15.0, 1e-9));
+      m.setHaasEnabled(false);
+      expect(m.componentLatency('haas').ms, closeTo(0.0, 1e-9));
+    });
+  });
 }

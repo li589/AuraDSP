@@ -157,6 +157,10 @@ struct Params {
     /* BassMono：低频单声道化（one-pole LPF，RT 线程就地处理，零延迟） */
     std::atomic<int32_t>  bassmono_enable{0};
     std::atomic<float>    bassmono_freq{120.0f}; /* Hz [20,300] */
+    /* Haas 差分环绕（右声道延迟 0..25ms + 干湿混合） */
+    std::atomic<int32_t>  haas_enable{0};
+    std::atomic<float>    haas_delay_ms{12.0f};  /* ms [0,25] */
+    std::atomic<float>    haas_mix{1.0f};        /* [0,1] */
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -327,6 +331,10 @@ struct auradsp_handle_s {
     } shelf;
     /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
+    /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
+    float* haas_ring = nullptr;
+    int    haas_ring_len = 0;
+    int    haas_pos = 0;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
@@ -392,6 +400,12 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     }
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
         ms += kLatComp.ms;
+    }
+    /* Haas = 纯延迟线，按当前设定值动态上报（0..25ms，Viper 差分环绕同量级）。 */
+    if (h->p.haas_enable.load(std::memory_order_relaxed)) {
+        float dms = h->p.haas_delay_ms.load(std::memory_order_relaxed);
+        if (dms < 0.0f) dms = 0.0f; if (dms > 25.0f) dms = 25.0f;
+        ms += dms;
     }
     *out_ms = ms;
 }
@@ -1289,6 +1303,16 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
         delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
         delete h; return nullptr;
     }
+    /* Haas 延迟环：25ms 上限 + 一块余量，清零（开轮即录制，无陈旧音频 burst） */
+    h->haas_ring_len = (int)(0.025 * sample_rate) + max_block_frames + 64;
+    h->haas_ring = new (std::nothrow) float[(size_t)h->haas_ring_len]();
+    if (!h->haas_ring) {
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
+        delete[] h->shelf_scratch; delete[] h->conv_scratch;
+    delete[] h->mx_scratch; delete[] h->mx_stereo;
+        delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete h; return nullptr;
+    }
     h->plugin_host = std::make_unique<auradsp::PluginHostManager>();
     h->plugin_host->updateFormat(sample_rate, (uint32_t)max_block_frames);
 
@@ -1345,6 +1369,7 @@ void auradsp_destroy(auradsp_handle h) {
     delete[] h->viz_hist; delete[] h->eq_in_hist;
     delete[] h->shelf_scratch;
     delete[] h->conv_scratch;
+    delete[] h->haas_ring;
     delete[] h->plugin_buf_l;
     delete[] h->plugin_buf_r;
     free(h->lp_code);
@@ -1570,6 +1595,34 @@ static void bassmono_process(auradsp_handle h, float* io, int frames) {
     h->bm_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
 }
 
+/* Haas 差分环绕（右声道延迟 D + 干湿混合，左声道直通保单声道兼容）。
+ * 位置：Stage 2 后 / Freeverb 前——vendor 内部展宽拆不出来，
+ * vendor 出口是能挂的最晚空间点（spec 链序 stereo→haas→reverb 的可实现形态）。
+ * RT 安全：纯延迟线，无分配无锁；mix=0 时仍持续录制延迟环，
+ * 避免开轮瞬间爆出陈旧音频。 */
+static void haas_process(auradsp_handle h, float* io, int frames) {
+    const int ringLen = h->haas_ring_len;
+    if (!h->haas_ring || ringLen <= 0) return;
+    float dms = h->p.haas_delay_ms.load(std::memory_order_relaxed);
+    if (dms < 0.0f) dms = 0.0f; if (dms > 25.0f) dms = 25.0f;
+    float mix = h->p.haas_mix.load(std::memory_order_relaxed);
+    if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
+    const float fs = (float)h->jdsp.fs;
+    int d = (fs > 0.0f) ? (int)(dms * 0.001f * fs + 0.5f) : 0;
+    if (d >= ringLen) d = ringLen - 1;
+    const float dry = 1.0f - mix;
+    int pos = h->haas_pos;
+    for (int i = 0; i < frames; ++i) {
+        const float rin = io[i * 2 + 1];
+        h->haas_ring[pos] = rin;
+        int rp = pos - d;
+        if (rp < 0) rp += ringLen;
+        io[i * 2 + 1] = rin * dry + h->haas_ring[rp] * mix;
+        if (++pos >= ringLen) pos = 0;
+    }
+    h->haas_pos = pos;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -1612,6 +1665,11 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
 
     /* Stage 2: Post-Vendor（主效果后 / 混响前） */
     process_plugin_slots_stage(h, 2, dst, frames);
+
+    /* Haas 差分环绕（Stage 2 后 / Freeverb 前） */
+    if (h->p.haas_enable.load(std::memory_order_relaxed)) {
+        haas_process(h, dst, frames);
+    }
 
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
     if (h->p.fv_enable.load(std::memory_order_relaxed)) {
@@ -2177,6 +2235,23 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.bassmono_freq.store(v);
         return AURADSP_OK;
     }
+    /* ---- Haas 差分环绕 ---- */
+    if (!strcmp(id, "haas.enable") && bytes >= 4) {
+        h->p.haas_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "haas.delay") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 25) v = 25;
+        h->p.haas_delay_ms.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "haas.mix") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.haas_mix.store(v);
+        return AURADSP_OK;
+    }
     /* ---- VDC 空间校正（M5-3） ---- */
     if (!strcmp(id, "ddc.load")) {
         if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
@@ -2399,6 +2474,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bassmono.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.bassmono_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bassmono.freq") && bytes >= 4) { *(float*)out_value = h->p.bassmono_freq.load(); return AURADSP_OK; }
+    if (!strcmp(id, "haas.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.haas_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "haas.delay") && bytes >= 4) { *(float*)out_value = h->p.haas_delay_ms.load(); return AURADSP_OK; }
+    if (!strcmp(id, "haas.mix") && bytes >= 4) { *(float*)out_value = h->p.haas_mix.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.gain") && bytes >= 4) { *(float*)out_value = h->p.shelf_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.fv_enable.load(); return AURADSP_OK; }
@@ -2428,6 +2506,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"limiter\",\"tier\":0,\"exposed\":true},"
             "{\"id\":\"comp\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"bassmono\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"haas\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"

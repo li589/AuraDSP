@@ -312,6 +312,12 @@ abstract final class PresetLibrary {
           'enable': m.bassmonoOn,
           'freq': m.bassmonoFreq,
         },
+        // Haas 差分环绕（stereo 后 / reverb 前）
+        'haas': {
+          'enable': m.haasOn,
+          'delay': m.haasDelayMs,
+          'mix': m.haasMix,
+        },
         // 脉冲卷积与校正
         'convolver': {
           'enable': m.convEnabled && m.convReady,
@@ -547,6 +553,20 @@ abstract final class PresetLibrary {
       }
       if (bm['enable'] != null) {
         m.setBassmonoEnabled(bm['enable'] as bool);
+      }
+    }
+
+    // 8.6 Haas 差分环绕（delay/mix 先行，enable 最后）
+    final hs = (p['haas'] as Map<String, dynamic>?) ?? {};
+    if (hs.isNotEmpty) {
+      if (hs['delay'] != null) {
+        m.setHaasDelay((hs['delay'] as num).toDouble());
+      }
+      if (hs['mix'] != null) {
+        m.setHaasMix((hs['mix'] as num).toDouble());
+      }
+      if (hs['enable'] != null) {
+        m.setHaasEnabled(hs['enable'] as bool);
       }
     }
 

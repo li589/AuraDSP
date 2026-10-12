@@ -1408,6 +1408,30 @@ abstract class AppLocalizations {
   /// **'低频单声道'**
   String get stBassmono;
 
+  /// No description provided for @stHaas.
+  ///
+  /// In zh, this message translates to:
+  /// **'差分环绕'**
+  String get stHaas;
+
+  /// No description provided for @haasHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'右声道延迟制造声场宽度，左声道直通保兼容'**
+  String get haasHint;
+
+  /// No description provided for @haasDelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'右声道延迟'**
+  String get haasDelay;
+
+  /// No description provided for @haasMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'差分混合比'**
+  String get haasMix;
+
   /// No description provided for @bassmonoHint.
   ///
   /// In zh, this message translates to:

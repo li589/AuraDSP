@@ -700,6 +700,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stBassmono => 'Bass Mono';
 
   @override
+  String get stHaas => 'Differential Surround';
+
+  @override
+  String get haasHint =>
+      'Delayed right channel widens the stage, left stays dry';
+
+  @override
+  String get haasDelay => 'Right delay';
+
+  @override
+  String get haasMix => 'Differential mix';
+
+  @override
   String get bassmonoHint =>
       'Chain head: mono below crossover, saves small speakers';
 

@@ -59,6 +59,10 @@ abstract final class ParamId {
   // 低频单声道化（BassMono）
   static const bassmonoEnable = 'bassmono.enable';
   static const bassmonoFreq = 'bassmono.freq';
+  // Haas 差分环绕
+  static const haasEnable = 'haas.enable';
+  static const haasDelay = 'haas.delay';
+  static const haasMix = 'haas.mix';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';
