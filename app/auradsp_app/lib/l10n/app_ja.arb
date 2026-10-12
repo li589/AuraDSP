@@ -182,7 +182,7 @@
   "reverbStereoWidth": "ステレオ幅",
   "reverbMix": "リバーブミックス",
   "eqMultiBand": "グラフィックイコライザー",
-  "eqBands": "バンド数",
+  "eqBands": "{n}段",
   "eqPresets": "プリセット",
   "eqFlat": "フラットリセット",
   "eqBypass": "バイパス",
@@ -239,7 +239,6 @@
   },
   "latTipProbing": "コンポーネント遅延を測定中…",
   "latTipUnmeasured": "未測定です\n↻タップでインパルス応答を1回測定（数十ms）",
-  "eqBands": "{n}段",
   "@eqBands": {
     "placeholders": {
       "n": {
@@ -621,5 +620,16 @@
   "plugActive": "有効",
   "lpSaveFailed": "保存に失敗しました（不正な名前または書き込み不可）",
   "chainVstTitle": "サードパーティVST / CLAPプラグインスロットとステージ順序",
-  "chainVstHint": "複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。"
- }
+  "chainVstHint": "複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。",
+  "stDdc": "VDC 空間補正",
+  "compTitle": "ダイナミックコンプレッサー",
+  "compTimeconstant": "時定数",
+  "compGranularity": "粒度",
+  "compGranularityCoarse": "低負荷",
+  "compGranularityNormal": "標準 (バランス)",
+  "compGranularityFine": "高精細 (マルチバンド)",
+  "compTfresolution": "時間周波数分解能",
+  "compTfresTransient": "過渡応答",
+  "compTfresBalanced": "バランス",
+  "compTfresFine": "高周波"
+}

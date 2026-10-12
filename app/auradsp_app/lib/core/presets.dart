@@ -315,6 +315,13 @@ abstract final class PresetLibrary {
         'ddc': {
           'enable': m.ddcOn,
         },
+        // 动态压限器
+        'comp': {
+          'enable': m.compOn,
+          'timeconstant': m.compTimeconstant,
+          'granularity': m.compGranularity,
+          'tfresolution': m.compTfresolution,
+        },
         // 交叉反馈与输出限幅
         'crossfeed': {
           'enable': m.xfeedOn,
@@ -542,6 +549,23 @@ abstract final class PresetLibrary {
     final ddc = (p['ddc'] as Map<String, dynamic>?) ?? {};
     if (ddc.isNotEmpty && ddc['enable'] != null) {
       m.setDdcEnabled(ddc['enable'] as bool);
+    }
+
+    // 10.5 动态压限器
+    final comp = (p['comp'] as Map<String, dynamic>?) ?? {};
+    if (comp.isNotEmpty) {
+      if (comp['timeconstant'] != null) {
+        m.setCompTimeconstant((comp['timeconstant'] as num).toDouble());
+      }
+      if (comp['granularity'] != null) {
+        m.setCompGranularity((comp['granularity'] as num).toInt());
+      }
+      if (comp['tfresolution'] != null) {
+        m.setCompTfresolution((comp['tfresolution'] as num).toInt());
+      }
+      if (comp['enable'] != null) {
+        m.setCompEnabled(comp['enable'] as bool);
+      }
     }
 
     // 11. 交叉反馈

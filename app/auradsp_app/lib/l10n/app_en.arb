@@ -182,7 +182,7 @@
   "reverbStereoWidth": "Stereo Width",
   "reverbMix": "Wet/Dry Mix",
   "eqMultiBand": "Multi-Band Equalizer",
-  "eqBands": "Bands",
+  "eqBands": "{n} bands",
   "eqPresets": "Presets",
   "eqFlat": "Flat Reset",
   "eqBypass": "Bypass",
@@ -239,7 +239,6 @@
   },
   "latTipProbing": "Measuring component latency…",
   "latTipUnmeasured": "Component latency not measured yet\nTap ↻ for one impulse-response measurement (tens of ms)",
-  "eqBands": "{n} bands",
   "@eqBands": {
     "placeholders": {
       "n": {
@@ -621,5 +620,16 @@
   "plugActive": "Active",
   "lpSaveFailed": "Save failed (bad name or unwritable disk)",
   "chainVstTitle": "Third-party VST / CLAP Plugin Slots & Stage Order",
-  "chainVstHint": "Mount multiple slots in parallel; set each plugin's insert stage and order on the global chain below."
+  "chainVstHint": "Mount multiple slots in parallel; set each plugin's insert stage and order on the global chain below.",
+  "stDdc": "VDC Spatial Correction",
+  "compTitle": "Dynamic Compressor",
+  "compTimeconstant": "Time Constant",
+  "compGranularity": "Granularity",
+  "compGranularityCoarse": "Coarse (Low Load)",
+  "compGranularityNormal": "Standard (Balanced)",
+  "compGranularityFine": "Fine (Multi-band)",
+  "compTfresolution": "TF Resolution",
+  "compTfresTransient": "Transient",
+  "compTfresBalanced": "Balanced",
+  "compTfresFine": "High Frequency"
 }
