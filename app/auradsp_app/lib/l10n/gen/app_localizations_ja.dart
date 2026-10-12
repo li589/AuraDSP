@@ -264,6 +264,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpNoCode => 'スクリプト未読込（有効時はパススルー）';
 
   @override
+  String get lpStatusOk => '実行中';
+
+  @override
+  String get lpStatusIdle => '未読込';
+
+  @override
+  String get lpStatusError => 'コンパイル失敗';
+
+  @override
+  String get lpErrInitMissing => '@init セクションがありません';
+
+  @override
+  String get lpErrInitSyntax => '@init セクションの構文エラー';
+
+  @override
+  String get lpErrSampleMissing => '@sample セクションがありません';
+
+  @override
+  String get lpErrSampleSyntax => '@sample セクションの構文エラー';
+
+  @override
+  String get lpBlockedByLint => '構造上の問題を修正してから適用してください';
+
+  @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
 
   @override
@@ -659,6 +683,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainFlowCaption => '全体シグナルフロー概略（左から右へ）：';
 
   @override
+  String get chainNodeInput => '入力ゲート';
+
+  @override
   String get chainNodeShelf => 'ローシェルフEQ';
 
   @override
@@ -671,7 +698,34 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainNodeLimiter => 'メインリミッター';
 
   @override
+  String get chainNodeOutputGate => '出力ゲート';
+
+  @override
   String get chainNodeOutput => 'オーディオ出力';
+
+  @override
+  String get inputGate => '入力ゲート';
+
+  @override
+  String get inputGain => '全体入力ゲイン';
+
+  @override
+  String get channelBalance => 'チャンネルバランス';
+
+  @override
+  String get channelBalanceHint => '各チャンネルの独立音量制御。最終音量 = 全体入力ゲイン × 各チャンネルバランス。';
+
+  @override
+  String get channelLeft => '左チャンネル (L)';
+
+  @override
+  String get channelRight => '右チャンネル (R)';
+
+  @override
+  String get inputStageIn => '本段入力';
+
+  @override
+  String get inputStageOut => '本段出力';
 
   @override
   String get chainStagePreDsp => 'DSP 前';

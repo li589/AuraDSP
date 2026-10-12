@@ -18,7 +18,11 @@ class EelLintIssue {
   final int line;
   final int col; // 1-based，0 = 未知
   final String message;
-  const EelLintIssue(this.line, this.col, this.message);
+
+  /// 引擎必拒项（缺段/空 @init）：应用前本地拦截，不下发编译。
+  /// 非 blocking 仅警告（引擎可编译但语义可疑，如 slider9+ 永远收不到滑块值）。
+  final bool blocking;
+  const EelLintIssue(this.line, this.col, this.message, {this.blocking = false});
 }
 
 /// 自适应滑块参数元数据
@@ -419,7 +423,130 @@ abstract final class EelLinter {
     for (final (ch, l, c) in stack.reversed) {
       issues.add(EelLintIssue(l, c, '"$ch" 未闭合（始于第 $l 行第 $c 列）'));
     }
+    issues.addAll(_structuralChecks(src));
     issues.sort((a, b) => a.line.compareTo(b.line));
+    return issues;
+  }
+
+  /// 把注释与字符串内容抹成空格（保留换行）：结构检查只看真实代码，
+  /// 注释里的 "@init" 字样、字符串里的 "slider9" 不得误报。
+  static String _stripNonCode(String src) {
+    final buf = StringBuffer();
+    var i = 0;
+    var inString = false, inLine = false, inBlock = false;
+    while (i < src.length) {
+      final ch = src[i];
+      if (ch == '\n') {
+        buf.write('\n');
+        inLine = false;
+        inString = false;
+        i++;
+        continue;
+      }
+      if (inLine) {
+        buf.write(' ');
+        i++;
+        continue;
+      }
+      if (inBlock) {
+        if (ch == '*' && i + 1 < src.length && src[i + 1] == '/') {
+          buf.write('  ');
+          inBlock = false;
+          i += 2;
+          continue;
+        }
+        buf.write(' ');
+        i++;
+        continue;
+      }
+      if (inString) {
+        if (ch == '\\' && i + 1 < src.length) {
+          buf.write('  ');
+          i += 2;
+          continue;
+        }
+        if (ch == '"') inString = false;
+        buf.write(' ');
+        i++;
+        continue;
+      }
+      if (ch == '/' && i + 1 < src.length && src[i + 1] == '/') {
+        buf.write('  ');
+        inLine = true;
+        i += 2;
+        continue;
+      }
+      if (ch == '/' && i + 1 < src.length && src[i + 1] == '*') {
+        buf.write('  ');
+        inBlock = true;
+        i += 2;
+        continue;
+      }
+      if (ch == '"') {
+        buf.write(' ');
+        inString = true;
+        i++;
+        continue;
+      }
+      buf.write(ch);
+      i++;
+    }
+    return buf.toString();
+  }
+
+  /// 结构预检（应用前本地拦截，不下发即报错）：
+  /// 段存在性 / 空 @init / slider 越界 / 只读变量赋值。
+  static List<EelLintIssue> _structuralChecks(String src) {
+    final issues = <EelLintIssue>[];
+    final code = _stripNonCode(src);
+    int lineOf(int offset) =>
+        '\n'.allMatches(code.substring(0, offset)).length + 1;
+
+    final hasInit = RegExp(r'@init\b').hasMatch(code);
+    final hasSample = RegExp(r'@sample\b').hasMatch(code);
+    if (!hasInit) {
+      issues.add(const EelLintIssue(0, 0, '缺少 @init 段（引擎会拒绝编译）',
+          blocking: true));
+    }
+    if (!hasSample) {
+      issues.add(const EelLintIssue(0, 0, '缺少 @sample 段（引擎会拒绝编译）',
+          blocking: true));
+    }
+
+    // 空段：@init 到下一个段指令（或文末）之间只有空白。
+    final dirRe = RegExp(r'@(init|sample|slider|block)\b');
+    final dirs = dirRe.allMatches(code).toList();
+    for (var k = 0; k < dirs.length; k++) {
+      final d = dirs[k];
+      final name = code.substring(d.start, d.end);
+      final end = (k + 1 < dirs.length) ? dirs[k + 1].start : code.length;
+      if (code.substring(d.end, end).trim().isEmpty) {
+        if (name == '@init') {
+          issues.add(EelLintIssue(lineOf(d.start), 0,
+              '空 @init 段（vendor 要求至少一条语句）',
+              blocking: true));
+        } else if (name == '@sample') {
+          issues.add(EelLintIssue(lineOf(d.start), 0,
+              '@sample 段为空（将输出静音），确认不是漏写？'));
+        }
+      }
+    }
+
+    // sliderN（N>8）：EEL 会放行编译，但宿主只有 slider1..8，值永远到不了。
+    for (final m in RegExp(r'\bslider(\d+)\b').allMatches(code)) {
+      final n = int.tryParse(m.group(1) ?? '');
+      if (n != null && n > 8) {
+        issues.add(EelLintIssue(
+            lineOf(m.start), 0, 'slider$n 越界（仅 slider1..8 会联动滑块）'));
+      }
+    }
+
+    // 只读变量赋值：srate / num_ch 由宿主提供，赋值无效果。
+    for (final m
+        in RegExp(r'\b(srate|num_ch)\b\s*[-+*/%]?=(?!=)').allMatches(code)) {
+      issues.add(EelLintIssue(
+          lineOf(m.start), 0, '${m.group(1)} 是只读变量，赋值不会生效'));
+    }
     return issues;
   }
 }

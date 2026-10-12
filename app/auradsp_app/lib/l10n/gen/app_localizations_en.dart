@@ -267,6 +267,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpNoCode => 'No script loaded (passthrough when enabled)';
 
   @override
+  String get lpStatusOk => 'Running';
+
+  @override
+  String get lpStatusIdle => 'Not loaded';
+
+  @override
+  String get lpStatusError => 'Compile failed';
+
+  @override
+  String get lpErrInitMissing => 'Missing @init section';
+
+  @override
+  String get lpErrInitSyntax => 'Syntax error in @init section';
+
+  @override
+  String get lpErrSampleMissing => 'Missing @sample section';
+
+  @override
+  String get lpErrSampleSyntax => 'Syntax error in @sample section';
+
+  @override
+  String get lpBlockedByLint => 'Fix the flagged structural issues first';
+
+  @override
   String get lpSliders => 'Script sliders (slider1..8)';
 
   @override
@@ -675,6 +699,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainFlowCaption => 'Global signal-flow overview (left to right):';
 
   @override
+  String get chainNodeInput => 'Input Gate';
+
+  @override
   String get chainNodeShelf => 'Low-shelf EQ';
 
   @override
@@ -687,7 +714,35 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainNodeLimiter => 'Main Limiter';
 
   @override
+  String get chainNodeOutputGate => 'Output Gate';
+
+  @override
   String get chainNodeOutput => 'Audio Output';
+
+  @override
+  String get inputGate => 'Input Gate';
+
+  @override
+  String get inputGain => 'Master Input Gain';
+
+  @override
+  String get channelBalance => 'Channel Balance';
+
+  @override
+  String get channelBalanceHint =>
+      'Per-channel independent level scaling. Final channel volume = master input gain × individual balance.';
+
+  @override
+  String get channelLeft => 'Left Channel (L)';
+
+  @override
+  String get channelRight => 'Right Channel (R)';
+
+  @override
+  String get inputStageIn => 'Stage In';
+
+  @override
+  String get inputStageOut => 'Stage Out';
 
   @override
   String get chainStagePreDsp => 'Pre-DSP';
