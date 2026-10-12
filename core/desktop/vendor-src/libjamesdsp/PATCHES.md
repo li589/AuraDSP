@@ -76,3 +76,33 @@
 - **兼容性**：req[NUMPTS]（用户最末点）已由引擎侧钳到 
 yquist * 0.999，
   故 req[NUMPTS] < fs * 0.5 恒成立，单调性不被破坏。
+
+## P-008 jdspController.c — 块长抖动抑制：不再无谓重建卷积器（电平抖动 / 卡顿修复，2026-10-12）
+
+- **位置**：`jdspController.c` 的 `pfloat32Multiplexed()` 内 `if (jdsp->blockSize != n)` 分支
+- **病因**：只要块长变化，就无条件调 `JamesDSPRefreshConvolutions()` →
+  `Convolver1DLoadImpulseResponse(updateOld=0)` → 析构并重建全部卷积器
+  （重做全 IR 的 FFT + 分段选择）。而 AuraDSP 的 WASAPI 泵传入
+  `n = min(avail, max_block)`，`avail` 随 padding 逐轮抖动，于是**几乎每轮都重建**。
+  实测（`tools/probe_ir_stability.py`，0.5s / 48kHz IR）：
+
+  | 块长 | 中位耗时 | 输出 RMS |
+  |---|---|---|
+  | 恒定 1024 | 0.160ms | 0.5607 |
+  | 1024/900/700 抖动 | **4.050ms（25×）** | **0.4360（低 22%）** |
+  | 1024/1023（差 1 样本） | **3.958ms（25×）** | **0.4577（低 18%）** |
+
+  即用户反馈的「启动后播放长时间声音，会周期性声音断续或者变小或者卡顿」：
+  重建既吃满 CPU 预算（卡顿），又重置卷积状态把湿信号尾巴截断（变小 / 断续）。
+
+- **上游原意图**：组件说明里写着 "update convolution object to **maximize performance**"
+  —— 所以这里的块长变化是**性能优化触发器**，不是正确性要求：
+  `FFTConvolver2x2Process` 以输入 FIFO 逐块消化（`while (processed < len)`），
+  任意 `len` 都输出正确 —— 所以**不重建也不会牺牲正确性**，只需消除抖动。
+
+- **修改**：把重建条件改为**量级滞回** —— 仅当块长跨越 2 倍（`n >= old*2 || old >= n*2`，
+  含 `old == 0` 首次）时才重建。`blockSize` 仍照常更新（被 `selectConvPartitions` 等读取），
+  只是不再因此触发重建。
+
+- **验收**：`test/smoke/smoke_ir_block_jitter.py`（已挂 runner）—— 抖动块长时中位耗时放大 < 3×
+  且输出 RMS 偏差 < 2%；移除 P-008 后该用例报「中位耗时放大 26.7x —— 卷积器仍在重建」。

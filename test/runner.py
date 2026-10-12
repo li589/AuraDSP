@@ -39,6 +39,7 @@ def run_smoke_tests():
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
+    "smoke_ir_block_jitter.py",
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",
