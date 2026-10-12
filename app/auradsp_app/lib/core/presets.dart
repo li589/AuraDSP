@@ -307,6 +307,11 @@ abstract final class PresetLibrary {
           'freq': m.shelfFreq,
           'gain': m.shelfGain,
         },
+        // 低频单声道化（链头）
+        'bassmono': {
+          'enable': m.bassmonoOn,
+          'freq': m.bassmonoFreq,
+        },
         // 脉冲卷积与校正
         'convolver': {
           'enable': m.convEnabled && m.convReady,
@@ -531,6 +536,17 @@ abstract final class PresetLibrary {
       // enable 必须最后下发：引擎侧先按 freq/gain 重算系数，再由它决定是否旁路
       if (shelf['enable'] != null) {
         m.setInt('shelf.enable', (shelf['enable'] as bool) ? 1 : 0);
+      }
+    }
+
+    // 8.5 低频单声道化（freq 先行，enable 最后）
+    final bm = (p['bassmono'] as Map<String, dynamic>?) ?? {};
+    if (bm.isNotEmpty) {
+      if (bm['freq'] != null) {
+        m.setBassmonoFreq((bm['freq'] as num).toDouble());
+      }
+      if (bm['enable'] != null) {
+        m.setBassmonoEnabled(bm['enable'] as bool);
       }
     }
 

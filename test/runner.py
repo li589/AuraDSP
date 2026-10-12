@@ -41,6 +41,7 @@ def run_smoke_tests():
         "smoke_abi_consistency.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
+    "smoke_bassmono.py",
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",

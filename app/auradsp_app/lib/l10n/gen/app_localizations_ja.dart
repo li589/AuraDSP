@@ -680,6 +680,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stBass => '低音ブースト';
 
   @override
+  String get stBassmono => '低域モノラル';
+
+  @override
+  String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
+
+  @override
+  String get bassmonoFreq => 'クロスオーバー';
+
+  @override
   String get stEq => 'イコライザー';
 
   @override

@@ -47,6 +47,10 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _BassMonoCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _SpatialReverbCard(model: model),
         ),
         ListenableBuilder(
@@ -1277,6 +1281,80 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/* ---- 02B BassMono (低频单声道化，链头) ----
+ * 分频点以下 L/R 取平均。与 bass 卡相邻但独立开关：链头处理，
+ * 不随 bassOn 折叠。频率滑块到下限不关开关（stereo 解耦教训）。 */
+class _BassMonoCard extends StatelessWidget {
+  final AppModel model;
+  const _BassMonoCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+
+    return SectionCard(
+      index: '02',
+      title: l.stBassmono,
+      collapsed: !model.bassmonoOn,
+      latencyMs: model.componentLatency('bassmono').ms,
+      latencyMeasured: model.componentLatency('bassmono').measured,
+      latencyProbing: model.isProbingLatency('bassmono'),
+      onRefreshLatency: () => model.refreshComponentLatency('bassmono'),
+      latencyTick: model.getComponentLatencyTick('bassmono'),
+      trailing: AuraSwitch(
+        value: model.bassmonoOn,
+        onChanged: model.setBassmonoEnabled,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l.bassmonoHint, style: captionOf(p)),
+          const SizedBox(height: AuraSpace.sm),
+          // 分频点滑块
+          ValueSlider(
+            label: l.bassmonoFreq,
+            infoMessage: '分频点以下左右声道取平均（单声道化），以上直通。防小音箱低频打架破音。',
+            value: model.bassmonoFreq,
+            defaultValue: ParamDefaults.bassmonoFreq,
+            onResetToDefault: () =>
+                model.setBassmonoFreq(ParamDefaults.bassmonoFreq),
+            min: 20,
+            max: 300,
+            unit: 'Hz',
+            enabled: model.bassmonoOn,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: model.setBassmonoFreq,
+            onChangedEnd: model.setBassmonoFreq,
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          // 快捷分频点
+          Row(
+            children: [
+              Text(l.bassmonoFreq, style: captionOf(p)),
+              const Spacer(),
+              Wrap(
+                spacing: AuraSpace.sm,
+                children: [
+                  for (final f in const [80.0, 120.0, 200.0])
+                    AuraChoiceChip(
+                      label: '${f.toStringAsFixed(0)} Hz',
+                      selected:
+                          (model.bassmonoFreq - f).abs() < 0.5,
+                      onTap: model.bassmonoOn
+                          ? () => model.setBassmonoFreq(f)
+                          : null,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 }

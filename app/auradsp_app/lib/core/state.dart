@@ -78,6 +78,9 @@ abstract class ParamDefaults {
   static const double shelfFreq = 100.0;     // 100 Hz
   static const double shelfGain = 0.0;       // 0.0 dB
 
+  // 低频单声道化 (BassMono)
+  static const double bassmonoFreq = 120.0;  // 120 Hz [20,300]
+
   // 声场分带
   static const double stereoBand = 0.5;      // 50%
 
@@ -207,6 +210,9 @@ class AppModel extends ChangeNotifier {
   // M5-b：低频搁架
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
+  // 低频单声道化（BassMono，链头）
+  bool bassmonoOn = false;
+  double bassmonoFreq = 120;
 
   // M5-c：空间混响（Freeverb / Spatial Reverb）
   bool fvOn = false;
@@ -626,6 +632,12 @@ class AppModel extends ChangeNotifier {
         shelfOn = (raw['shelfEnable'] as int) != 0;
         shelfFreq = (raw['shelfFreq'] as num).toDouble();
         shelfGain = (raw['shelfGain'] as num).toDouble();
+        if (raw['bassmonoEnable'] != null) {
+          bassmonoOn = (raw['bassmonoEnable'] as int) != 0;
+        }
+        if (raw['bassmonoFreq'] != null) {
+          bassmonoFreq = (raw['bassmonoFreq'] as num).toDouble();
+        }
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -941,6 +953,11 @@ class AppModel extends ChangeNotifier {
   Future<void> replaySessionToEngine() async {
     _isReplayingSession = true;
     try {
+      // 0. 输入门控（总增益与声道平衡）
+      setFloat(ParamId.inputGain, inputGain);
+      setFloat(ParamId.inputBalance(1), inputBalanceL);
+      setFloat(ParamId.inputBalance(2), inputBalanceR);
+
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
       setFloat('bass.gain', bassGain);
@@ -973,8 +990,16 @@ class AppModel extends ChangeNotifier {
       setInt('shelf.enable', shelfOn ? 1 : 0);
       setFloat('shelf.freq', shelfFreq);
       setFloat('shelf.gain', shelfGain);
+      setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
+      setFloat(ParamId.bassmonoFreq, bassmonoFreq);
       setInt('limiter.enable', limiterOn ? 1 : 0);
       setFloat('post.gain', postGain);
+
+      // 动态压限器
+      setFloat(ParamId.compTimeconstant, compTimeconstant);
+      setInt(ParamId.compGranularity, compGranularity);
+      setInt(ParamId.compTfresolution, compTfresolution);
+      setInt(ParamId.compEnable, compOn ? 1 : 0);
 
       // 2. 混响
       if (reverbPreset >= 0) {
@@ -1100,6 +1125,8 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
         if (id == ParamId.shelfFreq) { shelfFreq = v; break; }
         if (id == ParamId.shelfGain) { shelfGain = v; break; }
+        if (id == ParamId.bassmonoEnable) { bassmonoOn = v != 0; break; }
+        if (id == ParamId.bassmonoFreq) { bassmonoFreq = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1202,6 +1229,7 @@ class AppModel extends ChangeNotifier {
     return switch (stageId) {
       'tube' => tubeOn,
       'comp' => compOn,
+      'bassmono' => bassmonoOn,
       'bass' => bassOn,
       'eq' => eqOn,
       'arbmag' => false,
@@ -1221,6 +1249,8 @@ class AppModel extends ChangeNotifier {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
+      case 'bassmono':
+        setBassmonoEnabled(!bassmonoOn);
       case 'comp':
         setCompEnabled(!compOn);
       case 'bass':
@@ -1354,6 +1384,22 @@ class AppModel extends ChangeNotifier {
 
   void setCrossfeedEnabled(bool on) {
     setInt(ParamId.xfeedEnable, on ? 1 : 0);
+  }
+
+  /// 低频单声道化（BassMono）：开关与分频点（stereo 解耦教训：独立开关位，
+  /// 频率滑块到下限不关开关）。
+  void setBassmonoEnabled(bool on) {
+    bassmonoOn = on;
+    setInt(ParamId.bassmonoEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setBassmonoFreq(double v) {
+    bassmonoFreq = v.clamp(20.0, 300.0);
+    setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+    notifyListeners();
+    scheduleAutoSave();
   }
 
   void setInputGain(double v) {
@@ -2214,7 +2260,7 @@ void fillEqQ(double q) {
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc'
+        'convolver', 'ddc', 'bassmono'
       }.contains(compId);
 
   /// 探测进行中

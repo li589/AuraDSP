@@ -679,6 +679,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stBass => '低音增强';
 
   @override
+  String get stBassmono => '低频单声道';
+
+  @override
+  String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
+
+  @override
+  String get bassmonoFreq => '分频点';
+
+  @override
   String get stEq => '均衡器';
 
   @override

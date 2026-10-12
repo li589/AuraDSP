@@ -697,6 +697,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stBass => 'Bass Boost';
 
   @override
+  String get stBassmono => 'Bass Mono';
+
+  @override
+  String get bassmonoHint =>
+      'Chain head: mono below crossover, saves small speakers';
+
+  @override
+  String get bassmonoFreq => 'Crossover';
+
+  @override
   String get stEq => 'Equalizer';
 
   @override

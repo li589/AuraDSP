@@ -154,6 +154,9 @@ struct Params {
     std::atomic<int32_t>  shelf_enable{0};
     std::atomic<float>    shelf_freq{100.0f};   /* Hz [40,400] */
     std::atomic<float>    shelf_gain{0.0f};     /* dB [-15,15] */
+    /* BassMono：低频单声道化（one-pole LPF，RT 线程就地处理，零延迟） */
+    std::atomic<int32_t>  bassmono_enable{0};
+    std::atomic<float>    bassmono_freq{120.0f}; /* Hz [20,300] */
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -322,6 +325,8 @@ struct auradsp_handle_s {
         std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
         double z1L = 0, z2L = 0, z1R = 0, z2R = 0;   /* TDF2 状态（RT 独占） */
     } shelf;
+    /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
+    float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
@@ -1544,6 +1549,27 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     }
 }
 
+/* BassMono：分频点以下 L/R 取平均（就地改 src；one-pole，零延迟）。
+ * RT 安全：每块一次 expf 求系数，无分配无锁；状态每块做 denormal 归零，
+ * 静音时不烧 CPU。 */
+static void bassmono_process(auradsp_handle h, float* io, int frames) {
+    float f = h->p.bassmono_freq.load(std::memory_order_relaxed);
+    if (f < 20.0f) f = 20.0f; if (f > 300.0f) f = 300.0f;
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    const float a = 1.0f - expf(-2.0f * 3.14159265358979f * f / fs);
+    float lpL = h->bm_lp_l, lpR = h->bm_lp_r;
+    for (int i = 0; i < frames; ++i) {
+        lpL += a * (io[i * 2] - lpL);
+        lpR += a * (io[i * 2 + 1] - lpR);
+        const float lo = 0.5f * (lpL + lpR);
+        io[i * 2]     += lo - lpL;
+        io[i * 2 + 1] += lo - lpR;
+    }
+    h->bm_lp_l = (fabsf(lpL) < 1e-18f) ? 0.0f : lpL;
+    h->bm_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -1559,6 +1585,12 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
      * EQ 卷积器同型的数据竞争。且拖动时目标值每秒跳数十次，每次都是阶跃，
      * 连成「叫叫叫」。此处改为每块按 kBassSlewPerBlock 向目标渐变，
      * 变化足够小时才真正下发，兼顾连续性与 vendor 调用频率。*/
+    /* BassMono：在一切之前（Stage 0 插件/搁架/vendor 之前）——
+     * 单声道化后再做后续处理，否则低频相位差会被后级放大。
+     * 随 shelf precedent 就地改 src（调用方传的本就是可写 scratch）。 */
+    if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
+        bassmono_process(h, const_cast<float*>(src), frames);
+    }
     /* Stage 0: Pre-DSP（链头，最前置） */
     process_plugin_slots_stage(h, 0, const_cast<float*>(src), frames);
 
@@ -1860,6 +1892,19 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         }
         return AURADSP_OK;
     }
+    if (!strcmp(id, "stereo.bandUsed") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        h->p.stereo_band_used.store(v);
+        if (h->open.load()) {
+            if (v) {
+                apply_stereo(h);
+            } else {
+                StereoEnhancementUseUnifiedMix(&h->jdsp);
+                apply_stereo(h);
+            }
+        }
+        return AURADSP_OK;
+    }
     if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
         const char d = id[11];
         if (d < '1' || d > '5' || id[12] != 0) { set_error(h, "unknown param id"); return AURADSP_E_PARAM; }
@@ -2121,6 +2166,17 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         shelf_recalc(h);
         return AURADSP_OK;
     }
+    /* ---- BassMono 低频单声道化 ---- */
+    if (!strcmp(id, "bassmono.enable") && bytes >= 4) {
+        h->p.bassmono_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "bassmono.freq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 20) v = 20; if (v > 300) v = 300;
+        h->p.bassmono_freq.store(v);
+        return AURADSP_OK;
+    }
     /* ---- VDC 空间校正（M5-3） ---- */
     if (!strcmp(id, "ddc.load")) {
         if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
@@ -2276,13 +2332,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "bass.gain") && bytes >= 4) { *(float*)out_value = h->p.bass_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.preset") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_preset.load(); return AURADSP_OK; }
     if (!strcmp(id, "stereo.mix") && bytes >= 4) { *(float*)out_value = h->p.stereo_mix.load(); return AURADSP_OK; }
+    if (!strcmp(id, "stereo.bandUsed") && bytes >= 4) { *(int32_t*)out_value = h->p.stereo_band_used.load(); return AURADSP_OK; }
     if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
         const char d = id[11];
         if (d < '1' || d > '5' || id[12] != 0) return AURADSP_E_PARAM;
         *(float*)out_value = h->p.stereo_band[d - '1'].load();
         return AURADSP_OK;
     }
-    if (!strcmp(id, "stereo.bandUsed") && bytes >= 4) { *(int32_t*)out_value = h->p.stereo_band_used.load(); return AURADSP_OK; }
     if (!strcmp(id, "eq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.limiter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "post.gain") && bytes >= 4) { *(float*)out_value = h->p.post_gain.load(); return AURADSP_OK; }
@@ -2341,6 +2397,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "comp.tfresolution") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_tfresolution.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bassmono.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.bassmono_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bassmono.freq") && bytes >= 4) { *(float*)out_value = h->p.bassmono_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.gain") && bytes >= 4) { *(float*)out_value = h->p.shelf_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.fv_enable.load(); return AURADSP_OK; }
@@ -2369,6 +2427,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"post\",\"tier\":0,\"exposed\":true},"
             "{\"id\":\"limiter\",\"tier\":0,\"exposed\":true},"
             "{\"id\":\"comp\",\"tier\":2,\"exposed\":true},"
+            "{\"id\":\"bassmono\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
