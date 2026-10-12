@@ -81,6 +81,11 @@ public:
     // Presets (State serialization)
     virtual bool savePreset(const std::string& filePath) = 0;
     virtual bool loadPreset(const std::string& filePath) = 0;
+
+    /* B3（2026-10-12）：实例内部线程挂死时置位。挂死线程仍引用实例，
+     * 析构 = use-after-free；manager 据此把整个实例移入静态隔离区
+     * （可控泄漏换不可控崩溃），绝不释放。 */
+    virtual bool abandoned() const { return false; }
 };
 
 class PluginScanner {
