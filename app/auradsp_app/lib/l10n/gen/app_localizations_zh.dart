@@ -290,6 +290,46 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpCodeMismatch => '预设存档时的脚本与当前代码不一致，滑块值可能对不上号';
 
   @override
+  String get lpCompiling => '编译中…';
+
+  @override
+  String lpCompileTook(String t) {
+    return '上次编译耗时 $t';
+  }
+
+  @override
+  String get lpCompileSlow => '偏慢，连击应用可能卡音频';
+
+  @override
+  String lpSkipped(int n) {
+    return '$n 个超限或损坏的文件已跳过';
+  }
+
+  @override
+  String get lpOverwriteTitle => '覆盖确认';
+
+  @override
+  String get lpOverwriteBody => '已存在同名脚本，覆盖吗？';
+
+  @override
+  String get lpOverwriteAction => '覆盖';
+
+  @override
+  String get lpDeleteTitle => '删除脚本';
+
+  @override
+  String get lpDeleteBody => '确定删除该脚本文件吗？不可撤销。';
+
+  @override
+  String get lpDeleteAction => '删除';
+
+  @override
+  String get lpRenameTitle => '重命名脚本';
+
+  @override
+  String get lpOpFailed => '操作失败，请重试';
+
+  @override
   String get lpSliders => '脚本滑块（slider1..8）';
 
   @override

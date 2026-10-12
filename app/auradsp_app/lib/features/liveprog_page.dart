@@ -7,6 +7,8 @@
  * 3. 自适应滑块调节（EelSliderParser：根据代码引用及声明动态呈现活跃参数与自定义名称/范围）
  * 4. 外部预设文件夹加载（多目录递归遍历 .eel / .txt，一键加载生效）
  */
+import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -28,6 +30,44 @@ class LiveprogPage extends StatefulWidget {
   State<LiveprogPage> createState() => _LiveprogPageState();
 }
 
+/// 状态胶囊共用体：主文案 + 可选的引擎原文第二行（与主文案不同才展示）。
+Widget _capsuleBody(AuraPalette p, Color c, IconData icon, String text,
+    {String? err}) {
+  return Container(
+    margin: const EdgeInsets.only(bottom: AuraSpace.md),
+    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+    decoration: BoxDecoration(
+      color: c.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      border: Border.all(color: c.withValues(alpha: 0.45)),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, size: 14, color: c),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            text,
+            style: captionOf(p, color: c),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+        if (err != null && err.isNotEmpty && !text.contains(err))
+          Flexible(
+            child: Text(
+              err,
+              style: monoOf(p, size: 11, color: p.textDim),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.right,
+            ),
+          ),
+      ],
+    ),
+  );
+}
+
 class _LiveprogPageState extends State<LiveprogPage> {
   final _editorFocus = FocusNode();
   int _cursorLine = 1, _cursorCol = 1;
@@ -37,8 +77,13 @@ class _LiveprogPageState extends State<LiveprogPage> {
       EelSyntaxTextEditingController(text: LiveprogLibrary.template);
 
   List<LiveprogItem> _libraryItems = const [];
+  int _skippedCount = 0;
   Map<int, EelSliderMeta> _activeSliders = {};
   bool _showAllSliders = false;
+  // v3 §3.4：编译往返 guard——防抖 + 编译中禁用应用键。
+  bool _compiling = false;
+  int _lastApplyMs = 0;
+  Timer? _compileFallback;
 
   final TextEditingController _libraryNameController =
       TextEditingController(text: 'my-script');
@@ -46,15 +91,27 @@ class _LiveprogPageState extends State<LiveprogPage> {
   @override
   void initState() {
     super.initState();
+    widget.model.addListener(_onModelTick);
     _refreshLibrary();
     _activeSliders = EelSliderParser.parse(_code.text);
     _runLint();
   }
 
+  /// 引擎回了编译结果（成功或失败）→ 松开应用键。
+  void _onModelTick() {
+    if (_compiling &&
+        (widget.model.lpStatus == 1 || widget.model.lpError != null)) {
+      _compileFallback?.cancel();
+      if (mounted) setState(() => _compiling = false);
+    }
+  }
+
   void _refreshLibrary() {
+    final items =
+        LiveprogLibrary.listAll(widget.model.config.customScriptDirs);
     setState(() {
-      _libraryItems =
-          LiveprogLibrary.listAll(widget.model.config.customScriptDirs);
+      _libraryItems = items;
+      _skippedCount = LiveprogLibrary.lastSkipped;
     });
   }
 
@@ -173,10 +230,41 @@ class _LiveprogPageState extends State<LiveprogPage> {
       if (blocking.first.line > 0) _gotoLine(blocking.first.line);
       return;
     }
+    // v3 §3.4：编译往返未归前忽略连击；500ms 防抖。
+    // 引擎未连接时无状态事件回包，靠 5s 兜底松开按钮（只放行 UI，不中断编译）。
+    if (_compiling) return;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastApplyMs < 500) return;
+    _lastApplyMs = now;
+    setState(() => _compiling = true);
     widget.model.setLiveprogCode(text);
+    _compileFallback?.cancel();
+    _compileFallback = Timer(const Duration(seconds: 5), () {
+      if (mounted) setState(() => _compiling = false);
+    });
   }
 
   void _save() {
+    final name = _libraryNameController.text.trim();
+    if (name.isEmpty) return;
+    final fileName = name.endsWith('.eel') ? name : '$name.eel';
+    // v3 §3.5：目标已存在 → 先弹覆盖确认，不再静默覆盖。
+    final target =
+        File('${LiveprogLibrary.dir}${Platform.pathSeparator}$fileName');
+    if (target.existsSync()) {
+      _confirmDialog(
+        title: l10nOf(context).lpOverwriteTitle,
+        body: l10nOf(context).lpOverwriteBody,
+        actionLabel: l10nOf(context).lpOverwriteAction,
+        danger: true,
+        onConfirm: _doSave,
+      );
+      return;
+    }
+    _doSave();
+  }
+
+  void _doSave() {
     final name = _libraryNameController.text.trim();
     if (name.isEmpty) return;
     final ok = LiveprogLibrary.save(
@@ -188,6 +276,125 @@ class _LiveprogPageState extends State<LiveprogPage> {
           style: TextStyle(color: paletteOf(context).text, fontSize: 13)),
       duration: const Duration(seconds: 2),
     ));
+  }
+
+  /// 通用确认框（覆盖/删除共用）：取消走 dlgCancel，确认键可标 danger。
+  void _confirmDialog({
+    required String title,
+    required String body,
+    required String actionLabel,
+    required bool danger,
+    required VoidCallback onConfirm,
+  }) {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final p = paletteOf(ctx);
+        return AlertDialog(
+          backgroundColor: p.panel,
+          title: Text(title, style: sectionOf(p)),
+          content: Text(body, style: captionOf(p)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(l10nOf(ctx).dlgCancel, style: labelOf(p)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: danger ? p.error : p.accent,
+                foregroundColor: danger
+                    ? Colors.white
+                    : p.accentContrast,
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                onConfirm();
+              },
+              child: Text(actionLabel),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _deleteItem(LiveprogItem item) {
+    _confirmDialog(
+      title: l10nOf(context).lpDeleteTitle,
+      body: '${item.name}\n${l10nOf(context).lpDeleteBody}',
+      actionLabel: l10nOf(context).lpDeleteAction,
+      danger: true,
+      onConfirm: () {
+        final ok = LiveprogLibrary.deletePath(
+            item.path, widget.model.config.customScriptDirs);
+        _refreshLibrary();
+        if (!ok && mounted) {
+          ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+            content: Text(l10nOf(context).lpOpFailed,
+                style: TextStyle(
+                    color: paletteOf(context).text, fontSize: 13)),
+            duration: const Duration(seconds: 2),
+          ));
+        }
+      },
+    );
+  }
+
+  void _renameItem(LiveprogItem item) {
+    final ctrl = TextEditingController(text: item.name);
+    // 对话框 pop 后 ctx 即失效，文案提前取好。
+    final l = l10nOf(context);
+    final pal = paletteOf(context);
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        final p = paletteOf(ctx);
+        return AlertDialog(
+          backgroundColor: p.panel,
+          title: Text(l.lpRenameTitle, style: sectionOf(p)),
+          content: TextField(
+            controller: ctrl,
+            style: monoOf(p, size: 12),
+            decoration: InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                borderSide: BorderSide(color: p.hairline),
+              ),
+              contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 10, vertical: 8),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(l.dlgCancel, style: labelOf(p)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: p.accent,
+                foregroundColor: p.accentContrast,
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                final ok = LiveprogLibrary.renamePath(item.path,
+                    ctrl.text.trim(), widget.model.config.customScriptDirs);
+                _refreshLibrary();
+                if (!ok && mounted) {
+                  ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+                    content: Text(l.lpOpFailed,
+                        style: TextStyle(
+                            color: pal.text, fontSize: 13)),
+                    duration: const Duration(seconds: 2),
+                  ));
+                }
+              },
+              child: Text(l.dlgSave),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   void _addExternalScriptDirDialog() {
@@ -250,6 +457,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   @override
   void dispose() {
+    widget.model.removeListener(_onModelTick);
+    _compileFallback?.cancel();
     _editorFocus.dispose();
     _code.dispose();
     _libraryNameController.dispose();
@@ -286,8 +495,18 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 spacing: AuraSpace.sm,
                 runSpacing: AuraSpace.sm,
                 children: [
-                  AuraChip(l.lpApply,
-                      icon: Icons.play_arrow_rounded, onTap: _apply),
+                  // v3 §3.4：编译中禁用应用键（视觉置灰 + 忽略点击）
+                  IgnorePointer(
+                    ignoring: _compiling,
+                    child: Opacity(
+                      opacity: _compiling ? 0.4 : 1.0,
+                      child: AuraChip(l.lpApply,
+                          icon: _compiling
+                              ? Icons.sync_rounded
+                              : Icons.play_arrow_rounded,
+                          onTap: _apply),
+                    ),
+                  ),
                   AuraChip(l.lpUnload,
                       icon: Icons.stop_rounded,
                       danger: true,
@@ -309,17 +528,61 @@ class _LiveprogPageState extends State<LiveprogPage> {
               ListenableBuilder(
                 listenable: m,
                 builder: (_, _) {
+                  // v3：编译中优先展示（_compiling 为页内态，随 setState 重建）。
+                  if (_compiling) {
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: AuraSpace.md),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 7),
+                      decoration: BoxDecoration(
+                        color: p.accent.withValues(alpha: 0.10),
+                        borderRadius:
+                            BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(
+                            color: p.accent.withValues(alpha: 0.45)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.sync_rounded,
+                              size: 14, color: p.accent),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              l.lpCompiling,
+                              style: captionOf(p, color: p.accent),
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   final st = m.lpStatus;
                   final err = m.lpError;
                   final failed = st < 0 || (st == 0 && err != null);
                   final ok = st == 1;
-                  final Color c =
-                      ok ? p.success : (failed ? p.error : p.textDim);
+                  // v3：慢编译（≥2s）降级为警告色——持锁编译饿音频泵，提醒勿连击。
+                  final slow = ok && m.lpCompileMs >= 2000;
+                  final Color c = ok
+                      ? (slow ? p.warning : p.success)
+                      : (failed ? p.error : p.textDim);
                   final String text;
                   if (ok) {
                     text = l.lpStatusOk;
+                    var t = text;
+                    if (m.lpCompileMs >= 0) {
+                      final took = m.lpCompileMs >= 1000
+                          ? '${(m.lpCompileMs / 1000).toStringAsFixed(1)}s'
+                          : '${m.lpCompileMs}ms';
+                      t = '$t · ${l.lpCompileTook(took)}';
+                    }
+                    if (slow) t = '$t · ${l.lpCompileSlow}';
+                    return _capsuleBody(
+                        p, c, Icons.check_circle_outline_rounded, t);
                   } else if (!failed) {
-                    text = l.lpStatusIdle;
+                    return _capsuleBody(p, c,
+                        Icons.radio_button_unchecked_rounded, l.lpStatusIdle);
                   } else {
                     final mapped = switch (st) {
                       0 => l.lpErrInitMissing,
@@ -328,56 +591,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       -3 => l.lpErrSampleSyntax,
                       _ => null,
                     };
-                    text = '${l.lpStatusError}：${mapped ?? err ?? ''}';
+                    final t = '${l.lpStatusError}：${mapped ?? err ?? ''}';
+                    return _capsuleBody(
+                        p, c, Icons.error_outline_rounded, t,
+                        err: err);
                   }
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: AuraSpace.md),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 7),
-                    decoration: BoxDecoration(
-                      color: c.withValues(alpha: 0.10),
-                      borderRadius:
-                          BorderRadius.circular(AuraRadius.sm),
-                      border:
-                          Border.all(color: c.withValues(alpha: 0.45)),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          ok
-                              ? Icons.check_circle_outline_rounded
-                              : (failed
-                                  ? Icons.error_outline_rounded
-                                  : Icons
-                                      .radio_button_unchecked_rounded),
-                          size: 14,
-                          color: c,
-                        ),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            text,
-                            style: captionOf(p, color: c),
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        if (failed &&
-                            (err ?? '').isNotEmpty &&
-                            !text.contains(err!))
-                          Flexible(
-                            child: Text(
-                              err,
-                              style: monoOf(p,
-                                  size: 11, color: p.textDim),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.right,
-                            ),
-                          ),
-                      ],
-                    ),
-                  );
                 },
               ),
 
@@ -636,30 +854,73 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 Text(l.lpLibraryEmpty, style: captionOf(p))
               else
                 Wrap(
-                  spacing: AuraSpace.sm,
+                  spacing: AuraSpace.xs,
                   runSpacing: AuraSpace.sm,
+                  crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     for (final item in _libraryItems)
-                      AuraChip(
-                        item.isExternal
-                            ? '${item.name} [${item.folderName}]'
-                            : item.name,
-                        icon: item.isExternal
-                            ? Icons.folder_shared_rounded
-                            : Icons.description_outlined,
-                        onTap: () async {
-                          final text =
-                              await LiveprogLibrary.loadFromPath(item.path);
-                          if (text != null && mounted) {
-                            setState(() {
-                              _code.text = text;
-                              _onCodeChanged(text);
-                            });
-                          }
-                        },
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          AuraChip(
+                            item.isExternal
+                                ? '${item.name} [${item.folderName}]'
+                                : item.name,
+                            icon: item.isExternal
+                                ? Icons.folder_shared_rounded
+                                : Icons.description_outlined,
+                            onTap: () async {
+                              final text =
+                                  await LiveprogLibrary.loadFromPath(
+                                      item.path);
+                              if (text != null && mounted) {
+                                setState(() {
+                                  _code.text = text;
+                                  _onCodeChanged(text);
+                                });
+                              }
+                            },
+                          ),
+                          // v3 §3.5：库管理——重命名 / 删除（删前确认）。
+                          IconButton(
+                            tooltip: l.lpRenameTitle,
+                            visualDensity: VisualDensity.compact,
+                            iconSize: 14,
+                            color: p.textDim,
+                            icon: const Icon(Icons
+                                .drive_file_rename_outline_rounded),
+                            onPressed: () => _renameItem(item),
+                          ),
+                          IconButton(
+                            tooltip: l.lpDeleteTitle,
+                            visualDensity: VisualDensity.compact,
+                            iconSize: 14,
+                            color: p.textDim,
+                            icon: const Icon(
+                                Icons.delete_outline_rounded),
+                            onPressed: () => _deleteItem(item),
+                          ),
+                        ],
                       ),
                   ],
                 ),
+              // v3 §3.5：门限隔离提示（超限/损坏文件被跳过，不中断整批）。
+              if (_skippedCount > 0) ...[
+                const SizedBox(height: AuraSpace.xs),
+                Row(
+                  children: [
+                    Icon(Icons.shield_outlined,
+                        size: 12, color: p.warning),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        l.lpSkipped(_skippedCount),
+                        style: captionOf(p, color: p.warning),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: AuraSpace.md),
 
               // 保存脚本
@@ -795,6 +1056,26 @@ class LiveprogItem {
 abstract final class LiveprogLibrary {
   static String? _dir;
 
+  /// 脚本入口 FileGate L1（v3 §3.5）：单文件 ≤1MB，超限/坏文件隔离计数，
+  /// 不中断整批加载。
+  static const maxScriptBytes = 1024 * 1024;
+
+  /// 最近一次 listAll 跳过的文件数（超限或不可读），供页面提示。
+  static int lastSkipped = 0;
+
+  /// 门检：null = 放行，否则为原因码（'tooLarge' / 'unreadable'）。
+  /// 纯函数，可单测（对照：引擎侧 FileGate 管 IR/磁盘镜像，这里管脚本入口）。
+  static String? gateCheck(File f) {
+    try {
+      if (f.lengthSync() > maxScriptBytes) return 'tooLarge';
+      // 全文 UTF-8 试解码：malformed 抛 FormatException → 隔离。
+      f.readAsStringSync(encoding: utf8);
+      return null;
+    } catch (_) {
+      return 'unreadable';
+    }
+  }
+
   /// 统一走 ConfigManager.baseDir（此前自行拼 APPDATA，
   /// 非 Windows 上会落到相对路径 ./AuraDSP，与其它子系统分家）
   static String get dir => _dir ??= ConfigManager.path('liveprog');
@@ -802,43 +1083,52 @@ abstract final class LiveprogLibrary {
   /// 聚合本地库与用户自定义外部目录
   static List<LiveprogItem> listAll(List<String> customDirs) {
     final items = <LiveprogItem>[];
+    lastSkipped = 0;
+
+    void collect(Directory d, {required bool external, required String folder}) {
+      for (final f in d.listSync().whereType<File>()) {
+        final p = f.path.toLowerCase();
+        if (!(p.endsWith('.eel') || p.endsWith('.txt'))) continue;
+        // v3 §3.5：坏文件隔离——跳过并计数，不中断整批。
+        if (gateCheck(f) != null) {
+          lastSkipped++;
+          continue;
+        }
+        items.add(LiveprogItem(
+          name: f.uri.pathSegments.last,
+          path: f.path,
+          isExternal: external,
+          folderName: folder,
+        ));
+      }
+    }
 
     // 1. 本地默认目录
     try {
       final d = Directory(dir);
-      if (d.existsSync()) {
-        for (final f in d.listSync().whereType<File>()) {
-          final p = f.path.toLowerCase();
-          if (p.endsWith('.eel') || p.endsWith('.txt')) {
-            items.add(LiveprogItem(
-              name: f.uri.pathSegments.last,
-              path: f.path,
-              isExternal: false,
-              folderName: 'Local',
-            ));
-          }
-        }
-      }
+      if (d.existsSync()) collect(d, external: false, folder: 'Local');
     } catch (_) {}
 
     // 2. 外部预设目录
     for (final cDir in customDirs) {
       try {
         final d = Directory(cDir);
-        if (d.existsSync()) {
-          final segments = d.uri.pathSegments.where((s) => s.isNotEmpty);
-          final folderName = segments.isNotEmpty ? segments.last : cDir;
-          for (final f in d.listSync(recursive: true).whereType<File>()) {
-            final p = f.path.toLowerCase();
-            if (p.endsWith('.eel') || p.endsWith('.txt')) {
-              items.add(LiveprogItem(
-                name: f.uri.pathSegments.last,
-                path: f.path,
-                isExternal: true,
-                folderName: folderName,
-              ));
-            }
+        if (!d.existsSync()) continue;
+        final segments = d.uri.pathSegments.where((s) => s.isNotEmpty);
+        final folderName = segments.isNotEmpty ? segments.last : cDir;
+        for (final f in d.listSync(recursive: true).whereType<File>()) {
+          final p = f.path.toLowerCase();
+          if (!(p.endsWith('.eel') || p.endsWith('.txt'))) continue;
+          if (gateCheck(f) != null) {
+            lastSkipped++;
+            continue;
           }
+          items.add(LiveprogItem(
+            name: f.uri.pathSegments.last,
+            path: f.path,
+            isExternal: true,
+            folderName: folderName,
+          ));
         }
       } catch (_) {}
     }
@@ -849,9 +1139,60 @@ abstract final class LiveprogLibrary {
 
   static Future<String?> loadFromPath(String filePath) async {
     try {
-      return await File(filePath).readAsString();
+      final f = File(filePath);
+      // v3 §3.5：加载时复检（列出后文件可能被换掉/变大）。
+      if (gateCheck(f) != null) return null;
+      return await f.readAsString(encoding: utf8);
     } catch (_) {
       return null;
+    }
+  }
+
+  /// 路径收敛：只允许操作本地库或已登记外部目录之下的文件，
+  /// 防止调用方误传任意路径造成越界删除。
+  static bool _isUnderLibrary(String filePath, List<String> customDirs) {
+    final abs = File(filePath).absolute.path;
+    final roots = <String>[Directory(dir).absolute.path, ...customDirs];
+    for (final r in roots) {
+      final root = Directory(r).absolute.path;
+      if (abs == root) continue;
+      if (abs.startsWith(root + Platform.pathSeparator)) return true;
+    }
+    return false;
+  }
+
+  /// 删除库内脚本（先判收敛；不存在视为成功，幂等）。
+  static bool deletePath(String filePath, List<String> customDirs) {
+    try {
+      if (!_isUnderLibrary(filePath, customDirs)) return false;
+      final f = File(filePath);
+      if (!f.existsSync()) return true;
+      f.deleteSync();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// 重命名库内脚本（同目录内先写后删；目标已存在则拒绝，由调用方弹覆盖确认）。
+  static bool renamePath(
+      String oldPath, String newName, List<String> customDirs) {
+    try {
+      if (newName.contains(RegExp(r'[\\/:*?"<>|]')) || newName.contains('..')) {
+        return false;
+      }
+      if (!_isUnderLibrary(oldPath, customDirs)) return false;
+      final old = File(oldPath);
+      if (!old.existsSync() || gateCheck(old) != null) return false;
+      final sep = Platform.pathSeparator;
+      final parent = old.parent.path;
+      final target = File('$parent$sep$newName');
+      if (target.existsSync()) return false;
+      target.writeAsStringSync(old.readAsStringSync(encoding: utf8));
+      old.deleteSync();
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -860,6 +1201,8 @@ abstract final class LiveprogLibrary {
       if (name.contains(RegExp(r'[\\/:*?"<>|]')) || name.contains('..')) {
         return false;
       }
+      // v3 §3.5：写入同样受 1MB 门限约束。
+      if (utf8.encode(text).length > maxScriptBytes) return false;
       final d = Directory(dir);
       if (!d.existsSync()) d.createSync(recursive: true);
       File('$dir${Platform.pathSeparator}$name').writeAsStringSync(text);

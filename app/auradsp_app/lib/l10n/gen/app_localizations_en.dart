@@ -295,6 +295,46 @@ class AppLocalizationsEn extends AppLocalizations {
       'Preset was saved with different script code; slider values may not match';
 
   @override
+  String get lpCompiling => 'Compiling…';
+
+  @override
+  String lpCompileTook(String t) {
+    return 'Last compile took $t';
+  }
+
+  @override
+  String get lpCompileSlow => 'slow — hammering Apply may stall audio';
+
+  @override
+  String lpSkipped(int n) {
+    return 'Skipped $n oversized or broken files';
+  }
+
+  @override
+  String get lpOverwriteTitle => 'Overwrite?';
+
+  @override
+  String get lpOverwriteBody => 'A script with this name exists. Overwrite it?';
+
+  @override
+  String get lpOverwriteAction => 'Overwrite';
+
+  @override
+  String get lpDeleteTitle => 'Delete script';
+
+  @override
+  String get lpDeleteBody => 'Delete this script file? This cannot be undone.';
+
+  @override
+  String get lpDeleteAction => 'Delete';
+
+  @override
+  String get lpRenameTitle => 'Rename script';
+
+  @override
+  String get lpOpFailed => 'Operation failed, please retry';
+
+  @override
   String get lpSliders => 'Script sliders (slider1..8)';
 
   @override

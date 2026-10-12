@@ -160,6 +160,9 @@ class AppModel extends ChangeNotifier {
   int lpStatus = 0;
   String? lpError; // 最近一次编译错误文案（事件条已显示，这里供编辑页内联标红）
   final List<double> lpParams = List.filled(8, 0);
+  // v3：上次 liveprog.code 下发的引擎侧编译耗时（ms），-1 = 未知。
+  // isolate 早已实测 tookMs（此前只记日志），现回传供胶囊展示与慢编译提醒。
+  int lpCompileMs = -1;
   // v2：预设存档时的代码指纹与当前编辑器代码不一致（全文不在预设里，
   // 恢复的滑块可能对不上号；UI 预留徽标位，当前仅置位不展示）。
   bool lpPresetCodeMismatch = false;
@@ -651,13 +654,16 @@ class AppModel extends ChangeNotifier {
           // 点击 → 引擎确认 的回环耗时（定位"生效慢"到底慢在哪一段）
           dbgLog('rt $id = ${DateTime.now().millisecondsSinceEpoch - t0}ms rc=$rc');
         }
+        // v3：脚本编译耗时回传（成功失败都记，供胶囊展示）
+        if (id == ParamId.lpCode && raw['tookMs'] is int) {
+          lpCompileMs = raw['tookMs'] as int;
+        }
         if (rc != 0) {
           lastGuard = GuardRejection(
               id, (raw['msg'] as String?) ?? 'engine rc=$rc', rc);
           if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
             lpError = lastGuard!.message; // 编辑页内联标红用
-          }
-          eventSeq.value = ++_guardSeq;
+          }          eventSeq.value = ++_guardSeq;
           notifyListeners();
           // 引擎拒绝 → 回读引擎真相，抹掉 _mirror 的乐观假象
           // （否则界面会一直显示"已选中"，但引擎里根本没生效）
@@ -1235,6 +1241,7 @@ class AppModel extends ChangeNotifier {
     lpError = null;
     lpCode = text;
     lpPresetCodeMismatch = false;
+    lpCompileMs = -1;
     send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
     // 引擎 LoadCode 已把 8 滑块清零，这里全量回推对齐；声明签名不变时
@@ -1281,6 +1288,7 @@ class AppModel extends ChangeNotifier {
     lpStatus = 0;
     lpError = null;
     lpPresetCodeMismatch = false;
+    lpCompileMs = -1;
     // v2 §3.2：不再清 lpCode——编辑器内容即真相，卸载只关使能；
     // 下次应用同签名代码时滑块值予以保留（见 setLiveprogCode）。
     notifyListeners();

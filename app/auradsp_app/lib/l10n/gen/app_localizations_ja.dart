@@ -291,6 +291,46 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpCodeMismatch => 'プリセット保存時とスクリプトが異なります。スライダー値が対応しない可能性があります';
 
   @override
+  String get lpCompiling => 'コンパイル中…';
+
+  @override
+  String lpCompileTook(String t) {
+    return '前回コンパイル $t';
+  }
+
+  @override
+  String get lpCompileSlow => '遅いです。連続適用は音切れの恐れ';
+
+  @override
+  String lpSkipped(int n) {
+    return '$n 件の巨大/破損ファイルをスキップ';
+  }
+
+  @override
+  String get lpOverwriteTitle => '上書き確認';
+
+  @override
+  String get lpOverwriteBody => '同名のスクリプトが存在します。上書きしますか？';
+
+  @override
+  String get lpOverwriteAction => '上書き';
+
+  @override
+  String get lpDeleteTitle => 'スクリプト削除';
+
+  @override
+  String get lpDeleteBody => 'このファイルを削除しますか？元に戻せません。';
+
+  @override
+  String get lpDeleteAction => '削除';
+
+  @override
+  String get lpRenameTitle => 'スクリプト名変更';
+
+  @override
+  String get lpOpFailed => '操作に失敗しました';
+
+  @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
 
   @override

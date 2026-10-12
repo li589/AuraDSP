@@ -4,6 +4,7 @@ import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/presets.dart';
 import 'package:auradsp_app/core/session_memory.dart';
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -352,6 +353,95 @@ void main() {
       expect(m.lpEnabled, isFalse);
       expect(m.lpStatus, 0);
       expect(m.lpCode, 'keepme');
+    });
+  });
+
+  group('Liveprog v3: 脚本入口 FileGate L1', () {
+    Directory makeTempDir() =>
+        Directory.systemTemp.createTempSync('auradsp_lp_gate_');
+
+    test('gateCheck：正常放行，超限/坏编码隔离', () {
+      final d = makeTempDir();
+      try {
+        final ok = File('${d.path}${Platform.pathSeparator}a.eel')
+          ..writeAsStringSync('@init\nx = 1;\n@sample\nspl0 = 1;\n');
+        expect(LiveprogLibrary.gateCheck(ok), isNull);
+
+        final big = File('${d.path}${Platform.pathSeparator}big.eel')
+          ..writeAsBytesSync(List<int>.filled(
+              LiveprogLibrary.maxScriptBytes + 1, 0x20));
+        expect(LiveprogLibrary.gateCheck(big), 'tooLarge');
+
+        final bad = File('${d.path}${Platform.pathSeparator}bad.eel')
+          ..writeAsBytesSync([0xFF, 0xFE, 0x00, 0x41]);
+        expect(LiveprogLibrary.gateCheck(bad), 'unreadable');
+      } finally {
+        d.deleteSync(recursive: true);
+      }
+    });
+
+    test('listAll 跳过坏文件并计数，不中断整批', () {
+      final d = makeTempDir();
+      try {
+        File('${d.path}${Platform.pathSeparator}good.eel')
+            .writeAsStringSync('@init\nx = 1;\n@sample\nspl0 = 1;\n');
+        File('${d.path}${Platform.pathSeparator}evil.eel')
+            .writeAsBytesSync([0xFF, 0xFE]);
+        final items = LiveprogLibrary.listAll([d.path]);
+        expect(items.any((e) => e.name == 'good.eel'), isTrue);
+        expect(items.any((e) => e.name == 'evil.eel'), isFalse);
+        expect(LiveprogLibrary.lastSkipped, 1);
+      } finally {
+        d.deleteSync(recursive: true);
+      }
+    });
+
+    test('deletePath：库外拒绝，库内删除，不存在幂等成功', () {
+      final d = makeTempDir();
+      try {
+        // 库外路径一律拒绝
+        expect(
+            LiveprogLibrary.deletePath(
+                '${d.path}${Platform.pathSeparator}x.eel', []),
+            isFalse);
+        // 库内（登记为外部目录）可删
+        final f = File('${d.path}${Platform.pathSeparator}y.eel')
+          ..writeAsStringSync('x');
+        expect(LiveprogLibrary.deletePath(f.path, [d.path]), isTrue);
+        expect(f.existsSync(), isFalse);
+        // 不存在视为成功
+        expect(LiveprogLibrary.deletePath(f.path, [d.path]), isTrue);
+      } finally {
+        d.deleteSync(recursive: true);
+      }
+    });
+
+    test('renamePath：遍历名拒绝，同目录先写后删，目标存在拒绝', () {
+      final d = makeTempDir();
+      try {
+        final old = File('${d.path}${Platform.pathSeparator}a.eel')
+          ..writeAsStringSync('@init\nx = 1;\n@sample\nspl0 = 1;\n');
+        expect(
+            LiveprogLibrary.renamePath(old.path, '../evil.eel', [d.path]),
+            isFalse);
+        expect(old.existsSync(), isTrue);
+        expect(
+            LiveprogLibrary.renamePath(old.path, 'b.eel', [d.path]), isTrue);
+        expect(old.existsSync(), isFalse);
+        expect(
+            File('${d.path}${Platform.pathSeparator}b.eel').existsSync(),
+            isTrue);
+        // 目标已存在 → 拒绝（调用方弹覆盖确认，不静默覆盖）
+        final c = File('${d.path}${Platform.pathSeparator}c.eel')
+          ..writeAsStringSync('c');
+        expect(
+            LiveprogLibrary.renamePath(
+                '${d.path}${Platform.pathSeparator}b.eel', 'c.eel', [d.path]),
+            isFalse);
+        expect(c.readAsStringSync(), 'c');
+      } finally {
+        d.deleteSync(recursive: true);
+      }
     });
   });
 }
