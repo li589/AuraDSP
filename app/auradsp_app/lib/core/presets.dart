@@ -215,6 +215,18 @@ abstract final class PresetLibrary {
 
   /* ---- 全量快照与应用 ---- */
 
+  /// 脚本全文指纹（FNV-1a 32 位）：预设/会话只存 hash 不存全文，
+  /// apply 时校验编辑器代码是否与存档时一致。空代码 → ''。
+  static String _lpCodeHash(String? code) {
+    if (code == null || code.isEmpty) return '';
+    var h = 0x811C9DC5;
+    for (var i = 0; i < code.length; i++) {
+      h ^= code.codeUnitAt(i);
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
   static AuraPreset snapshot(
     AppModel m, {
     required String name,
@@ -222,15 +234,14 @@ abstract final class PresetLibrary {
     String description = '',
   }) {
     return AuraPreset(
-      schemaVersion: 2,
+      schemaVersion: 3,
       name: name,
       category: category,
       description: description,
       author: 'User',
       createdAt: DateTime.now().toIso8601String(),
       isFactory: false,
-      params: {
-        // 输入门控（钉死首位）
+      params: {        // 输入门控（钉死首位）
         'input': {
           'gain': m.inputGain,
           'balanceL': m.inputBalanceL,
@@ -307,6 +318,13 @@ abstract final class PresetLibrary {
         // 交叉反馈与输出限幅
         'crossfeed': {
           'enable': m.xfeedOn,
+        },
+        // 脚本（v2：只存使能与滑块；全文不在预设里，走脚本库/会话引用；
+        // codeHash 供 apply 校验当前编辑器代码是否与存档时一致）
+        'liveprog': {
+          'enabled': m.lpEnabled,
+          'params': List<double>.of(m.lpParams),
+          'codeHash': _lpCodeHash(m.lpCode),
         },
         'post': {
           'gain': m.postGain,
@@ -530,6 +548,30 @@ abstract final class PresetLibrary {
     final xf = (p['crossfeed'] as Map<String, dynamic>?) ?? {};
     if (xf.isNotEmpty && xf['enable'] != null) {
       m.setCrossfeedEnabled(xf['enable'] as bool);
+    }
+
+    // 12. 脚本（v2：只恢复使能与滑块；全文不在预设里）。
+    // 无 liveprog 节的老预设/老会话直接跳过，脚本态保持不动。
+    final lp = (p['liveprog'] as Map<String, dynamic>?) ?? {};
+    if (lp.isNotEmpty) {
+      if (lp['params'] is List) {
+        final saved =
+            (lp['params'] as List).map((e) => (e as num).toDouble()).toList();
+        for (var i = 0; i < saved.length && i < 8; i++) {
+          m.lpParams[i] = saved[i];
+        }
+      }
+      if (lp['enabled'] != null) m.lpEnabled = lp['enabled'] as bool;
+      final savedHash = lp['codeHash'] as String?;
+      m.lpPresetCodeMismatch = savedHash != null &&
+          savedHash.isNotEmpty &&
+          savedHash != _lpCodeHash(m.lpCode);
+      // 下发（运行时切预设即时生效；会话恢复时引擎未连，send 空转安全，
+      // 连接后 replaySessionToEngine 会再推一次全量，幂等）。
+      m.setLiveprogEnabled(m.lpEnabled);
+      for (var i = 0; i < 8; i++) {
+        m.setLiveprogParam(i, m.lpParams[i]);
+      }
     }
 
     m.activePresetName = preset.name;

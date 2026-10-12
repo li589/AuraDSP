@@ -108,7 +108,7 @@
   "lpErrSampleSyntax": "@sample セクションの構文エラー",
   "lpBlockedByLint": "構造上の問題を修正してから適用してください",
   "lpSliders": "スクリプトスライダー（slider1..8）",
-  "lpSliderHint": "範囲 -1..+4。意味はスクリプト次第。変更はリアルタイム反映",
+  "lpSliderHint": "宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映",
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
   "lpSave": "ライブラリに保存",

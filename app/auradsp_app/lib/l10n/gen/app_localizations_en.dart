@@ -295,7 +295,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpSliderHint =>
-      'Range -1..+4; meaning is defined by the script; changes apply live';
+      'Declared range wins; 0..1 when undeclared; changes apply live';
 
   @override
   String get lpLibrary => 'Script library (%APPDATA%/AuraDSP/liveprog)';

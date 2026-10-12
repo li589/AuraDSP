@@ -291,7 +291,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
 
   @override
-  String get lpSliderHint => '範囲 -1..+4。意味はスクリプト次第。変更はリアルタイム反映';
+  String get lpSliderHint => '宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映';
 
   @override
   String get lpLibrary => 'スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）';

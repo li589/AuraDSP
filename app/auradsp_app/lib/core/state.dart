@@ -16,6 +16,9 @@ import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart'
     show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
+// v2 §3.2：脚本声明默认值解析（eel_editor_support 仅依赖 flutter/material，
+// 与 core 无循环引用）。
+import '../features/eel_editor_support.dart';
 import 'config.dart';
 import 'plugin_manager.dart';
 import 'presets.dart';
@@ -157,6 +160,12 @@ class AppModel extends ChangeNotifier {
   int lpStatus = 0;
   String? lpError; // 最近一次编译错误文案（事件条已显示，这里供编辑页内联标红）
   final List<double> lpParams = List.filled(8, 0);
+  // v2：预设存档时的代码指纹与当前编辑器代码不一致（全文不在预设里，
+  // 恢复的滑块可能对不上号；UI 预留徽标位，当前仅置位不展示）。
+  bool lpPresetCodeMismatch = false;
+  // v2：上次应用代码的滑块声明签名。签名不变的重应用（改注释/调格式）
+  // 保留用户已调的滑块值；声明变化才采纳新默认值。
+  String _lpDeclSig = '';
 
   // 卷积 / IR（v1.1 M4）：meta 由引擎门卫校验后回读
   bool convEnabled = false, convReady = false;
@@ -1225,7 +1234,37 @@ class AppModel extends ChangeNotifier {
   void setLiveprogCode(String text) {
     lpError = null;
     lpCode = text;
+    lpPresetCodeMismatch = false;
     send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
+    // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
+    // 引擎 LoadCode 已把 8 滑块清零，这里全量回推对齐；声明签名不变时
+    // 保留用户已调值（只做回推），声明变化才采纳新默认值。
+    // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
+    final metas = EelSliderParser.parse(text);
+    final sig = StringBuffer();
+    for (var i = 1; i <= 8; i++) {
+      final meta = metas[i];
+      if (meta != null) {
+        sig.write(
+            '$i:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
+      }
+    }
+    if (sig.toString() != _lpDeclSig) {
+      _lpDeclSig = sig.toString();
+      for (var i = 1; i <= 8; i++) {
+        final meta = metas[i];
+        if (meta != null) {
+          var d = meta.defaultVal;
+          if (meta.minVal <= meta.maxVal) {
+            d = d.clamp(meta.minVal, meta.maxVal);
+          }
+          lpParams[i - 1] = d;
+        }
+      }
+    }
+    for (var i = 0; i < 8; i++) {
+      setLiveprogParam(i, lpParams[i]);
+    }
     scheduleAutoSave();
   }
 
@@ -1241,7 +1280,9 @@ class AppModel extends ChangeNotifier {
     lpEnabled = false;
     lpStatus = 0;
     lpError = null;
-    lpCode = null;
+    lpPresetCodeMismatch = false;
+    // v2 §3.2：不再清 lpCode——编辑器内容即真相，卸载只关使能；
+    // 下次应用同签名代码时滑块值予以保留（见 setLiveprogCode）。
     notifyListeners();
     _markSent(ParamId.lpUnload);
     send({'cmd': 'setParam', 'id': ParamId.lpUnload, 'value': 0, 'isFloat': false});

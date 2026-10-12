@@ -38,7 +38,9 @@ abstract final class SessionMemory {
       }
 
       final payload = {
-        'version': 3,
+        // v4：parameters 经 PresetLibrary.snapshot 携带 liveprog{enabled,params,codeHash}，
+        // 会话恢复补回脚本使能与滑块（v2）；顶层 lpCode 保留作老版本兼容。
+        'version': 4,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
         'locale': m.locale.languageCode,
