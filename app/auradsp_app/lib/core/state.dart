@@ -594,6 +594,10 @@ class AppModel extends ChangeNotifier {
         scheduleAutoSave();
         notifyListeners();
         break;
+      case 'pluginSlotBusy':
+        pluginManager.onPluginSlotBusy(
+            raw['slot'] as int, raw['busy'] as bool);
+        break;
       case 'pluginSlotUnloaded':
         pluginManager.onPluginSlotUnloaded(
             raw['slot'] as int, raw['rc'] as int, raw['status']);

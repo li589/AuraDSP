@@ -21,6 +21,9 @@ EXPORTS
     auradsp_plugin_get_all
     auradsp_plugin_slot_load
     auradsp_plugin_slot_unload
+    auradsp_plugin_slot_load_async
+    auradsp_plugin_slot_unload_async
+    auradsp_plugin_slot_task_state
     auradsp_plugin_slot_set_bypass
     auradsp_plugin_slot_get_bypass
     auradsp_plugin_slot_get_latency
