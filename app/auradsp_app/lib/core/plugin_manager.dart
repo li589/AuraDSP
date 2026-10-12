@@ -402,10 +402,17 @@ class PluginManager extends ChangeNotifier {
   }
 
   /// 打开插件原生 GUI 编辑器窗口
+  ///
+  /// C1：同一插件可同时挂多个槽位，标题必须带槽位号区分多个编辑器窗口。
+  /// 本地化标题由调用方经 `plugEditorTitleNamed` 传入；未传时的兜底也带
+  /// 槽位号（本类无 BuildContext，取 locale 中性格式）。
   void showEditor({int? slot, String? title}) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
-    final winTitle = title ?? (meta != null ? '${meta.name} - AuraDSP Host' : 'Plugin Editor');
+    final winTitle = title ??
+        (meta != null
+            ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]'
+            : 'Plugin Editor [Slot ${s + 1}]');
     _commandSender?.call({
       'cmd': 'pluginSlotShowEditor',
       'slot': s,

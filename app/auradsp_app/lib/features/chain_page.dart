@@ -545,7 +545,13 @@ class _PluginSlotChainCard extends StatelessWidget {
             IconButton(
               tooltip: l10nOf(context).chainOpenGui,
               icon: const Icon(Icons.open_in_new_rounded, size: 17),
-              onPressed: () => manager.showEditor(slot: slot),
+              // C1：同一插件可挂多槽，标题必须带槽位号区分两个编辑器窗口。
+              onPressed: () => manager.showEditor(
+                slot: slot,
+                title: active != null
+                    ? l10nOf(context).plugEditorTitleNamed(slot + 1, active.name)
+                    : null,
+              ),
               visualDensity: VisualDensity.compact,
             ),
             const SizedBox(width: AuraSpace.xs),

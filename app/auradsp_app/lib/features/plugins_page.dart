@@ -905,7 +905,11 @@ class _ActivePluginHero extends StatelessWidget {
         children: [
           // 原生 GUI 打开按钮
           ElevatedButton.icon(
-            onPressed: () => manager.showEditor(slot: slot),
+            // C1：同一插件可挂多槽，标题必须带槽位号区分两个编辑器窗口。
+            onPressed: () => manager.showEditor(
+              slot: slot,
+              title: l10nOf(context).plugEditorTitleNamed(slot + 1, active.name),
+            ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: Text(l10nOf(context).plugOpenGuiBtn),
             style: ElevatedButton.styleFrom(

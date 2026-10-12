@@ -505,6 +505,17 @@
       }
     }
   },
+  "plugEditorTitleNamed": "{name}（插槽 {n}）",
+  "@plugEditorTitleNamed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "plugOpenGuiBtn": "打开界面 (GUI)",
   "plugUnloadFromSlot": "从当前槽卸载",
   "plugLoadToSlot": "载入至插槽 {n}",

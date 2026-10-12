@@ -95,6 +95,82 @@ int main(int argc, char** argv) {
             }
         }
     }
+
+    // C1（2026-10-12）：多槽挂载同一插件——共享泵线程（ModulePumpThread）验证。
+    // argv[2] == "dualslot" 时执行。场景：
+    //   ① 同路径同时挂槽 0/1（LoadLibrary 同模块 → 两条实例共享一条泵线程）
+    //   ② 两个编辑器同时打开（标题必须可区分，见 Dart 侧槽位号）
+    //   ③ 关掉槽 0 编辑器 → 槽 1 编辑器必须仍然存活可交互
+    //   ④ 开着编辑器卸载槽 0 → 槽 1 不受影响
+    //   ⑤ 卸载槽 1（最后一实例）→ 泵线程才停，DLL 才卸载
+    // B3 之前每实例一条线程，② 即 JUCE MessageManager 死锁；共享泵下应全绿。
+    if (argc > 2 && std::string(argv[2]) == "dualslot") {
+        std::cout << "\n===== C1 dual-slot same-plugin test =====" << std::endl;
+        struct DualCase { const char* path; auradsp::PluginFormat fmt; const char* id; };
+        DualCase duals[] = {
+            {"C:\\Program Files\\Common Files\\VST3\\Antares\\Auto-Tune EFX+.vst3", auradsp::PluginFormat::VST3, ""},
+            {"C:\\Program Files\\Common Files\\CLAP\\KV-Element-FX.clap", auradsp::PluginFormat::CLAP, "net.kushview.ElementFX"},
+        };
+        for (const auto& tc : duals) {
+            std::cout << "\n---- dual-slot: " << tc.path << " ----" << std::endl;
+            std::vector<auradsp::PluginMetadata> metaList;
+            auradsp::PluginScanner::queryMetadata(tc.path, tc.fmt, metaList);
+            if (metaList.empty()) {
+                std::cout << "SKIP: plugin not present" << std::endl;
+                continue;
+            }
+            std::string targetId = tc.id;
+            if (targetId.empty()) targetId = metaList[0].id;
+
+            stage("load slot0");
+            bool ok0 = mgr.loadPluginSlot(0, tc.path, targetId, 48000.0, 1024);
+            stage("load slot1");
+            bool ok1 = mgr.loadPluginSlot(1, tc.path, targetId, 48000.0, 1024);
+            std::cout << "slot0 load=" << ok0 << " slot1 load=" << ok1 << std::endl;
+            if (!ok0 || !ok1) {
+                mgr.unloadPluginSlot(0);
+                mgr.unloadPluginSlot(1);
+                std::cout << "FAIL: dual load" << std::endl;
+                continue;
+            }
+
+            stage("show editor slot0");
+            bool e0 = mgr.showEditorSlot(0, "C1-Dual Slot 1");
+            stage("show editor slot1");
+            bool e1 = mgr.showEditorSlot(1, "C1-Dual Slot 2");
+            std::cout << "editor0=" << e0 << " editor1=" << e1
+                      << " open0=" << mgr.isEditorOpenSlot(0)
+                      << " open1=" << mgr.isEditorOpenSlot(1) << std::endl;
+            if (!e0 || !e1 || !mgr.isEditorOpenSlot(0) || !mgr.isEditorOpenSlot(1)) {
+                std::cout << "FAIL: dual editors" << std::endl;
+            }
+            Sleep(500);
+
+            stage("close editor slot0");
+            mgr.closeEditorSlot(0);
+            std::cout << "after close: open0=" << mgr.isEditorOpenSlot(0)
+                      << " open1=" << mgr.isEditorOpenSlot(1) << std::endl;
+            if (mgr.isEditorOpenSlot(0) || !mgr.isEditorOpenSlot(1)) {
+                std::cout << "FAIL: slot1 editor must survive slot0 close" << std::endl;
+            }
+            Sleep(300);
+
+            stage("unload slot0 with slot1 editor open");
+            mgr.unloadPluginSlot(0);
+            std::cout << "after unload0: open1=" << mgr.isEditorOpenSlot(1) << std::endl;
+            if (!mgr.isEditorOpenSlot(1)) {
+                std::cout << "FAIL: slot1 editor must survive slot0 unload" << std::endl;
+            }
+            Sleep(300);
+
+            stage("close editor slot1");
+            mgr.closeEditorSlot(1);
+            stage("unload slot1 (last instance)");
+            mgr.unloadPluginSlot(1);
+            std::cout << "dual-slot case complete: " << tc.path << std::endl;
+        }
+        stage("dual-slot test done");
+    }
     stage("all cases done");
     return 0;
 }

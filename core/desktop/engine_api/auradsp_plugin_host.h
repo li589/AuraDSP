@@ -86,6 +86,12 @@ public:
      * 析构 = use-after-free；manager 据此把整个实例移入静态隔离区
      * （可控泄漏换不可控崩溃），绝不释放。 */
     virtual bool abandoned() const { return false; }
+
+    /* C1（2026-10-12）：编辑器容器窗口收到 WM_CLOSE（用户点 X）时，由容器
+     * WndProc 经 GWLP_USERDATA 在 plugin main 线程上回调。默认空实现——
+     * 两个具体类必须覆写为「已在泵线程，直接执行收尾」的版本；绝不可
+     * 默认转发 closeEditor()（那会 postTaskAndWait 到当前线程 → 死锁）。 */
+    virtual void onEditorWmClose() {}
 };
 
 class PluginScanner {
