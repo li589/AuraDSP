@@ -108,7 +108,7 @@
   "convOpenIr": "Open IR file",
   "convClear": "Clear IR",
   "convNoIr": "No IR loaded (WAV / FLAC; sniffed, size-capped, sanity-checked)",
-  "convResampled": "Source rate differs from device — resampled automatically (disclosed, not silent)",
+  "convResampled": "Source rate differs from device — resampled automatically",
   "signalFlow": "Signal Flow",
   "fvTitle": "Parametric Reverb",
   "fvDecayLabel": "Decay",

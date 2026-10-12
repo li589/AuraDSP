@@ -290,7 +290,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get convNoIr => '未加载脉冲文件（支持 WAV / FLAC；含格式嗅探、尺寸限额与健全性校验）';
 
   @override
-  String get convResampled => '源采样率与设备不同，已自动重采样（诚实明示，不静默）';
+  String get convResampled => '源采样率与设备不同，已自动重采样';
 
   @override
   String get signalFlow => '信号流';

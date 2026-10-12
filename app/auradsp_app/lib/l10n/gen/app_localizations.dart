@@ -649,7 +649,7 @@ abstract class AppLocalizations {
   /// No description provided for @convResampled.
   ///
   /// In zh, this message translates to:
-  /// **'源采样率与设备不同，已自动重采样（诚实明示，不静默）'**
+  /// **'源采样率与设备不同，已自动重采样'**
   String get convResampled;
 
   /// No description provided for @signalFlow.

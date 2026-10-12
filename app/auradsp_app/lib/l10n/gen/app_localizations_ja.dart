@@ -291,7 +291,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get convNoIr => 'IR 未読込（WAV / FLAC。形式判定・サイズ制限・健全性チェック付き）';
 
   @override
-  String get convResampled => 'ソースのサンプルレートが異なるため自動リサンプルしました（明示）';
+  String get convResampled => 'ソースのサンプルレートが異なるため自動リサンプルしました';
 
   @override
   String get signalFlow => 'シグナルフロー';

@@ -1546,7 +1546,7 @@ class _IrWaveformGraphState extends State<_IrWaveformGraph> {
             children: [
               Icon(Icons.waves_rounded, size: 14, color: p.accent),
               const SizedBox(width: 6),
-              Text('脉冲响应包络 (EasyEffects 风格)',
+              Text('脉冲响应包络',
                   style: captionOf(p).copyWith(fontWeight: FontWeight.w600, color: p.text)),
               const SizedBox(width: AuraSpace.sm),
               // 声道指示点
