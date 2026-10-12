@@ -123,3 +123,37 @@
   并拦截重复下发。`_slotBusy` 字段**原本就声明了但从未写入**——接线时发现的是死代码。
 - **门禁坑**：`flutter test` 与 `python test/runner.py --smoke` **不要并发跑**——
   资源争用会让 Dart 测试超时（`responsive_layout_test` 报 "did not complete"），单独跑则全过。
+
+### C4 编辑器尺寸（2026-10-12）
+- **"拉大框多出空白"的根因是宿主 WndProc 里没有 `WM_SIZE` 分支**，不是布局没铺满。
+  插件子窗口（VST3 由 `view->attached` 建、CLAP 由 `gui->set_parent` 建）创建后尺寸就
+  固定；容器放大 → 客户区变大 → 子窗口不动 → 多出来的是容器自己的空白背景。
+- **两种格式的 resize 契约相反，不能统一处理**：VST3 规范要求宿主在 `WM_SIZE` 时调
+  `view->onSize(newSize)`，由**插件自己**改子窗口（子窗口句柄归插件、有自己的布局
+  逻辑，宿主强行 `MoveWindow` 会打架）；CLAP 规范反过来要求宿主**直接** resize 子窗口
+  到客户区。所以要在 `IPluginInstance` 上开两个虚方法（默认空实现，不破坏既有实现）
+  按格式分派：`onEditorResize`（WM_SIZE 回调）、`pollEditorSize`（定时器回调）。
+- **插件的布局是异步的**（iZotope RX 系列典型）：`attached`/`set_parent` 之后真实尺寸
+  要几十到几百毫秒才稳定，一次性同步会拿到中间态。用短命定时器 100ms × 6 = 600ms
+  反复校正，tick 计数存 `GWLP_USERDATA2`，满次数自停；`WM_CLOSE` 也要 `KillTimer`
+  （关窗走这条路径，不经过定时器自停）。
+- 两个 Win32 细节：`GWLP_USERDATA2`（值 -5，Vista+）在部分 SDK 配置下不随
+  `<windows.h>` 暴露（需 `WINVER >= 0x0600`），**手工 `#define` 补齐**而不是抬高全局
+  `WINVER`——后者会改变整个翻译单元的 API 可见性，影响面大得多；
+  VST3 侧 `onSize → 插件 resize → 容器 WM_SIZE → onSize` 会**回环**，用
+  `m_lastViewW/H` 记住上次尺寸，没变就不重复下发。
+- **自报尺寸要有合理性下限**（100×80）：低于此值视为"尚未布局完成"，不采信，
+  否则会把容器缩成一个不可见的小方块。
+- **反向验证手法（通用，值得复用）**：让探针支持 `AURADSP_DLL` 环境变量指定被测 DLL，
+  用**未含本次修复的旧产物**跑同一套断言。C4 用它 3/3 FAIL 精确复现了用户报障
+  （RX De-hum 容器 1136x897 而子窗口仍 560x540），新产物 3/3 PASS——
+  这才能证明探针不是空跑，下次谁删掉 `WM_SIZE` 分支门禁会红。
+- **尺寸类测试的目标值必须相对被测对象的当前值**（当前外框 ×2，上限取
+  `SystemParametersInfoW(SPI_GETWORKAREA)` − 24px 防被系统 clamp）。用绝对常量
+  （如固定 900×600）会踩坑：KV-Element-FX 自报 1230×730，初始就比目标大，
+  "拉大"退化成"缩小"，断言误报 FAIL。
+- **遗留 → C5**：`show_editor` 仍是同步调用，RX 169~568ms / KV 258~276ms /
+  PatchWork 115ms，全耗在音频 isolate 事件循环上（568ms ≈ 跳过 100 多轮 5ms 泵）。
+  C3 只异步化了 load/unload；"打开插件卡一下"很可能一半在 load、一半在这里，
+  两者都要按 C3 同构模式异步化才算彻底。
+

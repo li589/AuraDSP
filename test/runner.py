@@ -48,6 +48,8 @@ def run_smoke_tests():
         "bench_scan_c2.py",
         # C3：异步挂载/卸载（无插件环境自动 SKIP，故可值守）
         "bench_load_async_c3.py",
+        # C4：编辑器容器与子窗口尺寸一致 + 拉伸跟随（无插件环境自动 SKIP）
+        "test_editor_size_c4.py",
     ]
     all_pass = True
     for sf in smoke_files:

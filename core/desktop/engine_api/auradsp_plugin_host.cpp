@@ -1411,6 +1411,36 @@ static std::string normalizeModuleKey(const std::wstring& wpath) {
     return key;
 }
 
+// 把宿主窗口的**直接子窗口**铺满客户区。
+// C4 核心修复：插件子窗口（VST3 由 attached 创建、CLAP 由 set_parent 创建）
+// 一旦创建就固定在其原始尺寸。用户拖动/放大容器、或插件回调 resizeView 经
+// SetWindowPos 改容器，子窗口都**不会**跟着长大——于是表现为"打开只有一点点、
+// 拉大框多出来的是空白、实际仍被裁剪"（iZotope RX 系列典型症状）。
+// 只在宿主 WndProc 的 WM_SIZE 里做一次同步，两条放大路径就都被覆盖。
+// 只处理直接子窗口（GetWindow(GW_CHILD)/GW_HWNDNEXT），不递归——插件内部的
+// 嵌套结构由其自身布局管理，越界拉伸会破坏插件 UI。
+static void ResizeDirectChildren(HWND hwnd) {
+    RECT rc;
+    if (!GetClientRect(hwnd, &rc)) return;
+    const int cw = rc.right - rc.left;
+    const int ch = rc.bottom - rc.top;
+    HWND child = GetWindow(hwnd, GW_CHILD);
+    while (child) {
+        MoveWindow(child, 0, 0, cw, ch, TRUE);
+        child = GetWindow(child, GW_HWNDNEXT);
+    }
+}
+
+// C4：尺寸稳定化定时器 ID 与轮询次数。
+static constexpr UINT_PTR kSizeSettleTimerId = 0x4143;  // 避免与 CLAP 插件自己的定时器 ID 冲突
+static constexpr int kSizeSettleMaxTicks = 6;            // 6 * 100ms = 600ms
+
+// GWLP_USERDATA2（Vista+，值 -5）在部分 SDK 配置下不随 <windows.h> 暴露
+// （需要 WINVER >= 0x0600）。手工补齐，避免抬高全局 WINVER 带来的副作用。
+#ifndef GWLP_USERDATA2
+#define GWLP_USERDATA2 (-5)
+#endif
+
 // 编辑器容器窗口的过程函数（CLAP/VST3 共用模式）：
 // 生命周期由 plugin main 线程的泵循环管理，WM_CLOSE 经 GWLP_USERDATA 里
 // 的实例指针分发到 onEditorWmClose()（在泵线程内直接收尾，与 gui->create /
@@ -1418,7 +1448,29 @@ static std::string normalizeModuleKey(const std::wstring& wpath) {
 // PostQuitMessage——该线程是长寿命的共享 plugin main 线程，绝不能被一次
 // 编辑器关闭杀掉（旧 AuraDSP_Plugin_Host_Window 即因此不能承载泵线程）。
 static LRESULT CALLBACK EditorHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    if (msg == WM_SIZE) {
+        // C4：容器尺寸一变，就把新尺寸派发给插件，让它的子窗口同步铺满
+        // 客户区。旧实现完全不处理 WM_SIZE——子窗口固定在其创建时的尺寸，
+        // 容器放大只多出空白，内容仍被裁剪（iZotope RX 系列典型症状）。
+        LRESULT r = DefWindowProcW(hwnd, msg, wp, lp);
+        auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (instance) instance->onEditorResize();
+        return r;
+    }
+    if (msg == WM_TIMER && wp == kSizeSettleTimerId) {
+        // C4：尺寸稳定化轮询——见 IPluginInstance::pollEditorSize 注释。
+        auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (instance) instance->pollEditorSize();
+        LONG_PTR ticks = GetWindowLongPtrW(hwnd, GWLP_USERDATA2);
+        if (ticks >= kSizeSettleMaxTicks) {
+            KillTimer(hwnd, kSizeSettleTimerId);
+            return 0;
+        }
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, ticks + 1);
+        return 0;
+    }
     if (msg == WM_CLOSE) {
+        KillTimer(hwnd, kSizeSettleTimerId);
         auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (instance) {
             instance->onEditorWmClose();
@@ -1899,6 +1951,13 @@ public:
         } catch (...) {}
         UpdateWindow(hwnd);
 
+        // C4：部分插件在 set_parent/show 之后才布局出真实尺寸（iZotope RX
+        // 系列为代表），所以再取一次并同步容器与子窗口；异步布局的插件由
+        // 尺寸稳定化定时器继续校正。
+        if (setParentRes) pollEditorSizeClap(gui, width, height);
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, 0);
+        SetTimer(hwnd, kSizeSettleTimerId, 100, nullptr);
+
         auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
 
@@ -1917,11 +1976,56 @@ public:
         return setParentRes;
     }
 
+    // C4：取 CLAP 插件自报尺寸；与当前容器不同且合理即同步容器
+    // （其后的 WM_SIZE 由 WndProc 把子窗口铺满客户区）。泵线程上调用。
+    void pollEditorSizeClap(const clap_plugin_gui_t* gui, uint32_t& curW, uint32_t& curH) {
+        if (!gui || !m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        uint32_t w = 0, h = 0;
+        if (!gui->get_size) return;
+        try {
+            if (!gui->get_size(m_plugin, &w, &h)) return;
+        } catch (...) { return; }
+        // 合理性下限：太低视为"尚未布局"，不采信。
+        if (w < 100 || h < 80) return;
+        if (w == curW && h == curH) return;
+        curW = w;
+        curH = h;
+        RECT nrc = {0, 0, static_cast<LONG>(w), static_cast<LONG>(h)};
+        DWORD style = static_cast<DWORD>(GetWindowLongW(m_editorHwnd, GWL_STYLE));
+        AdjustWindowRect(&nrc, style, FALSE);
+        SetWindowPos(m_editorHwnd, NULL, 0, 0,
+                     nrc.right - nrc.left, nrc.bottom - nrc.top,
+                     SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    }
+
+    // C4：容器定时器回调入口（泵线程，见 IPluginInstance::pollEditorSize）。
+    void pollEditorSize() override {
+        if (!m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        uint32_t w = 0, h = 0;
+        RECT rc;
+        if (GetClientRect(m_editorHwnd, &rc)) {
+            w = static_cast<uint32_t>(rc.right - rc.left);
+            h = static_cast<uint32_t>(rc.bottom - rc.top);
+        }
+        auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+        if (gui) pollEditorSizeClap(gui, w, h);
+    }
+
+    // C4：容器 WM_SIZE（泵线程）。CLAP 规范——宿主直接把子窗口 resize 到
+    // 客户区。这是"拉大框后多出来的是空白"的根治点。
+    void onEditorResize() override {
+        if (!m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        ResizeDirectChildren(m_editorHwnd);
+    }
+
     // closeEditor 的实体（在 CLAP plugin main 线程内执行）。
     void closeEditorOnMainThread() {
         auto gui = m_plugin ? reinterpret_cast<const clap_plugin_gui_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_GUI)) : nullptr;
         HWND hwnd = m_editorHwnd;
+        // C4：卸尺寸稳定化定时器（走本路径时不经过 WM_CLOSE）。
+        if (hwnd) KillTimer(hwnd, kSizeSettleTimerId);
         // 宿主侧定时器登记先清（窗口即将销毁）。
         {
             std::lock_guard<std::mutex> lock(m_timerMutex);
@@ -2859,7 +2963,61 @@ public:
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
+
+        // C4：很多插件在 attached 之前 getSize 返回 0/0 或占位值，只有
+        // attached 之后才布局出真实尺寸——所以再取一次。尺寸变化就走一遍
+        // resizeView（resizeView 改容器，其后的 WM_SIZE 由 WndProc 把子窗口
+        // 同步铺满客户区）。
+        pollEditorSizeOnPumpThread(view, width, height);
+        // C4：异步布局的插件（iZotope RX 系列为代表）真实尺寸在几十到几百
+        // 毫秒后才稳定，故再挂一个短命定时器反复校正（100ms × 6 次）。
+        SetWindowLongPtrW(hwnd, GWLP_USERDATA2, 0);
+        SetTimer(hwnd, kSizeSettleTimerId, 100, nullptr);
         return true;
+    }
+
+    // C4：取插件自报尺寸；与当前容器不同且合理即同步（容器 + 子窗口）。
+    // 在 plugin main 线程（泵线程）上调用。
+    void pollEditorSizeOnPumpThread(Steinberg::IPlugView* view, int& curW, int& curH) {
+        if (!view || !m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        Steinberg::ViewRect vr;
+        if (view->getSize(&vr) != Steinberg::kResultOk) return;
+        const int w = vr.right - vr.left;
+        const int h = vr.bottom - vr.top;
+        // 合理性下限：太低视为"尚未布局"，不采信（避免把容器缩成小方块）。
+        if (w < 100 || h < 80) return;
+        if (w == curW && h == curH) return;
+        curW = w;
+        curH = h;
+        Steinberg::ViewRect nr{0, 0, w, h};
+        try { m_plugFrame.resizeView(view, &nr); } catch (...) {}
+    }
+
+    // C4：容器定时器回调入口（泵线程，见 IPluginInstance::pollEditorSize）。
+    void pollEditorSize() override {
+        int curW = 0, curH = 0;
+        RECT rc;
+        if (m_editorHwnd && GetClientRect(m_editorHwnd, &rc)) {
+            curW = rc.right - rc.left;
+            curH = rc.bottom - rc.top;
+        }
+        if (m_view) pollEditorSizeOnPumpThread(m_view, curW, curH);
+    }
+
+    // C4：容器 WM_SIZE（泵线程）。VST3 规范——宿主把新尺寸交给 view，由
+    // 插件自己调整子窗口。这是"拉大框后多出来的是空白"的根治点。
+    void onEditorResize() override {
+        if (!m_view || !m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        RECT rc;
+        if (!GetClientRect(m_editorHwnd, &rc)) return;
+        const int w = rc.right - rc.left;
+        const int h = rc.bottom - rc.top;
+        if (w <= 0 || h <= 0) return;
+        if (w == m_lastViewW && h == m_lastViewH) return;   // 防 resizeView 回环
+        m_lastViewW = w;
+        m_lastViewH = h;
+        Steinberg::ViewRect vr{0, 0, w, h};
+        try { m_view->onSize(&vr); } catch (...) {}
     }
 
     // IPlugView 收尾（泵线程内调用）：解绑 frame 并释放引用。
@@ -2894,6 +3052,9 @@ public:
     // 用户点 X 经 WndProc 分发（onEditorWmClose）时也走这里。
     void closeEditorOnPumpThread() {
         HWND hwnd = m_editorHwnd;
+        // C4：卸尺寸稳定化定时器。走本路径（Dart 侧卸载）时不经过 WM_CLOSE，
+        // 故必须显式 KillTimer，否则定时器会在窗口销毁后仍反复回调。
+        if (hwnd) KillTimer(hwnd, kSizeSettleTimerId);
         if (m_view) {
             detachViewOnPumpThread(m_view);
         }
@@ -3007,6 +3168,10 @@ private:
 
     // IPlugView 当前打开的编辑器视图（泵线程独占访问）。
     Steinberg::IPlugView* m_view = nullptr;
+    // C4：上次交给 view 的尺寸，防 resizeView → SetWindowPos → WM_SIZE →
+    // onSize → resizeView 的回环。
+    int m_lastViewW = 0;
+    int m_lastViewH = 0;
     // frame 必须存活到编辑器关闭（插件会回调 setFrame 指针）。
     AuraPlugFrame m_plugFrame;
 
