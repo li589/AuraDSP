@@ -8,42 +8,51 @@ import 'package:auradsp_app/features/chrome.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// 与 _SpectrumPainter 中一致的柱宽算法（最小柱宽 + 带内居中）。
+const minBarW = 3.0;
+const gap = 3.0;
+
 double barWidth(double span, double gap, double minBarW) =>
     math.max(minBarW, span - gap);
 
 void main() {
-  group('频带宽度：高频柱不得塌成发丝', () {
-    test('问题前提：高频带真实跨度远窄于中频带', () {
-      final mid = VizBands.edgeX(13) - VizBands.edgeX(12); // 400~500
-      final b31 = VizBands.edgeX(32) - VizBands.edgeX(31); // 19k~20k
-      expect(b31, lessThan(mid * 0.4),
-          reason: '最高频带应显著窄于中频带，这正是塌成发丝的原因');
+  group('频带宽度：不得出现发丝带', () {
+    /// 各带的对数跨度占比（%）。末端窄带曾是 0.74%（中频带的 1/4），画成发丝。
+    List<double> widths() {
+      final mx = math.log(VizBands.maxHz / VizBands.minHz);
+      return <double>[
+        for (var i = 0; i < VizBands.count; i++)
+          math.log(VizBands.edges[i + 1] / VizBands.edges[i]) / mx * 100,
+      ];
+    }
+
+    test('最窄带与中位带宽度的比值不得低于 0.6', () {
+      final w = widths()..sort();
+      final median = w[w.length ~/ 2];
+      final minW = w.first;
+      expect(minW / median, greaterThanOrEqualTo(0.6),
+          reason: '最窄带 $minW% 相对中位 $median% 仍过窄，会被画成发丝');
     });
 
-    test('旧算法在窄画布上会把最高频带钳到 1px 发丝', () {
-      const w = 320.0;
-      const gap = 3.0;
-      final x0 = VizBands.edgeX(31) * w;
-      final x1 = VizBands.edgeX(32) * w;
-      final old = math.max(1.0, (x1 - x0) - gap);
-      expect(old, lessThan(2.0), reason: '旧算法在此场景确实退化成发丝');
+    test('最高频带不再远窄于中频带（旧缺陷已从频带表根治）', () {
+      final w = widths();
+      final mid = w[13]; // 400~500 附近
+      final top = w[w.length - 1]; // 16.8k~20k
+      expect(top / mid, greaterThan(0.6));
     });
 
-    test('新算法：所有频带柱宽都不小于最小柱宽', () {
-      const canvasW = 320.0;
-      const minBarW = 3.0;
-      const gap = 3.0;
-      for (var i = 0; i < VizBands.count; i++) {
-        final x0 = VizBands.edgeX(i) * canvasW;
-        final x1 = VizBands.edgeX(i + 1) * canvasW;
-        final span = x1 - x0;
-        final bw = barWidth(span, gap, minBarW);
-        expect(bw, greaterThanOrEqualTo(minBarW),
-            reason: 'band $i 柱宽塌到 $bw px');
-        // 带内居中：柱体应落在该频带范围内（允许至多 minBarW/2 的相邻溢出）
-        final x = x0 + (span - bw) / 2;
-        expect(x, greaterThanOrEqualTo(x0 - minBarW / 2));
-        expect(x + bw, lessThanOrEqualTo(x1 + minBarW / 2));
+    test('任意窄画布上柱宽都不小于最小柱宽', () {
+      for (final canvasW in [320.0, 400.0, 640.0, 1200.0]) {
+        for (var i = 0; i < VizBands.count; i++) {
+          final x0 = VizBands.edgeX(i) * canvasW;
+          final x1 = VizBands.edgeX(i + 1) * canvasW;
+          final span = x1 - x0;
+          final bw = barWidth(span, gap, minBarW);
+          expect(bw, greaterThanOrEqualTo(minBarW),
+              reason: 'canvas=$canvasW band=$i 柱宽 $bw');
+          final x = x0 + (span - bw) / 2;
+          expect(x, greaterThanOrEqualTo(x0 - minBarW / 2));
+          expect(x + bw, lessThanOrEqualTo(x1 + minBarW / 2));
+        }
       }
     });
   });
