@@ -281,30 +281,52 @@ class _PluginStageTopologyView extends StatelessWidget {
       }
       final hasActivePlugin = activeSlots.isNotEmpty;
 
+      // 框体即语义：插件插入位用胶囊形 + 强调色细边（含插头图标），
+      // 与内置核心节点的直角细框一眼可辨，不再用“阶段 x”文字赘述。
+      final frame = isCore
+          ? BoxDecoration(
+              color: p.panelRaised,
+              borderRadius: BorderRadius.circular(AuraRadius.xs),
+              border: Border.all(color: p.hairline),
+            )
+          : BoxDecoration(
+              color: hasActivePlugin
+                  ? p.accent.withValues(alpha: 0.15)
+                  : p.panel,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: hasActivePlugin
+                    ? p.accent
+                    : p.accent.withValues(alpha: 0.45),
+                width: hasActivePlugin ? 1.5 : 1.0,
+              ),
+            );
+
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-        decoration: BoxDecoration(
-          color: hasActivePlugin
-              ? p.accent.withValues(alpha: 0.15)
-              : (isCore ? p.panelRaised : p.panel),
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: hasActivePlugin
-                ? p.accent
-                : (isCore ? p.hairline : p.hairline.withValues(alpha: 0.6)),
-            width: hasActivePlugin ? 1.5 : 1.0,
-          ),
-        ),
+        decoration: frame,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(
-              name,
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: isCore ? FontWeight.bold : FontWeight.w500,
-                color: hasActivePlugin ? p.accent : p.text,
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (!isCore)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 3),
+                    child: Icon(Icons.power_rounded,
+                        size: 10,
+                        color: hasActivePlugin ? p.accent : p.textDim),
+                  ),
+                Text(
+                  name,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: isCore ? FontWeight.bold : FontWeight.w500,
+                    color: hasActivePlugin ? p.accent : p.text,
+                  ),
+                ),
+              ],
             ),
             if (hasActivePlugin) ...[
               const SizedBox(height: 2),
@@ -356,31 +378,32 @@ class _PluginStageTopologyView extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                stageNode(PluginInsertStage.preDsp, l10nOf(context).chainStagePreDsp),
-                _flowArrow(p),
-                stageNode(-1, l10nOf(context).chainNodeShelf, isCore: true),
-                _flowArrow(p),
-                stageNode(PluginInsertStage.preVendor, l10nOf(context).chainStagePreVendor),
-                _flowArrow(p),
-                stageNode(-2, l10nOf(context).chainNodeVendor, isCore: true),
-                _flowArrow(p),
-                stageNode(PluginInsertStage.postVendor, l10nOf(context).chainStagePostVendor),
-                _flowArrow(p),
-                stageNode(-3, l10nOf(context).chainNodeReverb, isCore: true),
-                _flowArrow(p),
-                stageNode(PluginInsertStage.postReverb, l10nOf(context).chainStagePostReverb),
-                _flowArrow(p),
-                stageNode(-4, l10nOf(context).chainNodeLimiter, isCore: true),
-                _flowArrow(p),
-                stageNode(PluginInsertStage.postLimiter, l10nOf(context).chainStagePostLimiter),
-                _flowArrow(p),
-                stageNode(-5, l10nOf(context).chainNodeOutput, isCore: true),
-              ],
-            ),
+          // 窄屏自动换行，不断尾：宽屏仍是一行，窄屏折成多行。
+          Wrap(
+            spacing: 4,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              stageNode(PluginInsertStage.preDsp, l10nOf(context).chainStagePreDsp),
+              _flowArrow(p),
+              stageNode(-1, l10nOf(context).chainNodeShelf, isCore: true),
+              _flowArrow(p),
+              stageNode(PluginInsertStage.preVendor, l10nOf(context).chainStagePreVendor),
+              _flowArrow(p),
+              stageNode(-2, l10nOf(context).chainNodeVendor, isCore: true),
+              _flowArrow(p),
+              stageNode(PluginInsertStage.postVendor, l10nOf(context).chainStagePostVendor),
+              _flowArrow(p),
+              stageNode(-3, l10nOf(context).chainNodeReverb, isCore: true),
+              _flowArrow(p),
+              stageNode(PluginInsertStage.postReverb, l10nOf(context).chainStagePostReverb),
+              _flowArrow(p),
+              stageNode(-4, l10nOf(context).chainNodeLimiter, isCore: true),
+              _flowArrow(p),
+              stageNode(PluginInsertStage.postLimiter, l10nOf(context).chainStagePostLimiter),
+              _flowArrow(p),
+              stageNode(-5, l10nOf(context).chainNodeOutput, isCore: true),
+            ],
           ),
         ],
       ),

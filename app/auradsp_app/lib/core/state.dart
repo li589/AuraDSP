@@ -928,6 +928,9 @@ class AppModel extends ChangeNotifier {
         loadConvolverIr(convIrPath!);
         if (convEnabled) setInt(ParamId.convEnable, 1);
       }
+      // 干湿比有独立引擎参数，重启后必须重推，否则界面显示的混合比
+      // 与引擎默认值不一致（“记忆与滑块打架”的成因之一）。
+      setFloat('convolver.mix', convMix);
       if (ddcPath != null && ddcPath!.isNotEmpty && File(ddcPath!).existsSync()) {
         loadVdc(ddcPath!);
         if (ddcOn) setInt(ParamId.ddcEnable, 1);
@@ -935,6 +938,11 @@ class AppModel extends ChangeNotifier {
       if (lpCode != null && lpCode!.isNotEmpty) {
         setLiveprogCode(lpCode!);
         if (lpEnabled) setInt(ParamId.lpEnable, 1);
+        // 脚本滑块 1..8 有独立引擎参数，重启后必须重推，
+        // 否则界面显示的滑块值与引擎归零值不一致（同上）。
+        for (var i = 0; i < 8 && i < lpParams.length; i++) {
+          setFloat('liveprog.param${i + 1}', lpParams[i]);
+        }
       }
       if (graphOrder != null && graphOrder!.isNotEmpty) {
         setGraphOrder(graphOrder!);
@@ -1410,16 +1418,20 @@ class AppModel extends ChangeNotifier {
   }
 
   void setBassHarmonics(double h) {
+    // 引擎侧暂无 bass.harmonics 参数（只有 bass.enable/gain）：
+    // 只存 UI/预设状态，UI 侧已置灰禁用，待谐波合成 DSP 落地后再接线。
     bassHarmonics = h.clamp(0.0, 1.0);
     notifyListeners();
   }
 
   void setBassHarmonicBlend(double b) {
+    // 同上：引擎侧无对应参数。
     bassHarmonicBlend = b.clamp(0.0, 1.0);
     notifyListeners();
   }
 
   void setBassSubFloor(double s) {
+    // 同上：引擎侧无对应参数。
     bassSubFloor = s;
     notifyListeners();
   }
@@ -1433,21 +1445,26 @@ class AppModel extends ChangeNotifier {
   }
 
   void setTubeStyle(int style) {
+    // 引擎侧只有 tube.enable/gain：风格/过采样/补偿/混合暂无对应参数，
+    // 只存 UI/预设状态，UI 侧已置灰禁用，待电子管建模落地后再接线。
     tubeStyle = style;
     notifyListeners();
   }
 
   void setTubeOversampling(int os) {
+    // 同上：引擎侧无对应参数。
     tubeOversampling = os;
     notifyListeners();
   }
 
   void setTubeCompensation(double comp) {
+    // 同上：引擎侧无对应参数。
     tubeCompensation = comp.clamp(-6.0, 6.0);
     notifyListeners();
   }
 
   void setTubeMix(double mix) {
+    // 同上：引擎侧无对应参数。
     tubeMix = mix.clamp(0.0, 1.0);
     notifyListeners();
   }

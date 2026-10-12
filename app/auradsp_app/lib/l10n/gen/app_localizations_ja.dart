@@ -294,9 +294,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get convResampled => 'ソースのサンプルレートが異なるため自動リサンプルしました';
 
   @override
-  String get signalFlow => 'シグナルフロー';
-
-  @override
   String get fvTitle => 'パラメトリックリバーブ';
 
   @override
@@ -677,19 +674,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainNodeOutput => 'オーディオ出力';
 
   @override
-  String get chainStagePreDsp => 'ステージ 0 (DSP 前)';
+  String get chainStagePreDsp => 'DSP 前';
 
   @override
-  String get chainStagePreVendor => 'ステージ 1 (ベンダーチェーン前)';
+  String get chainStagePreVendor => 'ベンダーチェーン前';
 
   @override
-  String get chainStagePostVendor => 'ステージ 2 (ベンダーチェーン後)';
+  String get chainStagePostVendor => 'ベンダーチェーン後';
 
   @override
-  String get chainStagePostReverb => 'ステージ 3 (リバーブ後)';
+  String get chainStagePostReverb => 'リバーブ後';
 
   @override
-  String get chainStagePostLimiter => 'ステージ 4 (リミッター後)';
+  String get chainStagePostLimiter => 'リミッター後';
 
   @override
   String chainSlotActive(int n, String name, String fmt) {

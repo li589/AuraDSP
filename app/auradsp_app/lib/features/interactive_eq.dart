@@ -41,11 +41,9 @@ class _InteractiveSpectrumEQPanelState
   /// 选中浮框与 Q 旋钮都跟随它；点空白处清除。
   int? _selectedIndex;
 
-  /// 上一次选中框的几何（无选中时保持不动，供下次选中时平滑飞入）。
+  /// 上一次选区条的几何（无选中时保持不动，供下次选中时平滑飞入）。
   double _boxLeft = 0.0;
-  double _boxTop = 0.0;
   double _boxW = 96.0;
-  double _boxH = 56.0;
 
   @override
   Widget build(BuildContext context) {
@@ -112,35 +110,23 @@ class _InteractiveSpectrumEQPanelState
                     builder: (context, constraints) {
                       final w = constraints.maxWidth;
                       final h = constraints.maxHeight;
-                      // 选中浮框几何：跟随持久选中（拖拽中跟随拖拽点），
+                      // 选中选区条几何：跟随持久选中（拖拽中跟随拖拽点），
                       // 无选中时保留上一次几何，只把透明度降为 0，
                       // 于是下次选中是从上次位置“飞”过去，而不是凭空出现。
+                      // 条带上下顶格（定格为背景），宽度即该点 Q 对应的带宽。
                       Widget? box;
                       final sel = _selectionTarget(model);
                       if (sel != null) {
                         final f = model.eqFrequencies[sel];
-                        final g = model.eqGains[sel];
                         final q = model.eqQs[sel];
                         final nx = _freqToX(f, w);
-                        final ny = _gainToY(g, h);
                         final oct = _qBandwidthOctaves(q);
-                        final bw = (oct * (w / _logOctaves) * 0.9)
-                            .clamp(84.0, math.max(84.0, w * 0.55))
-                            .toDouble();
-                        final bh = (54.0 + oct * 5.0).clamp(54.0, 80.0);
-                        _boxLeft =
-                            (nx - bw / 2).clamp(4.0, math.max(4.0, w - bw - 4));
-                        _boxTop =
-                            (ny - bh / 2).clamp(4.0, math.max(4.0, h - bh - 4));
-                        _boxW = bw;
-                        _boxH = bh;
-                        box = _SelectionBox(
-                          palette: p,
-                          freqLabel: _freqLabel(f),
-                          gainLabel:
-                              '${g >= 0 ? '+' : ''}${g.toStringAsFixed(1)} dB',
-                          qLabel: 'Q ${q.toStringAsFixed(2)}',
-                        );
+                        final stripW = (oct * (w / _logOctaves))
+                            .clamp(20.0, w * 0.8);
+                        _boxLeft = (nx - stripW / 2)
+                            .clamp(0.0, math.max(0.0, w - stripW));
+                        _boxW = stripW;
+                        box = _SelectionStrip(palette: p);
                       }
                       return MouseRegion(
                         onHover: (e) {
@@ -239,15 +225,16 @@ class _InteractiveSpectrumEQPanelState
                               },
                             ),
                               ),
-                              // 选中频点的半透明浮框：位置/尺寸随选中自动动画，
-                              // 框宽即该点 Q 对应的带宽（Q 越小越宽），不拦截手势。
+                              // 选中频点的半透明选区条：上下顶格（定格为背景），
+                              // 位置/宽度随选中自动动画，宽度即该点 Q 对应的带宽
+                              //（Q 越小越宽），不拦截手势。
                               AnimatedPositioned(
                                 duration: const Duration(milliseconds: 200),
                                 curve: Curves.easeOutCubic,
                                 left: _boxLeft,
-                                top: _boxTop,
+                                top: 0,
                                 width: _boxW,
-                                height: _boxH,
+                                height: h,
                                 child: AnimatedOpacity(
                                   opacity: box != null ? 1.0 : 0.0,
                                   duration:
@@ -562,57 +549,31 @@ class _PresetDropdown extends StatelessWidget {
   }
 }
 
-/* ---- 选中频点的半透明浮框 ---- */
+/* ---- 选中频点的半透明选区条 ---- */
 
-/// 跟随选中频点的优雅浮框：半透明底 + 细边 + 柔光阴影。
-/// 位置与尺寸由调用方通过 AnimatedPositioned 做动画，这里只负责“长相”；
-/// 框宽即该点 Q 对应的带宽（Q 越小框越宽），字号用 FittedBox 自适应。
-class _SelectionBox extends StatelessWidget {
+/// 跟随选中频点的背景选区条：通栏上下顶格（像剪辑软件里的框选），
+/// 不显示任何文字。宽度即该点 Q 对应的带宽（Q 越小越宽），
+/// 位置与宽度由调用方通过 AnimatedPositioned 做动画，这里只负责“长相”。
+class _SelectionStrip extends StatelessWidget {
   final AuraPalette palette;
-  final String freqLabel;
-  final String gainLabel;
-  final String qLabel;
 
-  const _SelectionBox({
-    required this.palette,
-    required this.freqLabel,
-    required this.gainLabel,
-    required this.qLabel,
-  });
+  const _SelectionStrip({required this.palette});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        color: palette.panel.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: palette.accent.withValues(alpha: 0.55),
-          width: 1.2,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: palette.accent.withValues(alpha: 0.18),
-            blurRadius: 12,
-            spreadRadius: 1,
+        color: palette.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(6),
+        border: Border(
+          left: BorderSide(
+            color: palette.accent.withValues(alpha: 0.65),
+            width: 1.5,
           ),
-        ],
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-      child: FittedBox(
-        fit: BoxFit.scaleDown,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              freqLabel,
-              style: monoOf(palette, size: 12, color: palette.text),
-            ),
-            Text(
-              '$gainLabel · $qLabel',
-              style: monoOf(palette, size: 10, color: palette.accent),
-            ),
-          ],
+          right: BorderSide(
+            color: palette.accent.withValues(alpha: 0.65),
+            width: 1.5,
+          ),
         ),
       ),
     );

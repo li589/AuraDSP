@@ -293,9 +293,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get convResampled => '源采样率与设备不同，已自动重采样';
 
   @override
-  String get signalFlow => '信号流';
-
-  @override
   String get fvTitle => '参数化混响';
 
   @override
@@ -676,19 +673,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainNodeOutput => '音频输出';
 
   @override
-  String get chainStagePreDsp => '阶段 0 (DSP 前置)';
+  String get chainStagePreDsp => 'DSP 前置';
 
   @override
-  String get chainStagePreVendor => '阶段 1 (厂商链前置)';
+  String get chainStagePreVendor => '厂商链前置';
 
   @override
-  String get chainStagePostVendor => '阶段 2 (厂商链后置)';
+  String get chainStagePostVendor => '厂商链后置';
 
   @override
-  String get chainStagePostReverb => '阶段 3 (混响后置)';
+  String get chainStagePostReverb => '混响后置';
 
   @override
-  String get chainStagePostLimiter => '阶段 4 (限幅后置)';
+  String get chainStagePostLimiter => '限幅后置';
 
   @override
   String chainSlotActive(int n, String name, String fmt) {
