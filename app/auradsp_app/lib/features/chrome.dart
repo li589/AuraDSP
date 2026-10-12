@@ -490,8 +490,9 @@ class _AmbientPainter extends CustomPainter {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_img == null || now - _lastRenderMs >= _renderIntervalMs) {
       final silent = _env.maxValue <= AmbientEnvelope.epsilon;
-      // 首帧必须出图；之后只有「静默状态发生变化」才值得再光栅一次。
-      if (_img == null || silent != _renderedSilent) {
+      // 有信号时按节流节奏持续重绘；静音时只在“刚变静默”那一次重绘，
+      // 之后直接复用全黑图，不再重复光栅化。
+      if (_img == null || !silent || silent != _renderedSilent) {
         _lastRenderMs = now;
         _renderedSilent = silent;
         unawaited(_rerender(size));
