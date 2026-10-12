@@ -13,7 +13,8 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
-import 'package:flutter/foundation.dart' show ValueListenable;
+import 'package:flutter/foundation.dart'
+    show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 
 import 'package:flutter/scheduler.dart';
@@ -354,21 +355,47 @@ class AmbientEnvelope {
   static const double staleDecay = 0.70;  // 无信号时的快速衰减
   static const double epsilon = 0.0008;
 
+  /// 氛围柱的频率覆盖范围（对数均分到 [focusMinHz, focusMaxHz]）。
+  ///
+  /// 原本铺满 20Hz–20kHz，但两端几乎是空的：72 根柱里约 13 根落在 80Hz
+  /// 以下、约 9 根落在 14kHz 以上，对绝大多数音乐内容都是空柱，真正有
+  /// 信息的全挤在中段。后端又只有 32 个频带，于是等于把有限分辨率
+  /// 平均摊给了两根空区间。把 72 根柱集中到 80Hz–14kHz，是把密度花在
+  /// 真正有内容的地方（柱形密度不变，仍是 72 根）。
+  static const double focusMinHz = 80.0;
+  static const double focusMaxHz = 14000.0;
+
+  /// 每根氛围柱对应的源频带下标。**只算一次**。
+  ///
+  /// 原实现在 [feed] 里对 72 根柱各调一次 `VizBands.sampleIndex`
+  /// （内含 log），而 feed 随频谱帧以 30Hz 被调用 → 2160 次 log/s，
+  /// 产出的结果却和上一帧完全相同。表格化后降到 0。
+  static final List<int> _srcBand = List<int>.generate(bars, (i) {
+    final hz =
+        focusMinHz * math.pow(focusMaxHz / focusMinHz, i / (bars - 1));
+    return VizBands.sampleIndex(VizBands.logX(hz))
+        .round()
+        .clamp(0, VizBands.count - 1);
+  });
+
+  @visibleForTesting
+  static List<int> get sourceBands => _srcBand;
+
   final List<double> smooth = List.filled(bars, 0);
 
   /// 无信号（音频停止/欠载）状态。为 true 时不再重采样陈旧数据——
   /// 否则最后一帧的高值会把 smooth 反复抬回去，永远不归零。
   bool stale = false;
 
-  /// 喂入一帧真实频谱（32 带）。走 VizBands 对数刻度重采样；
-  /// 旧实现用 pow(t, 1.6) 幂律，会把低频拉宽、高频压扁。
+  /// 喂入一帧真实频谱（32 带）。按 [focusMinHz]–[focusMaxHz] 的对数刻度
+  /// 重采样；旧实现用 pow(t, 1.6) 幂律，会把低频拉宽、高频压扁。
   void feed(List<double> src) {
     stale = false;
     if (src.isEmpty) return;
+    final last = src.length - 1;
     for (var i = 0; i < bars; i++) {
-      final t = i / (bars - 1);
-      final idx = VizBands.sampleIndex(t);
-      final v = src[idx.round().clamp(0, src.length - 1)].clamp(0.0, 1.0);
+      final b = _srcBand[i] < last ? _srcBand[i] : last;
+      final v = src[b].clamp(0.0, 1.0);
       smooth[i] = math.max(v, smooth[i] * release);
     }
   }
@@ -407,6 +434,14 @@ class _AmbientPainter extends CustomPainter {
   bool _disposed = false;
   int _lastRenderMs = 0;
   static const _renderIntervalMs = 66;
+
+  /// 手上这张图是不是从「全零包络」渲染出来的。
+  ///
+  /// 静音间隙（曲子中间的空白、欠载）里引擎照样产帧，包络却恒为 0，
+  /// 于是每 66ms 仍然要走一遍 PictureRecorder→toImage——那是异步 GPU
+  /// 光栅化，外加一次新建 + 释放 ui.Image 纹理，画出来的却是一张全黑图。
+  /// 记下这张图的「静默」属性后，同为静默就直接复用，不再重复光栅。
+  bool _renderedSilent = false;
 
   _AmbientPainter({
     required this.spectrum,
@@ -447,8 +482,13 @@ class _AmbientPainter extends CustomPainter {
     // 节流重渲染低分图；绘制始终走缓存图。
     final now = DateTime.now().millisecondsSinceEpoch;
     if (_img == null || now - _lastRenderMs >= _renderIntervalMs) {
-      _lastRenderMs = now;
-      unawaited(_rerender(size));
+      final silent = _env.maxValue <= AmbientEnvelope.epsilon;
+      // 首帧必须出图；之后只有「静默状态发生变化」才值得再光栅一次。
+      if (_img == null || silent != _renderedSilent) {
+        _lastRenderMs = now;
+        _renderedSilent = silent;
+        unawaited(_rerender(size));
+      }
     }
 
     final img = _img;
@@ -467,20 +507,27 @@ class _AmbientPainter extends CustomPainter {
     final intensity = palette.isDark ? 1.0 : 0.45;
     final baseAlpha = (0.16 * intensity * 255).round();
     final bw = size.width / AmbientEnvelope.bars;
+
+    // 画笔 / 渐变 / 两种颜色都只建一次：原实现每根柱都新建一个 Paint、
+    // 调两次 Color.withValues、再 new 一个 LinearGradient，一次重渲染
+    // 最多 216 个短命对象。渐变本身与柱无关（只有绑定它的 rect 变），
+    // 所以渐变对象也能复用，只保留每柱必要的 createShader。
+    final paint = Paint();
+    final grad = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: [
+        palette.accent.withValues(alpha: baseAlpha / 255),
+        palette.accent.withValues(alpha: 0),
+      ],
+    );
+
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * size.height * 0.92;
       final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.62, h);
-      final paint = Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: [
-            palette.accent.withValues(alpha: baseAlpha / 255),
-            palette.accent.withValues(alpha: 0),
-          ],
-        ).createShader(rect);
+      paint.shader = grad.createShader(rect);
       canvas.drawRect(rect, paint);
     }
   }
