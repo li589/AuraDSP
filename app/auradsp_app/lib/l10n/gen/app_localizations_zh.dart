@@ -712,6 +712,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainNodeOutput => '音频输出';
 
   @override
+  String get chainStagePreDsp => '阶段 0 (DSP 前置)';
+
+  @override
+  String get chainStagePreVendor => '阶段 1 (厂商链前置)';
+
+  @override
+  String get chainStagePostVendor => '阶段 2 (厂商链后置)';
+
+  @override
+  String get chainStagePostReverb => '阶段 3 (混响后置)';
+
+  @override
+  String get chainStagePostLimiter => '阶段 4 (限幅后置)';
+
+  @override
   String chainSlotActive(int n, String name, String fmt) {
     return '插槽 $n：$name ($fmt)';
   }
@@ -979,6 +994,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String plugMountedTitle(int n) {
     return '当前挂载插件 (插槽 $n)';
+  }
+
+  @override
+  String plugMountedTitleNamed(int n, String name) {
+    return '当前挂载插件 (插槽 $n)：$name';
   }
 
   @override

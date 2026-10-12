@@ -735,6 +735,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainNodeOutput => 'Audio Output';
 
   @override
+  String get chainStagePreDsp => 'Stage 0 (Pre-DSP)';
+
+  @override
+  String get chainStagePreVendor => 'Stage 1 (Pre-Vendor)';
+
+  @override
+  String get chainStagePostVendor => 'Stage 2 (Post-Vendor)';
+
+  @override
+  String get chainStagePostReverb => 'Stage 3 (Post-Reverb)';
+
+  @override
+  String get chainStagePostLimiter => 'Stage 4 (Post-Limiter)';
+
+  @override
   String chainSlotActive(int n, String name, String fmt) {
     return 'Slot $n: $name ($fmt)';
   }
@@ -1019,6 +1034,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String plugMountedTitle(int n) {
     return 'Currently Loaded Plugin (Slot $n)';
+  }
+
+  @override
+  String plugMountedTitleNamed(int n, String name) {
+    return 'Currently Loaded Plugin (Slot $n): $name';
   }
 
   @override
