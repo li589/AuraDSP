@@ -166,48 +166,6 @@ abstract class AppLocalizations {
   /// **'算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms'**
   String get latencyTip;
 
-  /// No description provided for @latencyMode.
-  ///
-  /// In zh, this message translates to:
-  /// **'延迟模式'**
-  String get latencyMode;
-
-  /// No description provided for @latencyRealtime.
-  ///
-  /// In zh, this message translates to:
-  /// **'实时'**
-  String get latencyRealtime;
-
-  /// No description provided for @latencyMusic.
-  ///
-  /// In zh, this message translates to:
-  /// **'音乐'**
-  String get latencyMusic;
-
-  /// No description provided for @latencyQuality.
-  ///
-  /// In zh, this message translates to:
-  /// **'品质'**
-  String get latencyQuality;
-
-  /// No description provided for @latencyRealtimeDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'≤10ms · 游戏/直播，仅低延迟效果'**
-  String get latencyRealtimeDesc;
-
-  /// No description provided for @latencyMusicDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'≤30ms · 音乐欣赏（推荐）'**
-  String get latencyMusicDesc;
-
-  /// No description provided for @latencyQualityDesc.
-  ///
-  /// In zh, this message translates to:
-  /// **'不限 · 观影/听感优先，允许混响等'**
-  String get latencyQualityDesc;
-
   /// No description provided for @bassBoost.
   ///
   /// In zh, this message translates to:
@@ -334,12 +292,6 @@ abstract class AppLocalizations {
   /// **'空闲 — 无音频流经引擎'**
   String get noAudio;
 
-  /// No description provided for @guardBlocked.
-  ///
-  /// In zh, this message translates to:
-  /// **'已拦截：该效果超出当前延迟档预算，切换至品质模式后可用'**
-  String get guardBlocked;
-
   /// No description provided for @reverbPreset0.
   ///
   /// In zh, this message translates to:
@@ -441,12 +393,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'auradsp_engine.dll 未找到或初始化失败。若 DLL 已随包存在，请查看下方错误详情定位（常见：音频设备/COM 初始化问题）。'**
   String get engineFailedBody;
-
-  /// No description provided for @reverbNeedsQuality.
-  ///
-  /// In zh, this message translates to:
-  /// **'品质档限定'**
-  String get reverbNeedsQuality;
 
   /// No description provided for @channelMode.
   ///
@@ -567,12 +513,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'从下方选择音源开始处理'**
   String get heroHintIdle;
-
-  /// No description provided for @reverbAutoQuality.
-  ///
-  /// In zh, this message translates to:
-  /// **'已自动切换到品质延迟档以启用混响'**
-  String get reverbAutoQuality;
 
   /// No description provided for @stereoWidenHint.
   ///
@@ -712,12 +652,6 @@ abstract class AppLocalizations {
   /// **'源采样率与设备不同，已自动重采样（诚实明示，不静默）'**
   String get convResampled;
 
-  /// No description provided for @convAutoQuality.
-  ///
-  /// In zh, this message translates to:
-  /// **'已自动切换到品质延迟档以启用卷积'**
-  String get convAutoQuality;
-
   /// No description provided for @signalFlow.
   ///
   /// In zh, this message translates to:
@@ -729,12 +663,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'参数化混响'**
   String get fvTitle;
-
-  /// No description provided for @fvHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'Freeverb 算法（8 组合梳 + 4 全通/声道），与预设混响可并存；品质档限定'**
-  String get fvHint;
 
   /// No description provided for @fvDecayLabel.
   ///

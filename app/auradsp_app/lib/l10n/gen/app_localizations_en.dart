@@ -46,29 +46,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms';
 
   @override
-  String get latencyMode => 'Latency mode';
-
-  @override
-  String get latencyRealtime => 'Realtime';
-
-  @override
-  String get latencyMusic => 'Music';
-
-  @override
-  String get latencyQuality => 'Quality';
-
-  @override
-  String get latencyRealtimeDesc =>
-      '≤10ms · gaming/live, low-latency effects only';
-
-  @override
-  String get latencyMusicDesc => '≤30ms · music listening (recommended)';
-
-  @override
-  String get latencyQualityDesc =>
-      'uncapped · movies/audiophile, reverb allowed';
-
-  @override
   String get bassBoost => 'Bass Boost';
 
   @override
@@ -135,10 +112,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noAudio => 'Idle — no audio stream through the engine';
 
   @override
-  String get guardBlocked =>
-      'Blocked: effect exceeds current latency budget. Switch to Quality mode to enable.';
-
-  @override
   String get reverbPreset0 => 'Concert Hall';
 
   @override
@@ -189,9 +162,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get engineFailedBody =>
       'auradsp_engine.dll was not found or failed to initialize. If the DLL is already bundled, check the error details below (common causes: audio device / COM initialization).';
-
-  @override
-  String get reverbNeedsQuality => 'Quality tier only';
 
   @override
   String get channelMode => 'Channel Mode';
@@ -254,10 +224,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get heroHintIdle => 'Pick a source below to start processing';
-
-  @override
-  String get reverbAutoQuality =>
-      'Switched to Quality latency mode to enable reverb';
 
   @override
   String get stereoWidenHint =>
@@ -335,18 +301,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Source rate differs from device — resampled automatically (disclosed, not silent)';
 
   @override
-  String get convAutoQuality =>
-      'Switched to Quality latency mode to enable convolver';
-
-  @override
   String get signalFlow => 'Signal Flow';
 
   @override
   String get fvTitle => 'Parametric Reverb';
-
-  @override
-  String get fvHint =>
-      'Freeverb algorithm (8 combs + 4 allpasses/ch), stacks with preset reverb; quality tier only';
 
   @override
   String get fvDecayLabel => 'Decay';

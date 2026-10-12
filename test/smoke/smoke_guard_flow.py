@@ -1,5 +1,11 @@
 # -*- coding: utf-8 -*-
-# 验证 UI 自动升档等效链路：音乐档下混响被拒 → 切品质档 → 混响放行
+# ADR-006 契约：延迟不再有任何准入判定
+#
+# 撤销前本用例断言「默认档开混响 → E_LATENCY_GUARD(-3) → 切 quality 放行」。
+# 该行为随 ADR-002 于 ADR-006 一并撤销，故本用例改为钉住新契约：
+#   1) 混响/卷积/Freeverb 一律自由使能（不再返回 -3）；
+#   2) mode.latency 已是非法入参（明确 -1，而非静默忽略）；
+#   3) 延迟读数仍如实累加上报（测量量，不是闸门）。
 import ctypes
 
 dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
@@ -7,6 +13,8 @@ dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
 dll.auradsp_set_param.restype = ctypes.c_int
 dll.auradsp_set_param.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32]
+dll.auradsp_get_param.restype = ctypes.c_int
+dll.auradsp_get_param.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_uint32]
 dll.auradsp_last_error.restype = ctypes.c_char_p
 dll.auradsp_last_error.argtypes = [ctypes.c_void_p]
 dll.auradsp_get_latency_ms.restype = ctypes.c_double
@@ -17,29 +25,39 @@ h = dll.auradsp_create(48000.0, 240)
 i32 = lambda v: ctypes.c_int32(v)
 f32 = lambda v: ctypes.c_float(v)
 
-# 1) 默认音乐档(1)下开混响 → 应被拒 E_LATENCY_GUARD(-3)
+# 1) 混响自由使能：rc 必须为 0，绝不是 -3（E_LATENCY_GUARD）
 rc = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(0)), 4)
-print("music-mode reverb rc =", rc, "| err:", dll.auradsp_last_error(h).decode())
-assert rc == -3
+print("reverb preset rc =", rc, "| err:", dll.auradsp_last_error(h).decode())
+assert rc == 0, "ADR-006: reverb must be freely enableable, got rc=%d" % rc
+assert dll.auradsp_get_latency_ms(h) == 30.0, "reverb latency must still be measured as 30ms"
 
-# 2) UI 自动升档：mode.latency=2 → 混响放行
-rc1 = dll.auradsp_set_param(h, b"mode.latency", ctypes.byref(i32(2)), 4)
-rc2 = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(0)), 4)
-lat = dll.auradsp_get_latency_ms(h)
-print("quality-mode switch rc=%d, reverb rc=%d, latency=%.1f ms" % (rc1, rc2, lat))
-assert rc1 == 0 and rc2 == 0 and lat == 30.0
+# 2) Freeverb / 卷积同样自由使能
+rc_fv = dll.auradsp_set_param(h, b"freeverb.enable", ctypes.byref(i32(1)), 4)
+print("freeverb.enable rc =", rc_fv)
+assert rc_fv == 0, "ADR-006: freeverb must be freely enableable"
 
-# 3) 关闭混响 → 延迟回落 0
-rc = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(-1)), 4)
-print("reverb off rc=%d, latency=%.1f ms" % (rc, dll.auradsp_get_latency_ms(h)))
-assert dll.auradsp_get_latency_ms(h) == 0.0
+# 3) mode.latency 已是非法入参：明确报错(E_PARAM=-1)，不静默忽略
+rc_mode = dll.auradsp_set_param(h, b"mode.latency", ctypes.byref(i32(2)), 4)
+print("mode.latency rc =", rc_mode, "| err:", dll.auradsp_last_error(h).decode())
+assert rc_mode == -1, "ADR-006: mode.latency must be rejected as invalid param"
 
-# 4) 立体声上限映射：UI 100% → 引擎 0.75
+out_i = ctypes.c_int32()
+rc_get = dll.auradsp_get_param(h, b"mode.latency", ctypes.byref(out_i), 4)
+print("mode.latency get rc =", rc_get)
+assert rc_get == -1, "ADR-006: mode.latency must not be readable"
+
+# 4) 延迟读数仍如实累加（测量量），关闭后回落
+rc_off = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(-1)), 4)
+lat_off = dll.auradsp_get_latency_ms(h)
+print("reverb off rc=%d, latency=%.1f ms" % (rc_off, lat_off))
+assert rc_off == 0 and lat_off == 0.0
+
+# 5) 立体声上限映射：UI 100% → 引擎 0.75
 rc = dll.auradsp_set_param(h, b"stereo.mix", ctypes.byref(f32(0.75)), 4)
 out_v = ctypes.c_float()
 dll.auradsp_get_param(h, b"stereo.mix", ctypes.byref(out_v), 4)
 print("stereo.mix set 0.75 -> get %.3f rc=%d" % (out_v.value, rc))
 assert rc == 0 and abs(out_v.value - 0.75) < 1e-6
 
-print("PASS: guard auto-upgrade flow + latency + stereo mapping all OK")
+print("PASS: ADR-006 no-latency-gating contract + latency measurement + stereo mapping")
 dll.auradsp_destroy(h)

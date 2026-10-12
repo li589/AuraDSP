@@ -27,7 +27,6 @@ class EffectsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
     return PageScaffold(
       eyebrow: l.pageEffectsEyebrow,
@@ -67,20 +66,6 @@ class EffectsPage extends StatelessWidget {
           builder: (_, _) => _PostCard(model: model),
         ),
         _PresetCard(model: model),
-        // 收尾说明（静音，不加卡片）
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AuraSpace.xs, AuraSpace.sm, AuraSpace.xs, 0),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(Icons.info_outline, size: 14,
-                  color: p.warning.withValues(alpha: 0.8)),
-              const SizedBox(width: AuraSpace.sm),
-              Expanded(child: Text(l.guardBlocked, style: captionOf(p))),
-            ],
-          ),
-        ),
       ],
     );
   }

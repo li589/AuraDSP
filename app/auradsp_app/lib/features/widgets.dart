@@ -555,6 +555,9 @@ class SpectrumView extends StatelessWidget {
 }
 
 class _SpectrumPainter extends CustomPainter {
+  /// 最小柱宽（px）。高频带真实跨度极窄，低于此值就成了发丝线。
+  static const _minBarWidth = 3.0;
+
   final ValueListenable<List<double>> spectrum;
   final ValueListenable<List<double>>? peaks;
   final double gap;
@@ -602,22 +605,24 @@ class _SpectrumPainter extends CustomPainter {
       // 横坐标取该频带的真实对数跨度，不再均分 —— 与 FreqAxis 同一套刻度。
       final x0 = VizBands.edgeX(i) * size.width;
       final x1 = VizBands.edgeX(i + 1) * size.width;
-      final bw = math.max(1.0, (x1 - x0) - gap);
-      final x = x0 + gap / 2;
+      final span = x1 - x0;
+      // 高频带的真实跨度极窄（19k~20k 仅为中频带的 ~1/4），减去 gap 后会塌成
+      // 1px 发丝。故设最小柱宽并在带内居中，宁可相邻柱轻微相接也不出发丝。
+      final bw = math.max(_minBarWidth, span - gap).toDouble();
+      final x = x0 + (span - bw) / 2;
+      final radius = Radius.circular(math.min(2.0, bw / 2).toDouble());
       if (h > 0.5) {
         final rect = Rect.fromLTWH(x, size.height - h, bw, h)
-            .deflate(bw < 4 ? 0 : 0.5);
+            .deflate(bw < 6 ? 0 : 0.5);
         canvas.drawRRect(
             RRect.fromRectAndCorners(rect,
-                topLeft: const Radius.circular(2),
-                topRight: const Radius.circular(2)),
+                topLeft: radius, topRight: radius),
             paint);
         // 顶端 2px 亮帽：给柱体一个明确的"读数头"
         if (h > 4) {
           canvas.drawRRect(
               RRect.fromRectAndRadius(
-                  Rect.fromLTWH(x, size.height - h, bw, 2),
-                  const Radius.circular(1)),
+                  Rect.fromLTWH(x, size.height - h, bw, 2), radius),
               cap);
         }
       }

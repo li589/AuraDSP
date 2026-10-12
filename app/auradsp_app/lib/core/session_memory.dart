@@ -43,7 +43,6 @@ abstract final class SessionMemory {
         'activePresetName': m.activePresetName,
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
-        'latencyMode': m.latencyMode,
         'channelsMode': m.channelsMode,
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
@@ -78,9 +77,6 @@ abstract final class SessionMemory {
     try {
       if (session['activePresetName'] is String) {
         m.activePresetName = session['activePresetName'] as String;
-      }
-      if (session['latencyMode'] is num) {
-        m.latencyMode = (session['latencyMode'] as num).toInt();
       }
       if (session['channelsMode'] is num) {
         m.channelsMode = (session['channelsMode'] as num).toInt();

@@ -36,14 +36,12 @@ def sf(h, k, v):
 
 
 live = ctypes.c_void_p(lib.auradsp_create(ctypes.c_float(RATE), 2048))
-si(live, "mode.latency", 2)
 si(live, "bass.enable", 1)
 sf(live, "bass.gain", 6.0)
 print("live handle state =", lib.auradsp_get_state(live))
 
 probe = ctypes.c_void_p(lib.auradsp_create(ctypes.c_float(RATE), 2048))
 print("probe handle created:", bool(probe))
-si(probe, "mode.latency", 2)
 
 N = 256
 buf = (ctypes.c_float * (N * 2))()

@@ -255,7 +255,8 @@ class AppModel extends ChangeNotifier {
 
   AuraThemeId themeId = AuraThemeId.auraDark;
   Locale locale = const Locale('zh');
-  int latencyMode = 2; // 0=realtime 1=music 2=quality (默认品质/无限制，废除硬性拦截规则)
+  // 注：延迟档（ADR-002）已由 ADR-006 撤销，不再有 latencyMode。
+  // 延迟改为纯测量展示（组件级徽标 + 底栏总延迟），任何效果都可自由使能。
 
   // 高频可视化（独立 notifier，30fps）
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
@@ -312,8 +313,6 @@ class AppModel extends ChangeNotifier {
       (t) => t.name == config.themeId,
       orElse: () => AuraThemeId.auraDark,
     );
-    latencyMode = config.defaultLatencyMode;
-
     pluginManager = PluginManager(commandSender: (msg) {
       _toIso?.send(msg);
     });
@@ -426,7 +425,6 @@ class AppModel extends ChangeNotifier {
         eqOn = (raw['eqEnable'] as int) != 0;
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
-        latencyMode = raw['latencyMode'] as int;
         lpEnabled = (raw['lpEnable'] as int) != 0;
         lpStatus = raw['lpStatus'] as int;
         convEnabled = (raw['convEnable'] as int) != 0;
@@ -652,20 +650,7 @@ class AppModel extends ChangeNotifier {
 
   /// 混响预设：废除品质档拦截限制，无条件自由放行
   void setReverbPreset(int v, {String? autoQualityMsg}) {
-    if (v >= 0 && latencyMode < 2) {
-      latencyMode = 2;
-      notifyListeners();
-      _markSent('mode.latency');
-      send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-    }
     setInt('reverb.preset', v);
-  }
-
-  void setLatencyMode(int mode) {
-    latencyMode = mode;
-    notifyListeners();
-    _markSent('mode.latency');
-    send({'cmd': 'setParam', 'id': 'mode.latency', 'value': mode, 'isFloat': false});
   }
 
   void setInt(String id, int v) {
@@ -1018,7 +1003,7 @@ class AppModel extends ChangeNotifier {
         if (reverbPreset >= 0) {
           setInt('reverb.preset', -1);
         } else {
-          setReverbPreset(0, autoQualityMsg: '启用混响：已自动切换到品质模式');
+          setReverbPreset(0);
         }
       case 'output':
         setInt('limiter.enable', limiterOn ? 0 : 1);
@@ -1064,12 +1049,6 @@ class AppModel extends ChangeNotifier {
 
   /// 卷积使能：废除品质档拦截限制，无条件自由放行
   void setConvolverEnabled(bool on, {String? autoQualityMsg}) {
-    if (on && latencyMode < 2) {
-      latencyMode = 2;
-      notifyListeners();
-      _markSent('mode.latency');
-      send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-    }
     convEnabled = on;
     if (on && !convReady) {
       if (convIrPath != null && convIrPath!.isNotEmpty && File(convIrPath!).existsSync()) {
@@ -1107,12 +1086,6 @@ class AppModel extends ChangeNotifier {
 
   /// 参数化混响使能：废除品质档拦截限制，无条件自由放行
   void setFreeverbEnabled(bool on, {String? autoQualityMsg}) {
-    if (on && latencyMode < 2) {
-      latencyMode = 2;
-      notifyListeners();
-      _markSent('mode.latency');
-      send({'cmd': 'setParam', 'id': 'mode.latency', 'value': 2, 'isFloat': false});
-    }
     fvOn = on;
     notifyListeners();
     _markSent(ParamId.fvEnable);

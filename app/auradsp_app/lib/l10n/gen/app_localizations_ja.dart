@@ -45,27 +45,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get latencyTip => 'アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms';
 
   @override
-  String get latencyMode => '遅延モード';
-
-  @override
-  String get latencyRealtime => 'リアルタイム';
-
-  @override
-  String get latencyMusic => 'ミュージック';
-
-  @override
-  String get latencyQuality => 'クオリティ';
-
-  @override
-  String get latencyRealtimeDesc => '≤10ms · ゲーム/配信、低遅延のみ';
-
-  @override
-  String get latencyMusicDesc => '≤30ms · 音楽鑑賞（推奨）';
-
-  @override
-  String get latencyQualityDesc => '無制限 · 映画/音質重視、リバーブ可';
-
-  @override
   String get bassBoost => 'ベースブースト';
 
   @override
@@ -132,9 +111,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noAudio => 'アイドル — エンジンに音声ストリームなし';
 
   @override
-  String get guardBlocked => 'ブロック：現在の遅延予算を超過。クオリティモードで有効化できます';
-
-  @override
   String get reverbPreset0 => 'コンサートホール';
 
   @override
@@ -185,9 +161,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get engineFailedBody =>
       'auradsp_engine.dll が見つからないか、初期化に失敗しました。DLL が同梱済みの場合は、下のエラー詳細を確認してください（音声デバイス / COM 初期化が主因）。';
-
-  @override
-  String get reverbNeedsQuality => '品質モード限定';
 
   @override
   String get channelMode => 'チャンネルモード';
@@ -249,9 +222,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get heroHintIdle => '下のソースを選んで開始';
-
-  @override
-  String get reverbAutoQuality => 'リバーブを有効にするため品質モードへ自動切替しました';
 
   @override
   String get stereoWidenHint => '過度な拡張は中央ボーカル等を打ち消すため上限保護されています';
@@ -324,17 +294,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get convResampled => 'ソースのサンプルレートが異なるため自動リサンプルしました（明示）';
 
   @override
-  String get convAutoQuality => 'コンボルバーを有効にするため品質モードへ自動切替しました';
-
-  @override
   String get signalFlow => 'シグナルフロー';
 
   @override
   String get fvTitle => 'パラメトリックリバーブ';
-
-  @override
-  String get fvHint =>
-      'Freeverb アルゴリズム（8 コム + 4 オールパス/CH）。プリセットリバーブと併用可。品質モード限定';
 
   @override
   String get fvDecayLabel => '減衰';

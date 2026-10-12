@@ -21,7 +21,6 @@ abstract final class ParamId {
   static const eqEnable = 'eq.enable';
   static const postGain = 'post.gain';
   static const limiterEnable = 'limiter.enable';
-  static const modeLatency = 'mode.latency';
   static const channelsMode = 'channels.mode';
   // v1.1：Liveprog（EEL2 实时可编程 DSP）
   static const lpEnable = 'liveprog.enable';

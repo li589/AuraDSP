@@ -1,7 +1,9 @@
 /*
- * settings_page.dart — 设置页：延迟模式 / 配色 / 语言 / 声道 / 引擎信息
+ * settings_page.dart — 设置页：配色 / 语言 / 声道 / 引擎信息
  *
  * 一卡一节，序号贯通；说明文字统一挂在卡片标题下（hint），不再散落在控件之间。
+ * 注：延迟档（ADR-002）已由 ADR-006 撤销，此处不再有「延迟模式」选项；
+ *     延迟改为纯测量展示，见底栏徽标与效果页组件级徽标。
  */
 import 'package:flutter/material.dart';
 
@@ -27,28 +29,9 @@ class SettingsPage extends StatelessWidget {
         eyebrow: l.pageSettingsEyebrow,
         title: l.pageSettingsTitle,
         children: [
-          // 01 延迟模式（ADR-002 三档）
+          // 01 配色
           SectionCard(
             index: '01',
-            title: l.latencyMode,
-            hint: switch (model.latencyMode) {
-              0 => l.latencyRealtimeDesc,
-              1 => l.latencyMusicDesc,
-              _ => l.latencyQualityDesc,
-            },
-            child: AuraSegmented<int>(
-              segments: [
-                AuraSegment(0, l.latencyRealtime),
-                AuraSegment(1, l.latencyMusic),
-                AuraSegment(2, l.latencyQuality),
-              ],
-              selected: model.latencyMode,
-              onChanged: model.setLatencyMode,
-            ),
-          ),
-          // 02 配色
-          SectionCard(
-            index: '02',
             title: l.theme,
             child: Row(
               children: [
@@ -95,7 +78,7 @@ class SettingsPage extends StatelessWidget {
           ),
           // 03 语言
           SectionCard(
-            index: '03',
+            index: '02',
             title: l.language,
             child: AuraSegmented<String>(
               segments: const [
@@ -109,7 +92,7 @@ class SettingsPage extends StatelessWidget {
           ),
           // 04 声道模式（ADR-003 Phase A）
           SectionCard(
-            index: '04',
+            index: '03',
             title: l.channelMode,
             hint: l.channelPhaseA,
             child: AuraSegmented<int>(
@@ -124,13 +107,13 @@ class SettingsPage extends StatelessWidget {
           ),
           // 05 引擎信息
           SectionCard(
-            index: '05',
+            index: '04',
             title: l.engineInfo,
             child: _EngineInfo(model: model),
           ),
           // 06 持久化记忆与外置配置
           SectionCard(
-            index: '06',
+            index: '05',
             title: l.memTitle,
             hint: l.memHint,
             child: Column(
