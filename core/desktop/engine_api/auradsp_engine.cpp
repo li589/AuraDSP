@@ -161,6 +161,10 @@ struct Params {
     std::atomic<int32_t>  haas_enable{0};
     std::atomic<float>    haas_delay_ms{12.0f};  /* ms [0,25] */
     std::atomic<float>    haas_mix{1.0f};        /* [0,1] */
+    /* 激励器（HPF 取高频 + tanh 谐波混回；drive 固定，只暴露 amount/hifreq） */
+    std::atomic<int32_t>  exciter_enable{0};
+    std::atomic<float>    exciter_amount{0.3f};  /* [0,1] */
+    std::atomic<float>    exciter_hifreq{5000.0f}; /* Hz [3000,10000] */
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -335,6 +339,8 @@ struct auradsp_handle_s {
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
     int    haas_pos = 0;
+    /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算） */
+    float exc_lp_l = 0.0f, exc_lp_r = 0.0f;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
@@ -1623,6 +1629,35 @@ static void haas_process(auradsp_handle h, float* io, int frames) {
     h->haas_pos = pos;
 }
 
+/* 激励器（XHiFi 式高频修复）：HPF 取高频成分 → tanh 生成谐波 → 按量混回。
+ * 位置：Haas 后 / Freeverb 前——vendor 内部 EQ/tube 拆不出来，谐波不进
+ * tube 保暖声不糊；进 room 前加，房间带一点 shimmer。
+ * tanh 整形本想复用 tube 链路，但 tube 的 waveshaper 在 vendor 内部
+ * （VacuumTube*），引擎侧无原生共用函数——此处用标准 tanhf，drive 固
+ * 定 2.0 不暴露；输出天然限幅 ±0.5×amount，amount=1 也不刺耳。
+ * RT 安全：one-pole + tanhf 逐采样，无分配无锁；状态每块 denormal 归零。 */
+static void exciter_process(auradsp_handle h, float* io, int frames) {
+    float fc = h->p.exciter_hifreq.load(std::memory_order_relaxed);
+    if (fc < 3000.0f) fc = 3000.0f; if (fc > 10000.0f) fc = 10000.0f;
+    float amount = h->p.exciter_amount.load(std::memory_order_relaxed);
+    if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    const float a = expf(-2.0f * 3.14159265358979f * fc / fs);
+    float lpL = h->exc_lp_l, lpR = h->exc_lp_r;
+    for (int i = 0; i < frames; ++i) {
+        const float xL = io[i * 2], xR = io[i * 2 + 1];
+        lpL += (1.0f - a) * (xL - lpL);
+        lpR += (1.0f - a) * (xR - lpR);
+        const float harmL = tanhf((xL - lpL) * 2.0f) * 0.5f;
+        const float harmR = tanhf((xR - lpR) * 2.0f) * 0.5f;
+        io[i * 2]     = xL + amount * harmL;
+        io[i * 2 + 1] = xR + amount * harmR;
+    }
+    h->exc_lp_l = (fabsf(lpL) < 1e-18f) ? 0.0f : lpL;
+    h->exc_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -1669,6 +1704,11 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     /* Haas 差分环绕（Stage 2 后 / Freeverb 前） */
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
         haas_process(h, dst, frames);
+    }
+
+    /* 激励器（Haas 后 / Freeverb 前：最后一道音色工序，再进房间） */
+    if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
+        exciter_process(h, dst, frames);
     }
 
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
@@ -2252,6 +2292,23 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.haas_mix.store(v);
         return AURADSP_OK;
     }
+    /* ---- 激励器 ---- */
+    if (!strcmp(id, "exciter.enable") && bytes >= 4) {
+        h->p.exciter_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "exciter.amount") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.exciter_amount.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "exciter.hifreq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 3000) v = 3000; if (v > 10000) v = 10000;
+        h->p.exciter_hifreq.store(v);
+        return AURADSP_OK;
+    }
     /* ---- VDC 空间校正（M5-3） ---- */
     if (!strcmp(id, "ddc.load")) {
         if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
@@ -2477,6 +2534,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "haas.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.haas_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.delay") && bytes >= 4) { *(float*)out_value = h->p.haas_delay_ms.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.mix") && bytes >= 4) { *(float*)out_value = h->p.haas_mix.load(); return AURADSP_OK; }
+    if (!strcmp(id, "exciter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.exciter_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "exciter.amount") && bytes >= 4) { *(float*)out_value = h->p.exciter_amount.load(); return AURADSP_OK; }
+    if (!strcmp(id, "exciter.hifreq") && bytes >= 4) { *(float*)out_value = h->p.exciter_hifreq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.freq") && bytes >= 4) { *(float*)out_value = h->p.shelf_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.gain") && bytes >= 4) { *(float*)out_value = h->p.shelf_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.fv_enable.load(); return AURADSP_OK; }
@@ -2507,6 +2567,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"comp\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"bassmono\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"haas\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"exciter\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"

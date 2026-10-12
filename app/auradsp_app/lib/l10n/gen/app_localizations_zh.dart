@@ -685,6 +685,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stHaas => '差分环绕';
 
   @override
+  String get stExciter => '激励器';
+
+  @override
+  String get exciterHint => '给高频加谐波，压缩音频的空气感来源';
+
+  @override
+  String get exciterAmount => '谐波量';
+
+  @override
+  String get exciterHifreq => '取频点';
+
+  @override
   String get haasHint => '右声道延迟制造声场宽度，左声道直通保兼容';
 
   @override

@@ -43,6 +43,7 @@ def run_smoke_tests():
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
     "smoke_haas.py",
+    "smoke_exciter.py",
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",

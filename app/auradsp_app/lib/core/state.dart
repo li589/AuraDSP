@@ -85,6 +85,10 @@ abstract class ParamDefaults {
   static const double haasDelayMs = 12.0;    // 12 ms [0,25]
   static const double haasMix = 1.0;         // [0,1]
 
+  // 激励器
+  static const double exciterAmount = 0.3;   // [0,1]
+  static const double exciterHifreq = 5000.0; // 5 kHz [3000,10000]
+
   // 声场分带
   static const double stereoBand = 0.5;      // 50%
 
@@ -220,6 +224,9 @@ class AppModel extends ChangeNotifier {
   // Haas 差分环绕（stereo 后 / reverb 前）
   bool haasOn = false;
   double haasDelayMs = 12, haasMix = 1.0;
+  // 激励器（Haas 后 / reverb 前，最后一道音色工序）
+  bool exciterOn = false;
+  double exciterAmount = 0.3, exciterHifreq = 5000;
 
   // M5-c：空间混响（Freeverb / Spatial Reverb）
   bool fvOn = false;
@@ -654,6 +661,15 @@ class AppModel extends ChangeNotifier {
         if (raw['haasMix'] != null) {
           haasMix = (raw['haasMix'] as num).toDouble();
         }
+        if (raw['exciterEnable'] != null) {
+          exciterOn = (raw['exciterEnable'] as int) != 0;
+        }
+        if (raw['exciterAmount'] != null) {
+          exciterAmount = (raw['exciterAmount'] as num).toDouble();
+        }
+        if (raw['exciterHifreq'] != null) {
+          exciterHifreq = (raw['exciterHifreq'] as num).toDouble();
+        }
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -1011,6 +1027,9 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.haasEnable, haasOn ? 1 : 0);
       setFloat(ParamId.haasDelay, haasDelayMs);
       setFloat(ParamId.haasMix, haasMix);
+      setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
+      setFloat(ParamId.exciterAmount, exciterAmount);
+      setFloat(ParamId.exciterHifreq, exciterHifreq);
       setInt('limiter.enable', limiterOn ? 1 : 0);
       setFloat('post.gain', postGain);
 
@@ -1149,6 +1168,9 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.haasEnable) { haasOn = v != 0; break; }
         if (id == ParamId.haasDelay) { haasDelayMs = v; break; }
         if (id == ParamId.haasMix) { haasMix = v; break; }
+        if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
+        if (id == ParamId.exciterAmount) { exciterAmount = v; break; }
+        if (id == ParamId.exciterHifreq) { exciterHifreq = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1253,6 +1275,7 @@ class AppModel extends ChangeNotifier {
       'comp' => compOn,
       'bassmono' => bassmonoOn,
       'haas' => haasOn,
+      'exciter' => exciterOn,
       'bass' => bassOn,
       'eq' => eqOn,
       'arbmag' => false,
@@ -1276,6 +1299,8 @@ class AppModel extends ChangeNotifier {
         setBassmonoEnabled(!bassmonoOn);
       case 'haas':
         setHaasEnabled(!haasOn);
+      case 'exciter':
+        setExciterEnabled(!exciterOn);
       case 'comp':
         setCompEnabled(!compOn);
       case 'bass':
@@ -1445,6 +1470,28 @@ class AppModel extends ChangeNotifier {
   void setHaasMix(double v) {
     haasMix = v.clamp(0.0, 1.0);
     setFloat(ParamId.haasMix, haasMix);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 激励器：只暴露 amount/hifreq，drive 固定 2.0（防调出刺耳）。
+  void setExciterEnabled(bool on) {
+    exciterOn = on;
+    setInt(ParamId.exciterEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setExciterAmount(double v) {
+    exciterAmount = v.clamp(0.0, 1.0);
+    setFloat(ParamId.exciterAmount, exciterAmount);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setExciterHifreq(double v) {
+    exciterHifreq = v.clamp(3000.0, 10000.0);
+    setFloat(ParamId.exciterHifreq, exciterHifreq);
     notifyListeners();
     scheduleAutoSave();
   }
@@ -2311,7 +2358,7 @@ void fillEqQ(double q) {
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc', 'bassmono'
+        'convolver', 'ddc', 'bassmono', 'haas', 'exciter'
       }.contains(compId);
 
   /// 探测进行中

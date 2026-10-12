@@ -28,6 +28,7 @@ const List<({String id, bool exposed})> kStageMeta = [
   (id: 'crossfeed', exposed: true),
   (id: 'stereo', exposed: true),
   (id: 'haas', exposed: true),
+  (id: 'exciter', exposed: true),
   (id: 'reverb', exposed: true),
   (id: 'output', exposed: true),
 ];
@@ -46,6 +47,7 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'crossfeed' => l.stXfeed,
       'stereo' => l.stStereo,
       'haas' => l.stHaas,
+      'exciter' => l.stExciter,
       'reverb' => l.stReverb,
       'output' => l.stOutput,
       _ => id,
@@ -64,6 +66,7 @@ const List<String> kDefaultCoreOrder = [
   'crossfeed',
   'stereo',
   'haas',
+  'exciter',
   'reverb',
 ];
 

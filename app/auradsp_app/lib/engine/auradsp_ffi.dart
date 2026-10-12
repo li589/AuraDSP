@@ -63,6 +63,10 @@ abstract final class ParamId {
   static const haasEnable = 'haas.enable';
   static const haasDelay = 'haas.delay';
   static const haasMix = 'haas.mix';
+  // 激励器
+  static const exciterEnable = 'exciter.enable';
+  static const exciterAmount = 'exciter.amount';
+  static const exciterHifreq = 'exciter.hifreq';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';

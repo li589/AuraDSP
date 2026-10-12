@@ -703,6 +703,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stHaas => 'Differential Surround';
 
   @override
+  String get stExciter => 'Exciter';
+
+  @override
+  String get exciterHint => 'Harmonic air for compressed highs';
+
+  @override
+  String get exciterAmount => 'Amount';
+
+  @override
+  String get exciterHifreq => 'Pickup freq';
+
+  @override
   String get haasHint =>
       'Delayed right channel widens the stage, left stays dry';
 

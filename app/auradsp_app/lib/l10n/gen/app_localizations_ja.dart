@@ -686,6 +686,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stHaas => '差分サラウンド';
 
   @override
+  String get stExciter => 'エキサイター';
+
+  @override
+  String get exciterHint => '高域に倍音を足し空気感を復元';
+
+  @override
+  String get exciterAmount => '倍音量';
+
+  @override
+  String get exciterHifreq => '抽出周波数';
+
+  @override
   String get haasHint => '右を遅延させて広がりを作り、左はドライのまま';
 
   @override

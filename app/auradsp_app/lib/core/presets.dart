@@ -318,6 +318,12 @@ abstract final class PresetLibrary {
           'delay': m.haasDelayMs,
           'mix': m.haasMix,
         },
+        // 激励器（Haas 后 / reverb 前）
+        'exciter': {
+          'enable': m.exciterOn,
+          'amount': m.exciterAmount,
+          'hifreq': m.exciterHifreq,
+        },
         // 脉冲卷积与校正
         'convolver': {
           'enable': m.convEnabled && m.convReady,
@@ -567,6 +573,20 @@ abstract final class PresetLibrary {
       }
       if (hs['enable'] != null) {
         m.setHaasEnabled(hs['enable'] as bool);
+      }
+    }
+
+    // 8.7 激励器（amount/hifreq 先行，enable 最后）
+    final ex = (p['exciter'] as Map<String, dynamic>?) ?? {};
+    if (ex.isNotEmpty) {
+      if (ex['amount'] != null) {
+        m.setExciterAmount((ex['amount'] as num).toDouble());
+      }
+      if (ex['hifreq'] != null) {
+        m.setExciterHifreq((ex['hifreq'] as num).toDouble());
+      }
+      if (ex['enable'] != null) {
+        m.setExciterEnabled(ex['enable'] as bool);
       }
     }
 
