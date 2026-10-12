@@ -2612,7 +2612,9 @@ void fillEqQ(double q) {
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc', 'bassmono', 'haas', 'exciter', 'stereo', 'comp'
+        'convolver', 'ddc', 'bassmono', 'exciter', 'stereo', 'comp'
+        // haas 不入列：探针双声道脉冲对单侧延迟失明（必然测 0ms），
+        // 刷新回退到 componentLatency 的标称延迟（跟随 slider，诚实）。
       }.contains(compId);
 
   /// 探测进行中

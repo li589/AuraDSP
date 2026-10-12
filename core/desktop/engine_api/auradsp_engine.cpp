@@ -1198,11 +1198,6 @@ void probe_isolate(auradsp_handle p, const char* comp) {
         const int32_t one = 1; const float f = 120.0f;
         auradsp_set_param(p, "bassmono.enable", &one, 4);
         auradsp_set_param(p, "bassmono.freq", &f, 4);
-    } else if (!strcmp(comp, "haas")) {
-        const int32_t one = 1; const float dms = 10.0f; const float mix = 1.0f;
-        auradsp_set_param(p, "haas.enable", &one, 4);
-        auradsp_set_param(p, "haas.delay", &dms, 4);
-        auradsp_set_param(p, "haas.mix", &mix, 4);
     } else if (!strcmp(comp, "exciter")) {
         const int32_t one = 1; const float amt = 0.8f;
         auradsp_set_param(p, "exciter.enable", &one, 4);
@@ -1224,7 +1219,10 @@ void probe_isolate(auradsp_handle p, const char* comp) {
 bool probe_is_supported(const char* comp) {
     static const char* kSupported[] = {
         "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp",
-        "bassmono", "haas", "exciter", "stereo", "arbmag"
+        "bassmono", "exciter", "stereo"
+        /* 注意：haas 不入列。探针的能量/首非零法打双声道脉冲，而 haas 只延迟
+         * 一侧（另一侧干声恒在 0），必然测出 0ms——伪造零延迟比报「不可测」
+         * 更危险。摘掉后刷新回退到标称延迟（componentLatency 返回 slider 值）。 */
     };
     for (const char* s : kSupported)
         if (!strcmp(comp, s)) return true;
