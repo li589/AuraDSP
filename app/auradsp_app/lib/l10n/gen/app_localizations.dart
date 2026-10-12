@@ -1414,6 +1414,30 @@ abstract class AppLocalizations {
   /// **'差分环绕'**
   String get stHaas;
 
+  /// No description provided for @stExciter.
+  ///
+  /// In zh, this message translates to:
+  /// **'激励器'**
+  String get stExciter;
+
+  /// No description provided for @exciterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'给高频加谐波，压缩音频的空气感来源'**
+  String get exciterHint;
+
+  /// No description provided for @exciterAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'谐波量'**
+  String get exciterAmount;
+
+  /// No description provided for @exciterHifreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'取频点'**
+  String get exciterHifreq;
+
   /// No description provided for @haasHint.
   ///
   /// In zh, this message translates to:

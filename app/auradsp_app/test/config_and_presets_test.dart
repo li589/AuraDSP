@@ -566,4 +566,70 @@ void main() {
       expect(m.componentLatency('haas').ms, closeTo(0.0, 1e-9));
     });
   });
+
+  group('Exciter: 激励器', () {
+    test('默认值：关闭 + 0.3 + 5kHz', () {
+      final m = AppModel();
+      expect(m.exciterOn, isFalse);
+      expect(m.exciterAmount, closeTo(0.3, 1e-9));
+      expect(m.exciterHifreq, closeTo(5000.0, 1e-9));
+      expect(m.isStageEnabled('exciter'), isFalse);
+    });
+
+    test('量/分频钳位', () {
+      final m = AppModel();
+      m.setExciterAmount(2.0);
+      expect(m.exciterAmount, closeTo(1.0, 1e-9));
+      m.setExciterAmount(-1.0);
+      expect(m.exciterAmount, closeTo(0.0, 1e-9));
+      m.setExciterHifreq(1000);
+      expect(m.exciterHifreq, closeTo(3000.0, 1e-9));
+      m.setExciterHifreq(20000);
+      expect(m.exciterHifreq, closeTo(10000.0, 1e-9));
+    });
+
+    test('toggleStage 翻转独立开关位', () {
+      final m = AppModel();
+      m.toggleStage('exciter');
+      expect(m.exciterOn, isTrue);
+      m.toggleStage('exciter');
+      expect(m.exciterOn, isFalse);
+    });
+
+    test('snapshot/apply 对称恢复三字段', () {
+      final src = AppModel()
+        ..setExciterEnabled(true)
+        ..setExciterAmount(0.7)
+        ..setExciterHifreq(8000);
+      final snap = PresetLibrary.snapshot(src, name: '__ex__');
+      final ex = snap.params['exciter'] as Map<String, dynamic>;
+      expect(ex['enable'], isTrue);
+      expect((ex['amount'] as num).toDouble(), closeTo(0.7, 1e-9));
+      expect((ex['hifreq'] as num).toDouble(), closeTo(8000.0, 1e-9));
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__ex_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.exciterOn, isTrue);
+      expect(m.exciterAmount, closeTo(0.7, 1e-9));
+      expect(m.exciterHifreq, closeTo(8000.0, 1e-9));
+    });
+
+    test('无 exciter 节的老预设不碰开关', () {
+      final m = AppModel()..setExciterEnabled(true);
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__legacy__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 0.0, 'limiterEnable': true},
+              }));
+      expect(m.exciterOn, isTrue);
+    });
+  });
 }
