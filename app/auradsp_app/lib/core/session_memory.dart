@@ -49,6 +49,7 @@ abstract final class SessionMemory {
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
+        'arbmagString': m.arbmagString,
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
         'pluginId': m.pluginManager.getSlotPlugin(0)?.id,
         'pluginBypass': m.pluginManager.isSlotBypassed(0),
@@ -92,6 +93,9 @@ abstract final class SessionMemory {
       }
       if (session['lpCode'] is String) {
         m.lpCode = session['lpCode'] as String;
+      }
+      if (session['arbmagString'] is String) {
+        m.arbmagString = session['arbmagString'] as String;
       }
 
       // 多插槽恢复

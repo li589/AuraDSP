@@ -1441,13 +1441,13 @@ abstract class AppLocalizations {
   /// No description provided for @haasHint.
   ///
   /// In zh, this message translates to:
-  /// **'右声道延迟制造声场宽度，左声道直通保兼容'**
+  /// **'延迟侧制造声场宽度，另一侧恒直通保兼容'**
   String get haasHint;
 
   /// No description provided for @haasDelay.
   ///
   /// In zh, this message translates to:
-  /// **'右声道延迟'**
+  /// **'延迟量'**
   String get haasDelay;
 
   /// No description provided for @haasMix.
@@ -1455,6 +1455,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'差分混合比'**
   String get haasMix;
+
+  /// No description provided for @haasSide.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟侧'**
+  String get haasSide;
+
+  /// No description provided for @haasSideRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右声道'**
+  String get haasSideRight;
+
+  /// No description provided for @haasSideLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左声道'**
+  String get haasSideLeft;
 
   /// No description provided for @bassmonoHint.
   ///
@@ -2391,6 +2409,102 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'高频解析'**
   String get compTfresFine;
+
+  /// No description provided for @autoGainCompensation.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动增益补偿'**
+  String get autoGainCompensation;
+
+  /// No description provided for @autoGainCompensationTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'随音效提升动态平抑输出电平，防止多级叠加导致削波失真'**
+  String get autoGainCompensationTooltip;
+
+  /// No description provided for @outputGainGate.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出增益门'**
+  String get outputGainGate;
+
+  /// No description provided for @outputGainGateTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'微调该效果器出口电平 (-12.0 ~ +6.0 dB)'**
+  String get outputGainGateTooltip;
+
+  /// No description provided for @arbmagSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线'**
+  String get arbmagSubtitle;
+
+  /// No description provided for @arbmagPresetFlat.
+  ///
+  /// In zh, this message translates to:
+  /// **'平直 (Flat)'**
+  String get arbmagPresetFlat;
+
+  /// No description provided for @arbmagPresetHarman.
+  ///
+  /// In zh, this message translates to:
+  /// **'Harman 目标曲线'**
+  String get arbmagPresetHarman;
+
+  /// No description provided for @arbmagPresetDiffuse.
+  ///
+  /// In zh, this message translates to:
+  /// **'扩散场 (Diffuse-Field)'**
+  String get arbmagPresetDiffuse;
+
+  /// No description provided for @arbmagImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入文件'**
+  String get arbmagImport;
+
+  /// No description provided for @arbmagPaste.
+  ///
+  /// In zh, this message translates to:
+  /// **'剪贴板粘贴'**
+  String get arbmagPaste;
+
+  /// No description provided for @arbmagClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空曲线'**
+  String get arbmagClear;
+
+  /// No description provided for @arbmagEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未加载曲线。可点击上方预设、导入 AutoEq GraphicEQ 文件或粘贴代码。'**
+  String get arbmagEmptyHint;
+
+  /// No description provided for @arbmagEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'GraphicEQ 代码编辑器'**
+  String get arbmagEditor;
+
+  /// No description provided for @arbmagNodes.
+  ///
+  /// In zh, this message translates to:
+  /// **'已载入 {count} 个频点'**
+  String arbmagNodes(int count);
+
+  /// No description provided for @arbmagApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用代码'**
+  String get arbmagApply;
+
+  /// No description provided for @arbmagInvalidFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'GraphicEQ 格式错误或未包含有效节点'**
+  String get arbmagInvalidFormat;
 }
 
 class _AppLocalizationsDelegate

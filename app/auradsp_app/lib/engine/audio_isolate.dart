@@ -697,11 +697,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iBmE = idp(ParamId.bassmonoEnable), iBmF = idp(ParamId.bassmonoFreq);
             final iHsE = idp(ParamId.haasEnable), iHsD = idp(ParamId.haasDelay), iHsM = idp(ParamId.haasMix);
+            final iHsS = idp(ParamId.haasSide);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
+            // P-010：每效果输出增益门 + 自动补偿
+            final iBoG = idp(ParamId.bassOutGain), iBoA = idp(ParamId.bassAutoGain);
+            final iEoG = idp(ParamId.eqOutGain), iEoA = idp(ParamId.eqAutoGain);
+            final iToG = idp(ParamId.tubeOutGain), iToA = idp(ParamId.tubeAutoGain);
+            final iCoG = idp(ParamId.compOutGain), iCoA = idp(ParamId.compAutoGain);
+            final iRoG = idp(ParamId.reverbOutGain), iRoA = idp(ParamId.reverbAutoGain);
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
             final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
+            final iArbE = idp(ParamId.arbmagEnable), iArbR = idp(ParamId.arbmagReady);
+            final iArbN = idp(ParamId.arbmagNodeCount);
             List<List<double>>? readIrSpectrum(int ch) {
               if (ch <= 0 || ch > 8) return null;
               final count = ch * 32;
@@ -760,9 +769,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'haasEnable': rdInt(iHsE) ?? 0,
                 'haasDelay': rdFloat(iHsD) ?? 12.0,
                 'haasMix': rdFloat(iHsM) ?? 1.0,
+                'haasSide': rdInt(iHsS) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,
                 'exciterAmount': rdFloat(iExA) ?? 0.3,
                 'exciterHifreq': rdFloat(iExF) ?? 5000.0,
+                'bassOutGain': rdFloat(iBoG) ?? 0.0,
+                'bassAutoGain': rdInt(iBoA) ?? 0,
+                'eqOutGain': rdFloat(iEoG) ?? 0.0,
+                'eqAutoGain': rdInt(iEoA) ?? 0,
+                'tubeOutGain': rdFloat(iToG) ?? 0.0,
+                'tubeAutoGain': rdInt(iToA) ?? 0,
+                'compOutGain': rdFloat(iCoG) ?? 0.0,
+                'compAutoGain': rdInt(iCoA) ?? 0,
+                'reverbOutGain': rdFloat(iRoG) ?? 0.0,
+                'reverbAutoGain': rdInt(iRoA) ?? 0,
                 'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
@@ -772,9 +792,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'compTimeconstant': rdFloat(iCpT) ?? 0.14,
                 'compGranularity': rdInt(iCpG) ?? 1,
                 'compTfresolution': rdInt(iCpR) ?? 1,
+                'arbmagEnable': rdInt(iArbE) ?? 0,
+                'arbmagReady': rdInt(iArbR) ?? 0,
+                'arbmagNodeCount': rdInt(iArbN) ?? 0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iExE, iExA, iExF, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
                 malloc.free(q);
               }
             }
@@ -798,6 +821,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
               final st = AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});
+            }
+            if (rc == Status.ok && m['id'] == 'arbmag.string') {
+              final nodes = AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
+              final ready = AuraDspLib.getInt(lib, handle, 'arbmag.ready');
+              send({'evt': 'arbmag', 'nodes': nodes, 'ready': ready});
             }
             break;
           }

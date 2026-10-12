@@ -698,13 +698,22 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exciterHifreq => '抽出周波数';
 
   @override
-  String get haasHint => '右を遅延させて広がりを作り、左はドライのまま';
+  String get haasHint => '片側を遅延させて広がりを作り、もう片方はドライのまま';
 
   @override
-  String get haasDelay => '右遅延';
+  String get haasDelay => '遅延量';
 
   @override
   String get haasMix => '差分ミックス';
+
+  @override
+  String get haasSide => '遅延側';
+
+  @override
+  String get haasSideRight => '右チャンネル';
+
+  @override
+  String get haasSideLeft => '左チャンネル';
 
   @override
   String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
@@ -1226,4 +1235,56 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get compTfresFine => '高周波';
+
+  @override
+  String get autoGainCompensation => '自動ゲイン補正';
+
+  @override
+  String get autoGainCompensationTooltip =>
+      '音量増加に応じて出力レベルを動的に調整し、クリッピングを防止します。';
+
+  @override
+  String get outputGainGate => '出力ゲインゲート';
+
+  @override
+  String get outputGainGateTooltip => 'このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。';
+
+  @override
+  String get arbmagSubtitle => '8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線';
+
+  @override
+  String get arbmagPresetFlat => 'フラット (Flat)';
+
+  @override
+  String get arbmagPresetHarman => 'Harman ターゲット';
+
+  @override
+  String get arbmagPresetDiffuse => '拡散音場 (Diffuse-Field)';
+
+  @override
+  String get arbmagImport => 'ファイルをインポート';
+
+  @override
+  String get arbmagPaste => '貼り付け';
+
+  @override
+  String get arbmagClear => '曲線をクリア';
+
+  @override
+  String get arbmagEmptyHint =>
+      '曲線が読み込まれていません。上のプリセットを選択するか、AutoEqファイルをインポートまたはコードを貼り付けてください。';
+
+  @override
+  String get arbmagEditor => 'GraphicEQ コードエディタ';
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count 個の周波数ポイントを読み込みました';
+  }
+
+  @override
+  String get arbmagApply => 'コードを適用';
+
+  @override
+  String get arbmagInvalidFormat => 'GraphicEQフォーマットが無効であるか、有効な周波数ノードがありません';
 }

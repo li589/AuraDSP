@@ -63,10 +63,22 @@ abstract final class ParamId {
   static const haasEnable = 'haas.enable';
   static const haasDelay = 'haas.delay';
   static const haasMix = 'haas.mix';
+  static const haasSide = 'haas.side';
   // 激励器
   static const exciterEnable = 'exciter.enable';
   static const exciterAmount = 'exciter.amount';
   static const exciterHifreq = 'exciter.hifreq';
+  // 每效果输出增益门 + 自动增益补偿（P-010）
+  static const bassOutGain = 'bass.outgain';
+  static const bassAutoGain = 'bass.autogain';
+  static const eqOutGain = 'eq.outgain';
+  static const eqAutoGain = 'eq.autogain';
+  static const tubeOutGain = 'tube.outgain';
+  static const tubeAutoGain = 'tube.autogain';
+  static const compOutGain = 'comp.outgain';
+  static const compAutoGain = 'comp.autogain';
+  static const reverbOutGain = 'reverb.outgain';
+  static const reverbAutoGain = 'reverb.autogain';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';
@@ -78,6 +90,13 @@ abstract final class ParamId {
   static const compTimeconstant = 'comp.timeconstant';
   static const compGranularity = 'comp.granularity';
   static const compTfresolution = 'comp.tfresolution';
+  // 任意响应 EQ（ArbMag / AutoEq GraphicEQ）
+  static const arbmagEnable = 'arbmag.enable';
+  static const arbmagString = 'arbmag.string';
+  static const arbmagReady = 'arbmag.ready';
+  static const arbmagNodeCount = 'arbmag.nodeCount';
+  static const arbmagOutGain = 'arbmag.outgain';
+  static const arbmagAutoGain = 'arbmag.autogain';
 }
 
 /// auradsp_status（engine_api 枚举）

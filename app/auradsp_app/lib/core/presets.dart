@@ -257,6 +257,8 @@ abstract final class PresetLibrary {
           'harmonicBlend': m.bassHarmonicBlend,
           'subFloor': m.bassSubFloor,
           'gain': m.bassGain,
+          'autoGain': m.bassAutoGain,
+          'outputGain': m.bassOutputGain,
         },
         // 空间混响
         'reverb': {
@@ -268,6 +270,8 @@ abstract final class PresetLibrary {
           'dry': m.fvDry,
           'roomSize': m.fvRoomSize,
           'stereoWidth': m.fvWidth,
+          'autoGain': m.reverbAutoGain,
+          'outputGain': m.reverbOutputGain,
         },
         // 电子管模拟器
         'tube': {
@@ -277,6 +281,8 @@ abstract final class PresetLibrary {
           'oversampling': m.tubeOversampling,
           'compensation': m.tubeCompensation,
           'mix': m.tubeMix,
+          'autoGain': m.tubeAutoGain,
+          'outputGain': m.tubeOutputGain,
         },
         // 多段图形均衡器
         // 注意：快照必须深拷贝列表。直接存 m.eqFrequencies 这类活引用，
@@ -293,6 +299,8 @@ abstract final class PresetLibrary {
           'interp': m.eqInterp,
           'presetName': m.eqPresetName,
           'bypass': m.eqBypass,
+          'autoGain': m.eqAutoGain,
+          'outputGain': m.eqOutputGain,
         },
         // 立体声展宽
         'stereo': {
@@ -317,6 +325,7 @@ abstract final class PresetLibrary {
           'enable': m.haasOn,
           'delay': m.haasDelayMs,
           'mix': m.haasMix,
+          'side': m.haasSide,
         },
         // 激励器（Haas 后 / reverb 前）
         'exciter': {
@@ -338,6 +347,15 @@ abstract final class PresetLibrary {
           'timeconstant': m.compTimeconstant,
           'granularity': m.compGranularity,
           'tfresolution': m.compTfresolution,
+          'autoGain': m.compAutoGain,
+          'outputGain': m.compOutputGain,
+        },
+        // 任意响应 EQ（ArbMag）
+        'arbmag': {
+          'enable': m.arbmagOn && m.arbmagReady,
+          'string': m.arbmagString,
+          'autoGain': m.arbmagAutoGain,
+          'outputGain': m.arbmagOutputGain,
         },
         // 交叉反馈与输出限幅
         'crossfeed': {
@@ -398,6 +416,12 @@ abstract final class PresetLibrary {
       if (bass['subFloor'] != null) {
         m.setBassSubFloor((bass['subFloor'] as num).toDouble());
       }
+      if (bass['autoGain'] != null) {
+        m.setBassAutoGain(bass['autoGain'] as bool);
+      }
+      if (bass['outputGain'] != null) {
+        m.setBassOutputGain((bass['outputGain'] as num).toDouble());
+      }
       if (bass['enable'] != null) {
         m.setInt('bass.enable', (bass['enable'] as bool) ? 1 : 0);
       }
@@ -416,6 +440,12 @@ abstract final class PresetLibrary {
         m.setReverbCustomParam('dry', (rev['dry'] as num?)?.toDouble() ?? 1.0);
         m.setReverbCustomParam('roomSize', (rev['roomSize'] as num?)?.toDouble() ?? 1.2);
         m.setReverbCustomParam('width', (rev['stereoWidth'] as num?)?.toDouble() ?? 1.0);
+      }
+      if (rev['autoGain'] != null) {
+        m.setReverbAutoGain(rev['autoGain'] as bool);
+      }
+      if (rev['outputGain'] != null) {
+        m.setReverbOutputGain((rev['outputGain'] as num).toDouble());
       }
       if (rev['enable'] != null) {
         m.setSpatialReverbEnabled(rev['enable'] as bool);
@@ -439,6 +469,12 @@ abstract final class PresetLibrary {
       }
       if (tube['mix'] != null) {
         m.setTubeMix((tube['mix'] as num).toDouble());
+      }
+      if (tube['autoGain'] != null) {
+        m.setTubeAutoGain(tube['autoGain'] as bool);
+      }
+      if (tube['outputGain'] != null) {
+        m.setTubeOutputGain((tube['outputGain'] as num).toDouble());
       }
       if (tube['enable'] != null) {
         m.setInt('tube.enable', (tube['enable'] as bool) ? 1 : 0);
@@ -488,6 +524,12 @@ abstract final class PresetLibrary {
       }
       if (eq['presetName'] != null) {
         m.eqPresetName = eq['presetName'] as String;
+      }
+      if (eq['autoGain'] != null) {
+        m.setEqAutoGain(eq['autoGain'] as bool);
+      }
+      if (eq['outputGain'] != null) {
+        m.setEqOutputGain((eq['outputGain'] as num).toDouble());
       }
       if (eq['enable'] != null) {
         m.setInt('eq.enable', (eq['enable'] as bool) ? 1 : 0);
@@ -571,6 +613,9 @@ abstract final class PresetLibrary {
       if (hs['mix'] != null) {
         m.setHaasMix((hs['mix'] as num).toDouble());
       }
+      if (hs['side'] != null) {
+        m.setHaasSide((hs['side'] as num).toInt());
+      }
       if (hs['enable'] != null) {
         m.setHaasEnabled(hs['enable'] as bool);
       }
@@ -619,8 +664,31 @@ abstract final class PresetLibrary {
       if (comp['tfresolution'] != null) {
         m.setCompTfresolution((comp['tfresolution'] as num).toInt());
       }
+      if (comp['autoGain'] != null) {
+        m.setCompAutoGain(comp['autoGain'] as bool);
+      }
+      if (comp['outputGain'] != null) {
+        m.setCompOutputGain((comp['outputGain'] as num).toDouble());
+      }
       if (comp['enable'] != null) {
         m.setCompEnabled(comp['enable'] as bool);
+      }
+    }
+
+    // 10.6 任意响应 EQ（ArbMag）
+    final arb = (p['arbmag'] as Map<String, dynamic>?) ?? {};
+    if (arb.isNotEmpty) {
+      if (arb['string'] != null && (arb['string'] as String).isNotEmpty) {
+        m.setArbmagString(arb['string'] as String);
+      }
+      if (arb['autoGain'] != null) {
+        m.setArbmagAutoGain(arb['autoGain'] as bool);
+      }
+      if (arb['outputGain'] != null) {
+        m.setArbmagOutputGain((arb['outputGain'] as num).toDouble());
+      }
+      if (arb['enable'] != null) {
+        m.setArbmagEnabled(arb['enable'] as bool);
       }
     }
 

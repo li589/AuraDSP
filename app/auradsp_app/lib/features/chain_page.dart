@@ -21,7 +21,7 @@ const List<({String id, bool exposed})> kStageMeta = [
   (id: 'comp', exposed: true),
   (id: 'bass', exposed: true),
   (id: 'eq', exposed: true),
-  (id: 'arbmag', exposed: false),
+  (id: 'arbmag', exposed: true),
   (id: 'convolver', exposed: true),
   (id: 'ddc', exposed: true),
   (id: 'liveprog', exposed: true),

@@ -157,14 +157,28 @@ struct Params {
     /* BassMono：低频单声道化（one-pole LPF，RT 线程就地处理，零延迟） */
     std::atomic<int32_t>  bassmono_enable{0};
     std::atomic<float>    bassmono_freq{120.0f}; /* Hz [20,300] */
-    /* Haas 差分环绕（右声道延迟 0..25ms + 干湿混合） */
+    /* Haas 差分环绕（延迟侧 0..25ms + 干湿混合；side 选延迟哪一侧） */
     std::atomic<int32_t>  haas_enable{0};
     std::atomic<float>    haas_delay_ms{12.0f};  /* ms [0,25] */
     std::atomic<float>    haas_mix{1.0f};        /* [0,1] */
+    std::atomic<int32_t>  haas_side{0};          /* 0=延迟右 1=延迟左 */
     /* 激励器（HPF 取高频 + tanh 谐波混回；drive 固定，只暴露 amount/hifreq） */
     std::atomic<int32_t>  exciter_enable{0};
     std::atomic<float>    exciter_amount{0.3f};  /* [0,1] */
     std::atomic<float>    exciter_hifreq{5000.0f}; /* Hz [3000,10000] */
+    /* 每效果输出增益门（dB [-12,6]）+ 自动增益补偿开关。
+     * bass/eq/tube/comp 落地 vendor（P-010 的 fxOutGain/fxAutoGain）；
+     * reverb 落地引擎侧 Freeverb。 */
+    std::atomic<float>    bass_outgain{0.0f};
+    std::atomic<int32_t>  bass_autogain{0};
+    std::atomic<float>    eq_outgain{0.0f};
+    std::atomic<int32_t>  eq_autogain{0};
+    std::atomic<float>    tube_outgain{0.0f};
+    std::atomic<int32_t>  tube_autogain{0};
+    std::atomic<float>    comp_outgain{0.0f};
+    std::atomic<int32_t>  comp_autogain{0};
+    std::atomic<float>    reverb_outgain{0.0f};
+    std::atomic<int32_t>  reverb_autogain{0};
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -179,6 +193,10 @@ struct Params {
     std::atomic<float>    comp_timeconstant{0.14f};  /* 秒 [0.02, 0.5] */
     std::atomic<int32_t>  comp_granularity{1};       /* [0, 4] 频带颗粒度 */
     std::atomic<int32_t>  comp_tfresolution{1};      /* [0, 3] 时频模式: 1=标准, 3=Gammatone零延迟 */
+    /* 任意响应均衡器（ArbMag / AutoEq GraphicEQ） */
+    std::atomic<int32_t>  arbmag_enable{0};
+    std::atomic<int32_t>  arbmag_ready{0};
+    std::atomic<int32_t>  arbmag_nodes{0};
 };
 
 /* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
@@ -260,6 +278,7 @@ struct LatencyItem { int tier; float ms; };
 constexpr LatencyItem kLatReverb   {2, 30.0f};
 constexpr LatencyItem kLatComp     {2, 85.0f};  /* FFTCompander FFTSIZE_DRS/2 */
 constexpr LatencyItem kLatConvolver{2, 10.0f};  /* 保守下限，IR 长度另计 */
+constexpr LatencyItem kLatArbMag   {2, 2.67f};  /* 分块 FFT 卷积（128 frames @48k） */
 constexpr LatencyItem kLatCrossfeed{1, 3.0f};
 constexpr LatencyItem kLatDdc      {1, 6.0f};
 constexpr LatencyItem kLatLimiter  {0, 2.0f};
@@ -327,6 +346,8 @@ struct auradsp_handle_s {
 
     /* M5-c：Freeverb（RT 独占；create 分配） */
     FvVoice fvL, fvR;
+    /* 混响自动增益补偿平滑状态（RT 独占） */
+    double rev_ag_in = 0.0, rev_ag_out = 0.0, rev_ag_comp = 1.0;
 
     /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰） */
     struct ShelfBiquad {
@@ -407,6 +428,10 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
         ms += kLatComp.ms;
     }
+    if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
+        h->p.arbmag_ready.load(std::memory_order_relaxed)) {
+        ms += kLatArbMag.ms;
+    }
     /* Haas = 纯延迟线，按当前设定值动态上报（0..25ms，Viper 差分环绕同量级）。 */
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
         float dms = h->p.haas_delay_ms.load(std::memory_order_relaxed);
@@ -470,6 +495,34 @@ void apply_eq(auradsp_handle h) {
 
 void apply_post(auradsp_handle h) {
     JamesDSPSetPostGain(&h->jdsp, h->p.post_gain.load(std::memory_order_relaxed));
+}
+
+/* P-010：bass/eq/tube/comp 输出增益门 + 自动补偿落地 vendor stage。
+ * 每项独立下推，无 vendor 锁（对齐 float 写，x86 原子；切态重置在 vendor 内）。 */
+static void apply_fx_gains(auradsp_handle h) {
+    static constexpr struct { std::atomic<float> Params::*db;
+                              std::atomic<int32_t> Params::*on; int fx; } kFx[] = {
+        { &Params::tube_outgain, &Params::tube_autogain, 0 },
+        { &Params::comp_outgain, &Params::comp_autogain, 1 },
+        { &Params::bass_outgain, &Params::bass_autogain, 2 },
+        { &Params::eq_outgain,   &Params::eq_autogain,   3 },
+    };
+    for (const auto& f : kFx) {
+        const float db = (h->p.*(f.db)).load(std::memory_order_relaxed);
+        JamesDSPSetFxOutGain(&h->jdsp, f.fx, powf(10.0f, db * 0.05f));
+        JamesDSPSetFxAutoGain(&h->jdsp, f.fx,
+            (h->p.*(f.on)).load(std::memory_order_relaxed) ? 1 : 0);
+    }
+}
+
+/* 立体声块 RMS（reverb 自动补偿计量用；RT 独占调用） */
+static double stereo_block_rms(const float* io, int frames) {
+    double acc = 0.0;
+    for (int i = 0; i < frames; ++i) {
+        const double l = io[i * 2], r = io[i * 2 + 1];
+        acc += l * l + r * r;
+    }
+    return sqrt(acc / (2.0 * (double)frames));
 }
 
 void apply_liveprog(auradsp_handle h) {
@@ -564,6 +617,15 @@ void apply_comp(auradsp_handle h) {
         CompressorEnable(&h->jdsp, 1);
     } else {
         CompressorDisable(&h->jdsp);
+    }
+}
+
+void apply_arbmag(auradsp_handle h) {
+    if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
+        h->p.arbmag_ready.load(std::memory_order_relaxed)) {
+        ArbitraryResponseEqualizerEnable(&h->jdsp, 1);
+    } else {
+        ArbitraryResponseEqualizerDisable(&h->jdsp);
     }
 }
 
@@ -858,6 +920,8 @@ void apply_params_locked(auradsp_handle h) {
     apply_tube(h);
     apply_crossfeed(h);
     apply_comp(h);
+    apply_arbmag(h);
+    apply_fx_gains(h);
 }
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
@@ -1085,6 +1149,8 @@ void probe_isolate(auradsp_handle p, const char* comp) {
         {"bass.enable", 0}, {"eq.enable", 0}, {"tube.enable", 0},
         {"crossfeed.enable", 0}, {"limiter.enable", 0}, {"convolver.enable", 0},
         {"ddc.enable", 0}, {"liveprog.enable", 0}, {"shelf.enable", 0},
+        {"bassmono.enable", 0}, {"haas.enable", 0}, {"exciter.enable", 0},
+        {"stereo.enable", 0}, {"arbmag.enable", 0},
     };
     for (const auto& z : zeros) {
         const int32_t v = 0;
@@ -1097,6 +1163,8 @@ void probe_isolate(auradsp_handle p, const char* comp) {
     auradsp_set_param(p, "stereo.mix", &zero_f, 4);
     auradsp_set_param(p, "post.gain", &zero_f, 4);
     auradsp_set_param(p, "bass.gain", &zero_f, 4);
+    auradsp_set_param(p, "haas.mix", &zero_f, 4);
+    auradsp_set_param(p, "exciter.amount", &zero_f, 4);
 
     if (!strcmp(comp, "bass")) {
         const int32_t one = 1; const float g = 6.0f;
@@ -1126,6 +1194,28 @@ void probe_isolate(auradsp_handle p, const char* comp) {
     } else if (!strcmp(comp, "comp")) {
         const int32_t one = 1;
         auradsp_set_param(p, "comp.enable", &one, 4);
+    } else if (!strcmp(comp, "bassmono")) {
+        const int32_t one = 1; const float f = 120.0f;
+        auradsp_set_param(p, "bassmono.enable", &one, 4);
+        auradsp_set_param(p, "bassmono.freq", &f, 4);
+    } else if (!strcmp(comp, "haas")) {
+        const int32_t one = 1; const float dms = 10.0f; const float mix = 1.0f;
+        auradsp_set_param(p, "haas.enable", &one, 4);
+        auradsp_set_param(p, "haas.delay", &dms, 4);
+        auradsp_set_param(p, "haas.mix", &mix, 4);
+    } else if (!strcmp(comp, "exciter")) {
+        const int32_t one = 1; const float amt = 0.8f;
+        auradsp_set_param(p, "exciter.enable", &one, 4);
+        auradsp_set_param(p, "exciter.amount", &amt, 4);
+    } else if (!strcmp(comp, "stereo")) {
+        const int32_t one = 1; const float mix = 0.5f;
+        auradsp_set_param(p, "stereo.enable", &one, 4);
+        auradsp_set_param(p, "stereo.mix", &mix, 4);
+    } else if (!strcmp(comp, "arbmag")) {
+        const int32_t one = 1;
+        const char* str = "GraphicEQ: 20 0; 1000 0; 20000 0";
+        auradsp_set_param(p, "arbmag.string", str, (uint32_t)strlen(str));
+        auradsp_set_param(p, "arbmag.enable", &one, 4);
     }
     /* convolver / ddc / liveprog 需要外部资源（IR / VDC / 脚本），
      * 无法在空探针上就绪，此时如实返回"不可测"而不是编一个数字。 */
@@ -1133,7 +1223,8 @@ void probe_isolate(auradsp_handle p, const char* comp) {
 
 bool probe_is_supported(const char* comp) {
     static const char* kSupported[] = {
-        "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp"
+        "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp",
+        "bassmono", "haas", "exciter", "stereo", "arbmag"
     };
     for (const char* s : kSupported)
         if (!strcmp(comp, s)) return true;
@@ -1347,6 +1438,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvMixUsed = 0;
     fv_alloc(h->fvL, sample_rate, 0);
     fv_alloc(h->fvR, sample_rate, kFvStereoSpread);
+    JamesDSPInitFxGains(&h->jdsp);
     shelf_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
@@ -1601,8 +1693,8 @@ static void bassmono_process(auradsp_handle h, float* io, int frames) {
     h->bm_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
 }
 
-/* Haas 差分环绕（右声道延迟 D + 干湿混合，左声道直通保单声道兼容）。
- * 位置：Stage 2 后 / Freeverb 前——vendor 内部展宽拆不出来，
+/* Haas 差分环绕（延迟 D 的那一侧由 haas.side 决定 + 干湿混合，另一侧恒直通
+ * 保单声道兼容）。位置：Stage 2 后 / Freeverb 前——vendor 内部展宽拆不出来，
  * vendor 出口是能挂的最晚空间点（spec 链序 stereo→haas→reverb 的可实现形态）。
  * RT 安全：纯延迟线，无分配无锁；mix=0 时仍持续录制延迟环，
  * 避免开轮瞬间爆出陈旧音频。 */
@@ -1613,17 +1705,19 @@ static void haas_process(auradsp_handle h, float* io, int frames) {
     if (dms < 0.0f) dms = 0.0f; if (dms > 25.0f) dms = 25.0f;
     float mix = h->p.haas_mix.load(std::memory_order_relaxed);
     if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
+    /* 延迟侧：0=右 1=左（Viper 差分环绕同款偏好开关） */
+    const int dc = (h->p.haas_side.load(std::memory_order_relaxed) == 1) ? 0 : 1;
     const float fs = (float)h->jdsp.fs;
     int d = (fs > 0.0f) ? (int)(dms * 0.001f * fs + 0.5f) : 0;
     if (d >= ringLen) d = ringLen - 1;
     const float dry = 1.0f - mix;
     int pos = h->haas_pos;
     for (int i = 0; i < frames; ++i) {
-        const float rin = io[i * 2 + 1];
-        h->haas_ring[pos] = rin;
+        const float din = io[i * 2 + dc];
+        h->haas_ring[pos] = din;
         int rp = pos - d;
         if (rp < 0) rp += ringLen;
-        io[i * 2 + 1] = rin * dry + h->haas_ring[rp] * mix;
+        io[i * 2 + dc] = din * dry + h->haas_ring[rp] * mix;
         if (++pos >= ringLen) pos = 0;
     }
     h->haas_pos = pos;
@@ -1711,8 +1805,12 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
         exciter_process(h, dst, frames);
     }
 
-    /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合 */
+    /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合。
+     * P-010：混响输出增益门 + 自动增益补偿（全引擎侧，reverb 不占 vendor 槽） */
     if (h->p.fv_enable.load(std::memory_order_relaxed)) {
+        const bool ag = h->p.reverb_autogain.load(std::memory_order_relaxed) != 0;
+        double rin = 0.0;
+        if (ag) rin = stereo_block_rms(dst, frames);
         const float feedback =
             0.7f + h->p.fv_decay.load(std::memory_order_relaxed) * 0.28f;
         const float damp = h->p.fv_damp.load(std::memory_order_relaxed) * 0.4f;
@@ -1725,6 +1823,25 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
             const float wetR = fv_voice_process(h->fvR, dst[i * 2 + 1], feedback);
             dst[i * 2]     = dst[i * 2] * dryG + wetL * wetG;
             dst[i * 2 + 1] = dst[i * 2 + 1] * dryG + wetR * wetG;
+        }
+        float g = powf(10.0f, h->p.reverb_outgain.load(std::memory_order_relaxed) * 0.05f);
+        if (ag) {
+            const double rout = stereo_block_rms(dst, frames);
+            h->rev_ag_in  += (rin - h->rev_ag_in)  * 0.05;
+            h->rev_ag_out += (rout - h->rev_ag_out) * 0.05;
+            double desired = 1.0;
+            if (h->rev_ag_in > 1e-6 && h->rev_ag_out > 1e-6)
+                desired = h->rev_ag_in / h->rev_ag_out;
+            if (desired < 0.25) desired = 0.25;
+            if (desired > 4.0)  desired = 4.0;
+            h->rev_ag_comp += (desired - h->rev_ag_comp) * 0.1;
+            g *= (float)h->rev_ag_comp;
+        }
+        if (g != 1.0f) {
+            for (int i = 0; i < frames; ++i) {
+                dst[i * 2] *= g;
+                dst[i * 2 + 1] *= g;
+            }
         }
     }
 
@@ -2061,6 +2178,66 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_post(h);   /* 只动后级增益 */
         return AURADSP_OK;
     }
+    /* ---- P-010 每效果输出增益门 + 自动补偿 ---- */
+    if (!strcmp(id, "bass.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.bass_outgain.store(db);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "bass.autogain") && bytes >= 4) {
+        h->p.bass_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "eq.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.eq_outgain.store(db);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "eq.autogain") && bytes >= 4) {
+        h->p.eq_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "tube.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.tube_outgain.store(db);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "tube.autogain") && bytes >= 4) {
+        h->p.tube_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "comp.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.comp_outgain.store(db);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "comp.autogain") && bytes >= 4) {
+        h->p.comp_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "reverb.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.reverb_outgain.store(db);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "reverb.autogain") && bytes >= 4) {
+        h->p.reverb_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) h->rev_ag_in = h->rev_ag_out = 0.0; h->rev_ag_comp = 1.0;
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "input.gain") && bytes >= 4) {
         float db = *(const float*)value;
         if (db < -15.0f) db = -15.0f; if (db > 15.0f) db = 15.0f;
@@ -2199,6 +2376,37 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_convolver(h);
         return AURADSP_OK;
     }
+    /* ---- 任意响应均衡器（ArbMag / AutoEq GraphicEQ） ---- */
+    if (!strcmp(id, "arbmag.enable") && bytes >= 4) {
+        const int32_t v = *(const int32_t*)value ? 1 : 0;
+        if (v && !h->p.arbmag_ready.load(std::memory_order_relaxed)) {
+            set_error(h, "未加载响应曲线：请先配置或粘贴 GraphicEQ 节点，再启用任意响应 EQ");
+            return AURADSP_E_STATE;
+        }
+        h->p.arbmag_enable.store(v);
+        if (h->open.load()) apply_arbmag(h);
+        compute_latency(h, &h->latency_ms);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "arbmag.string")) {
+        if (bytes == 0 || bytes > 256 * 1024) {
+            set_error(h, "arbmag.string: size must be 1..256KiB");
+            return AURADSP_E_PARAM;
+        }
+        char* buf = (char*)malloc((size_t)bytes + 1);
+        if (!buf) { set_error(h, "arbmag.string: OOM"); return AURADSP_E_IO; }
+        memcpy(buf, value, bytes);
+        buf[bytes] = 0;
+        ArbitraryResponseEqualizerStringParser(&h->jdsp, buf);
+        free(buf);
+        const int nodes = (int)h->jdsp.arbMag.instance.coeffGen.nodesCount;
+        h->p.arbmag_nodes.store(nodes);
+        h->p.arbmag_ready.store(nodes > 0 ? 1 : 0);
+        if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {
+            apply_arbmag(h);
+        }
+        return AURADSP_OK;
+    }
     /* ---- M3-a：轻量效果开关 ---- */
     if (!strcmp(id, "tube.enable") && bytes >= 4) {
         h->p.tube_enable.store(*(const int32_t*)value ? 1 : 0);
@@ -2290,6 +2498,10 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         float v = *(const float*)value;
         if (v < 0) v = 0; if (v > 1) v = 1;
         h->p.haas_mix.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "haas.side") && bytes >= 4) {
+        h->p.haas_side.store(*(const int32_t*)value ? 1 : 0);
         return AURADSP_OK;
     }
     /* ---- 激励器 ---- */
@@ -2474,6 +2686,16 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "eq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.limiter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "post.gain") && bytes >= 4) { *(float*)out_value = h->p.post_gain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.outgain") && bytes >= 4) { *(float*)out_value = h->p.bass_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.bass_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "eq.outgain") && bytes >= 4) { *(float*)out_value = h->p.eq_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "eq.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.outgain") && bytes >= 4) { *(float*)out_value = h->p.tube_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.outgain") && bytes >= 4) { *(float*)out_value = h->p.comp_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "comp.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "reverb.outgain") && bytes >= 4) { *(float*)out_value = h->p.reverb_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "reverb.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "input.gain") && bytes >= 4) { *(float*)out_value = h->p.input_gain.load(); return AURADSP_OK; }
     if (!strncmp(id, "input.balance.", 14) && bytes >= 4) {
         const char d = id[14];
@@ -2534,6 +2756,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "haas.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.haas_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.delay") && bytes >= 4) { *(float*)out_value = h->p.haas_delay_ms.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.mix") && bytes >= 4) { *(float*)out_value = h->p.haas_mix.load(); return AURADSP_OK; }
+    if (!strcmp(id, "haas.side") && bytes >= 4) { *(int32_t*)out_value = h->p.haas_side.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.exciter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.amount") && bytes >= 4) { *(float*)out_value = h->p.exciter_amount.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.hifreq") && bytes >= 4) { *(float*)out_value = h->p.exciter_hifreq.load(); return AURADSP_OK; }
@@ -2548,6 +2771,10 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "gate.maxIrSeconds") && bytes >= 4) { *(float*)out_value = h->gate_max_ir_seconds.load(); return AURADSP_OK; }
     if (!strcmp(id, "gate.maxFileMb") && bytes >= 4) { *(float*)out_value = h->gate_max_file_mb.load(); return AURADSP_OK; }
     if (!strcmp(id, "viz.fftSize") && bytes >= 4) { *(int32_t*)out_value = h->viz_fft_size.load(); return AURADSP_OK; }
+    /* ---- 任意响应均衡器（ArbMag）回读 ---- */
+    if (!strcmp(id, "arbmag.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "arbmag.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_ready.load(); return AURADSP_OK; }
+    if (!strcmp(id, "arbmag.nodeCount") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_nodes.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 1024) {
         /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
@@ -2568,7 +2795,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"bassmono\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"haas\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"exciter\",\"tier\":1,\"exposed\":true},"
-            "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":false},"
+            "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
             "]";
