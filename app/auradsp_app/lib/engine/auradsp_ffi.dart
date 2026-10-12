@@ -20,6 +20,8 @@ abstract final class ParamId {
   static const stereoMix = 'stereo.mix';
   static const eqEnable = 'eq.enable';
   static const postGain = 'post.gain';
+  static const inputGain = 'input.gain';
+  static String inputBalance(int ch) => 'input.balance.$ch';
   static const limiterEnable = 'limiter.enable';
   static const channelsMode = 'channels.mode';
   // v1.1：Liveprog（EEL2 实时可编程 DSP）
@@ -218,6 +220,11 @@ final class VizFrame extends Struct {
 
     List<double> stageLevelsRToList() =>
         List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
+
+    double get inputLevelInL => stageLevelsL[12];
+    double get inputLevelInR => stageLevelsR[12];
+    double get inputLevelOutL => stageLevelsL[13];
+    double get inputLevelOutR => stageLevelsR[13];
   }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）

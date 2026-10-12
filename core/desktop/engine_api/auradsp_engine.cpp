@@ -160,6 +160,9 @@ struct Params {
     std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
     std::atomic<float>    fv_wet{0.3f};         /* 0..1 */
     std::atomic<float>    fv_dry{1.0f};         /* 0..1 */
+    /* 输入门控（钉死在链路最前端；全通道总增益 + 8通道单控平衡比例） */
+    std::atomic<float>    input_gain{0.0f};     /* dB [-15,15] 默认 0.0 */
+    std::atomic<float>    input_ch_gain[8];     /* 各声道单控比例 [0.0, 2.0]，默认 1.0 (100%) */
 };
 
 /* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
@@ -281,6 +284,11 @@ struct auradsp_handle_s {
     uint64_t viz_seq = 0;
     float  viz_lvl_l = -120.0f;       /* 最近块峰值 dBFS（viz_write 记录） */
     float  viz_lvl_r = -120.0f;
+    /* 输入门控实时本级电平（dBFS；RT 线程每块记录，emit_viz 填入 stage_levels 保留槽位） */
+    float  input_lvl_in_l = -120.0f;
+    float  input_lvl_in_r = -120.0f;
+    float  input_lvl_out_l = -120.0f;
+    float  input_lvl_out_r = -120.0f;
 
     /* Liveprog 状态 */
     float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */
@@ -980,6 +988,14 @@ void emit_viz(auradsp_handle h) {
             const float pr = h->jdsp.stagePeakR[i];
             f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;
             f.stage_levels_r[i] = pr > 1e-6f ? 20.0f * log10f(pr) : -120.0f;
+        } else if (i == 12) {
+            /* [Input Gate Tap] 输入门控本级 IN 电平 (L/R) */
+            f.stage_levels_l[i] = h->input_lvl_in_l;
+            f.stage_levels_r[i] = h->input_lvl_in_r;
+        } else if (i == 13) {
+            /* [Input Gate Tap] 输入门控本级 OUT 电平 (L/R) */
+            f.stage_levels_l[i] = h->input_lvl_out_l;
+            f.stage_levels_r[i] = h->input_lvl_out_r;
         } else {
             f.stage_levels_l[i] = -120.0f;
             f.stage_levels_r[i] = -120.0f;
@@ -1257,6 +1273,10 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (viz_int < 1) viz_int = 1;
     h->viz_interval.store(viz_int);
 
+    for (int i = 0; i < 8; ++i) {
+        h->p.input_ch_gain[i].store(1.0f);
+    }
+
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);
     /* P-005：scratch 绑定（必须在 memset 之后）+ 默认纯湿（=上游行为） */
@@ -1405,13 +1425,43 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
      * ch<=2 时整段跳过，立体声路径与改造前逐字节一致。 */
     const int ch = h->channel_count.load(std::memory_order_relaxed);
     const bool multichannel = (ch > 2);
+
+    /* [Input Gate: 顺序钉死在最前端] 全通道总输入增益 × 单通道平衡 */
+    const float in_gain_db = h->p.input_gain.load(std::memory_order_relaxed);
+    const float master_lin = (in_gain_db == 0.0f) ? 1.0f : powf(10.0f, in_gain_db * 0.05f);
+
     if (multichannel && h->mx_scratch) {
         if (st != AURADSP_STATE_PROCESSING) {
             /* 非处理态：原样直通（含全部声道），不做矩阵 */
             memcpy(out, in, (size_t)frames * ch * sizeof(float));
             return;
         }
-        if (!mx_downmix(h, in, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
+        /* 多声道输入门控处理：缩放写入 mx_scratch 并统计本级 IN / OUT 电平 */
+        float pk_in_l = 0.0f, pk_in_r = 0.0f;
+        float pk_out_l = 0.0f, pk_out_r = 0.0f;
+        for (int i = 0; i < frames; ++i) {
+            for (int c = 0; c < ch; ++c) {
+                const float s_in = in[i * ch + c];
+                const float bal = (c < 8) ? h->p.input_ch_gain[c].load(std::memory_order_relaxed) : 1.0f;
+                const float s_out = s_in * (master_lin * bal);
+                h->mx_scratch[i * ch + c] = s_out;
+                const float a_in = fabsf(s_in);
+                const float a_out = fabsf(s_out);
+                if (c == 0) {
+                    if (a_in > pk_in_l) pk_in_l = a_in;
+                    if (a_out > pk_out_l) pk_out_l = a_out;
+                } else if (c == 1) {
+                    if (a_in > pk_in_r) pk_in_r = a_in;
+                    if (a_out > pk_out_r) pk_out_r = a_out;
+                }
+            }
+        }
+        h->input_lvl_in_l = pk_in_l > 1e-6f ? 20.0f * log10f(pk_in_l) : -120.0f;
+        h->input_lvl_in_r = pk_in_r > 1e-6f ? 20.0f * log10f(pk_in_r) : -120.0f;
+        h->input_lvl_out_l = pk_out_l > 1e-6f ? 20.0f * log10f(pk_out_l) : -120.0f;
+        h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
+
+        if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
             memcpy(out, in, (size_t)frames * ch * sizeof(float));
             return;
         }
@@ -1432,8 +1482,32 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
         return;
     }
-    /* 输入拷入 shelf_scratch（in 原位不可写，同时作为链前置工作区） */
-    memcpy(h->shelf_scratch, in, (size_t)frames * 2 * sizeof(float));
+    /* 立体声输入门控处理：写入 shelf_scratch 作为链前置工作区 */
+    const float g0 = master_lin * h->p.input_ch_gain[0].load(std::memory_order_relaxed);
+    const float g1 = master_lin * h->p.input_ch_gain[1].load(std::memory_order_relaxed);
+    float pk_in_l = 0.0f, pk_in_r = 0.0f;
+    float pk_out_l = 0.0f, pk_out_r = 0.0f;
+    for (int i = 0; i < frames; ++i) {
+        const float in_l = in[i * 2];
+        const float in_r = in[i * 2 + 1];
+        const float out_l = in_l * g0;
+        const float out_r = in_r * g1;
+        h->shelf_scratch[i * 2]     = out_l;
+        h->shelf_scratch[i * 2 + 1] = out_r;
+        const float a_in_l = fabsf(in_l);
+        const float a_in_r = fabsf(in_r);
+        const float a_out_l = fabsf(out_l);
+        const float a_out_r = fabsf(out_r);
+        if (a_in_l > pk_in_l) pk_in_l = a_in_l;
+        if (a_in_r > pk_in_r) pk_in_r = a_in_r;
+        if (a_out_l > pk_out_l) pk_out_l = a_out_l;
+        if (a_out_r > pk_out_r) pk_out_r = a_out_r;
+    }
+    h->input_lvl_in_l = pk_in_l > 1e-6f ? 20.0f * log10f(pk_in_l) : -120.0f;
+    h->input_lvl_in_r = pk_in_r > 1e-6f ? 20.0f * log10f(pk_in_r) : -120.0f;
+    h->input_lvl_out_l = pk_out_l > 1e-6f ? 20.0f * log10f(pk_out_l) : -120.0f;
+    h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
+
     process_stereo_chain(h, h->shelf_scratch, out, frames);
     h->frames_since_viz += frames;
     viz_write(h, out, frames);
@@ -1818,6 +1892,21 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) apply_post(h);   /* 只动后级增益 */
         return AURADSP_OK;
     }
+    if (!strcmp(id, "input.gain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -15.0f) db = -15.0f; if (db > 15.0f) db = 15.0f;
+        h->p.input_gain.store(db);
+        return AURADSP_OK;
+    }
+    if (!strncmp(id, "input.balance.", 14) && bytes >= 4) {
+        const char d = id[14];
+        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "unknown input balance channel"); return AURADSP_E_PARAM; }
+        const int idx = d - '1';
+        float v = *(const float*)value;
+        if (v < 0.0f) v = 0.0f; if (v > 2.0f) v = 2.0f;
+        h->p.input_ch_gain[idx].store(v, std::memory_order_relaxed);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "mode.latency") && bytes >= 4) {
         /* ADR-006：延迟档已撤销，该参数不再是合法入参。
          * 明确返回 PARAM（而非静默忽略），让「旧版 UI 下发延迟档」成为可诊断错误。 */
@@ -2139,6 +2228,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "eq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.limiter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "post.gain") && bytes >= 4) { *(float*)out_value = h->p.post_gain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "input.gain") && bytes >= 4) { *(float*)out_value = h->p.input_gain.load(); return AURADSP_OK; }
+    if (!strncmp(id, "input.balance.", 14) && bytes >= 4) {
+        const char d = id[14];
+        if (d < '1' || d > '8' || id[15] != 0) return AURADSP_E_PARAM;
+        *(float*)out_value = h->p.input_ch_gain[d - '1'].load();
+        return AURADSP_OK;
+    }
     /* mode.latency 已由 ADR-006 移除：回读同样明确报错，不返回陈旧值。 */
     if (!strcmp(id, "mode.latency") && bytes >= 4) { return AURADSP_E_PARAM; }
     if (!strcmp(id, "channels.mode") && bytes >= 4) { *(int32_t*)out_value = h->p.channels_mode.load(); return AURADSP_OK; }

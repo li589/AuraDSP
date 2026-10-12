@@ -1213,6 +1213,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'r': fr.levelRDbfs,
                 'stageL': stageL,
                 'stageR': fr.stageLevelsRToList(),
+                'inputInL': fr.inputLevelInL,
+                'inputInR': fr.inputLevelInR,
+                'inputOutL': fr.inputLevelOutL,
+                'inputOutR': fr.inputLevelOutR,
                 'ts': fr.timestampMs,
                 'seq': fr.seq,
               });

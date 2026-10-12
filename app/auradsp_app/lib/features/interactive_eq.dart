@@ -442,28 +442,21 @@ class _InteractiveSpectrumEQPanelState
                   const SizedBox(height: AuraSpace.md),
                   Text(l.eqInterpolation, style: captionOf(p)),
                   const SizedBox(height: AuraSpace.xs),
-                  // vendor 的 IIR 分支不使用插值模式，IIR 下该组选项置灰禁用，
-                  // 避免“可选但无声学意义”的假控件。
-                  Opacity(
-                    opacity: model.eqFilter == 0 ? 1.0 : 0.4,
-                    child: IgnorePointer(
-                      ignoring: model.eqFilter != 0,
-                      child: Wrap(
-                        spacing: AuraSpace.sm,
-                        children: [
-                          AuraChoiceChip(
-                            label: l.eqInterpMakima,
-                            selected: model.eqInterp == 1,
-                            onTap: () => model.setEqInterp(1),
-                          ),
-                          AuraChoiceChip(
-                            label: l.eqInterpPchip,
-                            selected: model.eqInterp == 0,
-                            onTap: () => model.setEqInterp(0),
-                          ),
-                        ],
+                  // 注：vendor 的 IIR 分支不使用插值模式，该选项只在 FIR 下生效。
+                  Wrap(
+                    spacing: AuraSpace.sm,
+                    children: [
+                      AuraChoiceChip(
+                        label: l.eqInterpMakima,
+                        selected: model.eqInterp == 1,
+                        onTap: () => model.setEqInterp(1),
                       ),
-                    ),
+                      AuraChoiceChip(
+                        label: l.eqInterpPchip,
+                        selected: model.eqInterp == 0,
+                        onTap: () => model.setEqInterp(0),
+                      ),
+                    ],
                   ),
                 ],
               ),
