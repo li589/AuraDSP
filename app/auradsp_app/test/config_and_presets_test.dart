@@ -444,4 +444,64 @@ void main() {
       }
     });
   });
+
+  group('BassMono: 低频单声道化', () {
+    test('默认值：关闭 + 120Hz', () {
+      final m = AppModel();
+      expect(m.bassmonoOn, isFalse);
+      expect(m.bassmonoFreq, closeTo(120.0, 1e-9));
+      expect(m.isStageEnabled('bassmono'), isFalse);
+    });
+
+    test('分频点钳位 20~300Hz', () {
+      final m = AppModel();
+      m.setBassmonoFreq(10);
+      expect(m.bassmonoFreq, closeTo(20.0, 1e-9));
+      m.setBassmonoFreq(500);
+      expect(m.bassmonoFreq, closeTo(300.0, 1e-9));
+      m.setBassmonoFreq(80);
+      expect(m.bassmonoFreq, closeTo(80.0, 1e-9));
+    });
+
+    test('toggleStage 翻转独立开关位', () {
+      final m = AppModel();
+      m.toggleStage('bassmono');
+      expect(m.bassmonoOn, isTrue);
+      m.toggleStage('bassmono');
+      expect(m.bassmonoOn, isFalse);
+    });
+
+    test('snapshot/apply 对称恢复使能与分频点', () {
+      final src = AppModel()
+        ..setBassmonoEnabled(true)
+        ..setBassmonoFreq(200);
+      final snap = PresetLibrary.snapshot(src, name: '__bm__');
+      final bm = snap.params['bassmono'] as Map<String, dynamic>;
+      expect(bm['enable'], isTrue);
+      expect((bm['freq'] as num).toDouble(), closeTo(200.0, 1e-9));
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__bm_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.bassmonoOn, isTrue);
+      expect(m.bassmonoFreq, closeTo(200.0, 1e-9));
+    });
+
+    test('无 bassmono 节的老预设不碰开关', () {
+      final m = AppModel()..setBassmonoEnabled(true);
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__legacy__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 0.0, 'limiterEnable': true},
+              }));
+      expect(m.bassmonoOn, isTrue);
+    });
+  });
 }

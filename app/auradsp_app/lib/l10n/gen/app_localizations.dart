@@ -1402,6 +1402,24 @@ abstract class AppLocalizations {
   /// **'低音增强'**
   String get stBass;
 
+  /// No description provided for @stBassmono.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频单声道'**
+  String get stBassmono;
+
+  /// No description provided for @bassmonoHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'链头处理：分频点以下单声道化，防小音箱低频破音'**
+  String get bassmonoHint;
+
+  /// No description provided for @bassmonoFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频点'**
+  String get bassmonoFreq;
+
   /// No description provided for @stEq.
   ///
   /// In zh, this message translates to:

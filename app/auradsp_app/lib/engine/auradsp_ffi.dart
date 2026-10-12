@@ -56,6 +56,9 @@ abstract final class ParamId {
   static const shelfEnable = 'shelf.enable';
   static const shelfFreq = 'shelf.freq';
   static const shelfGain = 'shelf.gain';
+  // 低频单声道化（BassMono）
+  static const bassmonoEnable = 'bassmono.enable';
+  static const bassmonoFreq = 'bassmono.freq';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';
