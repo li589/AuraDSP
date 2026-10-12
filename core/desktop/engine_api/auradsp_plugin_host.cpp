@@ -19,6 +19,8 @@
 #include <cstring>
 #include <thread>
 #include <future>
+#include <functional>
+#include <deque>
 #include <array>
 
 // CLAP headers
@@ -102,6 +104,61 @@ static void EnsureWindowClassRegistered() {
         wc.lpfnWndProc = PluginWindowProc;
         wc.hInstance = GetModuleHandleW(NULL);
         wc.lpszClassName = L"AuraDSP_Plugin_Host_Window";
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        RegisterClassExW(&wc);
+    });
+}
+
+//------------------------------------------------------------------------------
+// CLAP plugin main thread（B3-② 2026-10-12）
+//------------------------------------------------------------------------------
+// 唤醒泵线程执行任务队列的消息。
+constexpr UINT WM_APP_CLAP_TASK = WM_APP + 0x1A2;
+
+// CLAP 容器窗口的过程函数：生命周期完全由 plugin main 线程的泵循环管理
+// （WM_CLOSE 在泵循环里截获并触发编辑器收尾）。刻意不在 WM_DESTROY 里
+// PostQuitMessage —— 该线程是长寿命的 plugin main 线程（还承载后续的
+// unload / 重新 showEditor），绝不能被一次编辑器关闭杀掉。
+static LRESULT CALLBACK ClapHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void EnsureClapWindowClassRegistered() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
+        wc.lpfnWndProc = ClapHostWindowProc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = L"AuraDSP_CLAP_Host_Window";
+        wc.hCursor = LoadCursor(NULL, IDC_ARROW);
+        wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+        RegisterClassExW(&wc);
+    });
+}
+
+//------------------------------------------------------------------------------
+// VST3 plugin main thread（B3 2026-10-12，镜像 CLAP 重构）
+//------------------------------------------------------------------------------
+// 唤醒 VST3 泵线程执行任务队列的消息。
+constexpr UINT WM_APP_VST3_TASK = WM_APP + 0x1A3;
+
+// VST3 编辑器容器窗口的过程函数：生命周期由 plugin main 线程的泵循环管理
+// （WM_CLOSE 在泵循环里截获并触发编辑器收尾）。刻意不在 WM_DESTROY 里
+// PostQuitMessage——该线程是长寿命的 plugin main 线程，绝不能被一次编辑器
+// 关闭杀掉。旧 AuraDSP_Plugin_Host_Window 的 WndProc 带 PostQuitMessage，
+// 不能承载泵线程，故 VST3 编辑器窗口改用本类。
+static LRESULT CALLBACK Vst3HostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static void EnsureVst3WindowClassRegistered() {
+    static std::once_flag flag;
+    std::call_once(flag, []() {
+        WNDCLASSEXW wc = {sizeof(WNDCLASSEXW)};
+        wc.lpfnWndProc = Vst3HostWindowProc;
+        wc.hInstance = GetModuleHandleW(NULL);
+        wc.lpszClassName = L"AuraDSP_VST3_Host_Window";
         wc.hCursor = LoadCursor(NULL, IDC_ARROW);
         wc.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
         RegisterClassExW(&wc);
@@ -1164,7 +1221,12 @@ static bool CLAP_ABI emptyOutEventsTryPush(const clap_output_events_t*, const cl
 class ClapPluginInstance : public IPluginInstance {
 public:
     ClapPluginInstance() = default;
-    ~ClapPluginInstance() override { unload(); }
+    ~ClapPluginInstance() override {
+        // 兜底卸载（load 失败等提前析构路径）；随后确保泵线程已停。
+        // 线程已废弃（挂死隔离、detach）时 joinable 为 false，自然跳过。
+        unload();
+        stopClapThread();
+    }
 
     bool load(const std::string& path, const std::string& pluginId,
               const PluginMetadata* scanSeed = nullptr) override {
@@ -1209,77 +1271,99 @@ public:
             return false;
         }
 
-        if (!m_entry->init(path.c_str())) {
+        // B3-②（2026-10-12）：entry->init 及其后的插件实例化全部移入 CLAP
+        // plugin main 线程。JUCE 系插件的 MessageManager 在 entry->init 首次
+        // 触达并把 message thread 固定为"首触线程"——旧结构里那是 caller
+        // （音频 isolate，不能泵消息），后续一切 GUI 调用因此死等或产出
+        // 无泵子窗口（白框）。该线程同时承担本插件的 GUI 消息泵与全部
+        // main-thread 任务，与 VST3 侧"attached 全在编辑器线程"的成功拓扑同构。
+        m_clapThreadReady.store(false, std::memory_order_release);
+        m_stopClapThread.store(false, std::memory_order_release);
+        m_clapThread = std::thread([this]() { clapMainLoop(); });
+        for (int i = 0; i < 200 && !m_clapThreadReady.load(std::memory_order_acquire); ++i) {
+            Sleep(10);
+        }
+        if (!m_clapThreadReady.load(std::memory_order_acquire)) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "clap_entry->init() returned false";
+            m_meta.errorMessage = "CLAP main thread failed to start";
             FreeLibrary(m_module);
             m_module = nullptr;
             m_entry = nullptr;
             return false;
         }
 
-        m_factory = reinterpret_cast<const clap_plugin_factory_t*>(m_entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
-        if (!m_factory) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to retrieve CLAP_PLUGIN_FACTORY_ID";
-            m_entry->deinit();
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_entry = nullptr;
-            return false;
-        }
-
-        uint32_t count = m_factory->get_plugin_count(m_factory);
-        if (count == 0) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "CLAP factory reports 0 plugins";
-            m_entry->deinit();
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_entry = nullptr;
-            return false;
-        }
-
-        const clap_plugin_descriptor_t* targetDesc = nullptr;
-        for (uint32_t i = 0; i < count; ++i) {
-            const clap_plugin_descriptor_t* d = m_factory->get_plugin_descriptor(m_factory, i);
-            if (!d) continue;
-            if (pluginId.empty() || std::string(d->id) == pluginId) {
-                targetDesc = d;
-                break;
+        std::string initErr;
+        bool taskRan = postTaskAndWait([&]() {
+            if (!m_entry->init(path.c_str())) {
+                initErr = "clap_entry->init() returned false";
+                return;
             }
-        }
 
-        if (!targetDesc) {
-            targetDesc = m_factory->get_plugin_descriptor(m_factory, 0);
-        }
+            m_factory = reinterpret_cast<const clap_plugin_factory_t*>(
+                m_entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
+            if (!m_factory) {
+                initErr = "Failed to retrieve CLAP_PLUGIN_FACTORY_ID";
+                m_entry->deinit();
+                m_entry = nullptr;
+                return;
+            }
 
-        if (targetDesc) {
-            // 与扫描路共用同一填充实现；scanSeed 已填的字段不会被覆盖。
-            applyClapDescriptor(m_meta, targetDesc, wpath, path);
-        }
+            uint32_t count = m_factory->get_plugin_count(m_factory);
+            if (count == 0) {
+                initErr = "CLAP factory reports 0 plugins";
+                m_entry->deinit();
+                m_entry = nullptr;
+                return;
+            }
 
-        initHostStruct();
-        m_plugin = m_factory->create_plugin(m_factory, &m_host, m_meta.id.c_str());
-        if (!m_plugin) {
+            const clap_plugin_descriptor_t* targetDesc = nullptr;
+            for (uint32_t i = 0; i < count; ++i) {
+                const clap_plugin_descriptor_t* d = m_factory->get_plugin_descriptor(m_factory, i);
+                if (!d) continue;
+                if (pluginId.empty() || std::string(d->id) == pluginId) {
+                    targetDesc = d;
+                    break;
+                }
+            }
+
+            if (!targetDesc) {
+                targetDesc = m_factory->get_plugin_descriptor(m_factory, 0);
+            }
+
+            if (targetDesc) {
+                // 与扫描路共用同一填充实现；scanSeed 已填的字段不会被覆盖。
+                applyClapDescriptor(m_meta, targetDesc, wpath, path);
+            }
+
+            initHostStruct();
+            m_plugin = m_factory->create_plugin(m_factory, &m_host, m_meta.id.c_str());
+            if (!m_plugin) {
+                initErr = "factory->create_plugin() returned null for ID: " + m_meta.id;
+                m_entry->deinit();
+                m_entry = nullptr;
+                return;
+            }
+
+            if (!m_plugin->init(m_plugin)) {
+                initErr = "plugin->init() failed";
+                m_plugin->destroy(m_plugin);
+                m_plugin = nullptr;
+                m_entry->deinit();
+                m_entry = nullptr;
+                return;
+            }
+        }, 10000);
+        if (!taskRan || !initErr.empty()) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "factory->create_plugin() returned null for ID: " + m_meta.id;
-            m_entry->deinit();
+            m_meta.errorMessage = taskRan ? initErr : "CLAP main thread task timeout during load";
+            if (!taskRan) {
+                // 线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
+                // 对象：登记废弃，由 manager 把整个实例移入静态隔离区。
+                m_threadAbandoned.store(true, std::memory_order_release);
+                return false;
+            }
             FreeLibrary(m_module);
             m_module = nullptr;
-            m_entry = nullptr;
-            return false;
-        }
-
-        if (!m_plugin->init(m_plugin)) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "plugin->init() failed";
-            m_plugin->destroy(m_plugin);
-            m_plugin = nullptr;
-            m_entry->deinit();
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_entry = nullptr;
             return false;
         }
 
@@ -1294,27 +1378,37 @@ public:
             closeEditor();
             std::cout << "[DBG CLAP unload] step 2: deactivate" << std::endl;
             deactivate();
-            if (m_plugin) {
-                std::cout << "[DBG CLAP unload] step 3: plugin->destroy" << std::endl;
-                m_plugin->destroy(m_plugin);
-                std::cout << "[DBG CLAP unload] step 3 done" << std::endl;
-                m_plugin = nullptr;
+            // plugin->destroy + entry->deinit 移入 plugin main 线程（JUCE
+            // message thread 所在线程；10-12 曾实证跨线程 destroy 死锁）。
+            std::cout << "[DBG CLAP unload] step 3: destroy on clap main thread" << std::endl;
+            bool destroyed = postTaskAndWait([&]() {
+                if (m_plugin) {
+                    m_plugin->destroy(m_plugin);
+                    m_plugin = nullptr;
+                }
+                if (m_entry) {
+                    m_entry->deinit();
+                    m_entry = nullptr;
+                }
+            }, 3000);
+            if (!destroyed) {
+                std::cout << "[DBG CLAP unload] WARNING: main thread unresponsive; quarantining instance"
+                          << std::endl;
+                m_threadAbandoned.store(true, std::memory_order_release);
+                return;   // manager 据此把实例移入静态隔离区（泄漏而非 UAF）
             }
-            if (m_entry) {
-                std::cout << "[DBG CLAP unload] step 4: entry->deinit" << std::endl;
-                m_entry->deinit();
-                std::cout << "[DBG CLAP unload] step 4 done" << std::endl;
-                m_entry = nullptr;
-            }
-            if (m_module) {
-                std::cout << "[DBG CLAP unload] step 5: FreeLibrary" << std::endl;
-                FreeLibrary(m_module);
-                std::cout << "[DBG CLAP unload] step 5 done" << std::endl;
-                m_module = nullptr;
-            }
+            std::cout << "[DBG CLAP unload] step 3 done" << std::endl;
             m_isLoaded = false;
-            std::cout << "[DBG CLAP unload] complete" << std::endl;
         }
+        stopClapThread();
+        if (m_module) {
+            std::cout << "[DBG CLAP unload] step 5: FreeLibrary" << std::endl;
+            FreeLibrary(m_module);
+            std::cout << "[DBG CLAP unload] step 5 done" << std::endl;
+            m_module = nullptr;
+        }
+        m_isLoaded = false;
+        std::cout << "[DBG CLAP unload] complete" << std::endl;
     }
 
     bool activate(double sampleRate, uint32_t maxBlockSize) override {
@@ -1443,11 +1537,25 @@ public:
             ShowWindow(m_editorHwnd, SW_SHOW);
             return true;
         }
-        if (m_editorThread.joinable()) {
-            m_editorThread.join();
-        }
-        m_editorAbort.store(false, std::memory_order_release);
+        if (!m_clapThreadReady.load(std::memory_order_acquire)) return false;
 
+        // B3-②：create/get_size/容器/set_parent/show 全部在 plugin main 线程
+        // （= JUCE message thread = 泵线程）执行。子窗口因此归泵线程所有，
+        // WM_PAINT/输入由泵分发——白框与拖动无响应的根因（子窗口落在无泵
+        // 的 caller 线程，拓扑探针 tid 实证）就此消除。caller 只等待有界
+        // 结果，不参与 JUCE 锁竞争。
+        bool ok = false;
+        bool done = postTaskAndWait([&]() { ok = showEditorOnMainThread(); }, 5000);
+        if (!done) {
+            std::cout << "[DBG CLAP showEditor] WARNING: editor task timed out; quarantining" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+            return false;
+        }
+        return ok;
+    }
+
+    // showEditor 的实体（在 CLAP plugin main 线程内执行）。
+    bool showEditorOnMainThread() {
         auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
         if (!gui) return false;
@@ -1455,7 +1563,7 @@ public:
             return false;
         }
 
-        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->create..." << std::endl;
+        std::cout << "[DBG CLAP showEditor] main thread: gui->create..." << std::endl;
         bool createRes = false;
         try {
             createRes = gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false);
@@ -1465,9 +1573,7 @@ public:
             std::cout << "[DBG CLAP showEditor] gui->create unknown exception!" << std::endl;
         }
         std::cout << "[DBG CLAP showEditor] gui->create returned: " << createRes << std::endl;
-        if (!createRes) {
-            return false;
-        }
+        if (!createRes) return false;
         m_guiCreated.store(true, std::memory_order_release);
 
         uint32_t width = 800, height = 600;
@@ -1478,157 +1584,35 @@ public:
         }
         if (width < 200) width = 800;
         if (height < 150) height = 600;
-        std::cout << "[DBG CLAP showEditor] gui->get_size on caller thread: " << width << "x" << height << std::endl;
 
-        // promise 由 shared_ptr 持有：线程在超时路径之后仍可能 set_value，
-        // 若捕获栈上对象会写已失效的栈帧（UAF）。
-        auto hwndPromise = std::make_shared<std::promise<HWND>>();
-        auto hwndFuture = hwndPromise->get_future();
+        EnsureClapWindowClassRegistered();
 
-        // 编辑器线程的职责**仅有**：创建宿主窗口 + 泵消息 + 销毁自己的窗口。
-        // 它绝不调用插件的 GUI API——JUCE 系的 hide/destroy 会取
-        // MessageManagerLock，而本线程不是 JUCE 的 message thread，
-        // 调用会永久阻塞并连带卡死后续的 plugin->destroy。
-        m_editorThread = std::thread([this, width, height, hwndPromise]() {
-            t_clapThreadType = ClapHostThreadType::Main;
-            EnsureWindowClassRegistered();
+        // E1：标题由调用方决定；为空时退化到插件自报名。
+        // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
+        // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
+        std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
+        RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+        DWORD style = WS_OVERLAPPEDWINDOW;
+        AdjustWindowRect(&rc, style, FALSE);
+        HWND hwnd = CreateWindowExW(
+            0, L"AuraDSP_CLAP_Host_Window", title.c_str(),
+            style, CW_USEDEFAULT, CW_USEDEFAULT,
+            rc.right - rc.left, rc.bottom - rc.top,
+            NULL, NULL, GetModuleHandleW(NULL), NULL);
+        if (!hwnd) return false;
 
-            // E1：标题由调用方决定；为空时退化到插件自报名。
-            // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
-            // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
-            std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
-            RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
-            DWORD style = WS_OVERLAPPEDWINDOW;
-            AdjustWindowRect(&rc, style, FALSE);
+        m_editorHwnd = hwnd;
+        m_editorOpen.store(true, std::memory_order_release);
+        std::cout << "[DBG CLAP showEditor] hwnd created: " << hwnd << std::endl;
 
-            HWND hwnd = CreateWindowExW(
-                0, L"AuraDSP_Plugin_Host_Window", title.c_str(),
-                style, CW_USEDEFAULT, CW_USEDEFAULT,
-                rc.right - rc.left, rc.bottom - rc.top,
-                NULL, NULL, GetModuleHandleW(NULL), NULL);
+        ShowWindow(hwnd, SW_SHOW);
 
-            if (!hwnd) {
-                hwndPromise->set_value(nullptr);
-                return;
-            }
-
-            m_editorHwnd = hwnd;
-            m_editorOpen.store(true, std::memory_order_release);
-            std::cout << "[DBG CLAP showEditor] in lambda, hwnd created: " << hwnd << std::endl;
-
-            ShowWindow(hwnd, SW_SHOW);
-            UpdateWindow(hwnd);
-
-            auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
-                m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
-
-            // Attach any previously registered timers to this new HWND
-            {
-                std::lock_guard<std::mutex> lock(m_timerMutex);
-                for (auto& pair : m_timers) {
-                    UINT_PTR wid = SetTimer(hwnd, static_cast<UINT_PTR>(pair.first), 20, NULL);
-                    if (wid != 0) {
-                        pair.second = wid;
-                        m_timerIdMap[wid] = pair.first;
-                    }
-                }
-            }
-
-            // Signal caller thread that hwnd is created and ready for set_parent
-            hwndPromise->set_value(hwnd);
-
-            // 宿主若已放弃本次挂载（set_parent 前超时），此处直接收尾，
-            // 不进入消息泵——否则没有任何 WM_CLOSE 会到来，线程永不结束。
-            if (m_editorAbort.load(std::memory_order_acquire)) {
-                std::cout << "[DBG CLAP editorThread] abort requested before pump, bailing out" << std::endl;
-                {
-                    std::lock_guard<std::mutex> lock(m_timerMutex);
-                    for (auto& pair : m_timers) KillTimer(hwnd, pair.second);
-                    m_timerIdMap.clear();
-                }
-                if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                m_editorHwnd = nullptr;
-                m_editorOpen.store(false, std::memory_order_release);
-                return;
-            }
-
-            MSG msg;
-            while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-                if (msg.message == WM_CLOSE && msg.hwnd == hwnd) {
-                    break;
-                }
-                if (msg.message == WM_TIMER && timerExt && timerExt->on_timer) {
-                    clap_id cid = 0;
-                    {
-                        std::lock_guard<std::mutex> lock(m_timerMutex);
-                        auto it = m_timerIdMap.find(msg.wParam);
-                        if (it != m_timerIdMap.end()) {
-                            cid = it->second;
-                        }
-                    }
-                    if (cid != 0) {
-                        timerExt->on_timer(m_plugin, cid);
-                    }
-                }
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-
-            {
-                std::lock_guard<std::mutex> lock(m_timerMutex);
-                for (auto& pair : m_timers) {
-                    KillTimer(hwnd, pair.second);
-                }
-                m_timerIdMap.clear();
-            }
-
-            // 纯 Win32 收尾。插件的 gui->hide/destroy 由调用线程（main thread）
-            // 在 closeEditor() 中完成，此处一律不碰插件对象。
-            std::cout << "[DBG CLAP editorThread] message pump exited, destroying hwnd" << std::endl;
-            if (IsWindow(hwnd)) {
-                DestroyWindow(hwnd);
-            }
-            m_editorHwnd = nullptr;
-            m_editorOpen.store(false, std::memory_order_release);
-            std::cout << "[DBG CLAP editorThread] exit" << std::endl;
-        });
-
-        // Wait for hwnd from thread
-        if (hwndFuture.wait_for(std::chrono::milliseconds(2000)) != std::future_status::ready) {
-            std::cout << "[DBG CLAP showEditor] Timeout waiting for hwnd creation!" << std::endl;
-            // 让线程在拿到 hwnd 之后直接收尾；否则它会进入一个永远等不到
-            // WM_CLOSE 的消息泵，线程与 HWND 一起泄漏。
-            m_editorAbort.store(true, std::memory_order_release);
-            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
-                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
-                if (hThread && WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
-                    m_editorThread.join();
-                } else {
-                    m_editorThread.detach();
-                    std::cout << "[DBG CLAP showEditor] WARNING: editor thread unresponsive, detached" << std::endl;
-                }
-            }
-            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
-            m_guiCreated.store(false, std::memory_order_release);
-            return false;
-        }
-        HWND hwnd = hwndFuture.get();
-        if (!hwnd) {
-            std::cout << "[DBG CLAP showEditor] Failed to create HWND!" << std::endl;
-            // 线程已自行 return，此处可直接回收。
-            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
-                m_editorThread.join();
-            }
-            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
-            m_guiCreated.store(false, std::memory_order_release);
-            return false;
-        }
-
-        // Call set_parent and show on caller thread
+        // [2] set_parent + show 在本线程（== 容器线程 == 泵线程）：
+        //     插件子窗口由本线程创建，其 WM_PAINT/输入由本线程泵分发。
         clap_window_t win = {};
         win.api = CLAP_WINDOW_API_WIN32;
         win.win32 = hwnd;
-        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->set_parent..." << std::endl;
+        std::cout << "[DBG CLAP showEditor] main thread: calling gui->set_parent..." << std::endl;
         bool setParentRes = false;
         try {
             if (gui->set_parent) setParentRes = gui->set_parent(m_plugin, &win);
@@ -1638,72 +1622,68 @@ public:
             std::cout << "[DBG CLAP showEditor] gui->set_parent unknown exception!" << std::endl;
         }
         std::cout << "[DBG CLAP showEditor] gui->set_parent returned: " << setParentRes << std::endl;
-
-        std::cout << "[DBG CLAP showEditor] on caller thread, calling gui->show..." << std::endl;
         try {
             if (gui->show) gui->show(m_plugin);
         } catch (...) {}
-        std::cout << "[DBG CLAP showEditor] gui->show done." << std::endl;
+        UpdateWindow(hwnd);
+
+        auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
+
+        // Attach any previously registered timers to this new HWND
+        {
+            std::lock_guard<std::mutex> lock(m_timerMutex);
+            for (auto& pair : m_timers) {
+                UINT_PTR wid = SetTimer(hwnd, static_cast<UINT_PTR>(pair.first), 20, NULL);
+                if (wid != 0) {
+                    pair.second = wid;
+                    m_timerIdMap[wid] = pair.first;
+                }
+            }
+        }
 
         return setParentRes;
     }
 
-    void closeEditor() override {
-        std::cout << "[DBG CLAP closeEditor] enter, joinable=" << m_editorThread.joinable() << std::endl;
-
-        const bool calledFromEditorThread =
-            m_editorThread.joinable() && m_editorThread.get_id() == std::this_thread::get_id();
-
-        // 第 1 步：在**调用线程**上关闭插件 GUI。
-        // CLAP 契约要求 gui->hide / gui->destroy 发生在 main thread；
-        // 把它们放进编辑器线程会因 JUCE MessageManagerLock 永久阻塞，
-        // 并连带卡死随后的 plugin->destroy（这曾让整个卸载流程挂死）。
-        // m_guiCreated 守卫：closeEditor 会被调用两次，而 gui->hide/destroy
-        // 对一次 gui->create 只能执行一次。
-        if (!calledFromEditorThread && m_plugin && m_guiCreated.exchange(false, std::memory_order_acq_rel)) {
-            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
-                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
-            if (gui) {
-                try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
-                try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
-                std::cout << "[DBG CLAP closeEditor] gui hide+destroy on caller thread" << std::endl;
-            }
-        }
-
-        // 第 2 步：请编辑器线程退出。WM_CLOSE 走窗口过程，WM_QUIT 兜底线程队列。
+    // closeEditor 的实体（在 CLAP plugin main 线程内执行）。
+    void closeEditorOnMainThread() {
+        auto gui = m_plugin ? reinterpret_cast<const clap_plugin_gui_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_GUI)) : nullptr;
         HWND hwnd = m_editorHwnd;
-        DWORD tid = 0;
-        if (hwnd && IsWindow(hwnd)) {
-            tid = GetWindowThreadProcessId(hwnd, NULL);
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
-            std::cout << "[DBG CLAP closeEditor] WM_CLOSE posted (tid " << tid << ")" << std::endl;
-        } else {
-            std::cout << "[DBG CLAP closeEditor] no live hwnd" << std::endl;
-        }
-        if (tid) {
-            PostThreadMessageW(tid, WM_QUIT, 0, 0);
-        }
-
-        // 第 3 步：等待线程收尾。线程此时只做纯 Win32 清理，3s 是宽松上限。
-        if (m_editorThread.joinable() && !calledFromEditorThread) {
-            HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
-            DWORD waitRes = hThread ? WaitForSingleObject(hThread, 3000) : WAIT_FAILED;
-            std::cout << "[DBG CLAP closeEditor] WaitForSingleObject -> " << waitRes
-                      << (waitRes == WAIT_OBJECT_0 ? " (signaled)" :
-                          waitRes == WAIT_TIMEOUT ? " (TIMEOUT)" : " (other)") << std::endl;
-            if (waitRes == WAIT_OBJECT_0) {
-                m_editorThread.join();
-                std::cout << "[DBG CLAP closeEditor] joined" << std::endl;
-            } else {
-                // 消息泵已失控。detach 后线程仍可能触碰本对象，属最后手段；
-                // 明确告警而绝不静默通过。
-                m_editorThread.detach();
-                std::cout << "[DBG CLAP closeEditor] WARNING: editor thread did not exit within 3s, detached"
-                          << std::endl;
+        // 宿主侧定时器登记先清（窗口即将销毁）。
+        {
+            std::lock_guard<std::mutex> lock(m_timerMutex);
+            for (auto& pair : m_timers) {
+                if (hwnd && IsWindow(hwnd)) KillTimer(hwnd, pair.second);
             }
+            m_timerIdMap.clear();
         }
-        m_editorOpen.store(false, std::memory_order_release);
+        // gui->hide/destroy 在本线程执行 —— 与 gui->create 同线程
+        // （JUCE message thread），MessageManagerLock 无竞争（B3-② 重构，
+        // 推翻 10-12「hide/destroy 必须在 caller」的结论——那个结论成立的
+        // 前提是 create 在 caller 线程）。m_guiCreated 交换守卫防双执行。
+        if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
+            try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
+            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+        }
+        if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
         m_editorHwnd = nullptr;
+        m_editorOpen.store(false, std::memory_order_release);
+        std::cout << "[DBG CLAP closeEditor] closed on main thread" << std::endl;
+    }
+
+    void closeEditor() override {
+        std::cout << "[DBG CLAP closeEditor] enter" << std::endl;
+        if (!m_clapThreadReady.load(std::memory_order_acquire)) {
+            m_editorOpen.store(false, std::memory_order_release);
+            std::cout << "[DBG CLAP closeEditor] no clap main thread; skip" << std::endl;
+            return;
+        }
+        bool done = postTaskAndWait([&]() { closeEditorOnMainThread(); }, 3000);
+        if (!done) {
+            std::cout << "[DBG CLAP closeEditor] WARNING: close task timed out; quarantining" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+        }
         std::cout << "[DBG CLAP closeEditor] exit" << std::endl;
     }
 
@@ -1722,20 +1702,26 @@ public:
 
     bool savePreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_plugin) return false;
-        auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
-            m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
-        if (!stateExt || !stateExt->save) return false;
+        // CLAP state 属 main-thread 操作；JUCE 系插件可能触达 MessageManager，
+        // 一律移入 plugin main 线程执行。
+        bool ok = false;
+        bool done = postTaskAndWait([&]() {
+            auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
+            if (!stateExt || !stateExt->save) return;
 
-        fs::path p(filePath);
-        if (p.has_parent_path() && !fs::exists(p.parent_path())) {
-            fs::create_directories(p.parent_path());
-        }
+            fs::path p(filePath);
+            if (p.has_parent_path() && !fs::exists(p.parent_path())) {
+                fs::create_directories(p.parent_path());
+            }
 
-        std::ofstream ofs(filePath, std::ios::binary);
-        if (!ofs) return false;
-        ClapOstreamContext ctx{&ofs};
-        clap_ostream_t ostream = { &ctx, clapOstreamWrite };
-        return stateExt->save(m_plugin, &ostream);
+            std::ofstream ofs(filePath, std::ios::binary);
+            if (!ofs) return;
+            ClapOstreamContext ctx{&ofs};
+            clap_ostream_t ostream = { &ctx, clapOstreamWrite };
+            ok = stateExt->save(m_plugin, &ostream);
+        }, 5000);
+        return done && ok;
     }
 
     struct ClapIstreamContext {
@@ -1750,19 +1736,117 @@ public:
     bool loadPreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_plugin) return false;
         if (!fs::exists(filePath)) return false;
+        // 同 savePreset：CLAP state 属 main-thread 操作，移入 plugin main 线程。
+        bool ok = false;
+        bool done = postTaskAndWait([&]() {
+            auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
+            if (!stateExt || !stateExt->load) return;
 
-        auto stateExt = reinterpret_cast<const clap_plugin_state_t*>(
-            m_plugin->get_extension(m_plugin, CLAP_EXT_STATE));
-        if (!stateExt || !stateExt->load) return false;
+            std::ifstream ifs(filePath, std::ios::binary);
+            if (!ifs) return;
+            ClapIstreamContext ctx{&ifs};
+            clap_istream_t istream = { &ctx, clapIstreamRead };
+            ok = stateExt->load(m_plugin, &istream);
+        }, 5000);
+        return done && ok;
+    }
 
-        std::ifstream ifs(filePath, std::ios::binary);
-        if (!ifs) return false;
-        ClapIstreamContext ctx{&ifs};
-        clap_istream_t istream = { &ctx, clapIstreamRead };
-        return stateExt->load(m_plugin, &istream);
+    bool abandoned() const override {
+        return m_threadAbandoned.load(std::memory_order_acquire);
     }
 
 private:
+    // ---- CLAP plugin main 线程 ----
+    // 长寿命线程：承载 entry->init（确立 JUCE MessageManager 的 message
+    // thread 归属）、全部 main-thread 任务（GUI/状态/销毁）与本插件容器
+    // 的消息泵。任务经 WM_APP_CLAP_TASK 唤醒、在 GetMessage 循环间隙执行。
+    void clapMainLoop() {
+        t_clapThreadType = ClapHostThreadType::Main;
+        m_clapThreadId = GetCurrentThreadId();
+        m_clapThreadReady.store(true, std::memory_order_release);
+        MSG msg;
+        for (;;) {
+            BOOL r = GetMessageW(&msg, NULL, 0, 0);
+            if (r <= 0) break;   // WM_QUIT（或错误）→ 退出
+            if (msg.message == WM_APP_CLAP_TASK) {
+                runQueuedTasks();
+                continue;
+            }
+            if (msg.message == WM_CLOSE && msg.hwnd == m_editorHwnd) {
+                // 用户点编辑器窗口的 X：收尾在泵线程内直接执行
+                // （与 gui->create 同线程，无锁竞争）。
+                closeEditorOnMainThread();
+                continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        // 线程退出前兜底收尾（正常路径由 unload 的任务完成，此处防遗漏）。
+        if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && m_plugin) {
+            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+            if (gui) {
+                try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
+                try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+            }
+        }
+        if (m_editorHwnd && IsWindow(m_editorHwnd)) DestroyWindow(m_editorHwnd);
+        m_editorHwnd = nullptr;
+        m_editorOpen.store(false, std::memory_order_release);
+    }
+
+    void runQueuedTasks() {
+        for (;;) {
+            std::function<void()> task;
+            {
+                std::lock_guard<std::mutex> lock(m_taskMutex);
+                if (m_tasks.empty()) return;
+                task = std::move(m_tasks.front());
+                m_tasks.pop_front();
+            }
+            task();
+        }
+    }
+
+    // 提交任务到 plugin main 线程并等待完成（有界超时）。
+    // 返回 false = 线程未运行或超时（调用方走废弃隔离路径）。
+    bool postTaskAndWait(std::function<void()> fn, DWORD timeoutMs) {
+        if (m_stopClapThread.load(std::memory_order_acquire)) return false;
+        auto task = std::make_shared<std::packaged_task<void()>>(std::move(fn));
+        auto fut = task->get_future();
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back([task]() { (*task)(); });
+        }
+        if (!PostThreadMessageW(m_clapThreadId, WM_APP_CLAP_TASK, 0, 0)) {
+            // Ready 已置位意味着 GetMessageW 已在跑、消息队列必已建立；
+            // 此分支仅防御极端时序，短暂重试一次。
+            Sleep(20);
+            if (!PostThreadMessageW(m_clapThreadId, WM_APP_CLAP_TASK, 0, 0)) {
+                std::cout << "[DBG CLAP] PostThreadMessage failed, err=" << GetLastError() << std::endl;
+                return false;
+            }
+        }
+        return fut.wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready;
+    }
+
+    void stopClapThread() {
+        if (!m_clapThread.joinable()) return;
+        m_stopClapThread.store(true, std::memory_order_release);
+        PostThreadMessageW(m_clapThreadId, WM_QUIT, 0, 0);
+        HANDLE h = reinterpret_cast<HANDLE>(m_clapThread.native_handle());
+        if (h && WaitForSingleObject(h, 3000) == WAIT_OBJECT_0) {
+            m_clapThread.join();
+        } else {
+            // 线程挂死 → 隔离（放弃释放）：detach 后对象由 manager 移入
+            // 静态隔离区，绝不在挂死线程仍引用期间析构。
+            std::cout << "[DBG CLAP] main thread unresponsive on stop; abandoning" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+            m_clapThread.detach();
+        }
+    }
+
     void initHostStruct() {
         m_mainThreadId = std::this_thread::get_id();
 
@@ -1951,17 +2035,24 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
 
-    std::thread m_editorThread;
+    // ---- CLAP plugin main 线程（B3-② 2026-10-12）----
+    std::thread m_clapThread;
+    DWORD m_clapThreadId = 0;
+    std::atomic<bool> m_clapThreadReady{false};
+    std::atomic<bool> m_stopClapThread{false};
+    // 线程挂死（任务超时）时置位：manager 据此把整个实例移入静态隔离区，
+    // 而不是析构它（挂死线程仍引用 this，析构 = use-after-free）。
+    std::atomic<bool> m_threadAbandoned{false};
+    std::mutex m_taskMutex;
+    std::deque<std::function<void()>> m_tasks;
+
     HWND m_editorHwnd = nullptr;
-    // E1：调用方（Dart）传来的窗口标题。写入发生在 std::thread 创建之前，
-    // 线程构造本身构成 happens-before，编辑器线程读取无竞争；
-    // 为空时退化为 m_meta.name（见 showEditor 内标题构造）。
+    // E1：调用方（Dart）传来的窗口标题。写入发生在任务提交之前，任务
+    // 提交/执行的同步构成 happens-before，无竞争；
+    // 为空时退化为 m_meta.name（见 showEditorOnMainThread 内标题构造）。
     std::string m_editorTitle;
     std::atomic<bool> m_editorOpen{false};
-    // 宿主放弃本次挂载时置位：编辑器线程在发出 hwnd 之后立即检查，
-    // 从而不会进入一个永远等不到 WM_CLOSE 的消息泵（否则线程永久泄漏）。
-    std::atomic<bool> m_editorAbort{false};
-    // gui->create 已成功且尚未 destroy。closeEditor 会被调用两次
+    // gui->create 已成功且尚未 destroy。closeEditor 会被调用多次
     // （unloadPluginSlotLocked 一次、unload() 内部一次），
     // 靠它保证 gui->hide/destroy 对一次 create 只执行一次。
     std::atomic<bool> m_guiCreated{false};
@@ -1973,7 +2064,12 @@ private:
 class Vst3PluginInstance : public IPluginInstance {
 public:
     Vst3PluginInstance() = default;
-    ~Vst3PluginInstance() override { unload(); }
+    ~Vst3PluginInstance() override {
+        // 兜底卸载（load 失败等提前析构路径）；随后确保泵线程已停。
+        // 线程已废弃（挂死隔离、detach）时 joinable 为 false，自然跳过。
+        unload();
+        stopVst3Thread();
+    }
 
     bool load(const std::string& path, const std::string& pluginId,
               const PluginMetadata* scanSeed = nullptr) override {
@@ -2018,166 +2114,191 @@ public:
             return false;
         }
 
-        m_factory = getFactory();
-        if (!m_factory) {
+        // B3（2026-10-12）：插件对象的全部交互（GetPluginFactory、组件/控制器
+        // 实例化与初始化、ConnectionPoint、状态同步）移入 VST3 plugin main
+        // 线程（每实例专用泵线程）。VST3 规范期望宿主在 main/UI 线程完成这些
+        // 调用；JUCE 系插件（如 Auto-Tune EFX+）的 MessageManager 在首次触达
+        // 时绑定该线程——旧结构里 initialize 在 caller、attached 在临时编辑器
+        // 线程，attached 因此死等（编辑器白框），unload 又撞上挂死线程
+        // （0xC0000374）。与 CLAP 侧重构同构。
+        m_vst3ThreadReady.store(false, std::memory_order_release);
+        m_stopVst3Thread.store(false, std::memory_order_release);
+        m_vst3Thread = std::thread([this]() { vst3MainLoop(); });
+        for (int i = 0; i < 200 && !m_vst3ThreadReady.load(std::memory_order_acquire); ++i) {
+            Sleep(10);
+        }
+        if (!m_vst3ThreadReady.load(std::memory_order_acquire)) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "GetPluginFactory returned null";
+            m_meta.errorMessage = "VST3 main thread failed to start";
             FreeLibrary(m_module);
             m_module = nullptr;
             return false;
         }
 
-        Steinberg::int32 classCount = m_factory->countClasses();
-        Steinberg::TUID targetCid = {};
-        bool found = false;
-
-        Steinberg::IPluginFactory2* factory2 = nullptr;
-        Steinberg::IPluginFactory3* factory3 = nullptr;
-        m_factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
-        // IPluginFactory3 曾在此缺失 —— 这正是 D2「FabFilter 加载后 vendor 为空」的根因：
-        // 加载路只读 ASCII 的 classInfo/factory2，而 Unicode 类信息（factory3）拿不到，
-        // 于是同一插件扫描得 'FabFilter'、加载后得 ''。
-        m_factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
-
-        for (Steinberg::int32 i = 0; i < classCount; ++i) {
-            PluginMetadata probe;
-            if (!applyVstAudioEffectClass(probe, m_factory, factory2, factory3, i, wpath, path, false, &targetCid)) {
-                continue;
+        std::string initErr;
+        bool taskRan = postTaskAndWait([&]() {
+            m_factory = getFactory();
+            if (!m_factory) {
+                initErr = "GetPluginFactory returned null";
+                return;
             }
-            if (!pluginId.empty() && probe.id != pluginId) continue;
 
-            // 与扫描路共用同一填充实现；seeded=true 时 scanSeed 已填的描述性字段
-            // （name/vendor/version/category/bundleName）不会被覆盖，
-            // 于是「扫描值 == 加载值」逐字段成立；id 例外，它是实例化身份键。
-            applyVstAudioEffectClass(m_meta, m_factory, factory2, factory3, i, wpath, path, true);
-            found = true;
-            break;
-        }
+            Steinberg::int32 classCount = m_factory->countClasses();
+            Steinberg::TUID targetCid = {};
+            bool found = false;
 
-        if (factory3) factory3->release();
-        if (factory2) factory2->release();
+            Steinberg::IPluginFactory2* factory2 = nullptr;
+            Steinberg::IPluginFactory3* factory3 = nullptr;
+            m_factory->queryInterface(Steinberg::IPluginFactory2::iid, reinterpret_cast<void**>(&factory2));
+            // IPluginFactory3 曾在此缺失 —— 这正是 D2「FabFilter 加载后 vendor 为空」的根因：
+            // 加载路只读 ASCII 的 classInfo/factory2，而 Unicode 类信息（factory3）拿不到，
+            // 于是同一插件扫描得 'FabFilter'、加载后得 ''。
+            m_factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
 
-        if (!found) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "No compatible audio effect class (kVstAudioEffectClass) found in VST3";
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_factory = nullptr;
-            return false;
-        }
+            for (Steinberg::int32 i = 0; i < classCount; ++i) {
+                PluginMetadata probe;
+                if (!applyVstAudioEffectClass(probe, m_factory, factory2, factory3, i, wpath, path, false, &targetCid)) {
+                    continue;
+                }
+                if (!pluginId.empty() && probe.id != pluginId) continue;
 
-        // Create component instance
-        std::cout << "[DBG VST3] createInstance targetCid on IComponent..." << std::endl;
-        Steinberg::tresult res = m_factory->createInstance(
-            targetCid,
-            Steinberg::Vst::IComponent::iid.toTUID(),
-            reinterpret_cast<void**>(&m_component)
-        );
-        std::cout << "[DBG VST3] createInstance res=" << res << " component=" << m_component << std::endl;
+                // 与扫描路共用同一填充实现；seeded=true 时 scanSeed 已填的描述性字段
+                // （name/vendor/version/category/bundleName）不会被覆盖，
+                // 于是「扫描值 == 加载值」逐字段成立；id 例外，它是实例化身份键。
+                applyVstAudioEffectClass(m_meta, m_factory, factory2, factory3, i, wpath, path, true);
+                found = true;
+                break;
+            }
 
-        if (res != Steinberg::kResultOk || !m_component) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to create VST3 IComponent instance, res: " + std::to_string(res);
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_factory = nullptr;
-            return false;
-        }
+            if (factory3) factory3->release();
+            if (factory2) factory2->release();
 
-        // Initialize component with host application context
-        std::cout << "[DBG VST3] Initializing component with hostApp..." << std::endl;
-        m_component->initialize(&m_hostApp);
-        std::cout << "[DBG VST3] Component initialized." << std::endl;
+            if (!found) {
+                initErr = "No compatible audio effect class (kVstAudioEffectClass) found in VST3";
+                m_factory = nullptr;
+                return;
+            }
 
-        // Query IAudioProcessor
-        std::cout << "[DBG VST3] Querying IAudioProcessor..." << std::endl;
-        res = m_component->queryInterface(
-            Steinberg::Vst::IAudioProcessor::iid,
-            reinterpret_cast<void**>(&m_processor)
-        );
-        std::cout << "[DBG VST3] Query IAudioProcessor res=" << res << " proc=" << m_processor << std::endl;
+            // Create component instance
+            std::cout << "[DBG VST3] createInstance targetCid on IComponent..." << std::endl;
+            Steinberg::tresult res = m_factory->createInstance(
+                targetCid,
+                Steinberg::Vst::IComponent::iid.toTUID(),
+                reinterpret_cast<void**>(&m_component)
+            );
+            std::cout << "[DBG VST3] createInstance res=" << res << " component=" << m_component << std::endl;
 
-        if (res != Steinberg::kResultOk || !m_processor) {
-            m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to query VST3 IAudioProcessor interface";
-            m_component->terminate();
-            m_component->release();
-            m_component = nullptr;
-            FreeLibrary(m_module);
-            m_module = nullptr;
-            m_factory = nullptr;
-            return false;
-        }
+            if (res != Steinberg::kResultOk || !m_component) {
+                initErr = "Failed to create VST3 IComponent instance, res: " + std::to_string(res);
+                return;
+            }
 
-        // Query IEditController
-        std::cout << "[DBG VST3] Querying IEditController on component..." << std::endl;
-        Steinberg::tresult cRes = m_component->queryInterface(
-            Steinberg::Vst::IEditController::iid,
-            reinterpret_cast<void**>(&m_controller)
-        );
-        std::cout << "[DBG VST3] Query IEditController cRes=" << cRes << " ctrl=" << m_controller << std::endl;
-        if (cRes != Steinberg::kResultOk || !m_controller) {
-            Steinberg::TUID controllerCID;
-            Steinberg::tresult cidRes = m_component->getControllerClassId(controllerCID);
-            std::cout << "[DBG VST3] getControllerClassId res=" << cidRes << std::endl;
-            if (cidRes == Steinberg::kResultOk) {
-                std::cout << "[DBG VST3] Creating controller from separate CID..." << std::endl;
-                Steinberg::tresult instRes = m_factory->createInstance(
-                    controllerCID,
-                    Steinberg::Vst::IEditController::iid.toTUID(),
-                    reinterpret_cast<void**>(&m_controller)
-                );
-                std::cout << "[DBG VST3] createInstance controller res=" << instRes << " ptr=" << m_controller << std::endl;
-                if (m_controller) {
-                    std::cout << "[DBG VST3] Initializing separate controller..." << std::endl;
-                    Steinberg::tresult initRes = m_controller->initialize(&m_hostApp);
-                    std::cout << "[DBG VST3] Controller initialize res=" << initRes << std::endl;
+            // Initialize component with host application context
+            std::cout << "[DBG VST3] Initializing component with hostApp..." << std::endl;
+            m_component->initialize(&m_hostApp);
+            std::cout << "[DBG VST3] Component initialized." << std::endl;
+
+            // Query IAudioProcessor
+            std::cout << "[DBG VST3] Querying IAudioProcessor..." << std::endl;
+            res = m_component->queryInterface(
+                Steinberg::Vst::IAudioProcessor::iid,
+                reinterpret_cast<void**>(&m_processor)
+            );
+            std::cout << "[DBG VST3] Query IAudioProcessor res=" << res << " proc=" << m_processor << std::endl;
+
+            if (res != Steinberg::kResultOk || !m_processor) {
+                initErr = "Failed to query VST3 IAudioProcessor interface";
+                m_component->terminate();
+                m_component->release();
+                m_component = nullptr;
+                return;
+            }
+
+            // Query IEditController
+            std::cout << "[DBG VST3] Querying IEditController on component..." << std::endl;
+            Steinberg::tresult cRes = m_component->queryInterface(
+                Steinberg::Vst::IEditController::iid,
+                reinterpret_cast<void**>(&m_controller)
+            );
+            std::cout << "[DBG VST3] Query IEditController cRes=" << cRes << " ctrl=" << m_controller << std::endl;
+            if (cRes != Steinberg::kResultOk || !m_controller) {
+                Steinberg::TUID controllerCID;
+                Steinberg::tresult cidRes = m_component->getControllerClassId(controllerCID);
+                std::cout << "[DBG VST3] getControllerClassId res=" << cidRes << std::endl;
+                if (cidRes == Steinberg::kResultOk) {
+                    std::cout << "[DBG VST3] Creating controller from separate CID..." << std::endl;
+                    Steinberg::tresult instRes = m_factory->createInstance(
+                        controllerCID,
+                        Steinberg::Vst::IEditController::iid.toTUID(),
+                        reinterpret_cast<void**>(&m_controller)
+                    );
+                    std::cout << "[DBG VST3] createInstance controller res=" << instRes << " ptr=" << m_controller << std::endl;
+                    if (m_controller) {
+                        std::cout << "[DBG VST3] Initializing separate controller..." << std::endl;
+                        Steinberg::tresult initRes = m_controller->initialize(&m_hostApp);
+                        std::cout << "[DBG VST3] Controller initialize res=" << initRes << std::endl;
+                    }
                 }
             }
-        }
 
-        if (m_controller) {
-            // 设置 ComponentHandler（Ozone 等宿主解耦插件强依赖 handler 才能创建 Editor）
-            std::cout << "[DBG VST3] setComponentHandler..." << std::endl;
-            m_controller->setComponentHandler(&m_componentHandler);
-            std::cout << "[DBG VST3] setComponentHandler done." << std::endl;
+            if (m_controller) {
+                // 设置 ComponentHandler（Ozone 等宿主解耦插件强依赖 handler 才能创建 Editor）
+                std::cout << "[DBG VST3] setComponentHandler..." << std::endl;
+                m_controller->setComponentHandler(&m_componentHandler);
+                std::cout << "[DBG VST3] setComponentHandler done." << std::endl;
 
-            // 连接 ConnectionPoint（Component 与 Controller 独立时建立互联通道）
-            std::cout << "[DBG VST3] Connecting ConnectionPoints..." << std::endl;
-            Steinberg::Vst::IConnectionPoint* compCP = nullptr;
-            Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
-            Steinberg::tresult q1 = m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&compCP));
-            Steinberg::tresult q2 = m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&ctrlCP));
-            std::cout << "[DBG VST3] compCP=" << compCP << " (q1=" << q1 << ") ctrlCP=" << ctrlCP << " (q2=" << q2 << ")" << std::endl;
-            if (compCP && ctrlCP) {
-                std::cout << "[DBG VST3] calling safeConnect(compCP, ctrlCP)..." << std::endl;
-                auto safeConnect = [](Steinberg::Vst::IConnectionPoint* a, Steinberg::Vst::IConnectionPoint* b) -> int {
-                    __try {
-                        return (int)a->connect(b);
-                    } __except (EXCEPTION_EXECUTE_HANDLER) {
-                        return -999999;
-                    }
-                };
-                int c1 = safeConnect(compCP, ctrlCP);
-                std::cout << "[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1 << std::endl;
-                int c2 = safeConnect(ctrlCP, compCP);
-                std::cout << "[DBG VST3] safeConnect(ctrlCP, compCP) result=" << c2 << std::endl;
+                // 连接 ConnectionPoint（Component 与 Controller 独立时建立互联通道）
+                std::cout << "[DBG VST3] Connecting ConnectionPoints..." << std::endl;
+                Steinberg::Vst::IConnectionPoint* compCP = nullptr;
+                Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
+                Steinberg::tresult q1 = m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&compCP));
+                Steinberg::tresult q2 = m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&ctrlCP));
+                std::cout << "[DBG VST3] compCP=" << compCP << " (q1=" << q1 << ") ctrlCP=" << ctrlCP << " (q2=" << q2 << ")" << std::endl;
+                if (compCP && ctrlCP) {
+                    std::cout << "[DBG VST3] calling safeConnect(compCP, ctrlCP)..." << std::endl;
+                    auto safeConnect = [](Steinberg::Vst::IConnectionPoint* a, Steinberg::Vst::IConnectionPoint* b) -> int {
+                        __try {
+                            return (int)a->connect(b);
+                        } __except (EXCEPTION_EXECUTE_HANDLER) {
+                            return -999999;
+                        }
+                    };
+                    int c1 = safeConnect(compCP, ctrlCP);
+                    std::cout << "[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1 << std::endl;
+                    int c2 = safeConnect(ctrlCP, compCP);
+                    std::cout << "[DBG VST3] safeConnect(ctrlCP, compCP) result=" << c2 << std::endl;
+                }
+                if (compCP) compCP->release();
+                if (ctrlCP) ctrlCP->release();
+                std::cout << "[DBG VST3] ConnectionPoints connected." << std::endl;
+
+                // 同步组件初始状态给控制器
+                std::cout << "[DBG VST3] Syncing component state to controller..." << std::endl;
+                Vst3MemoryStream stateStream;
+                Steinberg::tresult sRes = m_component->getState(&stateStream);
+                std::cout << "[DBG VST3] m_component->getState res=" << sRes << " bytes=" << stateStream.m_data.size() << std::endl;
+                if (sRes == Steinberg::kResultOk) {
+                    Steinberg::int64 seekRes = 0;
+                    stateStream.seek(0, Steinberg::IBStream::kIBSeekSet, &seekRes);
+                    Steinberg::tresult csRes = m_controller->setComponentState(&stateStream);
+                    std::cout << "[DBG VST3] m_controller->setComponentState res=" << csRes << std::endl;
+                }
             }
-            if (compCP) compCP->release();
-            if (ctrlCP) ctrlCP->release();
-            std::cout << "[DBG VST3] ConnectionPoints connected." << std::endl;
-
-            // 同步组件初始状态给控制器
-            std::cout << "[DBG VST3] Syncing component state to controller..." << std::endl;
-            Vst3MemoryStream stateStream;
-            Steinberg::tresult sRes = m_component->getState(&stateStream);
-            std::cout << "[DBG VST3] m_component->getState res=" << sRes << " bytes=" << stateStream.m_data.size() << std::endl;
-            if (sRes == Steinberg::kResultOk) {
-                Steinberg::int64 seekRes = 0;
-                stateStream.seek(0, Steinberg::IBStream::kIBSeekSet, &seekRes);
-                Steinberg::tresult csRes = m_controller->setComponentState(&stateStream);
-                std::cout << "[DBG VST3] m_controller->setComponentState res=" << csRes << std::endl;
+        }, 10000);
+        if (!taskRan || !initErr.empty()) {
+            m_meta.isCompatible = false;
+            m_meta.errorMessage = taskRan ? initErr : "VST3 main thread task timeout during load";
+            if (!taskRan) {
+                // 线程挂死于 init —— 隔离（放弃释放）而非 detach 后继续用本
+                // 对象：登记废弃，由 manager 把整个实例移入静态隔离区。
+                // 此时绝不能 FreeLibrary（DLL 代码可能正被执行中）。
+                m_threadAbandoned.store(true, std::memory_order_release);
+                return false;
             }
+            stopVst3Thread();
+            FreeLibrary(m_module);
+            m_module = nullptr;
+            return false;
         }
 
         m_isLoaded = true;
@@ -2186,46 +2307,66 @@ public:
     }
 
     void unload() override {
+        // abandoned 守卫必须最先执行：泵线程（或旧编辑器线程）挂死后仍卡在
+        // 插件代码里，此处的 terminate/release/FreeLibrary 都会撞上它
+        // （FreeLibrary 卸载正在执行的 DLL = 0xC0000374 堆损坏）。整体跳过
+        // 销毁，manager 据 abandoned() 把实例移入静态隔离区（可控泄漏换
+        // 不可控崩溃）。
+        if (m_threadAbandoned.load(std::memory_order_acquire)) {
+            std::cout << "[DBG VST3 unload] WARNING: main thread abandoned; skipping all teardown (quarantine)" << std::endl;
+            m_isLoaded = false;
+            return;
+        }
         if (m_isLoaded) {
             closeEditor();
             deactivate();
 
-            if (m_controller && m_component) {
-                Steinberg::Vst::IConnectionPoint* compCP = nullptr;
-                Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
-                m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&compCP));
-                m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&ctrlCP));
-                if (compCP && ctrlCP) {
-                    compCP->disconnect(ctrlCP);
-                    ctrlCP->disconnect(compCP);
+            // 插件对象销毁在 plugin main 线程执行（与创建同线程）。
+            std::cout << "[DBG VST3 unload] destroying plugin objects on main thread" << std::endl;
+            bool destroyed = postTaskAndWait([&]() {
+                if (m_controller && m_component) {
+                    Steinberg::Vst::IConnectionPoint* compCP = nullptr;
+                    Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
+                    m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&compCP));
+                    m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid, reinterpret_cast<void**>(&ctrlCP));
+                    if (compCP && ctrlCP) {
+                        compCP->disconnect(ctrlCP);
+                        ctrlCP->disconnect(compCP);
+                    }
+                    if (compCP) compCP->release();
+                    if (ctrlCP) ctrlCP->release();
+                    m_controller->setComponentHandler(nullptr);
                 }
-                if (compCP) compCP->release();
-                if (ctrlCP) ctrlCP->release();
-                m_controller->setComponentHandler(nullptr);
-            }
 
-            if (m_controller) {
-                m_controller->terminate();
-                m_controller->release();
-                m_controller = nullptr;
-            }
-            if (m_processor) {
-                m_processor->release();
-                m_processor = nullptr;
-            }
-            if (m_component) {
-                m_component->terminate();
-                m_component->release();
-                m_component = nullptr;
-            }
-            m_factory = nullptr;
-
-            if (m_module) {
-                FreeLibrary(m_module);
-                m_module = nullptr;
+                if (m_controller) {
+                    m_controller->terminate();
+                    m_controller->release();
+                    m_controller = nullptr;
+                }
+                if (m_processor) {
+                    m_processor->release();
+                    m_processor = nullptr;
+                }
+                if (m_component) {
+                    m_component->terminate();
+                    m_component->release();
+                    m_component = nullptr;
+                }
+                m_factory = nullptr;
+            }, 3000);
+            if (!destroyed) {
+                std::cout << "[DBG VST3 unload] WARNING: main thread unresponsive; quarantining instance" << std::endl;
+                m_threadAbandoned.store(true, std::memory_order_release);
+                return;   // manager 据此把实例移入静态隔离区（泄漏而非 UAF）
             }
             m_isLoaded = false;
         }
+        stopVst3Thread();
+        if (m_module) {
+            FreeLibrary(m_module);
+            m_module = nullptr;
+        }
+        m_isLoaded = false;
     }
 
     bool activate(double sampleRate, uint32_t maxBlockSize) override {
@@ -2400,14 +2541,26 @@ public:
             ShowWindow(m_editorHwnd, SW_SHOW);
             return true;
         }
-        if (m_editorThread.joinable()) {
-            m_editorThread.join();
-        }
-
         if (!m_controller) {
             std::cout << "[DBG VST3 showEditor] m_controller is NULL!" << std::endl;
             return false;
         }
+        // B3（2026-10-12）：GUI 交互全部在 VST3 plugin main 线程（每实例
+        // 专用泵线程）执行——与组件 initialize 同线程，JUCE 系插件的
+        // MessageManager 线程假设得以满足；旧结构里 attached 跑在临时编辑器
+        // 线程（≠ initialize 线程），Auto-Tune EFX+ 等插件因此挂死（白框）。
+        bool ok = false;
+        bool done = postTaskAndWait([&]() { ok = showEditorOnPumpThread(); }, 8000);
+        if (!done) {
+            std::cout << "[DBG VST3 showEditor] WARNING: show task timed out; abandoning instance" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+            return false;
+        }
+        return ok;
+    }
+
+    // showEditor 的实体（在 VST3 plugin main 线程内执行）。
+    bool showEditorOnPumpThread() {
         Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
         std::cout << "[DBG VST3 showEditor] createView(kEditor) returned: " << view << std::endl;
         if (!view) {
@@ -2437,170 +2590,132 @@ public:
             return false;
         }
 
-        // shared_ptr 承载：超时路径返回后线程仍可能 set_value，
-        // 捕获栈对象会写已失效的栈帧。
-        auto initPromise = std::make_shared<std::promise<bool>>();
-        auto initFuture = initPromise->get_future();
-        m_editorAbort.store(false, std::memory_order_release);
+        EnsureVst3WindowClassRegistered();
 
-        m_editorThread = std::thread([this, view, initPromise]() {
-            EnsureWindowClassRegistered();
-            Steinberg::ViewRect vr;
-            int width = 800, height = 600;
-            if (view->getSize(&vr) == Steinberg::kResultOk) {
-                width = vr.right - vr.left;
-                height = vr.bottom - vr.top;
-            }
-            if (width < 200) width = 800;
-            if (height < 150) height = 600;
+        Steinberg::ViewRect vr;
+        int width = 800, height = 600;
+        if (view->getSize(&vr) == Steinberg::kResultOk) {
+            width = vr.right - vr.left;
+            height = vr.bottom - vr.top;
+        }
+        if (width < 200) width = 800;
+        if (height < 150) height = 600;
 
-            // E1：标题由调用方决定；为空时退化到插件自报名。
-            // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
-            // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
-            std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
-            RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
-            DWORD style = WS_OVERLAPPEDWINDOW;
-            AdjustWindowRect(&rc, style, FALSE);
+        // E1：标题由调用方决定；为空时退化到插件自报名。
+        // 历史版本硬编码 L"[AuraDSP] " 前缀，Dart 侧构造的
+        // "<name> - AuraDSP Host" 标题从未生效（C ABI 丢弃第三参）。
+        std::wstring title = utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
+        RECT rc = {0, 0, static_cast<LONG>(width), static_cast<LONG>(height)};
+        DWORD style = WS_OVERLAPPEDWINDOW;
+        AdjustWindowRect(&rc, style, FALSE);
 
-            HWND hwnd = CreateWindowExW(
-                0, L"AuraDSP_Plugin_Host_Window", title.c_str(),
-                style, CW_USEDEFAULT, CW_USEDEFAULT,
-                rc.right - rc.left, rc.bottom - rc.top,
-                NULL, NULL, GetModuleHandleW(NULL), NULL);
+        HWND hwnd = CreateWindowExW(
+            0, L"AuraDSP_VST3_Host_Window", title.c_str(),
+            style, CW_USEDEFAULT, CW_USEDEFAULT,
+            rc.right - rc.left, rc.bottom - rc.top,
+            NULL, NULL, GetModuleHandleW(NULL), NULL);
 
-            if (!hwnd) {
-                view->release();
-                initPromise->set_value(false);
-                return;
-            }
+        if (!hwnd) {
+            view->release();
+            return false;
+        }
 
-            m_editorHwnd = hwnd;
-            m_editorOpen.store(true, std::memory_order_release);
+        m_editorHwnd = hwnd;
+        m_editorOpen.store(true, std::memory_order_release);
 
-            AuraPlugFrame frame;
-            frame.m_hwnd = hwnd;
-            view->setFrame(&frame);
+        // frame 必须存活到编辑器关闭（插件会回调），故为成员而非局部变量。
+        m_view = view;
+        m_plugFrame.m_hwnd = hwnd;
+        view->setFrame(&m_plugFrame);
 
-            try {
-                Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
-                if (attachRes != Steinberg::kResultOk && attachRes != Steinberg::kResultTrue) {
-                    std::cout << "[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes << std::endl;
-                    view->setFrame(nullptr);
-                    view->release();
-                    if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                    initPromise->set_value(false);
-                    return;
-                }
-            } catch (const std::exception& ex) {
-                std::cout << "[DBG VST3 showEditor] view->attached exception: " << ex.what() << std::endl;
-                view->setFrame(nullptr);
-                view->release();
-                if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                initPromise->set_value(false);
-                return;
-            } catch (...) {
-                std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
-                view->setFrame(nullptr);
-                view->release();
-                if (IsWindow(hwnd)) DestroyWindow(hwnd);
-                initPromise->set_value(false);
-                return;
-            }
-
-            ShowWindow(hwnd, SW_SHOW);
-            UpdateWindow(hwnd);
-
-            initPromise->set_value(true);
-
-            // 宿主若已放弃（等待超时），此处直接收尾，不进消息泵。
-            if (m_editorAbort.load(std::memory_order_acquire)) {
-                std::cout << "[DBG VST3 editorThread] abort requested before pump, bailing out" << std::endl;
-                view->setFrame(nullptr);
-                view->removed();
-                view->release();
+        try {
+            Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
+            if (attachRes != Steinberg::kResultOk && attachRes != Steinberg::kResultTrue) {
+                std::cout << "[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes << std::endl;
+                detachViewOnPumpThread(view);
                 if (IsWindow(hwnd)) DestroyWindow(hwnd);
                 m_editorHwnd = nullptr;
                 m_editorOpen.store(false, std::memory_order_release);
-                return;
+                return false;
             }
-
-            MSG msg;
-            while (GetMessageW(&msg, NULL, 0, 0) > 0) {
-                if (msg.message == WM_CLOSE && msg.hwnd == hwnd) {
-                    break;
-                }
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
-
-            view->setFrame(nullptr);
-            view->removed();
-            view->release();
-            if (IsWindow(hwnd)) {
-                DestroyWindow(hwnd);
-            }
+        } catch (const std::exception& ex) {
+            std::cout << "[DBG VST3 showEditor] view->attached exception: " << ex.what() << std::endl;
+            detachViewOnPumpThread(view);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
-        });
-
-        if (initFuture.wait_for(std::chrono::milliseconds(3000)) != std::future_status::ready) {
-            std::cout << "[DBG VST3 showEditor] Timeout waiting for editor window to open!" << std::endl;
-            // 让线程在窗口就绪后直接收尾，避免它进入无人关闭的消息泵。
-            m_editorAbort.store(true, std::memory_order_release);
-            if (m_editorThread.joinable() && m_editorThread.get_id() != std::this_thread::get_id()) {
-                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
-                if (hThread && WaitForSingleObject(hThread, 3000) == WAIT_OBJECT_0) {
-                    m_editorThread.join();
-                } else {
-                    m_editorThread.detach();
-                    std::cout << "[DBG VST3 showEditor] WARNING: editor thread unresponsive, detached" << std::endl;
-                }
-            }
+            return false;
+        } catch (...) {
+            std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
+            detachViewOnPumpThread(view);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+            m_editorHwnd = nullptr;
+            m_editorOpen.store(false, std::memory_order_release);
             return false;
         }
-        return initFuture.get();
+
+        ShowWindow(hwnd, SW_SHOW);
+        UpdateWindow(hwnd);
+        return true;
+    }
+
+    // IPlugView 收尾（泵线程内调用）：解绑 frame 并释放引用。
+    void detachViewOnPumpThread(Steinberg::IPlugView* view) {
+        try { view->setFrame(nullptr); } catch (...) {}
+        try { view->removed(); } catch (...) {}
+        try { view->release(); } catch (...) {}
+        m_view = nullptr;
     }
 
     void closeEditor() override {
+        std::cout << "[DBG VST3 closeEditor] enter" << std::endl;
+        if (!m_vst3ThreadReady.load(std::memory_order_acquire)) {
+            m_editorOpen.store(false, std::memory_order_release);
+            std::cout << "[DBG VST3 closeEditor] no plugin main thread; skip" << std::endl;
+            return;
+        }
+        bool done = postTaskAndWait([&]() { closeEditorOnPumpThread(); }, 3000);
+        if (!done) {
+            std::cout << "[DBG VST3 closeEditor] WARNING: close task timed out; abandoning instance" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+        }
+    }
+
+    // closeEditor 的实体（在 VST3 plugin main 线程内执行）；
+    // 泵循环截获编辑器窗口 WM_CLOSE（用户点 X）时也走这里。
+    void closeEditorOnPumpThread() {
         HWND hwnd = m_editorHwnd;
-        if (hwnd && IsWindow(hwnd)) {
-            PostMessageW(hwnd, WM_CLOSE, 0, 0);
+        if (m_view) {
+            detachViewOnPumpThread(m_view);
         }
-        if (m_editorThread.joinable()) {
-            if (m_editorThread.get_id() != std::this_thread::get_id()) {
-                HANDLE hThread = reinterpret_cast<HANDLE>(m_editorThread.native_handle());
-                if (hThread) {
-                    DWORD waitRes = WaitForSingleObject(hThread, 800);
-                    if (waitRes == WAIT_OBJECT_0) {
-                        m_editorThread.join();
-                    } else {
-                        if (hwnd && IsWindow(hwnd)) {
-                            DWORD tid = GetWindowThreadProcessId(hwnd, NULL);
-                            if (tid) PostThreadMessageW(tid, WM_QUIT, 0, 0);
-                        }
-                        m_editorThread.detach();
-                    }
-                } else {
-                    m_editorThread.detach();
-                }
-            } else {
-                m_editorThread.detach();
-            }
-        }
-        m_editorOpen.store(false, std::memory_order_release);
+        if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
         m_editorHwnd = nullptr;
+        m_editorOpen.store(false, std::memory_order_release);
+        std::cout << "[DBG VST3 closeEditor] closed on main thread" << std::endl;
     }
 
     bool isEditorOpen() const override {
         return m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd != nullptr && IsWindow(m_editorHwnd);
     }
 
+    // 编辑器线程曾被 detach（仍卡在插件代码里并引用 this/插件对象）。
+    // manager 据此把实例移入静态隔离区而不是析构——镜像 CLAP 同款机制。
+    bool abandoned() const override {
+        return m_threadAbandoned.load(std::memory_order_acquire);
+    }
+
     bool savePreset(const std::string& filePath) override {
         if (!m_isLoaded || !m_component) return false;
-        auto stream = new Vst3MemoryStream();
-        Steinberg::tresult res = m_component->getState(stream);
-        if (res != Steinberg::kResultOk) {
+        // getState 属插件 main 线程交互（B3：与 initialize/createView 同线程）。
+        std::vector<uint8_t> data;
+        bool got = postTaskAndWait([&]() {
+            auto stream = new Vst3MemoryStream();
+            Steinberg::tresult res = m_component->getState(stream);
+            if (res == Steinberg::kResultOk) data = stream->m_data;
             stream->release();
+        }, 3000);
+        if (!got || data.empty()) {
+            if (!got) m_threadAbandoned.store(true, std::memory_order_release);
             return false;
         }
 
@@ -2611,11 +2726,9 @@ public:
 
         std::ofstream ofs(filePath, std::ios::binary);
         if (!ofs) {
-            stream->release();
             return false;
         }
-        ofs.write(reinterpret_cast<const char*>(stream->m_data.data()), stream->m_data.size());
-        stream->release();
+        ofs.write(reinterpret_cast<const char*>(data.data()), data.size());
         return true;
     }
 
@@ -2631,15 +2744,24 @@ public:
         std::vector<uint8_t> buf(sz);
         ifs.read(reinterpret_cast<char*>(buf.data()), static_cast<std::streamsize>(sz));
 
-        auto stream = new Vst3MemoryStream();
-        stream->m_data = std::move(buf);
-        Steinberg::tresult res = m_component->setState(stream);
-        if (res == Steinberg::kResultOk && m_controller) {
-            stream->seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
-            m_controller->setComponentState(stream);
+        // setState/setComponentState 属插件 main 线程交互（B3）。
+        bool ok = false;
+        bool ran = postTaskAndWait([&]() {
+            auto stream = new Vst3MemoryStream();
+            stream->m_data = std::move(buf);
+            Steinberg::tresult res = m_component->setState(stream);
+            if (res == Steinberg::kResultOk && m_controller) {
+                stream->seek(0, Steinberg::IBStream::kIBSeekSet, nullptr);
+                m_controller->setComponentState(stream);
+            }
+            stream->release();
+            ok = (res == Steinberg::kResultOk);
+        }, 3000);
+        if (!ran) {
+            m_threadAbandoned.store(true, std::memory_order_release);
+            return false;
         }
-        stream->release();
-        return (res == Steinberg::kResultOk);
+        return ok;
     }
 
 private:
@@ -2663,15 +2785,104 @@ private:
     int32_t m_numInputBusses = 1;
     int32_t m_numOutputBusses = 1;
 
-    std::thread m_editorThread;
     HWND m_editorHwnd = nullptr;
     // E1：调用方（Dart）传来的窗口标题；为空时退化为 m_meta.name。
-    // 同步语义同 CLAP 实例：写于 std::thread 创建前，读于线程内。
+    // 同步语义同 CLAP 实例：写于任务提交前，读于泵线程内。
     std::string m_editorTitle;
     std::atomic<bool> m_editorOpen{false};
-    // 宿主放弃本次挂载时置位；编辑器线程在窗口就绪后立即检查，
-    // 避免进入一个永远等不到 WM_CLOSE 的消息泵。
-    std::atomic<bool> m_editorAbort{false};
+    // 泵线程挂死后置位；unload 与 manager 隔离逻辑据此放弃销毁。
+    std::atomic<bool> m_threadAbandoned{false};
+
+    // IPlugView 当前打开的编辑器视图（泵线程独占访问）。
+    Steinberg::IPlugView* m_view = nullptr;
+    // frame 必须存活到编辑器关闭（插件会回调 setFrame 指针）。
+    AuraPlugFrame m_plugFrame;
+
+    // ---- VST3 plugin main 线程（B3 2026-10-12，镜像 CLAP）----
+    // 长寿命线程：承载插件对象创建/初始化（确立 JUCE MessageManager 归属）、
+    // 全部 main-thread 任务（GUI/状态/销毁）与编辑器容器的消息泵。任务经
+    // WM_APP_VST3_TASK 唤醒、在 GetMessage 循环间隙执行。
+    std::thread m_vst3Thread;
+    DWORD m_vst3ThreadId = 0;
+    std::atomic<bool> m_vst3ThreadReady{false};
+    std::atomic<bool> m_stopVst3Thread{false};
+    std::mutex m_taskMutex;
+    std::deque<std::function<void()>> m_tasks;
+
+    void vst3MainLoop() {
+        m_vst3ThreadId = GetCurrentThreadId();
+        m_vst3ThreadReady.store(true, std::memory_order_release);
+        MSG msg;
+        for (;;) {
+            BOOL r = GetMessageW(&msg, NULL, 0, 0);
+            if (r <= 0) break;   // WM_QUIT（或错误）→ 退出
+            if (msg.message == WM_APP_VST3_TASK) {
+                runQueuedTasks();
+                continue;
+            }
+            if (msg.message == WM_CLOSE && msg.hwnd == m_editorHwnd) {
+                // 用户点编辑器窗口的 X：收尾在泵线程内直接执行
+                //（与 createView/attached 同线程，无锁竞争）。
+                closeEditorOnPumpThread();
+                continue;
+            }
+            TranslateMessage(&msg);
+            DispatchMessageW(&msg);
+        }
+        // 线程退出前兜底收尾（正常路径由 unload 的任务完成，此处防遗漏）。
+        closeEditorOnPumpThread();
+    }
+
+    void runQueuedTasks() {
+        for (;;) {
+            std::function<void()> task;
+            {
+                std::lock_guard<std::mutex> lock(m_taskMutex);
+                if (m_tasks.empty()) return;
+                task = std::move(m_tasks.front());
+                m_tasks.pop_front();
+            }
+            task();
+        }
+    }
+
+    // 提交任务到 plugin main 线程并等待完成（有界超时）。
+    // 返回 false = 线程未运行或超时（调用方走废弃隔离路径）。
+    bool postTaskAndWait(std::function<void()> fn, DWORD timeoutMs) {
+        if (m_stopVst3Thread.load(std::memory_order_acquire)) return false;
+        auto task = std::make_shared<std::packaged_task<void()>>(std::move(fn));
+        auto fut = task->get_future();
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back([task]() { (*task)(); });
+        }
+        if (!PostThreadMessageW(m_vst3ThreadId, WM_APP_VST3_TASK, 0, 0)) {
+            // Ready 已置位意味着 GetMessageW 已在跑、消息队列必已建立；
+            // 此分支仅防御极端时序，短暂重试一次。
+            Sleep(20);
+            if (!PostThreadMessageW(m_vst3ThreadId, WM_APP_VST3_TASK, 0, 0)) {
+                std::cout << "[DBG VST3] PostThreadMessage failed, err=" << GetLastError() << std::endl;
+                return false;
+            }
+        }
+        return fut.wait_for(std::chrono::milliseconds(timeoutMs)) == std::future_status::ready;
+    }
+
+    void stopVst3Thread() {
+        if (!m_vst3Thread.joinable()) return;
+        m_stopVst3Thread.store(true, std::memory_order_release);
+        PostThreadMessageW(m_vst3ThreadId, WM_QUIT, 0, 0);
+        HANDLE h = reinterpret_cast<HANDLE>(m_vst3Thread.native_handle());
+        if (h && WaitForSingleObject(h, 3000) == WAIT_OBJECT_0) {
+            m_vst3Thread.join();
+        } else {
+            // 线程挂死 → 隔离（放弃释放）：detach 后对象由 manager 移入
+            // 静态隔离区，绝不在挂死线程仍引用期间析构。
+            std::cout << "[DBG VST3] main thread unresponsive on stop; abandoning" << std::endl;
+            m_threadAbandoned.store(true, std::memory_order_release);
+            m_vst3Thread.detach();
+        }
+    }
 };
 
 //------------------------------------------------------------------------------
@@ -2992,6 +3203,19 @@ std::string PluginHostManager::getAllScannedJson() const {
     return ss.str();
 }
 
+// 隔离区（放弃释放）：abandoned 实例统一收容于此。
+// 关键约束——容器本身必须永不析构。挂死线程仍引用实例内部（this、编辑器
+// 窗口、COM 对象），任何时刻的释放都危险；静态存储的容器会在进程 exit()
+// 时触发析构并逐个销毁实例，同样撞上挂死线程（实测表现为退出阶段堆损坏
+// 或挂死）。故堆分配 + 从不 delete = 进程生命周期内绝对安全的隔离区，
+// 泄漏量级 = 挂死次数（罕见路径）。
+static void quarantineAbandonedInstance(std::unique_ptr<IPluginInstance> inst) {
+    static auto* s_leak = new std::vector<std::unique_ptr<IPluginInstance>>();
+    static std::mutex s_leakMutex;
+    std::lock_guard<std::mutex> lock(s_leakMutex);
+    s_leak->push_back(std::move(inst));
+}
+
 void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
@@ -3008,21 +3232,28 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     // 强制排空安全兜底：即便音频流非活动导致计数悬垂，也绝不能锁死用户卸载
     s.inFlight.store(0, std::memory_order_relaxed);
 
-    s.latency.store(0, std::memory_order_relaxed);
-    if (s.instance) {
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor" << std::endl;
-        s.instance->closeEditor();
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] deactivate" << std::endl;
-        s.instance->deactivate();
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] unload" << std::endl;
-        s.instance->unload();
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] reset (dtor)" << std::endl;
-        s.instance.reset();
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] complete" << std::endl;
-    } else {
-        std::cout << "[DBG Slot] unloadLocked[" << slot << "] no instance" << std::endl;
+        s.latency.store(0, std::memory_order_relaxed);
+        if (s.instance) {
+            std::cout << "[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor" << std::endl;
+            s.instance->closeEditor();
+            std::cout << "[DBG Slot] unloadLocked[" << slot << "] deactivate" << std::endl;
+            s.instance->deactivate();
+            std::cout << "[DBG Slot] unloadLocked[" << slot << "] unload" << std::endl;
+            s.instance->unload();
+            if (s.instance->abandoned()) {
+                // 隔离（放弃释放）：内部线程挂死且仍引用实例，析构 =
+                // use-after-free。整体移入隔离区（可控泄漏换不可控崩溃）。
+                quarantineAbandonedInstance(std::move(s.instance));
+                std::cout << "[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)" << std::endl;
+            } else {
+                std::cout << "[DBG Slot] unloadLocked[" << slot << "] reset (dtor)" << std::endl;
+                s.instance.reset();
+            }
+            std::cout << "[DBG Slot] unloadLocked[" << slot << "] complete" << std::endl;
+        } else {
+            std::cout << "[DBG Slot] unloadLocked[" << slot << "] no instance" << std::endl;
+        }
     }
-}
 
 void PluginHostManager::unloadPluginSlot(size_t slot) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
@@ -3075,6 +3306,11 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         bool lRet = instance->load(path, pluginId, seed);
         std::cout << "[DBG PluginHost] instance->load returned: " << lRet << std::endl;
         if (!lRet) {
+            if (instance->abandoned()) {
+                // load 阶段线程挂死 → 隔离区（同 unloadPluginSlotLocked）。
+                quarantineAbandonedInstance(std::move(instance));
+                std::cout << "[DBG PluginHost] instance quarantined (abandoned during load)" << std::endl;
+            }
             return false;
         }
 
@@ -3082,6 +3318,10 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         std::cout << "[DBG PluginHost] instance->activate returned: " << aRet << std::endl;
         if (!aRet) {
             instance->unload();
+            if (instance->abandoned()) {
+                quarantineAbandonedInstance(std::move(instance));
+                std::cout << "[DBG PluginHost] instance quarantined (abandoned during activate-unload)" << std::endl;
+            }
             return false;
         }
 
