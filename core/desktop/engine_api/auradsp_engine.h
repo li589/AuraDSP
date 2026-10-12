@@ -163,6 +163,18 @@ int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
 
 /* ---- 第三方插件宿主（M1：VST3 / CLAP 64位） ---- */
 int      auradsp_plugin_scan(auradsp_handle h, const char* extra_dirs_json, int deep_scan);
+/* C2 分块扫描：把「枚举 + 取元数据」拆成可让出的小步，调用方在步间让出
+ * 线程，扫描不再是一记长时间阻塞 FFI。结果渐进可见（scan_step 期间
+ * auradsp_plugin_get_all 即返回已扫到的部分）。
+ *   scan_begin → 返回候选总数（>0 表示有活）；
+ *   scan_step  → 处理至多 max_items 个候选，返回本步处理数（<=0 = 全部完成）；
+ *   scan_progress → 返回已处理数；out_total 非空时写入候选总数；无任务返回 -1；
+ *   scan_end   → 收尾并刷新元数据缓存，返回最终插件数。
+ * 未调用 scan_end 直接开始下一次 scan_begin 等价于放弃上一次任务。 */
+int      auradsp_plugin_scan_begin(auradsp_handle h, const char* extra_dirs_json, int deep_scan);
+int      auradsp_plugin_scan_step(auradsp_handle h, int max_items);
+int      auradsp_plugin_scan_progress(auradsp_handle h, int* out_total);
+int      auradsp_plugin_scan_end(auradsp_handle h);
 int      auradsp_plugin_get_count(auradsp_handle h);
 int      auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len);
 int      auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len);

@@ -42,6 +42,8 @@ def run_smoke_tests():
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",
+        # C2：扫描基准（无插件环境自动 SKIP，故可值守）
+        "bench_scan_c2.py",
     ]
     all_pass = True
     for sf in smoke_files:

@@ -815,20 +815,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final dirs = (m['dirs'] as List?)?.map((e) => e.toString()).toList();
               final dir = (m['dir'] as String?) ?? '';
               final deep = (m['deep'] as bool?) ?? false;
-              var totalCount = 0;
-              if (dirs != null && dirs.isNotEmpty) {
-                for (final d in dirs) {
-                  totalCount += AuraDspLib.pluginScanWrap(lib, handle, dir: d, deep: deep);
-                }
-              } else {
-                totalCount = AuraDspLib.pluginScanWrap(lib, handle, dir: dir, deep: deep);
-              }
-              final allJson = AuraDspLib.pluginGetAllJson(lib, handle);
-              send({
-                'evt': 'pluginScanned',
-                'count': totalCount,
-                'json': allJson,
-              });
+              final scanDir = (dirs != null && dirs.isNotEmpty) ? dirs.join(';') : dir;
+              // C2：分块扫描是异步的——本 case 在同步消息循环里（不能 await），
+              // 故以 fire-and-forget 启动，扫描在事件循环里与音频泵交替推进，
+              // 进度与完成都以事件回传（对外契约与同步路径一致）。
+              _scanChunked(
+                lib: lib,
+                handle: handle,
+                dir: scanDir,
+                deep: deep,
+                send: send,
+              );
             }
             break;
           }
@@ -1260,4 +1257,75 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   unawaited(pump());
+}
+
+/// C2：分块扫描（异步，由 'pluginScan' 命令 fire-and-forget 启动）。
+///
+/// 为什么不用一次性 `pluginScan`：那是一记长阻塞 FFI——快扫 ~120ms（76 个）
+/// 尚可，深扫要 LoadLibrary 每个 DLL（实测 3.6s），期间本 isolate 完全无法
+/// 让出，音频泵停摆、进度无从上报。切成小步后每步只处理少量候选，步间
+/// await 让出事件循环：音频继续跑、进度实时回传、列表边扫边长。
+///
+/// sync 消息循环里不能 await，故本函数独立存在并以事件回报结果；
+/// 完成事件 'pluginScanned' 与旧的一次性路径完全同构，UI 侧无需区分。
+void _scanChunked({
+  required AuraDspLib lib,
+  required Pointer<Void> handle,
+  required String dir,
+  required bool deep,
+  required void Function(Map<String, dynamic>) send,
+}) {
+  // 深扫每步 1 个（单次 LoadLibrary 可能几十毫秒）；快扫每步 8 个
+  // （PE 版本资源读取是纯 I/O，很快）。
+  const quickBatch = 8;
+  const deepBatch = 1;
+  final batchSize = deep ? deepBatch : quickBatch;
+
+  () async {
+    try {
+      var candidateTotal =
+          AuraDspLib.pluginScanBeginWrap(lib, handle, dir: dir, deep: deep);
+      send({
+        'evt': 'pluginScanProgress',
+        'done': 0,
+        'total': candidateTotal,
+        'found': 0,
+      });
+
+      var guard = 0;
+      while (true) {
+        final stepped =
+            AuraDspLib.pluginScanStepWrap(lib, handle, maxItems: batchSize);
+        if (stepped <= 0) break;
+        final pr = AuraDspLib.pluginScanProgressWrap(lib, handle);
+        final total = pr.total < 0 ? candidateTotal : pr.total;
+        if (total > 0) candidateTotal = total;
+        send({
+          'evt': 'pluginScanProgress',
+          'done': pr.processed,
+          'total': total,
+          'found': lib.pluginGetCount(handle),
+        });
+        // 让出事件循环：音频泵与未决命令得以推进（C3 同根因）。
+        await Future<void>.delayed(Duration.zero);
+        // 防御：候选数为 0 或引擎异常时避免死循环
+        if (++guard > 20000) break;
+      }
+
+      final totalCount = AuraDspLib.pluginScanEndWrap(lib, handle);
+      final allJson = AuraDspLib.pluginGetAllJson(lib, handle);
+      send({
+        'evt': 'pluginScanned',
+        'count': totalCount,
+        'json': allJson,
+      });
+    } catch (e) {
+      send({'evt': 'error', 'msg': '插件扫描失败：$e'});
+      // 失败也要收尾，避免扫描任务悬挂导致后续扫描被 begin 打断
+      try {
+        AuraDspLib.pluginScanEndWrap(lib, handle);
+      } catch (_) {}
+      send({'evt': 'pluginScanned', 'count': 0, 'json': '[]'});
+    }
+  }();
 }

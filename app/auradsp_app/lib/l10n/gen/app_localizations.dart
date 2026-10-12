@@ -1756,7 +1756,7 @@ abstract class AppLocalizations {
   /// **'系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。'**
   String get plugLibHint;
 
-  /// No description provided for @plugDeepScan.
+  /// 深扫勾选：会加载每个插件 DLL 以读取精确元数据，明显更慢
   ///
   /// In zh, this message translates to:
   /// **'深度遍历'**
@@ -1773,6 +1773,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'正在扫描...'**
   String get plugScanning;
+
+  /// No description provided for @plugScanPreparing.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在枚举插件目录…'**
+  String get plugScanPreparing;
+
+  /// No description provided for @plugScanProgressCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已扫描 {done}/{total} · 发现 {found} 个插件'**
+  String plugScanProgressCount(int done, int total, int found);
+
+  /// No description provided for @plugScanNoVerify.
+  ///
+  /// In zh, this message translates to:
+  /// **'快扫不加载插件：仅读取文件元数据，插件在挂载时才验证'**
+  String get plugScanNoVerify;
 
   /// No description provided for @plugOpenFolder.
   ///

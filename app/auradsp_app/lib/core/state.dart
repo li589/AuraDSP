@@ -535,6 +535,17 @@ class AppModel extends ChangeNotifier {
         eventSeq.value = ++_guardSeq;
         notifyListeners();
         break;
+      case 'pluginScanProgress':
+        // C2：扫描分块推进中的进度回执（已处理候选 / 候选总数 / 已发现插件）。
+        pluginManager.onPluginScanProgress(
+          raw['done'] as int? ?? 0,
+          raw['total'] as int? ?? 0,
+          raw['found'] as int? ?? 0,
+        );
+        // 不 notifyListeners 由被监听对象自身触发（见 onPluginScanProgress），
+        // 这里仅保证 UI 至少刷新一次。
+        notifyListeners();
+        break;
       case 'pluginScanned':
         pluginManager.onPluginScanned(raw['count'] as int, raw['json']);
         notifyListeners();

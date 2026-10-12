@@ -23,6 +23,7 @@
 #include <deque>
 #include <map>
 #include <set>
+#include <unordered_set>
 #include <array>
 
 // CLAP headers
@@ -3166,8 +3167,11 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
     return false;
 }
 
-std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& searchPaths, bool deepScan) {
-    std::vector<PluginMetadata> results;
+std::vector<PluginScanner::ScanCandidate> PluginScanner::enumerate(const std::vector<std::string>& searchPaths) {
+    // C2：只遍历目录树，不做任何 PE 读取 / LoadLibrary。这一步在每个
+    // 候选上只有 stat 级成本，可安全地在扫描启动时一次性完成。
+    std::vector<ScanCandidate> out;
+    std::unordered_set<std::string> seen;
 
     for (const auto& dirPath : searchPaths) {
         if (!fs::exists(dirPath)) continue;
@@ -3189,96 +3193,98 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
 
                 if (format == PluginFormat::Unknown) continue;
 
-                // If this is a directory (like Bundle.vst3), resolve its binary or skip directory
-                std::string pathStr;
-                std::string nameStr;
+                ScanCandidate c;
+                c.format = format;
                 if (entry.is_directory()) {
                     it.disable_recursion_pending();
-                    pathStr = resolveBundleBinary(entry.path().string(), format);
-                    if (pathStr.empty()) {
-                        // Directory ending with .vst3 but not a valid bundle, ignore
-                        continue;
-                    }
-                    nameStr = entry.path().stem().string();
+                    c.binaryPath = resolveBundleBinary(entry.path().string(), format);
+                    if (c.binaryPath.empty()) continue;   // 目录以 .vst3 结尾但不是有效 bundle
+                    c.path = entry.path().string();
+                    c.displayName = entry.path().stem().string();
                 } else {
-                    pathStr = entry.path().string();
-                    nameStr = entry.path().stem().string();
+                    c.binaryPath = entry.path().string();
+                    c.path = c.binaryPath;
+                    c.displayName = entry.path().stem().string();
                 }
 
-                // Deduplicate by path
-                bool duplicate = false;
-                for (const auto& r : results) {
-                    if (r.path == pathStr) { duplicate = true; break; }
-                }
-                if (duplicate) continue;
-
-                auto makeQuickMeta = [&](const std::string& pStr, const std::string& nStr, PluginFormat fmt) -> PluginMetadata {
-                    std::wstring wp = utf8ToWide(pStr);
-                    std::string peV = extractCompanyFromVersionInfo(wp);
-                    std::string copyV = extractVendorFromLegalCopyright(wp);
-                    std::string peVer = extractProductVersionFromVersionInfo(wp);
-                    std::string dirV = extractVendorFromPath(pStr);
-                    std::string sigV = extractVendorByKnownSignature(nStr);
-
-                    std::string vendor = !peV.empty() ? peV : (!copyV.empty() ? copyV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown")));
-
-                    // CLAP 格式轻量查询元数据以精确获取 id/vendor
-                    if (fmt == PluginFormat::CLAP) {
-                        std::vector<PluginMetadata> clapMetas;
-                        if (queryMetadata(pStr, fmt, clapMetas) && !clapMetas.empty()) {
-                            return clapMetas[0];
-                        }
-                    }
-
-                    PluginMetadata q;
-                    q.path = pStr;
-                    q.name = nStr;
-                    // 与深扫/加载路同一规则：bundleName = 注册路径的 stem。
-                    // 快扫不加载 DLL，拿不到自报名，但 bundle 名不依赖 DLL。
-                    q.bundleName = fs::path(pStr).stem().string();
-                    q.format = fmt;
-                    // D2：is64Bit 由 PE 头判定（不再硬编码 true）。32 位条目
-                    // 保留在扫描结果中但标记不可加载，加载路 loadPlugin() 会
-                    // 拦截并给出同一文案，不会走到 LoadLibrary。
-                    q.is64Bit = peIs64Bit(wp);
-                    if (!q.is64Bit) {
-                        q.isCompatible = false;
-                        q.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
-                    }
-                    q.vendor = vendor;
-                    q.version = !peVer.empty() ? peVer : "1.0";
-                    q.category = "AudioEffect";
-                    return q;
-                };
-
-                if (format == PluginFormat::CLAP) {
-                    std::vector<PluginMetadata> clapMetas;
-                    if (queryMetadata(pathStr, format, clapMetas) && !clapMetas.empty()) {
-                        for (const auto& m : clapMetas) {
-                            results.push_back(m);
-                        }
-                        continue;
-                    }
-                }
-
-                if (deepScan) {
-                    std::vector<PluginMetadata> deepMeta;
-                    if (queryMetadata(pathStr, format, deepMeta)) {
-                        for (const auto& m : deepMeta) {
-                            results.push_back(m);
-                        }
-                    } else {
-                        results.push_back(makeQuickMeta(pathStr, nameStr, format));
-                    }
-                } else {
-                    results.push_back(makeQuickMeta(pathStr, nameStr, format));
-                }
+                if (seen.insert(c.binaryPath).second) out.push_back(std::move(c));
             }
         } catch (...) {
             // Guard filesystem iteration exceptions
         }
     }
+    return out;
+}
 
+namespace {
+
+// 快扫元数据：PE 版本资源 + 路径/名称启发式（不加载 DLL）。
+// 与深扫/加载路共用 bundleName 与 is64Bit 判定规则（D2）。
+PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, PluginFormat fmt) {
+    std::wstring wp = utf8ToWide(pStr);
+    std::string peV = extractCompanyFromVersionInfo(wp);
+    std::string copyV = extractVendorFromLegalCopyright(wp);
+    std::string peVer = extractProductVersionFromVersionInfo(wp);
+    std::string dirV = extractVendorFromPath(pStr);
+    std::string sigV = extractVendorByKnownSignature(nStr);
+
+    std::string vendor = !peV.empty() ? peV : (!copyV.empty() ? copyV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown")));
+
+    PluginMetadata q;
+    q.path = pStr;
+    q.name = nStr;
+    // 与深扫/加载路同一规则：bundleName = 注册路径的 stem。
+    // 快扫不加载 DLL，拿不到自报名，但 bundle 名不依赖 DLL。
+    q.bundleName = fs::path(pStr).stem().string();
+    q.format = fmt;
+    // D2：is64Bit 由 PE 头判定（不再硬编码 true）。32 位条目保留在扫描结果
+    // 中但标记不可加载，加载路 loadPlugin() 会拦截并给出同一文案。
+    q.is64Bit = peIs64Bit(wp);
+    if (!q.is64Bit) {
+        q.isCompatible = false;
+        q.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+    }
+    q.vendor = vendor;
+    q.version = !peVer.empty() ? peVer : "1.0";
+    q.category = "AudioEffect";
+    return q;
+}
+
+// 单个候选的元数据提取（快扫/深扫共用）。CLAP 一律走轻量查询（不需要加载
+// DLL 即可拿到 id/vendor）；VST3 深扫才 LoadLibrary 走 queryMetadata。
+std::vector<PluginMetadata> scanCandidateMeta(const PluginScanner::ScanCandidate& c, bool deepScan) {
+    std::vector<PluginMetadata> out;
+
+    if (c.format == PluginFormat::CLAP) {
+        std::vector<PluginMetadata> clapMetas;
+        if (PluginScanner::queryMetadata(c.binaryPath, c.format, clapMetas) && !clapMetas.empty()) {
+            return clapMetas;
+        }
+        // 轻量查询失败时退化为 PE 版本资源路径
+        out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
+        return out;
+    }
+
+    if (deepScan) {
+        std::vector<PluginMetadata> deepMeta;
+        if (PluginScanner::queryMetadata(c.binaryPath, c.format, deepMeta) && !deepMeta.empty()) {
+            return deepMeta;
+        }
+    }
+    out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
+    return out;
+}
+
+}  // namespace
+
+std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& searchPaths, bool deepScan) {
+    // 一次性扫描（保留原语义）：枚举 + 逐个取元数据。分块扫描走
+    // PluginHostManager::scanBegin/scanStep，两边共用 enumerate 与同一套
+    // 元数据提取实现，保证「一次性 == 分块」结果一致。
+    std::vector<PluginMetadata> results;
+    for (const auto& c : enumerate(searchPaths)) {
+        for (auto& m : scanCandidateMeta(c, deepScan)) results.push_back(std::move(m));
+    }
     return results;
 }
 
@@ -3296,20 +3302,143 @@ PluginHostManager::~PluginHostManager() {
 int PluginHostManager::scanPlugins(const std::string& extraDirsJson, bool deepScan) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 
+    // 一次性扫描直接走分块管线的同一条实现（begin → 排空 → end），于是：
+    //   ① 结果与分块扫描逐条一致；② 同样命中元数据缓存；③ 结束同样刷新缓存。
+    // 早期版本这里单独调 PluginScanner::scan，绕过了缓存，导致"一次性 46ms /
+    // 分块 4ms"的观感差异——快慢并非实现不同，而是有没有命中缓存。
+    scanBegin(extraDirsJson, deepScan);          // recursive_mutex，可重入
+    while (scanStep(256) > 0) {
+    }
+    return scanEnd();
+}
+
+//------------------------------------------------------------------------------
+// C2 分块扫描
+//------------------------------------------------------------------------------
+namespace {
+
+// 文件指纹：大小 + 修改时间。仅用于缓存有效性判定，失败时返回 false
+// （= 不可缓存、每次都重扫——安全退化）。
+bool fileStamp(const std::string& path, std::pair<uint64_t, int64_t>& out) {
+    std::error_code ec;
+    auto sz = fs::file_size(path, ec);
+    if (ec) return false;
+    auto mtime = fs::last_write_time(path, ec);
+    if (ec) return false;
+    int64_t t = 0;
+#if defined(_MSC_VER) && (!defined(_HAS_CXX20) || _HAS_CXX20 == 0)
+    t = static_cast<int64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(mtime.time_since_epoch()).count());
+#else
+    t = static_cast<int64_t>(
+        std::chrono::duration_cast<std::chrono::seconds>(mtime.time_since_epoch()).count());
+#endif
+    out = {static_cast<uint64_t>(sz), t};
+    return true;
+}
+
+}  // namespace
+
+std::vector<std::string> PluginHostManager::collectSearchPathsLocked(const std::string& extraDirsJson) const {
     std::vector<std::string> searchPaths = PluginScanner::getDefaultSearchPaths();
-    // Parse extra dirs if provided
     if (!extraDirsJson.empty()) {
         std::istringstream iss(extraDirsJson);
         std::string path;
         while (std::getline(iss, path, ';')) {
-            if (!path.empty() && fs::exists(path)) {
-                searchPaths.push_back(path);
-            }
+            if (!path.empty() && fs::exists(path)) searchPaths.push_back(path);
         }
     }
+    return searchPaths;
+}
 
-    m_scannedPlugins = PluginScanner::scan(searchPaths, deepScan);
+int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan) {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+
+    auto job = std::make_unique<ScanJob>();
+    job->deep = deepScan;
+    job->candidates = PluginScanner::enumerate(collectSearchPathsLocked(extraDirsJson));
+
+    // 结果渐进写入 m_scannedPlugins：扫描过程中 get_all 即返回已扫到的部分
+    // （UI 边扫边长），scanEnd 只负责收尾与刷新缓存。
+    m_scannedPlugins.clear();
+    m_scanJob = std::move(job);
+    return static_cast<int>(m_scanJob->candidates.size());
+}
+
+int PluginHostManager::scanStep(int maxItems) {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (!m_scanJob) return 0;
+    if (maxItems <= 0) maxItems = 1;
+
+    int processed = 0;
+    auto& job = *m_scanJob;
+    while (processed < maxItems && job.cursor < job.candidates.size()) {
+        const auto& c = job.candidates[job.cursor++];
+        ++processed;
+
+        // 缓存复用：文件未变 + 缓存深度足够 → 直接复用，零 I/O（快扫）
+        // 或零 LoadLibrary（深扫）。这是"再扫一次"接近瞬时的关键。
+        std::pair<uint64_t, int64_t> stamp;
+        if (fileStamp(c.binaryPath, stamp)) {
+            auto itS = m_scanStamps.find(c.binaryPath);
+            auto itC = m_scanCache.find(c.binaryPath);
+            auto itD = m_scanCacheDeep.find(c.binaryPath);
+            if (itS != m_scanStamps.end() && itC != m_scanCache.end() &&
+                itS->second == stamp &&
+                itD != m_scanCacheDeep.end() && (itD->second || !job.deep)) {
+                // 复用该二进制下的**全部**条目（多插件 bundle 不会被折叠）。
+                for (const auto& cached : itC->second) m_scannedPlugins.push_back(cached);
+                continue;
+            }
+        }
+
+        for (auto& m : scanCandidateMeta(c, job.deep)) {
+            m_scannedPlugins.push_back(std::move(m));
+        }
+    }
+    return processed;
+}
+
+int PluginHostManager::scanProcessed() const {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (!m_scanJob) return -1;
+    return static_cast<int>(m_scanJob->cursor);
+}
+
+int PluginHostManager::scanTotal() const {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (!m_scanJob) return -1;
+    return static_cast<int>(m_scanJob->candidates.size());
+}
+
+int PluginHostManager::scanEnd() {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (!m_scanJob) return static_cast<int>(m_scannedPlugins.size());
+    const bool deep = m_scanJob->deep;
+    m_scanJob.reset();
+    rebuildScanCacheFromResults(deep);
     return static_cast<int>(m_scannedPlugins.size());
+}
+
+void PluginHostManager::scanAbort() {
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    m_scanJob.reset();   // 已扫到的部分保留在 m_scannedPlugins 中
+}
+
+void PluginHostManager::rebuildScanCacheFromResults(bool deep) {
+    // 由当前结果重建缓存与文件指纹。仅缓存"成功且有效"的条目（有 id 或
+    // 至少 name 非空），避免把一次失败的中间态固化进缓存。
+    m_scanCache.clear();
+    m_scanStamps.clear();
+    m_scanCacheDeep.clear();
+    for (const auto& m : m_scannedPlugins) {
+        if (m.path.empty()) continue;
+        std::pair<uint64_t, int64_t> stamp;
+        if (!fileStamp(m.path, stamp)) continue;
+        m_scanStamps[m.path] = stamp;
+        m_scanCache[m.path].push_back(m);   // 追加而非覆盖：保留多插件 bundle 的全部条目
+        m_scanCacheDeep[m.path] = deep;
+    }
 }
 
 size_t PluginHostManager::getScannedCount() const {

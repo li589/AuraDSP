@@ -12,6 +12,10 @@ EXPORTS
     auradsp_version
     auradsp_abi
     auradsp_plugin_scan
+    auradsp_plugin_scan_begin
+    auradsp_plugin_scan_step
+    auradsp_plugin_scan_progress
+    auradsp_plugin_scan_end
     auradsp_plugin_get_count
     auradsp_plugin_get_item
     auradsp_plugin_get_all

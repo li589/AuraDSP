@@ -22,6 +22,8 @@
 #include <mutex>
 #include <atomic>
 #include <array>
+#include <unordered_map>
+#include <utility>
 
 namespace auradsp {
 
@@ -96,7 +98,20 @@ public:
 
 class PluginScanner {
 public:
+    /* C2（2026-10-12）：扫描拆成"枚举"与"取元数据"两阶段。
+     * 枚举只遍历目录（无 PE 读取、无 LoadLibrary），成本低且可在 UI 线程
+     * 之外一次性做完；取元数据才是耗时部分（深扫每个 DLL 都要 LoadLibrary，
+     * 实测 76 个插件 3.6s），必须能被切成小步、由调用方在步间让出线程。 */
+    struct ScanCandidate {
+        std::string path;         // 对外标识（bundle 根路径）
+        std::string binaryPath;   // 真实二进制（bundle 内解析结果）
+        std::string displayName;  // stem（快扫拿不到自报名时用）
+        PluginFormat format = PluginFormat::Unknown;
+    };
+
     static std::vector<std::string> getDefaultSearchPaths();
+    /* 只做目录枚举：返回候选列表，不做任何元数据 I/O。 */
+    static std::vector<ScanCandidate> enumerate(const std::vector<std::string>& searchPaths);
     static std::vector<PluginMetadata> scan(const std::vector<std::string>& searchPaths, bool deepScan);
     static bool queryMetadata(const std::string& filePath, PluginFormat format, std::vector<PluginMetadata>& outPlugins);
     /* 解析 bundle 内的真实二进制。探测顺序：x86_64-win（本进程架构）→
@@ -131,6 +146,28 @@ public:
 
     // Scanning & Cache
     int scanPlugins(const std::string& extraDirsJson, bool deepScan);
+
+    /* ---- C2 分块扫描（2026-10-12）----
+     * 背景：一次性 scanPlugins 是单个长 FFI 调用——快扫 ~120ms（76 个）尚可，
+     * 深扫要 LoadLibrary 每个 DLL（3.6s），期间调用方线程（音频 isolate）
+     * 完全无法让出，音频泵停摆、进度无从上报。分块后：
+     *   scanBegin 枚举候选（便宜）→ scanStep 每次只处理少量候选 →
+     *   调用方在步间让出事件循环 → scanEnd 收尾并提交缓存。
+     * 结果同时渐进写入 m_scannedPlugins，因此扫描过程中 get_all 即返回
+     * 已扫到的部分（列表边扫边长）。 */
+    int scanBegin(const std::string& extraDirsJson, bool deepScan);  // 返回候选总数
+    int scanStep(int maxItems);                                      // 返回本步处理数（<=0 = 结束）
+    int scanProcessed() const;                                       // 已处理候选数（无任务返回 -1）
+    int scanTotal() const;                                           // 候选总数（无任务返回 -1）
+    int scanEnd();                                                   // 收尾，返回最终插件数
+    void scanAbort();                                                // 丢弃任务（保留已扫到的部分）
+
+private:
+    // 分块扫描内部辅助：解析搜索目录；扫描结束后重建元数据缓存。
+    std::vector<std::string> collectSearchPathsLocked(const std::string& extraDirsJson) const;
+    void rebuildScanCacheFromResults(bool deep);
+
+public:
     size_t getScannedCount() const;
     std::string getScannedItemJson(size_t index) const;
     std::string getAllScannedJson() const;
@@ -175,6 +212,25 @@ public:
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
     mutable std::recursive_mutex m_hostMutex;
+
+    // ---- C2 分块扫描状态与元数据缓存 ----
+    struct ScanJob {
+        std::vector<PluginScanner::ScanCandidate> candidates;
+        size_t cursor = 0;
+        bool deep = false;
+    };
+    std::unique_ptr<ScanJob> m_scanJob;
+    /* 上次扫描结果按二进制路径缓存（含文件大小+修改时间戳）。
+     * 重扫时若文件未变且缓存的扫描深度足够（深扫结果可服务快扫，反之不可以），
+     * 直接复用——彻底跳过 PE 版本资源读取与（深扫的）LoadLibrary，
+     * 于是"再扫一次"接近瞬时。 */
+    /* 值是**列表**而非单条：一个二进制（.vst3 bundle / CLAP bundle）可含多个
+     * 插件类，深扫会枚举出 N 条同 path 的元数据。若按单条缓存，重扫命中缓存时
+     * 会把 N 折叠成 1，导致"深扫冷 79 / 热 76"这种条目凭空消失的回归。 */
+    std::unordered_map<std::string, std::vector<PluginMetadata>> m_scanCache;
+    std::unordered_map<std::string, std::pair<uint64_t, int64_t>> m_scanStamps;
+    /* 缓存条目是否是深扫产出（用于上面"深度足够"判定）。 */
+    std::unordered_map<std::string, bool> m_scanCacheDeep;
 };
 
 } // namespace auradsp

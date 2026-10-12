@@ -431,8 +431,27 @@
   "plugLibTitle": "第三方效果器库",
   "plugLibHint": "系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。",
   "plugDeepScan": "深度遍历",
+  "@plugDeepScan": {
+    "description": "深扫勾选：会加载每个插件 DLL 以读取精确元数据，明显更慢"
+  },
   "plugScan": "扫描",
   "plugScanning": "正在扫描...",
+  "plugScanPreparing": "正在枚举插件目录…",
+  "plugScanProgressCount": "已扫描 {done}/{total} · 发现 {found} 个插件",
+  "@plugScanProgressCount": {
+    "placeholders": {
+      "done": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "found": {
+        "type": "int"
+      }
+    }
+  },
+  "plugScanNoVerify": "快扫不加载插件：仅读取文件元数据，插件在挂载时才验证",
   "plugOpenFolder": "打开 VST3 标准目录",
   "plugSearchHint": "搜索插件名称、厂商或路径...",
   "plugM1Title": "M1 插件宿主引擎规范",
