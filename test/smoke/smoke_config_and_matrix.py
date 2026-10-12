@@ -14,6 +14,9 @@ import struct
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _tmpcleanup import remove_tree_with_retry, warn_if_failed  # noqa: E402
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release", "auradsp_engine.dll")
 if not os.path.exists(DLL):
@@ -230,10 +233,12 @@ check(0.5 < out_rms / in_rms < 2.0,
 lib.auradsp_destroy(h)
 
 try:
-    os.remove(ir_path)
-    os.rmdir(tmpdir)
-except OSError:
-    pass
+    # B5 E4：健壮清理（有限重试 + 失败告警），替代静默的
+    # except OSError: pass——后者正是历史泄漏无人发现的原因。
+    ok = remove_tree_with_retry(tmpdir)
+    warn_if_failed(tmpdir, ok, "smoke_config_and_matrix")
+except Exception as ex:  # noqa: BLE001 - 清理路径不让任何异常翻车测试
+    print(f"[WARN] 临时目录清理异常：{ex}", file=sys.stderr)
 
 print()
 if FAILURES:
