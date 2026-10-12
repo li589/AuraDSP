@@ -262,11 +262,15 @@ abstract final class PresetLibrary {
           'mix': m.tubeMix,
         },
         // 多段图形均衡器
+        // 注意：快照必须深拷贝列表。直接存 m.eqFrequencies 这类活引用，
+        // 后续任何一次 setEqBandGain/setEqBandQ 都会把“快照”一起改掉，
+        // 快照就不再是快照（已用回归测试钉住）。
         'eq': {
           'enable': m.eqOn,
           'bandsCount': m.eqBandsCount,
-          'frequencies': m.eqFrequencies,
-          'gains': m.eqGains,
+          'frequencies': List<double>.of(m.eqFrequencies),
+          'gains': List<double>.of(m.eqGains),
+          'qs': List<double>.of(m.eqQs),
           'q': m.eqQ,
           'filter': m.eqFilter,
           'interp': m.eqInterp,
@@ -277,7 +281,7 @@ abstract final class PresetLibrary {
         'stereo': {
           'mix': m.stereoMix,
           'bandUsed': m.stereoBandUsed,
-          'bands': m.stereoBands,
+          'bands': List<double>.of(m.stereoBands),
         },
         // 低频搁架
         'shelf': {
@@ -384,8 +388,16 @@ abstract final class PresetLibrary {
       if (eq['bandsCount'] != null) {
         m.setEqBandsCount((eq['bandsCount'] as num).toInt());
       }
-      if (eq['q'] != null) {
-        m.setEqQ((eq['q'] as num).toDouble());
+      // 新格式按频点恢复每点 Q；旧格式只有标量 q，按全频带填充。
+      final presetFreqs = (eq['frequencies'] as List?)
+          ?.map((e) => (e as num).toDouble())
+          .toList();
+      if (eq['qs'] is List) {
+        final qs =
+            (eq['qs'] as List).map((e) => (e as num).toDouble()).toList();
+        m.applyEqQs(presetFreqs, qs);
+      } else if (eq['q'] != null) {
+        m.fillEqQ((eq['q'] as num).toDouble());
       }
       if (eq['filter'] != null) {
         m.setEqFilter((eq['filter'] as num).toInt());

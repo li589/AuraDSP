@@ -114,6 +114,13 @@ public:
      * MAKELPARAM，那在 DPI 感知窗口的缩放通知里可能带 -1）。
      * 默认空实现。线程契约：在 plugin main 线程（泵线程）上被调用。 */
     virtual void onEditorResize() {}
+
+    int getSettleTicks() const { return m_sizeSettleTicks; }
+    void incSettleTicks() { ++m_sizeSettleTicks; }
+    void resetSettleTicks() { m_sizeSettleTicks = 0; }
+
+protected:
+    int m_sizeSettleTicks = 0;
 };
 
 class PluginScanner {

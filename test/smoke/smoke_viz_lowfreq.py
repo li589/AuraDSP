@@ -5,7 +5,7 @@ import ctypes, math
 dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
 
 class VizFrame(ctypes.Structure):
-    # 必须与 auradsp_engine.h 的 auradsp_viz_frame 逐字节一致（280 字节）。
+    # 必须与 auradsp_engine.h 的 auradsp_viz_frame 逐字节一致（408 字节）。
     # 早期版本漏了 stage_levels_l/r（M3.5-c 才加入 ABI），结构只有 152 字节；
     # 于是 auradsp_viz_read(out, 8) 会往 1216 字节的缓冲里写 2240 字节，
     # 造成 1024 字节堆溢出（STATUS_HEAP_CORRUPTION 0xC0000374）。

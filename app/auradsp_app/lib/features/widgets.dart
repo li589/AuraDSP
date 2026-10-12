@@ -654,8 +654,6 @@ class FreqAxis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    const fMin = 20.0, fMax = 20000.0;
-    final denom = math.log(fMax / fMin);
     return LayoutBuilder(builder: (ctx, box) {
       return SizedBox(
         height: 14,
@@ -663,7 +661,7 @@ class FreqAxis extends StatelessWidget {
           children: [
             for (final m in _marks)
               Positioned(
-                left: math.log(m.hz / fMin) / denom * box.maxWidth,
+                left: VizBands.logX(m.hz) * box.maxWidth,
                 child: FractionalTranslation(
                   translation: const Offset(-0.5, 0),
                   child: Text(m.label,

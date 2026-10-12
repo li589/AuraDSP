@@ -20,6 +20,25 @@
 - **行为影响**：`bandMixUsed=0`（默认/Refresh 后/UseUnifiedMix 后）与上游逐字节一致；宿主显式 SetBandMix 后按带取值。gain 补偿沿用统一公式（分带时不二次补偿，UI 负责提示）。
 - **上游同步冲突风险**：中（改了 struct + Process 核心行；上游若重构此文件需人工合并）。
 
+## P-003 — 保留编号：LiveProg 编译错误行列号 vendor 补丁尚未落地
+
+- **状态**：该编号已在 `docs/UI-六页架构与M3.5重排序方案.md:66、75`
+  中规划为二期工作，源码中暂无对应补丁。
+- **登记目的**：避免把编号空缺误读为登记遗漏。
+
+## P-004 jdsp_header.h + jdspController.c — 表驱动处理链（2026-10-09）
+
+- **位置**：
+  `JDSPChainItem`、`chain[16]`、`chainLen`、`JamesDSPRebuildChain`；
+  12 个 stage 封装和默认处理顺序。
+- **内容**：
+  每个 stage 的 enabled 判断收进对应 stage 函数；
+  `graph.order` 必须恰好包含全部 12 个 stage 各一次，否则拒绝并且保持原表；
+  convolver/ddc/liveprog 逐段加解锁。
+- **行为影响**：
+  输出级和处理顺序可重建，非法顺序不会部分生效。
+- **上游同步冲突风险**：中（处理主循环结构已改，合并上游改动时需要人工核对）。
+
 ## P-005 jdsp_header.h + jdspController.c — 卷积干湿比（2026-10-10）
 
 - **位置**：struct 加 `auraConvScratch / auraConvWet / auraConvDry / auraConvMixUsed`；

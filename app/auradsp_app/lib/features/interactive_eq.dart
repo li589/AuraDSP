@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../engine/auradsp_ffi.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -35,6 +36,16 @@ class _InteractiveSpectrumEQPanelState
   int? _draggedIndex;
   Offset? _hoverPos;
   bool _advancedOpen = false;
+
+  /// 用户点击选中的频点（持久选中，区别于短暂的悬停）。
+  /// 选中浮框与 Q 旋钮都跟随它；点空白处清除。
+  int? _selectedIndex;
+
+  /// 上一次选中框的几何（无选中时保持不动，供下次选中时平滑飞入）。
+  double _boxLeft = 0.0;
+  double _boxTop = 0.0;
+  double _boxW = 96.0;
+  double _boxH = 56.0;
 
   @override
   Widget build(BuildContext context) {
@@ -101,6 +112,36 @@ class _InteractiveSpectrumEQPanelState
                     builder: (context, constraints) {
                       final w = constraints.maxWidth;
                       final h = constraints.maxHeight;
+                      // 选中浮框几何：跟随持久选中（拖拽中跟随拖拽点），
+                      // 无选中时保留上一次几何，只把透明度降为 0，
+                      // 于是下次选中是从上次位置“飞”过去，而不是凭空出现。
+                      Widget? box;
+                      final sel = _selectionTarget(model);
+                      if (sel != null) {
+                        final f = model.eqFrequencies[sel];
+                        final g = model.eqGains[sel];
+                        final q = model.eqQs[sel];
+                        final nx = _freqToX(f, w);
+                        final ny = _gainToY(g, h);
+                        final oct = _qBandwidthOctaves(q);
+                        final bw = (oct * (w / _logOctaves) * 0.9)
+                            .clamp(84.0, math.max(84.0, w * 0.55))
+                            .toDouble();
+                        final bh = (54.0 + oct * 5.0).clamp(54.0, 80.0);
+                        _boxLeft =
+                            (nx - bw / 2).clamp(4.0, math.max(4.0, w - bw - 4));
+                        _boxTop =
+                            (ny - bh / 2).clamp(4.0, math.max(4.0, h - bh - 4));
+                        _boxW = bw;
+                        _boxH = bh;
+                        box = _SelectionBox(
+                          palette: p,
+                          freqLabel: _freqLabel(f),
+                          gainLabel:
+                              '${g >= 0 ? '+' : ''}${g.toStringAsFixed(1)} dB',
+                          qLabel: 'Q ${q.toStringAsFixed(2)}',
+                        );
+                      }
                       return MouseRegion(
                         onHover: (e) {
                           final idx = _hitTestNode(e.localPosition, w, h);
@@ -116,22 +157,34 @@ class _InteractiveSpectrumEQPanelState
                           });
                         },
                         child: GestureDetector(
+                          onTapDown: (details) {
+                            // 单击选中频点（持久选中，浮框与 Q 旋钮跟随）；
+                            // 点空白处清除选中。
+                            final idx =
+                                _hitTestNode(details.localPosition, w, h);
+                            setState(() => _selectedIndex = idx);
+                          },
                           onDoubleTapDown: (details) {
                             final idx =
                                 _hitTestNode(details.localPosition, w, h);
                             if (idx != null) {
-                              // 双击单个节点：归零
+                              // 双击单个节点：归零并选中
                               model.setEqBandGain(idx, 0.0);
+                              setState(() => _selectedIndex = idx);
                             } else {
-                              // 双击画布空白：拉平整条曲线
+                              // 双击画布空白：拉平整条曲线并清除选中
                               model.flattenEq();
+                              setState(() => _selectedIndex = null);
                             }
                           },
                           onPanStart: (details) {
                             final idx =
                                 _hitTestNode(details.localPosition, w, h);
                             if (idx != null) {
-                              setState(() => _draggedIndex = idx);
+                              setState(() {
+                                _draggedIndex = idx;
+                                _selectedIndex = idx;
+                              });
                             }
                           },
                           onPanUpdate: (details) {
@@ -147,7 +200,10 @@ class _InteractiveSpectrumEQPanelState
                           onPanEnd: (_) {
                             setState(() => _draggedIndex = null);
                           },
-                          child: RepaintBoundary(
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              RepaintBoundary(
                             child: ListenableBuilder(
                               listenable: Listenable.merge([
                                 model.eqInSpectrum,
@@ -164,23 +220,44 @@ class _InteractiveSpectrumEQPanelState
                                     // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
                                     // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
                                     // （eqInSpectrum）+ 实测响应合成，见
-                                    // AppModel.composeEqOutputSpectrum。
-                                    spectrumBands: AppModel.composeEqOutputSpectrum(
-                                      model.eqInSpectrum.value,
-                                      model.eqResponseDb,
-                                      bypassed: model.eqBypass,
-                                    ),
+                                    // AppModel.eqOutputSpectrum。
+                                    spectrumBands: model.eqOutputSpectrum(),
                                     frequencies: model.eqFrequencies,
                                     gains: model.eqGains,
+                                    qs: model.eqQs,
                                     hoveredIndex: _draggedIndex ?? _hoveredIndex,
+                                    selectedIndex: _selectedIndex,
                                     hoverPos: _hoverPos,
-                                    isBypassed: model.eqBypass,
+                                    isBypassed: !model.isEqActive,
                                     measuredResponse: model.eqResponseDb,
                                     measuredForCurve: model.eqResponseCurve,
+                                    expectedResponseCurve:
+                                        model.currentEqCurveSignature,
+                                    responseFMax: model.eqResponseFMax,
                                   ),
                                 );
                               },
                             ),
+                              ),
+                              // 选中频点的半透明浮框：位置/尺寸随选中自动动画，
+                              // 框宽即该点 Q 对应的带宽（Q 越小越宽），不拦截手势。
+                              AnimatedPositioned(
+                                duration: const Duration(milliseconds: 200),
+                                curve: Curves.easeOutCubic,
+                                left: _boxLeft,
+                                top: _boxTop,
+                                width: _boxW,
+                                height: _boxH,
+                                child: AnimatedOpacity(
+                                  opacity: box != null ? 1.0 : 0.0,
+                                  duration:
+                                      const Duration(milliseconds: 160),
+                                  child: IgnorePointer(
+                                    child: box ?? const SizedBox.shrink(),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       );
@@ -190,15 +267,42 @@ class _InteractiveSpectrumEQPanelState
               ),
               // 分隔线
               Container(width: 1, height: double.infinity, color: p.hairline),
-              // 外置发光 Q 旋钮
-              SizedBox(
-                width: 96,
-                child: _RotaryQKnob(
-                  q: model.eqQ,
-                  onChanged: model.setEqQ,
-                  onReset: () => model.setEqQ(ParamDefaults.eqQ),
-                ),
-              ),
+              // Q 旋钮：调节当前选中频点的 Q（无选中时置灰禁用）。
+              // 每个频点自有 Q 值，不再是全局旋钮——见 AppModel.eqQs。
+              Builder(builder: (context) {
+                final qSel = _draggedIndex ?? _selectedIndex;
+                final sel = (qSel != null &&
+                        qSel >= 0 &&
+                        qSel < model.eqFrequencies.length &&
+                        qSel < model.eqQs.length)
+                    ? qSel
+                    : null;
+                return SizedBox(
+                  width: 96,
+                  child: Opacity(
+                    opacity: sel != null ? 1.0 : 0.4,
+                    child: IgnorePointer(
+                      ignoring: sel == null,
+                      child: _RotaryQKnob(
+                        q: sel != null
+                            ? model.eqQs[sel]
+                            : ParamDefaults.eqQ,
+                        caption: sel != null
+                            ? _freqLabel(model.eqFrequencies[sel])
+                            : '—',
+                        onChanged: (v) {
+                          if (sel != null) model.setEqBandQ(sel, v);
+                        },
+                        onReset: () {
+                          if (sel != null) {
+                            model.setEqBandQ(sel, ParamDefaults.eqQ);
+                          }
+                        },
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ],
           ),
         ),
@@ -243,6 +347,36 @@ class _InteractiveSpectrumEQPanelState
     return null;
   }
 
+  /// 浮框与 Q 旋钮的跟随目标：拖拽中跟拖拽点，否则跟持久选中。
+  /// 悬停不算选中——否则浮框会跟着鼠标乱飞。
+  int? _selectionTarget(AppModel model) {
+    final idx = _draggedIndex ?? _selectedIndex;
+    if (idx == null) return null;
+    if (idx < 0 ||
+        idx >= model.eqFrequencies.length ||
+        idx >= model.eqGains.length ||
+        idx >= model.eqQs.length) {
+      return null;
+    }
+    return idx;
+  }
+
+  /// Q → 带宽（倍频程）：教科书参量均衡定义，
+  /// N = 2·asinh(1/2Q)/ln2。Q=10 时约 0.14 倍频程，Q=0.3 时约 2.4 倍频程。
+  static double _qBandwidthOctaves(double q) {
+    final qq = q.clamp(0.3, 10.0);
+    return 2.0 * _asinh(1.0 / (2.0 * qq)) / math.ln2;
+  }
+
+  static double _asinh(double x) => math.log(x + math.sqrt(x * x + 1.0));
+
+  /// 画布横轴总跨度（20Hz..20kHz，约 9.97 倍频程），用于把带宽换算成像素。
+  static const double _logOctaves = 9.966;
+
+  static String _freqLabel(double f) => f >= 1000
+      ? '${(f / 1000).toStringAsFixed(1)} kHz'
+      : '${f.round()} Hz';
+
   Widget _buildAdvancedPanel(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
@@ -277,7 +411,11 @@ class _InteractiveSpectrumEQPanelState
                   Text(l.advanced, style: labelOf(p)),
                   const Spacer(),
                   Text(
-                    model.eqFilter == 0 ? 'FIR · Makima' : 'IIR · Makima',
+                    model.eqFilter == 0
+                        ? (model.eqInterp == 1
+                            ? 'FIR · Makima'
+                            : 'FIR · PCHIP')
+                        : (model.eqFilter == 1 ? 'IIR6' : 'IIR12'),
                     style: monoOf(p, size: 10, color: p.textDim),
                   ),
                 ],
@@ -317,20 +455,28 @@ class _InteractiveSpectrumEQPanelState
                   const SizedBox(height: AuraSpace.md),
                   Text(l.eqInterpolation, style: captionOf(p)),
                   const SizedBox(height: AuraSpace.xs),
-                  Wrap(
-                    spacing: AuraSpace.sm,
-                    children: [
-                      AuraChoiceChip(
-                        label: l.eqInterpMakima,
-                        selected: model.eqInterp == 1,
-                        onTap: () => model.setEqInterp(1),
+                  // vendor 的 IIR 分支不使用插值模式，IIR 下该组选项置灰禁用，
+                  // 避免“可选但无声学意义”的假控件。
+                  Opacity(
+                    opacity: model.eqFilter == 0 ? 1.0 : 0.4,
+                    child: IgnorePointer(
+                      ignoring: model.eqFilter != 0,
+                      child: Wrap(
+                        spacing: AuraSpace.sm,
+                        children: [
+                          AuraChoiceChip(
+                            label: l.eqInterpMakima,
+                            selected: model.eqInterp == 1,
+                            onTap: () => model.setEqInterp(1),
+                          ),
+                          AuraChoiceChip(
+                            label: l.eqInterpPchip,
+                            selected: model.eqInterp == 0,
+                            onTap: () => model.setEqInterp(0),
+                          ),
+                        ],
                       ),
-                      AuraChoiceChip(
-                        label: l.eqInterpPchip,
-                        selected: model.eqInterp == 0,
-                        onTap: () => model.setEqInterp(0),
-                      ),
-                    ],
+                    ),
                   ),
                 ],
               ),
@@ -416,6 +562,63 @@ class _PresetDropdown extends StatelessWidget {
   }
 }
 
+/* ---- 选中频点的半透明浮框 ---- */
+
+/// 跟随选中频点的优雅浮框：半透明底 + 细边 + 柔光阴影。
+/// 位置与尺寸由调用方通过 AnimatedPositioned 做动画，这里只负责“长相”；
+/// 框宽即该点 Q 对应的带宽（Q 越小框越宽），字号用 FittedBox 自适应。
+class _SelectionBox extends StatelessWidget {
+  final AuraPalette palette;
+  final String freqLabel;
+  final String gainLabel;
+  final String qLabel;
+
+  const _SelectionBox({
+    required this.palette,
+    required this.freqLabel,
+    required this.gainLabel,
+    required this.qLabel,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: palette.panel.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: palette.accent.withValues(alpha: 0.55),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: palette.accent.withValues(alpha: 0.18),
+            blurRadius: 12,
+            spreadRadius: 1,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      child: FittedBox(
+        fit: BoxFit.scaleDown,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              freqLabel,
+              style: monoOf(palette, size: 12, color: palette.text),
+            ),
+            Text(
+              '$gainLabel · $qLabel',
+              style: monoOf(palette, size: 10, color: palette.accent),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 /* ---- 外置发光 Q 旋钮 (Rotary Q Knob) ---- */
 
 class _RotaryQKnob extends StatefulWidget {
@@ -423,10 +626,14 @@ class _RotaryQKnob extends StatefulWidget {
   final ValueChanged<double> onChanged;
   final VoidCallback onReset;
 
+  /// 旋钮下方的小字说明（当前选中频点的频率；无选中时为 '—'）。
+  final String caption;
+
   const _RotaryQKnob({
     required this.q,
     required this.onChanged,
     required this.onReset,
+    this.caption = '',
   });
 
   @override
@@ -479,7 +686,7 @@ class _RotaryQKnobState extends State<_RotaryQKnob> {
               ),
               const SizedBox(height: 2),
               Text(
-                l.eqQFactor,
+                widget.caption.isNotEmpty ? widget.caption : l.eqQFactor,
                 style: captionOf(p).copyWith(fontSize: 9),
               ),
             ],
@@ -572,28 +779,45 @@ class _SpectrumEQPainter extends CustomPainter {
   final List<double> spectrumBands;
   final List<double> frequencies;
   final List<double> gains;
+
+  /// 与 [frequencies] 等长对齐的每点 Q 值，用于提示读数。
+  final List<double> qs;
   final int? hoveredIndex;
+
+  /// 持久选中的频点：只加强描边，不弹提示（提示框由 overlay 浮框负责）。
+  final int? selectedIndex;
   final Offset? hoverPos;
   final bool isBypassed;
 
-  /// 引擎实测的幅度响应（dB，长度 129，log 等分 20Hz..20kHz）。
+  /// 引擎实测的幅度响应（dB，对数均分，起点 20Hz，上限见 [responseFMax]）。
   ///
   /// null 或与当前曲线不匹配时，[_drawResponseCurve] 回退到本地 smoothstep
   /// 近似 —— 探针约 29ms 且只在拖拽停下后触发，拖拽过程中必然拿不到新值，
   /// 所以近似不是「旧代码」，而是必要的实时降级路径。
   final List<double>? measuredResponse;
 
-  /// [measuredResponse] 对应的曲线签名；与当前不符即视为过期。
+  /// [measuredResponse] 对应的曲线签名。
   final String? measuredForCurve;
+
+  /// 当前应显示的曲线签名；与 [measuredForCurve] 不一致时，
+  /// 即使有实测响应也不得使用，必须回退本地近似。
+  final String? expectedResponseCurve;
+
+  /// [measuredResponse] 的实际上限频率；为空时按默认 20000Hz 处理。
+  final double? responseFMax;
 
   const _SpectrumEQPainter({
     required this.palette,
     required this.spectrumBands,
     required this.frequencies,
     required this.gains,
+    required this.qs,
     required this.hoveredIndex,
+    required this.selectedIndex,
     required this.hoverPos,
     required this.isBypassed,
+    required this.expectedResponseCurve,
+    this.responseFMax,
     this.measuredResponse,
     this.measuredForCurve,
   });
@@ -708,8 +932,7 @@ class _SpectrumEQPainter extends CustomPainter {
     // 拿不到时才退回本地插值。探针约 29ms 且只在拖拽停下后触发，拖拽过程中
     // 必然拿不到新值，所以本地插值不是「旧代码」，而是必要的实时降级路径。
     const samples = 160;
-    final measured = measuredResponse;
-    final respLen = measured?.length ?? 0;
+    final currentMeasured = measuredResponse;
     final curvePoints = <Offset>[];
 
     for (var i = 0; i <= samples; i++) {
@@ -717,17 +940,12 @@ class _SpectrumEQPainter extends CustomPainter {
       final x = t * w;
       final f = _xToFreq(x, w);
       double g;
-      if (respLen >= 2) {
-        // 探针在 [20, 20000] 上 log 等分取样，这里按同一映射反查并线性内插
-        const fMin = 20.0, fMax = 20000.0;
-        final clamped = f.clamp(fMin, fMax).toDouble();
-        final lf = (math.log(clamped) - math.log(fMin)) /
-            (math.log(fMax) - math.log(fMin));
-        final pos = lf * (respLen - 1);
-        final i0 = pos.floor().clamp(0, respLen - 1);
-        final i1 = (i0 + 1).clamp(0, respLen - 1);
-        final k = pos - i0;
-        g = measured![i0] + (measured[i1] - measured[i0]) * k;
+      if (currentMeasured != null &&
+          currentMeasured.length >= 2 &&
+          measuredForCurve == expectedResponseCurve) {
+        // 探针按对数均分取样，这里用统一映射反查并线性内插。
+        g = VizBands.responseDbAt(currentMeasured, f,
+            responseFMax: responseFMax);
       } else {
         g = _interpolateGain(f);
       }
@@ -786,8 +1004,10 @@ class _SpectrumEQPainter extends CustomPainter {
       final nx = _freqToX(f, w);
       final ny = _gainToY(g, h);
       final isHovered = hoveredIndex == i;
+      final isSelected = selectedIndex == i;
+      final emphasized = isHovered || isSelected;
 
-      final radius = isHovered ? 7.5 : 5.0;
+      final radius = emphasized ? 7.5 : 5.0;
 
       // 外圈光晕
       if (isHovered && !isBypassed) {
@@ -807,18 +1027,19 @@ class _SpectrumEQPainter extends CustomPainter {
       final ringPaint = Paint()
         ..color = isBypassed
             ? palette.textDim
-            : (isHovered ? palette.accent : palette.accent.withValues(alpha: 0.85))
+            : (emphasized ? palette.accent : palette.accent.withValues(alpha: 0.85))
         ..style = PaintingStyle.stroke
-        ..strokeWidth = isHovered ? 2.5 : 1.8;
+        ..strokeWidth = emphasized ? 2.5 : 1.8;
       canvas.drawCircle(Offset(nx, ny), radius, ringPaint);
 
-      // 如果当前正在悬停/拖拽，绘制浮动读数微标
+      // 如果当前正在悬停/拖拽，绘制浮动读数微标（含该点 Q）
       if (isHovered) {
         final fStr = f >= 1000
             ? '${(f / 1000).toStringAsFixed(1)} kHz'
             : '${f.round()} Hz';
         final gStr = '${g >= 0 ? '+' : ''}${g.toStringAsFixed(1)} dB';
-        final tipText = '$fStr : $gStr';
+        final qStr = i < qs.length ? ' · Q${qs[i].toStringAsFixed(2)}' : '';
+        final tipText = '$fStr : $gStr$qStr';
         _drawTooltipBadge(canvas, tipText, Offset(nx, ny - 24), palette);
       }
     }

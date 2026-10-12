@@ -323,6 +323,10 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   @override
   void didUpdateWidget(AmbientSpectrum old) {
     super.didUpdateWidget(old);
+    if (widget.spectrum != old.spectrum) {
+      old.spectrum.removeListener(_onFrame);
+      widget.spectrum.addListener(_onFrame);
+    }
     if (widget.palette != old.palette) {
       // 换主题时换 painter 实例以触发重绘，同时保留平滑缓冲
       _painter.dispose();
@@ -443,6 +447,9 @@ class _AmbientPainter extends CustomPainter {
   /// 记下这张图的「静默」属性后，同为静默就直接复用，不再重复光栅。
   bool _renderedSilent = false;
 
+  /// 放大缓存图用的固定画笔。`paint()` 以帧率调用，不得在这里分配。
+  final Paint _blitPaint = Paint()..filterQuality = FilterQuality.medium;
+
   _AmbientPainter({
     required this.spectrum,
     required this.palette,
@@ -498,7 +505,7 @@ class _AmbientPainter extends CustomPainter {
       Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
       Offset.zero & size,
       // 双线性放大：把低分图的硬边平滑成光晕，替代 MaskFilter.blur
-      Paint()..filterQuality = FilterQuality.medium,
+      _blitPaint,
     );
   }
 

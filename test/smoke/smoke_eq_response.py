@@ -79,10 +79,11 @@ check('1kHz 点在提升点抬升', 10.0 < boost[2] < 14.0,
 check('远离提升点回到 0 dB', abs(boost[0]) < 1.5 and abs(boost[3]) < 1.5,
       'low=%.2f high=%.2f' % (boost[0], boost[3]))
 
-# 3) 低架样曲线
-shelf = curve_db('20:-24.0;200:-12.0;2000:2.0', [20, 100, 1000, 10000])
+# 3) 低切样曲线：末端锚点在 10000Hz 为 0dB，因此高频应回到 0dB 附近。
+# 不要用止于 2000Hz 的曲线验证高频：超出末端锚点的外推行为与锚点理想不同。
+shelf = curve_db('20:-24.0;200:-12.0;2000:-6.0;10000:0.0', [20, 100, 1000, 10000])
 check('低频被衰减', shelf[0] < -15.0, '20Hz=%.2f' % shelf[0])
-check('高频接近 0 dB', abs(shelf[3]) < 3.0, '10k=%.2f' % shelf[3])
+check('高频回到末端锚点', abs(shelf[3]) < 3.0, '10k=%.2f' % shelf[3])
 check('曲线单调抬升（无发散）',
       shelf[0] < shelf[1] < shelf[2],
       '%.2f/%.2f/%.2f' % (shelf[0], shelf[1], shelf[2]))
@@ -128,6 +129,25 @@ print('  UI 近似 vs 引擎实测 最大偏差: %.2f dB' % peak)
 check('实测与 UI 近似确有差异（C2 前提成立）', peak > 0.8,
       'peak=%.3f —— 若过小说明探针只是在复刻 UI 近似' % peak)
 
-print('\n=== %d/%d 通过 ===' % (7 + 5 - len(FAIL), 12) if not FAIL else
+# 8) eqm: 工作模式头：无头 == 显式 eqm:1:0（向后兼容）；
+#    换插值 / 换架构必须真实改变响应（否则 UI 选项是假控件）；
+#    非法头回退默认不断言崩溃。
+_, base = probe('100:0.0;1000:12.0;10000:0.0', sr=48000)
+_, explicit = probe('eqm:1:0;100:0.0;1000:12.0;10000:0.0', sr=48000)
+check('无头与显式 eqm:1:0 逐点一致（向后兼容）', base == explicit,
+      'maxdiff=%.4f' % max(abs(a - b) for a, b in zip(base, explicit)))
+_, pchip = probe('eqm:0:0;100:0.0;1000:12.0;10000:0.0', sr=48000)
+d_interp = max(abs(a - b) for a, b in zip(base, pchip))
+check('PCHIP 与 Makima 响应不同（插值选项真实生效）', d_interp > 0.5,
+      'maxdiff=%.4f' % d_interp)
+_, iir6 = probe('eqm:1:2;100:0.0;1000:12.0;10000:0.0', sr=48000)
+d_arch = max(abs(a - b) for a, b in zip(base, iir6))
+check('IIR6 与 FIR 响应不同（架构选项真实生效）', d_arch > 0.5,
+      'maxdiff=%.4f' % d_arch)
+_, badhead = probe('eqm:9:9;100:0.0;1000:12.0;10000:0.0', sr=48000)
+check('非法 eqm 头回退默认（不断言崩溃、结果一致）', base == badhead,
+      'maxdiff=%.4f' % max(abs(a - b) for a, b in zip(base, badhead)))
+
+print('\n=== %d/%d 通过 ===' % (16 - len(FAIL), 16) if not FAIL else
       '\n失败: %s' % FAIL)
 sys.exit(1 if FAIL else 0)

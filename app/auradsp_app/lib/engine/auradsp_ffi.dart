@@ -144,6 +144,24 @@ abstract final class VizBands {
 
   static double fromDb(double db) => ((db + dbSpan) / dbSpan).clamp(0.0, 1.0);
 
+  /// 在引擎实测响应数组上按频率线性插值取 dB。
+  ///
+  /// 该数组按 `minHz..responseFMax` 对数均分；调用方不得各自重写同一映射，
+  /// 否则曲线绘制与频谱合成会系统性错位。
+  static double responseDbAt(List<double> response, double hz,
+      {double? responseFMax}) {
+    if (response.length < 2) return 0.0;
+    final hiHz = responseFMax ?? maxHz;
+    final clampedHz = hz.clamp(minHz, hiHz);
+    final t = (math.log(clampedHz / minHz) / math.log(hiHz / minHz))
+        .clamp(0.0, 1.0);
+    final x = t * (response.length - 1);
+    final i = x.floor();
+    if (i >= response.length - 1) return response[response.length - 1];
+    final f = x - i;
+    return response[i] * (1 - f) + response[i + 1] * f;
+  }
+
   /// 给定归一化对数横坐标，返回源频带的小数下标，用于「N 条 ← 32 带」重采样。
   static double sampleIndex(double x) {
     final last = (count - 1).toDouble();
@@ -161,7 +179,7 @@ abstract final class VizBands {
   }
 }
 
-/// auradsp_viz_frame（280 字节：8+8+128+4+4+64+64）
+/// auradsp_viz_frame（408 字节：8+8+128+128+4+4+64+64）
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
@@ -516,6 +534,17 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
         .asFunction<
             int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)>();
 
+  /// 响应探针实际使用的上限频率：与引擎侧钳位公式保持一致。
+  ///
+  /// 采样率足够高时就是默认 `fMax`；低采样率下引擎会按 Nyquist 收窄。
+  /// UI 侧插值必须用同一个上限，否则低采样率下高频会被整体错位。
+  static double responseFMax({
+    required int sampleRate,
+    double fMin = 20.0,
+    double fMax = 20000.0,
+  }) =>
+      fMax.clamp(fMin + 1.0, sampleRate / 2.0 * 0.999).toDouble();
+
   /// [probeEqResponse] 的安全封装：负责字符串/输出缓冲的分配与释放。
   ///
   /// 返回 null 表示失败（非法曲线等），此时调用方应保留上一帧曲线，
@@ -529,7 +558,11 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     try {
       final out = alloc<Float>(nPoints);
       final text = curve.toNativeUtf8(allocator: alloc);
-      final hi = fMax.clamp(fMin + 1.0, sampleRate / 2.0 * 0.999).toDouble();
+      final hi = responseFMax(
+        sampleRate: sampleRate,
+        fMin: fMin,
+        fMax: fMax,
+      );
       final rc = probeEqResponse(sampleRate, text, nPoints, hi, out);
       /* 非法输入返回非 0 是**契约**，不是异常：调用方据此回退到本地插值。
        * 刻意不写成 assert —— 那样会把「预期被拒绝」变成崩溃，

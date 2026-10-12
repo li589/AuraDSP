@@ -1522,12 +1522,32 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
  *
  * 刻意抽成共用函数：探针必须与实时链路走**完全相同**的解析与重采样路径。
  * 一旦两边各自实现，探针量到的就不是设备实际产生的曲线，C2 等于用另一套
- * 算法自证。txt 会被就地改写（分词需要可写缓冲），调用方持有可写副本。 */
+ * 算法自证。txt 会被就地改写（分词需要可写缓冲），调用方持有可写副本。
+ *
+ * 可选头 `eqm:<interp>:<op>;`（UI 侧拼接，见 AppModel._pushEqCurve）：
+ *   interp = vendor interpolationMode（0=PCHIP，1=Makima）；
+ *   op     = vendor operatingMode（0=最小相位 FIR，2=6 阶 IIR，5=12 阶 IIR）。
+ * 无头或头非法时回退为历史默认（interp=1，op=0），旧曲线字符串行为不变。
+ * 注意 vendor 的 IIR 分支不使用 interpolationMode（见 multimodalEQ.c），
+ * 因此 IIR 模式下 interp 选择无声学意义，UI 侧应禁用该选项。 */
 static int build_eq_axis(char* txt, double sample_rate,
-                         double* freqAx, double* gainAx) {
+                         double* freqAx, double* gainAx,
+                         int* interpMode, int* opMode) {
+    int interp = 1, op = 0;
     double pf[64], pg[64];
     int n = 0;
     char* cur = txt;
+    if (strncmp(cur, "eqm:", 4) == 0) {
+        char* semi = strchr(cur, ';');
+        if (semi) {
+            int ii = -1, oo = -1;
+            if (sscanf(cur, "eqm:%d:%d", &ii, &oo) == 2) {
+                if (ii == 0 || ii == 1) interp = ii;
+                if (oo >= 0 && oo <= 5) op = oo;
+            }
+            cur = semi + 1;
+        }
+    }
     while (cur && n < 64) {
         char* semi = strchr(cur, ';');
         if (semi) *semi = 0;
@@ -1568,6 +1588,8 @@ static int build_eq_axis(char* txt, double sample_rate,
         freqAx[i] = target;
         gainAx[i] = pg[seg] + k * (pg[seg + 1] - pg[seg]);
     }
+    if (interpMode) *interpMode = interp;
+    if (opMode) *opMode = op;
     return n;
 }
 
@@ -1607,7 +1629,9 @@ int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
     if (!txt) return AURADSP_E_IO;
     memcpy(txt, curve, (size_t)bytes);
     txt[bytes] = 0;
-    const int npts = build_eq_axis(txt, (double)sample_rate, freqAx, gainAx);
+    int interp = 1, op = 0;
+    const int npts = build_eq_axis(txt, (double)sample_rate, freqAx, gainAx,
+                                   &interp, &op);
     free(txt);
     if (npts < 2) return AURADSP_E_PARAM;
 
@@ -1646,21 +1670,13 @@ int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
         jd->tmpBuffer[4] = jd->tmpBuffer[3] + kImp;
         jd->tmpBuffer[5] = jd->tmpBuffer[4] + kImp;
     }
-/* operatingMode=1：直接 IIR 逐点求解，而不是默认的卷积路径。
-     *
-     * 卷积路径在这个场景下走不通：P-006 的守卫要求 convProcCount 先被
-     * Process 推进过；FFTConvolver2x2LoadImpulseResponse 取的是 jdsp->blockSize
-     * 而非 blockSizeMax 做分块，在 8192 这种非 2 的幂块长上分段结构对不上。
-     *
-     * 关键是 operatingMode 必须**从 AxisInterpolation 就传 1**：d0/d1/c1/c2
-     * 只在这个分支里生成。若先用 0 调用再手动改 mEQ.operatingMode，系数全是
-     * 0，Process 出来就是静音 —— 表现为全频 -120 dB。
-     *
-     * 两条路径用**同一组用户锚点**（同样经 makima + 最小相位化），
-     * 所以测到的仍是真实响应。 */
-MultimodalEqualizerAxisInterpolation(jd, 1, 1, freqAx, gainAx);
+/* 工作模式取自曲线头的 `eqm:` 元信息，与生产链 `eq.curve` 下发时
+     * 解析出的模式完全一致 —— 探针与生产链永远同路。
+     * 新创建实例的 `convProcCount - convSwapProc` 已满足 P-006 的换出条件，
+     * 因此可以直接重建并换指针，无需先跑一次 Process。 */
+MultimodalEqualizerAxisInterpolation(jd, interp, op, freqAx, gainAx);
     MultimodalEqualizerEnable(jd, 1);
-    /* 冲激放在窗的**正中**，不能放 index 0。
+    /* 冲激放在窗的 1/4 处，不能放 index 0。
      * Hann 窗 w[0] = 0.5-0.5*cos(0) = 0，冲激若在 0 会被窗本身乘成 0，
      * FFT 之后整条曲线都是 -inf —— 实测平坦曲线整条 -120 就是这个原因，
      * 而不是 EQ 系数或 overallGain 的问题（排查时在这两处各绕了一圈）。 */
@@ -1761,10 +1777,14 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     /* ---- M5 第二批：EQ 频率轴曲线（multimodalEQ 轴注入） ----
-     * value = "f:g;f:g;..."（≤15 点，freq 升序，gain dB [-64,64]）。
+     * value = "[eqm:<interp>:<op>;]f:g;f:g;..."（解析器最多支持 64 点，
+     *   freq 升序，gain dB [-64,64]）。
+     * 可选头 `eqm:` 携带工作模式（UI 侧拼接，见 AppModel._pushEqCurve）：
+     *   interp = 0(PCHIP)/1(Makima)；op = 0(FIR)/2(6阶IIR)/5(12阶IIR)。
+     * 无头或头非法时回退 (1, 0)，旧曲线字符串行为不变。
      * 不足 NUMPTS 用末端值线性补齐；MultimodalEqualizerAxisInterpolation
-     * 内部 memcpy 恰好 NUMPTS 点。operatingMode=0 立即重建 IR，
-     * interpolationMode=1（makima，上游默认）。 */
+     * 内部 memcpy 恰好 NUMPTS 点。注意 vendor 的 IIR 分支不使用
+     * interpolationMode，因此 IIR 模式下 interp 选择无声学意义。 */
     if (!strcmp(id, "eq.curve")) {
         if (!h->open.load()) { set_error(h, "eq.curve: engine closed"); return AURADSP_E_STATE; }
         if (bytes == 0 || bytes > 4096) {
@@ -1776,13 +1796,15 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         memcpy(txt, value, bytes);
         txt[bytes] = 0;
         double freqAx[NUMPTS], gainAx[NUMPTS];
-        const int n = build_eq_axis(txt, h->sample_rate, freqAx, gainAx);
+        int interp = 1, op = 0;
+        const int n = build_eq_axis(txt, h->sample_rate, freqAx, gainAx,
+                                    &interp, &op);
         free(txt);
         if (n < 2) {
             set_error(h, "eq.curve: need >= 2 points (f:g;f:g;...)");
             return AURADSP_E_PARAM;
         }
-        MultimodalEqualizerAxisInterpolation(&h->jdsp, 1, 0, freqAx, gainAx);
+        MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
         return AURADSP_OK;
     }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) {

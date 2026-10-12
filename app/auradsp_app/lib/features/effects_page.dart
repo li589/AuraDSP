@@ -711,7 +711,10 @@ class _ConvolverCard extends StatelessWidget {
           final dur = durMs >= 1000
               ? '${(durMs / 1000).toStringAsFixed(2)} s'
               : '${durMs.toStringAsFixed(0)} ms';
-          final resampled = model.convSrcRate != 0 && model.convSrcRate != 48000;
+          final resampled = AppModel.irWasResampled(
+            srcRate: model.convSrcRate,
+            deviceRate: model.deviceRate,
+          );
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
