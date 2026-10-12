@@ -67,3 +67,19 @@
 - **`plugin_cache.json` 曾无 schema 版本戳**，`loadCache()` 无条件加载 → 列表永远显示陈旧数据（曾 76/76 `vendor="Unknown"`）。2026-10-12 B1 已修：信封 `{schema:2,...}`、不符即整份丢弃、落盘前自检拒绝全 Unknown 快照。**再改缓存结构必须同步 schema 版本 + Dart 测试 + rebuild_plugin_cache.py 三处。**
 - Windows 进程退出码要看**真实值**：`0xC0000374`=堆损坏、`0xC0000005`=访问越界。Git Bash 报的 127 等低位截断值会掩盖崩溃；用 `subprocess` 包装取 `returncode`。
 
+- **C1 起泵线程按模块共享**（2026-10-12）：`ModulePumpThread`（weak_ptr registry，key=canonical+小写二进制路径）。同 DLL 多槽挂载**绝不能**每实例各建泵线程——LoadLibrary 同模块 → 两条线程互斥 JUCE MessageManager 归属 → 死锁。泵对象 stop 失败必须故意泄漏（PumpDeleter），SEH 任务守卫毒化队列实现单插件崩溃隔离。共享 `once_flag` 不能放进带参的注册函数（只有首个参数生效——2026-10-12 实际踩过，CLAP/VST3 窗口类只注册了一个）。
+- **僵尸进程锁 exe 的绕法**：内核态挂死进程 taskkill/Stop-Process 均无效时，`mv` 改名被锁文件（锁随 inode/文件走），链接器即可产出新文件。LNK1104 排查先 `Get-CimInstance Win32_Process`（Get-Process 可能看不见僵尸）。
+- **并行会话工作区交缠拆分提交**：`git diff` 逐 hunk 过滤（含自家标记的 hunk）→ `git apply --cached` 精确暂存 → `git checkout-index -f` 同步工作区 → 重新 gen-l10n → 提交 → 备份恢复合并态 → 再 gen-l10n → 第二笔提交。gen 产物必须与所提交的 arb 同状态，否则编译期不一致。
+
+## 延迟档已撤销（2026-10-12，ADR-006 取代 ADR-002）
+- **不存在 `mode.latency`**，也不存在 `AURADSP_E_LATENCY_GUARD` 触发的拒绝路径（枚举值 -3 仅为不破 ABI 保留）。混响/卷积/Freeverb **一律自由使能**，设置页已无「延迟模式」三档选择器。
+- **撤销理由**（用户实测）：切档静默回滚 → 选项「按了没反应」；守卫方向是「先开关、后切档」→ 改了档位再开效果必然撞拒绝，选项与可用性互相锁死。
+- **半成品中间态是根因**：架构侧先「废除拦截、改自动升 quality」，引擎守卫却仍在 → 用户看不出档位却在被档位支配。**教训：跨层撤销决策必须同批落地 UI+FFI+引擎+ARB+文档，停在中间态比不做更糟。**
+- 延迟现在是**测量量**：`compute_latency()` 只累加上报（`get_latency_ms()`），UI 用底栏总延迟 + 组件级脉冲实测徽标呈现。`graph.effects` 的 `tier` 字段仅作文档标注，不参与判定。
+- 冻结 ADR 不得原地改写：ADR-002 原文保留 + 顶部加「已被 ADR-006 取代」横幅。ADR-005 是「插件桥进程化」预留号（已被 8 处引用），故本次用 ADR-006。
+
+## 频谱渲染两处修复（2026-10-12）
+- **高频柱塌成发丝**：`bw = max(1.0, span - gap)`，而 19k~20k 带的真实对数跨度只有中频带的 ~1/4，窄画布上减完 gap 即被钳到 1px。改为 `bw = max(3.0, span - gap)` 并**带内居中**（`x = x0 + (span-bw)/2`），圆角按 `min(2, bw/2)` 自适应。
+- **氛围频谱残留最后一帧**：`AmbientSpectrum` 的 repaint 只挂在 `spectrum` 上，音频一停引擎不再产帧 → 画面永久定格；而 `paint()` 若继续重采样陈旧数据，又会把最后一帧的高值**反复抬回**导致永不归零。解法：State 持有 `Ticker` 看门狗，>200ms 无新帧即置 stale，`AmbientEnvelope.decay()` 用 0.70 快速衰减且**不吃陈旧数据**；衰减干净自动停表（空闲零开销）。
+- **教训**：预计算尺寸/几何时不要手工复刻布局规则——`TextPainter` 与真实渲染会在字体度量、边框、内边距任一环节不一致（实测同为 110px 约束，估 1 行 18px、实渲 2 行 36px）。tooltip 气泡改为插入后用 `GlobalKey` 读回真实尺寸回正。
+- **测试红/绿纪律**：「两分支改成同一公式」后对称性变成结构性保证，此时任何参数值都对称，断言对称的测试抓不住回归——必须断言**绝对下限**（如间距 ≥14px）才能钉住「没有偏移」这个真实症状。
