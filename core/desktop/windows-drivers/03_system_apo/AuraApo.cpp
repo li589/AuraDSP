@@ -99,11 +99,23 @@ HRESULT __stdcall CAuraApo::LockForProcess(UINT32 nIn, APO_CONNECTION_DESCRIPTOR
     if (m_nConn > 8) m_nConn = 8;
     m_sampleRate = 0;
     for (UINT32 i = 0; i < m_nConn; ++i) {
-        const WAVEFORMATEX* wf = (const WAVEFORMATEX*)ppIn[i]->pFormat;
-        m_blockAlign[i] = wf ? wf->nBlockAlign : 4;
-        if (wf && wf->nSamplesPerSec > m_sampleRate) m_sampleRate = wf->nSamplesPerSec;
+        // pFormat 是 IAudioMediaType*（不是 WAVEFORMATEX，强转是未定义行为）。
+        UNCOMPRESSEDAUDIOFORMAT uf{};
+        UINT32 align = 4;
+        if (ppIn[i]->pFormat &&
+            SUCCEEDED(ppIn[i]->pFormat->GetUncompressedAudioFormat(&uf)) &&
+            uf.dwSamplesPerFrame > 0 && uf.dwSamplesPerFrame <= 32 &&
+            uf.dwBytesPerSampleContainer > 0 && uf.dwBytesPerSampleContainer <= 8) {
+            align = uf.dwSamplesPerFrame * uf.dwBytesPerSampleContainer;
+            if (uf.fFramesPerSecond > (FLOAT32)m_sampleRate)
+                m_sampleRate = (UINT32)uf.fFramesPerSecond;
+        }
+        m_blockAlign[i] = align ? align : 4;
     }
-    if (!OpenHeartbeat()) return E_FAIL;
+    if (!OpenHeartbeat()) {
+        // 心跳建不起（audiodg 上下文权限/命名空间所限）也绝不断流：
+        // 降级为纯透传（无心跳上报）。处理优先于观测。
+    }
     return S_OK;
 }
 

@@ -157,6 +157,21 @@ ApoInspect ApoInspectRun() {
         }
         col->Release();
     }
+    // 默认端点（eConsole；Configurator 选活体目标用）。必须在 en->Release 之前。
+    for (int f = 0; f < 2; ++f) {
+        IMMDevice* def = nullptr;
+        if (en->GetDefaultAudioEndpoint(flows[f], eConsole, &def) == S_OK && def) {
+            wchar_t* wid = nullptr;
+            if (def->GetId(&wid) == S_OK && wid) {
+                if (f == 0)
+                    out.defaultRender = WideToUtf8(wid);
+                else
+                    out.defaultCapture = WideToUtf8(wid);
+                CoTaskMemFree(wid);
+            }
+            def->Release();
+        }
+    }
     en->Release();
     DWORD dis = 0;
     if (ReadRegDword(HKEY_LOCAL_MACHINE,

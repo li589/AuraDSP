@@ -48,6 +48,22 @@ target_compile_options(apo_inspect PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_inspect PROPERTY CXX_STANDARD 20)
 set_property(TARGET apo_inspect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+add_executable(apo_selftest
+    "${APO}/apo_selftest.cpp"
+)
+target_link_libraries(apo_selftest PRIVATE ole32 audiomediatypecrt)
+target_compile_options(apo_selftest PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET apo_selftest PROPERTY CXX_STANDARD 20)
+set_property(TARGET apo_selftest PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+add_executable(tone_play
+    "${APO}/tone_play.cpp"
+)
+target_link_libraries(tone_play PRIVATE ole32)
+target_compile_options(tone_play PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET tone_play PROPERTY CXX_STANDARD 20)
+set_property(TARGET tone_play PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # 自研 APO（CBaseAudioProcessingObject 基类在 audiobaseprocessingobject.lib；
 # RegisterAPO 在 audioeng.lib；ConvertStringSecurityDescriptor 在 advapi32）。
 add_library(AuraApo SHARED
