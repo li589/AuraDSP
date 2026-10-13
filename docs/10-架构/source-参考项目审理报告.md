@@ -1,6 +1,6 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.3**（2026-10-13，ViPERDSP 引擎克隆补齐登记）
+> 版本：**v2.4**（2026-10-14，ViPER 全谱系与授权考证补录，新增 §2.7）
 > 范围：`source/` 下全部 13 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
@@ -16,7 +16,7 @@
 | 2 | **JDSP4Linux** | `Audio4Linux/JDSP4Linux` (master@3ea7d73) | Linux / PipeWire, Pulse, Qt | GPL-3.0 | 39.21 MB (1,291 文件) | ★★★ **Phase 7 Linux 形态蓝本**（filter-chain 模块化挂载与 D-Bus 通信） |
 | 3 | **RootJamesDSP** | `ShadoV90/RootJamesDSP` (master@58e6b1b) | Android (Root / KSU / Magisk) | GPL-3.0 | 14.79 MB (991 文件) | ★★ **Root 路线历史对照**（已由本项目原生 AIDL HAL + KSU 模块超越） |
 | 4 | **RootlessJamesDSP** | `timschneeb/RootlessJamesDSP` (master@60d25ae) | Android / AudioEffect 前台服务 | GPL-3.0 | 15.01 MB (1,010 文件) | ★★★ **Phase 6 Rootless 形态直接蓝本**（免 Root 动态会话捕获与前台保活） |
-| 5 | **ViPER4Android-FX** | `Magisk-Modules-Repo/ViPER4Android-FX` (master@507b93e) | Android / Magisk, sepolicy | 见仓库 | 3.32 MB (18 文件) | ★★ **系统集成与资产参考**（SELinux 策略范式、VDC 耳机校准格式、IRS 脉冲文件） |
+| 5 | **ViPER4Android-FX** | `Magisk-Modules-Repo/ViPER4Android-FX` (master@507b93e) | Android / Magisk, sepolicy | 无 OSS 许可（社区分发壳 + 官方二进制） | 3.32 MB (18 文件) | ★★ **系统集成与资产参考**（SELinux 策略范式、VDC 耳机校准格式、IRS 脉冲文件；实为官方 2.5.x 驱动 + DeWitt app 的社区分发壳，授权详见 §2.7） |
 | 6 | **ViPERFX_RE** | `AndroidAudioMods/ViPERFX_RE` (rewrite-continued@eb65772) | Android / C++20, NDK, CMake | GPL-3.0 | 1.12 MB (119 文件) | ★★ **现代 C++ float32 DSP 架构先例**（纯浮点管线设计、动态处理算法参考） |
 | 7 | **element** | `kushview/element` (main@7a415269) | Win/Linux/macOS / JUCE, C++ | Apache-2.0 | 6.88 MB (701 文件) | ★★★ **M1 插件宿主与 M6 节点连线图的头号参考**（多格式宿主 + 连线矩阵） |
 | 8 | **equalizerAPO64** | `TheFireKahuna/equalizerAPO64` (main@7156020) | Windows / C++, AVX2/512, Qt6 | GPL-2.0 / LGPL | 90.34 MB (488 文件) | ★★★ **Phase 7b Windows APO 唯一工程蓝本**（系统端点注入、注册表挂载、AVX 加速） |
@@ -99,7 +99,7 @@
   2. `viper/ViPER.cpp`（1,564 行）：效果编排与分发入口（`DispatchParamValue` 全参数下发）。
   3. `viper/effects/` **23 个效果模块**：ViPERBass / ViPERBassMono / ViPERClarity / ColorfulMusic（清晰度系）、TubeSimulator / AnalogX、SpectrumExtend（VSE）、DiffSurround / DepthSurround / Stereo3DSurround / StereoImager / VHE（含 L0–L4 系数表）、DynamicSystem、Cure（CURe crossfeed）、Reverberation / Convolver、DynamicEQ / IIRFilter、FETCompressor / MultibandCompressor / PlaybackGain / LUFSTargeting / SoftwareLimiter、PsychoacousticBass、SpeakerCorrection、ViPERDDC。
   4. `viper/utils/` **~35 个基础组件**：pffft（FFT）、Biquad / IIR_1st / IIR_NOrder_* 滤波器族、CRevModel / CCombFilter / CAllPassFilter（混响组件）、PConvSingle（分区卷积）、Polyphase（重采样）、Harmonic / DynamicBass（低音增强）、Crossfeed、QuadricTube（新电子管模型）、TimeConstDelay、WaveBuffer 等。
-- **授权红线（显式 All Rights Reserved，比 v2.2 判断更严重）**：引擎 README 明确声明——逆向代码，原 IP 归 Zhuhang / ViPER520；上游项目无许可证，按 **All Rights Reserved** 处理，**仅限个人使用、禁止任何商用**。AuraDSP 为 GPL-3.0 分发项目：**该库代码一律不得并入**，仅可作算法思路的阅读参考；若未来落地 ViPER 系效果，须自研重写或取得明确授权。
+- **授权红线（显式 All Rights Reserved，比 v2.2 判断更严重）**：引擎 README 明确声明——逆向代码，原 IP 归 Zhuhang / ViPER520；上游项目无许可证，按 **All Rights Reserved** 处理，**仅限个人使用、禁止任何商用**。AuraDSP 为 GPL-3.0 分发项目：**该库代码一律不得并入**，仅可作算法思路的阅读参考；若未来落地 ViPER 系效果，须自研重写或取得明确授权（全谱系授权地图见 §2.7）。
 - **对 AuraDSP 的算法对照价值（纯参考，禁搬运）**：VHE / DynamicSystem（头戴虚拟化，对照 haas + crossfeed）、PsychoacousticBass + Harmonic（对照 psycho 模块）、FETCompressor / MultibandCompressor（对照 vendor comp）、SpeakerCorrection / SpectrumExtend（对照 shelf / filter）、Convolver + PConvSingle（对照 convolver 节点）。
 - **快照内实测结构（218 文件 / 3.14 MB，含 ViPERDSP）**：
   1. **APO 层 `ViPER4WindowsAPO/`（C++，约 1,150 行）**：`CRegAPOProperties` 注册 MFX APO（INPLACE + 采样/帧率/位深必须匹配）；`FinalConstruct` 创建 `ViPER` 引擎实例并打开共享内存；**RT-Safe 参数投递范式**——`StartParamWatch()` 监听参数变更，`staged_params_` / `consumed_params_` 两个 `std::atomic` 指针构成双缓冲（写侧暂存、音频线程取用后交换删除），配合 avrt 多媒体类调度；`ViPERLog.h` 提供调试日志。
@@ -111,6 +111,30 @@
   - **跨平台预设格式 v2（grouped JSON）**：与 ViPER4Android / ViPER4Mac 互通，可为 AuraDSP 预设导入导出提供格式参照。
   - **按设备 profile 自动切换**：endpoint ID 为键、form factor 判耳机/音箱，对照本项目多设备形态适配。
 - **许可风险提示**：仓库**无 LICENSE 文件**（仅 Inter 字体 MIT 许可），APO 注册信息标注 `Copyright ViPER520`。作为参考阅读无碍；**任何代码搬运前必须先与上游确权**。
+
+### 2.7 ViPER 蝰蛇音效全谱系与合规地图（v2.4 新增，2026-10-14 联网考证）
+
+**背景**：GitHub 及其它渠道 ViPER 相关仓库众多，真伪、版本与授权状态混乱（中文站点充斥「正版/免ROOT/2026 最新版」打包 APK）。本节一次性厘清来龙去脉与合规条款；结论均有出处（XDA、百度百科、36 氪、GitHub 官方 org 实测）。
+
+**正主与官方遗产**：
+- ViPER's Audio 由 **ViPER520（王宇飞 / Euphy Wong）**创立（版权线 `Copyright (C) 2006-2016 vipercn.com / vipersaudio.com`），**zhuhang（Jasper Loo）**为联合创始人，2013 年经其登陆 XDA 走向全球；全球累计安装量约 4,000 万（36 氪，2016）。
+- **官方 GitHub org `vipersaudio` 仍然在线**（2026-10-14 实测）：`viper4android_fx`（app 源码，266★/123 forks，末次活动 2016-02）、`viper4android_xhifi`、`viperfx_core_binary`（驱动二进制仓）、`gst-plugin-viperfx`；已入 GitHub Arctic Code Vault 归档。
+- **官方条款**：app 源码公开但仓库**无 OSS 许可证**（GitHub 默认 All Rights Reserved）；驱动 `libv4a_*.so` 的 README 明写 **"restrict disallowed in commercial use"（严禁商用）**；百度百科记「授权：免费」——**免费 ≠ 开源，更 ≠ 可商用**。
+- 官方维护止于 **V4A 2.5.0.5（2018）**；XHiFi 线 2013 年停更、功能并入 FX。
+
+**三条谱系与授权条款**：
+
+| 谱系 | 代表仓库 / 产品 | 代码可见性 | 授权状态 | 对 AuraDSP 的意义 |
+|---|---|---|---|---|
+| 官方二进制系 | `vipersaudio` org；V4A 2.5.0.5 驱动 | app 源码公开 / 驱动二进制 | 无 OSS 许可；**驱动严禁商用** | 个人使用灰色地带；**不可并入、不可商用** |
+| 社区分发壳 | Magisk-Modules-Repo/ViPER4Android-FX（本报告 #5）；Team_DeWitt app（pittvandewitt/MrWhite214，包名 `com.pittvandewitt.viperfx`，Kotlin 重写、APK 闭源、AndroidAudioMods 发 release） | 壳源码 + 官方二进制 | 随官方条款 | 挂载结构参考；驱动同样禁商用 |
+| 逆向重写系 | AndroidAudioMods/ViPERFX_RE（#6，GPL-3.0）→ likelikeslike/ViPERDSP（#13，ARR）→ likelikeslike/ViPER4Windows（#12，无 LICENSE） | 全源码 | FX_RE 挂 GPL-3.0 但**派生自 ARR 代码，授权有效性存疑（灰区）**；两个衍生仓显式 ARR | **只读参考**。许可证兼容 ≠ 安全：原权利人仍可主张 ARR 派生权利，勿被 GPL 字样误导 |
+
+**唯一合规商用路径（商业授权系）**：36 氪实证——王宇飞创立的**听觉工坊**自 2014 年起向**酷狗**提供蝰蛇音效（3D丽音 / HiFi现场 / 超重低音 / 纯净人声），现运营为**酷狗蝰蛇声学实验室**（15 万款音效、5.5 亿用户、蝰蛇声学认证；硬件合作方含华为音频 / OPPO / vivo / 小米 / LHDC / 理想 / 蔚来）；听觉工坊另有 ViPER-MX USB 声卡硬件（6→2 声道下混）。**若 AuraDSP 未来要商品化 ViPER 系效果，唯一正途是向该体系取得授权，而非使用 GitHub 代码。**
+
+**假蝰蛇鉴定法**：中文站点泛滥的「VIPER 正版 / 免ROOT版 / 2026 最新版」基本为改装 pittvandewitt APK 塞广告或假应用。三判据：① 包名是否为 `com.pittvandewitt.viperfx`；② 驱动版本是否为官方 2.5.0.x 系；③ 是否捆绑广告 / 索取无关权限。真正的官方遗产只在 `vipersaudio` org 与酷狗体系内。
+
+**结论**：维持 v2.3 裁定——ViPERDSP / ViPERFX_RE / ViPER4Windows 三仓仅供阅读参考，代码零搬运；ViPER 系效果落地一律自研重写。
 
 ---
 
@@ -129,7 +153,7 @@
 | **Windows 全局音频** | 当前为进程内 WASAPI pump | `equalizerAPO64` / `ViPER4Windows` | `EqualizerAPO/`（APO 注册表服务、驱动挂载与端点拦截）；`ViPER4WindowsAPO/ViPER4WindowsAPO.cpp`（MFX APO 注册 + 共享内存参数投递的最小闭环） |
 | **RT-Safe 参数热更新** | P-004 表驱动链参数下发 | `ViPER4Windows` | `staged/consumed_params_` 原子双缓冲 + `StartParamWatch()`（对照音频线程零分配约束） |
 | **跨平台预设格式** | 自研 JSON 预设 | `ViPER4Windows` | `lib/models/` + `tools/convert_preset.py`（v2 grouped-JSON，与 ViPER4Android/Mac 互通） |
-| **ViPER 系效果算法** | 部分自研（haas / psycho / crossfeed / comp） | `ViPERDSP`（仅阅读参考） | `viper/effects/{VHE,DynamicSystem,PsychoacousticBass,FETCompressor,SpectrumExtend}.cpp`（**All Rights Reserved，禁搬运**，见 §2.6） |
+| **ViPER 系效果算法** | 部分自研（haas / psycho / crossfeed / comp） | `ViPERDSP`（仅阅读参考） | `viper/effects/{VHE,DynamicSystem,PsychoacousticBass,FETCompressor,SpectrumExtend}.cpp`（**All Rights Reserved，禁搬运**；全谱系授权地图见 §2.7） |
 | **Linux 全局音频** | Phase 7 规划中 | `JDSP4Linux` / `pulseeffects` | `JDSP4Linux/src/pipewire/`（PipeWire filter-chain 与 SPA 模块） |
 | **Android 免 Root 引擎** | Phase 6 规划中 | `RootlessJamesDSP` | `app/src/main/java/.../AudioCaptureService.kt`（无 Root 前台服务捕获） |
 
@@ -158,7 +182,7 @@
 | **P-5** | ✅ 已闭环 | lsp-plugins 源码定位 | **已彻底澄清并闭环**：`modules/` 下 66 个子模块源码完整在盘，无需额外克隆单个插件仓。 |
 | **P-6** | ✅ 新增闭环 | bass_enhancer 溯源 | 确认 pulseeffects 底层为 Calf 插件；算法对照锁定为 `lsp-plugins-loud-comp` 与 `lsp-dsp-units`。 |
 | **P-7** | ✅ 新增闭环 | CLAP 正典上游与内置快照落差 | 新克隆 `source/clap` 为正典上游 v1.2.10；内置快照 `vendor/plugin-api/clap` 为 1.2.6（落后 8 个 draft 头），可按 §2.5 建议升级。 |
-| **P-8** | ✅ 已闭环 | ViPER4Windows 引擎源码缺失 | 已克隆补齐 `likelikeslike/ViPERDSP` main@6fc1f1b（123 文件 / 1.36 MB，.git 已剥除并登记），23 个效果模块到齐；注意其为 ViPER4Windows 钉住指针 db1c11c 的后继版本。引擎为 **All Rights Reserved 仅限个人使用**，仅作阅读参考、禁并入 AuraDSP，见 §2.6。 |
+| **P-8** | ✅ 已闭环 | ViPER4Windows 引擎源码缺失 | 已克隆补齐 `likelikeslike/ViPERDSP` main@6fc1f1b（123 文件 / 1.36 MB，.git 已剥除并登记），23 个效果模块到齐；注意其为 ViPER4Windows 钉住指针 db1c11c 的后继版本。引擎为 **All Rights Reserved 仅限个人使用**，仅作阅读参考、禁并入 AuraDSP；谱系与合规全景见 §2.7。 |
 
 ---
 
@@ -168,5 +192,5 @@
 2. **M5 算法精细化**：全面挖掘 `source/lsp-plugins/modules/lsp-dsp-units` 与 `lsp-plugins-loud-comp`，用于自研等响度与高阶滤波器的对比验证。
 3. **磁盘轻量化（可选）**：如需节约约 300MB 空间，可清空 `source/lsp-plugins/release/` 下的离线归档包，因 `modules/` 源码已足够自洽。
 4. **CLAP 快照升级（可执行）**：将 `vendor/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `vendor/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
-5. **ViPER4Windows / ViPERDSP 后续**：APO 层与 `viper_params_layout.dart` 可作为 Phase 7b 蓝本阅读；ViPERDSP 为 All Rights Reserved（仅限个人使用），**代码不得并入 GPL 分发**——若需落地 ViPER 系效果（VHE / 动态系统 / 心理声学低音等），按 §2.6 算法对照清单自研重写。
+5. **ViPER4Windows / ViPERDSP 后续**：APO 层与 `viper_params_layout.dart` 可作为 Phase 7b 蓝本阅读；ViPERDSP 为 All Rights Reserved（仅限个人使用），**代码不得并入 GPL 分发**——若需落地 ViPER 系效果（VHE / 动态系统 / 心理声学低音等），按 §2.6 算法对照清单自研重写；若要走商品化，唯一正途是向听觉工坊 / 酷狗蝰蛇声学体系取得授权（§2.7）。
 
