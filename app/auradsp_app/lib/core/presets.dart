@@ -346,6 +346,13 @@ abstract final class PresetLibrary {
           'freq': m.deesserFreq,
           'amount': m.deesserAmount,
         },
+        // 独立滤波器（gate 后 / bassmono 前）
+        'filter': {
+          'enable': m.filterOn,
+          'type': m.filterType,
+          'freq': m.filterFreq,
+          'q': m.filterQ,
+        },
         // 脉冲卷积与校正
         'convolver': {
           'enable': m.convEnabled && m.convReady,
@@ -669,6 +676,15 @@ abstract final class PresetLibrary {
       if (ds['enable'] != null) m.setDeesserEnabled(ds['enable'] as bool);
     }
 
+    // 8.10 独立滤波器（参数先行，enable 最后）
+    final ft = (p['filter'] as Map<String, dynamic>?) ?? {};
+    if (ft.isNotEmpty) {
+      if (ft['type'] != null) m.setFilterType((ft['type'] as num).toInt());
+      if (ft['freq'] != null) m.setFilterFreq((ft['freq'] as num).toDouble());
+      if (ft['q'] != null) m.setFilterQ((ft['q'] as num).toDouble());
+      if (ft['enable'] != null) m.setFilterEnabled(ft['enable'] as bool);
+    }
+
     // 9. 脉冲卷积（IR 路径由 convIrPath / 会话层负责重载，这里只恢复使能与混合比）
     final conv = (p['convolver'] as Map<String, dynamic>?) ?? {};
     if (conv.isNotEmpty) {
@@ -871,11 +887,18 @@ abstract final class PresetLibrary {
         'bass': {
           'enable': true,
           'intensity': 0.5,
-          'mode': 1, // 纯净低架
+          'mode': 1, // 纯净低音（v3.1 起不再连带开 shelf，shelf 态走下面独立节）
           'cutoff': 100.0,
           'harmonics': 0.3,
           'harmonicBlend': 0.5,
           'subFloor': 25.0,
+        },
+        // v3.1 迁移：旧语义下 mode 1 会连带打开 shelf（freq=100/gain=6.0），
+        // 解耦后显式写出，保持该预设音色不变。
+        'shelf': {
+          'enable': true,
+          'freq': 100.0,
+          'gain': 6.0,
         },
         'reverb': {
           'enable': true,

@@ -876,11 +876,7 @@ class _GateCard extends StatelessWidget {
                   children: [
                     Text(l.deesserTitle, style: labelOf(p, color: p.text)),
                     const SizedBox(width: 4),
-                    Tooltip(
-                      message: '针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。',
-                      child: Icon(Icons.help_outline_rounded,
-                          size: 14, color: p.textDim),
-                    ),
+                    InfoBadge(message: '针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。'),
                     const Spacer(),
                     AuraSwitch(
                       value: model.deesserOn,
@@ -1131,10 +1127,7 @@ class _BassCard extends StatelessWidget {
             children: [
               Text(l.bassMode, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              Tooltip(
-                message: l.bassModeTooltip,
-                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
-              ),
+              InfoBadge(message: l.bassModeTooltip),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -1588,10 +1581,7 @@ class _BassMonoCard extends StatelessWidget {
             children: [
               Text(l.bassmonoFreq, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              Tooltip(
-                message: l.bassmonoCombinedTooltip,
-                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
-              ),
+              InfoBadge(message: l.bassmonoCombinedTooltip),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -2669,11 +2659,7 @@ class _CrossfeedCard extends StatelessWidget {
             children: [
               Text(l.crossfeedMode, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              Tooltip(
-                message: '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。',
-                child: Icon(Icons.help_outline_rounded,
-                    size: 14, color: p.textDim),
-              ),
+              InfoBadge(message: '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。'),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -2901,10 +2887,7 @@ class _HaasCard extends StatelessWidget {
             children: [
               Text(l.haasSide, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              Tooltip(
-                message: l.haasSideTooltip,
-                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
-              ),
+              InfoBadge(message: l.haasSideTooltip),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -3000,10 +2983,7 @@ class _ExciterCard extends StatelessWidget {
             children: [
               Text(l.exciterMode, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              Tooltip(
-                message: l.exciterModeTooltip,
-                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
-              ),
+              InfoBadge(message: l.exciterModeTooltip),
               const Spacer(),
               AuraChip(
                 'tanh',

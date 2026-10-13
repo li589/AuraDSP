@@ -253,4 +253,84 @@ void main() {
       await tester.pump();
     });
   });
+
+  group('HelpVisibilityScope & Mobile Scroll Auto-Fade', () {
+    testWidgets('桌面端（宽屏）InfoBadge 持续常驻显示', (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = HelpVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_app(HelpVisibilityScope(
+        controller: controller,
+        child: const InfoBadge(message: '桌面提示测试'),
+      )));
+
+      final opacityFinder = find.byType(AnimatedOpacity);
+      expect(opacityFinder, findsOneWidget);
+      final opacityWidget = tester.widget<AnimatedOpacity>(opacityFinder);
+      expect(opacityWidget.opacity, 1.0);
+    });
+
+    testWidgets('移动端未滑动时保持隐藏，滑动时唤醒显示，停止后延迟隐藏', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final controller = HelpVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_app(HelpVisibilityScope(
+        controller: controller,
+        child: const InfoBadge(message: '移动端提示测试'),
+      )));
+
+      // 1. 移动端初始不滑动状态：透明度为 0.0
+      var opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      expect(opacityWidget.opacity, 0.0);
+
+      // 2. 模拟滑动触发 recordScroll()
+      controller.recordScroll();
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 250));
+
+      opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      expect(opacityWidget.opacity, 1.0);
+
+      // 3. 停止滑动 2600ms 后自动淡出
+      await tester.pump(const Duration(milliseconds: 2700));
+      await tester.pump(const Duration(milliseconds: 250));
+
+      opacityWidget = tester.widget<AnimatedOpacity>(find.byType(AnimatedOpacity));
+      expect(opacityWidget.opacity, 0.0);
+    });
+
+    testWidgets('InfoBadge 点击可切换展开并再次点击收起', (tester) async {
+      final controller = HelpVisibilityController();
+      addTearDown(controller.dispose);
+
+      await tester.pumpWidget(_app(HelpVisibilityScope(
+        controller: controller,
+        child: const InfoBadge(message: '点击切换气泡测试'),
+      )));
+
+      final badgeFinder = find.byType(InfoBadge);
+      expect(badgeFinder, findsOneWidget);
+
+      // 点击展开
+      await tester.tap(badgeFinder);
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 50));
+      expect(find.text('点击切换气泡测试'), findsOneWidget);
+
+      // 再次点击收起
+      await tester.tap(badgeFinder);
+      await tester.pump();
+      expect(find.text('点击切换气泡测试'), findsNothing);
+    });
+  });
 }

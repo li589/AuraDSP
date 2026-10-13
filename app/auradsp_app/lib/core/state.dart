@@ -104,6 +104,11 @@ abstract class ParamDefaults {
   static const double bassHarmonicBlend = 0.5;// 50% (平衡)
   static const double bassSubFloor = 25.0;   // 25 Hz
 
+  // 独立滤波器
+  static const int filterType = 0;           // 0=HP 1=LP 2=BP
+  static const double filterFreq = 80.0;     // 80 Hz
+  static const double filterQ = 0.707;       // Q
+
   // 电子管模拟器
   static const double tubeGain = 4.5;        // +4.5 dB
   static const int tubeStyle = 0;            // 0: 三极管, 1: 五极管, 2: 磁带温润
@@ -302,6 +307,12 @@ class AppModel extends ChangeNotifier {
   double bassHarmonics = ParamDefaults.bassHarmonics;
   double bassHarmonicBlend = ParamDefaults.bassHarmonicBlend;
   double bassSubFloor = ParamDefaults.bassSubFloor;
+
+  // 独立滤波器（gate 后 / bassmono 前）
+  bool filterOn = false;
+  int filterType = ParamDefaults.filterType;
+  double filterFreq = ParamDefaults.filterFreq;
+  double filterQ = ParamDefaults.filterQ;
 
   // 电子管模拟器（Phase 4）
   double tubeGain = ParamDefaults.tubeGain;
@@ -753,6 +764,14 @@ class AppModel extends ChangeNotifier {
         if (raw['deesserEnable'] != null) deesserOn = (raw['deesserEnable'] as int) != 0;
         if (raw['deesserFreq'] != null) deesserFreq = (raw['deesserFreq'] as num).toDouble();
         if (raw['deesserAmount'] != null) deesserAmount = (raw['deesserAmount'] as num).toDouble();
+        if (raw['bassHarmonics'] != null) bassHarmonics = (raw['bassHarmonics'] as num).toDouble();
+        if (raw['bassHarmonicBlend'] != null) bassHarmonicBlend = (raw['bassHarmonicBlend'] as num).toDouble();
+        if (raw['bassSubFreq'] != null) bassSubFloor = (raw['bassSubFreq'] as num).toDouble();
+        if (raw['bassCutoffF'] != null) bassCutoff = (raw['bassCutoffF'] as num).toDouble();
+        if (raw['filterEnable'] != null) filterOn = (raw['filterEnable'] as int) != 0;
+        if (raw['filterType'] != null) filterType = (raw['filterType'] as int).clamp(0, 2);
+        if (raw['filterFreq'] != null) filterFreq = (raw['filterFreq'] as num).toDouble();
+        if (raw['filterQ'] != null) filterQ = (raw['filterQ'] as num).toDouble();
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -1149,6 +1168,14 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
       setFloat(ParamId.deesserFreq, deesserFreq);
       setFloat(ParamId.deesserAmount, deesserAmount);
+      setFloat(ParamId.bassHarmonics, bassHarmonics);
+      setFloat(ParamId.bassHarmonicBlend, bassHarmonicBlend);
+      setFloat(ParamId.bassSubFreq, bassSubFloor);
+      setFloat(ParamId.bassCutoffF, bassCutoff);
+      setInt(ParamId.filterEnable, filterOn ? 1 : 0);
+      setInt(ParamId.filterType, filterType);
+      setFloat(ParamId.filterFreq, filterFreq);
+      setFloat(ParamId.filterQ, filterQ);
       setFloat(ParamId.arbmagOutGain, arbmagOutputGain);
       setInt(ParamId.arbmagAutoGain, arbmagAutoGain ? 1 : 0);
       setInt('limiter.enable', limiterOn ? 1 : 0);
@@ -1323,6 +1350,14 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.gateAutoGain) { gateAutoGain = v != 0; break; }
         if (id == ParamId.deesserEnable) { deesserOn = v != 0; break; }
         if (id == ParamId.deesserFreq) { deesserFreq = v; break; }
+        if (id == ParamId.bassHarmonics) { bassHarmonics = v; break; }
+        if (id == ParamId.bassHarmonicBlend) { bassHarmonicBlend = v; break; }
+        if (id == ParamId.bassSubFreq) { bassSubFloor = v; break; }
+        if (id == ParamId.bassCutoffF) { bassCutoff = v; break; }
+        if (id == ParamId.filterEnable) { filterOn = v != 0; break; }
+        if (id == ParamId.filterType) { filterType = v.toInt().clamp(0, 2); break; }
+        if (id == ParamId.filterFreq) { filterFreq = v; break; }
+        if (id == ParamId.filterQ) { filterQ = v; break; }
         if (id == ParamId.deesserAmount) { deesserAmount = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
@@ -1432,6 +1467,7 @@ class AppModel extends ChangeNotifier {
       'comp' => compOn,
       'bassmono' => bassmonoOn,
       'gate' => gateOn,
+      'filter' => filterOn,
       'haas' => haasOn,
       'exciter' => exciterOn,
       'bass' => bassOn,
@@ -1457,6 +1493,8 @@ class AppModel extends ChangeNotifier {
         setBassmonoEnabled(!bassmonoOn);
       case 'gate':
         setGateEnabled(!gateOn);
+      case 'filter':
+        setFilterEnabled(!filterOn);
       case 'haas':
         setHaasEnabled(!haasOn);
       case 'exciter':
@@ -2070,47 +2108,75 @@ class AppModel extends ChangeNotifier {
     bassIntensity = v.clamp(0.0, 1.0);
     final gain = (bassIntensity * 15.0).clamp(0.0, 15.0);
     bassGain = gain;
+    // v3.1 重构：强度只驱动 vendor bass，不再碰 shelf 引擎。
+    // shelf 由自己的卡/预设节独立管理（老快照的 shelf 态走 shelf 节恢复）。
     setFloat('bass.gain', gain);
-    if (bassMode == 1) {
-      setFloat('shelf.gain', (bassIntensity * 12.0).clamp(0.0, 12.0));
-    }
     notifyListeners();
   }
 
+  /// ViPER 三模式 = 谐波配方宏（0=自然低音 / 1=纯净低音 / 2=超重低音）。
+  /// 不再碰 shelf 引擎；配方写入谐波三滑块（随后的 slider 恢复会覆盖为快照真值）。
   void setBassMode(int mode) {
     bassMode = mode;
     if (mode == 1) {
-      setInt('shelf.enable', 1);
-      setFloat('shelf.freq', bassCutoff);
-      setFloat('shelf.gain', (bassIntensity * 12.0).clamp(0.0, 12.0));
+      setBassHarmonics(0.35);
+      setBassHarmonicBlend(0.5);
+    } else if (mode == 2) {
+      setBassHarmonics(0.7);
+      setBassHarmonicBlend(0.7);
     } else {
-      setInt('shelf.enable', 0);
+      setBassHarmonics(0.0);
     }
     notifyListeners();
   }
 
   void setBassCutoff(double f) {
     bassCutoff = f;
-    setFloat('shelf.freq', f);
+    // v3.1：cutoff 改驱心理声学 LP，不再写 shelf.freq。
+    setFloat(ParamId.bassCutoffF, bassCutoff);
     notifyListeners();
   }
 
   void setBassHarmonics(double h) {
-    // 引擎侧暂无 bass.harmonics 参数（只有 bass.enable/gain）：
-    // 只存 UI/预设状态，UI 侧已置灰禁用，待谐波合成 DSP 落地后再接线。
     bassHarmonics = h.clamp(0.0, 1.0);
+    setFloat(ParamId.bassHarmonics, bassHarmonics);
     notifyListeners();
   }
 
   void setBassHarmonicBlend(double b) {
-    // 同上：引擎侧无对应参数。
     bassHarmonicBlend = b.clamp(0.0, 1.0);
+    setFloat(ParamId.bassHarmonicBlend, bassHarmonicBlend);
     notifyListeners();
   }
 
   void setBassSubFloor(double s) {
-    // 同上：引擎侧无对应参数。
     bassSubFloor = s;
+    setFloat(ParamId.bassSubFreq, bassSubFloor);
+    notifyListeners();
+  }
+
+  /// 独立滤波器（RBJ HP/LP/BP，gate 后 / bassmono 前）。
+  void setFilterEnabled(bool on) {
+    filterOn = on;
+    setInt(ParamId.filterEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setFilterType(int t) {
+    filterType = t.clamp(0, 2);
+    setInt(ParamId.filterType, filterType);
+    notifyListeners();
+  }
+
+  void setFilterFreq(double f) {
+    filterFreq = f.clamp(20.0, 20000.0);
+    setFloat(ParamId.filterFreq, filterFreq);
+    notifyListeners();
+  }
+
+  void setFilterQ(double q) {
+    filterQ = q.clamp(0.3, 10.0);
+    setFloat(ParamId.filterQ, filterQ);
     notifyListeners();
   }
 

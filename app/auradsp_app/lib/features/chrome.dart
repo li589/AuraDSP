@@ -65,6 +65,7 @@ class _PageScaffoldState extends State<PageScaffold>
     vsync: this,
     duration: AuraDur.staggerSpan,
   );
+  final HelpVisibilityController _helpController = HelpVisibilityController();
 
   @override
   void initState() {
@@ -81,6 +82,7 @@ class _PageScaffoldState extends State<PageScaffold>
 
   @override
   void dispose() {
+    _helpController.dispose();
     _c.dispose();
     super.dispose();
   }
@@ -114,45 +116,58 @@ class _PageScaffoldState extends State<PageScaffold>
       body.add(_reveal(i, widget.children[i]));
     }
 
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        if (widget.ambient != null)
-          AmbientSpectrum(spectrum: widget.ambient!, palette: p),
-        if (p.isDark) const GrainOverlay(),
-        SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-              context.responsivePageX, AuraSpace.pageTop,
-              context.responsivePageX, AuraSpace.pageBottom),
-          child: Center(
-            heightFactor: 1.0,
-            child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(maxWidth: widget.maxWidth ?? context.responsiveMaxW),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  if (widget.eyebrow != null)
-                    PageHeader(
-                      eyebrow: widget.eyebrow!,
-                      title: widget.title,
-                      trailing: widget.trailing,
-                    )
-                  else
-                    PageHeader(
-                      eyebrow: '',
-                      title: widget.title,
-                      trailing: widget.trailing,
-                      bare: true,
-                    ),
-                  const SizedBox(height: AuraSpace.xl),
-                  ...body,
-                ],
+    return HelpVisibilityScope(
+      controller: _helpController,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          if (widget.ambient != null)
+            AmbientSpectrum(spectrum: widget.ambient!, palette: p),
+          if (p.isDark) const GrainOverlay(),
+          NotificationListener<ScrollNotification>(
+            onNotification: (notification) {
+              if (notification is ScrollUpdateNotification ||
+                  notification is UserScrollNotification ||
+                  notification is ScrollStartNotification) {
+                _helpController.recordScroll();
+              }
+              return false;
+            },
+            child: SingleChildScrollView(
+              padding: EdgeInsets.fromLTRB(
+                  context.responsivePageX, AuraSpace.pageTop,
+                  context.responsivePageX, AuraSpace.pageBottom),
+              child: Center(
+                heightFactor: 1.0,
+                child: ConstrainedBox(
+                  constraints:
+                      BoxConstraints(maxWidth: widget.maxWidth ?? context.responsiveMaxW),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (widget.eyebrow != null)
+                        PageHeader(
+                          eyebrow: widget.eyebrow!,
+                          title: widget.title,
+                          trailing: widget.trailing,
+                        )
+                      else
+                        PageHeader(
+                          eyebrow: '',
+                          title: widget.title,
+                          trailing: widget.trailing,
+                          bare: true,
+                        ),
+                      const SizedBox(height: AuraSpace.xl),
+                      ...body,
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

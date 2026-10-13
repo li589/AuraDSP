@@ -75,13 +75,64 @@ const _bubbleSlack = 2.0;
 /// ])
 /// ```
 ///
-/// 触发：桌面 hover 300ms 弹出、离即消；触屏长按弹出、2.5s 后自动收起、
-/// 再点徽标也可关闭。气泡带指向箭头，空间不足自动翻转，并跟随目标滚动。
+/// 全局/页面级帮助徽标（问号）可见性控制器
+/// - 桌面端：持续常驻显示（鼠标环境空间充裕，便于随时查看）
+/// - 移动端：滑动页面时唤醒显示，停止滑动后延迟一段时间（2.6s）自动平滑淡出隐藏，保持极简界面
+class HelpVisibilityController extends ChangeNotifier {
+  bool _isScrollingOrRecent = false;
+  Timer? _hideTimer;
+  static const Duration hideDelay = Duration(milliseconds: 2600);
+
+  bool get isScrollingOrRecent => _isScrollingOrRecent;
+
+  void recordScroll() {
+    _hideTimer?.cancel();
+    if (!_isScrollingOrRecent) {
+      _isScrollingOrRecent = true;
+      notifyListeners();
+    }
+    _hideTimer = Timer(hideDelay, () {
+      _isScrollingOrRecent = false;
+      notifyListeners();
+    });
+  }
+
+  @override
+  void dispose() {
+    _hideTimer?.cancel();
+    super.dispose();
+  }
+}
+
+/// 帮助徽标可见性 Scope（通过 InheritedNotifier 提供给下层组件）
+class HelpVisibilityScope extends InheritedNotifier<HelpVisibilityController> {
+  const HelpVisibilityScope({
+    super.key,
+    required HelpVisibilityController controller,
+    required super.child,
+  }) : super(notifier: controller);
+
+  /// 查询当前上下文中的问号是否应该可见
+  /// - 电脑端（桌面端/宽屏 !context.isMobile）：恒返回 true，保持常驻
+  /// - 移动端（context.isMobile）：仅在滑动中或滑动后延迟时间内返回 true
+  static bool isVisibleOf(BuildContext context) {
+    if (!context.isMobile) {
+      return true;
+    }
+    final scope = context.dependOnInheritedWidgetOfExactType<HelpVisibilityScope>();
+    return scope?.notifier?.isScrollingOrRecent ?? false;
+  }
+}
+
+/// 统一帮助徽标（带指向箭头的提示气泡）
+/// 触发：
+/// - 电脑端：持续常驻显示；悬停 300ms 弹出、移开即隐；点击可切换显示/关闭。
+/// - 移动端：滑动页面时唤醒显示、停止滑动后延迟 2.6s 平滑淡出隐藏；支持触屏直接点击展开/收起气泡（3.5s 自动淡出防遮挡）。
 class InfoBadge extends StatefulWidget {
   /// 气泡内容（支持换行；请传 l10n 文案，勿硬编码）
   final String message;
 
-  /// 徽标直径（默认 16；命中区另有 4px 透明外衬）
+  /// 徽标直径（默认 15.0；命中区另有 4px 透明外衬）
   final double size;
 
   /// 气泡优先显示在徽标下方（默认 true；空间不足自动翻转）
@@ -93,7 +144,7 @@ class InfoBadge extends StatefulWidget {
   const InfoBadge({
     super.key,
     required this.message,
-    this.size = 16,
+    this.size = 15.0,
     this.preferBelow = true,
     this.maxWidth = 380,
   });
@@ -268,63 +319,87 @@ width: _bubbleW,
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return Semantics(
-      label: widget.message,
-      button: true,
-      child: CompositedTransformTarget(
-        link: _link,
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) {
-            if (!mounted) return;
-            setState(() => _hover = true);
-            _showTimer?.cancel();
-            _showTimer = Timer(_hoverDelay, () {
-              if (mounted) _show();
-            });
-          },
-          onExit: (_) {
-            if (!mounted) return;
-            setState(() => _hover = false);
-            _hide();
-          },
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onLongPressStart: (_) {
-              _showTimer?.cancel();
-              _show();
-              _hideTimer?.cancel();
-              _hideTimer = Timer(_touchVisible, () {
-                if (mounted) _hide();
-              });
-            },
-            onTap: () {
-              // 点击切换气泡显示/隐藏
-              if (_entry != null) {
+    final isVisible = HelpVisibilityScope.isVisibleOf(context);
+
+    // 移动端淡出隐藏时若浮层仍在，安全关闭浮层
+    if (!isVisible && _entry != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && !HelpVisibilityScope.isVisibleOf(context)) {
+          _hide();
+        }
+      });
+    }
+
+    return AnimatedOpacity(
+      opacity: isVisible ? 1.0 : 0.0,
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeInOut,
+      child: IgnorePointer(
+        ignoring: !isVisible,
+        child: Semantics(
+          label: widget.message,
+          button: true,
+          child: CompositedTransformTarget(
+            link: _link,
+            child: MouseRegion(
+              cursor: SystemMouseCursors.click,
+              onEnter: (_) {
+                if (!mounted) return;
+                setState(() => _hover = true);
+                _showTimer?.cancel();
+                _showTimer = Timer(_hoverDelay, () {
+                  if (mounted) _show();
+                });
+              },
+              onExit: (_) {
+                if (!mounted) return;
+                setState(() => _hover = false);
                 _hide();
-              } else {
-                _show();
-              }
-            },
-            // 4px 透明外衬：视觉仍是 16，触屏命中到 24
-            child: Padding(
-              padding: const EdgeInsets.all(AuraSpace.xs),
-              child: Container(
-                width: widget.size,
-                height: widget.size,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color:
-                        _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
-                    width: 1.2,
-                  ),
-                ),
-                child: Center(
-                  child: Icon(
-                    Icons.question_mark_rounded,
-                    size: widget.size * 0.65,
-                    color: _hover ? p.accent : p.textDim,
+              },
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onLongPressStart: (_) {
+                  _showTimer?.cancel();
+                  _show();
+                  _hideTimer?.cancel();
+                  _hideTimer = Timer(_touchVisible, () {
+                    if (mounted) _hide();
+                  });
+                },
+                onTap: () {
+                  // 点击切换气泡显示/隐藏
+                  if (_entry != null) {
+                    _hide();
+                  } else {
+                    _show();
+                    // 移动端点击打开时，启动 3.5s 自动淡出防遮挡（再次点击可立即收起）
+                    _hideTimer?.cancel();
+                    _hideTimer = Timer(_touchVisible, () {
+                      if (mounted) _hide();
+                    });
+                  }
+                },
+                // 4px 透明外衬：视觉仍是 15，触屏命中扩展至 23~25px
+                child: Padding(
+                  padding: const EdgeInsets.all(AuraSpace.xs),
+                  child: Container(
+                    width: widget.size,
+                    height: widget.size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color:
+                            _hover ? p.accent : p.textDim.withValues(alpha: 0.55),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Center(
+                      child: Icon(
+                        Icons.question_mark_rounded,
+                        size: widget.size * 0.65,
+                        color: _hover ? p.accent : p.textDim,
+                      ),
+                    ),
                   ),
                 ),
               ),

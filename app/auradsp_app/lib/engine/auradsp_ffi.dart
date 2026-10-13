@@ -91,6 +91,16 @@ abstract final class ParamId {
   static const deesserEnable = 'deesser.enable';
   static const deesserFreq = 'deesser.freq';
   static const deesserAmount = 'deesser.amount';
+  // 心理声学低音（谐波合成，曾经的三死滑块现在有引擎了）
+  static const bassHarmonics = 'bass.harmonics';
+  static const bassHarmonicBlend = 'bass.harmonicblend';
+  static const bassSubFreq = 'bass.subfreq';
+  static const bassCutoffF = 'bass.cutoff';
+  // 独立滤波器（RBJ HP/LP/BP）
+  static const filterEnable = 'filter.enable';
+  static const filterType = 'filter.type';
+  static const filterFreq = 'filter.freq';
+  static const filterQ = 'filter.q';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';

@@ -191,6 +191,16 @@ struct Params {
     std::atomic<int32_t>  deesser_enable{0};
     std::atomic<float>    deesser_freq{6000.0f};  /* Hz [2000,10000] */
     std::atomic<float>    deesser_amount{0.5f};   /* [0,1] */
+    /* 心理声学低音（谐波合成；频带 = LP(cutoff) − LP(subfreq)） */
+    std::atomic<float>    bass_harmonics{0.45f};  /* [0,1] 谐波量 */
+    std::atomic<float>    bass_harmonicblend{0.5f}; /* [0,1] 谐波混合 */
+    std::atomic<float>    bass_subfreq{25.0f};    /* Hz [10,40] 谐波下限 */
+    std::atomic<float>    bass_cutoff_f{120.0f};  /* Hz [30,300] 谐波上限 */
+    /* 独立滤波器（RBJ biquad：HP/LP/BP，链头 gate 之后） */
+    std::atomic<int32_t>  filter_enable{0};
+    std::atomic<int32_t>  filter_type{0};     /* 0=HP 1=LP 2=BP */
+    std::atomic<float>    filter_freq{80.0f}; /* Hz [20,20000] */
+    std::atomic<float>    filter_q{0.707f};   /* [0.3,10] */
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -368,6 +378,11 @@ struct auradsp_handle_s {
         std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
         double z1L = 0, z2L = 0, z1R = 0, z2R = 0;   /* TDF2 状态（RT 独占） */
     } shelf;
+    /* 独立滤波器 biquad（同 shelf 模式：控制线程重算系数，RT 只读） */
+    struct FilterBiquad {
+        std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
+        double z1L = 0, z2L = 0, z1R = 0, z2R = 0;
+    } filter;
     /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
     /* 噪声门/Deesser 状态（RT 独占） */
@@ -375,6 +390,9 @@ struct auradsp_handle_s {
     float gate_ds_lp_l = 0.0f, gate_ds_lp_r = 0.0f;  /* Deesser 侧链 HP 状态 */
     float gate_ds_env = 0.0f;       /* Deesser 侧链包络 */
     double gate_ag_in = 0.0, gate_ag_out = 0.0, gate_ag_comp = 1.0;
+    /* 心理声学低音 one-pole 状态（RT 独占；系数值每块现算） */
+    float psy_lp_l = 0.0f, psy_lp_r = 0.0f;   /* cutoff LP */
+    float psy_sub_l = 0.0f, psy_sub_r = 0.0f; /* subfreq LP */
     /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
@@ -1487,6 +1505,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     fv_alloc(h->fvR, sample_rate, kFvStereoSpread);
     JamesDSPInitFxGains(&h->jdsp);
     shelf_recalc(h);
+    filter_recalc(h);
     apply_params_locked(h);
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
@@ -1882,6 +1901,105 @@ static void gate_process(auradsp_handle h, float* io, int frames) {
     }
 }
 
+/* 心理声学低音（MaxxBass 路线）：谐波带 = LP(cutoff) − LP(subfreq)，
+ * 对该频带做 tanh 谐波合成后按量混回。小单元放不出 40Hz 基频，
+ * 但 80/120Hz 谐波让大脑"听见"低音。位置：bassmono 后（单声道低频
+ * 上直接合成，相位一致）、vendor 之前（谐波随后被 vendor bass 一起
+ * 提升，心理效应更强）。
+ * RT 安全：2×one-pole + tanhf 逐采样，无分配无锁；状态 denormal 归零。 */
+static void basspsycho_process(auradsp_handle h, float* io, int frames) {
+    float amount = h->p.bass_harmonics.load(std::memory_order_relaxed);
+    if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
+    float blend = h->p.bass_harmonicblend.load(std::memory_order_relaxed);
+    if (blend < 0.0f) blend = 0.0f; if (blend > 1.0f) blend = 1.0f;
+    float sub = h->p.bass_subfreq.load(std::memory_order_relaxed);
+    if (sub < 10.0f) sub = 10.0f; if (sub > 40.0f) sub = 40.0f;
+    float fc = h->p.bass_cutoff_f.load(std::memory_order_relaxed);
+    if (fc < 30.0f) fc = 30.0f; if (fc > 300.0f) fc = 300.0f;
+    if (sub >= fc) sub = fc * 0.5f;
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    const float aC = 1.0f - expf(-2.0f * 3.14159265358979f * fc / fs);
+    const float aS = 1.0f - expf(-2.0f * 3.14159265358979f * sub / fs);
+    const float k = amount * blend;
+    float cutL = h->psy_lp_l, cutR = h->psy_lp_r;
+    float subL = h->psy_sub_l, subR = h->psy_sub_r;
+    for (int i = 0; i < frames; ++i) {
+        const float xL = io[i * 2], xR = io[i * 2 + 1];
+        cutL += aC * (xL - cutL);
+        cutR += aC * (xR - cutR);
+        subL += aS * (xL - subL);
+        subR += aS * (xR - subR);
+        const float bandL = cutL - subL, bandR = cutR - subR;
+        const float harmL = tanhf(bandL * 2.5f) * 0.6f;
+        const float harmR = tanhf(bandR * 2.5f) * 0.6f;
+        io[i * 2]     = xL + k * harmL;
+        io[i * 2 + 1] = xR + k * harmR;
+    }
+    h->psy_lp_l = (fabsf(cutL) < 1e-18f) ? 0.0f : cutL;
+    h->psy_lp_r = (fabsf(cutR) < 1e-18f) ? 0.0f : cutR;
+    h->psy_sub_l = (fabsf(subL) < 1e-18f) ? 0.0f : subL;
+    h->psy_sub_r = (fabsf(subR) < 1e-18f) ? 0.0f : subR;
+}
+
+/* 独立滤波器（RBJ cookbook HP/LP/BP）：shelf 同款系数原子 + TDF2 直型。
+ * 控制线程 filter_recalc() 重算，RT 只读系数。默认全通（b0=1）。 */
+void filter_recalc(auradsp_handle h) {
+    const int type = h->p.filter_type.load(std::memory_order_relaxed);
+    double f0 = h->p.filter_freq.load(std::memory_order_relaxed);
+    double q = h->p.filter_q.load(std::memory_order_relaxed);
+    if (f0 < 20.0) f0 = 20.0; if (f0 > 20000.0) f0 = 20000.0;
+    if (q < 0.3) q = 0.3; if (q > 10.0) q = 10.0;
+    const double fs = h->jdsp.fs > 0.0 ? h->jdsp.fs : 48000.0;
+    double w0 = 2.0 * 3.14159265358979 * f0 / fs;
+    if (w0 > 3.14159265358979 * 0.99) w0 = 3.14159265358979 * 0.99;
+    const double cw = cos(w0), sw = sin(w0);
+    const double alpha = sw / (2.0 * q);
+    double b0, b1, b2, a0, a1, a2;
+    if (type == 1) {          /* LP */
+        b0 = (1.0 - cw) / 2.0; b1 = 1.0 - cw; b2 = (1.0 - cw) / 2.0;
+        a0 = 1.0 + alpha; a1 = -2.0 * cw; a2 = 1.0 - alpha;
+    } else if (type == 2) {   /* BP（恒定 0dB 峰值增益） */
+        b0 = alpha; b1 = 0.0; b2 = -alpha;
+        a0 = 1.0 + alpha; a1 = -2.0 * cw; a2 = 1.0 - alpha;
+    } else {                  /* HP（默认） */
+        b0 = (1.0 + cw) / 2.0; b1 = -(1.0 + cw); b2 = (1.0 + cw) / 2.0;
+        a0 = 1.0 + alpha; a1 = -2.0 * cw; a2 = 1.0 - alpha;
+    }
+    h->filter.b0.store(b0 / a0, std::memory_order_release);
+    h->filter.b1.store(b1 / a0, std::memory_order_release);
+    h->filter.b2.store(b2 / a0, std::memory_order_release);
+    h->filter.a1.store(a1 / a0, std::memory_order_release);
+    h->filter.a2.store(a2 / a0, std::memory_order_release);
+}
+
+void filter_process(auradsp_handle h, float* io, int frames) {
+    const double b0 = h->filter.b0.load(std::memory_order_acquire);
+    const double b1 = h->filter.b1.load(std::memory_order_acquire);
+    const double b2 = h->filter.b2.load(std::memory_order_acquire);
+    const double a1 = h->filter.a1.load(std::memory_order_acquire);
+    const double a2 = h->filter.a2.load(std::memory_order_acquire);
+    double z1L = h->filter.z1L, z2L = h->filter.z2L;
+    double z1R = h->filter.z1R, z2R = h->filter.z2R;
+    for (int i = 0; i < frames; ++i) {
+        const double xl = io[i * 2], xr = io[i * 2 + 1];
+        const double yl = b0 * xl + z1L;
+        z1L = b1 * xl - a1 * yl + z2L;
+        z2L = b2 * xl - a2 * yl;
+        const double yr = b0 * xr + z1R;
+        z1R = b1 * xr - a1 * yr + z2R;
+        z2R = b2 * xr - a2 * yr;
+        io[i * 2] = (float)yl;
+        io[i * 2 + 1] = (float)yr;
+    }
+    if (fabs(z1L) < 1e-15) z1L = 0.0;
+    if (fabs(z2L) < 1e-15) z2L = 0.0;
+    if (fabs(z1R) < 1e-15) z1R = 0.0;
+    if (fabs(z2R) < 1e-15) z2R = 0.0;
+    h->filter.z1L = z1L; h->filter.z2L = z2L;
+    h->filter.z1R = z1R; h->filter.z2R = z2R;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -1902,11 +2020,21 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     if (h->p.gate_enable.load(std::memory_order_relaxed)) {
         gate_process(h, const_cast<float*>(src), frames);
     }
+    /* 独立滤波器（gate 之后 / bassmono 之前）：HP 去隆隆声，
+     * 避免次声误开噪声门；LP/BP 按需。 */
+    if (h->p.filter_enable.load(std::memory_order_relaxed)) {
+        filter_process(h, const_cast<float*>(src), frames);
+    }
     /* BassMono：在一切之前（Stage 0 插件/搁架/vendor 之前）——
      * 单声道化后再做后续处理，否则低频相位差会被后级放大。
      * 随 shelf precedent 就地改 src（调用方传的本就是可写 scratch）。 */
     if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
         bassmono_process(h, const_cast<float*>(src), frames);
+    }
+    /* 心理声学低音：跟 bass 卡开关走；amount=0 时恒等直通，
+     * 状态持续跟踪以免开量瞬间抽吸。 */
+    if (h->p.bass_enable.load(std::memory_order_relaxed)) {
+        basspsycho_process(h, const_cast<float*>(src), frames);
     }
     /* Stage 0: Pre-DSP（链头，最前置） */
     process_plugin_slots_stage(h, 0, const_cast<float*>(src), frames);
@@ -2417,6 +2545,57 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.deesser_amount.store(v);
         return AURADSP_OK;
     }
+    /* ---- 独立滤波器（RBJ HP/LP/BP） ---- */
+    if (!strcmp(id, "filter.enable") && bytes >= 4) {
+        h->p.filter_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "filter.type") && bytes >= 4) {
+        int32_t v = *(const int32_t*)value;
+        if (v < 0) v = 0; if (v > 2) v = 2;
+        h->p.filter_type.store(v);
+        filter_recalc(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "filter.freq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 20) v = 20; if (v > 20000) v = 20000;
+        h->p.filter_freq.store(v);
+        filter_recalc(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "filter.q") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.3f) v = 0.3f; if (v > 10) v = 10;
+        h->p.filter_q.store(v);
+        filter_recalc(h);
+        return AURADSP_OK;
+    }
+    /* ---- 心理声学低音（谐波合成三滑块终于有引擎了） ---- */
+    if (!strcmp(id, "bass.harmonics") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.bass_harmonics.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "bass.harmonicblend") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.bass_harmonicblend.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "bass.subfreq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 10) v = 10; if (v > 40) v = 40;
+        h->p.bass_subfreq.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "bass.cutoff") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 30) v = 30; if (v > 300) v = 300;
+        h->p.bass_cutoff_f.store(v);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "arbmag.outgain") && bytes >= 4) {
         float db = *(const float*)value;
         if (db < -12) db = -12; if (db > 6) db = 6;
@@ -2916,6 +3095,14 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "deesser.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.deesser_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "deesser.freq") && bytes >= 4) { *(float*)out_value = h->p.deesser_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "deesser.amount") && bytes >= 4) { *(float*)out_value = h->p.deesser_amount.load(); return AURADSP_OK; }
+    if (!strcmp(id, "filter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.filter_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "filter.type") && bytes >= 4) { *(int32_t*)out_value = h->p.filter_type.load(); return AURADSP_OK; }
+    if (!strcmp(id, "filter.freq") && bytes >= 4) { *(float*)out_value = h->p.filter_freq.load(); return AURADSP_OK; }
+    if (!strcmp(id, "filter.q") && bytes >= 4) { *(float*)out_value = h->p.filter_q.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.harmonics") && bytes >= 4) { *(float*)out_value = h->p.bass_harmonics.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.harmonicblend") && bytes >= 4) { *(float*)out_value = h->p.bass_harmonicblend.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.subfreq") && bytes >= 4) { *(float*)out_value = h->p.bass_subfreq.load(); return AURADSP_OK; }
+    if (!strcmp(id, "bass.cutoff") && bytes >= 4) { *(float*)out_value = h->p.bass_cutoff_f.load(); return AURADSP_OK; }
     if (!strcmp(id, "arbmag.outgain") && bytes >= 4) { *(float*)out_value = h->p.arbmag_outgain.load(); return AURADSP_OK; }
     if (!strcmp(id, "arbmag.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "input.gain") && bytes >= 4) { *(float*)out_value = h->p.input_gain.load(); return AURADSP_OK; }
@@ -3021,6 +3208,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"haas\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"exciter\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"gate\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"filter\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
