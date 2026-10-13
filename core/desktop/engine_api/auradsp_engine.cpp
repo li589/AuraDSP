@@ -188,7 +188,9 @@ struct Params {
     std::atomic<float>    gate_attack{10.0f};     /* ms [1,100] */
     std::atomic<float>    gate_release{100.0f};   /* ms [10,500] */
     std::atomic<int32_t>  gate_autogain{0};
-    std::atomic<int32_t>  deesser_enable{0};
+    /* 响度补偿（信号自适应等响度：静音段按简化 ISO226 补低+高） */
+    std::atomic<int32_t>  loudness_enable{0};
+    std::atomic<float>    loudness_amount{0.5f};  /* [0,1] */    std::atomic<int32_t>  deesser_enable{0};
     std::atomic<float>    deesser_freq{6000.0f};  /* Hz [2000,10000] */
     std::atomic<float>    deesser_amount{0.5f};   /* [0,1] */
     /* 心理声学低音（谐波合成；频带 = LP(cutoff) − LP(subfreq)） */
@@ -393,6 +395,10 @@ struct auradsp_handle_s {
     /* 心理声学低音 one-pole 状态（RT 独占；系数值每块现算） */
     float psy_lp_l = 0.0f, psy_lp_r = 0.0f;   /* cutoff LP */
     float psy_sub_l = 0.0f, psy_sub_r = 0.0f; /* subfreq LP */
+    /* 响度补偿状态（RT 独占） */
+    float loud_lp_l = 0.0f, loud_lp_r = 0.0f;   /* 200Hz LP（低频成分） */
+    float loud_hp_l = 0.0f, loud_hp_r = 0.0f;   /* 6kHz HP 状态（高频成分） */
+    double loud_level = 0.0;                      /* 慢速电平跟随（~0.5s） */
     /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
@@ -2000,6 +2006,46 @@ static void basspsycho_process(auradsp_handle h, float* io, int frames) {
     h->psy_sub_r = (fabsf(subR) < 1e-18f) ? 0.0f : subR;
 }
 
+/* 响度补偿（信号自适应等响度）：慢速电平跟随（~0.5s）估计回放响度，
+ * 信号越静，低频（LP 200Hz）与高频（HP 6kHz）补得越多（简化 ISO226）。
+ * 上限：低频 +10dB、高频 +6dB，再乘 amount。响亮信号恒等直通。
+ * 位置：Stage 3 插件后、安全钳位前——最后一道音色工序。
+ * RT 安全：3×one-pole 逐采样，无分配无锁；状态 denormal 归零。 */
+static void loudness_process(auradsp_handle h, float* io, int frames) {
+    float amount = h->p.loudness_amount.load(std::memory_order_relaxed);
+    if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    const double lvl = stereo_block_rms(io, frames);
+    h->loud_level += (lvl - h->loud_level) * 0.02;
+    /* 安静度 q：-20dBFS 为基准，每低 30dB 加满（amount 再缩放） */
+    double levelDb = 20.0 * log10(h->loud_level + 1e-12);
+    double q = (-20.0 - levelDb) / 30.0;
+    if (q < 0.0) q = 0.0; if (q > 1.0) q = 1.0;
+    q *= amount;
+    const float lowG = (q <= 0.0) ? 0.0f : (float)(pow(10.0, 10.0 * q / 20.0) - 1.0);
+    const float hiG = (q <= 0.0) ? 0.0f : (float)(pow(10.0, 6.0 * q / 20.0) - 1.0);
+    if (lowG <= 0.0f && hiG <= 0.0f) return;
+    const float aL = 1.0f - expf(-2.0f * 3.14159265358979f * 200.0f / fs);
+    const float aH = expf(-2.0f * 3.14159265358979f * 6000.0f / fs);
+    float lpL = h->loud_lp_l, lpR = h->loud_lp_r;
+    float hpL = h->loud_hp_l, hpR = h->loud_hp_r;
+    for (int i = 0; i < frames; ++i) {
+        const float xL = io[i * 2], xR = io[i * 2 + 1];
+        lpL += aL * (xL - lpL);
+        lpR += aL * (xR - lpR);
+        hpL += (1.0f - aH) * (xL - hpL);
+        hpR += (1.0f - aH) * (xR - hpR);
+        const float hiL = xL - hpL, hiR = xR - hpR;
+        io[i * 2]     = xL + lowG * lpL + hiG * hiL;
+        io[i * 2 + 1] = xR + lowG * lpR + hiG * hiR;
+    }
+    h->loud_lp_l = (fabsf(lpL) < 1e-18f) ? 0.0f : lpL;
+    h->loud_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
+    h->loud_hp_l = (fabsf(hpL) < 1e-18f) ? 0.0f : hpL;
+    h->loud_hp_r = (fabsf(hpR) < 1e-18f) ? 0.0f : hpR;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -2110,6 +2156,11 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
 
     /* Stage 3: Post-Reverb（混响后，默认阶段） */
     process_plugin_slots_stage(h, 3, dst, frames);
+
+    /* 响度补偿（Stage 3 后 / 安全钳位前：最后一道音色工序） */
+    if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
+        loudness_process(h, dst, frames);
+    }
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
     const int total_samples = frames * 2;
@@ -2543,6 +2594,17 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         float v = *(const float*)value;
         if (v < 0) v = 0; if (v > 1) v = 1;
         h->p.deesser_amount.store(v);
+        return AURADSP_OK;
+    }
+    /* ---- 响度补偿 ---- */
+    if (!strcmp(id, "loudness.enable") && bytes >= 4) {
+        h->p.loudness_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "loudness.amount") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.loudness_amount.store(v);
         return AURADSP_OK;
     }
     /* ---- 独立滤波器（RBJ HP/LP/BP） ---- */
@@ -3095,6 +3157,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "deesser.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.deesser_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "deesser.freq") && bytes >= 4) { *(float*)out_value = h->p.deesser_freq.load(); return AURADSP_OK; }
     if (!strcmp(id, "deesser.amount") && bytes >= 4) { *(float*)out_value = h->p.deesser_amount.load(); return AURADSP_OK; }
+    if (!strcmp(id, "loudness.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.loudness_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "loudness.amount") && bytes >= 4) { *(float*)out_value = h->p.loudness_amount.load(); return AURADSP_OK; }
     if (!strcmp(id, "filter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.filter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "filter.type") && bytes >= 4) { *(int32_t*)out_value = h->p.filter_type.load(); return AURADSP_OK; }
     if (!strcmp(id, "filter.freq") && bytes >= 4) { *(float*)out_value = h->p.filter_freq.load(); return AURADSP_OK; }
@@ -3209,6 +3273,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"exciter\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"gate\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"filter\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"loudness\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"

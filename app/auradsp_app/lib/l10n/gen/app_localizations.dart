@@ -1528,6 +1528,24 @@ abstract class AppLocalizations {
   /// **'激励器'**
   String get stExciter;
 
+  /// No description provided for @stLoudness.
+  ///
+  /// In zh, this message translates to:
+  /// **'响度补偿'**
+  String get stLoudness;
+
+  /// No description provided for @loudnessHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'小音量自动补低频和高频，大音量直通'**
+  String get loudnessHint;
+
+  /// No description provided for @loudnessAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'补偿强度'**
+  String get loudnessAmount;
+
   /// No description provided for @exciterHint.
   ///
   /// In zh, this message translates to:

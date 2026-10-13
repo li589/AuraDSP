@@ -140,6 +140,9 @@ abstract class ParamDefaults {
   static const double gateRelease = 100.0;     // ms [10,500]
   static const double deesserFreq = 6000.0;    // Hz [2000,10000]
   static const double deesserAmount = 0.5;     // [0,1]
+
+  // 响度补偿
+  static const double loudnessAmount = 0.5;    // [0,1]
   static const bool arbmagAutoGain = false;
   static const double arbmagOutputGain = 0.0;   // [-12, 6] dB
 
@@ -293,6 +296,10 @@ class AppModel extends ChangeNotifier {
   bool gateAutoGain = false;
   bool deesserOn = false;
   double deesserFreq = 6000, deesserAmount = 0.5;
+
+  // 响度补偿（Stage 3 后 / 安全钳位前，最后一道音色工序）
+  bool loudnessOn = false;
+  double loudnessAmount = 0.5;
   bool arbmagOn = ParamDefaults.arbmagOn;
   String arbmagString = ParamDefaults.arbmagString;
   bool arbmagReady = false;
@@ -764,6 +771,8 @@ class AppModel extends ChangeNotifier {
         if (raw['deesserEnable'] != null) deesserOn = (raw['deesserEnable'] as int) != 0;
         if (raw['deesserFreq'] != null) deesserFreq = (raw['deesserFreq'] as num).toDouble();
         if (raw['deesserAmount'] != null) deesserAmount = (raw['deesserAmount'] as num).toDouble();
+        if (raw['loudnessEnable'] != null) loudnessOn = (raw['loudnessEnable'] as int) != 0;
+        if (raw['loudnessAmount'] != null) loudnessAmount = (raw['loudnessAmount'] as num).toDouble();
         if (raw['bassHarmonics'] != null) bassHarmonics = (raw['bassHarmonics'] as num).toDouble();
         if (raw['bassHarmonicBlend'] != null) bassHarmonicBlend = (raw['bassHarmonicBlend'] as num).toDouble();
         if (raw['bassSubFreq'] != null) bassSubFloor = (raw['bassSubFreq'] as num).toDouble();
@@ -1168,6 +1177,8 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
       setFloat(ParamId.deesserFreq, deesserFreq);
       setFloat(ParamId.deesserAmount, deesserAmount);
+      setInt(ParamId.loudnessEnable, loudnessOn ? 1 : 0);
+      setFloat(ParamId.loudnessAmount, loudnessAmount);
       setFloat(ParamId.bassHarmonics, bassHarmonics);
       setFloat(ParamId.bassHarmonicBlend, bassHarmonicBlend);
       setFloat(ParamId.bassSubFreq, bassSubFloor);
@@ -1350,6 +1361,8 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.gateAutoGain) { gateAutoGain = v != 0; break; }
         if (id == ParamId.deesserEnable) { deesserOn = v != 0; break; }
         if (id == ParamId.deesserFreq) { deesserFreq = v; break; }
+        if (id == ParamId.loudnessEnable) { loudnessOn = v != 0; break; }
+        if (id == ParamId.loudnessAmount) { loudnessAmount = v; break; }
         if (id == ParamId.bassHarmonics) { bassHarmonics = v; break; }
         if (id == ParamId.bassHarmonicBlend) { bassHarmonicBlend = v; break; }
         if (id == ParamId.bassSubFreq) { bassSubFloor = v; break; }
@@ -1468,6 +1481,7 @@ class AppModel extends ChangeNotifier {
       'bassmono' => bassmonoOn,
       'gate' => gateOn,
       'filter' => filterOn,
+      'loudness' => loudnessOn,
       'haas' => haasOn,
       'exciter' => exciterOn,
       'bass' => bassOn,
@@ -1495,6 +1509,8 @@ class AppModel extends ChangeNotifier {
         setGateEnabled(!gateOn);
       case 'filter':
         setFilterEnabled(!filterOn);
+      case 'loudness':
+        setLoudnessEnabled(!loudnessOn);
       case 'haas':
         setHaasEnabled(!haasOn);
       case 'exciter':
@@ -2053,6 +2069,19 @@ class AppModel extends ChangeNotifier {
   void setDeesserAmount(double v) {
     deesserAmount = v.clamp(0.0, 1.0);
     setFloat(ParamId.deesserAmount, deesserAmount);
+    notifyListeners();
+  }
+
+  /// 响度补偿：信号越静，低频 + 高频补得越多（简化等响曲线）。
+  void setLoudnessEnabled(bool on) {
+    loudnessOn = on;
+    setInt(ParamId.loudnessEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setLoudnessAmount(double v) {
+    loudnessAmount = v.clamp(0.0, 1.0);
+    setFloat(ParamId.loudnessAmount, loudnessAmount);
     notifyListeners();
   }
 

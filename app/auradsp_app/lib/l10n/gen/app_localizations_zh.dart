@@ -743,6 +743,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stExciter => '激励器';
 
   @override
+  String get stLoudness => '响度补偿';
+
+  @override
+  String get loudnessHint => '小音量自动补低频和高频，大音量直通';
+
+  @override
+  String get loudnessAmount => '补偿强度';
+
+  @override
   String get exciterHint => '给高频加谐波，压缩音频的空气感来源';
 
   @override

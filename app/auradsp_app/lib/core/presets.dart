@@ -346,6 +346,11 @@ abstract final class PresetLibrary {
           'freq': m.deesserFreq,
           'amount': m.deesserAmount,
         },
+        // 响度补偿（Stage 3 后 / 安全钳位前）
+        'loudness': {
+          'enable': m.loudnessOn,
+          'amount': m.loudnessAmount,
+        },
         // 独立滤波器（gate 后 / bassmono 前）
         'filter': {
           'enable': m.filterOn,
@@ -674,6 +679,13 @@ abstract final class PresetLibrary {
       if (ds['freq'] != null) m.setDeesserFreq((ds['freq'] as num).toDouble());
       if (ds['amount'] != null) m.setDeesserAmount((ds['amount'] as num).toDouble());
       if (ds['enable'] != null) m.setDeesserEnabled(ds['enable'] as bool);
+    }
+
+    // 8.11 响度补偿
+    final ld = (p['loudness'] as Map<String, dynamic>?) ?? {};
+    if (ld.isNotEmpty) {
+      if (ld['amount'] != null) m.setLoudnessAmount((ld['amount'] as num).toDouble());
+      if (ld['enable'] != null) m.setLoudnessEnabled(ld['enable'] as bool);
     }
 
     // 8.10 独立滤波器（参数先行，enable 最后）

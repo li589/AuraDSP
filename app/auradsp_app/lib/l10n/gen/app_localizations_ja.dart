@@ -744,6 +744,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stExciter => 'エキサイター';
 
   @override
+  String get stLoudness => 'ラウドネス';
+
+  @override
+  String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
+
+  @override
+  String get loudnessAmount => '補正量';
+
+  @override
   String get exciterHint => '高域に倍音を足し空気感を復元';
 
   @override
