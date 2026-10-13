@@ -13,6 +13,10 @@ add_library(auradsp_engine SHARED
     ${ENGINE_C}
     "${API}/auradsp_engine.cpp"
     "${API}/auradsp_plugin_host.cpp"
+    "${API}/host_gui.cpp"
+    "${API}/host_metadata_scan.cpp"
+    "${API}/host_instances.cpp"
+    "${API}/host_slots.cpp"
     "${API}/auradsp_engine.def"
 )
 
@@ -40,6 +44,10 @@ target_link_libraries(auradsp_engine PRIVATE version)
 add_executable(test_plugin_direct
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/test_plugin_direct.cpp"
     "${API}/auradsp_plugin_host.cpp"
+    "${API}/host_gui.cpp"
+    "${API}/host_metadata_scan.cpp"
+    "${API}/host_instances.cpp"
+    "${API}/host_slots.cpp"
 )
 target_include_directories(test_plugin_direct PRIVATE
     "${API}"
