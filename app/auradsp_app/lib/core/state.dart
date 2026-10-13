@@ -1804,6 +1804,7 @@ class AppModel extends ChangeNotifier {
   }
 
   void selectReverbPreset(int id) {
+    final wasCustom = reverbPreset == -2;
     reverbPreset = id;
     if (id >= 0 && id <= 7) {
       final (decay, damp, wet, dry, roomSize, width) = switch (id) {
@@ -1829,8 +1830,12 @@ class AppModel extends ChangeNotifier {
       setFloat('freeverb.dry', dry);
       setReverbPreset(id);
     } else if (id == -1) {
+      // Issue #3 方案A：从自定义态（-2）关闭只关声音，不丢标记。
+      // engine 照常收 -1（vendor 关）+ fv 关；Dart 侧保留 -2，开回来走 -2 分支
+      // 恢复自定义参数。从 preset/-1 关则照旧落 -1。
       setReverbPreset(-1);
       setFreeverbEnabled(false);
+      if (wasCustom) reverbPreset = -2;
     } else if (id == -2) {
       // 自定义模式
       setFreeverbEnabled(true);
