@@ -95,6 +95,28 @@ abstract final class ParamId {
   static const deesserEnable = 'deesser.enable';
   static const deesserFreq = 'deesser.freq';
   static const deesserAmount = 'deesser.amount';
+  // 全参数动态EQ（3 段 Low shelf / Mid bell / High shelf）
+  static const dyneqEnable = 'dyneq.enable';
+  static const dyneqAttack = 'dyneq.attack';
+  static const dyneqRelease = 'dyneq.release';
+  static const dyneqLowEnable = 'dyneq.low.enable';
+  static const dyneqLowFreq = 'dyneq.low.freq';
+  static const dyneqLowQ = 'dyneq.low.q';
+  static const dyneqLowGain = 'dyneq.low.gain';
+  static const dyneqLowRange = 'dyneq.low.range';
+  static const dyneqLowThreshold = 'dyneq.low.threshold';
+  static const dyneqMidEnable = 'dyneq.mid.enable';
+  static const dyneqMidFreq = 'dyneq.mid.freq';
+  static const dyneqMidQ = 'dyneq.mid.q';
+  static const dyneqMidGain = 'dyneq.mid.gain';
+  static const dyneqMidRange = 'dyneq.mid.range';
+  static const dyneqMidThreshold = 'dyneq.mid.threshold';
+  static const dyneqHighEnable = 'dyneq.high.enable';
+  static const dyneqHighFreq = 'dyneq.high.freq';
+  static const dyneqHighQ = 'dyneq.high.q';
+  static const dyneqHighGain = 'dyneq.high.gain';
+  static const dyneqHighRange = 'dyneq.high.range';
+  static const dyneqHighThreshold = 'dyneq.high.threshold';
   // 响度补偿（信号自适应等响度）
   static const loudnessEnable = 'loudness.enable';
   static const loudnessAmount = 'loudness.amount';

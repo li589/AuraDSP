@@ -25,6 +25,7 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_psycho.cpp"
     "${API}/dsp/dsp_loudness.cpp"
     "${API}/dsp/dsp_freeverb.cpp"
+    "${API}/dsp/dsp_dyneq.cpp"
     "${API}/auradsp_plugin_host.cpp"
     "${API}/host_gui.cpp"
     "${API}/host_metadata_scan.cpp"

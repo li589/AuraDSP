@@ -346,6 +346,36 @@ abstract final class PresetLibrary {
           'freq': m.deesserFreq,
           'amount': m.deesserAmount,
         },
+        // 全参数动态EQ（3 段；参数先行，enable 最后——apply 侧同序）
+        'dyneq': {
+          'enable': m.dyneqOn,
+          'attack': m.dyneqAttackMs,
+          'release': m.dyneqReleaseMs,
+          'low': {
+            'enable': m.dyneqLowOn,
+            'freq': m.dyneqLowFreq,
+            'q': m.dyneqLowQ,
+            'gain': m.dyneqLowGain,
+            'range': m.dyneqLowRange,
+            'threshold': m.dyneqLowThreshold,
+          },
+          'mid': {
+            'enable': m.dyneqMidOn,
+            'freq': m.dyneqMidFreq,
+            'q': m.dyneqMidQ,
+            'gain': m.dyneqMidGain,
+            'range': m.dyneqMidRange,
+            'threshold': m.dyneqMidThreshold,
+          },
+          'high': {
+            'enable': m.dyneqHighOn,
+            'freq': m.dyneqHighFreq,
+            'q': m.dyneqHighQ,
+            'gain': m.dyneqHighGain,
+            'range': m.dyneqHighRange,
+            'threshold': m.dyneqHighThreshold,
+          },
+        },
         // 响度补偿（Stage 3 后 / 安全钳位前）
         'loudness': {
           'enable': m.loudnessOn,
@@ -679,6 +709,32 @@ abstract final class PresetLibrary {
       if (ds['freq'] != null) m.setDeesserFreq((ds['freq'] as num).toDouble());
       if (ds['amount'] != null) m.setDeesserAmount((ds['amount'] as num).toDouble());
       if (ds['enable'] != null) m.setDeesserEnabled(ds['enable'] as bool);
+    }
+
+    // 8.10 全参数动态EQ（参数先行，段 enable 随后，总 enable 最后）
+    final dq = (p['dyneq'] as Map<String, dynamic>?) ?? {};
+    if (dq.isNotEmpty) {
+      if (dq['attack'] != null) m.setDyneqAttack((dq['attack'] as num).toDouble());
+      if (dq['release'] != null) m.setDyneqRelease((dq['release'] as num).toDouble());
+      void applyBand(String key, void Function(bool) setEn, void Function(double) setF,
+          void Function(double) setQ, void Function(double) setG,
+          void Function(double) setR, void Function(double) setT) {
+        final b = (dq[key] as Map<String, dynamic>?) ?? {};
+        if (b.isEmpty) return;
+        if (b['freq'] != null) setF((b['freq'] as num).toDouble());
+        if (b['q'] != null) setQ((b['q'] as num).toDouble());
+        if (b['gain'] != null) setG((b['gain'] as num).toDouble());
+        if (b['range'] != null) setR((b['range'] as num).toDouble());
+        if (b['threshold'] != null) setT((b['threshold'] as num).toDouble());
+        if (b['enable'] != null) setEn(b['enable'] as bool);
+      }
+      applyBand('low', m.setDyneqLowEnabled, m.setDyneqLowFreq, m.setDyneqLowQ,
+          m.setDyneqLowGain, m.setDyneqLowRange, m.setDyneqLowThreshold);
+      applyBand('mid', m.setDyneqMidEnabled, m.setDyneqMidFreq, m.setDyneqMidQ,
+          m.setDyneqMidGain, m.setDyneqMidRange, m.setDyneqMidThreshold);
+      applyBand('high', m.setDyneqHighEnabled, m.setDyneqHighFreq, m.setDyneqHighQ,
+          m.setDyneqHighGain, m.setDyneqHighRange, m.setDyneqHighThreshold);
+      if (dq['enable'] != null) m.setDyneqEnabled(dq['enable'] as bool);
     }
 
     // 8.11 响度补偿

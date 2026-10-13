@@ -747,6 +747,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stLoudness => 'ラウドネス';
 
   @override
+  String get stDyneq => 'ダイナミックEQ';
+
+  @override
+  String get dyneqTitle => 'ダイナミックイコライザー';
+
+  @override
+  String get dyneqHint => '3バンドフルパラメトリックダイナミックEQ：スレッショルド超過で減衰、以下ではスタティック整形';
+
+  @override
+  String get dyneqBandLow => '低域バンド';
+
+  @override
+  String get dyneqBandMid => '中域バンド';
+
+  @override
+  String get dyneqBandHigh => '高域バンド';
+
+  @override
+  String get dyneqFreq => '周波数';
+
+  @override
+  String get dyneqQ => 'Q';
+
+  @override
+  String get dyneqGain => 'スタティックゲイン';
+
+  @override
+  String get dyneqRange => 'ダイナミックレンジ';
+
+  @override
+  String get dyneqThreshold => 'スレッショルド';
+
+  @override
+  String get dyneqAttack => 'アタック';
+
+  @override
+  String get dyneqRelease => 'リリース';
+
+  @override
   String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
 
   @override

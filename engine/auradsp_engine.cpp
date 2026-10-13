@@ -544,6 +544,62 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         filter_recalc(h);
         return AURADSP_OK;
     }
+    /* ---- 全参数动态EQ（系数每块现算，只存值；钳位与 dsp_dyneq.cpp 双保险） ---- */
+    if (!strcmp(id, "dyneq.enable") && bytes >= 4) {
+        h->p.dyneq_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "dyneq.attack") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.1f) v = 0.1f; if (v > 100.0f) v = 100.0f;
+        h->p.dyneq_attack.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "dyneq.release") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 10.0f) v = 10.0f; if (v > 1000.0f) v = 1000.0f;
+        h->p.dyneq_release.store(v);
+        return AURADSP_OK;
+    }
+#define DYNEQ_BAND_SET(tag, P, FMIN, FMAX, QMIN, QMAX) \
+    if (!strcmp(id, "dyneq." tag ".enable") && bytes >= 4) { \
+        h->p.dyneq_##P##_enable.store(*(const int32_t*)value ? 1 : 0); \
+        return AURADSP_OK; \
+    } \
+    if (!strcmp(id, "dyneq." tag ".freq") && bytes >= 4) { \
+        float v = *(const float*)value; \
+        if (v < (FMIN)) v = (FMIN); if (v > (FMAX)) v = (FMAX); \
+        h->p.dyneq_##P##_freq.store(v); \
+        return AURADSP_OK; \
+    } \
+    if (!strcmp(id, "dyneq." tag ".q") && bytes >= 4) { \
+        float v = *(const float*)value; \
+        if (v < (QMIN)) v = (QMIN); if (v > (QMAX)) v = (QMAX); \
+        h->p.dyneq_##P##_q.store(v); \
+        return AURADSP_OK; \
+    } \
+    if (!strcmp(id, "dyneq." tag ".gain") && bytes >= 4) { \
+        float v = *(const float*)value; \
+        if (v < -12.0f) v = -12.0f; if (v > 12.0f) v = 12.0f; \
+        h->p.dyneq_##P##_gain.store(v); \
+        return AURADSP_OK; \
+    } \
+    if (!strcmp(id, "dyneq." tag ".range") && bytes >= 4) { \
+        float v = *(const float*)value; \
+        if (v < 0.0f) v = 0.0f; if (v > 24.0f) v = 24.0f; \
+        h->p.dyneq_##P##_range.store(v); \
+        return AURADSP_OK; \
+    } \
+    if (!strcmp(id, "dyneq." tag ".threshold") && bytes >= 4) { \
+        float v = *(const float*)value; \
+        if (v < -60.0f) v = -60.0f; if (v > 0.0f) v = 0.0f; \
+        h->p.dyneq_##P##_threshold.store(v); \
+        return AURADSP_OK; \
+    }
+    DYNEQ_BAND_SET("low", l, 20.0f, 500.0f, 0.5f, 2.0f)
+    DYNEQ_BAND_SET("mid", m, 200.0f, 8000.0f, 0.3f, 10.0f)
+    DYNEQ_BAND_SET("high", h, 2000.0f, 20000.0f, 0.5f, 2.0f)
+#undef DYNEQ_BAND_SET
     /* ---- 心理声学低音（谐波合成三滑块终于有引擎了） ---- */
     if (!strcmp(id, "bass.harmonics") && bytes >= 4) {
         float v = *(const float*)value;
@@ -1081,6 +1137,20 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "eq.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.eq_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.outgain") && bytes >= 4) { *(float*)out_value = h->p.tube_outgain.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "dyneq.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.dyneq_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "dyneq.attack") && bytes >= 4) { *(float*)out_value = h->p.dyneq_attack.load(); return AURADSP_OK; }
+    if (!strcmp(id, "dyneq.release") && bytes >= 4) { *(float*)out_value = h->p.dyneq_release.load(); return AURADSP_OK; }
+#define DYNEQ_BAND_GET(tag, P) \
+    if (!strcmp(id, "dyneq." tag ".enable") && bytes >= 4) { *(int32_t*)out_value = h->p.dyneq_##P##_enable.load(); return AURADSP_OK; } \
+    if (!strcmp(id, "dyneq." tag ".freq") && bytes >= 4) { *(float*)out_value = h->p.dyneq_##P##_freq.load(); return AURADSP_OK; } \
+    if (!strcmp(id, "dyneq." tag ".q") && bytes >= 4) { *(float*)out_value = h->p.dyneq_##P##_q.load(); return AURADSP_OK; } \
+    if (!strcmp(id, "dyneq." tag ".gain") && bytes >= 4) { *(float*)out_value = h->p.dyneq_##P##_gain.load(); return AURADSP_OK; } \
+    if (!strcmp(id, "dyneq." tag ".range") && bytes >= 4) { *(float*)out_value = h->p.dyneq_##P##_range.load(); return AURADSP_OK; } \
+    if (!strcmp(id, "dyneq." tag ".threshold") && bytes >= 4) { *(float*)out_value = h->p.dyneq_##P##_threshold.load(); return AURADSP_OK; }
+    DYNEQ_BAND_GET("low", l)
+    DYNEQ_BAND_GET("mid", m)
+    DYNEQ_BAND_GET("high", h)
+#undef DYNEQ_BAND_GET
     if (!strcmp(id, "comp.outgain") && bytes >= 4) { *(float*)out_value = h->p.comp_outgain.load(); return AURADSP_OK; }
     if (!strcmp(id, "comp.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.outgain") && bytes >= 4) { *(float*)out_value = h->p.reverb_outgain.load(); return AURADSP_OK; }

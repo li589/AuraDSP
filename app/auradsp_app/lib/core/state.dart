@@ -139,6 +139,25 @@ abstract class ParamDefaults {
   static const double deesserFreq = 6000.0;    // Hz [2000,10000]
   static const double deesserAmount = 0.5;     // [0,1]
 
+  // 全参数动态EQ（3 段）
+  static const double dyneqAttack = 2.0;       // ms [0.1,100]
+  static const double dyneqRelease = 120.0;    // ms [10,1000]
+  static const double dyneqLowFreq = 120.0;    // Hz [20,500]
+  static const double dyneqLowQ = 0.707;       // shelf S [0.5,2]
+  static const double dyneqLowGain = 0.0;      // dB [-12,12]
+  static const double dyneqLowRange = 6.0;     // dB [0,24]
+  static const double dyneqLowThreshold = -30.0; // dBFS [-60,0]
+  static const double dyneqMidFreq = 1000.0;   // Hz [200,8000]
+  static const double dyneqMidQ = 1.0;         // bell Q [0.3,10]
+  static const double dyneqMidGain = 0.0;
+  static const double dyneqMidRange = 6.0;
+  static const double dyneqMidThreshold = -30.0;
+  static const double dyneqHighFreq = 6000.0;  // Hz [2000,20000]
+  static const double dyneqHighQ = 0.707;
+  static const double dyneqHighGain = 0.0;
+  static const double dyneqHighRange = 6.0;
+  static const double dyneqHighThreshold = -30.0;
+
   // 响度补偿
   static const double loudnessAmount = 0.5;    // [0,1]
   static const bool arbmagAutoGain = false;
@@ -294,6 +313,27 @@ class AppModel extends ChangeNotifier {
   bool gateAutoGain = false;
   bool deesserOn = false;
   double deesserFreq = 6000, deesserAmount = 0.5;
+
+  // 全参数动态EQ（3 段；默认全关）
+  bool dyneqOn = false;
+  double dyneqAttackMs = ParamDefaults.dyneqAttack;
+  double dyneqReleaseMs = ParamDefaults.dyneqRelease;
+  bool dyneqLowOn = false, dyneqMidOn = false, dyneqHighOn = false;
+  double dyneqLowFreq = ParamDefaults.dyneqLowFreq;
+  double dyneqLowQ = ParamDefaults.dyneqLowQ;
+  double dyneqLowGain = ParamDefaults.dyneqLowGain;
+  double dyneqLowRange = ParamDefaults.dyneqLowRange;
+  double dyneqLowThreshold = ParamDefaults.dyneqLowThreshold;
+  double dyneqMidFreq = ParamDefaults.dyneqMidFreq;
+  double dyneqMidQ = ParamDefaults.dyneqMidQ;
+  double dyneqMidGain = ParamDefaults.dyneqMidGain;
+  double dyneqMidRange = ParamDefaults.dyneqMidRange;
+  double dyneqMidThreshold = ParamDefaults.dyneqMidThreshold;
+  double dyneqHighFreq = ParamDefaults.dyneqHighFreq;
+  double dyneqHighQ = ParamDefaults.dyneqHighQ;
+  double dyneqHighGain = ParamDefaults.dyneqHighGain;
+  double dyneqHighRange = ParamDefaults.dyneqHighRange;
+  double dyneqHighThreshold = ParamDefaults.dyneqHighThreshold;
 
   // 响度补偿（Stage 3 后 / 安全钳位前，最后一道音色工序）
   bool loudnessOn = false;
@@ -783,6 +823,27 @@ class AppModel extends ChangeNotifier {
         if (raw['deesserEnable'] != null) deesserOn = (raw['deesserEnable'] as int) != 0;
         if (raw['deesserFreq'] != null) deesserFreq = (raw['deesserFreq'] as num).toDouble();
         if (raw['deesserAmount'] != null) deesserAmount = (raw['deesserAmount'] as num).toDouble();
+        if (raw['dyneqEnable'] != null) dyneqOn = (raw['dyneqEnable'] as int) != 0;
+        if (raw['dyneqAttack'] != null) dyneqAttackMs = (raw['dyneqAttack'] as num).toDouble();
+        if (raw['dyneqRelease'] != null) dyneqReleaseMs = (raw['dyneqRelease'] as num).toDouble();
+        if (raw['dyneqLowEnable'] != null) dyneqLowOn = (raw['dyneqLowEnable'] as int) != 0;
+        if (raw['dyneqLowFreq'] != null) dyneqLowFreq = (raw['dyneqLowFreq'] as num).toDouble();
+        if (raw['dyneqLowQ'] != null) dyneqLowQ = (raw['dyneqLowQ'] as num).toDouble();
+        if (raw['dyneqLowGain'] != null) dyneqLowGain = (raw['dyneqLowGain'] as num).toDouble();
+        if (raw['dyneqLowRange'] != null) dyneqLowRange = (raw['dyneqLowRange'] as num).toDouble();
+        if (raw['dyneqLowThreshold'] != null) dyneqLowThreshold = (raw['dyneqLowThreshold'] as num).toDouble();
+        if (raw['dyneqMidEnable'] != null) dyneqMidOn = (raw['dyneqMidEnable'] as int) != 0;
+        if (raw['dyneqMidFreq'] != null) dyneqMidFreq = (raw['dyneqMidFreq'] as num).toDouble();
+        if (raw['dyneqMidQ'] != null) dyneqMidQ = (raw['dyneqMidQ'] as num).toDouble();
+        if (raw['dyneqMidGain'] != null) dyneqMidGain = (raw['dyneqMidGain'] as num).toDouble();
+        if (raw['dyneqMidRange'] != null) dyneqMidRange = (raw['dyneqMidRange'] as num).toDouble();
+        if (raw['dyneqMidThreshold'] != null) dyneqMidThreshold = (raw['dyneqMidThreshold'] as num).toDouble();
+        if (raw['dyneqHighEnable'] != null) dyneqHighOn = (raw['dyneqHighEnable'] as int) != 0;
+        if (raw['dyneqHighFreq'] != null) dyneqHighFreq = (raw['dyneqHighFreq'] as num).toDouble();
+        if (raw['dyneqHighQ'] != null) dyneqHighQ = (raw['dyneqHighQ'] as num).toDouble();
+        if (raw['dyneqHighGain'] != null) dyneqHighGain = (raw['dyneqHighGain'] as num).toDouble();
+        if (raw['dyneqHighRange'] != null) dyneqHighRange = (raw['dyneqHighRange'] as num).toDouble();
+        if (raw['dyneqHighThreshold'] != null) dyneqHighThreshold = (raw['dyneqHighThreshold'] as num).toDouble();
         if (raw['loudnessEnable'] != null) loudnessOn = (raw['loudnessEnable'] as int) != 0;
         if (raw['loudnessAmount'] != null) loudnessAmount = (raw['loudnessAmount'] as num).toDouble();
         if (raw['bassHarmonics'] != null) bassHarmonics = (raw['bassHarmonics'] as num).toDouble();
@@ -1193,6 +1254,28 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
       setFloat(ParamId.deesserFreq, deesserFreq);
       setFloat(ParamId.deesserAmount, deesserAmount);
+      // 全参数动态EQ
+      setInt(ParamId.dyneqEnable, dyneqOn ? 1 : 0);
+      setFloat(ParamId.dyneqAttack, dyneqAttackMs);
+      setFloat(ParamId.dyneqRelease, dyneqReleaseMs);
+      setInt(ParamId.dyneqLowEnable, dyneqLowOn ? 1 : 0);
+      setFloat(ParamId.dyneqLowFreq, dyneqLowFreq);
+      setFloat(ParamId.dyneqLowQ, dyneqLowQ);
+      setFloat(ParamId.dyneqLowGain, dyneqLowGain);
+      setFloat(ParamId.dyneqLowRange, dyneqLowRange);
+      setFloat(ParamId.dyneqLowThreshold, dyneqLowThreshold);
+      setInt(ParamId.dyneqMidEnable, dyneqMidOn ? 1 : 0);
+      setFloat(ParamId.dyneqMidFreq, dyneqMidFreq);
+      setFloat(ParamId.dyneqMidQ, dyneqMidQ);
+      setFloat(ParamId.dyneqMidGain, dyneqMidGain);
+      setFloat(ParamId.dyneqMidRange, dyneqMidRange);
+      setFloat(ParamId.dyneqMidThreshold, dyneqMidThreshold);
+      setInt(ParamId.dyneqHighEnable, dyneqHighOn ? 1 : 0);
+      setFloat(ParamId.dyneqHighFreq, dyneqHighFreq);
+      setFloat(ParamId.dyneqHighQ, dyneqHighQ);
+      setFloat(ParamId.dyneqHighGain, dyneqHighGain);
+      setFloat(ParamId.dyneqHighRange, dyneqHighRange);
+      setFloat(ParamId.dyneqHighThreshold, dyneqHighThreshold);
       setInt(ParamId.loudnessEnable, loudnessOn ? 1 : 0);
       setFloat(ParamId.loudnessAmount, loudnessAmount);
       setFloat(ParamId.bassHarmonics, bassHarmonics);
@@ -1391,6 +1474,27 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.filterFreq) { filterFreq = v; break; }
         if (id == ParamId.filterQ) { filterQ = v; break; }
         if (id == ParamId.deesserAmount) { deesserAmount = v; break; }
+        if (id == ParamId.dyneqEnable) { dyneqOn = v != 0; break; }
+        if (id == ParamId.dyneqAttack) { dyneqAttackMs = v; break; }
+        if (id == ParamId.dyneqRelease) { dyneqReleaseMs = v; break; }
+        if (id == ParamId.dyneqLowEnable) { dyneqLowOn = v != 0; break; }
+        if (id == ParamId.dyneqLowFreq) { dyneqLowFreq = v; break; }
+        if (id == ParamId.dyneqLowQ) { dyneqLowQ = v; break; }
+        if (id == ParamId.dyneqLowGain) { dyneqLowGain = v; break; }
+        if (id == ParamId.dyneqLowRange) { dyneqLowRange = v; break; }
+        if (id == ParamId.dyneqLowThreshold) { dyneqLowThreshold = v; break; }
+        if (id == ParamId.dyneqMidEnable) { dyneqMidOn = v != 0; break; }
+        if (id == ParamId.dyneqMidFreq) { dyneqMidFreq = v; break; }
+        if (id == ParamId.dyneqMidQ) { dyneqMidQ = v; break; }
+        if (id == ParamId.dyneqMidGain) { dyneqMidGain = v; break; }
+        if (id == ParamId.dyneqMidRange) { dyneqMidRange = v; break; }
+        if (id == ParamId.dyneqMidThreshold) { dyneqMidThreshold = v; break; }
+        if (id == ParamId.dyneqHighEnable) { dyneqHighOn = v != 0; break; }
+        if (id == ParamId.dyneqHighFreq) { dyneqHighFreq = v; break; }
+        if (id == ParamId.dyneqHighQ) { dyneqHighQ = v; break; }
+        if (id == ParamId.dyneqHighGain) { dyneqHighGain = v; break; }
+        if (id == ParamId.dyneqHighRange) { dyneqHighRange = v; break; }
+        if (id == ParamId.dyneqHighThreshold) { dyneqHighThreshold = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1499,6 +1603,7 @@ class AppModel extends ChangeNotifier {
       'comp' => compOn,
       'bassmono' => bassmonoOn,
       'gate' => gateOn,
+      'dyneq' => dyneqOn,
       'filter' => filterOn,
       'loudness' => loudnessOn,
       'haas' => haasOn,
@@ -1526,6 +1631,8 @@ class AppModel extends ChangeNotifier {
         setBassmonoEnabled(!bassmonoOn);
       case 'gate':
         setGateEnabled(!gateOn);
+      case 'dyneq':
+        setDyneqEnabled(!dyneqOn);
       case 'filter':
         setFilterEnabled(!filterOn);
       case 'loudness':
@@ -2099,6 +2206,136 @@ class AppModel extends ChangeNotifier {
   void setDeesserAmount(double v) {
     deesserAmount = v.clamp(0.0, 1.0);
     setFloat(ParamId.deesserAmount, deesserAmount);
+    notifyListeners();
+  }
+
+  /// 全参数动态EQ：总开关 + 包络时间 + 3 段 ×（开关/频率/Q/静态增益/动态量/阈值）。
+  void setDyneqEnabled(bool on) {
+    dyneqOn = on;
+    setInt(ParamId.dyneqEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setDyneqAttack(double v) {
+    dyneqAttackMs = v.clamp(0.1, 100.0);
+    setFloat(ParamId.dyneqAttack, dyneqAttackMs);
+    notifyListeners();
+  }
+
+  void setDyneqRelease(double v) {
+    dyneqReleaseMs = v.clamp(10.0, 1000.0);
+    setFloat(ParamId.dyneqRelease, dyneqReleaseMs);
+    notifyListeners();
+  }
+
+  void setDyneqLowEnabled(bool on) {
+    dyneqLowOn = on;
+    setInt(ParamId.dyneqLowEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+
+  void setDyneqLowFreq(double v) {
+    dyneqLowFreq = v.clamp(20.0, 500.0);
+    setFloat(ParamId.dyneqLowFreq, dyneqLowFreq);
+    notifyListeners();
+  }
+
+  void setDyneqLowQ(double v) {
+    dyneqLowQ = v.clamp(0.5, 2.0);
+    setFloat(ParamId.dyneqLowQ, dyneqLowQ);
+    notifyListeners();
+  }
+
+  void setDyneqLowGain(double v) {
+    dyneqLowGain = v.clamp(-12.0, 12.0);
+    setFloat(ParamId.dyneqLowGain, dyneqLowGain);
+    notifyListeners();
+  }
+
+  void setDyneqLowRange(double v) {
+    dyneqLowRange = v.clamp(0.0, 24.0);
+    setFloat(ParamId.dyneqLowRange, dyneqLowRange);
+    notifyListeners();
+  }
+
+  void setDyneqLowThreshold(double v) {
+    dyneqLowThreshold = v.clamp(-60.0, 0.0);
+    setFloat(ParamId.dyneqLowThreshold, dyneqLowThreshold);
+    notifyListeners();
+  }
+
+  void setDyneqMidEnabled(bool on) {
+    dyneqMidOn = on;
+    setInt(ParamId.dyneqMidEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+
+  void setDyneqMidFreq(double v) {
+    dyneqMidFreq = v.clamp(200.0, 8000.0);
+    setFloat(ParamId.dyneqMidFreq, dyneqMidFreq);
+    notifyListeners();
+  }
+
+  void setDyneqMidQ(double v) {
+    dyneqMidQ = v.clamp(0.3, 10.0);
+    setFloat(ParamId.dyneqMidQ, dyneqMidQ);
+    notifyListeners();
+  }
+
+  void setDyneqMidGain(double v) {
+    dyneqMidGain = v.clamp(-12.0, 12.0);
+    setFloat(ParamId.dyneqMidGain, dyneqMidGain);
+    notifyListeners();
+  }
+
+  void setDyneqMidRange(double v) {
+    dyneqMidRange = v.clamp(0.0, 24.0);
+    setFloat(ParamId.dyneqMidRange, dyneqMidRange);
+    notifyListeners();
+  }
+
+  void setDyneqMidThreshold(double v) {
+    dyneqMidThreshold = v.clamp(-60.0, 0.0);
+    setFloat(ParamId.dyneqMidThreshold, dyneqMidThreshold);
+    notifyListeners();
+  }
+
+  void setDyneqHighEnabled(bool on) {
+    dyneqHighOn = on;
+    setInt(ParamId.dyneqHighEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+
+  void setDyneqHighFreq(double v) {
+    dyneqHighFreq = v.clamp(2000.0, 20000.0);
+    setFloat(ParamId.dyneqHighFreq, dyneqHighFreq);
+    notifyListeners();
+  }
+
+  void setDyneqHighQ(double v) {
+    dyneqHighQ = v.clamp(0.5, 2.0);
+    setFloat(ParamId.dyneqHighQ, dyneqHighQ);
+    notifyListeners();
+  }
+
+  void setDyneqHighGain(double v) {
+    dyneqHighGain = v.clamp(-12.0, 12.0);
+    setFloat(ParamId.dyneqHighGain, dyneqHighGain);
+    notifyListeners();
+  }
+
+  void setDyneqHighRange(double v) {
+    dyneqHighRange = v.clamp(0.0, 24.0);
+    setFloat(ParamId.dyneqHighRange, dyneqHighRange);
+    notifyListeners();
+  }
+
+  void setDyneqHighThreshold(double v) {
+    dyneqHighThreshold = v.clamp(-60.0, 0.0);
+    setFloat(ParamId.dyneqHighThreshold, dyneqHighThreshold);
     notifyListeners();
   }
 

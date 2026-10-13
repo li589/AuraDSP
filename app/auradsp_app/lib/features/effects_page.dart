@@ -25,6 +25,7 @@ import 'widgets.dart';
 
 part 'effects/input_card.dart';
 part 'effects/gate_card.dart';
+part 'effects/dyneq_card.dart';
 part 'effects/filter_card.dart';
 part 'effects/comp_card.dart';
 part 'effects/bass_card.dart';
@@ -66,6 +67,10 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _FilterCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
+          builder: (_, _) => _DyneCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,

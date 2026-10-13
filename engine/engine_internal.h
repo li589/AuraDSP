@@ -180,6 +180,29 @@ struct Params {
     std::atomic<int32_t>  filter_type{0};     /* 0=HP 1=LP 2=BP */
     std::atomic<float>    filter_freq{80.0f}; /* Hz [20,20000] */
     std::atomic<float>    filter_q{0.707f};   /* [0.3,10] */
+    /* 全参数动态EQ（3 段：Low shelf / Mid bell / High shelf；pre-vendor 音色修整）。
+     * 每段：静态 gain（常时）+ range/threshold（超阈后最大附加衰减）；attack/release 全局共用。 */
+    std::atomic<int32_t>  dyneq_enable{0};
+    std::atomic<float>    dyneq_attack{2.0f};   /* ms [0.1,100] */
+    std::atomic<float>    dyneq_release{120.0f}; /* ms [10,1000] */
+    std::atomic<int32_t>  dyneq_l_enable{0};
+    std::atomic<float>    dyneq_l_freq{120.0f};  /* Hz [20,500] */
+    std::atomic<float>    dyneq_l_q{0.707f};     /* shelf 斜率 S [0.5,2] */
+    std::atomic<float>    dyneq_l_gain{0.0f};    /* dB [-12,12] 静态 */
+    std::atomic<float>    dyneq_l_range{6.0f};   /* dB [0,24] 最大动态衰减 */
+    std::atomic<float>    dyneq_l_threshold{-30.0f}; /* dBFS [-60,0] */
+    std::atomic<int32_t>  dyneq_m_enable{0};
+    std::atomic<float>    dyneq_m_freq{1000.0f}; /* Hz [200,8000] */
+    std::atomic<float>    dyneq_m_q{1.0f};       /* bell Q [0.3,10] */
+    std::atomic<float>    dyneq_m_gain{0.0f};
+    std::atomic<float>    dyneq_m_range{6.0f};
+    std::atomic<float>    dyneq_m_threshold{-30.0f};
+    std::atomic<int32_t>  dyneq_h_enable{0};
+    std::atomic<float>    dyneq_h_freq{6000.0f}; /* Hz [2000,20000] */
+    std::atomic<float>    dyneq_h_q{0.707f};
+    std::atomic<float>    dyneq_h_gain{0.0f};
+    std::atomic<float>    dyneq_h_range{6.0f};
+    std::atomic<float>    dyneq_h_threshold{-30.0f};
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -348,6 +371,14 @@ struct auradsp_handle_s {
     float gate_ds_lp_l = 0.0f, gate_ds_lp_r = 0.0f;  /* Deesser 侧链 HP 状态 */
     float gate_ds_env = 0.0f;       /* Deesser 侧链包络 */
     double gate_ag_in = 0.0, gate_ag_out = 0.0, gate_ag_comp = 1.0;
+    /* 全参数动态EQ状态（RT 独占；系数每块现算，无原子系数表）。
+     * 检波：单声道侧链 bell + 峰值包络（立体声联动，防声像漂移）；
+     * 施加：串联 bell/shelf（DF2T 双声道独立状态）。 */
+    struct DyneqBand {
+        double det_z1L = 0, det_z2L = 0, det_z1R = 0, det_z2R = 0; /* 侧链 bell（双声道） */
+        double env = 0;                  /* 峰值包络（取 L/R 最大，立体声联动） */
+        double z1L = 0, z2L = 0, z1R = 0, z2R = 0; /* 静态滤波器状态 */
+    } dyneq_b[3];
     /* 心理声学低音 one-pole 状态（RT 独占；系数值每块现算） */
     float psy_lp_l = 0.0f, psy_lp_r = 0.0f;   /* cutoff LP */
     float psy_sub_l = 0.0f, psy_sub_r = 0.0f; /* subfreq LP */
@@ -413,6 +444,7 @@ void apply_tube(auradsp_handle h);
 void bassmono_process(auradsp_handle h, float* io, int frames);
 void basspsycho_process(auradsp_handle h, float* io, int frames);
 void compute_latency(auradsp_handle h, double* out_ms);
+void dyneq_process(auradsp_handle h, float* io, int frames);
 void emit_viz(auradsp_handle h);
 void exciter_process(auradsp_handle h, float* io, int frames);
 void filter_process(auradsp_handle h, float* io, int frames);

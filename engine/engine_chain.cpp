@@ -386,6 +386,11 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
         shelf_process(h, const_cast<float*>(src), frames);
     }
 
+    /* 全参数动态EQ：shelf 之后、vendor 之前（pre-vendor 音色修整成组）。 */
+    if (h->p.dyneq_enable.load(std::memory_order_relaxed)) {
+        dyneq_process(h, const_cast<float*>(src), frames);
+    }
+
     /* Stage 1: Pre-Vendor（主效果前） */
     process_plugin_slots_stage(h, 1, const_cast<float*>(src), frames);
 

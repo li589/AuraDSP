@@ -766,6 +766,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stLoudness => 'Loudness';
 
   @override
+  String get stDyneq => 'Dynamic EQ';
+
+  @override
+  String get dyneqTitle => 'Dynamic Equalizer';
+
+  @override
+  String get dyneqHint =>
+      '3-band fully parametric dynamic EQ: cuts band energy above threshold, static shaping below';
+
+  @override
+  String get dyneqBandLow => 'Low Band';
+
+  @override
+  String get dyneqBandMid => 'Mid Band';
+
+  @override
+  String get dyneqBandHigh => 'High Band';
+
+  @override
+  String get dyneqFreq => 'Frequency';
+
+  @override
+  String get dyneqQ => 'Q';
+
+  @override
+  String get dyneqGain => 'Static Gain';
+
+  @override
+  String get dyneqRange => 'Dynamic Range';
+
+  @override
+  String get dyneqThreshold => 'Threshold';
+
+  @override
+  String get dyneqAttack => 'Attack';
+
+  @override
+  String get dyneqRelease => 'Release';
+
+  @override
   String get loudnessHint =>
       'Auto boosts lows and highs at quiet levels, transparent when loud';
 
