@@ -1069,25 +1069,25 @@ abstract class AppLocalizations {
   /// No description provided for @bassModeDynamic.
   ///
   /// In zh, this message translates to:
-  /// **'动态增强'**
+  /// **'自然低音'**
   String get bassModeDynamic;
 
   /// No description provided for @bassModeShelf.
   ///
   /// In zh, this message translates to:
-  /// **'纯净低架'**
+  /// **'纯净低音'**
   String get bassModeShelf;
 
   /// No description provided for @bassModeHarmonic.
   ///
   /// In zh, this message translates to:
-  /// **'心理声学谐波'**
+  /// **'超重低音'**
   String get bassModeHarmonic;
 
   /// No description provided for @bassModeTooltip.
   ///
   /// In zh, this message translates to:
-  /// **'低音增强模式：\n• 动态增强：自适应信号能量动态提升低频冲击感，防爆音失真\n• 纯净低架：模拟硬件平直提升低频，保真度高\n• 心理声学谐波：注入高次谐波，利用人耳基频缺失错觉在小单元产生深沉低音'**
+  /// **'低音增强模式：\n• 自然低音：vendor 直给提升，不加谐波\n• 纯净低音：轻量谐波（0.35），干净有形体\n• 超重低音：重谐波（0.7），小单元也出下潜'**
   String get bassModeTooltip;
 
   /// No description provided for @bassCutoff.
@@ -1419,6 +1419,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'噪声门'**
   String get stGate;
+
+  /// No description provided for @stFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'滤波器'**
+  String get stFilter;
+
+  /// No description provided for @filterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'gate 之后的第一道整形：HP 去隆隆声，LP/BP 按需'**
+  String get filterHint;
+
+  /// No description provided for @filterType.
+  ///
+  /// In zh, this message translates to:
+  /// **'类型'**
+  String get filterType;
+
+  /// No description provided for @filterHP.
+  ///
+  /// In zh, this message translates to:
+  /// **'高通'**
+  String get filterHP;
+
+  /// No description provided for @filterLP.
+  ///
+  /// In zh, this message translates to:
+  /// **'低通'**
+  String get filterLP;
+
+  /// No description provided for @filterBP.
+  ///
+  /// In zh, this message translates to:
+  /// **'带通'**
+  String get filterBP;
+
+  /// No description provided for @filterFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'频率'**
+  String get filterFreq;
+
+  /// No description provided for @filterQ.
+  ///
+  /// In zh, this message translates to:
+  /// **'Q 值'**
+  String get filterQ;
 
   /// No description provided for @gateHint.
   ///

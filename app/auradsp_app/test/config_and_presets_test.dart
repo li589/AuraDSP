@@ -870,5 +870,101 @@ void main() {
       expect(m.deesserAmount, closeTo(0.8, 1e-9));
     });
   });
+
+  group('Bass v3.1: ViPER 三模式 + 心理声学接线', () {
+    test('mode 宏写入谐波配方（不再碰 shelf）', () {
+      final m = AppModel();
+      m.setBassMode(1);
+      expect(m.bassMode, 1);
+      expect(m.bassHarmonics, closeTo(0.35, 1e-9));
+      expect(m.bassHarmonicBlend, closeTo(0.5, 1e-9));
+      m.setBassMode(2);
+      expect(m.bassHarmonics, closeTo(0.7, 1e-9));
+      expect(m.bassHarmonicBlend, closeTo(0.7, 1e-9));
+      m.setBassMode(0);
+      expect(m.bassHarmonics, closeTo(0.0, 1e-9));
+    });
+
+    test('谐波三滑块下发引擎（不再是死控件）', () {
+      final m = AppModel();
+      m.setBassHarmonics(0.6);
+      expect(m.bassHarmonics, closeTo(0.6, 1e-9));
+      m.setBassHarmonicBlend(0.4);
+      expect(m.bassHarmonicBlend, closeTo(0.4, 1e-9));
+      m.setBassSubFloor(15);
+      expect(m.bassSubFloor, closeTo(15.0, 1e-9));
+      m.setBassCutoff(200);
+      expect(m.bassCutoff, closeTo(200.0, 1e-9));
+    });
+
+    test('snapshot/apply 对称（含谐波三件套）', () {
+      final src = AppModel()
+        ..setBassMode(2)
+        ..setBassIntensity(0.6)
+        ..setBassCutoff(140)
+        ..setBassHarmonics(0.75)
+        ..setBassHarmonicBlend(0.65)
+        ..setBassSubFloor(20);
+      final snap = PresetLibrary.snapshot(src, name: '__bass31__');
+      final b = snap.params['bass'] as Map<String, dynamic>;
+      expect(b['mode'], 2);
+      expect((b['harmonics'] as num).toDouble(), closeTo(0.75, 1e-9));
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__bass31_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.bassMode, 2);
+      expect(m.bassHarmonics, closeTo(0.75, 1e-9));
+      expect(m.bassHarmonicBlend, closeTo(0.65, 1e-9));
+      expect(m.bassSubFloor, closeTo(20.0, 1e-9));
+    });
+  });
+
+  group('Filter: 独立滤波器', () {
+    test('默认值 + 钳位 + 开关', () {
+      final m = AppModel();
+      expect(m.filterOn, isFalse);
+      expect(m.filterType, 0);
+      expect(m.filterFreq, closeTo(80.0, 1e-9));
+      expect(m.filterQ, closeTo(0.707, 1e-9));
+      m.setFilterType(9);
+      expect(m.filterType, 2);
+      m.setFilterFreq(1);
+      expect(m.filterFreq, closeTo(20.0, 1e-9));
+      m.setFilterQ(99);
+      expect(m.filterQ, closeTo(10.0, 1e-9));
+      m.toggleStage('filter');
+      expect(m.filterOn, isTrue);
+      expect(m.isStageEnabled('filter'), isTrue);
+    });
+
+    test('snapshot/apply 对称', () {
+      final src = AppModel()
+        ..setFilterEnabled(true)
+        ..setFilterType(1)
+        ..setFilterFreq(200)
+        ..setFilterQ(1.0);
+      final snap = PresetLibrary.snapshot(src, name: '__ft__');
+      final f = snap.params['filter'] as Map<String, dynamic>;
+      expect(f['enable'], isTrue);
+      expect(f['type'], 1);
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__ft_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.filterOn, isTrue);
+      expect(m.filterType, 1);
+      expect(m.filterFreq, closeTo(200.0, 1e-9));
+      expect(m.filterQ, closeTo(1.0, 1e-9));
+    });
+  });
 }
 

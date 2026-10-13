@@ -508,17 +508,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassMode => '低音モード';
 
   @override
-  String get bassModeDynamic => 'ダイナミック';
+  String get bassModeDynamic => 'ナチュラルベース';
 
   @override
-  String get bassModeShelf => 'ローシェルフ';
+  String get bassModeShelf => 'ピュアベース+';
 
   @override
-  String get bassModeHarmonic => '心理音響ハーモニック';
+  String get bassModeHarmonic => 'サブウーファー';
 
   @override
   String get bassModeTooltip =>
-      '低音モード説明：\n• ダイナミック：信号エネルギーに応じた適応型ブースト（クリッピング防止）\n• ローシェルフ：高忠実度アナログイコライザー\n• 心理音響：高調波合成による小型スピーカー向け重低音知覚';
+      '低音モード：\n• ナチュラル：ベンダー直ブースト、倍音なし\n• ピュアベース+：軽量倍音（0.35）\n• サブウーファー：重量倍音（0.7）、小型機でも重低音';
 
   @override
   String get bassCutoff => 'カットオフ周波数';
@@ -688,6 +688,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get stGate => 'ノイズゲート';
+
+  @override
+  String get stFilter => 'フィルター';
+
+  @override
+  String get filterHint => 'ゲート直後の整形：HP でローカット、LP/BP は用途別';
+
+  @override
+  String get filterType => '種類';
+
+  @override
+  String get filterHP => 'ハイパス';
+
+  @override
+  String get filterLP => 'ローパス';
+
+  @override
+  String get filterBP => 'バンドパス';
+
+  @override
+  String get filterFreq => '周波数';
+
+  @override
+  String get filterQ => 'Q 値';
 
   @override
   String get gateHint => 'チェーン先頭：閾値以下の背景ノイズをゲート、attack/release でエッジ整形';
