@@ -55,6 +55,11 @@ if d is not None:
         if d.get('engine'):
             check('handles cover groups', isinstance(d.get('handles'), int) and d.get('handles') >= d.get('groups', 0),
                   'handles=%s groups=%s' % (d.get('handles'), d.get('groups')))
+        # 爆音预算：单次回调耗时必须远小于缓冲周期（2048/48k=42.7ms），否则必欠载。
+        # 本机中性引擎 8 组约 3.2ms；阈值取半周期，留足机器差异与效果全开余量。
+        md = d.get('maxCbUs')
+        check('callback budget maxCbUs<20000', isinstance(md, (int, float)) and md < 20000,
+              'maxCbUs=%s' % md)
         check('changes counter present', isinstance(d.get('changes'), int) and d.get('changes') >= 0,
               'changes=%s' % d.get('changes'))
 
