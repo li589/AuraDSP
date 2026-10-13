@@ -28,7 +28,7 @@ if sys.stdout.encoding != 'utf-8':
 
 SOURCE_IMPULSE_DIR = Path(r"D:\myPrograms\AudioEffect\Impulse")
 PROJECT_ROOT = Path(r"D:\temp_desktop\Proj\JamesDSP")
-RESOURCE_DIR = PROJECT_ROOT / "resource"
+RESOURCE_DIR = PROJECT_ROOT / "assets"
 LIVEPROG_SRC_DIR = PROJECT_ROOT / "source"
 
 # 杂质后缀黑名单
@@ -397,7 +397,7 @@ def run_pipeline(dry_run: bool = True):
         return
 
     # 5. 正式落盘执行
-    print("\n5. 开始正式向工程盘落盘 (D:\\temp_desktop\\Proj\\JamesDSP\\resource)...")
+    print("\n5. 开始正式向工程盘落盘 (D:\\temp_desktop\\Proj\\JamesDSP\\assets)...")
     RESOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
     # 5.1 复制脉冲文件并统一命名为 .irs
@@ -417,7 +417,7 @@ def run_pipeline(dry_run: bool = True):
         shutil.copy2(item["src_path"], dest)
 
     # 5.3 整理 Liveprog 脚本
-    print("\n5.3 正在同步官方 Liveprog EEL2 脚本到 resource/liveprog...")
+    print("\n5.3 正在同步官方 Liveprog EEL2 脚本到 assets/liveprog...")
     liveprog_dest = RESOURCE_DIR / "liveprog"
     liveprog_dest.mkdir(parents=True, exist_ok=True)
     liveprog_items = []

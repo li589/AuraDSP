@@ -2,7 +2,7 @@
 
 验收标准：
   1. 未加载文件时使能 → 直通守卫（输出不变）。
-  2. 加载真实 VDC（resource/ddc/Others/Butterworth.vdc）→ ready=1。
+  2. 加载真实 VDC（assets/ddc/Others/Butterworth.vdc）→ ready=1。
   3. 使能后输出相对旁通发生变化（校正滤波器生效）。
   4. set/get 回读对称。
 """
@@ -14,7 +14,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release',
                    'auradsp_engine.dll')
-VDC = os.path.join(ROOT, 'resource', 'ddc', 'Others', 'Butterworth.vdc')
+VDC = os.path.join(ROOT, 'assets', 'ddc', 'Others', 'Butterworth.vdc')
 
 SR = 48000.0
 BLOCK = 512
