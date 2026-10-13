@@ -13,6 +13,10 @@
 
 import 'package:flutter/material.dart';
 
+// P1：EelSliderMeta/EelSliderParser 已下沉到 core/eel_slider_parser.dart
+// （解 core→features 倒挂）；此处转 export，老调用方 import 不变。
+export '../core/eel_slider_parser.dart';
+
 /// 一条 lint 问题（行号 1-based）
 class EelLintIssue {
   final int line;
@@ -23,84 +27,6 @@ class EelLintIssue {
   /// 非 blocking 仅警告（引擎可编译但语义可疑，如 slider9+ 永远收不到滑块值）。
   final bool blocking;
   const EelLintIssue(this.line, this.col, this.message, {this.blocking = false});
-}
-
-/// 自适应滑块参数元数据
-class EelSliderMeta {
-  final int index; // 1..8
-  final String rawName;
-  final String displayName;
-  final double defaultVal;
-  final double minVal;
-  final double maxVal;
-  final double step;
-
-  const EelSliderMeta({
-    required this.index,
-    required this.rawName,
-    required this.displayName,
-    this.defaultVal = 0.0,
-    this.minVal = 0.0,
-    this.maxVal = 1.0,
-    this.step = 0.01,
-  });
-}
-
-/// 自适应滑块解析器
-abstract final class EelSliderParser {
-  static final RegExp _declRegex = RegExp(
-    r'slider(?<num>[1-8])\s*:\s*(?<def>-?[\d.]+)(\s*<\s*(?<min>-?[\d.]+)\s*,\s*(?<max>-?[\d.]+)(\s*,\s*(?<step>-?[\d.]+))?\s*>)?\s*(?<name>[^\r\n;]*)',
-  );
-
-  /// 解析代码文本中声明或引用的滑块参数
-  static Map<int, EelSliderMeta> parse(String code) {
-    final result = <int, EelSliderMeta>{};
-
-    // 1. 扫描显式声明指令
-    for (final m in _declRegex.allMatches(code)) {
-      final numStr = m.namedGroup('num');
-      if (numStr == null) continue;
-      final idx = int.tryParse(numStr);
-      if (idx == null) continue;
-
-      final defVal = double.tryParse(m.namedGroup('def') ?? '') ?? 0.0;
-      final minVal = double.tryParse(m.namedGroup('min') ?? '') ?? 0.0;
-      final maxVal = double.tryParse(m.namedGroup('max') ?? '') ?? 1.0;
-      final step = double.tryParse(m.namedGroup('step') ?? '') ?? 0.01;
-      var name = (m.namedGroup('name') ?? '').trim();
-      if (name.isEmpty) name = 'slider$idx';
-
-      result[idx] = EelSliderMeta(
-        index: idx,
-        rawName: 'slider$idx',
-        displayName: name,
-        defaultVal: defVal,
-        minVal: minVal,
-        maxVal: maxVal,
-        step: step,
-      );
-    }
-
-    // 2. 扫描代码全局引用的 slider1..8
-    for (var i = 1; i <= 8; i++) {
-      final refPattern = RegExp('\\bslider$i\\b');
-      if (refPattern.hasMatch(code)) {
-        if (!result.containsKey(i)) {
-          result[i] = EelSliderMeta(
-            index: i,
-            rawName: 'slider$i',
-            displayName: '参数 $i (slider$i)',
-            defaultVal: 0.0,
-            minVal: 0.0,
-            maxVal: 1.0,
-            step: 0.01,
-              );
-        }
-      }
-    }
-
-    return result;
-  }
 }
 
 /// EEL2 语法高亮文本控制器

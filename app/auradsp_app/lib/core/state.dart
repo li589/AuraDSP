@@ -18,10 +18,8 @@ import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart'
     show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
-// v2 §3.2：脚本声明默认值解析（eel_editor_support 仅依赖 flutter/material，
-// 与 core 无循环引用）。
-import '../features/eel_editor_support.dart';
 import 'config.dart';
+import 'eel_slider_parser.dart';
 import 'plugin_manager.dart';
 import 'presets.dart';
 import 'session_memory.dart';
