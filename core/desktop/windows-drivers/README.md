@@ -8,6 +8,8 @@
 - [x] 目录骨架 + 独立 CMake（VS18 x64，不进引擎构建）
 - [x] `02_voicemeeter_client/`：三级自省检测（注册表 → Remote DLL → PE 版本）
 - [x] `02` OUTPUT INSERT 回调泵（A1 主对进引擎 + 其余透传 + 静音旁路 + 中性透传验证）
+- [x] 回调语义对标 `source/equalizerAPO64/VoicemeeterClient`（bus 组迭代/精确零+10s+输出静默
+      三条件 idle/CHANGE 计数；初版 1e-5+2s 已按此推翻，见 `VmAudioCallback.cpp` 头注）
 - [ ] `02` 多总线逐对处理、参数下发面（后续 slice）
 - [ ] `03_system_apo/`（需管理员；本机 shell 非提权，按需提权跑 Configurator）
 - [ ] `04_asio_engine/`（需 Steinberg ASIO SDK，仓内暂无）

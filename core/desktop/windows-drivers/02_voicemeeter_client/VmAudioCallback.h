@@ -25,6 +25,7 @@ struct AuraVmPump {
     int startRc = -99;       // register rc（1 = 被别的应用占住）
     int sampleRate = 0;
     int nbs = 0;             // 每回调帧样点数
+    long changes = 0;        // CHANGE 到达计数（v1 只观测，重启面后续 slice）
     std::string note;        // ran=false 时的原因
 };
 
