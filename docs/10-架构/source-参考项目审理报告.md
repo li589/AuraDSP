@@ -8,7 +8,7 @@
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-11，`source/` 下全部 11 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 为不入库的只读克隆区，该文件仅本机可见；入库的来源登记见 [`core/desktop/vendor-src/ORIGIN.md`](../../core/desktop/vendor-src/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-10-11，`source/` 下全部 11 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 为不入库的只读克隆区，该文件仅本机可见；入库的来源登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -76,7 +76,7 @@
 
 ### 2.5 clap（CLAP 标准正典上游）
 
-- **背景**：AuraDSP 引擎的 CLAP 宿主（`core/desktop/engine_api/auradsp_plugin_host.cpp`，`#include <clap/clap.h>`，实现 `ClapPluginInstance`）此前依赖内置快照 `core/desktop/vendor-src/plugin-api/clap/`；该快照于 2026-10-10 自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/` 提取（`core/desktop/vendor-src/ORIGIN.md` 登记为 `clap-api`）。本次新克隆 `source/clap` 为其**正典上游**。
+- **背景**：AuraDSP 引擎的 CLAP 宿主（`engine/auradsp_plugin_host.cpp`，`#include <clap/clap.h>`，实现 `ClapPluginInstance`）此前依赖内置快照 `vendor/plugin-api/clap/`；该快照于 2026-10-10 自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/` 提取（`vendor/ORIGIN.md` 登记为 `clap-api`）。本次新克隆 `source/clap` 为其**正典上游**。
 - **版本落差（重要）**：
 
   | | 正典上游 `source/clap` | 引擎内置 `vendor-src/plugin-api/clap` |
@@ -85,7 +85,7 @@
   | 头文件数 | 68 | 60 |
   | 差异 | 多出 8 个 `ext/draft/*`：`background-activation/progress/state-context`、`flush-events`、`octave-number`、`param-hovered`、`params-origin`、`webview` | 严格子集（无独有文件） |
 
-- **同步建议**：内置快照可从 `source/clap/include/clap/` 覆盖升级至 1.2.10。**已逐文件实测 ABI 安全性**：60 个公共头中 17 个有内容变化，均为注释/文档增补（`ext/params.h` 的 enum 位值 `IS_BYPASS=1<<4`…`IS_ENUM=1<<16` 与 `clap_param_info_t` 字段布局逐条核对**完全一致**，仅行号因注释增多而偏移；`plugin.h`/`host.h`/`factory/plugin-factory.h` 0 处非注释差异），外加 8 个新增 `ext/draft/*` 头与版本号——**无任何结构/ABI 变更**。升级后更新 `core/desktop/vendor-src/ORIGIN.md` 的 `clap-api` 提取来源（lsp-plugins → source/clap）与版本号即可。**升级属引擎构建输入变更，须重编 + 冒烟验证**（草案扩展仅经 `clap/all.h` 引入，引擎目前用 `clap/clap.h`，风险极低）。
+- **同步建议**：内置快照可从 `source/clap/include/clap/` 覆盖升级至 1.2.10。**已逐文件实测 ABI 安全性**：60 个公共头中 17 个有内容变化，均为注释/文档增补（`ext/params.h` 的 enum 位值 `IS_BYPASS=1<<4`…`IS_ENUM=1<<16` 与 `clap_param_info_t` 字段布局逐条核对**完全一致**，仅行号因注释增多而偏移；`plugin.h`/`host.h`/`factory/plugin-factory.h` 0 处非注释差异），外加 8 个新增 `ext/draft/*` 头与版本号——**无任何结构/ABI 变更**。升级后更新 `vendor/ORIGIN.md` 的 `clap-api` 提取来源（lsp-plugins → source/clap）与版本号即可。**升级属引擎构建输入变更，须重编 + 冒烟验证**（草案扩展仅经 `clap/all.h` 引入，引擎目前用 `clap/clap.h`，风险极低）。
 - **许可**：MIT，与 AuraDSP 主项目 GPL-3.0 完全兼容；引擎宿主亦可对照 `source/element` 的 CLAP 实现。
 
 ---
@@ -139,5 +139,5 @@
 1. **M1 插件宿主推进**：在 D1（GPLv3）决策明确后，直接以 `source/element` 作为 VST3/CLAP 进程内宿主的架构蓝本。
 2. **M5 算法精细化**：全面挖掘 `source/lsp-plugins/modules/lsp-dsp-units` 与 `lsp-plugins-loud-comp`，用于自研等响度与高阶滤波器的对比验证。
 3. **磁盘轻量化（可选）**：如需节约约 300MB 空间，可清空 `source/lsp-plugins/release/` 下的离线归档包，因 `modules/` 源码已足够自洽。
-4. **CLAP 快照升级（可执行）**：将 `vendor-src/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `core/desktop/vendor-src/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
+4. **CLAP 快照升级（可执行）**：将 `vendor-src/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `vendor/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
 

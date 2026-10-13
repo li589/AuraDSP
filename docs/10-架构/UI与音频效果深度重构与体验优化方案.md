@@ -38,7 +38,7 @@
 ### 2. 空间混响统一架构：预设联动、参数细调与 3D 声场尺寸
 
 #### 2.1 底层算法实质剖析
-经深入审理 JamesDSP 源码 `core/desktop/vendor-src/libjamesdsp/.../Effects/reverb.c`：
+经深入审理 JamesDSP 源码 `vendor/libjamesdsp/.../Effects/reverb.c`：
 - 内置的 Sean Connelly Progenitor2 (Freeverb3 演进型) 算法本身即原生包含完整的参数化接口：
   - `er_fac`：早期反射房间尺寸倍数（Room Size，0.5 ~ 2.5）
   - `rt60`：混响混响时间衰减（Decay RT60，0.5s ~ 30s）

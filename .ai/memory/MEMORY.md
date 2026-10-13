@@ -157,3 +157,5 @@
   C3 只异步化了 load/unload；"打开插件卡一下"很可能一半在 load、一半在这里，
   两者都要按 C3 同构模式异步化才算彻底。
 
+
+- **P3a (2026-10-13)**: core/desktop/engine_api -> engine/, core/desktop/vendor-src -> vendor/ (git mv, R状态). 并行改动插件/host/crossfeed/arbmag请用新路径, 内容零改行可自动跟随.

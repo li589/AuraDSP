@@ -1,7 +1,7 @@
 /*
  * auradsp_ffi.dart — AuraDSP engine_api C ABI 的 dart:ffi 绑定
  *
- * 真相源：core/desktop/engine_api/auradsp_engine.h（v1.0，11 个导出符号）
+ * 真相源：engine/auradsp_engine.h（v1.0，11 个导出符号）
  * 仅在音频 isolate 内使用：auradsp_process 契约要求单音频线程独占 handle。
  * 绑定全部显式 Dart 侧签名（Int32/Uint32→int，Double/Float→double）。
  */
@@ -143,7 +143,7 @@ abstract final class EngineState {
 
 /// vendor 处理链的**实际** stage 数（graph.order 合法集合大小）。
 ///
-/// 对应 C 侧 `AURADSP_VENDOR_STAGES`（core/desktop/engine_api/auradsp_engine.h）。
+/// 对应 C 侧 `AURADSP_VENDOR_STAGES`（engine/auradsp_engine.h）。
 /// 注意与 ABI 容量 `AURADSP_STAGE_MAX = 16` 区分：C 结构体的 per-stage 电平
 /// 数组物理长度是 16（预留位，恒 -120 dBFS），但只有本值这么多项有数据。
 /// 改动 vendor 链长度时，**必须同步修改这两个常量**。

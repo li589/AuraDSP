@@ -1,7 +1,7 @@
 /*
  * auradsp_engine.c — AuraDSP Engines 统一 C ABI 实现（Desktop v1）
  *
- * 包装 core/desktop/vendor-src/libjamesdsp（纯 C，原样未改，见 ORIGIN.md）。
+ * 包装 vendor/libjamesdsp（纯 C，原样未改，见 ORIGIN.md）。
  * 参数语义与 Android 侧 JamesDspEngine（AIDL VendorParamId 透传）对齐：
  *   bass.enable/bass.gain/reverb.preset/stereo.mix/eq.enable/post.gain
  * 新增桌面侧参数：
