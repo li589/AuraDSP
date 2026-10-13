@@ -31,7 +31,7 @@ void main() {
     });
 
     test('AppModel defaults for comp', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.compOn, isFalse);
       expect(m.compTimeconstant, 0.14);
       expect(m.compGranularity, 1);
@@ -40,7 +40,7 @@ void main() {
     });
 
     test('AppModel stage toggle and latency fallback', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.isStageEnabled('comp'), isFalse);
       m.setCompEnabled(true);
       expect(m.isStageEnabled('comp'), isTrue);
@@ -61,7 +61,7 @@ void main() {
     });
 
     test('Presets capture and apply comp state', () {
-      final m1 = AppModel();
+      final m1 = AppModel(testing: true);
       m1.setCompEnabled(true);
       m1.setCompTimeconstant(0.35);
       m1.setCompGranularity(2);
@@ -75,7 +75,7 @@ void main() {
       expect(compMap['granularity'], 2);
       expect(compMap['tfresolution'], 0);
 
-      final m2 = AppModel();
+      final m2 = AppModel(testing: true);
       expect(m2.compOn, isFalse);
       PresetLibrary.apply(m2, preset);
       expect(m2.compOn, isTrue);

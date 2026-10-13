@@ -13,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// 测试结果不能依赖本机残留文件。
 AppModel _isolatedModel(Directory dir) {
   ConfigManager.baseDirOverride = dir.path;
-  return AppModel();
+  return AppModel(testing: true);
 }
 
 void _withIsolatedModel(void Function(AppModel m) body) {

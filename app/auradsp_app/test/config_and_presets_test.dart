@@ -189,7 +189,7 @@ void main() {
   // ---------------------------------------------------------------------
   group('Regressions: stereo band mirror / preset apply symmetry / EQ curve push', () {
     test('stereo.bandN 镜像生效（正则必须以裸美元符收尾，不能写成反斜杠转义）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       // 修复前：RegExp(r'^stereo\.band([1-5])\$') 匹配的是字面美元符，
       // 于是 stereoBands 永不更新、stereoBandUsed 永远 false。
       expect(m.stereoBandUsed, isFalse);
@@ -205,7 +205,7 @@ void main() {
     });
 
     test('apply() 读回 snapshot 写出的全部区块（shelf/convolver/ddc/crossfeed）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       // 先把四个效果全部打开，模拟"用户当前开着这些效果"
       m.setInt('shelf.enable', 1);
       m.setInt('convolver.enable', 1);
@@ -239,7 +239,7 @@ void main() {
     });
 
     test('apply() 后 eqGains 真正落到 model（裸字段赋值不再吞掉增益）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       final gains = List<double>.filled(15, 0.0);
       gains[0] = -6.0;
       gains[7] = 9.0;
@@ -261,7 +261,7 @@ void main() {
   group('Liveprog v2: 会话/预设带回使能与滑块', () {
     test('snapshot 携带 liveprog{enabled,params,codeHash}（schemaVersion 3）',
         () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.lpEnabled = true;
       m.lpParams[0] = 0.7;
       m.lpCode = '@init\nx = 1;\n@sample\nspl0 = 1;\n';
@@ -274,10 +274,10 @@ void main() {
     });
 
     test('apply 恢复使能与滑块；指纹一致 → mismatch 为 false', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       const code = '@init\nx = 1;\n@sample\nspl0 = 1;\n';
       m.lpCode = code;
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..lpCode = code
         ..lpEnabled = true;
       src.lpParams[2] = 0.5;
@@ -294,7 +294,7 @@ void main() {
     });
 
     test('apply 时编辑器代码与存档不一致 → mismatch 为 true', () {
-      final m = AppModel()..lpCode = '@init\ny = 2;\n@sample\nspl0 = 1;\n';
+      final m = AppModel(testing: true)..lpCode = '@init\ny = 2;\n@sample\nspl0 = 1;\n';
       final preset = AuraPreset(
         name: '__lp_mismatch__',
         createdAt: DateTime.now().toIso8601String(),
@@ -312,7 +312,7 @@ void main() {
     });
 
     test('无 liveprog 节的老预设不碰脚本态', () {
-      final m = AppModel()
+      final m = AppModel(testing: true)
         ..lpEnabled = true
         ..lpCode = 'keepme';
       m.lpParams[0] = 0.9;
@@ -330,7 +330,7 @@ void main() {
     });
 
     test('setLiveprogCode 采纳声明默认值；同签名重应用保留用户值', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       const code = 'slider1:1.5<0,2,0.01>vol\n@init\nx = 1;\n@sample\n'
           'spl0 *= slider1;\n';
       m.setLiveprogCode(code);
@@ -345,7 +345,7 @@ void main() {
     });
 
     test('unload 保留 lpCode，只关使能', () {
-      final m = AppModel()
+      final m = AppModel(testing: true)
         ..lpEnabled = true
         ..lpCode = 'keepme'
         ..lpStatus = 1;
@@ -447,14 +447,14 @@ void main() {
 
   group('BassMono: 低频单声道化', () {
     test('默认值：关闭 + 120Hz', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.bassmonoOn, isFalse);
       expect(m.bassmonoFreq, closeTo(120.0, 1e-9));
       expect(m.isStageEnabled('bassmono'), isFalse);
     });
 
     test('分频点钳位 20~300Hz', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setBassmonoFreq(10);
       expect(m.bassmonoFreq, closeTo(20.0, 1e-9));
       m.setBassmonoFreq(500);
@@ -464,7 +464,7 @@ void main() {
     });
 
     test('toggleStage 翻转独立开关位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.toggleStage('bassmono');
       expect(m.bassmonoOn, isTrue);
       m.toggleStage('bassmono');
@@ -472,7 +472,7 @@ void main() {
     });
 
     test('snapshot/apply 对称恢复使能与分频点', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setBassmonoEnabled(true)
         ..setBassmonoFreq(200);
       final snap = PresetLibrary.snapshot(src, name: '__bm__');
@@ -480,7 +480,7 @@ void main() {
       expect(bm['enable'], isTrue);
       expect((bm['freq'] as num).toDouble(), closeTo(200.0, 1e-9));
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -492,7 +492,7 @@ void main() {
     });
 
     test('无 bassmono 节的老预设不碰开关', () {
-      final m = AppModel()..setBassmonoEnabled(true);
+      final m = AppModel(testing: true)..setBassmonoEnabled(true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -507,7 +507,7 @@ void main() {
 
   group('Haas: 差分环绕', () {
     test('默认值：关闭 + 12ms + 全湿', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.haasOn, isFalse);
       expect(m.haasDelayMs, closeTo(12.0, 1e-9));
       expect(m.haasMix, closeTo(1.0, 1e-9));
@@ -515,7 +515,7 @@ void main() {
     });
 
     test('延迟/混合钳位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setHaasDelay(-5);
       expect(m.haasDelayMs, closeTo(0.0, 1e-9));
       m.setHaasDelay(40);
@@ -527,7 +527,7 @@ void main() {
     });
 
     test('toggleStage 翻转独立开关位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.toggleStage('haas');
       expect(m.haasOn, isTrue);
       m.toggleStage('haas');
@@ -535,7 +535,7 @@ void main() {
     });
 
     test('snapshot/apply 对称恢复三字段', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setHaasEnabled(true)
         ..setHaasDelay(8)
         ..setHaasMix(0.6);
@@ -545,7 +545,7 @@ void main() {
       expect((hs['delay'] as num).toDouble(), closeTo(8.0, 1e-9));
       expect((hs['mix'] as num).toDouble(), closeTo(0.6, 1e-9));
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -558,7 +558,7 @@ void main() {
     });
 
     test('延迟侧切换：setHaasSide 归一 0/1 且快照恢复', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.haasSide, 0);
       m.setHaasSide(1);
       expect(m.haasSide, 1);
@@ -567,14 +567,14 @@ void main() {
       m.setHaasSide(0);
       expect(m.haasSide, 0);
 
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setHaasEnabled(true)
         ..setHaasSide(1);
       final snap = PresetLibrary.snapshot(src, name: '__hs_side__');
       final hs = snap.params['haas'] as Map<String, dynamic>;
       expect(hs['side'], 1);
 
-      final m2 = AppModel();
+      final m2 = AppModel(testing: true);
       PresetLibrary.apply(
           m2,
           AuraPreset(
@@ -585,7 +585,7 @@ void main() {
     });
 
     test('延迟标称随设定值走（底栏/徽标用）', () {
-      final m = AppModel()
+      final m = AppModel(testing: true)
         ..setHaasEnabled(true)
         ..setHaasDelay(15);
       expect(m.componentLatency('haas').ms, closeTo(15.0, 1e-9));
@@ -596,7 +596,7 @@ void main() {
 
   group('Exciter: 激励器', () {
     test('默认值：关闭 + 0.3 + 5kHz', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.exciterOn, isFalse);
       expect(m.exciterAmount, closeTo(0.3, 1e-9));
       expect(m.exciterHifreq, closeTo(5000.0, 1e-9));
@@ -604,7 +604,7 @@ void main() {
     });
 
     test('量/分频钳位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setExciterAmount(2.0);
       expect(m.exciterAmount, closeTo(1.0, 1e-9));
       m.setExciterAmount(-1.0);
@@ -616,7 +616,7 @@ void main() {
     });
 
     test('toggleStage 翻转独立开关位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.toggleStage('exciter');
       expect(m.exciterOn, isTrue);
       m.toggleStage('exciter');
@@ -624,7 +624,7 @@ void main() {
     });
 
     test('snapshot/apply 对称恢复三字段', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setExciterEnabled(true)
         ..setExciterAmount(0.7)
         ..setExciterHifreq(8000);
@@ -634,7 +634,7 @@ void main() {
       expect((ex['amount'] as num).toDouble(), closeTo(0.7, 1e-9));
       expect((ex['hifreq'] as num).toDouble(), closeTo(8000.0, 1e-9));
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -647,7 +647,7 @@ void main() {
     });
 
     test('无 exciter 节的老预设不碰开关', () {
-      final m = AppModel()..setExciterEnabled(true);
+      final m = AppModel(testing: true)..setExciterEnabled(true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -662,7 +662,7 @@ void main() {
 
   group('P-010: 每效果输出增益门 + 自动补偿', () {
     test('setter 下发引擎参数（镜像闭环）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       // setBassOutputGain 走 setFloat → mirror 回写同一字段
       m.setBassOutputGain(6.0);
       expect(m.bassOutputGain, closeTo(6.0, 1e-9));
@@ -675,7 +675,7 @@ void main() {
     });
 
     test('五效果全部有独立字段与钳位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       for (final setter in [
         (double v) => m.setEqOutputGain(v),
         (double v) => m.setTubeOutputGain(v),
@@ -691,7 +691,7 @@ void main() {
     });
 
     test('arbmag 有独立字段与钳位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setArbmagOutputGain(12.0);
       expect(m.arbmagOutputGain, closeTo(6.0, 1e-9));
       m.setArbmagOutputGain(-20.0);
@@ -701,7 +701,7 @@ void main() {
     });
 
     test('snapshot/apply 对称恢复 autoGain + outputGain', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setBassAutoGain(true)
         ..setBassOutputGain(4.5)
         ..setEqAutoGain(true)
@@ -719,7 +719,7 @@ void main() {
       expect((arb['outputGain'] as num).toDouble(), closeTo(-1.5, 1e-9));
       expect(arb['string'], 'GraphicEQ: 20 0; 20000 0');
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -736,7 +736,7 @@ void main() {
     });
 
     test('Crossfeed: 默认值、模式联动与自定义分频/衰减', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.xfeedOn, isFalse);
       expect(m.xfeedMode, 0);
       expect(m.xfeedFcut, closeTo(700.0, 1e-9));
@@ -783,7 +783,7 @@ void main() {
     });
 
     test('SpatialReverb: setReverbCustomParam 调整干湿比不误关混响', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.selectReverbPreset(0); // 大音乐厅
       expect(m.isSpatialReverbOn, isTrue);
 
@@ -798,7 +798,7 @@ void main() {
 
   group('Gate + Deesser', () {
     test('默认值', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.gateOn, isFalse);
       expect(m.gateThreshold, closeTo(-40.0, 1e-9));
       expect(m.gateAttackMs, closeTo(10.0, 1e-9));
@@ -811,7 +811,7 @@ void main() {
     });
 
     test('钳位', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setGateThreshold(-100);
       expect(m.gateThreshold, closeTo(-60.0, 1e-9));
       m.setGateThreshold(10);
@@ -827,7 +827,7 @@ void main() {
     });
 
     test('toggleStage 翻转 gate', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.toggleStage('gate');
       expect(m.gateOn, isTrue);
       expect(m.isStageEnabled('gate'), isTrue);
@@ -836,7 +836,7 @@ void main() {
     });
 
     test('snapshot/apply 对称恢复 gate + deesser', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setGateEnabled(true)
         ..setGateThreshold(-35)
         ..setGateAttack(20)
@@ -854,7 +854,7 @@ void main() {
       expect(d['enable'], isTrue);
       expect((d['freq'] as num).toDouble(), closeTo(7500.0, 1e-9));
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -875,7 +875,7 @@ void main() {
     // 注意：AppModel 构造会 spawn 真实 isolate，其 getParams 回读（float32）
     // 可能竞态覆盖字段；非二进制精确常量（0.35/0.7/0.707/0.8）一律用 1e-6。
     test('mode 宏写入谐波配方（不再碰 shelf）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setBassMode(1);
       expect(m.bassMode, 1);
       expect(m.bassHarmonics, closeTo(0.35, 1e-6));
@@ -888,7 +888,7 @@ void main() {
     });
 
     test('谐波三滑块下发引擎（不再是死控件）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setBassHarmonics(0.6);
       expect(m.bassHarmonics, closeTo(0.6, 1e-9));
       m.setBassHarmonicBlend(0.4);
@@ -900,7 +900,7 @@ void main() {
     });
 
     test('snapshot/apply 对称（含谐波三件套）', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setBassMode(2)
         ..setBassIntensity(0.6)
         ..setBassCutoff(140)
@@ -912,7 +912,7 @@ void main() {
       expect(b['mode'], 2);
       expect((b['harmonics'] as num).toDouble(), closeTo(0.75, 1e-9));
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -928,7 +928,7 @@ void main() {
 
   group('Filter: 独立滤波器', () {
     test('默认值 + 钳位 + 开关', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.filterOn, isFalse);
       expect(m.filterType, 0);
       expect(m.filterFreq, closeTo(80.0, 1e-9));
@@ -945,7 +945,7 @@ void main() {
     });
 
     test('snapshot/apply 对称', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setFilterEnabled(true)
         ..setFilterType(1)
         ..setFilterFreq(200)
@@ -955,7 +955,7 @@ void main() {
       expect(f['enable'], isTrue);
       expect(f['type'], 1);
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -971,7 +971,7 @@ void main() {
 
   group('Loudness: 响度补偿', () {
     test('默认值 + 钳位 + 开关', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       expect(m.loudnessOn, isFalse);
       expect(m.loudnessAmount, closeTo(0.5, 1e-9));
       m.setLoudnessAmount(5);
@@ -984,7 +984,7 @@ void main() {
     });
 
     test('snapshot/apply 对称', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setLoudnessEnabled(true)
         ..setLoudnessAmount(0.8);
       final snap = PresetLibrary.snapshot(src, name: '__ld__');
@@ -992,7 +992,7 @@ void main() {
       expect(ld['enable'], isTrue);
       expect((ld['amount'] as num).toDouble(), closeTo(0.8, 1e-6)); // 防 isolate 回读竞态
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -1006,7 +1006,7 @@ void main() {
 
   group('Legacy stages: 快照/恢复往返', () {
     test('tube/stereo/shelf/input/limiter/bass/comp/fv 全节往返', () {
-      final src = AppModel()
+      final src = AppModel(testing: true)
         ..setTubeEnabled(true)
         ..setTubeGain(6.0)
         ..setStereoEnabled(true)
@@ -1025,7 +1025,7 @@ void main() {
         ..setReverbCustomParam('wet', 0.5);
       final snap = PresetLibrary.snapshot(src, name: '__legacy__');
 
-      final m = AppModel();
+      final m = AppModel(testing: true);
       PresetLibrary.apply(
           m,
           AuraPreset(
@@ -1050,7 +1050,7 @@ void main() {
     });
 
     test('自定义态下 enable 不得切回 preset（regression：wet 曾被 0.45 覆盖）', () {
-      final m = AppModel();
+      final m = AppModel(testing: true);
       m.setReverbCustomParam('wet', 0.5);
       m.setReverbCustomParam('decay', 0.7);
       expect(m.reverbPreset, -2);
@@ -1059,6 +1059,26 @@ void main() {
       expect(m.fvWet, closeTo(0.5, 1e-9));
       expect(m.fvDecay, closeTo(0.7, 1e-9));
       expect(m.reverbPreset, -2);
+    });
+  });
+
+  group('Issue #2 测试隔离', () {
+    test('testing 构造不拉 isolate、不落 session', () {
+      final dir = Directory.systemTemp.createTempSync('auradsp_iso2_');
+      try {
+        ConfigManager.baseDirOverride = dir.path;
+        final m = AppModel(testing: true);
+        // setter 照常走本地 mirror（回读值不断言引擎，只断言内存态）。
+        m.setTubeGain(6.0);
+        expect(m.tubeGain, closeTo(6.0, 1e-9));
+        // isolate 从未拉起：连接态恒为 connecting。
+        expect(m.conn, EngineConn.connecting);
+        // session 绝不落盘（构造回放 + 防抖自动保存 + dispose 全跳过）。
+        m.dispose();
+        expect(File('${dir.path}${Platform.pathSeparator}session_state.json').existsSync(), isFalse);
+      } finally {
+        ConfigManager.baseDirOverride = null;
+      }
     });
   });
 }
