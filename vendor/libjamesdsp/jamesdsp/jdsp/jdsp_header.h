@@ -141,6 +141,13 @@ typedef struct
 	samplerateTool smp[2];
 	SixBandsCrossover subband[2];
 	float pregain, postgain;
+	/* [PATCHED-AuraDSP 2026-10-13 P-011] 电子管音色/混合/补偿。
+	 * RT 只读、控制线程写（x86 对齐字读写无撕裂，与既有 pregain 同模式）。
+	 * VTInit 不重置这 4 个字段（开关切换不丢用户值）；tapeLp 每次 Enable 清零。 */
+	int character;    /* 0 Triode / 1 Pentode / 2 Tape */
+	float drywet;     /* 湿比 0..1（0=干声直通，1=全湿=旧行为） */
+	float outcomp;    /* 输出补偿 dB（只作用于湿信号） */
+	float tapeLp[2];  /* Tape 档 HF 阻尼一阶状态 */
 } VacuumTube;
 typedef struct
 {
@@ -667,6 +674,9 @@ extern void StereoEnhancementProcess(JamesDSPLib *jdsp, size_t n);
 extern void VacuumTubeEnable(JamesDSPLib *jdsp);
 extern void VacuumTubeDisable(JamesDSPLib *jdsp);
 extern void VacuumTubeSetGain(JamesDSPLib *jdsp, double dbGain);
+extern void VacuumTubeSetCharacter(JamesDSPLib *jdsp, int character); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
+extern void VacuumTubeSetDryWet(JamesDSPLib *jdsp, float mix); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
+extern void VacuumTubeSetOutComp(JamesDSPLib *jdsp, double db); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
 extern void VacuumTubeProcess(JamesDSPLib *jdsp, size_t n);
 // Live programmable effect
 extern const char* checkErrorCode(int errCode);

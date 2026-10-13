@@ -764,6 +764,31 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             VacuumTubeSetGain(&h->jdsp, (double)db);
         return AURADSP_OK;
     }
+    /* P-011：音色/混合/补偿（vendor 直接下发，RT 只读；未 open 只存值，create/apply_tube 推送） */
+    if (!strcmp(id, "tube.style") && bytes >= 4) {
+        int32_t v = *(const int32_t*)value;
+        if (v < 0) v = 0; if (v > 2) v = 2;
+        h->p.tube_style.store(v);
+        if (h->open.load() && h->p.tube_enable.load(std::memory_order_relaxed))
+            VacuumTubeSetCharacter(&h->jdsp, (int)v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "tube.mix") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f;
+        h->p.tube_mix.store(v);
+        if (h->open.load() && h->p.tube_enable.load(std::memory_order_relaxed))
+            VacuumTubeSetDryWet(&h->jdsp, v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "tube.compensation") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12.0f) db = -12.0f; if (db > 12.0f) db = 12.0f;
+        h->p.tube_compensation.store(db);
+        if (h->open.load() && h->p.tube_enable.load(std::memory_order_relaxed))
+            VacuumTubeSetOutComp(&h->jdsp, (double)db);
+        return AURADSP_OK;
+    }
     /* ---- 动态压限器 (Compressor, FFTCompander) ---- */
     if (!strcmp(id, "comp.enable") && bytes >= 4) {
         const int32_t v = *(const int32_t*)value ? 1 : 0;
@@ -1129,6 +1154,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "ddc.ready") && bytes >= 4) { *(int32_t*)out_value = h->p.ddc_ready.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "tube.gain") && bytes >= 4) { *(float*)out_value = h->p.tube_gain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.style") && bytes >= 4) { *(int32_t*)out_value = h->p.tube_style.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.mix") && bytes >= 4) { *(float*)out_value = h->p.tube_mix.load(); return AURADSP_OK; }
+    if (!strcmp(id, "tube.compensation") && bytes >= 4) { *(float*)out_value = h->p.tube_compensation.load(); return AURADSP_OK; }
     if (!strcmp(id, "comp.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "comp.timeconstant") && bytes >= 4) { *(float*)out_value = h->p.comp_timeconstant.load(); return AURADSP_OK; }
     if (!strcmp(id, "comp.granularity") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_granularity.load(); return AURADSP_OK; }

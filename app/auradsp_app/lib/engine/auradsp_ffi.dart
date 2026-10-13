@@ -43,6 +43,10 @@ abstract final class ParamId {
   // M3-a：轻量效果开关
   static const tubeEnable = 'tube.enable';
   static const tubeGain = 'tube.gain';
+  // P-011：电子管音色/干湿混合/输出补偿
+  static const tubeStyle = 'tube.style';
+  static const tubeMix = 'tube.mix';
+  static const tubeCompensation = 'tube.compensation';
   static const xfeedEnable = 'crossfeed.enable';
   static const xfeedMode = 'crossfeed.mode';
   static const xfeedFcut = 'crossfeed.fcut';

@@ -120,6 +120,9 @@ struct Params {
     /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
     std::atomic<float>    tube_gain{0.0f};      /* dB [-3, 12] 驱动度 */
+    std::atomic<int32_t>  tube_style{0};       /* P-011: 0 Triode / 1 Pentode / 2 Tape */
+    std::atomic<float>    tube_mix{1.0f};       /* P-011: 湿比 [0, 1] */
+    std::atomic<float>    tube_compensation{0.0f}; /* P-011: 输出补偿 dB [-12, 12] */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
     std::atomic<int32_t>  xfeed_mode{0};        /* 0: Default, 1: Chu Moy, 2: Jan Meier, 3: Custom */
     std::atomic<float>    xfeed_fcut{700.0f};   /* Hz [300, 2000] */

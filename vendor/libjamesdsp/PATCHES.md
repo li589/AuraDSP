@@ -152,3 +152,18 @@ yquist * 0.999，
 - **配合方**：uradsp_engine.cpp 的 ass/eq/tube/comp.outgain|autogain 参数；
   reverb 的增益/补偿在引擎侧 Freeverb（M5-c，非 vendor）实现，不占 vendor 槽。
 - **验收**：	est/smoke/smoke_fx_gain.py（输出增益 dB→线性倍率精确命中；自动补偿收敛到输入响度）。
+## P-011 jdsp_header.h + Effects/vacuumTube.c — 电子管音色/干湿混合/输出补偿（2026-10-13）
+
+- **位置**：jdsp_header.h 的 VacuumTube 结构体（+character/drywet/outcomp/tapeLp[2]）、
+  setter 声明区；vacuumTube.c 的 VTInit/VTProcess/新 setter。
+- **功能**：(a) character 0 Triode（旧行为逐位一致）/1 Pentode（谐波x1.8+trim 0.8）/
+  2 Tape（谐波x0.5+湿信号一阶 HF 阻尼 coef 0.5+trim 1.05）；
+  (b) drywet 干湿混合（0=干声直通，1=全湿=旧行为；in-place 别名安全，dry 取当期输入样点）；
+  (c) outcomp 输出补偿 dB（±12，只作用于湿信号，块首一次 pow）。
+- **RT 安全**：查表分支+乘加+自有状态，无分配无锁无 syscall；控制线程写对齐 int/float
+  （与既有 pregain 同模式）；VTInit 只清 tapeLp 不碰用户值（开关不丢档）。
+- **新增接口**：VacuumTubeSetCharacter / VacuumTubeSetDryWet / VacuumTubeSetOutComp。
+- **配合方**：engine 的 tube.style|mix|compensation 参数（apply_tube 每次推送，create 即默认全湿 0dB）；
+  默认 drywet 由引擎推送 1.0（vendor 零初始化为 0=干声直通，fail-open 安全）。
+- **验收**：test/smoke/smoke_tube.py（谐波谱随 style 可测变化；mix=0约等于直通；compensation 电平精确命中；
+  三档 RMS 正负1dB 内响度中性）。

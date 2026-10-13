@@ -703,6 +703,12 @@ class AppModel extends ChangeNotifier {
           convSpectrum = [];
         }
         tubeOn = (raw['tubeEnable'] as int) != 0;
+        // P-011：电子管音色/混合/补偿回读
+        if (raw['tubeStyle'] != null) tubeStyle = (raw['tubeStyle'] as int).clamp(0, 2);
+        if (raw['tubeMix'] != null) tubeMix = (raw['tubeMix'] as num).toDouble().clamp(0.0, 1.0);
+        if (raw['tubeCompensation'] != null) {
+          tubeCompensation = (raw['tubeCompensation'] as num).toDouble().clamp(-12.0, 12.0);
+        }
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         if (raw['xfeedMode'] != null) xfeedMode = raw['xfeedMode'] as int;
         if (raw['xfeedFcut'] != null) xfeedFcut = (raw['xfeedFcut'] as num).toDouble();
@@ -1139,6 +1145,10 @@ class AppModel extends ChangeNotifier {
       }
       setInt('tube.enable', tubeOn ? 1 : 0);
       setFloat('tube.gain', tubeGain);
+      // P-011：电子管音色/混合/补偿
+      setInt(ParamId.tubeStyle, tubeStyle);
+      setFloat(ParamId.tubeMix, tubeMix);
+      setFloat(ParamId.tubeCompensation, tubeCompensation);
       setInt('crossfeed.enable', xfeedOn ? 1 : 0);
       setInt(ParamId.xfeedMode, xfeedMode);
       setFloat(ParamId.xfeedFcut, xfeedFcut);
@@ -1312,6 +1322,9 @@ class AppModel extends ChangeNotifier {
       case 'limiter.enable': limiterOn = v != 0; break;
       case 'channels.mode': channelsMode = v.toInt(); break;
       case 'tube.enable': tubeOn = v != 0; break;
+      case 'tube.style': tubeStyle = v.toInt().clamp(0, 2); break;
+      case 'tube.mix': tubeMix = v.clamp(0.0, 1.0); break;
+      case 'tube.compensation': tubeCompensation = v.clamp(-12.0, 12.0); break;
       case 'crossfeed.enable': xfeedOn = v != 0; break;
       case 'crossfeed.mode': xfeedMode = v.toInt(); break;
       case 'crossfeed.fcut': xfeedFcut = v; break;
@@ -2222,27 +2235,29 @@ class AppModel extends ChangeNotifier {
   }
 
   void setTubeStyle(int style) {
-    // 引擎侧只有 tube.enable/gain：风格/过采样/补偿/混合暂无对应参数，
-    // 只存 UI/预设状态，UI 侧已置灰禁用，待电子管建模落地后再接线。
-    tubeStyle = style;
+    // P-011：引擎 tube.style 已接线（vendor character 开关，RT 安全）。
+    tubeStyle = style.clamp(0, 2);
+    setInt(ParamId.tubeStyle, tubeStyle);
     notifyListeners();
   }
 
   void setTubeOversampling(int os) {
-    // 同上：引擎侧无对应参数。
+    // 引擎侧无对应参数（vendor 按采样率自动过采样，手动无意义）：只存 UI/预设兼容，不下发。
     tubeOversampling = os;
     notifyListeners();
   }
 
   void setTubeCompensation(double comp) {
-    // 同上：引擎侧无对应参数。
-    tubeCompensation = comp.clamp(-6.0, 6.0);
+    // P-011：引擎 tube.compensation 已接线（vendor 湿信号补偿）。
+    tubeCompensation = comp.clamp(-12.0, 12.0);
+    setFloat(ParamId.tubeCompensation, tubeCompensation);
     notifyListeners();
   }
 
   void setTubeMix(double mix) {
-    // 同上：引擎侧无对应参数。
+    // P-011：引擎 tube.mix 已接线（vendor 干湿混合）。
     tubeMix = mix.clamp(0.0, 1.0);
+    setFloat(ParamId.tubeMix, tubeMix);
     notifyListeners();
   }
 
