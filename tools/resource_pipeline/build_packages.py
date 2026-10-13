@@ -4,7 +4,7 @@ r"""
 AuraDSP 资源分级打包与防冲突覆盖验证工具 (build_packages.py)
 
 功能：
-1. 读取 resource/ 目录与 manifest.json，构建双轨分发体系：
+1. 读取 assets/ 目录与 manifest.json，构建双轨分发体系：
    - auradsp-resource-core.zip (~20MB, 随版本默认内置)
    - auradsp-resource-full.zip (~180MB, 独立全量一体包)
    - auradsp-addon-headphone-ddc.zip (~2.5MB)
@@ -33,7 +33,7 @@ if sys.stdout.encoding != 'utf-8':
         pass
 
 PROJECT_ROOT = Path(r"D:\temp_desktop\Proj\JamesDSP")
-RESOURCE_DIR = PROJECT_ROOT / "resource"
+RESOURCE_DIR = PROJECT_ROOT / "assets"
 DIST_DIR = PROJECT_ROOT / "dist" / "resources"
 
 
@@ -78,7 +78,7 @@ def run_packaging():
     print("=== AuraDSP 资源分发包构建流水线 ===")
     manifest_path = RESOURCE_DIR / "manifest.json"
     if not manifest_path.exists():
-        print(f"错误: 请先执行 clean_and_organize.py 生成 resource/manifest.json")
+        print(f"错误: 请先执行 clean_and_organize.py 生成 assets/manifest.json")
         return False
 
     with open(manifest_path, "r", encoding="utf-8") as mf:
@@ -159,9 +159,9 @@ def run_packaging():
     print("\n2. 正在执行冲突与覆盖安全演练 (Sandboxed Simulation)...")
     with tempfile.TemporaryDirectory(prefix="auradsp_test_") as tmp_dir:
         sandbox_path = Path(tmp_dir)
-        app_resource_dir = sandbox_path / "resource"
+        app_assets_dir = sandbox_path / "assets"
         app_user_dir = sandbox_path / "user_data"
-        app_resource_dir.mkdir(parents=True)
+        app_assets_dir.mkdir(parents=True)
         app_user_dir.mkdir(parents=True)
 
         # 模拟用户自定义脉冲与收藏偏好
@@ -177,14 +177,14 @@ def run_packaging():
 
         # 步骤 A：解压 Core 包
         with zipfile.ZipFile(core_zip, "r") as zf:
-            zf.extractall(app_resource_dir)
-        core_files_before = set(p.relative_to(app_resource_dir).as_posix() for p in app_resource_dir.rglob("*") if p.is_file())
+            zf.extractall(app_assets_dir)
+        core_files_before = set(p.relative_to(app_assets_dir).as_posix() for p in app_assets_dir.rglob("*") if p.is_file())
         print(f"  • [Step A] 核心包解压完毕: 释放 {len(core_files_before)} 个文件")
 
         # 步骤 B：模拟用户后续下载 Full 全量包，直接覆盖解压
         with zipfile.ZipFile(full_zip, "r") as zf:
-            zf.extractall(app_resource_dir)
-        all_files_after = set(p.relative_to(app_resource_dir).as_posix() for p in app_resource_dir.rglob("*") if p.is_file())
+            zf.extractall(app_assets_dir)
+        all_files_after = set(p.relative_to(app_assets_dir).as_posix() for p in app_assets_dir.rglob("*") if p.is_file())
         print(f"  • [Step B] 全量包覆盖解压完毕: 总计 {len(all_files_after)} 个文件")
 
         # 步骤 C：验证冲突与覆盖

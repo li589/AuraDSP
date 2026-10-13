@@ -23,7 +23,7 @@ cal2vdc.py — 麦克风 / 声卡校准曲线 → AuraDSP VDC 文件转换器
   python tools/calibration/cal2vdc.py --in FILE.txt --brand BEHRINGER --model "ECM8000"
 
   # 审计：回读已有 VDC，报告其频率响应（验证系数符号约定）
-  python tools/calibration/cal2vdc.py --inspect resource/ddc/AKG/AKG\ K240.vdc
+  python tools/calibration/cal2vdc.py --inspect assets/ddc/AKG/AKG\ K240.vdc
 """
 
 import argparse
