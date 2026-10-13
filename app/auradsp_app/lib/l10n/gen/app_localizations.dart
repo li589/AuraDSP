@@ -370,6 +370,24 @@ abstract class AppLocalizations {
   /// **'停止'**
   String get srcStop;
 
+  /// No description provided for @testSrcTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试音频源'**
+  String get testSrcTitle;
+
+  /// No description provided for @testSrcHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试用信号源（正弦/粉噪/音频文件）；输入/输出设备选择后续在此扩展'**
+  String get testSrcHint;
+
+  /// No description provided for @srcMp3.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 MP3 文件'**
+  String get srcMp3;
+
   /// No description provided for @bypassOn.
   ///
   /// In zh, this message translates to:

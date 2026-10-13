@@ -150,6 +150,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get srcStop => '停止';
 
   @override
+  String get testSrcTitle => '测试音频源';
+
+  @override
+  String get testSrcHint => '测试用信号源（正弦/粉噪/音频文件）；输入/输出设备选择后续在此扩展';
+
+  @override
+  String get srcMp3 => '打开 MP3 文件';
+
+  @override
   String get bypassOn => '旁路 ON（A/B）';
 
   @override

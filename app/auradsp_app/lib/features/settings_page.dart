@@ -1,10 +1,12 @@
 /*
- * settings_page.dart — 设置页：配色 / 语言 / 声道 / 引擎信息
+ * settings_page.dart — 设置页：配色 / 语言 / 声道 / 引擎信息 / 测试音频源
  *
- * 一卡一节，序号贯通；说明文字统一挂在卡片标题下（hint），不再散落在控件之间。
+ * 一卡一节，序号贯通（测试卡无序号：纯测试工具，不计入设置序号）；
+ * 说明文字统一挂在卡片标题下（hint），不再散落在控件之间。
  * 注：延迟档（ADR-002）已由 ADR-006 撤销，此处不再有「延迟模式」选项；
  *     延迟改为纯测量展示，见底栏徽标与效果页组件级徽标。
  */
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../core/config.dart';
@@ -163,6 +165,77 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
           ),
+          // 测试音频源（无序号；主页迁移至此，为输入/输出设备选择预留位置）
+          SectionCard(
+            title: l.testSrcTitle,
+            hint: l.testSrcHint,
+            child: _TestSourceChips(model: model),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---- 测试音频源（主页迁移；WAV + MP3 文件 + 合成信号 + 停止） ---- */
+
+class _TestSourceChips extends StatelessWidget {
+  final AppModel model;
+  const _TestSourceChips({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) => Wrap(
+        spacing: AuraSpace.sm,
+        runSpacing: AuraSpace.sm,
+        children: [
+          AuraChip(
+            l.srcTone,
+            icon: Icons.graphic_eq,
+            selected: model.playing && model.sourceKind == 'tone',
+            onTap: () => model.setSource('tone'),
+          ),
+          AuraChip(
+            l.srcPink,
+            icon: Icons.blur_on,
+            selected: model.playing && model.sourceKind == 'pink',
+            onTap: () => model.setSource('pink'),
+          ),
+          AuraChip(
+            l.srcFile,
+            icon: Icons.folder_open_outlined,
+            selected: model.playing &&
+                model.sourceKind == 'file' &&
+                model.sourceExt != 'mp3',
+            onTap: () async {
+              const type = XTypeGroup(label: 'WAV', extensions: ['wav']);
+              final f = await openFile(acceptedTypeGroups: [type]);
+              if (f != null) model.setSource('file', path: f.path);
+            },
+          ),
+          AuraChip(
+            l.srcMp3,
+            icon: Icons.music_note_outlined,
+            selected: model.playing &&
+                model.sourceKind == 'file' &&
+                model.sourceExt == 'mp3',
+            onTap: () async {
+              const type = XTypeGroup(label: 'MP3', extensions: ['mp3']);
+              final f = await openFile(acceptedTypeGroups: [type]);
+              if (f != null) model.setSource('file', path: f.path);
+            },
+          ),
+          if (model.playing)
+            AuraChip(
+              l.srcStop,
+              icon: Icons.stop_rounded,
+              danger: true,
+              selected: true,
+              onTap: () => model.setSource('stop'),
+            ),
         ],
       ),
     );

@@ -126,6 +126,13 @@ const char*    auradsp_last_error(auradsp_handle h);
 /* ---- 可视化（UI 线程；返回实际读取帧数） ---- */
 uint32_t auradsp_viz_read(auradsp_handle h, auradsp_viz_frame* out, uint32_t max_frames);
 
+/* ---- 测试放音用的音频文件解码（isolate 线程；允许分配，非 RT 路径） ----
+ * MP3（dr_mp3，vendor 自带头单实例化）。WAV 仍走 Dart 自解码，此处只做 MP3。
+ * 成功返回 stereo interleave float32 缓冲（调用方 ownership），附采样率与总帧数；
+ * 失败返回 nullptr。用 auradsp_free_audio_buffer 释放（配对 free）。 */
+float*   auradsp_decode_audio_file(const char* utf8path, int* out_rate, uint64_t* out_frames);
+void     auradsp_free_audio_buffer(void* p);
+
 /* ---- 元信息 ---- */
 const char* auradsp_version(void);      /* 引擎 ABI 版本，如 "1.0.0" */
 uint32_t    auradsp_abi(void);          /* ABI 序号，加载时校验 */

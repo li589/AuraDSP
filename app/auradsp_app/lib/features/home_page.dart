@@ -1,10 +1,10 @@
 /*
- * home_page.dart — 主页：引擎状态大屏 + 音频源快速控制
+ * home_page.dart — 主页：引擎状态大屏 + 频谱/电平
  *
- * 层级：hero 状态区（最大字号 + A/B 主操作） → 音源 → 频谱/电平 → 引擎简报（静音收尾）
- * 数字即设计：延迟/电平读数全部等宽对齐，肉眼可扫。
+ * 层级：频谱可视化（无序号） → hero 状态区（最大字号 + A/B 主操作） →
+ * 引擎简报（静音收尾）。
+ * 测试音频源已移入设置页测试卡（为输入/输出设备选择预留位置）。
  */
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
@@ -25,14 +25,8 @@ class HomePage extends StatelessWidget {
       title: l.pageHomeTitle,
       ambient: model.spectrum,
       children: [
-        _SpectrumCard(model: model), // 可视化置顶：主页的第一视觉
+        _SpectrumCard(model: model), // 可视化置顶：主页的第一视觉（无序号）
         _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
-        SectionCard(
-          index: '01',
-          title: l.sourceCard,
-          hint: l.heroHintIdle,
-          child: _SourceButtons(model: model),
-        ),
         _EngineBrief(model: model),
       ],
     );
@@ -121,57 +115,6 @@ class _Hero extends StatelessWidget {
   }
 }
 
-/* ---- 音频源 ---- */
-
-class _SourceButtons extends StatelessWidget {
-  final AppModel model;
-  const _SourceButtons({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) => Wrap(
-        spacing: AuraSpace.sm,
-        runSpacing: AuraSpace.sm,
-        children: [
-          AuraChip(
-            l.srcTone,
-            icon: Icons.graphic_eq,
-            selected: model.playing && model.sourceKind == 'tone',
-            onTap: () => model.setSource('tone'),
-          ),
-          AuraChip(
-            l.srcPink,
-            icon: Icons.blur_on,
-            selected: model.playing && model.sourceKind == 'pink',
-            onTap: () => model.setSource('pink'),
-          ),
-          AuraChip(
-            l.srcFile,
-            icon: Icons.folder_open_outlined,
-            selected: model.playing && model.sourceKind == 'file',
-            onTap: () async {
-              const type = XTypeGroup(label: 'WAV', extensions: ['wav']);
-              final f = await openFile(acceptedTypeGroups: [type]);
-              if (f != null) model.setSource('file', path: f.path);
-            },
-          ),
-          if (model.playing)
-            AuraChip(
-              l.srcStop,
-              icon: Icons.stop_rounded,
-              danger: true,
-              selected: true,
-              onTap: () => model.setSource('stop'),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
 class _BypassButton extends StatefulWidget {
   final AppModel model;
   const _BypassButton({required this.model});
@@ -254,7 +197,6 @@ class _SpectrumCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '02',
       title: l.spectrum,
       trailing: _StateHint(model: model),
       child: Column(

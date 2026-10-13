@@ -377,6 +377,21 @@ final class AuraDspLib {
       .lookup<NativeFunction<Pointer<Utf8> Function()>>('auradsp_version')
       .asFunction();
 
+  /// 测试放音用的 MP3 解码（engine_audiofile.cpp；WAV 仍走 Dart 自解码）。
+  /// 返回 stereo interleave float32（engine 堆，调用方 ownership），失败 null。
+  late final Pointer<Float> Function(Pointer<Utf8>, Pointer<Int32>, Pointer<Uint64>)
+      decodeAudioFile = dylib
+          .lookup<
+              NativeFunction<
+                  Pointer<Float> Function(Pointer<Utf8>, Pointer<Int32>,
+                      Pointer<Uint64>)>>('auradsp_decode_audio_file')
+          .asFunction();
+
+  late final void Function(Pointer<Void>) freeAudioBuffer = dylib
+      .lookup<NativeFunction<Void Function(Pointer<Void>)>>(
+          'auradsp_free_audio_buffer')
+      .asFunction();
+
   late final int Function() abi = dylib
       .lookup<NativeFunction<Uint32 Function()>>('auradsp_abi')
       .asFunction();
