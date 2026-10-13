@@ -692,6 +692,18 @@ void main() {
       expect(m.dyneqOn, isFalse);
     });
 
+    test('Issue #4：graph.order 只留 12 个 vendor id（保序去杂）', () {
+      expect(
+        AppModel.filterVendorOrder('gate,tube,dyneq,filter,output'),
+        'tube,output',
+      );
+      expect(
+        AppModel.filterVendorOrder(
+            'gate,filter,bassmono,tube,comp,bass,eq,arbmag,convolver,ddc,liveprog,crossfeed,stereo,haas,exciter,reverb,loudness,output'),
+        'tube,comp,bass,eq,arbmag,convolver,ddc,liveprog,crossfeed,stereo,reverb,output',
+      );
+    });
+
     test('snapshot/apply 对称恢复三段', () {
       final src = AppModel(testing: true)
         ..setDyneqEnabled(true)
