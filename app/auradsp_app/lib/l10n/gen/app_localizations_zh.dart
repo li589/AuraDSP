@@ -507,17 +507,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bassMode => '低音增强模式';
 
   @override
-  String get bassModeDynamic => '动态增强';
+  String get bassModeDynamic => '自然低音';
 
   @override
-  String get bassModeShelf => '纯净低架';
+  String get bassModeShelf => '纯净低音';
 
   @override
-  String get bassModeHarmonic => '心理声学谐波';
+  String get bassModeHarmonic => '超重低音';
 
   @override
   String get bassModeTooltip =>
-      '低音增强模式：\n• 动态增强：自适应信号能量动态提升低频冲击感，防爆音失真\n• 纯净低架：模拟硬件平直提升低频，保真度高\n• 心理声学谐波：注入高次谐波，利用人耳基频缺失错觉在小单元产生深沉低音';
+      '低音增强模式：\n• 自然低音：vendor 直给提升，不加谐波\n• 纯净低音：轻量谐波（0.35），干净有形体\n• 超重低音：重谐波（0.7），小单元也出下潜';
 
   @override
   String get bassCutoff => '截止频率';
@@ -687,6 +687,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get stGate => '噪声门';
+
+  @override
+  String get stFilter => '滤波器';
+
+  @override
+  String get filterHint => 'gate 之后的第一道整形：HP 去隆隆声，LP/BP 按需';
+
+  @override
+  String get filterType => '类型';
+
+  @override
+  String get filterHP => '高通';
+
+  @override
+  String get filterLP => '低通';
+
+  @override
+  String get filterBP => '带通';
+
+  @override
+  String get filterFreq => '频率';
+
+  @override
+  String get filterQ => 'Q 值';
 
   @override
   String get gateHint => '链头第一道：低于阈值的背景噪声被压掉，attack/release 控制开关速度';

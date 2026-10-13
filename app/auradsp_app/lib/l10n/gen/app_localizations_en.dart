@@ -519,17 +519,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bassMode => 'Bass Mode';
 
   @override
-  String get bassModeDynamic => 'Dynamic';
+  String get bassModeDynamic => 'Natural Bass';
 
   @override
-  String get bassModeShelf => 'Shelf';
+  String get bassModeShelf => 'Pure Bass+';
 
   @override
-  String get bassModeHarmonic => 'Harmonic Exciter';
+  String get bassModeHarmonic => 'Sub-woofer';
 
   @override
   String get bassModeTooltip =>
-      'Bass Boost Modes:\n• Dynamic: Adaptive energy-driven boost with anti-clip protection\n• Shelf: Clean analog-style shelf equalizer\n• Harmonics: Psychoacoustic harmonic synthesis for rich deep bass on small drivers';
+      'Bass modes:\n• Natural: vendor boost only, no harmonics\n• Pure Bass+: light harmonics (0.35), clean body\n• Sub-woofer: heavy harmonics (0.7), deep bass on small drivers';
 
   @override
   String get bassCutoff => 'Cutoff Scope';
@@ -705,6 +705,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get stGate => 'Noise Gate';
+
+  @override
+  String get stFilter => 'Filter';
+
+  @override
+  String get filterHint =>
+      'First shaper after gate: HP kills rumble, LP/BP as needed';
+
+  @override
+  String get filterType => 'Type';
+
+  @override
+  String get filterHP => 'High-pass';
+
+  @override
+  String get filterLP => 'Low-pass';
+
+  @override
+  String get filterBP => 'Band-pass';
+
+  @override
+  String get filterFreq => 'Frequency';
+
+  @override
+  String get filterQ => 'Q';
 
   @override
   String get gateHint =>
