@@ -35,7 +35,7 @@
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
 | `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |
 | `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等；另有 `resource_pipeline/`（资源打包）与 `calibration/`（校准转换） | 纯工具性质，不包含测试用例；`probe/` 为一次性探针、`archive/` 为过程产物，均不进门禁 |
-| `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告 | 方案先行，设计更新后必须同步文档 |
+| `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告；含 `参考技术手册/`（第三方 PDF 手册本地只读区，约 220MB，仅 README 清单入库） | 方案先行，设计更新后必须同步文档；参考手册区只读，禁改禁搬，规则见 `docs/参考技术手册/README.md` |
 | `.ai/` | **AI 自治沉淀区**：包含 `.ai/memory/`（历史上下文与每日备忘）、`.ai/guidelines/`（经验教训） | 各类智能体共享知识，无需人工介入 |
 
 ---

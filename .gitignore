@@ -3,6 +3,12 @@
 source/*
 !source/ORIGIN.md
 
+# --- 第三方参考手册区（docs/参考技术手册/） ---
+# PDF 手册与克隆合计约 220MB：windows-win32-api.pdf 单文件超 GitHub 100MB 硬限，
+# 且 Microsoft/Steinberg 文档未授权公开镜像再分发。仅 README 清单入库。
+docs/参考技术手册/*
+!docs/参考技术手册/README.md
+
 # --- 本机环境 ---
 venv/
 
