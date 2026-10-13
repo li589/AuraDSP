@@ -39,7 +39,8 @@ int main() {
         }
         printf("]}");
     }
-    printf("],\"protectedAudioDG\":%d,\"note\":\"%s\"}\n", r.protectedAudioDG,
-           JsonEscape(r.note).c_str());
+    printf("],\"defaultRender\":\"%s\",\"defaultCapture\":\"%s\",\"protectedAudioDG\":%d,\"note\":\"%s\"}\n",
+           JsonEscape(r.defaultRender).c_str(), JsonEscape(r.defaultCapture).c_str(),
+           r.protectedAudioDG, JsonEscape(r.note).c_str());
     return 0;
 }

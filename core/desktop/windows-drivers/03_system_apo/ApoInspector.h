@@ -29,6 +29,8 @@ struct ApoEndpoint {
 
 struct ApoInspect {
     std::vector<ApoEndpoint> endpoints;
+    std::string defaultRender;   // 默认播放端点 id（eConsole；空=取不到）
+    std::string defaultCapture;  // 默认录音端点 id
     int protectedAudioDG = -1;  // DisableProtectedAudioDG：1=关签名强制（unsigned 可载）
                                 // 0/缺失=强制签名；-1=读不到
     std::string note;  // 非致命说明（如 COM 初始化失败）
