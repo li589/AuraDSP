@@ -7,6 +7,7 @@ source/*
 venv/
 
 # --- IDE / 智能体 harness 目录（AI 记忆统一在 .ai/，其余一律不入库） ---
+.agents/
 .workbuddy/
 .vscode/
 .idea/
