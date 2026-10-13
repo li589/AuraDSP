@@ -35,6 +35,8 @@
 - [x] `03` 只读检测（端点枚举/FxProperties 五槽/签名开关；本机 48 端点全可读，
       在用微软 inbox SFX/MFX，无第三方 APO；`smoke_apo_inspect.py`）
 - [ ] `03` Configurator（安装/备份/卸载/服务重启握手，需提权，EAPO 简报已备）
+- [x] 自研 APO v1（`AuraApo.dll`：裸 COM 聚合 + 自注册 + 透传 + 心跳映射 + SILENT 清零；
+      专属 CLSID，IID 取自 SDK IDL；`smoke_apo_register.py` 覆盖导出表 + 注册往返）
 - [ ] `04_asio_engine/`（需 Steinberg ASIO SDK，仓内暂无）
 - [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）
 
