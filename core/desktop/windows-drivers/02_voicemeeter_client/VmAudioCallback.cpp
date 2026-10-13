@@ -1,4 +1,5 @@
 // VmAudioCallback.cpp — 见头文件 v1 范围与 RT 铁律。
+#include "VmRemoteLoader.h"
 //
 // 借鉴注（source/equalizerAPO64/VoicemeeterClient/VoicemeeterClient.cpp:handle）：
 // ① 按 8 通道 bus 组迭代（`min(nbi,nbo)/8`，每组独立 FilterEngine）——v1 只做第 0 组
@@ -57,16 +58,19 @@ constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测
 
 struct PumpCtx {
     FnEngProcess process = nullptr;
-    void* eng = nullptr;
-    float* scratchIn = nullptr;   // 主线程预分配 2*kMaxNbs
+    FnEngDestroy destroy = nullptr;
+    static constexpr int kMaxGroups = 8;
+    void* eng[kMaxGroups] = {};  // 主线程按版型预建（RT 内禁分配）
+    int nEng = 0;
+    float* scratchIn = nullptr;   // 主线程预分配 2*kMaxNbs（各组串行复用，非重入安全）
     float* scratchOut = nullptr;
     uint64_t frames = 0;
-    uint64_t idleSamples = 0;     // 输入输出双静默累计（EAPO 同式）
-    bool idle = false;
-    bool lastOutSilent = true;
+    uint64_t idleSamples[kMaxGroups] = {};  // 组独立（EAPO 同式）
+    bool idle[kMaxGroups] = {};
     long sr = 0;
     long nbs = 0;
     long changes = 0;             // CHANGE 到达计数（v1 只观测，重启面后续 slice）
+    int groups = 0;               // 本轮实际组数
     double maxDiff = 0.0;
     bool bypassEntered = false;
 };
@@ -85,11 +89,11 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
         auto* info = (VbAudioInfo*)lpData;
         c->sr = info->samplerate;
         c->nbs = info->nbSamplePerFrame;
-        c->nbs = info->nbSamplePerFrame;
         c->frames = 0;
-        c->idleSamples = 0;
-        c->idle = false;
-        c->lastOutSilent = true;
+        for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+            c->idleSamples[g] = 0;
+            c->idle[g] = false;
+        }
         c->maxDiff = 0.0;
         c->bypassEntered = false;
         return 0;
@@ -103,60 +107,69 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
     auto* ab = (VbAudioBuffer*)lpData;
     if (ab->nbo < 2 || ab->nbs <= 0 || ab->nbs > kMaxNbs) return 0;
     const long n = ab->nbs;
-    // 其余通道永远透传（v1 只动 A1 主对）。
-    for (long ch = 2; ch < ab->nbo && ch < 128; ++ch) {
+    // 组数 = min(nbi,nbo)/8（EAPO 同式），钳到预建 handle 数。
+    int ng = (int)(ab->nbi < ab->nbo ? ab->nbi : ab->nbo) / 8;
+    if (ng < 1) ng = 1;
+    // 只按硬上限钳；缺 handle 的组内各自透传（haveEng/eng[g] 守卫），不整体归零。
+    if (ng > PumpCtx::kMaxGroups) ng = PumpCtx::kMaxGroups;
+    c->groups = ng;
+    const bool haveEng = c->process != nullptr;
+    for (int g = 0; g < ng; ++g) {
+        const long base = (long)g * 8;
+        // v2：每组主对（base+0/1）进该组引擎；组内其余 6 通道 + 组外全部透传。
+        const float* inL = ab->r[base];
+        const float* inR = ab->r[base + 1];
+        float* outL = ab->w[base];
+        float* outR = ab->w[base + 1];
+        if (!inL || !inR || !outL || !outR) continue;
+        for (long ch = base + 2; ch < base + 8; ++ch) {
+            if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
+                memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
+        }
+        // 无引擎桥（DLL 缺失/符号不全/组超预建）：主对也透传，绝不吞声。
+        if (!haveEng || c->eng[g] == nullptr) {
+            if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
+            if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
+            continue;
+        }
+        // 静音空转（组独立，EAPO 同式）。
+        if (!c->idle[g]) {
+            for (long i = 0; i < n; ++i) {
+                c->scratchIn[i * 2] = inL[i];
+                c->scratchIn[i * 2 + 1] = inR[i];
+            }
+            c->process(c->eng[g], c->scratchIn, c->scratchOut, (int)n);
+            bool outSilent = true;
+            for (long i = 0; i < n; ++i) {
+                const float oL = c->scratchOut[i * 2], oR = c->scratchOut[i * 2 + 1];
+                outL[i] = oL;
+                outR[i] = oR;
+                if (oL != 0.0f || oR != 0.0f) outSilent = false;
+                const double dL = (double)oL - (double)inL[i];
+                const double dR = (double)oR - (double)inR[i];
+                const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
+                if (d > c->maxDiff) c->maxDiff = d;
+            }
+            const bool inSilent = PairIsSilent(inL, inR, n);
+            if (inSilent && outSilent)
+                c->idleSamples[g] += (uint64_t)n;
+            else
+                c->idleSamples[g] = 0;
+            c->idle[g] = c->sr > 0 && c->idleSamples[g] > (uint64_t)c->sr * 10;
+        } else {
+            c->bypassEntered = true;
+            memcpy(outL, inL, (size_t)n * sizeof(float));
+            memcpy(outR, inR, (size_t)n * sizeof(float));
+            if (!PairIsSilent(inL, inR, n)) {
+                c->idle[g] = false;
+                c->idleSamples[g] = 0;
+            }
+        }
+    }
+    // 组外通道透传。
+    for (long ch = (long)ng * 8; ch < ab->nbo && ch < 128; ++ch) {
         if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
             memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
-    }
-    // v1：只动 A1 主对（ch0/1），其余透传（下面 memcpy）。
-    const float* inL = ab->r[0];
-    const float* inR = ab->r[1];
-    float* outL = ab->w[0];
-    float* outR = ab->w[1];
-    if (!inL || !inR || !outL || !outR) return 0;
-    // 无引擎桥（DLL 缺失/符号不全）：主对也透传，绝不吞声。
-    if (c->process == nullptr || c->eng == nullptr) {
-        if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
-        if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
-        c->frames += (uint64_t)n;
-        return 0;
-    }
-    // 静音空转（EAPO 同式，见文件头借鉴注）：非 idle 时正常处理，用
-    // “输入静默 && 本次输出静默” 累计；持续 10s 才进 bypass（弱音/混响尾不误杀）。
-    // idle 后每块只做指针透传，CPU 归零。
-    if (!c->idle) {
-        for (long i = 0; i < n; ++i) {
-            c->scratchIn[i * 2] = inL[i];
-            c->scratchIn[i * 2 + 1] = inR[i];
-        }
-        c->process(c->eng, c->scratchIn, c->scratchOut, (int)n);
-        bool outSilent = true;
-        for (long i = 0; i < n; ++i) {
-            const float oL = c->scratchOut[i * 2], oR = c->scratchOut[i * 2 + 1];
-            outL[i] = oL;
-            outR[i] = oR;
-            if (oL != 0.0f || oR != 0.0f) outSilent = false;
-            const double dL = (double)oL - (double)inL[i];
-            const double dR = (double)oR - (double)inR[i];
-            const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
-            if (d > c->maxDiff) c->maxDiff = d;
-        }
-        const bool inSilent = PairIsSilent(inL, inR, n);
-        if (inSilent && outSilent)
-            c->idleSamples += (uint64_t)n;
-        else
-            c->idleSamples = 0;
-        c->lastOutSilent = outSilent;
-        c->idle = c->sr > 0 && c->idleSamples > (uint64_t)c->sr * 10;
-    } else {
-        c->bypassEntered = true;
-        memcpy(outL, inL, (size_t)n * sizeof(float));
-        memcpy(outR, inR, (size_t)n * sizeof(float));
-        // idle 中若进来非零输入，下一块即恢复处理（本块仍透传，10ms 内回神）。
-        if (!PairIsSilent(inL, inR, n)) {
-            c->idle = false;
-            c->idleSamples = 0;
-        }
     }
     c->frames += (uint64_t)n;
     return 0;
@@ -185,8 +198,8 @@ HMODULE TryLoadEngine(const std::string& hint, std::wstring& used) {
     if (!hint.empty()) cands.push_back(ToWide(hint));
     const std::wstring exe = ExeDir();
     cands.push_back(exe + L"\\auradsp_engine.dll");
-    // windows-drivers/out/Release → core/desktop/windows/out/Release
-    cands.push_back(exe + L"\\..\\..\\windows\\out\\Release\\auradsp_engine.dll");
+    // windows-drivers/out/Release → 上三层到 desktop → windows/out/Release
+    cands.push_back(exe + L"\\..\\..\\..\\windows\\out\\Release\\auradsp_engine.dll");
     cands.push_back(L"C:\\Program Files\\AuraDSP\\auradsp_engine.dll");
     for (const auto& c : cands) {
         HMODULE h = LoadLibraryW(c.c_str());
@@ -244,24 +257,47 @@ int AuraVmPumpRun(AuraVmPump& p) {
         FreeLibrary(remote);
         return 0;
     }
-    // 引擎桥（主线程：加载 + 建 handle + 预分配）。
+    // 引擎桥（主线程：加载 + 按版型预建 handle + 预分配）。
+    // 版型决定最大组数（Potato 8 / Banana 5 / Standard 2；未知按 8 上限，
+    // 运行时再按实际 min(nbi,nbo)/8 钳）。RT 内禁分配，故全在 Start 前建好。
+    int wantGroups = PumpCtx::kMaxGroups;
+    {
+        const AuraVmDetect det = AuraVmDetectRun();
+        if (det.edition == 1)
+            wantGroups = 2;
+        else if (det.edition == 2)
+            wantGroups = 5;
+        p.edition = det.edition;
+    }
     std::wstring used;
     HMODULE eng = TryLoadEngine(p.engineDll, used);
+    if (!used.empty()) {
+        // UTF-16 → UTF-8 仅用于报告（ASCII 路径为主）。
+        char narrow[MAX_PATH * 2] = {0};
+        WideCharToMultiByte(CP_UTF8, 0, used.c_str(), -1, narrow, (int)sizeof(narrow), nullptr, nullptr);
+        p.enginePath = narrow;
+    }
     if (eng) {
         auto create = (FnEngCreate)GetProcAddress(eng, "auradsp_create");
         auto process = (FnEngProcess)GetProcAddress(eng, "auradsp_process");
         auto destroy = (FnEngDestroy)GetProcAddress(eng, "auradsp_destroy");
         if (create && process && destroy) {
-            // sr 未知（STARTING 才到）：先按 48k 建，STARTING 后若不一致则重建。
-            // v1 简化：STARTING 到来前不处理（ctx.process 为空即透传守卫实际在回调里
-            // 表现为直接返回——此处先建默认，CHANGE 时暂不重建（后续 slice）。
+            // sr 未知（STARTING 才到）：先按 48k 建（与 sr 无关的纯内存 sizing；
+            // 真实 sr 下 vendor 内部按块自适应，见 processFloatMultiplexd 注释）。
             ctx.process = process;
-            ctx.eng = create(48000.0f, 2048);
+            ctx.destroy = destroy;
             ctx.scratchIn = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
             ctx.scratchOut = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
-            if (!ctx.eng || !ctx.scratchIn || !ctx.scratchOut) {
-                if (ctx.eng) destroy(ctx.eng);
-                ctx.eng = nullptr;
+            for (int g = 0; g < wantGroups && ctx.scratchIn && ctx.scratchOut; ++g) {
+                ctx.eng[g] = create(48000.0f, 2048);
+                if (ctx.eng[g]) ++ctx.nEng;
+            }
+            if (ctx.nEng == 0 || !ctx.scratchIn || !ctx.scratchOut) {
+                for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+                    if (ctx.eng[g]) destroy(ctx.eng[g]);
+                    ctx.eng[g] = nullptr;
+                }
+                ctx.nEng = 0;
                 ctx.process = nullptr;
             }
         }
@@ -286,11 +322,16 @@ int AuraVmPumpRun(AuraVmPump& p) {
     p.sampleRate = (int)ctx.sr;
     p.nbs = (int)ctx.nbs;
     p.changes = ctx.changes;
+    p.groups = ctx.groups;
+    p.handles = ctx.nEng;
     if (ctx.scratchIn) free(ctx.scratchIn);
     if (ctx.scratchOut) free(ctx.scratchOut);
     if (eng) {
-        auto destroy = (FnEngDestroy)GetProcAddress(eng, "auradsp_destroy");
-        if (destroy && ctx.eng) destroy(ctx.eng);
+        if (ctx.destroy) {
+            for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+                if (ctx.eng[g]) ctx.destroy(ctx.eng[g]);
+            }
+        }
         FreeLibrary(eng);
     }
     FreeLibrary(remote);

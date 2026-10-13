@@ -26,6 +26,10 @@ struct AuraVmPump {
     int sampleRate = 0;
     int nbs = 0;             // 每回调帧样点数
     long changes = 0;        // CHANGE 到达计数（v1 只观测，重启面后续 slice）
+    int edition = 0;         // 探测到的版型（1/2/3，0=未知）
+    int groups = 0;          // 本轮实际 bus 组数（min(nbi,nbo)/8）
+    int handles = 0;         // 预建引擎 handle 数
+    std::string enginePath;  // 实际载入的引擎 DLL（空=没载上，全透传）
     std::string note;        // ran=false 时的原因
 };
 
