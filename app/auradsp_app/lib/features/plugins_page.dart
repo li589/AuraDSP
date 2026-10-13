@@ -16,6 +16,7 @@ import '../core/design.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -300,14 +301,7 @@ class _PluginsPageState extends State<PluginsPage> {
                     ),
                     Text(l10nOf(context).plugDeepScan, style: captionOf(p)),
                     const SizedBox(width: 6),
-                    Tooltip(
-                      message: l10nOf(context).plugScanNoVerify,
-                      child: Icon(
-                        Icons.help_outline_rounded,
-                        size: 14,
-                        color: p.textDim,
-                      ),
-                    ),
+                    InfoBadge(message: l10nOf(context).plugScanNoVerify),
                   ],
                 ),
                 const SizedBox(width: AuraSpace.sm),

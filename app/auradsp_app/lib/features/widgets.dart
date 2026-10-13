@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 import 'chrome.dart';
 
@@ -197,14 +198,7 @@ class SectionTitle extends StatelessWidget {
               ),
               if (titleTooltip != null) ...[
                 const SizedBox(width: 6),
-                Tooltip(
-                  message: titleTooltip!,
-                  child: Icon(
-                    Icons.help_outline_rounded,
-                    size: 14,
-                    color: p.textDim,
-                  ),
-                ),
+                InfoBadge(message: titleTooltip!),
               ],
             ],
           ),
@@ -338,12 +332,8 @@ class _AdvancedSectionState extends State<AdvancedSection> {
                 const SizedBox(width: AuraSpace.sm),
                 Text(l.advanced, style: labelOf(p, color: p.text)),
                 if (widget.helpTooltip != null) ...[
-                  const SizedBox(width: 4),
-                  Tooltip(
-                    message: widget.helpTooltip!,
-                    child: Icon(Icons.help_outline_rounded,
-                        size: 14, color: p.textDim),
-                  ),
+                  const SizedBox(width: 6),
+                  InfoBadge(message: widget.helpTooltip!),
                 ],
                 const Spacer(),
                 Text(widget.summary,

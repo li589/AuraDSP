@@ -16,6 +16,7 @@ import 'package:flutter/material.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
@@ -65,14 +66,7 @@ class _InteractiveSpectrumEQPanelState
               children: [
                 Text(l.eqModeLabel, style: labelOf(p, color: p.text)),
                 const SizedBox(width: 4),
-                Tooltip(
-                  message: l.eqModeTooltip,
-                  child: Icon(
-                    Icons.help_outline_rounded,
-                    size: 14,
-                    color: p.textDim,
-                  ),
-                ),
+                InfoBadge(message: l.eqModeTooltip),
               ],
             ),
             const SizedBox(width: AuraSpace.xs),
