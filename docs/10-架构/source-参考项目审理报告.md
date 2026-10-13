@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.2**（2026-10-13，新增 ViPER4Windows 登记）
-> 范围：`source/` 下全部 12 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.3**（2026-10-13，ViPERDSP 引擎克隆补齐登记）
+> 范围：`source/` 下全部 13 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-13，`source/` 下全部 12 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-10-13，`source/` 下全部 13 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -23,9 +23,10 @@
 | 9 | **lsp-plugins** | `lsp-plugins/lsp-plugins` (master@2df6eea0) | 多平台 / C++, SIMD, 多格式 | LGPL-3.0+ | 559.99 MB (7,642 文件) | ★★★ **M5 算法对照 + 多格式构建中枢**（66 个子模块完整展开，包含 DSP 核心库） |
 | 10 | **pulseeffects** | `mikhailnov/pulseeffects` (master@b9ec88ed) | Linux / C++, GStreamer, GTK3 | GPL-3.0 | 7.45 MB (436 文件) | ★★ **效果机架与预设架构参考**（EasyEffects 前身，预设 JSON 格式与多效果编排） |
 | 11 | **clap** | `free-audio/clap` (main@a47f6ba, v1.2.10) | 跨平台 / C 头文件（ABI 标准） | MIT | 3.73 MB (101 文件) | ★★★ **M1 插件宿主 CLAP 正典上游**（引擎内置 `vendor/plugin-api/clap` 的来源，见 §2.5） |
-| 12 | **ViPER4Windows** | `likelikeslike/ViPER4Windows` (main@ccc3f61, v2.0.1) | Windows / C++ APO + Flutter UI | 未见 LICENSE（Copyright ViPER520） | 1.78 MB (95 文件) | ★★★ **Windows 全局注入第二蓝本 + ViPER 效果系参数布局**（APO 挂载、共享内存参数投递、跨平台预设 v2 格式；引擎源码缺失，见 §2.6） |
+| 12 | **ViPER4Windows** | `likelikeslike/ViPER4Windows` (main@ccc3f61, v2.0.1) | Windows / C++ APO + Flutter UI | 未见 LICENSE（Copyright ViPER520） | 3.14 MB (218 文件) | ★★★ **Windows 全局注入第二蓝本 + ViPER 效果系参数布局**（APO 挂载、共享内存参数投递、跨平台预设 v2 格式；引擎 submodule 已补齐，见 §2.6 与下行） |
+| 13 | **ViPERDSP** | `likelikeslike/ViPERDSP` (main@6fc1f1b) | 跨平台 / C++17, CMake, pffft | **All Rights Reserved（仅限个人使用）** | 1.36 MB (123 文件) | ★★★ **ViPER 效果算法层**（23 个效果 + 21,278 行；VHE/DynamicSystem/FETCompressor 等蓝本；**仅供阅读参考，禁商用与代码搬运**，见 §2.6） |
 
-总计占用：**~766 MB**，约 **13,500** 个源文件与资源。
+总计占用：**~767 MB**，约 **13,600** 个源文件与资源。
 
 ---
 
@@ -89,13 +90,18 @@
 - **同步建议**：内置快照可从 `source/clap/include/clap/` 覆盖升级至 1.2.10。**已逐文件实测 ABI 安全性**：60 个公共头中 17 个有内容变化，均为注释/文档增补（`ext/params.h` 的 enum 位值 `IS_BYPASS=1<<4`…`IS_ENUM=1<<16` 与 `clap_param_info_t` 字段布局逐条核对**完全一致**，仅行号因注释增多而偏移；`plugin.h`/`host.h`/`factory/plugin-factory.h` 0 处非注释差异），外加 8 个新增 `ext/draft/*` 头与版本号——**无任何结构/ABI 变更**。升级后更新 `vendor/ORIGIN.md` 的 `clap-api` 提取来源（lsp-plugins → source/clap）与版本号即可。**升级属引擎构建输入变更，须重编 + 冒烟验证**（草案扩展仅经 `clap/all.h` 引入，引擎目前用 `clap/clap.h`，风险极低）。
 - **许可**：MIT，与 AuraDSP 主项目 GPL-3.0 完全兼容；引擎宿主亦可对照 `source/element` 的 CLAP 实现。
 
-### 2.6 ViPER4Windows（Windows 全局注入第二蓝本；引擎源码缺失）
+### 2.6 ViPER4Windows + ViPERDSP（Windows 全局注入第二蓝本；引擎层 All Rights Reserved）
 
 - **项目性质订正**：本仓为 `likelikeslike` 的**现代重写版 v2.0.1**（版本号 260818），与原版 ViPER4Windows 的驱动注入方案不同——改以标准 **Windows APO（MFX）** 挂载系统音频管线，配 Fluent 风格 Flutter UI。README 署名致敬 ViPER4Android（Zhuhang / ViPER520）与 ViPERDSP 逆向（Martmists / Iscle / likelikeslike）。
-- **源码完整性（重要缺口）**：
-  - `ViPERDSP/` 目录为 **git submodule 占位空目录**（登记指针 `db1c11cbe377eb35af6574abe75e3bb009910d88`，上游 `likelikeslike/ViPERDSP.git`），克隆时未 `--recursive`，**ViPER 效果算法源码不在快照内**。APO 层通过 `#include "viper/ViPER.h"` 与 `"include/ViPERParams.h"` 消费该 submodule 接口，快照内仅余调用侧。
-  - 如需 ViPER 系算法（Bass / Clarity / Tube / VSE / VHE / FET Compressor 等）的底层实现，须另行克隆 `likelikeslike/ViPERDSP`。
-- **快照内实测结构（95 文件 / 1.78 MB）**：
+- **源码完整性（v2.3 已补齐）**：v2.2 时 `ViPERDSP/` 为未初始化 submodule 占位空目录（指针 `db1c11c`）；本次已克隆补齐（`likelikeslike/ViPERDSP` main@6fc1f1b，123 文件 / 1.36 MB，嵌套 `.git` 已剥除）。**版本差注意**：ViPER4Windows 钉住 `db1c11c`，本克隆为其后继 main（含 `a25d50e` "Replace TubeSimulator with QuadricTube" 等变更），与宿主 APO 层的接口兼容性以构建实测为准。APO 层通过 `#include "viper/ViPER.h"` 与 `"include/ViPERParams.h"` 消费该引擎接口。
+- **引擎层实测结构（21,278 行 C/C++，C++17 + CMake + pffft）**：
+  1. `include/{ViPERParams.h, log.h}`：全效果参数结构体（与 Flutter 侧 `viper_params_layout.dart` 经 `tools/viper_layout_gen.py` 代码生成配对）。
+  2. `viper/ViPER.cpp`（1,564 行）：效果编排与分发入口（`DispatchParamValue` 全参数下发）。
+  3. `viper/effects/` **23 个效果模块**：ViPERBass / ViPERBassMono / ViPERClarity / ColorfulMusic（清晰度系）、TubeSimulator / AnalogX、SpectrumExtend（VSE）、DiffSurround / DepthSurround / Stereo3DSurround / StereoImager / VHE（含 L0–L4 系数表）、DynamicSystem、Cure（CURe crossfeed）、Reverberation / Convolver、DynamicEQ / IIRFilter、FETCompressor / MultibandCompressor / PlaybackGain / LUFSTargeting / SoftwareLimiter、PsychoacousticBass、SpeakerCorrection、ViPERDDC。
+  4. `viper/utils/` **~35 个基础组件**：pffft（FFT）、Biquad / IIR_1st / IIR_NOrder_* 滤波器族、CRevModel / CCombFilter / CAllPassFilter（混响组件）、PConvSingle（分区卷积）、Polyphase（重采样）、Harmonic / DynamicBass（低音增强）、Crossfeed、QuadricTube（新电子管模型）、TimeConstDelay、WaveBuffer 等。
+- **授权红线（显式 All Rights Reserved，比 v2.2 判断更严重）**：引擎 README 明确声明——逆向代码，原 IP 归 Zhuhang / ViPER520；上游项目无许可证，按 **All Rights Reserved** 处理，**仅限个人使用、禁止任何商用**。AuraDSP 为 GPL-3.0 分发项目：**该库代码一律不得并入**，仅可作算法思路的阅读参考；若未来落地 ViPER 系效果，须自研重写或取得明确授权。
+- **对 AuraDSP 的算法对照价值（纯参考，禁搬运）**：VHE / DynamicSystem（头戴虚拟化，对照 haas + crossfeed）、PsychoacousticBass + Harmonic（对照 psycho 模块）、FETCompressor / MultibandCompressor（对照 vendor comp）、SpeakerCorrection / SpectrumExtend（对照 shelf / filter）、Convolver + PConvSingle（对照 convolver 节点）。
+- **快照内实测结构（218 文件 / 3.14 MB，含 ViPERDSP）**：
   1. **APO 层 `ViPER4WindowsAPO/`（C++，约 1,150 行）**：`CRegAPOProperties` 注册 MFX APO（INPLACE + 采样/帧率/位深必须匹配）；`FinalConstruct` 创建 `ViPER` 引擎实例并打开共享内存；**RT-Safe 参数投递范式**——`StartParamWatch()` 监听参数变更，`staged_params_` / `consumed_params_` 两个 `std::atomic` 指针构成双缓冲（写侧暂存、音频线程取用后交换删除），配合 avrt 多媒体类调度；`ViPERLog.h` 提供调试日志。
   2. **Flutter UI `ViPER4Windows/`**：`lib/pages/` 八页面（output / equalizer / tone / spatial / dynamics / devices / preset / driver）；`lib/services/` 含 `shared_memory_service.dart`、`control_pipe_server.dart`、`apo_registration_service.dart`（端点注册）、`profile_file_manager.dart`（按设备持久化）；`lib/models/viper_params_layout.dart` 为**效果参数布局蓝本**（可对照 AuraDSP 的 `engine_internal.h` Params 结构与链视图）。
   3. **安装与工具**：`Installer/ViPER4Windows.iss`（Inno Setup，含 APO 注册/还原与 `DisableProtectedAudioDG` 处理）；`tools/convert_preset.py`（预设转换）。
@@ -123,6 +129,7 @@
 | **Windows 全局音频** | 当前为进程内 WASAPI pump | `equalizerAPO64` / `ViPER4Windows` | `EqualizerAPO/`（APO 注册表服务、驱动挂载与端点拦截）；`ViPER4WindowsAPO/ViPER4WindowsAPO.cpp`（MFX APO 注册 + 共享内存参数投递的最小闭环） |
 | **RT-Safe 参数热更新** | P-004 表驱动链参数下发 | `ViPER4Windows` | `staged/consumed_params_` 原子双缓冲 + `StartParamWatch()`（对照音频线程零分配约束） |
 | **跨平台预设格式** | 自研 JSON 预设 | `ViPER4Windows` | `lib/models/` + `tools/convert_preset.py`（v2 grouped-JSON，与 ViPER4Android/Mac 互通） |
+| **ViPER 系效果算法** | 部分自研（haas / psycho / crossfeed / comp） | `ViPERDSP`（仅阅读参考） | `viper/effects/{VHE,DynamicSystem,PsychoacousticBass,FETCompressor,SpectrumExtend}.cpp`（**All Rights Reserved，禁搬运**，见 §2.6） |
 | **Linux 全局音频** | Phase 7 规划中 | `JDSP4Linux` / `pulseeffects` | `JDSP4Linux/src/pipewire/`（PipeWire filter-chain 与 SPA 模块） |
 | **Android 免 Root 引擎** | Phase 6 规划中 | `RootlessJamesDSP` | `app/src/main/java/.../AudioCaptureService.kt`（无 Root 前台服务捕获） |
 
@@ -151,7 +158,7 @@
 | **P-5** | ✅ 已闭环 | lsp-plugins 源码定位 | **已彻底澄清并闭环**：`modules/` 下 66 个子模块源码完整在盘，无需额外克隆单个插件仓。 |
 | **P-6** | ✅ 新增闭环 | bass_enhancer 溯源 | 确认 pulseeffects 底层为 Calf 插件；算法对照锁定为 `lsp-plugins-loud-comp` 与 `lsp-dsp-units`。 |
 | **P-7** | ✅ 新增闭环 | CLAP 正典上游与内置快照落差 | 新克隆 `source/clap` 为正典上游 v1.2.10；内置快照 `vendor/plugin-api/clap` 为 1.2.6（落后 8 个 draft 头），可按 §2.5 建议升级。 |
-| **P-8** | ⚠️ 已记录（快照固有缺口） | ViPER4Windows 引擎源码缺失 | `ViPERDSP/` 为未初始化 submodule（指针 `db1c11c`），ViPER 效果算法源码不在快照内。如需算法底层，另行克隆 `likelikeslike/ViPERDSP.git` 后补充登记；当前 APO 调用侧与 UI 层已足够支撑架构参考。 |
+| **P-8** | ✅ 已闭环 | ViPER4Windows 引擎源码缺失 | 已克隆补齐 `likelikeslike/ViPERDSP` main@6fc1f1b（123 文件 / 1.36 MB，.git 已剥除并登记），23 个效果模块到齐；注意其为 ViPER4Windows 钉住指针 db1c11c 的后继版本。引擎为 **All Rights Reserved 仅限个人使用**，仅作阅读参考、禁并入 AuraDSP，见 §2.6。 |
 
 ---
 
@@ -161,5 +168,5 @@
 2. **M5 算法精细化**：全面挖掘 `source/lsp-plugins/modules/lsp-dsp-units` 与 `lsp-plugins-loud-comp`，用于自研等响度与高阶滤波器的对比验证。
 3. **磁盘轻量化（可选）**：如需节约约 300MB 空间，可清空 `source/lsp-plugins/release/` 下的离线归档包，因 `modules/` 源码已足够自洽。
 4. **CLAP 快照升级（可执行）**：将 `vendor/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `vendor/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
-5. **ViPER4Windows 后续（可选）**：若 Phase 7b 需要 APO 轻量落地范式或 ViPER 系效果补齐，先以快照内 APO 层与 `viper_params_layout.dart` 为蓝本；若深入算法层，另行克隆 `likelikeslike/ViPERDSP` 并重新登记。搬运代码前必须先确权（仓库无 LICENSE，见 §2.6）。
+5. **ViPER4Windows / ViPERDSP 后续**：APO 层与 `viper_params_layout.dart` 可作为 Phase 7b 蓝本阅读；ViPERDSP 为 All Rights Reserved（仅限个人使用），**代码不得并入 GPL 分发**——若需落地 ViPER 系效果（VHE / 动态系统 / 心理声学低音等），按 §2.6 算法对照清单自研重写。
 
