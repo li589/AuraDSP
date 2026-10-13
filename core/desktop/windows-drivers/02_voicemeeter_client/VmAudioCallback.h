@@ -29,6 +29,8 @@ struct AuraVmPump {
     int edition = 0;         // 探测到的版型（1/2/3，0=未知）
     int groups = 0;          // 本轮实际 bus 组数（min(nbi,nbo)/8）
     int handles = 0;         // 预建引擎 handle 数
+    int warmupMs = 0;        // 等首个 BUFFER 的毫秒数（冷启动观测）
+    double maxCbUs = 0.0;    // 单次回调最大耗时 us（爆音预算证据）
     std::string enginePath;  // 实际载入的引擎 DLL（空=没载上，全透传）
     std::string note;        // ran=false 时的原因
 };

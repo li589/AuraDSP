@@ -1,4 +1,12 @@
 // VmAudioCallback.cpp — 见头文件 v1 范围与 RT 铁律。
+//
+// 死锁审计（结论：结构上不可能死锁）：
+// ① RT 回调内零锁（无 mutex/CriticalSection/原子自旋；与 engine 的唯一共享是
+//    主线程建好后只读的函数指针 + RT 独占的 ctx 字段；VB 保证回调不重入）；
+// ② 主线程只 Sleep 轮询 + 顺序 join（无等待回调的原语；stop/unreg/logout 全是
+//    发后不管的同步调用，不依赖回调回执）；③ 不存在锁序（全程无锁）。
+// 崩溃面：进程崩溃会滞留 OUT 槽（VM 侧无超时回收，只能重启 VM 或等槽主退出）；
+// R 会话靠 Logout 配对释放（漏一次攒一个 R，上限 8）。
 #include "VmRemoteLoader.h"
 //
 // 借鉴注（source/equalizerAPO64/VoicemeeterClient/VoicemeeterClient.cpp:handle）：
@@ -65,6 +73,8 @@ struct PumpCtx {
     float* scratchIn = nullptr;   // 主线程预分配 2*kMaxNbs（各组串行复用，非重入安全）
     float* scratchOut = nullptr;
     uint64_t frames = 0;
+    uint64_t maxCbTicks = 0;  // 单次 BUFFER_OUT 最大耗时（QPC ticks；爆音预算证据）
+    volatile LONG gotFirst = 0;  // 首个 BUFFER 到达（主线程轮询，RT 只存一次）
     uint64_t idleSamples[kMaxGroups] = {};  // 组独立（EAPO 同式）
     bool idle[kMaxGroups] = {};
     long sr = 0;
@@ -104,6 +114,10 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
         return 0;
     }
     if (cmd != kCbBufferOut) return 0;
+    c->gotFirst = 1;
+    // 爆音预算：整块处理耗时打点（QPC 无等待，~50ns，可忽略；8 组串行是主要成本）。
+    LARGE_INTEGER t0, t1;
+    QueryPerformanceCounter(&t0);
     auto* ab = (VbAudioBuffer*)lpData;
     if (ab->nbo < 2 || ab->nbs <= 0 || ab->nbs > kMaxNbs) return 0;
     const long n = ab->nbs;
@@ -172,6 +186,9 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
             memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
     }
     c->frames += (uint64_t)n;
+    QueryPerformanceCounter(&t1);
+    const uint64_t dt = (uint64_t)(t1.QuadPart - t0.QuadPart);
+    if (dt > c->maxCbTicks) c->maxCbTicks = dt;
     return 0;
 }
 
@@ -233,28 +250,48 @@ int AuraVmPumpRun(AuraVmPump& p) {
     auto stop = (FnStop)GetProcAddress(remote, "VBVMR_AudioCallbackStop");
     auto unreg = (FnUnreg)GetProcAddress(remote, "VBVMR_AudioCallbackUnregister");
     auto login = (long(__stdcall*)())GetProcAddress(remote, "VBVMR_Login");
-    if (!reg || !start || !stop || !unreg || !login) {
+    auto logout = (long(__stdcall*)())GetProcAddress(remote, "VBVMR_Logout");
+    if (!reg || !start || !stop || !unreg || !login || !logout) {
         FreeLibrary(remote);
         p.note = "remote-api-missing";
         return 0;
     }
     login();
+    // EAPO 同式：Logout 配对（endSoftware 先 Logout 再 Unregister）。
+    // 漏 Logout 会在托盘攒 R（每次运行 +1，经 6 次运行复现 R 全亮）。
+    // 注意 FreeLibrary 只能一次：leave 幂等（remoteFreed 守卫），否则二次释放崩溃。
+    bool remoteFreed = false;
+    auto leave = [&](bool andUnreg) {
+        logout();
+        if (andUnreg) unreg();
+        if (!remoteFreed) {
+            remoteFreed = true;
+            FreeLibrary(remote);
+        }
+    };
     char name[64] = {0};
     memcpy(name, "AuraDSP", 7);
     PumpCtx ctx;
-    const long rc = reg(kModeOut, OnVbCallback, &ctx, name);
+    // 注册：1 = 被占（EAPO 同式直接让路）；其它非零 = 瞬时失败有界重试
+    //（EAPO 30×100ms；泵是短命进程，10×100ms 足够，超时仍优雅退出）。
+    long rc = -99;
+    for (int tries = 0; tries < 10; ++tries) {
+        rc = reg(kModeOut, OnVbCallback, &ctx, name);
+        if (rc == 0 || rc == 1) break;
+        Sleep(100);
+    }
     p.startRc = (int)rc;
     if (rc == 1) {
         // OUT 槽被别的应用占住：优雅让路（smoke 记 note，不判 FAIL）。
         p.note = std::string("out-slot-busy-by:") + name;
-        unreg();
-        FreeLibrary(remote);
+        leave(true);
         return 0;
     }
     if (rc != 0) {
-        p.note = "register-failed";
-        unreg();
-        FreeLibrary(remote);
+        char nb[64];
+        snprintf(nb, sizeof(nb), "register-failed rc=%ld", rc);
+        p.note = nb;
+        leave(true);
         return 0;
     }
     // 引擎桥（主线程：加载 + 按版型预建 handle + 预分配）。
@@ -308,13 +345,21 @@ int AuraVmPumpRun(AuraVmPump& p) {
     }
     if (start() != 0) {
         p.note = "start-failed";
-        unreg();
-        FreeLibrary(remote);
+        leave(true);
         return 0;
     }
+    // 等首个 BUFFER 再计时（冷启动引擎 device negotiate 要几秒；至多等 10s）。
+    // 等不到也继续跑完（frames=0 + note，smoke 按阈值判）。
+    int waited = 0;
+    while (!ctx.gotFirst && waited < 10000) {
+        Sleep(50);
+        waited += 50;
+    }
+    if (!ctx.gotFirst) p.note = "no-buffers-timeout";
+    p.warmupMs = waited;
     Sleep((DWORD)(p.seconds > 0 ? p.seconds : 5) * 1000);
     stop();
-    unreg();
+    leave(true);  // 单次配对：logout + unreg（二次 logout 会 AV，勿加第二次）
     p.ran = true;
     p.frames = ctx.frames;
     p.maxDiff = ctx.maxDiff;
@@ -324,6 +369,10 @@ int AuraVmPumpRun(AuraVmPump& p) {
     p.changes = ctx.changes;
     p.groups = ctx.groups;
     p.handles = ctx.nEng;
+    p.warmupMs = waited;
+    LARGE_INTEGER qpf;
+    if (QueryPerformanceFrequency(&qpf) && qpf.QuadPart > 0)
+        p.maxCbUs = (double)ctx.maxCbTicks * 1000000.0 / (double)qpf.QuadPart;
     if (ctx.scratchIn) free(ctx.scratchIn);
     if (ctx.scratchOut) free(ctx.scratchOut);
     if (eng) {
@@ -334,6 +383,5 @@ int AuraVmPumpRun(AuraVmPump& p) {
         }
         FreeLibrary(eng);
     }
-    FreeLibrary(remote);
     return 0;
 }
