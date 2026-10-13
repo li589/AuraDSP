@@ -6,6 +6,7 @@ set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 
 add_library(auravm STATIC
     "${VMCLIENT}/VmRemoteLoader.cpp"
+    "${VMCLIENT}/VmAudioCallback.cpp"
 )
 
 target_include_directories(auravm PUBLIC "${VMCLIENT}")
@@ -20,3 +21,11 @@ target_link_libraries(vm_detect PRIVATE auravm version)
 target_compile_options(vm_detect PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_detect PROPERTY CXX_STANDARD 20)
 set_property(TARGET vm_detect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+add_executable(vm_pump_test
+    "${VMCLIENT}/vm_pump_test.cpp"
+)
+target_link_libraries(vm_pump_test PRIVATE auravm version)
+target_compile_options(vm_pump_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vm_pump_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
