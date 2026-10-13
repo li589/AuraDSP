@@ -270,6 +270,15 @@
   "stComp": "Limiter",
   "stBass": "Bass Boost",
   "stBassmono": "Bass Mono",
+  "stGate": "Noise Gate",
+  "gateHint": "Chain head: background below threshold is gated, attack/release shape the edges",
+  "gateThreshold": "Threshold",
+  "gateAttack": "Attack",
+  "gateRelease": "Release",
+  "gateAutoGain": "Auto gain compensation",
+  "deesserTitle": "De-esser",
+  "deesserFreq": "Sibilance band",
+  "deesserAmount": "Reduction",
   "stHaas": "Differential Surround",
   "stExciter": "Exciter",
   "exciterHint": "Harmonic air for compressed highs",
@@ -669,5 +678,27 @@
     }
   },
   "arbmagApply": "Apply Code",
-  "arbmagInvalidFormat": "Invalid GraphicEQ format or no valid frequency nodes found"
+  "arbmagInvalidFormat": "Invalid GraphicEQ format or no valid frequency nodes found",
+  "crossfeedTitle": "Crossfeed",
+  "crossfeedDesc": "Simulates acoustic crosstalk to relieve headphone in-the-head listening fatigue",
+  "crossfeedModeDefault": "Default Standard",
+  "crossfeedModeChuMoy": "Chu Moy Classic",
+  "crossfeedModeJanMeier": "Jan Meier Enhanced",
+  "crossfeedModeCustom": "Custom",
+  "crossfeedCutoff": "Cutoff Frequency",
+  "crossfeedFeed": "Feed Level",
+  "crossfeedActiveDesc": "Active: {mode} ({fcut} Hz, {feed} dB)",
+  "@crossfeedActiveDesc": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "fcut": {
+        "type": "String"
+      },
+      "feed": {
+        "type": "String"
+      }
+    }
+  }
 }

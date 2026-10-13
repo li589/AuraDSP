@@ -369,7 +369,11 @@ void jdsp_unlock(JamesDSPLib *jdsp)
 static void stage_arbmag(JamesDSPLib *jdsp, size_t n)
 {
 	if (jdsp->arbitraryMagEnabled)
+	{
+		double rin = jdsp->fxAutoGain[4] ? stage_rms(jdsp, n) : 0.0;
 		ArbitraryResponseEqualizerProcess(jdsp, n);
+		stage_apply_fx_gain(jdsp, n, 4, rin);
+	}
 }
 static void stage_conv(JamesDSPLib *jdsp, size_t n)
 {
@@ -1332,12 +1336,12 @@ void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB)
  * 控制线程调用；fx 越界忽略。切态重置平滑状态避免从旧值爬坡。 */
 void JamesDSPSetFxOutGain(JamesDSPLib *jdsp, int fx, double linGain)
 {
-	if (fx < 0 || fx > 3) return;
+	if (fx < 0 || fx > 4) return;
 	jdsp->fxOutGain[fx] = (float)linGain;
 }
 void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on)
 {
-	if (fx < 0 || fx > 3) return;
+	if (fx < 0 || fx > 4) return;
 	jdsp->fxAutoGain[fx] = on ? 1 : 0;
 	if (on)
 	{
@@ -1348,7 +1352,7 @@ void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on)
 }
 void JamesDSPInitFxGains(JamesDSPLib *jdsp)
 {
-	for (int i = 0; i < 4; ++i)
+	for (int i = 0; i < 5; ++i)
 	{
 		jdsp->fxOutGain[i] = 1.0f;
 		jdsp->fxAutoGain[i] = 0;

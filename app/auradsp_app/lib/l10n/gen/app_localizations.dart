@@ -1408,6 +1408,60 @@ abstract class AppLocalizations {
   /// **'低频单声道'**
   String get stBassmono;
 
+  /// No description provided for @stGate.
+  ///
+  /// In zh, this message translates to:
+  /// **'噪声门'**
+  String get stGate;
+
+  /// No description provided for @gateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'链头第一道：低于阈值的背景噪声被压掉，attack/release 控制开关速度'**
+  String get gateHint;
+
+  /// No description provided for @gateThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'阈值'**
+  String get gateThreshold;
+
+  /// No description provided for @gateAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启时间'**
+  String get gateAttack;
+
+  /// No description provided for @gateRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放时间'**
+  String get gateRelease;
+
+  /// No description provided for @gateAutoGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动增益补偿'**
+  String get gateAutoGain;
+
+  /// No description provided for @deesserTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'齿音消除'**
+  String get deesserTitle;
+
+  /// No description provided for @deesserFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'齿音频段'**
+  String get deesserFreq;
+
+  /// No description provided for @deesserAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'压制强度'**
+  String get deesserAmount;
+
   /// No description provided for @stHaas.
   ///
   /// In zh, this message translates to:
@@ -2505,6 +2559,60 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'GraphicEQ 格式错误或未包含有效节点'**
   String get arbmagInvalidFormat;
+
+  /// No description provided for @crossfeedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'串扰消除'**
+  String get crossfeedTitle;
+
+  /// No description provided for @crossfeedDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'专为耳机设计，通过低通互馈消除头中效应与听觉疲劳'**
+  String get crossfeedDesc;
+
+  /// No description provided for @crossfeedModeDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认标准'**
+  String get crossfeedModeDefault;
+
+  /// No description provided for @crossfeedModeChuMoy.
+  ///
+  /// In zh, this message translates to:
+  /// **'经典耳放 (Chu Moy)'**
+  String get crossfeedModeChuMoy;
+
+  /// No description provided for @crossfeedModeJanMeier.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强互馈 (Jan Meier)'**
+  String get crossfeedModeJanMeier;
+
+  /// No description provided for @crossfeedModeCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get crossfeedModeCustom;
+
+  /// No description provided for @crossfeedCutoff.
+  ///
+  /// In zh, this message translates to:
+  /// **'截止频率'**
+  String get crossfeedCutoff;
+
+  /// No description provided for @crossfeedFeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'互馈电平'**
+  String get crossfeedFeed;
+
+  /// No description provided for @crossfeedActiveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前生效：{mode} ({fcut} Hz, {feed} dB)'**
+  String crossfeedActiveDesc(String mode, String fcut, String feed);
 }
 
 class _AppLocalizationsDelegate

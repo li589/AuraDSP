@@ -44,6 +44,9 @@ abstract final class ParamId {
   static const tubeEnable = 'tube.enable';
   static const tubeGain = 'tube.gain';
   static const xfeedEnable = 'crossfeed.enable';
+  static const xfeedMode = 'crossfeed.mode';
+  static const xfeedFcut = 'crossfeed.fcut';
+  static const xfeedFeed = 'crossfeed.feed';
   // M5/P-002：声场分带
   static String stereoBand(int i) => 'stereo.band${i + 1}'; // i: 0..4
   static const stereoBandUsed = 'stereo.bandUsed';
@@ -79,6 +82,15 @@ abstract final class ParamId {
   static const compAutoGain = 'comp.autogain';
   static const reverbOutGain = 'reverb.outgain';
   static const reverbAutoGain = 'reverb.autogain';
+  // 噪声门 + Deesser + 自动增益补偿
+  static const gateEnable = 'gate.enable';
+  static const gateThreshold = 'gate.threshold';
+  static const gateAttack = 'gate.attack';
+  static const gateRelease = 'gate.release';
+  static const gateAutoGain = 'gate.autogain';
+  static const deesserEnable = 'deesser.enable';
+  static const deesserFreq = 'deesser.freq';
+  static const deesserAmount = 'deesser.amount';
   // M5-c：参数化混响（Freeverb）
   static const fvEnable = 'freeverb.enable';
   static const fvDecay = 'freeverb.decay';

@@ -333,6 +333,19 @@ abstract final class PresetLibrary {
           'amount': m.exciterAmount,
           'hifreq': m.exciterHifreq,
         },
+        // 噪声门（链头）+ Deesser
+        'gate': {
+          'enable': m.gateOn,
+          'threshold': m.gateThreshold,
+          'attack': m.gateAttackMs,
+          'release': m.gateReleaseMs,
+          'autoGain': m.gateAutoGain,
+        },
+        'deesser': {
+          'enable': m.deesserOn,
+          'freq': m.deesserFreq,
+          'amount': m.deesserAmount,
+        },
         // 脉冲卷积与校正
         'convolver': {
           'enable': m.convEnabled && m.convReady,
@@ -360,6 +373,9 @@ abstract final class PresetLibrary {
         // 交叉反馈与输出限幅
         'crossfeed': {
           'enable': m.xfeedOn,
+          'mode': m.xfeedMode,
+          'fcut': m.xfeedFcut,
+          'feed': m.xfeedFeed,
         },
         // 脚本（v2：只存使能与滑块；全文不在预设里，走脚本库/会话引用；
         // codeHash 供 apply 校验当前编辑器代码是否与存档时一致）
@@ -635,6 +651,24 @@ abstract final class PresetLibrary {
       }
     }
 
+    // 8.8 噪声门（参数先行，enable 最后）
+    final gt = (p['gate'] as Map<String, dynamic>?) ?? {};
+    if (gt.isNotEmpty) {
+      if (gt['threshold'] != null) m.setGateThreshold((gt['threshold'] as num).toDouble());
+      if (gt['attack'] != null) m.setGateAttack((gt['attack'] as num).toDouble());
+      if (gt['release'] != null) m.setGateRelease((gt['release'] as num).toDouble());
+      if (gt['autoGain'] != null) m.setGateAutoGain(gt['autoGain'] as bool);
+      if (gt['enable'] != null) m.setGateEnabled(gt['enable'] as bool);
+    }
+
+    // 8.9 Deesser（参数先行，enable 最后）
+    final ds = (p['deesser'] as Map<String, dynamic>?) ?? {};
+    if (ds.isNotEmpty) {
+      if (ds['freq'] != null) m.setDeesserFreq((ds['freq'] as num).toDouble());
+      if (ds['amount'] != null) m.setDeesserAmount((ds['amount'] as num).toDouble());
+      if (ds['enable'] != null) m.setDeesserEnabled(ds['enable'] as bool);
+    }
+
     // 9. 脉冲卷积（IR 路径由 convIrPath / 会话层负责重载，这里只恢复使能与混合比）
     final conv = (p['convolver'] as Map<String, dynamic>?) ?? {};
     if (conv.isNotEmpty) {
@@ -692,10 +726,15 @@ abstract final class PresetLibrary {
       }
     }
 
-    // 11. 交叉反馈
+    // 11. 交叉反馈（fcut/feed 先行，mode 随后，避免联动误切自定义）
     final xf = (p['crossfeed'] as Map<String, dynamic>?) ?? {};
-    if (xf.isNotEmpty && xf['enable'] != null) {
-      m.setCrossfeedEnabled(xf['enable'] as bool);
+    if (xf.isNotEmpty) {
+      if (xf['fcut'] != null) m.setCrossfeedFcut((xf['fcut'] as num).toDouble());
+      if (xf['feed'] != null) m.setCrossfeedFeed((xf['feed'] as num).toDouble());
+      if (xf['mode'] != null) m.setCrossfeedMode(xf['mode'] as int);
+      if (xf['enable'] != null) {
+        m.setCrossfeedEnabled(xf['enable'] as bool);
+      }
     }
 
     // 12. 脚本（v2：只恢复使能与滑块；全文不在预设里）。

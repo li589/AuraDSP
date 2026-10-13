@@ -81,7 +81,35 @@ for i in range(BLOCK * 2):
 dll.auradsp_process(h, in_buf, out_buf, BLOCK)
 check('process block completed', any(out_buf[i] != 0 for i in range(BLOCK * 2)))
 
-# 5. 禁用
+# 5. 增益门与自动增益测试
+def set_f(pid, v):
+    val = ctypes.c_float(v)
+    return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(val), 4)
+
+def get_f(pid):
+    val = ctypes.c_float(0.0)
+    rc = dll.auradsp_get_param(h, pid.encode(), ctypes.byref(val), 4)
+    return rc, val.value
+
+rc = set_f('arbmag.outgain', -3.5)
+check('set arbmag.outgain == -3.5', rc == 0)
+_, og = get_f('arbmag.outgain')
+check('get arbmag.outgain == -3.5', abs(og - (-3.5)) < 1e-4, f'actual={og}')
+
+rc = set_i('arbmag.autogain', 1)
+check('set arbmag.autogain == 1', rc == 0)
+_, ag = get_i('arbmag.autogain')
+check('get arbmag.autogain == 1', ag == 1)
+
+# 6. 探针测试
+dll.auradsp_probe_component.restype = ctypes.c_int32
+dll.auradsp_probe_component.argtypes = [ctypes.c_char_p, ctypes.c_double, ctypes.POINTER(ctypes.c_uint32)]
+probe_out = ctypes.c_uint32(0)
+rc = dll.auradsp_probe_component(b'arbmag', SR, ctypes.byref(probe_out))
+check('probe arbmag rc==0', rc == 0, f'rc={rc}')
+check('probe arbmag samples==0', probe_out.value == 0, f'samples={probe_out.value}')
+
+# 7. 禁用
 set_i('arbmag.enable', 0)
 _, en = get_i('arbmag.enable')
 check('disable==0', en == 0)

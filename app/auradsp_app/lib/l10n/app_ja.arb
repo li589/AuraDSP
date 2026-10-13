@@ -270,6 +270,15 @@
   "stComp": "リミッター",
   "stBass": "低音ブースト",
   "stBassmono": "低域モノラル",
+  "stGate": "ノイズゲート",
+  "gateHint": "チェーン先頭：閾値以下の背景ノイズをゲート、attack/release でエッジ整形",
+  "gateThreshold": "閾値",
+  "gateAttack": "アタック",
+  "gateRelease": "リリース",
+  "gateAutoGain": "自動ゲイン補償",
+  "deesserTitle": "デエッサー",
+  "deesserFreq": "歯擦音帯域",
+  "deesserAmount": "減衰量",
   "stHaas": "差分サラウンド",
   "stExciter": "エキサイター",
   "exciterHint": "高域に倍音を足し空気感を復元",
@@ -669,5 +678,27 @@
     }
   },
   "arbmagApply": "コードを適用",
-  "arbmagInvalidFormat": "GraphicEQフォーマットが無効であるか、有効な周波数ノードがありません"
+  "arbmagInvalidFormat": "GraphicEQフォーマットが無効であるか、有効な周波数ノードがありません",
+  "crossfeedTitle": "クロスフィード",
+  "crossfeedDesc": "ヘッドホン特有の頭内定位感を緩和し、長時間のリスニング疲労を軽減",
+  "crossfeedModeDefault": "デフォルト標準",
+  "crossfeedModeChuMoy": "Chu Moy クラシック",
+  "crossfeedModeJanMeier": "Jan Meier 拡張",
+  "crossfeedModeCustom": "カスタム",
+  "crossfeedCutoff": "カットオフ周波数",
+  "crossfeedFeed": "クロスフィード量",
+  "crossfeedActiveDesc": "適用中: {mode} ({fcut} Hz, {feed} dB)",
+  "@crossfeedActiveDesc": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "fcut": {
+        "type": "String"
+      },
+      "feed": {
+        "type": "String"
+      }
+    }
+  }
 }

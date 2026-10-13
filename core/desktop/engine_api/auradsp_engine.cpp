@@ -147,6 +147,9 @@ struct Params {
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
     std::atomic<float>    tube_gain{0.0f};      /* dB [-3, 12] 驱动度 */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
+    std::atomic<int32_t>  xfeed_mode{0};        /* 0: Default, 1: Chu Moy, 2: Jan Meier, 3: Custom */
+    std::atomic<float>    xfeed_fcut{700.0f};   /* Hz [300, 2000] */
+    std::atomic<float>    xfeed_feed{4.5f};     /* dB [1.0, 15.0] */
     /* M5/P-002：声场分带（bandMixUsed 由宿主语义维护） */
     std::atomic<float>    stereo_band[5];
     std::atomic<int32_t>  stereo_band_used{0};
@@ -179,6 +182,15 @@ struct Params {
     std::atomic<int32_t>  comp_autogain{0};
     std::atomic<float>    reverb_outgain{0.0f};
     std::atomic<int32_t>  reverb_autogain{0};
+    /* 噪声门 + 齿音消除（Deesser）+ 自动增益补偿（链头） */
+    std::atomic<int32_t>  gate_enable{0};
+    std::atomic<float>    gate_threshold{-40.0f}; /* dB [-60,0] */
+    std::atomic<float>    gate_attack{10.0f};     /* ms [1,100] */
+    std::atomic<float>    gate_release{100.0f};   /* ms [10,500] */
+    std::atomic<int32_t>  gate_autogain{0};
+    std::atomic<int32_t>  deesser_enable{0};
+    std::atomic<float>    deesser_freq{6000.0f};  /* Hz [2000,10000] */
+    std::atomic<float>    deesser_amount{0.5f};   /* [0,1] */
     /* M5-c：参数化混响（Freeverb，T2 档） */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
@@ -197,6 +209,8 @@ struct Params {
     std::atomic<int32_t>  arbmag_enable{0};
     std::atomic<int32_t>  arbmag_ready{0};
     std::atomic<int32_t>  arbmag_nodes{0};
+    std::atomic<float>    arbmag_outgain{0.0f};
+    std::atomic<int32_t>  arbmag_autogain{0};
 };
 
 /* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
@@ -356,6 +370,11 @@ struct auradsp_handle_s {
     } shelf;
     /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
+    /* 噪声门/Deesser 状态（RT 独占） */
+    float gate_gain = 1.0f;         /* 门增益（平滑后） */
+    float gate_ds_lp_l = 0.0f, gate_ds_lp_r = 0.0f;  /* Deesser 侧链 HP 状态 */
+    float gate_ds_env = 0.0f;       /* Deesser 侧链包络 */
+    double gate_ag_in = 0.0, gate_ag_out = 0.0, gate_ag_comp = 1.0;
     /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
@@ -505,7 +524,8 @@ static void apply_fx_gains(auradsp_handle h) {
         { &Params::tube_outgain, &Params::tube_autogain, 0 },
         { &Params::comp_outgain, &Params::comp_autogain, 1 },
         { &Params::bass_outgain, &Params::bass_autogain, 2 },
-        { &Params::eq_outgain,   &Params::eq_autogain,   3 },
+        { &Params::eq_outgain,     &Params::eq_autogain,     3 },
+        { &Params::arbmag_outgain, &Params::arbmag_autogain, 4 },
     };
     for (const auto& f : kFx) {
         const float db = (h->p.*(f.db)).load(std::memory_order_relaxed);
@@ -593,9 +613,38 @@ void apply_tube(auradsp_handle h) {
 }
 
 void apply_crossfeed(auradsp_handle h) {
-    /* vendor lazy-build：enable 时用内置 HRTF blobs 建卷积（首次有一次性开销） */
-    CrossfeedEnable(&h->jdsp,
-                    h->p.xfeed_enable.load(std::memory_order_relaxed) ? 1 : 0);
+    const int en = h->p.xfeed_enable.load(std::memory_order_relaxed) ? 1 : 0;
+    if (en) {
+        CrossfeedEnable(&h->jdsp, 1);
+        const int mode = h->p.xfeed_mode.load(std::memory_order_relaxed);
+        const unsigned int fs = (unsigned int)h->jdsp.fs;
+        if (mode == 1) {
+            /* Chu Moy: 700 Hz, 6.0 dB */
+            h->jdsp.advXF.mode = 0;
+            BS2BInit(&h->jdsp.advXF.bs2b[0], fs, BS2B_CMOY_CLEVEL);
+        } else if (mode == 2) {
+            /* Jan Meier: 650 Hz, 9.5 dB */
+            h->jdsp.advXF.mode = 1;
+            BS2BInit(&h->jdsp.advXF.bs2b[1], fs, BS2B_JMEIER_CLEVEL);
+        } else if (mode == 3) {
+            /* Custom: fcut & feed */
+            float fcut = h->p.xfeed_fcut.load(std::memory_order_relaxed);
+            if (fcut < 300.0f) fcut = 300.0f;
+            if (fcut > 2000.0f) fcut = 2000.0f;
+            float feed = h->p.xfeed_feed.load(std::memory_order_relaxed);
+            if (feed < 1.0f) feed = 1.0f;
+            if (feed > 15.0f) feed = 15.0f;
+            int flevel = BS2BCalculateflevel((unsigned int)fcut, (unsigned int)(feed * 10.0f));
+            h->jdsp.advXF.mode = 0;
+            BS2BInit(&h->jdsp.advXF.bs2b[0], fs, flevel);
+        } else {
+            /* Mode 0: Default (BS2B standard / EasyEffects default: 700 Hz, 4.5 dB) */
+            h->jdsp.advXF.mode = 0;
+            BS2BInit(&h->jdsp.advXF.bs2b[0], fs, BS2B_DEFAULT_CLEVEL);
+        }
+    } else {
+        CrossfeedDisable(&h->jdsp);
+    }
 }
 
 void apply_convolver(auradsp_handle h) {
@@ -1219,7 +1268,7 @@ void probe_isolate(auradsp_handle p, const char* comp) {
 bool probe_is_supported(const char* comp) {
     static const char* kSupported[] = {
         "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp",
-        "bassmono", "exciter", "stereo"
+        "bassmono", "exciter", "stereo", "arbmag"
         /* 注意：haas 不入列。探针的能量/首非零法打双声道脉冲，而 haas 只延迟
          * 一侧（另一侧干声恒在 0），必然测出 0ms——伪造零延迟比报「不可测」
          * 更危险。摘掉后刷新回退到标称延迟（componentLatency 返回 slider 值）。 */
@@ -1750,6 +1799,89 @@ static void exciter_process(auradsp_handle h, float* io, int frames) {
     h->exc_lp_r = (fabsf(lpR) < 1e-18f) ? 0.0f : lpR;
 }
 
+/* 噪声门 + Deesser + 自动增益补偿（链头第一道，input 增益之后）。
+ * gate：逐采样峰值包络，attack/release 一阶平滑门增益，下限 -60dB 防咔哒；
+ * deesser：one-pole HP（deesser.freq）取 s 音高频，包络平滑后超阈值
+ * 只对高频成分动态衰减（低频不动）；
+ * autogain：P-010 leveler 模式（块前后 RMS 平滑，±12dB 限幅）。
+ * RT 安全：纯乘加/expf 每块一次，无分配无锁；状态 RT 独占。 */
+static void gate_process(auradsp_handle h, float* io, int frames) {
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    float thr = h->p.gate_threshold.load(std::memory_order_relaxed);
+    if (thr < -60.0f) thr = -60.0f; if (thr > 0.0f) thr = 0.0f;
+    float att = h->p.gate_attack.load(std::memory_order_relaxed);
+    if (att < 1.0f) att = 1.0f; if (att > 100.0f) att = 100.0f;
+    float rel = h->p.gate_release.load(std::memory_order_relaxed);
+    if (rel < 10.0f) rel = 10.0f; if (rel > 500.0f) rel = 500.0f;
+    const float attCoef = expf(-1.0f / (att * 0.001f * fs));
+    const float relCoef = expf(-1.0f / (rel * 0.001f * fs));
+    const int de = h->p.deesser_enable.load(std::memory_order_relaxed);
+    float df = h->p.deesser_freq.load(std::memory_order_relaxed);
+    if (df < 2000.0f) df = 2000.0f; if (df > 10000.0f) df = 10000.0f;
+    float da = h->p.deesser_amount.load(std::memory_order_relaxed);
+    if (da < 0.0f) da = 0.0f; if (da > 1.0f) da = 1.0f;
+    const bool ag = h->p.gate_autogain.load(std::memory_order_relaxed) != 0;
+
+    double rin = 0.0;
+    if (ag) rin = stereo_block_rms(io, frames);
+
+    const float bpa = expf(-2.0f * 3.14159265358979f * df / fs);
+    const float dsCoef = expf(-1.0f / (0.002f * fs));   /* 侧链包络 ~2ms */
+    const float dsThr = 0.05f;                            /* 归一化阈值（≈-26dBFS 齿音触发） */
+    float g = h->gate_gain;
+    float hpL = h->gate_ds_lp_l, hpR = h->gate_ds_lp_r, dsE = h->gate_ds_env;
+    for (int i = 0; i < frames; ++i) {
+        const float xL = io[i * 2], xR = io[i * 2 + 1];
+        /* 1. 噪声门 */
+        const float pk = fabsf(xL) > fabsf(xR) ? fabsf(xL) : fabsf(xR);
+        const float db = 20.0f * log10f(pk + 1e-12f);
+        const float target = (db < thr) ? 0.0f : 1.0f;
+        const float coef = (target > g) ? attCoef : relCoef;
+        g = target + (g - target) * coef;
+        const float ga = 0.001f + 0.999f * g;   /* 下限 -60dB 防完全静默 */
+
+        /* 2. Deesser（只衰减高频成分，低频直通） */
+        float outL = xL, outR = xR;
+        if (de) {
+            hpL += (1.0f - bpa) * (xL - hpL);
+            hpR += (1.0f - bpa) * (xR - hpR);
+            const float hiL = xL - hpL, hiR = xR - hpR;
+            const float env = 0.5f * (fabsf(hiL) + fabsf(hiR));
+            dsE += (env - dsE) * dsCoef;
+            float over = (dsE > dsThr) ? (dsE - dsThr) / (dsE + 1e-6f) : 0.0f;
+            if (over > 1.0f) over = 1.0f;
+            const float dg = 1.0f - da * over;
+            outL = (xL - hiL) + dg * hiL;
+            outR = (xR - hiR) + dg * hiR;
+        }
+        io[i * 2] = outL * ga;
+        io[i * 2 + 1] = outR * ga;
+    }
+    h->gate_gain = g;
+    h->gate_ds_lp_l = (fabsf(hpL) < 1e-18f) ? 0.0f : hpL;
+    h->gate_ds_lp_r = (fabsf(hpR) < 1e-18f) ? 0.0f : hpR;
+    h->gate_ds_env = (fabsf(dsE) < 1e-18f) ? 0.0f : dsE;
+
+    if (ag) {
+        const double rout = stereo_block_rms(io, frames);
+        h->gate_ag_in  += (rin - h->gate_ag_in)  * 0.05;
+        h->gate_ag_out += (rout - h->gate_ag_out) * 0.05;
+        double desired = 1.0;
+        if (h->gate_ag_in > 1e-6 && h->gate_ag_out > 1e-6)
+            desired = h->gate_ag_in / h->gate_ag_out;
+        if (desired < 0.25) desired = 0.25;
+        if (desired > 4.0)  desired = 4.0;
+        h->gate_ag_comp += (desired - h->gate_ag_comp) * 0.1;
+        const float cg = (float)h->gate_ag_comp;
+        if (cg != 1.0f)
+            for (int i = 0; i < frames; ++i) {
+                io[i * 2] *= cg;
+                io[i * 2 + 1] *= cg;
+            }
+    }
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -1765,6 +1897,11 @@ static void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
      * EQ 卷积器同型的数据竞争。且拖动时目标值每秒跳数十次，每次都是阶跃，
      * 连成「叫叫叫」。此处改为每块按 kBassSlewPerBlock 向目标渐变，
      * 变化足够小时才真正下发，兼顾连续性与 vendor 调用频率。*/
+    /* Gate/Deesser：链头第一道（input 增益之后、bassmono 之前）——
+     * 先降噪再单声道化，避免低频打架放大被门控的噪声。 */
+    if (h->p.gate_enable.load(std::memory_order_relaxed)) {
+        gate_process(h, const_cast<float*>(src), frames);
+    }
     /* BassMono：在一切之前（Stage 0 插件/搁架/vendor 之前）——
      * 单声道化后再做后续处理，否则低频相位差会被后级放大。
      * 随 shelf precedent 就地改 src（调用方传的本就是可写 scratch）。 */
@@ -2236,6 +2373,62 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load()) h->rev_ag_in = h->rev_ag_out = 0.0; h->rev_ag_comp = 1.0;
         return AURADSP_OK;
     }
+    /* ---- 噪声门 / Deesser / 自动增益补偿 ---- */
+    if (!strcmp(id, "gate.enable") && bytes >= 4) {
+        h->p.gate_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "gate.threshold") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < -60) v = -60; if (v > 0) v = 0;
+        h->p.gate_threshold.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "gate.attack") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 1) v = 1; if (v > 100) v = 100;
+        h->p.gate_attack.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "gate.release") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 10) v = 10; if (v > 500) v = 500;
+        h->p.gate_release.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "gate.autogain") && bytes >= 4) {
+        h->p.gate_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) h->gate_ag_in = h->gate_ag_out = 0.0; h->gate_ag_comp = 1.0;
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "deesser.enable") && bytes >= 4) {
+        h->p.deesser_enable.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "deesser.freq") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 2000) v = 2000; if (v > 10000) v = 10000;
+        h->p.deesser_freq.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "deesser.amount") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.deesser_amount.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "arbmag.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.arbmag_outgain.store(db);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "arbmag.autogain") && bytes >= 4) {
+        h->p.arbmag_autogain.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_fx_gains(h);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "input.gain") && bytes >= 4) {
         float db = *(const float*)value;
         if (db < -15.0f) db = -15.0f; if (db > 15.0f) db = 15.0f;
@@ -2662,6 +2855,27 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         compute_latency(h, &h->latency_ms);
         return AURADSP_OK;
     }
+    if (!strcmp(id, "crossfeed.mode") && bytes >= 4) {
+        int32_t m = *(const int32_t*)value;
+        if (m < 0) m = 0; if (m > 3) m = 3;
+        h->p.xfeed_mode.store(m);
+        if (h->open.load() && h->p.xfeed_enable.load()) apply_crossfeed(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "crossfeed.fcut") && bytes >= 4) {
+        float f = *(const float*)value;
+        if (f < 300.0f) f = 300.0f; if (f > 2000.0f) f = 2000.0f;
+        h->p.xfeed_fcut.store(f);
+        if (h->open.load() && h->p.xfeed_enable.load() && h->p.xfeed_mode.load() == 3) apply_crossfeed(h);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "crossfeed.feed") && bytes >= 4) {
+        float d = *(const float*)value;
+        if (d < 1.0f) d = 1.0f; if (d > 15.0f) d = 15.0f;
+        h->p.xfeed_feed.store(d);
+        if (h->open.load() && h->p.xfeed_enable.load() && h->p.xfeed_mode.load() == 3) apply_crossfeed(h);
+        return AURADSP_OK;
+    }
     set_error(h, "unknown param id");
     return AURADSP_E_PARAM;
 }
@@ -2694,6 +2908,16 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "comp.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.outgain") && bytes >= 4) { *(float*)out_value = h->p.reverb_outgain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.gate_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.threshold") && bytes >= 4) { *(float*)out_value = h->p.gate_threshold.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.attack") && bytes >= 4) { *(float*)out_value = h->p.gate_attack.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.release") && bytes >= 4) { *(float*)out_value = h->p.gate_release.load(); return AURADSP_OK; }
+    if (!strcmp(id, "gate.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.gate_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "deesser.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.deesser_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "deesser.freq") && bytes >= 4) { *(float*)out_value = h->p.deesser_freq.load(); return AURADSP_OK; }
+    if (!strcmp(id, "deesser.amount") && bytes >= 4) { *(float*)out_value = h->p.deesser_amount.load(); return AURADSP_OK; }
+    if (!strcmp(id, "arbmag.outgain") && bytes >= 4) { *(float*)out_value = h->p.arbmag_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "arbmag.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "input.gain") && bytes >= 4) { *(float*)out_value = h->p.input_gain.load(); return AURADSP_OK; }
     if (!strncmp(id, "input.balance.", 14) && bytes >= 4) {
         const char d = id[14];
@@ -2748,6 +2972,9 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "comp.granularity") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_granularity.load(); return AURADSP_OK; }
     if (!strcmp(id, "comp.tfresolution") && bytes >= 4) { *(int32_t*)out_value = h->p.comp_tfresolution.load(); return AURADSP_OK; }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "crossfeed.mode") && bytes >= 4) { *(int32_t*)out_value = h->p.xfeed_mode.load(); return AURADSP_OK; }
+    if (!strcmp(id, "crossfeed.fcut") && bytes >= 4) { *(float*)out_value = h->p.xfeed_fcut.load(); return AURADSP_OK; }
+    if (!strcmp(id, "crossfeed.feed") && bytes >= 4) { *(float*)out_value = h->p.xfeed_feed.load(); return AURADSP_OK; }
     if (!strcmp(id, "shelf.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.shelf_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bassmono.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.bassmono_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bassmono.freq") && bytes >= 4) { *(float*)out_value = h->p.bassmono_freq.load(); return AURADSP_OK; }
@@ -2793,6 +3020,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"bassmono\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"haas\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"exciter\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"gate\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
             "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"

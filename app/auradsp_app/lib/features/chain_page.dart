@@ -17,6 +17,7 @@ import 'widgets.dart';
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
 /// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
 const List<({String id, bool exposed})> kStageMeta = [
+  (id: 'gate', exposed: true),
   (id: 'bassmono', exposed: true),  (id: 'tube', exposed: true),
   (id: 'comp', exposed: true),
   (id: 'bass', exposed: true),
@@ -35,6 +36,7 @@ const List<({String id, bool exposed})> kStageMeta = [
 
 /// stage id → 展示名（l10n；未知 id 回退原文）。
 String stageLabelOf(AppLocalizations l, String id) => switch (id) {
+      'gate' => l.stGate,
       'bassmono' => l.stBassmono,
       'tube' => l.stTube,
       'comp' => l.stComp,
@@ -54,6 +56,7 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
     };
 
 const List<String> kDefaultCoreOrder = [
+  'gate',
   'bassmono',
   'tube',
   'comp',

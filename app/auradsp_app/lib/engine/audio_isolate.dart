@@ -691,6 +691,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
             final iCvSpec = idp('convolver.ir.spectrum');
             final iTb = idp('tube.enable'), iXf = idp('crossfeed.enable');
+            final iXfM = idp(ParamId.xfeedMode), iXfFc = idp(ParamId.xfeedFcut), iXfFd = idp(ParamId.xfeedFeed);
             final iSbU = idp('stereo.bandUsed');
             final iCvM = idp('convolver.mix');
             final iDdE = idp('ddc.enable'), iDdR = idp('ddc.ready');
@@ -705,6 +706,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iToG = idp(ParamId.tubeOutGain), iToA = idp(ParamId.tubeAutoGain);
             final iCoG = idp(ParamId.compOutGain), iCoA = idp(ParamId.compAutoGain);
             final iRoG = idp(ParamId.reverbOutGain), iRoA = idp(ParamId.reverbAutoGain);
+            // 噪声门 + Deesser
+            final iGtE = idp(ParamId.gateEnable), iGtT = idp(ParamId.gateThreshold);
+            final iGtA = idp(ParamId.gateAttack), iGtR = idp(ParamId.gateRelease);
+            final iGtG = idp(ParamId.gateAutoGain);
+            final iDsE = idp(ParamId.deesserEnable), iDsF = idp(ParamId.deesserFreq), iDsA = idp(ParamId.deesserAmount);
             final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
@@ -757,6 +763,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     : null,
                 'tubeEnable': rdInt(iTb) ?? 0,
                 'xfeedEnable': rdInt(iXf) ?? 0,
+                'xfeedMode': rdInt(iXfM) ?? 0,
+                'xfeedFcut': rdFloat(iXfFc) ?? 700.0,
+                'xfeedFeed': rdFloat(iXfFd) ?? 4.5,
                 'stereoBandUsed': rdInt(iSbU) ?? 0,
                 'convMix': rdFloat(iCvM) ?? 1.0,
                 'ddcEnable': rdInt(iDdE) ?? 0,
@@ -783,6 +792,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'compAutoGain': rdInt(iCoA) ?? 0,
                 'reverbOutGain': rdFloat(iRoG) ?? 0.0,
                 'reverbAutoGain': rdInt(iRoA) ?? 0,
+                'gateEnable': rdInt(iGtE) ?? 0,
+                'gateThreshold': rdFloat(iGtT) ?? -40.0,
+                'gateAttack': rdFloat(iGtA) ?? 10.0,
+                'gateRelease': rdFloat(iGtR) ?? 100.0,
+                'gateAutoGain': rdInt(iGtG) ?? 0,
+                'deesserEnable': rdInt(iDsE) ?? 0,
+                'deesserFreq': rdFloat(iDsF) ?? 6000.0,
+                'deesserAmount': rdFloat(iDsA) ?? 0.5,
                 'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
@@ -797,7 +814,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'arbmagNodeCount': rdInt(iArbN) ?? 0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
                 malloc.free(q);
               }
             }

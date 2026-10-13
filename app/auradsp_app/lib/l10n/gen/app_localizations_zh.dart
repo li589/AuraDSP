@@ -682,6 +682,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stBassmono => '低频单声道';
 
   @override
+  String get stGate => '噪声门';
+
+  @override
+  String get gateHint => '链头第一道：低于阈值的背景噪声被压掉，attack/release 控制开关速度';
+
+  @override
+  String get gateThreshold => '阈值';
+
+  @override
+  String get gateAttack => '开启时间';
+
+  @override
+  String get gateRelease => '释放时间';
+
+  @override
+  String get gateAutoGain => '自动增益补偿';
+
+  @override
+  String get deesserTitle => '齿音消除';
+
+  @override
+  String get deesserFreq => '齿音频段';
+
+  @override
+  String get deesserAmount => '压制强度';
+
+  @override
   String get stHaas => '差分环绕';
 
   @override
@@ -1284,4 +1311,33 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get arbmagInvalidFormat => 'GraphicEQ 格式错误或未包含有效节点';
+
+  @override
+  String get crossfeedTitle => '串扰消除';
+
+  @override
+  String get crossfeedDesc => '专为耳机设计，通过低通互馈消除头中效应与听觉疲劳';
+
+  @override
+  String get crossfeedModeDefault => '默认标准';
+
+  @override
+  String get crossfeedModeChuMoy => '经典耳放 (Chu Moy)';
+
+  @override
+  String get crossfeedModeJanMeier => '增强互馈 (Jan Meier)';
+
+  @override
+  String get crossfeedModeCustom => '自定义';
+
+  @override
+  String get crossfeedCutoff => '截止频率';
+
+  @override
+  String get crossfeedFeed => '互馈电平';
+
+  @override
+  String crossfeedActiveDesc(String mode, String fcut, String feed) {
+    return '当前生效：$mode ($fcut Hz, $feed dB)';
+  }
 }
