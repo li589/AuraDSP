@@ -30,7 +30,7 @@
 
 ### 3.1 产品与动机
 - [项目初衷.md](00-总览/项目初衷.md) — 动机与愿景；对 JamesDSP / EqualizerAPO / Voicemeeter / PulseEffects / Element / ViPER 的实测痛点复盘
-- [source-参考项目审理报告.md](10-架构/source-参考项目审理报告.md) — `source/` 12 个参考仓库的审计与算法对照矩阵
+- [source-参考项目审理报告.md](10-架构/source-参考项目审理报告.md) — `source/` 13 个参考仓库的审计与算法对照矩阵
 
 ### 3.2 Android 路线
 - [M0-Android音频政策专项调研.md](10-架构/M0-Android音频政策专项调研.md) — Android 音频政策调研
