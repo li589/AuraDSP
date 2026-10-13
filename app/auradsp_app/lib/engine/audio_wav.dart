@@ -69,3 +69,29 @@ DecodedWav? decodeWavFile(String path) {
   }
   return DecodedWav(out, rate);
 }
+
+/// MP3 解码（engine_audiofile.cpp `auradsp_decode_audio_file`，dr_mp3）。
+/// 输出契约与 decodeWavFile 一致（stereo interleave float32）；失败 null。
+/// 大文件一次性进内存（与 WAV 路径同等暴露；engine 侧限源文件 64MB）。
+DecodedWav? decodeMp3File(AuraDspLib lib, String path) {
+  final p = path.toNativeUtf8();
+  final ratePtr = malloc<Int32>();
+  final framesPtr = malloc<Uint64>();
+  try {
+    final out = lib.decodeAudioFile(p, ratePtr, framesPtr);
+    if (out.address == 0) return null;
+    try {
+      final n = framesPtr.value.toInt() * 2;
+      if (n <= 0 || ratePtr.value < 8000) return null;
+      final data = Float32List(n);
+      data.setAll(0, out.asTypedList(n));
+      return DecodedWav(data, ratePtr.value);
+    } finally {
+      lib.freeAudioBuffer(out.cast());
+    }
+  } finally {
+    malloc.free(p);
+    malloc.free(ratePtr);
+    malloc.free(framesPtr);
+  }
+}

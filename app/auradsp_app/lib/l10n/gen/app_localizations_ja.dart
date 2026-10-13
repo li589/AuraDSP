@@ -150,6 +150,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get srcStop => '停止';
 
   @override
+  String get testSrcTitle => 'テスト音源';
+
+  @override
+  String get testSrcHint => 'テスト用信号源（正弦/ピンクノイズ/オーディオファイル）；入出力デバイス選択は今後ここに拡張';
+
+  @override
+  String get srcMp3 => 'MP3 を開く';
+
+  @override
   String get bypassOn => 'バイパス ON（A/B）';
 
   @override

@@ -401,11 +401,25 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               source = PinkSource();
               break;
             case 'file':
-              final w = decodeWavFile(m['path'] as String);
-              if (w == null) {
-                send({'evt': 'error', 'msg': 'WAV 解析失败（仅支持 PCM 16/24/32 与 float32）'});
+              final fpath = m['path'] as String;
+              if (fpath.toLowerCase().endsWith('.mp3')) {
+                if (lib == null) {
+                  send({'evt': 'error', 'msg': 'MP3 解码需要引擎在线'});
+                } else {
+                  final mp = decodeMp3File(lib, fpath);
+                  if (mp == null) {
+                    send({'evt': 'error', 'msg': 'MP3 解析失败（文件损坏/不支持或超 64MB 上限）'});
+                  } else {
+                    source = FileSource(mp.data, mp.sampleRate);
+                  }
+                }
               } else {
-                source = FileSource(w.data, w.sampleRate);
+                final w = decodeWavFile(fpath);
+                if (w == null) {
+                  send({'evt': 'error', 'msg': 'WAV 解析失败（仅支持 PCM 16/24/32 与 float32）'});
+                } else {
+                  source = FileSource(w.data, w.sampleRate);
+                }
               }
               break;
           }

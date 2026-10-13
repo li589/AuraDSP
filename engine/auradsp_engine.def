@@ -45,3 +45,5 @@ EXPORTS
     auradsp_probe_component
     auradsp_probe_component_with_resource
     auradsp_probe_eq_response
+    auradsp_decode_audio_file
+    auradsp_free_audio_buffer

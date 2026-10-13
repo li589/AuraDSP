@@ -151,6 +151,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get srcStop => 'Stop';
 
   @override
+  String get testSrcTitle => 'Test Audio Source';
+
+  @override
+  String get testSrcHint =>
+      'Signal sources for testing (tone/noise/audio files); input/output device selection lives here later';
+
+  @override
+  String get srcMp3 => 'Open MP3 File';
+
+  @override
   String get bypassOn => 'Bypass ON (A/B)';
 
   @override

@@ -208,6 +208,7 @@ class AppModel extends ChangeNotifier {
   bool playing = false;
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
+  String sourceExt = ''; // 文件源扩展名（小写无点，如 'mp3'/'wav'；非文件源为空）
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
   bool bassOn = false, eqOn = false, limiterOn = true;
@@ -3161,6 +3162,14 @@ void fillEqQ(double q) {
 
   void setSource(String kind, {String? path}) {
     sourceKind = kind == 'stop' ? '' : kind;
+    // 文件源记住扩展名（mp3/wav 芯片各自高亮；isolate 侧按扩展名选解码器）。
+    sourceExt = '';
+    if (kind == 'file' && path != null) {
+      final dot = path.lastIndexOf('.');
+      if (dot >= 0 && dot < path.length - 1) {
+        sourceExt = path.substring(dot + 1).toLowerCase();
+      }
+    }
     playing = kind != 'stop';
     notifyListeners();
     send({'cmd': 'source', 'kind': kind, 'path': path});
