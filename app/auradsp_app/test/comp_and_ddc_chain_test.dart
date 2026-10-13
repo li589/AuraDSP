@@ -25,9 +25,9 @@ void main() {
       expect(stageLabelOf(en, 'ddc'), 'VDC Spatial Correction');
       expect(stageLabelOf(ja, 'ddc'), 'VDC 空間補正');
 
-      expect(stageLabelOf(zh, 'comp'), '压限器');
-      expect(stageLabelOf(en, 'comp'), 'Limiter');
-      expect(stageLabelOf(ja, 'comp'), 'リミッター');
+      expect(stageLabelOf(zh, 'comp'), '动态压限器');
+      expect(stageLabelOf(en, 'comp'), 'Dynamic Compressor');
+      expect(stageLabelOf(ja, 'comp'), 'ダイナミックコンプレッサー');
     });
 
     test('AppModel defaults for comp', () {

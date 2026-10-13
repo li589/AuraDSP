@@ -1069,13 +1069,13 @@ abstract class AppLocalizations {
   /// No description provided for @bassModeDynamic.
   ///
   /// In zh, this message translates to:
-  /// **'动态增强 (DBB)'**
+  /// **'动态增强'**
   String get bassModeDynamic;
 
   /// No description provided for @bassModeShelf.
   ///
   /// In zh, this message translates to:
-  /// **'纯净低架 (Shelf)'**
+  /// **'纯净低架'**
   String get bassModeShelf;
 
   /// No description provided for @bassModeHarmonic.
@@ -1083,6 +1083,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'心理声学谐波'**
   String get bassModeHarmonic;
+
+  /// No description provided for @bassModeTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强模式：\n• 动态增强：自适应信号能量动态提升低频冲击感，防爆音失真\n• 纯净低架：模拟硬件平直提升低频，保真度高\n• 心理声学谐波：注入高次谐波，利用人耳基频缺失错觉在小单元产生深沉低音'**
+  String get bassModeTooltip;
 
   /// No description provided for @bassCutoff.
   ///
@@ -1633,7 +1639,7 @@ abstract class AppLocalizations {
   /// No description provided for @chainFlowCaption.
   ///
   /// In zh, this message translates to:
-  /// **'全局信号流顺序示意 (自左至右)：'**
+  /// **'全局信号流顺序示意：'**
   String get chainFlowCaption;
 
   /// No description provided for @chainNodeInput.
@@ -1677,6 +1683,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'音频输出'**
   String get chainNodeOutput;
+
+  /// No description provided for @lpManual.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考手册'**
+  String get lpManual;
+
+  /// No description provided for @lpManualTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 快速参考手册'**
+  String get lpManualTitle;
+
+  /// No description provided for @lpManualContent.
+  ///
+  /// In zh, this message translates to:
+  /// **'【核心音频流寄存器】\n• spl0: 左声道样本值（浮点数，标称 ±1.0）\n• spl1: 右声道样本值（浮点数，标称 ±1.0）\n• srate: 当前设备实际采样率 (Hz)\n\n【交互滑块变量】\n• slider1 ~ slider8: 界面动态滑块参数（默认 0.0 ~ 1.0）\n\n【代码段规范】\n• @init: 脚本加载或重置时执行一次（必须至少包含一条语句）\n• @slider: 用户滑动滑块或参数变动时触发\n• @sample: 每个音频样本点流过时执行'**
+  String get lpManualContent;
+
+  /// No description provided for @lpEditorTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'基于 Cockos EEL2 脚本引擎的实时音频 DSP 编程环境，可在音频流中动态注入自定义算法。'**
+  String get lpEditorTooltip;
+
+  /// No description provided for @exciterMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式'**
+  String get exciterMode;
+
+  /// No description provided for @exciterModeTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过非线性传递函数产生高频泛音与丰富谐波，补偿高频衰减，重塑空气感与通透细节。'**
+  String get exciterModeTooltip;
+
+  /// No description provided for @exciterAmountInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制注入的高频谐波与原信号的混合比例。适度提升可显著增加声音光泽度，过高可能产生毛刺感。'**
+  String get exciterAmountInfo;
+
+  /// No description provided for @eqModeLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式'**
+  String get eqModeLabel;
+
+  /// No description provided for @eqModeTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段模式切换。在频谱画布中上下拖动节点调整增益，双击复位为 0dB，右侧调节选定频点的 Q 值锐度。'**
+  String get eqModeTooltip;
+
+  /// No description provided for @haasSideTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'Haas 效应差分环绕：将单侧声道延迟 0~25ms，利用双耳到达时间差在耳机中营造自然脱箱的环绕包围感。'**
+  String get haasSideTooltip;
+
+  /// No description provided for @bassmonoCombinedTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'将设定分频点以下的超低频合并为单声道，消除低频相位抵消与浑浊感，增强低音凝聚力与下潜力度。'**
+  String get bassmonoCombinedTooltip;
 
   /// No description provided for @inputGate.
   ///
@@ -2565,6 +2637,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'串扰消除'**
   String get crossfeedTitle;
+
+  /// No description provided for @crossfeedMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'模式'**
+  String get crossfeedMode;
 
   /// No description provided for @crossfeedDesc.
   ///

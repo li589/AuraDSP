@@ -299,14 +299,16 @@ class _PluginsPageState extends State<PluginsPage> {
                       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
                     Text(l10nOf(context).plugDeepScan, style: captionOf(p)),
+                    const SizedBox(width: 6),
+                    Tooltip(
+                      message: l10nOf(context).plugScanNoVerify,
+                      child: Icon(
+                        Icons.help_outline_rounded,
+                        size: 14,
+                        color: p.textDim,
+                      ),
+                    ),
                   ],
-                ),
-                // C2：说明"快扫不打开插件"——FL Studio 那种扫描即验证的做法
-                // 慢且无必要（深扫 3.6s vs 快扫 120ms / 76 个），本引擎在挂载
-                // 时才验证插件，这里明确告知用户，避免误以为列表已验证可用。
-                Tooltip(
-                  message: l10nOf(context).plugScanNoVerify,
-                  child: const Icon(Icons.info_outline_rounded, size: 14),
                 ),
                 const SizedBox(width: AuraSpace.sm),
                 // 扫描按钮

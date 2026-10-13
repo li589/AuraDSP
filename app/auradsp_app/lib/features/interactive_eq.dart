@@ -59,6 +59,23 @@ class _InteractiveSpectrumEQPanelState
           runSpacing: AuraSpace.sm,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            // 频段规格前导标签与帮助气泡
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(l.eqModeLabel, style: labelOf(p, color: p.text)),
+                const SizedBox(width: 4),
+                Tooltip(
+                  message: l.eqModeTooltip,
+                  child: Icon(
+                    Icons.help_outline_rounded,
+                    size: 14,
+                    color: p.textDim,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(width: AuraSpace.xs),
             // 频段规格切换
             for (final b in const [7, 10, 15, 31])
               AuraChoiceChip(
@@ -292,26 +309,13 @@ class _InteractiveSpectrumEQPanelState
             ],
           ),
         ),
-        const SizedBox(height: AuraSpace.sm),
-
-        // 底部提示（Wrap：窄屏自动换行，避免 Row 在小宽度下横向溢出；
-        // 桌面端一行放下时与原来视觉一致）
-        Wrap(
-          spacing: AuraSpace.sm,
-          runSpacing: AuraSpace.xs,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              l.eqCanvasHint,
-              style: captionOf(p),
-            ),
-            if (model.eqBypass)
-              Text(
-                l.eqBypassOn,
-                style: monoOf(p, size: 11, color: p.warning),
-              ),
-          ],
-        ),
+        if (model.eqBypass) ...[
+          const SizedBox(height: AuraSpace.sm),
+          Text(
+            l.eqBypassOn,
+            style: monoOf(p, size: 11, color: p.warning),
+          ),
+        ],
       ],
     );
   }
