@@ -31,6 +31,7 @@ const List<({String id, bool exposed})> kStageMeta = [
   (id: 'stereo', exposed: true),
   (id: 'haas', exposed: true),
   (id: 'exciter', exposed: true),
+  (id: 'loudness', exposed: true),
   (id: 'reverb', exposed: true),
   (id: 'output', exposed: true),
 ];
@@ -52,6 +53,7 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'stereo' => l.stereoWiden,
       'haas' => l.stHaas,
       'exciter' => l.stExciter,
+      'loudness' => l.stLoudness,
       'reverb' => l.spatialReverbTitle,
       'output' => l.postGain,
       _ => id,
@@ -74,6 +76,7 @@ const List<String> kDefaultCoreOrder = [
   'haas',
   'exciter',
   'reverb',
+  'loudness',
 ];
 
 class ChainPage extends StatefulWidget {

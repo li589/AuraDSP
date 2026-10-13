@@ -91,6 +91,9 @@ abstract final class ParamId {
   static const deesserEnable = 'deesser.enable';
   static const deesserFreq = 'deesser.freq';
   static const deesserAmount = 'deesser.amount';
+  // 响度补偿（信号自适应等响度）
+  static const loudnessEnable = 'loudness.enable';
+  static const loudnessAmount = 'loudness.amount';
   // 心理声学低音（谐波合成，曾经的三死滑块现在有引擎了）
   static const bassHarmonics = 'bass.harmonics';
   static const bassHarmonicBlend = 'bass.harmonicblend';

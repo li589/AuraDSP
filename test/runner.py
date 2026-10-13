@@ -50,6 +50,7 @@ def run_smoke_tests():
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
+    "smoke_loudness.py",
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",

@@ -711,6 +711,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iGtA = idp(ParamId.gateAttack), iGtR = idp(ParamId.gateRelease);
             final iGtG = idp(ParamId.gateAutoGain);
             final iDsE = idp(ParamId.deesserEnable), iDsF = idp(ParamId.deesserFreq), iDsA = idp(ParamId.deesserAmount);
+            final iLdE = idp(ParamId.loudnessEnable), iLdA = idp(ParamId.loudnessAmount);
             final iBhH = idp(ParamId.bassHarmonics), iBhB = idp(ParamId.bassHarmonicBlend);
             final iBhS = idp(ParamId.bassSubFreq), iBhC = idp(ParamId.bassCutoffF);
             final iFtE = idp(ParamId.filterEnable), iFtT = idp(ParamId.filterType);
@@ -804,6 +805,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'deesserEnable': rdInt(iDsE) ?? 0,
                 'deesserFreq': rdFloat(iDsF) ?? 6000.0,
                 'deesserAmount': rdFloat(iDsA) ?? 0.5,
+                'loudnessEnable': rdInt(iLdE) ?? 0,
+                'loudnessAmount': rdFloat(iLdA) ?? 0.5,
                 'bassHarmonics': rdFloat(iBhH) ?? 0.45,
                 'bassHarmonicBlend': rdFloat(iBhB) ?? 0.5,
                 'bassSubFreq': rdFloat(iBhS) ?? 25.0,
@@ -826,7 +829,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'arbmagNodeCount': rdInt(iArbN) ?? 0,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
                 malloc.free(q);
               }
             }

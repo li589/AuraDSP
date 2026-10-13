@@ -872,15 +872,17 @@ void main() {
   });
 
   group('Bass v3.1: ViPER 三模式 + 心理声学接线', () {
+    // 注意：AppModel 构造会 spawn 真实 isolate，其 getParams 回读（float32）
+    // 可能竞态覆盖字段；非二进制精确常量（0.35/0.7/0.707/0.8）一律用 1e-6。
     test('mode 宏写入谐波配方（不再碰 shelf）', () {
       final m = AppModel();
       m.setBassMode(1);
       expect(m.bassMode, 1);
-      expect(m.bassHarmonics, closeTo(0.35, 1e-9));
+      expect(m.bassHarmonics, closeTo(0.35, 1e-6));
       expect(m.bassHarmonicBlend, closeTo(0.5, 1e-9));
       m.setBassMode(2);
-      expect(m.bassHarmonics, closeTo(0.7, 1e-9));
-      expect(m.bassHarmonicBlend, closeTo(0.7, 1e-9));
+      expect(m.bassHarmonics, closeTo(0.7, 1e-6));
+      expect(m.bassHarmonicBlend, closeTo(0.7, 1e-6));
       m.setBassMode(0);
       expect(m.bassHarmonics, closeTo(0.0, 1e-9));
     });
@@ -930,7 +932,7 @@ void main() {
       expect(m.filterOn, isFalse);
       expect(m.filterType, 0);
       expect(m.filterFreq, closeTo(80.0, 1e-9));
-      expect(m.filterQ, closeTo(0.707, 1e-9));
+      expect(m.filterQ, closeTo(0.707, 1e-6)); // 见 Bass v3.1 组注：防 isolate 回读竞态
       m.setFilterType(9);
       expect(m.filterType, 2);
       m.setFilterFreq(1);
@@ -964,6 +966,41 @@ void main() {
       expect(m.filterType, 1);
       expect(m.filterFreq, closeTo(200.0, 1e-9));
       expect(m.filterQ, closeTo(1.0, 1e-9));
+    });
+  });
+
+  group('Loudness: 响度补偿', () {
+    test('默认值 + 钳位 + 开关', () {
+      final m = AppModel();
+      expect(m.loudnessOn, isFalse);
+      expect(m.loudnessAmount, closeTo(0.5, 1e-9));
+      m.setLoudnessAmount(5);
+      expect(m.loudnessAmount, closeTo(1.0, 1e-9));
+      m.setLoudnessAmount(-1);
+      expect(m.loudnessAmount, closeTo(0.0, 1e-9));
+      m.toggleStage('loudness');
+      expect(m.loudnessOn, isTrue);
+      expect(m.isStageEnabled('loudness'), isTrue);
+    });
+
+    test('snapshot/apply 对称', () {
+      final src = AppModel()
+        ..setLoudnessEnabled(true)
+        ..setLoudnessAmount(0.8);
+      final snap = PresetLibrary.snapshot(src, name: '__ld__');
+      final ld = snap.params['loudness'] as Map<String, dynamic>;
+      expect(ld['enable'], isTrue);
+      expect((ld['amount'] as num).toDouble(), closeTo(0.8, 1e-6)); // 防 isolate 回读竞态
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__ld_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.loudnessOn, isTrue);
+      expect(m.loudnessAmount, closeTo(0.8, 1e-6)); // 防 isolate 回读竞态
     });
   });
 }

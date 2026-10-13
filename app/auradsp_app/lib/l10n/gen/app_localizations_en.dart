@@ -763,6 +763,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stExciter => 'Exciter';
 
   @override
+  String get stLoudness => 'Loudness';
+
+  @override
+  String get loudnessHint =>
+      'Auto boosts lows and highs at quiet levels, transparent when loud';
+
+  @override
+  String get loudnessAmount => 'Amount';
+
+  @override
   String get exciterHint => 'Harmonic air for compressed highs';
 
   @override
