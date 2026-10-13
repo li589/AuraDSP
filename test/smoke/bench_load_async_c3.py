@@ -9,7 +9,11 @@
 """
 import ctypes, json, os, sys, time
 
-lib = ctypes.CDLL(os.path.abspath("auradsp_engine.dll"))
+# P0：DLL 统一从构建真相源加载（根目录散落副本已删除）。
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+DLL = os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release',
+                   'auradsp_engine.dll')
+lib = ctypes.CDLL(DLL)
 lib.auradsp_create.restype = ctypes.c_void_p
 lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
 lib.auradsp_destroy.argtypes = [ctypes.c_void_p]

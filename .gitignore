@@ -17,6 +17,9 @@ venv/
 # --- 构建产物 ---
 **/out/
 **/build/
+# P0：aidl-gen 为构建时生成物（tag aidl-gen-backup-20261013 留档），不入库
+core/android/aidl-gen/
+**/build/
 **/.dart_tool/
 **/windows/flutter/ephemeral/
 **/.plugin_symlinks/
@@ -39,6 +42,8 @@ __pycache__/
 # --- 临时与运行时产物 ---
 .tmp/
 dist/
+# tools/ 诊断过程产物归档（P0：csv/截图/wav 一律进 archive，不入库）
+tools/archive/
 # tools/log_clicks.py 的点击日志
 clicks.csv
 # tools/mem_baseline.py 运行时取证（csv + 点击切片目录）

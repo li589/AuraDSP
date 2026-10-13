@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
-"""逐个验证 auradsp_engine.dll 副本是否含 EQ 输入 tap（a0869de）。
+"""auradsp_engine.dll 分发 + 验证（P0：单向政策）。
 
+正式位置只剩 3 处：
+  真相源  core/desktop/windows/out/Release/auradsp_engine.dll（构建产物）
+  运行副本 app/auradsp_app/windows/runner/auradsp_engine.dll（随 flutter 打包）
+  运行副本 test/auradsp_engine.dll（smoke 用）
+其余散落副本已删除。流程：真相源 → 分发到 2 运行副本 → 功能断言全验。
 不信时间戳/哈希，直接跑功能断言：eq_in_spectrum 必须非零。
 这能区分「文件是旧的」和「文件是新的但进程里跑的是旧的」。
 """
@@ -8,10 +13,19 @@ import ctypes
 import glob
 import os
 import random
+import shutil
 import sys
 
 ROOT = r"D:\temp_desktop\Proj\JamesDSP"
 BANDS = 32
+
+TRUTH = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
+                     "auradsp_engine.dll")
+RUNTIME = [
+    os.path.join(ROOT, "app", "auradsp_app", "windows", "runner",
+                 "auradsp_engine.dll"),
+    os.path.join(ROOT, "test", "auradsp_engine.dll"),
+]
 
 
 class VizFrame(ctypes.Structure):
@@ -71,6 +85,16 @@ paths = sorted(glob.glob(os.path.join(ROOT, "**", "auradsp_engine.dll"),
 if not paths:
     print("没找到任何副本")
     sys.exit(1)
+
+# P0 单向分发：真相源 → 运行副本（App 运行时锁住会跳过并报错，不静默）。
+print("== 分发 ==")
+for dst in RUNTIME:
+    try:
+        shutil.copyfile(TRUTH, dst)
+        print(f"  OK {os.path.relpath(dst, ROOT)}")
+    except OSError as e:
+        print(f"  LOCKED（App 可能在跑，先退出再重跑） {os.path.relpath(dst, ROOT)}: {e}")
+        sys.exit(2)
 
 print("%-62s %-10s %-8s %s" % ("path", "eq_in", "ver", "verdict"))
 print("-" * 100)
