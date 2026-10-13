@@ -53,7 +53,7 @@
    - **像素级几何命中**：通过窗口矩形归一化与实际组件像素推导 Thumb 圆心位置，严禁盲目写死假坐标。
    - **视觉差分闭环断言**：每步操作前后必须比对截图区域像素差异（`assert_images_differ`），确保动作真正生效，杜绝假测试。
 
-### 3.5 UI 设计系统与跨端交互铁律（详见 `.agents/rules/ui_design_spec.md`）
+### 3.5 UI 设计系统与跨端交互铁律（详见 `.ai/rules/ui_design_spec.md`）
 1. **统一问号徽标（`InfoBadge` 强制铁律）**：
    - 严禁手写 `Tooltip(child: Icon(Icons.help_outline_rounded))`。凡提示气泡一律统一调用 `InfoBadge(message: ...)`。
    - **电脑端**：持续常驻显示，hover 300ms 弹出，点击可切换锁定/关闭。
