@@ -12,10 +12,15 @@
 
 | 层次 | 路径 | 核心技术 | 职责与契约 |
 |---|---|---|---|
-| **核心引擎** | `core/desktop/` | C++20, MSVC/CMake, libjamesdsp | 移植与扩展的底层 DSP 管道；WASAPI 独占音频泵；严格遵循 **RT-Safe（音频线程零锁、零内存分配、零系统调用）** |
+| **核心引擎** | `engine/` | C++20, MSVC/CMake | **P3a 后由 `core/desktop/engine_api` 上移至顶层**：`auradsp_engine.{h,cpp,def}`（ABI 契约）+ `engine_{chain,convolver,viz,probe}.cpp` + `dsp/` 10 个自研效果（含 `dsp_dyneq.cpp`） + `host_*` 5 个插件宿主 TU。严格遵循 **RT-Safe（音频线程零锁、零内存分配、零系统调用）** |
+| **平台适配器** | `core/desktop/windows/` | CMake + MSVC + WASAPI | 桌面 DLL 构建脚本与 Windows 音频适配；产物 `out/Release/auradsp_engine.dll` 为 DLL 真相源 |
+| **第三方源码** | `vendor/` | C / C++ | **只读**（P3a 后由 `core/desktop/vendor-src` 上移）：`libjamesdsp/` + `plugin-api/{clap,steinberg}`。补丁必须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `vendor/libjamesdsp/PATCHES.md` |
+| **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 251MB；大二进制 `.irs`/`.vdc` 已写入 `.gitignore`（走 release 附件），仅 `.eel` 与 `manifest.json` 版本化 |
 | **应用前端** | `app/auradsp_app/` | Flutter 3.47.7+, Dart FFI | 现代暗黑精致音频工作站 UI；6 页导航体系（主页/效果/脚本/插件/处理链/可视化）；高频可视化与状态隔离 |
-| **无锁桥接** | `auradsp_engine.h/cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 280 字节定长 `VizFrame`（含 32 带 FFT、总峰值及 16 节点 per-stage 电平表） |
+| **无锁桥接** | `engine/auradsp_engine.h/.cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 280 字节定长 `VizFrame`（含 32 带 FFT、总峰值及 16 节点 per-stage 电平表） |
 | **参考源码** | `source/` | C/C++/Java/Kotlin | 第三方参考代码库（只读，严禁嵌套 `.git`，严禁在此写代码） |
+
+> ⚠️ **路径易错点（P3a/P3b 后务必核对）**：本仓已走向"顶层扁平化"，旧路径一律失效——引擎在 `engine/`（**不是** `core/desktop/engine_api`），第三方在 `vendor/`（**不是** `core/desktop/vendor-src`），资源在 `assets/`（**不是** `resource/`）。写任何文档或脚本前先按此核对，避免制造新的漂移。
 
 ---
 
@@ -23,10 +28,13 @@
 
 | 目录 | 职责范围 | 规则与约束 |
 |---|---|---|
-| `core/` | 引擎动态库源码、ABI 接口定义、CMake 构建脚本 | 修改任何音频路径必须保证 RT-Safe |
+| `engine/` | **桌面引擎源码**：ABI 契约 (`auradsp_engine.*`)、`engine_internal.h`（私有符号单一入口）、`engine_{chain,convolver,viz,probe}.cpp`、`dsp/`（每效果一文件）、`host_*` 插件宿主 TU | 修改任何音频路径必须保证 RT-Safe；新增自研效果请落 `engine/dsp/` 并登记 `CMakeLists.txt` |
+| `core/` | **平台壳**：`core/desktop/windows/`（CMake + WASAPI，DLL 真相源在 `out/Release/`）、`core/android/`（registrar / spike / stubs / 独立 vendor-src） | 构建脚本集中于此；纯算法改动应在 `engine/` 内进行，不要动这里的文件清单 |
+| `vendor/` | **第三方只读源码**：`libjamesdsp/`（含 `PATCHES.md`）、`plugin-api/` | 改动必须 `[PATCHED-AuraDSP P-xxx]` + `PATCHES.md` 登记；升级即重新提取覆盖 |
+| `assets/` | **运行资源**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`（本地 251MB，原 `resource/`，P3b 改名） | 打包与盘点走 `tools/resource_pipeline/`；仅 `.eel`/`manifest.json` 版本化，勿把 python 脚本或日志混进资源树 |
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
 | `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |
-| `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等 | 纯工具性质，不包含测试用例 |
+| `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等；另有 `resource_pipeline/`（资源打包）与 `calibration/`（校准转换） | 纯工具性质，不包含测试用例；`probe/` 为一次性探针、`archive/` 为过程产物，均不进门禁 |
 | `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告 | 方案先行，设计更新后必须同步文档 |
 | `.ai/` | **AI 自治沉淀区**：包含 `.ai/memory/`（历史上下文与每日备忘）、`.ai/guidelines/`（经验教训） | 各类智能体共享知识，无需人工介入 |
 
@@ -38,6 +46,12 @@
 1. **音频主线程绝对禁区**：禁止 `malloc/free/new/delete`，禁止 `std::mutex/jdsp_lock` 竞态，禁止 IO/打印/系统调用。
 2. **表驱动处理链（P-004）**：12 效果节点顺序经由 `graph.order` 完整重排序，非法集合必须白名单全拒；每个 stage 的峰值采样必须是 $O(1)$ 常数时间。
 3. **文件门卫（FileGate）**：加载 IR 脉冲文件或 VDC 文件必须经由六道门卫校验（magic、尺寸、NaN/Inf 检测、重采样），防崩溃与内存溢出。
+4. **"12 级"只指 vendor 链，不等于效果总数**（易错点）：
+   - `AURADSP_VENDOR_STAGES = 12` **专指** `libjamesdsp` 内部那一条链，`graph.order` 也只接受这 12 个 id；
+   - 但**链路实际不止 12 个节点**：`graph.effects` 注册表有 **20** 个 —— vendor 12 个 + 自研前置/后置模块（gate、filter、bassmono、haas、exciter、loudness、shelf、freeverb、dyneq 等，见 `process_stereo_chain`）+ `vdc`（冗余占位，`exposed:false`）。
+     ⚠️ **已知不一致（待跟进）**：`dyneq`（三段全参数动态 EQ，`1631b52` 新增）已实现并接入链路、参数可下发，但**未登记进 `graph.effects` 注册表**——处理链页可能不显示该节点。新增效果请按下面第 5 条一并登记注册表。
+   - 改 vendor 链长度同步 3 处：`AURADSP_VENDOR_STAGES`、`kAuraStages`、`Dart kEngineStageCount`；**改自研模块则另说**，不要把两者混为一谈。
+5. **新增自研效果落地清单（6 步，缺一不可）**：`engine/dsp/dsp_xxx.cpp` 实现 → `engine_internal.h` 声明 + `Params` 字段 → `process_stereo_chain` 插入 → `CMakeLists.txt` 源文件表登记（漏登记会**静默不参与编译**）→ `graph.effects` 注册表登记（漏登记则**处理链页不显示该节点**，见上条 dyneq 教训）→ `test/smoke/smoke_xxx.py` 并挂入 `runner.py`。
 
 ### 3.2 UI 与交互规范
 1. **高频渲染与状态隔离**：30fps 的电平与频谱可视化通过独立 `ValueNotifier` 驱动局部重绘，严禁触发根级 `notifyListeners`。
