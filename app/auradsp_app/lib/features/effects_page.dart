@@ -40,6 +40,10 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
+          builder: (_, _) => _GateCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
           builder: (_, _) => _CompressorCard(model: model),
         ),
         ListenableBuilder(
@@ -69,6 +73,10 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _ArbmagCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
+          builder: (_, _) => _CrossfeedCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
@@ -781,6 +789,152 @@ class _ChannelBalanceBar extends StatelessWidget {
   }
 }
 
+/* ---- 00B Gate + Deesser（噪声门 + 齿音消除，链头第一道）----
+ * 主卡 = 噪声门（阈值/attack/release）；
+ * 高级区 = Deesser（开关 + 频段 + 强度）+ 噪声门自动增益补偿开关。 */
+class _GateCard extends StatelessWidget {
+  final AppModel model;
+  const _GateCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+
+    return SectionCard(
+      index: '00',
+      title: l.stGate,
+      collapsed: !model.gateOn,
+      latencyMs: model.componentLatency('gate').ms,
+      latencyMeasured: model.componentLatency('gate').measured,
+      latencyProbing: model.isProbingLatency('gate'),
+      onRefreshLatency: () => model.refreshComponentLatency('gate'),
+      latencyTick: model.getComponentLatencyTick('gate'),
+      trailing: AuraSwitch(
+        value: model.gateOn,
+        onChanged: model.setGateEnabled,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l.gateHint, style: captionOf(p)),
+          const SizedBox(height: AuraSpace.sm),
+          // 阈值
+          ValueSlider(
+            label: l.gateThreshold,
+            infoMessage: '低于该电平的背景噪声被压掉。太高会吃掉弱音尾音，太低门几乎不动作。',
+            value: model.gateThreshold,
+            defaultValue: ParamDefaults.gateThreshold,
+            onResetToDefault: () =>
+                model.setGateThreshold(ParamDefaults.gateThreshold),
+            min: -60,
+            max: 0,
+            unit: 'dB',
+            enabled: model.gateOn,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: model.setGateThreshold,
+            onChangedEnd: model.setGateThreshold,
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          // 开启时间
+          ValueSlider(
+            label: l.gateAttack,
+            infoMessage: '信号越过阈值后门打开的速度。太慢会吃掉起音，太快可能"咔"。',
+            value: model.gateAttackMs,
+            defaultValue: ParamDefaults.gateAttack,
+            onResetToDefault: () =>
+                model.setGateAttack(ParamDefaults.gateAttack),
+            min: 1,
+            max: 100,
+            unit: 'ms',
+            enabled: model.gateOn,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: model.setGateAttack,
+            onChangedEnd: model.setGateAttack,
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          // 释放时间
+          ValueSlider(
+            label: l.gateRelease,
+            infoMessage: '信号跌回阈值以下后门关闭的速度。太短会截断衰减尾音，太长噪声拖尾。',
+            value: model.gateReleaseMs,
+            defaultValue: ParamDefaults.gateRelease,
+            onResetToDefault: () =>
+                model.setGateRelease(ParamDefaults.gateRelease),
+            min: 10,
+            max: 500,
+            unit: 'ms',
+            enabled: model.gateOn,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: model.setGateRelease,
+            onChangedEnd: model.setGateRelease,
+          ),
+          const SizedBox(height: AuraSpace.md),
+          // 高级区：Deesser + 自动增益补偿
+          AdvancedSection(
+            summary: '${l.deesserTitle} · ${l.gateAutoGain}',
+            builder: (ctx) => Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _AutoGainRow(
+                  label: l.gateAutoGain,
+                  tooltip: '实时补偿噪声门造成的整体电平下降，保持响度不塌。',
+                  value: model.gateAutoGain,
+                  enabled: model.gateOn,
+                  onChanged: model.setGateAutoGain,
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                Row(
+                  children: [
+                    Text(l.deesserTitle, style: captionOf(p)),
+                    const Spacer(),
+                    AuraSwitch(
+                      value: model.deesserOn,
+                      onChanged: model.gateOn ? model.setDeesserEnabled : null,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                ValueSlider(
+                  label: l.deesserFreq,
+                  infoMessage: '检测齿音（s/sh 音）的侧链频段。齿音重往低调，太闷往高调。',
+                  value: model.deesserFreq,
+                  defaultValue: ParamDefaults.deesserFreq,
+                  onResetToDefault: () =>
+                      model.setDeesserFreq(ParamDefaults.deesserFreq),
+                  min: 2000,
+                  max: 10000,
+                  unit: 'Hz',
+                  enabled: model.gateOn && model.deesserOn,
+                  format: (v) => '${(v / 1000).toStringAsFixed(1)}k',
+                  onChanged: model.setDeesserFreq,
+                  onChangedEnd: model.setDeesserFreq,
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                ValueSlider(
+                  label: l.deesserAmount,
+                  infoMessage: '齿音压制强度。只衰减高频成分，低频人声不动。',
+                  value: model.deesserAmount,
+                  defaultValue: ParamDefaults.deesserAmount,
+                  onResetToDefault: () =>
+                      model.setDeesserAmount(ParamDefaults.deesserAmount),
+                  min: 0,
+                  max: 1,
+                  unit: '%',
+                  enabled: model.gateOn && model.deesserOn,
+                  format: (v) => (v * 100).toStringAsFixed(0),
+                  onChanged: model.setDeesserAmount,
+                  onChangedEnd: model.setDeesserAmount,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /* ---- 01 Compressor (动态压限器) ---- */
 
 class _CompressorCard extends StatelessWidget {
@@ -825,7 +979,7 @@ class _CompressorCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.sm),
           AdvancedSection(
-            summary: '${model.compGranularity == 0 ? l.compGranularityCoarse : (model.compGranularity == 1 ? l.compGranularityNormal : l.compGranularityFine)} · ${model.compTfresolution == 0 ? l.compTfresTransient : (model.compTfresolution == 1 ? l.compTfresBalanced : l.compTfresFine)}',
+            summary: '${model.compGranularity == 0 ? l.compGranularityCoarse : (model.compGranularity == 1 ? l.compGranularityNormal : l.compGranularityFine)} · AGC: ${model.compAutoGain ? "ON" : "OFF"} · ${(model.compOutputGain >= 0 ? "+" : "")}${model.compOutputGain.toStringAsFixed(1)} dB',
             builder: (ctx) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -1049,7 +1203,7 @@ class _BassAdvanced extends StatelessWidget {
     final l = l10nOf(context);
     final m = model;
     return AdvancedSection(
-      summary: '${m.bassCutoff.toStringAsFixed(0)} Hz · ${(m.bassHarmonics * 100).toStringAsFixed(0)}%',
+      summary: '${m.bassCutoff.toStringAsFixed(0)} Hz · AGC: ${m.bassAutoGain ? "ON" : "OFF"} · ${(m.bassOutputGain >= 0 ? "+" : "")}${m.bassOutputGain.toStringAsFixed(1)} dB',
       builder: (context) => Column(
         children: [
               ValueSlider(
@@ -1147,7 +1301,6 @@ class _SpatialReverbCard extends StatefulWidget {
 }
 
 class _SpatialReverbCardState extends State<_SpatialReverbCard> {
-  bool _open = false;
 
   @override
   Widget build(BuildContext context) {
@@ -1167,7 +1320,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
     };
 
     return SectionCard(
-      index: '03',
+      index: '04',
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('reverb').ms,
@@ -1213,8 +1366,6 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
                   if (m.reverbPreset != -2) {
                     m.selectReverbPreset(-2);
                   }
-                  // 自动展开高级调节面板
-                  if (!_open) setState(() => _open = true);
                 },
               ),
             ],
@@ -1238,12 +1389,8 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           ),
           const SizedBox(height: AuraSpace.md),
 
-          // 4. 高级声学物理精调（默认折叠）
-          _SpatialReverbAdvanced(
-            model: m,
-            open: _open,
-            onToggle: () => setState(() => _open = !_open),
-          ),
+          // 4. 高级声学物理精调（标准折叠面板）
+          _SpatialReverbAdvanced(model: m),
         ],
       ),
     );
@@ -1252,161 +1399,123 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
 
 class _SpatialReverbAdvanced extends StatelessWidget {
   final AppModel model;
-  final bool open;
-  final VoidCallback onToggle;
-
-  const _SpatialReverbAdvanced({
-    required this.model,
-    required this.open,
-    required this.onToggle,
-  });
+  const _SpatialReverbAdvanced({required this.model});
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
     final m = model;
     final isEnabled = m.isSpatialReverbOn;
+    final agcStr = 'AGC: ${m.reverbAutoGain ? "ON" : "OFF"}';
+    final trimStr =
+        '${(m.reverbOutputGain >= 0 ? "+" : "")}${m.reverbOutputGain.toStringAsFixed(1)} dB';
+    final roomStr =
+        '${(m.fvRoomSize).toStringAsFixed(1)}x · ${(m.fvDecay * 100).toStringAsFixed(0)}%';
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: onToggle,
-            child: Row(
-              children: [
-                AnimatedRotation(
-                  duration: AuraDur.fast,
-                  turns: open ? 0.25 : 0,
-                  child: Icon(Icons.expand_more_rounded,
-                      size: 20, color: p.accent),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                Text(l.advanced, style: labelOf(p, color: p.text)),
-                const Spacer(),
-                Text(
-                  '${(m.fvRoomSize).toStringAsFixed(1)}x · ${(m.fvDecay * 100).toStringAsFixed(0)}%',
-                  style: monoOf(p, size: 10, color: p.textDim),
-                ),
-              ],
-            ),
+    return AdvancedSection(
+      summary: '$roomStr · $agcStr · $trimStr',
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueSlider(
+            label: l.reverbRoomSize,
+            infoMessage: '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。',
+            value: m.fvRoomSize,
+            defaultValue: ParamDefaults.fvRoomSize,
+            onResetToDefault: () =>
+                m.setReverbCustomParam('roomSize', ParamDefaults.fvRoomSize),
+            min: 0.5,
+            max: 2.5,
+            unit: 'x',
+            enabled: isEnabled,
+            format: (v) => v.toStringAsFixed(1),
+            onChanged: (v) => m.setReverbCustomParam('roomSize', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('roomSize', v),
           ),
-        ),
-        AnimatedCrossFade(
-          duration: AuraDur.base,
-          sizeCurve: AuraCurve.standard,
-          crossFadeState:
-              open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-          firstChild: const SizedBox(width: double.infinity),
-          secondChild: Padding(
-            padding: const EdgeInsets.only(top: AuraSpace.sm),
-            child: Column(
-              children: [
-                ValueSlider(
-                  label: l.reverbRoomSize,
-                  infoMessage: '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。',
-                  value: m.fvRoomSize,
-                  defaultValue: ParamDefaults.fvRoomSize,
-                  onResetToDefault: () =>
-                      m.setReverbCustomParam('roomSize', ParamDefaults.fvRoomSize),
-                  min: 0.5,
-                  max: 2.5,
-                  unit: 'x',
-                  enabled: isEnabled,
-                  format: (v) => v.toStringAsFixed(1),
-                  onChanged: (v) => m.setReverbCustomParam('roomSize', v),
-                  onChangedEnd: (v) => m.setReverbCustomParam('roomSize', v),
-                ),
-                ValueSlider(
-                  label: l.fvDecayLabel,
-                  infoMessage: '反射残响消散时间。数值越大，声音余韵回荡持续越久。',
-                  value: m.fvDecay,
-                  defaultValue: ParamDefaults.fvDecay,
-                  onResetToDefault: () =>
-                      m.setReverbCustomParam('decay', ParamDefaults.fvDecay),
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: isEnabled,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: (v) => m.setReverbCustomParam('decay', v),
-                  onChangedEnd: (v) => m.setReverbCustomParam('decay', v),
-                ),
-                ValueSlider(
-                  label: l.reverbStereoWidth,
-                  infoMessage: '混响声的双耳立体声扩展度。让回声包围整个头部。',
-                  value: m.fvWidth,
-                  defaultValue: ParamDefaults.fvWidth,
-                  onResetToDefault: () =>
-                      m.setReverbCustomParam('width', ParamDefaults.fvWidth),
-                  min: 0.2,
-                  max: 2.0,
-                  unit: 'x',
-                  enabled: isEnabled,
-                  format: (v) => v.toStringAsFixed(1),
-                  onChanged: (v) => m.setReverbCustomParam('width', v),
-                  onChangedEnd: (v) => m.setReverbCustomParam('width', v),
-                ),
-                ValueSlider(
-                  label: l.fvDampLabel,
-                  infoMessage: '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。',
-                  value: m.fvDamp,
-                  defaultValue: ParamDefaults.fvDamp,
-                  onResetToDefault: () =>
-                      m.setReverbCustomParam('damp', ParamDefaults.fvDamp),
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: isEnabled,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: (v) => m.setReverbCustomParam('damp', v),
-                  onChangedEnd: (v) => m.setReverbCustomParam('damp', v),
-                ),
-                ValueSlider(
-                  label: l.fvDryLabel,
-                  infoMessage: '原始直达声保留量。确保人声吐字清晰结实。',
-                  value: m.fvDry,
-                  defaultValue: ParamDefaults.fvDry,
-                  onResetToDefault: () =>
-                      m.setReverbCustomParam('dry', ParamDefaults.fvDry),
-                  min: 0,
-                  max: 1,
-                  unit: '%',
-                  enabled: isEnabled,
-                  format: (v) => (v * 100).toStringAsFixed(0),
-                  onChanged: (v) => m.setReverbCustomParam('dry', v),
-                  onChangedEnd: (v) => m.setReverbCustomParam('dry', v),
-                ),
-                const SizedBox(height: AuraSpace.xs),
-                _AutoGainRow(
-                  label: l.autoGainCompensation,
-                  tooltip: l.autoGainCompensationTooltip,
-                  value: m.reverbAutoGain,
-                  enabled: isEnabled,
-                  onChanged: m.setReverbAutoGain,
-                ),
-                const SizedBox(height: AuraSpace.xs),
-                ValueSlider(
-                  label: l.outputGainGate,
-                  infoMessage: l.outputGainGateTooltip,
-                  value: m.reverbOutputGain,
-                  defaultValue: ParamDefaults.reverbOutputGain,
-                  min: -12.0,
-                  max: 6.0,
-                  unit: 'dB',
-                  enabled: isEnabled,
-                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                  onChanged: m.setReverbOutputGain,
-                  onChangedEnd: m.setReverbOutputGain,
-                ),
-              ],
-            ),
+          ValueSlider(
+            label: l.fvDecayLabel,
+            infoMessage: '反射残响消散时间。数值越大，声音余韵回荡持续越久。',
+            value: m.fvDecay,
+            defaultValue: ParamDefaults.fvDecay,
+            onResetToDefault: () =>
+                m.setReverbCustomParam('decay', ParamDefaults.fvDecay),
+            min: 0,
+            max: 1,
+            unit: '%',
+            enabled: isEnabled,
+            format: (v) => (v * 100).toStringAsFixed(0),
+            onChanged: (v) => m.setReverbCustomParam('decay', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('decay', v),
           ),
-        ),
-      ],
+          ValueSlider(
+            label: l.reverbStereoWidth,
+            infoMessage: '混响声的双耳立体声扩展度。让回声包围整个头部。',
+            value: m.fvWidth,
+            defaultValue: ParamDefaults.fvWidth,
+            onResetToDefault: () =>
+                m.setReverbCustomParam('width', ParamDefaults.fvWidth),
+            min: 0.2,
+            max: 2.0,
+            unit: 'x',
+            enabled: isEnabled,
+            format: (v) => v.toStringAsFixed(1),
+            onChanged: (v) => m.setReverbCustomParam('width', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('width', v),
+          ),
+          ValueSlider(
+            label: l.fvDampLabel,
+            infoMessage: '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。',
+            value: m.fvDamp,
+            defaultValue: ParamDefaults.fvDamp,
+            onResetToDefault: () =>
+                m.setReverbCustomParam('damp', ParamDefaults.fvDamp),
+            min: 0,
+            max: 1,
+            unit: '%',
+            enabled: isEnabled,
+            format: (v) => (v * 100).toStringAsFixed(0),
+            onChanged: (v) => m.setReverbCustomParam('damp', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('damp', v),
+          ),
+          ValueSlider(
+            label: l.fvDryLabel,
+            infoMessage: '原始直达声保留量。确保人声吐字清晰结实。',
+            value: m.fvDry,
+            defaultValue: ParamDefaults.fvDry,
+            onResetToDefault: () =>
+                m.setReverbCustomParam('dry', ParamDefaults.fvDry),
+            min: 0,
+            max: 1,
+            unit: '%',
+            enabled: isEnabled,
+            format: (v) => (v * 100).toStringAsFixed(0),
+            onChanged: (v) => m.setReverbCustomParam('dry', v),
+            onChangedEnd: (v) => m.setReverbCustomParam('dry', v),
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          _AutoGainRow(
+            label: l.autoGainCompensation,
+            tooltip: l.autoGainCompensationTooltip,
+            value: m.reverbAutoGain,
+            enabled: isEnabled,
+            onChanged: m.setReverbAutoGain,
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          ValueSlider(
+            label: l.outputGainGate,
+            infoMessage: l.outputGainGateTooltip,
+            value: m.reverbOutputGain,
+            defaultValue: ParamDefaults.reverbOutputGain,
+            min: -12.0,
+            max: 6.0,
+            unit: 'dB',
+            enabled: isEnabled,
+            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+            onChanged: m.setReverbOutputGain,
+            onChangedEnd: m.setReverbOutputGain,
+          ),
+        ],
+      ),
     );
   }
 }
@@ -1424,7 +1533,7 @@ class _BassMonoCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '02',
+      index: '03',
       title: l.stBassmono,
       collapsed: !model.bassmonoOn,
       latencyMs: model.componentLatency('bassmono').ms,
@@ -1551,7 +1660,7 @@ class _ConvolverCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '03',
+      index: '05',
       title: l.convTitle,
       // 常规语义：关闭即收起。用户先前明确要求「无文件时保持开关开启、
 // 效果内部直通(旁路)，待合格文件加载成功后自动生效」，
@@ -1702,7 +1811,7 @@ class _DdcCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '05',
+      index: '06',
       title: l.ddcTitle,
       collapsed: !model.ddcOn, // 同上：常规语义 + state 层 auto-bypass
       latencyMs: model.componentLatency('ddc').ms,
@@ -1770,7 +1879,7 @@ class _EqualizerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '06',
+      index: '07',
       title: l.eqMultiBand,
       collapsed: !model.eqOn,
       latencyMs: model.componentLatency('eq').ms,
@@ -1806,7 +1915,7 @@ class _EqualizerAdvanced extends StatelessWidget {
     final filterStr = m.eqFilter == 0
         ? (m.eqInterp == 1 ? 'FIR · Makima' : 'FIR · PCHIP')
         : (m.eqFilter == 1 ? 'IIR6' : 'IIR12');
-    final agcStr = 'AGC: ${m.eqAutoGain ? "开" : "关"}';
+    final agcStr = 'AGC: ${m.eqAutoGain ? "ON" : "OFF"}';
     final trimStr =
         '${(m.eqOutputGain >= 0 ? "+" : "")}${m.eqOutputGain.toStringAsFixed(1)} dB';
 
@@ -2006,7 +2115,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     final m = widget.model;
 
     return SectionCard(
-      index: '07',
+      index: '08',
       title: l.stArbmag,
       collapsed: !m.arbmagOn,
       latencyMs: m.componentLatency('arbmag').ms,
@@ -2361,7 +2470,7 @@ class _ArbmagAdvanced extends StatelessWidget {
     final p = paletteOf(context);
     final m = model;
 
-    final agcStr = 'AGC: ${m.arbmagAutoGain ? "开" : "关"}';
+    final agcStr = 'AGC: ${m.arbmagAutoGain ? "ON" : "OFF"}';
     final trimStr =
         '${(m.arbmagOutputGain >= 0 ? "+" : "")}${m.arbmagOutputGain.toStringAsFixed(1)} dB';
     final nodesStr = '${m.arbmagNodeCount} 节点';
@@ -2443,6 +2552,148 @@ class _ArbmagAdvanced extends StatelessWidget {
   }
 }
 
+/* ---- 09 Crossfeed (串扰消除 / 交叉馈送) ---- */
+
+class _CrossfeedCard extends StatelessWidget {
+  final AppModel model;
+  const _CrossfeedCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final m = model;
+    final isEnabled = m.xfeedOn;
+
+    final modeLabels = <int, String>{
+      0: l.crossfeedModeDefault,
+      1: l.crossfeedModeChuMoy,
+      2: l.crossfeedModeJanMeier,
+      3: l.crossfeedModeCustom,
+    };
+
+    final curModeLabel = modeLabels[m.xfeedMode] ?? l.crossfeedModeDefault;
+    final fcutStr = m.xfeedFcut.toStringAsFixed(0);
+    final feedStr = m.xfeedFeed.toStringAsFixed(1);
+
+    return SectionCard(
+      index: '09',
+      title: l.crossfeedTitle,
+      collapsed: !isEnabled,
+      latencyMs: m.componentLatency('crossfeed').ms,
+      latencyMeasured: m.componentLatency('crossfeed').measured,
+      latencyProbing: m.isProbingLatency('crossfeed'),
+      onRefreshLatency: () => m.refreshComponentLatency('crossfeed'),
+      latencyTick: m.getComponentLatencyTick('crossfeed'),
+      trailing: AuraSwitch(
+        value: isEnabled,
+        onChanged: (v) => m.setCrossfeedEnabled(v),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  l.crossfeedDesc,
+                  style: captionOf(paletteOf(context)),
+                ),
+              ),
+              const SizedBox(width: AuraSpace.sm),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: isEnabled
+                      ? paletteOf(context).accent.withValues(alpha: 0.12)
+                      : paletteOf(context).panelRaised,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isEnabled
+                        ? paletteOf(context).accent.withValues(alpha: 0.3)
+                        : paletteOf(context).hairline,
+                  ),
+                ),
+                child: Text(
+                  '$curModeLabel · ${fcutStr}Hz / ${feedStr}dB',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: isEnabled ? paletteOf(context).accent : paletteOf(context).textDim,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            children: [
+              for (final e in modeLabels.entries)
+                AuraChip(
+                  e.value,
+                  icon: e.key == 3 ? Icons.tune_rounded : Icons.headphones_rounded,
+                  selected: isEnabled && m.xfeedMode == e.key,
+                  onTap: isEnabled ? () => m.setCrossfeedMode(e.key) : null,
+                ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.md),
+          _CrossfeedAdvanced(model: m),
+        ],
+      ),
+    );
+  }
+}
+
+class _CrossfeedAdvanced extends StatelessWidget {
+  final AppModel model;
+  const _CrossfeedAdvanced({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final m = model;
+    final isEnabled = m.xfeedOn;
+
+    return AdvancedSection(
+      summary: '${m.xfeedFcut.toStringAsFixed(0)} Hz · ${m.xfeedFeed.toStringAsFixed(1)} dB · ${m.xfeedMode == 3 ? "自定义" : "预设联动"}',
+      builder: (ctx) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ValueSlider(
+            label: l.crossfeedCutoff,
+            infoMessage: '串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。',
+            value: m.xfeedFcut,
+            defaultValue: 700.0,
+            onResetToDefault: () => m.setCrossfeedFcut(700.0),
+            min: 300.0,
+            max: 2000.0,
+            unit: 'Hz',
+            enabled: isEnabled,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: (v) => m.setCrossfeedFcut(v),
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          ValueSlider(
+            label: l.crossfeedFeed,
+            infoMessage: '低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。',
+            value: m.xfeedFeed,
+            defaultValue: 4.5,
+            onResetToDefault: () => m.setCrossfeedFeed(4.5),
+            min: 1.0,
+            max: 15.0,
+            unit: 'dB',
+            enabled: isEnabled,
+            format: (v) => v.toStringAsFixed(1),
+            onChanged: (v) => m.setCrossfeedFeed(v),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /* ---- 06 Stereo (立体声声场展宽) ---- */
 
 class _StereoCard extends StatelessWidget {
@@ -2453,7 +2704,7 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '06',
+      index: '10',
       title: l.stereoWiden,
       collapsed: !model.stereoOn,
       latencyMs: model.componentLatency('stereo').ms,
@@ -2570,7 +2821,7 @@ class _HaasCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '06',
+      index: '11',
       title: l.stHaas,
       collapsed: !model.haasOn,
       latencyMs: model.componentLatency('haas').ms,
@@ -2666,7 +2917,7 @@ class _ExciterCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '06',
+      index: '12',
       title: l.stExciter,
       collapsed: !model.exciterOn,
       latencyMs: model.componentLatency('exciter').ms,
@@ -2733,7 +2984,7 @@ class _TubeCard extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     return SectionCard(
-      index: '08',
+      index: '13',
       title: l.tubeTitle,
       collapsed: !model.tubeOn,
       latencyMs: model.componentLatency('tube').ms,
@@ -2812,7 +3063,7 @@ class _TubeAdvanced extends StatelessWidget {
     final m = model;
     return AdvancedSection(
       summary:
-          '${m.tubeOversampling}x · AGC: ${m.tubeAutoGain ? "开" : "关"} · ${(m.tubeOutputGain >= 0 ? "+" : "")}${m.tubeOutputGain.toStringAsFixed(1)} dB',
+          '${m.tubeOversampling}x · AGC: ${m.tubeAutoGain ? "ON" : "OFF"} · ${(m.tubeOutputGain >= 0 ? "+" : "")}${m.tubeOutputGain.toStringAsFixed(1)} dB',
       builder: (context) {
         final p = paletteOf(context);
         return Column(
@@ -2821,10 +3072,18 @@ class _TubeAdvanced extends StatelessWidget {
             Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(l.tubeOversampling, style: captionOf(p)),
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                    l.tubeOversampling,
+                    style: captionOf(p),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: AuraSpace.sm),
                 Wrap(
                   spacing: AuraSpace.sm,
+                  alignment: WrapAlignment.end,
                   children: [
                     for (final os in const [1, 2, 4])
                       AuraChoiceChip(
@@ -2886,7 +3145,7 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '09',
+      index: '14',
       title: l.postGain,
       latencyMs: model.componentLatency('post').ms,
               latencyMeasured: model.componentLatency('post').measured,

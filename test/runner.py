@@ -46,6 +46,8 @@ def run_smoke_tests():
     "smoke_exciter.py",
     "smoke_fx_gain.py",
     "smoke_arbmag.py",
+    "smoke_gate_deesser.py",
+    "smoke_crossfeed.py",
         "test_editor_topology.py",
         "probe_component.py",
         "test_cross_system_verify.py",

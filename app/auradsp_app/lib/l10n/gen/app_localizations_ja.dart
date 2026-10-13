@@ -683,6 +683,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stBassmono => '低域モノラル';
 
   @override
+  String get stGate => 'ノイズゲート';
+
+  @override
+  String get gateHint => 'チェーン先頭：閾値以下の背景ノイズをゲート、attack/release でエッジ整形';
+
+  @override
+  String get gateThreshold => '閾値';
+
+  @override
+  String get gateAttack => 'アタック';
+
+  @override
+  String get gateRelease => 'リリース';
+
+  @override
+  String get gateAutoGain => '自動ゲイン補償';
+
+  @override
+  String get deesserTitle => 'デエッサー';
+
+  @override
+  String get deesserFreq => '歯擦音帯域';
+
+  @override
+  String get deesserAmount => '減衰量';
+
+  @override
   String get stHaas => '差分サラウンド';
 
   @override
@@ -1287,4 +1314,33 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get arbmagInvalidFormat => 'GraphicEQフォーマットが無効であるか、有効な周波数ノードがありません';
+
+  @override
+  String get crossfeedTitle => 'クロスフィード';
+
+  @override
+  String get crossfeedDesc => 'ヘッドホン特有の頭内定位感を緩和し、長時間のリスニング疲労を軽減';
+
+  @override
+  String get crossfeedModeDefault => 'デフォルト標準';
+
+  @override
+  String get crossfeedModeChuMoy => 'Chu Moy クラシック';
+
+  @override
+  String get crossfeedModeJanMeier => 'Jan Meier 拡張';
+
+  @override
+  String get crossfeedModeCustom => 'カスタム';
+
+  @override
+  String get crossfeedCutoff => 'カットオフ周波数';
+
+  @override
+  String get crossfeedFeed => 'クロスフィード量';
+
+  @override
+  String crossfeedActiveDesc(String mode, String fcut, String feed) {
+    return '適用中: $mode ($fcut Hz, $feed dB)';
+  }
 }

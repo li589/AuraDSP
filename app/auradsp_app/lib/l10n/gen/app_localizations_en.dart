@@ -700,6 +700,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stBassmono => 'Bass Mono';
 
   @override
+  String get stGate => 'Noise Gate';
+
+  @override
+  String get gateHint =>
+      'Chain head: background below threshold is gated, attack/release shape the edges';
+
+  @override
+  String get gateThreshold => 'Threshold';
+
+  @override
+  String get gateAttack => 'Attack';
+
+  @override
+  String get gateRelease => 'Release';
+
+  @override
+  String get gateAutoGain => 'Auto gain compensation';
+
+  @override
+  String get deesserTitle => 'De-esser';
+
+  @override
+  String get deesserFreq => 'Sibilance band';
+
+  @override
+  String get deesserAmount => 'Reduction';
+
+  @override
   String get stHaas => 'Differential Surround';
 
   @override
@@ -1330,4 +1358,34 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get arbmagInvalidFormat =>
       'Invalid GraphicEQ format or no valid frequency nodes found';
+
+  @override
+  String get crossfeedTitle => 'Crossfeed';
+
+  @override
+  String get crossfeedDesc =>
+      'Simulates acoustic crosstalk to relieve headphone in-the-head listening fatigue';
+
+  @override
+  String get crossfeedModeDefault => 'Default Standard';
+
+  @override
+  String get crossfeedModeChuMoy => 'Chu Moy Classic';
+
+  @override
+  String get crossfeedModeJanMeier => 'Jan Meier Enhanced';
+
+  @override
+  String get crossfeedModeCustom => 'Custom';
+
+  @override
+  String get crossfeedCutoff => 'Cutoff Frequency';
+
+  @override
+  String get crossfeedFeed => 'Feed Level';
+
+  @override
+  String crossfeedActiveDesc(String mode, String fcut, String feed) {
+    return 'Active: $mode ($fcut Hz, $feed dB)';
+  }
 }

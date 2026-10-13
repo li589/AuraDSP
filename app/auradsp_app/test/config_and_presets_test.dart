@@ -734,6 +734,141 @@ void main() {
       expect(m.arbmagOutputGain, closeTo(-1.5, 1e-9));
       expect(m.arbmagString, 'GraphicEQ: 20 0; 20000 0');
     });
+
+    test('Crossfeed: 默认值、模式联动与自定义分频/衰减', () {
+      final m = AppModel();
+      expect(m.xfeedOn, isFalse);
+      expect(m.xfeedMode, 0);
+      expect(m.xfeedFcut, closeTo(700.0, 1e-9));
+      expect(m.xfeedFeed, closeTo(4.5, 1e-9));
+
+      // 切换 Chu Moy 预设
+      m.setCrossfeedMode(1);
+      expect(m.xfeedMode, 1);
+      expect(m.xfeedFcut, closeTo(700.0, 1e-9));
+      expect(m.xfeedFeed, closeTo(6.0, 1e-9));
+
+      // 切换 Jan Meier 预设
+      m.setCrossfeedMode(2);
+      expect(m.xfeedMode, 2);
+      expect(m.xfeedFcut, closeTo(650.0, 1e-9));
+      expect(m.xfeedFeed, closeTo(9.5, 1e-9));
+
+      // 自定义分频点与馈送量，联动切为自定义模式 3
+      m.setCrossfeedFcut(800.0);
+      expect(m.xfeedMode, 3);
+      expect(m.xfeedFcut, closeTo(800.0, 1e-9));
+
+      m.setCrossfeedFeed(7.5);
+      expect(m.xfeedMode, 3);
+      expect(m.xfeedFeed, closeTo(7.5, 1e-9));
+
+      // 验证快照与恢复对称性
+      m.setCrossfeedEnabled(true);
+      final snap = PresetLibrary.snapshot(m, name: '__xf_snap__');
+      final xf = snap.params['crossfeed'] as Map<String, dynamic>;
+      expect(xf['enable'], isTrue);
+      expect(xf['mode'], 3);
+      expect(xf['fcut'], closeTo(800.0, 1e-9));
+      expect(xf['feed'], closeTo(7.5, 1e-9));
+
+      // 重置并恢复
+      m.setCrossfeedMode(0);
+      m.setCrossfeedEnabled(false);
+      PresetLibrary.apply(m, snap);
+      expect(m.xfeedOn, isTrue);
+      expect(m.xfeedMode, 3);
+      expect(m.xfeedFcut, closeTo(800.0, 1e-9));
+      expect(m.xfeedFeed, closeTo(7.5, 1e-9));
+    });
+
+    test('SpatialReverb: setReverbCustomParam 调整干湿比不误关混响', () {
+      final m = AppModel();
+      m.selectReverbPreset(0); // 大音乐厅
+      expect(m.isSpatialReverbOn, isTrue);
+
+      // 用户拖动干湿比滑块
+      m.setReverbCustomParam('wet', 0.6);
+      expect(m.reverbPreset, -2); // 变为自定义模式
+      expect(m.fvOn, isTrue);
+      expect(m.fvWet, closeTo(0.6, 1e-9));
+      expect(m.isSpatialReverbOn, isTrue); // 仍旧保持开启，绝不误关闭！
+    });
+  });
+
+  group('Gate + Deesser', () {
+    test('默认值', () {
+      final m = AppModel();
+      expect(m.gateOn, isFalse);
+      expect(m.gateThreshold, closeTo(-40.0, 1e-9));
+      expect(m.gateAttackMs, closeTo(10.0, 1e-9));
+      expect(m.gateReleaseMs, closeTo(100.0, 1e-9));
+      expect(m.gateAutoGain, isFalse);
+      expect(m.deesserOn, isFalse);
+      expect(m.deesserFreq, closeTo(6000.0, 1e-9));
+      expect(m.deesserAmount, closeTo(0.5, 1e-9));
+      expect(m.isStageEnabled('gate'), isFalse);
+    });
+
+    test('钳位', () {
+      final m = AppModel();
+      m.setGateThreshold(-100);
+      expect(m.gateThreshold, closeTo(-60.0, 1e-9));
+      m.setGateThreshold(10);
+      expect(m.gateThreshold, closeTo(0.0, 1e-9));
+      m.setGateAttack(0);
+      expect(m.gateAttackMs, closeTo(1.0, 1e-9));
+      m.setGateRelease(9999);
+      expect(m.gateReleaseMs, closeTo(500.0, 1e-9));
+      m.setDeesserFreq(100);
+      expect(m.deesserFreq, closeTo(2000.0, 1e-9));
+      m.setDeesserAmount(5);
+      expect(m.deesserAmount, closeTo(1.0, 1e-9));
+    });
+
+    test('toggleStage 翻转 gate', () {
+      final m = AppModel();
+      m.toggleStage('gate');
+      expect(m.gateOn, isTrue);
+      expect(m.isStageEnabled('gate'), isTrue);
+      m.toggleStage('gate');
+      expect(m.gateOn, isFalse);
+    });
+
+    test('snapshot/apply 对称恢复 gate + deesser', () {
+      final src = AppModel()
+        ..setGateEnabled(true)
+        ..setGateThreshold(-35)
+        ..setGateAttack(20)
+        ..setGateRelease(200)
+        ..setGateAutoGain(true)
+        ..setDeesserEnabled(true)
+        ..setDeesserFreq(7500)
+        ..setDeesserAmount(0.8);
+      final snap = PresetLibrary.snapshot(src, name: '__gate__');
+      final g = snap.params['gate'] as Map<String, dynamic>;
+      expect(g['enable'], isTrue);
+      expect((g['threshold'] as num).toDouble(), closeTo(-35.0, 1e-9));
+      expect(g['autoGain'], isTrue);
+      final d = snap.params['deesser'] as Map<String, dynamic>;
+      expect(d['enable'], isTrue);
+      expect((d['freq'] as num).toDouble(), closeTo(7500.0, 1e-9));
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__gate_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.gateOn, isTrue);
+      expect(m.gateThreshold, closeTo(-35.0, 1e-9));
+      expect(m.gateReleaseMs, closeTo(200.0, 1e-9));
+      expect(m.gateAutoGain, isTrue);
+      expect(m.deesserOn, isTrue);
+      expect(m.deesserFreq, closeTo(7500.0, 1e-9));
+      expect(m.deesserAmount, closeTo(0.8, 1e-9));
+    });
   });
 }
 

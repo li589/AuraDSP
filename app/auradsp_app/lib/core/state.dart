@@ -128,6 +128,13 @@ abstract class ParamDefaults {
   static const double tubeOutputGain = 0.0;     // [-12, 6] dB
   static const bool compAutoGain = false;
   static const double compOutputGain = 0.0;     // [-12, 6] dB
+
+  // 噪声门 + Deesser
+  static const double gateThreshold = -40.0;   // dB [-60,0]
+  static const double gateAttack = 10.0;       // ms [1,100]
+  static const double gateRelease = 100.0;     // ms [10,500]
+  static const double deesserFreq = 6000.0;    // Hz [2000,10000]
+  static const double deesserAmount = 0.5;     // [0,1]
   static const bool arbmagAutoGain = false;
   static const double arbmagOutputGain = 0.0;   // [-12, 6] dB
 
@@ -218,6 +225,9 @@ class AppModel extends ChangeNotifier {
 
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
+  int xfeedMode = 0; // 0: Default, 1: Chu Moy, 2: Jan Meier, 3: Custom
+  double xfeedFcut = 700.0; // 300..2000 Hz
+  double xfeedFeed = 4.5; // 1.0..15.0 dB
 
   // 动态压限器（Compander）
   bool compOn = false;
@@ -271,6 +281,13 @@ class AppModel extends ChangeNotifier {
   double tubeOutputGain = ParamDefaults.tubeOutputGain;
   bool compAutoGain = ParamDefaults.compAutoGain;
   double compOutputGain = ParamDefaults.compOutputGain;
+
+  // 噪声门（链头）+ Deesser + 自动增益补偿
+  bool gateOn = false;
+  double gateThreshold = -40, gateAttackMs = 10, gateReleaseMs = 100;
+  bool gateAutoGain = false;
+  bool deesserOn = false;
+  double deesserFreq = 6000, deesserAmount = 0.5;
   bool arbmagOn = ParamDefaults.arbmagOn;
   String arbmagString = ParamDefaults.arbmagString;
   bool arbmagReady = false;
@@ -671,6 +688,9 @@ class AppModel extends ChangeNotifier {
         }
         tubeOn = (raw['tubeEnable'] as int) != 0;
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
+        if (raw['xfeedMode'] != null) xfeedMode = raw['xfeedMode'] as int;
+        if (raw['xfeedFcut'] != null) xfeedFcut = (raw['xfeedFcut'] as num).toDouble();
+        if (raw['xfeedFeed'] != null) xfeedFeed = (raw['xfeedFeed'] as num).toDouble();
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
         convMix = (raw['convMix'] as num).toDouble();
         // auto-bypass 的另一半：资源此刻就绪且用户开关为开 → 立即生效。
@@ -725,6 +745,14 @@ class AppModel extends ChangeNotifier {
         if (raw['compAutoGain'] != null) compAutoGain = (raw['compAutoGain'] as int) != 0;
         if (raw['reverbOutGain'] != null) reverbOutputGain = (raw['reverbOutGain'] as num).toDouble();
         if (raw['reverbAutoGain'] != null) reverbAutoGain = (raw['reverbAutoGain'] as int) != 0;
+        if (raw['gateEnable'] != null) gateOn = (raw['gateEnable'] as int) != 0;
+        if (raw['gateThreshold'] != null) gateThreshold = (raw['gateThreshold'] as num).toDouble();
+        if (raw['gateAttack'] != null) gateAttackMs = (raw['gateAttack'] as num).toDouble();
+        if (raw['gateRelease'] != null) gateReleaseMs = (raw['gateRelease'] as num).toDouble();
+        if (raw['gateAutoGain'] != null) gateAutoGain = (raw['gateAutoGain'] as int) != 0;
+        if (raw['deesserEnable'] != null) deesserOn = (raw['deesserEnable'] as int) != 0;
+        if (raw['deesserFreq'] != null) deesserFreq = (raw['deesserFreq'] as num).toDouble();
+        if (raw['deesserAmount'] != null) deesserAmount = (raw['deesserAmount'] as num).toDouble();
         fvOn = (raw['fvEnable'] as int) != 0;
         fvDecay = (raw['fvDecay'] as num).toDouble();
         fvDamp = (raw['fvDamp'] as num).toDouble();
@@ -1078,6 +1106,9 @@ class AppModel extends ChangeNotifier {
       setInt('tube.enable', tubeOn ? 1 : 0);
       setFloat('tube.gain', tubeGain);
       setInt('crossfeed.enable', xfeedOn ? 1 : 0);
+      setInt(ParamId.xfeedMode, xfeedMode);
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
       setInt('shelf.enable', shelfOn ? 1 : 0);
       setFloat('shelf.freq', shelfFreq);
       setFloat('shelf.gain', shelfGain);
@@ -1101,6 +1132,17 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.compAutoGain, compAutoGain ? 1 : 0);
       setFloat(ParamId.reverbOutGain, reverbOutputGain);
       setInt(ParamId.reverbAutoGain, reverbAutoGain ? 1 : 0);
+      // 噪声门 + Deesser
+      setInt(ParamId.gateEnable, gateOn ? 1 : 0);
+      setFloat(ParamId.gateThreshold, gateThreshold);
+      setFloat(ParamId.gateAttack, gateAttackMs);
+      setFloat(ParamId.gateRelease, gateReleaseMs);
+      setInt(ParamId.gateAutoGain, gateAutoGain ? 1 : 0);
+      setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
+      setFloat(ParamId.deesserFreq, deesserFreq);
+      setFloat(ParamId.deesserAmount, deesserAmount);
+      setFloat(ParamId.arbmagOutGain, arbmagOutputGain);
+      setInt(ParamId.arbmagAutoGain, arbmagAutoGain ? 1 : 0);
       setInt('limiter.enable', limiterOn ? 1 : 0);
       setFloat('post.gain', postGain);
 
@@ -1111,14 +1153,18 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.compEnable, compOn ? 1 : 0);
 
       // 2. 混响
-      if (reverbPreset >= 0) {
-        setInt('reverb.preset', reverbPreset);
-      } else if (fvOn) {
+      if (isSpatialReverbOn) {
         setFloat('freeverb.decay', fvDecay);
         setFloat('freeverb.damp', fvDamp);
         setFloat('freeverb.wet', fvWet);
         setFloat('freeverb.dry', fvDry);
         setInt(ParamId.fvEnable, 1);
+        if (reverbPreset >= 0) {
+          setInt('reverb.preset', reverbPreset);
+        }
+      } else {
+        setInt(ParamId.fvEnable, 0);
+        setInt('reverb.preset', -1);
       }
 
       // 3. EQ 状态与曲线
@@ -1223,6 +1269,9 @@ class AppModel extends ChangeNotifier {
       case 'channels.mode': channelsMode = v.toInt(); break;
       case 'tube.enable': tubeOn = v != 0; break;
       case 'crossfeed.enable': xfeedOn = v != 0; break;
+      case 'crossfeed.mode': xfeedMode = v.toInt(); break;
+      case 'crossfeed.fcut': xfeedFcut = v; break;
+      case 'crossfeed.feed': xfeedFeed = v; break;
       default:
         // 注意：这里必须用 raw string 里的裸 $ 收尾。写成 r'...\$' 是
         // 反斜杠+美元，在 ECMAScript 正则里是 IdentityEscape，匹配**字面 $ 字符**，
@@ -1259,6 +1308,14 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.compAutoGain) { compAutoGain = v != 0; break; }
         if (id == ParamId.reverbOutGain) { reverbOutputGain = v; break; }
         if (id == ParamId.reverbAutoGain) { reverbAutoGain = v != 0; break; }
+        if (id == ParamId.gateEnable) { gateOn = v != 0; break; }
+        if (id == ParamId.gateThreshold) { gateThreshold = v; break; }
+        if (id == ParamId.gateAttack) { gateAttackMs = v; break; }
+        if (id == ParamId.gateRelease) { gateReleaseMs = v; break; }
+        if (id == ParamId.gateAutoGain) { gateAutoGain = v != 0; break; }
+        if (id == ParamId.deesserEnable) { deesserOn = v != 0; break; }
+        if (id == ParamId.deesserFreq) { deesserFreq = v; break; }
+        if (id == ParamId.deesserAmount) { deesserAmount = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -1366,6 +1423,7 @@ class AppModel extends ChangeNotifier {
       'tube' => tubeOn,
       'comp' => compOn,
       'bassmono' => bassmonoOn,
+      'gate' => gateOn,
       'haas' => haasOn,
       'exciter' => exciterOn,
       'bass' => bassOn,
@@ -1389,6 +1447,8 @@ class AppModel extends ChangeNotifier {
         setInt('tube.enable', tubeOn ? 0 : 1);
       case 'bassmono':
         setBassmonoEnabled(!bassmonoOn);
+      case 'gate':
+        setGateEnabled(!gateOn);
       case 'haas':
         setHaasEnabled(!haasOn);
       case 'exciter':
@@ -1527,7 +1587,45 @@ class AppModel extends ChangeNotifier {
   }
 
   void setCrossfeedEnabled(bool on) {
+    xfeedOn = on;
     setInt(ParamId.xfeedEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCrossfeedMode(int mode) {
+    xfeedMode = mode.clamp(0, 3);
+    if (xfeedMode == 0) {
+      xfeedFcut = 700.0;
+      xfeedFeed = 4.5;
+    } else if (xfeedMode == 1) {
+      xfeedFcut = 700.0;
+      xfeedFeed = 6.0;
+    } else if (xfeedMode == 2) {
+      xfeedFcut = 650.0;
+      xfeedFeed = 9.5;
+    }
+    setInt(ParamId.xfeedMode, xfeedMode);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCrossfeedFcut(double v) {
+    xfeedFcut = v.clamp(300.0, 2000.0);
+    xfeedMode = 3; // 联动切为自定义模式
+    setInt(ParamId.xfeedMode, 3);
+    setFloat(ParamId.xfeedFcut, xfeedFcut);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCrossfeedFeed(double v) {
+    xfeedFeed = v.clamp(1.0, 15.0);
+    xfeedMode = 3; // 联动切为自定义模式
+    setInt(ParamId.xfeedMode, 3);
+    setFloat(ParamId.xfeedFeed, xfeedFeed);
+    notifyListeners();
+    scheduleAutoSave();
   }
 
   /// 低频单声道化（BassMono）：开关与分频点（stereo 解耦教训：独立开关位，
@@ -1669,6 +1767,9 @@ class AppModel extends ChangeNotifier {
 
   void setReverbCustomParam(String param, double value) {
     reverbPreset = -2; // 联动切换为自定义模式
+    if (!fvOn) {
+      setFreeverbEnabled(true);
+    }
     switch (param) {
       case 'decay':
         fvDecay = value;
@@ -1856,6 +1957,56 @@ class AppModel extends ChangeNotifier {
   void setCompOutputGain(double v) {
     compOutputGain = v.clamp(-12.0, 6.0);
     setFloat(ParamId.compOutGain, compOutputGain);
+    notifyListeners();
+  }
+
+  /// 噪声门（链头第一道）：阈值/attack/release 全下发；自动增益补偿独立开关。
+  void setGateEnabled(bool on) {
+    gateOn = on;
+    setInt(ParamId.gateEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setGateThreshold(double v) {
+    gateThreshold = v.clamp(-60.0, 0.0);
+    setFloat(ParamId.gateThreshold, gateThreshold);
+    notifyListeners();
+  }
+
+  void setGateAttack(double v) {
+    gateAttackMs = v.clamp(1.0, 100.0);
+    setFloat(ParamId.gateAttack, gateAttackMs);
+    notifyListeners();
+  }
+
+  void setGateRelease(double v) {
+    gateReleaseMs = v.clamp(10.0, 500.0);
+    setFloat(ParamId.gateRelease, gateReleaseMs);
+    notifyListeners();
+  }
+
+  void setGateAutoGain(bool v) {
+    gateAutoGain = v;
+    setInt(ParamId.gateAutoGain, v ? 1 : 0);
+    notifyListeners();
+  }
+
+  /// Deesser（高级区）：开关 + 侧链频率 + 强度。
+  void setDeesserEnabled(bool on) {
+    deesserOn = on;
+    setInt(ParamId.deesserEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setDeesserFreq(double v) {
+    deesserFreq = v.clamp(2000.0, 10000.0);
+    setFloat(ParamId.deesserFreq, deesserFreq);
+    notifyListeners();
+  }
+
+  void setDeesserAmount(double v) {
+    deesserAmount = v.clamp(0.0, 1.0);
+    setFloat(ParamId.deesserAmount, deesserAmount);
     notifyListeners();
   }
 

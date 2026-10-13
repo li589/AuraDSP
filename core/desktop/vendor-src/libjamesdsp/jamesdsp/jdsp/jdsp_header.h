@@ -578,12 +578,12 @@ typedef struct dspsys
 	float stagePeakL[16];
 	float stagePeakR[16];
 	/* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动增益补偿（leveler）。
-	 * fx 索引：0=tube 1=comp 2=bass 3=eq（对应 kAuraStages 前四项）。
+	 * fx 索引：0=tube 1=comp 2=bass 3=eq 4=arbmag。
 	 * fxOutGain 线性增益（控制线程写，RT 读，x86 对齐 float 原子）；
 	 * fxAutoGain 开关；fxAGIn/Out/Comp 为 RT 独占的平滑 RMS 与补偿增益。 */
-	float fxOutGain[4];
-	int   fxAutoGain[4];
-	float fxAGIn[4], fxAGOut[4], fxAGComp[4];
+	float fxOutGain[5];
+	int   fxAutoGain[5];
+	float fxAGIn[5], fxAGOut[5], fxAGComp[5];
 	int32_t(*i32_from_p24)(const uint8_t *);
 	void (*p24_from_i32)(int32_t, uint8_t *);
 	// I/O function pointer
@@ -624,7 +624,7 @@ extern void jdsp_unlock(JamesDSPLib *jdsp);
 extern void JamesDSPFree(JamesDSPLib *jdsp);
  extern void JamesDSPInit(JamesDSPLib *jdsp, int blockSizeMax, float sample_rate);
  extern void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB);
- /* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动补偿（0=tube 1=comp 2=bass 3=eq） */
+ /* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动补偿（0=tube 1=comp 2=bass 3=eq 4=arbmag） */
  extern void JamesDSPSetFxOutGain(JamesDSPLib *jdsp, int fx, double linGain);
  extern void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on);
  extern void JamesDSPInitFxGains(JamesDSPLib *jdsp);
