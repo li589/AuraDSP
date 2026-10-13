@@ -5,7 +5,7 @@ import os
 import sys
 import subprocess
 
-ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 RUNNER = os.path.join(ROOT_DIR, "test", "runner.py")
 
 if __name__ == "__main__":

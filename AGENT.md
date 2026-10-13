@@ -26,7 +26,7 @@
 | `core/` | 引擎动态库源码、ABI 接口定义、CMake 构建脚本 | 修改任何音频路径必须保证 RT-Safe |
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
 | `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |
-| `tools/` | **开发辅助工具与小组件**：`push_via_api.py`、`gen_test_irs.py`、`diag_rail_icons.py`、`bench_effects.py` 等 | 纯工具性质，不包含测试用例 |
+| `tools/` | **开发辅助工具与小组件**：`bin/push_via_api.py`、`probe/gen_test_irs.py`、`probe/diag_rail_icons.py`、`probe/bench_effects.py` 等 | 纯工具性质，不包含测试用例 |
 | `docs/` | 架构方案、UI 设计规范、决策记录 (ADR)、阶段报告 | 方案先行，设计更新后必须同步文档 |
 | `.ai/` | **AI 自治沉淀区**：包含 `.ai/memory/`（历史上下文与每日备忘）、`.ai/guidelines/`（经验教训） | 各类智能体共享知识，无需人工介入 |
 
@@ -87,5 +87,5 @@ cd app/auradsp_app; flutter analyze
 cd app/auradsp_app; flutter build windows --release --no-tree-shake-icons
 
 # 5. 受限网络或 API 推送代码到远端
-python tools/push_via_api.py main
+python tools/bin/push_via_api.py main
 ```

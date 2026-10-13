@@ -9,7 +9,7 @@
   * 交互前确保卡片主开关为 ON（否则卡片折叠/滑块 disabled）
   * 每步用 assert_images_differ 做区域像素差分，杜绝假通过
 
-坐标由 tools/probe_effects_geometry.py + 渲染实测推导（1400x900 标准画布）：
+坐标由 tools/probe/probe_effects_geometry.py + 渲染实测推导（1400x900 标准画布）：
   低音「高级」折叠头 (430, 649)
   低音强度滑块行 y=532（用于确认卡片确实处于展开态）
 """

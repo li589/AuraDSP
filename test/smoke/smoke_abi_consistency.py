@@ -3,7 +3,7 @@
 """smoke_abi_consistency.py — B4 E4：C ABI / .def / Dart FFI 三处一致性
 
 E1 的 show_editor 签名漂移（Dart FFI 3 参 vs C ABI 2 参，窗口标题被静默
-丢弃）说明三处导出清单靠人肉同步不可靠。tools/abi_consistency.py 做
+丢弃）说明三处导出清单靠人肉同步不可靠。tools/bin/abi_consistency.py 做
 逐条比对，本 smoke 把它挂上门禁：任何"导出未绑定 / 绑定不存在符号 /
 元数不一致"都会在这里 FAIL。
 
@@ -16,7 +16,7 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPT = os.path.join(ROOT, "tools", "abi_consistency.py")
+SCRIPT = os.path.join(ROOT, "tools", "bin", "abi_consistency.py")
 
 
 def main() -> int:

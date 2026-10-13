@@ -17,8 +17,8 @@ loadCache() 只接受 schema 相符的信封；旧裸 list 一律丢弃。本工
   4. 原子写回缓存
 
 用法：
-  python tools/rebuild_plugin_cache.py            # 重建
-  python tools/rebuild_plugin_cache.py --dry-run  # 只体检不写
+  python tools/bin/rebuild_plugin_cache.py            # 重建
+  python tools/bin/rebuild_plugin_cache.py --dry-run  # 只体检不写
 """
 
 import argparse
@@ -30,7 +30,7 @@ import shutil
 import sys
 import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
                    "auradsp_engine.dll")
 CACHE = os.path.join(os.environ.get("APPDATA", ""), "AuraDSP", "plugins",

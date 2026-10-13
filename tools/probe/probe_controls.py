@@ -10,9 +10,9 @@
   * 可选点击：点击前后取小区域差分，差分大的位置即**可交互控件**。
 
 示例：
-  python tools/probe_controls.py --region 330,120,1390,900 --step 16
-  python tools/probe_controls.py --region 330,560,1390,760 --step 10 --click
-  python tools/probe_controls.py --region 330,120,1390,900 --step 8 --click --out controls.csv
+  python tools/probe/probe_controls.py --region 330,120,1390,900 --step 16
+  python tools/probe/probe_controls.py --region 330,560,1390,760 --step 10 --click
+  python tools/probe/probe_controls.py --region 330,120,1390,900 --step 8 --click --out controls.csv
 """
 import argparse
 import csv
@@ -20,8 +20,8 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), 'test', 'ui'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), 'test', 'ui'))
 
 import ui_test_kit as K  # noqa: E402
 from PIL import ImageChops  # noqa: E402

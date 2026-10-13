@@ -11,7 +11,7 @@
 
 用法：
   1) 手动启动 auradsp_app.exe
-  2) python tools/log_clicks.py --seconds 180 --out clicks.csv
+  2) python tools/probe/log_clicks.py --seconds 180 --out clicks.csv
   3) 在 APP 里按需点击；结束时直接 Ctrl+C 或等计时结束
   4) 分析 clicks.csv
 
@@ -25,8 +25,8 @@ import os
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), 'test', 'ui'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), 'test', 'ui'))
 
 import ui_test_kit as K  # noqa: E402
 from PIL import ImageChops  # noqa: E402

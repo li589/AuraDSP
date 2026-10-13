@@ -2,14 +2,14 @@
 
 用真实脉冲响应测量各组件的算法延迟并换算成 ms。
 注意 convolver / ddc / liveprog 需要外部资源，探针无法就绪，如实返回不可测。
-运行：python tools/probe_latency.py
+运行：python tools/probe/probe_latency.py
 """
 import ctypes
 import os
 import sys
 import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
                    "auradsp_engine.dll")
 lib = ctypes.CDLL(DLL)

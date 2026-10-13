@@ -13,8 +13,8 @@ import sys
 import tempfile
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), 'test', 'ui'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), 'test', 'ui'))
 
 from ui_test_kit import AuraAppSession  # noqa: E402
 

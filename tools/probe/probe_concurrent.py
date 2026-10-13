@@ -9,7 +9,7 @@ import math
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
                    "auradsp_engine.dll")
 lib = ctypes.CDLL(DLL)
