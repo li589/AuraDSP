@@ -508,13 +508,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassMode => '低音モード';
 
   @override
-  String get bassModeDynamic => 'ダイナミック (DBB)';
+  String get bassModeDynamic => 'ダイナミック';
 
   @override
-  String get bassModeShelf => 'Hi-Fiローシェルフ';
+  String get bassModeShelf => 'ローシェルフ';
 
   @override
   String get bassModeHarmonic => '心理音響ハーモニック';
+
+  @override
+  String get bassModeTooltip =>
+      '低音モード説明：\n• ダイナミック：信号エネルギーに応じた適応型ブースト（クリッピング防止）\n• ローシェルフ：高忠実度アナログイコライザー\n• 心理音響：高調波合成による小型スピーカー向け重低音知覚';
 
   @override
   String get bassCutoff => 'カットオフ周波数';
@@ -795,7 +799,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainFlowTitle => 'シグナルフロー（現在の順序）';
 
   @override
-  String get chainFlowCaption => '全体シグナルフロー概略（左から右へ）：';
+  String get chainFlowCaption => '全体シグナルフロー概略：';
 
   @override
   String get chainNodeInput => '入力ゲート';
@@ -817,6 +821,44 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chainNodeOutput => 'オーディオ出力';
+
+  @override
+  String get lpManual => 'マニュアル';
+
+  @override
+  String get lpManualTitle => 'EEL2 スクリプトリファレンス';
+
+  @override
+  String get lpManualContent =>
+      '【コアオーディオレジスタ】\n• spl0: 左チャンネルサンプル（浮動小数点、公称 ±1.0）\n• spl1: 右チャンネルサンプル（浮動小数点、公称 ±1.0）\n• srate: 現在のデバイス実サンプリング周波数 (Hz)\n\n【スライダー変数】\n• slider1 ~ slider8: 動的スライダーパラメータ（デフォルト 0.0 ~ 1.0）\n\n【セクション構文】\n• @init: ロードまたはリセット時に1回実行（1文以上必須）\n• @slider: スライダー操作時に実行\n• @sample: サンプルごとにリアルタイム実行';
+
+  @override
+  String get lpEditorTooltip =>
+      'Cockos EEL2 スクリプトエンジンに基づくリアルタイムオーディオDSPプログラミング環境。';
+
+  @override
+  String get exciterMode => 'モード';
+
+  @override
+  String get exciterModeTooltip => '非線形伝達関数により高域倍音を生成し、高域減衰を補償して空気感と透明感を復元します。';
+
+  @override
+  String get exciterAmountInfo => '生成された高域倍音と原音の混合比率を制御します。適度な設定で音の艶やかさが向上します。';
+
+  @override
+  String get eqModeLabel => 'モード';
+
+  @override
+  String get eqModeTooltip =>
+      'バンド数モード切替。キャンバス上でドラッグしてゲイン調整、ダブルクリックで0dBにリセット、右側でQ値を調節します。';
+
+  @override
+  String get haasSideTooltip =>
+      'ハース効果サラウンド：片側チャンネルを0〜25ms遅延させ、両耳時間差により自然な立体サラウンド音場を生成します。';
+
+  @override
+  String get bassmonoCombinedTooltip =>
+      '指定周波数以下の超低域をモノラル化し、低域の位相打ち消しを防ぎ力強い重低音を実現します。';
 
   @override
   String get inputGate => '入力ゲート';
@@ -1317,6 +1359,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get crossfeedTitle => 'クロスフィード';
+
+  @override
+  String get crossfeedMode => 'モード';
 
   @override
   String get crossfeedDesc => 'ヘッドホン特有の頭内定位感を緩和し、長時間のリスニング疲労を軽減';

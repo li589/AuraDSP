@@ -50,6 +50,9 @@ class SectionCard extends StatelessWidget {
   /// 是否折叠卡片内容区（关闭时整条折叠，仅保留标题与开关）
   final bool collapsed;
 
+  /// 标题右侧的帮助气泡提示
+  final String? titleTooltip;
+
   const SectionCard({
     super.key,
     required this.child,
@@ -65,6 +68,7 @@ class SectionCard extends StatelessWidget {
     this.onRefreshLatency,
     this.latencyTick = 0,
     this.collapsed = false,
+    this.titleTooltip,
   });
 
   @override
@@ -91,7 +95,10 @@ class SectionCard extends StatelessWidget {
               ],
             )
           : trailing;
-      body.add(SectionTitle(title!, index: index, trailing: effectiveTrailing));
+      body.add(SectionTitle(title!,
+          index: index,
+          trailing: effectiveTrailing,
+          titleTooltip: titleTooltip));
 
       final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,7 +160,9 @@ class SectionTitle extends StatelessWidget {
   final String text;
   final String? index;
   final Widget? trailing;
-  const SectionTitle(this.text, {super.key, this.index, this.trailing});
+  final String? titleTooltip;
+  const SectionTitle(this.text,
+      {super.key, this.index, this.trailing, this.titleTooltip});
 
   @override
   Widget build(BuildContext context) {
@@ -175,7 +184,31 @@ class SectionTitle extends StatelessWidget {
           ),
           const SizedBox(width: AuraSpace.sm),
         ],
-        Expanded(child: Text(text, style: sectionOf(p))),
+        Expanded(
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  text,
+                  style: sectionOf(p),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (titleTooltip != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: titleTooltip!,
+                  child: Icon(
+                    Icons.help_outline_rounded,
+                    size: 14,
+                    color: p.textDim,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
         if (trailing != null) ...[
           const SizedBox(width: AuraSpace.md),
           trailing!,
@@ -264,11 +297,15 @@ class AdvancedSection extends StatefulWidget {
   /// 初始是否展开。各卡片的历史默认态由调用方决定。
   final bool initOpen;
 
+  /// 高级标题旁的小问号 hover 气泡提示
+  final String? helpTooltip;
+
   const AdvancedSection({
     super.key,
     required this.summary,
     required this.builder,
     this.initOpen = false,
+    this.helpTooltip,
   });
 
   @override
@@ -300,6 +337,14 @@ class _AdvancedSectionState extends State<AdvancedSection> {
                 ),
                 const SizedBox(width: AuraSpace.sm),
                 Text(l.advanced, style: labelOf(p, color: p.text)),
+                if (widget.helpTooltip != null) ...[
+                  const SizedBox(width: 4),
+                  Tooltip(
+                    message: widget.helpTooltip!,
+                    child: Icon(Icons.help_outline_rounded,
+                        size: 14, color: p.textDim),
+                  ),
+                ],
                 const Spacer(),
                 Text(widget.summary,
                     style: monoOf(p, size: 10, color: p.textDim)),
@@ -320,6 +365,26 @@ class _AdvancedSectionState extends State<AdvancedSection> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// 统一的输出级边框容器（AGC 自动增益与输出增益门包裹用）
+class OutputGainFrame extends StatelessWidget {
+  final Widget child;
+  const OutputGainFrame({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: p.panelRaised.withValues(alpha: 0.35),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.hairline.withValues(alpha: 0.7)),
+      ),
+      padding: const EdgeInsets.all(AuraSpace.sm),
+      child: child,
     );
   }
 }

@@ -34,24 +34,24 @@ const List<({String id, bool exposed})> kStageMeta = [
   (id: 'output', exposed: true),
 ];
 
-/// stage id → 展示名（l10n；未知 id 回退原文）。
+/// stage id → 展示名（l10n；与效果器卡片名称严格对齐；未知 id 回退原文）。
 String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'gate' => l.stGate,
       'bassmono' => l.stBassmono,
-      'tube' => l.stTube,
-      'comp' => l.stComp,
-      'bass' => l.stBass,
-      'eq' => l.stEq,
+      'tube' => l.tubeTitle,
+      'comp' => l.compTitle,
+      'bass' => l.bassBoost,
+      'eq' => l.eqMultiBand,
       'arbmag' => l.stArbmag,
-      'convolver' => l.stConv,
-      'ddc' => l.stDdc,
+      'convolver' => l.convTitle,
+      'ddc' => l.ddcTitle,
       'liveprog' => l.stScript,
-      'crossfeed' => l.stXfeed,
-      'stereo' => l.stStereo,
+      'crossfeed' => l.crossfeedTitle,
+      'stereo' => l.stereoWiden,
       'haas' => l.stHaas,
       'exciter' => l.stExciter,
-      'reverb' => l.stReverb,
-      'output' => l.stOutput,
+      'reverb' => l.spatialReverbTitle,
+      'output' => l.postGain,
       _ => id,
     };
 
@@ -327,7 +327,7 @@ class _FullChainOrderFlowView extends StatelessWidget {
                   final isEnabled = model.isStageEnabled(id);
                   return _flowNode(
                     p: p,
-                    label: '${i + 1}.$label',
+                    label: label,
                     isFixed: false,
                     isActive: isEnabled,
                   );

@@ -171,6 +171,7 @@ class _InputCard extends StatelessWidget {
           // 下半区：高级展开区 - 声道平衡功能 (条形控制)
           AdvancedSection(
             summary: 'L: ${(model.inputBalanceL * 100).round()}% · R: ${(model.inputBalanceR * 100).round()}%',
+            helpTooltip: l.channelBalanceHint,
             builder: (ctx) => _InputBalanceAdvanced(
               model: model,
               palette: p,
@@ -620,16 +621,12 @@ class _InputBalanceAdvanced extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Expanded(
-              child: Text(
-                l10n.channelBalanceHint,
-                style: captionOf(palette).copyWith(fontSize: 11),
-              ),
-            ),
-            if (isCustom)
-              TextButton.icon(
+        if (isCustom)
+          Align(
+            alignment: Alignment.centerRight,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: AuraSpace.xs),
+              child: TextButton.icon(
                 style: TextButton.styleFrom(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   minimumSize: Size.zero,
@@ -642,9 +639,8 @@ class _InputBalanceAdvanced extends StatelessWidget {
                   model.setInputBalanceR(1.0);
                 },
               ),
-          ],
-        ),
-        const SizedBox(height: AuraSpace.sm),
+            ),
+          ),
         _ChannelBalanceBar(
           label: l10n.channelLeft,
           value: model.inputBalanceL,
@@ -804,6 +800,7 @@ class _GateCard extends StatelessWidget {
     return SectionCard(
       index: '00',
       title: l.stGate,
+      titleTooltip: l.gateHint,
       collapsed: !model.gateOn,
       latencyMs: model.componentLatency('gate').ms,
       latencyMeasured: model.componentLatency('gate').measured,
@@ -817,8 +814,6 @@ class _GateCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.gateHint, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
           // 阈值
           ValueSlider(
             label: l.gateThreshold,
@@ -870,23 +865,22 @@ class _GateCard extends StatelessWidget {
             onChangedEnd: model.setGateRelease,
           ),
           const SizedBox(height: AuraSpace.md),
-          // 高级区：Deesser + 自动增益补偿
+          // 高级区：Deesser（齿音消除）与输出级自动增益补偿
           AdvancedSection(
-            summary: '${l.deesserTitle} · ${l.gateAutoGain}',
+            summary: '${l.deesserTitle}: ${model.deesserOn ? "ON" : "OFF"} · AGC: ${model.gateAutoGain ? "ON" : "OFF"}',
+            helpTooltip: '侧链动态去齿音与噪声门输出响度自动补偿。',
             builder: (ctx) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _AutoGainRow(
-                  label: l.gateAutoGain,
-                  tooltip: '实时补偿噪声门造成的整体电平下降，保持响度不塌。',
-                  value: model.gateAutoGain,
-                  enabled: model.gateOn,
-                  onChanged: model.setGateAutoGain,
-                ),
-                const SizedBox(height: AuraSpace.sm),
                 Row(
                   children: [
-                    Text(l.deesserTitle, style: captionOf(p)),
+                    Text(l.deesserTitle, style: labelOf(p, color: p.text)),
+                    const SizedBox(width: 4),
+                    Tooltip(
+                      message: '针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。',
+                      child: Icon(Icons.help_outline_rounded,
+                          size: 14, color: p.textDim),
+                    ),
                     const Spacer(),
                     AuraSwitch(
                       value: model.deesserOn,
@@ -925,6 +919,17 @@ class _GateCard extends StatelessWidget {
                   format: (v) => (v * 100).toStringAsFixed(0),
                   onChanged: model.setDeesserAmount,
                   onChangedEnd: model.setDeesserAmount,
+                ),
+                const SizedBox(height: AuraSpace.md),
+                // 输出级外框（自动增益补偿）
+                OutputGainFrame(
+                  child: _AutoGainRow(
+                    label: l.gateAutoGain,
+                    tooltip: '实时补偿噪声门造成的整体电平下降，保持响度不塌。',
+                    value: model.gateAutoGain,
+                    enabled: model.gateOn,
+                    onChanged: model.setGateAutoGain,
+                  ),
                 ),
               ],
             ),
@@ -970,9 +975,9 @@ class _CompressorCard extends StatelessWidget {
             defaultValue: 0.14,
             min: 0.02,
             max: 1.0,
-            unit: 's',
+            unit: 'ms',
             enabled: model.compOn,
-            format: (v) => '${(v * 1000).toStringAsFixed(0)} ms',
+            format: (v) => (v * 1000).toStringAsFixed(0),
             onChanged: model.setCompTimeconstant,
             onChangedEnd: model.setCompTimeconstant,
             onResetToDefault: () => model.setCompTimeconstant(0.14),
@@ -986,7 +991,7 @@ class _CompressorCard extends StatelessWidget {
                 // 1. 分析颗粒度模式 (Granularity)
                 Row(
                   children: [
-                    Text(l.compGranularity, style: captionOf(p)),
+                    Text(l.compGranularity, style: labelOf(p, color: p.text)),
                     const Spacer(),
                     Wrap(
                       spacing: AuraSpace.sm,
@@ -1014,7 +1019,7 @@ class _CompressorCard extends StatelessWidget {
                 // 2. 时频分辨率 (Time-Frequency Resolution)
                 Row(
                   children: [
-                    Text(l.compTfresolution, style: captionOf(p)),
+                    Text(l.compTfresolution, style: labelOf(p, color: p.text)),
                     const Spacer(),
                     Wrap(
                       spacing: AuraSpace.sm,
@@ -1038,27 +1043,36 @@ class _CompressorCard extends StatelessWidget {
                     ),
                   ],
                 ),
-                const SizedBox(height: AuraSpace.sm),
-                _AutoGainRow(
-                  label: l.autoGainCompensation,
-                  tooltip: l.autoGainCompensationTooltip,
-                  value: model.compAutoGain,
-                  enabled: model.compOn,
-                  onChanged: model.setCompAutoGain,
-                ),
-                const SizedBox(height: AuraSpace.xs),
-                ValueSlider(
-                  label: l.outputGainGate,
-                  infoMessage: l.outputGainGateTooltip,
-                  value: model.compOutputGain,
-                  defaultValue: ParamDefaults.compOutputGain,
-                  min: -12.0,
-                  max: 6.0,
-                  unit: 'dB',
-                  enabled: model.compOn,
-                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                  onChanged: model.setCompOutputGain,
-                  onChangedEnd: model.setCompOutputGain,
+                const SizedBox(height: AuraSpace.md),
+                // 3. 输出级外框（自动增益补偿与输出增益门）
+                OutputGainFrame(
+                  child: Column(
+                    children: [
+                      _AutoGainRow(
+                        label: l.autoGainCompensation,
+                        tooltip: l.autoGainCompensationTooltip,
+                        value: model.compAutoGain,
+                        enabled: model.compOn,
+                        onChanged: model.setCompAutoGain,
+                      ),
+                      const SizedBox(height: AuraSpace.xs),
+                      ValueSlider(
+                        label: l.outputGainGate,
+                        infoMessage: l.outputGainGateTooltip,
+                        value: model.compOutputGain,
+                        defaultValue: ParamDefaults.compOutputGain,
+                        onResetToDefault: () =>
+                            model.setCompOutputGain(ParamDefaults.compOutputGain),
+                        min: -12.0,
+                        max: 6.0,
+                        unit: 'dB',
+                        enabled: model.compOn,
+                        format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                        onChanged: model.setCompOutputGain,
+                        onChangedEnd: model.setCompOutputGain,
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -1115,7 +1129,12 @@ class _BassCard extends StatelessWidget {
           // 低音增强模式 — 标签与选项同行，选项右对齐
           Row(
             children: [
-              Text(l.bassMode, style: captionOf(p)),
+              Text(l.bassMode, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: l.bassModeTooltip,
+                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
+              ),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -1264,27 +1283,35 @@ class _BassAdvanced extends StatelessWidget {
                 onChangedEnd: m.setBassSubFloor,
                 onResetToDefault: () => m.setBassSubFloor(ParamDefaults.bassSubFloor),
               ),
-              const SizedBox(height: AuraSpace.xs),
-              _AutoGainRow(
-                label: l.autoGainCompensation,
-                tooltip: l.autoGainCompensationTooltip,
-                value: m.bassAutoGain,
-                enabled: m.bassOn,
-                onChanged: m.setBassAutoGain,
-              ),
-              const SizedBox(height: AuraSpace.xs),
-              ValueSlider(
-                label: l.outputGainGate,
-                infoMessage: l.outputGainGateTooltip,
-                value: m.bassOutputGain,
-                defaultValue: ParamDefaults.bassOutputGain,
-                min: -12.0,
-                max: 6.0,
-                unit: 'dB',
-                enabled: m.bassOn,
-                format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                onChanged: m.setBassOutputGain,
-                onChangedEnd: m.setBassOutputGain,
+              const SizedBox(height: AuraSpace.md),
+              OutputGainFrame(
+                child: Column(
+                  children: [
+                    _AutoGainRow(
+                      label: l.autoGainCompensation,
+                      tooltip: l.autoGainCompensationTooltip,
+                      value: m.bassAutoGain,
+                      enabled: m.bassOn,
+                      onChanged: m.setBassAutoGain,
+                    ),
+                    const SizedBox(height: AuraSpace.xs),
+                    ValueSlider(
+                      label: l.outputGainGate,
+                      infoMessage: l.outputGainGateTooltip,
+                      value: m.bassOutputGain,
+                      defaultValue: ParamDefaults.bassOutputGain,
+                      onResetToDefault: () =>
+                          m.setBassOutputGain(ParamDefaults.bassOutputGain),
+                      min: -12.0,
+                      max: 6.0,
+                      unit: 'dB',
+                      enabled: m.bassOn,
+                      format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                      onChanged: m.setBassOutputGain,
+                      onChangedEnd: m.setBassOutputGain,
+                    ),
+                  ],
+                ),
               ),
         ],
       ),
@@ -1492,27 +1519,35 @@ class _SpatialReverbAdvanced extends StatelessWidget {
             onChanged: (v) => m.setReverbCustomParam('dry', v),
             onChangedEnd: (v) => m.setReverbCustomParam('dry', v),
           ),
-          const SizedBox(height: AuraSpace.xs),
-          _AutoGainRow(
-            label: l.autoGainCompensation,
-            tooltip: l.autoGainCompensationTooltip,
-            value: m.reverbAutoGain,
-            enabled: isEnabled,
-            onChanged: m.setReverbAutoGain,
-          ),
-          const SizedBox(height: AuraSpace.xs),
-          ValueSlider(
-            label: l.outputGainGate,
-            infoMessage: l.outputGainGateTooltip,
-            value: m.reverbOutputGain,
-            defaultValue: ParamDefaults.reverbOutputGain,
-            min: -12.0,
-            max: 6.0,
-            unit: 'dB',
-            enabled: isEnabled,
-            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-            onChanged: m.setReverbOutputGain,
-            onChangedEnd: m.setReverbOutputGain,
+          const SizedBox(height: AuraSpace.md),
+          OutputGainFrame(
+            child: Column(
+              children: [
+                _AutoGainRow(
+                  label: l.autoGainCompensation,
+                  tooltip: l.autoGainCompensationTooltip,
+                  value: m.reverbAutoGain,
+                  enabled: isEnabled,
+                  onChanged: m.setReverbAutoGain,
+                ),
+                const SizedBox(height: AuraSpace.xs),
+                ValueSlider(
+                  label: l.outputGainGate,
+                  infoMessage: l.outputGainGateTooltip,
+                  value: m.reverbOutputGain,
+                  defaultValue: ParamDefaults.reverbOutputGain,
+                  onResetToDefault: () =>
+                      m.setReverbOutputGain(ParamDefaults.reverbOutputGain),
+                  min: -12.0,
+                  max: 6.0,
+                  unit: 'dB',
+                  enabled: isEnabled,
+                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                  onChanged: m.setReverbOutputGain,
+                  onChangedEnd: m.setReverbOutputGain,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -1548,29 +1583,15 @@ class _BassMonoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.bassmonoHint, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
-          // 分频点滑块
-          ValueSlider(
-            label: l.bassmonoFreq,
-            infoMessage: '分频点以下左右声道取平均（单声道化），以上直通。防小音箱低频打架破音。',
-            value: model.bassmonoFreq,
-            defaultValue: ParamDefaults.bassmonoFreq,
-            onResetToDefault: () =>
-                model.setBassmonoFreq(ParamDefaults.bassmonoFreq),
-            min: 20,
-            max: 300,
-            unit: 'Hz',
-            enabled: model.bassmonoOn,
-            format: (v) => v.toStringAsFixed(0),
-            onChanged: model.setBassmonoFreq,
-            onChangedEnd: model.setBassmonoFreq,
-          ),
-          const SizedBox(height: AuraSpace.sm),
-          // 快捷分频点
+          // 快捷分频点（主卡展示）
           Row(
             children: [
-              Text(l.bassmonoFreq, style: captionOf(p)),
+              Text(l.bassmonoFreq, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: l.bassmonoCombinedTooltip,
+                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
+              ),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -1587,6 +1608,25 @@ class _BassMonoCard extends StatelessWidget {
                 ],
               ),
             ],
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          AdvancedSection(
+            summary: '${model.bassmonoFreq.toStringAsFixed(0)} Hz',
+            builder: (ctx) => ValueSlider(
+              label: l.bassmonoFreq,
+              infoMessage: l.bassmonoCombinedTooltip,
+              value: model.bassmonoFreq,
+              defaultValue: ParamDefaults.bassmonoFreq,
+              onResetToDefault: () =>
+                  model.setBassmonoFreq(ParamDefaults.bassmonoFreq),
+              min: 20,
+              max: 300,
+              unit: 'Hz',
+              enabled: model.bassmonoOn,
+              format: (v) => v.toStringAsFixed(0),
+              onChanged: model.setBassmonoFreq,
+              onChangedEnd: model.setBassmonoFreq,
+            ),
           ),
         ],
       ),
@@ -1736,6 +1776,8 @@ class _ConvolverCard extends StatelessWidget {
                 infoMessage: '卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。',
                 value: model.convMix,
                 defaultValue: ParamDefaults.convMix,
+                onResetToDefault: () =>
+                    model.setFloat('convolver.mix', ParamDefaults.convMix),
                 min: 0,
                 max: 1,
                 unit: '%',
@@ -1928,7 +1970,7 @@ class _EqualizerAdvanced extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Text(l.eqFilterType, style: captionOf(p)),
+              Text(l.eqFilterType, style: labelOf(p, color: p.text)),
               const SizedBox(width: AuraSpace.md),
               Expanded(
                 child: Align(
@@ -1967,7 +2009,7 @@ class _EqualizerAdvanced extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(l.eqInterpolation, style: captionOf(p)),
+                Text(l.eqInterpolation, style: labelOf(p, color: p.text)),
                 const SizedBox(width: AuraSpace.md),
                 Expanded(
                   child: Align(
@@ -1996,29 +2038,35 @@ class _EqualizerAdvanced extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.md),
 
-          // 3. 自动增益补偿开关
-          _AutoGainRow(
-            label: l.autoGainCompensation,
-            tooltip: l.autoGainCompensationTooltip,
-            value: m.eqAutoGain,
-            enabled: m.eqOn,
-            onChanged: m.setEqAutoGain,
-          ),
-          const SizedBox(height: AuraSpace.xs),
-
-          // 4. 输出增益门限调节
-          ValueSlider(
-            label: l.outputGainGate,
-            infoMessage: l.outputGainGateTooltip,
-            value: m.eqOutputGain,
-            defaultValue: ParamDefaults.eqOutputGain,
-            min: -12.0,
-            max: 6.0,
-            unit: 'dB',
-            enabled: m.eqOn,
-            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-            onChanged: m.setEqOutputGain,
-            onChangedEnd: m.setEqOutputGain,
+          // 3. 输出级外框（自动增益补偿与输出增益门）
+          OutputGainFrame(
+            child: Column(
+              children: [
+                _AutoGainRow(
+                  label: l.autoGainCompensation,
+                  tooltip: l.autoGainCompensationTooltip,
+                  value: m.eqAutoGain,
+                  enabled: m.eqOn,
+                  onChanged: m.setEqAutoGain,
+                ),
+                const SizedBox(height: AuraSpace.xs),
+                ValueSlider(
+                  label: l.outputGainGate,
+                  infoMessage: l.outputGainGateTooltip,
+                  value: m.eqOutputGain,
+                  defaultValue: ParamDefaults.eqOutputGain,
+                  onResetToDefault: () =>
+                      m.setEqOutputGain(ParamDefaults.eqOutputGain),
+                  min: -12.0,
+                  max: 6.0,
+                  unit: 'dB',
+                  enabled: m.eqOn,
+                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                  onChanged: m.setEqOutputGain,
+                  onChangedEnd: m.setEqOutputGain,
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -2175,58 +2223,19 @@ class _ArbmagCardState extends State<_ArbmagCard> {
           ),
           const SizedBox(height: AuraSpace.sm),
 
-          // 3. 导入、粘贴、清空操作按钮条
-          Row(
-            children: [
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: p.text,
-                  side: BorderSide(color: p.hairline),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-                icon: const Icon(Icons.file_upload_outlined, size: 14),
-                label: Text(l.arbmagImport),
-                onPressed: () => _importFile(context),
-              ),
-              const SizedBox(width: AuraSpace.sm),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: p.text,
-                  side: BorderSide(color: p.hairline),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  textStyle: const TextStyle(fontSize: 12),
-                ),
-                icon: const Icon(Icons.content_paste_rounded, size: 14),
-                label: Text(l.arbmagPaste),
-                onPressed: () => _pasteClipboard(context),
-              ),
-              const Spacer(),
-              if (m.arbmagString.isNotEmpty)
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: p.textDim,
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    textStyle: const TextStyle(fontSize: 12),
-                  ),
-                  icon: const Icon(Icons.clear_all_rounded, size: 14),
-                  label: Text(l.arbmagClear),
-                  onPressed: () {
-                    m.clearArbmag();
-                    _codeCtrl.clear();
-                  },
-                ),
-            ],
-          ),
-          const SizedBox(height: AuraSpace.sm),
-
-          // 4. 高级折叠面板（自动增益补偿、输出增益门、GraphicEQ 源码编辑）
+          // 3. 高级折叠面板（源码编辑、导入/粘贴工具、AGC、输出增益门）
           _ArbmagAdvanced(
             model: m,
             codeCtrl: _codeCtrl,
             onApplyCode: (code) {
               final cleaned = _cleanGraphicEqText(code);
               m.setArbmagString(cleaned);
+            },
+            onImportFile: () => _importFile(context),
+            onPasteClipboard: () => _pasteClipboard(context),
+            onClear: () {
+              m.clearArbmag();
+              _codeCtrl.clear();
             },
           ),
         ],
@@ -2457,12 +2466,27 @@ class _ArbmagAdvanced extends StatelessWidget {
   final AppModel model;
   final TextEditingController codeCtrl;
   final ValueChanged<String> onApplyCode;
+  final VoidCallback onImportFile;
+  final VoidCallback onPasteClipboard;
+  final VoidCallback onClear;
 
   const _ArbmagAdvanced({
     required this.model,
     required this.codeCtrl,
     required this.onApplyCode,
+    required this.onImportFile,
+    required this.onPasteClipboard,
+    required this.onClear,
   });
+
+  bool get _hasValidCode {
+    final text = codeCtrl.text.trim();
+    if (text.isEmpty) return false;
+    final lower = text.toLowerCase();
+    final content = lower.startsWith('graphiceq:') ? text.substring(10).trim() : text;
+    // 粗略校验至少包含一个分号或频点数对
+    return content.contains(';') || content.split(RegExp(r'\s+')).length >= 2;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2480,30 +2504,8 @@ class _ArbmagAdvanced extends StatelessWidget {
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _AutoGainRow(
-            label: l.autoGainCompensation,
-            tooltip: l.autoGainCompensationTooltip,
-            value: m.arbmagAutoGain,
-            enabled: m.arbmagOn,
-            onChanged: m.setArbmagAutoGain,
-          ),
-          const SizedBox(height: AuraSpace.xs),
-          ValueSlider(
-            label: l.outputGainGate,
-            infoMessage: l.outputGainGateTooltip,
-            value: m.arbmagOutputGain,
-            defaultValue: ParamDefaults.arbmagOutputGain,
-            min: -12.0,
-            max: 6.0,
-            unit: 'dB',
-            enabled: m.arbmagOn,
-            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-            onChanged: m.setArbmagOutputGain,
-            onChangedEnd: m.setArbmagOutputGain,
-          ),
-          const SizedBox(height: AuraSpace.sm),
-          // GraphicEQ 代码编辑器
-          Text(l.arbmagEditor, style: captionOf(p).copyWith(fontWeight: FontWeight.bold)),
+          // 1. GraphicEQ 代码编辑器
+          Text(l.arbmagEditor, style: labelOf(p, color: p.text)),
           const SizedBox(height: AuraSpace.xxs),
           Container(
             decoration: BoxDecoration(
@@ -2512,36 +2514,108 @@ class _ArbmagAdvanced extends StatelessWidget {
               border: Border.all(color: p.hairline.withValues(alpha: 0.6)),
             ),
             padding: const EdgeInsets.all(8),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                TextField(
-                  controller: codeCtrl,
-                  maxLines: 4,
-                  minLines: 2,
-                  style: monoOf(p, size: 11, color: p.text),
-                  decoration: InputDecoration(
-                    isDense: true,
-                    contentPadding: EdgeInsets.zero,
-                    border: InputBorder.none,
-                    hintText: 'GraphicEQ: 20 0.0; 1000 0.0; 20000 0.0',
-                    hintStyle: monoOf(p, size: 11, color: p.textDim),
-                  ),
-                ),
-                const SizedBox(height: AuraSpace.xs),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: ElevatedButton(
+            child: TextField(
+              controller: codeCtrl,
+              maxLines: 4,
+              minLines: 2,
+              style: monoOf(p, size: 11, color: p.text),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                border: InputBorder.none,
+                hintText: 'GraphicEQ: 20 0.0; 1000 0.0; 20000 0.0',
+                hintStyle: monoOf(p, size: 11, color: p.textDim),
+              ),
+            ),
+          ),
+          const SizedBox(height: AuraSpace.sm),
+
+          // 2. 工具栏：[应用代码] [导入文件] [从剪贴板粘贴] [清空]
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: codeCtrl,
+            builder: (context, value, _) {
+              final canApply = _hasValidCode;
+              return Row(
+                children: [
+                  ElevatedButton(
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: p.accent,
-                      foregroundColor: p.panel,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      backgroundColor: canApply ? p.accent : p.panelRaised,
+                      foregroundColor: canApply ? p.panel : p.textDim,
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       minimumSize: Size.zero,
-                      textStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                     ),
-                    onPressed: () => onApplyCode(codeCtrl.text),
+                    onPressed: canApply ? () => onApplyCode(codeCtrl.text) : null,
                     child: Text(l.arbmagApply),
                   ),
+                  const SizedBox(width: AuraSpace.sm),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: p.text,
+                      side: BorderSide(color: p.hairline),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    icon: const Icon(Icons.file_upload_outlined, size: 14),
+                    label: Text(l.arbmagImport),
+                    onPressed: onImportFile,
+                  ),
+                  const SizedBox(width: AuraSpace.sm),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: p.text,
+                      side: BorderSide(color: p.hairline),
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(fontSize: 12),
+                    ),
+                    icon: const Icon(Icons.content_paste_rounded, size: 14),
+                    label: Text(l.arbmagPaste),
+                    onPressed: onPasteClipboard,
+                  ),
+                  const Spacer(),
+                  if (m.arbmagString.isNotEmpty || codeCtrl.text.isNotEmpty)
+                    TextButton.icon(
+                      style: TextButton.styleFrom(
+                        foregroundColor: p.textDim,
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        textStyle: const TextStyle(fontSize: 12),
+                      ),
+                      icon: const Icon(Icons.clear_all_rounded, size: 14),
+                      label: Text(l.arbmagClear),
+                      onPressed: onClear,
+                    ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: AuraSpace.md),
+
+          // 3. 输出级外框（自动增益补偿与输出增益门）
+          OutputGainFrame(
+            child: Column(
+              children: [
+                _AutoGainRow(
+                  label: l.autoGainCompensation,
+                  tooltip: l.autoGainCompensationTooltip,
+                  value: m.arbmagAutoGain,
+                  enabled: m.arbmagOn,
+                  onChanged: m.setArbmagAutoGain,
+                ),
+                const SizedBox(height: AuraSpace.xs),
+                ValueSlider(
+                  label: l.outputGainGate,
+                  infoMessage: l.outputGainGateTooltip,
+                  value: m.arbmagOutputGain,
+                  defaultValue: ParamDefaults.arbmagOutputGain,
+                  onResetToDefault: () =>
+                      m.setArbmagOutputGain(ParamDefaults.arbmagOutputGain),
+                  min: -12.0,
+                  max: 6.0,
+                  unit: 'dB',
+                  enabled: m.arbmagOn,
+                  format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                  onChanged: m.setArbmagOutputGain,
+                  onChangedEnd: m.setArbmagOutputGain,
                 ),
               ],
             ),
@@ -2561,6 +2635,7 @@ class _CrossfeedCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    final p = paletteOf(context);
     final m = model;
     final isEnabled = m.xfeedOn;
 
@@ -2571,13 +2646,10 @@ class _CrossfeedCard extends StatelessWidget {
       3: l.crossfeedModeCustom,
     };
 
-    final curModeLabel = modeLabels[m.xfeedMode] ?? l.crossfeedModeDefault;
-    final fcutStr = m.xfeedFcut.toStringAsFixed(0);
-    final feedStr = m.xfeedFeed.toStringAsFixed(1);
-
     return SectionCard(
       index: '09',
       title: l.crossfeedTitle,
+      titleTooltip: l.crossfeedDesc,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('crossfeed').ms,
       latencyMeasured: m.componentLatency('crossfeed').measured,
@@ -2591,51 +2663,31 @@ class _CrossfeedCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 模式切换行：模式标签 + 问号帮助气泡 + AuraChoiceChip 芯片组
           Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Expanded(
-                child: Text(
-                  l.crossfeedDesc,
-                  style: captionOf(paletteOf(context)),
-                ),
+              Text(l.crossfeedMode, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。',
+                child: Icon(Icons.help_outline_rounded,
+                    size: 14, color: p.textDim),
               ),
-              const SizedBox(width: AuraSpace.sm),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: isEnabled
-                      ? paletteOf(context).accent.withValues(alpha: 0.12)
-                      : paletteOf(context).panelRaised,
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isEnabled
-                        ? paletteOf(context).accent.withValues(alpha: 0.3)
-                        : paletteOf(context).hairline,
-                  ),
-                ),
-                child: Text(
-                  '$curModeLabel · ${fcutStr}Hz / ${feedStr}dB',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: isEnabled ? paletteOf(context).accent : paletteOf(context).textDim,
-                  ),
-                ),
+              const Spacer(),
+              Wrap(
+                spacing: AuraSpace.sm,
+                runSpacing: AuraSpace.xs,
+                alignment: WrapAlignment.end,
+                children: [
+                  for (final e in modeLabels.entries)
+                    AuraChoiceChip(
+                      label: e.value,
+                      selected: isEnabled && m.xfeedMode == e.key,
+                      onTap: isEnabled ? () => m.setCrossfeedMode(e.key) : null,
+                    ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: AuraSpace.md),
-          Wrap(
-            spacing: AuraSpace.sm,
-            runSpacing: AuraSpace.sm,
-            children: [
-              for (final e in modeLabels.entries)
-                AuraChip(
-                  e.value,
-                  icon: e.key == 3 ? Icons.tune_rounded : Icons.headphones_rounded,
-                  selected: isEnabled && m.xfeedMode == e.key,
-                  onTap: isEnabled ? () => m.setCrossfeedMode(e.key) : null,
-                ),
             ],
           ),
           const SizedBox(height: AuraSpace.md),
@@ -2656,8 +2708,17 @@ class _CrossfeedAdvanced extends StatelessWidget {
     final m = model;
     final isEnabled = m.xfeedOn;
 
+    final modeLabels = <int, String>{
+      0: l.crossfeedModeDefault,
+      1: l.crossfeedModeChuMoy,
+      2: l.crossfeedModeJanMeier,
+      3: l.crossfeedModeCustom,
+    };
+    final curModeLabel = modeLabels[m.xfeedMode] ?? l.crossfeedModeDefault;
+
     return AdvancedSection(
-      summary: '${m.xfeedFcut.toStringAsFixed(0)} Hz · ${m.xfeedFeed.toStringAsFixed(1)} dB · ${m.xfeedMode == 3 ? "自定义" : "预设联动"}',
+      summary: '${m.xfeedFcut.toStringAsFixed(0)} Hz · ${m.xfeedFeed.toStringAsFixed(1)} dB · $curModeLabel',
+      helpTooltip: '自定义串扰低通截止频率与互馈衰减深度微调。',
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2673,6 +2734,7 @@ class _CrossfeedAdvanced extends StatelessWidget {
             enabled: isEnabled,
             format: (v) => v.toStringAsFixed(0),
             onChanged: (v) => m.setCrossfeedFcut(v),
+            onChangedEnd: (v) => m.setCrossfeedFcut(v),
           ),
           const SizedBox(height: AuraSpace.sm),
           ValueSlider(
@@ -2687,6 +2749,7 @@ class _CrossfeedAdvanced extends StatelessWidget {
             enabled: isEnabled,
             format: (v) => v.toStringAsFixed(1),
             onChanged: (v) => m.setCrossfeedFeed(v),
+            onChangedEnd: (v) => m.setCrossfeedFeed(v),
           ),
         ],
       ),
@@ -2752,8 +2815,8 @@ class _StereoAdvanced extends StatelessWidget {
     final m = model;
     return AdvancedSection(
       summary: '${(m.stereoMix * 100).toStringAsFixed(0)}%',
+      helpTooltip: l10nOf(context).stBandHint,
       builder: (context) {
-        final p = paletteOf(context);
         return Column(
           children: [
             for (var i = 0; i < 5; i++)
@@ -2762,9 +2825,6 @@ class _StereoAdvanced extends StatelessWidget {
                 index: i,
                 label: [l10nOf(context).stBand0, l10nOf(context).stBand1, l10nOf(context).stBand2, l10nOf(context).stBand3, l10nOf(context).stBand4][i],
               ),
-            const SizedBox(height: AuraSpace.xs),
-            Text(l10nOf(context).stBandHint,
-                style: captionOf(p)),
           ],
         );
       },
@@ -2836,12 +2896,15 @@ class _HaasCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.haasHint, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
           // 延迟侧切换（差分环绕的声道偏好）
           Row(
             children: [
-              Text(l.haasSide, style: captionOf(p)),
+              Text(l.haasSide, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: l.haasSideTooltip,
+                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
+              ),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -2932,12 +2995,28 @@ class _ExciterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.exciterHint, style: captionOf(p)),
+          // 激励器模式
+          Row(
+            children: [
+              Text(l.exciterMode, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              Tooltip(
+                message: l.exciterModeTooltip,
+                child: Icon(Icons.help_outline_rounded, size: 14, color: p.textDim),
+              ),
+              const Spacer(),
+              AuraChip(
+                'tanh',
+                selected: true,
+                onTap: null,
+              ),
+            ],
+          ),
           const SizedBox(height: AuraSpace.sm),
           // 谐波量
           ValueSlider(
             label: l.exciterAmount,
-            infoMessage: '高频谐波混回量。压缩音频的高频“空气感”来源；tanh 天然限幅，开满也不炸。',
+            infoMessage: l.exciterAmountInfo,
             value: model.exciterAmount,
             defaultValue: ParamDefaults.exciterAmount,
             onResetToDefault: () =>
@@ -3017,11 +3096,9 @@ class _TubeCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.md),
           // 电子管音色风格
           // 电子管音色风格 — 标签与选项同行，选项右对齐
-          // 注：引擎侧目前只有 tube.enable/gain，风格选择先只存 UI/预设状态，
-          // 待电子管建模落地后再接线。
           Row(
             children: [
-              Text(l.tubeStyle, style: captionOf(p)),
+              Text(l.tubeStyle, style: labelOf(p, color: p.text)),
               const Spacer(),
               Wrap(
                 spacing: AuraSpace.sm,
@@ -3075,7 +3152,7 @@ class _TubeAdvanced extends StatelessWidget {
                 Expanded(
                   child: Text(
                     l.tubeOversampling,
-                    style: captionOf(p),
+                    style: labelOf(p, color: p.text),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3095,41 +3172,51 @@ class _TubeAdvanced extends StatelessWidget {
                 ),
               ],
             ),
+            const SizedBox(height: AuraSpace.sm),
+            ValueSlider(
+              label: l.tubeMix,
+              value: m.tubeMix,
+              defaultValue: ParamDefaults.tubeMix,
+              onResetToDefault: () => m.setTubeMix(ParamDefaults.tubeMix),
+              min: 0,
+              max: 1,
+              unit: '%',
+              enabled: m.tubeOn,
+              format: (v) => (v * 100).toStringAsFixed(0),
+              onChanged: m.setTubeMix,
+              onChangedEnd: m.setTubeMix,
+            ),
             const SizedBox(height: AuraSpace.md),
-              _AutoGainRow(
-                label: l.autoGainCompensation,
-                tooltip: l.autoGainCompensationTooltip,
-                value: m.tubeAutoGain,
-                enabled: m.tubeOn,
-                onChanged: m.setTubeAutoGain,
+            // 输出级外框（自动增益补偿与输出增益门）
+            OutputGainFrame(
+              child: Column(
+                children: [
+                  _AutoGainRow(
+                    label: l.autoGainCompensation,
+                    tooltip: l.autoGainCompensationTooltip,
+                    value: m.tubeAutoGain,
+                    enabled: m.tubeOn,
+                    onChanged: m.setTubeAutoGain,
+                  ),
+                  const SizedBox(height: AuraSpace.xs),
+                  ValueSlider(
+                    label: l.outputGainGate,
+                    infoMessage: l.outputGainGateTooltip,
+                    value: m.tubeOutputGain,
+                    defaultValue: ParamDefaults.tubeOutputGain,
+                    onResetToDefault: () =>
+                        m.setTubeOutputGain(ParamDefaults.tubeOutputGain),
+                    min: -12.0,
+                    max: 6.0,
+                    unit: 'dB',
+                    enabled: m.tubeOn,
+                    format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+                    onChanged: m.setTubeOutputGain,
+                    onChangedEnd: m.setTubeOutputGain,
+                  ),
+                ],
               ),
-              const SizedBox(height: AuraSpace.xs),
-              ValueSlider(
-                label: l.outputGainGate,
-                infoMessage: l.outputGainGateTooltip,
-                value: m.tubeOutputGain,
-                defaultValue: ParamDefaults.tubeOutputGain,
-                min: -12.0,
-                max: 6.0,
-                unit: 'dB',
-                enabled: m.tubeOn,
-                format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                onChanged: m.setTubeOutputGain,
-                onChangedEnd: m.setTubeOutputGain,
-              ),
-              ValueSlider(
-                label: l.tubeMix,
-                value: m.tubeMix,
-                defaultValue: ParamDefaults.tubeMix,
-                min: 0,
-                max: 1,
-                unit: '%',
-                // 注：引擎侧无对应参数，先只存 UI/预设状态。
-                enabled: m.tubeOn,
-                format: (v) => (v * 100).toStringAsFixed(0),
-                onChanged: m.setTubeMix,
-                onChangedEnd: m.setTubeMix,
-              ),
+            ),
           ],
         );
       },
@@ -3160,6 +3247,8 @@ class _PostCard extends StatelessWidget {
             infoMessage: '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。',
             value: model.postGain,
             defaultValue: ParamDefaults.postGain,
+            onResetToDefault: () =>
+                model.setFloat('post.gain', ParamDefaults.postGain),
             min: -15,
             max: 15,
             unit: 'dB',

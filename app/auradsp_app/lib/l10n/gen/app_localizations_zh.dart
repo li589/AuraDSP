@@ -507,13 +507,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bassMode => '低音增强模式';
 
   @override
-  String get bassModeDynamic => '动态增强 (DBB)';
+  String get bassModeDynamic => '动态增强';
 
   @override
-  String get bassModeShelf => '纯净低架 (Shelf)';
+  String get bassModeShelf => '纯净低架';
 
   @override
   String get bassModeHarmonic => '心理声学谐波';
+
+  @override
+  String get bassModeTooltip =>
+      '低音增强模式：\n• 动态增强：自适应信号能量动态提升低频冲击感，防爆音失真\n• 纯净低架：模拟硬件平直提升低频，保真度高\n• 心理声学谐波：注入高次谐波，利用人耳基频缺失错觉在小单元产生深沉低音';
 
   @override
   String get bassCutoff => '截止频率';
@@ -794,7 +798,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainFlowTitle => '信号流（当前顺序）';
 
   @override
-  String get chainFlowCaption => '全局信号流顺序示意 (自左至右)：';
+  String get chainFlowCaption => '全局信号流顺序示意：';
 
   @override
   String get chainNodeInput => '输入门控';
@@ -816,6 +820,45 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chainNodeOutput => '音频输出';
+
+  @override
+  String get lpManual => '参考手册';
+
+  @override
+  String get lpManualTitle => 'EEL2 快速参考手册';
+
+  @override
+  String get lpManualContent =>
+      '【核心音频流寄存器】\n• spl0: 左声道样本值（浮点数，标称 ±1.0）\n• spl1: 右声道样本值（浮点数，标称 ±1.0）\n• srate: 当前设备实际采样率 (Hz)\n\n【交互滑块变量】\n• slider1 ~ slider8: 界面动态滑块参数（默认 0.0 ~ 1.0）\n\n【代码段规范】\n• @init: 脚本加载或重置时执行一次（必须至少包含一条语句）\n• @slider: 用户滑动滑块或参数变动时触发\n• @sample: 每个音频样本点流过时执行';
+
+  @override
+  String get lpEditorTooltip =>
+      '基于 Cockos EEL2 脚本引擎的实时音频 DSP 编程环境，可在音频流中动态注入自定义算法。';
+
+  @override
+  String get exciterMode => '模式';
+
+  @override
+  String get exciterModeTooltip => '通过非线性传递函数产生高频泛音与丰富谐波，补偿高频衰减，重塑空气感与通透细节。';
+
+  @override
+  String get exciterAmountInfo =>
+      '控制注入的高频谐波与原信号的混合比例。适度提升可显著增加声音光泽度，过高可能产生毛刺感。';
+
+  @override
+  String get eqModeLabel => '模式';
+
+  @override
+  String get eqModeTooltip =>
+      '频段模式切换。在频谱画布中上下拖动节点调整增益，双击复位为 0dB，右侧调节选定频点的 Q 值锐度。';
+
+  @override
+  String get haasSideTooltip =>
+      'Haas 效应差分环绕：将单侧声道延迟 0~25ms，利用双耳到达时间差在耳机中营造自然脱箱的环绕包围感。';
+
+  @override
+  String get bassmonoCombinedTooltip =>
+      '将设定分频点以下的超低频合并为单声道，消除低频相位抵消与浑浊感，增强低音凝聚力与下潜力度。';
 
   @override
   String get inputGate => '输入门控';
@@ -1314,6 +1357,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get crossfeedTitle => '串扰消除';
+
+  @override
+  String get crossfeedMode => '模式';
 
   @override
   String get crossfeedDesc => '专为耳机设计，通过低通互馈消除头中效应与听觉疲劳';

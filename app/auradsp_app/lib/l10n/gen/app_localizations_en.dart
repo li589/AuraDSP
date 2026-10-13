@@ -519,13 +519,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get bassMode => 'Bass Mode';
 
   @override
-  String get bassModeDynamic => 'Dynamic (DBB)';
+  String get bassModeDynamic => 'Dynamic';
 
   @override
-  String get bassModeShelf => 'Hi-Fi Shelf';
+  String get bassModeShelf => 'Shelf';
 
   @override
   String get bassModeHarmonic => 'Harmonic Exciter';
+
+  @override
+  String get bassModeTooltip =>
+      'Bass Boost Modes:\n• Dynamic: Adaptive energy-driven boost with anti-clip protection\n• Shelf: Clean analog-style shelf equalizer\n• Harmonics: Psychoacoustic harmonic synthesis for rich deep bass on small drivers';
 
   @override
   String get bassCutoff => 'Cutoff Scope';
@@ -815,7 +819,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainFlowTitle => 'Signal Flow (Current Order)';
 
   @override
-  String get chainFlowCaption => 'Global signal-flow overview (left to right):';
+  String get chainFlowCaption => 'Global signal-flow overview:';
 
   @override
   String get chainNodeInput => 'Input Gate';
@@ -837,6 +841,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chainNodeOutput => 'Audio Output';
+
+  @override
+  String get lpManual => 'Manual';
+
+  @override
+  String get lpManualTitle => 'EEL2 Script Quick Reference';
+
+  @override
+  String get lpManualContent =>
+      '【Audio Stream Registers】\n• spl0: Left channel sample (float, nominal ±1.0)\n• spl1: Right channel sample (float, nominal ±1.0)\n• srate: Active audio device sample rate (Hz)\n\n【Sliders】\n• slider1 ~ slider8: Interactive dynamic slider variables (default 0.0 ~ 1.0)\n\n【Sections】\n• @init: Runs once on load/reset (needs at least one statement)\n• @slider: Triggered on user slider change\n• @sample: Real-time per-sample DSP loop';
+
+  @override
+  String get lpEditorTooltip =>
+      'Real-time programmable audio DSP engine based on Cockos EEL2.';
+
+  @override
+  String get exciterMode => 'Mode';
+
+  @override
+  String get exciterModeTooltip =>
+      'Generates high-frequency harmonics via nonlinear transfer functions to restore presence.';
+
+  @override
+  String get exciterAmountInfo =>
+      'Controls the blend level of generated high-frequency harmonics. Enhances airiness and clarity.';
+
+  @override
+  String get eqModeLabel => 'Mode';
+
+  @override
+  String get eqModeTooltip =>
+      'EQ band mode. Drag nodes vertically on the canvas to adjust gain, double click to reset to 0dB, and tune Q sharpness on the right.';
+
+  @override
+  String get haasSideTooltip =>
+      'Haas Effect surround: Delays one channel by 0~25ms to create an expansive, out-of-head 3D soundstage using binaural time arrival differences.';
+
+  @override
+  String get bassmonoCombinedTooltip =>
+      'Sums low frequencies below cutoff into mono to eliminate phase cancellations and improve punch.';
 
   @override
   String get inputGate => 'Input Gate';
@@ -1361,6 +1405,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get crossfeedTitle => 'Crossfeed';
+
+  @override
+  String get crossfeedMode => 'Mode';
 
   @override
   String get crossfeedDesc =>

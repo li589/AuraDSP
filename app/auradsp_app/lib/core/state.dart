@@ -762,9 +762,17 @@ class AppModel extends ChangeNotifier {
         if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
         if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
         if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
-        if (raw['arbmagEnable'] != null) arbmagOn = (raw['arbmagEnable'] as int) != 0;
         if (raw['arbmagReady'] != null) arbmagReady = (raw['arbmagReady'] as int) != 0;
         if (raw['arbmagNodeCount'] != null) arbmagNodeCount = raw['arbmagNodeCount'] as int;
+        if (raw['arbmagEnable'] != null) {
+          final en = (raw['arbmagEnable'] as int) != 0;
+          if (arbmagReady && arbmagOn && !en) {
+            _markSent(ParamId.arbmagEnable);
+            send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 1, 'isFloat': false});
+          } else if (!arbmagOn || arbmagReady) {
+            arbmagOn = en;
+          }
+        }
         notifyListeners();
         break;
       case 'arbmag':
@@ -2034,7 +2042,6 @@ class AppModel extends ChangeNotifier {
   }
 
   void clearArbmag() {
-    arbmagOn = false;
     arbmagReady = false;
     arbmagNodeCount = 0;
     arbmagString = '';
