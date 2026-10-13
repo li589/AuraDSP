@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 3.20)
 project(auradsp_engine LANGUAGES C CXX)
 
-set(VENDOR     "${CMAKE_CURRENT_SOURCE_DIR}/../vendor-src/libjamesdsp/jamesdsp")
-set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../vendor-src/plugin-api")
-set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../engine_api")
+set(VENDOR     "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/libjamesdsp/jamesdsp")
+set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
+set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 
 file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${VENDOR}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）

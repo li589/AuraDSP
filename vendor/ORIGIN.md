@@ -1,4 +1,4 @@
-# ORIGIN.md — core/desktop/vendor-src 溯源登记
+# ORIGIN.md — vendor/ 溯源登记
 
 > 铁律：本目录每个子集必须登记上游仓库、分支、提取路径、用途、日期。
 > 升级路径：从 `source/` 重新提取覆盖，更新版本号即可。

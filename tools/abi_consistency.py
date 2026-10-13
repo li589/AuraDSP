@@ -16,8 +16,8 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-DEF_PATH = ROOT / "core/desktop/engine_api/auradsp_engine.def"
-H_PATH = ROOT / "core/desktop/engine_api/auradsp_engine.h"
+DEF_PATH = ROOT / "engine/auradsp_engine.def"
+H_PATH = ROOT / "engine/auradsp_engine.h"
 DART_PATH = ROOT / "app/auradsp_app/lib/engine/auradsp_ffi.dart"
 
 

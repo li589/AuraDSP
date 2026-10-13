@@ -2,12 +2,12 @@
 # build_engine.sh — build auradsp_engine.dll (AuraDSP Engines Desktop v1, Win x64)
 #
 # Sources (per docs/项目架构与开发规范.md §3 — 源码整合，无预编译依赖):
-#   ../vendor-src/libjamesdsp/   JamesDSP C engine (原样提取, 见 ORIGIN.md)
-#   ../engine_api/               auradsp_engine.h/.cpp/.def — 统一 C ABI
+#   ../../../vendor/libjamesdsp/   JamesDSP C engine (原样提取, 见 ORIGIN.md)
+#   ../../../engine/               auradsp_engine.h/.cpp/.def — 统一 C ABI
 #
 # Toolchain: CMake + Visual Studio 18 2026 generator (MSVC x64)
 # Output:    out/auradsp_engine.dll + auradsp_engine.lib
-# Exports:   auradsp_* 11 symbols only (engine_api/auradsp_engine.def)
+# Exports:   auradsp_* 11 symbols only (engine/auradsp_engine.def)
 set -e
 
 HERE_W="$(cd "$(dirname "$0")" && pwd -W)"        # core/desktop/windows

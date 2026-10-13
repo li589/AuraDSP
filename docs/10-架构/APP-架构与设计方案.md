@@ -59,7 +59,7 @@
 
 | 能力 | 来源 | 整合方式 |
 |---|---|---|
-| DSP 核心（11 效果 + limiter + postGain） | `source/JamesDSPManager/Main/libjamesdsp`（纯 C，含 `_WIN32` 分支） | 提取至 `core/desktop/vendor-src/libjamesdsp/`，ORIGIN.md 登记 |
+| DSP 核心（11 效果 + limiter + postGain） | `source/JamesDSPManager/Main/libjamesdsp`（纯 C，含 `_WIN32` 分支） | 提取至 `vendor/libjamesdsp/`，ORIGIN.md 登记 |
 | Windows WASAPI 链路 | 自研（Win32 WASAPI API，非第三方库） | `core/desktop/windows/` |
 | APO 挂载思路（Phase 7b） | `source/equalizerAPO64` **只读参考** | 不链接，只学注册/参数序列化 |
 | PipeWire filter-chain 思路（Phase 7） | `source/pulseeffects`、`source/JDSP4Linux` **只读参考** | 同上 |
@@ -67,7 +67,7 @@
 
 ## 3. Control API（UI ↔ 引擎的统一协议）
 
-引擎侧统一 C ABI（`core/desktop/engine_api/auradsp_engine.h`，Android Rootless 与桌面共用；Android Root 经 AIDL VendorParamId 透传同语义）：
+引擎侧统一 C ABI（`engine/auradsp_engine.h`，Android Rootless 与桌面共用；Android Root 经 AIDL VendorParamId 透传同语义）：
 
 ```c
 // 生命周期
