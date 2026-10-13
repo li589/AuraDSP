@@ -1265,8 +1265,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
         /* 21 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
          * 在链视图里展示为"参数开放中"占位）。
          * 注：此前写「14 项」，随 comp/arbmag 暴露与自研效果增补早已增至 20 项，
-         * 注释未同步。增删改条目时必须同步此处计数。
-         * 容量门 2048：20 项时 payload 已近 1000 字节，再增条目会静默截断 JSON；
+         * dyneq 入库（e1375b0）后现为 21 项，注释未同步。增删改条目时必须同步此处计数。
+         * 容量门 2048：21 项时 payload 已近 1000 字节，再增条目会静默截断 JSON；
          * 宁可让小 buffer 拿 E_PARAM，也不断尾残 JSON。 */
         const char* reg =
             "["
