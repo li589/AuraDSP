@@ -1591,9 +1591,26 @@ class AppModel extends ChangeNotifier {
 
   /* ---- Liveprog 命令（v1.1） ---- */
 
+  /// vendor 链 12 stage 白名单（与引擎 kAuraStages 对齐；Issue #4）。
+  ///
+  /// 链页展示序混有 engine 自研 stage（gate/filter/dyneq/…），而 vendor
+  /// JamesDSPRebuildChain 要求恰好 12 个已知 id——混发必 E_PARAM。
+  /// 此处过滤只保序去杂，不补不增：缺 vendor id 时引擎照常拒收并 set_error。
+  /// engine 自研 stage 的顺序本就钉死在 process_stereo_chain，过滤不丢任何功能。
+  static const _vendorStageIds = {
+    'tube', 'comp', 'bass', 'eq', 'arbmag', 'convolver', 'ddc', 'liveprog',
+    'crossfeed', 'stereo', 'reverb', 'output',
+  };
+
+  static String filterVendorOrder(String order) => order
+      .split(',')
+      .map((s) => s.trim())
+      .where(_vendorStageIds.contains)
+      .join(',');
+
   void setGraphOrder(String order) {
     graphOrder = order;
-    send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': order});
+    send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': filterVendorOrder(order)});
   }
 
   /// 获取某个处理链 stage 的启用状态
