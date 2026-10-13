@@ -746,6 +746,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stLoudness => '响度补偿';
 
   @override
+  String get stDyneq => '动态EQ';
+
+  @override
+  String get dyneqTitle => '动态均衡器';
+
+  @override
+  String get dyneqHint => '三段全参数动态均衡：频段能量超阈后自动衰减，阈下只做静态整形';
+
+  @override
+  String get dyneqBandLow => '低频段';
+
+  @override
+  String get dyneqBandMid => '中频段';
+
+  @override
+  String get dyneqBandHigh => '高频段';
+
+  @override
+  String get dyneqFreq => '频率';
+
+  @override
+  String get dyneqQ => 'Q 值';
+
+  @override
+  String get dyneqGain => '静态增益';
+
+  @override
+  String get dyneqRange => '动态量';
+
+  @override
+  String get dyneqThreshold => '阈值';
+
+  @override
+  String get dyneqAttack => '启动时间';
+
+  @override
+  String get dyneqRelease => '释放时间';
+
+  @override
   String get loudnessHint => '小音量自动补低频和高频，大音量直通';
 
   @override

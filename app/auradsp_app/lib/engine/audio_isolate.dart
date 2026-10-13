@@ -206,6 +206,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iGtA = idp(ParamId.gateAttack), iGtR = idp(ParamId.gateRelease);
             final iGtG = idp(ParamId.gateAutoGain);
             final iDsE = idp(ParamId.deesserEnable), iDsF = idp(ParamId.deesserFreq), iDsA = idp(ParamId.deesserAmount);
+            // 全参数动态EQ
+            final iDyE = idp(ParamId.dyneqEnable), iDyA = idp(ParamId.dyneqAttack), iDyR = idp(ParamId.dyneqRelease);
+            final iDyLE = idp(ParamId.dyneqLowEnable), iDyLF = idp(ParamId.dyneqLowFreq), iDyLQ = idp(ParamId.dyneqLowQ);
+            final iDyLG = idp(ParamId.dyneqLowGain), iDyLR = idp(ParamId.dyneqLowRange), iDyLT = idp(ParamId.dyneqLowThreshold);
+            final iDyME = idp(ParamId.dyneqMidEnable), iDyMF = idp(ParamId.dyneqMidFreq), iDyMQ = idp(ParamId.dyneqMidQ);
+            final iDyMG = idp(ParamId.dyneqMidGain), iDyMR = idp(ParamId.dyneqMidRange), iDyMT = idp(ParamId.dyneqMidThreshold);
+            final iDyHE = idp(ParamId.dyneqHighEnable), iDyHF = idp(ParamId.dyneqHighFreq), iDyHQ = idp(ParamId.dyneqHighQ);
+            final iDyHG = idp(ParamId.dyneqHighGain), iDyHR = idp(ParamId.dyneqHighRange), iDyHT = idp(ParamId.dyneqHighThreshold);
             final iLdE = idp(ParamId.loudnessEnable), iLdA = idp(ParamId.loudnessAmount);
             final iBhH = idp(ParamId.bassHarmonics), iBhB = idp(ParamId.bassHarmonicBlend);
             final iBhS = idp(ParamId.bassSubFreq), iBhC = idp(ParamId.bassCutoffF);
@@ -303,6 +311,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'deesserEnable': rdInt(iDsE) ?? 0,
                 'deesserFreq': rdFloat(iDsF) ?? 6000.0,
                 'deesserAmount': rdFloat(iDsA) ?? 0.5,
+                'dyneqEnable': rdInt(iDyE) ?? 0,
+                'dyneqAttack': rdFloat(iDyA) ?? 2.0,
+                'dyneqRelease': rdFloat(iDyR) ?? 120.0,
+                'dyneqLowEnable': rdInt(iDyLE) ?? 0,
+                'dyneqLowFreq': rdFloat(iDyLF) ?? 120.0,
+                'dyneqLowQ': rdFloat(iDyLQ) ?? 0.707,
+                'dyneqLowGain': rdFloat(iDyLG) ?? 0.0,
+                'dyneqLowRange': rdFloat(iDyLR) ?? 6.0,
+                'dyneqLowThreshold': rdFloat(iDyLT) ?? -30.0,
+                'dyneqMidEnable': rdInt(iDyME) ?? 0,
+                'dyneqMidFreq': rdFloat(iDyMF) ?? 1000.0,
+                'dyneqMidQ': rdFloat(iDyMQ) ?? 1.0,
+                'dyneqMidGain': rdFloat(iDyMG) ?? 0.0,
+                'dyneqMidRange': rdFloat(iDyMR) ?? 6.0,
+                'dyneqMidThreshold': rdFloat(iDyMT) ?? -30.0,
+                'dyneqHighEnable': rdInt(iDyHE) ?? 0,
+                'dyneqHighFreq': rdFloat(iDyHF) ?? 6000.0,
+                'dyneqHighQ': rdFloat(iDyHQ) ?? 0.707,
+                'dyneqHighGain': rdFloat(iDyHG) ?? 0.0,
+                'dyneqHighRange': rdFloat(iDyHR) ?? 6.0,
+                'dyneqHighThreshold': rdFloat(iDyHT) ?? -30.0,
                 'loudnessEnable': rdInt(iLdE) ?? 0,
                 'loudnessAmount': rdFloat(iLdA) ?? 0.5,
                 'bassHarmonics': rdFloat(iBhH) ?? 0.45,

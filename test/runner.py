@@ -47,6 +47,7 @@ def run_smoke_tests():
     "smoke_fx_gain.py",
     "smoke_arbmag.py",
     "smoke_gate_deesser.py",
+    "smoke_dyneq.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",

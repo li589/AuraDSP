@@ -1534,6 +1534,84 @@ abstract class AppLocalizations {
   /// **'响度补偿'**
   String get stLoudness;
 
+  /// No description provided for @stDyneq.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态EQ'**
+  String get stDyneq;
+
+  /// No description provided for @dyneqTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态均衡器'**
+  String get dyneqTitle;
+
+  /// No description provided for @dyneqHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'三段全参数动态均衡：频段能量超阈后自动衰减，阈下只做静态整形'**
+  String get dyneqHint;
+
+  /// No description provided for @dyneqBandLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频段'**
+  String get dyneqBandLow;
+
+  /// No description provided for @dyneqBandMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中频段'**
+  String get dyneqBandMid;
+
+  /// No description provided for @dyneqBandHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频段'**
+  String get dyneqBandHigh;
+
+  /// No description provided for @dyneqFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'频率'**
+  String get dyneqFreq;
+
+  /// No description provided for @dyneqQ.
+  ///
+  /// In zh, this message translates to:
+  /// **'Q 值'**
+  String get dyneqQ;
+
+  /// No description provided for @dyneqGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'静态增益'**
+  String get dyneqGain;
+
+  /// No description provided for @dyneqRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态量'**
+  String get dyneqRange;
+
+  /// No description provided for @dyneqThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'阈值'**
+  String get dyneqThreshold;
+
+  /// No description provided for @dyneqAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'启动时间'**
+  String get dyneqAttack;
+
+  /// No description provided for @dyneqRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放时间'**
+  String get dyneqRelease;
+
   /// No description provided for @loudnessHint.
   ///
   /// In zh, this message translates to:

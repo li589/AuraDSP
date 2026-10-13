@@ -660,6 +660,79 @@ void main() {
     });
   });
 
+  group('DyneQ: 全参数动态EQ', () {
+    test('默认值：全关 + 包络 2ms/120ms', () {
+      final m = AppModel(testing: true);
+      expect(m.dyneqOn, isFalse);
+      expect(m.dyneqLowOn || m.dyneqMidOn || m.dyneqHighOn, isFalse);
+      expect(m.dyneqAttackMs, closeTo(2.0, 1e-9));
+      expect(m.dyneqReleaseMs, closeTo(120.0, 1e-9));
+      expect(m.isStageEnabled('dyneq'), isFalse);
+    });
+
+    test('分段钳位', () {
+      final m = AppModel(testing: true);
+      m.setDyneqLowFreq(1.0);
+      expect(m.dyneqLowFreq, closeTo(20.0, 1e-9));
+      m.setDyneqMidQ(99.0);
+      expect(m.dyneqMidQ, closeTo(10.0, 1e-9));
+      m.setDyneqHighQ(0.1);
+      expect(m.dyneqHighQ, closeTo(0.5, 1e-9));
+      m.setDyneqMidRange(-5.0);
+      expect(m.dyneqMidRange, closeTo(0.0, 1e-9));
+      m.setDyneqLowThreshold(-99.0);
+      expect(m.dyneqLowThreshold, closeTo(-60.0, 1e-9));
+    });
+
+    test('toggleStage 翻转总开关', () {
+      final m = AppModel(testing: true);
+      m.toggleStage('dyneq');
+      expect(m.dyneqOn, isTrue);
+      m.toggleStage('dyneq');
+      expect(m.dyneqOn, isFalse);
+    });
+
+    test('snapshot/apply 对称恢复三段', () {
+      final src = AppModel(testing: true)
+        ..setDyneqEnabled(true)
+        ..setDyneqMidEnabled(true)
+        ..setDyneqMidFreq(2000)
+        ..setDyneqMidRange(12)
+        ..setDyneqHighThreshold(-20);
+      final snap = PresetLibrary.snapshot(src, name: '__dq__');
+      final dq = snap.params['dyneq'] as Map<String, dynamic>;
+      expect(dq['enable'], isTrue);
+      expect(((dq['mid'] as Map)['freq'] as num).toDouble(), closeTo(2000.0, 1e-9));
+      expect(((dq['mid'] as Map)['range'] as num).toDouble(), closeTo(12.0, 1e-9));
+      expect(((dq['high'] as Map)['threshold'] as num).toDouble(), closeTo(-20.0, 1e-9));
+      final m = AppModel(testing: true);
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__dq_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.dyneqOn, isTrue);
+      expect(m.dyneqMidOn, isTrue);
+      expect(m.dyneqMidFreq, closeTo(2000.0, 1e-9));
+      expect(m.dyneqMidRange, closeTo(12.0, 1e-9));
+      expect(m.dyneqHighThreshold, closeTo(-20.0, 1e-9));
+    });
+
+    test('无 dyneq 节的老预设不碰开关', () {
+      final m = AppModel(testing: true)..setDyneqEnabled(true);
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__legacy__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 0.0, 'limiterEnable': true},
+              }));
+      expect(m.dyneqOn, isTrue);
+    });
+  });
+
   group('P-010: 每效果输出增益门 + 自动补偿', () {
     test('setter 下发引擎参数（镜像闭环）', () {
       final m = AppModel(testing: true);
