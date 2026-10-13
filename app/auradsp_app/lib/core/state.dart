@@ -550,7 +550,15 @@ class AppModel extends ChangeNotifier {
 
   ReceivePort? _fromIso;
 
-  AppModel() {
+  /// 测试隔离开关（Issue #2）：testing=true 时跳过音频 isolate 拉起
+  /// 与 session 落盘（构造回放/防抖自动保存/dispose 保存）。
+  /// 磁盘沙箱本身已有 `ConfigManager.baseDir`（FLUTTER_TEST 自动指临时目录），
+  /// 这里解决的是另一半：真 isolate（拉 DLL + 开 WASAPI 设备）与竞态回读。
+  /// 生产代码一律默认 false，行为零变化。
+  final bool _testing;
+
+  // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
+  AppModel({bool testing = false}) : _testing = testing {
     config = ConfigManager.load();
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。
@@ -568,7 +576,7 @@ class AppModel extends ChangeNotifier {
     pluginManager.setCustomDirs(config.customPluginDirs);
     pluginManager.loadCache();
 
-    if (config.autoRestoreSession) {
+    if (config.autoRestoreSession && !_testing) {
       final session = SessionMemory.load();
       if (session != null) {
         SessionMemory.restoreMemoryImage(this, session);
@@ -576,7 +584,7 @@ class AppModel extends ChangeNotifier {
         SessionMemory.save(this);
       }
     }
-    _spawn();
+    if (!_testing) _spawn();
   }
 
   void addCustomPluginDir(String dir) {
@@ -614,7 +622,7 @@ class AppModel extends ChangeNotifier {
   }
 
   void scheduleAutoSave() {
-    if (_isReplayingSession) return;
+    if (_testing || _isReplayingSession) return;
     _debounceSaveTimer?.cancel();
     _debounceSaveTimer = Timer(
       Duration(milliseconds: config.autoSaveDebounceMs),
@@ -2938,6 +2946,11 @@ void fillEqQ(double q) {
 
   void setAutoRestoreSession(bool enable) {
     config.autoRestoreSession = enable;
+    if (_testing) {
+      // 测试隔离：只改内存开关，不碰磁盘。
+      notifyListeners();
+      return;
+    }
     ConfigManager.save(config);
     if (enable) {
       SessionMemory.save(this);
@@ -2956,7 +2969,8 @@ void fillEqQ(double q) {
   @override
   void dispose() {
     _debounceSaveTimer?.cancel();
-    SessionMemory.save(this);
+    // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
+    if (!_testing) SessionMemory.save(this);
     _toIso?.send({'cmd': 'shutdown'});
     _iso?.kill(priority: Isolate.beforeNextEvent);
     _fromIso?.close();

@@ -22,7 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 void _withIsolatedModel(void Function(AppModel m) body) {
   final dir = Directory.systemTemp.createTempSync('auradsp_eq_q_test');
   ConfigManager.baseDirOverride = dir.path;
-  final m = AppModel();
+  final m = AppModel(testing: true);
   try {
     body(m);
   } finally {
