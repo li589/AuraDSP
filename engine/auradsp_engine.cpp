@@ -1262,8 +1262,10 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "arbmag.nodeCount") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_nodes.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 1024) {
-        /* 14 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
-         * 在链视图里展示为"参数开放中"占位） */
+        /* 20 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
+         * 在链视图里展示为"参数开放中"占位）。
+         * 注：此前写「14 项」，随 comp/arbmag 暴露与自研效果增补早已增至 20 项，
+         * 注释未同步。增删改条目时必须同步此处计数。 */
         const char* reg =
             "["
             "{\"id\":\"tube\",\"tier\":0,\"exposed\":true},"
