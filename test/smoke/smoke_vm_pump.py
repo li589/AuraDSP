@@ -50,6 +50,8 @@ if d is not None:
               'maxDiff=%s' % md)
         check('sampleRate sane', sr in (44100, 48000, 88200, 96000, 192000), 'sr=%s' % sr)
         check('nbs in range', 0 < d.get('nbs', 0) <= 4096, 'nbs=%s' % d.get('nbs'))
+        check('changes counter present', isinstance(d.get('changes'), int) and d.get('changes') >= 0,
+              'changes=%s' % d.get('changes'))
 
 print()
 if FAIL:

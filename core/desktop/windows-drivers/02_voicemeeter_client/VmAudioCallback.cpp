@@ -1,4 +1,11 @@
 // VmAudioCallback.cpp — 见头文件 v1 范围与 RT 铁律。
+//
+// 借鉴注（source/equalizerAPO64/VoicemeeterClient/VoicemeeterClient.cpp:handle）：
+// ① 按 8 通道 bus 组迭代（`min(nbi,nbo)/8`，每组独立 FilterEngine）——v1 只做第 0 组
+//    的立体声主对，其余透传；多总线逐对即把循环展开到各组。
+// ② 静音空转三条件：精确零输入 + 本次输出精确零 + 持续 10s（弱音/混响尾不误杀），
+//    idle 后纯 memcpy；输入重现 1 块内回神。初版的“1e-5 峰值 + 2s”已按此推翻。
+// ③ CHANGE 用 PostThreadMessage 式重启——v1 只计数不断链（changes 上报），后续 slice 接。
 #include "VmAudioCallback.h"
 
 #include <windows.h>
@@ -54,12 +61,23 @@ struct PumpCtx {
     float* scratchIn = nullptr;   // 主线程预分配 2*kMaxNbs
     float* scratchOut = nullptr;
     uint64_t frames = 0;
-    uint64_t silentFrames = 0;
+    uint64_t idleSamples = 0;     // 输入输出双静默累计（EAPO 同式）
+    bool idle = false;
+    bool lastOutSilent = true;
     long sr = 0;
     long nbs = 0;
+    long changes = 0;             // CHANGE 到达计数（v1 只观测，重启面后续 slice）
     double maxDiff = 0.0;
     bool bypassEntered = false;
 };
+
+inline bool PairIsSilent(const float* a, const float* b, long n) {
+    // EAPO 同式：精确零才算静默（-100dBFS 的弱音也算有声，不误杀；见借鉴注）。
+    for (long i = 0; i < n; ++i) {
+        if (a[i] != 0.0f || b[i] != 0.0f) return false;
+    }
+    return true;
+}
 
 long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     auto* c = (PumpCtx*)lpUser;
@@ -69,12 +87,18 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
         c->nbs = info->nbSamplePerFrame;
         c->nbs = info->nbSamplePerFrame;
         c->frames = 0;
-        c->silentFrames = 0;
+        c->idleSamples = 0;
+        c->idle = false;
+        c->lastOutSilent = true;
         c->maxDiff = 0.0;
         c->bypassEntered = false;
         return 0;
     }
-    if (cmd == kCbEnding || cmd == kCbChange) return 0;
+    if (cmd == kCbEnding) return 0;
+    if (cmd == kCbChange) {
+        ++c->changes;  // v1 只计数不断链（重建面后续 slice；EAPO 用 PostThreadMessage 重启）
+        return 0;
+    }
     if (cmd != kCbBufferOut) return 0;
     auto* ab = (VbAudioBuffer*)lpData;
     if (ab->nbo < 2 || ab->nbs <= 0 || ab->nbs > kMaxNbs) return 0;
@@ -97,37 +121,41 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
         c->frames += (uint64_t)n;
         return 0;
     }
-    // 静音检测（doc §2.2：全 |x|<1e-5 持续 2s → 指针透传，CPU 归零）。
-    float peak = 0.0f;
-    for (long i = 0; i < n; ++i) {
-        const float a = inL[i] < 0 ? -inL[i] : inL[i];
-        const float b = inR[i] < 0 ? -inR[i] : inR[i];
-        if (a > peak) peak = a;
-        if (b > peak) peak = b;
-    }
-    if (peak < 1e-5f)
-        c->silentFrames += (uint64_t)n;
-    else
-        c->silentFrames = 0;
-    const bool bypass = c->sr > 0 && c->silentFrames > (uint64_t)c->sr * 2;
-    if (bypass) {
-        c->bypassEntered = true;
-        memcpy(outL, inL, (size_t)n * sizeof(float));
-        memcpy(outR, inR, (size_t)n * sizeof(float));
-    } else {
+    // 静音空转（EAPO 同式，见文件头借鉴注）：非 idle 时正常处理，用
+    // “输入静默 && 本次输出静默” 累计；持续 10s 才进 bypass（弱音/混响尾不误杀）。
+    // idle 后每块只做指针透传，CPU 归零。
+    if (!c->idle) {
         for (long i = 0; i < n; ++i) {
             c->scratchIn[i * 2] = inL[i];
             c->scratchIn[i * 2 + 1] = inR[i];
         }
         c->process(c->eng, c->scratchIn, c->scratchOut, (int)n);
+        bool outSilent = true;
         for (long i = 0; i < n; ++i) {
             const float oL = c->scratchOut[i * 2], oR = c->scratchOut[i * 2 + 1];
             outL[i] = oL;
             outR[i] = oR;
+            if (oL != 0.0f || oR != 0.0f) outSilent = false;
             const double dL = (double)oL - (double)inL[i];
             const double dR = (double)oR - (double)inR[i];
             const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
             if (d > c->maxDiff) c->maxDiff = d;
+        }
+        const bool inSilent = PairIsSilent(inL, inR, n);
+        if (inSilent && outSilent)
+            c->idleSamples += (uint64_t)n;
+        else
+            c->idleSamples = 0;
+        c->lastOutSilent = outSilent;
+        c->idle = c->sr > 0 && c->idleSamples > (uint64_t)c->sr * 10;
+    } else {
+        c->bypassEntered = true;
+        memcpy(outL, inL, (size_t)n * sizeof(float));
+        memcpy(outR, inR, (size_t)n * sizeof(float));
+        // idle 中若进来非零输入，下一块即恢复处理（本块仍透传，10ms 内回神）。
+        if (!PairIsSilent(inL, inR, n)) {
+            c->idle = false;
+            c->idleSamples = 0;
         }
     }
     c->frames += (uint64_t)n;
@@ -257,6 +285,7 @@ int AuraVmPumpRun(AuraVmPump& p) {
     p.bypassEntered = ctx.bypassEntered;
     p.sampleRate = (int)ctx.sr;
     p.nbs = (int)ctx.nbs;
+    p.changes = ctx.changes;
     if (ctx.scratchIn) free(ctx.scratchIn);
     if (ctx.scratchOut) free(ctx.scratchOut);
     if (eng) {

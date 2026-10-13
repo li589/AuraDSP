@@ -27,9 +27,9 @@ int main(int argc, char** argv) {
     AuraVmPumpRun(p);
     printf("{\"ran\":%s,\"frames\":%llu,\"maxDiff\":%.9f,"
            "\"bypassEntered\":%s,\"startRc\":%d,\"sampleRate\":%d,\"nbs\":%d,"
-           "\"note\":\"%s\"}\n",
+           "\"changes\":%ld,\"note\":\"%s\"}\n",
            p.ran ? "true" : "false", (unsigned long long)p.frames, p.maxDiff,
            p.bypassEntered ? "true" : "false", p.startRc, p.sampleRate, p.nbs,
-           JsonEscape(p.note).c_str());
+           p.changes, JsonEscape(p.note).c_str());
     return 0;
 }
