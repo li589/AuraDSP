@@ -12,11 +12,20 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
+
+struct AuraVmParam {
+    std::string id;  // 如 "tube.gain"
+    bool isFloat = true;
+    int32_t i = 0;
+    float f = 0.0f;
+};
 
 struct AuraVmPump {
     // 输入（主线程，Run 前填好）
     std::string engineDll;  // "" = 自动搜索
     int seconds = 5;
+    std::vector<AuraVmParam> params;  // Start 前下发到全部 handle（--seti/--setf）
     // 输出（主线程，Run 后读）
     bool ran = false;
     uint64_t frames = 0;     // 处理的总帧数（samples per channel）
@@ -31,6 +40,9 @@ struct AuraVmPump {
     int handles = 0;         // 预建引擎 handle 数
     int warmupMs = 0;        // 等首个 BUFFER 的毫秒数（冷启动观测）
     double maxCbUs = 0.0;    // 单次回调最大耗时 us（爆音预算证据）
+    double peakIn = 0.0;     // 主对输入峰值（smoke 条件断言用）
+    int paramsApplied = 0;   // 成功下发的参数条数（×handle 数前）
+    int paramsFailed = 0;    // 下发失败条数（id 错/类型错，继续跑）
     std::string enginePath;  // 实际载入的引擎 DLL（空=没载上，全透传）
     std::string note;        // ran=false 时的原因
 };

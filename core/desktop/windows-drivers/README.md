@@ -29,7 +29,8 @@
   exit 0 无崩溃）；引擎住在 audiodg，杀 GUI 未必停泵。
 - 死锁：结构不可能（RT 零锁 + 主线程无等待回调的原语，见源码头注）。
 - 爆音预算：`maxCbUs` 打点上报，中性 8 组约 3.2ms（缓冲 42.7ms），smoke 阈值半周期。
-- [ ] `02` 多总线逐对处理、参数下发面（后续 slice）
+- [x] `02` 多总线逐对处理（版型预建 handle，组独立 idle）
+- [x] `02` 参数下发面（`--seti/--setf`，回报 applied/failed；声学有条件断言）
 - [ ] `03_system_apo/`（需管理员；本机 shell 非提权，按需提权跑 Configurator）
 - [ ] `04_asio_engine/`（需 Steinberg ASIO SDK，仓内暂无）
 - [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）

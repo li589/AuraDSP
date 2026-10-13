@@ -3,8 +3,10 @@
 验收标准（机器无关）：
   1. vm_pump_test.exe 存在且退出码 0，输出单行合法 JSON。
   2. ran=false（无 VM / 槽被占 / 启动失败）→ 只打印 note，PASS（优雅跳过）。
-  3. ran=true → frames 达到实时跟量（>=2s×sr），中性引擎透传
-     maxDiff < 1e-4（本机实测恒 0.0），sampleRate/nbs 合法。
+  3. run1（中性）：frames 达到实时跟量（>=2s×sr），透传 maxDiff < 1e-4，
+     sampleRate/nbs/groups/handles/budget 合法。
+  4. run2（tube 12dB 参数下发）：applied==2 且 failed==0；有声（peakIn>0.1）时
+     maxDiff 必须起量（>1e-5），静默总线只记 note 不判（声学不可证）。
 """
 import json
 import os
@@ -62,6 +64,30 @@ if d is not None:
               'maxCbUs=%s' % md)
         check('changes counter present', isinstance(d.get('changes'), int) and d.get('changes') >= 0,
               'changes=%s' % d.get('changes'))
+
+# run2：参数下发面（tube 12dB）。声学断言是有条件的：总线静默时 bypass 接管，
+# maxDiff 恒 0 恰恰证明透传正确；只在有声（peakIn>0.1）时要求染色起量。
+r2 = subprocess.run([EXE, '4', '', '--seti', 'tube.enable=1', '--setf', 'tube.gain=12.0'],
+                    capture_output=True, text=True, timeout=120)
+check('param run exit 0', r2.returncode == 0, 'rc=%d' % r2.returncode)
+try:
+    d2 = json.loads(r2.stdout.strip().splitlines()[-1])
+except (ValueError, IndexError) as ex:
+    check('param run valid JSON', False, str(ex)[:100])
+    d2 = None
+if d2 is not None:
+    if not d2.get('ran'):
+        print('NOTE param run skipped: %s' % d2.get('note', '?'))
+    else:
+        check('params applied==2', d2.get('paramsApplied') == 2, str(d2.get('paramsApplied')))
+        check('params failed==0', d2.get('paramsFailed') == 0, str(d2.get('paramsFailed')))
+        peak = d2.get('peakIn') or 0.0
+        md2 = d2.get('maxDiff')
+        if peak > 0.1:
+            check('hot signal colored (maxDiff>1e-5)', isinstance(md2, (int, float)) and md2 > 1e-5,
+                  'peak=%.4f maxDiff=%s' % (peak, md2))
+        else:
+            print('NOTE silent bus (peak=%.6f): acoustic unproven, plumbing proven' % peak)
 
 print()
 if FAIL:

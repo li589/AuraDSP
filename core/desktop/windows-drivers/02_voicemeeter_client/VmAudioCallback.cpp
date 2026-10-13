@@ -61,6 +61,7 @@ using FnUnreg = long(__stdcall*)();
 using FnEngCreate = void*(__cdecl*)(float, int);
 using FnEngProcess = void(__cdecl*)(void*, const float*, float*, int);
 using FnEngDestroy = void(__cdecl*)(void*);
+using FnEngSetParam = int(__cdecl*)(void*, const char*, const void*, unsigned int);
 
 constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测 VM 给 512/1024）
 
@@ -82,6 +83,7 @@ struct PumpCtx {
     long changes = 0;             // CHANGE 到达计数（v1 只观测，重启面后续 slice）
     int groups = 0;               // 本轮实际组数
     double maxDiff = 0.0;
+    double peakIn = 0.0;  // 主对输入峰值（判定“有没有声”，smoke 条件断言用）
     bool bypassEntered = false;
 };
 
@@ -136,6 +138,13 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
         float* outL = ab->w[base];
         float* outR = ab->w[base + 1];
         if (!inL || !inR || !outL || !outR) continue;
+        // 输入峰值（全组主对的最大值；smoke 据此判定“有没有声”）。
+        for (long i = 0; i < n; ++i) {
+            const double a = inL[i] < 0 ? -(double)inL[i] : (double)inL[i];
+            const double b = inR[i] < 0 ? -(double)inR[i] : (double)inR[i];
+            const double m = a > b ? a : b;
+            if (m > c->peakIn) c->peakIn = m;
+        }
         for (long ch = base + 2; ch < base + 8; ++ch) {
             if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
                 memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
@@ -318,6 +327,7 @@ int AuraVmPumpRun(AuraVmPump& p) {
         auto create = (FnEngCreate)GetProcAddress(eng, "auradsp_create");
         auto process = (FnEngProcess)GetProcAddress(eng, "auradsp_process");
         auto destroy = (FnEngDestroy)GetProcAddress(eng, "auradsp_destroy");
+        auto setParam = (FnEngSetParam)GetProcAddress(eng, "auradsp_set_param");
         if (create && process && destroy) {
             // sr 未知（STARTING 才到）：先按 48k 建（与 sr 无关的纯内存 sizing；
             // 真实 sr 下 vendor 内部按块自适应，见 processFloatMultiplexd 注释）。
@@ -328,6 +338,30 @@ int AuraVmPumpRun(AuraVmPump& p) {
             for (int g = 0; g < wantGroups && ctx.scratchIn && ctx.scratchOut; ++g) {
                 ctx.eng[g] = create(48000.0f, 2048);
                 if (ctx.eng[g]) ++ctx.nEng;
+            }
+            // 参数下发面：CLI --seti/--setf 全 handle 应用（Start 前，主线程）。
+            // 失败只计数不中断（test 工具行为；回报给 smoke 判定）。
+            if (setParam) {
+                for (const auto& pm : p.params) {
+                    bool okAll = ctx.nEng > 0;
+                    for (int g = 0; g < ctx.nEng; ++g) {
+                        int prc;
+                        if (pm.isFloat)
+                            prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.f, 4);
+                        else
+                            prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.i, 4);
+                        if (prc != 0) {
+                            okAll = false;
+                            break;
+                        }
+                    }
+                    if (okAll)
+                        ++p.paramsApplied;
+                    else
+                        ++p.paramsFailed;
+                }
+            } else if (!p.params.empty()) {
+                p.paramsFailed = (int)p.params.size();
             }
             if (ctx.nEng == 0 || !ctx.scratchIn || !ctx.scratchOut) {
                 for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
@@ -356,7 +390,6 @@ int AuraVmPumpRun(AuraVmPump& p) {
         waited += 50;
     }
     if (!ctx.gotFirst) p.note = "no-buffers-timeout";
-    p.warmupMs = waited;
     Sleep((DWORD)(p.seconds > 0 ? p.seconds : 5) * 1000);
     stop();
     leave(true);  // 单次配对：logout + unreg（二次 logout 会 AV，勿加第二次）
@@ -370,6 +403,7 @@ int AuraVmPumpRun(AuraVmPump& p) {
     p.groups = ctx.groups;
     p.handles = ctx.nEng;
     p.warmupMs = waited;
+    p.peakIn = ctx.peakIn;
     LARGE_INTEGER qpf;
     if (QueryPerformanceFrequency(&qpf) && qpf.QuadPart > 0)
         p.maxCbUs = (double)ctx.maxCbTicks * 1000000.0 / (double)qpf.QuadPart;
