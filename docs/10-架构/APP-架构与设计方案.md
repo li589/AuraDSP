@@ -181,13 +181,12 @@ JamesDSP/
 │       │   └── main.dart
 │       ├── windows/ android/ linux/    # 平台壳
 │       └── pubspec.yaml
+├── engine/                     # ★【P3a 上移】原 core/desktop/engine_api — 统一 C ABI + 自研 DSP + 插件宿主
+├── vendor/                     # ★【P3a 上移】原 core/desktop/vendor-src — libjamesdsp + plugin-api（只读）
+├── assets/                     # ★【P3b 改名】原 resource/ — IR / VDC / Liveprog 运营资源 + manifest.json
 ├── core/
-│   ├── android/                # 已有（Root HAL + 未来 Rootless 共享 engine_api）
-│   └── desktop/                # 驱动层（桌面）：本次新建
-│       ├── engine_api/         # ★ auradsp_engine.h/.c — 统一 C ABI
-│       ├── vendor-src/         # libjamesdsp 源码提取 + ORIGIN.md
-│       ├── windows/            # WASAPI 链路 + DLL 构建脚本
-│       └── linux/              # Phase 7 预留
+│   ├── android/                # 已有（Root HAL + 未来 Rootless 共享同一套 C ABI 语义）
+│   └── desktop/windows/        # 平台构建层：WASAPI 链路 + CMake（DLL 真相源 out/Release/）
 ├── design/
 │   ├── tokens/aura.tokens.json # 设计令牌真相源（三主题）
 │   └── i18n/                   # 语言清单与效果名翻译表
