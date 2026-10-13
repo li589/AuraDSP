@@ -31,19 +31,35 @@ target_compile_options(vm_pump_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_pump_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
-add_library(auraapo STATIC
+add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
 )
-target_include_directories(auraapo PUBLIC "${APO}")
-target_compile_options(auraapo PRIVATE /utf-8 /W1 /EHsc)
-set_property(TARGET auraapo PROPERTY CXX_STANDARD 20)
-set_property(TARGET auraapo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_include_directories(auraapo_inspect PUBLIC "${APO}")
+target_compile_options(auraapo_inspect PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auraapo_inspect PROPERTY CXX_STANDARD 20)
+set_property(TARGET auraapo_inspect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 add_executable(apo_inspect
     "${APO}/apo_inspect.cpp"
 )
 # MMDevice/PropertyStore/COM 在 ole32。
-target_link_libraries(apo_inspect PRIVATE auraapo ole32 version)
+target_link_libraries(apo_inspect PRIVATE auraapo_inspect ole32 version)
 target_compile_options(apo_inspect PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET apo_inspect PROPERTY CXX_STANDARD 20)
 set_property(TARGET apo_inspect PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+# 自研 APO（CBaseAudioProcessingObject 基类在 audiobaseprocessingobject.lib；
+# RegisterAPO 在 audioeng.lib；ConvertStringSecurityDescriptor 在 advapi32）。
+add_library(AuraApo SHARED
+    "${APO}/AuraApo.cpp"
+    "${APO}/ApoClassFactory.cpp"
+    "${APO}/AuraApoMain.cpp"
+    "${APO}/AuraApo.def"
+)
+target_include_directories(AuraApo PRIVATE "${APO}")
+target_compile_options(AuraApo PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET AuraApo PROPERTY CXX_STANDARD 20)
+set_property(TARGET AuraApo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(AuraApo PRIVATE
+    audiobaseprocessingobject ole32 advapi32 uuid version audioeng
+    audiomediatypecrt legacy_stdio_definitions)

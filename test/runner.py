@@ -52,6 +52,7 @@ def run_smoke_tests():
     "smoke_vm_detect.py",
     "smoke_vm_pump.py",
     "smoke_apo_inspect.py",
+    "smoke_apo_register.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
