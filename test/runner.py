@@ -49,6 +49,7 @@ def run_smoke_tests():
     "smoke_gate_deesser.py",
     "smoke_dyneq.py",
     "smoke_mp3.py",
+    "smoke_vm_detect.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
