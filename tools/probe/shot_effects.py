@@ -5,16 +5,16 @@
 哪个是开关、哪个是滑轨。直接看图最快。
 
 用法：
-  python tools/shot_effects.py --out shot.png --scroll 0
-  python tools/shot_effects.py --out shot.png --scroll -3   # 向上滚
+  python tools/probe/shot_effects.py --out shot.png --scroll 0
+  python tools/probe/shot_effects.py --out shot.png --scroll -3   # 向上滚
 """
 import argparse
 import os
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(
-    os.path.abspath(__file__))), 'test', 'ui'))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(
+    os.path.abspath(__file__)))), 'test', 'ui'))
 
 import ui_test_kit as K  # noqa: E402
 

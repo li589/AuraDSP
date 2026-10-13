@@ -19,7 +19,7 @@ L-15 进一步要求播放态基线，并定位「重度操作下 ~5 GB 暴涨�
   * 内存采样与点击事件写入同一时间轴，并落 CSV。
 
 用法（与启动 app 同一条命令；脚本只连接已有进程，不控制鼠标）：
-  python tools/mem_baseline.py [秒数] [采样间隔秒]
+  python tools/probe/mem_baseline.py [秒数] [采样间隔秒]
 
 输出：
   * 终端：内存表 + 点击事件行（同轴）

@@ -8,8 +8,8 @@
   - 缓存写到 %APPDATA%/AuraDSP/plugins/plugin_cache.json，不碰源目录。
 
 用法：
-  python tools/scan_external.py --dirs D:\\myPrograms\\AudioEffect\\VST --dry-run
-  python tools/scan_external.py --dirs D:\\myPrograms\\AudioEffect\\VST
+  python tools/probe/scan_external.py --dirs D:\\myPrograms\\AudioEffect\\VST --dry-run
+  python tools/probe/scan_external.py --dirs D:\\myPrograms\\AudioEffect\\VST
 """
 import argparse
 import ctypes
@@ -17,7 +17,7 @@ import json
 import os
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release',
                    'auradsp_engine.dll')
 CACHE = os.path.join(os.environ.get('APPDATA', ''), 'AuraDSP', 'plugins',

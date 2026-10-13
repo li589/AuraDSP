@@ -23,7 +23,7 @@ cd app/auradsp_app && flutter analyze
 cd app/auradsp_app && flutter build windows --release --no-tree-shake-icons
 
 # Push via API fallback if git push origin fails
-python tools/push_via_api.py main
+python tools/bin/push_via_api.py main
 ```
 
 ## Critical Engineering Constraints

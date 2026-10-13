@@ -13,8 +13,8 @@ api.github.com（gh CLI）走三步 Git Data API：blob → tree → commit → 
   * author/committer 的时区必须换算成"提交自身时区"的 ISO，否则 sha 分叉。
 
 用法：
-    python tools/push_via_api.py            # 推当前分支，HEAD 单提交
-    python tools/push_via_api.py main       # 显式分支
+    python tools/bin/push_via_api.py            # 推当前分支，HEAD 单提交
+    python tools/bin/push_via_api.py main       # 显式分支
 
 前置：本地只比远端多 1 个提交（HEAD 的父 == 远端 HEAD）。
 """

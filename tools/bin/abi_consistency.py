@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# tools/abi_consistency.py — C ABI / .def 导出 / Dart FFI 绑定三处一致性检查
+# tools/bin/abi_consistency.py — C ABI / .def 导出 / Dart FFI 绑定三处一致性检查
 #
 # E4（docs/插件模块深度改良方案-2026-10-12.md §4.6-7）：E1 的 show_editor
 # 签名漂移（Dart 3 参 vs C 2 参，标题被静默丢弃）暴露了三处清单靠人肉
@@ -9,13 +9,13 @@
 #   3. auradsp_ffi.dart     —— Dart lookup 绑定（符号名 + NativeFunction 形参数）
 # 任何"导出未绑定 / 绑定了不存在的符号 / 元数不一致"都判 FAIL。
 #
-# 用法：python tools/abi_consistency.py（退出码 0 = 一致）
+# 用法：python tools/bin/abi_consistency.py（退出码 0 = 一致）
 
 import re
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parent.parent.parent
 DEF_PATH = ROOT / "engine/auradsp_engine.def"
 H_PATH = ROOT / "engine/auradsp_engine.h"
 DART_PATH = ROOT / "app/auradsp_app/lib/engine/auradsp_ffi.dart"

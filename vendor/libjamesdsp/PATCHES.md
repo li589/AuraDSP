@@ -103,7 +103,7 @@ yquist * 0.999，
   `Convolver1DLoadImpulseResponse(updateOld=0)` → 析构并重建全部卷积器
   （重做全 IR 的 FFT + 分段选择）。而 AuraDSP 的 WASAPI 泵传入
   `n = min(avail, max_block)`，`avail` 随 padding 逐轮抖动，于是**几乎每轮都重建**。
-  实测（`tools/probe_ir_stability.py`，0.5s / 48kHz IR）：
+  实测（`tools/probe/probe_ir_stability.py`，0.5s / 48kHz IR）：
 
   | 块长 | 中位耗时 | 输出 RMS |
   |---|---|---|

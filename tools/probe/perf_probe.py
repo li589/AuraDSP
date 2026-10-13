@@ -1,14 +1,14 @@
 """perf_probe.py — 引擎 RT 路径分段计时（只读诊断工具，不修改引擎）
 
 用途：在真实块长下量化各段成本，供引擎性能评估。取多次重复的最小值以压低调度噪声。
-运行：python tools/perf_probe.py
+运行：python tools/probe/perf_probe.py
 """
 import ctypes
 import os
 import sys
 import time
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release", "auradsp_engine.dll")
 if not os.path.exists(DLL):
     print(f"Error: DLL not found at {DLL}")

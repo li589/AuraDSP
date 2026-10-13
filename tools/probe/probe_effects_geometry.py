@@ -5,7 +5,7 @@
 把开关/滑块 Thumb/高级区折叠头的真实圆心打印出来，供 UI 测试引用。
 
 运行：与启动 app 同一条命令内
-  $p = Start-Process $exe -PassThru; python tools/probe_effects_geometry.py
+  $p = Start-Process $exe -PassThru; python tools/probe/probe_effects_geometry.py
 """
 import ctypes
 import ctypes.wintypes as wt
@@ -14,9 +14,9 @@ import sys
 import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                '..', 'test', 'ui'))
+                                '..', '..', 'test', 'ui'))
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SHOT = os.path.join(os.environ.get('TEMP', '.'), 'auradsp_effects_probe.png')
 
 from PIL import Image  # noqa: E402
