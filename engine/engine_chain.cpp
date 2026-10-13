@@ -133,6 +133,10 @@ void apply_liveprog(auradsp_handle h) {
 void apply_tube(auradsp_handle h) {
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         VacuumTubeSetGain(&h->jdsp, (double)h->p.tube_gain.load(std::memory_order_relaxed));
+        /* P-011：音色/混合/补偿每次推送（create 即默认全湿 0dB；VTInit 不重置这三个值） */
+        VacuumTubeSetCharacter(&h->jdsp, (int)h->p.tube_style.load(std::memory_order_relaxed));
+        VacuumTubeSetDryWet(&h->jdsp, h->p.tube_mix.load(std::memory_order_relaxed));
+        VacuumTubeSetOutComp(&h->jdsp, (double)h->p.tube_compensation.load(std::memory_order_relaxed));
         VacuumTubeEnable(&h->jdsp);
     } else {
         VacuumTubeDisable(&h->jdsp);

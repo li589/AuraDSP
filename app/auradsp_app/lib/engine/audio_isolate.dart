@@ -184,6 +184,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCvSr = idp('convolver.ir.srcRate'), iCvPk = idp('convolver.ir.peak');
             final iCvSpec = idp('convolver.ir.spectrum');
             final iTb = idp('tube.enable'), iXf = idp('crossfeed.enable');
+            // P-011：电子管音色/混合/补偿回读
+            final iTbS = idp(ParamId.tubeStyle), iTbM = idp(ParamId.tubeMix), iTbC = idp(ParamId.tubeCompensation);
             final iXfM = idp(ParamId.xfeedMode), iXfFc = idp(ParamId.xfeedFcut), iXfFd = idp(ParamId.xfeedFeed);
             final iSbU = idp('stereo.bandUsed');
             final iCvM = idp('convolver.mix');
@@ -260,6 +262,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     ? readIrSpectrum(cvChannels)
                     : null,
                 'tubeEnable': rdInt(iTb) ?? 0,
+                'tubeStyle': rdInt(iTbS) ?? 0,
+                'tubeMix': rdFloat(iTbM) ?? 1.0,
+                'tubeCompensation': rdFloat(iTbC) ?? 0.0,
                 'xfeedEnable': rdInt(iXf) ?? 0,
                 'xfeedMode': rdInt(iXfM) ?? 0,
                 'xfeedFcut': rdFloat(iXfFc) ?? 700.0,

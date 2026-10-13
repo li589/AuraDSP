@@ -124,6 +124,84 @@ linear_peak = 0.2 * (10.0 ** (12.0 / 20.0))
 check('soft saturation (peak < linear)', peak < linear_peak * 0.98,
       'peak=%.4f linear=%.4f' % (peak, linear_peak))
 
+# P-011: set/get 回读 + 钳位
+check('style set/get', set_i('tube.style', 1) == 0 and get_i('tube.style') == (0, 1))
+check('mix set/get', set_f('tube.mix', 0.5) == 0 and abs(get_f('tube.mix')[1] - 0.5) < 1e-6)
+check('comp set/get', set_f('tube.compensation', 3.0) == 0 and abs(get_f('tube.compensation')[1] - 3.0) < 1e-6)
+set_i('tube.style', 9)
+check('style clamp 9->2', get_i('tube.style') == (0, 2))
+set_f('tube.mix', 2.0)
+check('mix clamp 2->1', abs(get_f('tube.mix')[1] - 1.0) < 1e-6)
+set_f('tube.compensation', -20.0)
+check('comp clamp -20->-12', abs(get_f('tube.compensation')[1] + 12.0) < 1e-6)
+set_f('tube.mix', 1.0)
+set_f('tube.compensation', 0.0)
+
+
+def goertzel_power(ys, freq):
+    # 单频点 DFT 功率（稳态段）：线性拟合残差会被全通相移污染，谐波能量必须直测。
+    n = len(ys)
+    w = 2 * math.pi * freq / SR
+    cw, sw = math.cos(w), math.sin(w)
+    s0 = s1 = s2 = 0.0
+    for y in ys:
+        s0 = y + 2 * cw * s1 - s2
+        s2 = s1
+        s1 = s0
+    real = cw * s1 - s2
+    imag = sw * s1
+    return (real * real + imag * imag) / (n * n)
+
+
+def harmonic_profile(amp=0.2, freq=1000.0):
+    _, ys = run_sine(freq, amp, blocks=40)
+    fund = goertzel_power(ys, freq)
+    harm = sum(goertzel_power(ys, freq * k) for k in (2, 3, 4, 5))
+    rms = math.sqrt(sum(y * y for y in ys) / len(ys))
+    return (harm / fund if fund > 0 else 0.0), rms, math.sqrt(fund)
+
+
+# P-011: 三档音色谐波量有序（pentode > triode > tape），Goertzel 直测谐波功率。
+# 条件必须落在分频器平方项有效区：1000Hz/0.2/+12dB（与上组 legacy 同条件）。
+# 440Hz 处平方项只有 -36dB（ penny 1.48x）无分辨力；线性拟合残差则被全通相移污染。
+#（实测比值：pen/tri≈3.3x，tri/tape≈4.4x；断言留足余量。）
+set_i('tube.style', 0)
+tri_h, tri_rms, tri_f = harmonic_profile()
+set_i('tube.style', 1)
+pen_h, pen_rms, pen_f = harmonic_profile()
+set_i('tube.style', 2)
+tape_h, tape_rms, tape_f = harmonic_profile()
+print('  style harm-ratio: tri=%.5f pen=%.5f tape=%.5f' % (tri_h, pen_h, tape_h))
+print('  style fund-rms: tri=%.5f pen=%.5f tape=%.5f' % (tri_f, pen_f, tape_f))
+check('pentode hotter than triode', pen_h > tri_h * 2.0,
+      'pen=%.5f tri=%.5f' % (pen_h, tri_h))
+check('triode hotter than tape', tri_h > tape_h * 2.5,
+      'tri=%.5f tape=%.5f' % (tape_h, tri_h))
+for nm, a, b in (('pen/tri', pen_rms, tri_rms), ('tape/tri', tape_rms, tri_rms)):
+    ratio = a / b if b > 0 else 0.0
+    check('level-neutral %s (rms ratio <1.122)' % nm, 0.891 < ratio < 1.122,
+          'ratio=%.4f' % ratio)
+
+# P-011: mix=0 近似直通
+set_i('tube.style', 0)
+set_f('tube.mix', 0.0)
+xs, ys = run_sine(1000.0, 0.2)
+_, res, sig, _ = linfit_residual(xs, ys)
+check('mix=0 passthrough (<0.5%)', res < sig * 0.005,
+      'res=%.6f sig=%.4f' % (res, sig))
+
+# P-011: compensation +6dB 精确命中（相对 0dB）
+set_f('tube.mix', 1.0)
+set_f('tube.compensation', 0.0)
+_, ys0 = run_sine(1000.0, 0.2)
+rms0 = math.sqrt(sum(y * y for y in ys0) / len(ys0))
+set_f('tube.compensation', 6.0)
+_, ys6 = run_sine(1000.0, 0.2)
+rms6 = math.sqrt(sum(y * y for y in ys6) / len(ys6))
+ratio = rms6 / rms0 if rms0 > 0 else 0.0
+check('comp +6dB ~= x2 (5%)', abs(ratio - 2.0) < 0.10, 'ratio=%.4f' % ratio)
+set_f('tube.compensation', 0.0)
+
 dll.auradsp_destroy(h)
 
 print()

@@ -89,39 +89,13 @@ class _TubeAdvanced extends StatelessWidget {
     final m = model;
     return AdvancedSection(
       summary:
-          '${m.tubeOversampling}x · AGC: ${m.tubeAutoGain ? "ON" : "OFF"} · ${(m.tubeOutputGain >= 0 ? "+" : "")}${m.tubeOutputGain.toStringAsFixed(1)} dB',
+          'Mix ${(m.tubeMix * 100).toStringAsFixed(0)}% · Comp ${(m.tubeCompensation >= 0 ? "+" : "")}${m.tubeCompensation.toStringAsFixed(1)} dB · AGC: ${m.tubeAutoGain ? "ON" : "OFF"} · ${(m.tubeOutputGain >= 0 ? "+" : "")}${m.tubeOutputGain.toStringAsFixed(1)} dB',
       builder: (context) {
-        final p = paletteOf(context);
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    l.tubeOversampling,
-                    style: labelOf(p, color: p.text),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                Wrap(
-                  spacing: AuraSpace.sm,
-                  alignment: WrapAlignment.end,
-                  children: [
-                    for (final os in const [1, 2, 4])
-                      AuraChoiceChip(
-                        label: '${os}x',
-                        selected: m.tubeOversampling == os,
-                        onTap: () => m.setTubeOversampling(os),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: AuraSpace.sm),
+            // P-011：过采样由 vendor 按采样率自动选择（30k+→2x/20-30k→3x/14-20k→4x/14k-→5x），
+            // 手动档无声学意义，已移除；tubeOversampling 字段仅保留做预设兼容。
             ValueSlider(
               label: l.tubeMix,
               value: m.tubeMix,
@@ -134,6 +108,22 @@ class _TubeAdvanced extends StatelessWidget {
               format: (v) => (v * 100).toStringAsFixed(0),
               onChanged: m.setTubeMix,
               onChangedEnd: m.setTubeMix,
+            ),
+            const SizedBox(height: AuraSpace.sm),
+            ValueSlider(
+              label: l.tubeCompensation,
+              infoMessage: '电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。',
+              value: m.tubeCompensation,
+              defaultValue: ParamDefaults.tubeCompensation,
+              onResetToDefault: () =>
+                  m.setTubeCompensation(ParamDefaults.tubeCompensation),
+              min: -12.0,
+              max: 12.0,
+              unit: 'dB',
+              enabled: m.tubeOn,
+              format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+              onChanged: m.setTubeCompensation,
+              onChangedEnd: m.setTubeCompensation,
             ),
             const SizedBox(height: AuraSpace.md),
             // 输出级外框（自动增益补偿与输出增益门）
