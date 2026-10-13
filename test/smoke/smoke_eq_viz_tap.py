@@ -31,7 +31,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
                    "auradsp_engine.dll")
-SRC = os.path.join(ROOT, "core", "desktop", "engine_api", "auradsp_engine.cpp")
+SRC = os.path.join(ROOT, "core", "desktop", "engine_api", "engine_internal.h")
 
 FS = 48000.0
 BLOCK = 1024
