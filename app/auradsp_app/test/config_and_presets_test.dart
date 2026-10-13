@@ -1003,5 +1003,63 @@ void main() {
       expect(m.loudnessAmount, closeTo(0.8, 1e-6)); // 防 isolate 回读竞态
     });
   });
+
+  group('Legacy stages: 快照/恢复往返', () {
+    test('tube/stereo/shelf/input/limiter/bass/comp/fv 全节往返', () {
+      final src = AppModel()
+        ..setTubeEnabled(true)
+        ..setTubeGain(6.0)
+        ..setStereoEnabled(true)
+        ..setStereoMix(0.5)
+        ..setInt('shelf.enable', 1)
+        ..setFloat('shelf.freq', 100.0)
+        ..setFloat('shelf.gain', 6.0)
+        ..setInputGain(-6.0)
+        ..setInputBalanceL(0.5)
+        ..setInt('limiter.enable', 1)
+        ..setFloat('post.gain', 6.0)
+        ..setBassIntensity(0.5)
+        ..setCompEnabled(true)
+        ..setCompGranularity(2)
+        ..setFreeverbEnabled(true)
+        ..setReverbCustomParam('wet', 0.5);
+      final snap = PresetLibrary.snapshot(src, name: '__legacy__');
+
+      final m = AppModel();
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__legacy_apply__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: snap.params));
+      expect(m.tubeOn, isTrue);
+      expect(m.tubeGain, closeTo(6.0, 1e-9));
+      expect(m.stereoOn, isTrue);
+      expect(m.stereoMix, closeTo(0.5, 1e-9));
+      expect(m.shelfOn, isTrue);
+      expect(m.shelfFreq, closeTo(100.0, 1e-9));
+      expect(m.inputGain, closeTo(-6.0, 1e-9));
+      expect(m.inputBalanceL, closeTo(0.5, 1e-9));
+      expect(m.limiterOn, isTrue);
+      expect(m.postGain, closeTo(6.0, 1e-9));
+      expect(m.bassIntensity, closeTo(0.5, 1e-9));
+      expect(m.compOn, isTrue);
+      expect(m.compGranularity, 2);
+      expect(m.fvOn, isTrue);
+      expect(m.fvWet, closeTo(0.5, 1e-9));
+    });
+
+    test('自定义态下 enable 不得切回 preset（regression：wet 曾被 0.45 覆盖）', () {
+      final m = AppModel();
+      m.setReverbCustomParam('wet', 0.5);
+      m.setReverbCustomParam('decay', 0.7);
+      expect(m.reverbPreset, -2);
+      // 自定义态重复 enable：只开开关，不许碰参数
+      m.setSpatialReverbEnabled(true);
+      expect(m.fvWet, closeTo(0.5, 1e-9));
+      expect(m.fvDecay, closeTo(0.7, 1e-9));
+      expect(m.reverbPreset, -2);
+    });
+  });
 }
 

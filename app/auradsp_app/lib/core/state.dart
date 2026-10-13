@@ -1819,7 +1819,13 @@ class AppModel extends ChangeNotifier {
 
   void setSpatialReverbEnabled(bool on) {
     if (on) {
-      selectReverbPreset(reverbPreset >= 0 ? reverbPreset : 0);
+      if (reverbPreset == -2) {
+        // 自定义态：只开开关，不碰参数。旧逻辑无条件切 preset 0，
+        // 会吃掉刚恢复/刚调好的自定义值（预设恢复实测：wet 0.5 -> 0.45）。
+        selectReverbPreset(-2);
+      } else {
+        selectReverbPreset(reverbPreset >= 0 ? reverbPreset : 0);
+      }
     } else {
       selectReverbPreset(-1);
     }
