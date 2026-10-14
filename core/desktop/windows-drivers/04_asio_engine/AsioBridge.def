@@ -1,0 +1,11 @@
+LIBRARY auraasio_bridge
+EXPORTS
+    asio_detect            PRIVATE
+    asio_start             PRIVATE
+    asio_stop              PRIVATE
+    asio_status            PRIVATE
+    asio_set_param         PRIVATE
+    asio_viz_read          PRIVATE
+    asio_test_start        PRIVATE
+    asio_test_stop         PRIVATE
+    asio_bypass            PRIVATE

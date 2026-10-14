@@ -1,0 +1,437 @@
+// AsioBridge.cpp — ASIO 常驻桥实现（04_asio_engine Phase 2）。
+//
+// 结构镜像 05_vm_bridge/VmBridge.cpp（同款九件套 + 同款 RT/控制线程分离），
+// 差异：传输面由 VB 回调换成 ASIO bufferSwitch（AsioHost 封装 SDK），
+// 引擎加载/测试注入复用 02 的 VmPumpCore.h（TryLoadEngine / FillTestSignal），
+// 保证"与 05 同源"不出现第二套搜索逻辑或第二套测试信号数学。
+//
+// 线程模型：
+// - ASIO RT 线程：驱动 bufferSwitch → AsioHost::process_io → BridgeSink
+//   （零锁零分配零 syscall；仅原子量 + scratch + engine process）。
+// - Dart 线程：start/stop/set_param/test/viz/status/detect（直接调，无一进 RT）。
+// - 停止时序（防 RT 踩已释放引擎，同 05 FreeTestFile 模式）：
+//   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
+#include "AsioBridge.h"
+
+#include "AsioHost.h"
+#include "../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
+
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+
+namespace {
+
+void PathForJson(const std::wstring& in, char* out, size_t cap) {
+    // JSON 字符串里反斜杠是转义符：路径统一转正斜杠（仅上报用）。
+    size_t j = 0;
+    for (size_t i = 0; i < in.size() && j + 1 < cap; ++i) {
+        const wchar_t c = in[i];
+        out[j++] = (c == L'\\') ? '/' : (char)c;  // 路径均为 ASCII；非 ASCII 字符丢失可接受（仅上报）
+    }
+    out[j] = '\0';
+}
+
+void PathForJsonA(const std::string& in, char* out, size_t cap) {
+    size_t j = 0;
+    for (size_t i = 0; i < in.size() && j + 1 < cap; ++i) {
+        const char c = in[i];
+        out[j++] = (c == '\\') ? '/' : c;
+    }
+    out[j] = '\0';
+}
+
+using vmcore::FnEngCreate;
+using vmcore::FnEngDestroy;
+using vmcore::FnEngProcess;
+using vmcore::FnEngSetParam;
+using vmcore::FnEngVizRead;
+using vmcore::PumpCtx;
+
+struct BridgeCtl {
+    auraasio::AsioHost host;
+    // 引擎（动态加载；单 handle——ASIO v1 只取一个立体声对进链）
+    HMODULE engMod = nullptr;
+    FnEngCreate create = nullptr;
+    FnEngProcess process = nullptr;
+    FnEngDestroy destroy = nullptr;
+    FnEngSetParam setParam = nullptr;
+    FnEngVizRead vizRead = nullptr;
+    void* engine = nullptr;
+    std::wstring enginePath;      // 加载到的引擎 DLL（宽字节原样）
+    // 驱动信息（status 用）
+    std::string driverUtf8;       // 用户传入的 UTF-8 显示名
+    std::string driverRaw;        // 注册表原始名（SDK load 键；status 调试用）
+    long outPair = 0;
+    long inCh = 0, outCh = 0, inLat = 0, outLat = 0;
+    double sr = 0.0;
+    long nbs = 0;
+    // 运行态
+    volatile LONG running = 0;
+    volatile LONG userBypass = 0;
+    int startRc = -99;
+    char note[128] = {};
+    int paramsApplied = 0;
+    int paramsFailed = 0;
+    // 测试注入状态（FillTestSignal 载体；复用 05 的 PumpCtx 字段子集）
+    PumpCtx tc;
+};
+
+BridgeCtl g_b;
+
+// ---- RT sink（驱动 bufferSwitch 线程调用；零锁零分配零 syscall）----
+void BridgeSink(void* ctx, float* in, float* out, int frames) {
+    auto* c = static_cast<BridgeCtl*>(ctx);
+    if (frames <= 0) return;
+    const size_t bytes = sizeof(float) * 2 * (size_t)frames;
+    if (c->tc.testKind != 0) {
+        // 测试注入：测试信号替换真实输入，进同一条 DSP 链（与 05 同语义）。
+        vmcore::FillTestSignal(&c->tc, in, frames);
+    }
+    if (c->userBypass) {
+        // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
+        memcpy(out, in, bytes);
+        return;
+    }
+    if (c->process && c->engine) {
+        c->process(c->engine, in, out, frames);
+    } else {
+        memcpy(out, in, bytes);  // 无引擎：透传，绝不吞声
+    }
+}
+
+// "id=f1.5;gain=i3" 解析并下发引擎 handle（Dart 线程，无 RT 约束）。
+void ApplyParamsString(const char* s) {
+    if (!s || !*s || !g_b.setParam || !g_b.engine) {
+        if (s && *s && (!g_b.setParam || !g_b.engine)) ++g_b.paramsFailed;
+        return;
+    }
+    char buf[4096] = {0};
+    strncpy_s(buf, s, sizeof(buf) - 1);
+    // strtok 单线程调用（Dart 线程串行，无重入问题；同 05）。
+    for (char* tok = strtok(buf, ";"); tok != nullptr; tok = strtok(nullptr, ";")) {
+        char* eq = strchr(tok, '=');
+        if (!eq || eq == tok) {
+            ++g_b.paramsFailed;
+            continue;
+        }
+        *eq = '\0';
+        const char* id = tok;
+        const char* vs = eq + 1;
+        if (strchr(vs, '.') || strchr(vs, 'e') || strchr(vs, 'E')) {
+            const float f = (float)atof(vs);
+            if (g_b.setParam(g_b.engine, id, &f, 4) != 0) ++g_b.paramsFailed;
+            else ++g_b.paramsApplied;
+        } else {
+            const int32_t iv = (int32_t)atoi(vs);
+            if (g_b.setParam(g_b.engine, id, &iv, 4) != 0) ++g_b.paramsFailed;
+            else ++g_b.paramsApplied;
+        }
+    }
+}
+
+void DestroyEngine() {
+    if (g_b.engine && g_b.destroy) g_b.destroy(g_b.engine);
+    g_b.engine = nullptr;
+    if (g_b.engMod) FreeLibrary(g_b.engMod);
+    g_b.engMod = nullptr;
+    g_b.create = nullptr;
+    g_b.process = nullptr;
+    g_b.setParam = nullptr;
+    g_b.vizRead = nullptr;
+    g_b.destroy = nullptr;
+    g_b.enginePath.clear();
+}
+
+void FreeTestFile() {
+    // 先清 kind 让 RT 停用，再等在途回调退出（~10ms 量级），最后释放（同 05）。
+    InterlockedExchange(&g_b.tc.testKind, 0);
+    Sleep(50);
+    if (g_b.tc.testFile) {
+        free((void*)g_b.tc.testFile);
+        g_b.tc.testFile = nullptr;
+    }
+    g_b.tc.testFrames = 0;
+    g_b.tc.testPos = 0;
+}
+
+void ResetSession() {
+    // start 入口/停止出口的会话态复位（不动 host——由 open/close 自理）。
+    memset(&g_b.tc, 0, sizeof(g_b.tc));
+    g_b.userBypass = 0;
+    g_b.startRc = -99;
+    g_b.note[0] = '\0';
+    g_b.paramsApplied = 0;
+    g_b.paramsFailed = 0;
+    g_b.driverUtf8.clear();
+    g_b.driverRaw.clear();
+    g_b.outPair = 0;
+    g_b.inCh = g_b.outCh = g_b.inLat = g_b.outLat = 0;
+    g_b.sr = 0.0;
+    g_b.nbs = 0;
+}
+
+}  // namespace
+
+int asio_detect(char* out, int cap) {
+    if (!out || cap <= 0) return -1;
+    const auto drivers = auraasio::enumerate_drivers();
+    int n = 0;
+    // {"count":N,"drivers":[{...},...]}
+    n = _snprintf_s(out, (size_t)cap, _TRUNCATE, "{\"count\":%d,\"drivers\":[",
+                    (int)drivers.size());
+    if (n < 0) return -1;
+    for (size_t i = 0; i < drivers.size(); ++i) {
+        const auto& d = drivers[i];
+        char dll[512] = {0};
+        PathForJsonA(d.dllPath, dll, sizeof(dll));
+        char clsid[64] = {0};
+        strncpy_s(clsid, d.clsid.c_str(), sizeof(clsid) - 1);
+        const char* name = d.nameUtf8.empty() ? d.name.c_str() : d.nameUtf8.c_str();
+        // nameUtf8 为空时回退原始名（极端情况：ansi_to_utf8 失败）。
+        const int w = _snprintf_s(
+            out + n, (size_t)(cap - n), _TRUNCATE,
+            "%s{\"name\":\"%s\",\"dll\":\"%s\",\"clsid\":\"%s\"}",
+            (i ? "," : ""), name, dll, clsid);
+        if (w < 0 || w >= cap - n) return -1;
+        n += w;
+    }
+    const int w = _snprintf_s(out + n, (size_t)(cap - n), _TRUNCATE, "]}");
+    if (w < 0 || w >= cap - n) return -1;
+    n += w;
+    return n;
+}
+
+int asio_start(const char* driver_name, const char* engine_dll,
+               const char* params_json, long buf_size, long out_pair) {
+    if (InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 幂等成功
+    ResetSession();
+
+    // 1) 驱动名映射：用户传 UTF-8 显示名（detect 的 name），内部按 SDK 语义
+    //    用注册表原始名 load（Description 匹配；中文名必须走这张表）。
+    const auto drivers = auraasio::enumerate_drivers();
+    const auraasio::DriverEntry* chosen = nullptr;
+    for (const auto& d : drivers) {
+        if (driver_name && *driver_name &&
+            (d.nameUtf8 == driver_name || d.name == driver_name)) {
+            chosen = &d;
+            break;
+        }
+    }
+    if (!chosen && !drivers.empty() && (!driver_name || !*driver_name)) {
+        chosen = &drivers.front();  // 未指定：取枚举第一个（调用方应先 detect）
+    }
+    if (!chosen) {
+        snprintf(g_b.note, sizeof(g_b.note), "driver-not-found");
+        return -1;
+    }
+    g_b.driverUtf8 = chosen->nameUtf8.empty() ? chosen->name : chosen->nameUtf8;
+    g_b.driverRaw = chosen->name;
+
+    // 2) 引擎 DLL 加载 + 符号解析（必须在 host.open 之前！
+    //    2026-10-15 实测定罪：VM/FLStudio 驱动在 ASIOInit~ASIOCreateBuffers
+    //    窗口内先后启动自有线程；此窗口内的任何 LoadLibrary 都会与其争抢
+    //    loader lock——实测复现：轻则 bufferSwitch 永久静默（回调 stall），
+    //    重则驱动看门狗以 ExitProcess(0) 干净杀掉宿主（WER 无转储、无段错误，
+    //    曾长期被误判为"玄学崩"）。加载与 PE 重定位只发生在驱动线程存在之前
+    //    即无争用（预栽赃实验：引擎先于桥加载则全程正常）。
+    //    句柄创建（auradsp_create）无 LoadLibrary，可安全放在 open 之后。）
+    std::wstring used;
+    const std::string hint = (engine_dll && *engine_dll) ? engine_dll : "";
+    g_b.engMod = vmcore::TryLoadEngine(hint, used);
+    if (!used.empty()) g_b.enginePath = used;
+    if (g_b.engMod) {
+        g_b.create = (FnEngCreate)GetProcAddress(g_b.engMod, "auradsp_create");
+        g_b.process = (FnEngProcess)GetProcAddress(g_b.engMod, "auradsp_process");
+        g_b.destroy = (FnEngDestroy)GetProcAddress(g_b.engMod, "auradsp_destroy");
+        g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
+        g_b.vizRead = (FnEngVizRead)GetProcAddress(g_b.engMod, "auradsp_viz_read");
+    }
+    if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy) {
+        snprintf(g_b.note, sizeof(g_b.note), "engine-load-failed");
+        DestroyEngine();
+        g_b.startRc = -5;
+        return -5;
+    }
+
+    // 3) 打开驱动（loadAsioDriver + ASIOInit）
+    //    sysRef 传 GetConsoleWindow()：与 asio_tone 一致。FL Studio ASIO
+    //    （ilwasapi2asio，WASAPI 包装驱动）实测对 sysRef=nullptr 敏感——
+    //    会给宿主进程派发终止（2026-10-15 矩阵实验定罪；VM 驱动两种都正常）。
+    //    GUI 宿主（APP isolate）无控制台窗口时退化为 nullptr，由 P3 传入
+    //    主窗口句柄（AsioHost::open 已支持任意 sysRef）。
+    std::string why;
+    if (!g_b.host.open(chosen->name.c_str(), (void*)GetConsoleWindow(), why)) {
+        snprintf(g_b.note, sizeof(g_b.note), "open-failed: %.80s", why.c_str());
+        DestroyEngine();
+        g_b.startRc = -2;
+        return -2;
+    }
+
+    // 4) 能力查询（status 面 + 引擎创建参数）
+    auraasio::DriverCaps caps;
+    if (!g_b.host.query_caps(caps)) {
+        snprintf(g_b.note, sizeof(g_b.note), "caps-failed");
+        DestroyEngine();
+        g_b.host.close();
+        g_b.startRc = -3;
+        return -3;
+    }
+    g_b.inCh = caps.inChannels;
+    g_b.outCh = caps.outChannels;
+    g_b.inLat = caps.inLatency;
+    g_b.outLat = caps.outLatency;
+    g_b.sr = caps.sampleRate;
+    // 预计缓冲大小（与 create_stereo_io 同规则；创建后若驱动回值不同则重建引擎）
+    g_b.nbs = (buf_size > 0) ? buf_size : caps.prefBuf;
+
+    // 5) 创建引擎句柄（纯分配，无 LoadLibrary，可安全位于 open 之后）
+    g_b.engine = g_b.create((float)g_b.sr, (int)g_b.nbs);
+    if (!g_b.engine) {
+        snprintf(g_b.note, sizeof(g_b.note), "engine-create-failed");
+        DestroyEngine();
+        g_b.host.close();
+        g_b.startRc = -6;
+        return -6;
+    }
+
+    // 6) 创建输入 ch0/1 + 输出 outPair/outPair+1 缓冲
+    if (!g_b.host.create_stereo_io(buf_size, out_pair, why)) {
+        snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.80s", why.c_str());
+        DestroyEngine();
+        g_b.host.close();
+        g_b.startRc = -4;
+        return -4;
+    }
+    g_b.outPair = out_pair < 0 ? 0 : out_pair;
+    // 驱动回值缓冲大小与预估不符（granularity 取整等）：按实际值重建引擎句柄
+    if (g_b.engine && g_b.host.buffer_size() != g_b.nbs) {
+        if (g_b.destroy) g_b.destroy(g_b.engine);
+        g_b.nbs = g_b.host.buffer_size();
+        g_b.engine = g_b.create((float)g_b.sr, (int)g_b.nbs);
+        if (!g_b.engine) {
+            snprintf(g_b.note, sizeof(g_b.note), "engine-recreate-failed");
+            DestroyEngine();
+            g_b.host.close();
+            g_b.startRc = -6;
+            return -6;
+        }
+    }
+
+    // 7) 挂 sink（必须在 start 前；RT 启动后不再更改指针）
+    g_b.host.set_process_sink(&BridgeSink, &g_b);
+
+    // 8) 预下发参数 + 启动
+    ApplyParamsString(params_json);
+    if (!g_b.host.start()) {
+        snprintf(g_b.note, sizeof(g_b.note), "asio-start-failed");
+        DestroyEngine();
+        g_b.host.close();
+        g_b.startRc = -7;
+        return -7;
+    }
+    g_b.startRc = 0;
+    InterlockedExchange(&g_b.running, 1);
+    return 0;
+}
+
+int asio_stop() {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 幂等
+    InterlockedExchange(&g_b.running, 0);
+    // 停止时序（防 RT 踩已释放引擎，同 05）：stop → 等在途回调 → dispose/exit
+    g_b.host.stop();
+    FreeTestFile();
+    g_b.host.close();
+    // 显式释放驱动 COM 对象（SDK 单例 asioDrivers 仍在，下次 start 的
+    // loadDriver 会自行 removeCurrentDriver；此处主动释放避免跨会话占着驱动）。
+    auraasio::release_active_driver();
+    DestroyEngine();
+    return 0;
+}
+
+int asio_status(char* out, int cap) {
+    if (!out || cap <= 0) return -1;
+    LARGE_INTEGER qpf;
+    double cbUs = 0;
+    if (QueryPerformanceFrequency(&qpf) && qpf.QuadPart > 0)
+        cbUs = (double)g_b.host.max_cb_ticks() * 1000000.0 / (double)qpf.QuadPart;
+    char eng[512] = {0};
+    PathForJson(g_b.enginePath, eng, sizeof(eng));
+    const int n = snprintf(
+        out, (size_t)cap,
+        "{\"running\":%s,\"switches\":%llu,\"sr\":%.1f,\"nbs\":%ld,"
+        "\"driver\":\"%s\",\"outPair\":%ld,"
+        "\"inCh\":%ld,\"outCh\":%ld,\"inLatency\":%ld,\"outLatency\":%ld,"
+        "\"peakIn\":%.6f,\"peakOut\":%.6f,\"maxCbUs\":%.1f,"
+        "\"startRc\":%d,\"note\":\"%s\",\"bypass\":%ld,\"testKind\":%ld,"
+        "\"paramsApplied\":%d,\"paramsFailed\":%d,"
+        "\"engine\":\"%s\",\"engineOk\":%s}",
+        InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
+        (unsigned long long)g_b.host.switch_count(), g_b.sr, g_b.nbs,
+        g_b.driverUtf8.c_str(), g_b.outPair,
+        g_b.inCh, g_b.outCh, g_b.inLat, g_b.outLat,
+        (double)g_b.host.peak_in(), (double)g_b.host.peak_out(), cbUs,
+        g_b.startRc, g_b.note,
+        (long)InterlockedCompareExchange(&g_b.userBypass, 0, 0),
+        (long)InterlockedCompareExchange(&g_b.tc.testKind, 0, 0),
+        g_b.paramsApplied, g_b.paramsFailed, eng,
+        (g_b.engine && g_b.process) ? "true" : "false");
+    return (n >= 0 && n < cap) ? n : -1;
+}
+
+int asio_set_param(const char* id, int isFloat, const void* v4) {
+    (void)isFloat;  // 引擎按 id 自身语义取 4 字节；isFloat 仅调用方提示用
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !v4 || !g_b.setParam || !g_b.engine) return -2;
+    return (g_b.setParam(g_b.engine, id, v4, 4) == 0) ? 0 : -3;
+}
+
+int asio_viz_read(void* out408, int count) {
+    if (!out408 || count <= 0) return -1;
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.vizRead || !g_b.engine) return 0;
+    return (int)g_b.vizRead(g_b.engine, out408, (uint32_t)count);
+}
+
+int asio_bypass(int on) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    InterlockedExchange(&g_b.userBypass, on ? 1 : 0);
+    return 0;
+}
+
+int asio_test_start(int kind, const float* pcm, int frames, int ch, int rate) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (kind < 1 || kind > 3) return -2;
+    FreeTestFile();
+    if (kind == 3) {
+        // 文件 PCM 拷贝（交织立体声 float32；单声道铺双声道；同 05 语义）。
+        if (!pcm || frames <= 0 || rate <= 0) return -3;
+        const int srcCh = (ch == 1) ? 1 : 2;
+        float* buf = (float*)malloc(sizeof(float) * (size_t)frames * 2);
+        if (!buf) return -4;
+        for (int i = 0; i < frames; ++i) {
+            if (srcCh == 1) {
+                buf[i * 2] = buf[i * 2 + 1] = pcm[i];
+            } else {
+                buf[i * 2] = pcm[i * 2];
+                buf[i * 2 + 1] = pcm[i * 2 + 1];
+            }
+        }
+        g_b.tc.testFile = buf;
+        g_b.tc.testFrames = (uint64_t)frames;
+        g_b.tc.testRate = rate;
+        g_b.tc.testPos = 0;
+    }
+    g_b.tc.testPhase = 0;
+    g_b.tc.testRng = 0x12345678u;
+    for (int i = 0; i < 7; ++i) g_b.tc.testPink[i] = 0;
+    g_b.tc.sr = (long)g_b.sr;  // FillTestSignal 的音高/重采样基准取驱动采样率
+    InterlockedExchange(&g_b.tc.testKind, (LONG)kind);
+    return 0;
+}
+
+int asio_test_stop() {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    FreeTestFile();
+    return 0;
+}

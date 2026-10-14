@@ -43,6 +43,19 @@ foreach(tgt asio_probe asio_tone)
     set_property(TARGET ${tgt} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endforeach()
 
+# 04 ASIO 常驻桥（Phase 2；app isolate 经 FFI 调用，镜像 05 VmBridge 契约）。
+# 引擎 DLL 动态加载逻辑与测试注入复用 02 的 VmPumpCore.h（与 05 同源，
+# 不出现第二套搜索路径/第二套测试信号数学）；ASIO 传输面走 auraasio_host。
+add_library(auraasio_bridge SHARED
+    "${ASIODIR}/AsioBridge.cpp"
+    "${ASIODIR}/AsioBridge.def"
+)
+target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}")
+target_link_libraries(auraasio_bridge PRIVATE auraasio_host ole32 version)
+target_compile_options(auraasio_bridge PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auraasio_bridge PROPERTY CXX_STANDARD 20)
+set_property(TARGET auraasio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_library(auravm STATIC
     "${VMCLIENT}/VmRemoteLoader.cpp"
     "${VMCLIENT}/VmAudioCallback.cpp"
