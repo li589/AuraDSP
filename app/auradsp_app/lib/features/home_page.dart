@@ -45,14 +45,15 @@ class _Hero extends StatelessWidget {
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) {
-        final (text, color) = switch (model.engineState) {
-          2 => (l.stateError, p.error),
-          0 => (l.stateBypass, p.textDim),
-          _ => (
-              model.playing ? l.stateProcessing : l.stateBypass,
-              model.playing ? p.accent : p.textDim
-            ),
+        // 与 StateBadge 同口径，见 AppModel.engineDisplay。
+        final disp = model.engineDisplay;
+        final (text, color) = switch (disp) {
+          EngineDisplay.error => (l.stateError, p.error),
+          EngineDisplay.bypass => (l.stateBypass, p.textDim),
+          EngineDisplay.idle => (l.stateIdle, p.textDim),
+          EngineDisplay.processing => (l.stateProcessing, p.accent),
         };
+        final live = disp == EngineDisplay.processing;
         return SectionCard(
           hero: true,
           padding: const EdgeInsets.all(AuraSpace.xl),
@@ -70,7 +71,7 @@ class _Hero extends StatelessWidget {
                         const SizedBox(width: AuraSpace.sm),
                         PulseDot(
                           color: color,
-                          active: model.engineState == 1 && model.playing,
+                          active: live,
                           size: 6,
                         ),
                       ],
@@ -85,7 +86,9 @@ class _Hero extends StatelessWidget {
                     ),
                     const SizedBox(height: AuraSpace.sm + 2),
                     Text(
-                      model.playing ? l.heroHintProcessing : l.heroHintIdle,
+                      model.liveSpectrum
+                          ? l.heroHintProcessing
+                          : l.heroHintIdle,
                       style: captionOf(p),
                     ),
                   ],
@@ -206,7 +209,7 @@ class _SpectrumCard extends StatelessWidget {
             child: ListenableBuilder(
               listenable: model,
               builder: (_, _) {
-                if (!model.playing) {
+                if (!model.liveSpectrum) {
                   return _EmptySpectrum(text: l.noAudio);
                 }
                 // 频谱主体 + 右侧 dB 纵轴（与可视化页同一套坐标语义）
@@ -279,12 +282,19 @@ class _StateHint extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     return ListenableBuilder(
       listenable: model,
       builder: (_, _) => Text(
-        model.playing ? '● live' : 'idle',
+        model.engineDisplay == EngineDisplay.processing
+            ? '● live'
+            : model.engineDisplay == EngineDisplay.bypass
+                ? l.stateBypass
+                : l.stateIdle,
         style: monoOf(p, size: 10,
-            color: model.playing ? p.success : p.textDim.withValues(alpha: 0.7)),
+            color: model.engineDisplay == EngineDisplay.processing
+                ? p.success
+                : p.textDim.withValues(alpha: 0.7)),
       ),
     );
   }

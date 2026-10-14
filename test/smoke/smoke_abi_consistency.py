@@ -23,7 +23,10 @@ def main() -> int:
     if not os.path.exists(SCRIPT):
         print(f"[FAIL] abi_consistency.py missing: {SCRIPT}")
         return 1
-    r = subprocess.run([sys.executable, SCRIPT], capture_output=True, text=True)
+    # 子进程输出为 UTF-8（含中文 PASS 行）；显式指定编码，不跟随系统 GBK，
+    # 否则调用方带 PYTHONIOENCODING=utf-8 时必现 UnicodeDecodeError。
+    r = subprocess.run([sys.executable, SCRIPT], capture_output=True,
+                       text=True, encoding="utf-8", errors="replace")
     sys.stdout.write(r.stdout)
     if r.stderr:
         sys.stderr.write(r.stderr)

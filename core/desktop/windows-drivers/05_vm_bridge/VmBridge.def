@@ -1,0 +1,11 @@
+LIBRARY auravm_bridge
+EXPORTS
+    vb_detect             PRIVATE
+    vb_start              PRIVATE
+    vb_stop               PRIVATE
+    vb_status             PRIVATE
+    vb_set_param          PRIVATE
+    vb_viz_read           PRIVATE
+    vb_test_start         PRIVATE
+    vb_test_stop          PRIVATE
+    vb_bypass             PRIVATE

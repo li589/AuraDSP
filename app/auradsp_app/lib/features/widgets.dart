@@ -216,20 +216,30 @@ class SectionTitle extends StatelessWidget {
 
 class StateBadge extends StatelessWidget {
   final int engineState;
-  final bool playing;
-  const StateBadge({super.key, required this.engineState, required this.playing});
+  final bool bypass;
+  final bool live;
+  const StateBadge(
+      {super.key,
+      required this.engineState,
+      required this.bypass,
+      required this.live});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
+    // 与 AppModel.engineDisplay 同口径（ primitives 版本，避免 import cycle）：
+    // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
     final (text, color) = switch (engineState) {
       2 => (l.stateError, p.error),
-      0 => (l.stateBypass, p.textDim),
-      _ => playing
+      _ when bypass => (l.stateBypass, p.textDim),
+      0 => (l.stateIdle, p.textDim),
+      _ => live
           ? (l.stateProcessing, p.success)
-          : (l.stateBypass, p.textDim),
+          : (l.stateIdle, p.textDim),
     };
+    final active =
+        engineState == 1 && live && !bypass;
     return Container(
       padding: const EdgeInsets.symmetric(
           horizontal: AuraSpace.md, vertical: AuraSpace.sm - 2),
@@ -239,7 +249,7 @@ class StateBadge extends StatelessWidget {
         border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
       ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        PulseDot(color: color, active: engineState == 1 && playing),
+        PulseDot(color: color, active: active),
         const SizedBox(width: AuraSpace.sm - 2),
         Text(text,
             style: TextStyle(

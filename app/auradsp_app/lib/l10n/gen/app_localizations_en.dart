@@ -34,6 +34,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stateError => 'Error';
 
   @override
+  String get stateIdle => 'Idle';
+
+  @override
   String get latencyLabel => 'Latency';
 
   @override

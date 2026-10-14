@@ -148,6 +148,12 @@ abstract class AppLocalizations {
   /// **'失效'**
   String get stateError;
 
+  /// No description provided for @stateIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'空闲'**
+  String get stateIdle;
+
   /// No description provided for @latencyLabel.
   ///
   /// In zh, this message translates to:

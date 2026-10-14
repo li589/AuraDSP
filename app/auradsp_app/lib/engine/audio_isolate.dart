@@ -17,6 +17,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart';
+import 'audio_vbridge.dart';
 import 'debug_log.dart';
 
 
@@ -81,6 +82,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int? lastSentState;
   double? lastSentLatency;
 
+  // VB-Callback 模式面（05 桥）：与 WASAPI 路径互斥，一次只跑一边。
+  bool vbActive = false;
+  AuraVmBridge? vb;
+  // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
+  final Map<String, ({bool isFloat, double value})> paramMirror = {};
+  int vbStatusTick = 0;
+  bool vbVizNullLogged = false;
+  bool vbNoCbLogged = false;
+  bool vbVizOkLogged = false;
+  int vbStatusAt = 0;
+
   // 欠载（avail<=0）或无音源时引擎不再产出 viz 帧，UI 会把最后一帧电平永久冻住。
   // 持续空闲后补发一帧全零，使电平与频谱回落到 0。
   //
@@ -109,6 +121,70 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     });
   }
 
+  /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
+
+  void startVbBridge() {
+    if (vbActive) return;
+    dbgLog('vbmode: start requested');
+    try {
+      vb ??= AuraVmBridge.load();
+    } catch (e) {
+      send(
+          {'evt': 'vbstatus', 'running': false, 'note': 'bridge-missing: $e'});
+      return;
+    }
+    final rc = vb!.start(AuraDspLib.loadedPath ?? '', '');
+    dbgLog('vbmode: start rc=$rc');
+    if (rc != 0) {
+      final st = vb!.status();
+      send({
+        'evt': 'vbstatus',
+        'running': false,
+        'note': (st?['note'] as String?) ?? 'start-rc=$rc'
+      });
+      return;
+    }
+    // 全量回放参数镜像（setParamStr 如 liveprog.code 暂不同步：桥 handle 用默认值）。
+    var replayed = 0;
+    for (final e in paramMirror.entries) {
+      vb!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
+      replayed++;
+    }
+    dbgLog('vbmode: replayed $replayed params');
+    // 旁路态同步（用户此前可能已开旁路；桥默认关）。
+    final bypassRc = vb!.setBypass(bypass);
+    dbgLog('vbmode: bypass sync isolate=$bypass rc=$bypassRc');
+    try {
+      wasapi?.stop();
+    } catch (_) {}
+    source = null;
+    vbActive = true;
+    vbVizNullLogged = false;
+    vbNoCbLogged = false;
+    vbVizOkLogged = false;
+    vbStatusAt = DateTime.now().millisecondsSinceEpoch;
+    final st = vb!.status();
+    dbgLog('vbmode: started handles=${st?['handles']} groups=${st?['groups']} '
+        'frames=${st?['frames']} peakIn=${st?['peakIn']} note=${st?['note']}');
+    send({'evt': 'vbstatus', ...?st, 'running': true});
+  }
+
+  void stopVbBridge() {
+    if (!vbActive) return;
+    dbgLog('vbmode: stop requested');
+    try {
+      vb?.testStop();
+    } catch (_) {}
+    try {
+      vb?.stop();
+    } catch (_) {}
+    vbActive = false;
+    try {
+      wasapi?.start();
+    } catch (_) {}
+    send({'evt': 'vbstatus', 'running': false});
+  }
+
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
    * 无门控的同步落盘会在音频泵线程上产生上百次/秒 flushSync，
    * 直接抬升 WASAPI 抖动、诱发 underrun。 */
@@ -128,7 +204,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           final t0 = DateTime.now();
           final rc = AuraDspLib.setValue(lib!, handle!, m['id'] as String,
               isFloat: m['isFloat'] as bool, value: (m['value'] as num).toDouble());
-          final tookMs = DateTime.now().difference(t0).inMilliseconds;
+          // 参数镜像 + VB 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
+          paramMirror[m['id'] as String] = (
+            isFloat: m['isFloat'] as bool,
+            value: (m['value'] as num).toDouble()
+          );
+                    if (vbActive && vb != null) {
+            final brc = vb!.setParam(m['id'] as String,
+                isFloat: m['isFloat'] as bool,
+                value: (m['value'] as num).toDouble());
+            // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
+            if (brc == 0) dbgLog('vbmode: setParam ${m['id']} applied 0');
+          }          final tookMs = DateTime.now().difference(t0).inMilliseconds;
           // 关键证据：引擎应用耗时。旧实现全量重建混响/EQ 时这里是几十~几百 ms。
           logSetParam.admit('${m['id']}=${m['value']} rc=$rc took=${tookMs}ms');
           String? err;
@@ -390,6 +477,43 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'source':
           final kind = m['kind'] as String;
+          // VB 模式：测试源走桥注入（自动静音主通道 VB 输入），isolate 本地 source 保持空。
+          if (vbActive && vb != null && kind != 'stop') {
+            final tk = kind == 'tone'
+                ? 1
+                : kind == 'pink'
+                    ? 2
+                    : kind == 'file'
+                        ? 3
+                        : 0;
+            if (tk == 3) {
+              final fpath = m['path'] as String;
+              final lb = lib;
+              final decoded = fpath.toLowerCase().endsWith('.mp3')
+                  ? (lb == null ? null : decodeMp3File(lb, fpath))
+                  : decodeWavFile(fpath);
+              if (decoded == null) {
+                send({'evt': 'error', 'msg': 'VB模式文件解析失败'});
+              } else {
+                final n = decoded.data.length ~/ 2;
+                final ptr = malloc<Float>(decoded.data.length);
+                try {
+                  ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
+                  vb!.testStart(3,
+                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
+                } finally {
+                  malloc.free(ptr);
+                }
+              }
+            } else if (tk != 0) {
+              vb!.testStart(tk);
+            }
+            send({'evt': 'playing', 'playing': true});
+            break;
+          }
+          if (vbActive && vb != null && kind == 'stop') {
+            vb!.testStop();
+          }
           switch (kind) {
             case 'stop':
               source = null;
@@ -425,8 +549,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           send({'evt': 'playing', 'playing': source != null});
           break;
+        case 'vbmode':
+          if (m['on'] as bool) {
+            startVbBridge();
+          } else {
+            stopVbBridge();
+          }
+          break;
         case 'bypass':
           bypass = m['value'] as bool;
+          if (vbActive && vb != null) {
+            vb!.setBypass(bypass);
+          }
           break;
         case 'pluginScan':
           {
@@ -766,6 +900,45 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     while (running) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
       pumpRounds++;
+      // VB 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走桥。
+      if (vbActive && vb != null) {
+        try {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+            lastViz = now;
+            final v = vb!.vizRead();
+            if (v != null) {
+              v['backend'] = 'vb';
+              send({'evt': 'viz', ...v});
+              if (!vbVizOkLogged) {
+                vbVizOkLogged = true;
+                dbgLog('vbmode: viz flowing l=${v['l']} r=${v['r']}');
+              }
+            } else if (!vbVizNullLogged) {
+              // 首个空 viz 记一笔（桥 handle 未就绪或对端静默的早期信号）。
+              vbVizNullLogged = true;
+              dbgLog('vbmode: first null viz');
+            }
+            // 启动 5s 后仍无回调帧：路由/引擎二选一，看同周期 status 的 frames/handles。
+            if (!vbNoCbLogged &&
+                now - vbStatusAt > 5000) {
+              vbNoCbLogged = true;
+              final st0 = vb!.status();
+              dbgLog('vbmode: t+5s handles=${st0?['handles']} '
+                  'frames=${st0?['frames']} peakIn=${st0?['peakIn']} '
+                  'vizGrp=${st0?['vizGrp']} '
+                  'testKind=${st0?['testKind']} bypass=${st0?['bypass']} '
+                  'note=${st0?['note']}');
+            }
+          }
+          vbStatusTick++;
+          if (vbStatusTick % 200 == 0) {
+            final st = vb!.status();
+            if (st != null) send({'evt': 'vbstatus', ...st});
+          }
+        } catch (_) {}
+        continue;
+      }
       try {
         final w = wasapi!;
         final padding = w.getCurrentPaddingNow();
@@ -855,6 +1028,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     // 收尾
     try {
+      if (vbActive) {
+        try {
+          vb?.testStop();
+        } catch (_) {}
+        try {
+          vb?.stop();
+        } catch (_) {}
+        vbActive = false;
+      }
       wasapi?.stop();
       if (handle != null) lib?.destroy(handle);
       malloc.free(srcPtr);

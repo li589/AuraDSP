@@ -114,4 +114,36 @@ for p in paths:
 
 print("-" * 100)
 print("全部为新版" if allgood else "存在旧版副本")
+
+# VB 桥分发（05）：真相源 → 同 2 处运行副本；仅校验加载+导出存在，
+# 功能断言归 smoke_vm_bridge.py（需 Voicemeeter 在线）。
+BRIDGE_TRUTH = os.path.join(ROOT, "core", "desktop", "windows-drivers", "out",
+                            "Release", "auravm_bridge.dll")
+BRIDGE_RUNTIME = [
+    os.path.join(ROOT, "app", "auradsp_app", "windows", "runner",
+                 "auravm_bridge.dll"),
+    os.path.join(ROOT, "test", "auravm_bridge.dll"),
+]
+print("== VB 桥分发 ==")
+if os.path.exists(BRIDGE_TRUTH):
+    for dst in BRIDGE_RUNTIME:
+        try:
+            shutil.copyfile(BRIDGE_TRUTH, dst)
+            print(f"  OK {os.path.relpath(dst, ROOT)}")
+        except OSError as e:
+            print(f"  LOCKED（App 可能在跑，先退出再重跑） {os.path.relpath(dst, ROOT)}: {e}")
+            sys.exit(2)
+    try:
+        b = ctypes.CDLL(BRIDGE_TRUTH)
+        for sym in ("vb_detect", "vb_start", "vb_stop", "vb_status",
+                    "vb_set_param", "vb_viz_read", "vb_test_start",
+                    "vb_test_stop", "vb_bypass"):
+            getattr(b, sym)
+        print("  导出表 9/9 OK")
+    except OSError as e:
+        print(f"  桥加载失败: {e}")
+        sys.exit(1)
+else:
+    print("  跳过（真相源未构建）")
+
 sys.exit(0 if allgood else 1)

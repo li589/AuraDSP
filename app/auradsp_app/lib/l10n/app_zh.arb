@@ -8,6 +8,7 @@
   "stateProcessing": "处理中",
   "stateBypass": "旁路",
   "stateError": "失效",
+  "stateIdle": "空闲",
   "latencyLabel": "延迟",
   "latencyMs": "延迟 {n}ms",
   "latencyTip": "算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms",

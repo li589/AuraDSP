@@ -686,6 +686,9 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
 
   static AuraDspLib? _cached;
 
+  /// 最近一次 load 成功的路径（供 VB 桥透传引擎真相源，免二次搜索）。
+  static String? loadedPath;
+
   /// 尝试加载引擎 DLL；找不到时抛 [StateError]（路径清单供 UI 提示）。
   ///
   /// 候选路径顺序：exe 同级 → `engine/` 子目录 → 环境变量
@@ -705,6 +708,7 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     for (final path in candidates) {
       try {
         _cached = AuraDspLib._(DynamicLibrary.open(path));
+        loadedPath = path;
         return _cached!;
       } catch (e) {
         lastErr = e;

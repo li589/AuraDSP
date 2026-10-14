@@ -43,6 +43,9 @@ class SavedPluginSlot {
 
 enum EngineConn { connecting, ready, fatal }
 
+/// 右上徽标 / 主页 hero 的四态显示口径（见 [AppModel.engineDisplay]）。
+enum EngineDisplay { error, bypass, idle, processing }
+
 class EngineInfo {
   final int abi;
   final String version;
@@ -207,6 +210,19 @@ class AppModel extends ChangeNotifier {
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
   bool playing = false;
+  // 频谱门：进程内 playing 或 VB 桥活着都算 live。VB 模式不经过 source 选择，
+  // playing 恒 false，若只看 playing，主页/可视化页在 VB 下永远空（电平/EQ
+  // 页不看此门故正常——正是上报的症状）。
+  bool get liveSpectrum => playing || vbActive;
+  // 四态显示口径（右上徽标/主页 hero 共用）：engineState==0 混了"用户旁路"与
+  // "无源空闲"，以前一刀切标"旁路"，导致开关 OFF 却处处显示旁路。拆开：
+  // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
+  EngineDisplay get engineDisplay {
+    if (engineState == 2) return EngineDisplay.error;
+    if (bypass) return EngineDisplay.bypass;
+    if (engineState == 0) return EngineDisplay.idle;
+    return liveSpectrum ? EngineDisplay.processing : EngineDisplay.idle;
+  }
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
   String sourceExt = ''; // 文件源扩展名（小写无点，如 'mp3'/'wav'；非文件源为空）
@@ -224,6 +240,9 @@ class AppModel extends ChangeNotifier {
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
   // 引擎接线待后续版本，当前仅持久化 + UI 展示。
   String audioMode = 'auto';
+  // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
+  bool vbActive = false;
+  Map<String, dynamic> vbInfo = {};
 
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
@@ -724,6 +743,10 @@ class AppModel extends ChangeNotifier {
         } else {
           _toIso?.send({'cmd': 'getParams'});
         }
+        // 持久化的是 VB 模式：就绪后自动进桥（与用户上次状态一致）。
+        if (audioMode == 'vbcallback') {
+          _toIso?.send({'cmd': 'vbmode', 'on': true});
+        }
         break;
       case 'params':
         bassOn = (raw['bassEnable'] as int) != 0;
@@ -971,6 +994,21 @@ class AppModel extends ChangeNotifier {
       case 'error':
         lastEngineError = raw['msg'] as String;
         eventSeq.value = ++_guardSeq;
+        notifyListeners();
+        break;
+      case 'vbstatus':
+        final was = vbActive;
+        vbActive = (raw['running'] as bool?) ?? false;
+        vbInfo = Map<String, dynamic>.from(raw);
+        if (vbActive && !was) {
+          // VB 上升沿：清掉上一会话的残留帧，基线归零，活数据随后流入。
+          spectrum.value = List<double>.filled(32, 0.0);
+          eqInSpectrum.value = List<double>.filled(32, 0.0);
+          levelL.value = -90.0;
+          levelR.value = -90.0;
+          stageLevelsL.value = List<double>.filled(5, -90.0);
+          stageLevelsR.value = List<double>.filled(5, -90.0);
+        }
         notifyListeners();
         break;
       case 'pluginScanProgress':
@@ -2598,13 +2636,23 @@ void setSampleRate(int rate) {
 }
 
 /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
-/// 当前仅持久化选择（引擎接线待后续版本，重启生效）。
+/// vbcallback 切入/切出时联动 isolate 启停 VB 桥（WASAPI 路径随之暂停/恢复）；
+/// 其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
 void setAudioMode(String id) {
   final valid = AudioModes.normalize(id);
   if (valid == audioMode && config.audioMode == valid) return;
+  final wasVb = audioMode == 'vbcallback';
+  final isVb = valid == 'vbcallback';
   audioMode = valid;
   config.audioMode = valid;
   ConfigManager.save(config);
+  if (wasVb != isVb) {
+    _toIso?.send({'cmd': 'vbmode', 'on': isVb});
+    if (!isVb) {
+      vbActive = false;
+      vbInfo = {};
+    }
+  }
   notifyListeners();
 }
 

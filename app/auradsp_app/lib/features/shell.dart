@@ -526,41 +526,28 @@ class _TopBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
     final l = l10nOf(context);
     return SizedBox(
       height: AuraSize.topBarH,
       child: Center(
         heightFactor: 1.0,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: AuraSpace.contentMaxW),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AuraSpace.pageX),
-            child: Row(
-              children: [
-                // 引擎形态摘要（安静的一行等宽小字）
-                ListenableBuilder(
-                  listenable: model,
-                  builder: (_, _) {
-                    final info = model.info;
-                    final text = info == null
-                        ? l.engineForm
-                        : '${l.engineForm} · ${info.deviceRate}Hz · ${info.deviceCh}ch';
-                    return Expanded(
-                      child: Text(text,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: monoOf(p, size: 11, color: p.textDim)),
-                    );
-                  },
-                ),
-                const SizedBox(width: AuraSpace.lg),
-                ListenableBuilder(
+        child: Padding(
+          // 顶栏贴边：不用内容区的 pageX/contentMaxW（超宽屏下两边会空出一大截），
+          // 组件右对齐，左右只留 rowGap。
+          padding:
+              const EdgeInsets.symmetric(horizontal: AuraSpace.rowGap),
+          child: Row(
+            children: [
+              const Spacer(),
+              // 徽标 / 延迟 / 主题 / 设置（右对齐）。
+              ListenableBuilder(
                   listenable: model,
                   builder: (_, _) => Row(
                     children: [
                       StateBadge(
-                          engineState: model.engineState, playing: model.playing),
+                          engineState: model.engineState,
+                          bypass: model.bypass,
+                          live: model.liveSpectrum),
                       const SizedBox(width: AuraSpace.sm),
                       LatencyBadge(ms: model.latencyMs),
                       const SizedBox(width: AuraSpace.sm),
@@ -582,8 +569,7 @@ class _TopBar extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
+      );
   }
 }
 
