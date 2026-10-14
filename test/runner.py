@@ -55,6 +55,9 @@ def run_smoke_tests():
     "smoke_apo_inspect.py",
     "smoke_apo_register.py",
     "smoke_apo_selftest.py",
+    # ASIO 宿主（Phase 1）：枚举对账注册表 + 双驱动发声；无 ASIO 驱动时自动 SKIP
+    "smoke_asio_probe.py",
+    "smoke_asio_tone.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
