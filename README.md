@@ -45,7 +45,7 @@ AuraDSP/
 │   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：02 VM 泵 / 03 自研 APO / 05 VB 桥
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
 ├── app/auradsp_app/     # Flutter 3.47.7（62 个 dart，20 张效果卡；音频后端四模式已持久化）
-├── test/smoke/          # 46 个 smoke_*.py + probe/test/bench 7 个；runner.py 登记 51 项（套件实测 53 项全绿）
+├── test/smoke/          # 48 个 smoke_*.py + probe/test/bench 9 个；runner.py 登记 53 项（套件实测 53 项全绿）
 ├── tools/               # bin/ 6 · probe/ 18 · resource_pipeline/ 2 · calibration/ 1 · archive/
 ├── source/              # 第三方参考仓库只读快照（登记 13 项，仅 ORIGIN.md 入库）
 ├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
