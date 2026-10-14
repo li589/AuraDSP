@@ -42,6 +42,36 @@ void check(const char* name, bool ok, const char* detail = "") {
     if (!ok) ++g_fail;
 }
 
+bool HasGlobalPrivilege() {
+    HANDLE tok = nullptr;
+    if (!OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &tok)) return false;
+    struct {
+        DWORD cnt;
+        LUID_AND_ATTRIBUTES attrs[1];
+    } priv{};
+    DWORD size = 0;
+    LUID luid;
+    if (!LookupPrivilegeValueW(nullptr, L"SeCreateGlobalPrivilege", &luid)) {
+        CloseHandle(tok);
+        return false;
+    }
+    if (!GetTokenInformation(tok, TokenPrivileges, &priv, sizeof(priv), &size)) {
+        CloseHandle(tok);
+        return false;
+    }
+    bool found = false;
+    for (DWORD i = 0; i < priv.cnt; ++i) {
+        if (priv.attrs[i].Luid.HighPart == luid.HighPart &&
+            priv.attrs[i].Luid.LowPart == luid.LowPart &&
+            (priv.attrs[i].Attributes & SE_PRIVILEGE_ENABLED)) {
+            found = true;
+            break;
+        }
+    }
+    CloseHandle(tok);
+    return found;
+}
+
 std::string HRes(HRESULT hr) {
     char b[32];
     snprintf(b, sizeof(b), "hr=0x%08lX", (unsigned long)hr);
@@ -51,8 +81,11 @@ std::string HRes(HRESULT hr) {
 }  // namespace
 
 int main() {
-    // 心跳走 Local\（任意权限可跑；生产走 Global\，见 AuraApo.cpp OpenHeartbeat）。
-    SetEnvironmentVariableA("AURAAPO_HEARTBEAT_LOCAL", "1");
+    // 心跳命名空间自适应：优先 Global\（=生产路径，需 SeCreateGlobalPrivilege，
+    // 管理员/audiodg 才有）；无特权时经 AURAAPO_HEARTBEAT_LOCAL=1 回落 Local\
+    //（普通 shell/CI 仍可验证心跳逻辑）。见 AuraApo.cpp OpenHeartbeat。
+    if (!HasGlobalPrivilege())
+        SetEnvironmentVariableA("AURAAPO_HEARTBEAT_LOCAL", "1");
     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
         printf("{\"selftest\":false,\"reason\":\"coinitialize\"}\n");
         return 0;

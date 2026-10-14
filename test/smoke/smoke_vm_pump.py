@@ -89,6 +89,23 @@ if d2 is not None:
         else:
             print('NOTE silent bus (peak=%.6f): acoustic unproven, plumbing proven' % peak)
 
+# run3：CHANGE 重建路径（--fake-change 每 1.5s 一次，6s → 3 次；重建不崩、帧继续走）。
+r3 = subprocess.run([EXE, '6', '', '--fake-change', '1500'],
+                    capture_output=True, text=True, timeout=120)
+check('change run exit 0', r3.returncode == 0, 'rc=%d' % r3.returncode)
+try:
+    d3 = json.loads(r3.stdout.strip().splitlines()[-1])
+except (ValueError, IndexError) as ex:
+    check('change run valid JSON', False, str(ex)[:100])
+    d3 = None
+if d3 is not None:
+    if not d3.get('ran'):
+        print('NOTE change run skipped: %s' % d3.get('note', '?'))
+    else:
+        check('changes >=3', d3.get('changes', 0) >= 3, 'changes=%s' % d3.get('changes'))
+        check('change run frames real-time', d3.get('frames', 0) >= 1 * max(d3.get('sampleRate', 1), 1),
+              'frames=%s' % d3.get('frames'))
+
 print()
 if FAIL:
     print('VMPUMP FAILURES:', FAIL)

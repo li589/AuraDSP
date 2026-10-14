@@ -80,7 +80,8 @@ struct PumpCtx {
     bool idle[kMaxGroups] = {};
     long sr = 0;
     long nbs = 0;
-    long changes = 0;             // CHANGE 到达计数（v1 只观测，重启面后续 slice）
+    long changes = 0;             // CHANGE 到达计数（已落地重建，见主循环）
+    volatile LONG pendingChange = 0;  // RT 置位，主线程轮询消费（无锁单写单读）
     int groups = 0;               // 本轮实际组数
     double maxDiff = 0.0;
     double peakIn = 0.0;  // 主对输入峰值（判定“有没有声”，smoke 条件断言用）
@@ -112,7 +113,8 @@ long __stdcall OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) 
     }
     if (cmd == kCbEnding) return 0;
     if (cmd == kCbChange) {
-        ++c->changes;  // v1 只计数不断链（重建面后续 slice；EAPO 用 PostThreadMessage 重启）
+        // 采样率/缓冲变化：置位让主线程停泵重建引擎（勿在 RT 内 create/destroy）。
+        InterlockedExchange(&c->pendingChange, 1);
         return 0;
     }
     if (cmd != kCbBufferOut) return 0;
@@ -323,51 +325,67 @@ int AuraVmPumpRun(AuraVmPump& p) {
         WideCharToMultiByte(CP_UTF8, 0, used.c_str(), -1, narrow, (int)sizeof(narrow), nullptr, nullptr);
         p.enginePath = narrow;
     }
+    FnEngCreate create = nullptr;
+    FnEngProcess process = nullptr;
+    FnEngDestroy destroy = nullptr;
+    FnEngSetParam setParam = nullptr;
+    // 引擎重建（初始建 + CHANGE 重建共用；仅主线程调用，RT 内禁分配）。
+    // sr 用当前 ctx.sr（CHANGE 时已更新）；create 与 sr 关系不大（vendor 内部
+    // 按块自适应），但重建时用新 sr 更诚实。
+    auto rebuildEngines = [&](int groups) {
+        for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+            if (ctx.eng[g] && ctx.destroy) ctx.destroy(ctx.eng[g]);
+            ctx.eng[g] = nullptr;
+        }
+        ctx.nEng = 0;
+        const float sr = ctx.sr > 0 ? (float)ctx.sr : 48000.0f;
+        for (int g = 0; g < groups && create; ++g) {
+            ctx.eng[g] = create(sr, 2048);
+            if (ctx.eng[g]) ++ctx.nEng;
+        }
+        // 参数下发面：CLI --seti/--setf 全 handle 应用（失败只计数不中断）。
+        if (setParam) {
+            for (const auto& pm : p.params) {
+                bool okAll = ctx.nEng > 0;
+                for (int g = 0; g < ctx.nEng; ++g) {
+                    int prc;
+                    if (pm.isFloat)
+                        prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.f, 4);
+                    else
+                        prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.i, 4);
+                    if (prc != 0) {
+                        okAll = false;
+                        break;
+                    }
+                }
+                if (okAll)
+                    ++p.paramsApplied;
+                else
+                    ++p.paramsFailed;
+            }
+        } else if (!p.params.empty()) {
+            p.paramsFailed = (int)p.params.size();
+        }
+        if (ctx.nEng == 0 || !ctx.scratchIn || !ctx.scratchOut) {
+            for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+                if (ctx.eng[g] && ctx.destroy) ctx.destroy(ctx.eng[g]);
+                ctx.eng[g] = nullptr;
+            }
+            ctx.nEng = 0;
+        }
+    };
     if (eng) {
-        auto create = (FnEngCreate)GetProcAddress(eng, "auradsp_create");
-        auto process = (FnEngProcess)GetProcAddress(eng, "auradsp_process");
-        auto destroy = (FnEngDestroy)GetProcAddress(eng, "auradsp_destroy");
-        auto setParam = (FnEngSetParam)GetProcAddress(eng, "auradsp_set_param");
+        create = (FnEngCreate)GetProcAddress(eng, "auradsp_create");
+        process = (FnEngProcess)GetProcAddress(eng, "auradsp_process");
+        destroy = (FnEngDestroy)GetProcAddress(eng, "auradsp_destroy");
+        setParam = (FnEngSetParam)GetProcAddress(eng, "auradsp_set_param");
         if (create && process && destroy) {
-            // sr 未知（STARTING 才到）：先按 48k 建（与 sr 无关的纯内存 sizing；
-            // 真实 sr 下 vendor 内部按块自适应，见 processFloatMultiplexd 注释）。
             ctx.process = process;
             ctx.destroy = destroy;
             ctx.scratchIn = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
             ctx.scratchOut = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
-            for (int g = 0; g < wantGroups && ctx.scratchIn && ctx.scratchOut; ++g) {
-                ctx.eng[g] = create(48000.0f, 2048);
-                if (ctx.eng[g]) ++ctx.nEng;
-            }
-            // 参数下发面：CLI --seti/--setf 全 handle 应用（Start 前，主线程）。
-            // 失败只计数不中断（test 工具行为；回报给 smoke 判定）。
-            if (setParam) {
-                for (const auto& pm : p.params) {
-                    bool okAll = ctx.nEng > 0;
-                    for (int g = 0; g < ctx.nEng; ++g) {
-                        int prc;
-                        if (pm.isFloat)
-                            prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.f, 4);
-                        else
-                            prc = setParam(ctx.eng[g], pm.id.c_str(), &pm.i, 4);
-                        if (prc != 0) {
-                            okAll = false;
-                            break;
-                        }
-                    }
-                    if (okAll)
-                        ++p.paramsApplied;
-                    else
-                        ++p.paramsFailed;
-                }
-            } else if (!p.params.empty()) {
-                p.paramsFailed = (int)p.params.size();
-            }
-            if (ctx.nEng == 0 || !ctx.scratchIn || !ctx.scratchOut) {
-                for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
-                    if (ctx.eng[g]) destroy(ctx.eng[g]);
-                    ctx.eng[g] = nullptr;
-                }
+            rebuildEngines(wantGroups);
+            if (!ctx.scratchIn || !ctx.scratchOut) {
                 ctx.nEng = 0;
                 ctx.process = nullptr;
             }
@@ -390,7 +408,28 @@ int AuraVmPumpRun(AuraVmPump& p) {
         waited += 50;
     }
     if (!ctx.gotFirst) p.note = "no-buffers-timeout";
-    Sleep((DWORD)(p.seconds > 0 ? p.seconds : 5) * 1000);
+    // 分段轮询：CHANGE 到达（采样率/缓冲变化）→ stop → 重建引擎 → start。
+    // 总时长仍受 p.seconds 约束；重建不额外延长运行期。
+    int elapsed = 0;
+    const int totalMs = (p.seconds > 0 ? p.seconds : 5) * 1000;
+    int lastFake = 0;
+    while (elapsed < totalMs) {
+        // 合成 CHANGE（测试用）：按周期置位，驱动重建路径。
+        if (p.fakeChangeEveryMs > 0 && elapsed - lastFake >= p.fakeChangeEveryMs) {
+            InterlockedExchange(&ctx.pendingChange, 1);
+            lastFake = elapsed;
+        }
+        if (InterlockedExchange(&ctx.pendingChange, 0) != 0) {
+            ++ctx.changes;
+            printf("[CHANGE] sr=%ld nbs=%ld rebuild\n", ctx.sr, ctx.nbs);
+            stop();
+            rebuildEngines(ctx.groups > 0 ? ctx.groups : PumpCtx::kMaxGroups);
+            if (start() != 0) break;
+            ctx.gotFirst = 0;
+        }
+        Sleep(200);
+        elapsed += 200;
+    }
     stop();
     leave(true);  // 单次配对：logout + unreg（二次 logout 会 AV，勿加第二次）
     p.ran = true;
