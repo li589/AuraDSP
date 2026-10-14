@@ -22,7 +22,7 @@ class INonDelegatingUnknown {
 };
 
 class CAuraApo : public CBaseAudioProcessingObject,
-                 public IAudioSystemEffects,
+                 public IAudioSystemEffects2,  // 含 v1（菱形，故不另列 SysFx）
                  public INonDelegatingUnknown {
  public:
     CAuraApo(IUnknown* pUnkOuter);
@@ -33,15 +33,10 @@ class CAuraApo : public CBaseAudioProcessingObject,
     virtual ULONG __stdcall AddRef() override;
     virtual ULONG __stdcall Release() override;
 
-    // IAudioProcessingObject（宽容版，其余走基类默认）
+    // IAudioProcessingObject（宽容版 GetLatency/Initialize；格式协商用基类默认，
+    // EAPO/收件箱同式：盲目全接受曾致 audiodg 协商后崩，勿加回）
     virtual HRESULT __stdcall GetLatency(HNSTIME* pTime) override;
     virtual HRESULT __stdcall Initialize(UINT32 cbDataSize, BYTE* pbyData) override;
-    virtual HRESULT __stdcall IsInputFormatSupported(
-        IAudioMediaType* pOutputFormat, IAudioMediaType* pRequestedInputFormat,
-        IAudioMediaType** ppSupportedInputFormat) override;
-    virtual HRESULT __stdcall IsOutputFormatSupported(
-        IAudioMediaType* pInputFormat, IAudioMediaType* pRequestedOutputFormat,
-        IAudioMediaType** ppSupportedOutputFormat) override;
 
     // IAudioProcessingObjectConfiguration
     virtual HRESULT __stdcall LockForProcess(
@@ -59,8 +54,12 @@ class CAuraApo : public CBaseAudioProcessingObject,
     virtual ULONG __stdcall NonDelegatingAddRef() override;
     virtual ULONG __stdcall NonDelegatingRelease() override;
 
+    // IAudioSystemEffects2（现代 EFX 链要求；v1 无子效果，返回空表）
+    virtual HRESULT __stdcall GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects,
+                                             HANDLE Event) override;
+
     static long instCount;
-    static const CRegAPOProperties<1> regEfxProperties;
+    static const CRegAPOProperties<2> regEfxProperties;
 
  private:
     long m_ref = 1;
