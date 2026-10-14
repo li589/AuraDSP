@@ -51,6 +51,8 @@ std::string HRes(HRESULT hr) {
 }  // namespace
 
 int main() {
+    // 心跳走 Local\（任意权限可跑；生产走 Global\，见 AuraApo.cpp OpenHeartbeat）。
+    SetEnvironmentVariableA("AURAAPO_HEARTBEAT_LOCAL", "1");
     if (FAILED(CoInitializeEx(nullptr, COINIT_MULTITHREADED))) {
         printf("{\"selftest\":false,\"reason\":\"coinitialize\"}\n");
         return 0;
@@ -183,7 +185,10 @@ int main() {
     check("out flags VALID", outProp.u32BufferFlags == BUFFER_VALID);
     check("out frames", outProp.u32ValidFrameCount == (UINT32)N);
     // 心跳映射只在 Lock~Unlock 之间存在：必须先断言，后 Unlock。
-    HANDLE hMap = OpenFileMappingW(FILE_MAP_READ, FALSE, L"Global\\AuraAPO_Heartbeat");
+    // 注意：selftest 跑在任意权限下（CI/普通 shell 无 SeCreateGlobalPrivilege），
+    // 而 Global\ 需要该特权（audiodg=LocalService 才有）。故 selftest 用 Local\
+    // 验证心跳逻辑；生产 APO 仍用 Global\（AuraHeartbeat.h）。名字不同、结构相同。
+    HANDLE hMap = OpenFileMappingW(FILE_MAP_READ, FALSE, L"Local\\AuraAPO_Heartbeat");
     check("heartbeat mapping exists", hMap != nullptr);
     if (hMap) {
         const void* v = MapViewOfFile(hMap, FILE_MAP_READ, 0, 0, 32);

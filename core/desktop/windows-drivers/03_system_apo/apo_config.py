@@ -142,9 +142,96 @@ def restore_fx(meta):
     if not reg_file or not os.path.exists(reg_file):
         print('restore: backup .reg missing, REFUSE to guess')
         return False
-    r = sh(['reg', 'import', reg_file])
-    print('restore: reg import rc=%d' % r.returncode)
-    return r.returncode == 0
+    # reg import 在本机实测 rc=1（.reg 含多字节值 + 续行 hex），改程序化还原：
+    # 解析 .reg → 清空 FxProperties → 逐值写回（2026-10-14 手工验证通过）。
+    return _restore_from_reg(reg_file, meta)
+
+
+def _restore_from_reg(reg_file, meta):
+    import re as _re
+    import struct as _st
+    data = open(reg_file, 'rb').read()
+    for enc in ('utf-16', 'utf-8-sig', 'utf-8'):
+        try:
+            text = data.decode(enc)
+            break
+        except Exception:
+            continue
+    fx_sub = '%s\\%s\\%s\\FxProperties' % (
+        MM_BASE, meta['direction'].title(), short_guid(meta['endpoint']))
+    # 找 .reg 里该 key 段的值行
+    lines = text.splitlines()
+    in_key = False
+    pending = []
+    values = []
+    for raw in lines:
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        m = _re.match(r'^\[HKEY_LOCAL_MACHINE\\([^\]]+)\]$', line)
+        if m:
+            in_key = (m.group(1) == fx_sub)
+            pending = []
+            continue
+        if not in_key:
+            continue
+        if line.rstrip().endswith('\\'):
+            pending.append(line.rstrip()[:-1])
+            continue
+        if pending:
+            pending.append(line.strip())
+            values.append(' '.join(x.strip() for x in pending))
+            pending = []
+        else:
+            values.append(line.strip())
+    if not values:
+        print('restore: no values parsed from .reg')
+        return False
+
+    def parse_val(full):
+        m = _re.match(r'^"(.*?)"\s*=\s*(.*)$', full)
+        if not m:
+            return None
+        name, payload = m.group(1), m.group(2)
+        if payload.startswith('hex(7):'):
+            return name, winreg.REG_MULTI_SZ, bytes.fromhex(
+                payload[7:].replace(' ', '').replace(',', ''))
+        if payload.startswith('hex(2):'):
+            return name, winreg.REG_EXPAND_SZ, bytes.fromhex(
+                payload[7:].replace(' ', '').replace(',', ''))
+        if payload.startswith('hex:'):
+            return name, winreg.REG_BINARY, bytes.fromhex(
+                payload[4:].replace(' ', '').replace(',', ''))
+        if payload.startswith('dword:'):
+            return name, winreg.REG_DWORD, int(payload[6:], 16)
+        if payload.startswith('"'):
+            return name, winreg.REG_SZ, payload[1:payload.rfind('"')]
+        return name, winreg.REG_SZ, payload
+
+    with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, fx_sub) as k:
+        for _ in range(128):
+            try:
+                winreg.DeleteValue(k, winreg.EnumValue(k, 0)[0])
+            except OSError:
+                break
+        for full in values:
+            pv = parse_val(full)
+            if pv is None:
+                continue
+            name, typ, payload = pv
+            if typ == winreg.REG_DWORD:
+                winreg.SetValueEx(k, name, 0, typ, payload)
+            elif typ == winreg.REG_MULTI_SZ:
+                s = payload.decode('utf-16-le', errors='replace').rstrip('\x00')
+                winreg.SetValueEx(k, name, 0, typ, [x for x in s.split('\x00') if x])
+            elif typ == winreg.REG_SZ:
+                s = payload if isinstance(payload, str) else payload.decode(
+                    'utf-16-le', errors='replace').rstrip('\x00')
+                winreg.SetValueEx(k, name, 0, typ, s)
+            else:
+                winreg.SetValueEx(k, name, 0, typ, payload)
+    print('restore: programmatic restore done (%d values)' % len(values))
+    return True
 
 
 def latest_meta():
