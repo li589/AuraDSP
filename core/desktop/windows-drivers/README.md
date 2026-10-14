@@ -50,7 +50,9 @@
 - [x] `05_vm_bridge/`（`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
       `verify_dll_copies` 校验 9 导出；桥 bypass 透传 + per-group 衰减峰值 +
       hottest-non-idle 可视化组 + 4 态显示 error/bypass/idle/processing）
-- [ ] `04_asio_engine/`（需 Steinberg ASIO SDK，仓内暂无）
+- [ ] `04_asio_engine/`（ASIO 宿主模式；SDK 2.3.4 已就位于
+      `C:\FreeRulesPrograms\BasicToolkits\SteinbergDev\ASIOSDK`，GPLv3 路线；
+      开工 Spec 与 SDK 登记见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`）
 - [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）
 
 > ⚠️ **Known issue**（`806b44b` 立案）：APO 注册后 audiodg 加载失败（SFX/MFX APO 加载路径），
