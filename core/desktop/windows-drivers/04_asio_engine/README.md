@@ -32,16 +32,36 @@ Spec §1.1 → 回归 smoke。禁止手工改 SDK 内文件（与 `vendor/` 同�
 UTF-8，load 匹配键保留原始 ANSI）；smoke 对账基准必须同为 Description，
 误用子键名会 mismatch。
 
-## 规划布局（Spec §2.1，Phase 1 已落地 `fcd0f3f`）
+## 规划布局（Spec §2.1，Phase 1/2 均已落地）
 
 ```text
 AsioHost.{h,cpp}   # IASIO RAII 封装（枚举→init→能力→createBuffers→start/stop）
 asio_probe.cpp     # 枚举 + 能力查询 JSON（无音频，零风险）
 asio_tone.cpp      # 选定驱动正弦播放 N 秒（对标 03 tone_play）
-AsioBridge.h       # P2 常驻桥 C ABI（镜像 05 VmBridge.h 契约）
+AsioBridge.{h,cpp} # P2 常驻桥 C ABI（镜像 05 VmBridge.h 契约）+ .def 导出表
 ```
 
-Phase 1 已落码前三项；`AsioBridge.h` 属 Phase 2（待开工）。
+Phase 1（`fcd0f3f`）落码前三项；Phase 2（2026-10-15）落地桥四件，
+`smoke_asio_bridge.py` 已挂 `test/runner.py`（Spec §7 出口核销）。
+
+## 驱动兼容性实录（2026-10-15，FL Studio ASIO 深调）
+
+调试 `auraasio_bridge` 宿主下 FL Studio ASIO（ilwasapi2asio）必崩问题，
+逐项实验定罪三条铁律（详见 Spec §Phase 2 落地偏差记录）：
+
+1. **引擎 DLL 必须在 `host.open` 之前加载**。驱动在
+   `ASIOInit`~`ASIOCreateBuffers` 窗口内启动自有 RT 线程，此窗口内的
+   `LoadLibrary` 与其争抢 loader lock——轻则回调静默，重则驱动看门狗
+   `ExitProcess(0)` 干净杀宿主（无转储无段错误，易误判"玄学崩"）。
+2. **`ASIOInit` 的 sysRef 不能传 nullptr**（FL Studio ASIO 会给宿主派发
+   终止）；控制台宿主用 `GetConsoleWindow()`，GUI 宿主由调用方传主窗口。
+3. **`ASIOCallbacks` 必须进程级生存期（`AsioHost::s_cb` 类级静态）**。
+   驱动按 ASIO 契约长期持有该指针（FL Studio ASIO 存引擎对象 `+0xd0`，
+   RT 线程每帧经它尾调用 `bufferSwitch`）。栈局部地址在 `create_*`
+   返回后即失效，被后续调用覆写后驱动首次回调跳垃圾指针（NX 崩溃）——
+   "tone 侥幸存活、桥宿主必崩"对偶现象的根因（tone 调用链浅、栈槽
+   未被覆写纯属运气）。排查手法：跳板式 hook 驱动 `createBuffers`/
+   RT 助手函数记录实参与调用栈。
 
 ## 构建前提
 
