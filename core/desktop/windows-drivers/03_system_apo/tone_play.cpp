@@ -128,7 +128,8 @@ int main(int argc, char** argv) {
         CoTaskMemFree(wf);
         ac->Release();
         CoUninitialize();
-        printf("{\"played\":false,\"reason\":\"init-failed\"}\n");
+        printf("{\"played\":false,\"reason\":\"init-failed\",\"hr\":\"0x%08lX\"}\n",
+               (unsigned long)hr);
         return 0;
     }
     const int ch = wf->nChannels > 0 ? wf->nChannels : 2;
