@@ -12,10 +12,10 @@ list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
 add_library(auradsp_engine SHARED
     ${ENGINE_C}
     "${API}/auradsp_engine.cpp"
-    "${API}/engine_chain.cpp"
-    "${API}/engine_convolver.cpp"
-    "${API}/engine_viz.cpp"
-    "${API}/engine_probe.cpp"
+    "${API}/chain/engine_chain.cpp"
+    "${API}/chain/engine_convolver.cpp"
+    "${API}/chain/engine_viz.cpp"
+    "${API}/chain/engine_probe.cpp"
     "${API}/dsp/dsp_shelf.cpp"
     "${API}/dsp/dsp_filter.cpp"
     "${API}/dsp/dsp_bassmono.cpp"
@@ -26,17 +26,18 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_loudness.cpp"
     "${API}/dsp/dsp_freeverb.cpp"
     "${API}/dsp/dsp_dyneq.cpp"
-    "${API}/engine_audiofile.cpp"
-    "${API}/auradsp_plugin_host.cpp"
-    "${API}/host_gui.cpp"
-    "${API}/host_metadata_scan.cpp"
-    "${API}/host_instances.cpp"
-    "${API}/host_slots.cpp"
+    "${API}/chain/engine_audiofile.cpp"
+    "${API}/host/auradsp_plugin_host.cpp"
+    "${API}/host/host_gui.cpp"
+    "${API}/host/host_metadata_scan.cpp"
+    "${API}/host/host_instances.cpp"
+    "${API}/host/host_slots.cpp"
     "${API}/auradsp_engine.def"
 )
-
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
+    "${API}/chain"
+    "${API}/host"
     "${VENDOR}"
     "${VENDOR}/jdsp"
     "${PLUGIN_API}"
@@ -58,14 +59,15 @@ target_link_libraries(auradsp_engine PRIVATE version)
 
 add_executable(test_plugin_direct
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/test_plugin_direct.cpp"
-    "${API}/auradsp_plugin_host.cpp"
-    "${API}/host_gui.cpp"
-    "${API}/host_metadata_scan.cpp"
-    "${API}/host_instances.cpp"
-    "${API}/host_slots.cpp"
+    "${API}/host/auradsp_plugin_host.cpp"
+    "${API}/host/host_gui.cpp"
+    "${API}/host/host_metadata_scan.cpp"
+    "${API}/host/host_instances.cpp"
+    "${API}/host/host_slots.cpp"
 )
 target_include_directories(test_plugin_direct PRIVATE
     "${API}"
+    "${API}/host"
     "${PLUGIN_API}"
 )
 target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
