@@ -51,7 +51,7 @@ AuraDSP/
 
 ## 3. 内置音效器
 
-处理链（`engine/engine_chain.cpp` 的 `process_stereo_chain`）大致顺序：
+处理链（`engine/chain/engine_chain.cpp` 的 `process_stereo_chain`）大致顺序：
 **输入增益 → gate/deesser → filter → bassmono → 心理声学低音 → 插件 Pre-DSP → low-shelf → 动态EQ → vendor 链 → Haas → Exciter → Freeverb → Loudness → 安全钳位 → 插件 Post-Limiter**
 
 ### 自研（`engine/dsp/`）
