@@ -158,8 +158,12 @@ int main() {
         return 0;
     }
     check("Initialize", apo->Initialize(0, nullptr) == S_OK);
-    check("IsInputFormatSupported",
-          apo->IsInputFormatSupported(nullptr, nullptr, nullptr) == S_OK);
+    // 基类默认拒绝全 NULL（正确契约）；真格式在 fmt 建好后测。
+    {
+        HRESULT hrNull =
+            apo->IsInputFormatSupported(nullptr, nullptr, nullptr);
+        check("IsInputFormatSupported-null-rejected", FAILED(hrNull));
+    }
     // 合成 media type（CreateAudioMediaTypeFromUncompressedAudioFormat）。
     UNCOMPRESSEDAUDIOFORMAT uf{};
     uf.guidFormatType = KSDATAFORMAT_SUBTYPE_IEEE_FLOAT;
@@ -181,6 +185,14 @@ int main() {
     inDesc.pFormat = fmt;
     inDesc.u32MaxFrameCount = 512;
     outDesc = inDesc;
+    // 真格式协商（IEEE float 立体声 48k，基类默认应接受）。
+    {
+        IAudioMediaType* supported = nullptr;
+        HRESULT hrFmt =
+            apo->IsInputFormatSupported(nullptr, fmt, &supported);
+        check("IsInputFormatSupported-real", hrFmt == S_OK);
+        if (supported) supported->Release();
+    }
     APO_CONNECTION_DESCRIPTOR* pins[1] = {&inDesc};
     APO_CONNECTION_DESCRIPTOR* pouts[1] = {&outDesc};
     check("LockForProcess", cfg->LockForProcess(1, pins, 1, pouts) == S_OK);

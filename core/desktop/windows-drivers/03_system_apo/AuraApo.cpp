@@ -8,11 +8,21 @@
 
 long CAuraApo::instCount = 0;
 
-const CRegAPOProperties<1> CAuraApo::regEfxProperties(
-    CLSID_AuraApoEfx, L"AuraAPO EFX", L"AuraDSP", 1, 0, IID_IAudioSystemEffects);
+const CRegAPOProperties<2> CAuraApo::regEfxProperties(
+    // 注册接口：base APO + SysFx2（EAPO/MS LFX 同式 base；现代 EFX 链要 v2）。
+    // SysFx-v1-only 会触发 audiodg wrapper QI 自旋，勿删 v2。
+    CLSID_AuraApoEfx, L"AuraAPO EFX", L"AuraDSP", 1, 0, IID_IAudioProcessingObject,
+    DEFAULT_APOREG_FLAGS, DEFAULT_APOREG_MININPUTCONNECTIONS,
+    DEFAULT_APOREG_MAXINPUTCONNECTIONS, DEFAULT_APOREG_MINOUTPUTCONNECTIONS,
+    DEFAULT_APOREG_MAXOUTPUTCONNECTIONS, DEFAULT_APOREG_MAXINSTANCES,
+    IID_IAudioSystemEffects2);
 
 CAuraApo::CAuraApo(IUnknown* pUnkOuter)
     : CBaseAudioProcessingObject(regEfxProperties), m_outer(pUnkOuter) {
+    // EAPO 同式：outer 永不空（非聚合时指回自身非委托态），QI 全走委托。
+    // （reinterpret_cast 因 INonDelegatingUnknown 非 IUnknown 派生，EAPO 原式。）
+    if (!m_outer)
+        m_outer = reinterpret_cast<IUnknown*>(static_cast<INonDelegatingUnknown*>(this));
     InterlockedIncrement(&instCount);
 }
 
@@ -23,26 +33,28 @@ CAuraApo::~CAuraApo() {
 
 HRESULT __stdcall CAuraApo::QueryInterface(REFIID iid, void** ppv) {
     if (!ppv) return E_POINTER;
-    if (m_outer) return m_outer->QueryInterface(iid, ppv);
-    return NonDelegatingQueryInterface(iid, ppv);
+    // EAPO 同式：无条件委托 outer（构造期已保证非空）。
+    return m_outer->QueryInterface(iid, ppv);
 }
 
 ULONG __stdcall CAuraApo::AddRef() {
-    if (m_outer) return m_outer->AddRef();
-    return NonDelegatingAddRef();
+    return m_outer->AddRef();
 }
 
 ULONG __stdcall CAuraApo::Release() {
-    if (m_outer) return m_outer->Release();
-    return NonDelegatingRelease();
+    return m_outer->Release();
 }
 
 HRESULT __stdcall CAuraApo::NonDelegatingQueryInterface(REFIID iid, void** ppv) {
     if (!ppv) return E_POINTER;
+    // COM 同一性说明：EAPO 同式返 INonDelegatingUnknown*（多继承下与 APO 指针
+    // 地址不同，但 EAPO 量产验证无碍；勿“修复”为 APO 指针，保持同式）。
     if (iid == IID_IUnknown)
         *ppv = static_cast<INonDelegatingUnknown*>(this);
     else if (iid == IID_IAudioSystemEffects)
-        *ppv = static_cast<IAudioSystemEffects*>(this);
+        *ppv = static_cast<IAudioSystemEffects*>(static_cast<IAudioSystemEffects2*>(this));
+    else if (iid == IID_IAudioSystemEffects2)
+        *ppv = static_cast<IAudioSystemEffects2*>(this);
     else if (iid == IID_IAudioProcessingObject)
         *ppv = static_cast<IAudioProcessingObject*>(this);
     else if (iid == IID_IAudioProcessingObjectRT)
@@ -67,8 +79,19 @@ ULONG __stdcall CAuraApo::NonDelegatingRelease() {
     return n;
 }
 
+HRESULT __stdcall CAuraApo::GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects,
+                                           HANDLE /*Event*/) {
+    // v1 无子效果：空表（maybenull 合法）；Event 静态永不变，无需记。
+    if (!ppEffectsIds || !pcEffects) return E_POINTER;
+    *ppEffectsIds = nullptr;
+    *pcEffects = 0;
+    return S_OK;
+}
+
 HRESULT __stdcall CAuraApo::GetLatency(HNSTIME* pTime) {
     if (!pTime) return E_POINTER;
+    // EAPO 同式：未 Lock 前报 ALREADY_UNLOCKED（audioeng 借此辨锁态）。
+    if (!m_bIsLocked) return APOERR_ALREADY_UNLOCKED;
     *pTime = 0;  // v1 透传零附加延迟
     return S_OK;
 }
@@ -77,24 +100,10 @@ HRESULT __stdcall CAuraApo::Initialize(UINT32 /*cbDataSize*/, BYTE* /*pbyData*/)
     return S_OK;  // v1 无初始化参数，照单全收
 }
 
-HRESULT __stdcall CAuraApo::IsInputFormatSupported(
-    IAudioMediaType* /*pOutputFormat*/, IAudioMediaType* /*pRequestedInputFormat*/,
-    IAudioMediaType** ppSupportedInputFormat) {
-    // SPEC 宽容协商：透传与格式无关，全接受（S_OK = 按请求格式即可）。
-    if (ppSupportedInputFormat) *ppSupportedInputFormat = nullptr;
-    return S_OK;
-}
-
-HRESULT __stdcall CAuraApo::IsOutputFormatSupported(
-    IAudioMediaType* /*pInputFormat*/, IAudioMediaType* /*pRequestedOutputFormat*/,
-    IAudioMediaType** ppSupportedOutputFormat) {
-    if (ppSupportedOutputFormat) *ppSupportedOutputFormat = nullptr;
-    return S_OK;
-}
-
 HRESULT __stdcall CAuraApo::LockForProcess(UINT32 nIn, APO_CONNECTION_DESCRIPTOR** ppIn,
                                            UINT32 nOut, APO_CONNECTION_DESCRIPTOR** ppOut) {
     if ((nIn == 0 || !ppIn) || (nOut == 0 || !ppOut)) return E_INVALIDARG;
+    m_bIsLocked = true;  // 基类锁态（供 GetLatency；基类实现被覆盖故手动维护）
     m_nConn = nIn < nOut ? nIn : nOut;
     if (m_nConn > 8) m_nConn = 8;
     m_sampleRate = 0;
@@ -121,6 +130,7 @@ HRESULT __stdcall CAuraApo::LockForProcess(UINT32 nIn, APO_CONNECTION_DESCRIPTOR
 
 HRESULT __stdcall CAuraApo::UnlockForProcess() {
     CloseHeartbeat();
+    m_bIsLocked = false;
     m_nConn = 0;
     return S_OK;
 }
