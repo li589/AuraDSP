@@ -64,6 +64,14 @@ target_compile_options(tone_play PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET tone_play PROPERTY CXX_STANDARD 20)
 set_property(TARGET tone_play PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+add_executable(set_default_endpoint
+    "${APO}/set_default_endpoint.cpp"
+)
+target_link_libraries(set_default_endpoint PRIVATE ole32)
+target_compile_options(set_default_endpoint PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET set_default_endpoint PROPERTY CXX_STANDARD 20)
+set_property(TARGET set_default_endpoint PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # 自研 APO（CBaseAudioProcessingObject 基类在 audiobaseprocessingobject.lib；
 # RegisterAPO 在 audioeng.lib；ConvertStringSecurityDescriptor 在 advapi32）。
 add_library(AuraApo SHARED
@@ -79,3 +87,21 @@ set_property(TARGET AuraApo PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(AuraApo PRIVATE
     audiobaseprocessingobject ole32 advapi32 uuid version audioeng
     audiomediatypecrt legacy_stdio_definitions)
+
+
+add_executable(classfact_probe
+    "${APO}/classfact_probe.cpp"
+)
+target_link_libraries(classfact_probe PRIVATE ole32)
+target_compile_options(classfact_probe PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET classfact_probe PROPERTY CXX_STANDARD 20)
+set_property(TARGET classfact_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+
+add_executable(auditses_probe
+    "${APO}/auditses_probe.cpp"
+)
+target_link_libraries(auditses_probe PRIVATE ole32)
+target_compile_options(auditses_probe PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auditses_probe PROPERTY CXX_STANDARD 20)
+set_property(TARGET auditses_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
