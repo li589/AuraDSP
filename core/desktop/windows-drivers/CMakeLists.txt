@@ -6,6 +6,43 @@ set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
 set(VMBRIDGE "${CMAKE_CURRENT_SOURCE_DIR}/05_vm_bridge")
 
+# ---- 04 ASIO 宿主（Steinberg ASIO SDK 2.3.4，GPLv3 路线）----
+# SDK 为外部工具链（同 NDK/Flutter SDK 铁律）：不 vendor、按路径引用。
+# 本机默认路径见 04_asio_engine/README.md；换机/升级改这个 cache 变量即可。
+set(ASIO_SDK_ROOT "C:/FreeRulesPrograms/BasicToolkits/SteinbergDev/ASIOSDK"
+    CACHE PATH "Steinberg ASIO SDK 2.3.4 root (see 04_asio_engine/README.md)")
+if(NOT EXISTS "${ASIO_SDK_ROOT}/common/asio.h")
+    message(FATAL_ERROR
+        "ASIO SDK not found at ${ASIO_SDK_ROOT}\n"
+        "下载 Steinberg ASIO SDK 2.3.x 解压后设置 -DASIO_SDK_ROOT=<路径>；"
+        "许可与登记规则见 core/desktop/windows-drivers/04_asio_engine/README.md")
+endif()
+set(ASIODIR "${CMAKE_CURRENT_SOURCE_DIR}/04_asio_engine")
+# Windows 宿主最小源集（asiodrvr.cpp 在 WINDOWS 下 #error do not use this；
+# combase/register/dllentry 为驱动侧或 DLL 侧，宿主不需要——2026-10-14 实测）。
+add_library(auraasio_host STATIC
+    "${ASIODIR}/AsioHost.cpp"
+    "${ASIO_SDK_ROOT}/common/asio.cpp"
+    "${ASIO_SDK_ROOT}/host/asiodrivers.cpp"
+    "${ASIO_SDK_ROOT}/host/pc/asiolist.cpp")
+target_include_directories(auraasio_host PUBLIC
+    "${ASIODIR}" "${ASIO_SDK_ROOT}/common" "${ASIO_SDK_ROOT}/host" "${ASIO_SDK_ROOT}/host/pc")
+target_compile_options(auraasio_host PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auraasio_host PROPERTY CXX_STANDARD 20)
+set_property(TARGET auraasio_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+add_executable(asio_probe "${ASIODIR}/asio_probe.cpp")
+target_link_libraries(asio_probe PRIVATE auraasio_host ole32 version)
+
+add_executable(asio_tone "${ASIODIR}/asio_tone.cpp")
+target_link_libraries(asio_tone PRIVATE auraasio_host ole32 version)
+
+foreach(tgt asio_probe asio_tone)
+    target_compile_options(${tgt} PRIVATE /utf-8 /W1 /EHsc)
+    set_property(TARGET ${tgt} PROPERTY CXX_STANDARD 20)
+    set_property(TARGET ${tgt} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+endforeach()
+
 add_library(auravm STATIC
     "${VMCLIENT}/VmRemoteLoader.cpp"
     "${VMCLIENT}/VmAudioCallback.cpp"
