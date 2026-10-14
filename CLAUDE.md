@@ -2,8 +2,12 @@
 
 ## Overview
 AuraDSP is a next-generation high-fidelity audio DSP engine and modern desktop UI workstation.
-- **Engine Core (`core/desktop/`)**: C++20, libjamesdsp port, RT-Safe audio pipeline (zero-alloc, zero-lock, zero-syscall in audio thread).
-- **Frontend App (`app/auradsp_app/`)**: Flutter 3.47.7+, Dart FFI, lockless SPSC ring buffer for 30fps visualization frames.
+- **Engine Core (`engine/`)**: C++20, RT-Safe audio pipeline (zero-alloc, zero-lock, zero-syscall in audio thread). Layout (P3a top-level move + P4b subdirs): `auradsp_engine.{h,cpp,def}` (C ABI) + `engine_internal.h` + `chain/` (chain/convolver/viz/probe/audiofile) + `dsp/` (10 self-developed effects) + `host/` (VST3/CLAP plugin host TUs). libjamesdsp algorithm core lives read-only in `vendor/libjamesdsp/`.
+- **Windows Driver Suite (`core/desktop/windows-drivers/`)**: Decoupled transport/format layer — `02_voicemeeter_client/` (VM callback pump), `03_system_apo/` (self-built APO `AuraApo.dll` + Configurator/selftest/tone_play/probes), `05_vm_bridge/` (VB bridge). Separate CMake, NOT part of engine build. See its README.
+- **Platform Shell (`core/`)**: `core/desktop/windows/` (CMake + WASAPI, DLL truth source `out/Release/auradsp_engine.dll`), `core/android/` (AIDL effects HAL registrar/spike/stubs).
+- **Frontend App (`app/auradsp_app/`)**: Flutter 3.47.7+, Dart FFI, lockless SPSC ring buffer for 30fps visualization frames (408-byte `auradsp_viz_frame`). 6-page navigation; audio backend modes (vaio/vbcallback/sysapo/asio) persisted in `lib/core/audio_modes.dart`.
+- **Assets (`assets/`)**: IR/VDC/EEL runtime resources (251MB local). `.irs`/`.vdc` are gitignored for NEW files, but 2214 historical files (73MB) remain tracked — removal pending owner decision, do not `git rm --cached` unilaterally.
+- **Reference Docs (`docs/参考技术手册/`)**: Third-party PDF manuals (Microsoft WDK/Win32/UWP/MSVC/WSL, Steinberg ASIO, android_guides_cn, ~220MB) — local read-only, only README manifest committed. Do not push PDFs (GitHub 100MB limit + redistribution not licensed).
 - **Testing (`test/`)**: `test/smoke/` for C++ DLL tests via ctypes; `test/ui/` for topmost automated GUI assertions.
 - **Tools (`tools/`)**: Developer utilities, diagnostic probes, and generator tools.
 - **AI Knowledge (`.ai/`)**: Multi-agent shared memories and guidelines.
@@ -33,4 +37,4 @@ python tools/bin/push_via_api.py main
    - Every GUI interaction test MUST bring the target window to foreground top-most (`HWND_TOPMOST + SetForegroundWindow`).
    - Every slider interaction MUST check and guarantee that the effect switch is ON before dragging (disabled sliders ignore input).
    - Mouse events MUST hit exact Thumb center pixels and use image difference assertions (`assert_images_differ`) to ensure real visual change.
-4. **Third-Party Code (`source/`)**: `source/` is read-only reference code. Never commit nested `.git` repositories in `source/`.
+4. **Third-Party Code (`source/`)**: `source/` is read-only reference code (13 registered snapshots, see `source/ORIGIN.md` and `docs/10-架构/source-参考项目审理报告.md`). Never commit nested `.git` repositories in `source/`. No LICENSE ≠ open source — GitHub default is All Rights Reserved; ViPER-family code must never be merged into this GPL-3.0 project.
