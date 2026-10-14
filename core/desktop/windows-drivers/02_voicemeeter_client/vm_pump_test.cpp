@@ -26,11 +26,18 @@ int main(int argc, char** argv) {
     if (p.seconds <= 0 || p.seconds > 60) p.seconds = 5;
     if (argc > 2) p.engineDll = argv[2];
     // --seti id=int / --setf id=float（可重复；Start 前全 handle 下发）。
-    for (int i = 3; i + 1 < argc; i += 2) {
+    // --fake-change N：每 N ms 合成一次 CHANGE，验证重建路径（测试用）。
+    for (int i = 3; i < argc; ++i) {
         const std::string flag(argv[i]);
+        if (flag == "--fake-change" && i + 1 < argc) {
+            p.fakeChangeEveryMs = atoi(argv[i + 1]);
+            ++i;
+            continue;
+        }
+        if (i + 1 >= argc || (flag != "--seti" && flag != "--setf")) continue;
         const std::string kv(argv[i + 1]);
         const size_t eq = kv.find('=');
-        if ((flag != "--seti" && flag != "--setf") || eq == std::string::npos) continue;
+        if (eq == std::string::npos) continue;
         AuraVmParam pm;
         pm.id = kv.substr(0, eq);
         pm.isFloat = (flag == "--setf");
@@ -39,6 +46,7 @@ int main(int argc, char** argv) {
         else
             pm.i = atoi(kv.substr(eq + 1).c_str());
         p.params.push_back(pm);
+        ++i;
     }
     AuraVmPumpRun(p);
     printf("{\"ran\":%s,\"frames\":%llu,\"maxDiff\":%.9f,"

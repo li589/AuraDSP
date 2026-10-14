@@ -26,6 +26,7 @@ struct AuraVmPump {
     std::string engineDll;  // "" = 自动搜索
     int seconds = 5;
     std::vector<AuraVmParam> params;  // Start 前下发到全部 handle（--seti/--setf）
+    int fakeChangeEveryMs = 0;       // >0 时每 N ms 置 pendingChange（合成 CHANGE 验证重建）
     // 输出（主线程，Run 后读）
     bool ran = false;
     uint64_t frames = 0;     // 处理的总帧数（samples per channel）
