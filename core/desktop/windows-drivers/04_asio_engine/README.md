@@ -26,7 +26,13 @@ Spec §1.1 → 回归 smoke。禁止手工改 SDK 内文件（与 `vendor/` 同�
 
 → 无硬件即可端到端实测；枚举结果须与注册表逐一对账（`smoke_asio_probe.py`）。
 
-## 规划布局（Spec §2.1，Phase 1 批准后落码）
+**命名语义**（`fcd0f3f` 实测发现）：SDK 驱动名取子键 `Description` 值
+（`asiolist.cpp` `newDrvStruct`），缺失才回退子键名。故 `DSDTranscoder`
+子键的 SDK 显示名是 **`DSD 转码器 (DoP/Native)`**（GBK 字节，显示/JSON 需转
+UTF-8，load 匹配键保留原始 ANSI）；smoke 对账基准必须同为 Description，
+误用子键名会 mismatch。
+
+## 规划布局（Spec §2.1，Phase 1 已落地 `fcd0f3f`）
 
 ```text
 AsioHost.{h,cpp}   # IASIO RAII 封装（枚举→init→能力→createBuffers→start/stop）
@@ -35,11 +41,15 @@ asio_tone.cpp      # 选定驱动正弦播放 N 秒（对标 03 tone_play）
 AsioBridge.h       # P2 常驻桥 C ABI（镜像 05 VmBridge.h 契约）
 ```
 
+Phase 1 已落码前三项；`AsioBridge.h` 属 Phase 2（待开工）。
+
 ## 构建前提
 
-父目录 `core/desktop/windows-drivers/CMakeLists.txt` 将以 `ASIO_SDK_ROOT`
+父目录 `core/desktop/windows-drivers/CMakeLists.txt` 以 `ASIO_SDK_ROOT`
 （默认指向上述本机路径）引入 `auraasio_host` 静态库与 `asio_probe`/`asio_tone`
-可执行目标；SDK 缺失即 FATAL 并提示本文件。详见 Spec §3 Phase 1 的 CMake 片段。
+可执行目标；SDK 缺失即 FATAL 并提示本文件。详见 Spec §3 Phase 1 的 CMake 片段
+（宿主最小源集为 SDK 3 源：`common/asio.cpp` + `host/asiodrivers.cpp` +
+`host/pc/asiolist.cpp`，驱动侧 `asiodrvr/combase/register/dllentry` 不需要）。
 
 ## RT 铁律（与 02/05 同款）
 

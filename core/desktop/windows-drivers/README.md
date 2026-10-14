@@ -50,9 +50,13 @@
 - [x] `05_vm_bridge/`（`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
       `verify_dll_copies` 校验 9 导出；桥 bypass 透传 + per-group 衰减峰值 +
       hottest-non-idle 可视化组 + 4 态显示 error/bypass/idle/processing）
-- [ ] `04_asio_engine/`（ASIO 宿主模式；SDK 2.3.4 已就位于
-      `C:\FreeRulesPrograms\BasicToolkits\SteinbergDev\ASIOSDK`，GPLv3 路线；
-      开工 Spec 与 SDK 登记见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`）
+- [x] `04_asio_engine/` Phase 1（`fcd0f3f`：ASIO 宿主探测+发声，GPLv3 路线；
+      `asio_probe` 枚举 7 驱动 6 ok 全量能力 JSON + `asio_tone` 双驱动 3s 实测
+      （FL Studio 259×512/44100=3.007s、VM Virtual 69×2048/48000=2.944s）；
+      `smoke_asio_probe.py`/`smoke_asio_tone.py` 值守，全量 smoke 53 项 100%；
+      SDK 2.3.4 就位于 `C:\FreeRulesPrograms\BasicToolkits\SteinbergDev\ASIOSDK`，
+      登记与红线见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`；
+      Phase 2 常驻桥（DSP 入链）待开工）
 - [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）
 
 > ⚠️ **Known issue**（`806b44b` 立案）：APO 注册后 audiodg 加载失败（SFX/MFX APO 加载路径），
