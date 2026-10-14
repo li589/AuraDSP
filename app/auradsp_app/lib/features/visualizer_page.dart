@@ -77,7 +77,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                     child: ListenableBuilder(
                       listenable: widget.model,
                       builder: (_, _) => _Stage(
-                        playing: widget.model.playing,
+                        playing: widget.model.liveSpectrum,
                         spectrum: widget.model.spectrum,
                         peaks: _peakNotifier,
                         emptyText: l.noAudio,

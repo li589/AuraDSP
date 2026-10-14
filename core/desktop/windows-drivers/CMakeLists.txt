@@ -4,6 +4,7 @@ project(auravm_drivers LANGUAGES C CXX)
 # 独立于引擎构建（解耦铁律）；用户态只需要 Windows SDK。
 set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
+set(VMBRIDGE "${CMAKE_CURRENT_SOURCE_DIR}/05_vm_bridge")
 
 add_library(auravm STATIC
     "${VMCLIENT}/VmRemoteLoader.cpp"
@@ -132,3 +133,17 @@ target_link_libraries(ases_probe PRIVATE ole32)
 target_compile_options(ases_probe PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET ases_probe PROPERTY CXX_STANDARD 20)
 set_property(TARGET ases_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+
+# 05 常驻 VB 桥（app isolate 经 FFI 调用；VmRemoteLoader 编进本 DLL，
+# 复用 02 自省逻辑；泵回调核心走 VmPumpCore.h，与 vm_pump_test 同源）。
+add_library(auravm_bridge SHARED
+    "${VMBRIDGE}/VmBridge.cpp"
+    "${VMCLIENT}/VmRemoteLoader.cpp"
+    "${VMBRIDGE}/VmBridge.def"
+)
+target_include_directories(auravm_bridge PRIVATE "${VMCLIENT}" "${VMBRIDGE}")
+target_compile_options(auravm_bridge PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auravm_bridge PROPERTY CXX_STANDARD 20)
+set_property(TARGET auravm_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(auravm_bridge PRIVATE version)

@@ -8,6 +8,7 @@
   "stateProcessing": "Processing",
   "stateBypass": "Bypass",
   "stateError": "Error",
+  "stateIdle": "Idle",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",

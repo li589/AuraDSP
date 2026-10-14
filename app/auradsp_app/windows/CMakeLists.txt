@@ -83,6 +83,15 @@ if(EXISTS "${AURADSP_ENGINE_DLL}")
     COMPONENT Runtime)
 endif()
 
+# VB-Callback 常驻桥（05_vm_bridge）：有则随包，无则跳过（对应模式不可用，
+# UI 设备卡会直接显示原因；缺失不拦构建）。
+set(AURAVM_BRIDGE_DLL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/auravm_bridge.dll")
+if(EXISTS "${AURAVM_BRIDGE_DLL}")
+  install(FILES "${AURAVM_BRIDGE_DLL}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

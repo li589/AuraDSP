@@ -365,6 +365,29 @@ class _DeviceInfo extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final info = model.info;
+    // VB 桥激活时展示桥状态（sr/frames 来自 vbstatus 心跳）。
+    if (model.vbActive) {
+      final sr = model.vbInfo['sr'];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoRow(l.audioMode, _modeLabel(l, 'vbcallback')),
+          if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
+        ],
+      );
+    }
+    // 选了 VB 模式但桥没起来：把原因摆出来（缺 DLL/槽被占/未安装），别静默。
+    if (model.audioMode == 'vbcallback') {
+      final note = model.vbInfo['note'];
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoRow(l.audioMode, _modeLabel(l, 'vbcallback')),
+          if (note is String && note.isNotEmpty)
+            _InfoRow('VB', note),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

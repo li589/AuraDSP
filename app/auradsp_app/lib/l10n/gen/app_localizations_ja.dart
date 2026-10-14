@@ -34,6 +34,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stateError => 'エラー';
 
   @override
+  String get stateIdle => 'アイドル';
+
+  @override
   String get latencyLabel => '遅延';
 
   @override

@@ -34,6 +34,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stateError => '失效';
 
   @override
+  String get stateIdle => '空闲';
+
+  @override
   String get latencyLabel => '延迟';
 
   @override
