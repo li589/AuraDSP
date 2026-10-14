@@ -120,28 +120,32 @@ class _AppShellState extends State<AppShell> {
   }
 
   void _openSettings() {
-    final p = paletteOf(context);
     showDialog<void>(
       context: context,
-      // 半透明深色遮罩：把内容区压暗，凸显设置面板
-      barrierColor: p.bg.withValues(alpha: 0.72),
-      builder: (_) => Dialog(
-        // 面板自身提供底色（此前 transparent 导致"无背景"）
-        backgroundColor: p.panel,
-        surfaceTintColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(AuraSpace.xl),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(AuraRadius.lg),
-          side: BorderSide(color: p.hairline),
-        ),
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
-          child: ClipRRect(
+      // 遮罩固定黑色半透明（与主题无关）：barrierColor 在 open 时求值一次，
+      // 若跟主题走，切换主题后遮罩过期。面板底色/边框在 builder 内按当前
+      // 主题取，随主题重建（此前在外层抓取 palette 导致底板保持旧主题）。
+      barrierColor: Colors.black.withValues(alpha: 0.6),
+      builder: (ctx) {
+        final p = paletteOf(ctx);
+        return Dialog(
+          // 面板自身提供底色（此前 transparent 导致"无背景"）
+          backgroundColor: p.panel,
+          surfaceTintColor: Colors.transparent,
+          insetPadding: const EdgeInsets.all(AuraSpace.xl),
+          shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(AuraRadius.lg),
-            child: SettingsPage(model: widget.model),
+            side: BorderSide(color: p.hairline),
           ),
-        ),
-      ),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720, maxHeight: 640),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(AuraRadius.lg),
+              child: SettingsPage(model: widget.model),
+            ),
+          ),
+        );
+      },
     );
   }
 

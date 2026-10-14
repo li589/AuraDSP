@@ -153,7 +153,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get testSrcTitle => '测试音频源';
 
   @override
-  String get testSrcHint => '测试用信号源（正弦/粉噪/音频文件）；输入/输出设备选择后续在此扩展';
+  String get testSrcHint => '测量用信号；停止后回到正式源';
 
   @override
   String get srcMp3 => '打开 MP3 文件';
@@ -185,6 +185,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelPhaseA => 'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。';
+
+  @override
+  String get audioMode => '音频模式';
+
+  @override
+  String get audioModeHint => '重启引擎后生效，后续版本接线';
+
+  @override
+  String get audioDevice => '设备';
+
+  @override
+  String get modeAuto => '自动';
+
+  @override
+  String get sampleRate => '采样率';
+
+  @override
+  String get buffer => '缓冲区';
+
+  @override
+  String get modeVaio => 'AuraVAIO';
+
+  @override
+  String get modeVb => 'Voicemeeter';
+
+  @override
+  String get modeSysApo => 'System APO';
+
+  @override
+  String get modeAsio => 'ASIO';
+
+  @override
+  String get modeRoot => 'Root';
+
+  @override
+  String get modeRootless => 'Rootless';
+
+  @override
+  String get modeSystem => '系统';
+
+  @override
+  String get modeVirtual => '虚拟';
+
+  @override
+  String get modeDriver => '驱动';
+
+  @override
+  String get catAppearance => '外观';
+
+  @override
+  String get catAudio => '音频';
+
+  @override
+  String get catSystem => '系统';
+
+  @override
+  String get catTest => '测试';
 
   @override
   String get pageHomeEyebrow => '控制台';

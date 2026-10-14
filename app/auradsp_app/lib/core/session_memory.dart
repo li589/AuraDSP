@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'config.dart';
+import 'audio_modes.dart';
 import 'plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
@@ -46,6 +47,7 @@ abstract final class SessionMemory {
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
+        'audioMode': m.audioMode,
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
@@ -83,6 +85,10 @@ abstract final class SessionMemory {
       }
       if (session['channelsMode'] is num) {
         m.channelsMode = (session['channelsMode'] as num).toInt();
+      }
+      if (session['audioMode'] is String) {
+        m.audioMode = AudioModes.normalize(session['audioMode'] as String);
+        m.config.audioMode = m.audioMode;
       }
       if (session['convIrPath'] is String) {
         m.convIrPath = session['convIrPath'] as String;

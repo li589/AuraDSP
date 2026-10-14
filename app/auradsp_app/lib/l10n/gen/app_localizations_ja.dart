@@ -153,7 +153,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get testSrcTitle => 'テスト音源';
 
   @override
-  String get testSrcHint => 'テスト用信号源（正弦/ピンクノイズ/オーディオファイル）；入出力デバイス選択は今後ここに拡張';
+  String get testSrcHint => '測定用信号；停止すると正式ソースに戻ります';
 
   @override
   String get srcMp3 => 'MP3 を開く';
@@ -186,6 +186,63 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get channelPhaseA =>
       'Phase A：マトリクスダウンミックス（ADR-003）。チャンネル別インスタンスは Phase B で提供。';
+
+  @override
+  String get audioMode => 'オーディオモード';
+
+  @override
+  String get audioModeHint => 'エンジン再起動後に有効（今後のバージョンで接続）';
+
+  @override
+  String get audioDevice => 'デバイス';
+
+  @override
+  String get modeAuto => '自動';
+
+  @override
+  String get sampleRate => 'サンプルレート';
+
+  @override
+  String get buffer => 'バッファ';
+
+  @override
+  String get modeVaio => 'AuraVAIO';
+
+  @override
+  String get modeVb => 'Voicemeeter';
+
+  @override
+  String get modeSysApo => 'System APO';
+
+  @override
+  String get modeAsio => 'ASIO';
+
+  @override
+  String get modeRoot => 'Root';
+
+  @override
+  String get modeRootless => 'Rootless';
+
+  @override
+  String get modeSystem => 'システム';
+
+  @override
+  String get modeVirtual => '仮想';
+
+  @override
+  String get modeDriver => 'ドライバー';
+
+  @override
+  String get catAppearance => '外観';
+
+  @override
+  String get catAudio => 'オーディオ';
+
+  @override
+  String get catSystem => 'システム';
+
+  @override
+  String get catTest => 'テスト';
 
   @override
   String get pageHomeEyebrow => 'コンソール';

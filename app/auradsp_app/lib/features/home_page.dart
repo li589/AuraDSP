@@ -1,9 +1,9 @@
 /*
  * home_page.dart — 主页：引擎状态大屏 + 频谱/电平
  *
- * 层级：频谱可视化（无序号） → hero 状态区（最大字号 + A/B 主操作） →
- * 引擎简报（静音收尾）。
+ * 层级：频谱可视化（无序号） → hero 状态区（最大字号 + A/B 主操作）。
  * 测试音频源已移入设置页测试卡（为输入/输出设备选择预留位置）。
+ * 注：右上引擎简报行已移除（信息冗余，设备信息见设置页设备卡）。
  */
 import 'package:flutter/material.dart';
 
@@ -27,7 +27,6 @@ class HomePage extends StatelessWidget {
       children: [
         _SpectrumCard(model: model), // 可视化置顶：主页的第一视觉（无序号）
         _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
-        _EngineBrief(model: model),
       ],
     );
   }
@@ -307,45 +306,6 @@ class _EmptySpectrum extends StatelessWidget {
           Text(text, style: captionOf(p)),
         ],
       ),
-    );
-  }
-}
-
-/* ---- 引擎简报（静音收尾，不加卡片） ---- */
-
-class _EngineBrief extends StatelessWidget {
-  final AppModel model;
-  const _EngineBrief({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) {
-        final info = model.info;
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(
-              AuraSpace.xs, AuraSpace.sm, AuraSpace.xs, 0),
-          child: Wrap(
-            spacing: AuraSpace.md,
-            runSpacing: AuraSpace.xs,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(l.engineInfo, style: eyebrowOf(p)),
-              Text(l.engineForm, style: captionOf(p)),
-              if (info != null)
-                Text(
-                  '${l.engineAbi(info.abi, info.version)} · '
-                  '${info.deviceRate}Hz · ${info.deviceCh}ch · '
-                  '${info.bufferFrames}f',
-                  style: monoOf(p, size: 11, color: p.textDim),
-                ),
-            ],
-          ),
-        );
-      },
     );
   }
 }
