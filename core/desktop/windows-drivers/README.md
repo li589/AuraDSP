@@ -2,14 +2,18 @@
 
 > 与 `engine/`（DSP 算法）彻底解耦：本目录只做传输与格式搬运，
 > 不承载任何具体音效算法；仅依赖 Windows SDK（用户态）/ WDK（内核态）。
+> APP 侧音频后端四模式（vaio/vbcallback/sysapo/asio）见 `app/auradsp_app/lib/core/audio_modes.dart`，
+> 本目录是其 Windows 驱动侧对应实现（当前仅 vbcallback/sysapo 有实物）。
 
-## 现状（2026-10-13）
+## 现状（2026-10-14；今日 7 连提交 806b44b→82a75ae）
 
 - [x] 目录骨架 + 独立 CMake（VS18 x64，不进引擎构建）
 - [x] `02_voicemeeter_client/`：三级自省检测（注册表 → Remote DLL → PE 版本）
 - [x] `02` OUTPUT INSERT 回调泵（A1 主对进引擎 + 其余透传 + 静音旁路 + 中性透传验证）
 - [x] 回调语义对标 `source/equalizerAPO64/VoicemeeterClient`（bus 组迭代/精确零+10s+输出静默
       三条件 idle/CHANGE 计数；初版 1e-5+2s 已按此推翻，见 `VmAudioCallback.cpp` 头注）
+- [x] `02` **CHANGE 触发引擎重建**（`c3e26b4`：VM 参数变化才重建，`--fake-change` 可测；
+      旧轮询式重建已废）
 
 ## 托盘图标语义（VM 原生 tooltip 实证）
 
@@ -31,14 +35,27 @@
 - 爆音预算：`maxCbUs` 打点上报，中性 8 组约 3.2ms（缓冲 42.7ms），smoke 阈值半周期。
 - [x] `02` 多总线逐对处理（版型预建 handle，组独立 idle）
 - [x] `02` 参数下发面（`--seti/--setf`，回报 applied/failed；声学有条件断言）
-- [ ] `03_system_apo/`（需管理员；本机 shell 非提权，按需提权跑 Configurator）
+- [x] `03_system_apo/`：自研 APO v1（`AuraApo.dll`：裸 COM 聚合 + 自注册 + 透传 + 心跳映射
+      + SILENT 清零；专属 CLSID，IID 取自 SDK IDL；`smoke_apo_register.py` 覆盖导出表 + 注册往返）
+- [x] `03` **EAPO 对标加固**（`d33bab4`：聚合/QI/注册/CRT/CFG/v2 五线对齐 equalizerAPO 行为）
+- [x] `03` Configurator（`806b44b`：安装/备份/卸载/服务重启握手；`.reg` 备份 + 编程式恢复——
+      `reg import` rc=1 不可靠已改道，见 `42c757e`）
+- [x] `03` selftest（`806b44b`：unreg-safe 不破坏现场；心跳经 `Local\` 命名对象，
+      **任意权限可验**，`c3e26b4` 起权限自适应）
+- [x] `03` tone_play（`806b44b`/`88f35aa`：端点发声 + `set_default_endpoint` 切换默认设备）
+- [x] `03` 诊断探针族（`88f35aa`/`4a77448`：`comact_probe`/`classfact_probe` COM/CLSID 链路、
+      `ases_probe`/`audioclient_probe` 激活对象与音频客户端、`auditses_probe` 审计会话）
 - [x] `03` 只读检测（端点枚举/FxProperties 五槽/签名开关；本机 48 端点全可读，
       在用微软 inbox SFX/MFX，无第三方 APO；`smoke_apo_inspect.py`）
-- [ ] `03` Configurator（安装/备份/卸载/服务重启握手，需提权，EAPO 简报已备）
-- [x] 自研 APO v1（`AuraApo.dll`：裸 COM 聚合 + 自注册 + 透传 + 心跳映射 + SILENT 清零；
-      专属 CLSID，IID 取自 SDK IDL；`smoke_apo_register.py` 覆盖导出表 + 注册往返）
+- [x] `05_vm_bridge/`（`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
+      `verify_dll_copies` 校验 9 导出；桥 bypass 透传 + per-group 衰减峰值 +
+      hottest-non-idle 可视化组 + 4 态显示 error/bypass/idle/processing）
 - [ ] `04_asio_engine/`（需 Steinberg ASIO SDK，仓内暂无）
 - [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）
+
+> ⚠️ **Known issue**（`806b44b` 立案）：APO 注册后 audiodg 加载失败（SFX/MFX APO 加载路径），
+> 已登记待查。03 全部操作遵循"系统现场可恢复"原则（备份 → 操作 → 验证 → 恢复，
+> `88f35aa` 实测干净还原）。
 
 ## 环境结论（本机实测）
 

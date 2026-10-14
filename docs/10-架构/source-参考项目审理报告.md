@@ -78,7 +78,7 @@
 
 ### 2.5 clap（CLAP 标准正典上游）
 
-- **背景**：AuraDSP 引擎的 CLAP 宿主（`engine/auradsp_plugin_host.cpp`，`#include <clap/clap.h>`，实现 `ClapPluginInstance`）此前依赖内置快照 `vendor/plugin-api/clap/`；该快照于 2026-10-10 自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/` 提取（`vendor/ORIGIN.md` 登记为 `clap-api`）。本次新克隆 `source/clap` 为其**正典上游**。
+- **背景**：AuraDSP 引擎的 CLAP 宿主（`engine/host/auradsp_plugin_host.cpp`，`#include <clap/clap.h>`，实现 `ClapPluginInstance`）此前依赖内置快照 `vendor/plugin-api/clap/`；该快照于 2026-10-10 自 `source/lsp-plugins/modules/lsp-3rd-party/include/clap/` 提取（`vendor/ORIGIN.md` 登记为 `clap-api`）。本次新克隆 `source/clap` 为其**正典上游**。
 - **版本落差（重要）**：
 
   | | 正典上游 `source/clap` | 引擎内置 `vendor/plugin-api/clap` |
@@ -148,7 +148,7 @@
 | **响度感知 / 动态扩展** | 待开发（M5 细化） | `lsp-plugins` | `modules/lsp-plugins-loud-comp/src/main/`（工业级等响度曲线与自适应滤波） |
 | **多频段分带展宽** | P-002 补丁导出 vendor stereowide | `lsp-plugins` | `modules/lsp-plugins-crossover/`（Linkwitz-Riley 4阶分频网络参考） |
 | **卷积与 IR 管理** | FileGate 六道门卫 + convolver 节点 | `equalizerAPO64` / `lsp-plugins` | `lsp-plugins-impulse-responses/`（高吞吐卷积与 IR 预处理机制） |
-| **插件宿主 (VST3/CLAP)** | M1 引擎已实现进程内宿主（`auradsp_plugin_host.cpp`） | `clap`（协议正典）/ `element`（架构） | `source/clap/include/clap/`（CLAP C ABI 正典头）；`element/src/engine/`（跨平台宿主扫描、隔离与总线调度） |
+| **插件宿主 (VST3/CLAP)** | M1 引擎已实现进程内宿主（`engine/host/auradsp_plugin_host.cpp`，四插槽） | `clap`（协议正典）/ `element`（架构） | `source/clap/include/clap/`（CLAP C ABI 正典头）；`element/src/engine/`（跨平台宿主扫描、隔离与总线调度） |
 | **信号链重排序 / 节点图** | M3-a 线性展示 / M3.5 待 ADR | `element` / `pulseeffects` | `element` 的 Graph 连线拓扑；`pulseeffects` 的 pipeline 动态重编排 |
 | **Windows 全局音频** | 当前为进程内 WASAPI pump | `equalizerAPO64` / `ViPER4Windows` | `EqualizerAPO/`（APO 注册表服务、驱动挂载与端点拦截）；`ViPER4WindowsAPO/ViPER4WindowsAPO.cpp`（MFX APO 注册 + 共享内存参数投递的最小闭环） |
 | **RT-Safe 参数热更新** | P-004 表驱动链参数下发 | `ViPER4Windows` | `staged/consumed_params_` 原子双缓冲 + `StartParamWatch()`（对照音频线程零分配约束） |

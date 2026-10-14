@@ -16,22 +16,25 @@
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务（Phase 6） | ⬜ 蓝本见 `source/RootlessJamesDSP` |
 | **Linux** | PipeWire/Pulse | filter-chain 模块化挂载（Phase 7） | ⬜ 蓝本见 `source/JDSP4Linux` |
 
+> **音频后端模式**（`app/auradsp_app/lib/core/audio_modes.dart`，2026-10-14 新增）：Windows 侧四模式 `vaio`（AuraVAIO 虚拟声卡）/ `vbcallback`（Voicemeeter 回调）/ `sysapo`（System APO，默认）/ `asio`（专业 ASIO）；Android `root`/`rootless`。当前仅**持久化选择 + 重启生效提示**，引擎接线待后续版本；驱动侧对应实现见 `core/desktop/windows-drivers/`（02 VM 泵 / 03 自研 APO / 05 VB 桥）。
+
 ---
 
-## 2. 仓库结构（2026-10-13 重构后）
+## 2. 仓库结构（2026-10-14；P3a/P3b 顶层化 + P4b 引擎子目录化后）
 
 > P3a/P3b 已把引擎、第三方、资源三块提到顶层：
 > `core/desktop/engine_api` → **`engine/`**、`core/desktop/vendor-src` → **`vendor/`**、`resource/` → **`assets/`**。
+> P4b（`cec8064`）把引擎的链/IO 与插件宿主文件收进 `chain/` 与 `host/` 子目录（纯移动）。
 
 ```text
 AuraDSP/
 ├── engine/              # ★ 桌面引擎（C++20，MSVC）
 │   ├── auradsp_engine.{h,cpp,def}   # C ABI 契约（UI↔驱动唯一边界）
 │   ├── engine_internal.h            # 私有状态 + 跨文件符号（内部单一入口）
-│   ├── engine_{chain,convolver,viz,probe}.cpp
+│   ├── chain/                       # 链与 IO：engine_{chain,convolver,viz,probe,audiofile}.cpp
 │   ├── dsp/                         # 10 个自研效果模块（每效果一文件，含 dyneq）
-│   ├── host_*.cpp                   # 插件宿主（gui/metadata_scan/instances/slots）
-│   └── auradsp_plugin_host.{h,cpp}  # VST3/CLAP 宿主管理
+│   ├── host/                        # 插件宿主：auradsp_plugin_host.cpp + host_{gui,metadata_scan,instances,slots}.cpp
+│   └── auradsp_plugin_host.h        # VST3/CLAP 宿主公共头（四插槽 kMaxPluginSlots=4）
 ├── vendor/              # ★ 第三方只读（补丁必须登记 PATCHES.md）
 │   ├── libjamesdsp/     #   JamesDSP 算法核 + PATCHES.md
 │   └── plugin-api/      #   clap / steinberg(vst3)
@@ -39,12 +42,15 @@ AuraDSP/
 │   ├── convolver/ ddc/ liveprog/  + manifest.json
 ├── core/
 │   ├── desktop/windows/ # CMakeLists + build_engine.sh → out/Release/*.dll（DLL 真相源）
+│   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：02 VM 泵 / 03 自研 APO / 05 VB 桥
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
-├── app/auradsp_app/     # Flutter 3.47.7（59 个 dart，20 张效果卡）
-├── test/smoke/          # 38 个 smoke_*.py + probe/test/bench 若干；runner.py 共登记 43 项
+├── app/auradsp_app/     # Flutter 3.47.7（62 个 dart，20 张效果卡；音频后端四模式已持久化）
+├── test/smoke/          # 46 个 smoke_*.py + probe/test/bench 7 个；runner.py 登记 51 项（套件实测 53 项全绿）
 ├── tools/               # bin/ 6 · probe/ 18 · resource_pipeline/ 2 · calibration/ 1 · archive/
-├── source/              # 第三方参考仓库只读快照（11 个，不入库）
-└── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
+├── source/              # 第三方参考仓库只读快照（登记 13 项，仅 ORIGIN.md 入库）
+├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
+│   └── 参考技术手册/     #   第三方 PDF 手册本地只读区（约 220MB，仅 README 清单入库）
+└── .ai/                 # AI 自治沉淀区（memory/rules）
 ```
 
 ---

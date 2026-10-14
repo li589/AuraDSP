@@ -110,9 +110,9 @@
 - **M3.5-c ✅ 已全量落地并验证通过（2026-10-10）**：
   - **引擎层零开销采样与 SPSC 环扩展**：在 `JDSPChainItem` 引入固定 `stageIdx (0..11)`，在 `JamesDSPProcess` 与 `JamesDSPProcessCheckBenchmarkReady` 表遍历中实施 $O(1)$ 常数时间峰值扫描写入 `stagePeakL/R[16]`；`auradsp_viz_frame` 扩展包含 16 声道电平数组（dBFS 转换），SPSC 无锁环高频直推，零分配、零系统调用、严格 RT-Safe；
   - **单测全绿**：`tools/smoke_chain_meter.py` 验证默认直通（12 节点精确对齐 -10.46 dBFS）与 Liveprog 2.0x 增益节点（前置 7 节点保持 -10.46 dBFS，后置 5 节点精确放大至 -4.44 dBFS），100% PASS；6 项历史单测全量无回归；
-  - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 280 字节 `VizFrame` 结构体映射；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
+  - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 `VizFrame` 结构体映射（M3.5-c 时 280 字节，后加 EQ 输入谱 tap 扩为 **408 字节**，`sizeof == 408` 断言守护，改动须同步全部 ctypes 镜像）；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
   - **置顶前置 UI 自动化验证**：`tools/ui_verify_chain_meter.py` 在物理活动桌面置顶前置测试全部 PASS，留档截图 `30-chain-initial.png` ~ `33-chain-reset.png`。
-- **M3.5-d ✅ 已落地（2026-10-10）**：插件槽位入链。宿主由单插槽扩为**固定 2 插槽**（`kMaxPluginSlots = 2`），每槽经 `insertStage`（0..4）选择插入锚点，形成**外部可插 + 内部可重排**的统一拓扑。决策见 [ADR-004](../adr/ADR-004-plugin-multi-slot-and-stage-topology.md)。
+- **M3.5-d ✅ 已落地（2026-10-10；插槽数后扩）**：插件槽位入链。宿主由单插槽扩为**固定插槽**（M3.5-d 时 `kMaxPluginSlots = 2`，**2026-10-14 已扩至 4**），每槽经 `insertStage`（0..4）选择插入锚点，形成**外部可插 + 内部可重排**的统一拓扑。决策见 [ADR-004](../adr/ADR-004-plugin-multi-slot-and-stage-topology.md)。
   - **引擎**：`auradsp_process` 由 `process_plugin_slots_stage(h, stage, ...)` 统一承担 stage 遍历——链首 `Stage 0 Pre-DSP` → 低频搁架 → `Stage 1 Pre-Vendor` → vendor 12 级链 → `Stage 2 Post-Vendor` → Freeverb → `Stage 3 Post-Reverb`（默认，行为与旧单插槽一致）→ NaN/Inf 清洗与 ±10.0 钳位 → `Stage 4 Post-Limiter`。stage 匹配只读 `std::atomic`，音频线程零分配零锁。
   - **ABI**：新增 13 个 `auradsp_plugin_slot_*` 导出，旧单插槽符号全部保留为转发 slot 0 的薄封装，**向后兼容无破坏**。
   - **UI（处理链页）**：`_PluginStageTopologyView` 全局阶段拓扑图——Stage 0~4 与 vendor 内部节点同屏横向信号流，活跃插槽内联渲染为 `S<n>:<插件名>` 芯片；`_PluginSlotChainCard` 每槽一张卡（阶段下拉 + GUI 打开 + bypass 胶囊 + 延迟读数）。
