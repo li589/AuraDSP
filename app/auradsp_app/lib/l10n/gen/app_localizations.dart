@@ -379,7 +379,7 @@ abstract class AppLocalizations {
   /// No description provided for @testSrcHint.
   ///
   /// In zh, this message translates to:
-  /// **'测试用信号源（正弦/粉噪/音频文件）；输入/输出设备选择后续在此扩展'**
+  /// **'测量用信号；停止后回到正式源'**
   String get testSrcHint;
 
   /// No description provided for @srcMp3.
@@ -441,6 +441,120 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。'**
   String get channelPhaseA;
+
+  /// No description provided for @audioMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频模式'**
+  String get audioMode;
+
+  /// No description provided for @audioModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'重启引擎后生效，后续版本接线'**
+  String get audioModeHint;
+
+  /// No description provided for @audioDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备'**
+  String get audioDevice;
+
+  /// No description provided for @modeAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动'**
+  String get modeAuto;
+
+  /// No description provided for @sampleRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'采样率'**
+  String get sampleRate;
+
+  /// No description provided for @buffer.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓冲区'**
+  String get buffer;
+
+  /// No description provided for @modeVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO'**
+  String get modeVaio;
+
+  /// No description provided for @modeVb.
+  ///
+  /// In zh, this message translates to:
+  /// **'Voicemeeter'**
+  String get modeVb;
+
+  /// No description provided for @modeSysApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'System APO'**
+  String get modeSysApo;
+
+  /// No description provided for @modeAsio.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO'**
+  String get modeAsio;
+
+  /// No description provided for @modeRoot.
+  ///
+  /// In zh, this message translates to:
+  /// **'Root'**
+  String get modeRoot;
+
+  /// No description provided for @modeRootless.
+  ///
+  /// In zh, this message translates to:
+  /// **'Rootless'**
+  String get modeRootless;
+
+  /// No description provided for @modeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get modeSystem;
+
+  /// No description provided for @modeVirtual.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟'**
+  String get modeVirtual;
+
+  /// No description provided for @modeDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动'**
+  String get modeDriver;
+
+  /// No description provided for @catAppearance.
+  ///
+  /// In zh, this message translates to:
+  /// **'外观'**
+  String get catAppearance;
+
+  /// No description provided for @catAudio.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频'**
+  String get catAudio;
+
+  /// No description provided for @catSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get catSystem;
+
+  /// No description provided for @catTest.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试'**
+  String get catTest;
 
   /// No description provided for @pageHomeEyebrow.
   ///

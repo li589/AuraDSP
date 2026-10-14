@@ -19,6 +19,7 @@ import '../engine/auradsp_ffi.dart'
     show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
 import 'config.dart';
+import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugin_manager.dart';
 import 'presets.dart';
@@ -220,6 +221,9 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
+  // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
+  // 引擎接线待后续版本，当前仅持久化 + UI 展示。
+  String audioMode = 'auto';
 
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
@@ -601,6 +605,12 @@ class AppModel extends ChangeNotifier {
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
   AppModel({bool testing = false}) : _testing = testing {
     config = ConfigManager.load();
+    // 存量 audioMode 归一化到当前平台合法集（未知回平台默认并落盘）。
+    audioMode = AudioModes.normalize(config.audioMode);
+    if (audioMode != config.audioMode) {
+      config.audioMode = audioMode;
+      ConfigManager.save(config);
+    }
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。
      * 不重建的话，低采样率用户拿到的是含越界频点的出厂网格。 */
@@ -2585,6 +2595,17 @@ void setSampleRate(int rate) {
   config.sampleRate = rate;
   ConfigManager.save(config);
   _rebuildEqGridForSampleRate();
+}
+
+/// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
+/// 当前仅持久化选择（引擎接线待后续版本，重启生效）。
+void setAudioMode(String id) {
+  final valid = AudioModes.normalize(id);
+  if (valid == audioMode && config.audioMode == valid) return;
+  audioMode = valid;
+  config.audioMode = valid;
+  ConfigManager.save(config);
+  notifyListeners();
 }
 
 void setEqBandsCount(int count) {

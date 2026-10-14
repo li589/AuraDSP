@@ -19,6 +19,7 @@ class AppConfig {
   // 音频引擎参数
   int sampleRate;
   int maxBlockFrames;
+  String audioMode;
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
@@ -40,6 +41,7 @@ class AppConfig {
   AppConfig({
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
+    this.audioMode = 'auto',
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
@@ -63,6 +65,7 @@ class AppConfig {
     return AppConfig(
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
       maxBlockFrames: (audio['maxBlockFrames'] as num?)?.toInt() ?? 1024,
+      audioMode: (audio['audioMode'] as String?) ?? 'auto',
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
@@ -88,6 +91,7 @@ class AppConfig {
         'audio': {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
+          'audioMode': audioMode,
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,
           'stereoWidenMax': stereoWidenMax,

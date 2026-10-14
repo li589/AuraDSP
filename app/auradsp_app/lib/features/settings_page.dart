@@ -1,14 +1,19 @@
 /*
- * settings_page.dart — 设置页：配色 / 语言 / 声道 / 引擎信息 / 测试音频源
+ * settings_page.dart — 设置页：配色 / 语言 / 音频模式 / 设备 / 声道 /
+ * 采样率 / 引擎信息 / 持久化记忆 / 测试音频源
  *
  * 一卡一节，序号贯通（测试卡无序号：纯测试工具，不计入设置序号）；
  * 说明文字统一挂在卡片标题下（hint），不再散落在控件之间。
+ * 下设四类分区（外观/音频/系统/测试），底部选卡切换，序号跨类贯通不变。
  * 注：延迟档（ADR-002）已由 ADR-006 撤销，此处不再有「延迟模式」选项；
  *     延迟改为纯测量展示，见底栏徽标与效果页组件级徽标。
+ * 音频模式与设备分卡：模式管后端选择，设备管当前设备展示与后续枚举。
  */
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
+import '../core/audio_modes.dart';
 import '../core/config.dart';
 import '../core/design.dart';
 import '../core/session_memory.dart';
@@ -17,20 +22,27 @@ import '../core/theme.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   final AppModel model;
   const SettingsPage({super.key, required this.model});
 
   @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  // 当前分类：0 外观 / 1 音频 / 2 系统 / 3 测试（后续加类只改此处与 _CatBar）。
+  int _cat = 1;
+
+  @override
   Widget build(BuildContext context) {
+    final model = widget.model;
     final l = l10nOf(context);
     final p = paletteOf(context);
     return ListenableBuilder(
       listenable: model,
-      builder: (_, _) => PageScaffold(
-        eyebrow: l.pageSettingsEyebrow,
-        title: l.pageSettingsTitle,
-        children: [
+      builder: (_, _) {
+        final all = <Widget>[
           // 01 配色
           SectionCard(
             index: '01',
@@ -78,7 +90,7 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          // 03 语言
+          // 02 语言
           SectionCard(
             index: '02',
             title: l.language,
@@ -92,9 +104,29 @@ class SettingsPage extends StatelessWidget {
               onChanged: (v) => model.setLocale(Locale(v)),
             ),
           ),
-          // 04 声道模式（ADR-003 Phase A）
+          // 03 音频模式（各平台后端选择；引擎接线待后续版本）
           SectionCard(
             index: '03',
+            title: l.audioMode,
+            hint: l.audioModeHint,
+            child: AuraSegmented<String>(
+              segments: [
+                for (final id in AudioModes.optionsFor(AudioModes.currentOs()))
+                  AuraSegment(id, _modeLabel(l, id)),
+              ],
+              selected: model.audioMode,
+              onChanged: (v) => model.setAudioMode(v),
+            ),
+          ),
+          // 04 设备（当前设备展示；枚举列表后续在此扩展）
+          SectionCard(
+            index: '04',
+            title: l.audioDevice,
+            child: _DeviceInfo(model: model),
+          ),
+          // 05 声道模式（ADR-003 Phase A）
+          SectionCard(
+            index: '05',
             title: l.channelMode,
             hint: l.channelPhaseA,
             child: AuraSegmented<int>(
@@ -107,15 +139,29 @@ class SettingsPage extends StatelessWidget {
               onChanged: (v) => model.setInt('channels.mode', v),
             ),
           ),
-          // 05 引擎信息
+          // 06 采样率（发给设备的请求值；设备可回退原生值）
           SectionCard(
-            index: '04',
+            index: '06',
+            title: l.sampleRate,
+            child: AuraSegmented<int>(
+              segments: const [
+                AuraSegment(44100, '44100'),
+                AuraSegment(48000, '48000'),
+                AuraSegment(96000, '96000'),
+              ],
+              selected: model.config.sampleRate,
+              onChanged: (v) => model.setSampleRate(v),
+            ),
+          ),
+          // 07 引擎信息
+          SectionCard(
+            index: '07',
             title: l.engineInfo,
             child: _EngineInfo(model: model),
           ),
-          // 06 持久化记忆与外置配置
+          // 08 持久化记忆与外置配置
           SectionCard(
-            index: '05',
+            index: '08',
             title: l.memTitle,
             hint: l.memHint,
             child: Column(
@@ -165,19 +211,173 @@ class SettingsPage extends StatelessWidget {
               ],
             ),
           ),
-          // 测试音频源（无序号；主页迁移至此，为输入/输出设备选择预留位置）
+          // 测试音频源（无序号；测量用信号，停止后回到正式源）
           SectionCard(
             title: l.testSrcTitle,
             hint: l.testSrcHint,
             child: _TestSourceChips(model: model),
           ),
+        ];
+        // 按序号切片：[01,02] 外观 / [03,04,05,06] 音频 / [07,08] 系统 / [测试]。
+        final cats = <List<Widget>>[
+          [all[0], all[1]],
+          [all[2], all[3], all[4], all[5]],
+          [all[6], all[7]],
+          [all[8]],
+        ];
+        final shown = [...cats[_cat.clamp(0, 3)], const SizedBox(height: 84)];
+        return Stack(
+          children: [
+            PageScaffold(
+              eyebrow: l.pageSettingsEyebrow,
+              title: l.pageSettingsTitle,
+              children: shown,
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: _CatBar(
+                selected: _cat,
+                labels: [l.catAppearance, l.catAudio, l.catSystem, l.catTest],
+                onChanged: (v) => setState(() => _cat = v),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/* ---- 底部分类选卡（固定悬浮；点选切换设置分组） ---- */
+
+class _CatBar extends StatelessWidget {
+  final int selected;
+  final List<String> labels;
+  final ValueChanged<int> onChanged;
+  const _CatBar({
+    required this.selected,
+    required this.labels,
+    required this.onChanged,
+  });
+
+  static const _icons = [
+    Icons.color_lens_outlined,
+    Icons.graphic_eq_rounded,
+    Icons.memory_outlined,
+    Icons.science_outlined,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Container(
+      decoration: BoxDecoration(
+        color: p.panel,
+        border: Border(top: BorderSide(color: p.hairline)),
+      ),
+      padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).padding.bottom + AuraSpace.xs,
+          top: AuraSpace.xs),
+      child: Row(
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            Expanded(
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => onChanged(i),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: AuraSpace.xs + 2),
+                  decoration: BoxDecoration(
+                    border: Border(
+                      top: BorderSide(
+                        color: i == selected ? p.accent : Colors.transparent,
+                        width: 2,
+                      ),
+                    ),
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_icons[i],
+                          size: 19,
+                          color: i == selected ? p.accent : p.textDim),
+                      const SizedBox(height: 2),
+                      Text(
+                        labels[i],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: i == selected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                          color: i == selected ? p.text : p.textDim,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 }
 
-/* ---- 测试音频源（主页迁移；WAV + MP3 文件 + 合成信号 + 停止） ---- */
+/* ---- 音频模式 id → 展示名（与 AudioModes.optionsFor 对齐） ---- */
+
+String _modeLabel(AppLocalizations l, String id) {
+  switch (id) {
+    case 'vaio':
+      return l.modeVaio;
+    case 'vbcallback':
+      return l.modeVb;
+    case 'sysapo':
+      return l.modeSysApo;
+    case 'asio':
+      return l.modeAsio;
+    case 'root':
+      return l.modeRoot;
+    case 'rootless':
+      return l.modeRootless;
+    case 'system':
+      return l.modeSystem;
+    case 'virtual':
+      return l.modeVirtual;
+    case 'driver':
+      return l.modeDriver;
+    default:
+      return l.modeAuto;
+  }
+}
+
+/* ---- 当前设备（展示；枚举列表后续在此扩展） ---- */
+
+class _DeviceInfo extends StatelessWidget {
+  final AppModel model;
+  const _DeviceInfo({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final info = model.info;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow(l.engineForm, 'Desktop · in-process DLL'),
+        if (info != null) ...[
+          _InfoRow(
+              l.sampleRate, '${info.deviceRate} Hz / ${info.deviceCh} ch'),
+          _InfoRow(l.buffer, '${info.bufferFrames} frames'),
+        ],
+      ],
+    );
+  }
+}
 
 class _TestSourceChips extends StatelessWidget {
   final AppModel model;
@@ -254,11 +454,8 @@ class _EngineInfo extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.engineForm, 'Desktop · in-process DLL'),
         if (info != null) ...[
           _InfoRow('ABI', 'v${info.abi} · ${info.version}'),
-          _InfoRow('Device', '${info.deviceRate} Hz / ${info.deviceCh} ch'),
-          _InfoRow('Buffer', '${info.bufferFrames} frames'),
         ],
         _InfoRow('Latency', '${model.latencyMs.toStringAsFixed(1)} ms'),
         const SizedBox(height: AuraSpace.md),

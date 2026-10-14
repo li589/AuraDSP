@@ -155,7 +155,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get testSrcHint =>
-      'Signal sources for testing (tone/noise/audio files); input/output device selection lives here later';
+      'Signals for measurement; stopping returns to the formal source';
 
   @override
   String get srcMp3 => 'Open MP3 File';
@@ -188,6 +188,64 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get channelPhaseA =>
       'Phase A: matrix downmix envelope (ADR-003). True per-channel instances ship in Phase B.';
+
+  @override
+  String get audioMode => 'Audio Mode';
+
+  @override
+  String get audioModeHint =>
+      'Takes effect after engine restart; backend wiring lands in a later version';
+
+  @override
+  String get audioDevice => 'Device';
+
+  @override
+  String get modeAuto => 'Auto';
+
+  @override
+  String get sampleRate => 'Sample Rate';
+
+  @override
+  String get buffer => 'Buffer';
+
+  @override
+  String get modeVaio => 'AuraVAIO';
+
+  @override
+  String get modeVb => 'Voicemeeter';
+
+  @override
+  String get modeSysApo => 'System APO';
+
+  @override
+  String get modeAsio => 'ASIO';
+
+  @override
+  String get modeRoot => 'Root';
+
+  @override
+  String get modeRootless => 'Rootless';
+
+  @override
+  String get modeSystem => 'System';
+
+  @override
+  String get modeVirtual => 'Virtual';
+
+  @override
+  String get modeDriver => 'Driver';
+
+  @override
+  String get catAppearance => 'Appearance';
+
+  @override
+  String get catAudio => 'Audio';
+
+  @override
+  String get catSystem => 'System';
+
+  @override
+  String get catTest => 'Test';
 
   @override
   String get pageHomeEyebrow => 'CONSOLE';
