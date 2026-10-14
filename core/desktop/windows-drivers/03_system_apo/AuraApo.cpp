@@ -174,8 +174,17 @@ bool CAuraApo::OpenHeartbeat() {
     sa.nLength = sizeof(sa);
     sa.lpSecurityDescriptor = sd;
     sa.bInheritHandle = FALSE;
+    // 心跳映射名：生产用 Global\（audiodg=LocalService 有 SeCreateGlobalPrivilege）。
+    // selftest 跑在任意权限下（普通 shell 无该特权），经环境变量 AURAAPO_HEARTBEAT_LOCAL=1
+    // 切到 Local\ 验证心跳逻辑（同进程可见即可）。结构一致，仅命名空间不同。
+    const bool localHb = [] {
+        char v[2] = {0};
+        DWORD n = GetEnvironmentVariableA("AURAAPO_HEARTBEAT_LOCAL", v, 2);
+        return n == 1 && v[0] == '1';
+    }();
+    const wchar_t* hbName = localHb ? L"Local\\AuraAPO_Heartbeat" : AURA_HEARTBEAT_MAP_NAME;
     HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0,
-                                     (DWORD)sizeof(AuraHeartbeat), AURA_HEARTBEAT_MAP_NAME);
+                                     (DWORD)sizeof(AuraHeartbeat), hbName);
     LocalFree(sd);
     if (!hMap) return false;
     void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(AuraHeartbeat));
