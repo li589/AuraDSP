@@ -24,6 +24,10 @@ venv/
 # --- 构建产物 ---
 **/out/
 **/build/
+# AuraVAIO 内核驱动 MSBuild 产物：两条轨各自的 x64/ 输出与其中的包目录
+# （AuraVaioDriver/、AuraVaioDriverLegacy/）。不用裸 **/x64/，避免误伤
+# 仓库里合法的 x64 资源目录。
+core/desktop/windows-drivers/01_vaio_driver/*/x64/
 # P0：aidl-gen 为构建时生成物（tag aidl-gen-backup-20261013 留档），不入库
 core/android/aidl-gen/
 **/build/

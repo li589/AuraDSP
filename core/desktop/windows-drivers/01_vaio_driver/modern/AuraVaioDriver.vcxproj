@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AuraVaioDriver.vcxproj - MODERN main line
+  WDK 28000 + VS2026, Win10 1809+ / Win11 x64.
+
+  AuraVAIO virtual audio adapter: a PortCls WaveRT miniport plus a KMDF device
+  (DriverType=KMDF because DriverEntry uses WdfDriverCreate; PortCls owns the
+  IRP dispatch table via WdfDriverInitNoDispatchOverride).
+
+  The legacy / Win7 companion project lives in ../legacy/ and compiles the very
+  same sources from ../src/ with the EWDK 19041 toolchain, into its own output
+  directory.  Sources are NOT duplicated: ../src/ is the single source of truth,
+  and both projects only list which files they compile.  Keep the item lists in
+  the two projects in sync.
+-->
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{8E2B1C5A-3D6F-4A2B-9C01-1A2B3C4D5E6F}</ProjectGuid>
+    <TemplateGuid>{dd38f7fc-d7bd-488b-9242-7d8754cde80d}</TemplateGuid>
+    <RootNamespace>AuraVaioDriver</RootNamespace>
+    <ProjectName>AuraVaioDriver</ProjectName>
+    <WindowsTargetPlatformVersion>10.0.28000.0</WindowsTargetPlatformVersion>
+    <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetVersion>Windows10</TargetVersion>
+    <TargetPlatformVersion>10.0.28000.0</TargetPlatformVersion>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetVersion>Windows10</TargetVersion>
+    <TargetPlatformVersion>10.0.28000.0</TargetPlatformVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Skeleton build: skip test-signing (no test cert configured).
+         SignMode=None lets the .sys build unsigned; flip to test-sign later. -->
+    <SignMode>None</SignMode>
+    <!-- WDK 28000's ApiValidator aitstatic.exe returns exit 193 (bad exe format)
+         on this host; disable the optional Universal-API gate for now.
+         Re-enable (true) once a working ApiExtractor is available. -->
+    <ApiValidator_Enable>false</ApiValidator_Enable>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Link>
+      <!-- PortCls class driver, plus the kernel CRT (libcntpr) used by the
+           ntstrsafe / safe-string helpers. -->
+      <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Link>
+      <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\Driver.cpp" />
+    <ClCompile Include="..\src\AdapterCommon.cpp" />
+    <ClCompile Include="..\src\MiniportWaveRT.cpp" />
+    <ClCompile Include="..\src\MiniportWaveRTStream.cpp" />
+    <ClCompile Include="..\src\Topology.cpp" />
+    <ClCompile Include="..\src\VirtualClock.cpp" />
+    <ClCompile Include="..\src\Guids.cpp" />
+    <ClCompile Include="..\src\NewDelete.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\AuraVaio.h" />
+    <ClInclude Include="..\src\AuraPoolCompat.h" />
+    <ClInclude Include="..\src\AuraVaoTables.h" />
+    <ClInclude Include="..\src\AdapterCommon.h" />
+    <ClInclude Include="..\src\MiniportWaveRT.h" />
+    <ClInclude Include="..\src\MiniportWaveRTStream.h" />
+    <ClInclude Include="..\src\Topology.h" />
+    <ClInclude Include="..\src\VirtualClock.h" />
+    <ClInclude Include="..\src\NewDelete.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="..\src\AuraVaioDriver.inf" />
+    <!-- The WDK does not auto-add the linked .sys to the driver package folder;
+         Inf2Cat scans $(PackageDir) and needs the .sys there.  FilesToPackage is
+         a registered ProjectTools item type -> this is the supported way. -->
+    <FilesToPackage Include="$(TargetPath)" />
+  </ItemGroup>
+</Project>

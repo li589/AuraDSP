@@ -1,0 +1,136 @@
+;=============================================================================
+; AuraVaioDriver.inf
+;
+; AuraVAIO virtual audio device (SPEC-WIN-DRIVER-001 §3.1 / Phase 4).
+;
+; The adapter is a PortCls WaveRT driver exposing one render endpoint:
+;   - a WaveRT filter  (the byte stream, subdevice name "Wave")
+;   - a topology filter (the device side, subdevice name "Topology")
+; whose bridge pins are joined at runtime by PcRegisterPhysicalConnection().
+;
+; The KSNAME_* values below MUST stay in lockstep with AURA_KSNAME_* in
+; AuraVaio.h: PcRegisterSubdevice() appends the subdevice name to the device
+; interface reference string and these AddInterface lines look it back up.
+;=============================================================================
+
+[Version]
+Signature       = "$WINDOWS NT$"
+Class           = MEDIA
+ClassGuid       = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider        = %ProviderName%
+CatalogFile     = AuraVaioDriver.cat
+DriverVer       = 10/15/2026,1.0.0.0
+PnpLockDown     = 1
+
+[DestinationDirs]
+DefaultDestDir  = 12        ; \SystemRoot\System32\drivers
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+AuraVaioDriver.sys = 1,,
+
+[Manufacturer]
+%ProviderName% = AuraVAIO,NTamd64
+
+[AuraVAIO.NTamd64]
+%AuraVAIO.DeviceDesc% = AuraVAIO_Device, Root\AuraVAIO
+%AuraVAIO.DeviceDesc% = AuraVAIO_Device, Root\AuraVaioDriver
+
+;-----------------------------------------------------------------------------
+; Install sections
+;-----------------------------------------------------------------------------
+
+[AuraVAIO_Device.NT]
+CopyFiles = Drivers_Dir
+
+[AuraVAIO_Device.NT.HW]
+AddReg = AuraVAIO_Device.NT.HW.AddReg
+
+[AuraVAIO_Device.NT.HW.AddReg]
+; FILE_DEVICE_SOUND
+HKR,,DeviceType,0x10001,0x0000001D
+; SDDL_DEVOBJ_SYS_ALL_ADM_RWX_WORLD_RWX_RES_RWX
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GRGWGX;;;BA)(A;;GRGWGX;;;WD)(A;;GRGWGX;;;RC)"
+
+;-----------------------------------------------------------------------------
+; Device interfaces.
+;
+; Each KS filter is published under the audio categories with a reference
+; string matching its subdevice name so the audio endpoint builder can pair
+; the WaveRT render pin with the topology bridge pin.
+;-----------------------------------------------------------------------------
+
+[AuraVAIO_Device.NT.Interfaces]
+AddInterface = %KSCATEGORY_AUDIO%,    %KSNAME_Wave%,     AuraVAIO.Interface.Wave
+AddInterface = %KSCATEGORY_RENDER%,   %KSNAME_Wave%,     AuraVAIO.Interface.Wave
+AddInterface = %KSCATEGORY_AUDIO%,    %KSNAME_Topology%, AuraVAIO.Interface.Topology
+AddInterface = %KSCATEGORY_TOPOLOGY%, %KSNAME_Topology%, AuraVAIO.Interface.Topology
+
+[AuraVAIO.Interface.Wave]
+AddReg = AuraVAIO.Interface.Wave.AddReg
+
+[AuraVAIO.Interface.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AuraVAIO.Wave.szPname%
+
+[AuraVAIO.Interface.Topology]
+AddReg = AuraVAIO.Interface.Topology.AddReg
+
+[AuraVAIO.Interface.Topology.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AuraVAIO.Topology.szPname%
+
+;-----------------------------------------------------------------------------
+; Services
+;-----------------------------------------------------------------------------
+
+[AuraVAIO_Device.NT.Services]
+AddService = AuraVaioDriver,0x00000002,AuraVaioDriver_Service
+
+[AuraVaioDriver_Service]
+DisplayName    = %AuraVaioDriver.SvcDesc%
+ServiceType    = 1              ; SERVICE_KERNEL_DRIVER
+StartType      = 3              ; SERVICE_DEMAND_START
+ErrorControl   = 1              ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\AuraVaioDriver.sys
+
+[Drivers_Dir]
+AuraVaioDriver.sys
+
+;-----------------------------------------------------------------------------
+; WDF
+;
+; AuraVAIO is a KMDF driver (DriverEntry calls WdfDriverCreate) that also
+; plugs into PortCls.  $KMDFVERSION$ is stamped by StampInf from the project's
+; KMDF_VERSION_MAJOR/MINOR (1.15 on the modern track, 1.11 on the Win7 track).
+;-----------------------------------------------------------------------------
+
+[AuraVAIO_Device.NT.Wdf]
+KmdfService = AuraVaioDriver, AuraVAIO_WdfSect
+
+[AuraVAIO_WdfSect]
+KmdfLibraryVersion = $KMDFVERSION$
+
+;-----------------------------------------------------------------------------
+; Strings
+;-----------------------------------------------------------------------------
+
+[Strings]
+
+; -- Non-localizable --
+KSNAME_Wave               = "Wave"
+KSNAME_Topology           = "Topology"
+Proxy.CLSID               = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO          = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER         = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_TOPOLOGY       = "{DDA54A40-1E4C-11D1-A050-405705C10000}"
+
+; -- Localizable --
+ProviderName              = "AuraDSP"
+DiskName                  = "AuraVAIO Driver Installation Disk"
+AuraVAIO.DeviceDesc       = "AuraVAIO Virtual Audio Device"
+AuraVAIO.Wave.szPname     = "AuraVAIO"
+AuraVAIO.Topology.szPname = "AuraVAIO Topology"
+AuraVaioDriver.SvcDesc    = "AuraVAIO Virtual Audio Driver"
