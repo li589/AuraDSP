@@ -63,6 +63,18 @@ ASB_API int asio_status(char* out, int cap);
 // 返回 0=ok，<0=桥未运行/参数缺失。
 ASB_API int asio_set_param(const char* id, int isFloat, const void* v4);
 
+// 字符串参数（liveprog.code / arbmag.string）：同 auradsp_set_param 字节语义
+// （UTF-8，不含 NUL；引擎内部拷贝编译）。ASIO 重建一律走 Dart 侧 stop+start
+// （isolate 回放 paramStrMirror），桥内不另设镜像。返回 0=ok，<0=失败。
+ASB_API int asio_set_param_str(const char* id, const char* utf8, int bytes);
+
+// 参数回读（诊断/回归用）。out4 为 4 字节缓冲；返回 0=ok，<0=失败。
+ASB_API int asio_get_param(const char* id, int isFloat, void* out4);
+
+// 字符串参数回读：out 为调用方缓冲，cap 为容量；返回写入字节数（不含 NUL），
+// <0=失败。
+ASB_API int asio_get_param_str(const char* id, char* out, int cap);
+
 // 读可视化帧（408B/帧，与 auradsp_viz_read 同布局，Dart 侧已有解析）。
 // 返回读到帧数，0=无引擎/未运行。
 ASB_API int asio_viz_read(void* out408, int count);

@@ -1,10 +1,10 @@
-// audio_abridge.dart — ASIO 常驻桥 FFI（04_asio_engine/auraasio_bridge.dll）。
+// audio_abridge.dart — ASIO 常驻桥 FFI（bridge/asio_bridge/auraasio_bridge.dll）。
 //
 // 与 AuraVmBridge 同候选策略：exe 旁 → engine/ 子目录 → 环境变量
 // AURADSP_ASIO_BRIDGE_DLL。刻意不含硬编码开发机路径（产品铁律）。
 // 所有调用均在 isolate 线程（控制面），RT 线程只跑驱动 bufferSwitch 本身。
 //
-// 与 05 桥的两处契约差异（见 AsioBridge.h）：
+// 与 VB 桥的两处契约差异（见 AsioBridge.h）：
 //   1. start 多两个宿主参数 buf_size / out_pair（C long = Win64 下 32 位，
 //      FFI 侧用 Int32——ctypes.c_long 同口径）；
 //   2. detect 输出驱动清单（{"count":N,"drivers":[{name,dll,clsid}]}），
@@ -37,6 +37,12 @@ typedef _TestStopC = Int32 Function();
 typedef _TestStopDart = int Function();
 typedef _BypassC = Int32 Function(Int32);
 typedef _BypassDart = int Function(int);
+typedef _SetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
+typedef _SetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
+typedef _GetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
+typedef _GetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
+typedef _GetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
+typedef _GetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 
 class AuraAsioBridge {
   final DynamicLibrary dylib;
@@ -58,6 +64,12 @@ class AuraAsioBridge {
       dylib.lookupFunction<_TestStopC, _TestStopDart>('asio_test_stop');
   late final _BypassDart _bypass =
       dylib.lookupFunction<_BypassC, _BypassDart>('asio_bypass');
+  late final _SetParamStrDart _setParamStr = dylib.lookupFunction<
+      _SetParamStrC, _SetParamStrDart>('asio_set_param_str');
+  late final _GetParamDart _getParam =
+      dylib.lookupFunction<_GetParamC, _GetParamDart>('asio_get_param');
+  late final _GetParamStrDart _getParamStr = dylib.lookupFunction<
+      _GetParamStrC, _GetParamStrDart>('asio_get_param_str');
 
   AuraAsioBridge._(this.dylib);
 
@@ -103,7 +115,7 @@ class AuraAsioBridge {
   }
 
   /// 启动常驻桥。[driver] 为 detect 的 name（UTF-8 显示名）；[engineDll]
-  /// 传引擎真相源绝对路径（空串=桥内自动搜索）；[paramsJson] 同 05 格式
+  /// 传引擎真相源绝对路径（空串=桥内自动搜索）；[paramsJson] 同 bridge 格式
   /// "id=f1.5;id2=i3"；[bufSize]<=0 用驱动 preferredSize；[outPair] 为
   /// 输出对起始声道（L=R+1 配对），<0 按 0。
   int start(String driver,
@@ -199,4 +211,48 @@ class AuraAsioBridge {
   int testStop() => _testStop();
 
   int setBypass(bool on) => _bypass(on ? 1 : 0);
+
+  /// 字符串参数（liveprog.code / arbmag.string）：返回 0=ok，<0=失败。
+  /// ASIO 重建一律走 Dart 侧 stop+start（isolate 回放 paramStrMirror）。
+  int setParamStr(String id, String text) {
+    final idp = id.toNativeUtf8();
+    final tp = text.toNativeUtf8();
+    try {
+      return _setParamStr(idp.cast(), tp.cast(), tp.length);
+    } finally {
+      malloc.free(idp);
+      malloc.free(tp);
+    }
+  }
+
+  /// int 参数回读，失败返回 null。
+  int? getIntParam(String id) {
+    final idp = id.toNativeUtf8();
+    final vp = malloc<Int32>();
+    try {
+      final rc = _getParam(idp.cast(), 0, vp.cast());
+      return rc == 0 ? vp.value : null;
+    } catch (_) {
+      return null;
+    } finally {
+      malloc.free(idp);
+      malloc.free(vp);
+    }
+  }
+
+  /// 字符串参数回读，失败返回 null。
+  String? getParamStr(String id) {
+    final idp = id.toNativeUtf8();
+    final buf = malloc<Uint8>(256 * 1024 + 1).cast<Utf8>();
+    try {
+      final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
+      if (n <= 0) return null;
+      return buf.toDartString(length: n);
+    } catch (_) {
+      return null;
+    } finally {
+      malloc.free(idp);
+      malloc.free(buf);
+    }
+  }
 }

@@ -278,6 +278,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       replayed++;
     }
     dbgLog('asiomode: replayed $replayed params');
+    // 字符串参数回放（LiveProg/ArbMag 在 ASIO 下生效就靠这次；ASIO 重建一律
+    // 走本函数，重放必到）。
+    var replayedStr = 0;
+    for (final e in paramStrMirror.entries) {
+      if (ab!.setParamStr(e.key, e.value) == 0) replayedStr++;
+    }
+    dbgLog('asiomode: replayed $replayedStr str params');
     // 旁路态同步（用户此前可能已开旁路；桥默认关）。
     final bypassRc = ab!.setBypass(bypass);
     dbgLog('asiomode: bypass sync isolate=$bypass rc=$bypassRc');
@@ -602,6 +609,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 dbgLog('vbmode: setParamStr ${m['id']} applied 0');
               }
             }
+            if (asioActive && ab != null) {
+              // ASIO 约定与 VB 不同：0=ok，<0=失败（桥内无镜像，重建一律走
+              // Dart 侧 stop+start + paramStrMirror 回放）。
+              final arc =
+                  ab!.setParamStr(m['id'] as String, m['text'] as String);
+              if (arc != 0) {
+                dbgLog('asiomode: setParamStr ${m['id']} rc=$arc');
+              }
+            }
             final tookMs = DateTime.now().difference(t0).inMilliseconds;
             logSetParamStr.admit('${m['id']} (${(m['text'] as String).length}B) '
                 'rc=$rc took=${tookMs}ms');
@@ -612,22 +628,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
-              // VB 下游览桥 handle 的编译状态（进程内 handle 只是影子，不跑音频）。
-              final st = (vbActive && vb != null)
-                  ? (vb!.getIntParam('liveprog.status') ??
-                      AuraDspLib.getInt(lib, handle, 'liveprog.status'))
-                  : AuraDspLib.getInt(lib, handle, 'liveprog.status');
+              // 桥下读桥 handle 的编译状态（进程内 handle 只是影子，不跑音频）。
+              int? bst;
+              if (vbActive && vb != null) {
+                bst = vb!.getIntParam('liveprog.status');
+              } else if (asioActive && ab != null) {
+                bst = ab!.getIntParam('liveprog.status');
+              }
+              final st = bst ??
+                  AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});
             }
             if (rc == Status.ok && m['id'] == 'arbmag.string') {
-              final nodes = (vbActive && vb != null)
-                  ? (vb!.getIntParam('arbmag.nodeCount') ??
-                      AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount'))
-                  : AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
-              final ready = (vbActive && vb != null)
-                  ? (vb!.getIntParam('arbmag.ready') ??
-                      AuraDspLib.getInt(lib, handle, 'arbmag.ready'))
-                  : AuraDspLib.getInt(lib, handle, 'arbmag.ready');
+              int? bNodes, bReady;
+              if (vbActive && vb != null) {
+                bNodes = vb!.getIntParam('arbmag.nodeCount');
+                bReady = vb!.getIntParam('arbmag.ready');
+              } else if (asioActive && ab != null) {
+                bNodes = ab!.getIntParam('arbmag.nodeCount');
+                bReady = ab!.getIntParam('arbmag.ready');
+              }
+              final nodes = bNodes ??
+                  AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
+              final ready = bReady ??
+                  AuraDspLib.getInt(lib, handle, 'arbmag.ready');
               send({'evt': 'arbmag', 'nodes': nodes, 'ready': ready});
             }
             break;
