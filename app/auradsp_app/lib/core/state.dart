@@ -1040,6 +1040,11 @@ class AppModel extends ChangeNotifier {
           stageLevelsL.value = List<double>.filled(5, -90.0);
           stageLevelsR.value = List<double>.filled(5, -90.0);
         }
+        // Phase 4：驱动请求重置（kAsioResetRequest，采样率/设备变化等）→
+        // 复用热切换（stop→start 新参数；C++ 侧 start 时清标志，不会循环）。
+        if (asioActive && (raw['resetPending'] as int? ?? 0) == 1) {
+          _sendAsioRestart();
+        }
         notifyListeners();
         break;
       case 'asiodrivers':

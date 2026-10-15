@@ -122,6 +122,13 @@ check("sr/nbs 有效", st.get("sr", 0) > 0 and st.get("nbs", 0) > 0,
 check("engineOk", st.get("engineOk") is True)
 check("inCh/outCh>=2", st.get("inCh", 0) >= 2 and st.get("outCh", 0) >= 2,
       f"in={st.get('inCh')} out={st.get('outCh')}")
+# ---- Phase 4 加固字段（asioMessage 标志 + 掉线统计）----
+check("status 含 resetPending/latenciesChanged/dropouts",
+      "resetPending" in st and "latenciesChanged" in st and "dropouts" in st)
+check("resetPending==0（无待处理重置）", st.get("resetPending") == 0,
+      f"resetPending={st.get('resetPending')}")
+check("dropouts==0（3s 稳态无欠载）", st.get("dropouts") == 0,
+      f"dropouts={st.get('dropouts')}")
 
 f = ctypes.c_float(6.0)
 rc = b.asio_set_param(b"tube.gain", 1, ctypes.byref(f))

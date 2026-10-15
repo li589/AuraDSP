@@ -91,6 +91,15 @@
   "asioOutPair": "出力ペア",
   "asioRefresh": "更新",
   "asioSwitches": "コールバック",
+  "asioSrMismatch": "ドライバーは {sr} Hz で動作中（グローバル設定 {cfg} Hz と不一致、ASIO はドライバーに従います）",
+  "@asioSrMismatch": {
+    "placeholders": {
+      "sr": { "type": "String" },
+      "cfg": { "type": "String" }
+    }
+  },
+  "asioLatChanged": "ドライバーがレイテンシ変更を報告（次セッションで更新）",
+  "asioDropouts": "アンダーラン",
   "modeRoot": "Root",
   "modeRootless": "Rootless",
   "modeSystem": "システム",

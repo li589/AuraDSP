@@ -142,6 +142,12 @@ bool AsioHost::open(const char* driverName, void* sysRef, std::string& why) {
     driverName_ = info.name;
     asioVersion_ = info.asioVersion;
     driverVersion_ = info.driverVersion;
+    // 新会话从干净状态开始：清掉上一会话可能遗留的驱动请求标志
+    //（asiorestart 热切换复用同一 host 实例重 open，不清会让宿主心跳
+    // 把 resetPending=1 当新事件 → 无限 restart 循环）。
+    resetPending_.store(false, std::memory_order_release);
+    latenciesChanged_.store(false, std::memory_order_release);
+    lastSwitchQpc_.store(0, std::memory_order_relaxed);
     s_active = this;
     return true;
 }
@@ -536,13 +542,26 @@ long AsioHost::asio_message(long selector, long value, void* message, double* op
     case kAsioSupportsTimeInfo:  return 0;   // 用旧式 bufferSwitch
     case kAsioSupportsTimeCode:  return 0;
     case kAsioSupportsInputMonitor: return 0;
-    case kAsioLatenciesChanged:  return 1;   // 信息性：本宿主不缓存延迟
+    case kAsioLatenciesChanged:  // Phase 4：置位等控制面消费（重建 caps/延迟展示）
+        if (s_active) s_active->latenciesChanged_.store(true, std::memory_order_release);
+        return 1;
     case kAsioResyncRequest:     return 1;   // 信息性：tone/桥无语序依赖
-    default:                     return 0;   // ResetRequest/BufferSizeChange 等不支持
+    case kAsioResetRequest:      // Phase 4：驱动请求重置（采样率/设备变化等）——
+        // RT 回调上下文，绝不在此重建（buffer 重建必须控制面串行）。置位后
+        // 由桥的 status 心跳带回宿主，宿主走热切换（stop→caps→create→start）。
+        if (s_active) s_active->resetPending_.store(true, std::memory_order_release);
+        return 1;
+    default:                     return 0;
     }
 }
 
 void AsioHost::process(long doubleBufferIndex) {
+    // Phase 4 掉线检测的 RT 侧唯一动作：记 QPC。Win10+ QPC 为用户态内联
+    //（rdtsc/不变时钟源，不进内核），满足 RT 铁律"零 syscall"；欠载判定
+    // 本身放控制面（asio_status），RT 侧只留这一个写。
+    LARGE_INTEGER q;
+    QueryPerformanceCounter(&q);
+    lastSwitchQpc_.store((uint64_t)q.QuadPart, std::memory_order_relaxed);
     if (sink_) {
         process_io(doubleBufferIndex);
         return;

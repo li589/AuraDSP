@@ -73,6 +73,10 @@ struct BridgeCtl {
     char note[128] = {};
     int paramsApplied = 0;
     int paramsFailed = 0;
+    // Phase 4 掉线统计（仅控制线程读写——status/ResetSession 串行，无需原子）
+    uint64_t lastStatusQpc = 0;        // 上次 status 的 QPC
+    uint64_t lastStatusSwitches = 0;   // 上次 status 的 switch_count
+    unsigned long dropouts = 0;        // 欠载次数（本次会话累计）
     // 测试注入状态（FillTestSignal 载体；复用 05 的 PumpCtx 字段子集）
     PumpCtx tc;
 };
@@ -163,6 +167,9 @@ void ResetSession() {
     g_b.note[0] = '\0';
     g_b.paramsApplied = 0;
     g_b.paramsFailed = 0;
+    g_b.lastStatusQpc = 0;
+    g_b.lastStatusSwitches = 0;
+    g_b.dropouts = 0;
     g_b.driverUtf8.clear();
     g_b.driverRaw.clear();
     g_b.outPair = 0;
@@ -351,10 +358,27 @@ int asio_stop() {
 
 int asio_status(char* out, int cap) {
     if (!out || cap <= 0) return -1;
-    LARGE_INTEGER qpf;
+    LARGE_INTEGER qpf, qnow;
     double cbUs = 0;
     if (QueryPerformanceFrequency(&qpf) && qpf.QuadPart > 0)
         cbUs = (double)g_b.host.max_cb_ticks() * 1000000.0 / (double)qpf.QuadPart;
+    QueryPerformanceCounter(&qnow);
+    const uint64_t nowQ = (uint64_t)qnow.QuadPart;
+    const uint64_t sw = g_b.host.switch_count();
+    // Phase 4 掉线检测（控制面）：两次 status 间的 switches 增量低于期望的
+    // 80%（且期望增量足够大，排除短窗口抖动）记一次欠载。RT 侧只写 QPC，
+    // 判定全部在这里——误差容忍最后一次 status 之后的半帧。
+    if (InterlockedCompareExchange(&g_b.running, 0, 0) &&
+        g_b.lastStatusQpc != 0 && qpf.QuadPart > 0 &&
+        g_b.sr > 0.0 && g_b.nbs > 0 && sw >= g_b.lastStatusSwitches) {
+        const double elapsedSec =
+            (double)(nowQ - g_b.lastStatusQpc) / (double)qpf.QuadPart;
+        const double expect = elapsedSec * g_b.sr / (double)g_b.nbs;
+        const double actual = (double)(sw - g_b.lastStatusSwitches);
+        if (expect > 4.0 && actual < expect * 0.8) ++g_b.dropouts;
+    }
+    g_b.lastStatusQpc = nowQ;
+    g_b.lastStatusSwitches = sw;
     char eng[512] = {0};
     PathForJson(g_b.enginePath, eng, sizeof(eng));
     const int n = snprintf(
@@ -365,16 +389,20 @@ int asio_status(char* out, int cap) {
         "\"peakIn\":%.6f,\"peakOut\":%.6f,\"maxCbUs\":%.1f,"
         "\"startRc\":%d,\"note\":\"%s\",\"bypass\":%ld,\"testKind\":%ld,"
         "\"paramsApplied\":%d,\"paramsFailed\":%d,"
+        "\"resetPending\":%d,\"latenciesChanged\":%d,\"dropouts\":%lu,"
         "\"engine\":\"%s\",\"engineOk\":%s}",
         InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
-        (unsigned long long)g_b.host.switch_count(), g_b.sr, g_b.nbs,
+        (unsigned long long)sw, g_b.sr, g_b.nbs,
         g_b.driverUtf8.c_str(), g_b.outPair,
         g_b.inCh, g_b.outCh, g_b.inLat, g_b.outLat,
         (double)g_b.host.peak_in(), (double)g_b.host.peak_out(), cbUs,
         g_b.startRc, g_b.note,
         (long)InterlockedCompareExchange(&g_b.userBypass, 0, 0),
         (long)InterlockedCompareExchange(&g_b.tc.testKind, 0, 0),
-        g_b.paramsApplied, g_b.paramsFailed, eng,
+        g_b.paramsApplied, g_b.paramsFailed,
+        g_b.host.reset_pending() ? 1 : 0,
+        g_b.host.latencies_changed() ? 1 : 0,
+        g_b.dropouts, eng,
         (g_b.engine && g_b.process) ? "true" : "false");
     return (n >= 0 && n < cap) ? n : -1;
 }

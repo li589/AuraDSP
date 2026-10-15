@@ -239,6 +239,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioSwitches => 'コールバック';
 
   @override
+  String asioSrMismatch(String sr, String cfg) {
+    return 'ドライバーは $sr Hz で動作中（グローバル設定 $cfg Hz と不一致、ASIO はドライバーに従います）';
+  }
+
+  @override
+  String get asioLatChanged => 'ドライバーがレイテンシ変更を報告（次セッションで更新）';
+
+  @override
+  String get asioDropouts => 'アンダーラン';
+
+  @override
   String get modeRoot => 'Root';
 
   @override

@@ -91,6 +91,15 @@
   "asioOutPair": "Output Pair",
   "asioRefresh": "Refresh",
   "asioSwitches": "Switches",
+  "asioSrMismatch": "Driver runs at {sr} Hz, mismatching the global {cfg} Hz (ASIO follows the driver)",
+  "@asioSrMismatch": {
+    "placeholders": {
+      "sr": { "type": "String" },
+      "cfg": { "type": "String" }
+    }
+  },
+  "asioLatChanged": "Driver reported a latency change (reopens on next session)",
+  "asioDropouts": "Dropouts",
   "modeRoot": "Root",
   "modeRootless": "Rootless",
   "modeSystem": "System",
