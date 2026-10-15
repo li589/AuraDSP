@@ -13,10 +13,10 @@
 
 | 层次 | 路径 | 核心技术 | 职责与契约 |
 |---|---|---|---|
-| **核心引擎** | `engine/` | C++20, MSVC/CMake | **P3a 后由 `core/desktop/engine_api` 上移至顶层**：`auradsp_engine.{h,cpp,def}`（ABI 契约）+ `engine_internal.h`（私有符号单一入口）+ `chain/`（`engine_{chain,convolver,viz,probe,audiofile}.cpp` 链与 IO）+ `dsp/` 10 个自研效果（含 `dsp_dyneq.cpp`）+ `host/` 5 个插件宿主 TU（**P4b 子目录化**：原根目录散列文件已归 `chain/` 与 `host/`）。严格遵循 **RT-Safe（音频线程零锁、零内存分配、零系统调用）** |
+| **核心引擎** | `engine/` | C++20, MSVC/CMake | **P3a 后由 `core/desktop/engine_api` 上移至顶层**：`auradsp_engine.{h,cpp,def}`（ABI 契约）+ `engine_internal.h`（私有符号单一入口）+ `chain/`（`engine_{chain,convolver,viz,probe,audiofile}.cpp` 链与 IO）+ `dsp/` 10 个自研效果（含 `dsp_dyneq.cpp`）+ `host/` 5 个插件宿主 TU（**P4b 子目录化**：原根目录散列文件已归 `chain/` 与 `host/`）+ `legacy/`（**2026-10-16 由 `vendor/libjamesdsp/` 收编**的 JamesDSP C 算法核：12 级经典音效 + EEL2 + libsamplerate，补丁登记见 `engine/legacy/PATCHES.md`）。严格遵循 **RT-Safe（音频线程零锁、零内存分配、零系统调用）** |
 | **平台适配器** | `core/desktop/windows/` | CMake + MSVC + WASAPI | 桌面 DLL 构建脚本与 Windows 音频适配；产物 `out/Release/auradsp_engine.dll` 为 DLL 真相源 |
 | **Windows 驱动套件** | `core/desktop/windows-drivers/` | Windows SDK（用户态）+ WDK（内核态，待） | 与 `engine/` 彻底解耦的传输/格式层：`02_voicemeeter_client/`（VM 回调泵）、`03_system_apo/`（自研 APO `AuraApo.dll` + Configurator/selftest/tone_play/诊断探针）、`bridge/`（无编号 FFI 桥：`vm_bridge/` VB 桥 + `asio_bridge/` ASIO 桥）。规则与现状见该目录 README |
-| **第三方源码** | `vendor/` | C / C++ | **只读**（P3a 后由 `core/desktop/vendor-src` 上移）：`libjamesdsp/` + `plugin-api/{clap,steinberg}`。补丁必须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `vendor/libjamesdsp/PATCHES.md` |
+| **第三方源码** | `vendor/` | C / C++ | **只读**：仅剩 `plugin-api/{clap,steinberg}`（行业接口标准）。原 `libjamesdsp/` 已于 2026-10-16 收编至 `engine/legacy/`（见下「核心引擎」行与 `engine/legacy/PATCHES.md`）；补丁仍须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `engine/legacy/PATCHES.md` |
 | **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 251MB；`.gitignore` 已写 `/assets/**/*.irs`+`.vdc` 规则（走 release 附件），但**规则不回溯——仍有 2214 个历史 `.irs`/`.vdc`（约 73MB）处于跟踪中**，去跟踪（`git rm --cached`）属待裁定项，未擅动；新增大二进制不会被跟踪 |
 | **应用前端** | `app/auradsp_app/` | Flutter 3.47.7+, Dart FFI | 现代暗黑精致音频工作站 UI；6 页导航体系（主页/效果/脚本/插件/处理链/可视化）；高频可视化与状态隔离 |
 | **无锁桥接** | `engine/auradsp_engine.h/.cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 408 字节定长 `VizFrame`（含 32 带输出频谱 + 32 带 EQ 输入频谱、总峰值及 16 节点 per-stage 电平表；`sizeof == 408` 断言守护 ABI，改动须同步全部 ctypes 镜像） |
@@ -30,9 +30,9 @@
 
 | 目录 | 职责范围 | 规则与约束 |
 |---|---|---|
-| `engine/` | **桌面引擎源码**：ABI 契约 (`auradsp_engine.*`)、`engine_internal.h`（私有符号单一入口）、`chain/`（`engine_{chain,convolver,viz,probe,audiofile}.cpp`）、`dsp/`（每效果一文件）、`host/`（`auradsp_plugin_host.cpp` + `host_{gui,metadata_scan,instances,slots}.cpp` 插件宿主 TU） | 修改任何音频路径必须保证 RT-Safe；新增自研效果请落 `engine/dsp/` 并登记 `CMakeLists.txt`；**P4b 后链与宿主文件在 `chain/`/`host/` 子目录，勿再按旧扁平路径引用** |
+| `engine/` | **桌面引擎源码**：ABI 契约 (`auradsp_engine.*`)、`engine_internal.h`（私有符号单一入口）、`chain/`（`engine_{chain,convolver,viz,probe,audiofile}.cpp`）、`dsp/`（每效果一文件）、`host/`（`auradsp_plugin_host.cpp` + `host_{gui,metadata_scan,instances,slots}.cpp` 插件宿主 TU）、`legacy/`（2026-10-16 收编的 JamesDSP C 算法核 + `PATCHES.md`） | 修改任何音频路径必须保证 RT-Safe；新增自研效果请落 `engine/dsp/` 并登记 `CMakeLists.txt`；**P4b 后链与宿主文件在 `chain/`/`host/` 子目录，勿再按旧扁平路径引用**；`legacy/` 视同 vendor 只读，补丁须登记 `engine/legacy/PATCHES.md`，engine 侧引用其头必须写 `legacy/jdsp/...` |
 | `core/` | **平台壳**：`core/desktop/windows/`（CMake + WASAPI，DLL 真相源在 `out/Release/`）、`core/desktop/windows-drivers/`（Windows 底层驱动套件：VM 泵 / 自研 APO / VB 桥，独立 CMake 不进引擎构建）、`core/android/`（registrar / spike / stubs / 独立 vendor-src） | 构建脚本集中于此；纯算法改动应在 `engine/` 内进行，不要动这里的文件清单 |
-| `vendor/` | **第三方只读源码**：`libjamesdsp/`（含 `PATCHES.md`）、`plugin-api/` | 改动必须 `[PATCHED-AuraDSP P-xxx]` + `PATCHES.md` 登记；升级即重新提取覆盖 |
+| `vendor/` | **行业接口标准只读源码**：仅剩 `plugin-api/`（CLAP / Steinberg VST3 官方头）。原 `libjamesdsp/` 已于 2026-10-16 迁至 `engine/legacy/`（`a81dc04`） | 补丁必须 `[PATCHED-AuraDSP P-xxx]` + `engine/legacy/PATCHES.md` 登记；升级即重新提取覆盖 |
 | `assets/` | **运行资源**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`（本地 251MB，原 `resource/`，P3b 改名） | 打包与盘点走 `tools/resource_pipeline/`；勿把 python 脚本或日志混进资源树；`.irs`/`.vdc` 已入 `.gitignore` 但 2214 个历史文件仍在跟踪（73MB，去跟踪待用户裁定，勿擅自 `git rm --cached`） |
 | `app/` | Flutter 前端工程、L10n、各功能页、FFI 绑定 | 构建命令必须带 `--no-tree-shake-icons` |
 | `test/` | **全量测试套件**：`test/smoke/`（C++ 引擎单测）、`test/ui/`（UI 自动化置顶测试）、`test/data/`（测试数据） | 测试统一入口 `python test/runner.py` |

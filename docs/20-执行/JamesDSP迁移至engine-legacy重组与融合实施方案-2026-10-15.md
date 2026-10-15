@@ -1,6 +1,6 @@
 # JamesDSP 迁移至 engine/legacy/ 重组与融合实施方案
 
-> **方案状态**：执行版 v3（Phase 0 已复查满足，方案本身已按 v3 修订刷新，随即进入 Phase 1 物理平移）  
+> **方案状态**：**已执行完成 v3**（2026-10-16：Phase 0 前置 → Phase 1 平移 → Phase 2 纠偏 → Phase 3 冒烟 100% → Phase 4 文档同步；执行记录见 §4.5）  
 > **创建日期**：2026-10-15  
 > **责任目标**：将原位于 `vendor/libjamesdsp/jamesdsp` 的 C 算法核正式收编为核心引擎内建资产（`engine/legacy/`），消解“只读第三方与深度打补丁”的架构冲突，为后续效果原子化平级融合奠定基础。
 
@@ -9,6 +9,7 @@
 | v1 | 2026-10-15 | 初稿（规划评审版） |
 | v2 | 2026-10-15 | 按仓库实测核对更新（核对记录见 §6）：① 补丁计数修正（`PATCHES.md` 登记 12 条 P-001~P-012、P-003 保留编号、实际落地 11 项、源码内 38 处 `[PATCHED-AuraDSP]` 标记）；② 新增 Android 第二副本分叉事实与范围界定（§1.1-4、§1.3、§5.4）；③ 引用清单扩充（`build_engine.sh`、`engine/AGENT.md`、`tools/probe/fft_probe.cpp`）并修正行号；④ 测试计数更正（`test/smoke/` 57 个脚本、runner 注册 49 个 smoke 用例 / 54 条总项，原“20 个测试”作废）；⑤ 新增 Phase 0 执行前核验（工作树已洁净、`046fafe` 已同步 origin/main、EOL 已归一）；⑥ Phase 4 文档同步清单区分“活跃 / 历史”。 |
 | v3 | 2026-10-16 | 按执行时点复查刷新（核对记录见 §6.1）：① §3.1 矩阵补入 3 处此前遗漏的 jdsp include 引用（`engine/chain/engine_audiofile.cpp` L12、`engine/chain/engine_convolver.cpp` L3-L4、`tools/probe/emit_probe.cpp` L6）；② Phase 0 第 1/2/4 项状态刷新——v2 所述的“约 30 文件在途工作”已分别落地为 `2b23e3d`（fix engine）与 `6416ab8`（fix ui），HEAD 前进到 `ae5d1e2` 且 == `origin/main`；③ 补丁登记已补齐——`PATCHES.md` 12 → **13 条**（P-013 已登记 `JamesDSPFilterVendorOrder` 过滤层），源码 `[PATCHED-AuraDSP]` 标记实测 **37 处**（5 个文件，v2 所记“38 处”为计数口径误差，已更正）；④ Phase 0 第 1 项解除阻塞，`git mv` 前置条件全部满足。 |
+| v3-exec | 2026-10-16 | Phase 0~4 全流程执行完毕，回溯登记执行记录与验证数据（§4.5）：`6b0d583` → `3a9be5c` → `a81dc04`（139 文件 R100 纯平移）→ `1aa66d9`（纠偏 + 编译 + 冒烟 156 PASS / 0 FAIL）→ 本提交（文档同步 + 删空目录）。 |
 
 ---
 
@@ -252,6 +253,56 @@ python test/runner.py --smoke
 **不改（历史文档，保持原貌）**：`docs/30-审查/*`、`docs/40-回顾/阶段性回顾-2026-10-13.md`、`docs/20-执行/代码审查与整改Spec-2026-10-13.md`、`docs/20-执行/用户反馈问题修复计划-2026-10-10.md`、`docs/Windows通用底层音频驱动与四模式架构方案-2026-10-13.md` 等——历史记录不回改。
 
 6. 删除残留的空目录 `vendor/libjamesdsp`。
+
+---
+
+## 4.5 执行记录（2026-10-16，Phase 0~4 全流程实测）
+
+> 本节为**回溯登记**：记录 v3 方案定稿后实际执行的全过程与验证数据，供审计与回滚参考。
+
+### 提交链
+
+| 提交 | 阶段 | 内容 | 验证 |
+|---|---|---|---|
+| `6b0d583` | Phase 0 前置 | `PATCHES.md` 补登记 P-013（+20 行） | 使 `git mv` 工作树恢复洁净 |
+| `3a9be5c` | Phase 0 前置 | 方案文档修订为 v3（+33/−15） | §3.1 补 3 处 include、Phase 0 状态刷新、§6.1 核对记录 |
+| `a81dc04` | **Phase 1** | 物理平移：139 文件 `git mv` | `139 files changed, 0 insertions(+), 0 deletions(-)`；**全部 R100**（`git diff --cached --name-status -M50%` 无非 R100 条目）→ 纯平移、内容零改动、blame 完整 |
+| `1aa66d9` | **Phase 2** | 构建与 include 纠偏（10 文件，+36/−29） | 见下 |
+| （本提交） | **Phase 4** | 文档同步 + 删空目录 | 见下 |
+
+### Phase 2 改动明细（`1aa66d9`）
+
+* **CMakeLists.txt**：`VENDOR` → `LEGACY` 并改指 `engine/legacy`（原 L4/L8/L41/L42 四处）；`GLOB_RECURSE` 扫 `engine/legacy/*.c`；`eel2/cpthread.c` 排除规则不变；`PLUGIN_API`（`vendor/plugin-api`）不属本次范围保持不变；L48 注释口径由 "vendor-src" 更正为 `engine/legacy`。
+* **include 路径**（统一 `legacy/jdsp/...` 前缀，v3 补入的 3 处一并落地）：
+  `engine/engine_internal.h` L34-35、`engine/chain/engine_audiofile.cpp` L12、
+  `engine/chain/engine_convolver.cpp` L3-4、`tools/probe/fft_probe.cpp` L5-6、
+  `tools/probe/emit_probe.cpp` L6。
+* **注释同步**：`engine/auradsp_engine.cpp` L4、`engine/auradsp_msvc_shim.h` L5、
+  `core/desktop/windows/build_engine.sh` L5、`engine/AGENT.md`（§3 补 P-013 告警、§4 更名「legacy 边界」并补登记现状与 include 口径）。
+
+### 验证数据
+
+| 门禁 | 命令 | 结果 |
+|---|---|---|
+| 构建 | `bash core/desktop/windows/build_engine.sh` | ✅ BUILD OK；`out/Release/auradsp_engine.dll`（1,855,488 B）。legacy 树 = **139 文件**（86 `.c` + 48 `.h` + `PATCHES.md` + 4 个其他，与迁移前 139 完全一致）；编译 **106 个 obj 全部为本次新生成**（01:15）= 85 个 legacy C（86 `.c` 减去按规则排除的 `eel2/cpthread.c`）+ 21 个 engine `.cpp`；`cpthread.obj` 存在且正确（被排除的是 eel2 下与顶层重名的那份）。构建目录中另有 1 个 `host_com.obj` 为 2026-10-13 的陈旧残留，不在当前 CMake 清单内，不影响链接 |
+| 冒烟（一票否决） | `python test/runner.py --smoke`（DLL 已同步至 `test/`） | ✅ **ALL SMOKE TESTS PASSED [100%]** —— **156 PASS / 0 FAIL / 0 SKIP / 0 ERROR** |
+| 补丁标记守恒 | 迁移前 37 处 → 迁移后抽查 | ✅ 37 处（5 文件分布不变） |
+| Android 零影响 | `core/android/vendor-src/libjamesdsp/` | ✅ 一行未动（`git status` 无该路径条目） |
+
+### Phase 4 文档同步明细
+
+* 顶层：`AGENT.md`（引擎行补 `legacy/`、第三方源码行与 `vendor/` 行改写）、`CLAUDE.md` L5、`README.md`（目录树 L39、`vendor 链` → `legacy 链` L76、许可证 L134）。
+* 溯源：`vendor/ORIGIN.md`（libjamesdsp 行划删除线并标注迁出至 `engine/legacy/`，附考古说明）、`source/ORIGIN.md` L10（"已提取至 core/" → `engine/legacy/`，修正原有陈旧表述）。
+* 架构文档：`docs/00-总览/项目架构与开发规范.md`（目录树、信号链图、legacy 不可变铁律、风险登记表两行）、`docs/10-架构/APP-架构与设计方案.md`（源码移植清单、目录树、Phase B 补丁通道）、`docs/10-架构/APP-插件与信号图扩展规划.md` §1.1、`docs/10-架构/UI与音频效果深度重构与体验优化方案.md` L41。
+* `engine/AGENT.md` 已于 Phase 2 随 `1aa66d9` 同步。
+
+### 有意保留的旧路径表述
+
+以下位置的 `vendor/libjamesdsp` 属**历史/语义性引用**，按 §1.3 与 §3.1「明确不改的提及」不回改：本方案文档自身（描述迁移前后状态）、`docs/30-审查/*`、`docs/40-回顾/*`、`docs/forensics/*`、`docs/10-架构/M0-Android音频政策专项调研.md`、`docs/10-架构/source-参考项目审理报告.md`、`docs/00-总览/项目初启.md`、`.ai/memory/*` 日志、以及代码注释中「libjamesdsp 单体链 / 稳态无分配 / Pre-Vendor 拓扑」等算法血统与拓扑名（`Pre-Vendor`/`Post-Vendor` 同时是 l10n 用户可见串，改动属 UX 变更，不在本次范围）。
+
+### 回滚指引
+
+任一阶段可独立回滚：`git revert 1aa66d9`（Phase 2）→ `git revert a81dc04`（Phase 1，139 文件原路返回）。因全部 rename 为 R100 且无内容改动，revert 不会引发算法差异，仅路径回归。`6b0d583`/`3a9be5c` 为文档/登记类，可保留。
 
 ---
 

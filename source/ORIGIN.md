@@ -7,7 +7,7 @@
 | 目录 | origin | HEAD（剥离时） | 许可证 | 实测占用 | 状态 / 备注 |
 |---|---|---|---|---|---|
 | **JDSP4Linux** | https://github.com/Audio4Linux/JDSP4Linux.git | master@3ea7d73 | GPL-3.0 | 39.2 MB | stripped；Linux PipeWire/Pulse 参考 |
-| **JamesDSPManager** | https://github.com/james34602/JamesDSPManager.git | master@5aed6a4 | GPL-3.0 | 21.1 MB | stripped；libjamesdsp 算法真相源（已提取至 core/） |
+| **JamesDSPManager** | https://github.com/james34602/JamesDSPManager.git | master@5aed6a4 | GPL-3.0 | 21.1 MB | stripped；libjamesdsp 算法真相源（已提取至 `engine/legacy/`，2026-10-16 由 `vendor/libjamesdsp/` 迁入） |
 | **RootJamesDSP** | https://github.com/ShadoV90/RootJamesDSP.git | master@58e6b1b | GPL-3.0 | 14.8 MB | stripped；RootlessJamesDSP 的 root fork（含 BUILD_ROOT.md） |
 | **RootlessJamesDSP** | https://github.com/timschneeb/RootlessJamesDSP.git | master@60d25ae | GPL-3.0 | 15.0 MB | stripped；Phase 6 Android 免 root 蓝本 |
 | **ViPER4Android-FX** | https://github.com/Magisk-Modules-Repo/ViPER4Android-FX.git | master@507b93e | 见仓库 | 3.3 MB | stripped；Magisk 模块结构、sepolicy 与 VDC/IRS 资源 |

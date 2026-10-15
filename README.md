@@ -34,9 +34,9 @@ AuraDSP/
 │   ├── chain/                       # 链与 IO：engine_{chain,convolver,viz,probe,audiofile}.cpp
 │   ├── dsp/                         # 10 个自研效果模块（每效果一文件，含 dyneq）
 │   ├── host/                        # 插件宿主：auradsp_plugin_host.cpp + host_{gui,metadata_scan,instances,slots}.cpp
+│   ├── legacy/                      # JamesDSP C 算法核（12 级经典音效 + EEL2）+ PATCHES.md
 │   └── auradsp_plugin_host.h        # VST3/CLAP 宿主公共头（四插槽 kMaxPluginSlots=4）
-├── vendor/              # ★ 第三方只读（补丁必须登记 PATCHES.md）
-│   ├── libjamesdsp/     #   JamesDSP 算法核 + PATCHES.md
+├── vendor/              # ★ 第三方行业标准只读（CLAP / VST3 官方接口头，原样未改）
 │   └── plugin-api/      #   clap / steinberg(vst3)
 ├── assets/              # ★ 运行资源（原 resource/，P3b 迁来的 251MB）
 │   ├── convolver/ ddc/ liveprog/  + manifest.json
@@ -73,7 +73,7 @@ AuraDSP/
 每段含 `enable/freq/q/gain/range/threshold`，全局 `attack/release`；静态 RBJ + 动态谱减（与 Deesser 同构），
 位于 low-shelf 之后、vendor 链之前。
 
-### vendor 链（`libjamesdsp`，内部 12 级可重排序）
+### legacy 链（原 `libjamesdsp`，2026-10-16 收编至 `engine/legacy/`，内部 12 级可重排序）
 `tube`（Triode/Pentode/Tape 三音色 + 干湿 + 补偿）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFTCompander）· `arbmag`（任意幅度 EQ）· `convolver`（IR 卷积，带 FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程）· `crossfeed`（bs2b，含 Chu Moy / Jan Meier 模式）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post`+`limiter`（输出级）
 
 ### 插件宿主
@@ -131,7 +131,7 @@ python tools/bin/run_tests.py --smoke         # 转发 runner.py
 
 ## 6. 许可证与致谢
 
-- 引擎核心衍生自 [JamesDSP](https://github.com/james34602/JamesDSPManager)（libjamesdsp），遵循其上游 GPL 系许可证；补丁统一登记在 `vendor/libjamesdsp/PATCHES.md`。
+- 引擎核心衍生自 [JamesDSP](https://github.com/james34602/JamesDSPManager)（libjamesdsp，2026-10-16 起收编于 `engine/legacy/`），遵循其上游 GPL 系许可证；补丁统一登记在 `engine/legacy/PATCHES.md`。
 - 第三方插件 API（`vendor/plugin-api/`：CLAP / Steinberg VST3）遵循各自许可证。
 - 第三方参照项目以只读快照置于 `source/`（不入库），提取与版本溯源见 `source/ORIGIN.md` 与 `vendor/ORIGIN.md`。
 - 运行资源（IR / VDC / Liveprog 脚本）来自上游社区，见 `assets/manifest.json`。
