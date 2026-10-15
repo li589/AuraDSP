@@ -1,4 +1,6 @@
-// audio_abridge.dart — ASIO 常驻桥 FFI（bridge/asio_bridge/auraasio_bridge.dll）。
+// audio_abridge.dart — ASIO-Client 常驻桥 FFI（bridge/asio_bridge/auraasio_bridge.dll）。
+// Client 线：打开第三方 ASIO 驱动。未来的 Driver 线（自身作为驱动）另起炉灶，
+// 不共用本绑定。
 //
 // 与 AuraVmBridge 同候选策略：exe 旁 → engine/ 子目录 → 环境变量
 // AURADSP_ASIO_BRIDGE_DLL。刻意不含硬编码开发机路径（产品铁律）。

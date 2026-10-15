@@ -47,7 +47,9 @@ foreach(tgt asio_probe asio_tone)
     set_property(TARGET ${tgt} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endforeach()
 
-# ASIO 常驻桥（Phase 2；app isolate 经 FFI 调用，镜像 VmBridge 契约）。
+# ASIO-Client 常驻桥（Phase 2；app isolate 经 FFI 调用，镜像 VmBridge 契约）。
+# 注意：这是 Client 线（打开第三方驱动）。Driver 线（自身作为驱动被 DAW 打开）
+# 另行立项、单开目录，不进 bridge/（见 docs/20-执行双线规划）。
 # 引擎 DLL 动态加载逻辑与测试注入复用 02 的 VmPumpCore.h（与 vm_bridge 同源，
 # 不出现第二套搜索路径/第二套测试信号数学）；ASIO 传输面走 auraasio_host
 #（宿主仍在 04_asio_engine，桥只含 FFI 适配层）。

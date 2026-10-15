@@ -1,4 +1,9 @@
-# 04_asio_engine/ — ASIO 专业模式（宿主侧）
+# 04_asio_engine/ — ASIO 专业模式（宿主侧，Client 线）
+
+> 本目录 = Client 线：打开第三方 ASIO 驱动做传输。与未来的 Driver 线
+> （自身作为 ASIO 驱动被 DAW 打开）是两条线，规划见
+> `docs/20-执行/ASIO双线开发规划-2026-10-15.md`。
+>
 
 > 与 `engine/`（DSP 算法）彻底解耦：本目录只做 ASIO 传输搬运（枚举/加载驱动、
 > 缓冲区切换回调内调 `auradsp_process`），不承载任何音效算法。
