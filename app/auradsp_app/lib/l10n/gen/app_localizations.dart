@@ -544,6 +544,24 @@ abstract class AppLocalizations {
   /// **'回调帧'**
   String get asioSwitches;
 
+  /// No description provided for @asioSrMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动运行于 {sr} Hz，与全局设置 {cfg} Hz 不符（ASIO 跟随驱动）'**
+  String asioSrMismatch(String sr, String cfg);
+
+  /// No description provided for @asioLatChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动已上报延迟变更（重开会话后刷新）'**
+  String get asioLatChanged;
+
+  /// No description provided for @asioDropouts.
+  ///
+  /// In zh, this message translates to:
+  /// **'欠载'**
+  String get asioDropouts;
+
   /// No description provided for @modeRoot.
   ///
   /// In zh, this message translates to:

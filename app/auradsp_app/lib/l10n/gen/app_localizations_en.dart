@@ -242,6 +242,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioSwitches => 'Switches';
 
   @override
+  String asioSrMismatch(String sr, String cfg) {
+    return 'Driver runs at $sr Hz, mismatching the global $cfg Hz (ASIO follows the driver)';
+  }
+
+  @override
+  String get asioLatChanged =>
+      'Driver reported a latency change (reopens on next session)';
+
+  @override
+  String get asioDropouts => 'Dropouts';
+
+  @override
   String get modeRoot => 'Root';
 
   @override

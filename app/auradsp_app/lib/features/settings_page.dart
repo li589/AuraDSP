@@ -671,6 +671,20 @@ class _AsioPanel extends StatelessWidget {
             if (info['sr'] is num)
               _InfoRow(l.sampleRate,
                   '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames'),
+            // Phase 4：掉线计数（两次 status 间回调增量低于期望 80% 记一次）。
+            if ((info['dropouts'] as int? ?? 0) > 0)
+              _InfoRow(l.asioDropouts, '${info['dropouts']}'),
+            // Phase 4：驱动延迟变更提示（下一次会话生效）。
+            if ((info['latenciesChanged'] as int? ?? 0) == 1)
+              _InfoRow('ASIO', l.asioLatChanged),
+            // Phase 4：采样率不符策略提示（ASIO 跟随驱动；设置页采样率仅
+            // 对 WASAPI/进程内引擎生效）。
+            if (info['sr'] is num &&
+                (info['sr'] as num).toInt() != model.config.sampleRate)
+              _InfoRow(
+                  l.sampleRate,
+                  l.asioSrMismatch('${(info['sr'] as num).toInt()}',
+                      '${model.config.sampleRate}')),
           ],
         ],
       ),

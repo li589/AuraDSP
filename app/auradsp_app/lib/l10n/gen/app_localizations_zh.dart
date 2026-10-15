@@ -238,6 +238,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioSwitches => '回调帧';
 
   @override
+  String asioSrMismatch(String sr, String cfg) {
+    return '驱动运行于 $sr Hz，与全局设置 $cfg Hz 不符（ASIO 跟随驱动）';
+  }
+
+  @override
+  String get asioLatChanged => '驱动已上报延迟变更（重开会话后刷新）';
+
+  @override
+  String get asioDropouts => '欠载';
+
+  @override
   String get modeRoot => 'Root';
 
   @override

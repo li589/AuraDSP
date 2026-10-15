@@ -137,6 +137,13 @@ public:
     float peak_out() const { return peak_.load(std::memory_order_relaxed); }
     float peak_in() const { return peakIn_.load(std::memory_order_relaxed); }   // Phase 2 io 模式
     uint64_t max_cb_ticks() const { return maxCbTicks_.load(std::memory_order_relaxed); }  // QPC ticks
+    // Phase 4 加固：最近一次 bufferSwitch 的 QPC（RT 每帧写；掉线检测在控制面算）
+    uint64_t last_switch_qpc() const { return lastSwitchQpc_.load(std::memory_order_relaxed); }
+    // Phase 4 加固：驱动请求信号（asioMessage 置位、控制面消费；桥 start 时清零）
+    bool reset_pending() const { return resetPending_.load(std::memory_order_acquire); }
+    bool latencies_changed() const { return latenciesChanged_.load(std::memory_order_acquire); }
+    void clear_reset_pending() { resetPending_.store(false, std::memory_order_release); }
+    void clear_latencies_changed() { latenciesChanged_.store(false, std::memory_order_release); }
 
 private:
     // ---- SDK 回调（自由函数；经 s_active 转发）----
@@ -187,6 +194,10 @@ private:
     std::atomic<float> peakIn_{0.0f};  // io 模式输入峰值
     std::atomic<uint64_t> maxCbTicks_{0};  // io 模式单次回调最大耗时（QPC ticks）
     std::atomic<double> srLive_{0.0};  // sampleRateDidChange 更新；RT 读
+    // Phase 4 加固（全原子；RT 写/控制面读写）
+    std::atomic<uint64_t> lastSwitchQpc_{0};   // 最近 bufferSwitch 的 QPC ticks
+    std::atomic<bool> resetPending_{false};    // kAsioResetRequest 未消费
+    std::atomic<bool> latenciesChanged_{false}; // kAsioLatenciesChanged 未消费
 };
 
 }  // namespace auraasio
