@@ -1522,6 +1522,12 @@ abstract class AppLocalizations {
   /// **'尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）'**
   String get latTipUnmeasured;
 
+  /// Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.
+  ///
+  /// In zh, this message translates to:
+  /// **'估算值（非实测）: {text}\n来自标称表或解析推算，未经脉冲响应测量'**
+  String latTipEstimated(String text);
+
   /// No description provided for @eqCanvasHint.
   ///
   /// In zh, this message translates to:

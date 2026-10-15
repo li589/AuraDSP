@@ -12,13 +12,16 @@ class _TubeCard extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     return SectionCard(
-      index: '13',
+      index: kEffectCardIndex['tube'],
       title: l.tubeTitle,
       collapsed: !model.tubeOn,
       latencyMs: model.componentLatency('tube').ms,
               latencyMeasured: model.componentLatency('tube').measured,
+              latencyEstimated: model.componentLatency('tube').estimated,
               latencyProbing: model.isProbingLatency('tube'),
-      onRefreshLatency: () => model.refreshComponentLatency('tube'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('tube')
+          ? () => model.refreshComponentLatency('tube')
+          : null,
       latencyTick: model.getComponentLatencyTick('tube'),
       trailing: AuraSwitch(
         value: model.tubeOn,

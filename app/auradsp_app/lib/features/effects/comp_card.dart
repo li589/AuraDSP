@@ -13,13 +13,16 @@ class _CompressorCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '01',
+      index: kEffectCardIndex['comp'],
       title: l.compTitle,
       collapsed: !model.compOn,
       latencyMs: model.componentLatency('comp').ms,
       latencyMeasured: model.componentLatency('comp').measured,
+      latencyEstimated: model.componentLatency('comp').estimated,
       latencyProbing: model.isProbingLatency('comp'),
-      onRefreshLatency: () => model.refreshComponentLatency('comp'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('comp')
+          ? () => model.refreshComponentLatency('comp')
+          : null,
       latencyTick: model.getComponentLatencyTick('comp'),
       trailing: AuraSwitch(
         value: model.compOn,

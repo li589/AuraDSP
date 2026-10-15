@@ -744,6 +744,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get latTipUnmeasured => '尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）';
 
   @override
+  String latTipEstimated(String text) {
+    return '估算值（非实测）: $text\n来自标称表或解析推算，未经脉冲响应测量';
+  }
+
+  @override
   String get eqCanvasHint => '上下拖动调增益 · 双击节点归零 0dB · 双击背景平直复位';
 
   @override

@@ -12,13 +12,16 @@ class _DdcCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '06',
+      index: kEffectCardIndex['ddc'],
       title: l.ddcTitle,
       collapsed: !model.ddcOn, // 同上：常规语义 + state 层 auto-bypass
       latencyMs: model.componentLatency('ddc').ms,
               latencyMeasured: model.componentLatency('ddc').measured,
+              latencyEstimated: model.componentLatency('ddc').estimated,
               latencyProbing: model.isProbingLatency('ddc'),
-      onRefreshLatency: () => model.refreshComponentLatency('ddc'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('ddc')
+          ? () => model.refreshComponentLatency('ddc')
+          : null,
       latencyTick: model.getComponentLatencyTick('ddc'),
       trailing: ListenableBuilder(
         listenable: model,

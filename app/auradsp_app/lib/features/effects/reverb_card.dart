@@ -29,13 +29,16 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
     };
 
     return SectionCard(
-      index: '04',
+      index: kEffectCardIndex['reverb'],
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('reverb').ms,
               latencyMeasured: m.componentLatency('reverb').measured,
+              latencyEstimated: m.componentLatency('reverb').estimated,
               latencyProbing: m.isProbingLatency('reverb'),
-      onRefreshLatency: () => m.refreshComponentLatency('reverb'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('reverb')
+          ? () => m.refreshComponentLatency('reverb')
+          : null,
       latencyTick: m.getComponentLatencyTick('reverb'),
       trailing: AuraSwitch(
         value: isEnabled,

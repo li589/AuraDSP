@@ -745,6 +745,11 @@ class AppLocalizationsJa extends AppLocalizations {
   String get latTipUnmeasured => '未測定です\n↻タップでインパルス応答を1回測定（数十ms）';
 
   @override
+  String latTipEstimated(String text) {
+    return '推定値（実測ではない）: $text\n公称値または解析推定。インパルス応答測定は未実施';
+  }
+
+  @override
   String get eqCanvasHint => '上下ドラッグでゲイン · ノードをダブルタップで0dB · 背景をダブルタップでフラット化';
 
   @override

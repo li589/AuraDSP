@@ -11,7 +11,7 @@ class _InputCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '00',
+      index: kEffectCardIndex['input'],
       title: l.inputGate,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

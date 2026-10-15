@@ -3370,29 +3370,39 @@ void fillEqQ(double q) {
   /// 正在探测中的组件（UI 据此显示进度并禁用重复点击）。
   final Set<String> _probing = {};
 
-  /// 该组件当前可显示的延迟。
+  /// 该组件当前可显示的延迟，带**来源**三态。
   ///
-  /// 优先用**实测值**；未实测时对需要外部资源的组件（卷积/VDC/Liveprog）
-  /// 才退回解析估算，并把来源标出来供 UI 如实展示。
-  ({double ms, bool measured}) componentLatency(String compId) {
+  /// - [measured]  = true：来自真实脉冲响应实测（引擎 auradsp_probe_component）。
+  /// - [estimated] = true：来自标称表/解析推算，**不是**测出来的。UI 必须以
+  ///   「≈」前缀 + 差异化配色展示，不能与实测混为一谈——旧实现把这两类都塞进
+  ///   `measured:false`，徽标于是显示「未测量」，把已知的估算值白白丢掉。
+  /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
+  ///
+  /// 标称值必须与引擎 `compute_latency`（engine/chain/engine_chain.cpp 顶部
+  /// 的 kLat* 表）保持一致，否则卡片读数与总延迟口径会互相矛盾。
+  ({double ms, bool measured, bool estimated}) componentLatency(String compId) {
     final m = _measuredLatencyMs[compId];
-    if (m != null) return (ms: m, measured: true);
+    if (m != null) return (ms: m, measured: true, estimated: false);
     // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
     if (compId == 'convolver' && convEnabled && convReady &&
         convFrames > 0 && deviceRate > 0) {
-      return (ms: (convFrames / deviceRate) * 1000.0, measured: false);
+      return (ms: (convFrames / deviceRate) * 1000.0, measured: false, estimated: true);
     }
     if (compId == 'comp' && compOn) {
-      return (ms: 85.0, measured: false);
+      return (ms: 85.0, measured: false, estimated: true);
     }
     // Haas = 纯延迟线，按当前设定值标称（引擎 compute_latency 同值动态上报）。
     if (compId == 'haas' && haasOn) {
-      return (ms: haasDelayMs, measured: false);
+      return (ms: haasDelayMs, measured: false, estimated: true);
     }
     if (compId == 'arbmag' && arbmagOn && arbmagReady) {
-      return (ms: 2.67, measured: false);
+      return (ms: 2.67, measured: false, estimated: true);
     }
-    return (ms: 0.0, measured: false);
+    // VDC：二阶节链按样本处理，标称 6ms（kLatDdc）。已加载时优先等实测。
+    if (compId == 'ddc' && ddcOn && ddcReady) {
+      return (ms: 6.0, measured: false, estimated: true);
+    }
+    return (ms: 0.0, measured: false, estimated: false);
   }
 
   void _onComponentLatencyResult(String comp, int rc, int samples) {
@@ -3464,13 +3474,21 @@ void fillEqQ(double q) {
     }
   }
 
-  /// 该组件是否支持实测。卷积/VDC 需外部资源，但资源已加载时同样可测。
+  /// 该组件是否支持实测。
+  ///
+  /// 必须与引擎 `probe_is_supported`（engine/chain/engine_probe.cpp）保持一致。
+  /// 历史坑：这个集合**定义了却从未被任何 UI 使用**，于是 ↻ 按钮对所有 20 张
+  /// 卡片无条件显示，而引擎只认其中一部分——用户点一下必然得到「未测量」，
+  /// 还附带一次约 341ms 窗口的无效测量。现在卡片侧用它来决定是否给 ↻。
+  ///
+  /// convolver / ddc 需外部资源（IR / VDC），资源已加载时同样可测；
+  /// 未加载时探针返回 -1，UI 走标称估算而不是假装能测。
+  /// input 不是效果器（无延迟可测）；haas 探针结构性失明（见引擎注释）。
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc', 'bassmono', 'exciter', 'stereo', 'comp'
-        // haas 不入列：探针双声道脉冲对单侧延迟失明（必然测 0ms），
-        // 刷新回退到 componentLatency 的标称延迟（跟随 slider，诚实）。
+        'convolver', 'ddc', 'bassmono', 'exciter', 'stereo', 'comp', 'arbmag',
+        'dyneq', 'filter', 'gate', 'loudness',
       }.contains(compId);
 
   /// 探测进行中

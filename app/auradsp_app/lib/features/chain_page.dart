@@ -108,9 +108,14 @@ class _ChainPageState extends State<ChainPage> {
   }
 
   void _apply() {
-    // 下发的是 19 全量（含 7 个自研 stage）；引擎只取其中 12 个 vendor id
-    // 重排（filterVendorOrder），output 顺序钉死在末尾。自研 stage 顺序由
-    // process_stereo_chain 钉死，不参与重排。
+    // 下发的是 19 全量（含 7 个自研 stage）；引擎侧先经
+    // JamesDSPFilterVendorOrder 抽成 12 个 vendor id 再重建链，
+    // output 顺序钉死在末尾。自研 stage 顺序由 process_stereo_chain
+    // 钉死，不参与 vendor 侧重排。
+    //
+    // 历史坑：这层过滤曾经不存在，19 id 原样喂给 JamesDSPRebuildChain
+    // （只认 12 个且要求恰好各一次）→ 必然返回 -1，用户拖拽全部无效，
+    // 而 UI 显示的顺序与引擎实际执行的不一致。2026-10-16 已修。
     final fullOrder = '${_order.join(',')},output';
     widget.model.setGraphOrder(fullOrder);
     setState(() => _dirty = false);

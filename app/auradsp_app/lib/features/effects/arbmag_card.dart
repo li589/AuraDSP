@@ -90,13 +90,16 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     final m = widget.model;
 
     return SectionCard(
-      index: '08',
+      index: kEffectCardIndex['arbmag'],
       title: l.stArbmag,
       collapsed: !m.arbmagOn,
       latencyMs: m.componentLatency('arbmag').ms,
       latencyMeasured: m.componentLatency('arbmag').measured,
+      latencyEstimated: m.componentLatency('arbmag').estimated,
       latencyProbing: m.isProbingLatency('arbmag'),
-      onRefreshLatency: () => m.refreshComponentLatency('arbmag'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('arbmag')
+          ? () => m.refreshComponentLatency('arbmag')
+          : null,
       latencyTick: m.getComponentLatencyTick('arbmag'),
       trailing: AuraSwitch(
         value: m.arbmagOn,

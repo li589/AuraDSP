@@ -767,6 +767,11 @@ class AppLocalizationsEn extends AppLocalizations {
       'Component latency not measured yet\nTap ↻ for one impulse-response measurement (tens of ms)';
 
   @override
+  String latTipEstimated(String text) {
+    return 'Estimated (not measured): $text\nFrom the nominal table or an analytic estimate; no impulse-response measurement was run';
+  }
+
+  @override
   String get eqCanvasHint =>
       'Drag vertically for gain · double-tap a node to zero 0dB · double-tap background to flatten';
 

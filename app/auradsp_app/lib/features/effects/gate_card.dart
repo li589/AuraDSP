@@ -14,14 +14,17 @@ class _GateCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '00',
+      index: kEffectCardIndex['gate'],
       title: l.stGate,
       titleTooltip: l.gateHint,
       collapsed: !model.gateOn,
       latencyMs: model.componentLatency('gate').ms,
       latencyMeasured: model.componentLatency('gate').measured,
+      latencyEstimated: model.componentLatency('gate').estimated,
       latencyProbing: model.isProbingLatency('gate'),
-      onRefreshLatency: () => model.refreshComponentLatency('gate'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('gate')
+          ? () => model.refreshComponentLatency('gate')
+          : null,
       latencyTick: model.getComponentLatencyTick('gate'),
       trailing: AuraSwitch(
         value: model.gateOn,

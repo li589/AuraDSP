@@ -12,13 +12,16 @@ class _BassCard extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     return SectionCard(
-      index: '02',
+      index: kEffectCardIndex['bass'],
       title: l.bassBoost,
       collapsed: !model.bassOn,
       latencyMs: model.componentLatency('bass').ms,
               latencyMeasured: model.componentLatency('bass').measured,
+              latencyEstimated: model.componentLatency('bass').estimated,
               latencyProbing: model.isProbingLatency('bass'),
-      onRefreshLatency: () => model.refreshComponentLatency('bass'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('bass')
+          ? () => model.refreshComponentLatency('bass')
+          : null,
       latencyTick: model.getComponentLatencyTick('bass'),
       trailing: AuraSwitch(
         value: model.bassOn,

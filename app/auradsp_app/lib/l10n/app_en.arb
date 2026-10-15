@@ -294,6 +294,13 @@
   },
   "latTipProbing": "Measuring component latency…",
   "latTipUnmeasured": "Component latency not measured yet\nTap ↻ for one impulse-response measurement (tens of ms)",
+  "latTipEstimated": "Estimated (not measured): {text}\nFrom the nominal table or an analytic estimate; no impulse-response measurement was run",
+  "@latTipEstimated": {
+    "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
+    "placeholders": {
+      "text": {"type": "String"}
+    }
+  },
   "@eqBands": {
     "placeholders": {
       "n": {

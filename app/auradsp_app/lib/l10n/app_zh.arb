@@ -294,6 +294,13 @@
   },
   "latTipProbing": "正在测量组件延迟…",
   "latTipUnmeasured": "尚未测量该组件的延迟\n点击 ↻ 执行一次脉冲响应实测（约数十毫秒）",
+  "latTipEstimated": "估算值（非实测）: {text}\n来自标称表或解析推算，未经脉冲响应测量",
+  "@latTipEstimated": {
+    "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
+    "placeholders": {
+      "text": {"type": "String"}
+    }
+  },
   "@eqBands": {
     "placeholders": {
       "n": {
