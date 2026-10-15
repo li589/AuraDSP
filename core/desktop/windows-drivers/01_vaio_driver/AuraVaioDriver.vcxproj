@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AuraVaioDriver.vcxproj — MODERN 主线 (WDK 28000 + VS2026, Win10 1809+/Win11 x64)
+  说明：这是 KMDF 内核驱动的“最小可编译骨架”，用于先打通工具链。
+  真正的 AuraVAIO 虚拟声卡 = PortCls WaveRT 微端口（移植 Windows-driver-samples/audio/sysvad），
+  不属于本骨架的代码范围，后续在 device.cpp 中按 TODO 接入。
+  WindowsTargetPlatformVersion 必须与已装 SDK/WDK 的 build 号一致（此处 28000）。
+  PlatformToolset 用 $(DefaultPlatformToolset) 自动取 VS2026 默认，跨 VS 版本安全。
+-->
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{8E2B1C5A-3D6F-4A2B-9C01-1A2B3C4D5E6F}</ProjectGuid>
+    <TemplateGuid>{dd38f7fc-d7bd-488b-9242-7d8754cde80d}</TemplateGuid>
+    <RootNamespace>AuraVaioDriver</RootNamespace>
+    <ProjectName>AuraVaioDriver</ProjectName>
+    <WindowsTargetPlatformVersion>10.0.28000.0</WindowsTargetPlatformVersion>
+    <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <Configuration Condition="'$(Configuration)'==''">Debug</Configuration>
+    <Platform Condition="'$(Platform)'==''">x64</Platform>
+    <TargetVersion>Windows10</TargetVersion>
+    <TargetPlatformVersion>10.0.28000.0</TargetPlatformVersion>
+    <UseDebugLibraries Condition="'$(Configuration)'=='Debug'">true</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Universal</DriverTargetPlatform>
+    <PlatformToolset>$(DefaultPlatformToolset)</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+  <ItemGroup>
+    <ClCompile Include="driver.cpp" />
+    <ClCompile Include="device.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="AuraVaioDriver.inf" />
+  </ItemGroup>
+</Project>
