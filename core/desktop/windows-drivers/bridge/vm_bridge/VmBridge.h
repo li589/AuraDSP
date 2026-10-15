@@ -64,6 +64,10 @@ VBB_API int vb_viz_read(void* out408, int count);
 // 返回 0；桥未运行时返回 <0。
 VBB_API int vb_bypass(int on);
 
+// 总线处理掩码：bit g 置位 = 第 g 组（即第 g 条总线）进 DSP，清零 = 该总线直通。
+// 电平表照常计量；CHANGE 重建/session 内保持。返回生效后的掩码，<0=桥未运行。
+VBB_API int vb_set_bus_mask(int mask);
+
 // 测试注入：kind 1=正弦440 2=粉噪 3=文件。kind=3 时拷贝 pcm
 //（交织立体声 float32，frames 帧，ch 声道，rate 采样率；语义同 FileSource）。
 // 启动即静音主通道 VB 输入，测试信号进同一条 DSP 链。返回 0=ok，<0=未运行。

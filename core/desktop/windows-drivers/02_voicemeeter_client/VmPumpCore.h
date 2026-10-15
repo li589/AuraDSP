@@ -86,6 +86,9 @@ struct PumpCtx {
     // 用户旁路（bridge 用；pump 不碰，恒 0 即原行为）：置位时跳过 process，
     // 输入直通输出（测试注入仍生效：先填 scratchIn 再直通，与进程内 bypass?src:eng 同义）。
     volatile LONG userBypass = 0;
+    // 总线处理掩码（bit g = 第 g 组进 DSP；0 = 该总线直通）。桥经 vb_set_bus_mask
+    // 下发；电平表照常计量（仅跳过 process），重开即恢复，无需等 idle 退出。
+    volatile LONG busMask = 0xFF;
     // ---- 测试注入面（bridge 用；pump 不碰，全零即关闭） ----
     volatile LONG testKind = 0;  // 0=关 1=正弦440 2=粉噪 3=文件（RT 读，主线程 Interlocked 写）
     double testPhase = 0.0;      // 正弦相位（RT 独占）
@@ -211,6 +214,8 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     if (ng > PumpCtx::kMaxGroups) ng = PumpCtx::kMaxGroups;
     c->groups = ng;
     const bool haveEng = c->process != nullptr;
+    // 本组快照（整块统一口径，避免组间撕裂）。
+    const long mask = InterlockedCompareExchange(&c->busMask, 0, 0);
     for (int g = 0; g < ng; ++g) {
         const long base = (long)g * 8;
         // v2：每组主对（base+0/1）进该组引擎；组内其余 6 通道 + 组外全部透传。
@@ -239,8 +244,9 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
                 memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
         }
-        // 无引擎桥（DLL 缺失/符号不全/组超预建）：主对也透传，绝不吞声。
-        if (!haveEng || c->eng[g] == nullptr) {
+        // 无引擎桥（DLL 缺失/符号不全/组超预建）或本总线被 mask 关掉：主对透传，
+        // 绝不吞声。电平表在上游已计量，不受影响；mask 与 idle 无关，重开即恢复。
+        if (!haveEng || c->eng[g] == nullptr || (mask & (1L << g)) == 0) {
             if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
             if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
             continue;

@@ -13,3 +13,4 @@ EXPORTS
     vb_test_start         PRIVATE
     vb_test_stop          PRIVATE
     vb_bypass             PRIVATE
+    vb_set_bus_mask       PRIVATE

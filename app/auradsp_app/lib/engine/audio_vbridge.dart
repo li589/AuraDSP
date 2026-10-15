@@ -29,6 +29,8 @@ typedef _TestStopC = Int32 Function();
 typedef _TestStopDart = int Function();
 typedef _BypassC = Int32 Function(Int32);
 typedef _BypassDart = int Function(int);
+typedef _BusMaskC = Int32 Function(Int32);
+typedef _BusMaskDart = int Function(int);
 typedef _SetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
 typedef _SetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 typedef _GetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
@@ -56,6 +58,8 @@ class AuraVmBridge {
       dylib.lookupFunction<_TestStopC, _TestStopDart>('vb_test_stop');
   late final _BypassDart _bypass =
       dylib.lookupFunction<_BypassC, _BypassDart>('vb_bypass');
+  late final _BusMaskDart _busMask =
+      dylib.lookupFunction<_BusMaskC, _BusMaskDart>('vb_set_bus_mask');
   late final _SetParamStrDart _setParamStr =
       dylib.lookupFunction<_SetParamStrC, _SetParamStrDart>('vb_set_param_str');
   late final _GetParamDart _getParam =
@@ -192,6 +196,9 @@ class AuraVmBridge {
   int testStop() => _testStop();
 
   int setBypass(bool on) => _bypass(on ? 1 : 0);
+
+  /// 总线掩码：返回生效值，<0=失败。
+  int setBusMask(int mask) => _busMask(mask & 0xFF);
 
   /// 字符串参数（liveprog.code / arbmag.string）：返回成功 handle 数，
   /// <0=失败。桥内记镜像，CHANGE 重建后自动回放。

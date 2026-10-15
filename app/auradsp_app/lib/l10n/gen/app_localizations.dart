@@ -154,6 +154,12 @@ abstract class AppLocalizations {
   /// **'空闲'**
   String get stateIdle;
 
+  /// No description provided for @vbBuses.
+  ///
+  /// In zh, this message translates to:
+  /// **'VB 总线（关=直通）'**
+  String get vbBuses;
+
   /// No description provided for @latencyLabel.
   ///
   /// In zh, this message translates to:
