@@ -134,6 +134,42 @@ f = ctypes.c_float(6.0)
 rc = b.asio_set_param(b"tube.gain", 1, ctypes.byref(f))
 check("set_param rc==0", rc == 0, f"rc={rc}")
 
+# ---- LiveProg 字符串通道（与 VB 桥同款回归）----
+LP_CODE = ("/* asio bridge string-channel regression */\n@init\ndbg = 1;\n"
+           "@sample\nspl0 *= slider1;\nspl1 *= slider1;\n")
+b.asio_set_param_str.restype = ctypes.c_int
+b.asio_set_param_str.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+b.asio_get_param.restype = ctypes.c_int
+b.asio_get_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+b.asio_get_param_str.restype = ctypes.c_int
+b.asio_get_param_str.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+
+
+def asio_get_int(pid):
+    v = ctypes.c_int32(0)
+    rc = b.asio_get_param(pid.encode("utf-8"), 0, ctypes.byref(v))
+    return rc, v.value
+
+
+def asio_get_str(pid, cap=65536):
+    buf = ctypes.create_string_buffer(cap)
+    n = b.asio_get_param_str(pid.encode("utf-8"), buf, cap)
+    return n, (buf.value.decode("utf-8", "replace") if n > 0 else "")
+
+
+n = b.asio_set_param_str(b"liveprog.code", LP_CODE.encode("utf-8"), len(LP_CODE))
+check("set_param_str ok", n == 0, f"rc={n}")
+rc = b.asio_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(1)))
+check("liveprog enable", rc == 0, f"rc={rc}")
+rc, stcode = asio_get_int("liveprog.status")
+check("liveprog status==1", rc == 0 and stcode == 1, f"rc={rc} st={stcode}")
+n, back = asio_get_str("liveprog.code")
+check("liveprog code roundtrip", n > 0 and back == LP_CODE,
+      f"n={n} match={back == LP_CODE}")
+# 复位：关闭 liveprog（slider1 默认 0 会静音后续 tone 断言），下游回归出厂条件。
+rc = b.asio_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(0)))
+check("liveprog disable (downstream restore)", rc == 0, f"rc={rc}")
+
 viz = ctypes.create_string_buffer(408 * 4)
 n = b.asio_viz_read(viz, 4)
 check("viz_read ok", n >= 0, f"n={n}")

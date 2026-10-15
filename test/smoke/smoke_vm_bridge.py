@@ -220,6 +220,9 @@ check("liveprog status survived", rc == 0 and stcode == 1,
 n, back = get_param_str("liveprog.code")
 check("LIVEPROG SURVIVED REBUILD", n > 0 and back == LP_CODE,
       f"n={n} match={back == LP_CODE} note={st.get('note')}")
+# 复位：关闭 liveprog（与 ASIO 侧同款 hygiene，避免下游断言被 slider1=0 静音）。
+rc = b.vb_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(0)))
+check("liveprog disable (downstream restore)", rc and rc > 0, f"rc={rc}")
 
 # ---- 总线掩码：关 g0 直通不断流，不断言音质只断言不崩 + 状态回显 ----
 rc = b.vb_set_bus_mask(0xFE)

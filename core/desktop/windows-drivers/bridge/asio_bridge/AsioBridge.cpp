@@ -43,6 +43,7 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
 
 using vmcore::FnEngCreate;
 using vmcore::FnEngDestroy;
+using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
 using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
@@ -56,6 +57,7 @@ struct BridgeCtl {
     FnEngProcess process = nullptr;
     FnEngDestroy destroy = nullptr;
     FnEngSetParam setParam = nullptr;
+    FnEngGetParam getParam = nullptr;
     FnEngVizRead vizRead = nullptr;
     void* engine = nullptr;
     std::wstring enginePath;      // 加载到的引擎 DLL（宽字节原样）
@@ -142,6 +144,7 @@ void DestroyEngine() {
     g_b.create = nullptr;
     g_b.process = nullptr;
     g_b.setParam = nullptr;
+    g_b.getParam = nullptr;
     g_b.vizRead = nullptr;
     g_b.destroy = nullptr;
     g_b.enginePath.clear();
@@ -252,6 +255,7 @@ int asio_start(const char* driver_name, const char* engine_dll,
         g_b.process = (FnEngProcess)GetProcAddress(g_b.engMod, "auradsp_process");
         g_b.destroy = (FnEngDestroy)GetProcAddress(g_b.engMod, "auradsp_destroy");
         g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
+        g_b.getParam = (FnEngGetParam)GetProcAddress(g_b.engMod, "auradsp_get_param");
         g_b.vizRead = (FnEngVizRead)GetProcAddress(g_b.engMod, "auradsp_viz_read");
     }
     if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy) {
@@ -412,6 +416,31 @@ int asio_set_param(const char* id, int isFloat, const void* v4) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
     if (!id || !v4 || !g_b.setParam || !g_b.engine) return -2;
     return (g_b.setParam(g_b.engine, id, v4, 4) == 0) ? 0 : -3;
+}
+
+int asio_set_param_str(const char* id, const char* utf8, int bytes) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !utf8 || bytes <= 0 || bytes > 256 * 1024) return -2;
+    if (!g_b.setParam || !g_b.engine) return -3;
+    // 引擎内部拷贝编译，返回后调用方缓冲可释放；失败时引擎保留旧程序。
+    return (g_b.setParam(g_b.engine, id, utf8, (unsigned)bytes) == 0) ? 0
+                                                                     : -4;
+}
+
+int asio_get_param(const char* id, int isFloat, void* out4) {
+    (void)isFloat;
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !out4 || !g_b.getParam || !g_b.engine) return -2;
+    return (g_b.getParam(g_b.engine, id, out4, 4) == 0) ? 0 : -3;
+}
+
+int asio_get_param_str(const char* id, char* out, int cap) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !out || cap <= 1 || !g_b.getParam || !g_b.engine) return -2;
+    out[0] = 0;
+    if (g_b.getParam(g_b.engine, id, out, (unsigned)cap) != 0) return -3;
+    out[cap - 1] = 0;  // 引擎保证 NUL 结尾，这里再兜一层
+    return (int)strlen(out);
 }
 
 int asio_viz_read(void* out408, int count) {

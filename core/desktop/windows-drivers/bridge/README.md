@@ -20,8 +20,9 @@ bridge/
 1. **桥不实现传输**：VM 回调泵走 `../02_voicemeeter_client/VmPumpCore.h`，
    ASIO 传输走 `../04_asio_engine/AsioHost.h`；桥内只做句柄管理/参数镜像/重建。
 2. **契约对齐**：新增桥必须镜像 `vm_bridge/VmBridge.h` 的
-   detect/start/stop/status/set_param/viz_read/bypass/test 件套（ASIO 仅多
-   buf_size/out_pair 两个宿主参数），Dart 侧同构绑定。
+   detect/start/stop/status/set_param(+_str)/get_param(+_str)/viz_read/bypass/test
+   件套（ASIO 仅多 buf_size/out_pair 两个宿主参数），Dart 侧同构绑定。
+   ASIO 重建一律走 Dart 侧 stop+start（isolate 回放镜像），桥内不设镜像。
 3. **RT 铁律**：回调内零锁零分配；引擎建/销只在控制线程（CHANGE/ASIO reset
    一律走"停→销→启→重建→回放镜像"序列，见 `VmBridge.cpp MonitorProc`）。
 4. **参数镜像**：凡经桥下发的参数（含字符串）必须同时记镜像，重建后回放；
