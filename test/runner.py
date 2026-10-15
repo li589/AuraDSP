@@ -73,6 +73,7 @@ def run_smoke_tests():
     "smoke_comp.py",
     "smoke_limiter.py",
     "smoke_reverb.py",
+    "smoke_graph_order.py",
     "smoke_ddc.py",
         "test_editor_topology.py",
         "probe_component.py",

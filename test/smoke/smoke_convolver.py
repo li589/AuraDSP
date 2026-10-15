@@ -142,4 +142,39 @@ assert diff2 < 1e-3
 assert set_i("convolver.clear", 0) == 0
 print("7) clear: ready=%d enable=%d" % (get_i("convolver.ready"), get_i("convolver.enable")))
 assert get_i("convolver.ready") == 0 and get_i("convolver.enable") == 0
+# 8) mix 干湿比（P-005）：2.0 增益冲激 IR 下 mix=0/0.5/1 → 1.0x/1.5x/2.0x
+write_wavf32(os.path.join(DIR, "delta2.wav"),
+             [[2.0] + [0.0] * (N - 1), [2.0] + [0.0] * (N - 1)], 48000)
+assert set_str("convolver.ir.path", os.path.join(DIR, "delta2.wav")) == 0
+assert set_i("convolver.enable", 1) == 0
+f = ctypes.c_float
+gv = lambda pid: (lambda v: (dll.auradsp_get_param(h, pid.encode(), ctypes.byref(v), 4), v.value))(f(0))
+sf = lambda pid, v: dll.auradsp_set_param(h, pid.encode(), ctypes.byref(f(v)), 4)
+assert sf("convolver.mix", 0.5) == 0 and abs(gv("convolver.mix")[1] - 0.5) < 1e-6
+assert sf("convolver.mix", 9.0) == 0 and abs(gv("convolver.mix")[1] - 1.0) < 1e-6
+assert sf("convolver.mix", -9.0) == 0 and abs(gv("convolver.mix")[1] - 0.0) < 1e-6
+print("8) mix set/get+clamp ok")
+
+
+def mix_rms(mix, blocks=10):
+    sf("convolver.mix", mix)
+    acc = 0.0
+    for _ in range(blocks):
+        for n in range(N):
+            s = 0.2 * math.sin(n * 0.05)
+            buf[2 * n] = s
+            buf[2 * n + 1] = s
+        dll.auradsp_process(h, buf, out, N)
+        acc += sum(out[i * 2] ** 2 for i in range(N)) / N
+    return math.sqrt(acc / blocks)
+
+
+r0 = mix_rms(0.0)
+r5 = mix_rms(0.5)
+r1 = mix_rms(1.0)
+print("8) mix 0/0.5/1 rms=%.5f/%.5f/%.5f" % (r0, r5, r1))
+ref = 0.2 / math.sqrt(2)
+assert abs(r0 - ref) / ref < 0.05, r0
+assert abs(r5 / ref - 1.5) / 1.5 < 0.05, (r5, ref)
+assert abs(r1 / ref - 2.0) / 2.0 < 0.05, (r1, ref)
 print("PASS: convolver + FileGate engine flow all OK")

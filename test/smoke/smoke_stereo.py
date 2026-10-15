@@ -61,6 +61,16 @@ def get_f(pid):
     return rc, v.value
 
 
+def set_i(pid, v):
+    return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(i32(v)), 4)
+
+
+def get_i(pid):
+    v = i32(0)
+    rc = dll.auradsp_get_param(h, pid.encode(), ctypes.byref(v), 4)
+    return rc, v.value
+
+
 def run_quad(freq=440.0, amp=0.3, blocks=120):
     """L=sin, R=sin+90度，返回 (mid RMS, side RMS)。"""
     n0 = 0
@@ -80,6 +90,18 @@ def run_quad(freq=440.0, amp=0.3, blocks=120):
 
 # 0. 回读
 check('mix set/get', set_f('stereo.mix', 0.5) == 0 and abs(get_f('stereo.mix')[1] - 0.5) < 1e-6)
+check('enable set/get (was E_PARAM)', set_i('stereo.enable', 0) == 0 and
+      get_i('stereo.enable') == (0, 0) and
+      set_i('stereo.enable', 1) == 0 and
+      get_i('stereo.enable') == (0, 1))
+check('bandUsed set/get', set_i('stereo.bandUsed', 1) == 0 and
+      get_i('stereo.bandUsed') == (0, 1))
+for _b in range(5):
+    check('band%d set/get' % (_b + 1),
+          set_f('stereo.band%d' % (_b + 1), 0.2 * (_b + 1)) == 0 and
+          abs(get_f('stereo.band%d' % (_b + 1))[1] - 0.2 * (_b + 1)) < 1e-6)
+set_i('stereo.bandUsed', 0)
+set_f('stereo.mix', 0.5)
 
 # 1. mix=0 直通（等幅正交双声道 mid/side 均为 0.15）
 set_f('stereo.mix', 0.0)
@@ -93,6 +115,25 @@ m1, s1 = run_quad()
 r0, r1 = (s0 / m0) if m0 > 0 else 0, (s1 / m1) if m1 > 0 else 0
 check('mix=1.0 widens (side/mid rises >5%)', r1 > r0 * 1.05,
       'r0=%.3f r1=%.3f' % (r0, r1))
+
+# 3. enable 总开关：关 + mix=1 → 直通（与 mix=0 同形）
+set_i('stereo.enable', 0)
+set_f('stereo.mix', 1.0)
+me, se = run_quad()
+check('enable=0 passthrough despite mix=1',
+      abs(me - 0.15) / 0.15 < 0.05 and abs(se - 0.15) / 0.15 < 0.05,
+      'mid=%.4f side=%.4f' % (me, se))
+set_i('stereo.enable', 1)
+
+# 4. 分带路径：bandUsed=1 + band1 全 1 其余 0 → 输出有限且与统一 mix 不同构
+set_i('stereo.bandUsed', 1)
+for _b in range(5):
+    set_f('stereo.band%d' % (_b + 1), 1.0 if _b == 0 else 0.0)
+mb, sb = run_quad(blocks=40)
+check('band path finite', mb == mb and sb == sb and mb < 5.0 and sb < 5.0,
+      'mid=%.4f side=%.4f' % (mb, sb))
+set_i('stereo.bandUsed', 0)
+set_f('stereo.mix', 0.0)
 
 dll.auradsp_destroy(h)
 

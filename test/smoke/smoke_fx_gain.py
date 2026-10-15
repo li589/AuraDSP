@@ -149,6 +149,68 @@ tiny = run_sine(1000.0, 0.001, blocks=40)
 expect_tiny = 0.001 / math.sqrt(2)
 check('autogain clamp: tiny input not boosted past +12dB',
       tiny < expect_tiny * 4.5, 'rms=%.6f cap=%.6f' % (tiny, expect_tiny * 4.5))
+set_i('bass.autogain', 0)
+set_i('bass.enable', 0)
+set_f('bass.outgain', 0.0)
+
+# 6. tube.outgain：相对比值（非线性级前后同条件，比值只剩门增益）
+set_i('tube.enable', 1)
+set_f('tube.gain', 0.0)
+set_f('tube.outgain', 0.0)
+t0 = run_sine(1000.0, 0.1, blocks=24)
+set_f('tube.outgain', 6.0)
+t6 = run_sine(1000.0, 0.1, blocks=24)
+check('tube outgain +6dB doubles (+-5%)', abs(t6 / t0 - 2.0) / 2.0 < 0.05 if t0 > 0 else False,
+      'ratio=%.4f' % (t6 / t0 if t0 > 0 else 0.0))
+check('tube.outgain clamp', set_f('tube.outgain', 99.0) == 0 and abs(get_f('tube.outgain')[1] - 6.0) < 1e-6)
+set_f('tube.outgain', 0.0)
+check('tube.autogain set/get', set_i('tube.autogain', 1) == 0 and get_i('tube.autogain') == (0, 1))
+set_f('tube.gain', 12.0)
+t_ag = run_sine(1000.0, 0.1, blocks=40)
+check('tube.autogain bounded finite', t_ag == t_ag and t_ag < 2.0, 'rms=%.4f' % t_ag)
+set_i('tube.autogain', 0)
+set_f('tube.gain', 0.0)
+set_i('tube.enable', 0)
+
+# 7. eq.autogain：抬升曲线 + 开补偿 → 收敛回输入附近；set/get 对称
+def set_str(pid, s):
+    b = s.encode('utf-8')
+    buf = (ctypes.c_char * len(b)).from_buffer_copy(b)
+    return dll.auradsp_set_param(h, pid.encode(), buf, len(b))
+
+
+check('eq.autogain set/get', set_i('eq.autogain', 1) == 0 and get_i('eq.autogain') == (0, 1))
+set_str('eq.curve', '60:9;300:9;1000:9;8000:9;16000:9')
+set_i('eq.enable', 1)
+e_ag = run_sine(1000.0, 0.1, blocks=40)
+check('eq.autogain converges (+-25%)', abs(e_ag - expect) / expect < 0.25,
+      'rms=%.5f expect=%.5f' % (e_ag, expect))
+set_i('eq.autogain', 0)
+set_i('eq.enable', 0)
+
+# 8. reverb.outgain：freeverb 全湿下相对比值；autogain set/get + 有界
+set_fv = lambda pid, v: dll.auradsp_set_param(h, pid.encode(), ctypes.byref(f32(v)), 4)
+set_i('reverb.preset', -1)
+dll.auradsp_set_param(h, b'freeverb.enable', ctypes.byref(i32(1)), 4)
+set_fv('freeverb.decay', 0.5)
+set_fv('freeverb.wet', 1.0)
+set_fv('freeverb.dry', 0.0)
+set_fv('freeverb.roomsize', 1.0)
+set_f('reverb.outgain', 0.0)
+v0 = run_sine(1000.0, 0.1, blocks=24)
+set_f('reverb.outgain', 6.0)
+check('reverb.outgain clamp', abs(get_f('reverb.outgain')[1] - 6.0) < 1e-6)
+v6 = run_sine(1000.0, 0.1, blocks=24)
+check('reverb outgain +6dB doubles (+-8%)', abs(v6 / v0 - 2.0) / 2.0 < 0.08 if v0 > 0 else False,
+      'ratio=%.4f' % (v6 / v0 if v0 > 0 else 0.0))
+set_f('reverb.outgain', 0.0)
+check('reverb.autogain set/get', set_i('reverb.autogain', 1) == 0 and get_i('reverb.autogain') == (0, 1))
+v_ag = run_sine(1000.0, 0.1, blocks=40)
+check('reverb.autogain bounded finite', v_ag == v_ag and v_ag < 2.0, 'rms=%.4f' % v_ag)
+set_i('reverb.autogain', 0)
+dll.auradsp_set_param(h, b'freeverb.enable', ctypes.byref(i32(0)), 4)
+
+# 9. comp.outgain 由 smoke_comp.py 覆盖（比值+钳位），此处不再重复。
 
 dll.auradsp_destroy(h)
 

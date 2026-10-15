@@ -112,12 +112,29 @@ def fund(ys, f):
 # 0. 回读 + 钳位
 check('enable set/get', set_i('dyneq.enable', 1) == 0 and get_i('dyneq.enable') == (0, 1))
 check('attack set/get', set_f('dyneq.attack', 5.0) == 0 and abs(get_f('dyneq.attack')[1] - 5.0) < 1e-6)
+check('release set/get+clamp', set_f('dyneq.release', 200.0) == 0 and abs(get_f('dyneq.release')[1] - 200.0) < 1e-6 and
+      set_f('dyneq.release', 5.0) == 0 and abs(get_f('dyneq.release')[1] - 10.0) < 1e-6 and
+      set_f('dyneq.release', 99999.0) == 0 and abs(get_f('dyneq.release')[1] - 1000.0) < 1e-6)
+set_f('dyneq.release', 120.0)  # 复位默认，避免污染下游动态断言
 set_f('dyneq.mid.freq', 99999.0)
 check('mid freq clamp 99999->8000', abs(get_f('dyneq.mid.freq')[1] - 8000.0) < 1e-3)
 set_f('dyneq.low.q', 9.0)
 check('low q clamp 9->2 (shelf)', abs(get_f('dyneq.low.q')[1] - 2.0) < 1e-6)
 set_f('dyneq.high.range', 99.0)
 check('high range clamp 99->24', abs(get_f('dyneq.high.range')[1] - 24.0) < 1e-6)
+# 三缺口参数：low.threshold / high.q / high.threshold set/get+钳位
+set_f('dyneq.low.threshold', -30.0)
+check('low.threshold set/get', abs(get_f('dyneq.low.threshold')[1] + 30.0) < 1e-6)
+set_f('dyneq.low.threshold', 99.0)
+check('low.threshold clamp 99->0', abs(get_f('dyneq.low.threshold')[1]) < 1e-6)
+set_f('dyneq.high.q', 1.2)
+check('high.q set/get', abs(get_f('dyneq.high.q')[1] - 1.2) < 1e-6)
+set_f('dyneq.high.q', 99.0)
+check('high.q clamp 99->2', abs(get_f('dyneq.high.q')[1] - 2.0) < 1e-6)
+set_f('dyneq.high.threshold', -50.0)
+check('high.threshold set/get', abs(get_f('dyneq.high.threshold')[1] + 50.0) < 1e-6)
+set_f('dyneq.high.threshold', -99.0)
+check('high.threshold clamp -99->-60', abs(get_f('dyneq.high.threshold')[1] + 60.0) < 1e-6)
 set_f('dyneq.mid.threshold', -99.0)
 check('mid thr clamp -99->-60', abs(get_f('dyneq.mid.threshold')[1] + 60.0) < 1e-6)
 set_i('dyneq.enable', 0)

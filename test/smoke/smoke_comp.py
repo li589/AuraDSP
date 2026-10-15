@@ -93,6 +93,22 @@ def run_sine(freq, amp, blocks=40):
 # 0. 回读
 check('enable set/get', set_i('comp.enable', 1) == 0 and get_i('comp.enable') == (0, 1))
 check('timeconstant set/get', set_f('comp.timeconstant', 0.14) == 0 and abs(get_f('comp.timeconstant')[1] - 0.14) < 1e-6)
+check('granularity set/get+clamp',
+      set_i('comp.granularity', 2) == 0 and get_i('comp.granularity') == (0, 2) and
+      set_i('comp.granularity', 99) == 0 and get_i('comp.granularity') == (0, 4) and
+      set_i('comp.granularity', -9) == 0 and get_i('comp.granularity') == (0, 0))
+check('tfresolution set/get+clamp',
+      set_i('comp.tfresolution', 1) == 0 and get_i('comp.tfresolution') == (0, 1) and
+      set_i('comp.tfresolution', 99) == 0 and get_i('comp.tfresolution') == (0, 3))
+check('outgain set/get+clamp',
+      set_f('comp.outgain', 6.0) == 0 and abs(get_f('comp.outgain')[1] - 6.0) < 1e-6 and
+      set_f('comp.outgain', 99.0) == 0 and abs(get_f('comp.outgain')[1] - 6.0) < 1e-6 and
+      set_f('comp.outgain', -99.0) == 0 and abs(get_f('comp.outgain')[1] + 12.0) < 1e-6)
+check('autogain set/get', set_i('comp.autogain', 1) == 0 and get_i('comp.autogain') == (0, 1))
+set_i('comp.autogain', 0)
+set_i('comp.granularity', 2)
+set_i('comp.tfresolution', 1)
+set_f('comp.outgain', 0.0)
 
 # 1. 关闭直通
 set_i('comp.enable', 0)
@@ -108,6 +124,28 @@ check('hot still audible (>0.5)', p_hot > 0.5, 'peak=%.4f' % p_hot)
 # 3. 冷信号基本通过
 _, p_cold = run_sine(1000.0, 0.05, blocks=60)
 check('quiet passes (+-15%)', abs(p_cold - 0.05) / 0.05 < 0.15, 'peak=%.4f' % p_cold)
+
+# 4. outgain 声学：同条件 0 vs +6dB 精确翻倍（压缩量与电平无关时比值只剩门增益）
+set_f('comp.outgain', 0.0)
+r0, _ = run_sine(1000.0, 0.2, blocks=60)
+set_f('comp.outgain', 6.0)
+r6, _ = run_sine(1000.0, 0.2, blocks=60)
+check('outgain +6dB doubles (+-5%)', abs(r6 / r0 - 2.0) / 2.0 < 0.05 if r0 > 0 else False,
+      'ratio=%.4f' % (r6 / r0 if r0 > 0 else 0.0))
+set_f('comp.outgain', 0.0)
+
+# 5. 全档位 granularity/tfresolution 跑一遍：只允许有限输出，不许崩/NaN
+bad = False
+for g in range(5):
+    for t in range(4):
+        set_i('comp.granularity', g)
+        set_i('comp.tfresolution', t)
+        _, p = run_sine(1000.0, 0.3, blocks=8)
+        if p != p or p > 10.0:
+            bad = True
+check('all granularity/tfresolution combos finite', not bad)
+set_i('comp.granularity', 2)
+set_i('comp.tfresolution', 1)
 
 dll.auradsp_destroy(h)
 
