@@ -40,6 +40,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vbBuses => 'VB buses (off=passthrough)';
 
   @override
+  String get sampleRateFollowBridge =>
+      'Bridge modes follow the VB/ASIO device; this applies to in-process only';
+
+  @override
   String get latencyLabel => 'Latency';
 
   @override
@@ -247,6 +251,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String asioSrMismatch(String sr, String cfg) {
     return 'Driver runs at $sr Hz, mismatching the global $cfg Hz (ASIO follows the driver)';
+  }
+
+  @override
+  String wasapiSrFallback(String sr, String cfg) {
+    return 'Device runs at $sr Hz (requested $cfg Hz was rejected, fell back)';
   }
 
   @override

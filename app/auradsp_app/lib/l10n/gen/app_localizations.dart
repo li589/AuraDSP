@@ -160,6 +160,12 @@ abstract class AppLocalizations {
   /// **'VB 总线（关=直通）'**
   String get vbBuses;
 
+  /// No description provided for @sampleRateFollowBridge.
+  ///
+  /// In zh, this message translates to:
+  /// **'桥模式跟随 VB/ASIO 设备，此处仅对进程内生效'**
+  String get sampleRateFollowBridge;
+
   /// No description provided for @latencyLabel.
   ///
   /// In zh, this message translates to:
@@ -555,6 +561,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'驱动运行于 {sr} Hz，与全局设置 {cfg} Hz 不符（ASIO 跟随驱动）'**
   String asioSrMismatch(String sr, String cfg);
+
+  /// No description provided for @wasapiSrFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备实际 {sr} Hz（请求 {cfg} Hz 被拒，已回退）'**
+  String wasapiSrFallback(String sr, String cfg);
 
   /// No description provided for @asioLatChanged.
   ///

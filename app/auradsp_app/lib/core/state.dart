@@ -225,6 +225,7 @@ class AppModel extends ChangeNotifier {
   }
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
+  String sourcePath = ''; // 文件源路径（isolate 重启后重推音源用；tone/pink 为空）
   String sourceExt = ''; // 文件源扩展名（小写无点，如 'mp3'/'wav'；非文件源为空）
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
@@ -767,6 +768,23 @@ class AppModel extends ChangeNotifier {
             'bufSize': config.asioBufSize,
             'outPair': config.asioOutPair,
           });
+        }
+        // isolate 重启（采样率切换）：标准 session 回放只管参数，不管音源选择
+        // 与 bypass 开关——这里补推（model 级状态是真相源）。
+        if (_pendingRestartPush) {
+          _pendingRestartPush = false;
+          if (bypass) send({'cmd': 'bypass', 'value': true});
+          if (sourceKind.isNotEmpty) {
+            send({
+              'cmd': 'source',
+              'kind': sourceKind,
+              'path': sourcePath.isEmpty ? null : sourcePath
+            });
+            playing = true;
+          } else {
+            playing = false;
+          }
+          notifyListeners();
         }
         break;
       case 'params':
@@ -2678,11 +2696,39 @@ void _rebuildEqGridForSampleRate({bool notify = true}) {
 }
 
 /// 采样率变更后由调用方触发，重建网格并把新值落盘。
+/// 进程内模式：重启 isolate（spawn 路径按新采样率建链，就绪后走标准 session
+/// 回放：参数/脚本/IR/插件/音源/bypass 全回来，约 1 秒静音间隙）。
+/// 桥模式跟对端走：仅落盘（回进程内/下次启动生效），设置页有 hint 明示。
+bool _pendingRestartPush = false; // isolate 重启后就绪时重推音源/bypass
 void setSampleRate(int rate) {
   if (rate == config.sampleRate) return;
   config.sampleRate = rate;
   ConfigManager.save(config);
   _rebuildEqGridForSampleRate();
+  if (audioMode == 'vbcallback' || audioMode == 'asio') {
+    notifyListeners();
+    return;
+  }
+  _pendingRestartPush = true;
+  _restartIsolate();
+  notifyListeners();
+}
+
+/// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
+/// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
+void _restartIsolate() {
+  try {
+    _fromIso?.close();
+  } catch (_) {}
+  _fromIso = null;
+  _toIso = null;
+  try {
+    _iso?.kill(priority: Isolate.immediate);
+  } catch (_) {}
+  _iso = null;
+  conn = EngineConn.connecting;
+  playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
+  _spawn();
 }
 
 /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
@@ -3352,6 +3398,7 @@ void fillEqQ(double q) {
 
   void setSource(String kind, {String? path}) {
     sourceKind = kind == 'stop' ? '' : kind;
+    sourcePath = (kind == 'file' && path != null) ? path : '';
     // 文件源记住扩展名（mp3/wav 芯片各自高亮；isolate 侧按扩展名选解码器）。
     sourceExt = '';
     if (kind == 'file' && path != null) {

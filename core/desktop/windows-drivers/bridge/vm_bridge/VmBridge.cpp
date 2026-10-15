@@ -247,6 +247,9 @@ void RebuildEngines(int groups, float sr) {
         g_b.ctx.idleSamples[g] = 0;
         g_b.ctx.idle[g] = false;
         g_b.ctx.peakGrp[g] = 0.0;
+        g_b.ctx.grpLive[g] = false;
+        g_b.ctx.sigMark[g] = 0;
+        g_b.ctx.sigSame[g] = 0;
     }
     g_b.ctx.gotFirst = 0;
 }
@@ -557,9 +560,16 @@ int vb_stop() {
 // 要件：跳过 idle 组（停产 viz 帧，峰值可能是衰减中的僵尸热）；全 idle 时
 // 回落 0（诚实空 viz——对端确实无声）。调用方（status/viz）节流读取。
 static int HottestVizGroup() {
-    int best = 0;
-    double bp = -1.0;
     const long mask = InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0);
+    // 守擂：现任仍合格时，挑战者需超现任 2 倍（+6dB）才换——两组电平相当时来回
+    // 横跳，频谱内容跟着闪（主页/可视化页闪动的根因之一）。现任静默（0）时任何
+    // 有声组立即接管，不加延迟。
+    const int cur = g_b.ctx.vizStick;
+    const bool curOk = cur >= 0 && cur < vmcore::PumpCtx::kMaxGroups &&
+                       g_b.ctx.eng[cur] && !g_b.ctx.idle[cur] &&
+                       (mask & (1L << cur)) != 0;
+    int best = curOk ? cur : 0;
+    double bp = curOk ? g_b.ctx.peakGrp[cur] * 2.0 : -1.0;
     for (int g = 0; g < vmcore::PumpCtx::kMaxGroups; ++g) {
         if (!g_b.ctx.eng[g]) continue;
         if (g_b.ctx.idle[g]) continue;  // 僵尸热组排除：在产帧的组里选
@@ -570,6 +580,7 @@ static int HottestVizGroup() {
             best = g;
         }
     }
+    g_b.ctx.vizStick = best;
     return best;
 }
 
@@ -582,6 +593,9 @@ int vb_status(char* out, int cap) {
     char eng[512] = {0};
     PathForJson(g_b.enginePath, eng, sizeof(eng));
     const int vizGrp = HottestVizGroup();
+    int liveMask = 0;
+    for (int g = 0; g < vmcore::PumpCtx::kMaxGroups; ++g)
+        if (g_b.ctx.grpLive[g]) liveMask |= (1 << g);
     char peaks[256] = {0};
     snprintf(peaks, sizeof(peaks), "[%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f]",
              g_b.ctx.peakGrp[0], g_b.ctx.peakGrp[1], g_b.ctx.peakGrp[2],
@@ -592,8 +606,8 @@ int vb_status(char* out, int cap) {
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
-                     "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"peakGrp\":%s,"
-                     "\"edition\":%d,\"engine\":\"%s\"}",
+                     "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
+                     "\"peakGrp\":%s,\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
                       (unsigned long long)g_b.ctx.frames, g_b.ctx.sr,
@@ -603,7 +617,7 @@ int vb_status(char* out, int cap) {
                       (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
                       (int)(InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) &
                             0xFF),
-                      peaks, g_b.edition, eng);
+                      liveMask, peaks, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
 }

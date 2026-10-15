@@ -9,6 +9,8 @@
  *     延迟改为纯测量展示，见底栏徽标与效果页组件级徽标。
  * 音频模式与设备分卡：模式管后端选择，设备管当前设备展示与后续枚举。
  */
+import 'dart:math' as math;
+
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
@@ -139,18 +141,28 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => model.setInt('channels.mode', v),
             ),
           ),
-          // 06 采样率（发给设备的请求值；设备可回退原生值）
+          // 06 采样率（发给设备的请求值；设备可回退原生值；桥模式跟对端走，
+// 此时点选仅保存偏好，回进程内/下次建链生效——置灰反而让人以为坏了，保持可点）。
           SectionCard(
             index: '06',
             title: l.sampleRate,
-            child: AuraSegmented<int>(
-              segments: const [
-                AuraSegment(44100, '44100'),
-                AuraSegment(48000, '48000'),
-                AuraSegment(96000, '96000'),
+            hint: (model.audioMode == 'vbcallback' ||
+                    model.audioMode == 'asio')
+                ? l.sampleRateFollowBridge
+                : null,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AuraSegmented<int>(
+                  segments: const [
+                    AuraSegment(44100, '44100'),
+                    AuraSegment(48000, '48000'),
+                    AuraSegment(96000, '96000'),
+                  ],
+                  selected: model.config.sampleRate,
+                  onChanged: (v) => model.setSampleRate(v),
+                ),
               ],
-              selected: model.config.sampleRate,
-              onChanged: (v) => model.setSampleRate(v),
             ),
           ),
           // 07 引擎信息
@@ -410,6 +422,12 @@ class _DeviceInfo extends StatelessWidget {
           _InfoRow(
               l.sampleRate, '${info.deviceRate} Hz / ${info.deviceCh} ch'),
           _InfoRow(l.buffer, '${info.bufferFrames} frames'),
+          // 设备拒收请求速率（回退）：和 ASIO 的 srMismatch 同款诚实展示。
+          if (info.deviceRate != model.config.sampleRate)
+            _InfoRow(
+                l.sampleRate,
+                l.wasapiSrFallback('${info.deviceRate}',
+                    '${model.config.sampleRate}')),
         ],
       ],
     );
@@ -562,6 +580,7 @@ class _VbBuses extends StatelessWidget {
             ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
             .toList() ??
         const <double>[];
+    final live = (info['grpLive'] as num?)?.toInt() ?? 0;
     final n = groups.clamp(0, names.length);
     if (n <= 0) return const SizedBox.shrink();
     return Padding(
@@ -572,44 +591,141 @@ class _VbBuses extends StatelessWidget {
           Text(l.vbBuses, style: labelOf(p, size: 12, color: p.textDim)),
           const SizedBox(height: AuraSpace.xs),
           for (var g = 0; g < n; g++)
-            Builder(builder: (_) {
-              final on = (model.vbBusMask & (1 << g)) != 0;
-              final peak = g < peaks.length ? peaks[g].clamp(0.0, 1.0) : 0.0;
-              // 开方拉可见度：-40dB 左右的弱信号也能看到一格。
-              final frac = peak <= 0 ? 0.0 : (peak > 1 ? 1.0 : peak);
-              return Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 52,
-                      child: Text(names[g], style: monoOf(p, size: 12)),
-                    ),
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(2),
-                        child: LinearProgressIndicator(
-                          value: frac,
-                          minHeight: 6,
-                          backgroundColor: p.hairline,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                              on ? p.accent : p.textDim),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: AuraSpace.sm),
-                    Switch(
-                      value: on,
-                      activeThumbColor: p.accent,
-                      materialTapTargetSize:
-                          MaterialTapTargetSize.shrinkWrap,
-                      onChanged: (v) => model.setVbBus(g, v),
-                    ),
-                  ],
-                ),
-              );
-            }),
+            _VbBusRow(
+              name: names[g],
+              peak: g < peaks.length ? peaks[g] : 0.0,
+              live: (live & (1 << g)) != 0,
+              on: (model.vbBusMask & (1 << g)) != 0,
+              onToggle: (v) => model.setVbBus(g, v),
+            ),
         ],
+      ),
+    );
+  }
+}
+
+/* ---- VB 总线行：名 + LED 灯段表 + 紧凑开关 ----
+ * 灯段 12 格，dB 刻度（-54..0，每格 4.5dB；0dB 以上并入顶格）：
+ * 低 9 格 success、上 2 格 warning、顶格 error——颜色全取自 palette，
+ * 换主题自动跟；熄灭格用 hairline 做"暗槽"，复古调音台味。
+ * 心跳约 1/s，灯段天然低刷新；行内另做 100ms 淡入淡出防闪烁即可。 */
+
+class _VbBusRow extends StatelessWidget {
+  final String name;
+  final double peak;
+  final bool live;
+  final bool on;
+  final ValueChanged<bool> onToggle;
+  const _VbBusRow(
+      {required this.name,
+      required this.peak,
+      required this.live,
+      required this.on,
+      required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final row = Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          SizedBox(
+            width: 52,
+            child: Text(name,
+                style: monoOf(p, size: 12,
+                    color: live ? p.text : p.textDim)),
+          ),
+          Expanded(child: _LedMeter(peak: live ? peak : 0.0, on: on)),
+          const SizedBox(width: AuraSpace.sm),
+          _MiniToggle(on: on, onToggle: onToggle),
+        ],
+      ),
+    );
+    // VB 没给这条总线 buffer（未路由/未分配）：整行置灰，开关照常可用
+    // （VB 一旦送数，处理立刻生效）。
+    if (!live) return Opacity(opacity: 0.45, child: row);
+    return row;
+  }
+}
+
+class _LedMeter extends StatelessWidget {
+  final double peak;
+  final bool on;
+  const _LedMeter({required this.peak, required this.on});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    // 线性峰值→dB；底噪以下钳 -60。
+    final db = peak <= 0
+        ? -60.0
+        : (20 * (math.log(peak) / math.ln10)).clamp(-60.0, 3.0);
+    // -54dB 起亮，每格 4.5dB，12 格到 0dB。
+    final lit = ((db + 54) / 4.5).floor().clamp(0, 12);
+    return SizedBox(
+      height: 8,
+      child: Row(
+        children: [
+          for (var i = 0; i < 12; i++)
+            Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: i == 11 ? 0 : 3),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 100),
+                  curve: Curves.easeOut,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(1.5),
+                    color: i < lit
+                        ? (i < 9
+                            ? p.success
+                            : i < 11
+                                ? p.warning
+                                : p.error)
+                        : p.hairline,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/* 紧凑开关 30×18：胶囊底 + 滑块点，120ms 位移动画；关=直通。 */
+
+class _MiniToggle extends StatelessWidget {
+  final bool on;
+  final ValueChanged<bool> onToggle;
+  const _MiniToggle({required this.on, required this.onToggle});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return GestureDetector(
+      onTap: () => onToggle(!on),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 120),
+        curve: Curves.easeOut,
+        width: 30,
+        height: 18,
+        padding: const EdgeInsets.all(2),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(9),
+          color: on ? p.accent : p.panelRaised,
+          border: Border.all(
+              color: on ? p.accent : p.hairline, width: 1),
+        ),
+        alignment: on ? Alignment.centerRight : Alignment.centerLeft,
+        child: Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: on ? p.accentContrast : p.textDim,
+          ),
+        ),
       ),
     );
   }

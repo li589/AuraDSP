@@ -1,4 +1,4 @@
-// VmPumpCore.h — Voicemeeter 泵共享核心（05 桥用；02 泵保持原文件不动）。
+// VmPumpCore.h — Voicemeeter 泵共享核心（bridge/vm_bridge 用；02 泵保持原文件不动）。
 //
 // 与 VmAudioCallback.cpp 同源（PumpCtx/回调/引擎桥逻辑逐行对齐），
 // 02 侧已绿故冻结，演进只在此头做；若改回调语义，两处必须同步改，
@@ -82,6 +82,16 @@ struct PumpCtx {
     // 每组主对峰值（回调级衰减，半衰期约 1s，保证 viz 跟随“当前”有声组；
     // 旧 max-hold 会被僵尸热组霸榜：该组静默→idle→停产 viz 帧，viz 永久空）。
     double peakGrp[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    // 总线存活：本块四指针齐全即 true（VB 对未路由的总线给空指针；EAPO/Element
+    // 同症）。UI 据此把"VB 没给"和"没声"分开显示，不再神秘黑灯。
+    bool grpLive[8] = {false, false, false, false, false, false, false, false};
+    // 冻结输入检测：VB 有时对无路由总线持续给同一块 buffer（非零但永不变），
+    // 电平表会被钉死。滚动校验和 + 连续相同计数，超 0.5s 即判冻（只清表头峰值，
+    // 音频路径不动——冻住的流怎么处理输出都是冻住的，不碰最安全）。
+    uint32_t sigMark[8] = {};
+    int sigSame[8] = {};
+    // viz 跟随的现任组（HottestVizGroup 守擂用；memset 归零即 g0，无需特意复位）。
+    int vizStick = 0;
     bool bypassEntered = false;
     // 用户旁路（bridge 用；pump 不碰，恒 0 即原行为）：置位时跳过 process，
     // 输入直通输出（测试注入仍生效：先填 scratchIn 再直通，与进程内 bypass?src:eng 同义）。
@@ -106,6 +116,15 @@ inline bool PairIsSilent(const float* a, const float* b, long n) {
         if (a[i] != 0.0f || b[i] != 0.0f) return false;
     }
     return true;
+}
+
+// 表头峰值衰减：上升沿直跟、释放按块时长折算（nbs 变化手感不漂）。
+// seconds=释放到 37% 的时间；调用方按场景选 0.2（正常）/ 0.05（总线消失快衰）。
+inline void DecayGrpPeak(PumpCtx* c, int g, long n, double seconds) {
+    const double blk = (c->sr > 0 && n > 0) ? (double)n / (double)c->sr : 0.01;
+    double k = blk / seconds;
+    if (k > 1.0) k = 1.0;
+    if (k > 0.0) c->peakGrp[g] -= c->peakGrp[g] * k;
 }
 
 // 测试信号填充（RT-safe：纯数学，无分配无锁；与 Dart FileSource/ToneSource/PinkSource 同构）。
@@ -187,6 +206,9 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
             c->idleSamples[g] = 0;
             c->idle[g] = false;
+            c->grpLive[g] = false;
+            c->sigMark[g] = 0;
+            c->sigSame[g] = 0;
         }
         c->maxDiff = 0.0;
         c->bypassEntered = false;
@@ -223,7 +245,16 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         const float* inR = ab->r[base + 1];
         float* outL = ab->w[base];
         float* outR = ab->w[base + 1];
-        if (!inL || !inR || !outL || !outR) continue;
+        if (!inL || !inR || !outL || !outR) {
+            // VB 没给这条总线 buffer（未路由/未分配）：标死 + 50ms 快衰，
+            // 灯半秒内灭，不钉死也不闪瞎。
+            if (g < 8) {
+                c->grpLive[g] = false;
+                DecayGrpPeak(c, g, n, 0.05);
+            }
+            continue;
+        }
+        if (g < 8) c->grpLive[g] = true;
         // 输入峰值（全组主对的最大值；smoke 据此判定“有没有声”）。
         double grpPeak = 0.0;
         for (long i = 0; i < n; ++i) {
@@ -234,11 +265,37 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             if (m > grpPeak) grpPeak = m;
         }
         if (g < 8) {
-            // 上升沿直接跟，下降沿每回调衰减（48k/s 下 0.99995 ≈ 半衰期约 1s）。
+            // 冻结检测：步进 16 采、最多 64 点做 FNV 式折叠（RT 内纯整数运算）。
+            // 同一块内容连续超 0.5s → 本块峰值按 0 计（只清表头）。
+            uint32_t h = 2166136261u;
+            const long step = n > 64 ? n / 64 : 1;
+            for (long i = 0; i < n; i += step) {
+                union {
+                    float f;
+                    uint32_t u;
+                } xa, xb;
+                xa.f = inL[i];
+                xb.f = inR[i];
+                h ^= xa.u + 0x9e3779b9u + (h << 6) + (h >> 2);
+                h ^= xb.u + 0x9e3779b9u + (h << 6) + (h >> 2);
+            }
+            if (h == c->sigMark[g]) {
+                if (c->sigSame[g] < 1000000) ++c->sigSame[g];
+            } else {
+                c->sigMark[g] = h;
+                c->sigSame[g] = 0;
+            }
+            const long frozenAt =
+                c->sr > 0 && n > 0 ? c->sr / n / 2 : 240;  // 约 0.5s 的块数
+            if (frozenAt > 0 && c->sigSame[g] > frozenAt) grpPeak = 0.0;
+        }
+        if (g < 8) {
+            // 上升沿直接跟，释放约 200ms（旧 0.99995/块半衰期约 1s，灯要两三秒
+            // 才灭，用户读成"卡死"；200ms 人耳/人眼都跟得上，又不至于抖）。
             if (grpPeak > c->peakGrp[g])
                 c->peakGrp[g] = grpPeak;
             else
-                c->peakGrp[g] *= 0.99995;
+                DecayGrpPeak(c, g, n, 0.2);
         }
         for (long ch = base + 2; ch < base + 8; ++ch) {
             if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])

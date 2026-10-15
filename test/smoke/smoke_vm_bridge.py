@@ -234,6 +234,8 @@ rc = b.vb_set_bus_mask(0x1FF)
 check("bus_mask clamps to 0xFF", rc == 0xFF, f"rc={rc:#x}")
 rc = b.vb_set_bus_mask(0xFF)
 check("bus_mask restore", rc == 0xFF, f"rc={rc:#x}")
+check("grpLive field plumbed", isinstance(st.get("grpLive"), int),
+      f"grpLive={st.get('grpLive')}")
 
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]
