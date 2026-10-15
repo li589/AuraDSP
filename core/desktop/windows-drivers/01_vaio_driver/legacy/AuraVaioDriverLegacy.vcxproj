@@ -1,0 +1,121 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  AuraVaioDriverLegacy.vcxproj - LEGACY line
+  EWDK 19041 + KMDF 1.11, targeting Win7 SP1 / Win8 / Win8.1 x64.
+
+  This project deliberately does NOT duplicate sources: it compiles the very
+  same .cpp/.h from ../src/ as ../modern/AuraVaioDriver.vcxproj, with the
+  downlevel toolchain and its own output directory so the two tracks no longer
+  overwrite each other's AuraVaioDriver.sys / .inf / .cat.
+
+  ../src/ is the single source of truth for the driver; this project and the
+  modern one are peers that each say which files they compile.
+
+  Build via core/desktop/windows-drivers/01_vaio_driver/build_drivers.ps1 -Track legacy
+  (which enters the EWDK build environment first).
+
+  Notes on the Win7 target:
+    * DriverTargetPlatform must be Desktop (the Universal platform only
+      supports Win10+).
+    * KMDF 1.11 is the newest version that runs on Win7; the WDK would
+      otherwise pick 1.15 from TargetVersion.
+    * Event-driven WaveRT notification (IMiniportWaveRTStreamNotification)
+      is Win8+ only, so the shared sources must not depend on it yet; the
+      current implementation is notification-free by design.
+-->
+<Project ToolsVersion="15.0" DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A7C4D2E1-5B93-4F08-8E6A-2C1D4B7F9A03}</ProjectGuid>
+    <TemplateGuid>{dd38f7fc-d7bd-488b-9242-7d8754cde80d}</TemplateGuid>
+    <RootNamespace>AuraVaioDriverLegacy</RootNamespace>
+    <ProjectName>AuraVaioDriverLegacy</ProjectName>
+    <!-- The INF references AuraVaioDriver.sys, so the linked binary must keep
+         that name even though the project (and its package folder) differ. -->
+    <TargetName>AuraVaioDriver</TargetName>
+    <WindowsTargetPlatformVersion>10.0.19041.0</WindowsTargetPlatformVersion>
+    <MinimumVisualStudioVersion>16.0</MinimumVisualStudioVersion>
+  </PropertyGroup>
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Label="Configuration">
+    <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
+    <Platform Condition="'$(Platform)' == ''">x64</Platform>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetVersion>Windows7</TargetVersion>
+    <TargetPlatformVersion>10.0.19041.0</TargetPlatformVersion>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <KMDF_VERSION_MAJOR>1</KMDF_VERSION_MAJOR>
+    <KMDF_VERSION_MINOR>11</KMDF_VERSION_MINOR>
+  </PropertyGroup>
+  <PropertyGroup Label="Configuration" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetVersion>Windows7</TargetVersion>
+    <TargetPlatformVersion>10.0.19041.0</TargetPlatformVersion>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <ConfigurationType>Driver</ConfigurationType>
+    <DriverType>KMDF</DriverType>
+    <DriverTargetPlatform>Desktop</DriverTargetPlatform>
+    <PlatformToolset>WindowsKernelModeDriver10.0</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <KMDF_VERSION_MAJOR>1</KMDF_VERSION_MAJOR>
+    <KMDF_VERSION_MINOR>11</KMDF_VERSION_MINOR>
+  </PropertyGroup>
+  <PropertyGroup>
+    <!-- Same rationale as the modern project: no test certificate configured. -->
+    <SignMode>None</SignMode>
+    <ApiValidator_Enable>false</ApiValidator_Enable>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings" />
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Link>
+      <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Link>
+      <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClCompile Include="..\src\Driver.cpp" />
+    <ClCompile Include="..\src\AdapterCommon.cpp" />
+    <ClCompile Include="..\src\MiniportWaveRT.cpp" />
+    <ClCompile Include="..\src\MiniportWaveRTStream.cpp" />
+    <ClCompile Include="..\src\Topology.cpp" />
+    <ClCompile Include="..\src\VirtualClock.cpp" />
+    <ClCompile Include="..\src\Guids.cpp" />
+    <ClCompile Include="..\src\NewDelete.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\AuraVaio.h" />
+    <ClInclude Include="..\src\AuraPoolCompat.h" />
+    <ClInclude Include="..\src\AuraVaoTables.h" />
+    <ClInclude Include="..\src\AdapterCommon.h" />
+    <ClInclude Include="..\src\MiniportWaveRT.h" />
+    <ClInclude Include="..\src\MiniportWaveRTStream.h" />
+    <ClInclude Include="..\src\Topology.h" />
+    <ClInclude Include="..\src\VirtualClock.h" />
+    <ClInclude Include="..\src\NewDelete.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <Inf Include="..\src\AuraVaioDriver.inf" />
+    <FilesToPackage Include="$(TargetPath)" />
+  </ItemGroup>
+</Project>
