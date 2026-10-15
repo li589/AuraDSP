@@ -29,7 +29,7 @@
 
 ## 1. 现状盘点（代码事实，非愿望）
 
-### 1.1 引擎已具备（vendor-src/libjamesdsp，纯 C，源码整合）
+### 1.1 引擎已具备（engine/legacy，原 vendor-src/libjamesdsp，纯 C，源码整合；2026-10-16 迁入）
 
 | 能力 | 代码位置 | 现状 |
 |---|---|---|

@@ -59,7 +59,7 @@
 
 | 能力 | 来源 | 整合方式 |
 |---|---|---|
-| DSP 核心（11 效果 + limiter + postGain） | `source/JamesDSPManager/Main/libjamesdsp`（纯 C，含 `_WIN32` 分支） | 提取至 `vendor/libjamesdsp/`，ORIGIN.md 登记 |
+| DSP 核心（11 效果 + limiter + postGain） | `source/JamesDSPManager/Main/libjamesdsp`（纯 C，含 `_WIN32` 分支） | 提取至 `engine/legacy/`（2026-10-16 由 `vendor/libjamesdsp/` 迁入），ORIGIN.md 登记 |
 | Windows WASAPI 链路 | 自研（Win32 WASAPI API，非第三方库） | `core/desktop/windows/` |
 | APO 挂载思路（Phase 7b） | `source/equalizerAPO64` **只读参考** | 不链接，只学注册/参数序列化 |
 | PipeWire filter-chain 思路（Phase 7） | `source/pulseeffects`、`source/JDSP4Linux` **只读参考** | 同上 |
@@ -121,7 +121,7 @@ libjamesdsp 各模块算法延迟实测/推算（代码依据：`jdsp_header.h` 
 libjamesdsp 交织路径硬编码 2 声道（`processFloatMultiplexd`），但内部已有多声道 blob 基础（`blobsCh1..4`、`hrtfblobsResampled[4]`）。分两步走：
 
 - **Phase A（本版）：声道矩阵包络** —— 引擎外层实现 M×N 下混/上混矩阵：LFE 直通（不动低频主干），C/SL/SR 按系数并入 L/R 处理后回填。5.1/7.1 全局处理立即可用，UI 提供直通/下混/声道映射三视图。
-- **Phase B（后续）**：逐声道实例化（N-1 个 JamesDSPLib 并行实例，LFE 单独直通），需评估 CPU；若需真多声道跨声道效果，再评估 vendor-src 打 `[PATCHED]` 扩展通道数（铁律 §3.3 流程）。
+- **Phase B（后续）**：逐声道实例化（N-1 个 JamesDSPLib 并行实例，LFE 单独直通），需评估 CPU；若需真多声道跨声道效果，再评估在 `engine/legacy` 打 `[PATCHED]` 扩展通道数（铁律 §3.3 流程）。
 
 ## 6. 可视化与流畅交互
 
@@ -182,7 +182,8 @@ JamesDSP/
 │       ├── windows/ android/ linux/    # 平台壳
 │       └── pubspec.yaml
 ├── engine/                     # ★【P3a 上移】原 core/desktop/engine_api — 统一 C ABI + 自研 DSP + 插件宿主
-├── vendor/                     # ★【P3a 上移】原 core/desktop/vendor-src — libjamesdsp + plugin-api（只读）
+│                                 #   └── legacy/【2026-10-16】由 vendor/libjamesdsp 收编的 JamesDSP C 算法核 + PATCHES.md
+├── vendor/                     # ★【P3a 上移】原 core/desktop/vendor-src — 现仅剩 plugin-api（只读）
 ├── assets/                     # ★【P3b 改名】原 resource/ — IR / VDC / Liveprog 运营资源 + manifest.json
 ├── core/
 │   ├── android/                # 已有（Root HAL + 未来 Rootless 共享同一套 C ABI 语义）
