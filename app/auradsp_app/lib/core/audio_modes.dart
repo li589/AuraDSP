@@ -9,7 +9,10 @@
  * - 其他: auto（跟随当前引擎行为）
  *
  * 本文件纯 Dart（只依赖 dart:io），可单测；label 由 UI 层经 l10n 映射。
- * 引擎接线待后续版本（当前仅持久化选择 + 重启生效提示）。
+ * 接线现状（2026-10-15）：vbcallback/asio 活切；进程内采样率经 isolate 重启
+ * 即时生效；vaio/sysapo 选择仅持久化（VAIO 驱动点亮后接线）。
+ * 方向锁定：WASAPI 渲染最终只收敛于 AuraVAIO 模式，sysapo 回归纯配置面；
+ * 进程内链路是过渡形态，不再上新功能。
  */
 import 'dart:io' show Platform;
 

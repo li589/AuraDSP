@@ -203,7 +203,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get audioMode => 'オーディオモード';
 
   @override
-  String get audioModeHint => 'ASIO は即時有効、その他はエンジン再起動後に有効';
+  String get audioModeHint => 'モード切替は即時有効；WASAPI は最終的に AuraVAIO のみに収束';
 
   @override
   String get audioDevice => 'デバイス';

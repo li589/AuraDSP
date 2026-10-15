@@ -207,7 +207,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioModeHint =>
-      'ASIO takes effect instantly; other modes apply after engine restart';
+      'Mode switches apply instantly; WASAPI will converge on AuraVAIO only';
 
   @override
   String get audioDevice => 'Device';

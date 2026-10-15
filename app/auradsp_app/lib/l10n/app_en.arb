@@ -79,7 +79,7 @@
   "channels71": "7.1",
   "channelPhaseA": "Phase A: matrix downmix envelope (ADR-003). True per-channel instances ship in Phase B.",
   "audioMode": "Audio Mode",
-  "audioModeHint": "ASIO takes effect instantly; other modes apply after engine restart",
+  "audioModeHint": "Mode switches apply instantly; WASAPI will converge on AuraVAIO only",
   "audioDevice": "Device",
   "modeAuto": "Auto",
   "sampleRate": "Sample Rate",

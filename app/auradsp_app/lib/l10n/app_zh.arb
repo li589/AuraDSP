@@ -79,7 +79,7 @@
   "channels71": "7.1",
   "channelPhaseA": "Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。",
   "audioMode": "音频模式",
-  "audioModeHint": "ASIO 模式即时生效，其余模式重启引擎后生效",
+  "audioModeHint": "模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式",
   "audioDevice": "设备",
   "modeAuto": "自动",
   "sampleRate": "采样率",
