@@ -180,3 +180,23 @@ yquist * 0.999，
 - **配合方**：`auradsp_engine.cpp` 的 `limiter.enable` 分支同步写 vendor 标志。
 - **上游同步冲突风险**：低（加字段 + 单函数分支；上游若重构 stage_output 需人工合并）。
 - **验收**：热信号过载干湿对比（见 smoke_limiter.py，下述）。
+
+## P-013 jdspController.c + jdsp_header.h — 上层效果器 id 列表过滤层（2026-10-16）
+
+- **位置**：`jdspController.c` 新增 `JamesDSPFilterVendorOrder()`（`JamesDSPRebuildChain` 之后）；
+  `jdsp_header.h` 对应 `extern` 声明（`[PATCHED-AuraDSP P-013]`）。
+- **动机**：App 的「处理顺序」页下发的是**全量**效果器 id（19 个，含 gate/filter/dyneq/
+  bassmono/haas/exciter/loudness 七个自研 stage，它们在引擎自己的 `process_stereo_chain` 上，
+  不归 vendor 链管）。原调用方把这份原样喂给 `JamesDSPRebuildChain`，而后者只认
+  `kAuraStages` 的 12 个 id 且要求「恰好各一次」→ 任何来自 App 的载荷都必然
+  `found<0` 返回 -1：用户拖拽的顺序被**静默丢弃**，引擎永远跑默认序，
+  而 UI 显示的顺序与实际执行不一致。
+- **内容**：保序抽取已知 id、去重、丢弃未知 id、容忍首尾空白；`output` 位置由本函数
+  钉死在末尾（输入里出现也一律跳过后再追加，否则会被吞掉、过滤结果只剩 11 个 id）。
+  集合仍不完整时交由 `JamesDSPRebuildChain` 按原语义拒绝。
+- **行为影响**：`ids=NULL`（默认序）路径完全不变；纯 12-id 合法列表过滤后逐字节相同；
+  新增的是「含未知/重复 id 的列表也能被正确消化」这一能力。
+- **配合方**：`engine/auradsp_engine.cpp` 的 `graph.order` 分支先过本函数再重建链。
+- **上游同步冲突风险**：低（纯新增函数 + 一条 extern，不改任何既有逻辑）。
+- **验收**：`test/smoke/smoke_graph_order.py` —— App 19-id 载荷 rc=-1→0；
+  eq 移到 liveprog 之后峰值 1.0→3.198（证明重排真实生效，非纸面接受）。
