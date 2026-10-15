@@ -1088,6 +1088,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   var lastPumpErrAt = 0;
   var pumpRounds = 0;
   var procRounds = 0;
+  // 桥 viz 断流守卫（VB/ASIO 共用口径，各自独立计时）：桥引擎停产（VB 退出/
+  // 暂停无声/组 idle）时 vizRead 持续 null，之前是什么都不发，UI 永冻在最后一
+  // 帧。超 1.5s 无新帧：补一帧全零让频谱/电平回落（只补一次，活数据即恢复）。
+  int vbStaleSince = 0;
+  bool vbStaleSent = false;
+  int asioStaleSince = 0;
+  bool asioStaleSent = false;
+  void sendStaleViz(String backend, int now) {
+    send({
+      'evt': 'viz',
+      'backend': backend,
+      'spectrum': List<double>.filled(lastSpectrumLen, 0.0),
+      'eqIn': List<double>.filled(lastSpectrumLen, 0.0),
+      'l': -90.0,
+      'r': -90.0,
+      'stageL': List<double>.filled(lastStageLen, -90.0),
+      'stageR': List<double>.filled(lastStageLen, -90.0),
+      'ts': now,
+      'seq': -2,
+    });
+  }
   Future<void> pump() async {
     dbgLog('pump loop start');
     while (running) {
@@ -1101,15 +1122,24 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             lastViz = now;
             final v = ab!.vizRead();
             if (v != null) {
+              asioStaleSince = 0;
+              asioStaleSent = false;
               v['backend'] = 'asio';
               send({'evt': 'viz', ...v});
               if (!vbVizOkLogged) {
                 vbVizOkLogged = true;
                 dbgLog('asiomode: viz flowing l=${v['l']} r=${v['r']}');
               }
-            } else if (!vbVizNullLogged) {
-              vbVizNullLogged = true;
-              dbgLog('asiomode: first null viz');
+            } else {
+              if (!vbVizNullLogged) {
+                vbVizNullLogged = true;
+                dbgLog('asiomode: first null viz');
+              }
+              if (asioStaleSince == 0) asioStaleSince = now;
+              if (!asioStaleSent && now - asioStaleSince > 1500) {
+                asioStaleSent = true;
+                sendStaleViz('asio', now);
+              }
             }
             // 启动 5s 后仍无回调帧：驱动 RT 线程没在跑（对照 status 的 switches）。
             if (!vbNoCbLogged && now - vbStatusAt > 5000) {
@@ -1143,16 +1173,25 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             lastViz = now;
             final v = vb!.vizRead();
             if (v != null) {
+              vbStaleSince = 0;
+              vbStaleSent = false;
               v['backend'] = 'vb';
               send({'evt': 'viz', ...v});
               if (!vbVizOkLogged) {
                 vbVizOkLogged = true;
                 dbgLog('vbmode: viz flowing l=${v['l']} r=${v['r']}');
               }
-            } else if (!vbVizNullLogged) {
-              // 首个空 viz 记一笔（桥 handle 未就绪或对端静默的早期信号）。
-              vbVizNullLogged = true;
-              dbgLog('vbmode: first null viz');
+            } else {
+              if (!vbVizNullLogged) {
+                // 首个空 viz 记一笔（桥 handle 未就绪或对端静默的早期信号）。
+                vbVizNullLogged = true;
+                dbgLog('vbmode: first null viz');
+              }
+              if (vbStaleSince == 0) vbStaleSince = now;
+              if (!vbStaleSent && now - vbStaleSince > 1500) {
+                vbStaleSent = true;
+                sendStaleViz('vb', now);
+              }
             }
             // 启动 5s 后仍无回调帧：路由/引擎二选一，看同周期 status 的 frames/handles。
             if (!vbNoCbLogged &&
