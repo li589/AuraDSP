@@ -475,7 +475,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioModeHint.
   ///
   /// In zh, this message translates to:
-  /// **'ASIO 模式即时生效，其余模式重启引擎后生效'**
+  /// **'模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式'**
   String get audioModeHint;
 
   /// No description provided for @audioDevice.

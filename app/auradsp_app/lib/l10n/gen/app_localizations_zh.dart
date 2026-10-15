@@ -202,7 +202,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioMode => '音频模式';
 
   @override
-  String get audioModeHint => 'ASIO 模式即时生效，其余模式重启引擎后生效';
+  String get audioModeHint => '模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式';
 
   @override
   String get audioDevice => '设备';
