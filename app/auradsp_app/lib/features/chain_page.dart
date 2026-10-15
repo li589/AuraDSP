@@ -1,7 +1,8 @@
 /*
  * chain_page.dart — 处理链页（M3.5-c 完整落地）：
  * 1. 处理顺序调整（Element 式拖拽重排 + graph.order 下发）
- * 2. 12 节点 per-stage 双声道实时微型电平表（Mini Stereo Peak Meter）
+ * 2. vendor 链 per-stage 双声道实时微型电平表（Mini Stereo Peak Meter；
+ *    只有 12 个 vendor stage 有引擎电平，自研 7 个无表，见 stageMeterIndex）
  * 3. 节点独立旁路开关（Bypass / Enable）双向状态联动
  */
 import 'package:flutter/material.dart';
@@ -107,7 +108,9 @@ class _ChainPageState extends State<ChainPage> {
   }
 
   void _apply() {
-    // 引擎底层强校验必须恰好包含全部 12 个 stages（包括 output），output 顺序钉死在末尾
+    // 下发的是 19 全量（含 7 个自研 stage）；引擎只取其中 12 个 vendor id
+    // 重排（filterVendorOrder），output 顺序钉死在末尾。自研 stage 顺序由
+    // process_stereo_chain 钉死，不参与重排。
     final fullOrder = '${_order.join(',')},output';
     widget.model.setGraphOrder(fullOrder);
     setState(() => _dirty = false);
@@ -170,8 +173,6 @@ class _ChainPageState extends State<ChainPage> {
                   final meta = kStageMeta.firstWhere((s) => s.id == id,
                       orElse: () => (id: id, exposed: false));
                   final isEnabled = widget.model.isStageEnabled(id);
-                  final stageIdx = kStageMeta.indexWhere((s) => s.id == id);
-
                   return ReorderableDragStartListener(
                     key: ValueKey(id),
                     index: i,
@@ -233,9 +234,10 @@ class _ChainPageState extends State<ChainPage> {
                           ),
                           const SizedBox(width: AuraSpace.md),
                         ],
-                        // [M3.5-c] 双声道微型实时电平表
+                        // [M3.5-c] 双声道微型实时电平表（vendor 链位置索引；自研 stage 无表）
                         _StageStereoMeter(
-                          stageIndex: stageIdx,
+                          meterIndex:
+                              widget.model.stageMeterIndex(id),
                           isEnabled: isEnabled,
                           model: widget.model,
                         ),
@@ -681,29 +683,33 @@ class _StageBypassPill extends StatelessWidget {
 
 /// [M3.5-c] 硬件乐器合成器风格分段 LED 点阵电平表（一列灯一个声道，支持多通道扩展）
 class _StageStereoMeter extends StatelessWidget {
-  final int stageIndex;
+  /// vendor 链位置（0..11）；自研 stage 为 -1（引擎无逐级电平，不画表）。
+  final int meterIndex;
   final bool isEnabled;
   final AppModel model;
 
   const _StageStereoMeter({
-    required this.stageIndex,
+    required this.meterIndex,
     required this.isEnabled,
     required this.model,
   });
 
   @override
   Widget build(BuildContext context) {
+    // 自研 stage：引擎无逐级电平，不画表（此前按 UI 序号直连下标，
+    // 12 号之后全是错位灯/恒灭）。
+    if (meterIndex < 0) return const SizedBox.shrink();
     final p = paletteOf(context);
     return ListenableBuilder(
       listenable: Listenable.merge([model.stageLevelsL, model.stageLevelsR]),
       builder: (ctx, _) {
         final levelsL = model.stageLevelsL.value;
         final levelsR = model.stageLevelsR.value;
-        final dbL = (stageIndex >= 0 && stageIndex < levelsL.length)
-            ? levelsL[stageIndex]
+        final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
+            ? levelsL[meterIndex]
             : -120.0;
-        final dbR = (stageIndex >= 0 && stageIndex < levelsR.length)
-            ? levelsR[stageIndex]
+        final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
+            ? levelsR[meterIndex]
             : -120.0;
 
         // 硬件合成器分段 LED 电平表（双声道支持，可扩展多通道）

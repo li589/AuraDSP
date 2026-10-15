@@ -160,6 +160,42 @@ abstract class AppLocalizations {
   /// **'VB 总线（关=直通）'**
   String get vbBuses;
 
+  /// No description provided for @shelfTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架'**
+  String get shelfTitle;
+
+  /// No description provided for @shelfHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头'**
+  String get shelfHint;
+
+  /// No description provided for @shelfFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频点'**
+  String get shelfFreq;
+
+  /// No description provided for @shelfGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'增益'**
+  String get shelfGain;
+
+  /// No description provided for @shelfFreqInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'低于该频率整体增减，40~400Hz，一般放 80~120Hz。'**
+  String get shelfFreqInfo;
+
+  /// No description provided for @shelfGainInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'托起为正、压低为负；和低音增强是两条路，可叠加但别 double。'**
+  String get shelfGainInfo;
+
   /// No description provided for @retryNow.
   ///
   /// In zh, this message translates to:

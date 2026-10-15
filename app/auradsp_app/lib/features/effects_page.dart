@@ -32,6 +32,7 @@ part 'effects/bass_card.dart';
 part 'effects/cards_common.dart';
 part 'effects/reverb_card.dart';
 part 'effects/bassmono_card.dart';
+part 'effects/shelf_card.dart';
 part 'effects/convolver_card.dart';
 part 'effects/ddc_card.dart';
 part 'effects/eq_card.dart';
@@ -83,6 +84,10 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _BassMonoCard(model: model),
+        ),
+        ListenableBuilder(
+          listenable: model,
+          builder: (_, _) => _ShelfCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,

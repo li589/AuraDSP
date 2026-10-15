@@ -7,18 +7,51 @@
 void fv_alloc(FvVoice& v, double sampleRate, int spread = 0) {
     double scale = (sampleRate > 8000.0) ? (sampleRate / kFvTuningRefRate)
                                          : (48000.0 / kFvTuningRefRate);
+    // 按 room 上限预分配（kFvRoomMax×），运行时只改 Len。+4 守卫 + spread。
     for (int i = 0; i < kFvCombs; ++i) {
-        v.combSize[i] = (int)ceil((kFvCombTuning[i] + spread) * scale) + 4;
+        v.combSize[i] = (int)ceil((kFvCombTuning[i] + spread) * scale * kFvRoomMax) + 4;
         v.combBuf[i] = (float*)calloc(v.combSize[i], sizeof(float));
+        v.combLen[i] = (int)ceil((kFvCombTuning[i] + spread) * scale) + 4;
+        if (v.combLen[i] > v.combSize[i]) v.combLen[i] = v.combSize[i];
         v.combIdx[i] = 0;
         v.filterstore[i] = 0.0f;
     }
     for (int i = 0; i < kFvAllpasses; ++i) {
-        v.apSize[i] = (int)ceil((kFvAllpTuning[i] + spread) * scale) + 4;
+        v.apSize[i] = (int)ceil((kFvAllpTuning[i] + spread) * scale * kFvRoomMax) + 4;
         v.apBuf[i] = (float*)calloc(v.apSize[i], sizeof(float));
+        v.apLen[i] = (int)ceil((kFvAllpTuning[i] + spread) * scale) + 4;
+        if (v.apLen[i] > v.apSize[i]) v.apLen[i] = v.apSize[i];
         v.apIdx[i] = 0;
     }
     v.damp1 = 0; v.damp2 = 1;
+}
+
+// 控制线程专用（set_param 路径，持 ctrl_mutex，不在 RT 调用）。
+// 按 room 缩放两 voice 的有效长度并清缓冲，idx 若超出新长度就地归零。
+static void fv_retune_voice(FvVoice& v, double rateScale, int spread, double room) {
+    for (int i = 0; i < kFvCombs; ++i) {
+        int len = (int)ceil((kFvCombTuning[i] + spread) * rateScale * room) + 4;
+        if (len < 8) len = 8;
+        if (len > v.combSize[i]) len = v.combSize[i];
+        v.combLen[i] = len;
+        if (v.combIdx[i] >= len) v.combIdx[i] = 0;
+        memset(v.combBuf[i], 0, sizeof(float) * (size_t)v.combSize[i]);
+    }
+    for (int i = 0; i < kFvAllpasses; ++i) {
+        int len = (int)ceil((kFvAllpTuning[i] + spread) * rateScale * room) + 4;
+        if (len < 8) len = 8;
+        if (len > v.apSize[i]) len = v.apSize[i];
+        v.apLen[i] = len;
+        if (v.apIdx[i] >= len) v.apIdx[i] = 0;
+        memset(v.apBuf[i], 0, sizeof(float) * (size_t)v.apSize[i]);
+    }
+}
+
+void fv_retune(struct auradsp_handle_s* h, double room) {
+    const double sr = (h->sample_rate > 8000.0f) ? (double)h->sample_rate : 48000.0;
+    const double rateScale = sr / kFvTuningRefRate;
+    fv_retune_voice(h->fvL, rateScale, 0, room);
+    fv_retune_voice(h->fvR, rateScale, kFvStereoSpread, room);
 }
 
 
@@ -40,9 +73,19 @@ void freeverb_process(auradsp_handle h, float* dst, int frames) {
         const float dryG = h->p.fv_dry.load(std::memory_order_relaxed);
         h->fvL.damp1 = damp; h->fvL.damp2 = 1.0f - damp;
         h->fvR.damp1 = damp; h->fvR.damp2 = 1.0f - damp;
+        const float wdt = h->p.fv_width.load(std::memory_order_relaxed);
         for (int i = 0; i < frames; ++i) {
-            const float wetL = fv_voice_process(h->fvL, dst[i * 2], feedback);
-            const float wetR = fv_voice_process(h->fvR, dst[i * 2 + 1], feedback);
+            float wetL = fv_voice_process(h->fvL, dst[i * 2], feedback);
+            float wetR = fv_voice_process(h->fvR, dst[i * 2 + 1], feedback);
+            if (wdt != 1.0f) {
+                // width：只加宽 wet 声（M/S：mid 直通，side × width）。
+                // 1.0 恒等；干声不受影响。RT 纯数学，拖滑块的 zipper
+                // 藏在混响尾里。
+                const float mid = (wetL + wetR) * 0.5f;
+                const float side = (wetL - wetR) * 0.5f * wdt;
+                wetL = mid + side;
+                wetR = mid - side;
+            }
             dst[i * 2]     = dst[i * 2] * dryG + wetL * wetG;
             dst[i * 2 + 1] = dst[i * 2 + 1] * dryG + wetR * wetG;
         }

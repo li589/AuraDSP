@@ -1082,6 +1082,21 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.fv_dry.store(v);
         return AURADSP_OK;
     }
+    if (!strcmp(id, "freeverb.roomsize") && bytes >= 4) {
+        // 房间尺寸（0.5..2.5× tuning）：控制线程重算两 voice 有效长度并清
+        // 缓冲（见 fv_retune 注释）；RT 侧只读 Len/Buf，最多一个 click 伪影。
+        float v = *(const float*)value;
+        if (v < 0.5f) v = 0.5f; if (v > 2.5f) v = 2.5f;
+        h->p.fv_roomsize.store(v);
+        fv_retune(h, (double)v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "freeverb.width") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.2f) v = 0.2f; if (v > 2.0f) v = 2.0f;
+        h->p.fv_width.store(v);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "crossfeed.enable") && bytes >= 4) {
         h->p.xfeed_enable.store(*(const int32_t*)value ? 1 : 0);
         if (h->open.load()) apply_crossfeed(h);
@@ -1252,6 +1267,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "freeverb.damp") && bytes >= 4) { *(float*)out_value = h->p.fv_damp.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.wet") && bytes >= 4) { *(float*)out_value = h->p.fv_wet.load(); return AURADSP_OK; }
     if (!strcmp(id, "freeverb.dry") && bytes >= 4) { *(float*)out_value = h->p.fv_dry.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.roomsize") && bytes >= 4) { *(float*)out_value = h->p.fv_roomsize.load(); return AURADSP_OK; }
+    if (!strcmp(id, "freeverb.width") && bytes >= 4) { *(float*)out_value = h->p.fv_width.load(); return AURADSP_OK; }
     if (!strcmp(id, "channels.count") && bytes >= 4) { *(int32_t*)out_value = h->channel_count.load(); return AURADSP_OK; }
     if (!strcmp(id, "gate.maxIrSeconds") && bytes >= 4) { *(float*)out_value = h->gate_max_ir_seconds.load(); return AURADSP_OK; }
     if (!strcmp(id, "gate.maxFileMb") && bytes >= 4) { *(float*)out_value = h->gate_max_file_mb.load(); return AURADSP_OK; }

@@ -110,6 +110,53 @@ _, tail_vendor = impulse_tail(nblocks=32)
 check('vendor preset=0 audible tail', tail_vendor > 0.01, 'tail=%.4f' % tail_vendor)
 set_i('reverb.preset', -1)
 
+# 4. roomsize/width 真接线（此前 UI 滑块只写 Dart 字段，从不下发）
+check('roomsize set/get',
+      set_f('freeverb.roomsize', 1.8) == 0 and
+      abs(get_f('freeverb.roomsize')[1] - 1.8) < 1e-6)
+check('width set/get',
+      set_f('freeverb.width', 1.5) == 0 and
+      abs(get_f('freeverb.width')[1] - 1.5) < 1e-6)
+check('roomsize clamp 0.5..2.5',
+      set_f('freeverb.roomsize', 9.0) == 0 and
+      abs(get_f('freeverb.roomsize')[1] - 2.5) < 1e-6)
+check('width clamp 0.2..2.0',
+      set_f('freeverb.width', 0.0) == 0 and
+      abs(get_f('freeverb.width')[1] - 0.2) < 1e-6)
+set_i('freeverb.enable', 1)
+set_f('freeverb.decay', 0.7)
+set_f('freeverb.wet', 1.0)
+set_f('freeverb.dry', 0.0)
+set_f('freeverb.roomsize', 0.5)
+_, tail_small = impulse_tail(nblocks=32)
+set_f('freeverb.roomsize', 2.5)
+_, tail_big = impulse_tail(nblocks=32)
+check('roomsize changes room (tail differs)',
+      abs(tail_big - tail_small) > 0.005,
+      'small=%.4f big=%.4f' % (tail_small, tail_big))
+# 处理中途改 room/width：只允许 click 级伪影，不允许 NaN/爆炸/崩溃
+set_f('freeverb.roomsize', 2.5)
+set_f('freeverb.width', 2.0)
+buf = (ctypes.c_float * (BLOCK * 2))()
+out = (ctypes.c_float * (BLOCK * 2))()
+bad = False
+for b in range(30):
+    for i in range(BLOCK):
+        buf[i * 2] = 0.2 * math.sin(b * 0.3 + i * 0.05)
+        buf[i * 2 + 1] = buf[i * 2]
+    if b == 10:
+        set_f('freeverb.roomsize', 0.5)
+    if b == 20:
+        set_f('freeverb.width', 0.2)
+    dll.auradsp_process(h, buf, out, BLOCK)
+    for i in range(BLOCK * 2):
+        v = out[i]
+        if v != v or abs(v) > 10.0:
+            bad = True
+            break
+check('mid-stream retune stable (no NaN/blowup)', not bad)
+set_i('freeverb.enable', 0)
+
 dll.auradsp_destroy(h)
 
 print()

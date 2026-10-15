@@ -113,7 +113,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   var idleRounds = 0;
   var idleVizSent = false;
   var lastSpectrumLen = 32;
-  var lastStageLen = 5;
+  var lastStageLen = 12; // 与 kEngineStageCount 对齐（此前误写 5，零帧长度不对）
 
   void sendIdleViz() {
     if (idleVizSent) return;

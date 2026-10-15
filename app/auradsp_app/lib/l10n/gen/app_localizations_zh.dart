@@ -40,6 +40,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbBuses => 'VB 总线（关=直通）';
 
   @override
+  String get shelfTitle => '低频搁架';
+
+  @override
+  String get shelfHint => '分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头';
+
+  @override
+  String get shelfFreq => '分频点';
+
+  @override
+  String get shelfGain => '增益';
+
+  @override
+  String get shelfFreqInfo => '低于该频率整体增减，40~400Hz，一般放 80~120Hz。';
+
+  @override
+  String get shelfGainInfo => '托起为正、压低为负；和低音增强是两条路，可叠加但别 double。';
+
+  @override
   String get retryNow => '重试';
 
   @override
