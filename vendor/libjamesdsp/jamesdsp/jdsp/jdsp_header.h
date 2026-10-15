@@ -575,6 +575,7 @@ typedef struct dspsys
 	// Output limiter
 	float postGain;
 	JLimiter limiter;
+	int limiterEnabled; /* [PATCHED-AuraDSP P-012] limiter.enable 总开关（默认 1，关时只做 postGain） */
 	size_t blockSize, blockSizeMax, pw2BlockMemSize;
 	float *tmpBuffer[6];
 	// Internal function pointer

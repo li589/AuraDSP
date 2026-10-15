@@ -677,9 +677,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tubeStyleTape => '模拟磁带温润';
 
   @override
-  String get tubeOversampling => '高阶抗混叠过采样';
-
-  @override
   String get tubeCompensation => '输出电平补偿';
 
   @override
@@ -810,9 +807,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stComp => '压限器';
 
   @override
-  String get stBass => '低音增强';
-
-  @override
   String get stBassmono => '低频单声道';
 
   @override
@@ -930,6 +924,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get exciterHifreq => '取频点';
 
   @override
+  String get exciterHifreqInfo => '只取该频率以上成分做谐波。MP3 缺高频时往低调，齿音重时往高调。';
+
+  @override
+  String get chainPinnedFirst => '首位钉死';
+
+  @override
+  String get chainPinnedLast => '末位钉死';
+
+  @override
   String get haasHint => '延迟侧制造声场宽度，另一侧恒直通保兼容';
 
   @override
@@ -960,22 +963,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stArbmag => '任意响应 EQ';
 
   @override
-  String get stConv => '脉冲响应';
-
-  @override
   String get stScript => '脚本';
-
-  @override
-  String get stXfeed => '串扰消除';
-
-  @override
-  String get stStereo => '声场展宽';
-
-  @override
-  String get stReverb => '混响';
-
-  @override
-  String get stOutput => '输出级';
 
   @override
   String get chainTitle => '处理链';
@@ -1004,15 +992,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chainNodeInput => '输入门控';
-
-  @override
-  String get chainNodeShelf => '低频搁架 EQ';
-
-  @override
-  String get chainNodeVendor => '12级内部 DSP 链路';
-
-  @override
-  String get chainNodeReverb => '混响与声场';
 
   @override
   String get chainNodeLimiter => '主限幅 Limiter';
@@ -1473,9 +1452,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get chainVstHint => '支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。';
-
-  @override
-  String get stDdc => 'VDC 空间校正';
 
   @override
   String get compTitle => '动态压限器';

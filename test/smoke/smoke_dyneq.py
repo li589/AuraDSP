@@ -6,7 +6,7 @@
   3. 动态：range=12/threshold=-30，大声 1kHz 被压（<-1dB），小声不压，错频段不压。
   4. Low/High shelf 静态增益方向正确。
   5. set/get 回读对称 + 钳位。
-  6. graph.effects 注册表含 dyneq（21 项，2048 缓冲不断尾）。
+  6. graph.effects 注册表含 dyneq（20 项，2048 缓冲不断尾）。
 """
 import ctypes
 import json
@@ -172,15 +172,17 @@ set_i('dyneq.mid.enable', 0)
 f_off = fund(run_sine(1000.0, 0.2), 1000.0)
 check('band off passthrough', abs(f_off - 0.2) < 0.01, 'fund=%.4f' % f_off)
 
-# 6. graph.effects 注册表含 dyneq（2048 缓冲；1024 会拿 E_PARAM 防断尾）
+# 6. graph.effects 注册表含 dyneq（2048 缓冲；1024 会拿 E_PARAM 防断尾；
+#    死占位 vdc 已删，现为 20 项）
 buf = ctypes.create_string_buffer(2048)
 rc = dll.auradsp_get_param(h, b'graph.effects', buf, 2048)
 check('graph.effects rc', rc == 0, 'rc=%d' % rc)
 try:
     reg = json.loads(buf.value.decode('utf-8'))
     ids = [e['id'] for e in reg]
-    check('graph.effects 21 entries', len(reg) == 21, 'n=%d' % len(reg))
+    check('graph.effects 20 entries', len(reg) == 20, 'n=%d' % len(reg))
     check('graph.effects has dyneq', 'dyneq' in ids)
+    check('graph.effects no dead vdc', 'vdc' not in ids)
     dy = [e for e in reg if e['id'] == 'dyneq'][0]
     check('dyneq exposed tier1', dy.get('exposed') is True and dy.get('tier') == 1, str(dy))
 except (ValueError, KeyError, IndexError) as ex:

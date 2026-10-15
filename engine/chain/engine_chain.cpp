@@ -76,7 +76,8 @@ void apply_reverb(auradsp_handle h) {
 void apply_stereo(auradsp_handle h) {
     JamesDSPLib* j = &h->jdsp;
     const float sm = h->p.stereo_mix.load(std::memory_order_relaxed);
-    if (sm > 0.0f) {
+    const bool en = h->p.stereo_enable.load(std::memory_order_relaxed) != 0;
+    if (en && sm > 0.0f) {
         StereoEnhancementSetParam(j, sm);
         StereoEnhancementEnable(j);
         /* P-002：分带状态在 Refresh 时被清，apply 后重放宿主值 */

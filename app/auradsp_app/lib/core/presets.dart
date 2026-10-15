@@ -278,7 +278,6 @@ abstract final class PresetLibrary {
           'enable': m.tubeOn,
           'gain': m.tubeGain,
           'style': m.tubeStyle,
-          'oversampling': m.tubeOversampling,
           'compensation': m.tubeCompensation,
           'mix': m.tubeMix,
           'autoGain': m.tubeAutoGain,
@@ -519,9 +518,7 @@ abstract final class PresetLibrary {
       if (tube['style'] != null) {
         m.setTubeStyle((tube['style'] as num).toInt());
       }
-      if (tube['oversampling'] != null) {
-        m.setTubeOversampling((tube['oversampling'] as num).toInt());
-      }
+      // 注：老预设里的 tube.oversampling 已废弃（引擎无此参数），读到直接忽略。
       if (tube['compensation'] != null) {
         m.setTubeCompensation((tube['compensation'] as num).toDouble());
       }

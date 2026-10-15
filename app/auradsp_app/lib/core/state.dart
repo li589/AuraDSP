@@ -114,7 +114,6 @@ abstract class ParamDefaults {
   // 电子管模拟器
   static const double tubeGain = 4.5;        // +4.5 dB
   static const int tubeStyle = 0;            // 0: 三极管, 1: 五极管, 2: 磁带温润
-  static const int tubeOversampling = 2;     // 2x
   static const double tubeCompensation = 0.0;// 0.0 dB
   static const double tubeMix = 1.0;         // 100%
 
@@ -398,7 +397,6 @@ class AppModel extends ChangeNotifier {
   // 电子管模拟器（Phase 4）
   double tubeGain = ParamDefaults.tubeGain;
   int tubeStyle = ParamDefaults.tubeStyle;
-  int tubeOversampling = ParamDefaults.tubeOversampling;
   double tubeCompensation = ParamDefaults.tubeCompensation;
   double tubeMix = ParamDefaults.tubeMix;
 
@@ -2696,12 +2694,6 @@ class AppModel extends ChangeNotifier {
     // P-011：引擎 tube.style 已接线（vendor character 开关，RT 安全）。
     tubeStyle = style.clamp(0, 2);
     setInt(ParamId.tubeStyle, tubeStyle);
-    notifyListeners();
-  }
-
-  void setTubeOversampling(int os) {
-    // 引擎侧无对应参数（vendor 按采样率自动过采样，手动无意义）：只存 UI/预设兼容，不下发。
-    tubeOversampling = os;
     notifyListeners();
   }
 

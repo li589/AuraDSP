@@ -678,9 +678,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get tubeStyleTape => 'テープウォームス';
 
   @override
-  String get tubeOversampling => 'オーバーサンプリング';
-
-  @override
   String get tubeCompensation => '出力レベル補正';
 
   @override
@@ -811,9 +808,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stComp => 'リミッター';
 
   @override
-  String get stBass => '低音ブースト';
-
-  @override
   String get stBassmono => '低域モノラル';
 
   @override
@@ -931,6 +925,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get exciterHifreq => '抽出周波数';
 
   @override
+  String get exciterHifreqInfo => 'この周波数以上の成分のみ倍音化。高域不足のMP3は低め、歯擦音は高めに。';
+
+  @override
+  String get chainPinnedFirst => '先頭固定';
+
+  @override
+  String get chainPinnedLast => '末尾固定';
+
+  @override
   String get haasHint => '片側を遅延させて広がりを作り、もう片方はドライのまま';
 
   @override
@@ -961,22 +964,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stArbmag => '任意応答EQ';
 
   @override
-  String get stConv => 'インパルス応答';
-
-  @override
   String get stScript => 'スクリプト';
-
-  @override
-  String get stXfeed => 'クロスフィード';
-
-  @override
-  String get stStereo => 'ステレオワイド';
-
-  @override
-  String get stReverb => 'リバーブ';
-
-  @override
-  String get stOutput => '出力段';
 
   @override
   String get chainTitle => '処理チェーン';
@@ -1005,15 +993,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chainNodeInput => '入力ゲート';
-
-  @override
-  String get chainNodeShelf => 'ローシェルフEQ';
-
-  @override
-  String get chainNodeVendor => '12段内部DSPチェーン';
-
-  @override
-  String get chainNodeReverb => 'リバーブと音場';
 
   @override
   String get chainNodeLimiter => 'メインリミッター';
@@ -1473,9 +1452,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get chainVstHint => '複数スロットを並行マウント。下で各プラグインの挿入ステージと順序を個別設定。';
-
-  @override
-  String get stDdc => 'VDC 空間補正';
 
   @override
   String get compTitle => 'ダイナミックコンプレッサー';

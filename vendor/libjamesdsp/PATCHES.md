@@ -167,3 +167,16 @@ yquist * 0.999，
   默认 drywet 由引擎推送 1.0（vendor 零初始化为 0=干声直通，fail-open 安全）。
 - **验收**：test/smoke/smoke_tube.py（谐波谱随 style 可测变化；mix=0约等于直通；compensation 电平精确命中；
   三档 RMS 正负1dB 内响度中性）。
+
+## P-012 jdsp_header.h + jdspController.c — 输出限幅器总开关（2026-10-15）
+
+- **位置**：`JamesDSPLib` 加 `int limiterEnabled`（`[PATCHED-AuraDSP P-012]`）；
+  `JamesDSPInit` 内（memset 之后、JLimiterInit 之旁）置 1；
+  `stage_output` 包络增益分支 gated（关时 `gR=1.0`，只做 postGain）。
+- **动机**：`limiter.enable` 此前只存引擎侧标志、无任何落地——UI 开关是摆设，
+  且延迟上报（engine_chain 按此 bit 加 2ms）与实际行为脱节。
+- **行为影响**：默认 1，与上游逐位一致（初始化顺序：memset→置1，无 P-005 式踩踏）；
+  关时跳过包络跟踪与增益衰减，postGain 照常。
+- **配合方**：`auradsp_engine.cpp` 的 `limiter.enable` 分支同步写 vendor 标志。
+- **上游同步冲突风险**：低（加字段 + 单函数分支；上游若重构 stage_output 需人工合并）。
+- **验收**：热信号过载干湿对比（见 smoke_limiter.py，下述）。

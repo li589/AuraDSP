@@ -326,7 +326,7 @@ class _FullChainOrderFlowView extends StatelessWidget {
                 label: l.chainNodeInput,
                 isFixed: true,
                 isActive: true,
-                tag: '首位钉死',
+                tag: l.chainPinnedFirst,
               ),
               _flowArrow(p),
 
@@ -352,7 +352,7 @@ class _FullChainOrderFlowView extends StatelessWidget {
                 label: l.chainNodeOutputGate,
                 isFixed: true,
                 isActive: true,
-                tag: '末位钉死',
+                tag: l.chainPinnedLast,
               ),
               _flowArrow(p),
 
