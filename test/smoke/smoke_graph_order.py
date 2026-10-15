@@ -69,12 +69,23 @@ def set_str(pid, s):
     return dll.auradsp_set_param(h, pid.encode(), buf, len(b))
 
 
-# 0. 非法表拒绝（缺 id / 重复 / 未知 / 空串）
+# 0. 引擎级 graph.order 契约（2026-10-16 修订）
+#
+# 旧契约：任何不是「恰好 12 个 vendor id 各一次」的列表一律拒绝。
+# 问题：App 的「处理顺序」页下发的是**全量**效果器 id（19 个，含 7 个自研
+# stage：gate/filter/dyneq/bassmono/haas/exciter/loudness），按旧契约必然
+# 被拒 → 用户拖拽的顺序被静默丢弃，引擎永远跑默认序。
+# 新契约：引擎先经 JamesDSPFilterVendorOrder 过滤（保序、去重、丢未知、
+# output 钉末尾），再交给 JamesDSPRebuildChain。因此：
+#   - 缺 vendor stage / 空串 → 仍然拒绝（过滤后集合不完整）
+#   - 未知 id / 重复 id      → 容忍（过滤层消化），不再误伤 App 载荷
 ids = DEFAULT_ORDER.split(',')
 missing = ','.join([x for x in ids if x != 'bass'])
 check('reject missing id', set_str('graph.order', missing) != 0)
-check('reject duplicate id', set_str('graph.order', ids[0] + ',' + ','.join(ids)) != 0)
-check('reject unknown id', set_str('graph.order', 'nope,' + ','.join(ids[1:])) != 0)
+check('tolerate duplicate id (dedup)',
+      set_str('graph.order', ids[0] + ',' + ','.join(ids)) == 0)
+check('tolerate unknown id (dropped)',
+      set_str('graph.order', 'nope,' + DEFAULT_ORDER) == 0)
 check('reject empty', set_str('graph.order', '') != 0)
 
 # 1. 默认序基准（eq 在 liveprog 之前）：先关 limiter（默认开会把两条路都削平）。
@@ -144,6 +155,32 @@ check('restored: eq->tanh saturates again', pk_back < 1.4, 'peak=%.5f' % pk_back
 set_i('liveprog.enable', 0)
 set_i('eq.enable', 0)
 set_i('limiter.enable', 1)
+
+# 4. [回归] App 全量载荷（19 id + output）：必须被接受，且拖拽真的生效。
+#    这正是 2026-10-16 修复的 bug——此前这份载荷必然被拒，用户在「处理顺序」
+#    页的拖拽全是无效操作，而 UI 显示的顺序与引擎实际执行的不一致。
+APP_ORDER = ('gate,filter,dyneq,bassmono,tube,comp,bass,eq,arbmag,convolver,'
+             'ddc,liveprog,crossfeed,stereo,haas,exciter,reverb,loudness,output')
+APP_SWAPPED = ('gate,filter,dyneq,bassmono,tube,comp,bass,arbmag,convolver,ddc,'
+               'liveprog,crossfeed,stereo,eq,haas,exciter,reverb,loudness,output')
+check('app 19-id payload accepted', set_str('graph.order', APP_ORDER) == 0)
+# 必须再关一次 limiter：第 3 节末尾恢复了默认（开会），它会 saturate 后的
+# 3.16 也钳成 1.0，把两种顺序的差异抹平 → 假 FAIL。
+set_i('limiter.enable', 0)
+set_i('eq.enable', 1)
+set_i('liveprog.enable', 1)
+check('liveprog saturator reloaded',
+      set_str('liveprog.code', SAT) == 0)
+pk_app = read_peak()
+check('app payload: eq->tanh saturates (~1.0)', pk_app < 1.4, 'peak=%.5f' % pk_app)
+check('app payload swapped accepted', set_str('graph.order', APP_SWAPPED) == 0)
+pk_app_sw = read_peak()
+print('app default peak=%.5f app swapped peak=%.5f' % (pk_app, pk_app_sw))
+check('app payload: reorder changes peak (>2x)',
+      pk_app_sw / max(pk_app, 1e-9) > 2.0,
+      'default=%.5f swapped=%.5f' % (pk_app, pk_app_sw))
+set_i('liveprog.enable', 0)
+set_i('eq.enable', 0)
 
 dll.auradsp_destroy(h)
 

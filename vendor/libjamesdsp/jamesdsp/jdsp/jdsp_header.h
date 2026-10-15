@@ -704,6 +704,10 @@ extern void CrossfeedProcess(JamesDSPLib *jdsp, size_t n);
 // Convolver
 extern void Convolver1DEnable(JamesDSPLib *jdsp);
 extern int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids); /* [PATCHED-AuraDSP P-004] */
+/* 把上层（App）下发的全量效果器 id 列表过滤成 vendor 认识的 12 个 stage id：
+ * 保序、去重、丢弃未知 id（自研 stage 由引擎自己的链处理，不归 vendor 管），
+ * 并确保 output 在末尾。out 至少需 512 字节。返回写入的字节数（不含 NUL）。 */
+extern int JamesDSPFilterVendorOrder(const char *in, char *out, int out_size);
 extern void Convolver1DDisable(JamesDSPLib *jdsp);
 extern void Convolver1DConstructor(JamesDSPLib *jdsp);
 extern void Convolver1DDestructor(JamesDSPLib *jdsp);

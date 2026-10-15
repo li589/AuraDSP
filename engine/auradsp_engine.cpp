@@ -1045,14 +1045,24 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
 
-    /* ---- M3.5-a：处理顺序（P-004 表驱动链） ---- */
+    /* ---- M3.5-a：处理顺序（P-004 表驱动链） ----
+     * App 下发的是全量效果器 id（含 7 个自研 stage），必须先经
+     * JamesDSPFilterVendorOrder 过滤成 vendor 的 12 个 stage id 再重建。
+     * 不过滤则任何来自 App 的列表都含未知 id，JamesDSPRebuildChain 必然
+     * 返回 -1，用户拖拽的顺序被静默丢弃、引擎永远跑默认序。 */
     if (!strcmp(id, "graph.order") && bytes >= 16) {
         char* ord = (char*)malloc((size_t)bytes + 1);
         if (!ord) { set_error(h, "graph.order: OOM"); return AURADSP_E_IO; }
         memcpy(ord, value, bytes);
         ord[bytes] = 0;
-        const int rc = JamesDSPRebuildChain(&h->jdsp, ord);
+        char filtered[512];
+        const int flen = JamesDSPFilterVendorOrder(ord, filtered, (int)sizeof(filtered));
         free(ord);
+        if (flen <= 0) {
+            set_error(h, "graph.order: no vendor stage id found");
+            return AURADSP_E_PARAM;
+        }
+        const int rc = JamesDSPRebuildChain(&h->jdsp, filtered);
         if (rc != 0) {
             set_error(h, "graph.order: invalid list (need all 12 stages exactly once)");
             return AURADSP_E_PARAM;
