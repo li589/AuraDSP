@@ -9,12 +9,15 @@ class _PostCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '14',
+      index: kEffectCardIndex['post'],
       title: l.postGain,
       latencyMs: model.componentLatency('post').ms,
               latencyMeasured: model.componentLatency('post').measured,
+              latencyEstimated: model.componentLatency('post').estimated,
               latencyProbing: model.isProbingLatency('post'),
-      onRefreshLatency: () => model.refreshComponentLatency('post'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('post')
+          ? () => model.refreshComponentLatency('post')
+          : null,
       latencyTick: model.getComponentLatencyTick('post'),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

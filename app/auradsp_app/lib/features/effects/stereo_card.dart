@@ -11,13 +11,16 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '10',
+      index: kEffectCardIndex['stereo'],
       title: l.stereoWiden,
       collapsed: !model.stereoOn,
       latencyMs: model.componentLatency('stereo').ms,
               latencyMeasured: model.componentLatency('stereo').measured,
+              latencyEstimated: model.componentLatency('stereo').estimated,
               latencyProbing: model.isProbingLatency('stereo'),
-      onRefreshLatency: () => model.refreshComponentLatency('stereo'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('stereo')
+          ? () => model.refreshComponentLatency('stereo')
+          : null,
       latencyTick: model.getComponentLatencyTick('stereo'),
       trailing: AuraSwitch(
         value: model.stereoOn,

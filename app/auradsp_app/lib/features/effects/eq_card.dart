@@ -11,13 +11,16 @@ class _EqualizerCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: '07',
+      index: kEffectCardIndex['eq'],
       title: l.eqMultiBand,
       collapsed: !model.eqOn,
       latencyMs: model.componentLatency('eq').ms,
               latencyMeasured: model.componentLatency('eq').measured,
+              latencyEstimated: model.componentLatency('eq').estimated,
               latencyProbing: model.isProbingLatency('eq'),
-      onRefreshLatency: () => model.refreshComponentLatency('eq'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('eq')
+          ? () => model.refreshComponentLatency('eq')
+          : null,
       latencyTick: model.getComponentLatencyTick('eq'),
       trailing: AuraSwitch(
         value: model.eqOn,

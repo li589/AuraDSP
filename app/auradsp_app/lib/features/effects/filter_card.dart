@@ -13,13 +13,16 @@ class _FilterCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '00',
+      index: kEffectCardIndex['filter'],
       title: l.stFilter,
       collapsed: !model.filterOn,
       latencyMs: model.componentLatency('filter').ms,
       latencyMeasured: model.componentLatency('filter').measured,
+      latencyEstimated: model.componentLatency('filter').estimated,
       latencyProbing: model.isProbingLatency('filter'),
-      onRefreshLatency: () => model.refreshComponentLatency('filter'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('filter')
+          ? () => model.refreshComponentLatency('filter')
+          : null,
       latencyTick: model.getComponentLatencyTick('filter'),
       trailing: AuraSwitch(
         value: model.filterOn,

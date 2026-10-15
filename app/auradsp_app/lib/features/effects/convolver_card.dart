@@ -18,7 +18,7 @@ class _ConvolverCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: '05',
+      index: kEffectCardIndex['convolver'],
       title: l.convTitle,
       // 常规语义：关闭即收起。用户先前明确要求「无文件时保持开关开启、
 // 效果内部直通(旁路)，待合格文件加载成功后自动生效」，
@@ -27,8 +27,11 @@ class _ConvolverCard extends StatelessWidget {
       collapsed: !model.convEnabled,
       latencyMs: model.componentLatency('convolver').ms,
               latencyMeasured: model.componentLatency('convolver').measured,
+              latencyEstimated: model.componentLatency('convolver').estimated,
               latencyProbing: model.isProbingLatency('convolver'),
-      onRefreshLatency: () => model.refreshComponentLatency('convolver'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('convolver')
+          ? () => model.refreshComponentLatency('convolver')
+          : null,
       latencyTick: model.getComponentLatencyTick('convolver'),
       trailing: ListenableBuilder(
         listenable: model,

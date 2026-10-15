@@ -14,13 +14,16 @@ class _LoudnessCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '06',
+      index: kEffectCardIndex['loudness'],
       title: l.stLoudness,
       collapsed: !model.loudnessOn,
       latencyMs: model.componentLatency('loudness').ms,
       latencyMeasured: model.componentLatency('loudness').measured,
+      latencyEstimated: model.componentLatency('loudness').estimated,
       latencyProbing: model.isProbingLatency('loudness'),
-      onRefreshLatency: () => model.refreshComponentLatency('loudness'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('loudness')
+          ? () => model.refreshComponentLatency('loudness')
+          : null,
       latencyTick: model.getComponentLatencyTick('loudness'),
       trailing: AuraSwitch(
         value: model.loudnessOn,

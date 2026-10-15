@@ -294,6 +294,13 @@
   },
   "latTipProbing": "コンポーネント遅延を測定中…",
   "latTipUnmeasured": "未測定です\n↻タップでインパルス応答を1回測定（数十ms）",
+  "latTipEstimated": "推定値（実測ではない）: {text}\n公称値または解析推定。インパルス応答測定は未実施",
+  "@latTipEstimated": {
+    "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
+    "placeholders": {
+      "text": {"type": "String"}
+    }
+  },
   "@eqBands": {
     "placeholders": {
       "n": {

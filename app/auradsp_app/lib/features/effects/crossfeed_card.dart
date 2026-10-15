@@ -22,14 +22,17 @@ class _CrossfeedCard extends StatelessWidget {
     };
 
     return SectionCard(
-      index: '09',
+      index: kEffectCardIndex['crossfeed'],
       title: l.crossfeedTitle,
       titleTooltip: l.crossfeedDesc,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('crossfeed').ms,
       latencyMeasured: m.componentLatency('crossfeed').measured,
+      latencyEstimated: m.componentLatency('crossfeed').estimated,
       latencyProbing: m.isProbingLatency('crossfeed'),
-      onRefreshLatency: () => m.refreshComponentLatency('crossfeed'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('crossfeed')
+          ? () => m.refreshComponentLatency('crossfeed')
+          : null,
       latencyTick: m.getComponentLatencyTick('crossfeed'),
       trailing: AuraSwitch(
         value: isEnabled,

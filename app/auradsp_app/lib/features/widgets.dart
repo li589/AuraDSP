@@ -43,6 +43,8 @@ class SectionCard extends StatelessWidget {
   final double? latencyMs;
   /// latencyMs 的来源标注：true = 脉冲响应实测，false/null = 未测量
   final bool? latencyMeasured;
+  /// latencyMs 来自标称表/解析推算（非实测）时置 true，徽标以「≈」展示
+  final bool? latencyEstimated;
   /// 测量进行中（禁用重复点击）
   final bool? latencyProbing;
   final VoidCallback? onRefreshLatency;
@@ -65,6 +67,7 @@ class SectionCard extends StatelessWidget {
     this.hero = false,
     this.latencyMs,
     this.latencyMeasured,
+    this.latencyEstimated,
     this.latencyProbing,
     this.onRefreshLatency,
     this.latencyTick = 0,
@@ -85,8 +88,10 @@ class SectionCard extends StatelessWidget {
                 ComponentLatencyBadge(
                   latencyMs: latencyMs!,
                   measured: latencyMeasured ?? false,
+                  estimated: latencyEstimated ?? false,
                   probing: latencyProbing ?? false,
                   onRefresh: onRefreshLatency,
+                  showRefresh: onRefreshLatency != null,
                   refreshTick: latencyTick,
                 ),
                 if (trailing != null) ...[
@@ -393,17 +398,25 @@ class ComponentLatencyBadge extends StatefulWidget {
   final double latencyMs;
   /// 该数值是否来自真实脉冲响应实测。false 表示解析估算或未测量。
   final bool measured;
+  /// 该数值是否来自标称表/解析推算（非实测）。true 时 UI 以「≈」前缀 +
+  /// 弱化配色展示，避免把估算谎报成实测。
+  final bool estimated;
   final VoidCallback? onRefresh;
   final int refreshTick;
   final bool probing;
+  /// 是否显示 ↻ 刷新按钮。为 false 时（该组件不支持实测）整个按钮区不渲染，
+  /// 避免用户点一个必然失败的控件。
+  final bool showRefresh;
 
   const ComponentLatencyBadge({
     super.key,
     required this.latencyMs,
     this.measured = false,
+    this.estimated = false,
     this.onRefresh,
     this.refreshTick = 0,
     this.probing = false,
+    this.showRefresh = true,
   });
 
   @override
@@ -441,16 +454,24 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    final text = widget.measured
-        ? '${widget.latencyMs.toStringAsFixed(1)} ms'
-        : l.latUnmeasured;
-    // 如实标注来源：实测 / 估算 / 未测量。旧实现把查表常量标成"实测"，
-    // 而 refreshComponentLatency 只是改了个时间戳、根本没做测量。
+    // 三态文案：实测 → "X.X ms"；估算 → "≈X.X ms"；都没有 → "未测量"。
+    // 旧实现只有两态，估算值被当成"未测量"丢掉，用户既看不到数也无法区分来源。
+    final String text;
+    if (widget.measured) {
+      text = '${widget.latencyMs.toStringAsFixed(1)} ms';
+    } else if (widget.estimated) {
+      text = '≈${widget.latencyMs.toStringAsFixed(1)} ms';
+    } else {
+      text = l.latUnmeasured;
+    }
+    // 如实标注来源：实测 / 估算 / 未测量。
     final tooltip = widget.measured
         ? l.latTipMeasured(text)
-        : (widget.probing
-            ? l.latTipProbing
-            : l.latTipUnmeasured);
+        : (widget.estimated
+            ? l.latTipEstimated(text)
+            : (widget.probing
+                ? l.latTipProbing
+                : l.latTipUnmeasured));
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {
@@ -466,7 +487,7 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
           message: tooltip,
           waitDuration: const Duration(milliseconds: 250),
           child: InkWell(
-            onTap: widget.probing
+            onTap: (widget.probing || widget.onRefresh == null)
                 ? null
                 : () {
                     _pulseController.forward(from: 0.0);
@@ -496,15 +517,18 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
                               : (widget.latencyMs > 0 ? p.accent2 : p.textDim)),
                     ),
                   ),
-                  const SizedBox(width: 3),
-                  RotationTransition(
-                    turns: _pulseController,
-                    child: Icon(
-                      Icons.refresh_rounded,
-                      size: 11,
-                      color: p.textDim,
+                  // 不支持实测的组件不渲染 ↻：点它必然只得到「未测量」。
+                  if (widget.showRefresh && widget.onRefresh != null) ...[
+                    const SizedBox(width: 3),
+                    RotationTransition(
+                      turns: _pulseController,
+                      child: Icon(
+                        Icons.refresh_rounded,
+                        size: 11,
+                        color: p.textDim,
+                      ),
                     ),
-                  ),
+                  ],
                 ],
               ),
             ),

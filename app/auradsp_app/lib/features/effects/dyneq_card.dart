@@ -14,14 +14,17 @@ class _DyneCard extends StatelessWidget {
     final l = l10nOf(context);
     final m = model;
     return SectionCard(
-      index: '00',
+      index: kEffectCardIndex['dyneq'],
       title: l.dyneqTitle,
       titleTooltip: l.dyneqHint,
       collapsed: !m.dyneqOn,
       latencyMs: m.componentLatency('dyneq').ms,
       latencyMeasured: m.componentLatency('dyneq').measured,
+      latencyEstimated: m.componentLatency('dyneq').estimated,
       latencyProbing: m.isProbingLatency('dyneq'),
-      onRefreshLatency: () => m.refreshComponentLatency('dyneq'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('dyneq')
+          ? () => m.refreshComponentLatency('dyneq')
+          : null,
       latencyTick: m.getComponentLatencyTick('dyneq'),
       trailing: AuraSwitch(
         value: m.dyneqOn,

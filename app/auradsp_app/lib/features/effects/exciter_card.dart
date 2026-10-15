@@ -14,13 +14,16 @@ class _ExciterCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '12',
+      index: kEffectCardIndex['exciter'],
       title: l.stExciter,
       collapsed: !model.exciterOn,
       latencyMs: model.componentLatency('exciter').ms,
       latencyMeasured: model.componentLatency('exciter').measured,
+      latencyEstimated: model.componentLatency('exciter').estimated,
       latencyProbing: model.isProbingLatency('exciter'),
-      onRefreshLatency: () => model.refreshComponentLatency('exciter'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('exciter')
+          ? () => model.refreshComponentLatency('exciter')
+          : null,
       latencyTick: model.getComponentLatencyTick('exciter'),
       trailing: AuraSwitch(
         value: model.exciterOn,

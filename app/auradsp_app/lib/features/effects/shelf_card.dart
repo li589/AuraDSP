@@ -12,13 +12,16 @@ class _ShelfCard extends StatelessWidget {
     final l = l10nOf(context);
 
     return SectionCard(
-      index: '02',
+      index: kEffectCardIndex['shelf'],
       title: l.shelfTitle,
       collapsed: !model.shelfOn,
       latencyMs: model.componentLatency('shelf').ms,
       latencyMeasured: model.componentLatency('shelf').measured,
+      latencyEstimated: model.componentLatency('shelf').estimated,
       latencyProbing: model.isProbingLatency('shelf'),
-      onRefreshLatency: () => model.refreshComponentLatency('shelf'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('shelf')
+          ? () => model.refreshComponentLatency('shelf')
+          : null,
       latencyTick: model.getComponentLatencyTick('shelf'),
       trailing: AuraSwitch(
         value: model.shelfOn,

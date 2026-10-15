@@ -14,13 +14,16 @@ class _BassMonoCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '03',
+      index: kEffectCardIndex['bassmono'],
       title: l.stBassmono,
       collapsed: !model.bassmonoOn,
       latencyMs: model.componentLatency('bassmono').ms,
       latencyMeasured: model.componentLatency('bassmono').measured,
+      latencyEstimated: model.componentLatency('bassmono').estimated,
       latencyProbing: model.isProbingLatency('bassmono'),
-      onRefreshLatency: () => model.refreshComponentLatency('bassmono'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('bassmono')
+          ? () => model.refreshComponentLatency('bassmono')
+          : null,
       latencyTick: model.getComponentLatencyTick('bassmono'),
       trailing: AuraSwitch(
         value: model.bassmonoOn,

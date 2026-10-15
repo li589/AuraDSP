@@ -14,13 +14,16 @@ class _HaasCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: '11',
+      index: kEffectCardIndex['haas'],
       title: l.stHaas,
       collapsed: !model.haasOn,
       latencyMs: model.componentLatency('haas').ms,
       latencyMeasured: model.componentLatency('haas').measured,
+      latencyEstimated: model.componentLatency('haas').estimated,
       latencyProbing: model.isProbingLatency('haas'),
-      onRefreshLatency: () => model.refreshComponentLatency('haas'),
+      onRefreshLatency: AppModel.isLatencyProbeSupported('haas')
+          ? () => model.refreshComponentLatency('haas')
+          : null,
       latencyTick: model.getComponentLatencyTick('haas'),
       trailing: AuraSwitch(
         value: model.haasOn,

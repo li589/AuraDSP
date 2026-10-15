@@ -46,6 +46,38 @@ part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 
+/// 效果器卡片序号**单一真相**（按本页 SectionCard 展示顺序，01..20）。
+///
+/// 历史坑：序号原本硬编码在 20 个卡片文件里、各写各的，结果出现 5 个 '00'
+/// （input/gate/filter/dyneq 都算 0 号）、2 个 '02'、2 个 '06'，新增或调整
+/// 卡片时也无人同步——用户看到的就是「序号全是乱的」。
+/// 现在只允许改这一处；卡片侧一律写 `index: kEffectCardIndex['<id>']`。
+///
+/// 注意：这是**页面分区序号**，不是处理链顺序。链上顺序见 ChainPage 的
+/// kDefaultCoreOrder 与「处理顺序」页，两者不必相同。
+const Map<String, String> kEffectCardIndex = {
+  'input': '01',
+  'gate': '02',
+  'filter': '03',
+  'dyneq': '04',
+  'comp': '05',
+  'bass': '06',
+  'bassmono': '07',
+  'shelf': '08',
+  'reverb': '09',
+  'convolver': '10',
+  'ddc': '11',
+  'eq': '12',
+  'arbmag': '13',
+  'crossfeed': '14',
+  'stereo': '15',
+  'haas': '16',
+  'exciter': '17',
+  'loudness': '18',
+  'tube': '19',
+  'post': '20',
+};
+
 class EffectsPage extends StatelessWidget {
   final AppModel model;
   const EffectsPage({super.key, required this.model});
