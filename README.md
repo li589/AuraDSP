@@ -16,7 +16,7 @@
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务（Phase 6） | ⬜ 蓝本见 `source/RootlessJamesDSP` |
 | **Linux** | PipeWire/Pulse | filter-chain 模块化挂载（Phase 7） | ⬜ 蓝本见 `source/JDSP4Linux` |
 
-> **音频后端模式**（`app/auradsp_app/lib/core/audio_modes.dart`，2026-10-14 新增）：Windows 侧四模式 `vaio`（AuraVAIO 虚拟声卡）/ `vbcallback`（Voicemeeter 回调）/ `sysapo`（System APO，默认）/ `asio`（专业 ASIO）；Android `root`/`rootless`。当前仅**持久化选择 + 重启生效提示**，引擎接线待后续版本；驱动侧对应实现见 `core/desktop/windows-drivers/`（02 VM 泵 / 03 自研 APO / 05 VB 桥）。
+> **音频后端模式**（`app/auradsp_app/lib/core/audio_modes.dart`，2026-10-14 新增）：Windows 侧四模式 `vaio`（AuraVAIO 虚拟声卡）/ `vbcallback`（Voicemeeter 回调）/ `sysapo`（System APO，默认）/ `asio`（专业 ASIO）；Android `root`/`rootless`。当前仅**持久化选择 + 重启生效提示**，引擎接线待后续版本；驱动侧对应实现见 `core/desktop/windows-drivers/`（02 VM 泵 / 03 自研 APO / bridge 双桥：vm_bridge + asio_bridge）。
 
 ---
 
@@ -42,7 +42,7 @@ AuraDSP/
 │   ├── convolver/ ddc/ liveprog/  + manifest.json
 ├── core/
 │   ├── desktop/windows/ # CMakeLists + build_engine.sh → out/Release/*.dll（DLL 真相源）
-│   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：02 VM 泵 / 03 自研 APO / 05 VB 桥
+│   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：02 VM 泵 / 03 自研 APO / bridge 双桥
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
 ├── app/auradsp_app/     # Flutter 3.47.7（62 个 dart，20 张效果卡；音频后端四模式已持久化）
 ├── test/smoke/          # 48 个 smoke_*.py + probe/test/bench 9 个；runner.py 登记 53 项（套件实测 53 项全绿）

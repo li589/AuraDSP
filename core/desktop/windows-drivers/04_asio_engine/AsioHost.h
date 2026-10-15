@@ -7,7 +7,7 @@
 // 许可：依赖 Steinberg ASIO SDK 2.3.4（GPLv3 路线，见 04_asio_engine/README.md）。
 //   SDK 不 vendor 进仓库；本头文件只引用 SDK 的公共接口类型。
 //
-// RT 铁律（与 02_voicemeeter_client / 05_vm_bridge 同款）：
+// RT 铁律（与 02_voicemeeter_client / bridge/vm_bridge 同款）：
 //   bufferSwitch 即驱动 RT 线程——process() 内零分配、零锁、零 syscall、零日志，
 //   仅读原子量 + 写输出缓冲。控制面（open/close/start/stop/tone_set）全在调用线程。
 //

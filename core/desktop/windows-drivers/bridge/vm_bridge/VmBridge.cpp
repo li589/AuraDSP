@@ -7,8 +7,8 @@
 // Login/Logout 与泵同式严格单次配对；OUT 槽被占（rc=1）直接返回 1 让 UI 提示。
 #include "VmBridge.h"
 
-#include "../02_voicemeeter_client/VmPumpCore.h"
-#include "../02_voicemeeter_client/VmRemoteLoader.h"
+#include "../../02_voicemeeter_client/VmPumpCore.h"
+#include "../../02_voicemeeter_client/VmRemoteLoader.h"
 
 #include <cstdio>
 #include <cstring>

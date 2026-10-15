@@ -1,4 +1,4 @@
-// audio_vbridge.dart — VB-Callback 常驻桥 FFI（05_vm_bridge/auravm_bridge.dll）。
+// audio_vbridge.dart — VB-Callback 常驻桥 FFI（bridge/vm_bridge/auravm_bridge.dll）。
 //
 // 与 AuraDspLib.load() 同候选策略：exe 旁 → engine/ 子目录 → 环境变量
 // AURADSP_VB_BRIDGE_DLL。刻意不含硬编码开发机路径（产品铁律）。
