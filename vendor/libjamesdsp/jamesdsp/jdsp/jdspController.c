@@ -431,16 +431,21 @@ static void stage_output(JamesDSPLib *jdsp, size_t n)
 	{
 		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain;
 		float xR = jdsp->tmpBuffer[1][i] * jdsp->postGain;
+		/* [PATCHED-AuraDSP P-012] limiter.enable=0 时跳过包络增益（只做 postGain） */
+		float gR = 1.0f;
 		float rect1 = fabsf(xL);
 		float rect2 = fabsf(xR);
-		float maxLR = max(rect1, rect2);
-		if (maxLR < jdsp->limiter.threshold)
-			maxLR = jdsp->limiter.threshold;
-		if (maxLR > jdsp->limiter.envOverThreshold)
-			jdsp->limiter.envOverThreshold = maxLR;
-		else
-			jdsp->limiter.envOverThreshold = maxLR + jdsp->limiter.relCoef * (jdsp->limiter.envOverThreshold - maxLR);
-		float gR = jdsp->limiter.threshold / jdsp->limiter.envOverThreshold;
+		if (jdsp->limiterEnabled)
+		{
+			float maxLR = max(rect1, rect2);
+			if (maxLR < jdsp->limiter.threshold)
+				maxLR = jdsp->limiter.threshold;
+			if (maxLR > jdsp->limiter.envOverThreshold)
+				jdsp->limiter.envOverThreshold = maxLR;
+			else
+				jdsp->limiter.envOverThreshold = maxLR + jdsp->limiter.relCoef * (jdsp->limiter.envOverThreshold - maxLR);
+			gR = jdsp->limiter.threshold / jdsp->limiter.envOverThreshold;
+		}
 		rect1 = xL * gR;
 		rect2 = xR * gR;
 		jdsp->tmpBuffer[0][i] = rect1;
@@ -1283,6 +1288,7 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	// Init IO control
 	JLimiterInit(jdsp);
 	JLimiterSetCoefficients(jdsp, -(double)(FLT_EPSILON * 10.0f), 100.0);
+	jdsp->limiterEnabled = 1; /* [PATCHED-AuraDSP P-012] 默认开，与上游行为一致 */
 	jdsp->postGain = 1.0f;
 	// Init effect
 	LiveProgConstructor(jdsp);

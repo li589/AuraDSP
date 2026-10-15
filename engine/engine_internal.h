@@ -102,7 +102,8 @@ struct Params {
     std::atomic<int32_t>  bass_enable{0};
     std::atomic<float>    bass_gain{0.0f};      /* dB [0,15] */
     std::atomic<int32_t>  reverb_preset{-1};
-    std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
+std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
+    std::atomic<int32_t>  stereo_enable{1};   /* 总开关（默认开，保持 mix 语义不变） */
     std::atomic<int32_t>  eq_enable{0};
     std::atomic<int32_t>  limiter_enable{0};
     std::atomic<float>    post_gain{0.0f};      /* dB [-15,15] */

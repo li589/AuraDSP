@@ -39,9 +39,8 @@ class _DdcCard extends StatelessWidget {
               actions: [
                 AuraChip(l.ddcOpen, icon: Icons.folder_open_outlined,
                     onTap: () => _pickVdc(context)),
-                if (model.ddcReady)
-                  AuraChip(l.ddcLoaded, icon: Icons.check_circle_outline,
-                      onTap: null),
+                // 已加载态由 _ResourceSlot 的 detail 行展示（l.ddcLoaded），
+                // 此前这里还有个同文案死芯片（onTap: null），重复且误导，已删。
               ],
             ),
             const SizedBox(height: AuraSpace.sm),

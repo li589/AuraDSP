@@ -1396,12 +1396,6 @@ abstract class AppLocalizations {
   /// **'模拟磁带温润'**
   String get tubeStyleTape;
 
-  /// No description provided for @tubeOversampling.
-  ///
-  /// In zh, this message translates to:
-  /// **'高阶抗混叠过采样'**
-  String get tubeOversampling;
-
   /// No description provided for @tubeCompensation.
   ///
   /// In zh, this message translates to:
@@ -1654,12 +1648,6 @@ abstract class AppLocalizations {
   /// **'压限器'**
   String get stComp;
 
-  /// No description provided for @stBass.
-  ///
-  /// In zh, this message translates to:
-  /// **'低音增强'**
-  String get stBass;
-
   /// No description provided for @stBassmono.
   ///
   /// In zh, this message translates to:
@@ -1894,6 +1882,24 @@ abstract class AppLocalizations {
   /// **'取频点'**
   String get exciterHifreq;
 
+  /// No description provided for @exciterHifreqInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'只取该频率以上成分做谐波。MP3 缺高频时往低调，齿音重时往高调。'**
+  String get exciterHifreqInfo;
+
+  /// No description provided for @chainPinnedFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'首位钉死'**
+  String get chainPinnedFirst;
+
+  /// No description provided for @chainPinnedLast.
+  ///
+  /// In zh, this message translates to:
+  /// **'末位钉死'**
+  String get chainPinnedLast;
+
   /// No description provided for @haasHint.
   ///
   /// In zh, this message translates to:
@@ -1954,41 +1960,11 @@ abstract class AppLocalizations {
   /// **'任意响应 EQ'**
   String get stArbmag;
 
-  /// No description provided for @stConv.
-  ///
-  /// In zh, this message translates to:
-  /// **'脉冲响应'**
-  String get stConv;
-
   /// No description provided for @stScript.
   ///
   /// In zh, this message translates to:
   /// **'脚本'**
   String get stScript;
-
-  /// No description provided for @stXfeed.
-  ///
-  /// In zh, this message translates to:
-  /// **'串扰消除'**
-  String get stXfeed;
-
-  /// No description provided for @stStereo.
-  ///
-  /// In zh, this message translates to:
-  /// **'声场展宽'**
-  String get stStereo;
-
-  /// No description provided for @stReverb.
-  ///
-  /// In zh, this message translates to:
-  /// **'混响'**
-  String get stReverb;
-
-  /// No description provided for @stOutput.
-  ///
-  /// In zh, this message translates to:
-  /// **'输出级'**
-  String get stOutput;
 
   /// No description provided for @chainTitle.
   ///
@@ -2043,24 +2019,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'输入门控'**
   String get chainNodeInput;
-
-  /// No description provided for @chainNodeShelf.
-  ///
-  /// In zh, this message translates to:
-  /// **'低频搁架 EQ'**
-  String get chainNodeShelf;
-
-  /// No description provided for @chainNodeVendor.
-  ///
-  /// In zh, this message translates to:
-  /// **'12级内部 DSP 链路'**
-  String get chainNodeVendor;
-
-  /// No description provided for @chainNodeReverb.
-  ///
-  /// In zh, this message translates to:
-  /// **'混响与声场'**
-  String get chainNodeReverb;
 
   /// No description provided for @chainNodeLimiter.
   ///
@@ -2865,12 +2823,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'支持多插槽并行挂载；可在下方为每个插件单独设定在全局音频链上的插入阶段与处理先后。'**
   String get chainVstHint;
-
-  /// No description provided for @stDdc.
-  ///
-  /// In zh, this message translates to:
-  /// **'VDC 空间校正'**
-  String get stDdc;
 
   /// No description provided for @compTitle.
   ///

@@ -696,9 +696,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tubeStyleTape => 'Tape Warmth';
 
   @override
-  String get tubeOversampling => 'Oversampling';
-
-  @override
   String get tubeCompensation => 'Output Compensation';
 
   @override
@@ -835,9 +832,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stComp => 'Limiter';
 
   @override
-  String get stBass => 'Bass Boost';
-
-  @override
   String get stBassmono => 'Bass Mono';
 
   @override
@@ -959,6 +953,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get exciterHifreq => 'Pickup freq';
 
   @override
+  String get exciterHifreqInfo =>
+      'Harmonics from content above this freq only. Go lower for MP3s lacking highs, higher for harsh sibilance.';
+
+  @override
+  String get chainPinnedFirst => 'pinned first';
+
+  @override
+  String get chainPinnedLast => 'pinned last';
+
+  @override
   String get haasHint =>
       'One side delayed widens the stage, the other stays dry';
 
@@ -991,22 +995,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stArbmag => 'Arbitrary-response EQ';
 
   @override
-  String get stConv => 'Impulse Response';
-
-  @override
   String get stScript => 'Script';
-
-  @override
-  String get stXfeed => 'Crossfeed';
-
-  @override
-  String get stStereo => 'Stereo Widening';
-
-  @override
-  String get stReverb => 'Reverb';
-
-  @override
-  String get stOutput => 'Output Stage';
 
   @override
   String get chainTitle => 'Processing Chain';
@@ -1035,15 +1024,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get chainNodeInput => 'Input Gate';
-
-  @override
-  String get chainNodeShelf => 'Low-shelf EQ';
-
-  @override
-  String get chainNodeVendor => '12-stage internal DSP chain';
-
-  @override
-  String get chainNodeReverb => 'Reverb & Soundstage';
 
   @override
   String get chainNodeLimiter => 'Main Limiter';
@@ -1526,9 +1506,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get chainVstHint =>
       'Mount multiple slots in parallel; set each plugin\'s insert stage and order on the global chain below.';
-
-  @override
-  String get stDdc => 'VDC Spatial Correction';
 
   @override
   String get compTitle => 'Dynamic Compressor';

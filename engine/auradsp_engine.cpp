@@ -318,6 +318,11 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         compute_latency(h, &h->latency_ms);  /* 刷新延迟读数（开启/关闭都回落正确） */
         return AURADSP_OK;
     }
+    if (!strcmp(id, "stereo.enable") && bytes >= 4) {
+        h->p.stereo_enable.store(*(const int32_t*)value ? 1 : 0);
+        if (h->open.load()) apply_stereo(h);
+        return AURADSP_OK;
+    }
     if (!strcmp(id, "stereo.mix") && bytes >= 4) {
         float v = *(const float*)value;
         if (v < 0) v = 0; if (v > 1) v = 1;
@@ -393,7 +398,11 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) {
-        h->p.limiter_enable.store(*(const int32_t*)value ? 1 : 0);
+        const int v = *(const int32_t*)value ? 1 : 0;
+        h->p.limiter_enable.store(v);
+        // P-007：vendor stage_output 的包络增益跟此开关（此前只存值不落地，
+        // 开关是摆设）；postGain 不受影响，恒执行。
+        h->jdsp.limiterEnabled = v;
         return AURADSP_OK;
     }
     if (!strcmp(id, "post.gain") && bytes >= 4) {
@@ -1135,6 +1144,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "bass.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.bass_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "bass.gain") && bytes >= 4) { *(float*)out_value = h->p.bass_gain.load(); return AURADSP_OK; }
     if (!strcmp(id, "reverb.preset") && bytes >= 4) { *(int32_t*)out_value = h->p.reverb_preset.load(); return AURADSP_OK; }
+    if (!strcmp(id, "stereo.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.stereo_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "stereo.mix") && bytes >= 4) { *(float*)out_value = h->p.stereo_mix.load(); return AURADSP_OK; }
     if (!strcmp(id, "stereo.bandUsed") && bytes >= 4) { *(int32_t*)out_value = h->p.stereo_band_used.load(); return AURADSP_OK; }
     if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
@@ -1279,11 +1289,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "arbmag.nodeCount") && bytes >= 4) { *(int32_t*)out_value = h->p.arbmag_nodes.load(); return AURADSP_OK; }
     /* graph.effects：M3 链视图注册表（固定 vendor 顺序；exposed=参数通道已开放） */
     if (!strcmp(id, "graph.effects") && bytes >= 2048) {
-        /* 21 项注册表：id / 延迟档 / 参数通道是否开放（exposed=false 的节点
-         * 在链视图里展示为"参数开放中"占位）。
+        /* 20 项注册表：id / 延迟档 / 参数通道是否开放。
          * 注：此前写「14 项」，随 comp/arbmag 暴露与自研效果增补早已增至 20 项，
-         * dyneq 入库（e1375b0）后现为 21 项，注释未同步。增删改条目时必须同步此处计数。
-         * 容量门 2048：21 项时 payload 已近 1000 字节，再增条目会静默截断 JSON；
+         * dyneq 入库（e1375b0）后曾为 21 项；死占位 `vdc` 已删除（见下），现为 20 项。
+         * 增删改条目时必须同步此处计数。
+         * 命名对照（历史包袱，一处写死）：实现文件 `vdc.c` = DDC 功能，
+         * 参数前缀 `ddc.*`，注册表 id `ddc`——三处统一叫 ddc，只有文件名是 vdc。
+         * 容量门 2048：20 项时 payload 约 1000 字节，再增条目会静默截断 JSON；
          * 宁可让小 buffer 拿 E_PARAM，也不断尾残 JSON。 */
         const char* reg =
             "["
@@ -1306,8 +1318,7 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"dyneq\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"loudness\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
-            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
-            "{\"id\":\"vdc\",\"tier\":0,\"exposed\":false}"
+            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true}"
             "]";
         snprintf((char*)out_value, bytes, "%s", reg);
         return AURADSP_OK;

@@ -95,7 +95,7 @@ class _TubeAdvanced extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // P-011：过采样由 vendor 按采样率自动选择（30k+→2x/20-30k→3x/14-20k→4x/14k-→5x），
-            // 手动档无声学意义，已移除；tubeOversampling 字段仅保留做预设兼容。
+            // 无手动档（僵尸字段已删）。
             ValueSlider(
               label: l.tubeMix,
               value: m.tubeMix,

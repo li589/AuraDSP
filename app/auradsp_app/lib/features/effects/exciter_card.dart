@@ -29,18 +29,15 @@ class _ExciterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 激励器模式
+          // 激励器模式（当前仅 tanh 一种算法：纯文本展示，不用芯片——芯片意味着
+          // 可点，单个永选中的死选项是假交互）
           Row(
             children: [
               Text(l.exciterMode, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
               InfoBadge(message: l.exciterModeTooltip),
               const Spacer(),
-              AuraChip(
-                'tanh',
-                selected: true,
-                onTap: null,
-              ),
+              Text('tanh', style: monoOf(p, size: 12, color: p.textDim)),
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
@@ -64,7 +61,7 @@ class _ExciterCard extends StatelessWidget {
           // 取频点
           ValueSlider(
             label: l.exciterHifreq,
-            infoMessage: '只取该频率以上成分做谐波。MP3 缺高频时往低调，齿音重时往高调。',
+            infoMessage: l.exciterHifreqInfo,
             value: model.exciterHifreq,
             defaultValue: ParamDefaults.exciterHifreq,
             onResetToDefault: () =>
