@@ -10,6 +10,7 @@
   "stateError": "失效",
   "stateIdle": "空闲",
   "vbBuses": "VB 总线（关=直通）",
+  "retryNow": "重试",
   "sampleRateFollowBridge": "桥模式跟随 VB/ASIO 设备，此处仅对进程内生效",
   "latencyLabel": "延迟",
   "latencyMs": "延迟 {n}ms",

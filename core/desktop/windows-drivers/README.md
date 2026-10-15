@@ -99,6 +99,9 @@
   （EAPO/Element 同症，非我方 bug）；桥对空 buffer 总线直通不吞声，`status`
   的 `grpLive` 掩码逐条标存活，UI 置灰而非灭灯。对无路由总线持续给同一块
   buffer（非零但永不变）时，桥判冻清表头（仅电平，音频路径不动）。
+- **0x8889000a 是独占不是失效**：`AUDCLNT_E_DEVICE_IN_USE`（VB 以独占/KS
+  方式开着同一端点时，任何 shared 打开都撞墙，重试无用）。排查先看 VB
+  侧该设备的打开方式（WDM 共享 vs KS 独占），而不是怀疑端点死了。
 - **32 位系统**：本桥为 x64，只能加载 `VoicemeeterRemote64.dll`；32 位 Windows
   下检测报 `found=false`，模式不可用（App 为 x64，无 32 位构建）。
 - **已知限制**：`arbmag.string` 走同一字符串通道（编译+镜像+回放），与

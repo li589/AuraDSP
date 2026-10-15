@@ -1038,13 +1038,29 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   send({'evt': 'isoReady', 'port': fromMain.sendPort});
 
   /* ---- 引擎 + WASAPI 初始化 ---- */
+  // WASAPI 输出是"可选的"：默认端点被独占/幽灵时不再红屏，降级就绪——引擎照跑
+  // （参数/viz/插件全活），VB/ASIO 桥完全不受影响；进程内试音在用户修好设备
+  // 后点"重试"（= _restartIsolate）恢复。fatal 只留给 DLL 缺失/引擎建不出。
   try {
     lib = AuraDspLib.load();
     dbgLog('engine dll loaded');
-    wasapi = WasapiOut()
-      ..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
-    handle = lib.create(wasapi.mix.sampleRate.toDouble(), maxBlockFrames);
-    dbgLog('auradsp_create rate=${wasapi.mix.sampleRate} '
+    String? wasapiError;
+    try {
+      wasapi = WasapiOut()
+        ..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
+    } catch (e) {
+      wasapi = null;
+      wasapiError = e.toString();
+      dbgLog('WASAPI unavailable, degraded ready: $wasapiError');
+    }
+    // 无输出设备时按请求速率建引擎（有设备则跟设备协商值）。
+    final engineRate = wasapi != null
+        ? wasapi.mix.sampleRate.toDouble()
+        : (requestedRate > 0
+            ? requestedRate.toDouble()
+            : kFallbackSampleRate.toDouble());
+    handle = lib.create(engineRate, maxBlockFrames);
+    dbgLog('auradsp_create rate=$engineRate '
         'maxBlock=$maxBlockFrames '
         'handle=${handle == nullptr ? "NULL" : "ok"}');
     if (handle == nullptr) throw StateError('auradsp_create returned null');
@@ -1057,19 +1073,25 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       AuraDspLib.setValue(lib, handle, 'viz.fftSize',
           isFloat: false, value: vizFftSize.toDouble());
     }
-    wasapi.start();
-    dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
+    wasapi?.start();
+    if (wasapi != null) {
+      dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
+    }
     lastSentState = lib.getState(handle);
     lastSentLatency = lib.getLatencyMs(handle);
     send({
       'evt': 'ready',
       'abi': lib.abi(),
       'version': lib.version().toDartString(),
-      'deviceRate': wasapi.mix.sampleRate,
-      'deviceCh': wasapi.mix.channels,
-      'bufferFrames': wasapi.bufferFrames,
+      // 无输出设备时 deviceRate=0，UI 据此展示降级态而非红屏。
+      'deviceRate': wasapi?.mix.sampleRate ?? 0,
+      'deviceCh': wasapi?.mix.channels ?? 0,
+      'bufferFrames': wasapi?.bufferFrames ?? 0,
       'latencyMs': lib.getLatencyMs(handle),
     });
+    if (wasapiError != null) {
+      send({'evt': 'wasapiError', 'msg': wasapiError});
+    }
     final initialPluginStatus = AuraDspLib.pluginGetStatusJson(lib, handle);
     send({'evt': 'pluginStatus', 'status': initialPluginStatus});
   } catch (e) {
@@ -1086,6 +1108,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
   String? lastPumpErr;
   var lastPumpErrAt = 0;
+  // WASAPI 端点被占计数（0x8889000a = AUDCLNT_E_DEVICE_IN_USE：端点被独占，
+  // 典型是 VB 以独占/KS 方式开着同一设备。旧 client 在独占释放前永好不了，
+  // 必须等对端释放后重建链路）。
+  // 连续 ~2s（400 轮）即上报一次（latch，不反复刷）；model 侧重启 isolate。
+  var wasapiErrRounds = 0;
   var pumpRounds = 0;
   var procRounds = 0;
   // 桥 viz 断流守卫（VB/ASIO 共用口径，各自独立计时）：桥引擎停产（VB 退出/
@@ -1214,7 +1241,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         continue;
       }
       try {
-        final w = wasapi!;
+        final w = wasapi;
+        if (w == null) {
+          // 无输出设备（降级就绪）：引擎照跑、viz 照发，只是不渲染；
+          // 界面由 wasapiError 事件展示原因 + 重试。
+          idleRounds++;
+          if (idleRounds >= idleVizRounds) sendIdleViz();
+          continue;
+        }
         final padding = w.getCurrentPaddingNow();
         final avail = w.bufferFrames - padding;
         if (avail <= 0 || source == null) {
@@ -1297,6 +1331,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           lastPumpErr = msg;
           lastPumpErrAt = now;
           send({'evt': 'error', 'msg': msg});
+        }
+        // 端点死亡（只认 0x8889000a，其它错误走上面的常规上报，不触发重启）。
+        if (msg.contains('0x8889000a')) {
+          wasapiErrRounds++;
+        } else {
+          wasapiErrRounds = 0;
+        }
+        if (wasapiErrRounds >= 400) {
+          wasapiErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
+          dbgLog('PUMP: device invalidated 2s+, reporting wasapiLost');
+          send({'evt': 'wasapiLost'});
         }
       }
     }

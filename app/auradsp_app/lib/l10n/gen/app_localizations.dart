@@ -160,6 +160,12 @@ abstract class AppLocalizations {
   /// **'VB 总线（关=直通）'**
   String get vbBuses;
 
+  /// No description provided for @retryNow.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get retryNow;
+
   /// No description provided for @sampleRateFollowBridge.
   ///
   /// In zh, this message translates to:

@@ -40,6 +40,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbBuses => 'VB 总线（关=直通）';
 
   @override
+  String get retryNow => '重试';
+
+  @override
   String get sampleRateFollowBridge => '桥模式跟随 VB/ASIO 设备，此处仅对进程内生效';
 
   @override

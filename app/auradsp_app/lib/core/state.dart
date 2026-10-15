@@ -226,6 +226,9 @@ class AppModel extends ChangeNotifier {
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
   String sourcePath = ''; // 文件源路径（isolate 重启后重推音源用；tone/pink 为空）
+  // WASAPI 输出缺失（默认端点被独占/幽灵）：isolate 降级就绪的报错原文；
+  // 非空即降级态（引擎照跑，VB/ASIO 不受影响），进程内试音等重试恢复。
+  String wasapiError = '';
   String sourceExt = ''; // 文件源扩展名（小写无点，如 'mp3'/'wav'；非文件源为空）
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
@@ -749,6 +752,9 @@ class AppModel extends ChangeNotifier {
         latencyMs = (raw['latencyMs'] as num).toDouble();
         conn = EngineConn.ready;
         engineState = 1;
+        _fatalRetries = 0; // 活过来了，backoff 计数清零
+        // 输出恢复即清除降级标记（deviceRate>0 = 真有设备）。
+        if ((raw['deviceRate'] as num?)?.toInt() != 0) wasapiError = '';
         notifyListeners();
         if (config.autoRestoreSession) {
           replaySessionToEngine();
@@ -966,6 +972,25 @@ class AppModel extends ChangeNotifier {
       case 'fatal':
         conn = EngineConn.fatal;
         fatalMsg = raw['msg'] as String;
+        notifyListeners();
+// 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
+// 5 次约 10s 还起不来才认命留 fatal 屏。其它错误直接留屏。
+        if (fatalMsg?.contains('0x8889000a') == true) {
+          _scheduleFatalRetry();
+        }
+        break;
+      case 'wasapiLost':
+        // 运行中端点被独占（旧 client 在对端释放前永好不了）：只有还在进程内
+        // 模式才重起；用户若已切走（桥模式），忽略（桥侧自有重建/状态）。
+        if (audioMode != 'vbcallback' && audioMode != 'asio') {
+          _fatalRetries = 0;
+          _restartIsolate();
+          notifyListeners();
+        }
+        break;
+      case 'wasapiError':
+        // 输出缺失但引擎正常：不清 fatal、不红屏，设备卡展示原因 + 重试。
+        wasapiError = (raw['msg'] as String?) ?? 'output unavailable';
         notifyListeners();
         break;
       case 'state':
@@ -2714,6 +2739,14 @@ void setSampleRate(int rate) {
   notifyListeners();
 }
 
+/// WASAPI 输出重试（降级态用户手动触发）：本质是重启 isolate 再协商一次。
+void retryWasapi() {
+  wasapiError = '';
+  _fatalRetries = 0;
+  _restartIsolate();
+  notifyListeners();
+}
+
 /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
 /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
 void _restartIsolate() {
@@ -2729,6 +2762,24 @@ void _restartIsolate() {
   conn = EngineConn.connecting;
   playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
   _spawn();
+}
+
+// fatal-backoff 重试计数（'ready' 到达即清零；只对设备失效用）。
+int _fatalRetries = 0;
+
+/// fatal 屏退避重启：对端独占释放前重起多少次都没用，但 VB 侧切设备/重启引擎
+/// 会顺手释放，2s 间隔探 5 次能覆盖大多数窗口；10s 还不行就留屏（用户改对端）。
+void _scheduleFatalRetry() {
+  if (_fatalRetries >= 5) return;
+  _fatalRetries++;
+  Future.delayed(const Duration(seconds: 2), () {
+    if (conn != EngineConn.ready &&
+        audioMode != 'vbcallback' &&
+        audioMode != 'asio') {
+      _restartIsolate();
+      notifyListeners();
+    }
+  });
 }
 
 /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。

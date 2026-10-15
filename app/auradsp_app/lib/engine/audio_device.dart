@@ -143,6 +143,9 @@ final class WasapiOut {
 
   bool started = false;
 
+  /// 本次 init 选中的端点实名（排障用；_hr 失败时拼进异常，红屏直接见名）。
+  String endpointName = '';
+
   void init({int? requestedSampleRate}) {
     dbgLog('WASAPI init: begin');
     final hr = coInitializeEx(0, 0x0); // COINIT_MULTITHREADED
@@ -178,6 +181,94 @@ final class WasapiOut {
     device = pDev.value;
     malloc.free(pDev);
     dbgLog('GetDefaultAudioEndpoint ok');
+
+    // 端点实名（排障用：再报 DEVICE_INVALIDATED 时，日志直接写明是哪块设备，
+    // 不用猜默认端点是谁）。PKEY_Device_FriendlyName =
+    // {A45C254E-DF1C-4EFD-8020-67D146A850E0},14。best-effort，失败不拦初始化。
+    try {
+      final openStore = _vt<
+              NativeFunction<
+                  Int32 Function(
+                      Pointer<Void>, Int32, Pointer<Pointer<Void>>)>>(
+              device, 4)
+          .asFunction<
+              int Function(Pointer<Void>, int, Pointer<Pointer<Void>>)>();
+      final pStore = malloc<Pointer<Void>>();
+      try {
+        if (openStore(device, 0, pStore) == 0) {
+          final store = pStore.value;
+          final getValue = _vt<
+                  NativeFunction<
+                      Int32 Function(
+                          Pointer<Void>, Pointer<Void>, Pointer<Void>)>>(
+                  store, 5)
+              .asFunction<
+                  int Function(
+                      Pointer<Void>, Pointer<Void>, Pointer<Void>)>();
+          final key = malloc<Uint8>(20);
+          final prop = malloc<Uint8>(16);
+          try {
+            final g =
+                Guid.alloc('A45C254E-DF1C-4EFD-8020-67D146A850E0');
+            try {
+              final gp = g.cast<Uint8>();
+              for (var i = 0; i < 16; i++) {
+                key[i] = gp[i];
+              }
+              key[16] = 14;
+              key[17] = 0;
+              key[18] = 0;
+              key[19] = 0;
+              for (var i = 0; i < 16; i++) {
+                prop[i] = 0;
+              }
+              if (getValue(store, key.cast(), prop.cast()) == 0) {
+                final vt = prop[0] | (prop[1] << 8);
+                if (vt == 31) {
+                  // VT_LPWSTR：指针在偏移 8（+8 个 Uint8 步进；之前误读偏移 0，
+                  // 把 vt 当指针解引用导致启动即 native 崩溃——Dart 拦不住）。
+                  final wstr = (prop + 8).cast<Pointer<Utf16>>().value;
+                  if (wstr.address != 0) {
+                    final name = wstr.toDartString();
+                    endpointName = name;
+                    dbgLog('endpoint: $name');
+                    coTaskMemFree(wstr.cast());
+                  }
+                }
+              }
+            } finally {
+              malloc.free(g);
+            }
+          } finally {
+            malloc.free(key);
+            malloc.free(prop);
+          }
+          _vt<NativeFunction<Void Function(Pointer<Void>)>>(store, 2)
+              .asFunction<void Function(Pointer<Void>)>()(store);
+        }
+      } finally {
+        malloc.free(pStore);
+      }
+    } catch (_) {
+      // 实名失败不影响初始化（老驱动可能缺属性页）
+    }
+
+    // 端点状态（1=ACTIVE 2=DISABLED 4=NOTPRESENT 8=UNPLUGGED）：幽灵设备
+    // 在这里现形（PnP 列表里 OK 不代表能用）。
+    try {
+      final getState = _vt<
+              NativeFunction<Int32 Function(Pointer<Void>, Pointer<Uint32>)>>(
+              device, 6)
+          .asFunction<int Function(Pointer<Void>, Pointer<Uint32>)>();
+      final pSt = malloc<Uint32>();
+      try {
+        if (getState(device, pSt) == 0) {
+          dbgLog('endpoint state=${pSt.value}');
+        }
+      } finally {
+        malloc.free(pSt);
+      }
+    } catch (_) {}
 
     // IMMDevice::Activate(IID_IAudioClient)
     final activate = _vt<NativeFunction<
@@ -330,8 +421,8 @@ final class WasapiOut {
   void _hr(String what, int hr) {
     if (hr < 0) {
       dbgLog('WASAPI FAIL $what hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
-      throw StateError(
-          'WASAPI $what failed hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}');
+      throw StateError('WASAPI $what failed hr=0x${(hr & 0xFFFFFFFF).toRadixString(16)}'
+          '${endpointName.isNotEmpty ? " (endpoint: $endpointName)" : ""}');
     }
   }
 }

@@ -40,6 +40,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbBuses => 'VBバス（オフ=スルー）';
 
   @override
+  String get retryNow => '再試行';
+
+  @override
   String get sampleRateFollowBridge => 'ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）';
 
   @override
