@@ -31,6 +31,11 @@ void probe_isolate(auradsp_handle p, const char* comp) {
         {"ddc.enable", 0}, {"liveprog.enable", 0}, {"shelf.enable", 0},
         {"bassmono.enable", 0}, {"haas.enable", 0}, {"exciter.enable", 0},
         {"stereo.enable", 0}, {"arbmag.enable", 0},
+        /* 自研 stage：此前整组漏在这里。它们虽在引擎自己的链上而不在 vendor
+         * 链上，auradsp_process 走的正是 process_stereo_chain，所以探针
+         * handle 上同样能被启用/关闭——漏列只是让"全关基线"名不副实。 */
+        {"gate.enable", 0}, {"filter.enable", 0}, {"dyneq.enable", 0},
+        {"loudness.enable", 0}, {"comp.enable", 0},
     };
     for (const auto& z : zeros) {
         const int32_t v = 0;
@@ -91,6 +96,20 @@ void probe_isolate(auradsp_handle p, const char* comp) {
         const char* str = "GraphicEQ: 20 0; 1000 0; 20000 0";
         auradsp_set_param(p, "arbmag.string", str, (uint32_t)strlen(str));
         auradsp_set_param(p, "arbmag.enable", &one, 4);
+    } else if (!strcmp(comp, "dyneq")) {
+        /* 全参数动态 EQ：三段默认参数即可，它按样本逐点处理（无 FFT 块延迟），
+         * 预期测出 0——但必须是"实测的 0"，不是"拒绝测量"。 */
+        const int32_t one = 1;
+        auradsp_set_param(p, "dyneq.enable", &one, 4);
+    } else if (!strcmp(comp, "filter")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "filter.enable", &one, 4);
+    } else if (!strcmp(comp, "gate")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "gate.enable", &one, 4);
+    } else if (!strcmp(comp, "loudness")) {
+        const int32_t one = 1;
+        auradsp_set_param(p, "loudness.enable", &one, 4);
     }
     /* convolver / ddc / liveprog 需要外部资源（IR / VDC / 脚本），
      * 无法在空探针上就绪，此时如实返回"不可测"而不是编一个数字。 */
@@ -100,7 +119,11 @@ void probe_isolate(auradsp_handle p, const char* comp) {
 bool probe_is_supported(const char* comp) {
     static const char* kSupported[] = {
         "bass", "reverb", "eq", "tube", "crossfeed", "limiter", "post", "shelf", "comp",
-        "bassmono", "exciter", "stereo", "arbmag"
+        "bassmono", "exciter", "stereo", "arbmag",
+        /* 自研 stage（2026-10-16 补）：此前 UI 给了 ↻ 按钮但引擎一律返回 -1，
+         * 用户点任何一次都只得到「未测量」。这四者都在 process_stereo_chain 上、
+         * 按样本逐点处理，探针能如实测出（预期 0ms）。 */
+        "dyneq", "filter", "gate", "loudness"
         /* 注意：haas 不入列。探针的能量/首非零法打双声道脉冲，而 haas 只延迟
          * 一侧（另一侧干声恒在 0），必然测出 0ms——伪造零延迟比报「不可测」
          * 更危险。摘掉后刷新回退到标称延迟（componentLatency 返回 slider 值）。 */

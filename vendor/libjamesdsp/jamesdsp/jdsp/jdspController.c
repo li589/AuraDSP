@@ -540,6 +540,74 @@ int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
 	return 0;
 }
 
+/* [PATCHED-AuraDSP] 上层 id 列表 → vendor stage id 列表。
+ *
+ * 背景：App 的「处理顺序」页下发的是**全量**效果器 id（19 个，含 gate/filter/
+ * dyneq/bassmono/haas/exciter/loudness 等自研 stage，它们在引擎自己的
+ * process_stereo_chain 里，不归 vendor 链管）。原实现把这份原样喂给
+ * JamesDSPRebuildChain，而后者只认 kAuraStages 的 12 个 id 且要求「恰好各
+ * 一次」——于是任何来自 App 的 graph.order 都必然 found<0 返回 -1，
+ * 用户拖拽的顺序被**静默丢弃**，引擎永远跑默认序（UI 显示与实际处理不一致）。
+ *
+ * 本函数在两者之间补上丢失的那层：保序抽取已知 id、去重、丢未知，
+ * 并保证 output 收尾。过滤后若集合仍不完整（缺 vendor stage），由
+ * JamesDSPRebuildChain 按原语义拒绝——那种情况确实是调用方数据有问题。 */
+int JamesDSPFilterVendorOrder(const char *in, char *out, int out_size)
+{
+	if (!in || !out || out_size < 64)
+		return 0;
+	int used[kAuraStageCount];
+	for (unsigned int i = 0; i < kAuraStageCount; ++i)
+		used[i] = 0;
+	int written = 0;
+	const char *cur = in;
+	while (cur && *cur)
+	{
+		const char *comma = strchr((const char*)cur, ',');
+		int len = comma ? (int)(comma - cur) : (int)strlen(cur);
+		/* 去掉首尾空白，容忍 "a, b" 写法 */
+		while (len > 0 && (*cur == ' ' || *cur == '\t'))
+		{
+			cur++;
+			len--;
+		}
+		while (len > 0 && (cur[len - 1] == ' ' || cur[len - 1] == '\t' ||
+		                   cur[len - 1] == '\r' || cur[len - 1] == '\n'))
+			len--;
+		for (unsigned int i = 0; i < kAuraStageCount; ++i)
+		{
+			if ((int)strlen(kAuraStages[i].id) != len ||
+			    strncmp(cur, kAuraStages[i].id, (size_t)len))
+				continue;
+			/* output 的位置由本函数钉死在末尾，输入里出现也一律跳过，
+			 * 否则它会被静默吞掉、过滤结果只剩 11 个 id 而被整体拒绝。 */
+			if (!used[i] && strcmp(kAuraStages[i].id, "output") != 0)
+			{
+				used[i] = 1;
+				if (written && written + 1 < out_size)
+					out[written++] = ',';
+				if (written + len < out_size)
+				{
+					memcpy(out + written, cur, (size_t)len);
+					written += len;
+				}
+			}
+			break;
+		}
+		cur = comma ? comma + 1 : ((void *)0);
+	}
+	/* output 恒在末尾（与 App 侧 _apply 的约定一致） */
+	if (written && written + 1 < out_size)
+		out[written++] = ',';
+	if (written + 6 < out_size)
+	{
+		memcpy(out + written, "output", 6);
+		written += 6;
+	}
+	out[written] = 0;
+	return written;
+}
+
 // Process（P-004 表驱动 + M3.5-c 节点电平采样）
 void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 {
