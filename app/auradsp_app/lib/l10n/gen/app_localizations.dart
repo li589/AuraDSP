@@ -457,7 +457,7 @@ abstract class AppLocalizations {
   /// No description provided for @audioModeHint.
   ///
   /// In zh, this message translates to:
-  /// **'重启引擎后生效，后续版本接线'**
+  /// **'ASIO 模式即时生效，其余模式重启引擎后生效'**
   String get audioModeHint;
 
   /// No description provided for @audioDevice.
@@ -507,6 +507,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'ASIO'**
   String get modeAsio;
+
+  /// No description provided for @asioDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO 驱动'**
+  String get asioDriver;
+
+  /// No description provided for @asioBufSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓冲档'**
+  String get asioBufSize;
+
+  /// No description provided for @asioBufAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动（驱动首选）'**
+  String get asioBufAuto;
+
+  /// No description provided for @asioOutPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出声道对'**
+  String get asioOutPair;
+
+  /// No description provided for @asioRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新驱动'**
+  String get asioRefresh;
+
+  /// No description provided for @asioSwitches.
+  ///
+  /// In zh, this message translates to:
+  /// **'回调帧'**
+  String get asioSwitches;
 
   /// No description provided for @modeRoot.
   ///

@@ -18,6 +18,7 @@ import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart';
 import 'audio_vbridge.dart';
+import 'audio_abridge.dart';
 import 'debug_log.dart';
 
 
@@ -85,6 +86,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // VB-Callback 模式面（05 桥）：与 WASAPI 路径互斥，一次只跑一边。
   bool vbActive = false;
   AuraVmBridge? vb;
+  // ASIO 模式面（04 桥）：与 VB/WASAPI 同互斥（一次只跑一个后端）。
+  bool asioActive = false;
+  AuraAsioBridge? ab;
+  String asioDriverInUse = ''; // 当前桥会话用的驱动名（诊断对账用）
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   int vbStatusTick = 0;
@@ -185,6 +190,114 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'vbstatus', 'running': false});
   }
 
+  /* ---- ASIO 模式面（04 桥；与 VB/WASAPI 互斥） ---- */
+
+  /// 驱动清单回执：无论后续能否启动，都先把 detect 结果发给设置页。
+  void detectAsioDrivers() {
+    try {
+      ab ??= AuraAsioBridge.load();
+    } catch (e) {
+      send({'evt': 'asiodrivers', 'drivers': [], 'note': 'bridge-missing: $e'});
+      return;
+    }
+    final list = ab!.detect();
+    if (list == null) {
+      send({'evt': 'asiodrivers', 'drivers': [], 'note': 'detect-failed'});
+      return;
+    }
+    if (list.isEmpty) {
+      send({'evt': 'asiodrivers', 'drivers': [], 'note': 'no-drivers'});
+      return;
+    }
+    send({'evt': 'asiodrivers', 'drivers': list, 'note': ''});
+  }
+
+  /// driver/bufSize/outPair 由主 isolate 随命令带参（config 真相源在主侧）。
+  /// driver 为空则取清单第一个（零配置可用；清单也空则报 no-drivers）。
+  void startAsioBridge(
+      {required String driver, required int bufSize, required int outPair}) {
+    if (asioActive) return;
+    dbgLog('asiomode: start requested driver="$driver" '
+        'buf=$bufSize pair=$outPair');
+    try {
+      ab ??= AuraAsioBridge.load();
+    } catch (e) {
+      send({'evt': 'asiostatus', 'running': false, 'note': 'bridge-missing: $e'});
+      return;
+    }
+    // 零配置兜底：driver 空则 detect 取第一个；顺带回传清单（设置页下拉）。
+    var drv = driver;
+    final list = ab!.detect() ?? const [];
+    send({'evt': 'asiodrivers', 'drivers': list,
+        'note': list.isEmpty ? 'no-drivers' : ''});
+    if (drv.isEmpty) {
+      if (list.isEmpty) {
+        send({'evt': 'asiostatus', 'running': false, 'note': 'no-drivers'});
+        return;
+      }
+      drv = (list.first['name'] as String?) ?? '';
+      if (drv.isEmpty) {
+        send({'evt': 'asiostatus', 'running': false, 'note': 'no-drivers'});
+        return;
+      }
+    }
+    // 主 isolate 下发的 engineDll 为空时桥内自动搜索；有 loadedPath 就显式传
+    //（与 vbmode 同策略：App 真相源优先）。
+    final rc = ab!.start(drv, engineDll: AuraDspLib.loadedPath ?? '',
+        bufSize: bufSize, outPair: outPair);
+    dbgLog('asiomode: start rc=$rc');
+    if (rc != 0) {
+      final st = ab!.status();
+      send({
+        'evt': 'asiostatus',
+        'running': false,
+        'note': (st?['note'] as String?) ?? 'start-rc=$rc'
+      });
+      return;
+    }
+    // 全量回放参数镜像（与 vbmode 同款：桥 handle 用默认值起步）。
+    var replayed = 0;
+    for (final e in paramMirror.entries) {
+      ab!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
+      replayed++;
+    }
+    dbgLog('asiomode: replayed $replayed params');
+    // 旁路态同步（用户此前可能已开旁路；桥默认关）。
+    final bypassRc = ab!.setBypass(bypass);
+    dbgLog('asiomode: bypass sync isolate=$bypass rc=$bypassRc');
+    try {
+      wasapi?.stop();
+    } catch (_) {}
+    source = null;
+    asioActive = true;
+    asioDriverInUse = drv;
+    vbVizNullLogged = false;
+    vbNoCbLogged = false;
+    vbVizOkLogged = false;
+    vbStatusAt = DateTime.now().millisecondsSinceEpoch;
+    final st = ab!.status();
+    dbgLog('asiomode: started sr=${st?['sr']} nbs=${st?['nbs']} '
+        'outPair=${st?['outPair']} driver=${st?['driver']} note=${st?['note']}');
+    send({'evt': 'asiostatus', ...?st, 'running': true, 'driverInUse': drv});
+  }
+
+  void stopAsioBridge() {
+    if (!asioActive) return;
+    dbgLog('asiomode: stop requested');
+    try {
+      ab?.testStop();
+    } catch (_) {}
+    try {
+      ab?.stop();
+    } catch (_) {}
+    asioActive = false;
+    asioDriverInUse = '';
+    try {
+      wasapi?.start();
+    } catch (_) {}
+    send({'evt': 'asiostatus', 'running': false});
+  }
+
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
    * 无门控的同步落盘会在音频泵线程上产生上百次/秒 flushSync，
    * 直接抬升 WASAPI 抖动、诱发 underrun。 */
@@ -215,6 +328,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 value: (m['value'] as num).toDouble());
             // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
             if (brc == 0) dbgLog('vbmode: setParam ${m['id']} applied 0');
+          }
+          if (asioActive && ab != null) {
+            final arc = ab!.setParam(m['id'] as String,
+                isFloat: m['isFloat'] as bool,
+                value: (m['value'] as num).toDouble());
+            if (arc == 0) dbgLog('asiomode: setParam ${m['id']} applied 0');
           }          final tookMs = DateTime.now().difference(t0).inMilliseconds;
           // 关键证据：引擎应用耗时。旧实现全量重建混响/EQ 时这里是几十~几百 ms。
           logSetParam.admit('${m['id']}=${m['value']} rc=$rc took=${tookMs}ms');
@@ -556,10 +675,40 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             stopVbBridge();
           }
           break;
+        case 'asiomode':
+          if (m['on'] as bool) {
+            // VB 与 ASIO 互斥：切 ASIO 前先停 VB（主 isolate 的 setAudioMode
+            // 已保证一次只选一个模式，这里防御性再压一遍）。
+            if (vbActive) stopVbBridge();
+            startAsioBridge(
+              driver: (m['driver'] as String?) ?? '',
+              bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
+              outPair: (m['outPair'] as num?)?.toInt() ?? 0,
+            );
+          } else {
+            stopAsioBridge();
+          }
+          break;
+        case 'asiorestart':
+          // 驱动/缓冲/声道对变更：热切换（stop → start 新参数）。
+          if (!asioActive) break;
+          stopAsioBridge();
+          startAsioBridge(
+            driver: (m['driver'] as String?) ?? '',
+            bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
+            outPair: (m['outPair'] as num?)?.toInt() ?? 0,
+          );
+          break;
+        case 'asiodetect':
+          detectAsioDrivers();
+          break;
         case 'bypass':
           bypass = m['value'] as bool;
           if (vbActive && vb != null) {
             vb!.setBypass(bypass);
+          }
+          if (asioActive && ab != null) {
+            ab!.setBypass(bypass);
           }
           break;
         case 'pluginScan':
@@ -900,6 +1049,48 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     while (running) {
       await Future<void>.delayed(const Duration(milliseconds: 5));
       pumpRounds++;
+      // ASIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 04 桥。
+      if (asioActive && ab != null) {
+        try {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+            lastViz = now;
+            final v = ab!.vizRead();
+            if (v != null) {
+              v['backend'] = 'asio';
+              send({'evt': 'viz', ...v});
+              if (!vbVizOkLogged) {
+                vbVizOkLogged = true;
+                dbgLog('asiomode: viz flowing l=${v['l']} r=${v['r']}');
+              }
+            } else if (!vbVizNullLogged) {
+              vbVizNullLogged = true;
+              dbgLog('asiomode: first null viz');
+            }
+            // 启动 5s 后仍无回调帧：驱动 RT 线程没在跑（对照 status 的 switches）。
+            if (!vbNoCbLogged && now - vbStatusAt > 5000) {
+              vbNoCbLogged = true;
+              final st0 = ab!.status();
+              dbgLog('asiomode: t+5s switches=${st0?['switches']} '
+                  'sr=${st0?['sr']} nbs=${st0?['nbs']} '
+                  'peakIn=${st0?['peakIn']} peakOut=${st0?['peakOut']} '
+                  'bypass=${st0?['bypass']} note=${st0?['note']}');
+            }
+          }
+          vbStatusTick++;
+          if (vbStatusTick % 200 == 0) {
+            final st = ab!.status();
+            if (st != null) {
+              send({
+                'evt': 'asiostatus',
+                ...st,
+                'driverInUse': asioDriverInUse,
+              });
+            }
+          }
+        } catch (_) {}
+        continue;
+      }
       // VB 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走桥。
       if (vbActive && vb != null) {
         try {

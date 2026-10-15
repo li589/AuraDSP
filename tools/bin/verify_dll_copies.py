@@ -146,4 +146,35 @@ if os.path.exists(BRIDGE_TRUTH):
 else:
     print("  跳过（真相源未构建）")
 
+# ASIO 桥分发（04，Phase 3）：真相源 → 同 2 处运行副本；仅校验加载+导出存在，
+# 功能断言归 smoke_asio_bridge.py（需 ASIO 驱动在线）。
+ASIO_TRUTH = os.path.join(ROOT, "core", "desktop", "windows-drivers", "out",
+                          "Release", "auraasio_bridge.dll")
+ASIO_RUNTIME = [
+    os.path.join(ROOT, "app", "auradsp_app", "windows", "runner",
+                 "auraasio_bridge.dll"),
+    os.path.join(ROOT, "test", "auraasio_bridge.dll"),
+]
+print("== ASIO 桥分发 ==")
+if os.path.exists(ASIO_TRUTH):
+    for dst in ASIO_RUNTIME:
+        try:
+            shutil.copyfile(ASIO_TRUTH, dst)
+            print(f"  OK {os.path.relpath(dst, ROOT)}")
+        except OSError as e:
+            print(f"  LOCKED（App 可能在跑，先退出再重跑） {os.path.relpath(dst, ROOT)}: {e}")
+            sys.exit(2)
+    try:
+        b = ctypes.CDLL(ASIO_TRUTH)
+        for sym in ("asio_detect", "asio_start", "asio_stop", "asio_status",
+                    "asio_set_param", "asio_viz_read", "asio_test_start",
+                    "asio_test_stop", "asio_bypass"):
+            getattr(b, sym)
+        print("  导出表 9/9 OK")
+    except OSError as e:
+        print(f"  桥加载失败: {e}")
+        sys.exit(1)
+else:
+    print("  跳过（真相源未构建）")
+
 sys.exit(0 if allgood else 1)

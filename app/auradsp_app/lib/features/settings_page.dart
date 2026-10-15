@@ -388,6 +388,16 @@ class _DeviceInfo extends StatelessWidget {
         ],
       );
     }
+    // ASIO 模式：驱动选择器 + 缓冲档 + 输出对（Spec Phase 3）；桥活时加状态行。
+    if (model.audioMode == 'asio') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoRow(l.audioMode, _modeLabel(l, 'asio')),
+          _AsioPanel(model: model),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -509,6 +519,159 @@ class _InfoRow extends StatelessWidget {
             child: Text(k, style: labelOf(p, size: 12, color: p.textDim)),
           ),
           Expanded(child: Text(v, style: monoOf(p, size: 12))),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---- ASIO 面板：驱动选择器 + 缓冲档 + 输出对（与 04 桥契约对齐） ---- */
+
+class _AsioPanel extends StatelessWidget {
+  final AppModel model;
+  const _AsioPanel({required this.model});
+
+  // 缓冲档（帧）：0 = 驱动 preferredSize（FL Studio 实测 512 / VM 2048）。
+  static const _bufSizes = [0, 64, 128, 256, 512, 1024, 2048];
+  // 输出对起始声道：0→ch1/2，1→ch3/4……上限 4 对（v1 驱动面 ≥8 出声道常见）。
+  static const _outPairs = [0, 1, 2, 3];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final drivers = model.asioDrivers;
+    final names = [for (final d in drivers) d['name'] ?? ''];
+    final sel = names.contains(model.config.asioDriver)
+        ? model.config.asioDriver
+        : (names.isNotEmpty ? names.first : '');
+    final note = model.asioDriversNote;
+    final info = model.asioInfo;
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // 驱动下拉（清单空但 note 有原因：展示 note + 刷新入口，别静默）。
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioDriver,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: names.isEmpty
+                  ? Text(sel.isEmpty ? '—' : model.config.asioDriver,
+                      style: monoOf(p, size: 12))
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: sel,
+                        isDense: true,
+                        dropdownColor: p.panelRaised,
+                        style: labelOf(p),
+                        icon: Icon(Icons.arrow_drop_down_rounded,
+                            color: p.accent),
+                        items: [
+                          for (final n in names)
+                            DropdownMenuItem<String>(
+                              value: n,
+                              child: Text(n,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: n == sel ? p.accent : p.text)),
+                            ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) model.setAsioDriver(v);
+                        },
+                      ),
+                    ),
+            ),
+            // 刷新（重装驱动后手动重枚举；主 isolate 侧 asio_detect）。
+            AuraChip(l.asioRefresh,
+                icon: Icons.refresh_rounded,
+                onTap: () => model.refreshAsioDrivers()),
+          ]),
+          if (note.isNotEmpty) _InfoRow('ASIO', note),
+          // 缓冲档：0=自动（驱动 preferredSize），其余为显式档位。
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioBufSize,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _bufSizes.contains(model.config.asioBufSize)
+                      ? model.config.asioBufSize
+                      : 0,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon:
+                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    for (final b in _bufSizes)
+                      DropdownMenuItem<int>(
+                        value: b,
+                        child: Text(
+                            b == 0 ? l.asioBufAuto : '$b frames',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: b == model.config.asioBufSize
+                                    ? p.accent
+                                    : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioBufSize(v);
+                  },
+                ),
+              ),
+            ),
+          ]),
+          // 输出对：L=R+1 配对；0→ch1/2。
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioOutPair,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _outPairs.contains(model.config.asioOutPair)
+                      ? model.config.asioOutPair
+                      : 0,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon:
+                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    for (final n in _outPairs)
+                      DropdownMenuItem<int>(
+                        value: n,
+                        child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: n == model.config.asioOutPair
+                                    ? p.accent
+                                    : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioOutPair(v);
+                  },
+                ),
+              ),
+            ),
+          ]),
+          // 运行态（来自 asiostatus 心跳；与 VB 分支同款只挑可读字段）。
+          if (model.asioActive) ...[
+            _InfoRow(l.asioSwitches, '${info['switches'] ?? 0}'),
+            if (info['sr'] is num)
+              _InfoRow(l.sampleRate,
+                  '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames'),
+          ],
         ],
       ),
     );

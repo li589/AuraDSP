@@ -197,7 +197,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get audioModeHint =>
-      'Takes effect after engine restart; backend wiring lands in a later version';
+      'ASIO takes effect instantly; other modes apply after engine restart';
 
   @override
   String get audioDevice => 'Device';
@@ -222,6 +222,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get modeAsio => 'ASIO';
+
+  @override
+  String get asioDriver => 'ASIO Driver';
+
+  @override
+  String get asioBufSize => 'Buffer Size';
+
+  @override
+  String get asioBufAuto => 'Auto (driver preferred)';
+
+  @override
+  String get asioOutPair => 'Output Pair';
+
+  @override
+  String get asioRefresh => 'Refresh';
+
+  @override
+  String get asioSwitches => 'Switches';
 
   @override
   String get modeRoot => 'Root';

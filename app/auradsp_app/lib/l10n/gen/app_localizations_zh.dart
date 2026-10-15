@@ -193,7 +193,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioMode => '音频模式';
 
   @override
-  String get audioModeHint => '重启引擎后生效，后续版本接线';
+  String get audioModeHint => 'ASIO 模式即时生效，其余模式重启引擎后生效';
 
   @override
   String get audioDevice => '设备';
@@ -218,6 +218,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get modeAsio => 'ASIO';
+
+  @override
+  String get asioDriver => 'ASIO 驱动';
+
+  @override
+  String get asioBufSize => '缓冲档';
+
+  @override
+  String get asioBufAuto => '自动（驱动首选）';
+
+  @override
+  String get asioOutPair => '输出声道对';
+
+  @override
+  String get asioRefresh => '刷新驱动';
+
+  @override
+  String get asioSwitches => '回调帧';
 
   @override
   String get modeRoot => 'Root';

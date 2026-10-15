@@ -24,6 +24,11 @@ class AppConfig {
   int vizFftSize;
   double stereoWidenMax;
 
+  // ASIO 桥选择项（audioMode=='asio' 时生效；见 AsioBridge.h 契约）
+  String asioDriver; // detect 的 name（UTF-8 显示名）；''=未选择
+  int asioBufSize; // 0=驱动 preferredSize；其余为显式档位（帧）
+  int asioOutPair; // 输出对起始声道（L=R+1 配对）
+
   // 界面与记忆参数
   String locale;
   String themeId;
@@ -42,6 +47,9 @@ class AppConfig {
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
     this.audioMode = 'auto',
+    this.asioDriver = '',
+    this.asioBufSize = 0,
+    this.asioOutPair = 0,
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
@@ -66,6 +74,9 @@ class AppConfig {
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
       maxBlockFrames: (audio['maxBlockFrames'] as num?)?.toInt() ?? 1024,
       audioMode: (audio['audioMode'] as String?) ?? 'auto',
+      asioDriver: (audio['asioDriver'] as String?) ?? '',
+      asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
+      asioOutPair: (audio['asioOutPair'] as num?)?.toInt() ?? 0,
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
@@ -92,6 +103,9 @@ class AppConfig {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
           'audioMode': audioMode,
+          'asioDriver': asioDriver,
+          'asioBufSize': asioBufSize,
+          'asioOutPair': asioOutPair,
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,
           'stereoWidenMax': stereoWidenMax,
