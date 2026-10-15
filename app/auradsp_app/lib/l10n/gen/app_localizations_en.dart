@@ -40,6 +40,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vbBuses => 'VB buses (off=passthrough)';
 
   @override
+  String get retryNow => 'Retry';
+
+  @override
   String get sampleRateFollowBridge =>
       'Bridge modes follow the VB/ASIO device; this applies to in-process only';
 

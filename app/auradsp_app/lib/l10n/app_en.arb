@@ -10,6 +10,7 @@
   "stateError": "Error",
   "stateIdle": "Idle",
   "vbBuses": "VB buses (off=passthrough)",
+  "retryNow": "Retry",
   "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this applies to in-process only",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",

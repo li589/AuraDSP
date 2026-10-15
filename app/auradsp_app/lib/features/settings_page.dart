@@ -429,6 +429,18 @@ class _DeviceInfo extends StatelessWidget {
                 l.wasapiSrFallback('${info.deviceRate}',
                     '${model.config.sampleRate}')),
         ],
+        // 输出缺失降级态（默认端点被独占/幽灵）：原因 + 重试，不红屏。
+        if (model.wasapiError.isNotEmpty) ...[
+          _InfoRow('WASAPI', model.wasapiError),
+          Padding(
+            padding: const EdgeInsets.only(top: AuraSpace.sm),
+            child: AuraChip(
+              l.retryNow,
+              icon: Icons.refresh,
+              onTap: () => model.retryWasapi(),
+            ),
+          ),
+        ],
       ],
     );
   }

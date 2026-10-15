@@ -10,6 +10,7 @@
   "stateError": "エラー",
   "stateIdle": "アイドル",
   "vbBuses": "VBバス（オフ=スルー）",
+  "retryNow": "再試行",
   "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）",
   "latencyLabel": "遅延",
   "latencyMs": "遅延 {n}ms",
