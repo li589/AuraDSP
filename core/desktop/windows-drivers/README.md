@@ -57,7 +57,12 @@
       SDK 2.3.4 就位于 `C:\FreeRulesPrograms\BasicToolkits\SteinbergDev\ASIOSDK`，
       登记与红线见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`；
       Phase 2 常驻桥（DSP 入链）待开工）
-- [ ] `01_vaio_driver/`（需 WDK；**本机无 WDK**，`Include/wdf` 不存在，不可构建）
+- [x] `01_vaio_driver/`（**MODERN 主线**：WDK 28000 + VS2026，Win10 1809+/Win11 x64）—
+      已落 KMDF 骨架（`AuraVaioDriver.vcxproj` + `driver.cpp`/`device.cpp`/`AuraVaioDriver.inf`），
+      待 WDK 28000 安装完成后由 `build_drivers.ps1 -Track modern` 构建；真实 WaveRT 微端口待移植 sysvad。
+- [ ] `01_vaio_driver_legacy/`（**LEGACY 线**：EWDK 19041 + KMDF 1.11，Win7 SP1/8/8.1）—
+      `build_legacy.ps1` 复用 modern 同源代码，按 `WindowsTargetPlatformVersion=10.0.19041.0` 构建；
+      EWDK 19041 ISO 挂载后即用，无需安装 VS。
 
 > ⚠️ **Known issue**（`806b44b` 立案）：APO 注册后 audiodg 加载失败（SFX/MFX APO 加载路径），
 > 已登记待查。03 全部操作遵循"系统现场可恢复"原则（备份 → 操作 → 验证 → 恢复，
@@ -67,8 +72,26 @@
 
 - Voicemeeter 全家桶已安装（Standard/Banana/Potato exe + Remote32/64 DLL 1.1.1.9）→
   模式 2 可即刻联调；三级自省在本机应三级全通。
-- Windows Kits 10（仅 SDK）→ 用户态全可构建；内核态等 WDK。
+- Windows Kits 10（仅 SDK 19041/26100）→ 用户态全可构建；**WDK 28000 安装中（modern 主线工具链）**，
+  安装器与一键脚本位于 `.tmp/wdk-install/`，装完内核态 `01_vaio_driver` 即可构建。
 - 当前 shell 非管理员 → APO 注册/回滚操作需另行提权。
+
+## Voicemeeter 版本兼容（05 常驻桥）
+
+- **Remote DLL 定位**：`vb_start` 优先用三级自省检出的安装目录
+  （`Uninstall/VB:Voicemeeter*` 注册表 → API 自省 → PE 校验），覆盖标准版/香蕉/
+  土豆的默认与自定义安装路径；两条 `Program Files` 默认路径只做兜底。
+- **版型未知降级**：edition 未检出（0）时按 8 组预建引擎，泵在运行时按
+  `min(nbi,nbo)/8` 钳位 + 空 handle 透传——多建无害，绝不吞声。
+- **旧版 Remote**：回调族导出缺失时 note 写 `remote-api-missing r<版本>`，
+  UI 设备卡直接显示原因；`VBVMR_Login` 返回值不做断言（各版本语义不同）。
+- **采样率/缓冲**：CHANGE 重建只认 `samplerate>0` 的 STARTING（引擎未打开时 VM
+  可能先发全零 info），超时用旧采样率续命——任何设备速率组合都成立。
+- **32 位系统**：本桥为 x64，只能加载 `VoicemeeterRemote64.dll`；32 位 Windows
+  下检测报 `found=false`，模式不可用（App 为 x64，无 32 位构建）。
+- **已知限制**：`arbmag.string` 走同一字符串通道（编译+镜像+回放），与
+  `liveprog.code` 同命运；`liveprog.param1..8` 等数值参数走 `vb_set_param`
+  镜像——两者在 CHANGE 重建后都会回来。
 
 ## 构建
 
@@ -78,3 +101,18 @@ cmake --build core/desktop/windows-drivers/out --config Release
 ```
 
 产物进 `out/`（`**/out/` 已 gitignore），不污染源码树。
+
+## 双轨驱动构建（01_vaio_driver 系列，内核态，独立于 CMake）
+
+> 内核驱动走 MSBuild（依赖 WDK 的 `WindowsDriver.props/targets`、`StampInf`、`Inf2Cat`、签名），
+> **不并入**父级 CMake；用户态 02/03/04/05 仍走上面的 CMake 流程。
+
+```powershell
+# 默认 modern（VS2026 + WDK 28000，Win10 1809+/Win11 x64）
+core/desktop/windows-drivers/build_drivers.ps1
+core/desktop/windows-drivers/build_drivers.ps1 -Config Release
+
+# legacy（EWDK 19041 + KMDF 1.11，Win7/8/8.1）：先挂载 EWDK 19041 并设环境变量
+$env:AURA_EWDK19041 = "<挂载盘符或解压目录>"
+core/desktop/windows-drivers/build_drivers.ps1 -Track legacy -Config Release
+```

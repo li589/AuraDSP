@@ -4,7 +4,11 @@ EXPORTS
     vb_start              PRIVATE
     vb_stop               PRIVATE
     vb_status             PRIVATE
-    vb_set_param          PRIVATE
+    vb_set_param         PRIVATE
+    vb_set_param_str     PRIVATE
+    vb_get_param         PRIVATE
+    vb_get_param_str     PRIVATE
+    vb_test_change       PRIVATE
     vb_viz_read           PRIVATE
     vb_test_start         PRIVATE
     vb_test_stop          PRIVATE

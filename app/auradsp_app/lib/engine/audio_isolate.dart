@@ -92,6 +92,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   String asioDriverInUse = ''; // 当前桥会话用的驱动名（诊断对账用）
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
+  // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
+  // 回放，桥内另有镜像应对 CHANGE 重建（与 paramMirror 同口径）。
+  final Map<String, String> paramStrMirror = {};
   int vbStatusTick = 0;
   bool vbVizNullLogged = false;
   bool vbNoCbLogged = false;
@@ -156,6 +159,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       replayed++;
     }
     dbgLog('vbmode: replayed $replayed params');
+    // 字符串参数回放（LiveProg/ArbMag 在 VB 下生效就靠这次；桥内镜像只负责
+    // CHANGE 重建，首次进桥必须由这里推过去）。
+    var replayedStr = 0;
+    for (final e in paramStrMirror.entries) {
+      final brc = vb!.setParamStr(e.key, e.value);
+      if (brc > 0) replayedStr++;
+    }
+    dbgLog('vbmode: replayed $replayedStr str params');
     // 旁路态同步（用户此前可能已开旁路；桥默认关）。
     final bypassRc = vb!.setBypass(bypass);
     dbgLog('vbmode: bypass sync isolate=$bypass rc=$bypassRc');
@@ -574,6 +585,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final t0 = DateTime.now();
             final rc = AuraDspLib.setString(
                 lib!, handle!, m['id'] as String, m['text'] as String);
+            // 字符串镜像 + VB 桥同路由（成功才记；桥内镜像应对 CHANGE 重建）。
+            if (rc == Status.ok) {
+              paramStrMirror[m['id'] as String] = m['text'] as String;
+            }
+            if (vbActive && vb != null) {
+              final brc =
+                  vb!.setParamStr(m['id'] as String, m['text'] as String);
+              // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
+              if (brc == 0) {
+                dbgLog('vbmode: setParamStr ${m['id']} applied 0');
+              }
+            }
             final tookMs = DateTime.now().difference(t0).inMilliseconds;
             logSetParamStr.admit('${m['id']} (${(m['text'] as String).length}B) '
                 'rc=$rc took=${tookMs}ms');
@@ -584,12 +607,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
-              final st = AuraDspLib.getInt(lib, handle, 'liveprog.status');
+              // VB 下游览桥 handle 的编译状态（进程内 handle 只是影子，不跑音频）。
+              final st = (vbActive && vb != null)
+                  ? (vb!.getIntParam('liveprog.status') ??
+                      AuraDspLib.getInt(lib, handle, 'liveprog.status'))
+                  : AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});
             }
             if (rc == Status.ok && m['id'] == 'arbmag.string') {
-              final nodes = AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
-              final ready = AuraDspLib.getInt(lib, handle, 'arbmag.ready');
+              final nodes = (vbActive && vb != null)
+                  ? (vb!.getIntParam('arbmag.nodeCount') ??
+                      AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount'))
+                  : AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
+              final ready = (vbActive && vb != null)
+                  ? (vb!.getIntParam('arbmag.ready') ??
+                      AuraDspLib.getInt(lib, handle, 'arbmag.ready'))
+                  : AuraDspLib.getInt(lib, handle, 'arbmag.ready');
               send({'evt': 'arbmag', 'nodes': nodes, 'ready': ready});
             }
             break;
