@@ -31,13 +31,13 @@ struct ScopedFtzDazGuard {
 };
 
 extern "C" {
-#include "jdsp/jdsp_header.h"
-#include "jdsp/Effects/eel2/fft.h"
+#include "legacy/jdsp/jdsp_header.h"
+#include "legacy/jdsp/Effects/eel2/fft.h"
 }
 
-/* vendor liveprogWrapper.c 的错误码转文案（未在头文件声明，全局符号） */
+/* legacy liveprogWrapper.c 的错误码转文案（未在头文件声明，全局符号） */
 extern "C" const char* checkErrorCode(int errCode);
-/* vendor 离线重采样（nseel-compiler.c 定义，无头文件声明） */
+/* legacy 离线重采样（nseel-compiler.c 定义，无头文件声明） */
 extern "C" void JamesDSPOfflineResampling(float const* in, float* out,
                                           size_t lenIn, size_t lenOut,
                                           int channels, double src_ratio);

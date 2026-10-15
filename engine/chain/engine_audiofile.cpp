@@ -1,7 +1,7 @@
 /* engine_audiofile.cpp — 测试放音用的音频文件解码（WAV 之外）。
  *
- * MP3：vendor 自带的 dr_mp3.h 在此单实例化（全仓唯一 DRMP3_IMPLEMENTATION；
- * vendor 源码零修改，只是用头文件——与 dr_wav/dr_flac 用法同模式）。
+ * MP3：engine/legacy 自带的 dr_mp3.h 在此单实例化（全仓唯一 DRMP3_IMPLEMENTATION；
+ * legacy 源码零修改，只是用头文件——与 dr_wav/dr_flac 用法同模式）。
  * RT 无关：isolate 线程一次性调用，允许分配；失败返回 nullptr。
  * 路径：UTF-8 → wide（CJK 路径；read_text_file 同模式 R-1），再整文件读内存解。
  * 输出恒为 stereo interleave float32（drmp3_config.channels=2），与 Dart
@@ -9,7 +9,7 @@
  * （同 CRT 堆，配对 free，跨 DLL 边界安全）。
  * 上限：源文件 64MB（约 27 分钟 @320kbps；测试放音足够，防畸形文件爆内存）。 */
 #define DRMP3_IMPLEMENTATION
-#include "jdsp/Effects/eel2/dr_mp3.h"
+#include "legacy/jdsp/Effects/eel2/dr_mp3.h"
 
 #include <cstdint>
 #include <cstdio>

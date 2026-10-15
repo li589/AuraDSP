@@ -1,9 +1,9 @@
 /*
  * auradsp_msvc_shim.h — MSVC 构建前置 shim（/FI 注入，调用侧补丁，铁律 §3.3）
  *
- * 背景与语义（vendor-src 保持逐字节不改，见 ORIGIN.md）：
- *   1. libjamesdsp 的 essential.h 仅 include <errno.h>，NDK 环境经 libc 头链
- *      间接获得 <stdint.h>；MSVC 不会 → 此处强制包含。
+ * 背景与语义（engine/legacy 保持逐字节不改，见 engine/legacy/PATCHES.md 与 ORIGIN.md）：
+ *   1. libjamesdsp 的 essential.h（现 engine/legacy/essential.h）仅 include <errno.h>，
+ *      NDK 环境经 libc 头链间接获得 <stdint.h>；MSVC 不会 → 此处强制包含。
  *   2. jamesdsp.c:825/832 使用 GCC 扩展 __attribute__((constructor/destructor))
  *      做 DLL 加载/卸载时的 JamesDSPGlobalMemory(De)Allocation()。MSVC 不支持
  *      该语法。抹除后由 auradsp_engine.cpp 的 global_init() 引用计数显式替代：
