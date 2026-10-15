@@ -80,11 +80,14 @@ final class WavFormatEx {
   int get totalBytes => 18 + _cbSize;
   int _cbSize = 0;
 
-  /// 复制一份，仅把 nSamplesPerSec（偏移 4）改成 [rate]。
+  /// 复制一份，把 nSamplesPerSec（偏移 4）改成 [rate]，并按新速率重算
+  /// nAvgBytesPerSec（偏移 8 = rate × nBlockAlign）。
   ///
   /// 这是请求非设备原生采样率的安全做法：保留 formatTag / channels /
-  /// bitsPerSample / channel mask / SubFormat GUID，只改速率，
+  /// bitsPerSample / channel mask / SubFormat GUID，只改速率相关两处，
   /// 避免手搓 WAVEFORMATEXTENSIBLE 触发 AUDCLNT_E_INVALID_FORMAT。
+  /// 注意：只改 nSamplesPerSec 而漏改 nAvgBytesPerSec 会让结构自相矛盾，
+  /// WASAPI 直接 E_INVALIDARG（0x80070057）——正是之前 44100 被拒的原因。
   /// shared 模式下 Windows 会自行重采样到设备原生率。
   Pointer<Uint8> cloneWithRate(int rate) {
     final out = malloc<Uint8>(totalBytes);
@@ -96,6 +99,12 @@ final class WavFormatEx {
     b[5] = (rate >> 8) & 0xFF;
     b[6] = (rate >> 16) & 0xFF;
     b[7] = (rate >> 24) & 0xFF;
+    final blockAlign = b[12] | (b[13] << 8);
+    final avg = rate * blockAlign;
+    b[8] = avg & 0xFF;
+    b[9] = (avg >> 8) & 0xFF;
+    b[10] = (avg >> 16) & 0xFF;
+    b[11] = (avg >> 24) & 0xFF;
     return out;
   }
 }

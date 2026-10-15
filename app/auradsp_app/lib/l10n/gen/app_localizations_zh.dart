@@ -40,6 +40,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbBuses => 'VB 总线（关=直通）';
 
   @override
+  String get sampleRateFollowBridge => '桥模式跟随 VB/ASIO 设备，此处仅对进程内生效';
+
+  @override
   String get latencyLabel => '延迟';
 
   @override
@@ -243,6 +246,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String asioSrMismatch(String sr, String cfg) {
     return '驱动运行于 $sr Hz，与全局设置 $cfg Hz 不符（ASIO 跟随驱动）';
+  }
+
+  @override
+  String wasapiSrFallback(String sr, String cfg) {
+    return '设备实际 $sr Hz（请求 $cfg Hz 被拒，已回退）';
   }
 
   @override

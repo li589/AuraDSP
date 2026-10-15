@@ -10,6 +10,7 @@
   "stateError": "失效",
   "stateIdle": "空闲",
   "vbBuses": "VB 总线（关=直通）",
+  "sampleRateFollowBridge": "桥模式跟随 VB/ASIO 设备，此处仅对进程内生效",
   "latencyLabel": "延迟",
   "latencyMs": "延迟 {n}ms",
   "latencyTip": "算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms",
@@ -94,6 +95,13 @@
   "asioSwitches": "回调帧",
   "asioSrMismatch": "驱动运行于 {sr} Hz，与全局设置 {cfg} Hz 不符（ASIO 跟随驱动）",
   "@asioSrMismatch": {
+    "placeholders": {
+      "sr": { "type": "String" },
+      "cfg": { "type": "String" }
+    }
+  },
+  "wasapiSrFallback": "设备实际 {sr} Hz（请求 {cfg} Hz 被拒，已回退）",
+  "@wasapiSrFallback": {
     "placeholders": {
       "sr": { "type": "String" },
       "cfg": { "type": "String" }

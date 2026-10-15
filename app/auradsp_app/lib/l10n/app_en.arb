@@ -10,6 +10,7 @@
   "stateError": "Error",
   "stateIdle": "Idle",
   "vbBuses": "VB buses (off=passthrough)",
+  "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this applies to in-process only",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",
@@ -94,6 +95,13 @@
   "asioSwitches": "Switches",
   "asioSrMismatch": "Driver runs at {sr} Hz, mismatching the global {cfg} Hz (ASIO follows the driver)",
   "@asioSrMismatch": {
+    "placeholders": {
+      "sr": { "type": "String" },
+      "cfg": { "type": "String" }
+    }
+  },
+  "wasapiSrFallback": "Device runs at {sr} Hz (requested {cfg} Hz was rejected, fell back)",
+  "@wasapiSrFallback": {
     "placeholders": {
       "sr": { "type": "String" },
       "cfg": { "type": "String" }

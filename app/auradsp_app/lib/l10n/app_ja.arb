@@ -10,6 +10,7 @@
   "stateError": "エラー",
   "stateIdle": "アイドル",
   "vbBuses": "VBバス（オフ=スルー）",
+  "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）",
   "latencyLabel": "遅延",
   "latencyMs": "遅延 {n}ms",
   "latencyTip": "アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms",
@@ -94,6 +95,13 @@
   "asioSwitches": "コールバック",
   "asioSrMismatch": "ドライバーは {sr} Hz で動作中（グローバル設定 {cfg} Hz と不一致、ASIO はドライバーに従います）",
   "@asioSrMismatch": {
+    "placeholders": {
+      "sr": { "type": "String" },
+      "cfg": { "type": "String" }
+    }
+  },
+  "wasapiSrFallback": "デバイスは {sr} Hz で動作中（要求 {cfg} Hz は拒否されフォールバック）",
+  "@wasapiSrFallback": {
     "placeholders": {
       "sr": { "type": "String" },
       "cfg": { "type": "String" }

@@ -4,6 +4,14 @@
 > 不承载任何具体音效算法；仅依赖 Windows SDK（用户态）/ WDK（内核态）。
 > APP 侧音频后端四模式（vaio/vbcallback/sysapo/asio）见 `app/auradsp_app/lib/core/audio_modes.dart`，
 > 本目录是其 Windows 驱动侧对应实现（当前仅 vbcallback/sysapo 有实物）。
+>
+> 刻意**不在**本目录的 Windows-only 代码：进程内 WASAPI 渲染
+> （`app/auradsp_app/lib/engine/audio_device.dart`，Dart 直调 COM）。
+> 本目录是 C++/CMake 运输层（SDK/WDK 门禁、dumpbin 导出表、ctypes smoke），
+> 一个 Dart 文件搬进来两边都不沾；真要收编只能重写成 `00_wasapi_engine` DLL
+> （render 线程 + FFI + smoke 全套），而主力通路（ADR-001）在 Dart 侧跑得好好的——
+> 结论：不搬。触发重写的唯一理由是功能需求（独占模式/事件驱动/设备变更回调），
+> 不是洁癖。
 
 ## 现状（2026-10-14；今日 7 连提交 806b44b→82a75ae）
 
@@ -87,6 +95,10 @@
   UI 设备卡直接显示原因；`VBVMR_Login` 返回值不做断言（各版本语义不同）。
 - **采样率/缓冲**：CHANGE 重建只认 `samplerate>0` 的 STARTING（引擎未打开时 VM
   可能先发全零 info），超时用旧采样率续命——任何设备速率组合都成立。
+- **总线送达语义**：VB 只给"活着"的总线填 buffer，未路由的总线给空指针
+  （EAPO/Element 同症，非我方 bug）；桥对空 buffer 总线直通不吞声，`status`
+  的 `grpLive` 掩码逐条标存活，UI 置灰而非灭灯。对无路由总线持续给同一块
+  buffer（非零但永不变）时，桥判冻清表头（仅电平，音频路径不动）。
 - **32 位系统**：本桥为 x64，只能加载 `VoicemeeterRemote64.dll`；32 位 Windows
   下检测报 `found=false`，模式不可用（App 为 x64，无 32 位构建）。
 - **已知限制**：`arbmag.string` 走同一字符串通道（编译+镜像+回放），与
