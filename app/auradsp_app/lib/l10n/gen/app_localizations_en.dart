@@ -40,6 +40,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vbBuses => 'VB buses (off=passthrough)';
 
   @override
+  String get shelfTitle => 'Low Shelf';
+
+  @override
+  String get shelfHint =>
+      'Lift or cut everything below the corner; fixes thin recordings or boomy lows';
+
+  @override
+  String get shelfFreq => 'Corner';
+
+  @override
+  String get shelfGain => 'Gain';
+
+  @override
+  String get shelfFreqInfo =>
+      'Everything below moves together, 40–400Hz; try 80–120Hz.';
+
+  @override
+  String get shelfGainInfo =>
+      'Positive lifts, negative cuts; stacks with bass boost, mind doubling.';
+
+  @override
   String get retryNow => 'Retry';
 
   @override

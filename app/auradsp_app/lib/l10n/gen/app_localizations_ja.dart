@@ -40,6 +40,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbBuses => 'VBバス（オフ=スルー）';
 
   @override
+  String get shelfTitle => 'ローシェルフ';
+
+  @override
+  String get shelfHint => 'コーナー以下を持ち上げ/抑えて薄い低音や膨らみを整える';
+
+  @override
+  String get shelfFreq => 'コーナー周波数';
+
+  @override
+  String get shelfGain => 'ゲイン';
+
+  @override
+  String get shelfFreqInfo => '以下が一括で増減、40～400Hz；80～120Hz推奨。';
+
+  @override
+  String get shelfGainInfo => '正で持上、負で抑制；低音増強と併用可、重ね過ぎ注意。';
+
+  @override
   String get retryNow => '再試行';
 
   @override

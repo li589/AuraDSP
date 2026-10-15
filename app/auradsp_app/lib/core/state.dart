@@ -1070,8 +1070,10 @@ class AppModel extends ChangeNotifier {
           eqInSpectrum.value = List<double>.filled(32, 0.0);
           levelL.value = -90.0;
           levelR.value = -90.0;
-          stageLevelsL.value = List<double>.filled(5, -90.0);
-          stageLevelsR.value = List<double>.filled(5, -90.0);
+          // 长度必须与声明一致（kEngineStageCount=12；此前误写 5，
+          // _StageStereoMeter 按 0..18 索引，越界回退 -120 造成 LED 恒灭）。
+          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
+          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
         }
         notifyListeners();
         break;
@@ -1080,13 +1082,13 @@ class AppModel extends ChangeNotifier {
         asioActive = (raw['running'] as bool?) ?? false;
         asioInfo = Map<String, dynamic>.from(raw);
         if (asioActive && !wasA) {
-          // ASIO 上升沿：同 VB——清残留帧，基线归零。
+          // ASIO 上升沿：同 VB——清残留帧，基线归零（长度同上，12）。
           spectrum.value = List<double>.filled(32, 0.0);
           eqInSpectrum.value = List<double>.filled(32, 0.0);
           levelL.value = -90.0;
           levelR.value = -90.0;
-          stageLevelsL.value = List<double>.filled(5, -90.0);
-          stageLevelsR.value = List<double>.filled(5, -90.0);
+          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
+          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
         }
         // Phase 4：驱动请求重置（kAsioResetRequest，采样率/设备变化等）→
         // 复用热切换（stop→start 新参数；C++ 侧 start 时清标志，不会循环）。
@@ -1755,6 +1757,29 @@ class AppModel extends ChangeNotifier {
     send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': filterVendorOrder(order)});
   }
 
+  /// chain 行电平表映射：返回该 stage 在**当前 vendor 链**中的位置（0..11）。
+  /// 引擎 stagePeakL/R[i] 按当前链序（graph.order），自研 stage（gate/dyneq/
+  /// filter/bassmono/haas/exciter/loudness）引擎无逐级电平，返回 -1，UI 不画
+  /// 表——此前拿 UI 序号直连下标，12 号之后全是错位灯/恒灭。
+  static const _defaultVendorOrder = [
+    'tube', 'comp', 'bass', 'eq', 'arbmag', 'convolver', 'ddc', 'liveprog',
+    'crossfeed', 'stereo', 'reverb', 'output'
+  ];
+  int stageMeterIndex(String id) {
+    List<String> ord;
+    if (graphOrder == null || graphOrder!.isEmpty) {
+      ord = _defaultVendorOrder;
+    } else {
+      ord = filterVendorOrder(graphOrder!)
+          .split(',')
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+      if (ord.isEmpty) ord = _defaultVendorOrder;
+    }
+    return ord.indexOf(id);
+  }
+
   /// 获取某个处理链 stage 的启用状态
   bool isStageEnabled(String stageId) {
     return switch (stageId) {
@@ -1775,7 +1800,9 @@ class AppModel extends ChangeNotifier {
       'liveprog' => lpEnabled,
       'crossfeed' => xfeedOn,
       'stereo' => stereoOn,
-      'reverb' => reverbPreset >= 0,
+      'reverb' => reverbPreset >= 0 ||
+          // 自定义态 -2：fvOn 即开着，判关会让链视图与耳朵打架。
+          (reverbPreset == -2 && fvOn),
       'output' => limiterOn,
       _ => false,
     };
@@ -1822,7 +1849,9 @@ class AppModel extends ChangeNotifier {
         if (reverbPreset >= 0) {
           setInt('reverb.preset', -1);
         } else {
-          setReverbPreset(0);
+          // -1→preset 0；-2→重申自定义（setSpatialReverbEnabled 内保护，
+          // 直接 setReverbPreset(0) 会吃掉自定义参数）。
+          setSpatialReverbEnabled(true);
         }
       case 'output':
         setInt('limiter.enable', limiterOn ? 0 : 1);
@@ -2143,10 +2172,10 @@ class AppModel extends ChangeNotifier {
         setFloat('freeverb.dry', value);
       case 'roomSize':
         fvRoomSize = value;
-        notifyListeners();
+        setFloat('freeverb.roomsize', value);
       case 'width':
         fvWidth = value;
-        notifyListeners();
+        setFloat('freeverb.width', value);
     }
   }
 
@@ -2632,6 +2661,26 @@ class AppModel extends ChangeNotifier {
   void setFilterQ(double q) {
     filterQ = q.clamp(0.3, 10.0);
     setFloat(ParamId.filterQ, filterQ);
+    notifyListeners();
+  }
+
+  /* ---- 低频搁架（M5-b，自研 RBJ low-shelf；此前有引擎/回放无 UI） ---- */
+
+  void setShelfEnabled(bool on) {
+    shelfOn = on;
+    setInt(ParamId.shelfEnable, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setShelfFreq(double f) {
+    shelfFreq = f.clamp(40.0, 400.0);
+    setFloat(ParamId.shelfFreq, shelfFreq);
+    notifyListeners();
+  }
+
+  void setShelfGain(double db) {
+    shelfGain = db.clamp(-15.0, 15.0);
+    setFloat(ParamId.shelfGain, shelfGain);
     notifyListeners();
   }
 

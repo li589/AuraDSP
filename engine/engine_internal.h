@@ -209,6 +209,8 @@ struct Params {
     std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
     std::atomic<float>    fv_wet{0.3f};         /* 0..1 */
     std::atomic<float>    fv_dry{1.0f};         /* 0..1 */
+    std::atomic<float>    fv_roomsize{1.0f};    /* 0.5..2.5 × tuning（UI 默认 1.2，session 回放对齐） */
+    std::atomic<float>    fv_width{1.0f};       /* 0.2..2.0 wet 声 M/S 加宽 */
     /* 输入门控（钉死在链路最前端；全通道总增益 + 8通道单控平衡比例） */
     std::atomic<float>    input_gain{0.0f};     /* dB [-15,15] 默认 0.0 */
     std::atomic<float>    input_ch_gain[8];     /* 各声道单控比例 [0.0, 2.0]，默认 1.0 (100%) */
@@ -234,6 +236,9 @@ constexpr int kFvCombs = 8, kFvAllpasses = 4;
 constexpr int kFvCombTuning[kFvCombs] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
 constexpr int kFvAllpTuning[kFvAllpasses] = {556, 441, 341, 225};
 constexpr int kFvStereoSpread = 23;
+// roomsize 预分配上限（× tuning）：运行时只改有效长度 combLen/apLen，绝不重
+// 分配——RT 读到的永远是已分配区间的子集，无越界、无需等待、无需锁。
+constexpr double kFvRoomMax = 2.5;
 /* Freeverb 经典梳/全通长度标定在 44.1kHz（1116/556 等即该采样率下的采样数）。
  * 比例必须按**实际** fs 计算，不能写死 48/44.1 —— 写死意味着在 44.1k 或
  * 96k 设备上混响音调与衰减时间整体偏移（旧实现在非 48k 下必然失准）。 */
@@ -241,12 +246,14 @@ constexpr double kFvTuningRefRate = 44100.0;
 
 struct FvVoice {
     float* combBuf[kFvCombs];
-    int    combSize[kFvCombs];
+    int    combSize[kFvCombs];   // 分配长度（roomsize 上限，不变）
+    int    combLen[kFvCombs];    // 有效长度（RT 读这个；控制线程改）
     int    combIdx[kFvCombs];
     float  filterstore[kFvCombs];   /* 8 个 comb 独立阻尼状态，杜绝互调串扰 */
     float  damp1 = 0, damp2 = 1;
     float* apBuf[kFvAllpasses];
-    int    apSize[kFvAllpasses];
+    int    apSize[kFvAllpasses];  // 分配长度（不变）
+    int    apLen[kFvAllpasses];   // 有效长度（RT 读这个）
     int    apIdx[kFvAllpasses];
 };
 
@@ -255,20 +262,30 @@ struct FvVoice {
 inline float fv_voice_process(FvVoice& v, float in, float feedback) {
     float out = 0.0f;
     for (int i = 0; i < kFvCombs; ++i) {
-        const float y = v.combBuf[i][v.combIdx[i]];
+        // 有效长度（控制线程改 roomsize 时写；读到新旧值都不越界，
+        // 越界下标就地归零，无需锁）。
+        const int len = v.combLen[i] > 0 ? v.combLen[i] : v.combSize[i];
+        int idx = v.combIdx[i];
+        if (idx >= len) idx = 0;
+        const float y = v.combBuf[i][idx];
         v.filterstore[i] = y * v.damp2 + v.filterstore[i] * v.damp1;
         /* 截断次正常数 (subnormal float)，防止静音时 CPU 触发微码异常陷阱 */
         if (fabsf(v.filterstore[i]) < 1e-15f) v.filterstore[i] = 0.0f;
-        v.combBuf[i][v.combIdx[i]] = in + v.filterstore[i] * feedback;
-        if (++v.combIdx[i] >= v.combSize[i]) v.combIdx[i] = 0;
+        v.combBuf[i][idx] = in + v.filterstore[i] * feedback;
+        if (++idx >= len) idx = 0;
+        v.combIdx[i] = idx;
         out += y;
     }
     /* 全通扩散层：以 Comb 累加输出为输入，逐级全通相位扩散 */
     for (int i = 0; i < kFvAllpasses; ++i) {
-        const float bufout = v.apBuf[i][v.apIdx[i]];
+        const int len = v.apLen[i] > 0 ? v.apLen[i] : v.apSize[i];
+        int idx = v.apIdx[i];
+        if (idx >= len) idx = 0;
+        const float bufout = v.apBuf[i][idx];
         const float input2 = out + bufout * 0.5f;
-        v.apBuf[i][v.apIdx[i]] = input2;
-        if (++v.apIdx[i] >= v.apSize[i]) v.apIdx[i] = 0;
+        v.apBuf[i][idx] = input2;
+        if (++idx >= len) idx = 0;
+        v.apIdx[i] = idx;
         out = bufout - input2;
     }
     if (fabsf(out) < 1e-15f) out = 0.0f;
@@ -451,6 +468,9 @@ void filter_process(auradsp_handle h, float* io, int frames);
 void filter_recalc(auradsp_handle h);
 void fv_alloc(FvVoice& v, double sampleRate, int spread);
 void fv_free(FvVoice& v);
+// 控制线程：按 room 缩放重算有效长度 + 清缓冲（RT 侧只读 Len/Buf，无需停泵；
+// 并发瞬间最多一个 click 级伪影，无崩溃可能）。spread 与 alloc 时一致。
+void fv_retune(struct auradsp_handle_s* h, double room);
 void gate_process(auradsp_handle h, float* io, int frames);
 void haas_process(auradsp_handle h, float* io, int frames);
 auradsp_status load_ir_file(auradsp_handle h, const char* path);
