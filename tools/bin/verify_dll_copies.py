@@ -137,11 +137,11 @@ if os.path.exists(BRIDGE_TRUTH):
         b = ctypes.CDLL(BRIDGE_TRUTH)
         for sym in ("vb_detect", "vb_start", "vb_stop", "vb_status",
                     "vb_set_param", "vb_set_param_str", "vb_get_param",
-                    "vb_get_param_str", "vb_test_change",
+                    "vb_get_param_str", "vb_test_change", "vb_set_bus_mask",
                     "vb_viz_read", "vb_test_start",
                     "vb_test_stop", "vb_bypass"):
             getattr(b, sym)
-        print("  导出表 13/13 OK")
+        print("  导出表 14/14 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)

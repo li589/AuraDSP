@@ -243,6 +243,8 @@ class AppModel extends ChangeNotifier {
   // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
   bool vbActive = false;
   Map<String, dynamic> vbInfo = {};
+  // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
+  int vbBusMask = 0xFF;
   // ASIO 常驻桥状态（04 桥；isolate 回推，与 VB 桥互斥——一次只跑一个后端）。
   bool asioActive = false;
   Map<String, dynamic> asioInfo = {};
@@ -636,6 +638,9 @@ class AppModel extends ChangeNotifier {
       config.audioMode = audioMode;
       ConfigManager.save(config);
     }
+    // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
+    final m = config.vbBusMask & 0xFF;
+    vbBusMask = m == 0 ? 0xFF : m;
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。
      * 不重建的话，低采样率用户拿到的是含越界频点的出厂网格。 */
@@ -2694,6 +2699,8 @@ void setAudioMode(String id) {
   config.audioMode = valid;
   ConfigManager.save(config);
   if (wasVb != isVb) {
+    // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
+    if (isVb) _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
     _toIso?.send({'cmd': 'vbmode', 'on': isVb});
     if (!isVb) {
       vbActive = false;
@@ -2714,6 +2721,18 @@ void setAudioMode(String id) {
       asioInfo = {};
     }
   }
+  notifyListeners();
+}
+
+/// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
+void setVbBus(int group, bool on) {
+  if (group < 0 || group > 7) return;
+  final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
+  if (next == vbBusMask) return;
+  vbBusMask = next & 0xFF;
+  config.vbBusMask = vbBusMask;
+  ConfigManager.save(config);
+  _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
   notifyListeners();
 }
 

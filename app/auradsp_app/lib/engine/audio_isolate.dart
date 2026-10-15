@@ -95,6 +95,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
   // 回放，桥内另有镜像应对 CHANGE 重建（与 paramMirror 同口径）。
   final Map<String, String> paramStrMirror = {};
+  // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
+  int vbBusMask = 0xFF;
   int vbStatusTick = 0;
   bool vbVizNullLogged = false;
   bool vbNoCbLogged = false;
@@ -170,6 +172,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 旁路态同步（用户此前可能已开旁路；桥默认关）。
     final bypassRc = vb!.setBypass(bypass);
     dbgLog('vbmode: bypass sync isolate=$bypass rc=$bypassRc');
+    // 总线掩码同步（model 持久化的选择；桥默认全开）。
+    final maskRc = vb!.setBusMask(vbBusMask);
+    dbgLog('vbmode: busmask sync isolate=$vbBusMask rc=$maskRc');
     try {
       wasapi?.stop();
     } catch (_) {}
@@ -742,6 +747,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           if (asioActive && ab != null) {
             ab!.setBypass(bypass);
+          }
+          break;
+        case 'setBusMask':
+          vbBusMask = (m['mask'] as int) & 0xFF;
+          if (vbActive && vb != null) {
+            vb!.setBusMask(vbBusMask);
           }
           break;
         case 'pluginScan':

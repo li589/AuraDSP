@@ -368,11 +368,15 @@ class _DeviceInfo extends StatelessWidget {
     // VB 桥激活时展示桥状态（sr/frames 来自 vbstatus 心跳）。
     if (model.vbActive) {
       final sr = model.vbInfo['sr'];
+      final note = model.vbInfo['note'];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _InfoRow(l.audioMode, _modeLabel(l, 'vbcallback')),
           if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
+          // 重建事件（改主输出设备等）直接可见：用户不再靠"声音变了"猜。
+          if (note is String && note.isNotEmpty) _InfoRow('VB', note),
+          _VbBuses(model: model),
         ],
       );
     }
@@ -519,6 +523,92 @@ class _InfoRow extends StatelessWidget {
             child: Text(k, style: labelOf(p, size: 12, color: p.textDim)),
           ),
           Expanded(child: Text(v, style: monoOf(p, size: 12))),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---- VB 总线：版型→总线名 + 每总线电平 + 处理开关 ----
+ * SDK BUFFER_OUT 布局：每条总线 8 通道 = 泵的 1 组（g0 起）。
+ * Potato: A1-A5/B1-B3；Banana: A1-A3/B1-B2；Standard: A1-A2/B1。
+ * 开关 = vb_set_bus_mask 对应 bit；关=该总线直通（电平表照常计量）。
+ * 电平来自 vbstatus 心跳的 peakGrp（约 1/s，桥内半衰期约 1s）。 */
+
+List<String> _vbBusNames(int edition) {
+  switch (edition) {
+    case 1:
+      return const ['A1/A2', 'B1'];
+    case 2:
+      return const ['A1', 'A2', 'A3', 'B1', 'B2'];
+    default:
+      return const ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3'];
+  }
+}
+
+class _VbBuses extends StatelessWidget {
+  final AppModel model;
+  const _VbBuses({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final info = model.vbInfo;
+    final edition = (info['edition'] as num?)?.toInt() ?? 0;
+    final groups = (info['groups'] as num?)?.toInt() ?? 0;
+    final names = _vbBusNames(edition);
+    final peaks = (info['peakGrp'] as List?)
+            ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
+            .toList() ??
+        const <double>[];
+    final n = groups.clamp(0, names.length);
+    if (n <= 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AuraSpace.sm),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l.vbBuses, style: labelOf(p, size: 12, color: p.textDim)),
+          const SizedBox(height: AuraSpace.xs),
+          for (var g = 0; g < n; g++)
+            Builder(builder: (_) {
+              final on = (model.vbBusMask & (1 << g)) != 0;
+              final peak = g < peaks.length ? peaks[g].clamp(0.0, 1.0) : 0.0;
+              // 开方拉可见度：-40dB 左右的弱信号也能看到一格。
+              final frac = peak <= 0 ? 0.0 : (peak > 1 ? 1.0 : peak);
+              return Padding(
+                padding: const EdgeInsets.symmetric(vertical: 2),
+                child: Row(
+                  children: [
+                    SizedBox(
+                      width: 52,
+                      child: Text(names[g], style: monoOf(p, size: 12)),
+                    ),
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(2),
+                        child: LinearProgressIndicator(
+                          value: frac,
+                          minHeight: 6,
+                          backgroundColor: p.hairline,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                              on ? p.accent : p.textDim),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: AuraSpace.sm),
+                    Switch(
+                      value: on,
+                      activeThumbColor: p.accent,
+                      materialTapTargetSize:
+                          MaterialTapTargetSize.shrinkWrap,
+                      onChanged: (v) => model.setVbBus(g, v),
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

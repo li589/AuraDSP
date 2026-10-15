@@ -37,6 +37,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stateIdle => 'アイドル';
 
   @override
+  String get vbBuses => 'VBバス（オフ=スルー）';
+
+  @override
   String get latencyLabel => '遅延';
 
   @override

@@ -56,6 +56,7 @@ struct BridgeCtl {
     int startRc = -99;
     int edition = 0;
     int groupCount = PumpCtx::kMaxGroups;  // 版型应建引擎数（重建沿用，不看会漂的 ctx.groups）
+    int busMask = 0xFF;  // 总线处理掩码（bit=组使能；memset 会清 ctx，session 级保管在此）
     char note[128] = {};
     char enginePath[MAX_PATH * 2] = {};
     int paramsApplied = 0;
@@ -395,6 +396,8 @@ int vb_detect(char* out, int cap) {
 int vb_start(const char* engine_dll, const char* params_json) {
     if (InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 已在跑：幂等成功
     memset(&g_b.ctx, 0, sizeof(g_b.ctx));
+    // memset 清掉了 busMask：从 session 级保管恢复（App 进桥后还会再推一次）。
+    InterlockedExchange(&g_b.ctx.busMask, (LONG)(g_b.busMask & 0xFF));
     g_b.paramsApplied = 0;
     g_b.paramsFailed = 0;
     g_mirrorN = 0;  // 新会话：镜像由 App 侧 vb_start 后的重放重新填满
@@ -556,9 +559,11 @@ int vb_stop() {
 static int HottestVizGroup() {
     int best = 0;
     double bp = -1.0;
+    const long mask = InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0);
     for (int g = 0; g < vmcore::PumpCtx::kMaxGroups; ++g) {
         if (!g_b.ctx.eng[g]) continue;
         if (g_b.ctx.idle[g]) continue;  // 僵尸热组排除：在产帧的组里选
+        if ((mask & (1L << g)) == 0) continue;  // 被 mask 关掉的总线：看的是干声，不跟
         const double p = g_b.ctx.peakGrp[g];
         if (p > bp) {
             bp = p;
@@ -587,7 +592,7 @@ int vb_status(char* out, int cap) {
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
-                     "\"changes\":%lld,\"mirrorN\":%d,\"peakGrp\":%s,"
+                     "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"peakGrp\":%s,"
                      "\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
@@ -596,6 +601,8 @@ int vb_status(char* out, int cap) {
                       cbUs, g_b.startRc, g_b.note, (long)g_b.ctx.testKind,
                       (long)g_b.ctx.userBypass, vizGrp,
                       (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
+                      (int)(InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) &
+                            0xFF),
                       peaks, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
@@ -703,4 +710,12 @@ int vb_bypass(int on) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
     InterlockedExchange(&g_b.ctx.userBypass, on ? 1 : 0);
     return 0;
+}
+
+int vb_set_bus_mask(int mask) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    mask &= 0xFF;
+    g_b.busMask = mask;  // session 级保管（ctx 会被 memset，CHANGE 重建不丢）
+    InterlockedExchange(&g_b.ctx.busMask, (LONG)mask);
+    return mask;
 }

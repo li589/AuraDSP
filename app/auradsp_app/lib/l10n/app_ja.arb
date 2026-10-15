@@ -9,6 +9,7 @@
   "stateBypass": "バイパス",
   "stateError": "エラー",
   "stateIdle": "アイドル",
+  "vbBuses": "VBバス（オフ=スルー）",
   "latencyLabel": "遅延",
   "latencyMs": "遅延 {n}ms",
   "latencyTip": "アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms",

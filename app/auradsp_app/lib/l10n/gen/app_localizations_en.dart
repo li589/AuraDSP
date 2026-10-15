@@ -37,6 +37,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stateIdle => 'Idle';
 
   @override
+  String get vbBuses => 'VB buses (off=passthrough)';
+
+  @override
   String get latencyLabel => 'Latency';
 
   @override

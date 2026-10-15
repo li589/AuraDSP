@@ -9,6 +9,7 @@
   "stateBypass": "Bypass",
   "stateError": "Error",
   "stateIdle": "Idle",
+  "vbBuses": "VB buses (off=passthrough)",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",

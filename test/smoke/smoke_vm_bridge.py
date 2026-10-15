@@ -186,6 +186,9 @@ def get_param_str(pid, cap=65536):
     return n, (buf.value.decode("utf-8", "replace") if n > 0 else "")
 
 
+b.vb_set_bus_mask.restype = ctypes.c_int
+b.vb_set_bus_mask.argtypes = [ctypes.c_int]
+
 st = get_status()
 nh = st.get("handles", 0)
 n = b.vb_set_param_str(b"liveprog.code", LP_CODE.encode("utf-8"), len(LP_CODE))
@@ -217,6 +220,20 @@ check("liveprog status survived", rc == 0 and stcode == 1,
 n, back = get_param_str("liveprog.code")
 check("LIVEPROG SURVIVED REBUILD", n > 0 and back == LP_CODE,
       f"n={n} match={back == LP_CODE} note={st.get('note')}")
+
+# ---- 总线掩码：关 g0 直通不断流，不断言音质只断言不崩 + 状态回显 ----
+rc = b.vb_set_bus_mask(0xFE)
+check("bus_mask g0 off", rc == 0xFE, f"rc={rc:#x}")
+time.sleep(1)
+st = get_status()
+check("status busMask==0xFE", st.get("busMask") == 0xFE,
+      f"busMask={st.get('busMask')}")
+check("frames growing while masked", st.get("frames", 0) > 0,
+      f"frames={st.get('frames')}")
+rc = b.vb_set_bus_mask(0x1FF)
+check("bus_mask clamps to 0xFF", rc == 0xFF, f"rc={rc:#x}")
+rc = b.vb_set_bus_mask(0xFF)
+check("bus_mask restore", rc == 0xFF, f"rc={rc:#x}")
 
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]

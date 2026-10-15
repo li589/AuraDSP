@@ -28,6 +28,7 @@ class AppConfig {
   String asioDriver; // detect 的 name（UTF-8 显示名）；''=未选择
   int asioBufSize; // 0=驱动 preferredSize；其余为显式档位（帧）
   int asioOutPair; // 输出对起始声道（L=R+1 配对）
+  int vbBusMask; // VB 总线处理掩码（bit g=第 g 条总线进 DSP，默认全开 0xFF）
 
   // 界面与记忆参数
   String locale;
@@ -50,6 +51,7 @@ class AppConfig {
     this.asioDriver = '',
     this.asioBufSize = 0,
     this.asioOutPair = 0,
+    this.vbBusMask = 0xFF,
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
@@ -77,6 +79,7 @@ class AppConfig {
       asioDriver: (audio['asioDriver'] as String?) ?? '',
       asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
       asioOutPair: (audio['asioOutPair'] as num?)?.toInt() ?? 0,
+      vbBusMask: (audio['vbBusMask'] as num?)?.toInt() ?? 0xFF,
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
@@ -106,6 +109,7 @@ class AppConfig {
           'asioDriver': asioDriver,
           'asioBufSize': asioBufSize,
           'asioOutPair': asioOutPair,
+          'vbBusMask': vbBusMask,
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,
           'stereoWidenMax': stereoWidenMax,
