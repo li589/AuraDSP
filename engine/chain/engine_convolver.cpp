@@ -1,7 +1,7 @@
 /* P2 split: moved verbatim from auradsp_engine.cpp (pure move, no logic change). */
 #include "engine_internal.h"
-#include "jdsp/Effects/eel2/dr_wav.h"
-#include "jdsp/Effects/eel2/dr_flac.h"
+#include "legacy/jdsp/Effects/eel2/dr_wav.h"
+#include "legacy/jdsp/Effects/eel2/dr_flac.h"
 
 
 /* ---- IR 文件加载 + 统一文件门卫（M4，规划 §5.2）----

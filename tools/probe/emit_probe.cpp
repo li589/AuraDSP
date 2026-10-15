@@ -3,7 +3,7 @@
 #include <cmath>
 #include <cstring>
 extern "C" {
-#include "jdsp/Effects/eel2/fft.h"
+#include "legacy/jdsp/Effects/eel2/fft.h"
 }
 
 constexpr int kVizFftSize = 4096;

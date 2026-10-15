@@ -2,7 +2,7 @@
 # build_engine.sh — build auradsp_engine.dll (AuraDSP Engines Desktop v1, Win x64)
 #
 # Sources (per docs/项目架构与开发规范.md §3 — 源码整合，无预编译依赖):
-#   ../../../vendor/libjamesdsp/   JamesDSP C engine (原样提取, 见 ORIGIN.md)
+#   ../../../engine/legacy/        JamesDSP C engine (原 vendor/libjamesdsp 收编, 见 ORIGIN.md)
 #   ../../../engine/               auradsp_engine.h/.cpp/.def — 统一 C ABI
 #
 # Toolchain: CMake + Visual Studio 18 2026 generator (MSVC x64)

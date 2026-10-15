@@ -2,8 +2,8 @@
 #include <math.h>
 #include <string.h>
 extern "C" {
-#include "jdsp/jdsp_header.h"
-#include "jdsp/Effects/eel2/fft.h"
+#include "legacy/jdsp/jdsp_header.h"
+#include "legacy/jdsp/Effects/eel2/fft.h"
 }
 int main() {
     const int N = 4096;

@@ -49,15 +49,21 @@ engine/
 ## 3. 参数 id 与命名
 
 - `domain.name`（如 `dyneq.mid.freq`）；多段用 `low/mid/high` 后缀，勿发明新分隔符。
-- vendor 链 12 stage 白名单见 `vendor/libjamesdsp/jamesdsp/jdsp/jdspController.c` 的
+- legacy 链 12 stage 白名单见 `engine/legacy/jdsp/jdspController.c` 的
   `kAuraStages[]`（P-004 补丁；第 12 级 id 是 `output`，`graph.effects` 注册表中拆为
   `post`+`limiter` 两条展示）；`graph.order` 经 `JamesDSPRebuildChain` 严格校验
   （12 个恰好一次，集合非法返回 -1 且保持原表）。
   engine 自研 stage 顺序钉死在 chain 里，重排页只动展示序（Issue #4）。
+  ⚠️ App 侧下发的是**全量** 19 个 id（含 7 个自研 stage），必须先过
+  `JamesDSPFilterVendorOrder`（P-013）过滤成 vendor 的 12 个再喂 `RebuildChain`，
+  否则任何 App 载荷都必然 -1（2026-10-16 修复）。
 
-## 4. vendor 边界
+## 4. legacy 边界（原 vendor/libjamesdsp，2026-10-16 收编至 engine/legacy/）
 
-- `vendor/` 只读；补丁必须 `[PATCHED-AuraDSP P-xxx]` + `vendor/libjamesdsp/PATCHES.md`
-  登记；comment 级改动也要登记。升级 = 重提覆盖。
-- vendor 黑盒内的效果（如 tube），engine 侧只能开关+调参；要动音色必须走 vendor 补丁
+- `engine/legacy/` 视同 vendor 只读；补丁必须 `[PATCHED-AuraDSP P-xxx]` +
+  `engine/legacy/PATCHES.md` 登记；comment 级改动也要登记。升级 = 重提覆盖。
+  当前登记 13 条（P-001~P-013，P-003 保留编号），源码内 37 处标记。
+- legacy 黑盒内的效果（如 tube），engine 侧只能开关+调参；要动音色必须走 legacy 补丁
   （P-011 范例），禁止在 engine 侧“包一层假装”。
+- 目录内 include 一律相对/裸名；engine 侧引用 legacy 头必须写 `legacy/jdsp/...`
+  （依赖 `${API}` 即 `engine/` 在包含路径上），勿再写裸 `jdsp/...`。

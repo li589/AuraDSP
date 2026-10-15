@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.20)
 project(auradsp_engine LANGUAGES C CXX)
 
-set(VENDOR     "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/libjamesdsp/jamesdsp")
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
+set(LEGACY     "${API}/legacy")
 
-file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${VENDOR}/*.c")
+file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
 list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
 
@@ -38,16 +38,16 @@ target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
     "${API}/host"
-    "${VENDOR}"
-    "${VENDOR}/jdsp"
+    "${LEGACY}"
+    "${LEGACY}/jdsp"
     "${PLUGIN_API}"
 )
 
 target_compile_definitions(auradsp_engine PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
 target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
-# vendor-src 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
-# <stdint.h>；且 jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。按铁律
-# §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
+# engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
+# <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
+# 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
 target_compile_options(auradsp_engine PRIVATE /FI"${API}/auradsp_msvc_shim.h")
 set_source_files_properties(${ENGINE_C} PROPERTIES LANGUAGE C)
 set_property(TARGET auradsp_engine PROPERTY C_STANDARD 11)
