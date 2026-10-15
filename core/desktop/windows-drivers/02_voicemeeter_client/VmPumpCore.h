@@ -53,6 +53,7 @@ using FnEngCreate = void*(__cdecl*)(float, int);
 using FnEngProcess = void(__cdecl*)(void*, const float*, float*, int);
 using FnEngDestroy = void(__cdecl*)(void*);
 using FnEngSetParam = int(__cdecl*)(void*, const char*, const void*, unsigned int);
+using FnEngGetParam = int(__cdecl*)(void*, const char*, void*, unsigned int);
 using FnEngVizRead = int(__cdecl*)(void*, void*, int);
 
 constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测 VM 给 512/1024）
@@ -74,6 +75,7 @@ struct PumpCtx {
     long nbs = 0;
     long changes = 0;             // CHANGE 到达计数（已落地重建，见主循环）
     volatile LONG pendingChange = 0;  // RT 置位，主线程轮询消费（无锁单写单读）
+    volatile LONG startInfo = 0;      // STARTING 到达计数（主线程 CHANGE 重建时等新 audioInfo）
     int groups = 0;               // 本轮实际组数
     double maxDiff = 0.0;
     double peakIn = 0.0;  // 主对输入峰值（判定“有没有声”，smoke 条件断言用）
@@ -185,6 +187,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         }
         c->maxDiff = 0.0;
         c->bypassEntered = false;
+        InterlockedIncrement(&c->startInfo);
         return 0;
     }
     if (cmd == kCbEnding) return 0;

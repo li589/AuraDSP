@@ -27,6 +27,7 @@ void PathForJson(const std::string& in, char* out, size_t cap) {
 
 using vmcore::FnEngCreate;
 using vmcore::FnEngDestroy;
+using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
 using vmcore::FnEngSetParam;
 using vmcore::FnEngVizRead;
@@ -46,6 +47,7 @@ struct BridgeCtl {
     bool remoteFreed = false;
     HMODULE eng = nullptr;
     FnEngCreate create = nullptr;
+    FnEngGetParam getParam = nullptr;
     FnEngVizRead vizRead = nullptr;
     PumpCtx ctx;
     HANDLE monitor = nullptr;
@@ -53,6 +55,7 @@ struct BridgeCtl {
     volatile LONG stopEvent = 0;  // 置位即 monitor 退出
     int startRc = -99;
     int edition = 0;
+    int groupCount = PumpCtx::kMaxGroups;  // 版型应建引擎数（重建沿用，不看会漂的 ctx.groups）
     char note[128] = {};
     char enginePath[MAX_PATH * 2] = {};
     int paramsApplied = 0;
@@ -60,6 +63,138 @@ struct BridgeCtl {
 };
 
 BridgeCtl g_b;
+
+// 参数镜像：CHANGE 重建会换掉全部引擎句柄，新句柄是出厂态。桥必须自己留一份
+// 最近一次生效的参数并在重建后逐条回放——否则用户在 App 侧只在 vb_start 时
+// 下发一次，VM 一重启引擎（改主输出设备）参数就全丢，听感变成"没处理"，
+// 必须切一次模式才恢复。字符串参数（如 liveprog.code）不经此路径，见 README。
+constexpr int kMirrorMax = 512;
+struct MirrorEnt {
+    char id[64];
+    bool isFloat;
+    float f;
+    int32_t i;
+};
+MirrorEnt g_mirror[kMirrorMax];
+int g_mirrorN = 0;
+
+// 记录/覆盖一条参数（控制线程；id 超长直接丢，不做截断歧义）。
+void MirrorSet(const char* id, bool isFloat, const void* v4) {
+    if (!id || !v4) return;
+    for (int i = 0; i < g_mirrorN; ++i) {
+        if (strcmp(g_mirror[i].id, id) == 0) {
+            if (isFloat)
+                g_mirror[i].f = *(const float*)v4;
+            else
+                g_mirror[i].i = *(const int32_t*)v4;
+            return;
+        }
+    }
+    if (g_mirrorN >= kMirrorMax) return;
+    MirrorEnt* e = &g_mirror[g_mirrorN];
+    strncpy_s(e->id, id, sizeof(e->id) - 1);
+    e->isFloat = isFloat;
+    if (isFloat)
+        e->f = *(const float*)v4;
+    else
+        e->i = *(const int32_t*)v4;
+    ++g_mirrorN;
+}
+
+// 重建后回放全部镜像参数（主线程；引擎进程内串行，无 RT 约束）。
+void MirrorReplay(FnEngSetParam setParam) {
+    if (!setParam || g_mirrorN <= 0) return;
+    int ok = 0, bad = 0;
+    for (int i = 0; i < g_mirrorN; ++i) {
+        const MirrorEnt& e = g_mirror[i];
+        const void* v = e.isFloat ? (const void*)&e.f : (const void*)&e.i;
+        bool all = g_b.ctx.nEng > 0;
+        for (int g = 0; g < g_b.ctx.nEng; ++g) {
+            if (setParam(g_b.ctx.eng[g], e.id, v, 4) != 0) {
+                all = false;
+                break;
+            }
+        }
+        if (all)
+            ++ok;
+        else
+            ++bad;
+    }
+    g_b.paramsApplied = ok;
+    g_b.paramsFailed = bad;
+    snprintf(g_b.note, sizeof(g_b.note), "rebuilt@%.0fHz p%d/%d",
+             (double)(g_b.ctx.sr > 0 ? g_b.ctx.sr : 0), ok, g_mirrorN);
+}
+
+// 字符串参数镜像（liveprog.code / arbmag.string）：与数值镜像同命运，重建回放。
+// 文本 malloc 常驻（控制线程分配，无 RT 约束）；reset 在 vb_start。
+// 只记"全部句柄编译成功"的版本：失败的文本若记入，重建后新句柄将无程序可用
+// （引擎拒收坏代码时旧句柄是保留原程序的，镜像必须跟这个语义对齐）。
+constexpr int kStrMirrorMax = 64;
+struct StrMirrorEnt {
+    char id[64];
+    char* text = nullptr;  // NUL 结尾拷贝
+    int bytes = 0;         // 不含 NUL 的字节数
+};
+StrMirrorEnt g_strMirror[kStrMirrorMax];
+int g_strMirrorN = 0;
+
+void StrMirrorFree(StrMirrorEnt* e) {
+    if (e->text) {
+        free(e->text);
+        e->text = nullptr;
+    }
+    e->bytes = 0;
+}
+
+void StrMirrorReset() {
+    for (int i = 0; i < g_strMirrorN; ++i) StrMirrorFree(&g_strMirror[i]);
+    g_strMirrorN = 0;
+}
+
+void StrMirrorSet(const char* id, const char* utf8, int bytes) {
+    if (!id || !utf8 || bytes <= 0) return;
+    for (int i = 0; i < g_strMirrorN; ++i) {
+        if (strcmp(g_strMirror[i].id, id) == 0) {
+            StrMirrorFree(&g_strMirror[i]);
+            g_strMirror[i].text = (char*)malloc((size_t)bytes + 1);
+            if (!g_strMirror[i].text) return;
+            memcpy(g_strMirror[i].text, utf8, (size_t)bytes);
+            g_strMirror[i].text[bytes] = 0;
+            g_strMirror[i].bytes = bytes;
+            return;
+        }
+    }
+    if (g_strMirrorN >= kStrMirrorMax) return;
+    StrMirrorEnt* e = &g_strMirror[g_strMirrorN];
+    strncpy_s(e->id, id, sizeof(e->id) - 1);
+    e->text = (char*)malloc((size_t)bytes + 1);
+    if (!e->text) return;
+    memcpy(e->text, utf8, (size_t)bytes);
+    e->text[bytes] = 0;
+    e->bytes = bytes;
+    ++g_strMirrorN;
+}
+
+// 重建后回放字符串镜像（主线程；与 MirrorReplay 同一次重建窗口内调用）。
+// 返回成功条数；单条失败不影响其他（新句柄该条留空，note 如实记录）。
+int StrMirrorReplay(FnEngSetParam setParam) {
+    if (!setParam || g_strMirrorN <= 0 || g_b.ctx.nEng <= 0) return 0;
+    int ok = 0;
+    for (int i = 0; i < g_strMirrorN; ++i) {
+        const StrMirrorEnt& e = g_strMirror[i];
+        bool all = true;
+        for (int g = 0; g < g_b.ctx.nEng; ++g) {
+            if (setParam(g_b.ctx.eng[g], e.id, e.text, (unsigned)e.bytes) !=
+                0) {
+                all = false;
+                break;
+            }
+        }
+        if (all) ++ok;
+    }
+    return ok;
+}
 
 void LeaveCtl(bool andUnreg) {
     if (g_b.logout) g_b.logout();
@@ -79,11 +214,24 @@ void DestroyEngines() {
     g_b.ctx.nEng = 0;
 }
 
-void RebuildEngines(int groups) {
+void RebuildEngines(int groups, float sr) {
+    // 先用旧指针销毁（此刻回调已停），再从模块重解析——重建后不能依赖构建期
+    // 缓存的函数指针：任何一处被置空都会让泵退化成"无引擎直通"，表现正是
+    // "声音在但没处理"。
     DestroyEngines();
-    const float sr = g_b.ctx.sr > 0 ? (float)g_b.ctx.sr : 48000.0f;
-    if (g_b.create) {
-        for (int g = 0; g < groups; ++g) {
+    if (g_b.eng) {
+        g_b.create =
+            (FnEngCreate)GetProcAddress(g_b.eng, "auradsp_create");
+        g_b.getParam =
+            (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
+        g_b.ctx.process =
+            (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
+        g_b.ctx.destroy =
+            (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
+    }
+    if (g_b.create && g_b.ctx.process && g_b.ctx.destroy && g_b.ctx.scratchIn &&
+        g_b.ctx.scratchOut) {
+        for (int g = 0; g < groups && g < PumpCtx::kMaxGroups; ++g) {
             g_b.ctx.eng[g] = g_b.create(sr, 2048);
             if (g_b.ctx.eng[g]) ++g_b.ctx.nEng;
         }
@@ -92,6 +240,14 @@ void RebuildEngines(int groups) {
         DestroyEngines();
         g_b.ctx.process = nullptr;
     }
+    // 新句柄是空状态：idle 计数清零（否则可能直接判闲跳过 process），
+    // 组内峰值清零（viz 别跟着旧句柄的账本走）。
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        g_b.ctx.idleSamples[g] = 0;
+        g_b.ctx.idle[g] = false;
+        g_b.ctx.peakGrp[g] = 0.0;
+    }
+    g_b.ctx.gotFirst = 0;
 }
 
 // "id=f1.5;gain=i3" 解析并下发全部 handle（主线程/Dart 线程，无 RT 约束）。
@@ -147,12 +303,59 @@ DWORD WINAPI MonitorProc(LPVOID) {
     while (!InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) {
         if (InterlockedExchange(&g_b.ctx.pendingChange, 0) != 0) {
             ++g_b.ctx.changes;
+            // RT-safe 重建序列：stop(+50ms 余量) → 销毁旧句柄（无回调在跑）→
+            // start 等新 STARTING 取新采样率 → 重建 → 回放参数镜像。
+            // 引擎只在本线程建/销；start 到重建完成之间 process==nullptr，泵退化为
+            // 直通（不吞声、不吊野指针），绝不在音频线程 create/destroy。
+            const long oldSr = g_b.ctx.sr;  // STARTING 迟到时的兜底，别退回 48k
             if (g_b.stop) g_b.stop();
-            RebuildEngines(g_b.ctx.groups > 0 ? g_b.ctx.groups
-                                              : PumpCtx::kMaxGroups);
-            if (g_b.start) {
-                if (g_b.start() != 0) break;
-                g_b.ctx.gotFirst = 0;
+            Sleep(50);
+            DestroyEngines();
+            g_b.ctx.process = nullptr;
+            const LONG wantInfo =
+                InterlockedCompareExchange(&g_b.ctx.startInfo, 0, 0);
+            bool started = false;
+            for (int t = 0; t < 20; ++t) {
+                if (InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) break;
+                if (g_b.start && g_b.start() == 0) {
+                    started = true;
+                    break;
+                }
+                Sleep(50);
+            }
+            if (started) {
+                // 等 STARTING 把新 audioInfo（采样率/缓冲）送进来。改主输出设备会
+                // 连带重建设备枚举，可能要几秒，故给 5s；且只认 samplerate>0 的那次
+                // ——引擎未打开时 VM 可能先发一版全零 info，采信它会让引擎建在错
+                // 速率上（听得出的音高/时序错位）。超时则用旧采样率续命。
+                for (int t = 0; t < 200; ++t) {
+                    if (InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) break;
+                    if (InterlockedCompareExchange(&g_b.ctx.startInfo, 0, 0) !=
+                            wantInfo &&
+                        g_b.ctx.sr > 0)
+                        break;
+                    Sleep(25);
+                }
+            }
+            // 退出请求优先：这时绝不能再建引擎（stop 之后复活句柄 = 野指针）。
+            if (InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) break;
+            const long newSr = g_b.ctx.sr;
+            const float sr =
+                (float)(newSr > 0 ? newSr : (oldSr > 0 ? oldSr : 48000));
+            RebuildEngines(g_b.groupCount, sr);
+            if (g_b.ctx.process) {
+                MirrorReplay(
+                    (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param"));
+                const int sok = StrMirrorReplay(
+                    (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param"));
+                if (g_strMirrorN > 0) {
+                    char tail[48] = {0};
+                    snprintf(tail, sizeof(tail), " s%d/%d", sok, g_strMirrorN);
+                    strncat(g_b.note, tail,
+                            sizeof(g_b.note) - strlen(g_b.note) - 1);
+                }
+            } else {
+                snprintf(g_b.note, sizeof(g_b.note), "rebuild-failed");
             }
         }
         Sleep(200);
@@ -194,16 +397,33 @@ int vb_start(const char* engine_dll, const char* params_json) {
     memset(&g_b.ctx, 0, sizeof(g_b.ctx));
     g_b.paramsApplied = 0;
     g_b.paramsFailed = 0;
+    g_mirrorN = 0;  // 新会话：镜像由 App 侧 vb_start 后的重放重新填满
+    StrMirrorReset();
     g_b.note[0] = '\0';
     g_b.edition = 0;
     g_b.startRc = -99;
     g_b.stopEvent = 0;
     g_b.remoteFreed = false;  // 复位：上一轮 stop 已释放，本轮重新计数
-    const wchar_t* dirs[2] = {
+    // Remote DLL 定位（版本兼容关键）：优先用三级自省检出的安装目录——标准版/
+    // 香蕉/土豆的默认与自定义安装路径都可能不同，写死 Program Files 会在自定义
+    // 路径、新版本改目录时直接判死。内置两条默认路径只做兜底。
+    const AuraVmDetect det0 = AuraVmDetectRun();
+    g_b.edition = det0.edition;
+    wchar_t first[MAX_PATH * 2] = {0};
+    if (!det0.installDir.empty()) {
+        std::wstring wdir = vmcore::ToWide(det0.installDir);
+        if (!wdir.empty() && wdir.back() != L'\\' && wdir.back() != L'/')
+            wdir += L'\\';
+        wdir += L"VoicemeeterRemote64.dll";
+        wcsncpy_s(first, wdir.c_str(), _TRUNCATE);
+    }
+    const wchar_t* dirs[3] = {
+        first[0] ? first : L"",
         L"C:\\Program Files (x86)\\VB\\Voicemeeter\\VoicemeeterRemote64.dll",
         L"C:\\Program Files\\VB\\Voicemeeter\\VoicemeeterRemote64.dll",
     };
     for (const wchar_t* d : dirs) {
+        if (!d || !*d) continue;
         g_b.remote = LoadLibraryW(d);
         if (g_b.remote) break;
     }
@@ -218,7 +438,9 @@ int vb_start(const char* engine_dll, const char* params_json) {
     auto login = (long(__stdcall*)())GetProcAddress(g_b.remote, "VBVMR_Login");
     g_b.logout = (long(__stdcall*)())GetProcAddress(g_b.remote, "VBVMR_Logout");
     if (!reg || !g_b.start || !g_b.stop || !g_b.unreg || !login || !g_b.logout) {
-        snprintf(g_b.note, sizeof(g_b.note), "remote-api-missing");
+        // 旧版 Remote DLL 可能缺回调族导出：把版本写进 note，排障一眼可知。
+        snprintf(g_b.note, sizeof(g_b.note), "remote-api-missing r%s",
+                 det0.remoteVersion.empty() ? "?" : det0.remoteVersion.c_str());
         LeaveCtl(false);
         return -2;
     }
@@ -242,10 +464,7 @@ int vb_start(const char* engine_dll, const char* params_json) {
         LeaveCtl(true);
         return -3;
     }
-    {
-        const AuraVmDetect det = AuraVmDetectRun();
-        g_b.edition = det.edition;
-    }
+    // 版型已在入口处由 AuraVmDetectRun 确定（g_b.edition），重建沿用 groupCount。
     std::wstring used;
     std::string hint = (engine_dll && *engine_dll) ? engine_dll : "";
     g_b.eng = vmcore::TryLoadEngine(hint, used);
@@ -264,16 +483,21 @@ int vb_start(const char* engine_dll, const char* params_json) {
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
         g_b.vizRead =
             (FnEngVizRead)GetProcAddress(g_b.eng, "auradsp_viz_read");
+        g_b.getParam =
+            (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
         if (create && g_b.ctx.process && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 2 * vmcore::kMaxNbs);
             g_b.ctx.scratchOut =
                 (float*)malloc(sizeof(float) * 2 * vmcore::kMaxNbs);
+            // 版型→预建组数（EAPO 同式 min(nbi,nbo)/8 由泵在运行时再钳；未知版型按 8 建，
+            // 多建无害（泵按实际 ng 取用，空 handle 守卫透传），少建才会吞声。
             int want = PumpCtx::kMaxGroups;
             if (g_b.edition == 1)
                 want = 2;
             else if (g_b.edition == 2)
                 want = 5;
+            g_b.groupCount = want;  // CHANGE 重建沿用版型应建数，不看会漂的 ctx.groups
             const float sr0 = 48000.0f;
             for (int g = 0; g < want; ++g) {
                 g_b.ctx.eng[g] = create(sr0, 2048);
@@ -362,14 +586,17 @@ int vb_status(char* out, int cap) {
                      "{\"running\":%s,\"frames\":%llu,\"sr\":%ld,\"nbs\":%ld,"
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
-                     "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,\"peakGrp\":%s,\"edition\":%d,\"engine\":\"%s\"}",
+                     "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
+                     "\"changes\":%lld,\"mirrorN\":%d,\"peakGrp\":%s,"
+                     "\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
                       (unsigned long long)g_b.ctx.frames, g_b.ctx.sr,
                       g_b.ctx.nbs, g_b.ctx.groups, g_b.ctx.nEng, g_b.ctx.peakIn,
                       cbUs, g_b.startRc, g_b.note, (long)g_b.ctx.testKind,
-                      (long)g_b.ctx.userBypass, vizGrp, peaks,
-                      g_b.edition, eng);
+                      (long)g_b.ctx.userBypass, vizGrp,
+                      (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
+                      peaks, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
 }
@@ -379,11 +606,52 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
     if (!id || !v4 || !g_b.eng) return -2;
     auto setParam = (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param");
     if (!setParam) return -3;
+    MirrorSet(id, isFloat != 0, v4);  // 重建后要靠它回放
     int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, v4, 4) == 0) ++ok;
     }
     return ok;
+}
+
+int vb_set_param_str(const char* id, const char* utf8, int bytes) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !utf8 || bytes <= 0 || bytes > 256 * 1024) return -2;
+    if (!g_b.eng) return -3;
+    auto setParam = (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param");
+    if (!setParam) return -4;
+    int ok = 0;
+    for (int g = 0; g < g_b.ctx.nEng; ++g) {
+        if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, utf8, (unsigned)bytes) == 0)
+            ++ok;
+    }
+    // 全成功才记镜像（编译失败时引擎保留旧程序，镜像必须跟这个语义对齐，
+    // 否则重建后新句柄会被坏代码清空）。
+    if (ok == g_b.ctx.nEng && g_b.ctx.nEng > 0)
+        StrMirrorSet(id, utf8, bytes);
+    return ok;
+}
+
+int vb_get_param(const char* id, int isFloat, void* out4) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !out4 || !g_b.getParam || !g_b.ctx.eng[0]) return -2;
+    return g_b.getParam(g_b.ctx.eng[0], id, out4, 4) == 0 ? 0 : -3;
+}
+
+int vb_get_param_str(const char* id, char* out, int cap) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    if (!id || !out || cap <= 1 || !g_b.getParam || !g_b.ctx.eng[0]) return -2;
+    out[0] = 0;
+    if (g_b.getParam(g_b.ctx.eng[0], id, out, (unsigned)cap) != 0) return -3;
+    out[cap - 1] = 0;  // 引擎保证 NUL 结尾，这里再兜一层
+    return (int)strlen(out);
+}
+
+int vb_test_change() {
+    // 诊断/回归用：模拟一次 VM CHANGE（真实路径由 VB 推 kCbChange 置位同标志）。
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
+    InterlockedExchange(&g_b.ctx.pendingChange, 1);
+    return 0;
 }
 
 int vb_viz_read(void* out408, int count) {

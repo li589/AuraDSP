@@ -127,6 +127,97 @@ check("test_stop", rc == 0, f"rc={rc}")
 st = get_status()
 check("testKind==0", st.get("testKind") == 0, f"testKind={st.get('testKind')}")
 
+# ---- CHANGE 重建回归（改主输出设备 → VM 重启引擎 → 参数必须还在）----
+b.vb_get_param.restype = ctypes.c_int
+b.vb_get_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
+b.vb_test_change.restype = ctypes.c_int
+b.vb_test_change.argtypes = []
+
+
+def get_param(pid, is_float=False):
+    v = ctypes.c_float(0.0) if is_float else ctypes.c_int32(0)
+    rc = b.vb_get_param(pid.encode("utf-8"), 1 if is_float else 0,
+                        ctypes.byref(v))
+    return rc, v.value
+
+
+rc0, before = get_param("tube.gain", True)
+check("get_param pre-change", rc0 == 0, f"rc={rc0} v={before}")
+check("pre-change value kept", abs(before - 6.0) < 1e-4, f"v={before}")
+ch0 = get_status().get("changes", 0)
+handles0 = get_status().get("handles", 0)
+note0 = get_status().get("note", "")
+rc = b.vb_test_change()
+check("test_change accepted", rc == 0, f"rc={rc}")
+# monitor 200ms 轮询；changes 在重建开始就 +1，而 handles 在销毁前仍是旧值，
+# 只看两者会在销毁前误判"已重建"。note 是重建最后一步写的——等 note 翻新才算完。
+rebuilt = False
+for _ in range(80):
+    time.sleep(0.25)
+    st = get_status()
+    if st.get("changes", 0) > ch0 and st.get("note", "") != note0:
+        rebuilt = True
+        break
+st = get_status()
+check("changes counted", st.get("changes", 0) > ch0,
+      f"{ch0}->{st.get('changes')}")
+check("rebuild completed (handles restored)", rebuilt and
+      st.get("handles", 0) >= handles0,
+      f"handles={st.get('handles')} note={st.get('note')}")
+check("frames resumed after rebuild", st.get("frames", 0) > 0,
+      f"frames={st.get('frames')}")
+rc1, after = get_param("tube.gain", True)
+check("get_param post-change", rc1 == 0, f"rc={rc1} v={after}")
+check("PARAM SURVIVED REBUILD (改设备不丢参)", abs(after - 6.0) < 1e-4,
+      f"before={before} after={after}")
+
+# ---- LiveProg 字符串通道（VB 下生效 + CHANGE 重建回放）----
+LP_CODE = ("/* bridge string-channel regression */\n@init\ndbg = 1;\n"
+           "@sample\nspl0 *= slider1;\nspl1 *= slider1;\n")
+b.vb_set_param_str.restype = ctypes.c_int
+b.vb_set_param_str.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+b.vb_get_param_str.restype = ctypes.c_int
+b.vb_get_param_str.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]
+
+
+def get_param_str(pid, cap=65536):
+    buf = ctypes.create_string_buffer(cap)
+    n = b.vb_get_param_str(pid.encode("utf-8"), buf, cap)
+    return n, (buf.value.decode("utf-8", "replace") if n > 0 else "")
+
+
+st = get_status()
+nh = st.get("handles", 0)
+n = b.vb_set_param_str(b"liveprog.code", LP_CODE.encode("utf-8"), len(LP_CODE))
+check("set_param_str applied", n == nh and nh > 0, f"n={n} handles={nh}")
+rc = b.vb_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(1)))
+check("liveprog enable", rc and rc > 0, f"rc={rc}")
+rc, stcode = get_param("liveprog.status")
+check("liveprog status==1", rc == 0 and stcode == 1, f"rc={rc} st={stcode}")
+n, back = get_param_str("liveprog.code")
+check("liveprog code roundtrip", n > 0 and back == LP_CODE,
+      f"n={n} match={back == LP_CODE}")
+ch1 = get_status().get("changes", 0)
+note1 = get_status().get("note", "")
+rc = b.vb_test_change()
+check("test_change#2 accepted", rc == 0, f"rc={rc}")
+rebuilt2 = False
+for _ in range(80):
+    time.sleep(0.25)
+    st = get_status()
+    if st.get("changes", 0) > ch1 and st.get("note", "") != note1:
+        rebuilt2 = True
+        break
+st = get_status()
+check("rebuild#2 completed", rebuilt2 and st.get("handles", 0) >= nh,
+      f"handles={st.get('handles')} note={st.get('note')}")
+rc, stcode = get_param("liveprog.status")
+check("liveprog status survived", rc == 0 and stcode == 1,
+      f"rc={rc} st={stcode}")
+n, back = get_param_str("liveprog.code")
+check("LIVEPROG SURVIVED REBUILD", n > 0 and back == LP_CODE,
+      f"n={n} match={back == LP_CODE} note={st.get('note')}")
+
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]
 rc = b.vb_bypass(1)

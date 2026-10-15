@@ -40,6 +40,22 @@ VBB_API int vb_status(char* out, int cap);
 // isolate 侧同契约）。返回成功 handle 数，<0=桥未运行。
 VBB_API int vb_set_param(const char* id, int isFloat, const void* v4);
 
+// 字符串参数（liveprog.code / arbmag.string）：同 auradsp_set_param 的字节语义
+// （UTF-8 字节串，不含 NUL；调用返回后调用方缓冲可释放，引擎内部已拷贝编译）。
+// 下发全部 live handle 并记入镜像（CHANGE 重建后回放）。返回成功 handle 数。
+VBB_API int vb_set_param_str(const char* id, const char* utf8, int bytes);
+
+// 参数回读（group0，诊断/回归用：CHANGE 重建后验证参数真的还在）。
+// out4 为 4 字节缓冲；返回 0=ok，<0=失败。
+VBB_API int vb_get_param(const char* id, int isFloat, void* out4);
+
+// 字符串参数回读（group0）：out 为调用方缓冲，cap 为容量；返回写入字节数
+// （不含 NUL），<0=失败（空间不足/无此参数/桥未运行）。
+VBB_API int vb_get_param_str(const char* id, char* out, int cap);
+
+// 模拟一次 VM CHANGE（VB 推 kCbChange 时置位同标志），供 smoke 回归重建路径。
+VBB_API int vb_test_change();
+
 // 从 group0 handle 读可视化帧（408B/帧，与 auradsp_viz_read 同布局，
 // Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
 VBB_API int vb_viz_read(void* out408, int count);

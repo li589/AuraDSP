@@ -29,6 +29,12 @@ typedef _TestStopC = Int32 Function();
 typedef _TestStopDart = int Function();
 typedef _BypassC = Int32 Function(Int32);
 typedef _BypassDart = int Function(int);
+typedef _SetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
+typedef _SetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
+typedef _GetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
+typedef _GetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
+typedef _GetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
+typedef _GetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 
 class AuraVmBridge {
   final DynamicLibrary dylib;
@@ -50,6 +56,12 @@ class AuraVmBridge {
       dylib.lookupFunction<_TestStopC, _TestStopDart>('vb_test_stop');
   late final _BypassDart _bypass =
       dylib.lookupFunction<_BypassC, _BypassDart>('vb_bypass');
+  late final _SetParamStrDart _setParamStr =
+      dylib.lookupFunction<_SetParamStrC, _SetParamStrDart>('vb_set_param_str');
+  late final _GetParamDart _getParam =
+      dylib.lookupFunction<_GetParamC, _GetParamDart>('vb_get_param');
+  late final _GetParamStrDart _getParamStr = dylib.lookupFunction<
+      _GetParamStrC, _GetParamStrDart>('vb_get_param_str');
 
   AuraVmBridge._(this.dylib);
 
@@ -180,4 +192,48 @@ class AuraVmBridge {
   int testStop() => _testStop();
 
   int setBypass(bool on) => _bypass(on ? 1 : 0);
+
+  /// 字符串参数（liveprog.code / arbmag.string）：返回成功 handle 数，
+  /// <0=失败。桥内记镜像，CHANGE 重建后自动回放。
+  int setParamStr(String id, String text) {
+    final idp = id.toNativeUtf8();
+    final tp = text.toNativeUtf8();
+    try {
+      return _setParamStr(idp.cast(), tp.cast(), tp.length);
+    } finally {
+      malloc.free(idp);
+      malloc.free(tp);
+    }
+  }
+
+  /// int 参数回读（group0），失败返回 null。
+  int? getIntParam(String id) {
+    final idp = id.toNativeUtf8();
+    final vp = malloc<Int32>();
+    try {
+      final rc = _getParam(idp.cast(), 0, vp.cast());
+      return rc == 0 ? vp.value : null;
+    } catch (_) {
+      return null;
+    } finally {
+      malloc.free(idp);
+      malloc.free(vp);
+    }
+  }
+
+  /// 字符串参数回读（group0），失败返回 null。
+  String? getParamStr(String id) {
+    final idp = id.toNativeUtf8();
+    final buf = malloc<Uint8>(256 * 1024 + 1).cast<Utf8>();
+    try {
+      final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
+      if (n <= 0) return null;
+      return buf.toDartString(length: n);
+    } catch (_) {
+      return null;
+    } finally {
+      malloc.free(idp);
+      malloc.free(buf);
+    }
+  }
 }
