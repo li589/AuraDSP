@@ -1,6 +1,6 @@
 # JamesDSP 迁移至 engine/legacy/ 重组与融合实施方案
 
-> **方案状态**：规划评审版 v2（方案先行，暂不改动业务代码）  
+> **方案状态**：执行版 v3（Phase 0 已复查满足，方案本身已按 v3 修订刷新，随即进入 Phase 1 物理平移）  
 > **创建日期**：2026-10-15  
 > **责任目标**：将原位于 `vendor/libjamesdsp/jamesdsp` 的 C 算法核正式收编为核心引擎内建资产（`engine/legacy/`），消解“只读第三方与深度打补丁”的架构冲突，为后续效果原子化平级融合奠定基础。
 
@@ -8,6 +8,7 @@
 |---|---|---|
 | v1 | 2026-10-15 | 初稿（规划评审版） |
 | v2 | 2026-10-15 | 按仓库实测核对更新（核对记录见 §6）：① 补丁计数修正（`PATCHES.md` 登记 12 条 P-001~P-012、P-003 保留编号、实际落地 11 项、源码内 38 处 `[PATCHED-AuraDSP]` 标记）；② 新增 Android 第二副本分叉事实与范围界定（§1.1-4、§1.3、§5.4）；③ 引用清单扩充（`build_engine.sh`、`engine/AGENT.md`、`tools/probe/fft_probe.cpp`）并修正行号；④ 测试计数更正（`test/smoke/` 57 个脚本、runner 注册 49 个 smoke 用例 / 54 条总项，原“20 个测试”作废）；⑤ 新增 Phase 0 执行前核验（工作树已洁净、`046fafe` 已同步 origin/main、EOL 已归一）；⑥ Phase 4 文档同步清单区分“活跃 / 历史”。 |
+| v3 | 2026-10-16 | 按执行时点复查刷新（核对记录见 §6.1）：① §3.1 矩阵补入 3 处此前遗漏的 jdsp include 引用（`engine/chain/engine_audiofile.cpp` L12、`engine/chain/engine_convolver.cpp` L3-L4、`tools/probe/emit_probe.cpp` L6）；② Phase 0 第 1/2/4 项状态刷新——v2 所述的“约 30 文件在途工作”已分别落地为 `2b23e3d`（fix engine）与 `6416ab8`（fix ui），HEAD 前进到 `ae5d1e2` 且 == `origin/main`；③ 补丁登记已补齐——`PATCHES.md` 12 → **13 条**（P-013 已登记 `JamesDSPFilterVendorOrder` 过滤层），源码 `[PATCHED-AuraDSP]` 标记实测 **37 处**（5 个文件，v2 所记“38 处”为计数口径误差，已更正）；④ Phase 0 第 1 项解除阻塞，`git mv` 前置条件全部满足。 |
 
 ---
 
@@ -20,7 +21,7 @@
    * 构建时，桌面引擎 `auradsp_engine.dll` 需跨级向上寻找 `../../../vendor/libjamesdsp`，破坏了 `engine/` 作为核心音频处理引擎的**自包含性（Self-Containment）**。
 2. **“只读 Vendor”与“深度自研补丁”的逻辑冲突**：
    * 在行业规范中，`vendor/` 仅应存放未修改的上游第三方纯只读源码。
-   * 然而，为了满足现代音频工作站特性（声场分带调节、表驱动链路重排、卷积干湿比实时混合、EQ 卷积器双缓冲无爆音等），我们已在其上实施了 **11 项已落地的深度改造**——`vendor/libjamesdsp/PATCHES.md` 共登记 **12 条**（`P-001` ~ `P-012`，其中 `P-003` 为保留编号、补丁尚未落地），源码内累计 **38 处** `[PATCHED-AuraDSP …]` 标记。
+   * 然而，为了满足现代音频工作站特性（声场分带调节、表驱动链路重排、卷积干湿比实时混合、EQ 卷积器双缓冲无爆音等），我们已在其上实施了 **12 项已落地的深度改造**——`vendor/libjamesdsp/PATCHES.md` 共登记 **13 条**（`P-001` ~ `P-013`，其中 `P-003` 为保留编号、补丁尚未落地），源码内累计 **37 处** `[PATCHED-AuraDSP …]` 标记（2026-10-16 实测，分布于 5 个文件；v2 所记“38 处”为计数口径误差）。
    * **现实是：它已经不再是一个冷冰冰的“外部依赖”，而是 AuraDSP 核心处理引擎中不可分割的基石。**
 3. **效果器的“二元分裂”**：
    * 目前自研音效有 10 个（`engine/dsp/` 下的 `dsp_dyneq`、`dsp_gate`、`dsp_haas` 等），遵循现代 C++20 与 RT-Safe 规范；
@@ -105,11 +106,14 @@ AuraDSP/
 | 文件路径 | 原引用写法 | 目标引用写法 | 变更原因 |
 |---|---|---|---|
 | [engine/engine_internal.h](file:///d:/temp_desktop/Proj/JamesDSP/engine/engine_internal.h) L34-L35 | `#include "jdsp/jdsp_header.h"`<br/>`#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/jdsp_header.h"`<br/>`#include "legacy/jdsp/Effects/eel2/fft.h"` | 语义显式化，避免裸 include 造成命名污染 |
+| [engine/chain/engine_audiofile.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_audiofile.cpp) L12 | `#include "jdsp/Effects/eel2/dr_mp3.h"`（`DRMP3_IMPLEMENTATION` 单实例化） | `#include "legacy/jdsp/Effects/eel2/dr_mp3.h"` | 同上；vendor 头文件经 `LEGACY` 包含目录可见 |
+| [engine/chain/engine_convolver.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/chain/engine_convolver.cpp) L3-L4 | `#include "jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "jdsp/Effects/eel2/dr_flac.h"` | `#include "legacy/jdsp/Effects/eel2/dr_wav.h"`<br/>`#include "legacy/jdsp/Effects/eel2/dr_flac.h"` | 同上；IR 文件解码用的 dr_* 系列头 |
 | [engine/auradsp_engine.cpp](file:///d:/temp_desktop/Proj/JamesDSP/engine/auradsp_engine.cpp) L4 | 注释提到 `vendor/libjamesdsp` | 更新注释指向 `engine/legacy/` | 保持文档真实性 |
 | [engine/auradsp_msvc_shim.h](file:///d:/temp_desktop/Proj/JamesDSP/engine/auradsp_msvc_shim.h) L5 | 注释提到 `libjamesdsp` 的 `essential.h` 行为 | 更新注释指引 | 保持文档真实性 |
 | [engine/AGENT.md](file:///d:/temp_desktop/Proj/JamesDSP/engine/AGENT.md) L52、L60 | `vendor/libjamesdsp/jamesdsp/jdsp/jdspController.c`、`vendor/libjamesdsp/PATCHES.md` 补丁纪律指引 | 全部改为 `engine/legacy/…` 对应路径 | 补丁登记纪律的引用路径必须随迁 |
 | [core/desktop/windows/build_engine.sh](file:///d:/temp_desktop/Proj/JamesDSP/core/desktop/windows/build_engine.sh) L5（注释） | `../../../vendor/libjamesdsp/  JamesDSP C engine` | `engine/legacy/` | 构建脚本注释真实性（脚本本身不编译 vendor） |
-| [tools/probe/fft_probe.cpp](file:///d:/temp_desktop/Proj/JamesDSP/tools/probe/fft_probe.cpp) L5-L6 | `#include "jdsp/jdsp_header.h"`、`#include "jdsp/Effects/eel2/fft.h"`（依赖手工编译时 `-I vendor/libjamesdsp/jamesdsp`） | include 写法不变；编译参数 `-I` 改指 `engine/legacy` | 仓库内无固化编译命令，随实际编译参数同步即可 |
+| [tools/probe/fft_probe.cpp](file:///d:/temp_desktop/Proj/JamesDSP/tools/probe/fft_probe.cpp) L5-L6 | `#include "jdsp/jdsp_header.h"`、`#include "jdsp/Effects/eel2/fft.h"`（依赖手工编译时 `-I vendor/libjamesdsp/jamesdsp`） | `#include "legacy/jdsp/jdsp_header.h"`、`#include "legacy/jdsp/Effects/eel2/fft.h"`；编译参数 `-I` 改指 `engine/`（或 `engine/legacy` 且保留 `jdsp/` 前缀） | 与 engine 侧口径统一；该文件不在 CMake 目标内，仓库内无固化编译命令，随实际编译参数同步即可 |
+| [tools/probe/emit_probe.cpp](file:///d:/temp_desktop/Proj/JamesDSP/tools/probe/emit_probe.cpp) L6 | `#include "jdsp/Effects/eel2/fft.h"` | `#include "legacy/jdsp/Effects/eel2/fft.h"` | 同上 |
 | AGENT.md / CLAUDE.md / README.md | 目录结构清单含 `vendor/libjamesdsp` | 更新为 `engine/legacy` | 见 Phase 4 文档同步 |
 
 **明确不改的提及（语义性引用，迁移后依然准确）**：
@@ -160,7 +164,7 @@ target_include_directories(auradsp_engine PRIVATE
 
 * **测试用例（`test/smoke/*.py`，经 [test/runner.py](file:///d:/temp_desktop/Proj/JamesDSP/test/runner.py) 调度）**：**0 影响**。所有单测脚本均通过 `ctypes` 调用导出的 C ABI（`auradsp_create`、`auradsp_set_param`、`auradsp_process`），对底层物理源码位置完全透明。
 * **计数更正（2026-10-15 实测）**：`test/smoke/` 实有 **57** 个脚本；`runner.py` 注册表共 **54** 条——其中 **49 个 `smoke_*`**、3 个 `test_*`、2 个 `bench_*`。原方案所写“20 个测试”为过时估计，**以 runner 注册表实跑结果为准**：`python test/runner.py --smoke`（`--smoke` 参数已核验存在于 runner.py L162）执行的全部用例必须 **0 FAIL**。
-* **编译产物路径**：产物依然统一输出到 `core/desktop/windows/out/Release/auradsp_engine.dll`，下游自动化流程零冲击。runner 自带 CMake 构建步骤，路径迁移的正确性会由构建阶段自动验证（一票否决）。
+* **编译产物路径**：产物依然统一输出到 `core/desktop/windows/out/Release/auradsp_engine.dll`，下游自动化流程零冲击。`test/runner.py` 本身**不含** cmake 构建步骤（v3 实测：直接加载预编译 DLL），因此 Phase 2 构建 + DLL 同步到 `test/` 侧是 Phase 3 的**前置人工步骤**，路径迁移的正确性由构建阶段暴露（一票否决）。
 
 ---
 
@@ -176,7 +180,7 @@ sequenceDiagram
     participant Test as 自动化单测门禁
     participant Doc as 架构文档与总纲
 
-    Note over Git,Doc: Phase 0: 执行前核验（2026-10-15 已核验，执行时复查）
+    Note over Git,Doc: Phase 0: 执行前核验（2026-10-15 首次核验，2026-10-16 执行时点复查通过）
     Git->>Git: git status --porcelain 必须为空（树洁净、rename 检测无 EOL 噪音）
     Git->>Git: HEAD == origin/main（无未推送/未拉取分叉）
 
@@ -199,17 +203,17 @@ sequenceDiagram
     Git->>Git: 清理 vendor/libjamesdsp 空目录
 ```
 
-### Phase 0：执行前核验清单（2026-10-15 状态与执行时要求）
+### Phase 0：执行前核验清单（2026-10-15 状态 + 2026-10-16 执行时点复查）
 
-| # | 核验项 | 2026-10-15 状态 | 执行时要求 |
+| # | 核验项 | 2026-10-15 状态 | 2026-10-16 执行时点复查 |
 |---|---|---|---|
-| 1 | 工作树洁净：`git status --porcelain` 为空（此前的 VAIO 驱动重构、spike 生成物、`gen/` 噪音等已分别落地为提交，如 `deabedb`） | ✅ 核验时点满足（两次核验均为 0 条）；⚠️ 同日稍晚出现**新一批在途改动（约 30 文件）**：Flutter 效果卡片 ×23、`engine/auradsp_engine.cpp`、`engine/chain/engine_probe.cpp`、`test/smoke/smoke_graph_order.py`、`vendor/…/jdspController.c`(+68) 与 `jdsp_header.h`(+4) | **每次执行前必须重新复查为空**；在途工作须先落地或暂存，`git mv` 提交必须纯净、不混入在途工作，保证可单独回滚 |
-| 2 | 与远端同步：HEAD `046fafe`（含本方案）== `origin/main`，0 ahead / 0 behind | ✅ 满足 | 复查 |
-| 3 | EOL 归一：`.gitattributes` 已提交；`git diff` 与 `git diff --ignore-cr-at-eol` 对 `vendor/libjamesdsp` **均为空**（历史换行符翻搅已消噪，rename 识别不会被 `core.autocrlf` 干扰） | ✅ 满足 | 复查第 1 项即可 |
-| 4 | 补丁登记完整：`PATCHES.md` 12 条（P-003 保留编号）、源码 38 处 `[PATCHED-AuraDSP]` 标记，与迁移前树逐一随迁 | ⚠️ 核验时点满足；同日在途改动新增 1 处**未编号**标记（`jdspController.c` 内新函数 `JamesDSPFilterVendorOrder`，`PATCHES.md` 尚未登记） | 该在途补丁落地时**必须补登记**（预计 P-013）；迁移后抽查标记数 = 迁移前实测值 |
-| 5 | 双副本认知：Android `core/android/vendor-src/libjamesdsp` 分叉事实已登记（§1.1-4、§5.4） | ✅ 满足 | 本次不触碰该树 |
+| 1 | 工作树洁净：`git status --porcelain` 为空（此前的 VAIO 驱动重构、spike 生成物、`gen/` 噪音等已分别落地为提交，如 `deabedb`） | ✅ 核验时点满足（两次核验均为 0 条）；⚠️ 同日稍晚出现**新一批在途改动（约 30 文件）**：Flutter 效果卡片 ×23、`engine/auradsp_engine.cpp`、`engine/chain/engine_probe.cpp`、`test/smoke/smoke_graph_order.py`、`vendor/…/jdspController.c`(+68) 与 `jdsp_header.h`(+4) | ✅ **已解除阻塞**：该批在途工作已分别落地为 `2b23e3d`（fix engine：graph.order 过滤层 + 延迟探针补自研效果）与 `6416ab8`（fix ui：延迟徽标三态化 + 序号单一真相）。复查时 `git status --porcelain` 仅剩 `vendor/libjamesdsp/PATCHES.md`（P-013 补登记，+20 行）——**该条目必须在 `git mv` 之前单独提交**，否则补丁登记会混入平移提交、破坏可单独回滚性 |
+| 2 | 与远端同步：HEAD（含本方案）== `origin/main`，0 ahead / 0 behind | ✅ 满足（`046fafe`） | ✅ 满足：HEAD = `ae5d1e2`（`046fafe..ae5d1e2` 三批均已推送）== `origin/main` |
+| 3 | EOL 归一：`.gitattributes` 已提交；`git diff` 与 `git diff --ignore-cr-at-eol` 对 `vendor/libjamesdsp` **均为空**（历史换行符翻搅已消噪，rename 识别不会被 `core.autocrlf` 干扰） | ✅ 满足 | ✅ 满足：`git diff --stat -- vendor/libjamesdsp/jamesdsp` 为 0（仅 PATCHES.md 有在途补登记，见第 1 项） |
+| 4 | 补丁登记完整：`PATCHES.md` 逐条登记、源码 `[PATCHED-AuraDSP]` 标记与之一一对应，与迁移前树逐一随迁 | ⚠️ 核验时点 12 条；同日在途改动新增 1 处**未编号**标记（`jdspController.c` 内新函数 `JamesDSPFilterVendorOrder`） | ✅ **已补齐**：`PATCHES.md` **13 条**（P-001~P-013，P-003 保留编号，实际落地 12 项）；源码标记实测 **37 处**，分布于 5 个文件（`jdspController.c` 13、`jdsp_header.h` 15、`vacuumTube.c` 5、`stereoEnhancement.c` 3、`liveprogWrapper.c` 1）。v2 所记“38 处”为计数口径误差，以本表为准。迁移后抽查标记数 = 37 |
+| 5 | 双副本认知：Android `core/android/vendor-src/libjamesdsp` 分叉事实已登记（§1.1-4、§5.4） | ✅ 满足 | ✅ 本次不触碰该树 |
 
-> 结论：核验时点（2026-10-15）第 1~4 项前置条件均满足（第 5 项为范围约定，非门槛）；但**同日稍晚出现了新的在途工作（约 30 文件，含 vendor 链控文件与未编号补丁）**，因此执行 Phase 1 前必须重新满足第 1、4 两项——在途工作先落地、补丁先登记，之后方可 `git mv`。
+> 结论：执行时点（2026-10-16）第 1~5 项前置条件**全部满足**。唯一待办是把 P-013 补登记单独提交，使 `git mv` 工作树恢复洁净；随后即可按步骤 1 执行物理平移。
 
 ### 详细步骤规范：
 
@@ -223,8 +227,9 @@ git mv vendor/libjamesdsp/PATCHES.md engine/legacy/PATCHES.md
 #### 步骤 2：纠偏构建与头文件包含
 1. 编辑 `core/desktop/windows/CMakeLists.txt`，将 `VENDOR` 替换为 `LEGACY`（L4 / L8 / L41 / L42 四处，见 §3.2）；
 2. 编辑 `engine/engine_internal.h` L34-L35，更新包含路径（`legacy/jdsp/…`）；
-3. 同步注释与纪律引用：`engine/auradsp_engine.cpp` L4、`engine/auradsp_msvc_shim.h` L5、`core/desktop/windows/build_engine.sh` L5、`engine/AGENT.md` L52/L60；如本次编译 `tools/probe/fft_probe.cpp`，其 `-I` 参数改指 `engine/legacy`；
-4. 执行增量/全量构建：
+3. 编辑 `engine/chain/engine_audiofile.cpp` L12（`dr_mp3.h`）、`engine/chain/engine_convolver.cpp` L3-L4（`dr_wav.h` / `dr_flac.h`），同样改 `legacy/jdsp/…`（v2 矩阵遗漏，v3 补入）；
+4. 同步注释与纪律引用：`engine/auradsp_engine.cpp` L4、`engine/auradsp_msvc_shim.h` L5、`core/desktop/windows/build_engine.sh` L5、`engine/AGENT.md` L52/L60；如本次编译 `tools/probe/{fft,emit}_probe.cpp`，其 include 改 `legacy/jdsp/…` 且 `-I` 参数改指 `engine/`；
+5. 执行增量/全量构建：
    ```powershell
    cmake --build core/desktop/windows/out --config Release
    ```
@@ -295,3 +300,16 @@ python test/runner.py --smoke
 | `engine/` 现状树 | 28 个受管文件：`chain/` 5 cpp（含 `engine_audiofile.cpp`）、`dsp/` 10 cpp、`host/` 5 cpp + `plugin_host_util.h`、根 6 文件 | §2 目标树补入 `engine_audiofile.cpp`，`dsp/` 描述与现状一致 |
 | `vendor/` 现状 | 仅 `libjamesdsp/`、`plugin-api/`、`ORIGIN.md` | 与 §1.2“纯化后仅剩 plugin-api”目标衔接一致 |
 | 核验后在途工作（同日晚些时候观测） | `git status` 由 0 → 约 30 文件：Flutter 效果卡片 ×23、`engine/auradsp_engine.cpp`(+14)、`engine/chain/engine_probe.cpp`(+25)、`test/smoke/smoke_graph_order.py`(+43)、`vendor/…/jdspController.c`(+68，新函数 `JamesDSPFilterVendorOrder`，带未编号 `[PATCHED-AuraDSP]` 标记)、`vendor/…/jdsp_header.h`(+4) | Phase 0 第 1、4 项改为“执行前必须重新满足”；该新补丁落地时须补 `PATCHES.md` 登记（预计 P-013），否则违反铁律 §3.3 |
+
+### 6.1 v2 → v3 实测核对记录（2026-10-16 执行时点）
+
+| 核对项 | 实测结果 | 对方案的修正 |
+|---|---|---|
+| 仓库状态 | `git status --porcelain` 仅剩 ` M vendor/libjamesdsp/PATCHES.md`（+20 行）；HEAD `ae5d1e204ef493d0a997043fa2c5cde36b17f9e1` == `origin/main`，0 ahead / 0 behind；`046fafe..ae5d1e2` 三批（`2b23e3d` fix engine / `6416ab8` fix ui / `ae5d1e2` docs v2）均已推送 | Phase 0 第 1、2 项状态刷新为“已满足（唯一在途项为 P-013 补登记，需先单独提交）” |
+| v2 所述在途工作去向 | 约 30 文件已全部落地：`2b23e3d` 收 `engine/auradsp_engine.cpp`(+14)、`engine/chain/engine_probe.cpp`(+25)、`test/smoke/smoke_graph_order.py`(+43)、`vendor/…/jdspController.c`(+68)、`jdsp_header.h`(+4)；`6416ab8` 收 Flutter 效果卡片与 l10n | Phase 0 第 1 项解除阻塞；`git mv` 前置条件达成 |
+| 补丁登记 | `grep -c "^## P-" vendor/libjamesdsp/PATCHES.md` = **13**（P-001~P-013，P-003 保留编号 → 实际落地 12 项）；P-013 = `jdspController.c` + `jdsp_header.h` 的 `JamesDSPFilterVendorOrder` 上层 id 列表过滤层 | §1.1-2 计数由 12 条 / 11 项刷新为 13 条 / 12 项；Phase 0 第 4 项转 ✅ |
+| 源码标记计数 | `git grep -o "PATCHED-AuraDSP" ae5d1e2 -- vendor/libjamesdsp/jamesdsp` = **37** 处；按文件：`jdspController.c` 13、`jdsp_header.h` 15、`vacuumTube.c` 5、`stereoEnhancement.c` 3、`liveprogWrapper.c` 1（合计 37，`-c` 行口径与 `-o` 次口径一致） | 更正 v2 的“38 处”（计数口径误差）；§1.1-2、Phase 0 第 4 项、迁移后抽查基线统一为 37 |
+| **§3.1 矩阵遗漏的 jdsp include** | `git grep -n '"jdsp/'`（排除 legacy 树自身）命中 **5 个文件**，v2 矩阵仅列 `engine_internal.h` 与 `fft_probe.cpp` 两处；遗漏：`engine/chain/engine_audiofile.cpp:12`（`jdsp/Effects/eel2/dr_mp3.h`，`DRMP3_IMPLEMENTATION` 单实例化）、`engine/chain/engine_convolver.cpp:3-4`（`dr_wav.h` / `dr_flac.h`）、`tools/probe/emit_probe.cpp:6`（`jdsp/Effects/eel2/fft.h`） | §3.1 矩阵补入 3 行；步骤 2 增加对应编辑项；`fft_probe.cpp` 行的“include 写法不变”更正为“统一改 `legacy/jdsp/…`” |
+| legacy 树内部 include | `vendor/libjamesdsp/jamesdsp/` 内除 `jamesdsp.c:13`（`#include "jdsp/jdsp_header.h"`）外，全部为相对/裸名 include（如 `#include "Effects/eel2/fft.h"`）；`jamesdsp.c` 的引用相对自身目录，平移到 `engine/legacy/jamesdsp.c` 后依然成立 | 确认 Phase 1 平移**无需改动 legacy 树内任何一行** |
+| 测试侧 vendor 引用 | `git grep -n "libjamesdsp" -- test/` 仅命中注释中的 "vendor" 一词，无路径引用；`test/runner.py` 无 cmake 构建步骤（用预编译 DLL） | §3.3“0 影响”结论复核成立；Phase 3 需在构建后把 DLL 同步到 `test/` 侧 |
+| 活跃文档引用点 | `git grep -ln "libjamesdsp"` = 69 文件，其中**活跃**引用为：`AGENT.md:19`、`CLAUDE.md:5`、`README.md:134`、`core/desktop/windows/CMakeLists.txt:4`、`build_engine.sh:5`、`engine/AGENT.md:52/60`、`engine/auradsp_engine.cpp:4`；`docs/`、`.ai/`、`core/android` 按 §1.3 不回改 / 不动 | Phase 4 文档同步清单按上表执行；`vendor/ORIGIN.md` 增补“已吸收入 `engine/legacy/`”声明 |
