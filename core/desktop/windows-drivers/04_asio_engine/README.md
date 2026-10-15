@@ -38,7 +38,8 @@ UTF-8，load 匹配键保留原始 ANSI）；smoke 对账基准必须同为 Desc
 AsioHost.{h,cpp}   # IASIO RAII 封装（枚举→init→能力→createBuffers→start/stop）
 asio_probe.cpp     # 枚举 + 能力查询 JSON（无音频，零风险）
 asio_tone.cpp      # 选定驱动正弦播放 N 秒（对标 03 tone_play）
-AsioBridge.{h,cpp} # P2 常驻桥 C ABI（镜像 05 VmBridge.h 契约）+ .def 导出表
+# 常驻桥已搬入 ../bridge/asio_bridge/（AsioBridge.{h,cpp,def}，镜像
+# ../bridge/vm_bridge/VmBridge.h 契约）：桥统一收敛，宿主留守本目录。
 ```
 
 Phase 1（`fcd0f3f`）落码前三项；Phase 2（2026-10-15）落地桥四件，

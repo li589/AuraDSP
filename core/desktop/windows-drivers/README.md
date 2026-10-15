@@ -47,7 +47,7 @@
       `ases_probe`/`audioclient_probe` 激活对象与音频客户端、`auditses_probe` 审计会话）
 - [x] `03` 只读检测（端点枚举/FxProperties 五槽/签名开关；本机 48 端点全可读，
       在用微软 inbox SFX/MFX，无第三方 APO；`smoke_apo_inspect.py`）
-- [x] `05_vm_bridge/`（`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
+- [x] `bridge/vm_bridge/`（原 `05_vm_bridge/`，`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
       `verify_dll_copies` 校验 9 导出；桥 bypass 透传 + per-group 衰减峰值 +
       hottest-non-idle 可视化组 + 4 态显示 error/bypass/idle/processing）
 - [x] `04_asio_engine/` Phase 1（`fcd0f3f`：ASIO 宿主探测+发声，GPLv3 路线；
@@ -76,7 +76,7 @@
   安装器与一键脚本位于 `.tmp/wdk-install/`，装完内核态 `01_vaio_driver` 即可构建。
 - 当前 shell 非管理员 → APO 注册/回滚操作需另行提权。
 
-## Voicemeeter 版本兼容（05 常驻桥）
+## Voicemeeter 版本兼容（bridge/vm_bridge 常驻桥）
 
 - **Remote DLL 定位**：`vb_start` 优先用三级自省检出的安装目录
   （`Uninstall/VB:Voicemeeter*` 注册表 → API 自省 → PE 校验），覆盖标准版/香蕉/

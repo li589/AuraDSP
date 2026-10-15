@@ -4,7 +4,11 @@ project(auravm_drivers LANGUAGES C CXX)
 # 独立于引擎构建（解耦铁律）；用户态只需要 Windows SDK。
 set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
-set(VMBRIDGE "${CMAKE_CURRENT_SOURCE_DIR}/05_vm_bridge")
+# 常驻桥统一收敛到 bridge/（不编号）：vm_bridge / asio_bridge ……
+# 02/03/04 是传输/宿主实现，桥只是薄 FFI 适配层，单列编号会造成"有的单出、有的集成"的混乱。
+set(BRIDGEDIR "${CMAKE_CURRENT_SOURCE_DIR}/bridge")
+set(VMBRIDGE "${BRIDGEDIR}/vm_bridge")
+set(ASIOBRIDGE "${BRIDGEDIR}/asio_bridge")
 
 # ---- 04 ASIO 宿主（Steinberg ASIO SDK 2.3.4，GPLv3 路线）----
 # SDK 为外部工具链（同 NDK/Flutter SDK 铁律）：不 vendor、按路径引用。
@@ -43,14 +47,15 @@ foreach(tgt asio_probe asio_tone)
     set_property(TARGET ${tgt} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 endforeach()
 
-# 04 ASIO 常驻桥（Phase 2；app isolate 经 FFI 调用，镜像 05 VmBridge 契约）。
-# 引擎 DLL 动态加载逻辑与测试注入复用 02 的 VmPumpCore.h（与 05 同源，
-# 不出现第二套搜索路径/第二套测试信号数学）；ASIO 传输面走 auraasio_host。
+# ASIO 常驻桥（Phase 2；app isolate 经 FFI 调用，镜像 VmBridge 契约）。
+# 引擎 DLL 动态加载逻辑与测试注入复用 02 的 VmPumpCore.h（与 vm_bridge 同源，
+# 不出现第二套搜索路径/第二套测试信号数学）；ASIO 传输面走 auraasio_host
+#（宿主仍在 04_asio_engine，桥只含 FFI 适配层）。
 add_library(auraasio_bridge SHARED
-    "${ASIODIR}/AsioBridge.cpp"
-    "${ASIODIR}/AsioBridge.def"
+    "${ASIOBRIDGE}/AsioBridge.cpp"
+    "${ASIOBRIDGE}/AsioBridge.def"
 )
-target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}")
+target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}")
 target_link_libraries(auraasio_bridge PRIVATE auraasio_host ole32 version)
 target_compile_options(auraasio_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auraasio_bridge PROPERTY CXX_STANDARD 20)
@@ -185,7 +190,7 @@ set_property(TARGET ases_probe PROPERTY CXX_STANDARD 20)
 set_property(TARGET ases_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 
-# 05 常驻 VB 桥（app isolate 经 FFI 调用；VmRemoteLoader 编进本 DLL，
+# 常驻 VB 桥（app isolate 经 FFI 调用；VmRemoteLoader 编进本 DLL，
 # 复用 02 自省逻辑；泵回调核心走 VmPumpCore.h，与 vm_pump_test 同源）。
 add_library(auravm_bridge SHARED
     "${VMBRIDGE}/VmBridge.cpp"

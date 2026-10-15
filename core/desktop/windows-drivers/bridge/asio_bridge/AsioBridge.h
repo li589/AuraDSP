@@ -1,6 +1,6 @@
 // AsioBridge.h — ASIO 常驻桥 C ABI（app isolate 经 FFI 调用）。
 //
-// 契约镜像 05_vm_bridge/VmBridge.h（同款 detect/start/stop/status/set_param/
+// 契约镜像 bridge/vm_bridge/VmBridge.h（同款 detect/start/stop/status/set_param/
 // viz_read/bypass/test_start/test_stop 九件套），差异仅在：
 //   1. start 增加两个宿主参数 buf_size / out_pair（ASIO 驱动缓冲档与输出声道对，
 //      VM 桥没有对应物；Spec §2.3“通道对选择列入 P2 参数面”的落地）；

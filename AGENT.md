@@ -15,7 +15,7 @@
 |---|---|---|---|
 | **核心引擎** | `engine/` | C++20, MSVC/CMake | **P3a 后由 `core/desktop/engine_api` 上移至顶层**：`auradsp_engine.{h,cpp,def}`（ABI 契约）+ `engine_internal.h`（私有符号单一入口）+ `chain/`（`engine_{chain,convolver,viz,probe,audiofile}.cpp` 链与 IO）+ `dsp/` 10 个自研效果（含 `dsp_dyneq.cpp`）+ `host/` 5 个插件宿主 TU（**P4b 子目录化**：原根目录散列文件已归 `chain/` 与 `host/`）。严格遵循 **RT-Safe（音频线程零锁、零内存分配、零系统调用）** |
 | **平台适配器** | `core/desktop/windows/` | CMake + MSVC + WASAPI | 桌面 DLL 构建脚本与 Windows 音频适配；产物 `out/Release/auradsp_engine.dll` 为 DLL 真相源 |
-| **Windows 驱动套件** | `core/desktop/windows-drivers/` | Windows SDK（用户态）+ WDK（内核态，待） | 与 `engine/` 彻底解耦的传输/格式层：`02_voicemeeter_client/`（VM 回调泵）、`03_system_apo/`（自研 APO `AuraApo.dll` + Configurator/selftest/tone_play/诊断探针）、`05_vm_bridge/`（VB 桥，vbmode）。规则与现状见该目录 README |
+| **Windows 驱动套件** | `core/desktop/windows-drivers/` | Windows SDK（用户态）+ WDK（内核态，待） | 与 `engine/` 彻底解耦的传输/格式层：`02_voicemeeter_client/`（VM 回调泵）、`03_system_apo/`（自研 APO `AuraApo.dll` + Configurator/selftest/tone_play/诊断探针）、`bridge/`（无编号 FFI 桥：`vm_bridge/` VB 桥 + `asio_bridge/` ASIO 桥）。规则与现状见该目录 README |
 | **第三方源码** | `vendor/` | C / C++ | **只读**（P3a 后由 `core/desktop/vendor-src` 上移）：`libjamesdsp/` + `plugin-api/{clap,steinberg}`。补丁必须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `vendor/libjamesdsp/PATCHES.md` |
 | **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 251MB；`.gitignore` 已写 `/assets/**/*.irs`+`.vdc` 规则（走 release 附件），但**规则不回溯——仍有 2214 个历史 `.irs`/`.vdc`（约 73MB）处于跟踪中**，去跟踪（`git rm --cached`）属待裁定项，未擅动；新增大二进制不会被跟踪 |
 | **应用前端** | `app/auradsp_app/` | Flutter 3.47.7+, Dart FFI | 现代暗黑精致音频工作站 UI；6 页导航体系（主页/效果/脚本/插件/处理链/可视化）；高频可视化与状态隔离 |

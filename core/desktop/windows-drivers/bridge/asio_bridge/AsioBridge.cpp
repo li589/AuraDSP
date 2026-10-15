@@ -1,6 +1,6 @@
 // AsioBridge.cpp — ASIO 常驻桥实现（04_asio_engine Phase 2）。
 //
-// 结构镜像 05_vm_bridge/VmBridge.cpp（同款九件套 + 同款 RT/控制线程分离），
+// 结构镜像 bridge/vm_bridge/VmBridge.cpp（同款九件套 + 同款 RT/控制线程分离），
 // 差异：传输面由 VB 回调换成 ASIO bufferSwitch（AsioHost 封装 SDK），
 // 引擎加载/测试注入复用 02 的 VmPumpCore.h（TryLoadEngine / FillTestSignal），
 // 保证"与 05 同源"不出现第二套搜索逻辑或第二套测试信号数学。
@@ -13,8 +13,8 @@
 //   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
-#include "AsioHost.h"
-#include "../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
+#include "../../04_asio_engine/AsioHost.h"
+#include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
 #include <cstdio>
 #include <cstdlib>
