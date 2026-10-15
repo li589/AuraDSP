@@ -1,4 +1,9 @@
-// AsioBridge.h — ASIO 常驻桥 C ABI（app isolate 经 FFI 调用）。
+// AsioBridge.h — ASIO-Client 常驻桥 C ABI（app isolate 经 FFI 调用）。
+//
+// 本文件是 **Client 线**：打开第三方 ASIO 驱动，处理其输入→输出。与未来的
+// **Driver 线**（自身作为 ASIO 驱动被 DAW 打开，见 docs/20-执行双线规划）是
+// 两条线，不要混在一个目录里演进（Driver 线立项时单开目录，不进 bridge/）。
+//
 //
 // 契约镜像 bridge/vm_bridge/VmBridge.h（同款 detect/start/stop/status/set_param/
 // viz_read/bypass/test_start/test_stop 九件套），差异仅在：

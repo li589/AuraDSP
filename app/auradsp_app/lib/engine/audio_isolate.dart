@@ -695,6 +695,44 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (vbActive && vb != null && kind == 'stop') {
             vb!.testStop();
           }
+          // ASIO 模式：测试源走桥注入（自动静音驱动输入），isolate 本地 source
+          // 保持空——此前缺这支，ASIO 下点试音只有 playing 显示没有声。
+          if (asioActive && ab != null && kind != 'stop') {
+            final tk = kind == 'tone'
+                ? 1
+                : kind == 'pink'
+                    ? 2
+                    : kind == 'file'
+                        ? 3
+                        : 0;
+            if (tk == 3) {
+              final fpath = m['path'] as String;
+              final lb = lib;
+              final decoded = fpath.toLowerCase().endsWith('.mp3')
+                  ? (lb == null ? null : decodeMp3File(lb, fpath))
+                  : decodeWavFile(fpath);
+              if (decoded == null) {
+                send({'evt': 'error', 'msg': 'ASIO模式文件解析失败'});
+              } else {
+                final n = decoded.data.length ~/ 2;
+                final ptr = malloc<Float>(decoded.data.length);
+                try {
+                  ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
+                  ab!.testStart(3,
+                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
+                } finally {
+                  malloc.free(ptr);
+                }
+              }
+            } else if (tk != 0) {
+              ab!.testStart(tk);
+            }
+            send({'evt': 'playing', 'playing': true});
+            break;
+          }
+          if (asioActive && ab != null && kind == 'stop') {
+            ab!.testStop();
+          }
           switch (kind) {
             case 'stop':
               source = null;
