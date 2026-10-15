@@ -304,8 +304,18 @@ void ApplyParamsString(const char* s) {
 
 DWORD WINAPI MonitorProc(LPVOID) {
     // CHANGE 到达 → stop → 重建引擎 → start（泵同式；短暂断流可接受 v1）。
+    // 附带帧冻结看门狗：VB 彻底退出/引擎停转后回调不再来，表头会冻在最后一帧
+    // （设置页 LED 常亮的根因）。frames 是回调计数（静音也涨），冻住 3s 即判
+    // VB 走人：峰值清零 + 存活清零 + note 明示；回调恢复即清除。
+    uint64_t lastFrames = 0;
+    int stillRounds = 0;
+    int grace = 25;  // 启动宽限 ~5s（VB 首包可能来得慢，别一上来就判死刑）
+    bool gone = false;
     while (!InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) {
         if (InterlockedExchange(&g_b.ctx.pendingChange, 0) != 0) {
+            // 重建窗口内帧计数本就不动，看门狗此时闭嘴（别把"重启中"判成"走了"）。
+            lastFrames = g_b.ctx.frames;
+            stillRounds = 0;
             ++g_b.ctx.changes;
             // RT-safe 重建序列：stop(+50ms 余量) → 销毁旧句柄（无回调在跑）→
             // start 等新 STARTING 取新采样率 → 重建 → 回放参数镜像。
@@ -360,6 +370,32 @@ DWORD WINAPI MonitorProc(LPVOID) {
                 }
             } else {
                 snprintf(g_b.note, sizeof(g_b.note), "rebuild-failed");
+            }
+        }
+        // 帧冻结看门狗（重建分支内已重置时钟，这里只数"无重建的静默轮"）。
+        if (grace > 0) {
+            --grace;
+            lastFrames = g_b.ctx.frames;
+        } else {
+            const uint64_t f = g_b.ctx.frames;
+            if (f != lastFrames) {
+                lastFrames = f;
+                stillRounds = 0;
+                if (gone) {
+                    gone = false;
+                    if (strcmp(g_b.note, "voicemeeter-gone") == 0)
+                        g_b.note[0] = '\0';
+                }
+            } else if (++stillRounds >= 15) {
+                if (!gone) {
+                    gone = true;
+                    snprintf(g_b.note, sizeof(g_b.note), "voicemeeter-gone");
+                }
+                g_b.ctx.peakIn = 0.0;
+                for (int g = 0; g < 8; ++g) {
+                    g_b.ctx.peakGrp[g] = 0.0;
+                    g_b.ctx.grpLive[g] = false;
+                }
             }
         }
         Sleep(200);
