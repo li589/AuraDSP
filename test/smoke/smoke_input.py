@@ -109,6 +109,13 @@ check('balance.2 doubles R only', abs(rr / expect - 2.0) / 2.0 < 0.03 and abs(rl
       'l=%.4f r=%.4f' % (rl, rr))
 set_f('input.balance.2', 1.0)
 
+# 2b. balance.3..8 通道前缀分支 set/get 对称（声学由 1/2 代表覆盖）
+for _c in range(3, 9):
+    check('balance.%d set/get' % _c,
+          set_f('input.balance.%d' % _c, 1.5) == 0 and
+          abs(get_f('input.balance.%d' % _c)[1] - 1.5) < 1e-6)
+    set_f('input.balance.%d' % _c, 1.0)
+
 dll.auradsp_destroy(h)
 
 print()

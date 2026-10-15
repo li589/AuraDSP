@@ -100,6 +100,12 @@ print("5) reload ok rc=%d status=%d, slider1 persisted=%.1f -> peak=%.4f" % (
     rc, st, get_f("liveprog.param1"), p))
 assert rc == 0 and st == 1 and abs(p - 0.6) < 0.01
 
+# 5b) 滑块 2..8 set/get 对称（param1 已在 2)/5) 覆盖）
+for _s in range(2, 9):
+    assert set_f("liveprog.param%d" % _s, 0.5 * _s) == 0
+    assert abs(get_f("liveprog.param%d" % _s) - 0.5 * _s) < 1e-6
+print("5b) sliders 2..8 roundtrip ok")
+
 # 6) 代码回读
 rc, code_out = get_str("liveprog.code")
 print("6) code roundtrip rc=%d match=%s len=%d" % (rc, code_out == script, len(code_out)))

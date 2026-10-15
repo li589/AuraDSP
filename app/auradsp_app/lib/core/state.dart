@@ -1755,28 +1755,16 @@ class AppModel extends ChangeNotifier {
     send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': filterVendorOrder(order)});
   }
 
-  /// chain 行电平表映射：返回该 stage 在**当前 vendor 链**中的位置（0..11）。
-  /// 引擎 stagePeakL/R[i] 按当前链序（graph.order），自研 stage（gate/dyneq/
-  /// filter/bassmono/haas/exciter/loudness）引擎无逐级电平，返回 -1，UI 不画
-  /// 表——此前拿 UI 序号直连下标，12 号之后全是错位灯/恒灭。
-  static const _defaultVendorOrder = [
+  /// chain 行电平表映射：返回该 stage 在 kAuraStages 中的**固定**位置（0..11）。
+  /// 引擎 stagePeak 按效果 id 落槽（stageIdx），不跟 graph.order 走——重排后
+  /// 灯位不动才是对的；跟实时 order 走反而会在重排后全错位。
+  /// 自研 stage（gate/dyneq/filter/bassmono/haas/exciter/loudness）引擎无逐级
+  /// 电平，返回 -1，UI 不画表。
+  static const _vendorStageOrder = [
     'tube', 'comp', 'bass', 'eq', 'arbmag', 'convolver', 'ddc', 'liveprog',
     'crossfeed', 'stereo', 'reverb', 'output'
   ];
-  int stageMeterIndex(String id) {
-    List<String> ord;
-    if (graphOrder == null || graphOrder!.isEmpty) {
-      ord = _defaultVendorOrder;
-    } else {
-      ord = filterVendorOrder(graphOrder!)
-          .split(',')
-          .map((s) => s.trim())
-          .where((s) => s.isNotEmpty)
-          .toList();
-      if (ord.isEmpty) ord = _defaultVendorOrder;
-    }
-    return ord.indexOf(id);
-  }
+  int stageMeterIndex(String id) => _vendorStageOrder.indexOf(id);
 
   /// 获取某个处理链 stage 的启用状态
   bool isStageEnabled(String stageId) {
