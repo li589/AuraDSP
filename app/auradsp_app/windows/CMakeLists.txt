@@ -92,6 +92,14 @@ if(EXISTS "${AURAVM_BRIDGE_DLL}")
     COMPONENT Runtime)
 endif()
 
+# ASIO 常驻桥（04_asio_engine，Phase 3）：分发规则同上（有则随包无则跳过）。
+set(AURAASIO_BRIDGE_DLL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/auraasio_bridge.dll")
+if(EXISTS "${AURAASIO_BRIDGE_DLL}")
+  install(FILES "${AURAASIO_BRIDGE_DLL}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

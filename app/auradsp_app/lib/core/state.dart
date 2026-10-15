@@ -213,7 +213,7 @@ class AppModel extends ChangeNotifier {
   // 频谱门：进程内 playing 或 VB 桥活着都算 live。VB 模式不经过 source 选择，
   // playing 恒 false，若只看 playing，主页/可视化页在 VB 下永远空（电平/EQ
   // 页不看此门故正常——正是上报的症状）。
-  bool get liveSpectrum => playing || vbActive;
+  bool get liveSpectrum => playing || vbActive || asioActive;
   // 四态显示口径（右上徽标/主页 hero 共用）：engineState==0 混了"用户旁路"与
   // "无源空闲"，以前一刀切标"旁路"，导致开关 OFF 却处处显示旁路。拆开：
   // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
@@ -243,6 +243,12 @@ class AppModel extends ChangeNotifier {
   // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
   bool vbActive = false;
   Map<String, dynamic> vbInfo = {};
+  // ASIO 常驻桥状态（04 桥；isolate 回推，与 VB 桥互斥——一次只跑一个后端）。
+  bool asioActive = false;
+  Map<String, dynamic> asioInfo = {};
+  // asio_detect 驱动清单（isolate 回推；[{name,dll,clsid}]，name 为 UTF-8 显示名）。
+  List<Map<String, String>> asioDrivers = [];
+  String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
 
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
@@ -747,6 +753,16 @@ class AppModel extends ChangeNotifier {
         if (audioMode == 'vbcallback') {
           _toIso?.send({'cmd': 'vbmode', 'on': true});
         }
+        // 持久化的是 ASIO 模式：就绪后自动进桥（isolate 内部自带 detect）。
+        if (audioMode == 'asio') {
+          _toIso?.send({
+            'cmd': 'asiomode',
+            'on': true,
+            'driver': config.asioDriver,
+            'bufSize': config.asioBufSize,
+            'outPair': config.asioOutPair,
+          });
+        }
         break;
       case 'params':
         bassOn = (raw['bassEnable'] as int) != 0;
@@ -1009,6 +1025,30 @@ class AppModel extends ChangeNotifier {
           stageLevelsL.value = List<double>.filled(5, -90.0);
           stageLevelsR.value = List<double>.filled(5, -90.0);
         }
+        notifyListeners();
+        break;
+      case 'asiostatus':
+        final wasA = asioActive;
+        asioActive = (raw['running'] as bool?) ?? false;
+        asioInfo = Map<String, dynamic>.from(raw);
+        if (asioActive && !wasA) {
+          // ASIO 上升沿：同 VB——清残留帧，基线归零。
+          spectrum.value = List<double>.filled(32, 0.0);
+          eqInSpectrum.value = List<double>.filled(32, 0.0);
+          levelL.value = -90.0;
+          levelR.value = -90.0;
+          stageLevelsL.value = List<double>.filled(5, -90.0);
+          stageLevelsR.value = List<double>.filled(5, -90.0);
+        }
+        notifyListeners();
+        break;
+      case 'asiodrivers':
+        // 驱动清单（isolate 内 asio_detect 的结果；桥缺失/无驱动时 note 有原因）。
+        asioDrivers = [
+          for (final d in (raw['drivers'] as List?) ?? [])
+            Map<String, String>.from(d as Map),
+        ];
+        asioDriversNote = (raw['note'] as String?) ?? '';
         notifyListeners();
         break;
       case 'pluginScanProgress':
@@ -2636,13 +2676,15 @@ void setSampleRate(int rate) {
 }
 
 /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
-/// vbcallback 切入/切出时联动 isolate 启停 VB 桥（WASAPI 路径随之暂停/恢复）；
-/// 其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
+/// vbcallback/asio 切入/切出时联动 isolate 启停对应桥（WASAPI 路径随之
+/// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
 void setAudioMode(String id) {
   final valid = AudioModes.normalize(id);
   if (valid == audioMode && config.audioMode == valid) return;
   final wasVb = audioMode == 'vbcallback';
   final isVb = valid == 'vbcallback';
+  final wasAsio = audioMode == 'asio';
+  final isAsio = valid == 'asio';
   audioMode = valid;
   config.audioMode = valid;
   ConfigManager.save(config);
@@ -2653,7 +2695,62 @@ void setAudioMode(String id) {
       vbInfo = {};
     }
   }
+  if (wasAsio != isAsio) {
+    // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
+    _toIso?.send({
+      'cmd': 'asiomode',
+      'on': isAsio,
+      'driver': config.asioDriver,
+      'bufSize': config.asioBufSize,
+      'outPair': config.asioOutPair,
+    });
+    if (!isAsio) {
+      asioActive = false;
+      asioInfo = {};
+    }
+  }
   notifyListeners();
+}
+
+/// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。
+void setAsioDriver(String name) {
+  if (config.asioDriver == name) return;
+  config.asioDriver = name;
+  ConfigManager.save(config);
+  if (asioActive) _sendAsioRestart();
+  notifyListeners();
+}
+
+/// ASIO 缓冲档：0=驱动 preferredSize；桥在跑则热切换。
+void setAsioBufSize(int frames) {
+  if (config.asioBufSize == frames) return;
+  config.asioBufSize = frames;
+  ConfigManager.save(config);
+  if (asioActive) _sendAsioRestart();
+  notifyListeners();
+}
+
+/// ASIO 输出对起始声道（L=R+1 配对）；桥在跑则热切换。
+void setAsioOutPair(int ch) {
+  if (config.asioOutPair == ch) return;
+  config.asioOutPair = ch;
+  ConfigManager.save(config);
+  if (asioActive) _sendAsioRestart();
+  notifyListeners();
+}
+
+/// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
+void refreshAsioDrivers() {
+  _toIso?.send({'cmd': 'asiodetect'});
+}
+
+void _sendAsioRestart() {
+  _toIso?.send({
+    'cmd': 'asiorestart',
+    'driver': config.asioDriver,
+    'bufSize': config.asioBufSize,
+    'outPair': config.asioOutPair,
+  });
 }
 
 void setEqBandsCount(int count) {

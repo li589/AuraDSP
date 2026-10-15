@@ -194,7 +194,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get audioMode => 'オーディオモード';
 
   @override
-  String get audioModeHint => 'エンジン再起動後に有効（今後のバージョンで接続）';
+  String get audioModeHint => 'ASIO は即時有効、その他はエンジン再起動後に有効';
 
   @override
   String get audioDevice => 'デバイス';
@@ -219,6 +219,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get modeAsio => 'ASIO';
+
+  @override
+  String get asioDriver => 'ASIO ドライバー';
+
+  @override
+  String get asioBufSize => 'バッファサイズ';
+
+  @override
+  String get asioBufAuto => '自動（ドライバー推奨）';
+
+  @override
+  String get asioOutPair => '出力ペア';
+
+  @override
+  String get asioRefresh => '更新';
+
+  @override
+  String get asioSwitches => 'コールバック';
 
   @override
   String get modeRoot => 'Root';
