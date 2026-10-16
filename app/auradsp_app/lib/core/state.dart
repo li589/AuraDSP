@@ -456,13 +456,21 @@ class AppModel extends ChangeNotifier {
 
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
-  // System APO 挂载状态
+  // System APO 挂载状态与运行时遥测
   bool apoAttached = false;
+  bool apoHeartbeatAlive = false;
+  int apoHeartbeatSeq = 0;
+  int apoHeartbeatSr = 0;
+  int apoHeartbeatFrames = 0;
+  List<Map<String, dynamic>> apoInstalledEndpoints = [];
+  bool isApoOperating = false;
+  bool apoCompositeMode = false;
 
   // 底层驱动与音频服务异常信息跟踪（用于 UI 内联报警与用户引导）
   String? lastAudioError;
   String? lastVaioError;
   String? lastAsioError;
+  String? lastApoError;
 
   void clearAudioError() {
     lastAudioError = null;
@@ -476,6 +484,11 @@ class AppModel extends ChangeNotifier {
 
   void clearAsioError() {
     lastAsioError = null;
+    notifyListeners();
+  }
+
+  void clearApoError() {
+    lastApoError = null;
     notifyListeners();
   }
 
@@ -889,6 +902,7 @@ class AppModel extends ChangeNotifier {
     }
     if (!testing) {
       checkAsioDriverStatus();
+      checkApoStatus();
     }
     // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
     final m = config.vbBusMask & 0xFF;
@@ -3699,6 +3713,211 @@ File? _findAsioRegisterScript() {
     dir = parent;
   }
   return null;
+}
+
+File? _findApoConfigScript() {
+  var dir = Directory.current;
+  for (var i = 0; i < 4; i++) {
+    final candidate = File('${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py');
+    if (candidate.existsSync()) return candidate;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
+void setApoCompositeMode(bool enabled) {
+  apoCompositeMode = enabled;
+  notifyListeners();
+}
+
+/// 检查 System APO 在系统注册与端点挂载状态，并检测心跳
+Future<void> checkApoStatus({double timeout = 0.4}) async {
+  if (!Platform.isWindows) {
+    apoAttached = false;
+    apoHeartbeatAlive = false;
+    notifyListeners();
+    return;
+  }
+  try {
+    final script = _findApoConfigScript();
+    if (script != null) {
+      final res = await Process.run('python', [
+        script.path,
+        'status',
+        '--timeout',
+        timeout.toString(),
+        '--json',
+      ]);
+      if (res.exitCode == 0) {
+        final out = res.stdout.toString().trim();
+        final lines = out.split(RegExp(r'\r?\n')).where((l) => l.trim().startsWith('{')).toList();
+        if (lines.isNotEmpty) {
+          final data = jsonDecode(lines.last) as Map<String, dynamic>;
+          final rawInstalled = data['installed_endpoints'] as List?;
+          final installed = rawInstalled != null
+              ? rawInstalled.map((e) => Map<String, dynamic>.from(e as Map)).toList()
+              : <Map<String, dynamic>>[];
+          apoInstalledEndpoints = installed;
+
+          final target = config.apoTargetEndpoint;
+          if (target.isEmpty) {
+            apoAttached = installed.isNotEmpty;
+          } else {
+            apoAttached = installed.any((e) {
+              final short = e['short_guid']?.toString().toLowerCase() ?? '';
+              final name = e['DeviceName']?.toString().toLowerCase() ?? '';
+              final id = e['EndpointId']?.toString().toLowerCase() ?? '';
+              final t = target.toLowerCase();
+              return short.contains(t) || name.contains(t) || id.contains(t) || t.contains(short);
+            });
+          }
+
+          final hb = data['heartbeat'] as Map<String, dynamic>?;
+          if (hb != null && hb['alive'] == true) {
+            apoHeartbeatAlive = true;
+            apoHeartbeatSeq = (hb['seq'] as num?)?.toInt() ?? 0;
+            apoHeartbeatSr = (hb['sr'] as num?)?.toInt() ?? 0;
+            apoHeartbeatFrames = (hb['frames'] as num?)?.toInt() ?? 0;
+          } else {
+            apoHeartbeatAlive = false;
+          }
+          lastApoError = null;
+          notifyListeners();
+          return;
+        }
+      }
+    }
+  } catch (e) {
+    // 保持安静回退
+  }
+  notifyListeners();
+}
+
+/// 一键将 System APO 挂载到指定音频端点（支持 Windows UAC 提权授权，支持复合插槽）
+Future<bool> attachSystemApo({
+  String? endpointNameOrId,
+  bool? composite,
+  bool elevated = true,
+}) async {
+  if (!Platform.isWindows) return false;
+  isApoOperating = true;
+  lastApoError = null;
+  notifyListeners();
+
+  try {
+    final script = _findApoConfigScript();
+    if (script == null) {
+      lastApoError = '未找到 apo_config.py 驱动管理脚本';
+      isApoOperating = false;
+      notifyListeners();
+      return false;
+    }
+
+    final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+        ? endpointNameOrId
+        : config.apoTargetEndpoint;
+    if (target.isEmpty) {
+      lastApoError = '请先选择需要附加的音频端点';
+      isApoOperating = false;
+      notifyListeners();
+      return false;
+    }
+
+    final useComposite = composite ?? apoCompositeMode;
+    ProcessResult res;
+    if (elevated) {
+      final modeArg = useComposite ? ", '--composite'" : "";
+      final cmd =
+          "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'install', '\"$target\"', '--yes', '--force'$modeArg";
+      res = await Process.run('powershell', ['-Command', cmd]);
+    } else {
+      final args = [
+        script.path,
+        'install',
+        target,
+        '--yes',
+        '--force',
+        if (useComposite) '--composite',
+        '--json',
+      ];
+      res = await Process.run('python', args);
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    await checkApoStatus(timeout: 0.6);
+
+    final ok = (res.exitCode == 0) && apoAttached;
+    if (!ok && lastApoError == null) {
+      lastApoError = 'System APO 附加未生效，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+    }
+    isApoOperating = false;
+    notifyListeners();
+    return ok;
+  } catch (e) {
+    lastApoError = 'System APO 附加异常: $e';
+    isApoOperating = false;
+    notifyListeners();
+    return false;
+  }
+}
+
+/// 一键卸载已挂载的 System APO 并精确还原原始系统/厂商 APO
+Future<bool> detachSystemApo({
+  String? endpointNameOrId,
+  bool elevated = true,
+}) async {
+  if (!Platform.isWindows) return false;
+  isApoOperating = true;
+  lastApoError = null;
+  notifyListeners();
+
+  try {
+    final script = _findApoConfigScript();
+    if (script == null) {
+      lastApoError = '未找到 apo_config.py 驱动管理脚本';
+      isApoOperating = false;
+      notifyListeners();
+      return false;
+    }
+
+    final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+        ? endpointNameOrId
+        : config.apoTargetEndpoint;
+    ProcessResult res;
+    if (elevated) {
+      final targetArg = target.isNotEmpty ? ", '\"$target\"'" : "";
+      final cmd =
+          "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'uninstall'$targetArg, '--yes'";
+      res = await Process.run('powershell', ['-Command', cmd]);
+    } else {
+      final args = [
+        script.path,
+        'uninstall',
+        if (target.isNotEmpty) target,
+        '--yes',
+        '--json',
+      ];
+      res = await Process.run('python', args);
+    }
+
+    await Future.delayed(const Duration(milliseconds: 600));
+    await checkApoStatus(timeout: 0.6);
+
+    final ok = (res.exitCode == 0);
+    if (!ok && lastApoError == null) {
+      lastApoError = 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
+    }
+    isApoOperating = false;
+    notifyListeners();
+    return ok;
+  } catch (e) {
+    lastApoError = 'System APO 卸载异常: $e';
+    isApoOperating = false;
+    notifyListeners();
+    return false;
+  }
 }
 
 /// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。

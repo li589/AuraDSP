@@ -1,28 +1,54 @@
-// AuraApo.cpp — clean-room 实现（骨架模式对标 EAPO，逐行自写）。
+// AuraApo.cpp — 自研 System APO v1（透传 + 心跳 + RT-safe）。
 #include "AuraApo.h"
 
 #include <sddl.h>
+#include <cstdio>
+#include <cstring>
 
 #include "AuraApoGuid.h"
 #include "AuraHeartbeat.h"
 
 long CAuraApo::instCount = 0;
 
-const CRegAPOProperties<2> CAuraApo::regEfxProperties(
-    // 注册接口：base APO + SysFx2（EAPO/MS LFX 同式 base；现代 EFX 链要 v2）。
-    // SysFx-v1-only 会触发 audiodg wrapper QI 自旋，勿删 v2。
-    CLSID_AuraApoEfx, L"AuraAPO EFX", L"AuraDSP", 1, 0, IID_IAudioProcessingObject,
-    DEFAULT_APOREG_FLAGS, DEFAULT_APOREG_MININPUTCONNECTIONS,
-    DEFAULT_APOREG_MAXINPUTCONNECTIONS, DEFAULT_APOREG_MINOUTPUTCONNECTIONS,
-    DEFAULT_APOREG_MAXOUTPUTCONNECTIONS, DEFAULT_APOREG_MAXINSTANCES,
-    IID_IAudioSystemEffects2);
+// ---------------------------------------------------------------------------
+// Inner IUnknown（非委托，控制实际对象生命周期）
+// ---------------------------------------------------------------------------
+STDMETHODIMP CAuraApo::Inner::QueryInterface(REFIID riid, void** ppv) {
+    if (!ppv) return E_POINTER;
+    if (riid == IID_IUnknown) {
+        *ppv = static_cast<IUnknown*>(this);
+    } else if (riid == IID_IAudioProcessingObject) {
+        *ppv = static_cast<IAudioProcessingObject*>(self);
+    } else if (riid == IID_IAudioProcessingObjectRT) {
+        *ppv = static_cast<IAudioProcessingObjectRT*>(self);
+    } else if (riid == IID_IAudioProcessingObjectConfiguration) {
+        *ppv = static_cast<IAudioProcessingObjectConfiguration*>(self);
+    } else if (riid == IID_IAudioSystemEffects) {
+        *ppv = static_cast<IAudioSystemEffects*>(self);
+    } else {
+        *ppv = nullptr;
+        return E_NOINTERFACE;
+    }
+    ((IUnknown*)*ppv)->AddRef();
+    return S_OK;
+}
 
-CAuraApo::CAuraApo(IUnknown* pUnkOuter)
-    : CBaseAudioProcessingObject(regEfxProperties), m_outer(pUnkOuter) {
-    // EAPO 同式：outer 永不空（非聚合时指回自身非委托态），QI 全走委托。
-    // （reinterpret_cast 因 INonDelegatingUnknown 非 IUnknown 派生，EAPO 原式。）
-    if (!m_outer)
-        m_outer = reinterpret_cast<IUnknown*>(static_cast<INonDelegatingUnknown*>(this));
+STDMETHODIMP_(ULONG) CAuraApo::Inner::AddRef() {
+    return (ULONG)self->refs_.fetch_add(1) + 1;
+}
+
+STDMETHODIMP_(ULONG) CAuraApo::Inner::Release() {
+    ULONG n = (ULONG)self->refs_.fetch_sub(1) - 1;
+    if (n == 0) delete self;
+    return n;
+}
+
+// ---------------------------------------------------------------------------
+// CAuraApo 构造与析构
+// ---------------------------------------------------------------------------
+CAuraApo::CAuraApo(IUnknown* outer) {
+    inner_.self = this;
+    outer_ = outer ? outer : static_cast<IUnknown*>(&inner_);
     InterlockedIncrement(&instCount);
 }
 
@@ -31,162 +57,191 @@ CAuraApo::~CAuraApo() {
     InterlockedDecrement(&instCount);
 }
 
-HRESULT __stdcall CAuraApo::QueryInterface(REFIID iid, void** ppv) {
+// ---------------------------------------------------------------------------
+// 委托态 IUnknown（委托给 outer）
+// ---------------------------------------------------------------------------
+STDMETHODIMP CAuraApo::QueryInterface(REFIID riid, void** ppv) {
     if (!ppv) return E_POINTER;
-    // EAPO 同式：无条件委托 outer（构造期已保证非空）。
-    return m_outer->QueryInterface(iid, ppv);
+    return outer_->QueryInterface(riid, ppv);
 }
 
-ULONG __stdcall CAuraApo::AddRef() {
-    return m_outer->AddRef();
+STDMETHODIMP_(ULONG) CAuraApo::AddRef() {
+    return outer_->AddRef();
 }
 
-ULONG __stdcall CAuraApo::Release() {
-    return m_outer->Release();
+STDMETHODIMP_(ULONG) CAuraApo::Release() {
+    return outer_->Release();
 }
 
-HRESULT __stdcall CAuraApo::NonDelegatingQueryInterface(REFIID iid, void** ppv) {
-    if (!ppv) return E_POINTER;
-    // COM 同一性说明：EAPO 同式返 INonDelegatingUnknown*（多继承下与 APO 指针
-    // 地址不同，但 EAPO 量产验证无碍；勿“修复”为 APO 指针，保持同式）。
-    if (iid == IID_IUnknown)
-        *ppv = static_cast<INonDelegatingUnknown*>(this);
-    else if (iid == IID_IAudioSystemEffects)
-        *ppv = static_cast<IAudioSystemEffects*>(static_cast<IAudioSystemEffects2*>(this));
-    else if (iid == IID_IAudioSystemEffects2)
-        *ppv = static_cast<IAudioSystemEffects2*>(this);
-    else if (iid == IID_IAudioProcessingObject)
-        *ppv = static_cast<IAudioProcessingObject*>(this);
-    else if (iid == IID_IAudioProcessingObjectRT)
-        *ppv = static_cast<IAudioProcessingObjectRT*>(this);
-    else if (iid == IID_IAudioProcessingObjectConfiguration)
-        *ppv = static_cast<IAudioProcessingObjectConfiguration*>(this);
-    else {
-        *ppv = nullptr;
-        return E_NOINTERFACE;
-    }
-    NonDelegatingAddRef();
+// ---------------------------------------------------------------------------
+// IAudioProcessingObject
+// ---------------------------------------------------------------------------
+STDMETHODIMP CAuraApo::Reset() {
     return S_OK;
 }
 
-ULONG __stdcall CAuraApo::NonDelegatingAddRef() {
-    return (ULONG)InterlockedIncrement(&m_ref);
-}
-
-ULONG __stdcall CAuraApo::NonDelegatingRelease() {
-    const ULONG n = (ULONG)InterlockedDecrement(&m_ref);
-    if (n == 0) delete this;
-    return n;
-}
-
-HRESULT __stdcall CAuraApo::GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects,
-                                           HANDLE /*Event*/) {
-    // v1 无子效果：空表（maybenull 合法）；Event 静态永不变，无需记。
-    if (!ppEffectsIds || !pcEffects) return E_POINTER;
-    *ppEffectsIds = nullptr;
-    *pcEffects = 0;
-    return S_OK;
-}
-
-HRESULT __stdcall CAuraApo::GetLatency(HNSTIME* pTime) {
+STDMETHODIMP CAuraApo::GetLatency(HNSTIME* pTime) {
     if (!pTime) return E_POINTER;
-    // EAPO 同式：未 Lock 前报 ALREADY_UNLOCKED（audioeng 借此辨锁态）。
-    if (!m_bIsLocked) return APOERR_ALREADY_UNLOCKED;
-    *pTime = 0;  // v1 透传零附加延迟
+    *pTime = 0;  // 透传零延迟
     return S_OK;
 }
 
-HRESULT __stdcall CAuraApo::Initialize(UINT32 /*cbDataSize*/, BYTE* /*pbyData*/) {
-    return S_OK;  // v1 无初始化参数，照单全收
+STDMETHODIMP CAuraApo::GetRegistrationProperties(APO_REG_PROPERTIES** ppRegProps) {
+    if (!ppRegProps) return E_POINTER;
+    auto* p = (APO_REG_PROPERTIES*)CoTaskMemAlloc(sizeof(APO_REG_PROPERTIES));
+    if (!p) return E_OUTOFMEMORY;
+    memset(p, 0, sizeof(*p));
+    p->clsid = CLSID_AuraApoEfx;
+    p->Flags = (APO_FLAG)(APO_FLAG_INPLACE | APO_FLAG_DEFAULT);
+    wcscpy_s(p->szFriendlyName, L"AuraAPO EFX");
+    wcscpy_s(p->szCopyrightInfo, L"AuraDSP");
+    p->u32MajorVersion = 1;
+    p->u32MinorVersion = 0;
+    p->u32MinInputConnections = 1;
+    p->u32MaxInputConnections = 1;
+    p->u32MinOutputConnections = 1;
+    p->u32MaxOutputConnections = 1;
+    p->u32MaxInstances = 0xFFFFFFFF;
+    p->u32NumAPOInterfaces = 1;
+    p->iidAPOInterfaceList[0] = IID_IAudioProcessingObject;
+    *ppRegProps = p;
+    return S_OK;
 }
 
-HRESULT __stdcall CAuraApo::LockForProcess(UINT32 nIn, APO_CONNECTION_DESCRIPTOR** ppIn,
-                                           UINT32 nOut, APO_CONNECTION_DESCRIPTOR** ppOut) {
-    if ((nIn == 0 || !ppIn) || (nOut == 0 || !ppOut)) return E_INVALIDARG;
-    m_bIsLocked = true;  // 基类锁态（供 GetLatency；基类实现被覆盖故手动维护）
-    m_nConn = nIn < nOut ? nIn : nOut;
-    if (m_nConn > 8) m_nConn = 8;
-    m_sampleRate = 0;
-    for (UINT32 i = 0; i < m_nConn; ++i) {
-        // pFormat 是 IAudioMediaType*（不是 WAVEFORMATEX，强转是未定义行为）。
-        UNCOMPRESSEDAUDIOFORMAT uf{};
-        UINT32 align = 4;
-        if (ppIn[i]->pFormat &&
-            SUCCEEDED(ppIn[i]->pFormat->GetUncompressedAudioFormat(&uf)) &&
-            uf.dwSamplesPerFrame > 0 && uf.dwSamplesPerFrame <= 32 &&
-            uf.dwBytesPerSampleContainer > 0 && uf.dwBytesPerSampleContainer <= 8) {
-            align = uf.dwSamplesPerFrame * uf.dwBytesPerSampleContainer;
-            if (uf.fFramesPerSecond > (FLOAT32)m_sampleRate)
-                m_sampleRate = (UINT32)uf.fFramesPerSecond;
+STDMETHODIMP CAuraApo::Initialize(UINT32 /*cbDataSize*/, BYTE* /*pbyData*/) {
+    return S_OK;
+}
+
+bool CAuraApo::IsFloat32Type(IAudioMediaType* type) {
+    const WAVEFORMATEX* wf = type ? type->GetAudioFormat() : nullptr;
+    if (!wf) return false;
+    if (wf->wFormatTag == WAVE_FORMAT_IEEE_FLOAT) return true;
+    if (wf->wFormatTag == WAVE_FORMAT_EXTENSIBLE) {
+        const auto* wfe = (const WAVEFORMATEXTENSIBLE*)wf;
+        return IsEqualGUID(wfe->SubFormat, KSDATAFORMAT_SUBTYPE_IEEE_FLOAT) != FALSE;
+    }
+    return false;
+}
+
+HRESULT CAuraApo::CheckFormat(IAudioMediaType* opposite, IAudioMediaType* requested,
+                              IAudioMediaType** supported) {
+    if (!requested || !supported) return E_POINTER;
+    *supported = nullptr;
+    if (opposite) {
+        const WAVEFORMATEX* a = opposite->GetAudioFormat();
+        const WAVEFORMATEX* b = requested->GetAudioFormat();
+        if (a && b && (a->nChannels != b->nChannels || a->nSamplesPerSec != b->nSamplesPerSec ||
+                       a->wBitsPerSample != b->wBitsPerSample)) {
+            *supported = opposite;
+            opposite->AddRef();
+            return S_FALSE;
         }
-        m_blockAlign[i] = align ? align : 4;
     }
-    if (!OpenHeartbeat()) {
-        // 心跳建不起（audiodg 上下文权限/命名空间所限）也绝不断流：
-        // 降级为纯透传（无心跳上报）。处理优先于观测。
-    }
+    if (!IsFloat32Type(requested)) return APOERR_FORMAT_NOT_SUPPORTED;
+    *supported = requested;
+    requested->AddRef();
     return S_OK;
 }
 
-HRESULT __stdcall CAuraApo::UnlockForProcess() {
+STDMETHODIMP CAuraApo::IsInputFormatSupported(IAudioMediaType* pOppositeFormat,
+                                              IAudioMediaType* pRequestedInputFormat,
+                                              IAudioMediaType** ppSupportedInputFormat) {
+    return CheckFormat(pOppositeFormat, pRequestedInputFormat, ppSupportedInputFormat);
+}
+
+STDMETHODIMP CAuraApo::IsOutputFormatSupported(IAudioMediaType* pOppositeFormat,
+                                               IAudioMediaType* pRequestedOutputFormat,
+                                               IAudioMediaType** ppSupportedOutputFormat) {
+    return CheckFormat(pOppositeFormat, pRequestedOutputFormat, ppSupportedOutputFormat);
+}
+
+STDMETHODIMP CAuraApo::GetInputChannelCount(UINT32* pu32ChannelCount) {
+    if (!pu32ChannelCount) return E_POINTER;
+    *pu32ChannelCount = channels_ ? channels_ : 2;
+    return S_OK;
+}
+
+// ---------------------------------------------------------------------------
+// IAudioProcessingObjectConfiguration
+// ---------------------------------------------------------------------------
+STDMETHODIMP CAuraApo::LockForProcess(UINT32 numIn, APO_CONNECTION_DESCRIPTOR** in,
+                                      UINT32 numOut, APO_CONNECTION_DESCRIPTOR** out) {
+    if (numIn != 1 || numOut != 1 || !in || !out || !in[0] || !out[0])
+        return APOERR_NUM_CONNECTIONS_INVALID;
+    const WAVEFORMATEX* wf = in[0]->pFormat ? in[0]->pFormat->GetAudioFormat() : nullptr;
+    if (!wf) return APOERR_INVALID_CONNECTION_FORMAT;
+    channels_ = wf->nChannels ? wf->nChannels : 2;
+    rate_ = wf->nSamplesPerSec ? wf->nSamplesPerSec : 48000;
+    blockAlign_ = wf->nBlockAlign ? wf->nBlockAlign : (channels_ * sizeof(float));
+    locked_ = true;
+    OpenHeartbeat();
+    return S_OK;
+}
+
+STDMETHODIMP CAuraApo::UnlockForProcess() {
     CloseHeartbeat();
-    m_bIsLocked = false;
-    m_nConn = 0;
+    locked_ = false;
     return S_OK;
 }
 
-void __stdcall CAuraApo::APOProcess(UINT32 nIn, APO_CONNECTION_PROPERTY** ppIn, UINT32 nOut,
-                                    APO_CONNECTION_PROPERTY** ppOut) {
-    UINT32 n = nIn < nOut ? nIn : nOut;
-    if (n > m_nConn) n = m_nConn;
-    if (n > 8) n = 8;
-    for (UINT32 i = 0; i < n; ++i) {
-        const APO_CONNECTION_PROPERTY* in = ppIn[i];
-        APO_CONNECTION_PROPERTY* out = ppOut[i];
-        // pBuffer 是 UINT_PTR 整型（AudioAPOTypes.h），必须显式转指针。
-        const BYTE* inBuf = in ? (const BYTE*)in->pBuffer : nullptr;
-        BYTE* outBuf = out ? (BYTE*)out->pBuffer : nullptr;
-        if (!in || !out || !inBuf || !outBuf) continue;
-        UINT32 frames = in->u32ValidFrameCount;
-        const size_t bytes = (size_t)frames * (m_blockAlign[i] ? m_blockAlign[i] : 4);
-        if (in->u32BufferFlags & BUFFER_SILENT) {
-            // SILENT 输入：清零输出并透传标志（EAPO 同式；杜绝垃圾爆音）。
-            memset(outBuf, 0, bytes);
-            out->u32BufferFlags = BUFFER_SILENT;
-        } else {
-            memcpy(outBuf, inBuf, bytes);
-            out->u32BufferFlags = BUFFER_VALID;
-        }
-        out->u32ValidFrameCount = frames;
-        const LONG seq = InterlockedIncrement(&m_seq);
-        // framesTotal 累加（LONGLONG 原子加）。
-        const LONGLONG total =
-            InterlockedExchangeAdd64((volatile LONGLONG*)&m_frames, (LONGLONG)frames) +
-            (LONGLONG)frames;
-        // 心跳映射：Lock 期建好即只写（无锁、无等待；失败路径压根没建，空指针跳过）。
-        AuraHeartbeat* hb = (AuraHeartbeat*)m_hbView;
-        if (hb) {
-            hb->seq = (uint32_t)seq;
-            hb->framesTotal = (uint64_t)total;
-            hb->lastNbs = frames;
-        }
+// ---------------------------------------------------------------------------
+// IAudioProcessingObjectRT
+// ---------------------------------------------------------------------------
+STDMETHODIMP_(void) CAuraApo::APOProcess(UINT32 numIn, APO_CONNECTION_PROPERTY** in,
+                                         UINT32 numOut, APO_CONNECTION_PROPERTY** out) {
+    if (numIn != 1 || numOut != 1 || !in || !out || !in[0] || !out[0]) return;
+    const APO_CONNECTION_PROPERTY* cin = in[0];
+    APO_CONNECTION_PROPERTY* cout = out[0];
+    const UINT32 frames = cin->u32ValidFrameCount;
+    const BYTE* src = (const BYTE*)cin->pBuffer;
+    BYTE* dst = (BYTE*)cout->pBuffer;
+    const size_t bytes = (size_t)frames * (blockAlign_ ? blockAlign_ : (channels_ * sizeof(float)));
+
+    if (cin->u32BufferFlags & BUFFER_SILENT) {
+        if (dst) memset(dst, 0, bytes);
+        cout->u32BufferFlags = BUFFER_SILENT;
+    } else {
+        if (dst && src && dst != src) memcpy(dst, src, bytes);
+        cout->u32BufferFlags = cin->u32BufferFlags;
+    }
+    cout->u32ValidFrameCount = frames;
+
+    // 心跳上报：无锁、无分配
+    const LONG seq = InterlockedIncrement(&seq_);
+    const LONGLONG total =
+        InterlockedExchangeAdd64((volatile LONGLONG*)&frames_, (LONGLONG)frames) + (LONGLONG)frames;
+    auto* hb = (AuraHeartbeat*)hbView_;
+    if (hb) {
+        hb->seq = (uint32_t)seq;
+        hb->framesTotal = (uint64_t)total;
+        hb->lastNbs = frames;
     }
 }
 
-bool CAuraApo::OpenHeartbeat() {
+STDMETHODIMP_(UINT32) CAuraApo::CalcInputFrames(UINT32 outputFrames) {
+    return outputFrames;
+}
+
+STDMETHODIMP_(UINT32) CAuraApo::CalcOutputFrames(UINT32 inputFrames) {
+    return inputFrames;
+}
+
+// ---------------------------------------------------------------------------
+// 心跳共享映射（LocalService + LPAC 穿透）
+// ---------------------------------------------------------------------------
+void CAuraApo::OpenHeartbeat() {
     CloseHeartbeat();
-    // LocalService（audiodg）+ 任何用户进程可读写（SPEC §3 DACL 模式）。
+    // LocalService（audiodg）+ 任何用户进程可读写 + LPAC (S-1-15-2-1, S-1-15-2-2)
     PSECURITY_DESCRIPTOR sd = nullptr;
     if (!ConvertStringSecurityDescriptorToSecurityDescriptorW(
-            L"D:(A;;GA;;;LS)(A;;GA;;;WD)", SDDL_REVISION_1, &sd, nullptr))
-        return false;
+            L"D:(A;;GA;;;LS)(A;;GA;;;WD)(A;;GA;;;S-1-15-2-1)(A;;GA;;;S-1-15-2-2)", SDDL_REVISION_1,
+            &sd, nullptr))
+        return;
     SECURITY_ATTRIBUTES sa{};
     sa.nLength = sizeof(sa);
     sa.lpSecurityDescriptor = sd;
     sa.bInheritHandle = FALSE;
-    // 心跳映射名：生产用 Global\（audiodg=LocalService 有 SeCreateGlobalPrivilege）。
-    // selftest 跑在任意权限下（普通 shell 无该特权），经环境变量 AURAAPO_HEARTBEAT_LOCAL=1
-    // 切到 Local\ 验证心跳逻辑（同进程可见即可）。结构一致，仅命名空间不同。
+
     const bool localHb = [] {
         char v[2] = {0};
         DWORD n = GetEnvironmentVariableA("AURAAPO_HEARTBEAT_LOCAL", v, 2);
@@ -196,32 +251,32 @@ bool CAuraApo::OpenHeartbeat() {
     HANDLE hMap = CreateFileMappingW(INVALID_HANDLE_VALUE, &sa, PAGE_READWRITE, 0,
                                      (DWORD)sizeof(AuraHeartbeat), hbName);
     LocalFree(sd);
-    if (!hMap) return false;
+    if (!hMap) return;
+
     void* view = MapViewOfFile(hMap, FILE_MAP_WRITE, 0, 0, sizeof(AuraHeartbeat));
     if (!view) {
         CloseHandle(hMap);
-        return false;
+        return;
     }
     auto* hb = (AuraHeartbeat*)view;
     hb->magic = AURA_HEARTBEAT_MAGIC;
     hb->version = AURA_HEARTBEAT_VERSION;
     hb->seq = 0;
-    hb->sampleRate = m_sampleRate;
+    hb->sampleRate = rate_;
     hb->framesTotal = 0;
     hb->lastNbs = 0;
     hb->pid = GetCurrentProcessId();
-    m_hMap = hMap;
-    m_hbView = view;
-    return true;
+    hMap_ = hMap;
+    hbView_ = view;
 }
 
 void CAuraApo::CloseHeartbeat() {
-    if (m_hbView) {
-        UnmapViewOfFile(m_hbView);
-        m_hbView = nullptr;
+    if (hbView_) {
+        UnmapViewOfFile(hbView_);
+        hbView_ = nullptr;
     }
-    if (m_hMap) {
-        CloseHandle(m_hMap);
-        m_hMap = nullptr;
+    if (hMap_) {
+        CloseHandle(hMap_);
+        hMap_ = nullptr;
     }
 }

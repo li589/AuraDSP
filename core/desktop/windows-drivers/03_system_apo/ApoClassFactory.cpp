@@ -35,13 +35,12 @@ ULONG __stdcall ApoClassFactory::Release() {
 
 HRESULT __stdcall ApoClassFactory::CreateInstance(IUnknown* pUnkOuter, REFIID iid, void** ppv) {
     if (!ppv) return E_POINTER;
-    // EAPO 同式：工厂走 NonDelegating 对（返回 inner 自身引用，绝不碰 outer）。
-    // 聚合只支持 IUnknown（EAPO 用 E_NOINTERFACE，同式跟随）。
+    // COM 规范：若存在 outer 聚合，请求接口必须为 IUnknown
     if (pUnkOuter && iid != IID_IUnknown) return E_NOINTERFACE;
     auto* apo = new (std::nothrow) CAuraApo(pUnkOuter);
     if (!apo) return E_OUTOFMEMORY;
-    const HRESULT hr = apo->NonDelegatingQueryInterface(iid, ppv);
-    apo->NonDelegatingRelease();
+    const HRESULT hr = apo->inner_.QueryInterface(iid, ppv);
+    apo->inner_.Release();
     return hr;
 }
 
