@@ -9,6 +9,7 @@ set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
 set(BRIDGEDIR "${CMAKE_CURRENT_SOURCE_DIR}/bridge")
 set(VMBRIDGE "${BRIDGEDIR}/vm_bridge")
 set(ASIOBRIDGE "${BRIDGEDIR}/asio_bridge")
+set(VAIOBRIDGE "${BRIDGEDIR}/vaio_bridge")
 
 # ---- 04 ASIO 宿主（Steinberg ASIO SDK 2.3.4，GPLv3 路线）----
 # SDK 为外部工具链（同 NDK/Flutter SDK 铁律）：不 vendor、按路径引用。
@@ -204,3 +205,21 @@ target_compile_options(auravm_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auravm_bridge PRIVATE version)
+
+# 常驻 AuraVAIO 桥（Mode 1 虚拟声卡模式；app isolate 经 FFI 调用）。
+# 通过共享内存零拷贝连接 AuraVaioDriver 内核驱动，实时拉取音频进入 auradsp_engine，并输出到 WASAPI 物理设备。
+add_library(auravaio_bridge SHARED
+    "${VAIOBRIDGE}/VaioBridge.cpp"
+    "${VAIOBRIDGE}/VaioBridge.def"
+)
+target_include_directories(auravaio_bridge PRIVATE
+    "${VMCLIENT}"
+    "${CMAKE_CURRENT_SOURCE_DIR}/01_vaio_driver/src"
+    "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    "${VAIOBRIDGE}"
+)
+target_compile_options(auravaio_bridge PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
+set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
+

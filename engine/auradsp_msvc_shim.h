@@ -17,6 +17,15 @@
 #define AURADSP_MSVC_SHIM_H
 
 #ifdef _MSC_VER
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
+#ifndef WINVER
+#define WINVER 0x0601
+#endif
+#ifndef NTDDI_VERSION
+#define NTDDI_VERSION 0x06010000
+#endif
 #include <stdint.h>
 #define __attribute__(x)
 #endif

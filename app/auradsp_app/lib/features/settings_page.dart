@@ -414,6 +414,16 @@ class _DeviceInfo extends StatelessWidget {
         ],
       );
     }
+    // AuraVAIO 模式：驱动状态 + 物理输出端点选择器；桥活时加状态行。
+    if (model.audioMode == 'vaio') {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _InfoRow(l.audioMode, _modeLabel(l, 'vaio')),
+          _VaioPanel(model: model),
+        ],
+      );
+    }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -903,6 +913,85 @@ class _AsioPanel extends StatelessWidget {
                   l.sampleRate,
                   l.asioSrMismatch('${(info['sr'] as num).toInt()}',
                       '${model.config.sampleRate}')),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VaioPanel extends StatelessWidget {
+  final AppModel model;
+  const _VaioPanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final info = model.vaioInfo;
+    final det = model.vaioDetectInfo;
+    final endpoints = (det['endpoints'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        <String>[];
+    final curEndpoint = model.config.vaioOutputEndpoint;
+
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text('物理输出',
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: endpoints.contains(curEndpoint) ? curEndpoint : '',
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('自动选择（非VAIO扬声器）',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: curEndpoint.isEmpty ? p.accent : p.text)),
+                    ),
+                    for (final ep in endpoints)
+                      DropdownMenuItem<String>(
+                        value: ep,
+                        child: Text(ep,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: ep == curEndpoint ? p.accent : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setVaioOutputEndpoint(v);
+                  },
+                ),
+              ),
+            ),
+            AuraChip(l.asioRefresh,
+                icon: Icons.refresh_rounded,
+                onTap: () => model.refreshVaioDetect()),
+          ]),
+          if (det['found'] == false)
+            _InfoRow('驱动状态', '未检测到 AuraVAIO 虚拟声卡驱动'),
+          if (info['note'] is String && (info['note'] as String).isNotEmpty)
+            _InfoRow('AuraVAIO', '${info['note']}'),
+          if (model.vaioActive) ...[
+            if (info['sr'] is num)
+              _InfoRow(l.sampleRate, '${(info['sr'] as num).toInt()} Hz / 2 ch'),
+            if (info['frames'] is num)
+              _InfoRow('已处理帧', '${(info['frames'] as num).toInt()} frames'),
+            if (info['outputEndpoint'] is String && (info['outputEndpoint'] as String).isNotEmpty)
+              _InfoRow('输出端点', '${info['outputEndpoint']}'),
           ],
         ],
       ),

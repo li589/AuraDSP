@@ -1,0 +1,14 @@
+LIBRARY auravaio_bridge
+EXPORTS
+    vaio_detect
+    vaio_start
+    vaio_stop
+    vaio_status
+    vaio_set_param
+    vaio_set_param_str
+    vaio_get_param
+    vaio_get_param_str
+    vaio_viz_read
+    vaio_bypass
+    vaio_test_start
+    vaio_test_stop

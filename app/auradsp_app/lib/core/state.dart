@@ -209,10 +209,8 @@ class AppModel extends ChangeNotifier {
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
   bool playing = false;
-  // 频谱门：进程内 playing 或 VB 桥活着都算 live。VB 模式不经过 source 选择，
-  // playing 恒 false，若只看 playing，主页/可视化页在 VB 下永远空（电平/EQ
-  // 页不看此门故正常——正是上报的症状）。
-  bool get liveSpectrum => playing || vbActive || asioActive;
+  // 频谱门：进程内 playing 或 VB/ASIO/VAIO 桥活着都算 live。
+  bool get liveSpectrum => playing || vbActive || asioActive || vaioActive;
   // 四态显示口径（右上徽标/主页 hero 共用）：engineState==0 混了"用户旁路"与
   // "无源空闲"，以前一刀切标"旁路"，导致开关 OFF 却处处显示旁路。拆开：
   // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
@@ -254,6 +252,10 @@ class AppModel extends ChangeNotifier {
   // asio_detect 驱动清单（isolate 回推；[{name,dll,clsid}]，name 为 UTF-8 显示名）。
   List<Map<String, String>> asioDrivers = [];
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
+  // AuraVAIO 桥状态（01 桥；isolate 回推，与 VB/ASIO 互斥）。
+  bool vaioActive = false;
+  Map<String, dynamic> vaioInfo = {};
+  Map<String, dynamic> vaioDetectInfo = {};
 
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
@@ -662,7 +664,15 @@ class AppModel extends ChangeNotifier {
     if (config.autoRestoreSession && !_testing) {
       final session = SessionMemory.load();
       if (session != null) {
-        SessionMemory.restoreMemoryImage(this, session);
+        // 回放守卫：restoreMemoryImage → apply 会触发各 setter 的
+        // scheduleAutoSave；不置位则启动 500ms 后必把刚读入的数据
+        // 原样写回磁盘（自写），且与引擎异步 getParams 存在竞态窗口。
+        _isReplayingSession = true;
+        try {
+          SessionMemory.restoreMemoryImage(this, session);
+        } finally {
+          _isReplayingSession = false;
+        }
       } else {
         SessionMemory.save(this);
       }
@@ -771,6 +781,14 @@ class AppModel extends ChangeNotifier {
             'driver': config.asioDriver,
             'bufSize': config.asioBufSize,
             'outPair': config.asioOutPair,
+          });
+        }
+        // 持久化的是 AuraVAIO 模式：就绪后自动进桥。
+        if (audioMode == 'vaio') {
+          _toIso?.send({
+            'cmd': 'vaiomode',
+            'on': true,
+            'outputEndpoint': config.vaioOutputEndpoint,
           });
         }
         // isolate 重启（采样率切换）：标准 session 回放只管参数，不管音源选择
@@ -1093,6 +1111,24 @@ class AppModel extends ChangeNotifier {
         if (asioActive && (raw['resetPending'] as int? ?? 0) == 1) {
           _sendAsioRestart();
         }
+        notifyListeners();
+        break;
+      case 'vaiostatus':
+        final wasV = vaioActive;
+        vaioActive = (raw['running'] as bool?) ?? false;
+        vaioInfo = Map<String, dynamic>.from(raw);
+        if (vaioActive && !wasV) {
+          spectrum.value = List<double>.filled(32, 0.0);
+          eqInSpectrum.value = List<double>.filled(32, 0.0);
+          levelL.value = -90.0;
+          levelR.value = -90.0;
+          stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
+          stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
+        }
+        notifyListeners();
+        break;
+      case 'vaiodetect':
+        vaioDetectInfo = Map<String, dynamic>.from(raw);
         notifyListeners();
         break;
       case 'asiodrivers':
@@ -1753,6 +1789,9 @@ class AppModel extends ChangeNotifier {
   void setGraphOrder(String order) {
     graphOrder = order;
     send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': filterVendorOrder(order)});
+    // chainOrder 在 snapshot/会话 schema 内，必须持久化，
+    // 否则处理链重排重启即丢（此前唯一漏掉的大类用户动作）。
+    scheduleAutoSave();
   }
 
   /// chain 行电平表映射：返回该 stage 在 AURADSP_STAGE_MAX (32) 中的固定槽位索引。
@@ -2846,6 +2885,8 @@ void setAudioMode(String id) {
   final isVb = valid == 'vbcallback';
   final wasAsio = audioMode == 'asio';
   final isAsio = valid == 'asio';
+  final wasVaio = audioMode == 'vaio';
+  final isVaio = valid == 'vaio';
   audioMode = valid;
   config.audioMode = valid;
   ConfigManager.save(config);
@@ -2870,6 +2911,17 @@ void setAudioMode(String id) {
     if (!isAsio) {
       asioActive = false;
       asioInfo = {};
+    }
+  }
+  if (wasVaio != isVaio) {
+    _toIso?.send({
+      'cmd': 'vaiomode',
+      'on': isVaio,
+      'outputEndpoint': config.vaioOutputEndpoint,
+    });
+    if (!isVaio) {
+      vaioActive = false;
+      vaioInfo = {};
     }
   }
   notifyListeners();
@@ -2917,6 +2969,25 @@ void setAsioOutPair(int ch) {
 /// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
 void refreshAsioDrivers() {
   _toIso?.send({'cmd': 'asiodetect'});
+}
+
+/// AuraVAIO 物理输出端点重选：落盘 + 通知；桥在跑则热切换。
+void setVaioOutputEndpoint(String endpoint) {
+  if (config.vaioOutputEndpoint == endpoint) return;
+  config.vaioOutputEndpoint = endpoint;
+  ConfigManager.save(config);
+  if (vaioActive) {
+    _toIso?.send({
+      'cmd': 'vaiorestart',
+      'outputEndpoint': config.vaioOutputEndpoint,
+    });
+  }
+  notifyListeners();
+}
+
+/// 触发一次 AuraVAIO 驱动与端点探测。
+void refreshVaioDetect() {
+  _toIso?.send({'cmd': 'vaiodetect'});
 }
 
 void _sendAsioRestart() {
@@ -3590,6 +3661,11 @@ void fillEqQ(double q) {
 
   void resetConfig() {
     config = ConfigManager.resetToDefaults();
+    // 「恢复默认」必须连带清除会话记忆：否则 autoRestoreSession 开启时
+    // 下次启动 restoreMemoryImage 把旧参数全部还原（用户心智：全部归零）。
+    // 先取消挂起的防抖保存——否则 500ms 后的 timer 会把文件写回来。
+    _debounceSaveTimer?.cancel();
+    SessionMemory.clear();
     notifyListeners();
   }
 
