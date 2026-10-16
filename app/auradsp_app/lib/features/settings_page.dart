@@ -13,11 +13,11 @@ import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
-import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 import '../core/audio_modes.dart';
 import '../core/config.dart';
 import '../core/design.dart';
+import '../core/path_memory.dart';
 import '../core/session_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -106,25 +106,110 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => model.setLocale(Locale(v)),
             ),
           ),
-          // 03 音频模式（各平台后端选择；引擎接线待后续版本）
+          // 03 音频范式与模式（ADR-009：附加模式原地挂载；普通管线模式端到端流转）
           SectionCard(
             index: '03',
-            title: l.audioMode,
-            hint: l.audioModeHint,
-            child: AuraSegmented<String>(
-              segments: [
-                for (final id in AudioModes.optionsFor(AudioModes.currentOs()))
-                  AuraSegment(id, _modeLabel(l, id)),
+            title: l.audioParadigm,
+            hint: l.audioParadigmHint,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // 第一级：两大范式选择
+                AuraSegmented<String>(
+                  segments: [
+                    AuraSegment(AudioModes.categoryAttachment, l.paradigmAttachment),
+                    AuraSegment(AudioModes.categoryPipeline, l.paradigmPipeline),
+                  ],
+                  selected: model.modeCategory,
+                  onChanged: (v) => model.setModeCategory(v),
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                // 第二级：细分形态
+                if (model.modeCategory == AudioModes.categoryAttachment) ...[
+                  Text(l.audioMode, style: labelOf(p, size: 12, color: p.textDim)),
+                  const SizedBox(height: AuraSpace.xs),
+                  AuraSegmented<String>(
+                    segments: [
+                      AuraSegment(AudioModes.attachSysApo, l.modeSysApo),
+                      AuraSegment(AudioModes.attachVoicemeeterApi, l.modeVoicemeeterApi),
+                    ],
+                    selected: model.attachmentMode,
+                    onChanged: (v) => model.setAttachmentMode(v),
+                  ),
+                ] else ...[
+                  // 管线模式：输入源 + 输出端
+                  Text(l.pipelineIn, style: labelOf(p, size: 12, color: p.textDim)),
+                  const SizedBox(height: AuraSpace.xs),
+                  AuraSegmented<String>(
+                    segments: [
+                      AuraSegment(AudioModes.inputAsioDriver, l.inputAsioDriver),
+                      AuraSegment(AudioModes.inputVaio, l.inputVaio),
+                      AuraSegment(AudioModes.inputWasapi, l.inputWasapi),
+                    ],
+                    selected: model.pipelineInput,
+                    onChanged: (v) => model.setPipelineInput(v),
+                  ),
+                  const SizedBox(height: AuraSpace.sm),
+                  Text(l.pipelineOut, style: labelOf(p, size: 12, color: p.textDim)),
+                  const SizedBox(height: AuraSpace.xs),
+                  AuraSegmented<String>(
+                    segments: [
+                      AuraSegment(AudioModes.outputWasapi, l.outputWasapi),
+                      AuraSegment(AudioModes.outputVaio, l.outputVaio),
+                      AuraSegment(AudioModes.outputAsioClient, l.outputAsioClient),
+                    ],
+                    selected: model.pipelineOutput,
+                    onChanged: (v) => model.setPipelineOutput(v),
+                  ),
+                  // AuraVAIO 虚拟声卡输出提示与耳机监听镜像
+                  if (model.pipelineOutput == AudioModes.outputVaio) ...[
+                    const SizedBox(height: AuraSpace.sm),
+                    Container(
+                      padding: const EdgeInsets.all(AuraSpace.sm),
+                      decoration: BoxDecoration(
+                        color: p.panelRaised,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: p.warning.withValues(alpha: 0.4)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(Icons.info_outline, size: 16, color: p.warning),
+                              const SizedBox(width: AuraSpace.xs),
+                              Expanded(
+                                child: Text(l.virtualSinkNotice,
+                                    style: captionOf(p, color: p.warning)),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: AuraSpace.sm),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(l.monitorMirroring, style: labelOf(p, size: 12)),
+                              AuraSwitch(
+                                value: model.monitorMirroring,
+                                onChanged: (v) => model.setMonitorMirroring(v),
+                              ),
+                            ],
+                          ),
+                          Text(l.monitorMirroringHint,
+                              style: monoOf(p, size: 10, color: p.textDim)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
               ],
-              selected: model.audioMode,
-              onChanged: (v) => model.setAudioMode(v),
             ),
           ),
-          // 04 设备（当前设备展示；枚举列表后续在此扩展）
+          // 04 设备与精细化调节（根据当前范式与配置动态展示）
           SectionCard(
             index: '04',
             title: l.audioDevice,
-            child: _DeviceInfo(model: model),
+            child: _DynamicAudioPanel(model: model),
           ),
           // 05 声道模式（ADR-003 Phase A）
           SectionCard(
@@ -340,106 +425,273 @@ class _CatBar extends StatelessWidget {
   }
 }
 
-/* ---- 音频模式 id → 展示名（与 AudioModes.optionsFor 对齐） ---- */
 
-String _modeLabel(AppLocalizations l, String id) {
-  switch (id) {
-    case 'vaio':
-      return l.modeVaio;
-    case 'vbcallback':
-      return l.modeVb;
-    case 'sysapo':
-      return l.modeSysApo;
-    case 'asio':
-      return l.modeAsio;
-    case 'root':
-      return l.modeRoot;
-    case 'rootless':
-      return l.modeRootless;
-    case 'system':
-      return l.modeSystem;
-    case 'virtual':
-      return l.modeVirtual;
-    case 'driver':
-      return l.modeDriver;
-    default:
-      return l.modeAuto;
+
+/* ---- 04 动态设备与精细化调节面板（ADR-009） ---- */
+
+class _DynamicAudioPanel extends StatelessWidget {
+  final AppModel model;
+  const _DynamicAudioPanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
+    // 1. 附加模式
+    if (model.modeCategory == AudioModes.categoryAttachment) {
+      if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
+        return _VoicemeeterPanel(model: model);
+      } else {
+        return _SystemApoPanel(model: model);
+      }
+    }
+
+    // 2. 管线模式
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 输入源如果是虚拟 ASIO 驱动，显示驱动状态卡片
+        if (model.pipelineInput == AudioModes.inputAsioDriver) ...[
+          _VirtualAsioDriverCard(model: model),
+          const SizedBox(height: AuraSpace.md),
+          Container(height: 1, color: p.hairline),
+          const SizedBox(height: AuraSpace.md),
+        ],
+        // 输出端细分面板
+        if (model.pipelineOutput == AudioModes.outputAsioClient)
+          _AsioPanel(model: model)
+        else if (model.pipelineOutput == AudioModes.outputVaio)
+          _VaioPanel(model: model)
+        else
+          _WasapiRenderPanel(model: model),
+      ],
+    );
   }
 }
 
-/* ---- 当前设备（展示；枚举列表后续在此扩展） ---- */
-
-class _DeviceInfo extends StatelessWidget {
+class _VoicemeeterPanel extends StatelessWidget {
   final AppModel model;
-  const _DeviceInfo({required this.model});
+  const _VoicemeeterPanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final sr = model.vbInfo['sr'];
+    final note = model.vbInfo['note'];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · ${l.modeVoicemeeterApi}'),
+        _InfoRow('连接状态', model.vbActive ? '已连接 (活跃回调)' : (note is String && note.isNotEmpty ? note : '未连接 (等待 Voicemeeter 启动)')),
+        if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
+        if (model.vbActive) _VbBuses(model: model),
+      ],
+    );
+  }
+}
+
+class _SystemApoPanel extends StatelessWidget {
+  final AppModel model;
+  const _SystemApoPanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final det = model.vaioDetectInfo;
+    final endpoints = (det['endpoints'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        <String>[];
+    final selEndpoint = model.apoTargetEndpoint;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · System APO'),
+        const SizedBox(height: AuraSpace.xs),
+        Row(
+          children: [
+            SizedBox(
+              width: 104,
+              child: Text(l.apoTargetEndpoint,
+                  style: labelOf(p, size: 12, color: p.textDim)),
+            ),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: endpoints.contains(selEndpoint) ? selEndpoint : '',
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('默认音频端点 (Default Render)',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: selEndpoint.isEmpty ? p.accent : p.text)),
+                    ),
+                    for (final ep in endpoints)
+                      DropdownMenuItem<String>(
+                        value: ep,
+                        child: Text(ep,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: ep == selEndpoint ? p.accent : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setApoTargetEndpoint(v);
+                  },
+                ),
+              ),
+            ),
+            AuraChip(l.asioRefresh,
+                icon: Icons.refresh_rounded,
+                onTap: () => model.refreshVaioDetect()),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(l.apoStatus, model.apoAttached ? l.apoAttached : l.apoNotAttached),
+        const SizedBox(height: AuraSpace.sm),
+        Wrap(
+          spacing: AuraSpace.sm,
+          children: [
+            AuraChip(
+              l.apoActionAttach,
+              icon: Icons.link,
+              selected: model.apoAttached,
+              onTap: () {
+                model.setApoAttached(true);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('已向目标设备注册 APO 钩子'),
+                  duration: Duration(milliseconds: 1400),
+                ));
+              },
+            ),
+            AuraChip(
+              l.apoActionDetach,
+              icon: Icons.link_off,
+              danger: true,
+              onTap: () {
+                model.setApoAttached(false);
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                  content: Text('已从目标设备卸载 APO 钩子'),
+                  duration: Duration(milliseconds: 1400),
+                ));
+              },
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _VirtualAsioDriverCard extends StatelessWidget {
+  final AppModel model;
+  const _VirtualAsioDriverCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(l.asioDriverCardTitle,
+                style: sectionOf(p, color: p.text)),
+            AuraChip(
+              l.asioStatusCheck,
+              icon: Icons.refresh_rounded,
+              onTap: () => model.checkAsioDriverStatus(),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(
+          l.asioDriverStatus,
+          model.asioDriverInstalled
+              ? l.asioDriverRegistered
+              : l.asioDriverNotRegistered,
+        ),
+        _InfoRow(
+          l.asioDawStatus,
+          model.asioActive ? l.asioDawConnected : l.asioDawIdle,
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        Wrap(
+          spacing: AuraSpace.sm,
+          children: [
+            if (!model.asioDriverInstalled)
+              AuraChip(
+                l.asioDriverActionRegister,
+                icon: Icons.app_registration,
+                selected: true,
+                onTap: () async {
+                  final ok = await model.registerAsioDriver();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok
+                          ? '虚拟 ASIO 驱动注册成功！DAW 中现已可选'
+                          : '注册失败，请使用管理员权限重试'),
+                      duration: const Duration(milliseconds: 2000),
+                    ));
+                  }
+                },
+              )
+            else
+              AuraChip(
+                l.asioDriverActionUnregister,
+                icon: Icons.remove_circle_outline,
+                danger: true,
+                onTap: () async {
+                  final ok = await model.unregisterAsioDriver();
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                      content: Text(ok ? '虚拟 ASIO 驱动已从系统注销' : '注销失败，请使用管理员权限重试'),
+                      duration: const Duration(milliseconds: 2000),
+                    ));
+                  }
+                },
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _WasapiRenderPanel extends StatelessWidget {
+  final AppModel model;
+  const _WasapiRenderPanel({required this.model});
 
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final info = model.info;
-    // VB 桥激活时展示桥状态（sr/frames 来自 vbstatus 心跳）。
-    if (model.vbActive) {
-      final sr = model.vbInfo['sr'];
-      final note = model.vbInfo['note'];
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InfoRow(l.audioMode, _modeLabel(l, 'vbcallback')),
-          if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
-          // 重建事件（改主输出设备等）直接可见：用户不再靠"声音变了"猜。
-          if (note is String && note.isNotEmpty) _InfoRow('VB', note),
-          _VbBuses(model: model),
-        ],
-      );
-    }
-    // 选了 VB 模式但桥没起来：把原因摆出来（缺 DLL/槽被占/未安装），别静默。
-    if (model.audioMode == 'vbcallback') {
-      final note = model.vbInfo['note'];
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InfoRow(l.audioMode, _modeLabel(l, 'vbcallback')),
-          if (note is String && note.isNotEmpty)
-            _InfoRow('VB', note),
-        ],
-      );
-    }
-    // ASIO 模式：驱动选择器 + 缓冲档 + 输出对（Spec Phase 3）；桥活时加状态行。
-    if (model.audioMode == 'asio') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InfoRow(l.audioMode, _modeLabel(l, 'asio')),
-          _AsioPanel(model: model),
-        ],
-      );
-    }
-    // AuraVAIO 模式：驱动状态 + 物理输出端点选择器；桥活时加状态行。
-    if (model.audioMode == 'vaio') {
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _InfoRow(l.audioMode, _modeLabel(l, 'vaio')),
-          _VaioPanel(model: model),
-        ],
-      );
-    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.engineForm, 'Desktop · in-process DLL'),
+        _InfoRow(l.outputWasapi, 'Desktop · in-process WASAPI Render'),
         if (info != null) ...[
           _InfoRow(
               l.sampleRate, '${info.deviceRate} Hz / ${info.deviceCh} ch'),
           _InfoRow(l.buffer, '${info.bufferFrames} frames'),
-          // 设备拒收请求速率（回退）：和 ASIO 的 srMismatch 同款诚实展示。
           if (info.deviceRate != model.config.sampleRate)
             _InfoRow(
                 l.sampleRate,
                 l.wasapiSrFallback('${info.deviceRate}',
                     '${model.config.sampleRate}')),
         ],
-        // 输出缺失降级态（默认端点被独占/幽灵）：原因 + 重试，不红屏。
         if (model.wasapiError.isNotEmpty) ...[
           _InfoRow('WASAPI', model.wasapiError),
           Padding(
@@ -489,8 +741,15 @@ class _TestSourceChips extends StatelessWidget {
                 model.sourceExt != 'mp3',
             onTap: () async {
               const type = XTypeGroup(label: 'WAV', extensions: ['wav']);
-              final f = await openFile(acceptedTypeGroups: [type]);
-              if (f != null) model.setSource('file', path: f.path);
+              final f = await openFile(
+                acceptedTypeGroups: [type],
+                initialDirectory: PathMemory.dirFor(PathMemory.slotTestAudio) ??
+                    PathMemory.fallbackDir(PathMemory.slotTestAudio),
+              );
+              if (f != null) {
+                PathMemory.recordPick(PathMemory.slotTestAudio, f.path);
+                model.setSource('file', path: f.path);
+              }
             },
           ),
           AuraChip(
@@ -501,8 +760,15 @@ class _TestSourceChips extends StatelessWidget {
                 model.sourceExt == 'mp3',
             onTap: () async {
               const type = XTypeGroup(label: 'MP3', extensions: ['mp3']);
-              final f = await openFile(acceptedTypeGroups: [type]);
-              if (f != null) model.setSource('file', path: f.path);
+              final f = await openFile(
+                acceptedTypeGroups: [type],
+                initialDirectory: PathMemory.dirFor(PathMemory.slotTestAudio) ??
+                    PathMemory.fallbackDir(PathMemory.slotTestAudio),
+              );
+              if (f != null) {
+                PathMemory.recordPick(PathMemory.slotTestAudio, f.path);
+                model.setSource('file', path: f.path);
+              }
             },
           ),
           if (model.playing)

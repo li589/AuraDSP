@@ -146,6 +146,20 @@ class _PresetCardState extends State<_PresetCard> {
               ],
             ),
 
+          // 偏离即未保存（2026-10-16 决策 #3）：当前状态与已应用预设
+          // 有任何一点不同 → 显示「自定义（未保存）」徽标。
+          if (m.presetDirty) ...[
+            const SizedBox(height: AuraSpace.sm),
+            Row(
+              children: [
+                Icon(Icons.edit_rounded, size: 13, color: p.accent2),
+                const SizedBox(width: 4),
+                Text(l.presetDirtyBadge,
+                    style: monoOf(p, size: 11, color: p.accent2)),
+              ],
+            ),
+          ],
+
           const SizedBox(height: AuraSpace.md),
           // 保存栏
           Row(

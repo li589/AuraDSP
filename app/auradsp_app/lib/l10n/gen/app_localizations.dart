@@ -514,6 +514,216 @@ abstract class AppLocalizations {
   /// **'模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式'**
   String get audioModeHint;
 
+  /// No description provided for @audioParadigm.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理范式'**
+  String get audioParadigm;
+
+  /// No description provided for @audioParadigmHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）'**
+  String get audioParadigmHint;
+
+  /// No description provided for @paradigmAttachment.
+  ///
+  /// In zh, this message translates to:
+  /// **'附加模式'**
+  String get paradigmAttachment;
+
+  /// No description provided for @paradigmPipeline.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通管线模式'**
+  String get paradigmPipeline;
+
+  /// No description provided for @modeVoicemeeterApi.
+  ///
+  /// In zh, this message translates to:
+  /// **'Voicemeeter API'**
+  String get modeVoicemeeterApi;
+
+  /// No description provided for @pipelineIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入源'**
+  String get pipelineIn;
+
+  /// No description provided for @pipelineInHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择音频如何进入 AuraDSP 核心处理管线'**
+  String get pipelineInHint;
+
+  /// No description provided for @pipelineOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出端'**
+  String get pipelineOut;
+
+  /// No description provided for @pipelineOutHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择处理后的音频流向何处'**
+  String get pipelineOutHint;
+
+  /// No description provided for @inputAsioDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP Virtual ASIO (DAW)'**
+  String get inputAsioDriver;
+
+  /// No description provided for @inputVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入 (系统回放)'**
+  String get inputVaio;
+
+  /// No description provided for @inputWasapi.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 系统采集 (麦克风/混音)'**
+  String get inputWasapi;
+
+  /// No description provided for @outputWasapi.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 物理渲染 (扬声器/耳机)'**
+  String get outputWasapi;
+
+  /// No description provided for @outputVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输出 (录音/推流)'**
+  String get outputVaio;
+
+  /// No description provided for @outputAsioClient.
+  ///
+  /// In zh, this message translates to:
+  /// **'ASIO Client (外部硬件专业声卡)'**
+  String get outputAsioClient;
+
+  /// No description provided for @apoTargetEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'附加目标端点'**
+  String get apoTargetEndpoint;
+
+  /// No description provided for @apoTargetEndpointHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择要挂载 AuraDSP 系统级 APO 处理的音频端点'**
+  String get apoTargetEndpointHint;
+
+  /// No description provided for @apoStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 挂载状态'**
+  String get apoStatus;
+
+  /// No description provided for @apoAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已附加'**
+  String get apoAttached;
+
+  /// No description provided for @apoNotAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'未附加'**
+  String get apoNotAttached;
+
+  /// No description provided for @apoActionAttach.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键附加'**
+  String get apoActionAttach;
+
+  /// No description provided for @apoActionDetach.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键卸载'**
+  String get apoActionDetach;
+
+  /// No description provided for @asioDriverCardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP 虚拟 ASIO 驱动'**
+  String get asioDriverCardTitle;
+
+  /// No description provided for @asioDriverStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动状态'**
+  String get asioDriverStatus;
+
+  /// No description provided for @asioDriverRegistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已在系统注册'**
+  String get asioDriverRegistered;
+
+  /// No description provided for @asioDriverNotRegistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'未注册'**
+  String get asioDriverNotRegistered;
+
+  /// No description provided for @asioDriverActionRegister.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键注册驱动'**
+  String get asioDriverActionRegister;
+
+  /// No description provided for @asioDriverActionUnregister.
+  ///
+  /// In zh, this message translates to:
+  /// **'一键注销驱动'**
+  String get asioDriverActionUnregister;
+
+  /// No description provided for @asioDawStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'DAW 状态'**
+  String get asioDawStatus;
+
+  /// No description provided for @asioDawConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃连接中'**
+  String get asioDawConnected;
+
+  /// No description provided for @asioDawIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'空闲（等待 DAW 接入）'**
+  String get asioDawIdle;
+
+  /// No description provided for @asioStatusCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'检查状态'**
+  String get asioStatusCheck;
+
+  /// No description provided for @virtualSinkNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。'**
+  String get virtualSinkNotice;
+
+  /// No description provided for @monitorMirroring.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地耳机监听镜像'**
+  String get monitorMirroring;
+
+  /// No description provided for @monitorMirroringHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在向虚拟声卡推流的同时，分路一份音频到当前物理扬声器/耳机以供本地监听'**
+  String get monitorMirroringHint;
+
   /// No description provided for @audioDevice.
   ///
   /// In zh, this message translates to:
@@ -1113,6 +1323,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存失败（名称非法或磁盘不可写）'**
   String get presetSaveFail;
+
+  /// No description provided for @presetDirtyBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义（未保存）'**
+  String get presetDirtyBadge;
 
   /// No description provided for @presetDeleted.
   ///

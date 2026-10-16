@@ -158,7 +158,14 @@ class _ConvolverCard extends StatelessWidget {
   Future<void> _pickIr(BuildContext context) async {
     const type = XTypeGroup(label: 'Audio IR (*.irs, *.wav, *.flac)',
         extensions: ['irs', 'wav', 'flac']);
-    final f = await openFile(acceptedTypeGroups: [type]);
-    if (f != null) model.loadConvolverIr(f.path);
+    final f = await openFile(
+      acceptedTypeGroups: [type],
+      initialDirectory: PathMemory.dirFor(PathMemory.slotConvolverIr) ??
+          PathMemory.fallbackDir(PathMemory.slotConvolverIr),
+    );
+    if (f != null) {
+      PathMemory.recordPick(PathMemory.slotConvolverIr, f.path);
+      model.loadConvolverIr(f.path);
+    }
   }
 }

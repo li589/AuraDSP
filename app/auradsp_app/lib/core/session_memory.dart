@@ -38,12 +38,18 @@ abstract final class SessionMemory {
         });
       }
 
+      // 脏跟踪（决策 #3）：保存前统一重算一次（防抖后的低频路径），
+      // 顺带把「自定义（未保存）」徽标刷给 UI。
+      m.evaluatePresetDirty();
+
       final payload = {
-        // v4：parameters 经 PresetLibrary.snapshot 携带 liveprog{enabled,params,codeHash}，
-        // 会话恢复补回脚本使能与滑块（v2）；顶层 lpCode 保留作老版本兼容。
-        'version': 4,
+        // v5：+ appliedPresetFingerprint / presetDirty —— 未保存的自定义态
+        // 随会话记忆，重启后仍显示「自定义（未保存）」（决策 #3）。
+        'version': 5,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
+        'appliedPresetFingerprint': m.appliedPresetFingerprint,
+        'presetDirty': m.presetDirty,
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
@@ -89,6 +95,16 @@ abstract final class SessionMemory {
       if (session['audioMode'] is String) {
         m.audioMode = AudioModes.normalize(session['audioMode'] as String);
         m.config.audioMode = m.audioMode;
+        m.config.modeCategory = AudioModes.categoryForMode(m.audioMode);
+        if (m.config.modeCategory == AudioModes.categoryAttachment) {
+          m.config.attachmentMode = (m.audioMode == 'vbcallback')
+              ? AudioModes.attachVoicemeeterApi
+              : AudioModes.attachSysApo;
+        } else {
+          m.config.pipelineOutput = (m.audioMode == 'asio')
+              ? AudioModes.outputAsioClient
+              : (m.audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+        }
       }
       if (session['convIrPath'] is String) {
         m.convIrPath = session['convIrPath'] as String;
@@ -136,22 +152,34 @@ abstract final class SessionMemory {
       }
 
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};
-      if (params.isEmpty) return;
+      if (params.isNotEmpty) {
+        // PresetLibrary.apply() 末尾会执行 `m.activePresetName = preset.name`。
+        // 会话恢复不是「加载某个预设」，所以这里在 apply 之后把名字还原成
+        // 会话里存的那个（上面已从 session['activePresetName'] 恢复）。
+        // 否则每次启动 activePresetName 都会被覆盖成 '__restored__'，
+        // 效果页的预设高亮（比较 m.activePresetName == item.name）永远不命中。
+        final restoredPresetName = m.activePresetName;
+        final dummyPreset = AuraPreset(
+          name: '__restored__',
+          createdAt: DateTime.now().toIso8601String(),
+          params: params,
+        );
+        // 静默回填 model 内存字段
+        PresetLibrary.apply(m, dummyPreset);
+        m.activePresetName = restoredPresetName;
+      }
 
-      // PresetLibrary.apply() 末尾会执行 `m.activePresetName = preset.name`。
-      // 会话恢复不是「加载某个预设」，所以这里在 apply 之后把名字还原成
-      // 会话里存的那个（上面已从 session['activePresetName'] 恢复）。
-      // 否则每次启动 activePresetName 都会被覆盖成 '__restored__'，
-      // 效果页的预设高亮（比较 m.activePresetName == item.name）永远不命中。
-      final restoredPresetName = m.activePresetName;
-      final dummyPreset = AuraPreset(
-        name: '__restored__',
-        createdAt: DateTime.now().toIso8601String(),
-        params: params,
-      );
-      // 静默回填 model 内存字段
-      PresetLibrary.apply(m, dummyPreset);
-      m.activePresetName = restoredPresetName;
+      // 脏态随会话恢复（决策 #3）：即使未保存为文件的自定义态，重启后
+      // 仍显示「自定义（未保存）」。apply 上面把指纹锚到了回放后的状态，
+      // 这里必须用会话里存的锚点/脏标记覆盖，否则脏态被误清。
+      // 旧版（v4 及更早）会话无这两个键 → 保持默认（无锚点、不脏），平滑升级。
+      if (session['appliedPresetFingerprint'] is String) {
+        m.appliedPresetFingerprint =
+            session['appliedPresetFingerprint'] as String;
+      }
+      if (session['presetDirty'] is bool) {
+        m.presetDirty = session['presetDirty'] as bool;
+      }
     } catch (_) {}
   }
 

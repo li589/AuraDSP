@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/path_memory.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -36,7 +37,8 @@ class PluginsPage extends StatefulWidget {
 
 class _PluginsPageState extends State<PluginsPage> {
   final TextEditingController _searchCtrl = TextEditingController();
-  final TextEditingController _customDirCtrl = TextEditingController();
+  final TextEditingController _customDirCtrl = TextEditingController(
+      text: PathMemory.dirFor(PathMemory.slotLastPluginDir) ?? '');
   bool _deepScan = false;
 
   @override
@@ -106,6 +108,7 @@ class _PluginsPageState extends State<PluginsPage> {
               onPressed: () {
                 final path = _customDirCtrl.text.trim();
                 if (path.isNotEmpty) {
+                  PathMemory.setDir(PathMemory.slotLastPluginDir, path);
                   widget.model.addCustomPluginDir(path);
                   Navigator.of(ctx).pop();
                   widget.model.pluginManager.scan(deep: _deepScan);

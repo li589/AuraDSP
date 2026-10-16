@@ -71,4 +71,32 @@ void main() {
     expect(back.asioBufSize, 0);
     expect(back.asioOutPair, 0);
   });
+
+  test('ADR-009 two paradigms category inference and composing', () {
+    expect(AudioModes.categoryForMode('sysapo'), AudioModes.categoryAttachment);
+    expect(AudioModes.categoryForMode('vbcallback'), AudioModes.categoryAttachment);
+    expect(AudioModes.categoryForMode('vaio'), AudioModes.categoryPipeline);
+    expect(AudioModes.categoryForMode('asio'), AudioModes.categoryPipeline);
+
+    expect(
+        AudioModes.composeMode(
+            category: AudioModes.categoryAttachment,
+            attachmentMode: AudioModes.attachSysApo),
+        'sysapo');
+    expect(
+        AudioModes.composeMode(
+            category: AudioModes.categoryAttachment,
+            attachmentMode: AudioModes.attachVoicemeeterApi),
+        'vbcallback');
+    expect(
+        AudioModes.composeMode(
+            category: AudioModes.categoryPipeline,
+            pipelineOut: AudioModes.outputAsioClient),
+        'asio');
+    expect(
+        AudioModes.composeMode(
+            category: AudioModes.categoryPipeline,
+            pipelineOut: AudioModes.outputWasapi),
+        'vaio');
+  });
 }

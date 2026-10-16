@@ -577,7 +577,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'bassEnable': rdInt(iBass) ?? 0,
                 'bassGain': rdFloat(iBassG) ?? 0.0,
                 'reverbPreset': rdInt(iRev) ?? -1,
-                'stereoMix': rdFloat(iMix) ?? 0.5,
+                'stereoMix': rdFloat(iMix) ?? 0.0, // 兜底必须=ParamDefaults.stereoMix（UI 为真，原 0.5）
                 'eqEnable': rdInt(iEq) ?? 0,
                 'postGain': rdFloat(iPost) ?? 0.0,
                 'limiterEnable': rdInt(iLim) ?? 1,
@@ -669,7 +669,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
-                'fvWet': rdFloat(iFvW) ?? 0.3,
+                'fvWet': rdFloat(iFvW) ?? 0.35, // 兜底必须=ParamDefaults.fvWet（UI 为真，原 0.3）
                 'fvDry': rdFloat(iFvDr) ?? 1.0,
                 'compEnable': rdInt(iCpE) ?? 0,
                 'compTimeconstant': rdFloat(iCpT) ?? 0.14,

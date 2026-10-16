@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 
 import '../core/design.dart';
 import '../core/config.dart';
+import '../core/path_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'eel_editor_support.dart';
@@ -471,7 +472,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   void _addExternalScriptDirDialog() {
-    final ctrl = TextEditingController();
+    final ctrl = TextEditingController(
+        text: PathMemory.dirFor(PathMemory.slotLastScriptDir) ?? '');
     showDialog(
       context: context,
       builder: (ctx) {
@@ -515,6 +517,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
               onPressed: () {
                 final path = ctrl.text.trim();
                 if (path.isNotEmpty) {
+                  PathMemory.setDir(PathMemory.slotLastScriptDir, path);
                   widget.model.addCustomScriptDir(path);
                   Navigator.of(ctx).pop();
                   _refreshLibrary();
