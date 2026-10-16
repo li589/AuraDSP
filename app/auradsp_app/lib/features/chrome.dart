@@ -768,7 +768,8 @@ class AuraSwitch extends StatelessWidget {
 class AuraSegment<T> {
   final T value;
   final String label;
-  const AuraSegment(this.value, this.label);
+  final String? tooltip;
+  const AuraSegment(this.value, this.label, {this.tooltip});
 }
 
 /// 分段控件：选中态是一枚会滑动的实心块（Material SegmentedButton 尺寸过粗）
@@ -827,29 +828,40 @@ class AuraSegmented<T> extends StatelessWidget {
                         cursor: enabled
                             ? SystemMouseCursors.click
                             : SystemMouseCursors.basic,
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.opaque,
-                          onTap: enabled
-                              ? () => onChanged!(segments[k].value)
-                              : null,
-                          child: Center(
-                            child: AnimatedDefaultTextStyle(
-                              duration: AuraDur.fast,
-                              style: TextStyle(
-                                fontSize: 12.5,
-                                fontWeight: k == i
-                                    ? FontWeight.w700
-                                    : FontWeight.w500,
-                                color: k == i
-                                    ? (enabled ? p.accentContrast : p.textDim)
-                                    : p.textDim,
+                        child: () {
+                          Widget btn = GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: enabled
+                                ? () => onChanged!(segments[k].value)
+                                : null,
+                            child: Center(
+                              child: AnimatedDefaultTextStyle(
+                                duration: AuraDur.fast,
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: k == i
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: k == i
+                                      ? (enabled ? p.accentContrast : p.textDim)
+                                      : p.textDim,
+                                ),
+                                child: Text(segments[k].label,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
                               ),
-                              child: Text(segments[k].label,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis),
                             ),
-                          ),
-                        ),
+                          );
+                          final tip = segments[k].tooltip;
+                          if (tip != null && tip.isNotEmpty) {
+                            return Tooltip(
+                              message: tip,
+                              waitDuration: const Duration(milliseconds: 300),
+                              child: btn,
+                            );
+                          }
+                          return btn;
+                        }(),
                       ),
                     ),
                 ],

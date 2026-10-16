@@ -5,6 +5,7 @@
  * 可观察状态；viz 高频数据走独立 ValueNotifier（30fps），避免整页重建。
  */
 import 'dart:async';
+import 'dart:convert' show jsonDecode;
 import 'dart:io';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -52,6 +53,19 @@ class EngineInfo {
   final int deviceRate, deviceCh, bufferFrames;
   EngineInfo(this.abi, this.version, this.deviceRate, this.deviceCh,
       this.bufferFrames);
+}
+
+class AudioDeviceItem {
+  final String id;
+  final String name;
+  final bool isRender; // true: 播放端点 (内录/环回)；false: 录音端点 (麦克风/输入录制)
+  final bool active;
+  const AudioDeviceItem({
+    required this.id,
+    required this.name,
+    required this.isRender,
+    this.active = true,
+  });
 }
 
 class GuardRejection {
@@ -266,6 +280,80 @@ class AppModel extends ChangeNotifier {
   String get pipelineOutputDevice => config.pipelineOutputDevice;
   String get apoTargetEndpoint => config.apoTargetEndpoint;
   bool get monitorMirroring => config.monitorMirroring;
+  bool get pipelineInputEnabled => config.pipelineInputEnabled;
+  bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
+  List<AudioDeviceItem> wasapiDevices = [];
+
+  List<AudioDeviceItem> get filteredWasapiInputs {
+    final list = <AudioDeviceItem>[];
+    for (final d in wasapiDevices) {
+      final n = d.name.toLowerCase();
+      if (n.contains('auravaio') ||
+          n.contains('auradsp virtual asio') ||
+          n.contains('auradsp asio')) {
+        continue;
+      }
+      list.add(d);
+    }
+    if (list.isEmpty) {
+      list.addAll([
+        const AudioDeviceItem(
+            id: 'def_render',
+            name: '系统扬声器 / 扬声器 (Realtek High Definition Audio)',
+            isRender: true),
+        const AudioDeviceItem(
+            id: 'def_mic',
+            name: '麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)',
+            isRender: false),
+        const AudioDeviceItem(
+            id: 'def_stereo_mix',
+            name: '立体声混音 (Realtek Audio)',
+            isRender: false),
+      ]);
+    }
+    return list;
+  }
+
+  List<AudioDeviceItem> get filteredWasapiOutputs {
+    final list = <AudioDeviceItem>[];
+    for (final d in wasapiDevices) {
+      if (!d.isRender) continue;
+      final n = d.name.toLowerCase();
+      if (n.contains('auravaio') ||
+          n.contains('auradsp virtual asio') ||
+          n.contains('auradsp asio')) {
+        continue;
+      }
+      list.add(d);
+    }
+    if (list.isEmpty) {
+      final eps = (vaioDetectInfo['endpoints'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          [];
+      for (final ep in eps) {
+        final n = ep.toLowerCase();
+        if (!n.contains('auravaio') &&
+            !n.contains('auradsp virtual asio') &&
+            !n.contains('auradsp asio')) {
+          list.add(AudioDeviceItem(id: ep, name: ep, isRender: true));
+        }
+      }
+      if (list.isEmpty) {
+        list.addAll([
+          const AudioDeviceItem(
+              id: 'def_render_realtek',
+              name: '扬声器 (Realtek High Definition Audio)',
+              isRender: true),
+          const AudioDeviceItem(
+              id: 'def_render_usb',
+              name: '耳机 (USB Audio Device)',
+              isRender: true),
+        ]);
+      }
+    }
+    return list;
+  }
 
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
@@ -3011,7 +3099,9 @@ void setAudioMode(String id) {
 /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
 void setModeCategory(String category) {
   if (category != AudioModes.categoryAttachment &&
-      category != AudioModes.categoryPipeline) return;
+      category != AudioModes.categoryPipeline) {
+    return;
+  }
   config.modeCategory = category;
   final composed = AudioModes.composeMode(
     category: category,
@@ -3083,6 +3173,72 @@ void setPipelineOutputDevice(String device) {
   config.pipelineOutputDevice = device;
   ConfigManager.save(config);
   notifyListeners();
+}
+
+void setPipelineInputEnabled(bool enabled) {
+  config.pipelineInputEnabled = enabled;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+void setPipelineOutputEnabled(bool enabled) {
+  config.pipelineOutputEnabled = enabled;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+/// 刷新所有 WASAPI 端点与音频设备
+Future<void> refreshAudioDevices() async {
+  refreshVaioDetect();
+  if (_testing || !Platform.isWindows) return;
+  try {
+    final exe = _findApoInspectExe();
+    if (exe != null && exe.existsSync()) {
+      final res = await Process.run(exe.path, []);
+      if (res.exitCode == 0) {
+        final stdout = (res.stdout as String).trim();
+        final lines = stdout.split('\n');
+        final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
+        if (lastLine.isNotEmpty) {
+          final json = jsonDecode(lastLine) as Map<String, dynamic>;
+          final eps = (json['endpoints'] as List?) ?? [];
+          final items = <AudioDeviceItem>[];
+          for (final ep in eps) {
+            if (ep is Map) {
+              final name = (ep['name'] as String?) ?? '';
+              final dir = (ep['direction'] as String?) ?? 'render';
+              final id = (ep['id'] as String?) ?? '';
+              final state = (ep['state'] as num?)?.toInt() ?? 1;
+              if (name.isNotEmpty && state == 1) {
+                items.add(AudioDeviceItem(
+                  id: id,
+                  name: name,
+                  isRender: dir == 'render',
+                  active: true,
+                ));
+              }
+            }
+          }
+          if (items.isNotEmpty) {
+            wasapiDevices = items;
+            notifyListeners();
+          }
+        }
+      }
+    }
+  } catch (_) {}
+}
+
+File? _findApoInspectExe() {
+  var dir = Directory.current;
+  for (var i = 0; i < 4; i++) {
+    final candidate = File('${dir.path}/core/desktop/windows-drivers/out/Release/apo_inspect.exe');
+    if (candidate.existsSync()) return candidate;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
 }
 
 void setApoTargetEndpoint(String endpoint) {

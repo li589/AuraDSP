@@ -59,10 +59,22 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('普通管线模式'), findsWidgets);
-    expect(find.text('输入源'), findsOneWidget);
+    expect(find.text('输入端'), findsOneWidget);
     expect(find.text('输出端'), findsOneWidget);
 
-    // Virtual ASIO driver management card visible
+    // Verify 3 layers
+    expect(find.text('驱动信息与控制'), findsOneWidget);
+    expect(find.text('输入端信息与开关'), findsOneWidget);
+    expect(find.text('输出端信息与开关'), findsOneWidget);
+
+    // Verify segment names
+    expect(find.text('WASAPI 标准模式'), findsWidgets);
+    expect(find.text('AuraVAIO 虚拟输入'), findsWidgets);
+    expect(find.text('WASAPI 标准输出'), findsWidgets);
+    expect(find.text('AuraVAIO 虚拟输出'), findsWidgets);
+    expect(find.text('AuraDSP ASIO Client'), findsWidgets);
+
+    // Virtual ASIO driver management card visible in driver layer
     expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
     expect(find.text('驱动状态'), findsOneWidget);
     expect(find.text('DAW 状态'), findsOneWidget);

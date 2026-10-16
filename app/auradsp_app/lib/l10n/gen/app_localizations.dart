@@ -547,7 +547,7 @@ abstract class AppLocalizations {
   /// No description provided for @pipelineIn.
   ///
   /// In zh, this message translates to:
-  /// **'输入源'**
+  /// **'输入端'**
   String get pipelineIn;
 
   /// No description provided for @pipelineInHint.
@@ -565,44 +565,146 @@ abstract class AppLocalizations {
   /// No description provided for @pipelineOutHint.
   ///
   /// In zh, this message translates to:
-  /// **'选择处理后的音频流向何处'**
+  /// **'选择经由 AuraDSP 处理后的最终音频送往的目标端点'**
   String get pipelineOutHint;
-
-  /// No description provided for @inputAsioDriver.
-  ///
-  /// In zh, this message translates to:
-  /// **'AuraDSP Virtual ASIO (DAW)'**
-  String get inputAsioDriver;
-
-  /// No description provided for @inputVaio.
-  ///
-  /// In zh, this message translates to:
-  /// **'AuraVAIO 虚拟输入 (系统回放)'**
-  String get inputVaio;
 
   /// No description provided for @inputWasapi.
   ///
   /// In zh, this message translates to:
-  /// **'WASAPI 系统采集 (麦克风/混音)'**
+  /// **'WASAPI 标准模式'**
   String get inputWasapi;
+
+  /// No description provided for @inputVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入'**
+  String get inputVaio;
+
+  /// No description provided for @inputAsioDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP Virtual ASIO'**
+  String get inputAsioDriver;
 
   /// No description provided for @outputWasapi.
   ///
   /// In zh, this message translates to:
-  /// **'WASAPI 物理渲染 (扬声器/耳机)'**
+  /// **'WASAPI 标准输出'**
   String get outputWasapi;
 
   /// No description provided for @outputVaio.
   ///
   /// In zh, this message translates to:
-  /// **'AuraVAIO 虚拟输出 (录音/推流)'**
+  /// **'AuraVAIO 虚拟输出'**
   String get outputVaio;
 
   /// No description provided for @outputAsioClient.
   ///
   /// In zh, this message translates to:
-  /// **'ASIO Client (外部硬件专业声卡)'**
+  /// **'AuraDSP ASIO Client'**
   String get outputAsioClient;
+
+  /// No description provided for @tooltipInputWasapi.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 标准模式：支持从系统物理麦克风录制，或对播放设备进行内录/环回 (Loopback) 采集'**
+  String get tooltipInputWasapi;
+
+  /// No description provided for @tooltipInputVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入：接收系统音频或第三方播放器输出至 AuraVAIO 虚拟声卡的立体声/7.1 声道流'**
+  String get tooltipInputVaio;
+
+  /// No description provided for @tooltipInputAsioDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP Virtual ASIO：作为虚拟 ASIO 驱动供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频'**
+  String get tooltipInputAsioDriver;
+
+  /// No description provided for @tooltipOutputWasapi.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 标准输出：将处理完成的声音输出至物理扬声器、耳机或第三方虚拟输出设备'**
+  String get tooltipOutputWasapi;
+
+  /// No description provided for @tooltipOutputVaio.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输出：将声音输出至虚拟端点作为数字汇聚，可搭配物理耳机监听镜像使用'**
+  String get tooltipOutputVaio;
+
+  /// No description provided for @tooltipOutputAsioClient.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP ASIO Client：作为客户端对接外置物理专业 ASIO 声卡，享受超低延迟硬件监听'**
+  String get tooltipOutputAsioClient;
+
+  /// No description provided for @driverLayerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动信息与控制'**
+  String get driverLayerTitle;
+
+  /// No description provided for @inputLayerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入端信息与开关'**
+  String get inputLayerTitle;
+
+  /// No description provided for @outputLayerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出端信息与开关'**
+  String get outputLayerTitle;
+
+  /// No description provided for @inputDisabledNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入端已停用（音频采集暂停，处于静音/无输入状态）'**
+  String get inputDisabledNotice;
+
+  /// No description provided for @outputDisabledNotice.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出端已停用（声音输出静音）'**
+  String get outputDisabledNotice;
+
+  /// No description provided for @inputDeviceLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入设备'**
+  String get inputDeviceLabel;
+
+  /// No description provided for @outputDeviceLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出设备'**
+  String get outputDeviceLabel;
+
+  /// No description provided for @defaultInputDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统默认设备 [内录/环回]'**
+  String get defaultInputDevice;
+
+  /// No description provided for @defaultOutputDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统默认输出 (Default Render)'**
+  String get defaultOutputDevice;
+
+  /// No description provided for @tagLoopback.
+  ///
+  /// In zh, this message translates to:
+  /// **'[内录/环回]'**
+  String get tagLoopback;
+
+  /// No description provided for @tagRecording.
+  ///
+  /// In zh, this message translates to:
+  /// **'[录制]'**
+  String get tagRecording;
 
   /// No description provided for @apoTargetEndpoint.
   ///

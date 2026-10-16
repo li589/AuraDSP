@@ -21,6 +21,7 @@ import '../core/path_memory.dart';
 import '../core/session_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -137,70 +138,58 @@ class _SettingsPageState extends State<SettingsPage> {
                     onChanged: (v) => model.setAttachmentMode(v),
                   ),
                 ] else ...[
-                  // 管线模式：输入源 + 输出端
-                  Text(l.pipelineIn, style: labelOf(p, size: 12, color: p.textDim)),
+                  // 管线模式：输入端 + 输出端（上下文字对齐，带 InfoBadge 与 hover 气泡）
+                  Tooltip(
+                    message: l.pipelineInHint,
+                    waitDuration: const Duration(milliseconds: 300),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(l.pipelineIn, style: labelOf(p, size: 12, color: p.textDim)),
+                        const SizedBox(width: AuraSpace.xs),
+                        InfoBadge(message: l.pipelineInHint),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: AuraSpace.xs),
                   AuraSegmented<String>(
                     segments: [
-                      AuraSegment(AudioModes.inputAsioDriver, l.inputAsioDriver),
-                      AuraSegment(AudioModes.inputVaio, l.inputVaio),
-                      AuraSegment(AudioModes.inputWasapi, l.inputWasapi),
+                      AuraSegment(AudioModes.inputWasapi, l.inputWasapi,
+                          tooltip: l.tooltipInputWasapi),
+                      AuraSegment(AudioModes.inputVaio, l.inputVaio,
+                          tooltip: l.tooltipInputVaio),
+                      AuraSegment(AudioModes.inputAsioDriver, l.inputAsioDriver,
+                          tooltip: l.tooltipInputAsioDriver),
                     ],
                     selected: model.pipelineInput,
                     onChanged: (v) => model.setPipelineInput(v),
                   ),
                   const SizedBox(height: AuraSpace.sm),
-                  Text(l.pipelineOut, style: labelOf(p, size: 12, color: p.textDim)),
+                  Tooltip(
+                    message: l.pipelineOutHint,
+                    waitDuration: const Duration(milliseconds: 300),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(l.pipelineOut, style: labelOf(p, size: 12, color: p.textDim)),
+                        const SizedBox(width: AuraSpace.xs),
+                        InfoBadge(message: l.pipelineOutHint),
+                      ],
+                    ),
+                  ),
                   const SizedBox(height: AuraSpace.xs),
                   AuraSegmented<String>(
                     segments: [
-                      AuraSegment(AudioModes.outputWasapi, l.outputWasapi),
-                      AuraSegment(AudioModes.outputVaio, l.outputVaio),
-                      AuraSegment(AudioModes.outputAsioClient, l.outputAsioClient),
+                      AuraSegment(AudioModes.outputWasapi, l.outputWasapi,
+                          tooltip: l.tooltipOutputWasapi),
+                      AuraSegment(AudioModes.outputVaio, l.outputVaio,
+                          tooltip: l.tooltipOutputVaio),
+                      AuraSegment(AudioModes.outputAsioClient, l.outputAsioClient,
+                          tooltip: l.tooltipOutputAsioClient),
                     ],
                     selected: model.pipelineOutput,
                     onChanged: (v) => model.setPipelineOutput(v),
                   ),
-                  // AuraVAIO 虚拟声卡输出提示与耳机监听镜像
-                  if (model.pipelineOutput == AudioModes.outputVaio) ...[
-                    const SizedBox(height: AuraSpace.sm),
-                    Container(
-                      padding: const EdgeInsets.all(AuraSpace.sm),
-                      decoration: BoxDecoration(
-                        color: p.panelRaised,
-                        borderRadius: BorderRadius.circular(AuraRadius.sm),
-                        border: Border.all(color: p.warning.withValues(alpha: 0.4)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.info_outline, size: 16, color: p.warning),
-                              const SizedBox(width: AuraSpace.xs),
-                              Expanded(
-                                child: Text(l.virtualSinkNotice,
-                                    style: captionOf(p, color: p.warning)),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: AuraSpace.sm),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(l.monitorMirroring, style: labelOf(p, size: 12)),
-                              AuraSwitch(
-                                value: model.monitorMirroring,
-                                onChanged: (v) => model.setMonitorMirroring(v),
-                              ),
-                            ],
-                          ),
-                          Text(l.monitorMirroringHint,
-                              style: monoOf(p, size: 10, color: p.textDim)),
-                        ],
-                      ),
-                    ),
-                  ],
                 ],
               ],
             ),
@@ -435,8 +424,6 @@ class _DynamicAudioPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
-
     // 1. 附加模式
     if (model.modeCategory == AudioModes.categoryAttachment) {
       if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
@@ -446,26 +433,8 @@ class _DynamicAudioPanel extends StatelessWidget {
       }
     }
 
-    // 2. 管线模式
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 输入源如果是虚拟 ASIO 驱动，显示驱动状态卡片
-        if (model.pipelineInput == AudioModes.inputAsioDriver) ...[
-          _VirtualAsioDriverCard(model: model),
-          const SizedBox(height: AuraSpace.md),
-          Container(height: 1, color: p.hairline),
-          const SizedBox(height: AuraSpace.md),
-        ],
-        // 输出端细分面板
-        if (model.pipelineOutput == AudioModes.outputAsioClient)
-          _AsioPanel(model: model)
-        else if (model.pipelineOutput == AudioModes.outputVaio)
-          _VaioPanel(model: model)
-        else
-          _WasapiRenderPanel(model: model),
-      ],
-    );
+    // 2. 管线模式：三层设备显示卡（驱动层、输入层、输出层）
+    return _PipelineThreeLayerCard(model: model);
   }
 }
 
@@ -591,6 +560,343 @@ class _SystemApoPanel extends StatelessWidget {
   }
 }
 
+/* ---- 04 管线模式三层设备卡（ADR-009：驱动层 / 输入层 / 输出层） ---- */
+
+class _PipelineThreeLayerCard extends StatelessWidget {
+  final AppModel model;
+  const _PipelineThreeLayerCard({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 第一层：驱动的信息和按钮
+        _DriverLayer(model: model),
+
+        const SizedBox(height: AuraSpace.md),
+        Container(height: 1, color: p.hairline),
+        const SizedBox(height: AuraSpace.md),
+
+        // 第二层：输入的信息和开关
+        _InputLayer(model: model),
+
+        const SizedBox(height: AuraSpace.md),
+        Container(height: 1, color: p.hairline),
+        const SizedBox(height: AuraSpace.md),
+
+        // 第三层：输出的信息和开关
+        _OutputLayer(model: model),
+      ],
+    );
+  }
+}
+
+/* ---- 第一层：驱动的信息和控制 ---- */
+
+class _DriverLayer extends StatelessWidget {
+  final AppModel model;
+  const _DriverLayer({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+
+    final widgets = <Widget>[];
+
+    // 如果输出是 ASIO Client：显示专业 ASIO 驱动选择、缓冲档、输出声道对、刷新入口
+    if (model.pipelineOutput == AudioModes.outputAsioClient) {
+      widgets.add(_AsioClientDriverRow(model: model));
+    }
+
+    // 如果输入是虚拟 ASIO 驱动：显示 AuraDSP Virtual ASIO 驱动注册状态与 DAW 状态卡片
+    if (model.pipelineInput == AudioModes.inputAsioDriver) {
+      if (widgets.isNotEmpty) {
+        widgets.add(const SizedBox(height: AuraSpace.sm));
+      }
+      widgets.add(_VirtualAsioDriverCard(model: model));
+    }
+
+    // 如果输入或输出使用了 AuraVAIO：显示 AuraVAIO KMDF 虚拟声卡驱动状态
+    if (model.pipelineInput == AudioModes.inputVaio ||
+        model.pipelineOutput == AudioModes.outputVaio) {
+      if (widgets.isNotEmpty) {
+        widgets.add(const SizedBox(height: AuraSpace.sm));
+      }
+      widgets.add(_VaioDriverRow(model: model));
+    }
+
+    // 如果输入和输出均为 WASAPI 标准模式：显示 Windows WASAPI 引擎状态与刷新
+    if (model.pipelineInput == AudioModes.inputWasapi &&
+        model.pipelineOutput == AudioModes.outputWasapi) {
+      widgets.add(_WasapiDriverRow(model: model));
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.developer_board_rounded, size: 15, color: p.accent),
+            const SizedBox(width: AuraSpace.xs),
+            Text(l.driverLayerTitle,
+                style: sectionOf(p, color: p.text)),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        ...widgets,
+      ],
+    );
+  }
+}
+
+class _AsioClientDriverRow extends StatelessWidget {
+  final AppModel model;
+  const _AsioClientDriverRow({required this.model});
+
+  static const _bufSizes = [0, 64, 128, 256, 512, 1024, 2048];
+  static const _outPairs = [0, 1, 2, 3];
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final drivers = model.asioDrivers;
+    final names = [for (final d in drivers) d['name'] ?? ''];
+    final sel = names.contains(model.config.asioDriver)
+        ? model.config.asioDriver
+        : (names.isNotEmpty ? names.first : '');
+    final note = model.asioDriversNote;
+    final info = model.asioInfo;
+
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioDriver,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: names.isEmpty
+                  ? Text(sel.isEmpty ? '—' : model.config.asioDriver,
+                      style: monoOf(p, size: 12))
+                  : DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: sel,
+                        isDense: true,
+                        dropdownColor: p.panelRaised,
+                        style: labelOf(p),
+                        icon: Icon(Icons.arrow_drop_down_rounded,
+                            color: p.accent),
+                        items: [
+                          for (final n in names)
+                            DropdownMenuItem<String>(
+                              value: n,
+                              child: Text(n,
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: n == sel ? p.accent : p.text)),
+                            ),
+                        ],
+                        onChanged: (v) {
+                          if (v != null) model.setAsioDriver(v);
+                        },
+                      ),
+                    ),
+            ),
+            AuraChip(l.asioRefresh,
+                icon: Icons.refresh_rounded,
+                onTap: () => model.refreshAsioDrivers()),
+          ]),
+          if (note.isNotEmpty) _InfoRow('ASIO', note),
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioBufSize,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _bufSizes.contains(model.config.asioBufSize)
+                      ? model.config.asioBufSize
+                      : 0,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon:
+                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    for (final b in _bufSizes)
+                      DropdownMenuItem<int>(
+                        value: b,
+                        child: Text(
+                            b == 0 ? l.asioBufAuto : '$b frames',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: b == model.config.asioBufSize
+                                    ? p.accent
+                                    : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioBufSize(v);
+                  },
+                ),
+              ),
+            ),
+          ]),
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text(l.asioOutPair,
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: _outPairs.contains(model.config.asioOutPair)
+                      ? model.config.asioOutPair
+                      : 0,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon:
+                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    for (final n in _outPairs)
+                      DropdownMenuItem<int>(
+                        value: n,
+                        child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: n == model.config.asioOutPair
+                                    ? p.accent
+                                    : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setAsioOutPair(v);
+                  },
+                ),
+              ),
+            ),
+          ]),
+          if (model.asioActive) ...[
+            _InfoRow(l.asioSwitches, '${info['switches'] ?? 0}'),
+            if (info['sr'] is num)
+              _InfoRow(l.sampleRate,
+                  '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames'),
+            if ((info['dropouts'] as int? ?? 0) > 0)
+              _InfoRow(l.asioDropouts, '${info['dropouts']}'),
+            if ((info['latenciesChanged'] as int? ?? 0) == 1)
+              _InfoRow('ASIO', l.asioLatChanged),
+            if (info['sr'] is num &&
+                (info['sr'] as num).toInt() != model.config.sampleRate)
+              _InfoRow(
+                  l.sampleRate,
+                  l.asioSrMismatch('${(info['sr'] as num).toInt()}',
+                      '${model.config.sampleRate}')),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _VaioDriverRow extends StatelessWidget {
+  final AppModel model;
+  const _VaioDriverRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final det = model.vaioDetectInfo;
+    final found = det['found'] == true;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                found
+                    ? 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'
+                    : '未检测到 AuraVAIO 虚拟声卡驱动',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: found ? p.success : p.warning,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道',
+                style: monoOf(p, size: 10, color: p.textDim),
+              ),
+            ],
+          ),
+        ),
+        AuraChip(
+          '重新检测',
+          icon: Icons.refresh_rounded,
+          onTap: () => model.refreshVaioDetect(),
+        ),
+      ],
+    );
+  }
+}
+
+class _WasapiDriverRow extends StatelessWidget {
+  final AppModel model;
+  const _WasapiDriverRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final info = model.info;
+
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Windows CoreAudio WASAPI Engine',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: p.text,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                info != null
+                    ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
+                    : '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖',
+                style: monoOf(p, size: 10, color: p.textDim),
+              ),
+            ],
+          ),
+        ),
+        AuraChip(
+          '刷新设备',
+          icon: Icons.refresh_rounded,
+          onTap: () => model.refreshAudioDevices(),
+        ),
+      ],
+    );
+  }
+}
+
 class _VirtualAsioDriverCard extends StatelessWidget {
   final AppModel model;
   const _VirtualAsioDriverCard({required this.model});
@@ -669,19 +975,355 @@ class _VirtualAsioDriverCard extends StatelessWidget {
   }
 }
 
-class _WasapiRenderPanel extends StatelessWidget {
+/* ---- 第二层：输入的信息和开关 ---- */
+
+class _InputLayer extends StatelessWidget {
   final AppModel model;
-  const _WasapiRenderPanel({required this.model});
+  const _InputLayer({required this.model});
 
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    final p = paletteOf(context);
+    final enabled = model.pipelineInputEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.input_rounded, size: 15, color: p.accent),
+                const SizedBox(width: AuraSpace.xs),
+                Text(l.inputLayerTitle,
+                    style: sectionOf(p, color: p.text)),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(message: l.tooltipInputWasapi),
+              ],
+            ),
+            AuraSwitch(
+              value: enabled,
+              onChanged: (v) => model.setPipelineInputEnabled(v),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        if (!enabled)
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+            decoration: BoxDecoration(
+              color: p.panelRaised,
+              borderRadius: BorderRadius.circular(AuraRadius.sm),
+              border: Border.all(color: p.hairline),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.mic_off_outlined, size: 15, color: p.textDim),
+                const SizedBox(width: AuraSpace.xs),
+                Expanded(
+                  child: Text(
+                    l.inputDisabledNotice,
+                    style: captionOf(p, color: p.textDim),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (model.pipelineInput == AudioModes.inputWasapi)
+            _WasapiInputSubpanel(model: model)
+          else if (model.pipelineInput == AudioModes.inputVaio)
+            _VaioInputSubpanel(model: model)
+          else
+            _VirtualAsioInputSubpanel(model: model),
+        ],
+      ],
+    );
+  }
+}
+
+class _WasapiInputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _WasapiInputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final inputs = model.filteredWasapiInputs;
+    final curDev = model.pipelineInputDevice;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            SizedBox(
+              width: 104,
+              child: Text(l.inputDeviceLabel,
+                  style: labelOf(p, size: 12, color: p.textDim)),
+            ),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: inputs.any((d) => d.id == curDev || d.name == curDev)
+                      ? curDev
+                      : '',
+                  isDense: true,
+                  isExpanded: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text(
+                        l.defaultInputDevice,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: curDev.isEmpty ? p.accent : p.text,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    for (final item in inputs)
+                      DropdownMenuItem<String>(
+                        value: item.id.isNotEmpty ? item.id : item.name,
+                        child: Text(
+                          '${item.name} ${item.isRender ? l.tagLoopback : l.tagRecording}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: (item.id == curDev || item.name == curDev)
+                                ? p.accent
+                                : p.text,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setPipelineInputDevice(v);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: AuraSpace.xs),
+            AuraChip(
+              '刷新设备',
+              icon: Icons.refresh_rounded,
+              onTap: () => model.refreshAudioDevices(),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          curDev.isEmpty
+              ? '默认内录/环回模式：实时采集系统主回放端点音频'
+              : '针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集',
+          style: monoOf(p, size: 10, color: p.textDim),
+        ),
+      ],
+    );
+  }
+}
+
+class _VaioInputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _VaioInputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final active = model.vaioActive;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow('输入端点', 'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)'),
+        _InfoRow('通道状态', active ? '活跃传输中 (全双工 DMA 环形缓冲)' : '就绪 (等待系统/应用推流)'),
+        const SizedBox(height: 2),
+        Text(
+          '请在 Windows 声音设置或播放器中将默认输出选择为 "AuraVAIO"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。',
+          style: monoOf(p, size: 10, color: p.textDim),
+        ),
+      ],
+    );
+  }
+}
+
+class _VirtualAsioInputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _VirtualAsioInputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final active = model.asioActive;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow('输入端点', 'AuraDSP Virtual ASIO Client Stream'),
+        _InfoRow('输入通道', active ? 'DAW 实时注入 (活跃)' : '等待 DAW 连接 (宿主未开启)'),
+        const SizedBox(height: 2),
+        Text(
+          '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 "AuraDSP Virtual ASIO" 即可将工程音频路由至此。',
+          style: monoOf(p, size: 10, color: p.textDim),
+        ),
+      ],
+    );
+  }
+}
+
+/* ---- 第三层：输出的信息和开关 ---- */
+
+class _OutputLayer extends StatelessWidget {
+  final AppModel model;
+  const _OutputLayer({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final enabled = model.pipelineOutputEnabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.output_rounded, size: 15, color: p.accent),
+                const SizedBox(width: AuraSpace.xs),
+                Text(l.outputLayerTitle,
+                    style: sectionOf(p, color: p.text)),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(message: l.tooltipOutputWasapi),
+              ],
+            ),
+            AuraSwitch(
+              value: enabled,
+              onChanged: (v) => model.setPipelineOutputEnabled(v),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.sm),
+        if (!enabled)
+          Container(
+            padding: const EdgeInsets.symmetric(
+                horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+            decoration: BoxDecoration(
+              color: p.panelRaised,
+              borderRadius: BorderRadius.circular(AuraRadius.sm),
+              border: Border.all(color: p.hairline),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.volume_off_outlined, size: 15, color: p.textDim),
+                const SizedBox(width: AuraSpace.xs),
+                Expanded(
+                  child: Text(
+                    l.outputDisabledNotice,
+                    style: captionOf(p, color: p.textDim),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          if (model.pipelineOutput == AudioModes.outputWasapi)
+            _WasapiOutputSubpanel(model: model)
+          else if (model.pipelineOutput == AudioModes.outputVaio)
+            _VaioOutputSubpanel(model: model)
+          else
+            _AsioClientOutputSubpanel(model: model),
+        ],
+      ],
+    );
+  }
+}
+
+class _WasapiOutputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _WasapiOutputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final outputs = model.filteredWasapiOutputs;
+    final curDev = model.pipelineOutputDevice;
     final info = model.info;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.outputWasapi, 'Desktop · in-process WASAPI Render'),
+        _InfoRow(l.outputWasapi, 'WASAPI 物理渲染 (扬声器/耳机)'),
+        const SizedBox(height: AuraSpace.xs),
+        Row(
+          children: [
+            SizedBox(
+              width: 104,
+              child: Text(l.outputDeviceLabel,
+                  style: labelOf(p, size: 12, color: p.textDim)),
+            ),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: outputs.any((d) => d.id == curDev || d.name == curDev)
+                      ? curDev
+                      : '',
+                  isDense: true,
+                  isExpanded: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text(
+                        l.defaultOutputDevice,
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: curDev.isEmpty ? p.accent : p.text,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    for (final item in outputs)
+                      DropdownMenuItem<String>(
+                        value: item.id.isNotEmpty ? item.id : item.name,
+                        child: Text(
+                          item.name,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: (item.id == curDev || item.name == curDev)
+                                ? p.accent
+                                : p.text,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setPipelineOutputDevice(v);
+                  },
+                ),
+              ),
+            ),
+            const SizedBox(width: AuraSpace.xs),
+            AuraChip(
+              '刷新设备',
+              icon: Icons.refresh_rounded,
+              onTap: () => model.refreshAudioDevices(),
+            ),
+          ],
+        ),
         if (info != null) ...[
           _InfoRow(
               l.sampleRate, '${info.deviceRate} Hz / ${info.deviceCh} ch'),
@@ -703,6 +1345,141 @@ class _WasapiRenderPanel extends StatelessWidget {
             ),
           ),
         ],
+      ],
+    );
+  }
+}
+
+class _VaioOutputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _VaioOutputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final info = model.vaioInfo;
+    final det = model.vaioDetectInfo;
+    final endpoints = (det['endpoints'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
+        <String>[];
+    final curEndpoint = model.config.vaioOutputEndpoint;
+
+    return ListenableBuilder(
+      listenable: model,
+      builder: (_, _) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(AuraSpace.sm),
+            decoration: BoxDecoration(
+              color: p.panelRaised,
+              borderRadius: BorderRadius.circular(AuraRadius.sm),
+              border: Border.all(color: p.warning.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: p.warning),
+                    const SizedBox(width: AuraSpace.xs),
+                    Expanded(
+                      child: Text(l.virtualSinkNotice,
+                          style: captionOf(p, color: p.warning)),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(l.monitorMirroring, style: labelOf(p, size: 12)),
+                    AuraSwitch(
+                      value: model.monitorMirroring,
+                      onChanged: (v) => model.setMonitorMirroring(v),
+                    ),
+                  ],
+                ),
+                Text(l.monitorMirroringHint,
+                    style: monoOf(p, size: 10, color: p.textDim)),
+              ],
+            ),
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          Row(children: [
+            SizedBox(
+                width: 104,
+                child: Text('物理输出',
+                    style: labelOf(p, size: 12, color: p.textDim))),
+            Expanded(
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<String>(
+                  value: endpoints.contains(curEndpoint) ? curEndpoint : '',
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    DropdownMenuItem<String>(
+                      value: '',
+                      child: Text('自动选择（非VAIO扬声器）',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: curEndpoint.isEmpty ? p.accent : p.text)),
+                    ),
+                    for (final ep in endpoints)
+                      DropdownMenuItem<String>(
+                        value: ep,
+                        child: Text(ep,
+                            style: TextStyle(
+                                fontSize: 12,
+                                color: ep == curEndpoint ? p.accent : p.text)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) model.setVaioOutputEndpoint(v);
+                  },
+                ),
+              ),
+            ),
+            AuraChip(l.asioRefresh,
+                icon: Icons.refresh_rounded,
+                onTap: () => model.refreshVaioDetect()),
+          ]),
+          if (info['note'] is String && (info['note'] as String).isNotEmpty)
+            _InfoRow('AuraVAIO', '${info['note']}'),
+          if (model.vaioActive) ...[
+            if (info['sr'] is num)
+              _InfoRow(l.sampleRate, '${(info['sr'] as num).toInt()} Hz / 2 ch'),
+            if (info['frames'] is num)
+              _InfoRow('已处理帧', '${(info['frames'] as num).toInt()} frames'),
+            if (info['outputEndpoint'] is String &&
+                (info['outputEndpoint'] as String).isNotEmpty)
+              _InfoRow('输出端点', '${info['outputEndpoint']}'),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AsioClientOutputSubpanel extends StatelessWidget {
+  final AppModel model;
+  const _AsioClientOutputSubpanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final active = model.asioActive;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _InfoRow('输出端点', 'AuraDSP ASIO Client 硬件输出'),
+        _InfoRow('声道映射',
+            '通道 ${model.config.asioOutPair * 2 + 1} / ${model.config.asioOutPair * 2 + 2}'),
+        _InfoRow('输出状态', active ? '正在直通硬件监听 (超低延迟)' : '就绪 (等待驱动会话)'),
       ],
     );
   }
@@ -1019,251 +1796,7 @@ class _MiniToggle extends StatelessWidget {
   }
 }
 
-/* ---- ASIO 面板：驱动选择器 + 缓冲档 + 输出对（与 04 桥契约对齐） ---- */
 
-class _AsioPanel extends StatelessWidget {
-  final AppModel model;
-  const _AsioPanel({required this.model});
-
-  // 缓冲档（帧）：0 = 驱动 preferredSize（FL Studio 实测 512 / VM 2048）。
-  static const _bufSizes = [0, 64, 128, 256, 512, 1024, 2048];
-  // 输出对起始声道：0→ch1/2，1→ch3/4……上限 4 对（v1 驱动面 ≥8 出声道常见）。
-  static const _outPairs = [0, 1, 2, 3];
-
-  @override
-  Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    final p = paletteOf(context);
-    final drivers = model.asioDrivers;
-    final names = [for (final d in drivers) d['name'] ?? ''];
-    final sel = names.contains(model.config.asioDriver)
-        ? model.config.asioDriver
-        : (names.isNotEmpty ? names.first : '');
-    final note = model.asioDriversNote;
-    final info = model.asioInfo;
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 驱动下拉（清单空但 note 有原因：展示 note + 刷新入口，别静默）。
-          Row(children: [
-            SizedBox(
-                width: 104,
-                child: Text(l.asioDriver,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: names.isEmpty
-                  ? Text(sel.isEmpty ? '—' : model.config.asioDriver,
-                      style: monoOf(p, size: 12))
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: sel,
-                        isDense: true,
-                        dropdownColor: p.panelRaised,
-                        style: labelOf(p),
-                        icon: Icon(Icons.arrow_drop_down_rounded,
-                            color: p.accent),
-                        items: [
-                          for (final n in names)
-                            DropdownMenuItem<String>(
-                              value: n,
-                              child: Text(n,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: n == sel ? p.accent : p.text)),
-                            ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) model.setAsioDriver(v);
-                        },
-                      ),
-                    ),
-            ),
-            // 刷新（重装驱动后手动重枚举；主 isolate 侧 asio_detect）。
-            AuraChip(l.asioRefresh,
-                icon: Icons.refresh_rounded,
-                onTap: () => model.refreshAsioDrivers()),
-          ]),
-          if (note.isNotEmpty) _InfoRow('ASIO', note),
-          // 缓冲档：0=自动（驱动 preferredSize），其余为显式档位。
-          Row(children: [
-            SizedBox(
-                width: 104,
-                child: Text(l.asioBufSize,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: _bufSizes.contains(model.config.asioBufSize)
-                      ? model.config.asioBufSize
-                      : 0,
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon:
-                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    for (final b in _bufSizes)
-                      DropdownMenuItem<int>(
-                        value: b,
-                        child: Text(
-                            b == 0 ? l.asioBufAuto : '$b frames',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: b == model.config.asioBufSize
-                                    ? p.accent
-                                    : p.text)),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setAsioBufSize(v);
-                  },
-                ),
-              ),
-            ),
-          ]),
-          // 输出对：L=R+1 配对；0→ch1/2。
-          Row(children: [
-            SizedBox(
-                width: 104,
-                child: Text(l.asioOutPair,
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: _outPairs.contains(model.config.asioOutPair)
-                      ? model.config.asioOutPair
-                      : 0,
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon:
-                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    for (final n in _outPairs)
-                      DropdownMenuItem<int>(
-                        value: n,
-                        child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: n == model.config.asioOutPair
-                                    ? p.accent
-                                    : p.text)),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setAsioOutPair(v);
-                  },
-                ),
-              ),
-            ),
-          ]),
-          // 运行态（来自 asiostatus 心跳；与 VB 分支同款只挑可读字段）。
-          if (model.asioActive) ...[
-            _InfoRow(l.asioSwitches, '${info['switches'] ?? 0}'),
-            if (info['sr'] is num)
-              _InfoRow(l.sampleRate,
-                  '${(info['sr'] as num).toInt()} Hz / ${info['nbs'] ?? '?'} frames'),
-            // Phase 4：掉线计数（两次 status 间回调增量低于期望 80% 记一次）。
-            if ((info['dropouts'] as int? ?? 0) > 0)
-              _InfoRow(l.asioDropouts, '${info['dropouts']}'),
-            // Phase 4：驱动延迟变更提示（下一次会话生效）。
-            if ((info['latenciesChanged'] as int? ?? 0) == 1)
-              _InfoRow('ASIO', l.asioLatChanged),
-            // Phase 4：采样率不符策略提示（ASIO 跟随驱动；设置页采样率仅
-            // 对 WASAPI/进程内引擎生效）。
-            if (info['sr'] is num &&
-                (info['sr'] as num).toInt() != model.config.sampleRate)
-              _InfoRow(
-                  l.sampleRate,
-                  l.asioSrMismatch('${(info['sr'] as num).toInt()}',
-                      '${model.config.sampleRate}')),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _VaioPanel extends StatelessWidget {
-  final AppModel model;
-  const _VaioPanel({required this.model});
-
-  @override
-  Widget build(BuildContext context) {
-    final l = l10nOf(context);
-    final p = paletteOf(context);
-    final info = model.vaioInfo;
-    final det = model.vaioDetectInfo;
-    final endpoints = (det['endpoints'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        <String>[];
-    final curEndpoint = model.config.vaioOutputEndpoint;
-
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(children: [
-            SizedBox(
-                width: 104,
-                child: Text('物理输出',
-                    style: labelOf(p, size: 12, color: p.textDim))),
-            Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: endpoints.contains(curEndpoint) ? curEndpoint : '',
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('自动选择（非VAIO扬声器）',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: curEndpoint.isEmpty ? p.accent : p.text)),
-                    ),
-                    for (final ep in endpoints)
-                      DropdownMenuItem<String>(
-                        value: ep,
-                        child: Text(ep,
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: ep == curEndpoint ? p.accent : p.text)),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setVaioOutputEndpoint(v);
-                  },
-                ),
-              ),
-            ),
-            AuraChip(l.asioRefresh,
-                icon: Icons.refresh_rounded,
-                onTap: () => model.refreshVaioDetect()),
-          ]),
-          if (det['found'] == false)
-            _InfoRow('驱动状态', '未检测到 AuraVAIO 虚拟声卡驱动'),
-          if (info['note'] is String && (info['note'] as String).isNotEmpty)
-            _InfoRow('AuraVAIO', '${info['note']}'),
-          if (model.vaioActive) ...[
-            if (info['sr'] is num)
-              _InfoRow(l.sampleRate, '${(info['sr'] as num).toInt()} Hz / 2 ch'),
-            if (info['frames'] is num)
-              _InfoRow('已处理帧', '${(info['frames'] as num).toInt()} frames'),
-            if (info['outputEndpoint'] is String && (info['outputEndpoint'] as String).isNotEmpty)
-              _InfoRow('输出端点', '${info['outputEndpoint']}'),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 class _ThemeCard extends StatefulWidget {
   final String name;

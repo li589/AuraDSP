@@ -240,34 +240,91 @@ class AppLocalizationsJa extends AppLocalizations {
   String get modeVoicemeeterApi => 'Voicemeeter API';
 
   @override
-  String get pipelineIn => '入力ソース';
+  String get pipelineIn => '入力端';
 
   @override
-  String get pipelineInHint => '音声が AuraDSP コア処理パイプラインに入る方法を選択';
+  String get pipelineInHint => 'AuraDSP 処理パイプラインへ送るオーディオストリームの入力元を選択します';
 
   @override
-  String get pipelineOut => '出力ターゲット';
+  String get pipelineOut => '出力端';
 
   @override
-  String get pipelineOutHint => '処理された音声のルーティング先を選択';
+  String get pipelineOutHint => 'AuraDSP で処理されたオーディオの最終出力先を選択します';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+  String get inputWasapi => 'WASAPI 標準モード';
 
   @override
-  String get inputVaio => 'AuraVAIO 仮想入力 (システム再生)';
+  String get inputVaio => 'AuraVAIO 仮想入力';
 
   @override
-  String get inputWasapi => 'WASAPI キャプチャ (マイク / ミックス)';
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
 
   @override
-  String get outputWasapi => 'WASAPI レンダー (スピーカー / ヘッドホン)';
+  String get outputWasapi => 'WASAPI 標準出力';
 
   @override
-  String get outputVaio => 'AuraVAIO 仮想出力 (録音 / 配信)';
+  String get outputVaio => 'AuraVAIO 仮想出力';
 
   @override
-  String get outputAsioClient => 'ASIO Client (外部ハードウェアオーディオIF)';
+  String get outputAsioClient => 'AuraDSP ASIO Client';
+
+  @override
+  String get tooltipInputWasapi =>
+      'WASAPI 標準モード：物理マイク録音、または再生デバイスのループバック録音からキャプチャします';
+
+  @override
+  String get tooltipInputVaio =>
+      'AuraVAIO 仮想入力：AuraVAIO 仮想オーディオデバイスへ送られた音声を受信します';
+
+  @override
+  String get tooltipInputAsioDriver =>
+      'AuraDSP Virtual ASIO：FL Studio や Cubase などの DAW 向けに仮想 ASIO ドライバを提供します';
+
+  @override
+  String get tooltipOutputWasapi =>
+      'WASAPI 標準出力：物理スピーカー、ヘッドホン、または外部仮想デバイスへ再生出力します';
+
+  @override
+  String get tooltipOutputVaio =>
+      'AuraVAIO 仮想出力：仮想オーディオ端点へ出力し、ヘッドホンモニターミラーリングにも対応します';
+
+  @override
+  String get tooltipOutputAsioClient =>
+      'AuraDSP ASIO Client：外部のプロ向け物理 ASIO オーディオインターフェースへ超低遅延出力します';
+
+  @override
+  String get driverLayerTitle => 'ドライバ情報と制御';
+
+  @override
+  String get inputLayerTitle => '入力端情報とスイッチ';
+
+  @override
+  String get outputLayerTitle => '出力端情報とスイッチ';
+
+  @override
+  String get inputDisabledNotice => '入力端が無効になっています（録音キャプチャ一時停止中）';
+
+  @override
+  String get outputDisabledNotice => '出力端が無効になっています（再生ミュート中）';
+
+  @override
+  String get inputDeviceLabel => '入力デバイス';
+
+  @override
+  String get outputDeviceLabel => '出力デバイス';
+
+  @override
+  String get defaultInputDevice => 'システム既定デバイス [ループバック]';
+
+  @override
+  String get defaultOutputDevice => 'システム既定出力 (Default Render)';
+
+  @override
+  String get tagLoopback => '[ループバック]';
+
+  @override
+  String get tagRecording => '[録音]';
 
   @override
   String get apoTargetEndpoint => '対象エンドポイント';
