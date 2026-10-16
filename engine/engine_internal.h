@@ -154,6 +154,10 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    spatial_center{0.8f};/* [0,1] 中置聚焦 */
     std::atomic<float>    spatial_outgain{0.0f}; /* dB [-12,6] */
     std::atomic<int32_t>  spatial_autogain{0};
+    /* 头跟预留（Phase 2 stub：存取对称 + 钳位，DSP 暂不消费；未来实现时
+     * spatial_process 按 azimuth 整体旋转 kSpatDeg 即可，无需改状态布局） */
+    std::atomic<float>    spatial_headazim{0.0f}; /* 度 [-180,180] 头部偏航 */
+    std::atomic<int32_t>  spatial_headtrack{0};  /* 0=关闭 1=跟随 */
     /* 激励器（HPF 取高频 + tanh 谐波混回；drive 固定，只暴露 amount/hifreq） */
     std::atomic<int32_t>  exciter_enable{0};
     std::atomic<float>    exciter_amount{0.3f};  /* [0,1] */

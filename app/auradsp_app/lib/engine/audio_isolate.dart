@@ -522,6 +522,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iSpR = idp(ParamId.spatialRoom), iSpW = idp(ParamId.spatialWidth);
             final iSpC = idp(ParamId.spatialCenter), iSpG = idp(ParamId.spatialOutGain);
             final iSpA = idp(ParamId.spatialAutoGain);
+            final iSpH = idp(ParamId.spatialHeadAzim), iSpT = idp(ParamId.spatialHeadTrack);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
             // P-010：每效果输出增益门 + 自动补偿
             final iBoG = idp(ParamId.bassOutGain), iBoA = idp(ParamId.bassAutoGain);
@@ -625,6 +626,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'spatialCenter': rdFloat(iSpC) ?? 0.8,
                 'spatialOutGain': rdFloat(iSpG) ?? 0.0,
                 'spatialAutoGain': rdInt(iSpA) ?? 0,
+                'spatialHeadAzim': rdFloat(iSpH) ?? 0.0,
+                'spatialHeadTrack': rdInt(iSpT) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,
                 'exciterAmount': rdFloat(iExA) ?? 0.3,
                 'exciterHifreq': rdFloat(iExF) ?? 5000.0,
