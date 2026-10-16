@@ -67,25 +67,34 @@ Abstract:
 //=============================================================================
 // KS pin / node numbering
 //
-// Minimal render-only topology:
-//   Wave filter     : pin0 = host render sink (stream pin), pin1 = bridge
-//   Topology filter : pin0 = bridge, pin1 = speaker ("physical") output
-//   Neither filter declares nodes yet (see the milestone note above).
+// Render & Capture topology:
+//   Wave filter     : pin0 = render sink, pin1 = render bridge,
+//                     pin2 = capture bridge, pin3 = capture sink
+//   Topology filter : pin0 = render bridge, pin1 = speaker ("physical") output,
+//                     pin2 = mic/line ("physical") input, pin3 = capture bridge
 //=============================================================================
 
 enum
 {
-    KSPIN_WAVE_RENDER_SINK  = 0,    // host -> adapter  (the WaveRT stream pin)
-    KSPIN_WAVE_BRIDGE       = 1,    // adapter -> topology
+    KSPIN_WAVE_RENDER_SINK      = 0,    // host -> adapter (render stream pin)
+    KSPIN_WAVE_RENDER_BRIDGE    = 1,    // adapter -> topology (render bridge)
+    KSPIN_WAVE_CAPTURE_BRIDGE   = 2,    // topology -> adapter (capture bridge)
+    KSPIN_WAVE_CAPTURE_SINK     = 3,    // adapter -> host (capture stream pin)
     KSPIN_WAVE_PIN_COUNT
 };
 
+#define KSPIN_WAVE_BRIDGE       KSPIN_WAVE_RENDER_BRIDGE
+
 enum
 {
-    KSPIN_TOPO_BRIDGE       = 0,    // topology <- adapter
-    KSPIN_TOPO_SPEAKER      = 1,    // the endpoint-facing ("physical") pin
+    KSPIN_TOPO_RENDER_BRIDGE    = 0,    // topology <- wave (render)
+    KSPIN_TOPO_SPEAKER          = 1,    // endpoint speaker output
+    KSPIN_TOPO_MIC              = 2,    // endpoint mic/line input
+    KSPIN_TOPO_CAPTURE_BRIDGE   = 3,    // topology -> wave (capture)
     KSPIN_TOPO_PIN_COUNT
 };
+
+#define KSPIN_TOPO_BRIDGE       KSPIN_TOPO_RENDER_BRIDGE
 
 //=============================================================================
 // Default stream format (the only format this increment advertises)

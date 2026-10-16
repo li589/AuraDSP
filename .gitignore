@@ -35,9 +35,11 @@ core/android/aidl-gen/
 **/windows/flutter/ephemeral/
 **/.plugin_symlinks/
 *.o
+*.obj
 *.a
 *.so
 *.dll
+core/desktop/windows-drivers/01_vaio_driver/tools/*.exe
 obj/
 build_log*.txt
 xtrace.txt

@@ -222,7 +222,7 @@ CMiniportWaveRT::NewStream(
 
     *Stream = NULL;
 
-    if (Pin != KSPIN_WAVE_RENDER_SINK)
+    if (Pin != KSPIN_WAVE_RENDER_SINK && Pin != KSPIN_WAVE_CAPTURE_SINK)
     {
         AURA_TRACE("NewStream on unsupported pin %u", Pin);
         return STATUS_NOT_SUPPORTED;

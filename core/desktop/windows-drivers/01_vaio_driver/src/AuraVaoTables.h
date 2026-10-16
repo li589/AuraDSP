@@ -58,7 +58,7 @@ PCAUTOMATION_TABLE AuraNullAutomation =
 static
 KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
 {
-    {   // 0 : 32-bit IEEE float
+    {   // 0 : 32-bit IEEE float (stereo)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,                                              // Flags
@@ -68,11 +68,11 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
             STATICGUIDOF(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT),
             STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
         },
-        AURA_DEFAULT_CHANNELS,                              // MaximumChannels
+        AURA_DEFAULT_CHANNELS,                              // MaximumChannels (2)
         32, 32,                                             // Min/Max bits per sample
-        44100, 96000                                        // Min/Max sample rate
+        44100, 192000                                       // Min/Max sample rate
     },
-    {   // 1 : 16-bit PCM
+    {   // 1 : 16-bit PCM (stereo)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,
@@ -82,9 +82,37 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
             STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
             STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
         },
-        AURA_DEFAULT_CHANNELS,
+        AURA_DEFAULT_CHANNELS,                              // 2
         16, 16,
-        44100, 96000
+        44100, 192000
+    },
+    {   // 2 : 32-bit IEEE float (7.1 surround, 8 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        8,                                                  // MaximumChannels (8)
+        32, 32,
+        44100, 192000
+    },
+    {   // 3 : 16-bit PCM (7.1 surround, 8 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        8,                                                  // MaximumChannels (8)
+        16, 16,
+        44100, 192000
     }
 };
 
@@ -92,7 +120,9 @@ static
 PKSDATARANGE AuraWavePinDataRangePointersStream[] =
 {
     PKSDATARANGE(&AuraWavePinDataRangesStream[0]),
-    PKSDATARANGE(&AuraWavePinDataRangesStream[1])
+    PKSDATARANGE(&AuraWavePinDataRangesStream[1]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[2]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[3])
 };
 
 //=============================================================================
@@ -126,7 +156,7 @@ PKSDATARANGE AuraPinDataRangePointersBridge[] =
 static
 PCPIN_DESCRIPTOR AuraWaveMiniportPins[] =
 {
-    // KSPIN_WAVE_RENDER_SINK : the host render stream pin.
+    // KSPIN_WAVE_RENDER_SINK (0) : the host render stream pin.
     {
         1,                                          // MaxGlobalInstanceCount
         1,                                          // MaxFilterInstanceCount
@@ -146,7 +176,7 @@ PCPIN_DESCRIPTOR AuraWaveMiniportPins[] =
             0                                       // Reserved
         }
     },
-    // KSPIN_WAVE_BRIDGE : toward the topology filter.
+    // KSPIN_WAVE_RENDER_BRIDGE (1) : toward the topology filter (render).
     {
         0,                                          // MaxGlobalInstanceCount (not instantiable)
         0,
@@ -165,16 +195,59 @@ PCPIN_DESCRIPTOR AuraWaveMiniportPins[] =
             NULL,
             0
         }
+    },
+    // KSPIN_WAVE_CAPTURE_BRIDGE (2) : from the topology filter (capture).
+    {
+        0,
+        0,
+        0,
+        &AuraNullAutomation,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(AuraPinDataRangePointersBridge),
+            AuraPinDataRangePointersBridge,
+            KSPIN_DATAFLOW_IN,
+            KSPIN_COMMUNICATION_NONE,
+            &KSCATEGORY_AUDIO,
+            NULL,
+            0
+        }
+    },
+    // KSPIN_WAVE_CAPTURE_SINK (3) : the host capture stream pin.
+    {
+        1,                                          // MaxGlobalInstanceCount
+        1,                                          // MaxFilterInstanceCount
+        0,                                          // MinFilterInstanceCount
+        &AuraNullAutomation,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(AuraWavePinDataRangePointersStream),
+            AuraWavePinDataRangePointersStream,
+            KSPIN_DATAFLOW_OUT,                     // Host reads from here
+            KSPIN_COMMUNICATION_SINK,
+            &KSCATEGORY_AUDIO,
+            NULL,
+            0
+        }
     }
 };
 
 //
-// Internal connection: render sink -> bridge (no nodes in between yet).
+// Internal connections:
+//   render sink    -> render bridge
+//   capture bridge -> capture sink
 //
 static
 PCCONNECTION_DESCRIPTOR AuraWaveMiniportConnections[] =
 {
-    { PCFILTER_NODE, KSPIN_WAVE_RENDER_SINK, PCFILTER_NODE, KSPIN_WAVE_BRIDGE }
+    { PCFILTER_NODE, KSPIN_WAVE_RENDER_SINK,    PCFILTER_NODE, KSPIN_WAVE_RENDER_BRIDGE },
+    { PCFILTER_NODE, KSPIN_WAVE_CAPTURE_BRIDGE, PCFILTER_NODE, KSPIN_WAVE_CAPTURE_SINK   }
 };
 
 static
@@ -201,7 +274,7 @@ PCFILTER_DESCRIPTOR AuraWaveMiniportFilterDescriptor =
 static
 PCPIN_DESCRIPTOR AuraTopoMiniportPins[] =
 {
-    // KSPIN_TOPO_BRIDGE : receives from the wave filter.
+    // KSPIN_TOPO_RENDER_BRIDGE (0) : receives from the wave render bridge.
     {
         0,
         0,
@@ -221,7 +294,7 @@ PCPIN_DESCRIPTOR AuraTopoMiniportPins[] =
             0
         }
     },
-    // KSPIN_TOPO_SPEAKER : the endpoint-facing ("physical") output.
+    // KSPIN_TOPO_SPEAKER (1) : the endpoint-facing ("physical") speaker output.
     {
         0,
         0,
@@ -240,13 +313,54 @@ PCPIN_DESCRIPTOR AuraTopoMiniportPins[] =
             NULL,
             0
         }
+    },
+    // KSPIN_TOPO_MIC (2) : the endpoint-facing ("physical") mic/line input.
+    {
+        0,
+        0,
+        0,
+        &AuraNullAutomation,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(AuraPinDataRangePointersBridge),
+            AuraPinDataRangePointersBridge,
+            KSPIN_DATAFLOW_IN,
+            KSPIN_COMMUNICATION_NONE,
+            &KSNODETYPE_MICROPHONE,
+            NULL,
+            0
+        }
+    },
+    // KSPIN_TOPO_CAPTURE_BRIDGE (3) : sends to the wave capture bridge.
+    {
+        0,
+        0,
+        0,
+        &AuraNullAutomation,
+        {
+            0,
+            NULL,
+            0,
+            NULL,
+            SIZEOF_ARRAY(AuraPinDataRangePointersBridge),
+            AuraPinDataRangePointersBridge,
+            KSPIN_DATAFLOW_OUT,
+            KSPIN_COMMUNICATION_NONE,
+            &KSCATEGORY_AUDIO,
+            NULL,
+            0
+        }
     }
 };
 
 static
 PCCONNECTION_DESCRIPTOR AuraTopoMiniportConnections[] =
 {
-    { PCFILTER_NODE, KSPIN_TOPO_BRIDGE, PCFILTER_NODE, KSPIN_TOPO_SPEAKER }
+    { PCFILTER_NODE, KSPIN_TOPO_RENDER_BRIDGE, PCFILTER_NODE, KSPIN_TOPO_SPEAKER        },
+    { PCFILTER_NODE, KSPIN_TOPO_MIC,           PCFILTER_NODE, KSPIN_TOPO_CAPTURE_BRIDGE }
 };
 
 static
@@ -270,20 +384,23 @@ PCFILTER_DESCRIPTOR AuraTopoMiniportFilterDescriptor =
 // Wave <-> topology physical connections.
 //
 // Registered with PcRegisterPhysicalConnection(DeviceObject,
-// FromUnknown, FromPin, ToUnknown, ToPin).  For render the data flows
-// wave-bridge -> topology-bridge, so the wave filter is the "From" side.
+// FromUnknown, FromPin, ToUnknown, ToPin).
+// For render : wave-bridge (OUT) -> topo-bridge (IN)
+// For capture: topo-bridge (OUT) -> wave-bridge (IN)
 //=============================================================================
 
 typedef struct _AURA_PHYSICAL_CONNECTION
 {
     ULONG   WavePin;        // pin on the wave (sub)device
     ULONG   TopologyPin;    // pin on the topology (sub)device
+    BOOLEAN WaveIsFrom;     // TRUE: Wave -> Topo, FALSE: Topo -> Wave
 } AURA_PHYSICAL_CONNECTION;
 
 static
 AURA_PHYSICAL_CONNECTION AuraPhysicalConnections[] =
 {
-    { KSPIN_WAVE_BRIDGE, KSPIN_TOPO_BRIDGE }
+    { KSPIN_WAVE_RENDER_BRIDGE,  KSPIN_TOPO_RENDER_BRIDGE,  TRUE  },
+    { KSPIN_WAVE_CAPTURE_BRIDGE, KSPIN_TOPO_CAPTURE_BRIDGE, FALSE }
 };
 
 #endif // _AURA_VAO_TABLES_H_
