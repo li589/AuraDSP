@@ -23,7 +23,7 @@ std::string WideToUtf8(const wchar_t* w) {
     const int n = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
     if (n <= 1) return {};
     std::string s((size_t)n - 1, '\0');
-    WideCharToMultiByte(CP_UTF8, 0, w, -1, s.data(), n, nullptr, nullptr);
+    WideCharToMultiByte(CP_UTF8, 0, w, -1, &s[0], n, nullptr, nullptr);
     return s;
 }
 

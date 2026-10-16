@@ -42,5 +42,6 @@ int main() {
     printf("],\"defaultRender\":\"%s\",\"defaultCapture\":\"%s\",\"protectedAudioDG\":%d,\"note\":\"%s\"}\n",
            JsonEscape(r.defaultRender).c_str(), JsonEscape(r.defaultCapture).c_str(),
            r.protectedAudioDG, JsonEscape(r.note).c_str());
+    fflush(stdout);
     return 0;
 }

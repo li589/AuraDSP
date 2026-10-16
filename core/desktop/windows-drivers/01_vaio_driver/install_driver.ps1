@@ -1,4 +1,4 @@
-﻿<#
+<#
 .SYNOPSIS
   AuraVAIO 驱动装载 / 卸载 / 状态查询（Phase 4 验收 ①：设备管理器识别 AuraVAIO）。
 
@@ -70,12 +70,17 @@ $CatPath  = Join-Path $PackageDir 'auravaiodriver.cat'
 # 顺带排查几个历史位置（10.0.28000.0 / x64 / amd64）。
 function Find-Devcon {
     $candidates = @(
+        (Join-Path $PackageDir 'devcon.exe'),
+        (Join-Path $Root 'devcon.exe'),
+        "E:\Program Files\Windows Kits\10\Tools\x64\devcon.exe",
         "$env:ProgramFiles(x86)\Windows Kits\10\Tools\10.0.28000.0\x64\devcon.exe",
         "$env:ProgramFiles(x86)\Windows Kits\10\Tools\x64\devcon.exe",
         "$env:ProgramFiles(x86)\Windows Kits\10\Tools\amd64\devcon.exe",
         "$env:ProgramFiles(x86)\Windows Kits\10\Tools\10.0.26100.0\x64\devcon.exe"
     )
     foreach ($c in $candidates) { if ($c -and (Test-Path $c)) { return $c } }
+    $cmd = Get-Command devcon.exe -ErrorAction SilentlyContinue
+    if ($cmd) { return $cmd.Source }
     return $null
 }
 

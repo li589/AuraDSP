@@ -1,0 +1,105 @@
+;=============================================================================
+; AuraVaioDriver.inf (Legacy - Windows 7 SP1 / Windows 8 / Windows 8.1)
+;
+; Uses KMDF 1.11 with WdfCoinstaller01011.dll for Windows 7 support.
+;=============================================================================
+
+[Version]
+Signature       = "$WINDOWS NT$"
+Class           = MEDIA
+ClassGuid       = {4d36e96c-e325-11ce-bfc1-08002be10318}
+Provider        = %ProviderName%
+CatalogFile     = AuraVaioDriver.cat
+DriverVer       = 10/16/2026,1.0.0.0
+
+[DestinationDirs]
+DefaultDestDir                  = 12        ; \SystemRoot\System32\drivers
+AuraVAIO_CoInstaller_CopyFiles = 11        ; \SystemRoot\System32
+
+[SourceDisksNames]
+1 = %DiskName%,,,""
+
+[SourceDisksFiles]
+AuraVaioDriver.sys      = 1,,
+WdfCoinstaller01011.dll = 1,,
+
+[Manufacturer]
+%ProviderName% = AuraVAIO,NTamd64
+
+[AuraVAIO.NTamd64]
+%AuraVAIO.DeviceDesc% = AuraVAIO_Device, Root\AuraVAIO
+%AuraVAIO.DeviceDesc% = AuraVAIO_Device, Root\AuraVaioDriver
+
+[AuraVAIO_Device.NT]
+CopyFiles = Drivers_Dir
+
+[AuraVAIO_Device.NT.HW]
+AddReg = AuraVAIO_Device.NT.HW.AddReg
+
+[AuraVAIO_Device.NT.HW.AddReg]
+HKR,,DeviceType,0x10001,0x0000001D
+HKR,,Security,,"D:P(A;;GA;;;SY)(A;;GRGWGX;;;BA)(A;;GRGWGX;;;WD)(A;;GRGWGX;;;RC)"
+
+[AuraVAIO_Device.NT.Interfaces]
+AddInterface = %KSCATEGORY_AUDIO%,    %KSNAME_Wave%,     AuraVAIO.Interface.Wave
+AddInterface = %KSCATEGORY_RENDER%,   %KSNAME_Wave%,     AuraVAIO.Interface.Wave
+AddInterface = %KSCATEGORY_AUDIO%,    %KSNAME_Topology%, AuraVAIO.Interface.Topology
+AddInterface = %KSCATEGORY_TOPOLOGY%, %KSNAME_Topology%, AuraVAIO.Interface.Topology
+
+[AuraVAIO.Interface.Wave]
+AddReg = AuraVAIO.Interface.Wave.AddReg
+
+[AuraVAIO.Interface.Wave.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AuraVAIO.Wave.szPname%
+
+[AuraVAIO.Interface.Topology]
+AddReg = AuraVAIO.Interface.Topology.AddReg
+
+[AuraVAIO.Interface.Topology.AddReg]
+HKR,,CLSID,,%Proxy.CLSID%
+HKR,,FriendlyName,,%AuraVAIO.Topology.szPname%
+
+[AuraVAIO_Device.NT.Services]
+AddService = AuraVaioDriver,0x00000002,AuraVaioDriver_Service
+
+[AuraVaioDriver_Service]
+DisplayName    = %AuraVaioDriver.SvcDesc%
+ServiceType    = 1              ; SERVICE_KERNEL_DRIVER
+StartType      = 3              ; SERVICE_DEMAND_START
+ErrorControl   = 1              ; SERVICE_ERROR_NORMAL
+ServiceBinary  = %12%\AuraVaioDriver.sys
+
+[Drivers_Dir]
+AuraVaioDriver.sys
+
+[AuraVAIO_Device.NT.Wdf]
+KmdfService = AuraVaioDriver, AuraVAIO_WdfSect
+
+[AuraVAIO_WdfSect]
+KmdfLibraryVersion = 1.11
+
+[AuraVAIO_Device.NT.CoInstallers]
+AddReg    = AuraVAIO_CoInstaller_AddReg
+CopyFiles = AuraVAIO_CoInstaller_CopyFiles
+
+[AuraVAIO_CoInstaller_AddReg]
+HKR,,CoInstallers32,0x00010000, "WdfCoinstaller01011.dll,WdfCoInstaller"
+
+[AuraVAIO_CoInstaller_CopyFiles]
+WdfCoinstaller01011.dll
+
+[Strings]
+KSNAME_Wave               = "Wave"
+KSNAME_Topology           = "Topology"
+Proxy.CLSID               = "{17CCA71B-ECD7-11D0-B908-00A0C9223196}"
+KSCATEGORY_AUDIO          = "{6994AD04-93EF-11D0-A3CC-00A0C9223196}"
+KSCATEGORY_RENDER         = "{65E8773E-8F56-11D0-A3B9-00A0C9223196}"
+KSCATEGORY_TOPOLOGY       = "{DDA54A40-1E4C-11D1-A050-405705C10000}"
+
+ProviderName              = "AuraDSP"
+DiskName                  = "AuraVAIO Driver Installation Disk"
+AuraVAIO.DeviceDesc       = "AuraVAIO Virtual Audio Device"
+AuraVAIO.Wave.szPname     = "AuraVAIO"
+AuraVAIO.Topology.szPname = "AuraVAIO Topology"
+AuraVaioDriver.SvcDesc    = "AuraVAIO Virtual Audio Driver"
