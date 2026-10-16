@@ -518,6 +518,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iBmE = idp(ParamId.bassmonoEnable), iBmF = idp(ParamId.bassmonoFreq);
             final iHsE = idp(ParamId.haasEnable), iHsD = idp(ParamId.haasDelay), iHsM = idp(ParamId.haasMix);
             final iHsS = idp(ParamId.haasSide);
+            final iSpE = idp(ParamId.spatialEnable), iSpS = idp(ParamId.spatialStyle);
+            final iSpR = idp(ParamId.spatialRoom), iSpW = idp(ParamId.spatialWidth);
+            final iSpC = idp(ParamId.spatialCenter), iSpG = idp(ParamId.spatialOutGain);
+            final iSpA = idp(ParamId.spatialAutoGain);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
             // P-010：每效果输出增益门 + 自动补偿
             final iBoG = idp(ParamId.bassOutGain), iBoA = idp(ParamId.bassAutoGain);
@@ -614,6 +618,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'haasDelay': rdFloat(iHsD) ?? 12.0,
                 'haasMix': rdFloat(iHsM) ?? 1.0,
                 'haasSide': rdInt(iHsS) ?? 0,
+                'spatialEnable': rdInt(iSpE) ?? 0,
+                'spatialStyle': rdInt(iSpS) ?? 0,
+                'spatialRoom': rdFloat(iSpR) ?? 0.7,
+                'spatialWidth': rdFloat(iSpW) ?? 1.0,
+                'spatialCenter': rdFloat(iSpC) ?? 0.8,
+                'spatialOutGain': rdFloat(iSpG) ?? 0.0,
+                'spatialAutoGain': rdInt(iSpA) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,
                 'exciterAmount': rdFloat(iExA) ?? 0.3,
                 'exciterHifreq': rdFloat(iExF) ?? 5000.0,

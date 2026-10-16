@@ -1126,6 +1126,57 @@ class AppLocalizationsJa extends AppLocalizations {
   String get haasSideLeft => '左チャンネル';
 
   @override
+  String get spatialTitle => '空間オーディオ';
+
+  @override
+  String get spatialHint => '仮想 5.0 配置と初期反射で部屋の響きを再現。リバーブ / IR / 音場カードは本カードに統合';
+
+  @override
+  String get spatialStyle => 'スタイル';
+
+  @override
+  String get spatialStyleInfo => 'スタイルはプリセット群：切替で Room / Width / Center を上書き';
+
+  @override
+  String get spatialStyleDolby => 'Dolby ルーム';
+
+  @override
+  String get spatialStyleDts => 'DTS 定位';
+
+  @override
+  String get spatialStyleNeutral => 'ニュートラル';
+
+  @override
+  String get spatialRoom => 'ルーム';
+
+  @override
+  String get spatialRoomInfo => '初期反射レベルと時間スケール。0 はドライ、1 は大部屋';
+
+  @override
+  String get spatialWidth => '広がり';
+
+  @override
+  String get spatialWidthInfo => 'スピーカー配置の広がり。遠耳のみ変化し近耳は直達のまま';
+
+  @override
+  String get spatialCenter => 'センター';
+
+  @override
+  String get spatialCenterInfo => 'センターフォーカス：台詞とボーカル';
+
+  @override
+  String get spatialOutGain => '出力';
+
+  @override
+  String get spatialOutGainInfo => '空間ステージの出力トリム';
+
+  @override
+  String get spatialAutoGain => '自動ゲイン';
+
+  @override
+  String get spatialAutoGainInfo => '入力ラウドネスに追従（リバーブと同式）';
+
+  @override
   String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
 
   @override

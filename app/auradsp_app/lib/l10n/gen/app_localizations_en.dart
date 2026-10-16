@@ -1160,6 +1160,62 @@ class AppLocalizationsEn extends AppLocalizations {
   String get haasSideLeft => 'Left channel';
 
   @override
+  String get spatialTitle => 'Spatial';
+
+  @override
+  String get spatialHint =>
+      'Virtual 5.0 layout plus early reflections — room sound on headphones. Reverb / IR / soundstage cards live here now';
+
+  @override
+  String get spatialStyle => 'Style';
+
+  @override
+  String get spatialStyleInfo =>
+      'Style is a preset group: switching overwrites Room / Width / Center';
+
+  @override
+  String get spatialStyleDolby => 'Dolby Room';
+
+  @override
+  String get spatialStyleDts => 'DTS Imaging';
+
+  @override
+  String get spatialStyleNeutral => 'Neutral';
+
+  @override
+  String get spatialRoom => 'Room';
+
+  @override
+  String get spatialRoomInfo =>
+      'Early-reflection level and time scaling. 0 is dry, 1 is a large room';
+
+  @override
+  String get spatialWidth => 'Width';
+
+  @override
+  String get spatialWidthInfo =>
+      'Speaker spread scaling. Steers the far ear only, near ear stays direct';
+
+  @override
+  String get spatialCenter => 'Center';
+
+  @override
+  String get spatialCenterInfo => 'Center focus: dialogue and vocal energy';
+
+  @override
+  String get spatialOutGain => 'Output';
+
+  @override
+  String get spatialOutGainInfo => 'Spatial stage output trim';
+
+  @override
+  String get spatialAutoGain => 'Auto gain';
+
+  @override
+  String get spatialAutoGainInfo =>
+      'Rides input loudness (same follower as reverb)';
+
+  @override
   String get bassmonoHint =>
       'Chain head: mono below crossover, saves small speakers';
 

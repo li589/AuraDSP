@@ -71,6 +71,14 @@ abstract final class ParamId {
   static const haasDelay = 'haas.delay';
   static const haasMix = 'haas.mix';
   static const haasSide = 'haas.side';
+  // 空间音效 L1（参数化 HRTF + 早期反射，haas 后 / exciter 前）
+  static const spatialEnable = 'spatial.enable';
+  static const spatialStyle = 'spatial.style';
+  static const spatialRoom = 'spatial.room';
+  static const spatialWidth = 'spatial.width';
+  static const spatialCenter = 'spatial.center';
+  static const spatialOutGain = 'spatial.outgain';
+  static const spatialAutoGain = 'spatial.autogain';
   // 激励器
   static const exciterEnable = 'exciter.enable';
   static const exciterAmount = 'exciter.amount';

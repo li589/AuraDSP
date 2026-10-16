@@ -560,48 +560,35 @@ class _PluginSlotChainCard extends StatelessWidget {
 
           // 插入阶段选择器
           if (isActive) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: p.panelRaised,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.hairline),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: currentStage,
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: const [
-                    PluginInsertStage.preDsp,
-                    PluginInsertStage.preVendor,
-                    PluginInsertStage.postVendor,
-                    PluginInsertStage.postReverb,
-                    PluginInsertStage.postLimiter,
-                  ].map<DropdownMenuItem<int>>((stg) {
-                    return DropdownMenuItem<int>(
-                      value: stg,
-                      child: Text(
-                        PluginInsertStage.labelOf(stg),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: stg == currentStage ? p.accent : p.text,
-                          fontWeight: stg == currentStage
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      manager.setInsertStage(val, slot: slot);
-                    }
-                  },
-                ),
-              ),
+            AuraDropdown<int>(
+              value: currentStage,
+              isExpanded: false,
+              items: const [
+                PluginInsertStage.preDsp,
+                PluginInsertStage.preVendor,
+                PluginInsertStage.postVendor,
+                PluginInsertStage.postReverb,
+                PluginInsertStage.postLimiter,
+              ].map<DropdownMenuItem<int>>((stg) {
+                return DropdownMenuItem<int>(
+                  value: stg,
+                  child: Text(
+                    PluginInsertStage.labelOf(stg),
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: stg == currentStage ? p.accent : p.text,
+                      fontWeight: stg == currentStage
+                          ? FontWeight.bold
+                          : FontWeight.normal,
+                    ),
+                  ),
+                );
+              }).toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  manager.setInsertStage(val, slot: slot);
+                }
+              },
             ),
             const SizedBox(width: AuraSpace.sm),
             // GUI 打开按钮

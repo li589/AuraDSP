@@ -54,6 +54,20 @@ abstract final class SessionMemory {
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
         'audioMode': m.audioMode,
+        'modeCategory': m.modeCategory,
+        'attachmentMode': m.attachmentMode,
+        'pipelineInput': m.pipelineInput,
+        'pipelineOutput': m.pipelineOutput,
+        'pipelineInputDevice': m.pipelineInputDevice,
+        'pipelineOutputDevice': m.pipelineOutputDevice,
+        'pipelineInputEnabled': m.pipelineInputEnabled,
+        'pipelineOutputEnabled': m.pipelineOutputEnabled,
+        'asioDriver': m.config.asioDriver,
+        'asioBufSize': m.config.asioBufSize,
+        'asioOutPair': m.config.asioOutPair,
+        'vaioOutputEndpoint': m.config.vaioOutputEndpoint,
+        'apoTargetEndpoint': m.config.apoTargetEndpoint,
+        'monitorMirroring': m.monitorMirroring,
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
@@ -105,6 +119,48 @@ abstract final class SessionMemory {
               ? AudioModes.outputAsioClient
               : (m.audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
         }
+      }
+      if (session['modeCategory'] is String) {
+        m.config.modeCategory = session['modeCategory'] as String;
+      }
+      if (session['attachmentMode'] is String) {
+        m.config.attachmentMode = session['attachmentMode'] as String;
+      }
+      if (session['pipelineInput'] is String) {
+        m.config.pipelineInput = session['pipelineInput'] as String;
+      }
+      if (session['pipelineOutput'] is String) {
+        m.config.pipelineOutput = session['pipelineOutput'] as String;
+      }
+      if (session['pipelineInputDevice'] is String) {
+        m.config.pipelineInputDevice = session['pipelineInputDevice'] as String;
+      }
+      if (session['pipelineOutputDevice'] is String) {
+        m.config.pipelineOutputDevice = session['pipelineOutputDevice'] as String;
+      }
+      if (session['pipelineInputEnabled'] is bool) {
+        m.config.pipelineInputEnabled = session['pipelineInputEnabled'] as bool;
+      }
+      if (session['pipelineOutputEnabled'] is bool) {
+        m.config.pipelineOutputEnabled = session['pipelineOutputEnabled'] as bool;
+      }
+      if (session['asioDriver'] is String) {
+        m.config.asioDriver = session['asioDriver'] as String;
+      }
+      if (session['asioBufSize'] is num) {
+        m.config.asioBufSize = (session['asioBufSize'] as num).toInt();
+      }
+      if (session['asioOutPair'] is num) {
+        m.config.asioOutPair = (session['asioOutPair'] as num).toInt();
+      }
+      if (session['vaioOutputEndpoint'] is String) {
+        m.config.vaioOutputEndpoint = session['vaioOutputEndpoint'] as String;
+      }
+      if (session['apoTargetEndpoint'] is String) {
+        m.config.apoTargetEndpoint = session['apoTargetEndpoint'] as String;
+      }
+      if (session['monitorMirroring'] is bool) {
+        m.config.monitorMirroring = session['monitorMirroring'] as bool;
       }
       if (session['convIrPath'] is String) {
         m.convIrPath = session['convIrPath'] as String;

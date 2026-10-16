@@ -2260,6 +2260,108 @@ abstract class AppLocalizations {
   /// **'左声道'**
   String get haasSideLeft;
 
+  /// No description provided for @spatialTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间音效'**
+  String get spatialTitle;
+
+  /// No description provided for @spatialHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 5.0 摆位加早期反射，耳机上重建音箱房。混响 / 脉冲 / 声场卡片已并入本卡'**
+  String get spatialHint;
+
+  /// No description provided for @spatialStyle.
+  ///
+  /// In zh, this message translates to:
+  /// **'风格'**
+  String get spatialStyle;
+
+  /// No description provided for @spatialStyleInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）'**
+  String get spatialStyleInfo;
+
+  /// No description provided for @spatialStyleDolby.
+  ///
+  /// In zh, this message translates to:
+  /// **'Dolby 房'**
+  String get spatialStyleDolby;
+
+  /// No description provided for @spatialStyleDts.
+  ///
+  /// In zh, this message translates to:
+  /// **'DTS 定位'**
+  String get spatialStyleDts;
+
+  /// No description provided for @spatialStyleNeutral.
+  ///
+  /// In zh, this message translates to:
+  /// **'中性'**
+  String get spatialStyleNeutral;
+
+  /// No description provided for @spatialRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'房间'**
+  String get spatialRoom;
+
+  /// No description provided for @spatialRoomInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'早期反射电平加反射时间缩放。0 为干摆位，1 为大房'**
+  String get spatialRoomInfo;
+
+  /// No description provided for @spatialWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'张角'**
+  String get spatialWidth;
+
+  /// No description provided for @spatialWidthInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'扬声器摆位张角缩放。只改变对侧耳声像，同侧直达不变'**
+  String get spatialWidthInfo;
+
+  /// No description provided for @spatialCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置'**
+  String get spatialCenter;
+
+  /// No description provided for @spatialCenterInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置声像聚焦：人声对白能量'**
+  String get spatialCenterInfo;
+
+  /// No description provided for @spatialOutGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出'**
+  String get spatialOutGain;
+
+  /// No description provided for @spatialOutGainInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间级输出电平补偿'**
+  String get spatialOutGainInfo;
+
+  /// No description provided for @spatialAutoGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动增益'**
+  String get spatialAutoGain;
+
+  /// No description provided for @spatialAutoGainInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'向输入响度收敛（与混响同式），防摆位后忽大忽小'**
+  String get spatialAutoGainInfo;
+
   /// No description provided for @bassmonoHint.
   ///
   /// In zh, this message translates to:
