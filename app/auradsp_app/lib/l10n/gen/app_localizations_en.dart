@@ -1272,6 +1272,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainReserved => 'Reserved';
 
   @override
+  String get chainGrpInput => 'Input Shaping';
+
+  @override
+  String get chainGrpTone => 'Tone & Dynamics';
+
+  @override
+  String get chainGrpEqScript => 'EQ & Script';
+
+  @override
+  String get chainGrpSound => 'Soundstage';
+
+  @override
+  String get chainGrpSpatial => 'Spatial';
+
+  @override
+  String get chainGrpOut => 'Output Stage';
+
+  @override
   String get chainFlowTitle => 'Signal Flow (Current Order)';
 
   @override

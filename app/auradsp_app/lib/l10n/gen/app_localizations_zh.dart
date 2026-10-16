@@ -1227,6 +1227,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainReserved => '预留';
 
   @override
+  String get chainGrpInput => '输入整形';
+
+  @override
+  String get chainGrpTone => '音色与动态';
+
+  @override
+  String get chainGrpEqScript => '均衡与脚本';
+
+  @override
+  String get chainGrpSound => '声场';
+
+  @override
+  String get chainGrpSpatial => '空间';
+
+  @override
+  String get chainGrpOut => '输出段';
+
+  @override
   String get chainFlowTitle => '信号流（当前顺序）';
 
   @override

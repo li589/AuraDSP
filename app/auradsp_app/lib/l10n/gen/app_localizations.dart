@@ -2470,6 +2470,42 @@ abstract class AppLocalizations {
   /// **'预留'**
   String get chainReserved;
 
+  /// No description provided for @chainGrpInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入整形'**
+  String get chainGrpInput;
+
+  /// No description provided for @chainGrpTone.
+  ///
+  /// In zh, this message translates to:
+  /// **'音色与动态'**
+  String get chainGrpTone;
+
+  /// No description provided for @chainGrpEqScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'均衡与脚本'**
+  String get chainGrpEqScript;
+
+  /// No description provided for @chainGrpSound.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场'**
+  String get chainGrpSound;
+
+  /// No description provided for @chainGrpSpatial.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间'**
+  String get chainGrpSpatial;
+
+  /// No description provided for @chainGrpOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出段'**
+  String get chainGrpOut;
+
   /// No description provided for @chainFlowTitle.
   ///
   /// In zh, this message translates to:
