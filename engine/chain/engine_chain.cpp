@@ -342,6 +342,18 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                                  int frames);
 
 
+static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const float* interleaved, int frames) {
+    float ml = 0.0f, mr = 0.0f;
+    for (int i = 0; i < frames; ++i) {
+        const float al = fabsf(interleaved[i * 2]);
+        const float ar = fabsf(interleaved[i * 2 + 1]);
+        if (al > ml) ml = al;
+        if (ar > mr) mr = ar;
+    }
+    h->stage_peak_l[stage_idx] = ml;
+    h->stage_peak_r[stage_idx] = mr;
+}
+
 /* 立体声处理链本体（RT 线程；src != dst 恒成立）。
  *
  * 抽成独立函数是为了让多声道路径复用同一条链：多声道场景先把 M 声道下混成
@@ -362,17 +374,23 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     if (h->p.gate_enable.load(std::memory_order_relaxed)) {
         gate_process(h, const_cast<float*>(src), frames);
     }
+    sample_stage_peak(h, 13, src, frames);   /* Stage 13: Gate stage output */
+
     /* 独立滤波器（gate 之后 / bassmono 之前）：HP 去隆隆声，
      * 避免次声误开噪声门；LP/BP 按需。 */
     if (h->p.filter_enable.load(std::memory_order_relaxed)) {
         filter_process(h, const_cast<float*>(src), frames);
     }
+    sample_stage_peak(h, 15, src, frames);   /* Stage 15: Filter output */
+
     /* BassMono：在一切之前（Stage 0 插件/搁架/vendor 之前）——
      * 单声道化后再做后续处理，否则低频相位差会被后级放大。
      * 随 shelf precedent 就地改 src（调用方传的本就是可写 scratch）。 */
     if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
         bassmono_process(h, const_cast<float*>(src), frames);
     }
+    sample_stage_peak(h, 16, src, frames);   /* Stage 16: BassMono output */
+
     /* 心理声学低音：跟 bass 卡开关走；amount=0 时恒等直通，
      * 状态持续跟踪以免开量瞬间抽吸。 */
     if (h->p.bass_enable.load(std::memory_order_relaxed)) {
@@ -391,6 +409,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     if (h->p.dyneq_enable.load(std::memory_order_relaxed)) {
         dyneq_process(h, const_cast<float*>(src), frames);
     }
+    sample_stage_peak(h, 14, src, frames);   /* Stage 14: Dynamic EQ output */
 
     /* Stage 1: Pre-Vendor（主效果前） */
     process_plugin_slots_stage(h, 1, const_cast<float*>(src), frames);
@@ -409,11 +428,13 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
         haas_process(h, dst, frames);
     }
+    sample_stage_peak(h, 17, dst, frames);   /* Stage 17: Haas output */
 
     /* 激励器（Haas 后 / Freeverb 前：最后一道音色工序，再进房间） */
     if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
         exciter_process(h, dst, frames);
     }
+    sample_stage_peak(h, 18, dst, frames);   /* Stage 18: Exciter output */
 
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合。
      * P-010：混响输出增益门 + 自动增益补偿（全引擎侧，reverb 不占 vendor 槽） */
@@ -426,6 +447,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
         loudness_process(h, dst, frames);
     }
+    sample_stage_peak(h, 19, dst, frames);   /* Stage 19: Loudness output */
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
     const int total_samples = frames * 2;

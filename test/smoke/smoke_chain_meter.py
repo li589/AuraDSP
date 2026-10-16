@@ -12,9 +12,11 @@ class VizFrame(ctypes.Structure):
         ("eq_in_spectrum", ctypes.c_float * 32),
         ("level_l_dbfs", ctypes.c_float),
         ("level_r_dbfs", ctypes.c_float),
-        ("stage_levels_l", ctypes.c_float * 16),
-        ("stage_levels_r", ctypes.c_float * 16),
+        ("stage_levels_l", ctypes.c_float * 32),
+        ("stage_levels_r", ctypes.c_float * 32),
     ]
+
+assert ctypes.sizeof(VizFrame) == 536, f"Expected 536, got {ctypes.sizeof(VizFrame)}"
 
 dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
@@ -66,14 +68,22 @@ print(f"Overall output levels: L={last_frame.level_l_dbfs:.2f}dBFS, R={last_fram
 assert -11.0 < last_frame.level_l_dbfs < -9.5, f"Unexpected overall level: {last_frame.level_l_dbfs}"
 
 # stage 顺序对照：
-# 0: tube, 1: comp, 2: bass, 3: eq, 4: arbmag, 5: convolver,
-# 6: ddc, 7: liveprog, 8: crossfeed, 9: stereo, 10: reverb, 11: output
-stages_l = list(last_frame.stage_levels_l)[:12]
-stages_r = list(last_frame.stage_levels_r)[:12]
-print("Pass 1 stage levels (expect all around -10.5 dBFS in passthrough):")
-for idx, (l_val, r_val) in enumerate(zip(stages_l, stages_r)):
+# 0..11: vendor 12 stages (tube, comp, bass, eq, arbmag, convolver, ddc, liveprog, crossfeed, stereo, reverb, output)
+# 12: gate in, 13: gate out, 14: dyneq, 15: filter, 16: bassmono, 17: haas, 18: exciter, 19: loudness
+# 20..31: reserved (-120 dBFS)
+stages_l = list(last_frame.stage_levels_l)
+stages_r = list(last_frame.stage_levels_r)
+print("Pass 1 stage levels (expect stages 0..19 all around -10.5 dBFS in passthrough, 20..31 == -120):")
+for idx in range(20):
+    l_val = stages_l[idx]
+    r_val = stages_r[idx]
     print(f"  Stage {idx:02d}: L={l_val:.2f}dBFS, R={r_val:.2f}dBFS")
-    assert -12.0 < l_val < -9.0, f"Stage {idx} level mismatch: {l_val}"
+    assert -12.0 < l_val < -9.0, f"Stage {idx} L mismatch: {l_val}"
+    assert -12.0 < r_val < -9.0, f"Stage {idx} R mismatch: {r_val}"
+
+for idx in range(20, 32):
+    assert stages_l[idx] == -120.0, f"Reserved stage {idx} should be -120, got {stages_l[idx]}"
+    assert stages_r[idx] == -120.0, f"Reserved stage {idx} should be -120, got {stages_r[idx]}"
 
 # 2) 开启 liveprog (增益 2.0x，即 +6.02dB)，观察 stage 7 及后续 stage 电平提升
 script = """@init
@@ -114,5 +124,5 @@ for idx in range(7):
 for idx in range(7, 12):
     assert -5.5 < stages_l_gain[idx] < -3.5, f"Downstream stage {idx} should be boosted by +6dB: {stages_l_gain[idx]}"
 
-print("\nPASS: smoke_chain_meter passed successfully! All 12 per-stage meters validated.")
+print("\nPASS: smoke_chain_meter passed successfully! All 19 per-stage meters validated.")
 dll.auradsp_destroy(h)

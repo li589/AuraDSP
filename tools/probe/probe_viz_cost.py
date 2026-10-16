@@ -35,8 +35,8 @@ class VizFrame(ctypes.Structure):
         ("eq_in_spectrum", ctypes.c_float * 32),
         ("level_l_dbfs", ctypes.c_float),
         ("level_r_dbfs", ctypes.c_float),
-        ("stage_levels_l", ctypes.c_float * 16),
-        ("stage_levels_r", ctypes.c_float * 16),
+        ("stage_levels_l", ctypes.c_float * 32),
+        ("stage_levels_r", ctypes.c_float * 32),
     ]
 
 

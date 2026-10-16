@@ -161,9 +161,17 @@ void emit_viz(auradsp_handle h) {
     f.level_l_dbfs = h->viz_lvl_l;
     f.level_r_dbfs = h->viz_lvl_r;
 
-    /* 5) [M3.5-c] vendor 链各 stage 的输出峰值转 dBFS。
-     * 只有前 AURADSP_VENDOR_STAGES 项有数据；其余（到 ABI 容量上限）是保留位，
-     * 恒为 -120 dBFS，UI 不应展示。 */
+    /* 5) [M3.5-c / 全量电平补齐] 处理链各 stage 的输出峰值转 dBFS。
+     * 0..11: vendor 12 级链
+     * 12: gate 输入电平 (input_lvl_in)
+     * 13: gate 本级输出电平
+     * 14: dyneq 动态均衡
+     * 15: filter 独立滤波
+     * 16: bassmono 低频单声道
+     * 17: haas 差分环绕
+     * 18: exciter 高频激励
+     * 19: loudness 响度补偿
+     * 20..31: 预留槽位（恒 -120 dBFS） */
     for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
         if (i < AURADSP_VENDOR_STAGES) {
             const float pl = h->jdsp.stagePeakL[i];
@@ -174,15 +182,19 @@ void emit_viz(auradsp_handle h) {
             /* [Input Gate Tap] 输入门控本级 IN 电平 (L/R) */
             f.stage_levels_l[i] = h->input_lvl_in_l;
             f.stage_levels_r[i] = h->input_lvl_in_r;
-        } else if (i == 13) {
-            /* [Input Gate Tap] 输入门控本级 OUT 电平 (L/R) */
-            f.stage_levels_l[i] = h->input_lvl_out_l;
-            f.stage_levels_r[i] = h->input_lvl_out_r;
+        } else if (i >= 13 && i <= 19) {
+            /* 自研 7 级 stage 输出峰值转 dBFS */
+            const float pl = h->stage_peak_l[i];
+            const float pr = h->stage_peak_r[i];
+            f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;
+            f.stage_levels_r[i] = pr > 1e-6f ? 20.0f * log10f(pr) : -120.0f;
         } else {
             f.stage_levels_l[i] = -120.0f;
             f.stage_levels_r[i] = -120.0f;
         }
     }
+    h->input_lvl_out_l = f.stage_levels_l[13];
+    h->input_lvl_out_r = f.stage_levels_r[13];
     h->viz_emitted.store(true, std::memory_order_relaxed);
     h->viz.push(f);
 }

@@ -167,13 +167,18 @@ abstract final class EngineState {
   static const error = 2;
 }
 
-/// vendor 处理链的**实际** stage 数（graph.order 合法集合大小）。
-///
-/// 对应 C 侧 `AURADSP_VENDOR_STAGES`（engine/auradsp_engine.h）。
-/// 注意与 ABI 容量 `AURADSP_STAGE_MAX = 16` 区分：C 结构体的 per-stage 电平
-/// 数组物理长度是 16（预留位，恒 -120 dBFS），但只有本值这么多项有数据。
-/// 改动 vendor 链长度时，**必须同步修改这两个常量**。
-const int kEngineStageCount = 12;
+/// auradsp_viz_frame 的 stage 电平槽位容量（对应 C 侧 `AURADSP_STAGE_MAX = 32`）。
+/// 0..11: vendor 12 stages
+/// 12: gate in
+/// 13: gate out
+/// 14: dyneq out
+/// 15: filter out
+/// 16: bassmono out
+/// 17: haas out
+/// 18: exciter out
+/// 19: loudness out
+/// 20..31: 预留/扩展插件槽
+const int kEngineStageCount = 32;
 
 /// 引擎内建的频谱 FFT 点数（auradsp_engine.cpp 的 kVizFftSize）。
 /// config.vizFftSize 与之相同时无需下发，避免无谓的缓冲区重建。
@@ -267,51 +272,52 @@ abstract final class VizBands {
   }
 }
 
-/// auradsp_viz_frame（408 字节：8+8+128+128+4+4+64+64）
+/// auradsp_viz_frame（536 字节：8+8+128+128+4+4+128+128）
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
   @Double()
   external double timestampMs;
 
-@Array(32)
-    external Array<Float> spectrum;
+  @Array(32)
+  external Array<Float> spectrum;
 
-    /// vendor 链入口（均衡器输入）的 32 段频谱，语义与 [spectrum] 相同。
-    ///
-    /// 均衡器面板的背景柱必须用它，而不是 [spectrum]（整链最终输出，
-    /// 含 EQ 之后的混响/卷积/Freeverb/插件）。EQ 在 libjamesdsp 单体链
-    /// 内部拿不到输出，输出谱由 UI 用实测响应合成。
-    @Array(32)
-    external Array<Float> eqInSpectrum;
+  /// vendor 链入口（均衡器输入）的 32 段频谱，语义与 [spectrum] 相同。
+  ///
+  /// 均衡器面板的背景柱必须用它，而不是 [spectrum]（整链最终输出，
+  /// 含 EQ 之后的混响/卷积/Freeverb/插件）。EQ 在 libjamesdsp 单体链
+  /// 内部拿不到输出，输出谱由 UI 用实测响应合成。
+  @Array(32)
+  external Array<Float> eqInSpectrum;
 
-    @Float()
-    external double levelLDbfs;
-    @Float()
-    external double levelRDbfs;
-    @Array(16)
-    external Array<Float> stageLevelsL;
+  @Float()
+  external double levelLDbfs;
+  @Float()
+  external double levelRDbfs;
 
-    @Array(16)
-    external Array<Float> stageLevelsR;
+  @Array(32)
+  external Array<Float> stageLevelsL;
 
-    List<double> spectrumToList() =>
-        List<double>.generate(32, (i) => spectrum[i]);
+  @Array(32)
+  external Array<Float> stageLevelsR;
 
-    List<double> eqInSpectrumToList() =>
-        List<double>.generate(32, (i) => eqInSpectrum[i]);
+  List<double> spectrumToList() =>
+      List<double>.generate(32, (i) => spectrum[i]);
 
-    List<double> stageLevelsLToList() =>
-        List<double>.generate(kEngineStageCount, (i) => stageLevelsL[i]);
+  List<double> eqInSpectrumToList() =>
+      List<double>.generate(32, (i) => eqInSpectrum[i]);
 
-    List<double> stageLevelsRToList() =>
-        List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
+  List<double> stageLevelsLToList() =>
+      List<double>.generate(kEngineStageCount, (i) => stageLevelsL[i]);
 
-    double get inputLevelInL => stageLevelsL[12];
-    double get inputLevelInR => stageLevelsR[12];
-    double get inputLevelOutL => stageLevelsL[13];
-    double get inputLevelOutR => stageLevelsR[13];
-  }
+  List<double> stageLevelsRToList() =>
+      List<double>.generate(kEngineStageCount, (i) => stageLevelsR[i]);
+
+  double get inputLevelInL => stageLevelsL[12];
+  double get inputLevelInR => stageLevelsR[12];
+  double get inputLevelOutL => stageLevelsL[13];
+  double get inputLevelOutR => stageLevelsR[13];
+}
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）
 final class AuraDspLib {

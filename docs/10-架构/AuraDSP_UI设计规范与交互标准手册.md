@@ -130,30 +130,70 @@ Row(
 
 ## 5. 处理链与卡片命名对齐规范
 
-`chain_page.dart` 中处理链 16 个阶段展示名函数 `stageLabelOf(l, id)`，必须与 `effects_page.dart` 对应卡片的标题及 Arb 本地化词条严格保持一致：
+`chain_page.dart` 中处理链 19 个阶段展示名函数 `stageLabelOf(l, id)`，必须与 `effects_page.dart` 对应卡片的标题及 Arb 本地化词条严格保持一致：
 
-| stage ID | l10n 字段 | 中文展示名 | 对应效果器卡片 |
-|---|---|---|---|
-| `gate` | `l.stGate` | 输入门控 | `_GateCard` |
-| `bassmono` | `l.stBassmono` | 低频单声道 | `_BassMonoCard` |
-| `tube` | `l.tubeTitle` | 电子管温润 | `_TubeCard` |
-| `comp` | `l.compTitle` | 动态压限器 | `_CompCard` |
-| `bass` | `l.bassBoost` | 低音增强 | `_BassCard` |
-| `eq` | `l.eqMultiBand` | 图形均衡器 | `_EqCard` |
-| `arbmag` | `l.stArbmag` | 自由幅频响应 | `_ArbMagCard` |
-| `convolver` | `l.convTitle` | 卷积混响 | `_ConvolverCard` |
-| `ddc` | `l.ddcTitle` | 耳机校准 | `_DdcCard` |
-| `liveprog` | `l.stScript` | 实时脚本 | `_LiveprogCard` |
-| `crossfeed` | `l.crossfeedTitle` | 串扰消除 | `_CrossfeedCard` |
-| `stereo` | `l.stereoWiden` | 立体声拓宽 | `_StereoCard` |
-| `haas` | `l.stHaas` | 哈斯环绕 | `_HaasCard` |
-| `exciter` | `l.stExciter` | 高频激励器 | `_ExciterCard` |
-| `reverb` | `l.spatialReverbTitle`| 空间混响 | `_ReverbCard` |
-| `output` | `l.postGain` | 输出增益 | `_OutputGainCard` |
+| stage ID | l10n 字段 | 中文展示名 | 对应效果器卡片 | 架构归属 |
+|---|---|---|---|---|
+| `gate` | `l.stGate` | 输入门控 | `_GateCard` | 自研 C++20 |
+| `dyneq` | `l.stDyneq` | 动态均衡器 | `_DynEqCard` | 自研 C++20 |
+| `filter` | `l.stFilter` | 独立滤波 | `_FilterCard` | 自研 C++20 |
+| `bassmono` | `l.stBassmono` | 低频单声道 | `_BassMonoCard` | 自研 C++20 |
+| `tube` | `l.tubeTitle` | 电子管温润 | `_TubeCard` | Legacy 12 级链 |
+| `comp` | `l.compTitle` | 动态压限器 | `_CompCard` | Legacy 12 级链 |
+| `bass` | `l.bassBoost` | 低音增强 | `_BassCard` | Legacy 12 级链 |
+| `eq` | `l.eqMultiBand` | 图形均衡器 | `_EqCard` | Legacy 12 级链 |
+| `arbmag` | `l.stArbmag` | 自由幅频响应 | `_ArbMagCard` | Legacy 12 级链 |
+| `convolver` | `l.convTitle` | 卷积混响 | `_ConvolverCard` | Legacy 12 级链 |
+| `ddc` | `l.ddcTitle` | 耳机校准 | `_DdcCard` | Legacy 12 级链 |
+| `liveprog` | `l.stScript` | 实时脚本 | `_LiveprogCard` | Legacy 12 级链 |
+| `crossfeed` | `l.crossfeedTitle` | 串扰消除 | `_CrossfeedCard` | Legacy 12 级链 |
+| `stereo` | `l.stereoWiden` | 立体声拓宽 | `_StereoCard` | Legacy 12 级链 |
+| `haas` | `l.stHaas` | 哈斯环绕 | `_HaasCard` | 自研 C++20 |
+| `exciter` | `l.stExciter` | 高频激励器 | `_ExciterCard` | 自研 C++20 |
+| `loudness` | `l.stLoudness` | 响度补偿 | `_LoudnessCard` | 自研 C++20 |
+| `reverb` | `l.spatialReverbTitle`| 空间混响 | `_ReverbCard` | Legacy 12 级链 |
+| `output` | `l.postGain` | 输出增益 | `_OutputGainCard` | Legacy 12 级链 |
 
 ---
 
-## 6. Do & Don't 规范速查清单
+## 6. 处理链节点输出电平监控设计规范 (`StagePeakMeter`)
+
+### 6.1 视觉规格与硬件点阵美学
+处理链各行右侧的电平表采用**专业模拟硬件合成器风格的 LED 分段点阵灯柱**（`_SynthLedLadderMeter` + `_SynthLedPainter`）：
+- **分段色彩与声学阈值**：
+  - 底座与安全段（-60 dBFS ~ -12 dBFS）：荧光绿（Accent 主题色）；
+  - 动态预警段（-12 dBFS ~ -3 dBFS）：过渡暖黄（Warning 琥珀色）；
+  - 峰值极限段（-3 dBFS ~ 0 dBFS+）：过载亮红（Error 削波提示）；
+- **熄灭底座感**：未被点亮的 LED 灯珠必须保留半透明暗色微底（`alpha: 0.15`），模拟硬件 LED 关断时的玻璃微透质感；
+- **行高与布局**：行高固定为 **46 ~ 48px**，右侧预留出整齐的 LED 灯柱插槽与旁路胶囊（`_StageBypassPill`），形成紧凑有致的桌面 DAW 专业质感。
+
+### 6.2 真实输出电平契约 (Per-Stage True Output)
+- **输出电平唯一定义**：处理链节点右侧显示的电平，**必须且只能是该模块自身处理后的真实输出峰值（Output Level）**，严禁使用整链总输出或输入电平充数；
+- **重排序免疫（Order-Independent Mapping）**：
+  - 引擎在遍历执行处理链时，于各 stage 函数调用后立即做 $O(1)$ 局部峰值扫描，并严格按该模块固有的静态 `stageIdx` 写入槽位；
+  - UI 侧通过 `stageMeterIndex(id)` 绑定固定的逻辑槽位，**拖拽重排节点位置时，电平读数跟随模块自身移动**，绝不随动态位置发生错位；
+- **旁路/直通行为**：当模块被旁路（Bypassed）或未启用时，其输出电平自然退化为其输入信号电平（直通），视觉上清晰反映“信号无衰减穿过”。
+
+### 6.3 全 19 级节点输出电平表实现与槽位规范 (ABI v2)
+- **全 19 级节点全量覆盖**：
+  - **Legacy 12 级链（槽位 0..11）**：`tube`(0), `comp`(1), `bass`(2), `eq`(3), `arbmag`(4), `convolver`(5), `ddc`(6), `liveprog`(7), `crossfeed`(8), `stereo`(9), `reverb`(10), `output`(11)；
+  - **Gate 输入门控（槽位 12..13）**：槽位 12 为输入前测点（`input_lvl_in`），槽位 13 为本级真实输出峰值（`input_lvl_out` / `gate`）；
+  - **自研 6 节点（槽位 14..19）**：`dyneq`(14), `filter`(15), `bassmono`(16), `haas`(17), `exciter`(18), `loudness`(19)；
+  - **扩展预留（槽位 20..31）**：供后续三方插件插槽及多通道扩展使用（恒置 -120 dBFS）；
+- **ABI 容量升级（ABI v2 / 536 字节）**：`auradsp_viz_frame` 定义的 `stage_levels_l/r` 物理长度扩展为 32，全帧严格锁定在 536 字节（C ABI、Dart FFI 与 Python 烟囱镜像保持强校验）；
+- **静态映射与优雅隐退**：`state.dart` 中的 `stageMeterIndex` 采用纯静态 ID 匹配，与用户在链页的实时拖拽重排 `graph.order` 彻底解耦；未知或未注册 stage 索引返回 `-1`，UI 采用 `const SizedBox.shrink()` 优雅保护。
+
+### 6.4 多声道支持约定 (Multichannel Capability)
+- **UI 动态扩展就绪**：
+  `_SynthLedLadderMeter` 与 `_SynthLedPainter` 内部直接接收 `List<double> channelsDb`，支持动态计算列宽与边距。若底层提供 2/4/6/8 维电平，组件原生自适应渲染 2/4/6/8 列并排点阵；
+- **Phase A 声道矩阵下混包络约定**：
+  依照 [ADR-003](../adr/ADR-003-multichannel-matrix.md)，引擎多声道处理（5.1/7.1）外置了 M→2 下混与 2→M 上混矩阵，链内各节点在物理上运行于下混后的 2 声道核心。因此，**Phase A 阶段处理链电平表展示的是“并入了环绕声信号的核心立体声输出包络”**；
+- **Phase B 演进路线**：
+  未来推行逐声道全实例独立处理时，将由驱动侧 `channels.count` 动态决定下发到 Dart 的通道数，实现处理链上原生 6/8 声道点阵无缝点亮。
+
+---
+
+## 7. Do & Don't 规范速查清单
 
 | 维度 | ✅ 推荐做法 (Do) | ❌ 严禁做法 (Don't) |
 |---|---|---|
@@ -163,3 +203,7 @@ Row(
 | **滑块单位** | `unit: 'ms', format: (v) => v.toStringAsFixed(0)` | `unit: 'ms', format: (v) => '${v}ms'` 导致重复 |
 | **标签字体** | 统一使用 `labelOf(p, color: p.text)` | 私自改成小字号或细体导致排版不统一 |
 | **模块命名** | 处理链、卡片标题、Arb 词条 100% 同步 | 同一效果器在不同页面使用不同同义词 |
+| **节点电平** | 忠实展示本级模块真实输出峰值，重排不漂移 | 偷换为全链总输出或随拖拽次序错位映射 |
+| **电平保护** | 全 19 节点全量覆盖；未知 stage `meterIndex < 0` 返回 `SizedBox.shrink()` | 硬连越界 slot 导致出现恒灭或电平串位假死 |
+| **多声道点阵** | `channelsDb` 动态下发，UI 自适应多列点阵 | 写死立体声 2 列硬编码，阻断多声道平滑升级 |
+
