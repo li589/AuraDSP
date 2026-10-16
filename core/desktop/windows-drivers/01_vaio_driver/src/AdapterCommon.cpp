@@ -257,20 +257,20 @@ CAdapterCommon::InstallSubdevice(
     }
 
     //
-    // Cache it for teardown.  QueryInterface already took a reference, so the
-    // local strong ref in m_* is what will keep the subdevice alive.
+    // Cache it for teardown. QueryInterface took a reference; take an additional
+    // reference for m_* so OutPortUnknown can take ownership of the caller's reference.
     //
     if (IsEqualGUIDAligned(PortClassId, CLSID_PortWaveRT))
     {
         AURA_SAFE_RELEASE(m_WavePortUnknown);
         m_WavePortUnknown = portApi;
-        portApi = NULL;
+        m_WavePortUnknown->AddRef();
     }
     else if (IsEqualGUIDAligned(PortClassId, CLSID_PortTopology))
     {
         AURA_SAFE_RELEASE(m_TopologyPortUnknown);
         m_TopologyPortUnknown = portApi;
-        portApi = NULL;
+        m_TopologyPortUnknown->AddRef();
     }
 
     if (OutPortUnknown != NULL)

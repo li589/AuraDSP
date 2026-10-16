@@ -20,7 +20,6 @@ ClassGuid       = {4d36e96c-e325-11ce-bfc1-08002be10318}
 Provider        = %ProviderName%
 CatalogFile     = AuraVaioDriver.cat
 DriverVer       = 10/15/2026,1.0.0.0
-PnpLockDown     = 1
 
 [DestinationDirs]
 DefaultDestDir  = 12        ; \SystemRoot\System32\drivers

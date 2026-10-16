@@ -115,7 +115,7 @@
     <ClInclude Include="..\src\NewDelete.h" />
   </ItemGroup>
   <ItemGroup>
-    <Inf Include="..\src\AuraVaioDriver.inf" />
+    <Inf Include="AuraVaioDriver.inf" />
     <FilesToPackage Include="$(TargetPath)" />
   </ItemGroup>
 </Project>
