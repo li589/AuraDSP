@@ -67,7 +67,14 @@ class _DdcCard extends StatelessWidget {
 
   Future<void> _pickVdc(BuildContext context) async {
     const type = XTypeGroup(label: 'VDC', extensions: ['vdc']);
-    final f = await openFile(acceptedTypeGroups: [type]);
-    if (f != null) model.loadVdc(f.path);
+    final f = await openFile(
+      acceptedTypeGroups: [type],
+      initialDirectory: PathMemory.dirFor(PathMemory.slotDdcVdc) ??
+          PathMemory.fallbackDir(PathMemory.slotDdcVdc),
+    );
+    if (f != null) {
+      PathMemory.recordPick(PathMemory.slotDdcVdc, f.path);
+      model.loadVdc(f.path);
+    }
   }
 }

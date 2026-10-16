@@ -231,6 +231,117 @@ class AppLocalizationsEn extends AppLocalizations {
       'Mode switches apply instantly; WASAPI will converge on AuraVAIO only';
 
   @override
+  String get audioParadigm => 'Processing Paradigm';
+
+  @override
+  String get audioParadigmHint =>
+      'Select audio topology: Attachment Mode intercepts in-place; Pipeline Mode flows end-to-end (ADR-009)';
+
+  @override
+  String get paradigmAttachment => 'Attachment Mode';
+
+  @override
+  String get paradigmPipeline => 'Pipeline Mode';
+
+  @override
+  String get modeVoicemeeterApi => 'Voicemeeter API';
+
+  @override
+  String get pipelineIn => 'Input Source';
+
+  @override
+  String get pipelineInHint =>
+      'Select how audio enters the AuraDSP core processing pipeline';
+
+  @override
+  String get pipelineOut => 'Output Target';
+
+  @override
+  String get pipelineOutHint => 'Select where processed audio is routed';
+
+  @override
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+
+  @override
+  String get inputVaio => 'AuraVAIO Virtual In (System Playback)';
+
+  @override
+  String get inputWasapi => 'WASAPI Capture (Mic / Mix)';
+
+  @override
+  String get outputWasapi => 'WASAPI Render (Speakers / Headphones)';
+
+  @override
+  String get outputVaio => 'AuraVAIO Virtual Out (Recording / Stream)';
+
+  @override
+  String get outputAsioClient =>
+      'ASIO Client (External Hardware Audio Interface)';
+
+  @override
+  String get apoTargetEndpoint => 'Target Endpoint';
+
+  @override
+  String get apoTargetEndpointHint =>
+      'Select the Windows audio endpoint to attach AuraDSP System APO effects';
+
+  @override
+  String get apoStatus => 'APO Status';
+
+  @override
+  String get apoAttached => 'Attached';
+
+  @override
+  String get apoNotAttached => 'Not Attached';
+
+  @override
+  String get apoActionAttach => 'Attach APO';
+
+  @override
+  String get apoActionDetach => 'Detach APO';
+
+  @override
+  String get asioDriverCardTitle => 'AuraDSP Virtual ASIO Driver';
+
+  @override
+  String get asioDriverStatus => 'Driver Status';
+
+  @override
+  String get asioDriverRegistered => 'Registered in System';
+
+  @override
+  String get asioDriverNotRegistered => 'Not Registered';
+
+  @override
+  String get asioDriverActionRegister => 'Register Driver';
+
+  @override
+  String get asioDriverActionUnregister => 'Unregister Driver';
+
+  @override
+  String get asioDawStatus => 'DAW Status';
+
+  @override
+  String get asioDawConnected => 'Active Connection';
+
+  @override
+  String get asioDawIdle => 'Idle (Waiting for DAW)';
+
+  @override
+  String get asioStatusCheck => 'Check Status';
+
+  @override
+  String get virtualSinkNotice =>
+      'Note: AuraVAIO is a virtual sink. Open OBS or a recording app to listen to output.';
+
+  @override
+  String get monitorMirroring => 'Headphone Monitor Mirroring';
+
+  @override
+  String get monitorMirroringHint =>
+      'Mirror audio to physical headphones while pushing to the virtual sink for local listening';
+
+  @override
   String get audioDevice => 'Device';
 
   @override
@@ -548,6 +659,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get presetSaveFail => 'Save failed (invalid name or disk)';
+
+  @override
+  String get presetDirtyBadge => 'Custom (unsaved)';
 
   @override
   String get presetDeleted => 'Preset deleted';

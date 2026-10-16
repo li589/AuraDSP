@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/presets.dart';
 import 'package:auradsp_app/core/session_memory.dart';
@@ -8,6 +9,13 @@ import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  // 出厂预设/默认基线资产预载：让全文件走生产语义（apply 全量复写）。
+  setUpAll(() async {
+    await PresetLibrary.preloadFactoryAssets();
+  });
+
   group('AppConfig & ConfigManager Tests', () {
     test('Default AppConfig matches specification', () {
       final cfg = AppConfig();
@@ -163,6 +171,58 @@ void main() {
       expect(ConfigManager.baseDir, isNot(sandbox));
     });
 
+    test('守护：apply() 写 activePresetName（预设高亮依赖），会话回放不得污染成 __restored__', () {
+      final m = AppModel(testing: true);
+      expect(m.activePresetName, isNull);
+      final snap = PresetLibrary.snapshot(m, name: '__pollution_probe__');
+      PresetLibrary.apply(m, snap);
+      // apply 的副作用契约：成功应用后记住预设名，效果页据此高亮。
+      expect(m.activePresetName, '__pollution_probe__');
+
+      // 会话恢复路径：restoreMemoryImage 借道名为 '__restored__' 的哑预设，
+      // 但最后必须把名字还原成会话里存的那个（否则启动后预设高亮永远不命中）。
+      final m2 = AppModel(testing: true);
+      m2.activePresetName = 'My_Night_Mode';
+      expect(SessionMemory.save(m2), isTrue);
+      final session = SessionMemory.load()!;
+      final m3 = AppModel(testing: true);
+      SessionMemory.restoreMemoryImage(m3, session);
+      expect(m3.activePresetName, 'My_Night_Mode',
+          reason: 'restoreMemoryImage 必须绕开 apply 的 activePresetName 污染');
+    });
+
+    test('守护：音频引擎选择随会话记忆（四种 Windows 模式 round-trip）', () {
+      for (final mode in AudioModes.windows) {
+        final m = AppModel(testing: true);
+        m.audioMode = mode;
+        m.config.audioMode = mode;
+        expect(SessionMemory.save(m), isTrue, reason: 'mode=$mode');
+        final session = SessionMemory.load()!;
+        expect(session['audioMode'], mode, reason: 'mode=$mode');
+        final m2 = AppModel(testing: true);
+        SessionMemory.restoreMemoryImage(m2, session);
+        expect(m2.audioMode, AudioModes.normalize(mode),
+            reason: 'mode=$mode 重启后必须回到关闭前选择的引擎');
+      }
+    });
+
+    test('守护：测试音状态不落盘（关闭前开着 440Hz，重启必须默认关闭）', () {
+      final m = AppModel(testing: true);
+      m.setSource('tone');
+      expect(m.sourceKind, 'tone');
+      expect(m.playing, isTrue);
+      expect(SessionMemory.save(m), isTrue);
+      final payload = File(SessionMemory.sessionPath).readAsStringSync();
+      // 载荷里不得出现测试音状态：sourceKind 不在序列化集，'tone' 值也不得出现
+      expect(payload.contains('sourceKind'), isFalse);
+      expect(payload.contains('"tone"'), isFalse);
+      // 重启路径双保险：restore 后 playing/sourceKind 保持全新安装默认
+      final m2 = AppModel(testing: true);
+      SessionMemory.restoreMemoryImage(m2, SessionMemory.load()!);
+      expect(m2.playing, isFalse);
+      expect(m2.sourceKind, '');
+    });
+
     test('v2 config migrates vizFps to the render-friendly default', () {
       final prev = ConfigManager.baseDir;
       final dir = Directory.systemTemp.createTempSync('auradsp_cfgmig_');
@@ -181,6 +241,154 @@ void main() {
           dir.deleteSync(recursive: true);
         } catch (_) {}
       }
+    });
+  });
+
+  group('Preset dirty tracking：偏离即自定义/未保存（2026-10-16 决策 #3）', () {
+    test('apply 后不脏；任意一点偏离 → evaluatePresetDirty 翻 true', () {
+      final m = AppModel(testing: true);
+      final snap = PresetLibrary.snapshot(m, name: '__dirty_base__');
+      PresetLibrary.apply(m, snap);
+      expect(m.activePresetName, '__dirty_base__');
+      expect(m.appliedPresetFingerprint, isNotNull);
+      expect(m.evaluatePresetDirty(), isFalse);
+      expect(m.presetDirty, isFalse);
+
+      // 一点偏离（单个滑块）即脏
+      m.setFloat('post.gain', 1.25);
+      expect(m.evaluatePresetDirty(), isTrue);
+      expect(m.presetDirty, isTrue);
+    });
+
+    test('saveAsUserPreset 保存即锚定：脏标记归零，再偏离又脏', () {
+      final m = AppModel(testing: true);
+      final snap = PresetLibrary.snapshot(m, name: '__dirty_base__');
+      PresetLibrary.apply(m, snap);
+      m.setFloat('post.gain', 1.25);
+      expect(m.evaluatePresetDirty(), isTrue);
+
+      final prev = ConfigManager.baseDir;
+      final dir = Directory.systemTemp.createTempSync('auradsp_dirty_');
+      ConfigManager.baseDirOverride = dir.path;
+      try {
+        expect(m.saveAsUserPreset('My_Custom_1'), isTrue);
+      } finally {
+        ConfigManager.baseDirOverride = prev;
+      }
+      expect(m.presetDirty, isFalse);
+      expect(m.appliedPresetFingerprint, PresetLibrary.fingerprintOf(m),
+          reason: '保存即锚定：锚点 = 当前状态');
+      m.setFloat('post.gain', 2.0);
+      expect(m.evaluatePresetDirty(), isTrue);
+      try {
+        Directory(dir.path).deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('SessionMemory v5：脏态与锚点随会话持久化，重启后仍是「未保存」', () {
+      final prev = ConfigManager.baseDir;
+      final dir = Directory.systemTemp.createTempSync('auradsp_dirty2_');
+      ConfigManager.baseDirOverride = dir.path;
+      try {
+        final m = AppModel(testing: true);
+        final snap = PresetLibrary.snapshot(m, name: '__dirty_v5__');
+        PresetLibrary.apply(m, snap);
+        m.setFloat('post.gain', 1.25);
+        m.evaluatePresetDirty();
+        expect(m.presetDirty, isTrue);
+        final anchor = m.appliedPresetFingerprint;
+
+        expect(SessionMemory.save(m), isTrue);
+        final session = SessionMemory.load()!;
+        expect(session['version'], 5);
+        expect(session['presetDirty'], isTrue);
+        expect(session['appliedPresetFingerprint'], anchor);
+
+        // 模拟重启：全新模型回放会话
+        final m2 = AppModel(testing: true);
+        SessionMemory.restoreMemoryImage(m2, session);
+        expect(m2.presetDirty, isTrue,
+            reason: '未保存的自定义态重启后必须仍显示「未保存」');
+        expect(m2.appliedPresetFingerprint, anchor);
+        // 回放后的状态与原偏离状态一致 → 再评估仍脏（不是误报）
+        expect(m2.evaluatePresetDirty(), isTrue);
+      } finally {
+        ConfigManager.baseDirOverride = prev;
+        try {
+          Directory(dir.path).deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
+
+    test('会话回放不误清脏态：restoreMemoryImage 用会话锚点覆盖 apply 的锚点', () {
+      // 防回归：apply() 末尾会把指纹锚到回放后的状态（= 不脏），
+      // restoreMemoryImage 必须随后用会话里存的锚点/脏标记覆盖。
+      final prev = ConfigManager.baseDir;
+      final dir = Directory.systemTemp.createTempSync('auradsp_dirty3_');
+      ConfigManager.baseDirOverride = dir.path;
+      try {
+        final m = AppModel(testing: true);
+        final snap = PresetLibrary.snapshot(m, name: '__dirty_v5__');
+        PresetLibrary.apply(m, snap);
+        m.setFloat('post.gain', 1.25);
+        m.evaluatePresetDirty();
+        SessionMemory.save(m);
+        final session = SessionMemory.load()!;
+        final anchor = session['appliedPresetFingerprint'] as String;
+        expect(anchor, isNot(PresetLibrary.fingerprintOf(m)),
+            reason: '偏离态的指纹必须不同于锚点');
+
+        final m2 = AppModel(testing: true);
+        SessionMemory.restoreMemoryImage(m2, session);
+        expect(m2.appliedPresetFingerprint, anchor,
+            reason: 'apply 在回放里把锚点改成了回放态指纹，必须被会话锚点覆盖');
+      } finally {
+        ConfigManager.baseDirOverride = prev;
+        try {
+          Directory(dir.path).deleteSync(recursive: true);
+        } catch (_) {}
+      }
+    });
+  });
+
+  group('Readback: 防抖对账不变量（2026-10-16 决策 #4，源码形状钉住）', () {
+    // _testing 构造不拉 isolate，功能断言不可达；与 E1 探针同一模式，
+    // 以源码形状钉住三条不变量。
+    test('scheduleAutoSave 的防抖回调 = 保存 + 回读，且编辑即盖 _lastEditAt', () {
+      final src = File('lib/core/state.dart').readAsStringSync();
+      final i = src.indexOf('void scheduleAutoSave() {');
+      expect(i, greaterThan(-1), reason: '找不到 scheduleAutoSave 定义');
+      final j = src.indexOf('\n  }', i);
+      final body = src.substring(i, j);
+      expect(body.contains('_lastEditAt'), isTrue,
+          reason: '编辑即盖时间戳，回读过期判定的依据');
+      expect(body.contains('SessionMemory.save'), isTrue);
+      expect(body.contains('scheduleReadback()'), isTrue,
+          reason: '风暴平息后必须回读对账（决策 #4）');
+    });
+
+    test('scheduleReadback 有 _testing/_isReplayingSession 短路 + 置 pending', () {
+      final src = File('lib/core/state.dart').readAsStringSync();
+      final i = src.indexOf('void scheduleReadback() {');
+      expect(i, greaterThan(-1), reason: '找不到 scheduleReadback 定义');
+      final j = src.indexOf('\n  }', i);
+      final body = src.substring(i, j);
+      expect(body.contains('_testing || _isReplayingSession'), isTrue,
+          reason: '测试构造/会话回放不得发回读');
+      expect(body.contains('_readbackPending = true'), isTrue);
+      expect(body.contains("'getParams'"), isTrue);
+    });
+
+    test("'params' 分支顶部有过期守卫：编辑晚于回读发出 → 丢弃该轮", () {
+      final src = File('lib/core/state.dart').readAsStringSync();
+      final i = src.indexOf("case 'params':");
+      expect(i, greaterThan(-1));
+      final body = src.substring(i, i + 700);
+      final guard = body.indexOf('_readbackPending');
+      expect(guard, greaterThan(-1), reason: '守卫必须位于分支顶部（采用任何引擎值之前）');
+      expect(body.contains('_lastEditAt > _readbackRequestedAt'), isTrue);
+      expect(body.indexOf('bassOn ='), greaterThan(guard),
+          reason: '守卫必须在首次采用（bassOn =）之前');
     });
   });
 
@@ -280,11 +488,7 @@ void main() {
           reason: 'setStereoMix 自带 bandUsed=true 副作用，必须由快照值覆盖');
     });
 
-    test('apply() reverb preset=-1 分支：缺键不碰用户自调值，显式键照常写入', () {
-      final m = AppModel(testing: true);
-      m.setReverbCustomParam('decay', 0.9);
-      m.setReverbCustomParam('wet', 0.8);
-      m.setReverbCustomParam('roomSize', 2.2);
+    test('apply() reverb preset=-1 分支：全局预设基线复写 / 自有预设缺键不碰', () {
       // 出厂风格的最小 reverb 节：只关混响，不带任何 customParam
       final preset = AuraPreset(
         name: '__regress_reverb_off__',
@@ -293,12 +497,30 @@ void main() {
           'reverb': {'enable': false, 'preset': -1},
         },
       );
+
+      // 全局预设（fullRewrite=true，默认）：缺键由 defaults.json 基线补全复写，
+      // 用户自调值被复位为出厂默认（0.5/0.35/1.2）。
+      final m = AppModel(testing: true);
+      m.setReverbCustomParam('decay', 0.9);
+      m.setReverbCustomParam('wet', 0.8);
+      m.setReverbCustomParam('roomSize', 2.2);
       PresetLibrary.apply(m, preset);
-      // 修复前：?? 硬编码兜底把 0.9/0.8/2.2 抹成 0.5/0.35/1.2
-      expect(m.fvDecay, closeTo(0.9, 1e-9));
-      expect(m.fvWet, closeTo(0.8, 1e-9));
-      expect(m.fvRoomSize, closeTo(2.2, 1e-9));
       expect(m.isSpatialReverbOn, isFalse);
+      expect(m.fvDecay, closeTo(0.5, 1e-9));
+      expect(m.fvWet, closeTo(0.35, 1e-9));
+      expect(m.fvRoomSize, closeTo(1.2, 1e-9));
+
+      // 效果器自有预设（fullRewrite=false）：只应用实际携带的键，
+      // 缺键不碰用户自调值（钉住 F2 按键守卫：?? 硬编码兜底不得复活）。
+      final m2 = AppModel(testing: true);
+      m2.setReverbCustomParam('decay', 0.9);
+      m2.setReverbCustomParam('wet', 0.8);
+      m2.setReverbCustomParam('roomSize', 2.2);
+      PresetLibrary.apply(m2, preset, fullRewrite: false);
+      expect(m2.isSpatialReverbOn, isFalse);
+      expect(m2.fvDecay, closeTo(0.9, 1e-9));
+      expect(m2.fvWet, closeTo(0.8, 1e-9));
+      expect(m2.fvRoomSize, closeTo(2.2, 1e-9));
 
       // 显式携带的键仍必须写入；未携带的键保持现值
       final preset2 = AuraPreset(
@@ -308,9 +530,9 @@ void main() {
           'reverb': {'enable': false, 'preset': -1, 'decay': 0.3},
         },
       );
-      PresetLibrary.apply(m, preset2);
-      expect(m.fvDecay, closeTo(0.3, 1e-9));
-      expect(m.fvWet, closeTo(0.8, 1e-9));
+      PresetLibrary.apply(m2, preset2, fullRewrite: false);
+      expect(m2.fvDecay, closeTo(0.3, 1e-9));
+      expect(m2.fvWet, closeTo(0.8, 1e-9));
     });
 
     test('resetConfig 连带清除会话记忆（恢复默认 = 全部归零）', () {
@@ -397,7 +619,9 @@ void main() {
       expect(m.lpPresetCodeMismatch, isTrue);
     });
 
-    test('无 liveprog 节的老预设不碰脚本态', () {
+    test('无 liveprog 节的全局预设：使能/滑块复位默认，脚本正文（会话级）保留', () {
+      // 2026-10-16 语义定版：全局预设全部复写。lpCode 属会话级资源态，
+      // 不在预设 params 内，故不随预设复写。
       final m = AppModel(testing: true)
         ..lpEnabled = true
         ..lpCode = 'keepme';
@@ -410,6 +634,25 @@ void main() {
               params: {
                 'post': {'gain': 1.0, 'limiterEnable': true},
               }));
+      expect(m.lpEnabled, isFalse, reason: '缺节 = 复位默认（关闭）');
+      expect(m.lpCode, 'keepme', reason: '脚本正文是会话级资源，不随预设复写');
+      expect(m.lpParams[0], isNot(closeTo(0.9, 1e-9)));
+    });
+
+    test('效果器自有预设（fullRewrite=false）：liveprog 缺省节不碰脚本态', () {
+      final m = AppModel(testing: true)
+        ..lpEnabled = true
+        ..lpCode = 'keepme';
+      m.lpParams[0] = 0.9;
+      PresetLibrary.apply(
+          m,
+          AuraPreset(
+              name: '__scoped__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 1.0, 'limiterEnable': true},
+              }),
+          fullRewrite: false);
       expect(m.lpEnabled, isTrue);
       expect(m.lpCode, 'keepme');
       expect(m.lpParams[0], closeTo(0.9, 1e-9));
@@ -577,7 +820,8 @@ void main() {
       expect(m.bassmonoFreq, closeTo(200.0, 1e-9));
     });
 
-    test('无 bassmono 节的老预设不碰开关', () {
+    test('无 bassmono 节的全局预设：开关复位默认（关闭）', () {
+      // 2026-10-16 语义定版：全局预设全部复写，缺节 = 复位默认。
       final m = AppModel(testing: true)..setBassmonoEnabled(true);
       PresetLibrary.apply(
           m,
@@ -587,7 +831,7 @@ void main() {
               params: {
                 'post': {'gain': 0.0, 'limiterEnable': true},
               }));
-      expect(m.bassmonoOn, isTrue);
+      expect(m.bassmonoOn, isFalse);
     });
   });
 
@@ -732,7 +976,7 @@ void main() {
       expect(m.exciterHifreq, closeTo(8000.0, 1e-9));
     });
 
-    test('无 exciter 节的老预设不碰开关', () {
+    test('无 exciter 节：全局预设复位开关，效果器自有预设不碰', () {
       final m = AppModel(testing: true)..setExciterEnabled(true);
       PresetLibrary.apply(
           m,
@@ -742,7 +986,21 @@ void main() {
               params: {
                 'post': {'gain': 0.0, 'limiterEnable': true},
               }));
-      expect(m.exciterOn, isTrue);
+      // 2026-10-16 语义定版：全局预设全部复写，缺节 = 复位默认（关闭）。
+      expect(m.exciterOn, isFalse);
+
+      // 效果器自有预设（fullRewrite=false）：缺 exciter 节不碰本效果器状态。
+      final m2 = AppModel(testing: true)..setExciterEnabled(true);
+      PresetLibrary.apply(
+          m2,
+          AuraPreset(
+              name: '__own__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 0.0, 'limiterEnable': true},
+              }),
+          fullRewrite: false);
+      expect(m2.exciterOn, isTrue);
     });
   });
 
@@ -817,7 +1075,7 @@ void main() {
       expect(m.dyneqHighThreshold, closeTo(-20.0, 1e-9));
     });
 
-    test('无 dyneq 节的老预设不碰开关', () {
+    test('无 dyneq 节：全局预设复位开关，效果器自有预设不碰', () {
       final m = AppModel(testing: true)..setDyneqEnabled(true);
       PresetLibrary.apply(
           m,
@@ -827,7 +1085,21 @@ void main() {
               params: {
                 'post': {'gain': 0.0, 'limiterEnable': true},
               }));
-      expect(m.dyneqOn, isTrue);
+      // 2026-10-16 语义定版：全局预设全部复写，缺节 = 复位默认（关闭）。
+      expect(m.dyneqOn, isFalse);
+
+      // 效果器自有预设（fullRewrite=false）：缺 dyneq 节不碰本效果器状态。
+      final m2 = AppModel(testing: true)..setDyneqEnabled(true);
+      PresetLibrary.apply(
+          m2,
+          AuraPreset(
+              name: '__own__',
+              createdAt: DateTime.now().toIso8601String(),
+              params: {
+                'post': {'gain': 0.0, 'limiterEnable': true},
+              }),
+          fullRewrite: false);
+      expect(m2.dyneqOn, isTrue);
     });
   });
 

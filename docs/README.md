@@ -23,6 +23,9 @@
 | [ADR-003](adr/ADR-003-multichannel-matrix.md) | 多声道 Phase A 采用声道矩阵包络，不改 vendor-src | 已接受 |
 | [ADR-004](adr/ADR-004-plugin-multi-slot-and-stage-topology.md) | 插件**多插槽（2 路）+ 五级链阶段插入拓扑**；不引入桥进程 | 已接受 |
 | [ADR-006](adr/ADR-006-remove-latency-tier-gating.md) | **移除三档延迟硬约束**：延迟改为纯测量展示，所有效果可自由使能（**取代 ADR-002**） | 已接受 |
+| [ADR-007](adr/ADR-007-dsd-not-supported.md) | 不支持 DSD 直通与处理（专注 PCM/浮点 17 项算法链） | 已接受 |
+| [ADR-008](adr/ADR-008-asio-driver-identity-and-architecture.md) | 自研虚拟 ASIO 驱动（Driver 线）定名、COM 架构与分期实施路线 | 已接受 |
+| [ADR-009](adr/ADR-009-audio-processing-paradigms-and-settings-restructure.md) | Windows 底层音频两大交互范式（附加模式与管线模式）与设置面板重构 | 已接受 |
 
 > ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
 

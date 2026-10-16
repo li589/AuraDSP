@@ -103,9 +103,12 @@ struct Params {
     std::atomic<float>    bass_gain{0.0f};      /* dB [0,15] */
     std::atomic<int32_t>  reverb_preset{-1};
 std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
-    std::atomic<int32_t>  stereo_enable{1};   /* 总开关（默认开，保持 mix 语义不变） */
+    /* 2026-10-16 口径决策：UI 为真。以下默认值必须与 Dart ParamDefaults
+     * （app/auradsp_app/lib/core/state.dart L64-171）逐项一致，改动需同步两侧
+     * 并跑 flutter test（D1 监察）+ smoke。 */
+    std::atomic<int32_t>  stereo_enable{0};   /* 默认关（UI 为真，原 1） */
     std::atomic<int32_t>  eq_enable{0};
-    std::atomic<int32_t>  limiter_enable{0};
+    std::atomic<int32_t>  limiter_enable{1};  /* 默认开（UI 为真，原 0） */
     std::atomic<float>    post_gain{0.0f};      /* dB [-15,15] */
     /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
@@ -120,7 +123,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  ddc_ready{0};
     /* M3-a：轻量效果开关（真·重排序需 process 链补丁，后置 M3.5） */
     std::atomic<int32_t>  tube_enable{0};       /* T0 */
-    std::atomic<float>    tube_gain{0.0f};      /* dB [-3, 12] 驱动度 */
+    std::atomic<float>    tube_gain{4.5f};      /* dB [-3, 12] 驱动度（UI 为真，原 0.0） */
     std::atomic<int32_t>  tube_style{0};       /* P-011: 0 Triode / 1 Pentode / 2 Tape */
     std::atomic<float>    tube_mix{1.0f};       /* P-011: 湿比 [0, 1] */
     std::atomic<float>    tube_compensation{0.0f}; /* P-011: 输出补偿 dB [-12, 12] */
@@ -208,9 +211,9 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
     std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
-    std::atomic<float>    fv_wet{0.3f};         /* 0..1 */
+    std::atomic<float>    fv_wet{0.35f};        /* 0..1（UI 为真，原 0.3） */
     std::atomic<float>    fv_dry{1.0f};         /* 0..1 */
-    std::atomic<float>    fv_roomsize{1.0f};    /* 0.5..2.5 × tuning（UI 默认 1.2，session 回放对齐） */
+    std::atomic<float>    fv_roomsize{1.2f};    /* 0.5..2.5（UI 为真，原 1.0；旧注释自相矛盾已删） */
     std::atomic<float>    fv_width{1.0f};       /* 0.2..2.0 wet 声 M/S 加宽 */
     /* 输入门控（钉死在链路最前端；全通道总增益 + 8通道单控平衡比例） */
     std::atomic<float>    input_gain{0.0f};     /* dB [-15,15] 默认 0.0 */

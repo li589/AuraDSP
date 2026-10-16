@@ -223,6 +223,112 @@ class AppLocalizationsZh extends AppLocalizations {
   String get audioModeHint => '模式切换即时生效；WASAPI 最终只收敛于 AuraVAIO 模式';
 
   @override
+  String get audioParadigm => '处理范式';
+
+  @override
+  String get audioParadigmHint => '选择音频接入形态：附加模式原地挂载处理，普通管线模式端到端流转（ADR-009）';
+
+  @override
+  String get paradigmAttachment => '附加模式';
+
+  @override
+  String get paradigmPipeline => '普通管线模式';
+
+  @override
+  String get modeVoicemeeterApi => 'Voicemeeter API';
+
+  @override
+  String get pipelineIn => '输入源';
+
+  @override
+  String get pipelineInHint => '选择音频如何进入 AuraDSP 核心处理管线';
+
+  @override
+  String get pipelineOut => '输出端';
+
+  @override
+  String get pipelineOutHint => '选择处理后的音频流向何处';
+
+  @override
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+
+  @override
+  String get inputVaio => 'AuraVAIO 虚拟输入 (系统回放)';
+
+  @override
+  String get inputWasapi => 'WASAPI 系统采集 (麦克风/混音)';
+
+  @override
+  String get outputWasapi => 'WASAPI 物理渲染 (扬声器/耳机)';
+
+  @override
+  String get outputVaio => 'AuraVAIO 虚拟输出 (录音/推流)';
+
+  @override
+  String get outputAsioClient => 'ASIO Client (外部硬件专业声卡)';
+
+  @override
+  String get apoTargetEndpoint => '附加目标端点';
+
+  @override
+  String get apoTargetEndpointHint => '选择要挂载 AuraDSP 系统级 APO 处理的音频端点';
+
+  @override
+  String get apoStatus => 'APO 挂载状态';
+
+  @override
+  String get apoAttached => '已附加';
+
+  @override
+  String get apoNotAttached => '未附加';
+
+  @override
+  String get apoActionAttach => '一键附加';
+
+  @override
+  String get apoActionDetach => '一键卸载';
+
+  @override
+  String get asioDriverCardTitle => 'AuraDSP 虚拟 ASIO 驱动';
+
+  @override
+  String get asioDriverStatus => '驱动状态';
+
+  @override
+  String get asioDriverRegistered => '已在系统注册';
+
+  @override
+  String get asioDriverNotRegistered => '未注册';
+
+  @override
+  String get asioDriverActionRegister => '一键注册驱动';
+
+  @override
+  String get asioDriverActionUnregister => '一键注销驱动';
+
+  @override
+  String get asioDawStatus => 'DAW 状态';
+
+  @override
+  String get asioDawConnected => '活跃连接中';
+
+  @override
+  String get asioDawIdle => '空闲（等待 DAW 接入）';
+
+  @override
+  String get asioStatusCheck => '检查状态';
+
+  @override
+  String get virtualSinkNotice =>
+      '提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。';
+
+  @override
+  String get monitorMirroring => '本地耳机监听镜像';
+
+  @override
+  String get monitorMirroringHint => '在向虚拟声卡推流的同时，分路一份音频到当前物理扬声器/耳机以供本地监听';
+
+  @override
   String get audioDevice => '设备';
 
   @override
@@ -531,6 +637,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get presetSaveFail => '保存失败（名称非法或磁盘不可写）';
+
+  @override
+  String get presetDirtyBadge => '自定义（未保存）';
 
   @override
   String get presetDeleted => '预设已删除';

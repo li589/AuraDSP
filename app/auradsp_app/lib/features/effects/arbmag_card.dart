@@ -53,8 +53,13 @@ class _ArbmagCardState extends State<_ArbmagCard> {
 
   Future<void> _importFile(BuildContext context) async {
     const type = XTypeGroup(label: 'AutoEq GraphicEQ', extensions: ['txt', 'csv']);
-    final file = await openFile(acceptedTypeGroups: [type]);
+    final file = await openFile(
+      acceptedTypeGroups: [type],
+      initialDirectory: PathMemory.dirFor(PathMemory.slotArbmag) ??
+          PathMemory.fallbackDir(PathMemory.slotArbmag),
+    );
     if (file != null) {
+      PathMemory.recordPick(PathMemory.slotArbmag, file.path);
       try {
         final text = await file.readAsString();
         final cleaned = _cleanGraphicEqText(text);

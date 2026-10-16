@@ -17,6 +17,46 @@
 import 'dart:io' show Platform;
 
 abstract final class AudioModes {
+  // ADR-009 两大交互范式
+  static const String categoryAttachment = 'attachment';
+  static const String categoryPipeline = 'pipeline';
+
+  // 附加模式子项
+  static const String attachSysApo = 'sysapo';
+  static const String attachVoicemeeterApi = 'voicemeeter_api';
+
+  // 管线模式输入端
+  static const String inputWasapi = 'wasapi';
+  static const String inputVaio = 'vaio';
+  static const String inputAsioDriver = 'asio_driver';
+
+  // 管线模式输出端
+  static const String outputWasapi = 'wasapi';
+  static const String outputVaio = 'vaio';
+  static const String outputAsioClient = 'asio_client';
+
+  static const List<String> categories = [
+    categoryAttachment,
+    categoryPipeline,
+  ];
+
+  static const List<String> attachmentOptions = [
+    attachSysApo,
+    attachVoicemeeterApi,
+  ];
+
+  static const List<String> pipelineInputOptions = [
+    inputAsioDriver,
+    inputVaio,
+    inputWasapi,
+  ];
+
+  static const List<String> pipelineOutputOptions = [
+    outputWasapi,
+    outputVaio,
+    outputAsioClient,
+  ];
+
   static const List<String> windows = [
     'vaio',
     'vbcallback',
@@ -65,6 +105,40 @@ abstract final class AudioModes {
     final o = os ?? currentOs();
     final opts = optionsFor(o);
     if (id != null && opts.contains(id)) return id;
+    if (id == 'voicemeeter_api') return 'vbcallback';
     return defaultFor(o);
   }
+
+  /// 根据存量 audioMode 推断范式类别（ADR-009）
+  static String categoryForMode(String mode) {
+    switch (mode) {
+      case 'sysapo':
+      case 'vbcallback':
+      case 'voicemeeter_api':
+        return categoryAttachment;
+      case 'vaio':
+      case 'asio':
+      default:
+        return categoryPipeline;
+    }
+  }
+
+  /// 将范式与细分项合成底层的 audioMode
+  static String composeMode({
+    required String category,
+    String? attachmentMode,
+    String? pipelineOut,
+  }) {
+    if (category == categoryAttachment) {
+      if (attachmentMode == attachVoicemeeterApi || attachmentMode == 'vbcallback') {
+        return 'vbcallback';
+      }
+      return 'sysapo';
+    }
+    if (pipelineOut == outputAsioClient || pipelineOut == 'asio') {
+      return 'asio';
+    }
+    return 'vaio';
+  }
 }
+

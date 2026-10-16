@@ -9,6 +9,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/services.dart' show rootBundle;
+
 import 'config.dart';
 import 'state.dart';
 
@@ -68,7 +70,39 @@ abstract final class PresetLibrary {
   static String get userDir =>
       '$baseDir${Platform.pathSeparator}user';
 
-  /// 确保出厂预设目录及文件已初始化
+  /// 出厂预设资产清单（assets/presets/factory/）。代码中不存任何预设内容，
+  /// 只存文件名索引；内容一律来自 JSON 资产（2026-10-16 决策）。
+  static const List<String> _factoryAssetFiles = [
+    'Pop Vocal Clarity.json',
+    'Rock Bass Impact.json',
+    'Symphonic Concert Hall.json',
+    'Vintage Vinyl Tube.json',
+    'V-Shape Smile Hi-Fi.json',
+    'Studio Flat Monitor.json',
+  ];
+
+  static final Map<String, String> _factoryAssetCache = {};
+  static String? _defaultsJson;
+
+  /// 预载出厂预设与默认基线资产（异步）。rootBundle 仅提供异步 API，
+  /// 而 ensureInitialized/apply 在同步路径上——故 main 启动时预载一次
+  /// 进内存缓存，同步路径直接消费。未预载时 ensureInitialized 跳过写盘、
+  /// apply 退化为「原样应用」（不合并基线）。
+  static Future<void> preloadFactoryAssets() async {
+    for (final f in _factoryAssetFiles) {
+      try {
+        _factoryAssetCache[f] =
+            await rootBundle.loadString('assets/presets/factory/$f');
+      } catch (_) {}
+    }
+    try {
+      _defaultsJson = await rootBundle.loadString('assets/presets/defaults.json');
+    } catch (_) {}
+  }
+
+  /// 确保出厂预设目录及文件已初始化。
+  /// 版本化写盘：磁盘文件与资产内容**不一致即重写**——修复旧版
+  /// 「只在文件不存在时写、出厂预设永远无法热更新」缺陷。
   static void ensureInitialized() {
     try {
       final fDir = Directory(factoryDir);
@@ -76,12 +110,26 @@ abstract final class PresetLibrary {
       final uDir = Directory(userDir);
       if (!uDir.existsSync()) uDir.createSync(recursive: true);
 
-      for (final p in _builtInPresets) {
-        final f = File('$factoryDir${Platform.pathSeparator}${_safeFileName(p.name)}.json');
-        if (!f.existsSync()) {
-          final content = const JsonEncoder.withIndent('  ').convert(p.toJson());
-          f.writeAsStringSync(content);
+      if (_factoryAssetCache.isEmpty) {
+        for (final name in _factoryAssetFiles) {
+          final diskFile = File('assets/presets/factory/$name');
+          if (diskFile.existsSync()) {
+            _factoryAssetCache[name] = diskFile.readAsStringSync();
+          }
         }
+      }
+      if (_factoryAssetCache.isEmpty) return; // 资产未预载
+      for (final name in _factoryAssetFiles) {
+        final content = _factoryAssetCache[name];
+        if (content == null) continue;
+        final f = File(
+            '$factoryDir${Platform.pathSeparator}${_safeFileName(name)}');
+        if (f.existsSync()) {
+          try {
+            if (f.readAsStringSync() == content) continue; // 一致，跳过
+          } catch (_) {}
+        }
+        f.writeAsStringSync(content);
       }
     } catch (_) {}
   }
@@ -435,8 +483,14 @@ abstract final class PresetLibrary {
     );
   }
 
-  static void apply(AppModel m, AuraPreset preset) {
-    final p = preset.params;
+  /// 应用预设。2026-10-16 语义定版：
+  /// - fullRewrite=true（全局预设，默认）：**全部复写**——预设未携带的
+  ///   节/键一律取默认基线值，取代旧「缺节不碰」合并语义；
+  /// - fullRewrite=false（效果器自有预设）：只应用预设实际携带的节，
+  ///   每节内部同样以基线补齐缺失键（只覆盖自己的所有配置）。
+  /// 有意不复写的例外：chainOrder（全局路由选择）。
+  static void apply(AppModel m, AuraPreset preset, {bool fullRewrite = true}) {
+    final p = fullRewrite ? _mergeDefaults(preset.params) : preset.params;
 
     // 0. 输入门控
     final input = (p['input'] as Map<String, dynamic>?) ?? {};
@@ -866,276 +920,61 @@ abstract final class PresetLibrary {
     }
 
     m.activePresetName = preset.name;
+    // 脏跟踪锚点（2026-10-16 决策 #3）：应用成功后把当前状态记为
+    // 「不脏」的基准；之后任意参数偏离都会使 fingerprintOf 失配
+    // → 进入自定义/未保存态。会话恢复路径（restoreMemoryImage）随后
+    // 会用会话里存的锚点覆盖本值，见 session_memory.dart。
+    m.appliedPresetFingerprint = fingerprintOf(m);
   }
 
-  /* ---- 6 大出厂经典调音预设 ---- */
+  /* ---- 脏跟踪指纹（2026-10-16 决策 #3）---- */
 
-  static final List<AuraPreset> _builtInPresets = [
-    // 01 流行清澈人声
-    AuraPreset(
-      name: 'Pop Vocal Clarity',
-      category: '流行人声',
-      description: '突出人声泛音与透亮度，注入适度三极管暖声与精致短混响',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': true,
-          'intensity': 0.45,
-          'mode': 0,
-          'cutoff': 110.0,
-          'harmonics': 0.35,
-          'harmonicBlend': 0.5,
-          'subFloor': 30.0,
-        },
-        'reverb': {
-          'enable': true,
-          'preset': 1, // 小型厅堂
-          'decay': 0.35,
-          'damp': 0.6,
-          'wet': 0.25,
-          'dry': 1.0,
-          'roomSize': 1.0,
-          'stereoWidth': 1.0,
-        },
-        'tube': {
-          'enable': true,
-          'gain': 3.0,
-          'style': 0, // 三极管 12AX7
-          'oversampling': 2,
-          'compensation': 0.0,
-          'mix': 0.75,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [0, 0, 0, -0.5, 0.5, 1.0, 1.5, 2.5, 3.5, 3.0, 2.0, 1.5, 1.0, 0.5, 0],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'vocal',
-        },
-        'stereo': {'mix': 0.25, 'bandUsed': false},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-    // 02 摇滚深邃重低音
-    AuraPreset(
-      name: 'Rock Bass Impact',
-      category: '重低音',
-      description: '心理声学谐波强化，低频下潜强劲下沉，配合现代五极管动态饱和',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': true,
-          'intensity': 0.85,
-          'mode': 2, // 心理声学谐波
-          'cutoff': 140.0,
-          'harmonics': 0.75,
-          'harmonicBlend': 0.65,
-          'subFloor': 20.0,
-        },
-        'reverb': {
-          'enable': false,
-          'preset': -1,
-        },
-        'tube': {
-          'enable': true,
-          'gain': 5.5,
-          'style': 1, // 五极管 EL34
-          'oversampling': 2,
-          'compensation': -1.0,
-          'mix': 0.85,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [5.0, 4.5, 3.5, 2.0, 1.0, -1.0, -1.5, -1.0, 0.5, 1.5, 2.5, 3.5, 4.0, 3.0, 2.0],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'rock',
-        },
-        'stereo': {'mix': 0.35, 'bandUsed': false},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-    // 03 宏伟交响大厅
-    AuraPreset(
-      name: 'Symphonic Concert Hall',
-      category: '空间声学',
-      description: '大动态 3D 声学室模拟，深度去相关声场展宽，带来身临其境的音乐厅听感',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': true,
-          'intensity': 0.5,
-          'mode': 1, // 纯净低音（v3.1 起不再连带开 shelf，shelf 态走下面独立节）
-          'cutoff': 100.0,
-          'harmonics': 0.3,
-          'harmonicBlend': 0.5,
-          'subFloor': 25.0,
-        },
-        // v3.1 迁移：旧语义下 mode 1 会连带打开 shelf（freq=100/gain=6.0），
-        // 解耦后显式写出，保持该预设音色不变。
-        'shelf': {
-          'enable': true,
-          'freq': 100.0,
-          'gain': 6.0,
-        },
-        'reverb': {
-          'enable': true,
-          'preset': 3, // 大会堂
-          'decay': 0.75,
-          'damp': 0.45,
-          'wet': 0.45,
-          'dry': 0.9,
-          'roomSize': 1.8,
-          'stereoWidth': 1.6,
-        },
-        'tube': {
-          'enable': false,
-          'gain': 0.0,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [1.0, 1.0, 0.5, 0.5, 0.0, 0.0, 0.5, 1.0, 1.5, 1.5, 1.0, 1.0, 1.5, 1.5, 1.0],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'classical',
-        },
-        'stereo': {'mix': 0.65, 'bandUsed': false},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-    // 04 经典黑胶暖管
-    AuraPreset(
-      name: 'Vintage Vinyl Tube',
-      category: '模拟复古',
-      description: '模拟磁带温润饱和与电子管轻微二阶谐波染色，抚平数码生硬感',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': true,
-          'intensity': 0.6,
-          'mode': 0,
-          'cutoff': 120.0,
-          'harmonics': 0.4,
-          'harmonicBlend': 0.5,
-          'subFloor': 30.0,
-        },
-        'reverb': {
-          'enable': false,
-          'preset': -1,
-        },
-        'tube': {
-          'enable': true,
-          'gain': 6.0,
-          'style': 2, // 模拟磁带温润
-          'oversampling': 4,
-          'compensation': 0.5,
-          'mix': 1.0,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [2.0, 2.5, 2.0, 1.5, 1.0, 0.5, 0.0, -0.5, -0.5, 0.0, 0.5, -0.5, -1.0, -2.0, -3.0],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'warm',
-        },
-        'stereo': {'mix': 0.2, 'bandUsed': false},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-    // 05 动感微笑曲线
-    AuraPreset(
-      name: 'V-Shape Smile Hi-Fi',
-      category: '流行流行',
-      description: '两端提升中间平缓的经典 Smile 调音，能量充沛，明快抓耳',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': true,
-          'intensity': 0.7,
-          'mode': 0,
-          'cutoff': 130.0,
-          'harmonics': 0.5,
-          'harmonicBlend': 0.5,
-          'subFloor': 25.0,
-        },
-        'reverb': {
-          'enable': false,
-          'preset': -1,
-        },
-        'tube': {
-          'enable': true,
-          'gain': 3.5,
-          'style': 0,
-          'oversampling': 2,
-          'compensation': 0.0,
-          'mix': 0.8,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [5.0, 4.0, 3.0, 1.5, 0.0, -1.5, -2.5, -2.5, -1.5, 0.0, 1.5, 3.0, 4.0, 5.0, 5.5],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'smile',
-        },
-        'stereo': {'mix': 0.35, 'bandUsed': false},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-    // 06 录音棚平直监听
-    AuraPreset(
-      name: 'Studio Flat Monitor',
-      category: '专业监听',
-      description: '全频带线性直通，零额外染色与平直响应，供母带与录音回放基准对比',
-      author: 'AuraDSP Acoustics',
-      createdAt: '2026-10-10T10:00:00Z',
-      isFactory: true,
-      params: {
-        'bass': {
-          'enable': false,
-          'intensity': 0.0,
-          'gain': 0.0,
-        },
-        'reverb': {
-          'enable': false,
-          'preset': -1,
-        },
-        'tube': {
-          'enable': false,
-          'gain': 0.0,
-        },
-        'eq': {
-          'enable': true,
-          'bandsCount': 15,
-          'gains': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-          'q': 1.414,
-          'filter': 0,
-          'interp': 1,
-          'presetName': 'flat',
-        },
-        'stereo': {'mix': 0.0, 'bandUsed': false},
-        'shelf': {'enable': false, 'gain': 0.0},
-        'post': {'gain': 0.0, 'limiterEnable': true},
-      },
-    ),
-  ];
+  /// 模型当前参数状态的规范化指纹：snapshot params 的 JSON 编码。
+  /// snapshot 构建顺序确定 → 同一状态两次编码逐字节一致；
+  /// 与 [AppModel.appliedPresetFingerprint] 失配即「偏离预设」。
+  /// 开销：一次完整 snapshot（22 节），仅在 apply 与防抖保存回调中调用，
+  /// 不在 setter 热路径上（用户快速频繁改动时只花防抖间隔一次的开销）。
+  static String fingerprintOf(AppModel m) =>
+      jsonEncode(snapshot(m, name: '__fingerprint__').params);
+
+  /* ---- 出厂预设内容外置 + 默认基线（2026-10-16）----
+   * _builtInPresets 已删除：预设内容全部移至 assets/presets/（JSON 资产）。
+   * 出厂 JSON 经 ensureInitialized 版本化落盘，listAll 从磁盘读回。
+   * 默认基线（apply 全量复写的数据源）：assets/presets/defaults.json。
+   * 生成/再生成方式：test/zz_gen_factory_presets.dart（一次性工具）。 */
+
+  /// 全量复写合并：基线为底、预设键优先（深合并，逐键）。
+  /// 基线不可得（资产未预载）时原样返回，退化为旧语义。
+  static Map<String, dynamic> _mergeDefaults(Map<String, dynamic> src) {
+    final base = _defaultsParams();
+    if (base.isEmpty) return src;
+    return _deepMergeMaps(base, src);
+  }
+
+  static Map<String, dynamic> _defaultsParams() {
+    final raw = _defaultsJson;
+    if (raw == null || raw.isEmpty) return {};
+    try {
+      final obj = jsonDecode(raw) as Map<String, dynamic>;
+      final params = obj['params'];
+      if (params is Map<String, dynamic>) return params;
+      if (params is Map) return Map<String, dynamic>.from(params);
+    } catch (_) {}
+    return {};
+  }
+
+  static Map<String, dynamic> _deepMergeMaps(
+      Map<String, dynamic> base, Map<String, dynamic> over) {
+    final out = Map<String, dynamic>.of(base);
+    over.forEach((k, v) {
+      final b = out[k];
+      if (v is Map && b is Map) {
+        out[k] = _deepMergeMaps(
+            Map<String, dynamic>.from(b), Map<String, dynamic>.from(v));
+      } else {
+        out[k] = v;
+      }
+    });
+    return out;
+  }
 }

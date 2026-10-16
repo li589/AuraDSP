@@ -10,6 +10,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'audio_modes.dart';
 
 class AppConfig {
   /// 可视化帧率默认值。核显上 30fps 的全窗口重绘会把 GPU 顶到 ~70%
@@ -23,6 +24,16 @@ class AppConfig {
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
+
+  // ADR-009 两大交互范式扩展
+  String modeCategory; // 'attachment' | 'pipeline'
+  String attachmentMode; // 'sysapo' | 'voicemeeter_api'
+  String pipelineInput; // 'asio_driver' | 'vaio' | 'wasapi'
+  String pipelineOutput; // 'wasapi' | 'vaio' | 'asio_client'
+  String pipelineInputDevice; // WASAPI 采集端点
+  String pipelineOutputDevice; // WASAPI 渲染端点
+  String apoTargetEndpoint; // System APO 目标挂接端点
+  bool monitorMirroring; // 虚拟端点本地耳机监听镜像
 
   // ASIO 桥选择项（audioMode=='asio' 时生效；见 AsioBridge.h 契约）
   String asioDriver; // detect 的 name（UTF-8 显示名）；''=未选择
@@ -49,6 +60,14 @@ class AppConfig {
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
     this.audioMode = 'auto',
+    String? modeCategory,
+    String? attachmentMode,
+    String? pipelineInput,
+    String? pipelineOutput,
+    this.pipelineInputDevice = '',
+    this.pipelineOutputDevice = '',
+    this.apoTargetEndpoint = '',
+    this.monitorMirroring = false,
     this.asioDriver = '',
     this.asioBufSize = 0,
     this.asioOutPair = 0,
@@ -57,7 +76,7 @@ class AppConfig {
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
     this.stereoWidenMax = 0.75,
-        this.locale = 'zh',
+    this.locale = 'zh',
     this.themeId = 'auraDark',
     this.autoRestoreSession = true,
     this.autoSaveDebounceMs = 500,
@@ -65,7 +84,17 @@ class AppConfig {
     this.maxFileSizeMb = 64.0,
     List<String>? customPluginDirs,
     List<String>? customScriptDirs,
-  })  : customPluginDirs = customPluginDirs ?? [],
+  })  : modeCategory = modeCategory ?? AudioModes.categoryForMode(audioMode),
+        attachmentMode = attachmentMode ??
+            ((audioMode == 'vbcallback' || audioMode == 'voicemeeter_api')
+                ? AudioModes.attachVoicemeeterApi
+                : AudioModes.attachSysApo),
+        pipelineInput = pipelineInput ?? AudioModes.inputAsioDriver,
+        pipelineOutput = pipelineOutput ??
+            (audioMode == 'asio'
+                ? AudioModes.outputAsioClient
+                : (audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi)),
+        customPluginDirs = customPluginDirs ?? [],
         customScriptDirs = customScriptDirs ?? [];
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
@@ -74,10 +103,24 @@ class AppConfig {
     final safety = (json['safety'] as Map<String, dynamic>?) ?? {};
     final paths = (json['paths'] as Map<String, dynamic>?) ?? {};
 
+    final rawMode = (audio['audioMode'] as String?) ?? 'auto';
+    final rawCategory = audio['modeCategory'] as String?;
+    final rawAttach = audio['attachmentMode'] as String?;
+    final rawPipeIn = audio['pipelineInput'] as String?;
+    final rawPipeOut = audio['pipelineOutput'] as String?;
+
     return AppConfig(
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
       maxBlockFrames: (audio['maxBlockFrames'] as num?)?.toInt() ?? 1024,
-      audioMode: (audio['audioMode'] as String?) ?? 'auto',
+      audioMode: rawMode,
+      modeCategory: rawCategory,
+      attachmentMode: rawAttach,
+      pipelineInput: rawPipeIn,
+      pipelineOutput: rawPipeOut,
+      pipelineInputDevice: (audio['pipelineInputDevice'] as String?) ?? '',
+      pipelineOutputDevice: (audio['pipelineOutputDevice'] as String?) ?? '',
+      apoTargetEndpoint: (audio['apoTargetEndpoint'] as String?) ?? '',
+      monitorMirroring: (audio['monitorMirroring'] as bool?) ?? false,
       asioDriver: (audio['asioDriver'] as String?) ?? '',
       asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
       asioOutPair: (audio['asioOutPair'] as num?)?.toInt() ?? 0,
@@ -86,7 +129,7 @@ class AppConfig {
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
-            locale: (ui['locale'] as String?) ?? 'zh',
+      locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
@@ -109,6 +152,14 @@ class AppConfig {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
           'audioMode': audioMode,
+          'modeCategory': modeCategory,
+          'attachmentMode': attachmentMode,
+          'pipelineInput': pipelineInput,
+          'pipelineOutput': pipelineOutput,
+          'pipelineInputDevice': pipelineInputDevice,
+          'pipelineOutputDevice': pipelineOutputDevice,
+          'apoTargetEndpoint': apoTargetEndpoint,
+          'monitorMirroring': monitorMirroring,
           'asioDriver': asioDriver,
           'asioBufSize': asioBufSize,
           'asioOutPair': asioOutPair,
@@ -117,7 +168,7 @@ class AppConfig {
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,
           'stereoWidenMax': stereoWidenMax,
-                  },
+        },
         'ui': {
           'locale': locale,
           'themeId': themeId,

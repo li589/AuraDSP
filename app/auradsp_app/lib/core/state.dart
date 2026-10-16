@@ -257,6 +257,21 @@ class AppModel extends ChangeNotifier {
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
 
+  // ADR-009 范式与细分项快捷 getter
+  String get modeCategory => config.modeCategory;
+  String get attachmentMode => config.attachmentMode;
+  String get pipelineInput => config.pipelineInput;
+  String get pipelineOutput => config.pipelineOutput;
+  String get pipelineInputDevice => config.pipelineInputDevice;
+  String get pipelineOutputDevice => config.pipelineOutputDevice;
+  String get apoTargetEndpoint => config.apoTargetEndpoint;
+  bool get monitorMirroring => config.monitorMirroring;
+
+  // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
+  bool asioDriverInstalled = false;
+  // System APO 挂载状态
+  bool apoAttached = false;
+
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
   int lpStatus = 0;
@@ -556,6 +571,13 @@ class AppModel extends ChangeNotifier {
   // 用户偏好与外置配置
   late AppConfig config;
   String? activePresetName;
+  /// 脏跟踪（2026-10-16 决策 #3）：最近一次成功应用预设时的状态指纹。
+  /// null = 从未应用过预设（如全新安装），此时「偏离预设」无从谈起。
+  String? appliedPresetFingerprint;
+  /// 当前状态是否偏离已应用预设（任意一点偏离即 true → UI 显示
+  /// 「自定义（未保存）」）。由 evaluatePresetDirty()（防抖保存回调内
+  /// 统一触发）刷新，随 SessionMemory v5 持久化，重启后不丢。
+  bool presetDirty = false;
   String? convIrPath;
   String? ddcPath;
   String? ddcFileName;
@@ -614,6 +636,14 @@ class AppModel extends ChangeNotifier {
   /// 参数下发时刻（id → epoch ms），用于测量 点击→引擎确认 回环耗时
   final Map<String, int> _pendingSentAt = {};
 
+  /// 回读对账（2026-10-16 决策 #4）：
+  /// 防抖回读已发出、'params' 事件未归时置位；_readbackRequestedAt 为发出
+  /// 时刻，_lastEditAt 为最近一次用户编辑时刻。若编辑晚于发出 → 该轮回读
+  /// **过期**，归来的事件不得采用（否则把用户最新一次改动回滚成旧值）。
+  bool _readbackPending = false;
+  int _readbackRequestedAt = 0;
+  int _lastEditAt = 0;
+
   void _markSent(String id) {
     _pendingSentAt[id] = DateTime.now().millisecondsSinceEpoch;
   }
@@ -641,6 +671,9 @@ class AppModel extends ChangeNotifier {
     if (audioMode != config.audioMode) {
       config.audioMode = audioMode;
       ConfigManager.save(config);
+    }
+    if (!testing) {
+      checkAsioDriverStatus();
     }
     // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
     final m = config.vbBusMask & 0xFF;
@@ -716,11 +749,42 @@ class AppModel extends ChangeNotifier {
 
   void scheduleAutoSave() {
     if (_testing || _isReplayingSession) return;
+    _lastEditAt = DateTime.now().millisecondsSinceEpoch;
     _debounceSaveTimer?.cancel();
     _debounceSaveTimer = Timer(
       Duration(milliseconds: config.autoSaveDebounceMs),
-      () => SessionMemory.save(this),
+      () {
+        SessionMemory.save(this);
+        // 决策 #4：参数风暴平息后防抖回读引擎，全量 getParams 对账。
+        // 与 setParam 同端口 FIFO —— 读到的必含此前全部改动，无同端竞态。
+        scheduleReadback();
+      },
     );
+  }
+
+  /// 防抖回读（决策 #4）：拉一次引擎全量 getParams，'params' 事件归来后
+  /// 由分支顶部守卫决定采用或丢弃。快速频繁改动时每个 settle 窗口
+  /// （autoSaveDebounceMs）只花一次往返，不在 setter 热路径上。
+  void scheduleReadback() {
+    if (_testing || _isReplayingSession) return;
+    _readbackPending = true;
+    _readbackRequestedAt = DateTime.now().millisecondsSinceEpoch;
+    _toIso?.send({'cmd': 'getParams'});
+  }
+
+  /// 重算「偏离已应用预设」脏标记并按需通知 UI（2026-10-16 决策 #3）。
+  /// 生产路径：防抖自动保存回调（SessionMemory.save 内部）统一触发——
+  /// 用户快速频繁改动时，每 500ms 只花一次 snapshot 指纹的开销；
+  /// 测试（_testing）可直呼。
+  bool evaluatePresetDirty() {
+    final fp = PresetLibrary.fingerprintOf(this);
+    final dirty =
+        appliedPresetFingerprint != null && fp != appliedPresetFingerprint;
+    if (dirty != presetDirty) {
+      presetDirty = dirty;
+      notifyListeners();
+    }
+    return dirty;
   }
 
   void _spawn() {
@@ -810,6 +874,13 @@ class AppModel extends ChangeNotifier {
         }
         break;
       case 'params':
+        // 决策 #4 对账守卫：用户触发（防抖）的回读若在发出后又有新编辑，
+        // 则该轮回读已过期——采用会把最新改动回滚成旧值，直接丢弃。
+        // 连接期/重放期回读（_readbackPending=false）不设防，照常全量采用。
+        if (_readbackPending) {
+          _readbackPending = false;
+          if (_lastEditAt > _readbackRequestedAt) break;
+        }
         bassOn = (raw['bassEnable'] as int) != 0;
         bassGain = (raw['bassGain'] as num).toDouble();
         reverbPreset = raw['reverbPreset'] as int;
@@ -2880,6 +2951,16 @@ void _scheduleFatalRetry() {
 /// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
 void setAudioMode(String id) {
   final valid = AudioModes.normalize(id);
+  config.modeCategory = AudioModes.categoryForMode(valid);
+  if (config.modeCategory == AudioModes.categoryAttachment) {
+    config.attachmentMode = (valid == 'vbcallback')
+        ? AudioModes.attachVoicemeeterApi
+        : AudioModes.attachSysApo;
+  } else {
+    config.pipelineOutput = (valid == 'asio')
+        ? AudioModes.outputAsioClient
+        : (valid == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+  }
   if (valid == audioMode && config.audioMode == valid) return;
   final wasVb = audioMode == 'vbcallback';
   final isVb = valid == 'vbcallback';
@@ -2925,6 +3006,170 @@ void setAudioMode(String id) {
     }
   }
   notifyListeners();
+}
+
+/// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
+void setModeCategory(String category) {
+  if (category != AudioModes.categoryAttachment &&
+      category != AudioModes.categoryPipeline) return;
+  config.modeCategory = category;
+  final composed = AudioModes.composeMode(
+    category: category,
+    attachmentMode: config.attachmentMode,
+    pipelineOut: config.pipelineOutput,
+  );
+  if (composed != audioMode) {
+    setAudioMode(composed);
+  } else {
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+}
+
+/// ADR-009: 切换附加模式子类型（System APO vs Voicemeeter API）
+void setAttachmentMode(String mode) {
+  config.attachmentMode = mode;
+  if (modeCategory == AudioModes.categoryAttachment) {
+    final composed = AudioModes.composeMode(
+      category: AudioModes.categoryAttachment,
+      attachmentMode: mode,
+    );
+    if (composed != audioMode) {
+      setAudioMode(composed);
+    } else {
+      ConfigManager.save(config);
+      notifyListeners();
+    }
+  } else {
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+}
+
+/// ADR-009: 切换管线输入源（Virtual ASIO / AuraVAIO / WASAPI）
+void setPipelineInput(String inType) {
+  config.pipelineInput = inType;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+/// ADR-009: 切换管线输出端（WASAPI Render / AuraVAIO / ASIO Client）
+void setPipelineOutput(String outType) {
+  config.pipelineOutput = outType;
+  if (modeCategory == AudioModes.categoryPipeline) {
+    final composed = AudioModes.composeMode(
+      category: AudioModes.categoryPipeline,
+      pipelineOut: outType,
+    );
+    if (composed != audioMode) {
+      setAudioMode(composed);
+    } else {
+      ConfigManager.save(config);
+      notifyListeners();
+    }
+  } else {
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+}
+
+void setPipelineInputDevice(String device) {
+  config.pipelineInputDevice = device;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+void setPipelineOutputDevice(String device) {
+  config.pipelineOutputDevice = device;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+void setApoTargetEndpoint(String endpoint) {
+  config.apoTargetEndpoint = endpoint;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+void setMonitorMirroring(bool enabled) {
+  config.monitorMirroring = enabled;
+  ConfigManager.save(config);
+  notifyListeners();
+}
+
+void setApoAttached(bool attached) {
+  apoAttached = attached;
+  notifyListeners();
+}
+
+/// 检查 AuraDSP Virtual ASIO 驱动在 Windows 系统的注册状态
+Future<void> checkAsioDriverStatus() async {
+  if (!Platform.isWindows) {
+    asioDriverInstalled = false;
+    notifyListeners();
+    return;
+  }
+  try {
+    final res = await Process.run('reg.exe', ['query', r'HKLM\SOFTWARE\ASIO\AuraDSP Driver']);
+    asioDriverInstalled = (res.exitCode == 0);
+  } catch (_) {
+    asioDriverInstalled = false;
+  }
+  notifyListeners();
+}
+
+/// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统
+Future<bool> registerAsioDriver() async {
+  if (!Platform.isWindows) return false;
+  try {
+    final script = _findAsioRegisterScript();
+    if (script != null) {
+      final res = await Process.run('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        script.path,
+        '-Action',
+        'register'
+      ]);
+      await checkAsioDriverStatus();
+      return res.exitCode == 0;
+    }
+  } catch (_) {}
+  return false;
+}
+
+/// 一键反注册 AuraDSP 虚拟 ASIO 驱动
+Future<bool> unregisterAsioDriver() async {
+  if (!Platform.isWindows) return false;
+  try {
+    final script = _findAsioRegisterScript();
+    if (script != null) {
+      final res = await Process.run('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        script.path,
+        '-Action',
+        'unregister'
+      ]);
+      await checkAsioDriverStatus();
+      return res.exitCode == 0;
+    }
+  } catch (_) {}
+  return false;
+}
+
+File? _findAsioRegisterScript() {
+  var dir = Directory.current;
+  for (var i = 0; i < 4; i++) {
+    final candidate = File('${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1');
+    if (candidate.existsSync()) return candidate;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
 }
 
 /// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
@@ -3615,7 +3860,12 @@ void fillEqQ(double q) {
   bool saveAsUserPreset(String name, {String category = 'Custom', String description = ''}) {
     final preset = PresetLibrary.snapshot(this, name: name, category: category, description: description);
     final ok = PresetLibrary.saveUserPreset(preset);
-    if (ok) activePresetName = name;
+    if (ok) {
+      activePresetName = name;
+      // 保存即锚定（决策 #3）：当前状态 = 该预设内容，脏标记归零。
+      appliedPresetFingerprint = PresetLibrary.fingerprintOf(this);
+      presetDirty = false;
+    }
     notifyListeners();
     scheduleAutoSave();
     return ok;

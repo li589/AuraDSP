@@ -25,6 +25,11 @@ flutter:
   uses-material-design: true
   generate: true
 
+  # 出厂预设统一外置为 JSON（2026-10-16：代码中不再存储任何预设内容）
+  assets:
+    - assets/presets/defaults.json
+    - assets/presets/factory/
+
   fonts:
     - family: AuraDisplay
       fonts:

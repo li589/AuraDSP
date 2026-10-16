@@ -110,7 +110,9 @@ print("2) delta48 load rc=%d ready=%d frames=%d ch=%d src=%d peak=%.2f" % (
     get_i("convolver.ir.channels"), get_i("convolver.ir.srcRate"), get_f("convolver.ir.peak")))
 assert rc == 0 and get_i("convolver.ready") == 1 and get_i("convolver.ir.channels") == 2
 assert get_i("convolver.ir.srcRate") == 48000 and abs(get_f("convolver.ir.peak") - 1.0) < 0.01
-# 3) ADR-006：卷积一律自由使能（不再有 T2 守卫），延迟仍如实上报 10ms
+# 3) ADR-006：卷积一律自由使能（不再有 T2 守卫），延迟仍如实上报
+# 10ms 卷积 + 2ms limiter（2026-10-16 决策 #1：UI 为真，limiter_enable
+# 默认 1，compute_latency 基线 +2ms）= 12ms
 rc = set_i("convolver.enable", 1)
 print("3) enable rc=%d err=%r" % (rc, err()))
 assert rc == 0, "ADR-006: convolver must be freely enableable"
@@ -118,7 +120,7 @@ lat = ctypes.c_double()
 dll.auradsp_get_latency_ms.restype = ctypes.c_double
 dll.auradsp_get_latency_ms.argtypes = [ctypes.c_void_p]
 print("3) enable ok, latency=%.1f ms" % dll.auradsp_get_latency_ms(h))
-assert abs(dll.auradsp_get_latency_ms(h) - 10.0) < 0.01
+assert abs(dll.auradsp_get_latency_ms(h) - 12.0) < 0.01
 # 4) delta 卷积 = 直通
 run(40); run(2)
 sig = snapshot()

@@ -224,6 +224,115 @@ class AppLocalizationsJa extends AppLocalizations {
   String get audioModeHint => 'モード切替は即時有効；WASAPI は最終的に AuraVAIO のみに収束';
 
   @override
+  String get audioParadigm => '処理パラダイム';
+
+  @override
+  String get audioParadigmHint =>
+      'オーディオ接続形態の選択：アタッチメントモードはインプレース傍受、パイプラインモードはエンドツーエンド転送（ADR-009）';
+
+  @override
+  String get paradigmAttachment => 'アタッチメントモード';
+
+  @override
+  String get paradigmPipeline => 'パイプラインモード';
+
+  @override
+  String get modeVoicemeeterApi => 'Voicemeeter API';
+
+  @override
+  String get pipelineIn => '入力ソース';
+
+  @override
+  String get pipelineInHint => '音声が AuraDSP コア処理パイプラインに入る方法を選択';
+
+  @override
+  String get pipelineOut => '出力ターゲット';
+
+  @override
+  String get pipelineOutHint => '処理された音声のルーティング先を選択';
+
+  @override
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+
+  @override
+  String get inputVaio => 'AuraVAIO 仮想入力 (システム再生)';
+
+  @override
+  String get inputWasapi => 'WASAPI キャプチャ (マイク / ミックス)';
+
+  @override
+  String get outputWasapi => 'WASAPI レンダー (スピーカー / ヘッドホン)';
+
+  @override
+  String get outputVaio => 'AuraVAIO 仮想出力 (録音 / 配信)';
+
+  @override
+  String get outputAsioClient => 'ASIO Client (外部ハードウェアオーディオIF)';
+
+  @override
+  String get apoTargetEndpoint => '対象エンドポイント';
+
+  @override
+  String get apoTargetEndpointHint =>
+      'AuraDSP システム APO エフェクトをアタッチする Windows オーディオエンドポイントを選択';
+
+  @override
+  String get apoStatus => 'APO 状態';
+
+  @override
+  String get apoAttached => 'アタッチ済み';
+
+  @override
+  String get apoNotAttached => '未アタッチ';
+
+  @override
+  String get apoActionAttach => 'APO をアタッチ';
+
+  @override
+  String get apoActionDetach => 'APO を解除';
+
+  @override
+  String get asioDriverCardTitle => 'AuraDSP 仮想 ASIO ドライバー';
+
+  @override
+  String get asioDriverStatus => 'ドライバー状態';
+
+  @override
+  String get asioDriverRegistered => 'システムに登録済み';
+
+  @override
+  String get asioDriverNotRegistered => '未登録';
+
+  @override
+  String get asioDriverActionRegister => 'ドライバーを登録';
+
+  @override
+  String get asioDriverActionUnregister => 'ドライバー登録を解除';
+
+  @override
+  String get asioDawStatus => 'DAW 接続状態';
+
+  @override
+  String get asioDawConnected => '接続中';
+
+  @override
+  String get asioDawIdle => '待機中 (DAW の接続待ち)';
+
+  @override
+  String get asioStatusCheck => '状態確認';
+
+  @override
+  String get virtualSinkNotice =>
+      '注：AuraVAIO は仮想シンクです。OBS や録音アプリを開いて出力をモニターしてください。';
+
+  @override
+  String get monitorMirroring => 'ヘッドホンモニターミラーリング';
+
+  @override
+  String get monitorMirroringHint =>
+      '仮想シンクへ出力しながら、ローカル確認用に物理ヘッドホン/スピーカーへ同時にミラーリング出力します';
+
+  @override
   String get audioDevice => 'デバイス';
 
   @override
@@ -532,6 +641,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get presetSaveFail => '保存失敗（名式またはディスク）';
+
+  @override
+  String get presetDirtyBadge => 'カスタム（未保存）';
 
   @override
   String get presetDeleted => 'プリセットを削除しました';

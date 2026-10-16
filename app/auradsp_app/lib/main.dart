@@ -10,6 +10,7 @@ import 'dart:ui' show PlatformDispatcher;
 import 'package:flutter/material.dart';
 
 import 'core/design.dart';
+import 'core/presets.dart';
 import 'core/state.dart';
 import 'core/theme.dart';
 import 'engine/debug_log.dart';
@@ -40,29 +41,52 @@ class AuraApp extends StatefulWidget {
 }
 
 class _AuraAppState extends State<AuraApp> {
-  late final AppModel _model = AppModel();
+  AppModel? _model;
+
+  @override
+  void initState() {
+    super.initState();
+    _boot();
+  }
+
+  Future<void> _boot() async {
+    // 出厂预设/默认基线资产预载：rootBundle 只有异步 API，而 listAll→
+    // ensureInitialized 与 apply 全量复写都在同步路径。必须在 AppModel
+    // 构造前完成，否则会话恢复/预设读取拿不到资产数据。
+    await PresetLibrary.preloadFactoryAssets();
+    if (!mounted) return;
+    setState(() => _model ??= AppModel());
+  }
 
   @override
   void dispose() {
-    _model.dispose();
+    _model?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final model = _model;
+    if (model == null) {
+      return const MaterialApp(
+        home: Scaffold(
+          body: Center(child: CircularProgressIndicator()),
+        ),
+      );
+    }
     return ListenableBuilder(
-      listenable: _model,
+      listenable: model,
       builder: (_, _) {
         return MaterialApp(
           title: 'AuraDSP',
           debugShowCheckedModeBanner: false,
-          locale: _model.locale,
+          locale: model.locale,
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           onGenerateTitle: (ctx) => l10nOf(ctx).appName,
           theme: withAuraExtension(
-              buildAuraTheme(_model.themeId), _model.themeId.palette),
-          home: ShellGate(model: _model),
+              buildAuraTheme(model.themeId), model.themeId.palette),
+          home: ShellGate(model: model),
         );
       },
     );

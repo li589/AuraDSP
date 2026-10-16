@@ -29,7 +29,9 @@ f32 = lambda v: ctypes.c_float(v)
 rc = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(0)), 4)
 print("reverb preset rc =", rc, "| err:", dll.auradsp_last_error(h).decode())
 assert rc == 0, "ADR-006: reverb must be freely enableable, got rc=%d" % rc
-assert dll.auradsp_get_latency_ms(h) == 30.0, "reverb latency must still be measured as 30ms"
+# 30ms 混响 + 2ms limiter（2026-10-16 决策 #1：UI 为真，limiter_enable
+# 默认 1，compute_latency 基线 +2ms）= 32ms
+assert dll.auradsp_get_latency_ms(h) == 32.0, "reverb latency must still be measured as 32ms (30 reverb + 2 limiter default)"
 
 # 2) Freeverb / 卷积同样自由使能
 rc_fv = dll.auradsp_set_param(h, b"freeverb.enable", ctypes.byref(i32(1)), 4)
@@ -47,10 +49,12 @@ print("mode.latency get rc =", rc_get)
 assert rc_get == -1, "ADR-006: mode.latency must not be readable"
 
 # 4) 延迟读数仍如实累加（测量量），关闭后回落
+# 回落值 = 2ms limiter 基线（2026-10-16 决策 #1：UI 为真，limiter_enable
+# 默认 1；混响 -1 关闭后仅剩 limiter 计入）
 rc_off = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(-1)), 4)
 lat_off = dll.auradsp_get_latency_ms(h)
 print("reverb off rc=%d, latency=%.1f ms" % (rc_off, lat_off))
-assert rc_off == 0 and lat_off == 0.0
+assert rc_off == 0 and lat_off == 2.0
 
 # 5) 立体声上限映射：UI 100% → 引擎 0.75
 rc = dll.auradsp_set_param(h, b"stereo.mix", ctypes.byref(f32(0.75)), 4)
