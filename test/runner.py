@@ -61,6 +61,8 @@ def run_smoke_tests():
     # ASIO 常驻桥（Phase 2）：VM 虚拟 ASIO 上 10s，bypass 开/关峰值差 +
     # vizGrp/peak 断言 + slot 被占优雅让路（-3 语义同 05）
     "smoke_asio_bridge.py",
+    # AuraVAIO 虚拟声卡桥（Mode 1）：探测端点与无驱动防御 / 有驱动回环断言
+    "smoke_vaio_bridge.py",
     "smoke_crossfeed.py",
     "smoke_basspsycho.py",
     "smoke_filter.py",
