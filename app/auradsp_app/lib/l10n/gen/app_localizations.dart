@@ -2260,6 +2260,48 @@ abstract class AppLocalizations {
   /// **'左声道'**
   String get haasSideLeft;
 
+  /// No description provided for @fxCatAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get fxCatAll;
+
+  /// No description provided for @fxCatInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入整形'**
+  String get fxCatInput;
+
+  /// No description provided for @fxCatDynamics.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态控制'**
+  String get fxCatDynamics;
+
+  /// No description provided for @fxCatBass.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频'**
+  String get fxCatBass;
+
+  /// No description provided for @fxCatEq.
+  ///
+  /// In zh, this message translates to:
+  /// **'均衡校准'**
+  String get fxCatEq;
+
+  /// No description provided for @fxCatSpatial.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间'**
+  String get fxCatSpatial;
+
+  /// No description provided for @fxCatLate.
+  ///
+  /// In zh, this message translates to:
+  /// **'激励与输出'**
+  String get fxCatLate;
+
   /// No description provided for @spatialTitle.
   ///
   /// In zh, this message translates to:

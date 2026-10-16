@@ -1126,6 +1126,27 @@ class AppLocalizationsJa extends AppLocalizations {
   String get haasSideLeft => '左チャンネル';
 
   @override
+  String get fxCatAll => 'すべて';
+
+  @override
+  String get fxCatInput => '入力整形';
+
+  @override
+  String get fxCatDynamics => 'ダイナミクス';
+
+  @override
+  String get fxCatBass => '低音';
+
+  @override
+  String get fxCatEq => 'EQ・校正';
+
+  @override
+  String get fxCatSpatial => '空間';
+
+  @override
+  String get fxCatLate => 'エキサイター・出力';
+
+  @override
   String get spatialTitle => '空間オーディオ';
 
   @override
