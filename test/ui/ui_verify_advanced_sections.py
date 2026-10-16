@@ -26,9 +26,15 @@ SCRATCH = os.path.join(tempfile.gettempdir(), 'auradsp_adv_scratch.png')
 OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__)))), 'docs', 'ui-redesign')
 
-# 折叠头在其内容区上方若干像素；取该带状区域做差分
-HEADER_X, HEADER_Y = 430, 649
-CONTENT_BOX = (380, 660, 1340, 900)
+# 低频类视图实测（1400x900）：高级头在其内容区上方；内容扫描区收窄到 x<1240
+# 以排除右侧开关列（ON 开关的 accent 会污染像素计数）。
+HEADER_X, HEADER_Y = 480, 555
+CONTENT_BOX = (380, 590, 1240, 730)
+# 分类下拉与菜单（标题行右侧；菜单为 Overlay，相对按钮位置稳定）。
+_CAT_DROPDOWN = (1280, 205)
+_CAT_BASS_Y = 420
+# 低频类视图 + 滚顶后，3-1 低音开关 header y 稳定（与开关态无关）。
+_BASS_SW = (1315, 350)
 FAIL = []
 
 
@@ -40,8 +46,8 @@ def check(cond, label):
 
 def card_is_expanded(app):
     """展开时高级区下方会出现滑块行；折叠时没有。
-    用「折叠头下方是否存在 accent 色的滑轨」判断。"""
-    img = app.capture(SCRATCH, (380, 665, 1340, 760))
+    用「折叠头下方是否存在 accent 色的滑轨」判断。」"""
+    img = app.capture(SCRATCH, CONTENT_BOX)
     px = img.load()
     w, h = img.size
     n = 0
@@ -78,10 +84,15 @@ def main():
     print("=== [AdvancedSection 开合像素差分] ===")
     with AuraAppSession(width=1400, height=900, title='AdvancedSection Verify') as app:
         app.navigate_to('effects', delay=1.0)
-        app.scroll(700, 500, clicks=6, delay=0.5)      # 回到顶部
+        # 分类视图：低频类只有 3 卡，3-1 低音 header y 稳定（与开关态无关）。
+        app.click(*_CAT_DROPDOWN, delay=0.8)
+        time.sleep(0.6)
+        app.click(1260, _CAT_BASS_Y, delay=1.0)
+        time.sleep(0.8)
+        app.scroll(700, 500, clicks=8, delay=0.5)      # 回到顶部
         time.sleep(0.8)
         # 前置：低音卡片主开关必须 ON，否则卡片折叠、高级区不在该坐标
-        ensure_switch_on(app, 1281, 451, label="低音主开关")
+        ensure_switch_on(app, *_BASS_SW, label="低音主开关")
         time.sleep(0.8)
 
         before = app.capture(SCRATCH)
