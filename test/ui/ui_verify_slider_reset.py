@@ -21,6 +21,26 @@ _SCRATCH = os.path.join(tempfile.gettempdir(),
 OUT_DIR = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
 os.makedirs(OUT_DIR, exist_ok=True)
 
+# 效果页分类下拉（标题行右侧，1400x900 实测）与菜单项 y（x 取 1260）。
+# 分类是纯视图过滤：同类卡片 header y 与开关态无关，坐标天然稳定。
+_CAT_DROPDOWN = (1280, 205)
+_CAT_Y = {'all': 210, 'bass': 420, 'spatial': 555, 'late': 620}
+# 低频类视图 + 滚顶后，3-1 低音增强开关（展开/折叠 header 不动，坐标稳定）。
+_BASS_SW = (1315, 350)
+# 低音强度滑块行搜索区（展开态，find_thumb 动态定位 Thumb）。
+_BASS_SLIDER_ZONE = (340, 405, 1320, 470)
+# 低音高级折叠头与展开后内容搜索区。
+_BASS_ADV_HEAD = (480, 555)
+_BASS_ADV_ZONE = (340, 580, 1320, 740)
+
+
+def select_category(app, name):
+    """经标题行下拉切换效果分类（菜单为 Overlay，坐标相对按钮稳定）。"""
+    app.click(*_CAT_DROPDOWN, delay=0.8)
+    time.sleep(0.6)
+    app.click(1260, _CAT_Y[name], delay=1.0)
+    time.sleep(0.8)
+
 
 def ensure_switch_on(app, switch_rel_x, switch_rel_y, label="卡片开关"):
     """检测并确保开关处于开启状态 (绿色激活态: G > 200 且 B < 100)"""
@@ -49,31 +69,28 @@ def main():
     print("\n[Step 1] 点击导航项切换至【效果】页...")
     app.navigate_to('effects', delay=0.8)
 
-    # 2. 01 低音增强卡片
-    print("\n[Step 2] 测试 01 低音增强滑块调节与双击归位...")
+    # 2. 3-1 低音增强卡片（经“低频”分类过滤：类内只有 3 卡，
+    # header y 与开关/展开态无关，坐标稳定；previously 01 全页视图已作废）
+    print("\n[Step 2] 切换低频分类，测试 3-1 低音增强滑块调节与归位...")
+    select_category(app, 'bass')
     # 必须先滚回顶部：本用例的行坐标都以页面顶部为基准，
     # 旧代码缺少这一步，滚动位置一变整段坐标全部失效。
     app.scroll(700, 500, clicks=8, delay=0.5)
     time.sleep(0.8)
 
-    # 搜索带覆盖整个客户区。低音卡 collapsed 判据是 !model.bassOn（effects_page.dart:250），
-    # 开关一切换卡片就展开/收起，自身 body 与下方所有卡片的 y 全部平移。
-    SEARCH = (200, 90, 1390, 900)
-
     # 开关动态定位：关闭态是灰色非 accent，find_card_switch 只在已开启时有效。
-    # 关闭态下整卡收起、header 上移，此时退回展开态实测坐标 (1281,451)。
+    # 低频类视图下 header 稳定在 y=350，退回坐标即实测值（不再是全页旧值 451）。
     try:
-        sw_x, sw_y = app.find_card_switch(SEARCH)
+        sw_x, sw_y = app.find_card_switch((200, 300, 1390, 420))
         print(f"  实测低音主开关中心（accent 开启态）: ({sw_x}, {sw_y})")
     except AssertionError:
-        sw_x, sw_y = 1281, 451
-        print(f"  开关为关闭态（灰色），退回展开态坐标 ({sw_x}, {sw_y})")
+        sw_x, sw_y = _BASS_SW
+        print(f"  开关为关闭态（灰色），使用分类视图稳定坐标 ({sw_x}, {sw_y})")
     ensure_switch_on(app, sw_x, sw_y, label="低音主开关")
     time.sleep(0.8)
 
-    # 低音强度滑块行：坐标来自 ui_verify_advanced_sections 的实测（1400x900 画布），
-    # 且 ui_verify_advanced_sections 在同一坐标下稳定通过 —— 直接复用，不再自造像素定位器。
-    row = (340, 500, 1310, 560)
+    # 低音强度滑块行：展开态 y≈440，find_thumb 在搜索区内动态定位。
+    row = (340, 420, 1310, 465)
 
     # 会话会记忆滑块值，可能已停在最右端；此时向右拖必然 0 差异（假失败）。
     # 先拖到最左制造余量，再重新定位（值变了 Thumb 位置也随之变化）。
@@ -107,25 +124,23 @@ def main():
 
     # 3. 低音增强「高级」区第一条滑块（截止频率）的归位
     print("\n[Step 3] 展开低音增强高级区，测试高级区滑块归位...")
-    # 旧写法整段作废：它去找「低频搁架高级区」，并假设有一条独立的搁架卡片。
-    # 该卡片**从来不存在** —— effects_page.dart 的卡片注册表是 _BassCard /
-    # _SpatialReverbCard / _ConvolverCard / _DdcCard / _EqualizerCard /
-    # _StereoCard / _TubeCard / _PostCard / _PresetCard，没有 _ShelfCard。
-    # 低频搁架并非独立效果器，而是「纯净低架(Shelf)」模式的底层滤波器：
-    # _ChoiceChip -> setBassMode(1) -> shelf.enable=1 / shelf.freq=bassCutoff /
-    # shelf.gain=bassIntensity*12 -> audio_isolate -> 引擎 RBJ biquad。
-    # 所以这里改为验证真实存在的低音高级区。
-    adv_row = (340, 688, 1310, 722)   # 截止频率
+    # 旧写法整段作废（全页旧坐标 432,649 / (340,688,1310,722) 已随分类视图失效）。
+    # 低频类视图：高级头稳定在 (480,555)，内容在下方搜索区内 find_thumb 动态定位。
+    adv_head = _BASS_ADV_HEAD
     try:
-        app.find_thumb(adv_row)
+        app.find_thumb((_BASS_ADV_ZONE[0], _BASS_ADV_ZONE[1],
+                        _BASS_ADV_ZONE[2], _BASS_ADV_ZONE[3]))
     except AssertionError:
-        print("  点击展开「高级」折叠面板 (x=432, y=649)...")
-        app.click(432, 649, delay=0.8)
+        print("  点击展开「高级」折叠面板...")
+        app.click(*adv_head, delay=0.8)
         time.sleep(0.6)  # 等待 AnimatedCrossFade 展开动画完全舒展
-        app.find_thumb(adv_row)  # 展开后必须能反查到 Thumb
+        app.find_thumb((_BASS_ADV_ZONE[0], _BASS_ADV_ZONE[1],
+                        _BASS_ADV_ZONE[2], _BASS_ADV_ZONE[3]))  # 展开后必须能反查到 Thumb
 
-    thumb = app.find_thumb(adv_row)
-    print(f"  截止频率 Thumb 实测: {thumb}")
+    thumb = app.find_thumb((_BASS_ADV_ZONE[0], _BASS_ADV_ZONE[1],
+                            _BASS_ADV_ZONE[2], _BASS_ADV_ZONE[3]))
+    adv_row = (340, thumb[1] - 25, 1310, thumb[1] + 25)
+    print(f"  高级区 Thumb 实测: {thumb}")
     img_adv_pre = app.capture(_SCRATCH, adv_row)
     app.drag(thumb[0], min(thumb[0] + 260, 1240), thumb[1], steps=30, delay=0.5)
     img_adv_dragged = app.capture(_SCRATCH, adv_row)
@@ -146,18 +161,26 @@ def main():
     print(f"  -> 截止频率归位成功！差异像素: {diff_adv_reset}")
     app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "22-bass-adv-reset.png"))
 
-    # 4. 滚动到 Freeverb 混响卡片
-    print("\n[Step 4] 滚动至 Freeverb 混响卡片...")
-    app.scroll(700, 500, clicks=-5, delay=0.6)
+    # 4. 切「空间」分类，滚动至混响子卡（空间卡内 09.1，分类视图稳定的第二屏）
+    print("\n[Step 4] 切换空间分类，混响子卡留档...")
+    select_category(app, 'spatial')
+    app.scroll(700, 500, clicks=8, delay=0.5)
     time.sleep(0.3)
-    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "23-freeverb-doubletap-reset.png"))
-    print("  -> Freeverb 混响卡片已呈现并截图留档！")
+    ensure_switch_on(app, 1315, 350, label="空间主开关")
+    time.sleep(0.6)
+    app.scroll(700, 500, clicks=-4, delay=0.6)
+    time.sleep(0.3)
+    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "23-spatial-reverb.png"))
+    print("  -> 空间卡（含混响子卡）已呈现并截图留档！")
 
-    # 5. 滚动至 07 输出级卡片
-    print("\n[Step 5] 滚动至 07 输出级卡片...")
+    # 5. 切「激励与输出」分类，滚动至 6-3 输出级卡片
+    print("\n[Step 5] 切换激励与输出分类，输出级卡片留档...")
+    select_category(app, 'late')
+    app.scroll(700, 500, clicks=8, delay=0.5)
+    time.sleep(0.3)
     app.scroll(700, 500, clicks=-7, delay=0.6)
     time.sleep(0.3)
-    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "24-postgain-doubletap-reset.png"))
+    app.capture(_SCRATCH).save(os.path.join(OUT_DIR, "24-postgain.png"))
     print("  -> 输出级卡片已呈现并截图留档！")
 
     # 还原滚动位置
