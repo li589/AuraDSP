@@ -547,6 +547,8 @@ class AppModel extends ChangeNotifier {
   double spatialRoom = 0.7, spatialWidth = 1.0, spatialCenter = 0.8;
   double spatialOutGain = 0.0;
   bool spatialAutoGain = false;
+  // 效果页分类过滤（会话内有效，不持久化；'all' = 全部链序展开）。
+  String effectsCategory = 'all';
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
   bool exciterOn = false;
   double exciterAmount = 0.3, exciterHifreq = 5000;
@@ -2487,6 +2489,12 @@ class AppModel extends ChangeNotifier {
     setInt(ParamId.spatialAutoGain, on ? 1 : 0);
     notifyListeners();
     scheduleAutoSave();
+  }
+
+  /// 效果页分类切换（纯视图过滤，不动引擎；会话内有效）。
+  void setEffectsCategory(String c) {
+    effectsCategory = c;
+    notifyListeners();
   }
 
   /// 激励器：只暴露 amount/hifreq，drive 固定 2.0（防调出刺耳）。

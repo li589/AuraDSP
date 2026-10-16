@@ -29,7 +29,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
     };
 
     return SectionCard(
-      index: kEffectCardIndex['spatialReverb'],
+      index: null, // 随空间卡搬入，去编号
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('reverb').ms,

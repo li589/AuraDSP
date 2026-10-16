@@ -1121,6 +1121,27 @@ class AppLocalizationsZh extends AppLocalizations {
   String get haasSideLeft => '左声道';
 
   @override
+  String get fxCatAll => '全部';
+
+  @override
+  String get fxCatInput => '输入整形';
+
+  @override
+  String get fxCatDynamics => '动态控制';
+
+  @override
+  String get fxCatBass => '低频';
+
+  @override
+  String get fxCatEq => '均衡校准';
+
+  @override
+  String get fxCatSpatial => '空间';
+
+  @override
+  String get fxCatLate => '激励与输出';
+
+  @override
   String get spatialTitle => '空间音效';
 
   @override

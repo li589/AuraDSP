@@ -17,7 +17,8 @@ class _SpatialCard extends StatelessWidget {
 
     return SectionCard(
       hero: true,
-      index: kEffectCardIndex['spatial'],
+      // 空间卡去编号（含内部搬入子卡）：独立分类，无需序号。
+      index: null,
       title: l.spatialTitle,
       hint: l.spatialHint,
       collapsed: !model.spatialOn,

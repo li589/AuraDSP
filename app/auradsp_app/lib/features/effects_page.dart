@@ -48,115 +48,133 @@ part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 
-/// 效果器卡片序号**单一真相**（按本页 SectionCard 展示顺序，01..16；
-/// 09 空间卡内含 09.1..09.5 子卡）。
+/// 效果器卡片序号**单一真相**（分类编号 {类}-{序号}，类按链序：
+/// 1 输入整形 / 2 动态控制 / 3 低频 / 4 均衡校准 / 5 空间 / 6 激励与输出）。
 ///
 /// 历史坑：序号原本硬编码在 20 个卡片文件里、各写各的，结果出现 5 个 '00'
 /// （input/gate/filter/dyneq 都算 0 号）、2 个 '02'、2 个 '06'，新增或调整
 /// 卡片时也无人同步——用户看到的就是「序号全是乱的」。
 /// 现在只允许改这一处；卡片侧一律写 `index: kEffectCardIndex['<id>']`。
+/// 空间卡去编号（index 传 null，含其内部 5 张搬入子卡）。
 ///
 /// 注意：这是**页面分区序号**，不是处理链顺序。链上顺序见 ChainPage 的
 /// kDefaultCoreOrder 与「处理顺序」页，两者不必相同。
 const Map<String, String> kEffectCardIndex = {
-  'input': '01',
-  'gate': '02',
-  'filter': '03',
-  'dyneq': '04',
-  'comp': '05',
-  'bass': '06',
-  'bassmono': '07',
-  'shelf': '08',
-  // P3 空间音效 mega 卡：混响 / 脉冲 / 声场 / 立体声折叠搬入，用 09.x 子编号。
-  'spatial': '09',
-  'spatialReverb': '09.1',
-  'spatialConv': '09.2',
-  'spatialXfeed': '09.3',
-  'spatialHaas': '09.4',
-  'spatialStereo': '09.5',
-  'ddc': '10',
-  'eq': '11',
-  'arbmag': '12',
-  'exciter': '13',
-  'loudness': '14',
-  'tube': '15',
-  'post': '16',
+  'input': '1-1',
+  'gate': '1-2',
+  'filter': '1-3',
+  'comp': '2-1',
+  'dyneq': '2-2',
+  'loudness': '2-3',
+  'bass': '3-1',
+  'bassmono': '3-2',
+  'shelf': '3-3',
+  'eq': '4-1',
+  'arbmag': '4-2',
+  'ddc': '4-3',
+  'exciter': '6-1',
+  'tube': '6-2',
+  'post': '6-3',
 };
+
+/// 效果分类（标题行右侧下拉过滤；空间独占一类）。
+/// 'all' 伪类 = 全部链序展开（默认视图，与分类前逐像素一致）。
+const Map<String, List<String>> kEffectCategories = {
+  'input': ['input', 'gate', 'filter'],
+  'dynamics': ['comp', 'dyneq', 'loudness'],
+  'bass': ['bass', 'bassmono', 'shelf'],
+  'eq': ['eq', 'arbmag', 'ddc'],
+  'spatial': ['spatial'],
+  'late': ['exciter', 'tube', 'post'],
+};
+
+/// 'all' 默认视图的链序（与分类前一致，保证默认零视觉变更）。
+const List<String> kEffectPageOrder = [
+  'input', 'gate', 'filter', 'dyneq', 'comp', 'bass', 'bassmono', 'shelf',
+  'spatial', 'ddc', 'eq', 'arbmag', 'exciter', 'loudness', 'tube', 'post',
+];
 
 class EffectsPage extends StatelessWidget {
   final AppModel model;
   const EffectsPage({super.key, required this.model});
 
+  String _categoryLabel(AppLocalizations l, String id) {
+    return switch (id) {
+      'input' => l.fxCatInput,
+      'dynamics' => l.fxCatDynamics,
+      'bass' => l.fxCatBass,
+      'eq' => l.fxCatEq,
+      'spatial' => l.fxCatSpatial,
+      'late' => l.fxCatLate,
+      _ => l.fxCatAll,
+    };
+  }
+
+  Widget _cardFor(String id, AppModel model) {
+    return switch (id) {
+      'input' => _InputCard(model: model),
+      'gate' => _GateCard(model: model),
+      'filter' => _FilterCard(model: model),
+      'dyneq' => _DyneCard(model: model),
+      'comp' => _CompressorCard(model: model),
+      'bass' => _BassCard(model: model),
+      'bassmono' => _BassMonoCard(model: model),
+      'shelf' => _ShelfCard(model: model),
+      'spatial' => _SpatialCard(model: model),
+      'ddc' => _DdcCard(model: model),
+      'eq' => _EqualizerCard(model: model),
+      'arbmag' => _ArbmagCard(model: model),
+      'exciter' => _ExciterCard(model: model),
+      'loudness' => _LoudnessCard(model: model),
+      'tube' => _TubeCard(model: model),
+      'post' => _PostCard(model: model),
+      _ => _InputCard(model: model),
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
+    const order = ['all', 'input', 'dynamics', 'bass', 'eq', 'spatial', 'late'];
     return PageScaffold(
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
+      trailing: ListenableBuilder(
+        listenable: model,
+        builder: (_, _) => SizedBox(
+          width: 168,
+          child: AuraDropdown<String>(
+            value: model.effectsCategory,
+            isExpanded: true,
+            items: [
+              for (final id in order)
+                DropdownMenuItem<String>(
+                  value: id,
+                  child: Text(
+                    id == 'all' ? l.fxCatAll : _categoryLabel(l, id),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+            ],
+            onChanged: (v) {
+              if (v != null) model.setEffectsCategory(v);
+            },
+          ),
+        ),
+      ),
       children: [
         ListenableBuilder(
           listenable: model,
-          builder: (_, _) => _InputCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _GateCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _FilterCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _DyneCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _CompressorCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _BassCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _BassMonoCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _ShelfCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _SpatialCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _DdcCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _EqualizerCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _ArbmagCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _ExciterCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _LoudnessCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _TubeCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _PostCard(model: model),
+          builder: (_, _) {
+            final ids = model.effectsCategory == 'all'
+                ? kEffectPageOrder
+                : (kEffectCategories[model.effectsCategory] ??
+                    kEffectPageOrder);
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [for (final id in ids) _cardFor(id, model)],
+            );
+          },
         ),
         _PresetCard(model: model),
       ],

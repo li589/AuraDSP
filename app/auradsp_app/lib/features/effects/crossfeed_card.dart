@@ -22,7 +22,7 @@ class _CrossfeedCard extends StatelessWidget {
     };
 
     return SectionCard(
-      index: kEffectCardIndex['spatialXfeed'],
+      index: null, // 随空间卡搬入，去编号
       title: l.crossfeedTitle,
       titleTooltip: l.crossfeedDesc,
       collapsed: !isEnabled,

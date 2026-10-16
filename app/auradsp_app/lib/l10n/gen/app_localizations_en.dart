@@ -1160,6 +1160,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get haasSideLeft => 'Left channel';
 
   @override
+  String get fxCatAll => 'All';
+
+  @override
+  String get fxCatInput => 'Input Shaping';
+
+  @override
+  String get fxCatDynamics => 'Dynamics';
+
+  @override
+  String get fxCatBass => 'Bass';
+
+  @override
+  String get fxCatEq => 'EQ & Calibration';
+
+  @override
+  String get fxCatSpatial => 'Spatial';
+
+  @override
+  String get fxCatLate => 'Exciter & Output';
+
+  @override
   String get spatialTitle => 'Spatial';
 
   @override
