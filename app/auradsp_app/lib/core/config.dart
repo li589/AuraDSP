@@ -32,6 +32,8 @@ class AppConfig {
   String pipelineOutput; // 'wasapi' | 'vaio' | 'asio_client'
   String pipelineInputDevice; // WASAPI 采集端点
   String pipelineOutputDevice; // WASAPI 渲染端点
+  bool pipelineInputEnabled; // 输入端启用开关
+  bool pipelineOutputEnabled; // 输出端启用开关
   String apoTargetEndpoint; // System APO 目标挂接端点
   bool monitorMirroring; // 虚拟端点本地耳机监听镜像
 
@@ -66,6 +68,8 @@ class AppConfig {
     String? pipelineOutput,
     this.pipelineInputDevice = '',
     this.pipelineOutputDevice = '',
+    this.pipelineInputEnabled = true,
+    this.pipelineOutputEnabled = true,
     this.apoTargetEndpoint = '',
     this.monitorMirroring = false,
     this.asioDriver = '',
@@ -89,7 +93,7 @@ class AppConfig {
             ((audioMode == 'vbcallback' || audioMode == 'voicemeeter_api')
                 ? AudioModes.attachVoicemeeterApi
                 : AudioModes.attachSysApo),
-        pipelineInput = pipelineInput ?? AudioModes.inputAsioDriver,
+        pipelineInput = pipelineInput ?? AudioModes.inputWasapi,
         pipelineOutput = pipelineOutput ??
             (audioMode == 'asio'
                 ? AudioModes.outputAsioClient
@@ -119,6 +123,8 @@ class AppConfig {
       pipelineOutput: rawPipeOut,
       pipelineInputDevice: (audio['pipelineInputDevice'] as String?) ?? '',
       pipelineOutputDevice: (audio['pipelineOutputDevice'] as String?) ?? '',
+      pipelineInputEnabled: (audio['pipelineInputEnabled'] as bool?) ?? true,
+      pipelineOutputEnabled: (audio['pipelineOutputEnabled'] as bool?) ?? true,
       apoTargetEndpoint: (audio['apoTargetEndpoint'] as String?) ?? '',
       monitorMirroring: (audio['monitorMirroring'] as bool?) ?? false,
       asioDriver: (audio['asioDriver'] as String?) ?? '',
@@ -158,6 +164,8 @@ class AppConfig {
           'pipelineOutput': pipelineOutput,
           'pipelineInputDevice': pipelineInputDevice,
           'pipelineOutputDevice': pipelineOutputDevice,
+          'pipelineInputEnabled': pipelineInputEnabled,
+          'pipelineOutputEnabled': pipelineOutputEnabled,
           'apoTargetEndpoint': apoTargetEndpoint,
           'monitorMirroring': monitorMirroring,
           'asioDriver': asioDriver,

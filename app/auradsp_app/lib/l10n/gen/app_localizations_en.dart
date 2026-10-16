@@ -247,36 +247,95 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modeVoicemeeterApi => 'Voicemeeter API';
 
   @override
-  String get pipelineIn => 'Input Source';
+  String get pipelineIn => 'Input Endpoint';
 
   @override
   String get pipelineInHint =>
-      'Select how audio enters the AuraDSP core processing pipeline';
+      'Select the entry point for audio into the AuraDSP core processing pipeline';
 
   @override
-  String get pipelineOut => 'Output Target';
+  String get pipelineOut => 'Output Endpoint';
 
   @override
-  String get pipelineOutHint => 'Select where processed audio is routed';
+  String get pipelineOutHint =>
+      'Select the destination for audio processed by AuraDSP';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+  String get inputWasapi => 'WASAPI Standard Mode';
 
   @override
-  String get inputVaio => 'AuraVAIO Virtual In (System Playback)';
+  String get inputVaio => 'AuraVAIO Virtual Input';
 
   @override
-  String get inputWasapi => 'WASAPI Capture (Mic / Mix)';
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
 
   @override
-  String get outputWasapi => 'WASAPI Render (Speakers / Headphones)';
+  String get outputWasapi => 'WASAPI Standard Output';
 
   @override
-  String get outputVaio => 'AuraVAIO Virtual Out (Recording / Stream)';
+  String get outputVaio => 'AuraVAIO Virtual Output';
 
   @override
-  String get outputAsioClient =>
-      'ASIO Client (External Hardware Audio Interface)';
+  String get outputAsioClient => 'AuraDSP ASIO Client';
+
+  @override
+  String get tooltipInputWasapi =>
+      'WASAPI Standard Mode: Capture from physical microphones or loopback recording from playback devices';
+
+  @override
+  String get tooltipInputVaio =>
+      'AuraVAIO Virtual Input: Receive streams routed to the AuraVAIO virtual audio device';
+
+  @override
+  String get tooltipInputAsioDriver =>
+      'AuraDSP Virtual ASIO: Expose a virtual ASIO driver for DAWs like FL Studio, Cubase, Ableton, etc.';
+
+  @override
+  String get tooltipOutputWasapi =>
+      'WASAPI Standard Output: Render audio to physical speakers, headphones, or virtual outputs';
+
+  @override
+  String get tooltipOutputVaio =>
+      'AuraVAIO Virtual Output: Render audio to the virtual cable endpoint, with optional headphone mirror';
+
+  @override
+  String get tooltipOutputAsioClient =>
+      'AuraDSP ASIO Client: Output to external professional physical ASIO audio interfaces with ultra-low latency';
+
+  @override
+  String get driverLayerTitle => 'Driver Information & Controls';
+
+  @override
+  String get inputLayerTitle => 'Input Endpoint & Switch';
+
+  @override
+  String get outputLayerTitle => 'Output Endpoint & Switch';
+
+  @override
+  String get inputDisabledNotice =>
+      'Input endpoint is disabled (audio capture paused)';
+
+  @override
+  String get outputDisabledNotice =>
+      'Output endpoint is disabled (audio playback muted)';
+
+  @override
+  String get inputDeviceLabel => 'Input Device';
+
+  @override
+  String get outputDeviceLabel => 'Output Device';
+
+  @override
+  String get defaultInputDevice => 'System Default Device [Loopback]';
+
+  @override
+  String get defaultOutputDevice => 'System Default Output (Default Render)';
+
+  @override
+  String get tagLoopback => '[Loopback]';
+
+  @override
+  String get tagRecording => '[Recording]';
 
   @override
   String get apoTargetEndpoint => 'Target Endpoint';

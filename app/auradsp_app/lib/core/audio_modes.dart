@@ -46,9 +46,9 @@ abstract final class AudioModes {
   ];
 
   static const List<String> pipelineInputOptions = [
-    inputAsioDriver,
-    inputVaio,
     inputWasapi,
+    inputVaio,
+    inputAsioDriver,
   ];
 
   static const List<String> pipelineOutputOptions = [

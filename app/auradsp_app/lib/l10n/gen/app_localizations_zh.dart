@@ -238,7 +238,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modeVoicemeeterApi => 'Voicemeeter API';
 
   @override
-  String get pipelineIn => '输入源';
+  String get pipelineIn => '输入端';
 
   @override
   String get pipelineInHint => '选择音频如何进入 AuraDSP 核心处理管线';
@@ -247,25 +247,81 @@ class AppLocalizationsZh extends AppLocalizations {
   String get pipelineOut => '输出端';
 
   @override
-  String get pipelineOutHint => '选择处理后的音频流向何处';
+  String get pipelineOutHint => '选择经由 AuraDSP 处理后的最终音频送往的目标端点';
 
   @override
-  String get inputAsioDriver => 'AuraDSP Virtual ASIO (DAW)';
+  String get inputWasapi => 'WASAPI 标准模式';
 
   @override
-  String get inputVaio => 'AuraVAIO 虚拟输入 (系统回放)';
+  String get inputVaio => 'AuraVAIO 虚拟输入';
 
   @override
-  String get inputWasapi => 'WASAPI 系统采集 (麦克风/混音)';
+  String get inputAsioDriver => 'AuraDSP Virtual ASIO';
 
   @override
-  String get outputWasapi => 'WASAPI 物理渲染 (扬声器/耳机)';
+  String get outputWasapi => 'WASAPI 标准输出';
 
   @override
-  String get outputVaio => 'AuraVAIO 虚拟输出 (录音/推流)';
+  String get outputVaio => 'AuraVAIO 虚拟输出';
 
   @override
-  String get outputAsioClient => 'ASIO Client (外部硬件专业声卡)';
+  String get outputAsioClient => 'AuraDSP ASIO Client';
+
+  @override
+  String get tooltipInputWasapi =>
+      'WASAPI 标准模式：支持从系统物理麦克风录制，或对播放设备进行内录/环回 (Loopback) 采集';
+
+  @override
+  String get tooltipInputVaio =>
+      'AuraVAIO 虚拟输入：接收系统音频或第三方播放器输出至 AuraVAIO 虚拟声卡的立体声/7.1 声道流';
+
+  @override
+  String get tooltipInputAsioDriver =>
+      'AuraDSP Virtual ASIO：作为虚拟 ASIO 驱动供 FL Studio、Cubase、Ableton 等专业 DAW 宿主调用注入音频';
+
+  @override
+  String get tooltipOutputWasapi => 'WASAPI 标准输出：将处理完成的声音输出至物理扬声器、耳机或第三方虚拟输出设备';
+
+  @override
+  String get tooltipOutputVaio =>
+      'AuraVAIO 虚拟输出：将声音输出至虚拟端点作为数字汇聚，可搭配物理耳机监听镜像使用';
+
+  @override
+  String get tooltipOutputAsioClient =>
+      'AuraDSP ASIO Client：作为客户端对接外置物理专业 ASIO 声卡，享受超低延迟硬件监听';
+
+  @override
+  String get driverLayerTitle => '驱动信息与控制';
+
+  @override
+  String get inputLayerTitle => '输入端信息与开关';
+
+  @override
+  String get outputLayerTitle => '输出端信息与开关';
+
+  @override
+  String get inputDisabledNotice => '输入端已停用（音频采集暂停，处于静音/无输入状态）';
+
+  @override
+  String get outputDisabledNotice => '输出端已停用（声音输出静音）';
+
+  @override
+  String get inputDeviceLabel => '输入设备';
+
+  @override
+  String get outputDeviceLabel => '输出设备';
+
+  @override
+  String get defaultInputDevice => '系统默认设备 [内录/环回]';
+
+  @override
+  String get defaultOutputDevice => '系统默认输出 (Default Render)';
+
+  @override
+  String get tagLoopback => '[内录/环回]';
+
+  @override
+  String get tagRecording => '[录制]';
 
   @override
   String get apoTargetEndpoint => '附加目标端点';
