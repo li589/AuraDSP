@@ -29,6 +29,7 @@ Abstract:
 #include "MiniportWaveRT.h"
 #include "Topology.h"
 #include "AuraVaoTables.h"
+#include "ControlDevice.h"
 
 #include <wdfminiport.h>
 
@@ -53,6 +54,18 @@ StartDevice(
 
 _Dispatch_type_(IRP_MJ_PNP)
 DRIVER_DISPATCH PnpHandler;
+
+_Dispatch_type_(IRP_MJ_CREATE)
+DRIVER_DISPATCH CreateHandler;
+
+_Dispatch_type_(IRP_MJ_CLOSE)
+DRIVER_DISPATCH CloseHandler;
+
+_Dispatch_type_(IRP_MJ_CLEANUP)
+DRIVER_DISPATCH CleanupHandler;
+
+_Dispatch_type_(IRP_MJ_DEVICE_CONTROL)
+DRIVER_DISPATCH DeviceControlHandler;
 
 extern "C" VOID DriverUnload(_In_ PDRIVER_OBJECT DriverObject);
 
@@ -114,10 +127,24 @@ DriverEntry(
     }
 
     //
+    // Create the control device object (\Device\AuraVaioControl) for user-mode
+    // IPC and shared circular ring buffer mapping.
+    //
+    ntStatus = AuraControlDevice_Create(DriverObject);
+    if (!NT_SUCCESS(ntStatus))
+    {
+        AURA_TRACE("AuraControlDevice_Create failed, 0x%08X (continuing)\n", ntStatus);
+    }
+
+    //
     // Intercept stop / remove / surprise-remove so the adapter common object
     // can be released before PortCls tears the FDO down.
     //
-    DriverObject->MajorFunction[IRP_MJ_PNP] = PnpHandler;
+    DriverObject->MajorFunction[IRP_MJ_PNP]            = PnpHandler;
+    DriverObject->MajorFunction[IRP_MJ_CREATE]         = CreateHandler;
+    DriverObject->MajorFunction[IRP_MJ_CLOSE]          = CloseHandler;
+    DriverObject->MajorFunction[IRP_MJ_CLEANUP]        = CleanupHandler;
+    DriverObject->MajorFunction[IRP_MJ_DEVICE_CONTROL] = DeviceControlHandler;
 
     //
     // Chain the class driver's unload routine.
@@ -143,6 +170,11 @@ DriverUnload(
     AURA_TRACE("DriverUnload\n");
 
     //
+    // Clean up our control device and unmap/free shared ring buffer.
+    //
+    AuraControlDevice_Destroy(DriverObject);
+
+    //
     // Let PortCls clean up first...
     //
     if (g_PcDriverUnloadRoutine != NULL)
@@ -157,6 +189,62 @@ DriverUnload(
     {
         WdfDriverMiniportUnload(WdfGetDriver());
     }
+}
+
+//=============================================================================
+// Dispatch handlers
+//=============================================================================
+
+NTSTATUS
+CreateHandler(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP        Irp
+    )
+{
+    if (AuraControlDevice_IsControlDevice(DeviceObject))
+    {
+        return AuraControlDevice_DispatchCreate(DeviceObject, Irp);
+    }
+    return PcDispatchIrp(DeviceObject, Irp);
+}
+
+NTSTATUS
+CloseHandler(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP        Irp
+    )
+{
+    if (AuraControlDevice_IsControlDevice(DeviceObject))
+    {
+        return AuraControlDevice_DispatchClose(DeviceObject, Irp);
+    }
+    return PcDispatchIrp(DeviceObject, Irp);
+}
+
+NTSTATUS
+CleanupHandler(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP        Irp
+    )
+{
+    if (AuraControlDevice_IsControlDevice(DeviceObject))
+    {
+        return AuraControlDevice_DispatchCleanup(DeviceObject, Irp);
+    }
+    return PcDispatchIrp(DeviceObject, Irp);
+}
+
+NTSTATUS
+DeviceControlHandler(
+    _In_ PDEVICE_OBJECT DeviceObject,
+    _Inout_ PIRP        Irp
+    )
+{
+    if (AuraControlDevice_IsControlDevice(DeviceObject))
+    {
+        return AuraControlDevice_DispatchDeviceControl(DeviceObject, Irp);
+    }
+    return PcDispatchIrp(DeviceObject, Irp);
 }
 
 //=============================================================================

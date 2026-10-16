@@ -313,17 +313,31 @@ CAdapterCommon::ConnectTopologies(
     }
 
     //
-    // For render, data flows wave-bridge -> topology-bridge, so the wave filter
-    // is the "From" side.
+    // Register physical bridge connections.
+    // For render: Wave (From) -> Topology (To)
+    // For capture: Topology (From) -> Wave (To)
     //
     for (ULONG i = 0; i < SIZEOF_ARRAY(AuraPhysicalConnections); i++)
     {
-        ntStatus = PcRegisterPhysicalConnection(
-                        m_pDeviceObject,
-                        UnknownWave,
-                        AuraPhysicalConnections[i].WavePin,
-                        UnknownTopology,
-                        AuraPhysicalConnections[i].TopologyPin);
+        if (AuraPhysicalConnections[i].WaveIsFrom)
+        {
+            ntStatus = PcRegisterPhysicalConnection(
+                            m_pDeviceObject,
+                            UnknownWave,
+                            AuraPhysicalConnections[i].WavePin,
+                            UnknownTopology,
+                            AuraPhysicalConnections[i].TopologyPin);
+        }
+        else
+        {
+            ntStatus = PcRegisterPhysicalConnection(
+                            m_pDeviceObject,
+                            UnknownTopology,
+                            AuraPhysicalConnections[i].TopologyPin,
+                            UnknownWave,
+                            AuraPhysicalConnections[i].WavePin);
+        }
+
         if (!NT_SUCCESS(ntStatus))
         {
             AURA_TRACE("PcRegisterPhysicalConnection[%u] failed, 0x%08X", i, ntStatus);

@@ -81,18 +81,24 @@
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
   <ImportGroup Label="ExtensionSettings" />
-  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
-  <ImportGroup Label="ExtensionTargets" />
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>AURA_LEGACY_TRACK=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link>
       <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PreprocessorDefinitions>AURA_LEGACY_TRACK=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <Link>
       <AdditionalDependencies>$(DDK_LIB_PATH)\portcls.lib;$(DDK_LIB_PATH)\libcntpr.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets" />
   <ItemGroup>
     <ClCompile Include="..\src\Driver.cpp" />
     <ClCompile Include="..\src\AdapterCommon.cpp" />
@@ -102,6 +108,7 @@
     <ClCompile Include="..\src\VirtualClock.cpp" />
     <ClCompile Include="..\src\Guids.cpp" />
     <ClCompile Include="..\src\NewDelete.cpp" />
+    <ClCompile Include="..\src\ControlDevice.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\src\AuraVaio.h" />
@@ -113,6 +120,8 @@
     <ClInclude Include="..\src\Topology.h" />
     <ClInclude Include="..\src\VirtualClock.h" />
     <ClInclude Include="..\src\NewDelete.h" />
+    <ClInclude Include="..\src\ControlDevice.h" />
+    <ClInclude Include="..\..\common\AuraVaioIpc.h" />
   </ItemGroup>
   <ItemGroup>
     <Inf Include="AuraVaioDriver.inf" />

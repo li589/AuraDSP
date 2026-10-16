@@ -12,6 +12,7 @@ Abstract:
 
 #include "MiniportWaveRTStream.h"
 #include "MiniportWaveRT.h"
+#include "ControlDevice.h"
 
 CMiniportWaveRTStream::CMiniportWaveRTStream()
     : m_lRefCount(1)
@@ -30,6 +31,11 @@ CMiniportWaveRTStream::CMiniportWaveRTStream()
 
 CMiniportWaveRTStream::~CMiniportWaveRTStream()
 {
+    if (m_KsState == KSSTATE_RUN)
+    {
+        AuraControlDevice_OnStreamStateChange(m_bCapture, KSSTATE_STOP);
+    }
+
     //
     // The class driver is responsible for calling FreeAudioBuffer() before
     // dropping the stream, but be defensive: a buffer still mapped here would
@@ -87,14 +93,6 @@ CMiniportWaveRTStream::Init(
         return STATUS_INVALID_PARAMETER;
     }
 
-    //
-    // This increment only implements the render (playback) direction.
-    //
-    if (Capture)
-    {
-        return STATUS_NOT_SUPPORTED;
-    }
-
     if (DataFormat->FormatSize < sizeof(KSDATAFORMAT_WAVEFORMATEX))
     {
         return STATUS_INVALID_PARAMETER;
@@ -111,6 +109,8 @@ CMiniportWaveRTStream::Init(
 
         m_ulBlockAlign      = wfx->nBlockAlign;
         m_ulBytesPerSecond  = wfx->nAvgBytesPerSec;
+
+        AuraControlDevice_OnFormatChange(wfx->nSamplesPerSec, wfx->nChannels, wfx->wBitsPerSample);
     }
 
     m_pMiniport   = Miniport;
@@ -122,8 +122,8 @@ CMiniportWaveRTStream::Init(
     m_Clock.SetQpcFrequency(Miniport->GetQpcFrequency());
     m_Clock.Reset();
 
-    AURA_TRACE("stream created: pin=%u, %u B/s, blockAlign=%u",
-               Pin, m_ulBytesPerSecond, m_ulBlockAlign);
+    AURA_TRACE("stream created: pin=%u (capture=%u), %u B/s, blockAlign=%u",
+               Pin, Capture, m_ulBytesPerSecond, m_ulBlockAlign);
 
     return STATUS_SUCCESS;
 }
@@ -167,22 +167,26 @@ CMiniportWaveRTStream::SetState(
         qpc = KeQueryPerformanceCounter(NULL);
         m_Clock.Stop(qpc.QuadPart);
         m_Clock.Reset();
+        AuraControlDevice_OnStreamStateChange(m_bCapture, State);
         break;
 
     case KSSTATE_ACQUIRE:
         //
         // Buffers are allocated by AllocateAudioBuffer(); nothing to do.
         //
+        AuraControlDevice_OnStreamStateChange(m_bCapture, State);
         break;
 
     case KSSTATE_PAUSE:
         qpc = KeQueryPerformanceCounter(NULL);
         m_Clock.Stop(qpc.QuadPart);
+        AuraControlDevice_OnStreamStateChange(m_bCapture, State);
         break;
 
     case KSSTATE_RUN:
         qpc = KeQueryPerformanceCounter(NULL);
         m_Clock.Start(qpc.QuadPart);
+        AuraControlDevice_OnStreamStateChange(m_bCapture, State);
         break;
 
     default:
@@ -216,7 +220,42 @@ CMiniportWaveRTStream::GetPosition(
     if (m_KsState == KSSTATE_RUN)
     {
         qpc = KeQueryPerformanceCounter(NULL);
-        m_Clock.Advance((ULONGLONG)qpc.QuadPart, m_ulBytesPerSecond);
+        ULONGLONG oldPlay = m_Clock.PlayOffset();
+        ULONG bytesAdvanced = m_Clock.Advance((ULONGLONG)qpc.QuadPart, m_ulBytesPerSecond);
+
+        if (bytesAdvanced > 0 && m_pDmaBuffer != NULL && m_ulBufferSize > 0)
+        {
+            ULONG bytesToProcess = (bytesAdvanced > m_ulBufferSize) ? m_ulBufferSize : bytesAdvanced;
+            ULONG startOffset = (ULONG)(oldPlay % m_ulBufferSize);
+            ULONG chunk1 = m_ulBufferSize - startOffset;
+
+            if (!m_bCapture)
+            {
+                // Render: copy played audio from DMA buffer into shared ring buffer
+                if (chunk1 >= bytesToProcess)
+                {
+                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, bytesToProcess);
+                }
+                else
+                {
+                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer + startOffset, chunk1);
+                    AuraControlDevice_WriteRenderSamples(m_pDmaBuffer, bytesToProcess - chunk1);
+                }
+            }
+            else
+            {
+                // Capture: read captured audio from shared ring buffer into DMA buffer
+                if (chunk1 >= bytesToProcess)
+                {
+                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, bytesToProcess);
+                }
+                else
+                {
+                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer + startOffset, chunk1);
+                    AuraControlDevice_ReadCaptureSamples(m_pDmaBuffer, bytesToProcess - chunk1);
+                }
+            }
+        }
     }
 
     Position->PlayOffset  = m_Clock.PlayOffset();
