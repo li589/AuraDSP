@@ -43,7 +43,13 @@ target_include_directories(auradsp_engine PRIVATE
     "${PLUGIN_API}"
 )
 
-target_compile_definitions(auradsp_engine PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(auradsp_engine PRIVATE
+    NDEBUG
+    _CRT_SECURE_NO_WARNINGS
+    _WIN32_WINNT=0x0601
+    WINVER=0x0601
+    NTDDI_VERSION=0x06010000
+)
 target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
 # engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。

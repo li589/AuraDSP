@@ -256,6 +256,92 @@ void main() {
       expect(m.eqGains[7], closeTo(9.0, 1e-9));
       expect(m.eqGains[14], closeTo(3.0, 1e-9));
     });
+
+    test('apply() 对称读回 stereo.bandUsed（setStereoMix 副作用不得覆盖快照值）', () {
+      // 方向一：用户调过分带 → 恢复后仍 true
+      final m1 = AppModel(testing: true);
+      m1.setStereoBand(2, 0.5);
+      final snap1 = PresetLibrary.snapshot(m1, name: '__regress_band_used__');
+      final t1 = AppModel(testing: true)..stereoBandUsed = false;
+      PresetLibrary.apply(t1, snap1);
+      expect(t1.stereoBandUsed, isTrue);
+      expect(t1.stereoBands[2], closeTo(0.5, 1e-9));
+
+      // 方向二：从未调过分带（bandUsed=false）→ 恢复后不得被强制置 true。
+      // 修复前：apply 的 mix 分支调 setStereoMix，其副作用 bandUsed=true，
+      // 而快照值无人读回 → 每个人都被切成 per-band 展宽模式，
+      // 与全新安装（bandUsed=false）行为不一致。
+      final m2 = AppModel(testing: true);
+      expect(m2.stereoBandUsed, isFalse);
+      final snap2 = PresetLibrary.snapshot(m2, name: '__regress_band_unused__');
+      final t2 = AppModel(testing: true)..stereoBandUsed = true;
+      PresetLibrary.apply(t2, snap2);
+      expect(t2.stereoBandUsed, isFalse,
+          reason: 'setStereoMix 自带 bandUsed=true 副作用，必须由快照值覆盖');
+    });
+
+    test('apply() reverb preset=-1 分支：缺键不碰用户自调值，显式键照常写入', () {
+      final m = AppModel(testing: true);
+      m.setReverbCustomParam('decay', 0.9);
+      m.setReverbCustomParam('wet', 0.8);
+      m.setReverbCustomParam('roomSize', 2.2);
+      // 出厂风格的最小 reverb 节：只关混响，不带任何 customParam
+      final preset = AuraPreset(
+        name: '__regress_reverb_off__',
+        createdAt: DateTime.now().toIso8601String(),
+        params: {
+          'reverb': {'enable': false, 'preset': -1},
+        },
+      );
+      PresetLibrary.apply(m, preset);
+      // 修复前：?? 硬编码兜底把 0.9/0.8/2.2 抹成 0.5/0.35/1.2
+      expect(m.fvDecay, closeTo(0.9, 1e-9));
+      expect(m.fvWet, closeTo(0.8, 1e-9));
+      expect(m.fvRoomSize, closeTo(2.2, 1e-9));
+      expect(m.isSpatialReverbOn, isFalse);
+
+      // 显式携带的键仍必须写入；未携带的键保持现值
+      final preset2 = AuraPreset(
+        name: '__regress_reverb_partial__',
+        createdAt: DateTime.now().toIso8601String(),
+        params: {
+          'reverb': {'enable': false, 'preset': -1, 'decay': 0.3},
+        },
+      );
+      PresetLibrary.apply(m, preset2);
+      expect(m.fvDecay, closeTo(0.3, 1e-9));
+      expect(m.fvWet, closeTo(0.8, 1e-9));
+    });
+
+    test('resetConfig 连带清除会话记忆（恢复默认 = 全部归零）', () {
+      final m = AppModel(testing: true);
+      m.setGateEnabled(true);
+      expect(SessionMemory.save(m), isTrue);
+      expect(File(SessionMemory.sessionPath).existsSync(), isTrue);
+      m.resetConfig();
+      expect(File(SessionMemory.sessionPath).existsSync(), isFalse,
+          reason: 'resetConfig 后会话文件必须删除，否则下次启动旧参数全回来');
+    });
+
+    test('不变量：setGraphOrder 挂自动保存、两处回放均有守卫（_testing 短路 → 源码审计）', () {
+      // scheduleAutoSave 在 _testing/_isReplayingSession 下短路，功能断言
+      // 不可达，只能以源码形状钉住不变量（与 E1 探针同一模式）。
+      final src = File('lib/core/state.dart').readAsStringSync();
+
+      final i = src.indexOf('void setGraphOrder(String order) {');
+      expect(i, greaterThan(-1), reason: '找不到 setGraphOrder 定义');
+      final j = src.indexOf('\n  }', i);
+      final body = src.substring(i, j);
+      expect(body.contains('scheduleAutoSave'), isTrue,
+          reason: 'setGraphOrder 必须持久化 chainOrder（snapshot 已采集），'
+              '否则处理链重排重启即丢');
+
+      final guardCount =
+          RegExp(r'_isReplayingSession = true').allMatches(src).length;
+      expect(guardCount, 2,
+          reason: 'replaySessionToEngine 与构造期 restoreMemoryImage '
+              '两处回放都必须置守卫，缺一即启动自写');
+    });
   });
 
   group('Liveprog v2: 会话/预设带回使能与滑块', () {

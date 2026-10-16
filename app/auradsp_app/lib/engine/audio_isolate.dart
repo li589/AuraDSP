@@ -19,6 +19,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
+import 'audio_vaio_bridge.dart';
 import 'debug_log.dart';
 
 
@@ -90,6 +91,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool asioActive = false;
   AuraAsioBridge? ab;
   String asioDriverInUse = ''; // 当前桥会话用的驱动名（诊断对账用）
+  // AuraVAIO 虚拟声卡模式面（Mode 1 桥）：与 VB/ASIO/WASAPI 互斥。
+  bool vaioActive = false;
+  AuraVaioBridge? vaio;
+  String vaioOutputEndpointInUse = '';
+  int vaioStatusTick = 0;
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
@@ -102,6 +108,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool vbNoCbLogged = false;
   bool vbVizOkLogged = false;
   int vbStatusAt = 0;
+  bool vaioVizNullLogged = false;
+  bool vaioNoCbLogged = false;
+  bool vaioVizOkLogged = false;
+  int vaioStatusAt = 0;
 
   // 欠载（avail<=0）或无音源时引擎不再产出 viz 帧，UI 会把最后一帧电平永久冻住。
   // 持续空闲后补发一帧全零，使电平与频谱回落到 0。
@@ -321,6 +331,84 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'asiostatus', 'running': false});
   }
 
+  /* ---- AuraVAIO 虚拟声卡模式面（Mode 1 桥；与 VB/ASIO/WASAPI 互斥） ---- */
+
+  void detectVaio() {
+    try {
+      vaio ??= AuraVaioBridge.load();
+    } catch (e) {
+      send({'evt': 'vaiodetect', 'found': false, 'note': 'bridge-missing: $e', 'endpoints': []});
+      return;
+    }
+    final info = vaio!.detect();
+    send({'evt': 'vaiodetect', ...?info});
+  }
+
+  void startVaioBridge({String outputEndpointSubstr = ''}) {
+    if (vaioActive) return;
+    dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
+    try {
+      vaio ??= AuraVaioBridge.load();
+    } catch (e) {
+      send({'evt': 'vaiostatus', 'running': false, 'note': 'bridge-missing: $e'});
+      return;
+    }
+    final rc = vaio!.start(AuraDspLib.loadedPath ?? '', '', outputEndpointSubstr: outputEndpointSubstr);
+    dbgLog('vaiomode: start rc=$rc');
+    if (rc != 0) {
+      final st = vaio!.status();
+      send({
+        'evt': 'vaiostatus',
+        'running': false,
+        'note': (st?['note'] as String?) ?? 'start-rc=$rc',
+      });
+      return;
+    }
+    // 回放参数镜像
+    var replayed = 0;
+    for (final e in paramMirror.entries) {
+      vaio!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
+      replayed++;
+    }
+    dbgLog('vaiomode: replayed $replayed params');
+    var replayedStr = 0;
+    for (final e in paramStrMirror.entries) {
+      final brc = vaio!.setParamStr(e.key, e.value);
+      if (brc >= 0) replayedStr++;
+    }
+    dbgLog('vaiomode: replayed $replayedStr str params');
+    vaio!.setBypass(bypass);
+    try {
+      wasapi?.stop();
+    } catch (_) {}
+    source = null;
+    vaioActive = true;
+    vaioOutputEndpointInUse = outputEndpointSubstr;
+    vaioVizNullLogged = false;
+    vaioNoCbLogged = false;
+    vaioVizOkLogged = false;
+    vaioStatusAt = DateTime.now().millisecondsSinceEpoch;
+    final st = vaio!.status();
+    send({'evt': 'vaiostatus', ...?st, 'running': true});
+  }
+
+  void stopVaioBridge() {
+    if (!vaioActive) return;
+    dbgLog('vaiomode: stop requested');
+    try {
+      vaio?.testStop();
+    } catch (_) {}
+    try {
+      vaio?.stop();
+    } catch (_) {}
+    vaioActive = false;
+    vaioOutputEndpointInUse = '';
+    try {
+      wasapi?.start();
+    } catch (_) {}
+    send({'evt': 'vaiostatus', 'running': false});
+  }
+
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
    * 无门控的同步落盘会在音频泵线程上产生上百次/秒 flushSync，
    * 直接抬升 WASAPI 抖动、诱发 underrun。 */
@@ -357,7 +445,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 isFloat: m['isFloat'] as bool,
                 value: (m['value'] as num).toDouble());
             if (arc == 0) dbgLog('asiomode: setParam ${m['id']} applied 0');
-          }          final tookMs = DateTime.now().difference(t0).inMilliseconds;
+          }
+          if (vaioActive && vaio != null) {
+            final vrc = vaio!.setParam(m['id'] as String,
+                isFloat: m['isFloat'] as bool,
+                value: (m['value'] as num).toDouble());
+            if (vrc != 0) dbgLog('vaiomode: setParam ${m['id']} rc=$vrc');
+          }
+          final tookMs = DateTime.now().difference(t0).inMilliseconds;
           // 关键证据：引擎应用耗时。旧实现全量重建混响/EQ 时这里是几十~几百 ms。
           logSetParam.admit('${m['id']}=${m['value']} rc=$rc took=${tookMs}ms');
           String? err;
@@ -618,6 +713,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 dbgLog('asiomode: setParamStr ${m['id']} rc=$arc');
               }
             }
+            if (vaioActive && vaio != null) {
+              final vrc = vaio!.setParamStr(m['id'] as String, m['text'] as String);
+              if (vrc < 0) {
+                dbgLog('vaiomode: setParamStr ${m['id']} rc=$vrc');
+              }
+            }
             final tookMs = DateTime.now().difference(t0).inMilliseconds;
             logSetParamStr.admit('${m['id']} (${(m['text'] as String).length}B) '
                 'rc=$rc took=${tookMs}ms');
@@ -634,6 +735,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 bst = vb!.getIntParam('liveprog.status');
               } else if (asioActive && ab != null) {
                 bst = ab!.getIntParam('liveprog.status');
+              } else if (vaioActive && vaio != null) {
+                bst = vaio!.getIntParam('liveprog.status');
               }
               final st = bst ??
                   AuraDspLib.getInt(lib, handle, 'liveprog.status');
@@ -647,6 +750,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               } else if (asioActive && ab != null) {
                 bNodes = ab!.getIntParam('arbmag.nodeCount');
                 bReady = ab!.getIntParam('arbmag.ready');
+              } else if (vaioActive && vaio != null) {
+                bNodes = vaio!.getIntParam('arbmag.nodeCount');
+                bReady = vaio!.getIntParam('arbmag.ready');
               }
               final nodes = bNodes ??
                   AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
@@ -733,6 +839,43 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (asioActive && ab != null && kind == 'stop') {
             ab!.testStop();
           }
+          // AuraVAIO 模式：测试源走桥注入
+          if (vaioActive && vaio != null && kind != 'stop') {
+            final tk = kind == 'tone'
+                ? 1
+                : kind == 'pink'
+                    ? 2
+                    : kind == 'file'
+                        ? 3
+                        : 0;
+            if (tk == 3) {
+              final fpath = m['path'] as String;
+              final lb = lib;
+              final decoded = fpath.toLowerCase().endsWith('.mp3')
+                  ? (lb == null ? null : decodeMp3File(lb, fpath))
+                  : decodeWavFile(fpath);
+              if (decoded == null) {
+                send({'evt': 'error', 'msg': 'VAIO模式文件解析失败'});
+              } else {
+                final n = decoded.data.length ~/ 2;
+                final ptr = malloc<Float>(decoded.data.length);
+                try {
+                  ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
+                  vaio!.testStart(3,
+                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
+                } finally {
+                  malloc.free(ptr);
+                }
+              }
+            } else if (tk != 0) {
+              vaio!.testStart(tk);
+            }
+            send({'evt': 'playing', 'playing': true});
+            break;
+          }
+          if (vaioActive && vaio != null && kind == 'stop') {
+            vaio!.testStop();
+          }
           switch (kind) {
             case 'stop':
               source = null;
@@ -770,6 +913,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'vbmode':
           if (m['on'] as bool) {
+            if (asioActive) stopAsioBridge();
+            if (vaioActive) stopVaioBridge();
             startVbBridge();
           } else {
             stopVbBridge();
@@ -780,6 +925,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // VB 与 ASIO 互斥：切 ASIO 前先停 VB（主 isolate 的 setAudioMode
             // 已保证一次只选一个模式，这里防御性再压一遍）。
             if (vbActive) stopVbBridge();
+            if (vaioActive) stopVaioBridge();
             startAsioBridge(
               driver: (m['driver'] as String?) ?? '',
               bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
@@ -802,6 +948,27 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'asiodetect':
           detectAsioDrivers();
           break;
+        case 'vaiomode':
+          if (m['on'] as bool) {
+            if (vbActive) stopVbBridge();
+            if (asioActive) stopAsioBridge();
+            startVaioBridge(
+              outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
+            );
+          } else {
+            stopVaioBridge();
+          }
+          break;
+        case 'vaiorestart':
+          if (!vaioActive) break;
+          stopVaioBridge();
+          startVaioBridge(
+            outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
+          );
+          break;
+        case 'vaiodetect':
+          detectVaio();
+          break;
         case 'bypass':
           bypass = m['value'] as bool;
           if (vbActive && vb != null) {
@@ -809,6 +976,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           if (asioActive && ab != null) {
             ab!.setBypass(bypass);
+          }
+          if (vaioActive && vaio != null) {
+            vaio!.setBypass(bypass);
           }
           break;
         case 'setBusMask':
@@ -1184,6 +1354,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool vbStaleSent = false;
   int asioStaleSince = 0;
   bool asioStaleSent = false;
+  int vaioStaleSince = 0;
+  bool vaioStaleSent = false;
   void sendStaleViz(String backend, int now) {
     send({
       'evt': 'viz',
@@ -1298,6 +1470,56 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (vbStatusTick % 200 == 0) {
             final st = vb!.status();
             if (st != null) send({'evt': 'vbstatus', ...st});
+          }
+        } catch (_) {}
+        continue;
+      }
+      // AuraVAIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 01 桥。
+      if (vaioActive && vaio != null) {
+        try {
+          final now = DateTime.now().millisecondsSinceEpoch;
+          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+            lastViz = now;
+            final v = vaio!.vizRead();
+            if (v != null) {
+              vaioStaleSince = 0;
+              vaioStaleSent = false;
+              v['backend'] = 'vaio';
+              send({'evt': 'viz', ...v});
+              if (!vaioVizOkLogged) {
+                vaioVizOkLogged = true;
+                dbgLog('vaiomode: viz flowing l=${v['l']} r=${v['r']}');
+              }
+            } else {
+              if (!vaioVizNullLogged) {
+                vaioVizNullLogged = true;
+                dbgLog('vaiomode: first null viz');
+              }
+              if (vaioStaleSince == 0) vaioStaleSince = now;
+              if (!vaioStaleSent && now - vaioStaleSince > 1500) {
+                vaioStaleSent = true;
+                sendStaleViz('vaio', now);
+              }
+            }
+            if (!vaioNoCbLogged && now - vaioStatusAt > 5000) {
+              vaioNoCbLogged = true;
+              final st0 = vaio!.status();
+              dbgLog('vaiomode: t+5s frames=${st0?['frames']} '
+                  'sr=${st0?['sr']} peakIn=${st0?['peakIn']} '
+                  'peakOut=${st0?['peakOut']} bypass=${st0?['bypass']} '
+                  'note=${st0?['note']}');
+            }
+          }
+          vaioStatusTick++;
+          if (vaioStatusTick % 200 == 0) {
+            final st = vaio!.status();
+            if (st != null) {
+              send({
+                'evt': 'vaiostatus',
+                ...st,
+                'outputEndpoint': vaioOutputEndpointInUse,
+              });
+            }
           }
         } catch (_) {}
         continue;
@@ -1417,6 +1639,24 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           vb?.stop();
         } catch (_) {}
         vbActive = false;
+      }
+      if (asioActive) {
+        try {
+          ab?.testStop();
+        } catch (_) {}
+        try {
+          ab?.stop();
+        } catch (_) {}
+        asioActive = false;
+      }
+      if (vaioActive) {
+        try {
+          vaio?.testStop();
+        } catch (_) {}
+        try {
+          vaio?.stop();
+        } catch (_) {}
+        vaioActive = false;
       }
       wasapi?.stop();
       if (handle != null) lib?.destroy(handle);

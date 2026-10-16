@@ -491,12 +491,28 @@ abstract final class PresetLibrary {
       if (pr >= 0) {
         m.setReverbPreset(pr);
       } else {
-        m.setReverbCustomParam('decay', (rev['decay'] as num?)?.toDouble() ?? 0.5);
-        m.setReverbCustomParam('damp', (rev['damp'] as num?)?.toDouble() ?? 0.5);
-        m.setReverbCustomParam('wet', (rev['wet'] as num?)?.toDouble() ?? 0.35);
-        m.setReverbCustomParam('dry', (rev['dry'] as num?)?.toDouble() ?? 1.0);
-        m.setReverbCustomParam('roomSize', (rev['roomSize'] as num?)?.toDouble() ?? 1.2);
-        m.setReverbCustomParam('width', (rev['stereoWidth'] as num?)?.toDouble() ?? 1.0);
+        // 仅在预设显式携带该键时才写；缺键 = 不碰用户现值。
+        // 史：旧代码用 ?? 硬编码兜底，「关混响」的出厂预设
+        // （reverb 节只有 enable+preset=-1）也会把用户自调的
+        // decay/wet/roomSize 等 6 个参数抹成默认值。
+        if (rev['decay'] != null) {
+          m.setReverbCustomParam('decay', (rev['decay'] as num).toDouble());
+        }
+        if (rev['damp'] != null) {
+          m.setReverbCustomParam('damp', (rev['damp'] as num).toDouble());
+        }
+        if (rev['wet'] != null) {
+          m.setReverbCustomParam('wet', (rev['wet'] as num).toDouble());
+        }
+        if (rev['dry'] != null) {
+          m.setReverbCustomParam('dry', (rev['dry'] as num).toDouble());
+        }
+        if (rev['roomSize'] != null) {
+          m.setReverbCustomParam('roomSize', (rev['roomSize'] as num).toDouble());
+        }
+        if (rev['stereoWidth'] != null) {
+          m.setReverbCustomParam('width', (rev['stereoWidth'] as num).toDouble());
+        }
       }
       if (rev['autoGain'] != null) {
         m.setReverbAutoGain(rev['autoGain'] as bool);
@@ -613,6 +629,13 @@ abstract final class PresetLibrary {
         for (var i = 0; i < 5; i++) {
           m.setStereoBand(i, m.stereoBands[i]);
         }
+      }
+      // bandUsed 必须读回：上面的 setStereoMix/setStereoBand 自带
+      // bandUsed=true 副作用（保持旧 _mirror 行为），若不让快照值覆盖，
+      // 「从未调过分带」的快照恢复后也被切成 per-band 展宽模式
+      // （engine_chain 按 stereo_band_used 二选一），与全新安装行为不一致。
+      if (st['bandUsed'] != null) {
+        m.stereoBandUsed = st['bandUsed'] as bool;
       }
     }
 
