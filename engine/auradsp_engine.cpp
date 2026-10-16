@@ -2,7 +2,7 @@
  * auradsp_engine.c — AuraDSP Engines 统一 C ABI 实现（Desktop v1）
  *
  * 包装 engine/legacy（纯 C 算法核，原 vendor/libjamesdsp 收编而来，见
- * engine/legacy/PATCHES.md 的 13 条补丁登记与 ORIGIN.md）。
+ * engine/legacy/PATCHES.md 的 14 条补丁登记；溯源见 source/ORIGIN.md、vendor/ORIGIN.md）。
  * 参数语义与 Android 侧 JamesDspEngine（AIDL VendorParamId 透传）对齐：
  *   bass.enable/bass.gain/reverb.preset/stereo.mix/eq.enable/post.gain
  * 新增桌面侧参数：
@@ -1059,7 +1059,10 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         char filtered[512];
         const int flen = JamesDSPFilterVendorOrder(ord, filtered, (int)sizeof(filtered));
         free(ord);
-        if (flen <= 0) {
+        /* FilterVendorOrder（P-013）对任意输入都会追加 output，flen<=0 实际不可达；
+         * "无 vendor id" 的真实形态是过滤后只剩 output —— 在此归类，
+         * 避免把全未知载荷误报成 invalid list。 */
+        if (flen <= 0 || !strcmp(filtered, "output")) {
             set_error(h, "graph.order: no vendor stage id found");
             return AURADSP_E_PARAM;
         }

@@ -62,7 +62,7 @@ engine/
 
 - `engine/legacy/` 视同 vendor 只读；补丁必须 `[PATCHED-AuraDSP P-xxx]` +
   `engine/legacy/PATCHES.md` 登记；comment 级改动也要登记。升级 = 重提覆盖。
-  当前登记 13 条（P-001~P-013，P-003 保留编号），源码内 37 处标记。
+  当前登记 14 条（P-001~P-014，P-003 保留编号），源码内 38 处标记（以 PATCHES.md 实测为准）。
 - legacy 黑盒内的效果（如 tube），engine 侧只能开关+调参；要动音色必须走 legacy 补丁
   （P-011 范例），禁止在 engine 侧“包一层假装”。
 - 目录内 include 一律相对/裸名；engine 侧引用 legacy 头必须写 `legacy/jdsp/...`
