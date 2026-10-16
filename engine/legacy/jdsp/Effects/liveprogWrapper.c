@@ -43,10 +43,10 @@ int LiveProgLoadCode(JamesDSPLib *jdsp, char *codeTextInit, char *codeTextProces
 	*pg->vmFs = jdsp->fs;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
-	/* [PATCHED-AuraDSP 2026-10-09] 宿主滑块：编译前注册 slider1..8，
+	/* [PATCHED-AuraDSP 2026-10-09 P-001] 宿主滑块：编译前注册 slider1..8，
 	 * 供 engine_api "liveprog.paramN" 写值（freevars 会清掉旧注册，
 	 * 因此必须在每次 LoadCode 内紧跟 init_memRegion 重注册）。
-	 * 补丁说明见 core/desktop/vendor-src/libjamesdsp/PATCHES.md */
+	 * 补丁说明见 engine/legacy/PATCHES.md [PATCHED-AuraDSP 2026-10-16 P-014] */
 	for (int aura_i = 1; aura_i <= 8; aura_i++)
 	{
 		char aura_nm[16];
