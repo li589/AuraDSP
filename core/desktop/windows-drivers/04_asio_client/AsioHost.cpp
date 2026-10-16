@@ -1,5 +1,5 @@
-// AsioHost.cpp — ASIO 宿主封装实现（04_asio_engine Phase 1）
-// 许可：Steinberg ASIO SDK 2.3.4，GPLv3 路线（见 04_asio_engine/README.md）。
+// AsioHost.cpp — ASIO 宿主封装实现（04_asio_client Phase 1）
+// 许可：Steinberg ASIO SDK 2.3.4，GPLv3 路线（见 04_asio_client/README.md）。
 // RT 铁律：process() 仅触碰原子量与输出缓冲；零分配/零锁/零 syscall/零日志。
 
 #include "AsioHost.h"

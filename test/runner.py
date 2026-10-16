@@ -58,6 +58,8 @@ def run_smoke_tests():
     # ASIO 宿主（Phase 1）：枚举对账注册表 + 双驱动发声；无 ASIO 驱动时自动 SKIP
     "smoke_asio_probe.py",
     "smoke_asio_tone.py",
+    # ASIO 自研驱动（Driver 线 Phase 1）：COM In-Proc Server 握手 + 能力协商 + MMCSS 双缓冲泵
+    "smoke_asio_driver.py",
     # ASIO 常驻桥（Phase 2）：VM 虚拟 ASIO 上 10s，bypass 开/关峰值差 +
     # vizGrp/peak 断言 + slot 被占优雅让路（-3 语义同 05）
     "smoke_asio_bridge.py",

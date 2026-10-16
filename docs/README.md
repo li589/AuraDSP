@@ -66,7 +66,9 @@
 
 ### 3.75 效果器增补与 UI 整改 Spec（2026-10-13）
 - [任意响应EQ开工Spec-2026-10-13.md](20-执行/任意响应EQ开工Spec-2026-10-13.md) — `arbmag` 任意幅度 EQ 端到端开工（引擎接线 / UI / smoke）
-- [ASIO驱动开工Spec-2026-10-14.md](20-执行/ASIO驱动开工Spec-2026-10-14.md) — ASIO 专业模式（四模式最后一块）：SDK 2.3.4 GPLv3 路线 / 宿主架构 / P1 探测+发声 → P2 常驻桥 → P3 APP 接线 → P4 加固；SDK 登记见 `core/desktop/windows-drivers/04_asio_engine/README.md`
+- [ASIO驱动开工Spec-2026-10-14.md](20-执行/ASIO驱动开工Spec-2026-10-14.md) — ASIO 专业模式（四模式最后一块）：SDK 2.3.4 GPLv3 路线 / 宿主与驱动双线架构（`04_asio_client` 宿主线 + `04_asio_driver` 虚拟驱动线）/ P1~P4 落地演进；SDK 登记见 `core/desktop/windows-drivers/04_asio_client/README.md`
+- [ASIO双线开发规划-2026-10-15.md](20-执行/ASIO双线开发规划-2026-10-15.md) — ASIO 宿主（Client 线：`04_asio_client/`）与自研虚拟驱动（Driver 线：`04_asio_driver/`）双线规划与演进路线
+- [ADR-008-asio-driver-identity-and-architecture.md](adr/ADR-008-asio-driver-identity-and-architecture.md) — 自研虚拟 ASIO 驱动（`AuraDSP Driver`）定名、COM 架构与分期实施路线（`04_asio_driver/`）
 - [蝰蛇系三效果器开工Spec-2026-10-12.md](20-执行/蝰蛇系三效果器开工Spec-2026-10-13.md) — Viper 系效果器增补开工
 - [串扰消除卡片与混响热修复开工Spec-2026-10-13.md](20-执行/串扰消除卡片与混响热修复开工Spec-2026-10-13.md) — 链上串扰卡片与混响热修复
 - [UI交互精细化整改与问题修复开工Spec-2026-10-13.md](20-执行/UI交互精细化整改与问题修复开工Spec-2026-10-13.md) — UI 交互细节整改任务包

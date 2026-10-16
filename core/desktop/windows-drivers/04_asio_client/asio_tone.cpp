@@ -1,4 +1,4 @@
-// asio_tone.cpp — ASIO 驱动正弦发声测试（04_asio_engine Phase 1）
+// asio_tone.cpp — ASIO 驱动正弦发声测试（04_asio_client Phase 1）
 //
 // 对标 03_system_apo/tone_play.cpp：选定驱动 → 创建输出缓冲 → 播放正弦 N 秒 →
 // 干净退出。验证 open/createBuffers/bufferSwitch/start/stop 全链路可跑。
