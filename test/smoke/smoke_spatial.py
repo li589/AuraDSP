@@ -107,6 +107,14 @@ check('outgain set/get+clamp',
       set_f('spatial.outgain', 6.0) == 0 and abs(get_f('spatial.outgain')[1] - 6.0) < 1e-6 and
       set_f('spatial.outgain', -99.0) == 0 and abs(get_f('spatial.outgain')[1] + 12.0) < 1e-6)
 check('autogain set/get', set_i('spatial.autogain', 1) == 0 and get_i('spatial.autogain') == (0, 1))
+# 头跟 stub（Phase 2：存取对称 + 钳位；DSP 暂不消费，声学节须证明无影响）
+check('headazim set/get+clamp',
+      set_f('spatial.headazim', 45.0) == 0 and abs(get_f('spatial.headazim')[1] - 45.0) < 1e-6 and
+      set_f('spatial.headazim', 999.0) == 0 and abs(get_f('spatial.headazim')[1] - 180.0) < 1e-6 and
+      set_f('spatial.headazim', -999.0) == 0 and abs(get_f('spatial.headazim')[1] + 180.0) < 1e-6)
+check('headtrack set/get', set_i('spatial.headtrack', 1) == 0 and get_i('spatial.headtrack') == (0, 1))
+set_f('spatial.headazim', 0.0)
+set_i('spatial.headtrack', 0)
 
 # style 联动预设值（Dolby 0.7/1.0/0.8；DTS 0.25/1.1/0.5；中性 0.0/1.0/0.5）
 set_i('spatial.style', 0)
@@ -198,6 +206,34 @@ exp = [f32r(0.25 * math.sin(2 * math.pi * 440.0 * (n // 2) / SR))
 check('disabled bit-identical passthrough',
       all(x == y for x, y in zip(acc, exp)))
 dll.auradsp_destroy(h)
+
+# 1b. 头跟 stub 惰性：headtrack=1 + azim=90 与全关逐位一致（DSP 未消费）。
+def run_last_block(hh, az, ht):
+    dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(hh, b'spatial.headazim', ctypes.byref(f32(az)), 4)
+    dll.auradsp_set_param(hh, b'spatial.headtrack', ctypes.byref(i32(ht)), 4)
+    n0 = 0
+    last = None
+    for _ in range(12):
+        buf = (ctypes.c_float * (BLOCK * 2))()
+        for i in range(BLOCK):
+            s = 0.25 * math.sin(2 * math.pi * 440.0 * (n0 + i) / SR)
+            buf[i * 2] = s
+            buf[i * 2 + 1] = 0.0
+        out = (ctypes.c_float * (BLOCK * 2))()
+        dll.auradsp_process(hh, buf, out, BLOCK)
+        n0 += BLOCK
+        last = bytes(out)
+    return last
+
+
+h_a = dll.auradsp_create(SR, BLOCK)
+o_off = run_last_block(h_a, 0.0, 0)
+dll.auradsp_destroy(h_a)
+h_b = dll.auradsp_create(SR, BLOCK)
+o_on = run_last_block(h_b, 90.0, 1)
+dll.auradsp_destroy(h_b)
+check('headtrack stub inert (bit-identical)', o_off == o_on)
 
 # 2/3. 双耳对称 + 差异（Dolby 默认态；每 run 全新句柄——vendor limiter
 # 慢包络跨 run 污染对称测量，与被测 spatial 无关，见 smoke 注释）

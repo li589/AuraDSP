@@ -1044,6 +1044,17 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->spat_ag_comp = 1.0;
         return AURADSP_OK;
     }
+    /* ---- 头跟预留（Phase 2 stub：只存取，DSP 不消费） ---- */
+    if (!strcmp(id, "spatial.headazim") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < -180) v = -180; if (v > 180) v = 180;
+        h->p.spatial_headazim.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.headtrack") && bytes >= 4) {
+        h->p.spatial_headtrack.store(*(const int32_t*)value ? 1 : 0);
+        return AURADSP_OK;
+    }
     /* ---- 激励器 ---- */
     if (!strcmp(id, "exciter.enable") && bytes >= 4) {
         h->p.exciter_enable.store(*(const int32_t*)value ? 1 : 0);
@@ -1394,6 +1405,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "spatial.center") && bytes >= 4) { *(float*)out_value = h->p.spatial_center.load(); return AURADSP_OK; }
     if (!strcmp(id, "spatial.outgain") && bytes >= 4) { *(float*)out_value = h->p.spatial_outgain.load(); return AURADSP_OK; }
     if (!strcmp(id, "spatial.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.spatial_autogain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.headazim") && bytes >= 4) { *(float*)out_value = h->p.spatial_headazim.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.headtrack") && bytes >= 4) { *(int32_t*)out_value = h->p.spatial_headtrack.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.exciter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.amount") && bytes >= 4) { *(float*)out_value = h->p.exciter_amount.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.hifreq") && bytes >= 4) { *(float*)out_value = h->p.exciter_hifreq.load(); return AURADSP_OK; }

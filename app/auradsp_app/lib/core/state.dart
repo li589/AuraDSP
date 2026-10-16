@@ -560,6 +560,10 @@ class AppModel extends ChangeNotifier {
   double spatialRoom = 0.7, spatialWidth = 1.0, spatialCenter = 0.8;
   double spatialOutGain = 0.0;
   bool spatialAutoGain = false;
+  // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
+  // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
+  double spatialHeadAzim = 0.0;
+  bool spatialHeadTrack = false;
   // 效果页分类过滤（会话内有效，不持久化；'all' = 全部链序展开）。
   String effectsCategory = 'all';
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
@@ -1211,6 +1215,12 @@ class AppModel extends ChangeNotifier {
         if (raw['spatialAutoGain'] != null) {
           spatialAutoGain = (raw['spatialAutoGain'] as int) != 0;
         }
+        if (raw['spatialHeadAzim'] != null) {
+          spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
+        }
+        if (raw['spatialHeadTrack'] != null) {
+          spatialHeadTrack = (raw['spatialHeadTrack'] as int) != 0;
+        }
         if (raw['exciterEnable'] != null) {
           exciterOn = (raw['exciterEnable'] as int) != 0;
         }
@@ -1737,6 +1747,8 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.spatialCenter, spatialCenter);
       setFloat(ParamId.spatialOutGain, spatialOutGain);
       setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
+      setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
+      setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
       setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
       setFloat(ParamId.exciterAmount, exciterAmount);
       setFloat(ParamId.exciterHifreq, exciterHifreq);
@@ -1956,6 +1968,8 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.spatialCenter) { spatialCenter = v; break; }
         if (id == ParamId.spatialOutGain) { spatialOutGain = v; break; }
         if (id == ParamId.spatialAutoGain) { spatialAutoGain = v != 0; break; }
+        if (id == ParamId.spatialHeadAzim) { spatialHeadAzim = v; break; }
+        if (id == ParamId.spatialHeadTrack) { spatialHeadTrack = v != 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
         if (id == ParamId.exciterAmount) { exciterAmount = v; break; }
         if (id == ParamId.exciterHifreq) { exciterHifreq = v; break; }
@@ -2525,6 +2539,21 @@ class AppModel extends ChangeNotifier {
   void setSpatialAutoGain(bool on) {
     spatialAutoGain = on;
     setInt(ParamId.spatialAutoGain, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 头跟 stub：仅存取透传（无 UI；传感器接入后由驱动层高频下发 azimuth）。
+  void setSpatialHeadAzim(double v) {
+    spatialHeadAzim = v.clamp(-180.0, 180.0);
+    setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialHeadTrack(bool on) {
+    spatialHeadTrack = on;
+    setInt(ParamId.spatialHeadTrack, on ? 1 : 0);
     notifyListeners();
     scheduleAutoSave();
   }
