@@ -1,4 +1,4 @@
-"""smoke_asio_probe.py — ASIO 驱动枚举与能力探测验收（04_asio_engine Phase 1）。
+"""smoke_asio_probe.py — ASIO 驱动枚举与能力探测验收（04_asio_client Phase 1）。
 
 验收标准（机器无关，无音频零风险）：
   1. asio_probe.exe 存在（需先构建 core/desktop/windows-drivers）。

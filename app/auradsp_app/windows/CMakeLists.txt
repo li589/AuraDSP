@@ -92,7 +92,7 @@ if(EXISTS "${AURAVM_BRIDGE_DLL}")
     COMPONENT Runtime)
 endif()
 
-# ASIO 常驻桥（04_asio_engine，Phase 3）：分发规则同上（有则随包无则跳过）。
+# ASIO 常驻桥（04_asio_client，Phase 3）：分发规则同上（有则随包无则跳过）。
 set(AURAASIO_BRIDGE_DLL
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/auraasio_bridge.dll")
 if(EXISTS "${AURAASIO_BRIDGE_DLL}")

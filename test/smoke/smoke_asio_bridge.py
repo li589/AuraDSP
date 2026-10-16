@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""smoke_asio_bridge.py — ASIO 常驻桥冒烟（04_asio_engine Phase 2）。
+"""smoke_asio_bridge.py — ASIO 常驻桥冒烟（04_asio_client Phase 2）。
 
 流程（镜像 smoke_vm_bridge.py，驱动优先级 FL Studio ASIO > VM Virtual > 任一）：
 detect → start(引擎) → 3s（switches 增长）→ set_param → viz_read →

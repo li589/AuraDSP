@@ -13,16 +13,16 @@ set(VAIOBRIDGE "${BRIDGEDIR}/vaio_bridge")
 
 # ---- 04 ASIO 宿主（Steinberg ASIO SDK 2.3.4，GPLv3 路线）----
 # SDK 为外部工具链（同 NDK/Flutter SDK 铁律）：不 vendor、按路径引用。
-# 本机默认路径见 04_asio_engine/README.md；换机/升级改这个 cache 变量即可。
+# 本机默认路径见 04_asio_client/README.md；换机/升级改这个 cache 变量即可。
 set(ASIO_SDK_ROOT "C:/FreeRulesPrograms/BasicToolkits/SteinbergDev/ASIOSDK"
-    CACHE PATH "Steinberg ASIO SDK 2.3.4 root (see 04_asio_engine/README.md)")
+    CACHE PATH "Steinberg ASIO SDK 2.3.4 root (see 04_asio_client/README.md)")
 if(NOT EXISTS "${ASIO_SDK_ROOT}/common/asio.h")
     message(FATAL_ERROR
         "ASIO SDK not found at ${ASIO_SDK_ROOT}\n"
         "下载 Steinberg ASIO SDK 2.3.x 解压后设置 -DASIO_SDK_ROOT=<路径>；"
-        "许可与登记规则见 core/desktop/windows-drivers/04_asio_engine/README.md")
+        "许可与登记规则见 core/desktop/windows-drivers/04_asio_client/README.md")
 endif()
-set(ASIODIR "${CMAKE_CURRENT_SOURCE_DIR}/04_asio_engine")
+set(ASIODIR "${CMAKE_CURRENT_SOURCE_DIR}/04_asio_client")
 # Windows 宿主最小源集（asiodrvr.cpp 在 WINDOWS 下 #error do not use this；
 # combase/register/dllentry 为驱动侧或 DLL 侧，宿主不需要——2026-10-14 实测）。
 add_library(auraasio_host STATIC
@@ -53,7 +53,7 @@ endforeach()
 # 另行立项、单开目录，不进 bridge/（见 docs/20-执行双线规划）。
 # 引擎 DLL 动态加载逻辑与测试注入复用 02 的 VmPumpCore.h（与 vm_bridge 同源，
 # 不出现第二套搜索路径/第二套测试信号数学）；ASIO 传输面走 auraasio_host
-#（宿主仍在 04_asio_engine，桥只含 FFI 适配层）。
+#（宿主仍在 04_asio_client，桥只含 FFI 适配层）。
 add_library(auraasio_bridge SHARED
     "${ASIOBRIDGE}/AsioBridge.cpp"
     "${ASIOBRIDGE}/AsioBridge.def"
@@ -222,4 +222,25 @@ target_compile_options(auravaio_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
+
+# ---- 04 ASIO 自研虚拟驱动（Driver 线）----
+# 属性：COM In-Proc Server DLL (auraasio_driver.dll)
+# 职责：实现 IASIO 接口，承载外部宿主（DAW）协商与双缓冲时钟泵，解耦零音效处理。
+set(ASIODRVDIR "${CMAKE_CURRENT_SOURCE_DIR}/04_asio_driver")
+add_library(auraasio_driver SHARED
+    "${ASIODRVDIR}/AuraAsioDriver.cpp"
+    "${ASIODRVDIR}/AuraAsioClassFactory.cpp"
+    "${ASIODRVDIR}/AuraAsioWasapiSink.cpp"
+    "${ASIODRVDIR}/AuraAsioDriverMain.cpp"
+    "${ASIODRVDIR}/AuraAsioDriver.def"
+)
+target_include_directories(auraasio_driver PRIVATE
+    "${ASIODRVDIR}"
+    "${ASIO_SDK_ROOT}/common"
+)
+target_compile_options(auraasio_driver PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auraasio_driver PROPERTY CXX_STANDARD 20)
+set_property(TARGET auraasio_driver PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(auraasio_driver PRIVATE ole32 advapi32 winmm avrt version)
+
 

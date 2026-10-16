@@ -12,13 +12,13 @@ bridge/
   vm_bridge/         # Voicemeeter 回调桥 → auravm_bridge.dll（Dart: audio_vbridge.dart）
     VmBridge.{h,cpp,def}
   asio_bridge/       # ASIO 常驻桥 → auraasio_bridge.dll（Dart: audio_abridge.dart）
-    AsioBridge.{h,cpp,def}   # 宿主仍在 ../04_asio_engine（AsioHost.*），桥只含 FFI 适配
+    AsioBridge.{h,cpp,def}   # 宿主仍在 ../04_asio_client（AsioHost.*），桥只含 FFI 适配
 ```
 
 ## 规约
 
 1. **桥不实现传输**：VM 回调泵走 `../02_voicemeeter_client/VmPumpCore.h`，
-   ASIO 传输走 `../04_asio_engine/AsioHost.h`；桥内只做句柄管理/参数镜像/重建。
+   ASIO 传输走 `../04_asio_client/AsioHost.h`；桥内只做句柄管理/参数镜像/重建。
 2. **契约对齐**：新增桥必须镜像 `vm_bridge/VmBridge.h` 的
    detect/start/stop/status/set_param(+_str)/get_param(+_str)/viz_read/bypass/test
    件套（ASIO 仅多 buf_size/out_pair 两个宿主参数），Dart 侧同构绑定。

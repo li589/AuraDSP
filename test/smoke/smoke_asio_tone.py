@@ -1,4 +1,4 @@
-"""smoke_asio_tone.py — ASIO 驱动发声链路验收（04_asio_engine Phase 1）。
+"""smoke_asio_tone.py — ASIO 驱动发声链路验收（04_asio_client Phase 1）。
 
 验收标准（Spec §3 Phase 1 / §6）：
   1. asio_tone.exe 存在（需先构建）。

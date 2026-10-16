@@ -1,7 +1,7 @@
-# 04_asio_engine/ — ASIO 专业模式（宿主侧，Client 线）
+# 04_asio_client/ — ASIO 专业模式（宿主侧，Client 线）
 
-> 本目录 = Client 线：打开第三方 ASIO 驱动做传输。与未来的 Driver 线
-> （自身作为 ASIO 驱动被 DAW 打开）是两条线，规划见
+> 本目录 = Client 线：打开第三方 ASIO 驱动做传输。与 Driver 线
+> （自身作为 ASIO 驱动被 DAW 打开，见 `04_asio_driver/`）是两条线，规划见
 > `docs/20-执行/ASIO双线开发规划-2026-10-15.md`。
 >
 

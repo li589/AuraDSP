@@ -1,10 +1,10 @@
-// AsioHost.h — ASIO 宿主封装（04_asio_engine Phase 1）
+// AsioHost.h — ASIO 宿主封装（04_asio_client Phase 1）
 //
 // 定位（见 docs/20-执行/ASIO驱动开工Spec-2026-10-14.md §2）：
 //   只做传输搬运——枚举/加载第三方 ASIO 驱动、查询能力、在 bufferSwitch
 //   回调内填充输出缓冲。不承载任何音效算法（算法全在 engine/）。
 //
-// 许可：依赖 Steinberg ASIO SDK 2.3.4（GPLv3 路线，见 04_asio_engine/README.md）。
+// 许可：依赖 Steinberg ASIO SDK 2.3.4（GPLv3 路线，见 04_asio_client/README.md）。
 //   SDK 不 vendor 进仓库；本头文件只引用 SDK 的公共接口类型。
 //
 // RT 铁律（与 02_voicemeeter_client / bridge/vm_bridge 同款）：

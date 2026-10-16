@@ -1,4 +1,4 @@
-// asio_probe.cpp — ASIO 驱动枚举 + 能力探测（04_asio_engine Phase 1）
+// asio_probe.cpp — ASIO 驱动枚举 + 能力探测（04_asio_client Phase 1）
 //
 // 无音频、零声学风险：只枚举注册表 → 逐个 open/query/close。
 // 输出 JSON（stdout）：

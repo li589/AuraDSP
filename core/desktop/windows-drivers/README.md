@@ -59,13 +59,13 @@
 - [x] `bridge/vm_bridge/`（原 `05_vm_bridge/`，`82a75ae`：`auravm_bridge.dll` SHARED 目标 + APP 安装捆绑；
       `verify_dll_copies` 校验 9 导出；桥 bypass 透传 + per-group 衰减峰值 +
       hottest-non-idle 可视化组 + 4 态显示 error/bypass/idle/processing）
-- [x] `04_asio_engine/` Phase 1（`fcd0f3f`：ASIO 宿主探测+发声，GPLv3 路线；
-      `asio_probe` 枚举 7 驱动 6 ok 全量能力 JSON + `asio_tone` 双驱动 3s 实测
-      （FL Studio 259×512/44100=3.007s、VM Virtual 69×2048/48000=2.944s）；
-      `smoke_asio_probe.py`/`smoke_asio_tone.py` 值守，全量 smoke 53 项 100%；
+- [x] `04_asio_client/`（原 `04_asio_engine/`，Client 线）：ASIO 宿主探测+发声+常驻桥，GPLv3 路线；
+      `asio_probe` 枚举能力 JSON + `asio_tone` 正弦发声 + `auraasio_bridge` FFI 桥；
       SDK 2.3.4 就位于 `C:\FreeRulesPrograms\BasicToolkits\SteinbergDev\ASIOSDK`，
-      登记与红线见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`；
-      Phase 2 常驻桥（DSP 入链）待开工）
+      登记与红线见该目录 README + `docs/20-执行/ASIO驱动开工Spec-2026-10-14.md`。
+- [x] `04_asio_driver/`（原 `06_asio_driver/`，Driver 线）：虚拟 ASIO 驱动（`AuraDSP Driver`），
+      COM In-Proc Server DLL（`auraasio_driver.dll`），被外部 DAW 打开推流；
+      Phase 1 COM 骨架 + Phase 2 WASAPI 物理直通渲染已全面落地并全绿。
 - [x] `01_vaio_driver/`（**AuraVAIO 虚拟声卡，双轨**）—— **Phase 4 已落地并双轨编译通过**。
       目录按"源码单点真相 + 两条构建轨"组织：
 
