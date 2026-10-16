@@ -327,6 +327,88 @@ if ok44:
     dll.auradsp_destroy(h44)
 check('44.1k handle finite audible', ok44)
 
+# 8. 加固：快速自动化 + 奇异块长 + 中途开关 + 96k（全新句柄）
+h = dll.auradsp_create(SR, BLOCK)
+dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
+dll.auradsp_set_param(h, b'spatial.autogain', ctypes.byref(i32(1)), 4)
+n = 0
+worst = 0.0
+ok_auto = True
+for b in range(40):
+    dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32((b % 11) / 10.0)), 4)
+    dll.auradsp_set_param(h, b'spatial.width', ctypes.byref(f32(0.5 + (b % 11) / 10.0)), 4)
+    dll.auradsp_set_param(h, b'spatial.center', ctypes.byref(f32((b % 7) / 6.0)), 4)
+    dll.auradsp_set_param(h, b'spatial.outgain', ctypes.byref(f32(-12.0 + (b % 7) * 3.0)), 4)
+    bi = (ctypes.c_float * (BLOCK * 2))()
+    bo = (ctypes.c_float * (BLOCK * 2))()
+    for i in range(BLOCK):
+        s = 0.25 * math.sin(2 * math.pi * 440.0 * (n + i) / SR)
+        bi[2 * i] = s
+        bi[2 * i + 1] = 0.0
+    dll.auradsp_process(h, bi, bo, BLOCK)
+    n += BLOCK
+    for i in range(BLOCK * 2):
+        v = bo[i]
+        if v != v or abs(v) > 10.0:
+            ok_auto = False
+        a = abs(v)
+        if a > worst:
+            worst = a
+check('rapid automation finite+bounded', ok_auto and worst < 10.0,
+      'worst=%.3f' % worst)
+
+# 奇异块长（frames=1/7/100/511/512，皆须有限；create 上限内任意帧数合法）
+ok_fr = True
+for fr in (1, 7, 100, 511, 512):
+    bi = (ctypes.c_float * (fr * 2))()
+    bo = (ctypes.c_float * (fr * 2))()
+    for i in range(fr):
+        bi[2 * i] = 0.1
+        bi[2 * i + 1] = -0.1
+    dll.auradsp_process(h, bi, bo, fr)
+    for i in range(fr * 2):
+        if bo[i] != bo[i] or abs(bo[i]) > 10.0:
+            ok_fr = False
+check('odd frame counts finite (1/7/100/511/512)', ok_fr)
+
+# 中途开关：关→直通有限，开→恢复可听（状态残留不得爆音/静默）
+dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(0)), 4)
+bi = (ctypes.c_float * (BLOCK * 2))()
+bo = (ctypes.c_float * (BLOCK * 2))()
+for i in range(BLOCK):
+    bi[2 * i] = 0.2
+    bi[2 * i + 1] = 0.2
+dll.auradsp_process(h, bi, bo, BLOCK)
+off_ok = all(bo[i] == bo[i] and abs(bo[i]) < 10.0 for i in range(BLOCK * 2))
+dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
+pk_on = 0.0
+for _ in range(8):
+    dll.auradsp_process(h, bi, bo, BLOCK)
+    pk_on = max([pk_on] + [abs(bo[i]) for i in range(BLOCK * 2)])
+check('toggle off finite, on resumes audible',
+      off_ok and pk_on == pk_on and 0.001 < pk_on < 10.0, 'pk=%.4f' % pk_on)
+dll.auradsp_destroy(h)
+
+# 96k 独立句柄（ITD 127 钳位路径 + tap/hist 高 fs 缩放冒烟）
+h96 = dll.auradsp_create(96000.0, BLOCK)
+ok96 = h96 is not None and h96 != 0
+if ok96:
+    dll.auradsp_set_param(h96, b'spatial.enable', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(h96, b'spatial.room', ctypes.byref(f32(1.0)), 4)
+    dll.auradsp_set_param(h96, b'spatial.width', ctypes.byref(f32(1.5)), 4)
+    bi = (ctypes.c_float * (BLOCK * 2))()
+    bo = (ctypes.c_float * (BLOCK * 2))()
+    for i in range(BLOCK):
+        s = 0.25 * math.sin(2 * math.pi * 440.0 * i / 96000.0)
+        bi[2 * i] = s
+        bi[2 * i + 1] = 0.0
+    for _ in range(8):
+        dll.auradsp_process(h96, bi, bo, BLOCK)
+    pk96 = max(abs(bo[i]) for i in range(BLOCK * 2))
+    ok96 = pk96 == pk96 and 0.001 < pk96 < 10.0
+    dll.auradsp_destroy(h96)
+check('96k handle finite audible (ITD clamp path)', ok96)
+
 print()
 if FAIL:
     print('SPATIAL FAILURES:', FAIL)
