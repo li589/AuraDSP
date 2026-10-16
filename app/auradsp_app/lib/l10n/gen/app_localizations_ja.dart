@@ -1232,6 +1232,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainReserved => '予約済み';
 
   @override
+  String get chainGrpInput => '入力整形';
+
+  @override
+  String get chainGrpTone => '音色・ダイナミクス';
+
+  @override
+  String get chainGrpEqScript => 'EQ・スクリプト';
+
+  @override
+  String get chainGrpSound => '音場';
+
+  @override
+  String get chainGrpSpatial => '空間';
+
+  @override
+  String get chainGrpOut => '出力段';
+
+  @override
   String get chainFlowTitle => 'シグナルフロー（現在の順序）';
 
   @override

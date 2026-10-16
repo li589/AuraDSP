@@ -2141,7 +2141,8 @@ class AppModel extends ChangeNotifier {
   /// 17: haas stage out
   /// 18: exciter stage out
   /// 19: loudness stage out
-  /// 20..31: 预留/扩展插件槽
+  /// 20: spatial stage out（Phase 2 接入链页）
+  /// 21..31: 预留/扩展插件槽
   int stageMeterIndex(String id) => switch (id) {
     'tube' => 0,
     'comp' => 1,
@@ -2162,8 +2163,31 @@ class AppModel extends ChangeNotifier {
     'haas' => 17,
     'exciter' => 18,
     'loudness' => 19,
+    'spatial' => 20,
     _ => -1,
   };
+
+  /// 链组成员（Phase 2；与 chain_page.dart kChainGroups 同构，core 不得 import
+  /// features，故此处镜像一份，改动时两边同步）。
+  static const _chainGroupMembers = {
+    'chInput': ['gate', 'filter'],
+    'chTone': ['dyneq', 'bassmono', 'tube', 'comp', 'bass'],
+    'chEq': ['eq', 'arbmag', 'convolver', 'ddc', 'liveprog'],
+    'chSound': ['crossfeed', 'stereo', 'haas'],
+    'chSpatial': ['spatial'],
+    'chOut': ['exciter', 'reverb', 'loudness', 'output'],
+  };
+
+  /// 整组旁路/启用：把组内成员逐个拨到目标态（复用 toggleStage，含 reverb
+  /// 特殊语义）。output（限幅器）常驻，跳过——整组旁路不得静音整机。
+  void setChainGroup(String group, bool on) {
+    final members = _chainGroupMembers[group];
+    if (members == null) return;
+    for (final id in members) {
+      if (id == 'output') continue;
+      if (isStageEnabled(id) != on) toggleStage(id);
+    }
+  }
 
   /// 获取某个处理链 stage 的启用状态
   bool isStageEnabled(String stageId) {
