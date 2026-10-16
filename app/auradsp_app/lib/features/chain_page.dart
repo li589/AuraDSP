@@ -1,8 +1,8 @@
 /*
  * chain_page.dart — 处理链页（M3.5-c 完整落地）：
  * 1. 处理顺序调整（Element 式拖拽重排 + graph.order 下发）
- * 2. vendor 链 per-stage 双声道实时微型电平表（Mini Stereo Peak Meter；
- *    只有 12 个 vendor stage 有引擎电平，自研 7 个无表，见 stageMeterIndex）
+ * 2. 全 19 级节点双声道实时微型电平表（Mini Stereo Peak Meter；
+ *    12 个 vendor + 7 个自研 stage 均具备独立输出峰值采样，见 stageMeterIndex）
  * 3. 节点独立旁路开关（Bypass / Enable）双向状态联动
  */
 import 'package:flutter/material.dart';
@@ -239,7 +239,7 @@ class _ChainPageState extends State<ChainPage> {
                           ),
                           const SizedBox(width: AuraSpace.md),
                         ],
-                        // [M3.5-c] 双声道微型实时电平表（vendor 链位置索引；自研 stage 无表）
+                        // [M3.5-c] 双声道微型实时电平表（全 19 级节点逐级独立峰值采样）
                         _StageStereoMeter(
                           meterIndex:
                               widget.model.stageMeterIndex(id),
@@ -701,8 +701,7 @@ class _StageStereoMeter extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 自研 stage：引擎无逐级电平，不画表（此前按 UI 序号直连下标，
-    // 12 号之后全是错位灯/恒灭）。
+    // 未知或非法 stage 索引：不画表
     if (meterIndex < 0) return const SizedBox.shrink();
     final p = paletteOf(context);
     return ListenableBuilder(

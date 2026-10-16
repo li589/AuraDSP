@@ -75,7 +75,7 @@ typedef enum auradsp_state {
 /* 可视化帧：引擎 RT 线程每处理块写入 SPSC ring，UI 拉取。
  * spectrum 为 32 段对数频带归一化幅度 [0,1]，levels 为 dBFS。 */
 #define AURADSP_VIZ_BANDS 32
-#define AURADSP_STAGE_MAX 16   /* ABI 容量：per-stage 电平数组的物理长度（预留） */
+#define AURADSP_STAGE_MAX 32   /* ABI 容量：per-stage 电平数组的物理长度（预留 32 槽） */
 /* 实际在用的 vendor 处理链节点数（graph.order 的合法集合大小）。
  * AURADSP_STAGE_MAX 是 ABI 容量，本值是真实 stage 数——两者不要混用。
  * 改动 vendor 链长度时必须同步：此处 + Dart 的 kEngineStageCount。 */
@@ -101,8 +101,17 @@ typedef struct auradsp_viz_frame {
     float    eq_in_spectrum[AURADSP_VIZ_BANDS];
     float    level_l_dbfs;
     float    level_r_dbfs;
-    /* [M3.5-c] vendor 12 级链的实时双声道峰值 (dBFS)；
-     * 仅前 AURADSP_VENDOR_STAGES 项有效，其余恒为 -120.0f */
+    /* [M3.5-c / 全量电平补齐] 处理链各阶段实时双声道峰值 (dBFS)：
+     * 0..11: vendor 12 级链 (tube..output)
+     * 12: gate 输入电平 (input_lvl_in)
+     * 13: gate 本级输出电平 (gate stage output)
+     * 14: dyneq 动态均衡输出电平
+     * 15: filter 独立滤波输出电平
+     * 16: bassmono 低频单声道输出电平
+     * 17: haas 哈斯环绕输出电平
+     * 18: exciter 高频激励输出电平
+     * 19: loudness 响度补偿输出电平
+     * 20..31: 预留槽位（插件插槽 / 未来扩展，恒为 -120.0f） */
     float    stage_levels_l[AURADSP_STAGE_MAX];
     float    stage_levels_r[AURADSP_STAGE_MAX];
 } auradsp_viz_frame;

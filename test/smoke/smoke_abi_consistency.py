@@ -27,6 +27,11 @@ def main() -> int:
     # 否则调用方带 PYTHONIOENCODING=utf-8 时必现 UnicodeDecodeError。
     r = subprocess.run([sys.executable, SCRIPT], capture_output=True,
                        text=True, encoding="utf-8", errors="replace")
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
     sys.stdout.write(r.stdout)
     if r.stderr:
         sys.stderr.write(r.stderr)

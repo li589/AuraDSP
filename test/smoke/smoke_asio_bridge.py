@@ -170,7 +170,7 @@ check("liveprog code roundtrip", n > 0 and back == LP_CODE,
 rc = b.asio_set_param(b"liveprog.enable", 0, ctypes.byref(ctypes.c_int32(0)))
 check("liveprog disable (downstream restore)", rc == 0, f"rc={rc}")
 
-viz = ctypes.create_string_buffer(408 * 4)
+viz = ctypes.create_string_buffer(536 * 4)
 n = b.asio_viz_read(viz, 4)
 check("viz_read ok", n >= 0, f"n={n}")
 

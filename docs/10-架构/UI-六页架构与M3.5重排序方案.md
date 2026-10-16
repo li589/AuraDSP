@@ -121,6 +121,42 @@
 > 这是"完整重排"模型（非"排序权重"），非法集合一律拒绝并保持原表不变。
 > 效果页的 UI 显示顺序与处理顺序无关（用户裁定），信号流条仅作参照。
 
+### 4.5 处理链节点输出电平监控设计约定与多声道支持规范
+
+#### 1. 节点输出电平定义与物理采样机制
+- **输出电平唯一定义**：处理链节点右侧所展示的双声道/多通道电平，**必须且只能是该模块自身处理后的真实输出峰值（Output Level）**，严禁使用整链总输出或输入电平充数。
+- **逐级就地采样机制**：在 `engine/legacy/jdsp/jdspController.c` 中，每个 stage 的核心处理函数 `fn(jdsp, n)` 执行完毕后，紧接着在进入下一级之前实施 $O(1)$ 常数时间峰值扫描（`maxL`, `maxR`），记录到 `stagePeakL/R[stageIdx]` 中，忠实反映当前节点带来的动态、增益、失真或滤波变化。
+- **静态 ID 槽绑定与重排序免疫**：
+  - 采样值存储槽绑定的是该节点固有的静态索引 `stageIdx (0..11)`，而非其在当前动态执行链 `jdsp->chain[i]` 中的位置。
+  - Dart 侧 `stageMeterIndex(id)` 亦绑定固定的逻辑槽位（`_vendorStageOrder.indexOf(id)`）。
+  - **不变式**：无论用户如何在处理链中拖拽重排各阶段顺序（`graph.order`），各模块卡片内部绑定的电平表读数永远跟随该模块本身，绝不会因为拖拽重排序发生槽位错位或电平漂移。
+
+#### 2. 部分效果器无电平显示的根本原因与现状约定
+- **全 19 级节点输出电平表全覆盖（ABI v2）**：
+  - 处理链当前展示 19 个效果器（12 个 Legacy Vendor 节点 + 7 个自研 C++20 节点）。
+  - **全 19 个节点均具备真实硬件级输出电平采样**：
+    - Legacy 12 级链：`tube` (0), `comp` (1), `bass` (2), `eq` (3), `arbmag` (4), `convolver` (5), `ddc` (6), `liveprog` (7), `crossfeed` (8), `stereo` (9), `reverb` (10), `output` (11)。
+    - Gate 输入门控：`gate` (13) 拥有自身处理后真实输出电平采样；槽位 12 维持输入前测点（`input_lvl_in`），兼顾卡片内门限对比与链视图表头。
+    - 自研 6 节点：`dyneq` (14), `filter` (15), `bassmono` (16), `haas` (17), `exciter` (18), `loudness` (19)。
+    - 槽位 20..31：预留位/扩展插件槽（恒置 -120 dBFS）。
+- **ABI 容量升级（ABI v2 / 536 字节）**：
+  1. **536 字节 ABI 严格保护**：`auradsp_viz_frame` 定义的 `stage_levels_l/r` 物理长度受宏 `AURADSP_STAGE_MAX = 32` 约束。全帧尺寸严格守护在 536 字节（Dart FFI 与 Python 烟囱镜像均有 `sizeof == 536` 强校验）。
+  2. **自研节点外部采样全量注入**：在 `engine/chain/engine_chain.cpp` 的 `process_stereo_chain` 中，各效果器计算后立即由内联 RT-Safe 函数 `sample_stage_peak` 进行 $O(N)$ 零锁、零分配线性峰值扫描，并在 `emit_viz` 中转为 dBFS 写入对应的物理槽位。
+- **设计约定**：
+  - 在 `state.dart` 中，`stageMeterIndex(id)` 将 19 个 stage 静态映射至 0..19 槽位，与用户的实时重排序 `graph.order` 严格解耦（重排后灯位始终跟随效果器本身，杜绝错位）；
+  - UI 侧 `_StageStereoMeter` 统一渲染 `_SynthLedLadderMeter`，实时响应 `stageLevelsL` / `stageLevelsR`。
+
+#### 3. 多声道支持规范 (Multichannel Strategy)
+- **UI 渲染层（点阵多通道自适应）**：
+  - `_SynthLedLadderMeter` 与 `_SynthLedPainter` 封装为硬件合成器风格 LED 分段点阵，入参为 `channelsDb: List<double>`。
+  - 组件宽度与绘制逻辑根据 `channelsDb.length` 动态计算（`chCount` 列），天然支持 2 声道（立体声）、4 声道（Quad）、6 声道（5.1 环绕声）、8 声道（7.1 环绕声）点阵灯柱排布。
+- **引擎与 ABI 现状（Phase A 核心包络约定）**：
+  - 依照 [ADR-003](../adr/ADR-003-multichannel-matrix.md)，当前引擎多声道处理采用 **Phase A 声道矩阵（M→2 下混 + 2→M 上混）**，LFE 直通，C/SL/SR 并入 L/R。
+  - 信号链内部 19 个效果器在物理上运行于下混后的 2 声道立体声核心上。
+  - **设计约定**：在 Phase A 架构下，处理链节点电平表展示的是**并入了环绕声信号的核心立体声输出包络**（与 ADR-003 可视化约定一致）。
+- **后续演进路线（Phase B 多通道矩阵）**：
+  - 随着未来启动逐声道独立效果器实例化，电平表将进一步根据驱动汇报的 `channels.count` 动态点亮 6/8 声道点阵电平表。
+
 ---
 
 ## 5. 插件页（引用 M1，决策更新）

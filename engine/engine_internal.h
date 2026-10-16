@@ -347,6 +347,9 @@ struct auradsp_handle_s {
     float  input_lvl_in_r = -120.0f;
     float  input_lvl_out_l = -120.0f;
     float  input_lvl_out_r = -120.0f;
+    /* 自研效果器实时本级输出线性峰值（RT 线程每块就地扫描，emit_viz 填入 stage_levels 对应槽位） */
+    float  stage_peak_l[AURADSP_STAGE_MAX] = {};
+    float  stage_peak_r[AURADSP_STAGE_MAX] = {};
 
     /* Liveprog 状态 */
     float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */

@@ -106,7 +106,7 @@ f = ctypes.c_float(6.0)
 n = b.vb_set_param(b"tube.gain", 1, ctypes.byref(f))
 check("set_param applied", n > 0, f"handles={n}")
 
-viz = ctypes.create_string_buffer(408 * 4)
+viz = ctypes.create_string_buffer(536 * 4)
 n = b.vb_viz_read(viz, 4)
 check("viz_read ok", n >= 0, f"n={n}")
 if (st.get("peakIn") or 0) > 1e-4:
