@@ -40,8 +40,11 @@ static HINSTANCE g_hModule = nullptr;
 
 BOOL WINAPI DllMain(HINSTANCE hModule, DWORD dwReason, void* /*lpReserved*/) {
     if (dwReason == DLL_PROCESS_ATTACH) {
+        OutputDebugStringA("[AuraApo] DllMain DLL_PROCESS_ATTACH\n");
         g_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
+    } else if (dwReason == DLL_PROCESS_DETACH) {
+        OutputDebugStringA("[AuraApo] DllMain DLL_PROCESS_DETACH\n");
     }
     return TRUE;
 }
@@ -53,6 +56,9 @@ STDAPI DllCanUnloadNow() {
 }
 
 STDAPI DllGetClassObject(REFCLSID clsid, REFIID iid, void** ppv) {
+    char buf[128];
+    sprintf_s(buf, "[AuraApo] DllGetClassObject clsid={%08lX} iid={%08lX}\n", clsid.Data1, iid.Data1);
+    OutputDebugStringA(buf);
     if (!ppv) return E_POINTER;
     if (clsid != CLSID_AuraApoEfx) return CLASS_E_CLASSNOTAVAILABLE;
     auto* factory = new (std::nothrow) ApoClassFactory();
@@ -86,7 +92,22 @@ LONG WriteSz(HKEY root, const std::wstring& sub, const std::wstring& val, const 
 }  // namespace
 
 STDAPI DllRegisterServer() {
-    HRESULT hr = RegisterAPO(CAuraApo::regEfxProperties);
+    APO_REG_PROPERTIES props{};
+    props.clsid = CLSID_AuraApoEfx;
+    props.Flags = (APO_FLAG)(APO_FLAG_INPLACE | APO_FLAG_DEFAULT);
+    wcscpy_s(props.szFriendlyName, L"AuraAPO EFX");
+    wcscpy_s(props.szCopyrightInfo, L"AuraDSP");
+    props.u32MajorVersion = 1;
+    props.u32MinorVersion = 0;
+    props.u32MinInputConnections = 1;
+    props.u32MaxInputConnections = 1;
+    props.u32MinOutputConnections = 1;
+    props.u32MaxOutputConnections = 1;
+    props.u32MaxInstances = 0xFFFFFFFF;
+    props.u32NumAPOInterfaces = 1;
+    props.iidAPOInterfaceList[0] = IID_IAudioProcessingObject;
+
+    HRESULT hr = RegisterAPO(&props);
     if (FAILED(hr)) return hr;
     wchar_t filename[MAX_PATH] = {0};
     GetModuleFileNameW(g_hModule, filename, MAX_PATH);

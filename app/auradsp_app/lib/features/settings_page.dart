@@ -621,34 +621,163 @@ class _SystemApoPanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AuraSpace.xs),
-        _InfoRow(l.apoStatus, model.apoAttached ? l.apoAttached : l.apoNotAttached),
+        Row(
+          children: [
+            SizedBox(
+              width: 104,
+              child: Text(l.apoStatus, style: labelOf(p, size: 12, color: p.textDim)),
+            ),
+            Expanded(
+              child: Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Text(
+                    model.apoAttached ? l.apoAttached : l.apoNotAttached,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: model.apoAttached ? p.accent : p.textDim,
+                    ),
+                  ),
+                  if (model.apoHeartbeatAlive)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.green.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.graphic_eq_rounded, size: 12, color: Colors.green),
+                          const SizedBox(width: 4),
+                          Text(
+                            '活跃处理中 (${model.apoHeartbeatSr}Hz · ${model.apoHeartbeatFrames} 帧)',
+                            style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (model.apoAttached)
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.5)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.hourglass_top_rounded, size: 12, color: Colors.orange),
+                          const SizedBox(width: 4),
+                          const Text(
+                            '已挂接 (等待播放流触发)',
+                            style: TextStyle(fontSize: 10, color: Colors.orange),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (model.lastApoError != null) ...[
+          const SizedBox(height: AuraSpace.sm),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            decoration: BoxDecoration(
+              color: p.error.withValues(alpha: 0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: p.error.withValues(alpha: 0.4)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.error_outline_rounded, size: 16, color: p.error),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    model.lastApoError!,
+                    style: TextStyle(fontSize: 12, color: p.error),
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () => model.clearApoError(),
+                  child: Icon(Icons.close, size: 14, color: p.error),
+                ),
+              ],
+            ),
+          ),
+        ],
         const SizedBox(height: AuraSpace.sm),
         Wrap(
           spacing: AuraSpace.sm,
+          runSpacing: AuraSpace.xs,
           children: [
             AuraChip(
-              l.apoActionAttach,
+              model.isApoOperating ? '处理中...' : l.apoActionAttach,
               icon: Icons.link,
               selected: model.apoAttached,
-              onTap: () {
-                model.setApoAttached(true);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('已向目标设备注册 APO 钩子'),
-                  duration: Duration(milliseconds: 1400),
-                ));
-              },
+              onTap: model.isApoOperating
+                  ? null
+                  : () async {
+                      final ok = await model.attachSystemApo();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok
+                              ? '已向目标设备注册 System APO 钩子并完成服务同步'
+                              : (model.lastApoError ?? 'APO 附加未完成')),
+                          duration: const Duration(milliseconds: 2000),
+                        ));
+                      }
+                    },
             ),
             AuraChip(
-              l.apoActionDetach,
+              model.isApoOperating ? '处理中...' : l.apoActionDetach,
               icon: Icons.link_off,
               danger: true,
-              onTap: () {
-                model.setApoAttached(false);
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                  content: Text('已从目标设备卸载 APO 钩子'),
-                  duration: Duration(milliseconds: 1400),
-                ));
-              },
+              onTap: model.isApoOperating
+                  ? null
+                  : () async {
+                      final ok = await model.detachSystemApo();
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok
+                              ? '已安全卸载 APO 钩子并精确还原原始系统/厂商驱动'
+                              : (model.lastApoError ?? 'APO 卸载未完成')),
+                          duration: const Duration(milliseconds: 2000),
+                        ));
+                      }
+                    },
+            ),
+            AuraChip(
+              '复合插槽',
+              icon: model.apoCompositeMode ? Icons.layers_rounded : Icons.layers_outlined,
+              selected: model.apoCompositeMode,
+              onTap: () => model.setApoCompositeMode(!model.apoCompositeMode),
+            ),
+            AuraChip(
+              '刷新状态',
+              icon: Icons.refresh_rounded,
+              onTap: () => model.checkApoStatus(),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(Icons.shield_outlined, size: 13, color: p.accent),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。',
+                style: TextStyle(fontSize: 11, color: p.textDim, height: 1.3),
+              ),
             ),
           ],
         ),

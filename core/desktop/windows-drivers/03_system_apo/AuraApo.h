@@ -1,77 +1,85 @@
-// AuraApo.h — 自研 APO v1（透传 + 心跳；无 DSP）。
+// AuraApo.h — 自研 System APO v1（透传 + 心跳 + RT-safe）。
 //
-// COM 骨架模式对标 EAPO（CBaseAudioProcessingObject + 裸 COM 聚合 + 自注册），
-// 实现全部 clean-room 重写。v1 语义：
-//  - 格式全接受（SPEC 宽容协商；透传与格式无关，按字节搬运）；
-//  - APOProcess 按连接对 memcpy，SILENT 输入则零输出+SILENT 标志（防垃圾爆音）；
-//  - 心跳映射每块 seq++/framesTotal+=n（LocalService 可写的开放 DACL）。
-// 聚合（pUnkOuter + NonDelegating）是 EAPO 同式：audiodg 可能聚合创建，缺了静默拒载。
+// 架构参考：virtual-surround-sound / EqualizerAPO / tympan-apo。
+// 彻底解决 COM 聚合与 CFG (Control Flow Guard) 规范性：
+//   - Inner 派生自真正 IUnknown（非 reinterpret_cast 强转）；
+//   - 全接口覆盖：IAudioProcessingObject / RT / Configuration / SystemEffects；
+//   - 格式协商支持 float32 全采样率与多通道透传；
+//   - 心跳共享内存支持 LocalService + LPAC (S-1-15-2-1, S-1-15-2-2) 全权限沙箱穿透。
 #pragma once
 
+#include <windows.h>
 #include <audioenginebaseapo.h>
-#include <baseaudioprocessingobject.h>
+#include <ks.h>
+#include <ksmedia.h>
 
 #include <atomic>
 #include <cstdint>
-#include <windows.h>
 
-class INonDelegatingUnknown {
-    virtual HRESULT __stdcall NonDelegatingQueryInterface(REFIID iid, void** ppv) = 0;
-    virtual ULONG __stdcall NonDelegatingAddRef() = 0;
-    virtual ULONG __stdcall NonDelegatingRelease() = 0;
-};
-
-class CAuraApo : public CBaseAudioProcessingObject,
-                 public IAudioSystemEffects2,  // 含 v1（菱形，故不另列 SysFx）
-                 public INonDelegatingUnknown {
+class CAuraApo : public IAudioProcessingObject,
+                 public IAudioProcessingObjectRT,
+                 public IAudioProcessingObjectConfiguration,
+                 public IAudioSystemEffects {
  public:
-    CAuraApo(IUnknown* pUnkOuter);
+    // audiodg 聚合感知：Inner 非委托 IUnknown 拥有对象身份与真实生命周期
+    class Inner : public IUnknown {
+     public:
+        CAuraApo* self = nullptr;
+        STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
+        STDMETHODIMP_(ULONG) AddRef() override;
+        STDMETHODIMP_(ULONG) Release() override;
+    };
+
+    explicit CAuraApo(IUnknown* outer);
     virtual ~CAuraApo();
 
-    // IUnknown（聚合感知）
-    virtual HRESULT __stdcall QueryInterface(REFIID iid, void** ppv) override;
-    virtual ULONG __stdcall AddRef() override;
-    virtual ULONG __stdcall Release() override;
+    // IUnknown（委托给 outer）
+    STDMETHODIMP QueryInterface(REFIID riid, void** ppv) override;
+    STDMETHODIMP_(ULONG) AddRef() override;
+    STDMETHODIMP_(ULONG) Release() override;
 
-    // IAudioProcessingObject（宽容版 GetLatency/Initialize；格式协商用基类默认，
-    // EAPO/收件箱同式：盲目全接受曾致 audiodg 协商后崩，勿加回）
-    virtual HRESULT __stdcall GetLatency(HNSTIME* pTime) override;
-    virtual HRESULT __stdcall Initialize(UINT32 cbDataSize, BYTE* pbyData) override;
+    // IAudioProcessingObject
+    STDMETHODIMP Reset() override;
+    STDMETHODIMP GetLatency(HNSTIME* pTime) override;
+    STDMETHODIMP GetRegistrationProperties(APO_REG_PROPERTIES** ppRegProps) override;
+    STDMETHODIMP Initialize(UINT32 cbDataSize, BYTE* pbyData) override;
+    STDMETHODIMP IsInputFormatSupported(IAudioMediaType* pOppositeFormat,
+                                        IAudioMediaType* pRequestedInputFormat,
+                                        IAudioMediaType** ppSupportedInputFormat) override;
+    STDMETHODIMP IsOutputFormatSupported(IAudioMediaType* pOppositeFormat,
+                                         IAudioMediaType* pRequestedOutputFormat,
+                                         IAudioMediaType** ppSupportedOutputFormat) override;
+    STDMETHODIMP GetInputChannelCount(UINT32* pu32ChannelCount) override;
 
     // IAudioProcessingObjectConfiguration
-    virtual HRESULT __stdcall LockForProcess(
-        UINT32 nIn, APO_CONNECTION_DESCRIPTOR** ppIn, UINT32 nOut,
-        APO_CONNECTION_DESCRIPTOR** ppOut) override;
-    virtual HRESULT __stdcall UnlockForProcess() override;
+    STDMETHODIMP LockForProcess(UINT32 numIn, APO_CONNECTION_DESCRIPTOR** in,
+                                UINT32 numOut, APO_CONNECTION_DESCRIPTOR** out) override;
+    STDMETHODIMP UnlockForProcess() override;
 
-    // IAudioProcessingObjectRT（纯虚，v1=透传+心跳）
-    virtual void __stdcall APOProcess(
-        UINT32 nIn, APO_CONNECTION_PROPERTY** ppIn, UINT32 nOut,
-        APO_CONNECTION_PROPERTY** ppOut) override;
+    // IAudioProcessingObjectRT（RT 实时音频线程：无锁、无堆分配、纯透传）
+    STDMETHODIMP_(void) APOProcess(UINT32 numIn, APO_CONNECTION_PROPERTY** in,
+                                   UINT32 numOut, APO_CONNECTION_PROPERTY** out) override;
+    STDMETHODIMP_(UINT32) CalcInputFrames(UINT32 outputFrames) override;
+    STDMETHODIMP_(UINT32) CalcOutputFrames(UINT32 inputFrames) override;
 
-    // INonDelegatingUnknown
-    virtual HRESULT __stdcall NonDelegatingQueryInterface(REFIID iid, void** ppv) override;
-    virtual ULONG __stdcall NonDelegatingAddRef() override;
-    virtual ULONG __stdcall NonDelegatingRelease() override;
-
-    // IAudioSystemEffects2（现代 EFX 链要求；v1 无子效果，返回空表）
-    virtual HRESULT __stdcall GetEffectsList(LPGUID* ppEffectsIds, UINT* pcEffects,
-                                             HANDLE Event) override;
-
+    Inner inner_;
+    std::atomic<LONG> refs_{1};
     static long instCount;
-    static const CRegAPOProperties<2> regEfxProperties;
 
  private:
-    long m_ref = 1;
-    IUnknown* m_outer = nullptr;  // 非拥有（聚合外层）
-    UINT32 m_blockAlign[8] = {};  // 每连接字节/帧（Lock 时快照，最多 8 连接）
-    UINT32 m_nConn = 0;
-    HANDLE m_hMap = nullptr;       // 心跳映射（Lock 建，Unlock 关）
-    void* m_hbView = nullptr;      // 映射视图（RT 只写 seq/frames/lastNbs）
-    volatile LONG m_seq = 0;
-    volatile LONGLONG m_frames = 0;
-    UINT32 m_sampleRate = 0;
+    IUnknown* outer_ = nullptr;
+    bool locked_ = false;
+    UINT32 channels_ = 2;
+    UINT32 rate_ = 48000;
+    UINT32 blockAlign_ = 8;
+    HANDLE hMap_ = nullptr;
+    void* hbView_ = nullptr;
+    volatile LONG seq_ = 0;
+    volatile LONGLONG frames_ = 0;
 
+    void OpenHeartbeat();
     void CloseHeartbeat();
-    bool OpenHeartbeat();
+    static bool IsFloat32Type(IAudioMediaType* type);
+    static HRESULT CheckFormat(IAudioMediaType* opposite, IAudioMediaType* requested,
+                               IAudioMediaType** supported);
 };
