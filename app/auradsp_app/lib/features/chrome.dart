@@ -997,3 +997,126 @@ class StatReadout extends StatelessWidget {
     );
   }
 }
+
+/* ==================== 6. 下拉选择器 ==================== */
+
+/// 下拉选择框：契合 Aura 8pt 设计规范，固定高度 30/32，悬浮微动效，
+/// 自动适配明暗主题面板色与边框高亮，内置安全去重与无设备留空占位。
+class AuraDropdown<T> extends StatefulWidget {
+  final T? value;
+  final List<DropdownMenuItem<T>> items;
+  final ValueChanged<T?>? onChanged;
+  final String? hint;
+  final double height;
+  final bool isExpanded;
+  final Widget? icon;
+
+  const AuraDropdown({
+    super.key,
+    required this.value,
+    required this.items,
+    required this.onChanged,
+    this.hint,
+    this.height = 32.0,
+    this.isExpanded = true,
+    this.icon,
+  });
+
+  @override
+  State<AuraDropdown<T>> createState() => _AuraDropdownState<T>();
+}
+
+class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final enabled = widget.onChanged != null && widget.items.isNotEmpty;
+
+    final border = enabled
+        ? (_hover ? p.accent.withValues(alpha: 0.6) : p.hairline)
+        : p.hairline.withValues(alpha: 0.4);
+    final bg = enabled
+        ? (_hover ? hoverOn(p) : p.panelRaised.withValues(alpha: 0.75))
+        : p.panelRaised.withValues(alpha: 0.35);
+
+    // 1. 无可用项时的留空占位状态
+    if (widget.items.isEmpty) {
+      return Container(
+        height: widget.height,
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm + 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(color: border),
+        ),
+        alignment: Alignment.centerLeft,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Text(
+                widget.hint ?? '无可用设备',
+                style: monoOf(p, size: 12, color: p.textDim),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(Icons.keyboard_arrow_down_rounded,
+                color: p.textDim.withValues(alpha: 0.5), size: 18),
+          ],
+        ),
+      );
+    }
+
+    // 2. 去重过滤，防止底层设备枚举出现重复 ID 时 Flutter 断言崩溃
+    final uniqueItems = <DropdownMenuItem<T>>[];
+    final seen = <T?>{};
+    for (final it in widget.items) {
+      if (seen.add(it.value)) {
+        uniqueItems.add(it);
+      }
+    }
+
+    // 3. 防御性安全值校验：确保选中的 value 在有效项中
+    final effectiveValue = (widget.value != null &&
+            uniqueItems.any((it) => it.value == widget.value))
+        ? widget.value
+        : (uniqueItems.isNotEmpty ? uniqueItems.first.value : null);
+
+    return MouseRegion(
+      cursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: AuraDur.fast,
+        curve: AuraCurve.standard,
+        height: widget.height,
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm + 2),
+        decoration: BoxDecoration(
+          color: bg,
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(color: border),
+        ),
+        child: DropdownButtonHideUnderline(
+          child: DropdownButton<T>(
+            value: effectiveValue,
+            items: uniqueItems,
+            onChanged: enabled ? widget.onChanged : null,
+            isDense: true,
+            isExpanded: widget.isExpanded,
+            dropdownColor: p.panelRaised,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            style: labelOf(p),
+            icon: widget.icon ??
+                Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: enabled ? p.accent : p.textDim,
+                  size: 18,
+                ),
+          ),
+        ),
+      ),
+    );
+  }
+}

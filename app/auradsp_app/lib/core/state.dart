@@ -5,7 +5,7 @@
  * 可观察状态；viz 高频数据走独立 ValueNotifier（30fps），避免整页重建。
  */
 import 'dart:async';
-import 'dart:convert' show jsonDecode;
+import 'dart:convert' show jsonDecode, utf8;
 import 'dart:io';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -66,6 +66,23 @@ class AudioDeviceItem {
     required this.isRender,
     this.active = true,
   });
+
+  /// 正常人可读的友好显示名称（清理调试残余、原始 Map toString 字符串、去除裸 GUID）
+  String get friendlyName {
+    var n = name.trim();
+    // 1. 防御 Map.toString() 残留（如 `{name: Realtek Audio, id: ...}`）
+    if (n.startsWith('{') && n.contains('name:')) {
+      final m = RegExp(r'name:\s*(.*?)(?:,\s*id:|\s*})').firstMatch(n);
+      if (m != null) {
+        n = m.group(1)!.trim();
+      }
+    }
+    // 2. 避免裸 GUID
+    if (n.startsWith('{0.0.') && n.length > 30) {
+      return '音频端点 (${n.substring(n.length - 8, n.length - 1)})';
+    }
+    return n;
+  }
 }
 
 class GuardRejection {
@@ -104,6 +121,13 @@ abstract class ParamDefaults {
   static const double haasMix = 1.0;         // [0,1]
   static const int haasSideRight = 0;        // 0=延迟右 1=延迟左
   static const int haasSideLeft = 1;
+
+  // 空间音效 L1（Dolby 房默认；style 切换会整体覆盖下面三个）
+  static const int spatialStyle = 0;         // 0=Dolby 房 1=DTS 2=中性
+  static const double spatialRoom = 0.7;     // [0,1]
+  static const double spatialWidth = 1.0;    // [0.5,1.5]
+  static const double spatialCenter = 0.8;  // [0,1]
+  static const double spatialOutGain = 0.0;  // [-12,6] dB
 
   // 激励器
   static const double exciterAmount = 0.3;   // [0,1]
@@ -327,16 +351,29 @@ class AppModel extends ChangeNotifier {
       list.add(d);
     }
     if (list.isEmpty) {
-      final eps = (vaioDetectInfo['endpoints'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [];
+      final eps = (vaioDetectInfo['endpoints'] as List?) ?? [];
       for (final ep in eps) {
-        final n = ep.toLowerCase();
+        String name = '';
+        String id = '';
+        if (ep is Map) {
+          name = (ep['name'] as String?) ?? '';
+          id = (ep['id'] as String?) ?? name;
+        } else if (ep is String) {
+          if (ep.startsWith('{') && ep.contains('name:')) {
+            final m = RegExp(r'name:\s*(.*?)(?:,\s*id:|\s*})').firstMatch(ep);
+            name = m != null ? m.group(1)!.trim() : ep;
+            id = name;
+          } else {
+            name = ep;
+            id = ep;
+          }
+        }
+        if (name.isEmpty) continue;
+        final n = name.toLowerCase();
         if (!n.contains('auravaio') &&
             !n.contains('auradsp virtual asio') &&
             !n.contains('auradsp asio')) {
-          list.add(AudioDeviceItem(id: ep, name: ep, isRender: true));
+          list.add(AudioDeviceItem(id: id, name: name, isRender: true));
         }
       }
       if (list.isEmpty) {
@@ -355,10 +392,92 @@ class AppModel extends ChangeNotifier {
     return list;
   }
 
+  /// 解析后的 VAIO 物理输出端点列表（过滤掉虚拟驱动自身，供 UI 选择真实物理扬声器/耳机）
+  List<AudioDeviceItem> get vaioPhysicalEndpoints {
+    final list = <AudioDeviceItem>[];
+    final eps = (vaioDetectInfo['endpoints'] as List?) ?? [];
+    for (final ep in eps) {
+      String name = '';
+      String id = '';
+      if (ep is Map) {
+        name = (ep['name'] as String?) ?? '';
+        id = (ep['id'] as String?) ?? name;
+      } else if (ep is String) {
+        if (ep.startsWith('{') && ep.contains('name:')) {
+          final m = RegExp(r'name:\s*(.*?)(?:,\s*id:|\s*})').firstMatch(ep);
+          name = m != null ? m.group(1)!.trim() : ep;
+          id = name;
+        } else {
+          name = ep;
+          id = ep;
+        }
+      }
+      if (name.isEmpty) continue;
+      final lower = name.toLowerCase();
+      if (lower.contains('auravaio') ||
+          lower.contains('auradsp virtual asio') ||
+          lower.contains('auradsp asio')) {
+        continue;
+      }
+      list.add(AudioDeviceItem(id: id, name: name, isRender: true));
+    }
+    // 若 VAIO 探测结果暂未就绪，使用 filteredWasapiOutputs 兜底
+    if (list.isEmpty) {
+      for (final d in filteredWasapiOutputs) {
+        list.add(d);
+      }
+    }
+    return list;
+  }
+
+  /// 获取有效输入设备（在就按记忆，不在/离线走默认 ''）
+  String get effectivePipelineInputDevice {
+    final dev = config.pipelineInputDevice;
+    if (dev.isEmpty) return '';
+    final exists = filteredWasapiInputs.any((d) => d.id == dev || d.name == dev);
+    return exists ? dev : '';
+  }
+
+  /// 获取有效输出设备（在就按记忆，不在/离线走默认 ''）
+  String get effectivePipelineOutputDevice {
+    final dev = config.pipelineOutputDevice;
+    if (dev.isEmpty) return '';
+    final exists = filteredWasapiOutputs.any((d) => d.id == dev || d.name == dev);
+    return exists ? dev : '';
+  }
+
+  /// 获取有效 VAIO 物理输出端点（在就按记忆，不在/离线走默认 ''）
+  String get effectiveVaioOutputEndpoint {
+    final ep = config.vaioOutputEndpoint;
+    if (ep.isEmpty) return '';
+    final exists = vaioPhysicalEndpoints.any((d) => d.name == ep || d.id == ep);
+    return exists ? ep : '';
+  }
+
   // ASIO 驱动注册状态 (AuraDSP Virtual ASIO Driver)
   bool asioDriverInstalled = false;
   // System APO 挂载状态
   bool apoAttached = false;
+
+  // 底层驱动与音频服务异常信息跟踪（用于 UI 内联报警与用户引导）
+  String? lastAudioError;
+  String? lastVaioError;
+  String? lastAsioError;
+
+  void clearAudioError() {
+    lastAudioError = null;
+    notifyListeners();
+  }
+
+  void clearVaioError() {
+    lastVaioError = null;
+    notifyListeners();
+  }
+
+  void clearAsioError() {
+    lastAsioError = null;
+    notifyListeners();
+  }
 
   // Liveprog（v1.1）：status 0=无代码 1=编译成功 <0=引擎错误码
   bool lpEnabled = false;
@@ -422,6 +541,12 @@ class AppModel extends ChangeNotifier {
   bool haasOn = false;
   double haasDelayMs = 12, haasMix = 1.0;
   int haasSide = 0; // 0=延迟右 1=延迟左
+  // 空间音效 L1（haas 后 / exciter 前；默认关闭，用户显式开启）
+  bool spatialOn = false;
+  int spatialStyle = 0;
+  double spatialRoom = 0.7, spatialWidth = 1.0, spatialCenter = 0.8;
+  double spatialOutGain = 0.0;
+  bool spatialAutoGain = false;
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
   bool exciterOn = false;
   double exciterAmount = 0.3, exciterHifreq = 5000;
@@ -1049,6 +1174,27 @@ class AppModel extends ChangeNotifier {
         if (raw['haasSide'] != null) {
           haasSide = (raw['haasSide'] as int) != 0 ? 1 : 0;
         }
+        if (raw['spatialEnable'] != null) {
+          spatialOn = (raw['spatialEnable'] as int) != 0;
+        }
+        if (raw['spatialStyle'] != null) {
+          spatialStyle = (raw['spatialStyle'] as int).clamp(0, 2);
+        }
+        if (raw['spatialRoom'] != null) {
+          spatialRoom = (raw['spatialRoom'] as num).toDouble();
+        }
+        if (raw['spatialWidth'] != null) {
+          spatialWidth = (raw['spatialWidth'] as num).toDouble();
+        }
+        if (raw['spatialCenter'] != null) {
+          spatialCenter = (raw['spatialCenter'] as num).toDouble();
+        }
+        if (raw['spatialOutGain'] != null) {
+          spatialOutGain = (raw['spatialOutGain'] as num).toDouble();
+        }
+        if (raw['spatialAutoGain'] != null) {
+          spatialAutoGain = (raw['spatialAutoGain'] as int) != 0;
+        }
         if (raw['exciterEnable'] != null) {
           exciterOn = (raw['exciterEnable'] as int) != 0;
         }
@@ -1568,6 +1714,13 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.haasDelay, haasDelayMs);
       setFloat(ParamId.haasMix, haasMix);
       setInt(ParamId.haasSide, haasSide);
+      setInt(ParamId.spatialEnable, spatialOn ? 1 : 0);
+      setInt(ParamId.spatialStyle, spatialStyle);
+      setFloat(ParamId.spatialRoom, spatialRoom);
+      setFloat(ParamId.spatialWidth, spatialWidth);
+      setFloat(ParamId.spatialCenter, spatialCenter);
+      setFloat(ParamId.spatialOutGain, spatialOutGain);
+      setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
       setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
       setFloat(ParamId.exciterAmount, exciterAmount);
       setFloat(ParamId.exciterHifreq, exciterHifreq);
@@ -1780,6 +1933,13 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.haasDelay) { haasDelayMs = v; break; }
         if (id == ParamId.haasMix) { haasMix = v; break; }
         if (id == ParamId.haasSide) { haasSide = v != 0 ? 1 : 0; break; }
+        if (id == ParamId.spatialEnable) { spatialOn = v != 0; break; }
+        if (id == ParamId.spatialStyle) { spatialStyle = v.toInt().clamp(0, 2); break; }
+        if (id == ParamId.spatialRoom) { spatialRoom = v; break; }
+        if (id == ParamId.spatialWidth) { spatialWidth = v; break; }
+        if (id == ParamId.spatialCenter) { spatialCenter = v; break; }
+        if (id == ParamId.spatialOutGain) { spatialOutGain = v; break; }
+        if (id == ParamId.spatialAutoGain) { spatialAutoGain = v != 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
         if (id == ParamId.exciterAmount) { exciterAmount = v; break; }
         if (id == ParamId.exciterHifreq) { exciterHifreq = v; break; }
@@ -2000,6 +2160,7 @@ class AppModel extends ChangeNotifier {
       'filter' => filterOn,
       'loudness' => loudnessOn,
       'haas' => haasOn,
+      'spatial' => spatialOn,
       'exciter' => exciterOn,
       'bass' => bassOn,
       'eq' => eqOn,
@@ -2034,6 +2195,8 @@ class AppModel extends ChangeNotifier {
         setLoudnessEnabled(!loudnessOn);
       case 'haas':
         setHaasEnabled(!haasOn);
+      case 'spatial':
+        setSpatialEnabled(!spatialOn);
       case 'exciter':
         setExciterEnabled(!exciterOn);
       case 'comp':
@@ -2255,6 +2418,73 @@ class AppModel extends ChangeNotifier {
   void setHaasSide(int side) {
     haasSide = side.clamp(0, 1);
     setInt(ParamId.haasSide, haasSide);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 空间音效 L1：总开关 + 风格（三预设即整组联动，引擎+界面同步覆盖）。
+  void setSpatialEnabled(bool on) {
+    spatialOn = on;
+    setInt(ParamId.spatialEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialStyle(int style) {
+    spatialStyle = style.clamp(0, 2);
+    // 与引擎 style 联动预设同值（set_param 侧同样会覆盖，Dart 先行保证 UI 即时）。
+    if (spatialStyle == 0) {
+      spatialRoom = 0.7;
+      spatialWidth = 1.0;
+      spatialCenter = 0.8;
+    } else if (spatialStyle == 1) {
+      spatialRoom = 0.25;
+      spatialWidth = 1.1;
+      spatialCenter = 0.5;
+    } else {
+      spatialRoom = 0.0;
+      spatialWidth = 1.0;
+      spatialCenter = 0.5;
+    }
+    setInt(ParamId.spatialStyle, spatialStyle);
+    setFloat(ParamId.spatialRoom, spatialRoom);
+    setFloat(ParamId.spatialWidth, spatialWidth);
+    setFloat(ParamId.spatialCenter, spatialCenter);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialRoom(double v) {
+    spatialRoom = v.clamp(0.0, 1.0);
+    setFloat(ParamId.spatialRoom, spatialRoom);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialWidth(double v) {
+    spatialWidth = v.clamp(0.5, 1.5);
+    setFloat(ParamId.spatialWidth, spatialWidth);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialCenter(double v) {
+    spatialCenter = v.clamp(0.0, 1.0);
+    setFloat(ParamId.spatialCenter, spatialCenter);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialOutGain(double v) {
+    spatialOutGain = v.clamp(-12.0, 6.0);
+    setFloat(ParamId.spatialOutGain, spatialOutGain);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialAutoGain(bool on) {
+    spatialAutoGain = on;
+    setInt(ParamId.spatialAutoGain, on ? 1 : 0);
     notifyListeners();
     scheduleAutoSave();
   }
@@ -3194,7 +3424,7 @@ Future<void> refreshAudioDevices() async {
   try {
     final exe = _findApoInspectExe();
     if (exe != null && exe.existsSync()) {
-      final res = await Process.run(exe.path, []);
+      final res = await Process.run(exe.path, [], stdoutEncoding: utf8);
       if (res.exitCode == 0) {
         final stdout = (res.stdout as String).trim();
         final lines = stdout.split('\n');
@@ -3221,12 +3451,19 @@ Future<void> refreshAudioDevices() async {
           }
           if (items.isNotEmpty) {
             wasapiDevices = items;
+            lastAudioError = null;
             notifyListeners();
           }
         }
+      } else {
+        lastAudioError = '端点探测工具退出异常 (代码: ${res.exitCode})';
+        notifyListeners();
       }
     }
-  } catch (_) {}
+  } catch (e) {
+    lastAudioError = '刷新音频设备失败: $e';
+    notifyListeners();
+  }
 }
 
 File? _findApoInspectExe() {
@@ -3239,6 +3476,99 @@ File? _findApoInspectExe() {
     dir = parent;
   }
   return null;
+}
+
+File? _findVaioInstallScript() {
+  var dir = Directory.current;
+  for (var i = 0; i < 4; i++) {
+    final candidate = File(
+        '${dir.path}/core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1');
+    if (candidate.existsSync()) return candidate;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
+/// 一键 UAC 提权安装 AuraVAIO 虚拟声卡驱动
+Future<bool> installVaioDriver({bool elevated = true}) async {
+  if (!Platform.isWindows) return false;
+  try {
+    final script = _findVaioInstallScript();
+    if (script == null) {
+      lastVaioError = '未找到 install_driver.ps1 安装脚本';
+      notifyListeners();
+      return false;
+    }
+    ProcessResult res;
+    if (elevated) {
+      // 通过 PowerShell Start-Process -Verb RunAs 唤起 Windows UAC 管理员提权确认框
+      final cmd =
+          'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'install\', \'-Config\', \'Release\'';
+      res = await Process.run('powershell', ['-Command', cmd]);
+    } else {
+      res = await Process.run('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        script.path,
+        '-Action',
+        'install',
+        '-Config',
+        'Release',
+      ]);
+    }
+    refreshVaioDetect();
+    await refreshAudioDevices();
+    final ok = res.exitCode == 0;
+    if (!ok) {
+      lastVaioError = 'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
+    } else {
+      lastVaioError = null;
+    }
+    notifyListeners();
+    return ok;
+  } catch (e) {
+    lastVaioError = '安装驱动异常: $e';
+    notifyListeners();
+    return false;
+  }
+}
+
+/// 一键 UAC 提权卸载 AuraVAIO 虚拟声卡驱动
+Future<bool> uninstallVaioDriver({bool elevated = true}) async {
+  if (!Platform.isWindows) return false;
+  try {
+    final script = _findVaioInstallScript();
+    if (script == null) return false;
+    ProcessResult res;
+    if (elevated) {
+      final cmd =
+          'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'uninstall\', \'-RemoveTestCert\'';
+      res = await Process.run('powershell', ['-Command', cmd]);
+    } else {
+      res = await Process.run('powershell', [
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        script.path,
+        '-Action',
+        'uninstall',
+        '-RemoveTestCert',
+      ]);
+    }
+    refreshVaioDetect();
+    await refreshAudioDevices();
+    final ok = res.exitCode == 0;
+    if (ok) lastVaioError = null;
+    notifyListeners();
+    return ok;
+  } catch (e) {
+    lastVaioError = '卸载异常: $e';
+    notifyListeners();
+    return false;
+  }
 }
 
 void setApoTargetEndpoint(String endpoint) {
@@ -3274,45 +3604,80 @@ Future<void> checkAsioDriverStatus() async {
   notifyListeners();
 }
 
-/// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统
-Future<bool> registerAsioDriver() async {
+/// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）
+Future<bool> registerAsioDriver({bool elevated = true}) async {
   if (!Platform.isWindows) return false;
   try {
     final script = _findAsioRegisterScript();
     if (script != null) {
-      final res = await Process.run('powershell', [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        script.path,
-        '-Action',
-        'register'
-      ]);
+      ProcessResult res;
+      if (elevated) {
+        // 唤起 Windows UAC 提权对话框执行注册
+        final cmd =
+            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'register\'';
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        res = await Process.run('powershell', [
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+          '-Action',
+          'register'
+        ]);
+      }
       await checkAsioDriverStatus();
-      return res.exitCode == 0;
+      final ok = res.exitCode == 0 && asioDriverInstalled;
+      if (!ok) {
+        lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+      } else {
+        lastAsioError = null;
+      }
+      notifyListeners();
+      return ok;
     }
-  } catch (_) {}
+  } catch (e) {
+    lastAsioError = 'ASIO 驱动注册异常: $e';
+    notifyListeners();
+  }
   return false;
 }
 
-/// 一键反注册 AuraDSP 虚拟 ASIO 驱动
-Future<bool> unregisterAsioDriver() async {
+/// 一键反注册 AuraDSP 虚拟 ASIO 驱动（支持 Windows UAC 提权授权）
+Future<bool> unregisterAsioDriver({bool elevated = true}) async {
   if (!Platform.isWindows) return false;
   try {
     final script = _findAsioRegisterScript();
     if (script != null) {
-      final res = await Process.run('powershell', [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        script.path,
-        '-Action',
-        'unregister'
-      ]);
+      ProcessResult res;
+      if (elevated) {
+        final cmd =
+            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'unregister\'';
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        res = await Process.run('powershell', [
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+          '-Action',
+          'unregister'
+        ]);
+      }
       await checkAsioDriverStatus();
-      return res.exitCode == 0;
+      final ok = res.exitCode == 0 && !asioDriverInstalled;
+      if (!ok) {
+        lastAsioError = 'ASIO 驱动注销未完成';
+      } else {
+        lastAsioError = null;
+      }
+      notifyListeners();
+      return ok;
     }
-  } catch (_) {}
+  } catch (e) {
+    lastAsioError = 'ASIO 驱动注销异常: $e';
+    notifyListeners();
+  }
   return false;
 }
 
@@ -3891,6 +4256,11 @@ void fillEqQ(double q) {
     // Haas = 纯延迟线，按当前设定值标称（引擎 compute_latency 同值动态上报）。
     if (compId == 'haas' && haasOn) {
       return (ms: haasDelayMs, measured: false, estimated: true);
+    }
+    // 空间音效 = 直达径 ITD 名义 1ms（kLatSpatial；反射/混响尾是并行能量不计入）。
+    // 探针结构性失明（亚毫秒直达 + 并行反射），与 haas 同 posture：只标称不测。
+    if (compId == 'spatial' && spatialOn) {
+      return (ms: 1.0, measured: false, estimated: true);
     }
     if (compId == 'arbmag' && arbmagOn && arbmagReady) {
       return (ms: 2.67, measured: false, estimated: true);

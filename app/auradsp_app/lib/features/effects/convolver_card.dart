@@ -18,7 +18,7 @@ class _ConvolverCard extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return SectionCard(
-      index: kEffectCardIndex['convolver'],
+      index: kEffectCardIndex['spatialConv'],
       title: l.convTitle,
       // 常规语义：关闭即收起。用户先前明确要求「无文件时保持开关开启、
 // 效果内部直通(旁路)，待合格文件加载成功后自动生效」，

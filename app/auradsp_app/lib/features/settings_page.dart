@@ -460,6 +460,49 @@ class _VoicemeeterPanel extends StatelessWidget {
   }
 }
 
+/// 格式化离线/已断开设备的展示名称，避免给用户展示裸 GUID 或 Map.toString() 乱码
+String _formatOfflineDeviceName(String idOrName, [List<AudioDeviceItem>? known]) {
+  var s = idOrName.trim();
+  if (s.isEmpty) return '未连接设备';
+  // 防御 Map.toString() 残留（如 `{name: 扬声器, id: ...}`）
+  if (s.startsWith('{') && s.contains('name:')) {
+    final m = RegExp(r'name:\s*(.*?)(?:,\s*id:|\s*})').firstMatch(s);
+    if (m != null) s = m.group(1)!.trim();
+  }
+  // 若在已知设备列表中有匹配项，直接采用其 friendlyName
+  if (known != null) {
+    for (final d in known) {
+      if (d.id == s || d.name == s) {
+        return d.friendlyName;
+      }
+    }
+  }
+  // 若是裸 GUID，截取简短端点代号
+  if (s.startsWith('{0.0.') && s.length > 30) {
+    final shortId = s.length >= 8 ? s.substring(s.length - 8, s.length - 1) : '端点';
+    return '音频端点 ($shortId)';
+  }
+  return s;
+}
+
+/// 根据设备名称和类型推荐图标
+IconData _getAudioDeviceIcon(String name, {required bool isRender}) {
+  final lower = name.toLowerCase();
+  if (!isRender) return Icons.mic_none_outlined;
+  if (lower.contains('headphone') ||
+      lower.contains('headset') ||
+      lower.contains('耳机') ||
+      lower.contains('耳麦')) {
+    return Icons.headphones_outlined;
+  }
+  if (lower.contains('speaker') ||
+      lower.contains('扬声器') ||
+      lower.contains('喇叭')) {
+    return Icons.speaker_outlined;
+  }
+  return Icons.volume_up_outlined;
+}
+
 class _SystemApoPanel extends StatelessWidget {
   final AppModel model;
   const _SystemApoPanel({required this.model});
@@ -468,12 +511,14 @@ class _SystemApoPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final p = paletteOf(context);
-    final det = model.vaioDetectInfo;
-    final endpoints = (det['endpoints'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        <String>[];
+    final endpoints = model.vaioPhysicalEndpoints;
     final selEndpoint = model.apoTargetEndpoint;
+    final matched = endpoints.cast<AudioDeviceItem?>().firstWhere(
+        (e) => e?.name == selEndpoint || e?.id == selEndpoint,
+        orElse: () => null);
+    final selectedValue = matched != null
+        ? matched.name
+        : (selEndpoint.isEmpty ? '' : selEndpoint);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -488,36 +533,88 @@ class _SystemApoPanel extends StatelessWidget {
                   style: labelOf(p, size: 12, color: p.textDim)),
             ),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: endpoints.contains(selEndpoint) ? selEndpoint : '',
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('默认音频端点 (Default Render)',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: selEndpoint.isEmpty ? p.accent : p.text)),
-                    ),
-                    for (final ep in endpoints)
-                      DropdownMenuItem<String>(
-                        value: ep,
-                        child: Text(ep,
+              child: AuraDropdown<String>(
+                value: selectedValue,
+                items: [
+                  DropdownMenuItem<String>(
+                    value: '',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_mode_rounded,
+                            size: 14,
+                            color: selEndpoint.isEmpty ? p.accent : p.textDim),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '默认音频端点 (Default Render)',
                             style: TextStyle(
+                              fontSize: 12,
+                              color: selEndpoint.isEmpty ? p.accent : p.text,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (selEndpoint.isNotEmpty && matched == null)
+                    DropdownMenuItem<String>(
+                      value: selEndpoint,
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off_rounded,
+                              size: 14, color: p.warning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_formatOfflineDeviceName(selEndpoint, endpoints)} [离线/未连接]',
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: ep == selEndpoint ? p.accent : p.text)),
+                                color: p.warning,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setApoTargetEndpoint(v);
-                  },
-                ),
+                    ),
+                  for (final ep in endpoints)
+                    DropdownMenuItem<String>(
+                      value: ep.name,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getAudioDeviceIcon(ep.name, isRender: true),
+                            size: 14,
+                            color: (ep.name == selEndpoint || ep.id == selEndpoint)
+                                ? p.accent
+                                : p.textDim,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              ep.friendlyName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: (ep.name == selEndpoint || ep.id == selEndpoint)
+                                    ? p.accent
+                                    : p.text,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                hint: endpoints.isEmpty ? '无可用音频端点' : null,
+                onChanged: (v) {
+                  if (v != null) model.setApoTargetEndpoint(v);
+                },
               ),
             ),
+            const SizedBox(width: AuraSpace.xs),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
                 onTap: () => model.refreshVaioDetect()),
@@ -666,8 +763,9 @@ class _AsioClientDriverRow extends StatelessWidget {
     final p = paletteOf(context);
     final drivers = model.asioDrivers;
     final names = [for (final d in drivers) d['name'] ?? ''];
-    final sel = names.contains(model.config.asioDriver)
-        ? model.config.asioDriver
+    final curDriver = model.config.asioDriver;
+    final sel = curDriver.isNotEmpty
+        ? curDriver
         : (names.isNotEmpty ? names.first : '');
     final note = model.asioDriversNote;
     final info = model.asioInfo;
@@ -683,33 +781,38 @@ class _AsioClientDriverRow extends StatelessWidget {
                 child: Text(l.asioDriver,
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
-              child: names.isEmpty
-                  ? Text(sel.isEmpty ? '—' : model.config.asioDriver,
-                      style: monoOf(p, size: 12))
-                  : DropdownButtonHideUnderline(
-                      child: DropdownButton<String>(
-                        value: sel,
-                        isDense: true,
-                        dropdownColor: p.panelRaised,
-                        style: labelOf(p),
-                        icon: Icon(Icons.arrow_drop_down_rounded,
-                            color: p.accent),
-                        items: [
-                          for (final n in names)
-                            DropdownMenuItem<String>(
-                              value: n,
-                              child: Text(n,
-                                  style: TextStyle(
-                                      fontSize: 12,
-                                      color: n == sel ? p.accent : p.text)),
-                            ),
-                        ],
-                        onChanged: (v) {
-                          if (v != null) model.setAsioDriver(v);
-                        },
-                      ),
+              child: names.isEmpty && curDriver.isEmpty
+                  ? Text('—', style: monoOf(p, size: 12))
+                  : AuraDropdown<String>(
+                      value: sel,
+                      items: [
+                        if (curDriver.isNotEmpty && !names.contains(curDriver))
+                          DropdownMenuItem<String>(
+                            value: curDriver,
+                            child: Text('$curDriver [未检测到/离线]',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: p.warning,
+                                    fontStyle: FontStyle.italic),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        for (final n in names)
+                          DropdownMenuItem<String>(
+                            value: n,
+                            child: Text(n,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: n == sel ? p.accent : p.text),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                      ],
+                      hint: '—',
+                      onChanged: (v) {
+                        if (v != null) model.setAsioDriver(v);
+                      },
                     ),
             ),
+            const SizedBox(width: AuraSpace.xs),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
                 onTap: () => model.refreshAsioDrivers()),
@@ -721,68 +824,55 @@ class _AsioClientDriverRow extends StatelessWidget {
                 child: Text(l.asioBufSize,
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: _bufSizes.contains(model.config.asioBufSize)
-                      ? model.config.asioBufSize
-                      : 0,
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon:
-                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    for (final b in _bufSizes)
-                      DropdownMenuItem<int>(
-                        value: b,
-                        child: Text(
-                            b == 0 ? l.asioBufAuto : '$b frames',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: b == model.config.asioBufSize
-                                    ? p.accent
-                                    : p.text)),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setAsioBufSize(v);
-                  },
-                ),
+              child: AuraDropdown<int>(
+                value: _bufSizes.contains(model.config.asioBufSize)
+                    ? model.config.asioBufSize
+                    : 0,
+                items: [
+                  for (final b in _bufSizes)
+                    DropdownMenuItem<int>(
+                      value: b,
+                      child: Text(
+                          b == 0 ? l.asioBufAuto : '$b frames',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: b == model.config.asioBufSize
+                                  ? p.accent
+                                  : p.text)),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) model.setAsioBufSize(v);
+                },
               ),
             ),
           ]),
+          const SizedBox(height: AuraSpace.xs),
           Row(children: [
             SizedBox(
                 width: 104,
                 child: Text(l.asioOutPair,
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: _outPairs.contains(model.config.asioOutPair)
-                      ? model.config.asioOutPair
-                      : 0,
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon:
-                      Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    for (final n in _outPairs)
-                      DropdownMenuItem<int>(
-                        value: n,
-                        child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: n == model.config.asioOutPair
-                                    ? p.accent
-                                    : p.text)),
-                      ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setAsioOutPair(v);
-                  },
-                ),
+              child: AuraDropdown<int>(
+                value: _outPairs.contains(model.config.asioOutPair)
+                    ? model.config.asioOutPair
+                    : 0,
+                items: [
+                  for (final n in _outPairs)
+                    DropdownMenuItem<int>(
+                      value: n,
+                      child: Text('ch ${n * 2 + 1}/${n * 2 + 2}',
+                          style: TextStyle(
+                              fontSize: 12,
+                              color: n == model.config.asioOutPair
+                                  ? p.accent
+                                  : p.text)),
+                    ),
+                ],
+                onChanged: (v) {
+                  if (v != null) model.setAsioOutPair(v);
+                },
               ),
             ),
           ]),
@@ -808,6 +898,47 @@ class _AsioClientDriverRow extends StatelessWidget {
   }
 }
 
+class _ErrorBanner extends StatelessWidget {
+  final String message;
+  final VoidCallback? onDismiss;
+  const _ErrorBanner({required this.message, this.onDismiss});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Container(
+      margin: const EdgeInsets.only(top: AuraSpace.xs + 2),
+      padding: const EdgeInsets.symmetric(
+          horizontal: AuraSpace.sm + 2, vertical: AuraSpace.xs + 2),
+      decoration: BoxDecoration(
+        color: p.error.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.error.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 16, color: p.error),
+          const SizedBox(width: AuraSpace.sm),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(fontSize: 11.5, color: p.error),
+            ),
+          ),
+          if (onDismiss != null)
+            GestureDetector(
+              onTap: onDismiss,
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.close_rounded, size: 14, color: p.error),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _VaioDriverRow extends StatelessWidget {
   final AppModel model;
   const _VaioDriverRow({required this.model});
@@ -818,36 +949,87 @@ class _VaioDriverRow extends StatelessWidget {
     final det = model.vaioDetectInfo;
     final found = det['found'] == true;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                found
-                    ? 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'
-                    : '未检测到 AuraVAIO 虚拟声卡驱动',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: found ? p.success : p.warning,
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    found
+                        ? 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'
+                        : '未检测到 AuraVAIO 虚拟声卡驱动',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: found ? p.success : p.warning,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道',
+                    style: monoOf(p, size: 10, color: p.textDim),
+                  ),
+                ],
+              ),
+            ),
+            Wrap(
+              spacing: AuraSpace.sm,
+              children: [
+                if (!found)
+                  AuraChip(
+                    'UAC提权安装驱动',
+                    icon: Icons.admin_panel_settings,
+                    selected: true,
+                    onTap: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                        content: Text('正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...'),
+                        duration: Duration(milliseconds: 2000),
+                      ));
+                      final ok = await model.installVaioDriver(elevated: true);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok
+                              ? 'AuraVAIO 驱动已成功安装并通过系统验收！'
+                              : (model.lastVaioError ?? '驱动安装未完成')),
+                          duration: const Duration(milliseconds: 2500),
+                        ));
+                      }
+                    },
+                  )
+                else
+                  AuraChip(
+                    '卸载驱动',
+                    icon: Icons.delete_outline,
+                    danger: true,
+                    onTap: () async {
+                      final ok = await model.uninstallVaioDriver(elevated: true);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(ok ? 'AuraVAIO 驱动已成功卸载' : '卸载未完成'),
+                          duration: const Duration(milliseconds: 2000),
+                        ));
+                      }
+                    },
+                  ),
+                AuraChip(
+                  '重新检测',
+                  icon: Icons.refresh_rounded,
+                  onTap: () => model.refreshVaioDetect(),
                 ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道',
-                style: monoOf(p, size: 10, color: p.textDim),
-              ),
-            ],
+              ],
+            ),
+          ],
+        ),
+        if (model.lastVaioError != null)
+          _ErrorBanner(
+            message: model.lastVaioError!,
+            onDismiss: () => model.clearVaioError(),
           ),
-        ),
-        AuraChip(
-          '重新检测',
-          icon: Icons.refresh_rounded,
-          onTap: () => model.refreshVaioDetect(),
-        ),
       ],
     );
   }
@@ -862,36 +1044,46 @@ class _WasapiDriverRow extends StatelessWidget {
     final p = paletteOf(context);
     final info = model.info;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Windows CoreAudio WASAPI Engine',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: p.text,
-                ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Windows CoreAudio WASAPI Engine',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: p.text,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    info != null
+                        ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
+                        : '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖',
+                    style: monoOf(p, size: 10, color: p.textDim),
+                  ),
+                ],
               ),
-              const SizedBox(height: 2),
-              Text(
-                info != null
-                    ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
-                    : '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖',
-                style: monoOf(p, size: 10, color: p.textDim),
-              ),
-            ],
+            ),
+            AuraChip(
+              '刷新设备',
+              icon: Icons.refresh_rounded,
+              onTap: () => model.refreshAudioDevices(),
+            ),
+          ],
+        ),
+        if (model.lastAudioError != null)
+          _ErrorBanner(
+            message: model.lastAudioError!,
+            onDismiss: () => model.clearAudioError(),
           ),
-        ),
-        AuraChip(
-          '刷新设备',
-          icon: Icons.refresh_rounded,
-          onTap: () => model.refreshAudioDevices(),
-        ),
       ],
     );
   }
@@ -938,17 +1130,21 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           children: [
             if (!model.asioDriverInstalled)
               AuraChip(
-                l.asioDriverActionRegister,
-                icon: Icons.app_registration,
+                'UAC提权注册驱动',
+                icon: Icons.admin_panel_settings,
                 selected: true,
                 onTap: () async {
-                  final ok = await model.registerAsioDriver();
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    content: Text('正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...'),
+                    duration: Duration(milliseconds: 1500),
+                  ));
+                  final ok = await model.registerAsioDriver(elevated: true);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(ok
                           ? '虚拟 ASIO 驱动注册成功！DAW 中现已可选'
-                          : '注册失败，请使用管理员权限重试'),
-                      duration: const Duration(milliseconds: 2000),
+                          : (model.lastAsioError ?? '注册失败，请使用管理员权限重试')),
+                      duration: const Duration(milliseconds: 2500),
                     ));
                   }
                 },
@@ -959,10 +1155,10 @@ class _VirtualAsioDriverCard extends StatelessWidget {
                 icon: Icons.remove_circle_outline,
                 danger: true,
                 onTap: () async {
-                  final ok = await model.unregisterAsioDriver();
+                  final ok = await model.unregisterAsioDriver(elevated: true);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok ? '虚拟 ASIO 驱动已从系统注销' : '注销失败，请使用管理员权限重试'),
+                      content: Text(ok ? '虚拟 ASIO 驱动已从系统注销' : (model.lastAsioError ?? '注销失败，请使用管理员权限重试')),
                       duration: const Duration(milliseconds: 2000),
                     ));
                   }
@@ -970,10 +1166,16 @@ class _VirtualAsioDriverCard extends StatelessWidget {
               ),
           ],
         ),
+        if (model.lastAsioError != null)
+          _ErrorBanner(
+            message: model.lastAsioError!,
+            onDismiss: () => model.clearAsioError(),
+          ),
       ],
     );
   }
 }
+
 
 /* ---- 第二层：输入的信息和开关 ---- */
 
@@ -1055,6 +1257,12 @@ class _WasapiInputSubpanel extends StatelessWidget {
     final p = paletteOf(context);
     final inputs = model.filteredWasapiInputs;
     final curDev = model.pipelineInputDevice;
+    final matched = inputs.cast<AudioDeviceItem?>().firstWhere(
+        (d) => d?.id == curDev || d?.name == curDev,
+        orElse: () => null);
+    final selectedValue = matched != null
+        ? (matched.id.isNotEmpty ? matched.id : matched.name)
+        : (curDev.isEmpty ? '' : curDev);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1067,47 +1275,125 @@ class _WasapiInputSubpanel extends StatelessWidget {
                   style: labelOf(p, size: 12, color: p.textDim)),
             ),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: inputs.any((d) => d.id == curDev || d.name == curDev)
-                      ? curDev
-                      : '',
-                  isDense: true,
-                  isExpanded: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<String>(
-                      value: '',
-                      child: Text(
-                        l.defaultInputDevice,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: curDev.isEmpty ? p.accent : p.text,
+              child: AuraDropdown<String>(
+                value: selectedValue,
+                items: [
+                  DropdownMenuItem<String>(
+                    value: '',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_mode_rounded,
+                            size: 14,
+                            color: curDev.isEmpty ? p.accent : p.textDim),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l.defaultInputDevice,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: curDev.isEmpty ? p.accent : p.text,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 4, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: curDev.isEmpty
+                                ? p.accent.withValues(alpha: 0.15)
+                                : p.hairline.withValues(alpha: 0.3),
+                            borderRadius: BorderRadius.circular(3),
+                          ),
+                          child: Text(
+                            l.tagLoopback,
+                            style: TextStyle(
+                              fontSize: 9,
+                              color: curDev.isEmpty ? p.accent : p.textDim,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (curDev.isNotEmpty && matched == null)
+                    DropdownMenuItem<String>(
+                      value: curDev,
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off_rounded,
+                              size: 14, color: p.warning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_formatOfflineDeviceName(curDev, inputs)} [离线/未连接]',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: p.warning,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    for (final item in inputs)
-                      DropdownMenuItem<String>(
-                        value: item.id.isNotEmpty ? item.id : item.name,
-                        child: Text(
-                          '${item.name} ${item.isRender ? l.tagLoopback : l.tagRecording}',
-                          style: TextStyle(
-                            fontSize: 12,
+                  for (final item in inputs)
+                    DropdownMenuItem<String>(
+                      value: item.id.isNotEmpty ? item.id : item.name,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getAudioDeviceIcon(item.name,
+                                isRender: item.isRender),
+                            size: 14,
                             color: (item.id == curDev || item.name == curDev)
                                 ? p.accent
-                                : p.text,
+                                : p.textDim,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.friendlyName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: (item.id == curDev || item.name == curDev)
+                                    ? p.accent
+                                    : p.text,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: (item.id == curDev || item.name == curDev)
+                                  ? p.accent.withValues(alpha: 0.15)
+                                  : p.hairline.withValues(alpha: 0.3),
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                            child: Text(
+                              item.isRender
+                                  ? l.tagLoopback
+                                  : l.tagRecording,
+                              style: TextStyle(
+                                fontSize: 9,
+                                color: (item.id == curDev || item.name == curDev)
+                                    ? p.accent
+                                    : p.textDim,
+                              ),
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setPipelineInputDevice(v);
-                  },
-                ),
+                    ),
+                ],
+                hint: inputs.isEmpty ? '无可用输入设备' : null,
+                onChanged: (v) {
+                  if (v != null) model.setPipelineInputDevice(v);
+                },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
@@ -1258,6 +1544,12 @@ class _WasapiOutputSubpanel extends StatelessWidget {
     final p = paletteOf(context);
     final outputs = model.filteredWasapiOutputs;
     final curDev = model.pipelineOutputDevice;
+    final matched = outputs.cast<AudioDeviceItem?>().firstWhere(
+        (d) => d?.id == curDev || d?.name == curDev,
+        orElse: () => null);
+    final selectedValue = matched != null
+        ? (matched.id.isNotEmpty ? matched.id : matched.name)
+        : (curDev.isEmpty ? '' : curDev);
     final info = model.info;
 
     return Column(
@@ -1273,47 +1565,85 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                   style: labelOf(p, size: 12, color: p.textDim)),
             ),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: outputs.any((d) => d.id == curDev || d.name == curDev)
-                      ? curDev
-                      : '',
-                  isDense: true,
-                  isExpanded: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<String>(
-                      value: '',
-                      child: Text(
-                        l.defaultOutputDevice,
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: curDev.isEmpty ? p.accent : p.text,
+              child: AuraDropdown<String>(
+                value: selectedValue,
+                items: [
+                  DropdownMenuItem<String>(
+                    value: '',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_mode_rounded,
+                            size: 14,
+                            color: curDev.isEmpty ? p.accent : p.textDim),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            l.defaultOutputDevice,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: curDev.isEmpty ? p.accent : p.text,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                        overflow: TextOverflow.ellipsis,
+                      ],
+                    ),
+                  ),
+                  if (curDev.isNotEmpty && matched == null)
+                    DropdownMenuItem<String>(
+                      value: curDev,
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off_rounded,
+                              size: 14, color: p.warning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '${_formatOfflineDeviceName(curDev, outputs)} [离线/未连接]',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: p.warning,
+                                fontStyle: FontStyle.italic,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    for (final item in outputs)
-                      DropdownMenuItem<String>(
-                        value: item.id.isNotEmpty ? item.id : item.name,
-                        child: Text(
-                          item.name,
-                          style: TextStyle(
-                            fontSize: 12,
+                  for (final item in outputs)
+                    DropdownMenuItem<String>(
+                      value: item.id.isNotEmpty ? item.id : item.name,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getAudioDeviceIcon(item.name, isRender: true),
+                            size: 14,
                             color: (item.id == curDev || item.name == curDev)
                                 ? p.accent
-                                : p.text,
+                                : p.textDim,
                           ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              item.friendlyName,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: (item.id == curDev || item.name == curDev)
+                                    ? p.accent
+                                    : p.text,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
                       ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setPipelineOutputDevice(v);
-                  },
-                ),
+                    ),
+                ],
+                hint: outputs.isEmpty ? '无可用输出设备' : null,
+                onChanged: (v) {
+                  if (v != null) model.setPipelineOutputDevice(v);
+                },
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
@@ -1359,12 +1689,14 @@ class _VaioOutputSubpanel extends StatelessWidget {
     final l = l10nOf(context);
     final p = paletteOf(context);
     final info = model.vaioInfo;
-    final det = model.vaioDetectInfo;
-    final endpoints = (det['endpoints'] as List?)
-            ?.map((e) => e.toString())
-            .toList() ??
-        <String>[];
+    final endpoints = model.vaioPhysicalEndpoints;
     final curEndpoint = model.config.vaioOutputEndpoint;
+    final matched = endpoints.cast<AudioDeviceItem?>().firstWhere(
+        (e) => e?.name == curEndpoint || e?.id == curEndpoint,
+        orElse: () => null);
+    final selectedValue = matched != null
+        ? matched.name
+        : (curEndpoint.isEmpty ? '' : curEndpoint);
 
     return ListenableBuilder(
       listenable: model,
@@ -1414,36 +1746,82 @@ class _VaioOutputSubpanel extends StatelessWidget {
                 child: Text('物理输出',
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<String>(
-                  value: endpoints.contains(curEndpoint) ? curEndpoint : '',
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<String>(
-                      value: '',
-                      child: Text('自动选择（非VAIO扬声器）',
-                          style: TextStyle(
-                              fontSize: 12,
-                              color: curEndpoint.isEmpty ? p.accent : p.text)),
+              child: AuraDropdown<String>(
+                value: selectedValue,
+                items: [
+                  DropdownMenuItem<String>(
+                    value: '',
+                    child: Row(
+                      children: [
+                        Icon(Icons.auto_mode_rounded,
+                            size: 14,
+                            color: curEndpoint.isEmpty ? p.accent : p.textDim),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text('自动选择（非VAIO扬声器）',
+                              style: TextStyle(
+                                  fontSize: 12,
+                                  color: curEndpoint.isEmpty
+                                      ? p.accent
+                                      : p.text),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                      ],
                     ),
-                    for (final ep in endpoints)
-                      DropdownMenuItem<String>(
-                        value: ep,
-                        child: Text(ep,
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: ep == curEndpoint ? p.accent : p.text)),
+                  ),
+                  if (curEndpoint.isNotEmpty && matched == null)
+                    DropdownMenuItem<String>(
+                      value: curEndpoint,
+                      child: Row(
+                        children: [
+                          Icon(Icons.link_off_rounded,
+                              size: 14, color: p.warning),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                                '${_formatOfflineDeviceName(curEndpoint, endpoints)} [离线/未连接]',
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: p.warning,
+                                    fontStyle: FontStyle.italic),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
                       ),
-                  ],
-                  onChanged: (v) {
-                    if (v != null) model.setVaioOutputEndpoint(v);
-                  },
-                ),
+                    ),
+                  for (final ep in endpoints)
+                    DropdownMenuItem<String>(
+                      value: ep.name,
+                      child: Row(
+                        children: [
+                          Icon(
+                            _getAudioDeviceIcon(ep.name, isRender: true),
+                            size: 14,
+                            color: (ep.name == curEndpoint || ep.id == curEndpoint)
+                                ? p.accent
+                                : p.textDim,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(ep.friendlyName,
+                                style: TextStyle(
+                                    fontSize: 12,
+                                    color: (ep.name == curEndpoint || ep.id == curEndpoint)
+                                        ? p.accent
+                                        : p.text),
+                                overflow: TextOverflow.ellipsis),
+                          ),
+                        ],
+                      ),
+                    ),
+                ],
+                hint: endpoints.isEmpty ? '无可用物理输出设备' : null,
+                onChanged: (v) {
+                  if (v != null) model.setVaioOutputEndpoint(v);
+                },
               ),
             ),
+            const SizedBox(width: AuraSpace.xs),
             AuraChip(l.asioRefresh,
                 icon: Icons.refresh_rounded,
                 onTap: () => model.refreshVaioDetect()),

@@ -40,14 +40,16 @@ part 'effects/eq_card.dart';
 part 'effects/arbmag_card.dart';
 part 'effects/crossfeed_card.dart';
 part 'effects/stereo_card.dart';
-part 'effects/haas_card.dart';
+  part 'effects/haas_card.dart';
+  part 'effects/spatial_card.dart';
 part 'effects/exciter_card.dart';
 part 'effects/loudness_card.dart';
 part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 
-/// 效果器卡片序号**单一真相**（按本页 SectionCard 展示顺序，01..20）。
+/// 效果器卡片序号**单一真相**（按本页 SectionCard 展示顺序，01..16；
+/// 09 空间卡内含 09.1..09.5 子卡）。
 ///
 /// 历史坑：序号原本硬编码在 20 个卡片文件里、各写各的，结果出现 5 个 '00'
 /// （input/gate/filter/dyneq 都算 0 号）、2 个 '02'、2 个 '06'，新增或调整
@@ -65,18 +67,20 @@ const Map<String, String> kEffectCardIndex = {
   'bass': '06',
   'bassmono': '07',
   'shelf': '08',
-  'reverb': '09',
-  'convolver': '10',
-  'ddc': '11',
-  'eq': '12',
-  'arbmag': '13',
-  'crossfeed': '14',
-  'stereo': '15',
-  'haas': '16',
-  'exciter': '17',
-  'loudness': '18',
-  'tube': '19',
-  'post': '20',
+  // P3 空间音效 mega 卡：混响 / 脉冲 / 声场 / 立体声折叠搬入，用 09.x 子编号。
+  'spatial': '09',
+  'spatialReverb': '09.1',
+  'spatialConv': '09.2',
+  'spatialXfeed': '09.3',
+  'spatialHaas': '09.4',
+  'spatialStereo': '09.5',
+  'ddc': '10',
+  'eq': '11',
+  'arbmag': '12',
+  'exciter': '13',
+  'loudness': '14',
+  'tube': '15',
+  'post': '16',
 };
 
 class EffectsPage extends StatelessWidget {
@@ -124,11 +128,7 @@ class EffectsPage extends StatelessWidget {
         ),
         ListenableBuilder(
           listenable: model,
-          builder: (_, _) => _SpatialReverbCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _ConvolverCard(model: model),
+          builder: (_, _) => _SpatialCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,
@@ -141,18 +141,6 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) => _ArbmagCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _CrossfeedCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _StereoCard(model: model),
-        ),
-        ListenableBuilder(
-          listenable: model,
-          builder: (_, _) => _HaasCard(model: model),
         ),
         ListenableBuilder(
           listenable: model,

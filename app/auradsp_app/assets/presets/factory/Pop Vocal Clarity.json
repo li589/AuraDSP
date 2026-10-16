@@ -233,6 +233,22 @@
     "post": {
       "gain": 0.0,
       "limiterEnable": true
+    },
+    "routing": {
+      "modeCategory": "pipeline",
+      "attachmentMode": "sysapo",
+      "pipelineInput": "wasapi",
+      "pipelineOutput": "wasapi",
+      "pipelineInputDevice": "",
+      "pipelineOutputDevice": "",
+      "pipelineInputEnabled": true,
+      "pipelineOutputEnabled": true,
+      "asioDriver": "",
+      "asioBufSize": 0,
+      "asioOutPair": 0,
+      "vaioOutputEndpoint": "",
+      "apoTargetEndpoint": "",
+      "monitorMirroring": false
     }
   }
 }

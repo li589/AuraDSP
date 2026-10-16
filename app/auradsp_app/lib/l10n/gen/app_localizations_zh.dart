@@ -1121,6 +1121,57 @@ class AppLocalizationsZh extends AppLocalizations {
   String get haasSideLeft => '左声道';
 
   @override
+  String get spatialTitle => '空间音效';
+
+  @override
+  String get spatialHint => '虚拟 5.0 摆位加早期反射，耳机上重建音箱房。混响 / 脉冲 / 声场卡片已并入本卡';
+
+  @override
+  String get spatialStyle => '风格';
+
+  @override
+  String get spatialStyleInfo => '风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）';
+
+  @override
+  String get spatialStyleDolby => 'Dolby 房';
+
+  @override
+  String get spatialStyleDts => 'DTS 定位';
+
+  @override
+  String get spatialStyleNeutral => '中性';
+
+  @override
+  String get spatialRoom => '房间';
+
+  @override
+  String get spatialRoomInfo => '早期反射电平加反射时间缩放。0 为干摆位，1 为大房';
+
+  @override
+  String get spatialWidth => '张角';
+
+  @override
+  String get spatialWidthInfo => '扬声器摆位张角缩放。只改变对侧耳声像，同侧直达不变';
+
+  @override
+  String get spatialCenter => '中置';
+
+  @override
+  String get spatialCenterInfo => '中置声像聚焦：人声对白能量';
+
+  @override
+  String get spatialOutGain => '输出';
+
+  @override
+  String get spatialOutGainInfo => '空间级输出电平补偿';
+
+  @override
+  String get spatialAutoGain => '自动增益';
+
+  @override
+  String get spatialAutoGainInfo => '向输入响度收敛（与混响同式），防摆位后忽大忽小';
+
+  @override
   String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
 
   @override

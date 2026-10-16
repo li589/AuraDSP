@@ -479,6 +479,23 @@ abstract final class PresetLibrary {
         },
         // 处理链顺序
         if (m.graphOrder != null) 'chainOrder': m.graphOrder,
+        // 音频路由与设备记忆（接入预设系统）
+        'routing': {
+          'modeCategory': m.config.modeCategory,
+          'attachmentMode': m.config.attachmentMode,
+          'pipelineInput': m.config.pipelineInput,
+          'pipelineOutput': m.config.pipelineOutput,
+          'pipelineInputDevice': m.config.pipelineInputDevice,
+          'pipelineOutputDevice': m.config.pipelineOutputDevice,
+          'pipelineInputEnabled': m.config.pipelineInputEnabled,
+          'pipelineOutputEnabled': m.config.pipelineOutputEnabled,
+          'asioDriver': m.config.asioDriver,
+          'asioBufSize': m.config.asioBufSize,
+          'asioOutPair': m.config.asioOutPair,
+          'vaioOutputEndpoint': m.config.vaioOutputEndpoint,
+          'apoTargetEndpoint': m.config.apoTargetEndpoint,
+          'monitorMirroring': m.config.monitorMirroring,
+        },
       },
     );
   }
@@ -916,6 +933,60 @@ abstract final class PresetLibrary {
       m.setLiveprogEnabled(m.lpEnabled);
       for (var i = 0; i < 8; i++) {
         m.setLiveprogParam(i, m.lpParams[i]);
+      }
+    }
+
+    // 13. 音频路由与设备记忆（接入预设系统）
+    // 验证设备是否在当前环境中存在：在就按照记忆，不在就走默认或者留空标明无可用设备
+    final routing = (p['routing'] as Map<String, dynamic>?);
+    if (routing != null && routing.isNotEmpty) {
+      if (routing['pipelineInputEnabled'] is bool) {
+        m.setPipelineInputEnabled(routing['pipelineInputEnabled'] as bool);
+      }
+      if (routing['pipelineOutputEnabled'] is bool) {
+        m.setPipelineOutputEnabled(routing['pipelineOutputEnabled'] as bool);
+      }
+      if (routing['monitorMirroring'] is bool) {
+        m.setMonitorMirroring(routing['monitorMirroring'] as bool);
+      }
+
+      // 验证设备是否在当前环境中存在：在就按照记忆，不在就走默认或留空
+      if (routing['pipelineInputDevice'] is String) {
+        final dev = routing['pipelineInputDevice'] as String;
+        final exists = dev.isNotEmpty &&
+            m.wasapiDevices.any((d) => !d.isRender && (d.id == dev || d.name == dev));
+        m.setPipelineInputDevice(exists ? dev : '');
+      }
+      if (routing['pipelineOutputDevice'] is String) {
+        final dev = routing['pipelineOutputDevice'] as String;
+        final exists = dev.isNotEmpty &&
+            m.wasapiDevices.any((d) => d.isRender && (d.id == dev || d.name == dev));
+        m.setPipelineOutputDevice(exists ? dev : '');
+      }
+      if (routing['vaioOutputEndpoint'] is String) {
+        final ep = routing['vaioOutputEndpoint'] as String;
+        final exists = ep.isNotEmpty &&
+            m.vaioPhysicalEndpoints.any((d) => d.name == ep || d.id == ep);
+        m.setVaioOutputEndpoint(exists ? ep : '');
+      }
+      if (routing['apoTargetEndpoint'] is String) {
+        final ep = routing['apoTargetEndpoint'] as String;
+        final exists = ep.isNotEmpty &&
+            (m.vaioPhysicalEndpoints.any((d) => d.name == ep || d.id == ep) ||
+                m.wasapiDevices.any((d) => d.id == ep || d.name == ep));
+        m.setApoTargetEndpoint(exists ? ep : '');
+      }
+      if (routing['asioDriver'] is String) {
+        final drv = routing['asioDriver'] as String;
+        final names = [for (final d in m.asioDrivers) d['name'] ?? ''];
+        final exists = drv.isNotEmpty && names.contains(drv);
+        m.setAsioDriver(exists ? drv : (names.isNotEmpty ? names.first : ''));
+      }
+      if (routing['asioBufSize'] is num) {
+        m.setAsioBufSize((routing['asioBufSize'] as num).toInt());
+      }
+      if (routing['asioOutPair'] is num) {
+        m.setAsioOutPair((routing['asioOutPair'] as num).toInt());
       }
     }
 
