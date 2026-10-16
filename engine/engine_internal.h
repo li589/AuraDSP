@@ -146,6 +146,14 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    haas_delay_ms{12.0f};  /* ms [0,25] */
     std::atomic<float>    haas_mix{1.0f};        /* [0,1] */
     std::atomic<int32_t>  haas_side{0};          /* 0=延迟右 1=延迟左 */
+    /* 空间音效 L1（参数化 HRTF + 早期反射；Dolby 房默认，详见 dsp_spatial.cpp 头注） */
+    std::atomic<int32_t>  spatial_enable{0};
+    std::atomic<int32_t>  spatial_style{0};   /* 0=Dolby 房 1=DTS 定位 2=中性（下发即联动 room/width/center） */
+    std::atomic<float>    spatial_room{0.7f};  /* [0,1] 早期反射电平+时间缩放 */
+    std::atomic<float>    spatial_width{1.0f}; /* [0.5,1.5] 摆位张角缩放 */
+    std::atomic<float>    spatial_center{0.8f};/* [0,1] 中置聚焦 */
+    std::atomic<float>    spatial_outgain{0.0f}; /* dB [-12,6] */
+    std::atomic<int32_t>  spatial_autogain{0};
     /* 激励器（HPF 取高频 + tanh 谐波混回；drive 固定，只暴露 amount/hifreq） */
     std::atomic<int32_t>  exciter_enable{0};
     std::atomic<float>    exciter_amount{0.3f};  /* [0,1] */
@@ -306,6 +314,8 @@ constexpr LatencyItem kLatComp     {2, 85.0f};  /* FFTCompander FFTSIZE_DRS/2 */
 constexpr LatencyItem kLatConvolver{2, 10.0f};  /* 保守下限，IR 长度另计 */
 constexpr LatencyItem kLatArbMag   {2, 2.67f};  /* 分块 FFT 卷积（128 frames @48k） */
 constexpr LatencyItem kLatCrossfeed{1, 3.0f};
+constexpr LatencyItem kLatSpatial  {1, 1.0f};  /* 直达径 ITD 最大 0.65ms 取整；
+    * 早期反射/混响尾是并行能量不计入（与 reverb 30ms 名义口径一致） */
 constexpr LatencyItem kLatDdc      {1, 6.0f};
 constexpr LatencyItem kLatLimiter  {0, 2.0f};
 
@@ -414,6 +424,17 @@ struct auradsp_handle_s {
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
     int    haas_pos = 0;
+    /* 空间音效 RT 状态（全固定数组，handle 随体分配，RT 零分配） */
+    static constexpr int kSpatSpk = 5;      // L C R LS RS
+    static constexpr int kSpatItdLen = 128; // 远耳 ITD 线（0.8ms@96k=77 < 128）
+    static constexpr int kSpatHistLen = 32768; // 早期反射历史（110ms@192k=21120 < 32768）
+    float  spat_ring[kSpatSpk][kSpatItdLen]; // 各扬声器远耳延迟线（mono）
+    int    spat_ring_pos[kSpatSpk];
+    float  spat_lp[kSpatSpk];             // 各扬声器远耳头影低通状态
+    float  spat_hist[kSpatHistLen];       // 早期反射历史（输入 mono 下混）
+    int    spat_hist_pos = 0;
+    float  spat_pinna[2][2][4];           // [stage][ch] x1,x2,y1,y2（全局 pinna 双 biquad）
+    double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
     /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算） */
     float exc_lp_l = 0.0f, exc_lp_r = 0.0f;
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
@@ -490,5 +511,6 @@ char* read_text_file(auradsp_handle h, const char* path, long max_bytes, auradsp
 void rebuild_hann(auradsp_handle h, int n);
 void shelf_process(auradsp_handle h, float* io, int frames);
 void shelf_recalc(auradsp_handle h);
+void spatial_process(auradsp_handle h, float* io, int frames);
 void viz_write(auradsp_handle h, const float* out, int frames);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);

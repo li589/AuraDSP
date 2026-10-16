@@ -20,6 +20,7 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_filter.cpp"
     "${API}/dsp/dsp_bassmono.cpp"
     "${API}/dsp/dsp_haas.cpp"
+    "${API}/dsp/dsp_spatial.cpp"
     "${API}/dsp/dsp_exciter.cpp"
     "${API}/dsp/dsp_gate.cpp"
     "${API}/dsp/dsp_psycho.cpp"

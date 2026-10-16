@@ -976,6 +976,63 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.haas_side.store(*(const int32_t*)value ? 1 : 0);
         return AURADSP_OK;
     }
+    /* ---- 空间音效 L1（参数化 HRTF + 早期反射） ---- */
+    if (!strcmp(id, "spatial.enable") && bytes >= 4) {
+        h->p.spatial_enable.store(*(const int32_t*)value ? 1 : 0);
+        compute_latency(h, &h->latency_ms);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.style") && bytes >= 4) {
+        int32_t v = *(const int32_t*)value;
+        if (v < 0) v = 0; if (v > 2) v = 2;
+        h->p.spatial_style.store(v);
+        // 风格即整组预设：直接落下面三个参数（用户此后单调任一即脱离预设，
+        // style 值保留仅作展示；与 reverb preset 语义不同，此处无 -2 态）。
+        if (v == 0) {  // Dolby 房
+            h->p.spatial_room.store(0.7f);
+            h->p.spatial_width.store(1.0f);
+            h->p.spatial_center.store(0.8f);
+        } else if (v == 1) {  // DTS 定位
+            h->p.spatial_room.store(0.25f);
+            h->p.spatial_width.store(1.1f);
+            h->p.spatial_center.store(0.5f);
+        } else {  // 中性
+            h->p.spatial_room.store(0.0f);
+            h->p.spatial_width.store(1.0f);
+            h->p.spatial_center.store(0.5f);
+        }
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.room") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.spatial_room.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.width") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0.5f) v = 0.5f; if (v > 1.5f) v = 1.5f;
+        h->p.spatial_width.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.center") && bytes >= 4) {
+        float v = *(const float*)value;
+        if (v < 0) v = 0; if (v > 1) v = 1;
+        h->p.spatial_center.store(v);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.outgain") && bytes >= 4) {
+        float db = *(const float*)value;
+        if (db < -12) db = -12; if (db > 6) db = 6;
+        h->p.spatial_outgain.store(db);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "spatial.autogain") && bytes >= 4) {
+        h->p.spatial_autogain.store(*(const int32_t*)value ? 1 : 0);
+        h->spat_ag_in = h->spat_ag_out = 0.0;
+        h->spat_ag_comp = 1.0;
+        return AURADSP_OK;
+    }
     /* ---- 激励器 ---- */
     if (!strcmp(id, "exciter.enable") && bytes >= 4) {
         h->p.exciter_enable.store(*(const int32_t*)value ? 1 : 0);
@@ -1319,6 +1376,13 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "haas.delay") && bytes >= 4) { *(float*)out_value = h->p.haas_delay_ms.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.mix") && bytes >= 4) { *(float*)out_value = h->p.haas_mix.load(); return AURADSP_OK; }
     if (!strcmp(id, "haas.side") && bytes >= 4) { *(int32_t*)out_value = h->p.haas_side.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.spatial_enable.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.style") && bytes >= 4) { *(int32_t*)out_value = h->p.spatial_style.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.room") && bytes >= 4) { *(float*)out_value = h->p.spatial_room.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.width") && bytes >= 4) { *(float*)out_value = h->p.spatial_width.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.center") && bytes >= 4) { *(float*)out_value = h->p.spatial_center.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.outgain") && bytes >= 4) { *(float*)out_value = h->p.spatial_outgain.load(); return AURADSP_OK; }
+    if (!strcmp(id, "spatial.autogain") && bytes >= 4) { *(int32_t*)out_value = h->p.spatial_autogain.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.enable") && bytes >= 4) { *(int32_t*)out_value = h->p.exciter_enable.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.amount") && bytes >= 4) { *(float*)out_value = h->p.exciter_amount.load(); return AURADSP_OK; }
     if (!strcmp(id, "exciter.hifreq") && bytes >= 4) { *(float*)out_value = h->p.exciter_hifreq.load(); return AURADSP_OK; }
@@ -1343,8 +1407,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
     if (!strcmp(id, "graph.effects") && bytes >= 2048) {
         /* 20 项注册表：id / 延迟档 / 参数通道是否开放。
          * 注：此前写「14 项」，随 comp/arbmag 暴露与自研效果增补早已增至 20 项，
-         * dyneq 入库（e1375b0）后曾为 21 项；死占位 `vdc` 已删除（见下），现为 20 项。
-         * 增删改条目时必须同步此处计数。
+         * dyneq 入库（e1375b0）后曾为 21 项；死占位 `vdc` 已删除，现为 20 项；
+         * spatial 入库后现为 21 项。增删改条目时必须同步此处计数。
          * 命名对照（历史包袱，一处写死）：实现文件 `vdc.c` = DDC 功能，
          * 参数前缀 `ddc.*`，注册表 id `ddc`——三处统一叫 ddc，只有文件名是 vdc。
          * 容量门 2048：20 项时 payload 约 1000 字节，再增条目会静默截断 JSON；
@@ -1370,7 +1434,8 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
             "{\"id\":\"dyneq\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"loudness\",\"tier\":1,\"exposed\":true},"
             "{\"id\":\"arbmag\",\"tier\":2,\"exposed\":true},"
-            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true}"
+            "{\"id\":\"ddc\",\"tier\":1,\"exposed\":true},"
+            "{\"id\":\"spatial\",\"tier\":1,\"exposed\":true}"
             "]";
         snprintf((char*)out_value, bytes, "%s", reg);
         return AURADSP_OK;

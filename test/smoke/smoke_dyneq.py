@@ -6,7 +6,7 @@
   3. 动态：range=12/threshold=-30，大声 1kHz 被压（<-1dB），小声不压，错频段不压。
   4. Low/High shelf 静态增益方向正确。
   5. set/get 回读对称 + 钳位。
-  6. graph.effects 注册表含 dyneq（20 项，2048 缓冲不断尾）。
+  6. graph.effects 注册表含 dyneq（21 项，2048 缓冲不断尾）。
 """
 import ctypes
 import json
@@ -197,8 +197,9 @@ check('graph.effects rc', rc == 0, 'rc=%d' % rc)
 try:
     reg = json.loads(buf.value.decode('utf-8'))
     ids = [e['id'] for e in reg]
-    check('graph.effects 20 entries', len(reg) == 20, 'n=%d' % len(reg))
+    check('graph.effects 21 entries', len(reg) == 21, 'n=%d' % len(reg))
     check('graph.effects has dyneq', 'dyneq' in ids)
+    check('graph.effects has spatial', 'spatial' in ids)
     check('graph.effects no dead vdc', 'vdc' not in ids)
     dy = [e for e in reg if e['id'] == 'dyneq'][0]
     check('dyneq exposed tier1', dy.get('exposed') is True and dy.get('tier') == 1, str(dy))

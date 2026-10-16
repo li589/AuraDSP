@@ -37,6 +37,11 @@ void compute_latency(auradsp_handle h, double* out_ms) {
         if (dms < 0.0f) dms = 0.0f; if (dms > 25.0f) dms = 25.0f;
         ms += dms;
     }
+    /* 空间音效：直达径 ITD 名义 1ms（早期反射/混响尾是并行能量，不计入；
+     * 与 reverb 30ms 名义口径一致）。 */
+    if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
+        ms += kLatSpatial.ms;
+    }
     *out_ms = ms;
 }
 
@@ -429,6 +434,12 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
         haas_process(h, dst, frames);
     }
     sample_stage_peak(h, 17, dst, frames);   /* Stage 17: Haas output */
+
+    /* 空间音效 L1（haas 后 / exciter 前：空间族抱团，最后一道音色工序之前） */
+    if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
+        spatial_process(h, dst, frames);
+    }
+    sample_stage_peak(h, 20, dst, frames);   /* Stage 20: Spatial output */
 
     /* 激励器（Haas 后 / Freeverb 前：最后一道音色工序，再进房间） */
     if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
