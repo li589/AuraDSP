@@ -1,6 +1,6 @@
-# vendor/ 补丁登记（PATCHES.md）
+# engine/legacy/ 补丁登记（PATCHES.md）
 
-> 铁律 §3.3：上游源码原则上原样整合；确需扩展时打 `[PATCHED-AuraDSP <日期>]` 标记补丁，
+> 铁律 §3.3：上游源码原则上原样整合；确需扩展时打 `[PATCHED-AuraDSP <日期> P-xxx]` 标记补丁，
 > 逐条登记于本文件（位置 / 动机 / 影响面 / 上游同步冲突风险）。禁止无登记的隐式修改。
 
 ## P-001 liveprogWrapper.c — 宿主滑块注册（2026-10-09）
@@ -52,11 +52,11 @@
 
 ## P-006 jdsp_header.h + multimodalEQ.c — EQ 卷积器双缓冲（2026-10-10）
 
-- **位置**：MultimodalEQ 新增 convB / ctiveConv / convProcCount / convSwapProc；
+- **位置**：MultimodalEQ 新增 convB / activeConv / convProcCount / convSwapProc；
   MultimodalEqualizerConstructor 与 Destructor 增删 convB 的 Init/Free；
   MultimodalEqualizerAxisInterpolation 改为重建到非活动实例并原子换指针；
-  MultimodalEqualizerProcess 改用 ctiveConv
-- **症状**：操作 EQ 时爆音。eq.curve 经 uradsp_set_param 在驱动 WASAPI 的线程上
+  MultimodalEqualizerProcess 改用 activeConv
+- **症状**：操作 EQ 时爆音。eq.curve 经 auradsp_set_param 在驱动 WASAPI 的线程上
   调用 MultimodalEqualizerAxisInterpolation（makima + 最小相位 IR + FFT 卷积刷新，约 760µs），
   而同一线程的音频回调正在 FFTConvolver2x2Process(&mEQ.conv, ...)
 - **根因**：重建与处理**操作同一个卷积器对象** ——
@@ -69,7 +69,7 @@
   真实成因是 ① 每次重建**阻塞音频泵**约 760µs，导致回调赶不上；
   ② 重建对象与处理对象**重叠**（同一块内存先被刷新再被处理）。
   该补丁消除了②并把①移出关键路径，价值成立；「数据竞争」的原始措辞是错的。
-- **改动**：mEQ 内预分配 conv / convB 两个卷积器 + ctiveConv 指针。
+- **改动**：mEQ 内预分配 conv / convB 两个卷积器 + activeConv 指针。
   控制线程在非活动实例上完成 IR 构建与刷新，随后换指针；
   音频线程块首读一次指针即切到新 IR，块内不再触碰换出的实例
 - **生命周期**：两实例均内嵌于 mEQ，由 MultimodalEqualizerDestructor 统一释放，
@@ -78,9 +78,9 @@
   换出后需再跑满 1 块才允许把该实例重新投入重建，
   避免与换出瞬间尚未返回的那次 Process 调用竞争
 - **convState 未双缓冲**：已查明 FFTConvolver2x2RefreshImpulseResponse(conv1, conv2, ...)
-  中 conv1 仅用作 FFT 暂存（写 _fftBuffer、读 it/sine），IR 段不更新；
+  中 conv1 仅用作 FFT 暂存（写 _fftBuffer、读 bit/sine），IR 段不更新；
   只有 conv2 才是真正的 IR 存储。故无需为其引入第二份
-- **兼容性**：外部调用方无需改动，uradsp_set_param("eq.curve") 语义不变；
+- **兼容性**：外部调用方无需改动，auradsp_set_param("eq.curve") 语义不变；
   operatingMode != 0 的 IIR 分支未触及
 
 ## P-007 multimodalEQ.c — EQ 频率轴按实际 Nyquist 收尾（2026-10-10）
@@ -90,11 +90,11 @@
 - **症状**：采样率低于 48kHz 时，EQ 曲线最末端锚点超过 Nyquist。
   44.1kHz 下 Nyquist 为 22050Hz，硬编码的 24000 越界。
 - **改动**：改为 (double)jdsp->fs * 0.5，按实际采样率取 Nyquist。
-- **配套**：P-006 已把 uradsp_engine.cpp 侧 eq.curve 的频点也按
+- **配套**：P-006 已把 auradsp_engine.cpp 侧 eq.curve 的频点也按
   sample_rate * 0.5 钳位，两端一致。
-- **兼容性**：req[NUMPTS]（用户最末点）已由引擎侧钳到 
+- **兼容性**：freq[NUMPTS]（用户最末点）已由引擎侧钳到 
 yquist * 0.999，
-  故 req[NUMPTS] < fs * 0.5 恒成立，单调性不被破坏。
+  故 freq[NUMPTS] < fs * 0.5 恒成立，单调性不被破坏。
 
 ## P-008 jdspController.c — 块长抖动抑制：不再无谓重建卷积器（电平抖动 / 卡顿修复，2026-10-12）
 
@@ -142,16 +142,16 @@ yquist * 0.999，
 - **位置**：jdsp_header.h 的 JamesDSPLib 结构体（P-004 的 chain/stagePeak 段后）、
   jdspController.c 的 stage 封装与 setter 区。
 - **功能**：为 vendor 链内的 tube/comp/bass/eq 四个效果提供
-  (a) 输出增益门（xOutGain，线性，控制线程写/RT 读，x86 对齐 float 原子），
-  (b) 自动增益补偿 leveler（xAutoGain 开关 + 平滑 RMS 比：输入/输出各 5% 每块平滑，
+  (a) 输出增益门（fxOutGain，线性，控制线程写/RT 读，x86 对齐 float 原子），
+  (b) 自动增益补偿 leveler（fxAutoGain 开关 + 平滑 RMS 比：输入/输出各 5% 每块平滑，
   补偿增益 10% 每块，±12dB 限幅），全部在对应 stage 包装器内效果处理后原位应用。
-- **RT 安全**：stage_rms/stage_apply_fx_gain 纯乘加，无分配无锁；xAG* 状态 RT 独占；
+- **RT 安全**：stage_rms/stage_apply_fx_gain 纯乘加，无分配无锁；fxAG* 状态 RT 独占；
   开关切换时控制线程重置平滑状态（JamesDSPSetFxAutoGain）。
 - **新增接口**：JamesDSPSetFxOutGain / JamesDSPSetFxAutoGain / JamesDSPInitFxGains
   （后者在引擎 create 的 JamesDSPInit 后调用，默认输出增益 1.0、自动补偿关）。
-- **配合方**：uradsp_engine.cpp 的 ass/eq/tube/comp.outgain|autogain 参数；
+- **配合方**：auradsp_engine.cpp 的 bass/eq/tube/comp.outgain|autogain 参数；
   reverb 的增益/补偿在引擎侧 Freeverb（M5-c，非 vendor）实现，不占 vendor 槽。
-- **验收**：	est/smoke/smoke_fx_gain.py（输出增益 dB→线性倍率精确命中；自动补偿收敛到输入响度）。
+- **验收**：test/smoke/smoke_fx_gain.py（输出增益 dB→线性倍率精确命中；自动补偿收敛到输入响度）。
 ## P-011 jdsp_header.h + Effects/vacuumTube.c — 电子管音色/干湿混合/输出补偿（2026-10-13）
 
 - **位置**：jdsp_header.h 的 VacuumTube 结构体（+character/drywet/outcomp/tapeLp[2]）、
@@ -200,3 +200,25 @@ yquist * 0.999，
 - **上游同步冲突风险**：低（纯新增函数 + 一条 extern，不改任何既有逻辑）。
 - **验收**：`test/smoke/smoke_graph_order.py` —— App 19-id 载荷 rc=-1→0；
   eq 移到 liveprog 之后峰值 1.0→3.198（证明重排真实生效，非纸面接受）。
+
+## P-014 liveprogWrapper.c — 迁移后路径注释纠偏与标记补编号（2026-10-16）
+
+- **位置**：`jdsp/Effects/liveprogWrapper.c` `LiveProgLoadCode()` 内 P-001 注释块
+  （原 L46-L49）。
+- **动机**：Phase 1 收编（`vendor/libjamesdsp` → `engine/legacy/`）后，注释内指引路径
+  `core/desktop/vendor-src/libjamesdsp/PATCHES.md` 失效；且 P-001 原标记只有日期、
+  缺 `P-xxx` 编号，不符合登记簿铁律的双要素格式。
+- **内容**：注释路径改为 `engine/legacy/PATCHES.md` 并追加
+  `[PATCHED-AuraDSP 2026-10-16 P-014]`；P-001 标记补编号为
+  `[PATCHED-AuraDSP 2026-10-09 P-001]`。纯注释，无生成代码差异。
+- **行为影响**：无（comment-only）。
+- **上游同步冲突风险**：低（单注释块；上游若重写 `LiveProgLoadCode` 需人工合并）。
+- **验收**：`git diff` 仅注释行；引擎重建 + `python test/runner.py --smoke` 全绿。
+- **同日登记簿自维护**（随本条一并落地，不另占编号）：
+  ① 铁律模板统一为双要素 `[PATCHED-AuraDSP <日期> P-xxx]`
+  （消除与 `engine/AGENT.md` §4 的格式矛盾——2026-10-16 全局审查 m1 根因）；
+  ② 清理 P-006/P-007/P-010 条目内历史反斜杠转义事故遗留的控制字符
+  （BEL/BS/FF/TAB 共 15 字节）及 P-013 段混合行尾（20 处裸 LF），
+  按源码语义复原为 `activeConv`/`auradsp_*`/`fxOutGain`/`fxAutoGain`/`fxAG*`/
+  `bit/sine`/`freq[NUMPTS]`/`test/smoke/...`；
+  ③ 文件标题由 `vendor/` 更正为 `engine/legacy/`。
