@@ -47,6 +47,7 @@ def run_smoke_tests():
     "smoke_exciter.py",
     "smoke_fx_gain.py",
     "smoke_arbmag.py",
+    "smoke_string_readback.py",
     "smoke_gate_deesser.py",
     "smoke_dyneq.py",
     "smoke_mp3.py",

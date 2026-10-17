@@ -373,6 +373,11 @@ struct auradsp_handle_s {
     int    lp_status = 0;             /* 0=无代码 1=编译成功 <0=LiveProgStringParser 错误码 */
     char*  lp_code = nullptr;         /* 已下发代码副本（get_param 回读用） */
     size_t lp_code_len = 0;
+    /* 字符串回读副本（预设 §8.1 / 调研 §1：存原始串而非重序列化，避免格式漂移；析构释放） */
+    char*  eq_curve = nullptr;        /* 已下发 eq.curve 原串副本（get_param 回读用） */
+    size_t eq_curve_len = 0;
+    char*  arbmag_string = nullptr;   /* 已下发 arbmag.string 原串副本（get_param 回读用） */
+    size_t arbmag_string_len = 0;
 
     /* 卷积 IR 元数据（load 成功后填充；门卫见 load_ir_file） */
     std::atomic<bool>     ir_ready{false};

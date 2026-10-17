@@ -802,6 +802,28 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     }
   }
 
+  /// get_param 包装：UTF-8 字符串读回（engine_api 字符串回读，不加导出符号）。
+  /// capBytes = 允许的最大字节数（不含 NUL）；引擎按 `bytes >= len+1` 校验，
+  /// 超 cap 返回 E_PARAM（null），无副本返回空串。
+  /// 各 id 建议 cap：eq.curve 4 KiB、liveprog.code / arbmag.string 256 KiB。
+  static String? getString(
+      AuraDspLib lib, Pointer<Void> handle, String id, int capBytes) {
+    final idp = idBytes(id);
+    final vp = malloc<Uint8>(capBytes + 1);
+    try {
+      vp[capBytes] = 0;
+      final rc = lib.getParam(handle, idp, vp.cast(), capBytes + 1);
+      if (rc != 0) return null;
+      final units = vp.asTypedList(capBytes + 1);
+      final end = units.indexOf(0);
+      return utf8.decode(end < 0 ? units : units.sublist(0, end),
+          allowMalformed: true);
+    } finally {
+      malloc.free(vp);
+      malloc.free(idp);
+    }
+  }
+
   /// 插件宿主：扫描插件目录并返回发现数
   static int pluginScanWrap(AuraDspLib lib, Pointer<Void> handle,
       {String dir = '', bool deep = false}) {

@@ -1536,6 +1536,73 @@ void main() {
     });
   });
 
+  // ---------------------------------------------------------------------
+  // 字符串回读三 id（预设 §8.1 / 调研 §1）：引擎 get_param 字符串路径 +
+  // isolate 转发 + state 对账消费。源码形状钉死（isolate 闭包不可直接驱动）。
+  // ---------------------------------------------------------------------
+  group('字符串回读（eq.curve / arbmag.string / liveprog.code）', () {
+    test('isolate getParams 转发三串且带独立 cap', () {
+      final src =
+          File('lib/engine/audio_isolate.dart').readAsStringSync();
+      expect(src.contains("AuraDspLib.getString(p, h, 'liveprog.code', 256 * 1024)"),
+          isTrue, reason: 'liveprog.code 回读（cap 256 KiB，与 set 上限一致）');
+      expect(src.contains("AuraDspLib.getString(p, h, 'arbmag.string', 256 * 1024)"),
+          isTrue, reason: 'arbmag.string 回读（cap 256 KiB）');
+      expect(src.contains("AuraDspLib.getString(p, h, 'eq.curve', 4096)"),
+          isTrue, reason: 'eq.curve 回读（cap 4 KiB = set 侧上限，不浪费大缓冲）');
+      // 三键必须随 'evt':'params' 一并发出
+      expect(src.contains("'lpCode': lpCodeRb"), isTrue);
+      expect(src.contains("'arbmagString': arbmagRb"), isTrue);
+      expect(src.contains("'eqCurve': eqCurveRb"), isTrue);
+      // 三个 idp 指针必须进 finally 释放列表（不泄漏）
+      expect(src.contains('iArbN, iLpCode, iArbStr, iEqCurve])'), isTrue,
+          reason: '新 idp 指针必须随旧指针一并释放');
+    });
+
+    test('state params 分支消费三键（lpCode 只补空 / arbmag 采纳 / eqCurve 存对账字段）', () {
+      final src = File('lib/core/state.dart').readAsStringSync();
+      final i = src.indexOf("case 'params':");
+      expect(i, greaterThan(-1));
+      // 回读块距 case 头超过 9000 字符（params 分支先逐字段赋值），故守卫断言
+      // 直接对整文件做 contains；排序断言只看回读块局部窗口。
+      // lpCode 只在本地为空时补位——绝不覆盖编辑器内容（v2 铁律）
+      expect(src.contains('lpCode == null || lpCode!.isEmpty'), isTrue,
+          reason: 'lpCode 补位必须守卫本地为空（编辑器内容即真相）');
+      // arbmagString 非空即采纳（引擎是已应用曲线真相源）
+      expect(src.contains('rbArb is String && rbArb.isNotEmpty'), isTrue);
+      // eqCurve 存独立对账字段，不回灌 eqGains/eqFreqs
+      expect(src.contains('engineEqCurve = rbEq.isEmpty ? null : rbEq'), isTrue);
+      final rbIdx = src.indexOf('final rbEq');
+      expect(rbIdx, greaterThan(-1));
+      final rbWindow = src.substring(rbIdx, rbIdx + 1500);
+      expect(rbWindow.contains('eqGains ='), isFalse,
+          reason: '字符串回读不得回写 eqGains（避免与用户拖拽打架）');
+    });
+
+    test('getString 是读缓冲包装（不加导出符号：走既有 getParam）', () {
+      final src =
+          File('lib/engine/auradsp_ffi.dart').readAsStringSync();
+      final i = src.indexOf('static String? getString(');
+      expect(i, greaterThan(-1));
+      final body = src.substring(i, i + 700);
+      expect(body.contains('lib.getParam(handle, idp, vp.cast(), capBytes + 1)'),
+          isTrue, reason: '必须经既有 get_param（bytes = cap+1 满足 len+1 契约）');
+      expect(body.contains('if (rc != 0) return null'), isTrue,
+          reason: 'E_PARAM（超 cap）→ null，调用方按 null 跳过');
+    });
+
+    test('engineEqCurve 字段存在且不进 snapshot（纯对账，不持久化）', () {
+      final m = AppModel(testing: true);
+      expect(m.engineEqCurve, isNull);
+      m.engineEqCurve = '20:0;1000:3;20000:0';
+      final snap = PresetLibrary.snapshot(m, name: 't');
+      final flat = snap.params.toString();
+      expect(flat.contains('20:0;1000:3'), isFalse,
+          reason: 'engineEqCurve 是引擎回显缓存，不入预设/会话 schema');
+      m.dispose();
+    });
+  });
+
   group('Issue #2 测试隔离', () {
     test('testing 构造不拉 isolate、不落 session', () {
       final dir = Directory.systemTemp.createTempSync('auradsp_iso2_');

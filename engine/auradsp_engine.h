@@ -28,6 +28,9 @@
  *   liveprog.unload  i32  停用并清编译态
  *   liveprog.status  i32  get：0=无代码 1=编译成功 <0=语法错误码
  *   liveprog.paramN  f32  slider1..8（vendor 补丁 P-001，见 PATCHES.md）
+ *   字符串回读（2026-10-17）：liveprog.code / eq.curve / arbmag.string 三 id 均支持
+ *     get 回读（存下发原串副本，杜绝重序列化漂移；bytes 须 >= len+1，容量不足
+ *     返回 E_PARAM，无副本回 NUL 空串）。不新增导出符号、不升 ABI 版本。
  *   convolver.enable i32  0/1 —— 卷积混响，可自由使能（ADR-006 起不再受延迟档限定）
  *   convolver.ir.path str UTF-8 文件路径（WAV/FLAC，门卫见 load_ir_file）
  *   convolver.clear  i32  清除 IR 并停用

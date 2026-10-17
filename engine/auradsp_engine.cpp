@@ -229,6 +229,8 @@ void auradsp_destroy(auradsp_handle h) {
     delete[] h->plugin_buf_l;
     delete[] h->plugin_buf_r;
     free(h->lp_code);
+    free(h->eq_curve);
+    free(h->arbmag_string);
     delete h;
     global_unref();
 }
@@ -445,6 +447,17 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
             return AURADSP_E_PARAM;
         }
         MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
+        /* 回读副本（调研 §1.2）：存下发原串（不复用 txt——build_eq_axis 可能原地分词）。
+         * 回读永远吐原始串，杜绝"重序列化 vs _pushEqCurve 输出"的双向不一致（调研 §1.3）。 */
+        free(h->eq_curve);
+        h->eq_curve = (char*)malloc((size_t)bytes + 1);
+        if (h->eq_curve) {
+            memcpy(h->eq_curve, value, bytes);
+            h->eq_curve[bytes] = 0;
+            h->eq_curve_len = (size_t)bytes;
+        } else {
+            h->eq_curve_len = 0;
+        }
         return AURADSP_OK;
     }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) {
@@ -862,6 +875,16 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         h->p.arbmag_ready.store(nodes > 0 ? 1 : 0);
         if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {
             apply_arbmag(h);
+        }
+        /* 回读副本（调研 §1.2）：同 eq.curve，存下发原串（解析器原地分词不可复用 buf）。 */
+        free(h->arbmag_string);
+        h->arbmag_string = (char*)malloc((size_t)bytes + 1);
+        if (h->arbmag_string) {
+            memcpy(h->arbmag_string, value, bytes);
+            h->arbmag_string[bytes] = 0;
+            h->arbmag_string_len = (size_t)bytes;
+        } else {
+            h->arbmag_string_len = 0;
         }
         return AURADSP_OK;
     }
@@ -1348,6 +1371,19 @@ auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
         if (!h->lp_code) { *(char*)out_value = 0; return AURADSP_OK; }
         if (bytes < h->lp_code_len + 1) { set_error(h, "liveprog.code: buffer too small"); return AURADSP_E_PARAM; }
         memcpy(out_value, h->lp_code, h->lp_code_len + 1);
+        return AURADSP_OK;
+    }
+    /* ---- 字符串回读（预设 §8.1 / 调研 §1：不加导出符号、不升 ABI） ---- */
+    if (!strcmp(id, "eq.curve")) {
+        if (!h->eq_curve) { *(char*)out_value = 0; return AURADSP_OK; }
+        if (bytes < h->eq_curve_len + 1) { set_error(h, "eq.curve: buffer too small"); return AURADSP_E_PARAM; }
+        memcpy(out_value, h->eq_curve, h->eq_curve_len + 1);
+        return AURADSP_OK;
+    }
+    if (!strcmp(id, "arbmag.string")) {
+        if (!h->arbmag_string) { *(char*)out_value = 0; return AURADSP_OK; }
+        if (bytes < h->arbmag_string_len + 1) { set_error(h, "arbmag.string: buffer too small"); return AURADSP_E_PARAM; }
+        memcpy(out_value, h->arbmag_string, h->arbmag_string_len + 1);
         return AURADSP_OK;
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {

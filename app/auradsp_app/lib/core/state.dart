@@ -630,6 +630,10 @@ class AppModel extends ChangeNotifier {
   String arbmagString = ParamDefaults.arbmagString;
   bool arbmagReady = false;
   int arbmagNodeCount = 0;
+  /// 引擎回显的 eq.curve 下发原串（字符串回读对账用；null=引擎无副本）。
+  /// 引擎存的是原串副本（不重序列化），故可与 `_pushEqCurve` 输出直接比对
+  /// 检测引擎侧钳位/漂移。不回灌 eqGains/eqFreqs（避免与用户拖拽打架）。
+  String? engineEqCurve;
   bool arbmagAutoGain = ParamDefaults.arbmagAutoGain;
   double arbmagOutputGain = ParamDefaults.arbmagOutputGain;
 
@@ -1296,6 +1300,24 @@ class AppModel extends ChangeNotifier {
         if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
         if (raw['arbmagReady'] != null) arbmagReady = (raw['arbmagReady'] as int) != 0;
         if (raw['arbmagNodeCount'] != null) arbmagNodeCount = raw['arbmagNodeCount'] as int;
+        /* 字符串回读对账（预设 §8.1 / 调研 §1.2-1.3；null=引擎无副本或超 cap）：
+         * - lpCode：编辑器内容即真相（v2 铁律）——只在本地为空时补位，
+         *   绝不覆盖用户正在编辑的文本；用于引擎重起后回填与分叉检测。
+         * - arbmagString：引擎是已应用曲线的真相源（可能被解析器钳位/规范化），
+         *   非空即采纳，m 副本与之对齐。
+         * - eqCurve：引擎回显的是下发原串（引擎存原串副本，不重序列化）——
+         *   存独立对账字段，不回灌 eqGains/eqFreqs（避免 toStringAsFixed(1)
+         *   舍入漂移与用户拖拽打架）。 */
+        final rbLp = raw['lpCode'];
+        if (rbLp is String && rbLp.isNotEmpty && (lpCode == null || lpCode!.isEmpty)) {
+          lpCode = rbLp;
+        }
+        final rbArb = raw['arbmagString'];
+        if (rbArb is String && rbArb.isNotEmpty && rbArb != arbmagString) {
+          arbmagString = rbArb;
+        }
+        final rbEq = raw['eqCurve'];
+        if (rbEq is String) engineEqCurve = rbEq.isEmpty ? null : rbEq;
         if (raw['arbmagEnable'] != null) {
           final en = (raw['arbmagEnable'] as int) != 0;
           if (arbmagReady && arbmagOn && !en) {
