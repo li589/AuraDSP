@@ -106,6 +106,14 @@ ALL_SLOT_KEYS = [
 ]
 
 
+def is_win7_or_earlier():
+    try:
+        ver = sys.getwindowsversion()
+        return (ver.major < 6) or (ver.major == 6 and ver.minor <= 1)
+    except Exception:
+        return False
+
+
 def is_admin():
     try:
         return bool(ctypes.windll.shell32.IsUserAnAdmin())
@@ -548,6 +556,9 @@ def cmd_install(substr, mode='sfx-efx', force=False, as_json=False):
             print(f"WARN: {msg}")
         return 2
 
+    if is_win7_or_earlier() and mode == 'sfx-efx':
+        mode = 'win7-sapo'
+
     # 1. 确保 COM 注册就绪
     ensure_com_registered()
 
@@ -569,7 +580,11 @@ def cmd_install(substr, mode='sfx-efx', force=False, as_json=False):
         # PKEY_FX_Association 关联 GUID 必须为全零 GUID
         winreg.SetValueEx(k, FX_BASE + ',0', 0, winreg.REG_SZ, NULL_GUID)
 
-        if mode == 'composite':
+        if is_win7_or_earlier() or mode == 'win7-sapo':
+            # Windows 7 sAPO 规范：槽位 ,1 为 LFX (Local Effects)，槽位 ,2 为 GFX (Global Effects)
+            winreg.SetValueEx(k, FX_BASE + ',1', 0, winreg.REG_SZ, OUR_CLSID)
+            winreg.SetValueEx(k, FX_BASE + ',2', 0, winreg.REG_SZ, OUR_CLSID)
+        elif mode == 'composite':
             # 复合槽挂载（Win10 1803+ 规范：追加到 MULTI_SZ 列表中，不覆盖现有 OEM APO）
             for slot_key in (FX_BASE + ',13', FX_BASE + ',14'):
                 existing_list, _ = reg_read(winreg.HKEY_LOCAL_MACHINE, fx_sub, slot_key)
@@ -587,12 +602,13 @@ def cmd_install(substr, mode='sfx-efx', force=False, as_json=False):
             winreg.SetValueEx(k, FX_BASE + ',6', 0, winreg.REG_SZ, OUR_CLSID)
             winreg.SetValueEx(k, FX_BASE + ',7', 0, winreg.REG_SZ, OUR_CLSID)
 
-        # 补齐默认信号处理模式支持 (DEFAULT PROCESSING MODE)
-        for slot in ('5', '6', '7'):
-            pm_key = f'{PROC_MODES},{slot}'
-            cur_modes, _ = reg_read(winreg.HKEY_LOCAL_MACHINE, fx_sub, pm_key)
-            if not cur_modes or DEFAULT_MODE not in cur_modes:
-                winreg.SetValueEx(k, pm_key, 0, winreg.REG_MULTI_SZ, [DEFAULT_MODE])
+        # 补齐默认信号处理模式支持 (DEFAULT PROCESSING MODE)（仅 Win10/11 需要）
+        if not is_win7_or_earlier():
+            for slot in ('5', '6', '7'):
+                pm_key = f'{PROC_MODES},{slot}'
+                cur_modes, _ = reg_read(winreg.HKEY_LOCAL_MACHINE, fx_sub, pm_key)
+                if not cur_modes or DEFAULT_MODE not in cur_modes:
+                    winreg.SetValueEx(k, pm_key, 0, winreg.REG_MULTI_SZ, [DEFAULT_MODE])
 
         # 删除 DisableEnhancements 标志（强制系统启用音频增强）
         try:
