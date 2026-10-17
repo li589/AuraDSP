@@ -900,6 +900,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get memResetDone => 'config.json を標準テンプレートにリセットしました';
 
   @override
+  String get sysTitle => 'システム';
+
+  @override
+  String get sysHint => 'トレイ常住とログイン時起動（Windows）';
+
+  @override
+  String get sysTray => 'トレイに最小化';
+
+  @override
+  String get sysTrayHint => 'ウィンドウを閉じるとシステムトレイに隠れ、音声は再生継続。終了はトレイメニューから';
+
+  @override
+  String get sysAutostart => 'ログイン時起動';
+
+  @override
+  String get sysAutostartHint => 'Windows サインイン時に AuraDSP を自動起動';
+
+  @override
   String get latUnmeasured => '未測定';
 
   @override

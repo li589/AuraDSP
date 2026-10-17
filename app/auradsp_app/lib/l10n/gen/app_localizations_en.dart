@@ -925,6 +925,26 @@ class AppLocalizationsEn extends AppLocalizations {
       'config.json has been reset to the standard template';
 
   @override
+  String get sysTitle => 'System';
+
+  @override
+  String get sysHint => 'Tray residency and launch at login (Windows)';
+
+  @override
+  String get sysTray => 'Minimize to tray';
+
+  @override
+  String get sysTrayHint =>
+      'Closing the window hides to the system tray while audio keeps playing; quit via the tray menu';
+
+  @override
+  String get sysAutostart => 'Launch at login';
+
+  @override
+  String get sysAutostartHint =>
+      'Start AuraDSP automatically when you sign in to Windows';
+
+  @override
   String get latUnmeasured => 'Unmeasured';
 
   @override

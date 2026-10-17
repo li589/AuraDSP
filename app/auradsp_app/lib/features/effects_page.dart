@@ -163,11 +163,17 @@ class EffectsPage extends StatelessWidget {
             final ids = kEffectCategories[model.effectsCategory] ??
                 kEffectCategories['front']!;
             // 卡片间留空（用户反馈：全类连排过密无间距）。
+            // 每卡独立 ListenableBuilder：拖动某卡滑块只重建该卡，
+            // 不重建整类卡片（分类只影响列表构成，不影响卡片内部响应）。
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 for (var i = 0; i < ids.length; i++) ...[
-                  _cardFor(ids[i], model),
+                  ListenableBuilder(
+                    key: ValueKey(ids[i]),
+                    listenable: model,
+                    builder: (_, _) => _cardFor(ids[i], model),
+                  ),
                   if (i < ids.length - 1)
                     const SizedBox(height: AuraSpace.md),
                 ],
