@@ -590,6 +590,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final lpCodeRb = AuraDspLib.getString(p, h, 'liveprog.code', 256 * 1024);
               final arbmagRb = AuraDspLib.getString(p, h, 'arbmag.string', 256 * 1024);
               final eqCurveRb = AuraDspLib.getString(p, h, 'eq.curve', 4096);
+              // P3 增量回读：补齐此前遗漏的 14 类参数（输入增益/声道平衡/电子管增益/立体声分带/混响房型与立体声宽/EQ点数与插值/EEL2参数/图顺序等）
+              final inGainRb = AuraDspLib.getFloat(p, h, 'input.gain') ?? 0.0;
+              final inBalLRb = AuraDspLib.getFloat(p, h, 'input.balance.1') ?? 1.0;
+              final inBalRRb = AuraDspLib.getFloat(p, h, 'input.balance.2') ?? 1.0;
+              final tbGainRb = AuraDspLib.getFloat(p, h, 'tube.gain') ?? 4.5;
+              final stOnRb = AuraDspLib.getIntNullable(p, h, 'stereo.enable') ?? 0;
+              final fvRoomSizeRb = AuraDspLib.getFloat(p, h, 'freeverb.roomsize') ?? 1.0;
+              final fvWidthRb = AuraDspLib.getFloat(p, h, 'freeverb.width') ?? 1.0;
+              final eqBandsCountRb = AuraDspLib.getIntNullable(p, h, 'eq.bandsCount') ?? 31;
+              final eqFilterRb = AuraDspLib.getIntNullable(p, h, 'eq.filter') ?? 0;
+              final eqInterpRb = AuraDspLib.getIntNullable(p, h, 'eq.interp') ?? 0;
+              final eqQRb = AuraDspLib.getFloat(p, h, 'eq.q') ?? 4.3;
+              final bassModeRb = AuraDspLib.getIntNullable(p, h, 'bass.mode') ?? 0;
+              final bassIntensityRb = AuraDspLib.getFloat(p, h, 'bass.intensity') ?? 0.0;
+              final chainOrderRb = AuraDspLib.getString(p, h, 'graph.order', 2048);
+              final stBandsRb = <double>[];
+              for (var i = 1; i <= 5; i++) {
+                stBandsRb.add(AuraDspLib.getFloat(p, h, 'stereo.band$i') ?? 0.0);
+              }
+              final lpParamsRb = <double>[];
+              for (var i = 1; i <= 8; i++) {
+                lpParamsRb.add(AuraDspLib.getFloat(p, h, 'liveprog.param$i') ?? 0.0);
+              }
+
               send({
                 'evt': 'params',
                 'bassEnable': rdInt(iBass) ?? 0,
@@ -705,6 +729,23 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'arbmagEnable': rdInt(iArbE) ?? 0,
                 'arbmagReady': rdInt(iArbR) ?? 0,
                 'arbmagNodeCount': rdInt(iArbN) ?? 0,
+                // P3 增量回读参数键
+                'inputGain': inGainRb,
+                'inputBalanceL': inBalLRb,
+                'inputBalanceR': inBalRRb,
+                'tubeGain': tbGainRb,
+                'stereoEnable': stOnRb,
+                'stereoBands': stBandsRb,
+                'fvRoomSize': fvRoomSizeRb,
+                'fvWidth': fvWidthRb,
+                'eqBandsCount': eqBandsCountRb,
+                'eqFilter': eqFilterRb,
+                'eqInterp': eqInterpRb,
+                'eqQ': eqQRb,
+                'bassMode': bassModeRb,
+                'bassIntensity': bassIntensityRb,
+                'lpParams': lpParamsRb,
+                'chainOrder': chainOrderRb,
                 // 字符串回读（调研 §1.2）：null=引擎无副本或超 cap，主 isolate 按 null 跳过
                 'lpCode': lpCodeRb,
                 'arbmagString': arbmagRb,
