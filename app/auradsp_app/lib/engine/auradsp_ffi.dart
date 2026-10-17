@@ -802,6 +802,32 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     }
   }
 
+  /// get_param 包装：i32（可空）
+  static int? getIntNullable(AuraDspLib lib, Pointer<Void> handle, String id) {
+    final idp = idBytes(id);
+    final vp = malloc<Int32>();
+    try {
+      final rc = lib.getParam(handle, idp, vp.cast(), 4);
+      return rc == 0 ? vp.value : null;
+    } finally {
+      malloc.free(vp);
+      malloc.free(idp);
+    }
+  }
+
+  /// get_param 包装：f32
+  static double? getFloat(AuraDspLib lib, Pointer<Void> handle, String id) {
+    final idp = idBytes(id);
+    final vp = malloc<Float>();
+    try {
+      final rc = lib.getParam(handle, idp, vp.cast(), 4);
+      return rc == 0 ? vp.value : null;
+    } finally {
+      malloc.free(vp);
+      malloc.free(idp);
+    }
+  }
+
   /// get_param 包装：UTF-8 字符串读回（engine_api 字符串回读，不加导出符号）。
   /// capBytes = 允许的最大字节数（不含 NUL）；引擎按 `bytes >= len+1` 校验，
   /// 超 cap 返回 E_PARAM（null），无副本返回空串。

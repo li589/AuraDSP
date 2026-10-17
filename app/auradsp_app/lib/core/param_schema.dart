@@ -90,11 +90,24 @@ class ParamSpec<T> {
     if (raw == null) return defaultValue;
     if (type == ParamType.float) {
       if (raw is num) return raw.toDouble() as T;
+      if (raw is String) {
+        final parsed = double.tryParse(raw);
+        if (parsed != null) return parsed as T;
+      }
     } else if (type == ParamType.int32) {
       if (raw is num) return raw.toInt() as T;
+      if (raw is String) {
+        final parsed = int.tryParse(raw);
+        if (parsed != null) return parsed as T;
+      }
     } else if (type == ParamType.boolean) {
       if (raw is bool) return raw as T;
       if (raw is num) return (raw != 0) as T;
+      if (raw is String) {
+        final lower = raw.trim().toLowerCase();
+        if (lower == 'true' || lower == '1') return true as T;
+        if (lower == 'false' || lower == '0') return false as T;
+      }
     } else if (type == ParamType.string) {
       return raw.toString() as T;
     } else if (type == ParamType.blob) {

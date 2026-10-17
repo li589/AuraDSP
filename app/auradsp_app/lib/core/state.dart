@@ -23,6 +23,7 @@ import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugin_manager.dart';
+import 'param_schema.dart';
 import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
@@ -265,6 +266,58 @@ class AppModel extends ChangeNotifier {
   // 非空即降级态（引擎照跑，VB/ASIO 不受影响），进程内试音等重试恢复。
   String wasapiError = '';
   String sourceExt = ''; // 文件源扩展名（小写无点，如 'mp3'/'wav'；非文件源为空）
+
+  // P3: 全链路数据驱动参数体系：强类型 Spec 动态存储与访问器
+  final Map<String, dynamic> _paramValues = {};
+
+  /// 强类型通用参数读取
+  T getParam<T>(ParamSpec<T> spec) {
+    final val = _paramValues[spec.id];
+    if (val != null) return spec.cast(val);
+    final current = spec.read(this);
+    _paramValues[spec.id] = current;
+    return current;
+  }
+
+  /// 强类型通用参数设值
+  void setParam<T>(ParamSpec<T> spec, T value, {bool notify = true}) {
+    final clamped = spec.clamp(value);
+    _paramValues[spec.id] = clamped;
+    spec.write(this, clamped);
+    if (notify) notifyListeners();
+  }
+
+  /// 按参数 ID 通用读取
+  dynamic getParamById(String id) {
+    final spec = ParamRegistry.byId[id];
+    if (spec != null) return getParam(spec);
+    return _paramValues[id];
+  }
+
+  /// 按参数 ID 通用设值
+  void setParamById(String id, dynamic value, {bool notify = true}) {
+    final spec = ParamRegistry.byId[id];
+    if (spec != null) {
+      setParam(spec, spec.cast(value), notify: notify);
+    } else {
+      _paramValues[id] = value;
+      if (value is num) {
+        setFloat(id, value.toDouble());
+      } else if (value is bool) {
+        setInt(id, value ? 1 : 0);
+      } else if (value is String) {
+        send({'cmd': 'setParamStr', 'id': id, 'text': value});
+      }
+      if (notify) notifyListeners();
+    }
+  }
+
+  /// 检查某处理节是否处于激活状态（用于自绑定组件 enabled 联动）
+  bool isSectionEnabled(String section) {
+    if (section == 'input' || section == 'routing') return true;
+    if (section == 'post') return limiterOn;
+    return isStageEnabled(section);
+  }
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
   bool bassOn = false, eqOn = false, limiterOn = true;
@@ -1049,6 +1102,9 @@ class AppModel extends ChangeNotifier {
     port.listen(_onMessage);
   }
 
+  @visibleForTesting
+  void handleMessageForTesting(dynamic raw) => _onMessage(raw);
+
   void _onMessage(dynamic raw) {
     if (raw is! Map) return;
     switch (raw['evt'] as String) {
@@ -1289,11 +1345,11 @@ class AppModel extends ChangeNotifier {
         if (raw['filterType'] != null) filterType = (raw['filterType'] as int).clamp(0, 2);
         if (raw['filterFreq'] != null) filterFreq = (raw['filterFreq'] as num).toDouble();
         if (raw['filterQ'] != null) filterQ = (raw['filterQ'] as num).toDouble();
-        fvOn = (raw['fvEnable'] as int) != 0;
-        fvDecay = (raw['fvDecay'] as num).toDouble();
-        fvDamp = (raw['fvDamp'] as num).toDouble();
-        fvWet = (raw['fvWet'] as num).toDouble();
-        fvDry = (raw['fvDry'] as num).toDouble();
+        if (raw['fvEnable'] != null) fvOn = (raw['fvEnable'] as int) != 0;
+        if (raw['fvDecay'] != null) fvDecay = (raw['fvDecay'] as num).toDouble();
+        if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
+        if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
+        if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         if (raw['compEnable'] != null) compOn = (raw['compEnable'] as int) != 0;
         if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
         if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
@@ -1327,6 +1383,42 @@ class AppModel extends ChangeNotifier {
             arbmagOn = en;
           }
         }
+
+        // P3: 全量回读补齐此前遗漏的 14 类参数（输入/增益/分带/混响/EQ/EEL2/链顺序等）
+        if (raw['inputGain'] != null) inputGain = (raw['inputGain'] as num).toDouble();
+        if (raw['inputBalanceL'] != null) inputBalanceL = (raw['inputBalanceL'] as num).toDouble();
+        if (raw['inputBalanceR'] != null) inputBalanceR = (raw['inputBalanceR'] as num).toDouble();
+        if (raw['tubeGain'] != null) tubeGain = (raw['tubeGain'] as num).toDouble();
+        if (raw['stereoEnable'] != null) stereoOn = (raw['stereoEnable'] as int) != 0;
+        if (raw['stereoBands'] is List) {
+          final bands = (raw['stereoBands'] as List);
+          for (var i = 0; i < bands.length && i < 5; i++) {
+            stereoBands[i] = (bands[i] as num).toDouble();
+          }
+        }
+        if (raw['fvRoomSize'] != null) fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
+        if (raw['fvWidth'] != null) fvWidth = (raw['fvWidth'] as num).toDouble();
+        if (raw['eqBandsCount'] != null) eqBandsCount = raw['eqBandsCount'] as int;
+        if (raw['eqFilter'] != null) eqFilter = raw['eqFilter'] as int;
+        if (raw['eqInterp'] != null) eqInterp = raw['eqInterp'] as int;
+        if (raw['eqQ'] != null) eqQ = (raw['eqQ'] as num).toDouble();
+        if (raw['bassMode'] != null) bassMode = raw['bassMode'] as int;
+        if (raw['bassIntensity'] != null) bassIntensity = (raw['bassIntensity'] as num).toDouble();
+        if (raw['lpParams'] is List) {
+          final lpp = (raw['lpParams'] as List);
+          for (var i = 0; i < lpp.length && i < 8; i++) {
+            lpParams[i] = (lpp[i] as num).toDouble();
+          }
+        }
+        if (raw['chainOrder'] is String && (raw['chainOrder'] as String).isNotEmpty) {
+          graphOrder = raw['chainOrder'] as String;
+        }
+
+        // P3: 全量同步至通用字典 _paramValues，保证 SSOT 与引擎状态绝对一致
+        for (final spec in ParamRegistry.allParams) {
+          _paramValues[spec.id] = spec.read(this);
+        }
+
         notifyListeners();
         break;
       case 'arbmag':
@@ -1942,6 +2034,7 @@ class AppModel extends ChangeNotifier {
 
   /// 乐观镜像；被守卫拒绝时由 EventBanner 明示，引擎 params/state 纠正
   void _mirror(String id, double v) {
+    _paramValues[id] = v;
     switch (id) {
       case 'bass.enable': bassOn = v != 0; break;
       case 'bass.gain': bassGain = v; break;
