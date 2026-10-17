@@ -202,7 +202,13 @@ void apply_comp(auradsp_handle h) {
                            h->p.comp_granularity.load(std::memory_order_relaxed),
                            h->p.comp_tfresolution.load(std::memory_order_relaxed),
                            1);
-        CompressorSetGain(&h->jdsp, 0, 0, 0);
+        double freqs[7];
+        double gains[7];
+        for (int i = 0; i < 7; ++i) {
+            freqs[i] = (double)h->p.comp_freq[i].load(std::memory_order_relaxed);
+            gains[i] = (double)h->p.comp_gain[i].load(std::memory_order_relaxed);
+        }
+        CompressorSetGain(&h->jdsp, freqs, gains, 1);
         CompressorEnable(&h->jdsp, 1);
     } else {
         CompressorDisable(&h->jdsp);

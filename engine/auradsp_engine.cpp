@@ -174,6 +174,11 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     for (int i = 0; i < 8; ++i) {
         h->p.input_ch_gain[i].store(1.0f);
     }
+    const float default_comp_freq[7] = {95.0f, 200.0f, 400.0f, 800.0f, 1600.0f, 3400.0f, 7500.0f};
+    for (int i = 0; i < 7; ++i) {
+        h->p.comp_freq[i].store(default_comp_freq[i]);
+        h->p.comp_gain[i].store(-0.35f);
+    }
 
     std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     JamesDSPInit(&h->jdsp, max_block_frames, sample_rate);

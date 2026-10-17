@@ -152,6 +152,20 @@ abstract final class ParamId {
   static const compTimeconstant = 'comp.timeconstant';
   static const compGranularity = 'comp.granularity';
   static const compTfresolution = 'comp.tfresolution';
+  static const compFreq1 = 'comp.freq1';
+  static const compFreq2 = 'comp.freq2';
+  static const compFreq3 = 'comp.freq3';
+  static const compFreq4 = 'comp.freq4';
+  static const compFreq5 = 'comp.freq5';
+  static const compFreq6 = 'comp.freq6';
+  static const compFreq7 = 'comp.freq7';
+  static const compGain1 = 'comp.gain1';
+  static const compGain2 = 'comp.gain2';
+  static const compGain3 = 'comp.gain3';
+  static const compGain4 = 'comp.gain4';
+  static const compGain5 = 'comp.gain5';
+  static const compGain6 = 'comp.gain6';
+  static const compGain7 = 'comp.gain7';
   // 任意响应 EQ（ArbMag / AutoEq GraphicEQ）
   static const arbmagEnable = 'arbmag.enable';
   static const arbmagString = 'arbmag.string';

@@ -69,8 +69,12 @@ void freeverb_process(auradsp_handle h, float* dst, int frames) {
         const float feedback =
             0.7f + h->p.fv_decay.load(std::memory_order_relaxed) * 0.28f;
         const float damp = h->p.fv_damp.load(std::memory_order_relaxed) * 0.4f;
-        const float wetG = h->p.fv_wet.load(std::memory_order_relaxed) * 0.5f;
-        const float dryG = h->p.fv_dry.load(std::memory_order_relaxed);
+        float wetG = h->p.fv_wet.load(std::memory_order_relaxed) * 0.7f;
+        float dryG = h->p.fv_dry.load(std::memory_order_relaxed);
+        // 等能量归一化：确保干声+混响声总声能恒定，拉动干湿比不产生额外音量暴涨
+        const float fv_norm = 1.0f / sqrtf(fmaxf(0.01f, dryG * dryG + wetG * wetG));
+        dryG *= fv_norm;
+        wetG *= fv_norm;
         h->fvL.damp1 = damp; h->fvL.damp2 = 1.0f - damp;
         h->fvR.damp1 = damp; h->fvR.damp2 = 1.0f - damp;
         const float wdt = h->p.fv_width.load(std::memory_order_relaxed);

@@ -556,6 +556,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
             final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
+            final iCpF = List.generate(7, (i) => idp('comp.freq${i + 1}'));
+            final iCpGn = List.generate(7, (i) => idp('comp.gain${i + 1}'));
             final iArbE = idp(ParamId.arbmagEnable), iArbR = idp(ParamId.arbmagReady);
             final iArbN = idp(ParamId.arbmagNodeCount);
             /* 字符串回读三 id（调研 §1.2）：cap 按 id——liveprog/arbmag 256 KiB、
@@ -728,6 +730,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'compTimeconstant': rdFloat(iCpT) ?? 0.14,
                 'compGranularity': rdInt(iCpG) ?? 1,
                 'compTfresolution': rdInt(iCpR) ?? 1,
+                'compFreqs': [
+                  for (var i = 0; i < 7; i++)
+                    rdFloat(iCpF[i]) ?? [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0][i],
+                ],
+                'compGains': [
+                  for (var i = 0; i < 7; i++) rdFloat(iCpGn[i]) ?? -0.35,
+                ],
                 'arbmagEnable': rdInt(iArbE) ?? 0,
                 'arbmagReady': rdInt(iArbR) ?? 0,
                 'arbmagNodeCount': rdInt(iArbN) ?? 0,

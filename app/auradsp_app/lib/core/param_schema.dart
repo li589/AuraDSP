@@ -1055,6 +1055,43 @@ abstract final class ParamRegistry {
     getter: (m) => m.compTfresolution,
     setter: (m, v) => m.setCompTfresolution(v),
   );
+  static final compThreshold = ParamSpec<double>(
+    id: 'comp.threshold', section: 'comp', key: 'threshold',
+    type: ParamType.float, defaultValue: -18.0,
+    min: -48.0, max: 0.0, step: 0.5, unit: 'dB',
+    formatter: (v) => '${v.toStringAsFixed(1)} dB',
+    getter: (m) => m.compThreshold,
+    setter: (m, v) => m.setCompThreshold(v),
+  );
+  static final compRatio = ParamSpec<double>(
+    id: 'comp.ratio', section: 'comp', key: 'ratio',
+    type: ParamType.float, defaultValue: 4.0,
+    min: 1.0, max: 20.0, step: 0.1, unit: ':1',
+    formatter: (v) => '${v.toStringAsFixed(1)}:1',
+    getter: (m) => m.compRatio,
+    setter: (m, v) => m.setCompRatio(v),
+  );
+  static final compFreqs = List.generate(7, (i) {
+    const defaults = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
+    return ParamSpec<double>(
+      id: 'comp.freq${i + 1}', section: 'comp', key: 'freq${i + 1}',
+      type: ParamType.float, defaultValue: defaults[i],
+      min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+      formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+      getter: (m) => m.compFreqs[i],
+      setter: (m, v) => m.setCompFreq(i, v),
+    );
+  });
+  static final compGains = List.generate(7, (i) {
+    return ParamSpec<double>(
+      id: 'comp.gain${i + 1}', section: 'comp', key: 'gain${i + 1}',
+      type: ParamType.float, defaultValue: -0.35,
+      min: -1.2, max: 1.2, step: 0.01,
+      formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+      getter: (m) => m.compGains[i],
+      setter: (m, v) => m.setCompGain(i, v),
+    );
+  });
   static final compAutoGain = ParamSpec<bool>(
     id: 'comp.autogain', section: 'comp', key: 'autoGain',
     type: ParamType.boolean, defaultValue: ParamDefaults.compAutoGain,

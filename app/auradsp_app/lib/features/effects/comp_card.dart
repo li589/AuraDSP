@@ -32,10 +32,29 @@ class _CompressorCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 商业级动态响应传输曲线与 GR 衰减条
+          // 商业级动态响应传输曲线与 GR 衰减条（Ticker 驱动平滑回弹）
           _CompressorTransferScope(model: model),
           const SizedBox(height: AuraSpace.sm),
-          // 响应时常数（Time Constant）主滑块
+
+          // 核心滑块 1：压缩阈值 (Threshold)
+          ParamSlider(
+            param: ParamRegistry.compThreshold,
+            model: model,
+            customLabel: '压缩阈值',
+            infoMessage: '信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。',
+          ),
+          const SizedBox(height: AuraSpace.sm),
+
+          // 核心滑块 2：压缩比率 (Ratio)
+          ParamSlider(
+            param: ParamRegistry.compRatio,
+            model: model,
+            customLabel: '压缩比率',
+            infoMessage: '超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。',
+          ),
+          const SizedBox(height: AuraSpace.sm),
+
+          // 核心滑块 3：响应时常数（Time Constant）
           ParamSlider(
             param: ParamRegistry.compTimeconstant,
             model: model,
@@ -46,8 +65,9 @@ class _CompressorCard extends StatelessWidget {
             customFormat: (v) => (v * 1000).toStringAsFixed(0),
           ),
           const SizedBox(height: AuraSpace.sm),
+
           AdvancedSection(
-            summary: '${model.compGranularity == 0 ? l.compGranularityCoarse : (model.compGranularity == 1 ? l.compGranularityNormal : l.compGranularityFine)} · AGC: ${model.compAutoGain ? "ON" : "OFF"} · ${(model.compOutputGain >= 0 ? "+" : "")}${model.compOutputGain.toStringAsFixed(1)} dB',
+            summary: '${model.compThreshold.toStringAsFixed(0)} dB · ${model.compRatio.toStringAsFixed(1)}:1 · AGC: ${model.compAutoGain ? "ON" : "OFF"} · ${(model.compOutputGain >= 0 ? "+" : "")}${model.compOutputGain.toStringAsFixed(1)} dB',
             builder: (ctx) => Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -55,6 +75,8 @@ class _CompressorCard extends StatelessWidget {
                 Row(
                   children: [
                     Text(l.compGranularity, style: labelOf(p, color: p.text)),
+                    const SizedBox(width: 4),
+                    const InfoBadge(message: '频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。'),
                     const Spacer(),
                     ParamChoiceChips(
                       param: ParamRegistry.compGranularity,
@@ -68,10 +90,13 @@ class _CompressorCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AuraSpace.sm),
+
                 // 2. 时频分辨率 (Time-Frequency Resolution)
                 Row(
                   children: [
                     Text(l.compTfresolution, style: labelOf(p, color: p.text)),
+                    const SizedBox(width: 4),
+                    const InfoBadge(message: '算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。'),
                     const Spacer(),
                     ParamChoiceChips(
                       param: ParamRegistry.compTfresolution,
@@ -85,7 +110,33 @@ class _CompressorCard extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: AuraSpace.md),
-                // 3. 输出级外框（自动增益补偿与输出增益门）
+
+                // 3. 七频带独立压限频率与增益微调
+                Text(
+                  '分频段动态压限微调 (7 Bands)',
+                  style: labelOf(p, color: p.text).copyWith(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: AuraSpace.xs),
+                Text(
+                  '可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。',
+                  style: captionOf(p),
+                ),
+                const SizedBox(height: AuraSpace.sm),
+                Column(
+                  children: [
+                    for (var i = 0; i < 7; i++) ...[
+                      _CompBandRow(
+                        bandIndex: i,
+                        model: model,
+                        palette: p,
+                      ),
+                      if (i < 6) const SizedBox(height: AuraSpace.xs),
+                    ],
+                  ],
+                ),
+                const SizedBox(height: AuraSpace.md),
+
+                // 4. 输出级外框（自动增益补偿与输出增益门）
                 OutputGainFrame(
                   child: Column(
                     children: [
@@ -114,7 +165,121 @@ class _CompressorCard extends StatelessWidget {
   }
 }
 
-/// 商业级动态压限特性传输曲线与实时 Gain Reduction 衰减表
+/// 7 频带单带独立分频频率 + 动态增益调谐条
+class _CompBandRow extends StatelessWidget {
+  static const _bandNames = ['极低频', '低频', '中低频', '中频', '中高频', '高频', '超高频'];
+  static const _defaultFreqs = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
+  static const _ranges = [
+    (30.0, 250.0),
+    (80.0, 500.0),
+    (180.0, 1000.0),
+    (350.0, 2200.0),
+    (700.0, 4500.0),
+    (1500.0, 9000.0),
+    (3000.0, 18000.0),
+  ];
+
+  final int bandIndex;
+  final AppModel model;
+  final AuraPalette palette;
+
+  const _CompBandRow({
+    required this.bandIndex,
+    required this.model,
+    required this.palette,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final curFreq = model.compFreqs[bandIndex];
+    final curGain = model.compGains[bandIndex];
+    final defaultFreq = _defaultFreqs[bandIndex];
+    final (minFreq, maxFreq) = _ranges[bandIndex];
+    final name = _bandNames[bandIndex];
+
+    final freqStr = curFreq >= 1000
+        ? '${(curFreq / 1000).toStringAsFixed(1)} kHz'
+        : '${curFreq.toStringAsFixed(0)} Hz';
+    final gainStr = '${curGain >= 0 ? "+" : ""}${curGain.toStringAsFixed(2)}';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
+      decoration: BoxDecoration(
+        color: palette.panel.withValues(alpha: 0.5),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: palette.hairline.withValues(alpha: 0.3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'Band ${bandIndex + 1} ($name)',
+                style: monoOf(palette, size: 10, color: palette.text).copyWith(fontWeight: FontWeight.w600),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: palette.accent.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                ),
+                child: Text(
+                  freqStr,
+                  style: monoOf(palette, size: 9, color: palette.accent).copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(
+                  color: (curGain < 0 ? palette.warning : palette.accent2).withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                ),
+                child: Text(
+                  gainStr,
+                  style: monoOf(palette, size: 9, color: curGain < 0 ? palette.warning : palette.accent2)
+                      .copyWith(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          ValueSlider(
+            label: '分频中心频率',
+            value: curFreq,
+            defaultValue: defaultFreq,
+            min: minFreq,
+            max: maxFreq,
+            unit: 'Hz',
+            enabled: model.compOn,
+            format: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}k' : v.toStringAsFixed(0),
+            onChanged: (v) => model.setCompFreq(bandIndex, v),
+            onChangedEnd: (v) => model.setCompFreq(bandIndex, v),
+            onResetToDefault: () => model.setCompFreq(bandIndex, defaultFreq),
+          ),
+          ValueSlider(
+            label: '压限 / 扩展数值',
+            infoMessage: '负值为动态压缩压制，正值为动态扩展。默认 -0.35。',
+            value: curGain,
+            defaultValue: -0.35,
+            min: -1.2,
+            max: 1.2,
+            unit: '',
+            enabled: model.compOn,
+            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+            onChanged: (v) => model.setCompGain(bandIndex, v),
+            onChangedEnd: (v) => model.setCompGain(bandIndex, v),
+            onResetToDefault: () => model.setCompGain(bandIndex, -0.35),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 商业级动态压限特性传输曲线与实时 Gain Reduction 衰减表（物理 Ticker 驱动，告别停滞）
 class _CompressorTransferScope extends StatefulWidget {
   final AppModel model;
   const _CompressorTransferScope({required this.model});
@@ -123,80 +288,167 @@ class _CompressorTransferScope extends StatefulWidget {
   State<_CompressorTransferScope> createState() => _CompressorTransferScopeState();
 }
 
-class _CompressorTransferScopeState extends State<_CompressorTransferScope> {
+class _CompressorTransferScopeState extends State<_CompressorTransferScope>
+    with SingleTickerProviderStateMixin {
+  late final Ticker _ticker;
   double _smoothGr = 0.0;
+  double _targetGr = 0.0;
+  double _smoothInDb = -48.0;
+  double _targetInDb = -48.0;
+  Duration _lastElapsed = Duration.zero;
+
+  @override
+  void initState() {
+    super.initState();
+    _ticker = createTicker(_onTick);
+    widget.model.levelL.addListener(_updateTarget);
+    widget.model.levelR.addListener(_updateTarget);
+    widget.model.addListener(_onModelChanged);
+    _updateTarget();
+  }
+
+  @override
+  void dispose() {
+    _ticker.dispose();
+    widget.model.levelL.removeListener(_updateTarget);
+    widget.model.levelR.removeListener(_updateTarget);
+    widget.model.removeListener(_onModelChanged);
+    super.dispose();
+  }
+
+  void _onModelChanged() {
+    _updateTarget();
+    if (mounted) setState(() {});
+  }
+
+  void _updateTarget() {
+    final model = widget.model;
+    final inDb = math.max(model.levelL.value, model.levelR.value);
+    _targetInDb = inDb.clamp(-48.0, 0.0);
+
+    final threshold = model.compThreshold;
+    final ratio = model.compRatio;
+    const knee = 10.0;
+
+    double target = 0.0;
+    if (model.compOn && inDb > -48.0) {
+      final delta = inDb - threshold;
+      double yRaw;
+      if (2 * delta < -knee) {
+        yRaw = inDb;
+      } else if (2 * delta.abs() <= knee) {
+        final kTerm = delta + knee / 2.0;
+        yRaw = inDb + ((1.0 / ratio) - 1.0) * (kTerm * kTerm) / (2.0 * knee);
+      } else {
+        yRaw = threshold + delta / ratio;
+      }
+      target = (inDb - yRaw).clamp(0.0, 24.0);
+    }
+    _targetGr = target;
+
+    // 瞬态响应 (Attack)
+    if (_targetInDb >= _smoothInDb) {
+      _smoothInDb = _targetInDb;
+    }
+    if (_targetGr >= _smoothGr) {
+      _smoothGr = _targetGr;
+    }
+
+    // 若有电平流动或衰减需求且物理时钟未开，启动 Ticker
+    final needsAnimation = _smoothInDb > -46.0 ||
+        _targetInDb > -46.0 ||
+        _smoothGr > 0.01 ||
+        _targetGr > 0.01 ||
+        model.vbActive ||
+        model.asioActive ||
+        model.playing;
+
+    if (needsAnimation && !_ticker.isActive) {
+      _lastElapsed = Duration.zero;
+      _ticker.start();
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _onTick(Duration elapsed) {
+    if (!mounted) return;
+    if (_lastElapsed == Duration.zero) {
+      _lastElapsed = elapsed;
+      return;
+    }
+    final dt = (elapsed - _lastElapsed).inMicroseconds / 1000000.0;
+    _lastElapsed = elapsed;
+
+    // 1. 电平物理小球平滑跟随
+    final inDecay = math.exp(-dt / 0.12); // ~120ms 释放
+    if (_targetInDb >= _smoothInDb) {
+      _smoothInDb = _targetInDb;
+    } else {
+      _smoothInDb = _smoothInDb * inDecay + _targetInDb * (1.0 - inDecay);
+    }
+
+    // 2. 衰减表 Gain Reduction 物理平滑跟踪
+    final tc = widget.model.compTimeconstant.clamp(0.02, 0.5);
+    final grDecay = math.exp(-dt / tc);
+    if (_targetGr >= _smoothGr) {
+      _smoothGr = _targetGr;
+    } else {
+      _smoothGr = _smoothGr * grDecay + _targetGr * (1.0 - grDecay);
+    }
+
+    final isQuiet = _smoothInDb <= -47.0 &&
+        _targetInDb <= -47.0 &&
+        _smoothGr <= 0.02 &&
+        _targetGr <= 0.01;
+    final isStreamStopped = !widget.model.vbActive &&
+        !widget.model.asioActive &&
+        !widget.model.playing;
+
+    if (isQuiet && isStreamStopped) {
+      _smoothGr = 0.0;
+      _smoothInDb = -48.0;
+      _ticker.stop();
+      _lastElapsed = Duration.zero;
+    }
+    setState(() {});
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final model = widget.model;
+    final threshold = model.compThreshold;
+    final ratio = model.compRatio;
+    const knee = 10.0;
+    final makeup = model.compOutputGain + (model.compAutoGain ? 3.5 : 0.0);
 
-    return ListenableBuilder(
-      listenable: Listenable.merge([model.levelL, model.levelR]),
-      builder: (context, _) {
-        final inDb = math.max(model.levelL.value, model.levelR.value);
-
-        // 颗粒度对应拐点阈值
-        final threshold = model.compGranularity == 0
-            ? -18.0
-            : (model.compGranularity == 1 ? -24.0 : -28.0);
-        // 时常数影响压缩比斜率 (3.5 ~ 6.5)
-        final ratio = 3.5 + (0.5 - (model.compTimeconstant - 0.14)).clamp(0.0, 3.0);
-        const knee = 10.0;
-        final makeup = model.compOutputGain + (model.compAutoGain ? 3.5 : 0.0);
-
-        double targetGr = 0.0;
-        if (model.compOn && inDb > -48.0) {
-          final delta = inDb - threshold;
-          double yRaw;
-          if (2 * delta < -knee) {
-            yRaw = inDb;
-          } else if (2 * delta.abs() <= knee) {
-            final kTerm = delta + knee / 2.0;
-            yRaw = inDb + ((1.0 / ratio) - 1.0) * (kTerm * kTerm) / (2.0 * knee);
-          } else {
-            yRaw = threshold + delta / ratio;
-          }
-          targetGr = (inDb - yRaw).clamp(0.0, 24.0);
-        }
-
-        // 瞬时响应与平滑回弹 (Ballistics)
-        if (targetGr >= _smoothGr) {
-          _smoothGr = targetGr;
-        } else {
-          _smoothGr = _smoothGr * 0.85 + targetGr * 0.15;
-          if (_smoothGr < 0.05) _smoothGr = 0.0;
-        }
-
-        return Container(
-          width: double.infinity,
-          height: 130,
-          margin: const EdgeInsets.only(bottom: AuraSpace.xs),
-          decoration: BoxDecoration(
-            color: p.panel.withValues(alpha: 0.75),
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: Border.all(color: p.hairline.withValues(alpha: 0.4), width: 1.0),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            child: RepaintBoundary(
-              child: CustomPaint(
-                size: const Size(double.infinity, 130),
-                painter: _CompressorPainter(
-                  palette: p,
-                  active: model.compOn,
-                  threshold: threshold,
-                  ratio: ratio,
-                  knee: knee,
-                  makeup: makeup,
-                  inDb: inDb,
-                  grDb: _smoothGr,
-                ),
-              ),
+    return Container(
+      width: double.infinity,
+      height: 130,
+      margin: const EdgeInsets.only(bottom: AuraSpace.xs),
+      decoration: BoxDecoration(
+        color: p.panel.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.hairline.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: const Size(double.infinity, 130),
+            painter: _CompressorPainter(
+              palette: p,
+              active: model.compOn,
+              threshold: threshold,
+              ratio: ratio,
+              knee: knee,
+              makeup: makeup,
+              inDb: _smoothInDb,
+              grDb: _smoothGr,
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 }

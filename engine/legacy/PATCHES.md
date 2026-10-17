@@ -222,3 +222,11 @@ yquist * 0.999，
   按源码语义复原为 `activeConv`/`auradsp_*`/`fxOutGain`/`fxAutoGain`/`fxAG*`/
   `bit/sine`/`freq[NUMPTS]`/`test/smoke/...`；
   ③ 文件标题由 `vendor/` 更正为 `engine/legacy/`。
+
+## P-015 stereoEnhancement.c — 平滑等功率增益补偿（2026-10-17）
+
+- **位置**：`jdsp/Effects/stereoEnhancement.c` `StereoEnhancementSetParam`。
+- **动机**：原算法在 `mix=0.5` 处硬性将输出增益放大至 2.0 倍 (+6 dB)，导致用户拖动立体声展宽滑块时音量剧烈暴冲暴跌，体验失真（被误解为音量调节器）。
+- **内容**：采用平滑抛物线等功率增益补偿 `1.0f + 0.75f * (x * (1.0f - x))`，在 0.5 处温和补偿约 +1.4 dB 以弥补中央直达声能量分散，两端平滑归一到 1.0。
+- **行为影响**：消除 +6dB 音量突跳，立体声展宽调节过程总声能主观保持恒定。
+- **上游同步冲突风险**：低（单函数 4 行修改）。

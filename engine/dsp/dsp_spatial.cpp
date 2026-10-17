@@ -158,7 +158,9 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
             }
         }
         if (++h->spat_hist_pos >= 32768) h->spat_hist_pos = 0;
-        float yL = oL + eL, yR = oR + eR;
+        // 等能量归一化因子（消除 5 扬声器上混直加导致的声能暴涨 +8dB，保持调参时主观响度恒定）
+        const float spat_norm = 1.0f / sqrtf(2.0f + 0.5f * center * center + 0.98f + (room > 0.001f ? room * 0.4f : 0.0f));
+        float yL = (oL + eL) * spat_norm, yR = (oR + eR) * spat_norm;
         // pinna 双 biquad（DF1，固定签名）
         for (int st = 0; st < 2; ++st) {
             float* sL = h->spat_pinna[st][0];

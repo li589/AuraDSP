@@ -235,6 +235,8 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    comp_timeconstant{0.14f};  /* 秒 [0.02, 0.5] */
     std::atomic<int32_t>  comp_granularity{1};       /* [0, 4] 频带颗粒度 */
     std::atomic<int32_t>  comp_tfresolution{1};      /* [0, 3] 时频模式: 1=标准, 3=Gammatone零延迟 */
+    std::atomic<float>    comp_freq[7];              /* 7频段频率(Hz) [20, 20000] */
+    std::atomic<float>    comp_gain[7];              /* 7频段压限数值 [-1.2, 1.2]，负=压缩，正=扩展 */
     /* 任意响应均衡器（ArbMag / AutoEq GraphicEQ） */
     std::atomic<int32_t>  arbmag_enable{0};
     std::atomic<int32_t>  arbmag_ready{0};

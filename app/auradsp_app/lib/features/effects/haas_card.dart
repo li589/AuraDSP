@@ -14,7 +14,7 @@ class _HaasCard extends StatelessWidget {
     final p = paletteOf(context);
 
     return SectionCard(
-      index: null, // 随空间卡搬入，去编号
+      index: kEffectCardIndex['haas'],
       title: l.stHaas,
       collapsed: !model.haasOn,
       latencyMs: model.componentLatency('haas').ms,
