@@ -11,6 +11,7 @@ import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../core/design.dart';
@@ -82,12 +83,11 @@ const Map<String, String?> kEffectCardIndex = {
   'post': '3',
 };
 
-/// 效果分类（标题行右侧下拉过滤；**无"全部"**——全部 16 卡连排过密，
-/// 用户要求按类分页。默认展示第一类（前置整形）。空间独占一类）。
+/// 效果分类（标题行右侧下拉过滤；无"全部"，按类分页展示）。
 const Map<String, List<String>> kEffectCategories = {
   'front': ['input', 'gate', 'filter', 'bassmono', 'shelf'],
   'core': ['comp', 'dyneq', 'loudness', 'bass', 'eq', 'arbmag', 'ddc'],
-  'spatial': ['spatial'],
+  'spatial': ['spatial', 'reverb', 'stereo', 'haas', 'crossfeed', 'convolver'],
   'late': ['exciter', 'tube', 'post'],
 };
 
@@ -116,6 +116,11 @@ class EffectsPage extends StatelessWidget {
       'bassmono' => _BassMonoCard(model: model),
       'shelf' => _ShelfCard(model: model),
       'spatial' => _SpatialCard(model: model),
+      'reverb' => _SpatialReverbCard(model: model),
+      'stereo' => _StereoCard(model: model),
+      'haas' => _HaasCard(model: model),
+      'crossfeed' => _CrossfeedCard(model: model),
+      'convolver' => _ConvolverCard(model: model),
       'ddc' => _DdcCard(model: model),
       'eq' => _EqualizerCard(model: model),
       'arbmag' => _ArbmagCard(model: model),

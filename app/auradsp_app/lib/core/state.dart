@@ -585,6 +585,10 @@ class AppModel extends ChangeNotifier {
   double compTimeconstant = 0.14;
   int compGranularity = 1;
   int compTfresolution = 1;
+  double compThreshold = -18.0;
+  double compRatio = 4.0;
+  final List<double> compFreqs = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
+  final List<double> compGains = [-0.35, -0.35, -0.35, -0.35, -0.35, -0.35, -0.35];
 
   // M5/P-002：声场分带（0..1 每带；bandUsed=false 时随总滑块统一）
   final List<double> stereoBands = List.filled(5, 0.5);
@@ -1363,6 +1367,18 @@ class AppModel extends ChangeNotifier {
         if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
         if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
         if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
+        if (raw['compFreqs'] is List) {
+          final list = (raw['compFreqs'] as List).map((e) => (e as num).toDouble()).toList();
+          for (var i = 0; i < math.min(list.length, compFreqs.length); i++) {
+            compFreqs[i] = list[i];
+          }
+        }
+        if (raw['compGains'] is List) {
+          final list = (raw['compGains'] as List).map((e) => (e as num).toDouble()).toList();
+          for (var i = 0; i < math.min(list.length, compGains.length); i++) {
+            compGains[i] = list[i];
+          }
+        }
         if (raw['arbmagReady'] != null) arbmagReady = (raw['arbmagReady'] as int) != 0;
         if (raw['arbmagNodeCount'] != null) arbmagNodeCount = raw['arbmagNodeCount'] as int;
         /* 字符串回读对账（预设 §8.1 / 调研 §1.2-1.3；null=引擎无副本或超 cap）：
@@ -1945,6 +1961,10 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.compTimeconstant, compTimeconstant);
       setInt(ParamId.compGranularity, compGranularity);
       setInt(ParamId.compTfresolution, compTfresolution);
+      for (var i = 0; i < 7; i++) {
+        setFloat('comp.freq${i + 1}', compFreqs[i]);
+        setFloat('comp.gain${i + 1}', compGains[i]);
+      }
       setInt(ParamId.compEnable, compOn ? 1 : 0);
 
       // 2. 混响
@@ -2164,6 +2184,20 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.compTimeconstant) { compTimeconstant = v; break; }
         if (id == ParamId.compGranularity) { compGranularity = v.toInt(); break; }
         if (id == ParamId.compTfresolution) { compTfresolution = v.toInt(); break; }
+        if (id.startsWith('comp.freq')) {
+          final idx = int.tryParse(id.replaceFirst('comp.freq', ''));
+          if (idx != null && idx >= 1 && idx <= 7) {
+            compFreqs[idx - 1] = v;
+            break;
+          }
+        }
+        if (id.startsWith('comp.gain')) {
+          final idx = int.tryParse(id.replaceFirst('comp.gain', ''));
+          if (idx != null && idx >= 1 && idx <= 7) {
+            compGains[idx - 1] = v;
+            break;
+          }
+        }
         if (id == ParamId.arbmagEnable) { arbmagOn = v != 0; break; }
         if (id == ParamId.arbmagReady) { arbmagReady = v != 0; break; }
         if (id == ParamId.arbmagOutGain) { arbmagOutputGain = v; break; }
@@ -2216,10 +2250,9 @@ class AppModel extends ChangeNotifier {
     setStereoBand(index, ParamDefaults.stereoBand);
   }
 
-  /// 双击主滑块时重置立体声扩展并恢复 5 个子带为 0.5 中性
+  /// 双击主滑块时重置立体声扩展并恢复 5 个子带为 0.5 中性（不关闭开关）
   void resetStereoWiden() {
     stereoMix = ParamDefaults.stereoMix;
-    stereoOn = false;
     for (var i = 0; i < 5; i++) {
       stereoBands[i] = ParamDefaults.stereoBand;
     }
@@ -2924,6 +2957,40 @@ class AppModel extends ChangeNotifier {
   void setCompTfresolution(int v) {
     compTfresolution = v;
     setInt(ParamId.compTfresolution, v);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompThreshold(double v) {
+    compThreshold = v;
+    // 宏观阈值联动压缩强度：阈值越深(-dB)，压限系数越负
+    final strength = ((-v) / 48.0).clamp(0.0, 1.0);
+    for (var i = 0; i < 7; i++) {
+      compGains[i] = (-strength * 0.9).clamp(-1.2, 1.2);
+      setFloat('comp.gain${i + 1}', compGains[i]);
+    }
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompRatio(double v) {
+    compRatio = v;
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompFreq(int band, double freq) {
+    if (band < 0 || band >= 7) return;
+    compFreqs[band] = freq;
+    setFloat('comp.freq${band + 1}', freq);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setCompGain(int band, double gain) {
+    if (band < 0 || band >= 7) return;
+    compGains[band] = gain;
+    setFloat('comp.gain${band + 1}', gain);
     notifyListeners();
     scheduleAutoSave();
   }

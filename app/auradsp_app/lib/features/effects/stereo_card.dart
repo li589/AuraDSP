@@ -11,7 +11,7 @@ class _StereoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     return SectionCard(
-      index: null, // 随空间卡搬入，去编号
+      index: kEffectCardIndex['stereo'],
       title: l.stereoWiden,
       collapsed: !model.stereoOn,
       latencyMs: model.componentLatency('stereo').ms,

@@ -15,7 +15,7 @@ class _CrossfeedCard extends StatelessWidget {
     final isEnabled = m.xfeedOn;
 
     return SectionCard(
-      index: null, // 随空间卡搬入，去编号
+      index: kEffectCardIndex['crossfeed'],
       title: l.crossfeedTitle,
       titleTooltip: l.crossfeedDesc,
       collapsed: !isEnabled,

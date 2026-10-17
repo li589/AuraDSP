@@ -238,7 +238,7 @@ static auradsp_status get_bass_intensity(auradsp_handle h, void* out_value, uint
 static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
-    if (v < -1) return AURADSP_E_PARAM;
+    if (v < -2) return AURADSP_E_PARAM;
     if (v != h->p.reverb_preset.load(std::memory_order_relaxed)) {
         h->p.reverb_preset.store(v);
         compute_latency(h, &h->latency_ms);
@@ -251,10 +251,6 @@ static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uin
 static auradsp_status set_convolver_enable(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
-    if (v && !h->ir_ready.load(std::memory_order_relaxed)) {
-        set_error(h, "未加载脉冲响应：请先在 03 卡片点击「打开 IR」选择 .wav 文件，再启用卷积混响");
-        return AURADSP_E_STATE;
-    }
     h->p.conv_enable.store(v);
     if (h->open.load()) apply_convolver(h);
     compute_latency(h, &h->latency_ms);
@@ -782,6 +778,20 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("comp.timeconstant", comp_timeconstant, 0.02f, 0.5f, hook_comp_update),
     PARAM_INT("comp.granularity", comp_granularity, 0, 4, hook_comp_update),
     PARAM_INT("comp.tfresolution", comp_tfresolution, 0, 3, hook_comp_update),
+    PARAM_FLOAT("comp.freq1", comp_freq[0], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq2", comp_freq[1], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq3", comp_freq[2], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq4", comp_freq[3], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq5", comp_freq[4], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq6", comp_freq[5], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.freq7", comp_freq[6], 20.0f, 20000.0f, hook_comp_update),
+    PARAM_FLOAT("comp.gain1", comp_gain[0], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain2", comp_gain[1], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain3", comp_gain[2], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain4", comp_gain[3], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain5", comp_gain[4], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain6", comp_gain[5], -1.2f, 1.2f, hook_comp_update),
+    PARAM_FLOAT("comp.gain7", comp_gain[6], -1.2f, 1.2f, hook_comp_update),
     PARAM_FLOAT("comp.outgain", comp_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("comp.autogain", comp_autogain, hook_fx_gains),
 
