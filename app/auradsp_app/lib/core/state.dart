@@ -3798,8 +3798,15 @@ Future<bool> unregisterAsioDriver({bool elevated = true}) async {
 File? _findAsioRegisterScript() {
   var dir = Directory.current;
   for (var i = 0; i < 4; i++) {
-    final candidate = File('${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1');
-    if (candidate.existsSync()) return candidate;
+    final candidates = [
+      File('${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1'),
+      File('${dir.path}/scripts/register_driver.ps1'),
+      File('${dir.path}/register_driver.ps1'),
+      File('${dir.path}/../scripts/register_driver.ps1'),
+    ];
+    for (final c in candidates) {
+      if (c.existsSync()) return c;
+    }
     final parent = dir.parent;
     if (parent.path == dir.path) break;
     dir = parent;
@@ -3810,8 +3817,15 @@ File? _findAsioRegisterScript() {
 File? _findApoConfigScript() {
   var dir = Directory.current;
   for (var i = 0; i < 4; i++) {
-    final candidate = File('${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py');
-    if (candidate.existsSync()) return candidate;
+    final candidates = [
+      File('${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py'),
+      File('${dir.path}/scripts/apo_config.py'),
+      File('${dir.path}/apo_config.py'),
+      File('${dir.path}/../scripts/apo_config.py'),
+    ];
+    for (final c in candidates) {
+      if (c.existsSync()) return c;
+    }
     final parent = dir.parent;
     if (parent.path == dir.path) break;
     dir = parent;

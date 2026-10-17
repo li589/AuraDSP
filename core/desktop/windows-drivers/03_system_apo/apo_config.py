@@ -31,11 +31,47 @@ if sys.platform == 'win32' and hasattr(sys.stdout, 'reconfigure'):
         pass
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.dirname(os.path.abspath(__file__))))))
 OUT = os.path.join(ROOT, 'core', 'desktop', 'windows-drivers', 'out')
-BACKUP_DIR = os.path.join(OUT, 'apo-backups')
-DLL = os.path.join(OUT, 'Release', 'AuraApo.dll')
+
+def _find_first_existing(candidates):
+    for c in candidates:
+        if c and os.path.exists(c):
+            return os.path.abspath(c)
+    return os.path.abspath(candidates[0]) if candidates else ''
+
+def get_dll_path():
+    return _find_first_existing([
+        os.path.join(OUT, 'Release', 'AuraApo.dll'),
+        os.path.join(OUT, 'AuraApo.dll'),
+        os.path.join(SCRIPT_DIR, '..', 'bin', 'AuraApo.dll'),
+        os.path.join(SCRIPT_DIR, 'bin', 'AuraApo.dll'),
+        os.path.join(SCRIPT_DIR, 'AuraApo.dll'),
+    ])
+
+def get_inspect_exe():
+    return _find_first_existing([
+        os.path.join(OUT, 'Release', 'apo_inspect.exe'),
+        os.path.join(OUT, 'apo_inspect.exe'),
+        os.path.join(SCRIPT_DIR, '..', 'bin', 'apo_inspect.exe'),
+        os.path.join(SCRIPT_DIR, 'bin', 'apo_inspect.exe'),
+        os.path.join(SCRIPT_DIR, 'apo_inspect.exe'),
+    ])
+
+def get_backup_dir():
+    # If standard out dir exists, use OUT/apo-backups
+    if os.path.isdir(OUT) or os.path.isdir(os.path.join(ROOT, 'core')):
+        return os.path.join(OUT, 'apo-backups')
+    # If in unified workspace (with logs directory)
+    logs_dir = os.path.join(SCRIPT_DIR, '..', 'logs')
+    if os.path.isdir(logs_dir):
+        return os.path.join(logs_dir, 'apo-backups')
+    return os.path.join(SCRIPT_DIR, 'apo-backups')
+
+BACKUP_DIR = get_backup_dir()
+DLL = get_dll_path()
 
 OUR_CLSID = '{415AD8ED-7A45-4F4F-AC69-043830EBC174}'
 FX_BASE = '{d04e05a6-594b-4fb6-a80d-01af5eed7d1d}'
@@ -118,8 +154,9 @@ def ensure_com_registered():
     has_clsid, _ = reg_read(winreg.HKEY_CLASSES_ROOT, clsid_sub, '')
     if has_apo and has_clsid:
         return True
-    if os.path.exists(DLL):
-        sh(['regsvr32', '/s', DLL])
+    dll = get_dll_path()
+    if dll and os.path.exists(dll):
+        sh(['regsvr32', '/s', dll])
         has_apo, _ = reg_read(winreg.HKEY_CLASSES_ROOT, apo_sub, 'FriendlyName')
         has_clsid, _ = reg_read(winreg.HKEY_CLASSES_ROOT, clsid_sub, '')
         return bool(has_apo and has_clsid)
@@ -128,10 +165,8 @@ def ensure_com_registered():
 
 def find_endpoints(substr=''):
     """使用 apo_inspect.exe 获取系统所有活跃音频端点。"""
-    exe = os.path.join(OUT, 'Release', 'apo_inspect.exe')
-    if not os.path.exists(exe):
-        exe = os.path.join(OUT, 'apo_inspect.exe')
-    if not os.path.exists(exe):
+    exe = get_inspect_exe()
+    if not exe or not os.path.exists(exe):
         return []
     r = sh([exe])
     if r.returncode != 0:
@@ -179,7 +214,8 @@ def backup_endpoint(ep, mode='sfx-efx'):
     fx_sub = f'{MM_BASE}\\{direction}\\{short}\\FxProperties'
     child_sub = f'{CHILD_APO_ROOT}\\{short}'
     stamp = time.strftime('%Y%m%d_%H%M%S')
-    os.makedirs(BACKUP_DIR, exist_ok=True)
+    backup_dir = get_backup_dir()
+    os.makedirs(backup_dir, exist_ok=True)
 
     had_key = False
     slot_snapshot = {}
@@ -220,8 +256,8 @@ def backup_endpoint(ep, mode='sfx-efx'):
 
     # 2. 导出磁盘 .reg 和 .json 快照（双重安全防护）
     safe_name = ''.join(c if c.isalnum() else '_' for c in short)[:16]
-    reg_file = os.path.join(BACKUP_DIR, f'fx_{safe_name}_{stamp}.reg')
-    json_file = os.path.join(BACKUP_DIR, f'fx_{safe_name}_{stamp}.json')
+    reg_file = os.path.join(backup_dir, f'fx_{safe_name}_{stamp}.reg')
+    json_file = os.path.join(backup_dir, f'fx_{safe_name}_{stamp}.json')
 
     if had_key:
         sh(['reg', 'export', f'HKLM\\{fx_sub}', reg_file, '/y'])
@@ -257,8 +293,9 @@ def restore_endpoint(short_id):
         pass
 
     # 若注册表未存，尝试从磁盘 JSON 文件匹配
-    if not stored_info and os.path.isdir(BACKUP_DIR):
-        cands = [os.path.join(BACKUP_DIR, f) for f in os.listdir(BACKUP_DIR)
+    backup_dir = get_backup_dir()
+    if not stored_info and os.path.isdir(backup_dir):
+        cands = [os.path.join(backup_dir, f) for f in os.listdir(backup_dir)
                  if f.startswith('fx_') and f.endswith('.json')]
         for c in sorted(cands, reverse=True):
             try:
@@ -293,7 +330,7 @@ def restore_endpoint(short_id):
     else:
         # 逐槽恢复原始值
         try:
-            with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, fx_sub) as k:
+            with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, fx_sub, 0, winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE) as k:
                 if install_mode == 'composite':
                     # 复合槽：从 ,13/,14 的 MULTI_SZ 列表中移除 OUR_CLSID
                     for slot in (FX_BASE + ',13', FX_BASE + ',14'):
@@ -528,7 +565,7 @@ def cmd_install(substr, mode='sfx-efx', force=False, as_json=False):
     short = short_guid(ep['id'])
     fx_sub = f'{MM_BASE}\\{direction}\\{short}\\FxProperties'
 
-    with winreg.CreateKey(winreg.HKEY_LOCAL_MACHINE, fx_sub) as k:
+    with winreg.CreateKeyEx(winreg.HKEY_LOCAL_MACHINE, fx_sub, 0, winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE) as k:
         # PKEY_FX_Association 关联 GUID 必须为全零 GUID
         winreg.SetValueEx(k, FX_BASE + ',0', 0, winreg.REG_SZ, NULL_GUID)
 
