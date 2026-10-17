@@ -14,13 +14,6 @@ class _CrossfeedCard extends StatelessWidget {
     final m = model;
     final isEnabled = m.xfeedOn;
 
-    final modeLabels = <int, String>{
-      0: l.crossfeedModeDefault,
-      1: l.crossfeedModeChuMoy,
-      2: l.crossfeedModeJanMeier,
-      3: l.crossfeedModeCustom,
-    };
-
     return SectionCard(
       index: null, // 随空间卡搬入，去编号
       title: l.crossfeedTitle,
@@ -34,9 +27,9 @@ class _CrossfeedCard extends StatelessWidget {
           ? () => m.refreshComponentLatency('crossfeed')
           : null,
       latencyTick: m.getComponentLatencyTick('crossfeed'),
-      trailing: AuraSwitch(
-        value: isEnabled,
-        onChanged: (v) => m.setCrossfeedEnabled(v),
+      trailing: ParamSwitch(
+        param: ParamRegistry.crossfeedEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -49,17 +42,14 @@ class _CrossfeedCard extends StatelessWidget {
               const SizedBox(width: 4),
               InfoBadge(message: '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。'),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                runSpacing: AuraSpace.xs,
-                alignment: WrapAlignment.end,
-                children: [
-                  for (final e in modeLabels.entries)
-                    AuraChoiceChip(
-                      label: e.value,
-                      selected: isEnabled && m.xfeedMode == e.key,
-                      onTap: isEnabled ? () => m.setCrossfeedMode(e.key) : null,
-                    ),
+              ParamChoiceChips(
+                param: ParamRegistry.crossfeedMode,
+                model: m,
+                labels: [
+                  l.crossfeedModeDefault,
+                  l.crossfeedModeChuMoy,
+                  l.crossfeedModeJanMeier,
+                  l.crossfeedModeCustom,
                 ],
               ),
             ],
@@ -80,7 +70,6 @@ class _CrossfeedAdvanced extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final m = model;
-    final isEnabled = m.xfeedOn;
 
     final modeLabels = <int, String>{
       0: l.crossfeedModeDefault,
@@ -96,34 +85,18 @@ class _CrossfeedAdvanced extends StatelessWidget {
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ValueSlider(
-            label: l.crossfeedCutoff,
+          ParamSlider(
+            param: ParamRegistry.crossfeedFcut,
+            model: m,
+            customLabel: l.crossfeedCutoff,
             infoMessage: '串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。',
-            value: m.xfeedFcut,
-            defaultValue: 700.0,
-            onResetToDefault: () => m.setCrossfeedFcut(700.0),
-            min: 300.0,
-            max: 2000.0,
-            unit: 'Hz',
-            enabled: isEnabled,
-            format: (v) => v.toStringAsFixed(0),
-            onChanged: (v) => m.setCrossfeedFcut(v),
-            onChangedEnd: (v) => m.setCrossfeedFcut(v),
           ),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.crossfeedFeed,
+          ParamSlider(
+            param: ParamRegistry.crossfeedFeed,
+            model: m,
+            customLabel: l.crossfeedFeed,
             infoMessage: '低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。',
-            value: m.xfeedFeed,
-            defaultValue: 4.5,
-            onResetToDefault: () => m.setCrossfeedFeed(4.5),
-            min: 1.0,
-            max: 15.0,
-            unit: 'dB',
-            enabled: isEnabled,
-            format: (v) => v.toStringAsFixed(1),
-            onChanged: (v) => m.setCrossfeedFeed(v),
-            onChangedEnd: (v) => m.setCrossfeedFeed(v),
           ),
         ],
       ),

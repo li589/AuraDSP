@@ -22,28 +22,20 @@ class _PostCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ValueSlider(
-            label: l.postGain,
+          ParamSlider(
+            param: ParamRegistry.postGain,
+            model: model,
+            customLabel: l.postGain,
             infoMessage: '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。',
-            value: model.postGain,
-            defaultValue: ParamDefaults.postGain,
-            onResetToDefault: () =>
-                model.setFloat('post.gain', ParamDefaults.postGain),
-            min: -15,
-            max: 15,
-            unit: 'dB',
-            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-            onChanged: (v) => model.setFloat('post.gain', v),
-            onChangedEnd: (v) => model.setFloat('post.gain', v),
           ),
           const SizedBox(height: AuraSpace.md),
           Container(height: 1, color: paletteOf(context).hairline),
           const SizedBox(height: AuraSpace.md),
           SectionTitle(
             l.limiter,
-            trailing: AuraSwitch(
-              value: model.limiterOn,
-              onChanged: (v) => model.setInt('limiter.enable', v ? 1 : 0),
+            trailing: ParamSwitch(
+              param: ParamRegistry.postLimiterEnable,
+              model: model,
             ),
           ),
         ],

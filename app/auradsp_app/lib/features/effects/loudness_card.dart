@@ -25,29 +25,20 @@ class _LoudnessCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('loudness')
           : null,
       latencyTick: model.getComponentLatencyTick('loudness'),
-      trailing: AuraSwitch(
-        value: model.loudnessOn,
-        onChanged: model.setLoudnessEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.loudnessEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l.loudnessHint, style: captionOf(p)),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.loudnessAmount,
+          ParamSlider(
+            param: ParamRegistry.loudnessAmount,
+            model: model,
+            customLabel: l.loudnessAmount,
             infoMessage: '补偿强度。小音量夜听开高，大音量开低或关（响亮时自动直通）。',
-            value: model.loudnessAmount,
-            defaultValue: ParamDefaults.loudnessAmount,
-            onResetToDefault: () =>
-                model.setLoudnessAmount(ParamDefaults.loudnessAmount),
-            min: 0,
-            max: 1,
-            unit: '%',
-            enabled: model.loudnessOn,
-            format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: model.setLoudnessAmount,
-            onChangedEnd: model.setLoudnessAmount,
           ),
         ],
       ),

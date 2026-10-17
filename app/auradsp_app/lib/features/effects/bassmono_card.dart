@@ -25,9 +25,9 @@ class _BassMonoCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('bassmono')
           : null,
       latencyTick: model.getComponentLatencyTick('bassmono'),
-      trailing: AuraSwitch(
-        value: model.bassmonoOn,
-        onChanged: model.setBassmonoEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.bassmonoEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -58,20 +58,11 @@ class _BassMonoCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           AdvancedSection(
             summary: '${model.bassmonoFreq.toStringAsFixed(0)} Hz',
-            builder: (ctx) => ValueSlider(
-              label: l.bassmonoFreq,
+            builder: (ctx) => ParamSlider(
+              param: ParamRegistry.bassmonoFreq,
+              model: model,
+              customLabel: l.bassmonoFreq,
               infoMessage: l.bassmonoCombinedTooltip,
-              value: model.bassmonoFreq,
-              defaultValue: ParamDefaults.bassmonoFreq,
-              onResetToDefault: () =>
-                  model.setBassmonoFreq(ParamDefaults.bassmonoFreq),
-              min: 20,
-              max: 300,
-              unit: 'Hz',
-              enabled: model.bassmonoOn,
-              format: (v) => v.toStringAsFixed(0),
-              onChanged: model.setBassmonoFreq,
-              onChangedEnd: model.setBassmonoFreq,
             ),
           ),
         ],

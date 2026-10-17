@@ -24,27 +24,22 @@ class _CompressorCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('comp')
           : null,
       latencyTick: model.getComponentLatencyTick('comp'),
-      trailing: AuraSwitch(
-        value: model.compOn,
-        onChanged: model.setCompEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.compEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 响应时常数（Time Constant）主滑块
-          ValueSlider(
-            label: l.compTimeconstant,
+          ParamSlider(
+            param: ParamRegistry.compTimeconstant,
+            model: model,
+            customLabel: l.compTimeconstant,
             infoMessage: '控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。',
-            value: model.compTimeconstant,
-            defaultValue: 0.14,
-            min: 0.02,
-            max: 1.0,
-            unit: 'ms',
-            enabled: model.compOn,
-            format: (v) => (v * 1000).toStringAsFixed(0),
-            onChanged: model.setCompTimeconstant,
-            onChangedEnd: model.setCompTimeconstant,
-            onResetToDefault: () => model.setCompTimeconstant(0.14),
+            customMin: 0.02,
+            customUnit: 'ms',
+            customFormat: (v) => (v * 1000).toStringAsFixed(0),
           ),
           const SizedBox(height: AuraSpace.sm),
           AdvancedSection(
@@ -57,24 +52,13 @@ class _CompressorCard extends StatelessWidget {
                   children: [
                     Text(l.compGranularity, style: labelOf(p, color: p.text)),
                     const Spacer(),
-                    Wrap(
-                      spacing: AuraSpace.sm,
-                      children: [
-                        AuraChoiceChip(
-                          label: l.compGranularityCoarse,
-                          selected: model.compGranularity == 0,
-                          onTap: model.compOn ? () => model.setCompGranularity(0) : null,
-                        ),
-                        AuraChoiceChip(
-                          label: l.compGranularityNormal,
-                          selected: model.compGranularity == 1,
-                          onTap: model.compOn ? () => model.setCompGranularity(1) : null,
-                        ),
-                        AuraChoiceChip(
-                          label: l.compGranularityFine,
-                          selected: model.compGranularity == 2,
-                          onTap: model.compOn ? () => model.setCompGranularity(2) : null,
-                        ),
+                    ParamChoiceChips(
+                      param: ParamRegistry.compGranularity,
+                      model: model,
+                      labels: [
+                        l.compGranularityCoarse,
+                        l.compGranularityNormal,
+                        l.compGranularityFine,
                       ],
                     ),
                   ],
@@ -85,24 +69,13 @@ class _CompressorCard extends StatelessWidget {
                   children: [
                     Text(l.compTfresolution, style: labelOf(p, color: p.text)),
                     const Spacer(),
-                    Wrap(
-                      spacing: AuraSpace.sm,
-                      children: [
-                        AuraChoiceChip(
-                          label: l.compTfresTransient,
-                          selected: model.compTfresolution == 0,
-                          onTap: model.compOn ? () => model.setCompTfresolution(0) : null,
-                        ),
-                        AuraChoiceChip(
-                          label: l.compTfresBalanced,
-                          selected: model.compTfresolution == 1,
-                          onTap: model.compOn ? () => model.setCompTfresolution(1) : null,
-                        ),
-                        AuraChoiceChip(
-                          label: l.compTfresFine,
-                          selected: model.compTfresolution == 2,
-                          onTap: model.compOn ? () => model.setCompTfresolution(2) : null,
-                        ),
+                    ParamChoiceChips(
+                      param: ParamRegistry.compTfresolution,
+                      model: model,
+                      labels: [
+                        l.compTfresTransient,
+                        l.compTfresBalanced,
+                        l.compTfresFine,
                       ],
                     ),
                   ],
@@ -112,28 +85,18 @@ class _CompressorCard extends StatelessWidget {
                 OutputGainFrame(
                   child: Column(
                     children: [
-                      _AutoGainRow(
+                      ParamAutoGainRow(
+                        param: ParamRegistry.compAutoGain,
+                        model: model,
                         label: l.autoGainCompensation,
                         tooltip: l.autoGainCompensationTooltip,
-                        value: model.compAutoGain,
-                        enabled: model.compOn,
-                        onChanged: model.setCompAutoGain,
                       ),
                       const SizedBox(height: AuraSpace.xs),
-                      ValueSlider(
+                      ParamOutputGainSlider(
+                        param: ParamRegistry.compOutputGain,
+                        model: model,
                         label: l.outputGainGate,
                         infoMessage: l.outputGainGateTooltip,
-                        value: model.compOutputGain,
-                        defaultValue: ParamDefaults.compOutputGain,
-                        onResetToDefault: () =>
-                            model.setCompOutputGain(ParamDefaults.compOutputGain),
-                        min: -12.0,
-                        max: 6.0,
-                        unit: 'dB',
-                        enabled: model.compOn,
-                        format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                        onChanged: model.setCompOutputGain,
-                        onChangedEnd: model.setCompOutputGain,
                       ),
                     ],
                   ),
