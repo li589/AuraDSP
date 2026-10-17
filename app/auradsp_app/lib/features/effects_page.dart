@@ -48,8 +48,8 @@ part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 
-/// 效果器卡片序号**单一真相**（分类编号 {类}-{序号}，类按链序：
-/// 1 输入整形 / 2 动态控制 / 3 低频 / 4 均衡校准 / 5 空间 / 6 激励与输出）。
+/// 效果器卡片序号**单一真相**：**每类内**从 1 纯数字递增（类由标题行下拉
+/// 标明，卡片序号只在本类内计数，故无前缀）。空间卡单独成类、不编号。
 ///
 /// 历史坑：序号原本硬编码在 20 个卡片文件里、各写各的，结果出现 5 个 '00'
 /// （input/gate/filter/dyneq 都算 0 号）、2 个 '02'、2 个 '06'，新增或调整
@@ -59,40 +59,36 @@ part 'effects/preset_card.dart';
 ///
 /// 注意：这是**页面分区序号**，不是处理链顺序。链上顺序见 ChainPage 的
 /// kDefaultCoreOrder 与「处理顺序」页，两者不必相同。
-const Map<String, String> kEffectCardIndex = {
-  'input': '1-1',
-  'gate': '1-2',
-  'filter': '1-3',
-  'comp': '2-1',
-  'dyneq': '2-2',
-  'loudness': '2-3',
-  'bass': '3-1',
-  'bassmono': '3-2',
-  'shelf': '3-3',
-  'eq': '4-1',
-  'arbmag': '4-2',
-  'ddc': '4-3',
-  'exciter': '6-1',
-  'tube': '6-2',
-  'post': '6-3',
+const Map<String, String?> kEffectCardIndex = {
+  // 前置整形（front）
+  'input': '1',
+  'gate': '2',
+  'filter': '3',
+  'bassmono': '4',
+  'shelf': '5',
+  // 核心处理（core）
+  'comp': '1',
+  'dyneq': '2',
+  'loudness': '3',
+  'bass': '4',
+  'eq': '5',
+  'arbmag': '6',
+  'ddc': '7',
+  // 空间（spatial）：单独成类，不编号
+  // 激励与输出（late）
+  'exciter': '1',
+  'tube': '2',
+  'post': '3',
 };
 
-/// 效果分类（标题行右侧下拉过滤；空间独占一类）。
-/// 'all' 伪类 = 全部链序展开（默认视图，与分类前逐像素一致）。
+/// 效果分类（标题行右侧下拉过滤；**无"全部"**——全部 16 卡连排过密，
+/// 用户要求按类分页。默认展示第一类（前置整形）。空间独占一类）。
 const Map<String, List<String>> kEffectCategories = {
-  'input': ['input', 'gate', 'filter'],
-  'dynamics': ['comp', 'dyneq', 'loudness'],
-  'bass': ['bass', 'bassmono', 'shelf'],
-  'eq': ['eq', 'arbmag', 'ddc'],
+  'front': ['input', 'gate', 'filter', 'bassmono', 'shelf'],
+  'core': ['comp', 'dyneq', 'loudness', 'bass', 'eq', 'arbmag', 'ddc'],
   'spatial': ['spatial'],
   'late': ['exciter', 'tube', 'post'],
 };
-
-/// 'all' 默认视图的链序（与分类前一致，保证默认零视觉变更）。
-const List<String> kEffectPageOrder = [
-  'input', 'gate', 'filter', 'dyneq', 'comp', 'bass', 'bassmono', 'shelf',
-  'spatial', 'ddc', 'eq', 'arbmag', 'exciter', 'loudness', 'tube', 'post',
-];
 
 class EffectsPage extends StatelessWidget {
   final AppModel model;
@@ -100,13 +96,11 @@ class EffectsPage extends StatelessWidget {
 
   String _categoryLabel(AppLocalizations l, String id) {
     return switch (id) {
-      'input' => l.fxCatInput,
-      'dynamics' => l.fxCatDynamics,
-      'bass' => l.fxCatBass,
-      'eq' => l.fxCatEq,
+      'front' => l.fxCatFront,
+      'core' => l.fxCatCore,
       'spatial' => l.fxCatSpatial,
       'late' => l.fxCatLate,
-      _ => l.fxCatAll,
+      _ => l.fxCatCore,
     };
   }
 
@@ -135,7 +129,7 @@ class EffectsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    const order = ['all', 'input', 'dynamics', 'bass', 'eq', 'spatial', 'late'];
+    const order = ['front', 'core', 'spatial', 'late'];
     return PageScaffold(
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
@@ -151,7 +145,7 @@ class EffectsPage extends StatelessWidget {
                 DropdownMenuItem<String>(
                   value: id,
                   child: Text(
-                    id == 'all' ? l.fxCatAll : _categoryLabel(l, id),
+                    _categoryLabel(l, id),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -166,16 +160,22 @@ class EffectsPage extends StatelessWidget {
         ListenableBuilder(
           listenable: model,
           builder: (_, _) {
-            final ids = model.effectsCategory == 'all'
-                ? kEffectPageOrder
-                : (kEffectCategories[model.effectsCategory] ??
-                    kEffectPageOrder);
+            final ids = kEffectCategories[model.effectsCategory] ??
+                kEffectCategories['front']!;
+            // 卡片间留空（用户反馈：全类连排过密无间距）。
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: [for (final id in ids) _cardFor(id, model)],
+              children: [
+                for (var i = 0; i < ids.length; i++) ...[
+                  _cardFor(ids[i], model),
+                  if (i < ids.length - 1)
+                    const SizedBox(height: AuraSpace.md),
+                ],
+              ],
             );
           },
         ),
+        const SizedBox(height: AuraSpace.md),
         _PresetCard(model: model),
       ],
     );

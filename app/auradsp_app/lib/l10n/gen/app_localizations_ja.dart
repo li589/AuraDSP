@@ -1126,21 +1126,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get haasSideLeft => '左チャンネル';
 
   @override
-  String get fxCatAll => 'すべて';
-
-  @override
-  String get fxCatInput => '入力整形';
-
-  @override
-  String get fxCatDynamics => 'ダイナミクス';
-
-  @override
-  String get fxCatBass => '低音';
-
-  @override
-  String get fxCatEq => 'EQ・校正';
-
-  @override
   String get fxCatSpatial => '空間';
 
   @override
@@ -1840,4 +1825,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String crossfeedActiveDesc(String mode, String fcut, String feed) {
     return '適用中: $mode ($fcut Hz, $feed dB)';
   }
+
+  @override
+  String get fxCatFront => '前置整形';
+
+  @override
+  String get fxCatCore => 'コア処理';
 }

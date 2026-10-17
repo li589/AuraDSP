@@ -1,6 +1,6 @@
-// effects_category_test.dart — 效果页分类过滤回归：
-// 默认 'all' 展开全部 16 卡 + 空间卡内 5 搬入子卡 + 预设卡（22 SectionCard）；
-// 切到 'spatial' 只剩空间卡 + 5 子卡 + 预设卡（7）；切到 'eq' 为 3 卡 + 预设卡（4）。
+// effects_category_test.dart — 效果页分类过滤回归（无"全部"，4 类按页展示）：
+// 默认 front（5 卡 + 预设 = 6）；spatial 为空间卡 + 5 子卡 + 预设（7）；
+// core 7 卡 + 预设（8）；late 3 卡 + 预设（4）。
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
@@ -31,26 +31,57 @@ int _sectionCards(WidgetTester tester) =>
     tester.widgetList(find.byType(SectionCard)).length;
 
 void main() {
-  testWidgets('all shows every card, categories filter correctly',
+  testWidgets('no all, per-category card counts, spacing present',
       (tester) async {
     final model = AppModel(testing: true);
     await _pumpPage(tester, model);
-    // 16 页卡 + 空间卡内 5 子卡 + 预设卡
-    expect(_sectionCards(tester), 22);
 
+    // 默认 front：5 卡 + 预设卡
+    expect(model.effectsCategory, 'front');
+    expect(_sectionCards(tester), 6);
+    // 无"全部"下拉项
+    expect(find.text('All'), findsNothing);
+
+    // 空间类：空间卡 + 5 子卡 + 预设卡；空间卡不编号
     model.setEffectsCategory('spatial');
     await tester.pumpAndSettle();
-    // 空间卡 + 5 子卡 + 预设卡；搬入的混响子卡可见；空间卡去编号（无 09 徽标）
     expect(_sectionCards(tester), 7);
     expect(find.text('Spatial Reverb'), findsOneWidget);
 
-    model.setEffectsCategory('eq');
+    // 核心处理：7 卡 + 预设卡
+    model.setEffectsCategory('core');
     await tester.pumpAndSettle();
-    // eq/arbmag/ddc + 预设卡
-    expect(_sectionCards(tester), 4);
+    expect(_sectionCards(tester), 8);
 
-    model.setEffectsCategory('all');
+    // 激励与输出：3 卡 + 预设卡
+    model.setEffectsCategory('late');
     await tester.pumpAndSettle();
-    expect(_sectionCards(tester), 22);
+    expect(_sectionCards(tester), 4);
+  });
+
+  test('per-category numbering is 1-based within each category', () {
+    // front 类 5 张：1..5；core 类 7 张：1..7；late 3 张：1..3；空间 null。
+    for (var i = 0; i < kEffectCategories['front']!.length; i++) {
+      final id = kEffectCategories['front']![i];
+      expect(kEffectCardIndex[id], '${i + 1}', reason: id);
+    }
+    for (var i = 0; i < kEffectCategories['core']!.length; i++) {
+      final id = kEffectCategories['core']![i];
+      expect(kEffectCardIndex[id], '${i + 1}', reason: id);
+    }
+    for (var i = 0; i < kEffectCategories['late']!.length; i++) {
+      final id = kEffectCategories['late']![i];
+      expect(kEffectCardIndex[id], '${i + 1}', reason: id);
+    }
+    // 空间类去编号
+    expect(kEffectCardIndex['spatial'], isNull);
+    // 每张卡恰好属于一个类
+    final seen = <String, String>{};
+    for (final e in kEffectCategories.entries) {
+      for (final id in e.value) {
+        expect(seen.containsKey(id), isFalse, reason: '$id double-grouped');
+        seen[id] = e.key;
+      }
+    }
   });
 }

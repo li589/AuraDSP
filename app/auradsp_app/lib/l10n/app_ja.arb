@@ -155,15 +155,23 @@
   "asioSrMismatch": "ドライバーは {sr} Hz で動作中（グローバル設定 {cfg} Hz と不一致、ASIO はドライバーに従います）",
   "@asioSrMismatch": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "wasapiSrFallback": "デバイスは {sr} Hz で動作中（要求 {cfg} Hz は拒否されフォールバック）",
   "@wasapiSrFallback": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "asioLatChanged": "ドライバーがレイテンシ変更を報告（次セッションで更新）",
@@ -351,7 +359,9 @@
   "@latTipEstimated": {
     "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
     "placeholders": {
-      "text": {"type": "String"}
+      "text": {
+        "type": "String"
+      }
     }
   },
   "@eqBands": {
@@ -430,11 +440,6 @@
   "haasSide": "遅延側",
   "haasSideRight": "右チャンネル",
   "haasSideLeft": "左チャンネル",
-  "fxCatAll": "すべて",
-  "fxCatInput": "入力整形",
-  "fxCatDynamics": "ダイナミクス",
-  "fxCatBass": "低音",
-  "fxCatEq": "EQ・校正",
   "fxCatSpatial": "空間",
   "fxCatLate": "エキサイター・出力",
   "spatialTitle": "空間オーディオ",
@@ -876,5 +881,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fxCatFront": "前置整形",
+  "fxCatCore": "コア処理"
 }

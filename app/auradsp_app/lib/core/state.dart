@@ -568,8 +568,8 @@ class AppModel extends ChangeNotifier {
   int source51Mode = 0;
   // 当前文件源声道数（isolate playing 事件回填；直通/UI 门控据此判定）。
   int fileChannels = 2;
-  // 效果页分类过滤（会话内有效，不持久化；'all' = 全部链序展开）。
-  String effectsCategory = 'all';
+  // 效果页分类过滤（会话内有效，不持久化；默认第一类「前置整形」，无"全部"）。
+  String effectsCategory = 'front';
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
   bool exciterOn = false;
   double exciterAmount = 0.3, exciterHifreq = 5000;

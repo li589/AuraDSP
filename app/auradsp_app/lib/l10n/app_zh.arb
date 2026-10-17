@@ -155,15 +155,23 @@
   "asioSrMismatch": "驱动运行于 {sr} Hz，与全局设置 {cfg} Hz 不符（ASIO 跟随驱动）",
   "@asioSrMismatch": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "wasapiSrFallback": "设备实际 {sr} Hz（请求 {cfg} Hz 被拒，已回退）",
   "@wasapiSrFallback": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "asioLatChanged": "驱动已上报延迟变更（重开会话后刷新）",
@@ -351,7 +359,9 @@
   "@latTipEstimated": {
     "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
     "placeholders": {
-      "text": {"type": "String"}
+      "text": {
+        "type": "String"
+      }
     }
   },
   "@eqBands": {
@@ -430,11 +440,6 @@
   "haasSide": "延迟侧",
   "haasSideRight": "右声道",
   "haasSideLeft": "左声道",
-  "fxCatAll": "全部",
-  "fxCatInput": "输入整形",
-  "fxCatDynamics": "动态控制",
-  "fxCatBass": "低频",
-  "fxCatEq": "均衡校准",
   "fxCatSpatial": "空间",
   "fxCatLate": "激励与输出",
   "spatialTitle": "空间音效",
@@ -876,5 +881,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fxCatFront": "前置整形",
+  "fxCatCore": "核心处理"
 }

@@ -155,15 +155,23 @@
   "asioSrMismatch": "Driver runs at {sr} Hz, mismatching the global {cfg} Hz (ASIO follows the driver)",
   "@asioSrMismatch": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "wasapiSrFallback": "Device runs at {sr} Hz (requested {cfg} Hz was rejected, fell back)",
   "@wasapiSrFallback": {
     "placeholders": {
-      "sr": { "type": "String" },
-      "cfg": { "type": "String" }
+      "sr": {
+        "type": "String"
+      },
+      "cfg": {
+        "type": "String"
+      }
     }
   },
   "asioLatChanged": "Driver reported a latency change (reopens on next session)",
@@ -351,7 +359,9 @@
   "@latTipEstimated": {
     "description": "Tooltip for a latency value derived from the nominal table or analytic estimate rather than a real impulse-response measurement.",
     "placeholders": {
-      "text": {"type": "String"}
+      "text": {
+        "type": "String"
+      }
     }
   },
   "@eqBands": {
@@ -430,11 +440,6 @@
   "haasSide": "Delay side",
   "haasSideRight": "Right channel",
   "haasSideLeft": "Left channel",
-  "fxCatAll": "All",
-  "fxCatInput": "Input Shaping",
-  "fxCatDynamics": "Dynamics",
-  "fxCatBass": "Bass",
-  "fxCatEq": "EQ & Calibration",
   "fxCatSpatial": "Spatial",
   "fxCatLate": "Exciter & Output",
   "spatialTitle": "Spatial",
@@ -876,5 +881,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "fxCatFront": "Front Shaping",
+  "fxCatCore": "Core Processing"
 }
