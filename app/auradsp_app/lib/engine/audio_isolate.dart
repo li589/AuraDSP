@@ -78,6 +78,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   WasapiOut? wasapi;
   Source? source;
   bool bypass = false;
+  // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
+  // 引擎仍照常跑 fold 版供 viz/电平表，零额外开销）。设备声道不足时自动回落 fold。
+  bool passthrough51 = false;
   bool running = true;
   int? lastViz;
   var vizCount = 0;
@@ -910,7 +913,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   if (mp == null) {
                     send({'evt': 'error', 'msg': 'MP3 解析失败（文件损坏/不支持或超 64MB 上限）'});
                   } else {
-                    source = FileSource(mp.data, mp.sampleRate);
+                    source = FileSource(mp.data, mp.sampleRate)
+                      ..fileCh = 2;
                   }
                 }
               } else {
@@ -918,12 +922,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 if (w == null) {
                   send({'evt': 'error', 'msg': 'WAV 解析失败（仅支持 PCM 16/24/32 与 float32）'});
                 } else {
-                  source = FileSource(w.data, w.sampleRate);
+                  // fold 版常驻（引擎/viz/桥）；raw 版按需（≤8ch 才有，直通用）。
+                  final r = w.channels > 2 ? decodeWavFile(fpath, fold: false) : null;
+                  source = FileSource(w.data, w.sampleRate,
+                      raw: r?.data, rawCh: r?.channels ?? 2)
+                    ..fileCh = w.channels;
                 }
               }
               break;
           }
-          send({'evt': 'playing', 'playing': source != null});
+          final fs0 = source is FileSource ? source as FileSource : null;
+          send({
+            'evt': 'playing',
+            'playing': source != null,
+            'srcCh': fs0?.fileCh ?? 2,
+          });
           break;
         case 'vbmode':
           if (m['on'] as bool) {
@@ -994,6 +1007,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (vaioActive && vaio != null) {
             vaio!.setBypass(bypass);
           }
+          break;
+        case 'source51':
+          // 0=混缩（默认） 1=直通；桥注入（试音）恒走 fold stereo，本旗只管本地渲染。
+          passthrough51 = (m['value'] as int) != 0;
           break;
         case 'setBusMask':
           vbBusMask = (m['mask'] as int) & 0xFF;
@@ -1351,6 +1368,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final srcBuf = srcPtr.asTypedList(maxBlock * 2);
   final outPtrEng = malloc<Float>(maxBlock * 2);
   final engOut = outPtrEng.asTypedList(maxBlock * 2);
+  // 直通 scratch（Dart 堆，复用；fillRaw 写入 frames*rawCh ≤ maxBlock*8）。
+  final rawBuf = Float32List(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
   String? lastPumpErr;
   var lastPumpErrAt = 0;
@@ -1567,6 +1586,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             dbgLog('GUARD: frames=$frames > maxBlock=$maxBlock!');
           }
           final devCh = w.mix.channels;
+          // 5.1 直通判定（本地渲染 only）：raw 就绪 + 用户开直通 +
+          // 设备声道兜得住；任一不满足回落 fold。引擎照常跑 fold 版供 viz。
+          final fs = source is FileSource ? source as FileSource : null;
+          // 非空收窄：useRaw 为真蕴含 rawSrc 非空（analyzer 可验证的形态）。
+          final rawSrc = (fs != null &&
+                  fs.raw != null &&
+                  fs.rawCh > 2 &&
+                  passthrough51 &&
+                  devCh >= fs.rawCh)
+              ? fs
+              : null;
           if (!bypass) {
             procRounds++;
             if (procRounds == 1) {
@@ -1578,7 +1608,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
           final devOut = w.getBuffer(frames);
-          writeToDevice(w, devOut, frames, devCh, bypass ? srcBuf : engOut);
+          if (rawSrc != null) {
+            rawSrc.fillRaw(rawBuf, frames, w.mix.sampleRate);
+            writeToDevice(w, devOut, frames, devCh, rawBuf, srcCh: rawSrc.rawCh);
+          } else {
+            writeToDevice(w, devOut, frames, devCh, bypass ? srcBuf : engOut);
+          }
           w.releaseBuffer(frames);
 
           // 可视化节流拉取：引擎 ~10ms 产一帧，UI 33ms 拉一次，

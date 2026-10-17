@@ -82,4 +82,36 @@ void main() {
     expect(d.data[0], closeTo(0.3, 0.002));
     expect(d.data[1], closeTo(-0.3, 0.002));
   });
+
+  test('raw decode preserves channels for passthrough', () {
+    final p = _writeWav(6, [
+      [0.1, 0.2, 0.3, 0.4, 0.5, 0.6]
+    ]);
+    final folded = decodeWavFile(p)!;
+    expect(folded.channels, 6);
+    final raw = decodeWavFile(p, fold: false)!;
+    expect(raw.channels, 6);
+    expect(raw.data.length, 6);
+    expect(raw.data[0], closeTo(0.1, 0.002));
+    expect(raw.data[5], closeTo(0.6, 0.002));
+  });
+
+  test('fillRaw is bit-exact at unity ratio', () {
+    final frames = [
+      [0.1, -0.2, 0.3, -0.4, 0.5, -0.6],
+      [0.6, -0.5, 0.4, -0.3, 0.2, -0.1],
+      [0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    ];
+    final p = _writeWav(6, frames);
+    final raw = decodeWavFile(p, fold: false)!;
+    final src = FileSource(Float32List(0), 48000,
+        raw: raw.data, rawCh: 6)
+      ..fileCh = 6;
+    final out = Float32List(2 * 6);
+    src.fillRaw(out, 2, 48000);
+    // 与 fill() 同口径：_pos 到 total-1 即回绕（末帧跳过不断尾）。
+    for (var i = 0; i < 12; i++) {
+      expect(out[i], closeTo(raw.data[i], 1e-6));
+    }
+  });
 }

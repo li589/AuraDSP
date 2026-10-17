@@ -68,6 +68,7 @@ abstract final class SessionMemory {
         'vaioOutputEndpoint': m.config.vaioOutputEndpoint,
         'apoTargetEndpoint': m.config.apoTargetEndpoint,
         'monitorMirroring': m.monitorMirroring,
+        'source51Mode': m.source51Mode,
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
@@ -161,6 +162,9 @@ abstract final class SessionMemory {
       }
       if (session['monitorMirroring'] is bool) {
         m.config.monitorMirroring = session['monitorMirroring'] as bool;
+      }
+      if (session['source51Mode'] is num) {
+        m.source51Mode = (session['source51Mode'] as num).toInt().clamp(0, 1);
       }
       if (session['convIrPath'] is String) {
         m.convIrPath = session['convIrPath'] as String;

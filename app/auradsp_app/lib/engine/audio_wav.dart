@@ -3,12 +3,15 @@ part of 'audio_isolate.dart';
 /* ---------------- WAV 解码 ---------------- */
 
 final class DecodedWav {
-  final Float32List data; // stereo interleaved
+  final Float32List data; // stereo interleaved（fold=true）或 Nch 交织（raw）
   final int sampleRate;
-  DecodedWav(this.data, this.sampleRate);
+
+  /// 源文件声道数（fold/raw 一致；直通与 UI 芯片据此判定）。
+  final int channels;
+  DecodedWav(this.data, this.sampleRate, [this.channels = 2]);
 }
 
-DecodedWav? decodeWavFile(String path) {
+DecodedWav? decodeWavFile(String path, {bool fold = true}) {
   final bytes = File(path).readAsBytesSync();
   final bd = ByteData.sublistView(bytes);
   if (bytes.length < 44) return null;
@@ -37,8 +40,11 @@ DecodedWav? decodeWavFile(String path) {
   if (dataOff < 0 || ch < 1 || rate < 8000) return null;
 
   if (bits != 16 && bits != 24 && bits != 32) return null;
+  // raw 直通上限 8 声道（VB 组宽）；超限只给 fold 版（raw=null 由调用方处理）。
+  final wantRaw = !fold && ch > 2 && ch <= 8;
+  final outCh = wantRaw ? ch : 2;
   final frames = dataLen ~/ (bits ~/ 8 * ch);
-  final out = Float32List(frames * 2);
+  final out = Float32List(frames * outCh);
   const scale = 1.0 / 2147483648.0;
   // 通道采样读取（Phase 2 前：仅取 c%ch，前两声道直读，多声道静默丢弃）。
   double rd(int f, int c) {
@@ -64,7 +70,17 @@ DecodedWav? decodeWavFile(String path) {
 
   // Phase 2：多声道 Dolby 混缩（WAVE 声道序 L R C LFE LS RS；4 声道为
   // L R LS RS；3 声道为 L R C）。叠加后钳位（热 5.1 允许削峰，不断尾）。
+  // wantRaw 时原样搬运 Nch（供直通；fold 版仍由调用方另行解码）。
   const kC = 0.70710678;
+  if (wantRaw) {
+    for (var f = 0; f < frames; f++) {
+      for (var c = 0; c < ch; c++) {
+        final v = rd(f, c);
+        out[f * ch + c] = v.isFinite ? v.clamp(-1.0, 1.0) : 0.0;
+      }
+    }
+    return DecodedWav(out, rate, ch);
+  }
   for (var f = 0; f < frames; f++) {
     double l, r;
     if (ch == 1) {
@@ -94,7 +110,7 @@ DecodedWav? decodeWavFile(String path) {
     out[f * 2] = l.isFinite ? l.clamp(-1.0, 1.0) : 0.0;
     out[f * 2 + 1] = r.isFinite ? r.clamp(-1.0, 1.0) : 0.0;
   }
-  return DecodedWav(out, rate);
+  return DecodedWav(out, rate, ch);
 }
 
 /// MP3 解码（engine_audiofile.cpp `auradsp_decode_audio_file`，dr_mp3）。
