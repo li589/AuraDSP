@@ -511,6 +511,49 @@ abstract final class ParamRegistry {
     getter: (m) => m.stereoOn,
     setter: (m, v) => m.stereoOn = v,
   );
+  static final stereoBand1 = ParamSpec<double>(
+    id: 'stereo.band.1', section: 'stereo', key: 'band0',
+    type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.stereoBands[0],
+    setter: (m, v) => m.setStereoBand(0, v),
+  );
+  static final stereoBand2 = ParamSpec<double>(
+    id: 'stereo.band.2', section: 'stereo', key: 'band1',
+    type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.stereoBands[1],
+    setter: (m, v) => m.setStereoBand(1, v),
+  );
+  static final stereoBand3 = ParamSpec<double>(
+    id: 'stereo.band.3', section: 'stereo', key: 'band2',
+    type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.stereoBands[2],
+    setter: (m, v) => m.setStereoBand(2, v),
+  );
+  static final stereoBand4 = ParamSpec<double>(
+    id: 'stereo.band.4', section: 'stereo', key: 'band3',
+    type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.stereoBands[3],
+    setter: (m, v) => m.setStereoBand(3, v),
+  );
+  static final stereoBand5 = ParamSpec<double>(
+    id: 'stereo.band.5', section: 'stereo', key: 'band4',
+    type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.stereoBands[4],
+    setter: (m, v) => m.setStereoBand(4, v),
+  );
+  static final stereoBands = [stereoBand1, stereoBand2, stereoBand3, stereoBand4, stereoBand5];
+  static ParamSpec<bool> get stereoEnable => stereoOn;
+  static ParamSpec<double> get stereoWide => stereoMix;
 
   /* =========================================================================
    * 6. 低频搁架 (Shelf Filter)
@@ -618,6 +661,65 @@ abstract final class ParamRegistry {
     order: 100,
     getter: (m) => m.exciterOn,
     setter: (m, v) => m.setExciterEnabled(v),
+  );
+
+  /* =========================================================================
+   * 9B. 空间音效 (Spatial L1 HRTF)
+   * ========================================================================= */
+  static final spatialStyle = ParamSpec<int>(
+    id: 'spatial.style', section: 'spatial', key: 'style',
+    type: ParamType.int32, defaultValue: ParamDefaults.spatialStyle,
+    min: 0, max: 2,
+    options: ['Dolby 房', 'DTS', '中性'],
+    getter: (m) => m.spatialStyle,
+    setter: (m, v) => m.setSpatialStyle(v),
+  );
+  static final spatialRoom = ParamSpec<double>(
+    id: 'spatial.room', section: 'spatial', key: 'room',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialRoom,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.spatialRoom,
+    setter: (m, v) => m.setSpatialRoom(v),
+  );
+  static final spatialWidth = ParamSpec<double>(
+    id: 'spatial.width', section: 'spatial', key: 'width',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialWidth,
+    min: 0.5, max: 1.5, step: 0.01, unit: '×',
+    formatter: (v) => v.toStringAsFixed(2),
+    getter: (m) => m.spatialWidth,
+    setter: (m, v) => m.setSpatialWidth(v),
+  );
+  static final spatialCenter = ParamSpec<double>(
+    id: 'spatial.center', section: 'spatial', key: 'center',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialCenter,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.spatialCenter,
+    setter: (m, v) => m.setSpatialCenter(v),
+  );
+  static final spatialOutGain = ParamSpec<double>(
+    id: 'spatial.outgain', section: 'spatial', key: 'outgain',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialOutGain,
+    min: -12.0, max: 6.0, step: 0.1, unit: 'dB',
+    category: ParamCategory.outputGate,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
+    getter: (m) => m.spatialOutGain,
+    setter: (m, v) => m.setSpatialOutGain(v),
+  );
+  static final spatialAutoGain = ParamSpec<bool>(
+    id: 'spatial.autogain', section: 'spatial', key: 'autoGain',
+    type: ParamType.boolean, defaultValue: false,
+    category: ParamCategory.outputGate,
+    getter: (m) => m.spatialAutoGain,
+    setter: (m, v) => m.setSpatialAutoGain(v),
+  );
+  static final spatialEnable = ParamSpec<bool>(
+    id: 'spatial.enable', section: 'spatial', key: 'enable',
+    type: ParamType.boolean, defaultValue: false,
+    order: 100,
+    getter: (m) => m.spatialOn,
+    setter: (m, v) => m.setSpatialEnabled(v),
   );
 
   /* =========================================================================
@@ -1317,6 +1419,14 @@ abstract final class ParamRegistry {
     ParamSection(
       name: 'exciter',
       specs: [exciterAmount, exciterHifreq, exciterEnable],
+    ),
+    // 9B. 空间音效
+    ParamSection(
+      name: 'spatial',
+      specs: [
+        spatialStyle, spatialRoom, spatialWidth, spatialCenter,
+        spatialOutGain, spatialAutoGain, spatialEnable,
+      ],
     ),
     // 10. 噪声门
     ParamSection(

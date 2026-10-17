@@ -25,9 +25,9 @@ class _HaasCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('haas')
           : null,
       latencyTick: model.getComponentLatencyTick('haas'),
-      trailing: AuraSwitch(
-        value: model.haasOn,
-        onChanged: model.setHaasEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.haasEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -39,60 +39,28 @@ class _HaasCard extends StatelessWidget {
               const SizedBox(width: 4),
               InfoBadge(message: l.haasSideTooltip),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  AuraChoiceChip(
-                    label: l.haasSideRight,
-                    selected: model.haasSide == 0,
-                    onTap: model.haasOn
-                        ? () => model.setHaasSide(0)
-                        : null,
-                  ),
-                  AuraChoiceChip(
-                    label: l.haasSideLeft,
-                    selected: model.haasSide == 1,
-                    onTap: model.haasOn
-                        ? () => model.setHaasSide(1)
-                        : null,
-                  ),
-                ],
+              ParamChoiceChips(
+                param: ParamRegistry.haasSide,
+                model: model,
+                labels: [l.haasSideRight, l.haasSideLeft],
               ),
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
           // 延迟量
-          ValueSlider(
-            label: l.haasDelay,
+          ParamSlider(
+            param: ParamRegistry.haasDelay,
+            model: model,
+            customLabel: l.haasDelay,
             infoMessage: '延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。',
-            value: model.haasDelayMs,
-            defaultValue: ParamDefaults.haasDelayMs,
-            onResetToDefault: () =>
-                model.setHaasDelay(ParamDefaults.haasDelayMs),
-            min: 0,
-            max: 25,
-            unit: 'ms',
-            enabled: model.haasOn,
-            format: (v) => v.toStringAsFixed(1),
-            onChanged: model.setHaasDelay,
-            onChangedEnd: model.setHaasDelay,
           ),
           const SizedBox(height: AuraSpace.sm),
           // 干湿混合
-          ValueSlider(
-            label: l.haasMix,
+          ParamSlider(
+            param: ParamRegistry.haasMix,
+            model: model,
+            customLabel: l.haasMix,
             infoMessage: '湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。',
-            value: model.haasMix,
-            defaultValue: ParamDefaults.haasMix,
-            onResetToDefault: () =>
-                model.setHaasMix(ParamDefaults.haasMix),
-            min: 0,
-            max: 1,
-            unit: '%',
-            enabled: model.haasOn,
-            format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: model.setHaasMix,
-            onChangedEnd: model.setHaasMix,
           ),
         ],
       ),

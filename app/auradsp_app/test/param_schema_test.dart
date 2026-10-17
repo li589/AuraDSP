@@ -2,9 +2,15 @@
  * param_schema_test.dart — 全链路参数元数据注册中心与 AppModel 数据驱动对账测试 (Phase 3)
  */
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/param_schema.dart';
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/features/chrome.dart';
+import 'package:auradsp_app/features/effects_page.dart';
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 void main() {
   group('ParamRegistry Schema & Metadata Consistency Tests', () {
@@ -216,6 +222,178 @@ void main() {
       expect(m.getParam(ParamRegistry.tubeGain), closeTo(8.0, 1e-6));
       expect(m.getParam(ParamRegistry.inputGain), closeTo(2.5, 1e-6));
       expect(m.getParam(ParamRegistry.bassMode), equals(2));
+    });
+  });
+
+  group('Declarative UI Controls Widget Tests (Phase 4)', () {
+    Widget testApp(Widget child) => MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(body: Center(child: child)),
+        );
+
+    testWidgets('ParamSlider 声明式滑块双向响应与默认值恢复', (tester) async {
+      final m = AppModel(testing: true);
+      m.setParam(ParamRegistry.tubeGain, 6.0);
+
+      await tester.pumpWidget(
+        testApp(
+          ListenableBuilder(
+            listenable: m,
+            builder: (ctx, _) => ParamSlider(
+              param: ParamRegistry.tubeGain,
+              model: m,
+              customLabel: '电子管增益',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('电子管增益'), findsOneWidget);
+      expect(find.text('+6.0 dB'), findsOneWidget);
+
+      // 通过 model 驱动更新
+      m.setParam(ParamRegistry.tubeGain, 9.0);
+      await tester.pump();
+      expect(find.text('+9.0 dB'), findsOneWidget);
+    });
+
+    testWidgets('ParamSwitch 声明式开关状态绑定与点击下发', (tester) async {
+      final m = AppModel(testing: true);
+      expect(m.tubeOn, isFalse);
+
+      await tester.pumpWidget(
+        testApp(
+          ListenableBuilder(
+            listenable: m,
+            builder: (ctx, _) => ParamSwitch(
+              param: ParamRegistry.tubeEnable,
+              model: m,
+            ),
+          ),
+        ),
+      );
+
+      final switchFinder = find.byType(AuraSwitch);
+      expect(switchFinder, findsOneWidget);
+
+      // 点击切换
+      await tester.tap(switchFinder);
+      await tester.pump();
+
+      expect(m.tubeOn, isTrue);
+      expect(m.getParam(ParamRegistry.tubeEnable), isTrue);
+
+      // 再次点击切回
+      await tester.tap(switchFinder);
+      await tester.pump();
+
+      expect(m.tubeOn, isFalse);
+      expect(m.getParam(ParamRegistry.tubeEnable), isFalse);
+    });
+
+    testWidgets('ParamChoiceChips 声明式选项组选择联动', (tester) async {
+      final m = AppModel(testing: true);
+      m.setParam(ParamRegistry.tubeEnable, true);
+      m.setParam(ParamRegistry.tubeStyle, 0);
+
+      await tester.pumpWidget(
+        testApp(
+          ListenableBuilder(
+            listenable: m,
+            builder: (ctx, _) => ParamChoiceChips(
+              param: ParamRegistry.tubeStyle,
+              model: m,
+              labels: const ['三极管', '五极管', '磁带'],
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('三极管'), findsOneWidget);
+      expect(find.text('五极管'), findsOneWidget);
+      expect(find.text('磁带'), findsOneWidget);
+
+      // 点击切换到五极管 (index 1)
+      await tester.tap(find.text('五极管'));
+      await tester.pump();
+
+      expect(m.tubeStyle, equals(1));
+      expect(m.getParam(ParamRegistry.tubeStyle), equals(1));
+    });
+
+    testWidgets('ParamAutoGainRow 声明式自动增益开关联动', (tester) async {
+      final m = AppModel(testing: true);
+      m.setParam(ParamRegistry.compEnable, true);
+      m.setParam(ParamRegistry.compAutoGain, false);
+
+      await tester.pumpWidget(
+        testApp(
+          ListenableBuilder(
+            listenable: m,
+            builder: (ctx, _) => ParamAutoGainRow(
+              param: ParamRegistry.compAutoGain,
+              model: m,
+              label: '自动增益补偿',
+              tooltip: '自动估算增益衰减',
+            ),
+          ),
+        ),
+      );
+
+      final switchFinder = find.byType(AuraSwitch);
+      expect(switchFinder, findsOneWidget);
+      expect(m.compAutoGain, isFalse);
+
+      await tester.tap(switchFinder);
+      await tester.pump();
+
+      expect(m.compAutoGain, isTrue);
+      expect(m.getParam(ParamRegistry.compAutoGain), isTrue);
+    });
+
+    testWidgets('ParamOutputGainSlider 声明式输出增益门滑块联动', (tester) async {
+      final m = AppModel(testing: true);
+      m.setParam(ParamRegistry.compEnable, true);
+      m.setParam(ParamRegistry.compOutputGain, 0.0);
+
+      await tester.pumpWidget(
+        testApp(
+          ListenableBuilder(
+            listenable: m,
+            builder: (ctx, _) => ParamOutputGainSlider(
+              param: ParamRegistry.compOutputGain,
+              model: m,
+              label: '输出增益门',
+              infoMessage: '输出衰减防削波',
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('输出增益门'), findsOneWidget);
+      expect(find.text('+0.0 dB'), findsOneWidget);
+
+      m.setParam(ParamRegistry.compOutputGain, -3.5);
+      await tester.pump();
+
+      expect(find.text('-3.5 dB'), findsOneWidget);
+      expect(m.compOutputGain, closeTo(-3.5, 1e-5));
+    });
+
+    test('StereoBands 5个子带独立参数规格与双向读写', () {
+      final m = AppModel(testing: true);
+      expect(ParamRegistry.stereoBands.length, equals(5));
+
+      for (var i = 0; i < 5; i++) {
+        final spec = ParamRegistry.stereoBands[i];
+        expect(spec.section, equals('stereo'));
+        m.setParam(spec, 0.2 * (i + 1));
+        expect(m.stereoBands[i], closeTo(0.2 * (i + 1), 1e-5));
+        expect(m.getParam(spec), closeTo(0.2 * (i + 1), 1e-5));
+      }
     });
   });
 }

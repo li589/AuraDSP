@@ -25,9 +25,9 @@ class _ExciterCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('exciter')
           : null,
       latencyTick: model.getComponentLatencyTick('exciter'),
-      trailing: AuraSwitch(
-        value: model.exciterOn,
-        onChanged: model.setExciterEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.exciterEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -45,37 +45,20 @@ class _ExciterCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.sm),
           // 谐波量
-          ValueSlider(
-            label: l.exciterAmount,
+          ParamSlider(
+            param: ParamRegistry.exciterAmount,
+            model: model,
+            customLabel: l.exciterAmount,
             infoMessage: l.exciterAmountInfo,
-            value: model.exciterAmount,
-            defaultValue: ParamDefaults.exciterAmount,
-            onResetToDefault: () =>
-                model.setExciterAmount(ParamDefaults.exciterAmount),
-            min: 0,
-            max: 1,
-            unit: '%',
-            enabled: model.exciterOn,
-            format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: model.setExciterAmount,
-            onChangedEnd: model.setExciterAmount,
           ),
           const SizedBox(height: AuraSpace.sm),
           // 取频点
-          ValueSlider(
-            label: l.exciterHifreq,
+          ParamSlider(
+            param: ParamRegistry.exciterHifreq,
+            model: model,
+            customLabel: l.exciterHifreq,
             infoMessage: l.exciterHifreqInfo,
-            value: model.exciterHifreq,
-            defaultValue: ParamDefaults.exciterHifreq,
-            onResetToDefault: () =>
-                model.setExciterHifreq(ParamDefaults.exciterHifreq),
-            min: 3000,
-            max: 10000,
-            unit: 'Hz',
-            enabled: model.exciterOn,
-            format: (v) => '${(v / 1000).toStringAsFixed(1)}k',
-            onChanged: model.setExciterHifreq,
-            onChangedEnd: model.setExciterHifreq,
+            customFormat: (v) => '${(v / 1000).toStringAsFixed(1)}k',
           ),
         ],
       ),

@@ -24,9 +24,9 @@ class _FilterCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('filter')
           : null,
       latencyTick: model.getComponentLatencyTick('filter'),
-      trailing: AuraSwitch(
-        value: model.filterOn,
-        onChanged: model.setFilterEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.filterEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,63 +38,31 @@ class _FilterCard extends StatelessWidget {
             children: [
               Text(l.filterType, style: labelOf(p, color: p.text)),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  AuraChoiceChip(
-                    label: l.filterHP,
-                    selected: model.filterType == 0,
-                    onTap: model.filterOn ? () => model.setFilterType(0) : null,
-                  ),
-                  AuraChoiceChip(
-                    label: l.filterLP,
-                    selected: model.filterType == 1,
-                    onTap: model.filterOn ? () => model.setFilterType(1) : null,
-                  ),
-                  AuraChoiceChip(
-                    label: l.filterBP,
-                    selected: model.filterType == 2,
-                    onTap: model.filterOn ? () => model.setFilterType(2) : null,
-                  ),
-                ],
+              ParamChoiceChips(
+                param: ParamRegistry.filterType,
+                model: model,
+                labels: [l.filterHP, l.filterLP, l.filterBP],
               ),
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
           // 频率
-          ValueSlider(
-            label: l.filterFreq,
+          ParamSlider(
+            param: ParamRegistry.filterFreq,
+            model: model,
+            customLabel: l.filterFreq,
             infoMessage: 'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。',
-            value: model.filterFreq,
-            defaultValue: ParamDefaults.filterFreq,
-            onResetToDefault: () =>
-                model.setFilterFreq(ParamDefaults.filterFreq),
-            min: 20,
-            max: 20000,
-            unit: 'Hz',
-            enabled: model.filterOn,
-            format: (v) => v >= 1000
+            customFormat: (v) => v >= 1000
                 ? '${(v / 1000).toStringAsFixed(1)}k'
                 : v.toStringAsFixed(0),
-            onChanged: model.setFilterFreq,
-            onChangedEnd: model.setFilterFreq,
           ),
           const SizedBox(height: AuraSpace.sm),
           // Q
-          ValueSlider(
-            label: l.filterQ,
+          ParamSlider(
+            param: ParamRegistry.filterQ,
+            model: model,
+            customLabel: l.filterQ,
             infoMessage: '谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。',
-            value: model.filterQ,
-            defaultValue: ParamDefaults.filterQ,
-            onResetToDefault: () =>
-                model.setFilterQ(ParamDefaults.filterQ),
-            min: 0.3,
-            max: 10,
-            unit: '',
-            enabled: model.filterOn,
-            format: (v) => v.toStringAsFixed(2),
-            onChanged: model.setFilterQ,
-            onChangedEnd: model.setFilterQ,
           ),
         ],
       ),

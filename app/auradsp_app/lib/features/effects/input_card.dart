@@ -21,9 +21,9 @@ class _InputCard extends StatelessWidget {
             builder: (context, constraints) {
               final isCompact = constraints.maxWidth < 460;
               final knobWidget = _InputMasterGainKnob(
-                gain: model.inputGain,
-                onChanged: model.setInputGain,
-                onReset: () => model.setInputGain(0.0),
+                gain: model.getParam(ParamRegistry.inputGain),
+                onChanged: (v) => model.setParam(ParamRegistry.inputGain, v),
+                onReset: () => model.setParam(ParamRegistry.inputGain, 0.0),
                 label: l.inputGain,
                 palette: p,
               );
@@ -530,28 +530,28 @@ class _InputBalanceAdvanced extends StatelessWidget {
                 icon: const Icon(Icons.refresh_rounded, size: 13),
                 label: const Text('重置 100%', style: TextStyle(fontSize: 11)),
                 onPressed: () {
-                  model.setInputBalanceL(1.0);
-                  model.setInputBalanceR(1.0);
+                  model.setParam(ParamRegistry.inputBalanceL, 1.0);
+                  model.setParam(ParamRegistry.inputBalanceR, 1.0);
                 },
               ),
             ),
           ),
         _ChannelBalanceBar(
           label: l10n.channelLeft,
-          value: model.inputBalanceL,
-          masterGainDb: model.inputGain,
-          onChanged: model.setInputBalanceL,
-          onReset: () => model.setInputBalanceL(1.0),
+          value: model.getParam(ParamRegistry.inputBalanceL),
+          masterGainDb: model.getParam(ParamRegistry.inputGain),
+          onChanged: (v) => model.setParam(ParamRegistry.inputBalanceL, v),
+          onReset: () => model.setParam(ParamRegistry.inputBalanceL, 1.0),
           palette: palette,
           l10n: l10n,
         ),
         const SizedBox(height: AuraSpace.sm),
         _ChannelBalanceBar(
           label: l10n.channelRight,
-          value: model.inputBalanceR,
-          masterGainDb: model.inputGain,
-          onChanged: model.setInputBalanceR,
-          onReset: () => model.setInputBalanceR(1.0),
+          value: model.getParam(ParamRegistry.inputBalanceR),
+          masterGainDb: model.getParam(ParamRegistry.inputGain),
+          onChanged: (v) => model.setParam(ParamRegistry.inputBalanceR, v),
+          onReset: () => model.setParam(ParamRegistry.inputBalanceR, 1.0),
           palette: palette,
           l10n: l10n,
         ),

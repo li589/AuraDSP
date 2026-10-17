@@ -23,46 +23,27 @@ class _ShelfCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('shelf')
           : null,
       latencyTick: model.getComponentLatencyTick('shelf'),
-      trailing: AuraSwitch(
-        value: model.shelfOn,
-        onChanged: model.setShelfEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.shelfEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(l.shelfHint, style: captionOf(paletteOf(context))),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.shelfFreq,
+          ParamSlider(
+            param: ParamRegistry.shelfFreq,
+            model: model,
+            customLabel: l.shelfFreq,
             infoMessage: l.shelfFreqInfo,
-            value: model.shelfFreq,
-            defaultValue: ParamDefaults.shelfFreq,
-            onResetToDefault: () =>
-                model.setShelfFreq(ParamDefaults.shelfFreq),
-            min: 40,
-            max: 400,
-            unit: 'Hz',
-            enabled: model.shelfOn,
-            format: (v) => v.toStringAsFixed(0),
-            onChanged: model.setShelfFreq,
-            onChangedEnd: model.setShelfFreq,
           ),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.shelfGain,
+          ParamSlider(
+            param: ParamRegistry.shelfGain,
+            model: model,
+            customLabel: l.shelfGain,
             infoMessage: l.shelfGainInfo,
-            value: model.shelfGain,
-            defaultValue: ParamDefaults.shelfGain,
-            onResetToDefault: () =>
-                model.setShelfGain(ParamDefaults.shelfGain),
-            min: -15,
-            max: 15,
-            unit: 'dB',
-            enabled: model.shelfOn,
-            format: (v) =>
-                '${v >= 0 ? "+" : ""}${v.toStringAsFixed(1)}',
-            onChanged: model.setShelfGain,
-            onChangedEnd: model.setShelfGain,
           ),
         ],
       ),

@@ -1,6 +1,211 @@
 // part of effects_page.dart —— P1 按卡拆分，纯搬运零改行。
 // 共享 import 与 EffectsPage/ValueSlider 见父文件。
 part of '../effects_page.dart';
+
+/* =========================================================================
+ * 数据驱动自绑定 UI 控件体系 (Declarative Param Controls - Phase 4)
+ * ========================================================================= */
+
+/// 自绑定数值滑块：直接由 ParamSpec 强类型驱动，自动承接范围、步进、单位、格式化与默认值
+class ParamSlider extends StatelessWidget {
+  final ParamSpec<double> param;
+  final AppModel model;
+  final String? customLabel;
+  final String? infoMessage;
+  final bool? enabled;
+  final String Function(double)? customFormat;
+  final ValueChanged<double>? onChanged;
+  final ValueChanged<double>? onChangedEnd;
+  final VoidCallback? onResetToDefault;
+  final double? customMin;
+  final double? customMax;
+  final String? customUnit;
+  final bool overridden;
+  final String? overriddenNote;
+
+  const ParamSlider({
+    super.key,
+    required this.param,
+    required this.model,
+    this.customLabel,
+    this.infoMessage,
+    this.enabled,
+    this.customFormat,
+    this.customMin,
+    this.customMax,
+    this.customUnit,
+    this.onChanged,
+    this.onChangedEnd,
+    this.onResetToDefault,
+    this.overridden = false,
+    this.overriddenNote,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final val = model.getParam(param);
+    final isEn = enabled ?? model.isSectionEnabled(param.section);
+    return ValueSlider(
+      label: customLabel ?? param.key,
+      infoMessage: infoMessage,
+      value: val,
+      defaultValue: param.defaultValue,
+      min: customMin ?? param.min,
+      max: customMax ?? param.max,
+      unit: customUnit ?? param.unit,
+      enabled: isEn,
+      format: customFormat ?? param.formatter ?? (v) => v.toStringAsFixed(1),
+      overridden: overridden,
+      overriddenNote: overriddenNote,
+      onResetToDefault: onResetToDefault ?? () => model.setParam(param, param.defaultValue),
+      onChanged: (v) {
+        model.setParam(param, v);
+        onChanged?.call(v);
+      },
+      onChangedEnd: (v) {
+        model.setParam(param, v);
+        onChangedEnd?.call(v);
+      },
+    );
+  }
+}
+
+/// 自绑定开关：直接由 `ParamSpec<bool>` 驱动
+class ParamSwitch extends StatelessWidget {
+  final ParamSpec<bool> param;
+  final AppModel model;
+  final bool? enabled;
+  final ValueChanged<bool>? onChanged;
+
+  const ParamSwitch({
+    super.key,
+    required this.param,
+    required this.model,
+    this.enabled,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final val = model.getParam(param);
+    final isEn = enabled ?? (param.key == 'enable' || param.key == 'on' ? true : model.isSectionEnabled(param.section));
+    return AuraSwitch(
+      value: val,
+      onChanged: isEn
+          ? (v) {
+              model.setParam(param, v);
+              onChanged?.call(v);
+            }
+          : null,
+    );
+  }
+}
+
+/// 自绑定选项组：直接由 `ParamSpec<int>` 驱动，呈现横向 ChoiceChips
+class ParamChoiceChips extends StatelessWidget {
+  final ParamSpec<int> param;
+  final AppModel model;
+  final List<String>? labels;
+  final bool? enabled;
+  final ValueChanged<int>? onChanged;
+
+  const ParamChoiceChips({
+    super.key,
+    required this.param,
+    required this.model,
+    this.labels,
+    this.enabled,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = model.getParam(param);
+    final opts = labels ?? param.options ?? const [];
+    final isEn = enabled ?? model.isSectionEnabled(param.section);
+    return Wrap(
+      spacing: AuraSpace.sm,
+      runSpacing: AuraSpace.xs,
+      children: List.generate(opts.length, (idx) {
+        return AuraChoiceChip(
+          label: opts[idx],
+          selected: cur == idx,
+          onTap: isEn
+              ? () {
+                  model.setParam(param, idx);
+                  onChanged?.call(idx);
+                }
+              : null,
+        );
+      }),
+    );
+  }
+}
+
+/// 自绑定自动增益补偿行：连接 `ParamSpec<bool>` 与 _AutoGainRow
+class ParamAutoGainRow extends StatelessWidget {
+  final ParamSpec<bool> param;
+  final AppModel model;
+  final String label;
+  final String tooltip;
+  final bool? enabled;
+  final ValueChanged<bool>? onChanged;
+
+  const ParamAutoGainRow({
+    super.key,
+    required this.param,
+    required this.model,
+    required this.label,
+    required this.tooltip,
+    this.enabled,
+    this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isEn = enabled ?? model.isSectionEnabled(param.section);
+    return _AutoGainRow(
+      label: label,
+      tooltip: tooltip,
+      value: model.getParam(param),
+      enabled: isEn,
+      onChanged: (v) {
+        model.setParam(param, v);
+        onChanged?.call(v);
+      },
+    );
+  }
+}
+
+/// 自绑定输出增益门滑块：标准 [-12, +6] dB 输出门
+class ParamOutputGainSlider extends StatelessWidget {
+  final ParamSpec<double> param;
+  final AppModel model;
+  final String label;
+  final String infoMessage;
+  final bool? enabled;
+
+  const ParamOutputGainSlider({
+    super.key,
+    required this.param,
+    required this.model,
+    required this.label,
+    required this.infoMessage,
+    this.enabled,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ParamSlider(
+      param: param,
+      model: model,
+      customLabel: label,
+      infoMessage: infoMessage,
+      enabled: enabled,
+    );
+  }
+}
+
 class _AutoGainRow extends StatelessWidget {
   final String label;
   final String tooltip;

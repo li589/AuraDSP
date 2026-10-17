@@ -30,9 +30,9 @@ class _SpatialCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('spatial')
           : null,
       latencyTick: model.getComponentLatencyTick('spatial'),
-      trailing: AuraSwitch(
-        value: model.spatialOn,
-        onChanged: model.setSpatialEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.spatialEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -44,30 +44,13 @@ class _SpatialCard extends StatelessWidget {
               const SizedBox(width: 4),
               InfoBadge(message: l.spatialStyleInfo),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  AuraChoiceChip(
-                    label: l.spatialStyleDolby,
-                    selected: model.spatialStyle == 0,
-                    onTap: model.spatialOn
-                        ? () => model.setSpatialStyle(0)
-                        : null,
-                  ),
-                  AuraChoiceChip(
-                    label: l.spatialStyleDts,
-                    selected: model.spatialStyle == 1,
-                    onTap: model.spatialOn
-                        ? () => model.setSpatialStyle(1)
-                        : null,
-                  ),
-                  AuraChoiceChip(
-                    label: l.spatialStyleNeutral,
-                    selected: model.spatialStyle == 2,
-                    onTap: model.spatialOn
-                        ? () => model.setSpatialStyle(2)
-                        : null,
-                  ),
+              ParamChoiceChips(
+                param: ParamRegistry.spatialStyle,
+                model: model,
+                labels: [
+                  l.spatialStyleDolby,
+                  l.spatialStyleDts,
+                  l.spatialStyleNeutral,
                 ],
               ),
             ],
@@ -83,69 +66,32 @@ class _SpatialCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.sm),
           // 空间核心（展开）
-          ValueSlider(
-            label: l.spatialRoom,
+          ParamSlider(
+            param: ParamRegistry.spatialRoom,
+            model: model,
+            customLabel: l.spatialRoom,
             infoMessage: l.spatialRoomInfo,
-            value: model.spatialRoom,
-            defaultValue: ParamDefaults.spatialRoom,
-            onResetToDefault: () =>
-                model.setSpatialRoom(ParamDefaults.spatialRoom),
-            min: 0,
-            max: 1,
-            unit: '%',
-            enabled: model.spatialOn,
-            format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: model.setSpatialRoom,
-            onChangedEnd: model.setSpatialRoom,
           ),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.spatialWidth,
+          ParamSlider(
+            param: ParamRegistry.spatialWidth,
+            model: model,
+            customLabel: l.spatialWidth,
             infoMessage: l.spatialWidthInfo,
-            value: model.spatialWidth,
-            defaultValue: ParamDefaults.spatialWidth,
-            onResetToDefault: () =>
-                model.setSpatialWidth(ParamDefaults.spatialWidth),
-            min: 0.5,
-            max: 1.5,
-            unit: '×',
-            enabled: model.spatialOn,
-            format: (v) => v.toStringAsFixed(2),
-            onChanged: model.setSpatialWidth,
-            onChangedEnd: model.setSpatialWidth,
           ),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.spatialCenter,
+          ParamSlider(
+            param: ParamRegistry.spatialCenter,
+            model: model,
+            customLabel: l.spatialCenter,
             infoMessage: l.spatialCenterInfo,
-            value: model.spatialCenter,
-            defaultValue: ParamDefaults.spatialCenter,
-            onResetToDefault: () =>
-                model.setSpatialCenter(ParamDefaults.spatialCenter),
-            min: 0,
-            max: 1,
-            unit: '%',
-            enabled: model.spatialOn,
-            format: (v) => (v * 100).toStringAsFixed(0),
-            onChanged: model.setSpatialCenter,
-            onChangedEnd: model.setSpatialCenter,
           ),
           const SizedBox(height: AuraSpace.sm),
-          ValueSlider(
-            label: l.spatialOutGain,
+          ParamSlider(
+            param: ParamRegistry.spatialOutGain,
+            model: model,
+            customLabel: l.spatialOutGain,
             infoMessage: l.spatialOutGainInfo,
-            value: model.spatialOutGain,
-            defaultValue: ParamDefaults.spatialOutGain,
-            onResetToDefault: () =>
-                model.setSpatialOutGain(ParamDefaults.spatialOutGain),
-            min: -12,
-            max: 6,
-            unit: 'dB',
-            enabled: model.spatialOn,
-            format: (v) =>
-                '${v >= 0 ? "+" : ""}${v.toStringAsFixed(1)}',
-            onChanged: model.setSpatialOutGain,
-            onChangedEnd: model.setSpatialOutGain,
           ),
           const SizedBox(height: AuraSpace.sm),
           Row(
@@ -154,11 +100,9 @@ class _SpatialCard extends StatelessWidget {
               const SizedBox(width: 4),
               InfoBadge(message: l.spatialAutoGainInfo),
               const Spacer(),
-              AuraSwitch(
-                value: model.spatialAutoGain,
-                onChanged: model.spatialOn
-                    ? model.setSpatialAutoGain
-                    : null,
+              ParamSwitch(
+                param: ParamRegistry.spatialAutoGain,
+                model: model,
               ),
             ],
           ),

@@ -23,54 +23,30 @@ class _TubeCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('tube')
           : null,
       latencyTick: model.getComponentLatencyTick('tube'),
-      trailing: AuraSwitch(
-        value: model.tubeOn,
-        onChanged: model.setTubeEnabled,
+      trailing: ParamSwitch(
+        param: ParamRegistry.tubeEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 饱和驱动度 (Drive / Saturation)
-          ValueSlider(
-            label: l.tubeDrive,
+          ParamSlider(
+            param: ParamRegistry.tubeGain,
+            model: model,
+            customLabel: l.tubeDrive,
             infoMessage: '模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。',
-            value: model.tubeGain,
-            defaultValue: ParamDefaults.tubeGain,
-            onResetToDefault: () => model.setTubeGain(ParamDefaults.tubeGain),
-            min: -3,
-            max: 12,
-            unit: 'dB',
-            enabled: model.tubeOn,
-            format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-            onChanged: model.setTubeGain,
-            onChangedEnd: model.setTubeGain,
           ),
           const SizedBox(height: AuraSpace.md),
-          // 电子管音色风格
           // 电子管音色风格 — 标签与选项同行，选项右对齐
           Row(
             children: [
               Text(l.tubeStyle, style: labelOf(p, color: p.text)),
               const Spacer(),
-              Wrap(
-                spacing: AuraSpace.sm,
-                children: [
-                  AuraChoiceChip(
-                    label: l.tubeStyleTriode,
-                    selected: model.tubeStyle == 0,
-                    onTap: () => model.setTubeStyle(0),
-                  ),
-                  AuraChoiceChip(
-                    label: l.tubeStylePentode,
-                    selected: model.tubeStyle == 1,
-                    onTap: () => model.setTubeStyle(1),
-                  ),
-                  AuraChoiceChip(
-                    label: l.tubeStyleTape,
-                    selected: model.tubeStyle == 2,
-                    onTap: () => model.setTubeStyle(2),
-                  ),
-                ],
+              ParamChoiceChips(
+                param: ParamRegistry.tubeStyle,
+                model: model,
+                labels: [l.tubeStyleTriode, l.tubeStylePentode, l.tubeStyleTape],
               ),
             ],
           ),
@@ -97,64 +73,35 @@ class _TubeAdvanced extends StatelessWidget {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // P-011：过采样由 vendor 按采样率自动选择（30k+→2x/20-30k→3x/14-20k→4x/14k-→5x），
-            // 无手动档（僵尸字段已删）。
-            ValueSlider(
-              label: l.tubeMix,
-              value: m.tubeMix,
-              defaultValue: ParamDefaults.tubeMix,
-              onResetToDefault: () => m.setTubeMix(ParamDefaults.tubeMix),
-              min: 0,
-              max: 1,
-              unit: '%',
-              enabled: m.tubeOn,
-              format: (v) => (v * 100).toStringAsFixed(0),
-              onChanged: m.setTubeMix,
-              onChangedEnd: m.setTubeMix,
+            ParamSlider(
+              param: ParamRegistry.tubeMix,
+              model: m,
+              customLabel: l.tubeMix,
             ),
             const SizedBox(height: AuraSpace.sm),
-            ValueSlider(
-              label: l.tubeCompensation,
+            ParamSlider(
+              param: ParamRegistry.tubeCompensation,
+              model: m,
+              customLabel: l.tubeCompensation,
               infoMessage: '电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。',
-              value: m.tubeCompensation,
-              defaultValue: ParamDefaults.tubeCompensation,
-              onResetToDefault: () =>
-                  m.setTubeCompensation(ParamDefaults.tubeCompensation),
-              min: -12.0,
-              max: 12.0,
-              unit: 'dB',
-              enabled: m.tubeOn,
-              format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-              onChanged: m.setTubeCompensation,
-              onChangedEnd: m.setTubeCompensation,
             ),
             const SizedBox(height: AuraSpace.md),
             // 输出级外框（自动增益补偿与输出增益门）
             OutputGainFrame(
               child: Column(
                 children: [
-                  _AutoGainRow(
+                  ParamAutoGainRow(
+                    param: ParamRegistry.tubeAutoGain,
+                    model: m,
                     label: l.autoGainCompensation,
                     tooltip: l.autoGainCompensationTooltip,
-                    value: m.tubeAutoGain,
-                    enabled: m.tubeOn,
-                    onChanged: m.setTubeAutoGain,
                   ),
                   const SizedBox(height: AuraSpace.xs),
-                  ValueSlider(
-                    label: l.outputGainGate,
+                  ParamSlider(
+                    param: ParamRegistry.tubeOutputGain,
+                    model: m,
+                    customLabel: l.outputGainGate,
                     infoMessage: l.outputGainGateTooltip,
-                    value: m.tubeOutputGain,
-                    defaultValue: ParamDefaults.tubeOutputGain,
-                    onResetToDefault: () =>
-                        m.setTubeOutputGain(ParamDefaults.tubeOutputGain),
-                    min: -12.0,
-                    max: 6.0,
-                    unit: 'dB',
-                    enabled: m.tubeOn,
-                    format: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(1),
-                    onChanged: m.setTubeOutputGain,
-                    onChangedEnd: m.setTubeOutputGain,
                   ),
                 ],
               ),
