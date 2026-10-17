@@ -36,9 +36,9 @@ void main() {
     final model = AppModel(testing: true);
     await _pumpPage(tester, model);
 
-    // 默认 front：5 卡 + 预设卡
+    // 默认 front：4 卡 (input, gate, filter, bass_shaping) + 预设卡 = 5
     expect(model.effectsCategory, 'front');
-    expect(_sectionCards(tester), 6);
+    expect(_sectionCards(tester), 5);
     // 无"全部"下拉项
     expect(find.text('All'), findsNothing);
 

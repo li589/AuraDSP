@@ -100,6 +100,44 @@ if(EXISTS "${AURAASIO_BRIDGE_DLL}")
     COMPONENT Runtime)
 endif()
 
+# AuraVAIO 常驻桥（01_vaio_driver / vaio_bridge）：随包分发
+set(AURAVAIO_BRIDGE_DLL
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/auravaio_bridge.dll")
+if(EXISTS "${AURAVAIO_BRIDGE_DLL}")
+  install(FILES "${AURAVAIO_BRIDGE_DLL}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+
+# 声学资源包（VDC耳机校准库、Liveprog 脚本、核心脉冲与清单）：安装到 resources/
+set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")
+if(EXISTS "${AURADSP_ASSETS_DIR}/manifest.json")
+  install(DIRECTORY "${AURADSP_ASSETS_DIR}/ddc"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  install(DIRECTORY "${AURADSP_ASSETS_DIR}/liveprog"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  install(FILES "${AURADSP_ASSETS_DIR}/manifest.json"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  # 核心常用卷积脉冲分类安装（耳机校准、空间3D、扬声器仿真）
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+endif()
+
 install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}"
   COMPONENT Runtime)
 

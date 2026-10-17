@@ -69,5 +69,15 @@ void main() {
         b.deleteSync(recursive: true);
       }
     });
+
+    test('fallbackDir 在无记忆时可定位到已存在的资源目录', () {
+      // 在沙箱内构造一个模拟 resources/convolver
+      final sandbox = Directory(ConfigManager.baseDir);
+      final simRes = Directory('${sandbox.path}/resources/convolver');
+      simRes.createSync(recursive: true);
+
+      expect(PathMemory.fallbackDir(PathMemory.slotConvolverIr), isNotNull);
+      expect(PathMemory.fallbackDir(PathMemory.slotConvolverIr), contains('convolver'));
+    });
   });
 }

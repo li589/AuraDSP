@@ -47,7 +47,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Lift or cut everything below the corner; fixes thin recordings or boomy lows';
 
   @override
-  String get shelfFreq => 'Corner';
+  String get shelfFreq => 'Gain Frequency';
 
   @override
   String get shelfGain => 'Gain';
@@ -59,6 +59,25 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get shelfGainInfo =>
       'Positive lifts, negative cuts; stacks with bass boost, mind doubling.';
+
+  @override
+  String get bassShapingTitle => 'Bass Shaping';
+
+  @override
+  String get bassShapingHint =>
+      'Combines low-shelf filtering with bass mono-making for a clean and focused low-end';
+
+  @override
+  String get shelfFreqTooltip =>
+      'Cutoff frequency for the low-shelf filter (40–400Hz); boosts or cuts everything below';
+
+  @override
+  String get shelfGainTooltip =>
+      'Gain boost or cut below the cutoff frequency (-15 to +15dB). Boosts body or tightens rumble';
+
+  @override
+  String get bassmonoFreqTooltip =>
+      'Frequencies below this cutoff (20–300Hz) are summed to mono to prevent phase cancellation and muddy bass';
 
   @override
   String get retryNow => 'Retry';
@@ -1266,7 +1285,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Chain head: mono below crossover, saves small speakers';
 
   @override
-  String get bassmonoFreq => 'Crossover';
+  String get bassmonoFreq => 'Bass Mono Frequency';
 
   @override
   String get stEq => 'Equalizer';

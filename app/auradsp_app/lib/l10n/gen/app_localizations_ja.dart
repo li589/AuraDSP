@@ -46,7 +46,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get shelfHint => 'コーナー以下を持ち上げ/抑えて薄い低音や膨らみを整える';
 
   @override
-  String get shelfFreq => 'コーナー周波数';
+  String get shelfFreq => 'ゲイン周波数';
 
   @override
   String get shelfGain => 'ゲイン';
@@ -56,6 +56,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get shelfGainInfo => '正で持上、負で抑制；低音増強と併用可、重ね過ぎ注意。';
+
+  @override
+  String get bassShapingTitle => '低音シェイピング';
+
+  @override
+  String get bassShapingHint => 'ローシェルフと低域モノラル化を統合し、引き締まったクリーンな低域を構築';
+
+  @override
+  String get shelfFreqTooltip => 'ローシェルフのカットオフ周波数（40～400Hz）。この周波数以下の低域を一括増減';
+
+  @override
+  String get shelfGainTooltip => 'カットオフ以下のゲイン増減（-15～+15dB）。厚みの強調や膨らみの抑制に';
+
+  @override
+  String get bassmonoFreqTooltip => 'この周波数（20～300Hz）以下の低域をモノラル化し、位相干渉と濁りを排除';
 
   @override
   String get retryNow => '再試行';
@@ -1224,7 +1239,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
 
   @override
-  String get bassmonoFreq => 'クロスオーバー';
+  String get bassmonoFreq => '低域モノラル周波数';
 
   @override
   String get stEq => 'イコライザー';

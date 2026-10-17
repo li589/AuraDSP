@@ -345,10 +345,6 @@ static auradsp_status get_convolver_ir_spectrum(auradsp_handle h, void* out_valu
 static auradsp_status set_arbmag_enable(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
-    if (v && !h->p.arbmag_ready.load(std::memory_order_relaxed)) {
-        set_error(h, "未加载响应曲线：请先配置或粘贴 GraphicEQ 节点，再启用任意响应 EQ");
-        return AURADSP_E_STATE;
-    }
     h->p.arbmag_enable.store(v);
     if (h->open.load()) apply_arbmag(h);
     compute_latency(h, &h->latency_ms);
@@ -423,23 +419,26 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
         return AURADSP_E_PARAM;
     }
     h->p.ddc_ready.store(1);
+    if (h->open.load() && h->p.ddc_enable.load(std::memory_order_relaxed)) {
+        DDCEnable(&h->jdsp, 1);
+    }
     return AURADSP_OK;
 }
 
 static auradsp_status set_ddc_enable(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
-    if (v && !h->p.ddc_ready.load(std::memory_order_relaxed)) {
-        set_error(h, "未加载 VDC 滤波器：请先在 04 卡片点击「打开」选择 .vdc 文件，再启用 VDC");
-        return AURADSP_E_STATE;
-    }
-    const int rc = v ? DDCEnable(&h->jdsp, 1) : (DDCDisable(&h->jdsp), 1);
-    if (v && rc != 1) {
-        h->p.ddc_enable.store(0);
-        set_error(h, "ddc.enable: rejected by engine");
-        return AURADSP_E_STATE;
-    }
     h->p.ddc_enable.store(v);
+    if (v && h->p.ddc_ready.load(std::memory_order_relaxed)) {
+        const int rc = DDCEnable(&h->jdsp, 1);
+        if (rc != 1) {
+            h->p.ddc_enable.store(0);
+            set_error(h, "ddc.enable: rejected by engine");
+            return AURADSP_E_STATE;
+        }
+    } else {
+        DDCDisable(&h->jdsp);
+    }
     return AURADSP_OK;
 }
 

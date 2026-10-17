@@ -46,7 +46,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get shelfHint => '分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头';
 
   @override
-  String get shelfFreq => '分频点';
+  String get shelfFreq => '增益分频';
 
   @override
   String get shelfGain => '增益';
@@ -56,6 +56,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shelfGainInfo => '托起为正、压低为负；和低音增强是两条路，可叠加但别 double。';
+
+  @override
+  String get bassShapingTitle => '低音塑形';
+
+  @override
+  String get bassShapingHint => '融合低频搁架滤波与低音单声道化，塑造紧致干净的低频响应';
+
+  @override
+  String get shelfFreqTooltip => '设定低频搁架滤波器的分频截止频率点（40~400Hz），该频率以下的低音整体增减';
+
+  @override
+  String get shelfGainTooltip => '分频点以下整体增益提升或衰减（-15~+15dB）。正值增强低频厚度，负值收紧轰鸣';
+
+  @override
+  String get bassmonoFreqTooltip =>
+      '低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感';
 
   @override
   String get retryNow => '重试';
@@ -1218,7 +1234,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
 
   @override
-  String get bassmonoFreq => '分频点';
+  String get bassmonoFreq => '低音单声道分频';
 
   @override
   String get stEq => '均衡器';
