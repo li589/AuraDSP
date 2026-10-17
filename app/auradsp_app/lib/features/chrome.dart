@@ -670,15 +670,27 @@ class _PulseDotState extends State<PulseDot>
   @override
   void initState() {
     super.initState();
-    if (widget.active) _c.repeat();
+    if (widget.active && TrayService.instance.isWindowVisible.value) {
+      _c.repeat();
+    }
+    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+  }
+
+  void _onVisibilityChanged() {
+    if (!TrayService.instance.isWindowVisible.value) {
+      if (_c.isAnimating) _c.stop();
+    } else if (widget.active && !_c.isAnimating) {
+      _c.repeat();
+    }
   }
 
   @override
   void didUpdateWidget(PulseDot old) {
     super.didUpdateWidget(old);
-    if (widget.active && !_c.isAnimating) {
+    final visible = TrayService.instance.isWindowVisible.value;
+    if (widget.active && visible && !_c.isAnimating) {
       _c.repeat();
-    } else if (!widget.active && _c.isAnimating) {
+    } else if ((!widget.active || !visible) && _c.isAnimating) {
       _c.stop();
       _c.animateTo(0.35, duration: AuraDur.fast);
     }
@@ -686,6 +698,7 @@ class _PulseDotState extends State<PulseDot>
 
   @override
   void dispose() {
+    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
     _c.dispose();
     super.dispose();
   }

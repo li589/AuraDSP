@@ -188,4 +188,13 @@ class _WindowCloseListener extends WindowListener {
   void onWindowRestore() {
     TrayService.instance.setWindowVisible(true);
   }
+
+  @override
+  void onWindowEvent(String eventName) {
+    if (eventName == 'hide') {
+      TrayService.instance.setWindowVisible(false);
+    } else if (eventName == 'show') {
+      TrayService.instance.setWindowVisible(true);
+    }
+  }
 }
