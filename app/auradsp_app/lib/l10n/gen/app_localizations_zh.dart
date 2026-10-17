@@ -910,6 +910,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sysAutostart => '开机自启';
 
   @override
+  String get trayShow => '显示主窗口';
+
+  @override
+  String get trayQuit => '退出';
+
+  @override
   String get sysAutostartHint => '登录 Windows 时自动启动 AuraDSP';
 
   @override

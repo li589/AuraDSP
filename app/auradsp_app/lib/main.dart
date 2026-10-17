@@ -103,6 +103,15 @@ class _AuraAppState extends State<AuraApp> {
           onGenerateTitle: (ctx) => l10nOf(ctx).appName,
           theme: _themeFor(model),
           home: ShellGate(model: model),
+          // 托盘菜单文案跟随语言（locale 变化时 MaterialApp.builder 重建）。
+          // applyLocale 内部按 locale 去重，普通重建零成本。
+          builder: (ctx, child) {
+            final l = l10nOf(ctx);
+            TrayService.instance.applyLocale(
+                Localizations.localeOf(ctx).toString(),
+                l.trayShow, l.sysAutostart, l.trayQuit);
+            return child ?? const SizedBox.shrink();
+          },
         );
       },
     );

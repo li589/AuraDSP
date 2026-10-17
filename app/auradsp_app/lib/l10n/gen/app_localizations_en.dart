@@ -941,6 +941,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sysAutostart => 'Launch at login';
 
   @override
+  String get trayShow => 'Show Main Window';
+
+  @override
+  String get trayQuit => 'Quit';
+
+  @override
   String get sysAutostartHint =>
       'Start AuraDSP automatically when you sign in to Windows';
 

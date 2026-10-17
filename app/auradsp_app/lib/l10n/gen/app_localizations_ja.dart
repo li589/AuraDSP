@@ -915,6 +915,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sysAutostart => 'ログイン時起動';
 
   @override
+  String get trayShow => '主ウィンドウを表示';
+
+  @override
+  String get trayQuit => '終了';
+
+  @override
   String get sysAutostartHint => 'Windows サインイン時に AuraDSP を自動起動';
 
   @override

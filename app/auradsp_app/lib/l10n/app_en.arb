@@ -349,6 +349,8 @@
   "sysTray": "Minimize to tray",
   "sysTrayHint": "Closing the window hides to the system tray while audio keeps playing; quit via the tray menu",
   "sysAutostart": "Launch at login",
+  "trayShow": "Show Main Window",
+  "trayQuit": "Quit",
   "sysAutostartHint": "Start AuraDSP automatically when you sign in to Windows",
   "latUnmeasured": "Unmeasured",
   "latTipMeasured": "Component latency (impulse-response measured): {text}\nTap ↻ to re-measure (tens of ms, playback unaffected)",
