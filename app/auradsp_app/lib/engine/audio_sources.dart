@@ -48,11 +48,19 @@ class PinkSource implements Source {
 }
 
 class FileSource implements Source {
-  final Float32List data;
+  final Float32List data; // stereo（fold 版：引擎/viz/桥统一入口）
   final int srcRate;
+
+  /// 多声道 raw（直通用，Nch 交织；无则 null）与声道数。
+  final Float32List? raw;
+  final int rawCh;
   double _pos = 0;
+  double _posRaw = 0;
   bool loop = true;
-  FileSource(this.data, this.srcRate);
+  FileSource(this.data, this.srcRate, {this.raw, this.rawCh = 2});
+
+  /// 源文件声道数（fold 后恒 2 compass；直通判断用 fileCh）。
+  int fileCh = 2;
 
   @override
   void fill(Float32List out, int frames, int deviceRate) {
@@ -75,6 +83,41 @@ class FileSource implements Source {
       out[i * 2] = data[i0 * 2] * (1 - frac) + data[i1 * 2] * frac;
       out[i * 2 + 1] = data[i0 * 2 + 1] * (1 - frac) + data[i1 * 2 + 1] * frac;
       _pos += ratio;
+    }
+  }
+
+  /// 直通填充：raw Nch 交织 + 同式线性重采样（与 fill 独立游标；切换模式
+  /// 不追求采样级连续，追求不断尾不崩溃）。
+  void fillRaw(Float32List out, int frames, int deviceRate) {
+    final r = raw;
+    if (r == null || rawCh < 3) {
+      for (var i = 0; i < frames * 2 && i < out.length; i++) {
+        out[i] = 0;
+      }
+      return;
+    }
+    final ratio = srcRate / deviceRate;
+    final total = r.length ~/ rawCh;
+    for (var i = 0; i < frames; i++) {
+      if (_posRaw >= total - 1) {
+        if (!loop) {
+          for (var k = i; k < frames; k++) {
+            for (var c = 0; c < rawCh; c++) {
+              out[k * rawCh + c] = 0;
+            }
+          }
+          return;
+        }
+        _posRaw = 0;
+      }
+      final i0 = _posRaw.floor();
+      final frac = _posRaw - i0;
+      final i1 = math.min(i0 + 1, total - 1);
+      for (var c = 0; c < rawCh; c++) {
+        out[i * rawCh + c] =
+            r[i0 * rawCh + c] * (1 - frac) + r[i1 * rawCh + c] * frac;
+      }
+      _posRaw += ratio;
     }
   }
 }

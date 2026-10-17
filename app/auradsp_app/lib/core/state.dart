@@ -564,6 +564,10 @@ class AppModel extends ChangeNotifier {
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
   bool spatialHeadTrack = false;
+  // 5.1 源模式（Phase 2）：0=混缩（默认） 1=直通；fileChannels>2 时设置页露芯片。
+  int source51Mode = 0;
+  // 当前文件源声道数（isolate playing 事件回填；直通/UI 门控据此判定）。
+  int fileChannels = 2;
   // 效果页分类过滤（会话内有效，不持久化；'all' = 全部链序展开）。
   String effectsCategory = 'all';
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
@@ -1093,6 +1097,7 @@ class AppModel extends ChangeNotifier {
         if (_pendingRestartPush) {
           _pendingRestartPush = false;
           if (bypass) send({'cmd': 'bypass', 'value': true});
+          send({'cmd': 'source51', 'value': source51Mode});
           if (sourceKind.isNotEmpty) {
             send({
               'cmd': 'source',
@@ -1347,6 +1352,9 @@ class AppModel extends ChangeNotifier {
         break;
       case 'playing':
         playing = raw['playing'] as bool;
+        if (raw['srcCh'] is int) {
+          fileChannels = (raw['srcCh'] as int).clamp(1, 8);
+        }
         notifyListeners();
         break;
       case 'paramResult':
@@ -2554,6 +2562,15 @@ class AppModel extends ChangeNotifier {
   void setSpatialHeadTrack(bool on) {
     spatialHeadTrack = on;
     setInt(ParamId.spatialHeadTrack, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 5.1 源模式切换（直通只在本地渲染 + raw 就绪 + 设备声道足够时生效，
+  /// 否则自动回落混缩；桥注入试音恒走 fold，不受此开关影响）。
+  void setSource51Mode(int mode) {
+    source51Mode = mode.clamp(0, 1);
+    send({'cmd': 'source51', 'value': source51Mode});
     notifyListeners();
     scheduleAutoSave();
   }

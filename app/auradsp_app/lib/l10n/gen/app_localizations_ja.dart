@@ -1198,6 +1198,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialAutoGainInfo => '入力ラウドネスに追従（リバーブと同式）';
 
   @override
+  String get src51Fold => 'ミックスダウン';
+
+  @override
+  String get src51Pass => 'パススルー';
+
+  @override
+  String get src51Hint =>
+      'マルチチャンネルファイル：ミックスダウンはエンジン処理、パススルーはバイパス。機器ch不足時は自動でフォールバック';
+
+  @override
   String get bassmonoHint => 'チェーン先頭：クロスオーバー以下をモノラル化';
 
   @override

@@ -1193,6 +1193,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialAutoGainInfo => '向输入响度收敛（与混响同式），防摆位后忽大忽小';
 
   @override
+  String get src51Fold => '混缩';
+
+  @override
+  String get src51Pass => '直通';
+
+  @override
+  String get src51Hint => '多声道文件：混缩进引擎处理，直通绕开引擎；设备声道不足时自动回落混缩';
+
+  @override
   String get bassmonoHint => '链头处理：分频点以下单声道化，防小音箱低频破音';
 
   @override

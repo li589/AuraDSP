@@ -2055,6 +2055,21 @@ class _TestSourceChips extends StatelessWidget {
               }
             },
           ),
+          if (model.sourceKind == 'file' && model.fileChannels > 2) ...[
+            AuraChip(
+              l.src51Fold,
+              icon: Icons.alt_route_rounded,
+              selected: model.source51Mode == 0,
+              onTap: () => model.setSource51Mode(0),
+            ),
+            AuraChip(
+              l.src51Pass,
+              icon: Icons.arrow_forward_rounded,
+              selected: model.source51Mode == 1,
+              onTap: () => model.setSource51Mode(1),
+            ),
+            InfoBadge(message: l.src51Hint),
+          ],
           if (model.playing)
             AuraChip(
               l.srcStop,

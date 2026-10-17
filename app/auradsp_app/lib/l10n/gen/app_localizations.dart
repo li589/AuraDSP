@@ -2404,6 +2404,24 @@ abstract class AppLocalizations {
   /// **'向输入响度收敛（与混响同式），防摆位后忽大忽小'**
   String get spatialAutoGainInfo;
 
+  /// No description provided for @src51Fold.
+  ///
+  /// In zh, this message translates to:
+  /// **'混缩'**
+  String get src51Fold;
+
+  /// No description provided for @src51Pass.
+  ///
+  /// In zh, this message translates to:
+  /// **'直通'**
+  String get src51Pass;
+
+  /// No description provided for @src51Hint.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道文件：混缩进引擎处理，直通绕开引擎；设备声道不足时自动回落混缩'**
+  String get src51Hint;
+
   /// No description provided for @bassmonoHint.
   ///
   /// In zh, this message translates to:

@@ -1237,6 +1237,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Rides input loudness (same follower as reverb)';
 
   @override
+  String get src51Fold => 'Fold-down';
+
+  @override
+  String get src51Pass => 'Passthrough';
+
+  @override
+  String get src51Hint =>
+      'Multichannel file: fold-down runs through the engine, passthrough bypasses it; falls back to fold-down when the device has fewer channels';
+
+  @override
   String get bassmonoHint =>
       'Chain head: mono below crossover, saves small speakers';
 

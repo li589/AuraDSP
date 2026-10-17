@@ -9,8 +9,9 @@ bool _matchLe(Pointer<Uint8> b, int off, List<int> want) {
 
 /// 把引擎输出（stereo interleaved）按设备混音格式写入 WASAPI 缓冲。
 /// 共享模式通常为 float32，但部分驱动为 int32/int16——按位深正确转换。
+/// Phase 2 直通：src 可为 Nch 交织（srcCh），超出设备声道截断、不足补零。
 void writeToDevice(WasapiOut w, Pointer<Float> devOut, int frames, int devCh,
-    Float32List src) {
+    Float32List src, {int srcCh = 2}) {
   void put(int i, double v) {
     final c = v.clamp(-1.0, 1.0);
     if (w.mix.isFloat) {
@@ -22,7 +23,7 @@ void writeToDevice(WasapiOut w, Pointer<Float> devOut, int frames, int devCh,
     }
   }
 
-  if (devCh == 2) {
+  if (devCh == 2 && srcCh == 2) {
     if (w.mix.isFloat) {
       devOut.asTypedList(frames * 2).setRange(0, frames * 2, src);
       return;
@@ -34,7 +35,7 @@ void writeToDevice(WasapiOut w, Pointer<Float> devOut, int frames, int devCh,
   }
   for (var f = 0; f < frames; f++) {
     for (var c = 0; c < devCh; c++) {
-      put(f * devCh + c, c < 2 ? src[f * 2 + c] : 0.0);
+      put(f * devCh + c, c < srcCh ? src[f * srcCh + c] : 0.0);
     }
   }
 }
