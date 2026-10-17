@@ -349,6 +349,8 @@
   "sysTray": "トレイに最小化",
   "sysTrayHint": "ウィンドウを閉じるとシステムトレイに隠れ、音声は再生継続。終了はトレイメニューから",
   "sysAutostart": "ログイン時起動",
+  "trayShow": "主ウィンドウを表示",
+  "trayQuit": "終了",
   "sysAutostartHint": "Windows サインイン時に AuraDSP を自動起動",
   "latUnmeasured": "未測定",
   "latTipMeasured": "コンポーネント遅延（インパルス応答実測）: {text}\n↻タップで再測定（数十ms、再生に影響しません）",

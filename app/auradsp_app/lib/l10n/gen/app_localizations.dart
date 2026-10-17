@@ -1846,6 +1846,18 @@ abstract class AppLocalizations {
   /// **'开机自启'**
   String get sysAutostart;
 
+  /// No description provided for @trayShow.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示主窗口'**
+  String get trayShow;
+
+  /// No description provided for @trayQuit.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出'**
+  String get trayQuit;
+
   /// No description provided for @sysAutostartHint.
   ///
   /// In zh, this message translates to:

@@ -349,6 +349,8 @@
   "sysTray": "最小化到托盘",
   "sysTrayHint": "关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单",
   "sysAutostart": "开机自启",
+  "trayShow": "显示主窗口",
+  "trayQuit": "退出",
   "sysAutostartHint": "登录 Windows 时自动启动 AuraDSP",
   "latUnmeasured": "未测量",
   "latTipMeasured": "组件处理延迟（脉冲响应实测）: {text}\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）",

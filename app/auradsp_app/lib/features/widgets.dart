@@ -181,7 +181,8 @@ class _CardHoverState extends State<_CardHover> {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return MouseRegion(
-      cursor: SystemMouseCursors.basic,
+      // 不指定 cursor：让内层控件（switch/slider/按钮）的 cursor 完全自然生效，
+      // 避免外层 basic 造成不一致；hover 检测不依赖 cursor。
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: AnimatedContainer(

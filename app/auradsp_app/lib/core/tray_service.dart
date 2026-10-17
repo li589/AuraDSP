@@ -54,6 +54,11 @@ class TrayService {
 
   TrayIcon? _icon;
   bool _ready = false;
+  // 菜单项引用（label 是 live setter：applyLocale 运行时更新，无需重建菜单）
+  MenuItem? _showItem;
+  MenuItem? _autostartItem;
+  MenuItem? _quitItem;
+  String _curLocale = '';
 
   /// 是否已初始化（供 UI 判断托盘/自启可用）
   bool get ready => _ready;
@@ -77,15 +82,16 @@ class TrayService {
       final menu = Menu.create()!;
 
       final showItem = MenuItem.createWithLabelAndType(
-        '显示主窗口', MenuItemType.normal)!;
+        'Show Main Window', MenuItemType.normal)!;
       showItem.addListener((event) {
         if (event is MenuItemClickedEvent) _showWindow();
       });
       menu.addItem(showItem);
+      _showItem = showItem;
       menu.addSeparator();
 
       final autostartItem = MenuItem.createWithLabelAndType(
-        '开机自启', MenuItemType.checkbox)!;
+        'Launch at login', MenuItemType.checkbox)!;
       autostartItem.state = AutoStartService.instance.enabled ?? false
           ? MenuItemState.checked
           : MenuItemState.unchecked;
@@ -100,14 +106,16 @@ class TrayService {
         }
       });
       menu.addItem(autostartItem);
+      _autostartItem = autostartItem;
       menu.addSeparator();
 
       final quitItem = MenuItem.createWithLabelAndType(
-        '退出', MenuItemType.normal)!;
+        'Quit', MenuItemType.normal)!;
       quitItem.addListener((event) {
         if (event is MenuItemClickedEvent) _quitApp();
       });
       menu.addItem(quitItem);
+      _quitItem = quitItem;
 
       icon.setContextMenu(menu);
       icon.addListener((event) {
@@ -143,9 +151,21 @@ class TrayService {
   }
 
   /// 移除托盘图标（退出时调用）
+  /// 应用当前语言到托盘菜单（label live 更新；去重防无谓重建）。
+  /// 由 MaterialApp.builder 在 locale 变化时调用（有 context 可取 l10n）。
+  void applyLocale(String localeTag, String showText, String autostartText,
+      String quitText) {
+    if (localeTag == _curLocale) return;
+    _curLocale = localeTag;
+    _showItem?.label = showText;
+    _autostartItem?.label = autostartText;
+    _quitItem?.label = quitText;
+  }
+
   Future<void> dispose() async {
     _icon?.dispose();
     _icon = null;
+    _showItem = _autostartItem = _quitItem = null;
     _ready = false;
   }
 }
