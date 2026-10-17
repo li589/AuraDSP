@@ -140,9 +140,11 @@ class TrayService {
   /// 从托盘恢复主窗口（还原最小化 + 显示 + 前台）
   Future<void> _showWindow() async {
     setWindowVisible(true);
-    await WindowManager.instance.restore();
-    await WindowManager.instance.show();
-    await WindowManager.instance.focus();
+    try {
+      await WindowManager.instance.restore();
+      await WindowManager.instance.show();
+      await WindowManager.instance.focus();
+    } catch (_) {}
   }
 
   Future<void> _quitApp() async {
@@ -174,8 +176,10 @@ class TrayService {
 /// 统一隐藏窗口（引擎/音乐继续后台跑）。退出走托盘菜单。
 class _WindowCloseListener extends WindowListener {
   @override
-  void onWindowClose() {
-    WindowManager.instance.hide();
+  void onWindowClose() async {
+    try {
+      await WindowManager.instance.hide();
+    } catch (_) {}
     TrayService.instance.setWindowVisible(false);
   }
 
