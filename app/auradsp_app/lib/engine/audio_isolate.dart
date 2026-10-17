@@ -82,6 +82,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 引擎仍照常跑 fold 版供 viz/电平表，零额外开销）。设备声道不足时自动回落 fold。
   bool passthrough51 = false;
   bool running = true;
+  bool vizSuspended = false;
   int? lastViz;
   var vizCount = 0;
   int? lastSentState;
@@ -603,7 +604,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final eqInterpRb = AuraDspLib.getIntNullable(p, h, 'eq.interp') ?? 0;
               final eqQRb = AuraDspLib.getFloat(p, h, 'eq.q') ?? 4.3;
               final bassModeRb = AuraDspLib.getIntNullable(p, h, 'bass.mode') ?? 0;
-              final bassIntensityRb = AuraDspLib.getFloat(p, h, 'bass.intensity') ?? 0.0;
+              final bassGainVal = rdFloat(iBassG) ?? 0.0;
+              final bassIntensityRb = (AuraDspLib.getFloat(p, h, 'bass.intensity') ?? (bassGainVal / 15.0)).clamp(0.0, 1.0);
               final chainOrderRb = AuraDspLib.getString(p, h, 'graph.order', 2048);
               final stBandsRb = <double>[];
               for (var i = 1; i <= 5; i++) {
@@ -617,7 +619,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               send({
                 'evt': 'params',
                 'bassEnable': rdInt(iBass) ?? 0,
-                'bassGain': rdFloat(iBassG) ?? 0.0,
+                'bassGain': bassGainVal,
                 'reverbPreset': rdInt(iRev) ?? -1,
                 'stereoMix': rdFloat(iMix) ?? 0.0, // 兜底必须=ParamDefaults.stereoMix（UI 为真，原 0.5）
                 'eqEnable': rdInt(iEq) ?? 0,
@@ -1298,6 +1300,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
+        case 'setVizSuspended':
+          vizSuspended = (m['value'] as bool?) ?? false;
+          break;
         case 'shutdown':
           running = false;
           break;
@@ -1467,7 +1472,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (asioActive && ab != null) {
         try {
           final now = DateTime.now().millisecondsSinceEpoch;
-          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
             lastViz = now;
             final v = ab!.vizRead();
             if (v != null) {
@@ -1518,7 +1523,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (vbActive && vb != null) {
         try {
           final now = DateTime.now().millisecondsSinceEpoch;
-          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
             lastViz = now;
             final v = vb!.vizRead();
             if (v != null) {
@@ -1566,7 +1571,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (vaioActive && vaio != null) {
         try {
           final now = DateTime.now().millisecondsSinceEpoch;
-          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
             lastViz = now;
             final v = vaio!.vizRead();
             if (v != null) {
@@ -1674,7 +1679,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           // 可视化节流拉取：引擎 ~10ms 产一帧，UI 33ms 拉一次，
           // 一次最多读 8 帧并只取最新（避免队列积压导致画面滞后）
           final now = DateTime.now().millisecondsSinceEpoch;
-          if (lastViz == null || now - lastViz! >= vizIntervalMs) {
+          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
             lastViz = now;
             final n = lib!.vizRead(handle!, vizBuf, 8);
             if (n > 0) {

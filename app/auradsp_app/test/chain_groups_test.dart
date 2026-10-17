@@ -17,7 +17,7 @@ Widget _app(AppModel model) => MaterialApp(
     );
 
 void main() {
-  testWidgets('chain groups render with spatial row', (tester) async {
+  testWidgets('flat chain renders with stage category badges and spatial row', (tester) async {
     tester.view.physicalSize = const Size(1280, 2400);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -25,19 +25,21 @@ void main() {
     final model = AppModel(testing: true);
     await tester.pumpWidget(_app(model));
     await tester.pumpAndSettle();
-    // 6 组头（音色与动态组覆盖默认链序的 dyneq..bass 连续段）。
-    // 'Spatial' 出现 3 次：组头 + 空间行 + 底部信号流节点，单独断言。
-    for (final name in [
-      'Input Shaping',
-      'Tone & Dynamics',
-      'EQ & Script',
-      'Soundstage',
-      'Output Stage',
-    ]) {
-      expect(find.text(name), findsOneWidget, reason: name);
-    }
+
+    // 扁平化拖拽列表存在
+    expect(find.byType(ReorderableListView), findsOneWidget);
+
+    // 各分类方框标记正常渲染（随主题/语言切换）
+    expect(find.text('Input'), findsWidgets);
+    expect(find.text('Tone'), findsWidgets);
+    expect(find.text('EQ'), findsWidgets);
+    expect(find.text('Field'), findsWidgets);
+    expect(find.text('Output'), findsWidgets);
+
+    // 'Spatial' 出现 3 次：效果行标题 + 类别方框标记 + 底部信号流节点
     expect(find.text('Spatial'), findsNWidgets(3));
-    // 空间行（B 组单行）与默认顺序（haas 之后）
+
+    // 空间行与默认顺序（haas 之后）
     expect(kDefaultCoreOrder.indexOf('spatial'),
         kDefaultCoreOrder.indexOf('haas') + 1);
     expect(model.stageMeterIndex('spatial'), 20);

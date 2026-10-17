@@ -27,6 +27,7 @@ import 'param_schema.dart';
 import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
+import 'tray_service.dart';
 
 class SavedPluginSlot {
   final int slot;
@@ -1100,6 +1101,11 @@ class AppModel extends ChangeNotifier {
       _iso = iso;
     });
     port.listen(_onMessage);
+    TrayService.instance.isWindowVisible.addListener(_onWindowVisibilityChanged);
+  }
+
+  void _onWindowVisibilityChanged() {
+    send({'cmd': 'setVizSuspended', 'value': !TrayService.instance.isWindowVisible.value});
   }
 
   @visibleForTesting
@@ -1110,6 +1116,9 @@ class AppModel extends ChangeNotifier {
     switch (raw['evt'] as String) {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
+        if (!TrayService.instance.isWindowVisible.value) {
+          send({'cmd': 'setVizSuspended', 'value': true});
+        }
         break;
       case 'ready':
         info = EngineInfo(raw['abi'] as int, raw['version'] as String,
@@ -1499,6 +1508,7 @@ class AppModel extends ChangeNotifier {
         }
         break;
       case 'viz':
+        if (!TrayService.instance.isWindowVisible.value) break;
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();
@@ -4874,6 +4884,7 @@ void fillEqQ(double q) {
   /// 废除品质档限定拦截，所有效果均自由放行
   @override
   void dispose() {
+    TrayService.instance.isWindowVisible.removeListener(_onWindowVisibilityChanged);
     _debounceSaveTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);

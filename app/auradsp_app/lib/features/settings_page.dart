@@ -47,9 +47,8 @@ class _SettingsPageState extends State<SettingsPage> {
       listenable: model,
       builder: (_, _) {
         final all = <Widget>[
-          // 01 配色
+          // 配色
           SectionCard(
-            index: '01',
             title: l.theme,
             child: Row(
               children: [
@@ -94,9 +93,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          // 02 语言
+          // 语言
           SectionCard(
-            index: '02',
             title: l.language,
             child: AuraSegmented<String>(
               segments: const [
@@ -108,9 +106,8 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => model.setLocale(Locale(v)),
             ),
           ),
-          // 03 音频范式与模式（ADR-009：附加模式原地挂载；普通管线模式端到端流转）
+          // 音频范式与模式（ADR-009：附加模式原地挂载；普通管线模式端到端流转）
           SectionCard(
-            index: '03',
             title: l.audioParadigm,
             hint: l.audioParadigmHint,
             child: Column(
@@ -195,15 +192,13 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          // 04 设备与精细化调节（根据当前范式与配置动态展示）
+          // 设备与精细化调节（根据当前范式与配置动态展示）
           SectionCard(
-            index: '04',
             title: l.audioDevice,
             child: _DynamicAudioPanel(model: model),
           ),
-          // 05 声道模式（ADR-003 Phase A）
+          // 声道模式（ADR-003 Phase A）
           SectionCard(
-            index: '05',
             title: l.channelMode,
             hint: l.channelPhaseA,
             child: AuraSegmented<int>(
@@ -216,10 +211,9 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => model.setInt('channels.mode', v),
             ),
           ),
-          // 06 采样率（发给设备的请求值；设备可回退原生值；桥模式跟对端走，
+          // 采样率（发给设备的请求值；设备可回退原生值；桥模式跟对端走，
 // 此时点选仅保存偏好，回进程内/下次建链生效——置灰反而让人以为坏了，保持可点）。
           SectionCard(
-            index: '06',
             title: l.sampleRate,
             hint: (model.audioMode == 'vbcallback' ||
                     model.audioMode == 'asio')
@@ -240,15 +234,13 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          // 07 引擎信息
+          // 引擎信息
           SectionCard(
-            index: '07',
             title: l.engineInfo,
             child: _EngineInfo(model: model),
           ),
-          // 08 持久化记忆与外置配置
+          // 持久化记忆与外置配置
           SectionCard(
-            index: '08',
             title: l.memTitle,
             hint: l.memHint,
             child: Column(
@@ -298,9 +290,8 @@ class _SettingsPageState extends State<SettingsPage> {
               ],
             ),
           ),
-          // 09 系统（托盘常驻 + 开机自启；Windows）
+          // 系统（托盘常驻 + 开机自启；Windows）
           SectionCard(
-            index: '09',
             title: l.sysTitle,
             hint: l.sysHint,
             child: Column(
@@ -341,12 +332,12 @@ class _SettingsPageState extends State<SettingsPage> {
             child: _TestSourceChips(model: model),
           ),
         ];
-        // 按序号切片：[01,02] 外观 / [03,04,05,06] 音频 / [07,08] 系统 / [测试]。
+        // 按分类切片：外观 / 音频 / 系统 / 测试源。
         final cats = <List<Widget>>[
           [all[0], all[1]],
           [all[2], all[3], all[4], all[5]],
-          [all[6], all[7]],
-          [all[8]],
+          [all[6], all[7], all[8]],
+          [all[9]],
         ];
         final shown = [...cats[_cat.clamp(0, 3)], const SizedBox(height: 84)];
         return Stack(

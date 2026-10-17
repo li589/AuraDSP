@@ -11,6 +11,7 @@
  * 失败只置 ready=false，不抛异常、不阻塞启动——非核心路径）。
  * 退出走托盘菜单「退出」或应用内退出（dispose 移除图标并放行）。
  */
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:nativeapi/nativeapi.dart'
     show ContextMenuTrigger, LaunchAtLogin, Menu, MenuItem, MenuItemClickedEvent,
         MenuItemState, MenuItemType, TrayIcon, TrayIconClickedEvent;
@@ -121,8 +122,16 @@ class TrayService {
     }
   }
 
+  final ValueNotifier<bool> isWindowVisible = ValueNotifier<bool>(true);
+
+  void setWindowVisible(bool visible) {
+    if (isWindowVisible.value == visible) return;
+    isWindowVisible.value = visible;
+  }
+
   /// 从托盘恢复主窗口（还原最小化 + 显示 + 前台）
   Future<void> _showWindow() async {
+    setWindowVisible(true);
     await WindowManager.instance.restore();
     await WindowManager.instance.show();
     await WindowManager.instance.focus();
@@ -147,5 +156,16 @@ class _WindowCloseListener extends WindowListener {
   @override
   void onWindowClose() {
     WindowManager.instance.hide();
+    TrayService.instance.setWindowVisible(false);
+  }
+
+  @override
+  void onWindowMinimize() {
+    TrayService.instance.setWindowVisible(false);
+  }
+
+  @override
+  void onWindowRestore() {
+    TrayService.instance.setWindowVisible(true);
   }
 }

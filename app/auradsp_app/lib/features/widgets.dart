@@ -577,35 +577,17 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
                 borderRadius: BorderRadius.circular(AuraRadius.xs),
                 border: Border.all(color: borderColor, width: 1.0),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Text(
-                    text,
-                    style: monoOf(
-                      p,
-                      size: 10,
-                      color: !widget.measured
-                          ? p.textDim
-                          : (widget.latencyMs > 20
-                              ? p.warning
-                              : (widget.latencyMs > 0 ? p.accent2 : p.textDim)),
-                    ),
-                  ),
-                  // 不支持实测的组件不渲染 ↻：点它必然只得到「未测量」。
-                  if (widget.showRefresh && widget.onRefresh != null) ...[
-                    const SizedBox(width: 3),
-                    RotationTransition(
-                      turns: _pulseController,
-                      child: Icon(
-                        Icons.refresh_rounded,
-                        size: 11,
-                        color: p.textDim,
-                      ),
-                    ),
-                  ],
-                ],
+              child: Text(
+                text,
+                style: monoOf(
+                  p,
+                  size: 10,
+                  color: !widget.measured
+                      ? p.textDim
+                      : (widget.latencyMs > 20
+                          ? p.warning
+                          : (widget.latencyMs > 0 ? p.accent2 : p.textDim)),
+                ),
               ),
             ),
           ),
