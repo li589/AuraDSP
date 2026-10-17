@@ -98,8 +98,36 @@ abstract final class PathMemory {
     return _flush();
   }
 
-  /// slot 的兜底初始目录（无记忆时）：默认取 ConfigManager 子目录或 null。
+  /// slot 的兜底初始目录（无记忆时）：
+  /// 优先智能探测安装包/运行目录资源库（`resources/{subFolder}`）、
+  /// 用户配置中心（`%APPDATA%/AuraDSP/resources/{subFolder}`）以及工程 assets。
   static String? fallbackDir(String slot) {
+    final subFolder = switch (slot) {
+      slotConvolverIr => 'convolver',
+      slotDdcVdc => 'ddc',
+      slotLiveprogScript => 'liveprog',
+      _ => _fallbackDir[slot] ?? '',
+    };
+
+    if (subFolder.isNotEmpty) {
+      final exeDir = File(Platform.resolvedExecutable).parent.path;
+      final candidates = <String>[
+        '$exeDir${Platform.pathSeparator}resources${Platform.pathSeparator}$subFolder',
+        '$exeDir${Platform.pathSeparator}assets${Platform.pathSeparator}$subFolder',
+        ConfigManager.path('resources${Platform.pathSeparator}$subFolder'),
+        ConfigManager.path(subFolder),
+        'assets${Platform.pathSeparator}$subFolder',
+        '..${Platform.pathSeparator}..${Platform.pathSeparator}assets${Platform.pathSeparator}$subFolder',
+      ];
+
+      for (final p in candidates) {
+        try {
+          final d = Directory(p);
+          if (d.existsSync()) return d.path;
+        } catch (_) {}
+      }
+    }
+
     final rel = _fallbackDir[slot];
     if (rel == null || rel.isEmpty) return null;
     final p = ConfigManager.path(rel);

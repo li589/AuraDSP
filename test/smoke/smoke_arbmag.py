@@ -51,8 +51,9 @@ def set_str(pid, s):
     bs = s.encode('utf-8')
     return dll.auradsp_set_param(h, pid.encode(), bs, len(bs))
 
-# 1. 初始未加载曲线：enable=1 应被拒绝
-check('unloaded enable rejected', set_i('arbmag.enable', 1) != 0)
+# 1. 初始未加载曲线：enable=1 应被允许开启（自动直通安全旁通），ready 保持 0
+check('unloaded enable accepted (auto-bypass)', set_i('arbmag.enable', 1) == 0)
+check('enable readback == 1', get_i('arbmag.enable')[1] == 1)
 _, r = get_i('arbmag.ready')
 check('initial ready=0', r == 0)
 

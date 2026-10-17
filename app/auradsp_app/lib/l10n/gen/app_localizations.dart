@@ -175,7 +175,7 @@ abstract class AppLocalizations {
   /// No description provided for @shelfFreq.
   ///
   /// In zh, this message translates to:
-  /// **'分频点'**
+  /// **'增益分频'**
   String get shelfFreq;
 
   /// No description provided for @shelfGain.
@@ -195,6 +195,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'托起为正、压低为负；和低音增强是两条路，可叠加但别 double。'**
   String get shelfGainInfo;
+
+  /// No description provided for @bassShapingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音塑形'**
+  String get bassShapingTitle;
+
+  /// No description provided for @bassShapingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'融合低频搁架滤波与低音单声道化，塑造紧致干净的低频响应'**
+  String get bassShapingHint;
+
+  /// No description provided for @shelfFreqTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'设定低频搁架滤波器的分频截止频率点（40~400Hz），该频率以下的低音整体增减'**
+  String get shelfFreqTooltip;
+
+  /// No description provided for @shelfGainTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频点以下整体增益提升或衰减（-15~+15dB）。正值增强低频厚度，负值收紧轰鸣'**
+  String get shelfGainTooltip;
+
+  /// No description provided for @bassmonoFreqTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感'**
+  String get bassmonoFreqTooltip;
 
   /// No description provided for @retryNow.
   ///
@@ -2455,7 +2485,7 @@ abstract class AppLocalizations {
   /// No description provided for @bassmonoFreq.
   ///
   /// In zh, this message translates to:
-  /// **'分频点'**
+  /// **'低音单声道分频'**
   String get bassmonoFreq;
 
   /// No description provided for @stEq.

@@ -84,12 +84,13 @@ def run_sine(freq, amp=0.2, blocks=24):
 
 expect = 0.2 / math.sqrt(2)
 
-# 1. 未加载文件使能 → 显式拒绝（好设计：报错而不是假开），输出直通
+# 1. 未加载文件使能 → 允许使能并内部直通（输出不变）
 rc = set_i('ddc.enable', 1)
-check('enable w/o file rejected', rc != 0)
+check('enable w/o file accepted', rc == 0)
+check('enable readback == 1', get_i('ddc.enable')[1] == 1)
 outs = run_sine(1000.0)
 rms = math.sqrt(sum(s * s for s in outs) / len(outs))
-check('rejected enable passes through', abs(rms - expect) / expect < 0.03, 'rms=%.5f' % rms)
+check('unloaded enable passes through', abs(rms - expect) / expect < 0.03, 'rms=%.5f' % rms)
 set_i('ddc.enable', 0)
 
 # 2/3. 加载真实 VDC（文件存在才跑，否则 SKIP 风格通过）

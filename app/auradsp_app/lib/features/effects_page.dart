@@ -35,8 +35,7 @@ part 'effects/comp_card.dart';
 part 'effects/bass_card.dart';
 part 'effects/cards_common.dart';
 part 'effects/reverb_card.dart';
-part 'effects/bassmono_card.dart';
-part 'effects/shelf_card.dart';
+part 'effects/bass_shaping_card.dart';
 part 'effects/convolver_card.dart';
 part 'effects/ddc_card.dart';
 part 'effects/eq_card.dart';
@@ -67,8 +66,9 @@ const Map<String, String?> kEffectCardIndex = {
   'input': '1',
   'gate': '2',
   'filter': '3',
+  'bass_shaping': '4',
   'bassmono': '4',
-  'shelf': '5',
+  'shelf': '4',
   // 核心处理（core）
   'comp': '1',
   'dyneq': '2',
@@ -86,7 +86,7 @@ const Map<String, String?> kEffectCardIndex = {
 
 /// 效果分类（标题行右侧下拉过滤；无"全部"，按类分页展示）。
 const Map<String, List<String>> kEffectCategories = {
-  'front': ['input', 'gate', 'filter', 'bassmono', 'shelf'],
+  'front': ['input', 'gate', 'filter', 'bass_shaping'],
   'core': ['comp', 'dyneq', 'loudness', 'bass', 'eq', 'arbmag', 'ddc'],
   'spatial': ['spatial', 'reverb', 'stereo', 'haas', 'crossfeed', 'convolver'],
   'late': ['exciter', 'tube', 'post'],
@@ -114,8 +114,9 @@ class EffectsPage extends StatelessWidget {
       'dyneq' => _DyneCard(model: model),
       'comp' => _CompressorCard(model: model),
       'bass' => _BassCard(model: model),
-      'bassmono' => _BassMonoCard(model: model),
-      'shelf' => _ShelfCard(model: model),
+      'bass_shaping' => _BassShapingCard(model: model),
+      'bassmono' => _BassShapingCard(model: model),
+      'shelf' => _BassShapingCard(model: model),
       'spatial' => _SpatialCard(model: model),
       'reverb' => _SpatialReverbCard(model: model),
       'stereo' => _StereoCard(model: model),

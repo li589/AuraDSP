@@ -317,6 +317,9 @@ class AppModel extends ChangeNotifier {
   bool isSectionEnabled(String section) {
     if (section == 'input' || section == 'routing') return true;
     if (section == 'post') return limiterOn;
+    if (section == 'shelf' || section == 'bassmono' || section == 'bass_shaping') {
+      return bassShapingOn;
+    }
     return isStageEnabled(section);
   }
 
@@ -602,12 +605,13 @@ class AppModel extends ChangeNotifier {
   double convMix = 1.0;
   bool ddcOn = false, ddcReady = false;
 
-  // M5-b：低频搁架
+  // M5-b：低音塑形（Bass Shaping：合并低频搁架与单声道化）
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
   // 低频单声道化（BassMono，链头）
   bool bassmonoOn = false;
   double bassmonoFreq = 120;
+  bool get bassShapingOn => shelfOn || bassmonoOn;
   // Haas 差分环绕（stereo 后 / reverb 前）
   bool haasOn = false;
   double haasDelayMs = 12, haasMix = 1.0;
@@ -2211,6 +2215,13 @@ class AppModel extends ChangeNotifier {
   /// UI 滑块值不动。直发 bypass _mirror，避免回写冲掉 UI 位置。
   void _pushStereoChain() {
     final k = stereoOn ? 1.0 : 0.0;
+    _markSent('stereo.enable');
+    send({
+      'cmd': 'setParam',
+      'id': 'stereo.enable',
+      'value': stereoOn ? 1 : 0,
+      'isFloat': false,
+    });
     _markSent('stereo.mix');
     send({
       'cmd': 'setParam',
@@ -2375,6 +2386,8 @@ class AppModel extends ChangeNotifier {
       'tube' => tubeOn,
       'comp' => compOn,
       'bassmono' => bassmonoOn,
+      'shelf' => shelfOn,
+      'bass_shaping' => bassShapingOn,
       'gate' => gateOn,
       'dyneq' => dyneqOn,
       'filter' => filterOn,
@@ -2403,6 +2416,10 @@ class AppModel extends ChangeNotifier {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
+      case 'bass_shaping':
+        setBassShapingEnabled(!bassShapingOn);
+      case 'shelf':
+        setShelfEnabled(!shelfOn);
       case 'bassmono':
         setBassmonoEnabled(!bassmonoOn);
       case 'gate':
@@ -2531,13 +2548,13 @@ class AppModel extends ChangeNotifier {
     }
     notifyListeners();
     _markSent(ParamId.convEnable);
-    // Auto-bypass：用户要求「开关保持开启、无文件时效果内部直通，
-    // 待合格 IR 加载成功后自动生效」。因此 UI 的开关状态与引擎的生效状态
-    // 解耦：无资源时只对引擎下发 enable=0（内部直通），UI 仍显示为开启。
+    // Auto-bypass：即使无 IR 文件，也如实下发 enable 状态。
+    // 底层引擎在 ir_ready=0 时自动内部直通 (Convolver1DDisable)，
+    // 回读也能如实反映 convEnable=1，避免无文件开启后被回读冲刷关闭。
     send({
       'cmd': 'setParam',
       'id': ParamId.convEnable,
-      'value': (on && convReady) ? 1 : 0,
+      'value': on ? 1 : 0,
       'isFloat': false
     });
     scheduleAutoSave();
@@ -2623,6 +2640,9 @@ class AppModel extends ChangeNotifier {
   void setHaasDelay(double v) {
     haasDelayMs = v.clamp(0.0, 25.0);
     setFloat(ParamId.haasDelay, haasDelayMs);
+    if (_measuredLatencyMs.containsKey('haas')) {
+      _measuredLatencyMs['haas'] = haasDelayMs;
+    }
     notifyListeners();
     scheduleAutoSave();
   }
@@ -3385,6 +3405,17 @@ class AppModel extends ChangeNotifier {
     filterQ = q.clamp(0.3, 10.0);
     setFloat(ParamId.filterQ, filterQ);
     notifyListeners();
+  }
+
+  /* ---- 低音塑形（Bass Shaping：合并低频搁架与单声道化） ---- */
+
+  void setBassShapingEnabled(bool on) {
+    shelfOn = on;
+    bassmonoOn = on;
+    setInt(ParamId.shelfEnable, on ? 1 : 0);
+    setInt(ParamId.bassmonoEnable, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
   }
 
   /* ---- 低频搁架（M5-b，自研 RBJ low-shelf；此前有引擎/回放无 UI） ---- */
@@ -4772,6 +4803,9 @@ void fillEqQ(double q) {
     if (compId == 'ddc' && ddcOn && ddcReady) {
       return (ms: 6.0, measured: false, estimated: true);
     }
+    if (compId == 'bass_shaping' && bassShapingOn) {
+      return (ms: 0.0, measured: false, estimated: true);
+    }
     return (ms: 0.0, measured: false, estimated: false);
   }
 
@@ -4792,6 +4826,28 @@ void fillEqQ(double q) {
   /// 彻底消除测量时因阻塞音频泵循环引发的 WASAPI 缓冲区欠载爆音与声音卡顿。
   void refreshComponentLatency(String compId) async {
     if (_probing.contains(compId)) return;
+    if (compId == 'haas') {
+      _probing.add('haas');
+      _latencyRefreshTicks['haas'] = DateTime.now().millisecondsSinceEpoch;
+      notifyListeners();
+      Future.delayed(const Duration(milliseconds: 120), () {
+        _probing.remove('haas');
+        _measuredLatencyMs['haas'] = haasDelayMs;
+        notifyListeners();
+      });
+      return;
+    }
+    if (compId == 'bass_shaping') {
+      _probing.add('bass_shaping');
+      _latencyRefreshTicks['bass_shaping'] = DateTime.now().millisecondsSinceEpoch;
+      notifyListeners();
+      Future.delayed(const Duration(milliseconds: 100), () {
+        _probing.remove('bass_shaping');
+        _measuredLatencyMs['bass_shaping'] = 0.0;
+        notifyListeners();
+      });
+      return;
+    }
     _probing.add(compId);
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
@@ -4858,7 +4914,7 @@ void fillEqQ(double q) {
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
         'convolver', 'ddc', 'bassmono', 'exciter', 'stereo', 'comp', 'arbmag',
-        'dyneq', 'filter', 'gate', 'loudness',
+        'dyneq', 'filter', 'gate', 'loudness', 'haas', 'bass_shaping',
       }.contains(compId);
 
   /// 探测进行中

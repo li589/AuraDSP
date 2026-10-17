@@ -43,3 +43,26 @@ target_include_directories(${BINARY_NAME} PRIVATE "${CMAKE_SOURCE_DIR}")
 
 # Run the Flutter tool portions of the build. This must not be removed.
 add_dependencies(${BINARY_NAME} flutter_assemble)
+
+# 确保编译后 auradsp_engine.dll 实时同步到可执行文件所在目录
+set(AURADSP_ENGINE_DLL
+    "${CMAKE_SOURCE_DIR}/../../../core/desktop/windows/out/Release/auradsp_engine.dll")
+if(EXISTS "${AURADSP_ENGINE_DLL}")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${AURADSP_ENGINE_DLL}"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+endif()
+
+# 同样在 POST_BUILD 中将已编译的常驻桥 DLL 实时同步至 runner 目录，确保本地调试与 FFI 畅通
+foreach(BRIDGE_NAME auravm_bridge auravaio_bridge auraasio_bridge)
+  set(BRIDGE_DLL "${CMAKE_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/${BRIDGE_NAME}.dll")
+  if(EXISTS "${BRIDGE_DLL}")
+    add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${BRIDGE_DLL}"
+        "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+  endif()
+endforeach()
+
+

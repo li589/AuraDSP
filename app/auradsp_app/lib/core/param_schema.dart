@@ -509,7 +509,7 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: false,
     order: 100,
     getter: (m) => m.stereoOn,
-    setter: (m, v) => m.stereoOn = v,
+    setter: (m, v) => m.setStereoEnabled(v),
   );
   static final stereoBand1 = ParamSpec<double>(
     id: 'stereo.band.1', section: 'stereo', key: 'band0',
@@ -561,7 +561,7 @@ abstract final class ParamRegistry {
   static final shelfFreq = ParamSpec<double>(
     id: 'shelf.freq', section: 'shelf', key: 'freq',
     type: ParamType.float, defaultValue: ParamDefaults.shelfFreq,
-    min: 20.0, max: 500.0, step: 1.0, unit: 'Hz',
+    min: 40.0, max: 400.0, step: 1.0, unit: 'Hz',
     formatter: (v) => v.toStringAsFixed(0),
     getter: (m) => m.shelfFreq,
     setter: (m, v) => m.setShelfFreq(v),
@@ -599,6 +599,18 @@ abstract final class ParamRegistry {
     order: 100,
     getter: (m) => m.bassmonoOn,
     setter: (m, v) => m.setBassmonoEnabled(v),
+  );
+
+  /* =========================================================================
+   * 7B. 低音塑形 (Bass Shaping) — 合并低频搁架与低频单声道化
+   * ========================================================================= */
+  static final bassShapingEnable = ParamSpec<bool>(
+    id: 'bass_shaping.enable', section: 'bass_shaping', key: 'on',
+    type: ParamType.boolean, defaultValue: false,
+    flags: ParamFlags.presetSerializable,
+    order: 100,
+    getter: (m) => m.bassShapingOn,
+    setter: (m, v) => m.setBassShapingEnabled(v),
   );
 
   /* =========================================================================
@@ -1016,7 +1028,7 @@ abstract final class ParamRegistry {
     id: 'convolver.enable', section: 'convolver', key: 'enable',
     type: ParamType.boolean, defaultValue: false,
     order: 100,
-    getter: (m) => m.convEnabled && m.convReady,
+    getter: (m) => m.convEnabled,
     setter: (m, v) => m.setConvolverEnabled(v),
   );
 
