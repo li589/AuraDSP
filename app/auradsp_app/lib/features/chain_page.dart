@@ -117,23 +117,19 @@ final Map<String, String> _stageToGroup = {
     for (final id in e.value) id: e.key,
 };
 
-/// 行列视图记录：组头（不可拖拽，原地不动）或 stage 行（带全局序号）。
-sealed class _ChainRow {
-  const _ChainRow();
-}
-
-class _ChainGroupHead extends _ChainRow {
-  final String group;
-
-  /// 同一组在 _order 中被拆散时第几次出现（保证 View key 唯一）。
-  final int nth;
-  const _ChainGroupHead(this.group, this.nth);
-}
-
-class _ChainStageRow extends _ChainRow {
-  final String id;
-  final int number;
-  const _ChainStageRow(this.id, this.number);
+/// stage id → 分类展示名（方框徽标用，随中英文切换）。
+String stageCategoryLabelOf(BuildContext ctx, String id) {
+  final isZh = Localizations.localeOf(ctx).languageCode == 'zh';
+  final g = _stageToGroup[id];
+  return switch (g) {
+    'chInput' => isZh ? '输入' : 'Input',
+    'chTone' => isZh ? '音色' : 'Tone',
+    'chEq' => isZh ? '均衡' : 'EQ',
+    'chSound' => isZh ? '声场' : 'Field',
+    'chSpatial' => isZh ? '空间' : 'Spatial',
+    'chOut' => isZh ? '输出' : 'Output',
+    _ => isZh ? '效果' : 'FX',
+  };
 }
 
 class ChainPage extends StatefulWidget {
@@ -147,35 +143,6 @@ class ChainPage extends StatefulWidget {
 class _ChainPageState extends State<ChainPage> {
   late List<String> _order;
   bool _dirty = false;
-
-  /// 折叠的组（会话内有效）；行列视图（含组头）由 _rebuildView 派生。
-  final Set<String> _collapsed = {};
-  List<_ChainRow> _view = [];
-  int _viewStages = 0;
-  int _viewHeads = 0;
-
-  void _rebuildView() {
-    _view = [];
-    String? lastGroup;
-    var n = 0;
-    var heads = 0;
-    final nthSeen = <String, int>{};
-    for (final id in _order) {
-      final g = _stageToGroup[id] ?? lastGroup ?? 'chInput';
-      if (g != lastGroup) {
-        final nth = (nthSeen[g] ?? 0) + 1;
-        nthSeen[g] = nth;
-        _view.add(_ChainGroupHead(g, nth));
-        lastGroup = g;
-        heads++;
-      }
-      if (!_collapsed.contains(g)) {
-        _view.add(_ChainStageRow(id, ++n));
-      }
-    }
-    _viewStages = n;
-    _viewHeads = heads;
-  }
 
   @override
   void initState() {
@@ -196,18 +163,9 @@ class _ChainPageState extends State<ChainPage> {
         _order.insert(at, id);
       }
     }
-    _rebuildView();
   }
 
   void _apply() {
-    // 下发的是 20 全量（含 8 个自研 stage）；引擎侧先经
-    // JamesDSPFilterVendorOrder 抽成 12 个 vendor id 再重建链，
-    // output 顺序钉死在末尾。自研 stage 顺序由 process_stereo_chain
-    // 钉死，不参与 vendor 侧重排。
-    //
-    // 历史坑：这层过滤曾经不存在，19 id 原样喂给 JamesDSPRebuildChain
-    // （只认 12 个且要求恰好各一次）→ 必然返回 -1，用户拖拽全部无效，
-    // 而 UI 显示的顺序与引擎实际执行的不一致。2026-10-16 已修。
     final fullOrder = '${_order.join(',')},output';
     widget.model.setGraphOrder(fullOrder);
     setState(() => _dirty = false);
@@ -217,61 +175,7 @@ class _ChainPageState extends State<ChainPage> {
     setState(() {
       _order = List<String>.from(kDefaultCoreOrder);
       _dirty = true;
-      _rebuildView();
     });
-  }
-
-  /// 组头行：名 + 开x/y + 折叠 chevron + 整组旁路 pill（不可拖拽，原地不动）。
-  /// 整组旁路跳过 output（限幅器常驻，见 setChainGroup）。
-  Widget _groupHeader(BuildContext ctx, String g, int nth) {
-    final p = paletteOf(ctx);
-    final members = kChainGroups[g] ?? const <String>[];
-    final togglable = members.where((id) => id != 'output').toList();
-    final on = togglable.where((id) => widget.model.isStageEnabled(id)).length;
-    final collapsed = _collapsed.contains(g);
-    return Container(
-      key: ValueKey('grp_${g}_$nth'),
-      margin: const EdgeInsets.only(top: 10, bottom: 2),
-      child: Row(children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() {
-            if (collapsed) {
-              _collapsed.remove(g);
-            } else {
-              _collapsed.add(g);
-            }
-            _rebuildView();
-          }),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [
-            Icon(
-              collapsed
-                  ? Icons.chevron_right_rounded
-                  : Icons.expand_more_rounded,
-              size: 16,
-              color: p.accent,
-            ),
-            const SizedBox(width: 2),
-            Text(
-              chainGroupLabelOf(l10nOf(ctx), g),
-              style: monoOf(p, size: 11.5, color: p.text)
-                  .copyWith(fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(width: AuraSpace.sm),
-            Text(
-              '$on/${togglable.length}',
-              style: monoOf(p, size: 11, color: p.textDim),
-            ),
-          ]),
-        ),
-        const Spacer(),
-        _StageBypassPill(
-          isEnabled: togglable.isNotEmpty && on == togglable.length,
-          onTap: () => widget.model
-              .setChainGroup(g, !(togglable.isNotEmpty && on == togglable.length)),
-        ),
-      ]),
-    );
   }
 
   @override
@@ -294,162 +198,141 @@ class _ChainPageState extends State<ChainPage> {
                 ),
               AuraChip(l10nOf(context).chainReset, icon: Icons.restart_alt_rounded, onTap: _reset),
             ]),
-              child: Column(
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 56.0 * _viewStages + 40.0 * _viewHeads + 12,
+                  height: 54.0 * _order.length + 8,
                   child: ReorderableListView.builder(
-                buildDefaultDragHandles: false,
-                itemCount: _view.length,
-                onReorder: (oldI, newI) { // ignore: deprecated_member_use
-                  setState(() {
-                    if (newI > oldI) newI -= 1;
-                    if (oldI < 0 || oldI >= _view.length) return;
-                    final dragged = _view[oldI];
-                    // 组头无拖拽手柄，到不了这里；防御性直接返回。
-                    if (dragged is! _ChainStageRow) return;
-                    _order.remove(dragged.id);
-                    int at;
-                    if (newI >= _view.length) {
-                      at = _order.length;
-                    } else {
-                      final anchor = _view[newI];
-                      if (anchor is _ChainStageRow) {
-                        // newI（已按惯例减 1）处的行是被挤下去的行，
-                        // 拖拽项落在其之前——移除后查下标即插入点。
-                        at = _order.indexOf(anchor.id);
-                      } else if (anchor is _ChainGroupHead) {
-                        final members =
-                            kChainGroups[anchor.group] ?? const <String>[];
-                        if (newI > oldI) {
-                          // 下移落组头：放到该组尾（最后一个成员之后）。
-                          at = 0;
-                          for (final m in members) {
-                            final p = _order.indexOf(m);
-                            if (p >= 0 && p + 1 > at) at = p + 1;
-                          }
-                        } else {
-                          // 上移落组头：放到该组头（第一个成员之前）。
-                          at = _order.length;
-                          for (final m in members) {
-                            final p = _order.indexOf(m);
-                            if (p >= 0 && p < at) at = p;
-                          }
-                        }
-                      } else {
-                        at = _order.length;
-                      }
-                    }
-                    if (at < 0) at = 0;
-                    if (at > _order.length) at = _order.length;
-                    _order.insert(at, dragged.id);
-                    _rebuildView();
-                    _dirty = true;
-                  });
-                },
-                proxyDecorator: (child, index, anim) => AnimatedBuilder(
-                  animation: anim,
-                  builder: (_, c) => Material(
-                    color: p.accent.withValues(alpha: 0.10),
-                    borderRadius: BorderRadius.circular(AuraRadius.md),
-                    child: c,
-                  ),
-                  child: child,
-                ),
-                itemBuilder: (ctx, i) {
-                  final row = _view[i];
-                  if (row is _ChainGroupHead) {
-                    return _groupHeader(ctx, row.group, row.nth);
-                  }
-                  final stage = row as _ChainStageRow;
-                  final id = stage.id;
-                  final meta = kStageMeta.firstWhere((s) => s.id == id,
-                      orElse: () => (id: id, exposed: false));
-                  final isEnabled = widget.model.isStageEnabled(id);
-                  return ReorderableDragStartListener(
-                    key: ValueKey(id),
-                    index: i,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 3),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: AuraSpace.md + 2, vertical: AuraSpace.sm + 1),
-                      decoration: BoxDecoration(
-                        color: isEnabled
-                            ? p.panel
-                            : p.panel.withValues(alpha: 0.75),
+                    buildDefaultDragHandles: false,
+                    itemCount: _order.length,
+                    onReorder: (oldI, newI) { // ignore: deprecated_member_use
+                      setState(() {
+                        if (newI > oldI) newI -= 1;
+                        final item = _order.removeAt(oldI);
+                        _order.insert(newI, item);
+                        _dirty = true;
+                      });
+                    },
+                    proxyDecorator: (child, index, anim) => AnimatedBuilder(
+                      animation: anim,
+                      builder: (_, c) => Material(
+                        color: p.accent.withValues(alpha: 0.10),
                         borderRadius: BorderRadius.circular(AuraRadius.md),
-                        border: Border.all(
-                          color: isEnabled ? p.hairline : p.hairline.withValues(alpha: 0.5),
-                        ),
+                        child: c,
                       ),
-                      child: Row(children: [
-                        Icon(Icons.drag_indicator_rounded,
-                            size: 16, color: p.textDim),
-                        const SizedBox(width: AuraSpace.sm),
-                        Container(
-                          width: 24,
-                          alignment: Alignment.center,
-                          child: Text('${stage.number}',
-                              style: monoOf(p,
-                                  size: 11.5,
-                                  color: isEnabled ? p.accent : p.textDim)),
-                        ),
-                        const SizedBox(width: AuraSpace.sm + 2),
-                        Expanded(
-                          child: Text(
-                            stageLabelOf(l10nOf(ctx), id),
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: isEnabled
-                                  ? p.text
-                                  : p.textDim.withValues(alpha: 0.8),
-                            ),
-                          ),
-                        ),
-                        // 节点旁路 / 启用胶囊
-                        if (meta.exposed) ...[
-                          _StageBypassPill(
-                            isEnabled: isEnabled,
-                            onTap: () => widget.model.toggleStage(id),
-                          ),
-                          const SizedBox(width: AuraSpace.md),
-                        ] else ...[
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: p.panelRaised,
-                              borderRadius: BorderRadius.circular(AuraRadius.xs),
-                              border: Border.all(color: p.hairline),
-                            ),
-                            child: Text(l10nOf(context).chainReserved, style: captionOf(p)),
-                          ),
-                          const SizedBox(width: AuraSpace.md),
-                        ],
-                        // [M3.5-c] 双声道微型实时电平表（全 19 级节点逐级独立峰值采样）
-                        _StageStereoMeter(
-                          meterIndex:
-                              widget.model.stageMeterIndex(id),
-                          isEnabled: isEnabled,
-                          model: widget.model,
-                        ),
-                        const SizedBox(width: AuraSpace.sm),
-                        Icon(Icons.chevron_right_rounded,
-                            size: 16,
-                            color: p.textDim.withValues(alpha: 0.4)),
-                      ]),
+                      child: child,
                     ),
-                  );
-                },
-              ),
+                    itemBuilder: (ctx, i) {
+                      final id = _order[i];
+                      final meta = kStageMeta.firstWhere((s) => s.id == id,
+                          orElse: () => (id: id, exposed: false));
+                      final isEnabled = widget.model.isStageEnabled(id);
+                      return ReorderableDragStartListener(
+                        key: ValueKey(id),
+                        index: i,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: AuraSpace.md + 2, vertical: AuraSpace.sm + 1),
+                          decoration: BoxDecoration(
+                            color: isEnabled
+                                ? p.panel
+                                : p.panel.withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(AuraRadius.md),
+                            border: Border.all(
+                              color: isEnabled ? p.hairline : p.hairline.withValues(alpha: 0.5),
+                            ),
+                          ),
+                          child: Row(children: [
+                            Icon(Icons.drag_indicator_rounded,
+                                size: 16, color: p.textDim),
+                            const SizedBox(width: AuraSpace.sm),
+                            Container(
+                              width: 24,
+                              alignment: Alignment.center,
+                              child: Text('${i + 1}',
+                                  style: monoOf(p,
+                                      size: 11.5,
+                                      color: isEnabled ? p.accent : p.textDim)),
+                            ),
+                            const SizedBox(width: AuraSpace.sm + 2),
+                            Text(
+                              stageLabelOf(l10nOf(ctx), id),
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w600,
+                                color: isEnabled
+                                    ? p.text
+                                    : p.textDim.withValues(alpha: 0.8),
+                              ),
+                            ),
+                            const SizedBox(width: AuraSpace.sm),
+                            // 分类方框标记（自适应主色主题切换）
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 5, vertical: 1.5),
+                              decoration: BoxDecoration(
+                                color: p.accent.withValues(alpha: 0.08),
+                                borderRadius: BorderRadius.circular(AuraRadius.xs),
+                                border: Border.all(
+                                  color: p.accent.withValues(alpha: 0.35),
+                                  width: 1.0,
+                                ),
+                              ),
+                              child: Text(
+                                stageCategoryLabelOf(ctx, id),
+                                style: monoOf(
+                                  p,
+                                  size: 10,
+                                  color: isEnabled ? p.accent : p.textDim,
+                                ).copyWith(fontWeight: FontWeight.w600),
+                              ),
+                            ),
+                            const Spacer(),
+                            // 节点旁路 / 启用胶囊
+                            if (meta.exposed) ...[
+                              _StageBypassPill(
+                                isEnabled: isEnabled,
+                                onTap: () => widget.model.toggleStage(id),
+                              ),
+                              const SizedBox(width: AuraSpace.md),
+                            ] else ...[
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: p.panelRaised,
+                                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                                  border: Border.all(color: p.hairline),
+                                ),
+                                child: Text(l10nOf(context).chainReserved, style: captionOf(p)),
+                              ),
+                              const SizedBox(width: AuraSpace.md),
+                            ],
+                            // [M3.5-c] 双声道微型实时电平表（全 19 级节点逐级独立峰值采样）
+                            _StageStereoMeter(
+                              meterIndex:
+                                  widget.model.stageMeterIndex(id),
+                              isEnabled: isEnabled,
+                              model: widget.model,
+                            ),
+                            const SizedBox(width: AuraSpace.sm),
+                            Icon(Icons.chevron_right_rounded,
+                                size: 16,
+                                color: p.textDim.withValues(alpha: 0.4)),
+                          ]),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: AuraSpace.md),
+                // 完整实际处理链路顺序流图（顺序钉死的输入门控 -> 动态核心节点 -> 顺序钉死的输出门控）
+                _FullChainOrderFlowView(order: _order, model: widget.model),
+              ],
             ),
-            const SizedBox(height: AuraSpace.md),
-            // 完整实际处理链路顺序流图（顺序钉死的输入门控 -> 动态核心节点 -> 顺序钉死的输出门控）
-            _FullChainOrderFlowView(order: _order, model: widget.model),
-          ]),
-        ),
+          ),
 
           // M1 第三方插件插槽状态与处理链插入阶段调整
           SectionCard(

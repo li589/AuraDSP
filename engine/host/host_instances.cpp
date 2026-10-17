@@ -983,6 +983,17 @@ public:
         ResizeDirectChildren(m_editorHwnd);
     }
 
+    static void safeHideAndDestroyClapGui(const clap_plugin_gui_t* gui, const clap_plugin_t* plugin) {
+        if (!gui || !plugin) return;
+#if defined(_MSC_VER)
+        __try { if (gui->hide) gui->hide(plugin); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        __try { if (gui->destroy) gui->destroy(plugin); } __except (EXCEPTION_EXECUTE_HANDLER) {}
+#else
+        try { if (gui->hide) gui->hide(plugin); } catch (...) {}
+        try { if (gui->destroy) gui->destroy(plugin); } catch (...) {}
+#endif
+    }
+
     // closeEditor 的实体（在 CLAP plugin main 线程内执行）。
     void closeEditorOnMainThread() {
         auto gui = m_plugin ? reinterpret_cast<const clap_plugin_gui_t*>(
@@ -1003,11 +1014,13 @@ public:
         // 推翻 10-12「hide/destroy 必须在 caller」的结论——那个结论成立的
         // 前提是 create 在 caller 线程）。m_guiCreated 交换守卫防双执行。
         if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
-            try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
-            try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
+            safeHideAndDestroyClapGui(gui, m_plugin);
         }
-        if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
-        if (m_pump) m_pump->unregisterEditor(hwnd);
+        if (hwnd) {
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            if (m_pump) m_pump->unregisterEditor(hwnd);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        }
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
         std::cout << "[DBG CLAP closeEditor] closed on main thread" << std::endl;
@@ -1642,7 +1655,7 @@ public:
         // 查询插件所声明的总线数量
         int32_t numInBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
         int32_t numOutBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
-        if (numInBusses <= 0) numInBusses = 1;
+        if (numInBusses < 0) numInBusses = 0;
         if (numOutBusses <= 0) numOutBusses = 1;
         m_numInputBusses = numInBusses;
         m_numOutputBusses = numOutBusses;
@@ -1664,21 +1677,25 @@ public:
         }
 
         // 主总线协商优先设为立体声
-        inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
-        outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
+        if (numInBusses > 0) inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
+        if (numOutBusses > 0) outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
 
         // 调用 setBusArrangements（注意：根据 VST3 规范，返回 kResultFalse 并不代表致命失败，
         // 插件可自主选择自适应或维持其默认总线配置）
         m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
 
         // 重新获取主总线实际确认的声道数
-        Steinberg::Vst::SpeakerArrangement finalIn = Steinberg::Vst::SpeakerArr::kStereo;
-        Steinberg::Vst::SpeakerArrangement finalOut = Steinberg::Vst::SpeakerArr::kStereo;
-        if (m_processor->getBusArrangement(Steinberg::Vst::kInput, 0, finalIn) == Steinberg::kResultOk) {
-            m_inChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalIn) == 1 ? 1 : 2;
+        if (numInBusses > 0) {
+            Steinberg::Vst::SpeakerArrangement finalIn = Steinberg::Vst::SpeakerArr::kStereo;
+            if (m_processor->getBusArrangement(Steinberg::Vst::kInput, 0, finalIn) == Steinberg::kResultOk) {
+                m_inChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalIn) == 1 ? 1 : 2;
+            } else {
+                m_inChannels = 2;
+            }
         } else {
-            m_inChannels = 2;
+            m_inChannels = 0;
         }
+        Steinberg::Vst::SpeakerArrangement finalOut = Steinberg::Vst::SpeakerArr::kStereo;
         if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, 0, finalOut) == Steinberg::kResultOk) {
             m_outChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalOut) == 1 ? 1 : 2;
         } else {
@@ -1714,14 +1731,15 @@ public:
 
     void process(float* const* inChannels, float* const* outChannels, uint32_t numFrames) override {
         if (numFrames == 0) return;
-        if (!inChannels || !outChannels || !inChannels[0] || !outChannels[0]) return;
+        if (!outChannels || !outChannels[0]) return;
+        if (m_inChannels > 0 && (!inChannels || !inChannels[0])) return;
 
         const int32_t nc = m_inChannels;
         for (int32_t ch = 1; ch < nc; ++ch) if (!inChannels[ch]) return;
 
         if (!m_isActive || !m_processor || m_bypassed) {
-            if (inChannels != outChannels) {
-                for (int32_t ch = 0; ch < nc; ++ch) {
+            if (inChannels != outChannels && inChannels) {
+                for (int32_t ch = 0; ch < 2; ++ch) {
                     if (inChannels[ch] && outChannels[ch]) {
                         std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                     }
@@ -1732,7 +1750,7 @@ public:
 
         std::vector<Steinberg::Vst::AudioBusBuffers> inBusses(m_numInputBusses);
         for (int32_t b = 0; b < m_numInputBusses; ++b) {
-            if (b == 0) {
+            if (b == 0 && nc > 0) {
                 inBusses[0].numChannels = nc;
                 inBusses[0].silenceFlags = 0;
                 inBusses[0].channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
@@ -1781,7 +1799,7 @@ public:
         data.processContext = &context;
 
         Steinberg::tresult res = m_processor->process(data);
-        if (res != Steinberg::kResultOk) {
+        if (res != Steinberg::kResultOk && res != Steinberg::kResultFalse && res < 0) {
             m_bypassed = true;
         } else if (m_outChannels == 1 && outChannels[0] && outChannels[1]) {
             // 单声道插件：铺回 L/R，否则右声道会残留上一块数据。
@@ -1985,10 +2003,25 @@ public:
     }
 
     // IPlugView 收尾（泵线程内调用）：解绑 frame 并释放引用。
+    // VST3 规范：必须先 removed()，再 setFrame(nullptr)，最后 release()。
+    // 使用 SEH 隔离插件在退出时的内存越界，防止 0xC0000005 崩溃宿主。
     void detachViewOnPumpThread(Steinberg::IPlugView* view) {
-        try { view->setFrame(nullptr); } catch (...) {}
+        if (!view) return;
+#if defined(_MSC_VER)
+        __try {
+            view->removed();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        __try {
+            view->setFrame(nullptr);
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+        __try {
+            view->release();
+        } __except (EXCEPTION_EXECUTE_HANDLER) {}
+#else
         try { view->removed(); } catch (...) {}
+        try { view->setFrame(nullptr); } catch (...) {}
         try { view->release(); } catch (...) {}
+#endif
         m_view = nullptr;
     }
 
@@ -2022,8 +2055,11 @@ public:
         if (m_view) {
             detachViewOnPumpThread(m_view);
         }
-        if (hwnd && IsWindow(hwnd)) DestroyWindow(hwnd);
-        if (m_pump && hwnd) m_pump->unregisterEditor(hwnd);
+        if (hwnd) {
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
+            if (m_pump) m_pump->unregisterEditor(hwnd);
+            if (IsWindow(hwnd)) DestroyWindow(hwnd);
+        }
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
         std::cout << "[DBG VST3 closeEditor] closed on main thread" << std::endl;

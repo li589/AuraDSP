@@ -212,6 +212,29 @@ static void hook_crossfeed_custom(auradsp_handle h) {
 /*                   自定义 Set / Get 逻辑 (Custom Handlers)                  */
 /* ========================================================================= */
 
+static auradsp_status set_bass_intensity(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    float intensity = *(const float*)value;
+    if (intensity < 0.0f) intensity = 0.0f;
+    if (intensity > 1.0f) intensity = 1.0f;
+    float gain = intensity * 15.0f;
+    h->p.bass_gain.store(gain);
+    if (h->open.load() && h->p.bass_enable.load()) {
+        BassBoostSetParam(&h->jdsp, gain);
+    }
+    return AURADSP_OK;
+}
+
+static auradsp_status get_bass_intensity(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    float gain = h->p.bass_gain.load();
+    float intensity = gain / 15.0f;
+    if (intensity < 0.0f) intensity = 0.0f;
+    if (intensity > 1.0f) intensity = 1.0f;
+    *(float*)out_value = intensity;
+    return AURADSP_OK;
+}
+
 static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
@@ -790,6 +813,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     // 06 心理声学低音 (Bass Boost & Harmonics)
     PARAM_BOOL("bass.enable", bass_enable, hook_bass_enable),
     PARAM_FLOAT("bass.gain", bass_gain, 0.0f, 15.0f, hook_bass_gain),
+    PARAM_CUSTOM("bass.intensity", set_bass_intensity, get_bass_intensity),
     PARAM_FLOAT("bass.outgain", bass_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("bass.autogain", bass_autogain, hook_fx_gains),
     PARAM_FLOAT("bass.harmonics", bass_harmonics, 0.0f, 1.0f, nullptr),

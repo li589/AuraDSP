@@ -235,15 +235,11 @@ const bool is_ddc = !strcmp(component, "ddc");
     const long first = probe_first_nonzero(probe, 1e-7f, &energy);
     auradsp_destroy(probe);
 
-    /* 数据判定与上文同：全空输出→-3（无法测），
-     * 能量与基线一致→-3（探针未能使其生效）。 */
+    /* 数据判定：全空输出→-3（无法测），
+     * 能量与基线一致→-3（探针未能使其生效）。
+     * 若能量已改变且 first >= 0，说明组件有效介入且为即时样本级处理（真实 0 延迟）。 */
     if (first < 0) return -3;
     if (fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0)) return -3;
-    /* first==0 && baseline==0：既可能是「真的零延迟」，也可能是
-     * 「组件根本没启用」—— 能量法无法区分二者。宁可不报，
-     * 也不能报一个看似合理却错误的 0：那会让 UI 显示一个错误的延迟值，
-     * 比明确报「不可测」危险得多。 */
-    if (first == 0 && baseline == 0) return -3;
 
     long delay = first - (baseline > 0 ? baseline : 0);
     if (delay < 0) delay = 0;

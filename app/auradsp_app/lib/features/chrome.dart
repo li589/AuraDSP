@@ -22,6 +22,7 @@ import 'package:flutter/scheduler.dart';
 import '../core/design.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../core/tray_service.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 
 /* ==================== 1. 页面骨架 ==================== */
@@ -299,10 +300,20 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   void initState() {
     super.initState();
     widget.spectrum.addListener(_onFrame);
+    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+  }
+
+  void _onVisibilityChanged() {
+    if (!TrayService.instance.isWindowVisible.value) {
+      _stopTicking();
+    } else {
+      _ensureTicking();
+    }
   }
 
   /// 看门狗只在「有东西可能变陈旧」时跑：柱子已全部归零则完全不占用帧回调。
   void _ensureTicking() {
+    if (!TrayService.instance.isWindowVisible.value) return;
     _watchdog ??= createTicker(_onTick)..start();
   }
 
@@ -313,6 +324,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   }
 
   void _onFrame() {
+    if (!TrayService.instance.isWindowVisible.value) return;
     _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
     // 恢复真实信号：下一帧 paint 会重新按 spectrum 重采样。
     _painter.clearStale();
@@ -351,6 +363,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
 
   @override
   void dispose() {
+    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
     _stopTicking();
     widget.spectrum.removeListener(_onFrame);
     _clock.dispose();
@@ -494,6 +507,7 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    if (!TrayService.instance.isWindowVisible.value) return;
     if (_env.stale) {
       // 无信号：只衰减，不重采样陈旧数据（否则被最后一帧抬回、永不归零）。
       _env.decay();
@@ -556,7 +570,7 @@ class _AmbientPainter extends CustomPainter {
   }
 
   Future<void> _rerender(Size target) async {
-    if (_rendering || _disposed) return;
+    if (_rendering || _disposed || !TrayService.instance.isWindowVisible.value) return;
     _rendering = true;
     try {
       final lw = math.max(72.0, target.width / 10);
