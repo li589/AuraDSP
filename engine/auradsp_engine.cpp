@@ -448,16 +448,16 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         }
         MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
         /* 回读副本（调研 §1.2）：存下发原串（不复用 txt——build_eq_axis 可能原地分词）。
-         * 回读永远吐原始串，杜绝"重序列化 vs _pushEqCurve 输出"的双向不一致（调研 §1.3）。 */
+         * 回读永远吐原始串，杜绝"重序列化 vs _pushEqCurve 输出"的双向不一致（调研 §1.3）。
+         * 注意顺序：先分配新副本、成功后再替换旧指针——OOM 时旧副本保留，
+         * 避免 free-then-malloc 失败留下悬垂指针被 get_param 回读（UAF）。 */
+        char* eq_curve_new = (char*)malloc((size_t)bytes + 1);
+        if (!eq_curve_new) { set_error(h, "eq.curve: copy OOM"); return AURADSP_E_IO; }
+        memcpy(eq_curve_new, value, bytes);
+        eq_curve_new[bytes] = 0;
         free(h->eq_curve);
-        h->eq_curve = (char*)malloc((size_t)bytes + 1);
-        if (h->eq_curve) {
-            memcpy(h->eq_curve, value, bytes);
-            h->eq_curve[bytes] = 0;
-            h->eq_curve_len = (size_t)bytes;
-        } else {
-            h->eq_curve_len = 0;
-        }
+        h->eq_curve = eq_curve_new;
+        h->eq_curve_len = (size_t)bytes;
         return AURADSP_OK;
     }
     if (!strcmp(id, "limiter.enable") && bytes >= 4) {
@@ -766,13 +766,15 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         }
         lp_refresh_sliders(h);
         h->lp_status = 1;
+        /* 代码副本（get_param 回读用）：先分配新副本、成功后替换旧指针
+         * （同 eq.curve/arbmag 的 OOM/UAF 防护——OOM 保留旧副本，不悬垂）。 */
+        char* lp_new = (char*)malloc((size_t)bytes + 1);
+        if (!lp_new) { set_error(h, "liveprog.code: copy OOM"); return AURADSP_E_IO; }
+        memcpy(lp_new, value, bytes);
+        lp_new[bytes] = 0;
         free(h->lp_code);
-        h->lp_code = (char*)malloc((size_t)bytes + 1);
-        if (h->lp_code) {
-            memcpy(h->lp_code, value, bytes);
-            h->lp_code[bytes] = 0;
-            h->lp_code_len = bytes;
-        }
+        h->lp_code = lp_new;
+        h->lp_code_len = bytes;
         /* 代码热替换后保持使能状态一致 */
         if (h->open.load() && h->p.lp_enable.load(std::memory_order_relaxed))
             LiveProgEnable(&h->jdsp);
@@ -876,16 +878,15 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
         if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {
             apply_arbmag(h);
         }
-        /* 回读副本（调研 §1.2）：同 eq.curve，存下发原串（解析器原地分词不可复用 buf）。 */
+        /* 回读副本（调研 §1.2）：同 eq.curve，存下发原串（解析器原地分词不可复用 buf）。
+         * 先分配新副本、成功后替换旧指针（同 eq.curve 的 OOM/UAF 防护）。 */
+        char* arbmag_new = (char*)malloc((size_t)bytes + 1);
+        if (!arbmag_new) { set_error(h, "arbmag.string: copy OOM"); return AURADSP_E_IO; }
+        memcpy(arbmag_new, value, bytes);
+        arbmag_new[bytes] = 0;
         free(h->arbmag_string);
-        h->arbmag_string = (char*)malloc((size_t)bytes + 1);
-        if (h->arbmag_string) {
-            memcpy(h->arbmag_string, value, bytes);
-            h->arbmag_string[bytes] = 0;
-            h->arbmag_string_len = (size_t)bytes;
-        } else {
-            h->arbmag_string_len = 0;
-        }
+        h->arbmag_string = arbmag_new;
+        h->arbmag_string_len = (size_t)bytes;
         return AURADSP_OK;
     }
     /* ---- M3-a：轻量效果开关 ---- */
