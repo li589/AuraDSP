@@ -39,12 +39,15 @@ class SectionCard extends StatelessWidget {
   /// hero 卡片：更大内边距 + 强调色细边
   final bool hero;
 
-  /// 组件级微型延迟（ms）：非空时在 trailing 开关前渲染 [ 0.0 ms ↻ ] 徽标
+  /// 组件级微型延迟（ms）：非空时在 trailing 开关前渲染 [ 0.0 ms ] 徽标
   final double? latencyMs;
+
   /// latencyMs 的来源标注：true = 脉冲响应实测，false/null = 未测量
   final bool? latencyMeasured;
+
   /// latencyMs 来自标称表/解析推算（非实测）时置 true，徽标以「≈」展示
   final bool? latencyEstimated;
+
   /// 测量进行中（禁用重复点击）
   final bool? latencyProbing;
   final VoidCallback? onRefreshLatency;
@@ -101,10 +104,14 @@ class SectionCard extends StatelessWidget {
               ],
             )
           : trailing;
-      body.add(SectionTitle(title!,
+      body.add(
+        SectionTitle(
+          title!,
           index: index,
           trailing: effectiveTrailing,
-          titleTooltip: titleTooltip));
+          titleTooltip: titleTooltip,
+        ),
+      );
 
       final content = Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -142,9 +149,11 @@ class SectionCard extends StatelessWidget {
     final card = Container(
       // hero 分支已删：唯一 hero:true 调用方（home_page 引擎状态卡）自带显式 padding，
       // 默认分支无任何调用者走 hero ? xl。hero 字段仅保留强调色细边语义。
-      padding: padding ??
+      padding:
+          padding ??
           EdgeInsets.all(
-              collapsed ? AuraSpace.cardPadCollapsed : AuraSpace.cardPad),
+            collapsed ? AuraSpace.cardPadCollapsed : AuraSpace.cardPad,
+          ),
       decoration: BoxDecoration(
         color: p.panel,
         borderRadius: BorderRadius.circular(AuraRadius.md),
@@ -244,8 +253,13 @@ class SectionTitle extends StatelessWidget {
   final String? index;
   final Widget? trailing;
   final String? titleTooltip;
-  const SectionTitle(this.text,
-      {super.key, this.index, this.trailing, this.titleTooltip});
+  const SectionTitle(
+    this.text, {
+    super.key,
+    this.index,
+    this.trailing,
+    this.titleTooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -300,11 +314,12 @@ class StateBadge extends StatelessWidget {
   final int engineState;
   final bool bypass;
   final bool live;
-  const StateBadge(
-      {super.key,
-      required this.engineState,
-      required this.bypass,
-      required this.live});
+  const StateBadge({
+    super.key,
+    required this.engineState,
+    required this.bypass,
+    required this.live,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -316,27 +331,34 @@ class StateBadge extends StatelessWidget {
       2 => (l.stateError, p.error),
       _ when bypass => (l.stateBypass, p.textDim),
       0 => (l.stateIdle, p.textDim),
-      _ => live
-          ? (l.stateProcessing, p.success)
-          : (l.stateIdle, p.textDim),
+      _ => live ? (l.stateProcessing, p.success) : (l.stateIdle, p.textDim),
     };
-    final active =
-        engineState == 1 && live && !bypass;
+    final active = engineState == 1 && live && !bypass;
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.md, vertical: AuraSpace.sm - 2),
+        horizontal: AuraSpace.md,
+        vertical: AuraSpace.sm - 2,
+      ),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(AuraRadius.sm),
         border: Border.all(color: color.withValues(alpha: 0.5), width: 1),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        PulseDot(color: color, active: active),
-        const SizedBox(width: AuraSpace.sm - 2),
-        Text(text,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          PulseDot(color: color, active: active),
+          const SizedBox(width: AuraSpace.sm - 2),
+          Text(
+            text,
             style: TextStyle(
-                fontSize: 12, color: color, fontWeight: FontWeight.w600)),
-      ]),
+              fontSize: 12,
+              color: color,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -350,18 +372,26 @@ class LatencyBadge extends StatelessWidget {
     final p = paletteOf(context);
     final c = latencyColor(ms, p);
     final l = l10nOf(context);
+    final text = ms <= 0
+        ? '${l.latencyLabel} 0.0 ms'
+        : '${l.latencyLabel} ${ms.toStringAsFixed(1)} ms';
     return Tooltip(
       message: l.latencyTip,
       waitDuration: const Duration(milliseconds: 350),
       child: Container(
         padding: const EdgeInsets.symmetric(
-            horizontal: AuraSpace.md, vertical: AuraSpace.sm - 2),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AuraRadius.sm),
-          border: Border.all(color: p.hairline, width: 1),
+          horizontal: AuraSpace.md,
+          vertical: AuraSpace.sm - 2,
         ),
-        child: Text(l.latencyMs(ms.round()),
-            style: monoOf(p, size: 12, color: c)),
+        decoration: BoxDecoration(
+          color: c == p.textDim ? p.panel : c.withValues(alpha: 0.08),
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(
+            color: c == p.textDim ? p.hairline : c.withValues(alpha: 0.35),
+            width: 1,
+          ),
+        ),
+        child: Text(text, style: monoOf(p, size: 12, color: c)),
       ),
     );
   }
@@ -377,6 +407,7 @@ class LatencyBadge extends StatelessWidget {
 class AdvancedSection extends StatefulWidget {
   /// 右侧等宽小字摘要（各效果不同，例如 "120 Hz · 35%"）
   final String summary;
+
   /// 展开内容的构建函数。签名带 BuildContext，便于内部自行取 palette/l10n。
   final Widget Function(BuildContext context) builder;
 
@@ -418,8 +449,11 @@ class _AdvancedSectionState extends State<AdvancedSection> {
                 AnimatedRotation(
                   duration: AuraDur.fast,
                   turns: _open ? 0.25 : 0,
-                  child: Icon(Icons.expand_more_rounded,
-                      size: 20, color: p.accent),
+                  child: Icon(
+                    Icons.expand_more_rounded,
+                    size: 20,
+                    color: p.accent,
+                  ),
                 ),
                 const SizedBox(width: AuraSpace.sm),
                 Text(l.advanced, style: labelOf(p, color: p.text)),
@@ -428,8 +462,10 @@ class _AdvancedSectionState extends State<AdvancedSection> {
                   InfoBadge(message: widget.helpTooltip!),
                 ],
                 const Spacer(),
-                Text(widget.summary,
-                    style: monoOf(p, size: 10, color: p.textDim)),
+                Text(
+                  widget.summary,
+                  style: monoOf(p, size: 10, color: p.textDim),
+                ),
               ],
             ),
           ),
@@ -437,8 +473,9 @@ class _AdvancedSectionState extends State<AdvancedSection> {
         AnimatedCrossFade(
           duration: AuraDur.base,
           sizeCurve: AuraCurve.standard,
-          crossFadeState:
-              _open ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+          crossFadeState: _open
+              ? CrossFadeState.showSecond
+              : CrossFadeState.showFirst,
           // 收起时用零高占位，避免布局跳动
           firstChild: const SizedBox(width: double.infinity),
           secondChild: Padding(
@@ -473,14 +510,17 @@ class OutputGainFrame extends StatelessWidget {
 
 class ComponentLatencyBadge extends StatefulWidget {
   final double latencyMs;
+
   /// 该数值是否来自真实脉冲响应实测。false 表示解析估算或未测量。
   final bool measured;
+
   /// 该数值是否来自标称表/解析推算（非实测）。true 时 UI 以「≈」前缀 +
   /// 弱化配色展示，避免把估算谎报成实测。
   final bool estimated;
   final VoidCallback? onRefresh;
   final int refreshTick;
   final bool probing;
+
   /// 是否显示 ↻ 刷新按钮。为 false 时（该组件不支持实测）整个按钮区不渲染，
   /// 避免用户点一个必然失败的控件。
   final bool showRefresh;
@@ -545,17 +585,19 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
     final tooltip = widget.measured
         ? l.latTipMeasured(text)
         : (widget.estimated
-            ? l.latTipEstimated(text)
-            : (widget.probing
-                ? l.latTipProbing
-                : l.latTipUnmeasured));
+              ? l.latTipEstimated(text)
+              : (widget.probing ? l.latTipProbing : l.latTipUnmeasured));
+    final Color c = (!widget.measured && !widget.estimated)
+        ? p.textDim
+        : latencyColor(widget.latencyMs, p);
+
     return AnimatedBuilder(
       animation: _pulseController,
       builder: (context, _) {
         final pulse = _pulseController.value;
         final glowAlpha = (math.sin(pulse * math.pi) * 0.45).clamp(0.0, 1.0);
         final borderColor = Color.lerp(
-          p.hairline,
+          c == p.textDim ? p.hairline : c.withValues(alpha: 0.35),
           p.accent,
           glowAlpha,
         )!;
@@ -572,24 +614,15 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
                   },
             borderRadius: BorderRadius.circular(AuraRadius.xs),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               decoration: BoxDecoration(
-                color: p.accent.withValues(alpha: 0.05 + glowAlpha * 0.2),
+                color: c == p.textDim
+                    ? p.panel
+                    : c.withValues(alpha: 0.08 + glowAlpha * 0.2),
                 borderRadius: BorderRadius.circular(AuraRadius.xs),
                 border: Border.all(color: borderColor, width: 1.0),
               ),
-              child: Text(
-                text,
-                style: monoOf(
-                  p,
-                  size: 10,
-                  color: !widget.measured
-                      ? p.textDim
-                      : (widget.latencyMs > 20
-                          ? p.warning
-                          : (widget.latencyMs > 0 ? p.accent2 : p.textDim)),
-                ),
-              ),
+              child: Text(text, style: monoOf(p, size: 10, color: c)),
             ),
           ),
         );
@@ -608,32 +641,34 @@ class LevelMeter extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return Row(children: [
-      SizedBox(
-        width: 14,
-        child: Text(label, style: monoOf(p, size: 11, color: p.textDim)),
-      ),
-      const SizedBox(width: AuraSpace.sm),
-      Expanded(
-        child: ValueListenableBuilder<double>(
-          valueListenable: level,
-          builder: (_, db, _) {
-            final n = ((db + 60) / 60).clamp(0.0, 1.0);
-            return SizedBox(
-              height: 8,
-              child: CustomPaint(
-                size: const Size(double.infinity, 8),
-                painter: _MeterPainter(
-                  value: n,
-                  track: p.hairline,
-                  fill: db > -3 ? p.error : p.accent,
-                ),
-              ),
-            );
-          },
+    return Row(
+      children: [
+        SizedBox(
+          width: 14,
+          child: Text(label, style: monoOf(p, size: 11, color: p.textDim)),
         ),
-      ),
-    ]);
+        const SizedBox(width: AuraSpace.sm),
+        Expanded(
+          child: ValueListenableBuilder<double>(
+            valueListenable: level,
+            builder: (_, db, _) {
+              final n = ((db + 60) / 60).clamp(0.0, 1.0);
+              return SizedBox(
+                height: 8,
+                child: CustomPaint(
+                  size: const Size(double.infinity, 8),
+                  painter: _MeterPainter(
+                    value: n,
+                    track: p.hairline,
+                    fill: db > -3 ? p.error : p.accent,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -646,18 +681,25 @@ class _MeterPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     const r = Radius.circular(4);
     canvas.drawRRect(
-        RRect.fromRectAndRadius(Offset.zero & size, r), Paint()..color = track);
+      RRect.fromRectAndRadius(Offset.zero & size, r),
+      Paint()..color = track,
+    );
     if (value > 0) {
       canvas.drawRRect(
-          RRect.fromRectAndRadius(
-              Offset.zero & Size(size.width * value, size.height), r),
-          Paint()..color = fill);
+        RRect.fromRectAndRadius(
+          Offset.zero & Size(size.width * value, size.height),
+          r,
+        ),
+        Paint()..color = fill,
+      );
     }
     // 刻度：在轨道上打 3 道浅竖线作视觉参照
     final tick = Paint()..color = fill.withValues(alpha: 0.22);
     for (final f in const [0.3, 0.5, 0.7]) {
       canvas.drawRect(
-          Rect.fromLTWH(size.width * f, 2, 1, size.height - 4), tick);
+        Rect.fromLTWH(size.width * f, 2, 1, size.height - 4),
+        tick,
+      );
     }
   }
 
@@ -760,25 +802,37 @@ class _SpectrumPainter extends CustomPainter {
       final x = x0 + (span - bw) / 2;
       final radius = Radius.circular(math.min(2.0, bw / 2).toDouble());
       if (h > 0.5) {
-        final rect = Rect.fromLTWH(x, size.height - h, bw, h)
-            .deflate(bw < 6 ? 0 : 0.5);
+        final rect = Rect.fromLTWH(
+          x,
+          size.height - h,
+          bw,
+          h,
+        ).deflate(bw < 6 ? 0 : 0.5);
         canvas.drawRRect(
-            RRect.fromRectAndCorners(rect,
-                topLeft: radius, topRight: radius),
-            paint);
+          RRect.fromRectAndCorners(rect, topLeft: radius, topRight: radius),
+          paint,
+        );
         // 顶端 2px 亮帽：给柱体一个明确的"读数头"
         if (h > 4) {
           canvas.drawRRect(
-              RRect.fromRectAndRadius(
-                  Rect.fromLTWH(x, size.height - h, bw, 2), radius),
-              cap);
+            RRect.fromRectAndRadius(
+              Rect.fromLTWH(x, size.height - h, bw, 2),
+              radius,
+            ),
+            cap,
+          );
         }
       }
       // 峰值保持线
       if (pk != null && i < pk.length && pk[i] > 0.01) {
         final py = size.height - pk[i].clamp(0.0, 1.0) * size.height;
-        canvas.drawLine(Offset(x, py), Offset(x + bw, py),
-            Paint()..color = dimColor..strokeWidth = 1.5);
+        canvas.drawLine(
+          Offset(x, py),
+          Offset(x + bw, py),
+          Paint()
+            ..color = dimColor
+            ..strokeWidth = 1.5,
+        );
       }
     }
   }
@@ -802,25 +856,32 @@ class FreqAxis extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return LayoutBuilder(builder: (ctx, box) {
-      return SizedBox(
-        height: 14,
-        child: Stack(
-          children: [
-            for (final m in _marks)
-              Positioned(
-                left: VizBands.logX(m.hz) * box.maxWidth,
-                child: FractionalTranslation(
-                  translation: const Offset(-0.5, 0),
-                  child: Text(m.label,
-                      style: monoOf(p, size: 10,
-                          color: p.textDim.withValues(alpha: 0.7))),
+    return LayoutBuilder(
+      builder: (ctx, box) {
+        return SizedBox(
+          height: 14,
+          child: Stack(
+            children: [
+              for (final m in _marks)
+                Positioned(
+                  left: VizBands.logX(m.hz) * box.maxWidth,
+                  child: FractionalTranslation(
+                    translation: const Offset(-0.5, 0),
+                    child: Text(
+                      m.label,
+                      style: monoOf(
+                        p,
+                        size: 10,
+                        color: p.textDim.withValues(alpha: 0.7),
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-          ],
-        ),
-      );
-    });
+            ],
+          ),
+        );
+      },
+    );
   }
 }
 
@@ -872,19 +933,15 @@ class AuraChoiceChip extends StatelessWidget {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: selected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+          color: selected
+              ? p.accent.withValues(alpha: 0.16)
+              : Colors.transparent,
           borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: selected ? p.accent : p.hairline,
-          ),
+          border: Border.all(color: selected ? p.accent : p.hairline),
         ),
         child: Text(
           label,
-          style: monoOf(
-            p,
-            size: 11,
-            color: selected ? p.accent : p.textDim,
-          ),
+          style: monoOf(p, size: 11, color: selected ? p.accent : p.textDim),
         ),
       ),
     );
@@ -974,24 +1031,28 @@ class _AuraScanProgressState extends State<AuraScanProgress>
               // 用 TweenAnimationBuilder 让推进是"滑动"而非"跳变"。
               TweenAnimationBuilder<double>(
                 tween: Tween<double>(
-                    begin: (widget.done / widget.total).clamp(0.0, 1.0),
-                    end: (widget.done / widget.total).clamp(0.0, 1.0)),
+                  begin: (widget.done / widget.total).clamp(0.0, 1.0),
+                  end: (widget.done / widget.total).clamp(0.0, 1.0),
+                ),
                 duration: const Duration(milliseconds: 180),
                 builder: (context, frac, _) {
-                  return LayoutBuilder(builder: (context, constraints) {
-                    return Stack(
-                      children: [
-                        Positioned(
-                          left: 0,
-                          top: 0,
-                          bottom: 0,
-                          width: constraints.maxWidth * frac,
-                          child: DecoratedBox(
-                              decoration: BoxDecoration(gradient: gradient)),
-                        ),
-                      ],
-                    );
-                  });
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: constraints.maxWidth * frac,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(gradient: gradient),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
                 },
               )
             else
@@ -1000,22 +1061,25 @@ class _AuraScanProgressState extends State<AuraScanProgress>
                 animation: _ctrl,
                 builder: (context, _) {
                   final t = Curves.easeInOut.transform(_ctrl.value);
-                  return LayoutBuilder(builder: (context, constraints) {
-                    final segW = constraints.maxWidth * 0.35;
-                    final left = -segW + t * (constraints.maxWidth + segW);
-                    return Stack(
-                      children: [
-                        Positioned(
-                          left: left,
-                          width: segW,
-                          top: 0,
-                          bottom: 0,
-                          child: DecoratedBox(
-                              decoration: BoxDecoration(gradient: gradient)),
-                        ),
-                      ],
-                    );
-                  });
+                  return LayoutBuilder(
+                    builder: (context, constraints) {
+                      final segW = constraints.maxWidth * 0.35;
+                      final left = -segW + t * (constraints.maxWidth + segW);
+                      return Stack(
+                        children: [
+                          Positioned(
+                            left: left,
+                            width: segW,
+                            top: 0,
+                            bottom: 0,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(gradient: gradient),
+                            ),
+                          ),
+                        ],
+                      );
+                    },
+                  );
                 },
               ),
           ],

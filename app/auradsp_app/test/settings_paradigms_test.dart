@@ -64,8 +64,8 @@ void main() {
 
     // Verify 3 layers
     expect(find.text('驱动信息与控制'), findsOneWidget);
-    expect(find.text('输入端信息与开关'), findsOneWidget);
-    expect(find.text('输出端信息与开关'), findsOneWidget);
+    expect(find.text('音频输入'), findsOneWidget);
+    expect(find.text('音频输出'), findsOneWidget);
 
     // Verify segment names
     expect(find.text('WASAPI 标准模式'), findsWidgets);

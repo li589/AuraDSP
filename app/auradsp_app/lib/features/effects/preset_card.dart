@@ -44,7 +44,7 @@ class _PresetCardState extends State<_PresetCard> {
 
     return SectionCard(
       title: l.presetTitle,
-      hint: l.presetHint,
+      titleTooltip: l.presetHint,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -31,12 +31,12 @@ class _FilterCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.filterHint, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
           // 类型三选一
           Row(
             children: [
               Text(l.filterType, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              InfoBadge(message: l.filterHint),
               const Spacer(),
               ParamChoiceChips(
                 param: ParamRegistry.filterType,

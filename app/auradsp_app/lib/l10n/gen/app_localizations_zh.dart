@@ -294,10 +294,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get driverLayerTitle => '驱动信息与控制';
 
   @override
-  String get inputLayerTitle => '输入端信息与开关';
+  String get inputLayerTitle => '音频输入';
 
   @override
-  String get outputLayerTitle => '输出端信息与开关';
+  String get outputLayerTitle => '音频输出';
 
   @override
   String get inputDisabledNotice => '输入端已停用（音频采集暂停，处于静音/无输入状态）';
@@ -753,6 +753,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get tubeTitle => '电子管模拟器';
+
+  @override
+  String get tubeHint =>
+      '模拟经典电子管放大器与开盘磁带机的非线性饱和特性。通过注入富有音乐感的偶次与奇次泛音，消除数字音频生硬冷涩感，赋予声音温润、饱满的模拟胶片暖色调。';
 
   @override
   String get spatialReverbTitle => '空间混响';
@@ -1347,10 +1351,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainStagePreDsp => 'DSP 前置';
 
   @override
-  String get chainStagePreVendor => '厂商链前置';
+  String get chainStagePreVendor => '系统原声音效前置';
 
   @override
-  String get chainStagePostVendor => '厂商链后置';
+  String get chainStagePostVendor => '系统原声音效后置';
 
   @override
   String get chainStagePostReverb => '混响后置';
@@ -1545,7 +1549,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugLibHint =>
-      '系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。';
+      '系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。';
 
   @override
   String get plugDeepScan => '深度遍历';
@@ -1595,7 +1599,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugFeatDirs => '可自定义插件目录检索与本地状态快照';
 
   @override
-  String get plugFeatRt => '平面双声道 RT-Safe 预分配零锁保障';
+  String get plugFeatRt => '实时极速监听：专为专业制作定制的零卡顿音频通道';
 
   @override
   String plugSlot(int n) {
@@ -1667,7 +1671,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugStageLabel => '信号处理链插入阶段：';
 
   @override
-  String get plugRtNote => '实时动态串联 • 保持 RT-Safe 契约';
+  String get plugRtNote => '实时动态串联 • 保持专业监听超低延迟标准';
 
   @override
   String get plugFilterAll => '全部';
@@ -1733,6 +1737,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get compTitle => '动态压限器';
+
+  @override
+  String get compHint => '平抑突发大音量，提亮微弱细节，让听感饱满统一。右侧仪表实时显示压限削减量 (GR)。';
 
   @override
   String get compTimeconstant => '响应时常数';

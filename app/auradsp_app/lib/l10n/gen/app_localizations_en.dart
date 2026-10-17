@@ -306,10 +306,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get driverLayerTitle => 'Driver Information & Controls';
 
   @override
-  String get inputLayerTitle => 'Input Endpoint & Switch';
+  String get inputLayerTitle => 'Audio Input';
 
   @override
-  String get outputLayerTitle => 'Output Endpoint & Switch';
+  String get outputLayerTitle => 'Audio Output';
 
   @override
   String get inputDisabledNotice =>
@@ -780,6 +780,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tubeTitle => 'Tube Simulator';
+
+  @override
+  String get tubeHint =>
+      'Simulates the harmonic saturation characteristics of classic vacuum tube preamps and analog tape machines. Introduces musical even/odd harmonics to eliminate digital harshness, imparting warmth, analog body, and pleasant saturation.';
 
   @override
   String get spatialReverbTitle => 'Spatial Reverb';
@@ -1803,6 +1807,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get compTitle => 'Dynamic Compressor';
+
+  @override
+  String get compHint =>
+      'Smooths out loud peaks and lifts subtle details for a cohesive sound. The right meter displays real-time gain reduction (GR).';
 
   @override
   String get compTimeconstant => 'Time Constant';

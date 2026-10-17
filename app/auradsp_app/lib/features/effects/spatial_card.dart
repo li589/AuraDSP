@@ -1,7 +1,6 @@
 // part of effects_page.dart —— “空间音效” mega 卡（P3）。
-// hero：风格三预设 + 虚拟扬声器摆位图（随 width 张开）+ 早期反射 tap 图
-// （随 room 拉伸）；空间核心展开；混响 / 脉冲 / 声场（crossfeed+haas）/
-// 立体声折叠搬入。引擎 / 参数 / 预设 / 回放全部不动，纯 UI 搬家。
+// hero：风格三预设 + 极坐标全息声场雷达图（随 width 张开）+ 早期反射包络（随 room 动态伸缩）；
+// 空间核心展开；混响 / 脉冲 / 声场（crossfeed+haas）/ 立体声折叠搬入。
 // 共享 import 与 EffectsPage/ValueSlider/SectionCard 见父文件。
 part of '../effects_page.dart';
 
@@ -20,7 +19,7 @@ class _SpatialCard extends StatelessWidget {
       // 空间卡去编号（含内部搬入子卡）：独立分类，无需序号。
       index: null,
       title: l.spatialTitle,
-      hint: l.spatialHint,
+      titleTooltip: l.spatialHint,
       collapsed: !model.spatialOn,
       latencyMs: model.componentLatency('spatial').ms,
       latencyMeasured: model.componentLatency('spatial').measured,
@@ -56,13 +55,12 @@ class _SpatialCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AuraSpace.sm),
-          // hero：摆位图 + 反射 tap 图（数据驱动，随 width/room 实时变化）
+          // hero：全息极坐标声场雷达 + 空间早期反射包络（数据驱动，随 width/room 实时变化）
           _SpatialStageView(
             width: model.spatialWidth,
             room: model.spatialRoom,
-            accent: p.accent,
-            dim: p.textDim,
-            hairline: p.hairline,
+            palette: p,
+            active: model.spatialOn,
           ),
           const SizedBox(height: AuraSpace.sm),
           // 空间核心（展开）
@@ -124,34 +122,42 @@ class _SpatialCard extends StatelessWidget {
   }
 }
 
-/// 虚拟 5.0 摆位 + 早期反射 tap 示意（纯展示，不接受输入）。
-/// 上半：人头圆 + 5 扬声器点（方位 = 引擎 kSpatDeg × width，±160° 钳位同引擎）；
-/// 下半：8 tap（时间 = kSpatTapMs × tscale，tscale = 0.5+1.5×room 同引擎），
-/// 偶 tap 朝上（L）奇 tap 朝下（R），高度 ∝ |增益|。
+/// 商业级全息极坐标声场雷达 + 空间早期反射包络时间线
 class _SpatialStageView extends StatelessWidget {
   final double width;
   final double room;
-  final Color accent;
-  final Color dim;
-  final Color hairline;
+  final AuraPalette palette;
+  final bool active;
   const _SpatialStageView({
     required this.width,
     required this.room,
-    required this.accent,
-    required this.dim,
-    required this.hairline,
+    required this.palette,
+    required this.active,
   });
 
   @override
   Widget build(BuildContext context) {
-    return CustomPaint(
-      size: const Size(double.infinity, 132),
-      painter: _SpatialStagePainter(
-        width: width,
-        room: room,
-        accent: accent,
-        dim: dim,
-        hairline: hairline,
+    return Container(
+      width: double.infinity,
+      height: 154,
+      decoration: BoxDecoration(
+        color: palette.panel.withValues(alpha: 0.75),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: palette.hairline.withValues(alpha: 0.4), width: 1.0),
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        child: RepaintBoundary(
+          child: CustomPaint(
+            size: const Size(double.infinity, 154),
+            painter: _SpatialStagePainter(
+              width: width,
+              room: room,
+              palette: palette,
+              active: active,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -159,71 +165,291 @@ class _SpatialStageView extends StatelessWidget {
 
 class _SpatialStagePainter extends CustomPainter {
   static const _degs = [-30.0, 0.0, 30.0, -110.0, 110.0];
+  static const _labels = ['L', 'C', 'R', 'Ls', 'Rs'];
   static const _tapMs = [5.5, 9.0, 14.0, 21.0, 30.0, 42.0, 55.0, 68.0];
   static const _tapG = [0.25, 0.25, 0.18, 0.18, 0.12, 0.12, 0.07, 0.07];
 
   final double width;
   final double room;
-  final Color accent;
-  final Color dim;
-  final Color hairline;
-  const _SpatialStagePainter({
+  final AuraPalette palette;
+  final bool active;
+
+  _SpatialStagePainter({
     required this.width,
     required this.room,
-    required this.accent,
-    required this.dim,
-    required this.hairline,
+    required this.palette,
+    required this.active,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // 上半：摆位图
-    final cx = size.width / 2;
-    const cy = 40.0;
-    const r = 30.0;
-    canvas.drawCircle(
-      Offset(cx, cy),
-      7.0,
-      Paint()..color = dim
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+    final w = size.width;
+    final h = size.height;
+    if (w <= 0 || h <= 0) return;
+
+    // ── 1. Top Section: 极坐标全息声场雷达 ──
+    final cx = w / 2;
+    const cy = 48.0;
+    const radarR = 42.0;
+
+    // (1) Polar concentric radar arcs
+    final radarPaint = Paint()
+      ..color = palette.hairline.withValues(alpha: 0.25)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+
+    final radii = [14.0, 28.0, radarR];
+    for (final r in radii) {
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: r),
+        -math.pi * 0.9,
+        math.pi * 1.8,
+        false,
+        radarPaint,
+      );
+    }
+
+    // Radial guide spokes (-110, -30, 0, 30, 110 deg)
+    final spokePaint = Paint()
+      ..color = palette.hairline.withValues(alpha: 0.18)
+      ..strokeWidth = 0.8;
+    for (final deg in [-110.0, -30.0, 0.0, 30.0, 110.0]) {
+      final rad = deg * math.pi / 180.0;
+      final sx = cx + radii[0] * math.sin(rad);
+      final sy = cy - radii[0] * math.cos(rad);
+      final ex = cx + (radarR + 4) * math.sin(rad);
+      final ey = cy - (radarR + 4) * math.cos(rad);
+      canvas.drawLine(Offset(sx, sy), Offset(ex, ey), spokePaint);
+    }
+
+    // (2) Holographic Stereo Width Arc / Beam
+    final halfAngle = (32.0 * width.clamp(0.2, 2.0)) * math.pi / 180.0;
+    final coneR = radarR + 2.0;
+    final conePath = Path();
+    conePath.moveTo(cx, cy);
+    conePath.arcTo(
+      Rect.fromCircle(center: Offset(cx, cy), radius: coneR),
+      -math.pi / 2.0 - halfAngle,
+      halfAngle * 2.0,
+      false,
     );
-    final dot = Paint()..color = accent;
-    for (final d in _degs) {
-      var deg = d * width;
+    conePath.close();
+
+    final coneShader = RadialGradient(
+      center: Alignment.center,
+      radius: 0.9,
+      colors: [
+        active ? palette.accent.withValues(alpha: 0.20) : palette.textDim.withValues(alpha: 0.06),
+        active ? palette.accent2.withValues(alpha: 0.03) : Colors.transparent,
+      ],
+    ).createShader(Rect.fromCircle(center: Offset(cx, cy), radius: coneR));
+
+    final coneFillPaint = Paint()
+      ..shader = coneShader
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(conePath, coneFillPaint);
+
+    final coneStrokePaint = Paint()
+      ..color = (active ? palette.accent : palette.textDim).withValues(alpha: 0.45)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    canvas.drawPath(conePath, coneStrokePaint);
+
+    // (3) Central Listener Head Origin
+    final headPaint = Paint()
+      ..color = palette.panelRaised
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(Offset(cx, cy), 6.5, headPaint);
+
+    final headBorder = Paint()
+      ..color = (active ? palette.accent : palette.textDim).withValues(alpha: 0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+    canvas.drawCircle(Offset(cx, cy), 6.5, headBorder);
+
+    // Small forward listening notch pointing straight up
+    final notchPaint = Paint()
+      ..color = active ? palette.accent : palette.textDim
+      ..style = PaintingStyle.fill;
+    final notchPath = Path()
+      ..moveTo(cx - 2.5, cy - 6.5)
+      ..lineTo(cx + 2.5, cy - 6.5)
+      ..lineTo(cx, cy - 9.5)
+      ..close();
+    canvas.drawPath(notchPath, notchPaint);
+
+    // (4) 5 Virtual 5.0 Spatial Speaker Pods
+    for (var i = 0; i < _degs.length; i++) {
+      final baseDeg = _degs[i];
+      final isCenter = (i == 1);
+      final isSurround = (i >= 3);
+      var deg = baseDeg * (isSurround ? (0.75 + 0.25 * width) : width);
       if (deg < -160.0) deg = -160.0;
       if (deg > 160.0) deg = 160.0;
       final rad = deg * math.pi / 180.0;
-      canvas.drawCircle(
-        Offset(cx + r * math.sin(rad), cy - r * math.cos(rad)),
-        3.5,
-        dot,
-      );
+
+      final spkDist = isCenter ? (radarR - 4.0) : radarR;
+      final sx = cx + spkDist * math.sin(rad);
+      final sy = cy - spkDist * math.cos(rad);
+
+      final spkColor = isSurround ? palette.accent2 : palette.accent;
+
+      // Glow halo
+      if (active) {
+        final haloPaint = Paint()
+          ..color = spkColor.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+        canvas.drawCircle(Offset(sx, sy), 5.5, haloPaint);
+      }
+
+      // Speaker body
+      final spkBodyPaint = Paint()
+        ..color = palette.panelRaised
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(sx, sy), 4.0, spkBodyPaint);
+
+      final spkStrokePaint = Paint()
+        ..color = active ? spkColor : palette.textDim.withValues(alpha: 0.6)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.2;
+      canvas.drawCircle(Offset(sx, sy), 4.0, spkStrokePaint);
+
+      // Core dot
+      final coreDotPaint = Paint()
+        ..color = active ? spkColor : palette.textDim
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(sx, sy), 1.8, coreDotPaint);
+
+      // Radiated acoustic wavelets toward center
+      if (active) {
+        final wavePaint = Paint()
+          ..color = spkColor.withValues(alpha: 0.25)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8;
+        final waveRad = rad + math.pi;
+        canvas.drawArc(
+          Rect.fromCircle(center: Offset(sx, sy), radius: 8.0),
+          waveRad - 0.45,
+          0.9,
+          false,
+          wavePaint,
+        );
+      }
+
+      // Channel label (L, C, R, Ls, Rs)
+      final labelRad = rad;
+      final lx = cx + (radarR + 11.0) * math.sin(labelRad);
+      final ly = cy - (radarR + 11.0) * math.cos(labelRad);
+      final tp = TextPainter(
+        text: TextSpan(
+          text: _labels[i],
+          style: monoOf(
+            palette,
+            size: 7.5,
+            color: active ? spkColor : palette.textDim.withValues(alpha: 0.6),
+          ).copyWith(fontWeight: FontWeight.w600),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      tp.paint(canvas, Offset(lx - tp.width / 2, ly - tp.height / 2));
     }
-    // 下半：反射 tap 图（基线 + 8 刻度）
-    const baseY = 108.0;
-    canvas.drawLine(
-      Offset(8, baseY),
-      Offset(size.width - 8, baseY),
-      Paint()..color = hairline
-        ..strokeWidth = 1.0,
-    );
+
+    // ── 2. Horizontal Divider & Status Readout ──
+    const divY = 104.0;
+    final divPaint = Paint()
+      ..color = palette.hairline.withValues(alpha: 0.35)
+      ..strokeWidth = 0.8;
+    canvas.drawLine(Offset(12.0, divY), Offset(w - 12.0, divY), divPaint);
+
     final tscale = 0.5 + 1.5 * room;
-    const maxMs = 68.0 * 2.0; // tscale 上限 2.0
-    final tick = Paint()
-      ..color = accent
-      ..strokeWidth = 2.0
-      ..strokeCap = StrokeCap.round;
-    for (var t = 0; t < 8; ++t) {
-      final x = 8 +
-          (size.width - 16) * (_tapMs[t] * tscale / maxMs);
-      final h = 4.0 + 20.0 * (_tapG[t] / 0.25);
-      final dir = (t & 1) == 0 ? -1.0 : 1.0; // 偶→L 朝上，奇→R 朝下
-      canvas.drawLine(Offset(x, baseY), Offset(x, baseY + dir * h), tick);
+    final maxMs = 68.0 * 2.0;
+
+    // Left title
+    final leftTp = TextPainter(
+      text: TextSpan(
+        text: 'EARLY REFLECTIONS',
+        style: monoOf(palette, size: 7.5, color: palette.textDim.withValues(alpha: 0.7))
+            .copyWith(fontWeight: FontWeight.w600),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    leftTp.paint(canvas, const Offset(14.0, divY - 11.0));
+
+    // Right metric
+    final roomPct = (room * 100).toInt();
+    final delayMs = (tscale * 68.0).toStringAsFixed(1);
+    final rightTp = TextPainter(
+      text: TextSpan(
+        text: '$roomPct% ROOM · $delayMs ms',
+        style: monoOf(palette, size: 7.5, color: active ? palette.accent : palette.textDim)
+            .copyWith(fontWeight: FontWeight.w600),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    rightTp.paint(canvas, Offset(w - 14.0 - rightTp.width, divY - 11.0));
+
+    // ── 3. Bottom Section: 空间早期反射包络 ──
+    const baseY = 130.0;
+    const leftPad = 20.0;
+    final rightPad = 20.0;
+    final plotW = w - leftPad - rightPad;
+
+    // Baseline
+    final baseLinePaint = Paint()
+      ..color = palette.hairline.withValues(alpha: 0.25)
+      ..strokeWidth = 0.8;
+    canvas.drawLine(Offset(leftPad, baseY), Offset(w - rightPad, baseY), baseLinePaint);
+
+    // Exponential Decay Curves (upper L, lower R)
+    final envPathUpper = Path()..moveTo(leftPad, baseY - 18.0);
+    final envPathLower = Path()..moveTo(leftPad, baseY + 18.0);
+    for (var x = 0; x <= 40; x++) {
+      final frac = x / 40.0;
+      final px = leftPad + frac * plotW;
+      final decay = math.exp(-frac * 2.4);
+      envPathUpper.lineTo(px, baseY - 18.0 * decay);
+      envPathLower.lineTo(px, baseY + 18.0 * decay);
+    }
+    final envPaint = Paint()
+      ..color = palette.textDim.withValues(alpha: 0.15)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    canvas.drawPath(envPathUpper, envPaint);
+    canvas.drawPath(envPathLower, envPaint);
+
+    // 8 Early Reflection Taps
+    for (var t = 0; t < _tapMs.length; ++t) {
+      final tapFrac = (_tapMs[t] * tscale / maxMs).clamp(0.0, 1.0);
+      final tx = leftPad + plotW * tapFrac;
+      final h = 3.5 + 15.0 * (_tapG[t] / 0.25);
+      final isLeft = (t % 2 == 0);
+      final dir = isLeft ? -1.0 : 1.0;
+      final ty = baseY + dir * h;
+
+      final tapColor = isLeft ? palette.accent : palette.accent2;
+
+      // Vertical stem with gradient
+      final stemPaint = Paint()
+        ..color = active ? tapColor.withValues(alpha: 0.75) : palette.textDim.withValues(alpha: 0.35)
+        ..strokeWidth = 1.8
+        ..strokeCap = StrokeCap.round;
+      canvas.drawLine(Offset(tx, baseY), Offset(tx, ty), stemPaint);
+
+      // Tap particle head
+      if (active) {
+        final headGlow = Paint()
+          ..color = tapColor.withValues(alpha: 0.4)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 2.5);
+        canvas.drawCircle(Offset(tx, ty), 3.0, headGlow);
+      }
+      final headDot = Paint()
+        ..color = active ? tapColor : palette.textDim
+        ..style = PaintingStyle.fill;
+      canvas.drawCircle(Offset(tx, ty), 1.5, headDot);
     }
   }
 
   @override
   bool shouldRepaint(_SpatialStagePainter old) =>
-      old.width != width || old.room != room;
+      old.width != width || old.room != room || old.active != active || old.palette != palette;
 }
