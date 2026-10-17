@@ -2260,36 +2260,6 @@ abstract class AppLocalizations {
   /// **'左声道'**
   String get haasSideLeft;
 
-  /// No description provided for @fxCatAll.
-  ///
-  /// In zh, this message translates to:
-  /// **'全部'**
-  String get fxCatAll;
-
-  /// No description provided for @fxCatInput.
-  ///
-  /// In zh, this message translates to:
-  /// **'输入整形'**
-  String get fxCatInput;
-
-  /// No description provided for @fxCatDynamics.
-  ///
-  /// In zh, this message translates to:
-  /// **'动态控制'**
-  String get fxCatDynamics;
-
-  /// No description provided for @fxCatBass.
-  ///
-  /// In zh, this message translates to:
-  /// **'低频'**
-  String get fxCatBass;
-
-  /// No description provided for @fxCatEq.
-  ///
-  /// In zh, this message translates to:
-  /// **'均衡校准'**
-  String get fxCatEq;
-
   /// No description provided for @fxCatSpatial.
   ///
   /// In zh, this message translates to:
@@ -3561,6 +3531,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'当前生效：{mode} ({fcut} Hz, {feed} dB)'**
   String crossfeedActiveDesc(String mode, String fcut, String feed);
+
+  /// No description provided for @fxCatFront.
+  ///
+  /// In zh, this message translates to:
+  /// **'前置整形'**
+  String get fxCatFront;
+
+  /// No description provided for @fxCatCore.
+  ///
+  /// In zh, this message translates to:
+  /// **'核心处理'**
+  String get fxCatCore;
 }
 
 class _AppLocalizationsDelegate
