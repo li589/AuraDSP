@@ -1816,6 +1816,42 @@ abstract class AppLocalizations {
   /// **'已重置 config.json 为标准配置模板'**
   String get memResetDone;
 
+  /// No description provided for @sysTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get sysTitle;
+
+  /// No description provided for @sysHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'托盘常驻与开机启动（Windows）'**
+  String get sysHint;
+
+  /// No description provided for @sysTray.
+  ///
+  /// In zh, this message translates to:
+  /// **'最小化到托盘'**
+  String get sysTray;
+
+  /// No description provided for @sysTrayHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单'**
+  String get sysTrayHint;
+
+  /// No description provided for @sysAutostart.
+  ///
+  /// In zh, this message translates to:
+  /// **'开机自启'**
+  String get sysAutostart;
+
+  /// No description provided for @sysAutostartHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'登录 Windows 时自动启动 AuraDSP'**
+  String get sysAutostartHint;
+
   /// No description provided for @latUnmeasured.
   ///
   /// In zh, this message translates to:

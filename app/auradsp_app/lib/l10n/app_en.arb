@@ -344,6 +344,12 @@
   "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
   "memReset": "Reset External Config to Defaults",
   "memResetDone": "config.json has been reset to the standard template",
+  "sysTitle": "System",
+  "sysHint": "Tray residency and launch at login (Windows)",
+  "sysTray": "Minimize to tray",
+  "sysTrayHint": "Closing the window hides to the system tray while audio keeps playing; quit via the tray menu",
+  "sysAutostart": "Launch at login",
+  "sysAutostartHint": "Start AuraDSP automatically when you sign in to Windows",
   "latUnmeasured": "Unmeasured",
   "latTipMeasured": "Component latency (impulse-response measured): {text}\nTap ↻ to re-measure (tens of ms, playback unaffected)",
   "@latTipMeasured": {

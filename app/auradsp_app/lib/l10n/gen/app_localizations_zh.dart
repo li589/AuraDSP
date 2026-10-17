@@ -895,6 +895,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get memResetDone => '已重置 config.json 为标准配置模板';
 
   @override
+  String get sysTitle => '系统';
+
+  @override
+  String get sysHint => '托盘常驻与开机启动（Windows）';
+
+  @override
+  String get sysTray => '最小化到托盘';
+
+  @override
+  String get sysTrayHint => '关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单';
+
+  @override
+  String get sysAutostart => '开机自启';
+
+  @override
+  String get sysAutostartHint => '登录 Windows 时自动启动 AuraDSP';
+
+  @override
   String get latUnmeasured => '未测量';
 
   @override

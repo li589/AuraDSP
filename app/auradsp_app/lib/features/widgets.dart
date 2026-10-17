@@ -139,7 +139,7 @@ class SectionCard extends StatelessWidget {
       body.add(child);
     }
 
-    return Container(
+    final card = Container(
       // hero 分支已删：唯一 hero:true 调用方（home_page 引擎状态卡）自带显式 padding，
       // 默认分支无任何调用者走 hero ? xl。hero 字段仅保留强调色细边语义。
       padding: padding ??
@@ -158,6 +158,82 @@ class SectionCard extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: body,
       ),
+    );
+    // hover 微光：外发光 + accent 描边（仅 hover 存在，静态零成本）
+    return _CardHover(child: card);
+  }
+}
+
+/// 卡片 hover 微光：MouseRegion 驱动，AnimatedContainer 平滑过渡。
+/// 仅包一层装饰（光晕 + 描边），不参与布局——child 自身的 padding/边框不变。
+class _CardHover extends StatefulWidget {
+  final Widget child;
+  const _CardHover({required this.child});
+
+  @override
+  State<_CardHover> createState() => _CardHoverState();
+}
+
+class _CardHoverState extends State<_CardHover> {
+  bool _hover = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return MouseRegion(
+      cursor: SystemMouseCursors.basic,
+      onEnter: (_) => setState(() => _hover = true),
+      onExit: (_) => setState(() => _hover = false),
+      child: AnimatedContainer(
+        duration: AuraDur.fast,
+        curve: AuraCurve.standard,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(AuraRadius.md),
+          // 外发光：仅 hover 时存在，静态零成本
+          boxShadow: _hover
+              ? [
+                  BoxShadow(
+                    color: p.accent.withValues(alpha: 0.10),
+                    blurRadius: 12,
+                    spreadRadius: 0.5,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: _HoverAccentBorder(active: _hover, child: widget.child),
+      ),
+    );
+  }
+}
+
+/// accent 描边覆盖层：hover 时给卡片套一层 accent 细描边（不拦截事件）。
+class _HoverAccentBorder extends StatelessWidget {
+  final bool active;
+  final Widget child;
+  const _HoverAccentBorder({required this.active, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Stack(
+      children: [
+        child,
+        if (active)
+          Positioned.fill(
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(AuraRadius.md),
+                  border: Border.all(
+                    color: p.accent.withValues(alpha: 0.4),
+                    width: 1,
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

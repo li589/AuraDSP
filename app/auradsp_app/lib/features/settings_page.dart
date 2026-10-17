@@ -21,6 +21,7 @@ import '../core/path_memory.dart';
 import '../core/session_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/tray_service.dart';
 import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -294,6 +295,42 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+          // 09 系统（托盘常驻 + 开机自启；Windows）
+          SectionCard(
+            index: '09',
+            title: l.sysTitle,
+            hint: l.sysHint,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(l.sysTray, style: labelOf(p, size: 12)),
+                    AuraSwitch(
+                      value: true,
+                      onChanged: null, // 常驻行为；托盘不可用时整卡隐藏
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(l.sysTrayHint, style: captionOf(p)),
+                const SizedBox(height: AuraSpace.md),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(l.sysAutostart, style: labelOf(p, size: 12)),
+                    AuraSwitch(
+                      value: AutoStartService.instance.enabled ?? false,
+                      onChanged: (v) => AutoStartService.instance.setEnabled(v),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(l.sysAutostartHint, style: captionOf(p)),
               ],
             ),
           ),

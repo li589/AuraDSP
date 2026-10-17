@@ -344,6 +344,12 @@
   "memCleared": "已清除持久化会话记忆，下次启动将使用纯净默认值",
   "memReset": "重置外置配置为默认",
   "memResetDone": "已重置 config.json 为标准配置模板",
+  "sysTitle": "系统",
+  "sysHint": "托盘常驻与开机启动（Windows）",
+  "sysTray": "最小化到托盘",
+  "sysTrayHint": "关闭窗口时隐藏到系统托盘，音频继续播放；退出请用托盘菜单",
+  "sysAutostart": "开机自启",
+  "sysAutostartHint": "登录 Windows 时自动启动 AuraDSP",
   "latUnmeasured": "未测量",
   "latTipMeasured": "组件处理延迟（脉冲响应实测）: {text}\n点击 ↻ 重新测量（约数十毫秒，不影响正在播放的音频）",
   "@latTipMeasured": {

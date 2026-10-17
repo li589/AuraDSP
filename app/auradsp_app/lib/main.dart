@@ -13,6 +13,7 @@ import 'core/design.dart';
 import 'core/presets.dart';
 import 'core/state.dart';
 import 'core/theme.dart';
+import 'core/tray_service.dart';
 import 'engine/debug_log.dart';
 import 'features/shell.dart';
 import 'features/widgets.dart';
@@ -42,6 +43,10 @@ class AuraApp extends StatefulWidget {
 
 class _AuraAppState extends State<AuraApp> {
   AppModel? _model;
+  // theme 缓存：themeId 不变则复用 ThemeData 对象——AppModel 高频通知
+  // （viz 帧/参数拖动）不应反复重建整棵主题（MaterialApp 重建热点）。
+  AuraThemeId? _cachedThemeId;
+  ThemeData? _cachedTheme;
 
   @override
   void initState() {
@@ -49,11 +54,22 @@ class _AuraAppState extends State<AuraApp> {
     _boot();
   }
 
+  ThemeData _themeFor(AppModel m) {
+    if (_cachedThemeId != m.themeId) {
+      _cachedThemeId = m.themeId;
+      _cachedTheme = withAuraExtension(
+          buildAuraTheme(m.themeId), m.themeId.palette);
+    }
+    return _cachedTheme!;
+  }
+
   Future<void> _boot() async {
     // 出厂预设/默认基线资产预载：rootBundle 只有异步 API，而 listAll→
     // ensureInitialized 与 apply 全量复写都在同步路径。必须在 AppModel
     // 构造前完成，否则会话恢复/预设读取拿不到资产数据。
     await PresetLibrary.preloadFactoryAssets();
+    // 托盘/关窗拦截（非核心路径：失败不阻塞启动，仅不提供托盘）
+    await TrayService.instance.init();
     if (!mounted) return;
     setState(() => _model ??= AppModel());
   }
@@ -61,6 +77,7 @@ class _AuraAppState extends State<AuraApp> {
   @override
   void dispose() {
     _model?.dispose();
+    TrayService.instance.dispose();
     super.dispose();
   }
 
@@ -84,8 +101,7 @@ class _AuraAppState extends State<AuraApp> {
           supportedLocales: AppLocalizations.supportedLocales,
           localizationsDelegates: AppLocalizations.localizationsDelegates,
           onGenerateTitle: (ctx) => l10nOf(ctx).appName,
-          theme: withAuraExtension(
-              buildAuraTheme(model.themeId), model.themeId.palette),
+          theme: _themeFor(model),
           home: ShellGate(model: model),
         );
       },

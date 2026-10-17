@@ -34,6 +34,10 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   bool _railCollapsed = false;
 
+  // 页面实例缓存：AnimatedSwitcher 切页时复用既有 State（保滚动/折叠态），
+  // 也避免 build 每帧构造 6 个页面对象（性能）。
+  late final List<Widget> _pages;
+
   static const _destinations = <({IconData icon, IconData active})>[
     (icon: Icons.home_outlined, active: Icons.home),
     (icon: Icons.tune_outlined, active: Icons.tune),
@@ -44,14 +48,10 @@ class _AppShellState extends State<AppShell> {
   ];
 
   @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
+  void initState() {
+    super.initState();
     final m = widget.model;
-    final l = l10nOf(context);
-    final labels = [l.navHome, l.navEffects, l.navLiveprog, l.navPlugins, l.navChain, l.navVisualizer];
-
-
-    final pages = [
+    _pages = [
       HomePage(model: m),
       EffectsPage(model: m),
       LiveprogPage(model: m),
@@ -59,6 +59,14 @@ class _AppShellState extends State<AppShell> {
       ChainPage(model: m),
       VisualizerPage(model: m),
     ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final m = widget.model;
+    final l = l10nOf(context);
+    final labels = [l.navHome, l.navEffects, l.navLiveprog, l.navPlugins, l.navChain, l.navVisualizer];
 
     return Scaffold(
       body: Row(
@@ -107,7 +115,7 @@ class _AppShellState extends State<AppShell> {
                     ),
                     child: KeyedSubtree(
                       key: ValueKey<int>(_index),
-                      child: pages[_index],
+                      child: _pages[_index],
                     ),
                   ),
                 ),
