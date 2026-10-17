@@ -297,10 +297,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get driverLayerTitle => 'ドライバ情報と制御';
 
   @override
-  String get inputLayerTitle => '入力端情報とスイッチ';
+  String get inputLayerTitle => 'オーディオ入力';
 
   @override
-  String get outputLayerTitle => '出力端情報とスイッチ';
+  String get outputLayerTitle => 'オーディオ出力';
 
   @override
   String get inputDisabledNotice => '入力端が無効になっています（録音キャプチャ一時停止中）';
@@ -758,6 +758,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get tubeTitle => '真空管シミュレーター';
+
+  @override
+  String get tubeHint =>
+      'ビンテージ真空管プリアンプやアナログテープの非直線的な飽和特性を再現します。音楽的な偶数・奇数倍音を付加してデジタルの冷たさを解消し、温かみのあるアナログ質感を付与します。';
 
   @override
   String get spatialReverbTitle => '空間リバーブ';
@@ -1738,6 +1742,10 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get compTitle => 'ダイナミックコンプレッサー';
+
+  @override
+  String get compHint =>
+      '突発的な大音量を抑え、微弱な音のディテールを持ち上げて音圧を均一化します。右側のメーターはリアルタイムのゲインリダクション（GR）を表示します。';
 
   @override
   String get compTimeconstant => '時定数';

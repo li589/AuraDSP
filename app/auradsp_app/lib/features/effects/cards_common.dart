@@ -393,6 +393,7 @@ class _IrWaveformGraphState extends State<_IrWaveformGraph> {
               width: double.infinity,
               color: Colors.black.withValues(alpha: 0.3),
               child: CustomPaint(
+                size: const Size(double.infinity, 110),
                 painter: _IrWaveformPainter(
                   spectrum: widget.spectrum,
                   channels: widget.channels,
@@ -610,6 +611,7 @@ class _Freeverb3DStage extends StatelessWidget {
           children: [
             Positioned.fill(
               child: CustomPaint(
+                size: Size.infinite,
                 painter: _Freeverb3DPainter(
                   decay: decay,
                   damp: damp,

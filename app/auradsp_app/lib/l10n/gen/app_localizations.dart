@@ -649,13 +649,13 @@ abstract class AppLocalizations {
   /// No description provided for @inputLayerTitle.
   ///
   /// In zh, this message translates to:
-  /// **'输入端信息与开关'**
+  /// **'音频输入'**
   String get inputLayerTitle;
 
   /// No description provided for @outputLayerTitle.
   ///
   /// In zh, this message translates to:
-  /// **'输出端信息与开关'**
+  /// **'音频输出'**
   String get outputLayerTitle;
 
   /// No description provided for @inputDisabledNotice.
@@ -1545,6 +1545,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'电子管模拟器'**
   String get tubeTitle;
+
+  /// No description provided for @tubeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟经典电子管放大器与开盘磁带机的非线性饱和特性。通过注入富有音乐感的偶次与奇次泛音，消除数字音频生硬冷涩感，赋予声音温润、饱满的模拟胶片暖色调。'**
+  String get tubeHint;
 
   /// No description provided for @spatialReverbTitle.
   ///
@@ -2701,13 +2707,13 @@ abstract class AppLocalizations {
   /// No description provided for @chainStagePreVendor.
   ///
   /// In zh, this message translates to:
-  /// **'厂商链前置'**
+  /// **'系统原声音效前置'**
   String get chainStagePreVendor;
 
   /// No description provided for @chainStagePostVendor.
   ///
   /// In zh, this message translates to:
-  /// **'厂商链后置'**
+  /// **'系统原声音效后置'**
   String get chainStagePostVendor;
 
   /// No description provided for @chainStagePostReverb.
@@ -3043,7 +3049,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugLibHint.
   ///
   /// In zh, this message translates to:
-  /// **'系统标准 VST3 / CLAP 64 位插件目录与自定义目录扫描与管理。支持零延迟与前瞻延迟补偿，双声道平面 RT-Safe 运行。'**
+  /// **'系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。'**
   String get plugLibHint;
 
   /// 深扫勾选：会加载每个插件 DLL 以读取精确元数据，明显更慢
@@ -3139,7 +3145,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugFeatRt.
   ///
   /// In zh, this message translates to:
-  /// **'平面双声道 RT-Safe 预分配零锁保障'**
+  /// **'实时极速监听：专为专业制作定制的零卡顿音频通道'**
   String get plugFeatRt;
 
   /// No description provided for @plugSlot.
@@ -3253,7 +3259,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugRtNote.
   ///
   /// In zh, this message translates to:
-  /// **'实时动态串联 • 保持 RT-Safe 契约'**
+  /// **'实时动态串联 • 保持专业监听超低延迟标准'**
   String get plugRtNote;
 
   /// No description provided for @plugFilterAll.
@@ -3369,6 +3375,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'动态压限器'**
   String get compTitle;
+
+  /// No description provided for @compHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'平抑突发大音量，提亮微弱细节，让听感饱满统一。右侧仪表实时显示压限削减量 (GR)。'**
+  String get compHint;
 
   /// No description provided for @compTimeconstant.
   ///

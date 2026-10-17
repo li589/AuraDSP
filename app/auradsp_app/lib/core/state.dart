@@ -4913,8 +4913,9 @@ String dbfsText(double db) {
   return '${v >= 0 ? '' : '-'}${v.abs().toStringAsFixed(1)}';
 }
 
-/// 延迟徽标配色档位
+/// 延迟徽标配色档位：四阶声学色彩动力学（直通/零开销为弱灰，录音监听级为绿，影视游戏级为金，缓冲级为红）
 Color latencyColor(double ms, AuraPalette p) {
+  if (ms <= 0) return p.textDim;
   if (ms <= 10) return p.success;
   if (ms <= 30) return p.warning;
   return p.accent2;
