@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.4**（2026-10-14，ViPER 全谱系与授权考证补录，新增 §2.7）
-> 范围：`source/` 下全部 13 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.5**（2026-10-16，新增两个 Windows APO 参考仓 tympan-apo 与 virtual-surround-sound，扩充 §2.8 / §3 / §4 / §5 / §6）
+> 范围：`source/` 下全部 15 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-13，`source/` 下全部 13 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-10-16，`source/` 下全部 15 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -25,8 +25,10 @@
 | 11 | **clap** | `free-audio/clap` (main@a47f6ba, v1.2.10) | 跨平台 / C 头文件（ABI 标准） | MIT | 3.73 MB (101 文件) | ★★★ **M1 插件宿主 CLAP 正典上游**（引擎内置 `vendor/plugin-api/clap` 的来源，见 §2.5） |
 | 12 | **ViPER4Windows** | `likelikeslike/ViPER4Windows` (main@ccc3f61, v2.0.1) | Windows / C++ APO + Flutter UI | 未见 LICENSE（Copyright ViPER520） | 3.14 MB (218 文件) | ★★★ **Windows 全局注入第二蓝本 + ViPER 效果系参数布局**（APO 挂载、共享内存参数投递、跨平台预设 v2 格式；引擎 submodule 已补齐，见 §2.6 与下行） |
 | 13 | **ViPERDSP** | `likelikeslike/ViPERDSP` (main@6fc1f1b) | 跨平台 / C++17, CMake, pffft | **All Rights Reserved（仅限个人使用）** | 1.36 MB (123 文件) | ★★★ **ViPER 效果算法层**（23 个效果 + 21,278 行；VHE/DynamicSystem/FETCompressor 等蓝本；**仅供阅读参考，禁商用与代码搬运**，见 §2.6） |
+| 14 | **tympan-apo** | `penta2himajin/tympan-apo` (main@e85f7a4) | Windows / Rust APO 框架 | MIT OR Apache-2.0 | 654 KB (61 文件) | ★★ **Windows APO 的 Rust 抽象与 COM 基础设施蓝本**（IUnknown/IClassFactory/IAudioProcessingObject/IAudioSystemEffects v1-v3，SFX/MFX/EFX；含 Win11 AEC APO 与 lock-free ring；含 CLAUDE.md 研发手记）。对照 sysapo/VAIO 模式研发 |
+| 15 | **virtual-surround-sound** | `nnyj/virtual-surround-sound` (main@b67d037) | Windows / C++ APO 转发器 | GPL-3.0（**含 NIRSOFT SoundVolumeView.exe 专有工具，注意**） | 410 KB (31 文件) | ★★ **Windows APO RT 线程转发范式 + COM 聚合陷阱实录**（VB-Cable 7.1→HeSuVi binaural→WASAPI 物理设备，~10ms 延迟；lock-free SPSC ring + 注册表监听设备切换；docs/apo-forwarder-internals.md 记录 audiodg 聚合/端点 FX slot/LPAC ACE 等踩坑）。**GPL-3.0 但工具目录含第三方专有 exe，仅作阅读参考** |
 
-总计占用：**~767 MB**，约 **13,600** 个源文件与资源。
+总计占用：**~768 MB**，约 **13,700** 个源文件与资源。
 
 ---
 
@@ -136,6 +138,43 @@
 
 **结论**：维持 v2.3 裁定——ViPERDSP / ViPERFX_RE / ViPER4Windows 三仓仅供阅读参考，代码零搬运；ViPER 系效果落地一律自研重写。
 
+### 2.8 tympan-apo 与 virtual-surround-sound（Windows APO 参考矩阵补强，2026-10-16 新增）
+
+**共性定位**：二者均为 Windows Audio Processing Object（APO）生态的第三方参考，与本项目 Phase 7b 的 Windows 系统级音频注入路线（sysapo / VAIO 模式）同源异构——至此 `source/` 的 Windows APO 蓝本从"两个 C++ 工程"扩展为"Rust 抽象 + C++ 转发范式 + C++ 全功能工程（equalizerAPO64）+ C++ APO+Flutter（ViPER4Windows）"的四维对照，覆盖 COM 基础设施、RT 线程转发、注册表/INF 自动化到 audiodg 实战陷阱的完整知识链。**二者均仅作阅读参考、禁代码搬运**（理由见各自许可研判）。
+
+**tympan-apo（Rust APO 框架，`MIT OR Apache-2.0`）**
+- **已实现范围**（`docs/overview.md` 全部 In scope 项已落地）：
+  - COM 基础设施：`src/raw/` 实现 IUnknown、IClassFactory、注册与四个 `Dll*` 导出；
+  - 接口集：`IAudioProcessingObject` 家族 + `IAudioSystemEffects` v1/v2/v3，覆盖 SFX/MFX/EFX 三类；
+  - AEC APO 支持（`src/aec/`，受 `aec` feature 门控）：`AecProcessingObject` 基础、`AecApoInstanceCom` + `register_aec_apo!` COM 桥、`aec_scaffold` 示例——直接对接 Win11 麦克风采集管线的官方声学回声消除槽位；
+  - 格式协商（`src/format.rs`）：`WAVEFORMATEX` 与 `WAVEFORMATEXTENSIBLE`；
+  - RT-Safe 原语（`src/realtime/`）：lock-free ring buffer、atomic state、atomic refcount；
+  - 注册辅助（`src/clsid.rs` / `src/raw/register.rs` / `src/inf.rs` / `src/fx_properties.rs`）：CLSID 分配、注册表写入、INF 生成器、FxProperties 端点绑定；
+  - 示例 APO（`examples/`）：`passthrough` / `gain` / `aec_scaffold`。
+- **结构资产**：`src/{raw,aec,realtime,format.rs,clsid.rs,inf.rs,fx_properties.rs}`、`examples/`、`docs/{architecture,handoff-protocol,overview,references,testing}.md`、`tests/`、`CLAUDE.md`（含研发手记，对 AI 协作友好）。
+- **许可研判**：`MIT OR Apache-2.0` 双许可，与 AuraDSP GPL-3.0 主体不冲突——架构思路可自由借鉴；若未来要并入代码，须保留原许可声明（Apache-2.0 含专利授权条款，须一并保留 `LICENSE-APACHE`）。
+- **对 AuraDSP 价值**：本项目 Windows APO 路线此前只有 equalizerAPO64（C++/AVX）与 ViPER4Windows（C++ APO）两个 C++ 蓝本；tympan-apo 提供**另一种语言范式的 COM 抽象参考**——尤其 `IAudioSystemEffects v3`、AEC 槽位、`IAudioProcessingObject` 生命周期、RT-Safe 原语与 INF/注册表自动化生成，对评估"用 Rust 重写 APO 层"或理解 APO COM 契约有较高研读价值。注意它**不提供 DSP 算法**，只提供"接入 Windows 音频引擎"的骨架。
+
+**virtual-surround-sound（C++ APO 转发器，`GPL-3.0`，含 NIRSOFT 专有 exe）**
+- **定位**：自定义 APO，把 VB-Cable 虚拟 7.1 端点变成耳机环绕栈——app 播到 cable，HeSuVi（Equalizer APO）卷积 7.1→双耳，`vss_apo.dll` 在音频引擎内把结果转发到任意物理输出；设备切换实时、无需重启音频。
+- **技术要点**（README + `docs/apo-forwarder-internals.md`）：
+  - Inline APO 转发，~10ms 附加延迟，运行于 Windows Audio Engine 的 RT 线程；
+  - lock-free SPSC ring buffer 桥接 DSP 线程与专用 WASAPI 渲染线程；
+  - 实时输出设备切换（`RegNotifyChangeKeyValue` 监听 `HKLM\SOFTWARE\VirtualSurroundSound\TargetDeviceId`），无需音频重启；
+  - `IAudioClient3` 低延迟路径（可用时），20ms 共享模式回退；
+  - 音量 OSD（AutoHotkey）+ 任务计划程序自动路由设备插拔。
+- **架构与 audiodg 踩坑实录**（`docs/apo-forwarder-internals.md`，**极高价值**）：
+  - 数据流：`apps(7.1)→CABLE Input(默认设备)→EAPO SFX(预混)→EAPO MFX(HeSuVi 7.1→双耳)→vss forwarder MFX→物理设备(WASAPI)`；
+  - COM 聚合规则：`audiodg` 聚合 APO，`IClassFactory::CreateInstance` 收到非空 outer unknown；缺聚合支持会静默放弃 APO，端点 FX 图失败，`IAudioClient::Initialize` 返回 `E_NOTIMPL`；
+  - 端点 FX slot 规则（Win11 24H2 / VB-Cable Pack45）：经典 slot 5=SFX/6=MFX/7=EFX，MFX 单独注册被忽略需 SFX 填充；composite slot `,13`(SFX)/`,14`(MFX) 为 MULTI_SZ 多 APO 列表；FxProperties ACL 拒绝管理员 `KEY_WRITE`；
+  - LPAC 权限：`audiodg` 以 LPAC 运行，配置键需对 `S-1-15-2-1` / `S-1-15-2-2` 开放读 ACE，否则 APO 静默读失败；
+  - 调试陷阱：坏 APO 导致端点流打开失败、播放器静默回退其他设备（"能出声"不证明被测端点正常）；dbg 走 `OutputDebugString`，需 DebugView 捕获。
+- **结构资产**：`apo/src/{vss_apo.cpp, vss_apo.def}`（核心转发器，单文件最小 APO 实现，便于理解 APO DLL 导出契约）、`docs/{apo-forwarder-internals,sonar-apo-internals}.md`、`scripts/`、`tasks/`、`debug/`（含 `set_71_policy.ps1` / `wasapi_tone.ps1`）、`tools/`（`SoundVolumeView.exe` 专有工具）。
+- **许可研判（重点）**：`LICENSE` 确认为 **GNU GPL v3**——vss 自身 C++ 源码（apo/src、docs）是真正的 OSS；**但 `tools/` 下的 `SoundVolumeView.exe` 为 NIRSOFT 专有闭源免费工具，不在 GPL 覆盖范围内**。合规操作：① vss 源码按 GPL-3.0 阅读参考；② `tools/` 第三方 exe **绝不可并入主库或重新分发**，仅作本地辅助；③ 与 ViPERDSP（ARR，禁商用）不同，vss 是合法 OSS，但本项目 Phase 7b 已有 equalizerAPO64（GPL-2.0/LGPL，同源兼容）作为工程主蓝本，vss 补强的是"APO 在 RT 线程内转发 + 设备热切换"这一窄而深的范式与其详尽的 audiodg 陷阱清单。
+- **对 AuraDSP 价值**：若 Windows APO 路线需"在音频引擎 RT 线程内做轻量转发/镜像到其他端点"或"按设备热切换 sink"，vss 的 **SPSC ring + 注册表监听范式**与 `apo-forwarder-internals.md` 的 audiodg 陷阱清单是极高价值的实战参考；其单文件 APO 实现也便于快速掌握 APO DLL 的最小导出契约（`DllGetClassObject` / `DllRegisterServer` 等）。
+
+**两仓合论**：tympan-apo（Rust 抽象，可自由借鉴架构）与 virtual-surround-sound（C++ 转发范式 + 详尽 audiodg 踩坑，GPL-3.0 但含专有 exe 须剔除）共同把 Windows APO 参考矩阵补全为"基础设施→转发范式→全功能工程→UI 宿主"的完整链条；二者维持与既有 APO 蓝本一致的**只读参考、禁搬运**定位。
+
 ---
 
 ## 3. 算法与系统能力对照矩阵
@@ -156,6 +195,8 @@
 | **ViPER 系效果算法** | 部分自研（haas / psycho / crossfeed / comp） | `ViPERDSP`（仅阅读参考） | `viper/effects/{VHE,DynamicSystem,PsychoacousticBass,FETCompressor,SpectrumExtend}.cpp`（**All Rights Reserved，禁搬运**；全谱系授权地图见 §2.7） |
 | **Linux 全局音频** | Phase 7 规划中 | `JDSP4Linux` / `pulseeffects` | `JDSP4Linux/src/pipewire/`（PipeWire filter-chain 与 SPA 模块） |
 | **Android 免 Root 引擎** | Phase 6 规划中 | `RootlessJamesDSP` | `app/src/main/java/.../AudioCaptureService.kt`（无 Root 前台服务捕获） |
+| **Windows APO COM 抽象 / 生命周期（Rust 范式）** | Phase 7b Windows APO 路线（sysapo/VAIO） | `tympan-apo`（新增 #14） | `src/raw/`（IUnknown/IClassFactory/Dll* 导出）、`src/clsid.rs`/`src/inf.rs`/`src/fx_properties.rs`（CLSID/INF/FxProperties 注册）、`src/realtime/`（lock-free ring）；对照 equalizerAPO64/ViPER4Windows 的 C++ APO 实现，提供另一种语言范式的 COM 契约参考 |
+| **Windows APO RT 线程转发 + 设备热切换** | 当前为进程内 WASAPI pump | `virtual-surround-sound`（新增 #15） | `apo/src/vss_apo.cpp`（单文件最小 APO DLL）+ `docs/apo-forwarder-internals.md`（audiodg 聚合/端点 FX slot/LPAC ACE 踩坑实录）；lock-free SPSC ring 桥接 DSP 与 WASAPI 渲染线程，注册表监听实时切换 sink |
 
 ---
 
@@ -163,11 +204,13 @@
 
 1. **嵌套 `.git` 审查**：
    - 全面递归扫描确认：`source/` 下所有目录及子目录均 **无任何 `.git` 目录残留**，彻底规避子模块递归嵌套与意外提交问题。
+   - **v2.5 更新（2026-10-16）**：本轮新增的 `tympan-apo/`、`virtual-surround-sound/` 两个克隆在登记前已剥除各自的嵌套 `.git`（原各约 340–430 KB）；剥除后递归复核 `source/` 下 `.git` 数量为 **0**，铁律持续有效。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
    - `equalizerAPO64/Setup/lib*`：存在约 70MB 的 Qt6 预编译 DLL，只读保留无需改动。
    - `lsp-plugins/release/`：存在解包与打包的 tar 归档（约 339MB），主工程源码已在 `modules/` 完整展开。
+   - **v2.5 新增告警**：`virtual-surround-sound/tools/SoundVolumeView.exe` 为 **NIRSOFT 专有闭源免费工具**（非 GPL 覆盖），属第三方二进制，**不得并入主库、不得随参考区重新分发**；仅作本地辅助用途，与参考区"只读快照"铁律一并遵守。
 
 ---
 
@@ -183,6 +226,7 @@
 | **P-6** | ✅ 新增闭环 | bass_enhancer 溯源 | 确认 pulseeffects 底层为 Calf 插件；算法对照锁定为 `lsp-plugins-loud-comp` 与 `lsp-dsp-units`。 |
 | **P-7** | ✅ 新增闭环 | CLAP 正典上游与内置快照落差 | 新克隆 `source/clap` 为正典上游 v1.2.10；内置快照 `vendor/plugin-api/clap` 为 1.2.6（落后 8 个 draft 头），可按 §2.5 建议升级。 |
 | **P-8** | ✅ 已闭环 | ViPER4Windows 引擎源码缺失 | 已克隆补齐 `likelikeslike/ViPERDSP` main@6fc1f1b（123 文件 / 1.36 MB，.git 已剥除并登记），23 个效果模块到齐；注意其为 ViPER4Windows 钉住指针 db1c11c 的后继版本。引擎为 **All Rights Reserved 仅限个人使用**，仅作阅读参考、禁并入 AuraDSP；谱系与合规全景见 §2.7。 |
+| **P-9** | ✅ 已闭环 | 新增两个 Windows APO 参考仓（tympan-apo / virtual-surround-sound） | 2026-10-16 用户克隆至 `source/`；二者嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 分别锁定 `e85f7a4` / `b67d037`，已于 `source/ORIGIN.md` 追加 #14 / #15 登记、本报告升版 v2.5（§1 扩至 15 项、新增 §2.8、§3 补充两行、§4 审计更新）。许可研判：tympan-apo 双许可（`MIT OR Apache-2.0`，可自由借鉴架构、并入须保留声明）；virtual-surround-sound 为 GPL-3.0 但 `tools/` 含 NIRSOFT 专有 `SoundVolumeView.exe`，**该 exe 禁并入/重分发**，源码仅作阅读参考。二者维持只读参考、禁搬运定位。 |
 
 ---
 
@@ -193,4 +237,6 @@
 3. **磁盘轻量化（可选）**：如需节约约 300MB 空间，可清空 `source/lsp-plugins/release/` 下的离线归档包，因 `modules/` 源码已足够自洽。
 4. **CLAP 快照升级（可执行）**：将 `vendor/plugin-api/clap` 自 1.2.6 覆盖升级至 `source/clap` 的 1.2.10，同步更新 `vendor/ORIGIN.md` 的 `clap-api` 溯源（提取路径改为 `source/clap/include/clap/`）；升级后重编引擎并跑冒烟测试。
 5. **ViPER4Windows / ViPERDSP 后续**：APO 层与 `viper_params_layout.dart` 可作为 Phase 7b 蓝本阅读；ViPERDSP 为 All Rights Reserved（仅限个人使用），**代码不得并入 GPL 分发**——若需落地 ViPER 系效果（VHE / 动态系统 / 心理声学低音等），按 §2.6 算法对照清单自研重写；若要走商品化，唯一正途是向听觉工坊 / 酷狗蝰蛇声学体系取得授权（§2.7）。
+6. **Windows APO 路线四维对照（tympan-apo / virtual-surround-sound / equalizerAPO64 / ViPER4Windows）**：Phase 7b 立项时，以 `equalizerAPO64` 为工程主蓝本、`ViPER4Windows` 为轻量闭环对照；`tympan-apo` 用于评估"Rust 重写 APO 层"可行性与 `IAudioSystemEffects v3` / AEC 槽位契约；`virtual-surround-sound` 的 `apo-forwarder-internals.md` 与 SPSC ring 范式作为"RT 线程内转发 + 设备热切换"的实战参考。所有参考维持只读、禁搬运（§2.8）。
+7. **virtual-surround-sound 专有二进制隔离**：将 `tools/SoundVolumeView.exe`（NIRSOFT 专有闭源）纳入本地不入库清单，避免随参考区误提交或分发；该工具仅用于本地端点调试，不参与 AuraDSP 任何构建或分发。
 

@@ -557,6 +557,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
             final iArbE = idp(ParamId.arbmagEnable), iArbR = idp(ParamId.arbmagReady);
             final iArbN = idp(ParamId.arbmagNodeCount);
+            /* 字符串回读三 id（调研 §1.2）：cap 按 id——liveprog/arbmag 256 KiB、
+             * eq.curve 4 KiB（引擎 set 侧上限即 4096）。只随防抖回读窗口跑，
+             * setter 热路径零开销。 */
+            final iLpCode = idp('liveprog.code');
+            final iArbStr = idp('arbmag.string');
+            final iEqCurve = idp('eq.curve');
             List<List<double>>? readIrSpectrum(int ch) {
               if (ch <= 0 || ch > 8) return null;
               final count = ch * 32;
@@ -580,6 +586,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             try {
               final cvReady = rdInt(iCvRd) ?? 0;
               final cvChannels = rdInt(iCvCh) ?? 0;
+              /* 字符串回读（调研 §1.2）：随本次窗口一并发出；null=引擎无副本或超 cap。 */
+              final lpCodeRb = AuraDspLib.getString(p, h, 'liveprog.code', 256 * 1024);
+              final arbmagRb = AuraDspLib.getString(p, h, 'arbmag.string', 256 * 1024);
+              final eqCurveRb = AuraDspLib.getString(p, h, 'eq.curve', 4096);
               send({
                 'evt': 'params',
                 'bassEnable': rdInt(iBass) ?? 0,
@@ -695,9 +705,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'arbmagEnable': rdInt(iArbE) ?? 0,
                 'arbmagReady': rdInt(iArbR) ?? 0,
                 'arbmagNodeCount': rdInt(iArbN) ?? 0,
+                // 字符串回读（调研 §1.2）：null=引擎无副本或超 cap，主 isolate 按 null 跳过
+                'lpCode': lpCodeRb,
+                'arbmagString': arbmagRb,
+                'eqCurve': eqCurveRb,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN]) {
+              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
                 malloc.free(q);
               }
             }
