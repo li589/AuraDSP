@@ -105,12 +105,24 @@ class _AuraAppState extends State<AuraApp> {
           home: ShellGate(model: model),
           // 托盘菜单文案跟随语言（locale 变化时 MaterialApp.builder 重建）。
           // applyLocale 内部按 locale 去重，普通重建零成本。
+          // 托盘/后台休眠：当窗口隐藏在托盘时，全面关闭 Ticker 与 Offstage 绘制，
+          // 防止 Win32 无 VSync 节流下渲染循环狂飙导致的 GPU 异常占用（28%+）。
           builder: (ctx, child) {
             final l = l10nOf(ctx);
             TrayService.instance.applyLocale(
                 Localizations.localeOf(ctx).toString(),
                 l.trayShow, l.sysAutostart, l.trayQuit);
-            return child ?? const SizedBox.shrink();
+            return ValueListenableBuilder<bool>(
+              valueListenable: TrayService.instance.isWindowVisible,
+              builder: (_, isVisible, c) => TickerMode(
+                enabled: isVisible,
+                child: Offstage(
+                  offstage: !isVisible,
+                  child: c ?? const SizedBox.shrink(),
+                ),
+              ),
+              child: child,
+            );
           },
         );
       },

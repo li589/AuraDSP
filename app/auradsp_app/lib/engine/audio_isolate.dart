@@ -1450,6 +1450,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int vaioStaleSince = 0;
   bool vaioStaleSent = false;
   void sendStaleViz(String backend, int now) {
+    if (vizSuspended) return;
     send({
       'evt': 'viz',
       'backend': backend,
