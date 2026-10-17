@@ -304,11 +304,24 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     widget.model.levelL.addListener(_updateTarget);
     widget.model.levelR.addListener(_updateTarget);
     widget.model.addListener(_onModelChanged);
+    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
     _updateTarget();
+  }
+
+  void _onVisibilityChanged() {
+    if (!TrayService.instance.isWindowVisible.value) {
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _lastElapsed = Duration.zero;
+      }
+    } else if (widget.model.compOn) {
+      _updateTarget();
+    }
   }
 
   @override
   void dispose() {
+    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
     _ticker.dispose();
     widget.model.levelL.removeListener(_updateTarget);
     widget.model.levelR.removeListener(_updateTarget);
@@ -318,11 +331,21 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
 
   void _onModelChanged() {
     _updateTarget();
-    if (mounted) setState(() {});
+    if (mounted && widget.model.compOn && TrayService.instance.isWindowVisible.value) {
+      setState(() {});
+    }
   }
 
   void _updateTarget() {
     final model = widget.model;
+    if (!model.compOn || !TrayService.instance.isWindowVisible.value) {
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _lastElapsed = Duration.zero;
+      }
+      return;
+    }
+
     final inDb = math.max(model.levelL.value, model.levelR.value);
     _targetInDb = inDb.clamp(-48.0, 0.0);
 
@@ -331,7 +354,7 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     const knee = 10.0;
 
     double target = 0.0;
-    if (model.compOn && inDb > -48.0) {
+    if (inDb > -48.0) {
       final delta = inDb - threshold;
       double yRaw;
       if (2 * delta < -knee) {
@@ -358,10 +381,7 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     final needsAnimation = _smoothInDb > -46.0 ||
         _targetInDb > -46.0 ||
         _smoothGr > 0.01 ||
-        _targetGr > 0.01 ||
-        model.vbActive ||
-        model.asioActive ||
-        model.playing;
+        _targetGr > 0.01;
 
     if (needsAnimation && !_ticker.isActive) {
       _lastElapsed = Duration.zero;
@@ -372,6 +392,13 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
 
   void _onTick(Duration elapsed) {
     if (!mounted) return;
+    if (!widget.model.compOn || !TrayService.instance.isWindowVisible.value) {
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _lastElapsed = Duration.zero;
+      }
+      return;
+    }
     if (_lastElapsed == Duration.zero) {
       _lastElapsed = elapsed;
       return;
@@ -400,15 +427,14 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
         _targetInDb <= -47.0 &&
         _smoothGr <= 0.02 &&
         _targetGr <= 0.01;
-    final isStreamStopped = !widget.model.vbActive &&
-        !widget.model.asioActive &&
-        !widget.model.playing;
 
-    if (isQuiet && isStreamStopped) {
+    if (isQuiet) {
       _smoothGr = 0.0;
       _smoothInDb = -48.0;
-      _ticker.stop();
-      _lastElapsed = Duration.zero;
+      if (_ticker.isActive) {
+        _ticker.stop();
+        _lastElapsed = Duration.zero;
+      }
     }
     setState(() {});
   }

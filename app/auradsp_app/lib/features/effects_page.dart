@@ -20,6 +20,7 @@ import '../core/path_memory.dart';
 import '../core/presets.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../core/tray_service.dart';
 import '../core/ui_helpers.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';

@@ -299,6 +299,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   @override
   void initState() {
     super.initState();
+    _watchdog = createTicker(_onTick);
     widget.spectrum.addListener(_onFrame);
     TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
   }
@@ -314,13 +315,15 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   /// 看门狗只在「有东西可能变陈旧」时跑：柱子已全部归零则完全不占用帧回调。
   void _ensureTicking() {
     if (!TrayService.instance.isWindowVisible.value) return;
-    _watchdog ??= createTicker(_onTick)..start();
+    if (_watchdog != null && !_watchdog!.isTicking) {
+      _watchdog!.start();
+    }
   }
 
   void _stopTicking() {
-    _watchdog?.stop();
-    _watchdog?.dispose();
-    _watchdog = null;
+    if (_watchdog != null && _watchdog!.isTicking) {
+      _watchdog!.stop();
+    }
   }
 
   void _onFrame() {
@@ -365,6 +368,8 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   void dispose() {
     TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
     _stopTicking();
+    _watchdog?.dispose();
+    _watchdog = null;
     widget.spectrum.removeListener(_onFrame);
     _clock.dispose();
     _painter.dispose();
@@ -690,7 +695,10 @@ class _PulseDotState extends State<PulseDot>
     final visible = TrayService.instance.isWindowVisible.value;
     if (widget.active && visible && !_c.isAnimating) {
       _c.repeat();
-    } else if ((!widget.active || !visible) && _c.isAnimating) {
+    } else if (!visible && _c.isAnimating) {
+      _c.stop();
+      _c.value = 0.35;
+    } else if (!widget.active && _c.isAnimating) {
       _c.stop();
       _c.animateTo(0.35, duration: AuraDur.fast);
     }

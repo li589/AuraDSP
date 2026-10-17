@@ -137,7 +137,10 @@ class SectionCard extends StatelessWidget {
               duration: AuraDur.fast,
               curve: AuraCurve.standard,
               opacity: collapsed ? 0.0 : 1.0,
-              child: content,
+              child: TickerMode(
+                enabled: !collapsed,
+                child: content,
+              ),
             ),
           ),
         ),
