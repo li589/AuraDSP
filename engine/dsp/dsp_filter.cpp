@@ -41,8 +41,8 @@ void filter_process(auradsp_handle h, float* io, int frames) {
     const double b2 = h->filter.b2.load(std::memory_order_acquire);
     const double a1 = h->filter.a1.load(std::memory_order_acquire);
     const double a2 = h->filter.a2.load(std::memory_order_acquire);
-    double z1L = h->filter.z1L, z2L = h->filter.z2L;
-    double z1R = h->filter.z1R, z2R = h->filter.z2R;
+    double z1L = h->filter.z1[0], z2L = h->filter.z2[0];
+    double z1R = h->filter.z1[1], z2R = h->filter.z2[1];
     for (int i = 0; i < frames; ++i) {
         const double xl = io[i * 2], xr = io[i * 2 + 1];
         const double yl = b0 * xl + z1L;
@@ -58,6 +58,37 @@ void filter_process(auradsp_handle h, float* io, int frames) {
     if (fabs(z2L) < 1e-15) z2L = 0.0;
     if (fabs(z1R) < 1e-15) z1R = 0.0;
     if (fabs(z2R) < 1e-15) z2R = 0.0;
-    h->filter.z1L = z1L; h->filter.z2L = z2L;
-    h->filter.z1R = z1R; h->filter.z2R = z2R;
+    h->filter.z1[0] = z1L; h->filter.z2[0] = z2L;
+    h->filter.z1[1] = z1R; h->filter.z2[1] = z2R;
 }
+
+
+void filter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || ch <= 0 || frames <= 0) return;
+    const uint32_t mask = (uint32_t)h->p.filter_channels.load(std::memory_order_relaxed);
+    if ((mask & ((1u << ch) - 1u)) == 0) return;
+
+    const double b0 = h->filter.b0.load(std::memory_order_acquire);
+    const double b1 = h->filter.b1.load(std::memory_order_acquire);
+    const double b2 = h->filter.b2.load(std::memory_order_acquire);
+    const double a1 = h->filter.a1.load(std::memory_order_acquire);
+    const double a2 = h->filter.a2.load(std::memory_order_acquire);
+
+    const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
+    for (int c = 0; c < max_c; ++c) {
+        if (!(mask & (1u << c))) continue;
+        double z1 = h->filter.z1[c], z2 = h->filter.z2[c];
+        for (int i = 0; i < frames; ++i) {
+            const double x = io[i * ch + c];
+            const double y = b0 * x + z1;
+            z1 = b1 * x - a1 * y + z2;
+            z2 = b2 * x - a2 * y;
+            io[i * ch + c] = (float)y;
+        }
+        if (fabs(z1) < 1e-15) z1 = 0.0;
+        if (fabs(z2) < 1e-15) z2 = 0.0;
+        h->filter.z1[c] = z1;
+        h->filter.z2[c] = z2;
+    }
+}
+

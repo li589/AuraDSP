@@ -151,16 +151,17 @@ print("\n=== [3] channels.count 契约 (D8) ===")
 h = new_engine()
 rc, v = get_i32(h, "channels.count")
 check(rc == 0 and v == 2, f"channels.count 默认 2 (got {v})")
+check(set_i32(h, "channels.count", 4) == 0, "channels.count=4 (Quad) 接受")
 check(set_i32(h, "channels.count", 6) == 0, "channels.count=6 (5.1) 接受")
 check(set_i32(h, "channels.count", 8) == 0, "channels.count=8 (7.1) 接受")
-for bad in (1, 3, 4, 5, 7, 0, -1):
+for bad in (1, 3, 5, 7, 0, -1):
     check(set_i32(h, "channels.count", bad) != 0, f"channels.count={bad} 拒绝")
 rc, v = get_i32(h, "channels.count")
 check(v == 8, f"拒绝后保持原值 8 (got {v})")
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- [4] 5.1 矩阵
-print("\n=== [4] 5.1 矩阵下混/上混 (D8/ADR-003 Phase A) ===")
+print("\n=== [4] 5.1 矩阵下混/上混左右隔离度验证 (Phase 2 ADR-003) ===")
 CH = 6   # FL FR C LFE SL SR
 F = 256
 h = new_engine()
@@ -171,8 +172,7 @@ set_i32(h, "channels.mode", 0)
 set_i32(h, "bass.enable", 1)
 set_f32(h, "bass.gain", 3.0)
 
-# 用真实音频（440Hz）而非直流：直流经 bass shelf + 输出限幅的结果没有物理意义，
-# 断言"幅度上升"会变成对限幅器的猜测。改为断言"确实被处理过且非直通"。
+# 用真实音频（440Hz）测试直通与回填
 src, dst, sp, dp = process(h, F, CH)
 for i in range(F):
     s = 0.25 * math.sin(2 * math.pi * 440.0 * i / 48000.0)
@@ -202,21 +202,91 @@ check(0.2 < fl_rms / in_rms < 3.0,
 # 环绕声道应被回填（非零，且量级合理）
 sl_rms = math.sqrt(sum(dst[i * CH + 4] ** 2 for i in range(F)) / F)
 check(sl_rms > 1e-4, f"SL 被上混回填非零 (rms={sl_rms:.4f})")
-check(sl_rms < fl_rms, "SL 回填增益小于前置 (0.7 < 1.0)")
+check(sl_rms < fl_rms, "SL 回填增益小于前置 (0.707 < 1.0)")
 
-# 仅在 SL 有信号时，它必须出现在 L/R（下混生效）
+lib.auradsp_destroy(h)
+
+# 核心验证 1 & 2：声道左右隔离度验证（使用干净 engine 实例，排除历史滤波器尾音污染）
+h = new_engine()
+set_i32(h, "channels.count", CH)
+set_i32(h, "channels.mode", 0)
+
 for i in range(F):
     for c in range(CH):
         src[i * CH + c] = 0.0
     src[i * CH + 4] = 0.5
 lib.auradsp_process(h, sp, dp, F)
-check(abs(dst[0 * CH + 4]) > 1e-4, "仅 SL 有信号时 SL 输出非零")
-check(abs(dst[0 * CH + 0]) > 1e-4, "仅 SL 有信号时 FL 得到下混内容 (LFE 不受 SL 影响)")
+check(abs(dst[0 * CH + 4]) > 1e-4, "仅 SL 有信号时 SL 输出非零 (左回填正确)")
+check(abs(dst[0 * CH + 0]) > 1e-4, "仅 SL 有信号时 FL 得到下混内容 (下混入左声道正确)")
+check(abs(dst[0 * CH + 1]) < 1e-6, "仅 SL 有信号时 FR 严格静音 (下混串扰已彻底消除!)")
+check(abs(dst[0 * CH + 5]) < 1e-6, "仅 SL 有信号时 SR 严格静音 (上混镜像颠倒已彻底修复!)")
 check(abs(dst[0 * CH + 3]) < 1e-6, "仅 SL 有信号时 LFE 保持静音")
+
+# 核心验证 2：仅在 SR（右环绕）有信号时，右前(FR)与右环绕(SR)有输出，左侧(FL, SL)严格静音！
+for i in range(F):
+    for c in range(CH):
+        src[i * CH + c] = 0.0
+    src[i * CH + 5] = 0.5
+lib.auradsp_process(h, sp, dp, F)
+check(abs(dst[0 * CH + 5]) > 1e-4, "仅 SR 有信号时 SR 输出非零 (右回填正确)")
+check(abs(dst[0 * CH + 1]) > 1e-4, "仅 SR 有信号时 FR 得到下混内容 (下混入右声道正确)")
+check(abs(dst[0 * CH + 0]) < 1e-6, "仅 SR 有信号时 FL 严格静音 (左侧无串扰)")
+check(abs(dst[0 * CH + 4]) < 1e-6, "仅 SR 有信号时 SL 严格静音 (左环绕无镜像串扰)")
 lib.auradsp_destroy(h)
 
-# ---------------------------------------------------------------- [5] 立体声不回归
-print("\n=== [5] 立体声路径不受多声道改造影响 ===")
+# ---------------------------------------------------------------- [5] 离散多声道与声道掩码
+print("\n=== [5] 离散多声道与声道独立掩码 (Phase B Category A) ===")
+h = new_engine()
+set_i32(h, "channels.count", 6)
+check(set_i32(h, "channels.mode", 1) == 0, "channels.mode=1 (离散多声道模式) 接受")
+rc, v = get_i32(h, "channels.mode")
+check(v == 1, f"channels.mode 回读 1 (got {v})")
+
+# 验证 channel_mask 参数读写及别名映射
+rc, v = get_i32(h, "filter.channels")
+check(rc == 0 and v == 0xFF, f"filter.channels 默认 0xFF (got 0x{v:02X})")
+set_i32(h, "filter.channel_mask", 0x01) # 仅 FL 生效
+rc, v = get_i32(h, "filter.channels")
+check(v == 0x01, f"filter.channels 回读 0x01 (got 0x{v:02X})")
+
+# 开启高通滤波器 (HPF @ 500Hz)
+set_i32(h, "filter.enable", 1)
+set_i32(h, "filter.type", 0) # HPF
+set_f32(h, "filter.freq", 500.0)
+set_f32(h, "filter.q", 0.707)
+
+# 输入 100Hz 纯低频信号（在 500Hz HPF 阻带内）
+src, dst, sp, dp = process(h, F, 6)
+for i in range(F):
+    s = 0.5 * math.sin(2 * math.pi * 100.0 * i / 48000.0)
+    for c in range(6):
+        src[i * 6 + c] = s
+lib.auradsp_process(h, sp, dp, F)
+
+# 断言：FL（c=0）被深度滤波衰减（输出与输入有显著差异）
+fl_diff = sum(abs(dst[i * 6 + 0] - src[i * 6 + 0]) for i in range(F)) / F
+check(fl_diff > 0.05, f"FL (mask命中) 受到明显高通滤波 (diff={fl_diff:.4f})")
+
+# 断言：其余声道 (FR, C, LFE, SL, SR) 未在 mask 内，100% 逐样本原样直通！
+other_max_dev = 0.0
+for c in range(1, 6):
+    for i in range(F):
+        dev = abs(dst[i * 6 + c] - src[i * 6 + c])
+        other_max_dev = max(other_max_dev, dev)
+check(other_max_dev < 1e-6, f"未选中声道 (FR/C/LFE/SL/SR) 100% 逐样本直通 (max dev={other_max_dev:.2e})")
+
+# 翻转掩码：仅 FR 生效 (0x02)
+set_i32(h, "filter.channels", 0x02)
+lib.auradsp_process(h, sp, dp, F)
+fr_diff = sum(abs(dst[i * 6 + 1] - src[i * 6 + 1]) for i in range(F)) / F
+fl_dev = max(abs(dst[i * 6 + 0] - src[i * 6 + 0]) for i in range(F))
+check(fr_diff > 0.05, f"FR (mask命中) 受到滤波 (diff={fr_diff:.4f})")
+check(fl_dev < 1e-6, f"FL (mask未命中) 恢复 100% 直通 (dev={fl_dev:.2e})")
+
+lib.auradsp_destroy(h)
+
+# ---------------------------------------------------------------- [6] 立体声不回归
+print("\n=== [6] 立体声路径不受多声道改造影响 ===")
 h = new_engine()
 N = 512
 src, dst, sp, dp = process(h, N, 2)

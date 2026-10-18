@@ -360,8 +360,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
 
     volatile PAURA_VAIO_SHARED_HEADER pHeader = g_vaio.pRingHeader;
     const ULONG dataSize = g_vaio.ringDataSize;
-    const ULONG blockAlign = g_vaio.ringBlockAlign > 0 ? g_vaio.ringBlockAlign : 8;
-    const ULONG ringChannels = g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2;
+    ULONG blockAlign = g_vaio.ringBlockAlign > 0 ? g_vaio.ringBlockAlign : 8;
+    ULONG ringChannels = g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2;
     const ULONG wasapiChannels = g_vaio.wasapiChannels > 0 ? g_vaio.wasapiChannels : 2;
     BYTE* const pPayload = g_vaio.pRingPayload;
 
@@ -372,6 +372,18 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     g_vaio.pAudioClient->Start();
 
     while (!InterlockedCompareExchange(&g_vaio.stopEvent, 0, 0)) {
+        // 动态检测驱动共享环上的声道配置变更
+        if (pHeader && pHeader->Channels != ringChannels && pHeader->Channels > 0) {
+            ringChannels = pHeader->Channels;
+            g_vaio.ringChannels = ringChannels;
+            blockAlign = pHeader->BlockAlign > 0 ? pHeader->BlockAlign : (ringChannels * sizeof(float));
+            g_vaio.ringBlockAlign = blockAlign;
+            if (g_vaio.pEngine && g_vaio.fnSetParam) {
+                const int32_t newCh = (int32_t)ringChannels;
+                g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &newCh, sizeof(newCh));
+            }
+        }
+
         UINT32 padFrames = 0;
         HRESULT hr = g_vaio.pAudioClient->GetCurrentPadding(&padFrames);
         if (FAILED(hr)) {
@@ -484,8 +496,24 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                         pDstF[f * wasapiChannels + ch] = 0.0f;
                     }
                 }
+            } else if (ringChannels > 2 && wasapiChannels == 2) {
+                // 虚拟声卡多声道，物理声卡立体声（提取前左/前右）
+                float* pDstF = (float*)pDst;
+                for (UINT32 f = 0; f < framesToProcess; ++f) {
+                    pDstF[f * 2 + 0] = g_vaio.scratchOut[f * ringChannels + 0];
+                    pDstF[f * 2 + 1] = g_vaio.scratchOut[f * ringChannels + 1];
+                }
             } else {
-                memcpy(pDst, g_vaio.scratchOut, (size_t)framesToProcess * wasapiChannels * sizeof(float));
+                float* pDstF = (float*)pDst;
+                const UINT32 copyCh = (wasapiChannels < ringChannels) ? wasapiChannels : ringChannels;
+                for (UINT32 f = 0; f < framesToProcess; ++f) {
+                    for (UINT32 ch = 0; ch < copyCh; ++ch) {
+                        pDstF[f * wasapiChannels + ch] = g_vaio.scratchOut[f * ringChannels + ch];
+                    }
+                    for (UINT32 ch = copyCh; ch < wasapiChannels; ++ch) {
+                        pDstF[f * wasapiChannels + ch] = 0.0f;
+                    }
+                }
             }
             g_vaio.pRenderClient->ReleaseBuffer(framesToProcess, 0);
         }
@@ -883,6 +911,11 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         DestroyWasapi();
         g_vaio.startRc = -10;
         return -10;
+    }
+
+    if (g_vaio.fnSetParam) {
+        const int32_t initCh = (int32_t)(g_vaio.ringChannels > 0 ? g_vaio.ringChannels : 2);
+        g_vaio.fnSetParam(g_vaio.pEngine, "channels.count", &initCh, sizeof(initCh));
     }
 
     // 6. 预分配 RT 临时缓冲 (4096 帧 * 8 声道 float32)

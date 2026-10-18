@@ -60,6 +60,10 @@ class _ExciterCard extends StatelessWidget {
             infoMessage: l.exciterHifreqInfo,
             customFormat: (v) => '${(v / 1000).toStringAsFixed(1)}k',
           ),
+          ChannelRoutingSelector(
+            model: model,
+            paramKey: 'exciter.channels',
+          ),
         ],
       ),
     );

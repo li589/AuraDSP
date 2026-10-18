@@ -223,6 +223,15 @@ set_property(TARGET auravaio_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
 
+# 多声道能力与扬声器向导端到端测试探针
+add_executable(vaio_multichannel_probe
+    "${CMAKE_CURRENT_SOURCE_DIR}/tools/vaio_multichannel_probe.cpp"
+)
+target_link_libraries(vaio_multichannel_probe PRIVATE ole32 setupapi)
+target_compile_options(vaio_multichannel_probe PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vaio_multichannel_probe PROPERTY CXX_STANDARD 20)
+set_property(TARGET vaio_multichannel_probe PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # ---- 04 ASIO 自研虚拟驱动（Driver 线）----
 # 属性：COM In-Proc Server DLL (auraasio_driver.dll)
 # 职责：实现 IASIO 接口，承载外部宿主（DAW）协商与双缓冲时钟泵，解耦零音效处理。

@@ -33,8 +33,8 @@ void shelf_process(auradsp_handle h, float* io, int frames) {
     const double b2 = h->shelf.b2.load(std::memory_order_acquire);
     const double a1 = h->shelf.a1.load(std::memory_order_acquire);
     const double a2 = h->shelf.a2.load(std::memory_order_acquire);
-    double z1L = h->shelf.z1L, z2L = h->shelf.z2L;
-    double z1R = h->shelf.z1R, z2R = h->shelf.z2R;
+    double z1L = h->shelf.z1[0], z2L = h->shelf.z2[0];
+    double z1R = h->shelf.z1[1], z2R = h->shelf.z2[1];
     for (int i = 0; i < frames; ++i) {
         const double xl = io[i * 2], xr = io[i * 2 + 1];
         const double yl = b0 * xl + z1L;
@@ -51,6 +51,37 @@ void shelf_process(auradsp_handle h, float* io, int frames) {
     if (fabs(z2L) < 1e-15) z2L = 0.0;
     if (fabs(z1R) < 1e-15) z1R = 0.0;
     if (fabs(z2R) < 1e-15) z2R = 0.0;
-    h->shelf.z1L = z1L; h->shelf.z2L = z2L;
-    h->shelf.z1R = z1R; h->shelf.z2R = z2R;
+    h->shelf.z1[0] = z1L; h->shelf.z2[0] = z2L;
+    h->shelf.z1[1] = z1R; h->shelf.z2[1] = z2R;
 }
+
+
+void shelf_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || ch <= 0 || frames <= 0) return;
+    const uint32_t mask = (uint32_t)h->p.shelf_channels.load(std::memory_order_relaxed);
+    if ((mask & ((1u << ch) - 1u)) == 0) return;
+
+    const double b0 = h->shelf.b0.load(std::memory_order_acquire);
+    const double b1 = h->shelf.b1.load(std::memory_order_acquire);
+    const double b2 = h->shelf.b2.load(std::memory_order_acquire);
+    const double a1 = h->shelf.a1.load(std::memory_order_acquire);
+    const double a2 = h->shelf.a2.load(std::memory_order_acquire);
+
+    const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
+    for (int c = 0; c < max_c; ++c) {
+        if (!(mask & (1u << c))) continue;
+        double z1 = h->shelf.z1[c], z2 = h->shelf.z2[c];
+        for (int i = 0; i < frames; ++i) {
+            const double x = io[i * ch + c];
+            const double y = b0 * x + z1;
+            z1 = b1 * x - a1 * y + z2;
+            z2 = b2 * x - a2 * y;
+            io[i * ch + c] = (float)y;
+        }
+        if (fabs(z1) < 1e-15) z1 = 0.0;
+        if (fabs(z2) < 1e-15) z2 = 0.0;
+        h->shelf.z1[c] = z1;
+        h->shelf.z2[c] = z2;
+    }
+}
+

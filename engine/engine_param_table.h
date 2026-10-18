@@ -451,19 +451,19 @@ static auradsp_status get_ddc_ready(auradsp_handle h, void* out_value, uint32_t 
 static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
-    if (v != 0) {
-        set_error(h, "multichannel matrix lands in Phase A follow-up (ADR-003)");
-        return AURADSP_E_UNSUPPORTED;
+    if (v != 0 && v != 1) {
+        set_error(h, "channels.mode: must be 0 (matrix downmix/upmix) or 1 (discrete multichannel)");
+        return AURADSP_E_PARAM;
     }
-    h->p.channels_mode.store(0);
+    h->p.channels_mode.store(v);
     return AURADSP_OK;
 }
 
 static auradsp_status set_channels_count(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
-    if (v != 2 && v != 6 && v != 8) {
-        set_error(h, "channels.count: must be 2 (stereo), 6 (5.1) or 8 (7.1)");
+    if (v != 2 && v != 4 && v != 6 && v != 8) {
+        set_error(h, "channels.count: must be 2 (stereo), 4 (quad), 6 (5.1) or 8 (7.1)");
         return AURADSP_E_PARAM;
     }
     h->channel_count.store(v);
@@ -771,6 +771,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("tube.compensation", tube_compensation, -12.0f, 12.0f, hook_tube_compensation),
     PARAM_FLOAT("tube.outgain", tube_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("tube.autogain", tube_autogain, hook_fx_gains),
+    PARAM_INT("tube.channels", tube_channels, 0, 255, nullptr),
+    PARAM_INT("tube.channel_mask", tube_channels, 0, 255, nullptr),
 
     // 02 动态压限 (Compressor)
     PARAM_BOOL("comp.enable", comp_enable, hook_comp_enable),
@@ -793,6 +795,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("comp.gain7", comp_gain[6], -1.2f, 1.2f, hook_comp_update),
     PARAM_FLOAT("comp.outgain", comp_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("comp.autogain", comp_autogain, hook_fx_gains),
+    PARAM_INT("comp.channels", comp_channels, 0, 255, nullptr),
+    PARAM_INT("comp.channel_mask", comp_channels, 0, 255, nullptr),
 
     // 03 卷积混响 (Convolver)
     PARAM_CUSTOM_SET_STANDARD_GET("convolver.enable", conv_enable, ParamType::kBool, set_convolver_enable),
@@ -818,6 +822,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("arbmag.autogain", arbmag_autogain, hook_fx_gains),
     PARAM_CUSTOM_GET_ONLY("arbmag.ready", get_arbmag_ready),
     PARAM_CUSTOM_GET_ONLY("arbmag.nodeCount", get_arbmag_node_count),
+    PARAM_INT("arbmag.channels", arbmag_channels, 0, 255, nullptr),
+    PARAM_INT("arbmag.channel_mask", arbmag_channels, 0, 255, nullptr),
 
     // 06 心理声学低音 (Bass Boost & Harmonics)
     PARAM_BOOL("bass.enable", bass_enable, hook_bass_enable),
@@ -835,6 +841,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM("eq.curve", set_eq_curve, get_eq_curve),
     PARAM_FLOAT("eq.outgain", eq_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("eq.autogain", eq_autogain, hook_fx_gains),
+    PARAM_INT("eq.channels", eq_channels, 0, 255, nullptr),
+    PARAM_INT("eq.channel_mask", eq_channels, 0, 255, nullptr),
 
     // 08 混响 (Reverb / Freeverb)
     PARAM_CUSTOM_SET_STANDARD_GET("reverb.preset", reverb_preset, ParamType::kInt32, set_reverb_preset),
@@ -870,6 +878,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("dyneq.high.gain", dyneq_h_gain, -12.0f, 12.0f, nullptr),
     PARAM_FLOAT("dyneq.high.range", dyneq_h_range, 0.0f, 24.0f, nullptr),
     PARAM_FLOAT("dyneq.high.threshold", dyneq_h_threshold, -60.0f, 0.0f, nullptr),
+    PARAM_INT("dyneq.channels", dyneq_channels, 0, 255, nullptr),
+    PARAM_INT("dyneq.channel_mask", dyneq_channels, 0, 255, nullptr),
 
     // 10 空间立体声与声场 (Stereo & Spatial)
     PARAM_BOOL("stereo.enable", stereo_enable, hook_stereo_enable),
@@ -899,25 +909,35 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("shelf.enable", shelf_enable, nullptr),
     PARAM_FLOAT("shelf.freq", shelf_freq, 40.0f, 400.0f, hook_shelf_recalc),
     PARAM_FLOAT("shelf.gain", shelf_gain, -15.0f, 15.0f, hook_shelf_recalc),
+    PARAM_INT("shelf.channels", shelf_channels, 0, 255, nullptr),
+    PARAM_INT("shelf.channel_mask", shelf_channels, 0, 255, nullptr),
     PARAM_BOOL("filter.enable", filter_enable, nullptr),
     PARAM_INT("filter.type", filter_type, 0, 2, hook_filter_recalc),
     PARAM_FLOAT("filter.freq", filter_freq, 20.0f, 20000.0f, hook_filter_recalc),
     PARAM_FLOAT("filter.q", filter_q, 0.3f, 10.0f, hook_filter_recalc),
+    PARAM_INT("filter.channels", filter_channels, 0, 255, nullptr),
+    PARAM_INT("filter.channel_mask", filter_channels, 0, 255, nullptr),
 
     // 12 信号与动态修整 (Exciter, Gate, Deesser, Loudness)
     PARAM_BOOL("exciter.enable", exciter_enable, nullptr),
     PARAM_FLOAT("exciter.amount", exciter_amount, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("exciter.hifreq", exciter_hifreq, 3000.0f, 10000.0f, nullptr),
+    PARAM_INT("exciter.channels", exciter_channels, 0, 255, nullptr),
+    PARAM_INT("exciter.channel_mask", exciter_channels, 0, 255, nullptr),
     PARAM_BOOL("gate.enable", gate_enable, nullptr),
     PARAM_FLOAT("gate.threshold", gate_threshold, -60.0f, 0.0f, nullptr),
     PARAM_FLOAT("gate.attack", gate_attack, 1.0f, 100.0f, nullptr),
     PARAM_FLOAT("gate.release", gate_release, 10.0f, 500.0f, nullptr),
     PARAM_BOOL("gate.autogain", gate_autogain, hook_gate_autogain),
+    PARAM_INT("gate.channels", gate_channels, 0, 255, nullptr),
+    PARAM_INT("gate.channel_mask", gate_channels, 0, 255, nullptr),
     PARAM_BOOL("deesser.enable", deesser_enable, nullptr),
     PARAM_FLOAT("deesser.freq", deesser_freq, 2000.0f, 10000.0f, nullptr),
     PARAM_FLOAT("deesser.amount", deesser_amount, 0.0f, 1.0f, nullptr),
     PARAM_BOOL("loudness.enable", loudness_enable, nullptr),
     PARAM_FLOAT("loudness.amount", loudness_amount, 0.0f, 1.0f, nullptr),
+    PARAM_INT("loudness.channels", loudness_channels, 0, 255, nullptr),
+    PARAM_INT("loudness.channel_mask", loudness_channels, 0, 255, nullptr),
 
     // 13 实时可编程 (Liveprog)
     PARAM_BOOL("liveprog.enable", lp_enable, hook_liveprog_enable),
@@ -929,6 +949,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("input.gain", input_gain, -15.0f, 15.0f, nullptr),
     PARAM_FLOAT("post.gain", post_gain, -15.0f, 15.0f, hook_post_gain),
     PARAM_BOOL("limiter.enable", limiter_enable, hook_limiter_enable),
+    PARAM_INT("limiter.channels", limiter_channels, 0, 255, nullptr),
+    PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),
     PARAM_CUSTOM("channels.count", set_channels_count, get_channels_count),
     PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
     PARAM_CUSTOM("gate.maxIrSeconds", set_gate_max_ir_seconds, get_gate_max_ir_seconds),

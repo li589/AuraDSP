@@ -33,8 +33,8 @@ void gate_process(auradsp_handle h, float* io, int frames) {
     const float bpa = expf(-2.0f * 3.14159265358979f * df / fs);
     const float dsCoef = expf(-1.0f / (0.002f * fs));   /* 侧链包络 ~2ms */
     const float dsThr = 0.05f;                            /* 归一化阈值（≈-26dBFS 齿音触发） */
-    float g = h->gate_gain;
-    float hpL = h->gate_ds_lp_l, hpR = h->gate_ds_lp_r, dsE = h->gate_ds_env;
+    float g = h->gate_gain[0];
+    float hpL = h->gate_ds_lp[0], hpR = h->gate_ds_lp[1], dsE = h->gate_ds_env[0];
     for (int i = 0; i < frames; ++i) {
         const float xL = io[i * 2], xR = io[i * 2 + 1];
         /* 1. 噪声门 */
@@ -62,10 +62,10 @@ void gate_process(auradsp_handle h, float* io, int frames) {
         io[i * 2] = outL * ga;
         io[i * 2 + 1] = outR * ga;
     }
-    h->gate_gain = g;
-    h->gate_ds_lp_l = (fabsf(hpL) < 1e-18f) ? 0.0f : hpL;
-    h->gate_ds_lp_r = (fabsf(hpR) < 1e-18f) ? 0.0f : hpR;
-    h->gate_ds_env = (fabsf(dsE) < 1e-18f) ? 0.0f : dsE;
+    h->gate_gain[0] = h->gate_gain[1] = g;
+    h->gate_ds_lp[0] = (fabsf(hpL) < 1e-18f) ? 0.0f : hpL;
+    h->gate_ds_lp[1] = (fabsf(hpR) < 1e-18f) ? 0.0f : hpR;
+    h->gate_ds_env[0] = (fabsf(dsE) < 1e-18f) ? 0.0f : dsE;
 
     if (ag) {
         const double rout = stereo_block_rms(io, frames);
@@ -85,3 +85,65 @@ void gate_process(auradsp_handle h, float* io, int frames) {
             }
     }
 }
+
+
+void gate_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || ch <= 0 || frames <= 0) return;
+    const uint32_t mask = (uint32_t)h->p.gate_channels.load(std::memory_order_relaxed);
+    if ((mask & ((1u << ch) - 1u)) == 0) return;
+
+    const float fs = (float)h->jdsp.fs;
+    if (fs <= 0.0f) return;
+    float thr = h->p.gate_threshold.load(std::memory_order_relaxed);
+    if (thr < -60.0f) thr = -60.0f; if (thr > 0.0f) thr = 0.0f;
+    float att = h->p.gate_attack.load(std::memory_order_relaxed);
+    if (att < 1.0f) att = 1.0f; if (att > 100.0f) att = 100.0f;
+    float rel = h->p.gate_release.load(std::memory_order_relaxed);
+    if (rel < 10.0f) rel = 10.0f; if (rel > 500.0f) rel = 500.0f;
+    const float attCoef = expf(-1.0f / (att * 0.001f * fs));
+    const float relCoef = expf(-1.0f / (rel * 0.001f * fs));
+    const int de = h->p.deesser_enable.load(std::memory_order_relaxed);
+    float df = h->p.deesser_freq.load(std::memory_order_relaxed);
+    if (df < 2000.0f) df = 2000.0f; if (df > 10000.0f) df = 10000.0f;
+    float da = h->p.deesser_amount.load(std::memory_order_relaxed);
+    if (da < 0.0f) da = 0.0f; if (da > 1.0f) da = 1.0f;
+
+    const float bpa = expf(-2.0f * 3.14159265358979f * df / fs);
+    const float dsCoef = expf(-1.0f / (0.002f * fs));
+    const float dsThr = 0.05f;
+
+    const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
+    for (int c = 0; c < max_c; ++c) {
+        if (!(mask & (1u << c))) continue;
+        float g = h->gate_gain[c];
+        float hp = h->gate_ds_lp[c];
+        float dsE = h->gate_ds_env[c];
+
+        for (int i = 0; i < frames; ++i) {
+            const float x = io[i * ch + c];
+            const float pk = fabsf(x);
+            const float db = 20.0f * log10f(pk + 1e-12f);
+            const float target = (db < thr) ? 0.0f : 1.0f;
+            const float coef = (target > g) ? attCoef : relCoef;
+            g = target + (g - target) * coef;
+            const float ga = 0.001f + 0.999f * g;
+
+            float out = x;
+            if (de) {
+                hp += (1.0f - bpa) * (x - hp);
+                const float hi = x - hp;
+                const float env = fabsf(hi);
+                dsE += (env - dsE) * dsCoef;
+                float over = (dsE > dsThr) ? (dsE - dsThr) / (dsE + 1e-6f) : 0.0f;
+                if (over > 1.0f) over = 1.0f;
+                const float dg = 1.0f - da * over;
+                out = (x - hi) + dg * hi;
+            }
+            io[i * ch + c] = out * ga;
+        }
+        h->gate_gain[c] = g;
+        h->gate_ds_lp[c] = (fabsf(hp) < 1e-18f) ? 0.0f : hp;
+        h->gate_ds_env[c] = (fabsf(dsE) < 1e-18f) ? 0.0f : dsE;
+    }
+}
+

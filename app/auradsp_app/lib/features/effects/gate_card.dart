@@ -103,6 +103,11 @@ class _GateCard extends StatelessWidget {
                     tooltip: '实时补偿噪声门造成的整体电平下降，保持响度不塌。',
                   ),
                 ),
+                const SizedBox(height: AuraSpace.sm),
+                ChannelRoutingSelector(
+                  model: model,
+                  paramKey: 'gate.channels',
+                ),
               ],
             ),
           ),

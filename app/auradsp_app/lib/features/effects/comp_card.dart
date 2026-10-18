@@ -156,6 +156,11 @@ class _CompressorCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                const SizedBox(height: AuraSpace.sm),
+                ChannelRoutingSelector(
+                  model: model,
+                  paramKey: 'comp.channels',
+                ),
               ],
             ),
           ),

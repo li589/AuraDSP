@@ -60,10 +60,14 @@ public:
     // ---- AuraVAIO ----
     CAdapterCommon * GetAdapterCommon() const { return m_pAdapterCommon; }
 
+    ULONG GetChannelConfig() const { return m_ulChannelConfig; }
+    void  SetChannelConfig(ULONG ulConfig) { m_ulChannelConfig = ulConfig; }
+
 private:
     LONG                m_lRefCount;
     PPORTTOPOLOGY       m_pPort;
     CAdapterCommon *    m_pAdapterCommon;
+    ULONG               m_ulChannelConfig;
 };
 
 //

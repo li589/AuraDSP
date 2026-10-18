@@ -288,15 +288,23 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->input_lvl_out_l = pk_out_l > 1e-6f ? 20.0f * log10f(pk_out_l) : -120.0f;
         h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
 
-        if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
-            memcpy(out, in, (size_t)frames * ch * sizeof(float));
-            return;
+        const int mode = h->p.channels_mode.load(std::memory_order_relaxed);
+        if (mode == 1) {
+            /* 模式 1: 离散多声道独立处理 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
+            process_multichannel_chain(h, h->mx_scratch, out, frames, ch);
+            h->frames_since_viz += frames;
+            viz_write(h, out, frames);
+        } else {
+            /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
+            if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
+                memcpy(out, in, (size_t)frames * ch * sizeof(float));
+                return;
+            }
+            process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
+            mx_upmix(h, out, h->mx_stereo, frames, ch);
+            h->frames_since_viz += frames;
+            viz_write(h, h->mx_stereo, frames);
         }
-        process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
-        mx_upmix(h, out, h->mx_stereo, frames, ch);
-        /* 可视化只统计前置立体声工作区（真实信号走向的近似，见 ADR-003） */
-        h->frames_since_viz += frames;
-        viz_write(h, h->mx_stereo, frames);
         const int vizInt = h->viz_interval.load(std::memory_order_relaxed);
         while (h->frames_since_viz >= vizInt) {
             h->frames_since_viz -= vizInt;

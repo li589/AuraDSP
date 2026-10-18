@@ -110,6 +110,11 @@ class _TubeAdvanced extends StatelessWidget {
                 ],
               ),
             ),
+            const SizedBox(height: AuraSpace.sm),
+            ChannelRoutingSelector(
+              model: m,
+              paramKey: 'tube.channels',
+            ),
           ],
         );
       },

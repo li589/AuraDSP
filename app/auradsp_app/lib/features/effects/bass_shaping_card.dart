@@ -51,6 +51,10 @@ class _BassShapingCard extends StatelessWidget {
             customLabel: l.bassmonoFreq,
             infoMessage: l.bassmonoFreqTooltip,
           ),
+          ChannelRoutingSelector(
+            model: model,
+            paramKey: 'shelf.channels',
+          ),
         ],
       ),
     );

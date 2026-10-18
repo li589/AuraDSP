@@ -97,6 +97,11 @@ AuraControlDevice_ReadCaptureSamples(
     _In_ ULONG ByteCount
     );
 
+VOID
+AuraControlDevice_LogIntersection(
+    _In_ const AURA_INTERSECTION_LOG_ENTRY * Entry
+    );
+
 #ifdef __cplusplus
 }
 #endif

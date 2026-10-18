@@ -38,6 +38,10 @@ class _PostCard extends StatelessWidget {
               model: model,
             ),
           ),
+          ChannelRoutingSelector(
+            model: model,
+            paramKey: 'limiter.channels',
+          ),
         ],
       ),
     );
