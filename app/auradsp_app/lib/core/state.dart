@@ -135,6 +135,7 @@ abstract class ParamDefaults {
   static const double spatialElevation = 0.0; // [-30,30] 度
   static const double spatialHeadAzim = 0.0;  // [-180,180] 度
   static const bool spatialHeadTrack = false;
+  static const bool spatialBinaural = false;  // 6/8ch→2ch 双耳虚拟环绕
 
   // 激励器
   static const double exciterAmount = 0.3;   // [0,1]
@@ -655,6 +656,7 @@ class AppModel extends ChangeNotifier {
   bool spatialAutoGain = false;
   double spatialMix = 1.0;
   double spatialElevation = 0.0;
+  bool spatialBinaural = false;
   // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
@@ -1354,6 +1356,9 @@ class AppModel extends ChangeNotifier {
         if (raw['spatialElevation'] != null) {
           spatialElevation = (raw['spatialElevation'] as num).toDouble();
         }
+        if (raw['spatialBinaural'] != null) {
+          spatialBinaural = (raw['spatialBinaural'] as int) != 0;
+        }
         if (raw['spatialHeadAzim'] != null) {
           spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
         }
@@ -1995,6 +2000,7 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
       setFloat(ParamId.spatialMix, spatialMix);
       setFloat(ParamId.spatialElevation, spatialElevation);
+      setInt(ParamId.spatialBinaural, spatialBinaural ? 1 : 0);
       setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
       setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
       _syncHeadTracker();
@@ -2238,6 +2244,7 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.spatialAutoGain) { spatialAutoGain = v != 0; break; }
         if (id == ParamId.spatialMix) { spatialMix = v; break; }
         if (id == ParamId.spatialElevation) { spatialElevation = v; break; }
+        if (id == ParamId.spatialBinaural) { spatialBinaural = v != 0; break; }
         if (id == ParamId.spatialHeadAzim) { spatialHeadAzim = v; break; }
         if (id == ParamId.spatialHeadTrack) { spatialHeadTrack = v != 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
@@ -2860,6 +2867,13 @@ class AppModel extends ChangeNotifier {
   void setSpatialElevation(double v) {
     spatialElevation = v.clamp(-30.0, 30.0);
     setFloat(ParamId.spatialElevation, spatialElevation);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialBinaural(bool on) {
+    spatialBinaural = on;
+    setInt(ParamId.spatialBinaural, on ? 1 : 0);
     notifyListeners();
     scheduleAutoSave();
   }

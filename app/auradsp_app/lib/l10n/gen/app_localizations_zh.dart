@@ -1234,6 +1234,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialElevationInfo => '虚拟舞台的仰角。正值抬升声像，负值下沉；用于强化上方/下方定位';
 
   @override
+  String get spatialBinaural => '多声道虚拟环绕';
+
+  @override
+  String get spatialBinauralInfo =>
+      '输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音';
+
+  @override
   String get spatialHeadTrack => '头部跟随';
 
   @override

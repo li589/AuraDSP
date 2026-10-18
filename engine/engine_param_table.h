@@ -983,6 +983,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("spatial.autogain", spatial_autogain, hook_spatial_autogain),
     PARAM_FLOAT("spatial.mix", spatial_mix, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("spatial.elevation", spatial_elevation, -30.0f, 30.0f, nullptr),
+    PARAM_BOOL("spatial.binaural", spatial_binaural, nullptr),
     PARAM_FLOAT("spatial.headazim", spatial_headazim, -180.0f, 180.0f, nullptr),
     PARAM_BOOL("spatial.headtrack", spatial_headtrack, nullptr),
 

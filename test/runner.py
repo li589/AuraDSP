@@ -44,6 +44,7 @@ def run_smoke_tests():
     "smoke_bassmono.py",
     "smoke_haas.py",
     "smoke_spatial.py",
+    "smoke_spatial_binaural.py",
     "smoke_exciter.py",
     "smoke_fx_gain.py",
     "smoke_arbmag.py",

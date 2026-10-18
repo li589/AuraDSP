@@ -477,6 +477,8 @@
   "spatialMixInfo": "干声与空间声的混合比例。0% 等同旁路，100% 为完整虚拟声场",
   "spatialElevation": "高度",
   "spatialElevationInfo": "虚拟舞台的仰角。正值抬升声像，负值下沉；用于强化上方/下方定位",
+  "spatialBinaural": "多声道虚拟环绕",
+  "spatialBinauralInfo": "输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音",
   "spatialHeadTrack": "头部跟随",
   "spatialHeadTrackInfo": "开启后接收 OpenTrack UDP（端口 4242）的头部朝向；关闭时使用手动角度",
   "spatialHeadAzim": "头部朝向",

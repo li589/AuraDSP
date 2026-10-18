@@ -102,6 +102,19 @@ class _SpatialCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           Row(
             children: [
+              Text(l.spatialBinaural, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              InfoBadge(message: l.spatialBinauralInfo),
+              const Spacer(),
+              ParamSwitch(
+                param: ParamRegistry.spatialBinaural,
+                model: model,
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          Row(
+            children: [
               Text(l.spatialHeadTrack, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
               InfoBadge(message: l.spatialHeadTrackInfo),

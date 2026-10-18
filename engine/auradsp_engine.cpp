@@ -297,22 +297,40 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->input_lvl_out_l = pk_out_l > 1e-6f ? 20.0f * log10f(pk_out_l) : -120.0f;
         h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
 
-        const int mode = h->p.channels_mode.load(std::memory_order_relaxed);
-        if (mode == 1) {
-            /* 模式 1: 离散多声道独立处理 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
-            process_multichannel_chain(h, h->mx_scratch, out, frames, ch);
-            h->frames_since_viz += frames;
-            viz_write(h, out, frames);
-        } else {
-            /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
-            if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
-                memcpy(out, in, (size_t)frames * ch * sizeof(float));
-                return;
+        const bool binaural =
+            h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
+            h->p.spatial_enable.load(std::memory_order_relaxed) != 0 &&
+            h->mx_stereo && h->shelf_scratch;
+        if (binaural) {
+            /* B1：6/8ch → 双耳立体声，再复用完整立体声链；
+             * 输出写回 FL/FR，其余声道置零（物理立体声端点取 FL/FR）。 */
+            spatial_binaural_process(h, h->mx_scratch, h->mx_stereo, frames, ch);
+            process_stereo_chain(h, h->mx_stereo, h->shelf_scratch, frames, true);
+            for (int i = 0; i < frames; ++i) {
+                out[i * ch + 0] = h->shelf_scratch[i * 2];
+                out[i * ch + 1] = h->shelf_scratch[i * 2 + 1];
+                for (int c = 2; c < ch; ++c) out[i * ch + c] = 0.0f;
             }
-            process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
-            mx_upmix(h, out, h->mx_stereo, frames, ch);
             h->frames_since_viz += frames;
-            viz_write(h, h->mx_stereo, frames);
+            viz_write(h, h->shelf_scratch, frames);
+        } else {
+            const int mode = h->p.channels_mode.load(std::memory_order_relaxed);
+            if (mode == 1) {
+                /* 模式 1: 离散多声道独立处理 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
+                process_multichannel_chain(h, h->mx_scratch, out, frames, ch);
+                h->frames_since_viz += frames;
+                viz_write(h, out, frames);
+            } else {
+                /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
+                if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
+                    memcpy(out, in, (size_t)frames * ch * sizeof(float));
+                    return;
+                }
+                process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
+                mx_upmix(h, out, h->mx_stereo, frames, ch);
+                h->frames_since_viz += frames;
+                viz_write(h, h->mx_stereo, frames);
+            }
         }
         const int vizInt = h->viz_interval.load(std::memory_order_relaxed);
         while (h->frames_since_viz >= vizInt) {
