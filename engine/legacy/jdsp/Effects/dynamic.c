@@ -1594,6 +1594,7 @@ void CompressorConstructor(JamesDSPLib *jdsp)
 	cm->gains2[0] = cm->gains2[1];
 	cm->freq2[NUMPTS_DRS + 1] = 24000.0;
 	initIerper(&cm->pch, NUMPTS_DRS + 2);
+	jdsp->comp_gr = 0.0f;
 }
 void CompressorDestructor(JamesDSPLib *jdsp)
 {
@@ -1612,6 +1613,7 @@ void CompressorEnable(JamesDSPLib *jdsp, char enable)
 void CompressorDisable(JamesDSPLib *jdsp)
 {
 	jdsp->compEnabled = 0;
+	jdsp->comp_gr = 0.0f;
 }
 void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularity, int tfresolution, char forceRefresh)
 {
@@ -1813,4 +1815,30 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 			jdsp->tmpBuffer[1][smp] = x2 * cm->overallGain;
 		}
 	}
+	/* [PATCHED-AuraDSP P2.4] 动态压缩增益衰减实时计量 */
+	float min_g = 1.0f;
+	if (cm->tfresolution < 3)
+	{
+		unsigned int count = cm->smallGridSize > 0 ? cm->smallGridSize : (cm->procUpTo > 0 ? cm->procUpTo : 1);
+		if (count > HALFWNDLEN_DRS) count = HALFWNDLEN_DRS;
+		for (unsigned int i = 0; i < count; ++i)
+		{
+			if (cm->finalGain[i] > 0.0f && cm->finalGain[i] < min_g) min_g = cm->finalGain[i];
+		}
+	}
+	else
+	{
+		float og = cm->overallGain > 0.0f ? cm->overallGain : 1.0f;
+		for (int sb = 0; sb < DYN_BANDS_GAMMATONE; ++sb)
+		{
+			float g = cm->interpolatedGain[sb + 1] * og;
+			if (g > 0.0f && g < min_g) min_g = g;
+		}
+	}
+	float gr_db = 0.0f;
+	if (min_g < 0.999f && min_g > 1e-6f)
+	{
+		gr_db = -20.0f * log10f(min_g);
+	}
+	jdsp->comp_gr = gr_db;
 }

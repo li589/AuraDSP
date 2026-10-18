@@ -40,6 +40,11 @@ class _ExciterCard extends StatelessWidget {
               const SizedBox(width: 4),
               InfoBadge(message: l.exciterModeTooltip),
               const Spacer(),
+              HqOversampleBadge(
+                active: model.exciterOversample,
+                onChanged: model.setExciterOversample,
+              ),
+              const SizedBox(width: AuraSpace.sm),
               Text('tanh', style: monoOf(p, size: 12, color: p.textDim)),
             ],
           ),

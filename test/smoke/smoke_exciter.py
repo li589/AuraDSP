@@ -123,7 +123,10 @@ check('amount=0 passthrough', abs(rms_zero - expect) / expect < 0.02,
 
 # 2. 分频点以下近直通（one-pole 非砖墙：1kHz@5k 分频 HP 放过 19.6%，
 #    amount=1 时给 +3.3% RMS 属模拟器正常行为，故容差放宽到 6%）
+#    谐波能量测量在 oversample=0（1x）模式下执行，以便 tanhf 谐波直接叠加在信号上
+#    而不被 FIR 截止；2x 过采样抗混叠验证由 smoke_oversample_aliasing.py 覆盖。
 set_f('exciter.amount', 1.0)
+set_i('exciter.oversample', 0)   # 功能验证：1x 模式，保持原有谐波注入语义
 rms_1k, _ = run_sine(1000.0)
 check('1kHz below crossover near-untouched (<6% lift)', rms_1k < rms_zero * 1.06,
       'rms=%.5f' % rms_1k)
@@ -141,6 +144,7 @@ set_f('exciter.hifreq', 10000.0)
 rms_6k_hi, _ = run_sine(6000.0)
 check('higher crossover -> less lift', rms_6k_hi < rms_6k,
       'hi=%.5f lo=%.5f' % (rms_6k_hi, rms_6k))
+set_i('exciter.oversample', 1)   # 恢复默认 2x HQ 模式
 
 dll.auradsp_destroy(h)
 

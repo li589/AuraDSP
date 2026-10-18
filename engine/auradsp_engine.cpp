@@ -204,6 +204,23 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->spat_ag_in = 0.0;
     h->spat_ag_out = 0.0;
     h->spat_ag_comp = 1.0;
+    /* Lookahead Limiter RT 状态显式复位与初始化 */
+    h->mc_limiter_la_len = (int)(0.0015 * sample_rate + 0.5);
+    if (h->mc_limiter_la_len < 1) h->mc_limiter_la_len = 1;
+    if (h->mc_limiter_la_len > auradsp_handle_s::kLimLookaheadMax)
+        h->mc_limiter_la_len = auradsp_handle_s::kLimLookaheadMax;
+
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->mc_limiter_env[c] = 1.0f;
+        h->mc_limiter_la_env[c] = 1.0f;
+        h->mc_limiter_la_pos[c] = 0;
+        h->mc_limiter_prev[c][0] = 0.0f;
+        h->mc_limiter_prev[c][1] = 0.0f;
+        for (int k = 0; k < auradsp_handle_s::kLimLookaheadMax; ++k) {
+            h->mc_limiter_la_buf[c][k] = 0.0f;
+            h->mc_limiter_gain_buf[c][k] = 1.0f;
+        }
+    }
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
     return h;

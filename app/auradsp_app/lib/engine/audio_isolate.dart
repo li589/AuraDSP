@@ -534,13 +534,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iToG = idp(ParamId.tubeOutGain), iToA = idp(ParamId.tubeAutoGain);
             final iCoG = idp(ParamId.compOutGain), iCoA = idp(ParamId.compAutoGain);
             final iRoG = idp(ParamId.reverbOutGain), iRoA = idp(ParamId.reverbAutoGain);
-            // 噪声门 + Deesser
+            // 噪声门 + Deesser + 迟滞/底线/保持
             final iGtE = idp(ParamId.gateEnable), iGtT = idp(ParamId.gateThreshold);
             final iGtA = idp(ParamId.gateAttack), iGtR = idp(ParamId.gateRelease);
+            final iGtHys = idp(ParamId.gateHysteresis), iGtRange = idp(ParamId.gateRange);
+            final iGtHold = idp(ParamId.gateHoldMs);
+            final iExOs = idp(ParamId.exciterOversample), iTbOs = idp(ParamId.tubeOversample);
+            final iLimRel = idp(ParamId.limiterRelease), iLimThresh = idp(ParamId.limiterThreshold);
+            final iLimLink = idp(ParamId.limiterLink), iLimLook = idp(ParamId.limiterLookahead);
             final iGtG = idp(ParamId.gateAutoGain);
             final iDsE = idp(ParamId.deesserEnable), iDsF = idp(ParamId.deesserFreq), iDsA = idp(ParamId.deesserAmount);
             // 全参数动态EQ
             final iDyE = idp(ParamId.dyneqEnable), iDyA = idp(ParamId.dyneqAttack), iDyR = idp(ParamId.dyneqRelease);
+            final iDyB1A = idp(ParamId.dyneqB1Attack), iDyB1R = idp(ParamId.dyneqB1Release);
+            final iDyB2A = idp(ParamId.dyneqB2Attack), iDyB2R = idp(ParamId.dyneqB2Release);
+            final iDyB3A = idp(ParamId.dyneqB3Attack), iDyB3R = idp(ParamId.dyneqB3Release);
             final iDyLE = idp(ParamId.dyneqLowEnable), iDyLF = idp(ParamId.dyneqLowFreq), iDyLQ = idp(ParamId.dyneqLowQ);
             final iDyLG = idp(ParamId.dyneqLowGain), iDyLR = idp(ParamId.dyneqLowRange), iDyLT = idp(ParamId.dyneqLowThreshold);
             final iDyME = idp(ParamId.dyneqMidEnable), iDyMF = idp(ParamId.dyneqMidFreq), iDyMQ = idp(ParamId.dyneqMidQ);
@@ -682,10 +690,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'compAutoGain': rdInt(iCoA) ?? 0,
                 'reverbOutGain': rdFloat(iRoG) ?? 0.0,
                 'reverbAutoGain': rdInt(iRoA) ?? 0,
+                'exciterOversample': rdInt(iExOs) ?? 0,
+                'tubeOversample': rdInt(iTbOs) ?? 0,
+                'limiterRelease': rdFloat(iLimRel) ?? 50.0,
+                'limiterThreshold': rdFloat(iLimThresh) ?? -0.1,
+                'limiterLink': rdInt(iLimLink) ?? 1,
+                'limiterLookahead': rdInt(iLimLook) ?? 1,
                 'gateEnable': rdInt(iGtE) ?? 0,
                 'gateThreshold': rdFloat(iGtT) ?? -40.0,
                 'gateAttack': rdFloat(iGtA) ?? 10.0,
                 'gateRelease': rdFloat(iGtR) ?? 100.0,
+                'gateHysteresis': rdFloat(iGtHys) ?? 3.0,
+                'gateRange': rdFloat(iGtRange) ?? -60.0,
+                'gateHoldMs': rdFloat(iGtHold) ?? 20.0,
                 'gateAutoGain': rdInt(iGtG) ?? 0,
                 'deesserEnable': rdInt(iDsE) ?? 0,
                 'deesserFreq': rdFloat(iDsF) ?? 6000.0,
@@ -693,6 +710,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'dyneqEnable': rdInt(iDyE) ?? 0,
                 'dyneqAttack': rdFloat(iDyA) ?? 2.0,
                 'dyneqRelease': rdFloat(iDyR) ?? 120.0,
+                'dyneqB1Attack': rdFloat(iDyB1A) ?? 2.0,
+                'dyneqB1Release': rdFloat(iDyB1R) ?? 120.0,
+                'dyneqB2Attack': rdFloat(iDyB2A) ?? 2.0,
+                'dyneqB2Release': rdFloat(iDyB2R) ?? 120.0,
+                'dyneqB3Attack': rdFloat(iDyB3A) ?? 2.0,
+                'dyneqB3Release': rdFloat(iDyB3R) ?? 120.0,
                 'dyneqLowEnable': rdInt(iDyLE) ?? 0,
                 'dyneqLowFreq': rdFloat(iDyLF) ?? 120.0,
                 'dyneqLowQ': rdFloat(iDyLQ) ?? 0.707,

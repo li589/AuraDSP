@@ -308,6 +308,7 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     _ticker = createTicker(_onTick);
     widget.model.levelL.addListener(_updateTarget);
     widget.model.levelR.addListener(_updateTarget);
+    widget.model.grComp.addListener(_updateTarget);
     widget.model.addListener(_onModelChanged);
     TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
     _updateTarget();
@@ -330,6 +331,7 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     _ticker.dispose();
     widget.model.levelL.removeListener(_updateTarget);
     widget.model.levelR.removeListener(_updateTarget);
+    widget.model.grComp.removeListener(_updateTarget);
     widget.model.removeListener(_onModelChanged);
     super.dispose();
   }
@@ -354,25 +356,31 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     final inDb = math.max(model.levelL.value, model.levelR.value);
     _targetInDb = inDb.clamp(-48.0, 0.0);
 
-    final threshold = model.compThreshold;
-    final ratio = model.compRatio;
-    const knee = 10.0;
+    // 优先采用 C++ 引擎实时输出的精确物理 GR 检波值
+    final engineGr = model.grComp.value.abs().clamp(0.0, 24.0);
+    if (engineGr > 0.05) {
+      _targetGr = engineGr;
+    } else {
+      final threshold = model.compThreshold;
+      final ratio = model.compRatio;
+      const knee = 10.0;
 
-    double target = 0.0;
-    if (inDb > -48.0) {
-      final delta = inDb - threshold;
-      double yRaw;
-      if (2 * delta < -knee) {
-        yRaw = inDb;
-      } else if (2 * delta.abs() <= knee) {
-        final kTerm = delta + knee / 2.0;
-        yRaw = inDb + ((1.0 / ratio) - 1.0) * (kTerm * kTerm) / (2.0 * knee);
-      } else {
-        yRaw = threshold + delta / ratio;
+      double target = 0.0;
+      if (inDb > -48.0) {
+        final delta = inDb - threshold;
+        double yRaw;
+        if (2 * delta < -knee) {
+          yRaw = inDb;
+        } else if (2 * delta.abs() <= knee) {
+          final kTerm = delta + knee / 2.0;
+          yRaw = inDb + ((1.0 / ratio) - 1.0) * (kTerm * kTerm) / (2.0 * knee);
+        } else {
+          yRaw = threshold + delta / ratio;
+        }
+        target = (inDb - yRaw).clamp(0.0, 24.0);
       }
-      target = (inDb - yRaw).clamp(0.0, 24.0);
+      _targetGr = target;
     }
-    _targetGr = target;
 
     // 瞬态响应 (Attack)
     if (_targetInDb >= _smoothInDb) {

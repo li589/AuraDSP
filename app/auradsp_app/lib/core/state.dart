@@ -175,16 +175,35 @@ abstract class ParamDefaults {
   static const bool compAutoGain = false;
   static const double compOutputGain = 0.0;     // [-12, 6] dB
 
-  // 噪声门 + Deesser
+  // 噪声门 + Deesser + 迟滞/底线/保持
   static const double gateThreshold = -40.0;   // dB [-60,0]
   static const double gateAttack = 10.0;       // ms [1,100]
   static const double gateRelease = 100.0;     // ms [10,500]
+  static const double gateHysteresis = 3.0;    // dB [0,12]
+  static const double gateRange = -60.0;       // dB [-80,0]
+  static const double gateHoldMs = 20.0;       // ms [0,500]
   static const double deesserFreq = 6000.0;    // Hz [2000,10000]
   static const double deesserAmount = 0.5;     // [0,1]
+
+  // Modern Lookahead Limiter (自适应前瞻与立体声联动)
+  static const double limiterRelease = 50.0;   // ms [5,500]
+  static const double limiterThreshold = -0.1; // dBFS [-24,0]
+  static const bool limiterLink = true;        // true=联动, false=独立
+  static const bool limiterLookahead = true;   // true=1.5ms lookahead, false=0-latency
+
+  // 2x 多相半带过采样 (HQ Oversampling)
+  static const bool exciterOversample = false;
+  static const bool tubeOversample = false;
 
   // 全参数动态EQ（3 段）
   static const double dyneqAttack = 2.0;       // ms [0.1,100]
   static const double dyneqRelease = 120.0;    // ms [10,1000]
+  static const double dyneqB1Attack = 2.0;
+  static const double dyneqB1Release = 120.0;
+  static const double dyneqB2Attack = 2.0;
+  static const double dyneqB2Release = 120.0;
+  static const double dyneqB3Attack = 2.0;
+  static const double dyneqB3Release = 120.0;
   static const double dyneqLowFreq = 120.0;    // Hz [20,500]
   static const double dyneqLowQ = 0.707;       // shelf S [0.5,2]
   static const double dyneqLowGain = 0.0;      // dB [-12,12]
@@ -325,6 +344,10 @@ class AppModel extends ChangeNotifier {
 
   // 参数镜像（engine 侧真相，UI 只做回显与乐观更新）
   bool bassOn = false, eqOn = false, limiterOn = true;
+  double limiterReleaseMs = ParamDefaults.limiterRelease;
+  double limiterThreshold = ParamDefaults.limiterThreshold;
+  bool limiterLink = ParamDefaults.limiterLink;
+  bool limiterLookahead = ParamDefaults.limiterLookahead;
   double bassGain = ParamDefaults.bassGain,
       stereoMix = ParamDefaults.stereoMix,
       postGain = ParamDefaults.postGain,
@@ -579,6 +602,7 @@ class AppModel extends ChangeNotifier {
 
   // M3-a：轻量效果
   bool tubeOn = false, xfeedOn = false;
+  bool tubeOversample = ParamDefaults.tubeOversample;
   int xfeedMode = 0; // 0: Default, 1: Chu Moy, 2: Jan Meier, 3: Custom
   double xfeedFcut = 700.0; // 300..2000 Hz
   double xfeedFeed = 4.5; // 1.0..15.0 dB
@@ -635,6 +659,7 @@ class AppModel extends ChangeNotifier {
   // 激励器（Haas 后 / reverb 前，最后一道音色工序）
   bool exciterOn = false;
   double exciterAmount = 0.3, exciterHifreq = 5000;
+  bool exciterOversample = ParamDefaults.exciterOversample;
 
   // M5-c：空间混响（Freeverb / Spatial Reverb）
   bool fvOn = false;
@@ -657,9 +682,12 @@ class AppModel extends ChangeNotifier {
   bool compAutoGain = ParamDefaults.compAutoGain;
   double compOutputGain = ParamDefaults.compOutputGain;
 
-  // 噪声门（链头）+ Deesser + 自动增益补偿
+  // 噪声门（链头）+ Deesser + 自动增益补偿 + 迟滞/底线/保持
   bool gateOn = false;
   double gateThreshold = -40, gateAttackMs = 10, gateReleaseMs = 100;
+  double gateHysteresis = ParamDefaults.gateHysteresis;
+  double gateRange = ParamDefaults.gateRange;
+  double gateHoldMs = ParamDefaults.gateHoldMs;
   bool gateAutoGain = false;
   bool deesserOn = false;
   double deesserFreq = 6000, deesserAmount = 0.5;
@@ -668,6 +696,12 @@ class AppModel extends ChangeNotifier {
   bool dyneqOn = false;
   double dyneqAttackMs = ParamDefaults.dyneqAttack;
   double dyneqReleaseMs = ParamDefaults.dyneqRelease;
+  double dyneqB1Attack = ParamDefaults.dyneqB1Attack;
+  double dyneqB1Release = ParamDefaults.dyneqB1Release;
+  double dyneqB2Attack = ParamDefaults.dyneqB2Attack;
+  double dyneqB2Release = ParamDefaults.dyneqB2Release;
+  double dyneqB3Attack = ParamDefaults.dyneqB3Attack;
+  double dyneqB3Release = ParamDefaults.dyneqB3Release;
   bool dyneqLowOn = false, dyneqMidOn = false, dyneqHighOn = false;
   double dyneqLowFreq = ParamDefaults.dyneqLowFreq;
   double dyneqLowQ = ParamDefaults.dyneqLowQ;
@@ -915,6 +949,14 @@ class AppModel extends ChangeNotifier {
   final inputMeterInR = ValueNotifier<double>(-120.0);
   final inputMeterOutL = ValueNotifier<double>(-120.0);
   final inputMeterOutR = ValueNotifier<double>(-120.0);
+
+  // 动态衰减量计量 (Gain Reduction, dB, 负值或 0.0)
+  final grLimiter = ValueNotifier<double>(0.0);
+  final grComp = ValueNotifier<double>(0.0);
+  final grGate = ValueNotifier<double>(0.0);
+  final grDyneqLow = ValueNotifier<double>(0.0);
+  final grDyneqMid = ValueNotifier<double>(0.0);
+  final grDyneqHigh = ValueNotifier<double>(0.0);
 
   // 一次性事件（shell 监听弹 snackbar）
   final eventSeq = ValueNotifier<int>(0);
@@ -1323,6 +1365,15 @@ class AppModel extends ChangeNotifier {
         if (raw['compAutoGain'] != null) compAutoGain = (raw['compAutoGain'] as int) != 0;
         if (raw['reverbOutGain'] != null) reverbOutputGain = (raw['reverbOutGain'] as num).toDouble();
         if (raw['reverbAutoGain'] != null) reverbAutoGain = (raw['reverbAutoGain'] as int) != 0;
+        if (raw['exciterOversample'] != null) exciterOversample = (raw['exciterOversample'] as int) != 0;
+        if (raw['tubeOversample'] != null) tubeOversample = (raw['tubeOversample'] as int) != 0;
+        if (raw['limiterRelease'] != null) limiterReleaseMs = (raw['limiterRelease'] as num).toDouble();
+        if (raw['limiterThreshold'] != null) limiterThreshold = (raw['limiterThreshold'] as num).toDouble();
+        if (raw['limiterLink'] != null) limiterLink = (raw['limiterLink'] as int) != 0;
+        if (raw['limiterLookahead'] != null) limiterLookahead = (raw['limiterLookahead'] as int) != 0;
+        if (raw['gateHysteresis'] != null) gateHysteresis = (raw['gateHysteresis'] as num).toDouble();
+        if (raw['gateRange'] != null) gateRange = (raw['gateRange'] as num).toDouble();
+        if (raw['gateHoldMs'] != null) gateHoldMs = (raw['gateHoldMs'] as num).toDouble();
         if (raw['gateEnable'] != null) gateOn = (raw['gateEnable'] as int) != 0;
         if (raw['gateThreshold'] != null) gateThreshold = (raw['gateThreshold'] as num).toDouble();
         if (raw['gateAttack'] != null) gateAttackMs = (raw['gateAttack'] as num).toDouble();
@@ -1334,6 +1385,12 @@ class AppModel extends ChangeNotifier {
         if (raw['dyneqEnable'] != null) dyneqOn = (raw['dyneqEnable'] as int) != 0;
         if (raw['dyneqAttack'] != null) dyneqAttackMs = (raw['dyneqAttack'] as num).toDouble();
         if (raw['dyneqRelease'] != null) dyneqReleaseMs = (raw['dyneqRelease'] as num).toDouble();
+        if (raw['dyneqB1Attack'] != null) dyneqB1Attack = (raw['dyneqB1Attack'] as num).toDouble();
+        if (raw['dyneqB1Release'] != null) dyneqB1Release = (raw['dyneqB1Release'] as num).toDouble();
+        if (raw['dyneqB2Attack'] != null) dyneqB2Attack = (raw['dyneqB2Attack'] as num).toDouble();
+        if (raw['dyneqB2Release'] != null) dyneqB2Release = (raw['dyneqB2Release'] as num).toDouble();
+        if (raw['dyneqB3Attack'] != null) dyneqB3Attack = (raw['dyneqB3Attack'] as num).toDouble();
+        if (raw['dyneqB3Release'] != null) dyneqB3Release = (raw['dyneqB3Release'] as num).toDouble();
         if (raw['dyneqLowEnable'] != null) dyneqLowOn = (raw['dyneqLowEnable'] as int) != 0;
         if (raw['dyneqLowFreq'] != null) dyneqLowFreq = (raw['dyneqLowFreq'] as num).toDouble();
         if (raw['dyneqLowQ'] != null) dyneqLowQ = (raw['dyneqLowQ'] as num).toDouble();
@@ -1536,7 +1593,16 @@ class AppModel extends ChangeNotifier {
         levelL.value = (raw['l'] as num).toDouble();
         levelR.value = (raw['r'] as num).toDouble();
         if (raw['stageL'] != null) {
-          stageLevelsL.value = (raw['stageL'] as List).cast<num>().map((e) => e.toDouble()).toList();
+          final sL = (raw['stageL'] as List).cast<num>().map((e) => e.toDouble()).toList();
+          stageLevelsL.value = sL;
+          if (sL.length >= 30) {
+            grLimiter.value = sL[24];
+            grComp.value = sL[25];
+            grGate.value = sL[26];
+            grDyneqLow.value = sL[27];
+            grDyneqMid.value = sL[28];
+            grDyneqHigh.value = sL[29];
+          }
         }
         if (raw['stageR'] != null) {
           stageLevelsR.value = (raw['stageR'] as List).cast<num>().map((e) => e.toDouble()).toList();
@@ -1569,6 +1635,12 @@ class AppModel extends ChangeNotifier {
           eqInSpectrum.value = List<double>.filled(32, 0.0);
           levelL.value = -90.0;
           levelR.value = -90.0;
+          grLimiter.value = 0.0;
+          grComp.value = 0.0;
+          grGate.value = 0.0;
+          grDyneqLow.value = 0.0;
+          grDyneqMid.value = 0.0;
+          grDyneqHigh.value = 0.0;
           // 长度必须与声明一致（kEngineStageCount=12；此前误写 5，
           // _StageStereoMeter 按 0..18 索引，越界回退 -120 造成 LED 恒灭）。
           stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
@@ -1586,6 +1658,12 @@ class AppModel extends ChangeNotifier {
           eqInSpectrum.value = List<double>.filled(32, 0.0);
           levelL.value = -90.0;
           levelR.value = -90.0;
+          grLimiter.value = 0.0;
+          grComp.value = 0.0;
+          grGate.value = 0.0;
+          grDyneqLow.value = 0.0;
+          grDyneqMid.value = 0.0;
+          grDyneqHigh.value = 0.0;
           stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
           stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
         }
@@ -1879,6 +1957,7 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.tubeStyle, tubeStyle);
       setFloat(ParamId.tubeMix, tubeMix);
       setFloat(ParamId.tubeCompensation, tubeCompensation);
+      setInt(ParamId.tubeOversample, tubeOversample ? 1 : 0);
       setInt('crossfeed.enable', xfeedOn ? 1 : 0);
       setInt(ParamId.xfeedMode, xfeedMode);
       setFloat(ParamId.xfeedFcut, xfeedFcut);
@@ -1904,6 +1983,7 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
       setFloat(ParamId.exciterAmount, exciterAmount);
       setFloat(ParamId.exciterHifreq, exciterHifreq);
+      setInt(ParamId.exciterOversample, exciterOversample ? 1 : 0);
       // P-010：每效果输出增益门 + 自动补偿
       setFloat(ParamId.bassOutGain, bassOutputGain);
       setInt(ParamId.bassAutoGain, bassAutoGain ? 1 : 0);
@@ -1920,6 +2000,9 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.gateThreshold, gateThreshold);
       setFloat(ParamId.gateAttack, gateAttackMs);
       setFloat(ParamId.gateRelease, gateReleaseMs);
+      setFloat(ParamId.gateHysteresis, gateHysteresis);
+      setFloat(ParamId.gateRange, gateRange);
+      setFloat(ParamId.gateHoldMs, gateHoldMs);
       setInt(ParamId.gateAutoGain, gateAutoGain ? 1 : 0);
       setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
       setFloat(ParamId.deesserFreq, deesserFreq);
@@ -1928,6 +2011,12 @@ class AppModel extends ChangeNotifier {
       setInt(ParamId.dyneqEnable, dyneqOn ? 1 : 0);
       setFloat(ParamId.dyneqAttack, dyneqAttackMs);
       setFloat(ParamId.dyneqRelease, dyneqReleaseMs);
+      setFloat(ParamId.dyneqB1Attack, dyneqB1Attack);
+      setFloat(ParamId.dyneqB1Release, dyneqB1Release);
+      setFloat(ParamId.dyneqB2Attack, dyneqB2Attack);
+      setFloat(ParamId.dyneqB2Release, dyneqB2Release);
+      setFloat(ParamId.dyneqB3Attack, dyneqB3Attack);
+      setFloat(ParamId.dyneqB3Release, dyneqB3Release);
       setInt(ParamId.dyneqLowEnable, dyneqLowOn ? 1 : 0);
       setFloat(ParamId.dyneqLowFreq, dyneqLowFreq);
       setFloat(ParamId.dyneqLowQ, dyneqLowQ);
@@ -1959,6 +2048,10 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.arbmagOutGain, arbmagOutputGain);
       setInt(ParamId.arbmagAutoGain, arbmagAutoGain ? 1 : 0);
       setInt('limiter.enable', limiterOn ? 1 : 0);
+      setFloat(ParamId.limiterRelease, limiterReleaseMs);
+      setFloat(ParamId.limiterThreshold, limiterThreshold);
+      setInt(ParamId.limiterLink, limiterLink ? 1 : 0);
+      setInt(ParamId.limiterLookahead, limiterLookahead ? 1 : 0);
       setFloat('post.gain', postGain);
 
       // 动态压限器
@@ -2178,7 +2271,21 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.dyneqHighQ) { dyneqHighQ = v; break; }
         if (id == ParamId.dyneqHighGain) { dyneqHighGain = v; break; }
         if (id == ParamId.dyneqHighRange) { dyneqHighRange = v; break; }
-        if (id == ParamId.dyneqHighThreshold) { dyneqHighThreshold = v; break; }
+        if (id == ParamId.gateHysteresis) { gateHysteresis = v; break; }
+        if (id == ParamId.gateRange) { gateRange = v; break; }
+        if (id == ParamId.gateHoldMs) { gateHoldMs = v; break; }
+        if (id == ParamId.exciterOversample) { exciterOversample = v != 0; break; }
+        if (id == ParamId.tubeOversample) { tubeOversample = v != 0; break; }
+        if (id == ParamId.limiterRelease) { limiterReleaseMs = v; break; }
+        if (id == ParamId.limiterThreshold) { limiterThreshold = v; break; }
+        if (id == ParamId.limiterLink) { limiterLink = v != 0; break; }
+        if (id == ParamId.limiterLookahead) { limiterLookahead = v != 0; break; }
+        if (id == ParamId.dyneqB1Attack) { dyneqB1Attack = v; break; }
+        if (id == ParamId.dyneqB1Release) { dyneqB1Release = v; break; }
+        if (id == ParamId.dyneqB2Attack) { dyneqB2Attack = v; break; }
+        if (id == ParamId.dyneqB2Release) { dyneqB2Release = v; break; }
+        if (id == ParamId.dyneqB3Attack) { dyneqB3Attack = v; break; }
+        if (id == ParamId.dyneqB3Release) { dyneqB3Release = v; break; }
         if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
         if (id == ParamId.fvDecay) { fvDecay = v; break; }
         if (id == ParamId.fvDamp) { fvDamp = v; break; }
@@ -3115,6 +3222,60 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setGateHysteresis(double v) {
+    gateHysteresis = v.clamp(0.0, 12.0);
+    setFloat(ParamId.gateHysteresis, gateHysteresis);
+    notifyListeners();
+  }
+
+  void setGateRange(double v) {
+    gateRange = v.clamp(-80.0, 0.0);
+    setFloat(ParamId.gateRange, gateRange);
+    notifyListeners();
+  }
+
+  void setGateHoldMs(double v) {
+    gateHoldMs = v.clamp(0.0, 500.0);
+    setFloat(ParamId.gateHoldMs, gateHoldMs);
+    notifyListeners();
+  }
+
+  void setExciterOversample(bool on) {
+    exciterOversample = on;
+    setInt(ParamId.exciterOversample, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setTubeOversample(bool on) {
+    tubeOversample = on;
+    setInt(ParamId.tubeOversample, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setLimiterRelease(double v) {
+    limiterReleaseMs = v.clamp(5.0, 500.0);
+    setFloat(ParamId.limiterRelease, limiterReleaseMs);
+    notifyListeners();
+  }
+
+  void setLimiterThreshold(double v) {
+    limiterThreshold = v.clamp(-24.0, 0.0);
+    setFloat(ParamId.limiterThreshold, limiterThreshold);
+    notifyListeners();
+  }
+
+  void setLimiterLink(bool on) {
+    limiterLink = on;
+    setInt(ParamId.limiterLink, on ? 1 : 0);
+    notifyListeners();
+  }
+
+  void setLimiterLookahead(bool on) {
+    limiterLookahead = on;
+    setInt(ParamId.limiterLookahead, on ? 1 : 0);
+    notifyListeners();
+  }
+
   void setGateAutoGain(bool v) {
     gateAutoGain = v;
     setInt(ParamId.gateAutoGain, v ? 1 : 0);
@@ -3149,13 +3310,50 @@ class AppModel extends ChangeNotifier {
 
   void setDyneqAttack(double v) {
     dyneqAttackMs = v.clamp(0.1, 100.0);
+    dyneqB1Attack = dyneqAttackMs;
+    dyneqB2Attack = dyneqAttackMs;
+    dyneqB3Attack = dyneqAttackMs;
     setFloat(ParamId.dyneqAttack, dyneqAttackMs);
     notifyListeners();
   }
 
   void setDyneqRelease(double v) {
     dyneqReleaseMs = v.clamp(10.0, 1000.0);
+    dyneqB1Release = dyneqReleaseMs;
+    dyneqB2Release = dyneqReleaseMs;
+    dyneqB3Release = dyneqReleaseMs;
     setFloat(ParamId.dyneqRelease, dyneqReleaseMs);
+    notifyListeners();
+  }
+
+  void setDyneqB1Attack(double v) {
+    dyneqB1Attack = v.clamp(0.1, 100.0);
+    setFloat(ParamId.dyneqB1Attack, dyneqB1Attack);
+    notifyListeners();
+  }
+  void setDyneqB1Release(double v) {
+    dyneqB1Release = v.clamp(10.0, 1000.0);
+    setFloat(ParamId.dyneqB1Release, dyneqB1Release);
+    notifyListeners();
+  }
+  void setDyneqB2Attack(double v) {
+    dyneqB2Attack = v.clamp(0.1, 100.0);
+    setFloat(ParamId.dyneqB2Attack, dyneqB2Attack);
+    notifyListeners();
+  }
+  void setDyneqB2Release(double v) {
+    dyneqB2Release = v.clamp(10.0, 1000.0);
+    setFloat(ParamId.dyneqB2Release, dyneqB2Release);
+    notifyListeners();
+  }
+  void setDyneqB3Attack(double v) {
+    dyneqB3Attack = v.clamp(0.1, 100.0);
+    setFloat(ParamId.dyneqB3Attack, dyneqB3Attack);
+    notifyListeners();
+  }
+  void setDyneqB3Release(double v) {
+    dyneqB3Release = v.clamp(10.0, 1000.0);
+    setFloat(ParamId.dyneqB3Release, dyneqB3Release);
     notifyListeners();
   }
 
@@ -5024,6 +5222,12 @@ void fillEqQ(double q) {
     inputMeterInR.dispose();
     inputMeterOutL.dispose();
     inputMeterOutR.dispose();
+    grLimiter.dispose();
+    grComp.dispose();
+    grGate.dispose();
+    grDyneqLow.dispose();
+    grDyneqMid.dispose();
+    grDyneqHigh.dispose();
     eventSeq.dispose();
     super.dispose();
   }

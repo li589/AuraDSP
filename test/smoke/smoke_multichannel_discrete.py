@@ -83,6 +83,7 @@ CH = 6 # 5.1: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1) # 离散模式
+set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "shelf.enable", 1)
 set_f32(h, "shelf.freq", 200.0)
 set_f32(h, "shelf.gain", 6.0)
@@ -105,6 +106,7 @@ lib.auradsp_destroy(h)
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1)
+set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "tube.enable", 1)
 set_f32(h, "tube.drive", 8.0)
 set_i32(h, "tube.channels", 0x30) # 0x10 | 0x20
@@ -127,6 +129,7 @@ lib.auradsp_destroy(h)
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1)
+set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "exciter.enable", 1)
 set_f32(h, "exciter.harmonics", 1.0)
 set_f32(h, "exciter.blend", 1.0)
@@ -148,6 +151,7 @@ check(surround_dev < 1e-6, f"Exciter: 其余声道 (C/LFE/SL/SR) 100% 直通 (de
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1)
+set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "loudness.enable", 1)
 set_f32(h, "loudness.level", 0.8)
 set_i32(h, "loudness.channels", 0x0C)
@@ -192,6 +196,7 @@ print("\n=== [2] Category B 跨声道/声场效果器不变性验证 ===")
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1)
+set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "haas.enable", 1)
 set_f32(h, "haas.delay_ms", 15.0)
 set_f32(h, "haas.mix", 0.5)

@@ -10,6 +10,7 @@
 import 'dart:math' as math;
 
 import 'package:file_selector/file_selector.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
@@ -50,6 +51,7 @@ part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 part 'effects/channel_routing_selector.dart';
+part 'effects/gain_reduction_meter.dart';
 
 /// 效果器卡片序号**单一真相**：**每类内**从 1 纯数字递增（类由标题行下拉
 /// 标明，卡片序号只在本类内计数，故无前缀）。空间卡单独成类、不编号。

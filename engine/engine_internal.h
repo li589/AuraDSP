@@ -4,6 +4,8 @@
 
 #include "auradsp_engine.h"
 #include "auradsp_plugin_host.h"
+#include "dsp/dsp_oversample.h"
+#include "dsp/dsp_lookahead_limiter.h"
 #include <atomic>
 #include <cmath>
 #include <cstring>
@@ -139,6 +141,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  tube_style{0};       /* P-011: 0 Triode / 1 Pentode / 2 Tape */
     std::atomic<float>    tube_mix{1.0f};       /* P-011: 湿比 [0, 1] */
     std::atomic<float>    tube_compensation{0.0f}; /* P-011: 输出补偿 dB [-12, 12] */
+    std::atomic<int32_t>  tube_oversample{1};   /* 0=1x节能 1=2x高精抗混叠过采样 */
     std::atomic<int32_t>  xfeed_enable{0};      /* T1 ≈3ms */
     std::atomic<int32_t>  xfeed_mode{0};        /* 0: Default, 1: Chu Moy, 2: Jan Meier, 3: Custom */
     std::atomic<float>    xfeed_fcut{700.0f};   /* Hz [300, 2000] */
@@ -174,6 +177,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  exciter_enable{0};
     std::atomic<float>    exciter_amount{0.3f};  /* [0,1] */
     std::atomic<float>    exciter_hifreq{5000.0f}; /* Hz [3000,10000] */
+    std::atomic<int32_t>  exciter_oversample{1}; /* 0=1x节能 1=2x高精抗混叠过采样 */
     /* 每效果输出增益门（dB [-12,6]）+ 自动增益补偿开关。
      * bass/eq/tube/comp 落地 vendor（P-010 的 fxOutGain/fxAutoGain）；
      * reverb 落地引擎侧 Freeverb。 */
@@ -192,27 +196,38 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    gate_threshold{-40.0f}; /* dB [-60,0] */
     std::atomic<float>    gate_attack{10.0f};     /* ms [1,100] */
     std::atomic<float>    gate_release{100.0f};   /* ms [10,500] */
+    std::atomic<float>    gate_hysteresis{3.0f};  /* dB [0,12] 迟滞缓冲带 */
+    std::atomic<float>    gate_range{-40.0f};     /* dB [-80,0] 关门衰减地板 */
+    std::atomic<float>    gate_hold_ms{10.0f};    /* ms [0,500] 跌落后保持时长 */
     std::atomic<int32_t>  gate_autogain{0};
-    /* 响度补偿（信号自适应等响度：静音段按简化 ISO226 补低+高） */
-    std::atomic<int32_t>  loudness_enable{0};
-    std::atomic<float>    loudness_amount{0.5f};  /* [0,1] */    std::atomic<int32_t>  deesser_enable{0};
+    std::atomic<int32_t>  deesser_enable{0};
     std::atomic<float>    deesser_freq{6000.0f};  /* Hz [2000,10000] */
     std::atomic<float>    deesser_amount{0.5f};   /* [0,1] */
+    /* 响度补偿（信号自适应等响度：静音段按简化 ISO226 补低+高） */
+    std::atomic<int32_t>  loudness_enable{0};
+    std::atomic<float>    loudness_amount{0.5f};  /* [0,1] */
     /* 心理声学低音（谐波合成；频带 = LP(cutoff) − LP(subfreq)） */
     std::atomic<float>    bass_harmonics{0.45f};  /* [0,1] 谐波量 */
     std::atomic<float>    bass_harmonicblend{0.5f}; /* [0,1] 谐波混合 */
     std::atomic<float>    bass_subfreq{25.0f};    /* Hz [10,40] 谐波下限 */
     std::atomic<float>    bass_cutoff_f{120.0f};  /* Hz [30,300] 谐波上限 */
+    std::atomic<int32_t>  bass_oversample{1};     /* 0=1x节能 1=2x高精抗混叠过采样 */
     /* 独立滤波器（RBJ biquad：HP/LP/BP，链头 gate 之后） */
     std::atomic<int32_t>  filter_enable{0};
     std::atomic<int32_t>  filter_type{0};     /* 0=HP 1=LP 2=BP */
     std::atomic<float>    filter_freq{80.0f}; /* Hz [20,20000] */
     std::atomic<float>    filter_q{0.707f};   /* [0.3,10] */
     /* 全参数动态EQ（3 段：Low shelf / Mid bell / High shelf；pre-vendor 音色修整）。
-     * 每段：静态 gain（常时）+ range/threshold（超阈后最大附加衰减）；attack/release 全局共用。 */
+     * 每段：静态 gain（常时）+ range/threshold（超阈后最大附加衰减）；各频段支持独立 attack/release。 */
     std::atomic<int32_t>  dyneq_enable{0};
-    std::atomic<float>    dyneq_attack{2.0f};   /* ms [0.1,100] */
-    std::atomic<float>    dyneq_release{120.0f}; /* ms [10,1000] */
+    std::atomic<float>    dyneq_attack{2.0f};     /* ms [0.1,100] 全局广播 */
+    std::atomic<float>    dyneq_release{120.0f};  /* ms [10,1000] 全局广播 */
+    std::atomic<float>    dyneq_b1_attack{20.0f};   /* Low band [0.1, 100] */
+    std::atomic<float>    dyneq_b1_release{150.0f}; /* Low band [10, 1000] */
+    std::atomic<float>    dyneq_b2_attack{10.0f};   /* Mid band [0.1, 100] */
+    std::atomic<float>    dyneq_b2_release{100.0f}; /* Mid band [10, 1000] */
+    std::atomic<float>    dyneq_b3_attack{2.0f};    /* High band [0.1, 100] */
+    std::atomic<float>    dyneq_b3_release{30.0f};  /* High band [10, 1000] */
     std::atomic<int32_t>  dyneq_l_enable{0};
     std::atomic<float>    dyneq_l_freq{120.0f};  /* Hz [20,500] */
     std::atomic<float>    dyneq_l_q{0.707f};     /* shelf 斜率 S [0.5,2] */
@@ -267,6 +282,11 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  gate_channels{0xFF};
     std::atomic<int32_t>  comp_channels{0xFF};
     std::atomic<int32_t>  arbmag_channels{0xFF};
+    /* Modern Lookahead Limiter 参数（P2.3 新增；向后兼容，不破坏 ABI） */
+    std::atomic<float>    limiter_release_ms{100.0f}; /* ms [10, 500]：释放时间常数 */
+    std::atomic<float>    limiter_threshold{0.0f};    /* dBFS [-24, 0]：限幅门限（0 = 0dBFS 绝对防护） */
+    std::atomic<int32_t>  limiter_link{1};            /* 0=各声道独立限幅 1=全声道增益联动保持声像 */
+    std::atomic<int32_t>  limiter_lookahead{0};       /* 0=0ms 实时零延迟模式 1=1.5ms 高精母带前瞻模式 */
 };
 
 
@@ -422,6 +442,7 @@ struct auradsp_handle_s {
     FvVoice fvL, fvR;
     /* 混响自动增益补偿平滑状态（RT 独占） */
     double rev_ag_in = 0.0, rev_ag_out = 0.0, rev_ag_comp = 1.0;
+    float  fv_g_sm = 1.0f;     /* 混响输出总增益一阶平滑状态（2ms 时间常数） */
 
     /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰；支持 8 声道） */
     struct ShelfBiquad {
@@ -439,9 +460,13 @@ struct auradsp_handle_s {
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
     /* 噪声门/Deesser 状态（RT 独占；支持 8 声道） */
     float gate_gain[kMxMaxChannels] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    float gate_state[kMxMaxChannels] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    int   gate_hold_cnt[kMxMaxChannels] = {};
+    float gate_env[kMxMaxChannels] = {};
     float gate_ds_lp[kMxMaxChannels] = {};
     float gate_ds_env[kMxMaxChannels] = {};
     double gate_ag_in = 0.0, gate_ag_out = 0.0, gate_ag_comp = 1.0;
+    float  gate_ag_g_sm = 1.0f; /* 门控自动增益补偿一阶平滑状态（2ms 时间常数） */
     /* 全参数动态EQ状态（RT 独占；系数每块现算，无原子系数表；支持 8 声道）。
      * 检波：单声道侧链 bell + 峰值包络；
      * 施加：串联 bell/shelf（DF2T 8 声道独立状态）。 */
@@ -459,8 +484,24 @@ struct auradsp_handle_s {
     float loud_lp[kMxMaxChannels] = {};
     float loud_hp[kMxMaxChannels] = {};
     double loud_level = 0.0;                      /* 慢速电平跟随（~0.5s） */
-    /* 多声道 Limiter 8 声道独立包络状态（RT 独占） */
+    /* Modern Lookahead Limiter 状态（RT 独占；P2.3）
+     * 前瞻环形缓冲：每声道 kLimLookaheadMax 样本（上限 3ms @ 192kHz = 576 采样点）
+     * 存储延迟音频，同时在环上维护前向极小增益包络 */
+    static constexpr int kLimLookaheadMax = 576; // ceil(0.003 * 192000)
+    float mc_limiter_la_buf[kMxMaxChannels][kLimLookaheadMax] = {};   /* 前瞻音频延迟线 */
+    float mc_limiter_gain_buf[kMxMaxChannels][kLimLookaheadMax] = {}; /* 前瞻增益延迟线 */
+    float mc_limiter_la_env[kMxMaxChannels] = {};  /* 起音平滑包络（初始 = 1.0f 满增益 = 未压限） */
+    int   mc_limiter_la_pos[kMxMaxChannels] = {};  /* 前瞻环读写指针 */
+    int   mc_limiter_la_len = 72;  /* 实际使用长度（create/init 时按 fs 计算，默认 72@48k） */
+    /* 释放包络平滑增益（每声道；初始 1.0 = 无压限） */
     float mc_limiter_env[kMxMaxChannels] = {};
+    /* 历史输入样本，用于 4x ISP Cubic Hermite 插值（每声道保留上 2 个样本） */
+    float mc_limiter_prev[kMxMaxChannels][2] = {};
+    /* GR 计量（Gain Reduction）原子变量：每块更新，UI 线程读取（dB，恒 >= 0） */
+    std::atomic<float> gr_limiter{0.0f};
+    std::atomic<float> gr_comp{0.0f};
+    std::atomic<float> gr_gate{0.0f};
+    std::atomic<float> gr_dyneq[3] = {};
     /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
@@ -476,8 +517,14 @@ struct auradsp_handle_s {
     int    spat_hist_pos = 0;
     float  spat_pinna[2][2][4];           // [stage][ch] x1,x2,y1,y2（全局 pinna 双 biquad）
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
+    float  spat_g_sm = 1.0f;    /* 空间音效输出增益一阶平滑状态（2ms 时间常数） */
     /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算；支持 8 声道） */
     float exc_lp[kMxMaxChannels] = {};
+    /* 2x 多相半带过采样器实例（RT 独占，静态预分配零分配） */
+    auradsp::HalfbandOversampler2x exc_os[kMxMaxChannels];
+    auradsp::HalfbandOversampler2x tube_os[kMxMaxChannels];
+    auradsp::HalfbandOversampler2x psycho_os[2];
+
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 

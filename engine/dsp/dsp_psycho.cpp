@@ -24,6 +24,7 @@ void basspsycho_process(auradsp_handle h, float* io, int frames) {
     const float aC = 1.0f - expf(-2.0f * 3.14159265358979f * fc / fs);
     const float aS = 1.0f - expf(-2.0f * 3.14159265358979f * sub / fs);
     const float k = amount * blend;
+    const bool os = h->p.bass_oversample.load(std::memory_order_relaxed) != 0;
     float cutL = h->psy_lp_l, cutR = h->psy_lp_r;
     float subL = h->psy_sub_l, subR = h->psy_sub_r;
     for (int i = 0; i < frames; ++i) {
@@ -33,8 +34,14 @@ void basspsycho_process(auradsp_handle h, float* io, int frames) {
         subL += aS * (xL - subL);
         subR += aS * (xR - subR);
         const float bandL = cutL - subL, bandR = cutR - subR;
-        const float harmL = tanhf(bandL * 2.5f) * 0.6f;
-        const float harmR = tanhf(bandR * 2.5f) * 0.6f;
+        float harmL, harmR;
+        if (os) {
+            harmL = h->psycho_os[0].process_sample(bandL, [](float v) { return tanhf(v * 2.5f) * 0.6f; });
+            harmR = h->psycho_os[1].process_sample(bandR, [](float v) { return tanhf(v * 2.5f) * 0.6f; });
+        } else {
+            harmL = tanhf(bandL * 2.5f) * 0.6f;
+            harmR = tanhf(bandR * 2.5f) * 0.6f;
+        }
         io[i * 2]     = xL + k * harmL;
         io[i * 2 + 1] = xR + k * harmR;
     }
