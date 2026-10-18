@@ -1,26 +1,33 @@
 # AuraDSP 多声道支持、矩阵混音与 Windows 驱动架构全景分析报告
 
-> **报告版本**：v1.0  
-> **审查基准**：AuraDSP Engine v1.0 / Windows Drivers Specification (SPEC-WIN-DRIVER-001) / ADR-003 Phase A  
+> **报告版本**：v1.1（2026-10-18 复核）
+> **审查基准**：AuraDSP Engine v1.0 / Windows Drivers Specification (SPEC-WIN-DRIVER-001) / ADR-003 Phase A→B
 > **报告日期**：2026-10-18  
+>
+> **复核状态（2026-10-18）**：§1/§2/§3.3 为 **Phase 2 重构前基线**，保留作缺陷证据，**不代表当前代码**；§7~§9 为落地后实况。当前结论：
+> - 矩阵下混串扰 / 上混镜像 Bug 已修复（§8.1）；
+> - Category A 效果器已具备 8 声道独立状态 + 位掩码（§8.2）；Category B（haas/spatial/stereo/crossfeed/bassmono/freeverb）仍只作用前置 FL/FR；
+> - AuraVAIO 已支持 4.0/5.1/7.1 DataRanges + `KSPROPERTY_AUDIO_CHANNEL_CONFIG`，Win10/Win7 双 VM 验证通过（§7）；
+> - VM 泵仍每组只送 L/R 进引擎；ASIO 仍固定 2 进 2 出；AuraApo v1 仍为透传/心跳；
+> - 空间音效仍只消费前置立体声，尚未实现 5.1/7.1 耳机虚拟环绕（见空间音效复核）。
 
 ---
 
 ## 一、 核心结论速览 (Executive Summary)
 
-1. **效果器多声道物理支持现状**：
+1. **效果器多声道物理支持现状（Phase 2 前基线，已过时）**：
    - 全系统 **23+ 种 DSP 算法模块中，仅有 1 个模块具备物理多声道独立处理能力**：即位于引擎链头的 **Input Gate / Pre-Gain**（支持独立的 8 声道增益平衡 `input_ch_gain[0..7]` 与全声道实时峰值追踪）。
    - 其余所有核心算法（包含 Noise Gate、Biquad Filter、Dynamic EQ、BassBoost、Reverb、Compressor、Convolver、Exciter、Haas、Spatializer、Loudness、Limiter 以及 5 阶段插件宿主）**全部物理运行在 2 声道立体声模式**。
    - 多声道（5.1/7.1）运行完全依赖外层 **ADR-003 Phase A 矩阵混音包络**（下混成立体声进链处理，处理后再上混还原多声道）。
 
-2. **系统矩阵混音现状与重大缺陷**：
+2. **系统矩阵混音现状与重大缺陷（Phase 2 已修复）**：
    - **LFE 直通设计良好**：Index 3 的低频效果声道在下混时被完全剥离，上混时逐样本原样直通还原（实测 max dev = 0.0），有效保护了超低频相位与低音炮喇叭安全。
    - **发现重大数学逻辑缺陷（严重 Bug）**：
      - **下混环绕声坍缩单声道**：`engine_chain.cpp:324` 的判断缺失导致左环绕（SL）、左后环绕（BL）被等额混入右声道；右环绕（SR）、右后环绕（BR）被等额混入左声道。导致所有环绕方位感在进入 DSP 之前就彻底坍缩为中置单声道。
      - **上混环绕声道严重错位**：`engine_chain.cpp:347` 的回填逻辑仅为中置（k=2）和其余声道做了二元判断，导致 **左环绕（SL）与左后环绕（BL）均错误读取了右声道（r）的信号回填**，左右相位彻底颠倒。
      - **UI 与引擎参数断联**：前端设置界面的 `channels.mode`（0=Stereo, 1=5.1, 2=7.1）被引擎硬编码拒绝（返回 `AURADSP_E_UNSUPPORTED`），未真正接通底层的 `channels.count`。
 
-3. **Windows 驱动层多声道支持度与操作系统配置机制**：
+3. **Windows 驱动层多声道支持度与操作系统配置机制（VAIO 部分已由 §7 落地）**：
    - **AuraVAIO (01_vaio_driver)**：Pin 属性中仅声明了 2 声道与 8 声道，**缺失 4.0（Quad）与 5.1（6 声道）的 DataRange**；拓扑中**未实现 `KSPROPERTY_AUDIO_CHANNEL_CONFIG` 属性**，INF 亦未预设 `PKEY_AudioEndpoint_PhysicalSpeakers`。导致 Windows 控制面板（`mmsys.cpl`）的“配置扬声器”向导无法让用户自由选择 5.1/4.0 或将配置持久化。此外，`VaioBridge.cpp` 遗漏向引擎下发 `channels.count`，导致 7.1 流送入后步长错位破音。
    - **AuraApo (03_system_apo)**：格式协商支持任意通道数（`wf->nChannels`）Float32，目前为纯透传 + 心跳监控，完全遵从底层物理设备的声道模式。
    - **AuraAsioDriver (04_asio_driver)**：硬编码固定为 2 进 2 出立体声，WASAPI Sink 输出遇多声道物理设备时对后级环绕强制静音。
@@ -29,6 +36,8 @@
 ---
 
 ## 二、 各效果器多声道支持情况全盘点
+
+> **基线说明**：下表为 **Phase 2 重构前** 的审前基线；Category A 的现行 8 声道支持见 §8.2，勿按下表直接判断当前版本。
 
 AuraDSP 目前包含 23 项自研/集成效果器算法及 1 个五阶段第三方插件宿主。下表列出各效果器的多声道物理运行状态及行为：
 

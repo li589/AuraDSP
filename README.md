@@ -16,7 +16,7 @@
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务（Phase 6） | ⬜ 蓝本见 `source/RootlessJamesDSP` |
 | **Linux** | PipeWire/Pulse | filter-chain 模块化挂载（Phase 7） | ⬜ 蓝本见 `source/JDSP4Linux` |
 
-> **音频后端模式**（`app/auradsp_app/lib/core/audio_modes.dart`，2026-10-14 新增）：Windows 侧四模式 `vaio`（AuraVAIO 虚拟声卡）/ `vbcallback`（Voicemeeter 回调）/ `sysapo`（System APO，默认）/ `asio`（专业 ASIO）；Android `root`/`rootless`。当前仅**持久化选择 + 重启生效提示**，引擎接线待后续版本；驱动侧对应实现见 `core/desktop/windows-drivers/`（02 VM 泵 / 03 自研 APO / bridge 双桥：vm_bridge + asio_bridge）。
+> **音频后端模式**（`app/auradsp_app/lib/core/audio_modes.dart`）：Windows 侧四模式 `vaio`（AuraVAIO 虚拟声卡）/ `vbcallback`（Voicemeeter 回调）/ `sysapo`（System APO，默认）/ `asio`（专业 ASIO）；Android `root`/`rootless`。`vbcallback`/`asio` 已支持活切；`vaio`/`sysapo` 选择持久化，VAIO 驱动已点亮、sysapo 回归纯配置面。驱动侧对应实现见 `core/desktop/windows-drivers/`（01 VAIO / 02 VM 泵 / 03 自研 APO / 04 ASIO 双线 / bridge 三桥）。
 
 ---
 
@@ -32,7 +32,7 @@ AuraDSP/
 │   ├── auradsp_engine.{h,cpp,def}   # C ABI 契约（UI↔驱动唯一边界）
 │   ├── engine_internal.h            # 私有状态 + 跨文件符号（内部单一入口）
 │   ├── chain/                       # 链与 IO：engine_{chain,convolver,viz,probe,audiofile}.cpp
-│   ├── dsp/                         # 10 个自研效果模块（每效果一文件，含 dyneq）
+│   ├── dsp/                         # 11 个自研效果 TU（每效果一文件，含 dyneq/spatial）
 │   ├── host/                        # 插件宿主：auradsp_plugin_host.cpp + host_{gui,metadata_scan,instances,slots}.cpp
 │   ├── legacy/                      # JamesDSP C 算法核（12 级经典音效 + EEL2）+ PATCHES.md
 │   └── auradsp_plugin_host.h        # VST3/CLAP 宿主公共头（四插槽 kMaxPluginSlots=4）
@@ -42,12 +42,15 @@ AuraDSP/
 │   ├── convolver/ ddc/ liveprog/  + manifest.json
 ├── core/
 │   ├── desktop/windows/ # CMakeLists + build_engine.sh → out/Release/*.dll（DLL 真相源）
-│   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：02 VM 泵 / 03 自研 APO / bridge 双桥
+│   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：01 VAIO / 02 VM 泵 / 03 自研 APO / 04 ASIO 双线 / bridge 三桥
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
-├── app/auradsp_app/     # Flutter 3.47.7（62 个 dart，20 张效果卡；音频后端四模式已持久化）
-├── test/smoke/          # 48 个 smoke_*.py + probe/test/bench 9 个；runner.py 登记 53 项（套件实测 53 项全绿）
+├── app/auradsp_app/     # Flutter 3.47.7（70 个 dart，21 张效果卡；音频后端四模式已接通/持久化）
+├── test/
+│   ├── smoke/           # 58 个 smoke_*.py；runner.py --smoke 登记 63 项（含 6 个辅助/基准）
+│   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
+│   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
 ├── tools/               # bin/ 6 · probe/ 18 · resource_pipeline/ 2 · calibration/ 1 · archive/
-├── source/              # 第三方参考仓库只读快照（登记 13 项，仅 ORIGIN.md 入库）
+├── source/              # 第三方参考仓库只读快照（15 项 ORIGIN 登记 / 14 个顶层克隆）
 ├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
 │   └── 参考技术手册/     #   第三方 PDF 手册本地只读区（约 220MB，仅 README 清单入库）
 └── .ai/                 # AI 自治沉淀区（memory/rules）
@@ -58,7 +61,7 @@ AuraDSP/
 ## 3. 内置音效器
 
 处理链（`engine/chain/engine_chain.cpp` 的 `process_stereo_chain`）大致顺序：
-**输入增益 → gate/deesser → filter → bassmono → 心理声学低音 → 插件 Pre-DSP → low-shelf → 动态EQ → vendor 链 → Haas → Exciter → Freeverb → Loudness → 安全钳位 → 插件 Post-Limiter**
+**输入增益 → gate/deesser → filter → bassmono → 心理声学低音 → 插件 Pre-DSP → low-shelf → 动态EQ → vendor 链 → Haas → Spatial → Exciter → Freeverb → Loudness → Lookahead Limiter → 安全钳位 → 插件 Post-Limiter**
 
 ### 自研（`engine/dsp/`）
 | ID | 效果 | ID | 效果 |
@@ -68,6 +71,7 @@ AuraDSP/
 | `bassmono` | 低频单声道化 | `psycho` | 心理声学低音（MaxxBass 式谐波） |
 | `haas` | Haas 差分环绕 | `shelf` | 低频搁架 biquad |
 | `exciter` | 谐波激励器 | `dyneq` | 全参数动态 EQ（3 段，见下） |
+| `spatial` | 参数化 HRTF + 早期反射 | | |
 
 `dyneq` 为三段全参数动态 EQ：Low shelf（20–500Hz）/ Mid bell（200–8kHz）/ High shelf（2k–20kHz），
 每段含 `enable/freq/q/gain/range/threshold`，全局 `attack/release`；静态 RBJ + 动态谱减（与 Deesser 同构），
@@ -125,7 +129,7 @@ python tools/bin/run_tests.py --smoke         # 转发 runner.py
 | [`docs/源码重组与目录规范方案-2026-10-13.md`](docs/源码重组与目录规范方案-2026-10-13.md) | 本次重组的诊断 / 目标树 / 政策 / 分期 |
 | [`docs/40-回顾/阶段性回顾-2026-10-13.md`](docs/40-回顾/阶段性回顾-2026-10-13.md) | 重构 P0→P3b 与本期功能交付回顾 |
 
-决策记录见 `docs/adr/`（ADR-001/003/004/006 已接受，ADR-002 已被 006 取代）。
+决策记录见 `docs/adr/`（ADR-001/003/004/006/007/008/009 已接受，ADR-002 已被 006 取代）。
 
 ---
 
