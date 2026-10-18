@@ -13,6 +13,29 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
     CreateAndAttachConsole();
   }
 
+  // Single-instance mutex: prevent multiple app instances from conflicting on audio devices
+  HANDLE single_instance_mutex =
+      ::CreateMutexW(nullptr, TRUE, L"Local\\AuraDSP_SingleInstance_Mutex");
+  if (::GetLastError() == ERROR_ALREADY_EXISTS) {
+    HWND existing_window =
+        ::FindWindowW(L"FLUTTER_RUNNER_WIN32_WINDOW", L"AuraDSP");
+    if (!existing_window) {
+      existing_window = ::FindWindowW(nullptr, L"AuraDSP");
+    }
+    if (existing_window) {
+      if (::IsIconic(existing_window)) {
+        ::ShowWindow(existing_window, SW_RESTORE);
+      } else {
+        ::ShowWindow(existing_window, SW_SHOW);
+      }
+      ::SetForegroundWindow(existing_window);
+    }
+    if (single_instance_mutex) {
+      ::CloseHandle(single_instance_mutex);
+    }
+    return EXIT_SUCCESS;
+  }
+
   // Initialize COM, so that it is available for use in the library and/or
   // plugins.
   ::CoInitializeEx(nullptr, COINIT_APARTMENTTHREADED);
@@ -34,6 +57,11 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   // 外框 1176×800 → 客户区约 1161×762，低于此值左栏 + 内容区会把 8pt 留白压塌。
   window.SetMinimumSize(Win32Window::Size(1176, 800));
   if (!window.Create(L"AuraDSP", origin, size)) {
+    ::CoUninitialize();
+    if (single_instance_mutex) {
+      ::ReleaseMutex(single_instance_mutex);
+      ::CloseHandle(single_instance_mutex);
+    }
     return EXIT_FAILURE;
   }
   window.SetQuitOnClose(true);
@@ -45,5 +73,9 @@ int APIENTRY wWinMain(_In_ HINSTANCE instance, _In_opt_ HINSTANCE prev,
   }
 
   ::CoUninitialize();
+  if (single_instance_mutex) {
+    ::ReleaseMutex(single_instance_mutex);
+    ::CloseHandle(single_instance_mutex);
+  }
   return EXIT_SUCCESS;
 }

@@ -377,9 +377,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: RepaintBoundary(
-          child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
-        ),
+        child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
       );
 }
 
@@ -460,18 +458,14 @@ class _AmbientPainter extends CustomPainter {
   final ValueListenable<int> clock;
   final AmbientEnvelope _env = AmbientEnvelope();
 
-  /// 双层光晕与地平线微光画笔（纯矢量原生光晕，零 toImage 异步与泄漏）
+  /// 双线性放大画笔（固定 medium 滤波，通过低分图双线性放大实现纯正高斯状雾化光晕）
+  final Paint _blitPaint = Paint()..filterQuality = FilterQuality.medium;
+
+  /// 单复用柱体画笔
   final Paint _barPaint = Paint();
-  final Paint _bloomPaint = Paint();
-  final Paint _horizonPaint = Paint();
 
-  ui.Shader? _cachedBarShader;
-  ui.Shader? _cachedBloomShader;
-  ui.Shader? _cachedHorizonShader;
-
-  Size? _lastShaderSize;
-  Color? _lastAccentColor;
-  int? _lastBaseAlpha;
+  /// 同步小图双缓冲句柄（严格单实例轮替，零异步跨帧，杜绝 UAF 悬挂指针）
+  ui.Image? _lastImg;
 
   _AmbientPainter({
     required this.spectrum,
@@ -508,112 +502,70 @@ class _AmbientPainter extends CustomPainter {
     }
 
     if (_env.maxValue <= AmbientEnvelope.epsilon) {
-      // 静音期无须光栅化任何内容，零 GPU 占用
+      // 静音期无须光栅化任何内容，零 GPU / 显存开销；释放已有小图
+      if (_lastImg != null) {
+        _lastImg!.dispose();
+        _lastImg = null;
+      }
       return;
     }
 
     final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
-    final baseAlpha = (0.18 * intensity * 255).round();
-    final bw = size.width / AmbientEnvelope.bars;
+    final baseAlpha = (0.16 * intensity * 255).round();
 
-    // 仅在尺寸或配色参数变动时重建共用垂直渐变 Shader，消除循环内的重复构造
-    if (_cachedBarShader == null ||
-        _lastShaderSize != size ||
-        _lastAccentColor != palette.accent ||
-        _lastBaseAlpha != baseAlpha) {
-      _lastShaderSize = size;
-      _lastAccentColor = palette.accent;
-      _lastBaseAlpha = baseAlpha;
+    // 低分图离屏尺寸：144×90 像素（像素总数 12,960，显存仅约 50KB）
+    // 宽 144px 对应 72 根柱子（槽宽 2px：柱宽 1.25px，间距 0.75px）
+    // 经双线性插值 10~15 倍放大到全屏后，原本小图硬边被自然平滑为真实的高斯雾化柔和光晕，
+    // 完全复原最原始优化前的暗色弥散质感，彻底消除生硬的塑料外层框与假地平线。
+    const lw = 144.0;
+    const lh = 90.0;
+    const bars = AmbientEnvelope.bars;
+    const bw = lw / bars;
 
-      // 核心光束渐变
-      _cachedBarShader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [
-          palette.accent.withValues(alpha: baseAlpha / 255),
-          palette.accent.withValues(alpha: (baseAlpha * 0.4) / 255),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.45, 1.0],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-      _barPaint.shader = _cachedBarShader;
+    final recorder = ui.PictureRecorder();
+    final c = Canvas(recorder, const Rect.fromLTWH(0, 0, lw, lh));
 
-      // 外部大面积模糊光晕渐变（横向纵向漫反射弥散）
-      _cachedBloomShader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [
-          palette.accent.withValues(alpha: (baseAlpha * 0.45) / 255),
-          palette.accent.withValues(alpha: (baseAlpha * 0.12) / 255),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 0.5, 0.95],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-      _bloomPaint.shader = _cachedBloomShader;
-
-      // 底部氛围地平线泛光
-      final horizonH = math.min(160.0, size.height * 0.35);
-      _cachedHorizonShader = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [
-          palette.accent.withValues(alpha: (baseAlpha * 0.38) / 255),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-        stops: const [0.0, 1.0],
-      ).createShader(Rect.fromLTWH(0, size.height - horizonH, size.width, horizonH));
-      _horizonPaint.shader = _cachedHorizonShader;
-    }
-
-    // 1. 绘制底部极光地平线微光（随最大能量起伏的底座泛光）
-    final horizonH = math.min(160.0, size.height * 0.35);
-    final energyRatio = (_env.maxValue / peak).clamp(0.0, 1.0);
-    if (energyRatio > 0.05) {
-      canvas.drawRect(
-        Rect.fromLTWH(0, size.height - horizonH * energyRatio, size.width, horizonH * energyRatio),
-        _horizonPaint,
-      );
-    }
-
-    final coreRadius = Radius.circular(bw * 0.35);
-    final bloomRadius = Radius.circular(bw * 0.75);
-
-    // 2. 双通道原生光晕绘制：外层漫反射光晕（弥散）+ 内层聚光柱体（光束）
-    for (var i = 0; i < AmbientEnvelope.bars; i++) {
+    // 每根柱子独立从底部至顶部垂直渐隐消融
+    for (var i = 0; i < bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
-      final h = v * size.height * 0.92;
-
-      // 外层 Bloom 弥散光晕体（加宽、加大圆角、柔和羽化）
-      final bloomW = bw * 1.45;
-      final bloomRect = Rect.fromLTWH(
-        i * bw - (bloomW - bw * 0.75) / 2,
-        size.height - h * 1.04,
-        bloomW,
-        h * 1.04,
+      final h = v * lh * 0.92;
+      final rect = Rect.fromLTWH(i * bw, lh - h, bw * 0.62, h);
+      _barPaint.shader = ui.Gradient.linear(
+        Offset(0, lh),
+        Offset(0, lh - h),
+        [
+          palette.accent.withValues(alpha: baseAlpha / 255),
+          palette.accent.withValues(alpha: 0.0),
+        ],
       );
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(bloomRect, bloomRadius),
-        _bloomPaint,
-      );
-
-      // 内层核心光束（清亮凝聚）
-      final coreRect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.75, h);
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(coreRect, coreRadius),
-        _barPaint,
-      );
+      c.drawRect(rect, _barPaint);
     }
+
+    final pic = recorder.endRecording();
+    final img = pic.toImageSync(144, 90);
+    pic.dispose();
+
+    // 双线性平滑放大铺满全屏，呈现深邃自然的原始氛围雾化
+    canvas.drawImageRect(
+      img,
+      const Rect.fromLTWH(0, 0, lw, lh),
+      Offset.zero & size,
+      _blitPaint,
+    );
+
+    // 安全生命周期管理：释放上一帧纹理，保留当前帧直到下一帧完成
+    _lastImg?.dispose();
+    _lastImg = img;
   }
 
   @override
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
   void dispose() {
-    _cachedBarShader = null;
-    _cachedBloomShader = null;
-    _cachedHorizonShader = null;
+    _lastImg?.dispose();
+    _lastImg = null;
   }
 }
 

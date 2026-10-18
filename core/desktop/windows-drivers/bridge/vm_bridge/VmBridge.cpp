@@ -198,8 +198,8 @@ int StrMirrorReplay(FnEngSetParam setParam) {
 }
 
 void LeaveCtl(bool andUnreg) {
-    if (g_b.logout) g_b.logout();
     if (andUnreg && g_b.unreg) g_b.unreg();
+    if (g_b.logout) g_b.logout();
     if (!g_b.remoteFreed && g_b.remote) {
         g_b.remoteFreed = true;
         FreeLibrary(g_b.remote);
@@ -490,9 +490,13 @@ int vb_start(const char* engine_dll, const char* params_json) {
     char name[64] = {0};
     memcpy(name, "AuraDSP", 7);
     long rc = -99;
+    // 首次注册前先尝试清理可能存在的残留/挂起注册槽位（常见于上一进程异常退出或强杀）
+    if (g_b.unreg) g_b.unreg();
     for (int tries = 0; tries < 10; ++tries) {
         rc = reg(kModeOut, vmcore::OnVbCallback, &g_b.ctx, name);
         if (rc == 0 || rc == 1) break;
+        // 注册失败（如 -2/-3 槽位被残留占用），尝试 unregister 自愈后再重试
+        if (g_b.unreg) g_b.unreg();
         Sleep(100);
     }
     g_b.startRc = (int)rc;
