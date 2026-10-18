@@ -114,7 +114,8 @@ typedef struct auradsp_viz_frame {
      * 17: haas 哈斯环绕输出电平
      * 18: exciter 高频激励输出电平
      * 19: loudness 响度补偿输出电平
-     * 20..31: 预留槽位（插件插槽 / 未来扩展，恒为 -120.0f） */
+     * 20: spatial 空间音效输出电平
+     * 21..31: 预留槽位（插件插槽 / 未来扩展，恒为 -120.0f） */
     float    stage_levels_l[AURADSP_STAGE_MAX];
     float    stage_levels_r[AURADSP_STAGE_MAX];
 } auradsp_viz_frame;

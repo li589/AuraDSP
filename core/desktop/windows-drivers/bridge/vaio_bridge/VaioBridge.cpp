@@ -1043,9 +1043,9 @@ int vaio_get_param_str(const char* id, char* out, int cap) {
     return g_vaio.fnGetParam(g_vaio.pEngine, id, out, (unsigned int)cap);
 }
 
-int vaio_viz_read(void* out408, int count) {
-    if (!out408 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
-    return g_vaio.fnVizRead(g_vaio.pEngine, out408, count);
+int vaio_viz_read(void* out536, int count) {
+    if (!out536 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
+    return g_vaio.fnVizRead(g_vaio.pEngine, out536, count);
 }
 
 int vaio_bypass(int on) {

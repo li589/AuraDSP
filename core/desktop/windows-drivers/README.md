@@ -14,7 +14,7 @@
 > 结论：不搬。触发重写的唯一理由是功能需求（独占模式/事件驱动/设备变更回调），
 > 不是洁癖。
 
-## 现状（2026-10-15；vaio 驱动 Phase 4 双轨编译通过）
+## 现状（2026-10-18；VAIO 4.0/5.1/7.1 + 双 VM 验证通过）
 
 - [x] 目录骨架 + 独立 CMake（VS18 x64，不进引擎构建）
 - [x] `02_voicemeeter_client/`：三级自省检测（注册表 → Remote DLL → PE 版本）
@@ -66,7 +66,11 @@
 - [x] `04_asio_driver/`（原 `06_asio_driver/`，Driver 线）：虚拟 ASIO 驱动（`AuraDSP Driver`），
       COM In-Proc Server DLL（`auraasio_driver.dll`），被外部 DAW 打开推流；
       Phase 1 COM 骨架 + Phase 2 WASAPI 物理直通渲染已全面落地并全绿。
-- [x] `01_vaio_driver/`（**AuraVAIO 虚拟声卡，双轨**）—— **Phase 4 已落地并双轨编译通过**。
+- [x] `01_vaio_driver/`（**AuraVAIO 虚拟声卡，双轨**）—— **Phase 4 已落地并双轨编译通过**；
+      **2026-10-18 补齐 4.0/5.1/7.1 DataRanges + `KSPROPERTY_AUDIO_CHANNEL_CONFIG` +
+      INF `PKEY_AudioEndpoint_PhysicalSpeakers`**，Win10 LTSC / Win7 SP1 双 VM 验证
+      「立体声/四声道/5.1/7.1」向导全解锁（详见
+      `docs/30-审查/multichannel_and_driver_report.md` §7）。
       目录按"源码单点真相 + 两条构建轨"组织：
 
       ```
@@ -116,11 +120,11 @@
 > 故 `build_legacy.ps1` 不再从命令行覆盖任何属性。实测 link 出的子系统版本为 **6.1**，
 > 与 modern 的 10.0 形成对照，坐实降级目标生效。
 
-> **本轮不做（明确排除，已在源码头注登记）**：采集端点、`KSPROPSETID_Audio`
-> （音量/静音/峰值表）、`IMiniportWaveRTStreamNotification` 事件通知、
-> 7.1 格式矩阵，以及面向 `engine/` 的共享环形缓冲设备接口
-> （`GUID_DEVINTERFACE_*`）。本轮验收口径 = **最小可枚举端点**
-> （设备管理器能识别 AuraVAIO 为一个可用渲染端点）。
+> **明确排除（已在源码头注登记）**：采集端点、`KSPROPSETID_Audio`
+> （音量/静音/峰值表）、`IMiniportWaveRTStreamNotification` 事件通知，
+> 以及面向 `engine/` 的共享环形缓冲设备接口（`GUID_DEVINTERFACE_*`）。
+> 7.1 格式矩阵已于 2026-10-18 补齐；当前验收口径仍以「最小可枚举、
+> 4.0/5.1/7.1 可配置、可稳定回环」为准。
 
 > ⚠️ **Known issue**（`806b44b` 立案）：APO 注册后 audiodg 加载失败（SFX/MFX APO 加载路径），
 > 已登记待查。03 全部操作遵循"系统现场可恢复"原则（备份 → 操作 → 验证 → 恢复，
@@ -278,3 +282,9 @@ pnputil /delete-driver auravaiodriver.inf /uninstall /force
 > `[<Service>.NT.CoInstallers]` 段与 `WdfCoinstaller01011.dll` 的
 > `CopyFiles`/`CoInstallers32` 引用（KMDF 运行时不在 Win7 内置）。
 > 当前 INF 是"最小可枚举端点"口径，只保证 Win10+（KMDF 内置）可直接装。
+>
+> **多声道传输边界（2026-10-18）**：VAIO 桥会按端点 `Channels` 下发
+> `channels.count`；但 VM 泵每组仍只把 L/R 送进引擎、其余 6 通道透传；
+> ASIO 仍固定 2 进 2 出；AuraApo v1 仍为透传/心跳。因此
+> 「驱动能出 5.1/7.1」≠「引擎已对 5.1/7.1 逐声道做空间化」——空间音效
+> 目前只消费前置立体声，5.1/7.1 耳机虚拟环绕尚未实现。

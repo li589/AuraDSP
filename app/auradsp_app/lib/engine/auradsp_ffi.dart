@@ -221,7 +221,8 @@ abstract final class EngineState {
 /// 17: haas out
 /// 18: exciter out
 /// 19: loudness out
-/// 20..31: 预留/扩展插件槽
+/// 20: spatial out
+/// 21..31: 预留/扩展插件槽
 const int kEngineStageCount = 32;
 
 /// 引擎内建的频谱 FFT 点数（auradsp_engine.cpp 的 kVizFftSize）。

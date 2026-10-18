@@ -1,9 +1,9 @@
 # AuraDSP APP — 架构与设计方案
 
-> 版本：v1.0（2026-10-09）
+> 版本：v1.1（2026-10-18；同步 Desktop v1、四模式驱动、多声道 Phase A/B、空间 L1）
 > 定位：**AuraDSP 跨平台 APP 的完整方案** —— UI 层 / 驱动层分层、引擎形态矩阵、延迟预算、设计系统、Win11 首版落地范围。
-> 上游文档：`docs/产品架构总览.md`（产品/品牌真相源）、`docs/项目架构与开发规范.md`（工程真相源）。
-> 状态：有效。与本方案冲突的旧描述以本文档为准。
+> 上游文档：`00-总览/产品架构总览.md`（产品/品牌真相源）、`00-总览/项目架构与开发规范.md`（工程真相源）。
+> 状态：有效。与本方案冲突的旧描述以本文档为准；**2026-10-18 复核**：Windows Desktop v1 已交付，APP 经 Dart FFI 直调 DLL，四模式驱动实物齐备，多声道 Phase A/B 与 ChannelRoutingSelector 已落地。
 
 ---
 
@@ -46,9 +46,9 @@
 |---|---|---|---|---|---|---|
 | Android | **(Root)** | KSU/Magisk 模块 `auradsp_jdsp` | AIDL effects HAL 注入 audio HAL | 系统全局 | HAL 管线 | ✅ v0.4.0 已验证 |
 | Android | **(Rootless)** | APK 内置 `.so` | AudioEffect 挂 audio session / 进程内 FFI | 应用会话级 | 纯测量上报 | Phase 6 |
-| **Windows** | **(Desktop)** v1 | `auradsp_engine.dll` + WASAPI 共享模式播放链 | 应用内播放/loopback 链路 | 进程级 | 纯测量上报 | **← 本次 Win11 首版** |
-| Windows | (Desktop) v2 | SFX APO（挂声卡驱动） | APO 注册（需签名） | 系统全局 | in-place | Phase 7b |
-| Linux | (Desktop) | PipeWire filter-chain / 脉冲模块 | 会话管理器加载 | 用户会话级 | 纯测量上报 | Phase 7 |
+| **Windows** | **(Desktop)** v1 | `auradsp_engine.dll` + WASAPI 共享模式播放链 | 应用内播放/loopback + Dart FFI | 进程级 | 纯测量上报 | ✅ 已交付；四模式驱动实物齐备 |
+| Windows | (Desktop) v2 | SFX APO / AuraVAIO / VM / ASIO | APO 注册 / 虚拟声卡 / 回调 / COM | 系统级 | in-place / 驱动缓冲 | 🟡 `03_system_apo` v1 探路；VAIO/VM/ASIO 已落地 |
+| Linux | (Desktop) | PipeWire filter-chain / 脉冲模块 | 会话管理器加载 | 用户会话级 | 纯测量上报 | Phase 7（未开始） |
 | macOS | (Desktop) | CoreAudio + AudioUnit | AU 插件/驱动 | 应用级起步 | — | 低优先级 |
 
 > 「延迟口径」列原为延迟档承诺值。ADR-006 起延迟不再设档位准入，统一为纯测量上报。
@@ -74,7 +74,8 @@
 auradsp_handle auradsp_create(float sample_rate, int max_block);
 void auradsp_destroy(auradsp_handle);
 // RT 音频（进程内直调；桌面 WASAPI 线程 / Android audio session 线程）
-void auradsp_process(auradsp_handle, const float* in, float* out, int frames); // stereo interleaved
+// channels.count=2 时为 stereo interleaved；=6/8 时按 frames*channels 交织解释
+void auradsp_process(auradsp_handle, const float* in, float* out, int frames);
 // 参数（string ID + POD 值；与 AIDL VendorParamId 语义对齐）
 int  auradsp_set_param(auradsp_handle, const char* id, const void* val, uint32_t bytes);
 int  auradsp_get_param(auradsp_handle, const char* id, void* out, uint32_t bytes);
@@ -120,8 +121,9 @@ libjamesdsp 各模块算法延迟实测/推算（代码依据：`jdsp_header.h` 
 
 libjamesdsp 交织路径硬编码 2 声道（`processFloatMultiplexd`），但内部已有多声道 blob 基础（`blobsCh1..4`、`hrtfblobsResampled[4]`）。分两步走：
 
-- **Phase A（本版）：声道矩阵包络** —— 引擎外层实现 M×N 下混/上混矩阵：LFE 直通（不动低频主干），C/SL/SR 按系数并入 L/R 处理后回填。5.1/7.1 全局处理立即可用，UI 提供直通/下混/声道映射三视图。
-- **Phase B（后续）**：逐声道实例化（N-1 个 JamesDSPLib 并行实例，LFE 单独直通），需评估 CPU；若需真多声道跨声道效果，再评估在 `engine/legacy` 打 `[PATCHED]` 扩展通道数（铁律 §3.3 流程）。
+- **Phase A（已落地）：声道矩阵包络** —— 引擎外层实现 M×N 下混/上混矩阵：LFE 直通（不动低频主干），C/SL/SR 按系数并入 L/R 处理后回填。5.1/7.1 全局处理立即可用，UI 提供直通/下混/声道映射三视图。
+- **Phase B（已落地，2026-10-18）**：Category A 同质效果器（gate/filter/shelf/dyneq/tube/exciter/loudness/limiter）采用 8 声道独立状态 + 位掩码；Category B 跨声道效果（haas/spatial/stereo/crossfeed/bassmono/freeverb）仍只作用前置 FL/FR。未采用 N-1 个 JamesDSPLib 并行实例路线，避免 CPU 与 vendor 改动。
+- **空间音效边界**：`spatial` 目前只消费前置立体声，尚未实现 5.1/7.1 → 双耳虚拟环绕；头跟踪参数存在但 DSP 仍为 stub（见 `docs/20-执行/空间音效卡与空间核心方案-2026-10-16.md` 文末复核）。
 
 ## 6. 可视化与流畅交互
 
@@ -212,8 +214,8 @@ JamesDSP/
 
 | 阶段 | 内容 | 状态 |
 |---|---|---|
-| Phase 5 | AuraDSP APP Flutter 骨架 + Root 引擎控制（Android） | ← 当前（与 Win 首版并行） |
-| **W1** | **Win11 首版：engine_api + DLL + Flutter Windows APP（本方案 §9）** | ← 本次 |
+| Phase 5 | AuraDSP APP Flutter 骨架 + Root 引擎控制（Android） | ✅ 2026-10-10 |
+| **W1** | **Win11 首版：engine_api + DLL + Flutter Windows APP（本方案 §9）** | ✅ 2026-10-10 |
 | Phase 6 | Rootless 引擎（APK 内置，同一 engine_api） | 待做 |
-| Phase 7 | Desktop v2：Windows SFX APO（测试签名→正式签名）、Linux PipeWire | 待做 |
-| Phase 8 | 多声道 Phase B / 多语言扩展 / 打包发布 | 待做 |
+| Phase 7 | Desktop v2：Windows SFX APO（测试签名→正式签名）、Linux PipeWire | 🟡 Windows 四模式已落地；Linux 未开始 |
+| Phase 8 | 多声道 Phase B / 多语言扩展 / 打包发布 | 🟡 多声道 Phase B + UI 路由完成；打包待做 |

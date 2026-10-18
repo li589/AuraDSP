@@ -2,7 +2,7 @@
 
 > 版本：v0.1 设计稿（2026-10-09）。**本轮只出方案与设计，不含实现。**
 > 输入：用户六页信息架构需求 + M3.5 重排序激活 + GPLv3 拍板。
-> 上游：`docs/APP-插件与信号图扩展规划.md`（v0.1）、`docs/APP-架构与设计方案.md`。
+> 上游：`10-架构/APP-插件与信号图扩展规划.md`（v0.1）、`10-架构/APP-架构与设计方案.md`。
 
 ---
 
@@ -48,11 +48,11 @@
   - **集中式默认值真相源**：在 `lib/core/state.dart` 建立 `ParamDefaults`（严格对齐 C++ 引擎初始状态）；
   - **全量滑块双击归位出厂值**：`ValueSlider` 升级为整行 `HitTestBehavior.opaque` 手势捕获；低音主滑块、低频搁架频点/增益、Freeverb（衰减/阻尼/湿声/干声）、脉冲混合比例、声场展宽（含联动清除子带）及输出增益全部支持双击恢复出厂默认值；
   - **高级区交互与解耦**：展开箭头常亮 accent 色，去除冗余状态字，声场展宽双击恢复时联动重置 5 个子带为 0.5 中性；
-  - **置顶前置测试闭环**：`tools/ui_verify_slider_reset.py`（每次模拟交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS，生成截图 `20-bass-dragged.png` ~ `24-postgain-doubletap-reset.png` 留档；
+  - **置顶前置测试闭环**：`test/ui/ui_verify_slider_reset.py`（每次模拟交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS，生成截图 `20-bass-dragged.png` ~ `24-postgain-doubletap-reset.png` 留档；
 - **二期【已完成并验证通过】**：
   - **IR 多声道频谱可视化**（C++ 引擎层复用 viz FFT `WDL_real_fft` + 32 对数频带 `kBandEdges`，施加单侧平顶 Tukey 窗防时域首冲激截断；FFI 暴露 `convolver.ir.spectrum`；Dart 端 `_IrSpectrumGraph` 支持 1~8 声道分色绘制、渐变面积图与 20Hz~20kHz 对数频轴刻度）；
   - **Freeverb 3D 声学室空间渲染**（`_Freeverb3DStage` + `_Freeverb3DPainter`，实现透视 3D 房间线框、网格地板、虚拟发声源与听者节点、反射射线束与声波脉冲，实时联动 `decay`/`damp`/`wet`/电平）；
-  - **置顶前置测试闭环**：`tools/smoke_convolver_spectrum.py`（引擎层单测）与 `tools/ui_verify_effects_3d.py`（每次交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS；
+  - **置顶前置测试闭环**：`test/smoke/smoke_convolver_spectrum.py`（引擎层单测）与 `test/ui/ui_verify_effects_3d.py`（每次交互前严格置顶前置激活，自动化操作与断言）全部 100% PASS；
 - **三期**：扬声器优化（多实例卷积）+ 听力保护（响度护栏算法选型）。
 
 ---
@@ -109,11 +109,11 @@
   12 stage 一屏全见 + 只读信号流参照）。
 - **M3.5-c ✅ 已全量落地并验证通过（2026-10-10）**：
   - **引擎层零开销采样与 SPSC 环扩展**：在 `JDSPChainItem` 引入固定 `stageIdx (0..11)`，在 `JamesDSPProcess` 与 `JamesDSPProcessCheckBenchmarkReady` 表遍历中实施 $O(1)$ 常数时间峰值扫描写入 `stagePeakL/R[16]`；`auradsp_viz_frame` 扩展包含 16 声道电平数组（dBFS 转换），SPSC 无锁环高频直推，零分配、零系统调用、严格 RT-Safe；
-  - **单测全绿**：`tools/smoke_chain_meter.py` 验证默认直通（12 节点精确对齐 -10.46 dBFS）与 Liveprog 2.0x 增益节点（前置 7 节点保持 -10.46 dBFS，后置 5 节点精确放大至 -4.44 dBFS），100% PASS；6 项历史单测全量无回归；
-  - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 `VizFrame` 结构体映射（M3.5-c 时 280 字节，后加 EQ 输入谱 tap 扩为 **408 字节**，`sizeof == 408` 断言守护，改动须同步全部 ctypes 镜像）；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
-  - **置顶前置 UI 自动化验证**：`tools/ui_verify_chain_meter.py` 在物理活动桌面置顶前置测试全部 PASS，留档截图 `30-chain-initial.png` ~ `33-chain-reset.png`。
+  - **单测全绿**：`test/smoke/smoke_chain_meter.py` 验证默认直通（12 节点精确对齐 -10.46 dBFS）与 Liveprog 2.0x 增益节点（前置 7 节点保持 -10.46 dBFS，后置 5 节点精确放大至 -4.44 dBFS），100% PASS；6 项历史单测全量无回归；
+  - **Dart & UI 落地**：`auradsp_ffi.dart` 扩展 `VizFrame` 结构体映射（M3.5-c 时 280 字节，后加 EQ 输入谱 tap 扩为 408 字节，ABI v2 再扩 stage 槽位至 **536 字节**，`sizeof == 536` 断言守护，改动须同步全部 ctypes 镜像）；`state.dart` 提供 30fps 隔离电平监听器与 `toggleStage(stageId)`；`chain_page.dart` 呈现紧凑双轨双声道电平表（色阶平滑渐变映射）与每节点独立旁路/直通指示灯胶囊（`_StageBypassPill`）；
+  - **置顶前置 UI 自动化验证**：`test/ui/ui_verify_chain_meter.py` 在物理活动桌面置顶前置测试全部 PASS，留档截图 `30-chain-initial.png` ~ `33-chain-reset.png`。
 - **M3.5-d ✅ 已落地（2026-10-10；插槽数后扩）**：插件槽位入链。宿主由单插槽扩为**固定插槽**（M3.5-d 时 `kMaxPluginSlots = 2`，**2026-10-14 已扩至 4**），每槽经 `insertStage`（0..4）选择插入锚点，形成**外部可插 + 内部可重排**的统一拓扑。决策见 [ADR-004](../adr/ADR-004-plugin-multi-slot-and-stage-topology.md)。
-  - **引擎**：`auradsp_process` 由 `process_plugin_slots_stage(h, stage, ...)` 统一承担 stage 遍历——链首 `Stage 0 Pre-DSP` → 低频搁架 → `Stage 1 Pre-Vendor` → vendor 12 级链 → `Stage 2 Post-Vendor` → Freeverb → `Stage 3 Post-Reverb`（默认，行为与旧单插槽一致）→ NaN/Inf 清洗与 ±10.0 钳位 → `Stage 4 Post-Limiter`。stage 匹配只读 `std::atomic`，音频线程零分配零锁。
+  - **引擎**：`auradsp_process` 由 `process_plugin_slots_stage(h, stage, ...)` 统一承担 stage 遍历——链首 `Stage 0 Pre-DSP` → 低频搁架 → `Stage 1 Pre-Vendor` → vendor 12 级链 → `Stage 2 Post-Vendor` → Haas/Spatial/Exciter/Freeverb → `Stage 3 Post-Reverb`（默认，行为与旧单插槽一致）→ NaN/Inf 清洗与 ±10.0 钳位 → `Stage 4 Post-Limiter`。stage 匹配只读 `std::atomic`，音频线程零分配零锁。
   - **ABI**：新增 13 个 `auradsp_plugin_slot_*` 导出，旧单插槽符号全部保留为转发 slot 0 的薄封装，**向后兼容无破坏**。
   - **UI（处理链页）**：`_PluginStageTopologyView` 全局阶段拓扑图——Stage 0~4 与 vendor 内部节点同屏横向信号流，活跃插槽内联渲染为 `S<n>:<插件名>` 芯片；`_PluginSlotChainCard` 每槽一张卡（阶段下拉 + GUI 打开 + bypass 胶囊 + 延迟读数）。
 
@@ -132,18 +132,18 @@
   - **不变式**：无论用户如何在处理链中拖拽重排各阶段顺序（`graph.order`），各模块卡片内部绑定的电平表读数永远跟随该模块本身，绝不会因为拖拽重排序发生槽位错位或电平漂移。
 
 #### 2. 部分效果器无电平显示的根本原因与现状约定
-- **全 19 级节点输出电平表全覆盖（ABI v2）**：
-  - 处理链当前展示 19 个效果器（12 个 Legacy Vendor 节点 + 7 个自研 C++20 节点）。
-  - **全 19 个节点均具备真实硬件级输出电平采样**：
+- **全 21 个已用槽位输出电平表覆盖（ABI v2）**：
+  - 处理链当前展示 21 个效果器（12 个 Legacy Vendor 节点 + 8 个自研 C++20 节点 + 输入门控测点）。
+  - **全 21 个已用槽位（0..20）均具备真实硬件级输出电平采样**：
     - Legacy 12 级链：`tube` (0), `comp` (1), `bass` (2), `eq` (3), `arbmag` (4), `convolver` (5), `ddc` (6), `liveprog` (7), `crossfeed` (8), `stereo` (9), `reverb` (10), `output` (11)。
     - Gate 输入门控：`gate` (13) 拥有自身处理后真实输出电平采样；槽位 12 维持输入前测点（`input_lvl_in`），兼顾卡片内门限对比与链视图表头。
-    - 自研 6 节点：`dyneq` (14), `filter` (15), `bassmono` (16), `haas` (17), `exciter` (18), `loudness` (19)。
-    - 槽位 20..31：预留位/扩展插件槽（恒置 -120 dBFS）。
+    - 自研 7 节点：`dyneq` (14), `filter` (15), `bassmono` (16), `haas` (17), `exciter` (18), `loudness` (19), `spatial` (20)。
+    - 槽位 21..23、30..31：预留位（恒置 -120 dBFS）；槽位 24..29 为 GR 计量。
 - **ABI 容量升级（ABI v2 / 536 字节）**：
   1. **536 字节 ABI 严格保护**：`auradsp_viz_frame` 定义的 `stage_levels_l/r` 物理长度受宏 `AURADSP_STAGE_MAX = 32` 约束。全帧尺寸严格守护在 536 字节（Dart FFI 与 Python 烟囱镜像均有 `sizeof == 536` 强校验）。
   2. **自研节点外部采样全量注入**：在 `engine/chain/engine_chain.cpp` 的 `process_stereo_chain` 中，各效果器计算后立即由内联 RT-Safe 函数 `sample_stage_peak` 进行 $O(N)$ 零锁、零分配线性峰值扫描，并在 `emit_viz` 中转为 dBFS 写入对应的物理槽位。
 - **设计约定**：
-  - 在 `state.dart` 中，`stageMeterIndex(id)` 将 19 个 stage 静态映射至 0..19 槽位，与用户的实时重排序 `graph.order` 严格解耦（重排后灯位始终跟随效果器本身，杜绝错位）；
+  - 在 `state.dart` 中，`stageMeterIndex(id)` 将 21 个已用 stage 静态映射至 0..20 槽位，与用户的实时重排序 `graph.order` 严格解耦（重排后灯位始终跟随效果器本身，杜绝错位）；
   - UI 侧 `_StageStereoMeter` 统一渲染 `_SynthLedLadderMeter`，实时响应 `stageLevelsL` / `stageLevelsR`。
 
 #### 3. 多声道支持规范 (Multichannel Strategy)

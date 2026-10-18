@@ -5,6 +5,7 @@
 > 上游文档：[`docs/README.md`](../README.md)（导航）、`docs/APP-架构与设计方案.md`（APP 总方案）、`docs/产品架构总览.md`（产品真相源）、`docs/项目架构与开发规范.md`（工程真相源）。
 > 决策记录：[`docs/adr/`](../adr/)（ADR-001 ~ ADR-004、ADR-006）。
 > **实施结果（2026-10-10）**：M1/M2/M3.5(a~d)/M3-b/M4/M5 全部落地，`python test/runner.py --smoke` 10 项 100% PASS。里程碑状态见 §9.1，拍板结果见 §10。
+> **2026-10-18 注**：文内“10 项 smoke”为 2026-10-10 基线；当前 `test/smoke/` 有 58 个 `smoke_*.py`，`runner --smoke` 登记 63 项（含辅助/基准），VizFrame 已扩至 536B。
 
 ---
 

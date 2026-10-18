@@ -171,7 +171,8 @@ void emit_viz(auradsp_handle h) {
      * 17: haas 差分环绕
      * 18: exciter 高频激励
      * 19: loudness 响度补偿
-     * 20..23: 预留槽位（恒 -120 dBFS）
+     * 20: spatial 空间音效
+     * 21..23: 预留槽位（恒 -120 dBFS）
      * 24: Limiter GR (dB)
      * 25: Compressor GR (dB)
      * 26: Noise Gate GR (dB)
@@ -189,8 +190,8 @@ void emit_viz(auradsp_handle h) {
             /* [Input Gate Tap] 输入门控本级 IN 电平 (L/R) */
             f.stage_levels_l[i] = h->input_lvl_in_l;
             f.stage_levels_r[i] = h->input_lvl_in_r;
-        } else if (i >= 13 && i <= 19) {
-            /* 自研 7 级 stage 输出峰值转 dBFS */
+        } else if (i >= 13 && i <= 20) {
+            /* 自研 8 级 stage 输出峰值转 dBFS */
             const float pl = h->stage_peak_l[i];
             const float pr = h->stage_peak_r[i];
             f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;

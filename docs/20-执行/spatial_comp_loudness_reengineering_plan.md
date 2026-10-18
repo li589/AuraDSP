@@ -3,6 +3,14 @@
 > **目标版本**：AuraDSP v1.3.0  
 > **核心导向**：彻底解决用户反馈的五大核心痛点——动态压限器参数底层缺失、示波器偶尔停滞、空间音频卡片调参/开启时自动折叠关闭、效果器调参伴随剧烈音量变化（滑块变音量调节器）、空间图示“AI 简陋感”。  
 > **工程规范**：严格执行全站 FFI RT-Safe 规则、无工程黑话去工程师化文案、Flutter analyze 0 警告、全量测试 100% 通过。
+>
+> **实施状态（2026-10-18 复核）**
+> - 阶段一（7 频带 comp 参数 + UI）：✅ 引擎 `comp.freq1..7` / `comp.gain1..7` 已接线；`comp.threshold`/`comp.ratio` 为 UI 宏观参数，映射到分带 gain，不是独立 ABI 参数。
+> - 阶段二（Ticker 示波器）：✅ `comp_card.dart` 已用 `Ticker` 驱动衰减；GR 计量由 `gain_reduction_meter.dart` 承载。
+> - 阶段三（空间卡自闭/文案）：✅ `resetStereoWiden()` 不再关开关；`isSpatialReverbOn` 与自定义预设解耦。
+> - 阶段四（恒能量/等响）：✅ `dsp_spatial.cpp` 等能量归一化 + 2ms 平滑；`dsp_freeverb.cpp` 干湿等能量；`stereoEnhancement.c` 平滑补偿。
+> - 阶段五（空间/混响可视化）：✅ `spatial_card.dart` 全息声场、`reverb_card.dart` 声学面板已重绘。
+> - 遗留：本文中 `engine/chain/engine_chain.cpp#L205` 等旧行号为历史定位，阅读时以当前文件为准。
 
 ---
 
