@@ -762,6 +762,20 @@ abstract final class ParamRegistry {
     getter: (m) => m.spatialBinaural,
     setter: (m, v) => m.setSpatialBinaural(v),
   );
+  static final spatialFdn = ParamSpec<bool>(
+    id: 'spatial.fdn', section: 'spatial', key: 'fdn',
+    type: ParamType.boolean, defaultValue: ParamDefaults.spatialFdn,
+    getter: (m) => m.spatialFdn,
+    setter: (m, v) => m.setSpatialFdn(v),
+  );
+  static final spatialLate = ParamSpec<double>(
+    id: 'spatial.late', section: 'spatial', key: 'late',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialLate,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.spatialLate,
+    setter: (m, v) => m.setSpatialLate(v),
+  );
   static final spatialHeadAzim = ParamSpec<double>(
     id: 'spatial.headazim', section: 'spatial', key: 'headAzim',
     type: ParamType.float, defaultValue: ParamDefaults.spatialHeadAzim,
@@ -1619,7 +1633,8 @@ abstract final class ParamRegistry {
       specs: [
         spatialStyle, spatialRoom, spatialWidth, spatialCenter,
         spatialOutGain, spatialAutoGain, spatialMix, spatialElevation,
-        spatialBinaural, spatialHeadAzim, spatialHeadTrack, spatialEnable,
+        spatialBinaural, spatialFdn, spatialLate,
+        spatialHeadAzim, spatialHeadTrack, spatialEnable,
       ],
     ),
     // 10. 噪声门

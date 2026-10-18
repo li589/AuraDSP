@@ -1245,6 +1245,19 @@ class AppLocalizationsJa extends AppLocalizations {
       '5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音';
 
   @override
+  String get spatialFdn => 'FDN ルーム';
+
+  @override
+  String get spatialFdnInfo =>
+      '8 ライン FDN で後期リバーブを生成し Freeverb を置換。二重の部屋を避けるため Freeverb は自動スキップ';
+
+  @override
+  String get spatialLate => '後期リバーブ';
+
+  @override
+  String get spatialLateInfo => 'FDN 後期リバーブの送り量。大きいほど余韻が明確';
+
+  @override
   String get spatialHeadTrack => '頭部追従';
 
   @override

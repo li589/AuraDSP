@@ -64,8 +64,11 @@ struct PumpCtx {
     static constexpr int kMaxGroups = 8;
     void* eng[kMaxGroups] = {};  // 主线程按版型预建（RT 内禁分配）
     int nEng = 0;
-    float* scratchIn = nullptr;   // 主线程预分配 2*kMaxNbs（各组串行复用，非重入安全）
+    float* scratchIn = nullptr;   // 主线程预分配 8*kMaxNbs（双耳 8ch / 普通 2ch 共用）
     float* scratchOut = nullptr;
+    // 1=该组 8ch 送引擎做双耳虚拟环绕；0=旧的主对 2ch 路径。
+    // 由 vb_set_param("spatial.binaural") 更新；RT 只读。
+    volatile LONG binaural = 0;
     uint64_t frames = 0;
     uint64_t maxCbTicks = 0;  // 单次 BUFFER_OUT 最大耗时（QPC ticks；爆音预算证据）
     volatile LONG gotFirst = 0;  // 首个 BUFFER 到达（主线程轮询，RT 只存一次）
@@ -310,7 +313,28 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         }
         // 静音空转（组独立，EAPO 同式）。
         if (!c->idle[g]) {
-            if (c->testKind != 0) {
+            const bool binaural =
+                InterlockedCompareExchange(&c->binaural, 0, 0) != 0;
+            const int procCh = binaural ? 8 : 2;
+            if (binaural) {
+                // 8ch：FL/FR/C/LFE/SL/SR/BL/BR 全量进引擎。
+                for (long i = 0; i < n; ++i) {
+                    for (int ch = 0; ch < 8; ++ch) {
+                        const float* src = ab->r[base + ch];
+                        c->scratchIn[i * 8 + ch] = src ? src[i] : 0.0f;
+                    }
+                }
+                if (c->testKind != 0) {
+                    // 测试信号仍按 stereo 生成，再展开到 FL/FR；其余置零。
+                    FillTestSignal(c, c->scratchIn, n);
+                    for (long i = n - 1; i >= 0; --i) {
+                        c->scratchIn[i * 8] = c->scratchIn[i * 2];
+                        c->scratchIn[i * 8 + 1] = c->scratchIn[i * 2 + 1];
+                        for (int ch = 2; ch < 8; ++ch)
+                            c->scratchIn[i * 8 + ch] = 0.0f;
+                    }
+                }
+            } else if (c->testKind != 0) {
                 // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
                 FillTestSignal(c, c->scratchIn, n);
             } else {
@@ -323,15 +347,16 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             if (c->userBypass) {
                 // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
                 for (long i = 0; i < n; ++i) {
-                    outL[i] = c->scratchIn[i * 2];
-                    outR[i] = c->scratchIn[i * 2 + 1];
+                    outL[i] = inL[i];
+                    outR[i] = inR[i];
                 }
                 // 旁路输出==输入：测试注入恒视为有声，否则看输入。
                 outSilent = (c->testKind != 0) ? false : PairIsSilent(inL, inR, n);
             } else {
             c->process(c->eng[g], c->scratchIn, c->scratchOut, (int)n);
             for (long i = 0; i < n; ++i) {
-                const float oL = c->scratchOut[i * 2], oR = c->scratchOut[i * 2 + 1];
+                const float oL = c->scratchOut[i * procCh];
+                const float oR = c->scratchOut[i * procCh + 1];
                 outL[i] = oL;
                 outR[i] = oR;
                 if (oL != 0.0f || oR != 0.0f) outSilent = false;
@@ -339,6 +364,12 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 const double dR = (double)oR - (double)inR[i];
                 const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
                 if (d > c->maxDiff) c->maxDiff = d;
+            }
+            if (binaural) {
+                // 双耳输出只保留 FL/FR；其余置零，避免 VM 下混把原环绕混回来。
+                for (long ch = base + 2; ch < base + 8; ++ch) {
+                    if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
+                }
             }
             const bool inSilent = PairIsSilent(inL, inR, n);
             if (inSilent && outSilent)

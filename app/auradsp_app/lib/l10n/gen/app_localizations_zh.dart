@@ -1241,6 +1241,19 @@ class AppLocalizationsZh extends AppLocalizations {
       '输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音';
 
   @override
+  String get spatialFdn => 'FDN 房间';
+
+  @override
+  String get spatialFdnInfo =>
+      '使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间';
+
+  @override
+  String get spatialLate => '晚期混响';
+
+  @override
+  String get spatialLateInfo => 'FDN 晚期混响送入量。越大房间尾音越明显';
+
+  @override
   String get spatialHeadTrack => '头部跟随';
 
   @override

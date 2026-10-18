@@ -792,8 +792,13 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     sample_stage_peak(h, 18, dst, frames);   /* Stage 18: Exciter output */
 
     /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合。
-     * P-010：混响输出增益门 + 自动增益补偿（全引擎侧，reverb 不占 vendor 槽） */
-    freeverb_process(h, dst, frames);
+     * P-010：混响输出增益门 + 自动增益补偿（全引擎侧，reverb 不占 vendor 槽）。
+     * B3a：spatial.fdn 开启时由 spatial 内部 FDN 承担晚期混响，跳过 freeverb，
+     * 避免双房间；关掉 spatial/fdn 即恢复原行为。 */
+    if (!(h->p.spatial_enable.load(std::memory_order_relaxed) &&
+          h->p.spatial_fdn.load(std::memory_order_relaxed))) {
+        freeverb_process(h, dst, frames);
+    }
 
     /* Stage 3: Post-Reverb（混响后，默认阶段） */
     process_plugin_slots_stage(h, 3, dst, frames);
