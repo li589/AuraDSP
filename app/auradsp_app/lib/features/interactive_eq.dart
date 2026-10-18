@@ -199,41 +199,39 @@ class _InteractiveSpectrumEQPanelState
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              RepaintBoundary(
-                            child: ListenableBuilder(
-                              listenable: Listenable.merge([
-                                model.eqInSpectrum,
-                                model,
-                              ]),
-                              builder: (context, _) {
-                                return CustomPaint(
-                                  size: Size(w, h),
-                                  painter: _SpectrumEQPainter(
-                                    palette: p,
-                                    // 背景柱画的是**均衡器输出**频谱，不是整链输出：
-                                    // EQ 之后的混响/卷积/Freeverb/插件全都混在
-                                    // model.spectrum 里，拿它当背景，用户看到的根本不是
-                                    // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
-                                    // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
-                                    // （eqInSpectrum）+ 实测响应合成，见
-                                    // AppModel.eqOutputSpectrum。
-                                    spectrumBands: model.eqOutputSpectrum(),
-                                    frequencies: model.eqFrequencies,
-                                    gains: model.eqGains,
-                                    qs: model.eqQs,
-                                    hoveredIndex: _draggedIndex ?? _hoveredIndex,
-                                    selectedIndex: _selectedIndex,
-                                    hoverPos: _hoverPos,
-                                    isBypassed: !model.isEqActive,
-                                    measuredResponse: model.eqResponseDb,
-                                    measuredForCurve: model.eqResponseCurve,
-                                    expectedResponseCurve:
-                                        model.currentEqCurveSignature,
-                                    responseFMax: model.eqResponseFMax,
-                                  ),
-                                );
-                              },
-                            ),
+                              ListenableBuilder(
+                                listenable: Listenable.merge([
+                                  model.eqInSpectrum,
+                                  model,
+                                ]),
+                                builder: (context, _) {
+                                  return CustomPaint(
+                                    size: Size(w, h),
+                                    painter: _SpectrumEQPainter(
+                                      palette: p,
+                                      // 背景柱画的是**均衡器输出**频谱，不是整链输出：
+                                      // EQ 之后的混响/卷积/Freeverb/插件全都混在
+                                      // model.spectrum 里，拿它当背景，用户看到的根本不是
+                                      // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
+                                      // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
+                                      // （eqInSpectrum）+ 实测响应合成，见
+                                      // AppModel.eqOutputSpectrum。
+                                      spectrumBands: model.eqOutputSpectrum(),
+                                      frequencies: model.eqFrequencies,
+                                      gains: model.eqGains,
+                                      qs: model.eqQs,
+                                      hoveredIndex: _draggedIndex ?? _hoveredIndex,
+                                      selectedIndex: _selectedIndex,
+                                      hoverPos: _hoverPos,
+                                      isBypassed: !model.isEqActive,
+                                      measuredResponse: model.eqResponseDb,
+                                      measuredForCurve: model.eqResponseCurve,
+                                      expectedResponseCurve:
+                                          model.currentEqCurveSignature,
+                                      responseFMax: model.eqResponseFMax,
+                                    ),
+                                  );
+                                },
                               ),
                               // 选中频点的半透明选区条：上下顶格（定格为背景），
                               // 位置/宽度随选中自动动画，宽度即该点 Q 对应的带宽
@@ -727,6 +725,24 @@ class _SpectrumEQPainter extends CustomPainter {
     final barCount = math.min(32, spectrumBands.length);
     final barW = (w / (barCount * 1.35)).clamp(3.0, 14.0);
 
+    // 单次构建全画布共用纵向渐变 Shader，消除柱子循环内的重复分配与合批打断
+    final barShader = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: [
+        palette.accent.withValues(alpha: 0.02),
+        palette.accent.withValues(alpha: 0.18),
+      ],
+    ).createShader(Rect.fromLTWH(0, 0, w, h));
+
+    final barPaint = Paint()
+      ..shader = barShader
+      ..style = PaintingStyle.fill;
+
+    final tipPaint = Paint()
+      ..color = palette.accent.withValues(alpha: 0.45)
+      ..strokeWidth = 1.5;
+
     for (var i = 0; i < barCount; i++) {
       final val = spectrumBands[i].clamp(0.0, 1.0);
       if (val <= 0.005) continue;
@@ -738,28 +754,12 @@ class _SpectrumEQPainter extends CustomPainter {
       final y = h - barH;
 
       final rect = Rect.fromLTWH(x - barW / 2, y, barW, barH);
-      final gradient = LinearGradient(
-        begin: Alignment.bottomCenter,
-        end: Alignment.topCenter,
-        colors: [
-          palette.accent.withValues(alpha: 0.02),
-          palette.accent.withValues(alpha: 0.18 * val),
-        ],
-      );
-
-      final barPaint = Paint()
-        ..shader = gradient.createShader(rect)
-        ..style = PaintingStyle.fill;
-
       canvas.drawRRect(
         RRect.fromRectAndRadius(rect, const Radius.circular(2)),
         barPaint,
       );
 
       // 顶部高亮微光横线
-      final tipPaint = Paint()
-        ..color = palette.accent.withValues(alpha: 0.45 * val)
-        ..strokeWidth = 1.5;
       canvas.drawLine(
         Offset(x - barW / 2, y),
         Offset(x + barW / 2, y),
