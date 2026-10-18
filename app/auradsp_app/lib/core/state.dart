@@ -1298,7 +1298,7 @@ class AppModel extends ChangeNotifier {
           });
         }
         shelfOn = (raw['shelfEnable'] as int) != 0;
-        shelfFreq = (raw['shelfFreq'] as num).toDouble();
+        shelfFreq = (raw['shelfFreq'] as num).toDouble().clamp(40.0, 400.0);
         shelfGain = (raw['shelfGain'] as num).toDouble();
         if (raw['bassmonoEnable'] != null) {
           bassmonoOn = (raw['bassmonoEnable'] as int) != 0;
@@ -2203,7 +2203,7 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.ddcEnable) { ddcOn = v != 0; break; }
         if (id == ParamId.ddcReady) { ddcReady = v != 0; break; }
         if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
-        if (id == ParamId.shelfFreq) { shelfFreq = v; break; }
+        if (id == ParamId.shelfFreq) { shelfFreq = v.clamp(40.0, 400.0); break; }
         if (id == ParamId.shelfGain) { shelfGain = v; break; }
         if (id == ParamId.bassmonoEnable) { bassmonoOn = v != 0; break; }
         if (id == ParamId.bassmonoFreq) { bassmonoFreq = v; break; }
@@ -2492,9 +2492,7 @@ class AppModel extends ChangeNotifier {
     return switch (stageId) {
       'tube' => tubeOn,
       'comp' => compOn,
-      'bassmono' => bassmonoOn,
-      'shelf' => shelfOn,
-      'bass_shaping' => bassShapingOn,
+      'bassmono' || 'shelf' || 'bass_shaping' => bassShapingOn,
       'gate' => gateOn,
       'dyneq' => dyneqOn,
       'filter' => filterOn,
@@ -2523,12 +2521,8 @@ class AppModel extends ChangeNotifier {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
-      case 'bass_shaping':
+      case 'bass_shaping' || 'shelf' || 'bassmono':
         setBassShapingEnabled(!bassShapingOn);
-      case 'shelf':
-        setShelfEnabled(!shelfOn);
-      case 'bassmono':
-        setBassmonoEnabled(!bassmonoOn);
       case 'gate':
         setGateEnabled(!gateOn);
       case 'dyneq':
@@ -5052,10 +5046,11 @@ void fillEqQ(double q) {
 
     final res = latencyProbeResource(compId) ?? '';
     final rate = info?.deviceRate.toDouble() ?? 48000.0;
+    final enginePath = AuraDspLib.loadedPath;
 
     try {
       final result = await Isolate.run(() {
-        final l = AuraDspLib.load();
+        final l = AuraDspLib.load(enginePath);
         final out = malloc<Uint32>();
         final compPtr = compId.toNativeUtf8();
         int rc;

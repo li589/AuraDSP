@@ -754,11 +754,22 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   /// 刻意**不含**任何硬编码的开发机绝对路径——那属于本机配置，
   /// 不是产品行为；开发期请设 `AURADSP_ENGINE_DLL` 指向
   /// `core/desktop/windows/out/Release/auradsp_engine.dll`。
-  static AuraDspLib load() {
+  static AuraDspLib load([String? explicitPath]) {
+    if (explicitPath != null && explicitPath.isNotEmpty) {
+      if (_cached != null && loadedPath == explicitPath) return _cached!;
+      final lib = AuraDspLib._(DynamicLibrary.open(explicitPath));
+      _cached = lib;
+      loadedPath = explicitPath;
+      return lib;
+    }
     if (_cached != null) return _cached!;
     final candidates = <String>[
       'auradsp_engine.dll', // exe 旁（bundle root）
       'engine\\auradsp_engine.dll', // engine/ 子目录
+      'build\\windows\\x64\\runner\\Release\\auradsp_engine.dll', // 桌面 Release 构建产物
+      'build\\windows\\x64\\runner\\Debug\\auradsp_engine.dll',   // 桌面 Debug 构建产物
+      '..\\..\\core\\desktop\\windows\\out\\Release\\auradsp_engine.dll', // 单测 CWD (app/auradsp_app)
+      'core\\desktop\\windows\\out\\Release\\auradsp_engine.dll',       // 仓库根目录 CWD
     ];
     final envPath = Platform.environment['AURADSP_ENGINE_DLL'];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);

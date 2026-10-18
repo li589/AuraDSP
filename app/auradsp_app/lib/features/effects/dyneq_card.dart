@@ -242,80 +242,133 @@ class _DyneBand extends StatelessWidget {
           onChangedEnd: setThreshold,
         ),
         const SizedBox(height: AuraSpace.xs),
-        Theme(
-          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            dense: true,
-            tilePadding: EdgeInsets.zero,
-            childrenPadding: EdgeInsets.zero,
-            title: Text('独立动态响应时常数', style: monoOf(p, size: 10, color: p.textDim)),
-            children: [
-              ValueSlider(
-                label: '$bandLabel Attack',
-                infoMessage: '该频段专用的起音时间。',
-                value: band == 0 ? m.dyneqB1Attack : (band == 1 ? m.dyneqB2Attack : m.dyneqB3Attack),
-                defaultValue: 2.0,
-                onResetToDefault: () {
-                  if (band == 0) {
-                    m.setDyneqB1Attack(2.0);
-                  } else if (band == 1) {
-                    m.setDyneqB2Attack(2.0);
-                  } else {
-                    m.setDyneqB3Attack(2.0);
-                  }
-                },
-                min: 0.1,
-                max: 100,
-                unit: 'ms',
-                enabled: en,
-                format: (v) => v.toStringAsFixed(1),
-                onChanged: (v) {
-                  if (band == 0) {
-                    m.setDyneqB1Attack(v);
-                  } else if (band == 1) {
-                    m.setDyneqB2Attack(v);
-                  } else {
-                    m.setDyneqB3Attack(v);
-                  }
-                },
-              ),
-              const SizedBox(height: AuraSpace.xs),
-              ValueSlider(
-                label: '$bandLabel Release',
-                infoMessage: '该频段专用的释放时间。',
-                value: band == 0 ? m.dyneqB1Release : (band == 1 ? m.dyneqB2Release : m.dyneqB3Release),
-                defaultValue: 120.0,
-                onResetToDefault: () {
-                  if (band == 0) {
-                    m.setDyneqB1Release(120.0);
-                  } else if (band == 1) {
-                    m.setDyneqB2Release(120.0);
-                  } else {
-                    m.setDyneqB3Release(120.0);
-                  }
-                },
-                min: 10,
-                max: 1000,
-                unit: 'ms',
-                enabled: en,
-                format: (v) => v.toStringAsFixed(0),
-                onChanged: (v) {
-                  if (band == 0) {
-                    m.setDyneqB1Release(v);
-                  } else if (band == 1) {
-                    m.setDyneqB2Release(v);
-                  } else {
-                    m.setDyneqB3Release(v);
-                  }
-                },
-              ),
-            ],
-          ),
+        _DyneqTimingExpander(
+          bandLabel: bandLabel,
+          band: band,
+          model: m,
+          enabled: en,
         ),
       ],
     );
   }
 }
+
+class _DyneqTimingExpander extends StatefulWidget {
+  final String bandLabel;
+  final int band;
+  final AppModel model;
+  final bool enabled;
+
+  const _DyneqTimingExpander({
+    required this.bandLabel,
+    required this.band,
+    required this.model,
+    required this.enabled,
+  });
+
+  @override
+  State<_DyneqTimingExpander> createState() => _DyneqTimingExpanderState();
+}
+
+class _DyneqTimingExpanderState extends State<_DyneqTimingExpander> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final m = widget.model;
+    final band = widget.band;
+    final bandLabel = widget.bandLabel;
+    final en = widget.enabled;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _expanded = !_expanded),
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Icon(
+                  _expanded ? Icons.arrow_drop_down : Icons.arrow_right,
+                  size: 16,
+                  color: p.textDim,
+                ),
+                const SizedBox(width: 2),
+                Text('独立动态响应时常数', style: monoOf(p, size: 10, color: p.textDim)),
+              ],
+            ),
+          ),
+        ),
+        if (_expanded) ...[
+          const SizedBox(height: AuraSpace.xs),
+          ValueSlider(
+            label: '$bandLabel Attack',
+            infoMessage: '该频段专用的起音时间。',
+            value: band == 0 ? m.dyneqB1Attack : (band == 1 ? m.dyneqB2Attack : m.dyneqB3Attack),
+            defaultValue: 2.0,
+            onResetToDefault: () {
+              if (band == 0) {
+                m.setDyneqB1Attack(2.0);
+              } else if (band == 1) {
+                m.setDyneqB2Attack(2.0);
+              } else {
+                m.setDyneqB3Attack(2.0);
+              }
+            },
+            min: 0.1,
+            max: 100,
+            unit: 'ms',
+            enabled: en,
+            format: (v) => v.toStringAsFixed(1),
+            onChanged: (v) {
+              if (band == 0) {
+                m.setDyneqB1Attack(v);
+              } else if (band == 1) {
+                m.setDyneqB2Attack(v);
+              } else {
+                m.setDyneqB3Attack(v);
+              }
+            },
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          ValueSlider(
+            label: '$bandLabel Release',
+            infoMessage: '该频段专用的释放时间。',
+            value: band == 0 ? m.dyneqB1Release : (band == 1 ? m.dyneqB2Release : m.dyneqB3Release),
+            defaultValue: 120.0,
+            onResetToDefault: () {
+              if (band == 0) {
+                m.setDyneqB1Release(120.0);
+              } else if (band == 1) {
+                m.setDyneqB2Release(120.0);
+              } else {
+                m.setDyneqB3Release(120.0);
+              }
+            },
+            min: 10,
+            max: 1000,
+            unit: 'ms',
+            enabled: en,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: (v) {
+              if (band == 0) {
+                m.setDyneqB1Release(v);
+              } else if (band == 1) {
+                m.setDyneqB2Release(v);
+              } else {
+                m.setDyneqB3Release(v);
+              }
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 
 /// 商业级动态均衡器频响特性图（FabFilter / Ozone 风格）
 class _DynamicEqScope extends StatelessWidget {

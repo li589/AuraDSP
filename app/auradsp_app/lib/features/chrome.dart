@@ -9,9 +9,7 @@
  *   3. 动效：交错入场（一次编排的页面加载）、PulseDot 呼吸、AuraSwitch/
  *      AuraSegmented/AuraChip 的即时按压与滑动反馈。
  */
-import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
@@ -461,27 +459,8 @@ class _AmbientPainter extends CustomPainter {
   final ValueListenable<int> clock;
   final AmbientEnvelope _env = AmbientEnvelope();
 
-  /// 低分图缓存：把 72 根柱子画进一张约 1/10 分辨率的离屏图，再放大绘制。
-  /// 放大自带双线性平滑（等价于廉价模糊），彻底移除原来「每柱一次
-  /// MaskFilter.blur」的写法——那是 72 次高斯模糊/帧，Windows/D3D11 下每次
-  /// 模糊都倾向分配离屏渲染目标，直接导致 GPU ~70%、内存锯齿尖峰。
-  /// 低分图重渲染节流到 ~15fps，尺寸仅约 140×90，开销可忽略。
-  ui.Image? _img;
-  bool _rendering = false;
-  bool _disposed = false;
-  int _lastRenderMs = 0;
-  static const _renderIntervalMs = 66;
-
-  /// 手上这张图是不是从「全零包络」渲染出来的。
-  ///
-  /// 静音间隙（曲子中间的空白、欠载）里引擎照样产帧，包络却恒为 0，
-  /// 于是每 66ms 仍然要走一遍 PictureRecorder→toImage——那是异步 GPU
-  /// 光栅化，外加一次新建 + 释放 ui.Image 纹理，画出来的却是一张全黑图。
-  /// 记下这张图的「静默」属性后，同为静默就直接复用，不再重复光栅。
-  bool _renderedSilent = false;
-
-  /// 放大缓存图用的固定画笔。`paint()` 以帧率调用，不得在这里分配。
-  final Paint _blitPaint = Paint()..filterQuality = FilterQuality.medium;
+  /// 缓存画笔与基础绘制参数（避免每帧重复分配对象）
+  final Paint _barPaint = Paint();
 
   _AmbientPainter({
     required this.spectrum,
@@ -504,99 +483,51 @@ class _AmbientPainter extends CustomPainter {
 
   /// 无信号期衰减；返回是否仍有残留（false = 已衰减干净，可停止看门狗）。
   bool decayStale() {
-    final any = _env.decay();
-    // 强制下一次 paint 重建低分图，否则画布仍是衰减前的旧图。
-    _lastRenderMs = 0;
-    return any;
+    return _env.decay();
   }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (!TrayService.instance.isWindowVisible.value) return;
     if (_env.stale) {
-      // 无信号：只衰减，不重采样陈旧数据（否则被最后一帧抬回、永不归零）。
+      // 无信号：只衰减，不重采样陈旧数据
       _env.decay();
     } else {
       _env.feed(spectrum.value);
     }
 
-    // 节流重渲染低分图；绘制始终走缓存图。
-    final now = DateTime.now().millisecondsSinceEpoch;
-    if (_img == null || now - _lastRenderMs >= _renderIntervalMs) {
-      final silent = _env.maxValue <= AmbientEnvelope.epsilon;
-      // 有信号时按节流节奏持续重绘；静音时只在“刚变静默”那一次重绘，
-      // 之后直接复用全黑图，不再重复光栅化。
-      if (_img == null || !silent || silent != _renderedSilent) {
-        _lastRenderMs = now;
-        _renderedSilent = silent;
-        unawaited(_rerender(size));
-      }
+    if (_env.maxValue <= AmbientEnvelope.epsilon) {
+      // 静音期无须光栅化任何内容，零 GPU 占用
+      return;
     }
 
-    final img = _img;
-    if (img == null) return; // 首帧尚未就绪，跳过；下一帧（≈33ms）即可用
-    canvas.drawImageRect(
-      img,
-      Rect.fromLTWH(0, 0, img.width.toDouble(), img.height.toDouble()),
-      Offset.zero & size,
-      // 双线性放大：把低分图的硬边平滑成光晕，替代 MaskFilter.blur
-      _blitPaint,
-    );
-  }
-
-  void _drawBars(Canvas canvas, Size size) {
     final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
-    final baseAlpha = (0.16 * intensity * 255).round();
+    final baseAlpha = (0.14 * intensity * 255).round();
     final bw = size.width / AmbientEnvelope.bars;
 
-    // 画笔 / 渐变 / 两种颜色都只建一次：原实现每根柱都新建一个 Paint、
-    // 调两次 Color.withValues、再 new 一个 LinearGradient，一次重渲染
-    // 最多 216 个短命对象。渐变本身与柱无关（只有绑定它的 rect 变），
-    // 所以渐变对象也能复用，只保留每柱必要的 createShader。
-    final paint = Paint();
+    // 单次构建共用纵向渐变（底部至顶部渐隐，呈现柔和氛围光晕）
     final grad = LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
       colors: [
         palette.accent.withValues(alpha: baseAlpha / 255),
-        palette.accent.withValues(alpha: 0),
+        palette.accent.withValues(alpha: 0.0),
       ],
+      stops: const [0.0, 0.9],
     );
 
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * size.height * 0.92;
-      final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.62, h);
-      paint.shader = grad.createShader(rect);
-      canvas.drawRect(rect, paint);
-    }
-  }
-
-  Future<void> _rerender(Size target) async {
-    if (_rendering || _disposed || !TrayService.instance.isWindowVisible.value) return;
-    _rendering = true;
-    try {
-      final lw = math.max(72.0, target.width / 10);
-      final lh = math.max(48.0, target.height / 10);
-      final recorder = ui.PictureRecorder();
-      final c = Canvas(recorder, Rect.fromLTWH(0, 0, lw, lh));
-      _drawBars(c, Size(lw, lh));
-      final pic = recorder.endRecording();
-      final img = await pic.toImage(lw.round(), lh.round());
-      pic.dispose();
-      if (_disposed) {
-        img.dispose();
-        return;
-      }
-      final old = _img;
-      _img = img;
-      old?.dispose();
-    } catch (_) {
-      // 渲染失败不致命：下一帧重试
-    } finally {
-      _rendering = false;
+      final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.75, h);
+      _barPaint.shader = grad.createShader(rect);
+      // 原生带圆角直接光栅化，零 GPU 纹理重建与 D3D11 句柄损耗
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(rect, Radius.circular(bw * 0.35)),
+        _barPaint,
+      );
     }
   }
 
@@ -604,9 +535,7 @@ class _AmbientPainter extends CustomPainter {
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
   void dispose() {
-    _disposed = true;
-    _img?.dispose();
-    _img = null;
+    // 纯直接光栅化无须持有原生 Image 句柄
   }
 }
 

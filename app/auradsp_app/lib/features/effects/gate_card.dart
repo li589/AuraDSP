@@ -26,18 +26,9 @@ class _GateCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('gate')
           : null,
       latencyTick: model.getComponentLatencyTick('gate'),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (model.gateOn) ...[
-            GateActivityIndicator(grGate: model.grGate),
-            const SizedBox(width: AuraSpace.sm),
-          ],
-          ParamSwitch(
-            param: ParamRegistry.gateEnable,
-            model: model,
-          ),
-        ],
+      trailing: ParamSwitch(
+        param: ParamRegistry.gateEnable,
+        model: model,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
