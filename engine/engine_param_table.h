@@ -253,7 +253,10 @@ static auradsp_status get_bass_intensity(auradsp_handle h, void* out_value, uint
 static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
-    if (v < -2) return AURADSP_E_PARAM;
+    /* 18 = SF_REVERB_PRESET_LONGREVERB2（sf_presetreverb 最高分支）。
+     * 越界会落到 switch default，comb/delay size 保持 0，下一音频块
+     * (pos+1)%size 整数模零 → SIGFPE；VM/AIDL/预设恢复均可触达。 */
+    if (v < -2 || v > 18) return AURADSP_E_PARAM;
     if (v != h->p.reverb_preset.load(std::memory_order_relaxed)) {
         h->p.reverb_preset.store(v);
         compute_latency(h, &h->latency_ms);

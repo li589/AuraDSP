@@ -147,6 +147,13 @@ check(v == 2048, f"viz.fftSize 回读 2048 (got {v})")
 check(set_i32(h, "viz.fftSize", 3000) != 0, "viz.fftSize=3000 (非2的幂) 拒绝")
 check(set_i32(h, "viz.fftSize", 512) != 0, "viz.fftSize=512 (<1024) 拒绝")
 check(set_i32(h, "viz.fftSize", 16384) != 0, "viz.fftSize=16384 (>8192) 拒绝")
+
+# reverb.preset 上界：18=LONGREVERB2；越界会落 switch default → size=0 → 模零 SIGFPE
+check(set_i32(h, "reverb.preset", 18) == 0, "reverb.preset=18 (上界) 接受")
+check(set_i32(h, "reverb.preset", 19) != 0, "reverb.preset=19 (越界) 拒绝")
+check(set_i32(h, "reverb.preset", -3) != 0, "reverb.preset=-3 (越界) 拒绝")
+rc, v = get_i32(h, "reverb.preset")
+check(v == 18, f"reverb.preset 越界拒绝后保持 18 (got {v})")
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- [3] channels.count

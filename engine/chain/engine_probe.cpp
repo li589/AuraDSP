@@ -426,7 +426,8 @@ int build_eq_axis(char* txt, double sample_rate,
         if (colon) {
             *colon = 0;
             const double f = atof(cur), g = atof(colon + 1);
-            if (f > 0 && f <= 96000) {
+            /* NaN 会绕过所有 < / > 钳制并污染插值/IR 设计；整对丢弃。 */
+            if (std::isfinite(f) && std::isfinite(g) && f > 0 && f <= 96000) {
                 /* C3：钳到 Nyquist 以内。只判 <=96000 时，低采样率下越界频点
                  * 会进 vendor 的最小相位 IR 设计。 */
                 const double nyq = sample_rate * 0.5;

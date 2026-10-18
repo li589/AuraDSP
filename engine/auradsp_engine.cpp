@@ -115,9 +115,13 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->max_block = max_block_frames;
     h->fft_scratch = new (std::nothrow) float[kVizFftMax];
     h->hann = new (std::nothrow) float[kVizFftMax];
-    if (!h->fft_scratch) { delete h; return nullptr; }
+    if (!h->fft_scratch || !h->hann) {
+        delete[] h->fft_scratch; delete[] h->hann; delete h; return nullptr;
+    }
     h->viz_hist = new (std::nothrow) float[kVizFftMax * 2]();
-    if (!h->viz_hist) { delete[] h->fft_scratch; delete h; return nullptr; }
+    if (!h->viz_hist) {
+        delete[] h->fft_scratch; delete[] h->hann; delete h; return nullptr;
+    }
     /* [EQ tap] 第二条环形历史。分配失败不算致命：emit_viz 里对 nullptr
      * 已有分支，eq_in_spectrum 保持全 0，UI 会退回旧的全链输出谱。 */
     h->eq_in_hist = new (std::nothrow) float[kVizFftMax * 2]();
@@ -133,7 +137,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->mx_scratch = new (std::nothrow) float[(size_t)max_block_frames * kMxMaxChannels]();
     h->mx_stereo = new (std::nothrow) float[(size_t)max_block_frames * 2]();
     if (!h->mx_scratch || !h->mx_stereo) {
-        delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
+        delete[] h->shelf_scratch; delete[] h->conv_scratch;
         delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete h; return nullptr;
     }
@@ -236,9 +241,12 @@ void auradsp_destroy(auradsp_handle h) {
     fv_free(h->fvL);
     fv_free(h->fvR);
     delete[] h->fft_scratch;
+    delete[] h->hann;
     delete[] h->viz_hist; delete[] h->eq_in_hist;
     delete[] h->shelf_scratch;
     delete[] h->conv_scratch;
+    delete[] h->mx_scratch;
+    delete[] h->mx_stereo;
     delete[] h->haas_ring;
     delete[] h->plugin_buf_l;
     delete[] h->plugin_buf_r;

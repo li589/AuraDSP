@@ -96,6 +96,19 @@ outp = (ctypes.c_float * (frames * 2))()
 dll.auradsp_process(h, inp, outp, frames)
 check('process after readback patch', True)
 
+# 6. eq.curve 增益 NaN 不得污染插值/IR（atof("nan") 曾绕过三元钳制）
+nan_text = '20:nan;1000:3;20000:0'
+rc = set_str('eq.curve', nan_text)
+check('eq.curve with NaN gain rejected pair', rc == 0, 'rc=%d' % rc)
+ok_nan = True
+for _ in range(4):
+    dll.auradsp_process(h, inp, outp, frames)
+    for i in range(frames * 2):
+        v = outp[i]
+        if v != v or abs(v) > 10.0:
+            ok_nan = False
+check('NaN EQ curve leaves finite state', ok_nan)
+
 dll.auradsp_destroy(h)
 
 print()
