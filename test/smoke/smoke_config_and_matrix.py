@@ -18,10 +18,13 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _tmpcleanup import remove_tree_with_retry, warn_if_failed  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release", "auradsp_engine.dll")
+DLL = os.environ.get("AURADSP_DLL", os.path.join(ROOT, "core", "desktop", "windows", "out", "Release", "auradsp_engine.dll"))
 if not os.path.exists(DLL):
-    print(f"Error: DLL not found at {DLL}")
-    sys.exit(1)
+    if os.path.exists("C:/AuraDSP/auradsp_engine.dll"):
+        DLL = "C:/AuraDSP/auradsp_engine.dll"
+    else:
+        print(f"Error: DLL not found at {DLL}")
+        sys.exit(1)
 
 lib = ctypes.CDLL(DLL)
 lib.auradsp_create.restype = ctypes.c_void_p

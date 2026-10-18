@@ -13,8 +13,10 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DLL = os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release',
-                   'auradsp_engine.dll')
+DLL = os.environ.get("AURADSP_DLL", os.path.join(ROOT, 'core', 'desktop', 'windows', 'out', 'Release',
+                   'auradsp_engine.dll'))
+if not os.path.exists(DLL) and os.path.exists("C:/AuraDSP/auradsp_engine.dll"):
+    DLL = "C:/AuraDSP/auradsp_engine.dll"
 
 SR = 48000.0
 BLOCK = 512
