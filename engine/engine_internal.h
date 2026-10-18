@@ -522,6 +522,10 @@ struct auradsp_handle_s {
     int    spat_hist_pos = 0;
     float  spat_pinna[2][2][4];           // [stage][ch] 反射总线 pinna 双 biquad
     float  spat_src_pinna[kSpatSpk][2][2][4]; // [源][耳][stage] 方向 pinna 状态
+    /* B3b：早期反射 L/R 全通扩散器（2 耳 × 2 级；4.1ms@192k=788 < 1024） */
+    static constexpr int kSpatApMax = 1024;
+    float  spat_ap_buf[2][2][kSpatApMax]; // [耳][级] 全通延迟线
+    int    spat_ap_pos[2][2];             // [耳][级] 写指针
     float  spat_lfe_lp = 0.0f;            // LFE 120Hz 低通状态
     /* FDN 晚期混响（8 线 Hadamard；固定上限，reset 时按 fs 设长度） */
     static constexpr int kFdnLines = 8;

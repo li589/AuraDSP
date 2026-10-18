@@ -3,7 +3,7 @@
  * 参考：docs/10-架构/空间音效升级方案-2026-10-18.md
  *   5.0 虚拟扬声器（L-30/C0/R+30/LS-110/RS+110）→ 每源 ITD（Woodworth）
  *   + ILD（头影低通/远耳增益）+ 每源/每耳方向 pinna → 早期反射（8 tap 对称）
- *   → 输出增益 / 干湿比 / autogain。
+ *   → B3b 双耳全通扩散（左右不同延迟）→ 输出增益 / 干湿比 / autogain。
  * 输入：立体声上混（L→L/LS，R→R/RS，C 取中置和；v1 不做 5.1 分离）。
  * RT：全部固定数组预分配；音频线程零分配/零锁/无 IO。
  * 头跟踪：spatial.headazim 始终作为手动/外部朝向消费；DSP 只做块级平滑。
@@ -157,6 +157,39 @@ static inline void fdn_tick(auradsp_handle h, float in, float room,
     *outR = (odd + even * 0.5f) * 0.25f;
 }
 
+/* ---- B3b：早期反射全通扩散 ------------------------------------------------
+ * Schroeder 全通：H(z)=(-g+z^-D)/(1-gz^-D)，幅频恒为 1，只改相位/瞬态。
+ * 左右耳使用不同延迟，降低双耳相关；两级串联避免单级扩散不足。 */
+static inline float spat_ap_tick(float* buf, int& pos, int len, float g,
+                                 float x) {
+    const float z = buf[pos];
+    const float y = z - g * x;
+    buf[pos] = x + g * y;
+    if (++pos >= len) pos = 0;
+    return y;
+}
+
+static inline void spat_decorrelate(auradsp_handle h, float fs,
+                                    float* l, float* r) {
+    static const float kMsL[2] = {1.7f, 3.1f};
+    static const float kMsR[2] = {2.3f, 4.1f};
+    const float g = 0.55f;
+    for (int stage = 0; stage < 2; ++stage) {
+        int nl = (int)(kMsL[stage] * fs / 1000.0f + 0.5f);
+        int nr = (int)(kMsR[stage] * fs / 1000.0f + 0.5f);
+        if (nl < 1) nl = 1;
+        if (nr < 1) nr = 1;
+        if (nl >= auradsp_handle_s::kSpatApMax)
+            nl = auradsp_handle_s::kSpatApMax - 1;
+        if (nr >= auradsp_handle_s::kSpatApMax)
+            nr = auradsp_handle_s::kSpatApMax - 1;
+        *l = spat_ap_tick(h->spat_ap_buf[0][stage], h->spat_ap_pos[0][stage],
+                          nl, g, *l);
+        *r = spat_ap_tick(h->spat_ap_buf[1][stage], h->spat_ap_pos[1][stage],
+                          nr, g, *r);
+    }
+}
+
 /* 控制线程/开关切换时调用：清空全部 RT 状态，避免残留瞬态。
  * 不在音频线程调用。 */
 void spatial_reset(auradsp_handle h) {
@@ -170,6 +203,8 @@ void spatial_reset(auradsp_handle h) {
     memset(h->spat_hist, 0, sizeof(h->spat_hist));
     h->spat_hist_pos = 0;
     memset(h->spat_pinna, 0, sizeof(h->spat_pinna));
+    memset(h->spat_ap_buf, 0, sizeof(h->spat_ap_buf));
+    memset(h->spat_ap_pos, 0, sizeof(h->spat_ap_pos));
     h->spat_lfe_lp = 0.0f;
     h->spat_ag_in = 0.0;
     h->spat_ag_out = 0.0;
@@ -391,6 +426,7 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
                      ra1[0], ra2[0], eR);
         eR = spat_bq(h->spat_pinna[1][1], rb0[1], rb1[1], rb2[1],
                      ra1[1], ra2[1], eR);
+        spat_decorrelate(h, fs, &eL, &eR);
 
         // B3a：FDN 晚期混响（mono room send）
         if (fdnOn && late > 0.0f) {
@@ -663,6 +699,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                      ra1[0], ra2[0], eR);
         eR = spat_bq(h->spat_pinna[1][1], rb0[1], rb1[1], rb2[1],
                      ra1[1], ra2[1], eR);
+        spat_decorrelate(h, fs, &eL, &eR);
 
         if (fdnOn && late > 0.0f) {
             float fl = 0.0f, fr = 0.0f;
