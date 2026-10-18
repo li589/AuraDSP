@@ -1229,10 +1229,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Style is a preset group: switching overwrites Room / Width / Center';
 
   @override
-  String get spatialStyleDolby => 'Dolby Room';
+  String get spatialStyleCinema => 'Cinema';
 
   @override
-  String get spatialStyleDts => 'DTS Imaging';
+  String get spatialStyleImaging => 'Imaging';
 
   @override
   String get spatialStyleNeutral => 'Neutral';

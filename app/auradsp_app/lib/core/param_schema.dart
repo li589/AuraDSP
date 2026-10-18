@@ -696,7 +696,7 @@ abstract final class ParamRegistry {
     id: 'spatial.style', section: 'spatial', key: 'style',
     type: ParamType.int32, defaultValue: ParamDefaults.spatialStyle,
     min: 0, max: 2,
-    options: ['Dolby 房', 'DTS', '中性'],
+    options: ['影院', '定位', '中性'],
     getter: (m) => m.spatialStyle,
     setter: (m, v) => m.setSpatialStyle(v),
   );

@@ -1187,10 +1187,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialStyleInfo => 'スタイルはプリセット群：切替で Room / Width / Center を上書き';
 
   @override
-  String get spatialStyleDolby => 'Dolby ルーム';
+  String get spatialStyleCinema => 'シネマ';
 
   @override
-  String get spatialStyleDts => 'DTS 定位';
+  String get spatialStyleImaging => 'イメージング';
 
   @override
   String get spatialStyleNeutral => 'ニュートラル';

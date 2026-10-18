@@ -2380,17 +2380,17 @@ abstract class AppLocalizations {
   /// **'风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）'**
   String get spatialStyleInfo;
 
-  /// No description provided for @spatialStyleDolby.
+  /// No description provided for @spatialStyleCinema.
   ///
   /// In zh, this message translates to:
-  /// **'Dolby 房'**
-  String get spatialStyleDolby;
+  /// **'影院'**
+  String get spatialStyleCinema;
 
-  /// No description provided for @spatialStyleDts.
+  /// No description provided for @spatialStyleImaging.
   ///
   /// In zh, this message translates to:
-  /// **'DTS 定位'**
-  String get spatialStyleDts;
+  /// **'定位'**
+  String get spatialStyleImaging;
 
   /// No description provided for @spatialStyleNeutral.
   ///
