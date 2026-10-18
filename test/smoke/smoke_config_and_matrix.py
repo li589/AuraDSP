@@ -334,6 +334,19 @@ check(0.5 < out_rms / in_rms < 2.0,
       f"立体声直通比例合理 (in={in_rms:.4f} out={out_rms:.4f})")
 lib.auradsp_destroy(h)
 
+# ---------------------------------------------------------------- [7] 默认值对齐
+print("\n=== [7] 引擎默认值对齐 Dart ParamDefaults ===")
+h = new_engine()
+check(abs(get_f32(h, "gate.range")[1] + 60.0) < 1e-6,
+      f"gate.range 默认 -60 (got {get_f32(h, 'gate.range')[1]})")
+check(abs(get_f32(h, "limiter.threshold")[1] + 0.1) < 1e-6,
+      f"limiter.threshold 默认 -0.1 (got {get_f32(h, 'limiter.threshold')[1]})")
+check(abs(get_f32(h, "dyneq.b1.release")[1] - 120.0) < 1e-6,
+      f"dyneq.b1.release 默认 120 (got {get_f32(h, 'dyneq.b1.release')[1]})")
+check(abs(get_f32(h, "dyneq.b3.release")[1] - 120.0) < 1e-6,
+      f"dyneq.b3.release 默认 120 (got {get_f32(h, 'dyneq.b3.release')[1]})")
+lib.auradsp_destroy(h)
+
 try:
     # B5 E4：健壮清理（有限重试 + 失败告警），替代静默的
     # except OSError: pass——后者正是历史泄漏无人发现的原因。

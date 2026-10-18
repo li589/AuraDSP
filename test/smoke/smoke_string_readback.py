@@ -109,6 +109,12 @@ for _ in range(4):
             ok_nan = False
 check('NaN EQ curve leaves finite state', ok_nan)
 
+# 7. 空缓冲（bytes=0）不得在无副本分支写终末符
+for pid in ('eq.curve', 'arbmag.string', 'liveprog.code'):
+    zero = ctypes.create_string_buffer(1)
+    rc = dll.auradsp_get_param(h, pid.encode(), zero, 0)
+    check('%s bytes=0 rejected' % pid, rc == E_PARAM, 'rc=%d' % rc)
+
 dll.auradsp_destroy(h)
 
 print()

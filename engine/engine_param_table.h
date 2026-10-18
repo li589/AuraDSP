@@ -369,6 +369,30 @@ static auradsp_status set_arbmag_enable(auradsp_handle h, const void* value, uin
     return AURADSP_OK;
 }
 
+/* vendor 的 strtof/get_floatArb 会接受 nan/inf（errno 不报），随后
+ * gainAtLogGrid/NodesSorter 会把非有限值带进 FIR/卷积状态。legacy 只读，
+ * 因此在入口按“可解析数字必须是有限值”逐 token 拒绝。 */
+static bool arbmag_numeric_finite(const char* s) {
+    if (!s) return false;
+    for (const char* p = s; *p;) {
+        const char c = *p;
+        const bool maybeNum = (c >= '0' && c <= '9') || c == '+' || c == '-' ||
+                              c == '.' || c == 'n' || c == 'N' ||
+                              c == 'i' || c == 'I';
+        if (maybeNum) {
+            char* end = nullptr;
+            const double v = strtod(p, &end);
+            if (end != p) {
+                if (!std::isfinite(v)) return false;
+                p = end;
+                continue;
+            }
+        }
+        ++p;
+    }
+    return true;
+}
+
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes == 0 || bytes > 256 * 1024) {
         set_error(h, "arbmag.string: size must be 1..256KiB");
@@ -378,6 +402,11 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
     if (!buf) { set_error(h, "arbmag.string: OOM"); return AURADSP_E_IO; }
     memcpy(buf, value, bytes);
     buf[bytes] = 0;
+    if (!arbmag_numeric_finite(buf)) {
+        free(buf);
+        set_error(h, "arbmag.string: non-finite numeric token");
+        return AURADSP_E_PARAM;
+    }
     ArbitraryResponseEqualizerStringParser(&h->jdsp, buf);
     free(buf);
     const int nodes = (int)h->jdsp.arbMag.instance.coeffGen.nodesCount;
@@ -397,6 +426,8 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
 }
 
 static auradsp_status get_arbmag_string(auradsp_handle h, void* out_value, uint32_t bytes) {
+    /* S-10 修复：无副本分支也写 1 字节终末符，bytes<1 即理论越写。 */
+    if (bytes < 1) return AURADSP_E_PARAM;
     if (!h->arbmag_string) { *(char*)out_value = 0; return AURADSP_OK; }
     if (bytes < h->arbmag_string_len + 1) { set_error(h, "arbmag.string: buffer too small"); return AURADSP_E_PARAM; }
     memcpy(out_value, h->arbmag_string, h->arbmag_string_len + 1);
@@ -591,6 +622,8 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
 }
 
 static auradsp_status get_eq_curve(auradsp_handle h, void* out_value, uint32_t bytes) {
+    /* S-10 修复：无副本分支也写 1 字节终末符，bytes<1 即理论越写。 */
+    if (bytes < 1) return AURADSP_E_PARAM;
     if (!h->eq_curve) { *(char*)out_value = 0; return AURADSP_OK; }
     if (bytes < h->eq_curve_len + 1) { set_error(h, "eq.curve: buffer too small"); return AURADSP_E_PARAM; }
     memcpy(out_value, h->eq_curve, h->eq_curve_len + 1);
@@ -628,6 +661,8 @@ static auradsp_status set_liveprog_code(auradsp_handle h, const void* value, uin
 }
 
 static auradsp_status get_liveprog_code(auradsp_handle h, void* out_value, uint32_t bytes) {
+    /* S-10 修复：无副本分支也写 1 字节终末符，bytes<1 即理论越写。 */
+    if (bytes < 1) return AURADSP_E_PARAM;
     if (!h->lp_code) { *(char*)out_value = 0; return AURADSP_OK; }
     if (bytes < h->lp_code_len + 1) { set_error(h, "liveprog.code: buffer too small"); return AURADSP_E_PARAM; }
     memcpy(out_value, h->lp_code, h->lp_code_len + 1);

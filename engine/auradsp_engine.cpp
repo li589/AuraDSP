@@ -211,6 +211,8 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
         h->mc_limiter_env[c] = 1.0f;
         h->mc_limiter_la_env[c] = 1.0f;
         h->mc_limiter_la_pos[c] = 0;
+        h->mc_limiter_dq_head[c] = 0;
+        h->mc_limiter_dq_count[c] = 0;
         h->mc_limiter_prev[c][0] = 0.0f;
         h->mc_limiter_prev[c][1] = 0.0f;
         for (int k = 0; k < auradsp_handle_s::kLimLookaheadMax; ++k) {
@@ -218,6 +220,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
             h->mc_limiter_gain_buf[c][k] = 1.0f;
         }
     }
+    h->mc_limiter_dq_len = 0; /* PF-2：0 != 任何 la_len，首块强制重建 deque */
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
     return h;
@@ -276,8 +279,10 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
 
     if (multichannel && h->mx_scratch) {
         if (st != AURADSP_STATE_PROCESSING) {
-            /* 非处理态：原样直通（含全部声道），不做矩阵 */
-            memcpy(out, in, (size_t)frames * ch * sizeof(float));
+            /* 非处理态：直通但清洗非有限值（否则 NaN 会绕过全部 DSP 直达 DAC） */
+            const int n = frames * ch;
+            for (int i = 0; i < n; ++i)
+                out[i] = std::isfinite(in[i]) ? in[i] : 0.0f;
             return;
         }
         /* 多声道输入门控处理：缩放写入 mx_scratch 并统计本级 IN / OUT 电平 */
@@ -285,7 +290,8 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         float pk_out_l = 0.0f, pk_out_r = 0.0f;
         for (int i = 0; i < frames; ++i) {
             for (int c = 0; c < ch; ++c) {
-                const float s_in = in[i * ch + c];
+                const float s_raw = in[i * ch + c];
+                const float s_in = std::isfinite(s_raw) ? s_raw : 0.0f;
                 const float bal = (c < 8) ? h->p.input_ch_gain[c].load(std::memory_order_relaxed) : 1.0f;
                 const float s_out = s_in * (master_lin * bal);
                 h->mx_scratch[i * ch + c] = s_out;
@@ -349,7 +355,9 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     }
 
     if (st != AURADSP_STATE_PROCESSING) {
-        if (out != in) memcpy(out, in, (size_t)frames * 2 * sizeof(float));
+        const int n = frames * 2;
+        for (int i = 0; i < n; ++i)
+            out[i] = std::isfinite(in[i]) ? in[i] : 0.0f;
         return;
     }
     /* 立体声输入门控处理：写入 shelf_scratch 作为链前置工作区 */
@@ -358,8 +366,10 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     float pk_in_l = 0.0f, pk_in_r = 0.0f;
     float pk_out_l = 0.0f, pk_out_r = 0.0f;
     for (int i = 0; i < frames; ++i) {
-        const float in_l = in[i * 2];
-        const float in_r = in[i * 2 + 1];
+        const float raw_l = in[i * 2];
+        const float raw_r = in[i * 2 + 1];
+        const float in_l = std::isfinite(raw_l) ? raw_l : 0.0f;
+        const float in_r = std::isfinite(raw_r) ? raw_r : 0.0f;
         const float out_l = in_l * g0;
         const float out_r = in_r * g1;
         h->shelf_scratch[i * 2]     = out_l;
@@ -528,7 +538,10 @@ int auradsp_plugin_get_count(auradsp_handle h) {
 int auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max_len) {
     if (!h || !h->plugin_host || !out_json || max_len <= 1 || index < 0) return 0;
     std::string json = h->plugin_host->getScannedItemJson((size_t)index);
-    if ((int)json.length() >= max_len) {
+    /* S-9 修复：json.length() 为 size_t，(int) 强转在 >2GB 时回绕成负、
+     * 跳过截断分支后 memcpy 拿到超长长度即越界。改为 size_t 与
+     * (size_t)max_len 比较（入口已保证 max_len>=2，减 1 不回绕）。 */
+    if (json.length() >= (size_t)max_len) {
         memcpy(out_json, json.data(), (size_t)(max_len - 1));
         out_json[max_len - 1] = '\0';
         return max_len - 1;
@@ -541,7 +554,7 @@ int auradsp_plugin_get_item(auradsp_handle h, int index, char* out_json, int max
 int auradsp_plugin_get_all(auradsp_handle h, char* out_json, int max_len) {
     if (!h || !h->plugin_host || !out_json || max_len <= 1) return 0;
     std::string json = h->plugin_host->getAllScannedJson();
-    if ((int)json.length() >= max_len) {
+    if (json.length() >= (size_t)max_len) {
         memcpy(out_json, json.data(), (size_t)(max_len - 1));
         out_json[max_len - 1] = '\0';
         return max_len - 1;
@@ -607,7 +620,7 @@ uint32_t auradsp_plugin_slot_get_latency(auradsp_handle h, int slot) {
 int auradsp_plugin_slot_get_status(auradsp_handle h, int slot, char* out_json, int max_len) {
     if (!h || !h->plugin_host || !out_json || max_len <= 1 || slot < 0 || slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
     std::string json = h->plugin_host->getStatusJsonSlot((size_t)slot);
-    if ((int)json.length() >= max_len) {
+    if (json.length() >= (size_t)max_len) {
         memcpy(out_json, json.data(), (size_t)(max_len - 1));
         out_json[max_len - 1] = '\0';
         return max_len - 1;

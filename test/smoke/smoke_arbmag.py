@@ -68,6 +68,14 @@ check('ready after load', r == 1)
 _, nc = get_i('arbmag.nodeCount')
 check('nodeCount=5', nc == 5, f'actual={nc}')
 
+# 2b. 非有限数字必须整串拒绝（vendor strtof 会接受 nan/inf）
+for bad in ('GraphicEQ: 20 0; 100 nan; 20000 0',
+            'GraphicEQ: 20 0; 100 inf; 20000 0'):
+    rc = set_str('arbmag.string', bad)
+    check('non-finite arbmag rejected (%s)' % bad.split()[2], rc != 0)
+_, nc2 = get_i('arbmag.nodeCount')
+check('rejected arbmag keeps previous nodes', nc2 == 5, f'actual={nc2}')
+
 # 3. 加载后使能应成功
 rc = set_i('arbmag.enable', 1)
 check('enable succeeded', rc == 0)

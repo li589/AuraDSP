@@ -43,6 +43,10 @@ def f32(v):
     return ctypes.c_float(v)
 
 
+def i32(v):
+    return ctypes.c_int32(v)
+
+
 h = dll.auradsp_create(SR, BLOCK)
 assert h, 'create failed'
 
@@ -115,6 +119,27 @@ for _c in range(3, 9):
           set_f('input.balance.%d' % _c, 1.5) == 0 and
           abs(get_f('input.balance.%d' % _c)[1] - 1.5) < 1e-6)
     set_f('input.balance.%d' % _c, 1.0)
+
+# 3. 输入 NaN/Inf 必须在前置门清洗，不能污染递归滤波器状态
+def set_i(pid, v):
+    return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(i32(v)), 4)
+
+
+set_i('filter.enable', 1)
+set_f('filter.freq', 1000.0)
+set_f('filter.q', 1.0)
+bad = (ctypes.c_float * (BLOCK * 2))()
+bad[0] = float('nan')
+bad[1] = float('inf')
+bad[2] = float('-inf')
+bad_out = (ctypes.c_float * (BLOCK * 2))()
+dll.auradsp_process(h, bad, bad_out, BLOCK)
+check('NaN/Inf input block finite', all(v == v and abs(v) < 10.0 for v in bad_out))
+
+ok_l, ok_r = run_sine(freq=1000.0, amp=0.2, blocks=12)
+check('filter state survives NaN input', ok_l > 0.01 and ok_r > 0.01 and
+      ok_l == ok_l and ok_r == ok_r, 'l=%.4f r=%.4f' % (ok_l, ok_r))
+set_i('filter.enable', 0)
 
 dll.auradsp_destroy(h)
 

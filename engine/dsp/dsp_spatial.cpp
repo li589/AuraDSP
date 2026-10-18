@@ -322,6 +322,13 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
     float g_sm = h->spat_g_sm;
     float mix_sm = h->spat_mix_sm;
 
+    /* PF-4：等能量归一化（消除多源直加的能量暴涨）提出每样本循环 ——
+     * center/room 均为块内不变量，sqrtf 与样本无关；表达式与原逐样本
+     * 计算逐位一致。 */
+    const float spat_norm = 1.0f /
+        sqrtf(2.0f + 0.5f * center * center + 0.98f +
+              (room > 0.001f ? room * 0.4f : 0.0f));
+
     for (int i = 0; i < frames; ++i) {
         const float inL = io[i * 2], inR = io[i * 2 + 1];
         const float mC = 0.5f * (inL + inR) * center;
@@ -436,10 +443,6 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
             oR += fr * late;
         }
 
-        // 等能量归一化（消除多源直加的能量暴涨）
-        const float spat_norm = 1.0f /
-            sqrtf(2.0f + 0.5f * center * center + 0.98f +
-                  (room > 0.001f ? room * 0.4f : 0.0f));
         g_sm = alpha * g_sm + beta * outG;
         const float wetL = (oL + eL) * spat_norm * g_sm;
         const float wetR = (oR + eR) * spat_norm * g_sm;

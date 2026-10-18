@@ -521,14 +521,39 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
                 h->mc_limiter_la_buf[c][pos] = io[i * ch + c];
                 h->mc_limiter_gain_buf[c][pos] = g_target;
 
+                /* PF-2：滑动窗口最小值（单调 deque）替代每样本 O(la_len)
+                 * 全窗扫描（8ch LA 模式 576 iters/帧，≈0ms 模式 10× 成本）。
+                 * deque 存 gain_buf 的环形位置，所指引值从头到尾单调非降，
+                 * 队首即窗口最小 —— 与原"扫全部 la_len 个 slot"逐样本等价
+                 * （环形缓冲写满后全部 slot 恰好就是窗口）。la_len 变化时
+                 * 整体失效重建（la_len 仅 create 时按 fs 定，运行期不变）。 */
+                const int dqCap = (int)auradsp_handle_s::kLimLookaheadMax;
+                int* dq = h->mc_limiter_dq[c];
+                int& dq_head = h->mc_limiter_dq_head[c];
+                int& dq_count = h->mc_limiter_dq_count[c];
+                const float* gb = h->mc_limiter_gain_buf[c];
+                if (h->mc_limiter_dq_len != la_len) {
+                    dq_head = 0;
+                    dq_count = 0;
+                    h->mc_limiter_dq_len = la_len;
+                } else if (dq_count > 0 && dq[dq_head] == pos) {
+                    /* 队首是最老样本，本次写入即将覆盖它 → 已滑出窗口 */
+                    dq_head = (dq_head + 1 >= dqCap) ? 0 : dq_head + 1;
+                    --dq_count;
+                }
+                /* 入队：从队尾弹出所有不劣于新值的旧位（它们永不再成为最小；
+                 * 相等也弹，保留更晚滑出的新位，窗口语义不变） */
+                while (dq_count > 0) {
+                    const int tail = (dq_head + dq_count - 1) % dqCap;
+                    if (gb[dq[tail]] >= g_target) --dq_count; else break;
+                }
+                dq[(dq_head + dq_count) % dqCap] = pos;
+                ++dq_count;
+
+                float win_min_g = (dq_count > 0) ? gb[dq[dq_head]] : 1.0f;
+
                 int read_pos = (pos + 1) % la_len;
                 float delayed_s = h->mc_limiter_la_buf[c][read_pos];
-
-                float win_min_g = 1.0f;
-                for (int k = 0; k < la_len; ++k) {
-                    float gb = h->mc_limiter_gain_buf[c][k];
-                    if (gb < win_min_g) win_min_g = gb;
-                }
 
                 float env_rel = h->mc_limiter_env[c];
                 if (win_min_g < env_rel) {

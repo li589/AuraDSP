@@ -202,7 +202,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    gate_attack{10.0f};     /* ms [1,100] */
     std::atomic<float>    gate_release{100.0f};   /* ms [10,500] */
     std::atomic<float>    gate_hysteresis{3.0f};  /* dB [0,12] 迟滞缓冲带 */
-    std::atomic<float>    gate_range{-40.0f};     /* dB [-80,0] 关门衰减地板 */
+    std::atomic<float>    gate_range{-60.0f};     /* dB [-80,0] 关门衰减地板（P-4：对齐 Dart ParamDefaults.gateRange=-60） */
     std::atomic<float>    gate_hold_ms{10.0f};    /* ms [0,500] 跌落后保持时长 */
     std::atomic<int32_t>  gate_autogain{0};
     std::atomic<int32_t>  deesser_enable{0};
@@ -228,11 +228,11 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    dyneq_attack{2.0f};     /* ms [0.1,100] 全局广播 */
     std::atomic<float>    dyneq_release{120.0f};  /* ms [10,1000] 全局广播 */
     std::atomic<float>    dyneq_b1_attack{20.0f};   /* Low band [0.1, 100] */
-    std::atomic<float>    dyneq_b1_release{150.0f}; /* Low band [10, 1000] */
+    std::atomic<float>    dyneq_b1_release{120.0f}; /* Low band [10, 1000]（P-4：对齐 Dart ParamDefaults.dyneqB1Release=120） */
     std::atomic<float>    dyneq_b2_attack{10.0f};   /* Mid band [0.1, 100] */
     std::atomic<float>    dyneq_b2_release{100.0f}; /* Mid band [10, 1000] */
     std::atomic<float>    dyneq_b3_attack{2.0f};    /* High band [0.1, 100] */
-    std::atomic<float>    dyneq_b3_release{30.0f};  /* High band [10, 1000] */
+    std::atomic<float>    dyneq_b3_release{120.0f}; /* High band [10, 1000]（P-4：对齐 Dart ParamDefaults.dyneqB3Release=120） */
     std::atomic<int32_t>  dyneq_l_enable{0};
     std::atomic<float>    dyneq_l_freq{120.0f};  /* Hz [20,500] */
     std::atomic<float>    dyneq_l_q{0.707f};     /* shelf 斜率 S [0.5,2] */
@@ -289,7 +289,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  arbmag_channels{0xFF};
     /* Modern Lookahead Limiter 参数（P2.3 新增；向后兼容，不破坏 ABI） */
     std::atomic<float>    limiter_release_ms{100.0f}; /* ms [10, 500]：释放时间常数 */
-    std::atomic<float>    limiter_threshold{0.0f};    /* dBFS [-24, 0]：限幅门限（0 = 0dBFS 绝对防护） */
+    std::atomic<float>    limiter_threshold{-0.1f};    /* dBFS [-24, 0]：限幅门限（P-4：对齐 Dart ParamDefaults.limiterThreshold=-0.1；0 = 0dBFS 绝对防护为历史口径，不再作默认） */
     std::atomic<int32_t>  limiter_link{1};            /* 0=各声道独立限幅 1=全声道增益联动保持声像 */
     std::atomic<int32_t>  limiter_lookahead{0};       /* 0=0ms 实时零延迟模式 1=1.5ms 高精母带前瞻模式 */
 };
@@ -498,6 +498,14 @@ struct auradsp_handle_s {
     float mc_limiter_la_env[kMxMaxChannels] = {};  /* 起音平滑包络（初始 = 1.0f 满增益 = 未压限） */
     int   mc_limiter_la_pos[kMxMaxChannels] = {};  /* 前瞻环读写指针 */
     int   mc_limiter_la_len = 72;  /* 实际使用长度（create/init 时按 fs 计算，默认 72@48k） */
+    /* PF-2：LA 前瞻增益环形窗口最小值（单调 deque）。原实现每样本对
+     * gain_buf 全窗 O(la_len) 扫描（8ch LA ≈576 iters/帧），这里换成
+     * 摊销 O(1) 的滑动窗口最小：dq 存 gain_buf 的环形位置，所指引值
+     * 从头到尾单调非降，队首即窗口最小。la_len 变化时整体重置。 */
+    int   mc_limiter_dq[kMxMaxChannels][kLimLookaheadMax] = {};
+    int   mc_limiter_dq_head[kMxMaxChannels] = {};
+    int   mc_limiter_dq_count[kMxMaxChannels] = {};
+    int   mc_limiter_dq_len = 0;  /* deque 生效的 la_len；不等即失效重置 */
     /* 释放包络平滑增益（每声道；初始 1.0 = 无压限） */
     float mc_limiter_env[kMxMaxChannels] = {};
     /* 历史输入样本，用于 4x ISP Cubic Hermite 插值（每声道保留上 2 个样本） */

@@ -99,11 +99,22 @@ void main() {
       expect(m.tubeOn, isTrue);
     });
 
-    test('Dyneq B3 Attack setter 不串写 Release', () {
+    test('Dyneq 三段 Attack/Release setter 各写各的字段', () {
       final m = AppModel(testing: true);
-      m.setParam(ParamRegistry.dyneqB3Attack, 12.0);
-      expect(m.dyneqB3Attack, closeTo(12.0, 1e-6));
-      expect(m.dyneqB3Release, closeTo(ParamDefaults.dyneqB3Release, 1e-6));
+      final pairs = <(ParamSpec<double>, double, double Function(AppModel))>[
+        (ParamRegistry.dyneqB1Attack, 11.0, (x) => x.dyneqB1Attack),
+        (ParamRegistry.dyneqB1Release, 111.0, (x) => x.dyneqB1Release),
+        (ParamRegistry.dyneqB2Attack, 12.0, (x) => x.dyneqB2Attack),
+        (ParamRegistry.dyneqB2Release, 222.0, (x) => x.dyneqB2Release),
+        (ParamRegistry.dyneqB3Attack, 13.0, (x) => x.dyneqB3Attack),
+        (ParamRegistry.dyneqB3Release, 333.0, (x) => x.dyneqB3Release),
+      ];
+      for (final (spec, value, read) in pairs) {
+        m.setParam(spec, value);
+        expect(read(m), closeTo(value, 1e-6), reason: spec.id);
+      }
+      // B3 Attack 曾误写 Release：单独确认 Release 仍是最后一次写入值
+      expect(m.dyneqB3Release, closeTo(333.0, 1e-6));
     });
 
     test('getParamById 与 setParamById 动态反射通道', () {
