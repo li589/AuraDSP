@@ -107,7 +107,16 @@ check('outgain set/get+clamp',
       set_f('spatial.outgain', 6.0) == 0 and abs(get_f('spatial.outgain')[1] - 6.0) < 1e-6 and
       set_f('spatial.outgain', -99.0) == 0 and abs(get_f('spatial.outgain')[1] + 12.0) < 1e-6)
 check('autogain set/get', set_i('spatial.autogain', 1) == 0 and get_i('spatial.autogain') == (0, 1))
-# 头跟 stub（Phase 2：存取对称 + 钳位；DSP 暂不消费，声学节须证明无影响）
+check('mix set/get+clamp',
+      set_f('spatial.mix', 0.42) == 0 and abs(get_f('spatial.mix')[1] - 0.42) < 1e-6 and
+      set_f('spatial.mix', 9.0) == 0 and abs(get_f('spatial.mix')[1] - 1.0) < 1e-6 and
+      set_f('spatial.mix', -9.0) == 0 and abs(get_f('spatial.mix')[1] - 0.0) < 1e-6)
+set_f('spatial.mix', 1.0)
+check('elevation set/get+clamp',
+      set_f('spatial.elevation', 12.0) == 0 and abs(get_f('spatial.elevation')[1] - 12.0) < 1e-6 and
+      set_f('spatial.elevation', 99.0) == 0 and abs(get_f('spatial.elevation')[1] - 30.0) < 1e-6 and
+      set_f('spatial.elevation', -99.0) == 0 and abs(get_f('spatial.elevation')[1] + 30.0) < 1e-6)
+set_f('spatial.elevation', 0.0)
 check('headazim set/get+clamp',
       set_f('spatial.headazim', 45.0) == 0 and abs(get_f('spatial.headazim')[1] - 45.0) < 1e-6 and
       set_f('spatial.headazim', 999.0) == 0 and abs(get_f('spatial.headazim')[1] - 180.0) < 1e-6 and
@@ -116,14 +125,14 @@ check('headtrack set/get', set_i('spatial.headtrack', 1) == 0 and get_i('spatial
 set_f('spatial.headazim', 0.0)
 set_i('spatial.headtrack', 0)
 
-# style 联动预设值（Dolby 0.7/1.0/0.8；DTS 0.25/1.1/0.5；中性 0.0/1.0/0.5）
+# style 联动预设值（影院 0.7/1.0/0.8；定位 0.25/1.1/0.5；中性 0.0/1.0/0.5）
 set_i('spatial.style', 0)
-check('style=0 pushes Dolby preset',
+check('style=0 pushes cinema preset',
       abs(get_f('spatial.room')[1] - 0.7) < 1e-6 and
       abs(get_f('spatial.width')[1] - 1.0) < 1e-6 and
       abs(get_f('spatial.center')[1] - 0.8) < 1e-6)
 set_i('spatial.style', 1)
-check('style=1 pushes DTS preset',
+check('style=1 pushes imaging preset',
       abs(get_f('spatial.room')[1] - 0.25) < 1e-6 and
       abs(get_f('spatial.width')[1] - 1.1) < 1e-6 and
       abs(get_f('spatial.center')[1] - 0.5) < 1e-6)
@@ -135,8 +144,8 @@ check('style=2 pushes neutral preset',
 dll.auradsp_destroy(h)
 
 
-def fresh_dolby():
-    """全新句柄 + Dolby 默认态（enable/room0.7/width1.0/center0.8/其余默认）。"""
+def fresh_cinema():
+    """全新句柄 + 影院默认态（enable/room0.7/width1.0/center0.8/其余默认）。"""
     hh = dll.auradsp_create(SR, BLOCK)
     assert hh, 'create failed'
     dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
@@ -207,7 +216,7 @@ check('disabled bit-identical passthrough',
       all(x == y for x, y in zip(acc, exp)))
 dll.auradsp_destroy(h)
 
-# 1b. 头跟 stub 惰性：headtrack=1 + azim=90 与全关逐位一致（DSP 未消费）。
+# 1b. 头跟踪：headazim 必须改变声像；headtrack 只是外部源标志，不改变 DSP。
 def run_last_block(hh, az, ht):
     dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
     dll.auradsp_set_param(hh, b'spatial.headazim', ctypes.byref(f32(az)), 4)
@@ -231,19 +240,32 @@ h_a = dll.auradsp_create(SR, BLOCK)
 o_off = run_last_block(h_a, 0.0, 0)
 dll.auradsp_destroy(h_a)
 h_b = dll.auradsp_create(SR, BLOCK)
-o_on = run_last_block(h_b, 90.0, 1)
+o_man = run_last_block(h_b, 90.0, 0)
 dll.auradsp_destroy(h_b)
-check('headtrack stub inert (bit-identical)', o_off == o_on)
+h_c = dll.auradsp_create(SR, BLOCK)
+o_track = run_last_block(h_c, 90.0, 1)
+dll.auradsp_destroy(h_c)
+h_d = dll.auradsp_create(SR, BLOCK)
+o_zero_track = run_last_block(h_d, 0.0, 1)
+dll.auradsp_destroy(h_d)
+check('headazim steers the image (manual)', o_off != o_man)
+check('headtrack flag alone is inert', o_off == o_zero_track)
+check('headtrack=1 consumes same headazim', o_man == o_track)
 
-# 2/3. 双耳对称 + 差异（Dolby 默认态；每 run 全新句柄——vendor limiter
+# 2/3. 双耳对称 + 差异（影院默认态；每 run 全新句柄——vendor limiter
 # 慢包络跨 run 污染对称测量，与被测 spatial 无关，见 smoke 注释）
 # 对称测量在 room=0 纯 HRTF 路径下进行（反射 comb 相位干涉与测量正弦相位
 # 耦合，不适合做镜像相等断言；反射能量均衡由 2b mono 测试覆盖）。
-def run_fresh(fn, blocks=40, room=None):
+def run_fresh(fn, blocks=40, room=None, mix=None, elev=None):
     hh = dll.auradsp_create(SR, BLOCK)
     dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
     if room is not None:
         dll.auradsp_set_param(hh, b'spatial.room', ctypes.byref(f32(room)), 4)
+    if mix is not None:
+        dll.auradsp_set_param(hh, b'spatial.mix', ctypes.byref(f32(mix)), 4)
+    if elev is not None:
+        dll.auradsp_set_param(hh, b'spatial.elevation',
+                              ctypes.byref(f32(elev)), 4)
     out = run_blocks(hh, fn, blocks=blocks)
     dll.auradsp_destroy(hh)
     return out
@@ -259,6 +281,24 @@ check('binaural differs L/R (ITD/ILD active)',
       'L1=%.4f R1=%.4f' % (l1, r1))
 check('contralateral present but weaker', 0.05 * l1 < r1 < l1,
       'L1=%.4f R1=%.4f' % (l1, r1))
+
+# 2a. mix=0 必须回到干声；仰角 notch 移动必须可测（6k 正弦）
+l_m0, r_m0, _ = run_fresh(sine_l, room=0.0, mix=0.0)
+check('mix=0 returns dry signal',
+      abs(l_m0 - 0.25 / math.sqrt(2.0)) < 0.01 and
+      abs(r_m0 - 0.0) < 1e-6,
+      'L=%.4f R=%.4f' % (l_m0, r_m0))
+
+
+def sine_l6k(n):
+    return 0.25 * math.sin(2 * math.pi * 6000.0 * n / SR), 0.0
+
+
+l_ev_neg, _, _ = run_fresh(sine_l6k, room=0.0, elev=-25.0)
+l_ev_pos, _, _ = run_fresh(sine_l6k, room=0.0, elev=25.0)
+check('elevation moves pinna notch (>2%)',
+      abs(l_ev_neg - l_ev_pos) / max(l_ev_neg, l_ev_pos, 1e-9) > 0.02,
+      'elev-25=%.4f elev+25=%.4f' % (l_ev_neg, l_ev_pos))
 
 # 2b. 反射能量均衡：mono 噪声输入 room=0.7 时左右 RMS 近似相等（±配对 tap
 # 设计）。必须用噪声而非正弦：正弦与反射 comb 干涉的相位耦合会让任何

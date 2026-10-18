@@ -1226,6 +1226,31 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialAutoGainInfo => '入力ラウドネスに追従（リバーブと同式）';
 
   @override
+  String get spatialMix => '空間化ミックス';
+
+  @override
+  String get spatialMixInfo => 'ドライ音と空間音の混合比。0% はバイパス相当、100% で完全な仮想音場';
+
+  @override
+  String get spatialElevation => '高さ';
+
+  @override
+  String get spatialElevationInfo => '仮想ステージの仰角。正で音像が上がり、負で下がる';
+
+  @override
+  String get spatialHeadTrack => '頭部追従';
+
+  @override
+  String get spatialHeadTrackInfo =>
+      'OpenTrack UDP（ポート 4242）の頭部方位を受信。オフ時は手動角度を使用';
+
+  @override
+  String get spatialHeadAzim => '頭部方位';
+
+  @override
+  String get spatialHeadAzimInfo => '手動のヨー角。頭部追従オン時は外部データで上書き';
+
+  @override
   String get src51Fold => 'ミックスダウン';
 
   @override
