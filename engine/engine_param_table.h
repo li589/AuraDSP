@@ -471,6 +471,9 @@ static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uin
         return AURADSP_E_PARAM;
     }
     h->p.channels_mode.store(v);
+    /* 模式切换会改变 spatial 的输入布局/状态语义；清空 ring/history/pinna/FDN，
+     * 避免直播切换读到旧布局的延迟线。 */
+    spatial_reset(h);
     return AURADSP_OK;
 }
 
@@ -482,6 +485,8 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
         return AURADSP_E_PARAM;
     }
     h->channel_count.store(v);
+    /* 声道数变化同样改变 spatial 输入布局，复位其 RT 状态。 */
+    spatial_reset(h);
     return AURADSP_OK;
 }
 

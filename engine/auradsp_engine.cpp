@@ -408,6 +408,13 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
                 ptr->store(v);
             } else if (desc->type == ParamType::kFloat) {
                 float v = *(const float*)value;
+                /* NaN/Inf 必须拒绝：< / > 钳制对 NaN 全为 false，否则会原样
+                 * 存入原子量，并沿 powf/反馈结构扩散；链尾卫士只能清输出，
+                 * 无法清除已经污染的二阶节/延迟线/FDN 状态。 */
+                if (!std::isfinite(v)) {
+                    set_error(h, "float parameter rejected: NaN/Inf");
+                    return AURADSP_E_PARAM;
+                }
                 if (v < desc->min_val) v = desc->min_val;
                 if (v > desc->max_val) v = desc->max_val;
                 auto* ptr = reinterpret_cast<std::atomic<float>*>(
