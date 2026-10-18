@@ -194,11 +194,58 @@ class _WindowCloseListener extends WindowListener {
   }
 
   @override
+  void onWindowMaximize() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowUnmaximize() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowFocus() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowResize() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowResized() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowMove() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
+  void onWindowMoved() {
+    TrayService.instance.setWindowVisible(true);
+  }
+
+  @override
   void onWindowEvent(String eventName) {
-    if (eventName == 'hide') {
-      TrayService.instance.setWindowVisible(false);
-    } else if (eventName == 'show') {
-      TrayService.instance.setWindowVisible(true);
+    switch (eventName) {
+      case 'hide':
+      case 'minimize':
+        TrayService.instance.setWindowVisible(false);
+        break;
+      case 'show':
+      case 'restore':
+      case 'maximize':
+      case 'unmaximize':
+      case 'focus':
+      case 'resize':
+      case 'resized':
+      case 'move':
+      case 'moved':
+        TrayService.instance.setWindowVisible(true);
+        break;
     }
   }
 }
