@@ -472,19 +472,17 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(AuraRadius.sm),
-        child: RepaintBoundary(
-          child: CustomPaint(
-            size: const Size(double.infinity, 130),
-            painter: _CompressorPainter(
-              palette: p,
-              active: model.compOn,
-              threshold: threshold,
-              ratio: ratio,
-              knee: knee,
-              makeup: makeup,
-              inDb: _smoothInDb,
-              grDb: _smoothGr,
-            ),
+        child: CustomPaint(
+          size: const Size(double.infinity, 130),
+          painter: _CompressorPainter(
+            palette: p,
+            active: model.compOn,
+            threshold: threshold,
+            ratio: ratio,
+            knee: knee,
+            makeup: makeup,
+            inDb: _smoothInDb,
+            grDb: _smoothGr,
           ),
         ),
       ),
@@ -709,7 +707,7 @@ class _CompressorPainter extends CustomPainter {
           palette.warning,
           palette.accent2,
         ],
-      ).createShader(fillRect);
+      ).createShader(Rect.fromLTWH(meterX, trackY, trackW, trackH));
       final grBarPaint = Paint()
         ..shader = grShader
         ..style = PaintingStyle.fill;

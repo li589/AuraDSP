@@ -10,6 +10,7 @@
  *      AuraSegmented/AuraChip 的即时按压与滑动反馈。
  */
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
@@ -376,9 +377,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: RepaintBoundary(
-          child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
-        ),
+        child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
       );
 }
 
@@ -459,8 +458,12 @@ class _AmbientPainter extends CustomPainter {
   final ValueListenable<int> clock;
   final AmbientEnvelope _env = AmbientEnvelope();
 
-  /// 缓存画笔与基础绘制参数（避免每帧重复分配对象）
+  /// 缓存画笔与共用垂直渐变 Shader（整帧复用，避免循环内部重复分配 SkShader）
   final Paint _barPaint = Paint();
+  ui.Shader? _cachedShader;
+  Size? _lastShaderSize;
+  Color? _lastAccentColor;
+  int? _lastBaseAlpha;
 
   _AmbientPainter({
     required this.spectrum,
@@ -506,26 +509,36 @@ class _AmbientPainter extends CustomPainter {
     final baseAlpha = (0.14 * intensity * 255).round();
     final bw = size.width / AmbientEnvelope.bars;
 
-    // 单次构建共用纵向渐变（底部至顶部渐隐，呈现柔和氛围光晕）
-    final grad = LinearGradient(
-      begin: Alignment.bottomCenter,
-      end: Alignment.topCenter,
-      colors: [
-        palette.accent.withValues(alpha: baseAlpha / 255),
-        palette.accent.withValues(alpha: 0.0),
-      ],
-      stops: const [0.0, 0.9],
-    );
+    // 仅在尺寸或配色参数变动时重建全屏垂直渐变 Shader；整屏所有柱子共用同一个 Shader，
+    // 使得 Skia / ANGLE / D3D11 能够将 72 根柱子完全合批为单次 DrawCall。
+    if (_cachedShader == null ||
+        _lastShaderSize != size ||
+        _lastAccentColor != palette.accent ||
+        _lastBaseAlpha != baseAlpha) {
+      _lastShaderSize = size;
+      _lastAccentColor = palette.accent;
+      _lastBaseAlpha = baseAlpha;
+      _cachedShader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          palette.accent.withValues(alpha: baseAlpha / 255),
+          palette.accent.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.9],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      _barPaint.shader = _cachedShader;
+    }
 
+    final cornerRadius = Radius.circular(bw * 0.35);
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * size.height * 0.92;
       final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.75, h);
-      _barPaint.shader = grad.createShader(rect);
       // 原生带圆角直接光栅化，零 GPU 纹理重建与 D3D11 句柄损耗
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, Radius.circular(bw * 0.35)),
+        RRect.fromRectAndRadius(rect, cornerRadius),
         _barPaint,
       );
     }
@@ -535,7 +548,7 @@ class _AmbientPainter extends CustomPainter {
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
   void dispose() {
-    // 纯直接光栅化无须持有原生 Image 句柄
+    _cachedShader = null;
   }
 }
 

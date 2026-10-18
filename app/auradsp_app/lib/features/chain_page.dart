@@ -841,6 +841,30 @@ class _SynthLedPainter extends CustomPainter {
 
   static const int kSegments = 8; // 8 级垂直分段 LED 灯珠
 
+  // 预分配静态画笔，彻底消除高频电平刷新下每帧数百次 Paint 对象的分配与 GC 压力
+  static final Paint _greenLitPaint = Paint()
+    ..color = const Color(0xFF10B981)
+    ..style = PaintingStyle.fill;
+  static final Paint _amberLitPaint = Paint()
+    ..color = const Color(0xFFF59E0B)
+    ..style = PaintingStyle.fill;
+  static final Paint _redLitPaint = Paint()
+    ..color = const Color(0xFFEF4444)
+    ..style = PaintingStyle.fill;
+
+  static final Paint _greenOffPaint = Paint()
+    ..color = const Color(0xFF10B981).withValues(alpha: 0.12)
+    ..style = PaintingStyle.fill;
+  static final Paint _amberOffPaint = Paint()
+    ..color = const Color(0xFFF59E0B).withValues(alpha: 0.12)
+    ..style = PaintingStyle.fill;
+  static final Paint _redOffPaint = Paint()
+    ..color = const Color(0xFFEF4444).withValues(alpha: 0.12)
+    ..style = PaintingStyle.fill;
+  static final Paint _disabledOffPaint = Paint()
+    ..color = Colors.white.withValues(alpha: 0.08)
+    ..style = PaintingStyle.fill;
+
   _SynthLedPainter({
     required this.channelsDb,
     required this.isEnabled,
@@ -875,40 +899,32 @@ class _SynthLedPainter extends CustomPainter {
         final segTop = segBottom - segH;
         final isLit = s < litCount;
 
-        // 分段色彩：
-        // 底段 0..4: 翠绿 (安全动态)
-        // 中段 5..6: 琥珀橙/黄 (高能量预警)
-        // 顶段 7: 鲜红 (削波过载 Peak)
-        final Color litColor;
-        if (s >= 7) {
-          litColor = const Color(0xFFEF4444); // 鲜红
-        } else if (s >= 5) {
-          litColor = const Color(0xFFF59E0B); // 琥珀黄
+        final Paint segPaint;
+        if (isLit) {
+          if (s >= 7) {
+            segPaint = _redLitPaint;
+          } else if (s >= 5) {
+            segPaint = _amberLitPaint;
+          } else {
+            segPaint = _greenLitPaint;
+          }
         } else {
-          litColor = const Color(0xFF10B981); // 翠绿
+          if (!isEnabled) {
+            segPaint = _disabledOffPaint;
+          } else if (s >= 7) {
+            segPaint = _redOffPaint;
+          } else if (s >= 5) {
+            segPaint = _amberOffPaint;
+          } else {
+            segPaint = _greenOffPaint;
+          }
         }
 
         final rect = RRect.fromRectAndRadius(
           Rect.fromLTWH(colLeft, segTop, colW, segH),
           const Radius.circular(0.8),
         );
-
-        if (isLit) {
-          // 点亮状态：主体色填充
-          final paint = Paint()
-            ..color = litColor
-            ..style = PaintingStyle.fill;
-          canvas.drawRRect(rect, paint);
-        } else {
-          // 熄灭底座：深色半透明硬件凹槽
-          final offColor = isEnabled
-              ? litColor.withValues(alpha: 0.12)
-              : palette.textDim.withValues(alpha: 0.10);
-          final offPaint = Paint()
-            ..color = offColor
-            ..style = PaintingStyle.fill;
-          canvas.drawRRect(rect, offPaint);
-        }
+        canvas.drawRRect(rect, segPaint);
       }
     }
   }

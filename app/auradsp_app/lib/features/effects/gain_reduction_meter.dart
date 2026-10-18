@@ -209,7 +209,7 @@ class _GainReductionMeterPainter extends CustomPainter {
       );
 
       final barPaint = Paint()
-        ..shader = gradient.createShader(fillRect);
+        ..shader = gradient.createShader(trackRect);
       canvas.drawRRect(
         RRect.fromRectAndRadius(fillRect, const Radius.circular(2)),
         barPaint,
