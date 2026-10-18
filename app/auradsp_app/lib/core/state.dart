@@ -136,6 +136,8 @@ abstract class ParamDefaults {
   static const double spatialHeadAzim = 0.0;  // [-180,180] 度
   static const bool spatialHeadTrack = false;
   static const bool spatialBinaural = false;  // 6/8ch→2ch 双耳虚拟环绕
+  static const bool spatialFdn = false;       // FDN 晚期混响
+  static const double spatialLate = 0.25;     // [0,1]
 
   // 激励器
   static const double exciterAmount = 0.3;   // [0,1]
@@ -657,6 +659,8 @@ class AppModel extends ChangeNotifier {
   double spatialMix = 1.0;
   double spatialElevation = 0.0;
   bool spatialBinaural = false;
+  bool spatialFdn = false;
+  double spatialLate = 0.25;
   // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
@@ -1359,6 +1363,12 @@ class AppModel extends ChangeNotifier {
         if (raw['spatialBinaural'] != null) {
           spatialBinaural = (raw['spatialBinaural'] as int) != 0;
         }
+        if (raw['spatialFdn'] != null) {
+          spatialFdn = (raw['spatialFdn'] as int) != 0;
+        }
+        if (raw['spatialLate'] != null) {
+          spatialLate = (raw['spatialLate'] as num).toDouble();
+        }
         if (raw['spatialHeadAzim'] != null) {
           spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
         }
@@ -2001,6 +2011,8 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.spatialMix, spatialMix);
       setFloat(ParamId.spatialElevation, spatialElevation);
       setInt(ParamId.spatialBinaural, spatialBinaural ? 1 : 0);
+      setInt(ParamId.spatialFdn, spatialFdn ? 1 : 0);
+      setFloat(ParamId.spatialLate, spatialLate);
       setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
       setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
       _syncHeadTracker();
@@ -2245,6 +2257,8 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.spatialMix) { spatialMix = v; break; }
         if (id == ParamId.spatialElevation) { spatialElevation = v; break; }
         if (id == ParamId.spatialBinaural) { spatialBinaural = v != 0; break; }
+        if (id == ParamId.spatialFdn) { spatialFdn = v != 0; break; }
+        if (id == ParamId.spatialLate) { spatialLate = v; break; }
         if (id == ParamId.spatialHeadAzim) { spatialHeadAzim = v; break; }
         if (id == ParamId.spatialHeadTrack) { spatialHeadTrack = v != 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
@@ -2874,6 +2888,20 @@ class AppModel extends ChangeNotifier {
   void setSpatialBinaural(bool on) {
     spatialBinaural = on;
     setInt(ParamId.spatialBinaural, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialFdn(bool on) {
+    spatialFdn = on;
+    setInt(ParamId.spatialFdn, on ? 1 : 0);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  void setSpatialLate(double v) {
+    spatialLate = v.clamp(0.0, 1.0);
+    setFloat(ParamId.spatialLate, spatialLate);
     notifyListeners();
     scheduleAutoSave();
   }

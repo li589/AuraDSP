@@ -117,6 +117,13 @@ check('elevation set/get+clamp',
       set_f('spatial.elevation', 99.0) == 0 and abs(get_f('spatial.elevation')[1] - 30.0) < 1e-6 and
       set_f('spatial.elevation', -99.0) == 0 and abs(get_f('spatial.elevation')[1] + 30.0) < 1e-6)
 set_f('spatial.elevation', 0.0)
+check('fdn set/get', set_i('spatial.fdn', 1) == 0 and get_i('spatial.fdn') == (0, 1))
+check('late set/get+clamp',
+      set_f('spatial.late', 0.33) == 0 and abs(get_f('spatial.late')[1] - 0.33) < 1e-6 and
+      set_f('spatial.late', 9.0) == 0 and abs(get_f('spatial.late')[1] - 1.0) < 1e-6 and
+      set_f('spatial.late', -9.0) == 0 and abs(get_f('spatial.late')[1] - 0.0) < 1e-6)
+set_i('spatial.fdn', 0)
+set_f('spatial.late', 0.25)
 check('headazim set/get+clamp',
       set_f('spatial.headazim', 45.0) == 0 and abs(get_f('spatial.headazim')[1] - 45.0) < 1e-6 and
       set_f('spatial.headazim', 999.0) == 0 and abs(get_f('spatial.headazim')[1] - 180.0) < 1e-6 and
@@ -256,7 +263,8 @@ check('headtrack=1 consumes same headazim', o_man == o_track)
 # 慢包络跨 run 污染对称测量，与被测 spatial 无关，见 smoke 注释）
 # 对称测量在 room=0 纯 HRTF 路径下进行（反射 comb 相位干涉与测量正弦相位
 # 耦合，不适合做镜像相等断言；反射能量均衡由 2b mono 测试覆盖）。
-def run_fresh(fn, blocks=40, room=None, mix=None, elev=None):
+def run_fresh(fn, blocks=40, room=None, mix=None, elev=None, fdn=None,
+              late=None):
     hh = dll.auradsp_create(SR, BLOCK)
     dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
     if room is not None:
@@ -266,6 +274,10 @@ def run_fresh(fn, blocks=40, room=None, mix=None, elev=None):
     if elev is not None:
         dll.auradsp_set_param(hh, b'spatial.elevation',
                               ctypes.byref(f32(elev)), 4)
+    if fdn is not None:
+        dll.auradsp_set_param(hh, b'spatial.fdn', ctypes.byref(i32(fdn)), 4)
+    if late is not None:
+        dll.auradsp_set_param(hh, b'spatial.late', ctypes.byref(f32(late)), 4)
     out = run_blocks(hh, fn, blocks=blocks)
     dll.auradsp_destroy(hh)
     return out
@@ -311,6 +323,13 @@ def noise_mono(n):
 lm, rm, _ = run_fresh(noise_mono, room=0.7)
 check('reflections energy-balanced (mono L~R)',
       abs(lm - rm) / max(lm, 1e-9) < 0.05, 'L=%.4f R=%.4f' % (lm, rm))
+
+# 2c. FDN 晚期混响：同房间/同噪声下应增加尾音能量
+l_fdn, r_fdn, _ = run_fresh(noise_mono, room=0.0, fdn=1, late=1.0)
+l_dry, r_dry, _ = run_fresh(noise_mono, room=0.0, fdn=0)
+check('FDN adds late-reverb energy',
+      l_fdn > l_dry * 1.03 and r_fdn > r_dry * 1.03,
+      'fdn=%.4f/%.4f dry=%.4f/%.4f' % (l_fdn, r_fdn, l_dry, r_dry))
 
 # 4. 早期反射：脉冲尾 room=1 >> room=0（全新句柄，排除包络残留）
 h = dll.auradsp_create(SR, BLOCK)

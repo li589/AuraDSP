@@ -103,6 +103,18 @@ void MirrorSet(const char* id, bool isFloat, const void* v4) {
 }
 
 // 重建后回放全部镜像参数（主线程；引擎进程内串行，无 RT 约束）。
+// 双耳模式：把 channels.count 同步到全部 live handle。
+// vb_set_param("spatial.binaural") 与 CHANGE 重建回放后都会调用。
+void ApplyBinauralChannels(FnEngSetParam setParam) {
+    if (!setParam) return;
+    const int32_t ch =
+        InterlockedCompareExchange(&g_b.ctx.binaural, 0, 0) ? 8 : 2;
+    for (int g = 0; g < g_b.ctx.nEng; ++g) {
+        if (g_b.ctx.eng[g])
+            setParam(g_b.ctx.eng[g], "channels.count", &ch, sizeof(ch));
+    }
+}
+
 void MirrorReplay(FnEngSetParam setParam) {
     if (!setParam || g_mirrorN <= 0) return;
     int ok = 0, bad = 0;
@@ -358,8 +370,9 @@ DWORD WINAPI MonitorProc(LPVOID) {
                 (float)(newSr > 0 ? newSr : (oldSr > 0 ? oldSr : 48000));
             RebuildEngines(g_b.groupCount, sr);
             if (g_b.ctx.process) {
-                MirrorReplay(
-                    (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param"));
+                auto setP = (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param");
+                MirrorReplay(setP);
+                ApplyBinauralChannels(setP);
                 const int sok = StrMirrorReplay(
                     (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param"));
                 if (g_strMirrorN > 0) {
@@ -533,9 +546,9 @@ int vb_start(const char* engine_dll, const char* params_json) {
             (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
         if (create && g_b.ctx.process && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
-                (float*)malloc(sizeof(float) * 2 * vmcore::kMaxNbs);
+                (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
             g_b.ctx.scratchOut =
-                (float*)malloc(sizeof(float) * 2 * vmcore::kMaxNbs);
+                (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
             // 版型→预建组数（EAPO 同式 min(nbi,nbo)/8 由泵在运行时再钳；未知版型按 8 建，
             // 多建无害（泵按实际 ng 取用，空 handle 守卫透传），少建才会吞声。
             int want = PumpCtx::kMaxGroups;
@@ -671,6 +684,10 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
     int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g] && setParam(g_b.ctx.eng[g], id, v4, 4) == 0) ++ok;
+    }
+    if (!isFloat && strcmp(id, "spatial.binaural") == 0) {
+        InterlockedExchange(&g_b.ctx.binaural, *(const int32_t*)v4 ? 1 : 0);
+        ApplyBinauralChannels(setParam);
     }
     return ok;
 }

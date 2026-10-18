@@ -172,6 +172,8 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    spatial_mix{1.0f};       /* [0,1] 空间化干湿比 */
     std::atomic<float>    spatial_elevation{0.0f}; /* 度 [-30,30] 虚拟舞台高度 */
     std::atomic<int32_t>  spatial_binaural{0};     /* 1=6/8ch→2ch 双耳虚拟环绕 */
+    std::atomic<int32_t>  spatial_fdn{0};          /* 1=FDN 晚期混响（替代 freeverb） */
+    std::atomic<float>    spatial_late{0.25f};     /* [0,1] FDN 晚期送量 */
     /* 头跟踪：headazim 始终作为手动/外部朝向消费；headtrack 仅表示外部源
      * （OpenTrack UDP）是否开启，DSP 不区分来源。 */
     std::atomic<float>    spatial_headazim{0.0f}; /* 度 [-180,180] 头部偏航 */
@@ -521,6 +523,16 @@ struct auradsp_handle_s {
     float  spat_pinna[2][2][4];           // [stage][ch] 反射总线 pinna 双 biquad
     float  spat_src_pinna[kSpatSpk][2][2][4]; // [源][耳][stage] 方向 pinna 状态
     float  spat_lfe_lp = 0.0f;            // LFE 120Hz 低通状态
+    /* FDN 晚期混响（8 线 Hadamard；固定上限，reset 时按 fs 设长度） */
+    static constexpr int kFdnLines = 8;
+    static constexpr int kFdnMax = 16384;
+    float  fdn_buf[kFdnLines][kFdnMax];
+    int    fdn_pos[kFdnLines];
+    int    fdn_len[kFdnLines];
+    float  fdn_lp[kFdnLines];
+    float  fdn_fb[kFdnLines];
+    float  fdn_damp = 0.0f;
+    float  fdn_room_last = -1.0f;
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
     float  spat_g_sm = 1.0f;    /* 空间音效输出增益一阶平滑状态（2ms 时间常数） */
     float  spat_mix_sm = 1.0f;  /* 空间化干湿比平滑状态（2ms 时间常数） */

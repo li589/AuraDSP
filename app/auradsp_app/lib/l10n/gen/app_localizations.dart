@@ -2494,6 +2494,30 @@ abstract class AppLocalizations {
   /// **'输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音'**
   String get spatialBinauralInfo;
 
+  /// No description provided for @spatialFdn.
+  ///
+  /// In zh, this message translates to:
+  /// **'FDN 房间'**
+  String get spatialFdn;
+
+  /// No description provided for @spatialFdnInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间'**
+  String get spatialFdnInfo;
+
+  /// No description provided for @spatialLate.
+  ///
+  /// In zh, this message translates to:
+  /// **'晚期混响'**
+  String get spatialLate;
+
+  /// No description provided for @spatialLateInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'FDN 晚期混响送入量。越大房间尾音越明显'**
+  String get spatialLateInfo;
+
   /// No description provided for @spatialHeadTrack.
   ///
   /// In zh, this message translates to:

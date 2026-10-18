@@ -1292,6 +1292,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted';
 
   @override
+  String get spatialFdn => 'FDN room';
+
+  @override
+  String get spatialFdnInfo =>
+      '8-line feedback delay network for late reverb, replacing Freeverb; Freeverb is skipped to avoid a double room';
+
+  @override
+  String get spatialLate => 'Late reverb';
+
+  @override
+  String get spatialLateInfo =>
+      'FDN late-reverb send. Higher values make the room tail more obvious';
+
+  @override
   String get spatialHeadTrack => 'Head tracking';
 
   @override
