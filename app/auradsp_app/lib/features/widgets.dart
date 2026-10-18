@@ -731,18 +731,20 @@ class SpectrumView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    return CustomPaint(
-      painter: _SpectrumPainter(
-        spectrum: spectrum,
-        peaks: peaks,
-        gap: barGap,
-        spectrumColor: p.vizSpectrum,
-        capperColor: p.text.withValues(alpha: 0.85),
-        gridColor: gridAccent ? p.accent.withValues(alpha: 0.10) : p.vizGrid,
-        dimColor: p.textDim.withValues(alpha: 0.45),
-        showGrid: showGrid,
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: _SpectrumPainter(
+          spectrum: spectrum,
+          peaks: peaks,
+          gap: barGap,
+          spectrumColor: p.vizSpectrum,
+          capperColor: p.text.withValues(alpha: 0.85),
+          gridColor: gridAccent ? p.accent.withValues(alpha: 0.10) : p.vizGrid,
+          dimColor: p.textDim.withValues(alpha: 0.45),
+          showGrid: showGrid,
+        ),
+        child: const SizedBox.expand(),
       ),
-      child: const SizedBox.expand(),
     );
   }
 }
@@ -757,6 +759,11 @@ class _SpectrumPainter extends CustomPainter {
   final Color spectrumColor, capperColor, gridColor, dimColor;
   final bool showGrid;
 
+  final Paint _gridPaint = Paint()..strokeWidth = 1;
+  final Paint _barPaint = Paint();
+  final Paint _capPaint = Paint();
+  final Paint _pkPaint = Paint()..strokeWidth = 1.5;
+
   _SpectrumPainter({
     required this.spectrum,
     required this.peaks,
@@ -766,30 +773,30 @@ class _SpectrumPainter extends CustomPainter {
     required this.gridColor,
     required this.dimColor,
     required this.showGrid,
-  }) : super(repaint: spectrum);
+  }) : super(repaint: peaks != null ? Listenable.merge([spectrum, peaks]) : spectrum) {
+    _gridPaint.color = gridColor;
+    _barPaint.color = spectrumColor;
+    _capPaint.color = capperColor;
+    _pkPaint.color = dimColor;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
     if (showGrid) {
-      final gp = Paint()
-        ..color = gridColor
-        ..strokeWidth = 1;
       for (var i = 1; i < 4; i++) {
         final y = size.height * i / 4;
-        canvas.drawLine(Offset(0, y), Offset(size.width, y), gp);
+        canvas.drawLine(Offset(0, y), Offset(size.width, y), _gridPaint);
       }
       // 竖网格线必须落在对数刻度上（100/1k/10k 三个十倍频程），
       // 否则与下方 FreqAxis 的频率标签对不齐。
       for (final hz in const [100.0, 1000.0, 10000.0]) {
         final x = VizBands.logX(hz) * size.width;
-        canvas.drawLine(Offset(x, 0), Offset(x, size.height), gp);
+        canvas.drawLine(Offset(x, 0), Offset(x, size.height), _gridPaint);
       }
     }
 
     final bands = spectrum.value;
     final n = bands.length.clamp(1, VizBands.count);
-    final paint = Paint()..color = spectrumColor;
-    final cap = Paint()..color = capperColor;
     final pk = peaks?.value;
 
     for (var i = 0; i < n; i++) {
@@ -813,7 +820,7 @@ class _SpectrumPainter extends CustomPainter {
         ).deflate(bw < 6 ? 0 : 0.5);
         canvas.drawRRect(
           RRect.fromRectAndCorners(rect, topLeft: radius, topRight: radius),
-          paint,
+          _barPaint,
         );
         // 顶端 2px 亮帽：给柱体一个明确的"读数头"
         if (h > 4) {
@@ -822,7 +829,7 @@ class _SpectrumPainter extends CustomPainter {
               Rect.fromLTWH(x, size.height - h, bw, 2),
               radius,
             ),
-            cap,
+            _capPaint,
           );
         }
       }
@@ -832,16 +839,20 @@ class _SpectrumPainter extends CustomPainter {
         canvas.drawLine(
           Offset(x, py),
           Offset(x + bw, py),
-          Paint()
-            ..color = dimColor
-            ..strokeWidth = 1.5,
+          _pkPaint,
         );
       }
     }
   }
 
   @override
-  bool shouldRepaint(_SpectrumPainter old) => false; // repaint 由 listenable 驱动
+  bool shouldRepaint(_SpectrumPainter old) =>
+      old.spectrumColor != spectrumColor ||
+      old.capperColor != capperColor ||
+      old.gridColor != gridColor ||
+      old.dimColor != dimColor ||
+      old.gap != gap ||
+      old.showGrid != showGrid;
 }
 
 /// 频谱频率轴：对数额点标签，按 log10(f/20) / log10(20000/20) 定位，

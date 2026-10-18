@@ -377,7 +377,9 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
+        child: RepaintBoundary(
+          child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
+        ),
       );
 }
 
@@ -458,9 +460,15 @@ class _AmbientPainter extends CustomPainter {
   final ValueListenable<int> clock;
   final AmbientEnvelope _env = AmbientEnvelope();
 
-  /// 缓存画笔与共用垂直渐变 Shader（整帧复用，避免循环内部重复分配 SkShader）
+  /// 双层光晕与地平线微光画笔（纯矢量原生光晕，零 toImage 异步与泄漏）
   final Paint _barPaint = Paint();
-  ui.Shader? _cachedShader;
+  final Paint _bloomPaint = Paint();
+  final Paint _horizonPaint = Paint();
+
+  ui.Shader? _cachedBarShader;
+  ui.Shader? _cachedBloomShader;
+  ui.Shader? _cachedHorizonShader;
+
   Size? _lastShaderSize;
   Color? _lastAccentColor;
   int? _lastBaseAlpha;
@@ -506,39 +514,94 @@ class _AmbientPainter extends CustomPainter {
 
     final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
-    final baseAlpha = (0.14 * intensity * 255).round();
+    final baseAlpha = (0.18 * intensity * 255).round();
     final bw = size.width / AmbientEnvelope.bars;
 
-    // 仅在尺寸或配色参数变动时重建全屏垂直渐变 Shader；整屏所有柱子共用同一个 Shader，
-    // 使得 Skia / ANGLE / D3D11 能够将 72 根柱子完全合批为单次 DrawCall。
-    if (_cachedShader == null ||
+    // 仅在尺寸或配色参数变动时重建共用垂直渐变 Shader，消除循环内的重复构造
+    if (_cachedBarShader == null ||
         _lastShaderSize != size ||
         _lastAccentColor != palette.accent ||
         _lastBaseAlpha != baseAlpha) {
       _lastShaderSize = size;
       _lastAccentColor = palette.accent;
       _lastBaseAlpha = baseAlpha;
-      _cachedShader = LinearGradient(
+
+      // 核心光束渐变
+      _cachedBarShader = LinearGradient(
         begin: Alignment.bottomCenter,
         end: Alignment.topCenter,
         colors: [
           palette.accent.withValues(alpha: baseAlpha / 255),
+          palette.accent.withValues(alpha: (baseAlpha * 0.4) / 255),
           palette.accent.withValues(alpha: 0.0),
         ],
-        stops: const [0.0, 0.9],
+        stops: const [0.0, 0.45, 1.0],
       ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
-      _barPaint.shader = _cachedShader;
+      _barPaint.shader = _cachedBarShader;
+
+      // 外部大面积模糊光晕渐变（横向纵向漫反射弥散）
+      _cachedBloomShader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          palette.accent.withValues(alpha: (baseAlpha * 0.45) / 255),
+          palette.accent.withValues(alpha: (baseAlpha * 0.12) / 255),
+          palette.accent.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.5, 0.95],
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      _bloomPaint.shader = _cachedBloomShader;
+
+      // 底部氛围地平线泛光
+      final horizonH = math.min(160.0, size.height * 0.35);
+      _cachedHorizonShader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          palette.accent.withValues(alpha: (baseAlpha * 0.38) / 255),
+          palette.accent.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 1.0],
+      ).createShader(Rect.fromLTWH(0, size.height - horizonH, size.width, horizonH));
+      _horizonPaint.shader = _cachedHorizonShader;
     }
 
-    final cornerRadius = Radius.circular(bw * 0.35);
+    // 1. 绘制底部极光地平线微光（随最大能量起伏的底座泛光）
+    final horizonH = math.min(160.0, size.height * 0.35);
+    final energyRatio = (_env.maxValue / peak).clamp(0.0, 1.0);
+    if (energyRatio > 0.05) {
+      canvas.drawRect(
+        Rect.fromLTWH(0, size.height - horizonH * energyRatio, size.width, horizonH * energyRatio),
+        _horizonPaint,
+      );
+    }
+
+    final coreRadius = Radius.circular(bw * 0.35);
+    final bloomRadius = Radius.circular(bw * 0.75);
+
+    // 2. 双通道原生光晕绘制：外层漫反射光晕（弥散）+ 内层聚光柱体（光束）
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * size.height * 0.92;
-      final rect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.75, h);
-      // 原生带圆角直接光栅化，零 GPU 纹理重建与 D3D11 句柄损耗
+
+      // 外层 Bloom 弥散光晕体（加宽、加大圆角、柔和羽化）
+      final bloomW = bw * 1.45;
+      final bloomRect = Rect.fromLTWH(
+        i * bw - (bloomW - bw * 0.75) / 2,
+        size.height - h * 1.04,
+        bloomW,
+        h * 1.04,
+      );
       canvas.drawRRect(
-        RRect.fromRectAndRadius(rect, cornerRadius),
+        RRect.fromRectAndRadius(bloomRect, bloomRadius),
+        _bloomPaint,
+      );
+
+      // 内层核心光束（清亮凝聚）
+      final coreRect = Rect.fromLTWH(i * bw, size.height - h, bw * 0.75, h);
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(coreRect, coreRadius),
         _barPaint,
       );
     }
@@ -548,7 +611,9 @@ class _AmbientPainter extends CustomPainter {
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
   void dispose() {
-    _cachedShader = null;
+    _cachedBarShader = null;
+    _cachedBloomShader = null;
+    _cachedHorizonShader = null;
   }
 }
 
