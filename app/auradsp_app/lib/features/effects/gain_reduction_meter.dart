@@ -40,7 +40,9 @@ class _GainReductionMeterState extends State<GainReductionMeter>
     super.initState();
     _ticker = createTicker(_onTick);
     widget.grListenable.addListener(_onGrChanged);
-    _onGrChanged();
+    final v = widget.grListenable.value.abs().clamp(0.0, widget.maxDb);
+    _currentGr = v;
+    _peakGr = v;
   }
 
   void _onGrChanged() {
@@ -50,7 +52,10 @@ class _GainReductionMeterState extends State<GainReductionMeter>
       _peakGr = v;
       _peakHoldFrames = kHoldFrames;
     }
-    if (!_ticker.isActive && mounted && TrayService.instance.isWindowVisible.value) {
+    if ((_currentGr > 0.05 || _peakGr > 0.05) &&
+        !_ticker.isActive &&
+        mounted &&
+        TrayService.instance.isWindowVisible.value) {
       _ticker.start();
     }
   }

@@ -54,6 +54,9 @@ class _BassShapingCard extends StatelessWidget {
           ChannelRoutingSelector(
             model: model,
             paramKey: 'shelf.channels',
+            label: (Localizations.localeOf(context).languageCode == 'zh')
+                ? '低频搁架声道路由'
+                : 'Low-shelf Channel Routing',
           ),
         ],
       ),

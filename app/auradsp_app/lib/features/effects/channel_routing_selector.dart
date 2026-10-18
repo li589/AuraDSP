@@ -48,18 +48,18 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     widget.model.setInt(widget.paramKey, newMask & 0xFF);
   }
 
-  String _getSummaryText(int mask) {
-    if (mask == 0xFF) return '全声道 (8/8)';
-    if (mask == 0x03) return '立体声 (FL/FR)';
-    if (mask == 0xF7) return '无超低 (7/8)';
-    if (mask == 0x00) return '全旁路 (0/8)';
-    if (mask == 0xF0) return '仅环绕 (4/8)';
+  String _getSummaryText(int mask, bool isZh) {
+    if (mask == 0xFF) return isZh ? '全声道 (8/8)' : 'All Channels (8/8)';
+    if (mask == 0x03) return isZh ? '立体声 (FL/FR)' : 'Stereo (FL/FR)';
+    if (mask == 0xF7) return isZh ? '无超低 (7/8)' : 'No Sub (7/8)';
+    if (mask == 0x00) return isZh ? '全旁路 (0/8)' : 'All Bypassed (0/8)';
+    if (mask == 0xF0) return isZh ? '仅环绕 (4/8)' : 'Surround Only (4/8)';
 
     int count = 0;
     for (int i = 0; i < 8; i++) {
       if ((mask & (1 << i)) != 0) count++;
     }
-    return '$count/8 声道已选';
+    return isZh ? '$count/8 声道已选' : '$count/8 Selected';
   }
 
   @override
@@ -67,7 +67,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     final p = paletteOf(context);
     final isZh = Localizations.localeOf(context).languageCode == 'zh';
     final mask = _mask;
-    final summary = _getSummaryText(mask);
+    final summary = _getSummaryText(mask, isZh);
 
     return Container(
       margin: const EdgeInsets.only(top: AuraSpace.sm),
@@ -188,52 +188,49 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     final isSelected = (mask & (1 << ch.bit)) != 0;
     final name = isZh ? ch.nameZh : ch.nameEn;
 
-    return Tooltip(
-      message: '${ch.code} - $name (${isZh ? "声道" : "Channel"} ${ch.bit + 1})',
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          borderRadius: BorderRadius.circular(6),
-          onTap: () => _updateMask(mask ^ (1 << ch.bit)),
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-            decoration: BoxDecoration(
-              color: isSelected
-                  ? p.accent.withValues(alpha: 0.18)
-                  : p.panelRaised.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(
-                color: isSelected ? p.accent : p.hairline,
-                width: isSelected ? 1.2 : 1.0,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(6),
+        onTap: () => _updateMask(mask ^ (1 << ch.bit)),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? p.accent.withValues(alpha: 0.18)
+                : p.panelRaised.withValues(alpha: 0.4),
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isSelected ? p.accent : p.hairline,
+              width: isSelected ? 1.2 : 1.0,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                size: 13,
+                color: isSelected ? p.accent : p.textDim,
               ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  isSelected ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                  size: 13,
-                  color: isSelected ? p.accent : p.textDim,
+              const SizedBox(width: 5),
+              Text(
+                ch.code,
+                style: monoOf(p).copyWith(
+                  color: isSelected ? p.text : p.textDim,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  fontSize: 11,
                 ),
-                const SizedBox(width: 5),
-                Text(
-                  ch.code,
-                  style: monoOf(p).copyWith(
-                    color: isSelected ? p.text : p.textDim,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                    fontSize: 11,
-                  ),
+              ),
+              const SizedBox(width: 3),
+              Text(
+                name,
+                style: captionOf(p, color: isSelected ? p.text : p.textDim).copyWith(
+                  fontSize: 10,
                 ),
-                const SizedBox(width: 3),
-                Text(
-                  name,
-                  style: captionOf(p, color: isSelected ? p.text : p.textDim).copyWith(
-                    fontSize: 10,
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
