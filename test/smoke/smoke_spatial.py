@@ -357,6 +357,40 @@ check('early reflections tail grows with room', e1 > 5.0 * max(e0, 1e-12),
       'tail0=%.6f tail1=%.6f' % (e0, e1))
 dll.auradsp_destroy(h)
 
+# 4b. B3b 全通扩散：首个反射 tap（11ms）之后必须出现级联能量。
+# 未加全通时 12.3~13.5ms 的 peak < 1e-8；两级 Schroeder 后与首 tap 同量级。
+h = dll.auradsp_create(SR, BLOCK)
+dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
+dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32(1.0)), 4)
+dll.auradsp_set_param(h, b'spatial.fdn', ctypes.byref(i32(0)), 4)
+dll.auradsp_set_param(h, b'spatial.center', ctypes.byref(f32(0.0)), 4)
+dll.auradsp_set_param(h, b'spatial.mix', ctypes.byref(f32(1.0)), 4)
+sp_l, sp_r = [], []
+for b in range(30):
+    bi = (ctypes.c_float * (BLOCK * 2))()
+    bo = (ctypes.c_float * (BLOCK * 2))()
+    if b == 0:
+        bi[0] = 1.0
+        bi[1] = 1.0
+    dll.auradsp_process(h, bi, bo, BLOCK)
+    for i in range(BLOCK):
+        sp_l.append(bo[i * 2])
+        sp_r.append(bo[i * 2 + 1])
+dll.auradsp_destroy(h)
+
+
+def ir_peak(t0_ms, t1_ms):
+    a = int(t0_ms * SR / 1000.0)
+    b = int(t1_ms * SR / 1000.0)
+    return max([abs(x) for x in sp_l[a:b]] + [abs(y) for y in sp_r[a:b]])
+
+
+p_tap = ir_peak(10.5, 11.5)
+p_ap = ir_peak(12.3, 13.5)
+check('B3b allpass diffuses early reflection (inter-tap energy)',
+      p_tap > 1e-4 and p_ap > 0.1 * p_tap,
+      'tap=%.3e inter=%.3e' % (p_tap, p_ap))
+
 # 5. center/width/outgain 可测（每项独立全新句柄）
 h = dll.auradsp_create(SR, BLOCK)
 dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
@@ -484,7 +518,7 @@ check('toggle off finite, on resumes audible',
       off_ok and pk_on == pk_on and 0.001 < pk_on < 10.0, 'pk=%.4f' % pk_on)
 dll.auradsp_destroy(h)
 
-# 96k 独立句柄（ITD 127 钳位路径 + tap/hist 高 fs 缩放冒烟）
+# 96k 独立句柄（ITD/tap/hist/全通高 fs 缩放冒烟）
 h96 = dll.auradsp_create(96000.0, BLOCK)
 ok96 = h96 is not None and h96 != 0
 if ok96:
@@ -503,6 +537,28 @@ if ok96:
     ok96 = pk96 == pk96 and 0.001 < pk96 < 10.0
     dll.auradsp_destroy(h96)
 check('96k handle finite audible (ITD clamp path)', ok96)
+
+# 192k 独立句柄：ITD 154 < 256；全通最长 4.1ms≈788 < 1024。
+h192 = dll.auradsp_create(192000.0, BLOCK)
+ok192 = h192 is not None and h192 != 0
+if ok192:
+    dll.auradsp_set_param(h192, b'spatial.enable', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(h192, b'spatial.room', ctypes.byref(f32(1.0)), 4)
+    dll.auradsp_set_param(h192, b'spatial.width', ctypes.byref(f32(1.5)), 4)
+    dll.auradsp_set_param(h192, b'spatial.fdn', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(h192, b'spatial.late', ctypes.byref(f32(0.5)), 4)
+    bi = (ctypes.c_float * (BLOCK * 2))()
+    bo = (ctypes.c_float * (BLOCK * 2))()
+    for i in range(BLOCK):
+        s = 0.25 * math.sin(2 * math.pi * 440.0 * i / 192000.0)
+        bi[2 * i] = s
+        bi[2 * i + 1] = 0.0
+    for _ in range(8):
+        dll.auradsp_process(h192, bi, bo, BLOCK)
+    pk192 = max(abs(bo[i]) for i in range(BLOCK * 2))
+    ok192 = pk192 == pk192 and 0.001 < pk192 < 10.0
+    dll.auradsp_destroy(h192)
+check('192k handle finite audible (ITD/allpass full length)', ok192)
 
 print()
 if FAIL:
