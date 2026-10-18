@@ -1222,6 +1222,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialAutoGainInfo => '向输入响度收敛（与混响同式），防摆位后忽大忽小';
 
   @override
+  String get spatialMix => '空间化比例';
+
+  @override
+  String get spatialMixInfo => '干声与空间声的混合比例。0% 等同旁路，100% 为完整虚拟声场';
+
+  @override
+  String get spatialElevation => '高度';
+
+  @override
+  String get spatialElevationInfo => '虚拟舞台的仰角。正值抬升声像，负值下沉；用于强化上方/下方定位';
+
+  @override
+  String get spatialHeadTrack => '头部跟随';
+
+  @override
+  String get spatialHeadTrackInfo =>
+      '开启后接收 OpenTrack UDP（端口 4242）的头部朝向；关闭时使用手动角度';
+
+  @override
+  String get spatialHeadAzim => '头部朝向';
+
+  @override
+  String get spatialHeadAzimInfo => '手动偏航角度；头部跟随时由外部数据覆盖';
+
+  @override
   String get src51Fold => '混缩';
 
   @override

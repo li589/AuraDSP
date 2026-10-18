@@ -174,6 +174,7 @@ static void hook_comp_update(auradsp_handle h) {
 }
 
 static void hook_spatial_enable(auradsp_handle h) {
+    spatial_reset(h);
     compute_latency(h, &h->latency_ms);
 }
 
@@ -980,6 +981,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("spatial.center", spatial_center, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("spatial.outgain", spatial_outgain, -12.0f, 6.0f, nullptr),
     PARAM_BOOL("spatial.autogain", spatial_autogain, hook_spatial_autogain),
+    PARAM_FLOAT("spatial.mix", spatial_mix, 0.0f, 1.0f, nullptr),
+    PARAM_FLOAT("spatial.elevation", spatial_elevation, -30.0f, 30.0f, nullptr),
     PARAM_FLOAT("spatial.headazim", spatial_headazim, -180.0f, 180.0f, nullptr),
     PARAM_BOOL("spatial.headtrack", spatial_headtrack, nullptr),
 

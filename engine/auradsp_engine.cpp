@@ -193,17 +193,9 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     shelf_recalc(h);
     filter_recalc(h);
     apply_params_locked(h);
-    /* 空间音效 RT 状态显式复位：虽随 handle 值初始化已为零，此处显式清零以
-     * 固化不变量（防未来分配方式变更；控制线程一次性开销，RT 无影响）。 */
-    memset(h->spat_ring, 0, sizeof(h->spat_ring));
-    memset(h->spat_ring_pos, 0, sizeof(h->spat_ring_pos));
-    memset(h->spat_lp, 0, sizeof(h->spat_lp));
-    memset(h->spat_hist, 0, sizeof(h->spat_hist));
-    h->spat_hist_pos = 0;
-    memset(h->spat_pinna, 0, sizeof(h->spat_pinna));
-    h->spat_ag_in = 0.0;
-    h->spat_ag_out = 0.0;
-    h->spat_ag_comp = 1.0;
+    /* 空间音效 RT 状态显式复位（含新增的源/耳 pinna、mix/headazim 平滑器）。
+     * 控制线程一次性开销，RT 无影响。 */
+    spatial_reset(h);
     /* Lookahead Limiter RT 状态显式复位与初始化 */
     h->mc_limiter_la_len = (int)(0.0015 * sample_rate + 0.5);
     if (h->mc_limiter_la_len < 1) h->mc_limiter_la_len = 1;

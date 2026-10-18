@@ -63,6 +63,13 @@ class _SpatialCard extends StatelessWidget {
             active: model.spatialOn,
           ),
           const SizedBox(height: AuraSpace.sm),
+          ParamSlider(
+            param: ParamRegistry.spatialMix,
+            model: model,
+            customLabel: l.spatialMix,
+            infoMessage: l.spatialMixInfo,
+          ),
+          const SizedBox(height: AuraSpace.sm),
 
           // 核心空间控制滑块
           ParamSlider(
@@ -84,6 +91,33 @@ class _SpatialCard extends StatelessWidget {
             model: model,
             customLabel: l.spatialCenter,
             infoMessage: '控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。',
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          ParamSlider(
+            param: ParamRegistry.spatialElevation,
+            model: model,
+            customLabel: l.spatialElevation,
+            infoMessage: l.spatialElevationInfo,
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          Row(
+            children: [
+              Text(l.spatialHeadTrack, style: labelOf(p, color: p.text)),
+              const SizedBox(width: 4),
+              InfoBadge(message: l.spatialHeadTrackInfo),
+              const Spacer(),
+              ParamSwitch(
+                param: ParamRegistry.spatialHeadTrack,
+                model: model,
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.sm),
+          ParamSlider(
+            param: ParamRegistry.spatialHeadAzim,
+            model: model,
+            customLabel: l.spatialHeadAzim,
+            infoMessage: l.spatialHeadAzimInfo,
           ),
           const SizedBox(height: AuraSpace.sm),
           ParamSlider(

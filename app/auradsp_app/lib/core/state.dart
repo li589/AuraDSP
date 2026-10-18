@@ -19,6 +19,7 @@ import '../engine/audio_isolate.dart';
 import '../engine/auradsp_ffi.dart'
     show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
+import '../engine/head_tracker.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
@@ -130,6 +131,10 @@ abstract class ParamDefaults {
   static const double spatialWidth = 1.0;    // [0.5,1.5]
   static const double spatialCenter = 0.8;  // [0,1]
   static const double spatialOutGain = 0.0;  // [-12,6] dB
+  static const double spatialMix = 1.0;       // [0,1]
+  static const double spatialElevation = 0.0; // [-30,30] 度
+  static const double spatialHeadAzim = 0.0;  // [-180,180] 度
+  static const bool spatialHeadTrack = false;
 
   // 激励器
   static const double exciterAmount = 0.3;   // [0,1]
@@ -231,6 +236,8 @@ abstract class ParamDefaults {
 }
 
 class AppModel extends ChangeNotifier {
+  final HeadTracker _headTracker = HeadTracker();
+
   /// 声场展宽的引擎侧安全上限。
   /// libjamesdsp 的展宽在 mix=1.0 时执行 `band - centre`（中置完全剥离），
   /// 单声道内容会直接归零（表现为"拉满几乎没声音"）。UI 0..100% 线性映射到
@@ -646,6 +653,8 @@ class AppModel extends ChangeNotifier {
   double spatialRoom = 0.7, spatialWidth = 1.0, spatialCenter = 0.8;
   double spatialOutGain = 0.0;
   bool spatialAutoGain = false;
+  double spatialMix = 1.0;
+  double spatialElevation = 0.0;
   // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
@@ -1339,6 +1348,12 @@ class AppModel extends ChangeNotifier {
         if (raw['spatialAutoGain'] != null) {
           spatialAutoGain = (raw['spatialAutoGain'] as int) != 0;
         }
+        if (raw['spatialMix'] != null) {
+          spatialMix = (raw['spatialMix'] as num).toDouble();
+        }
+        if (raw['spatialElevation'] != null) {
+          spatialElevation = (raw['spatialElevation'] as num).toDouble();
+        }
         if (raw['spatialHeadAzim'] != null) {
           spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
         }
@@ -1978,8 +1993,11 @@ class AppModel extends ChangeNotifier {
       setFloat(ParamId.spatialCenter, spatialCenter);
       setFloat(ParamId.spatialOutGain, spatialOutGain);
       setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
+      setFloat(ParamId.spatialMix, spatialMix);
+      setFloat(ParamId.spatialElevation, spatialElevation);
       setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
       setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
+      _syncHeadTracker();
       setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
       setFloat(ParamId.exciterAmount, exciterAmount);
       setFloat(ParamId.exciterHifreq, exciterHifreq);
@@ -2218,6 +2236,8 @@ class AppModel extends ChangeNotifier {
         if (id == ParamId.spatialCenter) { spatialCenter = v; break; }
         if (id == ParamId.spatialOutGain) { spatialOutGain = v; break; }
         if (id == ParamId.spatialAutoGain) { spatialAutoGain = v != 0; break; }
+        if (id == ParamId.spatialMix) { spatialMix = v; break; }
+        if (id == ParamId.spatialElevation) { spatialElevation = v; break; }
         if (id == ParamId.spatialHeadAzim) { spatialHeadAzim = v; break; }
         if (id == ParamId.spatialHeadTrack) { spatialHeadTrack = v != 0; break; }
         if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
@@ -2830,19 +2850,56 @@ class AppModel extends ChangeNotifier {
     scheduleAutoSave();
   }
 
-  /// 头跟 stub：仅存取透传（无 UI；传感器接入后由驱动层高频下发 azimuth）。
-  void setSpatialHeadAzim(double v) {
-    spatialHeadAzim = v.clamp(-180.0, 180.0);
-    setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
+  void setSpatialMix(double v) {
+    spatialMix = v.clamp(0.0, 1.0);
+    setFloat(ParamId.spatialMix, spatialMix);
     notifyListeners();
     scheduleAutoSave();
+  }
+
+  void setSpatialElevation(double v) {
+    spatialElevation = v.clamp(-30.0, 30.0);
+    setFloat(ParamId.spatialElevation, spatialElevation);
+    notifyListeners();
+    scheduleAutoSave();
+  }
+
+  /// 头部朝向（手动或 OpenTrack 外部数据；引擎按块级 15ms 平滑消费）。
+  void setSpatialHeadAzim(double v, {bool persist = true}) {
+    final next = v.clamp(-180.0, 180.0);
+    if ((next - spatialHeadAzim).abs() < 0.25) return;
+    spatialHeadAzim = next;
+    setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
+    notifyListeners();
+    if (persist) scheduleAutoSave();
   }
 
   void setSpatialHeadTrack(bool on) {
     spatialHeadTrack = on;
     setInt(ParamId.spatialHeadTrack, on ? 1 : 0);
+    _syncHeadTracker();
     notifyListeners();
     scheduleAutoSave();
+  }
+
+  void _syncHeadTracker() {
+    if (spatialHeadTrack) {
+      if (!_headTracker.isRunning) _startHeadTracker();
+    } else {
+      _headTracker.stop();
+    }
+  }
+
+  void _startHeadTracker() {
+    _headTracker.start(onYaw: (yaw) {
+      setSpatialHeadAzim(yaw, persist: false);
+    }).then((ok) {
+      if (!ok && spatialHeadTrack) {
+        spatialHeadTrack = false;
+        setInt(ParamId.spatialHeadTrack, 0);
+        notifyListeners();
+      }
+    });
   }
 
   /// 5.1 源模式切换（直通只在本地渲染 + raw 就绪 + 设备声道足够时生效，
@@ -5200,6 +5257,7 @@ void fillEqQ(double q) {
   /// 废除品质档限定拦截，所有效果均自由放行
   @override
   void dispose() {
+    _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(_onWindowVisibilityChanged);
     _debounceSaveTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。

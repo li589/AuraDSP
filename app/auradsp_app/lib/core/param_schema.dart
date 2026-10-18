@@ -740,6 +740,36 @@ abstract final class ParamRegistry {
     getter: (m) => m.spatialAutoGain,
     setter: (m, v) => m.setSpatialAutoGain(v),
   );
+  static final spatialMix = ParamSpec<double>(
+    id: 'spatial.mix', section: 'spatial', key: 'mix',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialMix,
+    min: 0.0, max: 1.0, step: 0.01, unit: '%',
+    formatter: (v) => (v * 100).toStringAsFixed(0),
+    getter: (m) => m.spatialMix,
+    setter: (m, v) => m.setSpatialMix(v),
+  );
+  static final spatialElevation = ParamSpec<double>(
+    id: 'spatial.elevation', section: 'spatial', key: 'elevation',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialElevation,
+    min: -30.0, max: 30.0, step: 1.0, unit: '°',
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(0),
+    getter: (m) => m.spatialElevation,
+    setter: (m, v) => m.setSpatialElevation(v),
+  );
+  static final spatialHeadAzim = ParamSpec<double>(
+    id: 'spatial.headazim', section: 'spatial', key: 'headAzim',
+    type: ParamType.float, defaultValue: ParamDefaults.spatialHeadAzim,
+    min: -180.0, max: 180.0, step: 1.0, unit: '°',
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(0),
+    getter: (m) => m.spatialHeadAzim,
+    setter: (m, v) => m.setSpatialHeadAzim(v),
+  );
+  static final spatialHeadTrack = ParamSpec<bool>(
+    id: 'spatial.headtrack', section: 'spatial', key: 'headTrack',
+    type: ParamType.boolean, defaultValue: ParamDefaults.spatialHeadTrack,
+    getter: (m) => m.spatialHeadTrack,
+    setter: (m, v) => m.setSpatialHeadTrack(v),
+  );
   static final spatialEnable = ParamSpec<bool>(
     id: 'spatial.enable', section: 'spatial', key: 'enable',
     type: ParamType.boolean, defaultValue: false,
@@ -1582,7 +1612,8 @@ abstract final class ParamRegistry {
       name: 'spatial',
       specs: [
         spatialStyle, spatialRoom, spatialWidth, spatialCenter,
-        spatialOutGain, spatialAutoGain, spatialEnable,
+        spatialOutGain, spatialAutoGain, spatialMix, spatialElevation,
+        spatialHeadAzim, spatialHeadTrack, spatialEnable,
       ],
     ),
     // 10. 噪声门

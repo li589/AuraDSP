@@ -2458,6 +2458,54 @@ abstract class AppLocalizations {
   /// **'向输入响度收敛（与混响同式），防摆位后忽大忽小'**
   String get spatialAutoGainInfo;
 
+  /// No description provided for @spatialMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间化比例'**
+  String get spatialMix;
+
+  /// No description provided for @spatialMixInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'干声与空间声的混合比例。0% 等同旁路，100% 为完整虚拟声场'**
+  String get spatialMixInfo;
+
+  /// No description provided for @spatialElevation.
+  ///
+  /// In zh, this message translates to:
+  /// **'高度'**
+  String get spatialElevation;
+
+  /// No description provided for @spatialElevationInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟舞台的仰角。正值抬升声像，负值下沉；用于强化上方/下方定位'**
+  String get spatialElevationInfo;
+
+  /// No description provided for @spatialHeadTrack.
+  ///
+  /// In zh, this message translates to:
+  /// **'头部跟随'**
+  String get spatialHeadTrack;
+
+  /// No description provided for @spatialHeadTrackInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后接收 OpenTrack UDP（端口 4242）的头部朝向；关闭时使用手动角度'**
+  String get spatialHeadTrackInfo;
+
+  /// No description provided for @spatialHeadAzim.
+  ///
+  /// In zh, this message translates to:
+  /// **'头部朝向'**
+  String get spatialHeadAzim;
+
+  /// No description provided for @spatialHeadAzimInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动偏航角度；头部跟随时由外部数据覆盖'**
+  String get spatialHeadAzimInfo;
+
   /// No description provided for @src51Fold.
   ///
   /// In zh, this message translates to:

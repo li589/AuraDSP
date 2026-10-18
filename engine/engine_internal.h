@@ -169,8 +169,10 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<float>    spatial_center{0.8f};/* [0,1] 中置聚焦 */
     std::atomic<float>    spatial_outgain{0.0f}; /* dB [-12,6] */
     std::atomic<int32_t>  spatial_autogain{0};
-    /* 头跟预留（Phase 2 stub：存取对称 + 钳位，DSP 暂不消费；未来实现时
-     * spatial_process 按 azimuth 整体旋转 kSpatDeg 即可，无需改状态布局） */
+    std::atomic<float>    spatial_mix{1.0f};       /* [0,1] 空间化干湿比 */
+    std::atomic<float>    spatial_elevation{0.0f}; /* 度 [-30,30] 虚拟舞台高度 */
+    /* 头跟踪：headazim 始终作为手动/外部朝向消费；headtrack 仅表示外部源
+     * （OpenTrack UDP）是否开启，DSP 不区分来源。 */
     std::atomic<float>    spatial_headazim{0.0f}; /* 度 [-180,180] 头部偏航 */
     std::atomic<int32_t>  spatial_headtrack{0};  /* 0=关闭 1=跟随 */
     /* 激励器（HPF 取高频 + tanh 谐波混回；drive 固定，只暴露 amount/hifreq） */
@@ -515,9 +517,12 @@ struct auradsp_handle_s {
     float  spat_lp[kSpatSpk];             // 各扬声器远耳头影低通状态
     float  spat_hist[kSpatHistLen];       // 早期反射历史（输入 mono 下混）
     int    spat_hist_pos = 0;
-    float  spat_pinna[2][2][4];           // [stage][ch] x1,x2,y1,y2（全局 pinna 双 biquad）
+    float  spat_pinna[2][2][4];           // [stage][ch] 反射总线 pinna 双 biquad
+    float  spat_src_pinna[kSpatSpk][2][2][4]; // [源][耳][stage] 方向 pinna 状态
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
     float  spat_g_sm = 1.0f;    /* 空间音效输出增益一阶平滑状态（2ms 时间常数） */
+    float  spat_mix_sm = 1.0f;  /* 空间化干湿比平滑状态（2ms 时间常数） */
+    float  spat_headazim_sm = 0.0f; /* 头跟踪方位角块级平滑状态（~15ms） */
     /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算；支持 8 声道） */
     float exc_lp[kMxMaxChannels] = {};
     /* 2x 多相半带过采样器实例（RT 独占，静态预分配零分配） */
@@ -599,6 +604,7 @@ char* read_text_file(auradsp_handle h, const char* path, long max_bytes, auradsp
 void rebuild_hann(auradsp_handle h, int n);
 void shelf_process(auradsp_handle h, float* io, int frames);
 void shelf_recalc(auradsp_handle h);
+void spatial_reset(auradsp_handle h);
 void spatial_process(auradsp_handle h, float* io, int frames);
 void viz_write(auradsp_handle h, const float* out, int frames);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);

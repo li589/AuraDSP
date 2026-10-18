@@ -1271,6 +1271,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'Rides input loudness (same follower as reverb)';
 
   @override
+  String get spatialMix => 'Spatial mix';
+
+  @override
+  String get spatialMixInfo =>
+      'Dry/spatial blend. 0% equals bypass, 100% is full virtualization';
+
+  @override
+  String get spatialElevation => 'Elevation';
+
+  @override
+  String get spatialElevationInfo =>
+      'Virtual stage elevation. Positive lifts the image, negative lowers it';
+
+  @override
+  String get spatialHeadTrack => 'Head tracking';
+
+  @override
+  String get spatialHeadTrackInfo =>
+      'Receives head yaw from OpenTrack UDP (port 4242); off uses the manual angle';
+
+  @override
+  String get spatialHeadAzim => 'Head azimuth';
+
+  @override
+  String get spatialHeadAzimInfo =>
+      'Manual yaw; overridden by external data while head tracking is on';
+
+  @override
   String get src51Fold => 'Fold-down';
 
   @override
