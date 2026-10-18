@@ -26,6 +26,11 @@ void gate_process(auradsp_handle h, float* io, int frames) {
     if (hyst < 0.0f) hyst = 0.0f; if (hyst > 12.0f) hyst = 12.0f;
     const float t_open = thr;
     const float t_close = thr - hyst;
+    /* PF-3：开/关门限一次转线性域（10^(dB/20)），去掉每样本 log10f ——
+     * 原来每样本算 dB 只为与 t_open/t_close 两个比较，对数单调，
+     * 线性域判定逐位等价。env+1e-12 的加项保持，饱和行为不变。 */
+    const float t_open_lin = std::pow(10.0f, t_open / 20.0f);
+    const float t_close_lin = std::pow(10.0f, t_close / 20.0f);
 
     float range_db = h->p.gate_range.load(std::memory_order_relaxed);
     if (range_db < -80.0f) range_db = -80.0f; if (range_db > 0.0f) range_db = 0.0f;
@@ -65,14 +70,14 @@ void gate_process(auradsp_handle h, float* io, int frames) {
         } else {
             env += (pk - env) * (1.0f - det_rel_coef);
         }
-        const float db = 20.0f * log10f(env + 1e-12f);
-        if (db >= t_open) {
+        /* PF-3：线性域比较（等价于 db >= t_open / db < t_close） */
+        if (env + 1e-12f >= t_open_lin) {
             state = 1.0f;
             hold_cnt = hold_samples;
         } else if (hold_cnt > 0) {
             --hold_cnt;
             state = 1.0f;
-        } else if (db < t_close) {
+        } else if (env + 1e-12f < t_close_lin) {
             state = 0.0f;
         }
 
@@ -166,6 +171,11 @@ void gate_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     if (hyst < 0.0f) hyst = 0.0f; if (hyst > 12.0f) hyst = 12.0f;
     const float t_open = thr;
     const float t_close = thr - hyst;
+    /* PF-3：开/关门限一次转线性域（10^(dB/20)），去掉每样本 log10f ——
+     * 原来每样本算 dB 只为与 t_open/t_close 两个比较，对数单调，
+     * 线性域判定逐位等价。env+1e-12 的加项保持，饱和行为不变。 */
+    const float t_open_lin = std::pow(10.0f, t_open / 20.0f);
+    const float t_close_lin = std::pow(10.0f, t_close / 20.0f);
 
     float range_db = h->p.gate_range.load(std::memory_order_relaxed);
     if (range_db < -80.0f) range_db = -80.0f; if (range_db > 0.0f) range_db = 0.0f;
@@ -205,14 +215,14 @@ void gate_process_mc(auradsp_handle h, float* io, int frames, int ch) {
             } else {
                 env += (pk - env) * (1.0f - det_rel_coef);
             }
-            const float db = 20.0f * log10f(env + 1e-12f);
-            if (db >= t_open) {
+            /* PF-3：线性域比较（等价于 db >= t_open / db < t_close） */
+            if (env + 1e-12f >= t_open_lin) {
                 state = 1.0f;
                 hold_cnt = hold_samples;
             } else if (hold_cnt > 0) {
                 --hold_cnt;
                 state = 1.0f;
-            } else if (db < t_close) {
+            } else if (env + 1e-12f < t_close_lin) {
                 state = 0.0f;
             }
 

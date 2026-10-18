@@ -526,6 +526,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iSpR = idp(ParamId.spatialRoom), iSpW = idp(ParamId.spatialWidth);
             final iSpC = idp(ParamId.spatialCenter), iSpG = idp(ParamId.spatialOutGain);
             final iSpA = idp(ParamId.spatialAutoGain);
+            // P-2 修复：mix/elevation/binaural/fdn/late 五键此前漏读回，
+            // live-params  revert-to-default 与引擎不一致，直到下次
+            // applyUiToEngine 才被覆盖——与 ParamId/ParamRegistry 齐全的
+            // 定义不匹配。这里补齐（state.dart 侧消费早已 null-guard 就绪）。
+            final iSpM = idp(ParamId.spatialMix);
+            final iSpEl = idp(ParamId.spatialElevation);
+            final iSpBi = idp(ParamId.spatialBinaural);
+            final iSpFd = idp(ParamId.spatialFdn);
+            final iSpLa = idp(ParamId.spatialLate);
             final iSpH = idp(ParamId.spatialHeadAzim), iSpT = idp(ParamId.spatialHeadTrack);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
             // P-010：每效果输出增益门 + 自动补偿
@@ -609,10 +618,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final stOnRb = AuraDspLib.getIntNullable(p, h, 'stereo.enable') ?? 0;
               final fvRoomSizeRb = AuraDspLib.getFloat(p, h, 'freeverb.roomsize') ?? 1.0;
               final fvWidthRb = AuraDspLib.getFloat(p, h, 'freeverb.width') ?? 1.0;
-              final eqBandsCountRb = AuraDspLib.getIntNullable(p, h, 'eq.bandsCount') ?? 31;
-              final eqFilterRb = AuraDspLib.getIntNullable(p, h, 'eq.filter') ?? 0;
-              final eqInterpRb = AuraDspLib.getIntNullable(p, h, 'eq.interp') ?? 0;
-              final eqQRb = AuraDspLib.getFloat(p, h, 'eq.q') ?? 4.3;
+              // P-1 修复：eq.bandsCount/eq.filter/eq.interp/eq.q 引擎侧
+              // **不存在对应参数**（它们只驱动 UI 如何生成 eq.curve 点：
+              // 频点栅格/Q/插值模式；引擎读取的是曲线头 eqm: 元信息）。
+              // 旧代码 `?? 31/?? 0/?? 0/?? 4.3` 恒定兜底，回读即用兜底值
+              // 覆盖用户已存值（10/0.35/1 等），且与 ParamDefaults
+              // (15/1.414/1) 也不一致。改为 null 透传：state 侧消费处
+              // （state.dart:1517-1520）已有 != null 守卫，引擎不暴露时
+              // 保持 UI 值不动——与"UI 为唯一真相源"口径一致。
+              final eqBandsCountRb = AuraDspLib.getIntNullable(p, h, 'eq.bandsCount');
+              final eqFilterRb = AuraDspLib.getIntNullable(p, h, 'eq.filter');
+              final eqInterpRb = AuraDspLib.getIntNullable(p, h, 'eq.interp');
+              final eqQRb = AuraDspLib.getFloat(p, h, 'eq.q');
               final bassModeRb = AuraDspLib.getIntNullable(p, h, 'bass.mode') ?? 0;
               final bassGainVal = rdFloat(iBassG) ?? 0.0;
               final bassIntensityRb = (AuraDspLib.getFloat(p, h, 'bass.intensity') ?? (bassGainVal / 15.0)).clamp(0.0, 1.0);
@@ -675,6 +692,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'spatialCenter': rdFloat(iSpC) ?? 0.8,
                 'spatialOutGain': rdFloat(iSpG) ?? 0.0,
                 'spatialAutoGain': rdInt(iSpA) ?? 0,
+                // P-2 修复：补齐 mix/elevation/binaural/fdn/late（fallback 取
+                // 引擎 struct 默认：1.0 / 0.0 / 0 / 0 / 0.25，三层一致）。
+                'spatialMix': rdFloat(iSpM) ?? 1.0,
+                'spatialElevation': rdFloat(iSpEl) ?? 0.0,
+                'spatialBinaural': rdInt(iSpBi) ?? 0,
+                'spatialFdn': rdInt(iSpFd) ?? 0,
+                'spatialLate': rdFloat(iSpLa) ?? 0.25,
                 'spatialHeadAzim': rdFloat(iSpH) ?? 0.0,
                 'spatialHeadTrack': rdInt(iSpT) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,

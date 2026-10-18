@@ -1,5 +1,6 @@
 /* P2 split: moved verbatim from auradsp_engine.cpp (pure move, no logic change). */
 #include "engine_internal.h"
+#include <cstdint> /* INT32_MAX（S-11 钳位） */
 #include "legacy/jdsp/Effects/eel2/dr_wav.h"
 #include "legacy/jdsp/Effects/eel2/dr_flac.h"
 
@@ -249,7 +250,9 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
  * 放在重采样**之前**，按文件自身采样率判定用户感知的时长；
  * 同时保留原有的硬顶（16M 帧 / 64M 样本）作为内存的最后防线。 */
 const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
-    if (maxIrSec > 0.1f && src_rate > 0 &&
+    /* S-12 修复：`> 0.1f` 在用户显式设 gate.maxIrSeconds=0.1 时门被跳过
+     * （硬顶仍兜底，但用户配置静默失效）；改 >= 让显式 0.1 生效。 */
+    if (maxIrSec >= 0.1f && src_rate > 0 &&
         (double)frames > (double)maxIrSec * (double)src_rate) {
         free(data);
         set_error(h, "convolver.ir: too long (exceeds configured gate.maxIrSeconds)");
@@ -280,7 +283,13 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
     compute_ir_spectrum(h, proc, out_frames, (int)ch);
     free(proc);
     h->ir_ready.store(true);
-    h->ir_frames.store((int32_t)out_frames);
+    /* S-11 修复：out_frames 为 size_t，恶意 WAV 声明极低 src_rate 且时长门
+     * 被跳过时可 >INT32_MAX，直接强转会回读负帧数（仅显示用途，仍登记
+     * 防回归）。三重尺寸门（maxFileMb/maxIrSec/16M 帧硬顶）正常已挡住，
+     * 此处钳位是最后一道防线，不依赖门卫永不出错。 */
+    h->ir_frames.store(out_frames > (size_t)INT32_MAX
+                           ? (int32_t)INT32_MAX
+                           : (int32_t)out_frames);
     h->ir_channels.store((int32_t)ch);
     h->ir_src_rate.store((int32_t)src_rate);
     h->ir_peak.store(peak);
