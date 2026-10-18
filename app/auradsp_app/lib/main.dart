@@ -41,7 +41,7 @@ class AuraApp extends StatefulWidget {
   State<AuraApp> createState() => _AuraAppState();
 }
 
-class _AuraAppState extends State<AuraApp> {
+class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
   AppModel? _model;
   // theme 缓存：themeId 不变则复用 ThemeData 对象——AppModel 高频通知
   // （viz 帧/参数拖动）不应反复重建整棵主题（MaterialApp 重建热点）。
@@ -51,7 +51,15 @@ class _AuraAppState extends State<AuraApp> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _boot();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      TrayService.instance.setWindowVisible(true);
+    }
   }
 
   ThemeData _themeFor(AppModel m) {
@@ -76,6 +84,7 @@ class _AuraAppState extends State<AuraApp> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _model?.dispose();
     TrayService.instance.dispose();
     super.dispose();
@@ -108,13 +117,24 @@ class _AuraAppState extends State<AuraApp> {
             TrayService.instance.applyLocale(
                 Localizations.localeOf(ctx).toString(),
                 l.trayShow, l.sysAutostart, l.trayQuit);
-            return ValueListenableBuilder<bool>(
-              valueListenable: TrayService.instance.isWindowVisible,
-              builder: (_, isVisible, c) => TickerMode(
-                enabled: isVisible,
-                child: c ?? const SizedBox.shrink(),
-              ),
-              child: child,
+            // 避免在根层级包裹 TickerMode(enabled: isVisible)：
+            // 根层 TickerMode 曾在最小化还原时因事件滞后或丢包导致全局 Ticker 锁死，
+            // 引起 AnimatedSwitcher 页面切换与按钮微交互假死。
+            // 显存与后台节流已由 chrome 背景光晕与音频可视化监听器精准独立接管。
+            // 此处使用透明 Listener 守卫：任何指针落入均自愈拉起可见性。
+            return Listener(
+              behavior: HitTestBehavior.translucent,
+              onPointerDown: (_) {
+                if (!TrayService.instance.isWindowVisible.value) {
+                  TrayService.instance.setWindowVisible(true);
+                }
+              },
+              onPointerHover: (_) {
+                if (!TrayService.instance.isWindowVisible.value) {
+                  TrayService.instance.setWindowVisible(true);
+                }
+              },
+              child: child ?? const SizedBox.shrink(),
             );
           },
         );
