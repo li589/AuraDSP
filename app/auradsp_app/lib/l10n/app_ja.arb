@@ -477,6 +477,8 @@
   "spatialMixInfo": "ドライ音と空間音の混合比。0% はバイパス相当、100% で完全な仮想音場",
   "spatialElevation": "高さ",
   "spatialElevationInfo": "仮想ステージの仰角。正で音像が上がり、負で下がる",
+  "spatialBinaural": "マルチチャンネル両耳",
+  "spatialBinauralInfo": "5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音",
   "spatialHeadTrack": "頭部追従",
   "spatialHeadTrackInfo": "OpenTrack UDP（ポート 4242）の頭部方位を受信。オフ時は手動角度を使用",
   "spatialHeadAzim": "頭部方位",

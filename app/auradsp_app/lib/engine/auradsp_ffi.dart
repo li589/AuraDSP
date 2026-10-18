@@ -81,6 +81,7 @@ abstract final class ParamId {
   static const spatialAutoGain = 'spatial.autogain';
   static const spatialMix = 'spatial.mix';
   static const spatialElevation = 'spatial.elevation';
+  static const spatialBinaural = 'spatial.binaural';
   // 头跟预留（Phase 2 stub：引擎只存取，DSP 不消费，无 UI）
   static const spatialHeadAzim = 'spatial.headazim';
   static const spatialHeadTrack = 'spatial.headtrack';

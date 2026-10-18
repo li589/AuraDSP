@@ -477,6 +477,8 @@
   "spatialMixInfo": "Dry/spatial blend. 0% equals bypass, 100% is full virtualization",
   "spatialElevation": "Elevation",
   "spatialElevationInfo": "Virtual stage elevation. Positive lifts the image, negative lowers it",
+  "spatialBinaural": "Multichannel binaural",
+  "spatialBinauralInfo": "Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted",
   "spatialHeadTrack": "Head tracking",
   "spatialHeadTrackInfo": "Receives head yaw from OpenTrack UDP (port 4242); off uses the manual angle",
   "spatialHeadAzim": "Head azimuth",

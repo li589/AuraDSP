@@ -2482,6 +2482,18 @@ abstract class AppLocalizations {
   /// **'虚拟舞台的仰角。正值抬升声像，负值下沉；用于强化上方/下方定位'**
   String get spatialElevationInfo;
 
+  /// No description provided for @spatialBinaural.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道虚拟环绕'**
+  String get spatialBinaural;
+
+  /// No description provided for @spatialBinauralInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音'**
+  String get spatialBinauralInfo;
+
   /// No description provided for @spatialHeadTrack.
   ///
   /// In zh, this message translates to:

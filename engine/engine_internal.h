@@ -171,6 +171,7 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  spatial_autogain{0};
     std::atomic<float>    spatial_mix{1.0f};       /* [0,1] 空间化干湿比 */
     std::atomic<float>    spatial_elevation{0.0f}; /* 度 [-30,30] 虚拟舞台高度 */
+    std::atomic<int32_t>  spatial_binaural{0};     /* 1=6/8ch→2ch 双耳虚拟环绕 */
     /* 头跟踪：headazim 始终作为手动/外部朝向消费；headtrack 仅表示外部源
      * （OpenTrack UDP）是否开启，DSP 不区分来源。 */
     std::atomic<float>    spatial_headazim{0.0f}; /* 度 [-180,180] 头部偏航 */
@@ -509,7 +510,7 @@ struct auradsp_handle_s {
     int    haas_ring_len = 0;
     int    haas_pos = 0;
     /* 空间音效 RT 状态（全固定数组，handle 随体分配，RT 零分配） */
-    static constexpr int kSpatSpk = 5;      // L C R LS RS
+    static constexpr int kSpatSpk = 8;      // 立体声 5 + 多声道 8 的上限
     static constexpr int kSpatItdLen = 128; // 远耳 ITD 线（0.8ms@96k=77 < 128）
     static constexpr int kSpatHistLen = 32768; // 早期反射历史（110ms@192k=21120 < 32768）
     float  spat_ring[kSpatSpk][kSpatItdLen]; // 各扬声器远耳延迟线（mono）
@@ -519,6 +520,7 @@ struct auradsp_handle_s {
     int    spat_hist_pos = 0;
     float  spat_pinna[2][2][4];           // [stage][ch] 反射总线 pinna 双 biquad
     float  spat_src_pinna[kSpatSpk][2][2][4]; // [源][耳][stage] 方向 pinna 状态
+    float  spat_lfe_lp = 0.0f;            // LFE 120Hz 低通状态
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
     float  spat_g_sm = 1.0f;    /* 空间音效输出增益一阶平滑状态（2ms 时间常数） */
     float  spat_mix_sm = 1.0f;  /* 空间化干湿比平滑状态（2ms 时间常数） */
@@ -599,13 +601,16 @@ void loudness_process(auradsp_handle h, float* io, int frames);
 void lp_refresh_sliders(auradsp_handle h);
 bool mx_downmix(auradsp_handle h, const float* in, float* stereo, int frames, int ch);
 void mx_upmix(auradsp_handle h, float* out, const float* stereo, int frames, int ch);
-void process_stereo_chain(auradsp_handle h, const float* src, float* dst, int frames);
+void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
+                          int frames, bool skip_spatial = false);
 char* read_text_file(auradsp_handle h, const char* path, long max_bytes, auradsp_status* st);
 void rebuild_hann(auradsp_handle h, int n);
 void shelf_process(auradsp_handle h, float* io, int frames);
 void shelf_recalc(auradsp_handle h);
 void spatial_reset(auradsp_handle h);
 void spatial_process(auradsp_handle h, float* io, int frames);
+void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
+                              int frames, int ch);
 void viz_write(auradsp_handle h, const float* out, int frames);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);
 void gate_process_mc(auradsp_handle h, float* io, int frames, int ch);

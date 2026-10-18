@@ -46,7 +46,7 @@ AuraDSP/
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
 ├── app/auradsp_app/     # Flutter 3.47.7（70 个 dart，21 张效果卡；音频后端四模式已接通/持久化）
 ├── test/
-│   ├── smoke/           # 58 个 smoke_*.py；runner.py --smoke 登记 63 项（含 6 个辅助/基准）
+│   ├── smoke/           # 59 个 smoke_*.py；runner.py --smoke 登记 64 项（含 6 个辅助/基准）
 │   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
 │   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
 ├── tools/               # bin/ 6 · probe/ 18 · resource_pipeline/ 2 · calibration/ 1 · archive/

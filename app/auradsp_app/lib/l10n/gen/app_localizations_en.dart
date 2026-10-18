@@ -1285,6 +1285,13 @@ class AppLocalizationsEn extends AppLocalizations {
       'Virtual stage elevation. Positive lifts the image, negative lowers it';
 
   @override
+  String get spatialBinaural => 'Multichannel binaural';
+
+  @override
+  String get spatialBinauralInfo =>
+      'Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted';
+
+  @override
   String get spatialHeadTrack => 'Head tracking';
 
   @override

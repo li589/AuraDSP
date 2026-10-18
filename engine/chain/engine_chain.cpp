@@ -592,6 +592,9 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 }
 
 
+void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
+                          int frames, bool skip_spatial);
+
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
@@ -684,11 +687,6 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
 }
 
 
-void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
-                                 int frames);
-
-
-
 static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const float* interleaved, int frames) {
     float ml = 0.0f, mr = 0.0f;
     for (int i = 0; i < frames; ++i) {
@@ -709,7 +707,7 @@ static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const floa
  * src 为只读输入，dst 为就地处理的工作区与输出。
  */
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
-                                 int frames) {
+                                 int frames, bool skip_spatial) {
     /* 低音参数：系数重算必须在本线程做。
      * 旧实现在 auradsp_set_param("bass.gain") 里直接调 BassBoostSetParam，
      * 与此处的 processFloatMultiplexd 并发访问同一个 JamesDSPLib —— 与
@@ -780,8 +778,9 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
     sample_stage_peak(h, 17, dst, frames);   /* Stage 17: Haas output */
 
-    /* 空间音效 L1（haas 后 / exciter 前：空间族抱团，最后一道音色工序之前） */
-    if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
+    /* 空间音效 L1（haas 后 / exciter 前：空间族抱团，最后一道音色工序之前）。
+     * B1 多声道双耳模式已在上游渲染，skip_spatial 避免二次空间化。 */
+    if (!skip_spatial && h->p.spatial_enable.load(std::memory_order_relaxed)) {
         spatial_process(h, dst, frames);
     }
     sample_stage_peak(h, 20, dst, frames);   /* Stage 20: Spatial output */

@@ -756,6 +756,12 @@ abstract final class ParamRegistry {
     getter: (m) => m.spatialElevation,
     setter: (m, v) => m.setSpatialElevation(v),
   );
+  static final spatialBinaural = ParamSpec<bool>(
+    id: 'spatial.binaural', section: 'spatial', key: 'binaural',
+    type: ParamType.boolean, defaultValue: ParamDefaults.spatialBinaural,
+    getter: (m) => m.spatialBinaural,
+    setter: (m, v) => m.setSpatialBinaural(v),
+  );
   static final spatialHeadAzim = ParamSpec<double>(
     id: 'spatial.headazim', section: 'spatial', key: 'headAzim',
     type: ParamType.float, defaultValue: ParamDefaults.spatialHeadAzim,
@@ -1613,7 +1619,7 @@ abstract final class ParamRegistry {
       specs: [
         spatialStyle, spatialRoom, spatialWidth, spatialCenter,
         spatialOutGain, spatialAutoGain, spatialMix, spatialElevation,
-        spatialHeadAzim, spatialHeadTrack, spatialEnable,
+        spatialBinaural, spatialHeadAzim, spatialHeadTrack, spatialEnable,
       ],
     ),
     // 10. 噪声门

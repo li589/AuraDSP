@@ -26,9 +26,13 @@ constexpr float kSpatHeadR = 0.0875f;  // 头半径（m）
 constexpr float kSpatSoundC = 343.0f;  // 声速（m/s）
 constexpr float kPiF = 3.14159265358979f;
 
-static_assert(sizeof(kSpatDeg) / sizeof(kSpatDeg[0]) ==
+static_assert(sizeof(kSpatDeg) / sizeof(kSpatDeg[0]) <=
                   auradsp_handle_s::kSpatSpk,
-              "speaker table must match handle state");
+              "stereo speaker table must fit handle state");
+
+// 5.1/7.1 声道序 → 方位角（LFE 单独处理）
+constexpr float kBinauralDeg[8] =
+    {-30.0f, 30.0f, 0.0f, 0.0f, -110.0f, 110.0f, -150.0f, 150.0f};
 
 inline float spat_clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
@@ -86,6 +90,7 @@ void spatial_reset(auradsp_handle h) {
     memset(h->spat_hist, 0, sizeof(h->spat_hist));
     h->spat_hist_pos = 0;
     memset(h->spat_pinna, 0, sizeof(h->spat_pinna));
+    h->spat_lfe_lp = 0.0f;
     h->spat_ag_in = 0.0;
     h->spat_ag_out = 0.0;
     h->spat_ag_comp = 1.0;
@@ -335,6 +340,261 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         const float g = (float)h->spat_ag_comp;
         if (g != 1.0f) {
             for (int i = 0; i < frames * 2; ++i) io[i] *= g;
+        }
+    }
+}
+
+
+/* 6/8ch ? 2ch ???????B1??
+ * ??? WAVEFORMATEX ????FL FR C LFE SL SR [BL BR]?4ch ? FL FR BL BR?
+ * ?? stereo L/R?LFE ??????????/??????? pinna + ITD/ILD?
+ * ????engine_chain??? stereo ???????????? FL/FR??????
+ * ? spatial_process ?? ring/pinna/?????????? spatial_reset ??? */
+void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
+                              int frames, int ch) {
+    if (!h || !in || !stereo || frames <= 0 || ch < 2) return;
+    if (ch == 2) {
+        for (int i = 0; i < frames * 2; ++i) stereo[i] = in[i];
+        return;
+    }
+
+    const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+    const float room = spat_clampf(
+        h->p.spatial_room.load(std::memory_order_relaxed), 0.0f, 1.0f);
+    const float width = spat_clampf(
+        h->p.spatial_width.load(std::memory_order_relaxed), 0.5f, 1.5f);
+    const float center = spat_clampf(
+        h->p.spatial_center.load(std::memory_order_relaxed), 0.0f, 1.0f);
+    const float outgDb = h->p.spatial_outgain.load(std::memory_order_relaxed);
+    const bool ag = h->p.spatial_autogain.load(std::memory_order_relaxed) != 0;
+    const float mixTarget = spat_clampf(
+        h->p.spatial_mix.load(std::memory_order_relaxed), 0.0f, 1.0f);
+    const float elev = spat_clampf(
+        h->p.spatial_elevation.load(std::memory_order_relaxed), -30.0f, 30.0f);
+
+    const float headTarget = spat_clampf(
+        h->p.spatial_headazim.load(std::memory_order_relaxed), -180.0f, 180.0f);
+    float head = h->spat_headazim_sm;
+    if (!(head == head)) head = headTarget;
+    const float blockAlpha = expf(-(float)frames / (0.015f * fs));
+    head = blockAlpha * head + (1.0f - blockAlpha) * headTarget;
+    if (!(head == head)) head = headTarget;
+
+    const int nsrc = (ch > auradsp_handle_s::kSpatSpk)
+                         ? auradsp_handle_s::kSpatSpk : ch;
+    float srcDeg[8];
+    for (int c = 0; c < nsrc; ++c) {
+        float base = 0.0f;
+        if (ch == 4) {
+            base = (c == 0) ? -30.0f : (c == 1) ? 30.0f
+                 : (c == 2) ? -150.0f : 150.0f;
+        } else {
+            base = kBinauralDeg[c];
+        }
+        if (c == 2 && ch >= 6) base = 0.0f;
+        srcDeg[c] = spat_wrap_deg((c == 2 && ch >= 6) ? -head : base * width - head);
+    }
+
+    float itdSamp[8], farGain[8], farLpA[8];
+    for (int c = 0; c < nsrc; ++c) {
+        const float deg = srcDeg[c];
+        const float th = fabsf(deg) * kPiF / 180.0f;
+        const float itdSec = kSpatHeadR / kSpatSoundC * (th + sinf(th));
+        itdSamp[c] = spat_clampf(itdSec * fs, 0.0f, 127.0f);
+        const float ax = spat_clampf(th / (kPiF * 0.5f), 0.0f, 1.0f);
+        farGain[c] = 1.0f - 0.5f * ax;
+        const float ax2 = spat_clampf(th / (110.0f * kPiF / 180.0f), 0.0f, 1.0f);
+        const float fc = spat_clampf(8000.0f - 5500.0f * ax2, 1500.0f, 8000.0f);
+        farLpA[c] = 1.0f - expf(-2.0f * kPiF * fc / fs);
+    }
+
+    float pb0[8][2][2], pb1[8][2][2], pb2[8][2][2];
+    float pa1[8][2][2], pa2[8][2][2];
+    const float ev = spat_clampf(elev / 30.0f, -1.0f, 1.0f);
+    for (int c = 0; c < nsrc; ++c) {
+        const float deg = srcDeg[c];
+        const bool rear = fabsf(deg) > 90.0f;
+        for (int ear = 0; ear < 2; ++ear) {
+            const bool isFar = (deg > 0.5f && ear == 0) ||
+                               (deg < -0.5f && ear == 1);
+            float g0 = rear ? -4.0f : 2.2f;
+            if (isFar) g0 -= 1.0f;
+            spat_peaking(fs, rear ? 10500.0f : 8200.0f, 1.1f, g0,
+                         &pb0[c][ear][0], &pb1[c][ear][0], &pb2[c][ear][0],
+                         &pa1[c][ear][0], &pa2[c][ear][0]);
+            const float fc1 = 7200.0f + 2600.0f * ev;
+            const float g1 = -2.2f * (0.7f + 0.3f * fabsf(ev));
+            spat_peaking(fs, fc1, 2.0f, g1,
+                         &pb0[c][ear][1], &pb1[c][ear][1], &pb2[c][ear][1],
+                         &pa1[c][ear][1], &pa2[c][ear][1]);
+        }
+    }
+
+    float rb0[2], rb1[2], rb2[2], ra1[2], ra2[2];
+    spat_peaking(fs, 8000.0f, 1.0f, 2.5f,
+                 &rb0[0], &rb1[0], &rb2[0], &ra1[0], &ra2[0]);
+    spat_peaking(fs, 12500.0f, 2.0f, -3.0f,
+                 &rb0[1], &rb1[1], &rb2[1], &ra1[1], &ra2[1]);
+
+    const float tscale = 0.5f + 1.5f * room;
+    const float outG = powf(10.0f, spat_clampf(outgDb, -12.0f, 6.0f) * 0.05f);
+    const float lfeA = 1.0f - expf(-2.0f * kPiF * 120.0f / fs);
+    const float cGain = 0.5f + 0.5f * center;
+    const float norm = 1.0f / sqrtf(2.0f + 0.5f * (float)(nsrc - 2));
+
+    double rin = 0.0;
+    if (ag) {
+        double e = 0.0;
+        for (int i = 0; i < frames * ch; ++i) e += (double)in[i] * in[i];
+        rin = sqrt(e / (double)(frames * ch) + 1e-12);
+    }
+
+    const float alpha = (float)exp(-1.0 / (0.002 * (double)fs));
+    const float beta = 1.0f - alpha;
+    float g_sm = h->spat_g_sm;
+    float mix_sm = h->spat_mix_sm;
+
+    for (int i = 0; i < frames; ++i) {
+        const float* sp = in + (size_t)i * ch;
+        float dryL = 0.0f, dryR = 0.0f, monoSend = 0.0f;
+        float oL = 0.0f, oR = 0.0f;
+
+        for (int c = 0; c < nsrc; ++c) {
+            const float s = sp[c];
+            if (c == 0) { dryL += s; monoSend += 0.5f * s; }
+            else if (c == 1) { dryR += s; monoSend += 0.5f * s; }
+            else if (c == 2 && ch >= 6) { dryL += s * 0.70710678f;
+                dryR += s * 0.70710678f; monoSend += 0.70710678f * s; }
+            else if (c == 3 && ch >= 6) continue;
+            else if (ch == 4) {
+                if (c == 2) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
+                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
+            } else {
+                if ((c & 1) == 0) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
+                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
+            }
+
+            const float m = (c == 2 && ch >= 6) ? s * cGain : s;
+            const float deg = srcDeg[c];
+            if (fabsf(deg) < 0.5f) {
+                float l = spat_bq(h->spat_src_pinna[c][0][0],
+                                  pb0[c][0][0], pb1[c][0][0], pb2[c][0][0],
+                                  pa1[c][0][0], pa2[c][0][0], m);
+                l = spat_bq(h->spat_src_pinna[c][0][1],
+                            pb0[c][0][1], pb1[c][0][1], pb2[c][0][1],
+                            pa1[c][0][1], pa2[c][0][1], l);
+                float r = spat_bq(h->spat_src_pinna[c][1][0],
+                                  pb0[c][1][0], pb1[c][1][0], pb2[c][1][0],
+                                  pa1[c][1][0], pa2[c][1][0], m);
+                r = spat_bq(h->spat_src_pinna[c][1][1],
+                            pb0[c][1][1], pb1[c][1][1], pb2[c][1][1],
+                            pa1[c][1][1], pa2[c][1][1], r);
+                oL += l; oR += r;
+                float* ring = h->spat_ring[c];
+                int pos = h->spat_ring_pos[c];
+                ring[pos] = m;
+                if (++pos >= 128) pos = 0;
+                h->spat_ring_pos[c] = pos;
+                continue;
+            }
+
+            const bool nearR = deg > 0.0f;
+            const int nearEar = nearR ? 1 : 0;
+            const int farEar = nearR ? 0 : 1;
+            float nearSig = spat_bq(h->spat_src_pinna[c][nearEar][0],
+                                    pb0[c][nearEar][0], pb1[c][nearEar][0],
+                                    pb2[c][nearEar][0], pa1[c][nearEar][0],
+                                    pa2[c][nearEar][0], m);
+            nearSig = spat_bq(h->spat_src_pinna[c][nearEar][1],
+                              pb0[c][nearEar][1], pb1[c][nearEar][1],
+                              pb2[c][nearEar][1], pa1[c][nearEar][1],
+                              pa2[c][nearEar][1], nearSig);
+            if (nearR) oR += nearSig; else oL += nearSig;
+
+            float* ring = h->spat_ring[c];
+            int pos = h->spat_ring_pos[c];
+            ring[pos] = m;
+            const float d = itdSamp[c];
+            const int di = (int)d;
+            const float frac = d - (float)di;
+            int i0 = pos - di;
+            i0 %= 128; if (i0 < 0) i0 += 128;
+            int i1 = i0 - 1; if (i1 < 0) i1 += 128;
+            const float delayed = ring[i0] * (1.0f - frac) + ring[i1] * frac;
+            float y = h->spat_lp[c] + farLpA[c] * (delayed - h->spat_lp[c]);
+            if (fabsf(y) < 1e-15f) y = 0.0f;
+            h->spat_lp[c] = y;
+            float farSig = y * farGain[c];
+            farSig = spat_bq(h->spat_src_pinna[c][farEar][0],
+                             pb0[c][farEar][0], pb1[c][farEar][0],
+                             pb2[c][farEar][0], pa1[c][farEar][0],
+                             pa2[c][farEar][0], farSig);
+            farSig = spat_bq(h->spat_src_pinna[c][farEar][1],
+                             pb0[c][farEar][1], pb1[c][farEar][1],
+                             pb2[c][farEar][1], pa1[c][farEar][1],
+                             pa2[c][farEar][1], farSig);
+            if (nearR) oL += farSig; else oR += farSig;
+            if (++pos >= 128) pos = 0;
+            h->spat_ring_pos[c] = pos;
+        }
+
+        if (ch >= 6) {
+            const float lfe = sp[3];
+            h->spat_lfe_lp += lfeA * (lfe - h->spat_lfe_lp);
+            const float lfeSig = h->spat_lfe_lp * 0.5f;
+            oL += lfeSig;
+            oR += lfeSig;
+        }
+
+        float eL = 0.0f, eR = 0.0f;
+        h->spat_hist[h->spat_hist_pos] = monoSend;
+        if (room > 0.001f) {
+            for (int t = 0; t < 8; ++t) {
+                int off = (int)(kSpatTapMs[t] * tscale * fs / 1000.0f);
+                if (off >= 32768) off = 32767;
+                if (off < 0) off = 0;
+                int rp = h->spat_hist_pos - off;
+                rp %= 32768; if (rp < 0) rp += 32768;
+                const float te = h->spat_hist[rp] * kSpatTapG[t] * room;
+                if ((t & 1) == 0) eL += te; else eR += te;
+            }
+        }
+        if (++h->spat_hist_pos >= 32768) h->spat_hist_pos = 0;
+        eL = spat_bq(h->spat_pinna[0][0], rb0[0], rb1[0], rb2[0],
+                     ra1[0], ra2[0], eL);
+        eL = spat_bq(h->spat_pinna[1][0], rb0[1], rb1[1], rb2[1],
+                     ra1[1], ra2[1], eL);
+        eR = spat_bq(h->spat_pinna[0][1], rb0[0], rb1[0], rb2[0],
+                     ra1[0], ra2[0], eR);
+        eR = spat_bq(h->spat_pinna[1][1], rb0[1], rb1[1], rb2[1],
+                     ra1[1], ra2[1], eR);
+
+        g_sm = alpha * g_sm + beta * outG;
+        const float wetL = (oL + eL) * norm * g_sm;
+        const float wetR = (oR + eR) * norm * g_sm;
+        mix_sm = alpha * mix_sm + beta * mixTarget;
+        stereo[i * 2] = dryL + (wetL - dryL) * mix_sm;
+        stereo[i * 2 + 1] = dryR + (wetR - dryR) * mix_sm;
+    }
+
+    h->spat_g_sm = (fabsf(g_sm) < 1e-15f) ? 0.0f : g_sm;
+    h->spat_mix_sm = spat_clampf(mix_sm, 0.0f, 1.0f);
+    h->spat_headazim_sm = head;
+
+    if (ag && mixTarget > 0.001f) {
+        double e = 0.0;
+        for (int i = 0; i < frames * 2; ++i) e += (double)stereo[i] * stereo[i];
+        const double rout = sqrt(e / (double)(frames * 2) + 1e-12);
+        h->spat_ag_in += (rin - h->spat_ag_in) * 0.05;
+        h->spat_ag_out += (rout - h->spat_ag_out) * 0.05;
+        double desired = 1.0;
+        if (h->spat_ag_in > 1e-6 && h->spat_ag_out > 1e-6)
+            desired = h->spat_ag_in / h->spat_ag_out;
+        desired = (desired < 0.25) ? 0.25 : ((desired > 4.0) ? 4.0 : desired);
+        h->spat_ag_comp += (desired - h->spat_ag_comp) * 0.1;
+        const float g = (float)h->spat_ag_comp;
+        if (g != 1.0f) {
+            for (int i = 0; i < frames * 2; ++i) stereo[i] *= g;
         }
     }
 }

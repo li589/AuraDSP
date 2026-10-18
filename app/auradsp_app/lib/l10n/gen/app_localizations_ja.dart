@@ -1238,6 +1238,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialElevationInfo => '仮想ステージの仰角。正で音像が上がり、負で下がる';
 
   @override
+  String get spatialBinaural => 'マルチチャンネル両耳';
+
+  @override
+  String get spatialBinauralInfo =>
+      '5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音';
+
+  @override
   String get spatialHeadTrack => '頭部追従';
 
   @override
