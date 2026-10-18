@@ -536,6 +536,7 @@ typedef struct dspsys
 	// Compressor
 	int compEnabled, compForceRefresh;
 	FFTCompander comp;
+	float comp_gr; /* [PATCHED-AuraDSP P2.4] 实时压缩增益衰减分贝 (dB >= 0) */
 	// Bass boost
 	int bassBoostEnabled;
 	DBB dbb;

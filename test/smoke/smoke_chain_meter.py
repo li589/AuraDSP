@@ -70,10 +70,11 @@ assert -11.0 < last_frame.level_l_dbfs < -9.5, f"Unexpected overall level: {last
 # stage 顺序对照：
 # 0..11: vendor 12 stages (tube, comp, bass, eq, arbmag, convolver, ddc, liveprog, crossfeed, stereo, reverb, output)
 # 12: gate in, 13: gate out, 14: dyneq, 15: filter, 16: bassmono, 17: haas, 18: exciter, 19: loudness
-# 20..31: reserved (-120 dBFS)
+# 20..23, 30..31: reserved (-120 dBFS)
+# 24: limiter GR, 25: comp GR, 26: gate GR, 27..29: dyneq low/mid/high GR (0.0 dB in passthrough)
 stages_l = list(last_frame.stage_levels_l)
 stages_r = list(last_frame.stage_levels_r)
-print("Pass 1 stage levels (expect stages 0..19 all around -10.5 dBFS in passthrough, 20..31 == -120):")
+print("Pass 1 stage levels (expect stages 0..19 all around -10.5 dBFS, 20..23/30..31 == -120, 24..29 GR == 0.0):")
 for idx in range(20):
     l_val = stages_l[idx]
     r_val = stages_r[idx]
@@ -81,9 +82,13 @@ for idx in range(20):
     assert -12.0 < l_val < -9.0, f"Stage {idx} L mismatch: {l_val}"
     assert -12.0 < r_val < -9.0, f"Stage {idx} R mismatch: {r_val}"
 
-for idx in range(20, 32):
+for idx in [20, 21, 22, 23, 30, 31]:
     assert stages_l[idx] == -120.0, f"Reserved stage {idx} should be -120, got {stages_l[idx]}"
     assert stages_r[idx] == -120.0, f"Reserved stage {idx} should be -120, got {stages_r[idx]}"
+
+for idx in range(24, 30):
+    assert abs(stages_l[idx]) < 1e-4, f"GR stage {idx} should be 0.0 dB in passthrough, got {stages_l[idx]}"
+    assert abs(stages_r[idx]) < 1e-4, f"GR stage {idx} should be 0.0 dB in passthrough, got {stages_r[idx]}"
 
 # 2) 开启 liveprog (增益 2.0x，即 +6.02dB)，观察 stage 7 及后续 stage 电平提升
 script = """@init

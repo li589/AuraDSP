@@ -93,7 +93,7 @@ void freeverb_process(auradsp_handle h, float* dst, int frames) {
             dst[i * 2]     = dst[i * 2] * dryG + wetL * wetG;
             dst[i * 2 + 1] = dst[i * 2 + 1] * dryG + wetR * wetG;
         }
-        float g = powf(10.0f, h->p.reverb_outgain.load(std::memory_order_relaxed) * 0.05f);
+        float g_target = powf(10.0f, h->p.reverb_outgain.load(std::memory_order_relaxed) * 0.05f);
         if (ag) {
             const double rout = stereo_block_rms(dst, frames);
             h->rev_ag_in  += (rin - h->rev_ag_in)  * 0.05;
@@ -104,13 +104,21 @@ void freeverb_process(auradsp_handle h, float* dst, int frames) {
             if (desired < 0.25) desired = 0.25;
             if (desired > 4.0)  desired = 4.0;
             h->rev_ag_comp += (desired - h->rev_ag_comp) * 0.1;
-            g *= (float)h->rev_ag_comp;
+            g_target *= (float)h->rev_ag_comp;
         }
-        if (g != 1.0f) {
+        float g_sm = h->fv_g_sm;
+        if (g_target != 1.0f || fabsf(g_sm - 1.0f) >= 1e-6f) {
+            const double sr = (h->sample_rate > 8000.0f) ? (double)h->sample_rate : 48000.0;
+            const float alpha = (float)exp(-1.0 / (0.002 * sr));
+            const float beta = 1.0f - alpha;
             for (int i = 0; i < frames; ++i) {
-                dst[i * 2] *= g;
-                dst[i * 2 + 1] *= g;
+                g_sm = alpha * g_sm + beta * g_target;
+                dst[i * 2] *= g_sm;
+                dst[i * 2 + 1] *= g_sm;
             }
+            h->fv_g_sm = (fabsf(g_sm) < 1e-15f) ? 0.0f : g_sm;
+        } else {
+            h->fv_g_sm = 1.0f;
         }
     }
 }

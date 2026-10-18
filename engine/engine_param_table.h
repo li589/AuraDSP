@@ -108,6 +108,20 @@ static void hook_gate_autogain(auradsp_handle h) {
     }
 }
 
+static void hook_dyneq_attack(auradsp_handle h) {
+    const float att = h->p.dyneq_attack.load(std::memory_order_relaxed);
+    h->p.dyneq_b1_attack.store(att, std::memory_order_relaxed);
+    h->p.dyneq_b2_attack.store(att, std::memory_order_relaxed);
+    h->p.dyneq_b3_attack.store(att, std::memory_order_relaxed);
+}
+
+static void hook_dyneq_release(auradsp_handle h) {
+    const float rel = h->p.dyneq_release.load(std::memory_order_relaxed);
+    h->p.dyneq_b1_release.store(rel, std::memory_order_relaxed);
+    h->p.dyneq_b2_release.store(rel, std::memory_order_relaxed);
+    h->p.dyneq_b3_release.store(rel, std::memory_order_relaxed);
+}
+
 static void hook_filter_recalc(auradsp_handle h) {
     filter_recalc(h);
 }
@@ -737,6 +751,52 @@ static auradsp_status handle_indexed_param_get(auradsp_handle h, const char* id,
     return AURADSP_E_PARAM;
 }
 
+static auradsp_status get_gr_limiter(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_limiter.load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_comp(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_comp.load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_gate(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_gate.load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_dyneq(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    float g0 = h->gr_dyneq[0].load(std::memory_order_relaxed);
+    float g1 = h->gr_dyneq[1].load(std::memory_order_relaxed);
+    float g2 = h->gr_dyneq[2].load(std::memory_order_relaxed);
+    float max_gr = g0 > g1 ? (g0 > g2 ? g0 : g2) : (g1 > g2 ? g1 : g2);
+    *(float*)out = max_gr;
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_dyneq_b1(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_dyneq[0].load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_dyneq_b2(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_dyneq[1].load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
+static auradsp_status get_gr_dyneq_b3(auradsp_handle h, void* out, uint32_t bytes) {
+    if (!h || !out || bytes != 4) return AURADSP_E_PARAM;
+    *(float*)out = h->gr_dyneq[2].load(std::memory_order_relaxed);
+    return AURADSP_OK;
+}
+
 /* ========================================================================= */
 /*                          宏展开构建静态描述表                              */
 /* ========================================================================= */
@@ -773,6 +833,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("tube.autogain", tube_autogain, hook_fx_gains),
     PARAM_INT("tube.channels", tube_channels, 0, 255, nullptr),
     PARAM_INT("tube.channel_mask", tube_channels, 0, 255, nullptr),
+    PARAM_BOOL("tube.oversample", tube_oversample, nullptr),
 
     // 02 动态压限 (Compressor)
     PARAM_BOOL("comp.enable", comp_enable, hook_comp_enable),
@@ -835,6 +896,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("bass.harmonicblend", bass_harmonicblend, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("bass.subfreq", bass_subfreq, 10.0f, 40.0f, nullptr),
     PARAM_FLOAT("bass.cutoff", bass_cutoff_f, 30.0f, 300.0f, nullptr),
+    PARAM_BOOL("bass.oversample", bass_oversample, nullptr),
 
     // 07 多模态均衡 (Multimodal EQ)
     PARAM_BOOL("eq.enable", eq_enable, hook_eq_enable),
@@ -858,8 +920,26 @@ static const EngineParamDesc kEngineParamTable[] = {
 
     // 09 动态均衡 (Dynamic EQ)
     PARAM_BOOL("dyneq.enable", dyneq_enable, nullptr),
-    PARAM_FLOAT("dyneq.attack", dyneq_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.release", dyneq_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.attack", dyneq_attack, 0.1f, 100.0f, hook_dyneq_attack),
+    PARAM_FLOAT("dyneq.release", dyneq_release, 10.0f, 1000.0f, hook_dyneq_release),
+    PARAM_FLOAT("dyneq.b1.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.b1.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.b2.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.b2.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.b3.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.b3.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.low.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.low.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.mid.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.mid.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.high.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.high.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.band1.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.band1.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.band2.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.band2.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.band3.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
+    PARAM_FLOAT("dyneq.band3.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
     PARAM_BOOL("dyneq.low.enable", dyneq_l_enable, nullptr),
     PARAM_FLOAT("dyneq.low.freq", dyneq_l_freq, 20.0f, 500.0f, nullptr),
     PARAM_FLOAT("dyneq.low.q", dyneq_l_q, 0.5f, 2.0f, nullptr),
@@ -924,10 +1004,15 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("exciter.hifreq", exciter_hifreq, 3000.0f, 10000.0f, nullptr),
     PARAM_INT("exciter.channels", exciter_channels, 0, 255, nullptr),
     PARAM_INT("exciter.channel_mask", exciter_channels, 0, 255, nullptr),
+    PARAM_BOOL("exciter.oversample", exciter_oversample, nullptr),
     PARAM_BOOL("gate.enable", gate_enable, nullptr),
     PARAM_FLOAT("gate.threshold", gate_threshold, -60.0f, 0.0f, nullptr),
     PARAM_FLOAT("gate.attack", gate_attack, 1.0f, 100.0f, nullptr),
     PARAM_FLOAT("gate.release", gate_release, 10.0f, 500.0f, nullptr),
+    PARAM_FLOAT("gate.hysteresis", gate_hysteresis, 0.0f, 12.0f, nullptr),
+    PARAM_FLOAT("gate.range", gate_range, -80.0f, 0.0f, nullptr),
+    PARAM_FLOAT("gate.hold", gate_hold_ms, 0.0f, 500.0f, nullptr),
+    PARAM_FLOAT("gate.hold_ms", gate_hold_ms, 0.0f, 500.0f, nullptr),
     PARAM_BOOL("gate.autogain", gate_autogain, hook_gate_autogain),
     PARAM_INT("gate.channels", gate_channels, 0, 255, nullptr),
     PARAM_INT("gate.channel_mask", gate_channels, 0, 255, nullptr),
@@ -951,6 +1036,21 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("limiter.enable", limiter_enable, hook_limiter_enable),
     PARAM_INT("limiter.channels", limiter_channels, 0, 255, nullptr),
     PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),
+    PARAM_FLOAT("limiter.release", limiter_release_ms, 10.0f, 500.0f, nullptr),
+    PARAM_FLOAT("limiter.release_ms", limiter_release_ms, 10.0f, 500.0f, nullptr),
+    PARAM_FLOAT("limiter.threshold", limiter_threshold, -24.0f, 0.0f, nullptr),
+    PARAM_BOOL("limiter.link", limiter_link, nullptr),
+    PARAM_BOOL("limiter.lookahead", limiter_lookahead, nullptr),
+    PARAM_CUSTOM_GET_ONLY("gr.limiter", get_gr_limiter),
+    PARAM_CUSTOM_GET_ONLY("gr.comp", get_gr_comp),
+    PARAM_CUSTOM_GET_ONLY("gr.gate", get_gr_gate),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq", get_gr_dyneq),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.low", get_gr_dyneq_b1),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.mid", get_gr_dyneq_b2),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.high", get_gr_dyneq_b3),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.b1", get_gr_dyneq_b1),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.b2", get_gr_dyneq_b2),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.b3", get_gr_dyneq_b3),
     PARAM_CUSTOM("channels.count", set_channels_count, get_channels_count),
     PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
     PARAM_CUSTOM("gate.maxIrSeconds", set_gate_max_ir_seconds, get_gate_max_ir_seconds),

@@ -173,6 +173,25 @@ abstract final class ParamId {
   static const arbmagNodeCount = 'arbmag.nodeCount';
   static const arbmagOutGain = 'arbmag.outgain';
   static const arbmagAutoGain = 'arbmag.autogain';
+  // 高级 Gate 参数（Hysteresis 迟滞 / Range 衰减底线 / Hold 保持）
+  static const gateHysteresis = 'gate.hysteresis';
+  static const gateRange = 'gate.range';
+  static const gateHoldMs = 'gate.hold_ms';
+  // Modern Lookahead Limiter 参数
+  static const limiterRelease = 'limiter.release';
+  static const limiterThreshold = 'limiter.threshold';
+  static const limiterLink = 'limiter.link';
+  static const limiterLookahead = 'limiter.lookahead';
+  // 2x HQ 抗混叠过采样开关
+  static const exciterOversample = 'exciter.oversample';
+  static const tubeOversample = 'tube.oversample';
+  // Dyneq 3 频段独立双时间常数
+  static const dyneqB1Attack = 'dyneq.b1.attack';
+  static const dyneqB1Release = 'dyneq.b1.release';
+  static const dyneqB2Attack = 'dyneq.b2.attack';
+  static const dyneqB2Release = 'dyneq.b2.release';
+  static const dyneqB3Attack = 'dyneq.b3.attack';
+  static const dyneqB3Release = 'dyneq.b3.release';
 }
 
 /// auradsp_status（engine_api 枚举）
@@ -342,6 +361,14 @@ final class VizFrame extends Struct {
   double get inputLevelInR => stageLevelsR[12];
   double get inputLevelOutL => stageLevelsL[13];
   double get inputLevelOutR => stageLevelsR[13];
+
+  /// 动态增益衰减 (Gain Reduction, GR) 计量 (dB, >= 0.0)
+  double get grLimiter => stageLevelsL[24];
+  double get grComp => stageLevelsL[25];
+  double get grGate => stageLevelsL[26];
+  double get grDyneqLow => stageLevelsL[27];
+  double get grDyneqMid => stageLevelsL[28];
+  double get grDyneqHigh => stageLevelsL[29];
 }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）

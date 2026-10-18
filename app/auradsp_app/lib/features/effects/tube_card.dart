@@ -54,6 +54,16 @@ class _TubeCard extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: AuraSpace.sm),
+          Row(
+            children: [
+              const Spacer(),
+              HqOversampleBadge(
+                active: model.tubeOversample,
+                onChanged: model.setTubeOversample,
+              ),
+            ],
+          ),
           const SizedBox(height: AuraSpace.md),
           _TubeAdvanced(model: model),
         ],

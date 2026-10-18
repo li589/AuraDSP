@@ -405,6 +405,13 @@ abstract final class ParamRegistry {
     getter: (m) => m.tubeOutputGain,
     setter: (m, v) => m.setTubeOutputGain(v),
   );
+  static final tubeOversample = ParamSpec<bool>(
+    id: 'tube.oversample', section: 'tube', key: 'oversample',
+    type: ParamType.boolean, defaultValue: false,
+    category: ParamCategory.advanced,
+    getter: (m) => m.tubeOversample,
+    setter: (m, v) => m.setTubeOversample(v),
+  );
   static final tubeEnable = ParamSpec<bool>(
     id: 'tube.enable', section: 'tube', key: 'enable',
     type: ParamType.boolean, defaultValue: false,
@@ -667,6 +674,13 @@ abstract final class ParamRegistry {
     getter: (m) => m.exciterHifreq,
     setter: (m, v) => m.setExciterHifreq(v),
   );
+  static final exciterOversample = ParamSpec<bool>(
+    id: 'exciter.oversample', section: 'exciter', key: 'oversample',
+    type: ParamType.boolean, defaultValue: false,
+    category: ParamCategory.advanced,
+    getter: (m) => m.exciterOversample,
+    setter: (m, v) => m.setExciterOversample(v),
+  );
   static final exciterEnable = ParamSpec<bool>(
     id: 'exciter.enable', section: 'exciter', key: 'enable',
     type: ParamType.boolean, defaultValue: false,
@@ -761,6 +775,30 @@ abstract final class ParamRegistry {
     getter: (m) => m.gateReleaseMs,
     setter: (m, v) => m.setGateRelease(v),
   );
+  static final gateHysteresis = ParamSpec<double>(
+    id: 'gate.hysteresis', section: 'gate', key: 'hysteresis',
+    type: ParamType.float, defaultValue: ParamDefaults.gateHysteresis,
+    min: 0.0, max: 12.0, step: 0.5, unit: 'dB',
+    formatter: (v) => v.toStringAsFixed(1),
+    getter: (m) => m.gateHysteresis,
+    setter: (m, v) => m.setGateHysteresis(v),
+  );
+  static final gateRange = ParamSpec<double>(
+    id: 'gate.range', section: 'gate', key: 'range',
+    type: ParamType.float, defaultValue: ParamDefaults.gateRange,
+    min: -80.0, max: 0.0, step: 1.0, unit: 'dB',
+    formatter: (v) => v.toStringAsFixed(0),
+    getter: (m) => m.gateRange,
+    setter: (m, v) => m.setGateRange(v),
+  );
+  static final gateHoldMs = ParamSpec<double>(
+    id: 'gate.hold', section: 'gate', key: 'hold',
+    type: ParamType.float, defaultValue: ParamDefaults.gateHoldMs,
+    min: 0.0, max: 500.0, step: 5.0, unit: 'ms',
+    formatter: (v) => v.toStringAsFixed(0),
+    getter: (m) => m.gateHoldMs,
+    setter: (m, v) => m.setGateHoldMs(v),
+  );
   static final gateAutoGain = ParamSpec<bool>(
     id: 'gate.autogain', section: 'gate', key: 'autoGain',
     type: ParamType.boolean, defaultValue: false,
@@ -819,6 +857,48 @@ abstract final class ParamRegistry {
     min: 10.0, max: 500.0, step: 5.0, unit: 'ms',
     getter: (m) => m.dyneqReleaseMs,
     setter: (m, v) => m.setDyneqRelease(v),
+  );
+  static final dyneqB1Attack = ParamSpec<double>(
+    id: 'dyneq.b1.attack', section: 'dyneq', subSection: 'low', key: 'attack',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB1Attack,
+    min: 0.1, max: 100.0, step: 0.5, unit: 'ms',
+    getter: (m) => m.dyneqB1Attack,
+    setter: (m, v) => m.setDyneqB1Attack(v),
+  );
+  static final dyneqB1Release = ParamSpec<double>(
+    id: 'dyneq.b1.release', section: 'dyneq', subSection: 'low', key: 'release',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB1Release,
+    min: 10.0, max: 1000.0, step: 5.0, unit: 'ms',
+    getter: (m) => m.dyneqB1Release,
+    setter: (m, v) => m.setDyneqB1Release(v),
+  );
+  static final dyneqB2Attack = ParamSpec<double>(
+    id: 'dyneq.b2.attack', section: 'dyneq', subSection: 'mid', key: 'attack',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB2Attack,
+    min: 0.1, max: 100.0, step: 0.5, unit: 'ms',
+    getter: (m) => m.dyneqB2Attack,
+    setter: (m, v) => m.setDyneqB2Attack(v),
+  );
+  static final dyneqB2Release = ParamSpec<double>(
+    id: 'dyneq.b2.release', section: 'dyneq', subSection: 'mid', key: 'release',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB2Release,
+    min: 10.0, max: 1000.0, step: 5.0, unit: 'ms',
+    getter: (m) => m.dyneqB2Release,
+    setter: (m, v) => m.setDyneqB2Release(v),
+  );
+  static final dyneqB3Attack = ParamSpec<double>(
+    id: 'dyneq.b3.attack', section: 'dyneq', subSection: 'high', key: 'attack',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB3Attack,
+    min: 0.1, max: 100.0, step: 0.5, unit: 'ms',
+    getter: (m) => m.dyneqB3Attack,
+    setter: (m, v) => m.setDyneqB3Release(v),
+  );
+  static final dyneqB3Release = ParamSpec<double>(
+    id: 'dyneq.b3.release', section: 'dyneq', subSection: 'high', key: 'release',
+    type: ParamType.float, defaultValue: ParamDefaults.dyneqB3Release,
+    min: 10.0, max: 1000.0, step: 5.0, unit: 'ms',
+    getter: (m) => m.dyneqB3Release,
+    setter: (m, v) => m.setDyneqB3Release(v),
   );
   // Low Band
   static final dyneqLowEnable = ParamSpec<bool>(
@@ -1232,6 +1312,34 @@ abstract final class ParamRegistry {
     getter: (m) => m.limiterOn,
     setter: (m, v) => m.setInt('limiter.enable', v ? 1 : 0),
   );
+  static final limiterRelease = ParamSpec<double>(
+    id: 'limiter.release', section: 'post', key: 'release',
+    type: ParamType.float, defaultValue: ParamDefaults.limiterRelease,
+    min: 5.0, max: 500.0, step: 5.0, unit: 'ms',
+    formatter: (v) => v.toStringAsFixed(0),
+    getter: (m) => m.limiterReleaseMs,
+    setter: (m, v) => m.setLimiterRelease(v),
+  );
+  static final limiterThreshold = ParamSpec<double>(
+    id: 'limiter.threshold', section: 'post', key: 'threshold',
+    type: ParamType.float, defaultValue: ParamDefaults.limiterThreshold,
+    min: -24.0, max: 0.0, step: 0.1, unit: 'dBFS',
+    formatter: (v) => v.toStringAsFixed(1),
+    getter: (m) => m.limiterThreshold,
+    setter: (m, v) => m.setLimiterThreshold(v),
+  );
+  static final limiterLink = ParamSpec<bool>(
+    id: 'limiter.link', section: 'post', key: 'link',
+    type: ParamType.boolean, defaultValue: true,
+    getter: (m) => m.limiterLink,
+    setter: (m, v) => m.setLimiterLink(v),
+  );
+  static final limiterLookahead = ParamSpec<bool>(
+    id: 'limiter.lookahead', section: 'post', key: 'lookahead',
+    type: ParamType.boolean, defaultValue: true,
+    getter: (m) => m.limiterLookahead,
+    setter: (m, v) => m.setLimiterLookahead(v),
+  );
 
   /* =========================================================================
    * 22. 音频路由与设备配置 (Audio Routing & Endpoints)
@@ -1379,7 +1487,7 @@ abstract final class ParamRegistry {
       name: 'tube',
       specs: [
         tubeGain, tubeStyle, tubeCompensation, tubeMix,
-        tubeAutoGain, tubeOutputGain, tubeEnable,
+        tubeAutoGain, tubeOutputGain, tubeOversample, tubeEnable,
       ],
     ),
     // 4. 均衡器
@@ -1467,7 +1575,7 @@ abstract final class ParamRegistry {
     // 9. 激励器
     ParamSection(
       name: 'exciter',
-      specs: [exciterAmount, exciterHifreq, exciterEnable],
+      specs: [exciterAmount, exciterHifreq, exciterOversample, exciterEnable],
     ),
     // 9B. 空间音效
     ParamSection(
@@ -1480,7 +1588,11 @@ abstract final class ParamRegistry {
     // 10. 噪声门
     ParamSection(
       name: 'gate',
-      specs: [gateThreshold, gateAttack, gateRelease, gateAutoGain, gateEnable],
+      specs: [
+        gateThreshold, gateAttack, gateRelease,
+        gateHysteresis, gateRange, gateHoldMs,
+        gateAutoGain, gateEnable,
+      ],
     ),
     // 11. 齿音消除
     ParamSection(
@@ -1492,6 +1604,9 @@ abstract final class ParamRegistry {
       name: 'dyneq',
       specs: [
         dyneqAttack, dyneqRelease,
+        dyneqB1Attack, dyneqB1Release,
+        dyneqB2Attack, dyneqB2Release,
+        dyneqB3Attack, dyneqB3Release,
         dyneqLowEnable, dyneqLowFreq, dyneqLowQ, dyneqLowGain, dyneqLowRange, dyneqLowThreshold,
         dyneqMidEnable, dyneqMidFreq, dyneqMidQ, dyneqMidGain, dyneqMidRange, dyneqMidThreshold,
         dyneqHighEnable, dyneqHighFreq, dyneqHighQ, dyneqHighGain, dyneqHighRange, dyneqHighThreshold,
@@ -1567,7 +1682,10 @@ abstract final class ParamRegistry {
     // 21. 后级
     ParamSection(
       name: 'post',
-      specs: [postGain, postLimiterEnable],
+      specs: [
+        postGain, postLimiterEnable,
+        limiterRelease, limiterThreshold, limiterLink, limiterLookahead,
+      ],
     ),
     // 22. 路由
     ParamSection(

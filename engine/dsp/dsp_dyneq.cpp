@@ -82,12 +82,32 @@ inline void rbj_hshelf(double f0, double fs, double s, double gdb,
 void dyneq_process(auradsp_handle h, float* io, int frames) {
     const double fs = h->jdsp.fs;
     if (fs <= 0.0) return;
-    double att = h->p.dyneq_attack.load(std::memory_order_relaxed);
-    if (att < 0.1) att = 0.1; if (att > 100.0) att = 100.0;
-    double rel = h->p.dyneq_release.load(std::memory_order_relaxed);
-    if (rel < 10.0) rel = 10.0; if (rel > 1000.0) rel = 1000.0;
-    const double attCoef = exp(-1.0 / (att * 0.001 * fs));
-    const double relCoef = exp(-1.0 / (rel * 0.001 * fs));
+
+    /* P3.1: 3 频段独立 Attack / Release 双时间常数 */
+    double att[3] = {
+        h->p.dyneq_b1_attack.load(std::memory_order_relaxed),
+        h->p.dyneq_b2_attack.load(std::memory_order_relaxed),
+        h->p.dyneq_b3_attack.load(std::memory_order_relaxed)
+    };
+    double rel[3] = {
+        h->p.dyneq_b1_release.load(std::memory_order_relaxed),
+        h->p.dyneq_b2_release.load(std::memory_order_relaxed),
+        h->p.dyneq_b3_release.load(std::memory_order_relaxed)
+    };
+    for (int b = 0; b < 3; ++b) {
+        if (att[b] < 0.1) att[b] = 0.1; if (att[b] > 100.0) att[b] = 100.0;
+        if (rel[b] < 10.0) rel[b] = 10.0; if (rel[b] > 1000.0) rel[b] = 1000.0;
+    }
+    const double attCoef[3] = {
+        exp(-1.0 / (att[0] * 0.001 * fs)),
+        exp(-1.0 / (att[1] * 0.001 * fs)),
+        exp(-1.0 / (att[2] * 0.001 * fs))
+    };
+    const double relCoef[3] = {
+        exp(-1.0 / (rel[0] * 0.001 * fs)),
+        exp(-1.0 / (rel[1] * 0.001 * fs)),
+        exp(-1.0 / (rel[2] * 0.001 * fs))
+    };
 
     /* 每段参数快照（band 0=Low shelf / 1=Mid bell / 2=High shelf）。 */
     struct BandCfg { bool en; double f, q, g, range, thr; };
@@ -124,7 +144,12 @@ void dyneq_process(auradsp_handle h, float* io, int frames) {
         if (cfg[b].range < 0.0) cfg[b].range = 0.0; if (cfg[b].range > 24.0) cfg[b].range = 24.0;
         if (cfg[b].thr < -60.0) cfg[b].thr = -60.0; if (cfg[b].thr > 0.0) cfg[b].thr = 0.0;
     }
-    if (!anyOn) return;
+    if (!anyOn) {
+        h->gr_dyneq[0].store(0.0f, std::memory_order_relaxed);
+        h->gr_dyneq[1].store(0.0f, std::memory_order_relaxed);
+        h->gr_dyneq[2].store(0.0f, std::memory_order_relaxed);
+        return;
+    }
     /* 静态 + 检波 bell 系数（每块现算，跟踪参数滑动）。 */
     double sb0[3], sb1[3], sb2[3], sa1[3], sa2[3];
     double db0[3], db1[3], db2[3], da1[3], da2[3];
@@ -141,6 +166,8 @@ void dyneq_process(auradsp_handle h, float* io, int frames) {
         attMax[b] = 1.0 - pow(10.0, -cfg[b].range / 20.0); /* range=满偏时频段残留比 */
     }
 
+    double min_dg[3] = {1.0, 1.0, 1.0};
+
     for (int i = 0; i < frames; ++i) {
         double xl = io[i * 2], xr = io[i * 2 + 1];
         for (int b = 0; b < 3; ++b) {
@@ -154,12 +181,14 @@ void dyneq_process(auradsp_handle h, float* io, int frames) {
             st.det_z1[1] = db1[b] * xr - da1[b] * bR + st.det_z2[1];
             st.det_z2[1] = db2[b] * xr - da2[b] * bR;
             const double pk = fabs(bL) > fabs(bR) ? fabs(bL) : fabs(bR);
-            const double coef = (pk > st.env[0]) ? attCoef : relCoef;
+            const double coef = (pk > st.env[0]) ? attCoef[b] : relCoef[b];
             st.env[0] = pk + (st.env[0] - pk) * coef;
             /* 2. 动态量：超阈比例 → 频段衰减（只衰减该频段成分，带外不动）。 */
             double over = (st.env[0] > thrLin[b]) ? (st.env[0] - thrLin[b]) / (st.env[0] + 1e-9) : 0.0;
             if (over > 1.0) over = 1.0;
             const double dg = 1.0 - attMax[b] * over;
+            if (dg < min_dg[b]) min_dg[b] = dg;
+
             /* 3. 静态 RBJ + 谱减（out = static - band + dg*band）。 */
             const double yl = sb0[b] * xl + st.z1[0];
             st.z1[0] = sb1[b] * xl - sa1[b] * yl + st.z2[0];
@@ -185,6 +214,12 @@ void dyneq_process(auradsp_handle h, float* io, int frames) {
         if (fabs(st.z2[0]) < 1e-15) st.z2[0] = 0.0;
         if (fabs(st.z1[1]) < 1e-15) st.z1[1] = 0.0;
         if (fabs(st.z2[1]) < 1e-15) st.z2[1] = 0.0;
+
+        float gr_db = 0.0f;
+        if (cfg[b].en && min_dg[b] < 0.999 && min_dg[b] > 1e-6) {
+            gr_db = (float)(-20.0 * log10(min_dg[b]));
+        }
+        h->gr_dyneq[b].store(gr_db, std::memory_order_relaxed);
     }
 }
 
@@ -196,12 +231,32 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 
     const double fs = h->jdsp.fs;
     if (fs <= 0.0) return;
-    double att = h->p.dyneq_attack.load(std::memory_order_relaxed);
-    if (att < 0.1) att = 0.1; if (att > 100.0) att = 100.0;
-    double rel = h->p.dyneq_release.load(std::memory_order_relaxed);
-    if (rel < 10.0) rel = 10.0; if (rel > 1000.0) rel = 1000.0;
-    const double attCoef = exp(-1.0 / (att * 0.001 * fs));
-    const double relCoef = exp(-1.0 / (rel * 0.001 * fs));
+
+    /* P3.1: 3 频段独立 Attack / Release 双时间常数 */
+    double att[3] = {
+        h->p.dyneq_b1_attack.load(std::memory_order_relaxed),
+        h->p.dyneq_b2_attack.load(std::memory_order_relaxed),
+        h->p.dyneq_b3_attack.load(std::memory_order_relaxed)
+    };
+    double rel[3] = {
+        h->p.dyneq_b1_release.load(std::memory_order_relaxed),
+        h->p.dyneq_b2_release.load(std::memory_order_relaxed),
+        h->p.dyneq_b3_release.load(std::memory_order_relaxed)
+    };
+    for (int b = 0; b < 3; ++b) {
+        if (att[b] < 0.1) att[b] = 0.1; if (att[b] > 100.0) att[b] = 100.0;
+        if (rel[b] < 10.0) rel[b] = 10.0; if (rel[b] > 1000.0) rel[b] = 1000.0;
+    }
+    const double attCoef[3] = {
+        exp(-1.0 / (att[0] * 0.001 * fs)),
+        exp(-1.0 / (att[1] * 0.001 * fs)),
+        exp(-1.0 / (att[2] * 0.001 * fs))
+    };
+    const double relCoef[3] = {
+        exp(-1.0 / (rel[0] * 0.001 * fs)),
+        exp(-1.0 / (rel[1] * 0.001 * fs)),
+        exp(-1.0 / (rel[2] * 0.001 * fs))
+    };
 
     struct BandCfg { bool en; double f, q, g, range, thr; };
     BandCfg cfg[3] = {
@@ -237,7 +292,12 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         if (cfg[b].range < 0.0) cfg[b].range = 0.0; if (cfg[b].range > 24.0) cfg[b].range = 24.0;
         if (cfg[b].thr < -60.0) cfg[b].thr = -60.0; if (cfg[b].thr > 0.0) cfg[b].thr = 0.0;
     }
-    if (!anyOn) return;
+    if (!anyOn) {
+        h->gr_dyneq[0].store(0.0f, std::memory_order_relaxed);
+        h->gr_dyneq[1].store(0.0f, std::memory_order_relaxed);
+        h->gr_dyneq[2].store(0.0f, std::memory_order_relaxed);
+        return;
+    }
 
     double sb0[3], sb1[3], sb2[3], sa1[3], sa2[3];
     double db0[3], db1[3], db2[3], da1[3], da2[3];
@@ -254,6 +314,7 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         attMax[b] = 1.0 - pow(10.0, -cfg[b].range / 20.0);
     }
 
+    double min_dg[3] = {1.0, 1.0, 1.0};
     const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
     for (int c = 0; c < max_c; ++c) {
         if (!(mask & (1u << c))) continue;
@@ -266,12 +327,13 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
                 st.det_z1[c] = db1[b] * x - da1[b] * bp + st.det_z2[c];
                 st.det_z2[c] = db2[b] * x - da2[b] * bp;
                 const double pk = fabs(bp);
-                const double coef = (pk > st.env[c]) ? attCoef : relCoef;
+                const double coef = (pk > st.env[c]) ? attCoef[b] : relCoef[b];
                 st.env[c] = pk + (st.env[c] - pk) * coef;
 
                 double over = (st.env[c] > thrLin[b]) ? (st.env[c] - thrLin[b]) / (st.env[c] + 1e-9) : 0.0;
                 if (over > 1.0) over = 1.0;
                 const double dg = 1.0 - attMax[b] * over;
+                if (dg < min_dg[b]) min_dg[b] = dg;
 
                 const double y = sb0[b] * x + st.z1[c];
                 st.z1[c] = sb1[b] * x - sa1[b] * y + st.z2[c];
@@ -288,5 +350,12 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
             if (fabs(st.z1[c]) < 1e-15) st.z1[c] = 0.0;
             if (fabs(st.z2[c]) < 1e-15) st.z2[c] = 0.0;
         }
+    }
+    for (int b = 0; b < 3; ++b) {
+        float gr_db = 0.0f;
+        if (cfg[b].en && min_dg[b] < 0.999 && min_dg[b] > 1e-6) {
+            gr_db = (float)(-20.0 * log10(min_dg[b]));
+        }
+        h->gr_dyneq[b].store(gr_db, std::memory_order_relaxed);
     }
 }

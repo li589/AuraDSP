@@ -58,6 +58,9 @@ def set_i(pid, v):
     return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(i32(v)), 4)
 
 
+set_i('limiter.enable', 0)  # 隔离母带限幅器，专注于各效果器增益门与自动补偿的纯线性响应测试
+
+
 def set_f(pid, v):
     return dll.auradsp_set_param(h, pid.encode(), ctypes.byref(f32(v)), 4)
 

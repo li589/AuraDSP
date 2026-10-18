@@ -171,7 +171,14 @@ void emit_viz(auradsp_handle h) {
      * 17: haas 差分环绕
      * 18: exciter 高频激励
      * 19: loudness 响度补偿
-     * 20..31: 预留槽位（恒 -120 dBFS） */
+     * 20..23: 预留槽位（恒 -120 dBFS）
+     * 24: Limiter GR (dB)
+     * 25: Compressor GR (dB)
+     * 26: Noise Gate GR (dB)
+     * 27: Dyneq Low GR (dB)
+     * 28: Dyneq Mid GR (dB)
+     * 29: Dyneq High GR (dB)
+     * 30..31: 预留槽位（恒 -120 dBFS） */
     for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
         if (i < AURADSP_VENDOR_STAGES) {
             const float pl = h->jdsp.stagePeakL[i];
@@ -188,6 +195,18 @@ void emit_viz(auradsp_handle h) {
             const float pr = h->stage_peak_r[i];
             f.stage_levels_l[i] = pl > 1e-6f ? 20.0f * log10f(pl) : -120.0f;
             f.stage_levels_r[i] = pr > 1e-6f ? 20.0f * log10f(pr) : -120.0f;
+        } else if (i == 24) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_limiter.load(std::memory_order_relaxed);
+        } else if (i == 25) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_comp.load(std::memory_order_relaxed);
+        } else if (i == 26) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_gate.load(std::memory_order_relaxed);
+        } else if (i == 27) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_dyneq[0].load(std::memory_order_relaxed);
+        } else if (i == 28) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_dyneq[1].load(std::memory_order_relaxed);
+        } else if (i == 29) {
+            f.stage_levels_l[i] = f.stage_levels_r[i] = h->gr_dyneq[2].load(std::memory_order_relaxed);
         } else {
             f.stage_levels_l[i] = -120.0f;
             f.stage_levels_r[i] = -120.0f;

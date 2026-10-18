@@ -107,6 +107,10 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         rin = sqrt(e / (double)(frames * 2) + 1e-12);
     }
 
+    const float alpha = (float)exp(-1.0 / (0.002 * (double)fs));
+    const float beta = 1.0f - alpha;
+    float g_sm = h->spat_g_sm;
+
     for (int i = 0; i < frames; ++i) {
         const float inL = io[i * 2], inR = io[i * 2 + 1];
         // 立体声上混 → 5 扬声器 mono
@@ -176,9 +180,11 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         }
         if (fabsf(yL) < 1e-15f) yL = 0.0f;
         if (fabsf(yR) < 1e-15f) yR = 0.0f;
-        io[i * 2] = yL * outG;
-        io[i * 2 + 1] = yR * outG;
+        g_sm = alpha * g_sm + beta * outG;
+        io[i * 2] = yL * g_sm;
+        io[i * 2 + 1] = yR * g_sm;
     }
+    h->spat_g_sm = (fabsf(g_sm) < 1e-15f) ? 0.0f : g_sm;
 
     // 自动增益（reverb 同式：慢跟随收敛到输入响度，0.25..4 钳位）
     if (ag) {

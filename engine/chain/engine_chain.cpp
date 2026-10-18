@@ -414,6 +414,7 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     const float comp_db = h->p.tube_compensation.load(std::memory_order_relaxed);
     const float comp = powf(10.0f, comp_db * 0.05f);
     const int style = (int)h->p.tube_style.load(std::memory_order_relaxed);
+    const bool os = h->p.tube_oversample.load(std::memory_order_relaxed) != 0;
 
     const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
     for (int c = 0; c < max_c; ++c) {
@@ -421,15 +422,30 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         for (int i = 0; i < frames; ++i) {
             const float x = io[i * ch + c];
             float drive = x * pregain;
-            float sat = drive;
-            if (style == 0) {
-                sat = drive > 0.0f ? tanhf(drive) : (drive / (1.0f - drive * 0.5f));
-            } else if (style == 1) {
-                sat = tanhf(drive * 1.2f) * 0.833f;
+            float sat;
+            if (os) {
+                sat = h->tube_os[c].process_sample(drive, [style](float d) {
+                    if (style == 0) {
+                        return d > 0.0f ? tanhf(d) : (d / (1.0f - d * 0.5f));
+                    } else if (style == 1) {
+                        return tanhf(d * 1.2f) * 0.833f;
+                    } else {
+                        float s = d - (d * d * d) / 3.0f;
+                        if (s > 1.0f) return 1.0f;
+                        if (s < -1.0f) return -1.0f;
+                        return s;
+                    }
+                });
             } else {
-                sat = drive - (drive * drive * drive) / 3.0f;
-                if (sat > 1.0f) sat = 1.0f;
-                else if (sat < -1.0f) sat = -1.0f;
+                if (style == 0) {
+                    sat = drive > 0.0f ? tanhf(drive) : (drive / (1.0f - drive * 0.5f));
+                } else if (style == 1) {
+                    sat = tanhf(drive * 1.2f) * 0.833f;
+                } else {
+                    sat = drive - (drive * drive * drive) / 3.0f;
+                    if (sat > 1.0f) sat = 1.0f;
+                    else if (sat < -1.0f) sat = -1.0f;
+                }
             }
             float wet = sat * postgain * comp;
             io[i * ch + c] = x * (1.0f - mix) + wet * mix;
@@ -438,29 +454,141 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 }
 
 
-/* 多声道输出限幅器 (Category A: 按 limiter_channels 独立动态压制) */
+/* Modern Lookahead Limiter (P2.3 / P2.4)
+ * - 1.5ms 前瞻环形延迟队列
+ * - 4x ISP (Inter-Sample Peak) 三次埃尔米特插值真峰检测
+ * - 前瞻增益窗口最小检波与平滑起音/单极点释放跟踪
+ * - 声道独立 / 立体声增益联动支持 (limiter.link)
+ * - GR (Gain Reduction) 实时分贝计量写入原子变量
+ * - 绝对安全硬防护 (NaN/Inf 拦截与 10.0f 钳位)
+ */
 void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     if (!h || ch <= 0 || frames <= 0) return;
     if (!h->p.limiter_enable.load(std::memory_order_relaxed)) return;
+
     const uint32_t mask = (uint32_t)h->p.limiter_channels.load(std::memory_order_relaxed);
     const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
-    const float threshold = 1.0f; // 0 dBFS 极限阈值
-    const float relCoef = (float)exp(-1000.0 / (50.0 * (double)h->sample_rate)); // 50ms 释放时间常数
 
-    for (int c = 0; c < max_c; ++c) {
-        if (!(mask & (1u << c))) continue;
-        float env = h->mc_limiter_env[c];
-        for (int i = 0; i < frames; ++i) {
+    const float thresh_db = h->p.limiter_threshold.load(std::memory_order_relaxed);
+    const float threshold = std::pow(10.0f, (std::min)(0.0f, (std::max)(-24.0f, thresh_db)) / 20.0f);
+
+    const float rel_ms = (std::min)(500.0f, (std::max)(10.0f, h->p.limiter_release_ms.load(std::memory_order_relaxed)));
+    const float relCoef = (float)std::exp(-1.0 / ((double)rel_ms * 0.001 * (double)h->sample_rate));
+    const float attCoef = (float)(1.0 - std::exp(-1.0 / (0.00035 * (double)h->sample_rate)));
+
+    const int la_len = (h->mc_limiter_la_len > 0) ? (std::min)(h->mc_limiter_la_len, (int)auradsp_handle_s::kLimLookaheadMax) : 72;
+    const bool link_mode = (h->p.limiter_link.load(std::memory_order_relaxed) != 0);
+
+    float min_block_gain = 1.0f;
+
+    const bool use_la = (h->p.limiter_lookahead.load(std::memory_order_relaxed) != 0);
+
+    for (int i = 0; i < frames; ++i) {
+        float step_targets[kMxMaxChannels];
+        float linked_target = 1.0f;
+
+        // 第一遍：选定声道真峰检波 (4x ISP)
+        for (int c = 0; c < max_c; ++c) {
+            if (!(mask & (1u << c))) continue;
             float s = io[i * ch + c];
-            float rect = fabsf(s);
-            if (rect < threshold) rect = threshold;
-            if (rect > env) env = rect;
-            else env = rect + relCoef * (env - rect);
-            float g = threshold / env;
-            io[i * ch + c] = s * g;
+            float s_next = (i + 1 < frames) ? io[(i + 1) * ch + c] : s;
+            float p = auradsp::cubic_hermite_true_peak(
+                h->mc_limiter_prev[c][0],
+                h->mc_limiter_prev[c][1],
+                s,
+                s_next
+            );
+            h->mc_limiter_prev[c][0] = h->mc_limiter_prev[c][1];
+            h->mc_limiter_prev[c][1] = s;
+
+            float g = (p > threshold && p > 1e-9f) ? (threshold / p) : 1.0f;
+            step_targets[c] = g;
+            if (g < linked_target) linked_target = g;
         }
-        h->mc_limiter_env[c] = env;
+
+        // 第二遍：增益施加 (分支：1.5ms 高精母带前瞻模式 vs 0ms 零延迟实时模式)
+        for (int c = 0; c < max_c; ++c) {
+            if (!(mask & (1u << c))) continue;
+
+            float g_target = link_mode ? linked_target : step_targets[c];
+            float final_s = 0.0f;
+            float current_gain = 1.0f;
+
+            if (use_la) {
+                // 1.5ms 高精母带前瞻模式：环形延迟线 + 前向最小增益淡入
+                int pos = h->mc_limiter_la_pos[c];
+                h->mc_limiter_la_buf[c][pos] = io[i * ch + c];
+                h->mc_limiter_gain_buf[c][pos] = g_target;
+
+                int read_pos = (pos + 1) % la_len;
+                float delayed_s = h->mc_limiter_la_buf[c][read_pos];
+
+                float win_min_g = 1.0f;
+                for (int k = 0; k < la_len; ++k) {
+                    float gb = h->mc_limiter_gain_buf[c][k];
+                    if (gb < win_min_g) win_min_g = gb;
+                }
+
+                float env_rel = h->mc_limiter_env[c];
+                if (win_min_g < env_rel) {
+                    env_rel = win_min_g;
+                } else {
+                    env_rel += (1.0f - relCoef) * (win_min_g - env_rel);
+                }
+                h->mc_limiter_env[c] = env_rel;
+
+                float env_la = h->mc_limiter_la_env[c];
+                if (env_rel < env_la) {
+                    env_la += attCoef * (env_rel - env_la);
+                } else {
+                    env_la = env_rel;
+                }
+                h->mc_limiter_la_env[c] = env_la;
+                current_gain = env_la;
+                final_s = delayed_s * current_gain;
+
+                h->mc_limiter_la_pos[c] = read_pos;
+            } else {
+                // 0ms 实时零延迟模式：瞬时检波 + 平滑释放跟踪，输入未超载时 100% 逐样本零相移直通
+                float env = h->mc_limiter_env[c];
+                if (g_target < env) {
+                    env = g_target;
+                } else {
+                    env += (1.0f - relCoef) * (g_target - env);
+                }
+                h->mc_limiter_env[c] = env;
+                current_gain = env;
+                final_s = io[i * ch + c] * current_gain;
+            }
+
+            // 门限硬防护
+            if (std::fabs(final_s) > threshold) {
+                final_s = (final_s > 0.0f) ? threshold : -threshold;
+            }
+
+            // 安全防护
+            if (std::isnan(final_s) || std::isinf(final_s)) {
+                final_s = 0.0f;
+            } else if (final_s > 10.0f) {
+                final_s = 10.0f;
+            } else if (final_s < -10.0f) {
+                final_s = -10.0f;
+            }
+
+            io[i * ch + c] = final_s;
+
+            if (current_gain < min_block_gain) {
+                min_block_gain = current_gain;
+            }
+        }
     }
+
+    // 块末原子写入增益衰减分贝 (GR >= 0 dB)
+    float gr_db = 0.0f;
+    if (min_block_gain < 0.9999f && min_block_gain > 1e-6f) {
+        gr_db = -20.0f * (float)std::log10((double)min_block_gain);
+    }
+    h->gr_limiter.store(gr_db, std::memory_order_relaxed);
 }
 
 
@@ -639,6 +767,9 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
     h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(src), dst,
                                    (size_t)frames);
+    /* P2.4: 提取 Compressor GR 实时计量 */
+    h->gr_comp.store(h->p.comp_enable.load(std::memory_order_relaxed) ? h->jdsp.comp_gr : 0.0f,
+                     std::memory_order_relaxed);
 
     /* Stage 2: Post-Vendor（主效果后 / 混响前） */
     process_plugin_slots_stage(h, 2, dst, frames);
@@ -673,6 +804,9 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
         loudness_process(h, dst, frames);
     }
     sample_stage_peak(h, 19, dst, frames);   /* Stage 19: Loudness output */
+
+    /* Modern Lookahead Limiter (P2.3 立体声母带限幅) */
+    limiter_process_mc(h, dst, frames, 2);
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
     const int total_samples = frames * 2;

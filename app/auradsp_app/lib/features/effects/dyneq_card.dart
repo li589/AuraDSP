@@ -151,6 +151,16 @@ class _DyneBand extends StatelessWidget {
           children: [
             Text(bandLabel, style: labelOf(p, color: p.text)),
             const Spacer(),
+            if (m.dyneqOn && bandOn) ...[
+              MiniGainReductionBar(
+                grListenable: band == 0
+                    ? m.grDyneqLow
+                    : (band == 1 ? m.grDyneqMid : m.grDyneqHigh),
+                width: 56.0,
+                height: 6.0,
+              ),
+              const SizedBox(width: AuraSpace.sm),
+            ],
             AuraSwitch(
               value: bandOn,
               onChanged: m.dyneqOn ? setBandOn : null,
@@ -230,6 +240,77 @@ class _DyneBand extends StatelessWidget {
           format: (v) => v.toStringAsFixed(0),
           onChanged: setThreshold,
           onChangedEnd: setThreshold,
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            dense: true,
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: EdgeInsets.zero,
+            title: Text('独立动态响应时常数', style: monoOf(p, size: 10, color: p.textDim)),
+            children: [
+              ValueSlider(
+                label: '$bandLabel Attack',
+                infoMessage: '该频段专用的起音时间。',
+                value: band == 0 ? m.dyneqB1Attack : (band == 1 ? m.dyneqB2Attack : m.dyneqB3Attack),
+                defaultValue: 2.0,
+                onResetToDefault: () {
+                  if (band == 0) {
+                    m.setDyneqB1Attack(2.0);
+                  } else if (band == 1) {
+                    m.setDyneqB2Attack(2.0);
+                  } else {
+                    m.setDyneqB3Attack(2.0);
+                  }
+                },
+                min: 0.1,
+                max: 100,
+                unit: 'ms',
+                enabled: en,
+                format: (v) => v.toStringAsFixed(1),
+                onChanged: (v) {
+                  if (band == 0) {
+                    m.setDyneqB1Attack(v);
+                  } else if (band == 1) {
+                    m.setDyneqB2Attack(v);
+                  } else {
+                    m.setDyneqB3Attack(v);
+                  }
+                },
+              ),
+              const SizedBox(height: AuraSpace.xs),
+              ValueSlider(
+                label: '$bandLabel Release',
+                infoMessage: '该频段专用的释放时间。',
+                value: band == 0 ? m.dyneqB1Release : (band == 1 ? m.dyneqB2Release : m.dyneqB3Release),
+                defaultValue: 120.0,
+                onResetToDefault: () {
+                  if (band == 0) {
+                    m.setDyneqB1Release(120.0);
+                  } else if (band == 1) {
+                    m.setDyneqB2Release(120.0);
+                  } else {
+                    m.setDyneqB3Release(120.0);
+                  }
+                },
+                min: 10,
+                max: 1000,
+                unit: 'ms',
+                enabled: en,
+                format: (v) => v.toStringAsFixed(0),
+                onChanged: (v) {
+                  if (band == 0) {
+                    m.setDyneqB1Release(v);
+                  } else if (band == 1) {
+                    m.setDyneqB2Release(v);
+                  } else {
+                    m.setDyneqB3Release(v);
+                  }
+                },
+              ),
+            ],
+          ),
         ),
       ],
     );
