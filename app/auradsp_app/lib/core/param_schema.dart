@@ -941,7 +941,7 @@ abstract final class ParamRegistry {
     type: ParamType.float, defaultValue: ParamDefaults.dyneqB3Attack,
     min: 0.1, max: 100.0, step: 0.5, unit: 'ms',
     getter: (m) => m.dyneqB3Attack,
-    setter: (m, v) => m.setDyneqB3Release(v),
+    setter: (m, v) => m.setDyneqB3Attack(v),
   );
   static final dyneqB3Release = ParamSpec<double>(
     id: 'dyneq.b3.release', section: 'dyneq', subSection: 'high', key: 'release',

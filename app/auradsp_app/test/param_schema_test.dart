@@ -99,6 +99,13 @@ void main() {
       expect(m.tubeOn, isTrue);
     });
 
+    test('Dyneq B3 Attack setter 不串写 Release', () {
+      final m = AppModel(testing: true);
+      m.setParam(ParamRegistry.dyneqB3Attack, 12.0);
+      expect(m.dyneqB3Attack, closeTo(12.0, 1e-6));
+      expect(m.dyneqB3Release, closeTo(ParamDefaults.dyneqB3Release, 1e-6));
+    });
+
     test('getParamById 与 setParamById 动态反射通道', () {
       final m = AppModel(testing: true);
 
