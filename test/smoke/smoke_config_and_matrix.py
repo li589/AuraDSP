@@ -159,6 +159,14 @@ check(set_i32(h, "channels.count", 6) == 0, "channels.count=6 (5.1) 接受")
 check(set_i32(h, "channels.count", 8) == 0, "channels.count=8 (7.1) 接受")
 for bad in (1, 3, 5, 7, 0, -1):
     check(set_i32(h, "channels.count", bad) != 0, f"channels.count={bad} 拒绝")
+
+# 浮点参数必须拒绝 NaN/Inf（否则会绕过 < / > 钳制并污染反馈状态）
+base_gain = get_f32(h, "input.gain")[1]
+for bad in (float("nan"), float("inf"), float("-inf")):
+    rc = set_f32(h, "input.gain", bad)
+    check(rc != 0, f"input.gain {bad} 拒绝 (rc={rc})")
+check(abs(get_f32(h, "input.gain")[1] - base_gain) < 1e-9,
+      "NaN/Inf 拒绝后原值保持不变")
 rc, v = get_i32(h, "channels.count")
 check(v == 8, f"拒绝后保持原值 8 (got {v})")
 lib.auradsp_destroy(h)
@@ -286,6 +294,22 @@ fl_dev = max(abs(dst[i * 6 + 0] - src[i * 6 + 0]) for i in range(F))
 check(fr_diff > 0.05, f"FR (mask命中) 受到滤波 (diff={fr_diff:.4f})")
 check(fl_dev < 1e-6, f"FL (mask未命中) 恢复 100% 直通 (dev={fl_dev:.2e})")
 
+lib.auradsp_destroy(h)
+
+# ---------------------------------------------------------------- [5b] LFE NaN 卫士
+print("\n=== [5b] mode-0 LFE 直通不得绕过 NaN/Inf 卫士 ===")
+h = new_engine()
+set_i32(h, "channels.count", 6)
+F2 = 128
+src, dst, sp, dp = process(h, F2, 6)
+for i in range(F2):
+    for c in range(6):
+        src[i * 6 + c] = 0.0
+    src[i * 6 + 3] = float("nan")  # LFE 注入 NaN
+lib.auradsp_process(h, sp, dp, F2)
+lfe_bad = sum(1 for i in range(F2)
+              if not math.isfinite(dst[i * 6 + 3]))
+check(lfe_bad == 0, f"LFE 输出 NaN/Inf 被清零 (bad={lfe_bad})")
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- [6] 立体声不回归

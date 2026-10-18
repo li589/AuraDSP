@@ -513,7 +513,7 @@ struct auradsp_handle_s {
     int    haas_pos = 0;
     /* 空间音效 RT 状态（全固定数组，handle 随体分配，RT 零分配） */
     static constexpr int kSpatSpk = 8;      // 立体声 5 + 多声道 8 的上限
-    static constexpr int kSpatItdLen = 128; // 远耳 ITD 线（0.8ms@96k=77 < 128）
+    static constexpr int kSpatItdLen = 256; // 远耳 ITD 线（0.8ms@192k=154 < 256）
     static constexpr int kSpatHistLen = 32768; // 早期反射历史（110ms@192k=21120 < 32768）
     float  spat_ring[kSpatSpk][kSpatItdLen]; // 各扬声器远耳延迟线（mono）
     int    spat_ring_pos[kSpatSpk];

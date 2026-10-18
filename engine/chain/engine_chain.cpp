@@ -385,7 +385,8 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
                 dp[2] = (l + r) * 0.5f * kMxSqrtHalf; // Center: 居中单声道和
             }
             if (ch > 3) {
-                dp[3] = sp[3];                        // LFE: 逐样本 100% bit-exact 直通还原
+                // LFE: 正常情况逐样本 bit-exact 直通；NaN/Inf 不能绕过链尾卫士
+                dp[3] = std::isfinite(sp[3]) ? sp[3] : 0.0f;
             }
             if (ch >= 6) {
                 dp[4] = l * kMxSqrtHalf;              // SL: 严格取 L

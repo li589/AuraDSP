@@ -16,6 +16,8 @@
 namespace {
 
 // kSpatSpk/kSpatItdLen/kSpatHistLen 在 handle 结构体（engine_internal.h）
+constexpr int kItdLen = auradsp_handle_s::kSpatItdLen;
+constexpr int kHistLen = auradsp_handle_s::kSpatHistLen;
 constexpr float kSpatDeg[5] = {-30.0f, 0.0f, 30.0f, -110.0f, 110.0f};
 // 早期反射 tap（ms）L/R 交替；8 tap 严格配对，保证 mono 下左右能量相等
 constexpr float kSpatTapMs[8] =
@@ -228,7 +230,7 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         const float th = fabsf(deg) * kPiF / 180.0f;
         const float itdSec = kSpatHeadR / kSpatSoundC * (th + sinf(th));
         float d = itdSec * fs;
-        d = spat_clampf(d, 0.0f, 127.0f);
+        d = spat_clampf(d, 0.0f, (float)(kItdLen - 1));
         itdSamp[s] = d;
 
         const float ax = spat_clampf(th / (kPiF * 0.5f), 0.0f, 1.0f);
@@ -315,7 +317,7 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
                 float* ring = h->spat_ring[s];
                 int pos = h->spat_ring_pos[s];
                 ring[pos] = m;
-                if (++pos >= 128) pos = 0;
+                if (++pos >= kItdLen) pos = 0;
                 h->spat_ring_pos[s] = pos;
                 continue;
             }
@@ -343,8 +345,8 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
             const int di = (int)d;
             const float frac = d - (float)di;
             int i0 = pos - di;
-            i0 %= 128; if (i0 < 0) i0 += 128;
-            int i1 = i0 - 1; if (i1 < 0) i1 += 128;
+            i0 %= kItdLen; if (i0 < 0) i0 += kItdLen;
+            int i1 = i0 - 1; if (i1 < 0) i1 += kItdLen;
             const float delayed = ring[i0] * (1.0f - frac) + ring[i1] * frac;
             float y = h->spat_lp[s] + farLpA[s] * (delayed - h->spat_lp[s]);
             if (fabsf(y) < 1e-15f) y = 0.0f;
@@ -360,7 +362,7 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
                              pa2[s][farEar][1], farSig);
             if (nearR) oL += farSig; else oR += farSig;
 
-            if (++pos >= 128) pos = 0;
+            if (++pos >= kItdLen) pos = 0;
             h->spat_ring_pos[s] = pos;
         }
 
@@ -370,15 +372,15 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         if (room > 0.001f) {
             for (int t = 0; t < 8; ++t) {
                 int off = (int)(kSpatTapMs[t] * tscale * fs / 1000.0f);
-                if (off >= 32768) off = 32767;
+                if (off >= kHistLen) off = kHistLen - 1;
                 if (off < 0) off = 0;
                 int rp = h->spat_hist_pos - off;
-                rp %= 32768; if (rp < 0) rp += 32768;
+                rp %= kHistLen; if (rp < 0) rp += kHistLen;
                 const float te = h->spat_hist[rp] * kSpatTapG[t] * room;
                 if ((t & 1) == 0) eL += te; else eR += te;
             }
         }
-        if (++h->spat_hist_pos >= 32768) h->spat_hist_pos = 0;
+        if (++h->spat_hist_pos >= kHistLen) h->spat_hist_pos = 0;
 
         // 反射总线走原全局 pinna；直达声已按源/耳处理，不再二次滤波
         eL = spat_bq(h->spat_pinna[0][0], rb0[0], rb1[0], rb2[0],
@@ -493,7 +495,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         const float deg = srcDeg[c];
         const float th = fabsf(deg) * kPiF / 180.0f;
         const float itdSec = kSpatHeadR / kSpatSoundC * (th + sinf(th));
-        itdSamp[c] = spat_clampf(itdSec * fs, 0.0f, 127.0f);
+        itdSamp[c] = spat_clampf(itdSec * fs, 0.0f, (float)(kItdLen - 1));
         const float ax = spat_clampf(th / (kPiF * 0.5f), 0.0f, 1.0f);
         farGain[c] = 1.0f - 0.5f * ax;
         const float ax2 = spat_clampf(th / (110.0f * kPiF / 180.0f), 0.0f, 1.0f);
@@ -586,7 +588,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                 float* ring = h->spat_ring[c];
                 int pos = h->spat_ring_pos[c];
                 ring[pos] = m;
-                if (++pos >= 128) pos = 0;
+                if (++pos >= kItdLen) pos = 0;
                 h->spat_ring_pos[c] = pos;
                 continue;
             }
@@ -611,8 +613,8 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
             const int di = (int)d;
             const float frac = d - (float)di;
             int i0 = pos - di;
-            i0 %= 128; if (i0 < 0) i0 += 128;
-            int i1 = i0 - 1; if (i1 < 0) i1 += 128;
+            i0 %= kItdLen; if (i0 < 0) i0 += kItdLen;
+            int i1 = i0 - 1; if (i1 < 0) i1 += kItdLen;
             const float delayed = ring[i0] * (1.0f - frac) + ring[i1] * frac;
             float y = h->spat_lp[c] + farLpA[c] * (delayed - h->spat_lp[c]);
             if (fabsf(y) < 1e-15f) y = 0.0f;
@@ -627,7 +629,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                              pb2[c][farEar][1], pa1[c][farEar][1],
                              pa2[c][farEar][1], farSig);
             if (nearR) oL += farSig; else oR += farSig;
-            if (++pos >= 128) pos = 0;
+            if (++pos >= kItdLen) pos = 0;
             h->spat_ring_pos[c] = pos;
         }
 
@@ -644,15 +646,15 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         if (room > 0.001f) {
             for (int t = 0; t < 8; ++t) {
                 int off = (int)(kSpatTapMs[t] * tscale * fs / 1000.0f);
-                if (off >= 32768) off = 32767;
+                if (off >= kHistLen) off = kHistLen - 1;
                 if (off < 0) off = 0;
                 int rp = h->spat_hist_pos - off;
-                rp %= 32768; if (rp < 0) rp += 32768;
+                rp %= kHistLen; if (rp < 0) rp += kHistLen;
                 const float te = h->spat_hist[rp] * kSpatTapG[t] * room;
                 if ((t & 1) == 0) eL += te; else eR += te;
             }
         }
-        if (++h->spat_hist_pos >= 32768) h->spat_hist_pos = 0;
+        if (++h->spat_hist_pos >= kHistLen) h->spat_hist_pos = 0;
         eL = spat_bq(h->spat_pinna[0][0], rb0[0], rb1[0], rb2[0],
                      ra1[0], ra2[0], eL);
         eL = spat_bq(h->spat_pinna[1][0], rb0[1], rb1[1], rb2[1],
