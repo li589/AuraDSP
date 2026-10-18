@@ -64,6 +64,10 @@ class _FilterCard extends StatelessWidget {
             customLabel: l.filterQ,
             infoMessage: '谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。',
           ),
+          ChannelRoutingSelector(
+            model: model,
+            paramKey: 'filter.channels',
+          ),
         ],
       ),
     );

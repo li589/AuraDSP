@@ -35,6 +35,9 @@ static ULONG                    g_ulCurrentBitsPerSample= AURA_DEFAULT_BITS_PER_
 static ULONGLONG                g_ullTotalFramesWritten = 0;
 static ULONGLONG                g_ullTotalFramesRead    = 0;
 
+static AURA_DEBUG_LOG           g_DebugLog;
+static KSPIN_LOCK               g_DebugLock;
+
 //=============================================================================
 // Lifecycle
 //=============================================================================
@@ -53,6 +56,8 @@ AuraControlDevice_Create(
     AURA_TRACE("AuraControlDevice_Create\n");
 
     KeInitializeSpinLock(&g_RingLock);
+    KeInitializeSpinLock(&g_DebugLock);
+    RtlZeroMemory(&g_DebugLog, sizeof(g_DebugLog));
 
     RtlInitUnicodeString(&ntDeviceName, AURA_VAIO_DEVICE_NAME_NT);
     RtlInitUnicodeString(&dosDeviceName, AURA_VAIO_DOS_DEVICE_NAME);
@@ -472,6 +477,24 @@ AuraControlDevice_DispatchDeviceControl(
         }
         break;
 
+    case IOCTL_AURAVAIO_GET_DEBUG_LOG:
+        if (outBufLen < sizeof(AURA_DEBUG_LOG))
+        {
+            ntStatus = STATUS_BUFFER_TOO_SMALL;
+            break;
+        }
+        {
+            PAURA_DEBUG_LOG pLog = reinterpret_cast<PAURA_DEBUG_LOG>(systemBuffer);
+            KeAcquireSpinLock(&g_DebugLock, &oldIrql);
+            RtlCopyMemory(pLog, &g_DebugLog, sizeof(AURA_DEBUG_LOG));
+            g_DebugLog.Count = 0;
+            RtlZeroMemory(g_DebugLog.Entries, sizeof(g_DebugLog.Entries));
+            KeReleaseSpinLock(&g_DebugLock, oldIrql);
+            bytesReturned = sizeof(AURA_DEBUG_LOG);
+            ntStatus = STATUS_SUCCESS;
+        }
+        break;
+
     default:
         ntStatus = STATUS_INVALID_DEVICE_REQUEST;
         break;
@@ -684,4 +707,19 @@ AuraControlDevice_ReadCaptureSamples(
     }
 
     KeReleaseSpinLock(&g_RingLock, oldIrql);
+}
+
+VOID
+AuraControlDevice_LogIntersection(
+    _In_ const AURA_INTERSECTION_LOG_ENTRY * Entry
+    )
+{
+    KIRQL oldIrql;
+    KeAcquireSpinLock(&g_DebugLock, &oldIrql);
+    if (g_DebugLog.Count < 32)
+    {
+        g_DebugLog.Entries[g_DebugLog.Count] = *Entry;
+        g_DebugLog.Count++;
+    }
+    KeReleaseSpinLock(&g_DebugLock, oldIrql);
 }

@@ -53,6 +53,18 @@ constexpr int kVizRingCap = 64;   /* 2 的幂 */
 /* [ADR-003] 多声道矩阵支持的最大声道数 */
 constexpr int kMxMaxChannels = 8;
 
+/* 8 声道位掩码定义 (对齐 WAVEFORMATEX / 驱动拓扑声道序) */
+constexpr uint32_t kChMaskFL    = (1u << 0); /* 0x01: Front Left */
+constexpr uint32_t kChMaskFR    = (1u << 1); /* 0x02: Front Right */
+constexpr uint32_t kChMaskC     = (1u << 2); /* 0x04: Center */
+constexpr uint32_t kChMaskLFE   = (1u << 3); /* 0x08: Low Frequency Effect */
+constexpr uint32_t kChMaskSL    = (1u << 4); /* 0x10: Surround Left */
+constexpr uint32_t kChMaskSR    = (1u << 5); /* 0x20: Surround Right */
+constexpr uint32_t kChMaskBL    = (1u << 6); /* 0x40: Back Left */
+constexpr uint32_t kChMaskBR    = (1u << 7); /* 0x80: Back Right */
+constexpr uint32_t kChMaskAll   = 0xFF;      /* 0xFF: 全声道 (255) */
+constexpr uint32_t kChMaskNoLfe = 0xF7;      /* 0xF7: 排除 LFE (247) */
+
 constexpr int kVizFftMax = 8192;   /* 2 的幂；缓冲区按此上限一次性分配 */
 /* 默认使用长度。11.7Hz/bin @48k：20~50Hz 的前几个对数带才分得到 bin。
  * 曾用 1024（46.9Hz/bin），表现为"低音区几根柱子永远不动"。
@@ -243,6 +255,18 @@ std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
     std::atomic<int32_t>  arbmag_nodes{0};
     std::atomic<float>    arbmag_outgain{0.0f};
     std::atomic<int32_t>  arbmag_autogain{0};
+    /* 多声道独立处理声道掩码 (Category A) */
+    std::atomic<int32_t>  filter_channels{0xFF};
+    std::atomic<int32_t>  shelf_channels{0xFF};
+    std::atomic<int32_t>  eq_channels{0xFF};
+    std::atomic<int32_t>  dyneq_channels{0xF7};
+    std::atomic<int32_t>  tube_channels{0xFF};
+    std::atomic<int32_t>  exciter_channels{0xF7};
+    std::atomic<int32_t>  loudness_channels{0xFF};
+    std::atomic<int32_t>  limiter_channels{0xFF};
+    std::atomic<int32_t>  gate_channels{0xFF};
+    std::atomic<int32_t>  comp_channels{0xFF};
+    std::atomic<int32_t>  arbmag_channels{0xFF};
 };
 
 
@@ -399,38 +423,44 @@ struct auradsp_handle_s {
     /* 混响自动增益补偿平滑状态（RT 独占） */
     double rev_ag_in = 0.0, rev_ag_out = 0.0, rev_ag_comp = 1.0;
 
-    /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰） */
+    /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰；支持 8 声道） */
     struct ShelfBiquad {
         std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
-        double z1L = 0, z2L = 0, z1R = 0, z2R = 0;   /* TDF2 状态（RT 独占） */
+        double z1[kMxMaxChannels] = {};
+        double z2[kMxMaxChannels] = {};
     } shelf;
-    /* 独立滤波器 biquad（同 shelf 模式：控制线程重算系数，RT 只读） */
+    /* 独立滤波器 biquad（同 shelf 模式：控制线程重算系数，RT 只读；支持 8 声道） */
     struct FilterBiquad {
         std::atomic<double> b0{1}, b1{0}, b2{0}, a1{0}, a2{1};
-        double z1L = 0, z2L = 0, z1R = 0, z2R = 0;
+        double z1[kMxMaxChannels] = {};
+        double z2[kMxMaxChannels] = {};
     } filter;
     /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
-    /* 噪声门/Deesser 状态（RT 独占） */
-    float gate_gain = 1.0f;         /* 门增益（平滑后） */
-    float gate_ds_lp_l = 0.0f, gate_ds_lp_r = 0.0f;  /* Deesser 侧链 HP 状态 */
-    float gate_ds_env = 0.0f;       /* Deesser 侧链包络 */
+    /* 噪声门/Deesser 状态（RT 独占；支持 8 声道） */
+    float gate_gain[kMxMaxChannels] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+    float gate_ds_lp[kMxMaxChannels] = {};
+    float gate_ds_env[kMxMaxChannels] = {};
     double gate_ag_in = 0.0, gate_ag_out = 0.0, gate_ag_comp = 1.0;
-    /* 全参数动态EQ状态（RT 独占；系数每块现算，无原子系数表）。
-     * 检波：单声道侧链 bell + 峰值包络（立体声联动，防声像漂移）；
-     * 施加：串联 bell/shelf（DF2T 双声道独立状态）。 */
+    /* 全参数动态EQ状态（RT 独占；系数每块现算，无原子系数表；支持 8 声道）。
+     * 检波：单声道侧链 bell + 峰值包络；
+     * 施加：串联 bell/shelf（DF2T 8 声道独立状态）。 */
     struct DyneqBand {
-        double det_z1L = 0, det_z2L = 0, det_z1R = 0, det_z2R = 0; /* 侧链 bell（双声道） */
-        double env = 0;                  /* 峰值包络（取 L/R 最大，立体声联动） */
-        double z1L = 0, z2L = 0, z1R = 0, z2R = 0; /* 静态滤波器状态 */
+        double det_z1[kMxMaxChannels] = {};
+        double det_z2[kMxMaxChannels] = {};
+        double env[kMxMaxChannels] = {};
+        double z1[kMxMaxChannels] = {};
+        double z2[kMxMaxChannels] = {};
     } dyneq_b[3];
     /* 心理声学低音 one-pole 状态（RT 独占；系数值每块现算） */
     float psy_lp_l = 0.0f, psy_lp_r = 0.0f;   /* cutoff LP */
     float psy_sub_l = 0.0f, psy_sub_r = 0.0f; /* subfreq LP */
-    /* 响度补偿状态（RT 独占） */
-    float loud_lp_l = 0.0f, loud_lp_r = 0.0f;   /* 200Hz LP（低频成分） */
-    float loud_hp_l = 0.0f, loud_hp_r = 0.0f;   /* 6kHz HP 状态（高频成分） */
+    /* 响度补偿状态（RT 独占；支持 8 声道） */
+    float loud_lp[kMxMaxChannels] = {};
+    float loud_hp[kMxMaxChannels] = {};
     double loud_level = 0.0;                      /* 慢速电平跟随（~0.5s） */
+    /* 多声道 Limiter 8 声道独立包络状态（RT 独占） */
+    float mc_limiter_env[kMxMaxChannels] = {};
     /* Haas 右声道延迟环（RT 独占；create 时按 25ms 上限分配并清零） */
     float* haas_ring = nullptr;
     int    haas_ring_len = 0;
@@ -446,8 +476,8 @@ struct auradsp_handle_s {
     int    spat_hist_pos = 0;
     float  spat_pinna[2][2][4];           // [stage][ch] x1,x2,y1,y2（全局 pinna 双 biquad）
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
-    /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算） */
-    float exc_lp_l = 0.0f, exc_lp_r = 0.0f;
+    /* 激励器 one-pole HP 状态（RT 独占；系数值每块现算；支持 8 声道） */
+    float exc_lp[kMxMaxChannels] = {};
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
@@ -525,3 +555,13 @@ void shelf_recalc(auradsp_handle h);
 void spatial_process(auradsp_handle h, float* io, int frames);
 void viz_write(auradsp_handle h, const float* out, int frames);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);
+void gate_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void filter_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void shelf_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void tube_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void exciter_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void loudness_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch);
+

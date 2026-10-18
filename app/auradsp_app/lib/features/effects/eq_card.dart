@@ -161,6 +161,11 @@ class _EqualizerAdvanced extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: AuraSpace.sm),
+          ChannelRoutingSelector(
+            model: model,
+            paramKey: 'eq.channels',
+          ),
         ],
       ),
     );

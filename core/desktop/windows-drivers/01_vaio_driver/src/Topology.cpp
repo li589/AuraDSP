@@ -19,6 +19,7 @@ CMiniportTopology::CMiniportTopology(
     : m_lRefCount(1)
     , m_pPort(NULL)
     , m_pAdapterCommon(AdapterCommon)
+    , m_ulChannelConfig(KSAUDIO_SPEAKER_7POINT1_SURROUND)
 {
 }
 
@@ -173,4 +174,90 @@ CreateMiniportTopology(
     *OutMiniport = PUNKNOWN(static_cast<IMiniportTopology *>(pMiniport));
 
     return STATUS_SUCCESS;
+}
+
+//=============================================================================
+// Property Handlers
+//=============================================================================
+
+#pragma code_seg("PAGE")
+NTSTATUS
+PropertyHandler_ChannelConfig(
+    _In_ PPCPROPERTY_REQUEST PropertyRequest
+    )
+{
+    PAGED_CODE();
+
+    if (PropertyRequest == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    CMiniportTopology * pTopology = NULL;
+    if (PropertyRequest->MajorTarget != NULL)
+    {
+        pTopology = static_cast<CMiniportTopology *>(
+            static_cast<IMiniportTopology *>(PropertyRequest->MajorTarget));
+    }
+
+    if (pTopology == NULL)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    if (PropertyRequest->Verb & KSPROPERTY_TYPE_BASICSUPPORT)
+    {
+        if (PropertyRequest->ValueSize >= sizeof(KSPROPERTY_DESCRIPTION))
+        {
+            PKSPROPERTY_DESCRIPTION desc = (PKSPROPERTY_DESCRIPTION)PropertyRequest->Value;
+            RtlZeroMemory(desc, sizeof(KSPROPERTY_DESCRIPTION));
+            desc->AccessFlags = KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_BASICSUPPORT;
+            desc->DescriptionSize = sizeof(KSPROPERTY_DESCRIPTION);
+            desc->PropTypeSet.Set = KSPROPTYPESETID_General;
+            desc->PropTypeSet.Id = VT_UI4;
+            desc->PropTypeSet.Flags = 0;
+            desc->MembersListCount = 0;
+            desc->Reserved = 0;
+            PropertyRequest->ValueSize = sizeof(KSPROPERTY_DESCRIPTION);
+            return STATUS_SUCCESS;
+        }
+        else if (PropertyRequest->ValueSize >= sizeof(ULONG))
+        {
+            *(PULONG)PropertyRequest->Value = KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_BASICSUPPORT;
+            PropertyRequest->ValueSize = sizeof(ULONG);
+            return STATUS_SUCCESS;
+        }
+        else
+        {
+            PropertyRequest->ValueSize = sizeof(ULONG);
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+    }
+    else if (PropertyRequest->Verb & KSPROPERTY_TYPE_GET)
+    {
+        if (PropertyRequest->ValueSize < sizeof(KSAUDIO_CHANNEL_CONFIG))
+        {
+            PropertyRequest->ValueSize = sizeof(KSAUDIO_CHANNEL_CONFIG);
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+
+        PKSAUDIO_CHANNEL_CONFIG pConfig = (PKSAUDIO_CHANNEL_CONFIG)PropertyRequest->Value;
+        pConfig->ActiveSpeakerPositions = pTopology->GetChannelConfig();
+        PropertyRequest->ValueSize = sizeof(KSAUDIO_CHANNEL_CONFIG);
+        return STATUS_SUCCESS;
+    }
+    else if (PropertyRequest->Verb & KSPROPERTY_TYPE_SET)
+    {
+        if (PropertyRequest->ValueSize < sizeof(KSAUDIO_CHANNEL_CONFIG))
+        {
+            return STATUS_BUFFER_TOO_SMALL;
+        }
+
+        PKSAUDIO_CHANNEL_CONFIG pConfig = (PKSAUDIO_CHANNEL_CONFIG)PropertyRequest->Value;
+        pTopology->SetChannelConfig(pConfig->ActiveSpeakerPositions);
+        AURA_TRACE("ChannelConfig set to 0x%08X", pConfig->ActiveSpeakerPositions);
+        return STATUS_SUCCESS;
+    }
+
+    return STATUS_NOT_SUPPORTED;
 }

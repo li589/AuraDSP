@@ -75,6 +75,11 @@ class _DyneCard extends StatelessWidget {
           _DyneBand(model: m, band: 1),
           const SizedBox(height: AuraSpace.md),
           _DyneBand(model: m, band: 2),
+          const SizedBox(height: AuraSpace.sm),
+          ChannelRoutingSelector(
+            model: m,
+            paramKey: 'dyneq.channels',
+          ),
         ],
       ),
     );

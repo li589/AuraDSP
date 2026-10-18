@@ -47,6 +47,36 @@ PCAUTOMATION_TABLE AuraNullAutomation =
 };
 
 //=============================================================================
+// Speaker automation table (KSPROPERTY_AUDIO_CHANNEL_CONFIG)
+//=============================================================================
+NTSTATUS
+PropertyHandler_ChannelConfig(
+    _In_ PPCPROPERTY_REQUEST PropertyRequest
+    );
+
+static
+PCPROPERTY_ITEM AuraSpeakerProperties[] =
+{
+    {
+        &KSPROPSETID_Audio,
+        KSPROPERTY_AUDIO_CHANNEL_CONFIG,
+        KSPROPERTY_TYPE_GET | KSPROPERTY_TYPE_SET | KSPROPERTY_TYPE_BASICSUPPORT,
+        PropertyHandler_ChannelConfig
+    }
+};
+
+static
+PCAUTOMATION_TABLE AuraSpeakerAutomation =
+{
+    sizeof(PCPROPERTY_ITEM),
+    SIZEOF_ARRAY(AuraSpeakerProperties),
+    AuraSpeakerProperties,
+    0, 0, NULL,     // Method
+    0, 0, NULL,     // Event
+    0               // Reserved
+};
+
+//=============================================================================
 // Wave filter - streaming (host) pin
 //=============================================================================
 
@@ -58,7 +88,7 @@ PCAUTOMATION_TABLE AuraNullAutomation =
 static
 KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
 {
-    {   // 0 : 32-bit IEEE float (stereo)
+    {   // 0 : 32-bit IEEE float (stereo, 2 channels)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,                                              // Flags
@@ -72,7 +102,7 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
         32, 32,                                             // Min/Max bits per sample
         44100, 192000                                       // Min/Max sample rate
     },
-    {   // 1 : 16-bit PCM (stereo)
+    {   // 1 : 16-bit PCM (stereo, 2 channels)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,
@@ -86,7 +116,63 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
         16, 16,
         44100, 192000
     },
-    {   // 2 : 32-bit IEEE float (7.1 surround, 8 channels)
+    {   // 2 : 32-bit IEEE float (Quad, 4 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        4,                                                  // MaximumChannels (4)
+        32, 32,
+        44100, 192000
+    },
+    {   // 3 : 16-bit PCM (Quad, 4 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        4,                                                  // MaximumChannels (4)
+        16, 16,
+        44100, 192000
+    },
+    {   // 4 : 32-bit IEEE float (5.1 surround, 6 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_IEEE_FLOAT),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        6,                                                  // MaximumChannels (6)
+        32, 32,
+        44100, 192000
+    },
+    {   // 5 : 16-bit PCM (5.1 surround, 6 channels)
+        {
+            sizeof(KSDATARANGE_AUDIO),
+            0,
+            0,
+            0,
+            STATICGUIDOF(KSDATAFORMAT_TYPE_AUDIO),
+            STATICGUIDOF(KSDATAFORMAT_SUBTYPE_PCM),
+            STATICGUIDOF(KSDATAFORMAT_SPECIFIER_WAVEFORMATEX)
+        },
+        6,                                                  // MaximumChannels (6)
+        16, 16,
+        44100, 192000
+    },
+    {   // 6 : 32-bit IEEE float (7.1 surround, 8 channels)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,
@@ -100,7 +186,7 @@ KSDATARANGE_AUDIO AuraWavePinDataRangesStream[] =
         32, 32,
         44100, 192000
     },
-    {   // 3 : 16-bit PCM (7.1 surround, 8 channels)
+    {   // 7 : 16-bit PCM (7.1 surround, 8 channels)
         {
             sizeof(KSDATARANGE_AUDIO),
             0,
@@ -122,7 +208,11 @@ PKSDATARANGE AuraWavePinDataRangePointersStream[] =
     PKSDATARANGE(&AuraWavePinDataRangesStream[0]),
     PKSDATARANGE(&AuraWavePinDataRangesStream[1]),
     PKSDATARANGE(&AuraWavePinDataRangesStream[2]),
-    PKSDATARANGE(&AuraWavePinDataRangesStream[3])
+    PKSDATARANGE(&AuraWavePinDataRangesStream[3]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[4]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[5]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[6]),
+    PKSDATARANGE(&AuraWavePinDataRangesStream[7])
 };
 
 //=============================================================================
@@ -299,7 +389,7 @@ PCPIN_DESCRIPTOR AuraTopoMiniportPins[] =
         0,
         0,
         0,
-        &AuraNullAutomation,
+        &AuraSpeakerAutomation,
         {
             0,
             NULL,
@@ -367,7 +457,7 @@ static
 PCFILTER_DESCRIPTOR AuraTopoMiniportFilterDescriptor =
 {
     0,
-    &AuraNullAutomation,
+    &AuraSpeakerAutomation,
     sizeof(PCPIN_DESCRIPTOR),
     SIZEOF_ARRAY(AuraTopoMiniportPins),
     AuraTopoMiniportPins,

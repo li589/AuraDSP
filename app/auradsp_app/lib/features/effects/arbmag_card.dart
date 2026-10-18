@@ -555,6 +555,11 @@ class _ArbmagAdvanced extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(height: AuraSpace.sm),
+          ChannelRoutingSelector(
+            model: m,
+            paramKey: 'arbmag.channels',
+          ),
         ],
       ),
     );

@@ -290,38 +290,60 @@ static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float
  * 声道序遵循 WAVEFORMATEX 的标准顺序：FL FR C LFE SL SR [BL BR]。
  * ------------------------------------------------------------------------- */
 
-/* 各声道的下混系数（0 = 该声道不并入 L/R）。索引即声道号。 */
-constexpr float kMx51[6] = { 1.0f, 0.0f, 0.7f, 0.0f, 0.7f, 0.7f }; /* FL FR C LFE SL SR */
-constexpr float kMx71[8] = { 1.0f, 0.0f, 0.7f, 0.0f, 0.7f, 0.7f, 0.7f, 0.7f };
-/* 上混回填增益：环绕声道写入处理后 L/R 的比例（1.0 = 与前置同相） */
-constexpr float kMxUpmixSurround = 0.7f;
+/* 各声道的标准 -3dB 下混/上混系数 (1 / sqrt(2) ≈ 0.70710678) */
+constexpr float kMxSqrtHalf = 0.70710678f;
 
 
-
-static const float* mx_coeff_for(int ch) {
-    if (ch >= 8) return kMx71;
-    if (ch >= 6) return kMx71;   /* 7 声道按 7.1 前 6 个处理 */
-    return kMx51;
-}
-
-
-/* M→2 下混 + 旁路声道留存。返回 false 表示 scratch 不可用（应直通）。 */
+/* M→2 下混 + 旁路声道留存。返回 false 表示 scratch 不可用（应直通）。
+ * 彻底修复原实现中左右环绕串扰混入 L/R 的严重 Bug。 */
 bool mx_downmix(auradsp_handle h, const float* in, float* stereo,
                               int frames, int ch) {
-    const float* c = mx_coeff_for(ch);
     float* keep = h->mx_scratch;                 /* frames*ch，用于存 LFE 等直通声道 */
-    if (!keep) return false;
+    if (!keep || !stereo || !in) return false;
+
     for (int i = 0; i < frames; ++i) {
         const float* sp = in + (size_t)i * ch;
         float* kp = keep + (size_t)i * ch;
         float l = 0.0f, r = 0.0f;
+
+        // 全量完整留存源输入至 keep
         for (int k = 0; k < ch; ++k) {
-            const float v = sp[k];
-            kp[k] = v;                            /* 全量留存，上混时按需取用 */
-            const float g = c[k];
-            l += v * g;
-            /* 右声道增益：FL 不进右，FR 全额 */
-            r += v * ((k == 0) ? 0.0f : ((k == 1) ? 1.0f : g));
+            kp[k] = sp[k];
+        }
+
+        if (ch == 2) {
+            stereo[i * 2]     = sp[0];
+            stereo[i * 2 + 1] = sp[1];
+            continue;
+        }
+
+        if (ch == 4) {
+            // Quad 4.0: FL(0), FR(1), BL(2), BR(3)
+            l = sp[0] + sp[2] * kMxSqrtHalf;
+            r = sp[1] + sp[3] * kMxSqrtHalf;
+        } else {
+            // 5.1 / 7.1 标准声道序:
+            // 0: FL (左前) -> L
+            // 1: FR (右前) -> R
+            // 2: C  (中置) -> L+R 各 -3dB
+            // 3: LFE (低音) -> 绝不进 L/R，保留在 scratch 中原样直通
+            // 4: SL (左环绕) / 6: BL (左后) -> 仅进 L (-3dB)，绝不进 R
+            // 5: SR (右环绕) / 7: BR (右后) -> 仅进 R (-3dB)，绝不进 L
+            l = sp[0];
+            r = sp[1];
+            if (ch > 2) {
+                const float c = sp[2] * kMxSqrtHalf;
+                l += c;
+                r += c;
+            }
+            if (ch >= 6) {
+                l += sp[4] * kMxSqrtHalf;
+                r += sp[5] * kMxSqrtHalf;
+            }
+            if (ch >= 8) {
+                l += sp[6] * kMxSqrtHalf;
+                r += sp[7] * kMxSqrtHalf;
+            }
         }
         stereo[i * 2]     = l;
         stereo[i * 2 + 1] = r;
@@ -330,27 +352,213 @@ bool mx_downmix(auradsp_handle h, const float* in, float* stereo,
 }
 
 
-/* 2→M 上混：前置写处理后 L/R，环绕按系数回填，LFE 原样还原 */
+/* 2→M 上混：前置写处理后 L/R，环绕对号入座，中置取和，LFE 原样还原
+ * 彻底修复原实现中环绕声道全部取右声道导致左右颠倒的严重 Bug。 */
 void mx_upmix(auradsp_handle h, float* out, const float* stereo,
                             int frames, int ch) {
     const float* keep = h->mx_scratch;
-    if (!keep) return;
+    if (!keep || !out || !stereo) return;
+
     for (int i = 0; i < frames; ++i) {
         const float* sp = keep + (size_t)i * ch;
         float* dp = out + (size_t)i * ch;
         const float l = stereo[i * 2];
         const float r = stereo[i * 2 + 1];
-        for (int k = 0; k < ch; ++k) {
-            if (k == 0)      dp[k] = l;
-            else if (k == 1) dp[k] = r;
-            else if (k == 3) dp[k] = sp[3];               /* LFE 直通还原 */
-            else             dp[k] = (k == 2 ? l : r) * kMxUpmixSurround;
+
+        if (ch == 2) {
+            dp[0] = l;
+            dp[1] = r;
+            continue;
+        }
+
+        if (ch == 4) {
+            // Quad 4.0
+            dp[0] = l;
+            dp[1] = r;
+            dp[2] = l * kMxSqrtHalf; // BL 严格回填 L
+            dp[3] = r * kMxSqrtHalf; // BR 严格回填 R
+        } else {
+            // 5.1 / 7.1
+            dp[0] = l;
+            dp[1] = r;
+            if (ch > 2) {
+                dp[2] = (l + r) * 0.5f * kMxSqrtHalf; // Center: 居中单声道和
+            }
+            if (ch > 3) {
+                dp[3] = sp[3];                        // LFE: 逐样本 100% bit-exact 直通还原
+            }
+            if (ch >= 6) {
+                dp[4] = l * kMxSqrtHalf;              // SL: 严格取 L
+                dp[5] = r * kMxSqrtHalf;              // SR: 严格取 R
+            }
+            if (ch >= 8) {
+                dp[6] = l * kMxSqrtHalf;              // BL: 严格取 L
+                dp[7] = r * kMxSqrtHalf;              // BR: 严格取 R
+            }
         }
     }
 }
 
+
+/* 多声道电子管模拟 (Category A: 按 tube_channels 独立 waveshaper) */
+void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || ch <= 0 || frames <= 0) return;
+    if (!h->p.tube_enable.load(std::memory_order_relaxed)) return;
+    const uint32_t mask = (uint32_t)h->p.tube_channels.load(std::memory_order_relaxed);
+    if ((mask & ((1u << ch) - 1u)) == 0) return;
+
+    const float gain_db = h->p.tube_gain.load(std::memory_order_relaxed);
+    const float pregain = powf(10.0f, gain_db * 0.05f);
+    const float postgain = 1.0f / (pregain > 1e-4f ? pregain : 1.0f);
+    const float mix = h->p.tube_mix.load(std::memory_order_relaxed);
+    const float comp_db = h->p.tube_compensation.load(std::memory_order_relaxed);
+    const float comp = powf(10.0f, comp_db * 0.05f);
+    const int style = (int)h->p.tube_style.load(std::memory_order_relaxed);
+
+    const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
+    for (int c = 0; c < max_c; ++c) {
+        if (!(mask & (1u << c))) continue;
+        for (int i = 0; i < frames; ++i) {
+            const float x = io[i * ch + c];
+            float drive = x * pregain;
+            float sat = drive;
+            if (style == 0) {
+                sat = drive > 0.0f ? tanhf(drive) : (drive / (1.0f - drive * 0.5f));
+            } else if (style == 1) {
+                sat = tanhf(drive * 1.2f) * 0.833f;
+            } else {
+                sat = drive - (drive * drive * drive) / 3.0f;
+                if (sat > 1.0f) sat = 1.0f;
+                else if (sat < -1.0f) sat = -1.0f;
+            }
+            float wet = sat * postgain * comp;
+            io[i * ch + c] = x * (1.0f - mix) + wet * mix;
+        }
+    }
+}
+
+
+/* 多声道输出限幅器 (Category A: 按 limiter_channels 独立动态压制) */
+void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || ch <= 0 || frames <= 0) return;
+    if (!h->p.limiter_enable.load(std::memory_order_relaxed)) return;
+    const uint32_t mask = (uint32_t)h->p.limiter_channels.load(std::memory_order_relaxed);
+    const int max_c = ch > kMxMaxChannels ? kMxMaxChannels : ch;
+    const float threshold = 1.0f; // 0 dBFS 极限阈值
+    const float relCoef = (float)exp(-1000.0 / (50.0 * (double)h->sample_rate)); // 50ms 释放时间常数
+
+    for (int c = 0; c < max_c; ++c) {
+        if (!(mask & (1u << c))) continue;
+        float env = h->mc_limiter_env[c];
+        for (int i = 0; i < frames; ++i) {
+            float s = io[i * ch + c];
+            float rect = fabsf(s);
+            if (rect < threshold) rect = threshold;
+            if (rect > env) env = rect;
+            else env = rect + relCoef * (env - rect);
+            float g = threshold / env;
+            io[i * ch + c] = s * g;
+        }
+        h->mc_limiter_env[c] = env;
+    }
+}
+
+
+/* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
+void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
+    if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
+
+    // 1. 全量拷贝至目标工作区，就地推进
+    memcpy(dst, src, (size_t)frames * ch * sizeof(float));
+
+    // 2. 前级 Category A 效果器（支持 8 声道独立按掩码处理）
+    if (h->p.gate_enable.load(std::memory_order_relaxed)) {
+        gate_process_mc(h, dst, frames, ch);
+    }
+    if (h->p.filter_enable.load(std::memory_order_relaxed)) {
+        filter_process_mc(h, dst, frames, ch);
+    }
+    if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
+        h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
+        shelf_process_mc(h, dst, frames, ch);
+    }
+    if (h->p.dyneq_enable.load(std::memory_order_relaxed)) {
+        dyneq_process_mc(h, dst, frames, ch);
+    }
+    if (h->p.tube_enable.load(std::memory_order_relaxed)) {
+        tube_process_mc(h, dst, frames, ch);
+    }
+
+    // 3. Category B 跨声道/声场效果器与前置 FL/FR vendor 核心（仅作用于前置立体声对，保持环绕声场完整性）
+    if (h->shelf_scratch && h->mx_stereo) {
+        for (int i = 0; i < frames; ++i) {
+            h->shelf_scratch[i * 2]     = dst[i * ch + 0];
+            h->shelf_scratch[i * 2 + 1] = dst[i * ch + 1];
+        }
+
+        if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
+            bassmono_process(h, h->shelf_scratch, frames);
+        }
+        if (h->p.bass_enable.load(std::memory_order_relaxed)) {
+            basspsycho_process(h, h->shelf_scratch, frames);
+        }
+
+        process_plugin_slots_stage(h, 0, h->shelf_scratch, frames);
+        process_plugin_slots_stage(h, 1, h->shelf_scratch, frames);
+
+        const int tube_saved = h->jdsp.tubeEnabled;
+        const int limiter_saved = h->jdsp.limiterEnabled;
+        h->jdsp.tubeEnabled = 0;
+        h->jdsp.limiterEnabled = 0;
+        h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, h->mx_stereo, (size_t)frames);
+        h->jdsp.tubeEnabled = tube_saved;
+        h->jdsp.limiterEnabled = limiter_saved;
+
+        process_plugin_slots_stage(h, 2, h->mx_stereo, frames);
+
+        if (h->p.haas_enable.load(std::memory_order_relaxed)) {
+            haas_process(h, h->mx_stereo, frames);
+        }
+        if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
+            spatial_process(h, h->mx_stereo, frames);
+        }
+        freeverb_process(h, h->mx_stereo, frames);
+
+        process_plugin_slots_stage(h, 3, h->mx_stereo, frames);
+
+        for (int i = 0; i < frames; ++i) {
+            dst[i * ch + 0] = h->mx_stereo[i * 2];
+            dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
+        }
+    }
+
+    // 4. 后级 Category A 效果器（支持 8 声道独立按掩码处理）
+    if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
+        exciter_process_mc(h, dst, frames, ch);
+    }
+    if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
+        loudness_process_mc(h, dst, frames, ch);
+    }
+    limiter_process_mc(h, dst, frames, ch);
+
+    // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位
+    const int total_samples = frames * ch;
+    for (int i = 0; i < total_samples; ++i) {
+        float s = dst[i];
+        if (std::isnan(s) || std::isinf(s)) {
+            dst[i] = 0.0f;
+        } else if (s > 10.0f) {
+            dst[i] = 10.0f;
+        } else if (s < -10.0f) {
+            dst[i] = -10.0f;
+        }
+    }
+}
+
+
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                                  int frames);
+
 
 
 static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const float* interleaved, int frames) {

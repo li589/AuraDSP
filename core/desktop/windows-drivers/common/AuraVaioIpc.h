@@ -60,6 +60,9 @@ Abstract:
 #define IOCTL_AURAVAIO_UNMAP_SHARED_RING \
     CTL_CODE(FILE_DEVICE_UNKNOWN, 0x803, METHOD_BUFFERED, FILE_ANY_ACCESS)
 
+#define IOCTL_AURAVAIO_GET_DEBUG_LOG \
+    CTL_CODE(FILE_DEVICE_UNKNOWN, 0x804, METHOD_BUFFERED, FILE_ANY_ACCESS)
+
 //=============================================================================
 // Data Structures
 //=============================================================================
@@ -133,6 +136,30 @@ typedef struct _AURA_VAIO_SHARED_HEADER {
     volatile ULONG      StreamState;            // 0=STOP, 1=ACQUIRE, 2=PAUSE, 3=RUN
     ULONG               Reserved[15];           // Future expansion
 } AURA_VAIO_SHARED_HEADER, *PAURA_VAIO_SHARED_HEADER;
+
+typedef struct _AURA_INTERSECTION_LOG_ENTRY {
+    ULONG   PinId;
+    ULONG   FormatSize;
+    ULONG   OutputBufferLength;
+    ULONG   Status;
+    ULONG   MyMaxChannels;
+    ULONG   MyMaxBits;
+    ULONG   MyMaxSampleRate;
+    GUID    MySubFormat;
+    GUID    MajorFormat;
+    GUID    SubFormat;
+    GUID    Specifier;
+    ULONG   ExtraChannels;
+    ULONG   ExtraBits;
+    ULONG   ExtraSampleRate;
+    ULONG   ExtraChannelMask;
+    GUID    ExtraSubFormat;
+} AURA_INTERSECTION_LOG_ENTRY, *PAURA_INTERSECTION_LOG_ENTRY;
+
+typedef struct _AURA_DEBUG_LOG {
+    ULONG                       Count;
+    AURA_INTERSECTION_LOG_ENTRY Entries[32];
+} AURA_DEBUG_LOG, *PAURA_DEBUG_LOG;
 
 #pragma pack(pop)
 
