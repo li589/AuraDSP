@@ -45,8 +45,8 @@ class _SpatialCard extends StatelessWidget {
                 param: ParamRegistry.spatialStyle,
                 model: model,
                 labels: [
-                  l.spatialStyleDolby,
-                  l.spatialStyleDts,
+                  l.spatialStyleCinema,
+                  l.spatialStyleImaging,
                   l.spatialStyleNeutral,
                 ],
               ),
@@ -54,7 +54,7 @@ class _SpatialCard extends StatelessWidget {
           ),
           const SizedBox(height: AuraSpace.sm),
 
-          // 商业级杜比 / 苹果风格极简物理声场渲染视效
+          // 极简物理声场渲染视效
           _SpatialStageView(
             width: model.spatialWidth,
             room: model.spatialRoom,
@@ -111,7 +111,7 @@ class _SpatialCard extends StatelessWidget {
   }
 }
 
-/// 商业级 Dolby Atmos / Apple Spatial 极简全景声学声场可视化
+/// 极简全景声学声场可视化
 class _SpatialStageView extends StatelessWidget {
   final double width;
   final double room;
@@ -187,7 +187,7 @@ class _SpatialStagePainter extends CustomPainter {
     // ── 1. Corner Labels ──
     final titleTp = TextPainter(
       text: TextSpan(
-        text: 'DOLBY 5.0 SOUNDSTAGE',
+        text: 'VIRTUAL 5.0 SOUNDSTAGE',
         style: monoOf(palette, size: 8, color: palette.textDim.withValues(alpha: 0.6))
             .copyWith(fontWeight: FontWeight.w600),
       ),

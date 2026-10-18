@@ -124,8 +124,8 @@ abstract class ParamDefaults {
   static const int haasSideRight = 0;        // 0=延迟右 1=延迟左
   static const int haasSideLeft = 1;
 
-  // 空间音效 L1（Dolby 房默认；style 切换会整体覆盖下面三个）
-  static const int spatialStyle = 0;         // 0=Dolby 房 1=DTS 2=中性
+  // 空间音效 L1（影院预设默认；style 切换会整体覆盖下面三个）
+  static const int spatialStyle = 0;         // 0=影院 1=定位 2=中性
   static const double spatialRoom = 0.7;     // [0,1]
   static const double spatialWidth = 1.0;    // [0.5,1.5]
   static const double spatialCenter = 0.8;  // [0,1]

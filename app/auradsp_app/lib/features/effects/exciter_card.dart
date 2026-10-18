@@ -3,7 +3,7 @@
 part of '../effects_page.dart';
 /* ---- 06C Exciter (激励器，最后一道音色工序) ----
  * HPF 取高频 + tanh 谐波混回。只暴露 amount/hifreq（drive 固定防刺耳）。
- * 文案禁用“杜比/母带级”等词。 */
+ * 文案禁用品牌名与“母带级”等夸大词。 */
 class _ExciterCard extends StatelessWidget {
   final AppModel model;
   const _ExciterCard({required this.model});

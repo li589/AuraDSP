@@ -68,7 +68,7 @@ DecodedWav? decodeWavFile(String path, {bool fold = true}) {
     }
   }
 
-  // Phase 2：多声道 Dolby 混缩（WAVE 声道序 L R C LFE LS RS；4 声道为
+  // Phase 2：多声道 5.1 混缩（WAVE 声道序 L R C LFE LS RS；4 声道为
   // L R LS RS；3 声道为 L R C）。叠加后钳位（热 5.1 允许削峰，不断尾）。
   // wantRaw 时原样搬运 Nch（供直通；fold 版仍由调用方另行解码）。
   const kC = 0.70710678;

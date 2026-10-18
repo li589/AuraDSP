@@ -1183,10 +1183,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialStyleInfo => '风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）';
 
   @override
-  String get spatialStyleDolby => 'Dolby 房';
+  String get spatialStyleCinema => '影院';
 
   @override
-  String get spatialStyleDts => 'DTS 定位';
+  String get spatialStyleImaging => '定位';
 
   @override
   String get spatialStyleNeutral => '中性';
