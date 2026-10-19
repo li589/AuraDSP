@@ -157,6 +157,34 @@ for b in range(30):
 check('mid-stream retune stable (no NaN/blowup)', not bad)
 set_i('freeverb.enable', 0)
 
+# 5. reverb.preset 越界必须拒绝（审查报告 S-x：越界曾落到 switch default，
+#    comb/delay size=0 → 下一块 (pos+1)%size 整数模零 SIGFPE；
+#    VM/AIDL/预设恢复均可触达）。边界 -2/18 应接受，19/100/INT32_MIN/-3 拒收。
+E_PARAM = -1
+check('preset boundary -2 accepted', set_i('reverb.preset', -2) == 0)
+check('preset boundary 18 accepted', set_i('reverb.preset', 18) == 0)
+for bad_v in (19, 100, -2147483648, -3):
+    check('preset %d rejected (E_PARAM)' % bad_v,
+          set_i('reverb.preset', bad_v) == E_PARAM)
+# 拒绝后引擎必须存活：合法值可写、process 无 NaN
+check('preset 0 ok after rejects', set_i('reverb.preset', 0) == 0)
+set_i('freeverb.enable', 1)
+buf = (ctypes.c_float * (BLOCK * 2))()
+out = (ctypes.c_float * (BLOCK * 2))()
+bad = False
+for b in range(8):
+    for i in range(BLOCK):
+        buf[i * 2] = 0.2 * math.sin(b * 0.3 + i * 0.05)
+        buf[i * 2 + 1] = buf[i * 2]
+    dll.auradsp_process(h, buf, out, BLOCK)
+    for i in range(BLOCK * 2):
+        v = out[i]
+        if v != v or abs(v) > 10.0:
+            bad = True
+            break
+check('engine alive after preset rejects (no NaN)', not bad)
+set_i('freeverb.enable', 0)
+
 dll.auradsp_destroy(h)
 
 print()
