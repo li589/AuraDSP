@@ -2,8 +2,9 @@
  * 位置：haas 后 / exciter 前（空间族最后一道音色工序之前）。
  * 参考：docs/10-架构/空间音效升级方案-2026-10-18.md
  *   5.0 虚拟扬声器（L-30/C0/R+30/LS-110/RS+110）→ 每源 ITD（Woodworth）
- *   + ILD（头影低通/远耳增益）+ 每源/每耳方向 pinna → 早期反射（8 tap 对称）
- *   → B3b 双耳全通扩散（左右不同延迟）→ 输出增益 / 干湿比 / autogain。
+ *   + ILD（头影低通/远耳增益）+ 每源/每耳方向 pinna → B3c 矩形房间镜像源
+ *   早期反射（2 阶）→ B3b 双耳全通扩散（左右不同延迟）
+ *   → 输出增益 / 干湿比 / autogain。
  * 输入：立体声上混（L→L/LS，R→R/RS，C 取中置和；v1 不做 5.1 分离）。
  * RT：全部固定数组预分配；音频线程零分配/零锁/无 IO。
  * 头跟踪：spatial.headazim 始终作为手动/外部朝向消费；DSP 只做块级平滑。
@@ -19,11 +20,7 @@ namespace {
 constexpr int kItdLen = auradsp_handle_s::kSpatItdLen;
 constexpr int kHistLen = auradsp_handle_s::kSpatHistLen;
 constexpr float kSpatDeg[5] = {-30.0f, 0.0f, 30.0f, -110.0f, 110.0f};
-// 早期反射 tap（ms）L/R 交替；8 tap 严格配对，保证 mono 下左右能量相等
-constexpr float kSpatTapMs[8] =
-    {5.5f, 9.0f, 14.0f, 21.0f, 30.0f, 42.0f, 55.0f, 68.0f};
-constexpr float kSpatTapG[8] =
-    {0.250f, -0.250f, 0.180f, -0.180f, 0.120f, -0.120f, 0.070f, -0.070f};
+constexpr int kSpatImgMax = 12;        // B3c 镜像源上限（1 阶 4 + 2 阶 8）
 constexpr float kSpatHeadR = 0.0875f;  // 头半径（m）
 constexpr float kSpatSoundC = 343.0f;  // 声速（m/s）
 constexpr float kPiF = 3.14159265358979f;
@@ -190,6 +187,73 @@ static inline void spat_decorrelate(auradsp_handle h, float fs,
     }
 }
 
+/* ---- B3c：矩形房间镜像源早期反射 -----------------------------------------
+ * 2 阶 shoebox：虚拟声源置于听者正前 dSrc（反射总线为 mono send，单源
+ * 近似；逐源镜像留待 HRIR/对象阶段），镜像到 ±x/±y 墙（1 阶）及
+ * 二次像（同轴 + 对角，2 阶）。每块由 room（房间尺寸 + 墙面反射率）与
+ * head（头朝向）解出 tap 列表：延迟 = 镜像源距离 / 声速；方位经头旋转后
+ * 用连续头影（near/far）给出左右耳增益。
+ * 与直达声共用同一坐标系与 history 延迟线；room=0 时无反射。
+ * 镜像 x 严格对称 → head=0 时左右耳能量对等（mono 兼容）。 */
+struct SpatTap {
+    int off;     // history 回看样本数
+    float gL, gR;  // 已含距离衰减 / 反射率 / 头影的左右耳增益
+};
+
+static int spat_image_taps(float fs, float room, float head,
+                           SpatTap* taps, int cap) {
+    if (room <= 0.0005f || cap <= 0) return 0;
+    const float hx = 0.8f + 1.7f * room;   // 房间半宽（m）
+    const float hy = 1.2f + 2.3f * room;   // 房间半深（m）
+    const float ey = 1.5f;                 // 虚拟声源前向距离（m）
+    const float refl = 0.5f + 0.4f * room; // 墙面反射率
+    const float roomG = room;              // room=0 时整体静音
+
+    float ix[kSpatImgMax];
+    float iy[kSpatImgMax];
+    int ord[kSpatImgMax];
+    int n = 0;
+    // 1 阶：左右墙、前后墙
+    ix[n] = 2.0f * hx;  iy[n] = ey;  ord[n++] = 1;
+    ix[n] = -2.0f * hx; iy[n] = ey;  ord[n++] = 1;
+    ix[n] = 0.0f; iy[n] = 2.0f * hy - ey;  ord[n++] = 1;
+    ix[n] = 0.0f; iy[n] = -2.0f * hy - ey; ord[n++] = 1;
+    // 2 阶同轴
+    ix[n] = 4.0f * hx;  iy[n] = ey;  ord[n++] = 2;
+    ix[n] = -4.0f * hx; iy[n] = ey;  ord[n++] = 2;
+    ix[n] = 0.0f; iy[n] = 4.0f * hy - ey;  ord[n++] = 2;
+    ix[n] = 0.0f; iy[n] = -4.0f * hy - ey; ord[n++] = 2;
+    // 2 阶对角
+    for (int sx = -1; sx <= 1; sx += 2) {
+        for (int sy = -1; sy <= 1; sy += 2) {
+            ix[n] = (float)sx * 2.0f * hx;
+            iy[n] = (float)sy * (2.0f * hy - ey);
+            ord[n++] = 2;
+        }
+    }
+
+    int m = 0;
+    for (int k = 0; k < n && m < cap; ++k) {
+        const float dist = sqrtf(ix[k] * ix[k] + iy[k] * iy[k]);
+        int off = (int)(dist / kSpatSoundC * fs + 0.5f);
+        if (off < 1) off = 1;
+        if (off >= kHistLen) off = kHistLen - 1;
+        const float az = spat_wrap_deg(
+            atan2f(ix[k], iy[k]) * 180.0f / kPiF - head);
+        const float s = sinf(az * kPiF / 180.0f);
+        float gl = 1.0f, gr = 1.0f;
+        if (s > 0.0f) gl = 1.0f - 0.5f * s;   // 声源偏右 → 右近左远
+        else gr = 1.0f - 0.5f * (-s);
+        const float rp = (ord[k] >= 2) ? refl * refl : refl;
+        const float g = roomG * rp / (dist < 0.5f ? 0.5f : dist);
+        taps[m].off = off;
+        taps[m].gL = g * gl;
+        taps[m].gR = g * gr;
+        ++m;
+    }
+    return m;
+}
+
 /* 控制线程/开关切换时调用：清空全部 RT 状态，避免残留瞬态。
  * 不在音频线程调用。 */
 void spatial_reset(auradsp_handle h) {
@@ -307,7 +371,8 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
     spat_peaking(fs, 12500.0f, 2.0f, -3.0f,
                  &rb0[1], &rb1[1], &rb2[1], &ra1[1], &ra2[1]);
 
-    const float tscale = 0.5f + 1.5f * room;
+    SpatTap rtaps[kSpatImgMax];
+    const int nTaps = spat_image_taps(fs, room, head, rtaps, kSpatImgMax);
     const float outG = powf(10.0f, spat_clampf(outgDb, -12.0f, 6.0f) * 0.05f);
 
     double rin = 0.0;
@@ -408,19 +473,15 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
             h->spat_ring_pos[s] = pos;
         }
 
-        // 早期反射（mono 下混历史；8 tap ±配对）
+        // B3c 镜像源早期反射（mono 下混历史；tap 由房间几何逐块解出）
         float eL = 0.0f, eR = 0.0f;
         h->spat_hist[h->spat_hist_pos] = 0.5f * (inL + inR);
-        if (room > 0.001f) {
-            for (int t = 0; t < 8; ++t) {
-                int off = (int)(kSpatTapMs[t] * tscale * fs / 1000.0f);
-                if (off >= kHistLen) off = kHistLen - 1;
-                if (off < 0) off = 0;
-                int rp = h->spat_hist_pos - off;
-                rp %= kHistLen; if (rp < 0) rp += kHistLen;
-                const float te = h->spat_hist[rp] * kSpatTapG[t] * room;
-                if ((t & 1) == 0) eL += te; else eR += te;
-            }
+        for (int t = 0; t < nTaps; ++t) {
+            int rp = h->spat_hist_pos - rtaps[t].off;
+            rp %= kHistLen; if (rp < 0) rp += kHistLen;
+            const float v = h->spat_hist[rp];
+            eL += v * rtaps[t].gL;
+            eR += v * rtaps[t].gR;
         }
         if (++h->spat_hist_pos >= kHistLen) h->spat_hist_pos = 0;
 
@@ -570,7 +631,8 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
     spat_peaking(fs, 12500.0f, 2.0f, -3.0f,
                  &rb0[1], &rb1[1], &rb2[1], &ra1[1], &ra2[1]);
 
-    const float tscale = 0.5f + 1.5f * room;
+    SpatTap rtaps[kSpatImgMax];
+    const int nTaps = spat_image_taps(fs, room, head, rtaps, kSpatImgMax);
     const float outG = powf(10.0f, spat_clampf(outgDb, -12.0f, 6.0f) * 0.05f);
     const float lfeA = 1.0f - expf(-2.0f * kPiF * 120.0f / fs);
     const float cGain = 0.5f + 0.5f * center;
@@ -682,16 +744,12 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
 
         float eL = 0.0f, eR = 0.0f;
         h->spat_hist[h->spat_hist_pos] = monoSend;
-        if (room > 0.001f) {
-            for (int t = 0; t < 8; ++t) {
-                int off = (int)(kSpatTapMs[t] * tscale * fs / 1000.0f);
-                if (off >= kHistLen) off = kHistLen - 1;
-                if (off < 0) off = 0;
-                int rp = h->spat_hist_pos - off;
-                rp %= kHistLen; if (rp < 0) rp += kHistLen;
-                const float te = h->spat_hist[rp] * kSpatTapG[t] * room;
-                if ((t & 1) == 0) eL += te; else eR += te;
-            }
+        for (int t = 0; t < nTaps; ++t) {
+            int rp = h->spat_hist_pos - rtaps[t].off;
+            rp %= kHistLen; if (rp < 0) rp += kHistLen;
+            const float v = h->spat_hist[rp];
+            eL += v * rtaps[t].gL;
+            eR += v * rtaps[t].gR;
         }
         if (++h->spat_hist_pos >= kHistLen) h->spat_hist_pos = 0;
         eL = spat_bq(h->spat_pinna[0][0], rb0[0], rb1[0], rb2[0],

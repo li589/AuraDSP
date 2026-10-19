@@ -51,14 +51,14 @@ def f32(v):
     return ctypes.c_float(v)
 
 
-def make(ch, binaural=1, head=0.0, mix=1.0, mode=0, autogain=0):
+def make(ch, binaural=1, head=0.0, mix=1.0, mode=0, autogain=0, room=0.0):
     h = dll.auradsp_create(SR, BLOCK)
     assert h, 'create failed'
     dll.auradsp_set_param(h, b'channels.count', ctypes.byref(i32(ch)), 4)
     dll.auradsp_set_param(h, b'channels.mode', ctypes.byref(i32(mode)), 4)
     dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
     dll.auradsp_set_param(h, b'spatial.binaural', ctypes.byref(i32(binaural)), 4)
-    dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32(0.0)), 4)
+    dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32(room)), 4)
     dll.auradsp_set_param(h, b'spatial.mix', ctypes.byref(f32(mix)), 4)
     dll.auradsp_set_param(h, b'spatial.headazim', ctypes.byref(f32(head)), 4)
     dll.auradsp_set_param(h, b'spatial.autogain', ctypes.byref(i32(autogain)), 4)
@@ -135,6 +135,31 @@ check('4ch quad back-left finite', quad[0] > 0.001 and quad[0] == quad[0])
 ag = run_channel(6, 4, autogain=1)
 check('binaural autogain finite/bounded',
       all(v == v and v < 10.0 for v in ag), str(ag))
+
+# 7. B3c 镜像源反射在 binaural 总线同样生效：脉冲 IR 在 3ms 后的尾部
+# 随 room 增长（稳态正弦会与延迟反射相干，不适合做能量断言）。
+def binaural_tail(room, blocks=20, skip_ms=3.0):
+    h = make(6, room=room)
+    L, R = [], []
+    for b in range(blocks):
+        bi = (ctypes.c_float * (BLOCK * 6))()
+        bo = (ctypes.c_float * (BLOCK * 6))()
+        if b == 0:
+            bi[4] = 1.0
+        dll.auradsp_process(h, bi, bo, BLOCK)
+        for i in range(BLOCK):
+            L.append(bo[i * 6])
+            R.append(bo[i * 6 + 1])
+    dll.auradsp_destroy(h)
+    a = int(skip_ms * SR / 1000.0)
+    return sum(x * x for x in L[a:]) + sum(y * y for y in R[a:])
+
+
+bt0 = binaural_tail(0.0)
+bt7 = binaural_tail(0.7)
+check('binaural B3c reflections add IR tail',
+      bt7 > 1e-3 and bt7 > 5.0 * max(bt0, 1e-12),
+      'tail0=%.3e tail07=%.3e' % (bt0, bt7))
 
 print('\n' + ('SPATIAL BINAURAL FAILURES: ' + str(FAIL) if FAIL
              else 'spatial binaural: all checks passed'))
