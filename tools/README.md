@@ -22,6 +22,8 @@
 | `bin/abi_consistency.py` | .def/engine.h/ffi.dart 45 符号一致性（`smoke_abi_consistency.py` 调它） |
 | `bin/rebuild_plugin_cache.py` | 用引擎真实扫描结果重建 `%APPDATA%\AuraDSP\plugins\plugin_cache.json` |
 | `bin/fix_docs_links.py` | docs 搬迁后改链（P0 沉淀，可复用） |
+| `bin/scan_engine_strings.py` | 引擎内置字符串/预设数值扫描器（参数表/默认值/混响/kLat/字面量分类，缓存产 `tools/archive/_scan_cache.json`） |
+| `bin/gen_report.py` | 由扫描缓存生成《引擎内置字符串与预设数值扫描汇报》（头部带 git 锚点；报告已存在须 `--force` 才覆写） |
 
 ## 2. 引擎诊断探针（`probe/`，C++ / ctypes，只读不改引擎）
 
