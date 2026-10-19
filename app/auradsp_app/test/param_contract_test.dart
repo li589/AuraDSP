@@ -1038,10 +1038,16 @@ void main() {
             reason: '别名探针 ${e.group(1)} 的目标 $missing 不在引擎 kSupported');
       }
 
-      // 结构性不可测组件（haas 纯延迟线 / spatial 探针失明）只允许标称
-      // 刷新档（hasLatencyRefresh），不得混入真探针集冒充实测。
-      expect(dartSet.intersection(const {'haas', 'spatial'}), isEmpty,
-          reason: 'haas/spatial 探针结构性失明，只能走标称刷新档');
+      // 2026-10-19：haas/spatial 探针升级为「逐声道首非零取最大」，已可如实
+      // 测量（haas 测当前延迟、spatial 测 0ms 诚实链延迟）——不再是
+      // 「结构性不可测」，必须出现在引擎 kSupported 与 Dart 真探针集中，
+      // 否则 ↻ 按钮显示却引擎返回 -1 就是假接通。
+      for (final c in const {'haas', 'spatial'}) {
+        expect(engineSupported.contains(c), isTrue,
+            reason: '引擎 kSupported 缺失 $c（探针升级后必须可测）');
+        expect(dartSet.contains(c), isTrue,
+            reason: 'Dart 探针集缺失 $c');
+      }
     });
   });
 }

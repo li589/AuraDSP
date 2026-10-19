@@ -94,27 +94,33 @@ void main() {
       expect(AppModel.hasLatencyRefresh('bass_shaping'), isTrue);
       expect(AppModel.hasLatencyRefresh('haas'), isTrue);
       expect(AppModel.hasLatencyRefresh('spatial'), isTrue);
-      // haas/spatial 只走标称刷新档（引擎探针结构性失明）
-      expect(AppModel.isLatencyProbeSupported('haas'), isFalse);
-      expect(AppModel.isLatencyProbeSupported('spatial'), isFalse);
+      // 2026-10-19 探针升级：haas/spatial 已入引擎 kSupported（逐声道首非零
+      // 取最大），不再是「结构性不可测」——必须走真探针而非标称刷新档。
+      expect(AppModel.isLatencyProbeSupported('haas'), isTrue);
+      expect(AppModel.isLatencyProbeSupported('spatial'), isTrue);
       // 低音塑形走别名真探针：引擎实名 shelf + bassmono（均受支持）
       expect(AppModel.kLatencyProbeAliases['bass_shaping'],
           ['shelf', 'bassmono']);
     });
 
-    test('标称刷新档：tick 前进 + 不写 _measuredLatencyMs（不冒充实测）', () {
+    test('haas/spatial 走真探针档：tick 前进 + 实测真实值（不再冒充标称）', () async {
       final m = AppModel(testing: true);
-      m.setHaasEnabled(true); // 估算值仅在组件开启时展示（componentLatency 口径）
+      m.setHaasEnabled(true);
       final haasTick0 = m.getComponentLatencyTick('haas');
       final spTick0 = m.getComponentLatencyTick('spatial');
-      m.refreshComponentLatency('haas');
-      m.refreshComponentLatency('spatial');
+      await m.refreshComponentLatency('haas');
+      await m.refreshComponentLatency('spatial');
       expect(m.getComponentLatencyTick('haas'), greaterThan(haasTick0));
       expect(m.getComponentLatencyTick('spatial'), greaterThan(spTick0));
-      expect(m.isProbingLatency('haas'), isFalse,
-          reason: '标称刷新档同步完成，不进入探测占用态');
-      expect(m.componentLatency('haas').measured, isFalse);
-      expect(m.componentLatency('haas').estimated, isTrue);
+      // 测试环境可加载真实 DLL：haas 按当前延迟（默认 12ms）实测出 576 样本
+      // （@48k → 12.0ms）；spatial 诚实测出 0ms（链上无前瞻）。二者都不再
+      // 走「≈标称」估算档。
+      expect(m.componentLatency('haas').measured, isTrue,
+          reason: 'haas 应走真探针实测');
+      expect(m.componentLatency('haas').ms, closeTo(12.0, 0.5));
+      expect(m.componentLatency('spatial').measured, isTrue,
+          reason: 'spatial 应走真探针实测');
+      expect(m.componentLatency('spatial').ms, closeTo(0.0, 0.1));
     });
   });
 }

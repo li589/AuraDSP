@@ -684,6 +684,15 @@ final class AuraDspLib {
               int Function(Pointer<Utf8>, Pointer<Utf8>, double,
                   Pointer<Uint32>)>();
 
+  /// 带「当前配置」实测：arg 仅 haas 使用——传入用户当前的 haas.delay（ms），
+  /// 使实测值等于引擎 compute_latency 动态上报口径；其它组件忽略 arg。
+  late final int Function(Pointer<Utf8>, double, double, Pointer<Uint32>)
+      probeComponentCurrent = dylib
+          .lookup<NativeFunction<Int32 Function(Pointer<Utf8>, Double, Double,
+              Pointer<Uint32>)>>('auradsp_probe_component_current')
+          .asFunction<
+              int Function(Pointer<Utf8>, double, double, Pointer<Uint32>)>();
+
   /// C2：EQ 实际频率响应实测。curve 用 eq.curve 同格式（"f:g;f:g;..."）。
   ///
   /// **不接收 handle**，引擎内部自建私有 jdsp 实例 —— 复用调用方的会和音频

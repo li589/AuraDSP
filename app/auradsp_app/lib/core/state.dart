@@ -5124,53 +5124,31 @@ void fillEqQ(double q) {
   /// 该组件当前可显示的延迟，带**来源**三态。
   ///
   /// - [measured]  = true：来自真实脉冲响应实测（引擎 auradsp_probe_component）。
-  /// - [estimated] = true：来自标称表/解析推算，**不是**测出来的。UI 必须以
-  ///   「≈」前缀 + 差异化配色展示，不能与实测混为一谈——旧实现把这两类都塞进
-  ///   `measured:false`，徽标于是显示「未测量」，把已知的估算值白白丢掉。
+  /// - [estimated] = true：来自**实时计算**（目前仅 convolver 的 IR 长度换算，
+  ///   是精确数学而非预设常数）。2026-10-19 起不再有任何「预设延迟数值」：
+  ///   comp/haas/spatial/arbmag/ddc 的硬编码标称已全部删除，改为 ↻ 实测
+  ///   （haas/spatial 探针本轮已支持）。
   /// - 两者皆 false：真的没有可用数值，UI 显示「未测量」。
-  ///
-  /// 标称值必须与引擎 `compute_latency`（engine/chain/engine_chain.cpp 顶部
-  /// 的 kLat* 表）保持一致，否则卡片读数与总延迟口径会互相矛盾。
   ({double ms, bool measured, bool estimated}) componentLatency(String compId) {
     final m = _measuredLatencyMs[compId];
     if (m != null) return (ms: m, measured: true, estimated: false);
     // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
+    // （convFrames/deviceRate 实时计算，非预设常数）。
     if (compId == 'convolver' && convEnabled && convReady &&
         convFrames > 0 && deviceRate > 0) {
       return (ms: (convFrames / deviceRate) * 1000.0, measured: false, estimated: true);
-    }
-    if (compId == 'comp' && compOn) {
-      return (ms: 85.0, measured: false, estimated: true);
-    }
-    // Haas = 纯延迟线，按当前设定值标称（引擎 compute_latency 同值动态上报）。
-    if (compId == 'haas' && haasOn) {
-      return (ms: haasDelayMs, measured: false, estimated: true);
-    }
-    // 空间音效 = 直达径 ITD 名义 1ms（kLatSpatial；反射/混响尾是并行能量不计入）。
-    // 探针结构性失明（亚毫秒直达 + 并行反射），与 haas 同 posture：只标称不测。
-    if (compId == 'spatial' && spatialOn) {
-      return (ms: 1.0, measured: false, estimated: true);
-    }
-    if (compId == 'arbmag' && arbmagOn && arbmagReady) {
-      return (ms: 2.67, measured: false, estimated: true);
-    }
-    // VDC：二阶节链按样本处理，标称 6ms（kLatDdc）。已加载时优先等实测。
-    if (compId == 'ddc' && ddcOn && ddcReady) {
-      return (ms: 6.0, measured: false, estimated: true);
-    }
-    if (compId == 'bass_shaping' && bassShapingOn) {
-      return (ms: 0.0, measured: false, estimated: true);
     }
     return (ms: 0.0, measured: false, estimated: false);
   }
 
   void _onComponentLatencyResult(String comp, int rc, int samples) {
     _probing.remove(comp);
-    if (rc == 0) {
+    // deviceRate 守卫：采样率未知/为 0 时 samples/deviceRate → NaN/Inf，
+    // 会把徽标刷成 "NaN ms"（历史事故）。此时与失败同处理——清除旧值，
+    // 卡片 Badge 静默保持「未测量」与 Tooltip 说明。
+    if (rc == 0 && deviceRate > 0) {
       _measuredLatencyMs[comp] = samples / deviceRate * 1000.0;
     } else {
-      // 测量失败时不强行弹窗骚扰用户，清除旧测量值，在卡片上的 Badge
-      // 静默保持「未测量」与 Tooltip 说明即可。
       _measuredLatencyMs.remove(comp);
     }
     notifyListeners();
@@ -5185,12 +5163,11 @@ void fillEqQ(double q) {
   /// 明确不支持这两者（haas 探针结构性失明，必测出 0ms；bass_shaping 在引擎
   /// 侧的探针名是 shelf，无此 id）。伪造「实测」比报「不可测」更危险，
   /// 现统一由 componentLatency 的 ≈ 标称态如实展示。
-  void refreshComponentLatency(String compId) async {
+  Future<void> refreshComponentLatency(String compId) async {
     if (_probing.contains(compId)) return;
 
-    // 档位 3：结构性不可测（haas 纯延迟线 / spatial 探针失明）——
-    // ↻ 语义 = 刷新标称显示（脉冲动效 + componentLatency 重算估算值）。
-    // 绝不写 _measuredLatencyMs：伪造"实测"比报"不可测"更危险。
+    // 2026-10-19：haas / spatial 探针已支持，全部组件均可真实测——「三档
+    // 口径」的档位 3（结构性不可测）已不存在，全部走引擎脉冲实测。
     if (!isLatencyProbeSupported(compId) &&
         !kLatencyProbeAliases.containsKey(compId)) {
       _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
@@ -5202,11 +5179,16 @@ void fillEqQ(double q) {
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
 
-    // 档位 2：别名探针——合并卡映射到引擎实名，逐段实测求和。
+    // 别名探针——合并卡映射到引擎实名，逐段实测求和。
     final alias = kLatencyProbeAliases[compId];
     final res = latencyProbeResource(compId) ?? '';
     final rate = info?.deviceRate.toDouble() ?? 48000.0;
     final enginePath = AuraDspLib.loadedPath;
+    // haas 是纯延迟线，其"算法延迟"= 用户当前设定值。把 live 值传给引擎
+    // 的 auradsp_probe_component_current，测出的才是当前口径——否则引擎
+    // 会用出厂默认 12ms，与 compute_latency 动态上报脱节。
+    final isHaas = compId == 'haas';
+    final haasArg = haasDelayMs;
 
     try {
       final result = await Isolate.run(() {
@@ -5217,7 +5199,9 @@ void fillEqQ(double q) {
           try {
             out.value = 0;
             int rc;
-            if (res.isEmpty) {
+            if (name == 'haas' && isHaas) {
+              rc = l.probeComponentCurrent(compPtr, haasArg, rate, out);
+            } else if (res.isEmpty) {
               rc = l.probeComponent(compPtr, rate, out);
             } else {
               final p = res.toNativeUtf8();
@@ -5278,12 +5262,15 @@ void fillEqQ(double q) {
   /// 现集合 = 引擎 kSupported 中有卡片的部分 + 两个资源型组件
   /// （convolver / ddc：资源已加载时可测，未加载时如实报「未测量」）。
   /// param_contract_test Part G 以引擎源文件断言该集合不得越界。
+  /// 2026-10-19：haas / spatial 入列——引擎探针改逐声道首非零取最大后
+  /// 两者均可如实测量（haas 测当前延迟、spatial 测 0ms 诚实链延迟）。
   static bool isLatencyProbeSupported(String compId) =>
       const {
         'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post',
         'comp', 'exciter', 'stereo', 'arbmag',
         'dyneq', 'filter', 'gate', 'loudness',
         'convolver', 'ddc',
+        'haas', 'spatial',
       }.contains(compId);
 
   /// 探针别名：卡片 compId → 引擎 probe_is_supported 实名列表。
@@ -5297,18 +5284,12 @@ void fillEqQ(double q) {
     'bass_shaping': ['shelf', 'bassmono'],
   };
 
-  /// 该组件是否显示 ↻ 刷新按钮（三档口径，配合 refreshComponentLatency）：
-  /// 1. 引擎真探针（isLatencyProbeSupported）——实测脉冲；
-  /// 2. 别名探针（kLatencyProbeAliases）——映射到引擎实名实测求和；
-  /// 3. 结构性不可测但有标称值（haas 纯延迟线 / spatial 探针失明）——
-  ///    ↻ = 刷新标称显示（脉冲动效 + 重算估算值），绝不冒充实测。
-  /// 2026-10-19：上一轮把 haas/bass_shaping/spatial 的 ↻ 一并摘掉后
-  /// 用户反馈"点不动"——按钮存在但永远禁用同样是不诚实 UI。现在
-  /// 每张卡的 ↻ 都有明确语义：能实测就实测，不能实测就刷新标称。
+  /// 该组件是否显示 ↻ 刷新按钮。
+  /// 2026-10-19：haas/spatial 探针已支持后，全部卡片都是真探针或别名探针
+  /// ——三档口径收敛为两档，不再有「只刷新标称」的档位。
   static bool hasLatencyRefresh(String compId) =>
       isLatencyProbeSupported(compId) ||
-      kLatencyProbeAliases.containsKey(compId) ||
-      const {'haas', 'spatial'}.contains(compId);
+      kLatencyProbeAliases.containsKey(compId);
 
   /// 探测进行中
   bool isProbingLatency(String compId) => _probing.contains(compId);
