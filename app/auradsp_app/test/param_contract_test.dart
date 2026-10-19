@@ -1134,4 +1134,179 @@ gate.hold / limiter.release / gr.dyneq.b1..b3），引擎表已标 deprecated。
 ${hits.join('\n')}''');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // Part J：kLat 延迟表契约（B-4 / 计划 §5.3；未决清单 C4 已"删表改实测"，
+  // 本部分改为形态 + 防回退镜像守卫）
+  // ---------------------------------------------------------------------------
+  group('Part J kLat 延迟表契约', () {
+    test('引擎 kLat* 8 条形态（stages>=0 且 ms>0）', () {
+      final src = _read('engine/engine_internal.h');
+      final re = RegExp(r'kLat(\w+)\s*\{\s*(\d+),\s*([\d.]+)f?\s*\}');
+      final rows = re.allMatches(src).map((m) => (
+            name: m.group(1)!,
+            stages: int.parse(m.group(2)!),
+            ms: double.parse(m.group(3)!),
+          )).toList();
+      expect(rows.length, 8, reason: '引擎 kLat 表条目数应为 8');
+      for (final r in rows) {
+        expect(r.stages, greaterThanOrEqualTo(0));
+        expect(r.ms, greaterThan(0), reason: 'kLat${r.name} ms 应>0');
+      }
+    });
+
+    test('Dart 无 kLat 硬编码镜像（防回退"两张皮"；C4 已删表改实测）', () {
+      final libHits = <String>[];
+      final libDir = _locateLibDir();
+      final engineBoundary = '${Platform.pathSeparator}engine${Platform.pathSeparator}';
+      for (final f in libDir.listSync(recursive: true).whereType<File>()
+          .where((f) => f.path.endsWith('.dart')
+              && !f.path.contains(engineBoundary))) {
+        for (final n in f.readAsLinesSync()) {
+          if (RegExp(r'kLat[A-Z]\w*').hasMatch(n)) {  // kLatComp 等；排除 kLatencyProbeAliases
+            libHits.add('${f.path.replaceFirst(libDir.path, 'lib')}: ${n.trim()}');
+          }
+        }
+      }
+      expect(libHits, isEmpty,
+          reason: 'lib/ 出现 kLat 硬编码镜像（延迟须实测，见未决清单 C4）\n'
+              '${libHits.join('\n')}');
+      final stateSrc = _read('app/auradsp_app/lib/core/state.dart');
+      final sig = stateSrc.indexOf('componentLatency(String compId)');
+      final end = stateSrc.indexOf('void _onComponentLatencyResult');
+      expect(sig, isNot(-1));
+      expect(end, greaterThan(sig));
+      final body = stateSrc.substring(sig, end);
+      for (final stale in const ['85.0', '2.67']) {
+        expect(body.contains(stale), isFalse,
+            reason: 'componentLatency 出现旧硬编码延迟标称 $stale（须实测，C4）');
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Part K：参数默认 ∈ 范围契约（B-4 / 扫描汇报 B3 固化）
+  // ---------------------------------------------------------------------------
+  group('Part K 参数默认 ∈ 范围契约', () {
+    test('有界参数默认全部落 [min,max]；comp 数组 14 条登记为设计预期', () {
+      final table = _read('engine/engine_param_table.h');
+      final internal = _read('engine/engine_internal.h');
+
+      double fnum(String s) {
+        var t = s.trim();
+        if (t.endsWith('f')) t = t.substring(0, t.length - 1);
+        if (t.toLowerCase().startsWith('0x')) {
+          return int.parse(t.substring(2), radix: 16).toDouble();
+        }
+        return double.parse(t);
+      }
+
+      final rows = <({String id, String member, double min, double max})>[];
+      final floatInt = RegExp(
+          r'PARAM_(FLOAT|INT)\("([^"]+)",\s*(\w+(?:\[\d+\])?),\s*(-?\d+(?:\.\d+)?)f?,\s*(-?\d+(?:\.\d+)?)f?,');
+      final boolRe = RegExp(r'PARAM_BOOL\("([^"]+)",\s*(\w+),');
+      for (final m in floatInt.allMatches(table)) {
+        rows.add((id: m.group(2)!, member: m.group(3)!,
+            min: fnum(m.group(4)!), max: fnum(m.group(5)!)));
+      }
+      for (final m in boolRe.allMatches(table)) {
+        rows.add((id: m.group(1)!, member: m.group(2)!, min: 0, max: 1));
+      }
+
+      final defRe = RegExp(r'std::atomic<\w+>\s+(\w+)\{([^}]*)\}');
+      final defaults = <String, double>{};
+      for (final m in defRe.allMatches(internal)) {
+        final member = m.group(1)!;
+        if (member.contains('[')) continue; // 数组无聚合默认
+        final val = m.group(2)!.trim();
+        // 非数值默认（如 state{AURADSP_STATE_BYPASS} 内部哨兵）不参与范围校验
+        if (!RegExp(r'^-?(?:\d+(?:\.\d+)?|0x[0-9A-Fa-f]+)f?$').hasMatch(val)) {
+          continue;
+        }
+        defaults[member] = fnum(val);
+      }
+
+      final outOfRange = <String>[];
+      final missing = <String>[];
+      var checked = 0;
+      for (final r in rows) {
+        final dv = defaults[r.member];
+        if (dv == null) {
+          missing.add(r.id);
+          continue;
+        }
+        checked++;
+        if (dv < r.min || dv > r.max) {
+          outOfRange.add('${r.id} 默认 $dv ∉ [${r.min}, ${r.max}]');
+        }
+      }
+      expect(checked, greaterThanOrEqualTo(159),
+          reason: '有界参数检查数 <159（解析可能漏行）');
+      expect(outOfRange, isEmpty, reason: '默认超界：\n${outOfRange.join('\n')}');
+      expect(missing.toSet(), {
+        'comp.freq1', 'comp.freq2', 'comp.freq3', 'comp.freq4', 'comp.freq5',
+        'comp.freq6', 'comp.freq7', 'comp.gain1', 'comp.gain2', 'comp.gain3',
+        'comp.gain4', 'comp.gain5', 'comp.gain6', 'comp.gain7',
+      }, reason: '缺默认 id 集合应为 comp 数组 14 条（设计预期，见扫描汇报 B3）');
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Part L：混响预设 JSON 契约（B-4 / 扫描汇报 B4 固化）
+  // ---------------------------------------------------------------------------
+  group('Part L 混响预设矩阵契约', () {
+    List<List<double>> engineRows() {
+      final src = _read('engine/legacy/jdsp/Effects/reverb.c');
+      final block = RegExp(r'ps\s*\[\]\s*=\s*\{(.*?)\n\s*\};', dotAll: true)
+          .firstMatch(src)!.group(1)!;
+      final numRe = RegExp(r'-?\d+(?:\.\d+)?f?');
+      final rows = <List<double>>[];
+      for (final line in block.split('\n')) {
+        final t = line.trim();
+        if (!t.startsWith('{')) continue;
+        final nums = numRe.allMatches(t).map((m) {
+          final s = m.group(0)!;
+          return double.parse(s.endsWith('f') ? s.substring(0, s.length - 1) : s);
+        }).toList();
+        expect(nums.length, 17, reason: 'ps[] 行数值数 !=17: ${t.substring(0, 60)}');
+        rows.add(nums);
+      }
+      return rows;
+    }
+
+    test('引擎 ps[] == test/data/reverb_presets.json（19×17 逐值）', () {
+      final rows = engineRows();
+      expect(rows.length, 19, reason: 'ps[] 预设数 != 19');
+      final json = jsonDecode(_read('test/data/reverb_presets.json'))
+          as Map<String, dynamic>;
+      final presets = (json['presets'] as List).cast<Map<String, dynamic>>();
+      expect(presets.length, 19, reason: 'JSON 预设数 != 19（跑 gen_reverb_presets.py 重生成）');
+      for (var i = 0; i < 19; i++) {
+        final vals = (presets[i]['values'] as Map<String, dynamic>)
+            .values.cast<num>().toList();
+        for (var c = 0; c < 17; c++) {
+          expect(vals[c].toDouble(), closeTo(rows[i][c], 1e-6),
+              reason: '预设 $i 列 $c 与引擎源码不一致（跑 tools/bin/gen_reverb_presets.py 重生成）');
+        }
+      }
+    });
+
+    test('JSON 预设名 0..18 齐全；UI reverb 卡索引 ⊆ 引擎域', () {
+      final json = jsonDecode(_read('test/data/reverb_presets.json'))
+          as Map<String, dynamic>;
+      final presets = (json['presets'] as List).cast<Map<String, dynamic>>();
+      expect(presets.map((p) => p['index'] as int).toSet(),
+          {for (var i = 0; i < 19; i++) i},
+          reason: 'JSON 预设 index 应覆盖 0..18');
+      for (final p in presets) {
+        expect((p['name'] as String).isNotEmpty, isTrue);
+      }
+      final card = _read('app/auradsp_app/lib/features/effects/reverb_card.dart');
+      final uiIdx = RegExp(r'(\d+):\s*l\.reverbPreset\d+')
+          .allMatches(card).map((m) => int.parse(m.group(1)!)).toSet();
+      expect(uiIdx, isNotEmpty, reason: 'reverb_card 预设映射解析为空');
+      expect(uiIdx.every((i) => i >= 0 && i <= 18), isTrue,
+          reason: 'UI reverb 卡索引越出引擎预设域 0..18: $uiIdx');
+    });
+  });
 }
