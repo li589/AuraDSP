@@ -3729,6 +3729,90 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'核心处理'**
   String get fxCatCore;
+
+  /// No description provided for @errEngineClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎未运行'**
+  String get errEngineClosed;
+
+  /// No description provided for @errInvalidLength.
+  ///
+  /// In zh, this message translates to:
+  /// **'长度无效'**
+  String get errInvalidLength;
+
+  /// No description provided for @errInvalidEncoding.
+  ///
+  /// In zh, this message translates to:
+  /// **'编码无效'**
+  String get errInvalidEncoding;
+
+  /// No description provided for @errInvalidPath.
+  ///
+  /// In zh, this message translates to:
+  /// **'路径无效'**
+  String get errInvalidPath;
+
+  /// No description provided for @errBufferTooSmall.
+  ///
+  /// In zh, this message translates to:
+  /// **'缓冲区空间不足'**
+  String get errBufferTooSmall;
+
+  /// No description provided for @errFileTooSmall.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件过小'**
+  String get errFileTooSmall;
+
+  /// No description provided for @errFileTooLarge.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件大小超出限制'**
+  String get errFileTooLarge;
+
+  /// No description provided for @errOutOfRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'数值超出允许范围'**
+  String get errOutOfRange;
+
+  /// No description provided for @errOutOfMemory.
+  ///
+  /// In zh, this message translates to:
+  /// **'内存不足'**
+  String get errOutOfMemory;
+
+  /// No description provided for @errParseFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'内容解析失败'**
+  String get errParseFailed;
+
+  /// No description provided for @errIoFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件读写失败'**
+  String get errIoFailed;
+
+  /// No description provided for @errRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'该值被引擎拒绝'**
+  String get errRejected;
+
+  /// No description provided for @errUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持的操作'**
+  String get errUnsupported;
+
+  /// No description provided for @errInternal.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎内部错误'**
+  String get errInternal;
 }
 
 class _AppLocalizationsDelegate

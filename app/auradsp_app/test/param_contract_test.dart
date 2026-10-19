@@ -20,6 +20,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:auradsp_app/core/engine_error_map.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/param_schema.dart';
 import 'package:auradsp_app/core/state.dart';
@@ -335,6 +336,15 @@ const Map<String, String> kKnownRangeDivergences = {
 // ---------------------------------------------------------------------------
 // 源码解析 helpers（静态链；不依赖缩进，全部括号配对）
 // ---------------------------------------------------------------------------
+
+/// Part H：定位 engine/ 目录（CWD 基准 ['', '../', '../../']，找不到即抛）。
+Directory _locateEngineDir() {
+  for (final base in const ['', '../', '../../']) {
+    final d = Directory('${base}engine');
+    if (d.existsSync()) return d;
+  }
+  throw StateError('engine/ 目录不存在（CWD 基准漂移？）');
+}
 
 String _read(String relPath) {
   for (final base in const ['', '../', '../../']) {
@@ -1047,6 +1057,61 @@ void main() {
             reason: '引擎 kSupported 缺失 $c（探针升级后必须可测）');
         expect(dartSet.contains(c), isTrue,
             reason: 'Dart 探针集缺失 $c');
+      }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Part H：引擎错误 reason-token 白名单契约（B-2 / 计划 D2 §4.3）
+  // ---------------------------------------------------------------------------
+  group('Part H 引擎错误 reason-token 契约', () {
+    test('set_error 字面量全部匹配 <subject>: <token>[ (detail)] 语法', () {
+      final tokens = kEngineReasonTokens;
+      final grammar = RegExp('^[a-zA-Z][a-zA-Z0-9_.]*: ('
+          '${tokens.map(RegExp.escape).join('|')}'
+          r')( \(.*\))?$');
+      final literal = RegExp(r'set_error\(\s*h\s*,\s*"([^"]*)"');
+      final bad = <String>[];
+      var checked = 0;
+      final engineDir = _locateEngineDir();
+      for (final f in engineDir.listSync(recursive: true).whereType<File>()
+          .where((f) => f.path.endsWith('.h') || f.path.endsWith('.hpp')
+              || f.path.endsWith('.c') || f.path.endsWith('.cpp'))) {
+        final lines = f.readAsLinesSync();
+        for (var n = 0; n < lines.length; n++) {
+          for (final m in literal.allMatches(lines[n])) {
+            checked++;
+            if (!grammar.hasMatch(m.group(1)!)) {
+              final rel = f.path.replaceFirst(engineDir.path, 'engine');
+              bad.add('$rel:${n + 1}  ${m.group(1)}');
+            }
+          }
+        }
+      }
+      expect(checked, greaterThan(60),
+          reason: '引擎 set_error 字面量数量异常（扫描静默失败？）');
+      expect(bad, isEmpty, reason: '''
+未登记 token：请在 lib/core/engine_error_map.dart kEngineReasonTokens +
+lib/l10n/app_{zh,en,ja}.arb（errXxx）+ 引擎侧三方同步登记后再落引擎（R4 登记指引）。
+违规清单：
+${bad.join('\n')}''');
+    });
+
+    test('null handle 特殊返回仍登记（bare 白名单唯一成员）', () {
+      final src = _read('engine/auradsp_engine.cpp');
+      expect(src, contains('h->last_error : "null handle"'),
+          reason: 'auradsp_last_error 的 null-handle 兜底被改动（B-2 契约约束）');
+    });
+
+    test('arb 三语为全部 token 提供词条', () {
+      for (final tok in kEngineReasonTokens) {
+        final key = engineReasonArbKey(tok);
+        for (final lang in const ['zh', 'en', 'ja']) {
+          final arb = jsonDecode(_read('app/auradsp_app/lib/l10n/app_$lang.arb'))
+              as Map<String, dynamic>;
+          expect(arb.containsKey(key), isTrue,
+              reason: 'token "$tok" → $key 缺失于 app_$lang.arb（新增 token 未登记）');
+        }
       }
     });
   });

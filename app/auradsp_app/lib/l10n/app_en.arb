@@ -914,5 +914,19 @@
     }
   },
   "fxCatFront": "Front Shaping",
-  "fxCatCore": "Core Processing"
+  "fxCatCore": "Core Processing",
+  "errEngineClosed": "Engine is not running",
+  "errInvalidLength": "Invalid length",
+  "errInvalidEncoding": "Invalid encoding",
+  "errInvalidPath": "Invalid path",
+  "errBufferTooSmall": "Insufficient buffer space",
+  "errFileTooSmall": "File too small",
+  "errFileTooLarge": "File size exceeds the limit",
+  "errOutOfRange": "Value out of allowed range",
+  "errOutOfMemory": "Out of memory",
+  "errParseFailed": "Content parsing failed",
+  "errIoFailed": "File I/O failed",
+  "errRejected": "Value rejected by engine",
+  "errUnsupported": "Unsupported operation",
+  "errInternal": "Internal engine error"
 }

@@ -1650,6 +1650,7 @@ class AppModel extends ChangeNotifier {
         }
         if (rc != 0) {
           final msg = (raw['msg'] as String?) ?? 'engine rc=$rc';
+          dbgLog('engine reject id=$id rc=$rc raw=$msg'); // B-2：原始串只进 dbgLog
           // 引擎拒绝 → 回读引擎真相，抹掉 _mirror 的乐观假象
           // （否则界面会一直显示"已选中"，但引擎里根本没生效）。
           // 回写与提示解耦：被同因抑制时依然要回读。
@@ -1706,6 +1707,7 @@ class AppModel extends ChangeNotifier {
         break;
       case 'error':
         final msg = raw['msg'] as String;
+        dbgLog('engine error raw=$msg'); // B-2：原始串只进 dbgLog
         // 同因抑制：与 guard 拒绝共用一套窗口（isolate 侧 pump 错误已有
         // 3s 节流，但 paramResult 拒绝没有任何节流，UI 侧必须兜底）。
         if (!_admitEngineEvent('error|$msg')) break;

@@ -914,5 +914,19 @@
     }
   },
   "fxCatFront": "前置整形",
-  "fxCatCore": "コア処理"
+  "fxCatCore": "コア処理",
+  "errEngineClosed": "エンジン未起動",
+  "errInvalidLength": "長さが無効",
+  "errInvalidEncoding": "エンコーディングが無効",
+  "errInvalidPath": "パスが無効",
+  "errBufferTooSmall": "バッファ空間不足",
+  "errFileTooSmall": "ファイルが小さすぎます",
+  "errFileTooLarge": "ファイルサイズが上限を超えています",
+  "errOutOfRange": "値が許容範囲外です",
+  "errOutOfMemory": "メモリ不足",
+  "errParseFailed": "コンテンツの解析に失敗",
+  "errIoFailed": "ファイル読み書きに失敗",
+  "errRejected": "エンジンにより値が拒否されました",
+  "errUnsupported": "非サポートの操作",
+  "errInternal": "エンジン内部エラー"
 }

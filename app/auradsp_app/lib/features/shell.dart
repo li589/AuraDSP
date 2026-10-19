@@ -11,6 +11,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/engine_error_map.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chain_page.dart';
@@ -687,9 +688,15 @@ class _EventBannerState extends State<EventBanner> {
       widget.model.clearLastGuard();
       widget.model.clearLastEngineError();
       widget.model.clearLastInfo();
-      final text = guard != null
+      final rawText = guard != null
           ? guard.message
           : (err ?? info ?? '');
+      // B-2（D2）：引擎错误展示层本地化 + 脱敏（guard/error 来自引擎；
+      // info 为 Dart 侧已本地化文案，原样透传）。detail（如 gate.maxFileMb）
+      // 在此丢弃；原始串已由 state.dart 消费点 dbgLog 保留。
+      final text = (guard != null || err != null)
+          ? localizeEngineError(rawText, l10nOf(context))
+          : rawText;
       if (text.isEmpty) return;
       final isError = guard == null && err != null;
       final isInfo = guard == null && err == null;
