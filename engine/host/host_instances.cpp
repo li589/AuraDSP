@@ -10,6 +10,7 @@
 #include <fstream>
 #include <sstream>
 #include <algorithm>
+#include <cctype>
 #include <cstring>
 #include <thread>
 #include <future>
@@ -1332,6 +1333,26 @@ private:
 //------------------------------------------------------------------------------
 // VST3 Host Implementation
 //------------------------------------------------------------------------------
+/* 已知「关闭编辑器时自身 teardown 会触发不可捕获 fail-fast」的插件隔离名单。
+ * 设计目标：宿主绝不为插件自身缺陷陪葬（jBridge / EqualizerAPO 桥接类
+ * 插件同理可扩充）。按 name / path 小写子串匹配；命中后 VST3 closeEditor
+ * 跳过 view->removed() / setFrame(nullptr) / release()，直接丢弃引用
+ * （view 对象泄漏，罕见路径可接受），容器窗仍由 closeEditorOnPumpThread
+ * 正常销毁——fail-fast（0xC0000374）不可 SEH 捕获，只有不调用才不死。
+ * 2026-10-19：Zebra2(x64)（u-he 旧版 2.9.3，removed() 内堆损坏，官方
+ * SDK editorhost 同机复现；ZebraHZ 同族正常，不误伤）。 */
+static bool editorQuarantineMatch(const std::string& name, const std::string& path) {
+    static const char* kPatterns[] = {"zebra2"};
+    std::string ln = name, lp = path;
+    for (auto& c : ln) c = (char)std::tolower((unsigned char)c);
+    for (auto& c : lp) c = (char)std::tolower((unsigned char)c);
+    for (const char* p : kPatterns) {
+        if (ln.find(p) != std::string::npos) return true;
+        if (lp.find(p) != std::string::npos) return true;
+    }
+    return false;
+}
+
 class Vst3PluginInstance : public IPluginInstance {
 public:
     Vst3PluginInstance() = default;
@@ -2033,6 +2054,17 @@ public:
     // 使用 SEH 隔离插件在退出时的内存越界，防止 0xC0000005 崩溃宿主。
     void detachViewOnPumpThread(Steinberg::IPlugView* view) {
         if (!view) return;
+        // 隔离名单（editorQuarantineMatch）：插件自身 teardown 缺陷——
+        // removed()/setFrame(nullptr)/release() 任一步都可能踩进其损坏的
+        // teardown（fail-fast 不可捕获）。命中则整体跳过 detach，只丢弃
+        // view 引用（对象泄漏，罕见路径可接受）；容器窗由
+        // closeEditorOnPumpThread 正常销毁。宿主不为插件缺陷陪葬。
+        if (editorQuarantineMatch(m_meta.name, m_meta.path)) {
+            AURADSP_WARN("[DBG VST3 closeEditor] quarantine: 插件自身 teardown 缺陷，"
+                         "跳过 removed()/release()（隔离名单，防 0xC0000374 fail-fast）");
+            m_view = nullptr;
+            return;
+        }
 #if defined(_MSC_VER)
         __try {
             view->setFrame(nullptr);
