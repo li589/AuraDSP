@@ -275,13 +275,10 @@ const Set<String> kOrphanStaticSpecIds = {
 
 /// Part D：已登记的"spec.defaultValue ≠ 引擎默认"分歧（P-4 类）。
 /// 与实测分歧集合精确相等（双向）——修好一项就删一条；
-/// 新增分歧不登记即测试红。修复方向待定（引擎→Dart 或 Dart→引擎），
-/// 详见引擎代码审查报告 §P-4 与交付说明。
-const Map<String, String> kKnownDefaultDivergences = {
-  'gate.hold': 'Dart 20.0ms vs 引擎 gate_hold_ms 10.0ms',
-  'gate.hold_ms': '同上（引擎别名 id，成员同为 gate_hold_ms）',
-  'limiter.release': 'Dart 50.0ms vs 引擎 limiter_release_ms 100.0ms',
-};
+/// 新增分歧不登记即测试红。
+/// 2026-10-19 B-3 定案：A1 九条全部闭合（6 条技术定向 + 3 条听感无差异→
+/// Dart 对齐引擎出厂值：gate.hold=10ms / limiter.release=100ms）。
+const Map<String, String> kKnownDefaultDivergences = {};
 
 /// Part D：同一引擎成员被多个 spec 引用时默认值必须一致（防别名族互相打架）。
 /// 与实测冲突集合精确相等（双向）。
