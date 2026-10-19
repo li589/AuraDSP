@@ -245,6 +245,13 @@ int      auradsp_plugin_slot_is_editor_open(auradsp_handle h, int slot);
 int      auradsp_plugin_slot_save_preset(auradsp_handle h, int slot, const char* path);
 int      auradsp_plugin_slot_load_preset(auradsp_handle h, int slot, const char* path);
 
+/* 插件编辑器隔离名单（预设系统数据，UI/预设层维护，引擎不硬编码插件名）。
+ * patterns: 逗号分隔的小写子串（匹配插件 name/path），如 "zebra2,ozone"；
+ * NULL 或空串清空名单。命中名单的插件关闭编辑器时跳过 removed()/release()
+ * （防插件自身 teardown fail-fast 崩溃，宿主不因插件缺陷陪葬）。
+ * 2026-10-19：从引擎内硬编码迁移为运行时数据。 */
+int      auradsp_plugin_set_editor_quarantine_list(const char* patterns);
+
 /* 处理链插入阶段 (0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter) */
 int      auradsp_plugin_slot_set_insert_stage(auradsp_handle h, int slot, int stage);
 int      auradsp_plugin_slot_get_insert_stage(auradsp_handle h, int slot);
