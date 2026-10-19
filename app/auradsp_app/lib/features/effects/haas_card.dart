@@ -21,7 +21,7 @@ class _HaasCard extends StatelessWidget {
       latencyMeasured: model.componentLatency('haas').measured,
       latencyEstimated: model.componentLatency('haas').estimated,
       latencyProbing: model.isProbingLatency('haas'),
-      onRefreshLatency: AppModel.isLatencyProbeSupported('haas')
+      onRefreshLatency: AppModel.hasLatencyRefresh('haas')
           ? () => model.refreshComponentLatency('haas')
           : null,
       latencyTick: model.getComponentLatencyTick('haas'),

@@ -225,7 +225,7 @@ abstract final class ParamRegistry {
   static final bassSubFloor = ParamSpec<double>(
     id: 'bass.subFloor', section: 'bass', key: 'subFloor',
     type: ParamType.float, defaultValue: ParamDefaults.bassSubFloor,
-    min: 10.0, max: 80.0, step: 1.0, unit: 'Hz',
+    min: 10.0, max: 40.0, step: 1.0, unit: 'Hz',
     category: ParamCategory.advanced,
     formatter: (v) => v.toStringAsFixed(0),
     getter: (m) => m.bassSubFloor,
@@ -313,7 +313,7 @@ abstract final class ParamRegistry {
   static final reverbRoomSize = ParamSpec<double>(
     id: 'reverb.roomSize', section: 'reverb', key: 'roomSize',
     type: ParamType.float, defaultValue: ParamDefaults.fvRoomSize,
-    min: 0.1, max: 3.0, step: 0.05, unit: 'x',
+    min: 0.5, max: 2.5, step: 0.05, unit: 'x',
     formatter: (v) => '${v.toStringAsFixed(2)}x',
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.fvRoomSize,
@@ -322,7 +322,7 @@ abstract final class ParamRegistry {
   static final reverbStereoWidth = ParamSpec<double>(
     id: 'reverb.width', section: 'reverb', key: 'stereoWidth',
     type: ParamType.float, defaultValue: ParamDefaults.fvWidth,
-    min: 0.0, max: 2.0, step: 0.05, unit: 'x',
+    min: 0.2, max: 2.0, step: 0.05, unit: 'x',
     formatter: (v) => '${v.toStringAsFixed(2)}x',
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.fvWidth,
@@ -968,7 +968,7 @@ abstract final class ParamRegistry {
   static final dyneqLowQ = ParamSpec<double>(
     id: 'dyneq.low.q', section: 'dyneq', subSection: 'low', key: 'q',
     type: ParamType.float, defaultValue: 0.707,
-    min: 0.1, max: 10.0, step: 0.01,
+    min: 0.5, max: 2.0, step: 0.01,
     getter: (m) => m.dyneqLowQ,
     setter: (m, v) => m.setDyneqLowQ(v),
   );
@@ -1011,7 +1011,7 @@ abstract final class ParamRegistry {
   static final dyneqMidQ = ParamSpec<double>(
     id: 'dyneq.mid.q', section: 'dyneq', subSection: 'mid', key: 'q',
     type: ParamType.float, defaultValue: 1.0,
-    min: 0.1, max: 10.0, step: 0.01,
+    min: 0.3, max: 10.0, step: 0.01,
     getter: (m) => m.dyneqMidQ,
     setter: (m, v) => m.setDyneqMidQ(v),
   );
@@ -1054,7 +1054,7 @@ abstract final class ParamRegistry {
   static final dyneqHighQ = ParamSpec<double>(
     id: 'dyneq.high.q', section: 'dyneq', subSection: 'high', key: 'q',
     type: ParamType.float, defaultValue: 0.707,
-    min: 0.1, max: 10.0, step: 0.01,
+    min: 0.5, max: 2.0, step: 0.01,
     getter: (m) => m.dyneqHighQ,
     setter: (m, v) => m.setDyneqHighQ(v),
   );
@@ -1128,7 +1128,7 @@ abstract final class ParamRegistry {
   static final filterQ = ParamSpec<double>(
     id: 'filter.q', section: 'filter', key: 'q',
     type: ParamType.float, defaultValue: ParamDefaults.filterQ,
-    min: 0.1, max: 10.0, step: 0.01,
+    min: 0.3, max: 10.0, step: 0.01,
     getter: (m) => m.filterQ,
     setter: (m, v) => m.setFilterQ(v),
   );
@@ -1179,7 +1179,7 @@ abstract final class ParamRegistry {
   static final compTimeconstant = ParamSpec<double>(
     id: 'comp.timeconstant', section: 'comp', key: 'timeconstant',
     type: ParamType.float, defaultValue: 0.14,
-    min: 0.01, max: 1.0, step: 0.01, unit: 's',
+    min: 0.02, max: 0.5, step: 0.01, unit: 's',
     getter: (m) => m.compTimeconstant,
     setter: (m, v) => m.setCompTimeconstant(v),
   );
@@ -1365,7 +1365,7 @@ abstract final class ParamRegistry {
   static final limiterRelease = ParamSpec<double>(
     id: 'limiter.release', section: 'post', key: 'release',
     type: ParamType.float, defaultValue: ParamDefaults.limiterRelease,
-    min: 5.0, max: 500.0, step: 5.0, unit: 'ms',
+    min: 10.0, max: 500.0, step: 5.0, unit: 'ms',
     formatter: (v) => v.toStringAsFixed(0),
     getter: (m) => m.limiterReleaseMs,
     setter: (m, v) => m.setLimiterRelease(v),

@@ -20,7 +20,7 @@ class _BassShapingCard extends StatelessWidget {
       latencyMeasured: model.componentLatency('bass_shaping').measured,
       latencyEstimated: model.componentLatency('bass_shaping').estimated,
       latencyProbing: model.isProbingLatency('bass_shaping'),
-      onRefreshLatency: AppModel.isLatencyProbeSupported('bass_shaping')
+      onRefreshLatency: AppModel.hasLatencyRefresh('bass_shaping')
           ? () => model.refreshComponentLatency('bass_shaping')
           : null,
       latencyTick: model.getComponentLatencyTick('bass_shaping'),
