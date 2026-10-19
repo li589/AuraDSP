@@ -33,6 +33,7 @@ flutter:
   assets:
     - assets/presets/defaults.json
     - assets/presets/factory/
+    - assets/presets/plugin_tables.json
     - assets/tray_icon.ico
 
   fonts:

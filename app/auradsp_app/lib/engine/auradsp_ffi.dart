@@ -661,6 +661,14 @@ final class AuraDspLib {
           'auradsp_plugin_slot_get_insert_stage')
       .asFunction();
 
+  /// 插件编辑器隔离名单（预设系统数据）：逗号分隔小写子串（匹配 name/path），
+  /// 引擎据此对命中插件关闭编辑器时跳过 removed()/release()，防插件自身
+  /// teardown fail-fast 崩溃。NULL/空串清空名单。
+  late final int Function(Pointer<Utf8>) pluginSetEditorQuarantineList = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Utf8>)>>(
+          'auradsp_plugin_set_editor_quarantine_list')
+      .asFunction<int Function(Pointer<Utf8>)>();
+
   /// 组件延迟实测：真实脉冲响应测量，返回算法延迟（样本数）。
   /// 见 auradsp_engine.h 的 auradsp_probe_component 契约。
   /// 每次调用约数十毫秒（引擎内部建/毁一个探针 handle），只能按需调用，

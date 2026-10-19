@@ -1291,6 +1291,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
+        case 'setEditorQuarantineList':
+          {
+            // 预设系统数据：把编辑器隔离名单（逗号分隔小写子串）推给引擎，
+            // 引擎据此对命中插件跳过 removed()/release()（防关闭崩溃）。
+            if (lib != null) {
+              final patterns = (m['patterns'] as String?) ?? '';
+              final p = patterns.toNativeUtf8();
+              try {
+                lib.pluginSetEditorQuarantineList(p);
+              } finally {
+                malloc.free(p);
+              }
+            }
+            break;
+          }
         case 'pluginSlotUnload':
           {
             if (lib != null && handle != null) {
