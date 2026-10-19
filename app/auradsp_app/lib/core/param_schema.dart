@@ -519,7 +519,7 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setStereoEnabled(v),
   );
   static final stereoBand1 = ParamSpec<double>(
-    id: 'stereo.band.1', section: 'stereo', key: 'band0',
+    id: 'stereo.band1', section: 'stereo', key: 'band0',
     type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
     min: 0.0, max: 1.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
@@ -527,7 +527,7 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setStereoBand(0, v),
   );
   static final stereoBand2 = ParamSpec<double>(
-    id: 'stereo.band.2', section: 'stereo', key: 'band1',
+    id: 'stereo.band2', section: 'stereo', key: 'band1',
     type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
     min: 0.0, max: 1.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
@@ -535,7 +535,7 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setStereoBand(1, v),
   );
   static final stereoBand3 = ParamSpec<double>(
-    id: 'stereo.band.3', section: 'stereo', key: 'band2',
+    id: 'stereo.band3', section: 'stereo', key: 'band2',
     type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
     min: 0.0, max: 1.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
@@ -543,7 +543,7 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setStereoBand(2, v),
   );
   static final stereoBand4 = ParamSpec<double>(
-    id: 'stereo.band.4', section: 'stereo', key: 'band3',
+    id: 'stereo.band4', section: 'stereo', key: 'band3',
     type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
     min: 0.0, max: 1.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
@@ -551,7 +551,7 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setStereoBand(3, v),
   );
   static final stereoBand5 = ParamSpec<double>(
-    id: 'stereo.band.5', section: 'stereo', key: 'band4',
+    id: 'stereo.band5', section: 'stereo', key: 'band4',
     type: ParamType.float, defaultValue: ParamDefaults.stereoBand,
     min: 0.0, max: 1.0, step: 0.01, unit: '%',
     formatter: (v) => (v * 100).toStringAsFixed(0),
@@ -611,14 +611,9 @@ abstract final class ParamRegistry {
   /* =========================================================================
    * 7B. 低音塑形 (Bass Shaping) — 合并低频搁架与低频单声道化
    * ========================================================================= */
-  static final bassShapingEnable = ParamSpec<bool>(
-    id: 'bass_shaping.enable', section: 'bass_shaping', key: 'on',
-    type: ParamType.boolean, defaultValue: false,
-    flags: ParamFlags.presetSerializable,
-    order: 100,
-    getter: (m) => m.bassShapingOn,
-    setter: (m, v) => m.setBassShapingEnabled(v),
-  );
+  // B3 定案：bass_shaping.enable 为纯 UI 虚拟开关（setter 重定向到 shelf.enable），
+  // 无独立引擎参数，删除 spec；开关由 bass_shaping_card 直接驱动
+  // model.setBassShapingEnabled（组合 shelf.enable + bassmono.enable）。
 
   /* =========================================================================
    * 8. Haas 差分环绕 (Haas Effect)
@@ -1213,27 +1208,120 @@ abstract final class ParamRegistry {
     getter: (m) => m.compRatio,
     setter: (m, v) => m.setCompRatio(v),
   );
-  static final compFreqs = List.generate(7, (i) {
-    const defaults = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
-    return ParamSpec<double>(
-      id: 'comp.freq${i + 1}', section: 'comp', key: 'freq${i + 1}',
-      type: ParamType.float, defaultValue: defaults[i],
-      min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
-      formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
-      getter: (m) => m.compFreqs[i],
-      setter: (m, v) => m.setCompFreq(i, v),
-    );
-  });
-  static final compGains = List.generate(7, (i) {
-    return ParamSpec<double>(
-      id: 'comp.gain${i + 1}', section: 'comp', key: 'gain${i + 1}',
-      type: ParamType.float, defaultValue: -0.35,
-      min: -1.2, max: 1.2, step: 0.01,
-      formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
-      getter: (m) => m.compGains[i],
-      setter: (m, v) => m.setCompGain(i, v),
-    );
-  });
+  static final compFreq1 = ParamSpec<double>(
+    id: 'comp.freq1', section: 'comp', key: 'freq1',
+    type: ParamType.float, defaultValue: 95.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[0],
+    setter: (m, v) => m.setCompFreq(0, v),
+  );
+  static final compFreq2 = ParamSpec<double>(
+    id: 'comp.freq2', section: 'comp', key: 'freq2',
+    type: ParamType.float, defaultValue: 200.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[1],
+    setter: (m, v) => m.setCompFreq(1, v),
+  );
+  static final compFreq3 = ParamSpec<double>(
+    id: 'comp.freq3', section: 'comp', key: 'freq3',
+    type: ParamType.float, defaultValue: 400.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[2],
+    setter: (m, v) => m.setCompFreq(2, v),
+  );
+  static final compFreq4 = ParamSpec<double>(
+    id: 'comp.freq4', section: 'comp', key: 'freq4',
+    type: ParamType.float, defaultValue: 800.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[3],
+    setter: (m, v) => m.setCompFreq(3, v),
+  );
+  static final compFreq5 = ParamSpec<double>(
+    id: 'comp.freq5', section: 'comp', key: 'freq5',
+    type: ParamType.float, defaultValue: 1600.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[4],
+    setter: (m, v) => m.setCompFreq(4, v),
+  );
+  static final compFreq6 = ParamSpec<double>(
+    id: 'comp.freq6', section: 'comp', key: 'freq6',
+    type: ParamType.float, defaultValue: 3400.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[5],
+    setter: (m, v) => m.setCompFreq(5, v),
+  );
+  static final compFreq7 = ParamSpec<double>(
+    id: 'comp.freq7', section: 'comp', key: 'freq7',
+    type: ParamType.float, defaultValue: 7500.0,
+    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
+    getter: (m) => m.compFreqs[6],
+    setter: (m, v) => m.setCompFreq(6, v),
+  );
+  static final compGain1 = ParamSpec<double>(
+    id: 'comp.gain1', section: 'comp', key: 'gain1',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[0],
+    setter: (m, v) => m.setCompGain(0, v),
+  );
+  static final compGain2 = ParamSpec<double>(
+    id: 'comp.gain2', section: 'comp', key: 'gain2',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[1],
+    setter: (m, v) => m.setCompGain(1, v),
+  );
+  static final compGain3 = ParamSpec<double>(
+    id: 'comp.gain3', section: 'comp', key: 'gain3',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[2],
+    setter: (m, v) => m.setCompGain(2, v),
+  );
+  static final compGain4 = ParamSpec<double>(
+    id: 'comp.gain4', section: 'comp', key: 'gain4',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[3],
+    setter: (m, v) => m.setCompGain(3, v),
+  );
+  static final compGain5 = ParamSpec<double>(
+    id: 'comp.gain5', section: 'comp', key: 'gain5',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[4],
+    setter: (m, v) => m.setCompGain(4, v),
+  );
+  static final compGain6 = ParamSpec<double>(
+    id: 'comp.gain6', section: 'comp', key: 'gain6',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[5],
+    setter: (m, v) => m.setCompGain(5, v),
+  );
+  static final compGain7 = ParamSpec<double>(
+    id: 'comp.gain7', section: 'comp', key: 'gain7',
+    type: ParamType.float, defaultValue: -0.35,
+    min: -1.2, max: 1.2, step: 0.01,
+    formatter: (v) => (v >= 0 ? '+' : '') + v.toStringAsFixed(2),
+    getter: (m) => m.compGains[6],
+    setter: (m, v) => m.setCompGain(6, v),
+  );
+  static final compFreqs = [compFreq1, compFreq2, compFreq3, compFreq4, compFreq5, compFreq6, compFreq7];
+  static final compGains = [compGain1, compGain2, compGain3, compGain4, compGain5, compGain6, compGain7];
   static final compAutoGain = ParamSpec<bool>(
     id: 'comp.autogain', section: 'comp', key: 'autoGain',
     type: ParamType.boolean, defaultValue: ParamDefaults.compAutoGain,
@@ -1578,7 +1666,7 @@ abstract final class ParamRegistry {
     // 5. 立体声
     ParamSection(
       name: 'stereo',
-      specs: [stereoMix, stereoBandUsed, stereoOn],
+      specs: [stereoMix, stereoBandUsed, stereoOn, ...stereoBands],
       customApplyOnly: true,
       customSnapshot: (m, map) {
         map['bands'] = List<double>.of(m.stereoBands);
@@ -1693,6 +1781,7 @@ abstract final class ParamRegistry {
       specs: [
         compTimeconstant, compGranularity, compTfresolution,
         compAutoGain, compOutputGain, compEnable, compChannels,
+        ...compFreqs, ...compGains, // B2：14 动态段注册进预设系统（真实驱动引擎）
       ],
     ),
     // 18. ArbMag

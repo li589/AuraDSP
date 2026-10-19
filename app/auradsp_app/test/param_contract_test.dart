@@ -54,14 +54,9 @@ const Map<String, Set<String>> kAliasToEngineId = {
   'bass.harmonicBlend': {'bass.harmonicblend'}, // 引擎 id 全小写
   'bass.subFloor': {'bass.subfreq'},
   'bass.intensity': {'bass.gain'}, // 强度旋钮直写引擎增益
-  'bass_shaping.enable': {'shelf.enable'}, // 低频搁架开关 = 引擎 shelf
+  // B3 定案：bass_shaping.enable 已删除（假参数；开关复用 shelf.enable + bassmono.enable）
   'gate.hold': {'gate.hold_ms'},
-  // 分带：UI 带点 stereo.band.N，引擎分支 id 不带点
-  'stereo.band.1': {'stereo.band1'},
-  'stereo.band.2': {'stereo.band2'},
-  'stereo.band.3': {'stereo.band3'},
-  'stereo.band.4': {'stereo.band4'},
-  'stereo.band.5': {'stereo.band5'},
+  // B3 定案：stereo 分带 spec id 已统一为引擎层名称 stereo.band1..5（无别名）
   // comp 宏观阈值换算为 7 段压限量下发
   'comp.threshold': {
     'comp.gain1', 'comp.gain2', 'comp.gain3', 'comp.gain4',
@@ -154,22 +149,8 @@ const Set<String> kEngineOnlyIds = {
   // ---- channels：声道数/模式查询（VM/isolate 直发） ----
   'channels.count',
   'channels.mode',
-  // ---- comp：freq/gain 动态段（UI 走 macro threshold + 未挂表动态 spec） ----
+  // ---- comp：channel_mask（spec id = comp.channels；freq/gain 14 动态段已注册进 comp section） ----
   'comp.channel_mask',
-  'comp.freq1',
-  'comp.freq2',
-  'comp.freq3',
-  'comp.freq4',
-  'comp.freq5',
-  'comp.freq6',
-  'comp.freq7',
-  'comp.gain1',
-  'comp.gain2',
-  'comp.gain3',
-  'comp.gain4',
-  'comp.gain5',
-  'comp.gain6',
-  'comp.gain7',
   // ---- convolver：卷积 IR 查询/清空（副作用指令） ----
   'convolver.clear',
   'convolver.ir.channels',
@@ -250,12 +231,6 @@ const Set<String> kEngineOnlyIds = {
   'mode.latency',
   // ---- shelf：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'shelf.channel_mask',
-  // ---- stereo：分带分支（UI 走 stereo.band.N 别名 spec） ----
-  'stereo.band1',
-  'stereo.band2',
-  'stereo.band3',
-  'stereo.band4',
-  'stereo.band5',
   // ---- tube：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'tube.channel_mask',
   // ---- viz：可视化参数 ----
@@ -266,11 +241,10 @@ const Set<String> kEngineOnlyIds = {
 /// ParamRegistry.allParams）的孤儿 spec。与实测差集精确相等；
 /// 将它们接线进 registry 时同步删此条目。
 const Set<String> kOrphanStaticSpecIds = {
-  'bass_shaping.enable', // 与 shelf.enable 重复暴露， shelved 未挂 section
-  'comp.ratio', // 引擎无此参；vendor 多段压缩无比率
-  'comp.threshold', // 宏观阈值；7 段 gain 已挂 section，macro 本体未挂
-  'stereo.band.1', 'stereo.band.2', 'stereo.band.3', //
-  'stereo.band.4', 'stereo.band.5', // stereoBands 列表自持，未挂 section
+  // 待引擎补充（B2 排期，方案文档 2026-10-19 §2.2）：
+  // FFTCompander 外围"阈值输入偏移 + 比率增益标度"宏控映射，需 vendor 语义验证 + 听感校准。
+  'comp.ratio', // 引擎无 comp.ratio 参数（vendor 多段压缩无比率）；UI 核心滑块 + 传递曲线可视化依赖，暂保留
+  'comp.threshold', // 同上：宏观阈值；7 段 gain 已注册进 comp section，macro 本体未挂
 };
 
 /// Part D：已登记的"spec.defaultValue ≠ 引擎默认"分歧（P-4 类）。
@@ -284,7 +258,11 @@ const Map<String, String> kKnownDefaultDivergences = {};
 /// 与实测冲突集合精确相等（双向）。
 /// 现状：引擎别名族（dynex.low/mid/high.attack 等）在 registry 无同名 spec
 /// （attack/release 仅 b1/b2/b3 与总 attack/release 暴露），暂无冲突。
-const Set<String> kKnownMemberConflicts = {};
+const Set<String> kKnownMemberConflicts = {
+  // B2 注册后：comp 7 频段动态 spec（comp.freq1..7）引用同一数组成员 comp_freq[7]，
+  // 各槽位默认值不同（95/200/400/800/1600/3400/7500 Hz）——设计预期，非打架。
+  'comp_freq',
+};
 
 /// Part F：macro 换算别名——UI 域与引擎域量纲不同，范围本应不同，跳过比对。
 const Set<String> kRangeCheckSkipSpecIds = {
