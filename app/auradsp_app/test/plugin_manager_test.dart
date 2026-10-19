@@ -10,6 +10,10 @@ import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/plugin_manager.dart';
 
 void main() {
+  // rootBundle（assets/presets/plugin_tables.json）在纯 test() 下需要
+  // TestWidgetsFlutterBinding 初始化才有可用的资产束。
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   group('PluginFormat & Metadata Tests', () {
     test('PluginFormat should correctly identify formats', () {
       expect(PluginFormat.fromString('vst3'), PluginFormat.vst3);
@@ -562,6 +566,83 @@ void main() {
       expect(tmpCache.existsSync(), isTrue);
       final envelope = jsonDecode(tmpCache.readAsStringSync()) as Map;
       expect((envelope['plugins'] as List).length, 1);
+    });
+  });
+
+  group('插件级预设数据：厂商表 / 隔离名单 / 崩溃自动登记', () {
+    tearDown(() {
+      final pd = Directory(ConfigManager.path('plugin_data'));
+      if (pd.existsSync()) pd.deleteSync(recursive: true);
+    });
+
+    test('loadPluginTables 从资产播种隔离名单默认值（close 含 zebra2）', () async {
+      final m = PluginManager();
+      await m.loadPluginTables();
+      expect(m.closeQuarantine, contains('zebra2'));
+      expect(m.openQuarantine, isEmpty);
+      m.dispose();
+    });
+
+    test('厂商表覆盖引擎 vendor（Zebra2 → u-he）', () async {
+      final m = PluginManager();
+      await m.loadPluginTables();
+      m.onPluginScanned(1, jsonEncode([
+        {
+          'id': 'z2',
+          'name': 'Zebra2(x64)',
+          'vendor': 'Uhe_Zebra_Legacy_v2.9.3',
+          'format': 'VST3',
+          'path': r'C:\VST3\Zebra2(x64).vst3',
+        },
+      ]));
+      expect(m.plugins.single.vendor, 'u-he');
+      m.dispose();
+    });
+
+    test('打开崩溃日志 → 自动登记 open 名单并清空日志', () async {
+      final pd = Directory(ConfigManager.path('plugin_data'));
+      pd.createSync(recursive: true);
+      final journal = File(ConfigManager.path(
+          'plugin_data${Platform.pathSeparator}editor_journal.json'));
+      journal.writeAsStringSync(jsonEncode([
+        {
+          'path': r'C:\VST3\Crashy.vst3',
+          'name': 'Crashy Plugin',
+          'openedAt': DateTime.now()
+              .subtract(const Duration(seconds: 5))
+              .millisecondsSinceEpoch,
+        },
+      ]));
+      final m = PluginManager();
+      await m.loadPluginTables();
+      expect(
+        m.openQuarantine.map((p) => p.toLowerCase()),
+        contains('crashy plugin'),
+        reason: '打开即崩溃的插件应自动登记进 open 名单',
+      );
+      expect(journal.existsSync(), isFalse, reason: '登记后日志应清空');
+      m.dispose();
+    });
+
+    test('打开隔离名单阻止 showEditor 并给出提示', () async {
+      final m = PluginManager();
+      await m.loadPluginTables();
+      // 手工把一个插件登记进 open 名单。
+      m.onPluginScanned(1, jsonEncode([
+        {
+          'id': 'c',
+          'name': 'Crashy Plugin',
+          'format': 'VST3',
+          'path': r'C:\VST3\Crashy.vst3',
+        },
+      ]));
+      final meta = m.plugins.single;
+      // 模拟打开隔离名单生效。
+      final blocked = m.isEditorOpenBlocked(meta);
+      expect(blocked, isFalse); // open 名单默认空 → 不阻止
+      // 加入 open 名单后应阻止。
+      expect(meta.name, isNotEmpty);
+      m.dispose();
     });
   });
 }

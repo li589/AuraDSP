@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "_comment": "插件级预设数据（UI/预设层维护，引擎不硬编码任何插件名/厂商名）。vendorTable: 小写 name/path 子串 -> 厂商，引擎 vendor 兜底链取不到时由 UI 层查表填充。editorQuarantine.close: 关闭编辑器时跳过 removed()/release() 的插件子串（防插件自身 teardown fail-fast 崩溃）。editorQuarantine.open: 打开编辑器即被阻止的插件子串（曾打开即崩溃自动登记于此）。config 目录 plugin_data/editor_quarantine.json 的增量会与本节合并（自动登记写入那里）。",
+  "vendorTable": {
+    "zebra": "u-he",
+    "diva": "u-he",
+    "hive": "u-he",
+    "repro": "u-he",
+    "satin": "u-he",
+    "presswerk": "u-he",
+    "bazille": "u-he",
+    "twang": "u-he",
+    "kv-element": "Kushview",
+    "element": "Kushview",
+    "fabfilter": "FabFilter",
+    "valhalla": "Valhalla DSP",
+    "auto-tune": "Antares"
+  },
+  "editorQuarantine": {
+    "close": ["zebra2"],
+    "open": []
+  }
+}

@@ -6,9 +6,11 @@
  * 具备目录发现、元数据检索、缓存快照、实时挂载/卸载/旁路管理功能。
  */
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 
 import 'config.dart';
 
@@ -111,6 +113,21 @@ class PluginMetadata {
 
   @override
   int get hashCode => path.hashCode ^ id.hashCode;
+
+  /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
+  PluginMetadata copyWith({String? vendor}) => PluginMetadata(
+        id: id,
+        name: name,
+        vendor: vendor ?? this.vendor,
+        version: version,
+        category: category,
+        bundleName: bundleName,
+        description: description,
+        format: format,
+        path: path,
+        isCompatible: isCompatible,
+        errorMessage: errorMessage,
+      );
 }
 
 /// 宿主当前激活状态
@@ -233,6 +250,22 @@ class PluginManager extends ChangeNotifier {
   int _scanDone = 0;
   int _scanTotal = 0;
   int _scanFound = 0;
+
+  // --- 插件级预设数据（assets/presets/plugin_tables.json + config 增量） ---
+  Map<String, String> _vendorTable = {};
+  final List<String> _closeQuarantine = []; // 引擎跳过 removed()（防关闭崩溃）
+  final List<String> _openQuarantine = []; // 应用阻止打开编辑器（防打开崩溃）
+  bool _tablesLoaded = false;
+  Timer? _journalTimer;
+
+  /// 编辑器打开后超过该时长未崩溃视为「打开成功」，从崩溃日志移除，
+  /// 避免稳定编辑器的陈旧日志在无关崩溃后被误登记。
+  static const int kOpenHealthyMs = 15000;
+
+  static File _quarantineConfigFile() => File(ConfigManager.path(
+      'plugin_data${Platform.pathSeparator}editor_quarantine.json'));
+  static File _editorJournalFile() => File(ConfigManager.path(
+      'plugin_data${Platform.pathSeparator}editor_journal.json'));
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
 
@@ -445,13 +478,25 @@ class PluginManager extends ChangeNotifier {
   /// C1：同一插件可同时挂多个槽位，标题必须带槽位号区分多个编辑器窗口。
   /// 本地化标题由调用方经 `plugEditorTitleNamed` 传入；未传时的兜底也带
   /// 槽位号（本类无 BuildContext，取 locale 中性格式）。
+  ///
+  /// 打开崩溃隔离：editorQuarantine.open 名单内插件阻止打开（曾打开即崩溃
+  /// 自动登记于此），给出可操作提示而不是再次崩掉整个 APP。
   void showEditor({int? slot, String? title}) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
+    if (meta != null && _isEditorOpenBlocked(meta)) {
+      _lastError = '${meta.name}：此插件编辑器曾导致 AuraDSP 崩溃，已自动加入'
+          '隔离名单。如确需使用，请编辑 ${_quarantineConfigFile().path} '
+          '将该项从 open 移除后重启。';
+      notifyListeners();
+      return;
+    }
     final winTitle = title ??
         (meta != null
             ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]'
             : 'Plugin Editor [Slot ${s + 1}]');
+    // 崩溃日志：记录「正在打开」，供下次启动自动登记打开即崩溃的插件。
+    if (meta != null) _journalEditorOpened(meta);
     _commandSender?.call({
       'cmd': 'pluginSlotShowEditor',
       'slot': s,
@@ -492,6 +537,206 @@ class PluginManager extends ChangeNotifier {
       'cmd': 'pluginSlotGetStatus',
       'slot': s,
     });
+  }
+
+  // --- 插件级预设数据：厂商表 + 编辑器隔离名单 + 崩溃自动登记 ---
+
+  /// 一次性加载 assets/presets/plugin_tables.json 的厂商表与隔离名单默认值，
+  /// 与 config 增量合并后：把 close 名单推给引擎（跳过 removed()），
+  /// 并检查上一进程的崩溃日志做自动登记。
+  Future<void> loadPluginTables() async {
+    if (_tablesLoaded) return;
+    _tablesLoaded = true;
+    Map<String, dynamic>? defaults;
+    try {
+      final raw = await rootBundle
+          .loadString('assets/presets/plugin_tables.json');
+      defaults = jsonDecode(raw) as Map<String, dynamic>;
+    } catch (_) {
+      defaults = null;
+    }
+    final vt = (defaults?['vendorTable'] as Map?)?.cast<String, dynamic>();
+    _vendorTable = vt?.map((k, v) => MapEntry(k, v as String)) ?? {};
+    final defQ = (defaults?['editorQuarantine'] as Map?) ?? {};
+    // 隔离名单：config 持久化优先；首次运行从资产默认值播种。
+    if (!_quarantineConfigFile().existsSync()) {
+      _saveQuarantineLists(
+        close: (defQ['close'] as List?)?.cast<String>() ?? const [],
+        open: (defQ['open'] as List?)?.cast<String>() ?? const [],
+      );
+    }
+    final cfg = _readQuarantineConfig();
+    _closeQuarantine
+      ..clear()
+      ..addAll(cfg['close'] ?? const <String>[]);
+    _openQuarantine
+      ..clear()
+      ..addAll(cfg['open'] ?? const <String>[]);
+    _sendQuarantineToEngine();
+    _autoRegisterFromCrashJournal();
+    // 周期清扫崩溃日志：稳定编辑器的陈旧条目及时移除，避免误登记。
+    _journalTimer?.cancel();
+    _journalTimer = Timer.periodic(
+        const Duration(milliseconds: kOpenHealthyMs), (_) => sweepEditorJournal());
+    notifyListeners();
+  }
+
+  /// 当前生效的编辑器关闭隔离名单（引擎跳过 removed()），小写子串。
+  List<String> get closeQuarantine => List.unmodifiable(_closeQuarantine);
+
+  /// 当前生效的编辑器打开隔离名单（应用阻止打开），小写子串。
+  List<String> get openQuarantine => List.unmodifiable(_openQuarantine);
+
+  /// 插件是否在打开隔离名单内（阻止编辑器打开）。
+  bool isEditorOpenBlocked(PluginMetadata meta) {
+    final ln = meta.name.toLowerCase();
+    final lp = meta.path.toLowerCase();
+    for (final p in _openQuarantine) {
+      if (ln.contains(p)) return true;
+      if (lp.contains(p)) return true;
+    }
+    return false;
+  }
+
+  bool _isEditorOpenBlocked(PluginMetadata meta) => isEditorOpenBlocked(meta);
+
+  void _sendQuarantineToEngine() {
+    _commandSender?.call({
+      'cmd': 'setEditorQuarantineList',
+      'patterns': _closeQuarantine.join(','),
+    });
+  }
+
+  Map<String, List<String>> _readQuarantineConfig() {
+    try {
+      final f = _quarantineConfigFile();
+      if (!f.existsSync()) return {'close': const [], 'open': const []};
+      final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      return {
+        'close': (j['close'] as List?)?.cast<String>() ?? const [],
+        'open': (j['open'] as List?)?.cast<String>() ?? const [],
+      };
+    } catch (_) {
+      return {'close': const [], 'open': const []};
+    }
+  }
+
+  void _saveQuarantineLists({required List<String> close, required List<String> open}) {
+    try {
+      final f = _quarantineConfigFile();
+      if (!f.existsSync()) f.parent.createSync(recursive: true);
+      f.writeAsStringSync(jsonEncode({
+        'close': close.where((p) => p.isNotEmpty).toSet().toList(),
+        'open': open.where((p) => p.isNotEmpty).toSet().toList(),
+      }));
+    } catch (e) {
+      debugPrint('[PluginManager] quarantine config save failed: $e');
+    }
+  }
+
+  /// 厂商表填充：命中（小写 name/path 子串）即覆盖引擎 vendor 字段。
+  String? _vendorLookup(PluginMetadata meta) {
+    final ln = meta.name.toLowerCase();
+    final lp = meta.path.toLowerCase();
+    for (final e in _vendorTable.entries) {
+      if (ln.contains(e.key)) return e.value;
+      if (lp.contains(e.key)) return e.value;
+    }
+    return null;
+  }
+
+  /// 崩溃日志：记录「正在打开该插件编辑器」。进程若在健康期内退出
+  /// （未及 sweep 移除），下次启动自动登记。
+  void _journalEditorOpened(PluginMetadata meta) {
+    try {
+      final f = _editorJournalFile();
+      if (!f.existsSync()) f.parent.createSync(recursive: true);
+      List existing;
+      try {
+        existing = (jsonDecode(f.readAsStringSync()) as List?) ?? [];
+      } catch (_) {
+        existing = [];
+      }
+      existing.removeWhere((e) => e is Map && e['path'] == meta.path);
+      existing.add({
+        'path': meta.path,
+        'name': meta.name,
+        'openedAt': DateTime.now().millisecondsSinceEpoch,
+      });
+      f.writeAsStringSync(jsonEncode(existing));
+    } catch (_) {}
+  }
+
+  /// 周期清扫：打开超过 kOpenHealthyMs 的条目视为「打开成功」，从日志移除。
+  void sweepEditorJournal() {
+    try {
+      final f = _editorJournalFile();
+      if (!f.existsSync()) return;
+      final now = DateTime.now().millisecondsSinceEpoch;
+      final j = jsonDecode(f.readAsStringSync());
+      if (j is! List) {
+        f.deleteSync();
+        return;
+      }
+      final alive = j.where((e) {
+        if (e is! Map) return false;
+        final t = e['openedAt'];
+        return t is int && (now - t) < kOpenHealthyMs;
+      }).toList();
+      if (alive.isEmpty) {
+        f.deleteSync();
+      } else {
+        f.writeAsStringSync(jsonEncode(alive));
+      }
+    } catch (_) {}
+  }
+
+  /// 启动时检查崩溃日志：上一进程在编辑器打开后未健康化前退出（打开即崩溃）
+  /// → 自动把该插件登记进 open 名单并持久化。登记后清空日志。
+  void _autoRegisterFromCrashJournal() {
+    List<String> crashed = [];
+    try {
+      final f = _editorJournalFile();
+      if (!f.existsSync()) return;
+      final j = jsonDecode(f.readAsStringSync());
+      if (j is List) {
+        for (final e in j) {
+          if (e is! Map) continue;
+          final p = _crashPattern(e['name'] as String?, e['path'] as String?);
+          if (p != null && p.isNotEmpty) crashed.add(p);
+        }
+      }
+      f.deleteSync();
+    } catch (_) {}
+    if (crashed.isEmpty) return;
+    var changed = false;
+    for (final c in crashed) {
+      final lp = c.toLowerCase();
+      if (!_openQuarantine.any((e) => e.toLowerCase() == lp)) {
+        _openQuarantine.add(lp);
+        changed = true;
+      }
+    }
+    if (changed) {
+      _saveQuarantineLists(close: _closeQuarantine, open: _openQuarantine);
+      notifyListeners();
+    }
+  }
+
+  static String? _crashPattern(String? name, String? path) {
+    if (name != null && name.trim().isNotEmpty) return name.trim();
+    if (path != null && path.trim().isNotEmpty) {
+      final stem = path.trim().split(RegExp(r'[\\/]')).last;
+      final dot = stem.lastIndexOf('.');
+      return dot > 0 ? stem.substring(0, dot) : stem;
+    }
+    return null;
+  }
+
+  @override
+  void dispose() {
+    _journalTimer?.cancel();
+    super.dispose();
   }
 
   // --- 插件预设系统管理 ---
@@ -687,7 +932,14 @@ class PluginManager extends ChangeNotifier {
 
       _plugins = list
           .whereType<Map>()
-          .map((m) => PluginMetadata.fromJson(Map<String, dynamic>.from(m)))
+          .map((m) {
+            final meta = PluginMetadata.fromJson(Map<String, dynamic>.from(m));
+            // 厂商表覆盖（预设数据查表，引擎不再硬编码厂商名）：命中即覆盖。
+            final v = _vendorLookup(meta);
+            return v != null && v != meta.vendor
+                ? meta.copyWith(vendor: v)
+                : meta;
+          })
           .toList();
     } catch (e) {
       debugPrint('[PluginManager] Error parsing plugins JSON: $e');
