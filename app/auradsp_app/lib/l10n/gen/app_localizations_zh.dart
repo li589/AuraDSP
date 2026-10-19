@@ -1922,4 +1922,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fxCatCore => '核心处理';
+
+  @override
+  String get errEngineClosed => '引擎未运行';
+
+  @override
+  String get errInvalidLength => '长度无效';
+
+  @override
+  String get errInvalidEncoding => '编码无效';
+
+  @override
+  String get errInvalidPath => '路径无效';
+
+  @override
+  String get errBufferTooSmall => '缓冲区空间不足';
+
+  @override
+  String get errFileTooSmall => '文件过小';
+
+  @override
+  String get errFileTooLarge => '文件大小超出限制';
+
+  @override
+  String get errOutOfRange => '数值超出允许范围';
+
+  @override
+  String get errOutOfMemory => '内存不足';
+
+  @override
+  String get errParseFailed => '内容解析失败';
+
+  @override
+  String get errIoFailed => '文件读写失败';
+
+  @override
+  String get errRejected => '该值被引擎拒绝';
+
+  @override
+  String get errUnsupported => '不支持的操作';
+
+  @override
+  String get errInternal => '引擎内部错误';
 }

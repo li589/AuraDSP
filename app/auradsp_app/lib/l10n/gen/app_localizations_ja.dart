@@ -1929,4 +1929,46 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fxCatCore => 'コア処理';
+
+  @override
+  String get errEngineClosed => 'エンジン未起動';
+
+  @override
+  String get errInvalidLength => '長さが無効';
+
+  @override
+  String get errInvalidEncoding => 'エンコーディングが無効';
+
+  @override
+  String get errInvalidPath => 'パスが無効';
+
+  @override
+  String get errBufferTooSmall => 'バッファ空間不足';
+
+  @override
+  String get errFileTooSmall => 'ファイルが小さすぎます';
+
+  @override
+  String get errFileTooLarge => 'ファイルサイズが上限を超えています';
+
+  @override
+  String get errOutOfRange => '値が許容範囲外です';
+
+  @override
+  String get errOutOfMemory => 'メモリ不足';
+
+  @override
+  String get errParseFailed => 'コンテンツの解析に失敗';
+
+  @override
+  String get errIoFailed => 'ファイル読み書きに失敗';
+
+  @override
+  String get errRejected => 'エンジンにより値が拒否されました';
+
+  @override
+  String get errUnsupported => '非サポートの操作';
+
+  @override
+  String get errInternal => 'エンジン内部エラー';
 }

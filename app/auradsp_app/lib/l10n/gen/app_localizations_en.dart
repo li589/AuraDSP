@@ -2006,4 +2006,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fxCatCore => 'Core Processing';
+
+  @override
+  String get errEngineClosed => 'Engine is not running';
+
+  @override
+  String get errInvalidLength => 'Invalid length';
+
+  @override
+  String get errInvalidEncoding => 'Invalid encoding';
+
+  @override
+  String get errInvalidPath => 'Invalid path';
+
+  @override
+  String get errBufferTooSmall => 'Insufficient buffer space';
+
+  @override
+  String get errFileTooSmall => 'File too small';
+
+  @override
+  String get errFileTooLarge => 'File size exceeds the limit';
+
+  @override
+  String get errOutOfRange => 'Value out of allowed range';
+
+  @override
+  String get errOutOfMemory => 'Out of memory';
+
+  @override
+  String get errParseFailed => 'Content parsing failed';
+
+  @override
+  String get errIoFailed => 'File I/O failed';
+
+  @override
+  String get errRejected => 'Value rejected by engine';
+
+  @override
+  String get errUnsupported => 'Unsupported operation';
+
+  @override
+  String get errInternal => 'Internal engine error';
 }

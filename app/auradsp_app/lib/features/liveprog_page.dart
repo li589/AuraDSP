@@ -16,6 +16,7 @@ import 'package:flutter/services.dart';
 
 import '../core/design.dart';
 import '../core/config.dart';
+import '../core/engine_error_map.dart';
 import '../core/path_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -681,7 +682,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       -3 => l.lpErrSampleSyntax,
                       _ => null,
                     };
-                    final t = '${l.lpStatusError}：${mapped ?? err ?? ''}';
+                    // B-2：lpError 兜底走本地化（token 命中→词条；EEL 原文透传）
+                    final t = '${l.lpStatusError}：${mapped ?? (err == null ? '' : localizeEngineError(err, l))}';
                     return _capsuleBody(
                         p, c, Icons.error_outline_rounded, t,
                         err: err);

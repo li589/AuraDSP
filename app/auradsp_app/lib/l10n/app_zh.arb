@@ -914,5 +914,19 @@
     }
   },
   "fxCatFront": "前置整形",
-  "fxCatCore": "核心处理"
+  "fxCatCore": "核心处理",
+  "errEngineClosed": "引擎未运行",
+  "errInvalidLength": "长度无效",
+  "errInvalidEncoding": "编码无效",
+  "errInvalidPath": "路径无效",
+  "errBufferTooSmall": "缓冲区空间不足",
+  "errFileTooSmall": "文件过小",
+  "errFileTooLarge": "文件大小超出限制",
+  "errOutOfRange": "数值超出允许范围",
+  "errOutOfMemory": "内存不足",
+  "errParseFailed": "内容解析失败",
+  "errIoFailed": "文件读写失败",
+  "errRejected": "该值被引擎拒绝",
+  "errUnsupported": "不支持的操作",
+  "errInternal": "引擎内部错误"
 }
