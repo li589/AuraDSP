@@ -88,10 +88,16 @@ print("=== [4] 测试插件加载与音频处理 ===")
 # Find a test plugin to load
 target_plugin = None
 for p in plugins_json:
-    # Prefer KV-Element-FX or Valhalla or Convology
-    if "KV-Element-FX" in p['name'] or "Valhalla" in p['name'] or "Convology" in p['name']:
+    # 优先真实处理类插件（Convology/Valhalla 会改变 DC 电平，可断言输出≠输入）；
+    # KV-Element-FX 空图属合法直通，仅作后备。
+    if "Convology" in p['name'] or "Valhalla" in p['name']:
         target_plugin = p
         break
+if not target_plugin:
+    for p in plugins_json:
+        if "KV-Element-FX" in p['name']:
+            target_plugin = p
+            break
 if not target_plugin:
     target_plugin = plugins_json[0]
 
@@ -107,20 +113,41 @@ assert status_loaded['hasActive'], "Expected hasActive=true after load"
 assert status_loaded['plugin'] is not None
 
 print("=== [5] 验证音频 process() 处理与直通旁路 ===")
-# Feed 1024 frames of 0.5f test signal
+# Feed DC 0.5 over multiple blocks and require the plugin to actually WRITE output.
+# 历史回归（2026-10-19）：未显式 activateBus 时 FabFilter/Convology 类插件
+# process() 恒返回 kResultOk 但从不写输出——分离缓冲路径残留毒值 -777，
+# in-place 路径表现为位精确直通（与合法 passthrough 插件难以区分）。
 frames = 256
+blocks = 24
 in_samples = [0.5] * (frames * 2)
 in_arr = (ctypes.c_float * len(in_samples))(*in_samples)
 out_arr = (ctypes.c_float * len(in_samples))()
 
-dll.auradsp_process(h, in_arr, out_arr, frames)
-print(f"Processed 256 frames, sample 0: in={in_arr[0]:.4f}, out={out_arr[0]:.4f}")
+expect_processing = ("Convology" in target_plugin['name'] or "Valhalla" in target_plugin['name'])
+last_out = None
+for _ in range(blocks):
+    dll.auradsp_process(h, in_arr, out_arr, frames)
+    last_out = list(out_arr)
 
-# Bypass
+# 毒值检测：未被写入的分离缓冲区会保留哨兵 -777
+assert not any(abs(v) == 777.0 for v in last_out), \
+    "output buffer was never written (poison -777 detected)"
+if expect_processing:
+    assert any(abs(v) > 1e-6 for v in last_out), "processing plugin produced pure silence"
+    maxdiff = max(abs(v - 0.5) for v in last_out)
+    print(f"Processed {blocks} x {frames} frames, DC 0.5: max|out-in| = {maxdiff:.6f}")
+    assert maxdiff > 1e-3, f"plugin returned bit-exact passthrough (max|out-in|={maxdiff:.6f})"
+else:
+    print(f"Processed {blocks} x {frames} frames (passthrough-class plugin, "
+          f"in-place output not asserted against input)")
+
+# Bypass：必须位精确直通
 dll.auradsp_plugin_set_bypass(h, 1)
 assert dll.auradsp_plugin_get_bypass(h) == 1
 dll.auradsp_process(h, in_arr, out_arr, frames)
 print(f"Bypassed 256 frames, sample 0: out={out_arr[0]:.4f}")
+assert out_arr[0] == in_arr[0] and out_arr[200] == in_arr[200], \
+    "bypass must be bit-exact passthrough"
 
 # Unbypass
 dll.auradsp_plugin_set_bypass(h, 0)

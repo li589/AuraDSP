@@ -1682,13 +1682,24 @@ public:
             }
         }
 
+        // 显式激活全部音频总线：FabFilter/Convology 等插件不会仅凭 BusInfo.flags 的
+        // kDefaultActive 进入可处理态，必须在 setupProcessing 前对每个音频总线调用
+        // activateBus(..., true)，否则 process() 恒返回 kResultOk 但不写任何输出。
+        // （已用官方 VST3 SDK hosting 参考宿主复现并验证该行为差异。）
+        for (int32_t i = 0; i < numInBusses; ++i) {
+            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, true);
+        }
+        for (int32_t i = 0; i < numOutBusses; ++i) {
+            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, true);
+        }
+
         // 主总线协商优先设为立体声
         if (numInBusses > 0) inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
         if (numOutBusses > 0) outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
 
         // 调用 setBusArrangements（注意：根据 VST3 规范，返回 kResultFalse 并不代表致命失败，
         // 插件可自主选择自适应或维持其默认总线配置）
-        m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
+        (void)m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
 
         // 重新获取主总线实际确认的声道数
         if (numInBusses > 0) {
@@ -1782,11 +1793,23 @@ public:
         context.state = Steinberg::Vst::ProcessContext::kPlaying |
                         Steinberg::Vst::ProcessContext::kProjectTimeMusicValid |
                         Steinberg::Vst::ProcessContext::kTempoValid |
-                        Steinberg::Vst::ProcessContext::kTimeSigValid;
+                        Steinberg::Vst::ProcessContext::kTimeSigValid |
+                        Steinberg::Vst::ProcessContext::kContTimeValid |
+                        Steinberg::Vst::ProcessContext::kSystemTimeValid;
         context.sampleRate = m_sampleRate;
         context.tempo = 120.0;
         context.timeSigNumerator = 4;
         context.timeSigDenominator = 4;
+        // 连续时间轴推进：同步类/动画类插件依赖（与官方 hosting 参考实现的
+        // AudioClient::preprocess 行为一致）。
+        context.continousTimeSamples = m_continuousTimeSamples;
+        context.projectTimeSamples = m_continuousTimeSamples;
+        {
+            FILETIME ft = {};
+            GetSystemTimeAsFileTime(&ft);
+            context.systemTime = (static_cast<int64_t>(ft.dwHighDateTime) << 32) | ft.dwLowDateTime;
+        }
+        m_continuousTimeSamples += numFrames;
 
         Steinberg::Vst::ProcessData data = {};
         data.processMode = Steinberg::Vst::kRealtime;
@@ -2157,6 +2180,7 @@ private:
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
+    int64_t m_continuousTimeSamples = 0;
     int32_t m_inChannels = 2;
     int32_t m_outChannels = 2;
     int32_t m_numInputBusses = 1;
