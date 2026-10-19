@@ -1,4 +1,5 @@
 #include "auradsp_plugin_host.h"
+#include "auradsp_engine.h" // B-5：宿主自报版本经 auradsp_version() 单源（AURADSP_VERSION）
 #include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
@@ -1125,7 +1126,7 @@ private:
         m_host.name = "AuraDSP";
         m_host.vendor = "AuraDSP Audio Engine";
         m_host.url = "https://github.com/li589/AuraDSP";
-        m_host.version = "1.0.0";
+        m_host.version = auradsp_version();  // B-5：单源 AURADSP_VERSION（不再硬编码 1.0.0）
         m_host.get_extension = hostGetExtension;
         m_host.request_restart = hostRequestRestart;
         m_host.request_process = hostRequestProcess;
