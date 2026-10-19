@@ -6,7 +6,8 @@
   1. 关闭直通（float32 精度内逐位一致）。
   2. 双耳对称性：硬左声像与其镜像的输出互为镜像（确定性 DSP 该成立）。
   3. 双耳差异：单声道输入进左右耳不等（ITD/ILD 真在干活）。
-  4. 早期反射：room=1 脉冲尾 >> room=0；8 tap ±配对保证 mono 下左右能量均衡。
+  4. 早期反射：B3c 矩形房间镜像源（2 阶）；room=1 脉冲尾 >> room=0；
+     首个反射落在镜像源距离处，room 增大 → 反射更晚；左右能量对等。
   5. center/width/outgain 均可测地改变输出。
   6. autogain set/get + 有界；全参数极值 fuzz 有限无 NaN。
   7. 44.1k 独立句柄冒烟（ITD 缩放/pinna 系数/tap 偏移都跟 fs 走）。
@@ -331,65 +332,92 @@ check('FDN adds late-reverb energy',
       l_fdn > l_dry * 1.03 and r_fdn > r_dry * 1.03,
       'fdn=%.4f/%.4f dry=%.4f/%.4f' % (l_fdn, r_fdn, l_dry, r_dry))
 
-# 4. 早期反射：脉冲尾 room=1 >> room=0（全新句柄，排除包络残留）
-h = dll.auradsp_create(SR, BLOCK)
-dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
-
-
-def impulse_tail(room, blocks=40):
-    dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32(room)), 4)
-    e = 0.0
+# 4. B3c 镜像源早期反射：脉冲尾 room=1 >> room=0；反射时刻由房间几何决定。
+def capture_ir(room, blocks=40):
+    hh = dll.auradsp_create(SR, BLOCK)
+    dll.auradsp_set_param(hh, b'spatial.enable', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(hh, b'spatial.room', ctypes.byref(f32(room)), 4)
+    dll.auradsp_set_param(hh, b'spatial.fdn', ctypes.byref(i32(0)), 4)
+    dll.auradsp_set_param(hh, b'spatial.center', ctypes.byref(f32(0.0)), 4)
+    dll.auradsp_set_param(hh, b'spatial.mix', ctypes.byref(f32(1.0)), 4)
+    L, R = [], []
     for b in range(blocks):
-        buf = (ctypes.c_float * (BLOCK * 2))()
+        bi = (ctypes.c_float * (BLOCK * 2))()
+        bo = (ctypes.c_float * (BLOCK * 2))()
         if b == 0:
-            buf[0] = 1.0
-            buf[1] = 1.0
-        out = (ctypes.c_float * (BLOCK * 2))()
-        dll.auradsp_process(h, buf, out, BLOCK)
-        if b >= 2:
-            e += sum(out[i] ** 2 for i in range(BLOCK * 2))
-    return e
+            bi[0] = 1.0
+            bi[1] = 1.0
+        dll.auradsp_process(hh, bi, bo, BLOCK)
+        for i in range(BLOCK):
+            L.append(bo[i * 2])
+            R.append(bo[i * 2 + 1])
+    dll.auradsp_destroy(hh)
+    return L, R
 
 
-e0 = impulse_tail(0.0)
-e1 = impulse_tail(1.0)
+def img_taps_ms(room):
+    """与 dsp_spatial.cpp spat_image_taps 同式：镜像源距离 → 延迟(ms)。"""
+    hx = 0.8 + 1.7 * room
+    hy = 1.2 + 2.3 * room
+    ey = 1.5
+    pts = [(2 * hx, ey), (-2 * hx, ey), (0, 2 * hy - ey), (0, -2 * hy - ey),
+           (4 * hx, ey), (-4 * hx, ey), (0, 4 * hy - ey), (0, -4 * hy - ey)]
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            pts.append((sx * 2 * hx, sy * (2 * hy - ey)))
+    return [math.hypot(x, y) / 343.0 * 1000.0 for x, y in pts]
+
+
+def tail_energy(room, skip_ms=3.0):
+    L, R = capture_ir(room)
+    a = int(skip_ms * SR / 1000.0)
+    return sum(x * x for x in L[a:]) + sum(y * y for y in R[a:])
+
+
+e0 = tail_energy(0.0)
+e1 = tail_energy(1.0)
 check('early reflections tail grows with room', e1 > 5.0 * max(e0, 1e-12),
       'tail0=%.6f tail1=%.6f' % (e0, e1))
-dll.auradsp_destroy(h)
 
-# 4b. B3b 全通扩散：首个反射 tap（11ms）之后必须出现级联能量。
-# 未加全通时 12.3~13.5ms 的 peak < 1e-8；两级 Schroeder 后与首 tap 同量级。
-h = dll.auradsp_create(SR, BLOCK)
-dll.auradsp_set_param(h, b'spatial.enable', ctypes.byref(i32(1)), 4)
-dll.auradsp_set_param(h, b'spatial.room', ctypes.byref(f32(1.0)), 4)
-dll.auradsp_set_param(h, b'spatial.fdn', ctypes.byref(i32(0)), 4)
-dll.auradsp_set_param(h, b'spatial.center', ctypes.byref(f32(0.0)), 4)
-dll.auradsp_set_param(h, b'spatial.mix', ctypes.byref(f32(1.0)), 4)
-sp_l, sp_r = [], []
-for b in range(30):
-    bi = (ctypes.c_float * (BLOCK * 2))()
-    bo = (ctypes.c_float * (BLOCK * 2))()
-    if b == 0:
-        bi[0] = 1.0
-        bi[1] = 1.0
-    dll.auradsp_process(h, bi, bo, BLOCK)
-    for i in range(BLOCK):
-        sp_l.append(bo[i * 2])
-        sp_r.append(bo[i * 2 + 1])
-dll.auradsp_destroy(h)
+# 4b. B3c 几何：首个反射落在镜像源距离处，且在此前无能量。
+irL, irR = capture_ir(1.0)
 
 
 def ir_peak(t0_ms, t1_ms):
-    a = int(t0_ms * SR / 1000.0)
+    a = max(0, int(t0_ms * SR / 1000.0))
     b = int(t1_ms * SR / 1000.0)
-    return max([abs(x) for x in sp_l[a:b]] + [abs(y) for y in sp_r[a:b]])
+    return max([abs(x) for x in irL[a:b]] + [abs(y) for y in irR[a:b]] + [0.0])
 
 
-p_tap = ir_peak(10.5, 11.5)
-p_ap = ir_peak(12.3, 13.5)
-check('B3b allpass diffuses early reflection (inter-tap energy)',
-      p_tap > 1e-4 and p_ap > 0.1 * p_tap,
-      'tap=%.3e inter=%.3e' % (p_tap, p_ap))
+t_first = min(img_taps_ms(1.0))
+t_last = max(img_taps_ms(1.0))
+p_first = ir_peak(t_first - 0.6, t_first + 0.6)
+p_pre = ir_peak(2.0, t_first - 1.5)
+check('B3c first reflection lands at image-source delay',
+      p_first > 1e-4 and p_pre < 0.05 * p_first,
+      'first=%.2fms peak=%.3e pre=%.3e' % (t_first, p_first, p_pre))
+
+# 4c. B3b 全通扩散：最后一个反射 tap 之后仍有弥散尾（未加全通应≈0）。
+p_last = ir_peak(t_last - 0.6, t_last + 0.6)
+p_smear = ir_peak(t_last + 1.5, t_last + 4.0)
+check('B3b allpass smears after last reflection tap',
+      p_last > 1e-4 and p_smear > 0.05 * p_last,
+      'last=%.2fms tap=%.3e smear=%.3e' % (t_last, p_last, p_smear))
+
+# 4d. room 只改房间尺寸/反射率：更大房间 → 首个反射更晚（几何单调）。
+def first_reflection_ms(room, thr=0.004):
+    L, R = capture_ir(room)
+    for i in range(int(3.0 * SR / 1000.0), len(L)):
+        if abs(L[i]) > thr or abs(R[i]) > thr:
+            return i * 1000.0 / SR
+    return -1.0
+
+
+fr_small = first_reflection_ms(0.3)
+fr_big = first_reflection_ms(1.0)
+check('room scales reflection geometry (bigger room = later first tap)',
+      fr_small > 0 and fr_big > fr_small + 2.0,
+      'small=%.2fms big=%.2fms' % (fr_small, fr_big))
 
 # 5. center/width/outgain 可测（每项独立全新句柄）
 h = dll.auradsp_create(SR, BLOCK)

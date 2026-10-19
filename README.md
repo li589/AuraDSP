@@ -71,7 +71,7 @@ AuraDSP/
 | `bassmono` | 低频单声道化 | `psycho` | 心理声学低音（MaxxBass 式谐波） |
 | `haas` | Haas 差分环绕 | `shelf` | 低频搁架 biquad |
 | `exciter` | 谐波激励器 | `dyneq` | 全参数动态 EQ（3 段，见下） |
-| `spatial` | 参数化 HRTF + 早期反射 | | |
+| `spatial` | 参数化 HRTF + 镜像源早期反射 + FDN 晚期 | | |
 
 `dyneq` 为三段全参数动态 EQ：Low shelf（20–500Hz）/ Mid bell（200–8kHz）/ High shelf（2k–20kHz），
 每段含 `enable/freq/q/gain/range/threshold`，全局 `attack/release`；静态 RBJ + 动态谱减（与 Deesser 同构），
