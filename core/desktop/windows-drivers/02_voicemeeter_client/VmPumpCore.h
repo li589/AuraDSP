@@ -108,8 +108,9 @@ struct PumpCtx {
     uint32_t testRng = 0x12345678u;  // xorshift 白噪声源（RT 独占，禁 rand()）
     double testPink[7] = {};     // 粉噪滤波器状态（RT 独占，Paul Kellet 系数对标 Dart）
     const float* testFile = nullptr;  // 主线程 test_start 时拷贝，stop 时先清 kind 再 Sleep 后释放
-    uint64_t testFrames = 0;     // 源帧数（立体声交织帧）
+    uint64_t testFrames = 0;     // 源帧数（按 testFileCh 交织）
     int testRate = 0;
+    int testFileCh = 2;          // testFile 交织声道数（2..8；pump 恒 2，ASIO 桥 B2c 可为 4/6/8）
     double testPos = 0.0;  // 文件播放头（源帧单位，RT 独占，循环）
 };
 
@@ -132,7 +133,10 @@ inline void DecayGrpPeak(PumpCtx* c, int g, long n, double seconds) {
 
 // 测试信号填充（RT-safe：纯数学，无分配无锁；与 Dart FileSource/ToneSource/PinkSource 同构）。
 // 用户语义：测试源启动即静音主通道输入，本函数输出替代 VB 输入进同一条 DSP 链。
-inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
+// FillTestSignalN：dst 为 ch 声道交织。kind1/2 源写 ch0/1（其余补零）；
+// kind3 按 testFileCh→ch 复制（不足补零）。ch==2 即原 FillTestSignal 逐字节同义。
+inline void FillTestSignalN(PumpCtx* c, float* dst, long n, int ch) {
+    if (ch <= 0) return;
     const double sr = c->sr > 0 ? (double)c->sr : 48000.0;
     const long kind = c->testKind;  // 单次读，快照
     if (kind == 1) {
@@ -142,8 +146,10 @@ inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
             c->testPhase += d;
             if (c->testPhase > 2.0 * 3.14159265358979)
                 c->testPhase -= 2.0 * 3.14159265358979;
-            dst[i * 2] = s;
-            dst[i * 2 + 1] = s;
+            float* f = dst + (size_t)i * (size_t)ch;
+            f[0] = s;
+            if (ch > 1) f[1] = s;
+            for (int k = 2; k < ch; ++k) f[k] = 0.0f;
         }
     } else if (kind == 2) {
         double b0 = c->testPink[0], b1 = c->testPink[1], b2 = c->testPink[2];
@@ -166,8 +172,10 @@ inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
             const float s =
                 (float)((b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.05);
             b6 = w * 0.115926;
-            dst[i * 2] = s;
-            dst[i * 2 + 1] = s;
+            float* f = dst + (size_t)i * (size_t)ch;
+            f[0] = s;
+            if (ch > 1) f[1] = s;
+            for (int k = 2; k < ch; ++k) f[k] = 0.0f;
         }
         c->testPink[0] = b0;
         c->testPink[1] = b1;
@@ -179,24 +187,32 @@ inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
     } else if (kind == 3 && c->testFile && c->testFrames > 0 && c->testRate > 0) {
         const double ratio = (double)c->testRate / sr;
         const uint64_t total = c->testFrames;
+        const int srcCh = (c->testFileCh >= 1 && c->testFileCh <= 8) ? c->testFileCh : 2;
+        const int copy = (ch < srcCh) ? ch : srcCh;
         for (long i = 0; i < n; ++i) {
             if (c->testPos >= (double)(total - 1)) c->testPos = 0.0;
             const uint64_t i0 = (uint64_t)c->testPos;
             const double frac = c->testPos - (double)i0;
             uint64_t i1 = i0 + 1;
             if (i1 >= total) i1 = total - 1;
-            const float aL = c->testFile[i0 * 2], aR = c->testFile[i0 * 2 + 1];
-            const float bL = c->testFile[i1 * 2], bR = c->testFile[i1 * 2 + 1];
-            dst[i * 2] = (float)(aL * (1.0 - frac) + bL * frac);
-            dst[i * 2 + 1] = (float)(aR * (1.0 - frac) + bR * frac);
+            const float* a = c->testFile + (size_t)i0 * (size_t)srcCh;
+            const float* b = c->testFile + (size_t)i1 * (size_t)srcCh;
+            float* f = dst + (size_t)i * (size_t)ch;
+            for (int k = 0; k < copy; ++k)
+                f[k] = (float)(a[k] * (1.0 - frac) + b[k] * frac);
+            for (int k = copy; k < ch; ++k) f[k] = 0.0f;
             c->testPos += ratio;
         }
     } else {
         for (long i = 0; i < n; ++i) {
-            dst[i * 2] = 0.0f;
-            dst[i * 2 + 1] = 0.0f;
+            float* f = dst + (size_t)i * (size_t)ch;
+            for (int k = 0; k < ch; ++k) f[k] = 0.0f;
         }
     }
+}
+
+inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
+    FillTestSignalN(c, dst, n, 2);
 }
 
 inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {

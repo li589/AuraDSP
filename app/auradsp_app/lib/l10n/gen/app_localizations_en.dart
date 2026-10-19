@@ -453,7 +453,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get asioBufAuto => 'Auto (driver preferred)';
 
   @override
-  String get asioOutPair => 'Output Pair';
+  String get asioOutPair => 'Output Block Start';
+
+  @override
+  String get asioDeviceChannels => 'Device Channels';
+
+  @override
+  String get asioTransportChannels => 'Transport Channels';
 
   @override
   String get asioRefresh => 'Refresh';

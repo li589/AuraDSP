@@ -62,9 +62,17 @@ public:
     // 活跃驱动实例计数（供 DllCanUnloadNow 检查）
     static std::atomic<long> s_instanceCount;
 
+    // 通道档位（B2c）：与引擎 channels.count 一致，仅允许 2/4/6/8。
+    static constexpr long kMinChannels = 2;
+    static constexpr long kMaxChannels = 8;
+    static bool IsValidChannelCount(long n) {
+        return n == 2 || n == 4 || n == 6 || n == 8;
+    }
+
 private:
     static DWORD WINAPI AudioPumpThreadProc(LPVOID param);
     DWORD PumpLoop();
+    void LoadConfiguredChannels();  // 启动前从注册表读取档位（默认 2）
 
     std::atomic<long> m_refCount{1};
 
@@ -79,12 +87,12 @@ private:
 
     ASIOCallbacks* m_callbacks = nullptr;
 
-    // 立体声通道映射（In 0/1, Out 0/1）
-    // 双缓冲配置：[channel][buffer_half 0 or 1]
-    float* m_inBuffers[2][2] = {};
-    float* m_outBuffers[2][2] = {};
-    bool m_inputActive[2] = {false, false};
-    bool m_outputActive[2] = {false, false};
+    // 通道映射（B2c：2/4/6/8 档，默认 2；双缓冲 [channel][half 0/1]）
+    long m_channels = 2;
+    float* m_inBuffers[kMaxChannels][2] = {};
+    float* m_outBuffers[kMaxChannels][2] = {};
+    bool m_inputActive[kMaxChannels] = {};
+    bool m_outputActive[kMaxChannels] = {};
 
     // 时钟与线程
     HANDLE m_hThread = nullptr;
@@ -102,10 +110,13 @@ private:
     std::string m_pendingParamString;
 
     // 实时音频交织与 DSP 处理中间缓冲（createBuffers 时分配，RT 线程零分配）
+    // m_proc：处理后交织输出（bufferSize * m_channels）；m_foldL/R：N→立体声下混，
+    // 供 WasapiSink 物理端点消费（m_channels==2 时为通道 0/1 的等价拷贝）。
     float* m_interleavedIn = nullptr;
     float* m_interleavedOut = nullptr;
-    float* m_dspOutL = nullptr;
-    float* m_dspOutR = nullptr;
+    float* m_proc = nullptr;
+    float* m_foldL = nullptr;
+    float* m_foldR = nullptr;
 
     char m_errorMessage[128] = {0};
 };

@@ -66,6 +66,9 @@ def run_smoke_tests():
     # ASIO 常驻桥（Phase 2）：VM 虚拟 ASIO 上 10s，bypass 开/关峰值差 +
     # vizGrp/peak 断言 + slot 被占优雅让路（-3 语义同 05）
     "smoke_asio_bridge.py",
+    # ASIO 多声道传输（B2c）：asio_start_ex(Nch) + 引擎 channels.count 对齐 +
+    # 6ch 文件注入/bypass + 驱动能力降级；无 in/out>=6 驱动时自动 SKIP
+    "smoke_asio_multichannel.py",
     # AuraVAIO 虚拟声卡桥（Mode 1）：探测端点与无驱动防御 / 有驱动回环断言
     "smoke_vaio_bridge.py",
     "smoke_crossfeed.py",

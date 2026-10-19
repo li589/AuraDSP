@@ -37,6 +37,10 @@ constexpr long kAuraAsioFutureApplyParamsString        = 0x41555215; // 'AUR\x15
 constexpr long kAuraAsioFutureGetDspProcessedFrames    = 0x41555216; // 'AUR\x16': opt -> uint64_t*
 constexpr long kAuraAsioFutureCopyLastOutputBlock      = 0x41555217; // 'AUR\x17': opt -> AuraAsioBlockCopy*
 
+// Phase B2c 多声道档位扩展（须在 createBuffers 之前设置；仅接受 2/4/6/8）
+constexpr long kAuraAsioFutureSetChannels              = 0x41555218; // 'AUR\x18': opt -> const long*
+constexpr long kAuraAsioFutureGetChannels              = 0x41555219; // 'AUR\x19': opt -> long*
+
 struct AuraAsioParamIo {
     const char* id;
     void* value;

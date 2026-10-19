@@ -168,12 +168,12 @@ if os.path.exists(ASIO_TRUTH):
             sys.exit(2)
     try:
         b = ctypes.CDLL(ASIO_TRUTH)
-        for sym in ("asio_detect", "asio_start", "asio_stop", "asio_status",
-                    "asio_set_param", "asio_set_param_str", "asio_get_param",
-                    "asio_get_param_str", "asio_viz_read", "asio_test_start",
-                    "asio_test_stop", "asio_bypass"):
+        for sym in ("asio_detect", "asio_start", "asio_start_ex", "asio_stop",
+                    "asio_status", "asio_set_param", "asio_set_param_str",
+                    "asio_get_param", "asio_get_param_str", "asio_viz_read",
+                    "asio_test_start", "asio_test_stop", "asio_bypass"):
             getattr(b, sym)
-        print("  导出表 12/12 OK")
+        print("  导出表 13/13 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)

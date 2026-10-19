@@ -98,6 +98,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool asioActive = false;
   AuraAsioBridge? ab;
   String asioDriverInUse = ''; // 当前桥会话用的驱动名（诊断对账用）
+  int asioBufSize = 0; // 当前桥会话缓冲档（B2c：文件声道变化时热切复用）
+  int asioOutPair = 0; // 当前桥会话输出块起始声道（同上）
+  int asioCh = 2;      // 当前桥会话 io 声道数（B2c：2/4/6/8）
   // AuraVAIO 虚拟声卡模式面（Mode 1 桥）：与 VB/ASIO/WASAPI 互斥。
   bool vaioActive = false;
   AuraVaioBridge? vaio;
@@ -264,13 +267,28 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     send({'evt': 'asiodrivers', 'drivers': list, 'note': ''});
   }
 
-  /// driver/bufSize/outPair 由主 isolate 随命令带参（config 真相源在主侧）。
+  /// B2c：当前已加载文件应使用的桥 io 声道数（仅 4/6/8 声道 raw 文件才升到 N，
+  /// 其余回落立体声）。用于 ASIO 模式开启/热切时无显式 channels 参数的兜底。
+  int asioChannelsFromSource() {
+    final s = source;
+    if (s is FileSource) {
+      final c = s.fileCh;
+      if (c == 4 || c == 6 || c == 8) return c;
+    }
+    return 2;
+  }
+
+  /// driver/bufSize/outPair/channels 由主 isolate 随命令带参（config 真相源在主侧）。
   /// driver 为空则取清单第一个（零配置可用；清单也空则报 no-drivers）。
+  /// [channels] ∈ {2,4,6,8} 为 io 声道数（B2c）；桥按驱动能力自动降级。
   void startAsioBridge(
-      {required String driver, required int bufSize, required int outPair}) {
+      {required String driver,
+      required int bufSize,
+      required int outPair,
+      int channels = 2}) {
     if (asioActive) return;
     dbgLog('asiomode: start requested driver="$driver" '
-        'buf=$bufSize pair=$outPair');
+        'buf=$bufSize pair=$outPair ch=$channels');
     try {
       ab ??= AuraAsioBridge.load();
     } catch (e) {
@@ -296,7 +314,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 主 isolate 下发的 engineDll 为空时桥内自动搜索；有 loadedPath 就显式传
     //（与 vbmode 同策略：App 真相源优先）。
     final rc = ab!.start(drv, engineDll: AuraDspLib.loadedPath ?? '',
-        bufSize: bufSize, outPair: outPair);
+        bufSize: bufSize, outPair: outPair, channels: channels);
     dbgLog('asiomode: start rc=$rc');
     if (rc != 0) {
       final st = ab!.status();
@@ -330,13 +348,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     source = null;
     asioActive = true;
     asioDriverInUse = drv;
+    asioBufSize = bufSize;
+    asioOutPair = outPair;
     vbVizNullLogged = false;
     vbNoCbLogged = false;
     vbVizOkLogged = false;
     vbStatusAt = DateTime.now().millisecondsSinceEpoch;
     final st = ab!.status();
+    // 桥可能按驱动能力把 io 声道数向下取档（如 6→2）；以桥回报的真值为准，
+    // 供文件声道变化时的热切判断与状态展示。
+    final liveCh = (st?['ioCh'] as num?)?.toInt() ?? 0;
+    asioCh = liveCh > 0 ? liveCh : channels;
     dbgLog('asiomode: started sr=${st?['sr']} nbs=${st?['nbs']} '
-        'outPair=${st?['outPair']} driver=${st?['driver']} note=${st?['note']}');
+        'outPair=${st?['outPair']} ioCh=${st?['ioCh']} driver=${st?['driver']} '
+        'note=${st?['note']}');
     send({'evt': 'asiostatus', ...?st, 'running': true, 'driverInUse': drv});
   }
 
@@ -966,18 +991,34 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (tk == 3) {
               final fpath = m['path'] as String;
               final lb = lib;
+              // B2c：多声道文件按原始声道注入（4/6/8 才有 raw 直通；其余回落 fold
+              // 立体声）。声道数与当前桥 io 声道数不符则热切桥（重建引擎）。
               final decoded = fpath.toLowerCase().endsWith('.mp3')
                   ? (lb == null ? null : decodeMp3File(lb, fpath))
-                  : decodeWavFile(fpath);
+                  : decodeWavFile(fpath, fold: false);
               if (decoded == null) {
                 send({'evt': 'error', 'msg': 'ASIO模式文件解析失败'});
               } else {
-                final n = decoded.data.length ~/ 2;
+                final srcCh = decoded.channels;
+                final ch = (srcCh == 4 || srcCh == 6 || srcCh == 8) ? srcCh : 2;
+                if (ch != asioCh) {
+                  final drv = asioDriverInUse;
+                  final bs = asioBufSize, op = asioOutPair;
+                  dbgLog('asiomode: fileCh=$ch != ioCh=$asioCh → restart bridge');
+                  stopAsioBridge();
+                  startAsioBridge(
+                      driver: drv, bufSize: bs, outPair: op, channels: ch);
+                  if (!asioActive || ab == null) {
+                    send({'evt': 'error', 'msg': 'ASIO多声道重启失败'});
+                    break;
+                  }
+                }
+                final n = decoded.data.length ~/ ch;
                 final ptr = malloc<Float>(decoded.data.length);
                 try {
                   ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
                   ab!.testStart(3,
-                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
+                      pcm: ptr, frames: n, ch: ch, rate: decoded.sampleRate);
                 } finally {
                   malloc.free(ptr);
                 }
@@ -1092,19 +1133,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               driver: (m['driver'] as String?) ?? '',
               bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
               outPair: (m['outPair'] as num?)?.toInt() ?? 0,
+              channels: (m['channels'] as num?)?.toInt() ?? asioChannelsFromSource(),
             );
           } else {
             stopAsioBridge();
           }
           break;
         case 'asiorestart':
-          // 驱动/缓冲/声道对变更：热切换（stop → start 新参数）。
+          // 驱动/缓冲/声道数变更：热切换（stop → start 新参数）。
           if (!asioActive) break;
           stopAsioBridge();
           startAsioBridge(
             driver: (m['driver'] as String?) ?? '',
             bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
             outPair: (m['outPair'] as num?)?.toInt() ?? 0,
+            channels: (m['channels'] as num?)?.toInt() ?? asioChannelsFromSource(),
           );
           break;
         case 'asiodetect':

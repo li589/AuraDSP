@@ -55,8 +55,28 @@ ULONG STDMETHODCALLTYPE AuraAsioDriver::Release() {
 ASIOBool AuraAsioDriver::init(void* /*sysHandle*/) {
     m_active = true;
     m_errorMessage[0] = '\0';
+    LoadConfiguredChannels();
     m_engineLoader.Load();
     return ASIOTrue;
+}
+
+// B2c：从注册表读取通道档位。优先 HKCU\SOFTWARE\AuraDSP\AsioDriver\Channels，
+// 其次 HKCR\CLSID\{...}\Channels；缺省或非法值回落 2（保持历史立体声行为）。
+void AuraAsioDriver::LoadConfiguredChannels() {
+    DWORD val = 0;
+    DWORD sz = sizeof(val);
+    const std::wstring clsidKey =
+        std::wstring(L"CLSID\\") + kAuraAsioClsidString;
+    if (RegGetValueW(HKEY_CURRENT_USER, L"SOFTWARE\\AuraDSP\\AsioDriver",
+                     L"Channels", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS ||
+        RegGetValueW(HKEY_CLASSES_ROOT, clsidKey.c_str(),
+                     L"Channels", RRF_RT_REG_DWORD, nullptr, &val, &sz) == ERROR_SUCCESS) {
+        if (IsValidChannelCount((long)val)) {
+            m_channels = (long)val;
+            return;
+        }
+    }
+    m_channels = 2;
 }
 
 void AuraAsioDriver::getDriverName(char* name) {
@@ -77,8 +97,8 @@ void AuraAsioDriver::getErrorMessage(char* string) {
 
 ASIOError AuraAsioDriver::getChannels(long* numInputChannels, long* numOutputChannels) {
     if (!numInputChannels || !numOutputChannels) return ASE_InvalidParameter;
-    *numInputChannels = 2;   // 立体声输入
-    *numOutputChannels = 2;  // 立体声输出
+    *numInputChannels = m_channels;   // B2c：2/4/6/8 档（默认 2）
+    *numOutputChannels = m_channels;
     return ASE_OK;
 }
 
@@ -168,25 +188,25 @@ ASIOError AuraAsioDriver::getSamplePosition(ASIOSamples* sPos, ASIOTimeStamp* tS
 
 ASIOError AuraAsioDriver::getChannelInfo(ASIOChannelInfo* info) {
     if (!info) return ASE_InvalidParameter;
-    if (info->channel < 0 || info->channel >= 2) return ASE_InvalidParameter;
+    if (info->channel < 0 || info->channel >= m_channels) return ASE_InvalidParameter;
 
     info->type = ASIOSTFloat32LSB;
     info->channelGroup = 0;
-    if (info->isInput) {
-        info->isActive = m_inputActive[info->channel] ? ASIOTrue : ASIOFalse;
-        if (info->channel == 0) {
-            strncpy_s(info->name, sizeof(info->name), "In 1 (L)", _TRUNCATE);
-        } else {
-            strncpy_s(info->name, sizeof(info->name), "In 2 (R)", _TRUNCATE);
-        }
+
+    // B2c：1/2 声道保留人可读 L/R 名；>=3 声道使用通用 "In/Out N" 以便 DAW 路由。
+    const long ch = info->channel;
+    char name[32];
+    if (ch == 0) {
+        strncpy_s(name, sizeof(name), info->isInput ? "In 1 (L)" : "Out 1 (L)", _TRUNCATE);
+    } else if (ch == 1) {
+        strncpy_s(name, sizeof(name), info->isInput ? "In 2 (R)" : "Out 2 (R)", _TRUNCATE);
     } else {
-        info->isActive = m_outputActive[info->channel] ? ASIOTrue : ASIOFalse;
-        if (info->channel == 0) {
-            strncpy_s(info->name, sizeof(info->name), "Out 1 (L)", _TRUNCATE);
-        } else {
-            strncpy_s(info->name, sizeof(info->name), "Out 2 (R)", _TRUNCATE);
-        }
+        sprintf_s(name, sizeof(name), info->isInput ? "In %ld" : "Out %ld", ch + 1);
     }
+    strncpy_s(info->name, sizeof(info->name), name, _TRUNCATE);
+
+    info->isActive = (info->isInput ? m_inputActive[ch] : m_outputActive[ch])
+                         ? ASIOTrue : ASIOFalse;
     return ASE_OK;
 }
 
@@ -200,19 +220,25 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
     m_bufferSize = bufferSize;
     m_callbacks = callbacks;
 
-    // 分配 Phase 3 实时中间与交织缓冲
-    m_interleavedIn = static_cast<float*>(_aligned_malloc((size_t)bufferSize * 2 * sizeof(float), 64));
-    m_interleavedOut = static_cast<float*>(_aligned_malloc((size_t)bufferSize * 2 * sizeof(float), 64));
-    m_dspOutL = static_cast<float*>(_aligned_malloc((size_t)bufferSize * sizeof(float), 64));
-    m_dspOutR = static_cast<float*>(_aligned_malloc((size_t)bufferSize * sizeof(float), 64));
-    if (!m_interleavedIn || !m_interleavedOut || !m_dspOutL || !m_dspOutR) {
+    const long ch = m_channels;
+
+    // 分配 Phase 3 实时中间与交织缓冲（B2c：按 m_channels 档位交织）
+    const size_t interBytes = (size_t)bufferSize * (size_t)ch * sizeof(float);
+    const size_t pairBytes = (size_t)bufferSize * sizeof(float);
+    m_interleavedIn = static_cast<float*>(_aligned_malloc(interBytes, 64));
+    m_interleavedOut = static_cast<float*>(_aligned_malloc(interBytes, 64));
+    m_proc = static_cast<float*>(_aligned_malloc(interBytes, 64));
+    m_foldL = static_cast<float*>(_aligned_malloc(pairBytes, 64));
+    m_foldR = static_cast<float*>(_aligned_malloc(pairBytes, 64));
+    if (!m_interleavedIn || !m_interleavedOut || !m_proc || !m_foldL || !m_foldR) {
         disposeBuffers();
         return ASE_NoMemory;
     }
-    memset(m_interleavedIn, 0, (size_t)bufferSize * 2 * sizeof(float));
-    memset(m_interleavedOut, 0, (size_t)bufferSize * 2 * sizeof(float));
-    memset(m_dspOutL, 0, (size_t)bufferSize * sizeof(float));
-    memset(m_dspOutR, 0, (size_t)bufferSize * sizeof(float));
+    memset(m_interleavedIn, 0, interBytes);
+    memset(m_interleavedOut, 0, interBytes);
+    memset(m_proc, 0, interBytes);
+    memset(m_foldL, 0, pairBytes);
+    memset(m_foldR, 0, pairBytes);
 
     // 引擎句柄实例化（按协商后的采样率与缓冲大小创建）
     if (!m_engineLoader.IsLoaded()) {
@@ -223,11 +249,16 @@ ASIOError AuraAsioDriver::createBuffers(ASIOBufferInfo* bufferInfos, long numCha
         if (m_engine && !m_pendingParamString.empty()) {
             m_engineLoader.ApplyParamsString(m_engine, m_pendingParamString.c_str());
         }
+        // B2c：驱动为权威，钉死引擎通道档位（避免传输/处理步长不一致）
+        if (m_engine) {
+            int nCh = (int)m_channels;
+            m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
+        }
     }
 
     for (long i = 0; i < numChannels; ++i) {
         ASIOBufferInfo& info = bufferInfos[i];
-        if (info.channelNum < 0 || info.channelNum >= 2) {
+        if (info.channelNum < 0 || info.channelNum >= ch) {
             disposeBuffers();
             return ASE_InvalidParameter;
         }
@@ -282,16 +313,20 @@ ASIOError AuraAsioDriver::disposeBuffers() {
         _aligned_free(m_interleavedOut);
         m_interleavedOut = nullptr;
     }
-    if (m_dspOutL) {
-        _aligned_free(m_dspOutL);
-        m_dspOutL = nullptr;
+    if (m_proc) {
+        _aligned_free(m_proc);
+        m_proc = nullptr;
     }
-    if (m_dspOutR) {
-        _aligned_free(m_dspOutR);
-        m_dspOutR = nullptr;
+    if (m_foldL) {
+        _aligned_free(m_foldL);
+        m_foldL = nullptr;
+    }
+    if (m_foldR) {
+        _aligned_free(m_foldR);
+        m_foldR = nullptr;
     }
 
-    for (int c = 0; c < 2; ++c) {
+    for (int c = 0; c < kMaxChannels; ++c) {
         if (m_inBuffers[c][0]) {
             _aligned_free(m_inBuffers[c][0]);
             m_inBuffers[c][0] = nullptr;
@@ -416,13 +451,39 @@ ASIOError AuraAsioDriver::future(long selector, void* opt) {
     case kAuraAsioFutureCopyLastOutputBlock:
         if (opt) {
             auto* p = reinterpret_cast<AuraAsioBlockCopy*>(opt);
-            if (p && p->outL && p->outR && p->maxSamples > 0 && m_dspOutL && m_dspOutR) {
+            if (p && p->outL && p->outR && p->maxSamples > 0 && m_proc) {
+                const long ch = m_channels;
                 long toCopy = (m_bufferSize < p->maxSamples) ? m_bufferSize : p->maxSamples;
-                memcpy(p->outL, m_dspOutL, (size_t)toCopy * sizeof(float));
-                memcpy(p->outR, m_dspOutR, (size_t)toCopy * sizeof(float));
+                // 取处理后块的前两个通道（与历史立体声语义一致，多声道下为 ch0/ch1）
+                for (long i = 0; i < toCopy; ++i) {
+                    p->outL[i] = m_proc[i * ch + 0];
+                    p->outR[i] = (ch > 1) ? m_proc[i * ch + 1] : m_proc[i * ch + 0];
+                }
                 p->copiedSamples = toCopy;
                 return ASE_SUCCESS;
             }
+        }
+        return ASE_InvalidParameter;
+
+    case kAuraAsioFutureSetChannels:
+        // B2c：仅允许在 createBuffers 之前设置；驱动为权威并同步引擎 channels.count
+        if (opt) {
+            if (m_buffersAllocated) return ASE_InvalidMode;
+            const long n = *reinterpret_cast<const long*>(opt);
+            if (!IsValidChannelCount(n)) return ASE_InvalidParameter;
+            m_channels = n;
+            if (m_engine) {
+                int nCh = (int)m_channels;
+                m_engineLoader.SetParam(m_engine, "channels.count", &nCh, (uint32_t)sizeof(nCh));
+            }
+            return ASE_SUCCESS;
+        }
+        return ASE_InvalidParameter;
+
+    case kAuraAsioFutureGetChannels:
+        if (opt) {
+            *reinterpret_cast<long*>(opt) = m_channels;
+            return ASE_SUCCESS;
         }
         return ASE_InvalidParameter;
 
@@ -515,46 +576,62 @@ DWORD AuraAsioDriver::PumpLoop() {
         m_samplePosition += m_bufferSize;
 
         // Phase 2 / Phase 3：提取对立半区（DAW 在上一个时钟周期已填毕的数据）
+        const long ch = m_channels;
         const long playIndex = 1 - currentToggle;
-        const float* playL = (m_outputActive[0] && m_outBuffers[0][playIndex]) ? m_outBuffers[0][playIndex] : nullptr;
-        const float* playR = (m_outputActive[1] && m_outBuffers[1][playIndex]) ? m_outBuffers[1][playIndex] : nullptr;
 
-        if (m_dspOutL && m_dspOutR) {
-            if (m_engine && !m_bypass.load(std::memory_order_relaxed) && m_interleavedIn && m_interleavedOut) {
+        if (m_proc && m_interleavedIn && m_interleavedOut && m_foldL && m_foldR) {
+            // 按通道收集 DAW 输出块，交织进 m_interleavedIn（缺缓冲的通道补零）
+            for (long c = 0; c < ch; ++c) {
+                const float* play = (m_outputActive[c] && m_outBuffers[c][playIndex])
+                                        ? m_outBuffers[c][playIndex] : nullptr;
+                for (long i = 0; i < m_bufferSize; ++i) {
+                    m_interleavedIn[i * ch + c] = play ? play[i] : 0.0f;
+                }
+            }
+
+            if (m_engine && !m_bypass.load(std::memory_order_relaxed)) {
                 // 交织 DAW 输出送入 DSP 处理
-                for (long i = 0; i < m_bufferSize; ++i) {
-                    m_interleavedIn[i * 2 + 0] = playL ? playL[i] : 0.0f;
-                    m_interleavedIn[i * 2 + 1] = playR ? playR[i] : 0.0f;
-                }
                 m_engineLoader.Process(m_engine, m_interleavedIn, m_interleavedOut, (int)m_bufferSize);
-                for (long i = 0; i < m_bufferSize; ++i) {
-                    m_dspOutL[i] = m_interleavedOut[i * 2 + 0];
-                    m_dspOutR[i] = m_interleavedOut[i * 2 + 1];
-                }
+                memcpy(m_proc, m_interleavedOut, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
                 m_dspProcessedFrames.fetch_add((uint64_t)m_bufferSize, std::memory_order_relaxed);
             } else {
                 // 旁路直通（或未加载引擎时安全透传）
-                if (playL) {
-                    memcpy(m_dspOutL, playL, (size_t)m_bufferSize * sizeof(float));
-                } else {
-                    memset(m_dspOutL, 0, (size_t)m_bufferSize * sizeof(float));
+                memcpy(m_proc, m_interleavedIn, (size_t)m_bufferSize * (size_t)ch * sizeof(float));
+            }
+
+            // N→立体声下混，供 WasapiSink 物理端点（2 声道为逐样本等价拷贝）
+            if (ch <= 2) {
+                for (long i = 0; i < m_bufferSize; ++i) {
+                    m_foldL[i] = m_proc[i * ch + 0];
+                    m_foldR[i] = (ch > 1) ? m_proc[i * ch + 1] : m_proc[i * ch + 0];
                 }
-                if (playR) {
-                    memcpy(m_dspOutR, playR, (size_t)m_bufferSize * sizeof(float));
-                } else {
-                    memset(m_dspOutR, 0, (size_t)m_bufferSize * sizeof(float));
+            } else {
+                const float k = 0.70710678f;  // 标准 -3dB 下混系数
+                for (long i = 0; i < m_bufferSize; ++i) {
+                    const float* f = m_proc + i * ch;
+                    float l = f[0], r = f[1];
+                    if (ch > 2) { const float ctr = f[2] * k; l += ctr; r += ctr; }
+                    if (ch > 3) { l += f[3] * k; }
+                    if (ch > 4) { r += f[4] * k; }
+                    if (ch > 5) { l += f[5] * k; }
+                    if (ch > 6) { r += f[6] * k; }
+                    m_foldL[i] = l;
+                    m_foldR[i] = r;
                 }
             }
 
             // 1. WASAPI 物理渲染汇直通推流
-            m_wasapiSink.PushSamples(m_dspOutL, m_dspOutR, m_bufferSize, m_sampleRate);
+            m_wasapiSink.PushSamples(m_foldL, m_foldR, m_bufferSize, m_sampleRate);
 
-            // 2. 将处理后音频提供给输入通道（标准虚拟驱动 Loopback 回录）
-            if (m_inputActive[0] && m_inBuffers[0][currentToggle]) {
-                memcpy(m_inBuffers[0][currentToggle], m_dspOutL, (size_t)m_bufferSize * sizeof(float));
-            }
-            if (m_inputActive[1] && m_inBuffers[1][currentToggle]) {
-                memcpy(m_inBuffers[1][currentToggle], m_dspOutR, (size_t)m_bufferSize * sizeof(float));
+            // 2. 将处理后各通道提供给输入通道（标准虚拟驱动 Loopback 回录）
+            for (long c = 0; c < ch; ++c) {
+                float* dst = (m_inputActive[c] && m_inBuffers[c][currentToggle])
+                                 ? m_inBuffers[c][currentToggle] : nullptr;
+                if (dst) {
+                    for (long i = 0; i < m_bufferSize; ++i) {
+                        dst[i] = m_proc[i * ch + c];
+                    }
+                }
             }
         }
 

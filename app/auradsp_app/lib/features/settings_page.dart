@@ -1034,6 +1034,11 @@ class _AsioClientDriverRow extends StatelessWidget {
             ),
           ]),
           if (model.asioActive) ...[
+            if (info['inCh'] is num && info['outCh'] is num)
+              _InfoRow(l.asioDeviceChannels,
+                  'IN ${info['inCh']} / OUT ${info['outCh']}'),
+            if (info['ioCh'] is num && (info['ioCh'] as num) > 2)
+              _InfoRow(l.asioTransportChannels, '${info['ioCh']} ch'),
             _InfoRow(l.asioSwitches, '${info['switches'] ?? 0}'),
             if (info['sr'] is num)
               _InfoRow(l.sampleRate,

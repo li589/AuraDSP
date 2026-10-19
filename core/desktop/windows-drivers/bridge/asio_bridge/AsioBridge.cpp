@@ -65,6 +65,7 @@ struct BridgeCtl {
     std::string driverUtf8;       // 用户传入的 UTF-8 显示名
     std::string driverRaw;        // 注册表原始名（SDK load 键；status 调试用）
     long outPair = 0;
+    int ioCh = 2;                 // io 声道数（2/4/6/8；start 定稿，RT 只读）
     long inCh = 0, outCh = 0, inLat = 0, outLat = 0;
     double sr = 0.0;
     long nbs = 0;
@@ -89,10 +90,12 @@ BridgeCtl g_b;
 void BridgeSink(void* ctx, float* in, float* out, int frames) {
     auto* c = static_cast<BridgeCtl*>(ctx);
     if (frames <= 0) return;
-    const size_t bytes = sizeof(float) * 2 * (size_t)frames;
+    const int ch = (c->ioCh >= 2) ? c->ioCh : 2;
+    const size_t bytes = sizeof(float) * (size_t)ch * (size_t)frames;
     if (c->tc.testKind != 0) {
-        // 测试注入：测试信号替换真实输入，进同一条 DSP 链（与 05 同语义）。
-        vmcore::FillTestSignal(&c->tc, in, frames);
+        // 测试注入：测试信号替换真实输入，进同一条 DSP 链（与 05 同语义；
+        // B2c：桥按 io 声道数交织填充，文件多声道直通/立体声铺前对）。
+        vmcore::FillTestSignalN(&c->tc, in, frames, ch);
     }
     if (c->userBypass) {
         // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
@@ -176,6 +179,7 @@ void ResetSession() {
     g_b.driverUtf8.clear();
     g_b.driverRaw.clear();
     g_b.outPair = 0;
+    g_b.ioCh = 2;
     g_b.inCh = g_b.outCh = g_b.inLat = g_b.outLat = 0;
     g_b.sr = 0.0;
     g_b.nbs = 0;
@@ -212,8 +216,9 @@ int asio_detect(char* out, int cap) {
     return n;
 }
 
-int asio_start(const char* driver_name, const char* engine_dll,
-               const char* params_json, long buf_size, long out_pair) {
+int asio_start_ex(const char* driver_name, const char* engine_dll,
+                  const char* params_json, long buf_size, long out_pair,
+                  long channels) {
     if (InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;  // 幂等成功
     ResetSession();
 
@@ -293,6 +298,26 @@ int asio_start(const char* driver_name, const char* engine_dll,
     g_b.inLat = caps.inLatency;
     g_b.outLat = caps.outLatency;
     g_b.sr = caps.sampleRate;
+    // io 声道数（B2c）：请求值非 {2,4,6,8} 归 2；再按驱动能力向下取档
+    //（inCh/outCh/out_pair 余量）。取不到请求档即自动降级（保音频不断）。
+    long nCh = (channels == 4 || channels == 6 || channels == 8) ? channels : 2;
+    {
+        const long ob = out_pair < 0 ? 0 : out_pair;
+        long avail = 2;
+        const long cand[4] = { 8, 6, 4, 2 };
+        for (int i = 0; i < 4; ++i) {
+            if (cand[i] <= nCh && cand[i] <= caps.inChannels &&
+                ob + cand[i] <= caps.outChannels) {
+                avail = cand[i];
+                break;
+            }
+        }
+        if (avail != nCh) {
+            snprintf(g_b.note, sizeof(g_b.note), "ioCh %ld->%ld (driver caps)", nCh, avail);
+        }
+        nCh = avail;
+    }
+    g_b.ioCh = (int)nCh;
     // 预计缓冲大小（与 create_stereo_io 同规则；创建后若驱动回值不同则重建引擎）
     g_b.nbs = (buf_size > 0) ? buf_size : caps.prefBuf;
 
@@ -306,8 +331,8 @@ int asio_start(const char* driver_name, const char* engine_dll,
         return -6;
     }
 
-    // 6) 创建输入 ch0/1 + 输出 outPair/outPair+1 缓冲
-    if (!g_b.host.create_stereo_io(buf_size, out_pair, why)) {
+    // 6) 创建 nCh 声道输入（ch0..nCh-1）+ 输出（out_pair..out_pair+nCh-1）缓冲
+    if (!g_b.host.create_io(nCh, buf_size, out_pair, why)) {
         snprintf(g_b.note, sizeof(g_b.note), "buffers-failed: %.80s", why.c_str());
         DestroyEngine();
         g_b.host.close();
@@ -334,6 +359,14 @@ int asio_start(const char* driver_name, const char* engine_dll,
 
     // 8) 预下发参数 + 启动
     ApplyParamsString(params_json);
+    // 传输声道数与引擎处理声道数必须等宽（process 读写按 channels.count 定 stride，
+    // 不等宽会错位）。桥以 io 声道数为权威，最后覆盖 mirror 可能带来的旧值。
+    if (g_b.setParam && g_b.engine) {
+        const int32_t cc = (int32_t)nCh;
+        if (g_b.setParam(g_b.engine, "channels.count", &cc, 4) != 0) {
+            snprintf(g_b.note, sizeof(g_b.note), "channels.count set failed (%ld)", nCh);
+        }
+    }
     if (!g_b.host.start()) {
         snprintf(g_b.note, sizeof(g_b.note), "asio-start-failed");
         DestroyEngine();
@@ -344,6 +377,12 @@ int asio_start(const char* driver_name, const char* engine_dll,
     g_b.startRc = 0;
     InterlockedExchange(&g_b.running, 1);
     return 0;
+}
+
+int asio_start(const char* driver_name, const char* engine_dll,
+               const char* params_json, long buf_size, long out_pair) {
+    // 兼容入口：默认立体声（既有调用方零改动；多声道走 asio_start_ex）。
+    return asio_start_ex(driver_name, engine_dll, params_json, buf_size, out_pair, 2);
 }
 
 int asio_stop() {
@@ -388,7 +427,7 @@ int asio_status(char* out, int cap) {
     const int n = snprintf(
         out, (size_t)cap,
         "{\"running\":%s,\"switches\":%llu,\"sr\":%.1f,\"nbs\":%ld,"
-        "\"driver\":\"%s\",\"outPair\":%ld,"
+        "\"driver\":\"%s\",\"outPair\":%ld,\"ioCh\":%d,"
         "\"inCh\":%ld,\"outCh\":%ld,\"inLatency\":%ld,\"outLatency\":%ld,"
         "\"peakIn\":%.6f,\"peakOut\":%.6f,\"maxCbUs\":%.1f,"
         "\"startRc\":%d,\"note\":\"%s\",\"bypass\":%ld,\"testKind\":%ld,"
@@ -397,7 +436,7 @@ int asio_status(char* out, int cap) {
         "\"engine\":\"%s\",\"engineOk\":%s}",
         InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
         (unsigned long long)sw, g_b.sr, g_b.nbs,
-        g_b.driverUtf8.c_str(), g_b.outPair,
+        g_b.driverUtf8.c_str(), g_b.outPair, g_b.ioCh,
         g_b.inCh, g_b.outCh, g_b.inLat, g_b.outLat,
         (double)g_b.host.peak_in(), (double)g_b.host.peak_out(), cbUs,
         g_b.startRc, g_b.note,
@@ -461,22 +500,22 @@ int asio_test_start(int kind, const float* pcm, int frames, int ch, int rate) {
     if (kind < 1 || kind > 3) return -2;
     FreeTestFile();
     if (kind == 3) {
-        // 文件 PCM 拷贝（交织立体声 float32；单声道铺双声道；同 05 语义）。
+        // 文件 PCM 拷贝（交织 float32）。B2c：支持 1..8 声道源；单声道铺双声道，
+        // 多声道按 ch 原样存储（FillTestSignalN 按 io 声道数取用/补零；同 05 语义）。
         if (!pcm || frames <= 0 || rate <= 0) return -3;
-        const int srcCh = (ch == 1) ? 1 : 2;
-        float* buf = (float*)malloc(sizeof(float) * (size_t)frames * 2);
+        if (ch < 1 || ch > 8) return -3;
+        const int storeCh = (ch <= 1) ? 2 : ch;
+        float* buf = (float*)malloc(sizeof(float) * (size_t)frames * (size_t)storeCh);
         if (!buf) return -4;
-        for (int i = 0; i < frames; ++i) {
-            if (srcCh == 1) {
-                buf[i * 2] = buf[i * 2 + 1] = pcm[i];
-            } else {
-                buf[i * 2] = pcm[i * 2];
-                buf[i * 2 + 1] = pcm[i * 2 + 1];
-            }
+        if (ch <= 1) {
+            for (int i = 0; i < frames; ++i) buf[i * 2] = buf[i * 2 + 1] = pcm[i];
+        } else {
+            memcpy(buf, pcm, sizeof(float) * (size_t)frames * (size_t)storeCh);
         }
         g_b.tc.testFile = buf;
         g_b.tc.testFrames = (uint64_t)frames;
         g_b.tc.testRate = rate;
+        g_b.tc.testFileCh = storeCh;
         g_b.tc.testPos = 0;
     }
     g_b.tc.testPhase = 0;
