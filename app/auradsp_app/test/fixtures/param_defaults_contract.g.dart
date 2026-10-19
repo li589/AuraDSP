@@ -117,7 +117,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('dyneq.channels', 'dyneq_channels', 247),
   ParamDefaultRow('dyneq.channel_mask', 'dyneq_channels', 247),
   ParamDefaultRow('stereo.enable', 'stereo_enable', 0),
-  ParamDefaultRow('stereo.mix', 'stereo_mix', 0.0),
+  ParamDefaultRow('stereo.mix', 'stereo_mix', 0.5),
   ParamDefaultRow('stereo.bandUsed', 'stereo_band_used', 0),
   ParamDefaultRow('haas.enable', 'haas_enable', 0),
   ParamDefaultRow('haas.delay', 'haas_delay_ms', 12.0),
