@@ -71,3 +71,5 @@ tools/**/_probe_ir/
 # .eel è„šæœ¬ä¸ manifest.json ä½“ç§¯æå°ï¼Œæ­£å¸¸ç‰ˆæœ¬åŒ–
 /assets/**/*.irs
 /assets/**/*.vdc
+# ÒıÇæ×Ö·û´®É¨ÃèÆ÷»º´æ£¨scan_engine_strings.py ¿ÉËæÊ±ÖØĞÂÉú³É£¬²»Èë¿â£©
+engine/_scan_cache.json
