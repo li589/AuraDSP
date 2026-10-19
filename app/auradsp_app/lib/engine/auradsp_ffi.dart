@@ -181,7 +181,7 @@ abstract final class ParamId {
   // 高级 Gate 参数（Hysteresis 迟滞 / Range 衰减底线 / Hold 保持）
   static const gateHysteresis = 'gate.hysteresis';
   static const gateRange = 'gate.range';
-  static const gateHoldMs = 'gate.hold_ms';
+  static const gateHoldMs = 'gate.hold_ms'; // 引擎边界常量（Part I 豁免：lib/engine）
   // Modern Lookahead Limiter 参数
   static const limiterRelease = 'limiter.release';
   static const limiterThreshold = 'limiter.threshold';

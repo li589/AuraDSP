@@ -876,7 +876,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("tube.outgain", tube_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("tube.autogain", tube_autogain, hook_fx_gains),
     PARAM_INT("tube.channels", tube_channels, 0, 255, nullptr),
-    PARAM_INT("tube.channel_mask", tube_channels, 0, 255, nullptr),
+    PARAM_INT("tube.channel_mask", tube_channels, 0, 255, nullptr),  /* deprecated alias of tube.channels */
     PARAM_BOOL("tube.oversample", tube_oversample, nullptr),
 
     // 02 动态压限 (Compressor)
@@ -901,7 +901,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("comp.outgain", comp_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("comp.autogain", comp_autogain, hook_fx_gains),
     PARAM_INT("comp.channels", comp_channels, 0, 255, nullptr),
-    PARAM_INT("comp.channel_mask", comp_channels, 0, 255, nullptr),
+    PARAM_INT("comp.channel_mask", comp_channels, 0, 255, nullptr),  /* deprecated alias of comp.channels */
 
     // 03 卷积混响 (Convolver)
     PARAM_CUSTOM_SET_STANDARD_GET("convolver.enable", conv_enable, ParamType::kBool, set_convolver_enable),
@@ -928,7 +928,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_GET_ONLY("arbmag.ready", get_arbmag_ready),
     PARAM_CUSTOM_GET_ONLY("arbmag.nodeCount", get_arbmag_node_count),
     PARAM_INT("arbmag.channels", arbmag_channels, 0, 255, nullptr),
-    PARAM_INT("arbmag.channel_mask", arbmag_channels, 0, 255, nullptr),
+    PARAM_INT("arbmag.channel_mask", arbmag_channels, 0, 255, nullptr),  /* deprecated alias of arbmag.channels */
 
     // 06 心理声学低音 (Bass Boost & Harmonics)
     PARAM_BOOL("bass.enable", bass_enable, hook_bass_enable),
@@ -948,7 +948,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("eq.outgain", eq_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("eq.autogain", eq_autogain, hook_fx_gains),
     PARAM_INT("eq.channels", eq_channels, 0, 255, nullptr),
-    PARAM_INT("eq.channel_mask", eq_channels, 0, 255, nullptr),
+    PARAM_INT("eq.channel_mask", eq_channels, 0, 255, nullptr),  /* deprecated alias of eq.channels */
 
     // 08 混响 (Reverb / Freeverb)
     PARAM_CUSTOM_SET_STANDARD_GET("reverb.preset", reverb_preset, ParamType::kInt32, set_reverb_preset),
@@ -972,18 +972,18 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("dyneq.b2.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
     PARAM_FLOAT("dyneq.b3.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
     PARAM_FLOAT("dyneq.b3.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.low.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.low.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.mid.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.mid.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.high.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.high.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.band1.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.band1.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.band2.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.band2.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),
-    PARAM_FLOAT("dyneq.band3.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),
-    PARAM_FLOAT("dyneq.band3.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),
+    PARAM_FLOAT("dyneq.low.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b1.attack */
+    PARAM_FLOAT("dyneq.low.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b1.release */
+    PARAM_FLOAT("dyneq.mid.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b2.attack */
+    PARAM_FLOAT("dyneq.mid.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b2.release */
+    PARAM_FLOAT("dyneq.high.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b3.attack */
+    PARAM_FLOAT("dyneq.high.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b3.release */
+    PARAM_FLOAT("dyneq.band1.attack", dyneq_b1_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b1.attack */
+    PARAM_FLOAT("dyneq.band1.release", dyneq_b1_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b1.release */
+    PARAM_FLOAT("dyneq.band2.attack", dyneq_b2_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b2.attack */
+    PARAM_FLOAT("dyneq.band2.release", dyneq_b2_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b2.release */
+    PARAM_FLOAT("dyneq.band3.attack", dyneq_b3_attack, 0.1f, 100.0f, nullptr),  /* deprecated alias of dyneq.b3.attack */
+    PARAM_FLOAT("dyneq.band3.release", dyneq_b3_release, 10.0f, 1000.0f, nullptr),  /* deprecated alias of dyneq.b3.release */
     PARAM_BOOL("dyneq.low.enable", dyneq_l_enable, nullptr),
     PARAM_FLOAT("dyneq.low.freq", dyneq_l_freq, 20.0f, 500.0f, nullptr),
     PARAM_FLOAT("dyneq.low.q", dyneq_l_q, 0.5f, 2.0f, nullptr),
@@ -1003,7 +1003,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("dyneq.high.range", dyneq_h_range, 0.0f, 24.0f, nullptr),
     PARAM_FLOAT("dyneq.high.threshold", dyneq_h_threshold, -60.0f, 0.0f, nullptr),
     PARAM_INT("dyneq.channels", dyneq_channels, 0, 255, nullptr),
-    PARAM_INT("dyneq.channel_mask", dyneq_channels, 0, 255, nullptr),
+    PARAM_INT("dyneq.channel_mask", dyneq_channels, 0, 255, nullptr),  /* deprecated alias of dyneq.channels */
 
     // 10 空间立体声与声场 (Stereo & Spatial)
     PARAM_BOOL("stereo.enable", stereo_enable, hook_stereo_enable),
@@ -1039,20 +1039,20 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("shelf.freq", shelf_freq, 40.0f, 400.0f, hook_shelf_recalc),
     PARAM_FLOAT("shelf.gain", shelf_gain, -15.0f, 15.0f, hook_shelf_recalc),
     PARAM_INT("shelf.channels", shelf_channels, 0, 255, nullptr),
-    PARAM_INT("shelf.channel_mask", shelf_channels, 0, 255, nullptr),
+    PARAM_INT("shelf.channel_mask", shelf_channels, 0, 255, nullptr),  /* deprecated alias of shelf.channels */
     PARAM_BOOL("filter.enable", filter_enable, nullptr),
     PARAM_INT("filter.type", filter_type, 0, 2, hook_filter_recalc),
     PARAM_FLOAT("filter.freq", filter_freq, 20.0f, 20000.0f, hook_filter_recalc),
     PARAM_FLOAT("filter.q", filter_q, 0.3f, 10.0f, hook_filter_recalc),
     PARAM_INT("filter.channels", filter_channels, 0, 255, nullptr),
-    PARAM_INT("filter.channel_mask", filter_channels, 0, 255, nullptr),
+    PARAM_INT("filter.channel_mask", filter_channels, 0, 255, nullptr),  /* deprecated alias of filter.channels */
 
     // 12 信号与动态修整 (Exciter, Gate, Deesser, Loudness)
     PARAM_BOOL("exciter.enable", exciter_enable, nullptr),
     PARAM_FLOAT("exciter.amount", exciter_amount, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("exciter.hifreq", exciter_hifreq, 3000.0f, 10000.0f, nullptr),
     PARAM_INT("exciter.channels", exciter_channels, 0, 255, nullptr),
-    PARAM_INT("exciter.channel_mask", exciter_channels, 0, 255, nullptr),
+    PARAM_INT("exciter.channel_mask", exciter_channels, 0, 255, nullptr),  /* deprecated alias of exciter.channels */
     PARAM_BOOL("exciter.oversample", exciter_oversample, nullptr),
     PARAM_BOOL("gate.enable", gate_enable, nullptr),
     PARAM_FLOAT("gate.threshold", gate_threshold, -60.0f, 0.0f, nullptr),
@@ -1061,17 +1061,17 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("gate.hysteresis", gate_hysteresis, 0.0f, 12.0f, nullptr),
     PARAM_FLOAT("gate.range", gate_range, -80.0f, 0.0f, nullptr),
     PARAM_FLOAT("gate.hold", gate_hold_ms, 0.0f, 500.0f, nullptr),
-    PARAM_FLOAT("gate.hold_ms", gate_hold_ms, 0.0f, 500.0f, nullptr),
+    PARAM_FLOAT("gate.hold_ms", gate_hold_ms, 0.0f, 500.0f, nullptr),  /* deprecated alias of gate.hold */
     PARAM_BOOL("gate.autogain", gate_autogain, hook_gate_autogain),
     PARAM_INT("gate.channels", gate_channels, 0, 255, nullptr),
-    PARAM_INT("gate.channel_mask", gate_channels, 0, 255, nullptr),
+    PARAM_INT("gate.channel_mask", gate_channels, 0, 255, nullptr),  /* deprecated alias of gate.channels */
     PARAM_BOOL("deesser.enable", deesser_enable, nullptr),
     PARAM_FLOAT("deesser.freq", deesser_freq, 2000.0f, 10000.0f, nullptr),
     PARAM_FLOAT("deesser.amount", deesser_amount, 0.0f, 1.0f, nullptr),
     PARAM_BOOL("loudness.enable", loudness_enable, nullptr),
     PARAM_FLOAT("loudness.amount", loudness_amount, 0.0f, 1.0f, nullptr),
     PARAM_INT("loudness.channels", loudness_channels, 0, 255, nullptr),
-    PARAM_INT("loudness.channel_mask", loudness_channels, 0, 255, nullptr),
+    PARAM_INT("loudness.channel_mask", loudness_channels, 0, 255, nullptr),  /* deprecated alias of loudness.channels */
 
     // 13 实时可编程 (Liveprog)
     PARAM_BOOL("liveprog.enable", lp_enable, hook_liveprog_enable),
@@ -1084,9 +1084,9 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("post.gain", post_gain, -15.0f, 15.0f, hook_post_gain),
     PARAM_BOOL("limiter.enable", limiter_enable, hook_limiter_enable),
     PARAM_INT("limiter.channels", limiter_channels, 0, 255, nullptr),
-    PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),
+    PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),  /* deprecated alias of limiter.channels */
     PARAM_FLOAT("limiter.release", limiter_release_ms, 10.0f, 500.0f, nullptr),
-    PARAM_FLOAT("limiter.release_ms", limiter_release_ms, 10.0f, 500.0f, nullptr),
+    PARAM_FLOAT("limiter.release_ms", limiter_release_ms, 10.0f, 500.0f, nullptr),  /* deprecated alias of limiter.release */
     PARAM_FLOAT("limiter.threshold", limiter_threshold, -24.0f, 0.0f, nullptr),
     PARAM_BOOL("limiter.link", limiter_link, nullptr),
     PARAM_BOOL("limiter.lookahead", limiter_lookahead, nullptr),
@@ -1094,9 +1094,9 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_GET_ONLY("gr.comp", get_gr_comp),
     PARAM_CUSTOM_GET_ONLY("gr.gate", get_gr_gate),
     PARAM_CUSTOM_GET_ONLY("gr.dyneq", get_gr_dyneq),
-    PARAM_CUSTOM_GET_ONLY("gr.dyneq.low", get_gr_dyneq_b1),
-    PARAM_CUSTOM_GET_ONLY("gr.dyneq.mid", get_gr_dyneq_b2),
-    PARAM_CUSTOM_GET_ONLY("gr.dyneq.high", get_gr_dyneq_b3),
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.low", get_gr_dyneq_b1),  /* deprecated alias of gr.dyneq.b1 */
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.mid", get_gr_dyneq_b2),  /* deprecated alias of gr.dyneq.b2 */
+    PARAM_CUSTOM_GET_ONLY("gr.dyneq.high", get_gr_dyneq_b3),  /* deprecated alias of gr.dyneq.b3 */
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b1", get_gr_dyneq_b1),
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b2", get_gr_dyneq_b2),
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b3", get_gr_dyneq_b3),
