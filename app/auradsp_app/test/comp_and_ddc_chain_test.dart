@@ -44,7 +44,10 @@ void main() {
       expect(m.isStageEnabled('comp'), isFalse);
       m.setCompEnabled(true);
       expect(m.isStageEnabled('comp'), isTrue);
-      expect(m.componentLatency('comp').ms, 85.0);
+      // 2026-10-19：comp 的 85ms 预设标称已删除，未实测前如实「未测量」，
+      // 不冒充估算值。
+      expect(m.componentLatency('comp').measured, isFalse);
+      expect(m.componentLatency('comp').estimated, isFalse);
 
       m.setCompEnabled(false);
       expect(m.isStageEnabled('comp'), isFalse);

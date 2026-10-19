@@ -574,13 +574,11 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    // 三态文案：实测 → "X.X ms"；估算 → "≈X.X ms"；都没有 → "未测量"。
-    // 旧实现只有两态，估算值被当成"未测量"丢掉，用户既看不到数也无法区分来源。
+    // 2026-10-19：无预设常数后估算值只来自 convolver 的 IR 长度实时计算，
+    // 不再以「≈」前缀弱化（与实测同款渲染）；无可显示值时仍是「未测量」。
     final String text;
-    if (widget.measured) {
+    if (widget.measured || widget.estimated) {
       text = '${widget.latencyMs.toStringAsFixed(1)} ms';
-    } else if (widget.estimated) {
-      text = '≈${widget.latencyMs.toStringAsFixed(1)} ms';
     } else {
       text = l.latUnmeasured;
     }

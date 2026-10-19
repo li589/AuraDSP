@@ -914,13 +914,18 @@ void main() {
       expect(m2.haasSide, 1);
     });
 
-    test('延迟标称随设定值走（底栏/徽标用）', () {
+    test('延迟不再有标称随设定值走（2026-10-19：删除预设标称）', () {
       final m = AppModel(testing: true)
         ..setHaasEnabled(true)
         ..setHaasDelay(15);
-      expect(m.componentLatency('haas').ms, closeTo(15.0, 1e-9));
+      // 旧行为：componentLatency('haas') 把设定值 15ms 冒充「≈标称」。
+      // 新行为：诚实「未测量」——点 ↻ 后由引擎真探针（携带当前延迟值）
+      // 实测；未实测绝不编数字。
+      expect(m.componentLatency('haas').ms, 0.0);
+      expect(m.componentLatency('haas').measured, isFalse);
+      expect(m.componentLatency('haas').estimated, isFalse);
       m.setHaasEnabled(false);
-      expect(m.componentLatency('haas').ms, closeTo(0.0, 1e-9));
+      expect(m.componentLatency('haas').ms, 0.0);
     });
   });
 
