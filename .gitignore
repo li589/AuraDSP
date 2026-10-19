@@ -71,5 +71,9 @@ tools/**/_probe_ir/
 # .eel è„šæœ¬ä¸ manifest.json ä½“ç§¯æå°ï¼Œæ­£å¸¸ç‰ˆæœ¬åŒ–
 /assets/**/*.irs
 /assets/**/*.vdc
-# ÒıÇæ×Ö·û´®É¨ÃèÆ÷»º´æ£¨scan_engine_strings.py ¿ÉËæÊ±ÖØĞÂÉú³É£¬²»Èë¿â£©
+# ï¿½ï¿½ï¿½ï¿½ï¿½Ö·ï¿½ï¿½ï¿½É¨ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½æ£¨scan_engine_strings.py ï¿½ï¿½ï¿½ï¿½Ê±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½É£ï¿½ï¿½ï¿½ï¿½ï¿½â£©
 engine/_scan_cache.json
+# A1 å¬æ„ŸäºŒé€‰ä¸€ A/B æ¸²æŸ“äº§ç‰©ï¼ˆab_listen_render.py ç”Ÿæˆï¼Œè¿‡ç¨‹æ–‡ä»¶ä¸å…¥åº“ï¼›
+# ç´ ææº test/data/ab_gate_voice.wav / ab_limiter_drums.wav æ­£å¸¸å…¥åº“ï¼‰
+test/data/*.A.wav
+test/data/*.B.wav
