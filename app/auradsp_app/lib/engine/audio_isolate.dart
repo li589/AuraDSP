@@ -21,6 +21,7 @@ import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
 import 'debug_log.dart';
+import 'local_channel_policy.dart';
 
 
 part 'audio_guid.dart';
@@ -87,6 +88,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   var vizCount = 0;
   int? lastSentState;
   double? lastSentLatency;
+  // B2b：本地 handle 当前 channels.count 的影子（引擎默认 2；重建后归 2）。
+  int engineChCount = 2;
 
   // VB-Callback 模式面（05 桥）：与 WASAPI 路径互斥，一次只跑一边。
   bool vbActive = false;
@@ -143,6 +146,25 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'ts': DateTime.now().millisecondsSinceEpoch,
       'seq': -1,
     });
+  }
+
+  /// B2b：把本地 handle 的 `channels.count` 对齐到引擎应处理的工作声道数。
+  /// 值未变时零开销；失败保持原值并返回实际生效值（调用方据此决定是否走
+  /// 多声道路径，避免输入声道数与引擎解释不一致）。
+  int applyEngineChannels(int want) {
+    if (lib == null || handle == null || want == engineChCount) {
+      return engineChCount;
+    }
+    final rc = AuraDspLib.setValue(lib, handle, 'channels.count',
+        isFloat: false, value: want.toDouble());
+    if (rc == Status.ok) {
+      engineChCount = want;
+    } else {
+      final e = lib.lastError(handle);
+      dbgLog('channels.count=$want apply rc=$rc '
+          '${e == nullptr ? "" : e.toDartString()}');
+    }
+    return engineChCount;
   }
 
   /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
@@ -1443,6 +1465,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         'maxBlock=$maxBlockFrames '
         'handle=${handle == nullptr ? "NULL" : "ok"}');
     if (handle == nullptr) throw StateError('auradsp_create returned null');
+    engineChCount = 2; // 新 handle 默认 2（与新引擎状态一致）
     // FileGate 资源上限来自 config（此前引擎写死 256MiB / 16M 帧）
     AuraDspLib.setValue(lib, handle, 'gate.maxIrSeconds',
         isFloat: true, value: maxIrSeconds);
@@ -1484,8 +1507,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final srcBuf = srcPtr.asTypedList(maxBlock * 2);
   final outPtrEng = malloc<Float>(maxBlock * 2);
   final engOut = outPtrEng.asTypedList(maxBlock * 2);
-  // 直通 scratch（Dart 堆，复用；fillRaw 写入 frames*rawCh ≤ maxBlock*8）。
-  final rawBuf = Float32List(maxBlock * 8);
+  // B2b/直通共用 Nch scratch（native，复用：fillRaw/引擎输入 ≤ maxBlock*8）：
+  // inBufEng 既是直通源（写设备）也是多声道引擎的输入；outBufEng 收引擎
+  // frames*ch 输出（binaural 时 ch0/1 有值，其余置零；矩阵/离散为 Nch）。
+  final inPtrEng = malloc<Float>(maxBlock * 8);
+  final inBufEng = inPtrEng.asTypedList(maxBlock * 8);
+  final outPtrEng8 = malloc<Float>(maxBlock * 8);
   final vizBuf = malloc<VizFrame>(8); // 持久化复用，零运行时堆分配
   String? lastPumpErr;
   var lastPumpErrAt = 0;
@@ -1703,10 +1730,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             dbgLog('GUARD: frames=$frames > maxBlock=$maxBlock!');
           }
           final devCh = w.mix.channels;
+          final fs = source is FileSource ? source as FileSource : null;
           // 5.1 直通判定（本地渲染 only）：raw 就绪 + 用户开直通 +
           // 设备声道兜得住；任一不满足回落 fold。引擎照常跑 fold 版供 viz。
-          final fs = source is FileSource ? source as FileSource : null;
-          // 非空收窄：useRaw 为真蕴含 rawSrc 非空（analyzer 可验证的形态）。
           final rawSrc = (fs != null &&
                   fs.raw != null &&
                   fs.rawCh > 2 &&
@@ -1714,20 +1740,53 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   devCh >= fs.rawCh)
               ? fs
               : null;
+          // B2b：多声道入引擎（非直通/非旁路）——把真实 Nch 送入引擎多声道
+          // 路径，替代 Dart 预折叠；输出 ch0/1 即（binaural）立体声或矩阵
+          // L/R。引擎 channels.count 未成功对齐时回落 fold（防输入解释错位）。
+          var engineMulti = false;
           if (!bypass) {
             procRounds++;
-            if (procRounds == 1) {
-              dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
-            }
-            lib!.process(handle!, srcPtr, outPtrEng, frames);
-            if (procRounds == 1) {
-              dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+            final cm = paramMirror[ParamId.channelsMode]?.value.toInt() ?? 0;
+            final binauralOn =
+                (paramMirror[ParamId.spatialEnable]?.value ?? 0) != 0 &&
+                    (paramMirror[ParamId.spatialBinaural]?.value ?? 0) != 0;
+            final want = fs == null
+                ? 2
+                : localEngineChannels(
+                    hasRaw: fs.raw != null,
+                    rawCh: fs.rawCh,
+                    passthrough51: passthrough51,
+                    bypass: bypass,
+                    devCh: devCh,
+                    channelsMode: cm,
+                    binauralActive: binauralOn);
+            if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
+              fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+              lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+              engineMulti = true;
+              if (procRounds == 1) {
+                dbgLog('first process(multi ch=$want)');
+              }
+            } else {
+              applyEngineChannels(2);
+              if (procRounds == 1) {
+                dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
+              }
+              lib!.process(handle!, srcPtr, outPtrEng, frames);
+              if (procRounds == 1) {
+                dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+              }
             }
           }
           final devOut = w.getBuffer(frames);
           if (rawSrc != null) {
-            rawSrc.fillRaw(rawBuf, frames, w.mix.sampleRate);
-            writeToDevice(w, devOut, frames, devCh, rawBuf, srcCh: rawSrc.rawCh);
+            rawSrc.fillRaw(inBufEng, frames, w.mix.sampleRate);
+            writeToDevice(w, devOut, frames, devCh, inBufEng, srcCh: rawSrc.rawCh);
+          } else if (engineMulti) {
+            // 引擎输出 Nch：devCh==2 写 L/R；devCh>=N 写全部（环绕监听）。
+            writeToDevice(w, devOut, frames, devCh,
+                outPtrEng8.asTypedList(frames * engineChCount),
+                srcCh: engineChCount);
           } else {
             writeToDevice(w, devOut, frames, devCh, bypass ? srcBuf : engOut);
           }
@@ -1828,6 +1887,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (handle != null) lib?.destroy(handle);
       malloc.free(srcPtr);
       malloc.free(outPtrEng);
+      malloc.free(inPtrEng);
+      malloc.free(outPtrEng8);
       malloc.free(vizBuf);
     } catch (_) {}
   }
