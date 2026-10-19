@@ -42,7 +42,7 @@ void main() {
     model.setAudioMode('asio');
     await tester.pumpAndSettle();
     expect(find.text('缓冲档'), findsOneWidget);
-    expect(find.text('输出声道对'), findsOneWidget);
+    expect(find.text('输出起始声道对'), findsOneWidget);
     expect(find.text('刷新驱动'), findsOneWidget);
     // 未选驱动（清单空）：占位 '—' 而非崩溃；输出对默认 ch 1/2；缓冲默认自动。
     expect(find.text('—'), findsOneWidget);
