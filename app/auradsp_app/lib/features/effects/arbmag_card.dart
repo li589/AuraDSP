@@ -472,16 +472,20 @@ class _ArbmagAdvanced extends StatelessWidget {
               final canApply = _hasValidCode;
               return Row(
                 children: [
-                  ElevatedButton(
+                  // 主动作保留 accent 实底（应用侧对话框主按钮惯例），
+                  // 但几何尺寸与其余 OutlinedButton.icon 兄弟统一：
+                  // 同 padding(10,8)、同字号 12 常规字重、不设 minimumSize
+                  // 覆盖（统一默认 36 高）、配 14px 图标。
+                  ElevatedButton.icon(
                     style: ElevatedButton.styleFrom(
                       backgroundColor: canApply ? p.accent : p.panelRaised,
-                      foregroundColor: canApply ? p.panel : p.textDim,
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      minimumSize: Size.zero,
-                      textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      foregroundColor: canApply ? p.accentContrast : p.textDim,
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                      textStyle: const TextStyle(fontSize: 12),
                     ),
+                    icon: const Icon(Icons.check_rounded, size: 14),
+                    label: Text(l.arbmagApply),
                     onPressed: canApply ? () => onApplyCode(codeCtrl.text) : null,
-                    child: Text(l.arbmagApply),
                   ),
                   const SizedBox(width: AuraSpace.sm),
                   OutlinedButton.icon(
