@@ -51,6 +51,13 @@ target_compile_definitions(auradsp_engine PRIVATE
     WINVER=0x0601
     NTDDI_VERSION=0x06010000
 )
+# B-1 调试日志（计划 D1）：宿主 [DBG 诊断默认编译期剥离（Release DLL strings 扫描
+# 无 [DBG 由 smoke_release_strings.py 门禁）；-DAURADSP_DBG_LOG=ON 重建可恢复输出
+# （OutputDebugString 通道，运行期再受环境变量 AURADSP_LOG=0|1|2 控制）。
+option(AURADSP_DBG_LOG "Emit host [DBG diagnostics via OutputDebugString (OFF in default builds)" OFF)
+if(AURADSP_DBG_LOG)
+    target_compile_definitions(auradsp_engine PRIVATE AURADSP_DBG_LOG)
+endif()
 target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
 # engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
