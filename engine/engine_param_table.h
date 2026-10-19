@@ -408,8 +408,24 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
         return AURADSP_E_PARAM;
     }
     ArbitraryResponseEqualizerStringParser(&h->jdsp, buf);
-    free(buf);
     const int nodes = (int)h->jdsp.arbMag.instance.coeffGen.nodesCount;
+    /* B 轮复查：畸形输入（如 "20:6.0" 无 GraphicEQ 前缀）会被 legacy 解析器
+     * 产出垃圾 nodesCount，apply_arbmag 随之越界读 → 引擎 AV（实测读 0xFF..FF）。
+     * 护栏：nodes 合理性校验 + 失败时恢复上次合法曲线（或标记未就绪），
+     * 绝不让部分损坏的 coeffGen 进入后续 process。 */
+    if (nodes < 2 || nodes > 65536) {
+        if (h->arbmag_string && h->arbmag_string_len) {
+            ArbitraryResponseEqualizerStringParser(&h->jdsp, h->arbmag_string);
+        } else {
+            h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
+        }
+        free(buf);
+        set_error(h, "arbmag.string: parse failed (invalid curve)");
+        h->p.arbmag_nodes.store(0);
+        h->p.arbmag_ready.store(0);
+        return AURADSP_E_PARAM;
+    }
+    free(buf);
     h->p.arbmag_nodes.store(nodes);
     h->p.arbmag_ready.store(nodes > 0 ? 1 : 0);
     if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {

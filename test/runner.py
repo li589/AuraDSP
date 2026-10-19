@@ -87,6 +87,9 @@ def run_smoke_tests():
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",
     "smoke_multichannel_discrete.py",
+    # B 轮补充：全参数扫描（159 有界参数 roundtrip/clamp/NaN/默认回读）+ 多声道掩码
+    # （8 按声道效果器 mask=0 不变式 + arbmag/comp/eq 立体声实现语义登记）
+    "smoke_effects_allparams.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
     "smoke_graph_order.py",
