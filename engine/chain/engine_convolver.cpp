@@ -15,35 +15,35 @@
 char* read_text_file(auradsp_handle h, const char* path, long max_bytes,
                      auradsp_status* st) {
     *st = AURADSP_OK;
-    if (!path || !path[0]) { set_error(h, "path: empty"); *st = AURADSP_E_PARAM; return nullptr; }
+    if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); *st = AURADSP_E_PARAM; return nullptr; }
 #ifdef _WIN32
     const int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    if (wlen <= 0) { set_error(h, "path: invalid encoding"); *st = AURADSP_E_PARAM; return nullptr; }
+    if (wlen <= 0) { set_error(h, "convolver.ir.path: invalid encoding"); *st = AURADSP_E_PARAM; return nullptr; }
     wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
-    if (!wpath) { set_error(h, "path: OOM"); *st = AURADSP_E_IO; return nullptr; }
+    if (!wpath) { set_error(h, "convolver.ir.path: out of memory"); *st = AURADSP_E_IO; return nullptr; }
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
     FILE* fp = _wfopen(wpath, L"rb");
     free(wpath);
 #else
     FILE* fp = fopen(path, "rb");
 #endif
-    if (!fp) { set_error(h, "file: cannot open"); *st = AURADSP_E_IO; return nullptr; }
+    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open)"); *st = AURADSP_E_IO; return nullptr; }
     fseek(fp, 0, SEEK_END);
     const long sz = ftell(fp);
     if (sz <= 0 || sz > max_bytes) {
         fclose(fp);
-        set_error(h, "file: empty or too large");
+        set_error(h, "convolver.ir: parse failed (empty or too large)");
         *st = AURADSP_E_PARAM;
         return nullptr;
     }
     rewind(fp);
     char* buf = (char*)malloc((size_t)sz + 1);
-    if (!buf) { fclose(fp); set_error(h, "file: OOM"); *st = AURADSP_E_IO; return nullptr; }
+    if (!buf) { fclose(fp); set_error(h, "convolver.ir: out of memory"); *st = AURADSP_E_IO; return nullptr; }
     const size_t got = fread(buf, 1, (size_t)sz, fp);
     fclose(fp);
     if (got != (size_t)sz) {
         free(buf);
-        set_error(h, "file: read failed");
+        set_error(h, "convolver.ir: io failed (read failed)");
         *st = AURADSP_E_IO;
         return nullptr;
     }
@@ -143,22 +143,22 @@ void rebuild_hann(auradsp_handle h, int n) {
 
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
-    if (!path || !path[0]) { set_error(h, "convolver.ir.path: empty path"); return AURADSP_E_PARAM; }
+    if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); return AURADSP_E_PARAM; }
     /* 审查修复 R-1：Windows fopen 走 ANSI 代码页，中文路径必挂——
      * UTF-8 → UTF-16 后走 _wfopen */
 #ifdef _WIN32
     int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
     if (wlen <= 0) { set_error(h, "convolver.ir.path: invalid encoding"); return AURADSP_E_PARAM; }
     wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
-    if (!wpath) { set_error(h, "convolver.ir.path: OOM"); return AURADSP_E_IO; }
+    if (!wpath) { set_error(h, "convolver.ir.path: out of memory"); return AURADSP_E_IO; }
     MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
     FILE* fp = _wfopen(wpath, L"rb");
     free(wpath);
 #else
     FILE* fp = fopen(path, "rb");
 #endif
-    if (!fp) { set_error(h, "convolver.ir: cannot open file"); return AURADSP_E_IO; }
-    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: seek failed"); return AURADSP_E_IO; }
+    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open file)"); return AURADSP_E_IO; }
+    if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: io failed (seek failed)"); return AURADSP_E_IO; }
     const long fsize = ftell(fp);
     if (fsize <= 44) { fclose(fp); set_error(h, "convolver.ir: file too small"); return AURADSP_E_PARAM; }
     const long long maxFileBytes = gate_file_bytes(h);
@@ -169,10 +169,10 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     }
     rewind(fp);
     unsigned char* bytes = (unsigned char*)malloc((size_t)fsize);
-    if (!bytes) { fclose(fp); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+    if (!bytes) { fclose(fp); set_error(h, "convolver.ir: out of memory"); return AURADSP_E_IO; }
     const size_t got = fread(bytes, 1, (size_t)fsize, fp);
     fclose(fp);
-    if (got != (size_t)fsize) { free(bytes); set_error(h, "convolver.ir: read failed"); return AURADSP_E_IO; }
+    if (got != (size_t)fsize) { free(bytes); set_error(h, "convolver.ir: io failed (read failed)"); return AURADSP_E_IO; }
 
     /* L1：magic 嗅探（RIFF..WAVE / fLaC；不信任扩展名） */
     const unsigned char* b = bytes;
@@ -185,44 +185,44 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     if (is_wav) {
         drwav wav;
         if (!drwav_init_memory(&wav, bytes, (size_t)fsize, nullptr)) {
-            free(bytes); set_error(h, "convolver.ir: WAV header corrupt"); return AURADSP_E_PARAM;
+            free(bytes); set_error(h, "convolver.ir: parse failed (WAV header corrupt)"); return AURADSP_E_PARAM;
         }
         ch = wav.channels; src_rate = (unsigned int)wav.sampleRate; frames = (size_t)wav.totalPCMFrameCount;
         if (ch < 1 || ch > 8 || frames == 0) {
             drwav_uninit(&wav); free(bytes);
-            set_error(h, "convolver.ir: invalid WAV channels/frames");
+            set_error(h, "convolver.ir: parse failed (invalid WAV channels/frames)");
             return AURADSP_E_PARAM;
         }
         /* 审查修复 R-2：总样本量上限（16M 帧 × 8ch 会要 512MB 分配） */
         if (frames > 16u * 1024 * 1024 || (unsigned long long)frames * ch > 64ull * 1024 * 1024) {
             drwav_uninit(&wav); free(bytes);
-            set_error(h, "convolver.ir: too long (max 16M frames / 64M samples)");
+            set_error(h, "convolver.ir: file too large (max 16M frames / 64M samples)");
             return AURADSP_E_PARAM;
         }
         data = (float*)malloc(frames * ch * sizeof(float));
-        if (!data) { drwav_uninit(&wav); free(bytes); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+        if (!data) { drwav_uninit(&wav); free(bytes); set_error(h, "convolver.ir: out of memory"); return AURADSP_E_IO; }
         const drwav_uint64 rd = drwav_read_pcm_frames_f32(&wav, frames, data);
         drwav_uninit(&wav);
-        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: WAV truncated"); return AURADSP_E_PARAM; }
+        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: parse failed (WAV truncated)"); return AURADSP_E_PARAM; }
     } else if (is_flac) {
         drflac* flac = drflac_open_memory(bytes, (size_t)fsize, nullptr);
-        if (!flac) { free(bytes); set_error(h, "convolver.ir: FLAC corrupt"); return AURADSP_E_PARAM; }
+        if (!flac) { free(bytes); set_error(h, "convolver.ir: parse failed (FLAC corrupt)"); return AURADSP_E_PARAM; }
         ch = flac->channels; src_rate = (unsigned int)flac->sampleRate; frames = (size_t)flac->totalPCMFrameCount;
         if (ch < 1 || ch > 8 || frames == 0 ||
             frames > 16u * 1024 * 1024 ||
             (unsigned long long)frames * ch > 64ull * 1024 * 1024) {
             drflac_close(flac); free(bytes);
-            set_error(h, "convolver.ir: invalid FLAC channels/frames/length");
+            set_error(h, "convolver.ir: parse failed (invalid FLAC channels/frames/length)");
             return AURADSP_E_PARAM;
         }
         data = (float*)malloc(frames * ch * sizeof(float));
-        if (!data) { drflac_close(flac); free(bytes); set_error(h, "convolver.ir: OOM"); return AURADSP_E_IO; }
+        if (!data) { drflac_close(flac); free(bytes); set_error(h, "convolver.ir: out of memory"); return AURADSP_E_IO; }
         const drflac_uint64 rd = drflac_read_pcm_frames_f32(flac, frames, data);
         drflac_close(flac);
-        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: FLAC truncated"); return AURADSP_E_PARAM; }
+        if (rd != frames) { free(data); free(bytes); set_error(h, "convolver.ir: parse failed (FLAC truncated)"); return AURADSP_E_PARAM; }
     } else {
         free(bytes);
-        set_error(h, "convolver.ir: unknown format (need WAV/FLAC)");
+        set_error(h, "convolver.ir: parse failed (unknown format, need WAV/FLAC)");
         return AURADSP_E_PARAM;
     }
     free(bytes);
@@ -234,7 +234,7 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
         const float v = data[i];
         if (isnan(v) || isinf(v)) {
             free(data);
-            set_error(h, "convolver.ir: NaN/Inf samples in file");
+            set_error(h, "convolver.ir: parse failed (NaN/Inf samples in file)");
             return AURADSP_E_PARAM;
         }
         const float a = fabsf(v);
@@ -242,7 +242,7 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     }
     if (peak == 0.0f) {
         free(data);
-        set_error(h, "convolver.ir: all-silent IR");
+        set_error(h, "convolver.ir: parse failed (all-silent IR)");
         return AURADSP_E_PARAM;
     }
 
@@ -255,7 +255,7 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
     if (maxIrSec >= 0.1f && src_rate > 0 &&
         (double)frames > (double)maxIrSec * (double)src_rate) {
         free(data);
-        set_error(h, "convolver.ir: too long (exceeds configured gate.maxIrSeconds)");
+        set_error(h, "convolver.ir: file too large (exceeds configured gate.maxIrSeconds)");
         return AURADSP_E_PARAM;
     }
 
@@ -266,7 +266,7 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
         const double ratio = (double)h->jdsp.fs / (double)src_rate;
         out_frames = (size_t)ceil((double)frames * ratio);
         float* res = (float*)malloc(out_frames * ch * sizeof(float));
-        if (!res) { free(data); set_error(h, "convolver.ir: OOM (resample)"); return AURADSP_E_IO; }
+        if (!res) { free(data); set_error(h, "convolver.ir: out of memory (resample)"); return AURADSP_E_IO; }
         memset(res, 0, out_frames * ch * sizeof(float));
         JamesDSPOfflineResampling(data, res, frames, out_frames, (int)ch, ratio);
         free(data);
@@ -277,7 +277,7 @@ const float maxIrSec = h->gate_max_ir_seconds.load(std::memory_order_relaxed);
     const int rc = Convolver1DLoadImpulseResponse(&h->jdsp, proc, ch, out_frames, 1);
     if (rc != 1) {
         free(proc);
-        set_error(h, "convolver.ir: vendor load failed (partition select?)");
+        set_error(h, "convolver.ir: internal (vendor load failed, partition select?)");
         return AURADSP_E_STATE;
     }
     compute_ir_spectrum(h, proc, out_frames, (int)ch);

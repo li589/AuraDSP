@@ -293,7 +293,7 @@ static auradsp_status set_convolver_ir_path(auradsp_handle h, const void* value,
         return AURADSP_E_PARAM;
     }
     char* pbuf = (char*)malloc((size_t)bytes + 1);
-    if (!pbuf) { set_error(h, "convolver.ir.path: OOM"); return AURADSP_E_IO; }
+    if (!pbuf) { set_error(h, "convolver.ir.path: out of memory"); return AURADSP_E_IO; }
     memcpy(pbuf, value, bytes);
     pbuf[bytes] = 0;
     const auradsp_status st = load_ir_file(h, pbuf);
@@ -395,16 +395,16 @@ static bool arbmag_numeric_finite(const char* s) {
 
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes == 0 || bytes > 256 * 1024) {
-        set_error(h, "arbmag.string: size must be 1..256KiB");
+        set_error(h, "arbmag.string: invalid length (1..256KiB)");
         return AURADSP_E_PARAM;
     }
     char* buf = (char*)malloc((size_t)bytes + 1);
-    if (!buf) { set_error(h, "arbmag.string: OOM"); return AURADSP_E_IO; }
+    if (!buf) { set_error(h, "arbmag.string: out of memory"); return AURADSP_E_IO; }
     memcpy(buf, value, bytes);
     buf[bytes] = 0;
     if (!arbmag_numeric_finite(buf)) {
         free(buf);
-        set_error(h, "arbmag.string: non-finite numeric token");
+        set_error(h, "arbmag.string: parse failed (non-finite numeric token)");
         return AURADSP_E_PARAM;
     }
     ArbitraryResponseEqualizerStringParser(&h->jdsp, buf);
@@ -416,7 +416,7 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
         apply_arbmag(h);
     }
     char* arbmag_new = (char*)malloc((size_t)bytes + 1);
-    if (!arbmag_new) { set_error(h, "arbmag.string: copy OOM"); return AURADSP_E_IO; }
+    if (!arbmag_new) { set_error(h, "arbmag.string: out of memory (copy)"); return AURADSP_E_IO; }
     memcpy(arbmag_new, value, bytes);
     arbmag_new[bytes] = 0;
     free(h->arbmag_string);
@@ -449,11 +449,11 @@ static auradsp_status get_arbmag_node_count(auradsp_handle h, void* out_value, u
 static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t bytes) {
     if (!h->open.load()) { set_error(h, "ddc.load: engine closed"); return AURADSP_E_STATE; }
     if (bytes == 0 || bytes > 4096) {
-        set_error(h, "ddc.load: invalid path length");
+        set_error(h, "ddc.load: invalid path (length)");
         return AURADSP_E_PARAM;
     }
     char* pbuf = (char*)malloc((size_t)bytes + 1);
-    if (!pbuf) { set_error(h, "ddc.load: OOM"); return AURADSP_E_IO; }
+    if (!pbuf) { set_error(h, "ddc.load: out of memory"); return AURADSP_E_IO; }
     memcpy(pbuf, value, bytes);
     pbuf[bytes] = 0;
     auradsp_status st = AURADSP_OK;
@@ -482,7 +482,7 @@ static auradsp_status set_ddc_enable(auradsp_handle h, const void* value, uint32
         const int rc = DDCEnable(&h->jdsp, 1);
         if (rc != 1) {
             h->p.ddc_enable.store(0);
-            set_error(h, "ddc.enable: rejected by engine");
+            set_error(h, "ddc.enable: rejected");
             return AURADSP_E_STATE;
         }
     } else {
@@ -501,7 +501,7 @@ static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uin
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
     if (v != 0 && v != 1) {
-        set_error(h, "channels.mode: must be 0 (matrix downmix/upmix) or 1 (discrete multichannel)");
+        set_error(h, "channels.mode: out of range (0=matrix, 1=discrete)");
         return AURADSP_E_PARAM;
     }
     h->p.channels_mode.store(v);
@@ -515,7 +515,7 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
     if (v != 2 && v != 4 && v != 6 && v != 8) {
-        set_error(h, "channels.count: must be 2 (stereo), 4 (quad), 6 (5.1) or 8 (7.1)");
+        set_error(h, "channels.count: out of range (2/4/6/8 only)");
         return AURADSP_E_PARAM;
     }
     h->channel_count.store(v);
@@ -564,11 +564,11 @@ static auradsp_status set_viz_fft_size(auradsp_handle h, const void* value, uint
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value;
     if (v < 1024 || v > kVizFftMax || (v & (v - 1)) != 0) {
-        set_error(h, "viz.fftSize: must be a power of two within [1024, 8192]");
+        set_error(h, "viz.fftSize: out of range (power of two within [1024, 8192])");
         return AURADSP_E_PARAM;
     }
     if (h->viz_emitted.load(std::memory_order_relaxed)) {
-        set_error(h, "viz.fftSize: only changeable before the first viz frame");
+        set_error(h, "viz.fftSize: rejected (only changeable before the first viz frame)");
         return AURADSP_E_STATE;
     }
     rebuild_hann(h, (int)v);
@@ -584,7 +584,7 @@ static auradsp_status get_viz_fft_size(auradsp_handle h, void* out_value, uint32
 
 static auradsp_status set_mode_latency(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
-    set_error(h, "mode.latency removed by ADR-006 (latency is measurement-only)");
+    set_error(h, "mode.latency: unsupported (removed by ADR-006, latency is measurement-only)");
     return AURADSP_E_PARAM;
 }
 
@@ -599,7 +599,7 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
         return AURADSP_E_PARAM;
     }
     char* txt = (char*)malloc((size_t)bytes + 1);
-    if (!txt) { set_error(h, "eq.curve: OOM"); return AURADSP_E_IO; }
+    if (!txt) { set_error(h, "eq.curve: out of memory"); return AURADSP_E_IO; }
     memcpy(txt, value, bytes);
     txt[bytes] = 0;
     double freqAx[NUMPTS], gainAx[NUMPTS];
@@ -607,12 +607,12 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
     const int n = build_eq_axis(txt, h->sample_rate, freqAx, gainAx, &interp, &op);
     free(txt);
     if (n < 2) {
-        set_error(h, "eq.curve: need >= 2 points (f:g;f:g;...)");
+        set_error(h, "eq.curve: invalid length (need >= 2 points, f:g;f:g;...)");
         return AURADSP_E_PARAM;
     }
     MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
     char* eq_curve_new = (char*)malloc((size_t)bytes + 1);
-    if (!eq_curve_new) { set_error(h, "eq.curve: copy OOM"); return AURADSP_E_IO; }
+    if (!eq_curve_new) { set_error(h, "eq.curve: out of memory (copy)"); return AURADSP_E_IO; }
     memcpy(eq_curve_new, value, bytes);
     eq_curve_new[bytes] = 0;
     free(h->eq_curve);
@@ -632,11 +632,11 @@ static auradsp_status get_eq_curve(auradsp_handle h, void* out_value, uint32_t b
 
 static auradsp_status set_liveprog_code(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes == 0 || bytes > 256 * 1024) {
-        set_error(h, "liveprog.code: size must be 1..256KiB");
+        set_error(h, "liveprog.code: invalid length (1..256KiB)");
         return AURADSP_E_PARAM;
     }
     char* buf = (char*)malloc((size_t)bytes + 1);
-    if (!buf) { set_error(h, "liveprog.code: OOM"); return AURADSP_E_IO; }
+    if (!buf) { set_error(h, "liveprog.code: out of memory"); return AURADSP_E_IO; }
     memcpy(buf, value, bytes);
     buf[bytes] = 0;
     const int rc = LiveProgStringParser(&h->jdsp, buf);
@@ -649,7 +649,7 @@ static auradsp_status set_liveprog_code(auradsp_handle h, const void* value, uin
     lp_refresh_sliders(h);
     h->lp_status = 1;
     char* lp_new = (char*)malloc((size_t)bytes + 1);
-    if (!lp_new) { set_error(h, "liveprog.code: copy OOM"); return AURADSP_E_IO; }
+    if (!lp_new) { set_error(h, "liveprog.code: out of memory (copy)"); return AURADSP_E_IO; }
     memcpy(lp_new, value, bytes);
     lp_new[bytes] = 0;
     free(h->lp_code);
@@ -687,19 +687,19 @@ static auradsp_status get_liveprog_status(auradsp_handle h, void* out_value, uin
 static auradsp_status set_graph_order(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 16) return AURADSP_E_PARAM;
     char* ord = (char*)malloc((size_t)bytes + 1);
-    if (!ord) { set_error(h, "graph.order: OOM"); return AURADSP_E_IO; }
+    if (!ord) { set_error(h, "graph.order: out of memory"); return AURADSP_E_IO; }
     memcpy(ord, value, bytes);
     ord[bytes] = 0;
     char filtered[512];
     const int flen = JamesDSPFilterVendorOrder(ord, filtered, (int)sizeof(filtered));
     free(ord);
     if (flen <= 0 || !strcmp(filtered, "output")) {
-        set_error(h, "graph.order: no vendor stage id found");
+        set_error(h, "graph.order: parse failed (no vendor stage id found)");
         return AURADSP_E_PARAM;
     }
     const int rc = JamesDSPRebuildChain(&h->jdsp, filtered);
     if (rc != 0) {
-        set_error(h, "graph.order: invalid list (need all 12 stages exactly once)");
+        set_error(h, "graph.order: parse failed (invalid list, need all 12 stages exactly once)");
         return AURADSP_E_PARAM;
     }
     return AURADSP_OK;
@@ -742,7 +742,7 @@ static auradsp_status get_graph_effects(auradsp_handle /*h*/, void* out_value, u
 static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id, const void* value, uint32_t bytes) {
     if (!strncmp(id, "stereo.band", 11) && bytes >= 4) {
         const char d = id[11];
-        if (d < '1' || d > '5' || id[12] != 0) { set_error(h, "unknown param id"); return AURADSP_E_PARAM; }
+        if (d < '1' || d > '5' || id[12] != 0) { set_error(h, "param: unsupported (unknown param id)"); return AURADSP_E_PARAM; }
         const int idx = d - '1';
         float v = *(const float*)value;
         if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f;
@@ -753,7 +753,7 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
     }
     if (!strncmp(id, "input.balance.", 14) && bytes >= 4) {
         const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "unknown input balance channel"); return AURADSP_E_PARAM; }
+        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "param: unsupported (unknown input balance channel)"); return AURADSP_E_PARAM; }
         const int idx = d - '1';
         float v = *(const float*)value;
         if (v < 0.0f) v = 0.0f; if (v > 2.0f) v = 2.0f;
@@ -762,14 +762,14 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {
         const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "unknown param id"); return AURADSP_E_PARAM; }
+        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "param: unsupported (unknown param id)"); return AURADSP_E_PARAM; }
         const int idx = d - '1';
         h->p.lp_param[idx].store(*(const float*)value, std::memory_order_relaxed);
         if (h->lp_slider_ptr[idx])
             *h->lp_slider_ptr[idx] = *(const float*)value;
         return AURADSP_OK;
     }
-    set_error(h, "unknown param id");
+    set_error(h, "param: unsupported (unknown param id)");
     return AURADSP_E_PARAM;
 }
 
