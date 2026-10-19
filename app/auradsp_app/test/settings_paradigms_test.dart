@@ -81,7 +81,7 @@ void main() {
 
     // External ASIO client controls visible
     expect(find.text('缓冲档'), findsOneWidget);
-    expect(find.text('输出声道对'), findsOneWidget);
+    expect(find.text('输出起始声道对'), findsOneWidget);
 
     // 切到 AuraVAIO 输出端：出现虚拟声卡提示与耳机监听镜像开关
     model.setPipelineOutput(AudioModes.outputVaio);
