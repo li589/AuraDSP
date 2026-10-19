@@ -1,10 +1,35 @@
 #!/usr/bin/env python3
-"""第二遍：交叉分析 + 生成 Markdown 汇报。"""
-import os, re, json
+"""第二遍：交叉分析 + 生成 Markdown 汇报。
+
+用法：python tools/bin/gen_report.py [--force]
+- 数据源：tools/archive/_scan_cache.json（scan_engine_strings.py 产出）
+- 报告已存在时拒绝覆写（会冲掉文首勘误注记），确认重生成须加 --force。
+"""
+import os, re, json, sys, subprocess
 from collections import Counter, defaultdict
 
-ENGINE = r"D:/temp_desktop/Proj/JamesDSP/engine"
-cache = json.load(open(os.path.join(ENGINE, "_scan_cache.json"), encoding="utf-8"))
+# 仓库根 = 本文件的 tools/bin/ 上两级（2026-10-19 归位，不再写死绝对路径）
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ENGINE = os.path.join(ROOT, "engine")
+ARCHIVE = os.path.join(ROOT, "tools", "archive")
+REPORT = os.path.join(ROOT, "docs/30-审查/引擎内置字符串与预设数值扫描汇报-2026-10-19.md")
+
+if os.path.exists(REPORT) and "--force" not in sys.argv:
+    sys.exit(f"[abort] 报告已存在，拒绝覆写（会冲掉文首勘误注记）：\n  {REPORT}\n确认要重生成请加 --force。")
+
+def git_anchor():
+    """S1-2：报告头部固定输出代码锚点 + 工作区洁净度（E1 教训固化）。"""
+    try:
+        head = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT,
+                              capture_output=True, text=True, timeout=10).stdout.strip()
+        st = subprocess.run(["git", "status", "--short"], cwd=ROOT,
+                            capture_output=True, text=True, timeout=10).stdout.strip()
+        clean = "工作区洁净" if not st else f"**⚠️ 工作区不洁净（{len(st.splitlines())} 个变更）**"
+        return f"> 代码锚点：`{head}` ｜ {clean}"
+    except Exception:
+        return "> 代码锚点：（git 不可用，快照状态未知）"
+
+cache = json.load(open(os.path.join(ARCHIVE, "_scan_cache.json"), encoding="utf-8"))
 table = cache["table"]
 errors = cache["errors"]
 versions = cache["versions"]
@@ -104,6 +129,7 @@ w("# AuraDSP 引擎内置字符串与预设性质数值 扫描汇报")
 w()
 w(f"> 扫描时间：2026-10-19 ｜ 范围：`engine/` 全树（chain / dsp / host / legacy / 根）")
 w(f"> 文件类型：`.c .cpp .h .hpp .cc`（共 {sum(1 for _ in os.walk(ENGINE))} 目录）")
+w(git_anchor())
 w()
 w("---")
 w()
@@ -348,14 +374,14 @@ w()
 w()
 w("---")
 w("# 附录二：扫描方法说明")
-w("脚本：`engine/scan_engine_strings.py`（stdlib only）。")
+w("脚本：`tools/bin/scan_engine_strings.py`（stdlib only；2026-10-19 由 `engine/` 归位至此，绝对路径改仓库根相对定位）。")
 w("- 参数表：正则解析 `kEngineParamTable` 的 `PARAM_*` 宏（id/type/member/min/max）。")
 w("- 默认值：解析 `struct Params` 字段初始化与行内范围注释。")
 w("- 混响/kLat：定位 `ps[]` 与 `kLat*` 字面块。")
 w("- 字符串：全树遍历 `.c/.cpp/.h/.hpp/.cc` 抽取字面量，按目录/面向分类。")
 w("- 交叉校验：有界参数默认∈[min,max]、同字段多 id 别名族。")
 
-open(os.path.join(ENGINE, "..", "docs/30-审查/引擎内置字符串与预设数值扫描汇报-2026-10-19.md"), "w", encoding="utf-8").write("\n".join(L))
+open(REPORT, "w", encoding="utf-8").write("\n".join(L))
 print("报告已生成。行数:", len(L))
 print("range_issues:", len(range_issues))
 print("alias_groups:", len(alias_groups))

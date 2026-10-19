@@ -3,7 +3,10 @@
 输出：扫描统计 + 结构化数据，供汇报文档使用。"""
 import os, re, json, sys
 
-ENGINE = r"D:/temp_desktop/Proj/JamesDSP/engine"
+# 仓库根 = 本文件的 tools/bin/ 上两级（2026-10-19 归位，不再写死绝对路径）
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+ENGINE = os.path.join(ROOT, "engine")
+ARCHIVE = os.path.join(ROOT, "tools", "archive")  # 扫描缓存落这里（tools/archive/ 已 gitignore）
 
 # ---------------------------------------------------------------------------
 # 1. 解析参数表 kEngineParamTable（id / type / member / min / max）
@@ -186,5 +189,6 @@ if __name__ == "__main__":
     out = {"table": table, "defaults": defaults, "reverb": reverb,
            "klat": klat, "buckets": buckets, "total": total,
            "dup_members": dup_members, "errors": errors, "versions": versions}
-    json.dump(out, open(os.path.join(ENGINE, "_scan_cache.json"), "w"), ensure_ascii=False, indent=1)
-    print("\n[cache] 已写入 _scan_cache.json")
+    os.makedirs(ARCHIVE, exist_ok=True)
+    json.dump(out, open(os.path.join(ARCHIVE, "_scan_cache.json"), "w"), ensure_ascii=False, indent=1)
+    print(f"\n[cache] 已写入 {os.path.join(ARCHIVE, '_scan_cache.json')}")
