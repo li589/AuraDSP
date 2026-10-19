@@ -175,6 +175,15 @@ int auradsp_probe_component_with_resource(const char* component,
                                           double sample_rate,
                                           uint32_t* out_samples);
 
+/* 同上，但携带「当前配置」实参：arg 仅 haas 使用——传入用户当前的
+ * haas.delay_ms，使实测值等于引擎 compute_latency 的动态口径（0..25ms）；
+ * 其它组件忽略 arg（传 0 即可）。haas / spatial 已入探针支持集：
+ * 逐声道首非零取最大后，haas 测出延迟值，spatial 测出 0ms（链上无前瞻，
+ * ITD 是耳间差而非链延迟）。 */
+int auradsp_probe_component_current(const char* component, double arg,
+                                    double sample_rate,
+                                    uint32_t* out_samples);
+
 /* ---- C2：EQ 实际频率响应实测 ----
  *
  * 传入 eq.curve 同格式字符串（"f:g;f:g;..."），在 [f_min, f_max] 上按
