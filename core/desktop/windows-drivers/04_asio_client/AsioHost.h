@@ -36,6 +36,9 @@ namespace auraasio {
 // 不进引擎（防堆不足；实测 VM 给 2048、FL Studio 给 512，余量充足）。
 constexpr long kMaxNbs = 4096;
 
+// io 模式最大声道数（引擎 channels.count ∈ {2,4,6,8}；create_io 上限，B2c）。
+constexpr int kMaxCh = 8;
+
 // 注册表枚举条目（不加载 COM；来自 AsioDriverList）
 struct DriverEntry {
     std::string name;       // 注册表原始字节（CP_ACP）——loadAsioDriver 的匹配键，勿改
@@ -105,18 +108,25 @@ public:
     // bufSize<=0 用 preferredSize。失败时 why 说明（声道不足/格式不支持等）。
     bool create_output_stereo(long bufSize, std::string& why);
 
-    // ---- Phase 2 桥用：输入 ch0/1 + 输出 outPair/outPair+1 双声道缓冲 ----
-    // 处理 sink：in/out 为交织 stereo float32（frames 帧），RT 线程调用；
+    // ---- Phase 2/B2c 桥用：nCh 声道 io 缓冲 ----
+    // 处理 sink：in/out 为交织 nCh 声道 float32（frames 帧），RT 线程调用；
     // in 允许改写（测试注入语义：测试信号替换真实输入，同 05 FillTestSignal 用法）。
-    // 实现方必须零分配零锁零 syscall（桥内即 FillTestSignal → engine process/bypass）。
+    // 实现方必须零分配零锁零 syscall（桥内即 FillTestSignalN → engine process/bypass）。
     // nullptr = 回 tone 模式（Phase 1 行为，与 create_output_stereo 配套）。
     using ProcessSink = void (*)(void* ctx, float* in, float* out, int frames);
 
-    // outPair<0 或越界按 0；bufSize<=0 用 preferredSize。失败时 why 说明。
+    // 创建 nCh ∈ {2,4,6,8} 条输入（ch 0..nCh-1）与 nCh 条输出（ch outBase..outBase+nCh-1）。
+    // nCh 非 {2,4,6,8}、驱动输入<nCh 或 outBase+nCh>outCh 则失败（why 说明）。
+    // outBase<0 按 0；bufSize<=0 用 preferredSize。
     // 输入/输出声道均限 Float32LSB 原生 + Int32/Int24/Int16LSB 换算（R-6：不猜格式）。
-    bool create_stereo_io(long bufSize, long outPair, std::string& why);
+    bool create_io(long nCh, long bufSize, long outBase, std::string& why);
 
-    // 设置处理 sink（控制线程；start 前后都可；须在 create_stereo_io 之后生效）。
+    // 便捷：create_io(2, bufSize, outPair, why)（既有调用方零改动）。
+    bool create_stereo_io(long bufSize, long outPair, std::string& why) {
+        return create_io(2, bufSize, outPair, why);
+    }
+
+    // 设置处理 sink（控制线程；start 前后都可；须在 create_io 之后生效）。
     void set_process_sink(ProcessSink fn, void* ctx);
 
     bool start();       // ASIOStart
@@ -126,6 +136,7 @@ public:
     long buffer_size() const { return bufSize_; }
     double sample_rate() const { return sampleRate_; }
     long out_sample_type() const { return outType_[0]; }
+    long io_ch() const { return ioCh_; }   // io 声道数（create_io 后为 2/4/6/8，否则 0）
 
     // ---- tone 发生源（RT 安全）----
     void tone_set(float freqHz, float amp);   // 控制线程；start 前后都可
@@ -172,17 +183,18 @@ private:
     std::string driverName_;           // ASIOInit 回填的驱动自报名
     long asioVersion_ = 0;             // ASIOInit 回填（驱动实现的 ASIO 版本）
     long driverVersion_ = 0;           // ASIOInit 回填（驱动特定版本号）
-    long outType_[2] = { -1, -1 };     // 每声道 ASIOSampleType
-    void* outBufs_[2][2] = {};         // [声道][doubleBufferIndex]
+    long outType_[kMaxCh] = { -1, -1, -1, -1, -1, -1, -1, -1 };  // 每声道 ASIOSampleType
+    void* outBufs_[kMaxCh][2] = {};    // [声道][doubleBufferIndex]
 
-    // ---- Phase 2 io 模式（create_stereo_io 才非空）----
-    long inType_[2] = { -1, -1 };      // 输入声道 0/1 的 ASIOSampleType
-    void* inBufs_[2][2] = {};          // [声道][doubleBufferIndex]
-    float* scratchIn_ = nullptr;       // 2*kMaxNbs，create_stereo_io 分配 / close 释放
+    // ---- Phase 2/B2c io 模式（create_io 才非空）----
+    long inType_[kMaxCh] = { -1, -1, -1, -1, -1, -1, -1, -1 };   // 输入声道 ASIOSampleType
+    void* inBufs_[kMaxCh][2] = {};     // [声道][doubleBufferIndex]
+    float* scratchIn_ = nullptr;       // kMaxCh*kMaxNbs，create_io 分配 / close 释放
     float* scratchOut_ = nullptr;
     ProcessSink sink_ = nullptr;       // 控制线程写、start 前定稿；RT 只读
     void* sinkCtx_ = nullptr;
-    long outPair_ = 0;                 // 输出对起始声道（信息性）
+    long outPair_ = 0;                 // 输出块起始声道（信息性）
+    long ioCh_ = 0;                    // io 声道数（2/4/6/8）；create 期写，RT 只读
 
     // tone 状态（控制线程写 / RT 读，全原子）
     std::atomic<bool> toneOn_{false};

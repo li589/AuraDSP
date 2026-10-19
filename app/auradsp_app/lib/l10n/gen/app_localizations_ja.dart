@@ -438,7 +438,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get asioBufAuto => '自動（ドライバー推奨）';
 
   @override
-  String get asioOutPair => '出力ペア';
+  String get asioOutPair => '出力ブロック開始';
+
+  @override
+  String get asioDeviceChannels => 'デバイスチャンネル';
+
+  @override
+  String get asioTransportChannels => '伝送チャンネル';
 
   @override
   String get asioRefresh => '更新';

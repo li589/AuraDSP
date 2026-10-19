@@ -46,10 +46,18 @@ ASB_API int asio_detect(char* out, int cap);
 // engine_dll="" 则自动搜索（复用 05 的 TryLoadEngine 候选路径）。
 // params_json="" 则不预下发，格式 "id=f1.5;id2=i3"（float 含 '.'/'e'，
 // 其余按 int），失败条目计数进 status.paramsFailed。
-// buf_size<=0 用驱动 preferredSize；out_pair 为输出对起始声道（L=R+1 配对），
-// <0 按 0。返回：0=ok；<0=失败（note 见 status）。非阻塞（ASIO 回调自有线程）。
+// buf_size<=0 用驱动 preferredSize；out_pair 为输出块起始声道，<0 按 0。
+// 返回：0=ok；<0=失败（note 见 status）。非阻塞（ASIO 回调自有线程）。
+// 兼容入口：等价 asio_start_ex(..., channels=2)（既有调用方零改动）。
 ASB_API int asio_start(const char* driver_name, const char* engine_dll,
                        const char* params_json, long buf_size, long out_pair);
+
+// 多声道入口（B2c）：channels ∈ {2,4,6,8} 为 io 声道数（引擎 channels.count 由
+// 桥按此强制对齐）；桥按驱动能力自动降级（in/outCh 不足或 out_pair 余量不够时
+// 向下取档，note 上报 "ioCh A->B"）。输入 ch0..nCh-1、输出 out_pair..out_pair+nCh-1。
+ASB_API int asio_start_ex(const char* driver_name, const char* engine_dll,
+                          const char* params_json, long buf_size, long out_pair,
+                          long channels);
 
 // 停止：ASIOStop → disposeBuffers → ASIOExit → removeDriver → 销毁引擎 →
 // 释放（与 start 严格配对，幂等）。
@@ -58,7 +66,7 @@ ASB_API int asio_stop();
 // 状态 JSON（调用方 buffer，无分配；driverRaw 为注册表原始字节，不保证合法
 // UTF-8，故不上屏——只进 note 排障）：
 // {"running":true,"switches":N,"sr":48000,"nbs":512,"driver":"...",
-//  "outPair":0,"inCh":8,"outCh":8,"inLatency":0,"outLatency":0,
+//  "outPair":0,"ioCh":2,"inCh":8,"outCh":8,"inLatency":0,"outLatency":0,
 //  "peakIn":0.0,"peakOut":0.0,"maxCbUs":0.0,"startRc":0,"note":"",
 //  "bypass":0,"testKind":0,"paramsApplied":0,"paramsFailed":0,
 //  "engine":"C:/.../auradsp_engine.dll","engineOk":true}
@@ -89,9 +97,9 @@ ASB_API int asio_viz_read(void* out408, int count);
 ASB_API int asio_bypass(int on);
 
 // 测试注入：kind 1=正弦440 2=粉噪 3=文件。kind=3 时拷贝 pcm
-// （交织立体声 float32，frames 帧，ch 声道，rate 采样率；语义同 FileSource，
-// 复用 05 FillTestSignal）。启动即静音 ASIO 输入，测试信号进同一条 DSP 链。
-// 返回 0=ok，<0=未运行/参数错。
+// （交织 float32，frames 帧，ch ∈ {1..8} 声道，rate 采样率；单声道铺双声道，
+// 多声道原样存储；语义同 FileSource，经 05 FillTestSignalN）。启动即静音
+// ASIO 输入，测试信号进同一条 DSP 链。返回 0=ok，<0=未运行/参数错。
 ASB_API int asio_test_start(int kind, const float* pcm, int frames, int ch, int rate);
 // 停止测试：先清 kind（RT 可见），等 50ms 让在途回调退出，再释放文件缓冲。
 ASB_API int asio_test_stop();

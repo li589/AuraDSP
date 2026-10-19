@@ -925,8 +925,20 @@ abstract class AppLocalizations {
   /// No description provided for @asioOutPair.
   ///
   /// In zh, this message translates to:
-  /// **'输出声道对'**
+  /// **'输出起始声道对'**
   String get asioOutPair;
+
+  /// No description provided for @asioDeviceChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备通道'**
+  String get asioDeviceChannels;
+
+  /// No description provided for @asioTransportChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'传输声道'**
+  String get asioTransportChannels;
 
   /// No description provided for @asioRefresh.
   ///

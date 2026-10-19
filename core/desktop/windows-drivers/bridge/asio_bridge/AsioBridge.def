@@ -2,6 +2,7 @@ LIBRARY auraasio_bridge
 EXPORTS
     asio_detect            PRIVATE
     asio_start             PRIVATE
+    asio_start_ex          PRIVATE
     asio_stop              PRIVATE
     asio_status            PRIVATE
     asio_set_param         PRIVATE

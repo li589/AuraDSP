@@ -160,17 +160,18 @@ void AsioHost::close() {
     bufSize_ = 0;
     sampleRate_ = 0.0;
     srLive_.store(0.0, std::memory_order_relaxed);
-    outType_[0] = outType_[1] = -1;
-    outBufs_[0][0] = outBufs_[0][1] = nullptr;
-    outBufs_[1][0] = outBufs_[1][1] = nullptr;
-    inType_[0] = inType_[1] = -1;
-    inBufs_[0][0] = inBufs_[0][1] = nullptr;
-    inBufs_[1][0] = inBufs_[1][1] = nullptr;
+    for (int ch = 0; ch < kMaxCh; ++ch) {
+        outType_[ch] = -1;
+        outBufs_[ch][0] = outBufs_[ch][1] = nullptr;
+        inType_[ch] = -1;
+        inBufs_[ch][0] = inBufs_[ch][1] = nullptr;
+    }
     free(scratchIn_); free(scratchOut_);
     scratchIn_ = scratchOut_ = nullptr;
     sink_ = nullptr;
     sinkCtx_ = nullptr;
     outPair_ = 0;
+    ioCh_ = 0;
     phase_ = 0.0;
     toneOn_.store(false, std::memory_order_release);
     switches_.store(0, std::memory_order_relaxed);
@@ -362,29 +363,35 @@ void AsioHost::set_process_sink(ProcessSink fn, void* ctx) {
     sinkCtx_ = ctx;
 }
 
-bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
+bool AsioHost::create_io(long nCh, long bufSize, long outBase, std::string& why) {
     if (!opened_) { why = "host not open"; return false; }
     if (buffers_) { why = "buffers already created"; return false; }
+    if (nCh != 2 && nCh != 4 && nCh != 6 && nCh != 8) {
+        char b[96];
+        _snprintf_s(b, sizeof(b), _TRUNCATE, "nCh %ld not in {2,4,6,8}", nCh);
+        why = b;
+        return false;
+    }
 
     long inCh = 0, outCh = 0;
     if (ASIOGetChannels(&inCh, &outCh) != ASE_OK) { why = "getChannels failed"; return false; }
-    if (inCh < 2) {
+    if (inCh < nCh) {
         char b[96];
-        _snprintf_s(b, sizeof(b), _TRUNCATE, "driver has %ld input channels (<2)", inCh);
+        _snprintf_s(b, sizeof(b), _TRUNCATE, "driver has %ld input channels (<%ld)", inCh, nCh);
         why = b;
         return false;
     }
-    if (outCh < 2) {
+    if (outCh < nCh) {
         char b[96];
-        _snprintf_s(b, sizeof(b), _TRUNCATE, "driver has %ld output channels (<2)", outCh);
+        _snprintf_s(b, sizeof(b), _TRUNCATE, "driver has %ld output channels (<%ld)", outCh, nCh);
         why = b;
         return false;
     }
-    if (outPair < 0) outPair = 0;
-    if (outPair + 1 >= outCh) {
+    if (outBase < 0) outBase = 0;
+    if (outBase + nCh > outCh) {
         char b[128];
         _snprintf_s(b, sizeof(b), _TRUNCATE,
-                    "outPair %ld out of range (outCh=%ld)", outPair, outCh);
+                    "outBase %ld + nCh %ld out of range (outCh=%ld)", outBase, nCh, outCh);
         why = b;
         return false;
     }
@@ -399,18 +406,18 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
         return false;
     }
 
-    // 输入 ch0/1 + 输出 outPair/outPair+1
-    ASIOBufferInfo infos[4];
+    // 输入 ch0..nCh-1 + 输出 outBase..outBase+nCh-1（条目顺序：输入在前、输出在后）
+    ASIOBufferInfo infos[2 * kMaxCh];
     int nInfos = 0;
-    for (int ch = 0; ch < 2; ++ch) {
+    for (long ch = 0; ch < nCh; ++ch) {
         infos[nInfos].isInput = ASIOTrue;
         infos[nInfos].channelNum = ch;
         infos[nInfos].buffers[0] = infos[nInfos].buffers[1] = nullptr;
         ++nInfos;
     }
-    for (int ch = 0; ch < 2; ++ch) {
+    for (long ch = 0; ch < nCh; ++ch) {
         infos[nInfos].isInput = ASIOFalse;
-        infos[nInfos].channelNum = outPair + ch;
+        infos[nInfos].channelNum = outBase + ch;
         infos[nInfos].buffers[0] = infos[nInfos].buffers[1] = nullptr;
         ++nInfos;
     }
@@ -432,10 +439,10 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
         return false;
     }
 
-    // 逐声道取类型与缓冲地址（输入条目在前、输出对在后）
-    const int inBase = 0;
-    const int outBase = 2;
-    for (int ch = 0; ch < 2; ++ch) {
+    // 逐声道取类型与缓冲地址（输入条目在前、输出块在后）
+    const int inIdxBase = 0;
+    const int outIdxBase = (int)nCh;
+    for (long ch = 0; ch < nCh; ++ch) {
         ASIOChannelInfo ci;
         memset(&ci, 0, sizeof(ci));
         ci.channel = ch;
@@ -446,13 +453,13 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
             return false;
         }
         inType_[ch] = ci.type;
-        inBufs_[ch][0] = infos[inBase + ch].buffers[0];
-        inBufs_[ch][1] = infos[inBase + ch].buffers[1];
+        inBufs_[ch][0] = infos[inIdxBase + ch].buffers[0];
+        inBufs_[ch][1] = infos[inIdxBase + ch].buffers[1];
     }
-    for (int ch = 0; ch < 2; ++ch) {
+    for (long ch = 0; ch < nCh; ++ch) {
         ASIOChannelInfo ci;
         memset(&ci, 0, sizeof(ci));
-        ci.channel = outPair + ch;
+        ci.channel = outBase + ch;
         ci.isInput = ASIOFalse;
         if (ASIOGetChannelInfo(&ci) != ASE_OK) {
             ASIODisposeBuffers();
@@ -460,15 +467,15 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
             return false;
         }
         outType_[ch] = ci.type;
-        outBufs_[ch][0] = infos[outBase + ch].buffers[0];
-        outBufs_[ch][1] = infos[outBase + ch].buffers[1];
+        outBufs_[ch][0] = infos[outIdxBase + ch].buffers[0];
+        outBufs_[ch][1] = infos[outIdxBase + ch].buffers[1];
     }
-    for (int ch = 0; ch < 2; ++ch) {
+    for (long ch = 0; ch < nCh; ++ch) {
         if (!TypeSupported(inType_[ch])) {
             ASIODisposeBuffers();
             char b[160];
             _snprintf_s(b, sizeof(b), _TRUNCATE,
-                        "unsupported input sample type ch%d: %s (%ld)",
+                        "unsupported input sample type ch%ld: %s (%ld)",
                         ch, sample_type_name(inType_[ch]), inType_[ch]);
             why = b;
             return false;
@@ -477,7 +484,7 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
             ASIODisposeBuffers();
             char b[160];
             _snprintf_s(b, sizeof(b), _TRUNCATE,
-                        "unsupported output sample type ch%d: %s (%ld)",
+                        "unsupported output sample type ch%ld: %s (%ld)",
                         ch, sample_type_name(outType_[ch]), outType_[ch]);
             why = b;
             return false;
@@ -490,8 +497,8 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
         return false;
     }
     // scratch（控制线程分配；RT 只读指针）
-    scratchIn_ = (float*)malloc(sizeof(float) * 2 * (size_t)kMaxNbs);
-    scratchOut_ = (float*)malloc(sizeof(float) * 2 * (size_t)kMaxNbs);
+    scratchIn_ = (float*)malloc(sizeof(float) * (size_t)nCh * (size_t)kMaxNbs);
+    scratchOut_ = (float*)malloc(sizeof(float) * (size_t)nCh * (size_t)kMaxNbs);
     if (!scratchIn_ || !scratchOut_) {
         free(scratchIn_); free(scratchOut_);
         scratchIn_ = scratchOut_ = nullptr;
@@ -502,7 +509,8 @@ bool AsioHost::create_stereo_io(long bufSize, long outPair, std::string& why) {
     bufSize_ = bs;
     sampleRate_ = sr;
     srLive_.store(sr, std::memory_order_relaxed);
-    outPair_ = outPair;
+    outPair_ = outBase;
+    ioCh_ = nCh;
     buffers_ = true;
     return true;
 }
@@ -645,19 +653,23 @@ void AsioHost::process_io(long doubleBufferIndex) {
     switches_.fetch_add(1, std::memory_order_relaxed);
     const long n = bufSize_;
     if (n <= 0) return;
+    const long ch = ioCh_;   // 2/4/6/8（create_io 定稿；RT 只读）
     // 爆音预算：整块（搬运 + sink）耗时打点（QPC 无等待；同 05）。
     LARGE_INTEGER t0, t1;
     QueryPerformanceCounter(&t0);
     float peakIn = 0.0f, peakOut = 0.0f;
-    if (n <= kMaxNbs && scratchIn_ && scratchOut_) {
-        // ① 输入分声道 → 交织 float32
-        for (int ch = 0; ch < 2; ++ch) {
-            const void* ib = inBufs_[ch][doubleBufferIndex];
-            const long t = inType_[ch];
-            if (!ib) continue;
+    if (n <= kMaxNbs && ch > 0 && scratchIn_ && scratchOut_) {
+        // ① 输入分声道 → 交织 float32（缺缓冲的声道补零，防跨回调残留）
+        for (long c = 0; c < ch; ++c) {
+            const void* ib = inBufs_[c][doubleBufferIndex];
+            const long t = inType_[c];
+            if (!ib) {
+                for (long i = 0; i < n; ++i) scratchIn_[i * ch + c] = 0.0f;
+                continue;
+            }
             for (long i = 0; i < n; ++i) {
                 const float v = ReadSample(ib, t, i);
-                scratchIn_[i * 2 + ch] = v;
+                scratchIn_[i * ch + c] = v;
                 const float a = fabsf(v);
                 if (a > peakIn) peakIn = a;
             }
@@ -665,12 +677,12 @@ void AsioHost::process_io(long doubleBufferIndex) {
         // ② sink（桥内：测试注入 → engine process / bypass；RT 安全由桥保证）
         sink_(sinkCtx_, scratchIn_, scratchOut_, (int)n);
         // ③ 交织 → 输出分声道
-        for (int ch = 0; ch < 2; ++ch) {
-            void* ob = outBufs_[ch][doubleBufferIndex];
-            const long t = outType_[ch];
+        for (long c = 0; c < ch; ++c) {
+            void* ob = outBufs_[c][doubleBufferIndex];
+            const long t = outType_[c];
             if (!ob) continue;
             for (long i = 0; i < n; ++i) {
-                const float v = scratchOut_[i * 2 + ch];
+                const float v = scratchOut_[i * ch + c];
                 WriteSample(ob, t, i, v);
                 const float a = fabsf(v);
                 if (a > peakOut) peakOut = a;
@@ -679,11 +691,11 @@ void AsioHost::process_io(long doubleBufferIndex) {
     } else {
         // 超长块 / scratch 缺失（理论不可达——create 期已钳 kMaxNbs）：
         // 声道级直通，绝不吞声（逐样本换算保类型正确）。
-        for (int ch = 0; ch < 2; ++ch) {
-            const void* ib = inBufs_[ch][doubleBufferIndex];
-            void* ob = outBufs_[ch][doubleBufferIndex];
+        for (long c = 0; c < ch; ++c) {
+            const void* ib = inBufs_[c][doubleBufferIndex];
+            void* ob = outBufs_[c][doubleBufferIndex];
             if (!ib || !ob) continue;
-            for (long i = 0; i < n; ++i) WriteSample(ob, outType_[ch], i, ReadSample(ib, inType_[ch], i));
+            for (long i = 0; i < n; ++i) WriteSample(ob, outType_[c], i, ReadSample(ib, inType_[c], i));
         }
     }
     QueryPerformanceCounter(&t1);

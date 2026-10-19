@@ -434,7 +434,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get asioBufAuto => '自动（驱动首选）';
 
   @override
-  String get asioOutPair => '输出声道对';
+  String get asioOutPair => '输出起始声道对';
+
+  @override
+  String get asioDeviceChannels => '设备通道';
+
+  @override
+  String get asioTransportChannels => '传输声道';
 
   @override
   String get asioRefresh => '刷新驱动';

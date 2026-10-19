@@ -21,10 +21,10 @@ import 'auradsp_ffi.dart' show VizFrame;
 
 typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
 typedef _DetectDart = int Function(Pointer<Utf8>, int);
-typedef _StartC = Int32 Function(
-    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Int32);
-typedef _StartDart = int Function(
-    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int);
+typedef _StartExC = Int32 Function(
+    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Int32, Int32);
+typedef _StartExDart = int Function(
+    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int, int);
 typedef _StopC = Int32 Function();
 typedef _StopDart = int Function();
 typedef _StatusC = Int32 Function(Pointer<Utf8>, Int32);
@@ -50,8 +50,8 @@ class AuraAsioBridge {
   final DynamicLibrary dylib;
   late final _DetectDart _detect =
       dylib.lookupFunction<_DetectC, _DetectDart>('asio_detect');
-  late final _StartDart _start =
-      dylib.lookupFunction<_StartC, _StartDart>('asio_start');
+  late final _StartExDart _startEx =
+      dylib.lookupFunction<_StartExC, _StartExDart>('asio_start_ex');
   late final _StopDart _stop =
       dylib.lookupFunction<_StopC, _StopDart>('asio_stop');
   late final _StatusDart _status =
@@ -119,14 +119,19 @@ class AuraAsioBridge {
   /// 启动常驻桥。[driver] 为 detect 的 name（UTF-8 显示名）；[engineDll]
   /// 传引擎真相源绝对路径（空串=桥内自动搜索）；[paramsJson] 同 bridge 格式
   /// "id=f1.5;id2=i3"；[bufSize]<=0 用驱动 preferredSize；[outPair] 为
-  /// 输出对起始声道（L=R+1 配对），<0 按 0。
+  /// 输出块起始声道，<0 按 0；[channels] ∈ {2,4,6,8} 为 io 声道数（B2c，桥按
+  /// 驱动能力自动降级并把引擎 channels.count 对齐到此值）。
   int start(String driver,
-      {String engineDll = '', String paramsJson = '', int bufSize = 0, int outPair = 0}) {
+      {String engineDll = '',
+      String paramsJson = '',
+      int bufSize = 0,
+      int outPair = 0,
+      int channels = 2}) {
     final dp = driver.toNativeUtf8();
     final ep = engineDll.toNativeUtf8();
     final pp = paramsJson.toNativeUtf8();
     try {
-      return _start(dp.cast(), ep.cast(), pp.cast(), bufSize, outPair);
+      return _startEx(dp.cast(), ep.cast(), pp.cast(), bufSize, outPair, channels);
     } finally {
       malloc.free(dp);
       malloc.free(ep);

@@ -451,6 +451,80 @@ test_mode = 'sine'
 check('IASIO::stop S_OK', StopFunc(pAsio.value) == 0)
 check('IASIO::disposeBuffers S_OK', DisposeFunc(pAsio.value) == 0)
 
+# 测试 F：B2c 多声道档位（2 -> 6）。SetChannels 须在 createBuffers 之前；
+# disposeBuffers 之后 m_buffersAllocated 已复位，可复用同一实例切换档位。
+kAuraAsioFutureSetChannels = 0x41555218
+kAuraAsioFutureGetChannels = 0x41555219
+
+nch6 = ctypes.c_long(6)
+res_set = FutureFunc(pAsio.value, kAuraAsioFutureSetChannels, ctypes.byref(nch6))
+check('future(SetChannels(6)) ASE_SUCCESS', res_set == ASE_SUCCESS)
+
+nch_get = ctypes.c_long(0)
+FutureFunc(pAsio.value, kAuraAsioFutureGetChannels, ctypes.byref(nch_get))
+check('future(GetChannels) == 6', nch_get.value == 6, f'{nch_get.value}')
+
+n_in6 = ctypes.c_long(0)
+n_out6 = ctypes.c_long(0)
+res_ch6 = GetChannelsFunc(pAsio.value, ctypes.byref(n_in6), ctypes.byref(n_out6))
+check('getChannels now (6, 6)', res_ch6 == 0 and n_in6.value == 6 and n_out6.value == 6,
+      f'in={n_in6.value} out={n_out6.value}')
+
+ci5 = ASIOChannelInfo(5, 1, 0, 0, 0, b'')   # channel=5, isInput=1
+res_ci5 = GetChInfoFunc(pAsio.value, ctypes.byref(ci5))
+check('getChannelInfo(In 6) valid Float32LSB',
+      res_ci5 == 0 and ci5.type == 19 and ci5.name.decode('ascii').startswith('In 6'),
+      f'res={res_ci5} name={ci5.name}')
+ci6 = ASIOChannelInfo(6, 0, 0, 0, 0, b'')   # channel=6, isInput=0（越界）
+check('getChannelInfo(Out 7) out-of-range rejected', GetChInfoFunc(pAsio.value, ctypes.byref(ci6)) != 0)
+
+buf6 = (ASIOBufferInfo * 12)(
+    *[ASIOBufferInfo(1, c, (ctypes.c_void_p * 2)()) for c in range(6)],
+    *[ASIOBufferInfo(0, c, (ctypes.c_void_p * 2)()) for c in range(6)]
+)
+mch_switches = [0]
+
+
+def py_buffer_switch6(idx, direct):
+    mch_switches[0] += 1
+    arr = ctypes.c_float * 256
+    for o in range(6):                       # 输出位于索引 6..11
+        p = buf6[6 + o].buffers[idx]
+        if p:
+            b = arr.from_address(p)
+            for i in range(256):
+                b[i] = 0.05
+
+
+cb6 = BufferSwitchProto(py_buffer_switch6)
+callbacks6 = ASIOCallbacks(cb6, cb_sr, cb_msg, BufferSwitchTimeInfoProto())
+
+res_create6 = CreateBuffersFunc(pAsio.value, buf6, 12, 256, ctypes.byref(callbacks6))
+check('createBuffers 6in+6out S_OK', res_create6 == 0)
+check('6ch double-buffers allocated non-null',
+      all(bool(buf6[i].buffers[0] and buf6[i].buffers[1]) for i in range(12)))
+check('start (6ch) S_OK', StartFunc(pAsio.value) == 0)
+time.sleep(0.12)
+check(f'6ch pump active: {mch_switches[0]} switches (expected ~22)',
+      12 <= mch_switches[0] <= 30)
+
+val_cc = ctypes.c_int(0)
+param_cc = AuraAsioParamIo(b'channels.count', ctypes.cast(ctypes.byref(val_cc), ctypes.c_void_p), 4)
+res_cc = FutureFunc(pAsio.value, kAuraAsioFutureGetParam, ctypes.byref(param_cc))
+check('engine channels.count==6 (driver authoritative)',
+      res_cc == ASE_SUCCESS and val_cc.value == 6, f'cc={val_cc.value}')
+
+out_l6 = (ctypes.c_float * 256)()
+out_r6 = (ctypes.c_float * 256)()
+blk6 = AuraAsioBlockCopy(out_l6, out_r6, 256, 0)
+res_cp6 = FutureFunc(pAsio.value, kAuraAsioFutureCopyLastOutputBlock, ctypes.byref(blk6))
+check('6ch CopyLastOutputBlock S_OK & copiedSamples==256',
+      res_cp6 == ASE_SUCCESS and blk6.copiedSamples == 256,
+      f'res={res_cp6} n={blk6.copiedSamples}')
+
+check('stop (6ch) S_OK', StopFunc(pAsio.value) == 0)
+check('disposeBuffers (6ch) S_OK', DisposeFunc(pAsio.value) == 0)
+
 # Release objects
 ReleaseFunc = ctypes.WINFUNCTYPE(ctypes.c_ulong, ctypes.c_void_p)(pAsioVtbl[2])
 ref_asio = ReleaseFunc(pAsio.value)
