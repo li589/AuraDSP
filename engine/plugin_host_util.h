@@ -6,6 +6,7 @@
 //   utf8/normalize —— 原 static 自由函数改 inline
 //   其余为跨 TU 引用的自由函数声明（定义各在一处）
 #include "auradsp_plugin_host.h"
+#include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
 #include <string>
@@ -138,7 +139,7 @@ public:
             // 此分支仅防御极端时序，短暂重试一次。
             Sleep(20);
             if (!PostThreadMessageW(m_threadId, WM_APP_PUMP_TASK, 0, 0)) {
-                std::cout << "[DBG Pump] PostThreadMessage failed, err=" << GetLastError() << std::endl;
+                AURADSP_WARN_S("[DBG Pump] PostThreadMessage failed, err=" << GetLastError());
                 return false;
             }
         }
@@ -168,7 +169,7 @@ private:
                 return;
             }
             // 挂死：故意泄漏。p 仍被挂死线程的栈引用，delete = UAF。
-            std::cout << "[DBG Pump] deleter: thread unresponsive; leaking pump object (quarantine)" << std::endl;
+            AURADSP_WARN("[DBG Pump] deleter: thread unresponsive; leaking pump object (quarantine)");
         }
     };
     friend struct PumpDeleter;
@@ -182,7 +183,7 @@ private:
             Sleep(10);
         }
         if (!m_ready.load(std::memory_order_acquire)) {
-            std::cout << "[DBG Pump] main thread failed to start" << std::endl;
+            AURADSP_WARN("[DBG Pump] main thread failed to start");
             stop();
             return false;
         }
@@ -260,14 +261,14 @@ private:
         __try {
             (*task)();
         } __except (EXCEPTION_EXECUTE_HANDLER) {
-            std::cout << "[DBG Pump] task crashed (SEH); poisoning pump" << std::endl;
+            AURADSP_WARN("[DBG Pump] task crashed (SEH); poisoning pump");
             m_abandoned.store(true, std::memory_order_release);
         }
 #else
         try {
             (*task)();
         } catch (...) {
-            std::cout << "[DBG Pump] task threw; poisoning pump" << std::endl;
+            AURADSP_WARN("[DBG Pump] task threw; poisoning pump");
             m_abandoned.store(true, std::memory_order_release);
         }
 #endif

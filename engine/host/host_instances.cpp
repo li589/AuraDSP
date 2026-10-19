@@ -1,4 +1,5 @@
 #include "auradsp_plugin_host.h"
+#include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
 #include <winver.h>
@@ -7,8 +8,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <iostream>
-#include <iomanip>
 #include <algorithm>
 #include <cstring>
 #include <thread>
@@ -431,14 +430,14 @@ public:
             AuraMessage* msg = new AuraMessage();
             Steinberg::tresult res = msg->queryInterface(_iid, obj);
             msg->release();
-            std::cout << "[DBG VST3] createInstance IMessage res=" << res << " ptr=" << *obj << std::endl;
+            AURADSP_DBG_S("[DBG VST3] createInstance IMessage res=" << res << " ptr=" << *obj);
             return res;
         }
         if (std::memcmp(cid, Steinberg::Vst::IAttributeList::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
             AuraAttributeList* attr = new AuraAttributeList();
             Steinberg::tresult res = attr->queryInterface(_iid, obj);
             attr->release();
-            std::cout << "[DBG VST3] createInstance IAttributeList res=" << res << " ptr=" << *obj << std::endl;
+            AURADSP_DBG_S("[DBG VST3] createInstance IAttributeList res=" << res << " ptr=" << *obj);
             return res;
         }
 
@@ -453,7 +452,7 @@ public:
             (unsigned char)_iid[4], (unsigned char)_iid[5], (unsigned char)_iid[6], (unsigned char)_iid[7],
             (unsigned char)_iid[8], (unsigned char)_iid[9], (unsigned char)_iid[10], (unsigned char)_iid[11],
             (unsigned char)_iid[12], (unsigned char)_iid[13], (unsigned char)_iid[14], (unsigned char)_iid[15]);
-        std::cout << "[DBG VST3] AuraHostApplication::createInstance unsupported cid=" << cbuf << " iid=" << ibuf << std::endl;
+        AURADSP_WARN_S("[DBG VST3] AuraHostApplication::createInstance unsupported cid=" << cbuf << " iid=" << ibuf);
         return Steinberg::kNotImplemented;
     }
 };
@@ -639,18 +638,18 @@ public:
         // destroy/FreeLibrary 都会撞上它（卸载正在执行的 DLL = 0xC0000374）。
         // 整体跳过销毁，manager 据 abandoned() 把实例移入静态隔离区。
         if (m_threadAbandoned.load(std::memory_order_acquire)) {
-            std::cout << "[DBG CLAP unload] WARNING: pump abandoned; skipping all teardown (quarantine)" << std::endl;
+            AURADSP_WARN("[DBG CLAP unload] WARNING: pump abandoned; skipping all teardown (quarantine)");
             m_isLoaded = false;
             return;
         }
         if (m_isLoaded) {
-            std::cout << "[DBG CLAP unload] step 1: closeEditor" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 1: closeEditor");
             closeEditor();
-            std::cout << "[DBG CLAP unload] step 2: deactivate" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 2: deactivate");
             deactivate();
             // plugin->destroy + entry->deinit 移入 plugin main 线程（JUCE
             // message thread 所在线程；10-12 曾实证跨线程 destroy 死锁）。
-            std::cout << "[DBG CLAP unload] step 3: destroy on clap main thread" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 3: destroy on clap main thread");
             bool destroyed = m_pump->postTaskAndWait([&]() {
                 if (m_plugin) {
                     m_plugin->destroy(m_plugin);
@@ -662,12 +661,11 @@ public:
                 }
             }, 3000);
             if (!destroyed) {
-                std::cout << "[DBG CLAP unload] WARNING: main thread unresponsive; quarantining instance"
-                          << std::endl;
+                AURADSP_WARN("[DBG CLAP unload] WARNING: main thread unresponsive; quarantining instance");
                 m_threadAbandoned.store(true, std::memory_order_release);
                 return;   // manager 据此把实例移入静态隔离区（泄漏而非 UAF）
             }
-            std::cout << "[DBG CLAP unload] step 3 done" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 3 done");
             m_isLoaded = false;
         }
         // C1：释放共享泵引用。若本实例是该模块最后一持有者，PumpDeleter 在此
@@ -676,13 +674,13 @@ public:
         // 已无人执行。
         m_pump.reset();
         if (m_module) {
-            std::cout << "[DBG CLAP unload] step 5: FreeLibrary" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 5: FreeLibrary");
             FreeLibrary(m_module);
-            std::cout << "[DBG CLAP unload] step 5 done" << std::endl;
+            AURADSP_DBG("[DBG CLAP unload] step 5 done");
             m_module = nullptr;
         }
         m_isLoaded = false;
-        std::cout << "[DBG CLAP unload] complete" << std::endl;
+        AURADSP_DBG("[DBG CLAP unload] complete");
     }
 
     bool activate(double sampleRate, uint32_t maxBlockSize) override {
@@ -821,7 +819,7 @@ public:
         bool ok = false;
         bool done = m_pump->postTaskAndWait([&]() { ok = showEditorOnMainThread(); }, 5000);
         if (!done) {
-            std::cout << "[DBG CLAP showEditor] WARNING: editor task timed out; quarantining" << std::endl;
+            AURADSP_WARN("[DBG CLAP showEditor] WARNING: editor task timed out; quarantining");
             m_threadAbandoned.store(true, std::memory_order_release);
             return false;
         }
@@ -837,16 +835,16 @@ public:
             return false;
         }
 
-        std::cout << "[DBG CLAP showEditor] main thread: gui->create..." << std::endl;
+        AURADSP_DBG("[DBG CLAP showEditor] main thread: gui->create...");
         bool createRes = false;
         try {
             createRes = gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false);
         } catch (const std::exception& ex) {
-            std::cout << "[DBG CLAP showEditor] gui->create exception: " << ex.what() << std::endl;
+            AURADSP_WARN_S("[DBG CLAP showEditor] gui->create exception: " << ex.what());
         } catch (...) {
-            std::cout << "[DBG CLAP showEditor] gui->create unknown exception!" << std::endl;
+            AURADSP_WARN("[DBG CLAP showEditor] gui->create unknown exception!");
         }
-        std::cout << "[DBG CLAP showEditor] gui->create returned: " << createRes << std::endl;
+        AURADSP_DBG_S("[DBG CLAP showEditor] gui->create returned: " << createRes);
         if (!createRes) return false;
         m_guiCreated.store(true, std::memory_order_release);
 
@@ -877,7 +875,7 @@ public:
             // C1 修复记录：CreateWindow 失败时 gui->create 已成功，必须就地
             // destroy 回收插件 GUI，否则插件持有一个无父窗口的 GUI——后续
             // gui->destroy 在该状态下可能挂死（close 任务超时 → 实例被隔离）。
-            std::cout << "[DBG CLAP showEditor] CreateWindowExW failed, err=" << GetLastError() << std::endl;
+            AURADSP_WARN_S("[DBG CLAP showEditor] CreateWindowExW failed, err=" << GetLastError());
             if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
                 try { if (gui->hide) gui->hide(m_plugin); } catch (...) {}
                 try { if (gui->destroy) gui->destroy(m_plugin); } catch (...) {}
@@ -891,7 +889,7 @@ public:
         // （onEditorWmClose）；同时向共享泵登记，泵异常退出时兜底销毁。
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
         m_pump->registerEditor(hwnd);
-        std::cout << "[DBG CLAP showEditor] hwnd created: " << hwnd << std::endl;
+        AURADSP_DBG_S("[DBG CLAP showEditor] hwnd created: " << hwnd);
 
         ShowWindow(hwnd, SW_SHOW);
 
@@ -900,16 +898,16 @@ public:
         clap_window_t win = {};
         win.api = CLAP_WINDOW_API_WIN32;
         win.win32 = hwnd;
-        std::cout << "[DBG CLAP showEditor] main thread: calling gui->set_parent..." << std::endl;
+        AURADSP_DBG("[DBG CLAP showEditor] main thread: calling gui->set_parent...");
         bool setParentRes = false;
         try {
             if (gui->set_parent) setParentRes = gui->set_parent(m_plugin, &win);
         } catch (const std::exception& ex) {
-            std::cout << "[DBG CLAP showEditor] gui->set_parent exception: " << ex.what() << std::endl;
+            AURADSP_WARN_S("[DBG CLAP showEditor] gui->set_parent exception: " << ex.what());
         } catch (...) {
-            std::cout << "[DBG CLAP showEditor] gui->set_parent unknown exception!" << std::endl;
+            AURADSP_WARN("[DBG CLAP showEditor] gui->set_parent unknown exception!");
         }
-        std::cout << "[DBG CLAP showEditor] gui->set_parent returned: " << setParentRes << std::endl;
+        AURADSP_DBG_S("[DBG CLAP showEditor] gui->set_parent returned: " << setParentRes);
         try {
             if (gui->show) gui->show(m_plugin);
         } catch (...) {}
@@ -1023,7 +1021,7 @@ public:
         }
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
-        std::cout << "[DBG CLAP closeEditor] closed on main thread" << std::endl;
+        AURADSP_DBG("[DBG CLAP closeEditor] closed on main thread");
     }
 
     // C1：用户点编辑器窗口 X —— WndProc 在泵线程上分发到此。已在 plugin
@@ -1033,18 +1031,18 @@ public:
     }
 
     void closeEditor() override {
-        std::cout << "[DBG CLAP closeEditor] enter" << std::endl;
+        AURADSP_DBG("[DBG CLAP closeEditor] enter");
         if (!m_pump || !m_pump->isReady()) {
             m_editorOpen.store(false, std::memory_order_release);
-            std::cout << "[DBG CLAP closeEditor] no clap main thread; skip" << std::endl;
+            AURADSP_WARN("[DBG CLAP closeEditor] no clap main thread; skip");
             return;
         }
         bool done = m_pump->postTaskAndWait([&]() { closeEditorOnMainThread(); }, 3000);
         if (!done) {
-            std::cout << "[DBG CLAP closeEditor] WARNING: close task timed out; quarantining" << std::endl;
+            AURADSP_WARN("[DBG CLAP closeEditor] WARNING: close task timed out; quarantining");
             m_threadAbandoned.store(true, std::memory_order_release);
         }
-        std::cout << "[DBG CLAP closeEditor] exit" << std::endl;
+        AURADSP_DBG("[DBG CLAP closeEditor] exit");
     }
 
     bool isEditorOpen() const override {
@@ -1452,13 +1450,13 @@ public:
             }
 
             // Create component instance
-            std::cout << "[DBG VST3] createInstance targetCid on IComponent..." << std::endl;
+            AURADSP_DBG("[DBG VST3] createInstance targetCid on IComponent...");
             Steinberg::tresult res = m_factory->createInstance(
                 targetCid,
                 Steinberg::Vst::IComponent::iid.toTUID(),
                 reinterpret_cast<void**>(&m_component)
             );
-            std::cout << "[DBG VST3] createInstance res=" << res << " component=" << m_component << std::endl;
+            AURADSP_DBG_S("[DBG VST3] createInstance res=" << res << " component=" << m_component);
 
             if (res != Steinberg::kResultOk || !m_component) {
                 initErr = "Failed to create VST3 IComponent instance, res: " + std::to_string(res);
@@ -1466,17 +1464,16 @@ public:
             }
 
             // Initialize component with host application context
-            std::cout << "[DBG VST3] Initializing component with hostApp..." << std::endl;
+            AURADSP_DBG("[DBG VST3] Initializing component with hostApp...");
             m_component->initialize(&m_hostApp);
-            std::cout << "[DBG VST3] Component initialized." << std::endl;
 
             // Query IAudioProcessor
-            std::cout << "[DBG VST3] Querying IAudioProcessor..." << std::endl;
+            AURADSP_DBG("[DBG VST3] Querying IAudioProcessor...");
             res = m_component->queryInterface(
                 Steinberg::Vst::IAudioProcessor::iid,
                 reinterpret_cast<void**>(&m_processor)
             );
-            std::cout << "[DBG VST3] Query IAudioProcessor res=" << res << " proc=" << m_processor << std::endl;
+            AURADSP_DBG_S("[DBG VST3] Query IAudioProcessor res=" << res << " proc=" << m_processor);
 
             if (res != Steinberg::kResultOk || !m_processor) {
                 initErr = "Failed to query VST3 IAudioProcessor interface";
@@ -1487,47 +1484,46 @@ public:
             }
 
             // Query IEditController
-            std::cout << "[DBG VST3] Querying IEditController on component..." << std::endl;
+            AURADSP_DBG("[DBG VST3] Querying IEditController on component...");
             Steinberg::tresult cRes = m_component->queryInterface(
                 Steinberg::Vst::IEditController::iid,
                 reinterpret_cast<void**>(&m_controller)
             );
-            std::cout << "[DBG VST3] Query IEditController cRes=" << cRes << " ctrl=" << m_controller << std::endl;
+            AURADSP_DBG_S("[DBG VST3] Query IEditController cRes=" << cRes << " ctrl=" << m_controller);
             if (cRes != Steinberg::kResultOk || !m_controller) {
                 Steinberg::TUID controllerCID;
                 Steinberg::tresult cidRes = m_component->getControllerClassId(controllerCID);
-                std::cout << "[DBG VST3] getControllerClassId res=" << cidRes << std::endl;
+                AURADSP_DBG_S("[DBG VST3] getControllerClassId res=" << cidRes);
                 if (cidRes == Steinberg::kResultOk) {
-                    std::cout << "[DBG VST3] Creating controller from separate CID..." << std::endl;
+                    AURADSP_DBG("[DBG VST3] Creating controller from separate CID...");
                     Steinberg::tresult instRes = m_factory->createInstance(
                         controllerCID,
                         Steinberg::Vst::IEditController::iid.toTUID(),
                         reinterpret_cast<void**>(&m_controller)
                     );
-                    std::cout << "[DBG VST3] createInstance controller res=" << instRes << " ptr=" << m_controller << std::endl;
+                    AURADSP_DBG_S("[DBG VST3] createInstance controller res=" << instRes << " ptr=" << m_controller);
                     if (m_controller) {
-                        std::cout << "[DBG VST3] Initializing separate controller..." << std::endl;
+                        AURADSP_DBG("[DBG VST3] Initializing separate controller...");
                         Steinberg::tresult initRes = m_controller->initialize(&m_hostApp);
-                        std::cout << "[DBG VST3] Controller initialize res=" << initRes << std::endl;
+                        AURADSP_DBG_S("[DBG VST3] Controller initialize res=" << initRes);
                     }
                 }
             }
 
             if (m_controller) {
                 // 设置 ComponentHandler（Ozone 等宿主解耦插件强依赖 handler 才能创建 Editor）
-                std::cout << "[DBG VST3] setComponentHandler..." << std::endl;
+                AURADSP_DBG("[DBG VST3] setComponentHandler...");
                 m_controller->setComponentHandler(&m_componentHandler);
-                std::cout << "[DBG VST3] setComponentHandler done." << std::endl;
 
                 // 连接 ConnectionPoint（Component 与 Controller 独立时建立互联通道）
-                std::cout << "[DBG VST3] Connecting ConnectionPoints..." << std::endl;
+                AURADSP_DBG("[DBG VST3] Connecting ConnectionPoints...");
                 Steinberg::Vst::IConnectionPoint* compCP = nullptr;
                 Steinberg::Vst::IConnectionPoint* ctrlCP = nullptr;
                 Steinberg::tresult q1 = m_component->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&compCP));
                 Steinberg::tresult q2 = m_controller->queryInterface(Steinberg::Vst::IConnectionPoint::iid.toTUID(), reinterpret_cast<void**>(&ctrlCP));
-                std::cout << "[DBG VST3] compCP=" << compCP << " (q1=" << q1 << ") ctrlCP=" << ctrlCP << " (q2=" << q2 << ")" << std::endl;
+                AURADSP_DBG_S("[DBG VST3] compCP=" << compCP << " (q1=" << q1 << ") ctrlCP=" << ctrlCP << " (q2=" << q2 << ")");
                 if (compCP && ctrlCP) {
-                    std::cout << "[DBG VST3] calling safeConnect(compCP, ctrlCP)..." << std::endl;
+                    AURADSP_DBG("[DBG VST3] calling safeConnect(compCP, ctrlCP)...");
                     auto safeConnect = [](Steinberg::Vst::IConnectionPoint* a, Steinberg::Vst::IConnectionPoint* b) -> int {
                         __try {
                             return (int)a->connect(b);
@@ -1536,24 +1532,23 @@ public:
                         }
                     };
                     int c1 = safeConnect(compCP, ctrlCP);
-                    std::cout << "[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1 << std::endl;
+                    AURADSP_DBG_S("[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1);
                     int c2 = safeConnect(ctrlCP, compCP);
-                    std::cout << "[DBG VST3] safeConnect(ctrlCP, compCP) result=" << c2 << std::endl;
+                    AURADSP_DBG_S("[DBG VST3] safeConnect(ctrlCP, compCP) result=" << c2);
                 }
                 if (compCP) compCP->release();
                 if (ctrlCP) ctrlCP->release();
-                std::cout << "[DBG VST3] ConnectionPoints connected." << std::endl;
 
                 // 同步组件初始状态给控制器
-                std::cout << "[DBG VST3] Syncing component state to controller..." << std::endl;
+                AURADSP_DBG("[DBG VST3] Syncing component state to controller...");
                 Vst3MemoryStream stateStream;
                 Steinberg::tresult sRes = m_component->getState(&stateStream);
-                std::cout << "[DBG VST3] m_component->getState res=" << sRes << " bytes=" << stateStream.m_data.size() << std::endl;
+                AURADSP_DBG_S("[DBG VST3] m_component->getState res=" << sRes << " bytes=" << stateStream.m_data.size());
                 if (sRes == Steinberg::kResultOk) {
                     Steinberg::int64 seekRes = 0;
                     stateStream.seek(0, Steinberg::IBStream::kIBSeekSet, &seekRes);
                     Steinberg::tresult csRes = m_controller->setComponentState(&stateStream);
-                    std::cout << "[DBG VST3] m_controller->setComponentState res=" << csRes << std::endl;
+                    AURADSP_DBG_S("[DBG VST3] m_controller->setComponentState res=" << csRes);
                 }
             }
         }, 10000);
@@ -1587,7 +1582,7 @@ public:
         // 销毁，manager 据 abandoned() 把实例移入静态隔离区（可控泄漏换
         // 不可控崩溃）。
         if (m_threadAbandoned.load(std::memory_order_acquire)) {
-            std::cout << "[DBG VST3 unload] WARNING: main thread abandoned; skipping all teardown (quarantine)" << std::endl;
+            AURADSP_WARN("[DBG VST3 unload] WARNING: main thread abandoned; skipping all teardown (quarantine)");
             m_isLoaded = false;
             return;
         }
@@ -1596,7 +1591,7 @@ public:
             deactivate();
 
             // 插件对象销毁在 plugin main 线程执行（与创建同线程）。
-            std::cout << "[DBG VST3 unload] destroying plugin objects on main thread" << std::endl;
+            AURADSP_DBG("[DBG VST3 unload] destroying plugin objects on main thread");
             bool destroyed = m_pump->postTaskAndWait([&]() {
                 if (m_controller && m_component) {
                     Steinberg::Vst::IConnectionPoint* compCP = nullptr;
@@ -1629,7 +1624,7 @@ public:
                 m_factory = nullptr;
             }, 3000);
             if (!destroyed) {
-                std::cout << "[DBG VST3 unload] WARNING: main thread unresponsive; quarantining instance" << std::endl;
+                AURADSP_WARN("[DBG VST3 unload] WARNING: main thread unresponsive; quarantining instance");
                 m_threadAbandoned.store(true, std::memory_order_release);
                 return;   // manager 据此把实例移入静态隔离区（泄漏而非 UAF）
             }
@@ -1850,7 +1845,7 @@ public:
             return true;
         }
         if (!m_controller) {
-            std::cout << "[DBG VST3 showEditor] m_controller is NULL!" << std::endl;
+            AURADSP_WARN("[DBG VST3 showEditor] m_controller is NULL!");
             return false;
         }
         if (!m_pump || !m_pump->isReady()) return false;
@@ -1861,7 +1856,7 @@ public:
         bool ok = false;
         bool done = m_pump->postTaskAndWait([&]() { ok = showEditorOnPumpThread(); }, 8000);
         if (!done) {
-            std::cout << "[DBG VST3 showEditor] WARNING: show task timed out; abandoning instance" << std::endl;
+            AURADSP_WARN("[DBG VST3 showEditor] WARNING: show task timed out; abandoning instance");
             m_threadAbandoned.store(true, std::memory_order_release);
             return false;
         }
@@ -1871,29 +1866,29 @@ public:
     // showEditor 的实体（在 VST3 plugin main 线程内执行）。
     bool showEditorOnPumpThread() {
         Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
-        std::cout << "[DBG VST3 showEditor] createView(kEditor) returned: " << view << std::endl;
+        AURADSP_DBG_S("[DBG VST3 showEditor] createView(kEditor) returned: " << view);
         if (!view) {
             view = m_controller->createView(nullptr);
-            std::cout << "[DBG VST3 showEditor] createView(nullptr) returned: " << view << std::endl;
+            AURADSP_WARN_S("[DBG VST3 showEditor] createView(nullptr) returned: " << view);
         }
         if (!view) {
             view = m_controller->createView("Editor");
-            std::cout << "[DBG VST3 showEditor] createView(\"Editor\") returned: " << view << std::endl;
+            AURADSP_DBG_S("[DBG VST3 showEditor] createView(\"Editor\") returned: " << view);
         }
         if (!view) {
             // Check if controller or component itself is IPlugView
             Steinberg::IPlugView* pv = nullptr;
             if (m_controller->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
-                std::cout << "[DBG VST3 showEditor] controller implements IPlugView!" << std::endl;
+                AURADSP_DBG("[DBG VST3 showEditor] controller implements IPlugView!");
                 view = pv;
             } else if (m_component->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
-                std::cout << "[DBG VST3 showEditor] component implements IPlugView!" << std::endl;
+                AURADSP_DBG("[DBG VST3 showEditor] component implements IPlugView!");
                 view = pv;
             }
         }
         if (!view) return false;
         Steinberg::tresult platSup = view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND);
-        std::cout << "[DBG VST3 showEditor] isPlatformTypeSupported(HWND) returned: " << platSup << std::endl;
+        AURADSP_DBG_S("[DBG VST3 showEditor] isPlatformTypeSupported(HWND) returned: " << platSup);
         if (platSup != Steinberg::kResultTrue) {
             view->release();
             return false;
@@ -1944,7 +1939,7 @@ public:
         try {
             Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
             if (attachRes != Steinberg::kResultOk && attachRes != Steinberg::kResultTrue) {
-                std::cout << "[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes << std::endl;
+                AURADSP_WARN_S("[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes);
                 detachViewOnPumpThread(view);
                 if (IsWindow(hwnd)) DestroyWindow(hwnd);
                 if (m_pump) m_pump->unregisterEditor(hwnd);
@@ -1953,7 +1948,7 @@ public:
                 return false;
             }
         } catch (const std::exception& ex) {
-            std::cout << "[DBG VST3 showEditor] view->attached exception: " << ex.what() << std::endl;
+            AURADSP_WARN_S("[DBG VST3 showEditor] view->attached exception: " << ex.what());
             detachViewOnPumpThread(view);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
             if (m_pump) m_pump->unregisterEditor(hwnd);
@@ -1961,7 +1956,7 @@ public:
             m_editorOpen.store(false, std::memory_order_release);
             return false;
         } catch (...) {
-            std::cout << "[DBG VST3 showEditor] view->attached unknown exception!" << std::endl;
+            AURADSP_WARN("[DBG VST3 showEditor] view->attached unknown exception!");
             detachViewOnPumpThread(view);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
             if (m_pump) m_pump->unregisterEditor(hwnd);
@@ -2056,15 +2051,15 @@ public:
     }
 
     void closeEditor() override {
-        std::cout << "[DBG VST3 closeEditor] enter" << std::endl;
+        AURADSP_DBG("[DBG VST3 closeEditor] enter");
         if (!m_pump || !m_pump->isReady()) {
             m_editorOpen.store(false, std::memory_order_release);
-            std::cout << "[DBG VST3 closeEditor] no plugin main thread; skip" << std::endl;
+            AURADSP_WARN("[DBG VST3 closeEditor] no plugin main thread; skip");
             return;
         }
         bool done = m_pump->postTaskAndWait([&]() { closeEditorOnPumpThread(); }, 3000);
         if (!done) {
-            std::cout << "[DBG VST3 closeEditor] WARNING: close task timed out; abandoning instance" << std::endl;
+            AURADSP_WARN("[DBG VST3 closeEditor] WARNING: close task timed out; abandoning instance");
             m_threadAbandoned.store(true, std::memory_order_release);
         }
     }
@@ -2092,7 +2087,7 @@ public:
         }
         m_editorHwnd = nullptr;
         m_editorOpen.store(false, std::memory_order_release);
-        std::cout << "[DBG VST3 closeEditor] closed on main thread" << std::endl;
+        AURADSP_DBG("[DBG VST3 closeEditor] closed on main thread");
     }
 
     bool isEditorOpen() const override {
