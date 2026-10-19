@@ -20,17 +20,18 @@ namespace {
 constexpr int kProbeWindow = 16384;   /* @48k ≈ 341ms */
 constexpr int kProbeBlock  = 256;
 
-/* 把探针 handle 上的所有效果关掉，只留下要测的那个 */
-
-
-/* 把探针 handle 上的所有效果关掉，只留下要测的那个 */
-void probe_isolate(auradsp_handle p, const char* comp) {
+/* 把探针 handle 上的所有效果关掉，只留下要测的那个。
+ * probe_arg：仅 haas 使用——传入当前延迟（ms），让探针按用户实际设定测，
+ * 而不是用出厂默认 12ms（否则徽标读数与引擎 compute_latency 的动态口径脱节）。
+ * 其它组件忽略该参数。 */
+void probe_isolate(auradsp_handle p, const char* comp, float probe_arg = 0.0f) {
     const struct { const char* id; int i; } zeros[] = {
         {"bass.enable", 0}, {"eq.enable", 0}, {"tube.enable", 0},
         {"crossfeed.enable", 0}, {"limiter.enable", 0}, {"convolver.enable", 0},
         {"ddc.enable", 0}, {"liveprog.enable", 0}, {"shelf.enable", 0},
         {"bassmono.enable", 0}, {"haas.enable", 0}, {"exciter.enable", 0},
         {"stereo.enable", 0}, {"arbmag.enable", 0},
+        {"spatial.enable", 0},
         /* 自研 stage：此前整组漏在这里。它们虽在引擎自己的链上而不在 vendor
          * 链上，auradsp_process 走的正是 process_stereo_chain，所以探针
          * handle 上同样能被启用/关闭——漏列只是让"全关基线"名不副实。 */
@@ -110,6 +111,24 @@ void probe_isolate(auradsp_handle p, const char* comp) {
     } else if (!strcmp(comp, "loudness")) {
         const int32_t one = 1;
         auradsp_set_param(p, "loudness.enable", &one, 4);
+    } else if (!strcmp(comp, "haas")) {
+        /* Haas = 纯延迟线：只延迟一侧（haas.side 决定），另一侧恒直通。
+         * 首非零法打双声道脉冲时干声侧恒在 0，故必须用「逐声道首非零取
+         * 最大」测延迟侧；且 mix 必须拨到 1.0（纯延迟），否则延迟侧也有
+         * 干声成分、首非零仍落在 0。delay 用调用方传入的 probe_arg——
+         * 测的是用户当前设定值，与 compute_latency 动态口径一致。 */
+        const int32_t one = 1;
+        const float delay = (probe_arg >= 0.0f && probe_arg <= 25.0f) ? probe_arg : 12.0f;
+        const float mix1 = 1.0f;
+        auradsp_set_param(p, "haas.delay", &delay, 4);
+        auradsp_set_param(p, "haas.mix", &mix1, 4);
+        auradsp_set_param(p, "haas.enable", &one, 4);
+    } else if (!strcmp(comp, "spatial")) {
+        /* 空间音效：近耳直达 + 中置源均即时输出（ITD 是耳间差而非链延迟），
+         * 首非零必然落在 0——实测 0ms 是诚实的「链上无前瞻」；kLatSpatial
+         * 的 1ms 名义属总延迟口径里的耳间 ITD 语义，不是链延迟。 */
+        const int32_t one = 1;
+        auradsp_set_param(p, "spatial.enable", &one, 4);
     }
     /* convolver / ddc / liveprog 需要外部资源（IR / VDC / 脚本），
      * 无法在空探针上就绪，此时如实返回"不可测"而不是编一个数字。 */
@@ -124,9 +143,10 @@ bool probe_is_supported(const char* comp) {
          * 用户点任何一次都只得到「未测量」。这四者都在 process_stereo_chain 上、
          * 按样本逐点处理，探针能如实测出（预期 0ms）。 */
         "dyneq", "filter", "gate", "loudness"
-        /* 注意：haas 不入列。探针的能量/首非零法打双声道脉冲，而 haas 只延迟
-         * 一侧（另一侧干声恒在 0），必然测出 0ms——伪造零延迟比报「不可测」
-         * 更危险。摘掉后刷新回退到标称延迟（componentLatency 返回 slider 值）。 */
+        /* haas / spatial（2026-10-19 补）：此前认为探针结构性失明（haas 只延迟
+         * 一侧、spatial 近耳即时），改为逐声道首非零取最大后均可如实测量——
+         * haas 测出当前延迟值，spatial 测出 0ms（诚实链延迟）。 */
+        , "haas", "spatial"
     };
     for (const char* s : kSupported)
         if (!strcmp(comp, s)) return true;
@@ -136,12 +156,16 @@ bool probe_is_supported(const char* comp) {
 
 /* 打脉冲，返回首个非零输出样本下标（无则 -1），并把输出总能量写入 *energy。
  * 能量用于判定「该组件是否真的参与了处理」——否则一个没接上的组件会被
- * 误报成「实测 0 ms 延迟」，把「测不到」谎报成「测到了」。 */
+ * 误报成「实测 0 ms 延迟」，把「测不到」谎报成「测到了」。
+ *
+ * 首非零按**逐声道**分别检测后取两者较大者返回：多数组件左右对称，两声道
+ * 同一时刻过线，等价于旧实现；而 Haas 只延迟一侧（另一侧干声恒在 0），
+ * 只有取「较晚的那一侧」才是延迟线的真实通过时刻。 */
 long probe_first_nonzero(auradsp_handle p, float threshold, double* energy) {
     float* in = (float*)calloc(kProbeBlock * 2, sizeof(float));
     float* out = (float*)calloc(kProbeBlock * 2, sizeof(float));
     if (!in || !out) { free(in); free(out); return -1; }
-    long first = -1;
+    long firstL = -1, firstR = -1;
     double e = 0.0;
     /* 激励用**宽带噪声**而非单位冲激。
      *
@@ -169,21 +193,28 @@ long probe_first_nonzero(auradsp_handle p, float threshold, double* energy) {
         auradsp_process(p, in, out, kProbeBlock);
         for (int i = 0; i < kProbeBlock * 2; ++i) {
             const double a = fabs((double)out[i]);
-            if (a > (double)threshold && first < 0) first = processed + i / 2;
+            if (a > (double)threshold) {
+                const int sample = processed + i / 2;
+                if ((i & 1) == 0) { if (firstL < 0) firstL = sample; }
+                else              { if (firstR < 0) firstR = sample; }
+            }
             e += a * a;
         }
     }
     free(in);
     free(out);
     if (energy) *energy = e;
-    return first;
+    if (firstL < 0) return firstR;
+    if (firstR < 0) return firstL;
+    return (firstL > firstR) ? firstL : firstR;
 }
 
 }  // namespace
 
 
 static int probe_component_impl(const char* component, const char* resource_path,
-                                double sample_rate, uint32_t* out_samples) {
+                                float probe_arg, double sample_rate,
+                                uint32_t* out_samples) {
     if (!component || !out_samples) return -1;
     *out_samples = 0;
 
@@ -215,7 +246,7 @@ const bool is_ddc = !strcmp(component, "ddc");
     probe_isolate(probe, "");
     const long baseline = probe_first_nonzero(probe, 1e-7f, &base_energy);
 
-    probe_isolate(probe, supported ? component : "");
+    probe_isolate(probe, supported ? component : "", probe_arg);
     if (!supported) {
         /* 带资源探测：先让资源就绪，再打开组件，
          * 否则 probe_isolate 已将它关掉且无资源时开启会被引擎拒绝。 */
@@ -250,7 +281,7 @@ const bool is_ddc = !strcmp(component, "ddc");
 
 int auradsp_probe_component(const char* component, double sample_rate,
                             uint32_t* out_samples) {
-    return probe_component_impl(component, nullptr, sample_rate, out_samples);
+    return probe_component_impl(component, nullptr, 0.0f, sample_rate, out_samples);
 }
 
 
@@ -258,7 +289,19 @@ int auradsp_probe_component_with_resource(const char* component,
                                           const char* resource_path,
                                           double sample_rate,
                                           uint32_t* out_samples) {
-    return probe_component_impl(component, resource_path, sample_rate, out_samples);
+    return probe_component_impl(component, resource_path, 0.0f, sample_rate,
+                                out_samples);
+}
+
+
+/* 带「当前配置」实测：arg 仅 haas 使用——传入用户当前的 haas.delay_ms，
+ * 使实测值等于引擎 compute_latency 动态上报口径；其它组件忽略 arg。
+ * 保留前两个符号不破坏既有 ABI。 */
+int auradsp_probe_component_current(const char* component, double arg,
+                                    double sample_rate,
+                                    uint32_t* out_samples) {
+    return probe_component_impl(component, nullptr, (float)arg, sample_rate,
+                                out_samples);
 }
 
 
