@@ -18,6 +18,7 @@ class _CompressorCard extends StatelessWidget {
       titleTooltip: l.compHint,
       collapsed: !model.compOn,
       latencyMs: model.componentLatency('comp').ms,
+      latencyEnabled: model.isSectionEnabled('comp'),
       latencyMeasured: model.componentLatency('comp').measured,
       latencyEstimated: model.componentLatency('comp').estimated,
       latencyProbing: model.isProbingLatency('comp'),

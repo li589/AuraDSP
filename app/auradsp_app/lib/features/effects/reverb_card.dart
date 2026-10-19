@@ -33,6 +33,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
       title: l.spatialReverbTitle,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('reverb').ms,
+      latencyEnabled: m.isSectionEnabled('reverb'),
               latencyMeasured: m.componentLatency('reverb').measured,
               latencyEstimated: m.componentLatency('reverb').estimated,
               latencyProbing: m.isProbingLatency('reverb'),

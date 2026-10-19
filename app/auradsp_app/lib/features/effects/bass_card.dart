@@ -16,6 +16,7 @@ class _BassCard extends StatelessWidget {
       title: l.bassBoost,
       collapsed: !model.bassOn,
       latencyMs: model.componentLatency('bass').ms,
+      latencyEnabled: model.isSectionEnabled('bass'),
               latencyMeasured: model.componentLatency('bass').measured,
               latencyEstimated: model.componentLatency('bass').estimated,
               latencyProbing: model.isProbingLatency('bass'),

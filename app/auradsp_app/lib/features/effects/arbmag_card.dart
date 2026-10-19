@@ -99,6 +99,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       title: l.stArbmag,
       collapsed: !m.arbmagOn,
       latencyMs: m.componentLatency('arbmag').ms,
+      latencyEnabled: m.isSectionEnabled('arbmag'),
       latencyMeasured: m.componentLatency('arbmag').measured,
       latencyEstimated: m.componentLatency('arbmag').estimated,
       latencyProbing: m.isProbingLatency('arbmag'),

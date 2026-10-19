@@ -14,6 +14,7 @@ class _PostCard extends StatelessWidget {
       index: kEffectCardIndex['post'],
       title: l.postGain,
       latencyMs: model.componentLatency('post').ms,
+      latencyEnabled: model.isSectionEnabled('post'),
       latencyMeasured: model.componentLatency('post').measured,
       latencyEstimated: model.componentLatency('post').estimated,
       latencyProbing: model.isProbingLatency('post'),

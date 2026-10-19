@@ -17,6 +17,7 @@ class _TubeCard extends StatelessWidget {
       titleTooltip: l.tubeHint,
       collapsed: !model.tubeOn,
       latencyMs: model.componentLatency('tube').ms,
+      latencyEnabled: model.isSectionEnabled('tube'),
       latencyMeasured: model.componentLatency('tube').measured,
       latencyEstimated: model.componentLatency('tube').estimated,
       latencyProbing: model.isProbingLatency('tube'),

@@ -20,6 +20,7 @@ class _DyneCard extends StatelessWidget {
       titleTooltip: l.dyneqHint,
       collapsed: !m.dyneqOn,
       latencyMs: m.componentLatency('dyneq').ms,
+      latencyEnabled: m.isSectionEnabled('dyneq'),
       latencyMeasured: m.componentLatency('dyneq').measured,
       latencyEstimated: m.componentLatency('dyneq').estimated,
       latencyProbing: m.isProbingLatency('dyneq'),

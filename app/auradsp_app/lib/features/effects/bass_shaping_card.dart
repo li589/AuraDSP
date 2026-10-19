@@ -17,6 +17,7 @@ class _BassShapingCard extends StatelessWidget {
       titleTooltip: l.bassShapingHint,
       collapsed: !model.bassShapingOn,
       latencyMs: model.componentLatency('bass_shaping').ms,
+      latencyEnabled: model.isSectionEnabled('bass_shaping'),
       latencyMeasured: model.componentLatency('bass_shaping').measured,
       latencyEstimated: model.componentLatency('bass_shaping').estimated,
       latencyProbing: model.isProbingLatency('bass_shaping'),

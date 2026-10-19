@@ -53,6 +53,9 @@ class SectionCard extends StatelessWidget {
   final VoidCallback? onRefreshLatency;
   final int latencyTick;
 
+  /// C1：效果器关闭时隐藏延迟徽标（由卡片传入 section 启用态）。
+  final bool latencyEnabled;
+
   /// 是否折叠卡片内容区（关闭时整条折叠，仅保留标题与开关）
   final bool collapsed;
 
@@ -76,6 +79,7 @@ class SectionCard extends StatelessWidget {
     this.latencyTick = 0,
     this.collapsed = false,
     this.titleTooltip,
+    this.latencyEnabled = true,
   });
 
   @override
@@ -96,6 +100,7 @@ class SectionCard extends StatelessWidget {
                   onRefresh: onRefreshLatency,
                   showRefresh: onRefreshLatency != null,
                   refreshTick: latencyTick,
+                  enabled: latencyEnabled,
                 ),
                 if (trailing != null) ...[
                   const SizedBox(width: AuraSpace.sm),
@@ -528,6 +533,9 @@ class ComponentLatencyBadge extends StatefulWidget {
   /// 避免用户点一个必然失败的控件。
   final bool showRefresh;
 
+  /// C1：效果器关闭时隐藏延迟小框（enabled=false → 整徽标不渲染）。
+  final bool enabled;
+
   const ComponentLatencyBadge({
     super.key,
     required this.latencyMs,
@@ -537,6 +545,7 @@ class ComponentLatencyBadge extends StatefulWidget {
     this.refreshTick = 0,
     this.probing = false,
     this.showRefresh = true,
+    this.enabled = true,
   });
 
   @override
@@ -574,6 +583,7 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
+    if (!widget.enabled) return const SizedBox.shrink(); // C1：关闭态隐藏延迟小框
     // 2026-10-19：无预设常数后估算值只来自 convolver 的 IR 长度实时计算，
     // 不再以「≈」前缀弱化（与实测同款渲染）；无可显示值时仍是「未测量」。
     final String text;

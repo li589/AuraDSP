@@ -17,6 +17,7 @@ class _FilterCard extends StatelessWidget {
       title: l.stFilter,
       collapsed: !model.filterOn,
       latencyMs: model.componentLatency('filter').ms,
+      latencyEnabled: model.isSectionEnabled('filter'),
       latencyMeasured: model.componentLatency('filter').measured,
       latencyEstimated: model.componentLatency('filter').estimated,
       latencyProbing: model.isProbingLatency('filter'),

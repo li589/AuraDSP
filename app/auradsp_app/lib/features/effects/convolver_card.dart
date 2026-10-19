@@ -26,6 +26,7 @@ class _ConvolverCard extends StatelessWidget {
       // D1 曾改成 convEnabled && convReady，导致「打开开关反而收起」的反向手感。
       collapsed: !model.convEnabled,
       latencyMs: model.componentLatency('convolver').ms,
+      latencyEnabled: model.isSectionEnabled('convolver'),
               latencyMeasured: model.componentLatency('convolver').measured,
               latencyEstimated: model.componentLatency('convolver').estimated,
               latencyProbing: model.isProbingLatency('convolver'),

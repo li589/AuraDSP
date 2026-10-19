@@ -20,6 +20,7 @@ class _SpatialCard extends StatelessWidget {
       titleTooltip: l.spatialHint,
       collapsed: !model.spatialOn,
       latencyMs: model.componentLatency('spatial').ms,
+      latencyEnabled: model.isSectionEnabled('spatial'),
       latencyMeasured: model.componentLatency('spatial').measured,
       latencyEstimated: model.componentLatency('spatial').estimated,
       latencyProbing: model.isProbingLatency('spatial'),

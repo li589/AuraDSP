@@ -18,6 +18,7 @@ class _LoudnessCard extends StatelessWidget {
       title: l.stLoudness,
       collapsed: !model.loudnessOn,
       latencyMs: model.componentLatency('loudness').ms,
+      latencyEnabled: model.isSectionEnabled('loudness'),
       latencyMeasured: model.componentLatency('loudness').measured,
       latencyEstimated: model.componentLatency('loudness').estimated,
       latencyProbing: model.isProbingLatency('loudness'),
