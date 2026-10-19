@@ -407,7 +407,7 @@ abstract final class ParamRegistry {
   );
   static final tubeOversample = ParamSpec<bool>(
     id: 'tube.oversample', section: 'tube', key: 'oversample',
-    type: ParamType.boolean, defaultValue: false,
+    type: ParamType.boolean, defaultValue: true,  // B-3(A1)：对齐引擎 tube_oversample=1
     category: ParamCategory.advanced,
     getter: (m) => m.tubeOversample,
     setter: (m, v) => m.setTubeOversample(v),
@@ -676,7 +676,7 @@ abstract final class ParamRegistry {
   );
   static final exciterOversample = ParamSpec<bool>(
     id: 'exciter.oversample', section: 'exciter', key: 'oversample',
-    type: ParamType.boolean, defaultValue: false,
+    type: ParamType.boolean, defaultValue: true,  // B-3(A1)：对齐引擎 exciter_oversample=1
     category: ParamCategory.advanced,
     getter: (m) => m.exciterOversample,
     setter: (m, v) => m.setExciterOversample(v),
@@ -1386,7 +1386,7 @@ abstract final class ParamRegistry {
   );
   static final limiterLookahead = ParamSpec<bool>(
     id: 'limiter.lookahead', section: 'post', key: 'lookahead',
-    type: ParamType.boolean, defaultValue: true,
+    type: ParamType.boolean, defaultValue: false, // B-3(A1)：对齐引擎 limiter_lookahead=0
     getter: (m) => m.limiterLookahead,
     setter: (m, v) => m.setLimiterLookahead(v),
   );
@@ -1538,6 +1538,7 @@ abstract final class ParamRegistry {
       specs: [
         tubeGain, tubeStyle, tubeCompensation, tubeMix,
         tubeAutoGain, tubeOutputGain, tubeOversample, tubeEnable,
+        tubeChannels,
       ],
     ),
     // 4. 均衡器
@@ -1545,7 +1546,7 @@ abstract final class ParamRegistry {
       name: 'eq',
       specs: [
         eqBandsCount, eqQ, eqFilter, eqInterp, eqPresetName, eqBypass,
-        eqAutoGain, eqOutputGain, eqEnable,
+        eqAutoGain, eqOutputGain, eqEnable, eqChannels,
       ],
       customSnapshot: (m, map) {
         map['frequencies'] = List<double>.of(m.eqFrequencies);
@@ -1610,7 +1611,7 @@ abstract final class ParamRegistry {
     // 6. 搁架
     ParamSection(
       name: 'shelf',
-      specs: [shelfFreq, shelfGain, shelfEnable],
+      specs: [shelfFreq, shelfGain, shelfEnable, shelfChannels],
     ),
     // 7. 低频单声道
     ParamSection(
@@ -1625,7 +1626,8 @@ abstract final class ParamRegistry {
     // 9. 激励器
     ParamSection(
       name: 'exciter',
-      specs: [exciterAmount, exciterHifreq, exciterOversample, exciterEnable],
+      specs: [exciterAmount, exciterHifreq, exciterOversample, exciterEnable,
+        exciterChannels],
     ),
     // 9B. 空间音效
     ParamSection(
@@ -1643,7 +1645,7 @@ abstract final class ParamRegistry {
       specs: [
         gateThreshold, gateAttack, gateRelease,
         gateHysteresis, gateRange, gateHoldMs,
-        gateAutoGain, gateEnable,
+        gateAutoGain, gateEnable, gateChannels,
       ],
     ),
     // 11. 齿音消除
@@ -1662,18 +1664,18 @@ abstract final class ParamRegistry {
         dyneqLowEnable, dyneqLowFreq, dyneqLowQ, dyneqLowGain, dyneqLowRange, dyneqLowThreshold,
         dyneqMidEnable, dyneqMidFreq, dyneqMidQ, dyneqMidGain, dyneqMidRange, dyneqMidThreshold,
         dyneqHighEnable, dyneqHighFreq, dyneqHighQ, dyneqHighGain, dyneqHighRange, dyneqHighThreshold,
-        dyneqEnable,
+        dyneqEnable, dyneqChannels,
       ],
     ),
     // 13. 响度补偿
     ParamSection(
       name: 'loudness',
-      specs: [loudnessAmount, loudnessEnable],
+      specs: [loudnessAmount, loudnessEnable, loudnessChannels],
     ),
     // 14. 独立滤波
     ParamSection(
       name: 'filter',
-      specs: [filterType, filterFreq, filterQ, filterEnable],
+      specs: [filterType, filterFreq, filterQ, filterEnable, filterChannels],
     ),
     // 15. 卷积器
     ParamSection(
@@ -1690,13 +1692,14 @@ abstract final class ParamRegistry {
       name: 'comp',
       specs: [
         compTimeconstant, compGranularity, compTfresolution,
-        compAutoGain, compOutputGain, compEnable,
+        compAutoGain, compOutputGain, compEnable, compChannels,
       ],
     ),
     // 18. ArbMag
     ParamSection(
       name: 'arbmag',
-      specs: [arbmagString, arbmagAutoGain, arbmagOutputGain, arbmagEnable],
+      specs: [arbmagString, arbmagAutoGain, arbmagOutputGain, arbmagEnable,
+        arbmagChannels],
     ),
     // 19. 交叉反馈
     ParamSection(
@@ -1737,6 +1740,7 @@ abstract final class ParamRegistry {
       specs: [
         postGain, postLimiterEnable,
         limiterRelease, limiterThreshold, limiterLink, limiterLookahead,
+        limiterChannels,
       ],
     ),
     // 22. 路由
@@ -1801,6 +1805,88 @@ abstract final class ParamRegistry {
       },
     ),
   ];
+
+  // ---- B-3（未决清单 B1）：11 个 *.channels 声道掩码注册 int spec ----
+  // 引擎默认：dyneq/exciter 为 0xF7（默认排除 LFE），其余 0xFF；
+  // getter 走 mirrorInt（引擎为唯一真相，所有写路径经 setInt 同步镜像）。
+  // 注意：id 必须字面量书写（契约测试静态解析），不得经工厂插值。
+  static final arbmagChannels = ParamSpec<int>(
+    id: 'arbmag.channels', section: 'arbmag', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('arbmag.channels', 0xFF),
+    setter: (m, v) => m.setInt('arbmag.channels', v),
+  );
+  static final compChannels = ParamSpec<int>(
+    id: 'comp.channels', section: 'comp', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('comp.channels', 0xFF),
+    setter: (m, v) => m.setInt('comp.channels', v),
+  );
+  static final dyneqChannels = ParamSpec<int>(
+    id: 'dyneq.channels', section: 'dyneq', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xF7, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('dyneq.channels', 0xF7),
+    setter: (m, v) => m.setInt('dyneq.channels', v),
+  );
+  static final eqChannels = ParamSpec<int>(
+    id: 'eq.channels', section: 'eq', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('eq.channels', 0xFF),
+    setter: (m, v) => m.setInt('eq.channels', v),
+  );
+  static final exciterChannels = ParamSpec<int>(
+    id: 'exciter.channels', section: 'exciter', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xF7, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('exciter.channels', 0xF7),
+    setter: (m, v) => m.setInt('exciter.channels', v),
+  );
+  static final filterChannels = ParamSpec<int>(
+    id: 'filter.channels', section: 'filter', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('filter.channels', 0xFF),
+    setter: (m, v) => m.setInt('filter.channels', v),
+  );
+  static final gateChannels = ParamSpec<int>(
+    id: 'gate.channels', section: 'gate', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('gate.channels', 0xFF),
+    setter: (m, v) => m.setInt('gate.channels', v),
+  );
+  static final limiterChannels = ParamSpec<int>(
+    id: 'limiter.channels', section: 'post', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('limiter.channels', 0xFF),
+    setter: (m, v) => m.setInt('limiter.channels', v),
+  );
+  static final loudnessChannels = ParamSpec<int>(
+    id: 'loudness.channels', section: 'loudness', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('loudness.channels', 0xFF),
+    setter: (m, v) => m.setInt('loudness.channels', v),
+  );
+  static final shelfChannels = ParamSpec<int>(
+    id: 'shelf.channels', section: 'shelf', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('shelf.channels', 0xFF),
+    setter: (m, v) => m.setInt('shelf.channels', v),
+  );
+  static final tubeChannels = ParamSpec<int>(
+    id: 'tube.channels', section: 'tube', key: 'channels',
+    type: ParamType.int32, defaultValue: 0xFF, min: 0, max: 255,
+    category: ParamCategory.hidden,
+    getter: (m) => m.mirrorInt('tube.channels', 0xFF),
+    setter: (m, v) => m.setInt('tube.channels', v),
+  );
 
   static final Map<String, ParamSection> bySection = {
     for (final s in sections) s.name: s,

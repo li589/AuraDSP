@@ -45,7 +45,9 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
   }
 
   void _updateMask(int newMask) {
-    widget.model.setInt(widget.paramKey, newMask & 0xFF);
+    // B-3（B1）：改走 setParamById 经 spec 链（setter→setInt+镜像），
+    // 否则 spec getter（mirrorInt）读不到新值，UI 回显陈旧。
+    widget.model.setParamById(widget.paramKey, newMask & 0xFF);
   }
 
   String _getSummaryText(int mask, bool isZh) {

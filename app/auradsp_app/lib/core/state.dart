@@ -197,19 +197,19 @@ abstract class ParamDefaults {
   static const double limiterRelease = 50.0;   // ms [5,500]
   static const double limiterThreshold = -0.1; // dBFS [-24,0]
   static const bool limiterLink = true;        // true=联动, false=独立
-  static const bool limiterLookahead = true;   // true=1.5ms lookahead, false=0-latency
+  static const bool limiterLookahead = false;  // B-3(A1)：对齐引擎默认 0=零延迟
 
-  // 2x 多相半带过采样 (HQ Oversampling)
-  static const bool exciterOversample = false;
-  static const bool tubeOversample = false;
+  // 2x 多相半带过采样 (HQ Oversampling)；B-3(A1)：默认对齐引擎（1=2x 高精）
+  static const bool exciterOversample = true;
+  static const bool tubeOversample = true;
 
   // 全参数动态EQ（3 段）
   static const double dyneqAttack = 2.0;       // ms [0.1,100]
   static const double dyneqRelease = 120.0;    // ms [10,1000]
-  static const double dyneqB1Attack = 2.0;
+  static const double dyneqB1Attack = 20.0;   // B-3(A1)：对齐引擎 dyneq_b1_attack=20
   static const double dyneqB1Release = 120.0;
-  static const double dyneqB2Attack = 2.0;
-  static const double dyneqB2Release = 120.0;
+  static const double dyneqB2Attack = 10.0;   // B-3(A1)：对齐引擎 dyneq_b2_attack=10
+  static const double dyneqB2Release = 100.0; // B-3(A1)：对齐引擎 dyneq_b2_release=100
   static const double dyneqB3Attack = 2.0;
   static const double dyneqB3Release = 120.0;
   static const double dyneqLowFreq = 120.0;    // Hz [20,500]
@@ -328,6 +328,15 @@ class AppModel extends ChangeNotifier {
     final spec = ParamRegistry.byId[id];
     if (spec != null) return getParam(spec);
     return _paramValues[id];
+  }
+
+  /// B-3（B1）：未建模的镜像型参数读取（channels spec.getter 用）。
+  /// 引擎为唯一真相；所有写路径（setInt/preset/session）都同步 _paramValues。
+  int mirrorInt(String id, int fallback) {
+    final v = _paramValues[id];
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return fallback;
   }
 
   /// 按参数 ID 通用设值
