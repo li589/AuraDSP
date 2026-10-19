@@ -199,6 +199,8 @@ class _ActivePluginHero extends StatelessWidget {
         children: [
           // C3：挂载/卸载进行中（异步任务）。所有会触碰该槽实例的按钮已禁用，
           // 这里给出一个可见的忙态，让用户知道"正在处理，不是卡死了"。
+          // 2026-10-20：大插件（如 Ozone 12）加载可达数秒，补文字提示避免
+          // 误以为加载失败。
           if (isBusy) ...[
             SizedBox(
               width: 14,
@@ -209,6 +211,9 @@ class _ActivePluginHero extends StatelessWidget {
                 backgroundColor: p.hairline,
               ),
             ),
+            const SizedBox(width: AuraSpace.xs),
+            Text(l10nOf(context).plugLoading,
+                style: labelOf(p, size: 11, color: p.textDim)),
             const SizedBox(width: AuraSpace.sm),
           ],
           // 原生 GUI 打开按钮
