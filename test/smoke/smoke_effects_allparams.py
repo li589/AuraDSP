@@ -262,30 +262,40 @@ def mask_zero_invariant(name):
     lib.auradsp_destroy(h)
 
 
-# 声道掩码语义登记（B 轮复查实证）：
-#   MASKED   —— 引擎按 *.channels 位掩码独立处理声道（隔离 + mask=0 直通成立）
-#   STEREO   —— legacy 立体声处理器（jdsp 链），固定处理 FL/FR 声道对，掩码不适用
-#               （B1 已注册 *.channels spec + UI 选择器，与引擎实现不一致 → 未决登记）
+# 声道掩码语义登记（B5 定案，2026-10-19）：
+#   MASKED  —— 引擎按 *.channels 位掩码独立处理声道（隔离 + mask=0 直通成立）
+#   STEREO  —— 双声道实现（jdsp 链），多声道下按掩码选"标准声道对"独立处理：
+#              0x03→FL/FR(0,1) 前组 / 0x0C→C/LFE(2,3) 中低音组 / 0x30→SL/SR(4,5) 后组
+#              允许多选（如 0x33）；未选中任何完整对 → 全直通
 MASKED_EFFECTS = ["dyneq", "exciter", "filter", "gate", "limiter",
                   "loudness", "shelf", "tube"]
 STEREO_EFFECTS = ["arbmag", "comp", "eq"]
 
 
-def stereo_pair_probe(name, setup):
-    """6ch 离散：效果器为 legacy 立体声实现 → 固定处理 FL/FR(0/1)，C..SR(2..5) 直通。"""
-    h = mk_handle(6)
-    setup(h)
-    set_i(h, f"{name}.channels", 0x04)  # 掩码值照写（引擎忽略，语义登记）
-    src, dst = run_ch(h, 6)
-    fr_diff = max(ch_dev(src, dst, 6, 0), ch_dev(src, dst, 6, 1))
-    other = ch_max_dev(src, dst, 6, (2, 3, 4, 5))
-    check(fr_diff > 0.01, f"{name} 立体声实现：FL/FR 处理（diff={fr_diff:.4f}）")
-    check(other < 1e-6, f"{name} 立体声实现：C/LFE/SL/SR 直通（dev={other:.2e}）")
-    lib.auradsp_destroy(h)
+def stereo_pair_semantics(name, setup):
+    """6ch 离散：双声道效果器按掩码选标准声道对处理（B5）。"""
+    def expect(mask, proc_pairs, passthru):
+        h = mk_handle(6)
+        setup(h)
+        set_i(h, f"{name}.channels", mask)
+        src, dst = run_ch(h, 6)
+        for (a, b) in proc_pairs:
+            d = max(ch_dev(src, dst, 6, a), ch_dev(src, dst, 6, b))
+            check(d > 0.01, f"{name} mask=0x{mask:02X} 对({a},{b}) 处理 diff={d:.4f}")
+        for c in passthru:
+            d = ch_dev(src, dst, 6, c)
+            check(d < 1e-6, f"{name} mask=0x{mask:02X} 声道{c} 应直通 dev={d:.2e}")
+        lib.auradsp_destroy(h)
+
+    expect(0x03, [(0, 1)], [2, 3, 4, 5])    # 仅前组
+    expect(0x0C, [(2, 3)], [0, 1, 4, 5])    # 仅中/低音组
+    expect(0x30, [(4, 5)], [0, 1, 2, 3])    # 仅后组
+    expect(0x33, [(0, 1), (4, 5)], [2, 3])  # 前+后组多选
+    expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
 
 
 def part2_multichannel():
-    print("\n=== [2] 多声道掩码补充（8 按声道 + 3 立体声实现 + mask=0 不变式） ===")
+    print("\n=== [2] 多声道掩码补充（8 按声道 + 3 双声道配对语义 + mask=0 不变式） ===")
 
     def setup_arbmag(h):
         set_i(h, "arbmag.enable", 1)
@@ -301,10 +311,10 @@ def part2_multichannel():
         set_i(h, "eq.enable", 1)
         set_s(h, "eq.curve", "20:6.0;20000:6.0")
 
-    # 3 个 legacy 立体声实现：掩码不适用，固定 FL/FR
-    stereo_pair_probe("arbmag", setup_arbmag)
-    stereo_pair_probe("comp", setup_comp)
-    stereo_pair_probe("eq", setup_eq)
+    # 3 个双声道实现（B5）：按掩码选标准声道对独立处理（0x03/0x0C/0x30/0x33/0x00）
+    stereo_pair_semantics("arbmag", setup_arbmag)
+    stereo_pair_semantics("comp", setup_comp)
+    stereo_pair_semantics("eq", setup_eq)
 
     # 8 个按声道处理效果器：mask=0 → 全声道直通（不变式）
     for name in MASKED_EFFECTS:

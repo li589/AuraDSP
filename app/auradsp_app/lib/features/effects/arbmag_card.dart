@@ -51,6 +51,43 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     return trimmed;
   }
 
+  /// B6 UI 预检：GraphicEQ 至少 2 个有效频点（频率>0 且<=96000、增益 [-64,64]、有限数）。
+  /// 返回错误信息；null = 可通过（防坏串进引擎，与引擎 nodes 护栏双层防护）。
+  static String? precheckGraphicEq(String text) {
+    final clean = text.replaceAll(RegExp(r'^[Gg]raphic[Ee][Qq]:\s*'), '');
+    final pairs = clean.split(';');
+    var ok = 0;
+    for (final p in pairs) {
+      final parts = p.trim().split(RegExp(r'\s+'));
+      if (parts.length < 2) continue;
+      final f = double.tryParse(parts[0]);
+      final g = double.tryParse(parts[1]);
+      if (f == null || g == null || !f.isFinite || !g.isFinite) continue;
+      if (f <= 0 || f > 96000) continue;
+      if (g < -64 || g > 64) continue;
+      ok++;
+    }
+    return ok >= 2 ? null : '至少需要 2 个有效频点（频率 增益dB; …）';
+  }
+
+  /// 校验通过才下发引擎；返回是否成功。
+  bool _applyGraphicEq(BuildContext context, String text) {
+    final cleaned = _cleanGraphicEqText(text);
+    if (cleaned.isEmpty) return false;
+    final err = precheckGraphicEq(cleaned);
+    if (err != null) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('GraphicEQ 无效：$err')),
+        );
+      }
+      return false;
+    }
+    widget.model.setArbmagString(cleaned);
+    _codeCtrl.text = cleaned;
+    return true;
+  }
+
   Future<void> _importFile(BuildContext context) async {
     const type = XTypeGroup(label: 'AutoEq GraphicEQ', extensions: ['txt', 'csv']);
     final file = await openFile(
@@ -63,10 +100,8 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       try {
         final text = await file.readAsString();
         final cleaned = _cleanGraphicEqText(text);
-        if (cleaned.isNotEmpty) {
-          widget.model.setArbmagString(cleaned);
-          _codeCtrl.text = cleaned;
-        }
+        if (!context.mounted) return;
+        _applyGraphicEq(context, cleaned);
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -82,10 +117,8 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     final text = data?.text?.trim() ?? '';
     if (text.isEmpty) return;
     final cleaned = _cleanGraphicEqText(text);
-    if (cleaned.isNotEmpty) {
-      widget.model.setArbmagString(cleaned);
-      _codeCtrl.text = cleaned;
-    }
+    if (!context.mounted) return;
+    _applyGraphicEq(context, cleaned);
   }
 
   @override
@@ -164,8 +197,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
             model: m,
             codeCtrl: _codeCtrl,
             onApplyCode: (code) {
-              final cleaned = _cleanGraphicEqText(code);
-              m.setArbmagString(cleaned);
+              _applyGraphicEq(context, code);
             },
             onImportFile: () => _importFile(context),
             onPasteClipboard: () => _pasteClipboard(context),

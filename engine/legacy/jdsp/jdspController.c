@@ -1181,6 +1181,61 @@ void pfloat32Multiplexed(JamesDSPLib *jdsp, float *x, float *y, size_t n)
 	}
 }
 extern void JamesDSPOfflineResampling(float const *in, float *out, size_t lenIn, size_t lenOut, int channels, double src_ratio);
+/* [PATCHED-AuraDSP B5] 多声道声道对选择：仅跑 ids 指定的阶段子集（默认顺序），
+ * 镜像 processFloatMultiplexd 的块长/ASRC/交织处理。用于双声道效果器
+ * （comp/eq/arbmag）在多声道下按掩码对选中声道对独立处理。 */
+static int stage_selected(const char *ids, const char *id)
+{
+	const size_t l = strlen(id);
+	const char *p = ids;
+	while ((p = strstr(p, id)) != NULL)
+	{
+		const int prevOk = (p == ids) || p[-1] == ',';
+		const int nextOk = (p[l] == 0) || p[l] == ',';
+		if (prevOk && nextOk)
+			return 1;
+		p += l;
+	}
+	return 0;
+}
+void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
+                                        size_t n, const char *ids)
+{
+	const size_t oldBlockSizeMax = jdsp->blockSizeMax;
+	if (oldBlockSizeMax < n)
+		JamesDSPReallocateBlock(jdsp, n);
+	if (jdsp->blockSize != n)
+	{
+		const size_t oldBlockSize = jdsp->blockSize;
+		jdsp->blockSize = n;
+		if (oldBlockSize == 0 || oldBlockSizeMax < n)
+			JamesDSPRefreshConvolutions(jdsp, 1);
+	}
+	for (size_t i = 0; i < n; i++)
+	{
+		jdsp->tmpBuffer[0][i] = x[i << 1];
+		jdsp->tmpBuffer[1][i] = x[(i << 1) + 1];
+	}
+	if (jdsp->enableASRC)
+	{
+		unsigned int curDecimatedLen = DoASRC_fwd(jdsp, n);
+		for (unsigned int i = 0; i < kAuraStageCount; ++i)
+			if (stage_selected(ids, kAuraStages[i].id))
+				kAuraStages[i].fn(jdsp, curDecimatedLen);
+		DoASRC_bwd(jdsp, curDecimatedLen, n);
+	}
+	else
+	{
+		for (unsigned int i = 0; i < kAuraStageCount; ++i)
+			if (stage_selected(ids, kAuraStages[i].id))
+				kAuraStages[i].fn(jdsp, n);
+	}
+	for (size_t i = 0; i < n; i++)
+	{
+		y[i << 1] = jdsp->tmpBuffer[0][i];
+		y[(i << 1) + 1] = jdsp->tmpBuffer[1][i];
+	}
+}
 // Binary blobs
 extern const int hrtfLenPerChannel;
 extern const int hrtfFs;

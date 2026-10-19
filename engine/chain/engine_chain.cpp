@@ -667,7 +667,20 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         const int limiter_saved = h->jdsp.limiterEnabled;
         h->jdsp.tubeEnabled = 0;
         h->jdsp.limiterEnabled = 0;
+        /* B5：双声道效果器（comp/eq/arbmag）在 FL/FR 对上按掩码门控 */
+        const int comp_saved = h->jdsp.compEnabled;
+        const int eq_saved = h->jdsp.equalizerEnabled;
+        const int arbmag_saved = h->jdsp.arbitraryMagEnabled;
+        if ((h->p.comp_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
+            h->jdsp.compEnabled = 0;
+        if ((h->p.eq_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
+            h->jdsp.equalizerEnabled = 0;
+        if ((h->p.arbmag_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
+            h->jdsp.arbitraryMagEnabled = 0;
         h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, h->mx_stereo, (size_t)frames);
+        h->jdsp.compEnabled = comp_saved;
+        h->jdsp.equalizerEnabled = eq_saved;
+        h->jdsp.arbitraryMagEnabled = arbmag_saved;
         h->jdsp.tubeEnabled = tube_saved;
         h->jdsp.limiterEnabled = limiter_saved;
 
@@ -686,6 +699,40 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
+        }
+    }
+
+    // 3b. B5：双声道效果器（comp/eq/arbmag）按掩码对选中声道对独立处理
+    // （标准声道对 = (0,1)/(2,3)/(4,5)/(6,7)，位掩码 3<<p0；允许多选，未选对直通）
+    {
+        char ids[40];
+        for (int p0 = 2; p0 + 1 < ch; p0 += 2) {
+            const int bits = 3 << p0;
+            int idn = 0;
+            if ((h->p.comp_channels.load(std::memory_order_relaxed) & bits) == bits) {
+                memcpy(ids + idn, "comp,", 5);
+                idn += 5;
+            }
+            if ((h->p.eq_channels.load(std::memory_order_relaxed) & bits) == bits) {
+                memcpy(ids + idn, "eq,", 3);
+                idn += 3;
+            }
+            if ((h->p.arbmag_channels.load(std::memory_order_relaxed) & bits) == bits) {
+                memcpy(ids + idn, "arbmag,", 7);
+                idn += 7;
+            }
+            if (idn == 0) continue;
+            ids[idn - 1] = 0; /* 去掉末尾逗号 */
+            for (int i = 0; i < frames; ++i) {
+                h->shelf_scratch[i * 2] = dst[i * ch + p0];
+                h->shelf_scratch[i * 2 + 1] = dst[i * ch + p0 + 1];
+            }
+            JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
+                                               h->shelf_scratch, (size_t)frames, ids);
+            for (int i = 0; i < frames; ++i) {
+                dst[i * ch + p0] = h->shelf_scratch[i * 2];
+                dst[i * ch + p0 + 1] = h->shelf_scratch[i * 2 + 1];
+            }
         }
     }
 
