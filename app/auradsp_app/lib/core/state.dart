@@ -189,12 +189,12 @@ abstract class ParamDefaults {
   static const double gateRelease = 100.0;     // ms [10,500]
   static const double gateHysteresis = 3.0;    // dB [0,12]
   static const double gateRange = -60.0;       // dB [-80,0]
-  static const double gateHoldMs = 20.0;       // ms [0,500]
+  static const double gateHoldMs = 10.0;       // ms [0,500]；B-3 定案：Dart 对齐引擎（听感无差异→保持出厂值）
   static const double deesserFreq = 6000.0;    // Hz [2000,10000]
   static const double deesserAmount = 0.5;     // [0,1]
 
   // Modern Lookahead Limiter (自适应前瞻与立体声联动)
-  static const double limiterRelease = 50.0;   // ms [5,500]
+  static const double limiterRelease = 100.0;  // ms [5,500]；B-3 定案：Dart 对齐引擎（听感无差异→平滑优先出厂值）
   static const double limiterThreshold = -0.1; // dBFS [-24,0]
   static const bool limiterLink = true;        // true=联动, false=独立
   static const bool limiterLookahead = false;  // B-3(A1)：对齐引擎默认 0=零延迟
