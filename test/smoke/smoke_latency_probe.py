@@ -1,11 +1,15 @@
 """smoke_latency_probe.py — 组件延迟实测的契约守卫。
 
-覆盖三条：
+覆盖四条：
   1. `auradsp_probe_component` 对需要外部资源的组件（convolver/ddc/liveprog）
      仍返回 -1「不可测」，**绝不返回 0 并编造一个 0ms**；
   2. 新的 `auradsp_probe_component_with_resource` 存在，且无资源路径时
      与旧函数行为一致（仍是 -1，不因新增符号而放宽）；
-  3. 无需资源的组件（bass/eq/...）实测成功并给出非负样本数。
+  3. 无需资源的组件（bass/eq/...）实测成功并给出非负样本数；
+  4. 2026-10-19 新增：
+     - `auradsp_probe_component_current` 存在；haas（纯延迟线）按传入的
+       当前延迟实测（12ms→576、5ms→240 @48k），spatial 实测为 0ms
+       （链上无前瞻，ITD 是耳间差而非链延迟）。
 
 仓库内没有随附的 .vdc/.wav 测试资源（`Get-ChildItem test -Include *.vdc,*.wav`
 为空），因此「带真实资源测出非零延迟」这一条不在此覆盖，
@@ -37,6 +41,10 @@ def main():
     lib.auradsp_probe_component_with_resource.restype = ctypes.c_int32
     lib.auradsp_probe_component_with_resource.argtypes = [
         ctypes.c_char_p, ctypes.c_char_p, ctypes.c_double,
+        ctypes.POINTER(ctypes.c_uint32)]
+    lib.auradsp_probe_component_current.restype = ctypes.c_int32
+    lib.auradsp_probe_component_current.argtypes = [
+        ctypes.c_char_p, ctypes.c_double, ctypes.c_double,
         ctypes.POINTER(ctypes.c_uint32)]
 
     out = ctypes.c_uint32(0)
@@ -78,6 +86,23 @@ def main():
     rc = lib.auradsp_probe_component(b'__nope__', ctypes.c_double(48000.0),
                                      ctypes.byref(out))
     check(rc == -1, '未知组件返回 -1 (rc=%d)' % rc)
+
+    print('\n=== 5) haas 纯延迟线：按当前延迟实测（逐声道首非零取最大） ===')
+    for arg, expect in ((12.0, 576), (5.0, 240), (3.0, 144), (0.0, 0)):
+        out.value = 0
+        rc = lib.auradsp_probe_component_current(b'haas', ctypes.c_double(arg),
+                                                 ctypes.c_double(48000.0),
+                                                 ctypes.byref(out))
+        check(rc == 0 and abs(out.value - expect) <= 1,
+              'haas @%gms → samples=%d (expect≈%d), rc=%d'
+              % (arg, out.value, expect, rc))
+
+    print('\n=== 6) spatial：诚实测出 0ms（链上无前瞻，ITD 是耳间差） ===')
+    out.value = 0
+    rc = lib.auradsp_probe_component(b'spatial', ctypes.c_double(48000.0),
+                                     ctypes.byref(out))
+    check(rc == 0 and out.value == 0,
+          'spatial 实测成功且为 0 样本 (rc=%d, samples=%d)' % (rc, out.value))
 
     print()
     if FAIL:
