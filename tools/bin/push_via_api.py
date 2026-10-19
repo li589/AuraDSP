@@ -189,6 +189,25 @@ def main():
     # 更新 ref（非强制快进）
     sh_gh("repos/%s/git/refs/heads/%s" % (repo, branch), "-X", "PATCH",
           stdin_json={"sha": parent, "force": False})
+
+    # 自愈对齐：API 重放产出的提交 SHA 与本地不同（GitHub 归一化 message
+    # 尾部换行，见上文 commit 段注释），本地若不 reset 会持续与远端显示分叉。
+    # 推送成功后 fetch 并 reset --hard 到远端分支，让本地 == 远端，
+    # GitLens / 原生 git 不再报 ahead/behind。工作区有未提交改动时跳过
+    # （避免 reset 丢失），由调用方手动处理。
+    if sh("status", "--porcelain"):
+        print("  [自愈] 工作区有未提交改动，跳过自动对齐；请手动："
+              "git fetch origin %s && git reset --hard origin/%s" % (branch, branch))
+    else:
+        sh("fetch", "origin", branch)
+        remote_ref = sh("rev-parse", "--verify", "refs/remotes/origin/%s" % branch)
+        if remote_ref != parent:
+            print("  [自愈] 警告：远端 %s != 已推送 %s，跳过 reset（手动检查）"
+                  % (remote_ref[:12], parent[:12]))
+        else:
+            sh("reset", "--hard", "refs/remotes/origin/%s" % branch)
+            print("  [自愈] 本地 %s 已对齐远端（fetch + reset --hard）"
+                  % branch)
     # 远端 ref 已通过 API 更新；本地 remote-tracking 分支稍后 git fetch 同步
     print(">>> 已推送：%s -> %s（%d 个提交，树/内容逐字一致；SHA 因 GitHub 归一化 message 尾部换行而不同）"
           % (branch, parent[:8], len(commits)))
