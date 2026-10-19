@@ -146,7 +146,6 @@ const Set<String> kUiOnlySpecIds = {
 const Set<String> kEngineOnlyIds = {
   // ---- arbmag：ArbMag 节点数/就绪 ----
   'arbmag.channel_mask',
-  'arbmag.channels',
   'arbmag.nodeCount',
   'arbmag.ready',
   // ---- bass：oversample（UI 未暴露） ----
@@ -157,7 +156,6 @@ const Set<String> kEngineOnlyIds = {
   'channels.mode',
   // ---- comp：freq/gain 动态段（UI 走 macro threshold + 未挂表动态 spec） ----
   'comp.channel_mask',
-  'comp.channels',
   'comp.freq1',
   'comp.freq2',
   'comp.freq3',
@@ -192,7 +190,6 @@ const Set<String> kEngineOnlyIds = {
   'dyneq.band3.attack',
   'dyneq.band3.release',
   'dyneq.channel_mask',
-  'dyneq.channels',
   'dyneq.high.attack',
   'dyneq.high.release',
   'dyneq.low.attack',
@@ -201,17 +198,13 @@ const Set<String> kEngineOnlyIds = {
   'dyneq.mid.release',
   // ---- eq：curve 大参数 + 掩码 ----
   'eq.channel_mask',
-  'eq.channels',
   'eq.curve',
   // ---- exciter：声道掩码族（UI 不暴露逐效果掩码） ----
   'exciter.channel_mask',
-  'exciter.channels',
   // ---- filter：声道掩码族（UI 不暴露逐效果掩码） ----
   'filter.channel_mask',
-  'filter.channels',
   // ---- gate：IR 上限查询 + 别名 id + 掩码 ----
   'gate.channel_mask',
-  'gate.channels',
   'gate.hold',
   'gate.maxFileMb',
   'gate.maxIrSeconds',
@@ -238,7 +231,6 @@ const Set<String> kEngineOnlyIds = {
   'input.balance.8',
   // ---- limiter：别名 id limiter.release_ms + 掩码 ----
   'limiter.channel_mask',
-  'limiter.channels',
   'limiter.release_ms',
   // ---- liveprog：Liveprog 代码/状态/参数分支 ----
   'liveprog.code',
@@ -254,21 +246,18 @@ const Set<String> kEngineOnlyIds = {
   'liveprog.unload',
   // ---- loudness：声道掩码族（UI 不暴露逐效果掩码） ----
   'loudness.channel_mask',
-  'loudness.channels',
   // ---- mode：全局模式查询 ----
   'mode.latency',
-  // ---- shelf：声道掩码族（UI 不暴露逐效果掩码） ----
+  // ---- shelf：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'shelf.channel_mask',
-  'shelf.channels',
   // ---- stereo：分带分支（UI 走 stereo.band.N 别名 spec） ----
   'stereo.band1',
   'stereo.band2',
   'stereo.band3',
   'stereo.band4',
   'stereo.band5',
-  // ---- tube：声道掩码族（UI 不暴露逐效果掩码） ----
+  // ---- tube：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'tube.channel_mask',
-  'tube.channels',
   // ---- viz：可视化参数 ----
   'viz.fftSize',
 };
@@ -292,12 +281,6 @@ const Map<String, String> kKnownDefaultDivergences = {
   'gate.hold': 'Dart 20.0ms vs 引擎 gate_hold_ms 10.0ms',
   'gate.hold_ms': '同上（引擎别名 id，成员同为 gate_hold_ms）',
   'limiter.release': 'Dart 50.0ms vs 引擎 limiter_release_ms 100.0ms',
-  'limiter.lookahead': 'Dart true vs 引擎 0（bool↔int，语义零延迟 vs 前瞻）',
-  'tube.oversample': 'Dart false vs 引擎 1（bool↔int，2x 过采样开关）',
-  'exciter.oversample': 'Dart false vs 引擎 1（bool↔int，2x 过采样开关）',
-  'dyneq.b1.attack': 'Dart 2.0ms vs 引擎 20.0ms（且与同成员的 dyneq.low.attack 打架）',
-  'dyneq.b2.attack': 'Dart 2.0ms vs 引擎 10.0ms（且与同成员的 dyneq.mid.attack 打架）',
-  'dyneq.b2.release': 'Dart 120.0ms vs 引擎 100.0ms',
 };
 
 /// Part D：同一引擎成员被多个 spec 引用时默认值必须一致（防别名族互相打架）。
