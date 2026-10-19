@@ -329,6 +329,15 @@ Directory _locateEngineDir() {
   throw StateError('engine/ 目录不存在（CWD 基准漂移？）');
 }
 
+/// Part I：定位 lib/ 目录（同上基准，找不到即抛）。
+Directory _locateLibDir() {
+  for (final base in const ['', '../', '../../']) {
+    final d = Directory('${base}lib');
+    if (d.existsSync()) return d;
+  }
+  throw StateError('lib/ 目录不存在（CWD 基准漂移？）');
+}
+
 String _read(String relPath) {
   for (final base in const ['', '../', '../../']) {
     final f = File('$base$relPath');
@@ -1096,6 +1105,36 @@ ${bad.join('\n')}''');
               reason: 'token "$tok" → $key 缺失于 app_$lang.arb（新增 token 未登记）');
         }
       }
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Part I：别名收敛契约（B-3 / 计划 §5.2 第三步）——Dart 仅引用规范 id
+  // ---------------------------------------------------------------------------
+  group('Part I 别名收敛（Dart 仅引用规范 id）', () {
+    test('lib/ 零引用引擎别名 id（channel_mask/dyneq 别名族/ms 别名/gr 别名）', () {
+      final aliasRe = RegExp(
+          r"(channel_mask|dyneq\.(?:low|mid|high|band[123])\.(?:attack|release)|"
+          r"gate\.hold_ms|limiter\.release_ms|gr\.dyneq\.(?:low|mid|high))");
+      final hits = <String>[];
+      final libDir = _locateLibDir();
+      final engineBoundary = '${Platform.pathSeparator}engine${Platform.pathSeparator}';
+      for (final f in libDir.listSync(recursive: true).whereType<File>()
+          .where((f) => f.path.endsWith('.dart')
+              && !f.path.contains(engineBoundary))) {
+        final lines = f.readAsLinesSync();
+        for (var n = 0; n < lines.length; n++) {
+          if (aliasRe.hasMatch(lines[n])) {
+            hits.add('${f.path.replaceFirst(libDir.path, 'lib')}:${n + 1}  '
+                '${lines[n].trim()}');
+          }
+        }
+      }
+      expect(hits, isEmpty, reason: '''
+Dart 引用了引擎别名 id（非规范名）：请改用规范 id（*.channels / dyneq.b1..b3.* /
+gate.hold / limiter.release / gr.dyneq.b1..b3），引擎表已标 deprecated。
+违规清单：
+${hits.join('\n')}''');
     });
   });
 }
