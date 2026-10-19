@@ -1728,6 +1728,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
 
   @override
+  String get plugLoading => '加载中…';
+
+  @override
   String get plugUnloadFromSlot => 'このスロットからアンロード';
 
   @override

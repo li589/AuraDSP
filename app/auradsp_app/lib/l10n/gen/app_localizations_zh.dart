@@ -1724,6 +1724,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugOpenGuiBtn => '打开界面 (GUI)';
 
   @override
+  String get plugLoading => '加载中…';
+
+  @override
   String get plugUnloadFromSlot => '从当前槽卸载';
 
   @override

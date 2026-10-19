@@ -802,6 +802,7 @@
     }
   },
   "plugOpenGuiBtn": "打开界面 (GUI)",
+  "plugLoading": "加载中…",
   "plugUnloadFromSlot": "从当前槽卸载",
   "plugLoadToSlot": "载入至插槽 {n}",
   "@plugLoadToSlot": {

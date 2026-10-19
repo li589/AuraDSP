@@ -3358,6 +3358,12 @@ abstract class AppLocalizations {
   /// **'打开界面 (GUI)'**
   String get plugOpenGuiBtn;
 
+  /// No description provided for @plugLoading.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载中…'**
+  String get plugLoading;
+
   /// No description provided for @plugUnloadFromSlot.
   ///
   /// In zh, this message translates to:

@@ -1799,6 +1799,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugOpenGuiBtn => 'Open UI (GUI)';
 
   @override
+  String get plugLoading => 'Loading…';
+
+  @override
   String get plugUnloadFromSlot => 'Unload from This Slot';
 
   @override
