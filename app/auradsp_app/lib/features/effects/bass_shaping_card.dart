@@ -24,9 +24,9 @@ class _BassShapingCard extends StatelessWidget {
           ? () => model.refreshComponentLatency('bass_shaping')
           : null,
       latencyTick: model.getComponentLatencyTick('bass_shaping'),
-      trailing: ParamSwitch(
-        param: ParamRegistry.bassShapingEnable,
-        model: model,
+      trailing: AuraSwitch(
+        value: model.bassShapingOn,
+        onChanged: (v) => model.setBassShapingEnabled(v),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
