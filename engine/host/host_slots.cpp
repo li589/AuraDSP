@@ -1,4 +1,5 @@
 #include "auradsp_plugin_host.h"
+#include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
 #include <winver.h>
@@ -7,7 +8,6 @@
 #include <filesystem>
 #include <fstream>
 #include <sstream>
-#include <iostream>
 #include <iomanip>
 #include <algorithm>
 #include <cstring>
@@ -76,24 +76,24 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
 
         s.latency.store(0, std::memory_order_relaxed);
         if (s.instance) {
-            std::cout << "[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor" << std::endl;
+            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor");
             s.instance->closeEditor();
-            std::cout << "[DBG Slot] unloadLocked[" << slot << "] deactivate" << std::endl;
+            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] deactivate");
             s.instance->deactivate();
-            std::cout << "[DBG Slot] unloadLocked[" << slot << "] unload" << std::endl;
+            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] unload");
             s.instance->unload();
             if (s.instance->abandoned()) {
                 // 隔离（放弃释放）：内部线程挂死且仍引用实例，析构 =
                 // use-after-free。整体移入隔离区（可控泄漏换不可控崩溃）。
                 quarantineAbandonedInstance(std::move(s.instance));
-                std::cout << "[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)" << std::endl;
+                AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)");
             } else {
-                std::cout << "[DBG Slot] unloadLocked[" << slot << "] reset (dtor)" << std::endl;
+                AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] reset (dtor)");
                 s.instance.reset();
             }
-            std::cout << "[DBG Slot] unloadLocked[" << slot << "] complete" << std::endl;
+            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] complete");
         } else {
-            std::cout << "[DBG Slot] unloadLocked[" << slot << "] no instance" << std::endl;
+            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] no instance");
         }
     }
 
@@ -146,23 +146,23 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         }
 
         bool lRet = instance->load(path, pluginId, seed);
-        std::cout << "[DBG PluginHost] instance->load returned: " << lRet << std::endl;
+        AURADSP_DBG_S("[DBG PluginHost] instance->load returned: " << lRet);
         if (!lRet) {
             if (instance->abandoned()) {
                 // load 阶段线程挂死 → 隔离区（同 unloadPluginSlotLocked）。
                 quarantineAbandonedInstance(std::move(instance));
-                std::cout << "[DBG PluginHost] instance quarantined (abandoned during load)" << std::endl;
+                AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during load)");
             }
             return false;
         }
 
         bool aRet = instance->activate(sampleRate, maxBlockSize);
-        std::cout << "[DBG PluginHost] instance->activate returned: " << aRet << std::endl;
+        AURADSP_DBG_S("[DBG PluginHost] instance->activate returned: " << aRet);
         if (!aRet) {
             instance->unload();
             if (instance->abandoned()) {
                 quarantineAbandonedInstance(std::move(instance));
-                std::cout << "[DBG PluginHost] instance quarantined (abandoned during activate-unload)" << std::endl;
+                AURADSP_WARN("[DBG PluginHost] instance quarantined (abandoned during activate-unload)");
             }
             return false;
         }
