@@ -705,6 +705,10 @@ extern void CrossfeedProcess(JamesDSPLib *jdsp, size_t n);
 // Convolver
 extern void Convolver1DEnable(JamesDSPLib *jdsp);
 extern int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids); /* [PATCHED-AuraDSP P-004] */
+/* [PATCHED-AuraDSP B5] 多声道声道对选择：仅跑 ids 逗号表指定的阶段子集（默认顺序）。
+ * 镜像 processFloatMultiplexd 的块长/ASRC/交织处理；x 与 y 可为同一缓冲。 */
+extern void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
+                                               size_t n, const char *ids);
 /* 把上层（App）下发的全量效果器 id 列表过滤成 vendor 认识的 12 个 stage id：
  * 保序、去重、丢弃未知 id（自研 stage 由引擎自己的链处理，不归 vendor 管），
  * 并确保 output 在末尾。out 至少需 512 字节。返回写入的字节数（不含 NUL）。 */
