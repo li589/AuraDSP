@@ -147,7 +147,7 @@ float*   auradsp_decode_audio_file(const char* utf8path, int* out_rate, uint64_t
 void     auradsp_free_audio_buffer(void* p);
 
 /* ---- 元信息 ---- */
-const char* auradsp_version(void);      /* 引擎 ABI 版本，如 "1.0.0" */
+const char* auradsp_version(void);      /* 引擎版本；实际值以 AURADSP_VERSION（engine_internal.h）为准 */
 uint32_t    auradsp_abi(void);          /* ABI 序号，加载时校验 */
 
 /* ---- 组件延迟实测（控制线程；不触碰调用方正在使用的 handle） ---- */
