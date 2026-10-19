@@ -344,7 +344,6 @@ std::string cidToHexString(const Steinberg::TUID tuid);
 bool hexStringToCid(const std::string& hex, Steinberg::TUID tuid);
 void setupPluginDllDirectories(const std::string& pluginPath);
 std::string extractVendorFromPath(const std::string& filePath);
-std::string extractVendorByKnownSignature(const std::string& name);
 bool peIs64Bit(const std::wstring& binaryPath);
 std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath);
 std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath);

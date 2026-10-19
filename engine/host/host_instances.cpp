@@ -12,6 +12,8 @@
 #include <algorithm>
 #include <cctype>
 #include <cstring>
+#include <mutex>
+#include <vector>
 #include <thread>
 #include <future>
 #include <functional>
@@ -1333,24 +1335,55 @@ private:
 //------------------------------------------------------------------------------
 // VST3 Host Implementation
 //------------------------------------------------------------------------------
-/* 已知「关闭编辑器时自身 teardown 会触发不可捕获 fail-fast」的插件隔离名单。
- * 设计目标：宿主绝不为插件自身缺陷陪葬（jBridge / EqualizerAPO 桥接类
- * 插件同理可扩充）。按 name / path 小写子串匹配；命中后 VST3 closeEditor
- * 跳过 view->removed() / setFrame(nullptr) / release()，直接丢弃引用
- * （view 对象泄漏，罕见路径可接受），容器窗仍由 closeEditorOnPumpThread
- * 正常销毁——fail-fast（0xC0000374）不可 SEH 捕获，只有不调用才不死。
- * 2026-10-19：Zebra2(x64)（u-he 旧版 2.9.3，removed() 内堆损坏，官方
- * SDK editorhost 同机复现；ZebraHZ 同族正常，不误伤）。 */
+/* 插件编辑器隔离名单——数据驱动，UI/预设层维护，引擎不硬编码任何插件名。
+ * g_quarantinePatterns 由 auradsp_plugin_set_editor_quarantine_list 填充
+ * （逗号分隔小写子串，匹配插件 name/path）。命中名单的插件关闭编辑器时
+ * 跳过 removed()/release()（防插件自身 teardown fail-fast 崩溃），宿主
+ * 不因插件缺陷陪葬。设计目标：jBridge / EqualizerAPO 等桥接类插件同样
+ * 可按需登记。2026-10-19 从硬编码迁移为运行时数据。 */
+static std::vector<std::string> g_quarantinePatterns;
+static std::mutex g_quarantineMutex;
+
+static void pluginSetEditorQuarantineList(const char* patterns) {
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    g_quarantinePatterns.clear();
+    if (!patterns || !*patterns) return;
+    std::string s = patterns;
+    size_t start = 0;
+    for (;;) {
+        const size_t comma = s.find(',', start);
+        std::string tok = s.substr(
+            start, comma == std::string::npos ? std::string::npos : comma - start);
+        auto notSpace = [](char c) { return !std::isspace((unsigned char)c); };
+        const auto b = std::find_if(tok.begin(), tok.end(), notSpace);
+        const auto e = std::find_if(tok.rbegin(), tok.rend(), notSpace).base();
+        if (b < e) {
+            std::string pat(b, e);
+            for (auto& c : pat) c = (char)std::tolower((unsigned char)c);
+            g_quarantinePatterns.push_back(pat);
+        }
+        if (comma == std::string::npos) break;
+        start = comma + 1;
+    }
+}
+
 static bool editorQuarantineMatch(const std::string& name, const std::string& path) {
-    static const char* kPatterns[] = {"zebra2"};
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    if (g_quarantinePatterns.empty()) return false;
     std::string ln = name, lp = path;
     for (auto& c : ln) c = (char)std::tolower((unsigned char)c);
     for (auto& c : lp) c = (char)std::tolower((unsigned char)c);
-    for (const char* p : kPatterns) {
+    for (const auto& p : g_quarantinePatterns) {
         if (ln.find(p) != std::string::npos) return true;
         if (lp.find(p) != std::string::npos) return true;
     }
     return false;
+}
+
+/* C ABI：设置隔离名单（预设系统数据）。patterns 逗号分隔；NULL/空串清空。 */
+extern "C" int auradsp_plugin_set_editor_quarantine_list(const char* patterns) {
+    pluginSetEditorQuarantineList(patterns);
+    return 1;
 }
 
 class Vst3PluginInstance : public IPluginInstance {

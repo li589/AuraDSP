@@ -140,30 +140,6 @@ std::string extractVendorFromPath(const std::string& filePath) {
     return "";
 }
 
-std::string extractVendorByKnownSignature(const std::string& name) {
-    std::string lower = name;
-    std::transform(lower.begin(), lower.end(), lower.begin(), ::tolower);
-    if (lower.find("zebra") != std::string::npos || lower.find("diva") != std::string::npos ||
-        lower.find("hive") != std::string::npos || lower.find("repro") != std::string::npos ||
-        lower.find("satin") != std::string::npos || lower.find("presswerk") != std::string::npos ||
-        lower.find("bazille") != std::string::npos || lower.find("twang") != std::string::npos) {
-        return "u-he";
-    }
-    if (lower.find("kv-element") != std::string::npos || lower.find("element") != std::string::npos) {
-        return "Kushview";
-    }
-    if (lower.find("fabfilter") != std::string::npos) {
-        return "FabFilter";
-    }
-    if (lower.find("valhalla") != std::string::npos) {
-        return "Valhalla DSP";
-    }
-    if (lower.find("auto-tune") != std::string::npos) {
-        return "Antares";
-    }
-    return "";
-}
-
 /// 读取 PE 头的 IMAGE_FILE_MACHINE。无法解析（非 PE / 读失败）返回 0。
 /// 0x014c = IMAGE_FILE_MACHINE_I386（32 位）
 /// 0x8664 = IMAGE_FILE_MACHINE_AMD64（64 位）
@@ -407,11 +383,11 @@ void fill32BitIncompatible(PluginMetadata& meta, const std::string& filePath,
     meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
 
     // vendor 兜底链与 makeQuickMeta / applyClapDescriptor 完全一致：
-    // PE CompanyName -> LegalCopyright -> 上级目录 -> 知名签名 -> "Unknown"
+    // PE CompanyName -> LegalCopyright -> 上级目录 -> "Unknown"。
+    // 不再含硬编码厂商签名表（2026-10-19：厂商识别数据移往 UI 层 vendor_table）。
     std::string vendor = extractCompanyFromVersionInfo(wpath);
     if (vendor.empty()) vendor = extractVendorFromLegalCopyright(wpath);
     if (vendor.empty()) vendor = extractVendorFromPath(filePath);
-    if (vendor.empty()) vendor = extractVendorByKnownSignature(meta.name);
     if (vendor.empty()) vendor = "Unknown";
     meta.vendor = vendor;
 
@@ -471,13 +447,12 @@ void applyClapDescriptor(PluginMetadata& meta,
 
     fillIfEmpty(meta.version, (d->version && d->version[0]) ? d->version : "");
 
-    // 厂商兜底链：descriptor -> PE 公司名 -> LegalCopyright -> 上级目录 -> 知名签名
+    // 厂商兜底链：descriptor -> PE 公司名 -> LegalCopyright -> 上级目录
     std::string vendor = (d->vendor && d->vendor[0]) ? d->vendor : "";
     if (vendor.empty()) {
         vendor = extractCompanyFromVersionInfo(binaryPath);
         if (vendor.empty()) vendor = extractVendorFromLegalCopyright(binaryPath);
         if (vendor.empty()) vendor = extractVendorFromPath(bundlePath);
-        if (vendor.empty()) vendor = extractVendorByKnownSignature(meta.name);
     }
     fillIfEmpty(meta.vendor, vendor);
 
@@ -581,10 +556,6 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
             else {
                 std::string dirV = extractVendorFromPath(bundlePath);
                 if (!dirV.empty()) meta.vendor = dirV;
-                else {
-                    std::string sigV = extractVendorByKnownSignature(meta.name);
-                    if (!sigV.empty()) meta.vendor = sigV;
-                }
             }
         }
     }
@@ -800,9 +771,8 @@ PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, P
     std::string copyV = extractVendorFromLegalCopyright(wp);
     std::string peVer = extractProductVersionFromVersionInfo(wp);
     std::string dirV = extractVendorFromPath(pStr);
-    std::string sigV = extractVendorByKnownSignature(nStr);
 
-    std::string vendor = !peV.empty() ? peV : (!copyV.empty() ? copyV : (!dirV.empty() ? dirV : (!sigV.empty() ? sigV : "Unknown")));
+    std::string vendor = !peV.empty() ? peV : (!copyV.empty() ? copyV : (!dirV.empty() ? dirV : "Unknown"));
 
     PluginMetadata q;
     q.path = pStr;
