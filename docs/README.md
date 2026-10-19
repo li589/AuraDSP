@@ -111,7 +111,7 @@
 - [引擎尖端升级与UI全景适配实施方案-2026-10-18.md](10-架构/引擎尖端升级与UI全景适配实施方案-2026-10-18.md) — Phase 1~3（2ms 平滑、Haas 分数延迟、2x 过采样、Lookahead/ISP Limiter、GR 计量、Dyneq 分段时间常数、Gate 迟滞/Range/Hold）已落地；Phase 4 FDN 仍为远期储备
 - [多声道支持、矩阵混音与 Windows 驱动架构全景分析报告](30-审查/multichannel_and_driver_report.md) — Phase 1（VAIO 4.0/5.1/7.1 + ChannelConfig + Win7/Win10 双 VM）、Phase 2（矩阵 Bug 修复 + Category A 8ch 位掩码）、Phase 3（ChannelRoutingSelector）现状；§1/§2 为审前基线，§7~§9 为复核后实况
 - [引擎尖端对标评估-2026-10-17.md](30-审查/引擎尖端对标评估-2026-10-17.md) 与 [引擎尖端改进实施计划-2026-10-17.md](30-审查/引擎尖端改进实施计划-2026-10-17.md) — FabFilter/iZotope/Dirac 对标与优先级来源
-- [空间音效卡与空间核心方案-2026-10-16.md](20-执行/空间音效卡与空间核心方案-2026-10-16.md) — L1 参数化 HRTF、三风格预设、空间卡结构；**2026-10-18 Phase A + B1 + B2a + B3a/B3b/B3c 已落地（头跟/仰角/mix、6/8ch 双耳、VM 8ch、FDN、全通扩散、镜像源早期反射），ASIO/本地多声道/HRIR 仍待补**
+- [空间音效卡与空间核心方案-2026-10-16.md](20-执行/空间音效卡与空间核心方案-2026-10-16.md) — L1 参数化 HRTF、三风格预设、空间卡结构；**2026-10-18 Phase A + B1 + B2a + B2b + B3a/B3b/B3c 已落地（头跟/仰角/mix、6/8ch 双耳、VM 8ch、本地多声道入引擎、FDN、全通扩散、镜像源早期反射），ASIO 多声道/HRIR 仍待补**
 - [spatial_comp_loudness_reengineering_plan.md](20-执行/spatial_comp_loudness_reengineering_plan.md) — 空间/压限/等响度五阶段修复计划；阶段一~五已落地，可视化与恒能量为复核重点
 - [Windows通用底层音频驱动与四模式架构方案-2026-10-13.md](10-架构/Windows通用底层音频驱动与四模式架构方案-2026-10-13.md) — 四模式（VAIO/VM 回调/APO/ASIO）蓝图；文首「2026-10-18 复核」标注 Phase 2~5 实际落地
 - [全链路数据驱动预设与参数系统架构方案-2026-10-17.md](10-架构/全链路数据驱动预设与参数系统架构方案-2026-10-17.md) — 预设/参数/会话记忆的现行数据流

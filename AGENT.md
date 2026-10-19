@@ -1,7 +1,7 @@
 # AGENT.md — AuraDSP 智能体协作总纲与工程指南
 
 > 本文档专为 AI 编码智能体（Antigravity、Codex、Cursor、Claude、AutoDev 等）编写，旨在帮助智能体秒级熟悉项目全貌、架构铁律、目录规范与工作流。
-> **最近对齐**：2026-10-18（同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
+> **最近对齐**：2026-10-18（同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1/B2a/B2b/B3a/B3b/B3c（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕、VM 8ch、本地多声道入引擎、FDN、全通扩散、镜像源早期反射）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
 
 ---
 
