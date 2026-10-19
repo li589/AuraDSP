@@ -47,7 +47,8 @@ void main() {
       final m = AppModel(testing: true);
       // UI 先读一次（旧实现此时把默认值自填充进缓存）
       expect(m.getParam(ParamRegistry.stereoBands[0]), 0.5);
-      expect(m.getParam(ParamRegistry.stereoWide), 0.0);
+      // C3 定案：中性档 0.5（引擎 + Dart 单源）
+      expect(m.getParam(ParamRegistry.stereoWide), 0.5);
 
       // 模拟会话恢复 postApply 的字段直写路径
       m.stereoBands[0] = 0.158;
@@ -82,9 +83,11 @@ void main() {
 
     test('打开开关且滑块为 0 时的兜底恢复为 0.5（既有 UX 语义保留）', () {
       final m = AppModel(testing: true);
+      m.setStereoMix(0.0); // 用户把滑块拉到 0
       expect(m.stereoMix, 0.0);
       m.setStereoEnabled(true);
-      expect(m.stereoMix, 0.5);
+      expect(m.stereoMix, 0.5,
+          reason: '滑块为 0 时开开关兜底恢复中性档 0.5（C3 单源）');
     });
   });
 

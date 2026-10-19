@@ -116,7 +116,7 @@ struct Params {
     std::atomic<int32_t>  bass_enable{0};
     std::atomic<float>    bass_gain{0.0f};      /* dB [0,15] */
     std::atomic<int32_t>  reverb_preset{-1};
-std::atomic<float>    stereo_mix{0.0f};     /* [0,1] */
+std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一单源，2026-10-19） */
     /* 2026-10-16 口径决策：UI 为真。以下默认值必须与 Dart ParamDefaults
      * （app/auradsp_app/lib/core/state.dart L64-171）逐项一致，改动需同步两侧
      * 并跑 flutter test（D1 监察）+ smoke。 */

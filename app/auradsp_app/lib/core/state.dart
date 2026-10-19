@@ -97,7 +97,7 @@ class GuardRejection {
 /// 集中式出厂默认值真相源（与 C++ 引擎 auradsp_create 初始状态严格对齐）
 abstract class ParamDefaults {
   static const double bassGain = 0.0;        // [0, 15] dB
-  static const double stereoMix = 0.0;       // [0, 1] (0% ~ 100%)
+  static const double stereoMix = 0.5;       // [0, 1] 中性档 0.5（C3 统一单源，2026-10-19）
   static const double convMix = 1.0;         // [0, 1] (100% 纯湿)
   static const double postGain = 0.0;        // [-15, 15] dB
   static const double inputGain = 0.0;       // [-15, 15] dB
@@ -1259,6 +1259,9 @@ class AppModel extends ChangeNotifier {
         if (audioMode == 'vbcallback') {
           _toIso?.send({'cmd': 'vbmode', 'on': true});
         }
+        // 插件级预设数据：厂商表 + 编辑器隔离名单（引擎跳过 removed()），
+        // 就绪后加载并下发 close 名单；同时检查上一进程崩溃日志做自动登记。
+        pluginManager.loadPluginTables();
         // 持久化的是 ASIO 模式：就绪后自动进桥（isolate 内部自带 detect）。
         if (audioMode == 'asio') {
           _toIso?.send({
@@ -1566,8 +1569,15 @@ class AppModel extends ChangeNotifier {
         if (raw['stereoEnable'] != null) stereoOn = (raw['stereoEnable'] as int) != 0;
         if (raw['stereoBands'] is List) {
           final bands = (raw['stereoBands'] as List);
-          for (var i = 0; i < bands.length && i < 5; i++) {
-            stereoBands[i] = (bands[i] as num).toDouble();
+          // B4 对账（D-2）：引擎 raw 值 = (band*stereoMix*2).clamp(0,1)*stereoWidenMax*k，
+          // 逆换算回 UI 刻度；stereo 关闭（k=0）或 mix=0 时引擎侧恒 0，跳过对账保留 UI 记忆值。
+          if (stereoOn && stereoMix > 0.0 && stereoWidenMax > 0.0) {
+            final denom = stereoMix * 2.0;
+            for (var i = 0; i < bands.length && i < 5; i++) {
+              final eff = (bands[i] as num).toDouble();
+              final norm = (eff / stereoWidenMax).clamp(0.0, 1.0);
+              stereoBands[i] = (norm / denom).clamp(0.0, 1.0);
+            }
           }
         }
         if (raw['fvRoomSize'] != null) fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
@@ -2501,7 +2511,7 @@ class AppModel extends ChangeNotifier {
   void setStereoEnabled(bool on) {
     stereoOn = on;
     if (on && stereoMix <= 0.0) {
-      stereoMix = _lastStereoMix > 0.0 ? _lastStereoMix : 0.5;
+      stereoMix = _lastStereoMix > 0.0 ? _lastStereoMix : ParamDefaults.stereoMix;
     }
     if (!on && stereoMix > 0.0) {
       _lastStereoMix = stereoMix;
