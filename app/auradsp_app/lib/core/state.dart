@@ -301,9 +301,15 @@ class AppModel extends ChangeNotifier {
   final Map<String, dynamic> _paramValues = {};
 
   /// 强类型通用参数读取
+  ///
+  /// 2026-10-19 修复：**getter（model 字段）是唯一真相**。旧实现先查
+  /// `_paramValues` 自填充缓存——但会话恢复（PresetLibrary.postApply）、
+  /// readback 对账、resetStereoBand 等路径全是**字段直写**，不经过缓存，
+  /// 于是 UI（ParamSlider→getParam）在字段已更新后仍读到陈旧缓存值
+  /// （用户实测：立体声分带滑块显示 0%，而"归位默认"按钮走 setParam
+  /// 恰好同步刷缓存才显示正确——同一数值两条显示链路互相打架）。
+  /// 缓存仅保留镜像写入（供 getParamById 未注册回退与诊断），不再参与读取。
   T getParam<T>(ParamSpec<T> spec) {
-    final val = _paramValues[spec.id];
-    if (val != null) return spec.cast(val);
     final current = spec.read(this);
     _paramValues[spec.id] = current;
     return current;
@@ -992,6 +998,42 @@ class AppModel extends ChangeNotifier {
     lastEngineError = null;
   }
 
+  /* ---- 事件同因抑制（防通知条刷屏，2026-10-18 UI 排查）----
+   * 引擎 guard 拒绝（paramResult rc!=0）与 isolate 错误（error 事件）在
+   * 历史上零去重：预设全量 apply / session 回放 / EQ 曲线节流下发 /
+   * liveprog 编译失败重试，任何一条批量路径都会把 N 个拒绝排成一串
+   * 4s SnackBar 连续弹出；同一问题反复出现时更是持续不断。
+   * 用户诉求：「出问题通知一两次就够了」。
+   * 口径：同一 (kind|key|msg) 在 [_kEventDedupWindowMs] 内只放行第一次，
+   * 后续同因静默抑制（不 bump eventSeq、不动一次性事件字段）；
+   * 窗口外再次出现视为新事件，正常提示。不同成因永远立即放行。 */
+  static const int _kEventDedupWindowMs = 5000;
+  String _lastEventKey = '';
+  int _lastEventAt = 0;
+  int _lastEventSuppressed = 0;
+
+  /// 测试可注入的时钟（ epoch ms ）；null = 系统时钟。
+  @visibleForTesting
+  int? debugNowOverride;
+
+  /// 同因放行判定。true = 应提示；false = 抑制。
+  bool _admitEngineEvent(String key) {
+    final now = debugNowOverride ?? DateTime.now().millisecondsSinceEpoch;
+    if (key == _lastEventKey && now - _lastEventAt < _kEventDedupWindowMs) {
+      _lastEventAt = now;
+      _lastEventSuppressed++;
+      return false;
+    }
+    _lastEventKey = key;
+    _lastEventAt = now;
+    return true;
+  }
+
+  /// 被抑制的同因事件累计次数（诊断/测试用；放行时不清零，
+  /// 由下一次同因抑制继续累加，窗口外重新出现时自然失去参照）。
+  @visibleForTesting
+  int get debugEventSuppressedCount => _lastEventSuppressed;
+
   /// 参数下发时刻（id → epoch ms），用于测量 点击→引擎确认 回环耗时
   final Map<String, int> _pendingSentAt = {};
 
@@ -1256,9 +1298,16 @@ class AppModel extends ChangeNotifier {
         bassOn = (raw['bassEnable'] as int) != 0;
         bassGain = (raw['bassGain'] as num).toDouble();
         reverbPreset = raw['reverbPreset'] as int;
-        // 引擎真相是 0..stereoWidenMax，换算回 UI 显示刻度 0..1
-        stereoMix =
-            ((raw['stereoMix'] as num).toDouble() / stereoWidenMax).clamp(0.0, 1.0);
+        // 引擎真相是 0..stereoWidenMax，换算回 UI 显示刻度 0..1。
+        // 开关关闭时引擎侧是"静音语义"的 0（_pushStereoChain 的 k=0 直发），
+        // 不代表用户滑块记忆——2026-10-19 修复：旧实现无条件回写，用户
+        // 关着开关退出后，下次启动回放推 0 → readback 把 UI 滑块清零 →
+        // autoSave 再把 0 存回会话（会话记忆被静默销毁；用户打开开关时
+        // 又被 setStereoEnabled 的兜底拉回 0.5，表现为"滑块自己跑到 50%"）。
+        if (stereoOn) {
+          stereoMix =
+              ((raw['stereoMix'] as num).toDouble() / stereoWidenMax).clamp(0.0, 1.0);
+        }
         eqOn = (raw['eqEnable'] as int) != 0;
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
@@ -1600,15 +1649,20 @@ class AppModel extends ChangeNotifier {
           lpCompileMs = raw['tookMs'] as int;
         }
         if (rc != 0) {
-          lastGuard = GuardRejection(
-              id, (raw['msg'] as String?) ?? 'engine rc=$rc', rc);
+          final msg = (raw['msg'] as String?) ?? 'engine rc=$rc';
+          // 引擎拒绝 → 回读引擎真相，抹掉 _mirror 的乐观假象
+          // （否则界面会一直显示"已选中"，但引擎里根本没生效）。
+          // 回写与提示解耦：被同因抑制时依然要回读。
+          _toIso?.send({'cmd': 'getParams'});
+          // 同因抑制（见 _admitEngineEvent）：批量路径下同一拒绝会连成
+          // 串 SnackBar；窗口内只提示第一次。
+          if (!_admitEngineEvent('guard|$id|$msg')) break;
+          lastGuard = GuardRejection(id, msg, rc);
           if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
             lpError = lastGuard!.message; // 编辑页内联标红用
-          }          eventSeq.value = ++_guardSeq;
+          }
+          eventSeq.value = ++_guardSeq;
           notifyListeners();
-          // 引擎拒绝 → 回读引擎真相，抹掉 _mirror 的乐观假象
-          // （否则界面会一直显示"已选中"，但引擎里根本没生效）
-          _toIso?.send({'cmd': 'getParams'});
         } else if (id == ParamId.convIrPath) {
           // IR 加载成功 → 回读 meta（frames/channels/srcRate/peak）
           _toIso?.send({'cmd': 'getParams'});
@@ -1651,7 +1705,11 @@ class AppModel extends ChangeNotifier {
         }
         break;
       case 'error':
-        lastEngineError = raw['msg'] as String;
+        final msg = raw['msg'] as String;
+        // 同因抑制：与 guard 拒绝共用一套窗口（isolate 侧 pump 错误已有
+        // 3s 节流，但 paramResult 拒绝没有任何节流，UI 侧必须兜底）。
+        if (!_admitEngineEvent('error|$msg')) break;
+        lastEngineError = msg;
         eventSeq.value = ++_guardSeq;
         notifyListeners();
         break;
@@ -2782,9 +2840,9 @@ class AppModel extends ChangeNotifier {
   void setHaasDelay(double v) {
     haasDelayMs = v.clamp(0.0, 25.0);
     setFloat(ParamId.haasDelay, haasDelayMs);
-    if (_measuredLatencyMs.containsKey('haas')) {
-      _measuredLatencyMs['haas'] = haasDelayMs;
-    }
+    // haas 延迟即滑块值（纯延迟线，componentLatency 动态返回估算）；
+    // 旧实现曾在此把它写进 _measuredLatencyMs 冒充实测，已随假测量分支
+    // 一并移除（2026-10-18/19）。
     notifyListeners();
     scheduleAutoSave();
   }
@@ -3080,11 +3138,14 @@ class AppModel extends ChangeNotifier {
         fvDry = value;
         setFloat('freeverb.dry', value);
       case 'roomSize':
-        fvRoomSize = value;
-        setFloat('freeverb.roomsize', value);
+        // 引擎表 0.5..2.5；旧实现无 clamp，预设/session 里的旧值（如 0.1
+        // 或 3.0）直达引擎必被拒收。2026-10-18 补钳。
+        fvRoomSize = value.clamp(0.5, 2.5);
+        setFloat('freeverb.roomsize', fvRoomSize);
       case 'width':
-        fvWidth = value;
-        setFloat('freeverb.width', value);
+        // 引擎表 0.2..2.0（同上）。
+        fvWidth = value.clamp(0.2, 2.0);
+        setFloat('freeverb.width', fvWidth);
     }
   }
 
@@ -3161,8 +3222,10 @@ class AppModel extends ChangeNotifier {
   }
 
   void setCompTimeconstant(double v) {
-    compTimeconstant = v;
-    setFloat(ParamId.compTimeconstant, v);
+    // 引擎表 0.02..0.5s；旧实现无 clamp，UI/预设给 0.01 或 1.0 会被引擎
+    // 拒收再回读回弹（块自己变 + 通知弹窗）。2026-10-18 补钳。
+    compTimeconstant = v.clamp(0.02, 0.5);
+    setFloat(ParamId.compTimeconstant, compTimeconstant);
     notifyListeners();
     scheduleAutoSave();
   }
@@ -3346,7 +3409,7 @@ class AppModel extends ChangeNotifier {
   }
 
   void setLimiterRelease(double v) {
-    limiterReleaseMs = v.clamp(5.0, 500.0);
+    limiterReleaseMs = v.clamp(10.0, 500.0);
     setFloat(ParamId.limiterRelease, limiterReleaseMs);
     notifyListeners();
   }
@@ -3668,7 +3731,8 @@ class AppModel extends ChangeNotifier {
   }
 
   void setBassSubFloor(double s) {
-    bassSubFloor = s;
+    // 引擎表 10..40Hz；旧实现无 clamp，超界值引擎拒收 + 回读回弹。
+    bassSubFloor = s.clamp(10.0, 40.0);
     setFloat(ParamId.bassSubFreq, bassSubFloor);
     notifyListeners();
   }
@@ -5115,34 +5179,31 @@ void fillEqQ(double q) {
   /// 触发一次真实脉冲探测。
   /// 关键架构优化：采用独立后台 Isolate.run 异步执行，绝不塞进 audio_isolate 实时音频泵，
   /// 彻底消除测量时因阻塞音频泵循环引发的 WASAPI 缓冲区欠载爆音与声音卡顿。
+  ///
+  /// 2026-10-18：删除 haas / bass_shaping 两处「假测量」分支（延时 100~120ms
+  /// 后把标称值写进 _measuredLatencyMs，冒充实测）。引擎 probe_is_supported
+  /// 明确不支持这两者（haas 探针结构性失明，必测出 0ms；bass_shaping 在引擎
+  /// 侧的探针名是 shelf，无此 id）。伪造「实测」比报「不可测」更危险，
+  /// 现统一由 componentLatency 的 ≈ 标称态如实展示。
   void refreshComponentLatency(String compId) async {
     if (_probing.contains(compId)) return;
-    if (compId == 'haas') {
-      _probing.add('haas');
-      _latencyRefreshTicks['haas'] = DateTime.now().millisecondsSinceEpoch;
+
+    // 档位 3：结构性不可测（haas 纯延迟线 / spatial 探针失明）——
+    // ↻ 语义 = 刷新标称显示（脉冲动效 + componentLatency 重算估算值）。
+    // 绝不写 _measuredLatencyMs：伪造"实测"比报"不可测"更危险。
+    if (!isLatencyProbeSupported(compId) &&
+        !kLatencyProbeAliases.containsKey(compId)) {
+      _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
       notifyListeners();
-      Future.delayed(const Duration(milliseconds: 120), () {
-        _probing.remove('haas');
-        _measuredLatencyMs['haas'] = haasDelayMs;
-        notifyListeners();
-      });
       return;
     }
-    if (compId == 'bass_shaping') {
-      _probing.add('bass_shaping');
-      _latencyRefreshTicks['bass_shaping'] = DateTime.now().millisecondsSinceEpoch;
-      notifyListeners();
-      Future.delayed(const Duration(milliseconds: 100), () {
-        _probing.remove('bass_shaping');
-        _measuredLatencyMs['bass_shaping'] = 0.0;
-        notifyListeners();
-      });
-      return;
-    }
+
     _probing.add(compId);
     _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
     notifyListeners();
 
+    // 档位 2：别名探针——合并卡映射到引擎实名，逐段实测求和。
+    final alias = kLatencyProbeAliases[compId];
     final res = latencyProbeResource(compId) ?? '';
     final rate = info?.deviceRate.toDouble() ?? 48000.0;
     final enginePath = AuraDspLib.loadedPath;
@@ -5150,27 +5211,41 @@ void fillEqQ(double q) {
     try {
       final result = await Isolate.run(() {
         final l = AuraDspLib.load(enginePath);
-        final out = malloc<Uint32>();
-        final compPtr = compId.toNativeUtf8();
-        int rc;
-        try {
-          out.value = 0;
-          if (res.isEmpty) {
-            rc = l.probeComponent(compPtr, rate, out);
-          } else {
-            final p = res.toNativeUtf8();
-            try {
-              rc = l.probeComponentWithResource(compPtr, p, rate, out);
-            } finally {
-              malloc.free(p);
+        int probeOne(String name) {
+          final out = malloc<Uint32>();
+          final compPtr = name.toNativeUtf8();
+          try {
+            out.value = 0;
+            int rc;
+            if (res.isEmpty) {
+              rc = l.probeComponent(compPtr, rate, out);
+            } else {
+              final p = res.toNativeUtf8();
+              try {
+                rc = l.probeComponentWithResource(compPtr, p, rate, out);
+              } finally {
+                malloc.free(p);
+              }
             }
+            return rc == 0 ? out.value.toInt() : -1;
+          } finally {
+            malloc.free(out);
+            malloc.free(compPtr);
           }
-          final samples = rc == 0 ? out.value.toInt() : 0;
-          return {'rc': rc, 'samples': samples};
-        } finally {
-          malloc.free(out);
-          malloc.free(compPtr);
         }
+
+        // 单名直测；别名列表逐段求和（任一段失败即整体失败，不拼凑数字）。
+        if (alias == null) {
+          final s = probeOne(compId);
+          return {'rc': s < 0 ? -1 : 0, 'samples': s < 0 ? 0 : s};
+        }
+        var total = 0;
+        for (final name in alias) {
+          final s = probeOne(name);
+          if (s < 0) return {'rc': -1, 'samples': 0};
+          total += s;
+        }
+        return {'rc': 0, 'samples': total};
       });
       _onComponentLatencyResult(compId, result['rc'] as int, result['samples'] as int);
     } catch (_) {
@@ -5194,20 +5269,46 @@ void fillEqQ(double q) {
 
   /// 该组件是否支持实测。
   ///
-  /// 必须与引擎 `probe_is_supported`（engine/chain/engine_probe.cpp）保持一致。
-  /// 历史坑：这个集合**定义了却从未被任何 UI 使用**，于是 ↻ 按钮对所有 20 张
-  /// 卡片无条件显示，而引擎只认其中一部分——用户点一下必然得到「未测量」，
-  /// 还附带一次约 341ms 窗口的无效测量。现在卡片侧用它来决定是否给 ↻。
-  ///
-  /// convolver / ddc 需外部资源（IR / VDC），资源已加载时同样可测；
-  /// 未加载时探针返回 -1，UI 走标称估算而不是假装能测。
-  /// input 不是效果器（无延迟可测）；haas 探针结构性失明（见引擎注释）。
+  /// 必须与引擎 `probe_is_supported`（engine/chain/engine_probe.cpp 的
+  /// kSupported 表）保持一致——历史上这个集合与引擎两张皮：UI 给 ↻ 但
+  /// 引擎一律返回 -1，用户点任何一次都只得到「未测量」（2026-10-16 修）；
+  /// 2026-10-18 再修反向漂移：haas（引擎注释明示探针结构性失明，必测出
+  /// 0ms 造假）与 bass_shaping（引擎无此 id，其探针名是 shelf）曾在本
+  /// 集合中，配 refreshComponentLatency 的假测量分支把标称值冒充实测。
+  /// 现集合 = 引擎 kSupported 中有卡片的部分 + 两个资源型组件
+  /// （convolver / ddc：资源已加载时可测，未加载时如实报「未测量」）。
+  /// param_contract_test Part G 以引擎源文件断言该集合不得越界。
   static bool isLatencyProbeSupported(String compId) =>
       const {
-        'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post', 'shelf',
-        'convolver', 'ddc', 'bassmono', 'exciter', 'stereo', 'comp', 'arbmag',
-        'dyneq', 'filter', 'gate', 'loudness', 'haas', 'bass_shaping',
+        'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post',
+        'comp', 'exciter', 'stereo', 'arbmag',
+        'dyneq', 'filter', 'gate', 'loudness',
+        'convolver', 'ddc',
       }.contains(compId);
+
+  /// 探针别名：卡片 compId → 引擎 probe_is_supported 实名列表。
+  ///
+  /// 低音塑形是合并卡（shelf + bassmono 两段引擎 stage），Dart 侧没有
+  /// 'bass_shaping' 这个探针名（引擎只认 shelf/bassmono，二者均在
+  /// kSupported）。↻ 实测时对两个实名分别打脉冲，样本延迟求和 =
+  /// 合并卡总算法延迟。param_contract_test Part G 校验别名目标必须
+  /// 全部在引擎支持集内。
+  static const Map<String, List<String>> kLatencyProbeAliases = {
+    'bass_shaping': ['shelf', 'bassmono'],
+  };
+
+  /// 该组件是否显示 ↻ 刷新按钮（三档口径，配合 refreshComponentLatency）：
+  /// 1. 引擎真探针（isLatencyProbeSupported）——实测脉冲；
+  /// 2. 别名探针（kLatencyProbeAliases）——映射到引擎实名实测求和；
+  /// 3. 结构性不可测但有标称值（haas 纯延迟线 / spatial 探针失明）——
+  ///    ↻ = 刷新标称显示（脉冲动效 + 重算估算值），绝不冒充实测。
+  /// 2026-10-19：上一轮把 haas/bass_shaping/spatial 的 ↻ 一并摘掉后
+  /// 用户反馈"点不动"——按钮存在但永远禁用同样是不诚实 UI。现在
+  /// 每张卡的 ↻ 都有明确语义：能实测就实测，不能实测就刷新标称。
+  static bool hasLatencyRefresh(String compId) =>
+      isLatencyProbeSupported(compId) ||
+      kLatencyProbeAliases.containsKey(compId) ||
+      const {'haas', 'spatial'}.contains(compId);
 
   /// 探测进行中
   bool isProbingLatency(String compId) => _probing.contains(compId);

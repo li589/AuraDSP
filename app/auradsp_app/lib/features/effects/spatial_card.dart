@@ -23,7 +23,7 @@ class _SpatialCard extends StatelessWidget {
       latencyMeasured: model.componentLatency('spatial').measured,
       latencyEstimated: model.componentLatency('spatial').estimated,
       latencyProbing: model.isProbingLatency('spatial'),
-      onRefreshLatency: AppModel.isLatencyProbeSupported('spatial')
+      onRefreshLatency: AppModel.hasLatencyRefresh('spatial')
           ? () => model.refreshComponentLatency('spatial')
           : null,
       latencyTick: model.getComponentLatencyTick('spatial'),
