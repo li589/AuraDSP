@@ -39,6 +39,8 @@ def run_smoke_tests():
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
+        # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
+        "smoke_release_strings.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
