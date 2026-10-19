@@ -16,6 +16,7 @@ class _DdcCard extends StatelessWidget {
       title: l.ddcTitle,
       collapsed: !model.ddcOn, // 同上：常规语义 + state 层 auto-bypass
       latencyMs: model.componentLatency('ddc').ms,
+      latencyEnabled: model.isSectionEnabled('ddc'),
               latencyMeasured: model.componentLatency('ddc').measured,
               latencyEstimated: model.componentLatency('ddc').estimated,
               latencyProbing: model.isProbingLatency('ddc'),

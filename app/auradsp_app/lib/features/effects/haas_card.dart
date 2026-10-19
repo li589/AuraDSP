@@ -18,6 +18,7 @@ class _HaasCard extends StatelessWidget {
       title: l.stHaas,
       collapsed: !model.haasOn,
       latencyMs: model.componentLatency('haas').ms,
+      latencyEnabled: model.isSectionEnabled('haas'),
       latencyMeasured: model.componentLatency('haas').measured,
       latencyEstimated: model.componentLatency('haas').estimated,
       latencyProbing: model.isProbingLatency('haas'),

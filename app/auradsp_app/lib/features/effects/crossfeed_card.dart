@@ -20,6 +20,7 @@ class _CrossfeedCard extends StatelessWidget {
       titleTooltip: l.crossfeedDesc,
       collapsed: !isEnabled,
       latencyMs: m.componentLatency('crossfeed').ms,
+      latencyEnabled: m.isSectionEnabled('crossfeed'),
       latencyMeasured: m.componentLatency('crossfeed').measured,
       latencyEstimated: m.componentLatency('crossfeed').estimated,
       latencyProbing: m.isProbingLatency('crossfeed'),

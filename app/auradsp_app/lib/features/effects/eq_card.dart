@@ -15,6 +15,7 @@ class _EqualizerCard extends StatelessWidget {
       title: l.eqMultiBand,
       collapsed: !model.eqOn,
       latencyMs: model.componentLatency('eq').ms,
+      latencyEnabled: model.isSectionEnabled('eq'),
               latencyMeasured: model.componentLatency('eq').measured,
               latencyEstimated: model.componentLatency('eq').estimated,
               latencyProbing: model.isProbingLatency('eq'),

@@ -19,6 +19,7 @@ class _GateCard extends StatelessWidget {
       titleTooltip: l.gateHint,
       collapsed: !model.gateOn,
       latencyMs: model.componentLatency('gate').ms,
+      latencyEnabled: model.isSectionEnabled('gate'),
       latencyMeasured: model.componentLatency('gate').measured,
       latencyEstimated: model.componentLatency('gate').estimated,
       latencyProbing: model.isProbingLatency('gate'),
