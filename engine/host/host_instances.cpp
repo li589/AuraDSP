@@ -2030,23 +2030,26 @@ public:
     }
 
     // IPlugView 收尾（泵线程内调用）：解绑 frame 并释放引用。
-    // VST3 规范：必须先 removed()，再 setFrame(nullptr)，最后 release()。
+    // 顺序与官方 editorhost（WindowController::closePlugView）一致：
+    // 先 setFrame(nullptr) 再 removed()——Zebra2 (u-he) 在 removed() 仍持有
+    // frame 时会回调宿主 resizeView（进而 onSize 重入半拆除中的 view），
+    // 导致其堆块损坏并在内部 free() 触发不可捕获的 0xC0000374 fail-fast。
     // 使用 SEH 隔离插件在退出时的内存越界，防止 0xC0000005 崩溃宿主。
     void detachViewOnPumpThread(Steinberg::IPlugView* view) {
         if (!view) return;
 #if defined(_MSC_VER)
         __try {
-            view->removed();
+            view->setFrame(nullptr);
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
         __try {
-            view->setFrame(nullptr);
+            view->removed();
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
         __try {
             view->release();
         } __except (EXCEPTION_EXECUTE_HANDLER) {}
 #else
-        try { view->removed(); } catch (...) {}
         try { view->setFrame(nullptr); } catch (...) {}
+        try { view->removed(); } catch (...) {}
         try { view->release(); } catch (...) {}
 #endif
         m_view = nullptr;
