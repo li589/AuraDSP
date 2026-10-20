@@ -220,8 +220,97 @@ void apply_arbmag(auradsp_handle h) {
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed)) {
         ArbitraryResponseEqualizerEnable(&h->jdsp, 1);
+        /* B5 后续：主 conv 就绪的同时把逐声道池同步到同一 IR（控制线程）。 */
+        arbmag_pool_reload(h);
     } else {
         ArbitraryResponseEqualizerDisable(&h->jdsp);
+    }
+}
+
+
+/* B5 后续：arbmag 逐声道池（8×FFTConvolver1x1，IR 与主 arbMag.conv 同源）。
+ * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。
+ * 内容等价性：同一 eqFil、同一 blockSize 下，1x1 输出 == 2x2 对应声道输出
+ * （独立 inputBuffer/segments，无跨声道状态）。 */
+void arbmag_pool_alloc(auradsp_handle h) {
+    if (!h) return;
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        if (!h->arbmag_pool.conv[c]) {
+            auto* conv = new (std::nothrow) FFTConvolver1x1();
+            if (!conv) return; /* OOM：保持空位，process 侧直通 */
+            FFTConvolver1x1Init(conv);
+            h->arbmag_pool.conv[c] = conv;
+        }
+    }
+}
+
+void arbmag_pool_free(auradsp_handle h) {
+    if (!h) return;
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        if (h->arbmag_pool.conv[c]) {
+            FFTConvolver1x1Free(h->arbmag_pool.conv[c]);
+            delete h->arbmag_pool.conv[c];
+            h->arbmag_pool.conv[c] = nullptr;
+        }
+    }
+    h->arbmag_pool.loaded = 0;
+    h->arbmag_pool.loaded_block = 0;
+}
+
+/* 控制线程：用当前 GetFilter(eqFil) 同步重载全池。IR 源与主 conv 完全相同
+ * （同一 coeffGen.GetFilter(fs) 调用——注意主链 StringParser/Enable 的
+ * ForceRefresh 路径也会重算 eqFil；池与主 conv 共用同一份，不存在漂移）。 */
+void arbmag_pool_reload(auradsp_handle h) {
+    if (!h) return;
+    const unsigned block = (unsigned)h->jdsp.blockSize;
+    if (block == 0) { h->arbmag_pool.loaded = 0; return; }
+    float* eqFil = h->jdsp.arbMag.instance.coeffGen.GetFilter(
+        &h->jdsp.arbMag.instance.coeffGen, (float)h->jdsp.fs);
+    if (!eqFil) { h->arbmag_pool.loaded = 0; return; }
+    const unsigned irLen = h->jdsp.arbMag.instance.filterLen;
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        auto* conv = h->arbmag_pool.conv[c];
+        if (!conv) { h->arbmag_pool.loaded = 0; return; }
+        if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
+            h->arbmag_pool.loaded = 0;
+            return;
+        }
+    }
+    h->arbmag_pool.loaded_block = block;
+    h->arbmag_pool.loaded = 1;
+}
+
+/* RT 线程：交织缓冲单声道处理（无分配、无锁）。
+ * 选中（mask 位 && enable && ready && 池已装载）→ 抽 mono 进 shelf_scratch、
+ * 1x1 卷积、应用输出增益门 fxOutGain[4]（静态线性增益；autogain 为逐块平滑，
+ * 多声道逐声道路径不重复应用共享平滑状态——保持与单声道场景一致的确定性），
+ * 写回交织缓冲。未选中 → 原样直通。 */
+static inline float* arbmag_pool_get_scratch(auradsp_handle h) {
+    return h && h->shelf_scratch ? h->shelf_scratch : nullptr;
+}
+void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
+                                 int nch, int ch_idx) {
+    if (!h || !io || frames <= 0 || nch <= 0 || ch_idx < 0 || ch_idx >= nch)
+        return;
+    if (!(h->p.arbmag_channels.load(std::memory_order_relaxed) & (1u << ch_idx)))
+        return;
+    if (!h->p.arbmag_enable.load(std::memory_order_relaxed) ||
+        !h->p.arbmag_ready.load(std::memory_order_relaxed))
+        return;
+    auto* conv = h->arbmag_pool.conv[ch_idx];
+    if (!conv || !h->arbmag_pool.loaded) return;
+    float* scratch = arbmag_pool_get_scratch(h);
+    if (!scratch) return;
+    float* in = io + ch_idx;
+    for (int i = 0; i < frames; ++i) scratch[i] = in[(size_t)i * nch];
+
+    FFTConvolver1x1Process(conv, scratch, scratch, (unsigned)frames);
+
+    const float g = h->jdsp.fxOutGain[4]; /* 线性输出增益门（apply_fx_gains 下推） */
+    if (g == 1.0f) {
+        for (int i = 0; i < frames; ++i) in[(size_t)i * nch] = scratch[i];
+    } else {
+        for (int i = 0; i < frames; ++i) in[(size_t)i * nch] = scratch[i] * g;
     }
 }
 
@@ -263,16 +352,36 @@ static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float
             !h->plugin_host->isBypassedSlot(s) &&
             h->plugin_host->getInsertStageSlot(s) == stage) {
 
+            double inSum = 0.0;
             for (int i = 0; i < frames; ++i) {
-                h->plugin_buf_l[i] = buffer[i * 2];
-                h->plugin_buf_r[i] = buffer[i * 2 + 1];
+                const float l = buffer[i * 2];
+                const float r = buffer[i * 2 + 1];
+                inSum += (double)l * l + (double)r * r;
+                h->plugin_buf_l[i] = l;
+                h->plugin_buf_r[i] = r;
             }
             float* planarBuffers[2] = { h->plugin_buf_l, h->plugin_buf_r };
             h->plugin_host->processSlot(s, planarBuffers, planarBuffers, static_cast<uint32_t>(frames));
+            double outSum = 0.0;
+            float maxDiff = 0.0f;
             for (int i = 0; i < frames; ++i) {
-                buffer[i * 2]     = h->plugin_buf_l[i];
-                buffer[i * 2 + 1] = h->plugin_buf_r[i];
+                const float l = h->plugin_buf_l[i];
+                const float r = h->plugin_buf_r[i];
+                outSum += (double)l * l + (double)r * r;
+                const float dl = std::fabs(l - buffer[i * 2]);
+                const float dr = std::fabs(r - buffer[i * 2 + 1]);
+                if (dl > maxDiff) maxDiff = dl;
+                if (dr > maxDiff) maxDiff = dr;
+                buffer[i * 2]     = l;
+                buffer[i * 2 + 1] = r;
             }
+            const double denom = frames > 0 ? (double)frames * 2.0 : 1.0;
+            h->plugin_host->recordTelemetry(
+                s,
+                static_cast<float>(std::sqrt(inSum / denom)),
+                static_cast<float>(std::sqrt(outSum / denom)),
+                maxDiff,
+                static_cast<uint32_t>(frames));
         }
     }
 }
@@ -665,19 +774,39 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
 
         const int tube_saved = h->jdsp.tubeEnabled;
         const int limiter_saved = h->jdsp.limiterEnabled;
-        h->jdsp.tubeEnabled = 0;
-        h->jdsp.limiterEnabled = 0;
-        /* B5：双声道效果器（comp/eq/arbmag）在 FL/FR 对上按掩码门控 */
         const int comp_saved = h->jdsp.compEnabled;
         const int eq_saved = h->jdsp.equalizerEnabled;
         const int arbmag_saved = h->jdsp.arbitraryMagEnabled;
+        h->jdsp.tubeEnabled = 0;
+        h->jdsp.limiterEnabled = 0;
+        h->jdsp.arbitraryMagEnabled = 0; /* arbmag 逐声道改走池，不再在链内跑 FL/FR 对 */
         if ((h->p.comp_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
             h->jdsp.compEnabled = 0;
         if ((h->p.eq_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
             h->jdsp.equalizerEnabled = 0;
-        if ((h->p.arbmag_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
-            h->jdsp.arbitraryMagEnabled = 0;
-        h->jdsp.processFloatMultiplexd(&h->jdsp, h->shelf_scratch, h->mx_stereo, (size_t)frames);
+        /* B5 后续：拆链两段，arbmag 插在中点按 FL/FR 各自 mask 位独立处理，
+         * 保持原链内顺序（eq → arbmag → convolver…）。ASRC 由两段各自往返。
+         * 两段开 samplePeaks=1：等价原 processFloatMultiplexd 的逐 stage 峰值
+         * 采样（viz stage_levels）；arbmag 级（stage 4）峰值由池处理后手动补。 */
+        JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
+                                           h->mx_stereo, (size_t)frames,
+                                           "tube,comp,bass,eq", 1);
+        if (h->arbmag_pool.loaded) {
+            arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 0);
+            arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 1);
+            float maxL = 0.0f, maxR = 0.0f;
+            for (int i = 0; i < frames; ++i) {
+                const float aL = fabsf(h->mx_stereo[i * 2]);
+                const float aR = fabsf(h->mx_stereo[i * 2 + 1]);
+                if (aL > maxL) maxL = aL;
+                if (aR > maxR) maxR = aR;
+            }
+            h->jdsp.stagePeakL[4] = maxL; /* arbmag 级输出峰值（stage 4） */
+            h->jdsp.stagePeakR[4] = maxR;
+        }
+        JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->mx_stereo,
+                                           h->mx_stereo, (size_t)frames,
+                                           "convolver,ddc,liveprog,crossfeed,stereo,reverb,output", 1);
         h->jdsp.compEnabled = comp_saved;
         h->jdsp.equalizerEnabled = eq_saved;
         h->jdsp.arbitraryMagEnabled = arbmag_saved;
@@ -702,8 +831,10 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
     }
 
-    // 3b. B5：双声道效果器（comp/eq/arbmag）按掩码对选中声道对独立处理
-    // （标准声道对 = (0,1)/(2,3)/(4,5)/(6,7)，位掩码 3<<p0；允许多选，未选对直通）
+    // 3b. B5：双声道效果器（comp/eq）按掩码对选中声道对独立处理；
+    //      arbmag 升级逐声道（B5 后续）：同一对处理后按各自 mask 位进池。
+    //      （comp/eq 仍按标准声道对 (2,3)/(4,5)/(6,7) 判定，位掩码 3<<p0；
+    //        arbMag 由池逐声道，任何单个声道位都可独立生效）
     {
         char ids[40];
         for (int p0 = 2; p0 + 1 < ch; p0 += 2) {
@@ -717,21 +848,23 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
                 memcpy(ids + idn, "eq,", 3);
                 idn += 3;
             }
-            if ((h->p.arbmag_channels.load(std::memory_order_relaxed) & bits) == bits) {
-                memcpy(ids + idn, "arbmag,", 7);
-                idn += 7;
+            if (idn > 0) {
+                ids[idn - 1] = 0; /* 去掉末尾逗号 */
+                for (int i = 0; i < frames; ++i) {
+                    h->shelf_scratch[i * 2] = dst[i * ch + p0];
+                    h->shelf_scratch[i * 2 + 1] = dst[i * ch + p0 + 1];
+                }
+                JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
+                                                   h->shelf_scratch, (size_t)frames, ids, 0);
+                for (int i = 0; i < frames; ++i) {
+                    dst[i * ch + p0] = h->shelf_scratch[i * 2];
+                    dst[i * ch + p0 + 1] = h->shelf_scratch[i * 2 + 1];
+                }
             }
-            if (idn == 0) continue;
-            ids[idn - 1] = 0; /* 去掉末尾逗号 */
-            for (int i = 0; i < frames; ++i) {
-                h->shelf_scratch[i * 2] = dst[i * ch + p0];
-                h->shelf_scratch[i * 2 + 1] = dst[i * ch + p0 + 1];
-            }
-            JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
-                                               h->shelf_scratch, (size_t)frames, ids);
-            for (int i = 0; i < frames; ++i) {
-                dst[i * ch + p0] = h->shelf_scratch[i * 2];
-                dst[i * ch + p0 + 1] = h->shelf_scratch[i * 2 + 1];
+            /* arbmag 逐声道池：pair 内每声道按各自 mask 位独立（B5 后续） */
+            if (h->arbmag_pool.loaded) {
+                arbmag_pool_process_strided(h, dst, frames, ch, p0);
+                arbmag_pool_process_strided(h, dst, frames, ch, p0 + 1);
             }
         }
     }

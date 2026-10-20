@@ -430,6 +430,10 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
     h->p.arbmag_ready.store(nodes > 0 ? 1 : 0);
     if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {
         apply_arbmag(h);
+    } else {
+        /* B5 后续：即使尚未 enable/open（曲线先生效），也把逐声道池同步到
+         * 新 IR——多声道链按 mask 位决定是否进池，进池前池必须已装载。 */
+        arbmag_pool_reload(h);
     }
     char* arbmag_new = (char*)malloc((size_t)bytes + 1);
     if (!arbmag_new) { set_error(h, "arbmag.string: out of memory (copy)"); return AURADSP_E_IO; }
