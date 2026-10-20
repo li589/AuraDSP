@@ -1,9 +1,9 @@
-/* P2: shared internals (moved verbatim; zero logic change). */
+/* Shared engine internals (P2 split; Phase 3 plugin state moved to PluginEngineState). */
 
 #pragma once
 
 #include "auradsp_engine.h"
-#include "plugin_host.h"
+#include "plugins/integration/plugin_engine_state.h"
 #include "dsp/dsp_oversample.h"
 #include "dsp/dsp_lookahead_limiter.h"
 #include <atomic>
@@ -569,12 +569,7 @@ struct auradsp_handle_s {
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
-    /* M1 插件宿主引擎与双声道平面工作区 */
-    std::unique_ptr<auradsp::PluginHostManager> plugin_host;
-    float* plugin_buf_l = nullptr;
-    float* plugin_buf_r = nullptr;
-    float* plugin_out_l = nullptr;
-    float* plugin_out_r = nullptr;
+    auradsp::PluginEngineState plugin;
 
     /* [ADR-003 Phase A] 多声道矩阵工作区 */
     std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
