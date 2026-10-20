@@ -15,6 +15,7 @@ set(AURADSP_PLUGIN_HOST_SOURCES
     "${API}/plugins/driver/plugin_json.cpp"
     "${API}/plugins/driver/plugin_thread.cpp"
     "${API}/plugins/driver/plugin_host_manager.cpp"
+    "${API}/plugins/driver/plugin_chain_component.cpp"
     "${API}/plugins/formats/clap/clap_driver.cpp"
     "${API}/plugins/formats/clap/clap_instance.cpp"
     "${API}/plugins/formats/clap/clap_metadata.cpp"
@@ -24,6 +25,9 @@ set(AURADSP_PLUGIN_HOST_SOURCES
 )
 set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_host.cpp"
+    "${API}/plugins/integration/plugin_engine_state.cpp"
+    "${API}/plugins/integration/plugin_chain_adapter.cpp"
+    "${API}/plugins/integration/plugin_abi.cpp"
 )
 
 file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
@@ -107,4 +111,21 @@ target_compile_options(test_plugin_direct PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_direct PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_direct PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_plugin_direct PRIVATE auradsp_engine version)
+
+add_executable(test_plugin_chain
+    "${API}/plugins/tests/plugin_chain_consistency.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+)
+target_include_directories(test_plugin_chain PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_plugin_chain PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_options(test_plugin_chain PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_plugin_chain PRIVATE auradsp_engine version)
 
