@@ -360,13 +360,14 @@ static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float
                 h->plugin_buf_l[i] = l;
                 h->plugin_buf_r[i] = r;
             }
-            float* planarBuffers[2] = { h->plugin_buf_l, h->plugin_buf_r };
-            h->plugin_host->processSlot(s, planarBuffers, planarBuffers, static_cast<uint32_t>(frames));
+            float* planarIn[2] = { h->plugin_buf_l, h->plugin_buf_r };
+            float* planarOut[2] = { h->plugin_out_l, h->plugin_out_r };
+            h->plugin_host->processSlot(s, planarIn, planarOut, static_cast<uint32_t>(frames));
             double outSum = 0.0;
             float maxDiff = 0.0f;
             for (int i = 0; i < frames; ++i) {
-                const float l = h->plugin_buf_l[i];
-                const float r = h->plugin_buf_r[i];
+                const float l = h->plugin_out_l[i];
+                const float r = h->plugin_out_r[i];
                 outSum += (double)l * l + (double)r * r;
                 const float dl = std::fabs(l - buffer[i * 2]);
                 const float dr = std::fabs(r - buffer[i * 2 + 1]);

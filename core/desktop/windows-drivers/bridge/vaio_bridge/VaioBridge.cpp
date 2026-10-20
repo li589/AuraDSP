@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 
+#include "../PluginBridge.h"
 #include "../../common/AuraVaioIpc.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 
@@ -209,6 +210,10 @@ struct VaioBridgeCtl {
 };
 
 VaioBridgeCtl g_vaio;
+
+// 插件槽转发：单引擎（g_vaio.pEngine），Dart 在 start 成功后按会话镜像重放。
+auraplugin::Fns g_pluginFns;
+auraplugin::Mirror g_pluginMirror;
 
 void FreeTestFile() {
     InterlockedExchange(&g_vaio.tc.testKind, 0);
@@ -655,6 +660,7 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.note[0] = '\0';
     g_vaio.paramsApplied = 0;
     g_vaio.paramsFailed = 0;
+    g_pluginMirror.Reset();  // 新会话：等 App 侧 start 后按当前会话重放
 
     // 1. 打开内核驱动控制设备
     g_vaio.hControlDev = CreateFileW(
@@ -715,6 +721,7 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_vaio.fnSetParam = (FnEngSetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_set_param");
         g_vaio.fnGetParam = (FnEngGetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_get_param");
         g_vaio.fnVizRead = (FnEngVizRead)GetProcAddress(g_vaio.hEngineMod, "auradsp_viz_read");
+        g_pluginFns.Resolve(g_vaio.hEngineMod);
     }
 
     if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess || !g_vaio.fnDestroy) {
@@ -1081,4 +1088,86 @@ int vaio_test_start(int kind, const float* pcm, int frames, int ch, int rate) {
 int vaio_test_stop() {
     FreeTestFile();
     return 0;
+}
+
+// ---- 插件槽（单引擎）----
+int vaio_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    return auraplugin::SlotLoad(g_vaio.pEngine, g_pluginFns, g_pluginMirror,
+                                slot, path, plugin_id);
+}
+
+int vaio_plugin_slot_unload(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    return auraplugin::SlotUnload(g_vaio.pEngine, g_pluginFns, g_pluginMirror,
+                                  slot);
+}
+
+int vaio_plugin_slot_set_bypass(int slot, int bypass) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    return auraplugin::SlotSetBypass(g_vaio.pEngine, g_pluginFns,
+                                     g_pluginMirror, slot, bypass);
+}
+
+int vaio_plugin_slot_get_bypass(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getBypass(g_vaio.pEngine, slot);
+}
+
+unsigned vaio_plugin_slot_get_latency(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getLatency(g_vaio.pEngine, slot);
+}
+
+int vaio_plugin_slot_get_status(int slot, char* out, int cap) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) {
+        if (out && cap > 0) out[0] = 0;
+        return 0;
+    }
+    return auraplugin::SlotGetStatus(g_vaio.pEngine, g_pluginFns, slot, out,
+                                     cap);
+}
+
+int vaio_plugin_slot_show_editor(int slot, const char* title) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.showEditor(g_vaio.pEngine, slot, title);
+}
+
+int vaio_plugin_slot_close_editor(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.closeEditor(g_vaio.pEngine, slot);
+}
+
+int vaio_plugin_slot_is_editor_open(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.isEditorOpen(g_vaio.pEngine, slot);
+}
+
+int vaio_plugin_slot_save_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.savePreset(g_vaio.pEngine, slot, path);
+}
+
+int vaio_plugin_slot_load_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.loadPreset(g_vaio.pEngine, slot, path);
+}
+
+int vaio_plugin_slot_set_insert_stage(int slot, int stage) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    return auraplugin::SlotSetStage(g_vaio.pEngine, g_pluginFns,
+                                    g_pluginMirror, slot, stage);
+}
+
+int vaio_plugin_slot_get_insert_stage(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 3;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 3;
+    return g_pluginFns.getStage(g_vaio.pEngine, slot);
 }

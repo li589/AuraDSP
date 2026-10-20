@@ -169,6 +169,12 @@ public:
         /* C3 异步挂载/卸载任务状态（原子，供 Dart 无锁轮询）：
          * 0=无任务 1=进行中 2=成功 3=失败。终态（2/3）在下一次提交时被清零。 */
         std::atomic<int> taskState{0};
+        /* Phase 0 可观测性：RT 侧写、控制侧读；只用于诊断，不参与音频决策。 */
+        std::atomic<uint64_t> processCalls{0};
+        std::atomic<uint32_t> inRmsBits{0};
+        std::atomic<uint32_t> outRmsBits{0};
+        std::atomic<uint32_t> maxDiffBits{0};
+        std::atomic<uint32_t> lastFrames{0};
     };
 
     PluginHostManager();
@@ -241,6 +247,7 @@ public:
 
     // Process single slot (RT-Safe)
     void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
+    void recordTelemetry(size_t slot, float inRms, float outRms, float maxDiff, uint32_t frames);
 
     // Legacy single-slot helper. Only loadPlugin() is still referenced
     // (test/smoke/test_plugin_direct.cpp); the other six forwards were removed

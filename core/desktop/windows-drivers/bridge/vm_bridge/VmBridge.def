@@ -14,3 +14,16 @@ EXPORTS
     vb_test_stop          PRIVATE
     vb_bypass             PRIVATE
     vb_set_bus_mask       PRIVATE
+    vb_plugin_slot_load              PRIVATE
+    vb_plugin_slot_unload            PRIVATE
+    vb_plugin_slot_set_bypass        PRIVATE
+    vb_plugin_slot_get_bypass        PRIVATE
+    vb_plugin_slot_get_latency       PRIVATE
+    vb_plugin_slot_get_status        PRIVATE
+    vb_plugin_slot_show_editor       PRIVATE
+    vb_plugin_slot_close_editor      PRIVATE
+    vb_plugin_slot_is_editor_open    PRIVATE
+    vb_plugin_slot_save_preset       PRIVATE
+    vb_plugin_slot_load_preset       PRIVATE
+    vb_plugin_slot_set_insert_stage  PRIVATE
+    vb_plugin_slot_get_insert_stage  PRIVATE

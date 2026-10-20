@@ -13,3 +13,16 @@ EXPORTS
     asio_test_start        PRIVATE
     asio_test_stop         PRIVATE
     asio_bypass            PRIVATE
+    asio_plugin_slot_load              PRIVATE
+    asio_plugin_slot_unload            PRIVATE
+    asio_plugin_slot_set_bypass        PRIVATE
+    asio_plugin_slot_get_bypass        PRIVATE
+    asio_plugin_slot_get_latency       PRIVATE
+    asio_plugin_slot_get_status        PRIVATE
+    asio_plugin_slot_show_editor       PRIVATE
+    asio_plugin_slot_close_editor      PRIVATE
+    asio_plugin_slot_is_editor_open    PRIVATE
+    asio_plugin_slot_save_preset       PRIVATE
+    asio_plugin_slot_load_preset       PRIVATE
+    asio_plugin_slot_set_insert_stage  PRIVATE
+    asio_plugin_slot_get_insert_stage  PRIVATE

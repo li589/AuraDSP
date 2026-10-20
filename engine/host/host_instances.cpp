@@ -11,6 +11,7 @@
 #include <sstream>
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <cstring>
 #include <mutex>
 #include <vector>
@@ -1732,24 +1733,36 @@ public:
             }
         }
 
-        // 显式激活全部音频总线：FabFilter/Convology 等插件不会仅凭 BusInfo.flags 的
-        // kDefaultActive 进入可处理态，必须在 setupProcessing 前对每个音频总线调用
-        // activateBus(..., true)，否则 process() 恒返回 kResultOk 但不写任何输出。
-        // （已用官方 VST3 SDK hosting 参考宿主复现并验证该行为差异。）
-        for (int32_t i = 0; i < numInBusses; ++i) {
-            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, true);
-        }
-        for (int32_t i = 0; i < numOutBusses; ++i) {
-            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, true);
-        }
-
         // 主总线协商优先设为立体声
         if (numInBusses > 0) inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
         if (numOutBusses > 0) outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
 
-        // 调用 setBusArrangements（注意：根据 VST3 规范，返回 kResultFalse 并不代表致命失败，
-        // 插件可自主选择自适应或维持其默认总线配置）
-        (void)m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
+        const Steinberg::tresult arrRes =
+            m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
+
+        // Setup processing (must be in disabled state, before activateBus/setActive)
+        Steinberg::Vst::ProcessSetup setup = {};
+        setup.processMode = Steinberg::Vst::kRealtime;
+        setup.sampleRate = sampleRate;
+        setup.maxSamplesPerBlock = maxBlockSize;
+        setup.symbolicSampleSize = Steinberg::Vst::kSample32;
+
+        if (m_processor->setupProcessing(setup) != Steinberg::kResultOk) {
+            return false;
+        }
+
+        const Steinberg::tresult activeRes = m_component->setActive(true);
+        if (activeRes != Steinberg::kResultOk) {
+            return false;
+        }
+
+        // 仅启用主输入总线；侧链/辅助总线保持关闭，Phase 5 再扩展多总线。
+        for (int32_t i = 0; i < numInBusses; ++i) {
+            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, i == 0);
+        }
+        for (int32_t i = 0; i < numOutBusses; ++i) {
+            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, true);
+        }
 
         // 重新获取主总线实际确认的声道数
         if (numInBusses > 0) {
@@ -1769,20 +1782,13 @@ public:
             m_outChannels = 2;
         }
 
-        // Setup processing
-        Steinberg::Vst::ProcessSetup setup = {};
-        setup.processMode = Steinberg::Vst::kRealtime;
-        setup.sampleRate = sampleRate;
-        setup.maxSamplesPerBlock = maxBlockSize;
-        setup.symbolicSampleSize = Steinberg::Vst::kSample32;
-
-        if (m_processor->setupProcessing(setup) != Steinberg::kResultOk) {
+        const Steinberg::tresult procRes = m_processor->setProcessing(true);
+        if (procRes != Steinberg::kResultOk) {
+            m_component->setActive(false);
             return false;
         }
 
-        m_component->setActive(true);
-        m_processor->setProcessing(true);
-
+        (void)arrRes;
         m_meta.latency = m_processor->getLatencySamples();
         m_isActive = true;
         return true;
@@ -1842,6 +1848,8 @@ public:
         Steinberg::Vst::ProcessContext context = {};
         context.state = Steinberg::Vst::ProcessContext::kPlaying |
                         Steinberg::Vst::ProcessContext::kProjectTimeMusicValid |
+                        Steinberg::Vst::ProcessContext::kBarPositionValid |
+                        Steinberg::Vst::ProcessContext::kCycleValid |
                         Steinberg::Vst::ProcessContext::kTempoValid |
                         Steinberg::Vst::ProcessContext::kTimeSigValid |
                         Steinberg::Vst::ProcessContext::kContTimeValid |
@@ -1850,6 +1858,10 @@ public:
         context.tempo = 120.0;
         context.timeSigNumerator = 4;
         context.timeSigDenominator = 4;
+        context.barPositionMusic = 0.0;
+        context.cycleStartMusic = 0.0;
+        context.cycleEndMusic = 4.0;
+        context.projectTimeMusic = 0.0;
         // 连续时间轴推进：同步类/动画类插件依赖（与官方 hosting 参考实现的
         // AudioClient::preprocess 行为一致）。
         context.continousTimeSamples = m_continuousTimeSamples;
@@ -1866,9 +1878,9 @@ public:
         data.symbolicSampleSize = Steinberg::Vst::kSample32;
         data.numSamples = numFrames;
         data.inputs = m_inBusses.data();
-        data.numInputs = static_cast<Steinberg::int32>(m_inBusses.size());
+        data.numInputs = m_numInputBusses;
         data.outputs = m_outBusses.data();
-        data.numOutputs = static_cast<Steinberg::int32>(m_outBusses.size());
+        data.numOutputs = m_numOutputBusses;
         data.inputParameterChanges = nullptr;
         data.outputParameterChanges = nullptr;
         data.inputEvents = nullptr;

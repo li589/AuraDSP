@@ -20,6 +20,7 @@ import 'auradsp_ffi.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
+import 'bridge_plugin_ffi.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
@@ -53,6 +54,21 @@ int _cfgInt(Map<String, dynamic> cfg, String key, int fallback) {
 double _cfgDouble(Map<String, dynamic> cfg, String key, double fallback) {
   final v = cfg[key];
   return v is num ? v.toDouble() : fallback;
+}
+
+/// 桥模式下插件配置的会话镜像（path/id/bypass/stage）。
+///
+/// 桥各自持有独立引擎；Dart 必须在命令到达时同步记下，桥 start 成功后
+/// 回放，桥 stop 后同步回本地引擎。插件内部状态（旋钮值）不在镜像内，
+/// 属已知 MVP 限制。
+const int _kPluginSlots = 4;
+
+class _PluginSlotCfg {
+  bool loaded = false;
+  String path = '';
+  String id = '';
+  bool bypass = false;
+  int stage = 3;
 }
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
@@ -122,6 +138,95 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool vaioNoCbLogged = false;
   bool vaioVizOkLogged = false;
   int vaioStatusAt = 0;
+
+  // 插件槽会话镜像：无论当前走本地还是桥，插件命令都先落到这里。
+  final List<_PluginSlotCfg> pluginMirror =
+      List<_PluginSlotCfg>.generate(_kPluginSlots, (_) => _PluginSlotCfg());
+
+  /// 当前真正处理音频的后端插件入口；未进桥返回 null（走本地引擎）。
+  BridgePluginFfi? activePluginBridge() {
+    try {
+      if (vbActive) return vb?.plugin;
+      if (asioActive) return ab?.plugin;
+      if (vaioActive) return vaio?.plugin;
+    } catch (e) {
+      dbgLog('plugin: bridge ABI missing: $e');
+    }
+    return null;
+  }
+
+  /// 桥 start 成功后按镜像回放（桥内引擎是新建的空状态）。
+  void replayPluginMirrorToBridge(BridgePluginFfi pb) {
+    var ok = 0;
+    var failed = 0;
+    for (var i = 0; i < _kPluginSlots; ++i) {
+      final c = pluginMirror[i];
+      if (!c.loaded) continue;
+      final rc = pb.load(i, c.path, id: c.id);
+      if (rc == 1) {
+        pb.setInsertStage(i, c.stage);
+        pb.setBypass(i, c.bypass);
+        c.stage = pb.getInsertStage(i);
+        c.bypass = pb.getBypass(i);
+        ++ok;
+        send({
+          'evt': 'pluginSlotLoaded',
+          'slot': i,
+          'path': c.path,
+          'rc': 1,
+          'status': pb.getStatus(i),
+          'stage': c.stage,
+          'busy': false,
+        });
+        send({
+          'evt': 'pluginSlotBypass',
+          'slot': i,
+          'bypass': c.bypass,
+          'rc': 1,
+          'status': pb.getStatus(i),
+        });
+      } else {
+        c.loaded = false;
+        ++failed;
+        send({
+          'evt': 'pluginSlotLoaded',
+          'slot': i,
+          'path': c.path,
+          'rc': 0,
+          'status': pb.getStatus(i),
+          'stage': 3,
+          'busy': false,
+        });
+      }
+    }
+    dbgLog('plugin: bridge replay ok=$ok failed=$failed');
+  }
+
+  /// 桥 stop 后把镜像同步回本地引擎（否则本地 handle 还挂着旧插件，
+  /// 用户切回 WASAPI 时看到的与刚才在桥里编辑的不是同一套）。
+  Future<void> syncPluginMirrorToLocal(
+      AuraDspLib? l, Pointer<Void>? h) async {
+    if (l == null || h == null) return;
+    for (var i = 0; i < _kPluginSlots; ++i) {
+      final c = pluginMirror[i];
+      final st = AuraDspLib.pluginSlotGetStatusJson(l, h, i);
+      final active = st.contains('"hasActive":true');
+      if (c.loaded) {
+        final rc = await _slotLoadAsync(l, h, i, c.path, c.id, send);
+        if (rc == 1) {
+          AuraDspLib.pluginSlotSetInsertStageWrap(l, h, i, c.stage);
+          AuraDspLib.pluginSlotSetBypassWrap(l, h, i, c.bypass);
+          c.stage = AuraDspLib.pluginSlotGetInsertStageWrap(l, h, i);
+          c.bypass = AuraDspLib.pluginSlotGetBypassWrap(l, h, i);
+        } else {
+          c.loaded = false;
+        }
+      } else if (active) {
+        await _slotUnloadAsync(l, h, i, send);
+      }
+    }
+    dbgLog('plugin: synced mirror back to local');
+  }
 
   // 欠载（avail<=0）或无音源时引擎不再产出 viz 帧，UI 会把最后一帧电平永久冻住。
   // 持续空闲后补发一帧全零，使电平与频谱回落到 0。
@@ -219,6 +324,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (_) {}
     source = null;
     vbActive = true;
+    replayPluginMirrorToBridge(vb!.plugin);
     vbVizNullLogged = false;
     vbNoCbLogged = false;
     vbVizOkLogged = false;
@@ -242,6 +348,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       wasapi?.start();
     } catch (_) {}
+    unawaited(syncPluginMirrorToLocal(lib, handle));
     send({'evt': 'vbstatus', 'running': false});
   }
 
@@ -350,6 +457,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     asioDriverInUse = drv;
     asioBufSize = bufSize;
     asioOutPair = outPair;
+    replayPluginMirrorToBridge(ab!.plugin);
     vbVizNullLogged = false;
     vbNoCbLogged = false;
     vbVizOkLogged = false;
@@ -379,6 +487,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       wasapi?.start();
     } catch (_) {}
+    unawaited(syncPluginMirrorToLocal(lib, handle));
     send({'evt': 'asiostatus', 'running': false});
   }
 
@@ -435,6 +544,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     source = null;
     vaioActive = true;
     vaioOutputEndpointInUse = outputEndpointSubstr;
+    replayPluginMirrorToBridge(vaio!.plugin);
     vaioVizNullLogged = false;
     vaioNoCbLogged = false;
     vaioVizOkLogged = false;
@@ -457,6 +567,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       wasapi?.start();
     } catch (_) {}
+    unawaited(syncPluginMirrorToLocal(lib, handle));
     send({'evt': 'vaiostatus', 'running': false});
   }
 
@@ -1284,10 +1395,63 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotLoad':
           {
-            if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              _slotLoadAsync(lib, handle, slot, m['path'] as String,
-                  (m['id'] as String?) ?? '', send);
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final path = m['path'] as String;
+            final id = (m['id'] as String?) ?? '';
+            final pb = activePluginBridge();
+            if (pb != null) {
+              // 桥引擎才是当前音频路径：同步加载（RT 在原生线程，不受阻）。
+              send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': true});
+              final rc = pb.load(slot, path, id: id);
+              if (rc == 1) {
+                final stage = pb.getInsertStage(slot);
+                final bypass = pb.getBypass(slot);
+                pluginMirror[slot]
+                  ..loaded = true
+                  ..path = path
+                  ..id = id
+                  ..bypass = bypass
+                  ..stage = stage;
+                send({
+                  'evt': 'pluginSlotLoaded',
+                  'slot': slot,
+                  'path': path,
+                  'rc': rc,
+                  'status': pb.getStatus(slot),
+                  'stage': stage,
+                  'busy': false,
+                });
+              } else {
+                pluginMirror[slot] = _PluginSlotCfg();
+                send({
+                  'evt': 'pluginSlotLoaded',
+                  'slot': slot,
+                  'path': path,
+                  'rc': rc,
+                  'status': pb.getStatus(slot),
+                  'stage': 3,
+                  'busy': false,
+                });
+              }
+              send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': false});
+              break;
+            }
+            final l = lib;
+            final h = handle;
+            if (l != null && h != null) {
+              unawaited(_slotLoadAsync(l, h, slot, path, id, send).then((rc) {
+                if (rc == 1) {
+                  pluginMirror[slot]
+                    ..loaded = true
+                    ..path = path
+                    ..id = id
+                    ..bypass = AuraDspLib.pluginSlotGetBypassWrap(l, h, slot)
+                    ..stage =
+                        AuraDspLib.pluginSlotGetInsertStageWrap(l, h, slot);
+                } else {
+                  pluginMirror[slot] = _PluginSlotCfg();
+                }
+              }));
             }
             break;
           }
@@ -1308,18 +1472,51 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotUnload':
           {
-            if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              _slotUnloadAsync(lib, handle, slot, send);
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': true});
+              final rc = pb.unload(slot);
+              if (rc == 1) pluginMirror[slot] = _PluginSlotCfg();
+              send({
+                'evt': 'pluginSlotUnloaded',
+                'slot': slot,
+                'rc': rc,
+                'status': pb.getStatus(slot),
+                'busy': false,
+              });
+              send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': false});
+              break;
+            }
+            final l = lib;
+            final h = handle;
+            if (l != null && h != null) {
+              unawaited(_slotUnloadAsync(l, h, slot, send).then((rc) {
+                if (rc == 1) pluginMirror[slot] = _PluginSlotCfg();
+              }));
             }
             break;
           }
         case 'pluginSlotSetBypass':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final bypassVal = m['bypass'] as bool;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc = pb.setBypass(slot, bypassVal);
+              if (rc == 1) pluginMirror[slot].bypass = bypassVal;
+              send({
+                'evt': 'pluginSlotBypass',
+                'slot': slot,
+                'bypass': bypassVal,
+                'rc': rc,
+                'status': pb.getStatus(slot),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final bypassVal = m['bypass'] as bool;
               final rc = AuraDspLib.pluginSlotSetBypassWrap(lib, handle, slot, bypassVal);
+              if (rc == 1) pluginMirror[slot].bypass = bypassVal;
               final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
               send({
                 'evt': 'pluginSlotBypass',
@@ -1333,8 +1530,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotGetStatus':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotStatus',
+                'slot': slot,
+                'status': pb.getStatus(slot),
+                'stage': pb.getInsertStage(slot),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
               final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
               final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
               send({
@@ -1348,9 +1555,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotShowEditor':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final title = (m['title'] as String?) ?? '';
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotEditorResult',
+                'slot': slot,
+                'action': 'show',
+                'rc': pb.showEditor(slot, title: title),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final title = (m['title'] as String?) ?? '';
               final rc = AuraDspLib.pluginSlotShowEditorWrap(lib, handle, slot, title: title);
               send({
                 'evt': 'pluginSlotEditorResult',
@@ -1363,8 +1580,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotCloseEditor':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotEditorResult',
+                'slot': slot,
+                'action': 'close',
+                'rc': pb.closeEditor(slot),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
               final rc = AuraDspLib.pluginSlotCloseEditorWrap(lib, handle, slot);
               send({
                 'evt': 'pluginSlotEditorResult',
@@ -1377,9 +1604,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotSavePreset':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': pb.savePreset(slot, path),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final path = m['path'] as String;
               final rc = AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
               send({
                 'evt': 'pluginSlotPresetSaved',
@@ -1392,9 +1629,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotLoadPreset':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': pb.loadPreset(slot, path),
+                'status': pb.getStatus(slot),
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final path = m['path'] as String;
               final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
               final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
               send({
@@ -1409,10 +1657,23 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotSetInsertStage':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final stage = (m['stage'] as num).toInt();
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc = pb.setInsertStage(slot, stage);
+              if (rc == 1) pluginMirror[slot].stage = stage;
+              send({
+                'evt': 'pluginSlotInsertStage',
+                'slot': slot,
+                'stage': stage,
+                'rc': rc,
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
-              final stage = (m['stage'] as num).toInt();
               final rc = AuraDspLib.pluginSlotSetInsertStageWrap(lib, handle, slot, stage);
+              if (rc == 1) pluginMirror[slot].stage = stage;
               send({
                 'evt': 'pluginSlotInsertStage',
                 'slot': slot,
@@ -1424,8 +1685,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotGetInsertStage':
           {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              send({
+                'evt': 'pluginSlotInsertStage',
+                'slot': slot,
+                'stage': pb.getInsertStage(slot),
+                'rc': 1,
+              });
+              break;
+            }
             if (lib != null && handle != null) {
-              final slot = (m['slot'] as num?)?.toInt() ?? 0;
               final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
               send({
                 'evt': 'pluginSlotInsertStage',

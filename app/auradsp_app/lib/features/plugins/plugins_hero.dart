@@ -185,6 +185,7 @@ class _ActivePluginHero extends StatelessWidget {
     final isVst3 = active.format == PluginFormat.vst3;
 
     final latencySamples = manager.getSlotLatency(slot);
+    final status = manager.getSlotStatus(slot);
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
     final latencyMs =
         (latencySamples / model.deviceRate * 1000.0).toStringAsFixed(1);
@@ -442,6 +443,21 @@ class _ActivePluginHero extends StatelessWidget {
                 Text(
                   l10nOf(context).plugRtNote,
                   style: captionOf(p, color: p.textDim),
+                ),
+              ],
+            ),
+            const SizedBox(height: AuraSpace.xs),
+            Row(
+              children: [
+                Icon(Icons.monitor_heart_rounded,
+                    size: 14, color: p.textDim),
+                const SizedBox(width: AuraSpace.xs),
+                Text(
+                  'proc ${status.processCalls}  '
+                  'in ${status.inRms.toStringAsFixed(4)}  '
+                  'out ${status.outRms.toStringAsFixed(4)}  '
+                  'Δ ${status.maxDiff.toStringAsFixed(4)}',
+                  style: monoOf(p, size: 10, color: p.textDim),
                 ),
               ],
             ),

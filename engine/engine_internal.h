@@ -573,6 +573,8 @@ struct auradsp_handle_s {
     std::unique_ptr<auradsp::PluginHostManager> plugin_host;
     float* plugin_buf_l = nullptr;
     float* plugin_buf_r = nullptr;
+    float* plugin_out_l = nullptr;
+    float* plugin_out_r = nullptr;
 
     /* [ADR-003 Phase A] 多声道矩阵工作区 */
     std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */
