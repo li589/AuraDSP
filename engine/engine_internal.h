@@ -3,7 +3,7 @@
 #pragma once
 
 #include "auradsp_engine.h"
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 #include "dsp/dsp_oversample.h"
 #include "dsp/dsp_lookahead_limiter.h"
 #include <atomic>

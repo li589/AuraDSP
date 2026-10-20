@@ -1,4 +1,4 @@
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 
 #include <windows.h>
 #include <winver.h>
@@ -24,7 +24,7 @@
 #include <clap/clap.h>
 
 // Steinberg VST3 headers
-// VST3 接口声明（定义见 host_instances.cpp 的静态锚点）
+// VST3 接口声明（定义见 formats/plugin_instances.cpp 的静态锚点）
 #include <steinberg/vst3/base/FUnknown.h>
 #include <steinberg/vst3/base/IPluginFactory.h>
 #include <steinberg/vst3/base/IPluginFactory2.h>

@@ -1,5 +1,5 @@
 /*
- * auradsp_plugin_host.h — AuraDSP M1 Plugin Host Engine (VST3 / CLAP 64-bit)
+ * plugin_host.h — AuraDSP M1 Plugin Host Engine (VST3 / CLAP 64-bit)
  *
  * Implements in-process plugin hosting for:
  *   - CLAP (Clever Audio Plugin) via pure C ABI (clap/clap.h)
@@ -250,7 +250,7 @@ public:
     void recordTelemetry(size_t slot, float inRms, float outRms, float maxDiff, uint32_t frames);
 
     // Legacy single-slot helper. Only loadPlugin() is still referenced
-    // (test/smoke/test_plugin_direct.cpp); the other six forwards were removed
+    // (engine/plugins/tests/plugin_host_direct.cpp); the other six forwards were removed
     // as dead code -- the C ABI keeps its own single-slot compatibility symbols
     // (auradsp_plugin_load etc.), which forward to the *Slot functions
     // directly and never went through these members.

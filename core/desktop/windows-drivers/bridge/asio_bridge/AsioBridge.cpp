@@ -13,7 +13,7 @@
 //   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
-#include "../PluginBridge.h"
+#include "PluginBridge.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 

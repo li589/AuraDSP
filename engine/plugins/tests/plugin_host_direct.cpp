@@ -2,7 +2,7 @@
 #include <chrono>
 #include <cstdlib>
 #include <iostream>
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 
 // 实时落盘。默认 std::cout 重定向到文件时是全缓冲，进程若被超时杀掉，
 // 缓冲区内容全部丢失——日志会停在最后一个 flush 点，把真正的卡点掩盖成

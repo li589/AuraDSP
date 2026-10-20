@@ -25,7 +25,7 @@
 #include <string>
 #include <vector>
 
-#include "../PluginBridge.h"
+#include "PluginBridge.h"
 #include "../../common/AuraVaioIpc.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 

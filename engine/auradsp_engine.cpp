@@ -18,7 +18,7 @@
  */
 #include "auradsp_engine.h"
 #include "engine_internal.h"
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 
 #include <atomic>
 #include <cmath>
