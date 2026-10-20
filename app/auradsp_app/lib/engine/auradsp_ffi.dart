@@ -544,6 +544,21 @@ final class AuraDspLib {
           'auradsp_plugin_get_latency')
       .asFunction();
 
+  late final int Function(Pointer<Void>, int) pluginSetPdc = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_set_pdc')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetPdc = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_pdc')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetTotalLatency = dylib
+      .lookup<NativeFunction<Uint32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_total_latency')
+      .asFunction();
+
   late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginGetStatus =
       dylib
           .lookup<
@@ -1006,7 +1021,15 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     return lib.pluginSetBypass(handle, bypass ? 1 : 0);
   }
 
-  /// 插件宿主：获取宿主状态 JSON
+  static int pluginSetPdcWrap(AuraDspLib lib, Pointer<Void> handle, bool enable) {
+    return lib.pluginSetPdc(handle, enable ? 1 : 0);
+  }
+
+  static bool pluginGetPdcWrap(AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginGetPdc(handle) != 0;
+  }
+
+  /// �����������ȡ����״̬ JSON
   static String pluginGetStatusJson(AuraDspLib lib, Pointer<Void> handle,
       {int maxBytes = 8192}) {
     final buf = malloc<Uint8>(maxBytes);

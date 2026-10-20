@@ -81,6 +81,10 @@ bool PluginChainComponent::prepare(double sampleRate, uint32_t maxBlockSize) {
     m_workBL = std::move(workBL);
     m_workBR = std::move(workBR);
     m_maxBlock = maxBlockSize;
+
+    for (size_t s = 0; s < m_delayLines.size(); ++s) {
+        m_delayLines[s].prepare(DelayLine::kMaxDelay);
+    }
     return true;
 }
 
@@ -88,6 +92,7 @@ void PluginChainComponent::reset() {
     if (!m_host) return;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         m_host->unloadPluginSlot(slot);
+        m_delayLines[slot].reset();
     }
 }
 
@@ -99,7 +104,8 @@ void PluginChainComponent::process(int stage, float* const* in,
         return;
     }
 
-    if (!stageHasActive(stage)) {
+    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
+    if (!stageHasActiveOrPdc(stage)) {
         copyPlanar(out, in, frames);
         return;
     }
@@ -112,39 +118,53 @@ void PluginChainComponent::process(int stage, float* const* in,
 
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (!m_host->hasActivePluginSlot(slot) ||
-            m_host->isBypassedSlot(slot) ||
             m_host->getInsertStageSlot(slot) != stage) {
             continue;
         }
 
-        float* src[2] = {srcL, srcR};
-        float* dst[2] = {dstL, dstR};
-        copyPlanar(dst, src, frames);
+        const bool bypassed = m_host->isBypassedSlot(slot);
 
-        const double inSum = planarRmsSum(srcL, srcR, frames);
-        m_host->processSlot(slot, src, dst, frames);
+        if (pdc && bypassed) {
+            m_delayLines[slot].setDelay(m_host->getLatencySlot(slot));
+            float* src[2] = {srcL, srcR};
+            float* dst[2] = {dstL, dstR};
+            m_delayLines[slot].process(src, dst, frames);
+        } else {
+            if (pdc) {
+                float* src[2] = {srcL, srcR};
+                m_delayLines[slot].pushOnly(src, frames);
+            }
+            if (bypassed) continue;
 
-        double outSum = 0.0;
-        float maxDiff = 0.0f;
-        for (uint32_t i = 0; i < frames; ++i) {
-            const float outL = dstL[i];
-            const float outR = dstR[i];
-            const double ol = outL;
-            const double orr = outR;
-            outSum += ol * ol + orr * orr;
-            const float dl = std::fabs(outL - srcL[i]);
-            const float dr = std::fabs(outR - srcR[i]);
-            if (dl > maxDiff) maxDiff = dl;
-            if (dr > maxDiff) maxDiff = dr;
+            float* src[2] = {srcL, srcR};
+            float* dst[2] = {dstL, dstR};
+            copyPlanar(dst, src, frames);
+
+            const double inSum = planarRmsSum(srcL, srcR, frames);
+            m_host->processSlot(slot, src, dst, frames);
+
+            double outSum = 0.0;
+            float maxDiff = 0.0f;
+            for (uint32_t i = 0; i < frames; ++i) {
+                const float outL = dstL[i];
+                const float outR = dstR[i];
+                const double ol = outL;
+                const double orr = outR;
+                outSum += ol * ol + orr * orr;
+                const float dl = std::fabs(outL - srcL[i]);
+                const float dr = std::fabs(outR - srcR[i]);
+                if (dl > maxDiff) maxDiff = dl;
+                if (dr > maxDiff) maxDiff = dr;
+            }
+
+            const double denom = frames > 0 ? static_cast<double>(frames) * 2.0 : 1.0;
+            m_host->recordTelemetry(
+                slot,
+                static_cast<float>(std::sqrt(inSum / denom)),
+                static_cast<float>(std::sqrt(outSum / denom)),
+                maxDiff,
+                frames);
         }
-
-        const double denom = frames > 0 ? static_cast<double>(frames) * 2.0 : 1.0;
-        m_host->recordTelemetry(
-            slot,
-            static_cast<float>(std::sqrt(inSum / denom)),
-            static_cast<float>(std::sqrt(outSum / denom)),
-            maxDiff,
-            frames);
 
         srcL = dstL;
         srcR = dstR;
@@ -165,7 +185,7 @@ void PluginChainComponent::process(int stage, float* const* in,
 void PluginChainComponent::processInterleaved(int stage, float* interleaved,
                                                uint32_t frames) noexcept {
     if (!m_host || !interleaved || frames == 0 || frames > m_maxBlock) return;
-    if (!stageHasActive(stage)) return;
+    if (!stageHasActiveOrPdc(stage)) return;
 
     for (uint32_t i = 0; i < frames; ++i) {
         m_chanInL[i] = interleaved[i * 2];
@@ -208,11 +228,12 @@ uint32_t PluginChainComponent::latency(int slot) const noexcept {
 
 uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
     if (!m_host) return 0;
+    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (m_host->hasActivePluginSlot(slot) &&
-            !m_host->isBypassedSlot(slot) &&
-            m_host->getInsertStageSlot(slot) == stage) {
+            m_host->getInsertStageSlot(slot) == stage &&
+            (pdc || !m_host->isBypassedSlot(slot))) {
             total += m_host->getLatencySlot(slot);
         }
     }
@@ -221,10 +242,11 @@ uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
 
 uint32_t PluginChainComponent::totalLatency() const noexcept {
     if (!m_host) return 0;
+    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (m_host->hasActivePluginSlot(slot) &&
-            !m_host->isBypassedSlot(slot)) {
+            (pdc || !m_host->isBypassedSlot(slot))) {
             total += m_host->getLatencySlot(slot);
         }
     }
@@ -245,6 +267,19 @@ bool PluginChainComponent::stageHasActive(int stage) const noexcept {
         if (m_host->hasActivePluginSlot(slot) &&
             !m_host->isBypassedSlot(slot) &&
             m_host->getInsertStageSlot(slot) == stage) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool PluginChainComponent::stageHasActiveOrPdc(int stage) const noexcept {
+    if (!m_host) return false;
+    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
+    for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
+        if (m_host->hasActivePluginSlot(slot) &&
+            m_host->getInsertStageSlot(slot) == stage &&
+            (pdc || !m_host->isBypassedSlot(slot))) {
             return true;
         }
     }

@@ -1382,6 +1382,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
+        case 'pluginSetPdc':
+          {
+            if (lib != null && handle != null) {
+              final pdcVal = m['pdc'] as bool;
+              final rc = AuraDspLib.pluginSetPdcWrap(lib, handle, pdcVal);
+              send({
+                'evt': 'pluginPdc',
+                'pdc': pdcVal,
+                'rc': rc,
+              });
+            }
+            break;
+          }
         case 'pluginGetStatus':
           {
             if (lib != null && handle != null) {

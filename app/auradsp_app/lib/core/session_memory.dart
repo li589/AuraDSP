@@ -76,6 +76,7 @@ abstract final class SessionMemory {
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
         'pluginId': m.pluginManager.getSlotPlugin(0)?.id,
         'pluginBypass': m.pluginManager.isSlotBypassed(0),
+        'pluginPdc': m.pluginManager.pdcEnabled,
         'slots': slotSnapshots,
         'parameters': snapshot.params,
       };
@@ -209,6 +210,9 @@ abstract final class SessionMemory {
           bypass: m.savedPluginBypass,
           stage: PluginInsertStage.defaultStage,
         ));
+      }
+      if (session['pluginPdc'] is bool) {
+        m.savedPluginPdc = session['pluginPdc'] as bool;
       }
 
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};
