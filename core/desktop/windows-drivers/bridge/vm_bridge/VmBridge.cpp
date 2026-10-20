@@ -7,6 +7,7 @@
 // Login/Logout 与泵同式严格单次配对；OUT 槽被占（rc=1）直接返回 1 让 UI 提示。
 #include "VmBridge.h"
 
+#include "../PluginBridge.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 #include "../../02_voicemeeter_client/VmRemoteLoader.h"
 
@@ -64,6 +65,15 @@ struct BridgeCtl {
 };
 
 BridgeCtl g_b;
+
+// 插件槽转发（A1 主总线 = eng[0]；VM 每总线独立 handle，编辑器只能驱动一个
+// 实例，故本轮插件只作用 A1，其余总线保持直通/原生 DSP）。
+auraplugin::Fns g_pluginFns;
+auraplugin::Mirror g_pluginMirror;
+
+void* PluginEngine() {
+    return g_b.ctx.nEng > 0 ? g_b.ctx.eng[0] : nullptr;
+}
 
 // 参数镜像：CHANGE 重建会换掉全部引擎句柄，新句柄是出厂态。桥必须自己留一份
 // 最近一次生效的参数并在重建后逐条回放——否则用户在 App 侧只在 vb_start 时
@@ -241,6 +251,7 @@ void RebuildEngines(int groups, float sr) {
             (FnEngProcess)GetProcAddress(g_b.eng, "auradsp_process");
         g_b.ctx.destroy =
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
+        g_pluginFns.Resolve(g_b.eng);
     }
     if (g_b.create && g_b.ctx.process && g_b.ctx.destroy && g_b.ctx.scratchIn &&
         g_b.ctx.scratchOut) {
@@ -264,6 +275,12 @@ void RebuildEngines(int groups, float sr) {
         g_b.ctx.sigSame[g] = 0;
     }
     g_b.ctx.gotFirst = 0;
+    // 新句柄是出厂态：把桥内插件镜像回放到 A1（eng[0]）。插件 load 是控制
+    // 线程同步操作，此刻回调已停，不会碰 RT 线程。
+    if (g_pluginFns.Ready()) {
+        int ok = 0, failed = 0;
+        g_pluginMirror.Replay(PluginEngine(), g_pluginFns, &ok, &failed);
+    }
 }
 
 // "id=f1.5;gain=i3" 解析并下发全部 handle（主线程/Dart 线程，无 RT 约束）。
@@ -454,6 +471,9 @@ int vb_start(const char* engine_dll, const char* params_json) {
     g_b.paramsFailed = 0;
     g_mirrorN = 0;  // 新会话：镜像由 App 侧 vb_start 后的重放重新填满
     StrMirrorReset();
+    // 插件镜像同理：新会话从空开始，避免上一次桥会话的旧插件在
+    // "用户已切走又切回"时抢跑。App 侧 start 成功后会按当前会话重放。
+    g_pluginMirror.Reset();
     g_b.note[0] = '\0';
     g_b.edition = 0;
     g_b.startRc = -99;
@@ -544,6 +564,7 @@ int vb_start(const char* engine_dll, const char* params_json) {
             (FnEngVizRead)GetProcAddress(g_b.eng, "auradsp_viz_read");
         g_b.getParam =
             (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
+        g_pluginFns.Resolve(g_b.eng);
         if (create && g_b.ctx.process && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
@@ -789,4 +810,96 @@ int vb_set_bus_mask(int mask) {
     g_b.busMask = mask;  // session 级保管（ctx 会被 memset，CHANGE 重建不丢）
     InterlockedExchange(&g_b.ctx.busMask, (LONG)mask);
     return mask;
+}
+
+// ---- 插件槽（仅 A1 = eng[0]）----
+// 桥模式下 Dart 把 pluginSlot* 路由到这里；引擎仍是桥自己加载的那一份，
+// 因此插件与音频在同一条 DSP 链上。桥未运行/引擎缺失时一律返回 0。
+int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotLoad(PluginEngine(), g_pluginFns, g_pluginMirror,
+                                slot, path, plugin_id);
+}
+
+int vb_plugin_slot_unload(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotUnload(PluginEngine(), g_pluginFns, g_pluginMirror,
+                                  slot);
+}
+
+int vb_plugin_slot_set_bypass(int slot, int bypass) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotSetBypass(PluginEngine(), g_pluginFns,
+                                     g_pluginMirror, slot, bypass);
+}
+
+int vb_plugin_slot_get_bypass(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getBypass(e, slot);
+}
+
+unsigned vb_plugin_slot_get_latency(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getLatency(e, slot);
+}
+
+int vb_plugin_slot_get_status(int slot, char* out, int cap) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) {
+        if (out && cap > 0) out[0] = 0;
+        return 0;
+    }
+    return auraplugin::SlotGetStatus(PluginEngine(), g_pluginFns, slot, out,
+                                     cap);
+}
+
+int vb_plugin_slot_show_editor(int slot, const char* title) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.showEditor(e, slot, title);
+}
+
+int vb_plugin_slot_close_editor(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.closeEditor(e, slot);
+}
+
+int vb_plugin_slot_is_editor_open(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.isEditorOpen(e, slot);
+}
+
+int vb_plugin_slot_save_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.savePreset(e, slot, path);
+}
+
+int vb_plugin_slot_load_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.loadPreset(e, slot, path);
+}
+
+int vb_plugin_slot_set_insert_stage(int slot, int stage) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotSetStage(PluginEngine(), g_pluginFns,
+                                    g_pluginMirror, slot, stage);
+}
+
+int vb_plugin_slot_get_insert_stage(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 3;
+    void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 3;
+    return g_pluginFns.getStage(e, slot);
 }

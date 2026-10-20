@@ -13,6 +13,7 @@
 //   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
+#include "../PluginBridge.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
@@ -85,6 +86,10 @@ struct BridgeCtl {
 };
 
 BridgeCtl g_b;
+
+// 插件槽转发：单引擎（g_b.engine），Dart 在 start 成功后按会话镜像重放。
+auraplugin::Fns g_pluginFns;
+auraplugin::Mirror g_pluginMirror;
 
 // ---- RT sink（驱动 bufferSwitch 线程调用；零锁零分配零 syscall）----
 void BridgeSink(void* ctx, float* in, float* out, int frames) {
@@ -183,6 +188,7 @@ void ResetSession() {
     g_b.inCh = g_b.outCh = g_b.inLat = g_b.outLat = 0;
     g_b.sr = 0.0;
     g_b.nbs = 0;
+    g_pluginMirror.Reset();  // 新会话：等 App 侧 start 后按当前会话重放
 }
 
 }  // namespace
@@ -262,6 +268,7 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
         g_b.getParam = (FnEngGetParam)GetProcAddress(g_b.engMod, "auradsp_get_param");
         g_b.vizRead = (FnEngVizRead)GetProcAddress(g_b.engMod, "auradsp_viz_read");
+        g_pluginFns.Resolve(g_b.engMod);
     }
     if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy) {
         snprintf(g_b.note, sizeof(g_b.note), "engine-load-failed");
@@ -530,4 +537,85 @@ int asio_test_stop() {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     FreeTestFile();
     return 0;
+}
+
+// ---- 插件槽（单引擎）----
+int asio_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotLoad(g_b.engine, g_pluginFns, g_pluginMirror,
+                                slot, path, plugin_id);
+}
+
+int asio_plugin_slot_unload(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotUnload(g_b.engine, g_pluginFns, g_pluginMirror,
+                                  slot);
+}
+
+int asio_plugin_slot_set_bypass(int slot, int bypass) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotSetBypass(g_b.engine, g_pluginFns,
+                                     g_pluginMirror, slot, bypass);
+}
+
+int asio_plugin_slot_get_bypass(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getBypass(g_b.engine, slot);
+}
+
+unsigned asio_plugin_slot_get_latency(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.getLatency(g_b.engine, slot);
+}
+
+int asio_plugin_slot_get_status(int slot, char* out, int cap) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) {
+        if (out && cap > 0) out[0] = 0;
+        return 0;
+    }
+    return auraplugin::SlotGetStatus(g_b.engine, g_pluginFns, slot, out, cap);
+}
+
+int asio_plugin_slot_show_editor(int slot, const char* title) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.showEditor(g_b.engine, slot, title);
+}
+
+int asio_plugin_slot_close_editor(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.closeEditor(g_b.engine, slot);
+}
+
+int asio_plugin_slot_is_editor_open(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.isEditorOpen(g_b.engine, slot);
+}
+
+int asio_plugin_slot_save_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.savePreset(g_b.engine, slot, path);
+}
+
+int asio_plugin_slot_load_preset(int slot, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.loadPreset(g_b.engine, slot, path);
+}
+
+int asio_plugin_slot_set_insert_stage(int slot, int stage) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotSetStage(g_b.engine, g_pluginFns,
+                                    g_pluginMirror, slot, stage);
+}
+
+int asio_plugin_slot_get_insert_stage(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 3;
+    if (!g_b.engine || !g_pluginFns.Ready()) return 3;
+    return g_pluginFns.getStage(g_b.engine, slot);
 }

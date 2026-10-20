@@ -135,12 +135,22 @@ class PluginHostStatus {
   final bool hasActive;
   final bool bypassed;
   final int latency;
+  final int processCalls;
+  final double inRms;
+  final double outRms;
+  final double maxDiff;
+  final int lastFrames;
   final PluginMetadata? plugin;
 
   const PluginHostStatus({
     this.hasActive = false,
     this.bypassed = false,
     this.latency = 0,
+    this.processCalls = 0,
+    this.inRms = 0,
+    this.outRms = 0,
+    this.maxDiff = 0,
+    this.lastFrames = 0,
     this.plugin,
   });
 
@@ -155,6 +165,11 @@ class PluginHostStatus {
       hasActive: json['hasActive'] as bool? ?? false,
       bypassed: json['bypassed'] as bool? ?? false,
       latency: (json['latency'] as num?)?.toInt() ?? 0,
+      processCalls: (json['processCalls'] as num?)?.toInt() ?? 0,
+      inRms: (json['inRms'] as num?)?.toDouble() ?? 0,
+      outRms: (json['outRms'] as num?)?.toDouble() ?? 0,
+      maxDiff: (json['maxDiff'] as num?)?.toDouble() ?? 0,
+      lastFrames: (json['lastFrames'] as num?)?.toInt() ?? 0,
       plugin: meta,
     );
   }
@@ -163,6 +178,11 @@ class PluginHostStatus {
         'hasActive': hasActive,
         'bypassed': bypassed,
         'latency': latency,
+        'processCalls': processCalls,
+        'inRms': inRms,
+        'outRms': outRms,
+        'maxDiff': maxDiff,
+        'lastFrames': lastFrames,
         'plugin': plugin?.toJson(),
       };
 }
@@ -242,6 +262,7 @@ class PluginManager extends ChangeNotifier {
   String _searchQuery = '';
   final Map<int, bool> _slotBusy = {};
   String? _lastError;
+  String? _lastNotice;
   int _lastScanCount = 0;
   /// 最近一次扫描是否为深扫（决定缓存里元数据的可信度，随信封落盘）。
   bool _lastScanDeep = false;
@@ -253,8 +274,8 @@ class PluginManager extends ChangeNotifier {
 
   // --- 插件级预设数据（assets/presets/plugin_tables.json + config 增量） ---
   Map<String, String> _vendorTable = {};
-  final List<String> _closeQuarantine = []; // 引擎跳过 removed()（防关闭崩溃）
-  final List<String> _openQuarantine = []; // 应用阻止打开编辑器（防打开崩溃）
+  final List<String> _closeQuarantine = []; // 引擎跳过 removed()/release()（防关闭崩溃）
+  final List<String> _openQuarantine = []; // 历史崩溃标记（仅提示，不阻止加载/打开）
   bool _tablesLoaded = false;
   Timer? _journalTimer;
 
@@ -292,7 +313,14 @@ class PluginManager extends ChangeNotifier {
   String get filterFormat => _filterFormat;
   String get searchQuery => _searchQuery;
   String? get lastError => _lastError;
+  String? get lastNotice => _lastNotice;
   int get lastScanCount => _lastScanCount;
+
+  void clearNotice() {
+    if (_lastNotice == null) return;
+    _lastNotice = null;
+    notifyListeners();
+  }
 
   // 插槽状态读取
   PluginHostStatus getSlotStatus(int slot) {
@@ -481,15 +509,16 @@ class PluginManager extends ChangeNotifier {
   ///
   /// 打开崩溃隔离：editorQuarantine.open 名单内插件阻止打开（曾打开即崩溃
   /// 自动登记于此），给出可操作提示而不是再次崩掉整个 APP。
+  /// 历史崩溃仅提示：加载与编辑器打开都不再被阻止。插件关闭时由引擎
+  /// 依据 [closeQuarantine] 跳过 `removed()`/`release()`，换用隔离 teardown。
   void showEditor({int? slot, String? title}) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
-    if (meta != null && _isEditorOpenBlocked(meta)) {
-      _lastError = '${meta.name}：此插件编辑器曾导致 AuraDSP 崩溃，已自动加入'
-          '隔离名单。如确需使用，请编辑 ${_quarantineConfigFile().path} '
-          '将该项从 open 移除后重启。';
+    if (meta != null && isEditorCrashKnown(meta)) {
+      _lastNotice = '${meta.name}：该插件曾导致 AuraDSP 崩溃。已记录到隔离名单，'
+          '关闭插件时将跳过其自身的 teardown（removed/release）以避免二次崩溃；'
+          '插件仍会正常加载和运行，但可能残留少量资源。';
       notifyListeners();
-      return;
     }
     final winTitle = title ??
         (meta != null
@@ -572,8 +601,8 @@ class PluginManager extends ChangeNotifier {
     _openQuarantine
       ..clear()
       ..addAll(cfg['open'] ?? const <String>[]);
-    _sendQuarantineToEngine();
     _autoRegisterFromCrashJournal();
+    _sendQuarantineToEngine();
     // 周期清扫崩溃日志：稳定编辑器的陈旧条目及时移除，避免误登记。
     _journalTimer?.cancel();
     _journalTimer = Timer.periodic(
@@ -587,8 +616,8 @@ class PluginManager extends ChangeNotifier {
   /// 当前生效的编辑器打开隔离名单（应用阻止打开），小写子串。
   List<String> get openQuarantine => List.unmodifiable(_openQuarantine);
 
-  /// 插件是否在打开隔离名单内（阻止编辑器打开）。
-  bool isEditorOpenBlocked(PluginMetadata meta) {
+  /// 插件是否曾导致编辑器打开崩溃（仅用于提示，不阻止操作）。
+  bool isEditorCrashKnown(PluginMetadata meta) {
     final ln = meta.name.toLowerCase();
     final lp = meta.path.toLowerCase();
     for (final p in _openQuarantine) {
@@ -598,7 +627,8 @@ class PluginManager extends ChangeNotifier {
     return false;
   }
 
-  bool _isEditorOpenBlocked(PluginMetadata meta) => isEditorOpenBlocked(meta);
+  /// 兼容旧调用点：历史崩溃不再阻止打开。
+  bool isEditorOpenBlocked(PluginMetadata meta) => false;
 
   void _sendQuarantineToEngine() {
     _commandSender?.call({
@@ -716,9 +746,16 @@ class PluginManager extends ChangeNotifier {
         _openQuarantine.add(lp);
         changed = true;
       }
+      // 崩溃历史同时进入 close 名单：下次关闭该插件时跳过其自身 teardown。
+      if (!_closeQuarantine.any((e) => e.toLowerCase() == lp)) {
+        _closeQuarantine.add(lp);
+        changed = true;
+      }
     }
     if (changed) {
       _saveQuarantineLists(close: _closeQuarantine, open: _openQuarantine);
+      _lastNotice = '检测到 ${crashed.length} 个插件上次在打开编辑器后崩溃，'
+          '已记录到隔离名单；它们仍可加载，关闭时将使用安全 teardown。';
       notifyListeners();
     }
   }
@@ -894,10 +931,11 @@ class PluginManager extends ChangeNotifier {
   }
 
   /// 处理引擎对插入阶段的回执。
-  /// rc != 0 表示引擎拒绝，���滚到下发前的值（UI 不得显示为成功）。
+  /// 引擎契约：rc=1 成功，rc=0 拒绝；拒绝时回滚到下发前的值，
+  /// 避免「引擎拒绝但 UI 显示成功」。
   void onPluginSlotInsertStage(int slot, int stage, int rc) {
     if (slot < 0 || slot >= kMaxSlots) return;
-    if (rc != 0) {
+    if (rc != 1) {
       _slotStages[slot] = _pendingStages.remove(slot) ?? _slotStages[slot];
     } else {
       _pendingStages.remove(slot);

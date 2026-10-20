@@ -10,6 +10,7 @@ import 'dart:io' show Platform;
 import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart' show VizFrame;
+import 'bridge_plugin_ffi.dart';
 
 typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
 typedef _DetectDart = int Function(Pointer<Utf8>, int);
@@ -40,6 +41,7 @@ typedef _GetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 
 class AuraVmBridge {
   final DynamicLibrary dylib;
+  late final BridgePluginFfi plugin = BridgePluginFfi(dylib, 'vb');
   late final _StatusDart _detect =
       dylib.lookupFunction<_DetectC, _DetectDart>('vb_detect');
   late final _StartDart _start =

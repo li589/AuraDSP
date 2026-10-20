@@ -10,6 +10,7 @@
 #include <sstream>
 #include <iomanip>
 #include <algorithm>
+#include <cstdio>
 #include <cstring>
 #include <thread>
 #include <future>
@@ -27,6 +28,17 @@
 namespace fs = std::filesystem;
 
 namespace auradsp {
+static inline uint32_t packFloat(float v) {
+    uint32_t u = 0;
+    std::memcpy(&u, &v, sizeof(u));
+    return u;
+}
+
+static inline float unpackFloat(uint32_t u) {
+    float v = 0.0f;
+    std::memcpy(&v, &u, sizeof(v));
+    return v;
+}
 /* SEH 崩溃隔离。
  * MSVC 限制：__try 不能出现在需要 C++ 对象展开（ unwind）的函数中（C2712），
  * 而 processSlot 内有 InFlightGuard 析构，故把 SEH 段隔离到这个无对象函数。
@@ -75,6 +87,11 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     s.inFlight.store(0, std::memory_order_relaxed);
 
         s.latency.store(0, std::memory_order_relaxed);
+        s.processCalls.store(0, std::memory_order_relaxed);
+        s.inRmsBits.store(0, std::memory_order_relaxed);
+        s.outRmsBits.store(0, std::memory_order_relaxed);
+        s.maxDiffBits.store(0, std::memory_order_relaxed);
+        s.lastFrames.store(0, std::memory_order_relaxed);
         if (s.instance) {
             AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor");
             s.instance->closeEditor();
@@ -117,7 +134,9 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         PluginFormat format = PluginFormat::Unknown;
         if (ext == ".clap") format = PluginFormat::CLAP;
         else if (ext == ".vst3") format = PluginFormat::VST3;
-        else return false;
+        else {
+            return false;
+        }
 
         std::string resolvedBin = PluginScanner::resolveBundleBinary(path, format);
         if (resolvedBin.empty()) {
@@ -173,6 +192,9 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         m_slots[slot].bypassed.store(false, std::memory_order_release);
 
         return true;
+    } catch (const std::exception& e) {
+        unloadPluginSlotLocked(slot);
+        return false;
     } catch (...) {
         unloadPluginSlotLocked(slot);
         return false;
@@ -212,6 +234,11 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"bypassed\":" << (m_slots[slot].bypassed.load() ? "true" : "false") << ","
        << "\"latency\":" << m_slots[slot].latency.load() << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
+       << "\"processCalls\":" << m_slots[slot].processCalls.load(std::memory_order_relaxed) << ","
+       << "\"inRms\":" << unpackFloat(m_slots[slot].inRmsBits.load(std::memory_order_relaxed)) << ","
+       << "\"outRms\":" << unpackFloat(m_slots[slot].outRmsBits.load(std::memory_order_relaxed)) << ","
+       << "\"maxDiff\":" << unpackFloat(m_slots[slot].maxDiffBits.load(std::memory_order_relaxed)) << ","
+       << "\"lastFrames\":" << m_slots[slot].lastFrames.load(std::memory_order_relaxed) << ","
        << "\"isEditorOpen\":" << ((m_slots[slot].instance && m_slots[slot].instance->isEditorOpen()) ? "true" : "false") << ",";
     if (m_slots[slot].instance) {
         const auto& meta = m_slots[slot].instance->getMetadata();
@@ -276,9 +303,20 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     }
 
     /* SEH/异常段已隔离到 processSlotGuarded（MSVC C2712：无析构函数才能用 __try） */
+    s.processCalls.fetch_add(1, std::memory_order_relaxed);
     if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
         s.bypassed.store(true, std::memory_order_release);
     }
+}
+
+void PluginHostManager::recordTelemetry(size_t slot, float inRms, float outRms,
+                                        float maxDiff, uint32_t frames) {
+    if (slot >= kMaxPluginSlots) return;
+    PluginSlot& s = m_slots[slot];
+    s.inRmsBits.store(packFloat(inRms), std::memory_order_relaxed);
+    s.outRmsBits.store(packFloat(outRms), std::memory_order_relaxed);
+    s.maxDiffBits.store(packFloat(maxDiff), std::memory_order_relaxed);
+    s.lastFrames.store(frames, std::memory_order_relaxed);
 }
 
 // Legacy single-slot forward (slot 0).
@@ -370,6 +408,11 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
     s.hasActive.store(true, std::memory_order_release);
     s.bypassed.store(false, std::memory_order_release);
+    s.processCalls.store(0, std::memory_order_relaxed);
+    s.inRmsBits.store(0, std::memory_order_relaxed);
+    s.outRmsBits.store(0, std::memory_order_relaxed);
+    s.maxDiffBits.store(0, std::memory_order_relaxed);
+    s.lastFrames.store(0, std::memory_order_relaxed);
 
     if (old) {
         // 正常流程由 runControlTask 预先调用 detachInstanceLocked 摘除并在锁外销毁；

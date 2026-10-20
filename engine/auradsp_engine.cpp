@@ -23,6 +23,7 @@
 #include <atomic>
 #include <cmath>
 #include <cstring>
+#include <cstdio>
 #include <mutex>
 #include <new>
 
@@ -144,11 +145,15 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     }
     h->plugin_buf_l = new (std::nothrow) float[(size_t)max_block_frames]();
     h->plugin_buf_r = new (std::nothrow) float[(size_t)max_block_frames]();
-    if (!h->plugin_buf_l || !h->plugin_buf_r) {
+    h->plugin_out_l = new (std::nothrow) float[(size_t)max_block_frames]();
+    h->plugin_out_r = new (std::nothrow) float[(size_t)max_block_frames]();
+    if (!h->plugin_buf_l || !h->plugin_buf_r ||
+        !h->plugin_out_l || !h->plugin_out_r) {
         delete[] h->fft_scratch; delete[] h->hann; delete[] h->viz_hist; delete[] h->eq_in_hist;
         delete[] h->shelf_scratch; delete[] h->conv_scratch;
     delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete[] h->plugin_out_l; delete[] h->plugin_out_r;
         delete h; return nullptr;
     }
     /* Haas 延迟环：25ms 上限 + 一块余量，清零（开轮即录制，无陈旧音频 burst） */
@@ -159,6 +164,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
         delete[] h->shelf_scratch; delete[] h->conv_scratch;
     delete[] h->mx_scratch; delete[] h->mx_stereo;
         delete[] h->plugin_buf_l; delete[] h->plugin_buf_r;
+        delete[] h->plugin_out_l; delete[] h->plugin_out_r;
         delete h; return nullptr;
     }
     h->plugin_host = std::make_unique<auradsp::PluginHostManager>();
@@ -258,6 +264,8 @@ void auradsp_destroy(auradsp_handle h) {
     delete[] h->haas_ring;
     delete[] h->plugin_buf_l;
     delete[] h->plugin_buf_r;
+    delete[] h->plugin_out_l;
+    delete[] h->plugin_out_r;
     free(h->lp_code);
     free(h->eq_curve);
     free(h->arbmag_string);

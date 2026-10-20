@@ -73,6 +73,23 @@ VAB_API int vaio_test_start(int kind, const float* pcm, int frames, int ch, int 
 // 停止测试信号。
 VAB_API int vaio_test_stop();
 
+// ---- 插件槽（单引擎）----
+// 与 auradsp_plugin_slot_* 同语义（1=成功/0=失败）；桥未运行或无引擎时 0。
+VAB_API int vaio_plugin_slot_load(int slot, const char* path,
+                                  const char* plugin_id);
+VAB_API int vaio_plugin_slot_unload(int slot);
+VAB_API int vaio_plugin_slot_set_bypass(int slot, int bypass);
+VAB_API int vaio_plugin_slot_get_bypass(int slot);
+VAB_API unsigned vaio_plugin_slot_get_latency(int slot);
+VAB_API int vaio_plugin_slot_get_status(int slot, char* out, int cap);
+VAB_API int vaio_plugin_slot_show_editor(int slot, const char* title);
+VAB_API int vaio_plugin_slot_close_editor(int slot);
+VAB_API int vaio_plugin_slot_is_editor_open(int slot);
+VAB_API int vaio_plugin_slot_save_preset(int slot, const char* path);
+VAB_API int vaio_plugin_slot_load_preset(int slot, const char* path);
+VAB_API int vaio_plugin_slot_set_insert_stage(int slot, int stage);
+VAB_API int vaio_plugin_slot_get_insert_stage(int slot);
+
 #ifdef __cplusplus
 }
 #endif

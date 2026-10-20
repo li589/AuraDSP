@@ -12,3 +12,16 @@ EXPORTS
     vaio_bypass
     vaio_test_start
     vaio_test_stop
+    vaio_plugin_slot_load
+    vaio_plugin_slot_unload
+    vaio_plugin_slot_set_bypass
+    vaio_plugin_slot_get_bypass
+    vaio_plugin_slot_get_latency
+    vaio_plugin_slot_get_status
+    vaio_plugin_slot_show_editor
+    vaio_plugin_slot_close_editor
+    vaio_plugin_slot_is_editor_open
+    vaio_plugin_slot_save_preset
+    vaio_plugin_slot_load_preset
+    vaio_plugin_slot_set_insert_stage
+    vaio_plugin_slot_get_insert_stage

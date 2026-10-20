@@ -9,6 +9,7 @@
  * 5. 全音效处理链插入阶段调整（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）
  */
 
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 
@@ -40,15 +41,25 @@ class _PluginsPageState extends State<PluginsPage> {
   final TextEditingController _customDirCtrl = TextEditingController(
       text: PathMemory.dirFor(PathMemory.slotLastPluginDir) ?? '');
   bool _deepScan = false;
+  Timer? _statusTimer;
 
   @override
   void initState() {
     super.initState();
     _searchCtrl.text = widget.model.pluginManager.searchQuery;
+    _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!mounted) return;
+      for (var i = 0; i < PluginManager.kMaxSlots; i++) {
+        if (widget.model.pluginManager.isSlotActive(i)) {
+          widget.model.pluginManager.refreshStatus(slot: i);
+        }
+      }
+    });
   }
 
   @override
   void dispose() {
+    _statusTimer?.cancel();
     _searchCtrl.dispose();
     _customDirCtrl.dispose();
     super.dispose();
@@ -437,6 +448,38 @@ class _PluginsPageState extends State<PluginsPage> {
                         Expanded(
                           child: Text(manager.lastError!,
                               style: captionOf(p, color: p.error)),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                if (manager.lastNotice != null) ...[
+                  const SizedBox(height: AuraSpace.sm),
+                  Container(
+                    padding: const EdgeInsets.all(AuraSpace.sm),
+                    decoration: BoxDecoration(
+                      color: p.warning.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(AuraRadius.sm),
+                      border: Border.all(color: p.warning.withValues(alpha: 0.35)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            size: 16, color: p.warning),
+                        const SizedBox(width: AuraSpace.sm),
+                        Expanded(
+                          child: Text(manager.lastNotice!,
+                              style: captionOf(p, color: p.warning)),
+                        ),
+                        IconButton(
+                          onPressed: manager.clearNotice,
+                          icon: Icon(Icons.close_rounded,
+                              size: 14, color: p.warning),
+                          visualDensity: VisualDensity.compact,
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(
+                              minWidth: 24, minHeight: 24),
                         ),
                       ],
                     ),

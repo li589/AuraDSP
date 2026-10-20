@@ -599,7 +599,7 @@ void main() {
       m.dispose();
     });
 
-    test('打开崩溃日志 → 自动登记 open 名单并清空日志', () async {
+    test('打开崩溃日志 → 自动登记 open+close 名单并清空日志', () async {
       final pd = Directory(ConfigManager.path('plugin_data'));
       pd.createSync(recursive: true);
       final journal = File(ConfigManager.path(
@@ -618,30 +618,57 @@ void main() {
       expect(
         m.openQuarantine.map((p) => p.toLowerCase()),
         contains('crashy plugin'),
-        reason: '打开即崩溃的插件应自动登记进 open 名单',
+        reason: '打开即崩溃的插件应自动登记进 open 名单（仅提示）',
       );
+      expect(
+        m.closeQuarantine.map((p) => p.toLowerCase()),
+        contains('crashy plugin'),
+        reason: '崩溃历史必须同时进入 close 名单，关闭时跳过插件 teardown',
+      );
+      expect(m.lastNotice, isNotNull);
       expect(journal.existsSync(), isFalse, reason: '登记后日志应清空');
       m.dispose();
     });
 
-    test('打开隔离名单阻止 showEditor 并给出提示', () async {
-      final m = PluginManager();
-      await m.loadPluginTables();
-      // 手工把一个插件登记进 open 名单。
-      m.onPluginScanned(1, jsonEncode([
+    test('历史崩溃插件仍允许 showEditor，只提示不阻止', () async {
+      final pd = Directory(ConfigManager.path('plugin_data'));
+      pd.createSync(recursive: true);
+      final journal = File(ConfigManager.path(
+          'plugin_data${Platform.pathSeparator}editor_journal.json'));
+      journal.writeAsStringSync(jsonEncode([
         {
+          'path': r'C:\VST3\Crashy.vst3',
+          'name': 'Crashy Plugin',
+          'openedAt': DateTime.now().millisecondsSinceEpoch,
+        },
+      ]));
+      final sent = <Map<String, dynamic>>[];
+      final m = PluginManager(commandSender: sent.add);
+      await m.loadPluginTables();
+      m.onPluginSlotLoaded(0, r'C:\VST3\Crashy.vst3', 1, {
+        'hasActive': true,
+        'bypassed': false,
+        'latency': 0,
+        'plugin': {
           'id': 'c',
           'name': 'Crashy Plugin',
+          'vendor': '',
+          'category': '',
           'format': 'VST3',
           'path': r'C:\VST3\Crashy.vst3',
         },
-      ]));
-      final meta = m.plugins.single;
-      // 模拟打开隔离名单生效。
-      final blocked = m.isEditorOpenBlocked(meta);
-      expect(blocked, isFalse); // open 名单默认空 → 不阻止
-      // 加入 open 名单后应阻止。
-      expect(meta.name, isNotEmpty);
+      }, 3);
+      final meta = m.getSlotPlugin(0)!;
+      expect(m.isEditorCrashKnown(meta), isTrue);
+      expect(m.isEditorOpenBlocked(meta), isFalse);
+      sent.clear();
+      m.showEditor(slot: 0);
+      expect(
+        sent.any((c) => c['cmd'] == 'pluginSlotShowEditor'),
+        isTrue,
+        reason: '历史崩溃不得再阻止打开编辑器',
+      );
+      expect(m.lastNotice, contains('Crashy Plugin'));
       m.dispose();
     });
   });

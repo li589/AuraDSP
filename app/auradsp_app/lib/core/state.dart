@@ -1250,9 +1250,7 @@ class AppModel extends ChangeNotifier {
         // 输出恢复即清除降级标记（deviceRate>0 = 真有设备）。
         if ((raw['deviceRate'] as num?)?.toInt() != 0) wasapiError = '';
         notifyListeners();
-        if (config.autoRestoreSession) {
-          replaySessionToEngine();
-        } else {
+        if (!config.autoRestoreSession) {
           _toIso?.send({'cmd': 'getParams'});
         }
         // 持久化的是 VB 模式：就绪后自动进桥（与用户上次状态一致）。
@@ -1279,6 +1277,12 @@ class AppModel extends ChangeNotifier {
             'on': true,
             'outputEndpoint': config.vaioOutputEndpoint,
           });
+        }
+        // 会话回放必须落在音频后端就绪之后：VB/ASIO/VAIO 模式下桥引擎才是
+        // 真正的处理路径，提前回放会把插件装到本地引擎、随后建桥时镜像为空
+        // （表现为重启后插件未挂载）。
+        if (config.autoRestoreSession) {
+          replaySessionToEngine();
         }
         // isolate 重启（采样率切换）：标准 session 回放只管参数，不管音源选择
         // 与 bypass 开关——这里补推（model 级状态是真相源）。

@@ -81,40 +81,38 @@ void _scanChunked({
 /// 改为：引擎侧 `slot_load_async` 只做微秒级入队（重活挪到引擎控制线程，
 /// 且不持 m_hostMutex），这里 fire-and-forget 轮询 task_state，每轮之间
 /// `await Future<void>.delayed` 让出事件循环 → 音频泵照常推进。
-void _slotLoadAsync(AuraDspLib lib, Pointer<Void> handle, int slot, String path,
-    String id, void Function(Map<String, dynamic>) send) {
-  () async {
-    final rc = await _submitAndWait(lib, handle, slot, send, isLoad: true,
-        path: path, id: id);
-    final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-    final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
-    send({
-      'evt': 'pluginSlotLoaded',
-      'slot': slot,
-      'path': path,
-      'rc': rc,
-      'status': statusJson,
-      'stage': stage,
-      'busy': false,
-    });
-  }();
+Future<int> _slotLoadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
+    String path, String id, void Function(Map<String, dynamic>) send) async {
+  final rc = await _submitAndWait(lib, handle, slot, send, isLoad: true,
+      path: path, id: id);
+  final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+  final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
+  send({
+    'evt': 'pluginSlotLoaded',
+    'slot': slot,
+    'path': path,
+    'rc': rc,
+    'status': statusJson,
+    'stage': stage,
+    'busy': false,
+  });
+  return rc;
 }
 
 /// C3：异步卸载。同 [_slotLoadAsync] 的根因——卸载重活（deactivate / destroy /
 /// FreeLibrary，实测 p50 18.2ms、max 231.3ms）也必须移出事件循环。
-void _slotUnloadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
-    void Function(Map<String, dynamic>) send) {
-  () async {
-    final rc = await _submitAndWait(lib, handle, slot, send, isLoad: false);
-    final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-    send({
-      'evt': 'pluginSlotUnloaded',
-      'slot': slot,
-      'rc': rc,
-      'status': statusJson,
-      'busy': false,
-    });
-  }();
+Future<int> _slotUnloadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
+    void Function(Map<String, dynamic>) send) async {
+  final rc = await _submitAndWait(lib, handle, slot, send, isLoad: false);
+  final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
+  send({
+    'evt': 'pluginSlotUnloaded',
+    'slot': slot,
+    'rc': rc,
+    'status': statusJson,
+    'busy': false,
+  });
+  return rc;
 }
 
 /// C3：提交异步任务并轮询到终态。返回引擎 load/unload 的语义码（1 成功 / 0 失败）。

@@ -75,6 +75,24 @@ VBB_API int vb_test_start(int kind, const float* pcm, int frames, int ch, int ra
 // 停止测试：先清 kind（RT 可见），等 50ms 让在途回调退出，再释放文件缓冲。
 VBB_API int vb_test_stop();
 
+// ---- 插件槽（仅 A1 主总线 = eng[0]）----
+// 与 auradsp_plugin_slot_* 同语义（1=成功/0=失败）；桥未运行或无引擎时 0。
+// load 成功会写入桥内镜像，VM CHANGE 重建后自动回放到新 eng[0]。
+VBB_API int vb_plugin_slot_load(int slot, const char* path,
+                                const char* plugin_id);
+VBB_API int vb_plugin_slot_unload(int slot);
+VBB_API int vb_plugin_slot_set_bypass(int slot, int bypass);
+VBB_API int vb_plugin_slot_get_bypass(int slot);
+VBB_API unsigned vb_plugin_slot_get_latency(int slot);
+VBB_API int vb_plugin_slot_get_status(int slot, char* out, int cap);
+VBB_API int vb_plugin_slot_show_editor(int slot, const char* title);
+VBB_API int vb_plugin_slot_close_editor(int slot);
+VBB_API int vb_plugin_slot_is_editor_open(int slot);
+VBB_API int vb_plugin_slot_save_preset(int slot, const char* path);
+VBB_API int vb_plugin_slot_load_preset(int slot, const char* path);
+VBB_API int vb_plugin_slot_set_insert_stage(int slot, int stage);
+VBB_API int vb_plugin_slot_get_insert_stage(int slot);
+
 #ifdef __cplusplus
 }
 #endif
