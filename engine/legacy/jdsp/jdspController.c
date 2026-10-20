@@ -1199,7 +1199,7 @@ static int stage_selected(const char *ids, const char *id)
 	return 0;
 }
 void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
-                                        size_t n, const char *ids)
+                                        size_t n, const char *ids, char samplePeaks)
 {
 	const size_t oldBlockSizeMax = jdsp->blockSizeMax;
 	if (oldBlockSizeMax < n)
@@ -1221,14 +1221,44 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 		unsigned int curDecimatedLen = DoASRC_fwd(jdsp, n);
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
+			{
 				kAuraStages[i].fn(jdsp, curDecimatedLen);
+				if (samplePeaks && i < 16)
+				{
+					float maxL = 0.0f, maxR = 0.0f;
+					for (unsigned int s = 0; s < curDecimatedLen; ++s)
+					{
+						float aL = fabsf(jdsp->tmpBuffer[0][s]);
+						float aR = fabsf(jdsp->tmpBuffer[1][s]);
+						if (aL > maxL) maxL = aL;
+						if (aR > maxR) maxR = aR;
+					}
+					jdsp->stagePeakL[i] = maxL;
+					jdsp->stagePeakR[i] = maxR;
+				}
+			}
 		DoASRC_bwd(jdsp, curDecimatedLen, n);
 	}
 	else
 	{
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
+			{
 				kAuraStages[i].fn(jdsp, n);
+				if (samplePeaks && i < 16)
+				{
+					float maxL = 0.0f, maxR = 0.0f;
+					for (size_t s = 0; s < n; ++s)
+					{
+						float aL = fabsf(jdsp->tmpBuffer[0][s]);
+						float aR = fabsf(jdsp->tmpBuffer[1][s]);
+						if (aL > maxL) maxL = aL;
+						if (aR > maxR) maxR = aR;
+					}
+					jdsp->stagePeakL[i] = maxL;
+					jdsp->stagePeakR[i] = maxR;
+				}
+			}
 	}
 	for (size_t i = 0; i < n; i++)
 	{

@@ -262,18 +262,20 @@ def mask_zero_invariant(name):
     lib.auradsp_destroy(h)
 
 
-# 声道掩码语义登记（B5 定案，2026-10-19）：
+# 声道掩码语义登记（B5 定案 + B5 后续 arbmag 逐声道升级）：
 #   MASKED  —— 引擎按 *.channels 位掩码独立处理声道（隔离 + mask=0 直通成立）
-#   STEREO  —— 双声道实现（jdsp 链），多声道下按掩码选"标准声道对"独立处理：
+#   PAIR    —— comp/eq（双声道实现，jdsp 链）按掩码选"标准声道对"处理：
 #              0x03→FL/FR(0,1) 前组 / 0x0C→C/LFE(2,3) 中低音组 / 0x30→SL/SR(4,5) 后组
-#              允许多选（如 0x33）；未选中任何完整对 → 全直通
+#              （允许多选；未选中任何完整对 → 全直通）
+#   PERCH   —— arbmag（逐声道池，B5 后续）：mask 第 c 位 = 声道 c 独立开关，
+#              单个声道（如 0x04 仅 C）即可独立生效；0x01 仅 FL 时 FR 直通（FL/FR 彻底解绑）
 MASKED_EFFECTS = ["dyneq", "exciter", "filter", "gate", "limiter",
                   "loudness", "shelf", "tube"]
-STEREO_EFFECTS = ["arbmag", "comp", "eq"]
+PAIR_EFFECTS = ["comp", "eq"]
 
 
 def stereo_pair_semantics(name, setup):
-    """6ch 离散：双声道效果器按掩码选标准声道对处理（B5）。"""
+    """6ch 离散：双声道效果器（comp/eq）按掩码选标准声道对处理（B5）。"""
     def expect(mask, proc_pairs, passthru):
         h = mk_handle(6)
         setup(h)
@@ -294,8 +296,33 @@ def stereo_pair_semantics(name, setup):
     expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
 
 
+def arbmag_persch_semantics(setup):
+    """6ch 离散：arbmag 逐声道池语义（B5 后续）——mask 第 c 位 = 声道 c 独立开关。
+    关键差异对 B5 对语义：0x01 仅 FL（FR 直通）、0x04 仅 C（无需完整对）。"""
+    def expect(mask, proc_ch, passthru):
+        h = mk_handle(6)
+        setup(h)
+        set_i(h, "arbmag.channels", mask)
+        src, dst = run_ch(h, 6)
+        for c in proc_ch:
+            d = ch_dev(src, dst, 6, c)
+            check(d > 0.01, f"arbmag mask=0x{mask:02X} 声道{c} 处理 diff={d:.4f}")
+        for c in passthru:
+            d = ch_dev(src, dst, 6, c)
+            check(d < 1e-6, f"arbmag mask=0x{mask:02X} 声道{c} 应直通 dev={d:.2e}")
+        lib.auradsp_destroy(h)
+
+    expect(0x01, [0], [1, 2, 3, 4, 5])      # 仅 FL（FR 直通 = 彻底解绑）
+    expect(0x02, [1], [0, 2, 3, 4, 5])      # 仅 FR
+    expect(0x04, [2], [0, 1, 3, 4, 5])      # 仅 C（无需完整对）
+    expect(0x0C, [2, 3], [0, 1, 4, 5])      # C/LFE
+    expect(0x30, [4, 5], [0, 1, 2, 3])      # 后组
+    expect(0xFF, [0, 1, 2, 3, 4, 5], [])    # 全选
+    expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
+
+
 def part2_multichannel():
-    print("\n=== [2] 多声道掩码补充（8 按声道 + 3 双声道配对语义 + mask=0 不变式） ===")
+    print("\n=== [2] 多声道掩码补充（8 按声道 + 3 双声道 + arbmag 逐声道 + mask=0 不变式） ===")
 
     def setup_arbmag(h):
         set_i(h, "arbmag.enable", 1)
@@ -311,8 +338,9 @@ def part2_multichannel():
         set_i(h, "eq.enable", 1)
         set_s(h, "eq.curve", "20:6.0;20000:6.0")
 
-    # 3 个双声道实现（B5）：按掩码选标准声道对独立处理（0x03/0x0C/0x30/0x33/0x00）
-    stereo_pair_semantics("arbmag", setup_arbmag)
+    # arbmag：逐声道池语义（B5 后续）——0x01 仅 FL / 0x04 仅 C 独立生效
+    arbmag_persch_semantics(setup_arbmag)
+    # comp/eq：B5 对语义（标准声道对，无单声道粒度）
     stereo_pair_semantics("comp", setup_comp)
     stereo_pair_semantics("eq", setup_eq)
 

@@ -461,6 +461,16 @@ struct auradsp_handle_s {
         double z1[kMxMaxChannels] = {};
         double z2[kMxMaxChannels] = {};
     } filter;
+    /* B5 后续：arbmag 逐声道池（8×FFTConvolver1x1，IR 与主 arbMag.conv 同源）。
+     * 生命周期：句柄级 new[]/delete[]（create 分配、destroy 释放，RT 零分配）；
+     * 内容：控制线程在 set_arbmag_string 生效路径重建/重载（带上 blockSize；
+     * 注意 jdsp 块长重分配的 Refresh 钩子只刷新主 conv，池另行同步见
+     * arbmag_pool_reload）；RT 线程只读指针，无跨线程释放。 */
+    struct ArbmagPool {
+        FFTConvolver1x1* conv[kMxMaxChannels] = {};
+        unsigned int     loaded_block = 0;  /* 上次成功 Load/Refresh 的 blockSize */
+        int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
+    } arbmag_pool;
     /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
     float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
     /* 噪声门/Deesser 状态（RT 独占；支持 8 声道） */
@@ -645,5 +655,15 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void exciter_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void loudness_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch);
+/* B5 后续：arbmag 逐声道池（控制线程建/载/释，RT 只读）。
+ * IR 与主 arbMag.conv 同源（GetFilter 同一份 eqFil）；loaded 为 0 时直通。
+ * process_strided：处理交织缓冲中任一单声道（mask 位=1 且 enable/ready/loaded
+ * 才生效，否则原样直通）；mono 连续化用 h->shelf_scratch 前 frames 个 float，
+ * 调用方须保证该 scratch 当前空闲（Category B 段1 与 3b 段用法均满足）。 */
+void arbmag_pool_alloc(auradsp_handle h);
+void arbmag_pool_free(auradsp_handle h);
+void arbmag_pool_reload(auradsp_handle h);
+void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
+                                 int nch, int ch_idx);
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch);
 
