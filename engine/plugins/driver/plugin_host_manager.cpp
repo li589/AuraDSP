@@ -1,4 +1,4 @@
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 #include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
@@ -321,7 +321,7 @@ void PluginHostManager::recordTelemetry(size_t slot, float inRms, float outRms,
 
 // Legacy single-slot forward (slot 0).
 // Only loadPlugin survives: it is the one still referenced by
-// test/smoke/test_plugin_direct.cpp. The other six (unloadPlugin, setBypass,
+// engine/plugins/tests/plugin_host_direct.cpp. The other six (unloadPlugin, setBypass,
 // isBypassed, getLatency, hasActivePlugin, getStatusJson, process) had no
 // callers anywhere in the repo -- the C ABI's own single-slot compatibility
 // symbols forward straight to the *Slot functions and never used them.

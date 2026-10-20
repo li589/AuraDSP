@@ -203,7 +203,7 @@ w("## A3. 版本 / 标识字符串")
 w()
 w("- 引擎版本锚点：`auradsp_engine.h` = `1.0.0`、`engine_internal.h` = `1.1.0`（注意两处不一致）。")
 w("- host 侧大量 `version.lib`（Windows 导入库）与 `ProductVersion`/`FileVersion` 资源提取逻辑"
-  "（host_metadata_scan.cpp），用于读取第三方插件版本——属宿主基础设施，非引擎自身版本。")
+  "（plugins/driver/plugin_scanner.cpp），用于读取第三方插件版本——属宿主基础设施，非引擎自身版本。")
 w("- 未发现运行时可加载的巨型内嵌脚本（`>200` 字符的长字符串为 0）：说明 **EEL/Liveprog 脚本是资源文件运行时加载，而非 C 源码内嵌**，"
   "符合之前未决清单的推测；这类内置字符串不在此树，应到 `assets/`/`dsp/` 资源目录另行审计。")
 w()

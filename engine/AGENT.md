@@ -12,12 +12,13 @@ engine/
 ├── chain/                       # 链与 IO：engine_chain / engine_convolver / engine_viz /
 │                                #   engine_probe / engine_audiofile
 ├── dsp/                         # 自研效果，一效果一文件（11 个）
-└── host/                        # 插件宿主 TU：auradsp_plugin_host / host_gui /
-                                 #   host_metadata_scan / host_instances / host_slots
+└── plugins/                     # 插件宿主：api/plugin_host.h + driver/ + formats/ +
+                                 #   platform/win32/ + integration/ + tests/
 ```
 
-引用链/宿主文件时用 `chain/xxx.cpp`、`host/xxx.cpp` 相对路径；**旧扁平路径（`engine_chain.cpp`
-直接躺在 engine/ 根）自 P4b（`cec8064`）起失效**，文档/脚本/CMake 一律按新结构写。
+引用链/宿主文件时用 `chain/xxx.cpp`、`plugins/{api,driver,formats,platform/win32,integration,tests}/xxx.cpp`
+相对路径；**旧扁平路径（`engine_chain.cpp` 直接躺在 engine/ 根）自 P4b（`cec8064`）起失效，
+旧 `engine/host/` 自 P1（2026-10-20）起失效**，文档/脚本/CMake 一律按新结构写。
 
 ## 1. RT 安全（铁律）
 

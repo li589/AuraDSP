@@ -8,7 +8,7 @@
 无人值守的插件通路门禁由以下用例承担：
   - test/smoke/smoke_plugin_host.py（进程内直通、延迟、旁路，无 GUI）
   - test/smoke/smoke_multislot_and_stages.py（多插槽与阶段拓扑）
-  - test/smoke/test_plugin_direct.cpp（C++ 侧等价验证，编译后手动执行）
+  - engine/plugins/tests/plugin_host_direct.cpp（C++ 侧等价验证，编译后手动执行）
 
 运行方式（需在本机有桌面会话时手动执行）：
     python test/smoke/smoke_three_key_plugins.py

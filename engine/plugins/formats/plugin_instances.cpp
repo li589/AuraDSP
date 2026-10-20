@@ -1,4 +1,4 @@
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 #include "auradsp_engine.h" // B-5：宿主自报版本经 auradsp_version() 单源（AURADSP_VERSION）
 #include "debug_log.h"  // B-1 统一调试日志宏
 

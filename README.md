@@ -20,11 +20,12 @@
 
 ---
 
-## 2. 仓库结构（2026-10-14；P3a/P3b 顶层化 + P4b 引擎子目录化后）
+## 2. 仓库结构（2026-10-20；P3a/P3b 顶层化 + P4b 引擎子目录化 + P1 插件目录迁移后）
 
 > P3a/P3b 已把引擎、第三方、资源三块提到顶层：
 > `core/desktop/engine_api` → **`engine/`**、`core/desktop/vendor-src` → **`vendor/`**、`resource/` → **`assets/`**。
-> P4b（`cec8064`）把引擎的链/IO 与插件宿主文件收进 `chain/` 与 `host/` 子目录（纯移动）。
+> P4b（`cec8064`）把引擎的链/IO 与插件宿主文件收进 `chain/` 与 `host/` 子目录（纯移动）；
+> P1（2026-10-20）再把插件宿主从 `host/` 迁到 `plugins/` 分层目录（纯移动）。
 
 ```text
 AuraDSP/
@@ -33,9 +34,8 @@ AuraDSP/
 │   ├── engine_internal.h            # 私有状态 + 跨文件符号（内部单一入口）
 │   ├── chain/                       # 链与 IO：engine_{chain,convolver,viz,probe,audiofile}.cpp
 │   ├── dsp/                         # 11 个自研效果 TU（每效果一文件，含 dyneq/spatial）
-│   ├── host/                        # 插件宿主：auradsp_plugin_host.cpp + host_{gui,metadata_scan,instances,slots}.cpp
-│   ├── legacy/                      # JamesDSP C 算法核（12 级经典音效 + EEL2）+ PATCHES.md
-│   └── auradsp_plugin_host.h        # VST3/CLAP 宿主公共头（四插槽 kMaxPluginSlots=4）
+│   ├── plugins/                     # 插件宿主：api/plugin_host.h + driver/ + formats/ + platform/win32/ + integration/ + tests/（四插槽 kMaxPluginSlots=4）
+│   └── legacy/                      # JamesDSP C 算法核（12 级经典音效 + EEL2）+ PATCHES.md
 ├── vendor/              # ★ 第三方行业标准只读（CLAP / VST3 官方接口头，原样未改）
 │   └── plugin-api/      #   clap / steinberg(vst3)
 ├── assets/              # ★ 运行资源（原 resource/，P3b 迁来的 251MB）

@@ -5,7 +5,7 @@
 //   ModulePumpThread —— 整类搬入，static 成员改 inline static
 //   utf8/normalize —— 原 static 自由函数改 inline
 //   其余为跨 TU 引用的自由函数声明（定义各在一处）
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 #include "debug_log.h"  // B-1 统一调试日志宏
 
 #include <windows.h>
@@ -23,7 +23,7 @@
 #include <system_error>
 #include <algorithm>
 
-// VST3 接口声明（定义见 host_instances.cpp 的静态锚点；多包含安全）
+// VST3 接口声明（定义见 formats/plugin_instances.cpp 的静态锚点；多包含安全）
 #include <steinberg/vst3/base/FUnknown.h>
 #include <steinberg/vst3/base/IPluginFactory.h>
 #include <steinberg/vst3/base/IPluginFactory2.h>
@@ -335,7 +335,7 @@ void quarantineAbandonedInstance(std::unique_ptr<IPluginInstance> inst);
 void ResizeDirectChildren(HWND hwnd);
 void EnsureClapWindowClassRegistered();
 void EnsureVst3WindowClassRegistered();
-// 实例工厂（定义在 host_instances.cpp；slots TU 只经此创建实例，
+// 实例工厂（定义在 formats/plugin_instances.cpp；manager TU 只经此创建实例，
 // 不直引具体类，保持 TU 边界干净）
 std::unique_ptr<IPluginInstance> createClapInstance();
 std::unique_ptr<IPluginInstance> createVst3Instance();

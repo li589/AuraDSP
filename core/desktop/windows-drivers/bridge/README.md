@@ -9,6 +9,8 @@
 ```text
 bridge/
   README.md          # 本文件（规约）
+  common/
+    PluginBridge.h   # 三桥共用插件槽转发
   vm_bridge/         # Voicemeeter 回调桥 → auravm_bridge.dll（Dart: audio_vbridge.dart）
     VmBridge.{h,cpp,def}
   asio_bridge/       # ASIO 常驻桥 → auraasio_bridge.dll（Dart: audio_abridge.dart）
@@ -29,4 +31,4 @@ bridge/
    回归必须有"重建后回读仍一致"的 smoke 断言（`smoke_vm_bridge.py`
    `SURVIVED REBUILD` 件套为范本）。
 5. **CMake**：在父级 `CMakeLists.txt` 用 `BRIDGEDIR` 变量统一起名
-   （`VMBRIDGE`/`ASIOBRIDGE`），不要散写相对路径。
+   （`BRIDGECOMMON`/`VMBRIDGE`/`ASIOBRIDGE`/`VAIOBRIDGE`），不要散写相对路径。

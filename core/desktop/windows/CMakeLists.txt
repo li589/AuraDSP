@@ -5,6 +5,16 @@ set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 set(LEGACY     "${API}/legacy")
 
+set(AURADSP_PLUGIN_HOST_SOURCES
+    "${API}/plugins/platform/win32/plugin_gui_win32.cpp"
+    "${API}/plugins/driver/plugin_scanner.cpp"
+    "${API}/plugins/formats/plugin_instances.cpp"
+    "${API}/plugins/driver/plugin_host_manager.cpp"
+)
+set(AURADSP_PLUGIN_INTEGRATION_SOURCES
+    "${API}/plugins/integration/plugin_host.cpp"
+)
+
 file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
 list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
@@ -28,17 +38,15 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_freeverb.cpp"
     "${API}/dsp/dsp_dyneq.cpp"
     "${API}/chain/engine_audiofile.cpp"
-    "${API}/host/auradsp_plugin_host.cpp"
-    "${API}/host/host_gui.cpp"
-    "${API}/host/host_metadata_scan.cpp"
-    "${API}/host/host_instances.cpp"
-    "${API}/host/host_slots.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+    ${AURADSP_PLUGIN_INTEGRATION_SOURCES}
     "${API}/auradsp_engine.def"
 )
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
-    "${API}/host"
+    "${API}/plugins/api"
+    "${API}/plugins/platform/win32"
     "${LEGACY}"
     "${LEGACY}/jdsp"
     "${PLUGIN_API}"
@@ -72,21 +80,18 @@ set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
 add_executable(test_plugin_direct
-    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/smoke/test_plugin_direct.cpp"
-    "${API}/host/auradsp_plugin_host.cpp"
-    "${API}/host/host_gui.cpp"
-    "${API}/host/host_metadata_scan.cpp"
-    "${API}/host/host_instances.cpp"
-    "${API}/host/host_slots.cpp"
+    "${API}/plugins/tests/plugin_host_direct.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
 )
 target_include_directories(test_plugin_direct PRIVATE
     "${API}"
-    "${API}/host"
+    "${API}/plugins/api"
+    "${API}/plugins/platform/win32"
     "${PLUGIN_API}"
 )
 target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
 target_compile_options(test_plugin_direct PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_direct PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_direct PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(test_plugin_direct PRIVATE version)
+target_link_libraries(test_plugin_direct PRIVATE auradsp_engine version)
 

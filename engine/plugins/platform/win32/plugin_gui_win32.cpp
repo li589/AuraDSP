@@ -1,4 +1,4 @@
-#include "auradsp_plugin_host.h"
+#include "plugin_host.h"
 
 #include <windows.h>
 #include <winver.h>
