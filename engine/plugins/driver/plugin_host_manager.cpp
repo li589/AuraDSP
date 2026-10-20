@@ -4,6 +4,10 @@
 #include "inflight_guard.h"
 #include "plugin_format_driver.h"
 
+#ifndef AURADSP_HOST_INPROC
+#include "process_plugin_proxy.h"
+#endif
+
 #include <windows.h>
 
 #include <algorithm>
@@ -105,6 +109,30 @@ void PluginHostManager::unloadPluginSlot(size_t slot) {
 
 bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, const std::string& pluginId, double sampleRate, uint32_t maxBlockSize) {
     if (slot >= kMaxPluginSlots) return false;
+
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        std::unique_ptr<IPluginInstance> oldInstance;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+            m_sampleRate = sampleRate;
+            m_maxBlockSize = maxBlockSize;
+            oldInstance = detachInstanceLocked(slot);
+        }
+        if (oldInstance) destroyInstance(std::move(oldInstance));
+
+        auto instance = std::make_unique<ProcessPluginProxy>(
+            m_remoteClient, slot, sampleRate, maxBlockSize);
+        if (!instance->load(path, pluginId)) return false;
+
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+            commitInstanceLocked(slot, std::move(instance));
+        }
+        return true;
+    }
+#endif
+
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     try {
         unloadPluginSlotLocked(slot);
@@ -178,7 +206,8 @@ void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
 
 bool PluginHostManager::isBypassedSlot(size_t slot) const {
     if (slot >= kMaxPluginSlots) return true;
-    return m_slots[slot].bypassed.load(std::memory_order_acquire);
+    if (m_slots[slot].bypassed.load(std::memory_order_acquire)) return true;
+    return m_slots[slot].instance && m_slots[slot].instance->hostTransportFailed();
 }
 
 uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
@@ -198,7 +227,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
     ss << "{"
        << "\"slot\":" << slot << ","
        << "\"hasActive\":" << (m_slots[slot].hasActive.load() ? "true" : "false") << ","
-       << "\"bypassed\":" << (m_slots[slot].bypassed.load() ? "true" : "false") << ","
+       << "\"bypassed\":" << (isBypassedSlot(slot) ? "true" : "false") << ","
        << "\"latency\":" << m_slots[slot].latency.load() << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
        << "\"processCalls\":" << m_slots[slot].processCalls.load(std::memory_order_relaxed) << ","
@@ -207,6 +236,25 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"maxDiff\":" << unpackFloat(m_slots[slot].maxDiffBits.load(std::memory_order_relaxed)) << ","
        << "\"lastFrames\":" << m_slots[slot].lastFrames.load(std::memory_order_relaxed) << ","
        << "\"isEditorOpen\":" << ((m_slots[slot].instance && m_slots[slot].instance->isEditorOpen()) ? "true" : "false") << ",";
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode) {
+        bool remoteFailed = false;
+        uint32_t transportLatency = 0;
+        uint64_t inputOverflows = 0;
+        uint64_t outputOverflows = 0;
+        if (auto* proxy = dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
+            remoteFailed = proxy->remoteFailed();
+            transportLatency = proxy->transportLatency();
+            inputOverflows = proxy->inputOverflows();
+            outputOverflows = proxy->outputOverflows();
+        }
+        ss << "\"remoteMode\":true,"
+           << "\"remoteFailed\":" << (remoteFailed ? "true" : "false") << ","
+           << "\"transportLatency\":" << transportLatency << ","
+           << "\"inputOverflows\":" << inputOverflows << ","
+           << "\"outputOverflows\":" << outputOverflows << ",";
+    }
+#endif
     if (m_slots[slot].instance) {
         const auto& meta = m_slots[slot].instance->getMetadata();
         ss << "\"plugin\":" << meta.toJson();
@@ -300,6 +348,20 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     m_sampleRate = sampleRate;
     m_maxBlockSize = maxBlockSize;
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        if (m_remoteClient->alive()) {
+            m_remoteClient->updateFormat(sampleRate, maxBlockSize);
+            for (size_t s = 0; s < kMaxPluginSlots; ++s) {
+                if (m_slots[s].instance && m_slots[s].hasActive.load()) {
+                    m_slots[s].latency.store(m_slots[s].instance->getLatency(),
+                                             std::memory_order_relaxed);
+                }
+            }
+        }
+        return;
+    }
+#endif
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         if (m_slots[s].instance && m_slots[s].hasActive.load()) {
             m_slots[s].instance->activate(sampleRate, maxBlockSize);
@@ -312,7 +374,26 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
 
 // C3 两段式拆分：prepare（重活，锁外） / commit（微秒级，锁内）
 
-std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(const std::string& path, const std::string& pluginId) {
+std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot, const std::string& path, const std::string& pluginId) {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        if (slot >= kMaxPluginSlots) return nullptr;
+        std::unique_ptr<IPluginInstance> oldInstance;
+        {
+            std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+            oldInstance = detachInstanceLocked(slot);
+        }
+        if (oldInstance) destroyInstance(std::move(oldInstance));
+
+        auto instance = std::make_unique<ProcessPluginProxy>(
+            m_remoteClient, slot, m_sampleRate, m_maxBlockSize);
+        if (!instance->load(path, pluginId)) return nullptr;
+        return instance;
+    }
+#else
+    (void)slot;
+#endif
+
     auto* driver = PluginDriverRegistry::instance().findForPath(path);
     if (!driver) return nullptr;
     if (driver->resolveBinary(path).empty()) return nullptr;
@@ -455,8 +536,15 @@ void PluginHostManager::runControlTask(const ControlTask& t) {
 
     try {
         if (t.isLoad) {
+#ifndef AURADSP_HOST_INPROC
+            if (m_remoteMode) {
+                std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+                m_sampleRate = t.sampleRate;
+                m_maxBlockSize = t.maxBlockSize;
+            }
+#endif
             // prepare 在锁外执行（重活）
-            auto instance = prepareInstance(t.path, t.pluginId);
+            auto instance = prepareInstance(t.slot, t.path, t.pluginId);
             std::unique_ptr<IPluginInstance> oldInstance;
             // commit 在锁内执行（微秒级）
             {

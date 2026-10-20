@@ -5,6 +5,10 @@
 #include "plugin_metadata_util.h"
 #include "win32_util.h"
 
+#ifndef AURADSP_HOST_INPROC
+#include "plugin_host_client.h"
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <filesystem>
@@ -202,7 +206,17 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
 //------------------------------------------------------------------------------
 // PluginHostManager
 //------------------------------------------------------------------------------
-PluginHostManager::PluginHostManager() = default;
+PluginHostManager::PluginHostManager() {
+#ifndef AURADSP_HOST_INPROC
+    m_remoteClient = std::make_shared<PluginHostClient>();
+    if (m_remoteClient->start()) {
+        m_remoteMode = true;
+    } else {
+        m_remoteClient.reset();
+        m_remoteMode = false;
+    }
+#endif
+}
 
 PluginHostManager::~PluginHostManager() {
     // 先停止控制线程（避免新任务进入）
@@ -213,9 +227,17 @@ PluginHostManager::~PluginHostManager() {
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         unloadPluginSlot(s);
     }
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteClient) m_remoteClient->shutdown();
+#endif
 }
 
 int PluginHostManager::scanPlugins(const std::string& extraDirsJson, bool deepScan) {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanPlugins(extraDirsJson, deepScan);
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 
     // 一次性扫描直接走分块管线的同一条实现（begin → 排空 → end），于是：
@@ -245,6 +267,11 @@ std::vector<std::string> PluginHostManager::collectSearchPathsLocked(const std::
 }
 
 int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan) {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanBegin(extraDirsJson, deepScan);
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 
     auto job = std::make_unique<ScanJob>();
@@ -259,6 +286,11 @@ int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan
 }
 
 int PluginHostManager::scanStep(int maxItems) {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanStep(maxItems);
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return 0;
     if (maxItems <= 0) maxItems = 1;
@@ -293,18 +325,33 @@ int PluginHostManager::scanStep(int maxItems) {
 }
 
 int PluginHostManager::scanProcessed() const {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanProcessed();
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return -1;
     return static_cast<int>(m_scanJob->cursor);
 }
 
 int PluginHostManager::scanTotal() const {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanTotal();
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return -1;
     return static_cast<int>(m_scanJob->candidates.size());
 }
 
 int PluginHostManager::scanEnd() {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->scanEnd();
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return static_cast<int>(m_scannedPlugins.size());
     const bool deep = m_scanJob->deep;
@@ -314,6 +361,12 @@ int PluginHostManager::scanEnd() {
 }
 
 void PluginHostManager::scanAbort() {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        m_remoteClient->scanEnd();
+        return;
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     m_scanJob.reset();   // 已扫到的部分保留在 m_scannedPlugins 中
 }
@@ -335,17 +388,33 @@ void PluginHostManager::rebuildScanCacheFromResults(bool deep) {
 }
 
 size_t PluginHostManager::getScannedCount() const {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        const int count = m_remoteClient->getScannedCount();
+        return count > 0 ? static_cast<size_t>(count) : 0;
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     return m_scannedPlugins.size();
 }
 
 std::string PluginHostManager::getScannedItemJson(size_t index) const {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->getScannedItemJson(static_cast<uint32_t>(index));
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (index >= m_scannedPlugins.size()) return "{}";
     return m_scannedPlugins[index].toJson();
 }
 
 std::string PluginHostManager::getAllScannedJson() const {
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        return m_remoteClient->getAllScannedJson();
+    }
+#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     std::ostringstream ss;
     ss << "[";

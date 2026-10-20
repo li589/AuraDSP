@@ -550,6 +550,7 @@ class _PluginSlotChainCard extends StatelessWidget {
     final isActive = manager.isSlotActive(slot);
     final active = manager.getSlotPlugin(slot);
     final isBypassed = manager.isSlotBypassed(slot);
+    final remoteFailed = manager.getSlotStatus(slot).remoteFailed;
     final currentStage = manager.getSlotStage(slot);
 
     return Container(
@@ -623,7 +624,11 @@ class _PluginSlotChainCard extends StatelessWidget {
                 Text(
                   isActive
                       ? l10nOf(context).chainSlotStatusLine(
-                          isBypassed ? l10nOf(context).chainSlotBypassed : l10nOf(context).chainSlotProcessing,
+                          isBypassed
+                              ? (remoteFailed
+                                  ? l10nOf(context).chainSlotRemoteFailed
+                                  : l10nOf(context).chainSlotBypassed)
+                              : l10nOf(context).chainSlotProcessing,
                           manager.getSlotLatency(slot))
                       : l10nOf(context).chainSlotHint,
                   style: captionOf(p, color: p.textDim),
