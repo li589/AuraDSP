@@ -80,8 +80,8 @@ if (-not $SkipEngine) {
     Write-Host "  配置 CMake (core/desktop/windows)..."
     cmake -S "$EngineSourceDir" -B "$EngineOutDir" -A x64 | Out-Null
 
-    Write-Host "  编译 Release 引擎动态库..."
-    cmake --build "$EngineOutDir" --config $BuildType --target auradsp_engine
+    Write-Host "  编译 Release 引擎动态库与进程外插件宿主..."
+    cmake --build "$EngineOutDir" --config $BuildType --target auradsp_engine auradsp_plugin_host
 
     $EngineDll = Join-Path $EngineOutDir "$BuildType\auradsp_engine.dll"
     if (-not (Test-Path $EngineDll)) {
@@ -89,6 +89,12 @@ if (-not $SkipEngine) {
     }
     $EngineSize = (Get-Item $EngineDll).Length
     Write-Host "  -> 核心引擎就绪: auradsp_engine.dll ($([math]::Round($EngineSize / 1MB, 2)) MB)" -ForegroundColor Green
+
+    $PluginHostExe = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
+    if (-not (Test-Path $PluginHostExe)) {
+        throw "插件宿主编译完成但未找到产物: $PluginHostExe"
+    }
+    Write-Host "  -> 进程外插件宿主就绪: auradsp_plugin_host.exe" -ForegroundColor Green
 } else {
     Write-Host "`n[2/6] 已跳过核心引擎编译 (-SkipEngine)" -ForegroundColor DarkGray
 }

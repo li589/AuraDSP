@@ -30,6 +30,10 @@
 
 namespace auradsp {
 
+#ifndef AURADSP_HOST_INPROC
+class PluginHostClient;
+#endif
+
 enum class PluginFormat {
     Unknown = 0,
     VST3,
@@ -91,6 +95,11 @@ public:
      * 析构 = use-after-free；manager 据此把整个实例移入静态隔离区
      * （可控泄漏换不可控崩溃），绝不释放。 */
     virtual bool abandoned() const { return false; }
+
+    /* 跨进程传输层失败（host 崩溃 / 超时无输出）。进程内实例恒 false；
+     * ProcessPluginProxy 在连续多个传输块收不到结果后置位，管理器和 UI
+     * 据此显示"远程旁路"，而音频线程本身已自动 copy-through。 */
+    virtual bool hostTransportFailed() const { return false; }
 
     /* C1（2026-10-12）：编辑器容器窗口收到 WM_CLOSE（用户点 X）时，由容器
      * WndProc 经 GWLP_USERDATA 在 plugin main 线程上回调。默认空实现——
@@ -270,7 +279,7 @@ public:
 
     /* 加载的两段式拆分（C3）：prepare 是重活（解析 bundle / LoadLibrary /
      * createInstance / activate），在锁外执行；commit 只把指针挂进槽位。 */
-    std::unique_ptr<IPluginInstance> prepareInstance(const std::string& path, const std::string& pluginId);
+    std::unique_ptr<IPluginInstance> prepareInstance(size_t slot, const std::string& path, const std::string& pluginId);
     void commitInstanceLocked(size_t slot, std::unique_ptr<IPluginInstance> instance);
 
     // ---- C3 异步挂载/卸载：控制线程 + 任务队列 ----
@@ -293,8 +302,14 @@ public:
     std::thread m_controlThread;
     std::atomic<bool> m_controlRunning{false};
 
+    bool remoteMode() const { return m_remoteMode; }
+
     std::vector<PluginMetadata> m_scannedPlugins;
     std::array<PluginSlot, kMaxPluginSlots> m_slots;
+    bool m_remoteMode = false;
+#ifndef AURADSP_HOST_INPROC
+    std::shared_ptr<PluginHostClient> m_remoteClient;
+#endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
     mutable std::recursive_mutex m_hostMutex;

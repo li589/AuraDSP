@@ -29,6 +29,11 @@ set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_chain_adapter.cpp"
     "${API}/plugins/integration/plugin_abi.cpp"
 )
+set(AURADSP_PLUGIN_REMOTE_SOURCES
+    "${API}/plugins/host/plugin_shared_region.cpp"
+    "${API}/plugins/host/plugin_host_client.cpp"
+    "${API}/plugins/host/process_plugin_proxy.cpp"
+)
 
 file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
@@ -55,6 +60,7 @@ add_library(auradsp_engine SHARED
     "${API}/chain/engine_audiofile.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}
     ${AURADSP_PLUGIN_INTEGRATION_SOURCES}
+    ${AURADSP_PLUGIN_REMOTE_SOURCES}
     "${API}/auradsp_engine.def"
 )
 target_include_directories(auradsp_engine PRIVATE
@@ -62,6 +68,7 @@ target_include_directories(auradsp_engine PRIVATE
     "${API}/chain"
     "${API}/plugins/api"
     "${API}/plugins/driver"
+    "${API}/plugins/host"
     "${API}/plugins/platform/win32"
     "${LEGACY}"
     "${LEGACY}/jdsp"
@@ -95,6 +102,29 @@ set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedD
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
+add_executable(auradsp_plugin_host
+    "${API}/plugins/host/auradsp_plugin_host_main.cpp"
+    "${API}/plugins/host/plugin_shared_region.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+)
+target_include_directories(auradsp_plugin_host PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/host"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(auradsp_plugin_host PRIVATE
+    NDEBUG
+    _CRT_SECURE_NO_WARNINGS
+    AURADSP_HOST_INPROC=1
+)
+target_compile_options(auradsp_plugin_host PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET auradsp_plugin_host PROPERTY CXX_STANDARD 20)
+set_property(TARGET auradsp_plugin_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(auradsp_plugin_host PRIVATE version)
+
 add_executable(test_plugin_direct
     "${API}/plugins/tests/plugin_host_direct.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}
@@ -106,7 +136,7 @@ target_include_directories(test_plugin_direct PRIVATE
     "${API}/plugins/platform/win32"
     "${PLUGIN_API}"
 )
-target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS AURADSP_HOST_INPROC=1)
 target_compile_options(test_plugin_direct PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_direct PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_direct PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -123,7 +153,7 @@ target_include_directories(test_plugin_chain PRIVATE
     "${API}/plugins/platform/win32"
     "${PLUGIN_API}"
 )
-target_compile_definitions(test_plugin_chain PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_definitions(test_plugin_chain PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS AURADSP_HOST_INPROC=1)
 target_compile_options(test_plugin_chain PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")

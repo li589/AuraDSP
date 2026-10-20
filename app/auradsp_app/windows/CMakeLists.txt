@@ -83,6 +83,14 @@ if(EXISTS "${AURADSP_ENGINE_DLL}")
     COMPONENT Runtime)
 endif()
 
+# Phase 4：进程外插件宿主与引擎 DLL 同目录分发。
+set(AURADSP_PLUGIN_HOST_EXE
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/windows/out/Release/auradsp_plugin_host.exe")
+if(EXISTS "${AURADSP_PLUGIN_HOST_EXE}")
+  install(FILES "${AURADSP_PLUGIN_HOST_EXE}" DESTINATION "${CMAKE_INSTALL_PREFIX}"
+    COMPONENT Runtime)
+endif()
+
 # VB-Callback 常驻桥（bridge/vm_bridge）：有则随包，无则跳过（对应模式不可用，
 # UI 设备卡会直接显示原因；缺失不拦构建）。
 set(AURAVM_BRIDGE_DLL

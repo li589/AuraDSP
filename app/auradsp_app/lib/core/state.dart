@@ -3926,16 +3926,53 @@ void retryWasapi() {
 
 /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
 /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
+int _restartToken = 0;
+
+Future<void> _stopAudioIsolate(Isolate iso, SendPort? port) async {
+  final done = Completer<void>();
+  final exitPort = ReceivePort();
+  exitPort.listen((_) {
+    if (!done.isCompleted) done.complete();
+  });
+  try {
+    iso.addOnExitListener(exitPort.sendPort);
+  } catch (_) {}
+  try {
+    port?.send({'cmd': 'shutdown'});
+  } catch (_) {}
+  try {
+    await done.future.timeout(const Duration(milliseconds: 800));
+  } catch (_) {
+    try {
+      iso.kill(priority: Isolate.immediate);
+    } catch (_) {}
+  } finally {
+    try {
+      iso.removeOnExitListener(exitPort.sendPort);
+    } catch (_) {}
+    exitPort.close();
+  }
+}
+
 void _restartIsolate() {
-  try {
-    _fromIso?.close();
-  } catch (_) {}
-  _fromIso = null;
-  _toIso = null;
-  try {
-    _iso?.kill(priority: Isolate.immediate);
-  } catch (_) {}
+  final token = ++_restartToken;
+  unawaited(_restartIsolateAsync(token));
+}
+
+Future<void> _restartIsolateAsync(int token) async {
+  final oldIso = _iso;
+  final oldPort = _toIso;
+  final oldFrom = _fromIso;
   _iso = null;
+  _toIso = null;
+  _fromIso = null;
+  try {
+    oldFrom?.close();
+  } catch (_) {}
+  if (oldIso != null) {
+    await _stopAudioIsolate(oldIso, oldPort);
+  }
+  if (token != _restartToken) return;
   conn = EngineConn.connecting;
   playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
   _spawn();

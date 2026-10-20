@@ -1446,6 +1446,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainSlotProcessing => '正在处理';
 
   @override
+  String get chainSlotRemoteFailed => '插件宿主已断开（已旁路）';
+
+  @override
   String chainSlotStatusLine(String a, int b) {
     return '状态：$a • 延迟：$b 采样';
   }

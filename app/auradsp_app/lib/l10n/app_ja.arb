@@ -563,6 +563,7 @@
   },
   "chainSlotBypassed": "バイパス中（スルー）",
   "chainSlotProcessing": "処理中",
+  "chainSlotRemoteFailed": "プラグインホスト切断（バイパス中）",
   "chainSlotStatusLine": "状態：{a} • 遅延：{b}サンプル",
   "@chainSlotStatusLine": {
     "placeholders": {

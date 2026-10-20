@@ -563,6 +563,7 @@
   },
   "chainSlotBypassed": "Bypassed (thru)",
   "chainSlotProcessing": "Processing",
+  "chainSlotRemoteFailed": "Plugin host lost - bypassed",
   "chainSlotStatusLine": "Status: {a} • latency: {b} samples",
   "@chainSlotStatusLine": {
     "placeholders": {

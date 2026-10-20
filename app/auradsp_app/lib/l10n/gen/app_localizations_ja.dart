@@ -1450,6 +1450,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainSlotProcessing => '処理中';
 
   @override
+  String get chainSlotRemoteFailed => 'プラグインホスト切断（バイパス中）';
+
+  @override
   String chainSlotStatusLine(String a, int b) {
     return '状態：$a • 遅延：$bサンプル';
   }

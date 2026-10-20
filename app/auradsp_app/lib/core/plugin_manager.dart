@@ -141,6 +141,11 @@ class PluginHostStatus {
   final double maxDiff;
   final int lastFrames;
   final PluginMetadata? plugin;
+  final bool remoteMode;
+  final bool remoteFailed;
+  final int transportLatency;
+  final int inputOverflows;
+  final int outputOverflows;
 
   const PluginHostStatus({
     this.hasActive = false,
@@ -152,6 +157,11 @@ class PluginHostStatus {
     this.maxDiff = 0,
     this.lastFrames = 0,
     this.plugin,
+    this.remoteMode = false,
+    this.remoteFailed = false,
+    this.transportLatency = 0,
+    this.inputOverflows = 0,
+    this.outputOverflows = 0,
   });
 
   static const empty = PluginHostStatus();
@@ -171,6 +181,11 @@ class PluginHostStatus {
       maxDiff: (json['maxDiff'] as num?)?.toDouble() ?? 0,
       lastFrames: (json['lastFrames'] as num?)?.toInt() ?? 0,
       plugin: meta,
+      remoteMode: json['remoteMode'] as bool? ?? false,
+      remoteFailed: json['remoteFailed'] as bool? ?? false,
+      transportLatency: (json['transportLatency'] as num?)?.toInt() ?? 0,
+      inputOverflows: (json['inputOverflows'] as num?)?.toInt() ?? 0,
+      outputOverflows: (json['outputOverflows'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -184,6 +199,11 @@ class PluginHostStatus {
         'maxDiff': maxDiff,
         'lastFrames': lastFrames,
         'plugin': plugin?.toJson(),
+        'remoteMode': remoteMode,
+        'remoteFailed': remoteFailed,
+        'transportLatency': transportLatency,
+        'inputOverflows': inputOverflows,
+        'outputOverflows': outputOverflows,
       };
 }
 

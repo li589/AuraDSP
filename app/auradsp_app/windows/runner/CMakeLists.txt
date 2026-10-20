@@ -54,6 +54,16 @@ if(EXISTS "${AURADSP_ENGINE_DLL}")
       "$<TARGET_FILE_DIR:${BINARY_NAME}>")
 endif()
 
+# Phase 4：进程外插件宿主必须与 auradsp_engine.dll 同目录，客户端按 DLL 路径解析。
+set(AURADSP_PLUGIN_HOST_EXE
+    "${CMAKE_SOURCE_DIR}/../../../core/desktop/windows/out/Release/auradsp_plugin_host.exe")
+if(EXISTS "${AURADSP_PLUGIN_HOST_EXE}")
+  add_custom_command(TARGET ${BINARY_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+      "${AURADSP_PLUGIN_HOST_EXE}"
+      "$<TARGET_FILE_DIR:${BINARY_NAME}>")
+endif()
+
 # 同样在 POST_BUILD 中将已编译的常驻桥 DLL 实时同步至 runner 目录，确保本地调试与 FFI 畅通
 foreach(BRIDGE_NAME auravm_bridge auravaio_bridge auraasio_bridge)
   set(BRIDGE_DLL "${CMAKE_SOURCE_DIR}/../../../core/desktop/windows-drivers/out/Release/${BRIDGE_NAME}.dll")
