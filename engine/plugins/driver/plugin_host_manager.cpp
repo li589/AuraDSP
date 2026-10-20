@@ -1,31 +1,15 @@
 #include "plugin_host.h"
 #include "debug_log.h"  // B-1 统一调试日志宏
 
+#include "inflight_guard.h"
+#include "plugin_format_driver.h"
+
 #include <windows.h>
-#include <winver.h>
-#pragma comment(lib, "version.lib")
-#include <shlobj.h>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <iomanip>
+
 #include <algorithm>
-#include <cstdio>
 #include <cstring>
-#include <thread>
-#include <future>
-#include <functional>
-#include <deque>
-#include <map>
-#include <set>
-#include <unordered_set>
-#include <array>
-
-
-
-#include "plugin_host_util.h"
-
-namespace fs = std::filesystem;
+#include <sstream>
+#include <string>
 
 namespace auradsp {
 static inline uint32_t packFloat(float v) {
@@ -128,29 +112,12 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
 
-        std::string ext = fs::path(path).extension().string();
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        auto* driver = PluginDriverRegistry::instance().findForPath(path);
+        if (!driver) return false;
+        if (driver->resolveBinary(path).empty()) return false;
 
-        PluginFormat format = PluginFormat::Unknown;
-        if (ext == ".clap") format = PluginFormat::CLAP;
-        else if (ext == ".vst3") format = PluginFormat::VST3;
-        else {
-            return false;
-        }
-
-        std::string resolvedBin = PluginScanner::resolveBundleBinary(path, format);
-        if (resolvedBin.empty()) {
-            return false;
-        }
-
-        std::unique_ptr<IPluginInstance> instance;
-        if (format == PluginFormat::CLAP) {
-            instance = createClapInstance();
-        } else if (format == PluginFormat::VST3) {
-            instance = createVst3Instance();
-        } else {
-            return false;
-        }
+        auto instance = driver->createInstance();
+        if (!instance) return false;
 
         // 扫描期命中项作为种子传入：加载路以扫描值为基准，descriptor 只补空不覆盖，
         // 于是「扫描值 == 加载值」对扫描期已有的字段恒成立（B1 的结构性保证）。
@@ -346,23 +313,12 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
 // C3 两段式拆分：prepare（重活，锁外） / commit（微秒级，锁内）
 
 std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(const std::string& path, const std::string& pluginId) {
-    // 判断格式
-    std::string ext = fs::path(path).extension().string();
-    std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-    PluginFormat format = PluginFormat::Unknown;
-    if (ext == ".clap") format = PluginFormat::CLAP;
-    else if (ext == ".vst3") format = PluginFormat::VST3;
-    else return nullptr;
+    auto* driver = PluginDriverRegistry::instance().findForPath(path);
+    if (!driver) return nullptr;
+    if (driver->resolveBinary(path).empty()) return nullptr;
 
-    std::string resolvedBin = PluginScanner::resolveBundleBinary(path, format);
-    if (resolvedBin.empty()) return nullptr;
-
-    std::unique_ptr<IPluginInstance> instance;
-    if (format == PluginFormat::CLAP) {
-        instance = createClapInstance();
-    } else {
-        instance = createVst3Instance();
-    }
+    auto instance = driver->createInstance();
+    if (!instance) return nullptr;
 
     // 查找扫描期种子（匹配 path + pluginId）——值拷贝到局部变量，避免持有裸指针跨越锁外耗时 I/O 导致 UAF
     PluginMetadata seedCopy;

@@ -7,9 +7,20 @@ set(LEGACY     "${API}/legacy")
 
 set(AURADSP_PLUGIN_HOST_SOURCES
     "${API}/plugins/platform/win32/plugin_gui_win32.cpp"
+    "${API}/plugins/platform/win32/win32_util.cpp"
+    "${API}/plugins/platform/win32/plugin_paths.cpp"
+    "${API}/plugins/driver/plugin_bundle.cpp"
     "${API}/plugins/driver/plugin_scanner.cpp"
-    "${API}/plugins/formats/plugin_instances.cpp"
+    "${API}/plugins/driver/plugin_driver_registry.cpp"
+    "${API}/plugins/driver/plugin_json.cpp"
+    "${API}/plugins/driver/plugin_thread.cpp"
     "${API}/plugins/driver/plugin_host_manager.cpp"
+    "${API}/plugins/formats/clap/clap_driver.cpp"
+    "${API}/plugins/formats/clap/clap_instance.cpp"
+    "${API}/plugins/formats/clap/clap_metadata.cpp"
+    "${API}/plugins/formats/vst3/vst3_driver.cpp"
+    "${API}/plugins/formats/vst3/vst3_instance.cpp"
+    "${API}/plugins/formats/vst3/vst3_metadata.cpp"
 )
 set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_host.cpp"
@@ -46,6 +57,7 @@ target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
     "${API}/plugins/api"
+    "${API}/plugins/driver"
     "${API}/plugins/platform/win32"
     "${LEGACY}"
     "${LEGACY}/jdsp"
@@ -86,6 +98,7 @@ add_executable(test_plugin_direct
 target_include_directories(test_plugin_direct PRIVATE
     "${API}"
     "${API}/plugins/api"
+    "${API}/plugins/driver"
     "${API}/plugins/platform/win32"
     "${PLUGIN_API}"
 )
