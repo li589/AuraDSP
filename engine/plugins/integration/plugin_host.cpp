@@ -8,7 +8,7 @@
 #include "plugin_host.h"
 
 // P1：本文件已按区拆分（见上 switch）；此处仅保留 C++ TU 骨架。
-// VST3 静态链接锚点（vst3_static.h）在 formats/plugin_instances.cpp，
+// VST3 静态链接锚点（vst3_static.h）在 formats/vst3/vst3_instance.cpp，
 // 全仓仅此一处 include（DEF_CLASS_IID 单包含设计）。
 
 namespace auradsp {

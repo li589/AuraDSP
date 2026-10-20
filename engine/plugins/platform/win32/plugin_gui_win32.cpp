@@ -1,30 +1,11 @@
 #include "plugin_host.h"
+#include "win32_util.h"
 
 #include <windows.h>
-#include <winver.h>
-#pragma comment(lib, "version.lib")
-#include <shlobj.h>
-#include <filesystem>
-#include <fstream>
-#include <sstream>
-#include <iostream>
-#include <iomanip>
-#include <algorithm>
-#include <cstring>
-#include <thread>
-#include <future>
-#include <functional>
-#include <deque>
-#include <map>
+
+#include <mutex>
 #include <set>
-#include <unordered_set>
-#include <array>
-
-
-
-#include "plugin_host_util.h"
-
-namespace fs = std::filesystem;
+#include <string>
 
 namespace auradsp {
 static LRESULT CALLBACK PluginWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
