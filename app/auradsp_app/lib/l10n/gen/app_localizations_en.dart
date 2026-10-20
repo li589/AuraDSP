@@ -1506,6 +1506,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainSlotRemoteFailed => 'Plugin host lost - bypassed';
 
   @override
+  String get chainPdcLabel => 'Delay compensation (PDC)';
+
+  @override
   String chainSlotStatusLine(String a, int b) {
     return 'Status: $a • latency: $b samples';
   }

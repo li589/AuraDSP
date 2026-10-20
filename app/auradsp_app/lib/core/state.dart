@@ -1062,6 +1062,7 @@ class AppModel extends ChangeNotifier {
   String? savedPluginPath;
   String savedPluginId = '';
   bool savedPluginBypass = false;
+  bool savedPluginPdc = false;
   final List<SavedPluginSlot> savedPluginSlots = [];
 
   ReceivePort? _fromIso;
@@ -1849,6 +1850,11 @@ class AppModel extends ChangeNotifier {
         scheduleAutoSave();
         notifyListeners();
         break;
+      case 'pluginPdc':
+        pluginManager.onPluginPdc(raw['pdc'] as bool, raw['rc'] as int);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
       case 'pluginStatus':
         pluginManager.onPluginStatus(raw['status']);
         notifyListeners();
@@ -2233,7 +2239,10 @@ class AppModel extends ChangeNotifier {
         setGraphOrder(graphOrder!);
       }
 
-      // 5. 恢复第三方插件挂载与旁路（多插槽）
+      if (savedPluginPdc) {
+        send({'cmd': 'pluginSetPdc', 'pdc': true});
+      }
+
       if (savedPluginSlots.isNotEmpty) {
         for (final item in savedPluginSlots) {
           if (item.path.isNotEmpty && File(item.path).existsSync()) {

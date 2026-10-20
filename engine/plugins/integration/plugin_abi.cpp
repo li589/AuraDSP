@@ -241,4 +241,20 @@ int auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len) {
     return auradsp_plugin_slot_get_status(h, 0, out_json, max_len);
 }
 
+int auradsp_plugin_set_pdc(auradsp_handle h, int enable) {
+    if (!h || !h->plugin.chain) return 0;
+    h->plugin.chain->setPdc(enable != 0);
+    return 1;
+}
+
+int auradsp_plugin_get_pdc(auradsp_handle h) {
+    if (!h || !h->plugin.chain) return 0;
+    return h->plugin.chain->pdc() ? 1 : 0;
+}
+
+uint32_t auradsp_plugin_get_total_latency(auradsp_handle h) {
+    if (!h || !h->plugin.chain) return 0;
+    return h->plugin.chain->totalLatency();
+}
+
 } // extern "C"

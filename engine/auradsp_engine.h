@@ -264,6 +264,11 @@ int      auradsp_plugin_get_bypass(auradsp_handle h);
 uint32_t auradsp_plugin_get_latency(auradsp_handle h);
 int      auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len);
 
+/* PDC ��·�ӳٲ����� */
+int      auradsp_plugin_set_pdc(auradsp_handle h, int enable);
+int      auradsp_plugin_get_pdc(auradsp_handle h);
+uint32_t auradsp_plugin_get_total_latency(auradsp_handle h);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

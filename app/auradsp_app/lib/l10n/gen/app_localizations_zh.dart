@@ -1449,6 +1449,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainSlotRemoteFailed => '插件宿主已断开（已旁路）';
 
   @override
+  String get chainPdcLabel => '延迟补偿 (PDC)';
+
+  @override
   String chainSlotStatusLine(String a, int b) {
     return '状态：$a • 延迟：$b 采样';
   }

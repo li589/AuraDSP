@@ -352,6 +352,8 @@ class _ChainPageState extends State<ChainPage> {
                   if (s < PluginManager.kMaxSlots - 1)
                     const SizedBox(height: AuraSpace.sm),
                 ],
+                const SizedBox(height: AuraSpace.sm),
+                _PdcToggleRow(model: widget.model),
               ],
             ),
           ),
@@ -699,6 +701,34 @@ class _PluginSlotChainCard extends StatelessWidget {
 }
 
 /// 节点旁路开关交互胶囊
+class _PdcToggleRow extends StatelessWidget {
+  final AppModel model;
+
+  const _PdcToggleRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final manager = model.pluginManager;
+    return Row(
+      children: [
+        Icon(Icons.timeline_rounded, size: 16, color: p.accent),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            l10nOf(context).chainPdcLabel,
+            style: captionOf(p),
+          ),
+        ),
+        AuraSwitch(
+          value: manager.pdcEnabled,
+          onChanged: (v) => manager.setPdc(v),
+        ),
+      ],
+    );
+  }
+}
+
 class _StageBypassPill extends StatelessWidget {
   final bool isEnabled;
   final VoidCallback onTap;

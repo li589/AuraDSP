@@ -291,6 +291,7 @@ class PluginManager extends ChangeNotifier {
   int _scanDone = 0;
   int _scanTotal = 0;
   int _scanFound = 0;
+  bool _pdcEnabled = false;
 
   // --- 插件级预设数据（assets/presets/plugin_tables.json + config 增量） ---
   Map<String, String> _vendorTable = {};
@@ -519,6 +520,24 @@ class PluginManager extends ChangeNotifier {
   void toggleBypass({int? slot}) {
     final s = slot ?? _selectedSlot;
     setBypass(!isSlotBypassed(s), slot: s);
+  }
+
+  void setPdc(bool enable) {
+    _pdcEnabled = enable;
+    notifyListeners();
+    _commandSender?.call({
+      'cmd': 'pluginSetPdc',
+      'pdc': enable,
+    });
+  }
+
+  bool get pdcEnabled => _pdcEnabled;
+
+  void onPluginPdc(bool pdc, int rc) {
+    if (rc == 1) {
+      _pdcEnabled = pdc;
+    }
+    notifyListeners();
   }
 
   /// 打开插件原生 GUI 编辑器窗口
