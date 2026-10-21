@@ -162,12 +162,19 @@ void main() {
     test('params 消息包含此前遗漏的 14 类参数时，AppModel 状态与 _paramValues 字典全量更新', () {
       final m = AppModel(testing: true);
 
+      // 引擎真相值与逆换算契约（state.dart:1581）：
+      // 引擎 raw 值 = (band * stereoMix * 2).clamp(0, 1) * stereoWidenMax
+      const expectedMix = 0.8;
+      final effMix = expectedMix * m.stereoWidenMax;
+      final rawBand0 = (0.1 * (expectedMix * 2.0)).clamp(0.0, 1.0) * m.stereoWidenMax;
+      final rawBand4 = (0.5 * (expectedMix * 2.0)).clamp(0.0, 1.0) * m.stereoWidenMax;
+
       final fakeParamsMsg = {
         'evt': 'params',
         'bassEnable': 1,
         'bassGain': 6.0,
         'reverbPreset': 2,
-        'stereoMix': 0.8,
+        'stereoMix': effMix,
         'eqEnable': 1,
         'postGain': -2.0,
         'limiterEnable': 1,
@@ -201,7 +208,7 @@ void main() {
         'inputBalanceR': 0.85,
         'tubeGain': 8.0,
         'stereoEnable': 1,
-        'stereoBands': [0.1, 0.2, 0.3, 0.4, 0.5],
+        'stereoBands': [rawBand0, 0.2, 0.3, 0.4, rawBand4],
         'fvRoomSize': 1.5,
         'fvWidth': 1.8,
         'eqBandsCount': 10,

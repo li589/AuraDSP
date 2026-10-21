@@ -1323,7 +1323,10 @@ class AppModel extends ChangeNotifier {
         // 关着开关退出后，下次启动回放推 0 → readback 把 UI 滑块清零 →
         // autoSave 再把 0 存回会话（会话记忆被静默销毁；用户打开开关时
         // 又被 setStereoEnabled 的兜底拉回 0.5，表现为"滑块自己跑到 50%"）。
-        if (stereoOn) {
+        if (raw['stereoEnable'] != null) {
+          stereoOn = (raw['stereoEnable'] as int) != 0;
+        }
+        if (stereoOn && raw['stereoMix'] != null) {
           stereoMix =
               ((raw['stereoMix'] as num).toDouble() / stereoWidenMax).clamp(0.0, 1.0);
         }
