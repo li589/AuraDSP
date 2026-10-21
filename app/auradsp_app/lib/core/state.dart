@@ -5473,6 +5473,9 @@ void fillEqQ(double q) {
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(_onWindowVisibilityChanged);
     _debounceSaveTimer?.cancel();
+    _bassGainTimer?.cancel();
+    _eqCurveTimer?.cancel();
+    _eqResponseTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);
     _toIso?.send({'cmd': 'shutdown'});
@@ -5495,6 +5498,8 @@ void fillEqQ(double q) {
     grDyneqMid.dispose();
     grDyneqHigh.dispose();
     eventSeq.dispose();
+    pluginManager.removeListener(notifyListeners);
+    pluginManager.dispose();
     super.dispose();
   }
 }

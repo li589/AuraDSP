@@ -104,8 +104,9 @@ void ProcessPluginProxy::deactivate() {
 
 void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outChannels,
                                     uint32_t numFrames) const {
-    if (!inChannels || !outChannels) return;
-    for (uint32_t ch = 0; ch < 2; ++ch) {
+    if (!inChannels || !outChannels || numFrames == 0) return;
+    const uint32_t channels = (std::max)(2u, (std::min)(m_transportChannels, ipc::kChannels));
+    for (uint32_t ch = 0; ch < channels; ++ch) {
         if (inChannels[ch] && outChannels[ch] &&
             inChannels[ch] != outChannels[ch]) {
             std::memcpy(outChannels[ch], inChannels[ch],
@@ -178,26 +179,44 @@ void ProcessPluginProxy::process(float* const* inChannels, float* const* outChan
         return;
     }
 
-    float* inL = inChannels[0];
-    float* inR = inChannels[1];
-    float* outL = outChannels[0];
-    float* outR = outChannels[1];
-    if (!inL || !inR || !outL || !outR) return;
+    const uint32_t channels = (std::max)(2u, (std::min)(m_transportChannels, ipc::kChannels));
+    uint32_t plugChannels = (m_busInfo.mainInChannels > 0)
+                                ? static_cast<uint32_t>(m_busInfo.mainInChannels)
+                                : 2u;
+    if (plugChannels > channels) plugChannels = channels;
+    if (plugChannels > ipc::kChannels) plugChannels = ipc::kChannels;
 
-    float block[2 * ipc::kTransportFrames];
+    for (uint32_t ch = 0; ch < plugChannels; ++ch) {
+        if (!inChannels[ch] || !outChannels[ch]) {
+            copyBypass(inChannels, outChannels, numFrames);
+            return;
+        }
+    }
+
+    float block[ipc::kChannels * ipc::kTransportFrames];
     uint32_t offset = 0;
     while (offset < numFrames) {
         const uint32_t n = (std::min)(ipc::kTransportFrames, numFrames - offset);
         for (uint32_t i = 0; i < n; ++i) {
-            block[i * 2] = inL[offset + i];
-            block[i * 2 + 1] = inR[offset + i];
+            for (uint32_t ch = 0; ch < plugChannels; ++ch) {
+                block[i * plugChannels + ch] = inChannels[ch][offset + i];
+            }
         }
-        processInterleaved(block, n, 2, 0xFF);
+        processInterleaved(block, n, plugChannels, (1u << plugChannels) - 1u);
         for (uint32_t i = 0; i < n; ++i) {
-            outL[offset + i] = block[i * 2];
-            outR[offset + i] = block[i * 2 + 1];
+            for (uint32_t ch = 0; ch < plugChannels; ++ch) {
+                outChannels[ch][offset + i] = block[i * plugChannels + ch];
+            }
         }
         offset += n;
+    }
+
+    for (uint32_t ch = plugChannels; ch < channels; ++ch) {
+        if (inChannels[ch] && outChannels[ch] &&
+            inChannels[ch] != outChannels[ch]) {
+            std::memcpy(outChannels[ch], inChannels[ch],
+                        static_cast<size_t>(numFrames) * sizeof(float));
+        }
     }
 }
 
