@@ -177,17 +177,16 @@ status = get_status(handle)
 assert status["hasActive"] and status["plugin"] is not None
 assert status.get("remoteMode") is True, f"expected remoteMode, got {status}"
 latency = dll.auradsp_plugin_get_latency(handle)
-# F-7: 总延迟 = 插件自身延迟 + 2×传输块（在途输入块 + 待回输出块）。
-# 判别阈推导：修复前代理只加 1 块（plugin+128），修复后加 2 块（plugin+256）。
-# 泛化下界 plugin+256 取自扫描元数据——但扫描期是预实例化元数据（VST3 的
-# 延迟查询发生在实例化时），本用例中为 0，单靠它无法判别修复前的 416
-# （416 >= 0+256 亦通过）。故对本用例附加固定判别阈：R-1 实测 Convology
-# XT 插件延迟 288 → 端到端 544（修复前 416）；阈取 512，416 失败、544 通过。
+# E15（2026-10-22 实测重校准）：总延迟 = 插件自身延迟 + 1×传输块。
+# 判别史：F-7 曾依据 R-1 的 544 实测（pre-F-6 宿主 Sleep(1) 轮询、流水深
+# 2 块）把上报从 +1 块改为 +2 块，阈取 512 判别 416/544。E9 门禁 + E12 修复
+# 后实测（E15）：post-F-6 事件唤醒下动态流水深恒为 1 块（onset delta=128，
+# 两模式逐位一致背书），+2 块过报 128 帧 → 公式改回 +1 块。Convology XT
+# 插件延迟 288 → 端到端 416，此处精确断言（元数据 latency 不可靠，见下）。
 plugin_latency = TARGET.get("latency", 0)
-assert latency >= max(plugin_latency + 2 * 128, 512), (
-    f"total latency {latency} < expected floor "
-    f"max(plugin {plugin_latency} + 2x128, 512) — proxy still reports only "
-    f"one transport block (pre-F-7)")
+assert latency == 416, (
+    f"total latency {latency} != 416 (= ConvologyXT 288 + 1x128 transport) — "
+    f"proxy latency reporting drifted from E15 calibration")
 assert status.get("transportLatency") == 128, f"unexpected transport latency: {status}"
 assert status.get("latency") == latency, (
     f"ABI latency {latency} != status latency {status.get('latency')}")
