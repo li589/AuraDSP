@@ -49,6 +49,8 @@ def run_smoke_tests():
         # 报红抓出 E12 P0（missStreak 自毁）；E12/E13 修复后转绿，现为常驻
         # 回归守卫（slot 健康 + processCalls 推进 + 对齐逐位一致）。
         "smoke_cross_mode_consistency.py",
+        # E14 预热直通双发门禁：直通块不得被宿主回放（prime 补位机制守卫）
+        "smoke_plugin_prime_no_double_send.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",

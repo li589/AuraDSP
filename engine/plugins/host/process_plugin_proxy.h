@@ -118,6 +118,11 @@ private:
      * 刚提交的块不可能微秒级返回），导致 missStreak 每块自增、~64 块后误判
      * 宿主死亡永久 bypass。 */
     bool m_gotOutputThisBlock = false;
+
+    /* E14: 本传输块内是否发生过直通帧（无输出可用 → 输入原样保留）。
+     * 直通块在块边界被**丢弃不提交**——直通内容已被上层听见，再提交会让
+     * 宿主处理结果（回声）稍后再次进入输出流，同一段音频听到两遍。 */
+    bool m_blockHadPassthrough = false;
 };
 
 } // namespace auradsp
