@@ -463,6 +463,11 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     if (s.instance && s.instance->interleavedTransport()) {
         s.inFlight.fetch_add(1, std::memory_order_acq_rel);
         InFlightGuard guard(s.inFlight, s.destroyPending);
+        /* E13: 交错传输路径（remote 代理分支）此前从不递增 processCalls——
+         * 该计数只存在于平面 processSlot，进程内链组件经 else 分支的交错→
+         * 平面转换间接计数，remote 路径则全程为 0（遥测盲区，R-1 遗留①）。
+         * 仅在此分支递增：else 分支由其内部 processSlot 计数，避免双计。 */
+        s.processCalls.fetch_add(1, std::memory_order_relaxed);
         if (s.hasActive.load(std::memory_order_acquire) &&
             !s.bypassed.load(std::memory_order_acquire)) {
             s.instance->processInterleaved(interleaved, numFrames, channels, mask);
