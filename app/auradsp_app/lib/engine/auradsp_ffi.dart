@@ -544,6 +544,21 @@ final class AuraDspLib {
           'auradsp_plugin_get_latency')
       .asFunction();
 
+  late final int Function(Pointer<Void>, int) pluginSetPdc = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_set_pdc')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetPdc = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_pdc')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginGetTotalLatency = dylib
+      .lookup<NativeFunction<Uint32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_get_total_latency')
+      .asFunction();
+
   late final int Function(Pointer<Void>, Pointer<Utf8>, int) pluginGetStatus =
       dylib
           .lookup<
@@ -659,6 +674,16 @@ final class AuraDspLib {
   late final int Function(Pointer<Void>, int) pluginSlotGetInsertStage = dylib
       .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
           'auradsp_plugin_slot_get_insert_stage')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int, int) pluginSlotSetChannels = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
+          'auradsp_plugin_slot_set_channels')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotGetChannels = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_get_channels')
       .asFunction();
 
   /// 插件编辑器隔离名单（预设系统数据）：逗号分隔小写子串（匹配 name/path），
@@ -1006,7 +1031,15 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     return lib.pluginSetBypass(handle, bypass ? 1 : 0);
   }
 
-  /// 插件宿主：获取宿主状态 JSON
+  static int pluginSetPdcWrap(AuraDspLib lib, Pointer<Void> handle, bool enable) {
+    return lib.pluginSetPdc(handle, enable ? 1 : 0);
+  }
+
+  static bool pluginGetPdcWrap(AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginGetPdc(handle) != 0;
+  }
+
+  /// �����������ȡ����״̬ JSON
   static String pluginGetStatusJson(AuraDspLib lib, Pointer<Void> handle,
       {int maxBytes = 8192}) {
     final buf = malloc<Uint8>(maxBytes);
@@ -1138,5 +1171,15 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   static int pluginSlotGetInsertStageWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotGetInsertStage(handle, slot);
+  }
+
+  static int pluginSlotSetChannelsWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, int mask) {
+    return lib.pluginSlotSetChannels(handle, slot, mask);
+  }
+
+  static int pluginSlotGetChannelsWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotGetChannels(handle, slot);
   }
 }

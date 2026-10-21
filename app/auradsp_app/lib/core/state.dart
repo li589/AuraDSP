@@ -36,12 +36,14 @@ class SavedPluginSlot {
   final String id;
   final bool bypass;
   final int stage;
+  final int channels;
   const SavedPluginSlot({
     required this.slot,
     required this.path,
     this.id = '',
     this.bypass = false,
     this.stage = 3,
+    this.channels = 0xFF,
   });
 }
 
@@ -1062,6 +1064,7 @@ class AppModel extends ChangeNotifier {
   String? savedPluginPath;
   String savedPluginId = '';
   bool savedPluginBypass = false;
+  bool savedPluginPdc = false;
   final List<SavedPluginSlot> savedPluginSlots = [];
 
   ReceivePort? _fromIso;
@@ -1320,7 +1323,10 @@ class AppModel extends ChangeNotifier {
         // 关着开关退出后，下次启动回放推 0 → readback 把 UI 滑块清零 →
         // autoSave 再把 0 存回会话（会话记忆被静默销毁；用户打开开关时
         // 又被 setStereoEnabled 的兜底拉回 0.5，表现为"滑块自己跑到 50%"）。
-        if (stereoOn) {
+        if (raw['stereoEnable'] != null) {
+          stereoOn = (raw['stereoEnable'] as int) != 0;
+        }
+        if (stereoOn && raw['stereoMix'] != null) {
           stereoMix =
               ((raw['stereoMix'] as num).toDouble() / stereoWidenMax).clamp(0.0, 1.0);
         }
@@ -1849,6 +1855,11 @@ class AppModel extends ChangeNotifier {
         scheduleAutoSave();
         notifyListeners();
         break;
+      case 'pluginPdc':
+        pluginManager.onPluginPdc(raw['pdc'] as bool, raw['rc'] as int);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
       case 'pluginStatus':
         pluginManager.onPluginStatus(raw['status']);
         notifyListeners();
@@ -1887,6 +1898,12 @@ class AppModel extends ChangeNotifier {
       case 'pluginSlotInsertStage':
         pluginManager.onPluginSlotInsertStage(
             raw['slot'] as int, (raw['stage'] as num).toInt(), raw['rc'] as int);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
+      case 'pluginSlotChannels':
+        pluginManager.onPluginSlotChannels(
+            raw['slot'] as int, (raw['mask'] as num).toInt(), raw['rc'] as int);
         scheduleAutoSave();
         notifyListeners();
         break;
@@ -2233,7 +2250,10 @@ class AppModel extends ChangeNotifier {
         setGraphOrder(graphOrder!);
       }
 
-      // 5. 恢复第三方插件挂载与旁路（多插槽）
+      if (savedPluginPdc) {
+        send({'cmd': 'pluginSetPdc', 'pdc': true});
+      }
+
       if (savedPluginSlots.isNotEmpty) {
         for (final item in savedPluginSlots) {
           if (item.path.isNotEmpty && File(item.path).existsSync()) {
@@ -2243,6 +2263,13 @@ class AppModel extends ChangeNotifier {
               'path': item.path,
               'id': item.id,
             });
+            if (item.channels != 0xFF) {
+              send({
+                'cmd': 'pluginSlotSetChannels',
+                'slot': item.slot,
+                'mask': item.channels,
+              });
+            }
             if (item.stage != PluginInsertStage.defaultStage) {
               send({
                 'cmd': 'pluginSlotSetInsertStage',
@@ -3926,16 +3953,53 @@ void retryWasapi() {
 
 /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
 /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
+int _restartToken = 0;
+
+Future<void> _stopAudioIsolate(Isolate iso, SendPort? port) async {
+  final done = Completer<void>();
+  final exitPort = ReceivePort();
+  exitPort.listen((_) {
+    if (!done.isCompleted) done.complete();
+  });
+  try {
+    iso.addOnExitListener(exitPort.sendPort);
+  } catch (_) {}
+  try {
+    port?.send({'cmd': 'shutdown'});
+  } catch (_) {}
+  try {
+    await done.future.timeout(const Duration(milliseconds: 800));
+  } catch (_) {
+    try {
+      iso.kill(priority: Isolate.immediate);
+    } catch (_) {}
+  } finally {
+    try {
+      iso.removeOnExitListener(exitPort.sendPort);
+    } catch (_) {}
+    exitPort.close();
+  }
+}
+
 void _restartIsolate() {
-  try {
-    _fromIso?.close();
-  } catch (_) {}
-  _fromIso = null;
-  _toIso = null;
-  try {
-    _iso?.kill(priority: Isolate.immediate);
-  } catch (_) {}
+  final token = ++_restartToken;
+  unawaited(_restartIsolateAsync(token));
+}
+
+Future<void> _restartIsolateAsync(int token) async {
+  final oldIso = _iso;
+  final oldPort = _toIso;
+  final oldFrom = _fromIso;
   _iso = null;
+  _toIso = null;
+  _fromIso = null;
+  try {
+    oldFrom?.close();
+  } catch (_) {}
+  if (oldIso != null) {
+    await _stopAudioIsolate(oldIso, oldPort);
+  }
+  if (token != _restartToken) return;
   conn = EngineConn.connecting;
   playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
   _spawn();
@@ -5409,6 +5473,9 @@ void fillEqQ(double q) {
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(_onWindowVisibilityChanged);
     _debounceSaveTimer?.cancel();
+    _bassGainTimer?.cancel();
+    _eqCurveTimer?.cancel();
+    _eqResponseTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);
     _toIso?.send({'cmd': 'shutdown'});
@@ -5431,6 +5498,8 @@ void fillEqQ(double q) {
     grDyneqMid.dispose();
     grDyneqHigh.dispose();
     eventSeq.dispose();
+    pluginManager.removeListener(notifyListeners);
+    pluginManager.dispose();
     super.dispose();
   }
 }

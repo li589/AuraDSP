@@ -96,6 +96,18 @@ for dst in RUNTIME:
         print(f"  LOCKED（App 可能在跑，先退出再重跑） {os.path.relpath(dst, ROOT)}: {e}")
         sys.exit(2)
 
+# Phase 4：host 必须始终与 engine DLL 同目录（客户端按 DLL 路径解析）。
+HOST_TRUTH = os.path.join(os.path.dirname(TRUTH), "auradsp_plugin_host.exe")
+if os.path.exists(HOST_TRUTH):
+    for dst in RUNTIME:
+        host_dst = os.path.join(os.path.dirname(dst), "auradsp_plugin_host.exe")
+        try:
+            shutil.copyfile(HOST_TRUTH, host_dst)
+            print(f"  OK {os.path.relpath(host_dst, ROOT)}")
+        except OSError as e:
+            print(f"  LOCKED（App 可能在跑，先退出再重跑） {os.path.relpath(host_dst, ROOT)}: {e}")
+            sys.exit(2)
+
 print("%-62s %-10s %-8s %s" % ("path", "eq_in", "ver", "verdict"))
 print("-" * 100)
 allgood = True

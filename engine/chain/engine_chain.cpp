@@ -1,5 +1,6 @@
-/* P2 split: moved verbatim from auradsp_engine.cpp (pure move, no logic change). */
+/* P2 split from auradsp_engine.cpp; Phase 3 routes plugin stages through PluginChainComponent. */
 #include "engine_internal.h"
+#include "plugins/integration/plugin_chain_adapter.h"
 
 
 
@@ -344,48 +345,6 @@ void lp_refresh_sliders(auradsp_handle h) {
     }
 }
 
-
-static inline void process_plugin_slots_stage(auradsp_handle h, int stage, float* buffer, int frames) {
-    if (!h || !h->plugin_host) return;
-    for (size_t s = 0; s < auradsp::PluginHostManager::kMaxPluginSlots; ++s) {
-        if (h->plugin_host->hasActivePluginSlot(s) &&
-            !h->plugin_host->isBypassedSlot(s) &&
-            h->plugin_host->getInsertStageSlot(s) == stage) {
-
-            double inSum = 0.0;
-            for (int i = 0; i < frames; ++i) {
-                const float l = buffer[i * 2];
-                const float r = buffer[i * 2 + 1];
-                inSum += (double)l * l + (double)r * r;
-                h->plugin_buf_l[i] = l;
-                h->plugin_buf_r[i] = r;
-            }
-            float* planarIn[2] = { h->plugin_buf_l, h->plugin_buf_r };
-            float* planarOut[2] = { h->plugin_out_l, h->plugin_out_r };
-            h->plugin_host->processSlot(s, planarIn, planarOut, static_cast<uint32_t>(frames));
-            double outSum = 0.0;
-            float maxDiff = 0.0f;
-            for (int i = 0; i < frames; ++i) {
-                const float l = h->plugin_out_l[i];
-                const float r = h->plugin_out_r[i];
-                outSum += (double)l * l + (double)r * r;
-                const float dl = std::fabs(l - buffer[i * 2]);
-                const float dr = std::fabs(r - buffer[i * 2 + 1]);
-                if (dl > maxDiff) maxDiff = dl;
-                if (dr > maxDiff) maxDiff = dr;
-                buffer[i * 2]     = l;
-                buffer[i * 2 + 1] = r;
-            }
-            const double denom = frames > 0 ? (double)frames * 2.0 : 1.0;
-            h->plugin_host->recordTelemetry(
-                s,
-                static_cast<float>(std::sqrt(inSum / denom)),
-                static_cast<float>(std::sqrt(outSum / denom)),
-                maxDiff,
-                static_cast<uint32_t>(frames));
-        }
-    }
-}
 
 /* ---------------------------------------------------------------------------
  * 多声道矩阵混音（ADR-003 Phase A）
@@ -745,6 +704,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.filter_enable.load(std::memory_order_relaxed)) {
         filter_process_mc(h, dst, frames, ch);
     }
+    auradsp::plugin_chain_process_n(h, 0, dst, (uint32_t)frames, (uint32_t)ch);
+
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
         h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
         shelf_process_mc(h, dst, frames, ch);
@@ -755,6 +716,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         tube_process_mc(h, dst, frames, ch);
     }
+
+    auradsp::plugin_chain_process_n(h, 1, dst, (uint32_t)frames, (uint32_t)ch);
 
     // 3. Category B 跨声道/声场效果器与前置 FL/FR vendor 核心（仅作用于前置立体声对，保持环绕声场完整性）
     if (h->shelf_scratch && h->mx_stereo) {
@@ -769,9 +732,6 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
-
-        process_plugin_slots_stage(h, 0, h->shelf_scratch, frames);
-        process_plugin_slots_stage(h, 1, h->shelf_scratch, frames);
 
         const int tube_saved = h->jdsp.tubeEnabled;
         const int limiter_saved = h->jdsp.limiterEnabled;
@@ -814,7 +774,17 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         h->jdsp.tubeEnabled = tube_saved;
         h->jdsp.limiterEnabled = limiter_saved;
 
-        process_plugin_slots_stage(h, 2, h->mx_stereo, frames);
+        for (int i = 0; i < frames; ++i) {
+            dst[i * ch + 0] = h->mx_stereo[i * 2];
+            dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
+        }
+
+        auradsp::plugin_chain_process_n(h, 2, dst, (uint32_t)frames, (uint32_t)ch);
+
+        for (int i = 0; i < frames; ++i) {
+            h->mx_stereo[i * 2]     = dst[i * ch + 0];
+            h->mx_stereo[i * 2 + 1] = dst[i * ch + 1];
+        }
 
         if (h->p.haas_enable.load(std::memory_order_relaxed)) {
             haas_process(h, h->mx_stereo, frames);
@@ -824,13 +794,13 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         freeverb_process(h, h->mx_stereo, frames);
 
-        process_plugin_slots_stage(h, 3, h->mx_stereo, frames);
-
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
     }
+
+    auradsp::plugin_chain_process_n(h, 3, dst, (uint32_t)frames, (uint32_t)ch);
 
     // 3b. B5：双声道效果器（comp/eq）按掩码对选中声道对独立处理；
     //      arbmag 升级逐声道（B5 后续）：同一对处理后按各自 mask 位进池。
@@ -891,6 +861,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
             dst[i] = -10.0f;
         }
     }
+
+    auradsp::plugin_chain_process_n(h, 4, dst, (uint32_t)frames, (uint32_t)ch);
 }
 
 
@@ -949,7 +921,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
         basspsycho_process(h, const_cast<float*>(src), frames);
     }
     /* Stage 0: Pre-DSP（链头，最前置） */
-    process_plugin_slots_stage(h, 0, const_cast<float*>(src), frames);
+    auradsp::plugin_chain_process(h, 0, const_cast<float*>(src), (uint32_t)frames);
 
     /* M5-b：低频搁架在 vendor 链前（就地改 src） */
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
@@ -964,7 +936,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     sample_stage_peak(h, 14, src, frames);   /* Stage 14: Dynamic EQ output */
 
     /* Stage 1: Pre-Vendor（主效果前） */
-    process_plugin_slots_stage(h, 1, const_cast<float*>(src), frames);
+    auradsp::plugin_chain_process(h, 1, const_cast<float*>(src), (uint32_t)frames);
 
     /* [EQ tap] EQ 输入 = vendor 链入口。EQ 在库的单体链内部，拆不出后级，
      * 只能取前级；此处已过 pre-DSP / 前置插件 / 低架，尚未进 EQ。 */
@@ -977,7 +949,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                      std::memory_order_relaxed);
 
     /* Stage 2: Post-Vendor（主效果后 / 混响前） */
-    process_plugin_slots_stage(h, 2, dst, frames);
+    auradsp::plugin_chain_process(h, 2, dst, (uint32_t)frames);
 
     /* Haas 差分环绕（Stage 2 后 / Freeverb 前） */
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
@@ -1008,7 +980,7 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
 
     /* Stage 3: Post-Reverb（混响后，默认阶段） */
-    process_plugin_slots_stage(h, 3, dst, frames);
+    auradsp::plugin_chain_process(h, 3, dst, (uint32_t)frames);
 
     /* 响度补偿（Stage 3 后 / 安全钳位前：最后一道音色工序） */
     if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
@@ -1033,5 +1005,5 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
 
     /* Stage 4: Post-Limiter（链尾，最终安全输出后） */
-    process_plugin_slots_stage(h, 4, dst, frames);
+    auradsp::plugin_chain_process(h, 4, dst, (uint32_t)frames);
 }

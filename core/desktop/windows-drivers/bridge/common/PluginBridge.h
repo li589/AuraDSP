@@ -34,6 +34,8 @@ struct Fns {
     using FnLoadPreset = int (*)(void*, int, const char*);
     using FnSetStage = int (*)(void*, int, int);
     using FnGetStage = int (*)(void*, int);
+    using FnSetChannels = int (*)(void*, int, int);
+    using FnGetChannels = int (*)(void*, int);
 
     FnLoad load = nullptr;
     FnUnload unload = nullptr;
@@ -48,11 +50,14 @@ struct Fns {
     FnLoadPreset loadPreset = nullptr;
     FnSetStage setStage = nullptr;
     FnGetStage getStage = nullptr;
+    FnSetChannels setChannels = nullptr;
+    FnGetChannels getChannels = nullptr;
 
     bool Ready() const {
         return load && unload && setBypass && getBypass && getLatency &&
                getStatus && showEditor && closeEditor && isEditorOpen &&
-               savePreset && loadPreset && setStage && getStage;
+               savePreset && loadPreset && setStage && getStage &&
+               setChannels && getChannels;
     }
 
     bool Resolve(HMODULE mod) {
@@ -69,6 +74,8 @@ struct Fns {
         loadPreset = nullptr;
         setStage = nullptr;
         getStage = nullptr;
+        setChannels = nullptr;
+        getChannels = nullptr;
         if (!mod) return false;
         load = (FnLoad)GetProcAddress(mod, "auradsp_plugin_slot_load");
         unload = (FnUnload)GetProcAddress(mod, "auradsp_plugin_slot_unload");
@@ -94,6 +101,10 @@ struct Fns {
             mod, "auradsp_plugin_slot_set_insert_stage");
         getStage = (FnGetStage)GetProcAddress(
             mod, "auradsp_plugin_slot_get_insert_stage");
+        setChannels = (FnSetChannels)GetProcAddress(
+            mod, "auradsp_plugin_slot_set_channels");
+        getChannels = (FnGetChannels)GetProcAddress(
+            mod, "auradsp_plugin_slot_get_channels");
         return Ready();
     }
 };
@@ -104,6 +115,7 @@ struct Cfg {
     char id[256] = {};
     int bypass = 0;
     int stage = 3;
+    int channels = 0xFF;
 };
 
 // 控制线程镜像（Dart 线程 + VM monitor 重建线程）。RT 线程从不读取。
@@ -118,7 +130,7 @@ public:
     }
 
     void SetLoad(int slot, const char* path, const char* id, int stage,
-                 int bypass) {
+                 int bypass, int channels) {
         if (slot < 0 || slot >= kSlots || !path) return;
         AcquireSRWLockExclusive(&lock_);
         Cfg& c = cfg_[slot];
@@ -127,6 +139,7 @@ public:
         strncpy_s(c.id, id ? id : "", _TRUNCATE);
         c.stage = stage;
         c.bypass = bypass;
+        c.channels = channels;
         ReleaseSRWLockExclusive(&lock_);
     }
 
@@ -151,6 +164,13 @@ public:
         ReleaseSRWLockExclusive(&lock_);
     }
 
+    void SetChannels(int slot, int channels) {
+        if (slot < 0 || slot >= kSlots) return;
+        AcquireSRWLockExclusive(&lock_);
+        cfg_[slot].channels = channels;
+        ReleaseSRWLockExclusive(&lock_);
+    }
+
     // 重建后回放（调用方已确保音频线程不接触 engine）。返回成功/失败槽数。
     void Replay(void* engine, const Fns& fns, int* ok, int* failed) {
         if (ok) *ok = 0;
@@ -164,6 +184,7 @@ public:
                 if (failed) ++*failed;
                 continue;
             }
+            fns.setChannels(engine, i, c.channels);
             fns.setStage(engine, i, c.stage);
             fns.setBypass(engine, i, c.bypass);
             if (ok) ++*ok;
@@ -183,7 +204,8 @@ inline int SlotLoad(void* e, const Fns& f, Mirror& m, int slot,
         return 0;
     const int rc = f.load(e, slot, path, id ? id : "");
     if (rc == 1) {
-        m.SetLoad(slot, path, id, f.getStage(e, slot), f.getBypass(e, slot));
+        m.SetLoad(slot, path, id, f.getStage(e, slot), f.getBypass(e, slot),
+                  f.getChannels(e, slot));
     }
     return rc;
 }
@@ -209,6 +231,19 @@ inline int SlotSetStage(void* e, const Fns& f, Mirror& m, int slot,
     const int rc = f.setStage(e, slot, stage);
     if (rc == 1) m.SetStage(slot, stage);
     return rc;
+}
+
+inline int SlotSetChannels(void* e, const Fns& f, Mirror& m, int slot,
+                           int channels) {
+    if (!e || !f.Ready() || slot < 0 || slot >= kSlots) return 0;
+    const int rc = f.setChannels(e, slot, channels);
+    if (rc == 1) m.SetChannels(slot, channels);
+    return rc;
+}
+
+inline int SlotGetChannels(void* e, const Fns& f, int slot) {
+    if (!e || !f.Ready() || slot < 0 || slot >= kSlots) return 0xFF;
+    return f.getChannels(e, slot);
 }
 
 inline int SlotGetStatus(void* e, const Fns& f, int slot, char* out, int cap) {

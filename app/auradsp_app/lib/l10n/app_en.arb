@@ -563,6 +563,8 @@
   },
   "chainSlotBypassed": "Bypassed (thru)",
   "chainSlotProcessing": "Processing",
+  "chainSlotRemoteFailed": "Plugin host lost - bypassed",
+  "chainPdcLabel": "Delay compensation (PDC)",
   "chainSlotStatusLine": "Status: {a} • latency: {b} samples",
   "@chainSlotStatusLine": {
     "placeholders": {

@@ -13,7 +13,7 @@
 //   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
-#include "../PluginBridge.h"
+#include "PluginBridge.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
@@ -618,4 +618,15 @@ int asio_plugin_slot_get_insert_stage(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 3;
     if (!g_b.engine || !g_pluginFns.Ready()) return 3;
     return g_pluginFns.getStage(g_b.engine, slot);
+}
+
+int asio_plugin_slot_set_channels(int slot, int channels) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    return auraplugin::SlotSetChannels(g_b.engine, g_pluginFns,
+                                       g_pluginMirror, slot, channels);
+}
+
+int asio_plugin_slot_get_channels(int slot) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0xFF;
+    return auraplugin::SlotGetChannels(g_b.engine, g_pluginFns, slot);
 }
