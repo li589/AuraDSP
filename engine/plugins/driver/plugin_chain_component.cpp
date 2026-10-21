@@ -84,6 +84,7 @@ bool PluginChainComponent::prepare(double sampleRate, uint32_t maxBlockSize) {
 
     for (size_t s = 0; s < m_delayLines.size(); ++s) {
         m_delayLines[s].prepare(DelayLine::kMaxDelay);
+        m_multiDelayLines[s].prepare(MultiDelayLine::kMaxDelay);
     }
     return true;
 }
@@ -93,6 +94,8 @@ void PluginChainComponent::reset() {
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         m_host->unloadPluginSlot(slot);
         m_delayLines[slot].reset();
+        m_multiDelayLines[slot].reset();
+        m_lastMasks[slot] = 0;
     }
 }
 
@@ -184,22 +187,50 @@ void PluginChainComponent::process(int stage, float* const* in,
 
 void PluginChainComponent::processInterleaved(int stage, float* interleaved,
                                                uint32_t frames) noexcept {
-    if (!m_host || !interleaved || frames == 0 || frames > m_maxBlock) return;
+    processInterleavedN(stage, interleaved, frames, 2);
+}
+
+void PluginChainComponent::processInterleavedN(int stage, float* interleaved,
+                                                uint32_t frames,
+                                                uint32_t channels) noexcept {
+    if (!m_host || !interleaved || frames == 0 || frames > m_maxBlock ||
+        channels == 0) {
+        return;
+    }
+    if (channels > 8) channels = 8;
     if (!stageHasActiveOrPdc(stage)) return;
 
-    for (uint32_t i = 0; i < frames; ++i) {
-        m_chanInL[i] = interleaved[i * 2];
-        m_chanInR[i] = interleaved[i * 2 + 1];
-    }
+    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
+    for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
+        if (!m_host->hasActivePluginSlot(slot) ||
+            m_host->getInsertStageSlot(slot) != stage) {
+            continue;
+        }
+        uint32_t mask = m_host->getChannelMaskSlot(slot) & ((1u << channels) - 1u);
+        if (mask == 0) continue;
+        if (mask != m_lastMasks[slot]) {
+            m_multiDelayLines[slot].reset();
+            m_lastMasks[slot] = mask;
+        }
 
-    float* in[2] = {m_chanInL.get(), m_chanInR.get()};
-    float* out[2] = {m_chanOutL.get(), m_chanOutR.get()};
-    process(stage, in, out, frames);
+        const bool bypassed = m_host->isBypassedSlot(slot);
+        if (pdc) {
+            m_multiDelayLines[slot].setDelay(m_host->getLatencySlot(slot));
+            if (bypassed) {
+                m_multiDelayLines[slot].process(interleaved, frames, channels, mask);
+            } else {
+                m_multiDelayLines[slot].pushOnly(interleaved, frames, channels, mask);
+            }
+        }
+        if (bypassed) continue;
 
-    for (uint32_t i = 0; i < frames; ++i) {
-        interleaved[i * 2] = m_chanOutL[i];
-        interleaved[i * 2 + 1] = m_chanOutR[i];
+        m_host->processSlotInterleaved(slot, interleaved, frames, channels, mask);
     }
+}
+
+void PluginChainComponent::setChannelHint(int channels) noexcept {
+    if (!m_host) return;
+    m_host->setChannelHint(channels);
 }
 
 void PluginChainComponent::setBypass(int slot, bool bypassValue) noexcept {
@@ -232,6 +263,7 @@ uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (m_host->hasActivePluginSlot(slot) &&
+            m_host->getChannelMaskSlot(slot) != 0 &&
             m_host->getInsertStageSlot(slot) == stage &&
             (pdc || !m_host->isBypassedSlot(slot))) {
             total += m_host->getLatencySlot(slot);
@@ -246,6 +278,7 @@ uint32_t PluginChainComponent::totalLatency() const noexcept {
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (m_host->hasActivePluginSlot(slot) &&
+            m_host->getChannelMaskSlot(slot) != 0 &&
             (pdc || !m_host->isBypassedSlot(slot))) {
             total += m_host->getLatencySlot(slot);
         }
@@ -265,6 +298,7 @@ bool PluginChainComponent::stageHasActive(int stage) const noexcept {
     if (!m_host) return false;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
         if (m_host->hasActivePluginSlot(slot) &&
+            m_host->getChannelMaskSlot(slot) != 0 &&
             !m_host->isBypassedSlot(slot) &&
             m_host->getInsertStageSlot(slot) == stage) {
             return true;

@@ -11,6 +11,7 @@
 #include <windows.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <sstream>
 #include <string>
@@ -75,6 +76,8 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     s.inFlight.store(0, std::memory_order_relaxed);
 
         s.latency.store(0, std::memory_order_relaxed);
+        s.mainInChannels.store(2, std::memory_order_relaxed);
+        s.mainOutChannels.store(2, std::memory_order_relaxed);
         s.processCalls.store(0, std::memory_order_relaxed);
         s.inRmsBits.store(0, std::memory_order_relaxed);
         s.outRmsBits.store(0, std::memory_order_relaxed);
@@ -121,6 +124,9 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         }
         if (oldInstance) destroyInstance(std::move(oldInstance));
 
+        ensureChannelScratch(maxBlockSize);
+        m_remoteClient->setChannelHint(
+            static_cast<uint32_t>(m_channelHint.load(std::memory_order_relaxed)));
         auto instance = std::make_unique<ProcessPluginProxy>(
             m_remoteClient, slot, sampleRate, maxBlockSize);
         if (!instance->load(path, pluginId)) return false;
@@ -139,6 +145,7 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
 
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
+        ensureChannelScratch(maxBlockSize);
 
         auto* driver = PluginDriverRegistry::instance().findForPath(path);
         if (!driver) return false;
@@ -170,6 +177,7 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             return false;
         }
 
+        instance->setChannelHint(m_channelHint.load());
         bool aRet = instance->activate(sampleRate, maxBlockSize);
         AURADSP_DBG_S("[DBG PluginHost] instance->activate returned: " << aRet);
         if (!aRet) {
@@ -181,11 +189,7 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             return false;
         }
 
-        m_slots[slot].latency.store(instance->getLatency(), std::memory_order_relaxed);
-        m_slots[slot].instance = std::move(instance);
-        m_slots[slot].hasActive.store(true, std::memory_order_release);
-        m_slots[slot].bypassed.store(false, std::memory_order_release);
-
+        commitInstanceLocked(slot, std::move(instance));
         return true;
     } catch (const std::exception& e) {
         unloadPluginSlotLocked(slot);
@@ -230,6 +234,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"bypassed\":" << (isBypassedSlot(slot) ? "true" : "false") << ","
        << "\"latency\":" << m_slots[slot].latency.load() << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
+       << "\"channels\":" << m_slots[slot].channelMask.load() << ","
        << "\"processCalls\":" << m_slots[slot].processCalls.load(std::memory_order_relaxed) << ","
        << "\"inRms\":" << unpackFloat(m_slots[slot].inRmsBits.load(std::memory_order_relaxed)) << ","
        << "\"outRms\":" << unpackFloat(m_slots[slot].outRmsBits.load(std::memory_order_relaxed)) << ","
@@ -305,6 +310,57 @@ int PluginHostManager::getInsertStageSlot(size_t slot) const {
     return m_slots[slot].insertStage.load(std::memory_order_acquire);
 }
 
+void PluginHostManager::setChannelMaskSlot(size_t slot, uint32_t mask) {
+    if (slot >= kMaxPluginSlots) return;
+    m_slots[slot].channelMask.store(mask & 0xFFu, std::memory_order_release);
+}
+
+uint32_t PluginHostManager::getChannelMaskSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return 0;
+    return m_slots[slot].channelMask.load(std::memory_order_acquire);
+}
+
+void PluginHostManager::getMainChannelsSlot(size_t slot, int* inChannels,
+                                            int* outChannels) const {
+    if (inChannels) *inChannels = 2;
+    if (outChannels) *outChannels = 2;
+    if (slot >= kMaxPluginSlots) return;
+    if (inChannels) *inChannels = m_slots[slot].mainInChannels.load(std::memory_order_relaxed);
+    if (outChannels) *outChannels = m_slots[slot].mainOutChannels.load(std::memory_order_relaxed);
+}
+
+void PluginHostManager::setChannelHint(int channels) {
+    if (channels < 1) channels = 1;
+    if (channels > 8) channels = 8;
+    const int previous = m_channelHint.exchange(channels, std::memory_order_acq_rel);
+    if (previous == channels) return;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+#ifndef AURADSP_HOST_INPROC
+    if (m_remoteMode && m_remoteClient) {
+        m_remoteClient->setChannelHint(static_cast<uint32_t>(channels));
+        return;
+    }
+#endif
+    for (size_t s = 0; s < kMaxPluginSlots; ++s) {
+        if (!m_slots[s].instance || !m_slots[s].hasActive.load()) continue;
+        m_slots[s].instance->setChannelHint(channels);
+        m_slots[s].instance->activate(m_sampleRate, m_maxBlockSize);
+        m_slots[s].latency.store(m_slots[s].instance->getLatency(),
+                                 std::memory_order_relaxed);
+        const PluginBusInfo bus = m_slots[s].instance->busInfo();
+        m_slots[s].mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
+                                        std::memory_order_relaxed);
+        m_slots[s].mainOutChannels.store(
+            bus.mainOutChannels > 0 ? bus.mainOutChannels
+                                    : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
+            std::memory_order_relaxed);
+    }
+}
+
+int PluginHostManager::getChannelHint() const {
+    return m_channelHint.load(std::memory_order_acquire);
+}
+
 void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
@@ -334,6 +390,177 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     }
 }
 
+void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
+                                                uint32_t numFrames, uint32_t channels,
+                                                uint32_t mask) {
+    if (slot >= kMaxPluginSlots || !interleaved || numFrames == 0 || channels == 0) return;
+    if (channels > 8) channels = 8;
+    mask &= (1u << channels) - 1u;
+    if (mask == 0) return;
+    if (numFrames > m_channelScratchBlock || !m_channelIn[0] ||
+        !m_channelOut[0] || !m_channelZero) {
+        return;
+    }
+
+    PluginSlot& s = m_slots[slot];
+    if (!s.hasActive.load(std::memory_order_acquire) ||
+        s.bypassed.load(std::memory_order_acquire)) {
+        return;
+    }
+
+    for (uint32_t i = 0; i < numFrames; ++i) {
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            m_channelIn[ch][i] = interleaved[i * channels + ch];
+        }
+    }
+
+    double inSum = 0.0;
+    double outSum = 0.0;
+    float maxDiff = 0.0f;
+    uint32_t sampleCount = 0;
+
+    auto accumulate = [&](const float* in, const float* out) {
+        for (uint32_t i = 0; i < numFrames; ++i) {
+            const float a = in[i];
+            const float b = out[i];
+            inSum += static_cast<double>(a) * a;
+            outSum += static_cast<double>(b) * b;
+            const float diff = std::fabs(b - a);
+            if (diff > maxDiff) maxDiff = diff;
+        }
+        sampleCount += numFrames;
+    };
+
+    if (s.instance && s.instance->interleavedTransport()) {
+        s.inFlight.fetch_add(1, std::memory_order_acq_rel);
+        InFlightGuard guard(s.inFlight, s.destroyPending);
+        if (s.hasActive.load(std::memory_order_acquire) &&
+            !s.bypassed.load(std::memory_order_acquire)) {
+            s.instance->processInterleaved(interleaved, numFrames, channels, mask);
+        }
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            if (!(mask & (1u << ch))) continue;
+            for (uint32_t i = 0; i < numFrames; ++i) {
+                const float a = m_channelIn[ch][i];
+                const float b = interleaved[i * channels + ch];
+                inSum += static_cast<double>(a) * a;
+                outSum += static_cast<double>(b) * b;
+                const float diff = std::fabs(b - a);
+                if (diff > maxDiff) maxDiff = diff;
+            }
+            sampleCount += numFrames;
+        }
+    } else {
+        int inChannels = 2;
+        int outChannels = 2;
+        getMainChannelsSlot(slot, &inChannels, &outChannels);
+        if (inChannels <= 0) inChannels = 2;
+        if (outChannels <= 0) outChannels = inChannels;
+        if (inChannels > 8) inChannels = 8;
+        if (outChannels > 8) outChannels = 8;
+
+        auto fillOutput = [&](int count, const float* first) {
+            for (int ch = 0; ch < count; ++ch) {
+                if (ch < 2 && first && ch == 0) {
+                    std::memcpy(m_channelOut[ch].get(), first,
+                                static_cast<size_t>(numFrames) * sizeof(float));
+                } else if (first) {
+                    std::memcpy(m_channelOut[ch].get(), first,
+                                static_cast<size_t>(numFrames) * sizeof(float));
+                } else {
+                    std::memset(m_channelOut[ch].get(), 0,
+                                static_cast<size_t>(numFrames) * sizeof(float));
+                }
+            }
+        };
+
+        if (inChannels == 1) {
+            for (uint32_t ch = 0; ch < channels; ++ch) {
+                if (!(mask & (1u << ch))) continue;
+                fillOutput(outChannels, m_channelIn[ch].get());
+                float* inPtrs[1] = {m_channelIn[ch].get()};
+                float* outPtrs[8] = {};
+                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = m_channelOut[oc].get();
+                processSlot(slot, inPtrs, outPtrs, numFrames);
+                for (uint32_t i = 0; i < numFrames; ++i) {
+                    interleaved[i * channels + ch] = m_channelOut[0][i];
+                }
+                accumulate(m_channelIn[ch].get(), m_channelOut[0].get());
+            }
+        } else if (inChannels == 2) {
+            for (uint32_t base = 0; base + 1 < channels; base += 2) {
+                const uint32_t group = mask & (3u << base);
+                if (group == 0) continue;
+                const uint32_t srcL = (group & 1u) ? base : base + 1;
+                const uint32_t srcR = (group & 2u) ? base + 1 : srcL;
+                std::memcpy(m_channelOut[0].get(), m_channelIn[srcL].get(),
+                            static_cast<size_t>(numFrames) * sizeof(float));
+                std::memcpy(m_channelOut[1].get(), m_channelIn[srcR].get(),
+                            static_cast<size_t>(numFrames) * sizeof(float));
+                for (int oc = 2; oc < outChannels; ++oc) {
+                    std::memcpy(m_channelOut[oc].get(), m_channelIn[srcL].get(),
+                                static_cast<size_t>(numFrames) * sizeof(float));
+                }
+                float* inPtrs[2] = {m_channelIn[srcL].get(), m_channelIn[srcR].get()};
+                float* outPtrs[8] = {};
+                for (int oc = 0; oc < outChannels; ++oc) outPtrs[oc] = m_channelOut[oc].get();
+                processSlot(slot, inPtrs, outPtrs, numFrames);
+                for (uint32_t i = 0; i < numFrames; ++i) {
+                    if (group & 1u) interleaved[i * channels + base] = m_channelOut[0][i];
+                    if (group & 2u) interleaved[i * channels + base + 1] = m_channelOut[1][i];
+                }
+                accumulate(m_channelIn[srcL].get(), m_channelOut[0].get());
+                accumulate(m_channelIn[srcR].get(), m_channelOut[1].get());
+            }
+        } else {
+            int selected[8] = {};
+            int selectedCount = 0;
+            for (uint32_t ch = 0; ch < channels && selectedCount < 8; ++ch) {
+                if (mask & (1u << ch)) selected[selectedCount++] = static_cast<int>(ch);
+            }
+            for (int start = 0; start < selectedCount; start += inChannels) {
+                const int groupCount =
+                    (std::min)(inChannels, selectedCount - start);
+                float* inPtrs[8] = {};
+                float* outPtrs[8] = {};
+                for (int j = 0; j < inChannels; ++j) {
+                    inPtrs[j] = (j < groupCount)
+                                    ? m_channelIn[selected[start + j]].get()
+                                    : m_channelZero.get();
+                }
+                for (int j = 0; j < outChannels; ++j) {
+                    outPtrs[j] = m_channelOut[j].get();
+                    if (j < groupCount) {
+                        std::memcpy(m_channelOut[j].get(), inPtrs[j],
+                                    static_cast<size_t>(numFrames) * sizeof(float));
+                    } else {
+                        std::memset(m_channelOut[j].get(), 0,
+                                    static_cast<size_t>(numFrames) * sizeof(float));
+                    }
+                }
+                processSlot(slot, inPtrs, outPtrs, numFrames);
+                for (int j = 0; j < groupCount; ++j) {
+                    const int oc = (std::min)(j, outChannels - 1);
+                    for (uint32_t i = 0; i < numFrames; ++i) {
+                        interleaved[i * channels + selected[start + j]] =
+                            m_channelOut[oc][i];
+                    }
+                    accumulate(inPtrs[j], m_channelOut[oc].get());
+                }
+            }
+        }
+    }
+
+    if (sampleCount > 0) {
+        const double denom = static_cast<double>(sampleCount);
+        recordTelemetry(slot,
+                        static_cast<float>(std::sqrt(inSum / denom)),
+                        static_cast<float>(std::sqrt(outSum / denom)),
+                        maxDiff,
+                        numFrames);
+    }
+}
+
 void PluginHostManager::recordTelemetry(size_t slot, float inRms, float outRms,
                                         float maxDiff, uint32_t frames) {
     if (slot >= kMaxPluginSlots) return;
@@ -354,14 +581,33 @@ bool PluginHostManager::loadPlugin(const std::string& path, const std::string& p
     return loadPluginSlot(0, path, pluginId, sampleRate, maxBlockSize);
 }
 
+bool PluginHostManager::ensureChannelScratch(uint32_t maxBlockSize) {
+    if (maxBlockSize == 0) return false;
+    if (m_channelScratchBlock >= maxBlockSize &&
+        m_channelIn[0] && m_channelOut[0] && m_channelZero) {
+        return true;
+    }
+    for (size_t ch = 0; ch < m_channelIn.size(); ++ch) {
+        m_channelIn[ch].reset(new (std::nothrow) float[maxBlockSize]());
+        m_channelOut[ch].reset(new (std::nothrow) float[maxBlockSize]());
+        if (!m_channelIn[ch] || !m_channelOut[ch]) return false;
+    }
+    m_channelZero.reset(new (std::nothrow) float[maxBlockSize]());
+    if (!m_channelZero) return false;
+    m_channelScratchBlock = maxBlockSize;
+    return true;
+}
+
 void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     m_sampleRate = sampleRate;
     m_maxBlockSize = maxBlockSize;
+    ensureChannelScratch(maxBlockSize);
 #ifndef AURADSP_HOST_INPROC
     if (m_remoteMode && m_remoteClient) {
         if (m_remoteClient->alive()) {
             m_remoteClient->updateFormat(sampleRate, maxBlockSize);
+            m_remoteClient->setChannelHint(static_cast<uint32_t>(m_channelHint.load()));
             for (size_t s = 0; s < kMaxPluginSlots; ++s) {
                 if (m_slots[s].instance && m_slots[s].hasActive.load()) {
                     m_slots[s].latency.store(m_slots[s].instance->getLatency(),
@@ -374,8 +620,16 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
 #endif
     for (size_t s = 0; s < kMaxPluginSlots; ++s) {
         if (m_slots[s].instance && m_slots[s].hasActive.load()) {
+            m_slots[s].instance->setChannelHint(m_channelHint.load());
             m_slots[s].instance->activate(sampleRate, maxBlockSize);
             m_slots[s].latency.store(m_slots[s].instance->getLatency(), std::memory_order_relaxed);
+            const PluginBusInfo bus = m_slots[s].instance->busInfo();
+            m_slots[s].mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
+                                            std::memory_order_relaxed);
+            m_slots[s].mainOutChannels.store(
+                bus.mainOutChannels > 0 ? bus.mainOutChannels
+                                        : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
+                std::memory_order_relaxed);
         }
     }
 }
@@ -453,6 +707,12 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     auto old = std::move(s.instance);
     s.instance = std::move(instance);
     s.latency.store(s.instance->getLatency(), std::memory_order_relaxed);
+    const PluginBusInfo bus = s.instance->busInfo();
+    s.mainInChannels.store(bus.mainInChannels > 0 ? bus.mainInChannels : 2,
+                           std::memory_order_relaxed);
+    s.mainOutChannels.store(bus.mainOutChannels > 0 ? bus.mainOutChannels
+                                                    : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
+                            std::memory_order_relaxed);
     s.hasActive.store(true, std::memory_order_release);
     s.bypassed.store(false, std::memory_order_release);
     s.processCalls.store(0, std::memory_order_relaxed);

@@ -146,6 +146,9 @@ class PluginHostStatus {
   final int transportLatency;
   final int inputOverflows;
   final int outputOverflows;
+  final int channels;
+  final int mainInChannels;
+  final int mainOutChannels;
 
   const PluginHostStatus({
     this.hasActive = false,
@@ -162,6 +165,9 @@ class PluginHostStatus {
     this.transportLatency = 0,
     this.inputOverflows = 0,
     this.outputOverflows = 0,
+    this.channels = 0xFF,
+    this.mainInChannels = 2,
+    this.mainOutChannels = 2,
   });
 
   static const empty = PluginHostStatus();
@@ -171,6 +177,7 @@ class PluginHostStatus {
     if (json['plugin'] != null && json['plugin'] is Map) {
       meta = PluginMetadata.fromJson(Map<String, dynamic>.from(json['plugin'] as Map));
     }
+    final busInfo = json['busInfo'] as Map?;
     return PluginHostStatus(
       hasActive: json['hasActive'] as bool? ?? false,
       bypassed: json['bypassed'] as bool? ?? false,
@@ -186,6 +193,9 @@ class PluginHostStatus {
       transportLatency: (json['transportLatency'] as num?)?.toInt() ?? 0,
       inputOverflows: (json['inputOverflows'] as num?)?.toInt() ?? 0,
       outputOverflows: (json['outputOverflows'] as num?)?.toInt() ?? 0,
+      channels: (json['channels'] as num?)?.toInt() ?? 0xFF,
+      mainInChannels: (busInfo?['mainInChannels'] as num?)?.toInt() ?? 2,
+      mainOutChannels: (busInfo?['mainOutChannels'] as num?)?.toInt() ?? 2,
     );
   }
 
@@ -204,6 +214,9 @@ class PluginHostStatus {
         'transportLatency': transportLatency,
         'inputOverflows': inputOverflows,
         'outputOverflows': outputOverflows,
+        'channels': channels,
+        'mainInChannels': mainInChannels,
+        'mainOutChannels': mainOutChannels,
       };
 }
 
@@ -270,6 +283,11 @@ class PluginManager extends ChangeNotifier {
   final List<int> _slotStages = List.filled(
     kMaxSlots,
     PluginInsertStage.defaultStage,
+    growable: true,
+  );
+  final List<int> _slotChannels = List.filled(
+    kMaxSlots,
+    0xFF,
     growable: true,
   );
   /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
@@ -352,6 +370,12 @@ class PluginManager extends ChangeNotifier {
   int getSlotStage(int slot) {
     if (slot >= 0 && slot < kMaxSlots) return _slotStages[slot];
     return PluginInsertStage.defaultStage;
+  }
+
+  int getSlotChannels(int? slot) {
+    final s = slot ?? _selectedSlot;
+    if (s >= 0 && s < kMaxSlots) return _slotChannels[s];
+    return 0xFF;
   }
 
   bool isSlotActive(int slot) {
@@ -599,6 +623,17 @@ class PluginManager extends ChangeNotifier {
   }
 
   /// 请求刷新指定槽位当前状态
+  void setSlotChannels(int mask, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _slotChannels[s] = mask;
+    notifyListeners();
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetChannels',
+      'slot': s,
+      'mask': mask,
+    });
+  }
+
   void refreshStatus({int? slot}) {
     final s = slot ?? _selectedSlot;
     _commandSender?.call({
@@ -983,6 +1018,12 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void onPluginSlotChannels(int slot, int mask, int rc) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (rc == 1) _slotChannels[slot] = mask;
+    notifyListeners();
+  }
+
   // 向后兼容旧单槽事件
   void onPluginLoaded(String path, int rc, dynamic rawStatus) =>
       onPluginSlotLoaded(0, path, rc, rawStatus, PluginInsertStage.defaultStage);
@@ -1033,7 +1074,11 @@ class PluginManager extends ChangeNotifier {
       } else {
         return;
       }
-      _slotStatuses[slot] = PluginHostStatus.fromJson(map);
+      final status = PluginHostStatus.fromJson(map);
+      _slotStatuses[slot] = status;
+      if (map.containsKey('channels')) {
+        _slotChannels[slot] = (map['channels'] as num?)?.toInt() ?? 0xFF;
+      }
     } catch (e) {
       debugPrint('[PluginManager] Error parsing status JSON for slot $slot: $e');
     }

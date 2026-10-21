@@ -217,6 +217,21 @@ int auradsp_plugin_slot_get_insert_stage(auradsp_handle h, int slot) {
     return host->getInsertStageSlot((size_t)slot);
 }
 
+int auradsp_plugin_slot_set_channels(auradsp_handle h, int slot, int mask) {
+    auto* host = plugin_host(h);
+    if (!host || slot < 0 ||
+        slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0;
+    host->setChannelMaskSlot((size_t)slot, (uint32_t)mask);
+    return 1;
+}
+
+int auradsp_plugin_slot_get_channels(auradsp_handle h, int slot) {
+    auto* host = plugin_host(h);
+    if (!host || slot < 0 ||
+        slot >= (int)auradsp::PluginHostManager::kMaxPluginSlots) return 0xFF;
+    return (int)host->getChannelMaskSlot((size_t)slot);
+}
+
 int auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id) {
     return auradsp_plugin_slot_load(h, 0, path, plugin_id);
 }

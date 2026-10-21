@@ -120,6 +120,8 @@ ASB_API int asio_plugin_slot_save_preset(int slot, const char* path);
 ASB_API int asio_plugin_slot_load_preset(int slot, const char* path);
 ASB_API int asio_plugin_slot_set_insert_stage(int slot, int stage);
 ASB_API int asio_plugin_slot_get_insert_stage(int slot);
+ASB_API int asio_plugin_slot_set_channels(int slot, int channels);
+ASB_API int asio_plugin_slot_get_channels(int slot);
 
 #ifdef __cplusplus
 }

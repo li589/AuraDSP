@@ -1171,3 +1171,15 @@ int vaio_plugin_slot_get_insert_stage(int slot) {
     if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 3;
     return g_pluginFns.getStage(g_vaio.pEngine, slot);
 }
+
+int vaio_plugin_slot_set_channels(int slot, int channels) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0;
+    return auraplugin::SlotSetChannels(g_vaio.pEngine, g_pluginFns,
+                                       g_pluginMirror, slot, channels);
+}
+
+int vaio_plugin_slot_get_channels(int slot) {
+    if (!InterlockedCompareExchange(&g_vaio.running, 0, 0)) return 0xFF;
+    if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0xFF;
+    return g_pluginFns.getChannels(g_vaio.pEngine, slot);
+}

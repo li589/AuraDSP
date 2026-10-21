@@ -48,6 +48,7 @@ public:
     bool setStage(uint32_t slot, int stage);
     int getStage(uint32_t slot);
     bool updateFormat(double sampleRate, uint32_t maxBlockSize);
+    bool setChannelHint(uint32_t channels);
 
     int scanPlugins(const std::string& extraDirsJson, bool deepScan);
     int scanBegin(const std::string& extraDirsJson, bool deepScan);

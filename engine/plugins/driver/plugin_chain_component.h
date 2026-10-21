@@ -25,6 +25,9 @@ public:
                  uint32_t frames) noexcept;
     void processInterleaved(int stage, float* interleaved,
                             uint32_t frames) noexcept;
+    void processInterleavedN(int stage, float* interleaved, uint32_t frames,
+                             uint32_t channels) noexcept;
+    void setChannelHint(int channels) noexcept;
 
     void setBypass(int slot, bool bypass) noexcept;
     bool bypass(int slot) const noexcept;
@@ -56,6 +59,8 @@ private:
 
     std::atomic<bool> m_pdcEnabled{false};
     std::array<DelayLine, PluginHostManager::kMaxPluginSlots> m_delayLines;
+    std::array<MultiDelayLine, PluginHostManager::kMaxPluginSlots> m_multiDelayLines;
+    std::array<uint32_t, PluginHostManager::kMaxPluginSlots> m_lastMasks{};
 };
 
 } // namespace auradsp

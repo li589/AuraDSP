@@ -69,6 +69,7 @@ class _PluginSlotCfg {
   String id = '';
   bool bypass = false;
   int stage = 3;
+  int channels = 0xFF;
 }
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
@@ -164,10 +165,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (!c.loaded) continue;
       final rc = pb.load(i, c.path, id: c.id);
       if (rc == 1) {
+        pb.setChannels(i, c.channels);
         pb.setInsertStage(i, c.stage);
         pb.setBypass(i, c.bypass);
         c.stage = pb.getInsertStage(i);
         c.bypass = pb.getBypass(i);
+        c.channels = pb.getChannels(i);
         ++ok;
         send({
           'evt': 'pluginSlotLoaded',
@@ -214,10 +217,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (c.loaded) {
         final rc = await _slotLoadAsync(l, h, i, c.path, c.id, send);
         if (rc == 1) {
+          AuraDspLib.pluginSlotSetChannelsWrap(l, h, i, c.channels);
           AuraDspLib.pluginSlotSetInsertStageWrap(l, h, i, c.stage);
           AuraDspLib.pluginSlotSetBypassWrap(l, h, i, c.bypass);
           c.stage = AuraDspLib.pluginSlotGetInsertStageWrap(l, h, i);
           c.bypass = AuraDspLib.pluginSlotGetBypassWrap(l, h, i);
+          c.channels = AuraDspLib.pluginSlotGetChannelsWrap(l, h, i);
         } else {
           c.loaded = false;
         }
@@ -1691,6 +1696,35 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'evt': 'pluginSlotInsertStage',
                 'slot': slot,
                 'stage': stage,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSetChannels':
+          {
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final mask = (m['mask'] as num).toInt();
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc = pb.setChannels(slot, mask);
+              if (rc == 1) pluginMirror[slot].channels = mask;
+              send({
+                'evt': 'pluginSlotChannels',
+                'slot': slot,
+                'mask': mask,
+                'rc': rc,
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc =
+                  AuraDspLib.pluginSlotSetChannelsWrap(lib, handle, slot, mask);
+              if (rc == 1) pluginMirror[slot].channels = mask;
+              send({
+                'evt': 'pluginSlotChannels',
+                'slot': slot,
+                'mask': mask,
                 'rc': rc,
               });
             }

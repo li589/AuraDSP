@@ -17,6 +17,7 @@
 
 #include "auradsp_engine.h"
 #include "engine_internal.h"
+#include "plugins/integration/plugin_chain_adapter.h"
 
 enum class ParamType : uint8_t {
     kFloat,
@@ -539,7 +540,8 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
         return AURADSP_E_PARAM;
     }
     h->channel_count.store(v);
-    /* 声道数变化同样改变 spatial 输入布局，复位其 RT 状态。 */
+    auradsp::plugin_chain_set_channel_hint(h, v);
+    /* �������仯ͬ���ı� spatial ���벼�֣���λ�� RT ״̬�� */
     spatial_reset(h);
     return AURADSP_OK;
 }

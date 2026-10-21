@@ -289,10 +289,10 @@ public:
         }
 
         m_inChannels = m_numInputPorts > 0
-                           ? std::clamp<uint32_t>(m_inPortChannels[m_mainInPort], 1u, 2u)
+                           ? std::clamp<uint32_t>(m_inPortChannels[m_mainInPort], 1u, 8u)
                            : 0;
         m_outChannels = m_numOutputPorts > 0
-                            ? std::clamp<uint32_t>(m_outPortChannels[m_mainOutPort], 1u, 2u)
+                            ? std::clamp<uint32_t>(m_outPortChannels[m_mainOutPort], 1u, 8u)
                             : 0;
 
         m_inBufs.assign(m_numInputPorts, clap_audio_buffer_t{});
@@ -375,9 +375,16 @@ public:
         }
 
         // 引擎链恒送立体声；主端口声道数在此裁剪，辅助端口按插件声明补偿。
-        const int32_t nc = 2;
-        for (int32_t ch = 0; ch < nc; ++ch) {
-            if (!inChannels[ch] || !outChannels[ch]) {
+        const int32_t inNc = static_cast<int32_t>(m_inChannels);
+        const int32_t outNc = static_cast<int32_t>(m_outChannels);
+        for (int32_t ch = 0; ch < inNc; ++ch) {
+            if (!inChannels[ch]) {
+                t_pluginThreadRole = PluginThreadRole::Main;
+                return;
+            }
+        }
+        for (int32_t ch = 0; ch < outNc; ++ch) {
+            if (!outChannels[ch]) {
                 t_pluginThreadRole = PluginThreadRole::Main;
                 return;
             }
@@ -385,8 +392,10 @@ public:
 
         if (!m_isActive || !m_plugin || m_bypassed) {
             if (inChannels != outChannels) {
-                for (int32_t ch = 0; ch < nc; ++ch) {
-                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                const int32_t copyChannels = (std::min)(inNc, outNc);
+                for (int32_t ch = 0; ch < copyChannels; ++ch) {
+                    std::memcpy(outChannels[ch], inChannels[ch],
+                                numFrames * sizeof(float));
                 }
             }
             t_pluginThreadRole = PluginThreadRole::Main;
@@ -457,6 +466,11 @@ public:
     bool isLoaded() const override { return m_isLoaded; }
     bool isBypassed() const override { return m_bypassed; }
     void setBypass(bool bypass) override { m_bypassed = bypass; }
+    void setChannelHint(int channels) override {
+        if (channels < 1) channels = 1;
+        if (channels > 8) channels = 8;
+        m_channelHint = static_cast<uint32_t>(channels);
+    }
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
     PluginBusInfo busInfo() const override { return m_busInfo; }
@@ -971,6 +985,7 @@ private:
     uint32_t m_mainOutPort = 0;
     uint32_t m_inChannels = 0;
     uint32_t m_outChannels = 0;
+    uint32_t m_channelHint = 2;
     std::vector<int32_t> m_inPortChannels;
     std::vector<int32_t> m_outPortChannels;
     std::vector<clap_audio_buffer_t> m_inBufs;
