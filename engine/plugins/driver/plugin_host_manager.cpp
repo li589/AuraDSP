@@ -17,6 +17,13 @@
 #include <string>
 
 namespace auradsp {
+
+/* F-8a：遥测测量抽取周期（音频块）。8 块 @ 48kHz/256 帧 ≈ 43ms → ~23Hz
+ * 刷新，仍高于 UI 轮询与肉眼 meter 需求；块率更高时（低延迟小块）刷新
+ * 同步加快，块率更低时（大块/高采样率）最坏 ~43ms 陈旧，meter 不可感知。
+ * 仅门控 RMS/diff 测量，插件 process 音频路径不受任何影响。 */
+constexpr uint32_t kTelemetryDecimation = 8;
+
 static inline uint32_t packFloat(float v) {
     uint32_t u = 0;
     std::memcpy(&u, &v, sizeof(u));
@@ -83,6 +90,7 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
         s.outRmsBits.store(0, std::memory_order_relaxed);
         s.maxDiffBits.store(0, std::memory_order_relaxed);
         s.lastFrames.store(0, std::memory_order_relaxed);
+        resetTelemetryGateSlot(slot);
         if (s.instance) {
             AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor");
             s.instance->closeEditor();
@@ -211,6 +219,8 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
 void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
     if (slot >= kMaxPluginSlots) return;
     m_slots[slot].bypassed.store(bypass, std::memory_order_release);
+    // F-8a：旁通切换后首个音频块刷新遥测（解除旁通时不读到切换前的陈旧值）
+    resetTelemetryGateSlot(slot);
     if (m_slots[slot].instance) {
         m_slots[slot].instance->setBypass(bypass);
     }
@@ -314,6 +324,8 @@ void PluginHostManager::setInsertStageSlot(size_t slot, int stage) {
     if (stage < 0) stage = 0;
     if (stage > 4) stage = 4;
     m_slots[slot].insertStage.store(stage, std::memory_order_release);
+    // F-8a：阶段迁移后首个音频块刷新遥测（新阶段的测量不滞后到下一抽取点）
+    resetTelemetryGateSlot(slot);
 }
 
 int PluginHostManager::getInsertStageSlot(size_t slot) const {
@@ -419,6 +431,11 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         return;
     }
 
+    /* F-8a：遥测测量按块抽取。音频路径（解交织/插件 process/分组 scatter）
+     * 完全不受影响；未命中抽取点时跳过 RMS/diff 累加，sampleCount 保持 0，
+     * 末尾既有 `if (sampleCount > 0)` 守卫自然不会触发 recordTelemetry。 */
+    const bool sampleTelemetry = claimTelemetrySample(slot);
+
     for (uint32_t i = 0; i < numFrames; ++i) {
         for (uint32_t ch = 0; ch < channels; ++ch) {
             m_channelIn[ch][i] = interleaved[i * channels + ch];
@@ -431,6 +448,7 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     uint32_t sampleCount = 0;
 
     auto accumulate = [&](const float* in, const float* out) {
+        if (!sampleTelemetry) return;
         for (uint32_t i = 0; i < numFrames; ++i) {
             const float a = in[i];
             const float b = out[i];
@@ -449,17 +467,19 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
             !s.bypassed.load(std::memory_order_acquire)) {
             s.instance->processInterleaved(interleaved, numFrames, channels, mask);
         }
-        for (uint32_t ch = 0; ch < channels; ++ch) {
-            if (!(mask & (1u << ch))) continue;
-            for (uint32_t i = 0; i < numFrames; ++i) {
-                const float a = m_channelIn[ch][i];
-                const float b = interleaved[i * channels + ch];
-                inSum += static_cast<double>(a) * a;
-                outSum += static_cast<double>(b) * b;
-                const float diff = std::fabs(b - a);
-                if (diff > maxDiff) maxDiff = diff;
+        if (sampleTelemetry) {
+            for (uint32_t ch = 0; ch < channels; ++ch) {
+                if (!(mask & (1u << ch))) continue;
+                for (uint32_t i = 0; i < numFrames; ++i) {
+                    const float a = m_channelIn[ch][i];
+                    const float b = interleaved[i * channels + ch];
+                    inSum += static_cast<double>(a) * a;
+                    outSum += static_cast<double>(b) * b;
+                    const float diff = std::fabs(b - a);
+                    if (diff > maxDiff) maxDiff = diff;
+                }
+                sampleCount += numFrames;
             }
-            sampleCount += numFrames;
         }
     } else {
         int inChannels = 2;
@@ -580,6 +600,23 @@ void PluginHostManager::recordTelemetry(size_t slot, float inRms, float outRms,
     s.outRmsBits.store(packFloat(outRms), std::memory_order_relaxed);
     s.maxDiffBits.store(packFloat(maxDiff), std::memory_order_relaxed);
     s.lastFrames.store(frames, std::memory_order_relaxed);
+}
+
+bool PluginHostManager::claimTelemetrySample(size_t slot) noexcept {
+    if (slot >= kMaxPluginSlots) return false;
+    PluginSlot& s = m_slots[slot];
+    const uint32_t cur = s.telemetryCountdown.load(std::memory_order_relaxed);
+    if (cur == 0) {
+        s.telemetryCountdown.store(kTelemetryDecimation - 1, std::memory_order_relaxed);
+        return true;
+    }
+    s.telemetryCountdown.store(cur - 1, std::memory_order_relaxed);
+    return false;
+}
+
+void PluginHostManager::resetTelemetryGateSlot(size_t slot) noexcept {
+    if (slot >= kMaxPluginSlots) return;
+    m_slots[slot].telemetryCountdown.store(0, std::memory_order_relaxed);
 }
 
 // Legacy single-slot forward (slot 0).
@@ -731,6 +768,7 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     s.outRmsBits.store(0, std::memory_order_relaxed);
     s.maxDiffBits.store(0, std::memory_order_relaxed);
     s.lastFrames.store(0, std::memory_order_relaxed);
+    resetTelemetryGateSlot(slot);
 
     if (old) {
         // 正常流程由 runControlTask 预先调用 detachInstanceLocked 摘除并在锁外销毁；

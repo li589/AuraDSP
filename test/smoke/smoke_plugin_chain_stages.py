@@ -83,6 +83,25 @@ try:
             sys.exit(1)
         previous_calls = calls
 
+    # F-8a 回归守卫：遥测测量已改为按块抽取（kTelemetryDecimation=8）。
+    # 长跑 40 块（=5 个抽取周期）后遥测必须仍在刷新——若门控计数器卡死
+    # （永远不再归零），此处 outRms 会滞留下次采样前的陈旧值乃至初值。
+    # 注意：本断言对「逐块测量」的旧构建同样通过（无失败面），价值在于
+    # 防止抽取机制自身的未来回归，而非修复前的红。
+    for _ in range(40):
+        lib.auradsp_process(h, inp, out, BLOCK)
+    n = lib.auradsp_plugin_slot_get_status(h, 0, buf, len(buf))
+    status = json.loads(buf.value[:n].decode("utf-8"))
+    calls_after = status["processCalls"]
+    print(f"long-run: calls={calls_after} (+{calls_after - previous_calls}) "
+          f"outRms={status['outRms']:.6f}")
+    if calls_after < previous_calls + 40:
+        print(f"[FAIL] long-run: processCalls advanced only {calls_after - previous_calls}")
+        sys.exit(1)
+    if status["outRms"] <= 1e-6:
+        print(f"[FAIL] long-run: telemetry gate stuck, outRms={status['outRms']}")
+        sys.exit(1)
+
     lib.auradsp_plugin_slot_unload(h, 0)
 finally:
     lib.auradsp_destroy(h)
