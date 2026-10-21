@@ -74,11 +74,14 @@ private:
     std::atomic<bool> m_editorOpen{false};
     std::atomic<uint32_t> m_latency{0};
 
-    float m_inInterleaved[ipc::kChannels * ipc::kTransportFrames] = {};
+    // Proxy-side scratch buffers stay PLANAR (same layout as ipc::AudioBlock):
+    // sample index for channel ch at frame i is ch * kTransportFrames + i.
+    // Interleaving only happens at the public processInterleaved() boundary.
+    float m_inPlanar[ipc::kChannels * ipc::kTransportFrames] = {};
     uint32_t m_inFill = 0;
     uint64_t m_nextSeq = 0;
 
-    float m_outInterleaved[ipc::kChannels * ipc::kTransportFrames] = {};
+    float m_outPlanar[ipc::kChannels * ipc::kTransportFrames] = {};
     uint32_t m_outFill = 0;
     uint32_t m_outPos = 0;
     uint32_t m_outChannels = 2;

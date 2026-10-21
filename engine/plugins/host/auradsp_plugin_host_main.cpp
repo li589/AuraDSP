@@ -193,11 +193,15 @@ bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& runni
             }
             auradsp::ipc::RemotePluginInfo info = {};
             if (slot < auradsp::PluginHostManager::kMaxPluginSlots) {
-                {
-                    std::lock_guard<std::recursive_mutex> lock(manager.m_hostMutex);
-                    manager.m_sampleRate = sampleRate;
-                    manager.m_maxBlockSize = maxBlock;
-                }
+                /* R-1：经 updateFormat 入口落地格式——它内部 ensureChannelScratch。
+                 * 宿主侧 scratch 缺失时 processSlotInterleaved 会在入口静默返回
+                 * （不写输出缓冲 → 输入原样回声 → 近似单位增益直通，且
+                 * remoteFailed=false、无溢出，故障完全不可观测）。此前此处只手动
+                 * 赋值 m_sampleRate/m_maxBlockSize，依赖引擎 create 期转发的
+                 * Op::UpdateFormat 分配 scratch；但宿主是懒启动的（首个客户端
+                 * 请求才 launch），create 期转发被 alive() 守卫跳过且此后不再补发，
+                 * 于是宿主 scratch 永远为零。 */
+                manager.updateFormat(sampleRate, maxBlock);
                 auto instance = manager.prepareInstance(slot, path, pluginId);
                 if (instance) {
                     std::unique_ptr<auradsp::IPluginInstance> oldInstance;
