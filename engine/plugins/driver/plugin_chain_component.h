@@ -21,18 +21,11 @@ public:
     bool prepare(double sampleRate, uint32_t maxBlockSize);
     void reset();
 
-    /* 立体声平面入口（F-8b 契约，2026-10-21 文档化）：
-     * 仅承受 ≤2 声道平面缓冲——in/out 必须至少提供 2 个非空通道指针
-     * （in[0]/in[1]/out[0]/out[1] 全部非空），且内部 copyPlanar /
-     * planarRmsSum 按 [0]/[1] 硬编码，无 channels 形参。
-     * >2 声道或交错缓冲一律走 processInterleavedN()；误路由到本入口的
-     * 后果是 ch2+ 静默丢失（与阶段二代理修复同类的隐性故障）。
-     * 违反契约（任一指针为空/帧数越界）时静默早退、不写 out、不记日志
-     * （音频 RT 路径禁系统调用，见 debug_log.h 铁律）——契约由本文档与
-     * 调用方纪律保证；生产链路（plugin_chain_adapter）只走
-     * processInterleavedN，本入口无生产调用方。 */
-    void process(int stage, float* const* in, float* const* out,
-                 uint32_t frames) noexcept;
+    /* E16（2026-10-22）：平面 4 参 process() 已删除。该入口为 Phase 3 重构前
+     * 遗留路径，全库无生产调用方（引擎链经 plugin_chain_adapter 只走
+     * processInterleavedN；C++ 一致性测试亦只用 processInterleaved），
+     * 且其立体声硬边界（copyPlanar/planarRmsSum 按 [0]/[1] 硬编码）是
+     * F-8b 记录过的误路由隐患。>2 声道/交错一律走 processInterleavedN()。 */
     void processInterleaved(int stage, float* interleaved,
                             uint32_t frames) noexcept;
     void processInterleavedN(int stage, float* interleaved, uint32_t frames,
@@ -57,14 +50,8 @@ private:
     bool stageHasActiveOrPdc(int stage) const noexcept;
 
     std::unique_ptr<PluginHostManager> m_host;
-    std::unique_ptr<float[]> m_chanInL;
-    std::unique_ptr<float[]> m_chanInR;
-    std::unique_ptr<float[]> m_chanOutL;
-    std::unique_ptr<float[]> m_chanOutR;
-    std::unique_ptr<float[]> m_workAL;
-    std::unique_ptr<float[]> m_workAR;
-    std::unique_ptr<float[]> m_workBL;
-    std::unique_ptr<float[]> m_workBR;
+    /* E16：平面专用工作缓冲（m_chanIn/m_chanOut/m_work 系列共 8 块）随平面
+     * process() 一并删除——交错路径全部原地工作，无额外缓冲需求。 */
     uint32_t m_maxBlock = 0;
 
     std::atomic<bool> m_pdcEnabled{false};
