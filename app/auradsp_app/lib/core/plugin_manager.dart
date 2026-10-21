@@ -677,10 +677,10 @@ class PluginManager extends ChangeNotifier {
       ..addAll(cfg['open'] ?? const <String>[]);
     _autoRegisterFromCrashJournal();
     _sendQuarantineToEngine();
-    // 周期清扫崩溃日志：稳定编辑器的陈旧条目及时移除，避免误登记。
-    _journalTimer?.cancel();
-    _journalTimer = Timer.periodic(
-        const Duration(milliseconds: kOpenHealthyMs), (_) => sweepEditorJournal());
+    // 启动时若存在遗留的未清扫条目，才开启周期清扫；若本来就无日志，保持静默避免多余后台轮询
+    if (_editorJournalFile().existsSync()) {
+      _startJournalTimerIfNeeded();
+    }
     notifyListeners();
   }
 
@@ -768,6 +768,8 @@ class PluginManager extends ChangeNotifier {
         'openedAt': DateTime.now().millisecondsSinceEpoch,
       });
       f.writeAsStringSync(jsonEncode(existing));
+      // 写入日志后确保清扫定时器已激活
+      _startJournalTimerIfNeeded();
     } catch (_) {}
   }
 
@@ -844,9 +846,27 @@ class PluginManager extends ChangeNotifier {
     return null;
   }
 
+  /// 按需启动崩溃日志清扫定时器（若尚未运行）。
+  /// 仅在有日志文件需要清扫时才持有 Timer，以避免无谓的后台轮询。
+  void _startJournalTimerIfNeeded() {
+    if (_journalTimer != null) return; // 已在运行
+    _journalTimer = Timer.periodic(
+      const Duration(milliseconds: kOpenHealthyMs),
+      (_) {
+        sweepEditorJournal();
+        // 若日志文件已不存在，则停止定时器，减少资源占用
+        if (!_editorJournalFile().existsSync()) {
+          _journalTimer?.cancel();
+          _journalTimer = null;
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
     _journalTimer?.cancel();
+    _journalTimer = null;
     super.dispose();
   }
 
