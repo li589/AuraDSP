@@ -403,6 +403,14 @@ int wmain(int argc, wchar_t** argv) {
 
     auradsp::PluginHostManager manager;
 
+    /* F-6: 音频线程唤醒事件（自动重置）。命名派生自 shm（每代宿主 serial
+     * 唯一），与 shm 同在 Local\ 命名空间。客户端（代理）在每次成功提交
+     * 传输块后 SetEvent；自动重置语义保证信号不丢失——宿主忙时到达的信号
+     * 保持挂起，下一次 WaitForSingleObject 立即返回。等待的 2 ms 超时只是
+     * 安全网（如代理未能打开事件），不是主机制。 */
+    HANDLE wakeEvent = CreateEventW(nullptr, FALSE, FALSE,
+                                    (options.shmName + L".wake").c_str());
+
     HANDLE pipe = CreateNamedPipeW(
         options.pipeName.c_str(),
         PIPE_ACCESS_DUPLEX,
@@ -430,6 +438,23 @@ int wmain(int argc, wchar_t** argv) {
     std::atomic<bool> audioRunning{true};
     std::thread audioThread([&]() {
         SetThreadDescription(GetCurrentThread(), L"AuraPluginHostAudio");
+        /* F-6: 实时调度。音频线程若可被普通用户态活动抢占，环缓冲会出现
+         * 饥饿——代理侧表现为传输块缺失，最坏情况误触发 170 ms 宿主死亡
+         * 判定（missStreak 累积至 64 块）。主路径：MMCSS "Pro Audio"
+         * （WASAPI/ASIO 客户端同款注册）；兜底：THREAD_PRIORITY_TIME_CRITICAL
+         * 基优先级。avrt.dll 动态加载——API 自 Vista 起存在，但宿主不应因
+         * 其意外缺失而无法启动。MMCSS 成功时优先级由任务动态提升，此处再设
+         * TIME_CRITICAL 只是保底，互不冲突。 */
+        HMODULE avrt = LoadLibraryW(L"avrt.dll");
+        HANDLE mmcss = nullptr;
+        DWORD mmcssIndex = 0;
+        if (avrt) {
+            using AvSetMmThreadCharacteristicsWFn = HANDLE(WINAPI*)(LPCWSTR, LPDWORD);
+            const auto avSet = reinterpret_cast<AvSetMmThreadCharacteristicsWFn>(
+                GetProcAddress(avrt, "AvSetMmThreadCharacteristicsW"));
+            if (avSet) mmcss = avSet(L"Pro Audio", &mmcssIndex);
+        }
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
         while (audioRunning.load(std::memory_order_acquire)) {
             bool worked = false;
             for (size_t slot = 0; slot < auradsp::ipc::kMaxSlots; ++slot) {
@@ -477,8 +502,25 @@ int wmain(int argc, wchar_t** argv) {
                 ring.inputRead.store(read + 1, std::memory_order_release);
                 worked = true;
             }
-            if (!worked) Sleep(1);
+            if (!worked) {
+                /* F-6: 事件驱动唤醒替代 Sleep(1) 轮询。代理每次成功提交
+                 * 传输块即 SetEvent；自动重置 + 信号挂起保持 = 无丢失唤醒
+                 * （宿主处理期间到达的信号会释放下一次等待）。2 ms 超时仅
+                 * 为安全网；事件创建失败时退化为原轮询路径。 */
+                if (wakeEvent) {
+                    WaitForSingleObject(wakeEvent, 2);
+                } else {
+                    Sleep(1);
+                }
+            }
         }
+        if (mmcss && avrt) {
+            using AvRevertMmThreadCharacteristicsFn = BOOL(WINAPI*)(HANDLE);
+            const auto avRevert = reinterpret_cast<AvRevertMmThreadCharacteristicsFn>(
+                GetProcAddress(avrt, "AvRevertMmThreadCharacteristics"));
+            if (avRevert) avRevert(mmcss);
+        }
+        if (avrt) FreeLibrary(avrt);
     });
 
     bool running = true;
@@ -505,6 +547,12 @@ int wmain(int argc, wchar_t** argv) {
                             std::memory_order_release);
     audioRunning.store(false, std::memory_order_release);
     if (audioThread.joinable()) audioThread.join();
+    /* F-6: 客户端/代理可能仍持有借用副本——内核对象在其全部关闭后才销毁，
+     * 期间对旧事件的 SetEvent 无害（无等待者）。 */
+    if (wakeEvent) {
+        CloseHandle(wakeEvent);
+        wakeEvent = nullptr;
+    }
 
     FlushFileBuffers(pipe);
     DisconnectNamedPipe(pipe);

@@ -33,6 +33,13 @@ public:
     uint32_t hostPid() const { return m_hostPid.load(std::memory_order_acquire); }
     uint64_t generation() const { return m_generation.load(std::memory_order_acquire); }
 
+    /* F-6: 宿主音频线程的唤醒事件（自动重置，命名 <shmName>.wake）。
+     * 借用句柄：ProcessPluginProxy 在 load()（控制路径）缓存后由音频线程
+     * SetEvent 唤醒宿主，缓存方不得关闭。宿主重启后旧句柄指向上一代事件
+     * （信号无害丢失），宿主等待自带 2 ms 超时兜底，下次 load 重新缓存。
+     * 调用约定：仅在 load() 成功后的控制路径读取（此时无并发写者）。 */
+    HANDLE wakeEvent() const { return m_wakeEvent; }
+
     bool load(uint32_t slot, const std::string& path, const std::string& pluginId,
               double sampleRate, uint32_t maxBlockSize,
               ipc::RemotePluginInfo& outInfo, std::string& outError);
@@ -80,6 +87,9 @@ private:
     HANDLE m_pipe = nullptr;
     HANDLE m_process = nullptr;
     HANDLE m_job = nullptr;
+    // F-6: 宿主音频线程唤醒事件。m_mutex 保护写（launchLocked /
+    // closeHostHandlesLocked），控制路径经 wakeEvent() 读。
+    HANDLE m_wakeEvent = nullptr;
     std::wstring m_pipeName;
     std::wstring m_shmName;
     bool m_pipeHealthy = false;
