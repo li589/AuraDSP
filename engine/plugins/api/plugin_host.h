@@ -206,6 +206,12 @@ public:
         std::atomic<uint32_t> outRmsBits{0};
         std::atomic<uint32_t> maxDiffBits{0};
         std::atomic<uint32_t> lastFrames{0};
+        /* F-8a 遥测测量抽取门控：RT 侧每个音频块经 claimTelemetrySample()
+         * 递减，归零块才执行 RMS/diff 测量并 recordTelemetry——UI 轮询速率
+         * （~10-30Hz）远低于音频块率（~187 块/s @ 48kHz/256 帧），逐块测量
+         * 是无人观看时的纯 CPU 浪费。控制侧在挂载/卸载/阶段/旁通切换时归零，
+         * 保证状态切换后首个音频块遥测必然刷新（冒烟 3 块短窗不读陈旧值）。 */
+        std::atomic<uint32_t> telemetryCountdown{0};
     };
 
     PluginHostManager();
@@ -288,6 +294,12 @@ public:
                                 uint32_t channels, uint32_t mask);
     void recordTelemetry(size_t slot, float inRms, float outRms, float maxDiff, uint32_t frames);
 
+    /* F-8a：遥测测量门控（RT-Safe：仅 relaxed 原子，无锁无分配无日志）。
+     * 音频线程每块调用一次；返回 true 才做 RMS/diff 测量并上报遥测，
+     * false 表示跳过测量（插件音频处理本身不受影响）。
+     * 抽取周期见实现文件常量 kTelemetryDecimation。 */
+    bool claimTelemetrySample(size_t slot) noexcept;
+
     // Legacy single-slot helper. Only loadPlugin() is still referenced
     // (engine/plugins/tests/plugin_host_direct.cpp); the other six forwards were removed
     // as dead code -- the C ABI keeps its own single-slot compatibility symbols
@@ -307,6 +319,10 @@ public:
     std::unique_ptr<IPluginInstance> detachInstanceLocked(size_t slot);
     static void destroyInstance(std::unique_ptr<IPluginInstance> instance);
     void unloadPluginSlotLocked(size_t slot);
+
+    // F-8a：控制侧重置遥测门控计数器（挂载/卸载/阶段/旁通切换时调用）。
+    // 调用方须持 m_hostMutex 或位于控制线程（与 setInsertStageSlot 等同线程）。
+    void resetTelemetryGateSlot(size_t slot) noexcept;
 
     /* 加载的两段式拆分（C3）：prepare 是重活（解析 bundle / LoadLibrary /
      * createInstance / activate），在锁外执行；commit 只把指针挂进槽位。 */

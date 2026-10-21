@@ -21,6 +21,16 @@ public:
     bool prepare(double sampleRate, uint32_t maxBlockSize);
     void reset();
 
+    /* 立体声平面入口（F-8b 契约，2026-10-21 文档化）：
+     * 仅承受 ≤2 声道平面缓冲——in/out 必须至少提供 2 个非空通道指针
+     * （in[0]/in[1]/out[0]/out[1] 全部非空），且内部 copyPlanar /
+     * planarRmsSum 按 [0]/[1] 硬编码，无 channels 形参。
+     * >2 声道或交错缓冲一律走 processInterleavedN()；误路由到本入口的
+     * 后果是 ch2+ 静默丢失（与阶段二代理修复同类的隐性故障）。
+     * 违反契约（任一指针为空/帧数越界）时静默早退、不写 out、不记日志
+     * （音频 RT 路径禁系统调用，见 debug_log.h 铁律）——契约由本文档与
+     * 调用方纪律保证；生产链路（plugin_chain_adapter）只走
+     * processInterleavedN，本入口无生产调用方。 */
     void process(int stage, float* const* in, float* const* out,
                  uint32_t frames) noexcept;
     void processInterleaved(int stage, float* interleaved,

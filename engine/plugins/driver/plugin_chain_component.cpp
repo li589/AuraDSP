@@ -102,6 +102,10 @@ void PluginChainComponent::reset() {
 void PluginChainComponent::process(int stage, float* const* in,
                                    float* const* out,
                                    uint32_t frames) noexcept {
+    /* F-8b 契约执行点（契约全文见头文件）：立体声平面专用——in/out 必须
+     * 至少提供 2 个非空通道指针。任一为空或帧数越界时静默早退、不写 out、
+     * 不记日志（音频 RT 路径禁系统调用，debug_log.h 铁律）；调用方违反
+     * 契约的后果是输出保持原值（非静音零值），便于上层比对发现。 */
     if (!m_host || !in || !out || !in[0] || !in[1] || !out[0] || !out[1] ||
         frames == 0 || frames > m_maxBlock) {
         return;
@@ -143,30 +147,38 @@ void PluginChainComponent::process(int stage, float* const* in,
             float* dst[2] = {dstL, dstR};
             copyPlanar(dst, src, frames);
 
-            const double inSum = planarRmsSum(srcL, srcR, frames);
+            /* F-8a：遥测测量按块抽取（kTelemetryDecimation，门控实现在
+             * PluginHostManager::claimTelemetrySample）。插件音频处理不受
+             * 影响；未命中抽取点时跳过 RMS/diff 双循环。 */
+            const bool sampleTelemetry = m_host->claimTelemetrySample(slot);
+            const double inSum =
+                sampleTelemetry ? planarRmsSum(srcL, srcR, frames) : 0.0;
             m_host->processSlot(slot, src, dst, frames);
 
-            double outSum = 0.0;
-            float maxDiff = 0.0f;
-            for (uint32_t i = 0; i < frames; ++i) {
-                const float outL = dstL[i];
-                const float outR = dstR[i];
-                const double ol = outL;
-                const double orr = outR;
-                outSum += ol * ol + orr * orr;
-                const float dl = std::fabs(outL - srcL[i]);
-                const float dr = std::fabs(outR - srcR[i]);
-                if (dl > maxDiff) maxDiff = dl;
-                if (dr > maxDiff) maxDiff = dr;
-            }
+            if (sampleTelemetry) {
+                double outSum = 0.0;
+                float maxDiff = 0.0f;
+                for (uint32_t i = 0; i < frames; ++i) {
+                    const float outL = dstL[i];
+                    const float outR = dstR[i];
+                    const double ol = outL;
+                    const double orr = outR;
+                    outSum += ol * ol + orr * orr;
+                    const float dl = std::fabs(outL - srcL[i]);
+                    const float dr = std::fabs(outR - srcR[i]);
+                    if (dl > maxDiff) maxDiff = dl;
+                    if (dr > maxDiff) maxDiff = dr;
+                }
 
-            const double denom = frames > 0 ? static_cast<double>(frames) * 2.0 : 1.0;
-            m_host->recordTelemetry(
-                slot,
-                static_cast<float>(std::sqrt(inSum / denom)),
-                static_cast<float>(std::sqrt(outSum / denom)),
-                maxDiff,
-                frames);
+                const double denom =
+                    frames > 0 ? static_cast<double>(frames) * 2.0 : 1.0;
+                m_host->recordTelemetry(
+                    slot,
+                    static_cast<float>(std::sqrt(inSum / denom)),
+                    static_cast<float>(std::sqrt(outSum / denom)),
+                    maxDiff,
+                    frames);
+            }
         }
 
         srcL = dstL;
