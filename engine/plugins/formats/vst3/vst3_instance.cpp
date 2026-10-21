@@ -824,42 +824,78 @@ public:
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
 
-        // 查询插件所声明的总线数量
         int32_t numInBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kInput);
         int32_t numOutBusses = m_component->getBusCount(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput);
         if (numInBusses < 0) numInBusses = 0;
         if (numOutBusses <= 0) numOutBusses = 1;
         m_numInputBusses = numInBusses;
         m_numOutputBusses = numOutBusses;
+        std::vector<uint8_t> inDefault(static_cast<size_t>(numInBusses), 0);
+        std::vector<uint8_t> inCV(static_cast<size_t>(numInBusses), 0);
+        std::vector<uint8_t> outCV(static_cast<size_t>(numOutBusses), 0);
+        for (int32_t i = 0; i < numInBusses; ++i) {
+            Steinberg::Vst::BusInfo bi = {};
+            if (m_component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, bi) ==
+                Steinberg::kResultOk) {
+                inDefault[i] = (bi.flags & Steinberg::Vst::BusInfo::kDefaultActive) ? 1 : 0;
+                inCV[i] = (bi.flags & Steinberg::Vst::BusInfo::kIsControlVoltage) ? 1 : 0;
+            }
+        }
+        for (int32_t i = 0; i < numOutBusses; ++i) {
+            Steinberg::Vst::BusInfo bi = {};
+            if (m_component->getBusInfo(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, bi) ==
+                Steinberg::kResultOk) {
+                outCV[i] = (bi.flags & Steinberg::Vst::BusInfo::kIsControlVoltage) ? 1 : 0;
+            }
+        }
         /* process 在 RT 线程禁止堆分配：总线数在 activate 后不变，
          * 这里一次性分配，process 只填充/复用。 */
         m_inBusses.assign(static_cast<size_t>(numInBusses),
                           Steinberg::Vst::AudioBusBuffers{});
         m_outBusses.assign(static_cast<size_t>(numOutBusses),
                            Steinberg::Vst::AudioBusBuffers{});
+        m_inBusChannels.assign(static_cast<size_t>(numInBusses), 0);
+        m_outBusChannels.assign(static_cast<size_t>(numOutBusses), 0);
+        m_inBusActive.assign(static_cast<size_t>(numInBusses), 0);
+        m_outBusActive.assign(static_cast<size_t>(numOutBusses), 0);
+        m_auxInBuffers.assign(static_cast<size_t>(numInBusses), {});
+        m_auxInPtrs.assign(static_cast<size_t>(numInBusses), {});
+        m_auxOutBuffers.assign(static_cast<size_t>(numOutBusses), {});
+        m_auxOutPtrs.assign(static_cast<size_t>(numOutBusses), {});
 
-        std::vector<Steinberg::Vst::SpeakerArrangement> inArrs(numInBusses, Steinberg::Vst::SpeakerArr::kStereo);
-        std::vector<Steinberg::Vst::SpeakerArrangement> outArrs(numOutBusses, Steinberg::Vst::SpeakerArr::kStereo);
+        std::vector<Steinberg::Vst::SpeakerArrangement> inArrs(
+            static_cast<size_t>(numInBusses), Steinberg::Vst::SpeakerArr::kStereo);
+        std::vector<Steinberg::Vst::SpeakerArrangement> outArrs(
+            static_cast<size_t>(numOutBusses), Steinberg::Vst::SpeakerArr::kStereo);
 
         for (int32_t i = 0; i < numInBusses; ++i) {
             Steinberg::Vst::SpeakerArrangement cur = Steinberg::Vst::SpeakerArr::kStereo;
-            if (m_processor->getBusArrangement(Steinberg::Vst::kInput, i, cur) == Steinberg::kResultOk) {
+            if (m_processor->getBusArrangement(Steinberg::Vst::kInput, i, cur) == Steinberg::kResultOk &&
+                cur != 0) {
                 inArrs[i] = cur;
             }
         }
         for (int32_t i = 0; i < numOutBusses; ++i) {
             Steinberg::Vst::SpeakerArrangement cur = Steinberg::Vst::SpeakerArr::kStereo;
-            if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, i, cur) == Steinberg::kResultOk) {
+            if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, i, cur) == Steinberg::kResultOk &&
+                cur != 0) {
                 outArrs[i] = cur;
             }
         }
 
-        // 主总线协商优先设为立体声
+        const std::vector<Steinberg::Vst::SpeakerArrangement> defaultInArrs = inArrs;
+        const std::vector<Steinberg::Vst::SpeakerArrangement> defaultOutArrs = outArrs;
         if (numInBusses > 0) inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
         if (numOutBusses > 0) outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
 
-        const Steinberg::tresult arrRes =
+        Steinberg::tresult arrRes =
             m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
+        if (arrRes != Steinberg::kResultOk) {
+            inArrs = defaultInArrs;
+            outArrs = defaultOutArrs;
+            arrRes = m_processor->setBusArrangements(inArrs.data(), numInBusses,
+                                                     outArrs.data(), numOutBusses);
+        }
 
         // Setup processing (must be in disabled state, before activateBus/setActive)
         Steinberg::Vst::ProcessSetup setup = {};
@@ -877,15 +913,19 @@ public:
             return false;
         }
 
-        // 仅启用主输入总线；侧链/辅助总线保持关闭，Phase 5 再扩展多总线。
         for (int32_t i = 0; i < numInBusses; ++i) {
-            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, i == 0);
+            const bool want = (i == 0) || (inDefault[i] && !inCV[i]);
+            const Steinberg::tresult r =
+                m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kInput, i, want);
+            m_inBusActive[i] = (want && r == Steinberg::kResultOk) ? 1 : 0;
         }
         for (int32_t i = 0; i < numOutBusses; ++i) {
-            m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, true);
+            const bool want = !outCV[i];
+            const Steinberg::tresult r =
+                m_component->activateBus(Steinberg::Vst::kAudio, Steinberg::Vst::kOutput, i, want);
+            m_outBusActive[i] = (want && r == Steinberg::kResultOk) ? 1 : 0;
         }
 
-        // 重新获取主总线实际确认的声道数
         if (numInBusses > 0) {
             Steinberg::Vst::SpeakerArrangement finalIn = Steinberg::Vst::SpeakerArr::kStereo;
             if (m_processor->getBusArrangement(Steinberg::Vst::kInput, 0, finalIn) == Steinberg::kResultOk) {
@@ -893,14 +933,68 @@ public:
             } else {
                 m_inChannels = 2;
             }
+            m_inBusChannels[0] = m_inChannels;
         } else {
             m_inChannels = 0;
         }
+        for (int32_t i = 1; i < numInBusses; ++i) {
+            if (!m_inBusActive[i]) continue;
+            Steinberg::Vst::SpeakerArrangement arr = Steinberg::Vst::SpeakerArr::kStereo;
+            int32_t ch = 2;
+            if (m_processor->getBusArrangement(Steinberg::Vst::kInput, i, arr) == Steinberg::kResultOk) {
+                ch = Steinberg::Vst::SpeakerArr::getChannelCount(arr);
+            }
+            if (ch < 0) ch = 0;
+            if (ch > 16) ch = 16;
+            m_inBusChannels[i] = ch;
+        }
+
         Steinberg::Vst::SpeakerArrangement finalOut = Steinberg::Vst::SpeakerArr::kStereo;
         if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, 0, finalOut) == Steinberg::kResultOk) {
             m_outChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalOut) == 1 ? 1 : 2;
         } else {
             m_outChannels = 2;
+        }
+        m_outBusChannels[0] = m_outChannels;
+        for (int32_t i = 1; i < numOutBusses; ++i) {
+            if (!m_outBusActive[i]) continue;
+            Steinberg::Vst::SpeakerArrangement arr = Steinberg::Vst::SpeakerArr::kStereo;
+            int32_t ch = 2;
+            if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, i, arr) == Steinberg::kResultOk) {
+                ch = Steinberg::Vst::SpeakerArr::getChannelCount(arr);
+            }
+            if (ch < 0) ch = 0;
+            if (ch > 16) ch = 16;
+            m_outBusChannels[i] = ch;
+        }
+
+        for (int32_t i = 1; i < numInBusses; ++i) {
+            const int32_t ch = m_inBusChannels[i];
+            if (ch <= 0) continue;
+            m_auxInBuffers[i].assign(static_cast<size_t>(ch),
+                                     std::vector<float>(maxBlockSize, 0.0f));
+            m_auxInPtrs[i].resize(static_cast<size_t>(ch));
+            for (int32_t c = 0; c < ch; ++c) m_auxInPtrs[i][c] = m_auxInBuffers[i][c].data();
+        }
+        for (int32_t i = 1; i < numOutBusses; ++i) {
+            const int32_t ch = m_outBusChannels[i];
+            if (ch <= 0) continue;
+            m_auxOutBuffers[i].assign(static_cast<size_t>(ch),
+                                      std::vector<float>(maxBlockSize, 0.0f));
+            m_auxOutPtrs[i].resize(static_cast<size_t>(ch));
+            for (int32_t c = 0; c < ch; ++c) m_auxOutPtrs[i][c] = m_auxOutBuffers[i][c].data();
+        }
+
+        m_busInfo = PluginBusInfo{};
+        m_busInfo.inputBuses = numInBusses;
+        m_busInfo.outputBuses = numOutBusses;
+        m_busInfo.mainInChannels = m_inChannels;
+        m_busInfo.mainOutChannels = m_outChannels;
+        for (int32_t i = 1; i < numInBusses; ++i) {
+            if (m_inBusActive[i] && m_inBusChannels[i] > 0) ++m_busInfo.auxInputBuses;
+        }
+        for (int32_t i = 1; i < numOutBusses; ++i) {
+            if (m_outBusActive[i] && m_outBusChannels[i] > 0) ++m_busInfo.auxOutputBuses;
         }
 
         const Steinberg::tresult procRes = m_processor->setProcessing(true);
@@ -943,26 +1037,42 @@ public:
         }
 
         for (int32_t b = 0; b < m_numInputBusses; ++b) {
-            if (b == 0 && nc > 0) {
-                m_inBusses[0].numChannels = nc;
-                m_inBusses[0].silenceFlags = 0;
-                m_inBusses[0].channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
+            auto& bus = m_inBusses[b];
+            bus.silenceFlags = 0;
+            if (!m_inBusActive[b] || m_inBusChannels[b] <= 0 ||
+                (b > 0 && m_auxInPtrs[b].empty())) {
+                bus.numChannels = 0;
+                bus.channelBuffers32 = nullptr;
+                continue;
+            }
+            if (b == 0) {
+                bus.numChannels = m_inChannels;
+                bus.channelBuffers32 = (Steinberg::Vst::Sample32**)inChannels;
             } else {
-                m_inBusses[b].numChannels = 0;
-                m_inBusses[b].silenceFlags = 0;
-                m_inBusses[b].channelBuffers32 = nullptr;
+                for (auto& chBuf : m_auxInBuffers[b]) {
+                    std::fill_n(chBuf.begin(),
+                                std::min<size_t>(numFrames, chBuf.size()), 0.0f);
+                }
+                bus.numChannels = m_inBusChannels[b];
+                bus.channelBuffers32 = m_auxInPtrs[b].data();
             }
         }
 
         for (int32_t b = 0; b < m_numOutputBusses; ++b) {
+            auto& bus = m_outBusses[b];
+            bus.silenceFlags = 0;
+            if (!m_outBusActive[b] || m_outBusChannels[b] <= 0 ||
+                (b > 0 && m_auxOutPtrs[b].empty())) {
+                bus.numChannels = 0;
+                bus.channelBuffers32 = nullptr;
+                continue;
+            }
             if (b == 0) {
-                m_outBusses[0].numChannels = m_outChannels;
-                m_outBusses[0].silenceFlags = 0;
-                m_outBusses[0].channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
+                bus.numChannels = m_outChannels;
+                bus.channelBuffers32 = (Steinberg::Vst::Sample32**)outChannels;
             } else {
-                m_outBusses[b].numChannels = 0;
-                m_outBusses[b].silenceFlags = 0;
-                m_outBusses[b].channelBuffers32 = nullptr;
+                bus.numChannels = m_outBusChannels[b];
+                bus.channelBuffers32 = m_auxOutPtrs[b].data();
             }
         }
 
@@ -1022,6 +1132,7 @@ public:
     void setBypass(bool bypass) override { m_bypassed = bypass; }
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
+    PluginBusInfo busInfo() const override { return m_busInfo; }
 
     bool showEditor(const std::string& title = "") override {
         if (!m_isLoaded || !m_component) return false;
@@ -1384,6 +1495,15 @@ private:
     int32_t m_numOutputBusses = 1;
     std::vector<Steinberg::Vst::AudioBusBuffers> m_inBusses;
     std::vector<Steinberg::Vst::AudioBusBuffers> m_outBusses;
+    std::vector<int32_t> m_inBusChannels;
+    std::vector<int32_t> m_outBusChannels;
+    std::vector<uint8_t> m_inBusActive;
+    std::vector<uint8_t> m_outBusActive;
+    std::vector<std::vector<std::vector<float>>> m_auxInBuffers;
+    std::vector<std::vector<float*>> m_auxInPtrs;
+    std::vector<std::vector<std::vector<float>>> m_auxOutBuffers;
+    std::vector<std::vector<float*>> m_auxOutPtrs;
+    PluginBusInfo m_busInfo;
 
     HWND m_editorHwnd = nullptr;
     // E1：调用方（Dart）传来的窗口标题；为空时退化为 m_meta.name。

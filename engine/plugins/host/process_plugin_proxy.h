@@ -30,6 +30,7 @@ public:
     void setBypass(bool bypass) override;
     uint32_t getLatency() const override;
     const PluginMetadata& getMetadata() const override;
+    PluginBusInfo busInfo() const override { return m_busInfo; }
 
     bool showEditor(const std::string& title = "") override;
     void closeEditor() override;
@@ -61,6 +62,7 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlock = 1024;
     PluginMetadata m_metadata;
+    PluginBusInfo m_busInfo;
 
     std::atomic<bool> m_loaded{false};
     std::atomic<bool> m_bypassed{false};

@@ -236,6 +236,16 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"maxDiff\":" << unpackFloat(m_slots[slot].maxDiffBits.load(std::memory_order_relaxed)) << ","
        << "\"lastFrames\":" << m_slots[slot].lastFrames.load(std::memory_order_relaxed) << ","
        << "\"isEditorOpen\":" << ((m_slots[slot].instance && m_slots[slot].instance->isEditorOpen()) ? "true" : "false") << ",";
+    const PluginBusInfo bus = m_slots[slot].instance ? m_slots[slot].instance->busInfo()
+                                                      : PluginBusInfo{};
+    ss << "\"busInfo\":{"
+       << "\"inputs\":" << bus.inputBuses << ","
+       << "\"outputs\":" << bus.outputBuses << ","
+       << "\"auxInputs\":" << bus.auxInputBuses << ","
+       << "\"auxOutputs\":" << bus.auxOutputBuses << ","
+       << "\"mainInChannels\":" << bus.mainInChannels << ","
+       << "\"mainOutChannels\":" << bus.mainOutChannels
+       << "},";
 #ifndef AURADSP_HOST_INPROC
     if (m_remoteMode) {
         bool remoteFailed = false;

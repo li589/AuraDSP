@@ -11,7 +11,7 @@ namespace auradsp {
 namespace ipc {
 
 constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
-constexpr uint32_t kProtocolVersion = 1u;
+constexpr uint32_t kProtocolVersion = 2u;
 constexpr uint32_t kMaxSlots = 4u;
 constexpr uint32_t kChannels = 2u;
 constexpr uint32_t kTransportFrames = 128u;
@@ -119,6 +119,12 @@ struct RemotePluginInfo {
     uint32_t latency = 0;
     uint32_t is64Bit = 1;
     uint32_t isCompatible = 1;
+    uint32_t inputBuses = 0;
+    uint32_t outputBuses = 0;
+    uint32_t auxInputBuses = 0;
+    uint32_t auxOutputBuses = 0;
+    uint32_t mainInChannels = 0;
+    uint32_t mainOutChannels = 0;
 };
 
 inline void copyFixed(char* dst, size_t cap, const std::string& src) {

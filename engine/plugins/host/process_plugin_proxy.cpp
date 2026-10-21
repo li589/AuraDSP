@@ -55,6 +55,13 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_ring = &m_region->header()->slots[m_slot];
     m_ring->editorOpen.store(0, std::memory_order_release);
     copyInfoToMetadata(info, m_metadata);
+    m_busInfo = PluginBusInfo{};
+    m_busInfo.inputBuses = static_cast<int>(info.inputBuses);
+    m_busInfo.outputBuses = static_cast<int>(info.outputBuses);
+    m_busInfo.auxInputBuses = static_cast<int>(info.auxInputBuses);
+    m_busInfo.auxOutputBuses = static_cast<int>(info.auxOutputBuses);
+    m_busInfo.mainInChannels = static_cast<int>(info.mainInChannels);
+    m_busInfo.mainOutChannels = static_cast<int>(info.mainOutChannels);
     m_latency.store(info.latency + ipc::kTransportFrames, std::memory_order_release);
 
     m_inFill = 0;
