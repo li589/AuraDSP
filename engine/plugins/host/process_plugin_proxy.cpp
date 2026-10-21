@@ -54,6 +54,9 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     }
     m_ring = &m_region->header()->slots[m_slot];
     m_ring->editorOpen.store(0, std::memory_order_release);
+    /* F-6: 缓存宿主唤醒事件（借用句柄）。置于控制路径，音频线程后续
+     * SetEvent 无需再加锁；load 成功前的失败路径不会走到这里。 */
+    m_wakeEvent = m_client->wakeEvent();
     copyInfoToMetadata(info, m_metadata);
     m_busInfo = PluginBusInfo{};
     m_busInfo.inputBuses = static_cast<int>(info.inputBuses);
@@ -62,7 +65,14 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_busInfo.auxOutputBuses = static_cast<int>(info.auxOutputBuses);
     m_busInfo.mainInChannels = static_cast<int>(info.mainInChannels);
     m_busInfo.mainOutChannels = static_cast<int>(info.mainOutChannels);
-    m_latency.store(info.latency + ipc::kTransportFrames, std::memory_order_release);
+    /* F-7: 总延迟 = 插件自身延迟 + 2 个传输块。一次 processInterleaved 调用
+     * 的端到端流水深：调用方提交的块先在输入环排队（1 块），宿主处理后块进
+     * 输出环，代理下一次 pump 才取得（再 1 块）。R-1 实测背书：Convology XT
+     * 脉冲响应出现在第 544 样本 = 288（插件）+ 256（2×128 传输块）。
+     * 语义分层：getLatency() = 端到端总量（本公式，Dart UI/测试消费）；
+     * transportLatency() = 单块传输粒度 128（不变，UI 的分辨显示口径）。 */
+    m_latency.store(info.latency + 2 * ipc::kTransportFrames,
+                    std::memory_order_release);
 
     m_inFill = 0;
     m_nextSeq = 0;
@@ -146,6 +156,11 @@ bool ProcessPluginProxy::submitChunk(uint32_t channels, uint32_t mask) {
     }
     ring.inputWrite.store(w + 1, std::memory_order_release);
     ring.chunksIn.fetch_add(1, std::memory_order_relaxed);
+    /* F-6: 唤醒宿主音频线程——每接受一个传输块一次。SetEvent 是纯内核
+     * 调用（~1μs，无分配无锁，与 WASAPI 事件驱动同款实践），满足音频
+     * 路径 RT-safe 契约；句柄为空（宿主未起/事件缺失）时静默跳过，
+     * 宿主靠 2 ms 等待超时兜底。 */
+    if (m_wakeEvent) SetEvent(m_wakeEvent);
     return true;
 }
 
@@ -405,7 +420,9 @@ bool ProcessPluginProxy::loadPreset(const std::string& filePath) {
     const bool ok = m_client->loadPreset(static_cast<uint32_t>(m_slot), filePath);
     if (ok) {
         const uint32_t latency = m_client->getLatency(static_cast<uint32_t>(m_slot));
-        m_latency.store(latency + ipc::kTransportFrames, std::memory_order_release);
+        /* F-7: 与 load() 同口径——插件延迟 + 2×传输块（见 load 处注释）。 */
+        m_latency.store(latency + 2 * ipc::kTransportFrames,
+                        std::memory_order_release);
     }
     return ok;
 }

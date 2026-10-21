@@ -115,6 +115,10 @@ void PluginHostClient::shutdown() {
 }
 
 void PluginHostClient::closeHostHandlesLocked() {
+    if (m_wakeEvent) {
+        CloseHandle(m_wakeEvent);
+        m_wakeEvent = nullptr;
+    }
     if (m_pipe) {
         CloseHandle(m_pipe);
         m_pipe = nullptr;
@@ -199,6 +203,12 @@ bool PluginHostClient::launchLocked() {
         m_region.reset();
         return false;
     }
+
+    /* F-6: 打开宿主音频线程的唤醒事件。宿主在 ConnectNamedPipe 之前创建
+     * 该事件，Hello 往返返回时它必然已存在。打开失败不致命：宿主等待有
+     * 2 ms 超时兜底，代理侧缓存到空句柄后干脆不 SetEvent。 */
+    m_wakeEvent = OpenEventW(EVENT_MODIFY_STATE, FALSE,
+                             (m_shmName + L".wake").c_str());
 
     m_generation.fetch_add(1, std::memory_order_acq_rel);
     m_pipeHealthy = true;

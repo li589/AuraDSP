@@ -68,6 +68,12 @@ private:
     std::shared_ptr<PluginHostClient> m_client;
     std::shared_ptr<SharedRegion> m_region;
     ipc::SlotAudioRing* m_ring = nullptr;
+    /* F-6: 宿主音频线程唤醒事件的借用句柄（客户端所有，本类不关闭）。
+     * load() 时在控制路径缓存一次，音频线程 submitChunk 成功后直接
+     * SetEvent——不触碰客户端互斥锁，保持 RT-safe。宿主重启后此副本
+     * 失效（指向上一代事件，信号无害丢失，宿主 2 ms 超时兜底），下次
+     * load() 重新缓存。 */
+    HANDLE m_wakeEvent = nullptr;
     size_t m_slot = 0;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlock = 1024;

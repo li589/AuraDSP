@@ -177,11 +177,23 @@ status = get_status(handle)
 assert status["hasActive"] and status["plugin"] is not None
 assert status.get("remoteMode") is True, f"expected remoteMode, got {status}"
 latency = dll.auradsp_plugin_get_latency(handle)
-assert latency >= 128, f"transport latency missing: {latency}"
+# F-7: 总延迟 = 插件自身延迟 + 2×传输块（在途输入块 + 待回输出块）。
+# 判别阈推导：修复前代理只加 1 块（plugin+128），修复后加 2 块（plugin+256）。
+# 泛化下界 plugin+256 取自扫描元数据——但扫描期是预实例化元数据（VST3 的
+# 延迟查询发生在实例化时），本用例中为 0，单靠它无法判别修复前的 416
+# （416 >= 0+256 亦通过）。故对本用例附加固定判别阈：R-1 实测 Convology
+# XT 插件延迟 288 → 端到端 544（修复前 416）；阈取 512，416 失败、544 通过。
+plugin_latency = TARGET.get("latency", 0)
+assert latency >= max(plugin_latency + 2 * 128, 512), (
+    f"total latency {latency} < expected floor "
+    f"max(plugin {plugin_latency} + 2x128, 512) — proxy still reports only "
+    f"one transport block (pre-F-7)")
 assert status.get("transportLatency") == 128, f"unexpected transport latency: {status}"
+assert status.get("latency") == latency, (
+    f"ABI latency {latency} != status latency {status.get('latency')}")
 assert 128 / 48000.0 * 1000.0 < 5.0, "transport latency exceeds 5 ms"
-print(f"remote active, latency={latency} frames (transport 128 = "
-      f"{128 / 48000.0 * 1000.0:.2f} ms)")
+print(f"remote active, latency={latency} frames (plugin {plugin_latency} + "
+      f"transport 128 = {128 / 48000.0 * 1000.0:.2f} ms)")
 
 print("=== [4] remote processing transforms the input ===")
 out, src = wait_for_ramp_processed(handle)
