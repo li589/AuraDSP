@@ -7,6 +7,14 @@ Verifies:
 3. taskkill /F of the host does not kill the engine and audio falls back to bypass.
 4. Reload after host crash relaunches the host and restores processing.
 5. Engine destroy also terminates the host process.
+6. Layout integrity: a position-coded ramp vector (ch0 up / ch1 down) must
+   survive the proxy scratch boundary as a dense signal — any channel/frame
+   permutation there shows up as a sparse (mostly-zero) output.
+
+NOTE on test strength: a constant signal (e.g. 0.5) is invariant under any
+sample permutation, so "output != input" probes cannot detect layout bugs at
+the proxy boundary. Sections [4]/[4b]/[4c]/[7] are liveness probes only;
+section [4a] is the correctness gate.
 """
 import ctypes
 import json
@@ -52,8 +60,11 @@ dll.auradsp_plugin_slot_task_state.argtypes = [ctypes.c_void_p, ctypes.c_int]
 def hosts_for_parent(parent_pid):
     script = ("Get-CimInstance Win32_Process -Filter \"Name='auradsp_plugin_host.exe'\" | "
               "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
+    # errors="replace": taskkill/PowerShell emit locale-encoded (cp936) text on
+    # Chinese Windows; the reader thread must not die on undecodable bytes.
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script],
-                            capture_output=True, text=True, timeout=20)
+                            capture_output=True, text=True,
+                            encoding="utf-8", errors="replace", timeout=20)
     text = result.stdout.strip()
     if not text:
         return []
@@ -76,14 +87,63 @@ def process_blocks(handle, frames, blocks, pace_s=0.005):
     return last
 
 
-def wait_for_processed(handle, timeout=5.0):
+def ramp_input(frames, block_index, total_blocks):
+    """Position-coded stereo ramp: ch0 climbs 0.1 -> 0.9, ch1 falls -0.1 -> -0.9.
+
+    Every sample's value encodes its (frame, channel) position, so any
+    permutation of frames or channels at the proxy scratch boundary destroys
+    the dense ramp structure and leaves a sparse, mostly-zero output.
+    """
+    samples = [0.0] * (frames * 2)
+    for i in range(frames):
+        t = (block_index * frames + i) / float(total_blocks * frames)
+        samples[i * 2 + 0] = 0.1 + 0.8 * t   # ch0: upward ramp
+        samples[i * 2 + 1] = -0.1 - 0.8 * t  # ch1: downward ramp
+    return samples
+
+
+def process_ramp_blocks(handle, frames, blocks, pace_s=0.005):
+    in_arr = (ctypes.c_float * (frames * 2))()
+    out_arr = (ctypes.c_float * (frames * 2))()
+    last_in = None
+    last = None
+    for b in range(blocks):
+        samples = ramp_input(frames, b, blocks)
+        for i, v in enumerate(samples):
+            in_arr[i] = v
+        dll.auradsp_process(handle, in_arr, out_arr, frames)
+        last_in = samples
+        last = list(out_arr)
+        if pace_s:
+            time.sleep(pace_s)
+    return last, last_in
+
+
+def wait_for_ramp_processed(handle, timeout=5.0):
+    """Gate: wait until remote output is no longer bit-exact passthrough.
+
+    During transport warm-up the proxy passes input through unchanged, so a
+    dense ramp would trivially satisfy the density check even while broken.
+    A ramp (not a constant) is used because a constant's steady state can
+    legitimately equal the input (e.g. a unity-DC reverb IR), which would
+    leave a constant-based gate closed forever on a healthy pipeline.
+    """
     deadline = time.time() + timeout
-    out = []
+    out, src = process_ramp_blocks(handle, 256, 4)
     while time.time() < deadline:
-        out = process_blocks(handle, 256, 16)
-        if max(abs(v - 0.5) for v in out) > 1e-3:
-            return out
-    return out
+        if max(abs(a - b) for a, b in zip(out, src)) > 1e-3:
+            return out, src
+        out, src = process_ramp_blocks(handle, 256, 4)
+    return out, src
+
+
+def assert_processing(out, src, label):
+    """Assert the plugin actually transforms the ramp (not passthrough)."""
+    maxdiff = max(abs(a - b) for a, b in zip(out, src))
+    assert maxdiff > 1e-3, (
+        f"{label}: plugin returned bit-exact passthrough "
+        f"(max|out-in|={maxdiff:.6f})")
+    return maxdiff
 
 
 def get_status(handle):
@@ -123,15 +183,30 @@ assert 128 / 48000.0 * 1000.0 < 5.0, "transport latency exceeds 5 ms"
 print(f"remote active, latency={latency} frames (transport 128 = "
       f"{128 / 48000.0 * 1000.0:.2f} ms)")
 
-print("=== [4] remote processing differs from input ===")
-out = wait_for_processed(handle)
+print("=== [4] remote processing transforms the input ===")
+out, src = wait_for_ramp_processed(handle)
 assert not any(abs(v) == 777.0 for v in out)
-assert max(abs(v - 0.5) for v in out) > 1e-3, "remote plugin returned passthrough"
+assert_processing(out, src, "[4] remote processing")
+
+print("=== [4a] layout integrity: ramp vector must stay dense across the proxy boundary ===")
+out, src = process_ramp_blocks(handle, 256, 12)
+assert not any(abs(v) == 777.0 for v in out)
+assert_processing(out, src, "[4a] settled ramp")
+nz = sum(1 for v in out if abs(v) > 1e-5)
+nz_ratio = nz / len(out)
+ch0 = out[0::2]
+ch1 = out[1::2]
+print(f"  non-zero density: {nz_ratio:.1%} ({nz}/{len(out)}); "
+      f"mean(ch0)={sum(ch0) / len(ch0):+.4f} mean(ch1)={sum(ch1) / len(ch1):+.4f}")
+assert nz_ratio > 0.7, (
+    f"output is sparse ({nz_ratio:.1%} non-zero) — frames/channels are being "
+    "permuted at the proxy scratch boundary (a dense ramp through any "
+    "non-silent plugin must produce a dense signal)")
 
 print("=== [4b] replacing a loaded remote plugin keeps processing ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
-out = wait_for_processed(handle)
-assert max(abs(v - 0.5) for v in out) > 1e-3, "plugin replacement lost processing"
+out, src = wait_for_ramp_processed(handle)
+assert_processing(out, src, "[4b] plugin replacement")
 
 print("=== [4c] async replacement over a loaded remote slot ===")
 assert dll.auradsp_plugin_slot_load_async(
@@ -142,8 +217,8 @@ while state == 1 and time.time() < deadline:
     time.sleep(0.05)
     state = dll.auradsp_plugin_slot_task_state(handle, 0)
 assert state == 2, f"async replacement failed, task_state={state}"
-out = wait_for_processed(handle)
-assert max(abs(v - 0.5) for v in out) > 1e-3, "async replacement lost processing"
+out, src = wait_for_ramp_processed(handle)
+assert_processing(out, src, "[4c] async replacement")
 
 print("=== [5] host process exists as child ===")
 hosts = hosts_for_parent(os.getpid())
@@ -153,7 +228,8 @@ print(f"host pid: {host_pid}")
 
 print("=== [6] kill host; engine must survive and bypass ===")
 subprocess.run(["taskkill", "/F", "/PID", str(host_pid)],
-               capture_output=True, text=True, timeout=20)
+               capture_output=True, text=True,
+               encoding="utf-8", errors="replace", timeout=20)
 time.sleep(0.1)
 out = process_blocks(handle, 256, 80)
 assert len(out) == 512
@@ -167,8 +243,8 @@ print("engine survived; host crash reported and bypassed")
 print("=== [7] reload relaunches host and restores processing ===")
 assert dll.auradsp_plugin_unload(handle) == 1
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
-out = wait_for_processed(handle)
-assert max(abs(v - 0.5) for v in out) > 1e-3, "reloaded remote plugin returned passthrough"
+out, src = wait_for_ramp_processed(handle)
+assert_processing(out, src, "[7] reloaded remote plugin")
 status = get_status(handle)
 assert status.get("remoteMode") is True and status.get("remoteFailed") is False
 hosts = hosts_for_parent(os.getpid())

@@ -131,7 +131,7 @@ bool ProcessPluginProxy::submitChunk() {
     block.reserved = ipc::packTransportFlags(m_transportChannels, m_transportMask);
     for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
         std::memcpy(block.samples[ch],
-                    m_inInterleaved + ch * ipc::kTransportFrames,
+                    m_inPlanar + ch * ipc::kTransportFrames,
                     ipc::kTransportFrames * sizeof(float));
     }
     ring.inputWrite.store(w + 1, std::memory_order_release);
@@ -157,7 +157,7 @@ bool ProcessPluginProxy::pumpOutput() {
             continue;
         }
         for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
-            std::memcpy(m_outInterleaved + ch * ipc::kTransportFrames,
+            std::memcpy(m_outPlanar + ch * ipc::kTransportFrames,
                         block.samples[ch], frames * sizeof(float));
         }
         m_outChannels = channels;
@@ -237,7 +237,7 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
         float inFrame[ipc::kChannels] = {};
         for (uint32_t ch = 0; ch < channels; ++ch) {
             inFrame[ch] = interleaved[i * channels + ch];
-            m_inInterleaved[m_inFill * ipc::kChannels + ch] = inFrame[ch];
+            m_inPlanar[ch * ipc::kTransportFrames + m_inFill] = inFrame[ch];
         }
 
         if (m_outPos >= m_outFill) pumpOutput();
@@ -245,7 +245,7 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 if ((m_outMask & (1u << ch)) && ch < m_outChannels) {
                     interleaved[i * channels + ch] =
-                        m_outInterleaved[m_outPos * ipc::kChannels + ch];
+                        m_outPlanar[ch * ipc::kTransportFrames + m_outPos];
                 } else {
                     interleaved[i * channels + ch] = inFrame[ch];
                 }

@@ -166,10 +166,14 @@ bool PluginHostClient::launchLocked() {
     si.wShowWindow = SW_HIDE;
     PROCESS_INFORMATION pi = {};
 
-    const std::wstring dir = moduleDirectory();
+    // Inherit the engine's working directory (nullptr): plugins resolve IR
+    // libraries / persisted state relative to CWD, and the in-process path
+    // sees the engine's CWD. Pointing the host at the DLL directory instead
+    // gives the same plugin a different resource view (observed: Convology
+    // XT loads a 0.6-gain IR in-process but a unity state in the host).
     if (!CreateProcessW(exe.c_str(), cmdBuf.data(), nullptr, nullptr, FALSE,
                         CREATE_NO_WINDOW | CREATE_SUSPENDED | CREATE_UNICODE_ENVIRONMENT,
-                        nullptr, dir.empty() ? nullptr : dir.c_str(), &si, &pi)) {
+                        nullptr, nullptr, &si, &pi)) {
         closeHostHandlesLocked();
         m_region.reset();
         return false;

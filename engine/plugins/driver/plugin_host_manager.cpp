@@ -131,6 +131,14 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
             m_remoteClient, slot, sampleRate, maxBlockSize);
         if (!instance->load(path, pluginId)) return false;
 
+        /* R-1：宿主进程懒启动于本分支的首个请求（setChannelHint/load），
+         * 而 create 期 updateFormat 的转发被 alive() 守卫跳过、此后不再补发，
+         * 宿主侧格式与通道 scratch 可能从未初始化（processSlotInterleaved
+         * 静默直通）。Op::Load 消息虽已携带格式，此处再补发一次 updateFormat
+         * 作为兜底：保证宿主侧格式/scratch 与引擎当前格式一致，且覆盖
+         * create 之后、load 之前发生过格式变更的场景。 */
+        m_remoteClient->updateFormat(sampleRate, maxBlockSize);
+
         {
             std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
             commitInstanceLocked(slot, std::move(instance));
