@@ -83,6 +83,7 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_outPos = 0;
     m_missStreak.store(0, std::memory_order_relaxed);
     m_gotOutputThisBlock = false;
+    m_blockHadPassthrough = false;
     m_nextSeqOut = 0;
     m_outSynced = false;
     m_seqGaps.store(0, std::memory_order_relaxed);
@@ -331,16 +332,38 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
                 }
             }
             ++m_outPos;
+        } else {
+            /* E14: 本帧无输出可用 → 原样直通（interleaved 保持输入值）。
+             * 标记本块，块边界据此丢弃不提交（防双发）。 */
+            m_blockHadPassthrough = true;
         }
 
         ++m_inFill;
         if (m_inFill == ipc::kTransportFrames) {
-            /* F-4: a dropped input block (ring full) used to be silent —
-             * the 128 frames never reached the host and no counter moved.
-             * It is starvation evidence, so it now feeds the same miss
-             * window as a missing output block. */
-            const bool submitted = submitChunk(channels, mask);
             m_inFill = 0;
+            /* E14: 直通块丢弃不提交——直通内容已被上层听见，再提交会让宿主
+             * 处理结果（回声）稍后再次进入输出流，同一段音频听到两遍（R-1
+             * 轮「帧 0 与帧 544 双脉冲」同源）。破鸡生蛋：宿主必须有输入才
+             * 产输出，丢弃后若不补位，宿主队列耗尽即永久空闲——后续块全部
+             * 直通+丢弃，饿死螺旋（替换重载场景实测：processCalls 冻结 +
+             * 64 块判死）。故只要宿主存活就提交一个静音 prime 块补位：其
+             * 回声≈静音无听感，下一块起流水恢复；健康流水无直通 → 零
+             * prime。宿主始终不应答时由 E12 missStreak（m_outSynced 建立
+             * 后）与 remoteFailed(!alive) 判死兜底。
+             * F-4/E12: 输入环满丢块仍是饥饿证据，计入 miss 窗口；prime 提交
+             * 失败不计数（丢弃块的补位非流水数据）。 */
+            if (!m_blockHadPassthrough) {
+                if (!submitChunk(channels, mask)) {
+                    m_missStreak.fetch_add(1, std::memory_order_relaxed);
+                }
+            } else if (m_client && m_client->alive()) {
+                for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
+                    std::memset(m_inPlanar + ch * ipc::kTransportFrames, 0,
+                                ipc::kTransportFrames * sizeof(float));
+                }
+                submitChunk(channels, mask);
+            }
+            m_blockHadPassthrough = false;
             /* E12: 块尾 prefetch 保留（帧首取块失败时，迟到的输出块可在此
              * 入缓冲供下一块消费），但**不再**把 prefetch 失败当饥饿——那
              * 是健康流水下的常态：本块刚提交，宿主不可能微秒级返回。饥饿
@@ -352,9 +375,6 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
             if (gotOutput) {
                 m_missStreak.store(0, std::memory_order_relaxed);
             } else if (m_outSynced) {
-                m_missStreak.fetch_add(1, std::memory_order_relaxed);
-            }
-            if (!submitted) {
                 m_missStreak.fetch_add(1, std::memory_order_relaxed);
             }
             if (m_missStreak.load(std::memory_order_relaxed) >= kMissingLimit) {
