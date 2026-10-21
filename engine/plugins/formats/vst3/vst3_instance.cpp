@@ -1014,10 +1014,28 @@ public:
             if (m_outBusActive[i] && m_outBusChannels[i] > 0) ++m_busInfo.auxOutputBuses;
         }
 
+        // setProcessing 返回值语义（VST3）：
+        //   kResultOk        — 插件已进入处理态；
+        //   kNotImplemented  — 插件未实现该可选方法。iZotope Ozone 12 / RX 12 的
+        //                      VST3 wrapper 恒返回 kNotImplemented（0x80004001），
+        //                      但 process() 音频正常流动（2026-10-21 最小宿主
+        //                      izoprobe 实测：Equalizer 对 1kHz 正弦精确直通，
+        //                      Bass Control/Maximizer/RX 模块输出正常衰减信号）。
+        //                      该返回值与 activate 序列、宿主名、编辑器时序、
+        //                      COM 单元、线程亲和均无关。重构前（M1/2445f86）
+        //                      引擎忽略此返回值，插件可用；重构将其致命化后
+        //                      iZotope 全系 activate 失败。故 kNotImplemented
+        //                      必须容忍（记录警告），否则保持致命失败。
         const Steinberg::tresult procRes = m_processor->setProcessing(true);
-        if (procRes != Steinberg::kResultOk) {
+        if (procRes != Steinberg::kResultOk && procRes != Steinberg::kNotImplemented) {
+            AURADSP_WARN_S("VST3 setProcessing(true) failed: res=0x" << std::hex
+                           << static_cast<uint64_t>(static_cast<uint32_t>(procRes)) << std::dec);
             m_component->setActive(false);
             return false;
+        }
+        if (procRes == Steinberg::kNotImplemented) {
+            AURADSP_WARN("VST3 setProcessing(true) returned kNotImplemented; continuing "
+                         "(plugin may still process audio, e.g. iZotope Ozone/RX 12 wrappers)");
         }
 
         (void)arrRes;

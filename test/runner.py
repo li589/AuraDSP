@@ -34,6 +34,9 @@ def run_smoke_tests():
         "smoke_plugin_host.py",
         "smoke_plugin_host_process.py",
         "smoke_plugin_host_editor.py",
+        # iZotope Ozone/RX 12 加载契约：setProcessing 返回 kNotImplemented 不得致命，
+        # 且 process() 音频必须存活；机器上无 iZotope 插件时自动 SKIP
+        "smoke_plugin_izotope_setproc.py",
         "smoke_plugin_pdc.py",
         "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
