@@ -65,13 +65,16 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_busInfo.auxOutputBuses = static_cast<int>(info.auxOutputBuses);
     m_busInfo.mainInChannels = static_cast<int>(info.mainInChannels);
     m_busInfo.mainOutChannels = static_cast<int>(info.mainOutChannels);
-    /* F-7: 总延迟 = 插件自身延迟 + 2 个传输块。一次 processInterleaved 调用
-     * 的端到端流水深：调用方提交的块先在输入环排队（1 块），宿主处理后块进
-     * 输出环，代理下一次 pump 才取得（再 1 块）。R-1 实测背书：Convology XT
-     * 脉冲响应出现在第 544 样本 = 288（插件）+ 256（2×128 传输块）。
+    /* E15（2026-10-22 实测重校准）：总延迟 = 插件自身延迟 + 1 个传输块。
+     * E9 跨模式一致性冒烟实测动态 onset delta = 128（健康 paced 流水下代理
+     * 帧首取块成功 → 恒定滞后 1 块），两模式逐位一致背书。F-7 当时的 +2 块
+     * 口径采信 R-1 的 544 实测，但该测量取得于 F-6 事件唤醒之前（宿主
+     * Sleep(1) 轮询、应答节奏慢 1 块）；post-F-6 现实下 +2 块过报 128 帧
+     * （PDC 过补偿 ~2.67ms）。注意：非阻塞泵设计下深度随时序抖动（宿主偶发
+     * 慢 >1 块即 +1），长期解 = 恒定 in-flight 确定性流水深（未决清单 E15）。
      * 语义分层：getLatency() = 端到端总量（本公式，Dart UI/测试消费）；
      * transportLatency() = 单块传输粒度 128（不变，UI 的分辨显示口径）。 */
-    m_latency.store(info.latency + 2 * ipc::kTransportFrames,
+    m_latency.store(info.latency + ipc::kTransportFrames,
                     std::memory_order_release);
 
     m_inFill = 0;
@@ -432,8 +435,8 @@ bool ProcessPluginProxy::loadPreset(const std::string& filePath) {
     const bool ok = m_client->loadPreset(static_cast<uint32_t>(m_slot), filePath);
     if (ok) {
         const uint32_t latency = m_client->getLatency(static_cast<uint32_t>(m_slot));
-        /* F-7: 与 load() 同口径——插件延迟 + 2×传输块（见 load 处注释）。 */
-        m_latency.store(latency + 2 * ipc::kTransportFrames,
+        /* E15: 与 load() 同口径——插件延迟 + 1×传输块（见 load 处注释）。 */
+        m_latency.store(latency + ipc::kTransportFrames,
                         std::memory_order_release);
     }
     return ok;

@@ -6,7 +6,8 @@ R-1（进程模式宿主侧静默单位直通）能在出厂门禁下潜伏，�
 两模式「无直接对比门禁」——每个模式各自绿，模式间的分歧不可见。本用例补上
 该门禁：同一插件（ConvologyXT，真实 latency 288）、同一确定性输入序列，
 分别经进程内与进程外（AURA_PLUGIN_HOST_MODE=process）两种模式处理，对齐
-传输管线延迟（F-7 口径 2×kTransportFrames = 256 帧）后逐样本比对输出。
+传输管线延迟（E15 重校准口径 1×kTransportFrames = 128 帧，实测 onset
+delta 同值）后逐样本比对输出。
 
 输入序列（全局样本索引的确定性函数，两模式逐位相同）：
   [暖机 tone 直至插件生效] + TONE_BLOCKS 块 tone + SILENCE_BLOCKS 块静音
@@ -28,7 +29,8 @@ R-1（进程模式宿主侧静默单位直通）能在出厂门禁下潜伏，�
   0. 两模式收尾时 slot 健康（remoteFailed/bypassed 均为 False）——E12 红门禁：
      missStreak 设计缺陷会在 ~64 传输块（≈170ms）后把进程外 slot 永久 bypass，
      本断言在比对前给出直接归因，而不是让后续断言莫名报红；
-  1. process_latency - inproc_latency == 256（2×kTransportFrames，F-7 静态上报口径）；
+  1. process_latency - inproc_latency == 128（1×kTransportFrames，E15 重校准
+     后的 F-7 上报口径；post-F-6 动态流水深实测即 1 块）；
   2. 脉冲响应 onset 差为 1-2 个整传输块（128 的倍数），且 onset_inproc >=
      inproc_latency（IR 不可能早于插件自身延迟——把波形测量与 ABI 上报互相
      钩住）。注意：动态流水深取决于宿主时序（健康流水下代理帧首取块成功
@@ -71,7 +73,7 @@ PACE_PROCESS_S = 0.003            # 传输环 16 块；128 帧 @48k = 2.67ms 实
 IMPULSE_AMP = 0.5                 # 低于限幅门限，保持线性区间（虽然后置链是共模）
 ONSET_REL = 0.01                  # onset 检测阈 = 峰值 1%（两模式波形相同，相对阈无偏）
 ALIGN_TOLERANCE = 0.0             # 逐位一致门禁；若实证存在合法微小差，须先根因再改此值
-EXPECTED_TRANSPORT_DELAY = 256    # 2 × kTransportFrames（F-7 静态上报口径）
+EXPECTED_LATENCY_DELTA = 128      # 1 × kTransportFrames（E15 重校准后的上报口径，实测 onset delta 同值）
 kTransportFrames = 128            # == ipc::kTransportFrames（动态流水深以整块为单位）
 
 
@@ -312,18 +314,18 @@ def main():
                   f"{str(d['seqGaps']):>8} "
                   f"{str(d['inputOverflows'])}/{str(d['outputOverflows']):>5}")
 
-        # 判据 1：latency 差 = 2×传输块（F-7 语义，插件无关的泛化断言）
+        # 判据 1：latency 差 = 1×传输块（E15 重校准口径，插件无关的泛化断言）
         lat_delta = b["latency"] - a["latency"]
-        assert lat_delta == EXPECTED_TRANSPORT_DELAY, (
-            f"latency delta {lat_delta} != {EXPECTED_TRANSPORT_DELAY} "
-            "(process mode must add exactly 2 transport blocks)")
-        print(f"latency delta = {lat_delta} (expected {EXPECTED_TRANSPORT_DELAY})")
+        assert lat_delta == EXPECTED_LATENCY_DELTA, (
+            f"latency delta {lat_delta} != {EXPECTED_LATENCY_DELTA} "
+            "(process mode must add exactly 1 transport block — E15 calibration)")
+        print(f"latency delta = {lat_delta} (expected {EXPECTED_LATENCY_DELTA})")
 
         # 判据 2：onset 差 = 1-2 个整传输块，且不早于插件自身延迟
         # （波形测量钩住 ABI 上报）。动态流水深取决于宿主时序，只断言整块性。
         assert oa is not None and ob is not None, "impulse response onset not found"
         onset_delta = ob - oa
-        assert onset_delta % kTransportFrames == 0 and 0 < onset_delta <= EXPECTED_TRANSPORT_DELAY, (
+        assert onset_delta % kTransportFrames == 0 and 0 < onset_delta <= EXPECTED_LATENCY_DELTA, (
             f"onset delta {onset_delta} is not 1-2 whole transport blocks "
             f"(multiples of {kTransportFrames}): the two modes disagree on "
             "pipeline depth beyond whole-block transport latency")
@@ -370,7 +372,7 @@ def main():
             f"{ALIGN_TOLERANCE} ({ndiff}/{total} samples differ) — the two modes "
             "disagree on audio output for identical plugin/input/block-size")
         print("PASS: in-proc and out-of-process modes agree bit-exactly "
-              "(after 2×kTransportFrames alignment)")
+              f"(after {onset_delta}-frame transport alignment)")
         return 0
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
