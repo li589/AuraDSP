@@ -45,6 +45,10 @@ def run_smoke_tests():
         "smoke_plugin_metadata.py",
         "smoke_plugin_arch_detect.py",
         "smoke_multislot_and_stages.py",
+        # E9 跨模式一致性（进程内 vs 进程外逐位比对）。历史：建门禁时对 HEAD
+        # 报红抓出 E12 P0（missStreak 自毁）；E12/E13 修复后转绿，现为常驻
+        # 回归守卫（slot 健康 + processCalls 推进 + 对齐逐位一致）。
+        "smoke_cross_mode_consistency.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",

@@ -79,6 +79,7 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_outFill = 0;
     m_outPos = 0;
     m_missStreak.store(0, std::memory_order_relaxed);
+    m_gotOutputThisBlock = false;
     m_nextSeqOut = 0;
     m_outSynced = false;
     m_seqGaps.store(0, std::memory_order_relaxed);
@@ -230,6 +231,8 @@ bool ProcessPluginProxy::pumpOutput(uint32_t channels, uint32_t mask) {
         m_outMask = mask;
         m_outFill = frames;
         m_outPos = 0;
+        /* E12: 本块内取到了输出 = 宿主应答存活，块边界据此清零饥饿窗口。 */
+        m_gotOutputThisBlock = true;
         ring.outputRead.store(r + 1, std::memory_order_release);
         return frames > 0;
     }
@@ -333,18 +336,27 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
              * the 128 frames never reached the host and no counter moved.
              * It is starvation evidence, so it now feeds the same miss
              * window as a missing output block. */
-            if (!submitChunk(channels, mask)) {
+            const bool submitted = submitChunk(channels, mask);
+            m_inFill = 0;
+            /* E12: 块尾 prefetch 保留（帧首取块失败时，迟到的输出块可在此
+             * 入缓冲供下一块消费），但**不再**把 prefetch 失败当饥饿——那
+             * 是健康流水下的常态：本块刚提交，宿主不可能微秒级返回。饥饿
+             * 的正确口径 = 流水建立（m_outSynced）后整块零输出；首块输出
+             * 尚未到达（宿主启动中）不计入，防慢启动误判。 */
+            if (m_outPos >= m_outFill) pumpOutput(channels, mask);
+            const bool gotOutput = m_gotOutputThisBlock;
+            m_gotOutputThisBlock = false;
+            if (gotOutput) {
+                m_missStreak.store(0, std::memory_order_relaxed);
+            } else if (m_outSynced) {
                 m_missStreak.fetch_add(1, std::memory_order_relaxed);
             }
-            m_inFill = 0;
-            if (m_outPos >= m_outFill && !pumpOutput(channels, mask)) {
-                if (m_missStreak.fetch_add(1, std::memory_order_relaxed) + 1 >=
-                    kMissingLimit) {
-                    m_failed.store(true, std::memory_order_release);
-                    m_bypassed.store(true, std::memory_order_release);
-                }
-            } else {
-                m_missStreak.store(0, std::memory_order_relaxed);
+            if (!submitted) {
+                m_missStreak.fetch_add(1, std::memory_order_relaxed);
+            }
+            if (m_missStreak.load(std::memory_order_relaxed) >= kMissingLimit) {
+                m_failed.store(true, std::memory_order_release);
+                m_bypassed.store(true, std::memory_order_release);
             }
         }
     }

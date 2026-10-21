@@ -111,6 +111,13 @@ private:
     bool m_outSynced = false;
     std::atomic<uint64_t> m_seqGaps{0};
     std::atomic<uint32_t> m_missStreak{0};
+
+    /* E12: 本传输块内是否取得过任何输出块（音频线程私有，块边界评估后清零）。
+     * 饥饿信号的正确口径是「流水建立后整块零输出」；旧实现把块尾 prefetch
+     * 失败当饥饿计数——那是健康流水下的常态（帧首已消费上一块结果，本块
+     * 刚提交的块不可能微秒级返回），导致 missStreak 每块自增、~64 块后误判
+     * 宿主死亡永久 bypass。 */
+    bool m_gotOutputThisBlock = false;
 };
 
 } // namespace auradsp
