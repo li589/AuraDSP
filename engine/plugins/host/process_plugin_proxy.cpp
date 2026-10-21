@@ -68,7 +68,10 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_nextSeq = 0;
     m_outFill = 0;
     m_outPos = 0;
-    m_missStreak = 0;
+    m_missStreak.store(0, std::memory_order_relaxed);
+    m_nextSeqOut = 0;
+    m_outSynced = false;
+    m_seqGaps.store(0, std::memory_order_relaxed);
     m_failed.store(false, std::memory_order_release);
     m_bypassed.store(false, std::memory_order_release);
     m_loaded.store(true, std::memory_order_release);
@@ -86,6 +89,7 @@ void ProcessPluginProxy::unload() {
     m_inFill = 0;
     m_outFill = 0;
     m_outPos = 0;
+    m_outSynced = false;
 }
 
 bool ProcessPluginProxy::activate(double sampleRate, uint32_t maxBlockSize) {
@@ -105,7 +109,13 @@ void ProcessPluginProxy::deactivate() {
 void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outChannels,
                                     uint32_t numFrames) const {
     if (!inChannels || !outChannels || numFrames == 0) return;
-    const uint32_t channels = (std::max)(2u, (std::min)(m_transportChannels, ipc::kChannels));
+    /* F-5: bypass width follows the bus channel count (setChannelHint
+     * semantics) — not the last call's plugChannels, which used to collapse
+     * multichannel bypass to the plugin's channel count and silently drop
+     * ch2+ (bypassing the stage-2 "beyond-plugin passthrough" fix). */
+    const uint32_t channels = (std::max)(
+        2u, (std::min)(m_transportChannels.load(std::memory_order_acquire),
+                       ipc::kChannels));
     for (uint32_t ch = 0; ch < channels; ++ch) {
         if (inChannels[ch] && outChannels[ch] &&
             inChannels[ch] != outChannels[ch]) {
@@ -115,7 +125,7 @@ void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outC
     }
 }
 
-bool ProcessPluginProxy::submitChunk() {
+bool ProcessPluginProxy::submitChunk(uint32_t channels, uint32_t mask) {
     if (!m_ring) return false;
     auto& ring = *m_ring;
     const uint32_t w = ring.inputWrite.load(std::memory_order_relaxed);
@@ -128,7 +138,7 @@ bool ProcessPluginProxy::submitChunk() {
     ipc::AudioBlock& block = ring.input[w % ipc::kRingBlocks];
     block.seq = m_nextSeq++;
     block.frames = ipc::kTransportFrames;
-    block.reserved = ipc::packTransportFlags(m_transportChannels, m_transportMask);
+    block.reserved = ipc::packTransportFlags(channels, mask);
     for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
         std::memcpy(block.samples[ch],
                     m_inPlanar + ch * ipc::kTransportFrames,
@@ -139,7 +149,7 @@ bool ProcessPluginProxy::submitChunk() {
     return true;
 }
 
-bool ProcessPluginProxy::pumpOutput() {
+bool ProcessPluginProxy::pumpOutput(uint32_t channels, uint32_t mask) {
     if (!m_ring || m_outPos < m_outFill) return m_outPos < m_outFill;
     auto& ring = *m_ring;
     for (;;) {
@@ -150,12 +160,53 @@ bool ProcessPluginProxy::pumpOutput() {
         const ipc::AudioBlock& block = ring.output[r % ipc::kRingBlocks];
         const uint32_t frames =
             (std::min)(block.frames, ipc::kTransportFrames);
-        const uint32_t channels = ipc::unpackTransportChannels(block.reserved);
-        const uint32_t mask = ipc::unpackTransportMask(block.reserved);
-        if (channels != m_transportChannels || mask != m_transportMask) {
+        const uint32_t blockChannels = ipc::unpackTransportChannels(block.reserved);
+        const uint32_t blockMask = ipc::unpackTransportMask(block.reserved);
+
+        /* F-4: seq continuity. The host echoes the submitted seq on every
+         * output block (auradsp_plugin_host_main.cpp L444), so a gap between
+         * block.seq and the expected next seq means blocks were lost
+         * upstream — either the host dropped them (output ring overflow =
+         * proxy consumption starvation) or a parameter-transition drop
+         * consumed them. Before this check, such losses were invisible:
+         * pumpOutput simply moved to the next block and the audio stream
+         * silently jumped forward by whole transport blocks. */
+        const bool stale = m_outSynced && block.seq < m_nextSeqOut;
+        if (stale) {
+            /* Pre-resync residue (e.g. blocks still in flight across a
+             * reload): discard silently, keep the expected cursor. */
             ring.outputRead.store(r + 1, std::memory_order_release);
             continue;
         }
+        const bool mismatch = blockChannels != channels || blockMask != mask;
+        if (mismatch) {
+            /* Parameter-transition drop: a legitimate one-time cost of a
+             * channel/mask change (in-flight blocks carry the old flags).
+             * Counted in seqGaps for observability but NOT in missStreak —
+             * a hint change must not fail an otherwise healthy session. */
+            if (m_outSynced) {
+                m_seqGaps.fetch_add(block.seq - m_nextSeqOut + 1,
+                                    std::memory_order_relaxed);
+                m_nextSeqOut = block.seq + 1;
+            }
+            ring.outputRead.store(r + 1, std::memory_order_release);
+            continue;
+        }
+
+        if (!m_outSynced) {
+            /* First block after load/reload: establish the baseline, never
+             * a gap (the host may have restarted with its own counter). */
+            m_outSynced = true;
+            m_nextSeqOut = block.seq + 1;
+        } else if (block.seq > m_nextSeqOut) {
+            const uint64_t gap = block.seq - m_nextSeqOut;
+            m_seqGaps.fetch_add(gap, std::memory_order_relaxed);
+            m_missStreak.fetch_add(1, std::memory_order_relaxed);
+            m_nextSeqOut = block.seq + 1;
+        } else {
+            m_nextSeqOut = block.seq + 1;
+        }
+
         for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
             std::memcpy(m_outPlanar + ch * ipc::kTransportFrames,
                         block.samples[ch], frames * sizeof(float));
@@ -179,7 +230,11 @@ void ProcessPluginProxy::process(float* const* inChannels, float* const* outChan
         return;
     }
 
-    const uint32_t channels = (std::max)(2u, (std::min)(m_transportChannels, ipc::kChannels));
+    /* F-5: bypass/beyond-plugin passthrough width follows the bus channel
+     * count (setChannelHint semantics), not the per-call plugChannels. */
+    const uint32_t channels = (std::max)(
+        2u, (std::min)(m_transportChannels.load(std::memory_order_acquire),
+                       ipc::kChannels));
     uint32_t plugChannels = (m_busInfo.mainInChannels > 0)
                                 ? static_cast<uint32_t>(m_busInfo.mainInChannels)
                                 : 2u;
@@ -231,8 +286,12 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
         return;
     }
 
-    m_transportChannels = channels;
-    m_transportMask = mask;
+    /* F-5: channels/mask are per-call block parameters — they are passed
+     * down to submitChunk/pumpOutput instead of overwriting the
+     * session-level bus hint (m_transportChannels, setChannelHint-owned).
+     * The old member write was both a semantic corruption (bus hint became
+     * "whatever the last call used") and a data race (audio thread vs
+     * control thread on a plain member). */
     for (uint32_t i = 0; i < numFrames; ++i) {
         float inFrame[ipc::kChannels] = {};
         for (uint32_t ch = 0; ch < channels; ++ch) {
@@ -240,7 +299,7 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
             m_inPlanar[ch * ipc::kTransportFrames + m_inFill] = inFrame[ch];
         }
 
-        if (m_outPos >= m_outFill) pumpOutput();
+        if (m_outPos >= m_outFill) pumpOutput(channels, mask);
         if (m_outPos < m_outFill) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
                 if ((m_outMask & (1u << ch)) && ch < m_outChannels) {
@@ -255,15 +314,22 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
 
         ++m_inFill;
         if (m_inFill == ipc::kTransportFrames) {
-            submitChunk();
+            /* F-4: a dropped input block (ring full) used to be silent —
+             * the 128 frames never reached the host and no counter moved.
+             * It is starvation evidence, so it now feeds the same miss
+             * window as a missing output block. */
+            if (!submitChunk(channels, mask)) {
+                m_missStreak.fetch_add(1, std::memory_order_relaxed);
+            }
             m_inFill = 0;
-            if (m_outPos >= m_outFill && !pumpOutput()) {
-                if (++m_missStreak >= kMissingLimit) {
+            if (m_outPos >= m_outFill && !pumpOutput(channels, mask)) {
+                if (m_missStreak.fetch_add(1, std::memory_order_relaxed) + 1 >=
+                    kMissingLimit) {
                     m_failed.store(true, std::memory_order_release);
                     m_bypassed.store(true, std::memory_order_release);
                 }
             } else {
-                m_missStreak = 0;
+                m_missStreak.store(0, std::memory_order_relaxed);
             }
         }
     }
@@ -272,7 +338,12 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
 void ProcessPluginProxy::setChannelHint(int channels) {
     if (channels < 1) channels = 1;
     if (channels > static_cast<int>(ipc::kChannels)) channels = ipc::kChannels;
-    m_transportChannels = static_cast<uint32_t>(channels);
+    /* F-5: this is the ONLY writer of m_transportChannels — the bus channel
+     * count. The audio thread reads it for bypass width; the store is
+     * release so a reader that observes the new value also observes every
+     * prior store on this thread. */
+    m_transportChannels.store(static_cast<uint32_t>(channels),
+                              std::memory_order_release);
     if (m_client && m_loaded.load(std::memory_order_acquire)) {
         m_client->setChannelHint(static_cast<uint32_t>(channels));
     }
@@ -353,6 +424,10 @@ uint64_t ProcessPluginProxy::chunksIn() const {
 
 uint64_t ProcessPluginProxy::chunksOut() const {
     return m_ring ? m_ring->chunksOut.load(std::memory_order_relaxed) : 0;
+}
+
+uint64_t ProcessPluginProxy::seqGaps() const {
+    return m_seqGaps.load(std::memory_order_relaxed);
 }
 
 } // namespace auradsp

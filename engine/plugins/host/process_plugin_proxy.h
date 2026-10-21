@@ -47,6 +47,9 @@ public:
     uint64_t outputOverflows() const;
     uint64_t chunksIn() const;
     uint64_t chunksOut() const;
+    // F-4: output blocks lost upstream (host output-ring overflow, or
+    // parameter-transition drops) counted via seq continuity checks.
+    uint64_t seqGaps() const;
     bool remoteFailed() const {
         return m_failed.load(std::memory_order_acquire) ||
                (m_client && !m_client->alive());
@@ -54,8 +57,11 @@ public:
     uint32_t transportLatency() const { return ipc::kTransportFrames; }
 
 private:
-    bool submitChunk();
-    bool pumpOutput();
+    // F-4/F-5: channels/mask are per-call (block-level) parameters — they no
+    // longer live in members. The session-level bus channel count stays in
+    // m_transportChannels, owned exclusively by setChannelHint.
+    bool submitChunk(uint32_t channels, uint32_t mask);
+    bool pumpOutput(uint32_t channels, uint32_t mask);
     void copyBypass(float* const* inChannels, float* const* outChannels,
                     uint32_t numFrames) const;
 
@@ -86,10 +92,19 @@ private:
     uint32_t m_outPos = 0;
     uint32_t m_outChannels = 2;
     uint32_t m_outMask = 0xFF;
-    uint32_t m_transportChannels = 2;
-    uint32_t m_transportMask = 0xFF;
 
-    uint32_t m_missStreak = 0;
+    /* F-5: bus channel count — written only by setChannelHint (control
+     * thread), read by the audio thread (bypass width in copyBypass /
+     * process()). Atomic because the two are different threads; the old
+     * plain member was a data race between them. */
+    std::atomic<uint32_t> m_transportChannels{2};
+
+    // F-4: output-side seq continuity tracking (audio thread writes; status
+    // reads from the control thread — both atomic).
+    uint64_t m_nextSeqOut = 0;
+    bool m_outSynced = false;
+    std::atomic<uint64_t> m_seqGaps{0};
+    std::atomic<uint32_t> m_missStreak{0};
 };
 
 } // namespace auradsp
