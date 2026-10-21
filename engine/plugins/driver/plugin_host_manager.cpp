@@ -265,17 +265,20 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
         uint32_t transportLatency = 0;
         uint64_t inputOverflows = 0;
         uint64_t outputOverflows = 0;
+        uint64_t seqGaps = 0;
         if (auto* proxy = dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
             remoteFailed = proxy->remoteFailed();
             transportLatency = proxy->transportLatency();
             inputOverflows = proxy->inputOverflows();
             outputOverflows = proxy->outputOverflows();
+            seqGaps = proxy->seqGaps();
         }
         ss << "\"remoteMode\":true,"
            << "\"remoteFailed\":" << (remoteFailed ? "true" : "false") << ","
            << "\"transportLatency\":" << transportLatency << ","
            << "\"inputOverflows\":" << inputOverflows << ","
-           << "\"outputOverflows\":" << outputOverflows << ",";
+           << "\"outputOverflows\":" << outputOverflows << ","
+           << "\"seqGaps\":" << seqGaps << ",";
     }
 #endif
     if (m_slots[slot].instance) {

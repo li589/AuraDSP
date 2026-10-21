@@ -202,6 +202,17 @@ assert nz_ratio > 0.7, (
     f"output is sparse ({nz_ratio:.1%} non-zero) — frames/channels are being "
     "permuted at the proxy scratch boundary (a dense ramp through any "
     "non-silent plugin must produce a dense signal)")
+# F-4: healthy steady state must show zero seq gaps (output blocks lost
+# upstream are counted via the host-echoed seq; a nonzero value here means
+# the transport silently dropped blocks).
+status = get_status(handle)
+gaps = status.get("seqGaps")
+assert gaps == 0, (
+    f"seq gaps in healthy steady state: {gaps} — blocks are being lost in "
+    "the transport without a parameter change")
+print(f"  transport clean: seqGaps={gaps}, "
+      f"inputOverflows={status.get('inputOverflows')}, "
+      f"outputOverflows={status.get('outputOverflows')}")
 
 print("=== [4b] replacing a loaded remote plugin keeps processing ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
