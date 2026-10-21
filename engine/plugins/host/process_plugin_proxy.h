@@ -22,6 +22,10 @@ public:
     void deactivate() override;
     void process(float* const* inChannels, float* const* outChannels,
                  uint32_t numFrames) override;
+    void processInterleaved(float* interleaved, uint32_t numFrames,
+                            uint32_t channels, uint32_t mask) override;
+    bool interleavedTransport() const override { return true; }
+    void setChannelHint(int channels) override;
     bool isLoaded() const override;
     bool isBypassed() const override;
     bool hostTransportFailed() const override {
@@ -70,15 +74,17 @@ private:
     std::atomic<bool> m_editorOpen{false};
     std::atomic<uint32_t> m_latency{0};
 
-    float m_inL[ipc::kTransportFrames] = {};
-    float m_inR[ipc::kTransportFrames] = {};
+    float m_inInterleaved[ipc::kChannels * ipc::kTransportFrames] = {};
     uint32_t m_inFill = 0;
     uint64_t m_nextSeq = 0;
 
-    float m_outL[ipc::kTransportFrames] = {};
-    float m_outR[ipc::kTransportFrames] = {};
+    float m_outInterleaved[ipc::kChannels * ipc::kTransportFrames] = {};
     uint32_t m_outFill = 0;
     uint32_t m_outPos = 0;
+    uint32_t m_outChannels = 2;
+    uint32_t m_outMask = 0xFF;
+    uint32_t m_transportChannels = 2;
+    uint32_t m_transportMask = 0xFF;
 
     uint32_t m_missStreak = 0;
 };

@@ -338,6 +338,13 @@ bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& runni
             status = 1;
             break;
         }
+        case auradsp::ipc::Op::SetChannelHint: {
+            uint32_t channels = 2;
+            if (!r.u32(channels)) break;
+            manager.setChannelHint(static_cast<int>(channels));
+            status = 1;
+            break;
+        }
         case auradsp::ipc::Op::Shutdown:
             status = 1;
             running = false;
@@ -428,14 +435,30 @@ int wmain(int argc, wchar_t** argv) {
                 if (read == write) continue;
 
                 auto& in = ring.input[read % auradsp::ipc::kRingBlocks];
-                uint32_t frames = std::min<uint32_t>(in.frames, auradsp::ipc::kTransportFrames);
+                uint32_t frames = (std::min)(in.frames, auradsp::ipc::kTransportFrames);
                 auradsp::ipc::AudioBlock out = {};
                 out.seq = in.seq;
                 out.frames = frames;
-                float* inPtrs[auradsp::ipc::kChannels] = {in.samples[0], in.samples[1]};
-                float* outPtrs[auradsp::ipc::kChannels] = {out.samples[0], out.samples[1]};
+                out.reserved = in.reserved;
+                const uint32_t channels =
+                    auradsp::ipc::unpackTransportChannels(in.reserved);
+                const uint32_t mask =
+                    auradsp::ipc::unpackTransportMask(in.reserved);
+                float interleaved[auradsp::ipc::kChannels *
+                                  auradsp::ipc::kTransportFrames] = {};
+                for (uint32_t ch = 0; ch < channels; ++ch) {
+                    for (uint32_t i = 0; i < frames; ++i) {
+                        interleaved[i * channels + ch] = in.samples[ch][i];
+                    }
+                }
                 if (frames > 0) {
-                    manager.processSlot(slot, inPtrs, outPtrs, frames);
+                    manager.processSlotInterleaved(slot, interleaved, frames,
+                                                   channels, mask);
+                }
+                for (uint32_t ch = 0; ch < channels; ++ch) {
+                    for (uint32_t i = 0; i < frames; ++i) {
+                        out.samples[ch][i] = interleaved[i * channels + ch];
+                    }
                 }
 
                 const uint32_t outWrite = ring.outputWrite.load(std::memory_order_relaxed);

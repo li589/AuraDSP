@@ -26,6 +26,17 @@
 namespace fs = std::filesystem;
 
 namespace auradsp {
+
+static Steinberg::Vst::SpeakerArrangement arrangementForChannels(int channels) {
+    switch (channels) {
+        case 1: return Steinberg::Vst::SpeakerArr::kMono;
+        case 4: return Steinberg::Vst::SpeakerArr::k40Music;
+        case 6: return Steinberg::Vst::SpeakerArr::k51;
+        case 8: return Steinberg::Vst::SpeakerArr::k71Music;
+        default: return Steinberg::Vst::SpeakerArr::kStereo;
+    }
+}
+
 // VST3 COM 胶水（P1 自 host_com.cpp 并入：唯一消费者是 Vst3PluginInstance）
 class Vst3MemoryStream : public Steinberg::IBStream {
 public:
@@ -885,8 +896,10 @@ public:
 
         const std::vector<Steinberg::Vst::SpeakerArrangement> defaultInArrs = inArrs;
         const std::vector<Steinberg::Vst::SpeakerArrangement> defaultOutArrs = outArrs;
-        if (numInBusses > 0) inArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
-        if (numOutBusses > 0) outArrs[0] = Steinberg::Vst::SpeakerArr::kStereo;
+        const Steinberg::Vst::SpeakerArrangement mainArr =
+            arrangementForChannels(m_channelHint);
+        if (numInBusses > 0) inArrs[0] = mainArr;
+        if (numOutBusses > 0) outArrs[0] = mainArr;
 
         Steinberg::tresult arrRes =
             m_processor->setBusArrangements(inArrs.data(), numInBusses, outArrs.data(), numOutBusses);
@@ -929,10 +942,12 @@ public:
         if (numInBusses > 0) {
             Steinberg::Vst::SpeakerArrangement finalIn = Steinberg::Vst::SpeakerArr::kStereo;
             if (m_processor->getBusArrangement(Steinberg::Vst::kInput, 0, finalIn) == Steinberg::kResultOk) {
-                m_inChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalIn) == 1 ? 1 : 2;
+                m_inChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalIn);
             } else {
                 m_inChannels = 2;
             }
+            if (m_inChannels < 1) m_inChannels = 1;
+            if (m_inChannels > 8) m_inChannels = 8;
             m_inBusChannels[0] = m_inChannels;
         } else {
             m_inChannels = 0;
@@ -951,10 +966,12 @@ public:
 
         Steinberg::Vst::SpeakerArrangement finalOut = Steinberg::Vst::SpeakerArr::kStereo;
         if (m_processor->getBusArrangement(Steinberg::Vst::kOutput, 0, finalOut) == Steinberg::kResultOk) {
-            m_outChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalOut) == 1 ? 1 : 2;
+            m_outChannels = Steinberg::Vst::SpeakerArr::getChannelCount(finalOut);
         } else {
             m_outChannels = 2;
         }
+        if (m_outChannels < 1) m_outChannels = 1;
+        if (m_outChannels > 8) m_outChannels = 8;
         m_outBusChannels[0] = m_outChannels;
         for (int32_t i = 1; i < numOutBusses; ++i) {
             if (!m_outBusActive[i]) continue;
@@ -1027,9 +1044,12 @@ public:
 
         if (!m_isActive || !m_processor || m_bypassed) {
             if (inChannels != outChannels && inChannels) {
-                for (int32_t ch = 0; ch < 2; ++ch) {
+                const int32_t copyChannels =
+                    (std::min)(m_inChannels, m_outChannels);
+                for (int32_t ch = 0; ch < copyChannels; ++ch) {
                     if (inChannels[ch] && outChannels[ch]) {
-                        std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                        std::memcpy(outChannels[ch], inChannels[ch],
+                                    numFrames * sizeof(float));
                     }
                 }
             }
@@ -1130,6 +1150,11 @@ public:
     bool isLoaded() const override { return m_isLoaded; }
     bool isBypassed() const override { return m_bypassed; }
     void setBypass(bool bypass) override { m_bypassed = bypass; }
+    void setChannelHint(int channels) override {
+        if (channels < 1) channels = 1;
+        if (channels > 8) channels = 8;
+        m_channelHint = channels;
+    }
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
     PluginBusInfo busInfo() const override { return m_busInfo; }
@@ -1491,6 +1516,7 @@ private:
     int64_t m_continuousTimeSamples = 0;
     int32_t m_inChannels = 2;
     int32_t m_outChannels = 2;
+    int32_t m_channelHint = 2;
     int32_t m_numInputBusses = 1;
     int32_t m_numOutputBusses = 1;
     std::vector<Steinberg::Vst::AudioBusBuffers> m_inBusses;

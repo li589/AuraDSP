@@ -88,6 +88,15 @@ public:
     virtual uint32_t getLatency() const = 0;
     virtual const PluginMetadata& getMetadata() const = 0;
     virtual PluginBusInfo busInfo() const { return {}; }
+    virtual void setChannelHint(int channels) { (void)channels; }
+    virtual bool interleavedTransport() const { return false; }
+    virtual void processInterleaved(float* interleaved, uint32_t numFrames,
+                                    uint32_t channels, uint32_t mask) {
+        (void)interleaved;
+        (void)numFrames;
+        (void)channels;
+        (void)mask;
+    }
 
     // GUI Editor Window (Win32)
     /* title: 窗口标题，由调用方（Dart）决定；为空时退化为插件自报名。
@@ -178,6 +187,9 @@ public:
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
+        std::atomic<uint32_t> channelMask{0xFF};
+        std::atomic<int> mainInChannels{2};
+        std::atomic<int> mainOutChannels{2};
         /* RT 临界区握手计数器（修复 use-after-free）。
          * 契约：RT 侧进入 processSlot 时先 fetch_add(acq_rel) 再读 hasActive；
          * 控制侧卸载时先 hasActive=false(release) + destroyPending=true，
@@ -247,6 +259,12 @@ public:
     void setInsertStageSlot(size_t slot, int stage);
     int getInsertStageSlot(size_t slot) const;
 
+    void setChannelMaskSlot(size_t slot, uint32_t mask);
+    uint32_t getChannelMaskSlot(size_t slot) const;
+    void getMainChannelsSlot(size_t slot, int* inChannels, int* outChannels) const;
+    void setChannelHint(int channels);
+    int getChannelHint() const;
+
     /* ---- C3 异步挂载/卸载（2026-10-12）----
      * 背景：load/unload 是单个长 FFI 调用（实测 load p50 77ms、max 1144ms；
      *       unload p50 18ms、max 231ms），在 Dart isolate 的事件循环上同步执行
@@ -266,6 +284,8 @@ public:
 
     // Process single slot (RT-Safe)
     void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
+    void processSlotInterleaved(size_t slot, float* interleaved, uint32_t numFrames,
+                                uint32_t channels, uint32_t mask);
     void recordTelemetry(size_t slot, float inRms, float outRms, float maxDiff, uint32_t frames);
 
     // Legacy single-slot helper. Only loadPlugin() is still referenced
@@ -277,6 +297,7 @@ public:
 
     // Sample rate / block size update
     void updateFormat(double sampleRate, uint32_t maxBlockSize);
+    bool ensureChannelScratch(uint32_t maxBlockSize);
     double getSampleRate() const { return m_sampleRate; }
     uint32_t getMaxBlockSize() const { return m_maxBlockSize; }
 
@@ -322,6 +343,11 @@ public:
 #endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
+    std::atomic<int> m_channelHint{2};
+    std::array<std::unique_ptr<float[]>, 8> m_channelIn;
+    std::array<std::unique_ptr<float[]>, 8> m_channelOut;
+    std::unique_ptr<float[]> m_channelZero;
+    uint32_t m_channelScratchBlock = 0;
     mutable std::recursive_mutex m_hostMutex;
 
     // ---- C2 分块扫描状态与元数据缓存 ----

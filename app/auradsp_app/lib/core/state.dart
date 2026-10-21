@@ -36,12 +36,14 @@ class SavedPluginSlot {
   final String id;
   final bool bypass;
   final int stage;
+  final int channels;
   const SavedPluginSlot({
     required this.slot,
     required this.path,
     this.id = '',
     this.bypass = false,
     this.stage = 3,
+    this.channels = 0xFF,
   });
 }
 
@@ -1896,6 +1898,12 @@ class AppModel extends ChangeNotifier {
         scheduleAutoSave();
         notifyListeners();
         break;
+      case 'pluginSlotChannels':
+        pluginManager.onPluginSlotChannels(
+            raw['slot'] as int, (raw['mask'] as num).toInt(), raw['rc'] as int);
+        scheduleAutoSave();
+        notifyListeners();
+        break;
       case 'pluginSlotPresetSaved':
         lastInfo = '预设已保存成功';
         eventSeq.value = ++_guardSeq;
@@ -2252,6 +2260,13 @@ class AppModel extends ChangeNotifier {
               'path': item.path,
               'id': item.id,
             });
+            if (item.channels != 0xFF) {
+              send({
+                'cmd': 'pluginSlotSetChannels',
+                'slot': item.slot,
+                'mask': item.channels,
+              });
+            }
             if (item.stage != PluginInsertStage.defaultStage) {
               send({
                 'cmd': 'pluginSlotSetInsertStage',

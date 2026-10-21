@@ -399,6 +399,13 @@ bool PluginHostClient::updateFormat(double sampleRate, uint32_t maxBlockSize) {
     return simple(ipc::Op::UpdateFormat, w.data(), &status) && status == 1;
 }
 
+bool PluginHostClient::setChannelHint(uint32_t channels) {
+    ipc::Writer w;
+    w.u32(channels);
+    int32_t status = 0;
+    return simple(ipc::Op::SetChannelHint, w.data(), &status) && status == 1;
+}
+
 int PluginHostClient::scanPlugins(const std::string& extraDirsJson, bool deepScan) {
     ipc::Writer w;
     w.str(extraDirsJson);

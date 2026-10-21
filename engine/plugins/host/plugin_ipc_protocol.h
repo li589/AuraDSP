@@ -11,9 +11,9 @@ namespace auradsp {
 namespace ipc {
 
 constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
-constexpr uint32_t kProtocolVersion = 2u;
+constexpr uint32_t kProtocolVersion = 3u;
 constexpr uint32_t kMaxSlots = 4u;
-constexpr uint32_t kChannels = 2u;
+constexpr uint32_t kChannels = 8u;
 constexpr uint32_t kTransportFrames = 128u;
 constexpr uint32_t kRingBlocks = 16u;
 constexpr uint32_t kMaxScannedPlugins = 65536u;
@@ -45,6 +45,7 @@ enum class Op : uint32_t {
     GetStage = 23,
     UpdateFormat = 24,
     Shutdown = 25,
+    SetChannelHint = 26,
 };
 
 enum class HostState : uint32_t {
@@ -76,6 +77,20 @@ struct AudioBlock {
     uint32_t reserved;
     float samples[kChannels][kTransportFrames];
 };
+
+constexpr uint32_t packTransportFlags(uint32_t channels, uint32_t mask) {
+    return (channels & 0xFFu) | ((mask & 0xFFu) << 8);
+}
+
+constexpr uint32_t unpackTransportChannels(uint32_t flags) {
+    const uint32_t channels = flags & 0xFFu;
+    return channels == 0 ? 2u : (channels > kChannels ? kChannels : channels);
+}
+
+constexpr uint32_t unpackTransportMask(uint32_t flags) {
+    const uint32_t mask = (flags >> 8) & 0xFFu;
+    return mask == 0 ? 0xFFu : mask;
+}
 
 struct SlotAudioRing {
     alignas(64) std::atomic<uint32_t> inputWrite{0};

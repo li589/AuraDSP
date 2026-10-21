@@ -676,6 +676,16 @@ final class AuraDspLib {
           'auradsp_plugin_slot_get_insert_stage')
       .asFunction();
 
+  late final int Function(Pointer<Void>, int, int) pluginSlotSetChannels = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
+          'auradsp_plugin_slot_set_channels')
+      .asFunction();
+
+  late final int Function(Pointer<Void>, int) pluginSlotGetChannels = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_slot_get_channels')
+      .asFunction();
+
   /// 插件编辑器隔离名单（预设系统数据）：逗号分隔小写子串（匹配 name/path），
   /// 引擎据此对命中插件关闭编辑器时跳过 removed()/release()，防插件自身
   /// teardown fail-fast 崩溃。NULL/空串清空名单。
@@ -1161,5 +1171,15 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   static int pluginSlotGetInsertStageWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotGetInsertStage(handle, slot);
+  }
+
+  static int pluginSlotSetChannelsWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, int mask) {
+    return lib.pluginSlotSetChannels(handle, slot, mask);
+  }
+
+  static int pluginSlotGetChannelsWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotGetChannels(handle, slot);
   }
 }

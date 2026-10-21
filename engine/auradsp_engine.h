@@ -256,6 +256,9 @@ int      auradsp_plugin_set_editor_quarantine_list(const char* patterns);
 int      auradsp_plugin_slot_set_insert_stage(auradsp_handle h, int slot, int stage);
 int      auradsp_plugin_slot_get_insert_stage(auradsp_handle h, int slot);
 
+int      auradsp_plugin_slot_set_channels(auradsp_handle h, int slot, int mask);
+int      auradsp_plugin_slot_get_channels(auradsp_handle h, int slot);
+
 /* 兼容旧版单插槽（映射至 slot 0） */
 int      auradsp_plugin_load(auradsp_handle h, const char* path, const char* plugin_id);
 int      auradsp_plugin_unload(auradsp_handle h);

@@ -704,6 +704,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.filter_enable.load(std::memory_order_relaxed)) {
         filter_process_mc(h, dst, frames, ch);
     }
+    auradsp::plugin_chain_process_n(h, 0, dst, (uint32_t)frames, (uint32_t)ch);
+
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
         h->p.shelf_gain.load(std::memory_order_relaxed) != 0.0f) {
         shelf_process_mc(h, dst, frames, ch);
@@ -714,6 +716,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         tube_process_mc(h, dst, frames, ch);
     }
+
+    auradsp::plugin_chain_process_n(h, 1, dst, (uint32_t)frames, (uint32_t)ch);
 
     // 3. Category B 跨声道/声场效果器与前置 FL/FR vendor 核心（仅作用于前置立体声对，保持环绕声场完整性）
     if (h->shelf_scratch && h->mx_stereo) {
@@ -728,9 +732,6 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
-
-        auradsp::plugin_chain_process(h, 0, h->shelf_scratch, (uint32_t)frames);
-        auradsp::plugin_chain_process(h, 1, h->shelf_scratch, (uint32_t)frames);
 
         const int tube_saved = h->jdsp.tubeEnabled;
         const int limiter_saved = h->jdsp.limiterEnabled;
@@ -773,7 +774,17 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         h->jdsp.tubeEnabled = tube_saved;
         h->jdsp.limiterEnabled = limiter_saved;
 
-        auradsp::plugin_chain_process(h, 2, h->mx_stereo, (uint32_t)frames);
+        for (int i = 0; i < frames; ++i) {
+            dst[i * ch + 0] = h->mx_stereo[i * 2];
+            dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
+        }
+
+        auradsp::plugin_chain_process_n(h, 2, dst, (uint32_t)frames, (uint32_t)ch);
+
+        for (int i = 0; i < frames; ++i) {
+            h->mx_stereo[i * 2]     = dst[i * ch + 0];
+            h->mx_stereo[i * 2 + 1] = dst[i * ch + 1];
+        }
 
         if (h->p.haas_enable.load(std::memory_order_relaxed)) {
             haas_process(h, h->mx_stereo, frames);
@@ -783,13 +794,13 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         freeverb_process(h, h->mx_stereo, frames);
 
-        auradsp::plugin_chain_process(h, 3, h->mx_stereo, (uint32_t)frames);
-
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
     }
+
+    auradsp::plugin_chain_process_n(h, 3, dst, (uint32_t)frames, (uint32_t)ch);
 
     // 3b. B5：双声道效果器（comp/eq）按掩码对选中声道对独立处理；
     //      arbmag 升级逐声道（B5 后续）：同一对处理后按各自 mask 位进池。
@@ -850,6 +861,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
             dst[i] = -10.0f;
         }
     }
+
+    auradsp::plugin_chain_process_n(h, 4, dst, (uint32_t)frames, (uint32_t)ch);
 }
 
 

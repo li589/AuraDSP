@@ -105,7 +105,7 @@ void ProcessPluginProxy::deactivate() {
 void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outChannels,
                                     uint32_t numFrames) const {
     if (!inChannels || !outChannels) return;
-    for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
+    for (uint32_t ch = 0; ch < 2; ++ch) {
         if (inChannels[ch] && outChannels[ch] &&
             inChannels[ch] != outChannels[ch]) {
             std::memcpy(outChannels[ch], inChannels[ch],
@@ -127,9 +127,12 @@ bool ProcessPluginProxy::submitChunk() {
     ipc::AudioBlock& block = ring.input[w % ipc::kRingBlocks];
     block.seq = m_nextSeq++;
     block.frames = ipc::kTransportFrames;
-    block.reserved = 0;
-    std::memcpy(block.samples[0], m_inL, sizeof(m_inL));
-    std::memcpy(block.samples[1], m_inR, sizeof(m_inR));
+    block.reserved = ipc::packTransportFlags(m_transportChannels, m_transportMask);
+    for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
+        std::memcpy(block.samples[ch],
+                    m_inInterleaved + ch * ipc::kTransportFrames,
+                    ipc::kTransportFrames * sizeof(float));
+    }
     ring.inputWrite.store(w + 1, std::memory_order_release);
     ring.chunksIn.fetch_add(1, std::memory_order_relaxed);
     return true;
@@ -138,18 +141,31 @@ bool ProcessPluginProxy::submitChunk() {
 bool ProcessPluginProxy::pumpOutput() {
     if (!m_ring || m_outPos < m_outFill) return m_outPos < m_outFill;
     auto& ring = *m_ring;
-    const uint32_t w = ring.outputWrite.load(std::memory_order_acquire);
-    const uint32_t r = ring.outputRead.load(std::memory_order_relaxed);
-    if (w == r) return false;
+    for (;;) {
+        const uint32_t w = ring.outputWrite.load(std::memory_order_acquire);
+        const uint32_t r = ring.outputRead.load(std::memory_order_relaxed);
+        if (w == r) return false;
 
-    const ipc::AudioBlock& block = ring.output[r % ipc::kRingBlocks];
-    const uint32_t frames = std::min<uint32_t>(block.frames, ipc::kTransportFrames);
-    std::memcpy(m_outL, block.samples[0], static_cast<size_t>(frames) * sizeof(float));
-    std::memcpy(m_outR, block.samples[1], static_cast<size_t>(frames) * sizeof(float));
-    m_outFill = frames;
-    m_outPos = 0;
-    ring.outputRead.store(r + 1, std::memory_order_release);
-    return frames > 0;
+        const ipc::AudioBlock& block = ring.output[r % ipc::kRingBlocks];
+        const uint32_t frames =
+            (std::min)(block.frames, ipc::kTransportFrames);
+        const uint32_t channels = ipc::unpackTransportChannels(block.reserved);
+        const uint32_t mask = ipc::unpackTransportMask(block.reserved);
+        if (channels != m_transportChannels || mask != m_transportMask) {
+            ring.outputRead.store(r + 1, std::memory_order_release);
+            continue;
+        }
+        for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
+            std::memcpy(m_outInterleaved + ch * ipc::kTransportFrames,
+                        block.samples[ch], frames * sizeof(float));
+        }
+        m_outChannels = channels;
+        m_outMask = mask;
+        m_outFill = frames;
+        m_outPos = 0;
+        ring.outputRead.store(r + 1, std::memory_order_release);
+        return frames > 0;
+    }
 }
 
 void ProcessPluginProxy::process(float* const* inChannels, float* const* outChannels,
@@ -168,21 +184,56 @@ void ProcessPluginProxy::process(float* const* inChannels, float* const* outChan
     float* outR = outChannels[1];
     if (!inL || !inR || !outL || !outR) return;
 
-    for (uint32_t i = 0; i < numFrames; ++i) {
-        if (m_outPos >= m_outFill) {
-            pumpOutput();
+    float block[2 * ipc::kTransportFrames];
+    uint32_t offset = 0;
+    while (offset < numFrames) {
+        const uint32_t n = (std::min)(ipc::kTransportFrames, numFrames - offset);
+        for (uint32_t i = 0; i < n; ++i) {
+            block[i * 2] = inL[offset + i];
+            block[i * 2 + 1] = inR[offset + i];
         }
-        if (m_outPos < m_outFill) {
-            outL[i] = m_outL[m_outPos];
-            outR[i] = m_outR[m_outPos];
-            ++m_outPos;
-        } else {
-            outL[i] = inL[i];
-            outR[i] = inR[i];
+        processInterleaved(block, n, 2, 0xFF);
+        for (uint32_t i = 0; i < n; ++i) {
+            outL[offset + i] = block[i * 2];
+            outR[offset + i] = block[i * 2 + 1];
+        }
+        offset += n;
+    }
+}
+
+void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFrames,
+                                             uint32_t channels, uint32_t mask) {
+    if (!interleaved || numFrames == 0 || channels == 0) return;
+    if (channels > ipc::kChannels) channels = ipc::kChannels;
+    mask &= (1u << channels) - 1u;
+    if (!m_loaded.load(std::memory_order_acquire) ||
+        m_failed.load(std::memory_order_acquire) ||
+        m_bypassed.load(std::memory_order_acquire) || !m_ring) {
+        return;
+    }
+
+    m_transportChannels = channels;
+    m_transportMask = mask;
+    for (uint32_t i = 0; i < numFrames; ++i) {
+        float inFrame[ipc::kChannels] = {};
+        for (uint32_t ch = 0; ch < channels; ++ch) {
+            inFrame[ch] = interleaved[i * channels + ch];
+            m_inInterleaved[m_inFill * ipc::kChannels + ch] = inFrame[ch];
         }
 
-        m_inL[m_inFill] = inL[i];
-        m_inR[m_inFill] = inR[i];
+        if (m_outPos >= m_outFill) pumpOutput();
+        if (m_outPos < m_outFill) {
+            for (uint32_t ch = 0; ch < channels; ++ch) {
+                if ((m_outMask & (1u << ch)) && ch < m_outChannels) {
+                    interleaved[i * channels + ch] =
+                        m_outInterleaved[m_outPos * ipc::kChannels + ch];
+                } else {
+                    interleaved[i * channels + ch] = inFrame[ch];
+                }
+            }
+            ++m_outPos;
+        }
+
         ++m_inFill;
         if (m_inFill == ipc::kTransportFrames) {
             submitChunk();
@@ -196,6 +247,15 @@ void ProcessPluginProxy::process(float* const* inChannels, float* const* outChan
                 m_missStreak = 0;
             }
         }
+    }
+}
+
+void ProcessPluginProxy::setChannelHint(int channels) {
+    if (channels < 1) channels = 1;
+    if (channels > static_cast<int>(ipc::kChannels)) channels = ipc::kChannels;
+    m_transportChannels = static_cast<uint32_t>(channels);
+    if (m_client && m_loaded.load(std::memory_order_acquire)) {
+        m_client->setChannelHint(static_cast<uint32_t>(channels));
     }
 }
 
