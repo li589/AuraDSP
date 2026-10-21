@@ -1,5 +1,5 @@
 /*
- * auradsp_plugin_host.h — AuraDSP M1 Plugin Host Engine (VST3 / CLAP 64-bit)
+ * plugin_host.h — AuraDSP M1 Plugin Host Engine (VST3 / CLAP 64-bit)
  *
  * Implements in-process plugin hosting for:
  *   - CLAP (Clever Audio Plugin) via pure C ABI (clap/clap.h)
@@ -30,6 +30,10 @@
 
 namespace auradsp {
 
+#ifndef AURADSP_HOST_INPROC
+class PluginHostClient;
+#endif
+
 enum class PluginFormat {
     Unknown = 0,
     VST3,
@@ -56,6 +60,15 @@ struct PluginMetadata {
     std::string toJson() const;
 };
 
+struct PluginBusInfo {
+    int inputBuses = 0;
+    int outputBuses = 0;
+    int auxInputBuses = 0;
+    int auxOutputBuses = 0;
+    int mainInChannels = 0;
+    int mainOutChannels = 0;
+};
+
 class IPluginInstance {
 public:
     virtual ~IPluginInstance() = default;
@@ -74,6 +87,16 @@ public:
     virtual void setBypass(bool bypass) = 0;
     virtual uint32_t getLatency() const = 0;
     virtual const PluginMetadata& getMetadata() const = 0;
+    virtual PluginBusInfo busInfo() const { return {}; }
+    virtual void setChannelHint(int channels) { (void)channels; }
+    virtual bool interleavedTransport() const { return false; }
+    virtual void processInterleaved(float* interleaved, uint32_t numFrames,
+                                    uint32_t channels, uint32_t mask) {
+        (void)interleaved;
+        (void)numFrames;
+        (void)channels;
+        (void)mask;
+    }
 
     // GUI Editor Window (Win32)
     /* title: 窗口标题，由调用方（Dart）决定；为空时退化为插件自报名。
@@ -91,6 +114,11 @@ public:
      * 析构 = use-after-free；manager 据此把整个实例移入静态隔离区
      * （可控泄漏换不可控崩溃），绝不释放。 */
     virtual bool abandoned() const { return false; }
+
+    /* 跨进程传输层失败（host 崩溃 / 超时无输出）。进程内实例恒 false；
+     * ProcessPluginProxy 在连续多个传输块收不到结果后置位，管理器和 UI
+     * 据此显示"远程旁路"，而音频线程本身已自动 copy-through。 */
+    virtual bool hostTransportFailed() const { return false; }
 
     /* C1（2026-10-12）：编辑器容器窗口收到 WM_CLOSE（用户点 X）时，由容器
      * WndProc 经 GWLP_USERDATA 在 plugin main 线程上回调。默认空实现——
@@ -159,6 +187,9 @@ public:
         std::atomic<bool> bypassed{false};
         std::atomic<uint32_t> latency{0};
         std::atomic<int> insertStage{3}; // 0=Pre-DSP, 1=Pre-Vendor, 2=Post-Vendor, 3=Post-Reverb, 4=Post-Limiter
+        std::atomic<uint32_t> channelMask{0xFF};
+        std::atomic<int> mainInChannels{2};
+        std::atomic<int> mainOutChannels{2};
         /* RT 临界区握手计数器（修复 use-after-free）。
          * 契约：RT 侧进入 processSlot 时先 fetch_add(acq_rel) 再读 hasActive；
          * 控制侧卸载时先 hasActive=false(release) + destroyPending=true，
@@ -228,6 +259,12 @@ public:
     void setInsertStageSlot(size_t slot, int stage);
     int getInsertStageSlot(size_t slot) const;
 
+    void setChannelMaskSlot(size_t slot, uint32_t mask);
+    uint32_t getChannelMaskSlot(size_t slot) const;
+    void getMainChannelsSlot(size_t slot, int* inChannels, int* outChannels) const;
+    void setChannelHint(int channels);
+    int getChannelHint() const;
+
     /* ---- C3 异步挂载/卸载（2026-10-12）----
      * 背景：load/unload 是单个长 FFI 调用（实测 load p50 77ms、max 1144ms；
      *       unload p50 18ms、max 231ms），在 Dart isolate 的事件循环上同步执行
@@ -247,10 +284,12 @@ public:
 
     // Process single slot (RT-Safe)
     void processSlot(size_t slot, float* const* inChannels, float* const* outChannels, uint32_t numFrames);
+    void processSlotInterleaved(size_t slot, float* interleaved, uint32_t numFrames,
+                                uint32_t channels, uint32_t mask);
     void recordTelemetry(size_t slot, float inRms, float outRms, float maxDiff, uint32_t frames);
 
     // Legacy single-slot helper. Only loadPlugin() is still referenced
-    // (test/smoke/test_plugin_direct.cpp); the other six forwards were removed
+    // (engine/plugins/tests/plugin_host_direct.cpp); the other six forwards were removed
     // as dead code -- the C ABI keeps its own single-slot compatibility symbols
     // (auradsp_plugin_load etc.), which forward to the *Slot functions
     // directly and never went through these members.
@@ -258,6 +297,7 @@ public:
 
     // Sample rate / block size update
     void updateFormat(double sampleRate, uint32_t maxBlockSize);
+    bool ensureChannelScratch(uint32_t maxBlockSize);
     double getSampleRate() const { return m_sampleRate; }
     uint32_t getMaxBlockSize() const { return m_maxBlockSize; }
 
@@ -270,7 +310,7 @@ public:
 
     /* 加载的两段式拆分（C3）：prepare 是重活（解析 bundle / LoadLibrary /
      * createInstance / activate），在锁外执行；commit 只把指针挂进槽位。 */
-    std::unique_ptr<IPluginInstance> prepareInstance(const std::string& path, const std::string& pluginId);
+    std::unique_ptr<IPluginInstance> prepareInstance(size_t slot, const std::string& path, const std::string& pluginId);
     void commitInstanceLocked(size_t slot, std::unique_ptr<IPluginInstance> instance);
 
     // ---- C3 异步挂载/卸载：控制线程 + 任务队列 ----
@@ -293,10 +333,21 @@ public:
     std::thread m_controlThread;
     std::atomic<bool> m_controlRunning{false};
 
+    bool remoteMode() const { return m_remoteMode; }
+
     std::vector<PluginMetadata> m_scannedPlugins;
     std::array<PluginSlot, kMaxPluginSlots> m_slots;
+    bool m_remoteMode = false;
+#ifndef AURADSP_HOST_INPROC
+    std::shared_ptr<PluginHostClient> m_remoteClient;
+#endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};
+    std::atomic<int> m_channelHint{2};
+    std::array<std::unique_ptr<float[]>, 8> m_channelIn;
+    std::array<std::unique_ptr<float[]>, 8> m_channelOut;
+    std::unique_ptr<float[]> m_channelZero;
+    uint32_t m_channelScratchBlock = 0;
     mutable std::recursive_mutex m_hostMutex;
 
     // ---- C2 分块扫描状态与元数据缓存 ----

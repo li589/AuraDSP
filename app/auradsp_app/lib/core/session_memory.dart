@@ -35,6 +35,7 @@ abstract final class SessionMemory {
           'id': p?.id,
           'bypassed': m.pluginManager.isSlotBypassed(s),
           'stage': m.pluginManager.getSlotStage(s),
+          'channels': m.pluginManager.getSlotChannels(s),
         });
       }
 
@@ -45,7 +46,7 @@ abstract final class SessionMemory {
       final payload = {
         // v5：+ appliedPresetFingerprint / presetDirty —— 未保存的自定义态
         // 随会话记忆，重启后仍显示「自定义（未保存）」（决策 #3）。
-        'version': 5,
+        'version': 6,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
         'appliedPresetFingerprint': m.appliedPresetFingerprint,
@@ -76,6 +77,7 @@ abstract final class SessionMemory {
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
         'pluginId': m.pluginManager.getSlotPlugin(0)?.id,
         'pluginBypass': m.pluginManager.isSlotBypassed(0),
+        'pluginPdc': m.pluginManager.pdcEnabled,
         'slots': slotSnapshots,
         'parameters': snapshot.params,
       };
@@ -193,6 +195,7 @@ abstract final class SessionMemory {
                 id: (item['id'] as String?) ?? '',
                 bypass: (item['bypassed'] as bool?) ?? false,
                 stage: (item['stage'] as num?)?.toInt() ?? PluginInsertStage.defaultStage,
+                channels: (item['channels'] as num?)?.toInt() ?? 0xFF,
               ));
             }
           }
@@ -209,6 +212,9 @@ abstract final class SessionMemory {
           bypass: m.savedPluginBypass,
           stage: PluginInsertStage.defaultStage,
         ));
+      }
+      if (session['pluginPdc'] is bool) {
+        m.savedPluginPdc = session['pluginPdc'] as bool;
       }
 
       final params = (session['parameters'] as Map<String, dynamic>?) ?? {};

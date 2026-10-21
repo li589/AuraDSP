@@ -563,6 +563,8 @@
   },
   "chainSlotBypassed": "已旁路 (直通)",
   "chainSlotProcessing": "正在处理",
+  "chainSlotRemoteFailed": "插件宿主已断开（已旁路）",
+  "chainPdcLabel": "延迟补偿 (PDC)",
   "chainSlotStatusLine": "状态：{a} • 延迟：{b} 采样",
   "@chainSlotStatusLine": {
     "placeholders": {

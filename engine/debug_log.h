@@ -10,7 +10,7 @@
 //
 // 输出通道：OutputDebugStringA —— GUI 进程内无控制台也可靠（DebugView / VS Output
 //   可见），不劫持 stdout（原 86 处 std::cout 在无控制台进程里本就不可见）。
-// 格式："[AuraDSP][host_instances.cpp:434] <message>\n"
+// 格式："[AuraDSP][vst3_instance.cpp:434] <message>\n"
 //
 // 铁律：仅限宿主控制线程（load / unload / editor 生命周期路径）；严禁进入
 //   auradsp_process 音频 RT 路径（RT-Safe：零分配零锁零系统调用）。

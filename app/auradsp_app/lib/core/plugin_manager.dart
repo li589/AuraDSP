@@ -141,6 +141,14 @@ class PluginHostStatus {
   final double maxDiff;
   final int lastFrames;
   final PluginMetadata? plugin;
+  final bool remoteMode;
+  final bool remoteFailed;
+  final int transportLatency;
+  final int inputOverflows;
+  final int outputOverflows;
+  final int channels;
+  final int mainInChannels;
+  final int mainOutChannels;
 
   const PluginHostStatus({
     this.hasActive = false,
@@ -152,6 +160,14 @@ class PluginHostStatus {
     this.maxDiff = 0,
     this.lastFrames = 0,
     this.plugin,
+    this.remoteMode = false,
+    this.remoteFailed = false,
+    this.transportLatency = 0,
+    this.inputOverflows = 0,
+    this.outputOverflows = 0,
+    this.channels = 0xFF,
+    this.mainInChannels = 2,
+    this.mainOutChannels = 2,
   });
 
   static const empty = PluginHostStatus();
@@ -161,6 +177,7 @@ class PluginHostStatus {
     if (json['plugin'] != null && json['plugin'] is Map) {
       meta = PluginMetadata.fromJson(Map<String, dynamic>.from(json['plugin'] as Map));
     }
+    final busInfo = json['busInfo'] as Map?;
     return PluginHostStatus(
       hasActive: json['hasActive'] as bool? ?? false,
       bypassed: json['bypassed'] as bool? ?? false,
@@ -171,6 +188,14 @@ class PluginHostStatus {
       maxDiff: (json['maxDiff'] as num?)?.toDouble() ?? 0,
       lastFrames: (json['lastFrames'] as num?)?.toInt() ?? 0,
       plugin: meta,
+      remoteMode: json['remoteMode'] as bool? ?? false,
+      remoteFailed: json['remoteFailed'] as bool? ?? false,
+      transportLatency: (json['transportLatency'] as num?)?.toInt() ?? 0,
+      inputOverflows: (json['inputOverflows'] as num?)?.toInt() ?? 0,
+      outputOverflows: (json['outputOverflows'] as num?)?.toInt() ?? 0,
+      channels: (json['channels'] as num?)?.toInt() ?? 0xFF,
+      mainInChannels: (busInfo?['mainInChannels'] as num?)?.toInt() ?? 2,
+      mainOutChannels: (busInfo?['mainOutChannels'] as num?)?.toInt() ?? 2,
     );
   }
 
@@ -184,6 +209,14 @@ class PluginHostStatus {
         'maxDiff': maxDiff,
         'lastFrames': lastFrames,
         'plugin': plugin?.toJson(),
+        'remoteMode': remoteMode,
+        'remoteFailed': remoteFailed,
+        'transportLatency': transportLatency,
+        'inputOverflows': inputOverflows,
+        'outputOverflows': outputOverflows,
+        'channels': channels,
+        'mainInChannels': mainInChannels,
+        'mainOutChannels': mainOutChannels,
       };
 }
 
@@ -252,6 +285,11 @@ class PluginManager extends ChangeNotifier {
     PluginInsertStage.defaultStage,
     growable: true,
   );
+  final List<int> _slotChannels = List.filled(
+    kMaxSlots,
+    0xFF,
+    growable: true,
+  );
   /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
   final Map<int, int> _pendingStages = {};
   int _selectedSlot = 0;
@@ -271,6 +309,7 @@ class PluginManager extends ChangeNotifier {
   int _scanDone = 0;
   int _scanTotal = 0;
   int _scanFound = 0;
+  bool _pdcEnabled = false;
 
   // --- 插件级预设数据（assets/presets/plugin_tables.json + config 增量） ---
   Map<String, String> _vendorTable = {};
@@ -331,6 +370,12 @@ class PluginManager extends ChangeNotifier {
   int getSlotStage(int slot) {
     if (slot >= 0 && slot < kMaxSlots) return _slotStages[slot];
     return PluginInsertStage.defaultStage;
+  }
+
+  int getSlotChannels(int? slot) {
+    final s = slot ?? _selectedSlot;
+    if (s >= 0 && s < kMaxSlots) return _slotChannels[s];
+    return 0xFF;
   }
 
   bool isSlotActive(int slot) {
@@ -501,6 +546,24 @@ class PluginManager extends ChangeNotifier {
     setBypass(!isSlotBypassed(s), slot: s);
   }
 
+  void setPdc(bool enable) {
+    _pdcEnabled = enable;
+    notifyListeners();
+    _commandSender?.call({
+      'cmd': 'pluginSetPdc',
+      'pdc': enable,
+    });
+  }
+
+  bool get pdcEnabled => _pdcEnabled;
+
+  void onPluginPdc(bool pdc, int rc) {
+    if (rc == 1) {
+      _pdcEnabled = pdc;
+    }
+    notifyListeners();
+  }
+
   /// 打开插件原生 GUI 编辑器窗口
   ///
   /// C1：同一插件可同时挂多个槽位，标题必须带槽位号区分多个编辑器窗口。
@@ -560,6 +623,17 @@ class PluginManager extends ChangeNotifier {
   }
 
   /// 请求刷新指定槽位当前状态
+  void setSlotChannels(int mask, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _slotChannels[s] = mask;
+    notifyListeners();
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetChannels',
+      'slot': s,
+      'mask': mask,
+    });
+  }
+
   void refreshStatus({int? slot}) {
     final s = slot ?? _selectedSlot;
     _commandSender?.call({
@@ -603,10 +677,10 @@ class PluginManager extends ChangeNotifier {
       ..addAll(cfg['open'] ?? const <String>[]);
     _autoRegisterFromCrashJournal();
     _sendQuarantineToEngine();
-    // 周期清扫崩溃日志：稳定编辑器的陈旧条目及时移除，避免误登记。
-    _journalTimer?.cancel();
-    _journalTimer = Timer.periodic(
-        const Duration(milliseconds: kOpenHealthyMs), (_) => sweepEditorJournal());
+    // 启动时若存在遗留的未清扫条目，才开启周期清扫；若本来就无日志，保持静默避免多余后台轮询
+    if (_editorJournalFile().existsSync()) {
+      _startJournalTimerIfNeeded();
+    }
     notifyListeners();
   }
 
@@ -694,6 +768,8 @@ class PluginManager extends ChangeNotifier {
         'openedAt': DateTime.now().millisecondsSinceEpoch,
       });
       f.writeAsStringSync(jsonEncode(existing));
+      // 写入日志后确保清扫定时器已激活
+      _startJournalTimerIfNeeded();
     } catch (_) {}
   }
 
@@ -770,9 +846,27 @@ class PluginManager extends ChangeNotifier {
     return null;
   }
 
+  /// 按需启动崩溃日志清扫定时器（若尚未运行）。
+  /// 仅在有日志文件需要清扫时才持有 Timer，以避免无谓的后台轮询。
+  void _startJournalTimerIfNeeded() {
+    if (_journalTimer != null) return; // 已在运行
+    _journalTimer = Timer.periodic(
+      const Duration(milliseconds: kOpenHealthyMs),
+      (_) {
+        sweepEditorJournal();
+        // 若日志文件已不存在，则停止定时器，减少资源占用
+        if (!_editorJournalFile().existsSync()) {
+          _journalTimer?.cancel();
+          _journalTimer = null;
+        }
+      },
+    );
+  }
+
   @override
   void dispose() {
     _journalTimer?.cancel();
+    _journalTimer = null;
     super.dispose();
   }
 
@@ -944,6 +1038,12 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
+  void onPluginSlotChannels(int slot, int mask, int rc) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (rc == 1) _slotChannels[slot] = mask;
+    notifyListeners();
+  }
+
   // 向后兼容旧单槽事件
   void onPluginLoaded(String path, int rc, dynamic rawStatus) =>
       onPluginSlotLoaded(0, path, rc, rawStatus, PluginInsertStage.defaultStage);
@@ -994,7 +1094,11 @@ class PluginManager extends ChangeNotifier {
       } else {
         return;
       }
-      _slotStatuses[slot] = PluginHostStatus.fromJson(map);
+      final status = PluginHostStatus.fromJson(map);
+      _slotStatuses[slot] = status;
+      if (map.containsKey('channels')) {
+        _slotChannels[slot] = (map['channels'] as num?)?.toInt() ?? 0xFF;
+      }
     } catch (e) {
       debugPrint('[PluginManager] Error parsing status JSON for slot $slot: $e');
     }

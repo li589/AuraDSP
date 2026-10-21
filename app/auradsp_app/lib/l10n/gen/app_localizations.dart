@@ -2878,6 +2878,18 @@ abstract class AppLocalizations {
   /// **'正在处理'**
   String get chainSlotProcessing;
 
+  /// No description provided for @chainSlotRemoteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'插件宿主已断开（已旁路）'**
+  String get chainSlotRemoteFailed;
+
+  /// No description provided for @chainPdcLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟补偿 (PDC)'**
+  String get chainPdcLabel;
+
   /// No description provided for @chainSlotStatusLine.
   ///
   /// In zh, this message translates to:

@@ -1,5 +1,84 @@
 // part of plugins_page.dart —— P1 按区拆分，纯搬运零改行。
 part of '../plugins_page.dart';
+class _PluginChannelStrip extends StatelessWidget {
+  final int mask;
+  final ValueChanged<int> onChanged;
+
+  const _PluginChannelStrip({
+    required this.mask,
+    required this.onChanged,
+  });
+
+  static const _labels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs', 'Lr', 'Rr'];
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Row(
+      children: [
+        Icon(Icons.multitrack_audio_rounded, size: 16, color: p.accent),
+        const SizedBox(width: AuraSpace.xs),
+        Text('Ch', style: labelOf(p)),
+        const SizedBox(width: AuraSpace.sm),
+        Expanded(
+          child: Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [
+              for (var ch = 0; ch < 8; ++ch)
+                _ChannelChip(
+                  label: _labels[ch],
+                  selected: (mask & (1 << ch)) != 0,
+                  onTap: () {
+                    onChanged(mask ^ (1 << ch));
+                  },
+                ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ChannelChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _ChannelChip({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: selected ? p.accent : p.panel,
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(
+            color: selected ? p.accent : p.hairline,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.bold,
+            color: selected ? p.accentContrast : p.textDim,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _PluginTriLogo extends StatelessWidget {
   final String vendor;
   final String pluginName;
@@ -445,6 +524,11 @@ class _ActivePluginHero extends StatelessWidget {
                   style: captionOf(p, color: p.textDim),
                 ),
               ],
+            ),
+            const SizedBox(height: AuraSpace.sm),
+            _PluginChannelStrip(
+              mask: manager.getSlotChannels(slot),
+              onChanged: (m) => manager.setSlotChannels(m, slot: slot),
             ),
             const SizedBox(height: AuraSpace.xs),
             Row(

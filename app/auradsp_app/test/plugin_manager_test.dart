@@ -63,6 +63,11 @@ void main() {
         'hasActive': true,
         'bypassed': false,
         'latency': 288,
+        'remoteMode': true,
+        'remoteFailed': true,
+        'transportLatency': 128,
+        'inputOverflows': 3,
+        'outputOverflows': 5,
         'plugin': {
           'id': 'vst3-456',
           'name': 'ValhallaSupermassive',
@@ -80,9 +85,15 @@ void main() {
       expect(status.hasActive, isTrue);
       expect(status.bypassed, isFalse);
       expect(status.latency, 288);
+      expect(status.remoteMode, isTrue);
+      expect(status.remoteFailed, isTrue);
+      expect(status.transportLatency, 128);
+      expect(status.inputOverflows, 3);
+      expect(status.outputOverflows, 5);
       expect(status.plugin, isNotNull);
       expect(status.plugin!.name, 'ValhallaSupermassive');
       expect(status.plugin!.format, PluginFormat.vst3);
+      expect(status.toJson()['remoteFailed'], isTrue);
     });
   });
 
@@ -166,6 +177,16 @@ void main() {
       expect(dispatchedCmds.last['cmd'], 'pluginSlotSetInsertStage');
       expect(dispatchedCmds.last['slot'], 1);
       expect(dispatchedCmds.last['stage'], PluginInsertStage.preDsp);
+
+      // PDC
+      manager.setPdc(true);
+      expect(manager.pdcEnabled, isTrue);
+      expect(dispatchedCmds.last['cmd'], 'pluginSetPdc');
+      expect(dispatchedCmds.last['pdc'], isTrue);
+      manager.onPluginPdc(true, 1);
+      expect(manager.pdcEnabled, isTrue);
+      manager.onPluginPdc(false, 1);
+      expect(manager.pdcEnabled, isFalse);
     });
 
     test('D2: 32-bit incompatible plugin is intercepted before dispatch', () {

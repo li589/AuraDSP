@@ -7,6 +7,7 @@ set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
 # 常驻桥统一收敛到 bridge/（不编号）：vm_bridge / asio_bridge ……
 # 02/03/04 是传输/宿主实现，桥只是薄 FFI 适配层，单列编号会造成"有的单出、有的集成"的混乱。
 set(BRIDGEDIR "${CMAKE_CURRENT_SOURCE_DIR}/bridge")
+set(BRIDGECOMMON "${BRIDGEDIR}/common")
 set(VMBRIDGE "${BRIDGEDIR}/vm_bridge")
 set(ASIOBRIDGE "${BRIDGEDIR}/asio_bridge")
 set(VAIOBRIDGE "${BRIDGEDIR}/vaio_bridge")
@@ -58,7 +59,7 @@ add_library(auraasio_bridge SHARED
     "${ASIOBRIDGE}/AsioBridge.cpp"
     "${ASIOBRIDGE}/AsioBridge.def"
 )
-target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}")
+target_include_directories(auraasio_bridge PRIVATE "${VMCLIENT}" "${ASIODIR}" "${ASIOBRIDGE}" "${BRIDGECOMMON}")
 target_link_libraries(auraasio_bridge PRIVATE auraasio_host ole32 version)
 target_compile_options(auraasio_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auraasio_bridge PROPERTY CXX_STANDARD 20)
@@ -200,7 +201,7 @@ add_library(auravm_bridge SHARED
     "${VMCLIENT}/VmRemoteLoader.cpp"
     "${VMBRIDGE}/VmBridge.def"
 )
-target_include_directories(auravm_bridge PRIVATE "${VMCLIENT}" "${VMBRIDGE}")
+target_include_directories(auravm_bridge PRIVATE "${VMCLIENT}" "${VMBRIDGE}" "${BRIDGECOMMON}")
 target_compile_options(auravm_bridge PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm_bridge PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -216,6 +217,7 @@ target_include_directories(auravaio_bridge PRIVATE
     "${VMCLIENT}"
     "${CMAKE_CURRENT_SOURCE_DIR}/01_vaio_driver/src"
     "${CMAKE_CURRENT_SOURCE_DIR}/common"
+    "${BRIDGECOMMON}"
     "${VAIOBRIDGE}"
 )
 target_compile_options(auravaio_bridge PRIVATE /utf-8 /W1 /EHsc)

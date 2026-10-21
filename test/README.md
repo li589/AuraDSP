@@ -27,6 +27,6 @@ python test/runner.py --ui
 | 脚本 | 豁免原因 | 门禁替代者 |
 |---|---|---|
 | `smoke/smoke_three_key_plugins.py` | 弹插件原生 GUI；依赖本机 FabFilter / iZotope / Element 已安装 | `smoke_plugin_host.py`、`smoke_multislot_and_stages.py` |
-| `smoke/test_plugin_direct.cpp` | C++ 侧 GUI 批量验证，需编译后手动执行 | 同上 |
+| `engine/plugins/tests/plugin_host_direct.cpp` | C++ 侧 GUI 批量验证，需编译后手动执行 | 同上 |
 
 新增测试时先自问「能否无人值守跑完」：能 → **必须登记 runner**；不能 → 在本表登记豁免原因。

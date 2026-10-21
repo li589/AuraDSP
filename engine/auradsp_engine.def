@@ -35,6 +35,11 @@ EXPORTS
     auradsp_plugin_slot_load_preset
     auradsp_plugin_slot_set_insert_stage
     auradsp_plugin_slot_get_insert_stage
+    auradsp_plugin_slot_set_channels
+    auradsp_plugin_slot_get_channels
+    auradsp_plugin_set_pdc
+    auradsp_plugin_get_pdc
+    auradsp_plugin_get_total_latency
     auradsp_plugin_load
     auradsp_plugin_unload
     auradsp_plugin_set_bypass

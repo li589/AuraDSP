@@ -32,6 +32,10 @@ typedef _SlotSetStageC = Int32 Function(Int32, Int32);
 typedef _SlotSetStageDart = int Function(int, int);
 typedef _SlotGetStageC = Int32 Function(Int32);
 typedef _SlotGetStageDart = int Function(int);
+typedef _SlotSetChannelsC = Int32 Function(Int32, Int32);
+typedef _SlotSetChannelsDart = int Function(int, int);
+typedef _SlotGetChannelsC = Int32 Function(Int32);
+typedef _SlotGetChannelsDart = int Function(int);
 
 class BridgePluginFfi {
   final DynamicLibrary dylib;
@@ -49,6 +53,8 @@ class BridgePluginFfi {
   late final _SlotPresetDart _loadPreset;
   late final _SlotSetStageDart _setStage;
   late final _SlotGetStageDart _getStage;
+  late final _SlotSetChannelsDart _setChannels;
+  late final _SlotGetChannelsDart _getChannels;
 
   BridgePluginFfi(this.dylib, this.prefix) {
     _load = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>(
@@ -77,6 +83,10 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_set_insert_stage');
     _getStage = dylib.lookupFunction<_SlotGetStageC, _SlotGetStageDart>(
         '${prefix}_plugin_slot_get_insert_stage');
+    _setChannels = dylib.lookupFunction<_SlotSetChannelsC, _SlotSetChannelsDart>(
+        '${prefix}_plugin_slot_set_channels');
+    _getChannels = dylib.lookupFunction<_SlotGetChannelsC, _SlotGetChannelsDart>(
+        '${prefix}_plugin_slot_get_channels');
   }
 
   int load(int slot, String path, {String id = ''}) {
@@ -144,4 +154,20 @@ class BridgePluginFfi {
   int setInsertStage(int slot, int stage) => _setStage(slot, stage);
 
   int getInsertStage(int slot) => _getStage(slot);
+
+  int setChannels(int slot, int mask) {
+    try {
+      return _setChannels(slot, mask);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  int getChannels(int slot) {
+    try {
+      return _getChannels(slot);
+    } catch (_) {
+      return 0xFF;
+    }
+  }
 }
