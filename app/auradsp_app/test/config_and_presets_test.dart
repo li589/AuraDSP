@@ -300,7 +300,7 @@ void main() {
 
         expect(SessionMemory.save(m), isTrue);
         final session = SessionMemory.load()!;
-        expect(session['version'], 5);
+        expect(session['version'], 6);
         expect(session['presetDirty'], isTrue);
         expect(session['appliedPresetFingerprint'], anchor);
 
