@@ -35,6 +35,7 @@ def run_smoke_tests():
         "smoke_plugin_host_process.py",
         "smoke_plugin_host_editor.py",
         "smoke_plugin_pdc.py",
+        "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
         "smoke_plugin_chain_stages.py",
         "smoke_plugin_metadata.py",

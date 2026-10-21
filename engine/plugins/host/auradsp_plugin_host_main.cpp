@@ -77,7 +77,9 @@ void pumpMessages(bool& running) {
     }
 }
 
-void fillRemoteInfo(const auradsp::PluginMetadata& meta, auradsp::ipc::RemotePluginInfo& info) {
+void fillRemoteInfo(const auradsp::PluginMetadata& meta,
+                    const auradsp::PluginBusInfo& bus,
+                    auradsp::ipc::RemotePluginInfo& info) {
     auradsp::ipc::copyFixed(info.path, sizeof(info.path), meta.path);
     auradsp::ipc::copyFixed(info.id, sizeof(info.id), meta.id);
     auradsp::ipc::copyFixed(info.name, sizeof(info.name), meta.name);
@@ -91,6 +93,12 @@ void fillRemoteInfo(const auradsp::PluginMetadata& meta, auradsp::ipc::RemotePlu
     info.latency = meta.latency;
     info.is64Bit = meta.is64Bit ? 1u : 0u;
     info.isCompatible = meta.isCompatible ? 1u : 0u;
+    info.inputBuses = bus.inputBuses > 0 ? static_cast<uint32_t>(bus.inputBuses) : 0u;
+    info.outputBuses = bus.outputBuses > 0 ? static_cast<uint32_t>(bus.outputBuses) : 0u;
+    info.auxInputBuses = bus.auxInputBuses > 0 ? static_cast<uint32_t>(bus.auxInputBuses) : 0u;
+    info.auxOutputBuses = bus.auxOutputBuses > 0 ? static_cast<uint32_t>(bus.auxOutputBuses) : 0u;
+    info.mainInChannels = bus.mainInChannels > 0 ? static_cast<uint32_t>(bus.mainInChannels) : 0u;
+    info.mainOutChannels = bus.mainOutChannels > 0 ? static_cast<uint32_t>(bus.mainOutChannels) : 0u;
 }
 
 bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& running) {
@@ -200,7 +208,8 @@ bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& runni
                     }
                     auradsp::PluginHostManager::destroyInstance(std::move(oldInstance));
                     if (manager.m_slots[slot].instance) {
-                        fillRemoteInfo(manager.m_slots[slot].instance->getMetadata(), info);
+                        fillRemoteInfo(manager.m_slots[slot].instance->getMetadata(),
+                                       manager.m_slots[slot].instance->busInfo(), info);
                         status = 1;
                     }
                 }

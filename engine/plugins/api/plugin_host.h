@@ -60,6 +60,15 @@ struct PluginMetadata {
     std::string toJson() const;
 };
 
+struct PluginBusInfo {
+    int inputBuses = 0;
+    int outputBuses = 0;
+    int auxInputBuses = 0;
+    int auxOutputBuses = 0;
+    int mainInChannels = 0;
+    int mainOutChannels = 0;
+};
+
 class IPluginInstance {
 public:
     virtual ~IPluginInstance() = default;
@@ -78,6 +87,7 @@ public:
     virtual void setBypass(bool bypass) = 0;
     virtual uint32_t getLatency() const = 0;
     virtual const PluginMetadata& getMetadata() const = 0;
+    virtual PluginBusInfo busInfo() const { return {}; }
 
     // GUI Editor Window (Win32)
     /* title: 窗口标题，由调用方（Dart）决定；为空时退化为插件自报名。

@@ -247,6 +247,89 @@ public:
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
 
+        m_numInputPorts = 0;
+        m_numOutputPorts = 0;
+        m_inPortChannels.clear();
+        m_outPortChannels.clear();
+        m_inBufs.clear();
+        m_outBufs.clear();
+        m_auxInBuffers.clear();
+        m_auxInPtrs.clear();
+        m_auxOutBuffers.clear();
+        m_auxOutPtrs.clear();
+
+        const auto* ports = reinterpret_cast<const clap_plugin_audio_ports_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_AUDIO_PORTS));
+        m_mainInPort = 0;
+        m_mainOutPort = 0;
+        if (ports && ports->count && ports->get) {
+            m_numInputPorts = std::min<uint32_t>(ports->count(m_plugin, true), 32u);
+            m_numOutputPorts = std::min<uint32_t>(ports->count(m_plugin, false), 32u);
+            m_inPortChannels.assign(m_numInputPorts, 0);
+            m_outPortChannels.assign(m_numOutputPorts, 0);
+            for (uint32_t i = 0; i < m_numInputPorts; ++i) {
+                clap_audio_port_info_t info = {};
+                if (ports->get(m_plugin, i, true, &info)) {
+                    m_inPortChannels[i] = info.channel_count;
+                    if (info.flags & CLAP_AUDIO_PORT_IS_MAIN) m_mainInPort = i;
+                }
+            }
+            for (uint32_t i = 0; i < m_numOutputPorts; ++i) {
+                clap_audio_port_info_t info = {};
+                if (ports->get(m_plugin, i, false, &info)) {
+                    m_outPortChannels[i] = info.channel_count;
+                    if (info.flags & CLAP_AUDIO_PORT_IS_MAIN) m_mainOutPort = i;
+                }
+            }
+        } else {
+            m_numInputPorts = 1;
+            m_numOutputPorts = 1;
+            m_inPortChannels.assign(1, 2);
+            m_outPortChannels.assign(1, 2);
+        }
+
+        m_inChannels = m_numInputPorts > 0
+                           ? std::clamp<uint32_t>(m_inPortChannels[m_mainInPort], 1u, 2u)
+                           : 0;
+        m_outChannels = m_numOutputPorts > 0
+                            ? std::clamp<uint32_t>(m_outPortChannels[m_mainOutPort], 1u, 2u)
+                            : 0;
+
+        m_inBufs.assign(m_numInputPorts, clap_audio_buffer_t{});
+        m_outBufs.assign(m_numOutputPorts, clap_audio_buffer_t{});
+        m_auxInBuffers.assign(m_numInputPorts, {});
+        m_auxInPtrs.assign(m_numInputPorts, {});
+        m_auxOutBuffers.assign(m_numOutputPorts, {});
+        m_auxOutPtrs.assign(m_numOutputPorts, {});
+        for (uint32_t i = 0; i < m_numInputPorts; ++i) {
+            if (i == m_mainInPort) continue;
+            const uint32_t ch = std::min<uint32_t>(m_inPortChannels[i], 16u);
+            if (ch == 0) continue;
+            m_auxInBuffers[i].assign(ch, std::vector<float>(maxBlockSize, 0.0f));
+            m_auxInPtrs[i].resize(ch);
+            for (uint32_t c = 0; c < ch; ++c) m_auxInPtrs[i][c] = m_auxInBuffers[i][c].data();
+        }
+        for (uint32_t i = 0; i < m_numOutputPorts; ++i) {
+            if (i == m_mainOutPort) continue;
+            const uint32_t ch = std::min<uint32_t>(m_outPortChannels[i], 16u);
+            if (ch == 0) continue;
+            m_auxOutBuffers[i].assign(ch, std::vector<float>(maxBlockSize, 0.0f));
+            m_auxOutPtrs[i].resize(ch);
+            for (uint32_t c = 0; c < ch; ++c) m_auxOutPtrs[i][c] = m_auxOutBuffers[i][c].data();
+        }
+
+        m_busInfo = PluginBusInfo{};
+        m_busInfo.inputBuses = static_cast<int>(m_numInputPorts);
+        m_busInfo.outputBuses = static_cast<int>(m_numOutputPorts);
+        m_busInfo.mainInChannels = static_cast<int>(m_inChannels);
+        m_busInfo.mainOutChannels = static_cast<int>(m_outChannels);
+        for (uint32_t i = 0; i < m_numInputPorts; ++i) {
+            if (i != m_mainInPort && m_inPortChannels[i] > 0) ++m_busInfo.auxInputBuses;
+        }
+        for (uint32_t i = 0; i < m_numOutputPorts; ++i) {
+            if (i != m_mainOutPort && m_outPortChannels[i] > 0) ++m_busInfo.auxOutputBuses;
+        }
+
         if (!m_plugin->activate(m_plugin, sampleRate, 1, maxBlockSize)) {
             return false;
         }
@@ -291,8 +374,7 @@ public:
             return;
         }
 
-        // 本版 CLAP SDK 无 audio-config 扩展，无法协商声道数，引擎链恒送立体声；
-        // 这里只做逐声道空指针校验，替代原先的全有全无早退。
+        // 引擎链恒送立体声；主端口声道数在此裁剪，辅助端口按插件声明补偿。
         const int32_t nc = 2;
         for (int32_t ch = 0; ch < nc; ++ch) {
             if (!inChannels[ch] || !outChannels[ch]) {
@@ -311,15 +393,32 @@ public:
             return;
         }
 
-        clap_audio_buffer_t inBuf = {};
-        inBuf.data32 = (float**)inChannels;
-        inBuf.channel_count = 2;
-        inBuf.latency = 0;
-
-        clap_audio_buffer_t outBuf = {};
-        outBuf.data32 = (float**)outChannels;
-        outBuf.channel_count = 2;
-        outBuf.latency = 0;
+        for (uint32_t p = 0; p < m_numInputPorts; ++p) {
+            clap_audio_buffer_t& buf = m_inBufs[p];
+            buf = {};
+            if (p == m_mainInPort) {
+                buf.data32 = (float**)inChannels;
+                buf.channel_count = m_inChannels;
+            } else if (!m_auxInPtrs[p].empty()) {
+                for (auto& chBuf : m_auxInBuffers[p]) {
+                    std::fill_n(chBuf.begin(),
+                                std::min<size_t>(numFrames, chBuf.size()), 0.0f);
+                }
+                buf.data32 = m_auxInPtrs[p].data();
+                buf.channel_count = static_cast<uint32_t>(m_auxInPtrs[p].size());
+            }
+        }
+        for (uint32_t p = 0; p < m_numOutputPorts; ++p) {
+            clap_audio_buffer_t& buf = m_outBufs[p];
+            buf = {};
+            if (p == m_mainOutPort) {
+                buf.data32 = (float**)outChannels;
+                buf.channel_count = m_outChannels;
+            } else if (!m_auxOutPtrs[p].empty()) {
+                buf.data32 = m_auxOutPtrs[p].data();
+                buf.channel_count = static_cast<uint32_t>(m_auxOutPtrs[p].size());
+            }
+        }
 
         clap_event_transport_t transport = {};
         transport.header.size = sizeof(transport);
@@ -337,10 +436,10 @@ public:
         proc.steady_time = -1;
         proc.frames_count = numFrames;
         proc.transport = &transport;
-        proc.audio_inputs = &inBuf;
-        proc.audio_inputs_count = 1;
-        proc.audio_outputs = &outBuf;
-        proc.audio_outputs_count = 1;
+        proc.audio_inputs = m_inBufs.empty() ? nullptr : m_inBufs.data();
+        proc.audio_inputs_count = m_numInputPorts;
+        proc.audio_outputs = m_outBufs.empty() ? nullptr : m_outBufs.data();
+        proc.audio_outputs_count = m_numOutputPorts;
         proc.in_events = &emptyIn;
         proc.out_events = &emptyOut;
 
@@ -348,6 +447,9 @@ public:
         if (status == CLAP_PROCESS_ERROR) {
             // Bypass on error
             m_bypassed = true;
+        }
+        if (m_outChannels == 1 && outChannels[1]) {
+            std::memcpy(outChannels[1], outChannels[0], numFrames * sizeof(float));
         }
         t_pluginThreadRole = PluginThreadRole::Main;
     }
@@ -357,6 +459,7 @@ public:
     void setBypass(bool bypass) override { m_bypassed = bypass; }
     uint32_t getLatency() const override { return m_meta.latency; }
     const PluginMetadata& getMetadata() const override { return m_meta; }
+    PluginBusInfo busInfo() const override { return m_busInfo; }
 
     bool showEditor(const std::string& title = "") override {
         if (!m_isLoaded || !m_plugin) return false;
@@ -861,6 +964,22 @@ private:
     bool m_bypassed = false;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
+
+    uint32_t m_numInputPorts = 0;
+    uint32_t m_numOutputPorts = 0;
+    uint32_t m_mainInPort = 0;
+    uint32_t m_mainOutPort = 0;
+    uint32_t m_inChannels = 0;
+    uint32_t m_outChannels = 0;
+    std::vector<int32_t> m_inPortChannels;
+    std::vector<int32_t> m_outPortChannels;
+    std::vector<clap_audio_buffer_t> m_inBufs;
+    std::vector<clap_audio_buffer_t> m_outBufs;
+    std::vector<std::vector<std::vector<float>>> m_auxInBuffers;
+    std::vector<std::vector<float*>> m_auxInPtrs;
+    std::vector<std::vector<std::vector<float>>> m_auxOutBuffers;
+    std::vector<std::vector<float*>> m_auxOutPtrs;
+    PluginBusInfo m_busInfo;
 
     // ---- 共享 plugin main 线程（C1 2026-10-12，按模块共享）----
     // B3 时为每实例一条线程；C1 多槽挂载同一 DLL 时 LoadLibrary 返回同一
