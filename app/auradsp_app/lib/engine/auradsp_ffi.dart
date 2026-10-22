@@ -688,6 +688,24 @@ final class AuraDspLib {
           'auradsp_plugin_slot_get_channels')
       .asFunction();
 
+  /// 链级插件开关（VB 多总线按路插件处理底座，60430b3 引入）：
+  /// disabled = 该 handle 上插件（含 PDC）全部旁路，槽位挂载与 vendor DSP
+  /// 不受影响；默认启用。见 auradsp_engine.h 的契约注释。
+  /// set 返回 1=成功 / 0=无链（handle 无效）；get 返回 1=启用 / 0=禁用。
+  /// F-1 修复（2026-10-23）：该 ABI 为公共导出（.h + .def），此前遗漏
+  /// Dart 绑定导致 ABI 一致性门禁持续报红；当前产品形态下 Dart 侧经
+  /// Windows 桥调用（vb_plugin_group_enable），此处绑定供非 VB 单引擎
+  /// 路径使用并保持三处（.def/.h/ffi）一致。
+  late final int Function(Pointer<Void>, int) pluginChainSetEnabled = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32)>>(
+          'auradsp_plugin_chain_set_enabled')
+      .asFunction();
+
+  late final int Function(Pointer<Void>) pluginChainGetEnabled = dylib
+      .lookup<NativeFunction<Int32 Function(Pointer<Void>)>>(
+          'auradsp_plugin_chain_get_enabled')
+      .asFunction();
+
   /// 插件编辑器隔离名单（预设系统数据）：逗号分隔小写子串（匹配 name/path），
   /// 引擎据此对命中插件关闭编辑器时跳过 removed()/release()，防插件自身
   /// teardown fail-fast 崩溃。NULL/空串清空名单。
@@ -1189,5 +1207,17 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   static int pluginSlotGetChannelsWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotGetChannels(handle, slot);
+  }
+
+  /// 链级插件开关 wrapper（F-1 补齐的公共 ABI 绑定）。
+  /// set 返回 1=成功 / 0=无链；get 返回 true=启用。
+  static int pluginChainSetEnabledWrap(
+      AuraDspLib lib, Pointer<Void> handle, bool enabled) {
+    return lib.pluginChainSetEnabled(handle, enabled ? 1 : 0);
+  }
+
+  static bool pluginChainGetEnabledWrap(
+      AuraDspLib lib, Pointer<Void> handle) {
+    return lib.pluginChainGetEnabled(handle) != 0;
   }
 }
