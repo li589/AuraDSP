@@ -10,6 +10,7 @@
   "stateError": "失效",
   "stateIdle": "空闲",
   "vbBuses": "VB 总线（关=直通）",
+  "vbPluginTooltip": "勾选 = 挂载的插件处理该路音频（厂商音效不受影响）",
   "shelfTitle": "低频搁架",
   "shelfHint": "分频点以下整体托起/压低，补录音偏瘦的低频或收油腻的轰头",
   "shelfFreq": "增益分频",
@@ -333,10 +334,8 @@
   "dlgCancel": "取消",
   "dlgAdd": "添加",
   "dlgSave": "保存",
-  "dlgLoad": "载入",
   "dlgClose": "关闭",
   "dlgUnload": "卸载",
-  "dlgPreset": "预设",
   "memTitle": "持久化记忆与配置外置",
   "memHint": "自动记录当前所有效果调音状态，并在应用下次启动时无缝恢复。",
   "memAutoRestore": "退出时自动保存并恢复会话记忆",
@@ -688,25 +687,6 @@
   "plugAddDirPrompt": "请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：",
   "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
   "plugAddScan": "添加并扫描",
-  "plugPresetTitle": "插件预设管理 — {name}",
-  "@plugPresetTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "plugPresetSaveLabel": "保存当前参数状态",
-  "plugPresetNameHint": "输入新预设名称...",
-  "plugPresetList": "已有预设列表 ({n})",
-  "@plugPresetList": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
-  "plugPresetEmpty": "暂无已保存预设，可通过上方输入框保存。",
   "plugTitle": "插件中心",
   "plugLibTitle": "第三方效果器库",
   "plugLibHint": "系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。",
@@ -739,9 +719,9 @@
   "plugFeatSlots": "四槽位对称机架 (Slot 1 ~ Slot 4) 独立管理与并发",
   "plugFeatStages": "全音效链阶段插入 (Pre-DSP ~ Post-Limiter)",
   "plugFeatGui": "原生 Win32 GUI 弹窗独立消息循环",
-  "plugFeatPreset": "二进制流预设保存与即时载入恢复",
   "plugFeatDirs": "可自定义插件目录检索与本地状态快照",
   "plugFeatRt": "实时极速监听：专为专业制作定制的零卡顿音频通道",
+  "plugFeatRoute": "VB 按路插件逐路独立配置",
   "plugSlot": "插槽 {n} (Slot {n})",
   "@plugSlot": {
     "placeholders": {
@@ -804,6 +784,7 @@
     }
   },
   "plugOpenGuiBtn": "打开界面 (GUI)",
+  "plugRouteBypassed": "旁路（未选路）",
   "plugLoading": "加载中…",
   "plugUnloadFromSlot": "从当前槽卸载",
   "plugLoadToSlot": "载入至插槽 {n}",

@@ -23,7 +23,14 @@ EXPORTS
     vb_plugin_slot_show_editor       PRIVATE
     vb_plugin_slot_close_editor      PRIVATE
     vb_plugin_slot_is_editor_open    PRIVATE
+    vb_plugin_slot_show_editor_g     PRIVATE
+    vb_plugin_slot_close_editor_g    PRIVATE
+    vb_plugin_slot_is_editor_open_g  PRIVATE
     vb_plugin_slot_save_preset       PRIVATE
     vb_plugin_slot_load_preset       PRIVATE
     vb_plugin_slot_set_insert_stage  PRIVATE
     vb_plugin_slot_get_insert_stage  PRIVATE
+    vb_plugin_slot_set_channels      PRIVATE
+    vb_plugin_slot_get_channels      PRIVATE
+    vb_plugin_group_enable           PRIVATE
+    vb_plugin_group_mask             PRIVATE

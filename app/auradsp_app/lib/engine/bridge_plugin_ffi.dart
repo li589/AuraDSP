@@ -26,8 +26,14 @@ typedef _SlotCloseEditorC = Int32 Function(Int32);
 typedef _SlotCloseEditorDart = int Function(int);
 typedef _SlotIsEditorOpenC = Int32 Function(Int32);
 typedef _SlotIsEditorOpenDart = int Function(int);
-typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
-typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
+// 编辑器按路变体（v2，仅 VB 桥导出 _g 后缀；老桥 DLL 无此导出，
+// 构造时 lookup 失败置 null，调用方以 group < 0 回落到单路绑定）。
+typedef _SlotShowEditorGC = Int32 Function(Int32, Int32, Pointer<Utf8>);
+typedef _SlotShowEditorGDart = int Function(int, int, Pointer<Utf8>);
+typedef _SlotCloseEditorGC = Int32 Function(Int32, Int32);
+typedef _SlotCloseEditorGDart = int Function(int, int);
+typedef _SlotIsEditorOpenGC = Int32 Function(Int32, Int32);
+typedef _SlotIsEditorOpenGDart = int Function(int, int);
 typedef _SlotSetStageC = Int32 Function(Int32, Int32);
 typedef _SlotSetStageDart = int Function(int, int);
 typedef _SlotGetStageC = Int32 Function(Int32);
@@ -49,8 +55,9 @@ class BridgePluginFfi {
   late final _SlotShowEditorDart _showEditor;
   late final _SlotCloseEditorDart _closeEditor;
   late final _SlotIsEditorOpenDart _isEditorOpen;
-  late final _SlotPresetDart _savePreset;
-  late final _SlotPresetDart _loadPreset;
+  late final _SlotShowEditorGDart? _showEditorG;
+  late final _SlotCloseEditorGDart? _closeEditorG;
+  late final _SlotIsEditorOpenGDart? _isEditorOpenG;
   late final _SlotSetStageDart _setStage;
   late final _SlotGetStageDart _getStage;
   late final _SlotSetChannelsDart _setChannels;
@@ -75,10 +82,12 @@ class BridgePluginFfi {
         _SlotCloseEditorDart>('${prefix}_plugin_slot_close_editor');
     _isEditorOpen = dylib.lookupFunction<_SlotIsEditorOpenC,
         _SlotIsEditorOpenDart>('${prefix}_plugin_slot_is_editor_open');
-    _savePreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
-        '${prefix}_plugin_slot_save_preset');
-    _loadPreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
-        '${prefix}_plugin_slot_load_preset');
+    _showEditorG = _lookupShowEditorG(
+        '${prefix}_plugin_slot_show_editor_g');
+    _closeEditorG = _lookupCloseEditorG(
+        '${prefix}_plugin_slot_close_editor_g');
+    _isEditorOpenG = _lookupIsEditorOpenG(
+        '${prefix}_plugin_slot_is_editor_open_g');
     _setStage = dylib.lookupFunction<_SlotSetStageC, _SlotSetStageDart>(
         '${prefix}_plugin_slot_set_insert_stage');
     _getStage = dylib.lookupFunction<_SlotGetStageC, _SlotGetStageDart>(
@@ -87,6 +96,34 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_set_channels');
     _getChannels = dylib.lookupFunction<_SlotGetChannelsC, _SlotGetChannelsDart>(
         '${prefix}_plugin_slot_get_channels');
+  }
+
+  // 老桥 DLL 没有 _g 导出时返回 null（ArgumentError），调用方自动回落。
+  // 不能写泛型 helper：lookupFunction 的类型参数须为具体 dart:ffi 签名，
+  // 泛型占位通不过静态检查，故三处各写具名绑定。
+  _SlotShowEditorGDart? _lookupShowEditorG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotShowEditorGC, _SlotShowEditorGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotCloseEditorGDart? _lookupCloseEditorG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotCloseEditorGC, _SlotCloseEditorGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotIsEditorOpenGDart? _lookupIsEditorOpenG(String name) {
+    try {
+      return dylib
+          .lookupFunction<_SlotIsEditorOpenGC, _SlotIsEditorOpenGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
   }
 
   int load(int slot, String path, {String id = ''}) {
@@ -120,35 +157,35 @@ class BridgePluginFfi {
     }
   }
 
-  int showEditor(int slot, {String title = ''}) {
+  // group >= 0 且桥支持 _g 导出时按路打开（VB 多总线）；否则回落单路
+  // （非 VB 模式 / 老桥 DLL），语义与旧版一致。
+  int showEditor(int slot, {int group = -1, String title = ''}) {
     final tp = title.toNativeUtf8();
     try {
+      if (group >= 0) {
+        final f = _showEditorG;
+        if (f != null) return f(slot, group, tp.cast());
+      }
       return _showEditor(slot, tp.cast());
     } finally {
       malloc.free(tp);
     }
   }
 
-  int closeEditor(int slot) => _closeEditor(slot);
-
-  bool isEditorOpen(int slot) => _isEditorOpen(slot) == 1;
-
-  int savePreset(int slot, String path) {
-    final pp = path.toNativeUtf8();
-    try {
-      return _savePreset(slot, pp.cast());
-    } finally {
-      malloc.free(pp);
+  int closeEditor(int slot, {int group = -1}) {
+    if (group >= 0) {
+      final f = _closeEditorG;
+      if (f != null) return f(slot, group);
     }
+    return _closeEditor(slot);
   }
 
-  int loadPreset(int slot, String path) {
-    final pp = path.toNativeUtf8();
-    try {
-      return _loadPreset(slot, pp.cast());
-    } finally {
-      malloc.free(pp);
+  bool isEditorOpen(int slot, {int group = -1}) {
+    if (group >= 0) {
+      final f = _isEditorOpenG;
+      if (f != null) return f(slot, group) == 1;
     }
+    return _isEditorOpen(slot) == 1;
   }
 
   int setInsertStage(int slot, int stage) => _setStage(slot, stage);

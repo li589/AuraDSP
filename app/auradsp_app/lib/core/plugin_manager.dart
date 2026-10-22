@@ -570,11 +570,14 @@ class PluginManager extends ChangeNotifier {
   /// 本地化标题由调用方经 `plugEditorTitleNamed` 传入；未传时的兜底也带
   /// 槽位号（本类无 BuildContext，取 locale 中性格式）。
   ///
+  /// v2：VB 多总线下 [group] >= 0 时打开该组引擎上的编辑器（每路独立
+  /// 配置插件）；其余模式传 -1 走单路语义。标题附加路号，多窗口可区分。
+  ///
   /// 打开崩溃隔离：editorQuarantine.open 名单内插件阻止打开（曾打开即崩溃
   /// 自动登记于此），给出可操作提示而不是再次崩掉整个 APP。
   /// 历史崩溃仅提示：加载与编辑器打开都不再被阻止。插件关闭时由引擎
   /// 依据 [closeQuarantine] 跳过 `removed()`/`release()`，换用隔离 teardown。
-  void showEditor({int? slot, String? title}) {
+  void showEditor({int? slot, String? title, int group = -1}) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
     if (meta != null && isEditorCrashKnown(meta)) {
@@ -583,25 +586,28 @@ class PluginManager extends ChangeNotifier {
           '插件仍会正常加载和运行，但可能残留少量资源。';
       notifyListeners();
     }
+    final routeTag = group >= 0 ? ' [Route ${group + 1}]' : '';
     final winTitle = title ??
         (meta != null
-            ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]'
-            : 'Plugin Editor [Slot ${s + 1}]');
+            ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]$routeTag'
+            : 'Plugin Editor [Slot ${s + 1}]$routeTag');
     // 崩溃日志：记录「正在打开」，供下次启动自动登记打开即崩溃的插件。
     if (meta != null) _journalEditorOpened(meta);
     _commandSender?.call({
       'cmd': 'pluginSlotShowEditor',
       'slot': s,
       'title': winTitle,
+      'group': group,
     });
   }
 
-  /// 关闭插件原生 GUI 编辑器窗口
-  void closeEditor({int? slot}) {
+  /// 关闭插件原生 GUI 编辑器窗口（group 语义同 [showEditor]）。
+  void closeEditor({int? slot, int group = -1}) {
     final s = slot ?? _selectedSlot;
     _commandSender?.call({
       'cmd': 'pluginSlotCloseEditor',
       'slot': s,
+      'group': group,
     });
   }
 
@@ -868,82 +874,6 @@ class PluginManager extends ChangeNotifier {
     _journalTimer?.cancel();
     _journalTimer = null;
     super.dispose();
-  }
-
-  // --- 插件预设系统管理 ---
-  static Directory _getPresetsDir(String pluginName) {
-    final safeName = pluginName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    return ConfigManager.subDir(
-        'plugin_presets${Platform.pathSeparator}$safeName');
-  }
-
-  /// 列出指定插件所有已保存的预设
-  List<String> listPresets(String pluginName) {
-    try {
-      final dir = _getPresetsDir(pluginName);
-      if (!dir.existsSync()) return [];
-      return dir
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.aurapreset'))
-          .map((f) {
-            final filename = f.uri.pathSegments.last;
-            return filename.substring(0, filename.length - '.aurapreset'.length);
-          })
-          .toList()
-        ..sort();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// 保存当前槽位插件的预设
-  bool savePreset(String presetName, {int? slot}) {
-    final s = slot ?? _selectedSlot;
-    final meta = getSlotPlugin(s);
-    if (meta == null || presetName.trim().isEmpty) return false;
-    try {
-      final dir = _getPresetsDir(meta.name);
-      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-      final targetFile = File('${dir.path}/$safePreset.aurapreset');
-      _commandSender?.call({
-        'cmd': 'pluginSlotSavePreset',
-        'slot': s,
-        'path': targetFile.path,
-      });
-      return true;
-    } catch (e) {
-      _lastError = '保存预设失败: $e';
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// 加载指定预设至槽位
-  bool loadPreset(String presetName, {int? slot}) {
-    final s = slot ?? _selectedSlot;
-    final meta = getSlotPlugin(s);
-    if (meta == null) return false;
-    try {
-      final dir = _getPresetsDir(meta.name);
-      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-      final targetFile = File('${dir.path}/$safePreset.aurapreset');
-      if (!targetFile.existsSync()) {
-        _lastError = '预设文件不存在: ${targetFile.path}';
-        notifyListeners();
-        return false;
-      }
-      _commandSender?.call({
-        'cmd': 'pluginSlotLoadPreset',
-        'slot': s,
-        'path': targetFile.path,
-      });
-      return true;
-    } catch (e) {
-      _lastError = '加载预设失败: $e';
-      notifyListeners();
-      return false;
-    }
   }
 
   // --- 底层引擎事件回调处理 ---

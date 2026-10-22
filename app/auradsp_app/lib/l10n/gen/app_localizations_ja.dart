@@ -40,6 +40,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbBuses => 'VBバス（オフ=スルー）';
 
   @override
+  String get vbPluginTooltip => 'チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）';
+
+  @override
   String get shelfTitle => 'ローシェルフ';
 
   @override
@@ -887,16 +890,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dlgSave => '保存';
 
   @override
-  String get dlgLoad => '読み込み';
-
-  @override
   String get dlgClose => '閉じる';
 
   @override
   String get dlgUnload => 'アンロード';
-
-  @override
-  String get dlgPreset => 'プリセット';
 
   @override
   String get memTitle => '永続メモリと外部設定';
@@ -1600,25 +1597,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugAddScan => '追加してスキャン';
 
   @override
-  String plugPresetTitle(String name) {
-    return 'プラグインプリセット — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => '現在のパラメータ状態を保存';
-
-  @override
-  String get plugPresetNameHint => '新しいプリセット名を入力…';
-
-  @override
-  String plugPresetList(int n) {
-    return '保存済みプリセット ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty => '保存済みプリセットはありません。上の入力欄から保存できます。';
-
-  @override
   String get plugTitle => 'プラグインセンター';
 
   @override
@@ -1670,13 +1648,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugFeatGui => 'ネイティブWin32 GUIは独立メッセージループ';
 
   @override
-  String get plugFeatPreset => 'バイナリストリーム保存と即時復元';
-
-  @override
   String get plugFeatDirs => 'カスタム検索フォルダとローカル状態スナップショット';
 
   @override
   String get plugFeatRt => 'フラットステレオRT-Safe事前確保・ゼロロック';
+
+  @override
+  String get plugFeatRoute => 'VBバス別プラグイン設定';
 
   @override
   String plugSlot(int n) {
@@ -1732,6 +1710,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
+
+  @override
+  String get plugRouteBypassed => 'バイパス（未選択）';
 
   @override
   String get plugLoading => '加载中…';

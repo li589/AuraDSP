@@ -251,6 +251,81 @@ check("bus_mask restore", rc == 0xFF, f"rc={rc:#x}")
 check("grpLive field plumbed", isinstance(st.get("grpLive"), int),
       f"grpLive={st.get('grpLive')}")
 
+# ---- 插件组掩码（VB 按路插件处理）：导出存在性 + set/get 往返 + 重建存活 + 钳位 ----
+# 覆盖链开关 smoke（smoke_plugin_chain_enable）声明"不能证明"的桥侧扇出：
+# 掩码语义经 g_pluginGroupMask 跨 CHANGE 重建 + ApplyPluginGroupMask 重放。
+# 注意：note 的 "pN/M" 是参数镜像回放计数（非重建序号），重建检测只用 changes 计数器。
+b.vb_plugin_group_enable.restype = ctypes.c_int
+b.vb_plugin_group_enable.argtypes = [ctypes.c_int]
+b.vb_plugin_group_mask.restype = ctypes.c_int
+check("plugin_group default==0xFF", b.vb_plugin_group_mask() == 0xFF,
+      f"mask={b.vb_plugin_group_mask():#x}")
+rc = b.vb_plugin_group_enable(0xFE)
+check("plugin_group g0 off", rc == 0xFE, f"rc={rc:#x}")
+check("plugin_group_mask==0xFE", b.vb_plugin_group_mask() == 0xFE,
+      f"mask={b.vb_plugin_group_mask():#x}")
+if active_stream:
+    time.sleep(1)
+    st = get_status()
+    check("frames growing while plugin-group masked",
+          st.get("frames", 0) > 0, f"frames={st.get('frames')}")
+# 重建存活：保持 0xFE → CHANGE 重建 → 掩码不丢（新引擎出厂链全开，掩码重放覆盖之）。
+# changes 在重建开始时递增、note 在完成时重写、handles 在完成后恢复——
+# 完成判据取「changes 递增 且 handles 恢复」（note 字符串可能前后相同，不可靠）。
+ch2 = get_status().get("changes", 0)
+rc = b.vb_test_change()
+check("test_change#3 accepted", rc == 0, f"rc={rc}")
+rebuilt3 = False
+for _ in range(80):
+    time.sleep(0.25)
+    st = get_status()
+    if st.get("changes", 0) > ch2 and st.get("handles", 0) >= nh:
+        rebuilt3 = True
+        break
+st = get_status()
+check("rebuild#3 completed", rebuilt3 and st.get("handles", 0) >= nh,
+      f"changes={st.get('changes')} handles={st.get('handles')} note={st.get('note')}")
+check("PLUGIN GROUP MASK SURVIVED REBUILD",
+      b.vb_plugin_group_mask() == 0xFE,
+      f"mask={b.vb_plugin_group_mask():#x} note={st.get('note')}")
+rc = b.vb_plugin_group_enable(0x1FF)
+check("plugin_group clamps to 0xFF", rc == 0xFF, f"rc={rc:#x}")
+rc = b.vb_plugin_group_enable(0xFF)
+check("plugin_group restore", rc == 0xFF, f"rc={rc:#x}")
+check("plugin_group_mask==0xFF after restore",
+      b.vb_plugin_group_mask() == 0xFF,
+      f"mask={b.vb_plugin_group_mask():#x}")
+
+# ---- v2 按路编辑器 API：_g 导出存在性 + 非法 group 拒绝 + 空槽位行为 ----
+# Dart 插件页总线下拉 → pluginSlotShowEditor(group) → vb_plugin_slot_show_editor_g
+# （PluginEngineAt(group) 路由到该组引擎）。老桥无 _g 导出时 Dart 回落单路
+# 绑定，故此处断言新 DLL 必须带齐三个导出（部署陈旧 = Dart 静默走旧路径）。
+for _gfn in ("vb_plugin_slot_show_editor_g",
+             "vb_plugin_slot_close_editor_g",
+             "vb_plugin_slot_is_editor_open_g"):
+    check(f"export {_gfn} present", hasattr(b, _gfn),
+          "missing (stale bridge DLL?)")
+if hasattr(b, "vb_plugin_slot_show_editor_g"):
+    b.vb_plugin_slot_show_editor_g.restype = ctypes.c_int
+    b.vb_plugin_slot_show_editor_g.argtypes = [ctypes.c_int, ctypes.c_int,
+                                               ctypes.c_char_p]
+    b.vb_plugin_slot_close_editor_g.restype = ctypes.c_int
+    b.vb_plugin_slot_close_editor_g.argtypes = [ctypes.c_int, ctypes.c_int]
+    b.vb_plugin_slot_is_editor_open_g.restype = ctypes.c_int
+    b.vb_plugin_slot_is_editor_open_g.argtypes = [ctypes.c_int, ctypes.c_int]
+    # 非法 group（99 必然越界）：桥侧 PluginEngineAt 返回 null → 0，不得崩。
+    rc = b.vb_plugin_slot_show_editor_g(0, 99, None)
+    check("editor_g rejects out-of-range group", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_is_editor_open_g(0, 99)
+    check("editor_g is_open out-of-range group", rc == 0, f"rc={rc}")
+    # 空槽位（无插件加载）：show 必然 0，is_open 必然 0（不得误报已打开）。
+    rc = b.vb_plugin_slot_show_editor_g(0, 0, b"AuraDSP smoke")
+    check("editor_g empty slot show==0", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_is_editor_open_g(0, 0)
+    check("editor_g empty slot is_open==0", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_close_editor_g(0, 0)
+    check("editor_g empty slot close==0", rc == 0, f"rc={rc}")
+
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]
 rc = b.vb_bypass(1)
