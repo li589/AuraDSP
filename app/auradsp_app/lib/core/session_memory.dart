@@ -36,6 +36,11 @@ abstract final class SessionMemory {
           'bypassed': m.pluginManager.isSlotBypassed(s),
           'stage': m.pluginManager.getSlotStage(s),
           'channels': m.pluginManager.getSlotChannels(s),
+          // F-6：VB 各路 Ch 记忆（非 VB 下恒 0xFF，无害）。
+          'routeChannels': [
+            for (var g = 0; g < 8; g++)
+              m.pluginManager.getSlotChannels(s, group: g),
+          ],
         });
       }
 
@@ -196,6 +201,9 @@ abstract final class SessionMemory {
                 bypass: (item['bypassed'] as bool?) ?? false,
                 stage: (item['stage'] as num?)?.toInt() ?? PluginInsertStage.defaultStage,
                 channels: (item['channels'] as num?)?.toInt() ?? 0xFF,
+                routeChannels: (item['routeChannels'] as List?)
+                    ?.map((e) => (e as num).toInt())
+                    .toList(),
               ));
             }
           }

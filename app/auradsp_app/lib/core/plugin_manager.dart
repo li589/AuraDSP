@@ -275,9 +275,15 @@ abstract final class PluginInsertStage {
 /// 插件指令派发回调函数类型
 typedef PluginCommandSender = void Function(Map<String, dynamic> msg);
 
-/// VB 按路编辑器目标路的「未选择」哨兵（state.vbPluginEditorGroup 初值；
-/// v3.3 撤除「全部」后不再承载语义，仅为 <0 的未选标记）。
-const int kVbRouteAll = -2;
+/// VB 按路编辑器目标路的「未选择」哨兵（state.vbPluginEditorGroup 初值）。
+/// F-8（2026-10-23）：「全部」在 v3.3 已撤除，本常量只剩「未选」语义——
+/// 原名 kVbRouteAll 会让调用方误以为存在「全部路」分支。凡把它当合法
+/// group 传入（setSlotChannels/setSlotChannelsG 等）都属误用：range 断言
+/// 以 [-1, 8) 为合法域，-2 会被拒。
+const int kVbRouteUnselected = -2;
+
+/// group 取值合法域断言（VB 多总线：-1=单引擎/无路，0..7=具体组）。
+bool isValidPluginGroup(int group) => group >= -1 && group < 8;
 
 /// 插件管理器
 class PluginManager extends ChangeNotifier {
@@ -324,6 +330,10 @@ class PluginManager extends ChangeNotifier {
 
   /// per-route Ch 记忆：[slot][group]，VB 每路独立（v3.2「包括选择的声道
   /// 也跟随通道记忆切换」）。非 VB 单引擎走 [_slotChannels]。
+  /// F-7（2026-10-23）：Ch 乐观写入的待确认表（键 "slot|group" → 下发前值）。
+  /// 回执 rc!=1 时回滚，避免引擎拒收后 UI 记忆与实际生效值长期不一致。
+  final Map<String, int> _pendingChannels = {};
+
   final List<List<int>> _routeChannels = List.generate(
     kMaxSlots,
     (_) => List.filled(8, 0xFF),
@@ -426,6 +436,15 @@ class PluginManager extends ChangeNotifier {
 
   /// Ch 记忆按路由取值（P1-4）：
   /// [group] >= 0 = VB 具体路；-1 = 非 VB 单引擎（[_slotChannels]）。
+  /// F-6（2026-10-23）：直接播种 VB 各路 Ch 记忆（会话恢复用——不下发
+  /// 引擎，实际下发由 replay 路径逐路负责；避免恢复期多余命令）。
+  void seedRouteChannels(int slot, List<int> masks) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    for (var g = 0; g < 8 && g < masks.length; g++) {
+      _routeChannels[slot][g] = masks[g];
+    }
+  }
+
   int getSlotChannels(int? slot, {int group = -1}) {
     final s = slot ?? _selectedSlot;
     if (s < 0 || s >= kMaxSlots) return 0xFF;
@@ -777,6 +796,11 @@ class PluginManager extends ChangeNotifier {
     // F-3：VB 多总线模式下 -1 不是合法路（下发即写 eng[0]）——no-op，
     // 避免 UI 在「未选路」（editorGroup=-1）时误污染 route 0。
     if (group < 0 && _vbMultiBus) return;
+    // F-8：group 合法域断言（-1 或 0..7；-2 等哨兵值属误用，直接拒）。
+    if (!isValidPluginGroup(group)) return;
+    // F-7：乐观写入前记录旧值，回执 rc!=1 时回滚（与阶段回滚同口径）。
+    // 键含 group：同槽不同路可各挂一条待确认。
+    _pendingChannels['$s|$group'] = getSlotChannels(s, group: group);
     if (group >= 0 && group < 8) {
       _routeChannels[s][group] = mask;
       _commandSender?.call({
@@ -1155,11 +1179,20 @@ class PluginManager extends ChangeNotifier {
   /// rc != 1 时不改记忆（保留 setSlotChannels 的乐观值）。
   void onPluginSlotChannels(int slot, int mask, int rc, {int group = -1}) {
     if (slot < 0 || slot >= kMaxSlots) return;
+    final key = '$slot|$group';
+    final prev = _pendingChannels.remove(key);
     if (rc == 1) {
       if (group >= 0 && group < 8) {
         _routeChannels[slot][group] = mask;
       } else {
         _slotChannels[slot] = mask;
+      }
+    } else if (prev != null) {
+      // F-7：引擎拒收 → 回滚乐观写入（否则 UI 显示的 Ch 与实际生效不一致）。
+      if (group >= 0 && group < 8) {
+        _routeChannels[slot][group] = prev;
+      } else {
+        _slotChannels[slot] = prev;
       }
     }
     notifyListeners();

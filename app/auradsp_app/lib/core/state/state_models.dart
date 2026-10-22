@@ -8,6 +8,9 @@ class SavedPluginSlot {
   final bool bypass;
   final int stage;
   final int channels;
+  /// F-6（2026-10-23）：VB 各路 Ch 记忆（长度 8，下标=组）。
+  /// null = 旧会话无此字段（回落全 0xFF，与历史行为一致）。
+  final List<int>? routeChannels;
   const SavedPluginSlot({
     required this.slot,
     required this.path,
@@ -15,6 +18,7 @@ class SavedPluginSlot {
     this.bypass = false,
     this.stage = 3,
     this.channels = 0xFF,
+    this.routeChannels,
   });
 }
 

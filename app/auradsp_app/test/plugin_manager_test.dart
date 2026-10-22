@@ -801,6 +801,41 @@ void main() {
               '覆盖 route 0 的独立预设（F-3）');
     });
 
+    test('F-7：setSlotChannels 回执 rc!=1 回滚乐观写入', () {
+      markActive();
+      m.setVbMultiBus(false);
+      // 先建立基准值（rc=1 确认）
+      m.setSlotChannels(0x0F, group: 0);
+      m.onPluginSlotChannels(0, 0x0F, 1, group: 0);
+      expect(m.getSlotChannels(0, group: 0), 0x0F);
+      // 乐观写入 0x03 → 引擎拒收 → 必须回到 0x0F
+      m.setSlotChannels(0x03, group: 0);
+      expect(m.getSlotChannels(0, group: 0), 0x03,
+          reason: '乐观写入先于回执（UI 即时反馈）');
+      m.onPluginSlotChannels(0, 0x03, 0, group: 0);
+      expect(m.getSlotChannels(0, group: 0), 0x0F,
+          reason: 'F-7：引擎拒收必须回滚，否则 UI 记忆与实际生效不一致');
+    });
+
+    test('F-8：setSlotChannels 拒绝非法 group（-2 哨兵）', () {
+      markActive();
+      sent.clear();
+      m.setSlotChannels(0x03, group: kVbRouteUnselected);
+      expect(sent.where((c) => c['cmd'] == 'pluginSlotSetChannels'), isEmpty,
+          reason: 'F-8：-2 不是合法路，静默走错分支属误用');
+      m.setSlotChannels(0x03, group: 7);   // 上界合法
+      expect(
+          sent.where((c) => c['cmd'] == 'pluginSlotSetChannels').length, 1);
+    });
+
+    test('F-6：seedRouteChannels 播种各路 Ch 记忆', () {
+      markActive();
+      m.seedRouteChannels(0, [0x01, 0x02, 0x03, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF]);
+      expect(m.getSlotChannels(0, group: 0), 0x01);
+      expect(m.getSlotChannels(0, group: 2), 0x03);
+      expect(m.getSlotChannels(0, group: 3), 0xFF);
+    });
+
     test('非 VB：重挂恢复包含 -1 路（对照，行为不变）', () {
       markActive();
       m.setVbMultiBus(false);
