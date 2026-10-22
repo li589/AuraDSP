@@ -786,28 +786,19 @@
   },
   "plugOpenGuiBtn": "UIを開く (GUI)",
   "plugRouteBypassed": "バイパス（未選択）",
-  "plugAllInheritFrom": "{route} から継承",
-  "@plugAllInheritFrom": {
+  "abSlotA": "プリセットA",
+  "abSlotB": "プリセットB",
+  "abAutoSave": "自動保存",
+  "abInheritFrom": "{src} から継承",
+  "@abInheritFrom": {
     "placeholders": {
-      "route": {
+      "src": {
         "type": "String"
       }
     }
   },
-  "plugAllInheritNone": "継承元なし（未調整）",
-  "plugAllUseOwn": "「すべて」の独自状態を使用",
-  "plugInheritedFrom": "パラメータは {route} から継承",
-  "@plugInheritedFrom": {
-    "placeholders": {
-      "route": {
-        "type": "String"
-      }
-    }
-  },
-  "plugAllOwnState": "「すべて」独自状態",
-  "plugReInherit": "再継承",
+  "abReset": "リセット（このプリセットを消去、ソースはそのまま）",
   "plugRouteLocked": "エディタ開閉中は切替不可",
-  "plugRouteAll": "すべて",
   "plugChStereoOnly": "VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ",
   "plugUnloadFromSlot": "このスロットからアンロード",
   "plugLoadToSlot": "スロット{n}へロード",

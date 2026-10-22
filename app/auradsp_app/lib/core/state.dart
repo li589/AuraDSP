@@ -5505,32 +5505,32 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// v2 按路编辑器目标路选择（仅有效掩码内合法路，或 kVbRouteAll）。
-  void setVbPluginEditorGroup(int group) {
-    if (group == kVbRouteAll) {
-      if (vbPluginEditorGroup == kVbRouteAll) return;
-      vbPluginEditorGroup = kVbRouteAll;
-      notifyListeners();
-      return;
-    }
-    if (group < 0 || group > 7) return;
-    if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
-    if (vbPluginEditorGroup == group) return;
-    vbPluginEditorGroup = group;
-    notifyListeners();
-  }
+/// v2 按路编辑器目标路选择（仅有效掩码内合法路；v3.3「全部」已撤除）。
+void setVbPluginEditorGroup(int group) {
+  if (group < 0 || group > 7) return;
+  if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
+  if (vbPluginEditorGroup == group) return;
+  vbPluginEditorGroup = group;
+  notifyListeners();
+}
 
-  /// 选中路失效（通道关/插件取消勾选）时回落「全部」；「全部」恒有效。
-  /// 无任何有效路时由 UI 层按 vbEffectiveRouteMask==0 显示旁路态
-  /// （kVbRouteAll 保留，打开界面按钮在 UI 侧按无有效路禁用）。
-  void _fallbackVbPluginEditorGroup() {
-    if (vbPluginEditorGroup == kVbRouteAll) return;
-    if (vbPluginEditorGroup >= 0 &&
-        (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
-      return;
-    }
-    vbPluginEditorGroup = kVbRouteAll;
+/// 选中路失效（通道关/插件取消勾选）时回落最低有效路；无有效路置 -1。
+void _fallbackVbPluginEditorGroup() {
+  if (vbPluginEditorGroup >= 0 &&
+      (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
+    return;
   }
+  var next = -1;
+  for (var g = 0; g < 8; g++) {
+    if ((vbEffectiveRouteMask & (1 << g)) != 0) {
+      next = g;
+      break;
+    }
+  }
+  if (vbPluginEditorGroup != next) {
+    vbPluginEditorGroup = next;
+  }
+}
 
   /// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。
   void setAsioDriver(String name) {

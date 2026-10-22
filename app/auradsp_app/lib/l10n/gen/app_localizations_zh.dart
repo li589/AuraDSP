@@ -1714,32 +1714,24 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugRouteBypassed => '旁路（未选路）';
 
   @override
-  String plugAllInheritFrom(String route) {
-    return '继承自 $route';
+  String get abSlotA => 'A 预设';
+
+  @override
+  String get abSlotB => 'B 预设';
+
+  @override
+  String get abAutoSave => '自动保存';
+
+  @override
+  String abInheritFrom(String src) {
+    return '继承自 $src';
   }
 
   @override
-  String get plugAllInheritNone => '无可继承来源（未调过音）';
-
-  @override
-  String get plugAllUseOwn => '使用『全部』自有状态';
-
-  @override
-  String plugInheritedFrom(String route) {
-    return '参数继承自 $route';
-  }
-
-  @override
-  String get plugAllOwnState => '『全部』自有状态';
-
-  @override
-  String get plugReInherit => '重新继承';
+  String get abReset => '复原（清除当前预设，不影响来源）';
 
   @override
   String get plugRouteLocked => '界面已打开，关闭后可切换';
-
-  @override
-  String get plugRouteAll => '全部';
 
   @override
   String get plugChStereoOnly => 'VB 模式每通道仅立体声（L/R）进入插件链';

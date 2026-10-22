@@ -3346,53 +3346,41 @@ abstract class AppLocalizations {
   /// **'旁路（未选路）'**
   String get plugRouteBypassed;
 
-  /// No description provided for @plugAllInheritFrom.
+  /// No description provided for @abSlotA.
   ///
   /// In zh, this message translates to:
-  /// **'继承自 {route}'**
-  String plugAllInheritFrom(String route);
+  /// **'A 预设'**
+  String get abSlotA;
 
-  /// No description provided for @plugAllInheritNone.
+  /// No description provided for @abSlotB.
   ///
   /// In zh, this message translates to:
-  /// **'无可继承来源（未调过音）'**
-  String get plugAllInheritNone;
+  /// **'B 预设'**
+  String get abSlotB;
 
-  /// No description provided for @plugAllUseOwn.
+  /// No description provided for @abAutoSave.
   ///
   /// In zh, this message translates to:
-  /// **'使用『全部』自有状态'**
-  String get plugAllUseOwn;
+  /// **'自动保存'**
+  String get abAutoSave;
 
-  /// No description provided for @plugInheritedFrom.
+  /// No description provided for @abInheritFrom.
   ///
   /// In zh, this message translates to:
-  /// **'参数继承自 {route}'**
-  String plugInheritedFrom(String route);
+  /// **'继承自 {src}'**
+  String abInheritFrom(String src);
 
-  /// No description provided for @plugAllOwnState.
+  /// No description provided for @abReset.
   ///
   /// In zh, this message translates to:
-  /// **'『全部』自有状态'**
-  String get plugAllOwnState;
-
-  /// No description provided for @plugReInherit.
-  ///
-  /// In zh, this message translates to:
-  /// **'重新继承'**
-  String get plugReInherit;
+  /// **'复原（清除当前预设，不影响来源）'**
+  String get abReset;
 
   /// No description provided for @plugRouteLocked.
   ///
   /// In zh, this message translates to:
   /// **'界面已打开，关闭后可切换'**
   String get plugRouteLocked;
-
-  /// No description provided for @plugRouteAll.
-  ///
-  /// In zh, this message translates to:
-  /// **'全部'**
-  String get plugRouteAll;
 
   /// No description provided for @plugChStereoOnly.
   ///

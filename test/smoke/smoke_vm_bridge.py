@@ -348,6 +348,24 @@ if hasattr(b, "vb_plugin_slot_set_channels_g"):
     rc = b.vb_plugin_slot_sync_all(0, 0, b"C:\\Windows\\Temp\\aura_sync_test.aurapreset")
     check("sync_all empty slot ==0 (savePreset fails)", rc == 0, f"rc={rc}")
 
+# ---- P2（v3.3 A/B 预设）：per-group state 读写导出与拒绝语义 ----
+for _gfn in ("vb_plugin_slot_save_preset_g", "vb_plugin_slot_load_preset_g"):
+    check(f"export {_gfn} present", hasattr(b, _gfn),
+          "missing (stale bridge DLL?)")
+if hasattr(b, "vb_plugin_slot_save_preset_g"):
+    b.vb_plugin_slot_save_preset_g.restype = ctypes.c_int
+    b.vb_plugin_slot_save_preset_g.argtypes = [ctypes.c_int, ctypes.c_int,
+                                               ctypes.c_char_p]
+    b.vb_plugin_slot_load_preset_g.restype = ctypes.c_int
+    b.vb_plugin_slot_load_preset_g.argtypes = [ctypes.c_int, ctypes.c_int,
+                                               ctypes.c_char_p]
+    rc = b.vb_plugin_slot_save_preset_g(0, 99, b"C:\\Windows\\Temp\\aura_ab_test.aurapreset")
+    check("save_preset_g rejects out-of-range group", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_load_preset_g(0, 99, b"C:\\Windows\\Temp\\aura_ab_test.aurapreset")
+    check("load_preset_g rejects out-of-range group", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_save_preset_g(0, 0, b"C:\\Windows\\Temp\\aura_ab_test.aurapreset")
+    check("save_preset_g empty slot safe", rc in (0, 1), f"rc={rc}")
+
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]
 rc = b.vb_bypass(1)

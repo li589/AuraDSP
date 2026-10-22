@@ -659,6 +659,15 @@ final class AuraDspLib {
                       Pointer<Utf8>)>>('auradsp_plugin_slot_load_preset')
           .asFunction();
 
+  /// P2-1 A/B 预设落盘（非 VB 单引擎路径）。
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>) pluginSlotSavePreset =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_save_preset')
+          .asFunction();
+
   late final int Function(Pointer<Void>, int, int) pluginSlotSetInsertStage = dylib
       .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
           'auradsp_plugin_slot_set_insert_stage')
@@ -1144,6 +1153,17 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     final pathPtr = filePath.toNativeUtf8();
     try {
       return lib.pluginSlotLoadPreset(handle, slot, pathPtr);
+    } finally {
+      malloc.free(pathPtr);
+    }
+  }
+
+  /// 保存插件预设（P2-1 A/B 预设落盘）
+  static int pluginSlotSavePresetWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, String filePath) {
+    final pathPtr = filePath.toNativeUtf8();
+    try {
+      return lib.pluginSlotSavePreset(handle, slot, pathPtr);
     } finally {
       malloc.free(pathPtr);
     }

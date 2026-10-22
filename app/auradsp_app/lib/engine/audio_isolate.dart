@@ -1714,6 +1714,68 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
             break;
           }
+        case 'pluginSlotSavePresetG':
+          {
+            // P2-1 A/B 预设落盘（per-group；group<0 = 非 VB 单引擎）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc =
+                  group >= 0 ? pb.savePresetG(slot, group, path) : pb.savePreset(slot, path);
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc =
+                  AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotLoadPresetG':
+          {
+            // P2-1 A/B 预设激活/继承应用（per-group）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc =
+                  group >= 0 ? pb.loadPresetG(slot, group, path) : pb.loadPreset(slot, path);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': pb.getStatus(slot),
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc =
+                  AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot),
+              });
+            }
+            break;
+          }
         case 'pluginSlotSyncAll':
           {
             // P1-5 继承复制：srcGroup 的 state → 记忆文件 → 其余组

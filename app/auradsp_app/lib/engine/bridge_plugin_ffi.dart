@@ -51,6 +51,9 @@ typedef _SlotSyncAllDart = int Function(int, int, Pointer<Utf8>);
 // P1-5「不继承」应用「全部」记忆（v1 全组扇出 loadPreset）。
 typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
 typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
+// P2-1（v3.3 A/B 预设）per-group state 读写。
+typedef _SlotPresetGC = Int32 Function(Int32, Int32, Pointer<Utf8>);
+typedef _SlotPresetGDart = int Function(int, int, Pointer<Utf8>);
 
 class BridgePluginFfi {
   final DynamicLibrary dylib;
@@ -72,8 +75,11 @@ class BridgePluginFfi {
   late final _SlotSetChannelsDart _setChannels;
   late final _SlotGetChannelsDart _getChannels;
   late final _SlotPresetDart _loadPreset;
+  late final _SlotPresetDart _savePreset;
   late final _SlotSetChannelsGDart? _setChannelsG;
   late final _SlotSyncAllDart? _syncAll;
+  late final _SlotPresetGDart? _savePresetG;
+  late final _SlotPresetGDart? _loadPresetG;
 
   BridgePluginFfi(this.dylib, this.prefix) {
     _load = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>(
@@ -110,9 +116,13 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_get_channels');
     _loadPreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
         '${prefix}_plugin_slot_load_preset');
+    _savePreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
+        '${prefix}_plugin_slot_save_preset');
     _setChannelsG = _lookupSetChannelsG(
         '${prefix}_plugin_slot_set_channels_g');
     _syncAll = _lookupSyncAll('${prefix}_plugin_slot_sync_all');
+    _savePresetG = _lookupPresetG('${prefix}_plugin_slot_save_preset_g');
+    _loadPresetG = _lookupPresetG('${prefix}_plugin_slot_load_preset_g');
   }
 
   // 老桥 DLL 没有 _g 导出时返回 null（ArgumentError），调用方自动回落。
@@ -154,6 +164,14 @@ class BridgePluginFfi {
   _SlotSyncAllDart? _lookupSyncAll(String name) {
     try {
       return dylib.lookupFunction<_SlotSyncAllC, _SlotSyncAllDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotPresetGDart? _lookupPresetG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotPresetGC, _SlotPresetGDart>(name);
     } on ArgumentError {
       return null;
     }
@@ -261,6 +279,40 @@ class BridgePluginFfi {
     final pp = path.toNativeUtf8();
     try {
       return _loadPreset(slot, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// 非 VB 桥单引擎 state 存（group<0 路径）。
+  int savePreset(int slot, String path) {
+    final pp = path.toNativeUtf8();
+    try {
+      return _savePreset(slot, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// P2-1 per-group state 存（A/B 预设落盘；老桥无导出返回 0）。
+  int savePresetG(int slot, int group, String path) {
+    final f = _savePresetG;
+    if (f == null || group < 0) return 0;
+    final pp = path.toNativeUtf8();
+    try {
+      return f(slot, group, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// P2-1 per-group state 载（A/B 预设激活/继承应用）。
+  int loadPresetG(int slot, int group, String path) {
+    final f = _loadPresetG;
+    if (f == null || group < 0) return 0;
+    final pp = path.toNativeUtf8();
+    try {
+      return f(slot, group, pp.cast());
     } finally {
       malloc.free(pp);
     }

@@ -1718,32 +1718,24 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugRouteBypassed => 'バイパス（未選択）';
 
   @override
-  String plugAllInheritFrom(String route) {
-    return '$route から継承';
+  String get abSlotA => 'プリセットA';
+
+  @override
+  String get abSlotB => 'プリセットB';
+
+  @override
+  String get abAutoSave => '自動保存';
+
+  @override
+  String abInheritFrom(String src) {
+    return '$src から継承';
   }
 
   @override
-  String get plugAllInheritNone => '継承元なし（未調整）';
-
-  @override
-  String get plugAllUseOwn => '「すべて」の独自状態を使用';
-
-  @override
-  String plugInheritedFrom(String route) {
-    return 'パラメータは $route から継承';
-  }
-
-  @override
-  String get plugAllOwnState => '「すべて」独自状態';
-
-  @override
-  String get plugReInherit => '再継承';
+  String get abReset => 'リセット（このプリセットを消去、ソースはそのまま）';
 
   @override
   String get plugRouteLocked => 'エディタ開閉中は切替不可';
-
-  @override
-  String get plugRouteAll => 'すべて';
 
   @override
   String get plugChStereoOnly => 'VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ';
