@@ -1807,6 +1807,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get abReset => 'Reset (clear this preset, source untouched)';
 
   @override
+  String get abResetDone => 'Preset reset';
+
+  @override
   String get plugRouteLocked => 'Editor open - close it to switch';
 
   @override

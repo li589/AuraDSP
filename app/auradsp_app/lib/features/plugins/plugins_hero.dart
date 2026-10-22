@@ -364,17 +364,30 @@ class _AbPresetBar extends StatelessWidget {
         const SizedBox(width: AuraSpace.xs),
         Tooltip(
           message: l10nOf(context).abReset,
-          child: InkWell(
-            onTap: locked ? null : () => manager.resetAb(slot, group: group, ab: active),
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            child: Padding(
-              padding: const EdgeInsets.all(3),
-              child: Icon(
-                Icons.restart_alt_rounded,
-                size: 14,
-                color: locked ? p.textDim.withValues(alpha: 0.4) : p.textDim,
-              ),
+          // IconButton 自带 32×32 触达区域（此前 20px InkWell 太小点不中）；
+          // 清槽后 SnackBar 轻反馈（此前无可见变化被读成「点不动」）。
+          child: IconButton(
+            onPressed: locked
+                ? null
+                : () {
+                    manager.resetAb(slot, group: group, ab: active);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(l10nOf(context).abResetDone),
+                        duration: const Duration(seconds: 1),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  },
+            icon: Icon(
+              Icons.restart_alt_rounded,
+              size: 16,
+              color: locked ? p.textDim.withValues(alpha: 0.4) : p.textDim,
             ),
+            visualDensity: VisualDensity.compact,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            tooltip: l10nOf(context).abReset,
           ),
         ),
       ],
@@ -558,6 +571,7 @@ class _ActivePluginHero extends StatelessWidget {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
+                    isExpanded: true,
                     value: editorGroup >= 0 && editorGroup < routeCount
                         ? editorGroup
                         : null,
@@ -804,6 +818,7 @@ class _ActivePluginHero extends StatelessWidget {
                   ),
                   child: DropdownButtonHideUnderline(
                     child: DropdownButton<int>(
+                    isExpanded: true,
                       value: currentStage,
                       isDense: true,
                       dropdownColor: p.panelRaised,

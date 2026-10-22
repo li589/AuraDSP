@@ -798,6 +798,7 @@
     }
   },
   "abReset": "Reset (clear this preset, source untouched)",
+  "abResetDone": "Preset reset",
   "plugRouteLocked": "Editor open - close it to switch",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",

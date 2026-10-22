@@ -3376,6 +3376,12 @@ abstract class AppLocalizations {
   /// **'复原（清除当前预设，不影响来源）'**
   String get abReset;
 
+  /// No description provided for @abResetDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复原当前预设'**
+  String get abResetDone;
+
   /// No description provided for @plugRouteLocked.
   ///
   /// In zh, this message translates to:

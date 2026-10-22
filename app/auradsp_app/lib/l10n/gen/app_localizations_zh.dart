@@ -1731,6 +1731,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get abReset => '复原（清除当前预设，不影响来源）';
 
   @override
+  String get abResetDone => '已复原当前预设';
+
+  @override
   String get plugRouteLocked => '界面已打开，关闭后可切换';
 
   @override
