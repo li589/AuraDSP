@@ -37,3 +37,4 @@ EXPORTS
     vb_plugin_slot_set_channels_g    PRIVATE
     vb_plugin_group_enable           PRIVATE
     vb_plugin_group_mask             PRIVATE
+    vb_plugin_slot_group_ready       PRIVATE

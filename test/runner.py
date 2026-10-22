@@ -57,6 +57,9 @@ def run_smoke_tests():
         # F-2 真旁路生命周期门禁：旁路=空链同值（链层跳过槽位）、取消旁路
         # 必须恢复激活处理（泵线程生命周期切换 + 在途 process 握手）
         "smoke_plugin_bypass_lifecycle.py",
+        # 桥挂载提速门禁（2026-10-23）：eng[0] 同步 + 其余组后台补齐；
+        # 掩码外组不加载、掩码新使能组自动补挂。App 占槽时自动让路。
+        "smoke_vm_plugin_load_fast.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",

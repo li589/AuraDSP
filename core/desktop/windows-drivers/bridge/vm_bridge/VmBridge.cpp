@@ -14,6 +14,15 @@
 #include <cstdio>
 #include <cstring>
 
+#include <atomic>
+#include <condition_variable>
+#include <deque>
+#include <mutex>
+#include <string>
+#include <thread>
+#include <utility>
+#include <vector>
+
 namespace {
 
 void PathForJson(const std::string& in, char* out, size_t cap) {
@@ -103,6 +112,156 @@ static void ApplyPluginGroupMask() {
             g_pluginFns.chainSetEnabled(g_b.ctx.eng[g], (mask >> g) & 1);
         }
     }
+}
+
+// ---- 后台组补齐（2026-10-23：挂载提速）-----------------------------------
+// 历史：vb_plugin_slot_load 把插件**逐组同步实例化**。实测（Ozone 12，模块
+// 已映射后）每实例 ~2.4s：4 组 = 9.7s、8 组近 20s——而 FL Studio 单实例
+// 2-3s（用户实测 10s vs FL 2-3s 的根因即此）。
+// 现在：eng[0] 同步加载（读操作/编辑器/用户主监听总线立即可用，~2-3.7s），
+// 其余组由本工作线程按「代际」后台补齐；补齐后回放镜像状态（bypass/Ch/
+// 阶段）与已请求的预设——否则后台组会以出厂态开声（旁路丢失 + 预设丢失）。
+// 语义折衷：监听非 eng[0] 总线的用户在挂载后数秒内听到的是直通；这把
+// 「10s 无法操作」换成「主总线立即可用、其余总线渐次生效」。
+// 掩码位为 0 的组**不加载**（该组链已关闭，实例纯属浪费内存/CPU）。
+static std::atomic<uint32_t> g_bgGen{0};   // load/unload/销毁递增 → 旧任务作废
+static std::mutex g_bgMutex;
+static std::condition_variable g_bgCv;
+static std::thread g_bgThread;
+static bool g_bgStop = false;
+
+struct PendingGroupLoad {
+    uint32_t gen = 0;
+    int slot = -1;
+    std::string path;
+    std::string id;
+};
+static std::deque<PendingGroupLoad> g_bgJobs;
+
+// 引擎级互斥：后台补齐与 unload/同步 load 不得并发碰同一组引擎。
+static std::mutex g_engineMut;
+
+// 每组已加载槽位位图（bit slot）：判定该组是否就绪（决定预设即时应用还是
+// 挂起）；由同步加载、后台补齐、卸载共同维护。
+static std::atomic<uint32_t> g_grpLoaded[PumpCtx::kMaxGroups];
+
+// 挂起预设：[group][slot] = 最近一次请求的路径；该组补齐后应用一次。
+static std::mutex g_pendMutex;
+static std::string g_pendPreset[PumpCtx::kMaxGroups][auraplugin::kSlots];
+static bool g_pendHasPreset[PumpCtx::kMaxGroups][auraplugin::kSlots] = {};
+
+// 该组是否值得挂插件：插件掩码内 **且** 总线掩码内。
+// 掩码外的组要么链已关闭、要么整组不处理音频——实例纯属浪费
+// （加载时间 + 内存 + 每回调 CPU）。这是 F-4 卡顿的核心杠杆：VM 会把
+// 输入复制到全部总线，若不为用不到的总线裁掉实例，重插件会在单个
+// 回调里被 N 份并发处理，超出缓冲区预算即爆音/断续。
+static bool GroupNeedsPlugin(int g) {
+    if (g < 0 || g >= PumpCtx::kMaxGroups) return false;
+    const int pm = InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+    const int bm = InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0);
+    return ((pm >> g) & 1) != 0 && ((bm >> g) & 1) != 0;
+}
+
+// 后台补一个组：加载 → 镜像状态回放 → 挂起预设应用。
+// 返回 true = 该组已就绪。
+static bool LoadGroupForSlot(int g, int slot, const char* path, const char* id) {
+    void* e = PluginEngineAt(g);
+    if (!e || !path || !*path) return false;
+    std::lock_guard<std::mutex> eng(g_engineMut);
+    if (auraplugin::SlotLoad(e, g_pluginFns, g_pluginMirror, slot, path, id) != 1)
+        return false;
+    int stage = 3, bypass = 1, channels = 0xFF;
+    if (g_pluginMirror.GetSlot(slot, &stage, &bypass, &channels)) {
+        g_pluginFns.setChannels(e, slot, channels);
+        g_pluginFns.setStage(e, slot, stage);
+        g_pluginFns.setBypass(e, slot, bypass);
+    }
+    std::string preset;
+    {
+        std::lock_guard<std::mutex> lk(g_pendMutex);
+        if (g_pendHasPreset[g][slot]) {
+            preset = g_pendPreset[g][slot];
+            g_pendHasPreset[g][slot] = false;
+        }
+    }
+    if (!preset.empty()) g_pluginFns.loadPreset(e, slot, preset.c_str());
+    g_grpLoaded[g].fetch_or(1u << slot);
+    return true;
+}
+
+static void GroupLoadWorker() {
+    for (;;) {
+        PendingGroupLoad job;
+        {
+            std::unique_lock<std::mutex> lk(g_bgMutex);
+            g_bgCv.wait(lk, [] { return g_bgStop || !g_bgJobs.empty(); });
+            if (g_bgStop) return;
+            job = std::move(g_bgJobs.front());
+            g_bgJobs.pop_front();
+        }
+        const int n = PluginEngineCount();
+        HANDLE thr = GetCurrentThread();
+        const int oldPrio = GetThreadPriority(thr);
+        // 同同步路径：加载是重 IO/内存操作，压低本线程让 RT 回调优先。
+        SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
+        for (int g = 1; g < n; ++g) {
+            if (g_bgGen.load(std::memory_order_acquire) != job.gen) break;
+            if (!GroupNeedsPlugin(g)) continue;   // 掩码外组不加载
+            LoadGroupForSlot(g, job.slot, job.path.c_str(), job.id.c_str());
+        }
+        SetThreadPriority(thr, oldPrio);
+    }
+}
+
+static void EnsureBgThread() {
+    std::lock_guard<std::mutex> lk(g_bgMutex);
+    if (!g_bgThread.joinable()) {
+        g_bgStop = false;
+        g_bgThread = std::thread(GroupLoadWorker);
+    }
+}
+
+// 停止并 join（销毁/重建引擎前必须调用：工作线程会碰引擎句柄）。
+// join 上界 = 一个实例的加载时长（~2.4s），仅发生在 stop/CHANGE 重建。
+static void StopBgThread() {
+    {
+        std::lock_guard<std::mutex> lk(g_bgMutex);
+        g_bgStop = true;
+        g_bgJobs.clear();
+    }
+    g_bgCv.notify_all();
+    if (g_bgThread.joinable()) g_bgThread.join();
+}
+
+// 掩码新使能的组：若镜像里已有插件、但该组实例尚缺（加载时被掩码跳过），
+// 后台补挂——否则该总线只有厂商 DSP、插件永远不生效。
+// added = 新使能位图；调用方保证与旧掩码已切换。
+static void BackfillGroupsForMask(int added) {
+    if (!added) return;
+    std::vector<PendingGroupLoad> jobs;
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (!((added >> g) & 1) || !PluginEngineAt(g) || !GroupNeedsPlugin(g))
+            continue;
+        for (int s = 0; s < auraplugin::kSlots; ++s) {
+            if (g_grpLoaded[g].load() & (1u << s)) continue;
+            char p[512] = {0};
+            char id[128] = {0};
+            int stage = 3, bypass = 1, ch = 0xFF;
+            if (!g_pluginMirror.GetSlot(s, &stage, &bypass, &ch, p, sizeof(p), id,
+                                        sizeof(id)) ||
+                p[0] == '\0') {
+                continue;
+            }
+            jobs.push_back(PendingGroupLoad{g_bgGen.load(), s, p, id});
+        }
+    }
+    if (jobs.empty()) return;
+    EnsureBgThread();
+    {
+        std::lock_guard<std::mutex> lk(g_bgMutex);
+        for (auto& j : jobs) g_bgJobs.push_back(std::move(j));
+    }
+    g_bgCv.notify_one();
 }
 
 // 参数镜像：CHANGE 重建会换掉全部引擎句柄，新句柄是出厂态。桥必须自己留一份
@@ -260,9 +419,13 @@ void LeaveCtl(bool andUnreg) {
 }
 
 void DestroyEngines() {
+    // 后台补齐线程会碰引擎句柄：先停并 join（代际递增使在途任务作废）。
+    g_bgGen.fetch_add(1);
+    StopBgThread();
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         if (g_b.ctx.eng[g] && g_b.ctx.destroy) g_b.ctx.destroy(g_b.ctx.eng[g]);
         g_b.ctx.eng[g] = nullptr;
+        g_grpLoaded[g].store(0);
     }
     g_b.ctx.nEng = 0;
 }
@@ -860,8 +1023,12 @@ int vb_bypass(int on) {
 int vb_set_bus_mask(int mask) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;
     mask &= 0xFF;
+    const int oldBus = g_b.busMask & 0xFF;
     g_b.busMask = mask;  // session 级保管（ctx 会被 memset，CHANGE 重建不丢）
     InterlockedExchange(&g_b.ctx.busMask, (LONG)mask);
+    // 加速/CPU（2026-10-23）：新使能的总线若已有插件、但该组实例尚缺
+    // （加载时不在掩码内被跳过），后台补挂。
+    BackfillGroupsForMask(mask & ~oldBus);
     return mask;
 }
 
@@ -879,40 +1046,63 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
     if (!g_pluginFns.Ready()) return 0;
     const int n = PluginEngineCount();
     if (n <= 0) return 0;
-    // P2 防抖：加载是重 IO/内存操作（大插件 5-6s），压低当前线程优先级，
-    // 让 RT 回调（Pro Audio）优先拿 CPU——消加载期抢核导致的断续。
-    // 结束恢复原优先级（无论成败）。
+    // 本次加载起，此前排队/在途的后台补齐一律作废（代际递增）。
+    const uint32_t gen = g_bgGen.fetch_add(1) + 1;
+    // P2 防抖：加载是重 IO/内存操作，压低当前线程优先级，让 RT 回调
+    // （Pro Audio）优先拿 CPU——消加载期抢核导致的断续。
     HANDLE thr = GetCurrentThread();
     int oldPrio = GetThreadPriority(thr);
     SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
-    int loaded = 0;
-    for (int g = 0; g < n; ++g) {
-        if (auraplugin::SlotLoad(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
-                                 slot, path, plugin_id) != 1) {
-            // 回滚已加载的组（SlotUnload 同步清镜像，终态 = 全部未挂载）
-            for (int k = loaded - 1; k >= 0; --k) {
-                auraplugin::SlotUnload(PluginEngineAt(k), g_pluginFns,
-                                       g_pluginMirror, slot);
-            }
-            SetThreadPriority(thr, oldPrio);
-            return 0;
-        }
-        ++loaded;
+    // 加速（2026-10-23）：只同步加载 eng[0]（~2-3.7s，实测 Ozone 12），
+    // 其余组后台补齐（原逐组同步：4 组 9.7s / 8 组近 20s）。
+    int rc0;
+    {
+        std::lock_guard<std::mutex> eng(g_engineMut);
+        rc0 = auraplugin::SlotLoad(PluginEngineAt(0), g_pluginFns,
+                                   g_pluginMirror, slot, path, plugin_id);
     }
     SetThreadPriority(thr, oldPrio);
+    if (rc0 != 1) return 0;   // eng[0] 失败 = 整体失败（镜像未被改写）
+    g_grpLoaded[0].fetch_or(1u << slot);
+    // 新加载：该槽的挂起预设作废（旧请求属于上一次挂载）。
+    {
+        std::lock_guard<std::mutex> lk(g_pendMutex);
+        for (int g = 0; g < PumpCtx::kMaxGroups; ++g) g_pendHasPreset[g][slot] = false;
+    }
+    if (n > 1) {
+        EnsureBgThread();
+        {
+            std::lock_guard<std::mutex> lk(g_bgMutex);
+            g_bgJobs.push_back(PendingGroupLoad{gen, slot, path ? path : "",
+                                                plugin_id ? plugin_id : ""});
+        }
+        g_bgCv.notify_one();
+    }
     return 1;
 }
 
 int vb_plugin_slot_unload(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    // 取消在途/排队中的后台补齐（代际递增），并与其互斥（不得并发碰引擎）。
+    g_bgGen.fetch_add(1);
     const int n = PluginEngineCount();
     // 同 load：卸载 teardown 也是重操作，降优先级护 RT。
     HANDLE thr = GetCurrentThread();
     int oldPrio = GetThreadPriority(thr);
     SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
-    for (int g = 0; g < n; ++g) {
-        auraplugin::SlotUnload(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
-                               slot);
+    {
+        std::lock_guard<std::mutex> eng(g_engineMut);
+        for (int g = 0; g < n; ++g) {
+            auraplugin::SlotUnload(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
+                                   slot);
+        }
+    }
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        g_grpLoaded[g].fetch_and(~(1u << slot));
+    }
+    {
+        std::lock_guard<std::mutex> lk(g_pendMutex);
+        for (int g = 0; g < PumpCtx::kMaxGroups; ++g) g_pendHasPreset[g][slot] = false;
     }
     SetThreadPriority(thr, oldPrio);
     return n > 0 ? 1 : 0;
@@ -1025,6 +1215,16 @@ int vb_plugin_slot_load_preset_g(int slot, int group, const char* path) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     void* e = PluginEngineAt(group);
     if (!e || !g_pluginFns.Ready()) return 0;
+    // 加速（2026-10-23）：该组尚未补齐（后台在加载）时先挂起——补齐后由
+    // 工作线程应用一次。返回 1 = 已受理（Dart 侧不必重试）。
+    if (group >= 0 && group < PumpCtx::kMaxGroups && slot >= 0 &&
+        slot < auraplugin::kSlots &&
+        (g_grpLoaded[group].load() & (1u << slot)) == 0) {
+        std::lock_guard<std::mutex> lk(g_pendMutex);
+        g_pendPreset[group][slot] = path ? path : "";
+        g_pendHasPreset[group][slot] = true;
+        return 1;
+    }
     return g_pluginFns.loadPreset(e, slot, path) ? 1 : 0;
 }
 
@@ -1077,12 +1277,24 @@ int vb_plugin_slot_set_channels_g(int slot, int group, int channels) {
 int vb_plugin_group_enable(int mask) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     mask &= 0xFF;
-    InterlockedExchange(&g_pluginGroupMask, (LONG)mask);
+    const LONG oldMask = InterlockedExchange(&g_pluginGroupMask, (LONG)mask);
     ApplyPluginGroupMask();
+    // 加速（2026-10-23）：新使能的组若已挂插件但该组实例尚缺（加载时被
+    // 掩码跳过），后台补齐——否则该总线只有厂商 DSP、插件永远不生效。
+    BackfillGroupsForMask(mask & ~(int)oldMask);
     return mask;
 }
 
 int vb_plugin_group_mask() {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0xFF;
     return InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+}
+
+int vb_plugin_slot_group_ready(int slot, int group) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (slot < 0 || slot >= auraplugin::kSlots) return 0;
+    if (group < 0 || group >= PumpCtx::kMaxGroups) return 0;
+    return (g_grpLoaded[group].load(std::memory_order_acquire) & (1u << slot))
+               ? 1
+               : 0;
 }
