@@ -155,13 +155,20 @@ void main() {
       }
     });
 
-    test('PluginManager command dispatching', () {
+    test('PluginManager command dispatching', () async {
       manager.scan(deep: true);
       expect(dispatchedCmds.length, 1);
       expect(dispatchedCmds.first['cmd'], 'pluginScan');
       expect(dispatchedCmds.first['deep'], isTrue);
 
       manager.unloadPlugin();
+      // 优雅卸载（2026-10-22）：先内部直通（该槽 bypass、链早退）让音频
+      // 平滑过渡，150ms 后才真正卸载——大插件 teardown 2-3s 的扰动不再
+      // 影响音频流。因此即时末条命令是 pluginSlotSetBypass。
+      expect(dispatchedCmds.last['cmd'], 'pluginSlotSetBypass');
+      expect(dispatchedCmds.last['slot'], 0);
+      expect(dispatchedCmds.last['bypass'], isTrue);
+      await Future.delayed(const Duration(milliseconds: 250));
       expect(dispatchedCmds.last['cmd'], 'pluginSlotUnload');
       expect(dispatchedCmds.last['slot'], 0);
 
