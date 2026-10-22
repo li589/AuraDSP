@@ -1742,7 +1742,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               int rc;
               if (group >= 0) {
                 rc = pb.savePresetG(slot, group, path);
-              } else if (pb.hasPresetG) {
+              } else if (pb.hasSavePresetG) {
+                // F-5：save 侧按自身能力探测（中间态桥：只有 save_g 时
+                // 也走单组 0，不再整族回落 eng[0] 单发）。
                 rc = pb.savePresetG(slot, 0, path);
               } else {
                 rc = pb.savePreset(slot, path);
@@ -1780,7 +1782,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               int rc;
               if (group >= 0) {
                 rc = pb.loadPresetG(slot, group, path);
-              } else if (pb.hasPresetG) {
+              } else if (pb.hasLoadPresetG) {
+                // F-5：load 侧按自身能力探测（独立于 save_g）。
                 rc = pb.loadPresetG(slot, 0, path);
               } else {
                 rc = pb.loadPreset(slot, path);

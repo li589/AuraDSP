@@ -302,12 +302,20 @@ class BridgePluginFfi {
     }
   }
 
-  /// 桥是否导出 per-group 预设 ABI（VB 新桥有；ASIO/VAIO 单引擎桥与
+  /// 桥是否导出 per-group **保存**预设 ABI（VB 新桥有；ASIO/VAIO 单引擎桥与
   /// 老 VB 桥无）。A1 修复（2026-10-22 审查）：group<0 调用方据此在
   /// 「单组 0 语义」与「老回落」间选择，避免 VB 下 load 侧全组扇出
   /// 与 save 侧 eng[0] 单发的不对称污染。
-  bool get hasPresetG => _savePresetG != null && _loadPresetG != null;
+  ///
+  /// F-5（2026-10-23 审查）：探测按**单项**独立——桥的 `_g` 导出是逐个
+  /// 新增的，现实中存在中间态桥（只有 save_g 没有 load_g，或反之）。
+  /// 旧实现要求两者同时存在（hasPresetG），中间态下整族回落 → A1 缺陷
+  /// 原样存在。现在 save/load 各按自身能力决定走 `_g` 还是回落。
+  bool get hasSavePresetG => _savePresetG != null;
 
-  /// 桥是否导出 per-group Ch ABI（语义同 [hasPresetG]）。
+  /// 桥是否导出 per-group **加载**预设 ABI（探测独立于 [hasSavePresetG]）。
+  bool get hasLoadPresetG => _loadPresetG != null;
+
+  /// 桥是否导出 per-group Ch ABI（语义同 [hasSavePresetG]）。
   bool get hasSetChannelsG => _setChannelsG != null;
 }
