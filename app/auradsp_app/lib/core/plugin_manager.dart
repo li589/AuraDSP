@@ -593,11 +593,23 @@ class PluginManager extends ChangeNotifier {
     // C3：同上，避免在卸载还在进行时又发一次。
     if (_slotBusy[s] == true) return;
     // P2 自动记录：卸载前把当前调音落盘到激活 A/B 槽（不丢）。
+    // 注意顺序：**先存预设、再置直通**——直通（bypass）不是调音内容，
+    // 绝不能被记录进预设（预设仅 state+Ch）。
     autoSaveAb(s, group: _editorRoute[s] >= 0 ? _editorRoute[s] : -1);
     _slotBusy[s] = true;
     _slotBusyAction[s] = 'unload';
     notifyListeners();
-    _commandSender?.call({'cmd': 'pluginSlotUnload', 'slot': s});
+    // 优雅卸载（2026-10-22）：先内部直通（该槽 bypass，链早退）让音频
+    // 平滑过渡，短延迟等音频回调走过几块后再真正卸载——大插件 teardown
+    // 2-3s 的扰动不再影响音频流。重挂时引擎出厂 bypass=false，不残留。
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetBypass',
+      'slot': s,
+      'bypass': true,
+    });
+    Timer(const Duration(milliseconds: 150), () {
+      _commandSender?.call({'cmd': 'pluginSlotUnload', 'slot': s});
+    });
   }
 
   /// 设置指定槽位旁路

@@ -1746,6 +1746,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugUnloading => '卸载中…';
 
   @override
+  String get plugStateActive => '生效';
+
+  @override
+  String get plugStateBypassed => '旁路';
+
+  @override
   String get plugUnloadFromSlot => '从当前槽卸载';
 
   @override
