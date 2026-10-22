@@ -1571,11 +1571,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final pb = activePluginBridge();
             if (pb != null) {
+              // P1-1 路由锁定轮询兜底：任一组编辑器开着即视为打开
+              // （用户直接点插件自带关闭按钮也能解锁）。
+              var editorOpen = false;
+              for (var g = 0; g < 8 && !editorOpen; g++) {
+                if (pb.isEditorOpen(slot, group: g)) editorOpen = true;
+              }
               send({
                 'evt': 'pluginSlotStatus',
                 'slot': slot,
                 'status': pb.getStatus(slot),
                 'stage': pb.getInsertStage(slot),
+                'editorOpen': editorOpen,
               });
               break;
             }
@@ -1587,6 +1594,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'slot': slot,
                 'status': statusJson,
                 'stage': stage,
+                'editorOpen':
+                    AuraDspLib.pluginSlotIsEditorOpenWrap(lib, handle, slot),
               });
             }
             break;
@@ -1675,9 +1684,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final mask = (m['mask'] as num).toInt();
+            // P1-3 per-group Ch：group>=0 只发该组（VB 具体路）；
+            // -1 全组扇出（VB「全部」/非 VB）。
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
-              final rc = pb.setChannels(slot, mask);
+              final rc = group >= 0
+                  ? pb.setChannelsG(slot, group, mask)
+                  : pb.setChannels(slot, mask);
               if (rc == 1) pluginMirror[slot].channels = mask;
               send({
                 'evt': 'pluginSlotChannels',
@@ -1696,6 +1710,55 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'slot': slot,
                 'mask': mask,
                 'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSyncAll':
+          {
+            // P1-5 继承复制：srcGroup 的 state → 记忆文件 → 其余组
+            // （桥内批处理；非桥单引擎无多路语义，直接跳过）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final srcGroup = (m['srcGroup'] as num?)?.toInt() ?? 0;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc = pb.syncAll(slot, srcGroup, path);
+              send({
+                'evt': 'pluginSlotSyncAllDone',
+                'slot': slot,
+                'srcGroup': srcGroup,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotLoadPreset':
+          {
+            // P1-5「不继承」= 全部记忆文件全组扇出应用（复用 v1 全组
+            // loadPreset 语义；非桥单引擎同样下发）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              final rc = pb.loadPreset(slot, path);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': pb.getStatus(slot),
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot),
               });
             }
             break;

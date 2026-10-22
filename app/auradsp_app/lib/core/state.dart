@@ -394,14 +394,11 @@ class AppModel extends ChangeNotifier {
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
   int vbPluginGroupMask = 0xFF;
   // v2 按路编辑器目标总线（会话级，不落盘）。
-  // 取值：kVbRouteAll(-2)=「全部」（打开主实例界面，P1 起参数联动广播）；
-  // 0-7=具体路；-1=无有效选中路（全不可选时）。
+  // 取值：kVbRouteAll(-2)=「全部」（plugin_manager 顶层常量；打开主实例
+  // 界面，P1 起参数/Ch 走「全部」记忆）；0-7=具体路；-1=无有效选中路。
   // 插件页「打开界面」按钮跟随此值路由；选中路失效时由
   // _fallbackVbPluginEditorGroup() 回落「全部」。
   int vbPluginEditorGroup = kVbRouteAll;
-
-  /// 「全部」路由：编辑器打开有效路内最低组的实例。
-  static const int kVbRouteAll = -2;
 
   /// 插件页下拉的有效路掩码 = 通道开着 且 插件勾选
   /// （busMask 关的组整组直通不进引擎，调参不上流；复选框关的组链级停跑）。
@@ -1911,6 +1908,11 @@ class AppModel extends ChangeNotifier {
       case 'pluginSlotStatus':
         pluginManager.onPluginSlotStatus(
             raw['slot'] as int, raw['status'], (raw['stage'] as num).toInt());
+        // P1-1 路由锁定轮询兜底：编辑器打开态随 status 回执同步。
+        final eoSlot = (raw['slot'] as num?)?.toInt() ?? 0;
+        if (raw['editorOpen'] is bool) {
+          pluginManager.onSlotEditorOpenPolled(eoSlot, raw['editorOpen'] as bool);
+        }
         notifyListeners();
         break;
       case 'pluginSlotInsertStage':
@@ -1930,6 +1932,9 @@ class AppModel extends ChangeNotifier {
         final slot = (raw['slot'] as num?)?.toInt() ?? 0;
         final isShow = raw['action'] == 'show';
         final ok = (raw['rc'] as num?)?.toInt() != 0;
+        // P1-1/P1-5：路由锁定状态 + lastEditedRoute 记录。
+        pluginManager.onPluginSlotEditorResult(
+            slot, isShow ? 'show' : 'close', ok);
         if (ok) {
           lastInfo = isShow ? '插件 ${slot + 1} 界面已打开' : '插件 ${slot + 1} 界面已关闭';
         } else {

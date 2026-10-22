@@ -32,5 +32,7 @@ EXPORTS
     vb_plugin_slot_get_insert_stage  PRIVATE
     vb_plugin_slot_set_channels      PRIVATE
     vb_plugin_slot_get_channels      PRIVATE
+    vb_plugin_slot_set_channels_g    PRIVATE
+    vb_plugin_slot_sync_all          PRIVATE
     vb_plugin_group_enable           PRIVATE
     vb_plugin_group_mask             PRIVATE

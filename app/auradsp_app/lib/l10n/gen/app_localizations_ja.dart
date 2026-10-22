@@ -1718,6 +1718,31 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugRouteBypassed => 'バイパス（未選択）';
 
   @override
+  String plugAllInheritFrom(String route) {
+    return '$route から継承';
+  }
+
+  @override
+  String get plugAllInheritNone => '継承元なし（未調整）';
+
+  @override
+  String get plugAllUseOwn => '「すべて」の独自状態を使用';
+
+  @override
+  String plugInheritedFrom(String route) {
+    return 'パラメータは $route から継承';
+  }
+
+  @override
+  String get plugAllOwnState => '「すべて」独自状態';
+
+  @override
+  String get plugReInherit => '再継承';
+
+  @override
+  String get plugRouteLocked => 'エディタ開閉中は切替不可';
+
+  @override
   String get plugRouteAll => 'すべて';
 
   @override
@@ -1739,9 +1764,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plugStageLabel => 'シグナルチェーン挿入ステージ：';
-
-  @override
-  String get plugRtNote => 'ライブ直列接続 • RT-Safe契約を維持';
 
   @override
   String get plugFilterAll => 'すべて';

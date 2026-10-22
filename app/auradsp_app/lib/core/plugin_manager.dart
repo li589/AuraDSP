@@ -268,6 +268,11 @@ abstract final class PluginInsertStage {
 /// 插件指令派发回调函数类型
 typedef PluginCommandSender = void Function(Map<String, dynamic> msg);
 
+/// VB 按路编辑器的「全部」路由值（kVbRouteAll）：打开主实例界面、参数/
+/// Ch 走「全部」记忆（第 9 套，v3.2 继承/不继承双选项）。放本文件顶层
+/// 避免 manager↔state 循环依赖。
+const int kVbRouteAll = -2;
+
 /// 插件管理器
 class PluginManager extends ChangeNotifier {
   static const int kMaxSlots = 4;
@@ -292,6 +297,31 @@ class PluginManager extends ChangeNotifier {
   );
   /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
   final Map<int, int> _pendingStages = {};
+
+  // ---- P1 按路记忆与路由锁定（v3.1/v3.2） ----
+  /// 该槽插件编辑器是否打开（路由锁定依据）。事件驱动（EditorResult）+
+  /// status 轮询 is_editor_open 兜底（用户直接点插件自带关闭按钮也能解锁）。
+  final List<bool> _slotEditorOpen = List.filled(kMaxSlots, false, growable: true);
+
+  /// per-route Ch 记忆：[slot][group]，VB 每路独立（v3.2「包括选择的声道
+  /// 也跟随通道记忆切换」）。非 VB 单引擎走 [_slotChannels]。
+  final List<List<int>> _routeChannels =
+      List.generate(kMaxSlots, (_) => List.filled(8, 0xFF));
+
+  /// 「全部」的 Ch 记忆（第 9 套的一部分；参数记忆是 preset 文件）。
+  final List<int> _allChannels = List.filled(kMaxSlots, 0xFF);
+
+  /// 「全部」记忆的参数继承来源（P1-2 右侧标注三态）：
+  /// >=0 = 继承自该组；-1 =「『全部』自有状态」；-2 = 尚未建立记忆。
+  final List<int> _allInheritFrom =
+      List.filled(kMaxSlots, -2, growable: true);
+
+  /// 编辑器当前所在路由（-1=非 VB 单路；>=0=组号），用于关闭时记录来源。
+  final List<int> _editorRoute = List.filled(kMaxSlots, -1, growable: true);
+
+  /// 最后关闭编辑器的路由 = 「继承自 X」的候选来源（v3.2）。
+  int lastEditedRoute = -1;
+
   int _selectedSlot = 0;
 
   List<String> _customDirs = [];
@@ -372,16 +402,25 @@ class PluginManager extends ChangeNotifier {
     return PluginInsertStage.defaultStage;
   }
 
-  int getSlotChannels(int? slot) {
+  /// Ch 记忆按路由取值（P1-4）：
+  /// [group] >= 0 = VB 具体路；[kVbRouteAll](-2) = 「全部」记忆；
+  /// -1 = 非 VB 单引擎（[_slotChannels]）。
+  int getSlotChannels(int? slot, {int group = -1}) {
     final s = slot ?? _selectedSlot;
-    if (s >= 0 && s < kMaxSlots) return _slotChannels[s];
-    return 0xFF;
+    if (s < 0 || s >= kMaxSlots) return 0xFF;
+    if (group == kVbRouteAll) return _allChannels[s];
+    if (group >= 0 && group < 8) return _routeChannels[s][group];
+    return _slotChannels[s];
   }
 
   bool isSlotActive(int slot) {
     final s = getSlotStatus(slot);
     return s.hasActive && s.plugin != null;
   }
+
+  /// 该槽插件编辑器是否打开（P1-1 路由锁定依据）。
+  bool isSlotEditorOpen(int slot) =>
+      slot >= 0 && slot < kMaxSlots && _slotEditorOpen[slot];
 
   bool isSlotBypassed(int slot) => getSlotStatus(slot).bypassed;
   int getSlotLatency(int slot) => getSlotStatus(slot).latency;
@@ -593,6 +632,8 @@ class PluginManager extends ChangeNotifier {
             : 'Plugin Editor [Slot ${s + 1}]$routeTag');
     // 崩溃日志：记录「正在打开」，供下次启动自动登记打开即崩溃的插件。
     if (meta != null) _journalEditorOpened(meta);
+    // P1-1 路由锁定：记下编辑器所在路由；成功回执后置打开态。
+    _editorRoute[s] = group;
     _commandSender?.call({
       'cmd': 'pluginSlotShowEditor',
       'slot': s,
@@ -611,6 +652,91 @@ class PluginManager extends ChangeNotifier {
     });
   }
 
+  /// 编辑器回执（P1-1/P1-5）：更新打开态；关闭成功时记录 lastEditedRoute
+  /// （=「继承自 X」的来源候选，与路由锁定天然衔接——界面开着不能切路由）。
+  void onPluginSlotEditorResult(int slot, String action, bool ok) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (action == 'show') {
+      _slotEditorOpen[slot] = ok;
+    } else if (action == 'close' && ok) {
+      _slotEditorOpen[slot] = false;
+      final r = _editorRoute[slot];
+      if (r >= 0) lastEditedRoute = r;
+      _editorRoute[slot] = -1;
+    }
+    notifyListeners();
+  }
+
+  /// status 轮询兜底（P1-1）：用户直接点插件自带关闭按钮时同步打开态。
+  void onSlotEditorOpenPolled(int slot, bool open) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (_slotEditorOpen[slot] != open) {
+      _slotEditorOpen[slot] = open;
+      if (!open && _editorRoute[slot] >= 0) {
+        lastEditedRoute = _editorRoute[slot];
+        _editorRoute[slot] = -1;
+      }
+      notifyListeners();
+    }
+  }
+
+  /// 「全部」记忆 preset 文件（第 9 套参数记忆，v3.2）。
+  String allMemoryPath(int slot) {
+    final dir = ConfigManager.path(
+        'plugin_presets${Platform.pathSeparator}.all_memory');
+    Directory(dir).createSync(recursive: true);
+    return '$dir${Platform.pathSeparator}slot$slot.aurapreset';
+  }
+
+  /// 「全部」记忆的继承来源标注（P1-2）：>=0=组号 / -1=自有 / -2=未建立。
+  int allInheritFrom(int slot) =>
+      (slot >= 0 && slot < kMaxSlots) ? _allInheritFrom[slot] : -2;
+
+  /// P1-5 继承复制：srcGroup 的 state 快照写入「全部」记忆文件并应用到
+  /// 全部组（桥内 save→load 批处理）；同时把 srcGroup 的 Ch 记忆设为
+  /// 「全部」Ch 记忆并下发全组。
+  void inheritAllFrom(int srcGroup, {int? slot}) {
+    final s = slot ?? _selectedSlot;
+    if (srcGroup < 0 || srcGroup > 7) return;
+    _allChannels[s] = _routeChannels[s][srcGroup];
+    _allInheritFrom[s] = srcGroup;
+    _commandSender?.call({
+      'cmd': 'pluginSlotSyncAll',
+      'slot': s,
+      'srcGroup': srcGroup,
+      'path': allMemoryPath(s),
+    });
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetChannels',
+      'slot': s,
+      'mask': _allChannels[s],
+      'group': -1,
+    });
+    notifyListeners();
+  }
+
+  /// P1-5 不继承：把「全部」记忆文件应用到全部组（现有全组扇出 loadPreset）
+  /// + 「全部」Ch 记忆下发全组。
+  void applyAllMemory({int? slot}) {
+    final s = slot ?? _selectedSlot;
+    _allInheritFrom[s] = -1;
+    _commandSender?.call({
+      'cmd': 'pluginSlotLoadPreset',
+      'slot': s,
+      'path': allMemoryPath(s),
+    });
+    _commandSender?.call({
+      'cmd': 'pluginSlotSetChannels',
+      'slot': s,
+      'mask': _allChannels[s],
+      'group': -1,
+    });
+    notifyListeners();
+  }
+
+  /// P1-5「全部」记忆文件是否存在（决定菜单「不继承」是否可选）。
+  bool hasAllMemory(int slot) => File(allMemoryPath(slot)).existsSync();
+
   /// 调整插件在处理链上的插入阶段。
   ///
   /// 保持乐观写入（UI 即时反馈），但记录下发前的值：引擎回执
@@ -628,16 +754,38 @@ class PluginManager extends ChangeNotifier {
     });
   }
 
-  /// 请求刷新指定槽位当前状态
-  void setSlotChannels(int mask, {int? slot}) {
+  /// 设置 Ch 记忆并下发（P1-4 per-route；group 语义同 [getSlotChannels]）。
+  /// VB 具体路 → set_channels_g 只发该组；「全部」→ 全组扇出 + 更新
+  /// 第 9 套记忆；非 VB → 单路。
+  void setSlotChannels(int mask, {int? slot, int group = -1}) {
     final s = slot ?? _selectedSlot;
-    _slotChannels[s] = mask;
+    if (s < 0 || s >= kMaxSlots) return;
+    if (group == kVbRouteAll) {
+      _allChannels[s] = mask;
+      _commandSender?.call({
+        'cmd': 'pluginSlotSetChannels',
+        'slot': s,
+        'mask': mask,
+        'group': -1, // 全组扇出
+      });
+    } else if (group >= 0 && group < 8) {
+      _routeChannels[s][group] = mask;
+      _commandSender?.call({
+        'cmd': 'pluginSlotSetChannels',
+        'slot': s,
+        'mask': mask,
+        'group': group,
+      });
+    } else {
+      _slotChannels[s] = mask;
+      _commandSender?.call({
+        'cmd': 'pluginSlotSetChannels',
+        'slot': s,
+        'mask': mask,
+        'group': -1,
+      });
+    }
     notifyListeners();
-    _commandSender?.call({
-      'cmd': 'pluginSlotSetChannels',
-      'slot': s,
-      'mask': mask,
-    });
   }
 
   void refreshStatus({int? slot}) {

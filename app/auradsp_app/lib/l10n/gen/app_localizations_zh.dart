@@ -1714,6 +1714,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugRouteBypassed => '旁路（未选路）';
 
   @override
+  String plugAllInheritFrom(String route) {
+    return '继承自 $route';
+  }
+
+  @override
+  String get plugAllInheritNone => '无可继承来源（未调过音）';
+
+  @override
+  String get plugAllUseOwn => '使用『全部』自有状态';
+
+  @override
+  String plugInheritedFrom(String route) {
+    return '参数继承自 $route';
+  }
+
+  @override
+  String get plugAllOwnState => '『全部』自有状态';
+
+  @override
+  String get plugReInherit => '重新继承';
+
+  @override
+  String get plugRouteLocked => '界面已打开，关闭后可切换';
+
+  @override
   String get plugRouteAll => '全部';
 
   @override
@@ -1735,9 +1760,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugStageLabel => '信号处理链插入阶段：';
-
-  @override
-  String get plugRtNote => '实时动态串联 • 保持专业监听超低延迟标准';
 
   @override
   String get plugFilterAll => '全部';

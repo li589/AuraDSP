@@ -223,6 +223,99 @@ class _PluginTriLogo extends StatelessWidget {
   }
 }
 
+/// 「全部」路由选择菜单（P1-5）：继承自 {lastEditedRoute} / 使用自有状态。
+/// 确认后写入「全部」记忆（第 9 套）并统一下发全部组，再落到「全部」路由。
+void _showAllRouteMenu(
+  BuildContext context,
+  AppModel model,
+  PluginManager manager,
+  int slot,
+  List<String> routeNames,
+) {
+  final l = l10nOf(context);
+  final src = manager.lastEditedRoute;
+  final srcName = (src >= 0 && src < routeNames.length) ? routeNames[src] : '';
+  final canInherit = src >= 0;
+  final canOwn = manager.hasAllMemory(slot);
+  showMenu<int>(
+    context: context,
+    items: [
+      PopupMenuItem<int>(
+        value: 1,
+        enabled: canInherit,
+        child: Text(canInherit
+            ? l.plugAllInheritFrom(srcName)
+            : l.plugAllInheritNone),
+      ),
+      PopupMenuItem<int>(
+        value: 2,
+        enabled: canOwn,
+        child: Text(l.plugAllUseOwn),
+      ),
+    ],
+  ).then((v) {
+    if (v == 1 && canInherit) {
+      manager.inheritAllFrom(src, slot: slot);
+      model.setVbPluginEditorGroup(kVbRouteAll);
+    } else if (v == 2 && canOwn) {
+      manager.applyAllMemory(slot: slot);
+      model.setVbPluginEditorGroup(kVbRouteAll);
+    }
+  });
+}
+
+/// 「全部」记忆来源标注（P1-2，替换原 plugRtNote 位）：三态 + 重继承。
+class _AllInheritBadge extends StatelessWidget {
+  final AppModel model;
+  final PluginManager manager;
+  final int slot;
+  final List<String> routeNames;
+  const _AllInheritBadge({
+    required this.model,
+    required this.manager,
+    required this.slot,
+    required this.routeNames,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final from = manager.allInheritFrom(slot);
+    if (from == -2) return const SizedBox.shrink();
+    final label = from >= 0 && from < routeNames.length
+        ? l.plugInheritedFrom(routeNames[from])
+        : l.plugAllOwnState;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          from >= 0 ? Icons.download_done_rounded : Icons.settings_backup_restore_rounded,
+          size: 13,
+          color: p.textDim,
+        ),
+        const SizedBox(width: 4),
+        Text(label, style: captionOf(p, color: p.textDim)),
+        if (from >= 0 && manager.lastEditedRoute >= 0) ...[
+          const SizedBox(width: AuraSpace.xs),
+          Tooltip(
+            message: l.plugReInherit,
+            child: InkWell(
+              onTap: () => manager.inheritAllFrom(manager.lastEditedRoute,
+                  slot: slot),
+              borderRadius: BorderRadius.circular(AuraRadius.sm),
+              child: Padding(
+                padding: const EdgeInsets.all(2),
+                child: Icon(Icons.refresh_rounded, size: 13, color: p.accent),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+}
+
 /// 活跃插件 Hero 卡片
 class _ActivePluginHero extends StatelessWidget {
   final AppModel model;
@@ -319,7 +412,7 @@ class _ActivePluginHero extends StatelessWidget {
         : (routeMask & -routeMask).bitLength - 1; // 最低置位 bit
     final openGroup = !isVb
         ? -1
-        : (editorGroup == AppModel.kVbRouteAll
+        : (editorGroup == kVbRouteAll
             ? primaryGroup
             : editorGroup);
     // Ch strip 可交互位（P0-B）：VB 非双耳时泵层每组仅 L/R 进引擎
@@ -396,8 +489,8 @@ class _ActivePluginHero extends StatelessWidget {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
-                  value: editorGroup == AppModel.kVbRouteAll
-                      ? AppModel.kVbRouteAll
+                  value: editorGroup == kVbRouteAll
+                      ? kVbRouteAll
                       : (editorGroup >= 0 && editorGroup < routeCount
                           ? editorGroup
                           : null),
@@ -409,21 +502,23 @@ class _ActivePluginHero extends StatelessWidget {
                     style: labelOf(p, size: 12, color: p.textDim),
                   ),
                   disabledHint: Text(
-                    l10nOf(context).plugRouteBypassed,
+                    manager.isSlotEditorOpen(slot)
+                        ? l10nOf(context).plugRouteLocked
+                        : l10nOf(context).plugRouteBypassed,
                     style: labelOf(p, size: 12, color: p.textDim),
                   ),
                   icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
                   items: [
                     DropdownMenuItem<int>(
-                      value: AppModel.kVbRouteAll,
+                      value: kVbRouteAll,
                       child: Text(
                         l10nOf(context).plugRouteAll,
                         style: TextStyle(
                           fontSize: 12.5,
-                          color: editorGroup == AppModel.kVbRouteAll
+                          color: editorGroup == kVbRouteAll
                               ? p.accent
                               : p.text,
-                          fontWeight: editorGroup == AppModel.kVbRouteAll
+                          fontWeight: editorGroup == kVbRouteAll
                               ? FontWeight.bold
                               : FontWeight.normal,
                         ),
@@ -445,10 +540,17 @@ class _ActivePluginHero extends StatelessWidget {
                           ),
                         ),
                   ],
-                  onChanged: (isBusy || routeMask == 0)
-                      ? null
+                  onChanged: (isBusy ||
+                          routeMask == 0 ||
+                          manager.isSlotEditorOpen(slot))
+                      ? null // P1-1 路由锁定：编辑器打开时禁切换
                       : (val) {
-                          if (val != null) {
+                          if (val == null) return;
+                          if (val == kVbRouteAll) {
+                            // P1-5：切「全部」弹继承/不继承菜单
+                            _showAllRouteMenu(
+                                context, model, manager, slot, routeNames);
+                          } else {
                             model.setVbPluginEditorGroup(val);
                           }
                         },
@@ -675,17 +777,27 @@ class _ActivePluginHero extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                Text(
-                  l10nOf(context).plugRtNote,
-                  style: captionOf(p, color: p.textDim),
-                ),
+                // P1-2：原「实时动态串联…」文案删除（用户：完全不需要）。
+                // 「全部」路由下显示第 9 套记忆的来源标注（继承自 X / 自有）。
+                if (isVb && editorGroup == kVbRouteAll)
+                  _AllInheritBadge(
+                    model: model,
+                    manager: manager,
+                    slot: slot,
+                    routeNames: routeNames,
+                  )
+                else
+                  const SizedBox.shrink(),
               ],
             ),
             const SizedBox(height: AuraSpace.sm),
             _PluginChannelStrip(
-              mask: manager.getSlotChannels(slot),
+              // P1-4：Ch 按当前路由记忆取值/下发（「全部」= 第 9 套记忆）。
+              mask: manager.getSlotChannels(slot,
+                  group: isVb ? editorGroup : -1),
               interactiveMask: chInteractive,
-              onChanged: (m) => manager.setSlotChannels(m, slot: slot),
+              onChanged: (m) => manager.setSlotChannels(m,
+                  slot: slot, group: isVb ? editorGroup : -1),
             ),
             const SizedBox(height: AuraSpace.xs),
             Row(
