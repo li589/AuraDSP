@@ -9,7 +9,9 @@ import 'dart:convert' show jsonDecode, utf8;
 import 'dart:io';
 import 'dart:ffi';
 import 'dart:isolate';
+
 import 'package:ffi/ffi.dart';
+
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -56,8 +58,13 @@ class EngineInfo {
   final int abi;
   final String version;
   final int deviceRate, deviceCh, bufferFrames;
-  EngineInfo(this.abi, this.version, this.deviceRate, this.deviceCh,
-      this.bufferFrames);
+  EngineInfo(
+    this.abi,
+    this.version,
+    this.deviceRate,
+    this.deviceCh,
+    this.bufferFrames,
+  );
 }
 
 class AudioDeviceItem {
@@ -98,142 +105,145 @@ class GuardRejection {
 
 /// 集中式出厂默认值真相源（与 C++ 引擎 auradsp_create 初始状态严格对齐）
 abstract class ParamDefaults {
-  static const double bassGain = 0.0;        // [0, 15] dB
-  static const double stereoMix = 0.5;       // [0, 1] 中性档 0.5（C3 统一单源，2026-10-19）
-  static const double convMix = 1.0;         // [0, 1] (100% 纯湿)
-  static const double postGain = 0.0;        // [-15, 15] dB
-  static const double inputGain = 0.0;       // [-15, 15] dB
-  static const double inputBalanceL = 1.0;   // 100%
-  static const double inputBalanceR = 1.0;   // 100%
+  static const double bassGain = 0.0; // [0, 15] dB
+  static const double stereoMix = 0.5; // [0, 1] 中性档 0.5（C3 统一单源，2026-10-19）
+  static const double convMix = 1.0; // [0, 1] (100% 纯湿)
+  static const double postGain = 0.0; // [-15, 15] dB
+  static const double inputGain = 0.0; // [-15, 15] dB
+  static const double inputBalanceL = 1.0; // 100%
+  static const double inputBalanceR = 1.0; // 100%
 
   // Freeverb 空间混响
-  static const double fvDecay = 0.5;         // 50%
-  static const double fvDamp = 0.5;          // 50%
-  static const double fvWet = 0.35;          // 35%
-  static const double fvDry = 1.0;           // 100%
-  static const double fvRoomSize = 1.2;      // 1.2x
-  static const double fvWidth = 1.0;         // 100%
+  static const double fvDecay = 0.5; // 50%
+  static const double fvDamp = 0.5; // 50%
+  static const double fvWet = 0.35; // 35%
+  static const double fvDry = 1.0; // 100%
+  static const double fvRoomSize = 1.2; // 1.2x
+  static const double fvWidth = 1.0; // 100%
 
   // 低频搁架 (Shelf)
-  static const double shelfFreq = 100.0;     // 100 Hz
-  static const double shelfGain = 0.0;       // 0.0 dB
+  static const double shelfFreq = 100.0; // 100 Hz
+  static const double shelfGain = 0.0; // 0.0 dB
 
   // 低频单声道化 (BassMono)
-  static const double bassmonoFreq = 120.0;  // 120 Hz [20,300]
+  static const double bassmonoFreq = 120.0; // 120 Hz [20,300]
 
   // Haas 差分环绕
-  static const double haasDelayMs = 12.0;    // 12 ms [0,25]
-  static const double haasMix = 1.0;         // [0,1]
-  static const int haasSideRight = 0;        // 0=延迟右 1=延迟左
+  static const double haasDelayMs = 12.0; // 12 ms [0,25]
+  static const double haasMix = 1.0; // [0,1]
+  static const int haasSideRight = 0; // 0=延迟右 1=延迟左
   static const int haasSideLeft = 1;
 
   // 空间音效 L1（影院预设默认；style 切换会整体覆盖下面三个）
-  static const int spatialStyle = 0;         // 0=影院 1=定位 2=中性
-  static const double spatialRoom = 0.7;     // [0,1]
-  static const double spatialWidth = 1.0;    // [0.5,1.5]
-  static const double spatialCenter = 0.8;  // [0,1]
-  static const double spatialOutGain = 0.0;  // [-12,6] dB
-  static const double spatialMix = 1.0;       // [0,1]
+  static const int spatialStyle = 0; // 0=影院 1=定位 2=中性
+  static const double spatialRoom = 0.7; // [0,1]
+  static const double spatialWidth = 1.0; // [0.5,1.5]
+  static const double spatialCenter = 0.8; // [0,1]
+  static const double spatialOutGain = 0.0; // [-12,6] dB
+  static const double spatialMix = 1.0; // [0,1]
   static const double spatialElevation = 0.0; // [-30,30] 度
-  static const double spatialHeadAzim = 0.0;  // [-180,180] 度
+  static const double spatialHeadAzim = 0.0; // [-180,180] 度
   static const bool spatialHeadTrack = false;
-  static const bool spatialBinaural = false;  // 6/8ch→2ch 双耳虚拟环绕
-  static const bool spatialFdn = false;       // FDN 晚期混响
-  static const double spatialLate = 0.25;     // [0,1]
+  static const bool spatialBinaural = false; // 6/8ch→2ch 双耳虚拟环绕
+  static const bool spatialFdn = false; // FDN 晚期混响
+  static const double spatialLate = 0.25; // [0,1]
 
   // 激励器
-  static const double exciterAmount = 0.3;   // [0,1]
+  static const double exciterAmount = 0.3; // [0,1]
   static const double exciterHifreq = 5000.0; // 5 kHz [3000,10000]
 
   // 声场分带
-  static const double stereoBand = 0.5;      // 50%
+  static const double stereoBand = 0.5; // 50%
 
   // 低音重构
-  static const double bassIntensity = 0.6;   // 60%
-  static const int bassMode = 0;             // 0: 动态增强, 1: 纯净低架, 2: 心理声学谐波
-  static const double bassCutoff = 120.0;    // 120 Hz
-  static const double bassHarmonics = 0.45;  // 45%
-  static const double bassHarmonicBlend = 0.5;// 50% (平衡)
-  static const double bassSubFloor = 25.0;   // 25 Hz
+  static const double bassIntensity = 0.6; // 60%
+  static const int bassMode = 0; // 0: 动态增强, 1: 纯净低架, 2: 心理声学谐波
+  static const double bassCutoff = 120.0; // 120 Hz
+  static const double bassHarmonics = 0.45; // 45%
+  static const double bassHarmonicBlend = 0.5; // 50% (平衡)
+  static const double bassSubFloor = 25.0; // 25 Hz
 
   // 独立滤波器
-  static const int filterType = 0;           // 0=HP 1=LP 2=BP
-  static const double filterFreq = 80.0;     // 80 Hz
-  static const double filterQ = 0.707;       // Q
+  static const int filterType = 0; // 0=HP 1=LP 2=BP
+  static const double filterFreq = 80.0; // 80 Hz
+  static const double filterQ = 0.707; // Q
 
   // 电子管模拟器
-  static const double tubeGain = 4.5;        // +4.5 dB
-  static const int tubeStyle = 0;            // 0: 三极管, 1: 五极管, 2: 磁带温润
-  static const double tubeCompensation = 0.0;// 0.0 dB
-  static const double tubeMix = 1.0;         // 100%
+  static const double tubeGain = 4.5; // +4.5 dB
+  static const int tubeStyle = 0; // 0: 三极管, 1: 五极管, 2: 磁带温润
+  static const double tubeCompensation = 0.0; // 0.0 dB
+  static const double tubeMix = 1.0; // 100%
 
   // 多段图形均衡器
-  static const int eqBandsCount = 15;        // 15段
-  static const double eqQ = 1.414;           // Q 锐度
-  static const int eqFilter = 0;             // 0: FIR, 1: 6阶 IIR, 2: 12阶 IIR
-  static const int eqInterp = 1;             // 1: Makima, 0: PCHIP
+  static const int eqBandsCount = 15; // 15段
+  static const double eqQ = 1.414; // Q 锐度
+  static const int eqFilter = 0; // 0: FIR, 1: 6阶 IIR, 2: 12阶 IIR
+  static const int eqInterp = 1; // 1: Makima, 0: PCHIP
 
   // 自动增益补偿与输出增益门
   static const bool bassAutoGain = false;
-  static const double bassOutputGain = 0.0;     // [-12, 6] dB
+  static const double bassOutputGain = 0.0; // [-12, 6] dB
   static const bool eqAutoGain = false;
-  static const double eqOutputGain = 0.0;       // [-12, 6] dB
+  static const double eqOutputGain = 0.0; // [-12, 6] dB
   static const bool reverbAutoGain = false;
-  static const double reverbOutputGain = 0.0;   // [-12, 6] dB
+  static const double reverbOutputGain = 0.0; // [-12, 6] dB
   static const bool tubeAutoGain = false;
-  static const double tubeOutputGain = 0.0;     // [-12, 6] dB
+  static const double tubeOutputGain = 0.0; // [-12, 6] dB
   static const bool compAutoGain = false;
-  static const double compOutputGain = 0.0;     // [-12, 6] dB
+  static const double compOutputGain = 0.0; // [-12, 6] dB
 
   // 噪声门 + Deesser + 迟滞/底线/保持
-  static const double gateThreshold = -40.0;   // dB [-60,0]
-  static const double gateAttack = 10.0;       // ms [1,100]
-  static const double gateRelease = 100.0;     // ms [10,500]
-  static const double gateHysteresis = 3.0;    // dB [0,12]
-  static const double gateRange = -60.0;       // dB [-80,0]
-  static const double gateHoldMs = 10.0;       // ms [0,500]；B-3 定案：Dart 对齐引擎（听感无差异→保持出厂值）
-  static const double deesserFreq = 6000.0;    // Hz [2000,10000]
-  static const double deesserAmount = 0.5;     // [0,1]
+  static const double gateThreshold = -40.0; // dB [-60,0]
+  static const double gateAttack = 10.0; // ms [1,100]
+  static const double gateRelease = 100.0; // ms [10,500]
+  static const double gateHysteresis = 3.0; // dB [0,12]
+  static const double gateRange = -60.0; // dB [-80,0]
+  static const double gateHoldMs =
+      10.0; // ms [0,500]；B-3 定案：Dart 对齐引擎（听感无差异→保持出厂值）
+  static const double deesserFreq = 6000.0; // Hz [2000,10000]
+  static const double deesserAmount = 0.5; // [0,1]
 
   // Modern Lookahead Limiter (自适应前瞻与立体声联动)
-  static const double limiterRelease = 100.0;  // ms [5,500]；B-3 定案：Dart 对齐引擎（听感无差异→平滑优先出厂值）
+  static const double limiterRelease =
+      100.0; // ms [5,500]；B-3 定案：Dart 对齐引擎（听感无差异→平滑优先出厂值）
   static const double limiterThreshold = -0.1; // dBFS [-24,0]
-  static const bool limiterLink = true;        // true=联动, false=独立
-  static const bool limiterLookahead = false;  // B-3(A1)：对齐引擎默认 0=零延迟
+  static const bool limiterLink = true; // true=联动, false=独立
+  static const bool limiterLookahead = false; // B-3(A1)：对齐引擎默认 0=零延迟
 
   // 2x 多相半带过采样 (HQ Oversampling)；B-3(A1)：默认对齐引擎（1=2x 高精）
   static const bool exciterOversample = true;
   static const bool tubeOversample = true;
 
   // 全参数动态EQ（3 段）
-  static const double dyneqAttack = 2.0;       // ms [0.1,100]
-  static const double dyneqRelease = 120.0;    // ms [10,1000]
-  static const double dyneqB1Attack = 20.0;   // B-3(A1)：对齐引擎 dyneq_b1_attack=20
+  static const double dyneqAttack = 2.0; // ms [0.1,100]
+  static const double dyneqRelease = 120.0; // ms [10,1000]
+  static const double dyneqB1Attack = 20.0; // B-3(A1)：对齐引擎 dyneq_b1_attack=20
   static const double dyneqB1Release = 120.0;
-  static const double dyneqB2Attack = 10.0;   // B-3(A1)：对齐引擎 dyneq_b2_attack=10
-  static const double dyneqB2Release = 100.0; // B-3(A1)：对齐引擎 dyneq_b2_release=100
+  static const double dyneqB2Attack = 10.0; // B-3(A1)：对齐引擎 dyneq_b2_attack=10
+  static const double dyneqB2Release =
+      100.0; // B-3(A1)：对齐引擎 dyneq_b2_release=100
   static const double dyneqB3Attack = 2.0;
   static const double dyneqB3Release = 120.0;
-  static const double dyneqLowFreq = 120.0;    // Hz [20,500]
-  static const double dyneqLowQ = 0.707;       // shelf S [0.5,2]
-  static const double dyneqLowGain = 0.0;      // dB [-12,12]
-  static const double dyneqLowRange = 6.0;     // dB [0,24]
+  static const double dyneqLowFreq = 120.0; // Hz [20,500]
+  static const double dyneqLowQ = 0.707; // shelf S [0.5,2]
+  static const double dyneqLowGain = 0.0; // dB [-12,12]
+  static const double dyneqLowRange = 6.0; // dB [0,24]
   static const double dyneqLowThreshold = -30.0; // dBFS [-60,0]
-  static const double dyneqMidFreq = 1000.0;   // Hz [200,8000]
-  static const double dyneqMidQ = 1.0;         // bell Q [0.3,10]
+  static const double dyneqMidFreq = 1000.0; // Hz [200,8000]
+  static const double dyneqMidQ = 1.0; // bell Q [0.3,10]
   static const double dyneqMidGain = 0.0;
   static const double dyneqMidRange = 6.0;
   static const double dyneqMidThreshold = -30.0;
-  static const double dyneqHighFreq = 6000.0;  // Hz [2000,20000]
+  static const double dyneqHighFreq = 6000.0; // Hz [2000,20000]
   static const double dyneqHighQ = 0.707;
   static const double dyneqHighGain = 0.0;
   static const double dyneqHighRange = 6.0;
   static const double dyneqHighThreshold = -30.0;
 
   // 响度补偿
-  static const double loudnessAmount = 0.5;    // [0,1]
+  static const double loudnessAmount = 0.5; // [0,1]
   static const bool arbmagAutoGain = false;
-  static const double arbmagOutputGain = 0.0;   // [-12, 6] dB
+  static const double arbmagOutputGain = 0.0; // [-12, 6] dB
 
   // 任意响应 EQ (ArbMag)
   static const bool arbmagOn = false;
@@ -277,6 +287,7 @@ class AppModel extends ChangeNotifier {
     if (negotiated > 0) return negotiated;
     return config.sampleRate > 0 ? config.sampleRate : 48000;
   }
+
   int engineState = 0; // 0=bypass 1=processing 2=error
   double latencyMs = 0;
   bool playing = false;
@@ -291,6 +302,7 @@ class AppModel extends ChangeNotifier {
     if (engineState == 0) return EngineDisplay.idle;
     return liveSpectrum ? EngineDisplay.processing : EngineDisplay.idle;
   }
+
   bool bypass = false;
   String sourceKind = ''; // '' | 'tone' | 'pink' | 'file'
   String sourcePath = ''; // 文件源路径（isolate 重启后重推音源用；tone/pink 为空）
@@ -363,7 +375,9 @@ class AppModel extends ChangeNotifier {
   bool isSectionEnabled(String section) {
     if (section == 'input' || section == 'routing') return true;
     if (section == 'post') return limiterOn;
-    if (section == 'shelf' || section == 'bassmono' || section == 'bass_shaping') {
+    if (section == 'shelf' ||
+        section == 'bassmono' ||
+        section == 'bass_shaping') {
       return bassShapingOn;
     }
     return isStageEnabled(section);
@@ -441,17 +455,20 @@ class AppModel extends ChangeNotifier {
     if (list.isEmpty) {
       list.addAll([
         const AudioDeviceItem(
-            id: 'def_render',
-            name: '系统扬声器 / 扬声器 (Realtek High Definition Audio)',
-            isRender: true),
+          id: 'def_render',
+          name: '系统扬声器 / 扬声器 (Realtek High Definition Audio)',
+          isRender: true,
+        ),
         const AudioDeviceItem(
-            id: 'def_mic',
-            name: '麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)',
-            isRender: false),
+          id: 'def_mic',
+          name: '麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)',
+          isRender: false,
+        ),
         const AudioDeviceItem(
-            id: 'def_stereo_mix',
-            name: '立体声混音 (Realtek Audio)',
-            isRender: false),
+          id: 'def_stereo_mix',
+          name: '立体声混音 (Realtek Audio)',
+          isRender: false,
+        ),
       ]);
     }
     return list;
@@ -498,13 +515,15 @@ class AppModel extends ChangeNotifier {
       if (list.isEmpty) {
         list.addAll([
           const AudioDeviceItem(
-              id: 'def_render_realtek',
-              name: '扬声器 (Realtek High Definition Audio)',
-              isRender: true),
+            id: 'def_render_realtek',
+            name: '扬声器 (Realtek High Definition Audio)',
+            isRender: true,
+          ),
           const AudioDeviceItem(
-              id: 'def_render_usb',
-              name: '耳机 (USB Audio Device)',
-              isRender: true),
+            id: 'def_render_usb',
+            name: '耳机 (USB Audio Device)',
+            isRender: true,
+          ),
         ]);
       }
     }
@@ -553,7 +572,9 @@ class AppModel extends ChangeNotifier {
   String get effectivePipelineInputDevice {
     final dev = config.pipelineInputDevice;
     if (dev.isEmpty) return '';
-    final exists = filteredWasapiInputs.any((d) => d.id == dev || d.name == dev);
+    final exists = filteredWasapiInputs.any(
+      (d) => d.id == dev || d.name == dev,
+    );
     return exists ? dev : '';
   }
 
@@ -561,7 +582,9 @@ class AppModel extends ChangeNotifier {
   String get effectivePipelineOutputDevice {
     final dev = config.pipelineOutputDevice;
     if (dev.isEmpty) return '';
-    final exists = filteredWasapiOutputs.any((d) => d.id == dev || d.name == dev);
+    final exists = filteredWasapiOutputs.any(
+      (d) => d.id == dev || d.name == dev,
+    );
     return exists ? dev : '';
   }
 
@@ -653,8 +676,24 @@ class AppModel extends ChangeNotifier {
   int compTfresolution = 1;
   double compThreshold = -18.0;
   double compRatio = 4.0;
-  final List<double> compFreqs = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
-  final List<double> compGains = [-0.35, -0.35, -0.35, -0.35, -0.35, -0.35, -0.35];
+  final List<double> compFreqs = [
+    95.0,
+    200.0,
+    400.0,
+    800.0,
+    1600.0,
+    3400.0,
+    7500.0,
+  ];
+  final List<double> compGains = [
+    -0.35,
+    -0.35,
+    -0.35,
+    -0.35,
+    -0.35,
+    -0.35,
+    -0.35,
+  ];
 
   // M5/P-002：声场分带（0..1 每带；bandUsed=false 时随总滑块统一）
   final List<double> stereoBands = List.filled(5, 0.5);
@@ -770,6 +809,7 @@ class AppModel extends ChangeNotifier {
   String arbmagString = ParamDefaults.arbmagString;
   bool arbmagReady = false;
   int arbmagNodeCount = 0;
+
   /// 引擎回显的 eq.curve 下发原串（字符串回读对账用；null=引擎无副本）。
   /// 引擎存的是原串副本（不重序列化），故可与 `_pushEqCurve` 输出直接比对
   /// 检测引擎侧钳位/漂移。不回灌 eqGains/eqFreqs（避免与用户拖拽打架）。
@@ -799,9 +839,68 @@ class AppModel extends ChangeNotifier {
 
   // 多段图形均衡器（Phase 3）
   static const List<double> eqFreqs7 = [50, 150, 400, 1000, 3000, 8000, 16000];
-  static const List<double> eqFreqs10 = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
-  static const List<double> eqFreqs15 = [25, 40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000, 16000];
-  static const List<double> eqFreqs31 = [20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600, 2000, 2500, 3150, 4000, 5000, 6300, 8000, 10000, 12500, 16000, 20000];
+  static const List<double> eqFreqs10 = [
+    31,
+    62,
+    125,
+    250,
+    500,
+    1000,
+    2000,
+    4000,
+    8000,
+    16000,
+  ];
+  static const List<double> eqFreqs15 = [
+    25,
+    40,
+    63,
+    100,
+    160,
+    250,
+    400,
+    630,
+    1000,
+    1600,
+    2500,
+    4000,
+    6300,
+    10000,
+    16000,
+  ];
+  static const List<double> eqFreqs31 = [
+    20,
+    25,
+    31.5,
+    40,
+    50,
+    63,
+    80,
+    100,
+    125,
+    160,
+    200,
+    250,
+    315,
+    400,
+    500,
+    630,
+    800,
+    1000,
+    1250,
+    1600,
+    2000,
+    2500,
+    3150,
+    4000,
+    5000,
+    6300,
+    8000,
+    10000,
+    12500,
+    16000,
+    20000,
+  ];
 
   /// C4：按当前采样率裁掉超过 Nyquist 的频带。
   ///
@@ -844,10 +943,10 @@ class AppModel extends ChangeNotifier {
   /// 2 = 12 阶 IIR（`operatingMode=5`）。
   /// 未知值回退到 FIR，保证可听、可测。
   static int eqOpModeForFilter(int filter) => switch (filter) {
-        1 => 2,
-        2 => 5,
-        _ => 0,
-      };
+    1 => 2,
+    2 => 5,
+    _ => 0,
+  };
 
   /// 单座 RBJ 峰值钟形在频率 f 处的幅度（dB）。
   ///
@@ -899,8 +998,7 @@ class AppModel extends ChangeNotifier {
     required List<double> qs,
     required int sampleRate,
   }) {
-    final n = math.min(
-        centers.length, math.min(peakGains.length, qs.length));
+    final n = math.min(centers.length, math.min(peakGains.length, qs.length));
     return List<double>.generate(targetFreqs.length, (i) {
       var total = 0.0;
       for (var b = 0; b < n; b++) {
@@ -917,6 +1015,7 @@ class AppModel extends ChangeNotifier {
   }
 
   int eqBandsCount = ParamDefaults.eqBandsCount;
+
   /// 初值先用 48k 网格；构造函数体里 `config` 加载完后会按真实采样率重建
   /// （字段初始化器先于构造函数体执行，那时 config 还没读出来）。
   List<double> eqFrequencies = eqGridFor(ParamDefaults.eqBandsCount, 48000);
@@ -946,14 +1045,17 @@ class AppModel extends ChangeNotifier {
 
   // 组件级延迟评估刷新时间戳
   final Map<String, int> _latencyRefreshTicks = {};
-  int getComponentLatencyTick(String compId) => _latencyRefreshTicks[compId] ?? 0;
+  int getComponentLatencyTick(String compId) =>
+      _latencyRefreshTicks[compId] ?? 0;
 
   // 用户偏好与外置配置
   late AppConfig config;
   String? activePresetName;
+
   /// 脏跟踪（2026-10-16 决策 #3）：最近一次成功应用预设时的状态指纹。
   /// null = 从未应用过预设（如全新安装），此时「偏离预设」无从谈起。
   String? appliedPresetFingerprint;
+
   /// 当前状态是否偏离已应用预设（任意一点偏离即 true → UI 显示
   /// 「自定义（未保存）」）。由 evaluatePresetDirty()（防抖保存回调内
   /// 统一触发）刷新，随 SessionMemory v5 持久化，重启后不丢。
@@ -984,10 +1086,12 @@ class AppModel extends ChangeNotifier {
   final levelL = ValueNotifier<double>(-90);
   final levelR = ValueNotifier<double>(-90);
   // [M3.5-c] 12 个 stage 的实时双声道微型电平 (dBFS)
-  final stageLevelsL =
-      ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
-  final stageLevelsR =
-      ValueNotifier<List<double>>(List.filled(kEngineStageCount, -120.0));
+  final stageLevelsL = ValueNotifier<List<double>>(
+    List.filled(kEngineStageCount, -120.0),
+  );
+  final stageLevelsR = ValueNotifier<List<double>>(
+    List.filled(kEngineStageCount, -120.0),
+  );
   // 输入门控实时本级输入/输出电平 (dBFS)
   final inputMeterInL = ValueNotifier<double>(-120.0);
   final inputMeterInR = ValueNotifier<double>(-120.0);
@@ -1116,9 +1220,11 @@ class AppModel extends ChangeNotifier {
       (t) => t.name == config.themeId,
       orElse: () => AuraThemeId.auraDark,
     );
-    pluginManager = PluginManager(commandSender: (msg) {
-      _toIso?.send(msg);
-    });
+    pluginManager = PluginManager(
+      commandSender: (msg) {
+        _toIso?.send(msg);
+      },
+    );
     pluginManager.addListener(notifyListeners);
     pluginManager.setCustomDirs(config.customPluginDirs);
     pluginManager.loadCache();
@@ -1235,11 +1341,16 @@ class AppModel extends ChangeNotifier {
       _iso = iso;
     });
     port.listen(_onMessage);
-    TrayService.instance.isWindowVisible.addListener(_onWindowVisibilityChanged);
+    TrayService.instance.isWindowVisible.addListener(
+      _onWindowVisibilityChanged,
+    );
   }
 
   void _onWindowVisibilityChanged() {
-    send({'cmd': 'setVizSuspended', 'value': !TrayService.instance.isWindowVisible.value});
+    send({
+      'cmd': 'setVizSuspended',
+      'value': !TrayService.instance.isWindowVisible.value,
+    });
   }
 
   @visibleForTesting
@@ -1255,9 +1366,13 @@ class AppModel extends ChangeNotifier {
         }
         break;
       case 'ready':
-        info = EngineInfo(raw['abi'] as int, raw['version'] as String,
-            raw['deviceRate'] as int, raw['deviceCh'] as int,
-            raw['bufferFrames'] as int);
+        info = EngineInfo(
+          raw['abi'] as int,
+          raw['version'] as String,
+          raw['deviceRate'] as int,
+          raw['deviceCh'] as int,
+          raw['bufferFrames'] as int,
+        );
         // 协商采样率可能与请求值不同：EQ 网格必须按实际引擎采样率重建，
         // 否则曲线、响应和生产链使用三套不同的频率假设。
         _rebuildEqGridForSampleRate(notify: false);
@@ -1312,7 +1427,7 @@ class AppModel extends ChangeNotifier {
             send({
               'cmd': 'source',
               'kind': sourceKind,
-              'path': sourcePath.isEmpty ? null : sourcePath
+              'path': sourcePath.isEmpty ? null : sourcePath,
             });
             playing = true;
           } else {
@@ -1342,8 +1457,8 @@ class AppModel extends ChangeNotifier {
           stereoOn = (raw['stereoEnable'] as int) != 0;
         }
         if (stereoOn && raw['stereoMix'] != null) {
-          stereoMix =
-              ((raw['stereoMix'] as num).toDouble() / stereoWidenMax).clamp(0.0, 1.0);
+          stereoMix = ((raw['stereoMix'] as num).toDouble() / stereoWidenMax)
+              .clamp(0.0, 1.0);
         }
         eqOn = (raw['eqEnable'] as int) != 0;
         postGain = (raw['postGain'] as num).toDouble();
@@ -1360,7 +1475,7 @@ class AppModel extends ChangeNotifier {
             'cmd': 'setParam',
             'id': ParamId.convEnable,
             'value': 1,
-            'isFloat': false
+            'isFloat': false,
           });
         }
         convFrames = raw['convFrames'] as int;
@@ -1376,15 +1491,26 @@ class AppModel extends ChangeNotifier {
         }
         tubeOn = (raw['tubeEnable'] as int) != 0;
         // P-011：电子管音色/混合/补偿回读
-        if (raw['tubeStyle'] != null) tubeStyle = (raw['tubeStyle'] as int).clamp(0, 2);
-        if (raw['tubeMix'] != null) tubeMix = (raw['tubeMix'] as num).toDouble().clamp(0.0, 1.0);
+        if (raw['tubeStyle'] != null) {
+          tubeStyle = (raw['tubeStyle'] as int).clamp(0, 2);
+        }
+        if (raw['tubeMix'] != null) {
+          tubeMix = (raw['tubeMix'] as num).toDouble().clamp(0.0, 1.0);
+        }
         if (raw['tubeCompensation'] != null) {
-          tubeCompensation = (raw['tubeCompensation'] as num).toDouble().clamp(-12.0, 12.0);
+          tubeCompensation = (raw['tubeCompensation'] as num).toDouble().clamp(
+            -12.0,
+            12.0,
+          );
         }
         xfeedOn = (raw['xfeedEnable'] as int) != 0;
         if (raw['xfeedMode'] != null) xfeedMode = raw['xfeedMode'] as int;
-        if (raw['xfeedFcut'] != null) xfeedFcut = (raw['xfeedFcut'] as num).toDouble();
-        if (raw['xfeedFeed'] != null) xfeedFeed = (raw['xfeedFeed'] as num).toDouble();
+        if (raw['xfeedFcut'] != null) {
+          xfeedFcut = (raw['xfeedFcut'] as num).toDouble();
+        }
+        if (raw['xfeedFeed'] != null) {
+          xfeedFeed = (raw['xfeedFeed'] as num).toDouble();
+        }
         stereoBandUsed = (raw['stereoBandUsed'] as int) != 0;
         convMix = (raw['convMix'] as num).toDouble();
         // auto-bypass 的另一半：资源此刻就绪且用户开关为开 → 立即生效。
@@ -1395,7 +1521,7 @@ class AppModel extends ChangeNotifier {
             'cmd': 'setParam',
             'id': ParamId.ddcEnable,
             'value': 1,
-            'isFloat': false
+            'isFloat': false,
           });
         }
         shelfOn = (raw['shelfEnable'] as int) != 0;
@@ -1471,93 +1597,235 @@ class AppModel extends ChangeNotifier {
           exciterHifreq = (raw['exciterHifreq'] as num).toDouble();
         }
         // P-010：每效果输出增益门 + 自动补偿
-        if (raw['bassOutGain'] != null) bassOutputGain = (raw['bassOutGain'] as num).toDouble();
-        if (raw['bassAutoGain'] != null) bassAutoGain = (raw['bassAutoGain'] as int) != 0;
-        if (raw['eqOutGain'] != null) eqOutputGain = (raw['eqOutGain'] as num).toDouble();
-        if (raw['eqAutoGain'] != null) eqAutoGain = (raw['eqAutoGain'] as int) != 0;
-        if (raw['tubeOutGain'] != null) tubeOutputGain = (raw['tubeOutGain'] as num).toDouble();
-        if (raw['tubeAutoGain'] != null) tubeAutoGain = (raw['tubeAutoGain'] as int) != 0;
-        if (raw['compOutGain'] != null) compOutputGain = (raw['compOutGain'] as num).toDouble();
-        if (raw['compAutoGain'] != null) compAutoGain = (raw['compAutoGain'] as int) != 0;
-        if (raw['reverbOutGain'] != null) reverbOutputGain = (raw['reverbOutGain'] as num).toDouble();
-        if (raw['reverbAutoGain'] != null) reverbAutoGain = (raw['reverbAutoGain'] as int) != 0;
-        if (raw['exciterOversample'] != null) exciterOversample = (raw['exciterOversample'] as int) != 0;
-        if (raw['tubeOversample'] != null) tubeOversample = (raw['tubeOversample'] as int) != 0;
-        if (raw['limiterRelease'] != null) limiterReleaseMs = (raw['limiterRelease'] as num).toDouble();
-        if (raw['limiterThreshold'] != null) limiterThreshold = (raw['limiterThreshold'] as num).toDouble();
-        if (raw['limiterLink'] != null) limiterLink = (raw['limiterLink'] as int) != 0;
-        if (raw['limiterLookahead'] != null) limiterLookahead = (raw['limiterLookahead'] as int) != 0;
-        if (raw['gateHysteresis'] != null) gateHysteresis = (raw['gateHysteresis'] as num).toDouble();
-        if (raw['gateRange'] != null) gateRange = (raw['gateRange'] as num).toDouble();
-        if (raw['gateHoldMs'] != null) gateHoldMs = (raw['gateHoldMs'] as num).toDouble();
+        if (raw['bassOutGain'] != null) {
+          bassOutputGain = (raw['bassOutGain'] as num).toDouble();
+        }
+        if (raw['bassAutoGain'] != null) {
+          bassAutoGain = (raw['bassAutoGain'] as int) != 0;
+        }
+        if (raw['eqOutGain'] != null) {
+          eqOutputGain = (raw['eqOutGain'] as num).toDouble();
+        }
+        if (raw['eqAutoGain'] != null) {
+          eqAutoGain = (raw['eqAutoGain'] as int) != 0;
+        }
+        if (raw['tubeOutGain'] != null) {
+          tubeOutputGain = (raw['tubeOutGain'] as num).toDouble();
+        }
+        if (raw['tubeAutoGain'] != null) {
+          tubeAutoGain = (raw['tubeAutoGain'] as int) != 0;
+        }
+        if (raw['compOutGain'] != null) {
+          compOutputGain = (raw['compOutGain'] as num).toDouble();
+        }
+        if (raw['compAutoGain'] != null) {
+          compAutoGain = (raw['compAutoGain'] as int) != 0;
+        }
+        if (raw['reverbOutGain'] != null) {
+          reverbOutputGain = (raw['reverbOutGain'] as num).toDouble();
+        }
+        if (raw['reverbAutoGain'] != null) {
+          reverbAutoGain = (raw['reverbAutoGain'] as int) != 0;
+        }
+        if (raw['exciterOversample'] != null) {
+          exciterOversample = (raw['exciterOversample'] as int) != 0;
+        }
+        if (raw['tubeOversample'] != null) {
+          tubeOversample = (raw['tubeOversample'] as int) != 0;
+        }
+        if (raw['limiterRelease'] != null) {
+          limiterReleaseMs = (raw['limiterRelease'] as num).toDouble();
+        }
+        if (raw['limiterThreshold'] != null) {
+          limiterThreshold = (raw['limiterThreshold'] as num).toDouble();
+        }
+        if (raw['limiterLink'] != null) {
+          limiterLink = (raw['limiterLink'] as int) != 0;
+        }
+        if (raw['limiterLookahead'] != null) {
+          limiterLookahead = (raw['limiterLookahead'] as int) != 0;
+        }
+        if (raw['gateHysteresis'] != null) {
+          gateHysteresis = (raw['gateHysteresis'] as num).toDouble();
+        }
+        if (raw['gateRange'] != null) {
+          gateRange = (raw['gateRange'] as num).toDouble();
+        }
+        if (raw['gateHoldMs'] != null) {
+          gateHoldMs = (raw['gateHoldMs'] as num).toDouble();
+        }
         if (raw['gateEnable'] != null) gateOn = (raw['gateEnable'] as int) != 0;
-        if (raw['gateThreshold'] != null) gateThreshold = (raw['gateThreshold'] as num).toDouble();
-        if (raw['gateAttack'] != null) gateAttackMs = (raw['gateAttack'] as num).toDouble();
-        if (raw['gateRelease'] != null) gateReleaseMs = (raw['gateRelease'] as num).toDouble();
-        if (raw['gateAutoGain'] != null) gateAutoGain = (raw['gateAutoGain'] as int) != 0;
-        if (raw['deesserEnable'] != null) deesserOn = (raw['deesserEnable'] as int) != 0;
-        if (raw['deesserFreq'] != null) deesserFreq = (raw['deesserFreq'] as num).toDouble();
-        if (raw['deesserAmount'] != null) deesserAmount = (raw['deesserAmount'] as num).toDouble();
-        if (raw['dyneqEnable'] != null) dyneqOn = (raw['dyneqEnable'] as int) != 0;
-        if (raw['dyneqAttack'] != null) dyneqAttackMs = (raw['dyneqAttack'] as num).toDouble();
-        if (raw['dyneqRelease'] != null) dyneqReleaseMs = (raw['dyneqRelease'] as num).toDouble();
-        if (raw['dyneqB1Attack'] != null) dyneqB1Attack = (raw['dyneqB1Attack'] as num).toDouble();
-        if (raw['dyneqB1Release'] != null) dyneqB1Release = (raw['dyneqB1Release'] as num).toDouble();
-        if (raw['dyneqB2Attack'] != null) dyneqB2Attack = (raw['dyneqB2Attack'] as num).toDouble();
-        if (raw['dyneqB2Release'] != null) dyneqB2Release = (raw['dyneqB2Release'] as num).toDouble();
-        if (raw['dyneqB3Attack'] != null) dyneqB3Attack = (raw['dyneqB3Attack'] as num).toDouble();
-        if (raw['dyneqB3Release'] != null) dyneqB3Release = (raw['dyneqB3Release'] as num).toDouble();
-        if (raw['dyneqLowEnable'] != null) dyneqLowOn = (raw['dyneqLowEnable'] as int) != 0;
-        if (raw['dyneqLowFreq'] != null) dyneqLowFreq = (raw['dyneqLowFreq'] as num).toDouble();
-        if (raw['dyneqLowQ'] != null) dyneqLowQ = (raw['dyneqLowQ'] as num).toDouble();
-        if (raw['dyneqLowGain'] != null) dyneqLowGain = (raw['dyneqLowGain'] as num).toDouble();
-        if (raw['dyneqLowRange'] != null) dyneqLowRange = (raw['dyneqLowRange'] as num).toDouble();
-        if (raw['dyneqLowThreshold'] != null) dyneqLowThreshold = (raw['dyneqLowThreshold'] as num).toDouble();
-        if (raw['dyneqMidEnable'] != null) dyneqMidOn = (raw['dyneqMidEnable'] as int) != 0;
-        if (raw['dyneqMidFreq'] != null) dyneqMidFreq = (raw['dyneqMidFreq'] as num).toDouble();
-        if (raw['dyneqMidQ'] != null) dyneqMidQ = (raw['dyneqMidQ'] as num).toDouble();
-        if (raw['dyneqMidGain'] != null) dyneqMidGain = (raw['dyneqMidGain'] as num).toDouble();
-        if (raw['dyneqMidRange'] != null) dyneqMidRange = (raw['dyneqMidRange'] as num).toDouble();
-        if (raw['dyneqMidThreshold'] != null) dyneqMidThreshold = (raw['dyneqMidThreshold'] as num).toDouble();
-        if (raw['dyneqHighEnable'] != null) dyneqHighOn = (raw['dyneqHighEnable'] as int) != 0;
-        if (raw['dyneqHighFreq'] != null) dyneqHighFreq = (raw['dyneqHighFreq'] as num).toDouble();
-        if (raw['dyneqHighQ'] != null) dyneqHighQ = (raw['dyneqHighQ'] as num).toDouble();
-        if (raw['dyneqHighGain'] != null) dyneqHighGain = (raw['dyneqHighGain'] as num).toDouble();
-        if (raw['dyneqHighRange'] != null) dyneqHighRange = (raw['dyneqHighRange'] as num).toDouble();
-        if (raw['dyneqHighThreshold'] != null) dyneqHighThreshold = (raw['dyneqHighThreshold'] as num).toDouble();
-        if (raw['loudnessEnable'] != null) loudnessOn = (raw['loudnessEnable'] as int) != 0;
-        if (raw['loudnessAmount'] != null) loudnessAmount = (raw['loudnessAmount'] as num).toDouble();
-        if (raw['bassHarmonics'] != null) bassHarmonics = (raw['bassHarmonics'] as num).toDouble();
-        if (raw['bassHarmonicBlend'] != null) bassHarmonicBlend = (raw['bassHarmonicBlend'] as num).toDouble();
-        if (raw['bassSubFreq'] != null) bassSubFloor = (raw['bassSubFreq'] as num).toDouble();
-        if (raw['bassCutoffF'] != null) bassCutoff = (raw['bassCutoffF'] as num).toDouble();
-        if (raw['filterEnable'] != null) filterOn = (raw['filterEnable'] as int) != 0;
-        if (raw['filterType'] != null) filterType = (raw['filterType'] as int).clamp(0, 2);
-        if (raw['filterFreq'] != null) filterFreq = (raw['filterFreq'] as num).toDouble();
-        if (raw['filterQ'] != null) filterQ = (raw['filterQ'] as num).toDouble();
+        if (raw['gateThreshold'] != null) {
+          gateThreshold = (raw['gateThreshold'] as num).toDouble();
+        }
+        if (raw['gateAttack'] != null) {
+          gateAttackMs = (raw['gateAttack'] as num).toDouble();
+        }
+        if (raw['gateRelease'] != null) {
+          gateReleaseMs = (raw['gateRelease'] as num).toDouble();
+        }
+        if (raw['gateAutoGain'] != null) {
+          gateAutoGain = (raw['gateAutoGain'] as int) != 0;
+        }
+        if (raw['deesserEnable'] != null) {
+          deesserOn = (raw['deesserEnable'] as int) != 0;
+        }
+        if (raw['deesserFreq'] != null) {
+          deesserFreq = (raw['deesserFreq'] as num).toDouble();
+        }
+        if (raw['deesserAmount'] != null) {
+          deesserAmount = (raw['deesserAmount'] as num).toDouble();
+        }
+        if (raw['dyneqEnable'] != null) {
+          dyneqOn = (raw['dyneqEnable'] as int) != 0;
+        }
+        if (raw['dyneqAttack'] != null) {
+          dyneqAttackMs = (raw['dyneqAttack'] as num).toDouble();
+        }
+        if (raw['dyneqRelease'] != null) {
+          dyneqReleaseMs = (raw['dyneqRelease'] as num).toDouble();
+        }
+        if (raw['dyneqB1Attack'] != null) {
+          dyneqB1Attack = (raw['dyneqB1Attack'] as num).toDouble();
+        }
+        if (raw['dyneqB1Release'] != null) {
+          dyneqB1Release = (raw['dyneqB1Release'] as num).toDouble();
+        }
+        if (raw['dyneqB2Attack'] != null) {
+          dyneqB2Attack = (raw['dyneqB2Attack'] as num).toDouble();
+        }
+        if (raw['dyneqB2Release'] != null) {
+          dyneqB2Release = (raw['dyneqB2Release'] as num).toDouble();
+        }
+        if (raw['dyneqB3Attack'] != null) {
+          dyneqB3Attack = (raw['dyneqB3Attack'] as num).toDouble();
+        }
+        if (raw['dyneqB3Release'] != null) {
+          dyneqB3Release = (raw['dyneqB3Release'] as num).toDouble();
+        }
+        if (raw['dyneqLowEnable'] != null) {
+          dyneqLowOn = (raw['dyneqLowEnable'] as int) != 0;
+        }
+        if (raw['dyneqLowFreq'] != null) {
+          dyneqLowFreq = (raw['dyneqLowFreq'] as num).toDouble();
+        }
+        if (raw['dyneqLowQ'] != null) {
+          dyneqLowQ = (raw['dyneqLowQ'] as num).toDouble();
+        }
+        if (raw['dyneqLowGain'] != null) {
+          dyneqLowGain = (raw['dyneqLowGain'] as num).toDouble();
+        }
+        if (raw['dyneqLowRange'] != null) {
+          dyneqLowRange = (raw['dyneqLowRange'] as num).toDouble();
+        }
+        if (raw['dyneqLowThreshold'] != null) {
+          dyneqLowThreshold = (raw['dyneqLowThreshold'] as num).toDouble();
+        }
+        if (raw['dyneqMidEnable'] != null) {
+          dyneqMidOn = (raw['dyneqMidEnable'] as int) != 0;
+        }
+        if (raw['dyneqMidFreq'] != null) {
+          dyneqMidFreq = (raw['dyneqMidFreq'] as num).toDouble();
+        }
+        if (raw['dyneqMidQ'] != null) {
+          dyneqMidQ = (raw['dyneqMidQ'] as num).toDouble();
+        }
+        if (raw['dyneqMidGain'] != null) {
+          dyneqMidGain = (raw['dyneqMidGain'] as num).toDouble();
+        }
+        if (raw['dyneqMidRange'] != null) {
+          dyneqMidRange = (raw['dyneqMidRange'] as num).toDouble();
+        }
+        if (raw['dyneqMidThreshold'] != null) {
+          dyneqMidThreshold = (raw['dyneqMidThreshold'] as num).toDouble();
+        }
+        if (raw['dyneqHighEnable'] != null) {
+          dyneqHighOn = (raw['dyneqHighEnable'] as int) != 0;
+        }
+        if (raw['dyneqHighFreq'] != null) {
+          dyneqHighFreq = (raw['dyneqHighFreq'] as num).toDouble();
+        }
+        if (raw['dyneqHighQ'] != null) {
+          dyneqHighQ = (raw['dyneqHighQ'] as num).toDouble();
+        }
+        if (raw['dyneqHighGain'] != null) {
+          dyneqHighGain = (raw['dyneqHighGain'] as num).toDouble();
+        }
+        if (raw['dyneqHighRange'] != null) {
+          dyneqHighRange = (raw['dyneqHighRange'] as num).toDouble();
+        }
+        if (raw['dyneqHighThreshold'] != null) {
+          dyneqHighThreshold = (raw['dyneqHighThreshold'] as num).toDouble();
+        }
+        if (raw['loudnessEnable'] != null) {
+          loudnessOn = (raw['loudnessEnable'] as int) != 0;
+        }
+        if (raw['loudnessAmount'] != null) {
+          loudnessAmount = (raw['loudnessAmount'] as num).toDouble();
+        }
+        if (raw['bassHarmonics'] != null) {
+          bassHarmonics = (raw['bassHarmonics'] as num).toDouble();
+        }
+        if (raw['bassHarmonicBlend'] != null) {
+          bassHarmonicBlend = (raw['bassHarmonicBlend'] as num).toDouble();
+        }
+        if (raw['bassSubFreq'] != null) {
+          bassSubFloor = (raw['bassSubFreq'] as num).toDouble();
+        }
+        if (raw['bassCutoffF'] != null) {
+          bassCutoff = (raw['bassCutoffF'] as num).toDouble();
+        }
+        if (raw['filterEnable'] != null) {
+          filterOn = (raw['filterEnable'] as int) != 0;
+        }
+        if (raw['filterType'] != null) {
+          filterType = (raw['filterType'] as int).clamp(0, 2);
+        }
+        if (raw['filterFreq'] != null) {
+          filterFreq = (raw['filterFreq'] as num).toDouble();
+        }
+        if (raw['filterQ'] != null) {
+          filterQ = (raw['filterQ'] as num).toDouble();
+        }
         if (raw['fvEnable'] != null) fvOn = (raw['fvEnable'] as int) != 0;
-        if (raw['fvDecay'] != null) fvDecay = (raw['fvDecay'] as num).toDouble();
+        if (raw['fvDecay'] != null) {
+          fvDecay = (raw['fvDecay'] as num).toDouble();
+        }
         if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
         if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
         if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         if (raw['compEnable'] != null) compOn = (raw['compEnable'] as int) != 0;
-        if (raw['compTimeconstant'] != null) compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
-        if (raw['compGranularity'] != null) compGranularity = raw['compGranularity'] as int;
-        if (raw['compTfresolution'] != null) compTfresolution = raw['compTfresolution'] as int;
+        if (raw['compTimeconstant'] != null) {
+          compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
+        }
+        if (raw['compGranularity'] != null) {
+          compGranularity = raw['compGranularity'] as int;
+        }
+        if (raw['compTfresolution'] != null) {
+          compTfresolution = raw['compTfresolution'] as int;
+        }
         if (raw['compFreqs'] is List) {
-          final list = (raw['compFreqs'] as List).map((e) => (e as num).toDouble()).toList();
+          final list = (raw['compFreqs'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
           for (var i = 0; i < math.min(list.length, compFreqs.length); i++) {
             compFreqs[i] = list[i];
           }
         }
         if (raw['compGains'] is List) {
-          final list = (raw['compGains'] as List).map((e) => (e as num).toDouble()).toList();
+          final list = (raw['compGains'] as List)
+              .map((e) => (e as num).toDouble())
+              .toList();
           for (var i = 0; i < math.min(list.length, compGains.length); i++) {
             compGains[i] = list[i];
           }
         }
-        if (raw['arbmagReady'] != null) arbmagReady = (raw['arbmagReady'] as int) != 0;
-        if (raw['arbmagNodeCount'] != null) arbmagNodeCount = raw['arbmagNodeCount'] as int;
+        if (raw['arbmagReady'] != null) {
+          arbmagReady = (raw['arbmagReady'] as int) != 0;
+        }
+        if (raw['arbmagNodeCount'] != null) {
+          arbmagNodeCount = raw['arbmagNodeCount'] as int;
+        }
         /* 字符串回读对账（预设 §8.1 / 调研 §1.2-1.3；null=引擎无副本或超 cap）：
          * - lpCode：编辑器内容即真相（v2 铁律）——只在本地为空时补位，
          *   绝不覆盖用户正在编辑的文本；用于引擎重起后回填与分叉检测。
@@ -1567,7 +1835,9 @@ class AppModel extends ChangeNotifier {
          *   存独立对账字段，不回灌 eqGains/eqFreqs（避免 toStringAsFixed(1)
          *   舍入漂移与用户拖拽打架）。 */
         final rbLp = raw['lpCode'];
-        if (rbLp is String && rbLp.isNotEmpty && (lpCode == null || lpCode!.isEmpty)) {
+        if (rbLp is String &&
+            rbLp.isNotEmpty &&
+            (lpCode == null || lpCode!.isEmpty)) {
           lpCode = rbLp;
         }
         final rbArb = raw['arbmagString'];
@@ -1580,18 +1850,33 @@ class AppModel extends ChangeNotifier {
           final en = (raw['arbmagEnable'] as int) != 0;
           if (arbmagReady && arbmagOn && !en) {
             _markSent(ParamId.arbmagEnable);
-            send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 1, 'isFloat': false});
+            send({
+              'cmd': 'setParam',
+              'id': ParamId.arbmagEnable,
+              'value': 1,
+              'isFloat': false,
+            });
           } else if (!arbmagOn || arbmagReady) {
             arbmagOn = en;
           }
         }
 
         // P3: 全量回读补齐此前遗漏的 14 类参数（输入/增益/分带/混响/EQ/EEL2/链顺序等）
-        if (raw['inputGain'] != null) inputGain = (raw['inputGain'] as num).toDouble();
-        if (raw['inputBalanceL'] != null) inputBalanceL = (raw['inputBalanceL'] as num).toDouble();
-        if (raw['inputBalanceR'] != null) inputBalanceR = (raw['inputBalanceR'] as num).toDouble();
-        if (raw['tubeGain'] != null) tubeGain = (raw['tubeGain'] as num).toDouble();
-        if (raw['stereoEnable'] != null) stereoOn = (raw['stereoEnable'] as int) != 0;
+        if (raw['inputGain'] != null) {
+          inputGain = (raw['inputGain'] as num).toDouble();
+        }
+        if (raw['inputBalanceL'] != null) {
+          inputBalanceL = (raw['inputBalanceL'] as num).toDouble();
+        }
+        if (raw['inputBalanceR'] != null) {
+          inputBalanceR = (raw['inputBalanceR'] as num).toDouble();
+        }
+        if (raw['tubeGain'] != null) {
+          tubeGain = (raw['tubeGain'] as num).toDouble();
+        }
+        if (raw['stereoEnable'] != null) {
+          stereoOn = (raw['stereoEnable'] as int) != 0;
+        }
         if (raw['stereoBands'] is List) {
           final bands = (raw['stereoBands'] as List);
           // B4 对账（D-2）：引擎 raw 值 = (band*stereoMix*2).clamp(0,1)*stereoWidenMax*k，
@@ -1605,21 +1890,30 @@ class AppModel extends ChangeNotifier {
             }
           }
         }
-        if (raw['fvRoomSize'] != null) fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
-        if (raw['fvWidth'] != null) fvWidth = (raw['fvWidth'] as num).toDouble();
-        if (raw['eqBandsCount'] != null) eqBandsCount = raw['eqBandsCount'] as int;
+        if (raw['fvRoomSize'] != null) {
+          fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
+        }
+        if (raw['fvWidth'] != null) {
+          fvWidth = (raw['fvWidth'] as num).toDouble();
+        }
+        if (raw['eqBandsCount'] != null) {
+          eqBandsCount = raw['eqBandsCount'] as int;
+        }
         if (raw['eqFilter'] != null) eqFilter = raw['eqFilter'] as int;
         if (raw['eqInterp'] != null) eqInterp = raw['eqInterp'] as int;
         if (raw['eqQ'] != null) eqQ = (raw['eqQ'] as num).toDouble();
         if (raw['bassMode'] != null) bassMode = raw['bassMode'] as int;
-        if (raw['bassIntensity'] != null) bassIntensity = (raw['bassIntensity'] as num).toDouble();
+        if (raw['bassIntensity'] != null) {
+          bassIntensity = (raw['bassIntensity'] as num).toDouble();
+        }
         if (raw['lpParams'] is List) {
           final lpp = (raw['lpParams'] as List);
           for (var i = 0; i < lpp.length && i < 8; i++) {
             lpParams[i] = (lpp[i] as num).toDouble();
           }
         }
-        if (raw['chainOrder'] is String && (raw['chainOrder'] as String).isNotEmpty) {
+        if (raw['chainOrder'] is String &&
+            (raw['chainOrder'] as String).isNotEmpty) {
           graphOrder = raw['chainOrder'] as String;
         }
 
@@ -1635,7 +1929,12 @@ class AppModel extends ChangeNotifier {
         arbmagReady = (raw['ready'] as int?) == 1;
         if (arbmagReady && arbmagOn) {
           _markSent(ParamId.arbmagEnable);
-          send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 1, 'isFloat': false});
+          send({
+            'cmd': 'setParam',
+            'id': ParamId.arbmagEnable,
+            'value': 1,
+            'isFloat': false,
+          });
         }
         notifyListeners();
         break;
@@ -1648,8 +1947,8 @@ class AppModel extends ChangeNotifier {
         conn = EngineConn.fatal;
         fatalMsg = raw['msg'] as String;
         notifyListeners();
-// 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
-// 5 次约 10s 还起不来才认命留 fatal 屏。其它错误直接留屏。
+        // 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
+        // 5 次约 10s 还起不来才认命留 fatal 屏。其它错误直接留屏。
         if (fatalMsg?.contains('0x8889000a') == true) {
           _scheduleFatalRetry();
         }
@@ -1686,7 +1985,9 @@ class AppModel extends ChangeNotifier {
         final t0 = _pendingSentAt.remove(id);
         if (t0 != null) {
           // 点击 → 引擎确认 的回环耗时（定位"生效慢"到底慢在哪一段）
-          dbgLog('rt $id = ${DateTime.now().millisecondsSinceEpoch - t0}ms rc=$rc');
+          dbgLog(
+            'rt $id = ${DateTime.now().millisecondsSinceEpoch - t0}ms rc=$rc',
+          );
         }
         // v3：脚本编译耗时回传（成功失败都记，供胶囊展示）
         if (id == ParamId.lpCode && raw['tookMs'] is int) {
@@ -1722,7 +2023,10 @@ class AppModel extends ChangeNotifier {
         levelL.value = (raw['l'] as num).toDouble();
         levelR.value = (raw['r'] as num).toDouble();
         if (raw['stageL'] != null) {
-          final sL = (raw['stageL'] as List).cast<num>().map((e) => e.toDouble()).toList();
+          final sL = (raw['stageL'] as List)
+              .cast<num>()
+              .map((e) => e.toDouble())
+              .toList();
           stageLevelsL.value = sL;
           if (sL.length >= 30) {
             grLimiter.value = sL[24];
@@ -1734,7 +2038,10 @@ class AppModel extends ChangeNotifier {
           }
         }
         if (raw['stageR'] != null) {
-          stageLevelsR.value = (raw['stageR'] as List).cast<num>().map((e) => e.toDouble()).toList();
+          stageLevelsR.value = (raw['stageR'] as List)
+              .cast<num>()
+              .map((e) => e.toDouble())
+              .toList();
         }
         if (raw['inputInL'] != null) {
           inputMeterInL.value = (raw['inputInL'] as num).toDouble();
@@ -1856,7 +2163,10 @@ class AppModel extends ChangeNotifier {
         break;
       case 'pluginLoaded':
         pluginManager.onPluginLoaded(
-            raw['path'] as String, raw['rc'] as int, raw['status']);
+          raw['path'] as String,
+          raw['rc'] as int,
+          raw['status'],
+        );
         scheduleAutoSave();
         notifyListeners();
         break;
@@ -1881,51 +2191,78 @@ class AppModel extends ChangeNotifier {
         break;
       case 'pluginSlotLoaded':
         pluginManager.onPluginSlotLoaded(
-            raw['slot'] as int,
-            raw['path'] as String,
-            raw['rc'] as int,
-            raw['status'],
-            (raw['stage'] as num).toInt());
+          raw['slot'] as int,
+          raw['path'] as String,
+          raw['rc'] as int,
+          raw['status'],
+          (raw['stage'] as num).toInt(),
+        );
         scheduleAutoSave();
         notifyListeners();
         break;
       case 'pluginSlotBusy':
-        pluginManager.onPluginSlotBusy(
-            raw['slot'] as int, raw['busy'] as bool);
+        pluginManager.onPluginSlotBusy(raw['slot'] as int, raw['busy'] as bool);
         break;
       case 'pluginSlotUnloaded':
         pluginManager.onPluginSlotUnloaded(
-            raw['slot'] as int, raw['rc'] as int, raw['status']);
+          raw['slot'] as int,
+          raw['rc'] as int,
+          raw['status'],
+        );
         scheduleAutoSave();
         notifyListeners();
         break;
       case 'pluginSlotBypass':
         pluginManager.onPluginSlotBypass(
-            raw['slot'] as int, raw['bypass'] as bool, raw['status']);
+          raw['slot'] as int,
+          raw['bypass'] as bool,
+          raw['status'],
+        );
         scheduleAutoSave();
         notifyListeners();
         break;
       case 'pluginSlotStatus':
         pluginManager.onPluginSlotStatus(
-            raw['slot'] as int, raw['status'], (raw['stage'] as num).toInt());
+          raw['slot'] as int,
+          raw['status'],
+          (raw['stage'] as num).toInt(),
+        );
         // P1-1 路由锁定轮询兜底：编辑器打开态随 status 回执同步。
         final eoSlot = (raw['slot'] as num?)?.toInt() ?? 0;
         if (raw['editorOpen'] is bool) {
-          pluginManager.onSlotEditorOpenPolled(eoSlot, raw['editorOpen'] as bool);
+          pluginManager.onSlotEditorOpenPolled(
+            eoSlot,
+            raw['editorOpen'] as bool,
+          );
         }
         notifyListeners();
         break;
       case 'pluginSlotInsertStage':
         pluginManager.onPluginSlotInsertStage(
-            raw['slot'] as int, (raw['stage'] as num).toInt(), raw['rc'] as int);
+          raw['slot'] as int,
+          (raw['stage'] as num).toInt(),
+          raw['rc'] as int,
+        );
         scheduleAutoSave();
         notifyListeners();
         break;
       case 'pluginSlotChannels':
         pluginManager.onPluginSlotChannels(
-            raw['slot'] as int, (raw['mask'] as num).toInt(), raw['rc'] as int);
+          raw['slot'] as int,
+          (raw['mask'] as num).toInt(),
+          raw['rc'] as int,
+        );
         scheduleAutoSave();
         notifyListeners();
+        break;
+      case 'pluginSlotSyncAllDone':
+        // P1-5 继承/收尾同步回执：失败必须可见（曾静默——桥 DLL 旧版无
+        // sync_all 导出时 Dart 绑定为 null 恒返回 0，用户以为继承成功）。
+        if ((raw['rc'] as num?)?.toInt() != 1) {
+          lastEngineError = '参数同步失败（插件状态未复制到其它通道）。请确认桥 DLL 为最新构建。';
+          eventSeq.value = ++_guardSeq;
+          notifyListeners();
+        }
         break;
       case 'pluginSlotEditorResult':
         // 此前该事件被发出却无人处理：插件原生 GUI 打开失败对用户完全静默。
@@ -1934,7 +2271,10 @@ class AppModel extends ChangeNotifier {
         final ok = (raw['rc'] as num?)?.toInt() != 0;
         // P1-1/P1-5：路由锁定状态 + lastEditedRoute 记录。
         pluginManager.onPluginSlotEditorResult(
-            slot, isShow ? 'show' : 'close', ok);
+          slot,
+          isShow ? 'show' : 'close',
+          ok,
+        );
         if (ok) {
           lastInfo = isShow ? '插件 ${slot + 1} 界面已打开' : '插件 ${slot + 1} 界面已关闭';
         } else {
@@ -2034,30 +2374,39 @@ class AppModel extends ChangeNotifier {
         // 已渐变到 0，此时关开关才不会「哒」一声。
         _bassDisableAfterRamp = false;
         _markSent('bass.enable');
-        send(
-            {'cmd': 'setParam', 'id': 'bass.enable', 'value': 0, 'isFloat': false});
+        send({
+          'cmd': 'setParam',
+          'id': 'bass.enable',
+          'value': 0,
+          'isFloat': false,
+        });
       }
       _bassGainTimer?.cancel();
       _bassGainTimer = null;
       return;
     }
     _bassGainTimer ??= Timer(
-        const Duration(milliseconds: _bassGainMinIntervalMs), _stepBassRamp);
+      const Duration(milliseconds: _bassGainMinIntervalMs),
+      _stepBassRamp,
+    );
   }
 
   /// 关闭低音：先把增益渐变到 0，再下发 disable（无爆音的旁路）。
   void _disableBassRamped() {
     if (_bassRampCur <= 0.0) {
       _markSent('bass.enable');
-      send(
-          {'cmd': 'setParam', 'id': 'bass.enable', 'value': 0, 'isFloat': false});
+      send({
+        'cmd': 'setParam',
+        'id': 'bass.enable',
+        'value': 0,
+        'isFloat': false,
+      });
       return;
     }
     _bassRampTarget = 0.0;
     _bassDisableAfterRamp = true;
     _kickBassRamp();
   }
-
 
   Future<void> replaySessionToEngine() async {
     _isReplayingSession = true;
@@ -2232,14 +2581,18 @@ class AppModel extends ChangeNotifier {
       _pushEqCurve();
 
       // 4. 外部文件自校验重载
-      if (convIrPath != null && convIrPath!.isNotEmpty && File(convIrPath!).existsSync()) {
+      if (convIrPath != null &&
+          convIrPath!.isNotEmpty &&
+          File(convIrPath!).existsSync()) {
         loadConvolverIr(convIrPath!);
         if (convEnabled) setInt(ParamId.convEnable, 1);
       }
       // 干湿比有独立引擎参数，重启后必须重推，否则界面显示的混合比
       // 与引擎默认值不一致（“记忆与滑块打架”的成因之一）。
       setFloat('convolver.mix', convMix);
-      if (ddcPath != null && ddcPath!.isNotEmpty && File(ddcPath!).existsSync()) {
+      if (ddcPath != null &&
+          ddcPath!.isNotEmpty &&
+          File(ddcPath!).existsSync()) {
         loadVdc(ddcPath!);
         if (ddcOn) setInt(ParamId.ddcEnable, 1);
       }
@@ -2321,9 +2674,15 @@ class AppModel extends ChangeNotifier {
   void _mirror(String id, double v) {
     _paramValues[id] = v;
     switch (id) {
-      case 'bass.enable': bassOn = v != 0; break;
-      case 'bass.gain': bassGain = v; break;
-      case 'reverb.preset': reverbPreset = v.toInt(); break;
+      case 'bass.enable':
+        bassOn = v != 0;
+        break;
+      case 'bass.gain':
+        bassGain = v;
+        break;
+      case 'reverb.preset':
+        reverbPreset = v.toInt();
+        break;
       case 'stereo.mix':
         // UI 刻度 0..1 → 存显示值；引擎侧收到 v * stereoWidenMax
         stereoMix = (v / stereoWidenMax).clamp(0.0, 1.0);
@@ -2331,21 +2690,51 @@ class AppModel extends ChangeNotifier {
         // UI 镜像必须同步清，否则会一直显示"分带生效中"而造成与主滑块冲突
         stereoBandUsed = false;
         break;
-      case 'eq.enable': eqOn = v != 0; break;
-      case 'post.gain': postGain = v; break;
-      case 'input.gain': inputGain = v; break;
-      case 'input.balance.1': inputBalanceL = v; break;
-      case 'input.balance.2': inputBalanceR = v; break;
-      case 'limiter.enable': limiterOn = v != 0; break;
-      case 'channels.mode': channelsMode = v.toInt(); break;
-      case 'tube.enable': tubeOn = v != 0; break;
-      case 'tube.style': tubeStyle = v.toInt().clamp(0, 2); break;
-      case 'tube.mix': tubeMix = v.clamp(0.0, 1.0); break;
-      case 'tube.compensation': tubeCompensation = v.clamp(-12.0, 12.0); break;
-      case 'crossfeed.enable': xfeedOn = v != 0; break;
-      case 'crossfeed.mode': xfeedMode = v.toInt(); break;
-      case 'crossfeed.fcut': xfeedFcut = v; break;
-      case 'crossfeed.feed': xfeedFeed = v; break;
+      case 'eq.enable':
+        eqOn = v != 0;
+        break;
+      case 'post.gain':
+        postGain = v;
+        break;
+      case 'input.gain':
+        inputGain = v;
+        break;
+      case 'input.balance.1':
+        inputBalanceL = v;
+        break;
+      case 'input.balance.2':
+        inputBalanceR = v;
+        break;
+      case 'limiter.enable':
+        limiterOn = v != 0;
+        break;
+      case 'channels.mode':
+        channelsMode = v.toInt();
+        break;
+      case 'tube.enable':
+        tubeOn = v != 0;
+        break;
+      case 'tube.style':
+        tubeStyle = v.toInt().clamp(0, 2);
+        break;
+      case 'tube.mix':
+        tubeMix = v.clamp(0.0, 1.0);
+        break;
+      case 'tube.compensation':
+        tubeCompensation = v.clamp(-12.0, 12.0);
+        break;
+      case 'crossfeed.enable':
+        xfeedOn = v != 0;
+        break;
+      case 'crossfeed.mode':
+        xfeedMode = v.toInt();
+        break;
+      case 'crossfeed.fcut':
+        xfeedFcut = v;
+        break;
+      case 'crossfeed.feed':
+        xfeedFeed = v;
+        break;
       default:
         // 注意：这里必须用 raw string 里的裸 $ 收尾。写成 r'...\$' 是
         // 反斜杠+美元，在 ECMAScript 正则里是 IdentityEscape，匹配**字面 $ 字符**，
@@ -2357,107 +2746,410 @@ class AppModel extends ChangeNotifier {
           stereoBandUsed = true;
           break;
         }
-        if (id == ParamId.convMix) { convMix = v; break; }
-        if (id == ParamId.ddcEnable) { ddcOn = v != 0; break; }
-        if (id == ParamId.ddcReady) { ddcReady = v != 0; break; }
-        if (id == ParamId.shelfEnable) { shelfOn = v != 0; break; }
-        if (id == ParamId.shelfFreq) { shelfFreq = v.clamp(40.0, 400.0); break; }
-        if (id == ParamId.shelfGain) { shelfGain = v; break; }
-        if (id == ParamId.bassmonoEnable) { bassmonoOn = v != 0; break; }
-        if (id == ParamId.bassmonoFreq) { bassmonoFreq = v; break; }
-        if (id == ParamId.haasEnable) { haasOn = v != 0; break; }
-        if (id == ParamId.haasDelay) { haasDelayMs = v; break; }
-        if (id == ParamId.haasMix) { haasMix = v; break; }
-        if (id == ParamId.haasSide) { haasSide = v != 0 ? 1 : 0; break; }
-        if (id == ParamId.spatialEnable) { spatialOn = v != 0; break; }
-        if (id == ParamId.spatialStyle) { spatialStyle = v.toInt().clamp(0, 2); break; }
-        if (id == ParamId.spatialRoom) { spatialRoom = v; break; }
-        if (id == ParamId.spatialWidth) { spatialWidth = v; break; }
-        if (id == ParamId.spatialCenter) { spatialCenter = v; break; }
-        if (id == ParamId.spatialOutGain) { spatialOutGain = v; break; }
-        if (id == ParamId.spatialAutoGain) { spatialAutoGain = v != 0; break; }
-        if (id == ParamId.spatialMix) { spatialMix = v; break; }
-        if (id == ParamId.spatialElevation) { spatialElevation = v; break; }
-        if (id == ParamId.spatialBinaural) { spatialBinaural = v != 0; break; }
-        if (id == ParamId.spatialFdn) { spatialFdn = v != 0; break; }
-        if (id == ParamId.spatialLate) { spatialLate = v; break; }
-        if (id == ParamId.spatialHeadAzim) { spatialHeadAzim = v; break; }
-        if (id == ParamId.spatialHeadTrack) { spatialHeadTrack = v != 0; break; }
-        if (id == ParamId.exciterEnable) { exciterOn = v != 0; break; }
-        if (id == ParamId.exciterAmount) { exciterAmount = v; break; }
-        if (id == ParamId.exciterHifreq) { exciterHifreq = v; break; }
-        if (id == ParamId.bassOutGain) { bassOutputGain = v; break; }
-        if (id == ParamId.bassAutoGain) { bassAutoGain = v != 0; break; }
-        if (id == ParamId.eqOutGain) { eqOutputGain = v; break; }
-        if (id == ParamId.eqAutoGain) { eqAutoGain = v != 0; break; }
-        if (id == ParamId.tubeOutGain) { tubeOutputGain = v; break; }
-        if (id == ParamId.tubeAutoGain) { tubeAutoGain = v != 0; break; }
-        if (id == ParamId.compOutGain) { compOutputGain = v; break; }
-        if (id == ParamId.compAutoGain) { compAutoGain = v != 0; break; }
-        if (id == ParamId.reverbOutGain) { reverbOutputGain = v; break; }
-        if (id == ParamId.reverbAutoGain) { reverbAutoGain = v != 0; break; }
-        if (id == ParamId.gateEnable) { gateOn = v != 0; break; }
-        if (id == ParamId.gateThreshold) { gateThreshold = v; break; }
-        if (id == ParamId.gateAttack) { gateAttackMs = v; break; }
-        if (id == ParamId.gateRelease) { gateReleaseMs = v; break; }
-        if (id == ParamId.gateAutoGain) { gateAutoGain = v != 0; break; }
-        if (id == ParamId.deesserEnable) { deesserOn = v != 0; break; }
-        if (id == ParamId.deesserFreq) { deesserFreq = v; break; }
-        if (id == ParamId.loudnessEnable) { loudnessOn = v != 0; break; }
-        if (id == ParamId.loudnessAmount) { loudnessAmount = v; break; }
-        if (id == ParamId.bassHarmonics) { bassHarmonics = v; break; }
-        if (id == ParamId.bassHarmonicBlend) { bassHarmonicBlend = v; break; }
-        if (id == ParamId.bassSubFreq) { bassSubFloor = v; break; }
-        if (id == ParamId.bassCutoffF) { bassCutoff = v; break; }
-        if (id == ParamId.filterEnable) { filterOn = v != 0; break; }
-        if (id == ParamId.filterType) { filterType = v.toInt().clamp(0, 2); break; }
-        if (id == ParamId.filterFreq) { filterFreq = v; break; }
-        if (id == ParamId.filterQ) { filterQ = v; break; }
-        if (id == ParamId.deesserAmount) { deesserAmount = v; break; }
-        if (id == ParamId.dyneqEnable) { dyneqOn = v != 0; break; }
-        if (id == ParamId.dyneqAttack) { dyneqAttackMs = v; break; }
-        if (id == ParamId.dyneqRelease) { dyneqReleaseMs = v; break; }
-        if (id == ParamId.dyneqLowEnable) { dyneqLowOn = v != 0; break; }
-        if (id == ParamId.dyneqLowFreq) { dyneqLowFreq = v; break; }
-        if (id == ParamId.dyneqLowQ) { dyneqLowQ = v; break; }
-        if (id == ParamId.dyneqLowGain) { dyneqLowGain = v; break; }
-        if (id == ParamId.dyneqLowRange) { dyneqLowRange = v; break; }
-        if (id == ParamId.dyneqLowThreshold) { dyneqLowThreshold = v; break; }
-        if (id == ParamId.dyneqMidEnable) { dyneqMidOn = v != 0; break; }
-        if (id == ParamId.dyneqMidFreq) { dyneqMidFreq = v; break; }
-        if (id == ParamId.dyneqMidQ) { dyneqMidQ = v; break; }
-        if (id == ParamId.dyneqMidGain) { dyneqMidGain = v; break; }
-        if (id == ParamId.dyneqMidRange) { dyneqMidRange = v; break; }
-        if (id == ParamId.dyneqMidThreshold) { dyneqMidThreshold = v; break; }
-        if (id == ParamId.dyneqHighEnable) { dyneqHighOn = v != 0; break; }
-        if (id == ParamId.dyneqHighFreq) { dyneqHighFreq = v; break; }
-        if (id == ParamId.dyneqHighQ) { dyneqHighQ = v; break; }
-        if (id == ParamId.dyneqHighGain) { dyneqHighGain = v; break; }
-        if (id == ParamId.dyneqHighRange) { dyneqHighRange = v; break; }
-        if (id == ParamId.gateHysteresis) { gateHysteresis = v; break; }
-        if (id == ParamId.gateRange) { gateRange = v; break; }
-        if (id == ParamId.gateHoldMs) { gateHoldMs = v; break; }
-        if (id == ParamId.exciterOversample) { exciterOversample = v != 0; break; }
-        if (id == ParamId.tubeOversample) { tubeOversample = v != 0; break; }
-        if (id == ParamId.limiterRelease) { limiterReleaseMs = v; break; }
-        if (id == ParamId.limiterThreshold) { limiterThreshold = v; break; }
-        if (id == ParamId.limiterLink) { limiterLink = v != 0; break; }
-        if (id == ParamId.limiterLookahead) { limiterLookahead = v != 0; break; }
-        if (id == ParamId.dyneqB1Attack) { dyneqB1Attack = v; break; }
-        if (id == ParamId.dyneqB1Release) { dyneqB1Release = v; break; }
-        if (id == ParamId.dyneqB2Attack) { dyneqB2Attack = v; break; }
-        if (id == ParamId.dyneqB2Release) { dyneqB2Release = v; break; }
-        if (id == ParamId.dyneqB3Attack) { dyneqB3Attack = v; break; }
-        if (id == ParamId.dyneqB3Release) { dyneqB3Release = v; break; }
-        if (id == ParamId.fvEnable) { fvOn = v != 0; break; }
-        if (id == ParamId.fvDecay) { fvDecay = v; break; }
-        if (id == ParamId.fvDamp) { fvDamp = v; break; }
-        if (id == ParamId.fvWet) { fvWet = v; break; }
-        if (id == ParamId.fvDry) { fvDry = v; break; }
-        if (id == ParamId.compEnable) { compOn = v != 0; break; }
-        if (id == ParamId.compTimeconstant) { compTimeconstant = v; break; }
-        if (id == ParamId.compGranularity) { compGranularity = v.toInt(); break; }
-        if (id == ParamId.compTfresolution) { compTfresolution = v.toInt(); break; }
+        if (id == ParamId.convMix) {
+          convMix = v;
+          break;
+        }
+        if (id == ParamId.ddcEnable) {
+          ddcOn = v != 0;
+          break;
+        }
+        if (id == ParamId.ddcReady) {
+          ddcReady = v != 0;
+          break;
+        }
+        if (id == ParamId.shelfEnable) {
+          shelfOn = v != 0;
+          break;
+        }
+        if (id == ParamId.shelfFreq) {
+          shelfFreq = v.clamp(40.0, 400.0);
+          break;
+        }
+        if (id == ParamId.shelfGain) {
+          shelfGain = v;
+          break;
+        }
+        if (id == ParamId.bassmonoEnable) {
+          bassmonoOn = v != 0;
+          break;
+        }
+        if (id == ParamId.bassmonoFreq) {
+          bassmonoFreq = v;
+          break;
+        }
+        if (id == ParamId.haasEnable) {
+          haasOn = v != 0;
+          break;
+        }
+        if (id == ParamId.haasDelay) {
+          haasDelayMs = v;
+          break;
+        }
+        if (id == ParamId.haasMix) {
+          haasMix = v;
+          break;
+        }
+        if (id == ParamId.haasSide) {
+          haasSide = v != 0 ? 1 : 0;
+          break;
+        }
+        if (id == ParamId.spatialEnable) {
+          spatialOn = v != 0;
+          break;
+        }
+        if (id == ParamId.spatialStyle) {
+          spatialStyle = v.toInt().clamp(0, 2);
+          break;
+        }
+        if (id == ParamId.spatialRoom) {
+          spatialRoom = v;
+          break;
+        }
+        if (id == ParamId.spatialWidth) {
+          spatialWidth = v;
+          break;
+        }
+        if (id == ParamId.spatialCenter) {
+          spatialCenter = v;
+          break;
+        }
+        if (id == ParamId.spatialOutGain) {
+          spatialOutGain = v;
+          break;
+        }
+        if (id == ParamId.spatialAutoGain) {
+          spatialAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.spatialMix) {
+          spatialMix = v;
+          break;
+        }
+        if (id == ParamId.spatialElevation) {
+          spatialElevation = v;
+          break;
+        }
+        if (id == ParamId.spatialBinaural) {
+          spatialBinaural = v != 0;
+          break;
+        }
+        if (id == ParamId.spatialFdn) {
+          spatialFdn = v != 0;
+          break;
+        }
+        if (id == ParamId.spatialLate) {
+          spatialLate = v;
+          break;
+        }
+        if (id == ParamId.spatialHeadAzim) {
+          spatialHeadAzim = v;
+          break;
+        }
+        if (id == ParamId.spatialHeadTrack) {
+          spatialHeadTrack = v != 0;
+          break;
+        }
+        if (id == ParamId.exciterEnable) {
+          exciterOn = v != 0;
+          break;
+        }
+        if (id == ParamId.exciterAmount) {
+          exciterAmount = v;
+          break;
+        }
+        if (id == ParamId.exciterHifreq) {
+          exciterHifreq = v;
+          break;
+        }
+        if (id == ParamId.bassOutGain) {
+          bassOutputGain = v;
+          break;
+        }
+        if (id == ParamId.bassAutoGain) {
+          bassAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.eqOutGain) {
+          eqOutputGain = v;
+          break;
+        }
+        if (id == ParamId.eqAutoGain) {
+          eqAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.tubeOutGain) {
+          tubeOutputGain = v;
+          break;
+        }
+        if (id == ParamId.tubeAutoGain) {
+          tubeAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.compOutGain) {
+          compOutputGain = v;
+          break;
+        }
+        if (id == ParamId.compAutoGain) {
+          compAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.reverbOutGain) {
+          reverbOutputGain = v;
+          break;
+        }
+        if (id == ParamId.reverbAutoGain) {
+          reverbAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.gateEnable) {
+          gateOn = v != 0;
+          break;
+        }
+        if (id == ParamId.gateThreshold) {
+          gateThreshold = v;
+          break;
+        }
+        if (id == ParamId.gateAttack) {
+          gateAttackMs = v;
+          break;
+        }
+        if (id == ParamId.gateRelease) {
+          gateReleaseMs = v;
+          break;
+        }
+        if (id == ParamId.gateAutoGain) {
+          gateAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.deesserEnable) {
+          deesserOn = v != 0;
+          break;
+        }
+        if (id == ParamId.deesserFreq) {
+          deesserFreq = v;
+          break;
+        }
+        if (id == ParamId.loudnessEnable) {
+          loudnessOn = v != 0;
+          break;
+        }
+        if (id == ParamId.loudnessAmount) {
+          loudnessAmount = v;
+          break;
+        }
+        if (id == ParamId.bassHarmonics) {
+          bassHarmonics = v;
+          break;
+        }
+        if (id == ParamId.bassHarmonicBlend) {
+          bassHarmonicBlend = v;
+          break;
+        }
+        if (id == ParamId.bassSubFreq) {
+          bassSubFloor = v;
+          break;
+        }
+        if (id == ParamId.bassCutoffF) {
+          bassCutoff = v;
+          break;
+        }
+        if (id == ParamId.filterEnable) {
+          filterOn = v != 0;
+          break;
+        }
+        if (id == ParamId.filterType) {
+          filterType = v.toInt().clamp(0, 2);
+          break;
+        }
+        if (id == ParamId.filterFreq) {
+          filterFreq = v;
+          break;
+        }
+        if (id == ParamId.filterQ) {
+          filterQ = v;
+          break;
+        }
+        if (id == ParamId.deesserAmount) {
+          deesserAmount = v;
+          break;
+        }
+        if (id == ParamId.dyneqEnable) {
+          dyneqOn = v != 0;
+          break;
+        }
+        if (id == ParamId.dyneqAttack) {
+          dyneqAttackMs = v;
+          break;
+        }
+        if (id == ParamId.dyneqRelease) {
+          dyneqReleaseMs = v;
+          break;
+        }
+        if (id == ParamId.dyneqLowEnable) {
+          dyneqLowOn = v != 0;
+          break;
+        }
+        if (id == ParamId.dyneqLowFreq) {
+          dyneqLowFreq = v;
+          break;
+        }
+        if (id == ParamId.dyneqLowQ) {
+          dyneqLowQ = v;
+          break;
+        }
+        if (id == ParamId.dyneqLowGain) {
+          dyneqLowGain = v;
+          break;
+        }
+        if (id == ParamId.dyneqLowRange) {
+          dyneqLowRange = v;
+          break;
+        }
+        if (id == ParamId.dyneqLowThreshold) {
+          dyneqLowThreshold = v;
+          break;
+        }
+        if (id == ParamId.dyneqMidEnable) {
+          dyneqMidOn = v != 0;
+          break;
+        }
+        if (id == ParamId.dyneqMidFreq) {
+          dyneqMidFreq = v;
+          break;
+        }
+        if (id == ParamId.dyneqMidQ) {
+          dyneqMidQ = v;
+          break;
+        }
+        if (id == ParamId.dyneqMidGain) {
+          dyneqMidGain = v;
+          break;
+        }
+        if (id == ParamId.dyneqMidRange) {
+          dyneqMidRange = v;
+          break;
+        }
+        if (id == ParamId.dyneqMidThreshold) {
+          dyneqMidThreshold = v;
+          break;
+        }
+        if (id == ParamId.dyneqHighEnable) {
+          dyneqHighOn = v != 0;
+          break;
+        }
+        if (id == ParamId.dyneqHighFreq) {
+          dyneqHighFreq = v;
+          break;
+        }
+        if (id == ParamId.dyneqHighQ) {
+          dyneqHighQ = v;
+          break;
+        }
+        if (id == ParamId.dyneqHighGain) {
+          dyneqHighGain = v;
+          break;
+        }
+        if (id == ParamId.dyneqHighRange) {
+          dyneqHighRange = v;
+          break;
+        }
+        if (id == ParamId.gateHysteresis) {
+          gateHysteresis = v;
+          break;
+        }
+        if (id == ParamId.gateRange) {
+          gateRange = v;
+          break;
+        }
+        if (id == ParamId.gateHoldMs) {
+          gateHoldMs = v;
+          break;
+        }
+        if (id == ParamId.exciterOversample) {
+          exciterOversample = v != 0;
+          break;
+        }
+        if (id == ParamId.tubeOversample) {
+          tubeOversample = v != 0;
+          break;
+        }
+        if (id == ParamId.limiterRelease) {
+          limiterReleaseMs = v;
+          break;
+        }
+        if (id == ParamId.limiterThreshold) {
+          limiterThreshold = v;
+          break;
+        }
+        if (id == ParamId.limiterLink) {
+          limiterLink = v != 0;
+          break;
+        }
+        if (id == ParamId.limiterLookahead) {
+          limiterLookahead = v != 0;
+          break;
+        }
+        if (id == ParamId.dyneqB1Attack) {
+          dyneqB1Attack = v;
+          break;
+        }
+        if (id == ParamId.dyneqB1Release) {
+          dyneqB1Release = v;
+          break;
+        }
+        if (id == ParamId.dyneqB2Attack) {
+          dyneqB2Attack = v;
+          break;
+        }
+        if (id == ParamId.dyneqB2Release) {
+          dyneqB2Release = v;
+          break;
+        }
+        if (id == ParamId.dyneqB3Attack) {
+          dyneqB3Attack = v;
+          break;
+        }
+        if (id == ParamId.dyneqB3Release) {
+          dyneqB3Release = v;
+          break;
+        }
+        if (id == ParamId.fvEnable) {
+          fvOn = v != 0;
+          break;
+        }
+        if (id == ParamId.fvDecay) {
+          fvDecay = v;
+          break;
+        }
+        if (id == ParamId.fvDamp) {
+          fvDamp = v;
+          break;
+        }
+        if (id == ParamId.fvWet) {
+          fvWet = v;
+          break;
+        }
+        if (id == ParamId.fvDry) {
+          fvDry = v;
+          break;
+        }
+        if (id == ParamId.compEnable) {
+          compOn = v != 0;
+          break;
+        }
+        if (id == ParamId.compTimeconstant) {
+          compTimeconstant = v;
+          break;
+        }
+        if (id == ParamId.compGranularity) {
+          compGranularity = v.toInt();
+          break;
+        }
+        if (id == ParamId.compTfresolution) {
+          compTfresolution = v.toInt();
+          break;
+        }
         if (id.startsWith('comp.freq')) {
           final idx = int.tryParse(id.replaceFirst('comp.freq', ''));
           if (idx != null && idx >= 1 && idx <= 7) {
@@ -2472,10 +3164,22 @@ class AppModel extends ChangeNotifier {
             break;
           }
         }
-        if (id == ParamId.arbmagEnable) { arbmagOn = v != 0; break; }
-        if (id == ParamId.arbmagReady) { arbmagReady = v != 0; break; }
-        if (id == ParamId.arbmagOutGain) { arbmagOutputGain = v; break; }
-        if (id == ParamId.arbmagAutoGain) { arbmagAutoGain = v != 0; break; }
+        if (id == ParamId.arbmagEnable) {
+          arbmagOn = v != 0;
+          break;
+        }
+        if (id == ParamId.arbmagReady) {
+          arbmagReady = v != 0;
+          break;
+        }
+        if (id == ParamId.arbmagOutGain) {
+          arbmagOutputGain = v;
+          break;
+        }
+        if (id == ParamId.arbmagAutoGain) {
+          arbmagAutoGain = v != 0;
+          break;
+        }
         final m = RegExp(r'^liveprog\.param([1-8])$').firstMatch(id);
         if (m != null) lpParams[int.parse(m.group(1)!) - 1] = v;
     }
@@ -2503,7 +3207,9 @@ class AppModel extends ChangeNotifier {
     for (var i = 0; i < 5; i++) {
       final id = 'stereo.band${i + 1}';
       final eff =
-          (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) * stereoWidenMax * k;
+          (stereoBands[i] * macroMultiplier).clamp(0.0, 1.0) *
+          stereoWidenMax *
+          k;
       _markSent(id);
       send({'cmd': 'setParam', 'id': id, 'value': eff, 'isFloat': true});
     }
@@ -2554,7 +3260,9 @@ class AppModel extends ChangeNotifier {
   void setStereoEnabled(bool on) {
     stereoOn = on;
     if (on && stereoMix <= 0.0) {
-      stereoMix = _lastStereoMix > 0.0 ? _lastStereoMix : ParamDefaults.stereoMix;
+      stereoMix = _lastStereoMix > 0.0
+          ? _lastStereoMix
+          : ParamDefaults.stereoMix;
     }
     if (!on && stereoMix > 0.0) {
       _lastStereoMix = stereoMix;
@@ -2572,8 +3280,18 @@ class AppModel extends ChangeNotifier {
   /// 此处过滤只保序去杂，不补不增：缺 vendor id 时引擎照常拒收并 set_error。
   /// engine 自研 stage 的顺序本就钉死在 process_stereo_chain，过滤不丢任何功能。
   static const _vendorStageIds = {
-    'tube', 'comp', 'bass', 'eq', 'arbmag', 'convolver', 'ddc', 'liveprog',
-    'crossfeed', 'stereo', 'reverb', 'output',
+    'tube',
+    'comp',
+    'bass',
+    'eq',
+    'arbmag',
+    'convolver',
+    'ddc',
+    'liveprog',
+    'crossfeed',
+    'stereo',
+    'reverb',
+    'output',
   };
 
   static String filterVendorOrder(String order) => order
@@ -2584,7 +3302,11 @@ class AppModel extends ChangeNotifier {
 
   void setGraphOrder(String order) {
     graphOrder = order;
-    send({'cmd': 'setParamStr', 'id': 'graph.order', 'text': filterVendorOrder(order)});
+    send({
+      'cmd': 'setParamStr',
+      'id': 'graph.order',
+      'text': filterVendorOrder(order),
+    });
     // chainOrder 在 snapshot/会话 schema 内，必须持久化，
     // 否则处理链重排重启即丢（此前唯一漏掉的大类用户动作）。
     scheduleAutoSave();
@@ -2671,9 +3393,10 @@ class AppModel extends ChangeNotifier {
       'liveprog' => lpEnabled,
       'crossfeed' => xfeedOn,
       'stereo' => stereoOn,
-      'reverb' => reverbPreset >= 0 ||
-          // 自定义态 -2：fvOn 即开着，判关会让链视图与耳朵打架。
-          (reverbPreset == -2 && fvOn),
+      'reverb' =>
+        reverbPreset >= 0 ||
+            // 自定义态 -2：fvOn 即开着，判关会让链视图与耳朵打架。
+            (reverbPreset == -2 && fvOn),
       'output' => limiterOn,
       _ => false,
     };
@@ -2751,8 +3474,7 @@ class AppModel extends ChangeNotifier {
     for (var i = 1; i <= 8; i++) {
       final meta = metas[i];
       if (meta != null) {
-        sig.write(
-            '$i:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
+        sig.write('$i:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
       }
     }
     if (sig.toString() != _lpDeclSig) {
@@ -2778,7 +3500,12 @@ class AppModel extends ChangeNotifier {
     lpEnabled = on;
     notifyListeners();
     _markSent(ParamId.lpEnable);
-    send({'cmd': 'setParam', 'id': ParamId.lpEnable, 'value': on ? 1 : 0, 'isFloat': false});
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpEnable,
+      'value': on ? 1 : 0,
+      'isFloat': false,
+    });
     scheduleAutoSave();
   }
 
@@ -2792,7 +3519,12 @@ class AppModel extends ChangeNotifier {
     // 下次应用同签名代码时滑块值予以保留（见 setLiveprogCode）。
     notifyListeners();
     _markSent(ParamId.lpUnload);
-    send({'cmd': 'setParam', 'id': ParamId.lpUnload, 'value': 0, 'isFloat': false});
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.lpUnload,
+      'value': 0,
+      'isFloat': false,
+    });
     scheduleAutoSave();
   }
 
@@ -2806,7 +3538,9 @@ class AppModel extends ChangeNotifier {
   void setConvolverEnabled(bool on, {String? autoQualityMsg}) {
     convEnabled = on;
     if (on && !convReady) {
-      if (convIrPath != null && convIrPath!.isNotEmpty && File(convIrPath!).existsSync()) {
+      if (convIrPath != null &&
+          convIrPath!.isNotEmpty &&
+          File(convIrPath!).existsSync()) {
         loadConvolverIr(convIrPath!);
       }
     }
@@ -2819,7 +3553,7 @@ class AppModel extends ChangeNotifier {
       'cmd': 'setParam',
       'id': ParamId.convEnable,
       'value': on ? 1 : 0,
-      'isFloat': false
+      'isFloat': false,
     });
     scheduleAutoSave();
   }
@@ -3055,15 +3789,19 @@ class AppModel extends ChangeNotifier {
   }
 
   void _startHeadTracker() {
-    _headTracker.start(onYaw: (yaw) {
-      setSpatialHeadAzim(yaw, persist: false);
-    }).then((ok) {
-      if (!ok && spatialHeadTrack) {
-        spatialHeadTrack = false;
-        setInt(ParamId.spatialHeadTrack, 0);
-        notifyListeners();
-      }
-    });
+    _headTracker
+        .start(
+          onYaw: (yaw) {
+            setSpatialHeadAzim(yaw, persist: false);
+          },
+        )
+        .then((ok) {
+          if (!ok && spatialHeadTrack) {
+            spatialHeadTrack = false;
+            setInt(ParamId.spatialHeadTrack, 0);
+            notifyListeners();
+          }
+        });
   }
 
   /// 5.1 源模式切换（直通只在本地渲染 + raw 就绪 + 设备声道足够时生效，
@@ -3126,7 +3864,12 @@ class AppModel extends ChangeNotifier {
     fvOn = on;
     notifyListeners();
     _markSent(ParamId.fvEnable);
-    send({'cmd': 'setParam', 'id': ParamId.fvEnable, 'value': on ? 1 : 0, 'isFloat': false});
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.fvEnable,
+      'value': on ? 1 : 0,
+      'isFloat': false,
+    });
   }
 
   void selectReverbPreset(int id) {
@@ -3258,7 +4001,9 @@ class AppModel extends ChangeNotifier {
   void setDdcEnabled(bool on) {
     ddcOn = on;
     if (on && !ddcReady) {
-      if (ddcPath != null && ddcPath!.isNotEmpty && File(ddcPath!).existsSync()) {
+      if (ddcPath != null &&
+          ddcPath!.isNotEmpty &&
+          File(ddcPath!).existsSync()) {
         loadVdc(ddcPath!);
       }
     }
@@ -3270,7 +4015,7 @@ class AppModel extends ChangeNotifier {
       'cmd': 'setParam',
       'id': ParamId.ddcEnable,
       'value': (on && ddcReady) ? 1 : 0,
-      'isFloat': false
+      'isFloat': false,
     });
     // 绕过 setInt 后原本由它代劳的 UI 刷新没了，必须自己通知。
     // 漏掉这行会导致「关不掉」——模型已改但界面不重绘，直到别处触发刷新才生效。
@@ -3351,7 +4096,12 @@ class AppModel extends ChangeNotifier {
     convSpectrum = [];
     notifyListeners();
     _markSent(ParamId.convClear);
-    send({'cmd': 'setParam', 'id': ParamId.convClear, 'value': 0, 'isFloat': false});
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.convClear,
+      'value': 0,
+      'isFloat': false,
+    });
     scheduleAutoSave();
   }
 
@@ -3551,26 +4301,31 @@ class AppModel extends ChangeNotifier {
     setFloat(ParamId.dyneqB1Attack, dyneqB1Attack);
     notifyListeners();
   }
+
   void setDyneqB1Release(double v) {
     dyneqB1Release = v.clamp(10.0, 1000.0);
     setFloat(ParamId.dyneqB1Release, dyneqB1Release);
     notifyListeners();
   }
+
   void setDyneqB2Attack(double v) {
     dyneqB2Attack = v.clamp(0.1, 100.0);
     setFloat(ParamId.dyneqB2Attack, dyneqB2Attack);
     notifyListeners();
   }
+
   void setDyneqB2Release(double v) {
     dyneqB2Release = v.clamp(10.0, 1000.0);
     setFloat(ParamId.dyneqB2Release, dyneqB2Release);
     notifyListeners();
   }
+
   void setDyneqB3Attack(double v) {
     dyneqB3Attack = v.clamp(0.1, 100.0);
     setFloat(ParamId.dyneqB3Attack, dyneqB3Attack);
     notifyListeners();
   }
+
   void setDyneqB3Release(double v) {
     dyneqB3Release = v.clamp(10.0, 1000.0);
     setFloat(ParamId.dyneqB3Release, dyneqB3Release);
@@ -3582,7 +4337,6 @@ class AppModel extends ChangeNotifier {
     setInt(ParamId.dyneqLowEnable, on ? 1 : 0);
     notifyListeners();
   }
-
 
   void setDyneqLowFreq(double v) {
     dyneqLowFreq = v.clamp(20.0, 500.0);
@@ -3620,7 +4374,6 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-
   void setDyneqMidFreq(double v) {
     dyneqMidFreq = v.clamp(200.0, 8000.0);
     setFloat(ParamId.dyneqMidFreq, dyneqMidFreq);
@@ -3656,7 +4409,6 @@ class AppModel extends ChangeNotifier {
     setInt(ParamId.dyneqHighEnable, on ? 1 : 0);
     notifyListeners();
   }
-
 
   void setDyneqHighFreq(double v) {
     dyneqHighFreq = v.clamp(2000.0, 20000.0);
@@ -3729,7 +4481,12 @@ class AppModel extends ChangeNotifier {
     arbmagNodeCount = 0;
     arbmagString = '';
     _markSent(ParamId.arbmagEnable);
-    send({'cmd': 'setParam', 'id': ParamId.arbmagEnable, 'value': 0, 'isFloat': false});
+    send({
+      'cmd': 'setParam',
+      'id': ParamId.arbmagEnable,
+      'value': 0,
+      'isFloat': false,
+    });
     send({'cmd': 'setParamStr', 'id': ParamId.arbmagString, 'text': ''});
     notifyListeners();
     scheduleAutoSave();
@@ -3889,931 +4646,953 @@ class AppModel extends ChangeNotifier {
   /* ---- 多段图形均衡器（Phase 3） ---- */
 
   /// C4：按当前采样率重建 EQ 频率网格，增益按**频率**重新映射。
-///
-/// 裁掉高频带时不能简单截断 gains —— 那样低频段的增益会整体错位。
-/// 这里对每个新频点取旧网格中最接近的旧频点上的增益，
-/// 于是 Nyquist 以内的部分行为完全不变，只有越界的频带连同其增益一起消失。
-void _rebuildEqGridForSampleRate({bool notify = true}) {
-  final target = eqGridFor(eqBandsCount, engineRate);
-  if (target.isEmpty) return;
-  if (target.length == eqFrequencies.length) {
-    var same = true;
-    for (var i = 0; i < target.length; i++) {
-      if ((target[i] - eqFrequencies[i]).abs() > 1e-9) {
-        same = false;
-        break;
+  ///
+  /// 裁掉高频带时不能简单截断 gains —— 那样低频段的增益会整体错位。
+  /// 这里对每个新频点取旧网格中最接近的旧频点上的增益，
+  /// 于是 Nyquist 以内的部分行为完全不变，只有越界的频带连同其增益一起消失。
+  void _rebuildEqGridForSampleRate({bool notify = true}) {
+    final target = eqGridFor(eqBandsCount, engineRate);
+    if (target.isEmpty) return;
+    if (target.length == eqFrequencies.length) {
+      var same = true;
+      for (var i = 0; i < target.length; i++) {
+        if ((target[i] - eqFrequencies[i]).abs() > 1e-9) {
+          same = false;
+          break;
+        }
       }
+      if (same) return; // 无变化，不必重推曲线
     }
-    if (same) return;   // 无变化，不必重推曲线
-  }
-  final oldFreqs = eqFrequencies;
-  final oldGains = eqGains;
-  final oldQs = eqQs;
-  final newGains = <double>[];
-  final newQs = <double>[];
-  for (final f in target) {
-    if (oldFreqs.isEmpty || oldGains.isEmpty) {
-      newGains.add(0.0);
-      newQs.add(eqQ);
-      continue;
-    }
-    var bi = 0;
-    var best = double.infinity;
-    for (var i = 0; i < oldFreqs.length; i++) {
-      final d = (oldFreqs[i] - f).abs();
-      if (d < best) {
-        best = d;
-        bi = i;
+    final oldFreqs = eqFrequencies;
+    final oldGains = eqGains;
+    final oldQs = eqQs;
+    final newGains = <double>[];
+    final newQs = <double>[];
+    for (final f in target) {
+      if (oldFreqs.isEmpty || oldGains.isEmpty) {
+        newGains.add(0.0);
+        newQs.add(eqQ);
+        continue;
       }
+      var bi = 0;
+      var best = double.infinity;
+      for (var i = 0; i < oldFreqs.length; i++) {
+        final d = (oldFreqs[i] - f).abs();
+        if (d < best) {
+          best = d;
+          bi = i;
+        }
+      }
+      newGains.add(oldGains[bi]);
+      newQs.add(bi < oldQs.length ? oldQs[bi] : eqQ);
     }
-    newGains.add(oldGains[bi]);
-    newQs.add(bi < oldQs.length ? oldQs[bi] : eqQ);
+    eqFrequencies = target;
+    eqGains = newGains;
+    eqQs = newQs;
+    _pushEqCurve();
+    if (notify) notifyListeners();
   }
-  eqFrequencies = target;
-  eqGains = newGains;
-  eqQs = newQs;
-  _pushEqCurve();
-  if (notify) notifyListeners();
-}
 
-/// 采样率变更后由调用方触发，重建网格并把新值落盘。
-/// 进程内模式：重启 isolate（spawn 路径按新采样率建链，就绪后走标准 session
-/// 回放：参数/脚本/IR/插件/音源/bypass 全回来，约 1 秒静音间隙）。
-/// 桥模式跟对端走：仅落盘（回进程内/下次启动生效），设置页有 hint 明示。
-bool _pendingRestartPush = false; // isolate 重启后就绪时重推音源/bypass
-void setSampleRate(int rate) {
-  if (rate == config.sampleRate) return;
-  config.sampleRate = rate;
-  ConfigManager.save(config);
-  _rebuildEqGridForSampleRate();
-  if (audioMode == 'vbcallback' || audioMode == 'asio') {
+  /// 采样率变更后由调用方触发，重建网格并把新值落盘。
+  /// 进程内模式：重启 isolate（spawn 路径按新采样率建链，就绪后走标准 session
+  /// 回放：参数/脚本/IR/插件/音源/bypass 全回来，约 1 秒静音间隙）。
+  /// 桥模式跟对端走：仅落盘（回进程内/下次启动生效），设置页有 hint 明示。
+  bool _pendingRestartPush = false; // isolate 重启后就绪时重推音源/bypass
+  void setSampleRate(int rate) {
+    if (rate == config.sampleRate) return;
+    config.sampleRate = rate;
+    ConfigManager.save(config);
+    _rebuildEqGridForSampleRate();
+    if (audioMode == 'vbcallback' || audioMode == 'asio') {
+      notifyListeners();
+      return;
+    }
+    _pendingRestartPush = true;
+    _restartIsolate();
     notifyListeners();
-    return;
   }
-  _pendingRestartPush = true;
-  _restartIsolate();
-  notifyListeners();
-}
 
-/// WASAPI 输出重试（降级态用户手动触发）：本质是重启 isolate 再协商一次。
-void retryWasapi() {
-  wasapiError = '';
-  _fatalRetries = 0;
-  _restartIsolate();
-  notifyListeners();
-}
+  /// WASAPI 输出重试（降级态用户手动触发）：本质是重启 isolate 再协商一次。
+  void retryWasapi() {
+    wasapiError = '';
+    _fatalRetries = 0;
+    _restartIsolate();
+    notifyListeners();
+  }
 
-/// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
-/// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
-int _restartToken = 0;
+  /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
+  /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
+  int _restartToken = 0;
 
-Future<void> _stopAudioIsolate(Isolate iso, SendPort? port) async {
-  final done = Completer<void>();
-  final exitPort = ReceivePort();
-  exitPort.listen((_) {
-    if (!done.isCompleted) done.complete();
-  });
-  try {
-    iso.addOnExitListener(exitPort.sendPort);
-  } catch (_) {}
-  try {
-    port?.send({'cmd': 'shutdown'});
-  } catch (_) {}
-  try {
-    await done.future.timeout(const Duration(milliseconds: 800));
-  } catch (_) {
+  Future<void> _stopAudioIsolate(Isolate iso, SendPort? port) async {
+    final done = Completer<void>();
+    final exitPort = ReceivePort();
+    exitPort.listen((_) {
+      if (!done.isCompleted) done.complete();
+    });
     try {
-      iso.kill(priority: Isolate.immediate);
+      iso.addOnExitListener(exitPort.sendPort);
     } catch (_) {}
-  } finally {
     try {
-      iso.removeOnExitListener(exitPort.sendPort);
+      port?.send({'cmd': 'shutdown'});
     } catch (_) {}
-    exitPort.close();
+    try {
+      await done.future.timeout(const Duration(milliseconds: 800));
+    } catch (_) {
+      try {
+        iso.kill(priority: Isolate.immediate);
+      } catch (_) {}
+    } finally {
+      try {
+        iso.removeOnExitListener(exitPort.sendPort);
+      } catch (_) {}
+      exitPort.close();
+    }
   }
-}
 
-void _restartIsolate() {
-  final token = ++_restartToken;
-  unawaited(_restartIsolateAsync(token));
-}
-
-Future<void> _restartIsolateAsync(int token) async {
-  final oldIso = _iso;
-  final oldPort = _toIso;
-  final oldFrom = _fromIso;
-  _iso = null;
-  _toIso = null;
-  _fromIso = null;
-  try {
-    oldFrom?.close();
-  } catch (_) {}
-  if (oldIso != null) {
-    await _stopAudioIsolate(oldIso, oldPort);
+  void _restartIsolate() {
+    final token = ++_restartToken;
+    unawaited(_restartIsolateAsync(token));
   }
-  if (token != _restartToken) return;
-  conn = EngineConn.connecting;
-  playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
-  _spawn();
-}
 
-// fatal-backoff 重试计数（'ready' 到达即清零；只对设备失效用）。
-int _fatalRetries = 0;
+  Future<void> _restartIsolateAsync(int token) async {
+    final oldIso = _iso;
+    final oldPort = _toIso;
+    final oldFrom = _fromIso;
+    _iso = null;
+    _toIso = null;
+    _fromIso = null;
+    try {
+      oldFrom?.close();
+    } catch (_) {}
+    if (oldIso != null) {
+      await _stopAudioIsolate(oldIso, oldPort);
+    }
+    if (token != _restartToken) return;
+    conn = EngineConn.connecting;
+    playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
+    _spawn();
+  }
 
-/// fatal 屏退避重启：对端独占释放前重起多少次都没用，但 VB 侧切设备/重启引擎
-/// 会顺手释放，2s 间隔探 5 次能覆盖大多数窗口；10s 还不行就留屏（用户改对端）。
-void _scheduleFatalRetry() {
-  if (_fatalRetries >= 5) return;
-  _fatalRetries++;
-  Future.delayed(const Duration(seconds: 2), () {
-    if (conn != EngineConn.ready &&
-        audioMode != 'vbcallback' &&
-        audioMode != 'asio') {
-      _restartIsolate();
+  // fatal-backoff 重试计数（'ready' 到达即清零；只对设备失效用）。
+  int _fatalRetries = 0;
+
+  /// fatal 屏退避重启：对端独占释放前重起多少次都没用，但 VB 侧切设备/重启引擎
+  /// 会顺手释放，2s 间隔探 5 次能覆盖大多数窗口；10s 还不行就留屏（用户改对端）。
+  void _scheduleFatalRetry() {
+    if (_fatalRetries >= 5) return;
+    _fatalRetries++;
+    Future.delayed(const Duration(seconds: 2), () {
+      if (conn != EngineConn.ready &&
+          audioMode != 'vbcallback' &&
+          audioMode != 'asio') {
+        _restartIsolate();
+        notifyListeners();
+      }
+    });
+  }
+
+  /// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
+  /// vbcallback/asio 切入/切出时联动 isolate 启停对应桥（WASAPI 路径随之
+  /// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
+  void setAudioMode(String id) {
+    final valid = AudioModes.normalize(id);
+    config.modeCategory = AudioModes.categoryForMode(valid);
+    if (config.modeCategory == AudioModes.categoryAttachment) {
+      config.attachmentMode = (valid == 'vbcallback')
+          ? AudioModes.attachVoicemeeterApi
+          : AudioModes.attachSysApo;
+    } else {
+      config.pipelineOutput = (valid == 'asio')
+          ? AudioModes.outputAsioClient
+          : (valid == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
+    }
+    if (valid == audioMode && config.audioMode == valid) return;
+    final wasVb = audioMode == 'vbcallback';
+    final isVb = valid == 'vbcallback';
+    final wasAsio = audioMode == 'asio';
+    final isAsio = valid == 'asio';
+    final wasVaio = audioMode == 'vaio';
+    final isVaio = valid == 'vaio';
+    audioMode = valid;
+    config.audioMode = valid;
+    ConfigManager.save(config);
+    if (wasVb != isVb) {
+      // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
+      if (isVb) {
+        _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
+        _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+      }
+      _toIso?.send({'cmd': 'vbmode', 'on': isVb});
+      if (!isVb) {
+        vbActive = false;
+        vbInfo = {};
+      }
+    }
+    if (wasAsio != isAsio) {
+      // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
+      _toIso?.send({
+        'cmd': 'asiomode',
+        'on': isAsio,
+        'driver': config.asioDriver,
+        'bufSize': config.asioBufSize,
+        'outPair': config.asioOutPair,
+      });
+      if (!isAsio) {
+        asioActive = false;
+        asioInfo = {};
+      }
+    }
+    if (wasVaio != isVaio) {
+      _toIso?.send({
+        'cmd': 'vaiomode',
+        'on': isVaio,
+        'outputEndpoint': config.vaioOutputEndpoint,
+      });
+      if (!isVaio) {
+        vaioActive = false;
+        vaioInfo = {};
+      }
+    }
+    notifyListeners();
+  }
+
+  /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
+  void setModeCategory(String category) {
+    if (category != AudioModes.categoryAttachment &&
+        category != AudioModes.categoryPipeline) {
+      return;
+    }
+    config.modeCategory = category;
+    final composed = AudioModes.composeMode(
+      category: category,
+      attachmentMode: config.attachmentMode,
+      pipelineOut: config.pipelineOutput,
+    );
+    if (composed != audioMode) {
+      setAudioMode(composed);
+    } else {
+      ConfigManager.save(config);
       notifyListeners();
     }
-  });
-}
+  }
 
-/// 音频处理模式切换：非法 id 直接忽略；合法即落盘 + 通知。
-/// vbcallback/asio 切入/切出时联动 isolate 启停对应桥（WASAPI 路径随之
-/// 暂停/恢复）；其余模式当前仅持久化选择（引擎接线待后续版本，重启生效）。
-void setAudioMode(String id) {
-  final valid = AudioModes.normalize(id);
-  config.modeCategory = AudioModes.categoryForMode(valid);
-  if (config.modeCategory == AudioModes.categoryAttachment) {
-    config.attachmentMode = (valid == 'vbcallback')
-        ? AudioModes.attachVoicemeeterApi
-        : AudioModes.attachSysApo;
-  } else {
-    config.pipelineOutput = (valid == 'asio')
-        ? AudioModes.outputAsioClient
-        : (valid == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
-  }
-  if (valid == audioMode && config.audioMode == valid) return;
-  final wasVb = audioMode == 'vbcallback';
-  final isVb = valid == 'vbcallback';
-  final wasAsio = audioMode == 'asio';
-  final isAsio = valid == 'asio';
-  final wasVaio = audioMode == 'vaio';
-  final isVaio = valid == 'vaio';
-  audioMode = valid;
-  config.audioMode = valid;
-  ConfigManager.save(config);
-  if (wasVb != isVb) {
-    // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
-    if (isVb) {
-      _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
-      _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
-    }
-    _toIso?.send({'cmd': 'vbmode', 'on': isVb});
-    if (!isVb) {
-      vbActive = false;
-      vbInfo = {};
+  /// ADR-009: 切换附加模式子类型（System APO vs Voicemeeter API）
+  void setAttachmentMode(String mode) {
+    config.attachmentMode = mode;
+    if (modeCategory == AudioModes.categoryAttachment) {
+      final composed = AudioModes.composeMode(
+        category: AudioModes.categoryAttachment,
+        attachmentMode: mode,
+      );
+      if (composed != audioMode) {
+        setAudioMode(composed);
+      } else {
+        ConfigManager.save(config);
+        notifyListeners();
+      }
+    } else {
+      ConfigManager.save(config);
+      notifyListeners();
     }
   }
-  if (wasAsio != isAsio) {
-    // asiomode 内部自带 detect（无论能否启动都回 asiodrivers 事件给设置页）。
+
+  /// ADR-009: 切换管线输入源（Virtual ASIO / AuraVAIO / WASAPI）
+  void setPipelineInput(String inType) {
+    config.pipelineInput = inType;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  /// ADR-009: 切换管线输出端（WASAPI Render / AuraVAIO / ASIO Client）
+  void setPipelineOutput(String outType) {
+    config.pipelineOutput = outType;
+    if (modeCategory == AudioModes.categoryPipeline) {
+      final composed = AudioModes.composeMode(
+        category: AudioModes.categoryPipeline,
+        pipelineOut: outType,
+      );
+      if (composed != audioMode) {
+        setAudioMode(composed);
+      } else {
+        ConfigManager.save(config);
+        notifyListeners();
+      }
+    } else {
+      ConfigManager.save(config);
+      notifyListeners();
+    }
+  }
+
+  void setPipelineInputDevice(String device) {
+    config.pipelineInputDevice = device;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  void setPipelineOutputDevice(String device) {
+    config.pipelineOutputDevice = device;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  void setPipelineInputEnabled(bool enabled) {
+    config.pipelineInputEnabled = enabled;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  void setPipelineOutputEnabled(bool enabled) {
+    config.pipelineOutputEnabled = enabled;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  /// 刷新所有 WASAPI 端点与音频设备
+  Future<void> refreshAudioDevices() async {
+    refreshVaioDetect();
+    if (_testing || !Platform.isWindows) return;
+    try {
+      final exe = _findApoInspectExe();
+      if (exe != null && exe.existsSync()) {
+        final res = await Process.run(exe.path, [], stdoutEncoding: utf8);
+        if (res.exitCode == 0) {
+          final stdout = (res.stdout as String).trim();
+          final lines = stdout.split('\n');
+          final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
+          if (lastLine.isNotEmpty) {
+            final json = jsonDecode(lastLine) as Map<String, dynamic>;
+            final eps = (json['endpoints'] as List?) ?? [];
+            final items = <AudioDeviceItem>[];
+            for (final ep in eps) {
+              if (ep is Map) {
+                final name = (ep['name'] as String?) ?? '';
+                final dir = (ep['direction'] as String?) ?? 'render';
+                final id = (ep['id'] as String?) ?? '';
+                final state = (ep['state'] as num?)?.toInt() ?? 1;
+                if (name.isNotEmpty && state == 1) {
+                  items.add(
+                    AudioDeviceItem(
+                      id: id,
+                      name: name,
+                      isRender: dir == 'render',
+                      active: true,
+                    ),
+                  );
+                }
+              }
+            }
+            if (items.isNotEmpty) {
+              wasapiDevices = items;
+              lastAudioError = null;
+              notifyListeners();
+            }
+          }
+        } else {
+          lastAudioError = '端点探测工具退出异常 (代码: ${res.exitCode})';
+          notifyListeners();
+        }
+      }
+    } catch (e) {
+      lastAudioError = '刷新音频设备失败: $e';
+      notifyListeners();
+    }
+  }
+
+  File? _findApoInspectExe() {
+    var dir = Directory.current;
+    for (var i = 0; i < 4; i++) {
+      final candidate = File(
+        '${dir.path}/core/desktop/windows-drivers/out/Release/apo_inspect.exe',
+      );
+      if (candidate.existsSync()) return candidate;
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    return null;
+  }
+
+  File? _findVaioInstallScript() {
+    var dir = Directory.current;
+    for (var i = 0; i < 4; i++) {
+      final candidate = File(
+        '${dir.path}/core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1',
+      );
+      if (candidate.existsSync()) return candidate;
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    return null;
+  }
+
+  /// 一键 UAC 提权安装 AuraVAIO 虚拟声卡驱动
+  Future<bool> installVaioDriver({bool elevated = true}) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final script = _findVaioInstallScript();
+      if (script == null) {
+        lastVaioError = '未找到 install_driver.ps1 安装脚本';
+        notifyListeners();
+        return false;
+      }
+      ProcessResult res;
+      if (elevated) {
+        // 通过 PowerShell Start-Process -Verb RunAs 唤起 Windows UAC 管理员提权确认框
+        final cmd =
+            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'install\', \'-Config\', \'Release\'';
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        res = await Process.run('powershell', [
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+          '-Action',
+          'install',
+          '-Config',
+          'Release',
+        ]);
+      }
+      refreshVaioDetect();
+      await refreshAudioDevices();
+      final ok = res.exitCode == 0;
+      if (!ok) {
+        lastVaioError =
+            'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
+      } else {
+        lastVaioError = null;
+      }
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      lastVaioError = '安装驱动异常: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// 一键 UAC 提权卸载 AuraVAIO 虚拟声卡驱动
+  Future<bool> uninstallVaioDriver({bool elevated = true}) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final script = _findVaioInstallScript();
+      if (script == null) return false;
+      ProcessResult res;
+      if (elevated) {
+        final cmd =
+            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'uninstall\', \'-RemoveTestCert\'';
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        res = await Process.run('powershell', [
+          '-ExecutionPolicy',
+          'Bypass',
+          '-File',
+          script.path,
+          '-Action',
+          'uninstall',
+          '-RemoveTestCert',
+        ]);
+      }
+      refreshVaioDetect();
+      await refreshAudioDevices();
+      final ok = res.exitCode == 0;
+      if (ok) lastVaioError = null;
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      lastVaioError = '卸载异常: $e';
+      notifyListeners();
+      return false;
+    }
+  }
+
+  void setApoTargetEndpoint(String endpoint) {
+    config.apoTargetEndpoint = endpoint;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  void setMonitorMirroring(bool enabled) {
+    config.monitorMirroring = enabled;
+    ConfigManager.save(config);
+    notifyListeners();
+  }
+
+  void setApoAttached(bool attached) {
+    apoAttached = attached;
+    notifyListeners();
+  }
+
+  /// 检查 AuraDSP Virtual ASIO 驱动在 Windows 系统的注册状态
+  Future<void> checkAsioDriverStatus() async {
+    if (!Platform.isWindows) {
+      asioDriverInstalled = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final res = await Process.run('reg.exe', [
+        'query',
+        r'HKLM\SOFTWARE\ASIO\AuraDSP Driver',
+      ]);
+      asioDriverInstalled = (res.exitCode == 0);
+    } catch (_) {
+      asioDriverInstalled = false;
+    }
+    notifyListeners();
+  }
+
+  /// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）
+  Future<bool> registerAsioDriver({bool elevated = true}) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final script = _findAsioRegisterScript();
+      if (script != null) {
+        ProcessResult res;
+        if (elevated) {
+          // 唤起 Windows UAC 提权对话框执行注册
+          final cmd =
+              'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'register\'';
+          res = await Process.run('powershell', ['-Command', cmd]);
+        } else {
+          res = await Process.run('powershell', [
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            script.path,
+            '-Action',
+            'register',
+          ]);
+        }
+        await checkAsioDriverStatus();
+        final ok = res.exitCode == 0 && asioDriverInstalled;
+        if (!ok) {
+          lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+        } else {
+          lastAsioError = null;
+        }
+        notifyListeners();
+        return ok;
+      }
+    } catch (e) {
+      lastAsioError = 'ASIO 驱动注册异常: $e';
+      notifyListeners();
+    }
+    return false;
+  }
+
+  /// 一键反注册 AuraDSP 虚拟 ASIO 驱动（支持 Windows UAC 提权授权）
+  Future<bool> unregisterAsioDriver({bool elevated = true}) async {
+    if (!Platform.isWindows) return false;
+    try {
+      final script = _findAsioRegisterScript();
+      if (script != null) {
+        ProcessResult res;
+        if (elevated) {
+          final cmd =
+              'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'unregister\'';
+          res = await Process.run('powershell', ['-Command', cmd]);
+        } else {
+          res = await Process.run('powershell', [
+            '-ExecutionPolicy',
+            'Bypass',
+            '-File',
+            script.path,
+            '-Action',
+            'unregister',
+          ]);
+        }
+        await checkAsioDriverStatus();
+        final ok = res.exitCode == 0 && !asioDriverInstalled;
+        if (!ok) {
+          lastAsioError = 'ASIO 驱动注销未完成';
+        } else {
+          lastAsioError = null;
+        }
+        notifyListeners();
+        return ok;
+      }
+    } catch (e) {
+      lastAsioError = 'ASIO 驱动注销异常: $e';
+      notifyListeners();
+    }
+    return false;
+  }
+
+  File? _findAsioRegisterScript() {
+    var dir = Directory.current;
+    for (var i = 0; i < 4; i++) {
+      final candidates = [
+        File(
+          '${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1',
+        ),
+        File('${dir.path}/scripts/register_driver.ps1'),
+        File('${dir.path}/register_driver.ps1'),
+        File('${dir.path}/../scripts/register_driver.ps1'),
+      ];
+      for (final c in candidates) {
+        if (c.existsSync()) return c;
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    return null;
+  }
+
+  File? _findApoConfigScript() {
+    var dir = Directory.current;
+    for (var i = 0; i < 4; i++) {
+      final candidates = [
+        File(
+          '${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py',
+        ),
+        File('${dir.path}/scripts/apo_config.py'),
+        File('${dir.path}/apo_config.py'),
+        File('${dir.path}/../scripts/apo_config.py'),
+      ];
+      for (final c in candidates) {
+        if (c.existsSync()) return c;
+      }
+      final parent = dir.parent;
+      if (parent.path == dir.path) break;
+      dir = parent;
+    }
+    return null;
+  }
+
+  void setApoCompositeMode(bool enabled) {
+    apoCompositeMode = enabled;
+    notifyListeners();
+  }
+
+  /// 检查 System APO 在系统注册与端点挂载状态，并检测心跳
+  Future<void> checkApoStatus({double timeout = 0.4}) async {
+    if (!Platform.isWindows) {
+      apoAttached = false;
+      apoHeartbeatAlive = false;
+      notifyListeners();
+      return;
+    }
+    try {
+      final script = _findApoConfigScript();
+      if (script != null) {
+        final res = await Process.run('python', [
+          script.path,
+          'status',
+          '--timeout',
+          timeout.toString(),
+          '--json',
+        ]);
+        if (res.exitCode == 0) {
+          final out = res.stdout.toString().trim();
+          final lines = out
+              .split(RegExp(r'\r?\n'))
+              .where((l) => l.trim().startsWith('{'))
+              .toList();
+          if (lines.isNotEmpty) {
+            final data = jsonDecode(lines.last) as Map<String, dynamic>;
+            final rawInstalled = data['installed_endpoints'] as List?;
+            final installed = rawInstalled != null
+                ? rawInstalled
+                      .map((e) => Map<String, dynamic>.from(e as Map))
+                      .toList()
+                : <Map<String, dynamic>>[];
+            apoInstalledEndpoints = installed;
+
+            final target = config.apoTargetEndpoint;
+            if (target.isEmpty) {
+              apoAttached = installed.isNotEmpty;
+            } else {
+              apoAttached = installed.any((e) {
+                final short = e['short_guid']?.toString().toLowerCase() ?? '';
+                final name = e['DeviceName']?.toString().toLowerCase() ?? '';
+                final id = e['EndpointId']?.toString().toLowerCase() ?? '';
+                final t = target.toLowerCase();
+                return short.contains(t) ||
+                    name.contains(t) ||
+                    id.contains(t) ||
+                    t.contains(short);
+              });
+            }
+
+            final hb = data['heartbeat'] as Map<String, dynamic>?;
+            if (hb != null && hb['alive'] == true) {
+              apoHeartbeatAlive = true;
+              apoHeartbeatSeq = (hb['seq'] as num?)?.toInt() ?? 0;
+              apoHeartbeatSr = (hb['sr'] as num?)?.toInt() ?? 0;
+              apoHeartbeatFrames = (hb['frames'] as num?)?.toInt() ?? 0;
+            } else {
+              apoHeartbeatAlive = false;
+            }
+            lastApoError = null;
+            notifyListeners();
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      // 保持安静回退
+    }
+    notifyListeners();
+  }
+
+  /// 一键将 System APO 挂载到指定音频端点（支持 Windows UAC 提权授权，支持复合插槽）
+  Future<bool> attachSystemApo({
+    String? endpointNameOrId,
+    bool? composite,
+    bool elevated = true,
+  }) async {
+    if (!Platform.isWindows) return false;
+    isApoOperating = true;
+    lastApoError = null;
+    notifyListeners();
+
+    try {
+      final script = _findApoConfigScript();
+      if (script == null) {
+        lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        isApoOperating = false;
+        notifyListeners();
+        return false;
+      }
+
+      final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+          ? endpointNameOrId
+          : config.apoTargetEndpoint;
+      if (target.isEmpty) {
+        lastApoError = '请先选择需要附加的音频端点';
+        isApoOperating = false;
+        notifyListeners();
+        return false;
+      }
+
+      final useComposite = composite ?? apoCompositeMode;
+      ProcessResult res;
+      if (elevated) {
+        final modeArg = useComposite ? ", '--composite'" : "";
+        final cmd =
+            "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'install', '\"$target\"', '--yes', '--force'$modeArg";
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        final args = [
+          script.path,
+          'install',
+          target,
+          '--yes',
+          '--force',
+          if (useComposite) '--composite',
+          '--json',
+        ];
+        res = await Process.run('python', args);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 600));
+      await checkApoStatus(timeout: 0.6);
+
+      final ok = (res.exitCode == 0) && apoAttached;
+      if (!ok && lastApoError == null) {
+        lastApoError = 'System APO 附加未生效，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
+      }
+      isApoOperating = false;
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      lastApoError = 'System APO 附加异常: $e';
+      isApoOperating = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// 一键卸载已挂载的 System APO 并精确还原原始系统/厂商 APO
+  Future<bool> detachSystemApo({
+    String? endpointNameOrId,
+    bool elevated = true,
+  }) async {
+    if (!Platform.isWindows) return false;
+    isApoOperating = true;
+    lastApoError = null;
+    notifyListeners();
+
+    try {
+      final script = _findApoConfigScript();
+      if (script == null) {
+        lastApoError = '未找到 apo_config.py 驱动管理脚本';
+        isApoOperating = false;
+        notifyListeners();
+        return false;
+      }
+
+      final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
+          ? endpointNameOrId
+          : config.apoTargetEndpoint;
+      ProcessResult res;
+      if (elevated) {
+        final targetArg = target.isNotEmpty ? ", '\"$target\"'" : "";
+        final cmd =
+            "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'uninstall'$targetArg, '--yes'";
+        res = await Process.run('powershell', ['-Command', cmd]);
+      } else {
+        final args = [
+          script.path,
+          'uninstall',
+          if (target.isNotEmpty) target,
+          '--yes',
+          '--json',
+        ];
+        res = await Process.run('python', args);
+      }
+
+      await Future.delayed(const Duration(milliseconds: 600));
+      await checkApoStatus(timeout: 0.6);
+
+      final ok = (res.exitCode == 0);
+      if (!ok && lastApoError == null) {
+        lastApoError = 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
+      }
+      isApoOperating = false;
+      notifyListeners();
+      return ok;
+    } catch (e) {
+      lastApoError = 'System APO 卸载异常: $e';
+      isApoOperating = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
+  void setVbBus(int group, bool on) {
+    if (group < 0 || group > 7) return;
+    final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
+    if (next == vbBusMask) return;
+    vbBusMask = next & 0xFF;
+    config.vbBusMask = vbBusMask;
+    ConfigManager.save(config);
+    _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
+    notifyListeners();
+  }
+
+  /// VB 按路插件处理开关：bit g = 组 g 总线吃插件链（厂商 DSP 不受影响）。
+  void setVbPluginGroup(int group, bool on) {
+    if (group < 0 || group > 7) return;
+    final next = on
+        ? (vbPluginGroupMask | (1 << group))
+        : (vbPluginGroupMask & ~(1 << group));
+    if (next == vbPluginGroupMask) return;
+    vbPluginGroupMask = next & 0xFF;
+    config.vbPluginGroupMask = vbPluginGroupMask;
+    ConfigManager.save(config);
+    _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+    _fallbackVbPluginEditorGroup();
+    notifyListeners();
+  }
+
+  /// 批处理：全部总线开/关插件链。
+  void setVbPluginGroupAll(bool on) {
+    final next = on ? 0xFF : 0x00;
+    if (next == vbPluginGroupMask) return;
+    // 全关在 UI 语义 = 「全部不勾」；落盘仍用原值（0 回全开口径只影响加载），
+    // 这里直接保存 0xFF/0x00 原值：全关是用户显式选择。
+    vbPluginGroupMask = next;
+    config.vbPluginGroupMask = next;
+    ConfigManager.save(config);
+    _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+    _fallbackVbPluginEditorGroup();
+    notifyListeners();
+  }
+
+  /// v2 按路编辑器目标路选择（仅有效掩码内合法路，或 kVbRouteAll）。
+  void setVbPluginEditorGroup(int group) {
+    if (group == kVbRouteAll) {
+      if (vbPluginEditorGroup == kVbRouteAll) return;
+      vbPluginEditorGroup = kVbRouteAll;
+      notifyListeners();
+      return;
+    }
+    if (group < 0 || group > 7) return;
+    if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
+    if (vbPluginEditorGroup == group) return;
+    vbPluginEditorGroup = group;
+    notifyListeners();
+  }
+
+  /// 选中路失效（通道关/插件取消勾选）时回落「全部」；「全部」恒有效。
+  /// 无任何有效路时由 UI 层按 vbEffectiveRouteMask==0 显示旁路态
+  /// （kVbRouteAll 保留，打开界面按钮在 UI 侧按无有效路禁用）。
+  void _fallbackVbPluginEditorGroup() {
+    if (vbPluginEditorGroup == kVbRouteAll) return;
+    if (vbPluginEditorGroup >= 0 &&
+        (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
+      return;
+    }
+    vbPluginEditorGroup = kVbRouteAll;
+  }
+
+  /// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。
+  void setAsioDriver(String name) {
+    if (config.asioDriver == name) return;
+    config.asioDriver = name;
+    ConfigManager.save(config);
+    if (asioActive) _sendAsioRestart();
+    notifyListeners();
+  }
+
+  /// ASIO 缓冲档：0=驱动 preferredSize；桥在跑则热切换。
+  void setAsioBufSize(int frames) {
+    if (config.asioBufSize == frames) return;
+    config.asioBufSize = frames;
+    ConfigManager.save(config);
+    if (asioActive) _sendAsioRestart();
+    notifyListeners();
+  }
+
+  /// ASIO 输出对起始声道（L=R+1 配对）；桥在跑则热切换。
+  void setAsioOutPair(int ch) {
+    if (config.asioOutPair == ch) return;
+    config.asioOutPair = ch;
+    ConfigManager.save(config);
+    if (asioActive) _sendAsioRestart();
+    notifyListeners();
+  }
+
+  /// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
+  void refreshAsioDrivers() {
+    _toIso?.send({'cmd': 'asiodetect'});
+  }
+
+  /// AuraVAIO 物理输出端点重选：落盘 + 通知；桥在跑则热切换。
+  void setVaioOutputEndpoint(String endpoint) {
+    if (config.vaioOutputEndpoint == endpoint) return;
+    config.vaioOutputEndpoint = endpoint;
+    ConfigManager.save(config);
+    if (vaioActive) {
+      _toIso?.send({
+        'cmd': 'vaiorestart',
+        'outputEndpoint': config.vaioOutputEndpoint,
+      });
+    }
+    notifyListeners();
+  }
+
+  /// 触发一次 AuraVAIO 驱动与端点探测。
+  void refreshVaioDetect() {
+    _toIso?.send({'cmd': 'vaiodetect'});
+  }
+
+  void _sendAsioRestart() {
     _toIso?.send({
-      'cmd': 'asiomode',
-      'on': isAsio,
+      'cmd': 'asiorestart',
       'driver': config.asioDriver,
       'bufSize': config.asioBufSize,
       'outPair': config.asioOutPair,
     });
-    if (!isAsio) {
-      asioActive = false;
-      asioInfo = {};
-    }
   }
-  if (wasVaio != isVaio) {
-    _toIso?.send({
-      'cmd': 'vaiomode',
-      'on': isVaio,
-      'outputEndpoint': config.vaioOutputEndpoint,
-    });
-    if (!isVaio) {
-      vaioActive = false;
-      vaioInfo = {};
-    }
-  }
-  notifyListeners();
-}
 
-/// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
-void setModeCategory(String category) {
-  if (category != AudioModes.categoryAttachment &&
-      category != AudioModes.categoryPipeline) {
-    return;
-  }
-  config.modeCategory = category;
-  final composed = AudioModes.composeMode(
-    category: category,
-    attachmentMode: config.attachmentMode,
-    pipelineOut: config.pipelineOutput,
-  );
-  if (composed != audioMode) {
-    setAudioMode(composed);
-  } else {
-    ConfigManager.save(config);
-    notifyListeners();
-  }
-}
-
-/// ADR-009: 切换附加模式子类型（System APO vs Voicemeeter API）
-void setAttachmentMode(String mode) {
-  config.attachmentMode = mode;
-  if (modeCategory == AudioModes.categoryAttachment) {
-    final composed = AudioModes.composeMode(
-      category: AudioModes.categoryAttachment,
-      attachmentMode: mode,
-    );
-    if (composed != audioMode) {
-      setAudioMode(composed);
-    } else {
-      ConfigManager.save(config);
-      notifyListeners();
-    }
-  } else {
-    ConfigManager.save(config);
-    notifyListeners();
-  }
-}
-
-/// ADR-009: 切换管线输入源（Virtual ASIO / AuraVAIO / WASAPI）
-void setPipelineInput(String inType) {
-  config.pipelineInput = inType;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-/// ADR-009: 切换管线输出端（WASAPI Render / AuraVAIO / ASIO Client）
-void setPipelineOutput(String outType) {
-  config.pipelineOutput = outType;
-  if (modeCategory == AudioModes.categoryPipeline) {
-    final composed = AudioModes.composeMode(
-      category: AudioModes.categoryPipeline,
-      pipelineOut: outType,
-    );
-    if (composed != audioMode) {
-      setAudioMode(composed);
-    } else {
-      ConfigManager.save(config);
-      notifyListeners();
-    }
-  } else {
-    ConfigManager.save(config);
-    notifyListeners();
-  }
-}
-
-void setPipelineInputDevice(String device) {
-  config.pipelineInputDevice = device;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-void setPipelineOutputDevice(String device) {
-  config.pipelineOutputDevice = device;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-void setPipelineInputEnabled(bool enabled) {
-  config.pipelineInputEnabled = enabled;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-void setPipelineOutputEnabled(bool enabled) {
-  config.pipelineOutputEnabled = enabled;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-/// 刷新所有 WASAPI 端点与音频设备
-Future<void> refreshAudioDevices() async {
-  refreshVaioDetect();
-  if (_testing || !Platform.isWindows) return;
-  try {
-    final exe = _findApoInspectExe();
-    if (exe != null && exe.existsSync()) {
-      final res = await Process.run(exe.path, [], stdoutEncoding: utf8);
-      if (res.exitCode == 0) {
-        final stdout = (res.stdout as String).trim();
-        final lines = stdout.split('\n');
-        final lastLine = lines.isNotEmpty ? lines.last.trim() : '';
-        if (lastLine.isNotEmpty) {
-          final json = jsonDecode(lastLine) as Map<String, dynamic>;
-          final eps = (json['endpoints'] as List?) ?? [];
-          final items = <AudioDeviceItem>[];
-          for (final ep in eps) {
-            if (ep is Map) {
-              final name = (ep['name'] as String?) ?? '';
-              final dir = (ep['direction'] as String?) ?? 'render';
-              final id = (ep['id'] as String?) ?? '';
-              final state = (ep['state'] as num?)?.toInt() ?? 1;
-              if (name.isNotEmpty && state == 1) {
-                items.add(AudioDeviceItem(
-                  id: id,
-                  name: name,
-                  isRender: dir == 'render',
-                  active: true,
-                ));
-              }
-            }
-          }
-          if (items.isNotEmpty) {
-            wasapiDevices = items;
-            lastAudioError = null;
-            notifyListeners();
-          }
-        }
-      } else {
-        lastAudioError = '端点探测工具退出异常 (代码: ${res.exitCode})';
-        notifyListeners();
-      }
-    }
-  } catch (e) {
-    lastAudioError = '刷新音频设备失败: $e';
-    notifyListeners();
-  }
-}
-
-File? _findApoInspectExe() {
-  var dir = Directory.current;
-  for (var i = 0; i < 4; i++) {
-    final candidate = File('${dir.path}/core/desktop/windows-drivers/out/Release/apo_inspect.exe');
-    if (candidate.existsSync()) return candidate;
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  return null;
-}
-
-File? _findVaioInstallScript() {
-  var dir = Directory.current;
-  for (var i = 0; i < 4; i++) {
-    final candidate = File(
-        '${dir.path}/core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1');
-    if (candidate.existsSync()) return candidate;
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  return null;
-}
-
-/// 一键 UAC 提权安装 AuraVAIO 虚拟声卡驱动
-Future<bool> installVaioDriver({bool elevated = true}) async {
-  if (!Platform.isWindows) return false;
-  try {
-    final script = _findVaioInstallScript();
-    if (script == null) {
-      lastVaioError = '未找到 install_driver.ps1 安装脚本';
-      notifyListeners();
-      return false;
-    }
-    ProcessResult res;
-    if (elevated) {
-      // 通过 PowerShell Start-Process -Verb RunAs 唤起 Windows UAC 管理员提权确认框
-      final cmd =
-          'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'install\', \'-Config\', \'Release\'';
-      res = await Process.run('powershell', ['-Command', cmd]);
-    } else {
-      res = await Process.run('powershell', [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        script.path,
-        '-Action',
-        'install',
-        '-Config',
-        'Release',
-      ]);
-    }
-    refreshVaioDetect();
-    await refreshAudioDevices();
-    final ok = res.exitCode == 0;
-    if (!ok) {
-      lastVaioError = 'AuraVAIO 安装未完成 (退出码: ${res.exitCode})，请在 UAC 弹窗中选择允许提权';
-    } else {
-      lastVaioError = null;
-    }
-    notifyListeners();
-    return ok;
-  } catch (e) {
-    lastVaioError = '安装驱动异常: $e';
-    notifyListeners();
-    return false;
-  }
-}
-
-/// 一键 UAC 提权卸载 AuraVAIO 虚拟声卡驱动
-Future<bool> uninstallVaioDriver({bool elevated = true}) async {
-  if (!Platform.isWindows) return false;
-  try {
-    final script = _findVaioInstallScript();
-    if (script == null) return false;
-    ProcessResult res;
-    if (elevated) {
-      final cmd =
-          'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'uninstall\', \'-RemoveTestCert\'';
-      res = await Process.run('powershell', ['-Command', cmd]);
-    } else {
-      res = await Process.run('powershell', [
-        '-ExecutionPolicy',
-        'Bypass',
-        '-File',
-        script.path,
-        '-Action',
-        'uninstall',
-        '-RemoveTestCert',
-      ]);
-    }
-    refreshVaioDetect();
-    await refreshAudioDevices();
-    final ok = res.exitCode == 0;
-    if (ok) lastVaioError = null;
-    notifyListeners();
-    return ok;
-  } catch (e) {
-    lastVaioError = '卸载异常: $e';
-    notifyListeners();
-    return false;
-  }
-}
-
-void setApoTargetEndpoint(String endpoint) {
-  config.apoTargetEndpoint = endpoint;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-void setMonitorMirroring(bool enabled) {
-  config.monitorMirroring = enabled;
-  ConfigManager.save(config);
-  notifyListeners();
-}
-
-void setApoAttached(bool attached) {
-  apoAttached = attached;
-  notifyListeners();
-}
-
-/// 检查 AuraDSP Virtual ASIO 驱动在 Windows 系统的注册状态
-Future<void> checkAsioDriverStatus() async {
-  if (!Platform.isWindows) {
-    asioDriverInstalled = false;
-    notifyListeners();
-    return;
-  }
-  try {
-    final res = await Process.run('reg.exe', ['query', r'HKLM\SOFTWARE\ASIO\AuraDSP Driver']);
-    asioDriverInstalled = (res.exitCode == 0);
-  } catch (_) {
-    asioDriverInstalled = false;
-  }
-  notifyListeners();
-}
-
-/// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）
-Future<bool> registerAsioDriver({bool elevated = true}) async {
-  if (!Platform.isWindows) return false;
-  try {
-    final script = _findAsioRegisterScript();
-    if (script != null) {
-      ProcessResult res;
-      if (elevated) {
-        // 唤起 Windows UAC 提权对话框执行注册
-        final cmd =
-            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'register\'';
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        res = await Process.run('powershell', [
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-Action',
-          'register'
-        ]);
-      }
-      await checkAsioDriverStatus();
-      final ok = res.exitCode == 0 && asioDriverInstalled;
-      if (!ok) {
-        lastAsioError = 'ASIO 驱动注册未完成，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
-      } else {
-        lastAsioError = null;
-      }
-      notifyListeners();
-      return ok;
-    }
-  } catch (e) {
-    lastAsioError = 'ASIO 驱动注册异常: $e';
-    notifyListeners();
-  }
-  return false;
-}
-
-/// 一键反注册 AuraDSP 虚拟 ASIO 驱动（支持 Windows UAC 提权授权）
-Future<bool> unregisterAsioDriver({bool elevated = true}) async {
-  if (!Platform.isWindows) return false;
-  try {
-    final script = _findAsioRegisterScript();
-    if (script != null) {
-      ProcessResult res;
-      if (elevated) {
-        final cmd =
-            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'unregister\'';
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        res = await Process.run('powershell', [
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-Action',
-          'unregister'
-        ]);
-      }
-      await checkAsioDriverStatus();
-      final ok = res.exitCode == 0 && !asioDriverInstalled;
-      if (!ok) {
-        lastAsioError = 'ASIO 驱动注销未完成';
-      } else {
-        lastAsioError = null;
-      }
-      notifyListeners();
-      return ok;
-    }
-  } catch (e) {
-    lastAsioError = 'ASIO 驱动注销异常: $e';
-    notifyListeners();
-  }
-  return false;
-}
-
-File? _findAsioRegisterScript() {
-  var dir = Directory.current;
-  for (var i = 0; i < 4; i++) {
-    final candidates = [
-      File('${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1'),
-      File('${dir.path}/scripts/register_driver.ps1'),
-      File('${dir.path}/register_driver.ps1'),
-      File('${dir.path}/../scripts/register_driver.ps1'),
-    ];
-    for (final c in candidates) {
-      if (c.existsSync()) return c;
-    }
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  return null;
-}
-
-File? _findApoConfigScript() {
-  var dir = Directory.current;
-  for (var i = 0; i < 4; i++) {
-    final candidates = [
-      File('${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py'),
-      File('${dir.path}/scripts/apo_config.py'),
-      File('${dir.path}/apo_config.py'),
-      File('${dir.path}/../scripts/apo_config.py'),
-    ];
-    for (final c in candidates) {
-      if (c.existsSync()) return c;
-    }
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  return null;
-}
-
-void setApoCompositeMode(bool enabled) {
-  apoCompositeMode = enabled;
-  notifyListeners();
-}
-
-/// 检查 System APO 在系统注册与端点挂载状态，并检测心跳
-Future<void> checkApoStatus({double timeout = 0.4}) async {
-  if (!Platform.isWindows) {
-    apoAttached = false;
-    apoHeartbeatAlive = false;
-    notifyListeners();
-    return;
-  }
-  try {
-    final script = _findApoConfigScript();
-    if (script != null) {
-      final res = await Process.run('python', [
-        script.path,
-        'status',
-        '--timeout',
-        timeout.toString(),
-        '--json',
-      ]);
-      if (res.exitCode == 0) {
-        final out = res.stdout.toString().trim();
-        final lines = out.split(RegExp(r'\r?\n')).where((l) => l.trim().startsWith('{')).toList();
-        if (lines.isNotEmpty) {
-          final data = jsonDecode(lines.last) as Map<String, dynamic>;
-          final rawInstalled = data['installed_endpoints'] as List?;
-          final installed = rawInstalled != null
-              ? rawInstalled.map((e) => Map<String, dynamic>.from(e as Map)).toList()
-              : <Map<String, dynamic>>[];
-          apoInstalledEndpoints = installed;
-
-          final target = config.apoTargetEndpoint;
-          if (target.isEmpty) {
-            apoAttached = installed.isNotEmpty;
-          } else {
-            apoAttached = installed.any((e) {
-              final short = e['short_guid']?.toString().toLowerCase() ?? '';
-              final name = e['DeviceName']?.toString().toLowerCase() ?? '';
-              final id = e['EndpointId']?.toString().toLowerCase() ?? '';
-              final t = target.toLowerCase();
-              return short.contains(t) || name.contains(t) || id.contains(t) || t.contains(short);
-            });
-          }
-
-          final hb = data['heartbeat'] as Map<String, dynamic>?;
-          if (hb != null && hb['alive'] == true) {
-            apoHeartbeatAlive = true;
-            apoHeartbeatSeq = (hb['seq'] as num?)?.toInt() ?? 0;
-            apoHeartbeatSr = (hb['sr'] as num?)?.toInt() ?? 0;
-            apoHeartbeatFrames = (hb['frames'] as num?)?.toInt() ?? 0;
-          } else {
-            apoHeartbeatAlive = false;
-          }
-          lastApoError = null;
-          notifyListeners();
-          return;
-        }
-      }
-    }
-  } catch (e) {
-    // 保持安静回退
-  }
-  notifyListeners();
-}
-
-/// 一键将 System APO 挂载到指定音频端点（支持 Windows UAC 提权授权，支持复合插槽）
-Future<bool> attachSystemApo({
-  String? endpointNameOrId,
-  bool? composite,
-  bool elevated = true,
-}) async {
-  if (!Platform.isWindows) return false;
-  isApoOperating = true;
-  lastApoError = null;
-  notifyListeners();
-
-  try {
-    final script = _findApoConfigScript();
-    if (script == null) {
-      lastApoError = '未找到 apo_config.py 驱动管理脚本';
-      isApoOperating = false;
-      notifyListeners();
-      return false;
-    }
-
-    final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
-        ? endpointNameOrId
-        : config.apoTargetEndpoint;
-    if (target.isEmpty) {
-      lastApoError = '请先选择需要附加的音频端点';
-      isApoOperating = false;
-      notifyListeners();
-      return false;
-    }
-
-    final useComposite = composite ?? apoCompositeMode;
-    ProcessResult res;
-    if (elevated) {
-      final modeArg = useComposite ? ", '--composite'" : "";
-      final cmd =
-          "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'install', '\"$target\"', '--yes', '--force'$modeArg";
-      res = await Process.run('powershell', ['-Command', cmd]);
-    } else {
-      final args = [
-        script.path,
-        'install',
-        target,
-        '--yes',
-        '--force',
-        if (useComposite) '--composite',
-        '--json',
-      ];
-      res = await Process.run('python', args);
-    }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    await checkApoStatus(timeout: 0.6);
-
-    final ok = (res.exitCode == 0) && apoAttached;
-    if (!ok && lastApoError == null) {
-      lastApoError = 'System APO 附加未生效，请确认在 UAC 提权弹窗中选择“是”以授予管理员权限';
-    }
-    isApoOperating = false;
-    notifyListeners();
-    return ok;
-  } catch (e) {
-    lastApoError = 'System APO 附加异常: $e';
-    isApoOperating = false;
-    notifyListeners();
-    return false;
-  }
-}
-
-/// 一键卸载已挂载的 System APO 并精确还原原始系统/厂商 APO
-Future<bool> detachSystemApo({
-  String? endpointNameOrId,
-  bool elevated = true,
-}) async {
-  if (!Platform.isWindows) return false;
-  isApoOperating = true;
-  lastApoError = null;
-  notifyListeners();
-
-  try {
-    final script = _findApoConfigScript();
-    if (script == null) {
-      lastApoError = '未找到 apo_config.py 驱动管理脚本';
-      isApoOperating = false;
-      notifyListeners();
-      return false;
-    }
-
-    final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
-        ? endpointNameOrId
-        : config.apoTargetEndpoint;
-    ProcessResult res;
-    if (elevated) {
-      final targetArg = target.isNotEmpty ? ", '\"$target\"'" : "";
-      final cmd =
-          "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'uninstall'$targetArg, '--yes'";
-      res = await Process.run('powershell', ['-Command', cmd]);
-    } else {
-      final args = [
-        script.path,
-        'uninstall',
-        if (target.isNotEmpty) target,
-        '--yes',
-        '--json',
-      ];
-      res = await Process.run('python', args);
-    }
-
-    await Future.delayed(const Duration(milliseconds: 600));
-    await checkApoStatus(timeout: 0.6);
-
-    final ok = (res.exitCode == 0);
-    if (!ok && lastApoError == null) {
-      lastApoError = 'System APO 卸载未完成，请确认在 UAC 提权弹窗中选择“是”';
-    }
-    isApoOperating = false;
-    notifyListeners();
-    return ok;
-  } catch (e) {
-    lastApoError = 'System APO 卸载异常: $e';
-    isApoOperating = false;
-    notifyListeners();
-    return false;
-  }
-}
-
-/// VB 总线开关：落盘 + 通知；桥在跑则即时下发（mask 活在 ctx，CHANGE 重建不丢）。
-void setVbBus(int group, bool on) {
-  if (group < 0 || group > 7) return;
-  final next = on ? (vbBusMask | (1 << group)) : (vbBusMask & ~(1 << group));
-  if (next == vbBusMask) return;
-  vbBusMask = next & 0xFF;
-  config.vbBusMask = vbBusMask;
-  ConfigManager.save(config);
-  _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
-  notifyListeners();
-}
-
-/// VB 按路插件处理开关：bit g = 组 g 总线吃插件链（厂商 DSP 不受影响）。
-void setVbPluginGroup(int group, bool on) {
-  if (group < 0 || group > 7) return;
-  final next =
-      on ? (vbPluginGroupMask | (1 << group)) : (vbPluginGroupMask & ~(1 << group));
-  if (next == vbPluginGroupMask) return;
-  vbPluginGroupMask = next & 0xFF;
-  config.vbPluginGroupMask = vbPluginGroupMask;
-  ConfigManager.save(config);
-  _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
-  _fallbackVbPluginEditorGroup();
-  notifyListeners();
-}
-
-/// 批处理：全部总线开/关插件链。
-void setVbPluginGroupAll(bool on) {
-  final next = on ? 0xFF : 0x00;
-  if (next == vbPluginGroupMask) return;
-  // 全关在 UI 语义 = 「全部不勾」；落盘仍用原值（0 回全开口径只影响加载），
-  // 这里直接保存 0xFF/0x00 原值：全关是用户显式选择。
-  vbPluginGroupMask = next;
-  config.vbPluginGroupMask = next;
-  ConfigManager.save(config);
-  _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
-  _fallbackVbPluginEditorGroup();
-  notifyListeners();
-}
-
-/// v2 按路编辑器目标路选择（仅有效掩码内合法路，或 kVbRouteAll）。
-void setVbPluginEditorGroup(int group) {
-  if (group == kVbRouteAll) {
-    if (vbPluginEditorGroup == kVbRouteAll) return;
-    vbPluginEditorGroup = kVbRouteAll;
-    notifyListeners();
-    return;
-  }
-  if (group < 0 || group > 7) return;
-  if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
-  if (vbPluginEditorGroup == group) return;
-  vbPluginEditorGroup = group;
-  notifyListeners();
-}
-
-/// 选中路失效（通道关/插件取消勾选）时回落「全部」；「全部」恒有效。
-/// 无任何有效路时由 UI 层按 vbEffectiveRouteMask==0 显示旁路态
-/// （kVbRouteAll 保留，打开界面按钮在 UI 侧按无有效路禁用）。
-void _fallbackVbPluginEditorGroup() {
-  if (vbPluginEditorGroup == kVbRouteAll) return;
-  if (vbPluginEditorGroup >= 0 &&
-      (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
-    return;
-  }
-  vbPluginEditorGroup = kVbRouteAll;
-}
-
-/// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。
-void setAsioDriver(String name) {
-  if (config.asioDriver == name) return;
-  config.asioDriver = name;
-  ConfigManager.save(config);
-  if (asioActive) _sendAsioRestart();
-  notifyListeners();
-}
-
-/// ASIO 缓冲档：0=驱动 preferredSize；桥在跑则热切换。
-void setAsioBufSize(int frames) {
-  if (config.asioBufSize == frames) return;
-  config.asioBufSize = frames;
-  ConfigManager.save(config);
-  if (asioActive) _sendAsioRestart();
-  notifyListeners();
-}
-
-/// ASIO 输出对起始声道（L=R+1 配对）；桥在跑则热切换。
-void setAsioOutPair(int ch) {
-  if (config.asioOutPair == ch) return;
-  config.asioOutPair = ch;
-  ConfigManager.save(config);
-  if (asioActive) _sendAsioRestart();
-  notifyListeners();
-}
-
-/// 触发一次 ASIO 驱动清单刷新（设置页进入/下拉点开时调）。
-void refreshAsioDrivers() {
-  _toIso?.send({'cmd': 'asiodetect'});
-}
-
-/// AuraVAIO 物理输出端点重选：落盘 + 通知；桥在跑则热切换。
-void setVaioOutputEndpoint(String endpoint) {
-  if (config.vaioOutputEndpoint == endpoint) return;
-  config.vaioOutputEndpoint = endpoint;
-  ConfigManager.save(config);
-  if (vaioActive) {
-    _toIso?.send({
-      'cmd': 'vaiorestart',
-      'outputEndpoint': config.vaioOutputEndpoint,
-    });
-  }
-  notifyListeners();
-}
-
-/// 触发一次 AuraVAIO 驱动与端点探测。
-void refreshVaioDetect() {
-  _toIso?.send({'cmd': 'vaiodetect'});
-}
-
-void _sendAsioRestart() {
-  _toIso?.send({
-    'cmd': 'asiorestart',
-    'driver': config.asioDriver,
-    'bufSize': config.asioBufSize,
-    'outPair': config.asioOutPair,
-  });
-}
-
-void setEqBandsCount(int count) {
+  void setEqBandsCount(int count) {
     if (count == eqBandsCount) return;
     eqBandsCount = count;
     /* C4：网格按采样率裁剪，避免高频带在 Nyquist 处塌缩成重复点 */
@@ -4844,7 +5623,9 @@ void setEqBandsCount(int count) {
         final logF1 = math.log(oldFreqs[idx + 1]);
         final logTarget = math.log(f);
         final ratio = (logTarget - logF0) / (logF1 - logF0);
-        newGains.add(oldGains[idx] + ratio * (oldGains[idx + 1] - oldGains[idx]));
+        newGains.add(
+          oldGains[idx] + ratio * (oldGains[idx + 1] - oldGains[idx]),
+        );
         // Q 是频带属性，不做对数插值：取最近频带的 Q，保持钟形宽度语义。
         var bi = 0;
         var best = double.infinity;
@@ -4897,48 +5678,21 @@ void setEqBandsCount(int count) {
   }
 
   /// 按**频率**应用一条 EQ 曲线（C4）。
-///
-/// 预设里存的是「频点 + 增益」配对，而载入时的网格由当前采样率与段数决定，
-/// 两者不一定一致。若按下标灌入，低采样率裁掉高频带后整条曲线会错位。
-/// 这里对当前网格的每个频点，取预设中最接近的那个频点上的增益 ——
-/// 于是采样率/段数只影响取样密度，曲线形状不变。
-///
-/// 预设频点与当前网格无交集时（例如预设来自更高采样率、而当前网格低到
-/// 只能覆盖极低频）则整体取预设的第一个增益，至少不丢整条曲线。
-void applyEqCurve(List<double> freqs, List<double> gains) {
-  if (freqs.isEmpty || gains.isEmpty) return;
-  if (freqs.length != gains.length) {
-    applyEqGains(gains);
-    return;
-  }
-  final out = List<double>.filled(eqFrequencies.length, 0.0);
-  for (var i = 0; i < eqFrequencies.length; i++) {
-    final f = eqFrequencies[i];
-    var bi = 0;
-    var best = double.infinity;
-    for (var k = 0; k < freqs.length; k++) {
-      final d = (freqs[k] - f).abs();
-      if (d < best) {
-        best = d;
-        bi = k;
-      }
+  ///
+  /// 预设里存的是「频点 + 增益」配对，而载入时的网格由当前采样率与段数决定，
+  /// 两者不一定一致。若按下标灌入，低采样率裁掉高频带后整条曲线会错位。
+  /// 这里对当前网格的每个频点，取预设中最接近的那个频点上的增益 ——
+  /// 于是采样率/段数只影响取样密度，曲线形状不变。
+  ///
+  /// 预设频点与当前网格无交集时（例如预设来自更高采样率、而当前网格低到
+  /// 只能覆盖极低频）则整体取预设的第一个增益，至少不丢整条曲线。
+  void applyEqCurve(List<double> freqs, List<double> gains) {
+    if (freqs.isEmpty || gains.isEmpty) return;
+    if (freqs.length != gains.length) {
+      applyEqGains(gains);
+      return;
     }
-    out[i] = gains[bi].clamp(-18.0, 18.0);
-  }
-  for (var i = 0; i < eqGains.length; i++) {
-    eqGains[i] = i < out.length ? out[i] : 0.0;
-  }
-  _pushEqCurve();
-}
-
-/// 按**频率**应用一条 Q 曲线（与 [applyEqCurve] 同构）。
-///
-/// 预设/会话里的 `qs` 与当前网格不对齐时，按最近频点重映射；
-/// 长度对不上频率表时按下标截断对齐；缺省用 [eqQ] 补齐。
-void applyEqQs(List<double>? freqs, List<double> qs) {
-  if (qs.isEmpty) return;
-  final aligned = List<double>.filled(eqFrequencies.length, eqQ);
-  if (freqs != null && freqs.length == qs.length && freqs.isNotEmpty) {
+    final out = List<double>.filled(eqFrequencies.length, 0.0);
     for (var i = 0; i < eqFrequencies.length; i++) {
       final f = eqFrequencies[i];
       var bi = 0;
@@ -4950,25 +5704,52 @@ void applyEqQs(List<double>? freqs, List<double> qs) {
           bi = k;
         }
       }
-      aligned[i] = qs[bi].clamp(0.3, 10.0);
+      out[i] = gains[bi].clamp(-18.0, 18.0);
     }
-  } else {
-    for (var i = 0; i < aligned.length && i < qs.length; i++) {
-      aligned[i] = qs[i].clamp(0.3, 10.0);
+    for (var i = 0; i < eqGains.length; i++) {
+      eqGains[i] = i < out.length ? out[i] : 0.0;
     }
+    _pushEqCurve();
   }
-  eqQs = aligned;
-  _pushEqCurve();
-}
 
-/// 用同一个 Q 填满全部频点（兼容只有标量 `q` 的旧预设/会话）。
-void fillEqQ(double q) {
-  eqQ = q.clamp(0.3, 10.0);
-  eqQs = List<double>.filled(eqFrequencies.length, eqQ);
-  _pushEqCurve();
-}
+  /// 按**频率**应用一条 Q 曲线（与 [applyEqCurve] 同构）。
+  ///
+  /// 预设/会话里的 `qs` 与当前网格不对齐时，按最近频点重映射；
+  /// 长度对不上频率表时按下标截断对齐；缺省用 [eqQ] 补齐。
+  void applyEqQs(List<double>? freqs, List<double> qs) {
+    if (qs.isEmpty) return;
+    final aligned = List<double>.filled(eqFrequencies.length, eqQ);
+    if (freqs != null && freqs.length == qs.length && freqs.isNotEmpty) {
+      for (var i = 0; i < eqFrequencies.length; i++) {
+        final f = eqFrequencies[i];
+        var bi = 0;
+        var best = double.infinity;
+        for (var k = 0; k < freqs.length; k++) {
+          final d = (freqs[k] - f).abs();
+          if (d < best) {
+            best = d;
+            bi = k;
+          }
+        }
+        aligned[i] = qs[bi].clamp(0.3, 10.0);
+      }
+    } else {
+      for (var i = 0; i < aligned.length && i < qs.length; i++) {
+        aligned[i] = qs[i].clamp(0.3, 10.0);
+      }
+    }
+    eqQs = aligned;
+    _pushEqCurve();
+  }
 
-/// 整表写入 EQ 增益并重推曲线。
+  /// 用同一个 Q 填满全部频点（兼容只有标量 `q` 的旧预设/会话）。
+  void fillEqQ(double q) {
+    eqQ = q.clamp(0.3, 10.0);
+    eqQs = List<double>.filled(eqFrequencies.length, eqQ);
+    _pushEqCurve();
+  }
+
+  /// 整表写入 EQ 增益并重推曲线。
   /// 必须走本方法而不能直接 `eqGains[i] = v`：eqGains 是裸 `List<double>`，
   /// 直接赋值不会触发 _pushEqCurve()，引擎会继续用上一条曲线
   /// （预设恢复 EQ 时就是这么丢增益的）。
@@ -5110,9 +5891,12 @@ void fillEqQ(double q) {
       sampleRate: engineRate,
     );
     final buffer = StringBuffer(
-        'eqm:$eqInterp:${eqOpModeForFilter(eqFilter)};');
+      'eqm:$eqInterp:${eqOpModeForFilter(eqFilter)};',
+    );
     for (var i = 0; i < axis.length; i++) {
-      buffer.write('${axis[i].toStringAsFixed(1)}:${target[i].toStringAsFixed(1)}');
+      buffer.write(
+        '${axis[i].toStringAsFixed(1)}:${target[i].toStringAsFixed(1)}',
+      );
       if (i < axis.length - 1) buffer.write(';');
     }
     final curve = buffer.toString();
@@ -5182,7 +5966,8 @@ void fillEqQ(double q) {
         continue;
       }
       final hz = VizBands.centerHz(b);
-      final db = VizBands.toDb(eqIn[b].clamp(0.0, 1.0)) +
+      final db =
+          VizBands.toDb(eqIn[b].clamp(0.0, 1.0)) +
           VizBands.responseDbAt(respDb, hz, responseFMax: responseFMax);
       out[b] = VizBands.fromDb(db);
     }
@@ -5222,7 +6007,7 @@ void fillEqQ(double q) {
       try {
         return AuraDspLib.load();
       } catch (_) {
-        return null;   // DLL 缺失：UI 退回近似曲线，不崩
+        return null; // DLL 缺失：UI 退回近似曲线，不崩
       }
     }();
     return _ffiLib;
@@ -5233,15 +6018,14 @@ void fillEqQ(double q) {
     _eqResponseTimer = Timer(const Duration(milliseconds: 220), () {
       _eqResponseTimer = null;
       final c = _pendingEqCurve;
-      if (c == null || c == eqResponseCurve) return;   // 缓存命中，无需重算
+      if (c == null || c == eqResponseCurve) return; // 缓存命中，无需重算
       final lib = _probeLib;
       if (lib == null) return;
       List<double>? db;
       try {
-        db = lib.measureEqResponse(c, engineRate,
-            nPoints: eqResponsePoints);
+        db = lib.measureEqResponse(c, engineRate, nPoints: eqResponsePoints);
       } catch (_) {
-        return;   // 探针异常：保留上一帧曲线
+        return; // 探针异常：保留上一帧曲线
       }
       if (db == null) return;
       eqResponseDb = db;
@@ -5258,7 +6042,9 @@ void fillEqQ(double q) {
   void _flushEqCurve() {
     final pending = _pendingEqCurve;
     if (pending == null) return;
-    final elapsed = DateTime.now().difference(_lastEqCurveSentAt).inMilliseconds;
+    final elapsed = DateTime.now()
+        .difference(_lastEqCurveSentAt)
+        .inMilliseconds;
     if (elapsed >= _eqCurveMinIntervalMs) {
       _eqCurveTimer?.cancel();
       _eqCurveTimer = null;
@@ -5267,7 +6053,9 @@ void fillEqQ(double q) {
       setStringParam('eq.curve', pending);
     } else {
       _eqCurveTimer ??= Timer(
-          Duration(milliseconds: _eqCurveMinIntervalMs - elapsed), _flushEqCurve);
+        Duration(milliseconds: _eqCurveMinIntervalMs - elapsed),
+        _flushEqCurve,
+      );
     }
   }
 
@@ -5293,9 +6081,16 @@ void fillEqQ(double q) {
     if (m != null) return (ms: m, measured: true, estimated: false);
     // 解析兜底：只有 convolver 能从已知的 IR 长度算出真正的附加延迟
     // （convFrames/deviceRate 实时计算，非预设常数）。
-    if (compId == 'convolver' && convEnabled && convReady &&
-        convFrames > 0 && deviceRate > 0) {
-      return (ms: (convFrames / deviceRate) * 1000.0, measured: false, estimated: true);
+    if (compId == 'convolver' &&
+        convEnabled &&
+        convReady &&
+        convFrames > 0 &&
+        deviceRate > 0) {
+      return (
+        ms: (convFrames / deviceRate) * 1000.0,
+        measured: false,
+        estimated: true,
+      );
     }
     return (ms: 0.0, measured: false, estimated: false);
   }
@@ -5390,7 +6185,11 @@ void fillEqQ(double q) {
         }
         return {'rc': 0, 'samples': total};
       });
-      _onComponentLatencyResult(compId, result['rc'] as int, result['samples'] as int);
+      _onComponentLatencyResult(
+        compId,
+        result['rc'] as int,
+        result['samples'] as int,
+      );
     } catch (_) {
       _onComponentLatencyResult(compId, -2, 0);
     }
@@ -5423,14 +6222,27 @@ void fillEqQ(double q) {
   /// param_contract_test Part G 以引擎源文件断言该集合不得越界。
   /// 2026-10-19：haas / spatial 入列——引擎探针改逐声道首非零取最大后
   /// 两者均可如实测量（haas 测当前延迟、spatial 测 0ms 诚实链延迟）。
-  static bool isLatencyProbeSupported(String compId) =>
-      const {
-        'bass', 'reverb', 'eq', 'tube', 'crossfeed', 'limiter', 'post',
-        'comp', 'exciter', 'stereo', 'arbmag',
-        'dyneq', 'filter', 'gate', 'loudness',
-        'convolver', 'ddc',
-        'haas', 'spatial',
-      }.contains(compId);
+  static bool isLatencyProbeSupported(String compId) => const {
+    'bass',
+    'reverb',
+    'eq',
+    'tube',
+    'crossfeed',
+    'limiter',
+    'post',
+    'comp',
+    'exciter',
+    'stereo',
+    'arbmag',
+    'dyneq',
+    'filter',
+    'gate',
+    'loudness',
+    'convolver',
+    'ddc',
+    'haas',
+    'spatial',
+  }.contains(compId);
 
   /// 探针别名：卡片 compId → 引擎 probe_is_supported 实名列表。
   ///
@@ -5475,8 +6287,17 @@ void fillEqQ(double q) {
     send({'cmd': 'bypass', 'value': bypass});
   }
 
-  bool saveAsUserPreset(String name, {String category = 'Custom', String description = ''}) {
-    final preset = PresetLibrary.snapshot(this, name: name, category: category, description: description);
+  bool saveAsUserPreset(
+    String name, {
+    String category = 'Custom',
+    String description = '',
+  }) {
+    final preset = PresetLibrary.snapshot(
+      this,
+      name: name,
+      category: category,
+      description: description,
+    );
     final ok = PresetLibrary.saveUserPreset(preset);
     if (ok) {
       activePresetName = name;
@@ -5541,7 +6362,9 @@ void fillEqQ(double q) {
   @override
   void dispose() {
     _headTracker.stop();
-    TrayService.instance.isWindowVisible.removeListener(_onWindowVisibilityChanged);
+    TrayService.instance.isWindowVisible.removeListener(
+      _onWindowVisibilityChanged,
+    );
     _debounceSaveTimer?.cancel();
     _bassGainTimer?.cancel();
     _eqCurveTimer?.cancel();
