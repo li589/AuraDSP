@@ -362,6 +362,40 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
   层叠顺序（tube 的 setter 分散在 980 与 1946 两处），强行分组有错分
   风险；保持原序 + 文件头说明，IDE outline 按名跳读。
 
+### P6（state_eq.dart + state_audio_modes.dart + state_vb_asio.dart）
+
+- **剪切**（入口 2456 → 998 行）：
+  - state_eq.dart（688 行，extension EqState）：EQ static 助手 4 函数
+    + 4 频点常量 + eqResponsePoints/_eqCurveMinIntervalMs/
+    composeEqOutputSpectrum 改**顶层声明**；extension 内 20 个成员
+    （_rebuildEqGridForSampleRate、setEqBandsCount..flattenEq 13 件、
+    applyEqPreset、_pushEqCurve/_flushEqCurve、currentEqCurveSignature/
+    eqOutputSpectrum/_probeLib/_scheduleEqResponse 探测四件）。
+  - state_audio_modes.dart（700 行，extension AudioModesState）：模式/
+    管线 9 件 + refreshAudioDevices + VAIO 驱动 4 件 + APO 配置 3 件 +
+    ASIO 注册 4 件 + System APO 运维 5 件，共 26 个成员。
+  - state_vb_asio.dart（143 行，extension VbAsioState）：VB 桥 5 件 +
+    ASIO/VAIO 7 件，共 12 个成员。
+- **static 顶层化**（方案既定决策，与 P3/P4「留类体」政策的分支）：
+  eqGridFor/eqOpModeForFilter/eqPeakingDb/eqTargetGains 4 函数 +
+  eqFreqs7/10/15/31 + eqResponsePoints + _eqCurveMinIntervalMs +
+  composeEqOutputSpectrum 共 10 个 static 成员改 part 文件顶层；外部
+  调用方全在测试（AppModel.xxx → 裸名，3 文件共 37 处）。留类 static
+  （_vendorStageIds/filterVendorOrder/irWasResampled/latency 三件）
+  不动。类内引用均为裸名，顶层化后解析不变；字段初始化器
+  `eqFrequencies = eqGridFor(...)` 实测通过（风险 R5 未触发）。
+- **机检**：4 个顶层块（176+5+13+39 行，dedent + 剥 static）与 58 个
+  extension 方法块（20 EQ + 26 modes + 12 VB，57 处 notify 改名）
+  逐字等价；留类 static 声明完好；测试 0 残留限定调用。
+- **验证**：analyze 0 issue；哨兵 5 文件 139/139；全量串行两轮
+  （316 / 310 过）各 1 文件超时抖动且逐轮漂移（eq_response_ui →
+  param_contract），0 断言级失败，抖动文件单独复跑全过
+  （6/6、21/21）。本机抖动率维持高位，判定规则不变。
+- **踩坑记录**：括号配对定位器被字符串字面量花括号污染
+  （`startsWith('{')` 令 checkApoStatus 尾行误判 +860 行）——定位
+  脚本升级为字符串/注释感知的状态机剥离；另 doc 注释与签名行断言
+  初版凭记忆填写 28 处全错，改为先打印实际内容再回填。
+
 ---
 
 ## 8. 关联文档
