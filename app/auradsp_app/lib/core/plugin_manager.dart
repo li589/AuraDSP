@@ -587,6 +587,8 @@ class PluginManager extends ChangeNotifier {
     final s = slot ?? _selectedSlot;
     // C3：同上，避免在卸载还在进行时又发一次。
     if (_slotBusy[s] == true) return;
+    // P2 自动记录：卸载前把当前调音落盘到激活 A/B 槽（不丢）。
+    autoSaveAb(s, group: _editorRoute[s] >= 0 ? _editorRoute[s] : -1);
     _slotBusy[s] = true;
     notifyListeners();
     _commandSender?.call({'cmd': 'pluginSlotUnload', 'slot': s});
@@ -691,26 +693,8 @@ class PluginManager extends ChangeNotifier {
       final r = _editorRoute[slot];
       if (r >= 0) lastEditedRoute = r;
       _editorRoute[slot] = -1;
-      // P1-6 兜底：「全部」下关界面 → 主实例当前参数拉平全部组（调参
-      // 才真正生效于全部通道），并写入「全部」记忆；用户已改过参数，
-      // 标注归「『全部』自有状态」。
-      if (_slotSyncOnClose[slot] && r >= 0) {
-        _slotSyncOnClose[slot] = false;
-        _allChannels[slot] = _routeChannels[slot][r];
-        _allInheritFrom[slot] = -1;
-        _commandSender?.call({
-          'cmd': 'pluginSlotSyncAll',
-          'slot': slot,
-          'srcGroup': r,
-          'path': allMemoryPath(slot),
-        });
-        _commandSender?.call({
-          'cmd': 'pluginSlotSetChannels',
-          'slot': slot,
-          'mask': _allChannels[slot],
-          'group': -1,
-        });
-      }
+      // P2 自动记录：编辑器关闭即把当前调音落盘到激活 A/B 槽。
+      autoSaveAb(slot, group: r >= 0 ? r : -1);
       notifyListeners();
       return;
     }
@@ -1366,5 +1350,241 @@ class PluginManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('[PluginManager] saveCache error: $e');
     }
+  }
+
+  // ==================== P2 A/B 预设槽（v3.3） ====================
+  // 每「插件-槽位」两套预设 A/B（VB 再按 route 细分），内容 = 插件 state
+  // + Ch 选择。激活槽自动记录（编辑器关闭/切换/切路由时落盘）；继承 =
+  // 一次性复制（调参即归自定义）；复原清槽（不动源）。
+
+  /// 每 (slot, route) 的激活槽：'$slot|$route' -> 'A' | 'B'。
+  final Map<String, String> _abActive = {};
+
+  /// 每槽元数据：'$slot|$route|$ab' -> {hasState, source, chMask}。
+  /// source: 'custom' | 'inherit:r{route}:{A|B}'。
+  final Map<String, Map<String, dynamic>> _abMeta = {};
+
+  /// 各槽预设归属的插件 id（换插件即换预设库）。
+  final List<String?> _abPluginId = List.filled(kMaxSlots, null, growable: true);
+
+  /// 确定性短 hash（FNV-1a 32bit）——Dart String.hashCode 每次运行不同，
+  /// 不能用于持久化文件名。
+  static String _fnv1a(String s) {
+    var h = 0x811c9dc5;
+    for (final u in s.codeUnits) {
+      h ^= u;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
+  String _abPluginKey(int slot) {
+    final meta = getSlotPlugin(slot);
+    final id = meta == null
+        ? 'empty'
+        : _fnv1a('${meta.path}|${meta.name}');
+    return id;
+  }
+
+  Directory _abDir(String pluginId) => Directory(
+      ConfigManager.path('plugin_presets${Platform.pathSeparator}.ab${Platform.pathSeparator}$pluginId'));
+
+  String _abFile(int slot, int route, String ab) =>
+      '${_abDir(_abPluginKey(slot)).path}${Platform.pathSeparator}s${slot}_r$route$ab.aurapreset';
+
+  String _abMetaPath(String pluginId) =>
+      '${_abDir(pluginId).path}${Platform.pathSeparator}meta.json';
+
+  String _abKey(int slot, int route) => '$slot|$route';
+  String _abKey2(int slot, int route, String ab) => '$slot|$route|$ab';
+
+  /// 惰性加载/切换插件时重载预设库。
+  void _ensureAbLoaded(int slot) {
+    final id = _abPluginKey(slot);
+    if (_abPluginId[slot] == id) return;
+    _abPluginId[slot] = id;
+    // 清除该 slot 的内存缓存再读盘（换插件 = 换预设库）。
+    _abActive.removeWhere((k, _) => k.startsWith('$slot|'));
+    _abMeta.removeWhere((k, _) => k.startsWith('$slot|'));
+    try {
+      final f = File(_abMetaPath(id));
+      if (!f.existsSync()) return;
+      final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final slots = (raw['slots'] as Map<String, dynamic>?) ?? {};
+      final sr = (slots['$slot'] as Map<String, dynamic>?) ?? {};
+      sr.forEach((rk, rv) {
+        final r = rv as Map<String, dynamic>;
+        _abActive[_abKey(slot, _routeFromKey(rk))] =
+            (r['active'] as String?) ?? 'A';
+        for (final ab in ['A', 'B']) {
+          final m = (r[ab] as Map<String, dynamic>?) ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF};
+          _abMeta[_abKey2(slot, _routeFromKey(rk), ab)] = {
+            'hasState': m['hasState'] == true,
+            'source': m['source'] as String? ?? 'custom',
+            'chMask': (m['chMask'] as num?)?.toInt() ?? 0xFF,
+          };
+        }
+      });
+    } catch (e) {
+      debugPrint('[PluginManager] ab load error: $e');
+    }
+  }
+
+  static int _routeFromKey(String k) =>
+      k == 'rm1' ? -1 : int.tryParse(k.substring(1)) ?? -1;
+  static String _routeKey(int route) => route < 0 ? 'rm1' : 'r$route';
+
+  void _abPersist(int slot) {
+    try {
+      final id = _abPluginKey(slot);
+      final dir = _abDir(id);
+      dir.createSync(recursive: true);
+      final slots = <String, dynamic>{};
+      final seenRoutes = <int>{};
+      for (final k in _abActive.keys) {
+        final parts = k.split('|');
+        if (parts[0] != '$slot') continue;
+        seenRoutes.add(_routeFromKey(parts[1]));
+      }
+      for (final k in _abMeta.keys) {
+        final parts = k.split('|');
+        if (parts[0] != '$slot') continue;
+        seenRoutes.add(_routeFromKey(parts[1]));
+      }
+      for (final route in seenRoutes) {
+        final rk = _routeKey(route);
+        slots[rk] = {
+          'active': _abActive[_abKey(slot, route)] ?? 'A',
+          'A': _abMeta[_abKey2(slot, route, 'A')] ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF},
+          'B': _abMeta[_abKey2(slot, route, 'B')] ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF},
+        };
+      }
+      File(_abMetaPath(id)).writeAsStringSync(jsonEncode({'slots': slots}));
+    } catch (e) {
+      debugPrint('[PluginManager] ab persist error: $e');
+    }
+  }
+
+  Map<String, dynamic> _abMetaOf(int slot, int route, String ab) {
+    _ensureAbLoaded(slot);
+    return _abMeta[_abKey2(slot, route, ab)] ??=
+        {'hasState': false, 'source': 'custom', 'chMask': 0xFF};
+  }
+
+  /// 当前激活槽（默认 A——插件加载即 A 记录）。
+  String abActive(int slot, {int group = -1}) {
+    _ensureAbLoaded(slot);
+    return _abActive[_abKey(slot, group)] ?? 'A';
+  }
+
+  /// 槽元数据（UI：hasState/source/chMask）。
+  Map<String, dynamic> abMeta(int slot, {int group = -1, required String ab}) =>
+      Map.unmodifiable(_abMetaOf(slot, group, ab));
+
+  /// A/B 预设文件路径（继承复制时作源/目标）。
+  String abFilePath(int slot, {int group = -1, required String ab}) =>
+      _abFile(slot, group, ab);
+
+  /// 自动保存：当前实例 state + Ch → 激活槽（source 归 custom）。
+  /// 时机：编辑器关闭 / 切换 A-B / 切路由 / 卸载前——用户感知「自动记录」。
+  void autoSaveAb(int slot, {int group = -1}) {
+    if (!isSlotActive(slot)) return;
+    _ensureAbLoaded(slot);
+    final ab = abActive(slot, group: group);
+    final path = _abFile(slot, group, ab);
+    try {
+      _abDir(_abPluginKey(slot)).createSync(recursive: true);
+    } catch (_) {}
+    _commandSender?.call({
+      'cmd': 'pluginSlotSavePresetG',
+      'slot': slot,
+      'group': group,
+      'path': path,
+    });
+    final m = _abMetaOf(slot, group, ab);
+    m['hasState'] = true;
+    m['source'] = 'custom'; // 用户调过即自定义（继承后调参自动脱钩）
+    m['chMask'] = getSlotChannels(slot, group: group);
+    _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 切换/激活 A 或 B。
+  /// [inheritFrom] null = 自动保存（自定义）；'r{route}:{A|B}' = 一次性复制
+  /// 该源预设（state 文件拷贝 + Ch 继承），复制后与源无关。
+  void selectAb(int slot, {int group = -1, required String ab, String? inheritFrom}) {
+    if (ab != 'A' && ab != 'B') return;
+    if (!isSlotActive(slot)) return;
+    _ensureAbLoaded(slot);
+    // 离开当前状态前存回激活槽（不丢调音）。
+    autoSaveAb(slot, group: group);
+    final m = _abMetaOf(slot, group, ab);
+    if (inheritFrom != null) {
+      // 解析源 'r{route}:{A|B}'（排除自身已在 UI 过滤）。
+      final mm = RegExp(r'^r(-?\d+):([AB])$').firstMatch(inheritFrom);
+      if (mm != null) {
+        final srcRoute = int.parse(mm.group(1)!);
+        final srcAb = mm.group(2)!;
+        final srcFile = _abFile(slot, srcRoute, srcAb);
+        final dstFile = _abFile(slot, group, ab);
+        try {
+          _abDir(_abPluginKey(slot)).createSync(recursive: true);
+          if (File(srcFile).existsSync()) {
+            File(srcFile).copySync(dstFile);
+            _commandSender?.call({
+              'cmd': 'pluginSlotLoadPresetG',
+              'slot': slot,
+              'group': group,
+              'path': dstFile,
+            });
+            m['hasState'] = true;
+          } else {
+            m['hasState'] = false;
+          }
+        } catch (e) {
+          debugPrint('[PluginManager] ab inherit error: $e');
+        }
+        m['source'] = 'inherit:$inheritFrom';
+        // Ch 跟随继承源的记忆。
+        final srcCh = _routeChannels[slot]
+            [srcRoute < 0 ? 0 : (srcRoute > 7 ? 7 : srcRoute)];
+        m['chMask'] = srcCh;
+        setSlotChannels(srcCh, slot: slot, group: group);
+      }
+    } else if (m['hasState'] == true) {
+      // 激活已有内容的槽：应用其 state。
+      _commandSender?.call({
+        'cmd': 'pluginSlotLoadPresetG',
+        'slot': slot,
+        'group': group,
+        'path': _abFile(slot, group, ab),
+      });
+      setSlotChannels((m['chMask'] as num?)?.toInt() ?? 0xFF,
+          slot: slot, group: group);
+    }
+    // 空槽 + 自动保存：不动参数，从此刻开始自动记录（「空预设」语义）。
+    _abActive[_abKey(slot, group)] = ab;
+    _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 复原：清除该槽预设（回空；继承的源预设不动）。
+  void resetAb(int slot, {int group = -1, required String ab}) {
+    if (ab != 'A' && ab != 'B') return;
+    _ensureAbLoaded(slot);
+    try {
+      final f = File(_abFile(slot, group, ab));
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+    _abMeta[_abKey2(slot, group, ab)] = {
+      'hasState': false,
+      'source': 'custom',
+      'chMask': 0xFF,
+    };
+    _abPersist(slot);
+    notifyListeners();
   }
 }

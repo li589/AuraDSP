@@ -225,128 +225,158 @@ class _PluginTriLogo extends StatelessWidget {
   }
 }
 
-/// 「全部」路由选择菜单（P1-5）：继承自 {lastEditedRoute} / 使用自有状态。
-/// 确认后写入「全部」记忆（第 9 套）并统一下发全部组，再落到「全部」路由。
-///
-/// BUGFIX（2026-10-22 白屏）：showMenu 必须显式传 position/positionBuilder
-/// （Flutter 3.47 断言二选一；release 下 null position 进 _PopupMenuRoute
-/// 定位计算异常 → 整窗白屏但音频照跑）。窗口最小化/刚恢复时 MediaQuery
-/// 尺寸可能为 0——定位前防御，计算失败则回退屏幕中心。
-void _showAllRouteMenu(
+/// 安全弹菜单（v3.3）：showMenu 必须显式传 position（Flutter 3.47 断言
+/// 二选一，null position release 下白屏——2026-10-22 实测教训）。窗口
+/// 0 尺寸/树重建中时回退中心；异常不冒泡。
+void _safeShowMenu<T>(
   BuildContext context,
-  AppModel model,
-  PluginManager manager,
-  int slot,
-  List<String> routeNames,
+  List<PopupMenuEntry<T>> items,
+  void Function(T?) onSelected,
 ) {
-  final l = l10nOf(context);
-  final src = manager.lastEditedRoute;
-  final srcName = (src >= 0 && src < routeNames.length) ? routeNames[src] : '';
-  final canInherit = src >= 0;
-  final canOwn = manager.hasAllMemory(slot);
-
-  // 安全定位：锚在下拉框自身；RenderBox/MediaQuery 异常时回退中心。
   RelativeRect position = const RelativeRect.fromLTRB(0, 0, 0, 0);
   try {
     final box = context.findRenderObject() as RenderBox?;
     final screen = MediaQuery.of(context).size;
     if (box != null && box.hasSize && screen.width > 0 && screen.height > 0) {
-      final offset = box.localToGlobal(Offset.zero);
-      final rect = offset & box.size;
-      position = RelativeRect.fromRect(rect, Offset.zero & screen);
+      position =
+          RelativeRect.fromRect(box.localToGlobal(Offset.zero) & box.size,
+              Offset.zero & screen);
     } else {
-      position = RelativeRect.fromLTRB(
-        screen.width / 2,
-        screen.height / 2,
-        screen.width / 2,
-        screen.height / 2,
-      );
+      position = RelativeRect.fromLTRB(screen.width / 2, screen.height / 2,
+          screen.width / 2, screen.height / 2);
     }
-  } catch (_) {
-    // 极端情况（窗口 0 尺寸/树重建中）：保持 (0,0,0,0) 让菜单自兜底。
-  }
-
-  showMenu<int>(
-        context: context,
-        position: position,
-        items: [
-          PopupMenuItem<int>(
-            value: 1,
-            enabled: canInherit,
-            child: Text(
-              canInherit ? l.plugAllInheritFrom(srcName) : l.plugAllInheritNone,
-            ),
-          ),
-          PopupMenuItem<int>(
-            value: 2,
-            enabled: canOwn,
-            child: Text(l.plugAllUseOwn),
-          ),
-        ],
-      )
-      .then((v) {
-        if (v == 1 && canInherit) {
-          manager.inheritAllFrom(src, slot: slot);
-          model.setVbPluginEditorGroup(kVbRouteAll);
-        } else if (v == 2 && canOwn) {
-          manager.applyAllMemory(slot: slot);
-          model.setVbPluginEditorGroup(kVbRouteAll);
-        }
-      })
-      .catchError((_) {
-        // 菜单异常绝不冒泡成白屏（音频路径不受 UI 状态影响）。
-      });
+  } catch (_) {}
+  showMenu<T>(context: context, position: position, items: items)
+      .then(onSelected)
+      .catchError((_) {});
 }
 
-/// 「全部」记忆来源标注（P1-2，替换原 plugRtNote 位）：三态 + 重继承。
-class _AllInheritBadge extends StatelessWidget {
-  final AppModel model;
+/// v3.3 A/B 预设条：[A] [B] [复原]。
+/// - 非 VB：点 A/B 直接切换（自动记录）。
+/// - VB：点 A/B 弹下拉「自动保存 / 继承自 X-A…」（排除自身槽；继承 =
+///   一次性复制，调参即归自定义）。
+/// - 复原：清激活槽预设（继承的源预设不动）。
+/// - [locked]（编辑器打开）时全部禁用。
+class _AbPresetBar extends StatelessWidget {
   final PluginManager manager;
   final int slot;
+  final int group;
+  final bool isVb;
+  final bool locked;
   final List<String> routeNames;
-  const _AllInheritBadge({
-    required this.model,
+
+  const _AbPresetBar({
     required this.manager,
     required this.slot,
+    required this.group,
+    required this.isVb,
+    required this.locked,
     required this.routeNames,
   });
+
+  String _routeLabel(int route) =>
+      route < 0 ? 'Main' : (route < routeNames.length ? routeNames[route] : 'R$route');
+
+  void _onTapAb(BuildContext context, String ab) {
+    if (locked) return;
+    if (!isVb) {
+      manager.selectAb(slot, group: group, ab: ab);
+      return;
+    }
+    final l = l10nOf(context);
+    final items = <PopupMenuEntry<String>>[
+      PopupMenuItem<String>(
+        value: 'auto',
+        child: Text(l.abAutoSave),
+      ),
+      // 继承项：全部 route×AB 除自身槽（复制语义无循环，排除自身即防呆）。
+      for (var r = 0; r < routeNames.length && r < 8; r++)
+        for (final srcAb in ['A', 'B'])
+          if (!(r == group && srcAb == ab))
+            PopupMenuItem<String>(
+              value: 'r$r:$srcAb',
+              child: Text(l.abInheritFrom('${_routeLabel(r)}-$srcAb')),
+            ),
+    ];
+    _safeShowMenu<String>(context, items, (v) {
+      if (v == null) return;
+      if (v == 'auto') {
+        manager.selectAb(slot, group: group, ab: ab);
+      } else {
+        manager.selectAb(slot, group: group, ab: ab, inheritFrom: v);
+      }
+    });
+  }
+
+  Widget _abButton(BuildContext context, String ab) {
+    final p = paletteOf(context);
+    final active = manager.abActive(slot, group: group) == ab;
+    final meta = manager.abMeta(slot, group: group, ab: ab);
+    final hasState = meta['hasState'] == true;
+    final color = locked
+        ? p.textDim.withValues(alpha: 0.4)
+        : active
+            ? p.accent
+            : hasState
+                ? p.text
+                : p.textDim;
+    return Tooltip(
+      message: ab == 'A' ? l10nOf(context).abSlotA : l10nOf(context).abSlotB,
+      child: InkWell(
+        onTap: locked ? null : () => _onTapAb(context, ab),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        child: Container(
+          width: 26,
+          height: 22,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: active && !locked
+                ? p.accent.withValues(alpha: 0.18)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: Border.all(
+              color: active && !locked ? p.accent : p.hairline,
+            ),
+          ),
+          child: Text(
+            ab, // 用户定案：按钮始终显示 A / B
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w800,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final l = l10nOf(context);
-    final from = manager.allInheritFrom(slot);
-    if (from == -2) return const SizedBox.shrink();
-    final label = from >= 0 && from < routeNames.length
-        ? l.plugInheritedFrom(routeNames[from])
-        : l.plugAllOwnState;
+    final active = manager.abActive(slot, group: group);
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(
-          from >= 0
-              ? Icons.download_done_rounded
-              : Icons.settings_backup_restore_rounded,
-          size: 13,
-          color: p.textDim,
-        ),
+        _abButton(context, 'A'),
         const SizedBox(width: 4),
-        Text(label, style: captionOf(p, color: p.textDim)),
-        if (from >= 0 && manager.lastEditedRoute >= 0) ...[
-          const SizedBox(width: AuraSpace.xs),
-          Tooltip(
-            message: l.plugReInherit,
-            child: InkWell(
-              onTap: () =>
-                  manager.inheritAllFrom(manager.lastEditedRoute, slot: slot),
-              borderRadius: BorderRadius.circular(AuraRadius.sm),
-              child: Padding(
-                padding: const EdgeInsets.all(2),
-                child: Icon(Icons.refresh_rounded, size: 13, color: p.accent),
+        _abButton(context, 'B'),
+        const SizedBox(width: AuraSpace.xs),
+        Tooltip(
+          message: l10nOf(context).abReset,
+          child: InkWell(
+            onTap: locked ? null : () => manager.resetAb(slot, group: group, ab: active),
+            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            child: Padding(
+              padding: const EdgeInsets.all(3),
+              child: Icon(
+                Icons.restart_alt_rounded,
+                size: 14,
+                color: locked ? p.textDim.withValues(alpha: 0.4) : p.textDim,
               ),
             ),
           ),
-        ],
+        ),
       ],
     );
   }
@@ -428,12 +458,9 @@ class _ActivePluginHero extends StatelessWidget {
 
     final isVst3 = active.format == PluginFormat.vst3;
 
-    // v2 按路插件（2026-10-22）：VB 多总线下，插件实际挂在每一路的独立引擎
-    // 上（OUTPUT INSERT，每 8 声道一引擎）。「打开界面」跟随总线下拉选中的
-    // 路打开该路引擎上的编辑器；「全部」= 主实例（有效路内最低组）。
-    // 下拉选项源 = vbEffectiveRouteMask（通道开着 且 插件勾选——busMask 关的
-    // 整组直通不进引擎，调参不上流）。全不选时无可打开的路（旁路态）。
-    // 其余模式（VAIO/ASIO/WASAPI）单引擎，无此维度，group=-1。
+    // v3.3 按路插件 + A/B 预设：下拉选路 = 打开该路引擎的编辑器 + 该路的
+    // A/B 预设视图。选项源 = vbEffectiveRouteMask（通道开且插件勾）。
+    // 「全部」选项已撤除（统一调音用「预设继承」表达）。
     final isVb = model.audioMode == 'vbcallback';
     final routeMask = model.vbEffectiveRouteMask;
     final editorGroup = model.vbPluginEditorGroup;
@@ -441,17 +468,14 @@ class _ActivePluginHero extends StatelessWidget {
       (model.vbInfo['edition'] as num?)?.toInt() ?? 0,
     );
     final routeCount = routeNames.length;
-    // 「全部」路由解析：打开有效路内最低组的实例（P1 起该模式下参数
-    // 广播到全部组；P0 骨架仅路由，调参仍只作用主实例）。
-    final primaryGroup = routeMask == 0
-        ? -1
-        : (routeMask & -routeMask).bitLength - 1; // 最低置位 bit
-    final openGroup = !isVb
-        ? -1
-        : (editorGroup == kVbRouteAll ? primaryGroup : editorGroup);
-    // Ch strip 可交互位（P0-B）：VB 非双耳时泵层每组仅 L/R 进引擎
-    // （VmPumpCore.h procCh=2），C/LFE/… chip 是死控件 → 灰显禁点。
-    final chInteractive = (isVb && !model.spatialBinaural) ? 0x3 : 0xFF;
+    // 打开界面的目标组（非 VB 单引擎 -1；VB = 当前选中路）。
+    final openGroup = isVb ? editorGroup : -1;
+    // 路由锁定（编辑器打开时禁切换/禁 A/B/禁 Ch——用户定案）。
+    final locked = manager.isSlotEditorOpen(slot);
+    // Ch strip 可交互位：VB 非双耳仅 L/R 进插件链（泵层 procCh=2）；
+    // 编辑器打开时整体禁用（「禁止声道选择」）。
+    final chInteractive =
+        locked ? 0x0 : ((isVb && !model.spatialBinaural) ? 0x3 : 0xFF);
 
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
@@ -500,9 +524,6 @@ class _ActivePluginHero extends StatelessWidget {
                     title: l10nOf(context)
                         .plugEditorTitleNamed(slot + 1, active.name),
                     group: openGroup,
-                    // 「全部」下打开的界面：关界面时自动拉平全部组
-                    // （P1-6 兜底，调参才生效于全部通道）。
-                    syncOnClose: isVb && editorGroup == kVbRouteAll,
                   ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: Text(l10nOf(context).plugOpenGuiBtn),
@@ -537,11 +558,9 @@ class _ActivePluginHero extends StatelessWidget {
                 ),
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
-                    value: editorGroup == kVbRouteAll
-                        ? kVbRouteAll
-                        : (editorGroup >= 0 && editorGroup < routeCount
-                              ? editorGroup
-                              : null),
+                    value: editorGroup >= 0 && editorGroup < routeCount
+                        ? editorGroup
+                        : null,
                     isDense: true,
                     dropdownColor: p.panelRaised,
                     style: labelOf(p),
@@ -557,21 +576,6 @@ class _ActivePluginHero extends StatelessWidget {
                     ),
                     icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
                     items: [
-                      DropdownMenuItem<int>(
-                        value: kVbRouteAll,
-                        child: Text(
-                          l10nOf(context).plugRouteAll,
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            color: editorGroup == kVbRouteAll
-                                ? p.accent
-                                : p.text,
-                            fontWeight: editorGroup == kVbRouteAll
-                                ? FontWeight.bold
-                                : FontWeight.normal,
-                          ),
-                        ),
-                      ),
                       for (var g = 0; g < routeCount; g++)
                         if ((routeMask & (1 << g)) != 0)
                           DropdownMenuItem<int>(
@@ -589,24 +593,13 @@ class _ActivePluginHero extends StatelessWidget {
                           ),
                     ],
                     onChanged:
-                        (isBusy ||
-                            routeMask == 0 ||
-                            manager.isSlotEditorOpen(slot))
-                        ? null // P1-1 路由锁定：编辑器打开时禁切换
+                        (isBusy || routeMask == 0 || locked)
+                        ? null // 路由锁定：编辑器打开时禁切换
                         : (val) {
                             if (val == null) return;
-                            if (val == kVbRouteAll) {
-                              // P1-5：切「全部」弹继承/不继承菜单
-                              _showAllRouteMenu(
-                                context,
-                                model,
-                                manager,
-                                slot,
-                                routeNames,
-                              );
-                            } else {
-                              model.setVbPluginEditorGroup(val);
-                            }
+                            // P2 自动记录：离开当前路由前落盘 A/B 激活槽。
+                            manager.autoSaveAb(slot, group: editorGroup);
+                            model.setVbPluginEditorGroup(val);
                           },
                   ),
                 ),
@@ -852,17 +845,15 @@ class _ActivePluginHero extends StatelessWidget {
                   ),
                 ),
                 const Spacer(),
-                // P1-2：原「实时动态串联…」文案删除（用户：完全不需要）。
-                // 「全部」路由下显示第 9 套记忆的来源标注（继承自 X / 自有）。
-                if (isVb && editorGroup == kVbRouteAll)
-                  _AllInheritBadge(
-                    model: model,
-                    manager: manager,
-                    slot: slot,
-                    routeNames: routeNames,
-                  )
-                else
-                  const SizedBox.shrink(),
+                // v3.3 A/B 预设条（所有驱动模式显示；VB 点击展开继承下拉）。
+                _AbPresetBar(
+                  manager: manager,
+                  slot: slot,
+                  group: isVb ? editorGroup : -1,
+                  isVb: isVb,
+                  locked: locked,
+                  routeNames: routeNames,
+                ),
               ],
             ),
             const SizedBox(height: AuraSpace.sm),

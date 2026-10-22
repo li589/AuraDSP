@@ -1790,32 +1790,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugRouteBypassed => 'Bypass (no route)';
 
   @override
-  String plugAllInheritFrom(String route) {
-    return 'Inherit from $route';
+  String get abSlotA => 'Preset A';
+
+  @override
+  String get abSlotB => 'Preset B';
+
+  @override
+  String get abAutoSave => 'Auto save';
+
+  @override
+  String abInheritFrom(String src) {
+    return 'Inherit from $src';
   }
 
   @override
-  String get plugAllInheritNone => 'No source (nothing tuned yet)';
-
-  @override
-  String get plugAllUseOwn => 'Use \'All\' own state';
-
-  @override
-  String plugInheritedFrom(String route) {
-    return 'Params inherited from $route';
-  }
-
-  @override
-  String get plugAllOwnState => '\'All\' own state';
-
-  @override
-  String get plugReInherit => 'Re-inherit';
+  String get abReset => 'Reset (clear this preset, source untouched)';
 
   @override
   String get plugRouteLocked => 'Editor open - close it to switch';
-
-  @override
-  String get plugRouteAll => 'All';
 
   @override
   String get plugChStereoOnly =>

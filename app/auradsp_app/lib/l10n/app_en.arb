@@ -786,28 +786,19 @@
   },
   "plugOpenGuiBtn": "Open UI (GUI)",
   "plugRouteBypassed": "Bypass (no route)",
-  "plugAllInheritFrom": "Inherit from {route}",
-  "@plugAllInheritFrom": {
+  "abSlotA": "Preset A",
+  "abSlotB": "Preset B",
+  "abAutoSave": "Auto save",
+  "abInheritFrom": "Inherit from {src}",
+  "@abInheritFrom": {
     "placeholders": {
-      "route": {
+      "src": {
         "type": "String"
       }
     }
   },
-  "plugAllInheritNone": "No source (nothing tuned yet)",
-  "plugAllUseOwn": "Use 'All' own state",
-  "plugInheritedFrom": "Params inherited from {route}",
-  "@plugInheritedFrom": {
-    "placeholders": {
-      "route": {
-        "type": "String"
-      }
-    }
-  },
-  "plugAllOwnState": "'All' own state",
-  "plugReInherit": "Re-inherit",
+  "abReset": "Reset (clear this preset, source untouched)",
   "plugRouteLocked": "Editor open - close it to switch",
-  "plugRouteAll": "All",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",
   "plugUnloadFromSlot": "Unload from This Slot",

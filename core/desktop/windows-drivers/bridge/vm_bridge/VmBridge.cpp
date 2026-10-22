@@ -986,6 +986,22 @@ int vb_plugin_slot_load_preset(int slot, const char* path) {
     return n > 0 ? 1 : 0;
 }
 
+/* P2-1（v3.3 A/B 预设）：per-group state 读写。VB 各路 A/B 预设按
+ * (slot, route) 独立存储，save/load 只作用该组实例；group 越界/无引擎 0。 */
+int vb_plugin_slot_save_preset_g(int slot, int group, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.savePreset(e, slot, path) ? 1 : 0;
+}
+
+int vb_plugin_slot_load_preset_g(int slot, int group, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.loadPreset(e, slot, path) ? 1 : 0;
+}
+
 int vb_plugin_slot_set_insert_stage(int slot, int stage) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     const int n = PluginEngineCount();

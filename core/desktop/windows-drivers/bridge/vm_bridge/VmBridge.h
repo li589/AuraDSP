@@ -97,6 +97,9 @@ VBB_API int vb_plugin_slot_close_editor_g(int slot, int group);
 VBB_API int vb_plugin_slot_is_editor_open_g(int slot, int group);
 VBB_API int vb_plugin_slot_save_preset(int slot, const char* path);
 VBB_API int vb_plugin_slot_load_preset(int slot, const char* path);
+/* P2-1（v3.3 A/B 预设）：per-group state 读写（VB 各路 A/B 独立存储）。 */
+VBB_API int vb_plugin_slot_save_preset_g(int slot, int group, const char* path);
+VBB_API int vb_plugin_slot_load_preset_g(int slot, int group, const char* path);
 VBB_API int vb_plugin_slot_set_insert_stage(int slot, int stage);
 VBB_API int vb_plugin_slot_get_insert_stage(int slot);
 VBB_API int vb_plugin_slot_set_channels(int slot, int channels);

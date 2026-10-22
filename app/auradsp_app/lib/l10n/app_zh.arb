@@ -786,28 +786,19 @@
   },
   "plugOpenGuiBtn": "打开界面 (GUI)",
   "plugRouteBypassed": "旁路（未选路）",
-  "plugAllInheritFrom": "继承自 {route}",
-  "@plugAllInheritFrom": {
+  "abSlotA": "A 预设",
+  "abSlotB": "B 预设",
+  "abAutoSave": "自动保存",
+  "abInheritFrom": "继承自 {src}",
+  "@abInheritFrom": {
     "placeholders": {
-      "route": {
+      "src": {
         "type": "String"
       }
     }
   },
-  "plugAllInheritNone": "无可继承来源（未调过音）",
-  "plugAllUseOwn": "使用『全部』自有状态",
-  "plugInheritedFrom": "参数继承自 {route}",
-  "@plugInheritedFrom": {
-    "placeholders": {
-      "route": {
-        "type": "String"
-      }
-    }
-  },
-  "plugAllOwnState": "『全部』自有状态",
-  "plugReInherit": "重新继承",
+  "abReset": "复原（清除当前预设，不影响来源）",
   "plugRouteLocked": "界面已打开，关闭后可切换",
-  "plugRouteAll": "全部",
   "plugChStereoOnly": "VB 模式每通道仅立体声（L/R）进入插件链",
   "plugLoading": "加载中…",
   "plugUnloadFromSlot": "从当前槽卸载",
