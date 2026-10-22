@@ -4,9 +4,14 @@ class _PluginChannelStrip extends StatelessWidget {
   final int mask;
   final ValueChanged<int> onChanged;
 
+  /// 可交互位（bit=1 可点）：VB 非双耳时泵层每组仅 L/R 进引擎
+  /// （VmPumpCore.h procCh=2），C/LFE/… 位是死控件 → 灰显禁点并提示。
+  final int interactiveMask;
+
   const _PluginChannelStrip({
     required this.mask,
     required this.onChanged,
+    this.interactiveMask = 0xFF,
   });
 
   static const _labels = ['L', 'R', 'C', 'LFE', 'Ls', 'Rs', 'Lr', 'Rr'];
@@ -14,6 +19,7 @@ class _PluginChannelStrip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final stereoOnly = interactiveMask != 0xFF;
     return Row(
       children: [
         Icon(Icons.multitrack_audio_rounded, size: 16, color: p.accent),
@@ -29,9 +35,21 @@ class _PluginChannelStrip extends StatelessWidget {
                 _ChannelChip(
                   label: _labels[ch],
                   selected: (mask & (1 << ch)) != 0,
+                  enabled: (interactiveMask & (1 << ch)) != 0,
                   onTap: () {
                     onChanged(mask ^ (1 << ch));
                   },
+                ),
+              if (stereoOnly)
+                Tooltip(
+                  message: l10nOf(context).plugChStereoOnly,
+                  triggerMode: TooltipTriggerMode.tap,
+                  showDuration: const Duration(seconds: 4),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 2),
+                    child: Icon(Icons.info_outline_rounded,
+                        size: 13, color: p.textDim),
+                  ),
                 ),
             ],
           ),
@@ -44,17 +62,38 @@ class _PluginChannelStrip extends StatelessWidget {
 class _ChannelChip extends StatelessWidget {
   final String label;
   final bool selected;
+  final bool enabled;
   final VoidCallback onTap;
 
   const _ChannelChip({
     required this.label,
     required this.selected,
     required this.onTap,
+    this.enabled = true,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    if (!enabled) {
+      // 死控件：该通道不进插件链（VB 非双耳），灰显不可点。
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+        decoration: BoxDecoration(
+          color: p.panel,
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(color: p.hairline.withValues(alpha: 0.5)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11.5,
+            fontWeight: FontWeight.bold,
+            color: p.textDim.withValues(alpha: 0.4),
+          ),
+        ),
+      );
+    }
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -263,15 +302,29 @@ class _ActivePluginHero extends StatelessWidget {
 
     // v2 按路插件（2026-10-22）：VB 多总线下，插件实际挂在每一路的独立引擎
     // 上（OUTPUT INSERT，每 8 声道一引擎）。「打开界面」跟随总线下拉选中的
-    // 路打开该路引擎上的编辑器；下拉选项 = 设置页 VB 复选框掩码内的路
-    // （vbPluginGroupMask），全不选时无可打开的路（旁路态）。
+    // 路打开该路引擎上的编辑器；「全部」= 主实例（有效路内最低组）。
+    // 下拉选项源 = vbEffectiveRouteMask（通道开着 且 插件勾选——busMask 关的
+    // 整组直通不进引擎，调参不上流）。全不选时无可打开的路（旁路态）。
     // 其余模式（VAIO/ASIO/WASAPI）单引擎，无此维度，group=-1。
     final isVb = model.audioMode == 'vbcallback';
-    final groupMask = model.vbPluginGroupMask;
+    final routeMask = model.vbEffectiveRouteMask;
     final editorGroup = model.vbPluginEditorGroup;
     final routeNames = vbBusNames(
         (model.vbInfo['edition'] as num?)?.toInt() ?? 0);
     final routeCount = routeNames.length;
+    // 「全部」路由解析：打开有效路内最低组的实例（P1 起该模式下参数
+    // 广播到全部组；P0 骨架仅路由，调参仍只作用主实例）。
+    final primaryGroup = routeMask == 0
+        ? -1
+        : (routeMask & -routeMask).bitLength - 1; // 最低置位 bit
+    final openGroup = !isVb
+        ? -1
+        : (editorGroup == AppModel.kVbRouteAll
+            ? primaryGroup
+            : editorGroup);
+    // Ch strip 可交互位（P0-B）：VB 非双耳时泵层每组仅 L/R 进引擎
+    // （VmPumpCore.h procCh=2），C/LFE/… chip 是死控件 → 灰显禁点。
+    final chInteractive = (isVb && !model.spatialBinaural) ? 0x3 : 0xFF;
 
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
@@ -306,17 +359,18 @@ class _ActivePluginHero extends StatelessWidget {
                 style: labelOf(p, size: 11, color: p.textDim)),
             const SizedBox(width: AuraSpace.sm),
           ],
-          // 原生 GUI 打开按钮（v2：VB 模式跟随总线下拉选中的路）
+          // 原生 GUI 打开按钮（v2：VB 模式跟随总线下拉选中的路；
+          // 「全部」= 打开主实例界面）
           ElevatedButton.icon(
             // C1：同一插件可挂多槽，标题必须带槽位号区分两个编辑器窗口。
-            // VB 全不选（无可选路）时禁用——没有路可打开。
-            onPressed: isBusy || (isVb && editorGroup < 0)
+            // VB 无有效路（通道全关/插件全不勾）时禁用——没有路可打开。
+            onPressed: isBusy || (isVb && openGroup < 0)
                 ? null
                 : () => manager.showEditor(
                       slot: slot,
                       title: l10nOf(context)
                           .plugEditorTitleNamed(slot + 1, active.name),
-                      group: isVb ? editorGroup : -1,
+                      group: openGroup,
                     ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: Text(l10nOf(context).plugOpenGuiBtn),
@@ -330,8 +384,8 @@ class _ActivePluginHero extends StatelessWidget {
           ),
           const SizedBox(width: AuraSpace.sm),
           // v2：预设按钮位改「总线下拉」——仅 VB 模式显示（其余模式单引擎
-          // 无多路维度）。选项与设置页 VB 复选框掩码联动；全不选时禁用并
-          // 显示旁路提示。选中值 = vbPluginEditorGroup（会话级）。
+          // 无多路维度）。选项 = 有效路（通道开且插件勾）+「全部」置顶；
+          // 无有效路时禁用并显示旁路提示。选中值 = vbPluginEditorGroup。
           if (isVb) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
@@ -342,9 +396,11 @@ class _ActivePluginHero extends StatelessWidget {
               ),
               child: DropdownButtonHideUnderline(
                 child: DropdownButton<int>(
-                  value: editorGroup >= 0 && editorGroup < routeCount
-                      ? editorGroup
-                      : null,
+                  value: editorGroup == AppModel.kVbRouteAll
+                      ? AppModel.kVbRouteAll
+                      : (editorGroup >= 0 && editorGroup < routeCount
+                          ? editorGroup
+                          : null),
                   isDense: true,
                   dropdownColor: p.panelRaised,
                   style: labelOf(p),
@@ -358,8 +414,23 @@ class _ActivePluginHero extends StatelessWidget {
                   ),
                   icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
                   items: [
+                    DropdownMenuItem<int>(
+                      value: AppModel.kVbRouteAll,
+                      child: Text(
+                        l10nOf(context).plugRouteAll,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          color: editorGroup == AppModel.kVbRouteAll
+                              ? p.accent
+                              : p.text,
+                          fontWeight: editorGroup == AppModel.kVbRouteAll
+                              ? FontWeight.bold
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
                     for (var g = 0; g < routeCount; g++)
-                      if ((groupMask & (1 << g)) != 0)
+                      if ((routeMask & (1 << g)) != 0)
                         DropdownMenuItem<int>(
                           value: g,
                           child: Text(
@@ -374,7 +445,7 @@ class _ActivePluginHero extends StatelessWidget {
                           ),
                         ),
                   ],
-                  onChanged: (isBusy || groupMask == 0)
+                  onChanged: (isBusy || routeMask == 0)
                       ? null
                       : (val) {
                           if (val != null) {
@@ -613,6 +684,7 @@ class _ActivePluginHero extends StatelessWidget {
             const SizedBox(height: AuraSpace.sm),
             _PluginChannelStrip(
               mask: manager.getSlotChannels(slot),
+              interactiveMask: chInteractive,
               onChanged: (m) => manager.setSlotChannels(m, slot: slot),
             ),
             const SizedBox(height: AuraSpace.xs),

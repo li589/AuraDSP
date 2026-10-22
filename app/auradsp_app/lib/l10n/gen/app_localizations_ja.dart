@@ -43,6 +43,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbPluginTooltip => 'チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）';
 
   @override
+  String get vbPluginLockedHint => 'バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）';
+
+  @override
   String get shelfTitle => 'ローシェルフ';
 
   @override
@@ -1713,6 +1716,12 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plugRouteBypassed => 'バイパス（未選択）';
+
+  @override
+  String get plugRouteAll => 'すべて';
+
+  @override
+  String get plugChStereoOnly => 'VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ';
 
   @override
   String get plugLoading => '加载中…';

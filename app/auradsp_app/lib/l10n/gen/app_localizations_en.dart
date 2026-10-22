@@ -44,6 +44,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Check = mounted plugins process this bus (vendor FX unaffected)';
 
   @override
+  String get vbPluginLockedHint =>
+      'Plugins do not run while bus processing is off (state kept; resumes instantly)';
+
+  @override
   String get shelfTitle => 'Low Shelf';
 
   @override
@@ -1784,6 +1788,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugRouteBypassed => 'Bypass (no route)';
+
+  @override
+  String get plugRouteAll => 'All';
+
+  @override
+  String get plugChStereoOnly =>
+      'VB mode feeds only stereo (L/R) per bus into the plugin chain';
 
   @override
   String get plugLoading => 'Loading…';
