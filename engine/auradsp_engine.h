@@ -272,6 +272,12 @@ int      auradsp_plugin_set_pdc(auradsp_handle h, int enable);
 int      auradsp_plugin_get_pdc(auradsp_handle h);
 uint32_t auradsp_plugin_get_total_latency(auradsp_handle h);
 
+/* plugin chain enable switch (VB multi-bus per-bus plugin processing):
+ * disabled = plugins (incl. PDC) bypassed on this handle; slot mounts and
+ * vendor DSP unaffected. Enabled by default. */
+int      auradsp_plugin_chain_set_enabled(auradsp_handle h, int enabled);
+int      auradsp_plugin_chain_get_enabled(auradsp_handle h);
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

@@ -36,6 +36,10 @@ struct Fns {
     using FnGetStage = int (*)(void*, int);
     using FnSetChannels = int (*)(void*, int, int);
     using FnGetChannels = int (*)(void*, int);
+    /* 链级启用开关（2026-10-22 VB 按路插件处理）：可选解析——旧引擎 DLL
+     * 无此符号时保持 nullptr，调用方判空跳过（桥不因引擎版本被拒载）。 */
+    using FnChainSetEnabled = int (*)(void*, int);
+    using FnChainGetEnabled = int (*)(void*, int);
 
     FnLoad load = nullptr;
     FnUnload unload = nullptr;
@@ -52,6 +56,10 @@ struct Fns {
     FnGetStage getStage = nullptr;
     FnSetChannels setChannels = nullptr;
     FnGetChannels getChannels = nullptr;
+    FnChainSetEnabled chainSetEnabled = nullptr;
+    FnChainGetEnabled chainGetEnabled = nullptr;
+
+    bool HasChainEnable() const { return chainSetEnabled && chainGetEnabled; }
 
     bool Ready() const {
         return load && unload && setBypass && getBypass && getLatency &&
@@ -76,6 +84,8 @@ struct Fns {
         getStage = nullptr;
         setChannels = nullptr;
         getChannels = nullptr;
+        chainSetEnabled = nullptr;
+        chainGetEnabled = nullptr;
         if (!mod) return false;
         load = (FnLoad)GetProcAddress(mod, "auradsp_plugin_slot_load");
         unload = (FnUnload)GetProcAddress(mod, "auradsp_plugin_slot_unload");
@@ -105,6 +115,11 @@ struct Fns {
             mod, "auradsp_plugin_slot_set_channels");
         getChannels = (FnGetChannels)GetProcAddress(
             mod, "auradsp_plugin_slot_get_channels");
+        /* 可选符号：旧引擎 DLL 无此导出时保持 nullptr（不参与 Ready()）。 */
+        chainSetEnabled = (FnChainSetEnabled)GetProcAddress(
+            mod, "auradsp_plugin_chain_set_enabled");
+        chainGetEnabled = (FnChainGetEnabled)GetProcAddress(
+            mod, "auradsp_plugin_chain_get_enabled");
         return Ready();
     }
 };

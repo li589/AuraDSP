@@ -267,6 +267,20 @@ int auradsp_plugin_get_pdc(auradsp_handle h) {
     return h->plugin.chain->pdc() ? 1 : 0;
 }
 
+/* 链级启用开关（VB 多总线按路插件处理）：关闭 = 该 handle 上全部插件
+ * （含 PDC）不进音频路径，槽位挂载状态保留、厂商 DSP 不受影响。
+ * 原子布尔，桥控制线程调用安全（音频线程 acquire 读）。 */
+int auradsp_plugin_chain_set_enabled(auradsp_handle h, int enabled) {
+    if (!h || !h->plugin.chain) return 0;
+    h->plugin.chain->setEnabled(enabled != 0);
+    return 1;
+}
+
+int auradsp_plugin_chain_get_enabled(auradsp_handle h) {
+    if (!h || !h->plugin.chain) return 0;
+    return h->plugin.chain->enabled() ? 1 : 0;
+}
+
 uint32_t auradsp_plugin_get_total_latency(auradsp_handle h) {
     if (!h || !h->plugin.chain) return 0;
     return h->plugin.chain->totalLatency();
