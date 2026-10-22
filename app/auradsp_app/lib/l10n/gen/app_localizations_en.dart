@@ -40,6 +40,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get vbBuses => 'VB buses (off=passthrough)';
 
   @override
+  String get vbPluginTooltip =>
+      'Check = mounted plugins process this bus (vendor FX unaffected)';
+
+  @override
   String get shelfTitle => 'Low Shelf';
 
   @override
@@ -913,16 +917,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgSave => 'Save';
 
   @override
-  String get dlgLoad => 'Load';
-
-  @override
   String get dlgClose => 'Close';
 
   @override
   String get dlgUnload => 'Unload';
-
-  @override
-  String get dlgPreset => 'Preset';
 
   @override
   String get memTitle => 'Persistent Memory & External Config';
@@ -1662,26 +1660,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugAddScan => 'Add & Scan';
 
   @override
-  String plugPresetTitle(String name) {
-    return 'Plugin presets — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => 'Save current parameter state';
-
-  @override
-  String get plugPresetNameHint => 'Enter a new preset name...';
-
-  @override
-  String plugPresetList(int n) {
-    return 'Saved presets ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty =>
-      'No saved presets yet; save via the input above.';
-
-  @override
   String get plugTitle => 'Plugin Center';
 
   @override
@@ -1738,14 +1716,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Native Win32 GUI popups on a dedicated message loop';
 
   @override
-  String get plugFeatPreset => 'Binary-stream preset save & instant restore';
-
-  @override
   String get plugFeatDirs =>
       'Custom plugin folder search & local state snapshots';
 
   @override
   String get plugFeatRt => 'Flat stereo RT-Safe preallocation, zero locks';
+
+  @override
+  String get plugFeatRoute => 'Per-route plugin setup (VB)';
 
   @override
   String plugSlot(int n) {
@@ -1803,6 +1781,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugOpenGuiBtn => 'Open UI (GUI)';
+
+  @override
+  String get plugRouteBypassed => 'Bypass (no route)';
 
   @override
   String get plugLoading => 'Loading…';

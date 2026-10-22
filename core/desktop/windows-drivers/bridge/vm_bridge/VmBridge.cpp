@@ -88,6 +88,23 @@ static void* PluginEngineAt(int g) {
     return (g >= 0 && g < g_b.ctx.nEng) ? g_b.ctx.eng[g] : nullptr;
 }
 
+// 按路插件处理掩码（bit g = 组 g 吃插件链）。session 级保管于桥静态区
+// （ctx 会被 memset，CHANGE 重建不丢，重建后经 ApplyPluginGroupMask 重放）。
+static volatile LONG g_pluginGroupMask = 0xFF;
+
+// 把掩码下发到全部组引擎（引擎链级开关，原子布尔，RT 安全）。
+// 引擎 DLL 无链开关符号（旧版本）时静默跳过——掩码仍被记录，
+// 升级引擎后自然生效。不在 RT 线程调用（控制线程语义）。
+static void ApplyPluginGroupMask() {
+    if (!g_pluginFns.HasChainEnable()) return;
+    const int mask = InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+    for (int g = 0; g < g_b.ctx.nEng; ++g) {
+        if (g_b.ctx.eng[g]) {
+            g_pluginFns.chainSetEnabled(g_b.ctx.eng[g], (mask >> g) & 1);
+        }
+    }
+}
+
 // 参数镜像：CHANGE 重建会换掉全部引擎句柄，新句柄是出厂态。桥必须自己留一份
 // 最近一次生效的参数并在重建后逐条回放——否则用户在 App 侧只在 vb_start 时
 // 下发一次，VM 一重启引擎（改主输出设备）参数就全丢，听感变成"没处理"，
@@ -299,6 +316,8 @@ void RebuildEngines(int groups, float sr) {
             ok += o;
             failed += f2;
         }
+        // 新引擎出厂 = 链全开；按路掩码重放（未勾选组重新关闭）。
+        ApplyPluginGroupMask();
     }
 }
 
@@ -622,6 +641,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
     }
     g_b.monitor = CreateThread(nullptr, 0, MonitorProc, nullptr, 0, nullptr);
     InterlockedExchange(&g_b.running, 1);
+    // 启动后应用按路插件掩码（新引擎出厂 = 链全开，会话掩码覆盖之）
+    ApplyPluginGroupMask();
     return 0;
 }
 
@@ -911,6 +932,14 @@ int vb_plugin_slot_show_editor(int slot, const char* title) {
     return g_pluginFns.showEditor(e, slot, title);
 }
 
+/* 按路编辑器（作用于组 g 的引擎实例；group 越界/该组无引擎返回 0）。 */
+int vb_plugin_slot_show_editor_g(int slot, int group, const char* title) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.showEditor(e, slot, title);
+}
+
 int vb_plugin_slot_close_editor(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     void* e = PluginEngine();
@@ -918,9 +947,23 @@ int vb_plugin_slot_close_editor(int slot) {
     return g_pluginFns.closeEditor(e, slot);
 }
 
+int vb_plugin_slot_close_editor_g(int slot, int group) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.closeEditor(e, slot);
+}
+
 int vb_plugin_slot_is_editor_open(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     void* e = PluginEngine();
+    if (!e || !g_pluginFns.Ready()) return 0;
+    return g_pluginFns.isEditorOpen(e, slot);
+}
+
+int vb_plugin_slot_is_editor_open_g(int slot, int group) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
     if (!e || !g_pluginFns.Ready()) return 0;
     return g_pluginFns.isEditorOpen(e, slot);
 }
@@ -975,4 +1018,20 @@ int vb_plugin_slot_get_channels(int slot) {
     void* e = PluginEngine();
     if (!e || !g_pluginFns.Ready()) return 0xFF;
     return g_pluginFns.getChannels(e, slot);
+}
+
+// ---- 按路插件处理掩码 ----
+// bit g = 组 g 的总线是否吃插件链。接受任意 8 bit 掩码（掩码位超出当前
+// 组数无害——引擎按位取用，多余位被忽略；重建组数变化后重放自动适配）。
+int vb_plugin_group_enable(int mask) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    mask &= 0xFF;
+    InterlockedExchange(&g_pluginGroupMask, (LONG)mask);
+    ApplyPluginGroupMask();
+    return mask;
+}
+
+int vb_plugin_group_mask() {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0xFF;
+    return InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
 }

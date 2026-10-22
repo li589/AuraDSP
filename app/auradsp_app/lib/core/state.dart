@@ -391,6 +391,12 @@ class AppModel extends ChangeNotifier {
   Map<String, dynamic> vbInfo = {};
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
   int vbBusMask = 0xFF;
+  // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
+  int vbPluginGroupMask = 0xFF;
+  // v2 按路编辑器目标总线（会话级，不落盘；-1 = 无有效选中路）。
+  // 插件页「打开界面」按钮跟随此值路由到对应组引擎；选中路被取消勾选时
+  // 由 _fallbackVbPluginEditorGroup() 回落到仍在掩码内的最低路。
+  int vbPluginEditorGroup = -1;
   // ASIO 常驻桥状态（04 桥；isolate 回推，与 VB 桥互斥——一次只跑一个后端）。
   bool asioActive = false;
   Map<String, dynamic> asioInfo = {};
@@ -1092,6 +1098,9 @@ class AppModel extends ChangeNotifier {
     // VB 总线掩码：落盘值 0（=全关，无意义）回全开；其余取低 8 bit。
     final m = config.vbBusMask & 0xFF;
     vbBusMask = m == 0 ? 0xFF : m;
+    // 按路插件掩码：0（全关）是用户显式选择，直接取用；键缺失时
+    // fromJson 已给默认 0xFF。
+    vbPluginGroupMask = config.vbPluginGroupMask & 0xFF;
     /* C4：按真实采样率重建 EQ 网格。必须放在 config 加载之后 ——
      * 字段初始化器早于构造函数体，那时 config 还是默认值。
      * 不重建的话，低采样率用户拿到的是含越界频点的出厂网格。 */
@@ -1904,17 +1913,6 @@ class AppModel extends ChangeNotifier {
       case 'pluginSlotChannels':
         pluginManager.onPluginSlotChannels(
             raw['slot'] as int, (raw['mask'] as num).toInt(), raw['rc'] as int);
-        scheduleAutoSave();
-        notifyListeners();
-        break;
-      case 'pluginSlotPresetSaved':
-        lastInfo = '预设已保存成功';
-        eventSeq.value = ++_guardSeq;
-        notifyListeners();
-        break;
-      case 'pluginSlotPresetLoaded':
-        lastInfo = '预设已载入成功';
-        eventSeq.value = ++_guardSeq;
         scheduleAutoSave();
         notifyListeners();
         break;
@@ -4050,7 +4048,10 @@ void setAudioMode(String id) {
   ConfigManager.save(config);
   if (wasVb != isVb) {
     // 进桥先推掩码（isolate 记 session 变量，start 时同步进桥；桥未起时仅记录）。
-    if (isVb) _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
+    if (isVb) {
+      _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
+      _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+    }
     _toIso?.send({'cmd': 'vbmode', 'on': isVb});
     if (!isVb) {
       vbActive = false;
@@ -4681,6 +4682,61 @@ void setVbBus(int group, bool on) {
   ConfigManager.save(config);
   _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
   notifyListeners();
+}
+
+/// VB 按路插件处理开关：bit g = 组 g 总线吃插件链（厂商 DSP 不受影响）。
+void setVbPluginGroup(int group, bool on) {
+  if (group < 0 || group > 7) return;
+  final next =
+      on ? (vbPluginGroupMask | (1 << group)) : (vbPluginGroupMask & ~(1 << group));
+  if (next == vbPluginGroupMask) return;
+  vbPluginGroupMask = next & 0xFF;
+  config.vbPluginGroupMask = vbPluginGroupMask;
+  ConfigManager.save(config);
+  _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+  _fallbackVbPluginEditorGroup();
+  notifyListeners();
+}
+
+/// 批处理：全部总线开/关插件链。
+void setVbPluginGroupAll(bool on) {
+  final next = on ? 0xFF : 0x00;
+  if (next == vbPluginGroupMask) return;
+  // 全关在 UI 语义 = 「全部不勾」；落盘仍用原值（0 回全开口径只影响加载），
+  // 这里直接保存 0xFF/0x00 原值：全关是用户显式选择。
+  vbPluginGroupMask = next;
+  config.vbPluginGroupMask = next;
+  ConfigManager.save(config);
+  _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+  _fallbackVbPluginEditorGroup();
+  notifyListeners();
+}
+
+/// v2 按路编辑器目标路选择（仅掩码内合法；插件页总线下拉调用）。
+void setVbPluginEditorGroup(int group) {
+  if (group < 0 || group > 7) return;
+  if ((vbPluginGroupMask & (1 << group)) == 0) return;
+  if (vbPluginEditorGroup == group) return;
+  vbPluginEditorGroup = group;
+  notifyListeners();
+}
+
+/// 选中路失效（被取消勾选/全不勾）时回落到最低勾选路；无勾选路置 -1。
+void _fallbackVbPluginEditorGroup() {
+  if (vbPluginEditorGroup >= 0 &&
+      (vbPluginGroupMask & (1 << vbPluginEditorGroup)) != 0) {
+    return;
+  }
+  var next = -1;
+  for (var g = 0; g < 8; g++) {
+    if ((vbPluginGroupMask & (1 << g)) != 0) {
+      next = g;
+      break;
+    }
+  }
+  if (vbPluginEditorGroup != next) {
+    vbPluginEditorGroup = next;
+  }
 }
 
 /// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。

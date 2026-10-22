@@ -160,6 +160,12 @@ abstract class AppLocalizations {
   /// **'VB 总线（关=直通）'**
   String get vbBuses;
 
+  /// No description provided for @vbPluginTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'勾选 = 挂载的插件处理该路音频（厂商音效不受影响）'**
+  String get vbPluginTooltip;
+
   /// No description provided for @shelfTitle.
   ///
   /// In zh, this message translates to:
@@ -1792,12 +1798,6 @@ abstract class AppLocalizations {
   /// **'保存'**
   String get dlgSave;
 
-  /// No description provided for @dlgLoad.
-  ///
-  /// In zh, this message translates to:
-  /// **'载入'**
-  String get dlgLoad;
-
   /// No description provided for @dlgClose.
   ///
   /// In zh, this message translates to:
@@ -1809,12 +1809,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'卸载'**
   String get dlgUnload;
-
-  /// No description provided for @dlgPreset.
-  ///
-  /// In zh, this message translates to:
-  /// **'预设'**
-  String get dlgPreset;
 
   /// No description provided for @memTitle.
   ///
@@ -3142,36 +3136,6 @@ abstract class AppLocalizations {
   /// **'添加并扫描'**
   String get plugAddScan;
 
-  /// No description provided for @plugPresetTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'插件预设管理 — {name}'**
-  String plugPresetTitle(String name);
-
-  /// No description provided for @plugPresetSaveLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'保存当前参数状态'**
-  String get plugPresetSaveLabel;
-
-  /// No description provided for @plugPresetNameHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'输入新预设名称...'**
-  String get plugPresetNameHint;
-
-  /// No description provided for @plugPresetList.
-  ///
-  /// In zh, this message translates to:
-  /// **'已有预设列表 ({n})'**
-  String plugPresetList(int n);
-
-  /// No description provided for @plugPresetEmpty.
-  ///
-  /// In zh, this message translates to:
-  /// **'暂无已保存预设，可通过上方输入框保存。'**
-  String get plugPresetEmpty;
-
   /// No description provided for @plugTitle.
   ///
   /// In zh, this message translates to:
@@ -3268,12 +3232,6 @@ abstract class AppLocalizations {
   /// **'原生 Win32 GUI 弹窗独立消息循环'**
   String get plugFeatGui;
 
-  /// No description provided for @plugFeatPreset.
-  ///
-  /// In zh, this message translates to:
-  /// **'二进制流预设保存与即时载入恢复'**
-  String get plugFeatPreset;
-
   /// No description provided for @plugFeatDirs.
   ///
   /// In zh, this message translates to:
@@ -3285,6 +3243,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'实时极速监听：专为专业制作定制的零卡顿音频通道'**
   String get plugFeatRt;
+
+  /// No description provided for @plugFeatRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'VB 按路插件逐路独立配置'**
+  String get plugFeatRoute;
 
   /// No description provided for @plugSlot.
   ///
@@ -3369,6 +3333,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'打开界面 (GUI)'**
   String get plugOpenGuiBtn;
+
+  /// No description provided for @plugRouteBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路（未选路）'**
+  String get plugRouteBypassed;
 
   /// No description provided for @plugLoading.
   ///

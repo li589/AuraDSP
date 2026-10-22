@@ -4,7 +4,8 @@
  * 升级功能：
  * 1. 双插槽独立架构（Slot 1 / Slot 2 并行挂载与管理）
  * 2. 原生 GUI 编辑器弹窗唤起（独立消息循环异步线程）
- * 3. 插件预设管理系统（快照保存与载入、文件管理）
+ * 3. VB 多总线按路插件（VB 模式总线下拉选路，打开该路插件界面逐路调节；
+ *    预设存取功能已移除，各插件当前加载状态由 pluginMirror 完整保留）
  * 4. 可自定义插件检索目录（UI 配置、持久化 config.json、多目录聚合扫描）
  * 5. 全音效处理链插入阶段调整（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）
  */
@@ -133,141 +134,6 @@ class _PluginsPageState extends State<PluginsPage> {
     );
   }
 
-  void _showPresetDialog(BuildContext context, int slot, PluginMetadata plugin) {
-    final presetNameCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDlgState) {
-            final p = paletteOf(ctx);
-            final presets = widget.model.pluginManager.listPresets(plugin.name);
-
-            return AlertDialog(
-              backgroundColor: p.panel,
-              title: Row(
-                children: [
-                  Icon(Icons.tune_rounded, size: 20, color: p.accent),
-                  const SizedBox(width: AuraSpace.sm),
-                  Text(l10nOf(ctx).plugPresetTitle(plugin.name), style: sectionOf(p)),
-                ],
-              ),
-              content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l10nOf(ctx).plugPresetSaveLabel, style: labelOf(p)),
-                    const SizedBox(height: AuraSpace.xs),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: presetNameCtrl,
-                            style: labelOf(p),
-                            decoration: InputDecoration(
-                              hintText: l10nOf(ctx).plugPresetNameHint,
-                              hintStyle: captionOf(p),
-                              isDense: true,
-                              border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AuraRadius.sm),
-                                borderSide: BorderSide(color: p.hairline),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AuraSpace.sm),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            final name = presetNameCtrl.text.trim();
-                            if (name.isNotEmpty) {
-                              widget.model.pluginManager
-                                  .savePreset(name, slot: slot);
-                              presetNameCtrl.clear();
-                              setDlgState(() {});
-                            }
-                          },
-                          icon: const Icon(Icons.save_rounded, size: 16),
-                          label: Text(l10nOf(ctx).dlgSave),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: p.accent,
-                            foregroundColor: p.accentContrast,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AuraSpace.md),
-                    Divider(color: p.hairline, height: 1),
-                    const SizedBox(height: AuraSpace.md),
-                    Text(l10nOf(ctx).plugPresetList(presets.length), style: labelOf(p)),
-                    const SizedBox(height: AuraSpace.xs),
-                    if (presets.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: AuraSpace.md),
-                        child: Center(
-                          child: Text(l10nOf(ctx).plugPresetEmpty,
-                              style: captionOf(p)),
-                        ),
-                      )
-                    else
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 180),
-                        decoration: BoxDecoration(
-                          color: p.panelRaised,
-                          borderRadius: BorderRadius.circular(AuraRadius.sm),
-                          border: Border.all(color: p.hairline),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: presets.length,
-                          separatorBuilder: (_, _) =>
-                              Divider(color: p.hairline, height: 1),
-                          itemBuilder: (c, idx) {
-                            final name = presets[idx];
-                            return ListTile(
-                              dense: true,
-                              title: Text(name, style: labelOf(p)),
-                              trailing: ElevatedButton.icon(
-                                onPressed: () {
-                                  widget.model.pluginManager
-                                      .loadPreset(name, slot: slot);
-                                  Navigator.of(ctx).pop();
-                                },
-                                icon: const Icon(Icons.file_upload_rounded,
-                                    size: 14),
-                                label: Text(l10nOf(ctx).dlgLoad),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: p.accent.withValues(alpha: 0.2),
-                                  foregroundColor: p.accent,
-                                  visualDensity: VisualDensity.compact,
-                                  elevation: 0,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(l10nOf(ctx).dlgClose, style: labelOf(p)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
@@ -286,13 +152,13 @@ class _PluginsPageState extends State<PluginsPage> {
         final manager = widget.model.pluginManager;
         final currentSlot = manager.selectedSlot;
         return PageScaffold(
-        title: l10nOf(context).plugTitle,
-        children: [
-          // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
-          _SlotSelectorBar(
-            manager: manager,
-            onSelectSlot: (slot) => manager.selectSlot(slot),
-          ),
+          title: l10nOf(context).plugTitle,
+          children: [
+            // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
+            _SlotSelectorBar(
+              manager: manager,
+              onSelectSlot: (slot) => manager.selectSlot(slot),
+            ),
 
           // 1. 当前选中挂载插槽 Hero 卡片
           _ActivePluginHero(
@@ -300,7 +166,6 @@ class _PluginsPageState extends State<PluginsPage> {
             manager: manager,
             slot: currentSlot,
             onScanTap: () => manager.scan(deep: _deepScan),
-            onShowPresets: (plugin) => _showPresetDialog(context, currentSlot, plugin),
           ),
 
           // 2. 自定义检索目录管理
@@ -535,8 +400,8 @@ class _PluginsPageState extends State<PluginsPage> {
                       color: p.success,
                     ),
                     _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatPreset,
+                      icon: Icons.route_rounded,
+                      label: l10nOf(context).plugFeatRoute,
                       color: p.success,
                     ),
                     _FeatureBadge(

@@ -130,6 +130,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final Map<String, String> paramStrMirror = {};
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
   int vbBusMask = 0xFF;
+  // 按路插件处理掩码（bit g = 组 g 总线吃插件链；进桥后与 busMask 同步下发）。
+  int vbPluginGroupMask = 0xFF;
   int vbStatusTick = 0;
   bool vbVizNullLogged = false;
   bool vbNoCbLogged = false;
@@ -324,6 +326,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 总线掩码同步（model 持久化的选择；桥默认全开）。
     final maskRc = vb!.setBusMask(vbBusMask);
     dbgLog('vbmode: busmask sync isolate=$vbBusMask rc=$maskRc');
+    // 按路插件处理掩码同步（bit g = 组 g 总线吃插件链；桥默认全开）。
+    try {
+      final pgRc = vb!.pluginGroupEnable(vbPluginGroupMask);
+      dbgLog('vbmode: plugin-group sync isolate=$vbPluginGroupMask rc=$pgRc');
+    } catch (e) {
+      dbgLog('vbmode: plugin-group sync failed (old bridge dll?): $e');
+    }
     try {
       wasapi?.stop();
     } catch (_) {}
@@ -1312,6 +1321,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             vb!.setBusMask(vbBusMask);
           }
           break;
+        case 'setPluginGroupMask':
+          // 按路插件处理掩码（bit g = 组 g 总线吃插件链）。
+          vbPluginGroupMask = (m['mask'] as int) & 0xFF;
+          if (vbActive && vb != null) {
+            try {
+              vb!.pluginGroupEnable(vbPluginGroupMask);
+            } catch (e) {
+              dbgLog('plugin-group enable failed (old bridge dll?): $e');
+            }
+          }
+          break;
         case 'pluginScan':
           {
             if (lib != null && handle != null) {
@@ -1575,13 +1595,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final title = (m['title'] as String?) ?? '';
+            // v2：VB 多总线按路打开编辑器（group>=0 才有效；其余模式 -1）
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
               send({
                 'evt': 'pluginSlotEditorResult',
                 'slot': slot,
                 'action': 'show',
-                'rc': pb.showEditor(slot, title: title),
+                'rc': pb.showEditor(slot, group: group, title: title),
               });
               break;
             }
@@ -1599,13 +1621,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'pluginSlotCloseEditor':
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
               send({
                 'evt': 'pluginSlotEditorResult',
                 'slot': slot,
                 'action': 'close',
-                'rc': pb.closeEditor(slot),
+                'rc': pb.closeEditor(slot, group: group),
               });
               break;
             }
@@ -1616,59 +1639,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'slot': slot,
                 'action': 'close',
                 'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginSlotSavePreset':
-          {
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              send({
-                'evt': 'pluginSlotPresetSaved',
-                'slot': slot,
-                'path': path,
-                'rc': pb.savePreset(slot, path),
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
-              send({
-                'evt': 'pluginSlotPresetSaved',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginSlotLoadPreset':
-          {
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': pb.loadPreset(slot, path),
-                'status': pb.getStatus(slot),
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
-              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-                'status': statusJson,
               });
             }
             break;

@@ -10,6 +10,7 @@
   "stateError": "Error",
   "stateIdle": "Idle",
   "vbBuses": "VB buses (off=passthrough)",
+  "vbPluginTooltip": "Check = mounted plugins process this bus (vendor FX unaffected)",
   "shelfTitle": "Low Shelf",
   "shelfHint": "Lift or cut everything below the corner; fixes thin recordings or boomy lows",
   "shelfFreq": "Gain Frequency",
@@ -333,10 +334,8 @@
   "dlgCancel": "Cancel",
   "dlgAdd": "Add",
   "dlgSave": "Save",
-  "dlgLoad": "Load",
   "dlgClose": "Close",
   "dlgUnload": "Unload",
-  "dlgPreset": "Preset",
   "memTitle": "Persistent Memory & External Config",
   "memHint": "Automatically records all effect settings and restores them seamlessly on next launch.",
   "memAutoRestore": "Auto-save and restore session on exit",
@@ -688,25 +687,6 @@
   "plugAddDirPrompt": "Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:",
   "plugAddDirExample": "E.g.: D:\\AudioPlugins\\VST3",
   "plugAddScan": "Add & Scan",
-  "plugPresetTitle": "Plugin presets — {name}",
-  "@plugPresetTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "plugPresetSaveLabel": "Save current parameter state",
-  "plugPresetNameHint": "Enter a new preset name...",
-  "plugPresetList": "Saved presets ({n})",
-  "@plugPresetList": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
-  "plugPresetEmpty": "No saved presets yet; save via the input above.",
   "plugTitle": "Plugin Center",
   "plugLibTitle": "Third-party Effect Library",
   "plugLibHint": "Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.",
@@ -739,9 +719,9 @@
   "plugFeatSlots": "Quad slots (Slot 1 ~ Slot 4) managed independently & concurrently",
   "plugFeatStages": "Full-chain stage insertion (Pre-DSP ~ Post-Limiter)",
   "plugFeatGui": "Native Win32 GUI popups on a dedicated message loop",
-  "plugFeatPreset": "Binary-stream preset save & instant restore",
   "plugFeatDirs": "Custom plugin folder search & local state snapshots",
   "plugFeatRt": "Flat stereo RT-Safe preallocation, zero locks",
+  "plugFeatRoute": "Per-route plugin setup (VB)",
   "plugSlot": "Slot {n} (Slot {n})",
   "@plugSlot": {
     "placeholders": {
@@ -804,6 +784,7 @@
     }
   },
   "plugOpenGuiBtn": "Open UI (GUI)",
+  "plugRouteBypassed": "Bypass (no route)",
   "plugLoading": "Loading…",
   "plugUnloadFromSlot": "Unload from This Slot",
   "plugLoadToSlot": "Load into Slot {n}",

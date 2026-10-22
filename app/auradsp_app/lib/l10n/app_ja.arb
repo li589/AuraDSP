@@ -10,6 +10,7 @@
   "stateError": "エラー",
   "stateIdle": "アイドル",
   "vbBuses": "VBバス（オフ=スルー）",
+  "vbPluginTooltip": "チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）",
   "shelfTitle": "ローシェルフ",
   "shelfHint": "コーナー以下を持ち上げ/抑えて薄い低音や膨らみを整える",
   "shelfFreq": "ゲイン周波数",
@@ -333,10 +334,8 @@
   "dlgCancel": "キャンセル",
   "dlgAdd": "追加",
   "dlgSave": "保存",
-  "dlgLoad": "読み込み",
   "dlgClose": "閉じる",
   "dlgUnload": "アンロード",
-  "dlgPreset": "プリセット",
   "memTitle": "永続メモリと外部設定",
   "memHint": "全エフェクト設定を自動記録し、次回起動時にシームレスに復元します。",
   "memAutoRestore": "終了時にセッションを自動保存・復元",
@@ -688,25 +687,6 @@
   "plugAddDirPrompt": "64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：",
   "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
   "plugAddScan": "追加してスキャン",
-  "plugPresetTitle": "プラグインプリセット — {name}",
-  "@plugPresetTitle": {
-    "placeholders": {
-      "name": {
-        "type": "String"
-      }
-    }
-  },
-  "plugPresetSaveLabel": "現在のパラメータ状態を保存",
-  "plugPresetNameHint": "新しいプリセット名を入力…",
-  "plugPresetList": "保存済みプリセット ({n})",
-  "@plugPresetList": {
-    "placeholders": {
-      "n": {
-        "type": "int"
-      }
-    }
-  },
-  "plugPresetEmpty": "保存済みプリセットはありません。上の入力欄から保存できます。",
   "plugTitle": "プラグインセンター",
   "plugLibTitle": "サードパーティエフェクトライブラリ",
   "plugLibHint": "システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。",
@@ -739,9 +719,9 @@
   "plugFeatSlots": "4スロット対称プラグインラック (Slot 1 〜 Slot 4) 独立管理・並行",
   "plugFeatStages": "全チェーンステージ挿入 (Pre-DSP～Post-Limiter)",
   "plugFeatGui": "ネイティブWin32 GUIは独立メッセージループ",
-  "plugFeatPreset": "バイナリストリーム保存と即時復元",
   "plugFeatDirs": "カスタム検索フォルダとローカル状態スナップショット",
   "plugFeatRt": "フラットステレオRT-Safe事前確保・ゼロロック",
+  "plugFeatRoute": "VBバス別プラグイン設定",
   "plugSlot": "スロット{n} (Slot {n})",
   "@plugSlot": {
     "placeholders": {
@@ -804,6 +784,7 @@
     }
   },
   "plugOpenGuiBtn": "UIを開く (GUI)",
+  "plugRouteBypassed": "バイパス（未選択）",
   "plugUnloadFromSlot": "このスロットからアンロード",
   "plugLoadToSlot": "スロット{n}へロード",
   "@plugLoadToSlot": {

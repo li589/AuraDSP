@@ -40,6 +40,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbBuses => 'VB 总线（关=直通）';
 
   @override
+  String get vbPluginTooltip => '勾选 = 挂载的插件处理该路音频（厂商音效不受影响）';
+
+  @override
   String get shelfTitle => '低频搁架';
 
   @override
@@ -883,16 +886,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dlgSave => '保存';
 
   @override
-  String get dlgLoad => '载入';
-
-  @override
   String get dlgClose => '关闭';
 
   @override
   String get dlgUnload => '卸载';
-
-  @override
-  String get dlgPreset => '预设';
 
   @override
   String get memTitle => '持久化记忆与配置外置';
@@ -1596,25 +1593,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugAddScan => '添加并扫描';
 
   @override
-  String plugPresetTitle(String name) {
-    return '插件预设管理 — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => '保存当前参数状态';
-
-  @override
-  String get plugPresetNameHint => '输入新预设名称...';
-
-  @override
-  String plugPresetList(int n) {
-    return '已有预设列表 ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty => '暂无已保存预设，可通过上方输入框保存。';
-
-  @override
   String get plugTitle => '插件中心';
 
   @override
@@ -1666,13 +1644,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugFeatGui => '原生 Win32 GUI 弹窗独立消息循环';
 
   @override
-  String get plugFeatPreset => '二进制流预设保存与即时载入恢复';
-
-  @override
   String get plugFeatDirs => '可自定义插件目录检索与本地状态快照';
 
   @override
   String get plugFeatRt => '实时极速监听：专为专业制作定制的零卡顿音频通道';
+
+  @override
+  String get plugFeatRoute => 'VB 按路插件逐路独立配置';
 
   @override
   String plugSlot(int n) {
@@ -1728,6 +1706,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugOpenGuiBtn => '打开界面 (GUI)';
+
+  @override
+  String get plugRouteBypassed => '旁路（未选路）';
 
   @override
   String get plugLoading => '加载中…';

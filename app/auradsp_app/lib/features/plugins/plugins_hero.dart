@@ -190,14 +190,12 @@ class _ActivePluginHero extends StatelessWidget {
   final PluginManager manager;
   final int slot;
   final VoidCallback onScanTap;
-  final ValueChanged<PluginMetadata> onShowPresets;
 
   const _ActivePluginHero({
     required this.model,
     required this.manager,
     required this.slot,
     required this.onScanTap,
-    required this.onShowPresets,
   });
 
   @override
@@ -263,6 +261,18 @@ class _ActivePluginHero extends StatelessWidget {
 
     final isVst3 = active.format == PluginFormat.vst3;
 
+    // v2 按路插件（2026-10-22）：VB 多总线下，插件实际挂在每一路的独立引擎
+    // 上（OUTPUT INSERT，每 8 声道一引擎）。「打开界面」跟随总线下拉选中的
+    // 路打开该路引擎上的编辑器；下拉选项 = 设置页 VB 复选框掩码内的路
+    // （vbPluginGroupMask），全不选时无可打开的路（旁路态）。
+    // 其余模式（VAIO/ASIO/WASAPI）单引擎，无此维度，group=-1。
+    final isVb = model.audioMode == 'vbcallback';
+    final groupMask = model.vbPluginGroupMask;
+    final editorGroup = model.vbPluginEditorGroup;
+    final routeNames = vbBusNames(
+        (model.vbInfo['edition'] as num?)?.toInt() ?? 0);
+    final routeCount = routeNames.length;
+
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
@@ -296,13 +306,18 @@ class _ActivePluginHero extends StatelessWidget {
                 style: labelOf(p, size: 11, color: p.textDim)),
             const SizedBox(width: AuraSpace.sm),
           ],
-          // 原生 GUI 打开按钮
+          // 原生 GUI 打开按钮（v2：VB 模式跟随总线下拉选中的路）
           ElevatedButton.icon(
             // C1：同一插件可挂多槽，标题必须带槽位号区分两个编辑器窗口。
-            onPressed: isBusy ? null : () => manager.showEditor(
-              slot: slot,
-              title: l10nOf(context).plugEditorTitleNamed(slot + 1, active.name),
-            ),
+            // VB 全不选（无可选路）时禁用——没有路可打开。
+            onPressed: isBusy || (isVb && editorGroup < 0)
+                ? null
+                : () => manager.showEditor(
+                      slot: slot,
+                      title: l10nOf(context)
+                          .plugEditorTitleNamed(slot + 1, active.name),
+                      group: isVb ? editorGroup : -1,
+                    ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: Text(l10nOf(context).plugOpenGuiBtn),
             style: ElevatedButton.styleFrom(
@@ -314,20 +329,63 @@ class _ActivePluginHero extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AuraSpace.sm),
-          // 预设管理按钮
-          OutlinedButton.icon(
-            onPressed: isBusy ? null : () => onShowPresets(active),
-            icon: const Icon(Icons.tune_rounded, size: 15),
-            label: Text(l10nOf(context).dlgPreset),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: p.text,
-              side: BorderSide(color: p.hairline),
-              padding: const EdgeInsets.symmetric(
-                  horizontal: AuraSpace.md, vertical: AuraSpace.xs),
-              visualDensity: VisualDensity.compact,
+          // v2：预设按钮位改「总线下拉」——仅 VB 模式显示（其余模式单引擎
+          // 无多路维度）。选项与设置页 VB 复选框掩码联动；全不选时禁用并
+          // 显示旁路提示。选中值 = vbPluginEditorGroup（会话级）。
+          if (isVb) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+              decoration: BoxDecoration(
+                color: p.panel,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: Border.all(color: p.hairline),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<int>(
+                  value: editorGroup >= 0 && editorGroup < routeCount
+                      ? editorGroup
+                      : null,
+                  isDense: true,
+                  dropdownColor: p.panelRaised,
+                  style: labelOf(p),
+                  hint: Text(
+                    l10nOf(context).plugRouteBypassed,
+                    style: labelOf(p, size: 12, color: p.textDim),
+                  ),
+                  disabledHint: Text(
+                    l10nOf(context).plugRouteBypassed,
+                    style: labelOf(p, size: 12, color: p.textDim),
+                  ),
+                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                  items: [
+                    for (var g = 0; g < routeCount; g++)
+                      if ((groupMask & (1 << g)) != 0)
+                        DropdownMenuItem<int>(
+                          value: g,
+                          child: Text(
+                            routeNames[g],
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: g == editorGroup ? p.accent : p.text,
+                              fontWeight: g == editorGroup
+                                  ? FontWeight.bold
+                                  : FontWeight.normal,
+                            ),
+                          ),
+                        ),
+                  ],
+                  onChanged: (isBusy || groupMask == 0)
+                      ? null
+                      : (val) {
+                          if (val != null) {
+                            model.setVbPluginEditorGroup(val);
+                          }
+                        },
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: AuraSpace.sm),
+            const SizedBox(width: AuraSpace.sm),
+          ],
           // 旁路开关按钮
           AuraChip(
             isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
