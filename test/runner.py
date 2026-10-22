@@ -54,6 +54,9 @@ def run_smoke_tests():
         # 链级启用开关（VB 按路插件处理底层）：关=逐位直通+latency 归零，
         # 重启用=延迟线复位后效果恢复，槽位挂载状态全程保留
         "smoke_plugin_chain_enable.py",
+        # F-2 真旁路生命周期门禁：旁路=空链同值（链层跳过槽位）、取消旁路
+        # 必须恢复激活处理（泵线程生命周期切换 + 在途 process 握手）
+        "smoke_plugin_bypass_lifecycle.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
