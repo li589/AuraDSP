@@ -162,11 +162,11 @@ class AppModel extends ChangeNotifier {
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
   int vbPluginGroupMask = 0xFF;
   // v2 按路编辑器目标总线（会话级，不落盘）。
-  // 取值：kVbRouteAll(-2)=「全部」（plugin_manager 顶层常量；打开主实例
-  // 界面，P1 起参数/Ch 走「全部」记忆）；0-7=具体路；-1=无有效选中路。
+  // 取值：kVbRouteUnselected(-2)=未选择（初值；v3.3 已撤除「全部」，
+  // 本值不承载任何合法路语义）；0-7=具体路；-1=无有效选中路。
   // 插件页「打开界面」按钮跟随此值路由；选中路失效时由
-  // _fallbackVbPluginEditorGroup() 回落「全部」。
-  int vbPluginEditorGroup = kVbRouteAll;
+  // _fallbackVbPluginEditorGroup() 回落到最低有效路。
+  int vbPluginEditorGroup = kVbRouteUnselected;
 
   /// 插件页下拉的有效路掩码 = 通道开着 且 插件勾选
   /// （busMask 关的组整组直通不进引擎，调参不上流；复选框关的组链级停跑）。

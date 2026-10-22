@@ -313,6 +313,23 @@ extension StateSession on AppModel {
                 'mask': item.channels,
               });
             }
+            // F-6（2026-10-23）：VB 各路 Ch 记忆随会话恢复。旧会话无此字段
+            // （null）→ 保持原行为（回落 0xFF）。先播种 manager 记忆（UI
+            // 立即可见），再对非默认路下发引擎。
+            final rcMasks = item.routeChannels;
+            if (rcMasks != null) {
+              pluginManager.seedRouteChannels(item.slot, rcMasks);
+              for (var g = 0; g < 8 && g < rcMasks.length; g++) {
+                if (rcMasks[g] != 0xFF) {
+                  send({
+                    'cmd': 'pluginSlotSetChannels',
+                    'slot': item.slot,
+                    'mask': rcMasks[g],
+                    'group': g,
+                  });
+                }
+              }
+            }
             if (item.stage != PluginInsertStage.defaultStage) {
               send({
                 'cmd': 'pluginSlotSetInsertStage',
