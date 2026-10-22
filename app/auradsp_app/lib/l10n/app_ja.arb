@@ -798,6 +798,7 @@
     }
   },
   "abReset": "リセット（このプリセットを消去、ソースはそのまま）",
+  "abResetDone": "プリセットをリセットしました",
   "plugRouteLocked": "エディタ開閉中は切替不可",
   "plugChStereoOnly": "VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ",
   "plugUnloadFromSlot": "このスロットからアンロード",

@@ -798,6 +798,7 @@
     }
   },
   "abReset": "复原（清除当前预设，不影响来源）",
+  "abResetDone": "已复原当前预设",
   "plugRouteLocked": "界面已打开，关闭后可切换",
   "plugChStereoOnly": "VB 模式每通道仅立体声（L/R）进入插件链",
   "plugLoading": "加载中…",

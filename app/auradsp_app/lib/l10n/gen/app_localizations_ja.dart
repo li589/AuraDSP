@@ -1735,6 +1735,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get abReset => 'リセット（このプリセットを消去、ソースはそのまま）';
 
   @override
+  String get abResetDone => 'プリセットをリセットしました';
+
+  @override
   String get plugRouteLocked => 'エディタ開閉中は切替不可';
 
   @override
