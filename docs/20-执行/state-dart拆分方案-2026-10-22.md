@@ -323,6 +323,29 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
 - **验证**：analyze 0 issue；全量串行 319 过 + 1 文件已知超时抖动
   （bass_shaping_test，单独复跑 3/3 过）。
 
+### P4（state_session.dart + state_chain.dart）
+
+- **剪切**：14 个会话成员（自定义目录四件、scheduleAutoSave/
+  scheduleReadback/evaluatePresetDirty、replaySessionToEngine、
+  saveAsUserPreset/loadPreset、setTheme/setLocale/
+  setAutoRestoreSession/setSampleRate）→ state_session.dart（428 行，
+  extension StateSession）；26 个链成员（低音斜坡四件、立体声链七件、
+  setGraphOrder/stageMeterIndex/setChainGroup/isStageEnabled/toggleStage、
+  Liveprog 四件、卷积/VDC/DDC 六件）→ state_chain.dart（522 行，
+  extension StateChain）。入口 4368 → 3463 行。机检 40 块逐字等价。
+- **static 处理（延续 P3 政策）**：
+  (1) `filterVendorOrder`/`irWasResampled` 两个 static 方法**留类体**——
+  外部 `AppModel.xxx` 调用方（config_and_presets_test×2、
+  ir_sample_rate_test×3、convolver_card×1）；setGraphOrder 内 1 处
+  调用加 `AppModel.` 限定。
+  (2) `_chainGroupMembers`、`_bassGainStepDb`、`_bassGainMinIntervalMs`
+  三个私有 static const **随迁 part 顶层**（无外部调用者，仅被迁出的
+  方法引用；extension 不能非限定引用类 static）。
+  (3) 教训补充：预扫描 static 引用必须含 **static 字段**（本轮
+  `_bassGainStepDb` 等漏网，靠 analyze 报错兜底）。
+- **验证**：analyze 0 issue；全量串行 4 文件已知超时抖动
+  （effects_category×2、eq_spectrum×2，单独复跑 25/25 过）。
+
 ---
 
 ## 8. 关联文档
