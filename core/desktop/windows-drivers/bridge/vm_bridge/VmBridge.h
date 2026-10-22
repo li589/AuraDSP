@@ -114,6 +114,11 @@ VBB_API int vb_plugin_slot_set_channels_g(int slot, int group, int channels);
 VBB_API int vb_plugin_group_enable(int mask);
 VBB_API int vb_plugin_group_mask();
 
+/* 诊断（2026-10-23 挂载提速）：组 g 的 slot 是否已就绪（1=实例已挂）。
+ * 挂载先同步 eng[0]、其余组后台补齐——本函数用于冒烟验证补齐进度与
+ * 排障（Dart 侧不需要）。group/slot 越界返回 0。 */
+VBB_API int vb_plugin_slot_group_ready(int slot, int group);
+
 #ifdef __cplusplus
 }
 #endif

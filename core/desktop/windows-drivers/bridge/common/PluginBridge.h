@@ -186,6 +186,30 @@ public:
         ReleaseSRWLockExclusive(&lock_);
     }
 
+    // 读取某槽的镜像状态（后台组补齐回放用：补齐后让该组落到与其它组
+    // 一致的 bypass/Ch/阶段，而不是出厂默认）。path/id 可选（掩码新使能
+    // 组补挂时用）。不存在返回 false。
+    bool GetSlot(int slot, int* stage, int* bypass, int* channels,
+                 char* path = nullptr, size_t pathCap = 0,
+                 char* id = nullptr, size_t idCap = 0) {
+        if (slot < 0 || slot >= kSlots) return false;
+        AcquireSRWLockExclusive(&lock_);
+        const bool loaded = cfg_[slot].loaded;
+        if (loaded) {
+            if (stage) *stage = cfg_[slot].stage;
+            if (bypass) *bypass = cfg_[slot].bypass;
+            if (channels) *channels = cfg_[slot].channels;
+            if (path && pathCap) {
+                strncpy_s(path, pathCap, cfg_[slot].path, _TRUNCATE);
+            }
+            if (id && idCap) {
+                strncpy_s(id, idCap, cfg_[slot].id, _TRUNCATE);
+            }
+        }
+        ReleaseSRWLockExclusive(&lock_);
+        return loaded;
+    }
+
     // 重建后回放（调用方已确保音频线程不接触 engine）。返回成功/失败槽数。
     void Replay(void* engine, const Fns& fns, int* ok, int* failed) {
         if (ok) *ok = 0;
