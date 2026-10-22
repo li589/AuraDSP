@@ -346,6 +346,22 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
 - **验证**：analyze 0 issue；全量串行 4 文件已知超时抖动
   （effects_category×2、eq_spectrum×2，单独复跑 25/25 过）。
 
+### P5（state_effects.dart）
+
+- **剪切**：效果 setter 连续块（setReverbPreset + setTubeEnabled..
+  setTubeMix 共 996 行，~150 个同构 setter + autoGain/outputGain 10 件
+  + 头追/音源/分类状态）→ state_effects.dart（1011 行，extension
+  StateEffects）。入口 3461 → 2456 行。机检两块逐字等价（122 处
+  notifyListeners→_notifyUi）。静态引用扫描 0 命中。
+- **附带清理**：删除 3 个陈旧节标记（`/* ---- 命令 ---- */`、
+  `/* ---- Liveprog 命令 ---- */`、`/* ---- 卷积 / IR 命令 ---- */`，
+  主体已分别在 P2/P4 迁走）与 1 处 P4 遗留孤儿文档注释
+  （_chainGroupMembers 的 doc，const 已迁 state_chain 而 doc 留下）。
+- **验证**：analyze 0 issue；**全量串行 320/320 全绿**（本轮零抖动）。
+- **方案偏差说明**：原计划「按效果分节头注释」未执行——该块为历史
+  层叠顺序（tube 的 setter 分散在 980 与 1946 两处），强行分组有错分
+  风险；保持原序 + 文件头说明，IDE outline 按名跳读。
+
 ---
 
 ## 8. 关联文档
