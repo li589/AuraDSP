@@ -326,30 +326,28 @@ if hasattr(b, "vb_plugin_slot_show_editor_g"):
     check("editor_g empty slot show==0", rc == 0, f"rc={rc}")
     rc = b.vb_plugin_slot_is_editor_open_g(0, 0)
     check("editor_g empty slot is_open==0", rc == 0, f"rc={rc}")
+    # 空槽 close：引擎 ABI 契约 = 合法槽恒 1（closeEditorSlot 空槽幂等
+    # 空成功，auradsp_plugin_slot_close_editor 对 slot 越界才返 0）。
+    # 该断言同时是「桥-引擎插件 ABI 已解析」的活性探针：Ready()==false
+    # （引擎 DLL 陈旧/缺导出）时所有 editor_g 调用都会返 0——2026-10-22
+    # 深夜轮实测：旧 test/ 引擎 DLL 下此项恒 0 曾造成假绿。
     rc = b.vb_plugin_slot_close_editor_g(0, 0)
-    check("editor_g empty slot close==0", rc == 0, f"rc={rc}")
+    check("editor_g empty slot close==1 (idempotent; ABI live)", rc == 1,
+          f"rc={rc}")
 
-# ---- P1：per-group Ch + 继承复制（sync_all）导出与拒绝语义 ----
-for _gfn in ("vb_plugin_slot_set_channels_g", "vb_plugin_slot_sync_all"):
+# ---- P1：per-group Ch 导出与拒绝语义 ----
+for _gfn in ("vb_plugin_slot_set_channels_g",):
     check(f"export {_gfn} present", hasattr(b, _gfn),
           "missing (stale bridge DLL?)")
 if hasattr(b, "vb_plugin_slot_set_channels_g"):
     b.vb_plugin_slot_set_channels_g.restype = ctypes.c_int
     b.vb_plugin_slot_set_channels_g.argtypes = [ctypes.c_int, ctypes.c_int,
                                                 ctypes.c_int]
-    b.vb_plugin_slot_sync_all.restype = ctypes.c_int
-    b.vb_plugin_slot_sync_all.argtypes = [ctypes.c_int, ctypes.c_int,
-                                          ctypes.c_char_p]
     rc = b.vb_plugin_slot_set_channels_g(0, 99, 0x3)
     check("set_channels_g rejects out-of-range group", rc == 0, f"rc={rc}")
     rc = b.vb_plugin_slot_set_channels_g(0, 0, 0x3)
     # 空槽不崩即可（Ready/实例在场与否环境相关，0=拒绝 1=接受均为合法）
     check("set_channels_g empty slot safe", rc in (0, 1), f"rc={rc}")
-    # 空槽 sync_all：src 无插件 savePreset 失败 → 0（不得假装成功）
-    rc = b.vb_plugin_slot_sync_all(0, 99, b"C:\\Windows\\Temp\\aura_sync_test.aurapreset")
-    check("sync_all rejects out-of-range srcGroup", rc == 0, f"rc={rc}")
-    rc = b.vb_plugin_slot_sync_all(0, 0, b"C:\\Windows\\Temp\\aura_sync_test.aurapreset")
-    check("sync_all empty slot ==0 (savePreset fails)", rc == 0, f"rc={rc}")
 
 # ---- P2（v3.3 A/B 预设）：per-group state 读写导出与拒绝语义 ----
 for _gfn in ("vb_plugin_slot_save_preset_g", "vb_plugin_slot_load_preset_g"):

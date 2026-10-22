@@ -1685,18 +1685,29 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final mask = (m['mask'] as num).toInt();
             // P1-3 per-group Ch：group>=0 只发该组（VB 具体路）；
-            // -1 全组扇出（VB「全部」/非 VB）。
+            // -1 非 VB 单引擎 / VB 遗留 -1 路（见下方 A1 注释）。
             final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
-              final rc = group >= 0
-                  ? pb.setChannelsG(slot, group, mask)
-                  : pb.setChannels(slot, mask);
+              // A1（2026-10-22 审查）：VB 多组桥下 group<0 不是合法路
+              // （v3.3 已撤「全部」）。旧实现回落 pb.setChannels
+              // （vb_plugin_slot_set_channels = 全组扇出）——与 save 侧
+              // eng[0] 单发不对称，重挂时未编辑路被污染。新桥统一「单组 0」
+              // 语义；老桥（无 _g 导出）保持原回落。
+              int rc;
+              if (group >= 0) {
+                rc = pb.setChannelsG(slot, group, mask);
+              } else if (pb.hasSetChannelsG) {
+                rc = pb.setChannelsG(slot, 0, mask);
+              } else {
+                rc = pb.setChannels(slot, mask);
+              }
               if (rc == 1) pluginMirror[slot].channels = mask;
               send({
                 'evt': 'pluginSlotChannels',
                 'slot': slot,
                 'mask': mask,
+                'group': group, // A4：回执携带路由，Dart 按路归位
                 'rc': rc,
               });
               break;
@@ -1709,6 +1720,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'evt': 'pluginSlotChannels',
                 'slot': slot,
                 'mask': mask,
+                'group': group,
                 'rc': rc,
               });
             }
@@ -1716,14 +1728,25 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotSavePresetG':
           {
-            // P2-1 A/B 预设落盘（per-group；group<0 = 非 VB 单引擎）。
+            // P2-1 A/B 预设落盘（per-group；group<0 = 非 VB 单引擎 / VB
+            // 遗留 -1 路——A1 修复后新桥下单组 0 语义）。
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final group = (m['group'] as num?)?.toInt() ?? -1;
             final path = m['path'] as String;
             final pb = activePluginBridge();
             if (pb != null) {
-              final rc =
-                  group >= 0 ? pb.savePresetG(slot, group, path) : pb.savePreset(slot, path);
+              // A1（2026-10-22 审查）：save 侧 pb.savePreset 仅 eng[0]
+              // （vb_plugin_slot_save_preset），load 侧 pb.loadPreset 却
+              // 全组扇出（vb_plugin_slot_load_preset）——不对称使重挂/模式
+              // 切换后未编辑路由被 eng[0] 状态污染。新桥统一「单组 0」。
+              int rc;
+              if (group >= 0) {
+                rc = pb.savePresetG(slot, group, path);
+              } else if (pb.hasPresetG) {
+                rc = pb.savePresetG(slot, 0, path);
+              } else {
+                rc = pb.savePreset(slot, path);
+              }
               send({
                 'evt': 'pluginSlotPresetSaved',
                 'slot': slot,
@@ -1746,14 +1769,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'pluginSlotLoadPresetG':
           {
-            // P2-1 A/B 预设激活/继承应用（per-group）。
+            // P2-1 A/B 预设激活/继承应用（per-group；group<0 走 A1 单组 0）。
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final group = (m['group'] as num?)?.toInt() ?? -1;
             final path = m['path'] as String;
             final pb = activePluginBridge();
             if (pb != null) {
-              final rc =
-                  group >= 0 ? pb.loadPresetG(slot, group, path) : pb.loadPreset(slot, path);
+              // A1：与 save 侧对称——新桥 group<0 = 单组 0（不再全组扇出），
+              // 杜绝 eng[0] 状态污染未编辑路由；老桥保持原回落。
+              int rc;
+              if (group >= 0) {
+                rc = pb.loadPresetG(slot, group, path);
+              } else if (pb.hasPresetG) {
+                rc = pb.loadPresetG(slot, 0, path);
+              } else {
+                rc = pb.loadPreset(slot, path);
+              }
               send({
                 'evt': 'pluginSlotPresetLoaded',
                 'slot': slot,
@@ -1766,55 +1797,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (lib != null && handle != null) {
               final rc =
                   AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-                'status': AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot),
-              });
-            }
-            break;
-          }
-        case 'pluginSlotSyncAll':
-          {
-            // P1-5 继承复制：srcGroup 的 state → 记忆文件 → 其余组
-            // （桥内批处理；非桥单引擎无多路语义，直接跳过）。
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final srcGroup = (m['srcGroup'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              final rc = pb.syncAll(slot, srcGroup, path);
-              send({
-                'evt': 'pluginSlotSyncAllDone',
-                'slot': slot,
-                'srcGroup': srcGroup,
-                'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginSlotLoadPreset':
-          {
-            // P1-5「不继承」= 全部记忆文件全组扇出应用（复用 v1 全组
-            // loadPreset 语义；非桥单引擎同样下发）。
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              final rc = pb.loadPreset(slot, path);
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-                'status': pb.getStatus(slot),
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
               send({
                 'evt': 'pluginSlotPresetLoaded',
                 'slot': slot,
