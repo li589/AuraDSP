@@ -271,12 +271,21 @@ class _PluginsPageState extends State<PluginsPage> {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final manager = widget.model.pluginManager;
-    final currentSlot = manager.selectedSlot;
-
     return ListenableBuilder(
       listenable: widget.model,
-      builder: (context, _) => PageScaffold(
+      builder: (context, _) {
+        // BUGFIX（2026-10-22）：manager/currentSlot 必须在 builder 闭包内读取。
+        // 原实现把 `final currentSlot = manager.selectedSlot` 放在外层
+        // State.build 作用域——ListenableBuilder 重建时只重跑 builder 闭包，
+        // 而闭包捕获的是上一次外层 build 的变量绑定，currentSlot 永远冻结
+        // 在初始值 0。后果：切槽后 Hero 卡始终显示槽 1 的插件（tab 高亮
+        // 正常——_SlotSelectorBar 内部直接读 manager，是新鲜值）；列表
+        // 「载入到槽 N」/卸载永远落到槽 0，每次挂载都把槽 1 的插件挤掉。
+        // AppModel 已通过 pluginManager.addListener(notifyListeners) 转发
+        // manager 通知（builder 会随 selectSlot 重建），缺的只是新鲜读取。
+        final manager = widget.model.pluginManager;
+        final currentSlot = manager.selectedSlot;
+        return PageScaffold(
         title: l10nOf(context).plugTitle,
         children: [
           // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
@@ -546,7 +555,8 @@ class _PluginsPageState extends State<PluginsPage> {
             ),
           ),
         ],
-      ),
+        );
+      },
     );
   }
 }
