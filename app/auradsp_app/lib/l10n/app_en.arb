@@ -785,7 +785,7 @@
     }
   },
   "plugOpenGuiBtn": "Open UI (GUI)",
-  "plugRouteBypassed": "Bypass (no route)",
+  "plugRouteBypassed": "Bypass",
   "abSlotA": "Preset A",
   "abSlotB": "Preset B",
   "abAutoSave": "Auto save",
@@ -799,7 +799,7 @@
   },
   "abReset": "Reset (clear this preset, source untouched)",
   "abResetDone": "Preset reset",
-  "plugRouteLocked": "Editor open - close it to switch",
+  "plugRouteLocked": "Locked",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",
   "plugUnloadFromSlot": "Unload from This Slot",
