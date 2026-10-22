@@ -715,13 +715,26 @@ int vb_status(char* out, int cap) {
              g_b.ctx.peakGrp[0], g_b.ctx.peakGrp[1], g_b.ctx.peakGrp[2],
              g_b.ctx.peakGrp[3], g_b.ctx.peakGrp[4], g_b.ctx.peakGrp[5],
              g_b.ctx.peakGrp[6], g_b.ctx.peakGrp[7]);
+    // L0：每组 process 耗时峰值（μs）——爆音定位（8 组串行主成本）。
+    // ticks→μs：ticks / qpf * 1e6；qpf 无效（极罕见）时记 0。
+    char maxG[128] = {0};
+    {
+        double us[8] = {0};
+        const double q = (double)(qpf.QuadPart > 0 ? qpf.QuadPart : 1);
+        for (int i = 0; i < 8; ++i) {
+            us[i] = (double)g_b.ctx.maxGroupTicks[i] * 1000000.0 / q;
+        }
+        snprintf(maxG, sizeof(maxG),
+                 "[%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f]", us[0], us[1],
+                 us[2], us[3], us[4], us[5], us[6], us[7]);
+    }
     int n = snprintf(out, (size_t)cap,
                      "{\"running\":%s,\"frames\":%llu,\"sr\":%ld,\"nbs\":%ld,"
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
                      "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
-                     "\"peakGrp\":%s,\"edition\":%d,\"engine\":\"%s\"}",
+                     "\"peakGrp\":%s,\"maxGroupUs\":%s,\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
                       (unsigned long long)g_b.ctx.frames, g_b.ctx.sr,
@@ -731,7 +744,7 @@ int vb_status(char* out, int cap) {
                       (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
                       (int)(InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) &
                             0xFF),
-                      liveMask, peaks, g_b.edition, eng);
+                      liveMask, peaks, maxG, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
 }

@@ -248,6 +248,9 @@ rc = b.vb_set_bus_mask(0x1FF)
 check("bus_mask clamps to 0xFF", rc == 0xFF, f"rc={rc:#x}")
 rc = b.vb_set_bus_mask(0xFF)
 check("bus_mask restore", rc == 0xFF, f"rc={rc:#x}")
+check("maxGroupUs field plumbed (L0)",
+      isinstance(st.get("maxGroupUs"), list) and len(st.get("maxGroupUs")) == 8,
+      f"maxGroupUs={st.get('maxGroupUs')}")
 check("grpLive field plumbed", isinstance(st.get("grpLive"), int),
       f"grpLive={st.get('grpLive')}")
 
