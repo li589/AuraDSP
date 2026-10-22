@@ -284,11 +284,11 @@ const Set<String> kRangeCheckSkipSpecIds = {
 /// 剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
 /// 无拒收风险），收窄是产品取舍，保留登记待产品确认，不得悄悄抹平。
 const Map<String, String> kKnownRangeDivergences = {
-  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，待产品确认）',
-  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，待产品确认）',
+  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，产品已定案保留 2026-10-19）',
+  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，产品已定案保留 2026-10-19）',
   'dyneq.attack': 'spec 1..100ms vs 引擎 0.1..100ms（UI 收窄下限）',
-  'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，待产品确认）',
-  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，待产品确认）',
+  'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，产品已定案保留 2026-10-19）',
+  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，产品已定案保留 2026-10-19）',
 };
 
 // ---------------------------------------------------------------------------
