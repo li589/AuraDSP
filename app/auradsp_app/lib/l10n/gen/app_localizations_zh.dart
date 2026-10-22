@@ -1743,6 +1743,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugLoading => '加载中…';
 
   @override
+  String get plugUnloading => '卸载中…';
+
+  @override
   String get plugUnloadFromSlot => '从当前槽卸载';
 
   @override

@@ -346,6 +346,9 @@ class PluginManager extends ChangeNotifier {
   String _filterFormat = 'all'; // 'all', 'vst3', 'clap'
   String _searchQuery = '';
   final Map<int, bool> _slotBusy = {};
+
+  /// 忙态动作标记（UI 动画文案：'load' 加载中 / 'unload' 卸载中）。
+  final Map<int, String> _slotBusyAction = {};
   String? _lastError;
   String? _lastNotice;
   int _lastScanCount = 0;
@@ -382,6 +385,7 @@ class PluginManager extends ChangeNotifier {
   );
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
+  String slotBusyAction(int slot) => _slotBusyAction[slot] ?? 'load';
 
   /// C3：引擎回执挂载/卸载进行中（异步任务的"提交成功→进行中"与"终态"两次翻转）。
   /// 用于 UI 在挂载/卸载期间显示忙态并禁用重复操作。
@@ -573,6 +577,7 @@ class PluginManager extends ChangeNotifier {
     }
     // C3：乐观置忙（引擎回执 pluginSlotBusy 会再确认一次）。
     _slotBusy[s] = true;
+    _slotBusyAction[s] = 'load';
     notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotLoad',
@@ -590,6 +595,7 @@ class PluginManager extends ChangeNotifier {
     // P2 自动记录：卸载前把当前调音落盘到激活 A/B 槽（不丢）。
     autoSaveAb(s, group: _editorRoute[s] >= 0 ? _editorRoute[s] : -1);
     _slotBusy[s] = true;
+    _slotBusyAction[s] = 'unload';
     notifyListeners();
     _commandSender?.call({'cmd': 'pluginSlotUnload', 'slot': s});
   }
@@ -1126,6 +1132,7 @@ class PluginManager extends ChangeNotifier {
   ) {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
+      _slotBusyAction.remove(slot);
       if (rc != 1) {
         // D2：扫描列表里已标记不兼容的插件（当前唯一情形：32 位）直接用
         // 引擎的精确原因，不再让用户看"可能位数不符"的猜测文案。
@@ -1159,6 +1166,7 @@ class PluginManager extends ChangeNotifier {
   void onPluginSlotUnloaded(int slot, int rc, dynamic rawStatus) {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
+      _slotBusyAction.remove(slot);
       _parseStatusJsonForSlot(slot, rawStatus);
       notifyListeners();
     }

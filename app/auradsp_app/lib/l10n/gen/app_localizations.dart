@@ -3400,6 +3400,12 @@ abstract class AppLocalizations {
   /// **'加载中…'**
   String get plugLoading;
 
+  /// No description provided for @plugUnloading.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载中…'**
+  String get plugUnloading;
+
   /// No description provided for @plugUnloadFromSlot.
   ///
   /// In zh, this message translates to:

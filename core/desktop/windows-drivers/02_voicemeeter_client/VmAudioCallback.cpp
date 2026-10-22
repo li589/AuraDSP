@@ -384,6 +384,10 @@ int AuraVmPumpRun(AuraVmPump& p) {
             ctx.destroy = destroy;
             ctx.scratchIn = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
             ctx.scratchOut = (float*)malloc(sizeof(float) * 2 * kMaxNbs);
+            // P2 防抖：scratch 锁页（各 32KB）——大插件加载的 page fault
+            // 风暴下 RT 回调自身零缺页，消「加载时声音断断续续」的主因之一。
+            if (ctx.scratchIn) VirtualLock(ctx.scratchIn, sizeof(float) * 2 * kMaxNbs);
+            if (ctx.scratchOut) VirtualLock(ctx.scratchOut, sizeof(float) * 2 * kMaxNbs);
             rebuildEngines(wantGroups);
             if (!ctx.scratchIn || !ctx.scratchOut) {
                 ctx.nEng = 0;

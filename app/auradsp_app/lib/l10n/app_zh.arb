@@ -802,6 +802,7 @@
   "plugRouteLocked": "已锁定",
   "plugChStereoOnly": "VB 模式每通道仅立体声（L/R）进入插件链",
   "plugLoading": "加载中…",
+  "plugUnloading": "卸载中…",
   "plugUnloadFromSlot": "从当前槽卸载",
   "plugLoadToSlot": "载入至插槽 {n}",
   "@plugLoadToSlot": {
