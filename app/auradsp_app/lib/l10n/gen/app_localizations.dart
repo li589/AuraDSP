@@ -3343,7 +3343,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugRouteBypassed.
   ///
   /// In zh, this message translates to:
-  /// **'旁路（未选路）'**
+  /// **'旁路'**
   String get plugRouteBypassed;
 
   /// No description provided for @abSlotA.
@@ -3385,7 +3385,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugRouteLocked.
   ///
   /// In zh, this message translates to:
-  /// **'界面已打开，关闭后可切换'**
+  /// **'已锁定'**
   String get plugRouteLocked;
 
   /// No description provided for @plugChStereoOnly.

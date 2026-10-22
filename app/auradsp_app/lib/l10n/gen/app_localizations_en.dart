@@ -1787,7 +1787,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugOpenGuiBtn => 'Open UI (GUI)';
 
   @override
-  String get plugRouteBypassed => 'Bypass (no route)';
+  String get plugRouteBypassed => 'Bypass';
 
   @override
   String get abSlotA => 'Preset A';
@@ -1810,7 +1810,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get abResetDone => 'Preset reset';
 
   @override
-  String get plugRouteLocked => 'Editor open - close it to switch';
+  String get plugRouteLocked => 'Locked';
 
   @override
   String get plugChStereoOnly =>

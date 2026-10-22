@@ -1711,7 +1711,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugOpenGuiBtn => '打开界面 (GUI)';
 
   @override
-  String get plugRouteBypassed => '旁路（未选路）';
+  String get plugRouteBypassed => '旁路';
 
   @override
   String get abSlotA => 'A 预设';
@@ -1734,7 +1734,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get abResetDone => '已复原当前预设';
 
   @override
-  String get plugRouteLocked => '界面已打开，关闭后可切换';
+  String get plugRouteLocked => '已锁定';
 
   @override
   String get plugChStereoOnly => 'VB 模式每通道仅立体声（L/R）进入插件链';

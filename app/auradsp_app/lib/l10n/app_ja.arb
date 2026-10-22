@@ -785,7 +785,7 @@
     }
   },
   "plugOpenGuiBtn": "UIを開く (GUI)",
-  "plugRouteBypassed": "バイパス（未選択）",
+  "plugRouteBypassed": "バイパス",
   "abSlotA": "プリセットA",
   "abSlotB": "プリセットB",
   "abAutoSave": "自動保存",
@@ -799,7 +799,7 @@
   },
   "abReset": "リセット（このプリセットを消去、ソースはそのまま）",
   "abResetDone": "プリセットをリセットしました",
-  "plugRouteLocked": "エディタ開閉中は切替不可",
+  "plugRouteLocked": "ロック中",
   "plugChStereoOnly": "VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ",
   "plugUnloadFromSlot": "このスロットからアンロード",
   "plugLoadToSlot": "スロット{n}へロード",

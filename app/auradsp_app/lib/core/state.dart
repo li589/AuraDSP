@@ -4808,6 +4808,9 @@ class AppModel extends ChangeNotifier {
           : (valid == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi);
     }
     if (valid == audioMode && config.audioMode == valid) return;
+    // P2 边界：模式切换会重建引擎链路（插件重挂）——先把各槽 A/B 预设
+    // 落盘并清理编辑器状态，避免调音丢失/锁定卡死。
+    pluginManager.onAudioModeSwitching();
     final wasVb = audioMode == 'vbcallback';
     final isVb = valid == 'vbcallback';
     final wasAsio = audioMode == 'asio';

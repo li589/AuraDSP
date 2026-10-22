@@ -706,12 +706,38 @@ class PluginManager extends ChangeNotifier {
     if (slot < 0 || slot >= kMaxSlots) return;
     if (_slotEditorOpen[slot] != open) {
       _slotEditorOpen[slot] = open;
-      if (!open && _editorRoute[slot] >= 0) {
-        lastEditedRoute = _editorRoute[slot];
-        _editorRoute[slot] = -1;
+      if (!open) {
+        // 轮询解锁（用户点插件自带关闭按钮）也要落盘——与 close 回执同语义，
+        // 否则该路径下调音不进 A/B 预设。
+        if (_editorRoute[slot] >= 0) {
+          lastEditedRoute = _editorRoute[slot];
+          autoSaveAb(slot, group: _editorRoute[slot]);
+          _editorRoute[slot] = -1;
+        }
       }
       notifyListeners();
     }
+  }
+
+  /// 驱动模式切换（VB/ASIO/VAIO/WASAPI）前的插件状态收尾（P2 边界修复）：
+  /// 全部活跃槽的各路由 A/B 激活槽落盘（引擎重建不丢调音）+ 编辑器状态
+  /// 清理（重建后旧编辑器窗口已失效）。
+  void onAudioModeSwitching() {
+    for (var s = 0; s < kMaxSlots; s++) {
+      if (!isSlotActive(s)) continue;
+      // 非 VB 单路 + VB 各路（曾经记录过的路由都存）。
+      autoSaveAb(s, group: -1);
+      for (var g = 0; g < 8; g++) {
+        if (_abMeta.containsKey(_abKey2(s, g, 'A')) ||
+            _abMeta.containsKey(_abKey2(s, g, 'B'))) {
+          autoSaveAb(s, group: g);
+        }
+      }
+      _slotEditorOpen[s] = false;
+      _editorRoute[s] = -1;
+      _slotSyncOnClose[s] = false;
+    }
+    notifyListeners();
   }
 
   /// 「全部」记忆 preset 文件（第 9 套参数记忆，v3.2）。
@@ -1120,6 +1146,9 @@ class PluginManager extends ChangeNotifier {
         }
       } else {
         _lastError = null;
+        // P2 边界：挂载成功后自动应用激活 A/B 预设（若有记录）——
+        // 模式切换/重挂后插件是出厂态，不恢复会丢调音。
+        _restoreAbAfterLoad(slot);
       }
       _slotStages[slot] = stage;
       _parseStatusJsonForSlot(slot, rawStatus);
@@ -1548,9 +1577,10 @@ class PluginManager extends ChangeNotifier {
           debugPrint('[PluginManager] ab inherit error: $e');
         }
         m['source'] = 'inherit:$inheritFrom';
-        // Ch 跟随继承源的记忆。
-        final srcCh = _routeChannels[slot]
-            [srcRoute < 0 ? 0 : (srcRoute > 7 ? 7 : srcRoute)];
+        // Ch 跟随**源预设快照**的 chMask（不是源路由的当前记忆——
+        // 边界修复：源预设可能早于当前路由记忆存档）。
+        final srcMeta = _abMetaOf(slot, srcRoute, srcAb);
+        final srcCh = (srcMeta['chMask'] as num?)?.toInt() ?? 0xFF;
         m['chMask'] = srcCh;
         setSlotChannels(srcCh, slot: slot, group: group);
       }
@@ -1585,6 +1615,33 @@ class PluginManager extends ChangeNotifier {
       'chMask': 0xFF,
     };
     _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 挂载成功后恢复激活 A/B 预设（P2 边界：模式切换/重挂后插件出厂态，
+  /// 不恢复则调音丢失）。VB 各有记录的路由逐路恢复；非 VB 恢复 -1 路。
+  void _restoreAbAfterLoad(int slot) {
+    _ensureAbLoaded(slot);
+    final routes = <int>{-1};
+    for (var g = 0; g < 8; g++) {
+      if (_abMeta.containsKey(_abKey2(slot, g, 'A')) ||
+          _abMeta.containsKey(_abKey2(slot, g, 'B'))) {
+        routes.add(g);
+      }
+    }
+    for (final route in routes) {
+      final ab = abActive(slot, group: route);
+      final m = _abMetaOf(slot, route, ab);
+      if (m['hasState'] != true) continue;
+      _commandSender?.call({
+        'cmd': 'pluginSlotLoadPresetG',
+        'slot': slot,
+        'group': route,
+        'path': _abFile(slot, route, ab),
+      });
+      final ch = (m['chMask'] as num?)?.toInt() ?? 0xFF;
+      setSlotChannels(ch, slot: slot, group: route);
+    }
     notifyListeners();
   }
 }

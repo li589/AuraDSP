@@ -1715,7 +1715,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
 
   @override
-  String get plugRouteBypassed => 'バイパス（未選択）';
+  String get plugRouteBypassed => 'バイパス';
 
   @override
   String get abSlotA => 'プリセットA';
@@ -1738,7 +1738,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get abResetDone => 'プリセットをリセットしました';
 
   @override
-  String get plugRouteLocked => 'エディタ開閉中は切替不可';
+  String get plugRouteLocked => 'ロック中';
 
   @override
   String get plugChStereoOnly => 'VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ';
