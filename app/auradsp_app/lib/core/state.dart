@@ -772,6 +772,9 @@ class AppModel extends ChangeNotifier {
         _toIso?.send(msg);
       },
     );
+    // F-3：启动即同步 VB 多总线标志（配置里已是 vbcallback 时，-1 路
+    // 从一开始就不是合法路——不能等首次模式切换才生效）。
+    pluginManager.setVbMultiBus(audioMode == 'vbcallback');
     pluginManager.addListener(notifyListeners);
     pluginManager.setCustomDirs(config.customPluginDirs);
     pluginManager.loadCache();

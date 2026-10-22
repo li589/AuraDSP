@@ -700,4 +700,117 @@ void main() {
       m.dispose();
     });
   });
+
+  // F-3（2026-10-23 审查）：VB 多总线模式下 -1 不是合法路——桥按「单组 0」
+  // 语义把它落成 eng[0]，与 route 0 的独立预设互相覆盖（自我强化循环）。
+  // 判据：VB 下 -1 路既不落盘也不恢复；各路（g>=0）与非 VB 路径不受影响。
+  group('F-3: VB 多总线模式下 -1 路不是合法路', () {
+    late PluginManager m;
+    late List<Map<String, dynamic>> sent;
+    late Directory tempDir;
+
+    void markActive() {
+      m.onPluginSlotLoaded(0, r'C:\VST3\F3.vst3', 1, {
+        'hasActive': true,
+        'bypassed': false,
+        'latency': 0,
+        'plugin': {
+          'id': 'f3',
+          'name': 'F3 Probe',
+          'vendor': '',
+          'category': '',
+          'format': 'VST3',
+          'path': r'C:\VST3\F3.vst3',
+        },
+      }, 3);
+    }
+
+    setUp(() {
+      // 不沙箱化会写进真实 %APPDATA%（与既有组同款注入）。
+      tempDir = Directory.systemTemp.createTempSync('auradsp_plugin_test');
+      ConfigManager.baseDirOverride = tempDir.path;
+      sent = [];
+      m = PluginManager(commandSender: sent.add);
+    });
+
+    tearDown(() {
+      ConfigManager.baseDirOverride = null;
+      try {
+        tempDir.deleteSync(recursive: true);
+      } catch (_) {}
+    });
+
+    test('非 VB：autoSaveAb 走 -1 路（既有行为不变）', () {
+      markActive();
+      m.setVbMultiBus(false);
+      sent.clear();
+      m.autoSaveAb(0);
+      final saves =
+          sent.where((c) => c['cmd'] == 'pluginSlotSavePresetG').toList();
+      expect(saves.length, 1);
+      expect(saves.single['group'], -1);
+    });
+
+    test('VB：autoSaveAb(-1) 跳过（不落盘 eng[0]）', () {
+      markActive();
+      m.setVbMultiBus(true);
+      sent.clear();
+      m.autoSaveAb(0);
+      expect(sent.where((c) => c['cmd'] == 'pluginSlotSavePresetG'), isEmpty,
+          reason: 'VB 下 -1 落盘会被桥写成 eng[0]（F-3）');
+    });
+
+    test('VB：autoSaveAb(g=2) 各路独立照常落盘', () {
+      markActive();
+      m.setVbMultiBus(true);
+      sent.clear();
+      m.autoSaveAb(0, group: 2);
+      final saves =
+          sent.where((c) => c['cmd'] == 'pluginSlotSavePresetG').toList();
+      expect(saves.length, 1);
+      expect(saves.single['group'], 2);
+    });
+
+    test('VB：setSlotChannels(group:-1) no-op；g>=0 正常下发', () {
+      markActive();
+      m.setVbMultiBus(true);
+      sent.clear();
+      m.setSlotChannels(0x03);
+      expect(sent.where((c) => c['cmd'] == 'pluginSlotSetChannels'), isEmpty,
+          reason: 'VB 下未选路（-1）不应写 eng[0]');
+      m.setSlotChannels(0x05, group: 1);
+      final sets =
+          sent.where((c) => c['cmd'] == 'pluginSlotSetChannels').toList();
+      expect(sets.length, 1);
+      expect(sets.single['group'], 1);
+    });
+
+    test('VB：重挂恢复不含 -1 路（route 0 不被 eng[0] 快照覆盖）', () {
+      markActive();
+      // 1) 非 VB 下保存 -1 路（写 meta hasState=true）
+      m.setVbMultiBus(false);
+      m.autoSaveAb(0);
+      // 2) 切 VB 后重挂 → 恢复路径不得下发 group=-1
+      m.setVbMultiBus(true);
+      sent.clear();
+      markActive();
+      final loads =
+          sent.where((c) => c['cmd'] == 'pluginSlotLoadPresetG').toList();
+      expect(loads, isEmpty,
+          reason: 'VB 下 -1 不是合法路：恢复它会以「单组 0」写 eng[0]，'
+              '覆盖 route 0 的独立预设（F-3）');
+    });
+
+    test('非 VB：重挂恢复包含 -1 路（对照，行为不变）', () {
+      markActive();
+      m.setVbMultiBus(false);
+      m.autoSaveAb(0);
+      sent.clear();
+      markActive();
+      final loads =
+          sent.where((c) => c['cmd'] == 'pluginSlotLoadPresetG').toList();
+      expect(loads.where((c) => c['group'] == -1), isNotEmpty,
+          reason: '非 VB 单引擎下 -1 仍是唯一合法路');
+    });
+  });
 }
