@@ -285,6 +285,18 @@ class PluginManager extends ChangeNotifier {
 
   PluginCommandSender? _commandSender;
 
+  /// VB 多总线模式（Voicemeeter 每 8 声道一组独立引擎，route 0-7 各自
+  /// 独立预设/Ch）。非 VB（单引擎 WASAPI/ASIO/VAIO）下 -1 是唯一合法路。
+  ///
+  /// F-3（2026-10-23）：VB 下 -1 **不是合法路**——桥按「单组 0」语义把它
+  /// 落成 eng[0]，与 route 0 的独立预设互相覆盖（`_restoreAbAfterLoad`
+  /// 恒含 -1 → 每次挂载/卸载自我强化污染 route 0）。故 VB 下 -1 路
+  /// 既不落盘也不恢复（A1 报告原始建议）。由 AppModel 在构造/模式切换
+  /// 时同步（setVbMultiBus）。
+  bool _vbMultiBus = false;
+  bool get vbMultiBus => _vbMultiBus;
+  void setVbMultiBus(bool on) => _vbMultiBus = on;
+
   List<PluginMetadata> _plugins = [];
   final List<PluginHostStatus> _slotStatuses = List.filled(
     kMaxSlots,
@@ -762,6 +774,9 @@ class PluginManager extends ChangeNotifier {
   void setSlotChannels(int mask, {int? slot, int group = -1}) {
     final s = slot ?? _selectedSlot;
     if (s < 0 || s >= kMaxSlots) return;
+    // F-3：VB 多总线模式下 -1 不是合法路（下发即写 eng[0]）——no-op，
+    // 避免 UI 在「未选路」（editorGroup=-1）时误污染 route 0。
+    if (group < 0 && _vbMultiBus) return;
     if (group >= 0 && group < 8) {
       _routeChannels[s][group] = mask;
       _commandSender?.call({
@@ -1472,6 +1487,9 @@ class PluginManager extends ChangeNotifier {
   /// 时机：编辑器关闭 / 切换 A-B / 切路由 / 卸载前——用户感知「自动记录」。
   void autoSaveAb(int slot, {int group = -1}) {
     if (!isSlotActive(slot)) return;
+    // F-3：VB 多总线模式下 -1 不是合法路（落盘会被桥「单组 0」写成
+    // eng[0]，与 route 0 独立预设互相覆盖）——直接跳过，不落盘。
+    if (group < 0 && _vbMultiBus) return;
     _ensureAbLoaded(slot);
     final ab = abActive(slot, group: group);
     final path = _abFile(slot, group, ab);
@@ -1571,9 +1589,12 @@ class PluginManager extends ChangeNotifier {
 
   /// 挂载成功后恢复激活 A/B 预设（P2 边界：模式切换/重挂后插件出厂态，
   /// 不恢复则调音丢失）。VB 各有记录的路由逐路恢复；非 VB 恢复 -1 路。
+  ///
+  /// F-3：VB 多总线模式下**不含 -1 路**——-1 会被桥「单组 0」写成
+  /// eng[0]，与 route 0 的独立预设互相覆盖（自我强化污染）。
   void _restoreAbAfterLoad(int slot) {
     _ensureAbLoaded(slot);
-    final routes = <int>{-1};
+    final routes = <int>{if (!_vbMultiBus) -1};
     for (var g = 0; g < 8; g++) {
       if (_abMeta.containsKey(_abKey2(slot, g, 'A')) ||
           _abMeta.containsKey(_abKey2(slot, g, 'B'))) {
