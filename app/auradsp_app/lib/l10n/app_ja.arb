@@ -823,6 +823,14 @@
   "plugIncompatibleBadge": "32ビット非対応",
   "plugIncompatibleHint": "このプラグインは32ビット版です。AuraDSPは64ビットホストのため読み込めません。64ビット版をインストールしてください。",
   "plugSlotActive": "スロット{n}動作中",
+  "plugSlotBypassed": "スロット {n} バイパス",
+  "@plugSlotBypassed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "@plugSlotActive": {
     "placeholders": {
       "n": {

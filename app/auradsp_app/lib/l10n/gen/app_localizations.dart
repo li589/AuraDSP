@@ -3484,6 +3484,12 @@ abstract class AppLocalizations {
   /// **'插槽 {n} 活跃中'**
   String plugSlotActive(int n);
 
+  /// No description provided for @plugSlotBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} 旁路'**
+  String plugSlotBypassed(int n);
+
   /// No description provided for @plugSlotLoaded.
   ///
   /// In zh, this message translates to:

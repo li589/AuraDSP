@@ -1169,12 +1169,17 @@ public:
     bool isBypassed() const override { return m_bypassed; }
     void setBypass(bool bypass) override {
         m_bypassed = bypass;
-        // 真旁路（2026-10-22）：同步 setProcessing(false) 让插件内部处理
-        // （含 Ozone 级大插件的分析线程）停跑——仅置标志时旁路态 CPU 不降，
-        // 用户实测「旁路仍持续卡顿」。恢复时 setProcessing(true)。
-        // iZotope 恒返 kNotImplemented 但实际生效（E11 实测），失败容忍。
+        // 真旁路（2026-10-22，二次加强）：setProcessing + setActive 双管。
+        // 仅 setProcessing(false) 时 Ozone 级插件的内部分析线程仍可能
+        // 持续跑（用户实测残余卡顿）；setActive(false) 是 VST3 规范的
+        // 「停用」——释放处理资源/停内部线程。代价：重新 activate 大插件
+        // 1-2s（用户取消旁路时一次），换旁路期彻底安静。
+        // iZotope 恒返 kNotImplemented 但实际生效（E11），失败容忍。
         if (m_processor) {
             m_processor->setProcessing(!bypass);
+        }
+        if (m_component) {
+            m_component->setActive(!bypass);
         }
     }
     void setChannelHint(int channels) override {

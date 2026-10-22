@@ -261,47 +261,6 @@ class _PluginListItem extends StatelessWidget {
                         color: isLoadedInThisSlot ? p.accent : p.text,
                       ),
                     ),
-                    if (mountState != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: (mountState == 'bypassed'
-                                  ? const Color(0xFFE6A23C)
-                                  : const Color(0xFF67C23A))
-                              .withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              mountState == 'bypassed'
-                                  ? Icons.pause_circle_rounded
-                                  : Icons.play_circle_rounded,
-                              size: 10,
-                              color: mountState == 'bypassed'
-                                  ? const Color(0xFFE6A23C)
-                                  : const Color(0xFF67C23A),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              mountState == 'bypassed'
-                                  ? l10nOf(context).plugStateBypassed
-                                  : l10nOf(context).plugStateActive,
-                              style: TextStyle(
-                                fontSize: 10,
-                                color: mountState == 'bypassed'
-                                    ? const Color(0xFFE6A23C)
-                                    : const Color(0xFF67C23A),
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
                     if (isIncompatible) ...[
                       const SizedBox(width: 8),
                       Tooltip(
@@ -334,42 +293,38 @@ class _PluginListItem extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (isLoadedInThisSlot) ...[
+                    // 诚实状态一个标（2026-10-22 用户定案）：
+                    // 「插槽x活跃中」/「插槽x旁路」，不再并列「生效」字样。
+                    if (isLoadedInThisSlot || loadedInOtherSlot != null) ...[
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: p.success.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          l10nOf(context).plugSlotActive(slot + 1),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: p.success,
-                            fontWeight: FontWeight.bold,
+                      Builder(builder: (ctx) {
+                        final shownSlot =
+                            isLoadedInThisSlot ? slot : loadedInOtherSlot!;
+                        final bypassed = mountState == 'bypassed';
+                        final color = bypassed
+                            ? const Color(0xFFE6A23C)
+                            : const Color(0xFF67C23A);
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ),
-                      ),
-                    ] else if (loadedInOtherSlot != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: p.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          l10nOf(context).plugSlotLoaded(loadedInOtherSlot! + 1),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: p.accent,
-                            fontWeight: FontWeight.bold,
+                          child: Text(
+                            bypassed
+                                ? l10nOf(context)
+                                    .plugSlotBypassed(shownSlot + 1)
+                                : l10nOf(context)
+                                    .plugSlotActive(shownSlot + 1),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: color,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                     ],
                   ],
                 ),

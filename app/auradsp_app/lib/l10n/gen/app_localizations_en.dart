@@ -1868,6 +1868,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String plugSlotBypassed(int n) {
+    return 'Slot $n bypassed';
+  }
+
+  @override
   String plugSlotLoaded(int n) {
     return 'Slot $n loaded';
   }

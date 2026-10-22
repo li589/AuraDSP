@@ -184,6 +184,9 @@ bool PluginHostClient::launchLocked() {
     }
 
     if (m_job) AssignProcessToJobObject(m_job, pi.hProcess);
+    // P2 防抖（2026-10-22）：宿主进程整体 BELOW_NORMAL——插件内部分析线程
+    // （Ozone 级）与宿主工作线程都不与 RT 音频线程抢 CPU。
+    SetPriorityClass(pi.hProcess, BELOW_NORMAL_PRIORITY_CLASS);
     ResumeThread(pi.hThread);
     CloseHandle(pi.hThread);
 

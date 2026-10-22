@@ -1795,6 +1795,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String plugSlotBypassed(int n) {
+    return 'スロット $n バイパス';
+  }
+
+  @override
   String plugSlotLoaded(int n) {
     return 'スロット$nロード済み';
   }
