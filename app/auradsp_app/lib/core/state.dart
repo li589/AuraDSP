@@ -42,6 +42,37 @@ part 'state/state_eq.dart';
 part 'state/state_audio_modes.dart';
 part 'state/state_vb_asio.dart';
 
+// ---- 文件地图（2026-10-22 P0-P6 拆分）----------------------------------
+//
+// 入口（本文件）= 实例字段 + 构造/dispose + 留类 static + 少量核心方法。
+// 按域拆分的 part 文件统一用 `extension Xxx on AppModel`（同库作用域，
+// 实例调用 / tear-off / 跨 part 互调均解析不变）：
+//
+//   state_models.dart       6 个数据类 + ParamDefaults（纯顶层声明）
+//   state_core.dart         引擎命令原语 / 强类型参数访问 / 乐观镜像 /
+//                           isolate 生命周期 / 测试钩子
+//   state_events.dart       isolate 事件路由（_onMessage 全量 case）/
+//                           同因事件去重 / 组件延迟探测
+//   state_session.dart      会话回放 / 预设脏跟踪 / 防抖自动保存 /
+//                           主题本地化 / 自定义目录 / 采样率
+//   state_chain.dart        处理链 stage/组/顺序 / 立体声链 / Liveprog /
+//                           卷积/VDC/DDC / 低音斜坡
+//   state_effects.dart      ~150 个同构效果 setter（comp/ddc/bass/
+//                           spatial/reverb/gate/dyneq/loudness/...）
+//   state_eq.dart           EQ 网格/曲线/预设 + 引擎响应探测 +
+//                           EQ 静态助手（顶层函数/常量）
+//   state_audio_modes.dart  音频模式/管线/设备枚举/VAIO 驱动/ASIO 注册/
+//                           System APO 运维
+//   state_vb_asio.dart      Voicemeeter 桥总线/插件组 + ASIO 驱动 +
+//                           VAIO 输出端点
+//
+// 两条 extension 铁律（踩坑沉淀，改动前必读）：
+//   1. notifyListeners() 是 ChangeNotifier @protected——extension 非子类
+//      不可直呼，迁出方法统一改调类体内转发 _notifyUi()。
+//   2. extension 作用域不含被扩展类型的 static 成员——纯函数/常量助手
+//      放 part 文件顶层；对外 static（外部 AppModel.xxx 调用）留类体，
+//      extension 内引用加 AppModel. 限定。
+
 class AppModel extends ChangeNotifier {
   final HeadTracker _headTracker = HeadTracker();
 
