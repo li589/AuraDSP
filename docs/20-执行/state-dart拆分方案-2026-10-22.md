@@ -269,17 +269,41 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
   ——全量首跑即真红。已订正并提交 `6a3b274`（独立于重构）。
 
 ### P1（state_models.dart）
-（执行后回填）
 
 - **剪切**：state.dart L35-251（SavedPluginSlot / EngineConn / EngineDisplay /
   EngineInfo / AudioDeviceItem / GuardRejection / ParamDefaults 共 217 行）
   → 新建 `lib/core/state/state_models.dart`（part of '../state.dart'）。
-  git diff = 1 增 217 删，纯搬运零改行。
-- **入口**：6414 → 6199 行；part 指令置于 import 表之后、AppModel 之前。
+  git diff = 1 增 217 删，纯搬运零改行。入口 6414 → 6199 行；part 指令
+  置于 import 表之后、AppModel 之前。
 - **验证**：analyze 0 issue；全量串行 319/320（唯一失败 =
   settings_vaio_test 已知抖动，单独复跑 3/3 过）。另实测：代码变更后
   **冷跑**（测试内核重编译）会放大超时抖动至 6+ 文件，热跑恢复单文件
-  特征——后续各阶段以「热跑」为判定运行。
+  特征——后续各阶段以「热跑」为判定运行。提交 `3f8c02d`。
+
+### P2（state_core.dart）
+
+- **剪切**：20 个成员（send/setInt/setFloat/setStringParam、getParam<T>/
+  setParam<T>/getParamById/setParamById/mirrorInt、_mirror/_markSent/
+  isSectionEnabled、_spawn/_onWindowVisibilityChanged/_restartIsolate/
+  _restartIsolateAsync/_stopAudioIsolate/_scheduleFatalRetry/retryWasapi、
+  handleMessageForTesting/setSource）→ `lib/core/state/state_core.dart`
+  （770 行，`extension StateCore on AppModel`）。入口 6199 → 5450 行。
+  两处字段（_restartToken/_fatalRetries 及其文档注释）按"字段留类体"规则
+  未动。机检：14 个原块逐字等价（仅 notifyListeners→_notifyUi 改名）。
+- **踩坑（机制实验盲区，已沉淀）**：`notifyListeners()` 是 ChangeNotifier
+  `@protected` 成员，extension 不是子类 → 16 个
+  invalid_use_of_protected_member/visible_for_testing 警告。解法 =
+  类体内加转发 `void _notifyUi() => notifyListeners();`，迁出方法统一改调。
+  后续各阶段同法处理（含 P3+ 可能遇到的 addListener 等同类成员）。
+- **测试基础设施库感知化**：param_contract_test 的静态链解析器只读
+  state.dart 单文件 → convolver.mix 的 setFloat helper 断链、误判
+  「无引擎下发」真红。两文件均加 `_readStateLibrary()`（入口+全部 part
+  拼源），`_parseMethods` 扩展为同时扫描 `extension … on AppModel` 体；
+  config_and_presets_test 5 处源码形状断言同法预改（P3/P4 免再踩）。
+- **验证**：analyze 0 issue；param_contract + config_and_presets 单文件
+  106/106；全量串行 316 过 + 4 文件已知超时抖动（chain_groups×2、
+  settings_asio×2，单独复跑 5/5 全过）。本机抖动率较 P1 升高（疑 Avast
+  I/O 干扰加剧），判定规则不变：全量失败文件单独复跑必须全过。
 
 ---
 
