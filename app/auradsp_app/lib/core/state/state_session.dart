@@ -1,0 +1,427 @@
+// part of state.dart —— P4 按区拆分，extension 包装零逻辑改动。
+part of '../state.dart';
+
+/// 会话回放 / 预设脏跟踪 / 防抖自动保存 / 主题本地化 / 自定义目录 / 采样率。
+///
+/// 方法体逐字保留自 AppModel 类体（notifyListeners() 按 P2 约定改调
+/// _notifyUi()）。
+extension StateSession on AppModel {
+  void addCustomPluginDir(String dir) {
+    final path = dir.trim();
+    if (path.isNotEmpty && !config.customPluginDirs.contains(path)) {
+      config.customPluginDirs.add(path);
+      ConfigManager.save(config);
+      pluginManager.setCustomDirs(config.customPluginDirs);
+      _notifyUi();
+    }
+  }
+
+  void removeCustomPluginDir(String dir) {
+    if (config.customPluginDirs.remove(dir)) {
+      ConfigManager.save(config);
+      pluginManager.setCustomDirs(config.customPluginDirs);
+      _notifyUi();
+    }
+  }
+
+  // ---- 自定义脚本目录 ----
+
+  void addCustomScriptDir(String dir) {
+    final path = dir.trim();
+    if (path.isNotEmpty && !config.customScriptDirs.contains(path)) {
+      config.customScriptDirs.add(path);
+      ConfigManager.save(config);
+      _notifyUi();
+    }
+  }
+
+  void removeCustomScriptDir(String dir) {
+    if (config.customScriptDirs.remove(dir)) {
+      ConfigManager.save(config);
+      _notifyUi();
+    }
+  }
+
+  // ---- 防抖自动保存 / 回读对账 / 脏标记 ----
+
+  void scheduleAutoSave() {
+    if (_testing || _isReplayingSession) return;
+    _lastEditAt = DateTime.now().millisecondsSinceEpoch;
+    _debounceSaveTimer?.cancel();
+    _debounceSaveTimer = Timer(
+      Duration(milliseconds: config.autoSaveDebounceMs),
+      () {
+        SessionMemory.save(this);
+        // 决策 #4：参数风暴平息后防抖回读引擎，全量 getParams 对账。
+        // 与 setParam 同端口 FIFO —— 读到的必含此前全部改动，无同端竞态。
+        scheduleReadback();
+      },
+    );
+  }
+
+  /// 防抖回读（决策 #4）：拉一次引擎全量 getParams，'params' 事件归来后
+  /// 由分支顶部守卫决定采用或丢弃。快速频繁改动时每个 settle 窗口
+  /// （autoSaveDebounceMs）只花一次往返，不在 setter 热路径上。
+  void scheduleReadback() {
+    if (_testing || _isReplayingSession) return;
+    _readbackPending = true;
+    _readbackRequestedAt = DateTime.now().millisecondsSinceEpoch;
+    _toIso?.send({'cmd': 'getParams'});
+  }
+
+  /// 重算「偏离已应用预设」脏标记并按需通知 UI（2026-10-16 决策 #3）。
+  /// 生产路径：防抖自动保存回调（SessionMemory.save 内部）统一触发——
+  /// 用户快速频繁改动时，每 500ms 只花一次 snapshot 指纹的开销；
+  /// 测试（_testing）可直呼。
+  bool evaluatePresetDirty() {
+    final fp = PresetLibrary.fingerprintOf(this);
+    final dirty =
+        appliedPresetFingerprint != null && fp != appliedPresetFingerprint;
+    if (dirty != presetDirty) {
+      presetDirty = dirty;
+      _notifyUi();
+    }
+    return dirty;
+  }
+
+  // ---- 会话回放 ----
+
+  Future<void> replaySessionToEngine() async {
+    _isReplayingSession = true;
+    try {
+      // 0. 输入门控（总增益与声道平衡）
+      setFloat(ParamId.inputGain, inputGain);
+      setFloat(ParamId.inputBalance(1), inputBalanceL);
+      setFloat(ParamId.inputBalance(2), inputBalanceR);
+
+      // 1. 下发全量基础开关与数值
+      setInt('bass.enable', bassOn ? 1 : 0);
+      setFloat('bass.gain', bassGain);
+      // 声场（v1.2）：开关位独立后，直发 bypass _mirror（旧 setFloat 会把
+      // UI 的 mix/band 回写冲掉）；关闭时下发 0，UI 值保留。开时与旧行为一致。
+      final stereoK = stereoOn ? 1.0 : 0.0;
+      _markSent('stereo.mix');
+      send({
+        'cmd': 'setParam',
+        'id': 'stereo.mix',
+        'value': stereoMix * stereoWidenMax * stereoK,
+        'isFloat': true,
+      });
+      if (stereoBandUsed) {
+        setInt('stereo.bandUsed', 1);
+        for (var i = 0; i < 5; i++) {
+          final bandId = 'stereo.band${i + 1}';
+          _markSent(bandId);
+          send({
+            'cmd': 'setParam',
+            'id': bandId,
+            'value': stereoBands[i] * stereoK,
+            'isFloat': true,
+          });
+        }
+      }
+      setInt('tube.enable', tubeOn ? 1 : 0);
+      setFloat('tube.gain', tubeGain);
+      // P-011：电子管音色/混合/补偿
+      setInt(ParamId.tubeStyle, tubeStyle);
+      setFloat(ParamId.tubeMix, tubeMix);
+      setFloat(ParamId.tubeCompensation, tubeCompensation);
+      setInt(ParamId.tubeOversample, tubeOversample ? 1 : 0);
+      setInt('crossfeed.enable', xfeedOn ? 1 : 0);
+      setInt(ParamId.xfeedMode, xfeedMode);
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
+      setInt('shelf.enable', shelfOn ? 1 : 0);
+      setFloat('shelf.freq', shelfFreq);
+      setFloat('shelf.gain', shelfGain);
+      setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
+      setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+      setInt(ParamId.haasEnable, haasOn ? 1 : 0);
+      setFloat(ParamId.haasDelay, haasDelayMs);
+      setFloat(ParamId.haasMix, haasMix);
+      setInt(ParamId.haasSide, haasSide);
+      setInt(ParamId.spatialEnable, spatialOn ? 1 : 0);
+      setInt(ParamId.spatialStyle, spatialStyle);
+      setFloat(ParamId.spatialRoom, spatialRoom);
+      setFloat(ParamId.spatialWidth, spatialWidth);
+      setFloat(ParamId.spatialCenter, spatialCenter);
+      setFloat(ParamId.spatialOutGain, spatialOutGain);
+      setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
+      setFloat(ParamId.spatialMix, spatialMix);
+      setFloat(ParamId.spatialElevation, spatialElevation);
+      setInt(ParamId.spatialBinaural, spatialBinaural ? 1 : 0);
+      setInt(ParamId.spatialFdn, spatialFdn ? 1 : 0);
+      setFloat(ParamId.spatialLate, spatialLate);
+      setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
+      setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
+      _syncHeadTracker();
+      setInt(ParamId.exciterEnable, exciterOn ? 1 : 0);
+      setFloat(ParamId.exciterAmount, exciterAmount);
+      setFloat(ParamId.exciterHifreq, exciterHifreq);
+      setInt(ParamId.exciterOversample, exciterOversample ? 1 : 0);
+      // P-010：每效果输出增益门 + 自动补偿
+      setFloat(ParamId.bassOutGain, bassOutputGain);
+      setInt(ParamId.bassAutoGain, bassAutoGain ? 1 : 0);
+      setFloat(ParamId.eqOutGain, eqOutputGain);
+      setInt(ParamId.eqAutoGain, eqAutoGain ? 1 : 0);
+      setFloat(ParamId.tubeOutGain, tubeOutputGain);
+      setInt(ParamId.tubeAutoGain, tubeAutoGain ? 1 : 0);
+      setFloat(ParamId.compOutGain, compOutputGain);
+      setInt(ParamId.compAutoGain, compAutoGain ? 1 : 0);
+      setFloat(ParamId.reverbOutGain, reverbOutputGain);
+      setInt(ParamId.reverbAutoGain, reverbAutoGain ? 1 : 0);
+      // 噪声门 + Deesser
+      setInt(ParamId.gateEnable, gateOn ? 1 : 0);
+      setFloat(ParamId.gateThreshold, gateThreshold);
+      setFloat(ParamId.gateAttack, gateAttackMs);
+      setFloat(ParamId.gateRelease, gateReleaseMs);
+      setFloat(ParamId.gateHysteresis, gateHysteresis);
+      setFloat(ParamId.gateRange, gateRange);
+      setFloat(ParamId.gateHoldMs, gateHoldMs);
+      setInt(ParamId.gateAutoGain, gateAutoGain ? 1 : 0);
+      setInt(ParamId.deesserEnable, deesserOn ? 1 : 0);
+      setFloat(ParamId.deesserFreq, deesserFreq);
+      setFloat(ParamId.deesserAmount, deesserAmount);
+      // 全参数动态EQ
+      setInt(ParamId.dyneqEnable, dyneqOn ? 1 : 0);
+      setFloat(ParamId.dyneqAttack, dyneqAttackMs);
+      setFloat(ParamId.dyneqRelease, dyneqReleaseMs);
+      setFloat(ParamId.dyneqB1Attack, dyneqB1Attack);
+      setFloat(ParamId.dyneqB1Release, dyneqB1Release);
+      setFloat(ParamId.dyneqB2Attack, dyneqB2Attack);
+      setFloat(ParamId.dyneqB2Release, dyneqB2Release);
+      setFloat(ParamId.dyneqB3Attack, dyneqB3Attack);
+      setFloat(ParamId.dyneqB3Release, dyneqB3Release);
+      setInt(ParamId.dyneqLowEnable, dyneqLowOn ? 1 : 0);
+      setFloat(ParamId.dyneqLowFreq, dyneqLowFreq);
+      setFloat(ParamId.dyneqLowQ, dyneqLowQ);
+      setFloat(ParamId.dyneqLowGain, dyneqLowGain);
+      setFloat(ParamId.dyneqLowRange, dyneqLowRange);
+      setFloat(ParamId.dyneqLowThreshold, dyneqLowThreshold);
+      setInt(ParamId.dyneqMidEnable, dyneqMidOn ? 1 : 0);
+      setFloat(ParamId.dyneqMidFreq, dyneqMidFreq);
+      setFloat(ParamId.dyneqMidQ, dyneqMidQ);
+      setFloat(ParamId.dyneqMidGain, dyneqMidGain);
+      setFloat(ParamId.dyneqMidRange, dyneqMidRange);
+      setFloat(ParamId.dyneqMidThreshold, dyneqMidThreshold);
+      setInt(ParamId.dyneqHighEnable, dyneqHighOn ? 1 : 0);
+      setFloat(ParamId.dyneqHighFreq, dyneqHighFreq);
+      setFloat(ParamId.dyneqHighQ, dyneqHighQ);
+      setFloat(ParamId.dyneqHighGain, dyneqHighGain);
+      setFloat(ParamId.dyneqHighRange, dyneqHighRange);
+      setFloat(ParamId.dyneqHighThreshold, dyneqHighThreshold);
+      setInt(ParamId.loudnessEnable, loudnessOn ? 1 : 0);
+      setFloat(ParamId.loudnessAmount, loudnessAmount);
+      setFloat(ParamId.bassHarmonics, bassHarmonics);
+      setFloat(ParamId.bassHarmonicBlend, bassHarmonicBlend);
+      setFloat(ParamId.bassSubFreq, bassSubFloor);
+      setFloat(ParamId.bassCutoffF, bassCutoff);
+      setInt(ParamId.filterEnable, filterOn ? 1 : 0);
+      setInt(ParamId.filterType, filterType);
+      setFloat(ParamId.filterFreq, filterFreq);
+      setFloat(ParamId.filterQ, filterQ);
+      setFloat(ParamId.arbmagOutGain, arbmagOutputGain);
+      setInt(ParamId.arbmagAutoGain, arbmagAutoGain ? 1 : 0);
+      setInt('limiter.enable', limiterOn ? 1 : 0);
+      setFloat(ParamId.limiterRelease, limiterReleaseMs);
+      setFloat(ParamId.limiterThreshold, limiterThreshold);
+      setInt(ParamId.limiterLink, limiterLink ? 1 : 0);
+      setInt(ParamId.limiterLookahead, limiterLookahead ? 1 : 0);
+      setFloat('post.gain', postGain);
+
+      // 动态压限器
+      setFloat(ParamId.compTimeconstant, compTimeconstant);
+      setInt(ParamId.compGranularity, compGranularity);
+      setInt(ParamId.compTfresolution, compTfresolution);
+      for (var i = 0; i < 7; i++) {
+        setFloat('comp.freq${i + 1}', compFreqs[i]);
+        setFloat('comp.gain${i + 1}', compGains[i]);
+      }
+      setInt(ParamId.compEnable, compOn ? 1 : 0);
+
+      // 2. 混响
+      if (isSpatialReverbOn) {
+        setFloat('freeverb.decay', fvDecay);
+        setFloat('freeverb.damp', fvDamp);
+        setFloat('freeverb.wet', fvWet);
+        setFloat('freeverb.dry', fvDry);
+        setInt(ParamId.fvEnable, 1);
+        if (reverbPreset >= 0) {
+          setInt('reverb.preset', reverbPreset);
+        }
+      } else {
+        setInt(ParamId.fvEnable, 0);
+        setInt('reverb.preset', -1);
+      }
+
+      // 3. EQ 状态与曲线
+      setInt('eq.enable', eqOn ? 1 : 0);
+      _pushEqCurve();
+
+      // 4. 外部文件自校验重载
+      if (convIrPath != null &&
+          convIrPath!.isNotEmpty &&
+          File(convIrPath!).existsSync()) {
+        loadConvolverIr(convIrPath!);
+        if (convEnabled) setInt(ParamId.convEnable, 1);
+      }
+      // 干湿比有独立引擎参数，重启后必须重推，否则界面显示的混合比
+      // 与引擎默认值不一致（“记忆与滑块打架”的成因之一）。
+      setFloat('convolver.mix', convMix);
+      if (ddcPath != null &&
+          ddcPath!.isNotEmpty &&
+          File(ddcPath!).existsSync()) {
+        loadVdc(ddcPath!);
+        if (ddcOn) setInt(ParamId.ddcEnable, 1);
+      }
+      if (lpCode != null && lpCode!.isNotEmpty) {
+        setLiveprogCode(lpCode!);
+        if (lpEnabled) setInt(ParamId.lpEnable, 1);
+        // 脚本滑块 1..8 有独立引擎参数，重启后必须重推，
+        // 否则界面显示的滑块值与引擎归零值不一致（同上）。
+        for (var i = 0; i < 8 && i < lpParams.length; i++) {
+          setFloat('liveprog.param${i + 1}', lpParams[i]);
+        }
+      }
+      if (arbmagString.isNotEmpty) {
+        setArbmagString(arbmagString);
+        if (arbmagOn) {
+          setInt(ParamId.arbmagEnable, 1);
+        }
+      }
+      if (graphOrder != null && graphOrder!.isNotEmpty) {
+        setGraphOrder(graphOrder!);
+      }
+
+      if (savedPluginPdc) {
+        send({'cmd': 'pluginSetPdc', 'pdc': true});
+      }
+
+      if (savedPluginSlots.isNotEmpty) {
+        for (final item in savedPluginSlots) {
+          if (item.path.isNotEmpty && File(item.path).existsSync()) {
+            send({
+              'cmd': 'pluginSlotLoad',
+              'slot': item.slot,
+              'path': item.path,
+              'id': item.id,
+            });
+            if (item.channels != 0xFF) {
+              send({
+                'cmd': 'pluginSlotSetChannels',
+                'slot': item.slot,
+                'mask': item.channels,
+              });
+            }
+            if (item.stage != PluginInsertStage.defaultStage) {
+              send({
+                'cmd': 'pluginSlotSetInsertStage',
+                'slot': item.slot,
+                'stage': item.stage,
+              });
+            }
+            if (item.bypass) {
+              send({
+                'cmd': 'pluginSlotSetBypass',
+                'slot': item.slot,
+                'bypass': true,
+              });
+            }
+          }
+        }
+      } else if (savedPluginPath != null &&
+          savedPluginPath!.isNotEmpty &&
+          File(savedPluginPath!).existsSync()) {
+        send({
+          'cmd': 'pluginSlotLoad',
+          'slot': 0,
+          'path': savedPluginPath!,
+          'id': savedPluginId,
+        });
+        if (savedPluginBypass) {
+          send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': true});
+        }
+      }
+    } finally {
+      _isReplayingSession = false;
+      _toIso?.send({'cmd': 'getParams'});
+    }
+  }
+
+  // ---- 用户预设 / 主题 / 本地化 / 采样率 ----
+
+  bool saveAsUserPreset(
+    String name, {
+    String category = 'Custom',
+    String description = '',
+  }) {
+    final preset = PresetLibrary.snapshot(
+      this,
+      name: name,
+      category: category,
+      description: description,
+    );
+    final ok = PresetLibrary.saveUserPreset(preset);
+    if (ok) {
+      activePresetName = name;
+      // 保存即锚定（决策 #3）：当前状态 = 该预设内容，脏标记归零。
+      appliedPresetFingerprint = PresetLibrary.fingerprintOf(this);
+      presetDirty = false;
+    }
+    _notifyUi();
+    scheduleAutoSave();
+    return ok;
+  }
+
+  void loadPreset(AuraPreset preset) {
+    PresetLibrary.apply(this, preset);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setTheme(AuraThemeId id) {
+    themeId = id;
+    config.themeId = id.name;
+    ConfigManager.save(config);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setLocale(Locale l) {
+    locale = l;
+    config.locale = l.languageCode;
+    ConfigManager.save(config);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setAutoRestoreSession(bool enable) {
+    config.autoRestoreSession = enable;
+    if (_testing) {
+      // 测试隔离：只改内存开关，不碰磁盘。
+      _notifyUi();
+      return;
+    }
+    ConfigManager.save(config);
+    if (enable) {
+      SessionMemory.save(this);
+    } else {
+      SessionMemory.clear();
+    }
+    _notifyUi();
+  }
+
+  void setSampleRate(int rate) {
+    if (rate == config.sampleRate) return;
+    config.sampleRate = rate;
+    ConfigManager.save(config);
+    _rebuildEqGridForSampleRate();
+    if (audioMode == 'vbcallback' || audioMode == 'asio') {
+      _notifyUi();
+      return;
+    }
+    _pendingRestartPush = true;
+    _restartIsolate();
+    _notifyUi();
+  }
+}
