@@ -786,6 +786,27 @@
   },
   "plugOpenGuiBtn": "打开界面 (GUI)",
   "plugRouteBypassed": "旁路（未选路）",
+  "plugAllInheritFrom": "继承自 {route}",
+  "@plugAllInheritFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllInheritNone": "无可继承来源（未调过音）",
+  "plugAllUseOwn": "使用『全部』自有状态",
+  "plugInheritedFrom": "参数继承自 {route}",
+  "@plugInheritedFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllOwnState": "『全部』自有状态",
+  "plugReInherit": "重新继承",
+  "plugRouteLocked": "界面已打开，关闭后可切换",
   "plugRouteAll": "全部",
   "plugChStereoOnly": "VB 模式每通道仅立体声（L/R）进入插件链",
   "plugLoading": "加载中…",
@@ -800,7 +821,6 @@
   },
   "plugLatencyLabel": "实测音频延迟",
   "plugStageLabel": "信号处理链插入阶段：",
-  "plugRtNote": "实时动态串联 • 保持专业监听超低延迟标准",
   "plugFilterAll": "全部",
   "plugNoPlugins": "未检测到已安装的第三方插件",
   "plugNoPluginsHint": "请确认插件已放置在系统 VST3 / CLAP 路径，或在上方添加自定义插件目录后重新扫描",

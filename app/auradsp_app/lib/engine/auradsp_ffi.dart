@@ -650,6 +650,15 @@ final class AuraDspLib {
           'auradsp_plugin_slot_is_editor_open')
       .asFunction();
 
+  /// P1-5「不继承」应用「全部」记忆（全量 state 载入）。
+  late final int Function(Pointer<Void>, int, Pointer<Utf8>) pluginSlotLoadPreset =
+      dylib
+          .lookup<
+              NativeFunction<
+                  Int32 Function(Pointer<Void>, Int32,
+                      Pointer<Utf8>)>>('auradsp_plugin_slot_load_preset')
+          .asFunction();
+
   late final int Function(Pointer<Void>, int, int) pluginSlotSetInsertStage = dylib
       .lookup<NativeFunction<Int32 Function(Pointer<Void>, Int32, Int32)>>(
           'auradsp_plugin_slot_set_insert_stage')
@@ -1121,6 +1130,23 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
   static int pluginSlotCloseEditorWrap(
       AuraDspLib lib, Pointer<Void> handle, int slot) {
     return lib.pluginSlotCloseEditor(handle, slot);
+  }
+
+  /// 查询插件原生 GUI 是否打开（P1-1 路由锁定轮询兜底）
+  static bool pluginSlotIsEditorOpenWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot) {
+    return lib.pluginSlotIsEditorOpen(handle, slot) == 1;
+  }
+
+  /// 加载插件预设（P1-5「不继承」应用「全部」记忆）
+  static int pluginSlotLoadPresetWrap(
+      AuraDspLib lib, Pointer<Void> handle, int slot, String filePath) {
+    final pathPtr = filePath.toNativeUtf8();
+    try {
+      return lib.pluginSlotLoadPreset(handle, slot, pathPtr);
+    } finally {
+      malloc.free(pathPtr);
+    }
   }
 
   /// 设置插件在处理链上的插入阶段 (0: Pre-DSP, 1: Pre-Vendor, 2: Post-Vendor, 3: Post-Reverb, 4: Post-Limiter)

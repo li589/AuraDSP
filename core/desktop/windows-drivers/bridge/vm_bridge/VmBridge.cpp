@@ -1020,6 +1020,35 @@ int vb_plugin_slot_get_channels(int slot) {
     return g_pluginFns.getChannels(e, slot);
 }
 
+/* P1-3 per-group Ch 下发（VB 具体路独立记忆；group 越界/无引擎返回 0）。 */
+int vb_plugin_slot_set_channels_g(int slot, int group, int channels) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    void* e = PluginEngineAt(group);
+    if (!e || !g_pluginFns.Ready()) return 0;
+    auraplugin::SlotSetChannels(e, g_pluginFns, g_pluginMirror, slot, channels);
+    return 1;
+}
+
+/* P1-5 继承复制：srcGroup 的 state 快照写入 path（兼作「全部」记忆文件），
+ * 再载入其余全部组——组间参数统一（「继承自 X」）。失败即 0（部分组可能
+ * 已载入，下次继承幂等可重试）。 */
+int vb_plugin_slot_sync_all(int slot, int srcGroup, const char* path) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (!g_pluginFns.Ready() || !path || !*path) return 0;
+    void* src = PluginEngineAt(srcGroup);
+    if (!src) return 0;
+    const int n = PluginEngineCount();
+    if (n <= 0) return 0;
+    if (!g_pluginFns.savePreset(src, slot, path)) return 0;
+    for (int g = 0; g < n; ++g) {
+        if (g == srcGroup) continue;
+        void* e = PluginEngineAt(g);
+        if (!e) continue;
+        if (!g_pluginFns.loadPreset(e, slot, path)) return 0;
+    }
+    return 1;
+}
+
 // ---- 按路插件处理掩码 ----
 // bit g = 组 g 的总线是否吃插件链。接受任意 8 bit 掩码（掩码位超出当前
 // 组数无害——引擎按位取用，多余位被忽略；重建组数变化后重放自动适配）。

@@ -326,6 +326,28 @@ if hasattr(b, "vb_plugin_slot_show_editor_g"):
     rc = b.vb_plugin_slot_close_editor_g(0, 0)
     check("editor_g empty slot close==0", rc == 0, f"rc={rc}")
 
+# ---- P1：per-group Ch + 继承复制（sync_all）导出与拒绝语义 ----
+for _gfn in ("vb_plugin_slot_set_channels_g", "vb_plugin_slot_sync_all"):
+    check(f"export {_gfn} present", hasattr(b, _gfn),
+          "missing (stale bridge DLL?)")
+if hasattr(b, "vb_plugin_slot_set_channels_g"):
+    b.vb_plugin_slot_set_channels_g.restype = ctypes.c_int
+    b.vb_plugin_slot_set_channels_g.argtypes = [ctypes.c_int, ctypes.c_int,
+                                                ctypes.c_int]
+    b.vb_plugin_slot_sync_all.restype = ctypes.c_int
+    b.vb_plugin_slot_sync_all.argtypes = [ctypes.c_int, ctypes.c_int,
+                                          ctypes.c_char_p]
+    rc = b.vb_plugin_slot_set_channels_g(0, 99, 0x3)
+    check("set_channels_g rejects out-of-range group", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_set_channels_g(0, 0, 0x3)
+    # 空槽不崩即可（Ready/实例在场与否环境相关，0=拒绝 1=接受均为合法）
+    check("set_channels_g empty slot safe", rc in (0, 1), f"rc={rc}")
+    # 空槽 sync_all：src 无插件 savePreset 失败 → 0（不得假装成功）
+    rc = b.vb_plugin_slot_sync_all(0, 99, b"C:\\Windows\\Temp\\aura_sync_test.aurapreset")
+    check("sync_all rejects out-of-range srcGroup", rc == 0, f"rc={rc}")
+    rc = b.vb_plugin_slot_sync_all(0, 0, b"C:\\Windows\\Temp\\aura_sync_test.aurapreset")
+    check("sync_all empty slot ==0 (savePreset fails)", rc == 0, f"rc={rc}")
+
 b.vb_bypass.restype = ctypes.c_int
 b.vb_bypass.argtypes = [ctypes.c_int]
 rc = b.vb_bypass(1)

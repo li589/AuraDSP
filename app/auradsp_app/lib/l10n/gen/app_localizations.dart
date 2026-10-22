@@ -3346,6 +3346,48 @@ abstract class AppLocalizations {
   /// **'旁路（未选路）'**
   String get plugRouteBypassed;
 
+  /// No description provided for @plugAllInheritFrom.
+  ///
+  /// In zh, this message translates to:
+  /// **'继承自 {route}'**
+  String plugAllInheritFrom(String route);
+
+  /// No description provided for @plugAllInheritNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可继承来源（未调过音）'**
+  String get plugAllInheritNone;
+
+  /// No description provided for @plugAllUseOwn.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用『全部』自有状态'**
+  String get plugAllUseOwn;
+
+  /// No description provided for @plugInheritedFrom.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数继承自 {route}'**
+  String plugInheritedFrom(String route);
+
+  /// No description provided for @plugAllOwnState.
+  ///
+  /// In zh, this message translates to:
+  /// **'『全部』自有状态'**
+  String get plugAllOwnState;
+
+  /// No description provided for @plugReInherit.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新继承'**
+  String get plugReInherit;
+
+  /// No description provided for @plugRouteLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'界面已打开，关闭后可切换'**
+  String get plugRouteLocked;
+
   /// No description provided for @plugRouteAll.
   ///
   /// In zh, this message translates to:
@@ -3387,12 +3429,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'信号处理链插入阶段：'**
   String get plugStageLabel;
-
-  /// No description provided for @plugRtNote.
-  ///
-  /// In zh, this message translates to:
-  /// **'实时动态串联 • 保持专业监听超低延迟标准'**
-  String get plugRtNote;
 
   /// No description provided for @plugFilterAll.
   ///

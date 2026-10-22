@@ -786,6 +786,27 @@
   },
   "plugOpenGuiBtn": "Open UI (GUI)",
   "plugRouteBypassed": "Bypass (no route)",
+  "plugAllInheritFrom": "Inherit from {route}",
+  "@plugAllInheritFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllInheritNone": "No source (nothing tuned yet)",
+  "plugAllUseOwn": "Use 'All' own state",
+  "plugInheritedFrom": "Params inherited from {route}",
+  "@plugInheritedFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllOwnState": "'All' own state",
+  "plugReInherit": "Re-inherit",
+  "plugRouteLocked": "Editor open - close it to switch",
   "plugRouteAll": "All",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",
@@ -800,7 +821,6 @@
   },
   "plugLatencyLabel": "Measured Audio Latency",
   "plugStageLabel": "Signal-chain insert stage:",
-  "plugRtNote": "Live serial chaining • RT-Safe contract kept",
   "plugFilterAll": "All",
   "plugNoPlugins": "No third-party plugins detected",
   "plugNoPluginsHint": "Make sure plugins live in system VST3 / CLAP paths, or add a custom folder above and rescan",

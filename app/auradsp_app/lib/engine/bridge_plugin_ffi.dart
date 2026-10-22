@@ -42,6 +42,15 @@ typedef _SlotSetChannelsC = Int32 Function(Int32, Int32);
 typedef _SlotSetChannelsDart = int Function(int, int);
 typedef _SlotGetChannelsC = Int32 Function(Int32);
 typedef _SlotGetChannelsDart = int Function(int);
+// P1-3 per-group Ch 下发（仅新桥导出 _g 后缀）。
+typedef _SlotSetChannelsGC = Int32 Function(Int32, Int32, Int32);
+typedef _SlotSetChannelsGDart = int Function(int, int, int);
+// P1-5 继承复制：srcGroup state → path → 其余组（桥内批处理）。
+typedef _SlotSyncAllC = Int32 Function(Int32, Int32, Pointer<Utf8>);
+typedef _SlotSyncAllDart = int Function(int, int, Pointer<Utf8>);
+// P1-5「不继承」应用「全部」记忆（v1 全组扇出 loadPreset）。
+typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
+typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
 
 class BridgePluginFfi {
   final DynamicLibrary dylib;
@@ -62,6 +71,9 @@ class BridgePluginFfi {
   late final _SlotGetStageDart _getStage;
   late final _SlotSetChannelsDart _setChannels;
   late final _SlotGetChannelsDart _getChannels;
+  late final _SlotPresetDart _loadPreset;
+  late final _SlotSetChannelsGDart? _setChannelsG;
+  late final _SlotSyncAllDart? _syncAll;
 
   BridgePluginFfi(this.dylib, this.prefix) {
     _load = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>(
@@ -96,6 +108,11 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_set_channels');
     _getChannels = dylib.lookupFunction<_SlotGetChannelsC, _SlotGetChannelsDart>(
         '${prefix}_plugin_slot_get_channels');
+    _loadPreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
+        '${prefix}_plugin_slot_load_preset');
+    _setChannelsG = _lookupSetChannelsG(
+        '${prefix}_plugin_slot_set_channels_g');
+    _syncAll = _lookupSyncAll('${prefix}_plugin_slot_sync_all');
   }
 
   // 老桥 DLL 没有 _g 导出时返回 null（ArgumentError），调用方自动回落。
@@ -121,6 +138,22 @@ class BridgePluginFfi {
     try {
       return dylib
           .lookupFunction<_SlotIsEditorOpenGC, _SlotIsEditorOpenGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotSetChannelsGDart? _lookupSetChannelsG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotSetChannelsGC, _SlotSetChannelsGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotSyncAllDart? _lookupSyncAll(String name) {
+    try {
+      return dylib.lookupFunction<_SlotSyncAllC, _SlotSyncAllDart>(name);
     } on ArgumentError {
       return null;
     }
@@ -197,6 +230,39 @@ class BridgePluginFfi {
       return _setChannels(slot, mask);
     } catch (_) {
       return 0;
+    }
+  }
+
+  /// P1-3 per-group Ch 下发（group 越界/老桥无导出返回 0）。
+  int setChannelsG(int slot, int group, int mask) {
+    final f = _setChannelsG;
+    if (f == null || group < 0) return 0;
+    try {
+      return f(slot, group, mask);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// P1-5 继承复制：srcGroup state → [path] → 其余组（老桥无导出返回 0）。
+  int syncAll(int slot, int srcGroup, String path) {
+    final f = _syncAll;
+    if (f == null) return 0;
+    final pp = path.toNativeUtf8();
+    try {
+      return f(slot, srcGroup, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// P1-5「不继承」：全组扇出载入「全部」记忆文件。
+  int loadPreset(int slot, String path) {
+    final pp = path.toNativeUtf8();
+    try {
+      return _loadPreset(slot, pp.cast());
+    } finally {
+      malloc.free(pp);
     }
   }
 

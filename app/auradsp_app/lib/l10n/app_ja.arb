@@ -786,6 +786,27 @@
   },
   "plugOpenGuiBtn": "UIを開く (GUI)",
   "plugRouteBypassed": "バイパス（未選択）",
+  "plugAllInheritFrom": "{route} から継承",
+  "@plugAllInheritFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllInheritNone": "継承元なし（未調整）",
+  "plugAllUseOwn": "「すべて」の独自状態を使用",
+  "plugInheritedFrom": "パラメータは {route} から継承",
+  "@plugInheritedFrom": {
+    "placeholders": {
+      "route": {
+        "type": "String"
+      }
+    }
+  },
+  "plugAllOwnState": "「すべて」独自状態",
+  "plugReInherit": "再継承",
+  "plugRouteLocked": "エディタ開閉中は切替不可",
   "plugRouteAll": "すべて",
   "plugChStereoOnly": "VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ",
   "plugUnloadFromSlot": "このスロットからアンロード",
@@ -799,7 +820,6 @@
   },
   "plugLatencyLabel": "実測オーディオ遅延",
   "plugStageLabel": "シグナルチェーン挿入ステージ：",
-  "plugRtNote": "ライブ直列接続 • RT-Safe契約を維持",
   "plugFilterAll": "すべて",
   "plugNoPlugins": "サードパーティプラグインが検出されません",
   "plugNoPluginsHint": "システムVST3 / CLAPパスに配置済みか確認し、上のカスタムフォルダ追加後に再スキャン",

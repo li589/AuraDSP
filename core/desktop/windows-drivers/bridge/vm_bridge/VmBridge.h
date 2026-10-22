@@ -101,6 +101,12 @@ VBB_API int vb_plugin_slot_set_insert_stage(int slot, int stage);
 VBB_API int vb_plugin_slot_get_insert_stage(int slot);
 VBB_API int vb_plugin_slot_set_channels(int slot, int channels);
 VBB_API int vb_plugin_slot_get_channels(int slot);
+/* P1-3 per-group Ch（2026-10-22 v3.1）：VB 各路独立声道选择记忆。
+ * group 越界/无引擎返回 0。 */
+VBB_API int vb_plugin_slot_set_channels_g(int slot, int group, int channels);
+/* P1-5 继承复制（2026-10-22 v3.2）：srcGroup 的 state 快照写入 path
+ * （兼「全部」记忆文件），再载入其余全部组——组间参数统一。 */
+VBB_API int vb_plugin_slot_sync_all(int slot, int srcGroup, const char* path);
 
 // ---- 按路插件处理掩码（2026-10-22）----
 // bit g = 组 g 的总线是否吃插件链（1=吃，0=直通，厂商 DSP 不受影响）。

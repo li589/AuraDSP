@@ -1790,6 +1790,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugRouteBypassed => 'Bypass (no route)';
 
   @override
+  String plugAllInheritFrom(String route) {
+    return 'Inherit from $route';
+  }
+
+  @override
+  String get plugAllInheritNone => 'No source (nothing tuned yet)';
+
+  @override
+  String get plugAllUseOwn => 'Use \'All\' own state';
+
+  @override
+  String plugInheritedFrom(String route) {
+    return 'Params inherited from $route';
+  }
+
+  @override
+  String get plugAllOwnState => '\'All\' own state';
+
+  @override
+  String get plugReInherit => 'Re-inherit';
+
+  @override
+  String get plugRouteLocked => 'Editor open - close it to switch';
+
+  @override
   String get plugRouteAll => 'All';
 
   @override
@@ -1812,9 +1837,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugStageLabel => 'Signal-chain insert stage:';
-
-  @override
-  String get plugRtNote => 'Live serial chaining • RT-Safe contract kept';
 
   @override
   String get plugFilterAll => 'All';
