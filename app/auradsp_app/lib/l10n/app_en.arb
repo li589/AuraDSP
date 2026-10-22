@@ -802,6 +802,7 @@
   "plugRouteLocked": "Locked",
   "plugChStereoOnly": "VB mode feeds only stereo (L/R) per bus into the plugin chain",
   "plugLoading": "Loading…",
+  "plugUnloading": "Unloading…",
   "plugUnloadFromSlot": "Unload from This Slot",
   "plugLoadToSlot": "Load into Slot {n}",
   "@plugLoadToSlot": {

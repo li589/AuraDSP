@@ -24,6 +24,7 @@ class _SlotSelectorBar extends StatelessWidget {
                 isBypassed: manager.isSlotBypassed(i),
                 plugin: manager.getSlotPlugin(i),
                 stage: manager.getSlotStage(i),
+                busy: manager.isSlotBusy(i),
                 onTap: () => onSelectSlot(i),
               ),
             ),
@@ -44,6 +45,7 @@ class _SlotTab extends StatelessWidget {
   final bool isBypassed;
   final PluginMetadata? plugin;
   final int stage;
+  final bool busy;
   final VoidCallback onTap;
 
   const _SlotTab({
@@ -53,6 +55,7 @@ class _SlotTab extends StatelessWidget {
     required this.isBypassed,
     required this.plugin,
     required this.stage,
+    this.busy = false,
     required this.onTap,
   });
 
@@ -87,14 +90,25 @@ class _SlotTab extends StatelessWidget {
                 shape: BoxShape.circle,
               ),
               alignment: Alignment.center,
-              child: Text(
-                '${slotIdx + 1}',
-                style: TextStyle(
-                  color: isSelected ? p.accentContrast : p.textDim,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
+              // 忙态（加载/卸载中）：槽号位换加载动画——per-slot 独立，
+              // 切换槽查看其它槽不受影响（2026-10-22 用户需求）。
+              child: busy
+                  ? SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: isSelected ? p.accentContrast : p.accent,
+                      ),
+                    )
+                  : Text(
+                      '${slotIdx + 1}',
+                      style: TextStyle(
+                        color: isSelected ? p.accentContrast : p.textDim,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
             ),
             const SizedBox(width: AuraSpace.sm),
             Expanded(

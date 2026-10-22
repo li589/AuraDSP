@@ -487,8 +487,9 @@ class _ActivePluginHero extends StatelessWidget {
     final locked = manager.isSlotEditorOpen(slot);
     // Ch strip 可交互位：VB 非双耳仅 L/R 进插件链（泵层 procCh=2）；
     // 编辑器打开时整体禁用（「禁止声道选择」）。
-    final chInteractive =
-        locked ? 0x0 : ((isVb && !model.spatialBinaural) ? 0x3 : 0xFF);
+    final chInteractive = (locked || isBusy)
+        ? 0x0
+        : ((isVb && !model.spatialBinaural) ? 0x3 : 0xFF);
 
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
@@ -670,6 +671,41 @@ class _ActivePluginHero extends StatelessWidget {
         ),
         child: Column(
           children: [
+            // 槽级加载/卸载动画（2026-10-22 用户需求）：进度条 + 动作文案，
+            // per-slot busy 驱动——切到别的槽不受影响。大插件 5-6s 加载
+            // 期间全按钮禁用（过分操作防护），音频侧旧插件已卸/新插件
+            // 未就绪时链路直通不断音。
+            if (isBusy) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(2),
+                child: LinearProgressIndicator(
+                  minHeight: 3,
+                  color: p.accent,
+                  backgroundColor: p.hairline,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 12,
+                    height: 12,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: p.accent,
+                    ),
+                  ),
+                  const SizedBox(width: AuraSpace.xs),
+                  Text(
+                    manager.slotBusyAction(slot) == 'unload'
+                        ? l10nOf(context).plugUnloading
+                        : l10nOf(context).plugLoading,
+                    style: labelOf(p, size: 11, color: p.textDim),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AuraSpace.sm),
+            ],
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -866,7 +902,7 @@ class _ActivePluginHero extends StatelessWidget {
                   slot: slot,
                   group: isVb ? editorGroup : -1,
                   isVb: isVb,
-                  locked: locked,
+                  locked: locked || isBusy,
                   routeNames: routeNames,
                 ),
               ],

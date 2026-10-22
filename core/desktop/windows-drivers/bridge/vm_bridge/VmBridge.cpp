@@ -879,6 +879,12 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
     if (!g_pluginFns.Ready()) return 0;
     const int n = PluginEngineCount();
     if (n <= 0) return 0;
+    // P2 防抖：加载是重 IO/内存操作（大插件 5-6s），压低当前线程优先级，
+    // 让 RT 回调（Pro Audio）优先拿 CPU——消加载期抢核导致的断续。
+    // 结束恢复原优先级（无论成败）。
+    HANDLE thr = GetCurrentThread();
+    int oldPrio = GetThreadPriority(thr);
+    SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
     int loaded = 0;
     for (int g = 0; g < n; ++g) {
         if (auraplugin::SlotLoad(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
@@ -888,20 +894,27 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
                 auraplugin::SlotUnload(PluginEngineAt(k), g_pluginFns,
                                        g_pluginMirror, slot);
             }
+            SetThreadPriority(thr, oldPrio);
             return 0;
         }
         ++loaded;
     }
+    SetThreadPriority(thr, oldPrio);
     return 1;
 }
 
 int vb_plugin_slot_unload(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     const int n = PluginEngineCount();
+    // 同 load：卸载 teardown 也是重操作，降优先级护 RT。
+    HANDLE thr = GetCurrentThread();
+    int oldPrio = GetThreadPriority(thr);
+    SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
     for (int g = 0; g < n; ++g) {
         auraplugin::SlotUnload(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
                                slot);
     }
+    SetThreadPriority(thr, oldPrio);
     return n > 0 ? 1 : 0;
 }
 

@@ -1744,7 +1744,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugChStereoOnly => 'VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ';
 
   @override
-  String get plugLoading => '加载中…';
+  String get plugLoading => 'ロード中…';
+
+  @override
+  String get plugUnloading => 'アンロード中…';
 
   @override
   String get plugUnloadFromSlot => 'このスロットからアンロード';
