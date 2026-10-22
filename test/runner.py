@@ -51,6 +51,9 @@ def run_smoke_tests():
         "smoke_cross_mode_consistency.py",
         # E14 预热直通双发门禁：直通块不得被宿主回放（prime 补位机制守卫）
         "smoke_plugin_prime_no_double_send.py",
+        # 链级启用开关（VB 按路插件处理底层）：关=逐位直通+latency 归零，
+        # 重启用=延迟线复位后效果恢复，槽位挂载状态全程保留
+        "smoke_plugin_chain_enable.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",

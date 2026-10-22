@@ -42,6 +42,20 @@ void PluginChainComponent::reset() {
  * 调用方；其立体声硬边界是 F-8b 记录的误路由隐患）。链路统一入口为
  * processInterleavedN()，见头文件注释。 */
 
+void PluginChainComponent::setEnabled(bool enable) noexcept {
+    const bool previous = m_chainEnabled.exchange(enable, std::memory_order_acq_rel);
+    if (enable && !previous) {
+        /* 关闭期间延迟线只进不出，内容已陈旧；重启用时全量复位，
+         * 首块按「无延迟历史」重建（m_lastMasks 一并清零，走既有
+         * mask 变化复位路径），避免旧音频注入。 */
+        for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
+            m_delayLines[slot].reset();
+            m_multiDelayLines[slot].reset();
+            m_lastMasks[slot] = 0;
+        }
+    }
+}
+
 void PluginChainComponent::processInterleaved(int stage, float* interleaved,
                                                uint32_t frames) noexcept {
     processInterleavedN(stage, interleaved, frames, 2);
@@ -55,6 +69,8 @@ void PluginChainComponent::processInterleavedN(int stage, float* interleaved,
         return;
     }
     if (channels > 8) channels = 8;
+    /* 链级开关：关闭时插件（含 PDC）整体不进路径，纯直通。 */
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return;
     if (!stageHasActiveOrPdc(stage)) return;
 
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
@@ -116,6 +132,8 @@ uint32_t PluginChainComponent::latency(int slot) const noexcept {
 
 uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
     if (!m_host) return 0;
+    /* 链关闭 = 插件不进路径，不得贡献 PDC 延迟补偿量。 */
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return 0;
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
@@ -131,6 +149,7 @@ uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
 
 uint32_t PluginChainComponent::totalLatency() const noexcept {
     if (!m_host) return 0;
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return 0;
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {

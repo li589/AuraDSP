@@ -1114,3 +1114,17 @@ class _AuraScanProgressState extends State<AuraScanProgress>
 /* ---- i18n 便捷入口（生成类：AppLocalizations） ---- */
 
 AppLocalizations l10nOf(BuildContext context) => AppLocalizations.of(context)!;
+
+/* ---- VB 总线命名（设置页 VB 总线区与插件页 VB 插件处理区共用） ----
+ * SDK BUFFER_OUT 布局：每条总线 8 通道 = 泵的 1 组（g0 起）。
+ * Potato: A1-A5/B1-B3；Banana: A1-A3/B1-B2；Standard: A1-A2/B1。 */
+List<String> vbBusNames(int edition) {
+  switch (edition) {
+    case 1:
+      return const ['A1/A2', 'B1'];
+    case 2:
+      return const ['A1', 'A2', 'A3', 'B1', 'B2'];
+    default:
+      return const ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3'];
+  }
+}

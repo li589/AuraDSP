@@ -42,6 +42,15 @@ public:
     void setPdc(bool enable) noexcept { m_pdcEnabled.store(enable, std::memory_order_release); }
     bool pdc() const noexcept { return m_pdcEnabled.load(std::memory_order_acquire); }
 
+    /* 链级启用开关（VB 多总线按路插件处理，2026-10-22）。关闭 = 该 handle
+     * 上全部插入阶段的插件（含 PDC 延迟补偿）都不进音频路径：插件不收
+     * 输入、零插件 CPU；槽位挂载状态与厂商 DSP 链不受影响。原子布尔，
+     * 控制线程写 / 音频线程读。关闭期间 stageLatency/totalLatency 计 0
+     * （不处理的插件不得贡献 PDC 延迟）。重新启用时复位各槽延迟线——
+     * 关闭期间延迟线内容已陈旧，直接续用会注入旧音频。 */
+    void setEnabled(bool enable) noexcept;
+    bool enabled() const noexcept { return m_chainEnabled.load(std::memory_order_acquire); }
+
     PluginHostManager& host() noexcept { return *m_host; }
     const PluginHostManager& host() const noexcept { return *m_host; }
 
@@ -55,6 +64,7 @@ private:
     uint32_t m_maxBlock = 0;
 
     std::atomic<bool> m_pdcEnabled{false};
+    std::atomic<bool> m_chainEnabled{true};
     std::array<DelayLine, PluginHostManager::kMaxPluginSlots> m_delayLines;
     std::array<MultiDelayLine, PluginHostManager::kMaxPluginSlots> m_multiDelayLines;
     std::array<uint32_t, PluginHostManager::kMaxPluginSlots> m_lastMasks{};

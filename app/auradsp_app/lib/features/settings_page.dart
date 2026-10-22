@@ -2169,20 +2169,11 @@ class _InfoRow extends StatelessWidget {
 
 /* ---- VB 总线：版型→总线名 + 每总线电平 + 处理开关 ----
  * SDK BUFFER_OUT 布局：每条总线 8 通道 = 泵的 1 组（g0 起）。
- * Potato: A1-A5/B1-B3；Banana: A1-A3/B1-B2；Standard: A1-A2/B1。
+ * 版型→总线名共享版见 widgets.dart vbBusNames()。
  * 开关 = vb_set_bus_mask 对应 bit；关=该总线直通（电平表照常计量）。
+ * 复选框 = vb_plugin_group_enable 对应 bit（按路插件处理，2026-10-22）；
+ * 勾选 = 挂载的插件处理该路；厂商 DSP 不受影响。
  * 电平来自 vbstatus 心跳的 peakGrp（约 1/s，桥内半衰期约 1s）。 */
-
-List<String> _vbBusNames(int edition) {
-  switch (edition) {
-    case 1:
-      return const ['A1/A2', 'B1'];
-    case 2:
-      return const ['A1', 'A2', 'A3', 'B1', 'B2'];
-    default:
-      return const ['A1', 'A2', 'A3', 'A4', 'A5', 'B1', 'B2', 'B3'];
-  }
-}
 
 class _VbBuses extends StatelessWidget {
   final AppModel model;
@@ -2195,7 +2186,7 @@ class _VbBuses extends StatelessWidget {
     final info = model.vbInfo;
     final edition = (info['edition'] as num?)?.toInt() ?? 0;
     final groups = (info['groups'] as num?)?.toInt() ?? 0;
-    final names = _vbBusNames(edition);
+    final names = vbBusNames(edition);
     final peaks = (info['peakGrp'] as List?)
             ?.map((e) => (e as num?)?.toDouble() ?? 0.0)
             .toList() ??
@@ -2217,6 +2208,8 @@ class _VbBuses extends StatelessWidget {
               live: (live & (1 << g)) != 0,
               on: (model.vbBusMask & (1 << g)) != 0,
               onToggle: (v) => model.setVbBus(g, v),
+              pluginOn: (model.vbPluginGroupMask & (1 << g)) != 0,
+              onPluginToggle: (v) => model.setVbPluginGroup(g, v),
             ),
         ],
       ),
@@ -2236,16 +2229,23 @@ class _VbBusRow extends StatelessWidget {
   final bool live;
   final bool on;
   final ValueChanged<bool> onToggle;
+  /// 按路插件处理（2026-10-22）：复选框位于 DSP 开关左侧，
+  /// hover 气泡说明语义；勾选 = 挂载的插件处理该路。
+  final bool pluginOn;
+  final ValueChanged<bool> onPluginToggle;
   const _VbBusRow(
       {required this.name,
       required this.peak,
       required this.live,
       required this.on,
-      required this.onToggle});
+      required this.onToggle,
+      required this.pluginOn,
+      required this.onPluginToggle});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final row = Padding(
       padding: const EdgeInsets.symmetric(vertical: 3),
       child: Row(
@@ -2258,6 +2258,23 @@ class _VbBusRow extends StatelessWidget {
           ),
           Expanded(child: _LedMeter(peak: live ? peak : 0.0, on: on)),
           const SizedBox(width: AuraSpace.sm),
+          // 按路插件处理复选框（DSP 开关左侧）：视觉密度与 _MiniToggle 对齐。
+          Tooltip(
+            message: l.vbPluginTooltip,
+            triggerMode: TooltipTriggerMode.tap,
+            showDuration: const Duration(seconds: 4),
+            child: SizedBox(
+              width: 30,
+              height: 28,
+              child: Checkbox(
+                value: pluginOn,
+                onChanged: (v) => onPluginToggle(v ?? false),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                visualDensity: VisualDensity.compact,
+              ),
+            ),
+          ),
+          const SizedBox(width: AuraSpace.xs),
           _MiniToggle(on: on, onToggle: onToggle),
         ],
       ),
