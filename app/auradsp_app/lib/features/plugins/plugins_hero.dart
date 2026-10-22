@@ -1,5 +1,6 @@
 // part of plugins_page.dart —— P1 按区拆分，纯搬运零改行。
 part of '../plugins_page.dart';
+
 class _PluginChannelStrip extends StatelessWidget {
   final int mask;
   final ValueChanged<int> onChanged;
@@ -47,8 +48,11 @@ class _PluginChannelStrip extends StatelessWidget {
                   showDuration: const Duration(seconds: 4),
                   child: Padding(
                     padding: const EdgeInsets.only(left: 2),
-                    child: Icon(Icons.info_outline_rounded,
-                        size: 13, color: p.textDim),
+                    child: Icon(
+                      Icons.info_outline_rounded,
+                      size: 13,
+                      color: p.textDim,
+                    ),
                   ),
                 ),
             ],
@@ -101,9 +105,7 @@ class _ChannelChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected ? p.accent : p.panel,
           borderRadius: BorderRadius.circular(AuraRadius.sm),
-          border: Border.all(
-            color: selected ? p.accent : p.hairline,
-          ),
+          border: Border.all(color: selected ? p.accent : p.hairline),
         ),
         child: Text(
           label,
@@ -225,6 +227,11 @@ class _PluginTriLogo extends StatelessWidget {
 
 /// 「全部」路由选择菜单（P1-5）：继承自 {lastEditedRoute} / 使用自有状态。
 /// 确认后写入「全部」记忆（第 9 套）并统一下发全部组，再落到「全部」路由。
+///
+/// BUGFIX（2026-10-22 白屏）：showMenu 必须显式传 position/positionBuilder
+/// （Flutter 3.47 断言二选一；release 下 null position 进 _PopupMenuRoute
+/// 定位计算异常 → 整窗白屏但音频照跑）。窗口最小化/刚恢复时 MediaQuery
+/// 尺寸可能为 0——定位前防御，计算失败则回退屏幕中心。
 void _showAllRouteMenu(
   BuildContext context,
   AppModel model,
@@ -237,31 +244,58 @@ void _showAllRouteMenu(
   final srcName = (src >= 0 && src < routeNames.length) ? routeNames[src] : '';
   final canInherit = src >= 0;
   final canOwn = manager.hasAllMemory(slot);
-  showMenu<int>(
-    context: context,
-    items: [
-      PopupMenuItem<int>(
-        value: 1,
-        enabled: canInherit,
-        child: Text(canInherit
-            ? l.plugAllInheritFrom(srcName)
-            : l.plugAllInheritNone),
-      ),
-      PopupMenuItem<int>(
-        value: 2,
-        enabled: canOwn,
-        child: Text(l.plugAllUseOwn),
-      ),
-    ],
-  ).then((v) {
-    if (v == 1 && canInherit) {
-      manager.inheritAllFrom(src, slot: slot);
-      model.setVbPluginEditorGroup(kVbRouteAll);
-    } else if (v == 2 && canOwn) {
-      manager.applyAllMemory(slot: slot);
-      model.setVbPluginEditorGroup(kVbRouteAll);
+
+  // 安全定位：锚在下拉框自身；RenderBox/MediaQuery 异常时回退中心。
+  RelativeRect position = const RelativeRect.fromLTRB(0, 0, 0, 0);
+  try {
+    final box = context.findRenderObject() as RenderBox?;
+    final screen = MediaQuery.of(context).size;
+    if (box != null && box.hasSize && screen.width > 0 && screen.height > 0) {
+      final offset = box.localToGlobal(Offset.zero);
+      final rect = offset & box.size;
+      position = RelativeRect.fromRect(rect, Offset.zero & screen);
+    } else {
+      position = RelativeRect.fromLTRB(
+        screen.width / 2,
+        screen.height / 2,
+        screen.width / 2,
+        screen.height / 2,
+      );
     }
-  });
+  } catch (_) {
+    // 极端情况（窗口 0 尺寸/树重建中）：保持 (0,0,0,0) 让菜单自兜底。
+  }
+
+  showMenu<int>(
+        context: context,
+        position: position,
+        items: [
+          PopupMenuItem<int>(
+            value: 1,
+            enabled: canInherit,
+            child: Text(
+              canInherit ? l.plugAllInheritFrom(srcName) : l.plugAllInheritNone,
+            ),
+          ),
+          PopupMenuItem<int>(
+            value: 2,
+            enabled: canOwn,
+            child: Text(l.plugAllUseOwn),
+          ),
+        ],
+      )
+      .then((v) {
+        if (v == 1 && canInherit) {
+          manager.inheritAllFrom(src, slot: slot);
+          model.setVbPluginEditorGroup(kVbRouteAll);
+        } else if (v == 2 && canOwn) {
+          manager.applyAllMemory(slot: slot);
+          model.setVbPluginEditorGroup(kVbRouteAll);
+        }
+      })
+      .catchError((_) {
+        // 菜单异常绝不冒泡成白屏（音频路径不受 UI 状态影响）。
+      });
 }
 
 /// 「全部」记忆来源标注（P1-2，替换原 plugRtNote 位）：三态 + 重继承。
@@ -290,7 +324,9 @@ class _AllInheritBadge extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(
-          from >= 0 ? Icons.download_done_rounded : Icons.settings_backup_restore_rounded,
+          from >= 0
+              ? Icons.download_done_rounded
+              : Icons.settings_backup_restore_rounded,
           size: 13,
           color: p.textDim,
         ),
@@ -301,8 +337,8 @@ class _AllInheritBadge extends StatelessWidget {
           Tooltip(
             message: l.plugReInherit,
             child: InkWell(
-              onTap: () => manager.inheritAllFrom(manager.lastEditedRoute,
-                  slot: slot),
+              onTap: () =>
+                  manager.inheritAllFrom(manager.lastEditedRoute, slot: slot),
               borderRadius: BorderRadius.circular(AuraRadius.sm),
               child: Padding(
                 padding: const EdgeInsets.all(2),
@@ -351,26 +387,23 @@ class _ActivePluginHero extends StatelessWidget {
           decoration: BoxDecoration(
             color: p.panel,
             borderRadius: BorderRadius.circular(AuraRadius.md),
-            border: Border.all(
-              color: p.hairline,
-              style: BorderStyle.solid,
-            ),
+            border: Border.all(color: p.hairline, style: BorderStyle.solid),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.developer_board_rounded,
-                  size: 40, color: p.textDim.withValues(alpha: 0.6)),
+              Icon(
+                Icons.developer_board_rounded,
+                size: 40,
+                color: p.textDim.withValues(alpha: 0.6),
+              ),
               const SizedBox(height: AuraSpace.sm),
               Text(
                 l10nOf(context).plugMountEmpty(slot + 1),
                 style: sectionOf(p),
               ),
               const SizedBox(height: AuraSpace.xs),
-              Text(
-                l10nOf(context).plugMountEmptyHint,
-                style: captionOf(p),
-              ),
+              Text(l10nOf(context).plugMountEmptyHint, style: captionOf(p)),
               if (manager.plugins.isEmpty && !manager.isScanning) ...[
                 const SizedBox(height: AuraSpace.md),
                 OutlinedButton.icon(
@@ -381,7 +414,9 @@ class _ActivePluginHero extends StatelessWidget {
                     foregroundColor: p.accent,
                     side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
                     padding: const EdgeInsets.symmetric(
-                        horizontal: AuraSpace.md, vertical: AuraSpace.xs),
+                      horizontal: AuraSpace.md,
+                      vertical: AuraSpace.xs,
+                    ),
                   ),
                 ),
               ],
@@ -403,7 +438,8 @@ class _ActivePluginHero extends StatelessWidget {
     final routeMask = model.vbEffectiveRouteMask;
     final editorGroup = model.vbPluginEditorGroup;
     final routeNames = vbBusNames(
-        (model.vbInfo['edition'] as num?)?.toInt() ?? 0);
+      (model.vbInfo['edition'] as num?)?.toInt() ?? 0,
+    );
     final routeCount = routeNames.length;
     // 「全部」路由解析：打开有效路内最低组的实例（P1 起该模式下参数
     // 广播到全部组；P0 骨架仅路由，调参仍只作用主实例）。
@@ -412,9 +448,7 @@ class _ActivePluginHero extends StatelessWidget {
         : (routeMask & -routeMask).bitLength - 1; // 最低置位 bit
     final openGroup = !isVb
         ? -1
-        : (editorGroup == kVbRouteAll
-            ? primaryGroup
-            : editorGroup);
+        : (editorGroup == kVbRouteAll ? primaryGroup : editorGroup);
     // Ch strip 可交互位（P0-B）：VB 非双耳时泵层每组仅 L/R 进引擎
     // （VmPumpCore.h procCh=2），C/LFE/… chip 是死控件 → 灰显禁点。
     final chInteractive = (isVb && !model.spatialBinaural) ? 0x3 : 0xFF;
@@ -422,8 +456,8 @@ class _ActivePluginHero extends StatelessWidget {
     final latencySamples = manager.getSlotLatency(slot);
     final status = manager.getSlotStatus(slot);
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
-    final latencyMs =
-        (latencySamples / model.deviceRate * 1000.0).toStringAsFixed(1);
+    final latencyMs = (latencySamples / model.deviceRate * 1000.0)
+        .toStringAsFixed(1);
 
     // 命名规则（D4d）：槽位卡标题显示**用户所选名**——用户在扫描列表
     // 点选那一项的 name，与编辑器窗口标题（'<name> - AuraDSP Host'，
@@ -448,8 +482,10 @@ class _ActivePluginHero extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AuraSpace.xs),
-            Text(l10nOf(context).plugLoading,
-                style: labelOf(p, size: 11, color: p.textDim)),
+            Text(
+              l10nOf(context).plugLoading,
+              style: labelOf(p, size: 11, color: p.textDim),
+            ),
             const SizedBox(width: AuraSpace.sm),
           ],
           // 原生 GUI 打开按钮（v2：VB 模式跟随总线下拉选中的路；
@@ -460,18 +496,23 @@ class _ActivePluginHero extends StatelessWidget {
             onPressed: isBusy || (isVb && openGroup < 0)
                 ? null
                 : () => manager.showEditor(
-                      slot: slot,
-                      title: l10nOf(context)
-                          .plugEditorTitleNamed(slot + 1, active.name),
-                      group: openGroup,
-                    ),
+                    slot: slot,
+                    title: l10nOf(context)
+                        .plugEditorTitleNamed(slot + 1, active.name),
+                    group: openGroup,
+                    // 「全部」下打开的界面：关界面时自动拉平全部组
+                    // （P1-6 兜底，调参才生效于全部通道）。
+                    syncOnClose: isVb && editorGroup == kVbRouteAll,
+                  ),
             icon: const Icon(Icons.open_in_new_rounded, size: 15),
             label: Text(l10nOf(context).plugOpenGuiBtn),
             style: ElevatedButton.styleFrom(
               backgroundColor: p.accent,
               foregroundColor: p.accentContrast,
               padding: const EdgeInsets.symmetric(
-                  horizontal: AuraSpace.md, vertical: AuraSpace.xs),
+                horizontal: AuraSpace.md,
+                vertical: AuraSpace.xs,
+              ),
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -480,80 +521,94 @@ class _ActivePluginHero extends StatelessWidget {
           // 无多路维度）。选项 = 有效路（通道开且插件勾）+「全部」置顶；
           // 无有效路时禁用并显示旁路提示。选中值 = vbPluginEditorGroup。
           if (isVb) ...[
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-              decoration: BoxDecoration(
-                color: p.panel,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.hairline),
-              ),
-              child: DropdownButtonHideUnderline(
-                child: DropdownButton<int>(
-                  value: editorGroup == kVbRouteAll
-                      ? kVbRouteAll
-                      : (editorGroup >= 0 && editorGroup < routeCount
-                          ? editorGroup
-                          : null),
-                  isDense: true,
-                  dropdownColor: p.panelRaised,
-                  style: labelOf(p),
-                  hint: Text(
-                    l10nOf(context).plugRouteBypassed,
-                    style: labelOf(p, size: 12, color: p.textDim),
-                  ),
-                  disabledHint: Text(
-                    manager.isSlotEditorOpen(slot)
-                        ? l10nOf(context).plugRouteLocked
-                        : l10nOf(context).plugRouteBypassed,
-                    style: labelOf(p, size: 12, color: p.textDim),
-                  ),
-                  icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                  items: [
-                    DropdownMenuItem<int>(
-                      value: kVbRouteAll,
-                      child: Text(
-                        l10nOf(context).plugRouteAll,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          color: editorGroup == kVbRouteAll
-                              ? p.accent
-                              : p.text,
-                          fontWeight: editorGroup == kVbRouteAll
-                              ? FontWeight.bold
-                              : FontWeight.normal,
-                        ),
-                      ),
+            // 固定宽度：disabledHint（「界面已打开…」）比选中值长，不定宽会
+            // 随禁用态撑宽框体（2026-10-22 用户报告尺寸抖动）。
+            SizedBox(
+              width: 108,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 2,
+                ),
+                decoration: BoxDecoration(
+                  color: p.panel,
+                  borderRadius: BorderRadius.circular(AuraRadius.sm),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: editorGroup == kVbRouteAll
+                        ? kVbRouteAll
+                        : (editorGroup >= 0 && editorGroup < routeCount
+                              ? editorGroup
+                              : null),
+                    isDense: true,
+                    dropdownColor: p.panelRaised,
+                    style: labelOf(p),
+                    hint: Text(
+                      l10nOf(context).plugRouteBypassed,
+                      style: labelOf(p, size: 12, color: p.textDim),
                     ),
-                    for (var g = 0; g < routeCount; g++)
-                      if ((routeMask & (1 << g)) != 0)
-                        DropdownMenuItem<int>(
-                          value: g,
-                          child: Text(
-                            routeNames[g],
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: g == editorGroup ? p.accent : p.text,
-                              fontWeight: g == editorGroup
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
+                    disabledHint: Text(
+                      manager.isSlotEditorOpen(slot)
+                          ? l10nOf(context).plugRouteLocked
+                          : l10nOf(context).plugRouteBypassed,
+                      style: labelOf(p, size: 12, color: p.textDim),
+                    ),
+                    icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
+                    items: [
+                      DropdownMenuItem<int>(
+                        value: kVbRouteAll,
+                        child: Text(
+                          l10nOf(context).plugRouteAll,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: editorGroup == kVbRouteAll
+                                ? p.accent
+                                : p.text,
+                            fontWeight: editorGroup == kVbRouteAll
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
-                  ],
-                  onChanged: (isBusy ||
-                          routeMask == 0 ||
-                          manager.isSlotEditorOpen(slot))
-                      ? null // P1-1 路由锁定：编辑器打开时禁切换
-                      : (val) {
-                          if (val == null) return;
-                          if (val == kVbRouteAll) {
-                            // P1-5：切「全部」弹继承/不继承菜单
-                            _showAllRouteMenu(
-                                context, model, manager, slot, routeNames);
-                          } else {
-                            model.setVbPluginEditorGroup(val);
-                          }
-                        },
+                      ),
+                      for (var g = 0; g < routeCount; g++)
+                        if ((routeMask & (1 << g)) != 0)
+                          DropdownMenuItem<int>(
+                            value: g,
+                            child: Text(
+                              routeNames[g],
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                color: g == editorGroup ? p.accent : p.text,
+                                fontWeight: g == editorGroup
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                    ],
+                    onChanged:
+                        (isBusy ||
+                            routeMask == 0 ||
+                            manager.isSlotEditorOpen(slot))
+                        ? null // P1-1 路由锁定：编辑器打开时禁切换
+                        : (val) {
+                            if (val == null) return;
+                            if (val == kVbRouteAll) {
+                              // P1-5：切「全部」弹继承/不继承菜单
+                              _showAllRouteMenu(
+                                context,
+                                model,
+                                manager,
+                                slot,
+                                routeNames,
+                              );
+                            } else {
+                              model.setVbPluginEditorGroup(val);
+                            }
+                          },
+                  ),
                 ),
               ),
             ),
@@ -561,7 +616,9 @@ class _ActivePluginHero extends StatelessWidget {
           ],
           // 旁路开关按钮
           AuraChip(
-            isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
+            isBypassed
+                ? l10nOf(context).chainBypassed
+                : l10nOf(context).chainActive,
             selected: !isBypassed,
             danger: isBypassed,
             onTap: isBusy ? null : () => manager.toggleBypass(slot: slot),
@@ -576,7 +633,9 @@ class _ActivePluginHero extends StatelessWidget {
               foregroundColor: p.error,
               side: BorderSide(color: p.error.withValues(alpha: 0.4)),
               padding: const EdgeInsets.symmetric(
-                  horizontal: AuraSpace.md, vertical: AuraSpace.xs),
+                horizontal: AuraSpace.md,
+                vertical: AuraSpace.xs,
+              ),
               visualDensity: VisualDensity.compact,
             ),
           ),
@@ -594,8 +653,9 @@ class _ActivePluginHero extends StatelessWidget {
           ),
           boxShadow: [
             BoxShadow(
-              color: (isBypassed ? p.warning : p.accent)
-                  .withValues(alpha: 0.08),
+              color: (isBypassed ? p.warning : p.accent).withValues(
+                alpha: 0.08,
+              ),
               blurRadius: 16,
               spreadRadius: 2,
             ),
@@ -624,15 +684,14 @@ class _ActivePluginHero extends StatelessWidget {
                     children: [
                       Row(
                         children: [
-                          Text(
-                            active.name,
-                            style: sectionOf(p),
-                          ),
+                          Text(active.name, style: sectionOf(p)),
                           const SizedBox(width: AuraSpace.sm),
                           if (active.version.isNotEmpty)
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                                horizontal: 6,
+                                vertical: 2,
+                              ),
                               decoration: BoxDecoration(
                                 color: p.hairline,
                                 borderRadius: BorderRadius.circular(4),
@@ -650,7 +709,9 @@ class _ActivePluginHero extends StatelessWidget {
                       Text(
                         active.vendor.isNotEmpty
                             ? '${active.vendor} • ${active.category.isNotEmpty ? active.category : "Fx"}'
-                            : (active.category.isNotEmpty ? active.category : "Fx"),
+                            : (active.category.isNotEmpty
+                                  ? active.category
+                                  : "Fx"),
                         style: captionOf(p, color: p.textDim),
                       ),
                       const SizedBox(height: 6),
@@ -667,7 +728,9 @@ class _ActivePluginHero extends StatelessWidget {
                 // 实时延迟测定
                 Container(
                   padding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpace.md, vertical: AuraSpace.sm),
+                    horizontal: AuraSpace.md,
+                    vertical: AuraSpace.sm,
+                  ),
                   decoration: BoxDecoration(
                     color: p.panel,
                     borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -676,7 +739,10 @@ class _ActivePluginHero extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(l10nOf(context).plugLatencyLabel, style: captionOf(p, color: p.textDim)),
+                      Text(
+                        l10nOf(context).plugLatencyLabel,
+                        style: captionOf(p, color: p.textDim),
+                      ),
                       const SizedBox(height: 2),
                       Row(
                         mainAxisSize: MainAxisSize.min,
@@ -734,7 +800,10 @@ class _ActivePluginHero extends StatelessWidget {
                 Text(l10nOf(context).plugStageLabel, style: labelOf(p)),
                 const SizedBox(width: AuraSpace.sm),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 2,
+                  ),
                   decoration: BoxDecoration(
                     color: p.panel,
                     borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -746,28 +815,34 @@ class _ActivePluginHero extends StatelessWidget {
                       isDense: true,
                       dropdownColor: p.panelRaised,
                       style: labelOf(p),
-                      icon: Icon(Icons.arrow_drop_down_rounded, color: p.accent),
-                      items: [
-                        PluginInsertStage.preDsp,
-                        PluginInsertStage.preVendor,
-                        PluginInsertStage.postVendor,
-                        PluginInsertStage.postReverb,
-                        PluginInsertStage.postLimiter,
-                      ].map((stg) {
-                        return DropdownMenuItem<int>(
-                          value: stg,
-                          child: Text(
-                            PluginInsertStage.labelOf(stg),
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              color: stg == currentStage ? p.accent : p.text,
-                              fontWeight: stg == currentStage
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                            ),
-                          ),
-                        );
-                      }).toList(),
+                      icon: Icon(
+                        Icons.arrow_drop_down_rounded,
+                        color: p.accent,
+                      ),
+                      items:
+                          [
+                            PluginInsertStage.preDsp,
+                            PluginInsertStage.preVendor,
+                            PluginInsertStage.postVendor,
+                            PluginInsertStage.postReverb,
+                            PluginInsertStage.postLimiter,
+                          ].map((stg) {
+                            return DropdownMenuItem<int>(
+                              value: stg,
+                              child: Text(
+                                PluginInsertStage.labelOf(stg),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: stg == currentStage
+                                      ? p.accent
+                                      : p.text,
+                                  fontWeight: stg == currentStage
+                                      ? FontWeight.bold
+                                      : FontWeight.normal,
+                                ),
+                              ),
+                            );
+                          }).toList(),
                       onChanged: (val) {
                         if (val != null) {
                           manager.setInsertStage(val, slot: slot);
@@ -793,17 +868,21 @@ class _ActivePluginHero extends StatelessWidget {
             const SizedBox(height: AuraSpace.sm),
             _PluginChannelStrip(
               // P1-4：Ch 按当前路由记忆取值/下发（「全部」= 第 9 套记忆）。
-              mask: manager.getSlotChannels(slot,
-                  group: isVb ? editorGroup : -1),
+              mask: manager.getSlotChannels(
+                slot,
+                group: isVb ? editorGroup : -1,
+              ),
               interactiveMask: chInteractive,
-              onChanged: (m) => manager.setSlotChannels(m,
-                  slot: slot, group: isVb ? editorGroup : -1),
+              onChanged: (m) => manager.setSlotChannels(
+                m,
+                slot: slot,
+                group: isVb ? editorGroup : -1,
+              ),
             ),
             const SizedBox(height: AuraSpace.xs),
             Row(
               children: [
-                Icon(Icons.monitor_heart_rounded,
-                    size: 14, color: p.textDim),
+                Icon(Icons.monitor_heart_rounded, size: 14, color: p.textDim),
                 const SizedBox(width: AuraSpace.xs),
                 Text(
                   'proc ${status.processCalls}  '
