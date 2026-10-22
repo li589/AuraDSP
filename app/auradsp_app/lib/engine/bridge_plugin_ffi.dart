@@ -45,10 +45,7 @@ typedef _SlotGetChannelsDart = int Function(int);
 // P1-3 per-group Ch 下发（仅新桥导出 _g 后缀）。
 typedef _SlotSetChannelsGC = Int32 Function(Int32, Int32, Int32);
 typedef _SlotSetChannelsGDart = int Function(int, int, int);
-// P1-5 继承复制：srcGroup state → path → 其余组（桥内批处理）。
-typedef _SlotSyncAllC = Int32 Function(Int32, Int32, Pointer<Utf8>);
-typedef _SlotSyncAllDart = int Function(int, int, Pointer<Utf8>);
-// P1-5「不继承」应用「全部」记忆（v1 全组扇出 loadPreset）。
+// 全组/单引擎预设读写（非 _g；VB 下 load=全组扇出、save=eng[0]，见 A1）。
 typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
 typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
 // P2-1（v3.3 A/B 预设）per-group state 读写。
@@ -77,7 +74,6 @@ class BridgePluginFfi {
   late final _SlotPresetDart _loadPreset;
   late final _SlotPresetDart _savePreset;
   late final _SlotSetChannelsGDart? _setChannelsG;
-  late final _SlotSyncAllDart? _syncAll;
   late final _SlotPresetGDart? _savePresetG;
   late final _SlotPresetGDart? _loadPresetG;
 
@@ -120,7 +116,6 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_save_preset');
     _setChannelsG = _lookupSetChannelsG(
         '${prefix}_plugin_slot_set_channels_g');
-    _syncAll = _lookupSyncAll('${prefix}_plugin_slot_sync_all');
     _savePresetG = _lookupPresetG('${prefix}_plugin_slot_save_preset_g');
     _loadPresetG = _lookupPresetG('${prefix}_plugin_slot_load_preset_g');
   }
@@ -156,14 +151,6 @@ class BridgePluginFfi {
   _SlotSetChannelsGDart? _lookupSetChannelsG(String name) {
     try {
       return dylib.lookupFunction<_SlotSetChannelsGC, _SlotSetChannelsGDart>(name);
-    } on ArgumentError {
-      return null;
-    }
-  }
-
-  _SlotSyncAllDart? _lookupSyncAll(String name) {
-    try {
-      return dylib.lookupFunction<_SlotSyncAllC, _SlotSyncAllDart>(name);
     } on ArgumentError {
       return null;
     }
@@ -262,19 +249,8 @@ class BridgePluginFfi {
     }
   }
 
-  /// P1-5 继承复制：srcGroup state → [path] → 其余组（老桥无导出返回 0）。
-  int syncAll(int slot, int srcGroup, String path) {
-    final f = _syncAll;
-    if (f == null) return 0;
-    final pp = path.toNativeUtf8();
-    try {
-      return f(slot, srcGroup, pp.cast());
-    } finally {
-      malloc.free(pp);
-    }
-  }
-
-  /// P1-5「不继承」：全组扇出载入「全部」记忆文件。
+  /// 全组/单引擎 state 载（group<0 且老桥无 _g 导出时的回落；VB 新桥
+  /// 下 A1 修复已改走 loadPresetG(slot,0)，不再经过此路）。
   int loadPreset(int slot, String path) {
     final pp = path.toNativeUtf8();
     try {
@@ -325,4 +301,13 @@ class BridgePluginFfi {
       return 0xFF;
     }
   }
+
+  /// 桥是否导出 per-group 预设 ABI（VB 新桥有；ASIO/VAIO 单引擎桥与
+  /// 老 VB 桥无）。A1 修复（2026-10-22 审查）：group<0 调用方据此在
+  /// 「单组 0 语义」与「老回落」间选择，避免 VB 下 load 侧全组扇出
+  /// 与 save 侧 eng[0] 单发的不对称污染。
+  bool get hasPresetG => _savePresetG != null && _loadPresetG != null;
+
+  /// 桥是否导出 per-group Ch ABI（语义同 [hasPresetG]）。
+  bool get hasSetChannelsG => _setChannelsG != null;
 }

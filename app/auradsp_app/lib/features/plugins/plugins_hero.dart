@@ -483,10 +483,15 @@ class _ActivePluginHero extends StatelessWidget {
     final routeCount = routeNames.length;
     // 打开界面的目标组（非 VB 单引擎 -1；VB = 当前选中路）。
     final openGroup = isVb ? editorGroup : -1;
+    // A5（2026-10-22 审查）：VB 无有效路（通道全关/插件全不勾）时下拉
+    // 已禁并显示旁路提示，但 A/B 条与 Ch strip 若继续以 group=-1 存活，
+    // VB 下会落到 eng[0] 单组——与「无可操作路」的展示自相矛盾。无路态
+    // 统一按锁定处理（按钮全禁、Ch 全灰）。
+    final noRoute = isVb && openGroup < 0;
     // 路由锁定（编辑器打开时禁切换/禁 A/B/禁 Ch——用户定案）。
-    final locked = manager.isSlotEditorOpen(slot);
+    final locked = manager.isSlotEditorOpen(slot) || noRoute;
     // Ch strip 可交互位：VB 非双耳仅 L/R 进插件链（泵层 procCh=2）；
-    // 编辑器打开时整体禁用（「禁止声道选择」）。
+    // 编辑器打开/无有效路时整体禁用（「禁止声道选择」）。
     final chInteractive = (locked || isBusy)
         ? 0x0
         : ((isVb && !model.spatialBinaural) ? 0x3 : 0xFF);

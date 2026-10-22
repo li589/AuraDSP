@@ -2072,6 +2072,10 @@ class AppModel extends ChangeNotifier {
         vbInfo = Map<String, dynamic>.from(raw);
         if (vbActive && !was) {
           // VB 上升沿：清掉上一会话的残留帧，基线归零，活数据随后流入。
+          // A5（2026-10-22 审查）：进 VB 时编辑器目标路可能还是上一会话
+          // 的 -2 哨兵或已失效路——回落最低有效路，避免插件页落入
+          // 「无路可操作」态（A/B 与 Ch 曾被 group=-1 拖活）。
+          _fallbackVbPluginEditorGroup();
           spectrum.value = List<double>.filled(32, 0.0);
           eqInSpectrum.value = List<double>.filled(32, 0.0);
           levelL.value = -90.0;
@@ -2251,25 +2255,19 @@ class AppModel extends ChangeNotifier {
           raw['slot'] as int,
           (raw['mask'] as num).toInt(),
           raw['rc'] as int,
+          // A4（2026-10-22 审查）：回执携带下发路由，Dart 按路归位
+          // （旧版恒写 _slotChannels，VB 任一路回执即污染 -1 路记忆）。
+          group: (raw['group'] as num?)?.toInt() ?? -1,
         );
         scheduleAutoSave();
         notifyListeners();
-        break;
-      case 'pluginSlotSyncAllDone':
-        // P1-5 继承/收尾同步回执：失败必须可见（曾静默——桥 DLL 旧版无
-        // sync_all 导出时 Dart 绑定为 null 恒返回 0，用户以为继承成功）。
-        if ((raw['rc'] as num?)?.toInt() != 1) {
-          lastEngineError = '参数同步失败（插件状态未复制到其它通道）。请确认桥 DLL 为最新构建。';
-          eventSeq.value = ++_guardSeq;
-          notifyListeners();
-        }
         break;
       case 'pluginSlotEditorResult':
         // 此前该事件被发出却无人处理：插件原生 GUI 打开失败对用户完全静默。
         final slot = (raw['slot'] as num?)?.toInt() ?? 0;
         final isShow = raw['action'] == 'show';
         final ok = (raw['rc'] as num?)?.toInt() != 0;
-        // P1-1/P1-5：路由锁定状态 + lastEditedRoute 记录。
+        // P1-1：路由锁定状态同步（编辑器开/关回执）。
         pluginManager.onPluginSlotEditorResult(
           slot,
           isShow ? 'show' : 'close',
@@ -5508,32 +5506,32 @@ class AppModel extends ChangeNotifier {
     notifyListeners();
   }
 
-/// v2 按路编辑器目标路选择（仅有效掩码内合法路；v3.3「全部」已撤除）。
-void setVbPluginEditorGroup(int group) {
-  if (group < 0 || group > 7) return;
-  if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
-  if (vbPluginEditorGroup == group) return;
-  vbPluginEditorGroup = group;
-  notifyListeners();
-}
-
-/// 选中路失效（通道关/插件取消勾选）时回落最低有效路；无有效路置 -1。
-void _fallbackVbPluginEditorGroup() {
-  if (vbPluginEditorGroup >= 0 &&
-      (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
-    return;
+  /// v2 按路编辑器目标路选择（仅有效掩码内合法路；v3.3「全部」已撤除）。
+  void setVbPluginEditorGroup(int group) {
+    if (group < 0 || group > 7) return;
+    if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
+    if (vbPluginEditorGroup == group) return;
+    vbPluginEditorGroup = group;
+    notifyListeners();
   }
-  var next = -1;
-  for (var g = 0; g < 8; g++) {
-    if ((vbEffectiveRouteMask & (1 << g)) != 0) {
-      next = g;
-      break;
+
+  /// 选中路失效（通道关/插件取消勾选）时回落最低有效路；无有效路置 -1。
+  void _fallbackVbPluginEditorGroup() {
+    if (vbPluginEditorGroup >= 0 &&
+        (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
+      return;
+    }
+    var next = -1;
+    for (var g = 0; g < 8; g++) {
+      if ((vbEffectiveRouteMask & (1 << g)) != 0) {
+        next = g;
+        break;
+      }
+    }
+    if (vbPluginEditorGroup != next) {
+      vbPluginEditorGroup = next;
     }
   }
-  if (vbPluginEditorGroup != next) {
-    vbPluginEditorGroup = next;
-  }
-}
 
   /// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。
   void setAsioDriver(String name) {
