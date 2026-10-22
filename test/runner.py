@@ -60,6 +60,9 @@ def run_smoke_tests():
         # 桥挂载提速门禁（2026-10-23）：eng[0] 同步 + 其余组后台补齐；
         # 掩码外组不加载、掩码新使能组自动补挂。App 占槽时自动让路。
         "smoke_vm_plugin_load_fast.py",
+        # F-4 裁定守卫（2026-10-23）：宿主进程 BELOW_NORMAL 不得外溢到 RT
+        # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
+        "smoke_plugin_host_priority.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
