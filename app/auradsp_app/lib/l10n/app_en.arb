@@ -823,6 +823,14 @@
   "plugIncompatibleBadge": "32-bit incompatible",
   "plugIncompatibleHint": "This is a 32-bit plugin. AuraDSP is a 64-bit host and cannot load it; please install the 64-bit version.",
   "plugSlotActive": "Slot {n} active",
+  "plugSlotBypassed": "Slot {n} bypassed",
+  "@plugSlotBypassed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "@plugSlotActive": {
     "placeholders": {
       "n": {

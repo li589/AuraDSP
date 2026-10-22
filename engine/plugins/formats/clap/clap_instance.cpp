@@ -467,16 +467,13 @@ public:
     bool isBypassed() const override { return m_bypassed; }
     void setBypass(bool bypass) override {
         m_bypassed = bypass;
-        // 真旁路（2026-10-22）：stop/start_processing 让插件内部停/复跑
-        // （与 VST3 setProcessing 同语义，消旁路态持续 CPU）。
+        // 真旁路（2026-10-22，二次加强）：deactivate/activate 全停/全复
+        // （deactivate 内含 stop_processing；与 VST3 setActive 级同语义，
+        // 消 Ozone 级插件内部分析线程的残余卡顿）。恢复走完整 activate。
         if (bypass) {
-            if (m_plugin && m_plugin->stop_processing) {
-                m_plugin->stop_processing(m_plugin);
-            }
-        } else {
-            if (m_plugin && m_plugin->start_processing) {
-                m_plugin->start_processing(m_plugin);
-            }
+            deactivate();
+        } else if (!m_isActive) {
+            activate(m_sampleRate, m_maxBlockSize);
         }
     }
     void setChannelHint(int channels) override {

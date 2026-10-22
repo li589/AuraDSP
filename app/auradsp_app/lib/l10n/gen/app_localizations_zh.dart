@@ -1791,6 +1791,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String plugSlotBypassed(int n) {
+    return '插槽 $n 旁路';
+  }
+
+  @override
   String plugSlotLoaded(int n) {
     return '插槽 $n 已载入';
   }

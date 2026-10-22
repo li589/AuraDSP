@@ -823,6 +823,14 @@
   "plugIncompatibleBadge": "32 位不兼容",
   "plugIncompatibleHint": "该插件为 32 位版本，AuraDSP 是 64 位宿主，无法加载；请安装对应的 64 位版本。",
   "plugSlotActive": "插槽 {n} 活跃中",
+  "plugSlotBypassed": "插槽 {n} 旁路",
+  "@plugSlotBypassed": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "@plugSlotActive": {
     "placeholders": {
       "n": {

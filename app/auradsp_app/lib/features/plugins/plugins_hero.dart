@@ -610,8 +610,8 @@ class _ActivePluginHero extends StatelessWidget {
                           ),
                     ],
                     onChanged:
-                        (isBusy || routeMask == 0 || locked)
-                        ? null // 路由锁定：编辑器打开时禁切换
+                        (routeMask == 0 || locked)
+                        ? null // 路由锁定：仅编辑器打开时禁切换（busy 中可切看各路）
                         : (val) {
                             if (val == null) return;
                             // P2 自动记录：离开当前路由前落盘 A/B 激活槽。
