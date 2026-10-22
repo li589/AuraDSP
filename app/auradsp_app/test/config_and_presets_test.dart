@@ -8,6 +8,30 @@ import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+/// state.dart 入口 + lib/core/state/ 全部 part 文件拼成的单一库源码。
+///
+/// 2026-10-22 拆分：AppModel 方法陆续迁入 part 文件的
+/// `extension ... on AppModel`。源码形状不变量断言必须覆盖整个库
+/// （与 param_contract_test._readStateLibrary 同构）。
+String _readStateLibrary() {
+  final f = File('lib/core/state.dart');
+  final src = f.readAsStringSync();
+  final dir = Directory('lib/core/state');
+  final parts = <String>[];
+  if (dir.existsSync()) {
+    final files = dir
+        .listSync()
+        .whereType<File>()
+        .where((e) => e.path.endsWith('.dart'))
+        .toList()
+      ..sort((a, b) => a.path.compareTo(b.path));
+    for (final e in files) {
+      parts.add(e.readAsStringSync());
+    }
+  }
+  return [src, ...parts].join('\n');
+}
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -355,7 +379,7 @@ void main() {
     // _testing 构造不拉 isolate，功能断言不可达；与 E1 探针同一模式，
     // 以源码形状钉住三条不变量。
     test('scheduleAutoSave 的防抖回调 = 保存 + 回读，且编辑即盖 _lastEditAt', () {
-      final src = File('lib/core/state.dart').readAsStringSync();
+      final src = _readStateLibrary();
       final i = src.indexOf('void scheduleAutoSave() {');
       expect(i, greaterThan(-1), reason: '找不到 scheduleAutoSave 定义');
       final j = src.indexOf('\n  }', i);
@@ -368,7 +392,7 @@ void main() {
     });
 
     test('scheduleReadback 有 _testing/_isReplayingSession 短路 + 置 pending', () {
-      final src = File('lib/core/state.dart').readAsStringSync();
+      final src = _readStateLibrary();
       final i = src.indexOf('void scheduleReadback() {');
       expect(i, greaterThan(-1), reason: '找不到 scheduleReadback 定义');
       final j = src.indexOf('\n  }', i);
@@ -380,7 +404,7 @@ void main() {
     });
 
     test("'params' 分支顶部有过期守卫：编辑晚于回读发出 → 丢弃该轮", () {
-      final src = File('lib/core/state.dart').readAsStringSync();
+      final src = _readStateLibrary();
       final i = src.indexOf("case 'params':");
       expect(i, greaterThan(-1));
       final body = src.substring(i, i + 700);
@@ -548,7 +572,7 @@ void main() {
     test('不变量：setGraphOrder 挂自动保存、两处回放均有守卫（_testing 短路 → 源码审计）', () {
       // scheduleAutoSave 在 _testing/_isReplayingSession 下短路，功能断言
       // 不可达，只能以源码形状钉住不变量（与 E1 探针同一模式）。
-      final src = File('lib/core/state.dart').readAsStringSync();
+      final src = _readStateLibrary();
 
       final i = src.indexOf('void setGraphOrder(String order) {');
       expect(i, greaterThan(-1), reason: '找不到 setGraphOrder 定义');
@@ -1565,7 +1589,7 @@ void main() {
     });
 
     test('state params 分支消费三键（lpCode 只补空 / arbmag 采纳 / eqCurve 存对账字段）', () {
-      final src = File('lib/core/state.dart').readAsStringSync();
+      final src = _readStateLibrary();
       final i = src.indexOf("case 'params':");
       expect(i, greaterThan(-1));
       // 回读块距 case 头超过 9000 字符（params 分支先逐字段赋值），故守卫断言
