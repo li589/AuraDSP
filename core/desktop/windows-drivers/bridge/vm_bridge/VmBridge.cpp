@@ -66,13 +66,26 @@ struct BridgeCtl {
 
 BridgeCtl g_b;
 
-// 插件槽转发（A1 主总线 = eng[0]；VM 每总线独立 handle，编辑器只能驱动一个
-// 实例，故本轮插件只作用 A1，其余总线保持直通/原生 DSP）。
+// 插件槽转发（BUGFIX 2026-10-22：由「仅 A1 = eng[0]」改为**全部组引擎**）。
+// 根因：VM 多总线版面（Banana/Potato）每组 8 声道独立 handle，用户监听的
+// 输出总线往往不是 A1——插件只挂 eng[0] 时，A1 仍会收到 Voicemeeter 复制的
+// 音乐流（插件 GUI 有输入、遥测 Δmax>0），但用户监听总线走的是组 1+ 引擎
+// （只有厂商 DSP、无插件）→ 效果永远听不到。厂商 DSP 本就逐组各跑一份，
+// 插件逐组同步与其语义一致。读操作/编辑器仍走 eng[0]（单实例，GUI 参数
+// 改动不跨总线同步——引擎内实例本就独立，见下方各函数注释）。
 auraplugin::Fns g_pluginFns;
 auraplugin::Mirror g_pluginMirror;
 
 void* PluginEngine() {
     return g_b.ctx.nEng > 0 ? g_b.ctx.eng[0] : nullptr;
+}
+
+static int PluginEngineCount() {
+    return g_b.ctx.nEng;
+}
+
+static void* PluginEngineAt(int g) {
+    return (g >= 0 && g < g_b.ctx.nEng) ? g_b.ctx.eng[g] : nullptr;
 }
 
 // 参数镜像：CHANGE 重建会换掉全部引擎句柄，新句柄是出厂态。桥必须自己留一份
@@ -275,11 +288,17 @@ void RebuildEngines(int groups, float sr) {
         g_b.ctx.sigSame[g] = 0;
     }
     g_b.ctx.gotFirst = 0;
-    // 新句柄是出厂态：把桥内插件镜像回放到 A1（eng[0]）。插件 load 是控制
-    // 线程同步操作，此刻回调已停，不会碰 RT 线程。
+    // 新句柄是出厂态：把桥内插件镜像回放到**全部组引擎**（BUGFIX 2026-10-22：
+    // 原来只回放 eng[0]，CHANGE 重建后非 A1 总线丢失插件，监听总线无效果）。
+    // 插件 load 是控制线程同步操作，此刻回调已停，不会碰 RT 线程。
     if (g_pluginFns.Ready()) {
         int ok = 0, failed = 0;
-        g_pluginMirror.Replay(PluginEngine(), g_pluginFns, &ok, &failed);
+        for (int g = 0; g < g_b.ctx.nEng; ++g) {
+            int o = 0, f2 = 0;
+            g_pluginMirror.Replay(g_b.ctx.eng[g], g_pluginFns, &o, &f2);
+            ok += o;
+            failed += f2;
+        }
     }
 }
 
@@ -812,25 +831,54 @@ int vb_set_bus_mask(int mask) {
     return mask;
 }
 
-// ---- 插件槽（仅 A1 = eng[0]）----
+// ---- 插件槽（BUGFIX 2026-10-22：写操作同步到全部组引擎）----
 // 桥模式下 Dart 把 pluginSlot* 路由到这里；引擎仍是桥自己加载的那一份，
 // 因此插件与音频在同一条 DSP 链上。桥未运行/引擎缺失时一律返回 0。
+// 语义约定：
+//   写操作（load/unload/bypass/stage/channels/preset）→ 全部组引擎逐个下发，
+//   各总线插件集保持一致；load 任一组失败即回滚已加载组（状态不留半套）。
+//   读操作与编辑器（status/latency/editor/savePreset）→ eng[0] 单实例
+//   （编辑器 GUI 的参数改动只作用于 A1 实例，不跨总线同步——各引擎内
+//   插件实例本就独立，这是 Voicemeeter 每总线独立 handle 架构的固有限制）。
 int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    return auraplugin::SlotLoad(PluginEngine(), g_pluginFns, g_pluginMirror,
-                                slot, path, plugin_id);
+    if (!g_pluginFns.Ready()) return 0;
+    const int n = PluginEngineCount();
+    if (n <= 0) return 0;
+    int loaded = 0;
+    for (int g = 0; g < n; ++g) {
+        if (auraplugin::SlotLoad(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
+                                 slot, path, plugin_id) != 1) {
+            // 回滚已加载的组（SlotUnload 同步清镜像，终态 = 全部未挂载）
+            for (int k = loaded - 1; k >= 0; --k) {
+                auraplugin::SlotUnload(PluginEngineAt(k), g_pluginFns,
+                                       g_pluginMirror, slot);
+            }
+            return 0;
+        }
+        ++loaded;
+    }
+    return 1;
 }
 
 int vb_plugin_slot_unload(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    return auraplugin::SlotUnload(PluginEngine(), g_pluginFns, g_pluginMirror,
-                                  slot);
+    const int n = PluginEngineCount();
+    for (int g = 0; g < n; ++g) {
+        auraplugin::SlotUnload(PluginEngineAt(g), g_pluginFns, g_pluginMirror,
+                               slot);
+    }
+    return n > 0 ? 1 : 0;
 }
 
 int vb_plugin_slot_set_bypass(int slot, int bypass) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    return auraplugin::SlotSetBypass(PluginEngine(), g_pluginFns,
-                                     g_pluginMirror, slot, bypass);
+    const int n = PluginEngineCount();
+    for (int g = 0; g < n; ++g) {
+        auraplugin::SlotSetBypass(PluginEngineAt(g), g_pluginFns,
+                                  g_pluginMirror, slot, bypass);
+    }
+    return n > 0 ? 1 : 0;
 }
 
 int vb_plugin_slot_get_bypass(int slot) {
@@ -886,15 +934,23 @@ int vb_plugin_slot_save_preset(int slot, const char* path) {
 
 int vb_plugin_slot_load_preset(int slot, const char* path) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    void* e = PluginEngine();
-    if (!e || !g_pluginFns.Ready()) return 0;
-    return g_pluginFns.loadPreset(e, slot, path);
+    if (!g_pluginFns.Ready()) return 0;
+    // 预设改变插件状态，必须同步到全部组引擎（与 load 同语义）
+    const int n = PluginEngineCount();
+    for (int g = 0; g < n; ++g) {
+        if (!g_pluginFns.loadPreset(PluginEngineAt(g), slot, path)) return 0;
+    }
+    return n > 0 ? 1 : 0;
 }
 
 int vb_plugin_slot_set_insert_stage(int slot, int stage) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    return auraplugin::SlotSetStage(PluginEngine(), g_pluginFns,
-                                    g_pluginMirror, slot, stage);
+    const int n = PluginEngineCount();
+    for (int g = 0; g < n; ++g) {
+        auraplugin::SlotSetStage(PluginEngineAt(g), g_pluginFns,
+                                 g_pluginMirror, slot, stage);
+    }
+    return n > 0 ? 1 : 0;
 }
 
 int vb_plugin_slot_get_insert_stage(int slot) {
@@ -906,8 +962,12 @@ int vb_plugin_slot_get_insert_stage(int slot) {
 
 int vb_plugin_slot_set_channels(int slot, int channels) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
-    return auraplugin::SlotSetChannels(PluginEngine(), g_pluginFns,
-                                       g_pluginMirror, slot, channels);
+    const int n = PluginEngineCount();
+    for (int g = 0; g < n; ++g) {
+        auraplugin::SlotSetChannels(PluginEngineAt(g), g_pluginFns,
+                                    g_pluginMirror, slot, channels);
+    }
+    return n > 0 ? 1 : 0;
 }
 
 int vb_plugin_slot_get_channels(int slot) {
