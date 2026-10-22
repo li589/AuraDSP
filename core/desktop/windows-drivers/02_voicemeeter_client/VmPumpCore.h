@@ -102,6 +102,11 @@ struct PumpCtx {
     // 总线处理掩码（bit g = 第 g 组进 DSP；0 = 该总线直通）。桥经 vb_set_bus_mask
     // 下发；电平表照常计量（仅跳过 process），重开即恢复，无需等 idle 退出。
     volatile LONG busMask = 0xFF;
+    // L0（P2 性能）：每组 process 耗时峰值（QPC ticks），status 暴露供
+    // 爆音定位（8 组串行是回调主成本，直方图定位真凶组）。
+    uint64_t maxGroupTicks[8] = {};
+    // L1b：无声 idle 判定秒数（默认 3s；原硬编码 10s 休眠太慢）。
+    int idleSeconds = 3;
     // ---- 测试注入面（bridge 用；pump 不碰，全零即关闭） ----
     volatile LONG testKind = 0;  // 0=关 1=正弦440 2=粉噪 3=文件（RT 读，主线程 Interlocked 写）
     double testPhase = 0.0;      // 正弦相位（RT 独占）
@@ -369,7 +374,15 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 // 旁路输出==输入：测试注入恒视为有声，否则看输入。
                 outSilent = (c->testKind != 0) ? false : PairIsSilent(inL, inR, n);
             } else {
+            // L0：per-group process 耗时打点（QPC ~50ns × 8 组，可忽略）。
+            LARGE_INTEGER gt0, gt1;
+            QueryPerformanceCounter(&gt0);
             c->process(c->eng[g], c->scratchIn, c->scratchOut, (int)n);
+            QueryPerformanceCounter(&gt1);
+            if (g < 8) {
+                const uint64_t gt = (uint64_t)(gt1.QuadPart - gt0.QuadPart);
+                if (gt > c->maxGroupTicks[g]) c->maxGroupTicks[g] = gt;
+            }
             for (long i = 0; i < n; ++i) {
                 const float oL = c->scratchOut[i * procCh];
                 const float oR = c->scratchOut[i * procCh + 1];
@@ -392,7 +405,9 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 c->idleSamples[g] += (uint64_t)n;
             else
                 c->idleSamples[g] = 0;
-            c->idle[g] = c->sr > 0 && c->idleSamples[g] > (uint64_t)c->sr * 10;
+            c->idle[g] = c->sr > 0 &&
+                         c->idleSamples[g] >
+                             (uint64_t)c->sr * (uint64_t)(c->idleSeconds > 0 ? c->idleSeconds : 3);
             }  // end else(!userBypass)：正常 DSP 处理
         } else {
             c->bypassEntered = true;
