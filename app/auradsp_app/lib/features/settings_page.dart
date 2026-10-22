@@ -2259,8 +2259,10 @@ class _VbBusRow extends StatelessWidget {
           Expanded(child: _LedMeter(peak: live ? peak : 0.0, on: on)),
           const SizedBox(width: AuraSpace.sm),
           // 按路插件处理复选框（DSP 开关左侧）：视觉密度与 _MiniToggle 对齐。
+          // 通道处理开关（右侧）关闭时整组直通、插件不跑——复选框灰显但
+          // **保留勾选状态**（插件实例常驻，重开开关立即恢复，无重新加载）。
           Tooltip(
-            message: l.vbPluginTooltip,
+            message: on ? l.vbPluginTooltip : l.vbPluginLockedHint,
             triggerMode: TooltipTriggerMode.tap,
             showDuration: const Duration(seconds: 4),
             child: SizedBox(
@@ -2268,7 +2270,7 @@ class _VbBusRow extends StatelessWidget {
               height: 28,
               child: Checkbox(
                 value: pluginOn,
-                onChanged: (v) => onPluginToggle(v ?? false),
+                onChanged: on ? (v) => onPluginToggle(v ?? false) : null,
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
               ),

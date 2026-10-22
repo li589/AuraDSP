@@ -166,6 +166,12 @@ abstract class AppLocalizations {
   /// **'勾选 = 挂载的插件处理该路音频（厂商音效不受影响）'**
   String get vbPluginTooltip;
 
+  /// No description provided for @vbPluginLockedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道处理关闭时插件不运行（状态保留，开启后立即恢复）'**
+  String get vbPluginLockedHint;
+
   /// No description provided for @shelfTitle.
   ///
   /// In zh, this message translates to:
@@ -3339,6 +3345,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'旁路（未选路）'**
   String get plugRouteBypassed;
+
+  /// No description provided for @plugRouteAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get plugRouteAll;
+
+  /// No description provided for @plugChStereoOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'VB 模式每通道仅立体声（L/R）进入插件链'**
+  String get plugChStereoOnly;
 
   /// No description provided for @plugLoading.
   ///

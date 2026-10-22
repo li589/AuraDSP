@@ -393,10 +393,19 @@ class AppModel extends ChangeNotifier {
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
   int vbPluginGroupMask = 0xFF;
-  // v2 按路编辑器目标总线（会话级，不落盘；-1 = 无有效选中路）。
-  // 插件页「打开界面」按钮跟随此值路由到对应组引擎；选中路被取消勾选时
-  // 由 _fallbackVbPluginEditorGroup() 回落到仍在掩码内的最低路。
-  int vbPluginEditorGroup = -1;
+  // v2 按路编辑器目标总线（会话级，不落盘）。
+  // 取值：kVbRouteAll(-2)=「全部」（打开主实例界面，P1 起参数联动广播）；
+  // 0-7=具体路；-1=无有效选中路（全不可选时）。
+  // 插件页「打开界面」按钮跟随此值路由；选中路失效时由
+  // _fallbackVbPluginEditorGroup() 回落「全部」。
+  int vbPluginEditorGroup = kVbRouteAll;
+
+  /// 「全部」路由：编辑器打开有效路内最低组的实例。
+  static const int kVbRouteAll = -2;
+
+  /// 插件页下拉的有效路掩码 = 通道开着 且 插件勾选
+  /// （busMask 关的组整组直通不进引擎，调参不上流；复选框关的组链级停跑）。
+  int get vbEffectiveRouteMask => vbBusMask & vbPluginGroupMask & 0xFF;
   // ASIO 常驻桥状态（04 桥；isolate 回推，与 VB 桥互斥——一次只跑一个后端）。
   bool asioActive = false;
   Map<String, dynamic> asioInfo = {};
@@ -4712,31 +4721,31 @@ void setVbPluginGroupAll(bool on) {
   notifyListeners();
 }
 
-/// v2 按路编辑器目标路选择（仅掩码内合法；插件页总线下拉调用）。
+/// v2 按路编辑器目标路选择（仅有效掩码内合法路，或 kVbRouteAll）。
 void setVbPluginEditorGroup(int group) {
+  if (group == kVbRouteAll) {
+    if (vbPluginEditorGroup == kVbRouteAll) return;
+    vbPluginEditorGroup = kVbRouteAll;
+    notifyListeners();
+    return;
+  }
   if (group < 0 || group > 7) return;
-  if ((vbPluginGroupMask & (1 << group)) == 0) return;
+  if ((vbEffectiveRouteMask & (1 << group)) == 0) return;
   if (vbPluginEditorGroup == group) return;
   vbPluginEditorGroup = group;
   notifyListeners();
 }
 
-/// 选中路失效（被取消勾选/全不勾）时回落到最低勾选路；无勾选路置 -1。
+/// 选中路失效（通道关/插件取消勾选）时回落「全部」；「全部」恒有效。
+/// 无任何有效路时由 UI 层按 vbEffectiveRouteMask==0 显示旁路态
+/// （kVbRouteAll 保留，打开界面按钮在 UI 侧按无有效路禁用）。
 void _fallbackVbPluginEditorGroup() {
+  if (vbPluginEditorGroup == kVbRouteAll) return;
   if (vbPluginEditorGroup >= 0 &&
-      (vbPluginGroupMask & (1 << vbPluginEditorGroup)) != 0) {
+      (vbEffectiveRouteMask & (1 << vbPluginEditorGroup)) != 0) {
     return;
   }
-  var next = -1;
-  for (var g = 0; g < 8; g++) {
-    if ((vbPluginGroupMask & (1 << g)) != 0) {
-      next = g;
-      break;
-    }
-  }
-  if (vbPluginEditorGroup != next) {
-    vbPluginEditorGroup = next;
-  }
+  vbPluginEditorGroup = kVbRouteAll;
 }
 
 /// ASIO 驱动重选：落盘 + 通知；桥在跑则热切换（stop→start 新参数）。

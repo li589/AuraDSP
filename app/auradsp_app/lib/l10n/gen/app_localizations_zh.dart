@@ -43,6 +43,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbPluginTooltip => '勾选 = 挂载的插件处理该路音频（厂商音效不受影响）';
 
   @override
+  String get vbPluginLockedHint => '通道处理关闭时插件不运行（状态保留，开启后立即恢复）';
+
+  @override
   String get shelfTitle => '低频搁架';
 
   @override
@@ -1709,6 +1712,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugRouteBypassed => '旁路（未选路）';
+
+  @override
+  String get plugRouteAll => '全部';
+
+  @override
+  String get plugChStereoOnly => 'VB 模式每通道仅立体声（L/R）进入插件链';
 
   @override
   String get plugLoading => '加载中…';
