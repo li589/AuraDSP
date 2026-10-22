@@ -146,11 +146,21 @@ class _PluginListView extends StatelessWidget {
             }
           }
 
+          // 诚实状态（2026-10-22）：已挂载时显示该槽实际生效/旁路态。
+          String? mountState;
+          if (isLoadedInThisSlot) {
+            mountState = manager.isSlotBypassed(slot) ? 'bypassed' : 'active';
+          } else if (loadedInOtherSlot != null) {
+            mountState = manager.isSlotBypassed(loadedInOtherSlot)
+                ? 'bypassed'
+                : 'active';
+          }
           return _PluginListItem(
             plugin: plugin,
             slot: slot,
             isLoadedInThisSlot: isLoadedInThisSlot,
             loadedInOtherSlot: loadedInOtherSlot,
+            mountState: mountState,
             onLoad: () => onLoad(plugin),
             onUnload: onUnload,
             busy: manager.isSlotBusy(slot),
@@ -167,6 +177,9 @@ class _PluginListItem extends StatelessWidget {
   final int slot;
   final bool isLoadedInThisSlot;
   final int? loadedInOtherSlot;
+
+  /// 诚实状态：'active' 生效 / 'bypassed' 旁路 / null 未挂载。
+  final String? mountState;
   final VoidCallback onLoad;
   final VoidCallback onUnload;
   /// C3：该槽挂载/卸载任务进行中（异步）。两个操作按钮据此禁用。
@@ -177,6 +190,7 @@ class _PluginListItem extends StatelessWidget {
     required this.slot,
     required this.isLoadedInThisSlot,
     required this.loadedInOtherSlot,
+    this.mountState,
     required this.onLoad,
     required this.onUnload,
     this.busy = false,
@@ -247,6 +261,47 @@ class _PluginListItem extends StatelessWidget {
                         color: isLoadedInThisSlot ? p.accent : p.text,
                       ),
                     ),
+                    if (mountState != null) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 1),
+                        decoration: BoxDecoration(
+                          color: (mountState == 'bypassed'
+                                  ? const Color(0xFFE6A23C)
+                                  : const Color(0xFF67C23A))
+                              .withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              mountState == 'bypassed'
+                                  ? Icons.pause_circle_rounded
+                                  : Icons.play_circle_rounded,
+                              size: 10,
+                              color: mountState == 'bypassed'
+                                  ? const Color(0xFFE6A23C)
+                                  : const Color(0xFF67C23A),
+                            ),
+                            const SizedBox(width: 3),
+                            Text(
+                              mountState == 'bypassed'
+                                  ? l10nOf(context).plugStateBypassed
+                                  : l10nOf(context).plugStateActive,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: mountState == 'bypassed'
+                                    ? const Color(0xFFE6A23C)
+                                    : const Color(0xFF67C23A),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (isIncompatible) ...[
                       const SizedBox(width: 8),
                       Tooltip(

@@ -521,7 +521,9 @@ class _ActivePluginHero extends StatelessWidget {
             ),
             const SizedBox(width: AuraSpace.xs),
             Text(
-              l10nOf(context).plugLoading,
+              manager.slotBusyAction(slot) == 'unload'
+                  ? l10nOf(context).plugUnloading
+                  : l10nOf(context).plugLoading,
               style: labelOf(p, size: 11, color: p.textDim),
             ),
             const SizedBox(width: AuraSpace.sm),
@@ -675,7 +677,8 @@ class _ActivePluginHero extends StatelessWidget {
             // per-slot busy 驱动——切到别的槽不受影响。大插件 5-6s 加载
             // 期间全按钮禁用（过分操作防护），音频侧旧插件已卸/新插件
             // 未就绪时链路直通不断音。
-            if (isBusy) ...[
+            // 卸载不显示此大动画（用户：多余）——trailing 小标已够。
+            if (isBusy && manager.slotBusyAction(slot) == 'load') ...[
               ClipRRect(
                 borderRadius: BorderRadius.circular(2),
                 child: LinearProgressIndicator(

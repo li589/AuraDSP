@@ -1823,6 +1823,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugUnloading => 'Unloading…';
 
   @override
+  String get plugStateActive => 'Active';
+
+  @override
+  String get plugStateBypassed => 'Bypassed';
+
+  @override
   String get plugUnloadFromSlot => 'Unload from This Slot';
 
   @override

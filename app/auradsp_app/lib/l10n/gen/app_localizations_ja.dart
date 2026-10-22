@@ -1750,6 +1750,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugUnloading => 'アンロード中…';
 
   @override
+  String get plugStateActive => '有効';
+
+  @override
+  String get plugStateBypassed => 'バイパス';
+
+  @override
   String get plugUnloadFromSlot => 'このスロットからアンロード';
 
   @override

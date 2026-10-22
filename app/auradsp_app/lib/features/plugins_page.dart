@@ -37,7 +37,8 @@ class PluginsPage extends StatefulWidget {
   State<PluginsPage> createState() => _PluginsPageState();
 }
 
-class _PluginsPageState extends State<PluginsPage> {
+class _PluginsPageState extends State<PluginsPage>
+    with WidgetsBindingObserver {
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _customDirCtrl = TextEditingController(
       text: PathMemory.dirFor(PathMemory.slotLastPluginDir) ?? '');
@@ -47,7 +48,13 @@ class _PluginsPageState extends State<PluginsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _searchCtrl.text = widget.model.pluginManager.searchQuery;
+    _startStatusTimer();
+  }
+
+  void _startStatusTimer() {
+    _statusTimer?.cancel();
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
       for (var i = 0; i < PluginManager.kMaxSlots; i++) {
@@ -58,8 +65,24 @@ class _PluginsPageState extends State<PluginsPage> {
     });
   }
 
+  // UI 争用缓解（2026-10-22）：窗口最小化/隐藏时暂停 status 轮询——
+  // 用户实测「最小化 App 音频一卡一卡」，轮询的唤醒/IPC 与渲染恢复风暴
+  // 叠加是可消因素；恢复可见即重启轮询。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _statusTimer?.cancel();
+      _statusTimer = null;
+    } else {
+      if (_statusTimer == null) _startStatusTimer();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
     _searchCtrl.dispose();
     _customDirCtrl.dispose();

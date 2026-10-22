@@ -3406,6 +3406,18 @@ abstract class AppLocalizations {
   /// **'卸载中…'**
   String get plugUnloading;
 
+  /// No description provided for @plugStateActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'生效'**
+  String get plugStateActive;
+
+  /// No description provided for @plugStateBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路'**
+  String get plugStateBypassed;
+
   /// No description provided for @plugUnloadFromSlot.
   ///
   /// In zh, this message translates to:

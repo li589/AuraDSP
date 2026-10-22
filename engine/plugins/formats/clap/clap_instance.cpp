@@ -465,7 +465,20 @@ public:
 
     bool isLoaded() const override { return m_isLoaded; }
     bool isBypassed() const override { return m_bypassed; }
-    void setBypass(bool bypass) override { m_bypassed = bypass; }
+    void setBypass(bool bypass) override {
+        m_bypassed = bypass;
+        // 真旁路（2026-10-22）：stop/start_processing 让插件内部停/复跑
+        // （与 VST3 setProcessing 同语义，消旁路态持续 CPU）。
+        if (bypass) {
+            if (m_plugin && m_plugin->stop_processing) {
+                m_plugin->stop_processing(m_plugin);
+            }
+        } else {
+            if (m_plugin && m_plugin->start_processing) {
+                m_plugin->start_processing(m_plugin);
+            }
+        }
+    }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
         if (channels > 8) channels = 8;

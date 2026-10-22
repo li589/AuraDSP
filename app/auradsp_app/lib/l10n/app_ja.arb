@@ -787,6 +787,8 @@
   "plugOpenGuiBtn": "UIを開く (GUI)",
   "plugLoading": "ロード中…",
   "plugUnloading": "アンロード中…",
+  "plugStateActive": "有効",
+  "plugStateBypassed": "バイパス",
   "plugRouteBypassed": "バイパス",
   "abSlotA": "プリセットA",
   "abSlotB": "プリセットB",

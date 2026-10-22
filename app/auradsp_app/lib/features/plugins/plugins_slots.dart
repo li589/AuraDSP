@@ -66,7 +66,10 @@ class _SlotTab extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AuraRadius.md),
-      child: AnimatedContainer(
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(
             horizontal: AuraSpace.md, vertical: AuraSpace.sm + 2),
@@ -163,7 +166,25 @@ class _SlotTab extends StatelessWidget {
               ),
             ),
           ],
-        ),
+          ),
+          ),
+          // 右上角诚实状态（2026-10-22）：生效=绿点 / 旁路=橙点。
+          if (isActive)
+            Positioned(
+              top: 6,
+              right: 6,
+              child: Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isBypassed
+                      ? const Color(0xFFE6A23C)
+                      : const Color(0xFF67C23A),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

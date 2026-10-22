@@ -1167,7 +1167,16 @@ public:
 
     bool isLoaded() const override { return m_isLoaded; }
     bool isBypassed() const override { return m_bypassed; }
-    void setBypass(bool bypass) override { m_bypassed = bypass; }
+    void setBypass(bool bypass) override {
+        m_bypassed = bypass;
+        // 真旁路（2026-10-22）：同步 setProcessing(false) 让插件内部处理
+        // （含 Ozone 级大插件的分析线程）停跑——仅置标志时旁路态 CPU 不降，
+        // 用户实测「旁路仍持续卡顿」。恢复时 setProcessing(true)。
+        // iZotope 恒返 kNotImplemented 但实际生效（E11 实测），失败容忍。
+        if (m_processor) {
+            m_processor->setProcessing(!bypass);
+        }
+    }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
         if (channels > 8) channels = 8;
