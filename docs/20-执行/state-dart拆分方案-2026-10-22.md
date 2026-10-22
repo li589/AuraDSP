@@ -305,6 +305,24 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
   settings_asio×2，单独复跑 5/5 全过）。本机抖动率较 P1 升高（疑 Avast
   I/O 干扰加剧），判定规则不变：全量失败文件单独复跑必须全过。
 
+### P3（state_events.dart）
+
+- **剪切**：`_onMessage`（939 行全量 case）+ `_admitEngineEvent` + 4 个
+  错误 clear + 延迟探测四件（`_onComponentLatencyResult`/
+  `refreshComponentLatency`/`latencyProbeResource`/`isProbingLatency`）
+  → `lib/core/state/state_events.dart`（1113 行，extension StateEvents）。
+  入口 5458 → 4368 行。机检 7 块逐字等价（三处机械适配见下）。
+- **static 处理（方案外补充决策）**：
+  (1) `isLatencyProbeSupported`/`kLatencyProbeAliases`/`hasLatencyRefresh`
+  三个 static **留类体**——外部 18 处 `AppModel.xxx` 类名静态访问
+  （15 UI 文件 + ui_stereo_restore_test），extension static 无法经类名/
+  实例访问；refreshComponentLatency 内 3 处引用加 `AppModel.` 限定。
+  (2) `_kEventDedupWindowMs`（私有无外部调用者）随 `_admitEngineEvent`
+  迁为 part 文件**顶层 const**——extension 方法体不能非限定引用类 static。
+  教训：extension 作用域不含被扩展类型的 static 成员。
+- **验证**：analyze 0 issue；全量串行 319 过 + 1 文件已知超时抖动
+  （bass_shaping_test，单独复跑 3/3 过）。
+
 ---
 
 ## 8. 关联文档
