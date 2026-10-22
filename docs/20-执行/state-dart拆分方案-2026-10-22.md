@@ -1,7 +1,7 @@
 # state.dart 拆分方案（入口 + state/ 文件夹）
 
-> 日期：2026-10-22 ｜ 状态：**方案待审**（未动代码）
-> 对象：`app/auradsp_app/lib/core/state.dart`（6414 行，单文件单类 `AppModel` 6162 行）
+> 日期：2026-10-22 ｜ 状态：**已实施**（P0–P7 七阶段闭环，8 个提交；见文末§7 实施补记）
+> 对象：`app/auradsp_app/lib/core/state.dart`（拆分前 6414 行，单文件单类 `AppModel` 6162 行）
 
 ---
 
@@ -9,8 +9,15 @@
 
 - **策略**：入口 `state.dart` + `state/` 目录 **9 个 part 文件**，类方法按领域迁入
   part 文件中的 **extension**（同类库可访问全部私有成员，编译+运行双验证）。
-- **零行为变更、零 API 变更**：34 个导入方的 `import 'core/state.dart'` 与全部
+- **零行为变更、零调用方改动**：34 个导入方的 `import 'core/state.dart'` 与全部
   `model.xxx` 调用原样可用；part 文件共享入口的 import，无需一行 import 改动。
+  ⚠️ **例外（2026-10-22 追加复审登记 G-3）**：11 个 `AppModel` **public static**
+  （`eqFreqs7/10/15/31`、`eqGridFor`、`eqOpModeForFilter`、`eqPeakingDb`、
+  `eqTargetGains`、`eqResponsePoints`、`composeEqOutputSpectrum` 等）按 §5 P6
+  决策**迁为 part 文件顶层函数** → Dart part 顶层声明为**库私有**，
+  `AppModel.eqGridFor(...)` 形式**外部不可见**。已核实**本仓库无外部消费者**
+  （引用点全在库内，测试侧 37 处已同步改裸名），**无实际破坏**；但属**契约破坏**，
+  本仓库外的下游消费者需项目方确认。详见《代码审查报告-2026-10-22-增量.md》§10.4。
 - **入口目标 ~1100 行**（字段清单 + 构造器 + dispose + 小模型类），其余
   ~5300 行按领域入 9 个 260-1300 行的 part 文件。
 - **分 7 个阶段迁移**，每阶段 `flutter analyze` + `flutter test`（18 个测试文件）
@@ -404,9 +411,12 @@ dev 分支领先 main 的提交数增加但不改行为——可随时在主链�
 - **行数复核**（目标：入口 ≤1200、各 part ≤1400）：
   入口 **1028** ✓；part 侧最大 state_events 1113 ✓（models 220 /
   core 769 / events 1113 / session 427 / chain 527 / effects 1010 /
-  eq 687 / audio_modes 699 / vb_asio 142）；总计 6591 行
-  （原单体 6414 → 入口+parts 6619，增量 205 行 = part 头/节头/
+  eq 687 / audio_modes 699 / vb_asio 142）；part 合计 5594，总计 **6622**
+  （原单体 6414 → 入口+parts 6622，增量 **208** 行 = part 头/节头/
   文件地图/文档骨架）。
+  > 订正（2026-10-22 追加复审）：此处原写「总计 6591 / 入口+parts 6619 /
+  > 增量 205」，系 P7 追加入口文件地图注释 31 行后未同步数字，实测应为
+  > 5594 / 6622 / 208。详见《代码审查报告-2026-10-22-增量.md》§10.5（G-2）。
 - **验证**：analyze 0 issue；全量串行 **320/320 全绿**（零抖动，
   exit=0）。
 - **总体结论**：P0-P7 七阶段全部闭环。6414 行单体 → 1028 行入口 +
