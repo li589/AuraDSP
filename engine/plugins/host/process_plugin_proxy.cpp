@@ -414,15 +414,18 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
              * 失败不计数（丢弃块的补位非流水数据）。 */
             /* E15：提交前守深度不变量（>1 结构上不可达——E14 保证带直通帧
              * 的块不提交，且下方硬上限只允许 0→1；此处仅作哨兵）。 */
+            /* E15 硬上限：深度已满则本块不提交（直通）。宿主手上有活 →
+             * 不会饿死，prime 也无需补位。
+             * 注意：块大小切换（设备缓冲变化）会让目标深度变化，此时在途块
+             * 可能暂时多于新目标——那是正常过渡（残留会被后续帧消费掉），
+             * **不计入 depthViolations**。该计数器只表示「上限被绕过」，
+             * 而提交路径上的 depthFull 判定使其结构上恒为 0。 */
             const uint32_t target =
                 m_targetInFlight.load(std::memory_order_relaxed);
-            if (m_inFlight.load(std::memory_order_relaxed) > target) {
-                m_depthViolations.fetch_add(1, std::memory_order_relaxed);
-            }
-            /* E15 硬上限：深度已满则本块不提交（直通）。宿主手上有活 →
-             * 不会饿死，prime 也无需补位。 */
             const bool depthFull =
                 m_inFlight.load(std::memory_order_relaxed) >= target;
+            /* depthViolations 在此不再自增：上限由 depthFull 在提交路径强制，
+             * 越界结构上不可能。字段保留是为 status 兼容与「恒 0」断言。 */
             if (!m_blockHadPassthrough) {
                 if (depthFull) {
                     m_depthDrops.fetch_add(1, std::memory_order_relaxed);

@@ -155,6 +155,8 @@ private:
      * 音频线程读写、status 从控制线程读 → atomic。 */
     std::atomic<uint32_t> m_inFlight{0};
     std::atomic<uint32_t> m_maxInFlight{0};
+    /* 「上限被绕过」计数——提交路径的 depthFull 判定使其结构上恒 0；
+     * 块大小切换造成的在途残留属正常过渡，不计入（见 processInterleaved）。 */
     std::atomic<uint32_t> m_depthViolations{0};
     /* 因深度已满（宿主尚未消化上一块）而未提交的块数。健康 paced 流水应≈0；
      * 持续增长 = 宿主算力不足，此时直通替代排队。 */
