@@ -207,17 +207,19 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l.audioDevice,
             child: _DynamicAudioPanel(model: model),
           ),
-          // 声道模式（ADR-003 Phase A）
+          // 声道模式（ADR-003）：引擎 channels.mode 仅接受 0=矩阵下混 /
+          // 1=离散逐声道两档（set_channels_mode 对其它值直接拒收）。此处曾是
+          // 「立体声/5.1/7.1」三档——7.1 恒被引擎拒绝、标签亦与引擎语义不符，
+          // 用户实测「只是摆设」。2026-10-23 改为与引擎一致的两档真值标签。
           SectionCard(
             title: l.channelMode,
             hint: l.channelPhaseA,
             child: AuraSegmented<int>(
               segments: [
-                AuraSegment(0, l.channelsStereo),
-                AuraSegment(1, l.channels51),
-                AuraSegment(2, l.channels71),
+                AuraSegment(0, l.channelsMatrix),
+                AuraSegment(1, l.channelsDiscrete),
               ],
-              selected: model.channelsMode,
+              selected: model.channelsMode.clamp(0, 1),
               onChanged: (v) => model.setInt('channels.mode', v),
             ),
           ),

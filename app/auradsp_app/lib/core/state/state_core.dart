@@ -164,7 +164,10 @@ extension StateCore on AppModel {
         limiterOn = v != 0;
         break;
       case 'channels.mode':
-        channelsMode = v.toInt();
+        // 引擎只接受 0=矩阵下混 / 1=离散逐声道（set_channels_mode 拒收其它值，
+        // 且 setInt 的乐观镜像不回滚）。历史 UI 曾有非法的 2（"7.1"）档位，
+        // 会淤积在镜像与自动保存里——此处 clamp 保证镜像即引擎真相。
+        channelsMode = v.toInt().clamp(0, 1);
         break;
       case 'tube.enable':
         tubeOn = v != 0;

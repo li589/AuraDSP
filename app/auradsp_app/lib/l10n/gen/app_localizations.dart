@@ -1768,28 +1768,22 @@ abstract class AppLocalizations {
   /// **'声道模式'**
   String get channelMode;
 
-  /// No description provided for @channelsStereo.
+  /// No description provided for @channelsMatrix.
   ///
   /// In zh, this message translates to:
-  /// **'立体声'**
-  String get channelsStereo;
+  /// **'矩阵下混'**
+  String get channelsMatrix;
 
-  /// No description provided for @channels51.
+  /// No description provided for @channelsDiscrete.
   ///
   /// In zh, this message translates to:
-  /// **'5.1'**
-  String get channels51;
-
-  /// No description provided for @channels71.
-  ///
-  /// In zh, this message translates to:
-  /// **'7.1'**
-  String get channels71;
+  /// **'离散逐声道'**
+  String get channelsDiscrete;
 
   /// No description provided for @channelPhaseA.
   ///
   /// In zh, this message translates to:
-  /// **'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。'**
+  /// **'仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。'**
   String get channelPhaseA;
 
   /// No description provided for @audioMode.
