@@ -118,6 +118,10 @@ def run_smoke_tests():
     # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
     # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。
     "smoke_comp_race.py",
+    # Z14 DDC 控制线程/RT 竞争门禁（2026-10-23）：高频 ddc.enable +
+    # 交替 ddc.load 两份大 VDC + RT 连续 process。修复前 enable 落入
+    # DDCStringParser 解析瞬窗即误拒；修复后控制侧同锁零误拒。
+    "smoke_ddc_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",
