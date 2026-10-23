@@ -1,0 +1,27 @@
+# 硬编码中文基线（P2-2 棘轮）：条目只允许减少。
+# 重生成：python tools/l10n_cjk_scan.py --baseline
+# 格式：<相对路径> <条数>
+lib/features/chain_page.dart 7
+lib/features/chrome.dart 1
+lib/features/eel_editor_support.dart 10
+lib/features/effects/arbmag_card.dart 5
+lib/features/effects/bass_card.dart 2
+lib/features/effects/bass_shaping_card.dart 1
+lib/features/effects/cards_common.dart 2
+lib/features/effects/channel_routing_selector.dart 20
+lib/features/effects/comp_card.dart 19
+lib/features/effects/convolver_card.dart 1
+lib/features/effects/crossfeed_card.dart 4
+lib/features/effects/dyneq_card.dart 9
+lib/features/effects/filter_card.dart 2
+lib/features/effects/gate_card.dart 14
+lib/features/effects/haas_card.dart 2
+lib/features/effects/input_card.dart 4
+lib/features/effects/loudness_card.dart 1
+lib/features/effects/post_card.dart 9
+lib/features/effects/reverb_card.dart 6
+lib/features/effects/spatial_card.dart 5
+lib/features/effects/stereo_card.dart 1
+lib/features/effects/tube_card.dart 5
+lib/features/liveprog_page.dart 9
+lib/features/settings_page.dart 79

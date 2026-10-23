@@ -13,87 +13,88 @@
 import 'package:flutter/material.dart';
 
 import 'theme.dart';
+import 'tokens.g.dart';
 
 /* ---------- 8pt 间距网格 ---------- */
 
 class AuraSpace {
   const AuraSpace._();
-  static const xxs = 2.0;
-  static const xs = 4.0;
-  static const sm = 8.0;
-  static const md = 12.0;
-  static const lg = 16.0;
-  static const xl = 24.0;
-  static const xxl = 32.0;
-  static const hero = 48.0;
+  static const xxs = TokSpace.xxs;
+  static const xs = TokSpace.xs;
+  static const sm = TokSpace.sm;
+  static const md = TokSpace.md;
+  static const lg = TokSpace.lg;
+  static const xl = TokSpace.xl;
+  static const xxl = TokSpace.xxl;
+  static const hero = TokSpace.hero;
 
   /// 页面（内容区）左右留白——外框呼吸感的主要来源
-  static const pageX = 32.0;
+  static const pageX = TokSpace.pageX;
 
   /// 页面顶部/底部留白
-  static const pageTop = 26.0;
-  static const pageBottom = 32.0;
+  static const pageTop = TokSpace.pageTop;
+  static const pageBottom = TokSpace.pageBottom;
 
   /// 卡片内边距（四边统一，保证内容与外框的等距留白）
-  static const cardPad = 20.0;
+  static const cardPad = TokSpace.cardPad;
 
   /// 折叠态卡片内边距（P0 仅定义、P1 由 SectionCard 接入；数值沿用现状 14.0，视觉不变）
-  static const cardPadCollapsed = 14.0;
+  static const cardPadCollapsed = TokSpace.cardPadCollapsed;
 
   /// 卡片标题 → 卡片内容
-  static const cardHeadGap = 16.0;
+  static const cardHeadGap = TokSpace.cardHeadGap;
 
   /// 卡片与卡片之间
-  static const cardGap = 16.0;
+  static const cardGap = TokSpace.cardGap;
 
   /// 卡片内部控件行之间
-  static const rowGap = 12.0;
+  static const rowGap = TokSpace.rowGap;
 
   /// 内容区最大宽度：超宽屏下居中留白，避免拉伸到失焦
-  static const contentMaxW = 1080.0;
+  static const contentMaxW = TokSpace.contentMaxW;
 }
 
 /* ---------- 组件尺寸 ---------- */
 
 class AuraSize {
   const AuraSize._();
-  static const railW = 216.0;
-  static const railMinW = 64.0; // 收起态：仅图标
-  static const topBarH = 56.0;
-  static const navItemH = 40.0;
-  static const navIcon = 18.0;
-  static const chipH = 30.0;
-  static const switchW = 38.0;
-  static const switchH = 22.0;
-  static const switchThumb = 16.0;
-  static const sliderThumb = 6.0;
-  static const sliderTrack = 4.0;
+  static const railW = TokSize.railW;
+  static const railMinW = TokSize.railMinW; // 收起态：仅图标
+  static const topBarH = TokSize.topBarH;
+  static const navItemH = TokSize.navItemH;
+  static const navIcon = TokSize.navIcon;
+  static const chipH = TokSize.chipH;
+  static const switchW = TokSize.switchW;
+  static const switchH = TokSize.switchH;
+  static const switchThumb = TokSize.switchThumb;
+  static const sliderThumb = TokSize.sliderThumb;
+  static const sliderTrack = TokSize.sliderTrack;
   /// 紧凑 hero 按钮（首页引擎状态卡）的高度。
   /// 此前误用 AuraSpace.hero（间距网格里的间距量）当高度；此处按类别归位，
   /// 数值保持 48.0 不变，以免改变视觉。
-  static const heroCompact = 48.0;
+  static const heroCompact = TokSize.heroCompact;
 }
 
 /* ---------- 动效节奏 ---------- */
 
 class AuraDur {
   const AuraDur._();
-  static const instant = Duration(milliseconds: 90);
-  static const fast = Duration(milliseconds: 140);
-  static const base = Duration(milliseconds: 220);
-  static const slow = Duration(milliseconds: 380);
-  static const page = Duration(milliseconds: 260);
+  static const instant = TokDur.instant;
+  static const fast = TokDur.fast;
+  static const base = TokDur.base;
+  static const slow = TokDur.slow;
+  static const page = TokDur.page;
 
   /// 交错入场的单步延迟
-  static const stagger = Duration(milliseconds: 55);
-  static const staggerSpan = Duration(milliseconds: 620);
+  static const stagger = TokDur.stagger;
+  static const staggerSpan = TokDur.staggerSpan;
 }
 
 class AuraCurve {
   const AuraCurve._();
-  static const standard = Curves.easeOutCubic;
-  static const emphasized = Cubic(0.2, 0.0, 0.0, 1.0);
-  static const entrance = Cubic(0.16, 1.0, 0.3, 1.0);
+  static const standard = TokCurve.standard;
+  static const emphasized = TokCurve.emphasized;
+  static const entrance = TokCurve.entrance;
 }
 
 /* ---------- 排版尺度 ---------- */
