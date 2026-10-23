@@ -46,7 +46,7 @@ AuraDSP/
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
 ├── app/auradsp_app/     # Flutter 3.47.7（92 个 dart，21 张效果卡；音频后端四模式已接通/持久化）
 ├── test/
-│   ├── smoke/           # 79 个 smoke_*.py；runner.py --smoke 登记 84 项（78 smoke + 6 辅助/基准）
+│   ├── smoke/           # 80 个 smoke_*.py；runner.py --smoke 登记 85 项（79 smoke + 6 辅助/基准）
 │   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
 │   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
 ├── tools/               # bin/ 10 · probe/ 17 · resource_pipeline/ 2 · calibration/ 1 · archive/
@@ -85,7 +85,7 @@ VST3 / CLAP 64 位进程内宿主，4 插槽 × 5 级插入拓扑（Pre-DSP / Pr
 
 > 完整效果清单与宣传口径以 `engine/auradsp_engine.h` 参数语义表 + `graph.effects` 注册表为准（**以代码为准，不全信文档**）。
 
-**Voicemeeter 桥按路处理**（`bridge/vm_bridge` + `02_voicemeeter_client`）：VM 回调内每 8 声道一组建独立引擎，插件可按总线（路）勾选/旁路；Z12 超预算自动保护在回调持续超预算时把插件收窄到监听总线（EMA<50%×6s 恢复，手动改掩码立即让位 + 60s 冷却），插件页「生效中」按钮诚实显示「部分旁路」态。进程外插件宿主 opt-in：`AURA_PLUGIN_HOST_MODE=process`。
+**Voicemeeter 桥按路处理**（`bridge/vm_bridge` + `02_voicemeeter_client`）：VM 回调内每 8 声道一组建独立引擎，插件可按总线（路）勾选/旁路；Z12 超预算自动保护在回调持续超预算时把插件收窄到监听总线（EMA<50%×6s 恢复，手动改掩码立即让位 + 60s 冷却），插件页「生效中」按钮诚实显示「部分旁路」态。Z17 组间并行（2026-10-24）：RT 回调把各组 DSP 发布给常驻 worker 池（7 worker + RT 共 8 claimer，64 位代际-位图 CAS 认领、自旋 fan-in），单回调墙钟从 Σ(8 组) 压到 ≈max(单组)（实测 5.3×，位级与串行一致）；单核/建池失败自动退串行，`AURA_VM_PARALLEL=0` 或 `vb_set_param("parallel.enable")` 可对账切换。进程外插件宿主 opt-in：`AURA_PLUGIN_HOST_MODE=process`。
 
 ---
 
