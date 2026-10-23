@@ -114,6 +114,10 @@ def run_smoke_tests():
     "smoke_input.py",
     "smoke_bass.py",
     "smoke_comp.py",
+    # Z13 compander 控制线程/RT 竞争门禁（2026-10-23）：双 UI 线程高频拖
+    # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
+    # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。
+    "smoke_comp_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",
