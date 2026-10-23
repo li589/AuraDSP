@@ -26,8 +26,14 @@ typedef _SlotCloseEditorC = Int32 Function(Int32);
 typedef _SlotCloseEditorDart = int Function(int);
 typedef _SlotIsEditorOpenC = Int32 Function(Int32);
 typedef _SlotIsEditorOpenDart = int Function(int);
-typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
-typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
+// 编辑器按路变体（v2，仅 VB 桥导出 _g 后缀；老桥 DLL 无此导出，
+// 构造时 lookup 失败置 null，调用方以 group < 0 回落到单路绑定）。
+typedef _SlotShowEditorGC = Int32 Function(Int32, Int32, Pointer<Utf8>);
+typedef _SlotShowEditorGDart = int Function(int, int, Pointer<Utf8>);
+typedef _SlotCloseEditorGC = Int32 Function(Int32, Int32);
+typedef _SlotCloseEditorGDart = int Function(int, int);
+typedef _SlotIsEditorOpenGC = Int32 Function(Int32, Int32);
+typedef _SlotIsEditorOpenGDart = int Function(int, int);
 typedef _SlotSetStageC = Int32 Function(Int32, Int32);
 typedef _SlotSetStageDart = int Function(int, int);
 typedef _SlotGetStageC = Int32 Function(Int32);
@@ -36,6 +42,15 @@ typedef _SlotSetChannelsC = Int32 Function(Int32, Int32);
 typedef _SlotSetChannelsDart = int Function(int, int);
 typedef _SlotGetChannelsC = Int32 Function(Int32);
 typedef _SlotGetChannelsDart = int Function(int);
+// P1-3 per-group Ch 下发（仅新桥导出 _g 后缀）。
+typedef _SlotSetChannelsGC = Int32 Function(Int32, Int32, Int32);
+typedef _SlotSetChannelsGDart = int Function(int, int, int);
+// 全组/单引擎预设读写（非 _g；VB 下 load=全组扇出、save=eng[0]，见 A1）。
+typedef _SlotPresetC = Int32 Function(Int32, Pointer<Utf8>);
+typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
+// P2-1（v3.3 A/B 预设）per-group state 读写。
+typedef _SlotPresetGC = Int32 Function(Int32, Int32, Pointer<Utf8>);
+typedef _SlotPresetGDart = int Function(int, int, Pointer<Utf8>);
 
 class BridgePluginFfi {
   final DynamicLibrary dylib;
@@ -49,12 +64,18 @@ class BridgePluginFfi {
   late final _SlotShowEditorDart _showEditor;
   late final _SlotCloseEditorDart _closeEditor;
   late final _SlotIsEditorOpenDart _isEditorOpen;
-  late final _SlotPresetDart _savePreset;
-  late final _SlotPresetDart _loadPreset;
+  late final _SlotShowEditorGDart? _showEditorG;
+  late final _SlotCloseEditorGDart? _closeEditorG;
+  late final _SlotIsEditorOpenGDart? _isEditorOpenG;
   late final _SlotSetStageDart _setStage;
   late final _SlotGetStageDart _getStage;
   late final _SlotSetChannelsDart _setChannels;
   late final _SlotGetChannelsDart _getChannels;
+  late final _SlotPresetDart _loadPreset;
+  late final _SlotPresetDart _savePreset;
+  late final _SlotSetChannelsGDart? _setChannelsG;
+  late final _SlotPresetGDart? _savePresetG;
+  late final _SlotPresetGDart? _loadPresetG;
 
   BridgePluginFfi(this.dylib, this.prefix) {
     _load = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>(
@@ -75,10 +96,12 @@ class BridgePluginFfi {
         _SlotCloseEditorDart>('${prefix}_plugin_slot_close_editor');
     _isEditorOpen = dylib.lookupFunction<_SlotIsEditorOpenC,
         _SlotIsEditorOpenDart>('${prefix}_plugin_slot_is_editor_open');
-    _savePreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
-        '${prefix}_plugin_slot_save_preset');
-    _loadPreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
-        '${prefix}_plugin_slot_load_preset');
+    _showEditorG = _lookupShowEditorG(
+        '${prefix}_plugin_slot_show_editor_g');
+    _closeEditorG = _lookupCloseEditorG(
+        '${prefix}_plugin_slot_close_editor_g');
+    _isEditorOpenG = _lookupIsEditorOpenG(
+        '${prefix}_plugin_slot_is_editor_open_g');
     _setStage = dylib.lookupFunction<_SlotSetStageC, _SlotSetStageDart>(
         '${prefix}_plugin_slot_set_insert_stage');
     _getStage = dylib.lookupFunction<_SlotGetStageC, _SlotGetStageDart>(
@@ -87,6 +110,58 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_set_channels');
     _getChannels = dylib.lookupFunction<_SlotGetChannelsC, _SlotGetChannelsDart>(
         '${prefix}_plugin_slot_get_channels');
+    _loadPreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
+        '${prefix}_plugin_slot_load_preset');
+    _savePreset = dylib.lookupFunction<_SlotPresetC, _SlotPresetDart>(
+        '${prefix}_plugin_slot_save_preset');
+    _setChannelsG = _lookupSetChannelsG(
+        '${prefix}_plugin_slot_set_channels_g');
+    _savePresetG = _lookupPresetG('${prefix}_plugin_slot_save_preset_g');
+    _loadPresetG = _lookupPresetG('${prefix}_plugin_slot_load_preset_g');
+  }
+
+  // 老桥 DLL 没有 _g 导出时返回 null（ArgumentError），调用方自动回落。
+  // 不能写泛型 helper：lookupFunction 的类型参数须为具体 dart:ffi 签名，
+  // 泛型占位通不过静态检查，故三处各写具名绑定。
+  _SlotShowEditorGDart? _lookupShowEditorG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotShowEditorGC, _SlotShowEditorGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotCloseEditorGDart? _lookupCloseEditorG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotCloseEditorGC, _SlotCloseEditorGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotIsEditorOpenGDart? _lookupIsEditorOpenG(String name) {
+    try {
+      return dylib
+          .lookupFunction<_SlotIsEditorOpenGC, _SlotIsEditorOpenGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotSetChannelsGDart? _lookupSetChannelsG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotSetChannelsGC, _SlotSetChannelsGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
+  _SlotPresetGDart? _lookupPresetG(String name) {
+    try {
+      return dylib.lookupFunction<_SlotPresetGC, _SlotPresetGDart>(name);
+    } on ArgumentError {
+      return null;
+    }
   }
 
   int load(int slot, String path, {String id = ''}) {
@@ -120,35 +195,35 @@ class BridgePluginFfi {
     }
   }
 
-  int showEditor(int slot, {String title = ''}) {
+  // group >= 0 且桥支持 _g 导出时按路打开（VB 多总线）；否则回落单路
+  // （非 VB 模式 / 老桥 DLL），语义与旧版一致。
+  int showEditor(int slot, {int group = -1, String title = ''}) {
     final tp = title.toNativeUtf8();
     try {
+      if (group >= 0) {
+        final f = _showEditorG;
+        if (f != null) return f(slot, group, tp.cast());
+      }
       return _showEditor(slot, tp.cast());
     } finally {
       malloc.free(tp);
     }
   }
 
-  int closeEditor(int slot) => _closeEditor(slot);
-
-  bool isEditorOpen(int slot) => _isEditorOpen(slot) == 1;
-
-  int savePreset(int slot, String path) {
-    final pp = path.toNativeUtf8();
-    try {
-      return _savePreset(slot, pp.cast());
-    } finally {
-      malloc.free(pp);
+  int closeEditor(int slot, {int group = -1}) {
+    if (group >= 0) {
+      final f = _closeEditorG;
+      if (f != null) return f(slot, group);
     }
+    return _closeEditor(slot);
   }
 
-  int loadPreset(int slot, String path) {
-    final pp = path.toNativeUtf8();
-    try {
-      return _loadPreset(slot, pp.cast());
-    } finally {
-      malloc.free(pp);
+  bool isEditorOpen(int slot, {int group = -1}) {
+    if (group >= 0) {
+      final f = _isEditorOpenG;
+      if (f != null) return f(slot, group) == 1;
     }
+    return _isEditorOpen(slot) == 1;
   }
 
   int setInsertStage(int slot, int stage) => _setStage(slot, stage);
@@ -163,6 +238,62 @@ class BridgePluginFfi {
     }
   }
 
+  /// P1-3 per-group Ch 下发（group 越界/老桥无导出返回 0）。
+  int setChannelsG(int slot, int group, int mask) {
+    final f = _setChannelsG;
+    if (f == null || group < 0) return 0;
+    try {
+      return f(slot, group, mask);
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  /// 全组/单引擎 state 载（group<0 且老桥无 _g 导出时的回落；VB 新桥
+  /// 下 A1 修复已改走 loadPresetG(slot,0)，不再经过此路）。
+  int loadPreset(int slot, String path) {
+    final pp = path.toNativeUtf8();
+    try {
+      return _loadPreset(slot, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// 非 VB 桥单引擎 state 存（group<0 路径）。
+  int savePreset(int slot, String path) {
+    final pp = path.toNativeUtf8();
+    try {
+      return _savePreset(slot, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// P2-1 per-group state 存（A/B 预设落盘；老桥无导出返回 0）。
+  int savePresetG(int slot, int group, String path) {
+    final f = _savePresetG;
+    if (f == null || group < 0) return 0;
+    final pp = path.toNativeUtf8();
+    try {
+      return f(slot, group, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
+  /// P2-1 per-group state 载（A/B 预设激活/继承应用）。
+  int loadPresetG(int slot, int group, String path) {
+    final f = _loadPresetG;
+    if (f == null || group < 0) return 0;
+    final pp = path.toNativeUtf8();
+    try {
+      return f(slot, group, pp.cast());
+    } finally {
+      malloc.free(pp);
+    }
+  }
+
   int getChannels(int slot) {
     try {
       return _getChannels(slot);
@@ -170,4 +301,21 @@ class BridgePluginFfi {
       return 0xFF;
     }
   }
+
+  /// 桥是否导出 per-group **保存**预设 ABI（VB 新桥有；ASIO/VAIO 单引擎桥与
+  /// 老 VB 桥无）。A1 修复（2026-10-22 审查）：group<0 调用方据此在
+  /// 「单组 0 语义」与「老回落」间选择，避免 VB 下 load 侧全组扇出
+  /// 与 save 侧 eng[0] 单发的不对称污染。
+  ///
+  /// F-5（2026-10-23 审查）：探测按**单项**独立——桥的 `_g` 导出是逐个
+  /// 新增的，现实中存在中间态桥（只有 save_g 没有 load_g，或反之）。
+  /// 旧实现要求两者同时存在（hasPresetG），中间态下整族回落 → A1 缺陷
+  /// 原样存在。现在 save/load 各按自身能力决定走 `_g` 还是回落。
+  bool get hasSavePresetG => _savePresetG != null;
+
+  /// 桥是否导出 per-group **加载**预设 ABI（探测独立于 [hasSavePresetG]）。
+  bool get hasLoadPresetG => _loadPresetG != null;
+
+  /// 桥是否导出 per-group Ch ABI（语义同 [hasSavePresetG]）。
+  bool get hasSetChannelsG => _setChannelsG != null;
 }

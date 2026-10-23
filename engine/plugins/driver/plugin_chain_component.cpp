@@ -1,38 +1,8 @@
 #include "plugins/driver/plugin_chain_component.h"
 
-#include <cmath>
-#include <cstring>
 #include <new>
 
 namespace auradsp {
-namespace {
-
-bool allocFloats(std::unique_ptr<float[]>& out, uint32_t count) {
-    out.reset(new (std::nothrow) float[count]());
-    return static_cast<bool>(out);
-}
-
-void copyPlanar(float* const* dst, float* const* src, uint32_t frames) {
-    if (frames == 0) return;
-    if (dst[0] != src[0]) {
-        std::memcpy(dst[0], src[0], static_cast<size_t>(frames) * sizeof(float));
-    }
-    if (dst[1] != src[1]) {
-        std::memcpy(dst[1], src[1], static_cast<size_t>(frames) * sizeof(float));
-    }
-}
-
-double planarRmsSum(const float* left, const float* right, uint32_t frames) {
-    double sum = 0.0;
-    for (uint32_t i = 0; i < frames; ++i) {
-        const double l = left[i];
-        const double r = right[i];
-        sum += l * l + r * r;
-    }
-    return sum;
-}
-
-} // namespace
 
 PluginChainComponent::PluginChainComponent() = default;
 PluginChainComponent::~PluginChainComponent() = default;
@@ -46,40 +16,9 @@ bool PluginChainComponent::prepare(double sampleRate, uint32_t maxBlockSize) {
     }
     m_host->updateFormat(sampleRate, maxBlockSize);
 
-    if (m_maxBlock == maxBlockSize && m_chanInL && m_chanInR &&
-        m_chanOutL && m_chanOutR && m_workAL && m_workAR &&
-        m_workBL && m_workBR) {
-        return true;
-    }
-
-    std::unique_ptr<float[]> chanInL;
-    std::unique_ptr<float[]> chanInR;
-    std::unique_ptr<float[]> chanOutL;
-    std::unique_ptr<float[]> chanOutR;
-    std::unique_ptr<float[]> workAL;
-    std::unique_ptr<float[]> workAR;
-    std::unique_ptr<float[]> workBL;
-    std::unique_ptr<float[]> workBR;
-
-    if (!allocFloats(chanInL, maxBlockSize) ||
-        !allocFloats(chanInR, maxBlockSize) ||
-        !allocFloats(chanOutL, maxBlockSize) ||
-        !allocFloats(chanOutR, maxBlockSize) ||
-        !allocFloats(workAL, maxBlockSize) ||
-        !allocFloats(workAR, maxBlockSize) ||
-        !allocFloats(workBL, maxBlockSize) ||
-        !allocFloats(workBR, maxBlockSize)) {
-        return false;
-    }
-
-    m_chanInL = std::move(chanInL);
-    m_chanInR = std::move(chanInR);
-    m_chanOutL = std::move(chanOutL);
-    m_chanOutR = std::move(chanOutR);
-    m_workAL = std::move(workAL);
-    m_workAR = std::move(workAR);
-    m_workBL = std::move(workBL);
-    m_workBR = std::move(workBR);
+    /* E16：平面专用工作缓冲（m_chanIn/m_chanOut/m_work 系列共 8 块）随平面
+     * process() 一并删除——交错路径全部原地工作，无额外缓冲需求。 */
+    if (m_maxBlock == maxBlockSize) return true;
     m_maxBlock = maxBlockSize;
 
     for (size_t s = 0; s < m_delayLines.size(); ++s) {
@@ -99,90 +38,22 @@ void PluginChainComponent::reset() {
     }
 }
 
-void PluginChainComponent::process(int stage, float* const* in,
-                                   float* const* out,
-                                   uint32_t frames) noexcept {
-    if (!m_host || !in || !out || !in[0] || !in[1] || !out[0] || !out[1] ||
-        frames == 0 || frames > m_maxBlock) {
-        return;
-    }
+/* E16：平面 4 参 process() 已删除（Phase 3 重构前遗留死路径，全库无生产
+ * 调用方；其立体声硬边界是 F-8b 记录的误路由隐患）。链路统一入口为
+ * processInterleavedN()，见头文件注释。 */
 
-    const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
-    if (!stageHasActiveOrPdc(stage)) {
-        copyPlanar(out, in, frames);
-        return;
-    }
-
-    float* srcL = in[0];
-    float* srcR = in[1];
-    float* dstL = m_workAL.get();
-    float* dstR = m_workAR.get();
-    bool dstIsA = true;
-
-    for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
-        if (!m_host->hasActivePluginSlot(slot) ||
-            m_host->getInsertStageSlot(slot) != stage) {
-            continue;
+void PluginChainComponent::setEnabled(bool enable) noexcept {
+    const bool previous = m_chainEnabled.exchange(enable, std::memory_order_acq_rel);
+    if (enable && !previous) {
+        /* 关闭期间延迟线只进不出，内容已陈旧；重启用时全量复位，
+         * 首块按「无延迟历史」重建（m_lastMasks 一并清零，走既有
+         * mask 变化复位路径），避免旧音频注入。 */
+        for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
+            m_delayLines[slot].reset();
+            m_multiDelayLines[slot].reset();
+            m_lastMasks[slot] = 0;
         }
-
-        const bool bypassed = m_host->isBypassedSlot(slot);
-
-        if (pdc && bypassed) {
-            m_delayLines[slot].setDelay(m_host->getLatencySlot(slot));
-            float* src[2] = {srcL, srcR};
-            float* dst[2] = {dstL, dstR};
-            m_delayLines[slot].process(src, dst, frames);
-        } else {
-            if (pdc) {
-                float* src[2] = {srcL, srcR};
-                m_delayLines[slot].pushOnly(src, frames);
-            }
-            if (bypassed) continue;
-
-            float* src[2] = {srcL, srcR};
-            float* dst[2] = {dstL, dstR};
-            copyPlanar(dst, src, frames);
-
-            const double inSum = planarRmsSum(srcL, srcR, frames);
-            m_host->processSlot(slot, src, dst, frames);
-
-            double outSum = 0.0;
-            float maxDiff = 0.0f;
-            for (uint32_t i = 0; i < frames; ++i) {
-                const float outL = dstL[i];
-                const float outR = dstR[i];
-                const double ol = outL;
-                const double orr = outR;
-                outSum += ol * ol + orr * orr;
-                const float dl = std::fabs(outL - srcL[i]);
-                const float dr = std::fabs(outR - srcR[i]);
-                if (dl > maxDiff) maxDiff = dl;
-                if (dr > maxDiff) maxDiff = dr;
-            }
-
-            const double denom = frames > 0 ? static_cast<double>(frames) * 2.0 : 1.0;
-            m_host->recordTelemetry(
-                slot,
-                static_cast<float>(std::sqrt(inSum / denom)),
-                static_cast<float>(std::sqrt(outSum / denom)),
-                maxDiff,
-                frames);
-        }
-
-        srcL = dstL;
-        srcR = dstR;
-        if (dstIsA) {
-            dstL = m_workBL.get();
-            dstR = m_workBR.get();
-        } else {
-            dstL = m_workAL.get();
-            dstR = m_workAR.get();
-        }
-        dstIsA = !dstIsA;
     }
-
-    float* finalSrc[2] = {srcL, srcR};
-    copyPlanar(out, finalSrc, frames);
 }
 
 void PluginChainComponent::processInterleaved(int stage, float* interleaved,
@@ -198,6 +69,8 @@ void PluginChainComponent::processInterleavedN(int stage, float* interleaved,
         return;
     }
     if (channels > 8) channels = 8;
+    /* 链级开关：关闭时插件（含 PDC）整体不进路径，纯直通。 */
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return;
     if (!stageHasActiveOrPdc(stage)) return;
 
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
@@ -259,6 +132,8 @@ uint32_t PluginChainComponent::latency(int slot) const noexcept {
 
 uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
     if (!m_host) return 0;
+    /* 链关闭 = 插件不进路径，不得贡献 PDC 延迟补偿量。 */
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return 0;
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {
@@ -274,6 +149,7 @@ uint32_t PluginChainComponent::stageLatency(int stage) const noexcept {
 
 uint32_t PluginChainComponent::totalLatency() const noexcept {
     if (!m_host) return 0;
+    if (!m_chainEnabled.load(std::memory_order_acquire)) return 0;
     const bool pdc = m_pdcEnabled.load(std::memory_order_acquire);
     uint32_t total = 0;
     for (size_t slot = 0; slot < PluginHostManager::kMaxPluginSlots; ++slot) {

@@ -36,7 +36,7 @@ class _BassCard extends StatelessWidget {
             param: ParamRegistry.bassIntensity,
             model: model,
             customLabel: l.bassIntensity,
-            infoMessage: '增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。',
+            infoMessage: l.bassHintIntensity,
           ),
           const SizedBox(height: AuraSpace.md),
           // 低音增强模式 — 标签与选项同行，选项右对齐
@@ -81,7 +81,7 @@ class _BassAdvanced extends StatelessWidget {
             param: ParamRegistry.bassCutoff,
             model: m,
             customLabel: l.bassCutoff,
-            infoMessage: '低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。',
+            infoMessage: l.bassHintFrequency,
           ),
           ParamSlider(
             param: ParamRegistry.bassHarmonics,

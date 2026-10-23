@@ -460,7 +460,13 @@ static const struct
 	char lock;
 } kAuraStages[] = {
 	{"tube", stage_tube, 0},
-	{"comp", stage_comp, 0},
+	/* [PATCHED-AuraDSP Z13] comp 置 1：CompressorSetParam(forceRefresh=1) 会在
+	 * 控制线程整体重置 compander 状态（mOutputBufferCount=0、输出缓冲指针表
+	 * 复位、mInputPos/readOffset 清零），与 RT 消耗循环无互斥时 count 可被
+	 * 读到 -1 → 生产侧 mOutputBuffer[count-1] 越界空写（2026-10-23 minidump
+	 * 实证：拖 comp.gain 滑块即崩）。RT 侧持 jdsp_lock、控制侧 apply_comp
+	 * 同锁，形成互斥。历史遗漏：本标志在建 multiplexed RT 路径时未被 honoring。 */
+	{"comp", stage_comp, 1},
 	{"bass", stage_bass, 0},
 	{"eq", stage_eq, 0},
 	{"arbmag", stage_arbmag, 0},
@@ -1222,7 +1228,16 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
 			{
+				/* [PATCHED-AuraDSP Z13] honoring per-stage lock 标志：
+				 * 与 JamesDSPProcess 的 chain 表锁语义对齐。此前本路径
+				 * （引擎唯一 RT 入口）完全忽略该标志，comp/convolver/ddc/
+				 * liveprog 的控制侧重置与 RT 处理零互斥。 */
+				const char stageLock = kAuraStages[i].lock;
+				if (stageLock)
+					jdsp_lock(jdsp);
 				kAuraStages[i].fn(jdsp, curDecimatedLen);
+				if (stageLock)
+					jdsp_unlock(jdsp);
 				if (samplePeaks && i < 16)
 				{
 					float maxL = 0.0f, maxR = 0.0f;
@@ -1244,7 +1259,13 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
 			{
+				/* [PATCHED-AuraDSP Z13] 同 ASRC 分支：honoring per-stage lock */
+				const char stageLock = kAuraStages[i].lock;
+				if (stageLock)
+					jdsp_lock(jdsp);
 				kAuraStages[i].fn(jdsp, n);
+				if (stageLock)
+					jdsp_unlock(jdsp);
 				if (samplePeaks && i < 16)
 				{
 					float maxL = 0.0f, maxR = 0.0f;

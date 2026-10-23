@@ -39,7 +39,7 @@ class _LoudnessCard extends StatelessWidget {
             param: ParamRegistry.loudnessAmount,
             model: model,
             customLabel: l.loudnessAmount,
-            infoMessage: '补偿强度。小音量夜听开高，大音量开低或关（响亮时自动直通）。',
+            infoMessage: l.loudnessHint,
           ),
           ChannelRoutingSelector(
             model: model,

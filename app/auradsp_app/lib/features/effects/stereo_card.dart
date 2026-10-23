@@ -34,7 +34,7 @@ class _StereoCard extends StatelessWidget {
             param: ParamRegistry.stereoWide,
             model: model,
             customLabel: l.stereoWiden,
-            infoMessage: '拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。',
+            infoMessage: l.stereoHintWidth,
           ),
           const SizedBox(height: AuraSpace.md),
           _StereoAdvanced(model: model),

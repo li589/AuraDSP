@@ -36,6 +36,10 @@ struct Fns {
     using FnGetStage = int (*)(void*, int);
     using FnSetChannels = int (*)(void*, int, int);
     using FnGetChannels = int (*)(void*, int);
+    /* 链级启用开关（2026-10-22 VB 按路插件处理）：可选解析——旧引擎 DLL
+     * 无此符号时保持 nullptr，调用方判空跳过（桥不因引擎版本被拒载）。 */
+    using FnChainSetEnabled = int (*)(void*, int);
+    using FnChainGetEnabled = int (*)(void*, int);
 
     FnLoad load = nullptr;
     FnUnload unload = nullptr;
@@ -52,6 +56,10 @@ struct Fns {
     FnGetStage getStage = nullptr;
     FnSetChannels setChannels = nullptr;
     FnGetChannels getChannels = nullptr;
+    FnChainSetEnabled chainSetEnabled = nullptr;
+    FnChainGetEnabled chainGetEnabled = nullptr;
+
+    bool HasChainEnable() const { return chainSetEnabled && chainGetEnabled; }
 
     bool Ready() const {
         return load && unload && setBypass && getBypass && getLatency &&
@@ -76,6 +84,8 @@ struct Fns {
         getStage = nullptr;
         setChannels = nullptr;
         getChannels = nullptr;
+        chainSetEnabled = nullptr;
+        chainGetEnabled = nullptr;
         if (!mod) return false;
         load = (FnLoad)GetProcAddress(mod, "auradsp_plugin_slot_load");
         unload = (FnUnload)GetProcAddress(mod, "auradsp_plugin_slot_unload");
@@ -105,6 +115,11 @@ struct Fns {
             mod, "auradsp_plugin_slot_set_channels");
         getChannels = (FnGetChannels)GetProcAddress(
             mod, "auradsp_plugin_slot_get_channels");
+        /* 可选符号：旧引擎 DLL 无此导出时保持 nullptr（不参与 Ready()）。 */
+        chainSetEnabled = (FnChainSetEnabled)GetProcAddress(
+            mod, "auradsp_plugin_chain_set_enabled");
+        chainGetEnabled = (FnChainGetEnabled)GetProcAddress(
+            mod, "auradsp_plugin_chain_get_enabled");
         return Ready();
     }
 };
@@ -169,6 +184,30 @@ public:
         AcquireSRWLockExclusive(&lock_);
         cfg_[slot].channels = channels;
         ReleaseSRWLockExclusive(&lock_);
+    }
+
+    // 读取某槽的镜像状态（后台组补齐回放用：补齐后让该组落到与其它组
+    // 一致的 bypass/Ch/阶段，而不是出厂默认）。path/id 可选（掩码新使能
+    // 组补挂时用）。不存在返回 false。
+    bool GetSlot(int slot, int* stage, int* bypass, int* channels,
+                 char* path = nullptr, size_t pathCap = 0,
+                 char* id = nullptr, size_t idCap = 0) {
+        if (slot < 0 || slot >= kSlots) return false;
+        AcquireSRWLockExclusive(&lock_);
+        const bool loaded = cfg_[slot].loaded;
+        if (loaded) {
+            if (stage) *stage = cfg_[slot].stage;
+            if (bypass) *bypass = cfg_[slot].bypass;
+            if (channels) *channels = cfg_[slot].channels;
+            if (path && pathCap) {
+                strncpy_s(path, pathCap, cfg_[slot].path, _TRUNCATE);
+            }
+            if (id && idCap) {
+                strncpy_s(id, idCap, cfg_[slot].id, _TRUNCATE);
+            }
+        }
+        ReleaseSRWLockExclusive(&lock_);
+        return loaded;
     }
 
     // 重建后回放（调用方已确保音频线程不接触 engine）。返回成功/失败槽数。

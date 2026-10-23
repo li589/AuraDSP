@@ -37,7 +37,685 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stateIdle => '空闲';
 
   @override
+  String get routingChFl => '左前';
+
+  @override
+  String get routingChFr => '右前';
+
+  @override
+  String get routingChC => '中置';
+
+  @override
+  String get routingChLfe => '超低';
+
+  @override
+  String get routingChSl => '左环';
+
+  @override
+  String get routingChSr => '右环';
+
+  @override
+  String get routingChBl => '左后';
+
+  @override
+  String get routingChBr => '右后';
+
+  @override
+  String get routingAllChannels => '全声道 (8/8)';
+
+  @override
+  String get routingStereo => '立体声 (FL/FR)';
+
+  @override
+  String get routingNoSub => '无超低 (7/8)';
+
+  @override
+  String get routingAllBypassed => '全旁路 (0/8)';
+
+  @override
+  String get routingSurroundOnly => '仅环绕 (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 声道已选';
+  }
+
+  @override
+  String get channelRouting => '高级声道路由';
+
+  @override
+  String get routingPresets => '快速选择:';
+
+  @override
+  String get routingPresetAll => '全选';
+
+  @override
+  String get routingPresetStereo => '立体声';
+
+  @override
+  String get routingPresetNoLfe => '无超低';
+
+  @override
+  String get routingPresetSurround => '仅环绕';
+
+  @override
+  String get setConnStatus => '连接状态';
+
+  @override
+  String get setConnActive => '已连接 (活跃回调)';
+
+  @override
+  String get setConnIdle => '未连接 (等待 Voicemeeter 启动)';
+
+  @override
+  String get setDeviceDisconnected => '未连接设备';
+
+  @override
+  String get setEndpointShort => '端点';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return '音频端点 ($shortId)';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [离线/未连接]';
+  }
+
+  @override
+  String get setDefaultEndpoint => '默认音频端点 (Default Render)';
+
+  @override
+  String get setNoEndpoint => '无可用音频端点';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return '活跃处理中 (${sr}Hz · $frames 帧)';
+  }
+
+  @override
+  String get setApoAttached => '已挂接 (等待播放流触发)';
+
+  @override
+  String get setProcessing => '处理中...';
+
+  @override
+  String get setApoRegistered => '已向目标设备注册 System APO 钩子并完成服务同步';
+
+  @override
+  String get setApoAttachFailed => 'APO 附加未完成';
+
+  @override
+  String get setApoUnregistered => '已安全卸载 APO 钩子并精确还原原始系统/厂商驱动';
+
+  @override
+  String get setApoUnregisterFailed => 'APO 卸载未完成';
+
+  @override
+  String get setCompositeSlot => '复合插槽';
+
+  @override
+  String get setRefreshStatus => '刷新状态';
+
+  @override
+  String get setApoSafetyNote =>
+      '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
+
+  @override
+  String setDriverOffline(String name) {
+    return '$name [未检测到/离线]';
+  }
+
+  @override
+  String get setVaioReady => 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)';
+
+  @override
+  String get setVaioMissing => '未检测到 AuraVAIO 虚拟声卡驱动';
+
+  @override
+  String get setVaioDesc => 'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道';
+
+  @override
+  String get setInstallDriverUac => 'UAC提权安装驱动';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      '正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...';
+
+  @override
+  String get setVaioInstallOk => 'AuraVAIO 驱动已成功安装并通过系统验收！';
+
+  @override
+  String get setDriverInstallFailed => '驱动安装未完成';
+
+  @override
+  String get setUninstallDriver => '卸载驱动';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO 驱动已成功卸载';
+
+  @override
+  String get setDriverUninstallFailed => '卸载未完成';
+
+  @override
+  String get setRedetect => '重新检测';
+
+  @override
+  String get setWasapiDesc => '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖';
+
+  @override
+  String get setRefreshDevice => '刷新设备';
+
+  @override
+  String get setAsioRegisterUac => 'UAC提权注册驱动';
+
+  @override
+  String get setAsioRegisterPrompt => '正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...';
+
+  @override
+  String get setAsioRegisterOk => '虚拟 ASIO 驱动注册成功！DAW 中现已可选';
+
+  @override
+  String get setAsioRegisterFailed => '注册失败，请使用管理员权限重试';
+
+  @override
+  String get setAsioUnregisterOk => '虚拟 ASIO 驱动已从系统注销';
+
+  @override
+  String get setAsioUnregisterFailed => '注销失败，请使用管理员权限重试';
+
+  @override
+  String get gateHintThreshold => '低于该电平的背景底噪将被衰减。太高会吃掉弱音尾音，太低门几乎不动作。';
+
+  @override
+  String get gateHysteresis => '迟滞防抖 (Hysteresis)';
+
+  @override
+  String get gateHintHysteresis =>
+      '开门与关门之间的电平缓冲差。防止信号在阈值临界点反复振荡抽吸，确保人声起伏时门状态平稳自然。';
+
+  @override
+  String get gateRange => '衰减底线 (Range)';
+
+  @override
+  String get gateHintRange =>
+      '门完全关闭时的最大衰减深度。设为 -60dB 为静音，设为 -12~-24dB 可保留自然背景底噪，避免数码窒息感。';
+
+  @override
+  String get gateHold => '保持时间 (Hold)';
+
+  @override
+  String get gateHintHold => '信号跌破关门阈值后，保持完全导通的毫秒数。防止语间停顿或鼓点泛音被过早斩断。';
+
+  @override
+  String get gateHintAttack => '信号越过开启阈值后门打开的速度。太慢会吃掉起音，太快可能引入瞬态爆音。';
+
+  @override
+  String get gateHintRelease => '保持时间结束后门平滑关闭到衰减底线所需时间。较长的时间让淡出更自然。';
+
+  @override
+  String get gateHintSidechain => '侧链动态去齿音与噪声门输出响度自动补偿。';
+
+  @override
+  String get gateHintDeess => '针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。';
+
+  @override
+  String get gateHintDeessFreq => '检测齿音（s/sh 音）的侧链频段。齿音重往低调，太闷往高调。';
+
+  @override
+  String get gateHintDeessAmount => '齿音压制强度。只衰减高频成分，低频人声不动。';
+
+  @override
+  String get gateHintAutoGain => '实时补偿噪声门造成的整体电平下降，保持响度不塌。';
+
+  @override
+  String get compThreshold => '压缩阈值';
+
+  @override
+  String get compHintThreshold =>
+      '信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。';
+
+  @override
+  String get compRatio => '压缩比率';
+
+  @override
+  String get compHintRatio =>
+      '超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。';
+
+  @override
+  String get compHintRelease => '控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。';
+
+  @override
+  String get compHintBandwidth => '频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。';
+
+  @override
+  String get compHintTiming => '算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。';
+
+  @override
+  String get compBandsTitle => '分频段动态压限微调 (7 Bands)';
+
+  @override
+  String get compHintBands => '可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。';
+
+  @override
+  String get bandSub => '极低频';
+
+  @override
+  String get bandLow => '低频';
+
+  @override
+  String get bandLowMid => '中低频';
+
+  @override
+  String get bandMid => '中频';
+
+  @override
+  String get bandHighMid => '中高频';
+
+  @override
+  String get bandHigh => '高频';
+
+  @override
+  String get bandUltra => '超高频';
+
+  @override
+  String get compBandFreq => '分频中心频率';
+
+  @override
+  String get compBandAmount => '压限 / 扩展数值';
+
+  @override
+  String get compHintBandAmount => '负值为动态压缩压制，正值为动态扩展。默认 -0.35。';
+
+  @override
+  String get eelUnclosedString => '字符串未闭合（跨行）';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return '多余的 \"$ch\"（无匹配的开括号）';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => '块注释未闭合（/* 缺少对应的 */）';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" 未闭合（始于第 $line 行第 $col 列）';
+  }
+
+  @override
+  String get eelMissingInit => '缺少 @init 段（引擎会拒绝编译）';
+
+  @override
+  String get eelMissingSample => '缺少 @sample 段（引擎会拒绝编译）';
+
+  @override
+  String get eelEmptyInit => '空 @init 段（vendor 要求至少一条语句）';
+
+  @override
+  String get eelEmptySample => '@sample 段为空（将输出静音），确认不是漏写？';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n 越界（仅 slider1..8 会联动滑块）';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name 是只读变量，赋值不会生效';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。';
+
+  @override
+  String get lpDocSectionsTitle => '核心代码段（Sections）';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => '滑块控制语法（Sliders）';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！';
+
+  @override
+  String get lpDocBuiltinsTitle => '常用内置常量与函数';
+
+  @override
+  String get lpDocBuiltinConsts => '• 常量：srate (当前采样率), \$pi (圆周率)\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels => '• 声道：spl0 (左输入/输出), spl1 (右输入/输出)';
+
+  @override
+  String get ioNoInputDevices => '无可用输入设备';
+
+  @override
+  String get ioRefreshDevice => '刷新设备';
+
+  @override
+  String get ioLoopbackDesc => '默认内录/环回模式：实时采集系统主回放端点音频';
+
+  @override
+  String get ioExclusiveDesc => '针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集';
+
+  @override
+  String get ioInputLabel => '输入端点';
+
+  @override
+  String get ioVaioEndpointDesc => 'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)';
+
+  @override
+  String get ioChannelStatus => '通道状态';
+
+  @override
+  String get ioVaioActive => '活跃传输中 (全双工 DMA 环形缓冲)';
+
+  @override
+  String get ioVaioReady => '就绪 (等待系统/应用推流)';
+
+  @override
+  String get ioVaioGuide =>
+      '请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。';
+
+  @override
+  String get ioAsioChannelLabel => '输入通道';
+
+  @override
+  String get ioAsioActive => 'DAW 实时注入 (活跃)';
+
+  @override
+  String get ioAsioWait => '等待 DAW 连接 (宿主未开启)';
+
+  @override
+  String get ioAsioGuide =>
+      '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。';
+
+  @override
+  String get ioWasapiRenderDesc => 'WASAPI 物理渲染 (扬声器/耳机)';
+
+  @override
+  String get ioNoOutputDevices => '无可用输出设备';
+
+  @override
+  String get ioPhysicalOutput => '物理输出';
+
+  @override
+  String get ioAutoSelect => '自动选择（非VAIO扬声器）';
+
+  @override
+  String get ioNoPhysicalOutputs => '无可用物理输出设备';
+
+  @override
+  String get ioProcessedFrames => '已处理帧';
+
+  @override
+  String get ioOutputLabel => '输出端点';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client 硬件输出';
+
+  @override
+  String get ioChannelMap => '声道映射';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return '通道 $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => '输出状态';
+
+  @override
+  String get ioAsioPassthrough => '正在直通硬件监听 (超低延迟)';
+
+  @override
+  String get ioAsioReadyStatus => '就绪 (等待驱动会话)';
+
+  @override
+  String get catInput => '输入';
+
+  @override
+  String get catTone => '音色';
+
+  @override
+  String get catEq => '均衡';
+
+  @override
+  String get catStage => '声场';
+
+  @override
+  String get catSpace => '空间';
+
+  @override
+  String get catOutput => '输出';
+
+  @override
+  String get catEffect => '效果';
+
+  @override
+  String get arbmagMinPoints => '至少需要 2 个有效频点（频率 增益dB; …）';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'GraphicEQ 无效：$err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return '读取文件失败: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n 频点';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '已载入 $count 个频点';
+  }
+
+  @override
+  String get bassHintIntensity => '增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。';
+
+  @override
+  String get bassHintFrequency => '低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。';
+
+  @override
+  String get bassShelfRouting => '低频搁架声道路由';
+
+  @override
+  String get irEnvelope => '脉冲响应包络';
+
+  @override
+  String get irMirrorR => 'R (镜像)';
+
+  @override
+  String get convHintMix => '卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。';
+
+  @override
+  String get xfHintPreset => '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。';
+
+  @override
+  String get xfHintCustom => '自定义串扰低通截止频率与互馈衰减深度微调。';
+
+  @override
+  String get xfHintCutoff =>
+      '串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。';
+
+  @override
+  String get xfHintFeed => '低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。';
+
+  @override
+  String get dqHintAttack => '频段能量越过阈值后压下来的速度。太慢吃掉瞬态，太快可能有咔哒感。';
+
+  @override
+  String get dqHintRelease => '能量跌回阈值以下后松开的速度。太短会有抽吸感，太长压住不放。';
+
+  @override
+  String get dqShapeNote => 'Mid 为钟形带宽；Low/High 为搁架斜率共振。';
+
+  @override
+  String get dqHintStaticGain => '静态基础增益，常时有效；动态部分只做衰减。';
+
+  @override
+  String get dqHintRange => '频段能量超阈后最大再衰减多少。0 = 纯静态整形。';
+
+  @override
+  String get dqHintThreshold => '该频段包络超过此电平才开始动态衰减。太低误杀，太高不动作。';
+
+  @override
+  String get dqIndepTiming => '独立动态响应时常数';
+
+  @override
+  String get dqHintBandAttack => '该频段专用的起音时间。';
+
+  @override
+  String get dqHintBandRelease => '该频段专用的释放时间。';
+
+  @override
+  String get filterHintModes => 'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。';
+
+  @override
+  String get filterHintResonance => '谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。';
+
+  @override
+  String get haasHintDelay => '延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。';
+
+  @override
+  String get haasHintWet => '湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\n上下拖拽微调 · 双击归零';
+  }
+
+  @override
+  String get inputReset100 => '重置 100%';
+
+  @override
+  String inputFinal(String desc) {
+    return '最终: $desc';
+  }
+
+  @override
+  String get inputResetHint => '双击或点击恢复 100%';
+
+  @override
+  String get loudnessHint => '小音量自动补低频和高频，大音量直通';
+
+  @override
+  String get postHintGain => '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。';
+
+  @override
+  String get postCeiling => '限幅阈值';
+
+  @override
+  String get postHintCeiling =>
+      '母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。';
+
+  @override
+  String get postRelease => '释放时间';
+
+  @override
+  String get postHintRelease => '限幅器包络释放衰减时间。时间较短瞬态紧实有力，时间较长音质顺滑无抽吸感。';
+
+  @override
+  String get postLookahead => '1.5ms 前瞻';
+
+  @override
+  String get postHintLookahead =>
+      '1.5ms 自适应平滑前瞻。开启后提供广播母带级零失真削峰，关闭则进入零延迟电竞/监听模式。';
+
+  @override
+  String get postStereoLink => '立体声联动';
+
+  @override
+  String get postHintStereoLink => '开启后左右声道按能量最大侧联合限幅，防止大动态瞬态导致声像意外偏移。';
+
+  @override
+  String get reverbHintMix => '混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。';
+
+  @override
+  String get reverbHintSize => '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。';
+
+  @override
+  String get reverbHintDecay => '反射残响消散时间。数值越大，声音余韵回荡持续越久。';
+
+  @override
+  String get reverbHintWidth => '混响声的双耳立体声扩展度。让回声包围整个头部。';
+
+  @override
+  String get reverbHintDamp => '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。';
+
+  @override
+  String get reverbHintDry => '原始直达声保留量。确保人声吐字清晰结实。';
+
+  @override
+  String get spatialHintRoom => '模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。';
+
+  @override
+  String get spatialHintWidth => '扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。';
+
+  @override
+  String get spatialHintFocus => '控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。';
+
+  @override
+  String get spatialHintGain => '在全自动等能量物理归一化基础上的输出增益微调 (-12 ~ +6 dB)。';
+
+  @override
+  String get spatialHintLoudness =>
+      '全站等响度自动平衡算法。自动平抑多扬声器上混带来的能量增益，彻底杜绝滑块变音量调节器的问题。';
+
+  @override
+  String get stereoHintWidth => '拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。';
+
+  @override
+  String get tubeHintColor => '模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。';
+
+  @override
+  String get tubeHintTrim => '电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。';
+
+  @override
+  String get tubeTriode => 'TRIODE (偶次谐波)';
+
+  @override
+  String get tubePentode => 'PENTODE (奇次谐波)';
+
+  @override
+  String get tubeTape => 'TAPE (磁带温润)';
+
+  @override
+  String get noAvailableDevice => '无可用设备';
+
+  @override
   String get vbBuses => 'VB 总线（关=直通）';
+
+  @override
+  String get vbPluginTooltip => '勾选 = 挂载的插件处理该路音频（厂商音效不受影响）';
+
+  @override
+  String get vbPluginLockedHint => '通道处理关闭时插件不运行（状态保留，开启后立即恢复）';
+
+  @override
+  String get vbAutoProtect => '超预算自动保护';
+
+  @override
+  String get vbProtectHint => '回调持续超预算时自动把插件收窄到监听总线，回落后自动还原';
+
+  @override
+  String get vbProtectActive => '已激活：插件仅作用于监听总线，其余直通（回调超预算）';
 
   @override
   String get shelfTitle => '低频搁架';
@@ -221,16 +899,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelMode => '声道模式';
 
   @override
-  String get channelsStereo => '立体声';
+  String get channelsMatrix => '矩阵下混';
 
   @override
-  String get channels51 => '5.1';
+  String get channelsDiscrete => '离散逐声道';
 
   @override
-  String get channels71 => '7.1';
-
-  @override
-  String get channelPhaseA => 'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。';
+  String get channelPhaseA =>
+      '仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。';
 
   @override
   String get audioMode => '音频模式';
@@ -883,16 +1559,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dlgSave => '保存';
 
   @override
-  String get dlgLoad => '载入';
-
-  @override
   String get dlgClose => '关闭';
 
   @override
   String get dlgUnload => '卸载';
-
-  @override
-  String get dlgPreset => '预设';
 
   @override
   String get memTitle => '持久化记忆与配置外置';
@@ -1127,9 +1797,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get dyneqRelease => '释放时间';
-
-  @override
-  String get loudnessHint => '小音量自动补低频和高频，大音量直通';
 
   @override
   String get loudnessAmount => '补偿强度';
@@ -1596,25 +2263,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugAddScan => '添加并扫描';
 
   @override
-  String plugPresetTitle(String name) {
-    return '插件预设管理 — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => '保存当前参数状态';
-
-  @override
-  String get plugPresetNameHint => '输入新预设名称...';
-
-  @override
-  String plugPresetList(int n) {
-    return '已有预设列表 ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty => '暂无已保存预设，可通过上方输入框保存。';
-
-  @override
   String get plugTitle => '插件中心';
 
   @override
@@ -1666,13 +2314,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugFeatGui => '原生 Win32 GUI 弹窗独立消息循环';
 
   @override
-  String get plugFeatPreset => '二进制流预设保存与即时载入恢复';
-
-  @override
   String get plugFeatDirs => '可自定义插件目录检索与本地状态快照';
 
   @override
   String get plugFeatRt => '实时极速监听：专为专业制作定制的零卡顿音频通道';
+
+  @override
+  String get plugFeatRoute => 'VB 按路插件逐路独立配置';
 
   @override
   String plugSlot(int n) {
@@ -1730,7 +2378,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugOpenGuiBtn => '打开界面 (GUI)';
 
   @override
+  String get plugRouteBypassed => '旁路';
+
+  @override
+  String get abSlotA => 'A 预设';
+
+  @override
+  String get abSlotB => 'B 预设';
+
+  @override
+  String get abAutoSave => '自动保存';
+
+  @override
+  String abInheritFrom(String src) {
+    return '继承自 $src';
+  }
+
+  @override
+  String get abReset => '复原（清除当前预设，不影响来源）';
+
+  @override
+  String get abResetDone => '已复原当前预设';
+
+  @override
+  String get plugRouteLocked => '已锁定';
+
+  @override
+  String get plugChStereoOnly => 'VB 模式每通道仅立体声（L/R）进入插件链';
+
+  @override
   String get plugLoading => '加载中…';
+
+  @override
+  String get plugUnloading => '卸载中…';
+
+  @override
+  String get plugStateActive => '生效';
+
+  @override
+  String get plugStateBypassed => '旁路';
 
   @override
   String get plugUnloadFromSlot => '从当前槽卸载';
@@ -1745,9 +2431,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugStageLabel => '信号处理链插入阶段：';
-
-  @override
-  String get plugRtNote => '实时动态串联 • 保持专业监听超低延迟标准';
 
   @override
   String get plugFilterAll => '全部';
@@ -1772,6 +2455,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String plugSlotActive(int n) {
     return '插槽 $n 活跃中';
+  }
+
+  @override
+  String plugSlotBypassed(int n) {
+    return '插槽 $n 旁路';
   }
 
   @override
@@ -1882,11 +2570,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ 代码编辑器';
-
-  @override
-  String arbmagNodes(int count) {
-    return '已载入 $count 个频点';
-  }
 
   @override
   String get arbmagApply => '应用代码';

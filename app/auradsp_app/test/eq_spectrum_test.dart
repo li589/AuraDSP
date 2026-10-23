@@ -82,7 +82,7 @@ void main() {
   group('EQ 输出频谱合成', () {
     test('响应平坦时输出谱等于输入谱', () {
       final eqIn = List<double>.generate(32, (i) => 0.3 + 0.01 * i);
-      final out = AppModel.composeEqOutputSpectrum(eqIn, flatResponse());
+      final out = composeEqOutputSpectrum(eqIn, flatResponse());
       for (var b = 0; b < 32; b++) {
         expect(out[b], closeTo(eqIn[b], 1e-6), reason: 'band$b');
       }
@@ -91,16 +91,16 @@ void main() {
     test('整体 +12dB 的响应会把每个频带等量抬高', () {
       final eqIn = List<double>.filled(32, 0.5);   // -37.5 dBFS
       final flatPlus = List<double>.filled(129, 12.0);
-      final out = AppModel.composeEqOutputSpectrum(eqIn, flatPlus);
+      final out = composeEqOutputSpectrum(eqIn, flatPlus);
       expect(VizBands.toDb(out.first), closeTo(VizBands.toDb(0.5) + 12.0, 0.01));
       expect(VizBands.toDb(out.last), closeTo(VizBands.toDb(0.5) + 12.0, 0.01));
     });
 
     test('提升不会溢出 [0,1]，压低不会变负', () {
-      final hot = AppModel.composeEqOutputSpectrum(
+      final hot = composeEqOutputSpectrum(
           List<double>.filled(32, 0.95), List<double>.filled(129, 18.0));
       expect(hot.every((v) => v <= 1.0 + 1e-9), isTrue);
-      final cold = AppModel.composeEqOutputSpectrum(
+      final cold = composeEqOutputSpectrum(
           List<double>.filled(32, 0.10), List<double>.filled(129, -18.0));
       expect(cold.every((v) => v >= 0.0 - 1e-9), isTrue);
     });
@@ -108,7 +108,7 @@ void main() {
     test('bypass 时退化为恒等：EQ 不生效，输出就是输入', () {
       final eqIn = List<double>.generate(32, (i) => 0.2 + 0.02 * i);
       final wild = List<double>.generate(129, (i) => (i.isEven ? 18 : -18));
-      final out = AppModel.composeEqOutputSpectrum(eqIn, wild, bypassed: true);
+      final out = composeEqOutputSpectrum(eqIn, wild, bypassed: true);
       for (var b = 0; b < 32; b++) {
         expect(out[b], closeTo(eqIn[b], 1e-9), reason: 'band$b');
       }
@@ -117,7 +117,7 @@ void main() {
     test('响应尚未测得（null / 过短）时安全退化为输入谱', () {
       final eqIn = List<double>.generate(32, (i) => 0.4);
       for (final resp in <List<double>?>[null, <double>[1.0], <double>[]]) {
-        final out = AppModel.composeEqOutputSpectrum(eqIn, resp);
+        final out = composeEqOutputSpectrum(eqIn, resp);
         for (var b = 0; b < 32; b++) {
           expect(out[b], closeTo(eqIn[b], 1e-9));
         }
@@ -125,7 +125,7 @@ void main() {
     });
 
     test('输入谱短于 32 段时不越界，缺段补 0', () {
-      final out = AppModel.composeEqOutputSpectrum([0.5, 0.6], flatResponse());
+      final out = composeEqOutputSpectrum([0.5, 0.6], flatResponse());
       expect(out.length, 32);
       expect(out[0], closeTo(0.5, 1e-9));
       expect(out[1], closeTo(0.6, 1e-9));
@@ -133,10 +133,10 @@ void main() {
     });
 
     test('输出长度恒为 32（绘制端按固定长度索引）', () {
-      expect(AppModel.composeEqOutputSpectrum(const [], flatResponse()).length,
+      expect(composeEqOutputSpectrum(const [], flatResponse()).length,
           32);
       expect(
-          AppModel.composeEqOutputSpectrum(List<double>.filled(64, 0.5),
+          composeEqOutputSpectrum(List<double>.filled(64, 0.5),
                   flatResponse())
               .length,
           32);
@@ -169,7 +169,7 @@ void main() {
 
     test('响应签名过期时退化为输入谱', () {
       final eqIn = List<double>.filled(32, 0.6);
-      final out = AppModel.composeEqOutputSpectrum(
+      final out = composeEqOutputSpectrum(
         eqIn,
         List<double>.filled(129, 18.0),
         responseCurve: 'curve-a',
@@ -182,7 +182,7 @@ void main() {
 
     test('响应签名一致时正常合成', () {
       final eqIn = List<double>.filled(32, 0.5);
-      final out = AppModel.composeEqOutputSpectrum(
+      final out = composeEqOutputSpectrum(
         eqIn,
         List<double>.filled(129, 12.0),
         responseCurve: 'curve-a',
@@ -194,7 +194,7 @@ void main() {
     test('定点增益只影响其附近的频带（确认插值定位正确）', () {      // 只在 1kHz 附近给 -15dB，其余平坦
       final resp = responseWithDbAt(1000.0, -15.0);
       final eqIn = List<double>.filled(32, 0.6);
-      final out = AppModel.composeEqOutputSpectrum(eqIn, resp);
+      final out = composeEqOutputSpectrum(eqIn, resp);
       // band17 = [1000, 1250]，正是 1kHz 所在的那一带
       expect(VizBands.edges[17], lessThanOrEqualTo(1000.0));
       expect(VizBands.edges[18], greaterThan(1000.0));
@@ -209,15 +209,15 @@ void main() {
 
   group('每点 Q（参量钟形合成）', () {
     test('eqOpModeForFilter 映射与引擎注释一致', () {
-      expect(AppModel.eqOpModeForFilter(0), 0);
-      expect(AppModel.eqOpModeForFilter(1), 2);
-      expect(AppModel.eqOpModeForFilter(2), 5);
-      expect(AppModel.eqOpModeForFilter(99), 0);
+      expect(eqOpModeForFilter(0), 0);
+      expect(eqOpModeForFilter(1), 2);
+      expect(eqOpModeForFilter(2), 5);
+      expect(eqOpModeForFilter(99), 0);
     });
 
     test('单频点中心即峰值，增益为 0 时 Q 无意义', () {
       const centers = [100.0, 1000.0, 10000.0];
-      final atCenter = AppModel.eqTargetGains(
+      final atCenter = eqTargetGains(
         targetFreqs: [1000.0],
         centers: centers,
         peakGains: [0.0, 12.0, 0.0],
@@ -225,7 +225,7 @@ void main() {
         sampleRate: 48000,
       );
       expect(atCenter.single, closeTo(12.0, 0.3));
-      final flat = AppModel.eqTargetGains(
+      final flat = eqTargetGains(
         targetFreqs: centers,
         centers: centers,
         peakGains: [0.0, 0.0, 0.0],
@@ -240,7 +240,7 @@ void main() {
     test('窄 Q 只动本带、宽 Q 波及邻带', () {
       const centers = [100.0, 1000.0, 10000.0];
       const peaks = [0.0, 12.0, 0.0];
-      List<double> at(double q) => AppModel.eqTargetGains(
+      List<double> at(double q) => eqTargetGains(
             targetFreqs: centers,
             centers: centers,
             peakGains: peaks,

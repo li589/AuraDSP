@@ -135,7 +135,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   void _runLint() {
-    setState(() => _issues = EelLinter.lint(_code.text));
+    setState(() => _issues = EelLinter.lint(l10nOf(context), _code.text));
   }
 
   void _gotoLine(int line) {
@@ -342,24 +342,24 @@ class _LiveprogPageState extends State<LiveprogPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。',
+                  l.lpDocIntro,
                   style: captionOf(p),
                 ),
                 const SizedBox(height: AuraSpace.md),
-                Text('核心代码段（Sections）', style: labelOf(p, color: p.text)),
+                Text(l.lpDocSectionsTitle, style: labelOf(p, color: p.text)),
                 const SizedBox(height: 4),
-                _manualCodeBlock(p, '@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;'),
+                _manualCodeBlock(p, l.lpDocSampleCode),
                 const SizedBox(height: AuraSpace.md),
-                Text('滑块控制语法（Sliders）', style: labelOf(p, color: p.text)),
+                Text(l.lpDocSlidersTitle, style: labelOf(p, color: p.text)),
                 const SizedBox(height: 4),
-                _manualCodeBlock(p, 'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！'),
+                _manualCodeBlock(p, l.lpDocSampleSlider),
                 const SizedBox(height: AuraSpace.md),
-                Text('常用内置常量与函数', style: labelOf(p, color: p.text)),
+                Text(l.lpDocBuiltinsTitle, style: labelOf(p, color: p.text)),
                 const SizedBox(height: 4),
                 Text(
-                  '• 常量：srate (当前采样率), \$pi (圆周率)\n'
-                  '• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n'
-                  '• 声道：spl0 (左输入/输出), spl1 (右输入/输出)',
+                  l.lpDocBuiltinConsts +
+                      l.lpDocBuiltinFns +
+                      l.lpDocBuiltinChannels,
                   style: monoOf(p, size: 12),
                 ),
               ],

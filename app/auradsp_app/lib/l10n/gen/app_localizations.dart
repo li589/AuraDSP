@@ -154,11 +154,1271 @@ abstract class AppLocalizations {
   /// **'空闲'**
   String get stateIdle;
 
+  /// No description provided for @routingChFl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左前'**
+  String get routingChFl;
+
+  /// No description provided for @routingChFr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右前'**
+  String get routingChFr;
+
+  /// No description provided for @routingChC.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置'**
+  String get routingChC;
+
+  /// No description provided for @routingChLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'超低'**
+  String get routingChLfe;
+
+  /// No description provided for @routingChSl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左环'**
+  String get routingChSl;
+
+  /// No description provided for @routingChSr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右环'**
+  String get routingChSr;
+
+  /// No description provided for @routingChBl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左后'**
+  String get routingChBl;
+
+  /// No description provided for @routingChBr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右后'**
+  String get routingChBr;
+
+  /// No description provided for @routingAllChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'全声道 (8/8)'**
+  String get routingAllChannels;
+
+  /// No description provided for @routingStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声 (FL/FR)'**
+  String get routingStereo;
+
+  /// No description provided for @routingNoSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'无超低 (7/8)'**
+  String get routingNoSub;
+
+  /// No description provided for @routingAllBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'全旁路 (0/8)'**
+  String get routingAllBypassed;
+
+  /// No description provided for @routingSurroundOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅环绕 (4/8)'**
+  String get routingSurroundOnly;
+
+  /// No description provided for @routingSelectedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count}/8 声道已选'**
+  String routingSelectedCount(int count);
+
+  /// No description provided for @channelRouting.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级声道路由'**
+  String get channelRouting;
+
+  /// No description provided for @routingPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'快速选择:'**
+  String get routingPresets;
+
+  /// No description provided for @routingPresetAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get routingPresetAll;
+
+  /// No description provided for @routingPresetStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声'**
+  String get routingPresetStereo;
+
+  /// No description provided for @routingPresetNoLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'无超低'**
+  String get routingPresetNoLfe;
+
+  /// No description provided for @routingPresetSurround.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅环绕'**
+  String get routingPresetSurround;
+
+  /// No description provided for @setConnStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接状态'**
+  String get setConnStatus;
+
+  /// No description provided for @setConnActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接 (活跃回调)'**
+  String get setConnActive;
+
+  /// No description provided for @setConnIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接 (等待 Voicemeeter 启动)'**
+  String get setConnIdle;
+
+  /// No description provided for @setDeviceDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接设备'**
+  String get setDeviceDisconnected;
+
+  /// No description provided for @setEndpointShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'端点'**
+  String get setEndpointShort;
+
+  /// No description provided for @setEndpointWithId.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频端点 ({shortId})'**
+  String setEndpointWithId(String shortId);
+
+  /// No description provided for @setOfflineSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} [离线/未连接]'**
+  String setOfflineSuffix(String name);
+
+  /// No description provided for @setDefaultEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认音频端点 (Default Render)'**
+  String get setDefaultEndpoint;
+
+  /// No description provided for @setNoEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用音频端点'**
+  String get setNoEndpoint;
+
+  /// No description provided for @setApoActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃处理中 ({sr}Hz · {frames} 帧)'**
+  String setApoActive(int sr, int frames);
+
+  /// No description provided for @setApoAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已挂接 (等待播放流触发)'**
+  String get setApoAttached;
+
+  /// No description provided for @setProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理中...'**
+  String get setProcessing;
+
+  /// No description provided for @setApoRegistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已向目标设备注册 System APO 钩子并完成服务同步'**
+  String get setApoRegistered;
+
+  /// No description provided for @setApoAttachFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 附加未完成'**
+  String get setApoAttachFailed;
+
+  /// No description provided for @setApoUnregistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安全卸载 APO 钩子并精确还原原始系统/厂商驱动'**
+  String get setApoUnregistered;
+
+  /// No description provided for @setApoUnregisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 卸载未完成'**
+  String get setApoUnregisterFailed;
+
+  /// No description provided for @setCompositeSlot.
+  ///
+  /// In zh, this message translates to:
+  /// **'复合插槽'**
+  String get setCompositeSlot;
+
+  /// No description provided for @setRefreshStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新状态'**
+  String get setRefreshStatus;
+
+  /// No description provided for @setApoSafetyNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。'**
+  String get setApoSafetyNote;
+
+  /// No description provided for @setDriverOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} [未检测到/离线]'**
+  String setDriverOffline(String name);
+
+  /// No description provided for @setVaioReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'**
+  String get setVaioReady;
+
+  /// No description provided for @setVaioMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到 AuraVAIO 虚拟声卡驱动'**
+  String get setVaioMissing;
+
+  /// No description provided for @setVaioDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道'**
+  String get setVaioDesc;
+
+  /// No description provided for @setInstallDriverUac.
+  ///
+  /// In zh, this message translates to:
+  /// **'UAC提权安装驱动'**
+  String get setInstallDriverUac;
+
+  /// No description provided for @setInstallDriverUacPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...'**
+  String get setInstallDriverUacPrompt;
+
+  /// No description provided for @setVaioInstallOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动已成功安装并通过系统验收！'**
+  String get setVaioInstallOk;
+
+  /// No description provided for @setDriverInstallFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动安装未完成'**
+  String get setDriverInstallFailed;
+
+  /// No description provided for @setUninstallDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载驱动'**
+  String get setUninstallDriver;
+
+  /// No description provided for @setVaioUninstallOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动已成功卸载'**
+  String get setVaioUninstallOk;
+
+  /// No description provided for @setDriverUninstallFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载未完成'**
+  String get setDriverUninstallFailed;
+
+  /// No description provided for @setRedetect.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新检测'**
+  String get setRedetect;
+
+  /// No description provided for @setWasapiDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖'**
+  String get setWasapiDesc;
+
+  /// No description provided for @setRefreshDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新设备'**
+  String get setRefreshDevice;
+
+  /// No description provided for @setAsioRegisterUac.
+  ///
+  /// In zh, this message translates to:
+  /// **'UAC提权注册驱动'**
+  String get setAsioRegisterUac;
+
+  /// No description provided for @setAsioRegisterPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...'**
+  String get setAsioRegisterPrompt;
+
+  /// No description provided for @setAsioRegisterOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 ASIO 驱动注册成功！DAW 中现已可选'**
+  String get setAsioRegisterOk;
+
+  /// No description provided for @setAsioRegisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册失败，请使用管理员权限重试'**
+  String get setAsioRegisterFailed;
+
+  /// No description provided for @setAsioUnregisterOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 ASIO 驱动已从系统注销'**
+  String get setAsioUnregisterOk;
+
+  /// No description provided for @setAsioUnregisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'注销失败，请使用管理员权限重试'**
+  String get setAsioUnregisterFailed;
+
+  /// No description provided for @gateHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'低于该电平的背景底噪将被衰减。太高会吃掉弱音尾音，太低门几乎不动作。'**
+  String get gateHintThreshold;
+
+  /// No description provided for @gateHysteresis.
+  ///
+  /// In zh, this message translates to:
+  /// **'迟滞防抖 (Hysteresis)'**
+  String get gateHysteresis;
+
+  /// No description provided for @gateHintHysteresis.
+  ///
+  /// In zh, this message translates to:
+  /// **'开门与关门之间的电平缓冲差。防止信号在阈值临界点反复振荡抽吸，确保人声起伏时门状态平稳自然。'**
+  String get gateHintHysteresis;
+
+  /// No description provided for @gateRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'衰减底线 (Range)'**
+  String get gateRange;
+
+  /// No description provided for @gateHintRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'门完全关闭时的最大衰减深度。设为 -60dB 为静音，设为 -12~-24dB 可保留自然背景底噪，避免数码窒息感。'**
+  String get gateHintRange;
+
+  /// No description provided for @gateHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持时间 (Hold)'**
+  String get gateHold;
+
+  /// No description provided for @gateHintHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号跌破关门阈值后，保持完全导通的毫秒数。防止语间停顿或鼓点泛音被过早斩断。'**
+  String get gateHintHold;
+
+  /// No description provided for @gateHintAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号越过开启阈值后门打开的速度。太慢会吃掉起音，太快可能引入瞬态爆音。'**
+  String get gateHintAttack;
+
+  /// No description provided for @gateHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持时间结束后门平滑关闭到衰减底线所需时间。较长的时间让淡出更自然。'**
+  String get gateHintRelease;
+
+  /// No description provided for @gateHintSidechain.
+  ///
+  /// In zh, this message translates to:
+  /// **'侧链动态去齿音与噪声门输出响度自动补偿。'**
+  String get gateHintSidechain;
+
+  /// No description provided for @gateHintDeess.
+  ///
+  /// In zh, this message translates to:
+  /// **'针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。'**
+  String get gateHintDeess;
+
+  /// No description provided for @gateHintDeessFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测齿音（s/sh 音）的侧链频段。齿音重往低调，太闷往高调。'**
+  String get gateHintDeessFreq;
+
+  /// No description provided for @gateHintDeessAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'齿音压制强度。只衰减高频成分，低频人声不动。'**
+  String get gateHintDeessAmount;
+
+  /// No description provided for @gateHintAutoGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时补偿噪声门造成的整体电平下降，保持响度不塌。'**
+  String get gateHintAutoGain;
+
+  /// No description provided for @compThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'压缩阈值'**
+  String get compThreshold;
+
+  /// No description provided for @compHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。'**
+  String get compHintThreshold;
+
+  /// No description provided for @compRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'压缩比率'**
+  String get compRatio;
+
+  /// No description provided for @compHintRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。'**
+  String get compHintRatio;
+
+  /// No description provided for @compHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。'**
+  String get compHintRelease;
+
+  /// No description provided for @compHintBandwidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。'**
+  String get compHintBandwidth;
+
+  /// No description provided for @compHintTiming.
+  ///
+  /// In zh, this message translates to:
+  /// **'算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。'**
+  String get compHintTiming;
+
+  /// No description provided for @compBandsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频段动态压限微调 (7 Bands)'**
+  String get compBandsTitle;
+
+  /// No description provided for @compHintBands.
+  ///
+  /// In zh, this message translates to:
+  /// **'可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。'**
+  String get compHintBands;
+
+  /// No description provided for @bandSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'极低频'**
+  String get bandSub;
+
+  /// No description provided for @bandLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频'**
+  String get bandLow;
+
+  /// No description provided for @bandLowMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中低频'**
+  String get bandLowMid;
+
+  /// No description provided for @bandMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中频'**
+  String get bandMid;
+
+  /// No description provided for @bandHighMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中高频'**
+  String get bandHighMid;
+
+  /// No description provided for @bandHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频'**
+  String get bandHigh;
+
+  /// No description provided for @bandUltra.
+  ///
+  /// In zh, this message translates to:
+  /// **'超高频'**
+  String get bandUltra;
+
+  /// No description provided for @compBandFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频中心频率'**
+  String get compBandFreq;
+
+  /// No description provided for @compBandAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'压限 / 扩展数值'**
+  String get compBandAmount;
+
+  /// No description provided for @compHintBandAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'负值为动态压缩压制，正值为动态扩展。默认 -0.35。'**
+  String get compHintBandAmount;
+
+  /// No description provided for @eelUnclosedString.
+  ///
+  /// In zh, this message translates to:
+  /// **'字符串未闭合（跨行）'**
+  String get eelUnclosedString;
+
+  /// No description provided for @eelUnmatchedClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'多余的 \"{ch}\"（无匹配的开括号）'**
+  String eelUnmatchedClose(String ch);
+
+  /// No description provided for @eelBlockCommentUnclosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'块注释未闭合（/* 缺少对应的 */）'**
+  String get eelBlockCommentUnclosed;
+
+  /// No description provided for @eelUnclosedQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'\"{ch}\" 未闭合（始于第 {line} 行第 {col} 列）'**
+  String eelUnclosedQuote(String ch, int line, int col);
+
+  /// No description provided for @eelMissingInit.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @init 段（引擎会拒绝编译）'**
+  String get eelMissingInit;
+
+  /// No description provided for @eelMissingSample.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @sample 段（引擎会拒绝编译）'**
+  String get eelMissingSample;
+
+  /// No description provided for @eelEmptyInit.
+  ///
+  /// In zh, this message translates to:
+  /// **'空 @init 段（vendor 要求至少一条语句）'**
+  String get eelEmptyInit;
+
+  /// No description provided for @eelEmptySample.
+  ///
+  /// In zh, this message translates to:
+  /// **'@sample 段为空（将输出静音），确认不是漏写？'**
+  String get eelEmptySample;
+
+  /// No description provided for @eelSliderRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'slider{n} 越界（仅 slider1..8 会联动滑块）'**
+  String eelSliderRange(int n);
+
+  /// No description provided for @eelReadonlyAssign.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} 是只读变量，赋值不会生效'**
+  String eelReadonlyAssign(String name);
+
+  /// No description provided for @lpDocIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。'**
+  String get lpDocIntro;
+
+  /// No description provided for @lpDocSectionsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'核心代码段（Sections）'**
+  String get lpDocSectionsTitle;
+
+  /// No description provided for @lpDocSampleCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;'**
+  String get lpDocSampleCode;
+
+  /// No description provided for @lpDocSlidersTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑块控制语法（Sliders）'**
+  String get lpDocSlidersTitle;
+
+  /// No description provided for @lpDocSampleSlider.
+  ///
+  /// In zh, this message translates to:
+  /// **'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！'**
+  String get lpDocSampleSlider;
+
+  /// No description provided for @lpDocBuiltinsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'常用内置常量与函数'**
+  String get lpDocBuiltinsTitle;
+
+  /// No description provided for @lpDocBuiltinConsts.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 常量：srate (当前采样率), \$pi (圆周率)\n'**
+  String get lpDocBuiltinConsts;
+
+  /// No description provided for @lpDocBuiltinFns.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n'**
+  String get lpDocBuiltinFns;
+
+  /// No description provided for @lpDocBuiltinChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 声道：spl0 (左输入/输出), spl1 (右输入/输出)'**
+  String get lpDocBuiltinChannels;
+
+  /// No description provided for @ioNoInputDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用输入设备'**
+  String get ioNoInputDevices;
+
+  /// No description provided for @ioRefreshDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新设备'**
+  String get ioRefreshDevice;
+
+  /// No description provided for @ioLoopbackDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认内录/环回模式：实时采集系统主回放端点音频'**
+  String get ioLoopbackDesc;
+
+  /// No description provided for @ioExclusiveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集'**
+  String get ioExclusiveDesc;
+
+  /// No description provided for @ioInputLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入端点'**
+  String get ioInputLabel;
+
+  /// No description provided for @ioVaioEndpointDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)'**
+  String get ioVaioEndpointDesc;
+
+  /// No description provided for @ioChannelStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道状态'**
+  String get ioChannelStatus;
+
+  /// No description provided for @ioVaioActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃传输中 (全双工 DMA 环形缓冲)'**
+  String get ioVaioActive;
+
+  /// No description provided for @ioVaioReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'就绪 (等待系统/应用推流)'**
+  String get ioVaioReady;
+
+  /// No description provided for @ioVaioGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。'**
+  String get ioVaioGuide;
+
+  /// No description provided for @ioAsioChannelLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入通道'**
+  String get ioAsioChannelLabel;
+
+  /// No description provided for @ioAsioActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'DAW 实时注入 (活跃)'**
+  String get ioAsioActive;
+
+  /// No description provided for @ioAsioWait.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待 DAW 连接 (宿主未开启)'**
+  String get ioAsioWait;
+
+  /// No description provided for @ioAsioGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。'**
+  String get ioAsioGuide;
+
+  /// No description provided for @ioWasapiRenderDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 物理渲染 (扬声器/耳机)'**
+  String get ioWasapiRenderDesc;
+
+  /// No description provided for @ioNoOutputDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用输出设备'**
+  String get ioNoOutputDevices;
+
+  /// No description provided for @ioPhysicalOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'物理输出'**
+  String get ioPhysicalOutput;
+
+  /// No description provided for @ioAutoSelect.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动选择（非VAIO扬声器）'**
+  String get ioAutoSelect;
+
+  /// No description provided for @ioNoPhysicalOutputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用物理输出设备'**
+  String get ioNoPhysicalOutputs;
+
+  /// No description provided for @ioProcessedFrames.
+  ///
+  /// In zh, this message translates to:
+  /// **'已处理帧'**
+  String get ioProcessedFrames;
+
+  /// No description provided for @ioOutputLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出端点'**
+  String get ioOutputLabel;
+
+  /// No description provided for @ioAsioHwOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP ASIO Client 硬件输出'**
+  String get ioAsioHwOutput;
+
+  /// No description provided for @ioChannelMap.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道映射'**
+  String get ioChannelMap;
+
+  /// No description provided for @ioChannelPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道 {p1} / {p2}'**
+  String ioChannelPair(int p1, int p2);
+
+  /// No description provided for @ioOutputStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出状态'**
+  String get ioOutputStatus;
+
+  /// No description provided for @ioAsioPassthrough.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在直通硬件监听 (超低延迟)'**
+  String get ioAsioPassthrough;
+
+  /// No description provided for @ioAsioReadyStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'就绪 (等待驱动会话)'**
+  String get ioAsioReadyStatus;
+
+  /// No description provided for @catInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入'**
+  String get catInput;
+
+  /// No description provided for @catTone.
+  ///
+  /// In zh, this message translates to:
+  /// **'音色'**
+  String get catTone;
+
+  /// No description provided for @catEq.
+  ///
+  /// In zh, this message translates to:
+  /// **'均衡'**
+  String get catEq;
+
+  /// No description provided for @catStage.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场'**
+  String get catStage;
+
+  /// No description provided for @catSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间'**
+  String get catSpace;
+
+  /// No description provided for @catOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出'**
+  String get catOutput;
+
+  /// No description provided for @catEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'效果'**
+  String get catEffect;
+
+  /// No description provided for @arbmagMinPoints.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少需要 2 个有效频点（频率 增益dB; …）'**
+  String get arbmagMinPoints;
+
+  /// No description provided for @arbmagGraphicEqInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'GraphicEQ 无效：{err}'**
+  String arbmagGraphicEqInvalid(String err);
+
+  /// No description provided for @arbmagReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取文件失败: {err}'**
+  String arbmagReadFailed(String err);
+
+  /// No description provided for @arbmagPoints.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 频点'**
+  String arbmagPoints(int n);
+
+  /// No description provided for @arbmagNodes.
+  ///
+  /// In zh, this message translates to:
+  /// **'已载入 {count} 个频点'**
+  String arbmagNodes(int count);
+
+  /// No description provided for @bassHintIntensity.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。'**
+  String get bassHintIntensity;
+
+  /// No description provided for @bassHintFrequency.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。'**
+  String get bassHintFrequency;
+
+  /// No description provided for @bassShelfRouting.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架声道路由'**
+  String get bassShelfRouting;
+
+  /// No description provided for @irEnvelope.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲响应包络'**
+  String get irEnvelope;
+
+  /// No description provided for @irMirrorR.
+  ///
+  /// In zh, this message translates to:
+  /// **'R (镜像)'**
+  String get irMirrorR;
+
+  /// No description provided for @convHintMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。'**
+  String get convHintMix;
+
+  /// No description provided for @xfHintPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。'**
+  String get xfHintPreset;
+
+  /// No description provided for @xfHintCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义串扰低通截止频率与互馈衰减深度微调。'**
+  String get xfHintCustom;
+
+  /// No description provided for @xfHintCutoff.
+  ///
+  /// In zh, this message translates to:
+  /// **'串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。'**
+  String get xfHintCutoff;
+
+  /// No description provided for @xfHintFeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。'**
+  String get xfHintFeed;
+
+  /// No description provided for @dqHintAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段能量越过阈值后压下来的速度。太慢吃掉瞬态，太快可能有咔哒感。'**
+  String get dqHintAttack;
+
+  /// No description provided for @dqHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'能量跌回阈值以下后松开的速度。太短会有抽吸感，太长压住不放。'**
+  String get dqHintRelease;
+
+  /// No description provided for @dqShapeNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'Mid 为钟形带宽；Low/High 为搁架斜率共振。'**
+  String get dqShapeNote;
+
+  /// No description provided for @dqHintStaticGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'静态基础增益，常时有效；动态部分只做衰减。'**
+  String get dqHintStaticGain;
+
+  /// No description provided for @dqHintRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段能量超阈后最大再衰减多少。0 = 纯静态整形。'**
+  String get dqHintRange;
+
+  /// No description provided for @dqHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段包络超过此电平才开始动态衰减。太低误杀，太高不动作。'**
+  String get dqHintThreshold;
+
+  /// No description provided for @dqIndepTiming.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立动态响应时常数'**
+  String get dqIndepTiming;
+
+  /// No description provided for @dqHintBandAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段专用的起音时间。'**
+  String get dqHintBandAttack;
+
+  /// No description provided for @dqHintBandRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段专用的释放时间。'**
+  String get dqHintBandRelease;
+
+  /// No description provided for @filterHintModes.
+  ///
+  /// In zh, this message translates to:
+  /// **'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。'**
+  String get filterHintModes;
+
+  /// No description provided for @filterHintResonance.
+  ///
+  /// In zh, this message translates to:
+  /// **'谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。'**
+  String get filterHintResonance;
+
+  /// No description provided for @haasHintDelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。'**
+  String get haasHintDelay;
+
+  /// No description provided for @haasHintWet.
+  ///
+  /// In zh, this message translates to:
+  /// **'湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。'**
+  String get haasHintWet;
+
+  /// No description provided for @inputGainTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label}: {gain} dB\n上下拖拽微调 · 双击归零'**
+  String inputGainTip(String label, String gain);
+
+  /// No description provided for @inputReset100.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置 100%'**
+  String get inputReset100;
+
+  /// No description provided for @inputFinal.
+  ///
+  /// In zh, this message translates to:
+  /// **'最终: {desc}'**
+  String inputFinal(String desc);
+
+  /// No description provided for @inputResetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'双击或点击恢复 100%'**
+  String get inputResetHint;
+
+  /// No description provided for @loudnessHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'小音量自动补低频和高频，大音量直通'**
+  String get loudnessHint;
+
+  /// No description provided for @postHintGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。'**
+  String get postHintGain;
+
+  /// No description provided for @postCeiling.
+  ///
+  /// In zh, this message translates to:
+  /// **'限幅阈值'**
+  String get postCeiling;
+
+  /// No description provided for @postHintCeiling.
+  ///
+  /// In zh, this message translates to:
+  /// **'母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。'**
+  String get postHintCeiling;
+
+  /// No description provided for @postRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放时间'**
+  String get postRelease;
+
+  /// No description provided for @postHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'限幅器包络释放衰减时间。时间较短瞬态紧实有力，时间较长音质顺滑无抽吸感。'**
+  String get postHintRelease;
+
+  /// No description provided for @postLookahead.
+  ///
+  /// In zh, this message translates to:
+  /// **'1.5ms 前瞻'**
+  String get postLookahead;
+
+  /// No description provided for @postHintLookahead.
+  ///
+  /// In zh, this message translates to:
+  /// **'1.5ms 自适应平滑前瞻。开启后提供广播母带级零失真削峰，关闭则进入零延迟电竞/监听模式。'**
+  String get postHintLookahead;
+
+  /// No description provided for @postStereoLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声联动'**
+  String get postStereoLink;
+
+  /// No description provided for @postHintStereoLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后左右声道按能量最大侧联合限幅，防止大动态瞬态导致声像意外偏移。'**
+  String get postHintStereoLink;
+
+  /// No description provided for @reverbHintMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。'**
+  String get reverbHintMix;
+
+  /// No description provided for @reverbHintSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。'**
+  String get reverbHintSize;
+
+  /// No description provided for @reverbHintDecay.
+  ///
+  /// In zh, this message translates to:
+  /// **'反射残响消散时间。数值越大，声音余韵回荡持续越久。'**
+  String get reverbHintDecay;
+
+  /// No description provided for @reverbHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响声的双耳立体声扩展度。让回声包围整个头部。'**
+  String get reverbHintWidth;
+
+  /// No description provided for @reverbHintDamp.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。'**
+  String get reverbHintDamp;
+
+  /// No description provided for @reverbHintDry.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始直达声保留量。确保人声吐字清晰结实。'**
+  String get reverbHintDry;
+
+  /// No description provided for @spatialHintRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。'**
+  String get spatialHintRoom;
+
+  /// No description provided for @spatialHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。'**
+  String get spatialHintWidth;
+
+  /// No description provided for @spatialHintFocus.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。'**
+  String get spatialHintFocus;
+
+  /// No description provided for @spatialHintGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'在全自动等能量物理归一化基础上的输出增益微调 (-12 ~ +6 dB)。'**
+  String get spatialHintGain;
+
+  /// No description provided for @spatialHintLoudness.
+  ///
+  /// In zh, this message translates to:
+  /// **'全站等响度自动平衡算法。自动平抑多扬声器上混带来的能量增益，彻底杜绝滑块变音量调节器的问题。'**
+  String get spatialHintLoudness;
+
+  /// No description provided for @stereoHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。'**
+  String get stereoHintWidth;
+
+  /// No description provided for @tubeHintColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。'**
+  String get tubeHintColor;
+
+  /// No description provided for @tubeHintTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。'**
+  String get tubeHintTrim;
+
+  /// No description provided for @tubeTriode.
+  ///
+  /// In zh, this message translates to:
+  /// **'TRIODE (偶次谐波)'**
+  String get tubeTriode;
+
+  /// No description provided for @tubePentode.
+  ///
+  /// In zh, this message translates to:
+  /// **'PENTODE (奇次谐波)'**
+  String get tubePentode;
+
+  /// No description provided for @tubeTape.
+  ///
+  /// In zh, this message translates to:
+  /// **'TAPE (磁带温润)'**
+  String get tubeTape;
+
+  /// No description provided for @noAvailableDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用设备'**
+  String get noAvailableDevice;
+
   /// No description provided for @vbBuses.
   ///
   /// In zh, this message translates to:
   /// **'VB 总线（关=直通）'**
   String get vbBuses;
+
+  /// No description provided for @vbPluginTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'勾选 = 挂载的插件处理该路音频（厂商音效不受影响）'**
+  String get vbPluginTooltip;
+
+  /// No description provided for @vbPluginLockedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道处理关闭时插件不运行（状态保留，开启后立即恢复）'**
+  String get vbPluginLockedHint;
+
+  /// No description provided for @vbAutoProtect.
+  ///
+  /// In zh, this message translates to:
+  /// **'超预算自动保护'**
+  String get vbAutoProtect;
+
+  /// No description provided for @vbProtectHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'回调持续超预算时自动把插件收窄到监听总线，回落后自动还原'**
+  String get vbProtectHint;
+
+  /// No description provided for @vbProtectActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'已激活：插件仅作用于监听总线，其余直通（回调超预算）'**
+  String get vbProtectActive;
 
   /// No description provided for @shelfTitle.
   ///
@@ -508,28 +1768,22 @@ abstract class AppLocalizations {
   /// **'声道模式'**
   String get channelMode;
 
-  /// No description provided for @channelsStereo.
+  /// No description provided for @channelsMatrix.
   ///
   /// In zh, this message translates to:
-  /// **'立体声'**
-  String get channelsStereo;
+  /// **'矩阵下混'**
+  String get channelsMatrix;
 
-  /// No description provided for @channels51.
+  /// No description provided for @channelsDiscrete.
   ///
   /// In zh, this message translates to:
-  /// **'5.1'**
-  String get channels51;
-
-  /// No description provided for @channels71.
-  ///
-  /// In zh, this message translates to:
-  /// **'7.1'**
-  String get channels71;
+  /// **'离散逐声道'**
+  String get channelsDiscrete;
 
   /// No description provided for @channelPhaseA.
   ///
   /// In zh, this message translates to:
-  /// **'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。'**
+  /// **'仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。'**
   String get channelPhaseA;
 
   /// No description provided for @audioMode.
@@ -1792,12 +3046,6 @@ abstract class AppLocalizations {
   /// **'保存'**
   String get dlgSave;
 
-  /// No description provided for @dlgLoad.
-  ///
-  /// In zh, this message translates to:
-  /// **'载入'**
-  String get dlgLoad;
-
   /// No description provided for @dlgClose.
   ///
   /// In zh, this message translates to:
@@ -1809,12 +3057,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'卸载'**
   String get dlgUnload;
-
-  /// No description provided for @dlgPreset.
-  ///
-  /// In zh, this message translates to:
-  /// **'预设'**
-  String get dlgPreset;
 
   /// No description provided for @memTitle.
   ///
@@ -2271,12 +3513,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'释放时间'**
   String get dyneqRelease;
-
-  /// No description provided for @loudnessHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'小音量自动补低频和高频，大音量直通'**
-  String get loudnessHint;
 
   /// No description provided for @loudnessAmount.
   ///
@@ -3142,36 +4378,6 @@ abstract class AppLocalizations {
   /// **'添加并扫描'**
   String get plugAddScan;
 
-  /// No description provided for @plugPresetTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'插件预设管理 — {name}'**
-  String plugPresetTitle(String name);
-
-  /// No description provided for @plugPresetSaveLabel.
-  ///
-  /// In zh, this message translates to:
-  /// **'保存当前参数状态'**
-  String get plugPresetSaveLabel;
-
-  /// No description provided for @plugPresetNameHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'输入新预设名称...'**
-  String get plugPresetNameHint;
-
-  /// No description provided for @plugPresetList.
-  ///
-  /// In zh, this message translates to:
-  /// **'已有预设列表 ({n})'**
-  String plugPresetList(int n);
-
-  /// No description provided for @plugPresetEmpty.
-  ///
-  /// In zh, this message translates to:
-  /// **'暂无已保存预设，可通过上方输入框保存。'**
-  String get plugPresetEmpty;
-
   /// No description provided for @plugTitle.
   ///
   /// In zh, this message translates to:
@@ -3268,12 +4474,6 @@ abstract class AppLocalizations {
   /// **'原生 Win32 GUI 弹窗独立消息循环'**
   String get plugFeatGui;
 
-  /// No description provided for @plugFeatPreset.
-  ///
-  /// In zh, this message translates to:
-  /// **'二进制流预设保存与即时载入恢复'**
-  String get plugFeatPreset;
-
   /// No description provided for @plugFeatDirs.
   ///
   /// In zh, this message translates to:
@@ -3285,6 +4485,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'实时极速监听：专为专业制作定制的零卡顿音频通道'**
   String get plugFeatRt;
+
+  /// No description provided for @plugFeatRoute.
+  ///
+  /// In zh, this message translates to:
+  /// **'VB 按路插件逐路独立配置'**
+  String get plugFeatRoute;
 
   /// No description provided for @plugSlot.
   ///
@@ -3370,11 +4576,83 @@ abstract class AppLocalizations {
   /// **'打开界面 (GUI)'**
   String get plugOpenGuiBtn;
 
+  /// No description provided for @plugRouteBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路'**
+  String get plugRouteBypassed;
+
+  /// No description provided for @abSlotA.
+  ///
+  /// In zh, this message translates to:
+  /// **'A 预设'**
+  String get abSlotA;
+
+  /// No description provided for @abSlotB.
+  ///
+  /// In zh, this message translates to:
+  /// **'B 预设'**
+  String get abSlotB;
+
+  /// No description provided for @abAutoSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动保存'**
+  String get abAutoSave;
+
+  /// No description provided for @abInheritFrom.
+  ///
+  /// In zh, this message translates to:
+  /// **'继承自 {src}'**
+  String abInheritFrom(String src);
+
+  /// No description provided for @abReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'复原（清除当前预设，不影响来源）'**
+  String get abReset;
+
+  /// No description provided for @abResetDone.
+  ///
+  /// In zh, this message translates to:
+  /// **'已复原当前预设'**
+  String get abResetDone;
+
+  /// No description provided for @plugRouteLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已锁定'**
+  String get plugRouteLocked;
+
+  /// No description provided for @plugChStereoOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'VB 模式每通道仅立体声（L/R）进入插件链'**
+  String get plugChStereoOnly;
+
   /// No description provided for @plugLoading.
   ///
   /// In zh, this message translates to:
   /// **'加载中…'**
   String get plugLoading;
+
+  /// No description provided for @plugUnloading.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载中…'**
+  String get plugUnloading;
+
+  /// No description provided for @plugStateActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'生效'**
+  String get plugStateActive;
+
+  /// No description provided for @plugStateBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'旁路'**
+  String get plugStateBypassed;
 
   /// No description provided for @plugUnloadFromSlot.
   ///
@@ -3399,12 +4677,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'信号处理链插入阶段：'**
   String get plugStageLabel;
-
-  /// No description provided for @plugRtNote.
-  ///
-  /// In zh, this message translates to:
-  /// **'实时动态串联 • 保持专业监听超低延迟标准'**
-  String get plugRtNote;
 
   /// No description provided for @plugFilterAll.
   ///
@@ -3447,6 +4719,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'插槽 {n} 活跃中'**
   String plugSlotActive(int n);
+
+  /// No description provided for @plugSlotBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'插槽 {n} 旁路'**
+  String plugSlotBypassed(int n);
 
   /// No description provided for @plugSlotLoaded.
   ///
@@ -3657,12 +4935,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'GraphicEQ 代码编辑器'**
   String get arbmagEditor;
-
-  /// No description provided for @arbmagNodes.
-  ///
-  /// In zh, this message translates to:
-  /// **'已载入 {count} 个频点'**
-  String arbmagNodes(int count);
 
   /// No description provided for @arbmagApply.
   ///

@@ -40,7 +40,7 @@ class _TubeCard extends StatelessWidget {
             param: ParamRegistry.tubeGain,
             model: model,
             customLabel: l.tubeDrive,
-            infoMessage: '模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。',
+            infoMessage: l.tubeHintColor,
           ),
           const SizedBox(height: AuraSpace.md),
           // 电子管音色风格 — 标签与选项同行，选项右对齐
@@ -98,7 +98,7 @@ class _TubeAdvanced extends StatelessWidget {
               param: ParamRegistry.tubeCompensation,
               model: m,
               customLabel: l.tubeCompensation,
-              infoMessage: '电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。',
+              infoMessage: l.tubeHintTrim,
             ),
             const SizedBox(height: AuraSpace.md),
             // 输出级外框（自动增益补偿与输出增益门）
@@ -145,6 +145,12 @@ class _TubeScope extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final styleLabel = switch (model.tubeStyle) {
+      0 => l.tubeTriode,
+      1 => l.tubePentode,
+      _ => l.tubeTape,
+    };
     return Container(
       width: double.infinity,
       height: 114,
@@ -162,6 +168,7 @@ class _TubeScope extends StatelessWidget {
               active: model.tubeOn,
               driveDb: model.tubeGain,
               style: model.tubeStyle,
+              styleLabel: styleLabel,
               palette: palette,
             ),
           ),
@@ -175,12 +182,14 @@ class _TubeScopePainter extends CustomPainter {
   final bool active;
   final double driveDb;
   final int style; // 0: 三极管, 1: 五极管, 2: 磁带温润
+  final String styleLabel; // 由卡片层按 l10n 组装
   final AuraPalette palette;
 
   _TubeScopePainter({
     required this.active,
     required this.driveDb,
     required this.style,
+    required this.styleLabel,
     required this.palette,
   });
 
@@ -204,7 +213,6 @@ class _TubeScopePainter extends CustomPainter {
     final halfH = plotH / 2.0;
 
     // Title at top left
-    final styleLabel = style == 0 ? 'TRIODE (偶次谐波)' : (style == 1 ? 'PENTODE (奇次谐波)' : 'TAPE (磁带温润)');
     final titleTp = TextPainter(
       text: TextSpan(
         text: 'TRANSFER: $styleLabel',

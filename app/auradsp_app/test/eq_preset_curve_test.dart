@@ -34,7 +34,7 @@ List<double> remap(List<double> targetGrid, List<double> srcFreqs,
 
 void main() {
   test('网格一致时按频率重映射 == 按下标还原（无损）', () {
-    final grid = AppModel.eqGridFor(15, 48000);
+    final grid = eqGridFor(15, 48000);
     final gains = List<double>.generate(grid.length, (i) => (i - 7) * 1.5);
     final out = remap(grid, grid, gains);
     for (var i = 0; i < grid.length; i++) {
@@ -44,9 +44,9 @@ void main() {
   });
 
   test('从 31 段/48k 载到 15 段/48k，低频段增益必须对齐', () {
-    final srcF = AppModel.eqGridFor(31, 48000);
+    final srcF = eqGridFor(31, 48000);
     final srcG = List<double>.generate(srcF.length, (i) => i * 0.5);
-    final dstF = AppModel.eqGridFor(15, 48000);
+    final dstF = eqGridFor(15, 48000);
 
     // 目标网格的每个频点在源网格里都应能找到**自身**
     // （两张出厂网格都是 ISO 三倍频程，15 段是 31 段的子集）
@@ -61,12 +61,12 @@ void main() {
   });
 
   test('跨采样率（48k -> 24k）不得错位，低频段必须完全一致', () {
-    final srcF = AppModel.eqGridFor(31, 48000);
+    final srcF = eqGridFor(31, 48000);
     // 造一条有辨识度的曲线：只在 1 kHz 附近抬起
     final srcG = srcF
         .map((f) => math.exp(-math.pow((math.log(f) - math.log(1000)) / 0.6, 2)) * 12.0)
         .toList();
-    final dstF = AppModel.eqGridFor(31, 24000);
+    final dstF = eqGridFor(31, 24000);
 
     // 目标网格是源网格的前缀（低采样率只裁高频）
     expect(dstF.length, lessThan(srcF.length));
@@ -82,9 +82,9 @@ void main() {
   });
 
   test('极窄网格（16kHz 采样率）也不得错位', () {
-    final srcF = AppModel.eqGridFor(31, 48000);
+    final srcF = eqGridFor(31, 48000);
     final srcG = List<double>.generate(srcF.length, (i) => (i % 5) * 2.0 - 4.0);
-    final dstF = AppModel.eqGridFor(31, 16000);
+    final dstF = eqGridFor(31, 16000);
     expect(dstF, isNotEmpty);
     for (var i = 0; i < dstF.length; i++) {
       expect(dstF[i], closeTo(srcF[i], 1e-9));
@@ -105,7 +105,7 @@ void main() {
   test('等比网格的频率严格升序（重映射的前提）', () {
     for (final sr in <int>[48000, 44100, 32000, 24000, 16000]) {
       for (final n in <int>[7, 10, 15, 31]) {
-        final g = AppModel.eqGridFor(n, sr);
+        final g = eqGridFor(n, sr);
         for (var i = 1; i < g.length; i++) {
           expect(g[i], greaterThan(g[i - 1]),
               reason: '$n 段 @ ${sr}Hz 第 $i 点未升序');

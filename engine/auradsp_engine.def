@@ -38,6 +38,8 @@ EXPORTS
     auradsp_plugin_slot_set_channels
     auradsp_plugin_slot_get_channels
     auradsp_plugin_set_pdc
+    auradsp_plugin_chain_get_enabled
+    auradsp_plugin_chain_set_enabled
     auradsp_plugin_get_pdc
     auradsp_plugin_get_total_latency
     auradsp_plugin_load

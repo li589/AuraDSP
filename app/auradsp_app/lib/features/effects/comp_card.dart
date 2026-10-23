@@ -41,8 +41,8 @@ class _CompressorCard extends StatelessWidget {
           ParamSlider(
             param: ParamRegistry.compThreshold,
             model: model,
-            customLabel: '压缩阈值',
-            infoMessage: '信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。',
+            customLabel: l.compThreshold,
+            infoMessage: l.compHintThreshold,
           ),
           const SizedBox(height: AuraSpace.sm),
 
@@ -50,8 +50,8 @@ class _CompressorCard extends StatelessWidget {
           ParamSlider(
             param: ParamRegistry.compRatio,
             model: model,
-            customLabel: '压缩比率',
-            infoMessage: '超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。',
+            customLabel: l.compRatio,
+            infoMessage: l.compHintRatio,
           ),
           const SizedBox(height: AuraSpace.sm),
 
@@ -60,7 +60,7 @@ class _CompressorCard extends StatelessWidget {
             param: ParamRegistry.compTimeconstant,
             model: model,
             customLabel: l.compTimeconstant,
-            infoMessage: '控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。',
+            infoMessage: l.compHintRelease,
             customMin: 0.02,
             customUnit: 'ms',
             customFormat: (v) => (v * 1000).toStringAsFixed(0),
@@ -77,7 +77,7 @@ class _CompressorCard extends StatelessWidget {
                   children: [
                     Text(l.compGranularity, style: labelOf(p, color: p.text)),
                     const SizedBox(width: 4),
-                    const InfoBadge(message: '频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。'),
+                    InfoBadge(message: l.compHintBandwidth),
                     const Spacer(),
                     ParamChoiceChips(
                       param: ParamRegistry.compGranularity,
@@ -97,7 +97,7 @@ class _CompressorCard extends StatelessWidget {
                   children: [
                     Text(l.compTfresolution, style: labelOf(p, color: p.text)),
                     const SizedBox(width: 4),
-                    const InfoBadge(message: '算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。'),
+                    InfoBadge(message: l.compHintTiming),
                     const Spacer(),
                     ParamChoiceChips(
                       param: ParamRegistry.compTfresolution,
@@ -114,12 +114,12 @@ class _CompressorCard extends StatelessWidget {
 
                 // 3. 七频带独立压限频率与增益微调
                 Text(
-                  '分频段动态压限微调 (7 Bands)',
+                  l.compBandsTitle,
                   style: labelOf(p, color: p.text).copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: AuraSpace.xs),
                 Text(
-                  '可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。',
+                  l.compHintBands,
                   style: captionOf(p),
                 ),
                 const SizedBox(height: AuraSpace.sm),
@@ -173,7 +173,6 @@ class _CompressorCard extends StatelessWidget {
 
 /// 7 频带单带独立分频频率 + 动态增益调谐条
 class _CompBandRow extends StatelessWidget {
-  static const _bandNames = ['极低频', '低频', '中低频', '中频', '中高频', '高频', '超高频'];
   static const _defaultFreqs = [95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0];
   static const _ranges = [
     (30.0, 250.0),
@@ -201,7 +200,12 @@ class _CompBandRow extends StatelessWidget {
     final curGain = model.compGains[bandIndex];
     final defaultFreq = _defaultFreqs[bandIndex];
     final (minFreq, maxFreq) = _ranges[bandIndex];
-    final name = _bandNames[bandIndex];
+    final l = l10nOf(context);
+    final bandNames = [
+      l.bandSub, l.bandLow, l.bandLowMid, l.bandMid, l.bandHighMid,
+      l.bandHigh, l.bandUltra,
+    ];
+    final name = bandNames[bandIndex];
 
     final freqStr = curFreq >= 1000
         ? '${(curFreq / 1000).toStringAsFixed(1)} kHz'
@@ -253,7 +257,7 @@ class _CompBandRow extends StatelessWidget {
           ),
           const SizedBox(height: 2),
           ValueSlider(
-            label: '分频中心频率',
+            label: l.compBandFreq,
             value: curFreq,
             defaultValue: defaultFreq,
             min: minFreq,
@@ -266,8 +270,8 @@ class _CompBandRow extends StatelessWidget {
             onResetToDefault: () => model.setCompFreq(bandIndex, defaultFreq),
           ),
           ValueSlider(
-            label: '压限 / 扩展数值',
-            infoMessage: '负值为动态压缩压制，正值为动态扩展。默认 -0.35。',
+            label: l.compBandAmount,
+            infoMessage: l.compHintBandAmount,
             value: curGain,
             defaultValue: -0.35,
             min: -1.2,

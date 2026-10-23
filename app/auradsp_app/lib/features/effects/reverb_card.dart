@@ -88,7 +88,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           // 3. 核心滑块：混响干湿比 (Wet/Dry Mix)
           ValueSlider(
             label: l.reverbMix,
-            infoMessage: '混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。',
+            infoMessage: l.reverbHintMix,
             value: m.fvWet,
             defaultValue: ParamDefaults.fvWet,
             onResetToDefault: () => m.setReverbCustomParam('wet', ParamDefaults.fvWet),
@@ -132,7 +132,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
         children: [
           ValueSlider(
             label: l.reverbRoomSize,
-            infoMessage: '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。',
+            infoMessage: l.reverbHintSize,
             value: m.fvRoomSize,
             defaultValue: ParamDefaults.fvRoomSize,
             onResetToDefault: () =>
@@ -147,7 +147,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
           ValueSlider(
             label: l.fvDecayLabel,
-            infoMessage: '反射残响消散时间。数值越大，声音余韵回荡持续越久。',
+            infoMessage: l.reverbHintDecay,
             value: m.fvDecay,
             defaultValue: ParamDefaults.fvDecay,
             onResetToDefault: () =>
@@ -162,7 +162,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
           ValueSlider(
             label: l.reverbStereoWidth,
-            infoMessage: '混响声的双耳立体声扩展度。让回声包围整个头部。',
+            infoMessage: l.reverbHintWidth,
             value: m.fvWidth,
             defaultValue: ParamDefaults.fvWidth,
             onResetToDefault: () =>
@@ -177,7 +177,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
           ValueSlider(
             label: l.fvDampLabel,
-            infoMessage: '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。',
+            infoMessage: l.reverbHintDamp,
             value: m.fvDamp,
             defaultValue: ParamDefaults.fvDamp,
             onResetToDefault: () =>
@@ -192,7 +192,7 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
           ValueSlider(
             label: l.fvDryLabel,
-            infoMessage: '原始直达声保留量。确保人声吐字清晰结实。',
+            infoMessage: l.reverbHintDry,
             value: m.fvDry,
             defaultValue: ParamDefaults.fvDry,
             onResetToDefault: () =>

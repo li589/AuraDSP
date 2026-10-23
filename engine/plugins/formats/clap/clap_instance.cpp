@@ -242,7 +242,7 @@ public:
 
     bool activate(double sampleRate, uint32_t maxBlockSize) override {
         if (!m_isLoaded || !m_plugin) return false;
-        if (m_isActive) deactivate();
+        if (m_isActive.load(std::memory_order_acquire)) deactivate();
 
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
@@ -348,17 +348,19 @@ public:
             m_meta.latency = 0;
         }
 
-        m_isActive = true;
+        m_isActive.store(true, std::memory_order_release);
+        m_lifecycleBypassed.store(false, std::memory_order_release);
         return true;
     }
 
     void deactivate() override {
-        if (m_isActive && m_plugin) {
+        if (m_isActive.load(std::memory_order_acquire) && m_plugin) {
             if (m_plugin->stop_processing) {
                 m_plugin->stop_processing(m_plugin);
             }
             m_plugin->deactivate(m_plugin);
-            m_isActive = false;
+            m_isActive.store(false, std::memory_order_release);
+            m_lifecycleBypassed.store(true, std::memory_order_release);
         }
     }
 
@@ -390,7 +392,12 @@ public:
             }
         }
 
-        if (!m_isActive || !m_plugin || m_bypassed) {
+        // F-2：请求态（m_bypassed，控制线程写）与已应用态
+        // （m_lifecycleBypassed，泵线程切完生命周期后发布）不一致 =
+        // 切换在途 → 本块直通，绝不在插件停态时调其 process()。
+        if (!m_isActive.load(std::memory_order_acquire) || !m_plugin ||
+            m_bypassed.load(std::memory_order_acquire) ||
+            m_lifecycleBypassed.load(std::memory_order_acquire)) {
             if (inChannels != outChannels) {
                 const int32_t copyChannels = (std::min)(inNc, outNc);
                 for (int32_t ch = 0; ch < copyChannels; ++ch) {
@@ -452,10 +459,13 @@ public:
         proc.in_events = &emptyIn;
         proc.out_events = &emptyOut;
 
+        m_inPluginProcess.store(true, std::memory_order_release);
         clap_process_status status = m_plugin->process(m_plugin, &proc);
+        m_inPluginProcess.store(false, std::memory_order_release);
         if (status == CLAP_PROCESS_ERROR) {
-            // Bypass on error
-            m_bypassed = true;
+            // Bypass on error：只写请求态。生命周期切换绝不在音频线程做
+            // （F-2）——用户下次切换旁路时由泵线程补齐，期间本槽直通。
+            m_bypassed.store(true, std::memory_order_release);
         }
         if (m_outChannels == 1 && outChannels[1]) {
             std::memcpy(outChannels[1], outChannels[0], numFrames * sizeof(float));
@@ -464,8 +474,61 @@ public:
     }
 
     bool isLoaded() const override { return m_isLoaded; }
-    bool isBypassed() const override { return m_bypassed; }
-    void setBypass(bool bypass) override { m_bypassed = bypass; }
+    bool isBypassed() const override { return m_bypassed.load(std::memory_order_acquire); }
+
+    // F-2 常量：在途 process 退出等待上界（正常一块 ~2.7ms，2s 防御极端
+    // 长块）；泵任务有界等待（重新 activate 重插件 ~1-2s，10s 留余量）。
+    static constexpr int kBypassInFlightWaitMs = 2000;
+    static constexpr DWORD kBypassSwitchTimeoutMs = 10000;
+
+    void setBypass(bool bypass) override {
+        m_bypassed.store(bypass, std::memory_order_release);
+        // 真旁路（2026-10-22，二次加强）：deactivate/activate 全停/全复
+        // （deactivate 内含 stop_processing；与 VST3 setActive 级同语义，
+        // 消 Ozone 级插件内部分析线程的残余卡顿）。恢复走完整 activate。
+        //
+        // F-2（2026-10-23）：deactivate/activate 曾直接在控制线程执行，
+        // 与音频线程的 process() 并发，违反 CLAP 规范（deactivate 须在
+        // stop_processing 之后且不在处理期间）；activate 重建全套总线，
+        // 重插件 1-2s，更不可能在音频线程内联。现在只写原子请求态 +
+        // 投递泵线程执行；链层 bypass 原子已先翻转（manager setBypassSlot
+        // 先 store 再调本函数），切换期间本槽音频直通。
+        scheduleBypassLifecycle(bypass);
+    }
+
+    // F-2：生命周期切换投递共享泵线程（同模块复用一条 main 线程）。
+    // 超时/泵死不内联重放（任务可能仍在队列，双线程 deactivate 更糟）。
+    void scheduleBypassLifecycle(bool bypass) {
+        auto apply = [this, bypass]() { applyBypassLifecycle(bypass); };
+        if (m_pump && m_pump->isReady()) {
+            (void)m_pump->postTaskAndWait(apply, kBypassSwitchTimeoutMs);
+        } else {
+            apply();
+        }
+    }
+
+    // 仅在泵线程（或兜底控制线程）执行：先等在途 process() 退出，再切
+    // 生命周期。CLAP activate() 有真实成功信号——失败时保持
+    // m_lifecycleBypassed=true（停态），下次切换自动重试，绝不把激活
+    // 失败谎报成已恢复。
+    void applyBypassLifecycle(bool bypass) {
+        if (m_lifecycleBypassed.load(std::memory_order_acquire) == bypass) {
+            return;
+        }
+        for (int i = 0; i < kBypassInFlightWaitMs &&
+                        m_inPluginProcess.load(std::memory_order_acquire); ++i) {
+            Sleep(1);
+        }
+        if (bypass) {
+            if (m_isActive.load(std::memory_order_acquire)) deactivate();
+        } else if (!m_isActive.load(std::memory_order_acquire)) {
+            (void)activate(m_sampleRate, m_maxBlockSize);
+        }
+        // 以实测激活态发布（成功→false=已恢复；失败→true=仍停，可重试）。
+        m_lifecycleBypassed.store(
+            !m_isActive.load(std::memory_order_acquire) || bypass,
+            std::memory_order_release);
+    }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
         if (channels > 8) channels = 8;
@@ -974,8 +1037,18 @@ private:
 
     PluginMetadata m_meta;
     bool m_isLoaded = false;
-    bool m_isActive = false;
-    bool m_bypassed = false;
+    // F-2（2026-10-23）：m_isActive/m_bypassed 跨线程访问（控制线程
+    // setBypass/activate/deactivate 写，音频线程 process 读）改原子——
+    // 裸 bool 是数据竞争（UB），与 VST3 实例层及 manager 侧原子口径统一。
+    // m_lifecycleBypassed = 生命周期（activate/deactivate）已应用态，
+    // 泵线程切换完成后发布；音频线程见请求态与已应用态不一致时直通。
+    // m_inPluginProcess = 插件 process() 在途标志：泵线程切生命周期前
+    // 等它退出（CLAP 规范：deactivate 须在 stop_processing 之后、且不在
+    // 处理期间调用）。
+    std::atomic<bool> m_isActive{false};
+    std::atomic<bool> m_bypassed{false};
+    std::atomic<bool> m_lifecycleBypassed{false};
+    std::atomic<bool> m_inPluginProcess{false};
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
 

@@ -198,6 +198,17 @@ void apply_convolver(auradsp_handle h) {
 
 void apply_comp(auradsp_handle h) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
+        /* [PATCHED-AuraDSP Z13] compander 控制侧重置与 RT 处理的互斥。
+         * 背景：CompressorSetParam(forceRefresh=1) 每次都整体重置 compander
+         * （mOutputBufferCount=0、输出缓冲指针表复位、mInputPos/readOffset
+         * 清零、窗口表重算）。此前本路径只持 ctrl_mutex（RT 不取），而 RT
+         * multiplexed 路径不看 stage lock 标志 → 两侧零互斥：RT 消耗循环
+         * while(count>0) 通过后、count-- 前被置 0 → count 变 -1 → 下一帧
+         * 生产侧 mOutputBuffer[-1] 越界空写崩溃。2026-10-23 minidump 实证
+         * （拖 comp.gain 滑块即崩，与用户报告「效果器调节时闪退」吻合）。
+         * 修法：RT 侧 kAuraStages comp lock=1（stage_comp 持 jdsp_lock），
+         * 此处同锁；JamesDSPSetSampleRate→CompressorEnable 本就在锁内。 */
+        jdsp_lock(&h->jdsp);
         CompressorSetParam(&h->jdsp,
                            h->p.comp_timeconstant.load(std::memory_order_relaxed),
                            h->p.comp_granularity.load(std::memory_order_relaxed),
@@ -211,8 +222,11 @@ void apply_comp(auradsp_handle h) {
         }
         CompressorSetGain(&h->jdsp, freqs, gains, 1);
         CompressorEnable(&h->jdsp, 1);
+        jdsp_unlock(&h->jdsp);
     } else {
+        jdsp_lock(&h->jdsp);
         CompressorDisable(&h->jdsp);
+        jdsp_unlock(&h->jdsp);
     }
 }
 

@@ -146,11 +146,21 @@ class _PluginListView extends StatelessWidget {
             }
           }
 
+          // 诚实状态（2026-10-22）：已挂载时显示该槽实际生效/旁路态。
+          String? mountState;
+          if (isLoadedInThisSlot) {
+            mountState = manager.isSlotBypassed(slot) ? 'bypassed' : 'active';
+          } else if (loadedInOtherSlot != null) {
+            mountState = manager.isSlotBypassed(loadedInOtherSlot)
+                ? 'bypassed'
+                : 'active';
+          }
           return _PluginListItem(
             plugin: plugin,
             slot: slot,
             isLoadedInThisSlot: isLoadedInThisSlot,
             loadedInOtherSlot: loadedInOtherSlot,
+            mountState: mountState,
             onLoad: () => onLoad(plugin),
             onUnload: onUnload,
             busy: manager.isSlotBusy(slot),
@@ -167,6 +177,9 @@ class _PluginListItem extends StatelessWidget {
   final int slot;
   final bool isLoadedInThisSlot;
   final int? loadedInOtherSlot;
+
+  /// 诚实状态：'active' 生效 / 'bypassed' 旁路 / null 未挂载。
+  final String? mountState;
   final VoidCallback onLoad;
   final VoidCallback onUnload;
   /// C3：该槽挂载/卸载任务进行中（异步）。两个操作按钮据此禁用。
@@ -177,6 +190,7 @@ class _PluginListItem extends StatelessWidget {
     required this.slot,
     required this.isLoadedInThisSlot,
     required this.loadedInOtherSlot,
+    this.mountState,
     required this.onLoad,
     required this.onUnload,
     this.busy = false,
@@ -279,42 +293,38 @@ class _PluginListItem extends StatelessWidget {
                         ),
                       ),
                     ],
-                    if (isLoadedInThisSlot) ...[
+                    // 诚实状态一个标（2026-10-22 用户定案）：
+                    // 「插槽x活跃中」/「插槽x旁路」，不再并列「生效」字样。
+                    if (isLoadedInThisSlot || loadedInOtherSlot != null) ...[
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: p.success.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          l10nOf(context).plugSlotActive(slot + 1),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: p.success,
-                            fontWeight: FontWeight.bold,
+                      Builder(builder: (ctx) {
+                        final shownSlot =
+                            isLoadedInThisSlot ? slot : loadedInOtherSlot!;
+                        final bypassed = mountState == 'bypassed';
+                        final color = bypassed
+                            ? const Color(0xFFE6A23C)
+                            : const Color(0xFF67C23A);
+                        return Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: color.withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
                           ),
-                        ),
-                      ),
-                    ] else if (loadedInOtherSlot != null) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 1),
-                        decoration: BoxDecoration(
-                          color: p.accent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          l10nOf(context).plugSlotLoaded(loadedInOtherSlot! + 1),
-                          style: TextStyle(
-                            fontSize: 10,
-                            color: p.accent,
-                            fontWeight: FontWeight.bold,
+                          child: Text(
+                            bypassed
+                                ? l10nOf(context)
+                                    .plugSlotBypassed(shownSlot + 1)
+                                : l10nOf(context)
+                                    .plugSlotActive(shownSlot + 1),
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: color,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                        ),
-                      ),
+                        );
+                      }),
                     ],
                   ],
                 ),

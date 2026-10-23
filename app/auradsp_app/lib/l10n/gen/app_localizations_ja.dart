@@ -37,7 +37,695 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stateIdle => 'アイドル';
 
   @override
+  String get routingChFl => 'フロントL';
+
+  @override
+  String get routingChFr => 'フロントR';
+
+  @override
+  String get routingChC => 'センター';
+
+  @override
+  String get routingChLfe => 'サブウーファー';
+
+  @override
+  String get routingChSl => 'サラウンドL';
+
+  @override
+  String get routingChSr => 'サラウンドR';
+
+  @override
+  String get routingChBl => 'バックL';
+
+  @override
+  String get routingChBr => 'バックR';
+
+  @override
+  String get routingAllChannels => '全チャンネル (8/8)';
+
+  @override
+  String get routingStereo => 'ステレオ (FL/FR)';
+
+  @override
+  String get routingNoSub => 'サブなし (7/8)';
+
+  @override
+  String get routingAllBypassed => '全バイパス (0/8)';
+
+  @override
+  String get routingSurroundOnly => 'サラウンドのみ (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 選択';
+  }
+
+  @override
+  String get channelRouting => '詳細チャンネルルーティング';
+
+  @override
+  String get routingPresets => 'プリセット:';
+
+  @override
+  String get routingPresetAll => '全て';
+
+  @override
+  String get routingPresetStereo => 'ステレオ';
+
+  @override
+  String get routingPresetNoLfe => 'サブなし';
+
+  @override
+  String get routingPresetSurround => 'サラウンド';
+
+  @override
+  String get setConnStatus => '接続状態';
+
+  @override
+  String get setConnActive => '接続済み（コールバック動作中）';
+
+  @override
+  String get setConnIdle => '未接続（Voicemeeter 起動待ち）';
+
+  @override
+  String get setDeviceDisconnected => 'デバイス未接続';
+
+  @override
+  String get setEndpointShort => 'エンドポイント';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return 'オーディオエンドポイント（$shortId）';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [オフライン/未接続]';
+  }
+
+  @override
+  String get setDefaultEndpoint => '既定のオーディオエンドポイント (Default Render)';
+
+  @override
+  String get setNoEndpoint => '利用可能なオーディオエンドポイントなし';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return '処理中（$sr Hz · $frames フレーム）';
+  }
+
+  @override
+  String get setApoAttached => '接続済み（再生ストリーム待ち）';
+
+  @override
+  String get setProcessing => '処理中...';
+
+  @override
+  String get setApoRegistered => '対象デバイスに System APO フックを登録しサービス同期完了';
+
+  @override
+  String get setApoAttachFailed => 'APO アタッチ未完了';
+
+  @override
+  String get setApoUnregistered => 'APO フックを安全に解除し元のシステム/ベンダードライバーを復元';
+
+  @override
+  String get setApoUnregisterFailed => 'APO アンインストール未完了';
+
+  @override
+  String get setCompositeSlot => '複合スロット';
+
+  @override
+  String get setRefreshStatus => '状態を更新';
+
+  @override
+  String get setApoSafetyNote =>
+      'レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。';
+
+  @override
+  String setDriverOffline(String name) {
+    return '$name [未検出/オフライン]';
+  }
+
+  @override
+  String get setVaioReady => 'AuraVAIO KMDF ドライバー準備完了（Sysvad 仮想サウンドカード）';
+
+  @override
+  String get setVaioMissing => 'AuraVAIO 仮想サウンドカードドライバーが見つかりません';
+
+  @override
+  String get setVaioDesc => 'KMDF カーネルモード仮想オーディオドライバー。全二重の仮想オーディオケーブルを提供';
+
+  @override
+  String get setInstallDriverUac => 'ドライバーをインストール（UAC）';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      'Windows の UAC ダイアログを表示しています。システムのプロンプトで「はい」をクリックしてインストールを許可してください…';
+
+  @override
+  String get setVaioInstallOk => 'AuraVAIO ドライバーのインストールと検証が完了しました！';
+
+  @override
+  String get setDriverInstallFailed => 'ドライバーのインストールが完了しませんでした';
+
+  @override
+  String get setUninstallDriver => 'ドライバーをアンインストール';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO ドライバーをアンインストールしました';
+
+  @override
+  String get setDriverUninstallFailed => 'アンインストールが完了しませんでした';
+
+  @override
+  String get setRedetect => '再検出';
+
+  @override
+  String get setWasapiDesc => 'システム標準の WASAPI 共有/排他オーディオエンジン。追加ドライバー不要';
+
+  @override
+  String get setRefreshDevice => 'デバイスを更新';
+
+  @override
+  String get setAsioRegisterUac => 'ドライバーを登録（UAC）';
+
+  @override
+  String get setAsioRegisterPrompt =>
+      '仮想 ASIO ドライバーを登録するため Windows の UAC ダイアログを表示しています…';
+
+  @override
+  String get setAsioRegisterOk => '仮想 ASIO ドライバーの登録に成功しました。DAW で選択可能になりました';
+
+  @override
+  String get setAsioRegisterFailed => '登録に失敗しました。管理者権限で再試行してください';
+
+  @override
+  String get setAsioUnregisterOk => '仮想 ASIO ドライバーを登録解除しました';
+
+  @override
+  String get setAsioUnregisterFailed => '登録解除に失敗しました。管理者権限で再試行してください';
+
+  @override
+  String get gateHintThreshold =>
+      'このレベル以下の暗騒音を減衰します。高すぎると弱い余韻が消え、低すぎるとゲートがほとんど動作しません。';
+
+  @override
+  String get gateHysteresis => 'ヒステリシス';
+
+  @override
+  String get gateHintHysteresis =>
+      '開閉間のレベル差。しきい値付近での往復動作を防ぎ、ボーカルの起伏でも安定したゲート動作を保ちます。';
+
+  @override
+  String get gateRange => 'レンジ（減衰下限）';
+
+  @override
+  String get gateHintRange =>
+      '全閉時の最大減衰量。-60 dB は無音、-12〜-24 dB は自然な暗騒音を残し、デジタル的な息苦しさを避けます。';
+
+  @override
+  String get gateHold => 'ホールド';
+
+  @override
+  String get gateHintHold =>
+      '信号が閉じしきい値を下回ってから全開を保つ時間（ms）。語間の無音やドラムの余韻の早期遮断を防ぎます。';
+
+  @override
+  String get gateHintAttack =>
+      '開きしきい値を越えてから開く速さ。遅すぎるとアタックが削れ、速すぎるとクリックが出ることがあります。';
+
+  @override
+  String get gateHintRelease => 'ホールド後に減衰下限まで滑らかに閉じる時間。長いほど自然なフェードになります。';
+
+  @override
+  String get gateHintSidechain => 'サイドチェーンのデエッサーと、ゲート出力のラウドネス自動補正。';
+
+  @override
+  String get gateHintDeess => '歯擦音（s/sh/ch）を動的に抑え、低域の豊かさは保ちます。';
+
+  @override
+  String get gateHintDeessFreq => '歯擦音を検出するサイドチェーン帯域。歯擦音が強い場合は下げ、こもる場合は上げます。';
+
+  @override
+  String get gateHintDeessAmount => '歯擦音の抑圧量。高域のみを減衰し、低域の声は変えません。';
+
+  @override
+  String get gateHintAutoGain => 'ゲートによる全体レベルの低下をリアルタイムに補正します。';
+
+  @override
+  String get compThreshold => 'しきい値';
+
+  @override
+  String get compHintThreshold =>
+      'コンプレッションを開始するレベル。それ以下はそのまま、以上は比例的に抑え、過激なトランジェントを整えます。';
+
+  @override
+  String get compRatio => 'レシオ';
+
+  @override
+  String get compHintRatio =>
+      'しきい値超過分の圧縮の急峻さ。高いほど強く（10:1 はほぼリミッター）、低いほど穏やかで抜けの良い音になります。';
+
+  @override
+  String get compHintRelease =>
+      '圧縮とエンベロープ追従のリリース時間。短いとトランジェントが強調され、長いと滑らかで透明感が出ます。';
+
+  @override
+  String get compHintBandwidth =>
+      '周波数分析の分解能。粗い設定は応答が速く電子音楽向き、精密設定は帯域分離が良くボーカル・器楽向き。';
+
+  @override
+  String get compHintTiming =>
+      'フィルター時定数の方式。トランジェントは微細なダイナミクスを保持、バランスは汎用、ゼロレイテンシはバッファ遅延なし。';
+
+  @override
+  String get compBandsTitle => '帯域別ダイナミクス微調整（7 バンド）';
+
+  @override
+  String get compHintBands => '7 バンドそれぞれの中心周波数と圧縮/拡張量を設定（負＝圧縮、正＝拡張）。';
+
+  @override
+  String get bandSub => '超低域';
+
+  @override
+  String get bandLow => '低域';
+
+  @override
+  String get bandLowMid => '中低域';
+
+  @override
+  String get bandMid => '中域';
+
+  @override
+  String get bandHighMid => '中高域';
+
+  @override
+  String get bandHigh => '高域';
+
+  @override
+  String get bandUltra => '超高域';
+
+  @override
+  String get compBandFreq => '中心周波数';
+
+  @override
+  String get compBandAmount => '圧縮 / 拡張量';
+
+  @override
+  String get compHintBandAmount => '負で圧縮、正で拡張。既定値 -0.35。';
+
+  @override
+  String get eelUnclosedString => '文字列が閉じていません（複数行）';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return '余分な \"$ch\"（対応する開き括弧なし）';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => 'ブロックコメントが閉じていません（対応する */ なし）';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" が閉じていません（$line 行 $col 列から）';
+  }
+
+  @override
+  String get eelMissingInit => '@init セクションがありません（エンジンがコンパイルを拒否します）';
+
+  @override
+  String get eelMissingSample => '@sample セクションがありません（エンジンがコンパイルを拒否します）';
+
+  @override
+  String get eelEmptyInit => '空の @init セクション（vendor は少なくとも 1 文必要）';
+
+  @override
+  String get eelEmptySample => '@sample セクションが空です（出力は無音になります）。意図した記述ですか？';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n が範囲外です（slider1..8 のみスライダーに連動）';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name は読み取り専用です。代入は無効です';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 はリアルタイムオーディオ処理向けの高性能な式言語です。AuraDSP では全スクリプトがオーディオポンプスレッドで即時実行されます。';
+
+  @override
+  String get lpDocSectionsTitle => 'コアセクション';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// サンプルレート変更時または初回読み込み時に実行。変数・係数を初期化\n\n@sample\n// 各サンプルで実行。入出力は spl0（L）と spl1（R）\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => 'スライダー構文';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > ゲイン (dB)\n// sliderN: 初期値< 最小値, 最大値, ステップ > ラベル\n// ホストが対応するライブスライダーを自動生成します！';
+
+  @override
+  String get lpDocBuiltinsTitle => '主な組み込み定数と関数';
+
+  @override
+  String get lpDocBuiltinConsts => '• 定数：srate（サンプルレート）、\$pi（円周率）\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• 関数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels => '• チャンネル：spl0（L 入出力）、spl1（R 入出力）';
+
+  @override
+  String get ioNoInputDevices => '利用可能な入力デバイスがありません';
+
+  @override
+  String get ioRefreshDevice => 'デバイスを更新';
+
+  @override
+  String get ioLoopbackDesc => '既定のループバックモード：システムのメイン再生エンドポイントをリアルタイムに取り込みます';
+
+  @override
+  String get ioExclusiveDesc => '選択したハードウェア/仮想ポートから低レイテンシの WASAPI 排他/共有キャプチャ';
+
+  @override
+  String get ioInputLabel => '入力エンドポイント';
+
+  @override
+  String get ioVaioEndpointDesc => 'AuraVAIO 仮想入力エンドポイント（Stereo / 7.1 ch）';
+
+  @override
+  String get ioChannelStatus => 'チャンネル状態';
+
+  @override
+  String get ioVaioActive => '転送中（全二重 DMA リングバッファ）';
+
+  @override
+  String get ioVaioReady => '準備完了（システム/アプリのストリーム待ち）';
+
+  @override
+  String get ioVaioGuide =>
+      'Windows のサウンド設定やプレーヤーで既定の出力を「AuraVAIO」に設定すると、音声はこの仮想入力から AuraDSP パイプラインへ送られます。';
+
+  @override
+  String get ioAsioChannelLabel => '入力チャンネル';
+
+  @override
+  String get ioAsioActive => 'DAW ライブ注入（動作中）';
+
+  @override
+  String get ioAsioWait => 'DAW 接続待ち（ホスト未起動）';
+
+  @override
+  String get ioAsioGuide =>
+      'DAW（FL Studio / Cubase / Reaper / Ableton）の Audio Device で「AuraDSP Virtual ASIO」を選択すると、プロジェクトの音声がここにルーティングされます。';
+
+  @override
+  String get ioWasapiRenderDesc => 'WASAPI 物理レンダリング（スピーカー/ヘッドホン）';
+
+  @override
+  String get ioNoOutputDevices => '利用可能な出力デバイスがありません';
+
+  @override
+  String get ioPhysicalOutput => '物理出力';
+
+  @override
+  String get ioAutoSelect => '自動選択（非 VAIO スピーカー）';
+
+  @override
+  String get ioNoPhysicalOutputs => '利用可能な物理出力デバイスがありません';
+
+  @override
+  String get ioProcessedFrames => '処理済みフレーム';
+
+  @override
+  String get ioOutputLabel => '出力エンドポイント';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client ハードウェア出力';
+
+  @override
+  String get ioChannelMap => 'チャンネルマッピング';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return 'チャンネル $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => '出力状態';
+
+  @override
+  String get ioAsioPassthrough => 'ハードウェア直通モニタリング中（超低レイテンシ）';
+
+  @override
+  String get ioAsioReadyStatus => '準備完了（ドライバーセッション待ち）';
+
+  @override
+  String get catInput => '入力';
+
+  @override
+  String get catTone => 'トーン';
+
+  @override
+  String get catEq => 'イコライザー';
+
+  @override
+  String get catStage => 'ステージ';
+
+  @override
+  String get catSpace => '空間';
+
+  @override
+  String get catOutput => '出力';
+
+  @override
+  String get catEffect => 'エフェクト';
+
+  @override
+  String get arbmagMinPoints => '有効なポイントが 2 つ以上必要です（周波数 ゲインdB; …）';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'GraphicEQ が無効です：$err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return 'ファイルの読み取りに失敗しました: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n ポイント';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count 個の周波数ポイントを読み込みました';
+  }
+
+  @override
+  String get bassHintIntensity => '低域の重さとパンチを強化。上げるほど深い低域になりますが、過剰は避けてください。';
+
+  @override
+  String get bassHintFrequency => '低音ブーストの上限周波数。これ以下が増厚されます。60〜120 Hz が目安です。';
+
+  @override
+  String get bassShelfRouting => 'ローシェルフ チャンネルルーティング';
+
+  @override
+  String get irEnvelope => 'インパルス包絡';
+
+  @override
+  String get irMirrorR => 'R（ミラー）';
+
+  @override
+  String get convHintMix =>
+      'コンボリューションリバーブのミックス。0% でドライ、100% でサンプル空間の残響に完全に浸ります。';
+
+  @override
+  String get xfHintPreset => '定番のクロスフィード プリセットとカスタムを切り替え。頭の中響きを解消し自然なスピーカー定位に。';
+
+  @override
+  String get xfHintCustom => 'クロスフィードのローパス カットオフとフィード量を微調整。';
+
+  @override
+  String get xfHintCutoff =>
+      'クロスフィード用ローパスのカットオフ（300〜2000 Hz）。高いほど反対チャンネルへ渡る帯域が広がります。';
+
+  @override
+  String get xfHintFeed => '低域クロスフィードの減衰量（1.0〜15.0 dB）。小さいほど広い音場、大きいほど控えめ。';
+
+  @override
+  String get dqHintAttack =>
+      '帯域エネルギーがしきい値を超えた後の抑え込み速度。遅いとトランジェントを削り、速いとクリック感が出ます。';
+
+  @override
+  String get dqHintRelease => 'しきい値を下回ってからの解放速度。短いとポンピング、長いと抑えっぱなしになります。';
+
+  @override
+  String get dqShapeNote => 'Mid はベル型、Low/High はシェルフ特性です。';
+
+  @override
+  String get dqHintStaticGain => '常時有効な静的ゲイン。動的部は減衰のみ行います。';
+
+  @override
+  String get dqHintRange => 'しきい値超過時の最大追加減衰。0 で静的整形のみ。';
+
+  @override
+  String get dqHintThreshold => 'このレベルを超えると動的減衰を開始。低すぎると過剰に、高すぎると動作しません。';
+
+  @override
+  String get dqIndepTiming => '独立した動的応答時定数';
+
+  @override
+  String get dqHintBandAttack => 'この帯域専用のアタック時間。';
+
+  @override
+  String get dqHintBandRelease => 'この帯域専用のリリース時間。';
+
+  @override
+  String get filterHintModes => 'HP はこれより下を減衰、LP は上を減衰、BP は中心を通過。';
+
+  @override
+  String get filterHintResonance => 'レゾナンスの強さ。BP の帯域幅を決め、HP/LP は変換点にピークを作ります。';
+
+  @override
+  String get haasHintDelay =>
+      '遅延側 0〜25 ms（Haas オフセット）。約 12 ms で定位が広がり、大きすぎるとエコーになります。';
+
+  @override
+  String get haasHintWet => 'ウェット（遅延差分）の比率。下げるとセンターの声が際立ち、モノラル再生にも対応。';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\nドラッグで微調整 · ダブルクリックでリセット';
+  }
+
+  @override
+  String get inputReset100 => '100% にリセット';
+
+  @override
+  String inputFinal(String desc) {
+    return '最終: $desc';
+  }
+
+  @override
+  String get inputResetHint => 'ダブルクリックまたはタップで 100% に戻します';
+
+  @override
+  String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
+
+  @override
+  String get postHintGain => '全体出力レベルの補正。DSP チェーン後に音量が小さい場合に調整。';
+
+  @override
+  String get postCeiling => 'リミットしきい値';
+
+  @override
+  String get postHintCeiling =>
+      'マスタリング級ルックアヘッドのしきい値。超過トランジェントを透明に抑え、クリッピングと ISP を防止します。';
+
+  @override
+  String get postRelease => 'リリース';
+
+  @override
+  String get postHintRelease => 'リミッターのリリース時間。短いとタイトで力強く、長いと滑らかでポンピングしません。';
+
+  @override
+  String get postLookahead => '1.5ms ルックアヘッド';
+
+  @override
+  String get postHintLookahead =>
+      '1.5ms の適応型ルックアヘッド。オンで放送級の無歪みピーク制御、オフでゼロレイテンシのモニタリングmode。';
+
+  @override
+  String get postStereoLink => 'ステレオリンク';
+
+  @override
+  String get postHintStereoLink => '左右を連動して制限し、大きなトランジェントによる定位の揺れを防ぎます。';
+
+  @override
+  String get reverbHintMix => 'リバーブの割合。上げるほどホールや教会のような空間感が強まります。';
+
+  @override
+  String get reverbHintSize => '仮想ルームサイズ。大きいほど広い音場と長い反射間隔に。';
+
+  @override
+  String get reverbHintDecay => '残響の減衰時間。大きいほど余韻が長く続きます。';
+
+  @override
+  String get reverbHintWidth => 'リバーブのバイノーラル広がり。残響を頭の周りに包み込みます。';
+
+  @override
+  String get reverbHintDamp => '高域ダンピング。大きいと温かみ、小さいと明るく透通った音色。';
+
+  @override
+  String get reverbHintDry => 'ドライ信号の残量。声の明瞭さと芯を保ちます。';
+
+  @override
+  String get spatialHintRoom => '仮想空間の反射量。大きいほど奥深く豊かな空間感になります。';
+
+  @override
+  String get spatialHintWidth => 'バイノーラルの広がりと仮想スピーカー間隔を拡大。適度な設定で豊かさを保ちます。';
+
+  @override
+  String get spatialHintFocus => 'センターの声の結像を制御。適度に上げるとボーカルが明瞭に中央へ。';
+
+  @override
+  String get spatialHintGain => '自動等エネルギー正規化後の出力ゲイン微調整（-12〜+6 dB）。';
+
+  @override
+  String get spatialHintLoudness =>
+      '等ラウドネス自動バランス。スピーカー上混のエネルギー増加を打ち消し、スライダーが音量つまみになるのを防ぎます。';
+
+  @override
+  String get stereoHintWidth => 'ステレオ像の広がり。適度でスピーカーのような抜け、強すぎるとセンターが薄れます。';
+
+  @override
+  String get tubeHintColor => '真空管の偶数次高調波サチュレーション。温かみのあるアナログ的トーン。';
+
+  @override
+  String get tubeHintTrim => 'チューブ演出後の手動レベル調整（ウェットのみ）。モード切替時の音量合わせに。';
+
+  @override
+  String get tubeTriode => 'TRIODE（偶数次高調波）';
+
+  @override
+  String get tubePentode => 'PENTODE（奇数次高調波）';
+
+  @override
+  String get tubeTape => 'TAPE（温もりのあるテープ）';
+
+  @override
+  String get noAvailableDevice => '利用可能なデバイスなし';
+
+  @override
   String get vbBuses => 'VBバス（オフ=スルー）';
+
+  @override
+  String get vbPluginTooltip => 'チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）';
+
+  @override
+  String get vbPluginLockedHint => 'バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）';
+
+  @override
+  String get vbAutoProtect => '自動過負荷保護';
+
+  @override
+  String get vbProtectHint => 'コールバックが継続して予算超過のとき、プラグインを監視バスに自動絞り込みし、回復後に自動復帰';
+
+  @override
+  String get vbProtectActive => '作動中：プラグインは監視バスのみ、他はスルー（コールバック過負荷）';
 
   @override
   String get shelfTitle => 'ローシェルフ';
@@ -220,17 +908,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get channelMode => 'チャンネルモード';
 
   @override
-  String get channelsStereo => 'ステレオ';
+  String get channelsMatrix => 'マトリクスダウンミックス';
 
   @override
-  String get channels51 => '5.1';
-
-  @override
-  String get channels71 => '7.1';
+  String get channelsDiscrete => 'チャンネル別処理';
 
   @override
   String get channelPhaseA =>
-      'Phase A：マトリクスダウンミックス（ADR-003）。チャンネル別インスタンスは Phase B で提供。';
+      'ローカルの 4/6/8ch ファイル再生時のみ有効：マトリクスダウンミックス＝エンジンがステレオに混合して処理。チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは事前折畳）。';
 
   @override
   String get audioMode => 'オーディオモード';
@@ -887,16 +1572,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dlgSave => '保存';
 
   @override
-  String get dlgLoad => '読み込み';
-
-  @override
   String get dlgClose => '閉じる';
 
   @override
   String get dlgUnload => 'アンロード';
-
-  @override
-  String get dlgPreset => 'プリセット';
 
   @override
   String get memTitle => '永続メモリと外部設定';
@@ -1131,9 +1810,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get dyneqRelease => 'リリース';
-
-  @override
-  String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
 
   @override
   String get loudnessAmount => '補正量';
@@ -1600,25 +2276,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugAddScan => '追加してスキャン';
 
   @override
-  String plugPresetTitle(String name) {
-    return 'プラグインプリセット — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => '現在のパラメータ状態を保存';
-
-  @override
-  String get plugPresetNameHint => '新しいプリセット名を入力…';
-
-  @override
-  String plugPresetList(int n) {
-    return '保存済みプリセット ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty => '保存済みプリセットはありません。上の入力欄から保存できます。';
-
-  @override
   String get plugTitle => 'プラグインセンター';
 
   @override
@@ -1670,13 +2327,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugFeatGui => 'ネイティブWin32 GUIは独立メッセージループ';
 
   @override
-  String get plugFeatPreset => 'バイナリストリーム保存と即時復元';
-
-  @override
   String get plugFeatDirs => 'カスタム検索フォルダとローカル状態スナップショット';
 
   @override
   String get plugFeatRt => 'フラットステレオRT-Safe事前確保・ゼロロック';
+
+  @override
+  String get plugFeatRoute => 'VBバス別プラグイン設定';
 
   @override
   String plugSlot(int n) {
@@ -1734,7 +2391,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugOpenGuiBtn => 'UIを開く (GUI)';
 
   @override
-  String get plugLoading => '加载中…';
+  String get plugRouteBypassed => 'バイパス';
+
+  @override
+  String get abSlotA => 'プリセットA';
+
+  @override
+  String get abSlotB => 'プリセットB';
+
+  @override
+  String get abAutoSave => '自動保存';
+
+  @override
+  String abInheritFrom(String src) {
+    return '$src から継承';
+  }
+
+  @override
+  String get abReset => 'リセット（このプリセットを消去、ソースはそのまま）';
+
+  @override
+  String get abResetDone => 'プリセットをリセットしました';
+
+  @override
+  String get plugRouteLocked => 'ロック中';
+
+  @override
+  String get plugChStereoOnly => 'VBモードでは各バスのステレオ（L/R）のみプラグインチェーンへ';
+
+  @override
+  String get plugLoading => 'ロード中…';
+
+  @override
+  String get plugUnloading => 'アンロード中…';
+
+  @override
+  String get plugStateActive => '有効';
+
+  @override
+  String get plugStateBypassed => 'バイパス';
 
   @override
   String get plugUnloadFromSlot => 'このスロットからアンロード';
@@ -1749,9 +2444,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plugStageLabel => 'シグナルチェーン挿入ステージ：';
-
-  @override
-  String get plugRtNote => 'ライブ直列接続 • RT-Safe契約を維持';
 
   @override
   String get plugFilterAll => 'すべて';
@@ -1776,6 +2468,11 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String plugSlotActive(int n) {
     return 'スロット$n動作中';
+  }
+
+  @override
+  String plugSlotBypassed(int n) {
+    return 'スロット $n バイパス';
   }
 
   @override
@@ -1889,11 +2586,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ コードエディタ';
-
-  @override
-  String arbmagNodes(int count) {
-    return '$count 個の周波数ポイントを読み込みました';
-  }
 
   @override
   String get arbmagApply => 'コードを適用';

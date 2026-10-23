@@ -340,7 +340,7 @@ class _IrWaveformGraphState extends State<_IrWaveformGraph> {
             children: [
               Icon(Icons.waves_rounded, size: 14, color: p.accent),
               const SizedBox(width: 6),
-              Text('脉冲响应包络',
+              Text(l10nOf(context).irEnvelope,
                   style: captionOf(p).copyWith(fontWeight: FontWeight.w600, color: p.text)),
               const SizedBox(width: AuraSpace.sm),
               // 声道指示点
@@ -353,7 +353,7 @@ class _IrWaveformGraphState extends State<_IrWaveformGraph> {
                   const SizedBox(width: 8),
                   Container(width: 8, height: 8, decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFFF43F5E))),
                   const SizedBox(width: 4),
-                  Text(isMono ? 'R (镜像)' : 'R', style: monoOf(p, size: 10, color: p.textDim)),
+                  Text(isMono ? l10nOf(context).irMirrorR : 'R', style: monoOf(p, size: 10, color: p.textDim)),
                 ],
               ),
               const Spacer(),

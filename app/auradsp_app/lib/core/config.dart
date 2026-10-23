@@ -42,6 +42,8 @@ class AppConfig {
   int asioBufSize; // 0=驱动 preferredSize；其余为显式档位（帧）
   int asioOutPair; // 输出对起始声道（L=R+1 配对）
   int vbBusMask; // VB 总线处理掩码（bit g=第 g 条总线进 DSP，默认全开 0xFF）
+  int vbPluginGroupMask; // 按路插件处理掩码（bit g=组 g 总线吃插件链，默认全开 0xFF）
+  bool vbAutoProtect; // Z12 超预算自动保护：回调持续超预算时收窄插件到监听总线
   String vaioOutputEndpoint; // AuraVAIO 桥物理输出端点子串（'' = 自动探测物理扬声器）
 
   // 界面与记忆参数
@@ -76,6 +78,8 @@ class AppConfig {
     this.asioBufSize = 0,
     this.asioOutPair = 0,
     this.vbBusMask = 0xFF,
+    this.vbPluginGroupMask = 0xFF,
+    this.vbAutoProtect = true,
     this.vaioOutputEndpoint = '',
     this.vizFps = defaultVizFps,
     this.vizFftSize = 4096,
@@ -131,6 +135,8 @@ class AppConfig {
       asioBufSize: (audio['asioBufSize'] as num?)?.toInt() ?? 0,
       asioOutPair: (audio['asioOutPair'] as num?)?.toInt() ?? 0,
       vbBusMask: (audio['vbBusMask'] as num?)?.toInt() ?? 0xFF,
+      vbPluginGroupMask: (audio['vbPluginGroupMask'] as num?)?.toInt() ?? 0xFF,
+      vbAutoProtect: (audio['vbAutoProtect'] as bool?) ?? true,
       vaioOutputEndpoint: (audio['vaioOutputEndpoint'] as String?) ?? '',
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
@@ -172,6 +178,8 @@ class AppConfig {
           'asioBufSize': asioBufSize,
           'asioOutPair': asioOutPair,
           'vbBusMask': vbBusMask,
+          'vbPluginGroupMask': vbPluginGroupMask,
+          'vbAutoProtect': vbAutoProtect,
           'vaioOutputEndpoint': vaioOutputEndpoint,
           'vizFps': vizFps,
           'vizFftSize': vizFftSize,

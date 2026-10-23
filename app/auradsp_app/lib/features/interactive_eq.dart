@@ -14,6 +14,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
@@ -199,37 +200,50 @@ class _InteractiveSpectrumEQPanelState
                           child: Stack(
                             fit: StackFit.expand,
                             children: [
-                              ListenableBuilder(
-                                listenable: Listenable.merge([
-                                  model.eqInSpectrum,
-                                  model,
-                                ]),
-                                builder: (context, _) {
-                                  return CustomPaint(
-                                    size: Size(w, h),
-                                    painter: _SpectrumEQPainter(
-                                      palette: p,
-                                      // 背景柱画的是**均衡器输出**频谱，不是整链输出：
-                                      // EQ 之后的混响/卷积/Freeverb/插件全都混在
-                                      // model.spectrum 里，拿它当背景，用户看到的根本不是
-                                      // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
-                                      // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
-                                      // （eqInSpectrum）+ 实测响应合成，见
-                                      // AppModel.eqOutputSpectrum。
-                                      spectrumBands: model.eqOutputSpectrum(),
-                                      frequencies: model.eqFrequencies,
-                                      gains: model.eqGains,
-                                      qs: model.eqQs,
-                                      hoveredIndex: _draggedIndex ?? _hoveredIndex,
-                                      selectedIndex: _selectedIndex,
-                                      hoverPos: _hoverPos,
+                              // R2（2026-10-23）：effects 页离屏时不订阅
+                              // 30fps EQ 输入谱（IndexedStack 保活 = 本页
+                              // 仍在树上）。回页即恢复。
+                              ValueListenableBuilder<AppPage>(
+                                valueListenable: model.visiblePage,
+                                builder: (context, page, _) {
+                                  if (page != AppPage.effects) {
+                                    return const SizedBox.expand();
+                                  }
+                                  return ListenableBuilder(
+                                    listenable: Listenable.merge([
+                                      model.eqInSpectrum,
+                                      model,
+                                    ]),
+                                    builder: (context, _) {
+                                      return CustomPaint(
+                                        size: Size(w, h),
+                                        painter: _SpectrumEQPainter(
+                                          palette: p,
+                                          // 背景柱画的是**均衡器输出**频谱，不是整链输出：
+                                          // EQ 之后的混响/卷积/Freeverb/插件全都混在
+                                          // model.spectrum 里，拿它当背景，用户看到的根本不是
+                                          // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
+                                          // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
+                                          // （eqInSpectrum）+ 实测响应合成，见
+                                          // AppModel.eqOutputSpectrum。
+                                          spectrumBands:
+                                              model.eqOutputSpectrum(),
+                                          frequencies: model.eqFrequencies,
+                                          gains: model.eqGains,
+                                          qs: model.eqQs,
+                                          hoveredIndex:
+                                              _draggedIndex ?? _hoveredIndex,
+                                          selectedIndex: _selectedIndex,
+                                          hoverPos: _hoverPos,
                                       isBypassed: !model.isEqActive,
                                       measuredResponse: model.eqResponseDb,
                                       measuredForCurve: model.eqResponseCurve,
                                       expectedResponseCurve:
                                           model.currentEqCurveSignature,
                                       responseFMax: model.eqResponseFMax,
-                                    ),
+                                      ),
+                                    );
+                                    }
                                   );
                                 },
                               ),

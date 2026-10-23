@@ -133,7 +133,7 @@ libjamesdsp 交织路径硬编码 2 声道（`processFloatMultiplexd`），但�
 
 ## 7. 设计系统（扁平 × 艺术氛围 × 去 AI 味）
 
-真相源：`design/tokens/aura.tokens.json`（W3C Design Tokens 结构），Flutter 侧代码生成 `ThemeData`。
+真相源：`app/auradsp_app/design/tokens/aura.tokens.json`（W3C Design Tokens 结构），Flutter 侧代码生成 `ThemeData`。
 
 ### 7.1 视觉原则
 
@@ -182,6 +182,7 @@ JamesDSP/
 │       │   ├── engine/         # Control API 客户端：FFI 绑定 + 形态探测 + 状态机
 │       │   └── main.dart
 │       ├── windows/ android/ linux/    # 平台壳
+│       ├── design/tokens/aura.tokens.json  # 设计令牌真相源（三主题；i18n 词条在 lib/l10n/）
 │       └── pubspec.yaml
 ├── engine/                     # ★【P3a 上移】原 core/desktop/engine_api — 统一 C ABI + 自研 DSP + 插件宿主
 │                                 #   └── legacy/【2026-10-16】由 vendor/libjamesdsp 收编的 JamesDSP C 算法核 + PATCHES.md
@@ -190,9 +191,6 @@ JamesDSP/
 ├── core/
 │   ├── android/                # 已有（Root HAL + 未来 Rootless 共享同一套 C ABI 语义）
 │   └── desktop/windows/        # 平台构建层：WASAPI 链路 + CMake（DLL 真相源 out/Release/）
-├── design/
-│   ├── tokens/aura.tokens.json # 设计令牌真相源（三主题）
-│   └── i18n/                   # 语言清单与效果名翻译表
 └── docs/adr/                   # 关键决策记录（ADR-001..）
 ```
 
