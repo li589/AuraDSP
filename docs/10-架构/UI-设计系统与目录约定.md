@@ -124,5 +124,5 @@ effects_page 改为库 + part 结构（P1 后续，非必需）。
 | P1-3 | 依赖方向守卫（ui/engine/core 互不越级 + 薄壳约束） | ✅ 本轮 |
 | P1-4 | 裸 `Slider` 收敛 —— **审计结论：已达成**。全库真实裸 `Slider(` 仅 3 处：`effects_page.dart` 内部（ValueSlider 基座实现，正确）、`input_card` 条形滑块（自定义 track/thumb，非参数行）、`liveprog_page` 动态参数行（自带 label/读数列）。抽象早已到位：47 处 `ParamSlider` + 23 处 `ValueSlider` + 3 处 `ParamOutputGainSlider`。原「78 处」是 grep 把 `ParamSlider(` 调用计入的度量错误。 | ✅ 已核销 |
 | P1-1b | `hardware.dart` 1309 → `hardware_drivers.dart`(531) + `hardware_io.dart`(784) | ✅ 本轮 |
-| P2 续 | i18n 首批：`chrome.dart` 空设备占位 → arb 三语（218 → **217**），`l10nOf` 上移 `core/ui_helpers.dart`（ui/ 与 features/ 共用，widgets 保留 re-export 兼容） | 🔄 进行中 |
+| P2 续 | i18n 还债：① `chrome.dart` 空设备占位（1 条）；② `channel_routing_selector` 手写 zh/en 双语整体转 arb（20 条，**同时补齐 ja**）。基线 218 → **197**（25 文件）。`l10nOf` 上移 `core/ui_helpers.dart`（ui/ 与 features/ 共用，widgets 保留 re-export 兼容） | 🔄 进行中 |
 | P2 续 | 218 条硬编码中文按页转 arb（建议顺序：settings 68 → channel_routing 20 → gate/comp 27） | ⏳ 逐步 |

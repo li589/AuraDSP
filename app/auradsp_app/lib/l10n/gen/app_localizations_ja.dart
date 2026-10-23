@@ -37,6 +37,68 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stateIdle => 'アイドル';
 
   @override
+  String get routingChFl => 'フロントL';
+
+  @override
+  String get routingChFr => 'フロントR';
+
+  @override
+  String get routingChC => 'センター';
+
+  @override
+  String get routingChLfe => 'サブウーファー';
+
+  @override
+  String get routingChSl => 'サラウンドL';
+
+  @override
+  String get routingChSr => 'サラウンドR';
+
+  @override
+  String get routingChBl => 'バックL';
+
+  @override
+  String get routingChBr => 'バックR';
+
+  @override
+  String get routingAllChannels => '全チャンネル (8/8)';
+
+  @override
+  String get routingStereo => 'ステレオ (FL/FR)';
+
+  @override
+  String get routingNoSub => 'サブなし (7/8)';
+
+  @override
+  String get routingAllBypassed => '全バイパス (0/8)';
+
+  @override
+  String get routingSurroundOnly => 'サラウンドのみ (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 選択';
+  }
+
+  @override
+  String get channelRouting => '詳細チャンネルルーティング';
+
+  @override
+  String get routingPresets => 'プリセット:';
+
+  @override
+  String get routingPresetAll => '全て';
+
+  @override
+  String get routingPresetStereo => 'ステレオ';
+
+  @override
+  String get routingPresetNoLfe => 'サブなし';
+
+  @override
+  String get routingPresetSurround => 'サラウンド';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override

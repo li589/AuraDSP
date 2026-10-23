@@ -37,6 +37,68 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stateIdle => 'Idle';
 
   @override
+  String get routingChFl => 'Front Left';
+
+  @override
+  String get routingChFr => 'Front Right';
+
+  @override
+  String get routingChC => 'Center';
+
+  @override
+  String get routingChLfe => 'Subwoofer';
+
+  @override
+  String get routingChSl => 'Surround L';
+
+  @override
+  String get routingChSr => 'Surround R';
+
+  @override
+  String get routingChBl => 'Back L';
+
+  @override
+  String get routingChBr => 'Back R';
+
+  @override
+  String get routingAllChannels => 'All Channels (8/8)';
+
+  @override
+  String get routingStereo => 'Stereo (FL/FR)';
+
+  @override
+  String get routingNoSub => 'No Sub (7/8)';
+
+  @override
+  String get routingAllBypassed => 'All Bypassed (0/8)';
+
+  @override
+  String get routingSurroundOnly => 'Surround Only (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 Selected';
+  }
+
+  @override
+  String get channelRouting => 'Channel Routing';
+
+  @override
+  String get routingPresets => 'Presets:';
+
+  @override
+  String get routingPresetAll => 'All';
+
+  @override
+  String get routingPresetStereo => 'Stereo';
+
+  @override
+  String get routingPresetNoLfe => 'No LFE';
+
+  @override
+  String get routingPresetSurround => 'Surround';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override

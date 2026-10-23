@@ -7,7 +7,6 @@ lib/features/effects/arbmag_card.dart 5
 lib/features/effects/bass_card.dart 2
 lib/features/effects/bass_shaping_card.dart 1
 lib/features/effects/cards_common.dart 2
-lib/features/effects/channel_routing_selector.dart 20
 lib/features/effects/comp_card.dart 19
 lib/features/effects/convolver_card.dart 1
 lib/features/effects/crossfeed_card.dart 4
