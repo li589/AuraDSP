@@ -89,8 +89,8 @@ effects_page 改为库 + part 结构（P1 后续，非必需）。
 `export`。
 
 **P1-1 拆分（2026-10-23）**：`features/settings_page.dart` 2509 行 → 父文件 371 行
-（SettingsPage + State）+ `features/settings/panels/` 五个 part：
-`sections`(456) / `hardware_drivers`(531) / `hardware_io`(784) / `vb_theme`(398)。用 part 而非独立库，是为了保留私有符号可见性、
+（SettingsPage + State）+ `features/settings/panels/` 六个 part：
+`sections`(459) / `hardware_drivers`(537) / `hardware_io_input`(293) / `hardware_io_output`(498) / `vb_theme`(398)。用 part 而非独立库，是为了保留私有符号可见性、
 做到零逻辑改动的机械拆分。
 
 命名：`AuraXxx` 用于设计系统控件（AuraChip/AuraSwitch/AuraSegmented）；
