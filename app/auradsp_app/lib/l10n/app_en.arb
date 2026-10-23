@@ -9,6 +9,7 @@
   "stateBypass": "Bypass",
   "stateError": "Error",
   "stateIdle": "Idle",
+  "noAvailableDevice": "No device available",
   "vbBuses": "VB buses (off=passthrough)",
   "vbPluginTooltip": "Check = mounted plugins process this bus (vendor FX unaffected)",
   "vbPluginLockedHint": "Plugins do not run while bus processing is off (state kept; resumes instantly)",

@@ -154,6 +154,12 @@ abstract class AppLocalizations {
   /// **'空闲'**
   String get stateIdle;
 
+  /// No description provided for @noAvailableDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用设备'**
+  String get noAvailableDevice;
+
   /// No description provided for @vbBuses.
   ///
   /// In zh, this message translates to:

@@ -9,6 +9,7 @@
   "stateBypass": "旁路",
   "stateError": "失效",
   "stateIdle": "空闲",
+  "noAvailableDevice": "无可用设备",
   "vbBuses": "VB 总线（关=直通）",
   "vbPluginTooltip": "勾选 = 挂载的插件处理该路音频（厂商音效不受影响）",
   "vbPluginLockedHint": "通道处理关闭时插件不运行（状态保留，开启后立即恢复）",

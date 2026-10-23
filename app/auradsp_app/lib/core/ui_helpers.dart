@@ -8,6 +8,7 @@
  *   再点徽标也可关闭。空间不足自动翻转。R2 取代 P0 的 Tooltip 版。
  */
 import 'dart:async' show Timer;
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -496,3 +497,7 @@ class _ArrowPainter extends CustomPainter {
   bool shouldRepaint(_ArrowPainter old) =>
       old.color != color || old.border != border || old.pointUp != pointUp;
 }
+
+/// l10n 取用便捷通道（P1 后从 ui/widgets.dart 上移到 core，供 ui/ 与 features/ 共用）。
+AppLocalizations l10nOf(BuildContext context) =>
+    AppLocalizations.of(context)!;

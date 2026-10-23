@@ -7,7 +7,6 @@
  */
 import 'dart:math' as math;
 
-import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -17,6 +16,9 @@ import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 import 'chrome.dart';
+
+// l10nOf 上移后 re-export：既有 `import ...widgets.dart` 的调用方零改动。
+export '../core/ui_helpers.dart' show l10nOf;
 
 /* ---- 区块卡片 ---- */
 
@@ -1116,7 +1118,7 @@ class _AuraScanProgressState extends State<AuraScanProgress>
 
 /* ---- i18n 便捷入口（生成类：AppLocalizations） ---- */
 
-AppLocalizations l10nOf(BuildContext context) => AppLocalizations.of(context)!;
+// l10nOf 已上移至 core/ui_helpers.dart（下方 export 保持既有调用方零改动）。
 
 /* ---- VB 总线命名（设置页 VB 总线区与插件页 VB 插件处理区共用） ----
  * SDK BUFFER_OUT 布局：每条总线 8 通道 = 泵的 1 组（g0 起）。

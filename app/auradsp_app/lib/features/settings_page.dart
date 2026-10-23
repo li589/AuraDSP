@@ -27,7 +27,8 @@ import 'chrome.dart';
 import 'widgets.dart';
 
 part 'settings/panels/sections.dart';   // _CatBar / 模式面板（VB/APO/动态音频）
-part 'settings/panels/hardware.dart';   // 管线三层 + 驱动行 + 输入输出子面板
+part 'settings/panels/hardware_drivers.dart'; // 管线三层 + 驱动行（ASIO/VAIO/WASAPI/VASIO）
+part 'settings/panels/hardware_io.dart';      // 输入/输出层与子面板 + 测试音源
 part 'settings/panels/vb_theme.dart';   // 引擎信息 / VB 总线 / 主题卡
 
 

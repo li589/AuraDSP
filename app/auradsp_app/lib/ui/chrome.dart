@@ -1095,7 +1095,7 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
           children: [
             Expanded(
               child: Text(
-                widget.hint ?? '无可用设备',
+                widget.hint ?? l10nOf(context).noAvailableDevice,
                 style: monoOf(p, size: 12, color: p.textDim),
                 overflow: TextOverflow.ellipsis,
               ),
