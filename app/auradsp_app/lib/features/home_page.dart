@@ -8,6 +8,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chrome.dart';
@@ -17,17 +18,30 @@ class HomePage extends StatelessWidget {
   final AppModel model;
   const HomePage({super.key, required this.model});
 
+  /// R2：离屏时 AmbientSpectrum 改订阅冻结通知器（不随 30fps 频谱重建；
+  /// 回页时 didUpdateWidget 自动换回真通知器）。
+  static final _frozenSpectrum =
+      ValueNotifier<List<double>>(List.filled(32, 0.0));
+
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    return PageScaffold(
-      eyebrow: l.pageHomeEyebrow,
-      title: l.pageHomeTitle,
-      ambient: model.spectrum,
-      children: [
-        _SpectrumCard(model: model), // 可视化置顶：主页的第一视觉（无序号）
-        _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
-      ],
+    // R2（2026-10-23）：页可见性门控——IndexedStack 保活后本页离屏仍在
+    // 树上（SDK 实证全子节点参与 layout），高频可视化订阅据此摘除。
+    return ValueListenableBuilder<AppPage>(
+      valueListenable: model.visiblePage,
+      builder: (_, page, _) {
+        final active = page == AppPage.home;
+        return PageScaffold(
+          eyebrow: l.pageHomeEyebrow,
+          title: l.pageHomeTitle,
+          ambient: active ? model.spectrum : _frozenSpectrum,
+          children: [
+            _SpectrumCard(model: model, active: active), // 可视化置顶：主页的第一视觉（无序号）
+            _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
+          ],
+        );
+      },
     );
   }
 }
@@ -192,7 +206,10 @@ class _BypassButtonState extends State<_BypassButton> {
 
 class _SpectrumCard extends StatelessWidget {
   final AppModel model;
-  const _SpectrumCard({required this.model});
+  /// R2（2026-10-23）：宿主页可见性（HomePage 经 visiblePage 门控传入）。
+  /// false = 离屏——LevelMeter 与 dBFS 读数不订阅 30fps 通知器。
+  final bool active;
+  const _SpectrumCard({required this.model, this.active = true});
 
   @override
   Widget build(BuildContext context) {
@@ -212,7 +229,9 @@ class _SpectrumCard extends StatelessWidget {
                 if (!model.liveSpectrum) {
                   return _EmptySpectrum(text: l.noAudio);
                 }
-                // 频谱主体 + 右侧 dB 纵轴（与可视化页同一套坐标语义）
+                // 频谱主体 + 右侧 dB 纵轴（与可视化页同一套坐标语义）。
+                // SpectrumView 走 CustomPainter(repaint:)，离屏只标记脏
+                // 不实际绘制，无需门控。
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
@@ -228,22 +247,31 @@ class _SpectrumCard extends StatelessWidget {
           const FreqAxis(),
           const SizedBox(height: AuraSpace.lg),
           Row(children: [
-            Expanded(child: LevelMeter(level: model.levelL, label: 'L')),
+            Expanded(
+                child: LevelMeter(
+                    level: model.levelL, label: 'L', active: active)),
             const SizedBox(width: AuraSpace.lg),
-            Expanded(child: LevelMeter(level: model.levelR, label: 'R')),
+            Expanded(
+                child: LevelMeter(
+                    level: model.levelR, label: 'R', active: active)),
           ]),
           const SizedBox(height: AuraSpace.sm + 2),
           Align(
             alignment: Alignment.centerRight,
-            child: ValueListenableBuilder<double>(
-              valueListenable: model.levelL,
-              builder: (_, lDb, _) => ValueListenableBuilder<double>(
-                valueListenable: model.levelR,
-                builder: (_, rDb, _) => Text(
-                    'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
+            // R2：离屏不订阅 levelL/R——静态读数替代（回页父级以
+            // active=true 重建即恢复）。
+            child: active
+                ? ValueListenableBuilder<double>(
+                    valueListenable: model.levelL,
+                    builder: (_, lDb, _) => ValueListenableBuilder<double>(
+                      valueListenable: model.levelR,
+                      builder: (_, rDb, _) => Text(
+                          'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
+                          style: monoOf(p, size: 11, color: p.textDim)),
+                    ),
+                  )
+                : Text('L ${dbfsText(-90.0)}  R ${dbfsText(-90.0)} dBFS',
                     style: monoOf(p, size: 11, color: p.textDim)),
-              ),
-            ),
           ),
         ],
       ),

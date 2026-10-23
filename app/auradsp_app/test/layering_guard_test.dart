@@ -54,10 +54,15 @@ void main() {
     for (final f in _darts('lib/core')) {
       if (f.path.replaceAll('\\', '/').contains('/l10n/gen/')) continue;
       for (final l in _importLines(f)) {
-        if (l.contains('features/')) bad.add('${f.path}: $l');
+        // R1（2026-10-23）：断言体与测试名对齐——features/ 与 ui/ 两个
+        // 方向都守（core 反向依赖 ui/ = 状态层→展示层倒挂）。core/ 内
+        // design.dart/theme.dart 的令牌消费在 core 内闭环，无需引用 ui/。
+        if (l.contains('features/') || l.contains("'../ui/")) {
+          bad.add('${f.path}: $l');
+        }
       }
     }
-    expect(bad, isEmpty, reason: 'core 出现 features 依赖：\n${bad.join('\n')}');
+    expect(bad, isEmpty, reason: 'core 出现反向依赖：\n${bad.join('\n')}');
   });
 
   test('features/chrome.dart 与 widgets.dart 必须是纯 export 薄壳', () {

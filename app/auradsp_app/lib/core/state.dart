@@ -158,9 +158,12 @@ class AppModel extends ChangeNotifier {
   // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
   bool vbActive = false;
   Map<String, dynamic> vbInfo = {};
-  /// 当前可见页（shell 维护；P0-1 IndexedStack 保活后，页面定时器据此门控）。
-  /// 不 notify——仅高频任务读取。
-  AppPage visiblePage = AppPage.home;
+  /// 当前可见页（shell 维护；P0-1 IndexedStack 保活后，页面定时器与高频
+  /// 可视化消费点据此门控）。R2（2026-10-23）：改为 ValueNotifier——离屏页
+  /// 30fps 高频消费点（频谱/电平/各级电平表）订阅它，仅在对应页可见时
+  /// 才订阅数据通知器（IndexedStack 保活 = 离屏页仍在树上，SDK 实证全子
+  /// 节点仍参与 layout，纯 VLB 消费点会随数据 30fps 重建）。
+  final visiblePage = ValueNotifier<AppPage>(AppPage.home);
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
@@ -1008,6 +1011,7 @@ class AppModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     hbTick.dispose();
+    visiblePage.dispose();
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(
       _onWindowVisibilityChanged,

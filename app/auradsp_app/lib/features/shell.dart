@@ -81,7 +81,7 @@ class _AppShellState extends State<AppShell> {
             index: _index,
             onSelect: (i) => setState(() {
               _index = i;
-              m.visiblePage = AppPage.values[i]; // P0-1：定时器可见性门控
+              m.visiblePage.value = AppPage.values[i]; // P0-1：定时器可见性门控 + R2 高频消费点门控
             }),
             model: m,
             collapsed: _railCollapsed,
