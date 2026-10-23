@@ -7,12 +7,10 @@ lib/features/effects/arbmag_card.dart 5
 lib/features/effects/bass_card.dart 2
 lib/features/effects/bass_shaping_card.dart 1
 lib/features/effects/cards_common.dart 2
-lib/features/effects/comp_card.dart 19
 lib/features/effects/convolver_card.dart 1
 lib/features/effects/crossfeed_card.dart 4
 lib/features/effects/dyneq_card.dart 9
 lib/features/effects/filter_card.dart 2
-lib/features/effects/gate_card.dart 14
 lib/features/effects/haas_card.dart 2
 lib/features/effects/input_card.dart 4
 lib/features/effects/loudness_card.dart 1
