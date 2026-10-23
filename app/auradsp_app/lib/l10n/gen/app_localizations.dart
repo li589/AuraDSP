@@ -388,6 +388,126 @@ abstract class AppLocalizations {
   /// **'注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。'**
   String get setApoSafetyNote;
 
+  /// No description provided for @setDriverOffline.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} [未检测到/离线]'**
+  String setDriverOffline(String name);
+
+  /// No description provided for @setVaioReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'**
+  String get setVaioReady;
+
+  /// No description provided for @setVaioMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到 AuraVAIO 虚拟声卡驱动'**
+  String get setVaioMissing;
+
+  /// No description provided for @setVaioDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道'**
+  String get setVaioDesc;
+
+  /// No description provided for @setInstallDriverUac.
+  ///
+  /// In zh, this message translates to:
+  /// **'UAC提权安装驱动'**
+  String get setInstallDriverUac;
+
+  /// No description provided for @setInstallDriverUacPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...'**
+  String get setInstallDriverUacPrompt;
+
+  /// No description provided for @setVaioInstallOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动已成功安装并通过系统验收！'**
+  String get setVaioInstallOk;
+
+  /// No description provided for @setDriverInstallFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'驱动安装未完成'**
+  String get setDriverInstallFailed;
+
+  /// No description provided for @setUninstallDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载驱动'**
+  String get setUninstallDriver;
+
+  /// No description provided for @setVaioUninstallOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 驱动已成功卸载'**
+  String get setVaioUninstallOk;
+
+  /// No description provided for @setDriverUninstallFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'卸载未完成'**
+  String get setDriverUninstallFailed;
+
+  /// No description provided for @setRedetect.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新检测'**
+  String get setRedetect;
+
+  /// No description provided for @setWasapiDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖'**
+  String get setWasapiDesc;
+
+  /// No description provided for @setRefreshDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新设备'**
+  String get setRefreshDevice;
+
+  /// No description provided for @setAsioRegisterUac.
+  ///
+  /// In zh, this message translates to:
+  /// **'UAC提权注册驱动'**
+  String get setAsioRegisterUac;
+
+  /// No description provided for @setAsioRegisterPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...'**
+  String get setAsioRegisterPrompt;
+
+  /// No description provided for @setAsioRegisterOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 ASIO 驱动注册成功！DAW 中现已可选'**
+  String get setAsioRegisterOk;
+
+  /// No description provided for @setAsioRegisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册失败，请使用管理员权限重试'**
+  String get setAsioRegisterFailed;
+
+  /// No description provided for @setAsioUnregisterOk.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟 ASIO 驱动已从系统注销'**
+  String get setAsioUnregisterOk;
+
+  /// No description provided for @setAsioUnregisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'注销失败，请使用管理员权限重试'**
+  String get setAsioUnregisterFailed;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:

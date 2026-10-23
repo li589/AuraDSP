@@ -163,6 +163,69 @@ class AppLocalizationsZh extends AppLocalizations {
       '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
 
   @override
+  String setDriverOffline(String name) {
+    return '$name [未检测到/离线]';
+  }
+
+  @override
+  String get setVaioReady => 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)';
+
+  @override
+  String get setVaioMissing => '未检测到 AuraVAIO 虚拟声卡驱动';
+
+  @override
+  String get setVaioDesc => 'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道';
+
+  @override
+  String get setInstallDriverUac => 'UAC提权安装驱动';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      '正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...';
+
+  @override
+  String get setVaioInstallOk => 'AuraVAIO 驱动已成功安装并通过系统验收！';
+
+  @override
+  String get setDriverInstallFailed => '驱动安装未完成';
+
+  @override
+  String get setUninstallDriver => '卸载驱动';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO 驱动已成功卸载';
+
+  @override
+  String get setDriverUninstallFailed => '卸载未完成';
+
+  @override
+  String get setRedetect => '重新检测';
+
+  @override
+  String get setWasapiDesc => '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖';
+
+  @override
+  String get setRefreshDevice => '刷新设备';
+
+  @override
+  String get setAsioRegisterUac => 'UAC提权注册驱动';
+
+  @override
+  String get setAsioRegisterPrompt => '正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...';
+
+  @override
+  String get setAsioRegisterOk => '虚拟 ASIO 驱动注册成功！DAW 中现已可选';
+
+  @override
+  String get setAsioRegisterFailed => '注册失败，请使用管理员权限重试';
+
+  @override
+  String get setAsioUnregisterOk => '虚拟 ASIO 驱动已从系统注销';
+
+  @override
+  String get setAsioUnregisterFailed => '注销失败，请使用管理员权限重试';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override

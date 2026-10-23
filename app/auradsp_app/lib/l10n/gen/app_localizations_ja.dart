@@ -163,6 +163,70 @@ class AppLocalizationsJa extends AppLocalizations {
       'レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。';
 
   @override
+  String setDriverOffline(String name) {
+    return '$name [未検出/オフライン]';
+  }
+
+  @override
+  String get setVaioReady => 'AuraVAIO KMDF ドライバー準備完了（Sysvad 仮想サウンドカード）';
+
+  @override
+  String get setVaioMissing => 'AuraVAIO 仮想サウンドカードドライバーが見つかりません';
+
+  @override
+  String get setVaioDesc => 'KMDF カーネルモード仮想オーディオドライバー。全二重の仮想オーディオケーブルを提供';
+
+  @override
+  String get setInstallDriverUac => 'ドライバーをインストール（UAC）';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      'Windows の UAC ダイアログを表示しています。システムのプロンプトで「はい」をクリックしてインストールを許可してください…';
+
+  @override
+  String get setVaioInstallOk => 'AuraVAIO ドライバーのインストールと検証が完了しました！';
+
+  @override
+  String get setDriverInstallFailed => 'ドライバーのインストールが完了しませんでした';
+
+  @override
+  String get setUninstallDriver => 'ドライバーをアンインストール';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO ドライバーをアンインストールしました';
+
+  @override
+  String get setDriverUninstallFailed => 'アンインストールが完了しませんでした';
+
+  @override
+  String get setRedetect => '再検出';
+
+  @override
+  String get setWasapiDesc => 'システム標準の WASAPI 共有/排他オーディオエンジン。追加ドライバー不要';
+
+  @override
+  String get setRefreshDevice => 'デバイスを更新';
+
+  @override
+  String get setAsioRegisterUac => 'ドライバーを登録（UAC）';
+
+  @override
+  String get setAsioRegisterPrompt =>
+      '仮想 ASIO ドライバーを登録するため Windows の UAC ダイアログを表示しています…';
+
+  @override
+  String get setAsioRegisterOk => '仮想 ASIO ドライバーの登録に成功しました。DAW で選択可能になりました';
+
+  @override
+  String get setAsioRegisterFailed => '登録に失敗しました。管理者権限で再試行してください';
+
+  @override
+  String get setAsioUnregisterOk => '仮想 ASIO ドライバーを登録解除しました';
+
+  @override
+  String get setAsioUnregisterFailed => '登録解除に失敗しました。管理者権限で再試行してください';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override
