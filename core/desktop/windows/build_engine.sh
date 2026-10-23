@@ -27,3 +27,19 @@ DLL="$OUT_W/Release/auradsp_engine.dll"
 [ -f "$DLL" ] || { echo "ERROR: auradsp_engine.dll not produced"; exit 1; }
 echo "=== BUILD OK: $DLL ==="
 ls -la "$OUT_W/Release/auradsp_engine.dll" "$OUT_W/Release/auradsp_engine.lib"
+
+# [3/3] 产物同步：构建完成后把引擎 DLL + 宿主 EXE 自动覆盖分发到三处消费端点
+# （test/ 冒烟沙盒、app build runner、dist 发行包）。某端点缺失或单文件覆盖失败仅
+# 告警并跳过，不中止本次构建（详见 tools/sync_artifacts.ps1）。
+REPO_ROOT="$(cd "$HERE_W/../../.." && pwd -W)"
+SYNC_PS="$REPO_ROOT/tools/sync_artifacts.ps1"
+PWS="$(command -v powershell.exe || command -v pwsh || echo "")"
+if [ -n "$PWS" ] && [ -f "$SYNC_PS" ]; then
+  echo "=== [3/3] sync artifacts to consumers ==="
+  "$PWS" -NoProfile -ExecutionPolicy Bypass -File "$SYNC_PS" || \
+    echo "WARN: sync_artifacts.ps1 报告跳过项（见上方告警）；引擎构建本身成功。"
+elif [ -f "$SYNC_PS" ]; then
+  echo "WARN: powershell 未找到，跳过自动同步（引擎构建已成功）"
+else
+  echo "WARN: $SYNC_PS 不存在，跳过自动同步"
+fi

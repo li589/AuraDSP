@@ -18,7 +18,8 @@
 |---|---|
 | `bin/run_tests.py` | 统一测试执行入口桥接（转发 `test/runner.py`） |
 | `bin/push_via_api.py` | GitHub REST API 离线/受限网络推送兜底（自行组装 blob/tree/commit，sha 逐字一致） |
-| `bin/verify_dll_copies.py` | DLL 三处同哈希单向分发+校验 |
+| `bin/verify_dll_copies.py` | DLL 三处同哈希单向校验（仅校验；**分发**已改由 `sync_artifacts.ps1` 负责） |
+| `sync_artifacts.ps1` | 增量产物一次性同步：把引擎 DLL / 宿主 EXE / 三个桥从真相源覆盖分发到 `test/`、`app build runner`、`dist` 三处；端点缺失或单文件覆盖失败仅告警并跳过（替代手工 cp；`-WhatIf` 预演、`-PackZip` 重打包发行 zip） |
 | `bin/abi_consistency.py` | .def/engine.h/ffi.dart 45 符号一致性（`smoke_abi_consistency.py` 调它） |
 | `bin/rebuild_plugin_cache.py` | 用引擎真实扫描结果重建 `%APPDATA%\AuraDSP\plugins\plugin_cache.json` |
 | `bin/fix_docs_links.py` | docs 搬迁后改链（P0 沉淀，可复用） |
