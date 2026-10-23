@@ -137,7 +137,7 @@ class _AsioClientDriverRow extends StatelessWidget {
                         if (curDriver.isNotEmpty && !names.contains(curDriver))
                           DropdownMenuItem<String>(
                             value: curDriver,
-                            child: Text('$curDriver [未检测到/离线]',
+                            child: Text(l.setDriverOffline(curDriver),
                                 style: TextStyle(
                                     fontSize: 12,
                                     color: p.warning,
@@ -299,6 +299,7 @@ class _VaioDriverRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final det = model.vaioDetectInfo;
     final found = det['found'] == true;
 
@@ -314,8 +315,8 @@ class _VaioDriverRow extends StatelessWidget {
                 children: [
                   Text(
                     found
-                        ? 'AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)'
-                        : '未检测到 AuraVAIO 虚拟声卡驱动',
+                        ? l.setVaioReady
+                        : l.setVaioMissing,
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
@@ -324,7 +325,7 @@ class _VaioDriverRow extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道',
+                    l.setVaioDesc,
                     style: monoOf(p, size: 10, color: p.textDim),
                   ),
                 ],
@@ -335,20 +336,20 @@ class _VaioDriverRow extends StatelessWidget {
               children: [
                 if (!found)
                   AuraChip(
-                    'UAC提权安装驱动',
+                    l.setInstallDriverUac,
                     icon: Icons.admin_panel_settings,
                     selected: true,
                     onTap: () async {
-                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                        content: Text('正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...'),
-                        duration: Duration(milliseconds: 2000),
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text(l.setInstallDriverUacPrompt),
+                        duration: const Duration(milliseconds: 2000),
                       ));
                       final ok = await model.installVaioDriver(elevated: true);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(ok
-                              ? 'AuraVAIO 驱动已成功安装并通过系统验收！'
-                              : (model.lastVaioError ?? '驱动安装未完成')),
+                              ? l.setVaioInstallOk
+                              : (model.lastVaioError ?? l.setDriverInstallFailed)),
                           duration: const Duration(milliseconds: 2500),
                         ));
                       }
@@ -356,21 +357,23 @@ class _VaioDriverRow extends StatelessWidget {
                   )
                 else
                   AuraChip(
-                    '卸载驱动',
+                    l.setUninstallDriver,
                     icon: Icons.delete_outline,
                     danger: true,
                     onTap: () async {
                       final ok = await model.uninstallVaioDriver(elevated: true);
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(ok ? 'AuraVAIO 驱动已成功卸载' : '卸载未完成'),
+                          content: Text(ok
+                              ? l.setVaioUninstallOk
+                              : l.setDriverUninstallFailed),
                           duration: const Duration(milliseconds: 2000),
                         ));
                       }
                     },
                   ),
                 AuraChip(
-                  '重新检测',
+                  l.setRedetect,
                   icon: Icons.refresh_rounded,
                   onTap: () => model.refreshVaioDetect(),
                 ),
@@ -395,6 +398,7 @@ class _WasapiDriverRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final info = model.info;
 
     return Column(
@@ -419,14 +423,14 @@ class _WasapiDriverRow extends StatelessWidget {
                   Text(
                     info != null
                         ? 'ABI v${info.abi} · ${info.version} · ${info.deviceRate}Hz'
-                        : '系统底层 WASAPI 共享/独占音频引擎，无额外驱动依赖',
+                        : l.setWasapiDesc,
                     style: monoOf(p, size: 10, color: p.textDim),
                   ),
                 ],
               ),
             ),
             AuraChip(
-              '刷新设备',
+              l.setRefreshDevice,
               icon: Icons.refresh_rounded,
               onTap: () => model.refreshAudioDevices(),
             ),
@@ -483,20 +487,20 @@ class _VirtualAsioDriverCard extends StatelessWidget {
           children: [
             if (!model.asioDriverInstalled)
               AuraChip(
-                'UAC提权注册驱动',
+                l.setAsioRegisterUac,
                 icon: Icons.admin_panel_settings,
                 selected: true,
                 onTap: () async {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    content: Text('正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...'),
-                    duration: Duration(milliseconds: 1500),
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                    content: Text(l.setAsioRegisterPrompt),
+                    duration: const Duration(milliseconds: 1500),
                   ));
                   final ok = await model.registerAsioDriver(elevated: true);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                       content: Text(ok
-                          ? '虚拟 ASIO 驱动注册成功！DAW 中现已可选'
-                          : (model.lastAsioError ?? '注册失败，请使用管理员权限重试')),
+                          ? l.setAsioRegisterOk
+                          : (model.lastAsioError ?? l.setAsioRegisterFailed)),
                       duration: const Duration(milliseconds: 2500),
                     ));
                   }
@@ -511,7 +515,9 @@ class _VirtualAsioDriverCard extends StatelessWidget {
                   final ok = await model.unregisterAsioDriver(elevated: true);
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok ? '虚拟 ASIO 驱动已从系统注销' : (model.lastAsioError ?? '注销失败，请使用管理员权限重试')),
+                      content: Text(ok
+                          ? l.setAsioUnregisterOk
+                          : (model.lastAsioError ?? l.setAsioUnregisterFailed)),
                       duration: const Duration(milliseconds: 2000),
                     ));
                   }

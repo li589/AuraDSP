@@ -165,6 +165,78 @@ class AppLocalizationsEn extends AppLocalizations {
       'Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.';
 
   @override
+  String setDriverOffline(String name) {
+    return '$name [not detected/offline]';
+  }
+
+  @override
+  String get setVaioReady =>
+      'AuraVAIO KMDF driver ready (Sysvad virtual sound card)';
+
+  @override
+  String get setVaioMissing =>
+      'AuraVAIO virtual sound card driver not detected';
+
+  @override
+  String get setVaioDesc =>
+      'KMDF kernel-mode virtual audio driver providing a full-duplex virtual audio cable';
+
+  @override
+  String get setInstallDriverUac => 'Install driver (UAC)';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      'Bringing up the Windows UAC prompt; click “Yes” to allow the driver installation...';
+
+  @override
+  String get setVaioInstallOk =>
+      'AuraVAIO driver installed and verified successfully!';
+
+  @override
+  String get setDriverInstallFailed => 'Driver installation incomplete';
+
+  @override
+  String get setUninstallDriver => 'Uninstall driver';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO driver uninstalled successfully';
+
+  @override
+  String get setDriverUninstallFailed => 'Uninstall incomplete';
+
+  @override
+  String get setRedetect => 'Re-detect';
+
+  @override
+  String get setWasapiDesc =>
+      'System-level WASAPI shared/exclusive audio engine; no extra driver required';
+
+  @override
+  String get setRefreshDevice => 'Refresh devices';
+
+  @override
+  String get setAsioRegisterUac => 'Register driver (UAC)';
+
+  @override
+  String get setAsioRegisterPrompt =>
+      'Bringing up the Windows UAC prompt to register the virtual ASIO driver...';
+
+  @override
+  String get setAsioRegisterOk =>
+      'Virtual ASIO driver registered — now selectable in your DAW!';
+
+  @override
+  String get setAsioRegisterFailed =>
+      'Registration failed; retry with administrator privileges';
+
+  @override
+  String get setAsioUnregisterOk => 'Virtual ASIO driver unregistered';
+
+  @override
+  String get setAsioUnregisterFailed =>
+      'Unregister failed; retry with administrator privileges';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override
