@@ -44,12 +44,12 @@ AuraDSP/
 │   ├── desktop/windows/ # CMakeLists + build_engine.sh → out/Release/*.dll（DLL 真相源）
 │   ├── desktop/windows-drivers/  # Windows 底层驱动套件（独立 CMake）：01 VAIO / 02 VM 泵 / 03 自研 APO / 04 ASIO 双线 / bridge 三桥
 │   └── android/         # registrar / spike-global-effect / stubs / vendor-src
-├── app/auradsp_app/     # Flutter 3.47.7（70 个 dart，21 张效果卡；音频后端四模式已接通/持久化）
+├── app/auradsp_app/     # Flutter 3.47.7（92 个 dart，21 张效果卡；音频后端四模式已接通/持久化）
 ├── test/
-│   ├── smoke/           # 59 个 smoke_*.py；runner.py --smoke 登记 64 项（含 6 个辅助/基准）
+│   ├── smoke/           # 79 个 smoke_*.py；runner.py --smoke 登记 84 项（78 smoke + 6 辅助/基准）
 │   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
 │   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
-├── tools/               # bin/ 6 · probe/ 18 · resource_pipeline/ 2 · calibration/ 1 · archive/
+├── tools/               # bin/ 10 · probe/ 17 · resource_pipeline/ 2 · calibration/ 1 · archive/
 ├── source/              # 第三方参考仓库只读快照（15 项 ORIGIN 登记 / 14 个顶层克隆）
 ├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
 │   └── 参考技术手册/     #   第三方 PDF 手册本地只读区（约 220MB，仅 README 清单入库）
@@ -84,6 +84,8 @@ AuraDSP/
 VST3 / CLAP 64 位进程内宿主，4 插槽 × 5 级插入拓扑（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）。
 
 > 完整效果清单与宣传口径以 `engine/auradsp_engine.h` 参数语义表 + `graph.effects` 注册表为准（**以代码为准，不全信文档**）。
+
+**Voicemeeter 桥按路处理**（`bridge/vm_bridge` + `02_voicemeeter_client`）：VM 回调内每 8 声道一组建独立引擎，插件可按总线（路）勾选/旁路；Z12 超预算自动保护在回调持续超预算时把插件收窄到监听总线（EMA<50%×6s 恢复，手动改掩码立即让位 + 60s 冷却），插件页「生效中」按钮诚实显示「部分旁路」态。进程外插件宿主 opt-in：`AURA_PLUGIN_HOST_MODE=process`。
 
 ---
 
