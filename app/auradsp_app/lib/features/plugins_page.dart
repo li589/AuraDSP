@@ -15,6 +15,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/path_memory.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
@@ -57,6 +58,9 @@ class _PluginsPageState extends State<PluginsPage>
     _statusTimer?.cancel();
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
+      // P0-1：IndexedStack 保活后本页离屏仍在树上——只在可见时轮询，
+      // 否则每秒白跑 IPC + 通知（与最小化门控同一目的）。
+      if (widget.model.visiblePage != AppPage.plugins) return;
       for (var i = 0; i < PluginManager.kMaxSlots; i++) {
         if (widget.model.pluginManager.isSlotActive(i)) {
           widget.model.pluginManager.refreshStatus(slot: i);

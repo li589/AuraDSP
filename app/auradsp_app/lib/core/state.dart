@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
+import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
     show ParamId, kEngineStageCount, AuraDspLib, VizBands;
 import '../engine/debug_log.dart';
@@ -157,6 +158,9 @@ class AppModel extends ChangeNotifier {
   // VB-Callback 桥状态（isolate 回推；inactive 时为空）。
   bool vbActive = false;
   Map<String, dynamic> vbInfo = {};
+  /// 当前可见页（shell 维护；P0-1 IndexedStack 保活后，页面定时器据此门控）。
+  /// 不 notify——仅高频任务读取。
+  AppPage visiblePage = AppPage.home;
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
@@ -632,6 +636,11 @@ class AppModel extends ChangeNotifier {
   // 延迟改为纯测量展示（组件级徽标 + 底栏总延迟），任何效果都可自由使能。
 
   // 高频可视化（独立 notifier，30fps）
+  /// 1s 级状态心跳（P0-2，2026-10-23）：VB/VAIO/ASIO status 每秒到达，
+  /// 只推这个 notifier 喂高频读数组件（电平表/保护行/设备读数），
+  /// **不再**触发粗粒度 notifyListeners——否则 IndexedStack 保活后
+  /// 离屏页面会被每秒整树重建。
+  final ValueNotifier<int> hbTick = ValueNotifier<int>(0);
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
 
   /// vendor 链入口（= 均衡器输入）的 32 段频谱，口径与 [spectrum] 相同。
@@ -737,7 +746,25 @@ class AppModel extends ChangeNotifier {
   /// 而 `notifyListeners()` 是 `@protected`——扩展不是 ChangeNotifier 子类，
   /// 直呼触发 invalid_use_of_protected_member。所有迁出的方法统一改调
   /// `_notifyUi()`，与类体内 notifyListeners() 完全同义。
-  void _notifyUi() => notifyListeners();
+  bool _notifyScheduled = false;
+  bool _disposed = false;
+
+  /// 同帧多次变更合并为一次 notifyListeners（P0-2）：批量恢复/心跳边缘
+  /// 场景避免 N 次整树重建。microtask 在本帧绘制前执行，交互无感知。
+  /// 测试模式（AppModel(testing:true)）保持同步通知——既有断言按
+  /// 「setParam 调用后立刻可数」编写，合并属生产侧优化。
+  void _notifyUi() {
+    if (_testing) {
+      if (!_disposed) notifyListeners();
+      return;
+    }
+    if (_notifyScheduled || _disposed) return;
+    _notifyScheduled = true;
+    scheduleMicrotask(() {
+      _notifyScheduled = false;
+      if (!_disposed) notifyListeners();
+    });
+  }
 
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
   AppModel({bool testing = false}) : _testing = testing {
@@ -979,6 +1006,8 @@ class AppModel extends ChangeNotifier {
   /// 废除品质档限定拦截，所有效果均自由放行
   @override
   void dispose() {
+    _disposed = true;
+    hbTick.dispose();
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(
       _onWindowVisibilityChanged,

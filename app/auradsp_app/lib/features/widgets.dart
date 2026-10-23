@@ -664,14 +664,17 @@ class LevelMeter extends StatelessWidget {
             valueListenable: level,
             builder: (_, db, _) {
               final n = ((db + 60) / 60).clamp(0.0, 1.0);
-              return SizedBox(
-                height: 8,
-                child: CustomPaint(
-                  size: const Size(double.infinity, 8),
-                  painter: _MeterPainter(
-                    value: n,
-                    track: p.hairline,
-                    fill: db > -3 ? p.error : p.accent,
+              // P0-3：电平表每秒重绘，隔离重绘区（不带累父级）。
+              return RepaintBoundary(
+                child: SizedBox(
+                  height: 8,
+                  child: CustomPaint(
+                    size: const Size(double.infinity, 8),
+                    painter: _MeterPainter(
+                      value: n,
+                      track: p.hairline,
+                      fill: db > -3 ? p.error : p.accent,
+                    ),
                   ),
                 ),
               );

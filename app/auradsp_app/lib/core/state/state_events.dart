@@ -748,7 +748,10 @@ extension StateEvents on AppModel {
           stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
           stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
         }
-        _notifyUi();
+        // P0-2：1s 心跳只推 hbTick（高频读数组件），粗通知仅在 running
+        // 翻转等结构变化时发——避免 IndexedStack 保活后离屏页每秒重建。
+        hbTick.value++;
+        if (was != vbActive) _notifyUi();
         break;
       case 'asiostatus':
         final wasA = asioActive;
@@ -774,7 +777,8 @@ extension StateEvents on AppModel {
         if (asioActive && (raw['resetPending'] as int? ?? 0) == 1) {
           _sendAsioRestart();
         }
-        _notifyUi();
+        hbTick.value++;
+        if (wasA != asioActive) _notifyUi();
         break;
       case 'vaiostatus':
         final wasV = vaioActive;
@@ -788,7 +792,8 @@ extension StateEvents on AppModel {
           stageLevelsL.value = List<double>.filled(kEngineStageCount, -90.0);
           stageLevelsR.value = List<double>.filled(kEngineStageCount, -90.0);
         }
-        _notifyUi();
+        hbTick.value++;
+        if (wasV != vaioActive) _notifyUi();
         break;
       case 'vaiodetect':
         vaioDetectInfo = Map<String, dynamic>.from(raw);

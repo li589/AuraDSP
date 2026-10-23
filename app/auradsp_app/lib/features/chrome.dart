@@ -377,7 +377,10 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
 
   @override
   Widget build(BuildContext context) => IgnorePointer(
-        child: CustomPaint(painter: _painter, child: const SizedBox.expand()),
+        child: RepaintBoundary(
+          child: CustomPaint(
+              painter: _painter, child: const SizedBox.expand()),
+        ),
       );
 }
 
@@ -977,6 +980,21 @@ class _AuraChipState extends State<AuraChip> {
 /* ==================== 5. 数值读数 ==================== */
 
 /// 等宽数值块：标签在上、数值在下（tabular），用于状态/延迟/设备读数
+/// 1s 级状态心跳消费者（P0-2，2026-10-23）：把子树重建范围限定在心跳
+/// 更新内，不牵动外层粗粒度 `ListenableBuilder(listenable: model)`。
+/// 用于 VB/VAIO/ASIO 状态面板（电平表 / 保护行 / 设备读数）。
+class HbBuilder extends StatelessWidget {
+  final ValueListenable<int> tick;
+  final Widget Function(BuildContext) builder;
+  const HbBuilder({super.key, required this.tick, required this.builder});
+
+  @override
+  Widget build(BuildContext context) => ValueListenableBuilder<int>(
+        valueListenable: tick,
+        builder: (c, _, _) => builder(c),
+      );
+}
+
 class StatReadout extends StatelessWidget {
   final String label;
   final String value;
