@@ -490,6 +490,223 @@ class AppLocalizationsJa extends AppLocalizations {
   String get ioAsioReadyStatus => '準備完了（ドライバーセッション待ち）';
 
   @override
+  String get catInput => '入力';
+
+  @override
+  String get catTone => 'トーン';
+
+  @override
+  String get catEq => 'イコライザー';
+
+  @override
+  String get catStage => 'ステージ';
+
+  @override
+  String get catSpace => '空間';
+
+  @override
+  String get catOutput => '出力';
+
+  @override
+  String get catEffect => 'エフェクト';
+
+  @override
+  String get arbmagMinPoints => '有効なポイントが 2 つ以上必要です（周波数 ゲインdB; …）';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'GraphicEQ が無効です：$err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return 'ファイルの読み取りに失敗しました: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n ポイント';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count 個の周波数ポイントを読み込みました';
+  }
+
+  @override
+  String get bassHintIntensity => '低域の重さとパンチを強化。上げるほど深い低域になりますが、過剰は避けてください。';
+
+  @override
+  String get bassHintFrequency => '低音ブーストの上限周波数。これ以下が増厚されます。60〜120 Hz が目安です。';
+
+  @override
+  String get bassShelfRouting => 'ローシェルフ チャンネルルーティング';
+
+  @override
+  String get irEnvelope => 'インパルス包絡';
+
+  @override
+  String get irMirrorR => 'R（ミラー）';
+
+  @override
+  String get convHintMix =>
+      'コンボリューションリバーブのミックス。0% でドライ、100% でサンプル空間の残響に完全に浸ります。';
+
+  @override
+  String get xfHintPreset => '定番のクロスフィード プリセットとカスタムを切り替え。頭の中響きを解消し自然なスピーカー定位に。';
+
+  @override
+  String get xfHintCustom => 'クロスフィードのローパス カットオフとフィード量を微調整。';
+
+  @override
+  String get xfHintCutoff =>
+      'クロスフィード用ローパスのカットオフ（300〜2000 Hz）。高いほど反対チャンネルへ渡る帯域が広がります。';
+
+  @override
+  String get xfHintFeed => '低域クロスフィードの減衰量（1.0〜15.0 dB）。小さいほど広い音場、大きいほど控えめ。';
+
+  @override
+  String get dqHintAttack =>
+      '帯域エネルギーがしきい値を超えた後の抑え込み速度。遅いとトランジェントを削り、速いとクリック感が出ます。';
+
+  @override
+  String get dqHintRelease => 'しきい値を下回ってからの解放速度。短いとポンピング、長いと抑えっぱなしになります。';
+
+  @override
+  String get dqShapeNote => 'Mid はベル型、Low/High はシェルフ特性です。';
+
+  @override
+  String get dqHintStaticGain => '常時有効な静的ゲイン。動的部は減衰のみ行います。';
+
+  @override
+  String get dqHintRange => 'しきい値超過時の最大追加減衰。0 で静的整形のみ。';
+
+  @override
+  String get dqHintThreshold => 'このレベルを超えると動的減衰を開始。低すぎると過剰に、高すぎると動作しません。';
+
+  @override
+  String get dqIndepTiming => '独立した動的応答時定数';
+
+  @override
+  String get dqHintBandAttack => 'この帯域専用のアタック時間。';
+
+  @override
+  String get dqHintBandRelease => 'この帯域専用のリリース時間。';
+
+  @override
+  String get filterHintModes => 'HP はこれより下を減衰、LP は上を減衰、BP は中心を通過。';
+
+  @override
+  String get filterHintResonance => 'レゾナンスの強さ。BP の帯域幅を決め、HP/LP は変換点にピークを作ります。';
+
+  @override
+  String get haasHintDelay =>
+      '遅延側 0〜25 ms（Haas オフセット）。約 12 ms で定位が広がり、大きすぎるとエコーになります。';
+
+  @override
+  String get haasHintWet => 'ウェット（遅延差分）の比率。下げるとセンターの声が際立ち、モノラル再生にも対応。';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\nドラッグで微調整 · ダブルクリックでリセット';
+  }
+
+  @override
+  String get inputReset100 => '100% にリセット';
+
+  @override
+  String inputFinal(String desc) {
+    return '最終: $desc';
+  }
+
+  @override
+  String get inputResetHint => 'ダブルクリックまたはタップで 100% に戻します';
+
+  @override
+  String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
+
+  @override
+  String get postHintGain => '全体出力レベルの補正。DSP チェーン後に音量が小さい場合に調整。';
+
+  @override
+  String get postCeiling => 'リミットしきい値';
+
+  @override
+  String get postHintCeiling =>
+      'マスタリング級ルックアヘッドのしきい値。超過トランジェントを透明に抑え、クリッピングと ISP を防止します。';
+
+  @override
+  String get postRelease => 'リリース';
+
+  @override
+  String get postHintRelease => 'リミッターのリリース時間。短いとタイトで力強く、長いと滑らかでポンピングしません。';
+
+  @override
+  String get postLookahead => '1.5ms ルックアヘッド';
+
+  @override
+  String get postHintLookahead =>
+      '1.5ms の適応型ルックアヘッド。オンで放送級の無歪みピーク制御、オフでゼロレイテンシのモニタリングmode。';
+
+  @override
+  String get postStereoLink => 'ステレオリンク';
+
+  @override
+  String get postHintStereoLink => '左右を連動して制限し、大きなトランジェントによる定位の揺れを防ぎます。';
+
+  @override
+  String get reverbHintMix => 'リバーブの割合。上げるほどホールや教会のような空間感が強まります。';
+
+  @override
+  String get reverbHintSize => '仮想ルームサイズ。大きいほど広い音場と長い反射間隔に。';
+
+  @override
+  String get reverbHintDecay => '残響の減衰時間。大きいほど余韻が長く続きます。';
+
+  @override
+  String get reverbHintWidth => 'リバーブのバイノーラル広がり。残響を頭の周りに包み込みます。';
+
+  @override
+  String get reverbHintDamp => '高域ダンピング。大きいと温かみ、小さいと明るく透通った音色。';
+
+  @override
+  String get reverbHintDry => 'ドライ信号の残量。声の明瞭さと芯を保ちます。';
+
+  @override
+  String get spatialHintRoom => '仮想空間の反射量。大きいほど奥深く豊かな空間感になります。';
+
+  @override
+  String get spatialHintWidth => 'バイノーラルの広がりと仮想スピーカー間隔を拡大。適度な設定で豊かさを保ちます。';
+
+  @override
+  String get spatialHintFocus => 'センターの声の結像を制御。適度に上げるとボーカルが明瞭に中央へ。';
+
+  @override
+  String get spatialHintGain => '自動等エネルギー正規化後の出力ゲイン微調整（-12〜+6 dB）。';
+
+  @override
+  String get spatialHintLoudness =>
+      '等ラウドネス自動バランス。スピーカー上混のエネルギー増加を打ち消し、スライダーが音量つまみになるのを防ぎます。';
+
+  @override
+  String get stereoHintWidth => 'ステレオ像の広がり。適度でスピーカーのような抜け、強すぎるとセンターが薄れます。';
+
+  @override
+  String get tubeHintColor => '真空管の偶数次高調波サチュレーション。温かみのあるアナログ的トーン。';
+
+  @override
+  String get tubeHintTrim => 'チューブ演出後の手動レベル調整（ウェットのみ）。モード切替時の音量合わせに。';
+
+  @override
+  String get tubeTriode => 'TRIODE（偶数次高調波）';
+
+  @override
+  String get tubePentode => 'PENTODE（奇数次高調波）';
+
+  @override
+  String get tubeTape => 'TAPE（温もりのあるテープ）';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override
@@ -1598,9 +1815,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get dyneqRelease => 'リリース';
 
   @override
-  String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
-
-  @override
   String get loudnessAmount => '補正量';
 
   @override
@@ -2375,11 +2589,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ コードエディタ';
-
-  @override
-  String arbmagNodes(int count) {
-    return '$count 個の周波数ポイントを読み込みました';
-  }
 
   @override
   String get arbmagApply => 'コードを適用';

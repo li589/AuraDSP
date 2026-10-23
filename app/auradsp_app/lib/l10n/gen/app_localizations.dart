@@ -982,6 +982,402 @@ abstract class AppLocalizations {
   /// **'就绪 (等待驱动会话)'**
   String get ioAsioReadyStatus;
 
+  /// No description provided for @catInput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入'**
+  String get catInput;
+
+  /// No description provided for @catTone.
+  ///
+  /// In zh, this message translates to:
+  /// **'音色'**
+  String get catTone;
+
+  /// No description provided for @catEq.
+  ///
+  /// In zh, this message translates to:
+  /// **'均衡'**
+  String get catEq;
+
+  /// No description provided for @catStage.
+  ///
+  /// In zh, this message translates to:
+  /// **'声场'**
+  String get catStage;
+
+  /// No description provided for @catSpace.
+  ///
+  /// In zh, this message translates to:
+  /// **'空间'**
+  String get catSpace;
+
+  /// No description provided for @catOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出'**
+  String get catOutput;
+
+  /// No description provided for @catEffect.
+  ///
+  /// In zh, this message translates to:
+  /// **'效果'**
+  String get catEffect;
+
+  /// No description provided for @arbmagMinPoints.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少需要 2 个有效频点（频率 增益dB; …）'**
+  String get arbmagMinPoints;
+
+  /// No description provided for @arbmagGraphicEqInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'GraphicEQ 无效：{err}'**
+  String arbmagGraphicEqInvalid(String err);
+
+  /// No description provided for @arbmagReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取文件失败: {err}'**
+  String arbmagReadFailed(String err);
+
+  /// No description provided for @arbmagPoints.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 频点'**
+  String arbmagPoints(int n);
+
+  /// No description provided for @arbmagNodes.
+  ///
+  /// In zh, this message translates to:
+  /// **'已载入 {count} 个频点'**
+  String arbmagNodes(int count);
+
+  /// No description provided for @bassHintIntensity.
+  ///
+  /// In zh, this message translates to:
+  /// **'增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。'**
+  String get bassHintIntensity;
+
+  /// No description provided for @bassHintFrequency.
+  ///
+  /// In zh, this message translates to:
+  /// **'低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。'**
+  String get bassHintFrequency;
+
+  /// No description provided for @bassShelfRouting.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架声道路由'**
+  String get bassShelfRouting;
+
+  /// No description provided for @irEnvelope.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲响应包络'**
+  String get irEnvelope;
+
+  /// No description provided for @irMirrorR.
+  ///
+  /// In zh, this message translates to:
+  /// **'R (镜像)'**
+  String get irMirrorR;
+
+  /// No description provided for @convHintMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。'**
+  String get convHintMix;
+
+  /// No description provided for @xfHintPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。'**
+  String get xfHintPreset;
+
+  /// No description provided for @xfHintCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义串扰低通截止频率与互馈衰减深度微调。'**
+  String get xfHintCustom;
+
+  /// No description provided for @xfHintCutoff.
+  ///
+  /// In zh, this message translates to:
+  /// **'串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。'**
+  String get xfHintCutoff;
+
+  /// No description provided for @xfHintFeed.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。'**
+  String get xfHintFeed;
+
+  /// No description provided for @dqHintAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段能量越过阈值后压下来的速度。太慢吃掉瞬态，太快可能有咔哒感。'**
+  String get dqHintAttack;
+
+  /// No description provided for @dqHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'能量跌回阈值以下后松开的速度。太短会有抽吸感，太长压住不放。'**
+  String get dqHintRelease;
+
+  /// No description provided for @dqShapeNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'Mid 为钟形带宽；Low/High 为搁架斜率共振。'**
+  String get dqShapeNote;
+
+  /// No description provided for @dqHintStaticGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'静态基础增益，常时有效；动态部分只做衰减。'**
+  String get dqHintStaticGain;
+
+  /// No description provided for @dqHintRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段能量超阈后最大再衰减多少。0 = 纯静态整形。'**
+  String get dqHintRange;
+
+  /// No description provided for @dqHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段包络超过此电平才开始动态衰减。太低误杀，太高不动作。'**
+  String get dqHintThreshold;
+
+  /// No description provided for @dqIndepTiming.
+  ///
+  /// In zh, this message translates to:
+  /// **'独立动态响应时常数'**
+  String get dqIndepTiming;
+
+  /// No description provided for @dqHintBandAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段专用的起音时间。'**
+  String get dqHintBandAttack;
+
+  /// No description provided for @dqHintBandRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'该频段专用的释放时间。'**
+  String get dqHintBandRelease;
+
+  /// No description provided for @filterHintModes.
+  ///
+  /// In zh, this message translates to:
+  /// **'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。'**
+  String get filterHintModes;
+
+  /// No description provided for @filterHintResonance.
+  ///
+  /// In zh, this message translates to:
+  /// **'谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。'**
+  String get filterHintResonance;
+
+  /// No description provided for @haasHintDelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。'**
+  String get haasHintDelay;
+
+  /// No description provided for @haasHintWet.
+  ///
+  /// In zh, this message translates to:
+  /// **'湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。'**
+  String get haasHintWet;
+
+  /// No description provided for @inputGainTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'{label}: {gain} dB\n上下拖拽微调 · 双击归零'**
+  String inputGainTip(String label, String gain);
+
+  /// No description provided for @inputReset100.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置 100%'**
+  String get inputReset100;
+
+  /// No description provided for @inputFinal.
+  ///
+  /// In zh, this message translates to:
+  /// **'最终: {desc}'**
+  String inputFinal(String desc);
+
+  /// No description provided for @inputResetHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'双击或点击恢复 100%'**
+  String get inputResetHint;
+
+  /// No description provided for @loudnessHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'小音量自动补低频和高频，大音量直通'**
+  String get loudnessHint;
+
+  /// No description provided for @postHintGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。'**
+  String get postHintGain;
+
+  /// No description provided for @postCeiling.
+  ///
+  /// In zh, this message translates to:
+  /// **'限幅阈值'**
+  String get postCeiling;
+
+  /// No description provided for @postHintCeiling.
+  ///
+  /// In zh, this message translates to:
+  /// **'母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。'**
+  String get postHintCeiling;
+
+  /// No description provided for @postRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'释放时间'**
+  String get postRelease;
+
+  /// No description provided for @postHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'限幅器包络释放衰减时间。时间较短瞬态紧实有力，时间较长音质顺滑无抽吸感。'**
+  String get postHintRelease;
+
+  /// No description provided for @postLookahead.
+  ///
+  /// In zh, this message translates to:
+  /// **'1.5ms 前瞻'**
+  String get postLookahead;
+
+  /// No description provided for @postHintLookahead.
+  ///
+  /// In zh, this message translates to:
+  /// **'1.5ms 自适应平滑前瞻。开启后提供广播母带级零失真削峰，关闭则进入零延迟电竞/监听模式。'**
+  String get postHintLookahead;
+
+  /// No description provided for @postStereoLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声联动'**
+  String get postStereoLink;
+
+  /// No description provided for @postHintStereoLink.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后左右声道按能量最大侧联合限幅，防止大动态瞬态导致声像意外偏移。'**
+  String get postHintStereoLink;
+
+  /// No description provided for @reverbHintMix.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。'**
+  String get reverbHintMix;
+
+  /// No description provided for @reverbHintSize.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。'**
+  String get reverbHintSize;
+
+  /// No description provided for @reverbHintDecay.
+  ///
+  /// In zh, this message translates to:
+  /// **'反射残响消散时间。数值越大，声音余韵回荡持续越久。'**
+  String get reverbHintDecay;
+
+  /// No description provided for @reverbHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响声的双耳立体声扩展度。让回声包围整个头部。'**
+  String get reverbHintWidth;
+
+  /// No description provided for @reverbHintDamp.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。'**
+  String get reverbHintDamp;
+
+  /// No description provided for @reverbHintDry.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始直达声保留量。确保人声吐字清晰结实。'**
+  String get reverbHintDry;
+
+  /// No description provided for @spatialHintRoom.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。'**
+  String get spatialHintRoom;
+
+  /// No description provided for @spatialHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。'**
+  String get spatialHintWidth;
+
+  /// No description provided for @spatialHintFocus.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。'**
+  String get spatialHintFocus;
+
+  /// No description provided for @spatialHintGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'在全自动等能量物理归一化基础上的输出增益微调 (-12 ~ +6 dB)。'**
+  String get spatialHintGain;
+
+  /// No description provided for @spatialHintLoudness.
+  ///
+  /// In zh, this message translates to:
+  /// **'全站等响度自动平衡算法。自动平抑多扬声器上混带来的能量增益，彻底杜绝滑块变音量调节器的问题。'**
+  String get spatialHintLoudness;
+
+  /// No description provided for @stereoHintWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。'**
+  String get stereoHintWidth;
+
+  /// No description provided for @tubeHintColor.
+  ///
+  /// In zh, this message translates to:
+  /// **'模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。'**
+  String get tubeHintColor;
+
+  /// No description provided for @tubeHintTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。'**
+  String get tubeHintTrim;
+
+  /// No description provided for @tubeTriode.
+  ///
+  /// In zh, this message translates to:
+  /// **'TRIODE (偶次谐波)'**
+  String get tubeTriode;
+
+  /// No description provided for @tubePentode.
+  ///
+  /// In zh, this message translates to:
+  /// **'PENTODE (奇次谐波)'**
+  String get tubePentode;
+
+  /// No description provided for @tubeTape.
+  ///
+  /// In zh, this message translates to:
+  /// **'TAPE (磁带温润)'**
+  String get tubeTape;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:
@@ -3124,12 +3520,6 @@ abstract class AppLocalizations {
   /// **'释放时间'**
   String get dyneqRelease;
 
-  /// No description provided for @loudnessHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'小音量自动补低频和高频，大音量直通'**
-  String get loudnessHint;
-
   /// No description provided for @loudnessAmount.
   ///
   /// In zh, this message translates to:
@@ -4551,12 +4941,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'GraphicEQ 代码编辑器'**
   String get arbmagEditor;
-
-  /// No description provided for @arbmagNodes.
-  ///
-  /// In zh, this message translates to:
-  /// **'已载入 {count} 个频点'**
-  String arbmagNodes(int count);
 
   /// No description provided for @arbmagApply.
   ///

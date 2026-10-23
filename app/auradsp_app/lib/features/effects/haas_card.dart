@@ -53,7 +53,7 @@ class _HaasCard extends StatelessWidget {
             param: ParamRegistry.haasDelay,
             model: model,
             customLabel: l.haasDelay,
-            infoMessage: '延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。',
+            infoMessage: l.haasHintDelay,
           ),
           const SizedBox(height: AuraSpace.sm),
           // 干湿混合
@@ -61,7 +61,7 @@ class _HaasCard extends StatelessWidget {
             param: ParamRegistry.haasMix,
             model: model,
             customLabel: l.haasMix,
-            infoMessage: '湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。',
+            infoMessage: l.haasHintWet,
           ),
         ],
       ),

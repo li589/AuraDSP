@@ -52,7 +52,7 @@ class _FilterCard extends StatelessWidget {
             param: ParamRegistry.filterFreq,
             model: model,
             customLabel: l.filterFreq,
-            infoMessage: 'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。',
+            infoMessage: l.filterHintModes,
             customFormat: (v) => v >= 1000
                 ? '${(v / 1000).toStringAsFixed(1)}k'
                 : v.toStringAsFixed(0),
@@ -63,7 +63,7 @@ class _FilterCard extends StatelessWidget {
             param: ParamRegistry.filterQ,
             model: model,
             customLabel: l.filterQ,
-            infoMessage: '谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。',
+            infoMessage: l.filterHintResonance,
           ),
           ChannelRoutingSelector(
             model: model,

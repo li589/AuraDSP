@@ -436,7 +436,7 @@ abstract final class EelLinter {
           blocking: true));
     }
     if (!hasSample) {
-      issues.add(const EelLintIssue(0, 0, '缺少 @sample 段（引擎会拒绝编译）',
+      issues.add(EelLintIssue(0, 0, t.eelMissingSample,
           blocking: true));
     }
 
