@@ -99,6 +99,70 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingPresetSurround => '仅环绕';
 
   @override
+  String get setConnStatus => '连接状态';
+
+  @override
+  String get setConnActive => '已连接 (活跃回调)';
+
+  @override
+  String get setConnIdle => '未连接 (等待 Voicemeeter 启动)';
+
+  @override
+  String get setDeviceDisconnected => '未连接设备';
+
+  @override
+  String get setEndpointShort => '端点';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return '音频端点 ($shortId)';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [离线/未连接]';
+  }
+
+  @override
+  String get setDefaultEndpoint => '默认音频端点 (Default Render)';
+
+  @override
+  String get setNoEndpoint => '无可用音频端点';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return '活跃处理中 (${sr}Hz · $frames 帧)';
+  }
+
+  @override
+  String get setApoAttached => '已挂接 (等待播放流触发)';
+
+  @override
+  String get setProcessing => '处理中...';
+
+  @override
+  String get setApoRegistered => '已向目标设备注册 System APO 钩子并完成服务同步';
+
+  @override
+  String get setApoAttachFailed => 'APO 附加未完成';
+
+  @override
+  String get setApoUnregistered => '已安全卸载 APO 钩子并精确还原原始系统/厂商驱动';
+
+  @override
+  String get setApoUnregisterFailed => 'APO 卸载未完成';
+
+  @override
+  String get setCompositeSlot => '复合插槽';
+
+  @override
+  String get setRefreshStatus => '刷新状态';
+
+  @override
+  String get setApoSafetyNote =>
+      '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override

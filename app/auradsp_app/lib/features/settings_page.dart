@@ -23,6 +23,7 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/tray_service.dart';
 import '../core/ui_helpers.dart';
+import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -104,8 +105,10 @@ class _SettingsPageState extends State<SettingsPage> {
             title: l.language,
             child: AuraSegmented<String>(
               segments: const [
+                // l10n-ignore: 语言自称不翻译（各语言显示自己的名字）
                 AuraSegment('zh', '简体中文'),
                 AuraSegment('en', 'English'),
+                // l10n-ignore: 语言自称不翻译
                 AuraSegment('ja', '日本語'),
               ],
               selected: model.locale.languageCode,

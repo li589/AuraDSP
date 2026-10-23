@@ -9,6 +9,7 @@
 规则（与 test/l10n_cjk_guard_test.dart 完全一致）：
     1. 去掉 /* ... */ 块注释；
     2. 跳过以 // 或 /// 开头的整行（注释里的示例串不算）；
+       含 `l10n-ignore` 标记的行跳过（设备名匹配关键词、语言自称等不该翻译的串）；
     3. 统计「字符串字面量内含 CJK」的出现次数（'...' / "..."）。
 
 棘轮语义：基线只允许**变小**。新增硬编码 → 守卫测试红；还清债务 → 手动
@@ -31,11 +32,18 @@ CJK = re.compile(r"'[^'\n]*[\u4e00-\u9fff][^'\n]*'|\"[^\"\n]*[\u4e00-\u9fff][^\"
 def count_text(text):
     text = BLOCK.sub("", text)
     n = 0
+    prev_ignore = False
     for line in text.splitlines():
         s = line.strip()
         if s.startswith("//"):
+            # 注释行本身不计数；带 l10n-ignore 的注释豁免**下一行**
+            prev_ignore = "l10n-ignore" in line
+            continue
+        if prev_ignore or "l10n-ignore" in line:
+            prev_ignore = False
             continue
         n += len(CJK.findall(line))
+        prev_ignore = False
     return n
 
 

@@ -20,9 +20,20 @@ final _cjk = RegExp(
 int _count(String text) {
   final stripped = text.replaceAll(_block, '');
   var n = 0;
+  var prevIgnore = false;
   for (final line in stripped.split('\n')) {
-    if (line.trimLeft().startsWith('//')) continue;
+    final trimmed = line.trimLeft();
+    if (trimmed.startsWith('//')) {
+      // 注释行不计数；带 l10n-ignore 的注释豁免**下一行**（语言自称 / 匹配关键词）
+      prevIgnore = line.contains('l10n-ignore');
+      continue;
+    }
+    if (prevIgnore || line.contains('l10n-ignore')) {
+      prevIgnore = false;
+      continue;
+    }
     n += _cjk.allMatches(line).length;
+    prevIgnore = false;
   }
   return n;
 }
