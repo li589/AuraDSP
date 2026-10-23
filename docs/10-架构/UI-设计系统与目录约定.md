@@ -1,6 +1,6 @@
 # UI 设计系统与目录约定（AuraDSP 桌面端）
 
-> 定位：**UI 层的工程约定说明书**。数值真相源是 `design/tokens/aura.tokens.json`；
+> 定位：**UI 层的工程约定说明书**。数值真相源是 `app/auradsp_app/design/tokens/aura.tokens.json`；
 > 目录与依赖方向的权威是 `docs/00-总览/项目架构与开发规范.md`。本文补充两者之间的
 > 「怎么做」——令牌流水线、重建粒度、i18n 棘轮与待办清单。
 >
@@ -11,7 +11,7 @@
 ## 1. 设计令牌流水线（P2-1）
 
 ```
-design/tokens/aura.tokens.json          ← 手改（唯一真相源，W3C Design Tokens）
+app/auradsp_app/design/tokens/aura.tokens.json  ← 手改（唯一真相源，W3C Design Tokens）
         │  python tools/gen_theme.py     ← 改完 JSON 必须重跑
         ▼
 app/auradsp_app/lib/core/tokens.g.dart  ← 生成物，禁止手改
@@ -73,13 +73,25 @@ lib/
 ├── engine/      传输层（FFI / isolate / 桥）——不依赖 UI
 ├── core/        state / config / theme / design / l10n / tokens.g
 ├── features/    页面与业务组件——只经 core/ 访问基础设施
-└── ui/          （P1 规划）设计系统：chrome / controls / cards / meters
+└── ui/          设计系统（P1-2 已落地）：chrome.dart（骨架/基础控件）、widgets.dart（卡片/仪表）
 ```
 
-**当前**：`features/chrome.dart`（骨架/基础控件）、`features/widgets.dart`
-（内容卡片/仪表）、`features/effects/cards_common.dart`（参数控件）三处共享层，
-边界靠约定。**P1 目标**：迁入 `lib/ui/`，旧文件留 `export` 薄壳保持调用点零改动，
-并加静态断言测试（`ui/` 不得 import `features/` 或 `core/state`）。
+**P1-2 已落地（2026-10-23）**：`chrome.dart` / `widgets.dart` 已迁入 `lib/ui/`，
+旧路径 `features/chrome.dart`、`features/widgets.dart` 改为纯 `export` 薄壳
+（调用点零改动；`test/layering_guard_test.dart` 断言薄壳不得再长实现）。
+
+**特殊件**：`features/effects/cards_common.dart` 是 `part of '../effects_page.dart'`
+的 part 文件，与 effects 库同一编译单元，**不能**单独迁入 `ui/`；若迁移需先把
+effects_page 改为库 + part 结构（P1 后续，非必需）。
+
+**P1-3 守卫**：`test/layering_guard_test.dart` 四项断言——`ui/` 不得 import
+`features/`；`engine/` 不得依赖 UI；`core/` 不得依赖 `features/`；两个薄壳只允许
+`export`。
+
+**P1-1 拆分（2026-10-23）**：`features/settings_page.dart` 2509 行 → 父文件 370 行
+（SettingsPage + State）+ `features/settings/panels/{sections,hardware,vb_theme}.dart`
+三个 part（455/1309/397 行）。用 part 而非独立库，是为了保留私有符号可见性、
+做到零逻辑改动的机械拆分。
 
 命名：`AuraXxx` 用于设计系统控件（AuraChip/AuraSwitch/AuraSegmented）；
 `SectionCard`/`ParamSlider` 等语义件保持现名；页面私有件 `_Xxx`。
@@ -107,5 +119,8 @@ lib/
 | P2-1 | 令牌生成器 + 85 项 parity 测试 | ✅ 本轮 |
 | P2-2 | i18n 棘轮基线 + 守卫测试 | ✅ 本轮（债务 218 条待逐步清） |
 | P2-3 | 本文档 | ✅ 本轮 |
-| P1 | settings_page 拆分 → `features/settings/panels/`；chrome/widgets → `lib/ui/` 薄壳迁移；依赖方向断言；裸 `Slider` 收敛到 `ParamSlider` | ⏳ 待排期 |
+| P1-1 | settings_page 2509 行 → 370 行 + 3 个 part（sections/hardware/vb_theme） | ✅ 本轮 |
+| P1-2 | chrome/widgets → `lib/ui/`，旧路径 export 薄壳 | ✅ 本轮 |
+| P1-3 | 依赖方向守卫（ui/engine/core 互不越级 + 薄壳约束） | ✅ 本轮 |
+| P1-4 | 裸 `Slider` 收敛到 `ParamSlider`（78 处待逐卡核查） | ⏳ 待排期 |
 | P2 续 | 218 条硬编码中文按页转 arb（建议顺序：settings 68 → channel_routing 20 → gate/comp 27） | ⏳ 逐步 |

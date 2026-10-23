@@ -20,7 +20,8 @@ import re
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SCAN_DIR = os.path.join(ROOT, "app", "auradsp_app", "lib", "features")
+SCAN_DIRS = [os.path.join(ROOT, "app", "auradsp_app", "lib", d)
+              for d in ("features", "ui")]
 BASE = os.path.join(ROOT, "app", "auradsp_app", "test", "l10n_cjk_baseline.txt")
 
 BLOCK = re.compile(r"/\*.*?\*/", re.S)
@@ -40,15 +41,16 @@ def count_text(text):
 
 def scan():
     out = {}
-    for dirpath, _dirs, files in os.walk(SCAN_DIR):
-        for f in files:
-            if not f.endswith(".dart"):
-                continue
-            p = os.path.join(dirpath, f)
-            rel = os.path.relpath(p, os.path.join(ROOT, "app", "auradsp_app")).replace("\\", "/")
-            n = count_text(io.open(p, encoding="utf-8").read())
-            if n > 0:
-                out[rel] = n
+    for base in SCAN_DIRS:
+        for dirpath, _dirs, files in os.walk(base):
+            for f in files:
+                if not f.endswith(".dart"):
+                    continue
+                p = os.path.join(dirpath, f)
+                rel = os.path.relpath(p, os.path.join(ROOT, "app", "auradsp_app")).replace("\\", "/")
+                n = count_text(io.open(p, encoding="utf-8").read())
+                if n > 0:
+                    out[rel] = n
     return out
 
 
