@@ -85,6 +85,9 @@ def run_smoke_tests():
         "smoke_vm_detect.py",
         "smoke_vm_pump.py",
         "smoke_vm_bridge.py",
+        # Z12 超预算自动保护门禁（2026-10-23）：注入观测值 → 收窄到热组 →
+        # 回落自动恢复；手动改掩码立即取消；关保护不进入。App 占槽时让路。
+        "smoke_vm_protect.py",
     "smoke_apo_inspect.py",
     "smoke_apo_register.py",
     "smoke_apo_selftest.py",

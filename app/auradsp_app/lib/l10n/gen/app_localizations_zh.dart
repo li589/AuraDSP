@@ -46,6 +46,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbPluginLockedHint => '通道处理关闭时插件不运行（状态保留，开启后立即恢复）';
 
   @override
+  String get vbAutoProtect => '超预算自动保护';
+
+  @override
+  String get vbProtectHint => '回调持续超预算时自动把插件收窄到监听总线，回落后自动还原';
+
+  @override
+  String get vbProtectActive => '已激活：插件仅作用于监听总线，其余直通（回调超预算）';
+
+  @override
   String get shelfTitle => '低频搁架';
 
   @override

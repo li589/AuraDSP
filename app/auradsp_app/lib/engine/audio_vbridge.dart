@@ -34,6 +34,8 @@ typedef _BusMaskC = Int32 Function(Int32);
 typedef _BusMaskDart = int Function(int);
 typedef _PluginGroupEnableC = Int32 Function(Int32);
 typedef _PluginGroupEnableDart = int Function(int);
+typedef _AutoProtectC = Int32 Function(Int32);
+typedef _AutoProtectDart = int Function(int);
 typedef _SetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
 typedef _SetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 typedef _GetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
@@ -67,6 +69,11 @@ class AuraVmBridge {
   late final _PluginGroupEnableDart _pluginGroupEnable =
       dylib.lookupFunction<_PluginGroupEnableC, _PluginGroupEnableDart>(
           'vb_plugin_group_enable');
+  // Z12（2026-10-23）：超预算自动保护开关。旧桥 DLL 无此导出——调用方
+  // 必须 try/catch（isolate 侧已按 "old bridge dll?" 口径兜底）。
+  late final _AutoProtectDart _autoProtect =
+      dylib.lookupFunction<_AutoProtectC, _AutoProtectDart>(
+          'vb_plugin_auto_protect');
   late final _SetParamStrDart _setParamStr =
       dylib.lookupFunction<_SetParamStrC, _SetParamStrDart>('vb_set_param_str');
   late final _GetParamDart _getParam =
@@ -209,6 +216,10 @@ class AuraVmBridge {
 
   /// 按路插件处理掩码（bit g = 组 g 总线吃插件链）：返回生效值，0=桥未运行。
   int pluginGroupEnable(int mask) => _pluginGroupEnable(mask & 0xFF);
+
+  /// Z12 超预算自动保护开关：on<0 查询，其余置位；返回生效值。
+  /// 关闭时桥侧立即恢复用户掩码（若保护已激活）。
+  int pluginAutoProtect(int on) => _autoProtect(on);
 
   /// 字符串参数（liveprog.code / arbmag.string）：返回成功 handle 数，
   /// <0=失败。桥内记镜像，CHANGE 重建后自动回放。

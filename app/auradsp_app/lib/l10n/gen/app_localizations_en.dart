@@ -48,6 +48,17 @@ class AppLocalizationsEn extends AppLocalizations {
       'Plugins do not run while bus processing is off (state kept; resumes instantly)';
 
   @override
+  String get vbAutoProtect => 'Auto over-budget protection';
+
+  @override
+  String get vbProtectHint =>
+      'Narrows plugins to the monitored bus when the callback stays over budget; restores automatically';
+
+  @override
+  String get vbProtectActive =>
+      'Active: plugins only on the monitored bus, others passthrough (callback over budget)';
+
+  @override
   String get shelfTitle => 'Low Shelf';
 
   @override

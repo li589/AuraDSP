@@ -107,6 +107,14 @@ struct PumpCtx {
     uint64_t maxGroupTicks[8] = {};
     // L1b：无声 idle 判定秒数（默认 3s；原硬编码 10s 休眠太慢）。
     int idleSeconds = 3;
+    // ---- Z12 超预算保护观测（2026-10-23）----
+    // RT 单写者（OnVbCallback 尾部），守卫线程/桥只读。EMA 整数 µs：
+    // ema += (dt-ema)/8（时间常数 ≈8 块，@48k/128 ≈ 21ms）。qpfInvUs 由桥在
+    // 引擎构建点算好（QPF 是常量，RT 不调）；0 = 无效 → 观测停用。
+    volatile LONG cbEmaUs = 0;
+    volatile LONG cbOverStreak = 0;     // 连续超预算（EMA>85%）块数，回落即清零
+    double qpfInvUs = 0.0;              // 1e6/QPF；0 = 未初始化
+    volatile LONG protectTestMode = 0;  // 1 = RT 停更观测值（vb_protect_test 注入）
     // ---- 测试注入面（bridge 用；pump 不碰，全零即关闭） ----
     volatile LONG testKind = 0;  // 0=关 1=正弦440 2=粉噪 3=文件（RT 读，主线程 Interlocked 写）
     double testPhase = 0.0;      // 正弦相位（RT 独占）
@@ -428,6 +436,20 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     QueryPerformanceCounter(&t1);
     const uint64_t dt = (uint64_t)(t1.QuadPart - t0.QuadPart);
     if (dt > c->maxCbTicks) c->maxCbTicks = dt;
+    // Z12 预算观测：EMA(µs) + 连续超 85% 预算块计数。纯整数 + 单写者
+    // volatile store，RT 零等待；test 注入模式时停更（守卫冒烟驱动用）。
+    if (c->qpfInvUs > 0.0 && c->sr > 0 && c->nbs > 0 && !c->protectTestMode) {
+        const long dtUs = (long)((double)dt * c->qpfInvUs);
+        const long ema = c->cbEmaUs;
+        c->cbEmaUs = (LONG)(ema + (dtUs - ema) / 8);
+        const long budgetUs = (long)((double)c->nbs * 1000000.0 / (double)c->sr);
+        if (budgetUs > 0) {
+            if (c->cbEmaUs * 100 > budgetUs * 85)
+                ++c->cbOverStreak;
+            else
+                c->cbOverStreak = 0;
+        }
+    }
     return 0;
 }
 

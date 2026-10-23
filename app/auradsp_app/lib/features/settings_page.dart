@@ -2201,6 +2201,8 @@ class _VbBuses extends StatelessWidget {
         children: [
           Text(l.vbBuses, style: labelOf(p, size: 12, color: p.textDim)),
           const SizedBox(height: AuraSpace.xs),
+          _VbProtectRow(model: model),
+          const SizedBox(height: AuraSpace.xs),
           for (var g = 0; g < n; g++)
             _VbBusRow(
               name: names[g],
@@ -2211,6 +2213,62 @@ class _VbBuses extends StatelessWidget {
               pluginOn: (model.vbPluginGroupMask & (1 << g)) != 0,
               onPluginToggle: (v) => model.setVbPluginGroup(g, v),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/* ---- Z12 超预算自动保护（2026-10-23）：开关 + 预算占用/激活态 ----
+ * 数据来自 vbstatus 心跳的 protect/cbEmaUs/budgetUs（约 1s 一拍）。
+ * 激活 = 非监听总线插件直通——用户听感变化必须可见可解，故 warning 醒目提示；
+ * budgetUs<=0（桥未运行/旧桥 DLL）时只显示开关。 */
+class _VbProtectRow extends StatelessWidget {
+  final AppModel model;
+  const _VbProtectRow({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final l = l10nOf(context);
+    final info = model.vbInfo;
+    final prot = (info['protect'] as num?)?.toInt() ?? 0;
+    final emaUs = (info['cbEmaUs'] as num?)?.toInt() ?? 0;
+    final budgetUs = (info['budgetUs'] as num?)?.toInt() ?? 0;
+    final active = prot == 1;
+    final detail = active
+        ? l.vbProtectActive
+        : (budgetUs > 0
+            ? '${l.vbProtectHint}  ·  EMA ${(emaUs / 1000).toStringAsFixed(1)}ms / '
+                '${(budgetUs / 1000).toStringAsFixed(1)}ms'
+            : l.vbProtectHint);
+    return Container(
+      padding: const EdgeInsets.symmetric(
+          horizontal: AuraSpace.sm, vertical: 4),
+      decoration: BoxDecoration(
+        color: active ? p.warning.withValues(alpha: 0.10) : p.panel,
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: active ? p.warning : p.hairline, width: 1),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.vbAutoProtect,
+                    style: labelOf(p, size: 12,
+                        color: active ? p.warning : p.text)),
+                Text(detail,
+                    style: labelOf(p, size: 11,
+                        color: active ? p.warning : p.textDim)),
+              ],
+            ),
+          ),
+          const SizedBox(width: AuraSpace.sm),
+          _MiniToggle(
+              on: model.vbAutoProtect,
+              onToggle: (v) => model.setVbAutoProtect(v)),
         ],
       ),
     );

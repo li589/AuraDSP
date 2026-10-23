@@ -132,6 +132,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g = 组 g 总线吃插件链；进桥后与 busMask 同步下发）。
   int vbPluginGroupMask = 0xFF;
+  // Z12 超预算自动保护（进桥后与 pluginGroupMask 同步下发；桥默认开）。
+  bool vbAutoProtect = true;
   int vbStatusTick = 0;
   bool vbVizNullLogged = false;
   bool vbNoCbLogged = false;
@@ -332,6 +334,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       dbgLog('vbmode: plugin-group sync isolate=$vbPluginGroupMask rc=$pgRc');
     } catch (e) {
       dbgLog('vbmode: plugin-group sync failed (old bridge dll?): $e');
+    }
+    // Z12 超预算自动保护同步（旧桥 DLL 无此导出，静默兜底）。
+    try {
+      vb!.pluginAutoProtect(vbAutoProtect ? 1 : 0);
+    } catch (e) {
+      dbgLog('vbmode: auto-protect sync failed (old bridge dll?): $e');
     }
     try {
       wasapi?.stop();
@@ -1329,6 +1337,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               vb!.pluginGroupEnable(vbPluginGroupMask);
             } catch (e) {
               dbgLog('plugin-group enable failed (old bridge dll?): $e');
+            }
+          }
+          break;
+        case 'setPluginAutoProtect':
+          // Z12 超预算自动保护开关（桥关闭时立即恢复用户掩码）。
+          vbAutoProtect = (m['on'] as bool?) ?? true;
+          if (vbActive && vb != null) {
+            try {
+              vb!.pluginAutoProtect(vbAutoProtect ? 1 : 0);
+            } catch (e) {
+              dbgLog('auto-protect set failed (old bridge dll?): $e');
             }
           }
           break;

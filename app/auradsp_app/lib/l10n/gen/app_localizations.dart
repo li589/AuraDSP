@@ -172,6 +172,24 @@ abstract class AppLocalizations {
   /// **'通道处理关闭时插件不运行（状态保留，开启后立即恢复）'**
   String get vbPluginLockedHint;
 
+  /// No description provided for @vbAutoProtect.
+  ///
+  /// In zh, this message translates to:
+  /// **'超预算自动保护'**
+  String get vbAutoProtect;
+
+  /// No description provided for @vbProtectHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'回调持续超预算时自动把插件收窄到监听总线，回落后自动还原'**
+  String get vbProtectHint;
+
+  /// No description provided for @vbProtectActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'已激活：插件仅作用于监听总线，其余直通（回调超预算）'**
+  String get vbProtectActive;
+
   /// No description provided for @shelfTitle.
   ///
   /// In zh, this message translates to:
