@@ -37,6 +37,68 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stateIdle => '空闲';
 
   @override
+  String get routingChFl => '左前';
+
+  @override
+  String get routingChFr => '右前';
+
+  @override
+  String get routingChC => '中置';
+
+  @override
+  String get routingChLfe => '超低';
+
+  @override
+  String get routingChSl => '左环';
+
+  @override
+  String get routingChSr => '右环';
+
+  @override
+  String get routingChBl => '左后';
+
+  @override
+  String get routingChBr => '右后';
+
+  @override
+  String get routingAllChannels => '全声道 (8/8)';
+
+  @override
+  String get routingStereo => '立体声 (FL/FR)';
+
+  @override
+  String get routingNoSub => '无超低 (7/8)';
+
+  @override
+  String get routingAllBypassed => '全旁路 (0/8)';
+
+  @override
+  String get routingSurroundOnly => '仅环绕 (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 声道已选';
+  }
+
+  @override
+  String get channelRouting => '高级声道路由';
+
+  @override
+  String get routingPresets => '快速选择:';
+
+  @override
+  String get routingPresetAll => '全选';
+
+  @override
+  String get routingPresetStereo => '立体声';
+
+  @override
+  String get routingPresetNoLfe => '无超低';
+
+  @override
+  String get routingPresetSurround => '仅环绕';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override

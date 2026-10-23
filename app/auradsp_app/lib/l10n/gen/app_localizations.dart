@@ -154,6 +154,126 @@ abstract class AppLocalizations {
   /// **'空闲'**
   String get stateIdle;
 
+  /// No description provided for @routingChFl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左前'**
+  String get routingChFl;
+
+  /// No description provided for @routingChFr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右前'**
+  String get routingChFr;
+
+  /// No description provided for @routingChC.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置'**
+  String get routingChC;
+
+  /// No description provided for @routingChLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'超低'**
+  String get routingChLfe;
+
+  /// No description provided for @routingChSl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左环'**
+  String get routingChSl;
+
+  /// No description provided for @routingChSr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右环'**
+  String get routingChSr;
+
+  /// No description provided for @routingChBl.
+  ///
+  /// In zh, this message translates to:
+  /// **'左后'**
+  String get routingChBl;
+
+  /// No description provided for @routingChBr.
+  ///
+  /// In zh, this message translates to:
+  /// **'右后'**
+  String get routingChBr;
+
+  /// No description provided for @routingAllChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'全声道 (8/8)'**
+  String get routingAllChannels;
+
+  /// No description provided for @routingStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声 (FL/FR)'**
+  String get routingStereo;
+
+  /// No description provided for @routingNoSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'无超低 (7/8)'**
+  String get routingNoSub;
+
+  /// No description provided for @routingAllBypassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'全旁路 (0/8)'**
+  String get routingAllBypassed;
+
+  /// No description provided for @routingSurroundOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅环绕 (4/8)'**
+  String get routingSurroundOnly;
+
+  /// No description provided for @routingSelectedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count}/8 声道已选'**
+  String routingSelectedCount(int count);
+
+  /// No description provided for @channelRouting.
+  ///
+  /// In zh, this message translates to:
+  /// **'高级声道路由'**
+  String get channelRouting;
+
+  /// No description provided for @routingPresets.
+  ///
+  /// In zh, this message translates to:
+  /// **'快速选择:'**
+  String get routingPresets;
+
+  /// No description provided for @routingPresetAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get routingPresetAll;
+
+  /// No description provided for @routingPresetStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声'**
+  String get routingPresetStereo;
+
+  /// No description provided for @routingPresetNoLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'无超低'**
+  String get routingPresetNoLfe;
+
+  /// No description provided for @routingPresetSurround.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅环绕'**
+  String get routingPresetSurround;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:
