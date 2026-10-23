@@ -336,6 +336,75 @@ class AppLocalizationsJa extends AppLocalizations {
   String get compHintBandAmount => '負で圧縮、正で拡張。既定値 -0.35。';
 
   @override
+  String get eelUnclosedString => '文字列が閉じていません（複数行）';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return '余分な \"$ch\"（対応する開き括弧なし）';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => 'ブロックコメントが閉じていません（対応する */ なし）';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" が閉じていません（$line 行 $col 列から）';
+  }
+
+  @override
+  String get eelMissingInit => '@init セクションがありません（エンジンがコンパイルを拒否します）';
+
+  @override
+  String get eelMissingSample => '@sample セクションがありません（エンジンがコンパイルを拒否します）';
+
+  @override
+  String get eelEmptyInit => '空の @init セクション（vendor は少なくとも 1 文必要）';
+
+  @override
+  String get eelEmptySample => '@sample セクションが空です（出力は無音になります）。意図した記述ですか？';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n が範囲外です（slider1..8 のみスライダーに連動）';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name は読み取り専用です。代入は無効です';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 はリアルタイムオーディオ処理向けの高性能な式言語です。AuraDSP では全スクリプトがオーディオポンプスレッドで即時実行されます。';
+
+  @override
+  String get lpDocSectionsTitle => 'コアセクション';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// サンプルレート変更時または初回読み込み時に実行。変数・係数を初期化\n\n@sample\n// 各サンプルで実行。入出力は spl0（L）と spl1（R）\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => 'スライダー構文';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > ゲイン (dB)\n// sliderN: 初期値< 最小値, 最大値, ステップ > ラベル\n// ホストが対応するライブスライダーを自動生成します！';
+
+  @override
+  String get lpDocBuiltinsTitle => '主な組み込み定数と関数';
+
+  @override
+  String get lpDocBuiltinConsts => '• 定数：srate（サンプルレート）、\$pi（円周率）\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• 関数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels => '• チャンネル：spl0（L 入出力）、spl1（R 入出力）';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override

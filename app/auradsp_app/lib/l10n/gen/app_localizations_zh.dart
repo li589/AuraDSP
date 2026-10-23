@@ -329,6 +329,75 @@ class AppLocalizationsZh extends AppLocalizations {
   String get compHintBandAmount => '负值为动态压缩压制，正值为动态扩展。默认 -0.35。';
 
   @override
+  String get eelUnclosedString => '字符串未闭合（跨行）';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return '多余的 \"$ch\"（无匹配的开括号）';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => '块注释未闭合（/* 缺少对应的 */）';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" 未闭合（始于第 $line 行第 $col 列）';
+  }
+
+  @override
+  String get eelMissingInit => '缺少 @init 段（引擎会拒绝编译）';
+
+  @override
+  String get eelMissingSample => '缺少 @sample 段（引擎会拒绝编译）';
+
+  @override
+  String get eelEmptyInit => '空 @init 段（vendor 要求至少一条语句）';
+
+  @override
+  String get eelEmptySample => '@sample 段为空（将输出静音），确认不是漏写？';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n 越界（仅 slider1..8 会联动滑块）';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name 是只读变量，赋值不会生效';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。';
+
+  @override
+  String get lpDocSectionsTitle => '核心代码段（Sections）';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => '滑块控制语法（Sliders）';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！';
+
+  @override
+  String get lpDocBuiltinsTitle => '常用内置常量与函数';
+
+  @override
+  String get lpDocBuiltinConsts => '• 常量：srate (当前采样率), \$pi (圆周率)\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels => '• 声道：spl0 (左输入/输出), spl1 (右输入/输出)';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override

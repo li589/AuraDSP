@@ -706,6 +706,120 @@ abstract class AppLocalizations {
   /// **'负值为动态压缩压制，正值为动态扩展。默认 -0.35。'**
   String get compHintBandAmount;
 
+  /// No description provided for @eelUnclosedString.
+  ///
+  /// In zh, this message translates to:
+  /// **'字符串未闭合（跨行）'**
+  String get eelUnclosedString;
+
+  /// No description provided for @eelUnmatchedClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'多余的 \"{ch}\"（无匹配的开括号）'**
+  String eelUnmatchedClose(String ch);
+
+  /// No description provided for @eelBlockCommentUnclosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'块注释未闭合（/* 缺少对应的 */）'**
+  String get eelBlockCommentUnclosed;
+
+  /// No description provided for @eelUnclosedQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'\"{ch}\" 未闭合（始于第 {line} 行第 {col} 列）'**
+  String eelUnclosedQuote(String ch, int line, int col);
+
+  /// No description provided for @eelMissingInit.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @init 段（引擎会拒绝编译）'**
+  String get eelMissingInit;
+
+  /// No description provided for @eelMissingSample.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 @sample 段（引擎会拒绝编译）'**
+  String get eelMissingSample;
+
+  /// No description provided for @eelEmptyInit.
+  ///
+  /// In zh, this message translates to:
+  /// **'空 @init 段（vendor 要求至少一条语句）'**
+  String get eelEmptyInit;
+
+  /// No description provided for @eelEmptySample.
+  ///
+  /// In zh, this message translates to:
+  /// **'@sample 段为空（将输出静音），确认不是漏写？'**
+  String get eelEmptySample;
+
+  /// No description provided for @eelSliderRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'slider{n} 越界（仅 slider1..8 会联动滑块）'**
+  String eelSliderRange(int n);
+
+  /// No description provided for @eelReadonlyAssign.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} 是只读变量，赋值不会生效'**
+  String eelReadonlyAssign(String name);
+
+  /// No description provided for @lpDocIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。'**
+  String get lpDocIntro;
+
+  /// No description provided for @lpDocSectionsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'核心代码段（Sections）'**
+  String get lpDocSectionsTitle;
+
+  /// No description provided for @lpDocSampleCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;'**
+  String get lpDocSampleCode;
+
+  /// No description provided for @lpDocSlidersTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'滑块控制语法（Sliders）'**
+  String get lpDocSlidersTitle;
+
+  /// No description provided for @lpDocSampleSlider.
+  ///
+  /// In zh, this message translates to:
+  /// **'slider1: 0< -12, 12, 0.5 > 增益 (dB)\n// sliderN: 初始值< 最小值, 最大值, 步进 > 描述标签\n// 宿主将自动生成对应的实时调节滑块！'**
+  String get lpDocSampleSlider;
+
+  /// No description provided for @lpDocBuiltinsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'常用内置常量与函数'**
+  String get lpDocBuiltinsTitle;
+
+  /// No description provided for @lpDocBuiltinConsts.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 常量：srate (当前采样率), \$pi (圆周率)\n'**
+  String get lpDocBuiltinConsts;
+
+  /// No description provided for @lpDocBuiltinFns.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 函数：sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n'**
+  String get lpDocBuiltinFns;
+
+  /// No description provided for @lpDocBuiltinChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'• 声道：spl0 (左输入/输出), spl1 (右输入/输出)'**
+  String get lpDocBuiltinChannels;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:
