@@ -119,7 +119,7 @@ class _VoicemeeterPanel extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · ${l.modeVoicemeeterApi}'),
-        _InfoRow('连接状态', model.vbActive ? '已连接 (活跃回调)' : (note is String && note.isNotEmpty ? note : '未连接 (等待 Voicemeeter 启动)')),
+        _InfoRow(l.setConnStatus, model.vbActive ? l.setConnActive : (note is String && note.isNotEmpty ? note : l.setConnIdle)),
         if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
         if (model.vbActive)
           HbBuilder(tick: model.hbTick, builder: (_) => _VbBuses(model: model)),
@@ -129,9 +129,10 @@ class _VoicemeeterPanel extends StatelessWidget {
 }
 
 /// 格式化离线/已断开设备的展示名称，避免给用户展示裸 GUID 或 Map.toString() 乱码
-String _formatOfflineDeviceName(String idOrName, [List<AudioDeviceItem>? known]) {
+String _formatOfflineDeviceName(AppLocalizations l, String idOrName,
+    [List<AudioDeviceItem>? known]) {
   var s = idOrName.trim();
-  if (s.isEmpty) return '未连接设备';
+  if (s.isEmpty) return l.setDeviceDisconnected;
   // 防御 Map.toString() 残留（如 `{name: 扬声器, id: ...}`）
   if (s.startsWith('{') && s.contains('name:')) {
     final m = RegExp(r'name:\s*(.*?)(?:,\s*id:|\s*})').firstMatch(s);
@@ -147,8 +148,8 @@ String _formatOfflineDeviceName(String idOrName, [List<AudioDeviceItem>? known])
   }
   // 若是裸 GUID，截取简短端点代号
   if (s.startsWith('{0.0.') && s.length > 30) {
-    final shortId = s.length >= 8 ? s.substring(s.length - 8, s.length - 1) : '端点';
-    return '音频端点 ($shortId)';
+    final shortId = s.length >= 8 ? s.substring(s.length - 8, s.length - 1) : l.setEndpointShort;
+    return l.setEndpointWithId(shortId);
   }
   return s;
 }
@@ -159,13 +160,13 @@ IconData _getAudioDeviceIcon(String name, {required bool isRender}) {
   if (!isRender) return Icons.mic_none_outlined;
   if (lower.contains('headphone') ||
       lower.contains('headset') ||
-      lower.contains('耳机') ||
-      lower.contains('耳麦')) {
+      lower.contains('耳机') || // l10n-ignore: 设备名匹配关键词
+      lower.contains('耳麦')) { // l10n-ignore: 设备名匹配关键词
     return Icons.headphones_outlined;
   }
   if (lower.contains('speaker') ||
-      lower.contains('扬声器') ||
-      lower.contains('喇叭')) {
+      lower.contains('扬声器') || // l10n-ignore: 设备名匹配关键词
+      lower.contains('喇叭')) { // l10n-ignore: 设备名匹配关键词
     return Icons.speaker_outlined;
   }
   return Icons.volume_up_outlined;
@@ -214,7 +215,7 @@ class _SystemApoPanel extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            '默认音频端点 (Default Render)',
+                            l.setDefaultEndpoint,
                             style: TextStyle(
                               fontSize: 12,
                               color: selEndpoint.isEmpty ? p.accent : p.text,
@@ -235,7 +236,8 @@ class _SystemApoPanel extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_formatOfflineDeviceName(selEndpoint, endpoints)} [离线/未连接]',
+                              l.setOfflineSuffix(
+                                  _formatOfflineDeviceName(l, selEndpoint, endpoints)),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: p.warning,
@@ -276,7 +278,7 @@ class _SystemApoPanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: endpoints.isEmpty ? '无可用音频端点' : null,
+                hint: endpoints.isEmpty ? l.setNoEndpoint : null,
                 onChanged: (v) {
                   if (v != null) model.setApoTargetEndpoint(v);
                 },
@@ -323,7 +325,8 @@ class _SystemApoPanel extends StatelessWidget {
                           const Icon(Icons.graphic_eq_rounded, size: 12, color: Colors.green),
                           const SizedBox(width: 4),
                           Text(
-                            '活跃处理中 (${model.apoHeartbeatSr}Hz · ${model.apoHeartbeatFrames} 帧)',
+                            l.setApoActive(model.apoHeartbeatSr,
+                                model.apoHeartbeatFrames),
                             style: const TextStyle(fontSize: 10, color: Colors.green, fontWeight: FontWeight.bold),
                           ),
                         ],
@@ -342,9 +345,9 @@ class _SystemApoPanel extends StatelessWidget {
                         children: [
                           const Icon(Icons.hourglass_top_rounded, size: 12, color: Colors.orange),
                           const SizedBox(width: 4),
-                          const Text(
-                            '已挂接 (等待播放流触发)',
-                            style: TextStyle(fontSize: 10, color: Colors.orange),
+                          Text(
+                            l.setApoAttached,
+                            style: const TextStyle(fontSize: 10, color: Colors.orange),
                           ),
                         ],
                       ),
@@ -387,7 +390,7 @@ class _SystemApoPanel extends StatelessWidget {
           runSpacing: AuraSpace.xs,
           children: [
             AuraChip(
-              model.isApoOperating ? '处理中...' : l.apoActionAttach,
+              model.isApoOperating ? l.setProcessing : l.apoActionAttach,
               icon: Icons.link,
               selected: model.apoAttached,
               onTap: model.isApoOperating
@@ -397,15 +400,15 @@ class _SystemApoPanel extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(ok
-                              ? '已向目标设备注册 System APO 钩子并完成服务同步'
-                              : (model.lastApoError ?? 'APO 附加未完成')),
+                              ? l.setApoRegistered
+                              : (model.lastApoError ?? l.setApoAttachFailed)),
                           duration: const Duration(milliseconds: 2000),
                         ));
                       }
                     },
             ),
             AuraChip(
-              model.isApoOperating ? '处理中...' : l.apoActionDetach,
+              model.isApoOperating ? l.setProcessing : l.apoActionDetach,
               icon: Icons.link_off,
               danger: true,
               onTap: model.isApoOperating
@@ -415,21 +418,21 @@ class _SystemApoPanel extends StatelessWidget {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
                           content: Text(ok
-                              ? '已安全卸载 APO 钩子并精确还原原始系统/厂商驱动'
-                              : (model.lastApoError ?? 'APO 卸载未完成')),
+                              ? l.setApoUnregistered
+                              : (model.lastApoError ?? l.setApoUnregisterFailed)),
                           duration: const Duration(milliseconds: 2000),
                         ));
                       }
                     },
             ),
             AuraChip(
-              '复合插槽',
+              l.setCompositeSlot,
               icon: model.apoCompositeMode ? Icons.layers_rounded : Icons.layers_outlined,
               selected: model.apoCompositeMode,
               onTap: () => model.setApoCompositeMode(!model.apoCompositeMode),
             ),
             AuraChip(
-              '刷新状态',
+              l.setRefreshStatus,
               icon: Icons.refresh_rounded,
               onTap: () => model.checkApoStatus(),
             ),
@@ -443,7 +446,7 @@ class _SystemApoPanel extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                '注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。',
+                l.setApoSafetyNote,
                 style: TextStyle(fontSize: 11, color: p.textDim, height: 1.3),
               ),
             ),

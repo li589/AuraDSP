@@ -99,6 +99,70 @@ class AppLocalizationsJa extends AppLocalizations {
   String get routingPresetSurround => 'サラウンド';
 
   @override
+  String get setConnStatus => '接続状態';
+
+  @override
+  String get setConnActive => '接続済み（コールバック動作中）';
+
+  @override
+  String get setConnIdle => '未接続（Voicemeeter 起動待ち）';
+
+  @override
+  String get setDeviceDisconnected => 'デバイス未接続';
+
+  @override
+  String get setEndpointShort => 'エンドポイント';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return 'オーディオエンドポイント（$shortId）';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [オフライン/未接続]';
+  }
+
+  @override
+  String get setDefaultEndpoint => '既定のオーディオエンドポイント (Default Render)';
+
+  @override
+  String get setNoEndpoint => '利用可能なオーディオエンドポイントなし';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return '処理中（$sr Hz · $frames フレーム）';
+  }
+
+  @override
+  String get setApoAttached => '接続済み（再生ストリーム待ち）';
+
+  @override
+  String get setProcessing => '処理中...';
+
+  @override
+  String get setApoRegistered => '対象デバイスに System APO フックを登録しサービス同期完了';
+
+  @override
+  String get setApoAttachFailed => 'APO アタッチ未完了';
+
+  @override
+  String get setApoUnregistered => 'APO フックを安全に解除し元のシステム/ベンダードライバーを復元';
+
+  @override
+  String get setApoUnregisterFailed => 'APO アンインストール未完了';
+
+  @override
+  String get setCompositeSlot => '複合スロット';
+
+  @override
+  String get setRefreshStatus => '状態を更新';
+
+  @override
+  String get setApoSafetyNote =>
+      'レジストリ保護：すべての変更は HKLM\\SOFTWARE\\AuraDSP\\Child APOs とディスク二層スナップショットで原子的に保護され、アンインストール時に元のドライバー構成を 100% 復元します。';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override

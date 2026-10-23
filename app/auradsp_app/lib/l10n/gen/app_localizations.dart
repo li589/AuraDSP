@@ -274,6 +274,120 @@ abstract class AppLocalizations {
   /// **'仅环绕'**
   String get routingPresetSurround;
 
+  /// No description provided for @setConnStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'连接状态'**
+  String get setConnStatus;
+
+  /// No description provided for @setConnActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接 (活跃回调)'**
+  String get setConnActive;
+
+  /// No description provided for @setConnIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接 (等待 Voicemeeter 启动)'**
+  String get setConnIdle;
+
+  /// No description provided for @setDeviceDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接设备'**
+  String get setDeviceDisconnected;
+
+  /// No description provided for @setEndpointShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'端点'**
+  String get setEndpointShort;
+
+  /// No description provided for @setEndpointWithId.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频端点 ({shortId})'**
+  String setEndpointWithId(String shortId);
+
+  /// No description provided for @setOfflineSuffix.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} [离线/未连接]'**
+  String setOfflineSuffix(String name);
+
+  /// No description provided for @setDefaultEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认音频端点 (Default Render)'**
+  String get setDefaultEndpoint;
+
+  /// No description provided for @setNoEndpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用音频端点'**
+  String get setNoEndpoint;
+
+  /// No description provided for @setApoActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃处理中 ({sr}Hz · {frames} 帧)'**
+  String setApoActive(int sr, int frames);
+
+  /// No description provided for @setApoAttached.
+  ///
+  /// In zh, this message translates to:
+  /// **'已挂接 (等待播放流触发)'**
+  String get setApoAttached;
+
+  /// No description provided for @setProcessing.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理中...'**
+  String get setProcessing;
+
+  /// No description provided for @setApoRegistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已向目标设备注册 System APO 钩子并完成服务同步'**
+  String get setApoRegistered;
+
+  /// No description provided for @setApoAttachFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 附加未完成'**
+  String get setApoAttachFailed;
+
+  /// No description provided for @setApoUnregistered.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安全卸载 APO 钩子并精确还原原始系统/厂商驱动'**
+  String get setApoUnregistered;
+
+  /// No description provided for @setApoUnregisterFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'APO 卸载未完成'**
+  String get setApoUnregisterFailed;
+
+  /// No description provided for @setCompositeSlot.
+  ///
+  /// In zh, this message translates to:
+  /// **'复合插槽'**
+  String get setCompositeSlot;
+
+  /// No description provided for @setRefreshStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新状态'**
+  String get setRefreshStatus;
+
+  /// No description provided for @setApoSafetyNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。'**
+  String get setApoSafetyNote;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:

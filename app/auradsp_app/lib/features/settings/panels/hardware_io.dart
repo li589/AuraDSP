@@ -152,7 +152,7 @@ class _WasapiInputSubpanel extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_formatOfflineDeviceName(curDev, inputs)} [离线/未连接]',
+                              l.setOfflineSuffix(_formatOfflineDeviceName(l, curDev, inputs)),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: p.warning,
@@ -426,7 +426,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              '${_formatOfflineDeviceName(curDev, outputs)} [离线/未连接]',
+                              l.setOfflineSuffix(_formatOfflineDeviceName(l, curDev, outputs)),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: p.warning,
@@ -606,7 +606,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                                '${_formatOfflineDeviceName(curEndpoint, endpoints)} [离线/未连接]',
+                                l.setOfflineSuffix(_formatOfflineDeviceName(l, curEndpoint, endpoints)),
                                 style: TextStyle(
                                     fontSize: 12,
                                     color: p.warning,

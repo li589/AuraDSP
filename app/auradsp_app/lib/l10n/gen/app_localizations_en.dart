@@ -99,6 +99,72 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingPresetSurround => 'Surround';
 
   @override
+  String get setConnStatus => 'Connection';
+
+  @override
+  String get setConnActive => 'Connected (active callback)';
+
+  @override
+  String get setConnIdle => 'Not connected (waiting for Voicemeeter)';
+
+  @override
+  String get setDeviceDisconnected => 'Device not connected';
+
+  @override
+  String get setEndpointShort => 'Endpoint';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return 'Audio endpoint ($shortId)';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [offline/not connected]';
+  }
+
+  @override
+  String get setDefaultEndpoint => 'Default audio endpoint (Default Render)';
+
+  @override
+  String get setNoEndpoint => 'No audio endpoint available';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return 'Active ($sr Hz · $frames frames)';
+  }
+
+  @override
+  String get setApoAttached => 'Attached (waiting for playback stream)';
+
+  @override
+  String get setProcessing => 'Processing...';
+
+  @override
+  String get setApoRegistered =>
+      'System APO hook registered on the target device; service synced';
+
+  @override
+  String get setApoAttachFailed => 'APO attach incomplete';
+
+  @override
+  String get setApoUnregistered =>
+      'APO hook safely removed; original system/vendor drivers restored';
+
+  @override
+  String get setApoUnregisterFailed => 'APO uninstall incomplete';
+
+  @override
+  String get setCompositeSlot => 'Composite slot';
+
+  @override
+  String get setRefreshStatus => 'Refresh status';
+
+  @override
+  String get setApoSafetyNote =>
+      'Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override
