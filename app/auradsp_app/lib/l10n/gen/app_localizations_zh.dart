@@ -226,6 +226,109 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setAsioUnregisterFailed => '注销失败，请使用管理员权限重试';
 
   @override
+  String get gateHintThreshold => '低于该电平的背景底噪将被衰减。太高会吃掉弱音尾音，太低门几乎不动作。';
+
+  @override
+  String get gateHysteresis => '迟滞防抖 (Hysteresis)';
+
+  @override
+  String get gateHintHysteresis =>
+      '开门与关门之间的电平缓冲差。防止信号在阈值临界点反复振荡抽吸，确保人声起伏时门状态平稳自然。';
+
+  @override
+  String get gateRange => '衰减底线 (Range)';
+
+  @override
+  String get gateHintRange =>
+      '门完全关闭时的最大衰减深度。设为 -60dB 为静音，设为 -12~-24dB 可保留自然背景底噪，避免数码窒息感。';
+
+  @override
+  String get gateHold => '保持时间 (Hold)';
+
+  @override
+  String get gateHintHold => '信号跌破关门阈值后，保持完全导通的毫秒数。防止语间停顿或鼓点泛音被过早斩断。';
+
+  @override
+  String get gateHintAttack => '信号越过开启阈值后门打开的速度。太慢会吃掉起音，太快可能引入瞬态爆音。';
+
+  @override
+  String get gateHintRelease => '保持时间结束后门平滑关闭到衰减底线所需时间。较长的时间让淡出更自然。';
+
+  @override
+  String get gateHintSidechain => '侧链动态去齿音与噪声门输出响度自动补偿。';
+
+  @override
+  String get gateHintDeess => '针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。';
+
+  @override
+  String get gateHintDeessFreq => '检测齿音（s/sh 音）的侧链频段。齿音重往低调，太闷往高调。';
+
+  @override
+  String get gateHintDeessAmount => '齿音压制强度。只衰减高频成分，低频人声不动。';
+
+  @override
+  String get gateHintAutoGain => '实时补偿噪声门造成的整体电平下降，保持响度不塌。';
+
+  @override
+  String get compThreshold => '压缩阈值';
+
+  @override
+  String get compHintThreshold =>
+      '信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。';
+
+  @override
+  String get compRatio => '压缩比率';
+
+  @override
+  String get compHintRatio =>
+      '超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。';
+
+  @override
+  String get compHintRelease => '控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。';
+
+  @override
+  String get compHintBandwidth => '频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。';
+
+  @override
+  String get compHintTiming => '算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。';
+
+  @override
+  String get compBandsTitle => '分频段动态压限微调 (7 Bands)';
+
+  @override
+  String get compHintBands => '可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。';
+
+  @override
+  String get bandSub => '极低频';
+
+  @override
+  String get bandLow => '低频';
+
+  @override
+  String get bandLowMid => '中低频';
+
+  @override
+  String get bandMid => '中频';
+
+  @override
+  String get bandHighMid => '中高频';
+
+  @override
+  String get bandHigh => '高频';
+
+  @override
+  String get bandUltra => '超高频';
+
+  @override
+  String get compBandFreq => '分频中心频率';
+
+  @override
+  String get compBandAmount => '压限 / 扩展数值';
+
+  @override
+  String get compHintBandAmount => '负值为动态压缩压制，正值为动态扩展。默认 -0.35。';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override

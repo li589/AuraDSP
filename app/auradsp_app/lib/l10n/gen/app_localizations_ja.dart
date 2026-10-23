@@ -227,6 +227,115 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setAsioUnregisterFailed => '登録解除に失敗しました。管理者権限で再試行してください';
 
   @override
+  String get gateHintThreshold =>
+      'このレベル以下の暗騒音を減衰します。高すぎると弱い余韻が消え、低すぎるとゲートがほとんど動作しません。';
+
+  @override
+  String get gateHysteresis => 'ヒステリシス';
+
+  @override
+  String get gateHintHysteresis =>
+      '開閉間のレベル差。しきい値付近での往復動作を防ぎ、ボーカルの起伏でも安定したゲート動作を保ちます。';
+
+  @override
+  String get gateRange => 'レンジ（減衰下限）';
+
+  @override
+  String get gateHintRange =>
+      '全閉時の最大減衰量。-60 dB は無音、-12〜-24 dB は自然な暗騒音を残し、デジタル的な息苦しさを避けます。';
+
+  @override
+  String get gateHold => 'ホールド';
+
+  @override
+  String get gateHintHold =>
+      '信号が閉じしきい値を下回ってから全開を保つ時間（ms）。語間の無音やドラムの余韻の早期遮断を防ぎます。';
+
+  @override
+  String get gateHintAttack =>
+      '開きしきい値を越えてから開く速さ。遅すぎるとアタックが削れ、速すぎるとクリックが出ることがあります。';
+
+  @override
+  String get gateHintRelease => 'ホールド後に減衰下限まで滑らかに閉じる時間。長いほど自然なフェードになります。';
+
+  @override
+  String get gateHintSidechain => 'サイドチェーンのデエッサーと、ゲート出力のラウドネス自動補正。';
+
+  @override
+  String get gateHintDeess => '歯擦音（s/sh/ch）を動的に抑え、低域の豊かさは保ちます。';
+
+  @override
+  String get gateHintDeessFreq => '歯擦音を検出するサイドチェーン帯域。歯擦音が強い場合は下げ、こもる場合は上げます。';
+
+  @override
+  String get gateHintDeessAmount => '歯擦音の抑圧量。高域のみを減衰し、低域の声は変えません。';
+
+  @override
+  String get gateHintAutoGain => 'ゲートによる全体レベルの低下をリアルタイムに補正します。';
+
+  @override
+  String get compThreshold => 'しきい値';
+
+  @override
+  String get compHintThreshold =>
+      'コンプレッションを開始するレベル。それ以下はそのまま、以上は比例的に抑え、過激なトランジェントを整えます。';
+
+  @override
+  String get compRatio => 'レシオ';
+
+  @override
+  String get compHintRatio =>
+      'しきい値超過分の圧縮の急峻さ。高いほど強く（10:1 はほぼリミッター）、低いほど穏やかで抜けの良い音になります。';
+
+  @override
+  String get compHintRelease =>
+      '圧縮とエンベロープ追従のリリース時間。短いとトランジェントが強調され、長いと滑らかで透明感が出ます。';
+
+  @override
+  String get compHintBandwidth =>
+      '周波数分析の分解能。粗い設定は応答が速く電子音楽向き、精密設定は帯域分離が良くボーカル・器楽向き。';
+
+  @override
+  String get compHintTiming =>
+      'フィルター時定数の方式。トランジェントは微細なダイナミクスを保持、バランスは汎用、ゼロレイテンシはバッファ遅延なし。';
+
+  @override
+  String get compBandsTitle => '帯域別ダイナミクス微調整（7 バンド）';
+
+  @override
+  String get compHintBands => '7 バンドそれぞれの中心周波数と圧縮/拡張量を設定（負＝圧縮、正＝拡張）。';
+
+  @override
+  String get bandSub => '超低域';
+
+  @override
+  String get bandLow => '低域';
+
+  @override
+  String get bandLowMid => '中低域';
+
+  @override
+  String get bandMid => '中域';
+
+  @override
+  String get bandHighMid => '中高域';
+
+  @override
+  String get bandHigh => '高域';
+
+  @override
+  String get bandUltra => '超高域';
+
+  @override
+  String get compBandFreq => '中心周波数';
+
+  @override
+  String get compBandAmount => '圧縮 / 拡張量';
+
+  @override
+  String get compHintBandAmount => '負で圧縮、正で拡張。既定値 -0.35。';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override

@@ -237,6 +237,123 @@ class AppLocalizationsEn extends AppLocalizations {
       'Unregister failed; retry with administrator privileges';
 
   @override
+  String get gateHintThreshold =>
+      'Background noise below this level is attenuated. Too high eats quiet tails; too low and the gate barely acts.';
+
+  @override
+  String get gateHysteresis => 'Hysteresis';
+
+  @override
+  String get gateHintHysteresis =>
+      'Level gap between opening and closing; prevents chatter at the threshold so the gate stays stable through vocal dynamics.';
+
+  @override
+  String get gateRange => 'Range';
+
+  @override
+  String get gateHintRange =>
+      'Maximum attenuation when fully closed. -60 dB is silence; -12…-24 dB keeps natural ambience and avoids a digital-dead feel.';
+
+  @override
+  String get gateHold => 'Hold';
+
+  @override
+  String get gateHintHold =>
+      'Milliseconds to stay fully open after the signal drops below the close threshold; avoids cutting pauses or drum tails.';
+
+  @override
+  String get gateHintAttack =>
+      'How fast the gate opens after crossing the open threshold. Too slow eats attacks; too fast can click.';
+
+  @override
+  String get gateHintRelease =>
+      'Time to close smoothly to the range floor after hold; longer values give a more natural fade.';
+
+  @override
+  String get gateHintSidechain =>
+      'Sidechain de-esser plus automatic loudness compensation for the gate output.';
+
+  @override
+  String get gateHintDeess =>
+      'Dynamically tames sibilance (s/sh/ch) while keeping low-end body.';
+
+  @override
+  String get gateHintDeessFreq =>
+      'Sidechain band used to detect sibilance. Heavy sibilance → lower; dull → higher.';
+
+  @override
+  String get gateHintDeessAmount =>
+      'Sibilance reduction strength; only the high band is attenuated.';
+
+  @override
+  String get gateHintAutoGain =>
+      'Compensates the level drop caused by gating in real time.';
+
+  @override
+  String get compThreshold => 'Threshold';
+
+  @override
+  String get compHintThreshold =>
+      'Level where compression starts. Audio below stays untouched; above is reduced proportionally, taming harsh transients.';
+
+  @override
+  String get compRatio => 'Ratio';
+
+  @override
+  String get compHintRatio =>
+      'Steepness of gain reduction above threshold. Higher = stronger (10:1 approaches limiting); lower = gentler, more open dynamics.';
+
+  @override
+  String get compHintRelease =>
+      'Release time for compression and envelope tracking. Short = punchier transients; long = smoother, more transparent.';
+
+  @override
+  String get compHintBandwidth =>
+      'Frequency-analysis resolution. Coarse responds fastest (electronic/pop); precise separates bands better (vocals, instruments).';
+
+  @override
+  String get compHintTiming =>
+      'Filter time-constant strategy. Transient keeps micro-dynamics; Balanced is general purpose; Zero-latency adds no buffering delay.';
+
+  @override
+  String get compBandsTitle => 'Per-band dynamics trim (7 bands)';
+
+  @override
+  String get compHintBands =>
+      'Customize center frequency and compression/expansion per band (negative = compress, positive = expand).';
+
+  @override
+  String get bandSub => 'Sub';
+
+  @override
+  String get bandLow => 'Low';
+
+  @override
+  String get bandLowMid => 'Low-mid';
+
+  @override
+  String get bandMid => 'Mid';
+
+  @override
+  String get bandHighMid => 'High-mid';
+
+  @override
+  String get bandHigh => 'High';
+
+  @override
+  String get bandUltra => 'Ultra-high';
+
+  @override
+  String get compBandFreq => 'Center frequency';
+
+  @override
+  String get compBandAmount => 'Compress / expand';
+
+  @override
+  String get compHintBandAmount =>
+      'Negative compresses, positive expands. Default -0.35.';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override

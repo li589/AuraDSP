@@ -508,6 +508,204 @@ abstract class AppLocalizations {
   /// **'注销失败，请使用管理员权限重试'**
   String get setAsioUnregisterFailed;
 
+  /// No description provided for @gateHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'低于该电平的背景底噪将被衰减。太高会吃掉弱音尾音，太低门几乎不动作。'**
+  String get gateHintThreshold;
+
+  /// No description provided for @gateHysteresis.
+  ///
+  /// In zh, this message translates to:
+  /// **'迟滞防抖 (Hysteresis)'**
+  String get gateHysteresis;
+
+  /// No description provided for @gateHintHysteresis.
+  ///
+  /// In zh, this message translates to:
+  /// **'开门与关门之间的电平缓冲差。防止信号在阈值临界点反复振荡抽吸，确保人声起伏时门状态平稳自然。'**
+  String get gateHintHysteresis;
+
+  /// No description provided for @gateRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'衰减底线 (Range)'**
+  String get gateRange;
+
+  /// No description provided for @gateHintRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'门完全关闭时的最大衰减深度。设为 -60dB 为静音，设为 -12~-24dB 可保留自然背景底噪，避免数码窒息感。'**
+  String get gateHintRange;
+
+  /// No description provided for @gateHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持时间 (Hold)'**
+  String get gateHold;
+
+  /// No description provided for @gateHintHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号跌破关门阈值后，保持完全导通的毫秒数。防止语间停顿或鼓点泛音被过早斩断。'**
+  String get gateHintHold;
+
+  /// No description provided for @gateHintAttack.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号越过开启阈值后门打开的速度。太慢会吃掉起音，太快可能引入瞬态爆音。'**
+  String get gateHintAttack;
+
+  /// No description provided for @gateHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持时间结束后门平滑关闭到衰减底线所需时间。较长的时间让淡出更自然。'**
+  String get gateHintRelease;
+
+  /// No description provided for @gateHintSidechain.
+  ///
+  /// In zh, this message translates to:
+  /// **'侧链动态去齿音与噪声门输出响度自动补偿。'**
+  String get gateHintSidechain;
+
+  /// No description provided for @gateHintDeess.
+  ///
+  /// In zh, this message translates to:
+  /// **'针对高频咝咝声、齿音（s/sh/ch）进行动态衰减，保留低频自然丰满度。'**
+  String get gateHintDeess;
+
+  /// No description provided for @gateHintDeessFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'检测齿音（s/sh 音）的侧链频段。齿音重往低调，太闷往高调。'**
+  String get gateHintDeessFreq;
+
+  /// No description provided for @gateHintDeessAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'齿音压制强度。只衰减高频成分，低频人声不动。'**
+  String get gateHintDeessAmount;
+
+  /// No description provided for @gateHintAutoGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'实时补偿噪声门造成的整体电平下降，保持响度不塌。'**
+  String get gateHintAutoGain;
+
+  /// No description provided for @compThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'压缩阈值'**
+  String get compThreshold;
+
+  /// No description provided for @compHintThreshold.
+  ///
+  /// In zh, this message translates to:
+  /// **'信号触发动态压限的音量临界门槛。低于此门槛的声音保持原样，高于此门槛的声音将被按比例压制，从而压制过激瞬态。'**
+  String get compHintThreshold;
+
+  /// No description provided for @compRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'压缩比率'**
+  String get compRatio;
+
+  /// No description provided for @compHintRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'超过阈值部分的衰减陡峭程度。数值越高压制越强（如 10:1 几乎成为限幅），数值越低声音动态越温和通透。'**
+  String get compHintRatio;
+
+  /// No description provided for @compHintRelease.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制动态压缩与包络跟踪的释放响应时间。较小时瞬态冲击更明显，较大时动态压缩更平顺通透。'**
+  String get compHintRelease;
+
+  /// No description provided for @compHintBandwidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'频域分析带宽精细度。粗糙模式响应极快、适合电子流行；精细模式分频更精准、适合人声器乐。'**
+  String get compHintBandwidth;
+
+  /// No description provided for @compHintTiming.
+  ///
+  /// In zh, this message translates to:
+  /// **'算法滤波器时间常数策略。瞬态模式保留微动态；平衡模式通用；零延迟模式无缓冲延迟。'**
+  String get compHintTiming;
+
+  /// No description provided for @compBandsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频段动态压限微调 (7 Bands)'**
+  String get compBandsTitle;
+
+  /// No description provided for @compHintBands.
+  ///
+  /// In zh, this message translates to:
+  /// **'可对 7 个频带分别自定义分频中心频率与压限/扩展数值（负值为动态压制，正值为动态扩展）。'**
+  String get compHintBands;
+
+  /// No description provided for @bandSub.
+  ///
+  /// In zh, this message translates to:
+  /// **'极低频'**
+  String get bandSub;
+
+  /// No description provided for @bandLow.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频'**
+  String get bandLow;
+
+  /// No description provided for @bandLowMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中低频'**
+  String get bandLowMid;
+
+  /// No description provided for @bandMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中频'**
+  String get bandMid;
+
+  /// No description provided for @bandHighMid.
+  ///
+  /// In zh, this message translates to:
+  /// **'中高频'**
+  String get bandHighMid;
+
+  /// No description provided for @bandHigh.
+  ///
+  /// In zh, this message translates to:
+  /// **'高频'**
+  String get bandHigh;
+
+  /// No description provided for @bandUltra.
+  ///
+  /// In zh, this message translates to:
+  /// **'超高频'**
+  String get bandUltra;
+
+  /// No description provided for @compBandFreq.
+  ///
+  /// In zh, this message translates to:
+  /// **'分频中心频率'**
+  String get compBandFreq;
+
+  /// No description provided for @compBandAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'压限 / 扩展数值'**
+  String get compBandAmount;
+
+  /// No description provided for @compHintBandAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'负值为动态压缩压制，正值为动态扩展。默认 -0.35。'**
+  String get compHintBandAmount;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:
