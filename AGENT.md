@@ -110,7 +110,7 @@ bash core/desktop/windows/build_engine.sh
 #     任意端点缺失或单文件失败仅告警跳过；-WhatIf 预演，-PackZip 重打包发行 zip
 powershell -ExecutionPolicy Bypass -File tools/sync_artifacts.ps1
 
-# 4d. 设计令牌：改 design/tokens/aura.tokens.json 后重生成（tokens.g.dart 勿手改）
+# 4d. 设计令牌：改 app/auradsp_app/design/tokens/aura.tokens.json 后重生成（tokens.g.dart 勿手改）
 python tools/gen_theme.py            # --check 只校验不写盘
 python tools/l10n_cjk_scan.py        # 硬编码中文扫描；--baseline 降基线（棘轮）
 

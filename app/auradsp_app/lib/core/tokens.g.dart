@@ -1,5 +1,5 @@
 // GENERATED FILE — DO NOT EDIT BY HAND.
-// 源: design/tokens/aura.tokens.json
+// 源: app/auradsp_app/design/tokens/aura.tokens.json
 // 生成: python tools/gen_theme.py（改 JSON 后必须重跑）
 // 漂移防线: test/tokens_parity_test.dart（JSON vs 运行时常量逐项比对）
 

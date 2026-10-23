@@ -1,5 +1,5 @@
 /*
- * theme.dart — AuraDSP 三主题（真相源：design/tokens/aura.tokens.json）
+ * theme.dart — AuraDSP 三主题（真相源：app/auradsp_app/design/tokens/aura.tokens.json）
  *
  * 设计原则（docs/APP-架构与设计方案.md §7）：
  *   - 扁平但有不平：层次靠明度阶梯 + 1px hairline，禁用阴影堆叠
