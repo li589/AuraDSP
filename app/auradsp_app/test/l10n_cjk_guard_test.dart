@@ -42,7 +42,7 @@ Map<String, int> _baseline() {
 }
 
 void main() {
-  test('lib/features 硬编码中文不超过基线（棘轮只降不升）', () {
+  test('lib/features + lib/ui 硬编码中文不超过基线（棘轮只降不升）', () {
     final base = _baseline();
     expect(base, isNotEmpty, reason: '基线缺失：test/l10n_cjk_baseline.txt');
     final offenders = <String>[];
