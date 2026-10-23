@@ -37,6 +37,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get stateIdle => '空闲';
 
   @override
+  String get noAvailableDevice => '无可用设备';
+
+  @override
   String get vbBuses => 'VB 总线（关=直通）';
 
   @override

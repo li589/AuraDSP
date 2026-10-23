@@ -9,6 +9,7 @@
   "stateBypass": "バイパス",
   "stateError": "エラー",
   "stateIdle": "アイドル",
+  "noAvailableDevice": "利用可能なデバイスなし",
   "vbBuses": "VBバス（オフ=スルー）",
   "vbPluginTooltip": "チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）",
   "vbPluginLockedHint": "バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）",

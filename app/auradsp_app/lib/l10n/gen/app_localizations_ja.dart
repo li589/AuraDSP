@@ -37,6 +37,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get stateIdle => 'アイドル';
 
   @override
+  String get noAvailableDevice => '利用可能なデバイスなし';
+
+  @override
   String get vbBuses => 'VBバス（オフ=スルー）';
 
   @override

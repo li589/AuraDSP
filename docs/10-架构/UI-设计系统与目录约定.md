@@ -88,9 +88,9 @@ effects_page 改为库 + part 结构（P1 后续，非必需）。
 `features/`；`engine/` 不得依赖 UI；`core/` 不得依赖 `features/`；两个薄壳只允许
 `export`。
 
-**P1-1 拆分（2026-10-23）**：`features/settings_page.dart` 2509 行 → 父文件 370 行
-（SettingsPage + State）+ `features/settings/panels/{sections,hardware,vb_theme}.dart`
-三个 part（455/1309/397 行）。用 part 而非独立库，是为了保留私有符号可见性、
+**P1-1 拆分（2026-10-23）**：`features/settings_page.dart` 2509 行 → 父文件 371 行
+（SettingsPage + State）+ `features/settings/panels/` 五个 part：
+`sections`(456) / `hardware_drivers`(531) / `hardware_io`(784) / `vb_theme`(398)。用 part 而非独立库，是为了保留私有符号可见性、
 做到零逻辑改动的机械拆分。
 
 命名：`AuraXxx` 用于设计系统控件（AuraChip/AuraSwitch/AuraSegmented）；
@@ -122,5 +122,7 @@ effects_page 改为库 + part 结构（P1 后续，非必需）。
 | P1-1 | settings_page 2509 行 → 370 行 + 3 个 part（sections/hardware/vb_theme） | ✅ 本轮 |
 | P1-2 | chrome/widgets → `lib/ui/`，旧路径 export 薄壳 | ✅ 本轮 |
 | P1-3 | 依赖方向守卫（ui/engine/core 互不越级 + 薄壳约束） | ✅ 本轮 |
-| P1-4 | 裸 `Slider` 收敛到 `ParamSlider`（78 处待逐卡核查） | ⏳ 待排期 |
+| P1-4 | 裸 `Slider` 收敛 —— **审计结论：已达成**。全库真实裸 `Slider(` 仅 3 处：`effects_page.dart` 内部（ValueSlider 基座实现，正确）、`input_card` 条形滑块（自定义 track/thumb，非参数行）、`liveprog_page` 动态参数行（自带 label/读数列）。抽象早已到位：47 处 `ParamSlider` + 23 处 `ValueSlider` + 3 处 `ParamOutputGainSlider`。原「78 处」是 grep 把 `ParamSlider(` 调用计入的度量错误。 | ✅ 已核销 |
+| P1-1b | `hardware.dart` 1309 → `hardware_drivers.dart`(531) + `hardware_io.dart`(784) | ✅ 本轮 |
+| P2 续 | i18n 首批：`chrome.dart` 空设备占位 → arb 三语（218 → **217**），`l10nOf` 上移 `core/ui_helpers.dart`（ui/ 与 features/ 共用，widgets 保留 re-export 兼容） | 🔄 进行中 |
 | P2 续 | 218 条硬编码中文按页转 arb（建议顺序：settings 68 → channel_routing 20 → gate/comp 27） | ⏳ 逐步 |
