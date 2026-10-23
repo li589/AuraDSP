@@ -875,6 +875,10 @@ class AuraChip extends StatefulWidget {
   final IconData? icon;
   final VoidCallback? onTap;
   final bool danger;
+
+  /// 切换在途：文字替换为受控尺寸的小 spinner（高度锁 chipH，不跳版），
+  /// 用于旁路等异步切换的过渡反馈。onTap 应同时置 null 禁点。
+  final bool busy;
   const AuraChip(
     this.label, {
     super.key,
@@ -882,6 +886,7 @@ class AuraChip extends StatefulWidget {
     this.icon,
     this.onTap,
     this.danger = false,
+    this.busy = false,
   });
 
   @override
@@ -905,7 +910,9 @@ class _AuraChipState extends State<AuraChip> {
         : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline);
 
     return MouseRegion(
-      cursor: SystemMouseCursors.click,
+      cursor: widget.onTap == null
+          ? MouseCursor.defer
+          : SystemMouseCursors.click,
       onEnter: (_) => setState(() => _hover = true),
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
@@ -928,17 +935,36 @@ class _AuraChipState extends State<AuraChip> {
                 Icon(widget.icon, size: 14, color: tint),
                 const SizedBox(width: AuraSpace.sm - 2),
               ],
-              AnimatedDefaultTextStyle(
+              AnimatedSwitcher(
                 duration: AuraDur.fast,
-                style: TextStyle(
-                  fontSize: 12.5,
-                  fontWeight:
-                      widget.selected ? FontWeight.w600 : FontWeight.w500,
-                  fontFamilyFallback: kBodyCjkFallback,
-                  letterSpacing: 0.1,
-                  color: tint,
-                ),
-                child: Text(widget.label),
+                switchInCurve: AuraCurve.standard,
+                switchOutCurve: AuraCurve.standard,
+                transitionBuilder: (child, anim) =>
+                    FadeTransition(opacity: anim, child: child),
+                child: widget.busy
+                    ? SizedBox(
+                        key: const ValueKey('busy'),
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation(tint),
+                        ),
+                      )
+                    : AnimatedDefaultTextStyle(
+                        key: const ValueKey('label'),
+                        duration: AuraDur.fast,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: widget.selected
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          fontFamilyFallback: kBodyCjkFallback,
+                          letterSpacing: 0.1,
+                          color: tint,
+                        ),
+                        child: Text(widget.label),
+                      ),
               ),
             ],
           ),

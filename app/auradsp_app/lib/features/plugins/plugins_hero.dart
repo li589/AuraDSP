@@ -629,19 +629,24 @@ class _ActivePluginHero extends StatelessWidget {
             ),
             const SizedBox(width: AuraSpace.sm),
           ],
-          // 旁路开关按钮
+          // 旁路开关按钮（切换在途：spinner 替代文字 + 禁点，防连点/防卸载竞态）
           AuraChip(
             isBypassed
                 ? l10nOf(context).chainBypassed
                 : l10nOf(context).chainActive,
             selected: !isBypassed,
             danger: isBypassed,
-            onTap: isBusy ? null : () => manager.toggleBypass(slot: slot),
+            busy: manager.isSlotBypassPending(slot),
+            onTap: (isBusy || manager.isSlotBypassPending(slot))
+                ? null
+                : () => manager.toggleBypass(slot: slot),
           ),
           const SizedBox(width: AuraSpace.sm),
-          // 卸载按钮
+          // 卸载按钮（旁路切换在途时同样禁点，避免重挂竞态）
           OutlinedButton.icon(
-            onPressed: isBusy ? null : () => manager.unloadPlugin(slot: slot),
+            onPressed: (isBusy || manager.isSlotBypassPending(slot))
+                ? null
+                : () => manager.unloadPlugin(slot: slot),
             icon: const Icon(Icons.eject_rounded, size: 15),
             label: Text(l10nOf(context).dlgUnload),
             style: OutlinedButton.styleFrom(

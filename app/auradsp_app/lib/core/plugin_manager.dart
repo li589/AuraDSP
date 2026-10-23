@@ -352,6 +352,12 @@ class PluginManager extends ChangeNotifier {
 
   /// 忙态动作标记（UI 动画文案：'load' 加载中 / 'unload' 卸载中）。
   final Map<int, String> _slotBusyAction = {};
+
+  /// 旁路切换在途标记（slot → 已下发的目标 bypass 值）。引擎状态回读
+  /// 确认与请求一致后自动解除；10s 看门狗兜底（Zone12 级插件 setBypass
+  /// 同步秒级返回，正常远小于此；超时即恢复可点，按轮询状态如实显示）。
+  final Map<int, bool> _slotBypassPending = {};
+  final Map<int, Timer> _bypassPendingTimers = {};
   String? _lastError;
   String? _lastNotice;
   int _lastScanCount = 0;
@@ -389,6 +395,10 @@ class PluginManager extends ChangeNotifier {
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
   String slotBusyAction(int slot) => _slotBusyAction[slot] ?? 'load';
+
+  /// 旁路切换是否在途（已下发、引擎尚未回读确认）。UI 据此把旁路按钮
+  /// 转切换动画并禁点（防连点、防与卸载竞态）。
+  bool isSlotBypassPending(int slot) => _slotBypassPending.containsKey(slot);
 
   /// C3：引擎回执挂载/卸载进行中（异步任务的"提交成功→进行中"与"终态"两次翻转）。
   /// 用于 UI 在挂载/卸载期间显示忙态并禁用重复操作。
@@ -608,6 +618,9 @@ class PluginManager extends ChangeNotifier {
     autoSaveAb(s, group: _editorRoute[s] >= 0 ? _editorRoute[s] : -1);
     _slotBusy[s] = true;
     _slotBusyAction[s] = 'unload';
+    // 卸载接管全部过渡（含其内部下发的一次 bypass:true），在途标记失效。
+    _bypassPendingTimers.remove(s)?.cancel();
+    _slotBypassPending.remove(s);
     notifyListeners();
     // 优雅卸载（2026-10-22）：先内部直通（该槽 bypass，链早退）让音频
     // 平滑过渡，短延迟等音频回调走过几块后再真正卸载——大插件 teardown
@@ -623,8 +636,17 @@ class PluginManager extends ChangeNotifier {
   }
 
   /// 设置指定槽位旁路
+  ///
+  /// 置在途标记后立即通知（按钮转 spinner、防连点/防卸载竞态），引擎
+  /// 状态回读确认到位后自动解除（见 [_parseStatusJsonForSlot]）。
   void setBypass(bool bypass, {int? slot}) {
     final s = slot ?? _selectedSlot;
+    _slotBypassPending[s] = bypass;
+    _bypassPendingTimers[s]?.cancel();
+    _bypassPendingTimers[s] = Timer(const Duration(seconds: 10), () {
+      if (_slotBypassPending.remove(s) != null) notifyListeners();
+    });
+    notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotSetBypass',
       'slot': s,
@@ -1058,6 +1080,10 @@ class PluginManager extends ChangeNotifier {
   void dispose() {
     _journalTimer?.cancel();
     _journalTimer = null;
+    for (final t in _bypassPendingTimers.values) {
+      t.cancel();
+    }
+    _bypassPendingTimers.clear();
     super.dispose();
   }
 
@@ -1099,6 +1125,8 @@ class PluginManager extends ChangeNotifier {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
       _slotBusyAction.remove(slot);
+      _bypassPendingTimers.remove(slot)?.cancel();
+      _slotBypassPending.remove(slot); // 挂载即出厂旁路语义，在途标记不残留
       if (rc != 1) {
         // D2：扫描列表里已标记不兼容的插件（当前唯一情形：32 位）直接用
         // 引擎的精确原因，不再让用户看"可能位数不符"的猜测文案。
@@ -1140,6 +1168,8 @@ class PluginManager extends ChangeNotifier {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
       _slotBusyAction.remove(slot);
+      _bypassPendingTimers.remove(slot)?.cancel();
+      _slotBypassPending.remove(slot);
       _parseStatusJsonForSlot(slot, rawStatus);
       notifyListeners();
     }
@@ -1251,6 +1281,13 @@ class PluginManager extends ChangeNotifier {
       }
       final status = PluginHostStatus.fromJson(map);
       _slotStatuses[slot] = status;
+      // 引擎回读确认旁路到位 → 解除在途标记（与请求值一致才算到位）。
+      // 调用方（onPluginSlotBypass/onPluginSlotStatus 等）随后 notifyListeners。
+      final pending = _slotBypassPending[slot];
+      if (pending != null && status.bypassed == pending) {
+        _bypassPendingTimers.remove(slot)?.cancel();
+        _slotBypassPending.remove(slot);
+      }
       if (map.containsKey('channels')) {
         _slotChannels[slot] = (map['channels'] as num?)?.toInt() ?? 0xFF;
       }
