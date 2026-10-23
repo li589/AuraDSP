@@ -50,6 +50,20 @@ public:
     // F-4: output blocks lost upstream (host output-ring overflow, or
     // parameter-transition drops) counted via seq continuity checks.
     uint64_t seqGaps() const;
+    // E15: 传输流水深不变量观测（inFlight 应恒 ∈{0,1}；maxInFlight==1 是
+    // latency 上报绝对精确的前提；depthViolations>0 即上报不再可信）。
+    uint32_t inFlight() const {
+        return m_inFlight.load(std::memory_order_acquire);
+    }
+    uint32_t maxInFlight() const {
+        return m_maxInFlight.load(std::memory_order_acquire);
+    }
+    uint32_t depthViolations() const {
+        return m_depthViolations.load(std::memory_order_acquire);
+    }
+    uint32_t depthDrops() const {
+        return m_depthDrops.load(std::memory_order_acquire);
+    }
     bool remoteFailed() const {
         return m_failed.load(std::memory_order_acquire) ||
                (m_client && !m_client->alive());
@@ -62,6 +76,8 @@ private:
     // m_transportChannels, owned exclusively by setChannelHint.
     bool submitChunk(uint32_t channels, uint32_t mask);
     bool pumpOutput(uint32_t channels, uint32_t mask);
+    // E15：取回一块（含 stale/参数变更丢弃）= 深度 -1，钳制不下溢。
+    void ConsumeDepthOne();
     void copyBypass(float* const* inChannels, float* const* outChannels,
                     uint32_t numFrames) const;
 
@@ -123,6 +139,19 @@ private:
      * 直通块在块边界被**丢弃不提交**——直通内容已被上层听见，再提交会让
      * 宿主处理结果（回声）稍后再次进入输出流，同一段音频听到两遍。 */
     bool m_blockHadPassthrough = false;
+
+    /* E15（2026-10-23）确定性流水深：把「动态流水深」变成**可断言的不变量**。
+     * inFlight = 已提交 - 已取回（含 stale/参数变更丢弃的取回），正常应恒
+     * ∈ {0,1}。E14 的直通块丢弃已在结构上阻止深度涨到 2；本记账把它变成
+     * 可观测事实——**maxInFlight==1 时上报的 latency（+1×kTransportFrames）
+     * 才绝对精确**，一旦越界 status 里立刻看得见（depthViolations）。
+     * 音频线程读写、status 从控制线程读 → atomic。 */
+    std::atomic<uint32_t> m_inFlight{0};
+    std::atomic<uint32_t> m_maxInFlight{0};
+    std::atomic<uint32_t> m_depthViolations{0};
+    /* 因深度已满（宿主尚未消化上一块）而未提交的块数。健康 paced 流水应≈0；
+     * 持续增长 = 宿主算力不足，此时直通替代排队（见 kTargetInFlight）。 */
+    std::atomic<uint32_t> m_depthDrops{0};
 };
 
 } // namespace auradsp

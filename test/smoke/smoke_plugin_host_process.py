@@ -225,6 +225,25 @@ print(f"  transport clean: seqGaps={gaps}, "
       f"inputOverflows={status.get('inputOverflows')}, "
       f"outputOverflows={status.get('outputOverflows')}")
 
+# E15（2026-10-23）：确定性流水深不变量。深度是 submit 与 output 取回的
+# 配对差；E14 的直通块丢弃保证不涨到 2。maxInFlight==1 是 latency 上报
+# （插件延迟 + 1×128）绝对精确的前提——越界即上报失真，此处必须报红。
+in_flight = status.get("inFlight")
+max_in_flight = status.get("maxInFlight")
+depth_violations = status.get("depthViolations")
+print(f"  depth invariant: inFlight={in_flight}, "
+      f"maxInFlight={max_in_flight}, depthViolations={depth_violations}, "
+      f"depthDrops={status.get('depthDrops')}")
+assert in_flight in (0, 1), (
+    f"inFlight={in_flight} — transport depth left the {{0,1}} invariant")
+assert max_in_flight == 1, (
+    f"maxInFlight={max_in_flight} — steady-state depth must be exactly one "
+    "chunk (2 would add a full transport block of latency and invalidate "
+    "the reported PDC)")
+assert depth_violations == 0, (
+    f"depthViolations={depth_violations} — depth exceeded one chunk at a "
+    "block boundary; reported latency is no longer exact (E15)")
+
 print("=== [4b] replacing a loaded remote plugin keeps processing ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
 out, src = wait_for_ramp_processed(handle)

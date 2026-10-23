@@ -70,8 +70,11 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
      * 帧首取块成功 → 恒定滞后 1 块），两模式逐位一致背书。F-7 当时的 +2 块
      * 口径采信 R-1 的 544 实测，但该测量取得于 F-6 事件唤醒之前（宿主
      * Sleep(1) 轮询、应答节奏慢 1 块）；post-F-6 现实下 +2 块过报 128 帧
-     * （PDC 过补偿 ~2.67ms）。注意：非阻塞泵设计下深度随时序抖动（宿主偶发
-     * 慢 >1 块即 +1），长期解 = 恒定 in-flight 确定性流水深（未决清单 E15）。
+     * （PDC 过补偿 ~2.67ms）。
+     * E15（2026-10-23）：深度已改为**显式记账的不变量**（inFlight 恒属于
+     * {0,1}，见 m_inFlight）：E14 的直通块丢弃保证不涨到 2，本处 +1 块因此
+     * 是精确值而非经验值；status 的 maxInFlight/depthViolations 持续兜底
+     * （越界即上报失真，冒烟会报红）。
      * 语义分层：getLatency() = 端到端总量（本公式，Dart UI/测试消费）；
      * transportLatency() = 单块传输粒度 128（不变，UI 的分辨显示口径）。 */
     m_latency.store(info.latency + ipc::kTransportFrames,
@@ -87,6 +90,11 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_nextSeqOut = 0;
     m_outSynced = false;
     m_seqGaps.store(0, std::memory_order_relaxed);
+    // E15：深度记账随每次加载归零（新流水从 0 起，高水位与违例清零）。
+    m_inFlight.store(0, std::memory_order_relaxed);
+    m_maxInFlight.store(0, std::memory_order_relaxed);
+    m_depthViolations.store(0, std::memory_order_relaxed);
+    m_depthDrops.store(0, std::memory_order_relaxed);
     m_failed.store(false, std::memory_order_release);
     m_bypassed.store(false, std::memory_order_release);
     m_loaded.store(true, std::memory_order_release);
@@ -105,6 +113,8 @@ void ProcessPluginProxy::unload() {
     m_outFill = 0;
     m_outPos = 0;
     m_outSynced = false;
+    // E15：卸载后在途块已作废（宿主侧随之清空），深度归零防下一会话误判。
+    m_inFlight.store(0, std::memory_order_relaxed);
 }
 
 bool ProcessPluginProxy::activate(double sampleRate, uint32_t maxBlockSize) {
@@ -140,6 +150,21 @@ void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outC
     }
 }
 
+/* E15（2026-10-23）恒定流水深目标：1 块。
+ * 旧实现无上限——宿主跟不上时输入环可涨到容量 16 块（实测 inFlight 峰
+ * 值 16），而上报恒为 +1 块 → PDC 误差最多约 41ms，且队列越深湿声越滞后。
+ * 现在：深度已满则本块**不提交**（直通），深度恒属于 {0,1}，+1 块上报
+ * 恒精确。宿主算力不足时表现为直通而非隐性加深——这是实时处理器唯一
+ * 诚实的取舍。 */
+constexpr uint32_t kTargetInFlight = 1;
+
+/* E15：取回一块输出 = 流水深度 -1（钳制不下溢——跨会话 residue 可能
+ * 对不上旧提交）。 */
+void ProcessPluginProxy::ConsumeDepthOne() {
+    const uint32_t cur = m_inFlight.load(std::memory_order_relaxed);
+    if (cur > 0) m_inFlight.fetch_sub(1, std::memory_order_relaxed);
+}
+
 bool ProcessPluginProxy::submitChunk(uint32_t channels, uint32_t mask) {
     if (!m_ring) return false;
     auto& ring = *m_ring;
@@ -161,6 +186,15 @@ bool ProcessPluginProxy::submitChunk(uint32_t channels, uint32_t mask) {
     }
     ring.inputWrite.store(w + 1, std::memory_order_release);
     ring.chunksIn.fetch_add(1, std::memory_order_relaxed);
+    /* E15：深度 +1（提交成功才记账；环满丢块不计）。高水位只在音频线程
+     * 写、status 从控制线程读，relaxed 足够——纯观测用途。 */
+    {
+        const uint32_t depth =
+            m_inFlight.fetch_add(1, std::memory_order_relaxed) + 1;
+        if (depth > m_maxInFlight.load(std::memory_order_relaxed)) {
+            m_maxInFlight.store(depth, std::memory_order_relaxed);
+        }
+    }
     /* F-6: 唤醒宿主音频线程——每接受一个传输块一次。SetEvent 是纯内核
      * 调用（~1μs，无分配无锁，与 WASAPI 事件驱动同款实践），满足音频
      * 路径 RT-safe 契约；句柄为空（宿主未起/事件缺失）时静默跳过，
@@ -195,6 +229,7 @@ bool ProcessPluginProxy::pumpOutput(uint32_t channels, uint32_t mask) {
         if (stale) {
             /* Pre-resync residue (e.g. blocks still in flight across a
              * reload): discard silently, keep the expected cursor. */
+            ConsumeDepthOne();
             ring.outputRead.store(r + 1, std::memory_order_release);
             continue;
         }
@@ -209,6 +244,7 @@ bool ProcessPluginProxy::pumpOutput(uint32_t channels, uint32_t mask) {
                                     std::memory_order_relaxed);
                 m_nextSeqOut = block.seq + 1;
             }
+            ConsumeDepthOne();
             ring.outputRead.store(r + 1, std::memory_order_release);
             continue;
         }
@@ -237,6 +273,7 @@ bool ProcessPluginProxy::pumpOutput(uint32_t channels, uint32_t mask) {
         m_outPos = 0;
         /* E12: 本块内取到了输出 = 宿主应答存活，块边界据此清零饥饿窗口。 */
         m_gotOutputThisBlock = true;
+        ConsumeDepthOne();
         ring.outputRead.store(r + 1, std::memory_order_release);
         return frames > 0;
     }
@@ -352,11 +389,22 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
              * 后）与 remoteFailed(!alive) 判死兜底。
              * F-4/E12: 输入环满丢块仍是饥饿证据，计入 miss 窗口；prime 提交
              * 失败不计数（丢弃块的补位非流水数据）。 */
+            /* E15：提交前守深度不变量（>1 结构上不可达——E14 保证带直通帧
+             * 的块不提交，且下方硬上限只允许 0→1；此处仅作哨兵）。 */
+            if (m_inFlight.load(std::memory_order_relaxed) > kTargetInFlight) {
+                m_depthViolations.fetch_add(1, std::memory_order_relaxed);
+            }
+            /* E15 硬上限：深度已满则本块不提交（直通）。宿主手上有活 →
+             * 不会饿死，prime 也无需补位。 */
+            const bool depthFull =
+                m_inFlight.load(std::memory_order_relaxed) >= kTargetInFlight;
             if (!m_blockHadPassthrough) {
-                if (!submitChunk(channels, mask)) {
+                if (depthFull) {
+                    m_depthDrops.fetch_add(1, std::memory_order_relaxed);
+                } else if (!submitChunk(channels, mask)) {
                     m_missStreak.fetch_add(1, std::memory_order_relaxed);
                 }
-            } else if (m_client && m_client->alive()) {
+            } else if (m_client && m_client->alive() && !depthFull) {
                 for (uint32_t ch = 0; ch < ipc::kChannels; ++ch) {
                     std::memset(m_inPlanar + ch * ipc::kTransportFrames, 0,
                                 ipc::kTransportFrames * sizeof(float));

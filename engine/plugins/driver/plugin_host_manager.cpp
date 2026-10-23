@@ -276,19 +276,33 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
         uint64_t inputOverflows = 0;
         uint64_t outputOverflows = 0;
         uint64_t seqGaps = 0;
+        uint32_t inFlight = 0;
+        uint32_t maxInFlight = 0;
+        uint32_t depthViolations = 0;
+        uint32_t depthDrops = 0;
         if (auto* proxy = dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
             remoteFailed = proxy->remoteFailed();
             transportLatency = proxy->transportLatency();
             inputOverflows = proxy->inputOverflows();
             outputOverflows = proxy->outputOverflows();
             seqGaps = proxy->seqGaps();
+            // E15：流水深不变量观测（inFlight 恒 0/1；maxInFlight 应恒 1；
+            // depthViolations 恒 0——非 0 即 latency 上报失真）。
+            inFlight = proxy->inFlight();
+            maxInFlight = proxy->maxInFlight();
+            depthViolations = proxy->depthViolations();
+            depthDrops = proxy->depthDrops();
         }
         ss << "\"remoteMode\":true,"
            << "\"remoteFailed\":" << (remoteFailed ? "true" : "false") << ","
            << "\"transportLatency\":" << transportLatency << ","
            << "\"inputOverflows\":" << inputOverflows << ","
            << "\"outputOverflows\":" << outputOverflows << ","
-           << "\"seqGaps\":" << seqGaps << ",";
+           << "\"seqGaps\":" << seqGaps << ","
+           << "\"inFlight\":" << inFlight << ","
+           << "\"maxInFlight\":" << maxInFlight << ","
+           << "\"depthViolations\":" << depthViolations << ","
+           << "\"depthDrops\":" << depthDrops << ",";
     }
 #endif
     if (m_slots[slot].instance) {
