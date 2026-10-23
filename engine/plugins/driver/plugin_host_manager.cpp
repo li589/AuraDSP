@@ -234,6 +234,13 @@ bool PluginHostManager::isBypassedSlot(size_t slot) const {
 
 uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
     if (slot >= kMaxPluginSlots) return 0;
+    // E15 v2：进程外代理的传输延迟 = 插件延迟 + (每次回调块数)×128——随回调
+    // 块大小自适应（实测 128→+128、256→+256、512→+512、1024→+1024，延迟恒
+    // 为 1 个回调）。故这里返回实例的**实时值**而非加载快照：快照是首块前的
+    // 128 口径，用它做 PDC 会在 512 帧设备上欠补 384 帧（8ms）。
+    if (m_remoteMode && m_slots[slot].instance) {
+        return m_slots[slot].instance->getLatency();
+    }
     return m_slots[slot].latency.load(std::memory_order_relaxed);
 }
 
@@ -250,7 +257,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"slot\":" << slot << ","
        << "\"hasActive\":" << (m_slots[slot].hasActive.load() ? "true" : "false") << ","
        << "\"bypassed\":" << (isBypassedSlot(slot) ? "true" : "false") << ","
-       << "\"latency\":" << m_slots[slot].latency.load() << ","
+       << "\"latency\":" << getLatencySlot(slot) << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
        << "\"channels\":" << m_slots[slot].channelMask.load() << ","
        << "\"processCalls\":" << m_slots[slot].processCalls.load(std::memory_order_relaxed) << ","
@@ -280,6 +287,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
         uint32_t maxInFlight = 0;
         uint32_t depthViolations = 0;
         uint32_t depthDrops = 0;
+        uint32_t depthTarget = 0;
         if (auto* proxy = dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
             remoteFailed = proxy->remoteFailed();
             transportLatency = proxy->transportLatency();
@@ -292,6 +300,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
             maxInFlight = proxy->maxInFlight();
             depthViolations = proxy->depthViolations();
             depthDrops = proxy->depthDrops();
+            depthTarget = proxy->depthTarget();
         }
         ss << "\"remoteMode\":true,"
            << "\"remoteFailed\":" << (remoteFailed ? "true" : "false") << ","
@@ -302,7 +311,8 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
            << "\"inFlight\":" << inFlight << ","
            << "\"maxInFlight\":" << maxInFlight << ","
            << "\"depthViolations\":" << depthViolations << ","
-           << "\"depthDrops\":" << depthDrops << ",";
+           << "\"depthDrops\":" << depthDrops << ","
+           << "\"depthTarget\":" << depthTarget << ",";
     }
 #endif
     if (m_slots[slot].instance) {

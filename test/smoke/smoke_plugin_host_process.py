@@ -183,6 +183,9 @@ latency = dll.auradsp_plugin_get_latency(handle)
 # 后实测（E15）：post-F-6 事件唤醒下动态流水深恒为 1 块（onset delta=128，
 # 两模式逐位一致背书），+2 块过报 128 帧 → 公式改回 +1 块。Convology XT
 # 插件延迟 288 → 端到端 416，此处精确断言（元数据 latency 不可靠，见下）。
+# 注意口径：此处是**首块前**的值——目标深度初值 1（尚未观测到回调块
+# 大小），故 +1×128。首块之后 E15 v2 会按块数自适应（下方 [4a] 尾有
+# 256 帧口径的精确断言 544）。
 plugin_latency = TARGET.get("latency", 0)
 assert latency == 416, (
     f"total latency {latency} != 416 (= ConvologyXT 288 + 1x128 transport) — "
@@ -231,18 +234,37 @@ print(f"  transport clean: seqGaps={gaps}, "
 in_flight = status.get("inFlight")
 max_in_flight = status.get("maxInFlight")
 depth_violations = status.get("depthViolations")
+depth_target = status.get("depthTarget")
 print(f"  depth invariant: inFlight={in_flight}, "
-      f"maxInFlight={max_in_flight}, depthViolations={depth_violations}, "
+      f"maxInFlight={max_in_flight}, depthTarget={depth_target}, "
+      f"depthViolations={depth_violations}, "
       f"depthDrops={status.get('depthDrops')}")
-assert in_flight in (0, 1), (
-    f"inFlight={in_flight} — transport depth left the {{0,1}} invariant")
-assert max_in_flight == 1, (
-    f"maxInFlight={max_in_flight} — steady-state depth must be exactly one "
-    "chunk (2 would add a full transport block of latency and invalidate "
-    "the reported PDC)")
+assert depth_target and depth_target >= 1, (
+    f"depthTarget={depth_target} — status must expose the in-flight cap (E15)")
+assert 0 <= in_flight <= depth_target, (
+    f"inFlight={in_flight} left the [0,{depth_target}] invariant — the "
+    "hard cap was bypassed")
+assert 1 <= max_in_flight <= depth_target, (
+    f"maxInFlight={max_in_flight} outside [1,{depth_target}] — depth never "
+    "reached one chunk (transport idle?) or the cap was bypassed")
 assert depth_violations == 0, (
-    f"depthViolations={depth_violations} — depth exceeded one chunk at a "
+    f"depthViolations={depth_violations} — depth exceeded the cap at a "
     "block boundary; reported latency is no longer exact (E15)")
+# 上报口径一致性：maxInFlight 长期等于 depthTarget 才需要把 +1 块改成 +N；
+# paced 稳态应为 1（cross_mode onset delta=128 已独立背书）。
+# E15 v2：本冒烟用 256 帧回调 → 目标深度 2 块，传输延迟 256 帧，
+# 总延迟 = ConvologyXT 288 + 256 = 544。这是「延迟恒为 1 个回调」的直接
+# 证据：128 帧回调时是 416（见 [3]），块大小变了上报跟着变、误差为零。
+assert depth_target == 2, (
+    f"depthTarget={depth_target} — 256-frame callbacks must target 2 chunks")
+lat_after = dll.auradsp_plugin_get_latency(handle)
+assert lat_after == 544, (
+    f"total latency {lat_after} != 544 (= 288 plugin + 2x128 transport for "
+    "256-frame callbacks) — E15 v2 per-callback depth reporting drifted")
+assert status.get("transportLatency") == 256, (
+    f"transportLatency={status.get('transportLatency')} != 256 (two chunks)")
+print(f"  per-callback latency: 256-frame callbacks -> transport 256, "
+      f"total {lat_after} (288 + 2x128)")
 
 print("=== [4b] replacing a loaded remote plugin keeps processing ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1

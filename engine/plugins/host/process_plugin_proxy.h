@@ -64,11 +64,18 @@ public:
     uint32_t depthDrops() const {
         return m_depthDrops.load(std::memory_order_acquire);
     }
+    // E15：当前上限（= 每次回调的传输块数；供 status 判定上报口径）。
+    uint32_t depthTarget() const;
     bool remoteFailed() const {
         return m_failed.load(std::memory_order_acquire) ||
                (m_client && !m_client->alive());
     }
-    uint32_t transportLatency() const { return ipc::kTransportFrames; }
+    // E15 v2：实际传输延迟 = 每次回调块数 × 块长（恒为 1 个回调；128 帧回调
+    // 时仍是 128，多块回调时为 numFrames——UI 的「传输延迟」显示据此更真实）。
+    uint32_t transportLatency() const {
+        return m_targetInFlight.load(std::memory_order_acquire) *
+               ipc::kTransportFrames;
+    }
 
 private:
     // F-4/F-5: channels/mask are per-call (block-level) parameters — they no
@@ -150,8 +157,21 @@ private:
     std::atomic<uint32_t> m_maxInFlight{0};
     std::atomic<uint32_t> m_depthViolations{0};
     /* 因深度已满（宿主尚未消化上一块）而未提交的块数。健康 paced 流水应≈0；
-     * 持续增长 = 宿主算力不足，此时直通替代排队（见 kTargetInFlight）。 */
+     * 持续增长 = 宿主算力不足，此时直通替代排队。 */
     std::atomic<uint32_t> m_depthDrops{0};
+
+    /* E15（2026-10-23 v2）确定性流水深 = **每次回调的传输块数 N**
+     * （N = ceil(numFrames / kTransportFrames)，随回调块大小自适应）。
+     *
+     * 为什么不能固定 1：消费是「帧到即取」，一次 auradsp_process 调用在微秒内
+     * 跑完但代表 N×2.67ms 音频——宿主不可能在该调用内部产出。所以固定深度 1
+     * 时，N 块的回调只有 1 块能拿到湿声，其余必须直通；实测延迟也随 N 线性
+     * 漂移（128→128、256→256、512→768、1024→1792 帧）。
+     * 深度 = N 时：本次回调提交的 N 块由下一次回调开头一次性消费 → **延迟恰为
+     * 1 个回调（numFrames）**，与 N 无关地恒定，且可精确上报。
+     * 插件自身延迟另计（m_pluginLatency）。 */
+    std::atomic<uint32_t> m_targetInFlight{1};
+    std::atomic<uint32_t> m_pluginLatency{0};
 };
 
 } // namespace auradsp
