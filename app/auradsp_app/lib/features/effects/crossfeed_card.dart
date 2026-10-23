@@ -41,7 +41,7 @@ class _CrossfeedCard extends StatelessWidget {
             children: [
               Text(l.crossfeedMode, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              InfoBadge(message: '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。'),
+              InfoBadge(message: l.xfHintPreset),
               const Spacer(),
               ParamChoiceChips(
                 param: ParamRegistry.crossfeedMode,
@@ -82,7 +82,7 @@ class _CrossfeedAdvanced extends StatelessWidget {
 
     return AdvancedSection(
       summary: '${m.xfeedFcut.toStringAsFixed(0)} Hz · ${m.xfeedFeed.toStringAsFixed(1)} dB · $curModeLabel',
-      helpTooltip: '自定义串扰低通截止频率与互馈衰减深度微调。',
+      helpTooltip: l.xfHintCustom,
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -90,14 +90,14 @@ class _CrossfeedAdvanced extends StatelessWidget {
             param: ParamRegistry.crossfeedFcut,
             model: m,
             customLabel: l.crossfeedCutoff,
-            infoMessage: '串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。',
+            infoMessage: l.xfHintCutoff,
           ),
           const SizedBox(height: AuraSpace.sm),
           ParamSlider(
             param: ParamRegistry.crossfeedFeed,
             model: m,
             customLabel: l.crossfeedFeed,
-            infoMessage: '低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。',
+            infoMessage: l.xfHintFeed,
           ),
         ],
       ),

@@ -130,6 +130,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final Map<String, String> paramStrMirror = {};
   // VB 总线掩码（session 级；进桥/重建后下发，CHANGE 重建不丢——掩码活在 ctx）。
   int vbBusMask = 0xFF;
+  // 按路插件处理掩码（bit g = 组 g 总线吃插件链；进桥后与 busMask 同步下发）。
+  int vbPluginGroupMask = 0xFF;
+  // Z12 超预算自动保护（进桥后与 pluginGroupMask 同步下发；桥默认开）。
+  bool vbAutoProtect = true;
   int vbStatusTick = 0;
   bool vbVizNullLogged = false;
   bool vbNoCbLogged = false;
@@ -324,6 +328,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 总线掩码同步（model 持久化的选择；桥默认全开）。
     final maskRc = vb!.setBusMask(vbBusMask);
     dbgLog('vbmode: busmask sync isolate=$vbBusMask rc=$maskRc');
+    // 按路插件处理掩码同步（bit g = 组 g 总线吃插件链；桥默认全开）。
+    try {
+      final pgRc = vb!.pluginGroupEnable(vbPluginGroupMask);
+      dbgLog('vbmode: plugin-group sync isolate=$vbPluginGroupMask rc=$pgRc');
+    } catch (e) {
+      dbgLog('vbmode: plugin-group sync failed (old bridge dll?): $e');
+    }
+    // Z12 超预算自动保护同步（旧桥 DLL 无此导出，静默兜底）。
+    try {
+      vb!.pluginAutoProtect(vbAutoProtect ? 1 : 0);
+    } catch (e) {
+      dbgLog('vbmode: auto-protect sync failed (old bridge dll?): $e');
+    }
     try {
       wasapi?.stop();
     } catch (_) {}
@@ -1312,6 +1329,28 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             vb!.setBusMask(vbBusMask);
           }
           break;
+        case 'setPluginGroupMask':
+          // 按路插件处理掩码（bit g = 组 g 总线吃插件链）。
+          vbPluginGroupMask = (m['mask'] as int) & 0xFF;
+          if (vbActive && vb != null) {
+            try {
+              vb!.pluginGroupEnable(vbPluginGroupMask);
+            } catch (e) {
+              dbgLog('plugin-group enable failed (old bridge dll?): $e');
+            }
+          }
+          break;
+        case 'setPluginAutoProtect':
+          // Z12 超预算自动保护开关（桥关闭时立即恢复用户掩码）。
+          vbAutoProtect = (m['on'] as bool?) ?? true;
+          if (vbActive && vb != null) {
+            try {
+              vb!.pluginAutoProtect(vbAutoProtect ? 1 : 0);
+            } catch (e) {
+              dbgLog('auto-protect set failed (old bridge dll?): $e');
+            }
+          }
+          break;
         case 'pluginScan':
           {
             if (lib != null && handle != null) {
@@ -1551,11 +1590,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final pb = activePluginBridge();
             if (pb != null) {
+              // P1-1 路由锁定轮询兜底：任一组编辑器开着即视为打开
+              // （用户直接点插件自带关闭按钮也能解锁）。
+              var editorOpen = false;
+              for (var g = 0; g < 8 && !editorOpen; g++) {
+                if (pb.isEditorOpen(slot, group: g)) editorOpen = true;
+              }
               send({
                 'evt': 'pluginSlotStatus',
                 'slot': slot,
                 'status': pb.getStatus(slot),
                 'stage': pb.getInsertStage(slot),
+                'editorOpen': editorOpen,
               });
               break;
             }
@@ -1567,6 +1613,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'slot': slot,
                 'status': statusJson,
                 'stage': stage,
+                'editorOpen':
+                    AuraDspLib.pluginSlotIsEditorOpenWrap(lib, handle, slot),
               });
             }
             break;
@@ -1575,13 +1623,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final title = (m['title'] as String?) ?? '';
+            // v2：VB 多总线按路打开编辑器（group>=0 才有效；其余模式 -1）
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
               send({
                 'evt': 'pluginSlotEditorResult',
                 'slot': slot,
                 'action': 'show',
-                'rc': pb.showEditor(slot, title: title),
+                'rc': pb.showEditor(slot, group: group, title: title),
               });
               break;
             }
@@ -1599,13 +1649,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'pluginSlotCloseEditor':
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
               send({
                 'evt': 'pluginSlotEditorResult',
                 'slot': slot,
                 'action': 'close',
-                'rc': pb.closeEditor(slot),
+                'rc': pb.closeEditor(slot, group: group),
               });
               break;
             }
@@ -1616,59 +1667,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'slot': slot,
                 'action': 'close',
                 'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginSlotSavePreset':
-          {
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              send({
-                'evt': 'pluginSlotPresetSaved',
-                'slot': slot,
-                'path': path,
-                'rc': pb.savePreset(slot, path),
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
-              send({
-                'evt': 'pluginSlotPresetSaved',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-              });
-            }
-            break;
-          }
-        case 'pluginSlotLoadPreset':
-          {
-            final slot = (m['slot'] as num?)?.toInt() ?? 0;
-            final path = m['path'] as String;
-            final pb = activePluginBridge();
-            if (pb != null) {
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': pb.loadPreset(slot, path),
-                'status': pb.getStatus(slot),
-              });
-              break;
-            }
-            if (lib != null && handle != null) {
-              final rc = AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
-              final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
-              send({
-                'evt': 'pluginSlotPresetLoaded',
-                'slot': slot,
-                'path': path,
-                'rc': rc,
-                'status': statusJson,
               });
             }
             break;
@@ -1705,14 +1703,30 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           {
             final slot = (m['slot'] as num?)?.toInt() ?? 0;
             final mask = (m['mask'] as num).toInt();
+            // P1-3 per-group Ch：group>=0 只发该组（VB 具体路）；
+            // -1 非 VB 单引擎 / VB 遗留 -1 路（见下方 A1 注释）。
+            final group = (m['group'] as num?)?.toInt() ?? -1;
             final pb = activePluginBridge();
             if (pb != null) {
-              final rc = pb.setChannels(slot, mask);
+              // A1（2026-10-22 审查）：VB 多组桥下 group<0 不是合法路
+              // （v3.3 已撤「全部」）。旧实现回落 pb.setChannels
+              // （vb_plugin_slot_set_channels = 全组扇出）——与 save 侧
+              // eng[0] 单发不对称，重挂时未编辑路被污染。新桥统一「单组 0」
+              // 语义；老桥（无 _g 导出）保持原回落。
+              int rc;
+              if (group >= 0) {
+                rc = pb.setChannelsG(slot, group, mask);
+              } else if (pb.hasSetChannelsG) {
+                rc = pb.setChannelsG(slot, 0, mask);
+              } else {
+                rc = pb.setChannels(slot, mask);
+              }
               if (rc == 1) pluginMirror[slot].channels = mask;
               send({
                 'evt': 'pluginSlotChannels',
                 'slot': slot,
                 'mask': mask,
+                'group': group, // A4：回执携带路由，Dart 按路归位
                 'rc': rc,
               });
               break;
@@ -1725,7 +1739,92 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'evt': 'pluginSlotChannels',
                 'slot': slot,
                 'mask': mask,
+                'group': group,
                 'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotSavePresetG':
+          {
+            // P2-1 A/B 预设落盘（per-group；group<0 = 非 VB 单引擎 / VB
+            // 遗留 -1 路——A1 修复后新桥下单组 0 语义）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              // A1（2026-10-22 审查）：save 侧 pb.savePreset 仅 eng[0]
+              // （vb_plugin_slot_save_preset），load 侧 pb.loadPreset 却
+              // 全组扇出（vb_plugin_slot_load_preset）——不对称使重挂/模式
+              // 切换后未编辑路由被 eng[0] 状态污染。新桥统一「单组 0」。
+              int rc;
+              if (group >= 0) {
+                rc = pb.savePresetG(slot, group, path);
+              } else if (pb.hasSavePresetG) {
+                // F-5：save 侧按自身能力探测（中间态桥：只有 save_g 时
+                // 也走单组 0，不再整族回落 eng[0] 单发）。
+                rc = pb.savePresetG(slot, 0, path);
+              } else {
+                rc = pb.savePreset(slot, path);
+              }
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc =
+                  AuraDspLib.pluginSlotSavePresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetSaved',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+              });
+            }
+            break;
+          }
+        case 'pluginSlotLoadPresetG':
+          {
+            // P2-1 A/B 预设激活/继承应用（per-group；group<0 走 A1 单组 0）。
+            final slot = (m['slot'] as num?)?.toInt() ?? 0;
+            final group = (m['group'] as num?)?.toInt() ?? -1;
+            final path = m['path'] as String;
+            final pb = activePluginBridge();
+            if (pb != null) {
+              // A1：与 save 侧对称——新桥 group<0 = 单组 0（不再全组扇出），
+              // 杜绝 eng[0] 状态污染未编辑路由；老桥保持原回落。
+              int rc;
+              if (group >= 0) {
+                rc = pb.loadPresetG(slot, group, path);
+              } else if (pb.hasLoadPresetG) {
+                // F-5：load 侧按自身能力探测（独立于 save_g）。
+                rc = pb.loadPresetG(slot, 0, path);
+              } else {
+                rc = pb.loadPreset(slot, path);
+              }
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': pb.getStatus(slot),
+              });
+              break;
+            }
+            if (lib != null && handle != null) {
+              final rc =
+                  AuraDspLib.pluginSlotLoadPresetWrap(lib, handle, slot, path);
+              send({
+                'evt': 'pluginSlotPresetLoaded',
+                'slot': slot,
+                'path': path,
+                'rc': rc,
+                'status': AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot),
               });
             }
             break;

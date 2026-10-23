@@ -77,21 +77,21 @@ class _SpatialCard extends StatelessWidget {
             param: ParamRegistry.spatialRoom,
             model: model,
             customLabel: l.spatialRoom,
-            infoMessage: '模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。',
+            infoMessage: l.spatialHintRoom,
           ),
           const SizedBox(height: AuraSpace.sm),
           ParamSlider(
             param: ParamRegistry.spatialWidth,
             model: model,
             customLabel: l.spatialWidth,
-            infoMessage: '扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。',
+            infoMessage: l.spatialHintWidth,
           ),
           const SizedBox(height: AuraSpace.sm),
           ParamSlider(
             param: ParamRegistry.spatialCenter,
             model: model,
             customLabel: l.spatialCenter,
-            infoMessage: '控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。',
+            infoMessage: l.spatialHintFocus,
           ),
           const SizedBox(height: AuraSpace.sm),
           ParamSlider(
@@ -158,14 +158,14 @@ class _SpatialCard extends StatelessWidget {
             param: ParamRegistry.spatialOutGain,
             model: model,
             customLabel: l.spatialOutGain,
-            infoMessage: '在全自动等能量物理归一化基础上的输出增益微调 (-12 ~ +6 dB)。',
+            infoMessage: l.spatialHintGain,
           ),
           const SizedBox(height: AuraSpace.sm),
           Row(
             children: [
               Text(l.spatialAutoGain, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
-              const InfoBadge(message: '全站等响度自动平衡算法。自动平抑多扬声器上混带来的能量增益，彻底杜绝滑块变音量调节器的问题。'),
+              InfoBadge(message: l.spatialHintLoudness),
               const Spacer(),
               ParamSwitch(
                 param: ParamRegistry.spatialAutoGain,

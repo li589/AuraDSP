@@ -1,0 +1,3 @@
+# 硬编码中文基线（P2-2 棘轮）：条目只允许减少。
+# 重生成：python tools/l10n_cjk_scan.py --baseline
+# 格式：<相对路径> <条数>

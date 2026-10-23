@@ -53,7 +53,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
 
   /// B6 UI 预检：GraphicEQ 至少 2 个有效频点（频率>0 且<=96000、增益 [-64,64]、有限数）。
   /// 返回错误信息；null = 可通过（防坏串进引擎，与引擎 nodes 护栏双层防护）。
-  static String? precheckGraphicEq(String text) {
+  static String? precheckGraphicEq(AppLocalizations t, String text) {
     final clean = text.replaceAll(RegExp(r'^[Gg]raphic[Ee][Qq]:\s*'), '');
     final pairs = clean.split(';');
     var ok = 0;
@@ -67,18 +67,19 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       if (g < -64 || g > 64) continue;
       ok++;
     }
-    return ok >= 2 ? null : '至少需要 2 个有效频点（频率 增益dB; …）';
+    return ok >= 2 ? null : t.arbmagMinPoints;
   }
 
   /// 校验通过才下发引擎；返回是否成功。
   bool _applyGraphicEq(BuildContext context, String text) {
+    final l = l10nOf(context);
     final cleaned = _cleanGraphicEqText(text);
     if (cleaned.isEmpty) return false;
-    final err = precheckGraphicEq(cleaned);
+    final err = precheckGraphicEq(l, cleaned);
     if (err != null) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('GraphicEQ 无效：$err')),
+          SnackBar(content: Text(l.arbmagGraphicEqInvalid(err))),
         );
       }
       return false;
@@ -89,6 +90,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
   }
 
   Future<void> _importFile(BuildContext context) async {
+    final l = l10nOf(context);
     const type = XTypeGroup(label: 'AutoEq GraphicEQ', extensions: ['txt', 'csv']);
     final file = await openFile(
       acceptedTypeGroups: [type],
@@ -105,7 +107,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       } catch (e) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('读取文件失败: $e')),
+            SnackBar(content: Text(l.arbmagReadFailed(e.toString()))),
           );
         }
       }
@@ -287,7 +289,7 @@ class _ArbmagCurvePreview extends StatelessWidget {
                   border: Border.all(color: palette.hairline.withValues(alpha: 0.5)),
                 ),
                 child: Text(
-                  '${nodes.length} 频点',
+                  l10nOf(context).arbmagPoints(nodes.length),
                   style: monoOf(palette, size: 9.5, color: palette.accent),
                 ),
               ),
@@ -465,7 +467,7 @@ class _ArbmagAdvanced extends StatelessWidget {
     final agcStr = 'AGC: ${m.arbmagAutoGain ? "ON" : "OFF"}';
     final trimStr =
         '${(m.arbmagOutputGain >= 0 ? "+" : "")}${m.arbmagOutputGain.toStringAsFixed(1)} dB';
-    final nodesStr = '${m.arbmagNodeCount} 节点';
+    final nodesStr = l.arbmagNodes(m.arbmagNodeCount);
 
     return AdvancedSection(
       summary: '$agcStr · $trimStr · $nodesStr',

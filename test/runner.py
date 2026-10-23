@@ -34,6 +34,9 @@ def run_smoke_tests():
         "smoke_plugin_host.py",
         "smoke_plugin_host_process.py",
         "smoke_plugin_host_editor.py",
+        # iZotope Ozone/RX 12 加载契约：setProcessing 返回 kNotImplemented 不得致命，
+        # 且 process() 音频必须存活；机器上无 iZotope 插件时自动 SKIP
+        "smoke_plugin_izotope_setproc.py",
         "smoke_plugin_pdc.py",
         "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
@@ -42,6 +45,24 @@ def run_smoke_tests():
         "smoke_plugin_metadata.py",
         "smoke_plugin_arch_detect.py",
         "smoke_multislot_and_stages.py",
+        # E9 跨模式一致性（进程内 vs 进程外逐位比对）。历史：建门禁时对 HEAD
+        # 报红抓出 E12 P0（missStreak 自毁）；E12/E13 修复后转绿，现为常驻
+        # 回归守卫（slot 健康 + processCalls 推进 + 对齐逐位一致）。
+        "smoke_cross_mode_consistency.py",
+        # E14 预热直通双发门禁：直通块不得被宿主回放（prime 补位机制守卫）
+        "smoke_plugin_prime_no_double_send.py",
+        # 链级启用开关（VB 按路插件处理底层）：关=逐位直通+latency 归零，
+        # 重启用=延迟线复位后效果恢复，槽位挂载状态全程保留
+        "smoke_plugin_chain_enable.py",
+        # F-2 真旁路生命周期门禁：旁路=空链同值（链层跳过槽位）、取消旁路
+        # 必须恢复激活处理（泵线程生命周期切换 + 在途 process 握手）
+        "smoke_plugin_bypass_lifecycle.py",
+        # 桥挂载提速门禁（2026-10-23）：eng[0] 同步 + 其余组后台补齐；
+        # 掩码外组不加载、掩码新使能组自动补挂。App 占槽时自动让路。
+        "smoke_vm_plugin_load_fast.py",
+        # F-4 裁定守卫（2026-10-23）：宿主进程 BELOW_NORMAL 不得外溢到 RT
+        # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
+        "smoke_plugin_host_priority.py",
         "smoke_config_and_matrix.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
@@ -64,6 +85,9 @@ def run_smoke_tests():
         "smoke_vm_detect.py",
         "smoke_vm_pump.py",
         "smoke_vm_bridge.py",
+        # Z12 超预算自动保护门禁（2026-10-23）：注入观测值 → 收窄到热组 →
+        # 回落自动恢复；手动改掩码立即取消；关保护不进入。App 占槽时让路。
+        "smoke_vm_protect.py",
     "smoke_apo_inspect.py",
     "smoke_apo_register.py",
     "smoke_apo_selftest.py",
@@ -90,6 +114,10 @@ def run_smoke_tests():
     "smoke_input.py",
     "smoke_bass.py",
     "smoke_comp.py",
+    # Z13 compander 控制线程/RT 竞争门禁（2026-10-23）：双 UI 线程高频拖
+    # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
+    # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。
+    "smoke_comp_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",

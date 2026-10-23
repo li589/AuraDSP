@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
@@ -37,6 +38,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
   }
 
   void _onSpectrum() {
+    // R2（2026-10-23）：离屏不更新峰值（IndexedStack 保活 = 本页仍在树上，
+    // 30fps 写入会带动 SpectrumView repaint 与 _peakNotifier 订阅方重建）。
+    // 回页后下一帧（≤33ms）即恢复。
+    if (widget.model.visiblePage.value != AppPage.visualizer) return;
     _peakNotifier.value = List.of(_peaks.update(widget.model.spectrum.value));
   }
 
@@ -49,6 +54,17 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
   @override
   Widget build(BuildContext context) {
+    // R2（2026-10-23）：页可见性门控——离屏时高频读数（峰值/电平）不订阅
+    // 30fps 通知器。AmbientSpectrum/SpectrumView 的 CustomPainter repaint
+    // 离屏不实际绘制，无需门控。
+    return ValueListenableBuilder<AppPage>(
+      valueListenable: widget.model.visiblePage,
+      builder: (_, page, _) =>
+          _buildBody(context, active: page == AppPage.visualizer),
+    );
+  }
+
+  Widget _buildBody(BuildContext context, {required bool active}) {
     final p = paletteOf(context);
     final l = l10nOf(context);
     return Stack(
@@ -70,7 +86,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
                     eyebrow: l.pageVisualizerEyebrow,
                     title: l.pageVisualizerTitle,
                     trailing: _PeakReadout(
-                        spectrum: widget.model.spectrum, label: l.peakLabel),
+                        spectrum: widget.model.spectrum,
+                        label: l.peakLabel,
+                        active: active),
                   ),
                   const SizedBox(height: AuraSpace.xl),
                   Expanded(
@@ -94,25 +112,35 @@ class _VisualizerPageState extends State<VisualizerPage> {
                         Row(children: [
                           Expanded(
                               child: LevelMeter(
-                                  level: widget.model.levelL, label: 'L')),
+                                  level: widget.model.levelL,
+                                  label: 'L',
+                                  active: active)),
                           const SizedBox(width: AuraSpace.xl),
                           Expanded(
                               child: LevelMeter(
-                                  level: widget.model.levelR, label: 'R')),
+                                  level: widget.model.levelR,
+                                  label: 'R',
+                                  active: active)),
                         ]),
                         const SizedBox(height: AuraSpace.sm + 2),
                         Align(
                           alignment: Alignment.centerRight,
-                          child: ValueListenableBuilder<double>(
-                            valueListenable: widget.model.levelL,
-                            builder: (_, lDb, _) =>
-                                ValueListenableBuilder<double>(
-                              valueListenable: widget.model.levelR,
-                              builder: (_, rDb, _) => Text(
-                                  'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
+                          // R2：离屏不订阅 levelL/R——静态读数替代。
+                          child: active
+                              ? ValueListenableBuilder<double>(
+                                  valueListenable: widget.model.levelL,
+                                  builder: (_, lDb, _) =>
+                                      ValueListenableBuilder<double>(
+                                    valueListenable: widget.model.levelR,
+                                    builder: (_, rDb, _) => Text(
+                                        'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
+                                        style: monoOf(
+                                            p, size: 11, color: p.textDim)),
+                                  ),
+                                )
+                              : Text(
+                                  'L ${dbfsText(-90.0)}  R ${dbfsText(-90.0)} dBFS',
                                   style: monoOf(p, size: 11, color: p.textDim)),
-                            ),
-                          ),
                         ),
                       ],
                     ),
@@ -243,11 +271,24 @@ class _DbScale extends StatelessWidget {
 class _PeakReadout extends StatelessWidget {
   final ValueListenable<List<double>> spectrum;
   final String label;
-  const _PeakReadout({required this.spectrum, required this.label});
+  /// R2（2026-10-23）：false = 宿主页离屏，不订阅 spectrum。
+  final bool active;
+  const _PeakReadout(
+      {required this.spectrum, required this.label, this.active = true});
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    if (!active) {
+      // 离屏：静态占位（保持占位尺寸，回页父级重建即恢复订阅）。
+      return StatReadout(
+        label: label,
+        value: dbfsText(-90.0),
+        unit: 'dBFS',
+        size: 20,
+        valueColor: p.textDim,
+      );
+    }
     return ValueListenableBuilder<List<double>>(
       valueListenable: spectrum,
       builder: (_, bands, _) {

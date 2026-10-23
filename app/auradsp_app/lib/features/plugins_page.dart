@@ -4,7 +4,8 @@
  * 升级功能：
  * 1. 双插槽独立架构（Slot 1 / Slot 2 并行挂载与管理）
  * 2. 原生 GUI 编辑器弹窗唤起（独立消息循环异步线程）
- * 3. 插件预设管理系统（快照保存与载入、文件管理）
+ * 3. VB 多总线按路插件（VB 模式总线下拉选路，打开该路插件界面逐路调节；
+ *    预设存取功能已移除，各插件当前加载状态由 pluginMirror 完整保留）
  * 4. 可自定义插件检索目录（UI 配置、持久化 config.json、多目录聚合扫描）
  * 5. 全音效处理链插入阶段调整（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）
  */
@@ -14,6 +15,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/path_memory.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
@@ -36,7 +38,8 @@ class PluginsPage extends StatefulWidget {
   State<PluginsPage> createState() => _PluginsPageState();
 }
 
-class _PluginsPageState extends State<PluginsPage> {
+class _PluginsPageState extends State<PluginsPage>
+    with WidgetsBindingObserver {
   final TextEditingController _searchCtrl = TextEditingController();
   final TextEditingController _customDirCtrl = TextEditingController(
       text: PathMemory.dirFor(PathMemory.slotLastPluginDir) ?? '');
@@ -46,9 +49,18 @@ class _PluginsPageState extends State<PluginsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _searchCtrl.text = widget.model.pluginManager.searchQuery;
+    _startStatusTimer();
+  }
+
+  void _startStatusTimer() {
+    _statusTimer?.cancel();
     _statusTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (!mounted) return;
+      // P0-1：IndexedStack 保活后本页离屏仍在树上——只在可见时轮询，
+      // 否则每秒白跑 IPC + 通知（与最小化门控同一目的）。
+      if (widget.model.visiblePage.value != AppPage.plugins) return;
       for (var i = 0; i < PluginManager.kMaxSlots; i++) {
         if (widget.model.pluginManager.isSlotActive(i)) {
           widget.model.pluginManager.refreshStatus(slot: i);
@@ -57,8 +69,24 @@ class _PluginsPageState extends State<PluginsPage> {
     });
   }
 
+  // UI 争用缓解（2026-10-22）：窗口最小化/隐藏时暂停 status 轮询——
+  // 用户实测「最小化 App 音频一卡一卡」，轮询的唤醒/IPC 与渲染恢复风暴
+  // 叠加是可消因素；恢复可见即重启轮询。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      _statusTimer?.cancel();
+      _statusTimer = null;
+    } else {
+      if (_statusTimer == null) _startStatusTimer();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
     _searchCtrl.dispose();
     _customDirCtrl.dispose();
@@ -133,157 +161,31 @@ class _PluginsPageState extends State<PluginsPage> {
     );
   }
 
-  void _showPresetDialog(BuildContext context, int slot, PluginMetadata plugin) {
-    final presetNameCtrl = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (context, setDlgState) {
-            final p = paletteOf(ctx);
-            final presets = widget.model.pluginManager.listPresets(plugin.name);
-
-            return AlertDialog(
-              backgroundColor: p.panel,
-              title: Row(
-                children: [
-                  Icon(Icons.tune_rounded, size: 20, color: p.accent),
-                  const SizedBox(width: AuraSpace.sm),
-                  Text(l10nOf(ctx).plugPresetTitle(plugin.name), style: sectionOf(p)),
-                ],
-              ),
-              content: SizedBox(
-                width: 440,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(l10nOf(ctx).plugPresetSaveLabel, style: labelOf(p)),
-                    const SizedBox(height: AuraSpace.xs),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: presetNameCtrl,
-                            style: labelOf(p),
-                            decoration: InputDecoration(
-                              hintText: l10nOf(ctx).plugPresetNameHint,
-                              hintStyle: captionOf(p),
-                              isDense: true,
-                              border: OutlineInputBorder(
-                                borderRadius:
-                                    BorderRadius.circular(AuraRadius.sm),
-                                borderSide: BorderSide(color: p.hairline),
-                              ),
-                              contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 8),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: AuraSpace.sm),
-                        ElevatedButton.icon(
-                          onPressed: () {
-                            final name = presetNameCtrl.text.trim();
-                            if (name.isNotEmpty) {
-                              widget.model.pluginManager
-                                  .savePreset(name, slot: slot);
-                              presetNameCtrl.clear();
-                              setDlgState(() {});
-                            }
-                          },
-                          icon: const Icon(Icons.save_rounded, size: 16),
-                          label: Text(l10nOf(ctx).dlgSave),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: p.accent,
-                            foregroundColor: p.accentContrast,
-                            visualDensity: VisualDensity.compact,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AuraSpace.md),
-                    Divider(color: p.hairline, height: 1),
-                    const SizedBox(height: AuraSpace.md),
-                    Text(l10nOf(ctx).plugPresetList(presets.length), style: labelOf(p)),
-                    const SizedBox(height: AuraSpace.xs),
-                    if (presets.isEmpty)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: AuraSpace.md),
-                        child: Center(
-                          child: Text(l10nOf(ctx).plugPresetEmpty,
-                              style: captionOf(p)),
-                        ),
-                      )
-                    else
-                      Container(
-                        constraints: const BoxConstraints(maxHeight: 180),
-                        decoration: BoxDecoration(
-                          color: p.panelRaised,
-                          borderRadius: BorderRadius.circular(AuraRadius.sm),
-                          border: Border.all(color: p.hairline),
-                        ),
-                        child: ListView.separated(
-                          shrinkWrap: true,
-                          itemCount: presets.length,
-                          separatorBuilder: (_, _) =>
-                              Divider(color: p.hairline, height: 1),
-                          itemBuilder: (c, idx) {
-                            final name = presets[idx];
-                            return ListTile(
-                              dense: true,
-                              title: Text(name, style: labelOf(p)),
-                              trailing: ElevatedButton.icon(
-                                onPressed: () {
-                                  widget.model.pluginManager
-                                      .loadPreset(name, slot: slot);
-                                  Navigator.of(ctx).pop();
-                                },
-                                icon: const Icon(Icons.file_upload_rounded,
-                                    size: 14),
-                                label: Text(l10nOf(ctx).dlgLoad),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: p.accent.withValues(alpha: 0.2),
-                                  foregroundColor: p.accent,
-                                  visualDensity: VisualDensity.compact,
-                                  elevation: 0,
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(l10nOf(ctx).dlgClose, style: labelOf(p)),
-                ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final manager = widget.model.pluginManager;
-    final currentSlot = manager.selectedSlot;
-
     return ListenableBuilder(
       listenable: widget.model,
-      builder: (context, _) => PageScaffold(
-        title: l10nOf(context).plugTitle,
-        children: [
-          // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
-          _SlotSelectorBar(
-            manager: manager,
-            onSelectSlot: (slot) => manager.selectSlot(slot),
-          ),
+      builder: (context, _) {
+        // BUGFIX（2026-10-22）：manager/currentSlot 必须在 builder 闭包内读取。
+        // 原实现把 `final currentSlot = manager.selectedSlot` 放在外层
+        // State.build 作用域——ListenableBuilder 重建时只重跑 builder 闭包，
+        // 而闭包捕获的是上一次外层 build 的变量绑定，currentSlot 永远冻结
+        // 在初始值 0。后果：切槽后 Hero 卡始终显示槽 1 的插件（tab 高亮
+        // 正常——_SlotSelectorBar 内部直接读 manager，是新鲜值）；列表
+        // 「载入到槽 N」/卸载永远落到槽 0，每次挂载都把槽 1 的插件挤掉。
+        // AppModel 已通过 pluginManager.addListener(notifyListeners) 转发
+        // manager 通知（builder 会随 selectSlot 重建），缺的只是新鲜读取。
+        final manager = widget.model.pluginManager;
+        final currentSlot = manager.selectedSlot;
+        return PageScaffold(
+          title: l10nOf(context).plugTitle,
+          children: [
+            // 0. 插槽选择器（Slot 1 / Slot 2 并行管理）
+            _SlotSelectorBar(
+              manager: manager,
+              onSelectSlot: (slot) => manager.selectSlot(slot),
+            ),
 
           // 1. 当前选中挂载插槽 Hero 卡片
           _ActivePluginHero(
@@ -291,7 +193,6 @@ class _PluginsPageState extends State<PluginsPage> {
             manager: manager,
             slot: currentSlot,
             onScanTap: () => manager.scan(deep: _deepScan),
-            onShowPresets: (plugin) => _showPresetDialog(context, currentSlot, plugin),
           ),
 
           // 2. 自定义检索目录管理
@@ -526,8 +427,8 @@ class _PluginsPageState extends State<PluginsPage> {
                       color: p.success,
                     ),
                     _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatPreset,
+                      icon: Icons.route_rounded,
+                      label: l10nOf(context).plugFeatRoute,
                       color: p.success,
                     ),
                     _FeatureBadge(
@@ -546,7 +447,8 @@ class _PluginsPageState extends State<PluginsPage> {
             ),
           ),
         ],
-      ),
+        );
+      },
     );
   }
 }

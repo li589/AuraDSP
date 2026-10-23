@@ -16,6 +16,7 @@ import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/param_schema.dart';
 import '../core/path_memory.dart';
 import '../core/presets.dart';

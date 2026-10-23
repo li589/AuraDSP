@@ -17,6 +17,13 @@
 #include <string>
 
 namespace auradsp {
+
+/* F-8a：遥测测量抽取周期（音频块）。8 块 @ 48kHz/256 帧 ≈ 43ms → ~23Hz
+ * 刷新，仍高于 UI 轮询与肉眼 meter 需求；块率更高时（低延迟小块）刷新
+ * 同步加快，块率更低时（大块/高采样率）最坏 ~43ms 陈旧，meter 不可感知。
+ * 仅门控 RMS/diff 测量，插件 process 音频路径不受任何影响。 */
+constexpr uint32_t kTelemetryDecimation = 8;
+
 static inline uint32_t packFloat(float v) {
     uint32_t u = 0;
     std::memcpy(&u, &v, sizeof(u));
@@ -45,6 +52,34 @@ int processSlotGuarded(PluginHostManager::PluginSlot& s,
 #else
     try {
         if (s.instance) s.instance->process(inChannels, outChannels, numFrames);
+        return 0;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
+/* F-8a（续）：processInterleaved 的 SEH/C++ 异常隔离，镜像 processSlotGuarded。
+ * MSVC C2712 限制（__try 不能在含析构对象的函数中）同样适用：processSlotInterleaved
+ * 拥有 InFlightGuard 与 accumulate lambda，直接放 __try 会编译错误，故独立
+ * 函数体。返回值 0 = 正常，1 = 捕获到插件异常（调用方据此自动旁观该槽）。
+ *
+ * 交错传输路径（remote 代理分支）此前直接调用 processInterleaved 且无任何
+ * 崩溃隔离：一次插件抛出即直杀音频线程。此处补齐与 processSlot 同构的
+ * 崩溃恢复：bypassed.store(true) + resetTelemetryGateSlot。 */
+int processInterleavedGuarded(PluginHostManager::PluginSlot& s,
+                               float* interleaved, uint32_t numFrames,
+                               uint32_t channels, uint32_t mask) {
+#if defined(_MSC_VER)
+    __try {
+        if (s.instance) s.instance->processInterleaved(interleaved, numFrames, channels, mask);
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;
+    }
+#else
+    try {
+        if (s.instance) s.instance->processInterleaved(interleaved, numFrames, channels, mask);
         return 0;
     } catch (...) {
         return 1;
@@ -83,6 +118,7 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
         s.outRmsBits.store(0, std::memory_order_relaxed);
         s.maxDiffBits.store(0, std::memory_order_relaxed);
         s.lastFrames.store(0, std::memory_order_relaxed);
+        resetTelemetryGateSlot(slot);
         if (s.instance) {
             AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor");
             s.instance->closeEditor();
@@ -211,6 +247,8 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
 void PluginHostManager::setBypassSlot(size_t slot, bool bypass) {
     if (slot >= kMaxPluginSlots) return;
     m_slots[slot].bypassed.store(bypass, std::memory_order_release);
+    // F-8a：旁通切换后首个音频块刷新遥测（解除旁通时不读到切换前的陈旧值）
+    resetTelemetryGateSlot(slot);
     if (m_slots[slot].instance) {
         m_slots[slot].instance->setBypass(bypass);
     }
@@ -224,6 +262,13 @@ bool PluginHostManager::isBypassedSlot(size_t slot) const {
 
 uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
     if (slot >= kMaxPluginSlots) return 0;
+    // E15 v2：进程外代理的传输延迟 = 插件延迟 + (每次回调块数)×128——随回调
+    // 块大小自适应（实测 128→+128、256→+256、512→+512、1024→+1024，延迟恒
+    // 为 1 个回调）。故这里返回实例的**实时值**而非加载快照：快照是首块前的
+    // 128 口径，用它做 PDC 会在 512 帧设备上欠补 384 帧（8ms）。
+    if (m_remoteMode && m_slots[slot].instance) {
+        return m_slots[slot].instance->getLatency();
+    }
     return m_slots[slot].latency.load(std::memory_order_relaxed);
 }
 
@@ -240,7 +285,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"slot\":" << slot << ","
        << "\"hasActive\":" << (m_slots[slot].hasActive.load() ? "true" : "false") << ","
        << "\"bypassed\":" << (isBypassedSlot(slot) ? "true" : "false") << ","
-       << "\"latency\":" << m_slots[slot].latency.load() << ","
+       << "\"latency\":" << getLatencySlot(slot) << ","
        << "\"insertStage\":" << m_slots[slot].insertStage.load() << ","
        << "\"channels\":" << m_slots[slot].channelMask.load() << ","
        << "\"processCalls\":" << m_slots[slot].processCalls.load(std::memory_order_relaxed) << ","
@@ -265,17 +310,37 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
         uint32_t transportLatency = 0;
         uint64_t inputOverflows = 0;
         uint64_t outputOverflows = 0;
+        uint64_t seqGaps = 0;
+        uint32_t inFlight = 0;
+        uint32_t maxInFlight = 0;
+        uint32_t depthViolations = 0;
+        uint32_t depthDrops = 0;
+        uint32_t depthTarget = 0;
         if (auto* proxy = dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
             remoteFailed = proxy->remoteFailed();
             transportLatency = proxy->transportLatency();
             inputOverflows = proxy->inputOverflows();
             outputOverflows = proxy->outputOverflows();
+            seqGaps = proxy->seqGaps();
+            // E15：流水深不变量观测（inFlight 恒 0/1；maxInFlight 应恒 1；
+            // depthViolations 恒 0——非 0 即 latency 上报失真）。
+            inFlight = proxy->inFlight();
+            maxInFlight = proxy->maxInFlight();
+            depthViolations = proxy->depthViolations();
+            depthDrops = proxy->depthDrops();
+            depthTarget = proxy->depthTarget();
         }
         ss << "\"remoteMode\":true,"
            << "\"remoteFailed\":" << (remoteFailed ? "true" : "false") << ","
            << "\"transportLatency\":" << transportLatency << ","
            << "\"inputOverflows\":" << inputOverflows << ","
-           << "\"outputOverflows\":" << outputOverflows << ",";
+           << "\"outputOverflows\":" << outputOverflows << ","
+           << "\"seqGaps\":" << seqGaps << ","
+           << "\"inFlight\":" << inFlight << ","
+           << "\"maxInFlight\":" << maxInFlight << ","
+           << "\"depthViolations\":" << depthViolations << ","
+           << "\"depthDrops\":" << depthDrops << ","
+           << "\"depthTarget\":" << depthTarget << ",";
     }
 #endif
     if (m_slots[slot].instance) {
@@ -311,6 +376,8 @@ void PluginHostManager::setInsertStageSlot(size_t slot, int stage) {
     if (stage < 0) stage = 0;
     if (stage > 4) stage = 4;
     m_slots[slot].insertStage.store(stage, std::memory_order_release);
+    // F-8a：阶段迁移后首个音频块刷新遥测（新阶段的测量不滞后到下一抽取点）
+    resetTelemetryGateSlot(slot);
 }
 
 int PluginHostManager::getInsertStageSlot(size_t slot) const {
@@ -395,6 +462,11 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     s.processCalls.fetch_add(1, std::memory_order_relaxed);
     if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
         s.bypassed.store(true, std::memory_order_release);
+        // F-8a：崩溃导致旁路，直写 bypass 绕过 setBypassSlot，故在此补齐
+        // resetTelemetryGateSlot —— 保证后续首个音频块刷新遥测，不读到崩溃
+        // 前的陈旧/脏值。与 setBypassSlot/unloadPluginSlotLocked/
+        // setInsertStageSlot/commitInstanceLocked 的重置行为统一。
+        resetTelemetryGateSlot(slot);
     }
 }
 
@@ -416,6 +488,11 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         return;
     }
 
+    /* F-8a：遥测测量按块抽取。音频路径（解交织/插件 process/分组 scatter）
+     * 完全不受影响；未命中抽取点时跳过 RMS/diff 累加，sampleCount 保持 0，
+     * 末尾既有 `if (sampleCount > 0)` 守卫自然不会触发 recordTelemetry。 */
+    const bool sampleTelemetry = claimTelemetrySample(slot);
+
     for (uint32_t i = 0; i < numFrames; ++i) {
         for (uint32_t ch = 0; ch < channels; ++ch) {
             m_channelIn[ch][i] = interleaved[i * channels + ch];
@@ -428,6 +505,7 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     uint32_t sampleCount = 0;
 
     auto accumulate = [&](const float* in, const float* out) {
+        if (!sampleTelemetry) return;
         for (uint32_t i = 0; i < numFrames; ++i) {
             const float a = in[i];
             const float b = out[i];
@@ -442,21 +520,33 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
     if (s.instance && s.instance->interleavedTransport()) {
         s.inFlight.fetch_add(1, std::memory_order_acq_rel);
         InFlightGuard guard(s.inFlight, s.destroyPending);
+        /* E13: 交错传输路径（remote 代理分支）此前从不递增 processCalls——
+         * 该计数只存在于平面 processSlot，进程内链组件经 else 分支的交错→
+         * 平面转换间接计数，remote 路径则全程为 0（遥测盲区，R-1 遗留①）。
+         * 仅在此分支递增：else 分支由其内部 processSlot 计数，避免双计。 */
+        s.processCalls.fetch_add(1, std::memory_order_relaxed);
         if (s.hasActive.load(std::memory_order_acquire) &&
             !s.bypassed.load(std::memory_order_acquire)) {
-            s.instance->processInterleaved(interleaved, numFrames, channels, mask);
-        }
-        for (uint32_t ch = 0; ch < channels; ++ch) {
-            if (!(mask & (1u << ch))) continue;
-            for (uint32_t i = 0; i < numFrames; ++i) {
-                const float a = m_channelIn[ch][i];
-                const float b = interleaved[i * channels + ch];
-                inSum += static_cast<double>(a) * a;
-                outSum += static_cast<double>(b) * b;
-                const float diff = std::fabs(b - a);
-                if (diff > maxDiff) maxDiff = diff;
+            /* F-8a（续）：processInterleaved 崩溃 → 旁观 + 重置遥测门控，
+             * 镜像 processSlot 的 processSlotGuarded 崩溃恢复路径。 */
+            if (processInterleavedGuarded(s, interleaved, numFrames, channels, mask) != 0) {
+                s.bypassed.store(true, std::memory_order_release);
+                resetTelemetryGateSlot(slot);
             }
-            sampleCount += numFrames;
+        }
+        if (sampleTelemetry) {
+            for (uint32_t ch = 0; ch < channels; ++ch) {
+                if (!(mask & (1u << ch))) continue;
+                for (uint32_t i = 0; i < numFrames; ++i) {
+                    const float a = m_channelIn[ch][i];
+                    const float b = interleaved[i * channels + ch];
+                    inSum += static_cast<double>(a) * a;
+                    outSum += static_cast<double>(b) * b;
+                    const float diff = std::fabs(b - a);
+                    if (diff > maxDiff) maxDiff = diff;
+                }
+                sampleCount += numFrames;
+            }
         }
     } else {
         int inChannels = 2;
@@ -577,6 +667,23 @@ void PluginHostManager::recordTelemetry(size_t slot, float inRms, float outRms,
     s.outRmsBits.store(packFloat(outRms), std::memory_order_relaxed);
     s.maxDiffBits.store(packFloat(maxDiff), std::memory_order_relaxed);
     s.lastFrames.store(frames, std::memory_order_relaxed);
+}
+
+bool PluginHostManager::claimTelemetrySample(size_t slot) noexcept {
+    if (slot >= kMaxPluginSlots) return false;
+    PluginSlot& s = m_slots[slot];
+    const uint32_t cur = s.telemetryCountdown.load(std::memory_order_relaxed);
+    if (cur == 0) {
+        s.telemetryCountdown.store(kTelemetryDecimation - 1, std::memory_order_relaxed);
+        return true;
+    }
+    s.telemetryCountdown.store(cur - 1, std::memory_order_relaxed);
+    return false;
+}
+
+void PluginHostManager::resetTelemetryGateSlot(size_t slot) noexcept {
+    if (slot >= kMaxPluginSlots) return;
+    m_slots[slot].telemetryCountdown.store(0, std::memory_order_relaxed);
 }
 
 // Legacy single-slot forward (slot 0).
@@ -728,6 +835,7 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
     s.outRmsBits.store(0, std::memory_order_relaxed);
     s.maxDiffBits.store(0, std::memory_order_relaxed);
     s.lastFrames.store(0, std::memory_order_relaxed);
+    resetTelemetryGateSlot(slot);
 
     if (old) {
         // 正常流程由 runControlTask 预先调用 detachInstanceLocked 摘除并在锁外销毁；

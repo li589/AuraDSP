@@ -105,6 +105,7 @@ class _InputMasterGainKnobState extends State<_InputMasterGainKnob> {
   @override
   Widget build(BuildContext context) {
     final p = widget.palette;
+    final l = l10nOf(context);
     final gainText = (widget.gain >= 0 ? '+' : '') + widget.gain.toStringAsFixed(1);
 
     return GestureDetector(
@@ -126,7 +127,7 @@ class _InputMasterGainKnobState extends State<_InputMasterGainKnob> {
         _dragStartGain = null;
       },
       child: Tooltip(
-        message: '${widget.label}: $gainText dB\n上下拖拽微调 · 双击归零',
+        message: l.inputGainTip(widget.label, gainText),
         child: Container(
           color: Colors.transparent,
           padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
@@ -267,21 +268,28 @@ class _InputStageMeterMatrix extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        model.inputMeterInL,
-        model.inputMeterInR,
-        model.inputMeterOutL,
-        model.inputMeterOutR,
-      ]),
-      builder: (context, _) {
-        final inL = model.inputMeterInL.value;
-        final inR = model.inputMeterInR.value;
-        final outL = model.inputMeterOutL.value;
-        final outR = model.inputMeterOutR.value;
+    // R2（2026-10-23）：effects 页离屏时不订阅 30fps 输入/输出电平
+    // （IndexedStack 保活 = 本页仍在树上）。回页即恢复。
+    return ValueListenableBuilder<AppPage>(
+      valueListenable: model.visiblePage,
+      builder: (context, page, _) {
+        if (page != AppPage.effects) return const SizedBox.shrink();
+        return ListenableBuilder(
+          listenable: Listenable.merge([
+            model.inputMeterInL,
+            model.inputMeterInR,
+            model.inputMeterOutL,
+            model.inputMeterOutR,
+          ]),
+          builder: (context, _) {
+            final inL = model.inputMeterInL.value;
+            final inR = model.inputMeterInR.value;
+            final outL = model.inputMeterOutL.value;
+            final outR = model.inputMeterOutR.value;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+            return Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
           decoration: BoxDecoration(
             color: palette.panelRaised.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -328,6 +336,8 @@ class _InputStageMeterMatrix extends StatelessWidget {
             ],
           ),
         );
+      },
+    );
       },
     );
   }
@@ -510,6 +520,7 @@ class _InputBalanceAdvanced extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = l10nOf(context);
     final isCustom = (model.inputBalanceL - 1.0).abs() > 0.001 ||
         (model.inputBalanceR - 1.0).abs() > 0.001;
 
@@ -528,7 +539,7 @@ class _InputBalanceAdvanced extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 icon: const Icon(Icons.refresh_rounded, size: 13),
-                label: const Text('重置 100%', style: TextStyle(fontSize: 11)),
+                label: Text(l.inputReset100, style: const TextStyle(fontSize: 11)),
                 onPressed: () {
                   model.setParam(ParamRegistry.inputBalanceL, 1.0);
                   model.setParam(ParamRegistry.inputBalanceR, 1.0);
@@ -581,6 +592,7 @@ class _ChannelBalanceBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l = l10nOf(context);
     final p = palette;
     final percent = (value * 100).round();
     final isCustom = (value - 1.0).abs() > 0.001;
@@ -633,13 +645,13 @@ class _ChannelBalanceBar extends StatelessWidget {
               const Spacer(),
               // 最终音量合成显示
               Text(
-                '最终: $finalDesc',
+                l.inputFinal(finalDesc),
                 style: monoOf(p, size: 10.5, color: isCustom ? p.accent : p.textDim),
               ),
               if (isCustom) ...[
                 const SizedBox(width: AuraSpace.xs),
                 Tooltip(
-                  message: '双击或点击恢复 100%',
+                  message: l.inputResetHint,
                   child: InkWell(
                     onTap: onReset,
                     borderRadius: BorderRadius.circular(AuraRadius.xs),

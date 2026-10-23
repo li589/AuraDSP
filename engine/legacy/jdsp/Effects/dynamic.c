@@ -1606,6 +1606,12 @@ void CompressorEnable(JamesDSPLib *jdsp, char enable)
 	{
 		CompressorSetParam(jdsp, jdsp->comp.fgt_facT, jdsp->comp.granularity, jdsp->comp.tfresolution, 1);
 		CompressorSetGain(jdsp, 0, 0, 0);
+		/* [PATCHED-AuraDSP Z13] 一次性消费：此前该标志只置不清，导致采样率
+		 * 变更后每一次 CompressorEnable 都全量重初始化（apply_comp 每条
+		 * comp.* 参数都会调）。刷新语义本就是 one-shot，此处补齐清除点。
+		 * 调用方契约：JamesDSPSetSampleRate 持 jdsp_lock 调用；apply_comp
+		 * 持 jdsp_lock 调用（Z13 起）——与 RT comp stage 的 jdsp_lock 互斥。 */
+		jdsp->compForceRefresh = 0;
 	}
 	if (enable)
 		jdsp->compEnabled = 1;

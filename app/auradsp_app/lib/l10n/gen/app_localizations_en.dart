@@ -37,7 +37,757 @@ class AppLocalizationsEn extends AppLocalizations {
   String get stateIdle => 'Idle';
 
   @override
+  String get routingChFl => 'Front Left';
+
+  @override
+  String get routingChFr => 'Front Right';
+
+  @override
+  String get routingChC => 'Center';
+
+  @override
+  String get routingChLfe => 'Subwoofer';
+
+  @override
+  String get routingChSl => 'Surround L';
+
+  @override
+  String get routingChSr => 'Surround R';
+
+  @override
+  String get routingChBl => 'Back L';
+
+  @override
+  String get routingChBr => 'Back R';
+
+  @override
+  String get routingAllChannels => 'All Channels (8/8)';
+
+  @override
+  String get routingStereo => 'Stereo (FL/FR)';
+
+  @override
+  String get routingNoSub => 'No Sub (7/8)';
+
+  @override
+  String get routingAllBypassed => 'All Bypassed (0/8)';
+
+  @override
+  String get routingSurroundOnly => 'Surround Only (4/8)';
+
+  @override
+  String routingSelectedCount(int count) {
+    return '$count/8 Selected';
+  }
+
+  @override
+  String get channelRouting => 'Channel Routing';
+
+  @override
+  String get routingPresets => 'Presets:';
+
+  @override
+  String get routingPresetAll => 'All';
+
+  @override
+  String get routingPresetStereo => 'Stereo';
+
+  @override
+  String get routingPresetNoLfe => 'No LFE';
+
+  @override
+  String get routingPresetSurround => 'Surround';
+
+  @override
+  String get setConnStatus => 'Connection';
+
+  @override
+  String get setConnActive => 'Connected (active callback)';
+
+  @override
+  String get setConnIdle => 'Not connected (waiting for Voicemeeter)';
+
+  @override
+  String get setDeviceDisconnected => 'Device not connected';
+
+  @override
+  String get setEndpointShort => 'Endpoint';
+
+  @override
+  String setEndpointWithId(String shortId) {
+    return 'Audio endpoint ($shortId)';
+  }
+
+  @override
+  String setOfflineSuffix(String name) {
+    return '$name [offline/not connected]';
+  }
+
+  @override
+  String get setDefaultEndpoint => 'Default audio endpoint (Default Render)';
+
+  @override
+  String get setNoEndpoint => 'No audio endpoint available';
+
+  @override
+  String setApoActive(int sr, int frames) {
+    return 'Active ($sr Hz · $frames frames)';
+  }
+
+  @override
+  String get setApoAttached => 'Attached (waiting for playback stream)';
+
+  @override
+  String get setProcessing => 'Processing...';
+
+  @override
+  String get setApoRegistered =>
+      'System APO hook registered on the target device; service synced';
+
+  @override
+  String get setApoAttachFailed => 'APO attach incomplete';
+
+  @override
+  String get setApoUnregistered =>
+      'APO hook safely removed; original system/vendor drivers restored';
+
+  @override
+  String get setApoUnregisterFailed => 'APO uninstall incomplete';
+
+  @override
+  String get setCompositeSlot => 'Composite slot';
+
+  @override
+  String get setRefreshStatus => 'Refresh status';
+
+  @override
+  String get setApoSafetyNote =>
+      'Registry safety: all changes are atomically protected via HKLM\\SOFTWARE\\AuraDSP\\Child APOs plus a dual-layer disk snapshot; the original driver config is 100% restored on uninstall.';
+
+  @override
+  String setDriverOffline(String name) {
+    return '$name [not detected/offline]';
+  }
+
+  @override
+  String get setVaioReady =>
+      'AuraVAIO KMDF driver ready (Sysvad virtual sound card)';
+
+  @override
+  String get setVaioMissing =>
+      'AuraVAIO virtual sound card driver not detected';
+
+  @override
+  String get setVaioDesc =>
+      'KMDF kernel-mode virtual audio driver providing a full-duplex virtual audio cable';
+
+  @override
+  String get setInstallDriverUac => 'Install driver (UAC)';
+
+  @override
+  String get setInstallDriverUacPrompt =>
+      'Bringing up the Windows UAC prompt; click “Yes” to allow the driver installation...';
+
+  @override
+  String get setVaioInstallOk =>
+      'AuraVAIO driver installed and verified successfully!';
+
+  @override
+  String get setDriverInstallFailed => 'Driver installation incomplete';
+
+  @override
+  String get setUninstallDriver => 'Uninstall driver';
+
+  @override
+  String get setVaioUninstallOk => 'AuraVAIO driver uninstalled successfully';
+
+  @override
+  String get setDriverUninstallFailed => 'Uninstall incomplete';
+
+  @override
+  String get setRedetect => 'Re-detect';
+
+  @override
+  String get setWasapiDesc =>
+      'System-level WASAPI shared/exclusive audio engine; no extra driver required';
+
+  @override
+  String get setRefreshDevice => 'Refresh devices';
+
+  @override
+  String get setAsioRegisterUac => 'Register driver (UAC)';
+
+  @override
+  String get setAsioRegisterPrompt =>
+      'Bringing up the Windows UAC prompt to register the virtual ASIO driver...';
+
+  @override
+  String get setAsioRegisterOk =>
+      'Virtual ASIO driver registered — now selectable in your DAW!';
+
+  @override
+  String get setAsioRegisterFailed =>
+      'Registration failed; retry with administrator privileges';
+
+  @override
+  String get setAsioUnregisterOk => 'Virtual ASIO driver unregistered';
+
+  @override
+  String get setAsioUnregisterFailed =>
+      'Unregister failed; retry with administrator privileges';
+
+  @override
+  String get gateHintThreshold =>
+      'Background noise below this level is attenuated. Too high eats quiet tails; too low and the gate barely acts.';
+
+  @override
+  String get gateHysteresis => 'Hysteresis';
+
+  @override
+  String get gateHintHysteresis =>
+      'Level gap between opening and closing; prevents chatter at the threshold so the gate stays stable through vocal dynamics.';
+
+  @override
+  String get gateRange => 'Range';
+
+  @override
+  String get gateHintRange =>
+      'Maximum attenuation when fully closed. -60 dB is silence; -12…-24 dB keeps natural ambience and avoids a digital-dead feel.';
+
+  @override
+  String get gateHold => 'Hold';
+
+  @override
+  String get gateHintHold =>
+      'Milliseconds to stay fully open after the signal drops below the close threshold; avoids cutting pauses or drum tails.';
+
+  @override
+  String get gateHintAttack =>
+      'How fast the gate opens after crossing the open threshold. Too slow eats attacks; too fast can click.';
+
+  @override
+  String get gateHintRelease =>
+      'Time to close smoothly to the range floor after hold; longer values give a more natural fade.';
+
+  @override
+  String get gateHintSidechain =>
+      'Sidechain de-esser plus automatic loudness compensation for the gate output.';
+
+  @override
+  String get gateHintDeess =>
+      'Dynamically tames sibilance (s/sh/ch) while keeping low-end body.';
+
+  @override
+  String get gateHintDeessFreq =>
+      'Sidechain band used to detect sibilance. Heavy sibilance → lower; dull → higher.';
+
+  @override
+  String get gateHintDeessAmount =>
+      'Sibilance reduction strength; only the high band is attenuated.';
+
+  @override
+  String get gateHintAutoGain =>
+      'Compensates the level drop caused by gating in real time.';
+
+  @override
+  String get compThreshold => 'Threshold';
+
+  @override
+  String get compHintThreshold =>
+      'Level where compression starts. Audio below stays untouched; above is reduced proportionally, taming harsh transients.';
+
+  @override
+  String get compRatio => 'Ratio';
+
+  @override
+  String get compHintRatio =>
+      'Steepness of gain reduction above threshold. Higher = stronger (10:1 approaches limiting); lower = gentler, more open dynamics.';
+
+  @override
+  String get compHintRelease =>
+      'Release time for compression and envelope tracking. Short = punchier transients; long = smoother, more transparent.';
+
+  @override
+  String get compHintBandwidth =>
+      'Frequency-analysis resolution. Coarse responds fastest (electronic/pop); precise separates bands better (vocals, instruments).';
+
+  @override
+  String get compHintTiming =>
+      'Filter time-constant strategy. Transient keeps micro-dynamics; Balanced is general purpose; Zero-latency adds no buffering delay.';
+
+  @override
+  String get compBandsTitle => 'Per-band dynamics trim (7 bands)';
+
+  @override
+  String get compHintBands =>
+      'Customize center frequency and compression/expansion per band (negative = compress, positive = expand).';
+
+  @override
+  String get bandSub => 'Sub';
+
+  @override
+  String get bandLow => 'Low';
+
+  @override
+  String get bandLowMid => 'Low-mid';
+
+  @override
+  String get bandMid => 'Mid';
+
+  @override
+  String get bandHighMid => 'High-mid';
+
+  @override
+  String get bandHigh => 'High';
+
+  @override
+  String get bandUltra => 'Ultra-high';
+
+  @override
+  String get compBandFreq => 'Center frequency';
+
+  @override
+  String get compBandAmount => 'Compress / expand';
+
+  @override
+  String get compHintBandAmount =>
+      'Negative compresses, positive expands. Default -0.35.';
+
+  @override
+  String get eelUnclosedString => 'Unclosed string (spans lines)';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return 'Unexpected \"$ch\" (no matching opener)';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => 'Block comment not closed (missing */)';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" not closed (started at line $line, col $col)';
+  }
+
+  @override
+  String get eelMissingInit =>
+      'Missing @init section (engine will refuse to compile)';
+
+  @override
+  String get eelMissingSample =>
+      'Missing @sample section (engine will refuse to compile)';
+
+  @override
+  String get eelEmptyInit =>
+      'Empty @init section (vendor requires at least one statement)';
+
+  @override
+  String get eelEmptySample =>
+      'Empty @sample section (output will be silent) — sure this is intended?';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n out of range (only slider1..8 map to UI sliders)';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name is read-only; assignment has no effect';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 is a high-performance expression language for real-time audio. In AuraDSP every script runs instantly on the audio pump thread.';
+
+  @override
+  String get lpDocSectionsTitle => 'Core sections';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// Runs on sample-rate change or first load; init variables & coefficients\n\n@sample\n// Runs per sample. IO vars are spl0 (L) and spl1 (R)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => 'Slider syntax';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > Gain (dB)\n// sliderN: default< min, max, step > label\n// The host auto-generates live sliders for these!';
+
+  @override
+  String get lpDocBuiltinsTitle => 'Common built-in constants & functions';
+
+  @override
+  String get lpDocBuiltinConsts =>
+      '• Constants: srate (sample rate), \$pi (pi)\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• Functions: sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels =>
+      '• Channels: spl0 (L in/out), spl1 (R in/out)';
+
+  @override
+  String get ioNoInputDevices => 'No input devices available';
+
+  @override
+  String get ioRefreshDevice => 'Refresh devices';
+
+  @override
+  String get ioLoopbackDesc =>
+      'Default loopback mode: captures the system main playback endpoint in real time';
+
+  @override
+  String get ioExclusiveDesc =>
+      'Low-latency WASAPI exclusive/shared capture from the selected hardware/virtual port';
+
+  @override
+  String get ioInputLabel => 'Input endpoint';
+
+  @override
+  String get ioVaioEndpointDesc =>
+      'AuraVAIO virtual input endpoint (Stereo / 7.1 ch)';
+
+  @override
+  String get ioChannelStatus => 'Channel status';
+
+  @override
+  String get ioVaioActive => 'Active (full-duplex DMA ring buffer)';
+
+  @override
+  String get ioVaioReady => 'Ready (waiting for system/app stream)';
+
+  @override
+  String get ioVaioGuide =>
+      'In Windows Sound settings or your player, set the default output to \"AuraVAIO\"; audio then enters the AuraDSP pipeline via this virtual input.';
+
+  @override
+  String get ioAsioChannelLabel => 'Input channels';
+
+  @override
+  String get ioAsioActive => 'DAW live injection (active)';
+
+  @override
+  String get ioAsioWait => 'Waiting for DAW connection (host off)';
+
+  @override
+  String get ioAsioGuide =>
+      'In your DAW (FL Studio / Cubase / Reaper / Ableton) select \"AuraDSP Virtual ASIO\" as Audio Device to route project audio here.';
+
+  @override
+  String get ioWasapiRenderDesc =>
+      'WASAPI physical render (speakers/headphones)';
+
+  @override
+  String get ioNoOutputDevices => 'No output devices available';
+
+  @override
+  String get ioPhysicalOutput => 'Physical output';
+
+  @override
+  String get ioAutoSelect => 'Auto select (non-VAIO speaker)';
+
+  @override
+  String get ioNoPhysicalOutputs => 'No physical output devices available';
+
+  @override
+  String get ioProcessedFrames => 'Frames processed';
+
+  @override
+  String get ioOutputLabel => 'Output endpoint';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client hardware output';
+
+  @override
+  String get ioChannelMap => 'Channel mapping';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return 'Channel $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => 'Output status';
+
+  @override
+  String get ioAsioPassthrough =>
+      'Hardware passthrough monitoring (ultra-low latency)';
+
+  @override
+  String get ioAsioReadyStatus => 'Ready (waiting for driver session)';
+
+  @override
+  String get catInput => 'Input';
+
+  @override
+  String get catTone => 'Tone';
+
+  @override
+  String get catEq => 'EQ';
+
+  @override
+  String get catStage => 'Field';
+
+  @override
+  String get catSpace => 'Spatial';
+
+  @override
+  String get catOutput => 'Output';
+
+  @override
+  String get catEffect => 'FX';
+
+  @override
+  String get arbmagMinPoints =>
+      'Need at least 2 valid points (freq gain dB; …)';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'Invalid GraphicEQ: $err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return 'Failed to read file: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n points';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count nodes loaded';
+  }
+
+  @override
+  String get bassHintIntensity =>
+      'Adds low-end weight and punch. Higher = deeper bass; raise moderately to avoid boomy highs.';
+
+  @override
+  String get bassHintFrequency =>
+      'Upper limit of the bass boost. Audio below it is thickened; 60–120 Hz is a good range.';
+
+  @override
+  String get bassShelfRouting => 'Low-shelf channel routing';
+
+  @override
+  String get irEnvelope => 'Impulse envelope';
+
+  @override
+  String get irMirrorR => 'R (mirrored)';
+
+  @override
+  String get convHintMix =>
+      'Convolution reverb mix. 0% is dry; 100% fully immerses in the sampled space.';
+
+  @override
+  String get xfHintPreset =>
+      'Switch between classic headphone crossfeed presets or custom tuning; removes the in-head effect for natural speaker staging.';
+
+  @override
+  String get xfHintCustom =>
+      'Fine-tune the crossfeed low-pass cutoff and feed level.';
+
+  @override
+  String get xfHintCutoff =>
+      'Crossfeed low-pass cutoff (300–2000 Hz). Higher = wider band fed to the opposite channel.';
+
+  @override
+  String get xfHintFeed =>
+      'Low-band crossfeed attenuation (1.0–15.0 dB). Lower = more feed, wider stage; higher = subtler crossfeed.';
+
+  @override
+  String get dqHintAttack =>
+      'How fast a band compresses after crossing threshold. Too slow eats transients; too fast can click.';
+
+  @override
+  String get dqHintRelease =>
+      'How fast the band releases after dropping below threshold. Too short pumps; too long holds.';
+
+  @override
+  String get dqShapeNote => 'Mid is a bell shape; Low/High use shelf slopes.';
+
+  @override
+  String get dqHintStaticGain =>
+      'Static base gain, always active; the dynamic part only attenuates.';
+
+  @override
+  String get dqHintRange =>
+      'Maximum extra attenuation once over threshold. 0 = pure static shaping.';
+
+  @override
+  String get dqHintThreshold =>
+      'Band envelope level where dynamic attenuation starts. Too low over-triggers; too high never acts.';
+
+  @override
+  String get dqIndepTiming => 'Independent dynamic timing';
+
+  @override
+  String get dqHintBandAttack => 'Attack time dedicated to this band.';
+
+  @override
+  String get dqHintBandRelease => 'Release time dedicated to this band.';
+
+  @override
+  String get filterHintModes =>
+      'HP cuts below, LP cuts above, BP passes centered on this frequency.';
+
+  @override
+  String get filterHintResonance =>
+      'Resonance strength. It sets BP bandwidth; HP/LP only peak at the corner.';
+
+  @override
+  String get haasHintDelay =>
+      'Delayed side 0–25 ms (Haas offset). ~12 ms widens the stage; beyond that it becomes echo.';
+
+  @override
+  String get haasHintWet =>
+      'Wet (delayed difference) ratio. Lower keeps vocals centered; mono devices stay compatible.';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\ndrag to fine-tune · double-click to reset';
+  }
+
+  @override
+  String get inputReset100 => 'Reset 100%';
+
+  @override
+  String inputFinal(String desc) {
+    return 'Final: $desc';
+  }
+
+  @override
+  String get inputResetHint => 'Double-click or tap to restore 100%';
+
+  @override
+  String get loudnessHint =>
+      'Auto boosts lows and highs at quiet levels, transparent when loud';
+
+  @override
+  String get postHintGain =>
+      'Global output level trim. Nudge up if the DSP chain leaves things too quiet.';
+
+  @override
+  String get postCeiling => 'Ceiling';
+
+  @override
+  String get postHintCeiling =>
+      'Mastering-grade lookahead ceiling. Transients above it are transparently reduced, preventing clipping and true-peak (ISP) overs.';
+
+  @override
+  String get postRelease => 'Release';
+
+  @override
+  String get postHintRelease =>
+      'Limiter envelope release. Short = tight and punchy; long = smooth without pumping.';
+
+  @override
+  String get postLookahead => '1.5 ms lookahead';
+
+  @override
+  String get postHintLookahead =>
+      '1.5 ms adaptive smoothing lookahead. On = broadcast-grade distortion-free peak control; off = zero-latency esports/monitoring mode.';
+
+  @override
+  String get postStereoLink => 'Stereo link';
+
+  @override
+  String get postHintStereoLink =>
+      'Links both channels, limiting on the louder side to keep the image from wandering on big transients.';
+
+  @override
+  String get reverbHintMix =>
+      'Reverb level ratio. Higher = more spacious, hall-like ambience.';
+
+  @override
+  String get reverbHintSize =>
+      'Simulated room size. Larger = wider stage and longer reflection gaps.';
+
+  @override
+  String get reverbHintDecay => 'Reverb decay time. Higher = longer tails.';
+
+  @override
+  String get reverbHintWidth =>
+      'Binaural width of the reverb; wraps echoes around the head.';
+
+  @override
+  String get reverbHintDamp =>
+      'High-frequency damping. Higher = warmer; lower = brighter.';
+
+  @override
+  String get reverbHintDry =>
+      'Dry signal retention; keeps vocals articulate and solid.';
+
+  @override
+  String get spatialHintRoom =>
+      'Simulated room reflection volume. Higher = deeper, grander space with fuller tails.';
+
+  @override
+  String get spatialHintWidth =>
+      'Widens the binaural spread and virtual speaker spacing; moderate settings keep the sound full.';
+
+  @override
+  String get spatialHintFocus =>
+      'Controls center-vocal focus. Moderate boost keeps vocals centered and clear above the surrounds.';
+
+  @override
+  String get spatialHintGain =>
+      'Output gain trim on top of full auto equal-energy normalization (-12…+6 dB).';
+
+  @override
+  String get spatialHintLoudness =>
+      'Equal-loudness auto balancing. Cancels the energy gain from multi-speaker upmix so sliders never act as volume knobs.';
+
+  @override
+  String get stereoHintWidth =>
+      'Stretches the stereo image. Moderate stretch = out-of-head speaker feel; too much thins the center.';
+
+  @override
+  String get tubeHintColor =>
+      'Classic tube even-harmonic saturation; warm, filmic tone that removes digital harshness.';
+
+  @override
+  String get tubeHintTrim =>
+      'Manual level trim after tube coloration, wet path only. Use it to match loudness when switching modes.';
+
+  @override
+  String get tubeTriode => 'TRIODE (even harmonics)';
+
+  @override
+  String get tubePentode => 'PENTODE (odd harmonics)';
+
+  @override
+  String get tubeTape => 'TAPE (warm tape)';
+
+  @override
+  String get noAvailableDevice => 'No device available';
+
+  @override
   String get vbBuses => 'VB buses (off=passthrough)';
+
+  @override
+  String get vbPluginTooltip =>
+      'Check = mounted plugins process this bus (vendor FX unaffected)';
+
+  @override
+  String get vbPluginLockedHint =>
+      'Plugins do not run while bus processing is off (state kept; resumes instantly)';
+
+  @override
+  String get vbAutoProtect => 'Auto over-budget protection';
+
+  @override
+  String get vbProtectHint =>
+      'Narrows plugins to the monitored bus when the callback stays over budget; restores automatically';
+
+  @override
+  String get vbProtectActive =>
+      'Active: plugins only on the monitored bus, others passthrough (callback over budget)';
 
   @override
   String get shelfTitle => 'Low Shelf';
@@ -230,17 +980,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelMode => 'Channel Mode';
 
   @override
-  String get channelsStereo => 'Stereo';
+  String get channelsMatrix => 'Matrix downmix';
 
   @override
-  String get channels51 => '5.1';
-
-  @override
-  String get channels71 => '7.1';
+  String get channelsDiscrete => 'Discrete per-channel';
 
   @override
   String get channelPhaseA =>
-      'Phase A: matrix downmix envelope (ADR-003). True per-channel instances ship in Phase B.';
+      'Effective only for local 4/6/8-channel files: Matrix downmix = engine mixes to stereo before processing; Discrete = per-channel processing (pre-folded on stereo devices).';
 
   @override
   String get audioMode => 'Audio Mode';
@@ -913,16 +1660,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dlgSave => 'Save';
 
   @override
-  String get dlgLoad => 'Load';
-
-  @override
   String get dlgClose => 'Close';
 
   @override
   String get dlgUnload => 'Unload';
-
-  @override
-  String get dlgPreset => 'Preset';
 
   @override
   String get memTitle => 'Persistent Memory & External Config';
@@ -1168,10 +1909,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get dyneqRelease => 'Release';
-
-  @override
-  String get loudnessHint =>
-      'Auto boosts lows and highs at quiet levels, transparent when loud';
 
   @override
   String get loudnessAmount => 'Amount';
@@ -1662,26 +2399,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugAddScan => 'Add & Scan';
 
   @override
-  String plugPresetTitle(String name) {
-    return 'Plugin presets — $name';
-  }
-
-  @override
-  String get plugPresetSaveLabel => 'Save current parameter state';
-
-  @override
-  String get plugPresetNameHint => 'Enter a new preset name...';
-
-  @override
-  String plugPresetList(int n) {
-    return 'Saved presets ($n)';
-  }
-
-  @override
-  String get plugPresetEmpty =>
-      'No saved presets yet; save via the input above.';
-
-  @override
   String get plugTitle => 'Plugin Center';
 
   @override
@@ -1738,14 +2455,14 @@ class AppLocalizationsEn extends AppLocalizations {
       'Native Win32 GUI popups on a dedicated message loop';
 
   @override
-  String get plugFeatPreset => 'Binary-stream preset save & instant restore';
-
-  @override
   String get plugFeatDirs =>
       'Custom plugin folder search & local state snapshots';
 
   @override
   String get plugFeatRt => 'Flat stereo RT-Safe preallocation, zero locks';
+
+  @override
+  String get plugFeatRoute => 'Per-route plugin setup (VB)';
 
   @override
   String plugSlot(int n) {
@@ -1805,7 +2522,46 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugOpenGuiBtn => 'Open UI (GUI)';
 
   @override
+  String get plugRouteBypassed => 'Bypass';
+
+  @override
+  String get abSlotA => 'Preset A';
+
+  @override
+  String get abSlotB => 'Preset B';
+
+  @override
+  String get abAutoSave => 'Auto save';
+
+  @override
+  String abInheritFrom(String src) {
+    return 'Inherit from $src';
+  }
+
+  @override
+  String get abReset => 'Reset (clear this preset, source untouched)';
+
+  @override
+  String get abResetDone => 'Preset reset';
+
+  @override
+  String get plugRouteLocked => 'Locked';
+
+  @override
+  String get plugChStereoOnly =>
+      'VB mode feeds only stereo (L/R) per bus into the plugin chain';
+
+  @override
   String get plugLoading => 'Loading…';
+
+  @override
+  String get plugUnloading => 'Unloading…';
+
+  @override
+  String get plugStateActive => 'Active';
+
+  @override
+  String get plugStateBypassed => 'Bypassed';
 
   @override
   String get plugUnloadFromSlot => 'Unload from This Slot';
@@ -1820,9 +2576,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugStageLabel => 'Signal-chain insert stage:';
-
-  @override
-  String get plugRtNote => 'Live serial chaining • RT-Safe contract kept';
 
   @override
   String get plugFilterAll => 'All';
@@ -1847,6 +2600,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String plugSlotActive(int n) {
     return 'Slot $n active';
+  }
+
+  @override
+  String plugSlotBypassed(int n) {
+    return 'Slot $n bypassed';
   }
 
   @override
@@ -1964,11 +2722,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ Code Editor';
-
-  @override
-  String arbmagNodes(int count) {
-    return '$count nodes loaded';
-  }
 
   @override
   String get arbmagApply => 'Apply Code';

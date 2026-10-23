@@ -284,11 +284,11 @@ const Set<String> kRangeCheckSkipSpecIds = {
 /// 剩余 5 条均为「UI 收窄」（spec 是引擎范围的子集，UI 选值必在引擎域内，
 /// 无拒收风险），收窄是产品取舍，保留登记待产品确认，不得悄悄抹平。
 const Map<String, String> kKnownRangeDivergences = {
-  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，待产品确认）',
-  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，待产品确认）',
+  'comp.granularity': 'spec 0..2 vs 引擎 0..4（UI 收窄，产品已定案保留 2026-10-19）',
+  'comp.tfresolution': 'spec 0..2 vs 引擎 0..3（UI 收窄，产品已定案保留 2026-10-19）',
   'dyneq.attack': 'spec 1..100ms vs 引擎 0.1..100ms（UI 收窄下限）',
-  'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，待产品确认）',
-  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，待产品确认）',
+  'dyneq.mid.freq': 'spec 200..5000Hz vs 引擎 200..8000Hz（UI 收窄，产品已定案保留 2026-10-19）',
+  'dyneq.release': 'spec 10..500ms vs 引擎 10..1000ms（UI 收窄，产品已定案保留 2026-10-19）',
 };
 
 // ---------------------------------------------------------------------------
@@ -319,6 +319,35 @@ String _read(String relPath) {
     if (f.existsSync()) return f.readAsStringSync();
   }
   throw StateError('找不到 $relPath（cwd=${Directory.current.path}）');
+}
+
+/// state.dart 入口 + lib/core/state/ 全部 part 文件拼成的单一库源码。
+///
+/// 2026-10-22 拆分：AppModel 的方法陆续迁入 part 文件的
+/// `extension ... on AppModel`。静态解析（setter→引擎 id 链、源码形状
+/// 不变量）必须覆盖整个库，否则解析面缺失——曾致 convolver.mix 的
+/// setFloat helper 断链、误判「无引擎下发」而红。
+String _readStateLibrary() {
+  for (final base in const ['', '../', '../../']) {
+    final f = File('${base}app/auradsp_app/lib/core/state.dart');
+    if (!f.existsSync()) continue;
+    final src = f.readAsStringSync();
+    final dir = Directory('${base}app/auradsp_app/lib/core/state');
+    final parts = <String>[];
+    if (dir.existsSync()) {
+      final files = dir
+          .listSync()
+          .whereType<File>()
+          .where((e) => e.path.endsWith('.dart'))
+          .toList()
+        ..sort((a, b) => a.path.compareTo(b.path));
+      for (final e in files) {
+        parts.add(e.readAsStringSync());
+      }
+    }
+    return [src, ...parts].join('\n');
+  }
+  throw StateError('找不到 state.dart（cwd=${Directory.current.path}）');
 }
 
 List<String> _sorted(Set<String> s) => (s.toList()..sort());
@@ -384,26 +413,36 @@ List<_SpecInfo> _parseSpecs(String schemaSrc) {
   return out;
 }
 
-/// state.dart AppModel 类内全部方法体。类延伸到文件尾且混合缩进，
-/// 必须括号配对；方法体定位要先跳过参数表的 ')'（可选 {…} 命名参数）。
+/// state 库内全部方法体：AppModel 类体 + 所有 `extension ... on AppModel`
+/// 体（2026-10-22 拆分后方法在 part 文件的 extension 内，同库拼源后一并
+/// 扫描）。类/extension 延伸到各自文件尾且混合缩进，必须括号配对；方法体
+/// 定位要先跳过参数表的 ')'（可选 {…} 命名参数）。
 Map<String, String> _parseMethods(String stateSrc) {
+  final bodies = <String>[];
   final cls = stateSrc.indexOf('class AppModel extends ChangeNotifier {');
   if (cls < 0) {
     throw StateError('state.dart 应含 class AppModel');
   }
   final copen = stateSrc.indexOf('{', cls);
   final (bs, be) = _matchBraces(stateSrc, copen);
-  final body = stateSrc.substring(bs, be);
+  bodies.add(stateSrc.substring(bs, be));
+  for (final m in RegExp(r'extension \w+ on AppModel \{').allMatches(stateSrc)) {
+    final obr = stateSrc.indexOf('{', m.start);
+    final (es, ee) = _matchBraces(stateSrc, obr);
+    bodies.add(stateSrc.substring(es, ee));
+  }
   final out = <String, String>{};
   final re = RegExp(r'(?:^|\n)\s*(?:void|Future<void>|Future<[^>]*>) (\w+)\(');
-  for (final m in re.allMatches(body)) {
-    final popen = m.end - 1;
-    final (_, pe) = _matchParens(body, popen);
-    // 方法体 '{' 必须在参数表 ')' 之后（可选 {…} 命名参数的花括号不是体）
-    final obr = body.indexOf('{', pe);
-    if (obr < 0) continue;
-    final (ms, me) = _matchBraces(body, obr);
-    out[m.group(1)!] = _stripComments(body.substring(ms, me));
+  for (final body in bodies) {
+    for (final m in re.allMatches(body)) {
+      final popen = m.end - 1;
+      final (_, pe) = _matchParens(body, popen);
+      // 方法体 '{' 必须在参数表 ')' 之后（可选 {…} 命名参数的花括号不是体）
+      final obr = body.indexOf('{', pe);
+      if (obr < 0) continue;
+      final (ms, me) = _matchBraces(body, obr);
+      out[m.group(1)!] = _stripComments(body.substring(ms, me));
+    }
   }
   return out;
 }
@@ -607,7 +646,7 @@ void _invokeSetter(ParamSpec spec, AppModel m, Object value) {
 
 void main() {
   final schemaSrc = _read('app/auradsp_app/lib/core/param_schema.dart');
-  final stateSrc = _read('app/auradsp_app/lib/core/state.dart');
+  final stateSrc = _readStateLibrary();
   final ffiSrc = _read('app/auradsp_app/lib/engine/auradsp_ffi.dart');
   final engineParamTableSrc = _read('engine/engine_param_table.h');
   final engineInternalSrc = _read('engine/engine_internal.h');
@@ -962,7 +1001,7 @@ void main() {
           reason: '引擎 kSupported 解析异常: $engineSupported');
 
       // Dart 侧集合（剥注释后定位，注释里出现的组件名不得计入）
-      final st = _stripComments(_read('app/auradsp_app/lib/core/state.dart'));
+      final st = _stripComments(_readStateLibrary());
       final dm = RegExp(r'isLatencyProbeSupported\(String compId\)\s*=>\s*'
               r'const\s*\{([^}]*)\}\.contains\(compId\)')
           .firstMatch(st);
@@ -989,7 +1028,7 @@ void main() {
       for (final c in resourceBased) {
         expect(dartSet.contains(c), isTrue, reason: '资源型 $c 不在 Dart 探针集');
       }
-      final resSrc = _stripComments(_read('app/auradsp_app/lib/core/state.dart'));
+      final resSrc = _stripComments(_readStateLibrary());
       final rm = RegExp(r'latencyProbeResource\(String compId\)\s*\{([\s\S]*?)\n  \}')
           .firstMatch(resSrc);
       expect(rm, isNotNull, reason: '解析不到 latencyProbeResource');
@@ -1149,7 +1188,7 @@ ${hits.join('\n')}''');
       expect(libHits, isEmpty,
           reason: 'lib/ 出现 kLat 硬编码镜像（延迟须实测，见未决清单 C4）\n'
               '${libHits.join('\n')}');
-      final stateSrc = _read('app/auradsp_app/lib/core/state.dart');
+      final stateSrc = _readStateLibrary();
       final sig = stateSrc.indexOf('componentLatency(String compId)');
       final end = stateSrc.indexOf('void _onComponentLatencyResult');
       expect(sig, isNot(-1));

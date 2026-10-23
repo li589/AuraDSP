@@ -26,15 +26,15 @@ class ChannelRoutingSelector extends StatefulWidget {
 class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
   bool _expanded = false;
 
-  static const List<({int bit, String code, String nameZh, String nameEn})> _channels = [
-    (bit: 0, code: 'FL',  nameZh: '左前',  nameEn: 'Front Left'),
-    (bit: 1, code: 'FR',  nameZh: '右前',  nameEn: 'Front Right'),
-    (bit: 2, code: 'C',   nameZh: '中置',  nameEn: 'Center'),
-    (bit: 3, code: 'LFE', nameZh: '超低',  nameEn: 'Subwoofer'),
-    (bit: 4, code: 'SL',  nameZh: '左环',  nameEn: 'Surround L'),
-    (bit: 5, code: 'SR',  nameZh: '右环',  nameEn: 'Surround R'),
-    (bit: 6, code: 'BL',  nameZh: '左后',  nameEn: 'Back L'),
-    (bit: 7, code: 'BR',  nameZh: '右后',  nameEn: 'Back R'),
+  static const List<({int bit, String code})> _channels = [
+    (bit: 0, code: 'FL'),
+    (bit: 1, code: 'FR'),
+    (bit: 2, code: 'C'),
+    (bit: 3, code: 'LFE'),
+    (bit: 4, code: 'SL'),
+    (bit: 5, code: 'SR'),
+    (bit: 6, code: 'BL'),
+    (bit: 7, code: 'BR'),
   ];
 
   int get _mask {
@@ -50,26 +50,49 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     widget.model.setParamById(widget.paramKey, newMask & 0xFF);
   }
 
-  String _getSummaryText(int mask, bool isZh) {
-    if (mask == 0xFF) return isZh ? '全声道 (8/8)' : 'All Channels (8/8)';
-    if (mask == 0x03) return isZh ? '立体声 (FL/FR)' : 'Stereo (FL/FR)';
-    if (mask == 0xF7) return isZh ? '无超低 (7/8)' : 'No Sub (7/8)';
-    if (mask == 0x00) return isZh ? '全旁路 (0/8)' : 'All Bypassed (0/8)';
-    if (mask == 0xF0) return isZh ? '仅环绕 (4/8)' : 'Surround Only (4/8)';
+  /// 声道名走 l10n（此前手写 zh/en 双语，ja 无翻译）。
+  String _channelName(AppLocalizations l, String code) {
+    switch (code) {
+      case 'FL':
+        return l.routingChFl;
+      case 'FR':
+        return l.routingChFr;
+      case 'C':
+        return l.routingChC;
+      case 'LFE':
+        return l.routingChLfe;
+      case 'SL':
+        return l.routingChSl;
+      case 'SR':
+        return l.routingChSr;
+      case 'BL':
+        return l.routingChBl;
+      case 'BR':
+        return l.routingChBr;
+    }
+    return code;
+  }
+
+  String _getSummaryText(AppLocalizations l, int mask) {
+    if (mask == 0xFF) return l.routingAllChannels;
+    if (mask == 0x03) return l.routingStereo;
+    if (mask == 0xF7) return l.routingNoSub;
+    if (mask == 0x00) return l.routingAllBypassed;
+    if (mask == 0xF0) return l.routingSurroundOnly;
 
     int count = 0;
     for (int i = 0; i < 8; i++) {
       if ((mask & (1 << i)) != 0) count++;
     }
-    return isZh ? '$count/8 声道已选' : '$count/8 Selected';
+    return l.routingSelectedCount(count);
   }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l = l10nOf(context);
     final mask = _mask;
-    final summary = _getSummaryText(mask, isZh);
+    final summary = _getSummaryText(l, mask);
 
     return Container(
       margin: const EdgeInsets.only(top: AuraSpace.sm),
@@ -101,7 +124,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                   Icon(Icons.alt_route_rounded, size: 15, color: p.accent),
                   const SizedBox(width: 6),
                   Text(
-                    widget.label ?? (isZh ? '高级声道路由' : 'Channel Routing'),
+                    widget.label ?? l.channelRouting,
                     style: captionOf(p, color: p.text).copyWith(
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
@@ -150,7 +173,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                     runSpacing: 6,
                     children: [
                       for (final ch in _channels)
-                        _buildChannelChip(context, p, ch, mask, isZh),
+                        _buildChannelChip(context, p, ch, mask),
                     ],
                   ),
                   const SizedBox(height: 10),
@@ -159,17 +182,17 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                   Row(
                     children: [
                       Text(
-                        isZh ? '快速选择:' : 'Presets:',
+                        l.routingPresets,
                         style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
                       ),
                       const SizedBox(width: 8),
-                      _buildPresetChip(p, isZh ? '全选' : 'All', 0xFF, mask),
+                      _buildPresetChip(p, l.routingPresetAll, 0xFF, mask),
                       const SizedBox(width: 6),
-                      _buildPresetChip(p, isZh ? '立体声' : 'Stereo', 0x03, mask),
+                      _buildPresetChip(p, l.routingPresetStereo, 0x03, mask),
                       const SizedBox(width: 6),
-                      _buildPresetChip(p, isZh ? '无超低' : 'No LFE', 0xF7, mask),
+                      _buildPresetChip(p, l.routingPresetNoLfe, 0xF7, mask),
                       const SizedBox(width: 6),
-                      _buildPresetChip(p, isZh ? '仅环绕' : 'Surround', 0xF0, mask),
+                      _buildPresetChip(p, l.routingPresetSurround, 0xF0, mask),
                     ],
                   ),
                 ],
@@ -183,12 +206,11 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
   Widget _buildChannelChip(
     BuildContext context,
     AuraPalette p,
-    ({int bit, String code, String nameZh, String nameEn}) ch,
+    ({int bit, String code}) ch,
     int mask,
-    bool isZh,
   ) {
     final isSelected = (mask & (1 << ch.bit)) != 0;
-    final name = isZh ? ch.nameZh : ch.nameEn;
+    final name = _channelName(l10nOf(context), ch.code);
 
     return Material(
       color: Colors.transparent,

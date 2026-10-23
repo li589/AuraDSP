@@ -830,7 +830,7 @@ public:
 
     bool activate(double sampleRate, uint32_t maxBlockSize) override {
         if (!m_isLoaded || !m_processor || !m_component) return false;
-        if (m_isActive) deactivate();
+        if (m_isActive.load(std::memory_order_acquire)) deactivate();
 
         m_sampleRate = sampleRate;
         m_maxBlockSize = maxBlockSize;
@@ -1014,23 +1014,46 @@ public:
             if (m_outBusActive[i] && m_outBusChannels[i] > 0) ++m_busInfo.auxOutputBuses;
         }
 
+        // setProcessing 返回值语义（VST3）：
+        //   kResultOk        — 插件已进入处理态；
+        //   kNotImplemented  — 插件未实现该可选方法。iZotope Ozone 12 / RX 12 的
+        //                      VST3 wrapper 恒返回 kNotImplemented（0x80004001），
+        //                      但 process() 音频正常流动（2026-10-21 最小宿主
+        //                      izoprobe 实测：Equalizer 对 1kHz 正弦精确直通，
+        //                      Bass Control/Maximizer/RX 模块输出正常衰减信号）。
+        //                      该返回值与 activate 序列、宿主名、编辑器时序、
+        //                      COM 单元、线程亲和均无关。重构前（M1/2445f86）
+        //                      引擎忽略此返回值，插件可用；重构将其致命化后
+        //                      iZotope 全系 activate 失败。故 kNotImplemented
+        //                      必须容忍（记录警告），否则保持致命失败。
         const Steinberg::tresult procRes = m_processor->setProcessing(true);
-        if (procRes != Steinberg::kResultOk) {
+        if (procRes != Steinberg::kResultOk && procRes != Steinberg::kNotImplemented) {
+            AURADSP_WARN_S("VST3 setProcessing(true) failed: res=0x" << std::hex
+                           << static_cast<uint64_t>(static_cast<uint32_t>(procRes)) << std::dec);
             m_component->setActive(false);
+            // F-2：激活失败 = 生命周期处停态（否则后续 setBypass(false)
+            // 会因「已应用态==请求态」跳过激活，插件永久直通）。
+            m_lifecycleBypassed.store(true, std::memory_order_release);
             return false;
+        }
+        if (procRes == Steinberg::kNotImplemented) {
+            AURADSP_WARN("VST3 setProcessing(true) returned kNotImplemented; continuing "
+                         "(plugin may still process audio, e.g. iZotope Ozone/RX 12 wrappers)");
         }
 
         (void)arrRes;
         m_meta.latency = m_processor->getLatencySamples();
-        m_isActive = true;
+        m_isActive.store(true, std::memory_order_release);
+        m_lifecycleBypassed.store(false, std::memory_order_release);
         return true;
     }
 
     void deactivate() override {
-        if (m_isActive) {
+        if (m_isActive.load(std::memory_order_acquire)) {
             if (m_processor) m_processor->setProcessing(false);
             if (m_component) m_component->setActive(false);
-            m_isActive = false;
+            m_isActive.store(false, std::memory_order_release);
+            m_lifecycleBypassed.store(true, std::memory_order_release);
         }
     }
 
@@ -1042,7 +1065,12 @@ public:
         const int32_t nc = m_inChannels;
         for (int32_t ch = 1; ch < nc; ++ch) if (!inChannels[ch]) return;
 
-        if (!m_isActive || !m_processor || m_bypassed) {
+        // F-2：m_bypassed 是请求态（控制线程写），m_lifecycleBypassed 是
+        // 已应用态（泵线程切完生命周期后发布）。两者不一致 = 切换在途，
+        // 本块直通——绝不在插件尚处 setActive(false) 停态时调其 process()。
+        if (!m_isActive.load(std::memory_order_acquire) || !m_processor ||
+            m_bypassed.load(std::memory_order_acquire) ||
+            m_lifecycleBypassed.load(std::memory_order_acquire)) {
             if (inChannels != outChannels && inChannels) {
                 const int32_t copyChannels =
                     (std::min)(m_inChannels, m_outChannels);
@@ -1138,9 +1166,14 @@ public:
         data.outputEvents = nullptr;
         data.processContext = &context;
 
+        m_inPluginProcess.store(true, std::memory_order_release);
         Steinberg::tresult res = m_processor->process(data);
+        m_inPluginProcess.store(false, std::memory_order_release);
         if (res != Steinberg::kResultOk && res != Steinberg::kResultFalse && res < 0) {
-            m_bypassed = true;
+            // 插件 process 报错：请求旁路（只写请求态）。生命周期切换
+            // 绝不在音频线程做（F-2）——用户下次切换旁路时由泵线程补齐，
+            // 期间本槽直通（m_bypassed 门控）。
+            m_bypassed.store(true, std::memory_order_release);
         } else if (m_outChannels == 1 && outChannels[0] && outChannels[1]) {
             // 单声道插件：铺回 L/R，否则右声道会残留上一块数据。
             std::memcpy(outChannels[1], outChannels[0], numFrames * sizeof(float));
@@ -1148,8 +1181,68 @@ public:
     }
 
     bool isLoaded() const override { return m_isLoaded; }
-    bool isBypassed() const override { return m_bypassed; }
-    void setBypass(bool bypass) override { m_bypassed = bypass; }
+    bool isBypassed() const override { return m_bypassed.load(std::memory_order_acquire); }
+
+    // F-2 常量：在途 process 退出等待上界（正常一块 ~2.7ms，2s 防御极端
+    // 长块）；泵任务有界等待（重新 activate 重插件 ~1-2s，10s 留余量）。
+    static constexpr int kBypassInFlightWaitMs = 2000;
+    static constexpr DWORD kBypassSwitchTimeoutMs = 10000;
+
+    void setBypass(bool bypass) override {
+        m_bypassed.store(bypass, std::memory_order_release);
+        // 真旁路（2026-10-22，二次加强）：setProcessing + setActive 双管。
+        // 仅 setProcessing(false) 时 Ozone 级插件的内部分析线程仍可能
+        // 持续跑（用户实测残余卡顿）；setActive(false) 是 VST3 规范的
+        // 「停用」——释放处理资源/停内部线程。代价：重新 activate 大插件
+        // 1-2s（用户取消旁路时一次），换旁路期彻底安静。
+        // iZotope 恒返 kNotImplemented 但实际生效（E11），失败容忍。
+        //
+        // F-2（2026-10-23）：生命周期切换挪到 plugin main 线程（泵线程）——
+        // 此处曾直接在控制线程调 setActive，与音频线程的 process() 并发，
+        // 违反 VST3 规范（崩溃/越界 + 一块撕裂风险）。现在：
+        //   1) 只写原子请求态（上一步）；
+        //   2) 链层 bypass 原子已先翻转（PluginHostManager::setBypassSlot
+        //      先 store 再调本函数），本槽此后不再进 process()；
+        //   3) 泵任务等在途 process() 退出后执行 setActive/setProcessing。
+        // 控制线程在 postTaskAndWait 上有界等待（重新 activate 重插件
+        // 1-2s，与旧行为等长），音频线程全程不受阻塞。
+        scheduleBypassLifecycle(bypass);
+    }
+
+    // F-2：把生命周期切换投递到共享泵线程（同模块复用一条 main 线程，
+    // 见 module_pump.h）。超时/泵死时不内联重放——任务可能仍在队列，
+    // 双线程 setActive 比不切换更糟；链层已直通该槽，音频不受影响，
+    // 插件生命周期留待泵恢复（与本仓库「泵死=功能降级、实例隔离」口径一致）。
+    void scheduleBypassLifecycle(bool bypass) {
+        auto apply = [this, bypass]() { applyBypassLifecycle(bypass); };
+        if (m_pump && m_pump->isReady()) {
+            (void)m_pump->postTaskAndWait(apply, kBypassSwitchTimeoutMs);
+        } else {
+            apply();   // 无泵（理论不可达——加载即建泵）：旧路径兜底
+        }
+    }
+
+    // 仅在泵线程（或兜底的控制线程）执行：规范要求 setActive 不与
+    // process 并发——先等在途 process() 退出（链层原子翻转后本槽最多
+    // 还剩一个在途块，~2.7ms；上界 2s 防御极端长块）。
+    void applyBypassLifecycle(bool bypass) {
+        if (m_lifecycleBypassed.load(std::memory_order_acquire) == bypass) {
+            return;   // 已在该态：幂等快返回（避免重复 setActive）
+        }
+        for (int i = 0; i < kBypassInFlightWaitMs &&
+                        m_inPluginProcess.load(std::memory_order_acquire); ++i) {
+            Sleep(1);
+        }
+        if (m_processor) {
+            m_processor->setProcessing(!bypass);
+        }
+        if (m_component) {
+            m_component->setActive(!bypass);
+        }
+        // VST3 setActive 无可靠成功信号（iZotope 恒 kNotImplemented 但生效，
+        // E11），故以请求态发布；失败场景与旧实现风险等价。
+        m_lifecycleBypassed.store(bypass, std::memory_order_release);
+    }
     void setChannelHint(int channels) override {
         if (channels < 1) channels = 1;
         if (channels > 8) channels = 8;
@@ -1509,8 +1602,20 @@ private:
 
     PluginMetadata m_meta;
     bool m_isLoaded = false;
-    bool m_isActive = false;
-    bool m_bypassed = false;
+    // F-2（2026-10-23）：m_isActive/m_bypassed 跨线程访问（控制线程
+    // setBypass/activate/deactivate 写，音频线程 process 读）改原子——
+    // 裸 bool 是数据竞争（UB：编译器可缓存寄存器致旁路切换延迟生效），
+    // 并与 PluginHostManager::bypassed / ProcessPluginProxy::m_bypassed
+    // 的原子口径统一。
+    // m_lifecycleBypassed = 插件生命周期（setProcessing/setActive）当前
+    // 已处的旁路态，由泵线程切换完成后发布；音频线程见「请求态与已应用
+    // 态不一致」时直通，绝不在插件尚处停态时调其 process()。
+    // m_inPluginProcess = 插件 process() 在途标志：泵线程切生命周期前
+    // 等它退出（VST3 规范——setActive 不得与 process 并发）。
+    std::atomic<bool> m_isActive{false};
+    std::atomic<bool> m_bypassed{false};
+    std::atomic<bool> m_lifecycleBypassed{false};
+    std::atomic<bool> m_inPluginProcess{false};
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
     int64_t m_continuousTimeSamples = 0;

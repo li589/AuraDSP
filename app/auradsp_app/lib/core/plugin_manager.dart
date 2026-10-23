@@ -9,6 +9,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
@@ -43,15 +44,19 @@ enum PluginFormat {
 class PluginMetadata {
   final String id;
   final String name;
+
   /// 插件自报名（CLAP descriptor / VST3 factory）。
   final String vendor;
   final String version;
+
   /// 真实分类：CLAP features 级联 / VST3 subCategories。
   /// 注意历史上曾被误填为 descriptor 的 description 自由文本（B1 已修）。
   final String category;
+
   /// Bundle/文件名 stem —— 用户在列表里实际选中的那一个。
   /// CLAP 的自报名与文件名可能不同（如自报名 "Element FX"、文件 KV-Element-FX）。
   final String bundleName;
+
   /// 自由文本描述，仅展示用，不参与分类判断。
   final String description;
   final PluginFormat format;
@@ -90,18 +95,18 @@ class PluginMetadata {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'vendor': vendor,
-        'version': version,
-        'category': category,
-        'bundleName': bundleName,
-        'description': description,
-        'format': format.label,
-        'path': path,
-        'isCompatible': isCompatible,
-        'errorMessage': errorMessage,
-      };
+    'id': id,
+    'name': name,
+    'vendor': vendor,
+    'version': version,
+    'category': category,
+    'bundleName': bundleName,
+    'description': description,
+    'format': format.label,
+    'path': path,
+    'isCompatible': isCompatible,
+    'errorMessage': errorMessage,
+  };
 
   @override
   bool operator ==(Object other) =>
@@ -116,18 +121,18 @@ class PluginMetadata {
 
   /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
   PluginMetadata copyWith({String? vendor}) => PluginMetadata(
-        id: id,
-        name: name,
-        vendor: vendor ?? this.vendor,
-        version: version,
-        category: category,
-        bundleName: bundleName,
-        description: description,
-        format: format,
-        path: path,
-        isCompatible: isCompatible,
-        errorMessage: errorMessage,
-      );
+    id: id,
+    name: name,
+    vendor: vendor ?? this.vendor,
+    version: version,
+    category: category,
+    bundleName: bundleName,
+    description: description,
+    format: format,
+    path: path,
+    isCompatible: isCompatible,
+    errorMessage: errorMessage,
+  );
 }
 
 /// 宿主当前激活状态
@@ -175,7 +180,9 @@ class PluginHostStatus {
   factory PluginHostStatus.fromJson(Map<String, dynamic> json) {
     PluginMetadata? meta;
     if (json['plugin'] != null && json['plugin'] is Map) {
-      meta = PluginMetadata.fromJson(Map<String, dynamic>.from(json['plugin'] as Map));
+      meta = PluginMetadata.fromJson(
+        Map<String, dynamic>.from(json['plugin'] as Map),
+      );
     }
     final busInfo = json['busInfo'] as Map?;
     return PluginHostStatus(
@@ -200,24 +207,24 @@ class PluginHostStatus {
   }
 
   Map<String, dynamic> toJson() => {
-        'hasActive': hasActive,
-        'bypassed': bypassed,
-        'latency': latency,
-        'processCalls': processCalls,
-        'inRms': inRms,
-        'outRms': outRms,
-        'maxDiff': maxDiff,
-        'lastFrames': lastFrames,
-        'plugin': plugin?.toJson(),
-        'remoteMode': remoteMode,
-        'remoteFailed': remoteFailed,
-        'transportLatency': transportLatency,
-        'inputOverflows': inputOverflows,
-        'outputOverflows': outputOverflows,
-        'channels': channels,
-        'mainInChannels': mainInChannels,
-        'mainOutChannels': mainOutChannels,
-      };
+    'hasActive': hasActive,
+    'bypassed': bypassed,
+    'latency': latency,
+    'processCalls': processCalls,
+    'inRms': inRms,
+    'outRms': outRms,
+    'maxDiff': maxDiff,
+    'lastFrames': lastFrames,
+    'plugin': plugin?.toJson(),
+    'remoteMode': remoteMode,
+    'remoteFailed': remoteFailed,
+    'transportLatency': transportLatency,
+    'inputOverflows': inputOverflows,
+    'outputOverflows': outputOverflows,
+    'channels': channels,
+    'mainInChannels': mainInChannels,
+    'mainOutChannels': mainOutChannels,
+  };
 }
 
 /// 插入阶段定义与友好描述
@@ -268,11 +275,33 @@ abstract final class PluginInsertStage {
 /// 插件指令派发回调函数类型
 typedef PluginCommandSender = void Function(Map<String, dynamic> msg);
 
+/// VB 按路编辑器目标路的「未选择」哨兵（state.vbPluginEditorGroup 初值）。
+/// F-8（2026-10-23）：「全部」在 v3.3 已撤除，本常量只剩「未选」语义——
+/// 原名 kVbRouteAll 会让调用方误以为存在「全部路」分支。凡把它当合法
+/// group 传入（setSlotChannels/setSlotChannelsG 等）都属误用：range 断言
+/// 以 [-1, 8) 为合法域，-2 会被拒。
+const int kVbRouteUnselected = -2;
+
+/// group 取值合法域断言（VB 多总线：-1=单引擎/无路，0..7=具体组）。
+bool isValidPluginGroup(int group) => group >= -1 && group < 8;
+
 /// 插件管理器
 class PluginManager extends ChangeNotifier {
   static const int kMaxSlots = 4;
 
   PluginCommandSender? _commandSender;
+
+  /// VB 多总线模式（Voicemeeter 每 8 声道一组独立引擎，route 0-7 各自
+  /// 独立预设/Ch）。非 VB（单引擎 WASAPI/ASIO/VAIO）下 -1 是唯一合法路。
+  ///
+  /// F-3（2026-10-23）：VB 下 -1 **不是合法路**——桥按「单组 0」语义把它
+  /// 落成 eng[0]，与 route 0 的独立预设互相覆盖（`_restoreAbAfterLoad`
+  /// 恒含 -1 → 每次挂载/卸载自我强化污染 route 0）。故 VB 下 -1 路
+  /// 既不落盘也不恢复（A1 报告原始建议）。由 AppModel 在构造/模式切换
+  /// 时同步（setVbMultiBus）。
+  bool _vbMultiBus = false;
+  bool get vbMultiBus => _vbMultiBus;
+  void setVbMultiBus(bool on) => _vbMultiBus = on;
 
   List<PluginMetadata> _plugins = [];
   final List<PluginHostStatus> _slotStatuses = List.filled(
@@ -285,13 +314,34 @@ class PluginManager extends ChangeNotifier {
     PluginInsertStage.defaultStage,
     growable: true,
   );
-  final List<int> _slotChannels = List.filled(
-    kMaxSlots,
-    0xFF,
-    growable: true,
-  );
+  final List<int> _slotChannels = List.filled(kMaxSlots, 0xFF, growable: true);
+
   /// setInsertStage 下发前的阶段值，用于引擎拒绝时回滚（乐观 UI + 回执纠正）
   final Map<int, int> _pendingStages = {};
+
+  // ---- P1 按路记忆与路由锁定（v3.1/v3.2） ----
+  /// 该槽插件编辑器是否打开（路由锁定依据）。事件驱动（EditorResult）+
+  /// status 轮询 is_editor_open 兜底（用户直接点插件自带关闭按钮也能解锁）。
+  final List<bool> _slotEditorOpen = List.filled(
+    kMaxSlots,
+    false,
+    growable: true,
+  );
+
+  /// per-route Ch 记忆：[slot][group]，VB 每路独立（v3.2「包括选择的声道
+  /// 也跟随通道记忆切换」）。非 VB 单引擎走 [_slotChannels]。
+  /// F-7（2026-10-23）：Ch 乐观写入的待确认表（键 "slot|group" → 下发前值）。
+  /// 回执 rc!=1 时回滚，避免引擎拒收后 UI 记忆与实际生效值长期不一致。
+  final Map<String, int> _pendingChannels = {};
+
+  final List<List<int>> _routeChannels = List.generate(
+    kMaxSlots,
+    (_) => List.filled(8, 0xFF),
+  );
+
+  /// 编辑器当前所在路由（-1=非 VB 单路；>=0=组号），用于关闭时记录来源。
+  final List<int> _editorRoute = List.filled(kMaxSlots, -1, growable: true);
+
   int _selectedSlot = 0;
 
   List<String> _customDirs = [];
@@ -299,9 +349,19 @@ class PluginManager extends ChangeNotifier {
   String _filterFormat = 'all'; // 'all', 'vst3', 'clap'
   String _searchQuery = '';
   final Map<int, bool> _slotBusy = {};
+
+  /// 忙态动作标记（UI 动画文案：'load' 加载中 / 'unload' 卸载中）。
+  final Map<int, String> _slotBusyAction = {};
+
+  /// 旁路切换在途标记（slot → 已下发的目标 bypass 值）。引擎状态回读
+  /// 确认与请求一致后自动解除；10s 看门狗兜底（Zone12 级插件 setBypass
+  /// 同步秒级返回，正常远小于此；超时即恢复可点，按轮询状态如实显示）。
+  final Map<int, bool> _slotBypassPending = {};
+  final Map<int, Timer> _bypassPendingTimers = {};
   String? _lastError;
   String? _lastNotice;
   int _lastScanCount = 0;
+
   /// 最近一次扫描是否为深扫（决定缓存里元数据的可信度，随信封落盘）。
   bool _lastScanDeep = false;
 
@@ -322,12 +382,23 @@ class PluginManager extends ChangeNotifier {
   /// 避免稳定编辑器的陈旧日志在无关崩溃后被误登记。
   static const int kOpenHealthyMs = 15000;
 
-  static File _quarantineConfigFile() => File(ConfigManager.path(
-      'plugin_data${Platform.pathSeparator}editor_quarantine.json'));
-  static File _editorJournalFile() => File(ConfigManager.path(
-      'plugin_data${Platform.pathSeparator}editor_journal.json'));
+  static File _quarantineConfigFile() => File(
+    ConfigManager.path(
+      'plugin_data${Platform.pathSeparator}editor_quarantine.json',
+    ),
+  );
+  static File _editorJournalFile() => File(
+    ConfigManager.path(
+      'plugin_data${Platform.pathSeparator}editor_journal.json',
+    ),
+  );
 
   bool isSlotBusy(int slot) => _slotBusy[slot] ?? false;
+  String slotBusyAction(int slot) => _slotBusyAction[slot] ?? 'load';
+
+  /// 旁路切换是否在途（已下发、引擎尚未回读确认）。UI 据此把旁路按钮
+  /// 转切换动画并禁点（防连点、防与卸载竞态）。
+  bool isSlotBypassPending(int slot) => _slotBypassPending.containsKey(slot);
 
   /// C3：引擎回执挂载/卸载进行中（异步任务的"提交成功→进行中"与"终态"两次翻转）。
   /// 用于 UI 在挂载/卸载期间显示忙态并禁用重复操作。
@@ -345,6 +416,7 @@ class PluginManager extends ChangeNotifier {
   int get selectedSlot => _selectedSlot;
   List<String> get customDirs => List.unmodifiable(_customDirs);
   bool get isScanning => _isScanning;
+
   /// 扫描进度：已处理候选数 / 候选总数 / 已发现插件数
   int get scanDone => _scanDone;
   int get scanTotal => _scanTotal;
@@ -372,16 +444,32 @@ class PluginManager extends ChangeNotifier {
     return PluginInsertStage.defaultStage;
   }
 
-  int getSlotChannels(int? slot) {
+  /// Ch 记忆按路由取值（P1-4）：
+  /// [group] >= 0 = VB 具体路；-1 = 非 VB 单引擎（[_slotChannels]）。
+  /// F-6（2026-10-23）：直接播种 VB 各路 Ch 记忆（会话恢复用——不下发
+  /// 引擎，实际下发由 replay 路径逐路负责；避免恢复期多余命令）。
+  void seedRouteChannels(int slot, List<int> masks) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    for (var g = 0; g < 8 && g < masks.length; g++) {
+      _routeChannels[slot][g] = masks[g];
+    }
+  }
+
+  int getSlotChannels(int? slot, {int group = -1}) {
     final s = slot ?? _selectedSlot;
-    if (s >= 0 && s < kMaxSlots) return _slotChannels[s];
-    return 0xFF;
+    if (s < 0 || s >= kMaxSlots) return 0xFF;
+    if (group >= 0 && group < 8) return _routeChannels[s][group];
+    return _slotChannels[s];
   }
 
   bool isSlotActive(int slot) {
     final s = getSlotStatus(slot);
     return s.hasActive && s.plugin != null;
   }
+
+  /// 该槽插件编辑器是否打开（P1-1 路由锁定依据）。
+  bool isSlotEditorOpen(int slot) =>
+      slot >= 0 && slot < kMaxSlots && _slotEditorOpen[slot];
 
   bool isSlotBypassed(int slot) => getSlotStatus(slot).bypassed;
   int getSlotLatency(int slot) => getSlotStatus(slot).latency;
@@ -396,8 +484,10 @@ class PluginManager extends ChangeNotifier {
   int get currentStage => getSlotStage(_selectedSlot);
 
   int get countAll => _plugins.length;
-  int get countVst3 => _plugins.where((p) => p.format == PluginFormat.vst3).length;
-  int get countClap => _plugins.where((p) => p.format == PluginFormat.clap).length;
+  int get countVst3 =>
+      _plugins.where((p) => p.format == PluginFormat.vst3).length;
+  int get countClap =>
+      _plugins.where((p) => p.format == PluginFormat.clap).length;
 
   /// 过滤后的插件列表
   List<PluginMetadata> get filteredPlugins {
@@ -447,6 +537,7 @@ class PluginManager extends ChangeNotifier {
     _customDirs = List.from(dirs);
     notifyListeners();
   }
+
   /// C2：分块扫描进度回执。扫描过程中被反复调用，UI 据此显示确定性进度；
   /// 列表同时在 onPluginList/渐进 get_all 中刷新。
   void onPluginScanProgress(int done, int total, int found) {
@@ -484,9 +575,7 @@ class PluginManager extends ChangeNotifier {
 
   /// 请求刷新插件全量列表
   void refreshList() {
-    _commandSender?.call({
-      'cmd': 'pluginGetAll',
-    });
+    _commandSender?.call({'cmd': 'pluginGetAll'});
   }
 
   /// 加载插件到指定槽位（默认当前选中槽位）
@@ -508,6 +597,7 @@ class PluginManager extends ChangeNotifier {
     }
     // C3：乐观置忙（引擎回执 pluginSlotBusy 会再确认一次）。
     _slotBusy[s] = true;
+    _slotBusyAction[s] = 'load';
     notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotLoad',
@@ -522,17 +612,41 @@ class PluginManager extends ChangeNotifier {
     final s = slot ?? _selectedSlot;
     // C3：同上，避免在卸载还在进行时又发一次。
     if (_slotBusy[s] == true) return;
+    // P2 自动记录：卸载前把当前调音落盘到激活 A/B 槽（不丢）。
+    // 注意顺序：**先存预设、再置直通**——直通（bypass）不是调音内容，
+    // 绝不能被记录进预设（预设仅 state+Ch）。
+    autoSaveAb(s, group: _editorRoute[s] >= 0 ? _editorRoute[s] : -1);
     _slotBusy[s] = true;
+    _slotBusyAction[s] = 'unload';
+    // 卸载接管全部过渡（含其内部下发的一次 bypass:true），在途标记失效。
+    _bypassPendingTimers.remove(s)?.cancel();
+    _slotBypassPending.remove(s);
     notifyListeners();
+    // 优雅卸载（2026-10-22）：先内部直通（该槽 bypass，链早退）让音频
+    // 平滑过渡，短延迟等音频回调走过几块后再真正卸载——大插件 teardown
+    // 2-3s 的扰动不再影响音频流。重挂时引擎出厂 bypass=false，不残留。
     _commandSender?.call({
-      'cmd': 'pluginSlotUnload',
+      'cmd': 'pluginSlotSetBypass',
       'slot': s,
+      'bypass': true,
+    });
+    Timer(const Duration(milliseconds: 150), () {
+      _commandSender?.call({'cmd': 'pluginSlotUnload', 'slot': s});
     });
   }
 
   /// 设置指定槽位旁路
+  ///
+  /// 置在途标记后立即通知（按钮转 spinner、防连点/防卸载竞态），引擎
+  /// 状态回读确认到位后自动解除（见 [_parseStatusJsonForSlot]）。
   void setBypass(bool bypass, {int? slot}) {
     final s = slot ?? _selectedSlot;
+    _slotBypassPending[s] = bypass;
+    _bypassPendingTimers[s]?.cancel();
+    _bypassPendingTimers[s] = Timer(const Duration(seconds: 10), () {
+      if (_slotBypassPending.remove(s) != null) notifyListeners();
+    });
+    notifyListeners();
     _commandSender?.call({
       'cmd': 'pluginSlotSetBypass',
       'slot': s,
@@ -549,10 +663,7 @@ class PluginManager extends ChangeNotifier {
   void setPdc(bool enable) {
     _pdcEnabled = enable;
     notifyListeners();
-    _commandSender?.call({
-      'cmd': 'pluginSetPdc',
-      'pdc': enable,
-    });
+    _commandSender?.call({'cmd': 'pluginSetPdc', 'pdc': enable});
   }
 
   bool get pdcEnabled => _pdcEnabled;
@@ -570,39 +681,116 @@ class PluginManager extends ChangeNotifier {
   /// 本地化标题由调用方经 `plugEditorTitleNamed` 传入；未传时的兜底也带
   /// 槽位号（本类无 BuildContext，取 locale 中性格式）。
   ///
+  /// v2：VB 多总线下 [group] >= 0 时打开该组引擎上的编辑器（每路独立
+  /// 配置插件）；其余模式传 -1 走单路语义。标题附加路号，多窗口可区分。
+  ///
   /// 打开崩溃隔离：editorQuarantine.open 名单内插件阻止打开（曾打开即崩溃
   /// 自动登记于此），给出可操作提示而不是再次崩掉整个 APP。
   /// 历史崩溃仅提示：加载与编辑器打开都不再被阻止。插件关闭时由引擎
   /// 依据 [closeQuarantine] 跳过 `removed()`/`release()`，换用隔离 teardown。
-  void showEditor({int? slot, String? title}) {
+  void showEditor({
+    int? slot,
+    String? title,
+    int group = -1,
+  }) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
     if (meta != null && isEditorCrashKnown(meta)) {
-      _lastNotice = '${meta.name}：该插件曾导致 AuraDSP 崩溃。已记录到隔离名单，'
+      _lastNotice =
+          '${meta.name}：该插件曾导致 AuraDSP 崩溃。已记录到隔离名单，'
           '关闭插件时将跳过其自身的 teardown（removed/release）以避免二次崩溃；'
           '插件仍会正常加载和运行，但可能残留少量资源。';
       notifyListeners();
     }
-    final winTitle = title ??
+    final routeTag = group >= 0 ? ' [Route ${group + 1}]' : '';
+    final winTitle =
+        title ??
         (meta != null
-            ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]'
-            : 'Plugin Editor [Slot ${s + 1}]');
+            ? '${meta.name} - AuraDSP Host [Slot ${s + 1}]$routeTag'
+            : 'Plugin Editor [Slot ${s + 1}]$routeTag');
     // 崩溃日志：记录「正在打开」，供下次启动自动登记打开即崩溃的插件。
     if (meta != null) _journalEditorOpened(meta);
+    // P1-1 路由锁定：记下编辑器所在路由；成功回执后置打开态。
+    _editorRoute[s] = group;
     _commandSender?.call({
       'cmd': 'pluginSlotShowEditor',
       'slot': s,
       'title': winTitle,
+      'group': group,
     });
   }
 
-  /// 关闭插件原生 GUI 编辑器窗口
-  void closeEditor({int? slot}) {
+  /// 关闭插件原生 GUI 编辑器窗口（group 语义同 [showEditor]）。
+  void closeEditor({int? slot, int group = -1}) {
     final s = slot ?? _selectedSlot;
     _commandSender?.call({
       'cmd': 'pluginSlotCloseEditor',
       'slot': s,
+      'group': group,
     });
+  }
+
+  /// 编辑器回执（P1-1）：更新打开态；关闭成功时把当前调音落盘到该路
+  /// A/B 激活槽（与轮询解锁同口径，含非 VB 单路 group=-1）。
+  void onPluginSlotEditorResult(int slot, String action, bool ok) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (action == 'show') {
+      _slotEditorOpen[slot] = ok;
+    } else if (action == 'close' && ok) {
+      _slotEditorOpen[slot] = false;
+      final r = _editorRoute[slot];
+      _editorRoute[slot] = -1;
+      // P2 自动记录：编辑器关闭即把当前调音落盘到激活 A/B 槽。
+      autoSaveAb(slot, group: r >= 0 ? r : -1);
+      notifyListeners();
+      return;
+    }
+    notifyListeners();
+  }
+
+  /// status 轮询兜底（P1-1）：用户直接点插件自带关闭按钮时同步打开态。
+  ///
+  /// 落盘口径与 [onPluginSlotEditorResult] 的 close 回执**完全一致**：
+  /// 含非 VB 单路（group=-1）。历史版本这里只处理 `_editorRoute >= 0`，
+  /// 非 VB 用户点插件自带关闭按钮时轮询解锁不落盘——该次调音不进
+  /// A/B 预设，重挂/模式切换后丢失（2026-10-22 审查 A2）。
+  void onSlotEditorOpenPolled(int slot, bool open) {
+    if (slot < 0 || slot >= kMaxSlots) return;
+    if (_slotEditorOpen[slot] != open) {
+      _slotEditorOpen[slot] = open;
+      if (!open) {
+        // 轮询解锁（用户点插件自带关闭按钮）也要落盘——与 close 回执同语义，
+        // 否则该路径下调音不进 A/B 预设。
+        final r = _editorRoute[slot];
+        autoSaveAb(slot, group: r >= 0 ? r : -1);
+        _editorRoute[slot] = -1;
+      }
+      notifyListeners();
+    }
+  }
+
+  /// 驱动模式切换（VB/ASIO/VAIO/WASAPI）前的插件状态收尾（P2 边界修复）：
+  /// 全部活跃槽的各路由 A/B 激活槽落盘（引擎重建不丢调音）+ 编辑器状态
+  /// 清理（重建后旧编辑器窗口已失效）。
+  void onAudioModeSwitching() {
+    for (var s = 0; s < kMaxSlots; s++) {
+      if (!isSlotActive(s)) continue;
+      // A3（2026-10-22 审查）：当前正开着编辑器的路——若该路从未落盘过
+      // （新插件开界面调完直接切模式，未经关闭回执），旧实现只存 -1 路与
+      // 「已有 meta 的路」，这次调音随引擎重建丢失。开过的路必存。
+      if (_editorRoute[s] >= 0) autoSaveAb(s, group: _editorRoute[s]);
+      // 非 VB 单路 + VB 各路（曾经记录过的路由都存）。
+      autoSaveAb(s, group: -1);
+      for (var g = 0; g < 8; g++) {
+        if (_abMeta.containsKey(_abKey2(s, g, 'A')) ||
+            _abMeta.containsKey(_abKey2(s, g, 'B'))) {
+          autoSaveAb(s, group: g);
+        }
+      }
+      _slotEditorOpen[s] = false;
+      _editorRoute[s] = -1;
+    }
+    notifyListeners();
   }
 
   /// 调整插件在处理链上的插入阶段。
@@ -622,24 +810,42 @@ class PluginManager extends ChangeNotifier {
     });
   }
 
-  /// 请求刷新指定槽位当前状态
-  void setSlotChannels(int mask, {int? slot}) {
+  /// 设置 Ch 记忆并下发（P1-4 per-route；group 语义同 [getSlotChannels]）。
+  /// VB 具体路 → set_channels_g 只发该组；非 VB → 单路。
+  void setSlotChannels(int mask, {int? slot, int group = -1}) {
     final s = slot ?? _selectedSlot;
-    _slotChannels[s] = mask;
+    if (s < 0 || s >= kMaxSlots) return;
+    // F-3：VB 多总线模式下 -1 不是合法路（下发即写 eng[0]）——no-op，
+    // 避免 UI 在「未选路」（editorGroup=-1）时误污染 route 0。
+    if (group < 0 && _vbMultiBus) return;
+    // F-8：group 合法域断言（-1 或 0..7；-2 等哨兵值属误用，直接拒）。
+    if (!isValidPluginGroup(group)) return;
+    // F-7：乐观写入前记录旧值，回执 rc!=1 时回滚（与阶段回滚同口径）。
+    // 键含 group：同槽不同路可各挂一条待确认。
+    _pendingChannels['$s|$group'] = getSlotChannels(s, group: group);
+    if (group >= 0 && group < 8) {
+      _routeChannels[s][group] = mask;
+      _commandSender?.call({
+        'cmd': 'pluginSlotSetChannels',
+        'slot': s,
+        'mask': mask,
+        'group': group,
+      });
+    } else {
+      _slotChannels[s] = mask;
+      _commandSender?.call({
+        'cmd': 'pluginSlotSetChannels',
+        'slot': s,
+        'mask': mask,
+        'group': -1,
+      });
+    }
     notifyListeners();
-    _commandSender?.call({
-      'cmd': 'pluginSlotSetChannels',
-      'slot': s,
-      'mask': mask,
-    });
   }
 
   void refreshStatus({int? slot}) {
     final s = slot ?? _selectedSlot;
-    _commandSender?.call({
-      'cmd': 'pluginSlotGetStatus',
-      'slot': s,
-    });
+    _commandSender?.call({'cmd': 'pluginSlotGetStatus', 'slot': s});
   }
 
   // --- 插件级预设数据：厂商表 + 编辑器隔离名单 + 崩溃自动登记 ---
@@ -652,8 +858,9 @@ class PluginManager extends ChangeNotifier {
     _tablesLoaded = true;
     Map<String, dynamic>? defaults;
     try {
-      final raw = await rootBundle
-          .loadString('assets/presets/plugin_tables.json');
+      final raw = await rootBundle.loadString(
+        'assets/presets/plugin_tables.json',
+      );
       defaults = jsonDecode(raw) as Map<String, dynamic>;
     } catch (_) {
       defaults = null;
@@ -725,14 +932,19 @@ class PluginManager extends ChangeNotifier {
     }
   }
 
-  void _saveQuarantineLists({required List<String> close, required List<String> open}) {
+  void _saveQuarantineLists({
+    required List<String> close,
+    required List<String> open,
+  }) {
     try {
       final f = _quarantineConfigFile();
       if (!f.existsSync()) f.parent.createSync(recursive: true);
-      f.writeAsStringSync(jsonEncode({
-        'close': close.where((p) => p.isNotEmpty).toSet().toList(),
-        'open': open.where((p) => p.isNotEmpty).toSet().toList(),
-      }));
+      f.writeAsStringSync(
+        jsonEncode({
+          'close': close.where((p) => p.isNotEmpty).toSet().toList(),
+          'open': open.where((p) => p.isNotEmpty).toSet().toList(),
+        }),
+      );
     } catch (e) {
       debugPrint('[PluginManager] quarantine config save failed: $e');
     }
@@ -830,7 +1042,8 @@ class PluginManager extends ChangeNotifier {
     }
     if (changed) {
       _saveQuarantineLists(close: _closeQuarantine, open: _openQuarantine);
-      _lastNotice = '检测到 ${crashed.length} 个插件上次在打开编辑器后崩溃，'
+      _lastNotice =
+          '检测到 ${crashed.length} 个插件上次在打开编辑器后崩溃，'
           '已记录到隔离名单；它们仍可加载，关闭时将使用安全 teardown。';
       notifyListeners();
     }
@@ -867,83 +1080,11 @@ class PluginManager extends ChangeNotifier {
   void dispose() {
     _journalTimer?.cancel();
     _journalTimer = null;
+    for (final t in _bypassPendingTimers.values) {
+      t.cancel();
+    }
+    _bypassPendingTimers.clear();
     super.dispose();
-  }
-
-  // --- 插件预设系统管理 ---
-  static Directory _getPresetsDir(String pluginName) {
-    final safeName = pluginName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
-    return ConfigManager.subDir(
-        'plugin_presets${Platform.pathSeparator}$safeName');
-  }
-
-  /// 列出指定插件所有已保存的预设
-  List<String> listPresets(String pluginName) {
-    try {
-      final dir = _getPresetsDir(pluginName);
-      if (!dir.existsSync()) return [];
-      return dir
-          .listSync()
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.aurapreset'))
-          .map((f) {
-            final filename = f.uri.pathSegments.last;
-            return filename.substring(0, filename.length - '.aurapreset'.length);
-          })
-          .toList()
-        ..sort();
-    } catch (_) {
-      return [];
-    }
-  }
-
-  /// 保存当前槽位插件的预设
-  bool savePreset(String presetName, {int? slot}) {
-    final s = slot ?? _selectedSlot;
-    final meta = getSlotPlugin(s);
-    if (meta == null || presetName.trim().isEmpty) return false;
-    try {
-      final dir = _getPresetsDir(meta.name);
-      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-      final targetFile = File('${dir.path}/$safePreset.aurapreset');
-      _commandSender?.call({
-        'cmd': 'pluginSlotSavePreset',
-        'slot': s,
-        'path': targetFile.path,
-      });
-      return true;
-    } catch (e) {
-      _lastError = '保存预设失败: $e';
-      notifyListeners();
-      return false;
-    }
-  }
-
-  /// 加载指定预设至槽位
-  bool loadPreset(String presetName, {int? slot}) {
-    final s = slot ?? _selectedSlot;
-    final meta = getSlotPlugin(s);
-    if (meta == null) return false;
-    try {
-      final dir = _getPresetsDir(meta.name);
-      final safePreset = presetName.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_').trim();
-      final targetFile = File('${dir.path}/$safePreset.aurapreset');
-      if (!targetFile.existsSync()) {
-        _lastError = '预设文件不存在: ${targetFile.path}';
-        notifyListeners();
-        return false;
-      }
-      _commandSender?.call({
-        'cmd': 'pluginSlotLoadPreset',
-        'slot': s,
-        'path': targetFile.path,
-      });
-      return true;
-    } catch (e) {
-      _lastError = '加载预设失败: $e';
-      notifyListeners();
-      return false;
-    }
   }
 
   // --- 底层引擎事件回调处理 ---
@@ -959,6 +1100,7 @@ class PluginManager extends ChangeNotifier {
     return '插件加载失败：$name。文件存在但引擎无法完成初始化，'
         '可能是格式不兼容、位数不符或文件已损坏。';
   }
+
   void onPluginScanned(int count, dynamic rawJson) {
     _isScanning = false;
     _scanDone = _scanTotal; // 收尾：进度条走满（避免停在 99% 的观感）
@@ -973,9 +1115,18 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onPluginSlotLoaded(int slot, String path, int rc, dynamic rawStatus, int stage) {
+  void onPluginSlotLoaded(
+    int slot,
+    String path,
+    int rc,
+    dynamic rawStatus,
+    int stage,
+  ) {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
+      _slotBusyAction.remove(slot);
+      _bypassPendingTimers.remove(slot)?.cancel();
+      _slotBypassPending.remove(slot); // 挂载即出厂旁路语义，在途标记不残留
       if (rc != 1) {
         // D2：扫描列表里已标记不兼容的插件（当前唯一情形：32 位）直接用
         // 引擎的精确原因，不再让用户看"可能位数不符"的猜测文案。
@@ -987,13 +1138,25 @@ class PluginManager extends ChangeNotifier {
             break;
           }
         }
-        if (known != null && !known.isCompatible && known.errorMessage.isNotEmpty) {
+        if (known != null &&
+            !known.isCompatible &&
+            known.errorMessage.isNotEmpty) {
           _lastError = '${known.name}：${known.errorMessage}';
         } else {
           _lastError = _describeLoadFailure(path);
         }
       } else {
         _lastError = null;
+        // P2 边界：挂载成功后自动应用激活 A/B 预设（若有记录）——
+        // 模式切换/重挂后插件是出厂态，不恢复会丢调音。
+        _restoreAbAfterLoad(slot);
+        // 默认旁路（2026-10-22）：挂载即旁路态（诚实显示橙色旁路），
+        // 大插件不立即冲击音频；用户手动取消旁路才生效。
+        _commandSender?.call({
+          'cmd': 'pluginSlotSetBypass',
+          'slot': slot,
+          'bypass': true,
+        });
       }
       _slotStages[slot] = stage;
       _parseStatusJsonForSlot(slot, rawStatus);
@@ -1004,6 +1167,9 @@ class PluginManager extends ChangeNotifier {
   void onPluginSlotUnloaded(int slot, int rc, dynamic rawStatus) {
     if (slot >= 0 && slot < kMaxSlots) {
       _slotBusy[slot] = false; // C3：任务终态，忙态清除
+      _slotBusyAction.remove(slot);
+      _bypassPendingTimers.remove(slot)?.cancel();
+      _slotBypassPending.remove(slot);
       _parseStatusJsonForSlot(slot, rawStatus);
       notifyListeners();
     }
@@ -1038,15 +1204,39 @@ class PluginManager extends ChangeNotifier {
     notifyListeners();
   }
 
-  void onPluginSlotChannels(int slot, int mask, int rc) {
+  /// Ch 回执（A4：携带下发路由 [group]，按路归位——旧版恒写
+  /// [_slotChannels]，VB 下任一路的 Ch 回执都会污染 -1 路记忆）。
+  /// rc != 1 时不改记忆（保留 setSlotChannels 的乐观值）。
+  void onPluginSlotChannels(int slot, int mask, int rc, {int group = -1}) {
     if (slot < 0 || slot >= kMaxSlots) return;
-    if (rc == 1) _slotChannels[slot] = mask;
+    final key = '$slot|$group';
+    final prev = _pendingChannels.remove(key);
+    if (rc == 1) {
+      if (group >= 0 && group < 8) {
+        _routeChannels[slot][group] = mask;
+      } else {
+        _slotChannels[slot] = mask;
+      }
+    } else if (prev != null) {
+      // F-7：引擎拒收 → 回滚乐观写入（否则 UI 显示的 Ch 与实际生效不一致）。
+      if (group >= 0 && group < 8) {
+        _routeChannels[slot][group] = prev;
+      } else {
+        _slotChannels[slot] = prev;
+      }
+    }
     notifyListeners();
   }
 
   // 向后兼容旧单槽事件
   void onPluginLoaded(String path, int rc, dynamic rawStatus) =>
-      onPluginSlotLoaded(0, path, rc, rawStatus, PluginInsertStage.defaultStage);
+      onPluginSlotLoaded(
+        0,
+        path,
+        rc,
+        rawStatus,
+        PluginInsertStage.defaultStage,
+      );
 
   void onPluginUnloaded(int rc, dynamic rawStatus) =>
       onPluginSlotUnloaded(0, rc, rawStatus);
@@ -1068,17 +1258,12 @@ class PluginManager extends ChangeNotifier {
         return;
       }
 
-      _plugins = list
-          .whereType<Map>()
-          .map((m) {
-            final meta = PluginMetadata.fromJson(Map<String, dynamic>.from(m));
-            // 厂商表覆盖（预设数据查表，引擎不再硬编码厂商名）：命中即覆盖。
-            final v = _vendorLookup(meta);
-            return v != null && v != meta.vendor
-                ? meta.copyWith(vendor: v)
-                : meta;
-          })
-          .toList();
+      _plugins = list.whereType<Map>().map((m) {
+        final meta = PluginMetadata.fromJson(Map<String, dynamic>.from(m));
+        // 厂商表覆盖（预设数据查表，引擎不再硬编码厂商名）：命中即覆盖。
+        final v = _vendorLookup(meta);
+        return v != null && v != meta.vendor ? meta.copyWith(vendor: v) : meta;
+      }).toList();
     } catch (e) {
       debugPrint('[PluginManager] Error parsing plugins JSON: $e');
     }
@@ -1096,11 +1281,20 @@ class PluginManager extends ChangeNotifier {
       }
       final status = PluginHostStatus.fromJson(map);
       _slotStatuses[slot] = status;
+      // 引擎回读确认旁路到位 → 解除在途标记（与请求值一致才算到位）。
+      // 调用方（onPluginSlotBypass/onPluginSlotStatus 等）随后 notifyListeners。
+      final pending = _slotBypassPending[slot];
+      if (pending != null && status.bypassed == pending) {
+        _bypassPendingTimers.remove(slot)?.cancel();
+        _slotBypassPending.remove(slot);
+      }
       if (map.containsKey('channels')) {
         _slotChannels[slot] = (map['channels'] as num?)?.toInt() ?? 0xFF;
       }
     } catch (e) {
-      debugPrint('[PluginManager] Error parsing status JSON for slot $slot: $e');
+      debugPrint(
+        '[PluginManager] Error parsing status JSON for slot $slot: $e',
+      );
     }
   }
 
@@ -1120,8 +1314,9 @@ class PluginManager extends ChangeNotifier {
   ///   4. 条目唯一键 = path + format。
   static const int kCacheSchemaVersion = 2;
 
-  static File _getCacheFile() => File(ConfigManager.path(
-      'plugins${Platform.pathSeparator}plugin_cache.json'));
+  static File _getCacheFile() => File(
+    ConfigManager.path('plugins${Platform.pathSeparator}plugin_cache.json'),
+  );
 
   /// 剔除磁盘路径已不存在的条目，并按 path+format 去重，返回被剔除的数量。
   ///
@@ -1134,10 +1329,12 @@ class PluginManager extends ChangeNotifier {
     final before = _plugins.length;
     final seen = <String>{};
     _plugins = _plugins
-        .where((p) =>
-            p.path.isNotEmpty &&
-            File(p.path).existsSync() &&
-            seen.add('${p.path}\u0000${p.format.label}'))
+        .where(
+          (p) =>
+              p.path.isNotEmpty &&
+              File(p.path).existsSync() &&
+              seen.add('${p.path}\u0000${p.format.label}'),
+        )
         .toList();
     return before - _plugins.length;
   }
@@ -1154,8 +1351,10 @@ class PluginManager extends ChangeNotifier {
       final dynamic decoded = jsonDecode(text);
       if (decoded is! Map<String, dynamic> ||
           decoded['schema'] != kCacheSchemaVersion) {
-        debugPrint('[PluginManager] loadCache：缓存 schema 不符或为旧版裸 list，'
-            '整份丢弃，等待重新扫描');
+        debugPrint(
+          '[PluginManager] loadCache：缓存 schema 不符或为旧版裸 list，'
+          '整份丢弃，等待重新扫描',
+        );
         return;
       }
       final list = decoded['plugins'];
@@ -1188,8 +1387,10 @@ class PluginManager extends ChangeNotifier {
       // 拒绝写回，避免把坏数据固化成"官方缓存"。
       if (_plugins.isNotEmpty &&
           _plugins.every((p) => p.vendor.isEmpty || p.vendor == 'Unknown')) {
-        debugPrint('[PluginManager] saveCache 自检未过'
-            '（vendor 全空/Unknown），拒绝写回缓存');
+        debugPrint(
+          '[PluginManager] saveCache 自检未过'
+          '（vendor 全空/Unknown），拒绝写回缓存',
+        );
         return;
       }
       final file = _getCacheFile();
@@ -1214,5 +1415,275 @@ class PluginManager extends ChangeNotifier {
     } catch (e) {
       debugPrint('[PluginManager] saveCache error: $e');
     }
+  }
+
+  // ==================== P2 A/B 预设槽（v3.3） ====================
+  // 每「插件-槽位」两套预设 A/B（VB 再按 route 细分），内容 = 插件 state
+  // + Ch 选择。激活槽自动记录（编辑器关闭/切换/切路由时落盘）；继承 =
+  // 一次性复制（调参即归自定义）；复原清槽（不动源）。
+
+  /// 每 (slot, route) 的激活槽：'$slot|$route' -> 'A' | 'B'。
+  final Map<String, String> _abActive = {};
+
+  /// 每槽元数据：'$slot|$route|$ab' -> {hasState, source, chMask}。
+  /// source: 'custom' | 'inherit:r{route}:{A|B}'。
+  final Map<String, Map<String, dynamic>> _abMeta = {};
+
+  /// 各槽预设归属的插件 id（换插件即换预设库）。
+  final List<String?> _abPluginId = List.filled(kMaxSlots, null, growable: true);
+
+  /// 确定性短 hash（FNV-1a 32bit）——Dart String.hashCode 每次运行不同，
+  /// 不能用于持久化文件名。
+  static String _fnv1a(String s) {
+    var h = 0x811c9dc5;
+    for (final u in s.codeUnits) {
+      h ^= u;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
+  String _abPluginKey(int slot) {
+    final meta = getSlotPlugin(slot);
+    final id = meta == null
+        ? 'empty'
+        : _fnv1a('${meta.path}|${meta.name}');
+    return id;
+  }
+
+  Directory _abDir(String pluginId) => Directory(
+      ConfigManager.path('plugin_presets${Platform.pathSeparator}.ab${Platform.pathSeparator}$pluginId'));
+
+  String _abFile(int slot, int route, String ab) =>
+      '${_abDir(_abPluginKey(slot)).path}${Platform.pathSeparator}s${slot}_r$route$ab.aurapreset';
+
+  String _abMetaPath(String pluginId) =>
+      '${_abDir(pluginId).path}${Platform.pathSeparator}meta.json';
+
+  String _abKey(int slot, int route) => '$slot|$route';
+  String _abKey2(int slot, int route, String ab) => '$slot|$route|$ab';
+
+  /// 惰性加载/切换插件时重载预设库。
+  void _ensureAbLoaded(int slot) {
+    final id = _abPluginKey(slot);
+    if (_abPluginId[slot] == id) return;
+    _abPluginId[slot] = id;
+    // 清除该 slot 的内存缓存再读盘（换插件 = 换预设库）。
+    _abActive.removeWhere((k, _) => k.startsWith('$slot|'));
+    _abMeta.removeWhere((k, _) => k.startsWith('$slot|'));
+    try {
+      final f = File(_abMetaPath(id));
+      if (!f.existsSync()) return;
+      final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final slots = (raw['slots'] as Map<String, dynamic>?) ?? {};
+      final sr = (slots['$slot'] as Map<String, dynamic>?) ?? {};
+      sr.forEach((rk, rv) {
+        final r = rv as Map<String, dynamic>;
+        _abActive[_abKey(slot, _routeFromKey(rk))] =
+            (r['active'] as String?) ?? 'A';
+        for (final ab in ['A', 'B']) {
+          final m = (r[ab] as Map<String, dynamic>?) ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF};
+          _abMeta[_abKey2(slot, _routeFromKey(rk), ab)] = {
+            'hasState': m['hasState'] == true,
+            'source': m['source'] as String? ?? 'custom',
+            'chMask': (m['chMask'] as num?)?.toInt() ?? 0xFF,
+          };
+        }
+      });
+    } catch (e) {
+      debugPrint('[PluginManager] ab load error: $e');
+    }
+  }
+
+  static int _routeFromKey(String k) =>
+      k == 'rm1' ? -1 : int.tryParse(k.substring(1)) ?? -1;
+  static String _routeKey(int route) => route < 0 ? 'rm1' : 'r$route';
+
+  void _abPersist(int slot) {
+    try {
+      final id = _abPluginKey(slot);
+      final dir = _abDir(id);
+      dir.createSync(recursive: true);
+      final slots = <String, dynamic>{};
+      final seenRoutes = <int>{};
+      for (final k in _abActive.keys) {
+        final parts = k.split('|');
+        if (parts[0] != '$slot') continue;
+        seenRoutes.add(_routeFromKey(parts[1]));
+      }
+      for (final k in _abMeta.keys) {
+        final parts = k.split('|');
+        if (parts[0] != '$slot') continue;
+        seenRoutes.add(_routeFromKey(parts[1]));
+      }
+      for (final route in seenRoutes) {
+        final rk = _routeKey(route);
+        slots[rk] = {
+          'active': _abActive[_abKey(slot, route)] ?? 'A',
+          'A': _abMeta[_abKey2(slot, route, 'A')] ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF},
+          'B': _abMeta[_abKey2(slot, route, 'B')] ??
+              {'hasState': false, 'source': 'custom', 'chMask': 0xFF},
+        };
+      }
+      File(_abMetaPath(id)).writeAsStringSync(jsonEncode({'slots': slots}));
+    } catch (e) {
+      debugPrint('[PluginManager] ab persist error: $e');
+    }
+  }
+
+  Map<String, dynamic> _abMetaOf(int slot, int route, String ab) {
+    _ensureAbLoaded(slot);
+    return _abMeta[_abKey2(slot, route, ab)] ??=
+        {'hasState': false, 'source': 'custom', 'chMask': 0xFF};
+  }
+
+  /// 当前激活槽（默认 A——插件加载即 A 记录）。
+  String abActive(int slot, {int group = -1}) {
+    _ensureAbLoaded(slot);
+    return _abActive[_abKey(slot, group)] ?? 'A';
+  }
+
+  /// 槽元数据（UI：hasState/source/chMask）。
+  Map<String, dynamic> abMeta(int slot, {int group = -1, required String ab}) =>
+      Map.unmodifiable(_abMetaOf(slot, group, ab));
+
+  /// A/B 预设文件路径（继承复制时作源/目标）。
+  String abFilePath(int slot, {int group = -1, required String ab}) =>
+      _abFile(slot, group, ab);
+
+  /// 自动保存：当前实例 state + Ch → 激活槽（source 归 custom）。
+  /// 时机：编辑器关闭 / 切换 A-B / 切路由 / 卸载前——用户感知「自动记录」。
+  void autoSaveAb(int slot, {int group = -1}) {
+    if (!isSlotActive(slot)) return;
+    // F-3：VB 多总线模式下 -1 不是合法路（落盘会被桥「单组 0」写成
+    // eng[0]，与 route 0 独立预设互相覆盖）——直接跳过，不落盘。
+    if (group < 0 && _vbMultiBus) return;
+    _ensureAbLoaded(slot);
+    final ab = abActive(slot, group: group);
+    final path = _abFile(slot, group, ab);
+    try {
+      _abDir(_abPluginKey(slot)).createSync(recursive: true);
+    } catch (_) {}
+    _commandSender?.call({
+      'cmd': 'pluginSlotSavePresetG',
+      'slot': slot,
+      'group': group,
+      'path': path,
+    });
+    final m = _abMetaOf(slot, group, ab);
+    m['hasState'] = true;
+    m['source'] = 'custom'; // 用户调过即自定义（继承后调参自动脱钩）
+    m['chMask'] = getSlotChannels(slot, group: group);
+    _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 切换/激活 A 或 B。
+  /// [inheritFrom] null = 自动保存（自定义）；'r{route}:{A|B}' = 一次性复制
+  /// 该源预设（state 文件拷贝 + Ch 继承），复制后与源无关。
+  void selectAb(int slot, {int group = -1, required String ab, String? inheritFrom}) {
+    if (ab != 'A' && ab != 'B') return;
+    if (!isSlotActive(slot)) return;
+    _ensureAbLoaded(slot);
+    // 离开当前状态前存回激活槽（不丢调音）。
+    autoSaveAb(slot, group: group);
+    final m = _abMetaOf(slot, group, ab);
+    if (inheritFrom != null) {
+      // 解析源 'r{route}:{A|B}'（排除自身已在 UI 过滤）。
+      final mm = RegExp(r'^r(-?\d+):([AB])$').firstMatch(inheritFrom);
+      if (mm != null) {
+        final srcRoute = int.parse(mm.group(1)!);
+        final srcAb = mm.group(2)!;
+        final srcFile = _abFile(slot, srcRoute, srcAb);
+        final dstFile = _abFile(slot, group, ab);
+        try {
+          _abDir(_abPluginKey(slot)).createSync(recursive: true);
+          if (File(srcFile).existsSync()) {
+            File(srcFile).copySync(dstFile);
+            _commandSender?.call({
+              'cmd': 'pluginSlotLoadPresetG',
+              'slot': slot,
+              'group': group,
+              'path': dstFile,
+            });
+            m['hasState'] = true;
+          } else {
+            m['hasState'] = false;
+          }
+        } catch (e) {
+          debugPrint('[PluginManager] ab inherit error: $e');
+        }
+        m['source'] = 'inherit:$inheritFrom';
+        // Ch 跟随**源预设快照**的 chMask（不是源路由的当前记忆——
+        // 边界修复：源预设可能早于当前路由记忆存档）。
+        final srcMeta = _abMetaOf(slot, srcRoute, srcAb);
+        final srcCh = (srcMeta['chMask'] as num?)?.toInt() ?? 0xFF;
+        m['chMask'] = srcCh;
+        setSlotChannels(srcCh, slot: slot, group: group);
+      }
+    } else if (m['hasState'] == true) {
+      // 激活已有内容的槽：应用其 state。
+      _commandSender?.call({
+        'cmd': 'pluginSlotLoadPresetG',
+        'slot': slot,
+        'group': group,
+        'path': _abFile(slot, group, ab),
+      });
+      setSlotChannels((m['chMask'] as num?)?.toInt() ?? 0xFF,
+          slot: slot, group: group);
+    }
+    // 空槽 + 自动保存：不动参数，从此刻开始自动记录（「空预设」语义）。
+    _abActive[_abKey(slot, group)] = ab;
+    _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 复原：清除该槽预设（回空；继承的源预设不动）。
+  void resetAb(int slot, {int group = -1, required String ab}) {
+    if (ab != 'A' && ab != 'B') return;
+    _ensureAbLoaded(slot);
+    try {
+      final f = File(_abFile(slot, group, ab));
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+    _abMeta[_abKey2(slot, group, ab)] = {
+      'hasState': false,
+      'source': 'custom',
+      'chMask': 0xFF,
+    };
+    _abPersist(slot);
+    notifyListeners();
+  }
+
+  /// 挂载成功后恢复激活 A/B 预设（P2 边界：模式切换/重挂后插件出厂态，
+  /// 不恢复则调音丢失）。VB 各有记录的路由逐路恢复；非 VB 恢复 -1 路。
+  ///
+  /// F-3：VB 多总线模式下**不含 -1 路**——-1 会被桥「单组 0」写成
+  /// eng[0]，与 route 0 的独立预设互相覆盖（自我强化污染）。
+  void _restoreAbAfterLoad(int slot) {
+    _ensureAbLoaded(slot);
+    final routes = <int>{if (!_vbMultiBus) -1};
+    for (var g = 0; g < 8; g++) {
+      if (_abMeta.containsKey(_abKey2(slot, g, 'A')) ||
+          _abMeta.containsKey(_abKey2(slot, g, 'B'))) {
+        routes.add(g);
+      }
+    }
+    for (final route in routes) {
+      final ab = abActive(slot, group: route);
+      final m = _abMetaOf(slot, route, ab);
+      if (m['hasState'] != true) continue;
+      _commandSender?.call({
+        'cmd': 'pluginSlotLoadPresetG',
+        'slot': slot,
+        'group': route,
+        'path': _abFile(slot, route, ab),
+      });
+      final ch = (m['chMask'] as num?)?.toInt() ?? 0xFF;
+      setSlotChannels(ch, slot: slot, group: route);
+    }
+    notifyListeners();
   }
 }
