@@ -11,6 +11,7 @@
  *    自适应滑块参数解析器（解析 sliderN:default<min,max,step>name 声明与代码实际变量引用）
  */
 
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
 
 // P1：EelSliderMeta/EelSliderParser 已下沉到 core/eel_slider_parser.dart
@@ -252,7 +253,7 @@ abstract final class EelFormatter {
 /// 轻量即时语法检查器
 abstract final class EelLinter {
   /// 括号配对、字符串闭合、注释闭合检查
-  static List<EelLintIssue> lint(String src) {
+  static List<EelLintIssue> lint(AppLocalizations t, String src) {
     final issues = <EelLintIssue>[];
     var line = 1, col = 1;
     var inString = false, inLineComment = false, inBlockComment = false;
@@ -263,7 +264,7 @@ abstract final class EelLinter {
       final ch = src[i];
       if (ch == '\n') {
         if (inString) {
-          issues.add(EelLintIssue(line, col, '字符串未闭合（跨行）'));
+          issues.add(EelLintIssue(line, col, t.eelUnclosedString));
         }
         inLineComment = false;
         inString = false;
@@ -331,7 +332,7 @@ abstract final class EelLinter {
             ? '{'
             : (ch == ')' ? '(' : '[');
         if (stack.isEmpty || stack.last.$1 != want) {
-          issues.add(EelLintIssue(line, col, '多余的 "$ch"（无匹配的开括号）'));
+          issues.add(EelLintIssue(line, col, t.eelUnmatchedClose(ch)));
         } else {
           stack.removeLast();
         }
@@ -344,12 +345,12 @@ abstract final class EelLinter {
     }
 
     if (inBlockComment) {
-      issues.add(const EelLintIssue(0, 0, '块注释未闭合（/* 缺少对应的 */）'));
+      issues.add(EelLintIssue(0, 0, t.eelBlockCommentUnclosed));
     }
     for (final (ch, l, c) in stack.reversed) {
-      issues.add(EelLintIssue(l, c, '"$ch" 未闭合（始于第 $l 行第 $c 列）'));
+      issues.add(EelLintIssue(l, c, t.eelUnclosedQuote(ch, l, c)));
     }
-    issues.addAll(_structuralChecks(src));
+    issues.addAll(_structuralChecks(t, src));
     issues.sort((a, b) => a.line.compareTo(b.line));
     return issues;
   }
@@ -422,7 +423,7 @@ abstract final class EelLinter {
 
   /// 结构预检（应用前本地拦截，不下发即报错）：
   /// 段存在性 / 空 @init / slider 越界 / 只读变量赋值。
-  static List<EelLintIssue> _structuralChecks(String src) {
+  static List<EelLintIssue> _structuralChecks(AppLocalizations t, String src) {
     final issues = <EelLintIssue>[];
     final code = _stripNonCode(src);
     int lineOf(int offset) =>
@@ -431,7 +432,7 @@ abstract final class EelLinter {
     final hasInit = RegExp(r'@init\b').hasMatch(code);
     final hasSample = RegExp(r'@sample\b').hasMatch(code);
     if (!hasInit) {
-      issues.add(const EelLintIssue(0, 0, '缺少 @init 段（引擎会拒绝编译）',
+      issues.add(EelLintIssue(0, 0, t.eelMissingInit,
           blocking: true));
     }
     if (!hasSample) {
@@ -449,11 +450,11 @@ abstract final class EelLinter {
       if (code.substring(d.end, end).trim().isEmpty) {
         if (name == '@init') {
           issues.add(EelLintIssue(lineOf(d.start), 0,
-              '空 @init 段（vendor 要求至少一条语句）',
+              t.eelEmptyInit,
               blocking: true));
         } else if (name == '@sample') {
           issues.add(EelLintIssue(lineOf(d.start), 0,
-              '@sample 段为空（将输出静音），确认不是漏写？'));
+              t.eelEmptySample));
         }
       }
     }
@@ -463,7 +464,7 @@ abstract final class EelLinter {
       final n = int.tryParse(m.group(1) ?? '');
       if (n != null && n > 8) {
         issues.add(EelLintIssue(
-            lineOf(m.start), 0, 'slider$n 越界（仅 slider1..8 会联动滑块）'));
+            lineOf(m.start), 0, t.eelSliderRange(n)));
       }
     }
 
@@ -471,7 +472,7 @@ abstract final class EelLinter {
     for (final m
         in RegExp(r'\b(srate|num_ch)\b\s*[-+*/%]?=(?!=)').allMatches(code)) {
       issues.add(EelLintIssue(
-          lineOf(m.start), 0, '${m.group(1)} 是只读变量，赋值不会生效'));
+          lineOf(m.start), 0, t.eelReadonlyAssign(m.group(1) ?? '')));
     }
     return issues;
   }

@@ -2,7 +2,7 @@
 # 重生成：python tools/l10n_cjk_scan.py --baseline
 # 格式：<相对路径> <条数>
 lib/features/chain_page.dart 7
-lib/features/eel_editor_support.dart 10
+lib/features/eel_editor_support.dart 1
 lib/features/effects/arbmag_card.dart 5
 lib/features/effects/bass_card.dart 2
 lib/features/effects/bass_shaping_card.dart 1
@@ -19,5 +19,4 @@ lib/features/effects/reverb_card.dart 6
 lib/features/effects/spatial_card.dart 5
 lib/features/effects/stereo_card.dart 1
 lib/features/effects/tube_card.dart 5
-lib/features/liveprog_page.dart 9
 lib/features/settings/panels/hardware_io.dart 30

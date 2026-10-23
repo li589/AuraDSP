@@ -354,6 +354,81 @@ class AppLocalizationsEn extends AppLocalizations {
       'Negative compresses, positive expands. Default -0.35.';
 
   @override
+  String get eelUnclosedString => 'Unclosed string (spans lines)';
+
+  @override
+  String eelUnmatchedClose(String ch) {
+    return 'Unexpected \"$ch\" (no matching opener)';
+  }
+
+  @override
+  String get eelBlockCommentUnclosed => 'Block comment not closed (missing */)';
+
+  @override
+  String eelUnclosedQuote(String ch, int line, int col) {
+    return '\"$ch\" not closed (started at line $line, col $col)';
+  }
+
+  @override
+  String get eelMissingInit =>
+      'Missing @init section (engine will refuse to compile)';
+
+  @override
+  String get eelMissingSample =>
+      'Missing @sample section (engine will refuse to compile)';
+
+  @override
+  String get eelEmptyInit =>
+      'Empty @init section (vendor requires at least one statement)';
+
+  @override
+  String get eelEmptySample =>
+      'Empty @sample section (output will be silent) — sure this is intended?';
+
+  @override
+  String eelSliderRange(int n) {
+    return 'slider$n out of range (only slider1..8 map to UI sliders)';
+  }
+
+  @override
+  String eelReadonlyAssign(String name) {
+    return '$name is read-only; assignment has no effect';
+  }
+
+  @override
+  String get lpDocIntro =>
+      'EEL2 is a high-performance expression language for real-time audio. In AuraDSP every script runs instantly on the audio pump thread.';
+
+  @override
+  String get lpDocSectionsTitle => 'Core sections';
+
+  @override
+  String get lpDocSampleCode =>
+      '@init\n// Runs on sample-rate change or first load; init variables & coefficients\n\n@sample\n// Runs per sample. IO vars are spl0 (L) and spl1 (R)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;';
+
+  @override
+  String get lpDocSlidersTitle => 'Slider syntax';
+
+  @override
+  String get lpDocSampleSlider =>
+      'slider1: 0< -12, 12, 0.5 > Gain (dB)\n// sliderN: default< min, max, step > label\n// The host auto-generates live sliders for these!';
+
+  @override
+  String get lpDocBuiltinsTitle => 'Common built-in constants & functions';
+
+  @override
+  String get lpDocBuiltinConsts =>
+      '• Constants: srate (sample rate), \$pi (pi)\n';
+
+  @override
+  String get lpDocBuiltinFns =>
+      '• Functions: sin, cos, tan, sqrt, exp, log, abs, min, max, rand, floor, ceil\n';
+
+  @override
+  String get lpDocBuiltinChannels =>
+      '• Channels: spl0 (L in/out), spl1 (R in/out)';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override
