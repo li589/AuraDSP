@@ -398,6 +398,91 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpDocBuiltinChannels => '• 声道：spl0 (左输入/输出), spl1 (右输入/输出)';
 
   @override
+  String get ioNoInputDevices => '无可用输入设备';
+
+  @override
+  String get ioRefreshDevice => '刷新设备';
+
+  @override
+  String get ioLoopbackDesc => '默认内录/环回模式：实时采集系统主回放端点音频';
+
+  @override
+  String get ioExclusiveDesc => '针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集';
+
+  @override
+  String get ioInputLabel => '输入端点';
+
+  @override
+  String get ioVaioEndpointDesc => 'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)';
+
+  @override
+  String get ioChannelStatus => '通道状态';
+
+  @override
+  String get ioVaioActive => '活跃传输中 (全双工 DMA 环形缓冲)';
+
+  @override
+  String get ioVaioReady => '就绪 (等待系统/应用推流)';
+
+  @override
+  String get ioVaioGuide =>
+      '请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。';
+
+  @override
+  String get ioAsioChannelLabel => '输入通道';
+
+  @override
+  String get ioAsioActive => 'DAW 实时注入 (活跃)';
+
+  @override
+  String get ioAsioWait => '等待 DAW 连接 (宿主未开启)';
+
+  @override
+  String get ioAsioGuide =>
+      '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。';
+
+  @override
+  String get ioWasapiRenderDesc => 'WASAPI 物理渲染 (扬声器/耳机)';
+
+  @override
+  String get ioNoOutputDevices => '无可用输出设备';
+
+  @override
+  String get ioPhysicalOutput => '物理输出';
+
+  @override
+  String get ioAutoSelect => '自动选择（非VAIO扬声器）';
+
+  @override
+  String get ioNoPhysicalOutputs => '无可用物理输出设备';
+
+  @override
+  String get ioProcessedFrames => '已处理帧';
+
+  @override
+  String get ioOutputLabel => '输出端点';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client 硬件输出';
+
+  @override
+  String get ioChannelMap => '声道映射';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return '通道 $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => '输出状态';
+
+  @override
+  String get ioAsioPassthrough => '正在直通硬件监听 (超低延迟)';
+
+  @override
+  String get ioAsioReadyStatus => '就绪 (等待驱动会话)';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override
