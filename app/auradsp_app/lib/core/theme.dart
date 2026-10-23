@@ -10,6 +10,8 @@
  */
 import 'package:flutter/material.dart';
 
+import 'tokens.g.dart';
+
 class AuraPalette {
   final Color bg, panel, panelRaised, hairline, text, textDim;
   final Color accent, accentContrast, accent2;
@@ -38,54 +40,54 @@ class AuraPalette {
 }
 
 const auraDark = AuraPalette(
-  bg: Color(0xFF0E0F13),
-  panel: Color(0xFF171A21),
-  panelRaised: Color(0xFF1E222B),
-  hairline: Color(0xFF2A2F3A),
-  text: Color(0xFFE8EAF0),
-  textDim: Color(0xFF9AA3B2),
-  accent: Color(0xFFD4FF3F), // 强调：选中/激活/频谱（深色底荧光绿；与 error 正红系色相分离）
-  accentContrast: Color(0xFF10130A),
-  accent2: Color(0xFFFF6B35),
-  success: Color(0xFF5AD19B),
-  warning: Color(0xFFE8B93E),
-  error: Color(0xFFF05A5A),
-  vizSpectrum: Color(0xFFD4FF3F),
-  vizGrid: Color(0xFF232838),
+  bg: TokColor.auraDarkBg,
+  panel: TokColor.auraDarkPanel,
+  panelRaised: TokColor.auraDarkPanelRaised,
+  hairline: TokColor.auraDarkHairline,
+  text: TokColor.auraDarkText,
+  textDim: TokColor.auraDarkTextDim,
+  accent: TokColor.auraDarkAccent, // 强调：选中/激活/频谱（深色底荧光绿；与 error 正红系色相分离）
+  accentContrast: TokColor.auraDarkAccentContrast,
+  accent2: TokColor.auraDarkAccent2,
+  success: TokColor.auraDarkSuccess,
+  warning: TokColor.auraDarkWarning,
+  error: TokColor.auraDarkError,
+  vizSpectrum: TokColor.auraDarkVizSpectrum,
+  vizGrid: TokColor.auraDarkVizGrid,
 );
 
 const auraLight = AuraPalette(
-  bg: Color(0xFFF4F1EA),
-  panel: Color(0xFFFFFFFF),
-  panelRaised: Color(0xFFFBFAF6),
-  hairline: Color(0xFFE2DDCF),
-  text: Color(0xFF1A1A1A),
-  textDim: Color(0xFF6E6A60),
-  accent: Color(0xFF5B7A00), // 强调：选中/激活（浅色底深橄榄石灰，与 error 暗红跨色相分离；白底对比 4.97，同系深色主题荧光绿的明度适配）
-  accentContrast: Color(0xFFFFF7F6),
-  accent2: Color(0xFF22335C),
-  success: Color(0xFF1E7A4E),
-  warning: Color(0xFF9A6D00),
-  error: Color(0xFFC0271B),
-  vizSpectrum: Color(0xFF5B7A00),
-  vizGrid: Color(0xFFE7E2D6),
+  bg: TokColor.auraLightBg,
+  panel: TokColor.auraLightPanel,
+  panelRaised: TokColor.auraLightPanelRaised,
+  hairline: TokColor.auraLightHairline,
+  text: TokColor.auraLightText,
+  textDim: TokColor.auraLightTextDim,
+  accent: TokColor.auraLightAccent, // 强调：选中/激活（浅色底深橄榄石灰，与 error 暗红跨色相分离；白底对比 4.97，同系深色主题荧光绿的明度适配）
+  accentContrast: TokColor.auraLightAccentContrast,
+  accent2: TokColor.auraLightAccent2,
+  success: TokColor.auraLightSuccess,
+  warning: TokColor.auraLightWarning,
+  error: TokColor.auraLightError,
+  vizSpectrum: TokColor.auraLightVizSpectrum,
+  vizGrid: TokColor.auraLightVizGrid,
 );
 
 const aurora = AuraPalette(
-  bg: Color(0xFF070B14),
-  panel: Color(0xFF0D1522),
-  panelRaised: Color(0xFF122036),
-  hairline: Color(0xFF1B2A44),
-  text: Color(0xFFDCE6F5),
-  textDim: Color(0xFF7C8CA6),
-  accent: Color(0xFF64F0DC), // 强调：选中/激活/频谱（深海底青；accent2 品红仅作第二点缀，不承载状态语义）
-  accentContrast: Color(0xFF04110E),
-  accent2: Color(0xFFFF5EA8),
-  success: Color(0xFF4FDE9E),
-  warning: Color(0xFFF0C24B),
-  error: Color(0xFFFF6B6B),
-  vizSpectrum: Color(0xFF64F0DC),
-  vizGrid: Color(0xFF142033),
+  bg: TokColor.auroraBg,
+  panel: TokColor.auroraPanel,
+  panelRaised: TokColor.auroraPanelRaised,
+  hairline: TokColor.auroraHairline,
+  text: TokColor.auroraText,
+  textDim: TokColor.auroraTextDim,
+  accent: TokColor.auroraAccent, // 强调：选中/激活/频谱（深海底青；accent2 品红仅作第二点缀，不承载状态语义）
+  accentContrast: TokColor.auroraAccentContrast,
+  accent2: TokColor.auroraAccent2,
+  success: TokColor.auroraSuccess,
+  warning: TokColor.auroraWarning,
+  error: TokColor.auroraError,
+  vizSpectrum: TokColor.auroraVizSpectrum,
+  vizGrid: TokColor.auroraVizGrid,
 );
 
 enum AuraThemeId { auraDark, auraLight, aurora }
@@ -107,7 +109,8 @@ extension AuraThemeIdX on AuraThemeId {
 }
 
 class AuraRadius {
-  static const xs = 4.0, sm = 6.0, md = 10.0, lg = 14.0;
+  static const xs = TokRadius.xs, sm = TokRadius.sm,
+      md = TokRadius.md, lg = TokRadius.lg;
 }
 
 /* ---- 字体族分工 ---- */
