@@ -65,18 +65,28 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
     m_busInfo.auxOutputBuses = static_cast<int>(info.auxOutputBuses);
     m_busInfo.mainInChannels = static_cast<int>(info.mainInChannels);
     m_busInfo.mainOutChannels = static_cast<int>(info.mainOutChannels);
-    /* E15（2026-10-22 实测重校准）：总延迟 = 插件自身延迟 + 1 个传输块。
-     * E9 跨模式一致性冒烟实测动态 onset delta = 128（健康 paced 流水下代理
-     * 帧首取块成功 → 恒定滞后 1 块），两模式逐位一致背书。F-7 当时的 +2 块
-     * 口径采信 R-1 的 544 实测，但该测量取得于 F-6 事件唤醒之前（宿主
-     * Sleep(1) 轮询、应答节奏慢 1 块）；post-F-6 现实下 +2 块过报 128 帧
-     * （PDC 过补偿 ~2.67ms）。
-     * E15（2026-10-23）：深度已改为**显式记账的不变量**（inFlight 恒属于
-     * {0,1}，见 m_inFlight）：E14 的直通块丢弃保证不涨到 2，本处 +1 块因此
-     * 是精确值而非经验值；status 的 maxInFlight/depthViolations 持续兜底
-     * （越界即上报失真，冒烟会报红）。
-     * 语义分层：getLatency() = 端到端总量（本公式，Dart UI/测试消费）；
-     * transportLatency() = 单块传输粒度 128（不变，UI 的分辨显示口径）。 */
+    /* E15（2026-10-23 v2）总延迟 = 插件自身延迟 + 传输延迟，其中**传输延迟
+     * 恒为 1 个回调 = N×128 帧**（N = 每次回调的传输块数 = 目标流水深）。
+     *
+     * 实测标定（ConvologyXT，48k，真实实时节流）：
+     *   回调块 128 → 传输 128（总 416）  256 → 256（544）
+     *   512 → 512（800）                1024 → 1024（1312）
+     * 上报与实测**误差全为 0**。
+     *
+     * 历史坑（两次假设都被推翻）：
+     *   - F-7 按 R-1 的 544 实测定 +2 块 → post-F-6 下过报（pre-F-6 宿主
+     *     Sleep(1) 轮询慢一块，那 544 是当时的时序产物）；
+     *   - 只看 128 帧回调会误以为「恒定 1 块」，但消费是帧到即取、一次调用
+     *     微秒级跑完——多块回调下宿主不可能在调用内产出，固定深度 1/2 都会
+     *     导致延迟随块大小漂移（512 帧实测 768）或大半干声。
+     * 故本值随块数在 processInterleaved 里重算；getLatencySlot 对进程外
+     * 槽取实时值。语义分层：transportLatency() = N×128（实际传输延迟，
+     * UI 显示口径），不再是固定 128。 */
+    // E15 v2：插件自身延迟单独记账；传输项 = 目标深度 × 块长（随回调块大小
+    // 自适应，见 processInterleaved 的块数变更分支）。
+    m_pluginLatency.store(info.latency, std::memory_order_release);
+    m_targetInFlight.store(1, std::memory_order_release);
+    // 首块前的保守口径：假设 128 帧回调（N=1）。首块后按实际块数重算。
     m_latency.store(info.latency + ipc::kTransportFrames,
                     std::memory_order_release);
 
@@ -150,13 +160,11 @@ void ProcessPluginProxy::copyBypass(float* const* inChannels, float* const* outC
     }
 }
 
-/* E15（2026-10-23）恒定流水深目标：1 块。
- * 旧实现无上限——宿主跟不上时输入环可涨到容量 16 块（实测 inFlight 峰
- * 值 16），而上报恒为 +1 块 → PDC 误差最多约 41ms，且队列越深湿声越滞后。
- * 现在：深度已满则本块**不提交**（直通），深度恒属于 {0,1}，+1 块上报
- * 恒精确。宿主算力不足时表现为直通而非隐性加深——这是实时处理器唯一
- * 诚实的取舍。 */
-constexpr uint32_t kTargetInFlight = 1;
+/* E15（2026-10-23 v2）确定性流水深 = 每次回调的传输块数 N。
+ * 见头文件 m_targetInFlight 注释：固定深度与「帧到即取」的消费模型不相容
+ * （N 块回调只能拿到深度个湿声块），实测延迟随 N 线性漂移。深度=N 时延迟
+ * 恒为 1 个回调，上报 = 插件延迟 + N×kTransportFrames 精确。
+ * 旧实现完全无上限：宿主跟不上时队列涨到环容量 16 块，上报仍写 +1 块。 */
 
 /* E15：取回一块输出 = 流水深度 -1（钳制不下溢——跨会话 residue 可能
  * 对不上旧提交）。 */
@@ -337,6 +345,21 @@ void ProcessPluginProxy::process(float* const* inChannels, float* const* outChan
 void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFrames,
                                              uint32_t channels, uint32_t mask) {
     if (!interleaved || numFrames == 0 || channels == 0) return;
+    /* E15 v2：目标深度 = 本次回调的传输块数（1..环容量）。块大小变更时
+     * 同步重算上报 latency = 插件延迟 + N×块长（延迟恒为 1 个回调）。
+     * 音频线程写、控制线程读 status/latency → release/acquire。 */
+    {
+        uint32_t chunks = (numFrames + ipc::kTransportFrames - 1) /
+                          ipc::kTransportFrames;
+        if (chunks == 0) chunks = 1;
+        if (chunks > ipc::kRingBlocks) chunks = ipc::kRingBlocks;
+        if (chunks != m_targetInFlight.load(std::memory_order_relaxed)) {
+            m_targetInFlight.store(chunks, std::memory_order_release);
+            m_latency.store(m_pluginLatency.load(std::memory_order_relaxed) +
+                                chunks * ipc::kTransportFrames,
+                            std::memory_order_release);
+        }
+    }
     if (channels > ipc::kChannels) channels = ipc::kChannels;
     mask &= (1u << channels) - 1u;
     if (!m_loaded.load(std::memory_order_acquire) ||
@@ -391,13 +414,15 @@ void ProcessPluginProxy::processInterleaved(float* interleaved, uint32_t numFram
              * 失败不计数（丢弃块的补位非流水数据）。 */
             /* E15：提交前守深度不变量（>1 结构上不可达——E14 保证带直通帧
              * 的块不提交，且下方硬上限只允许 0→1；此处仅作哨兵）。 */
-            if (m_inFlight.load(std::memory_order_relaxed) > kTargetInFlight) {
+            const uint32_t target =
+                m_targetInFlight.load(std::memory_order_relaxed);
+            if (m_inFlight.load(std::memory_order_relaxed) > target) {
                 m_depthViolations.fetch_add(1, std::memory_order_relaxed);
             }
             /* E15 硬上限：深度已满则本块不提交（直通）。宿主手上有活 →
              * 不会饿死，prime 也无需补位。 */
             const bool depthFull =
-                m_inFlight.load(std::memory_order_relaxed) >= kTargetInFlight;
+                m_inFlight.load(std::memory_order_relaxed) >= target;
             if (!m_blockHadPassthrough) {
                 if (depthFull) {
                     m_depthDrops.fetch_add(1, std::memory_order_relaxed);
@@ -461,6 +486,10 @@ void ProcessPluginProxy::setBypass(bool bypass) {
     if (m_client && m_loaded.load(std::memory_order_acquire)) {
         m_client->setBypass(static_cast<uint32_t>(m_slot), bypass);
     }
+}
+
+uint32_t ProcessPluginProxy::depthTarget() const {
+    return m_targetInFlight.load(std::memory_order_acquire);
 }
 
 uint32_t ProcessPluginProxy::getLatency() const {
