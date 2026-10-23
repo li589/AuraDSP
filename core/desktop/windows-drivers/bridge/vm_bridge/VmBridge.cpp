@@ -509,6 +509,13 @@ void DestroyEngines() {
     // 后台补齐线程会碰引擎句柄：先停并 join（代际递增使在途任务作废）。
     g_bgGen.fetch_add(1);
     StopBgThread();
+    // Z17：确定性等在途 BUFFER_OUT 块结束（含并行 fan-in——worker 持句柄
+    // process）。原 Sleep(50) 余量在重载下可能不够（块墙钟随插件成本涨），
+    // 升级为 rtInBlock 轮询；3s 上限防监控线程被拖死（极端野指针场景）。
+    for (int i = 0; i < 3000; ++i) {
+        if (InterlockedCompareExchange(&g_b.ctx.rtInBlock, 0, 0) == 0) break;
+        Sleep(1);
+    }
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         if (g_b.ctx.eng[g] && g_b.ctx.destroy) g_b.ctx.destroy(g_b.ctx.eng[g]);
         g_b.ctx.eng[g] = nullptr;
@@ -886,6 +893,9 @@ int vb_start(const char* engine_dll, const char* params_json) {
             g_b.eng = nullptr;
         }
     }
+    // Z17：组间并行 worker 池（引擎就绪即建；回调尚未 start，worker 静默）。
+    // 失败/单核/AURA_VM_PARALLEL=0 → parallelOn=0，泵走串行（逐位同义）。
+    vmcore::VmParallelInit(&g_b.ctx);
     ApplyParamsString(params_json);
     if (g_b.start() != 0) {
         snprintf(g_b.note, sizeof(g_b.note), "start-failed");
@@ -913,6 +923,9 @@ int vb_stop() {
     }
     if (g_b.stop) g_b.stop();
     FreeTestFile();
+    // Z17：先收 worker 池（内部等 RT 在途块归零——fan-in 期间 worker 持
+    // 引擎句柄 process，绝不能在它们还在跑时销毁句柄），再销毁引擎。
+    vmcore::VmParallelShutdown(&g_b.ctx);
     DestroyEngines();
     if (g_b.ctx.scratchIn) free(g_b.ctx.scratchIn);
     if (g_b.ctx.scratchOut) free(g_b.ctx.scratchOut);
@@ -998,6 +1011,7 @@ int vb_status(char* out, int cap) {
                      "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
                      "\"protect\":%d,\"cbEmaUs\":%ld,\"budgetUs\":%ld,"
                      "\"hotGrp\":%d,\"plugMask\":%d,"
+                     "\"parallel\":%d,\"workers\":%d,"
                      "\"peakGrp\":%s,\"maxGroupUs\":%s,\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
@@ -1012,8 +1026,11 @@ int vb_status(char* out, int cap) {
                       protOn, g_b.ctx.cbEmaUs, budgetUs,
                       protOn ? InterlockedCompareExchange(&g_protectHot, 0, 0)
                              : -1,
-                      InterlockedCompareExchange(&g_pluginGroupMask, 0, 0),
-                      peaks, maxG, g_b.edition, eng);
+                     InterlockedCompareExchange(&g_pluginGroupMask, 0, 0),
+                     (int)(InterlockedCompareExchange(&g_b.ctx.parallelOn, 0, 0) &&
+                           g_b.ctx.nWorkers > 0),
+                     (int)g_b.ctx.nWorkers,
+                     peaks, maxG, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
 }
@@ -1023,6 +1040,15 @@ int vb_set_param(const char* id, int isFloat, const void* v4) {
     if (!id || !v4 || !g_b.eng) return -2;
     auto setParam = (FnEngSetParam)GetProcAddress(g_b.eng, "auradsp_set_param");
     if (!setParam) return -3;
+    // Z17：桥级开关（非引擎参数，不进 MirrorSet 回放；worker 池跨 CHANGE
+    // 重建存活，无需回放）。语义同引擎 fan-out：返回生效的路数。
+    if (!isFloat && strcmp(id, "parallel.enable") == 0) {
+        const int on = *(const int32_t*)v4 ? 1 : 0;
+        if (on && g_b.ctx.nWorkers == 0) vmcore::VmParallelInit(&g_b.ctx);
+        InterlockedExchange(&g_b.ctx.parallelOn,
+                            (on && g_b.ctx.nWorkers > 0) ? 1 : 0);
+        return g_b.ctx.parallelOn ? g_b.ctx.nEng : 0;
+    }
     MirrorSet(id, isFloat != 0, v4);  // 重建后要靠它回放
     int ok = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {

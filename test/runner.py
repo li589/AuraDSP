@@ -88,6 +88,9 @@ def run_smoke_tests():
         # Z12 超预算自动保护门禁（2026-10-23）：注入观测值 → 收窄到热组 →
         # 回落自动恢复；手动改掩码立即取消；关保护不进入。App 占槽时让路。
         "smoke_vm_protect.py",
+        # Z17 组间并行处理门禁（2026-10-24）：串/并行双路位级对账 + 语义断言
+        # + 遥测相等 + 墙钟（8 组 × 250µs 假插件：并行 <60% 串行）。不依赖 VM 在线。
+        "smoke_vm_parallel.py",
     "smoke_apo_inspect.py",
     "smoke_apo_register.py",
     "smoke_apo_selftest.py",

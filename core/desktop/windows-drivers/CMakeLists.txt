@@ -91,6 +91,17 @@ target_compile_options(vm_pump_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_pump_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# Z17 组间并行验收：不链 auravm（不碰 02 冻结副本），直接包含共享头
+# VmPumpCore.h 驱动 OnVbCallback 串/并行双路对账（smoke_vm_parallel.py）。
+add_executable(vm_parallel_test
+    "${VMBRIDGE}/vm_parallel_test.cpp"
+)
+target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}")
+target_link_libraries(vm_parallel_test PRIVATE version)
+target_compile_options(vm_parallel_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vm_parallel_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vm_parallel_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
 )
