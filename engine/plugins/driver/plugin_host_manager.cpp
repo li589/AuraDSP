@@ -59,6 +59,34 @@ int processSlotGuarded(PluginHostManager::PluginSlot& s,
 #endif
 }
 
+/* F-8a（续）：processInterleaved 的 SEH/C++ 异常隔离，镜像 processSlotGuarded。
+ * MSVC C2712 限制（__try 不能在含析构对象的函数中）同样适用：processSlotInterleaved
+ * 拥有 InFlightGuard 与 accumulate lambda，直接放 __try 会编译错误，故独立
+ * 函数体。返回值 0 = 正常，1 = 捕获到插件异常（调用方据此自动旁观该槽）。
+ *
+ * 交错传输路径（remote 代理分支）此前直接调用 processInterleaved 且无任何
+ * 崩溃隔离：一次插件抛出即直杀音频线程。此处补齐与 processSlot 同构的
+ * 崩溃恢复：bypassed.store(true) + resetTelemetryGateSlot。 */
+int processInterleavedGuarded(PluginHostManager::PluginSlot& s,
+                               float* interleaved, uint32_t numFrames,
+                               uint32_t channels, uint32_t mask) {
+#if defined(_MSC_VER)
+    __try {
+        if (s.instance) s.instance->processInterleaved(interleaved, numFrames, channels, mask);
+        return 0;
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 1;
+    }
+#else
+    try {
+        if (s.instance) s.instance->processInterleaved(interleaved, numFrames, channels, mask);
+        return 0;
+    } catch (...) {
+        return 1;
+    }
+#endif
+}
+
 void quarantineAbandonedInstance(std::unique_ptr<IPluginInstance> inst) {
     static auto* s_leak = new std::vector<std::unique_ptr<IPluginInstance>>();
     static std::mutex s_leakMutex;
@@ -434,6 +462,11 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     s.processCalls.fetch_add(1, std::memory_order_relaxed);
     if (processSlotGuarded(s, inChannels, outChannels, numFrames) != 0) {
         s.bypassed.store(true, std::memory_order_release);
+        // F-8a：崩溃导致旁路，直写 bypass 绕过 setBypassSlot，故在此补齐
+        // resetTelemetryGateSlot —— 保证后续首个音频块刷新遥测，不读到崩溃
+        // 前的陈旧/脏值。与 setBypassSlot/unloadPluginSlotLocked/
+        // setInsertStageSlot/commitInstanceLocked 的重置行为统一。
+        resetTelemetryGateSlot(slot);
     }
 }
 
@@ -494,7 +527,12 @@ void PluginHostManager::processSlotInterleaved(size_t slot, float* interleaved,
         s.processCalls.fetch_add(1, std::memory_order_relaxed);
         if (s.hasActive.load(std::memory_order_acquire) &&
             !s.bypassed.load(std::memory_order_acquire)) {
-            s.instance->processInterleaved(interleaved, numFrames, channels, mask);
+            /* F-8a（续）：processInterleaved 崩溃 → 旁观 + 重置遥测门控，
+             * 镜像 processSlot 的 processSlotGuarded 崩溃恢复路径。 */
+            if (processInterleavedGuarded(s, interleaved, numFrames, channels, mask) != 0) {
+                s.bypassed.store(true, std::memory_order_release);
+                resetTelemetryGateSlot(slot);
+            }
         }
         if (sampleTelemetry) {
             for (uint32_t ch = 0; ch < channels; ++ch) {
