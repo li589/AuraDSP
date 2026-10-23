@@ -980,17 +980,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get channelMode => 'Channel Mode';
 
   @override
-  String get channelsStereo => 'Stereo';
+  String get channelsMatrix => 'Matrix downmix';
 
   @override
-  String get channels51 => '5.1';
-
-  @override
-  String get channels71 => '7.1';
+  String get channelsDiscrete => 'Discrete per-channel';
 
   @override
   String get channelPhaseA =>
-      'Phase A: matrix downmix envelope (ADR-003). True per-channel instances ship in Phase B.';
+      'Effective only for local 4/6/8-channel files: Matrix downmix = engine mixes to stereo before processing; Discrete = per-channel processing (pre-folded on stereo devices).';
 
   @override
   String get audioMode => 'Audio Mode';

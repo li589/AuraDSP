@@ -899,16 +899,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get channelMode => '声道模式';
 
   @override
-  String get channelsStereo => '立体声';
+  String get channelsMatrix => '矩阵下混';
 
   @override
-  String get channels51 => '5.1';
+  String get channelsDiscrete => '离散逐声道';
 
   @override
-  String get channels71 => '7.1';
-
-  @override
-  String get channelPhaseA => 'Phase A：矩阵下混包络（ADR-003），逐声道实例化将于 Phase B 提供。';
+  String get channelPhaseA =>
+      '仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。';
 
   @override
   String get audioMode => '音频模式';

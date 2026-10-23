@@ -908,17 +908,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get channelMode => 'チャンネルモード';
 
   @override
-  String get channelsStereo => 'ステレオ';
+  String get channelsMatrix => 'マトリクスダウンミックス';
 
   @override
-  String get channels51 => '5.1';
-
-  @override
-  String get channels71 => '7.1';
+  String get channelsDiscrete => 'チャンネル別処理';
 
   @override
   String get channelPhaseA =>
-      'Phase A：マトリクスダウンミックス（ADR-003）。チャンネル別インスタンスは Phase B で提供。';
+      'ローカルの 4/6/8ch ファイル再生時のみ有効：マトリクスダウンミックス＝エンジンがステレオに混合して処理。チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは事前折畳）。';
 
   @override
   String get audioMode => 'オーディオモード';

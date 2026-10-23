@@ -112,7 +112,8 @@ abstract final class SessionMemory {
         m.activePresetName = session['activePresetName'] as String;
       }
       if (session['channelsMode'] is num) {
-        m.channelsMode = (session['channelsMode'] as num).toInt();
+        // clamp 同 state_core 镜像路径：历史 UI 的非法 2（"7.1"）不得复苏
+        m.channelsMode = (session['channelsMode'] as num).toInt().clamp(0, 1);
       }
       if (session['audioMode'] is String) {
         m.audioMode = AudioModes.normalize(session['audioMode'] as String);
