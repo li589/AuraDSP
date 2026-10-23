@@ -46,6 +46,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbPluginLockedHint => 'バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）';
 
   @override
+  String get vbAutoProtect => '自動過負荷保護';
+
+  @override
+  String get vbProtectHint => 'コールバックが継続して予算超過のとき、プラグインを監視バスに自動絞り込みし、回復後に自動復帰';
+
+  @override
+  String get vbProtectActive => '作動中：プラグインは監視バスのみ、他はスルー（コールバック過負荷）';
+
+  @override
   String get shelfTitle => 'ローシェルフ';
 
   @override

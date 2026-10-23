@@ -37,6 +37,18 @@ extension VbAsioState on AppModel {
     _notifyUi();
   }
 
+  /// Z12 超预算自动保护开关：回调持续超预算时桥自动收窄插件到监听总线，
+  /// 回落后自动还原。关闭即纯手动（组开关照常可用）。
+  bool get vbAutoProtect => config.vbAutoProtect;
+
+  void setVbAutoProtect(bool on) {
+    if (config.vbAutoProtect == on) return;
+    config.vbAutoProtect = on;
+    ConfigManager.save(config);
+    _toIso?.send({'cmd': 'setPluginAutoProtect', 'on': on});
+    _notifyUi();
+  }
+
   /// 批处理：全部总线开/关插件链。
   void setVbPluginGroupAll(bool on) {
     final next = on ? 0xFF : 0x00;

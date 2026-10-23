@@ -15,6 +15,7 @@
 #include <cstring>
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <deque>
 #include <mutex>
@@ -101,17 +102,93 @@ static void* PluginEngineAt(int g) {
 // （ctx 会被 memset，CHANGE 重建不丢，重建后经 ApplyPluginGroupMask 重放）。
 static volatile LONG g_pluginGroupMask = 0xFF;
 
+// ---- Z12 超预算自动保护（2026-10-23）--------------------------------------
+// 症状：Ozone 12 级重插件逐组串行（每实例 ~0.76ms 均 / 2.33ms 峰 @128 帧），
+// N≥2 组即超预算（128 帧 @48k = 2.67ms）→ VM 回调持续欠载 → 必卡。
+// 机制：RT 回调尾部只写观测值（cbEmaUs/cbOverStreak，纯整数零等待）；
+// 后台补齐线程兼职守卫（500ms 轮询 ProtectTick）——超预算持续 ~170ms 即把
+// 有效掩码收窄到最热组（viz 跟随 = 用户大概率监听的总线），EMA 回落到 50%
+// 预算以下持续 6s 自动恢复用户掩码。用户手动改掩码 / 关保护立即让位。
+// 语义代价：保护期非热组插件链旁通（该总线直通，厂商 DSP 照常）——好于全
+// 总线爆音。单组版面 / 引擎无链开关时守卫自动失效。
+static volatile LONG g_autoProtect = 1;        // 用户开关（vb_plugin_auto_protect）
+static volatile LONG g_protectActive = 0;      // 1 = 已收窄到热组
+static volatile LONG g_protectHot = 0;         // 保护期放行的组
+static volatile LONG g_protectUnderWakes = 0;  // EMA<50% 连续轮询计数
+static volatile LONG g_protectManualAt = 0;    // 用户手动改掩码时刻（秒，冷却用）
+static const LONG kProtectEnterStreak = 64;    // 连续超限块数（@48k/128 ≈ 170ms）
+static const LONG kProtectEnterPct = 85;       // 进入阈值（EMA/预算 %）
+static const LONG kProtectExitWakes = 12;      // 12 × 500ms = 6s 低于 50% 才恢复
+
 // 把掩码下发到全部组引擎（引擎链级开关，原子布尔，RT 安全）。
 // 引擎 DLL 无链开关符号（旧版本）时静默跳过——掩码仍被记录，
 // 升级引擎后自然生效。不在 RT 线程调用（控制线程语义）。
+// Z12：自动保护激活时**有效掩码**收窄为仅热组（用户掩码 plugMask 原样保留，
+// 恢复即重放，不需要记住"保护前"状态）。
 static void ApplyPluginGroupMask() {
     if (!g_pluginFns.HasChainEnable()) return;
-    const int mask = InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+    int eff = InterlockedCompareExchange(&g_pluginGroupMask, 0, 0);
+    if (InterlockedCompareExchange(&g_protectActive, 0, 0)) {
+        eff = 1 << InterlockedCompareExchange(&g_protectHot, 0, 0);
+    }
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g]) {
-            g_pluginFns.chainSetEnabled(g_b.ctx.eng[g], (mask >> g) & 1);
+            g_pluginFns.chainSetEnabled(g_b.ctx.eng[g], (eff >> g) & 1);
         }
     }
+}
+
+// 引擎构建点调用：观测基准重算 + 保护态作废（热组/句柄可能已变）。
+static void InitProtectObs() {
+    LARGE_INTEGER qpf;
+    g_b.ctx.qpfInvUs =
+        (QueryPerformanceFrequency(&qpf) && qpf.QuadPart > 0)
+            ? 1000000.0 / (double)qpf.QuadPart
+            : 0.0;
+    InterlockedExchange(&g_b.ctx.cbEmaUs, 0);
+    InterlockedExchange(&g_b.ctx.cbOverStreak, 0);
+    InterlockedExchange(&g_b.ctx.protectTestMode, 0);
+    InterlockedExchange(&g_protectActive, 0);
+    InterlockedExchange(&g_protectUnderWakes, 0);
+}
+
+// 守卫一次轮询（后台补齐线程调用，非 RT）。所有引擎/链操作都在本线程，
+// RT 路径零新增成本。
+static void ProtectTick() {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return;
+    if (g_b.ctx.nEng <= 1) return;  // 单组无从收窄
+    if (!g_pluginFns.HasChainEnable()) return;
+    const long sr = g_b.ctx.sr, nbs = g_b.ctx.nbs;
+    if (sr <= 0 || nbs <= 0) return;
+    const long budgetUs = (long)((double)nbs * 1000000.0 / (double)sr);
+    const long ema = g_b.ctx.cbEmaUs;
+    const long streak = g_b.ctx.cbOverStreak;
+    if (InterlockedCompareExchange(&g_protectActive, 0, 0)) {
+        if (ema * 100 < budgetUs * 50) {
+            if (InterlockedIncrement(&g_protectUnderWakes) >=
+                kProtectExitWakes) {
+                InterlockedExchange(&g_protectActive, 0);
+                InterlockedExchange(&g_protectUnderWakes, 0);
+                ApplyPluginGroupMask();  // 恢复用户掩码
+            }
+        } else {
+            InterlockedExchange(&g_protectUnderWakes, 0);
+        }
+        return;
+    }
+    if (!InterlockedCompareExchange(&g_autoProtect, 0, 0)) return;
+    const ULONGLONG nowS = GetTickCount64() / 1000ULL;
+    if ((LONG)(nowS & 0x7FFFFFFF) - InterlockedCompareExchange(
+                                            &g_protectManualAt, 0, 0) < 60)
+        return;  // 用户手动接管后的 60s 冷却
+    if (streak < kProtectEnterStreak || ema * 100 <= budgetUs * kProtectEnterPct)
+        return;
+    int hot = g_b.ctx.vizStick;
+    if (hot < 0 || hot >= g_b.ctx.nEng) hot = 0;
+    InterlockedExchange(&g_protectHot, hot);
+    InterlockedExchange(&g_protectActive, 1);
+    InterlockedExchange(&g_protectUnderWakes, 0);
+    ApplyPluginGroupMask();
 }
 
 // ---- 后台组补齐（2026-10-23：挂载提速）-----------------------------------
@@ -192,24 +269,34 @@ static bool LoadGroupForSlot(int g, int slot, const char* path, const char* id) 
 static void GroupLoadWorker() {
     for (;;) {
         PendingGroupLoad job;
+        bool hasJob = false;
         {
             std::unique_lock<std::mutex> lk(g_bgMutex);
-            g_bgCv.wait(lk, [] { return g_bgStop || !g_bgJobs.empty(); });
+            // Z12：wait→wait_for(500ms)——本线程兼职超预算守卫（ProtectTick），
+            // 空闲也要周期醒来；有 job 时照常即时处理，守卫不抢加载活。
+            g_bgCv.wait_for(lk, std::chrono::milliseconds(500),
+                            [] { return g_bgStop || !g_bgJobs.empty(); });
             if (g_bgStop) return;
-            job = std::move(g_bgJobs.front());
-            g_bgJobs.pop_front();
+            if (!g_bgJobs.empty()) {
+                job = std::move(g_bgJobs.front());
+                g_bgJobs.pop_front();
+                hasJob = true;
+            }
         }
-        const int n = PluginEngineCount();
-        HANDLE thr = GetCurrentThread();
-        const int oldPrio = GetThreadPriority(thr);
-        // 同同步路径：加载是重 IO/内存操作，压低本线程让 RT 回调优先。
-        SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
-        for (int g = 1; g < n; ++g) {
-            if (g_bgGen.load(std::memory_order_acquire) != job.gen) break;
-            if (!GroupNeedsPlugin(g)) continue;   // 掩码外组不加载
-            LoadGroupForSlot(g, job.slot, job.path.c_str(), job.id.c_str());
+        if (hasJob) {
+            const int n = PluginEngineCount();
+            HANDLE thr = GetCurrentThread();
+            const int oldPrio = GetThreadPriority(thr);
+            // 同同步路径：加载是重 IO/内存操作，压低本线程让 RT 回调优先。
+            SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
+            for (int g = 1; g < n; ++g) {
+                if (g_bgGen.load(std::memory_order_acquire) != job.gen) break;
+                if (!GroupNeedsPlugin(g)) continue;   // 掩码外组不加载
+                LoadGroupForSlot(g, job.slot, job.path.c_str(), job.id.c_str());
+            }
+            SetThreadPriority(thr, oldPrio);
         }
-        SetThreadPriority(thr, oldPrio);
+        ProtectTick();
     }
 }
 
@@ -480,6 +567,10 @@ void RebuildEngines(int groups, float sr) {
             failed += f2;
         }
         // 新引擎出厂 = 链全开；按路掩码重放（未勾选组重新关闭）。
+        // Z12：观测基准重算 + 保护态作废（热组/句柄已变）；守卫线程需在场
+        // （与后台补齐同线程驱动），重建后 EnsureBgThread 补启。
+        InitProtectObs();
+        EnsureBgThread();
         ApplyPluginGroupMask();
     }
 }
@@ -804,7 +895,10 @@ int vb_start(const char* engine_dll, const char* params_json) {
     }
     g_b.monitor = CreateThread(nullptr, 0, MonitorProc, nullptr, 0, nullptr);
     InterlockedExchange(&g_b.running, 1);
-    // 启动后应用按路插件掩码（新引擎出厂 = 链全开，会话掩码覆盖之）
+    // 启动后应用按路插件掩码（新引擎出厂 = 链全开，会话掩码覆盖之）。
+    // Z12：观测基准 + 守卫线程就位（守卫与后台补齐同线程，启动即需在岗）。
+    InitProtectObs();
+    EnsureBgThread();
     ApplyPluginGroupMask();
     return 0;
 }
@@ -891,12 +985,19 @@ int vb_status(char* out, int cap) {
                  "[%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f,%.1f]", us[0], us[1],
                  us[2], us[3], us[4], us[5], us[6], us[7]);
     }
+    // Z12：预算（µs）与保护状态透出——UI 据此显示预算占用与保护横幅。
+    long budgetUs = 0;
+    if (g_b.ctx.sr > 0 && g_b.ctx.nbs > 0)
+        budgetUs = (long)((double)g_b.ctx.nbs * 1000000.0 / (double)g_b.ctx.sr);
+    const int protOn = InterlockedCompareExchange(&g_protectActive, 0, 0);
     int n = snprintf(out, (size_t)cap,
                      "{\"running\":%s,\"frames\":%llu,\"sr\":%ld,\"nbs\":%ld,"
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
                      "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
+                     "\"protect\":%d,\"cbEmaUs\":%ld,\"budgetUs\":%ld,"
+                     "\"hotGrp\":%d,\"plugMask\":%d,"
                      "\"peakGrp\":%s,\"maxGroupUs\":%s,\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
@@ -907,7 +1008,12 @@ int vb_status(char* out, int cap) {
                       (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
                       (int)(InterlockedCompareExchange(&g_b.ctx.busMask, 0, 0) &
                             0xFF),
-                      liveMask, peaks, maxG, g_b.edition, eng);
+                      liveMask,
+                      protOn, g_b.ctx.cbEmaUs, budgetUs,
+                      protOn ? InterlockedCompareExchange(&g_protectHot, 0, 0)
+                             : -1,
+                      InterlockedCompareExchange(&g_pluginGroupMask, 0, 0),
+                      peaks, maxG, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
 }
@@ -1278,6 +1384,17 @@ int vb_plugin_group_enable(int mask) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     mask &= 0xFF;
     const LONG oldMask = InterlockedExchange(&g_pluginGroupMask, (LONG)mask);
+    // Z12：用户手动接管——立即取消自动保护并冷却 60s（尊重手动意图，
+    // 免守卫与用户来回拉扯）。掩码未变化（no-op）不算接管：进桥时的
+    // 掩码同步、重复开关都不该把守卫挡在门外。
+    if (mask != (int)oldMask) {
+        if (InterlockedCompareExchange(&g_protectActive, 0, 0)) {
+            InterlockedExchange(&g_protectActive, 0);
+            InterlockedExchange(&g_protectUnderWakes, 0);
+        }
+        InterlockedExchange(&g_protectManualAt,
+                            (LONG)(GetTickCount64() / 1000ULL));
+    }
     ApplyPluginGroupMask();
     // 加速（2026-10-23）：新使能的组若已挂插件但该组实例尚缺（加载时被
     // 掩码跳过），后台补齐——否则该总线只有厂商 DSP、插件永远不生效。
@@ -1297,4 +1414,34 @@ int vb_plugin_slot_group_ready(int slot, int group) {
     return (g_grpLoaded[group].load(std::memory_order_acquire) & (1u << slot))
                ? 1
                : 0;
+}
+
+// ---- Z12 超预算自动保护：用户开关 + 测试注入口 ----
+// on < 0 = 查询；否则置位。关闭时若保护已激活，立即恢复用户掩码。
+int vb_plugin_auto_protect(int on) {
+    if (on < 0) return InterlockedCompareExchange(&g_autoProtect, 0, 0);
+    InterlockedExchange(&g_autoProtect, on ? 1 : 0);
+    if (!on && InterlockedCompareExchange(&g_protectActive, 0, 0)) {
+        InterlockedExchange(&g_protectActive, 0);
+        InterlockedExchange(&g_protectUnderWakes, 0);
+        ApplyPluginGroupMask();
+    }
+    return InterlockedCompareExchange(&g_autoProtect, 0, 0);
+}
+
+// 测试注入（smoke_vm_protect.py）：直接喂守卫观测值。protectTestMode=1 时
+// RT 停更 cbEmaUs/cbOverStreak，守卫线程按注入值判定。overStreak < 0 =
+// 退出测试模式并清零观测（恢复 RT 自更新）。须桥已 start。
+int vb_protect_test(int emaUs, int overStreak) {
+    if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
+    if (overStreak < 0) {
+        InterlockedExchange(&g_b.ctx.protectTestMode, 0);
+        InterlockedExchange(&g_b.ctx.cbEmaUs, 0);
+        InterlockedExchange(&g_b.ctx.cbOverStreak, 0);
+        return 1;
+    }
+    InterlockedExchange(&g_b.ctx.protectTestMode, 1);
+    InterlockedExchange(&g_b.ctx.cbEmaUs, (LONG)emaUs);
+    InterlockedExchange(&g_b.ctx.cbOverStreak, (LONG)overStreak);
+    return 1;
 }

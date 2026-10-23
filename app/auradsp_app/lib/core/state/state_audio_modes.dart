@@ -47,6 +47,7 @@ extension AudioModesState on AppModel {
       if (isVb) {
         _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
         _toIso?.send({'cmd': 'setPluginGroupMask', 'mask': vbPluginGroupMask});
+        _toIso?.send({'cmd': 'setPluginAutoProtect', 'on': config.vbAutoProtect});
       }
       _toIso?.send({'cmd': 'vbmode', 'on': isVb});
       if (!isVb) {
