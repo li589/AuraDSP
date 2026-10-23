@@ -9,6 +9,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../core/nav.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -803,23 +804,31 @@ class _StageStereoMeter extends StatelessWidget {
     // 未知或非法 stage 索引：不画表
     if (meterIndex < 0) return const SizedBox.shrink();
     final p = paletteOf(context);
-    return ListenableBuilder(
-      listenable: Listenable.merge([model.stageLevelsL, model.stageLevelsR]),
-      builder: (ctx, _) {
-        final levelsL = model.stageLevelsL.value;
-        final levelsR = model.stageLevelsR.value;
-        final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
-            ? levelsL[meterIndex]
-            : -120.0;
-        final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
-            ? levelsR[meterIndex]
-            : -120.0;
+    // R2（2026-10-23）：chain 页离屏时不订阅 30fps 逐级电平
+    // （IndexedStack 保活 = 本页仍在树上）。回页即恢复。
+    return ValueListenableBuilder<AppPage>(
+      valueListenable: model.visiblePage,
+      builder: (ctx, page, _) {
+        if (page != AppPage.chain) return const SizedBox.shrink();
+        return ListenableBuilder(
+          listenable: Listenable.merge([model.stageLevelsL, model.stageLevelsR]),
+          builder: (ctx, _) {
+            final levelsL = model.stageLevelsL.value;
+            final levelsR = model.stageLevelsR.value;
+            final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
+                ? levelsL[meterIndex]
+                : -120.0;
+            final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
+                ? levelsR[meterIndex]
+                : -120.0;
 
-        // 硬件合成器分段 LED 电平表（双声道支持，可扩展多通道）
-        return _SynthLedLadderMeter(
-          channelsDb: [dbL, dbR],
-          isEnabled: isEnabled,
-          palette: p,
+            // 硬件合成器分段 LED 电平表（双声道支持，可扩展多通道）
+            return _SynthLedLadderMeter(
+              channelsDb: [dbL, dbR],
+              isEnabled: isEnabled,
+              palette: p,
+            );
+          },
         );
       },
     );

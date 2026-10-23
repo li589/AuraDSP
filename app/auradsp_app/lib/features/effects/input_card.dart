@@ -268,21 +268,28 @@ class _InputStageMeterMatrix extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: Listenable.merge([
-        model.inputMeterInL,
-        model.inputMeterInR,
-        model.inputMeterOutL,
-        model.inputMeterOutR,
-      ]),
-      builder: (context, _) {
-        final inL = model.inputMeterInL.value;
-        final inR = model.inputMeterInR.value;
-        final outL = model.inputMeterOutL.value;
-        final outR = model.inputMeterOutR.value;
+    // R2（2026-10-23）：effects 页离屏时不订阅 30fps 输入/输出电平
+    // （IndexedStack 保活 = 本页仍在树上）。回页即恢复。
+    return ValueListenableBuilder<AppPage>(
+      valueListenable: model.visiblePage,
+      builder: (context, page, _) {
+        if (page != AppPage.effects) return const SizedBox.shrink();
+        return ListenableBuilder(
+          listenable: Listenable.merge([
+            model.inputMeterInL,
+            model.inputMeterInR,
+            model.inputMeterOutL,
+            model.inputMeterOutR,
+          ]),
+          builder: (context, _) {
+            final inL = model.inputMeterInL.value;
+            final inR = model.inputMeterInR.value;
+            final outL = model.inputMeterOutL.value;
+            final outR = model.inputMeterOutR.value;
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+            return Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
           decoration: BoxDecoration(
             color: palette.panelRaised.withValues(alpha: 0.6),
             borderRadius: BorderRadius.circular(AuraRadius.sm),
@@ -329,6 +336,8 @@ class _InputStageMeterMatrix extends StatelessWidget {
             ],
           ),
         );
+      },
+    );
       },
     );
   }

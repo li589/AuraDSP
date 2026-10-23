@@ -649,7 +649,12 @@ class _ComponentLatencyBadgeState extends State<ComponentLatencyBadge>
 class LevelMeter extends StatelessWidget {
   final ValueListenable<double> level;
   final String label;
-  const LevelMeter({super.key, required this.level, required this.label});
+  /// R2（2026-10-23）：false = 宿主页离屏（IndexedStack 保活），不订阅
+  /// level 通知器——离屏页不随 30fps 数据重建（SDK 实证离屏子节点仍参与
+  /// layout）。回页时父级以 active=true 重建，自然恢复订阅。
+  final bool active;
+  const LevelMeter(
+      {super.key, required this.level, required this.label, this.active = true});
 
   @override
   Widget build(BuildContext context) {
@@ -662,26 +667,41 @@ class LevelMeter extends StatelessWidget {
         ),
         const SizedBox(width: AuraSpace.sm),
         Expanded(
-          child: ValueListenableBuilder<double>(
-            valueListenable: level,
-            builder: (_, db, _) {
-              final n = ((db + 60) / 60).clamp(0.0, 1.0);
-              // P0-3：电平表每秒重绘，隔离重绘区（不带累父级）。
-              return RepaintBoundary(
-                child: SizedBox(
-                  height: 8,
-                  child: CustomPaint(
-                    size: const Size(double.infinity, 8),
-                    painter: _MeterPainter(
-                      value: n,
-                      track: p.hairline,
-                      fill: db > -3 ? p.error : p.accent,
+          // 离屏：静态空轨（无 VLB 订阅）；可见：实时订阅。
+          child: active
+              ? ValueListenableBuilder<double>(
+                  valueListenable: level,
+                  builder: (_, db, _) {
+                    final n = ((db + 60) / 60).clamp(0.0, 1.0);
+                    // P0-3：电平表每秒重绘，隔离重绘区（不带累父级）。
+                    return RepaintBoundary(
+                      child: SizedBox(
+                        height: 8,
+                        child: CustomPaint(
+                          size: const Size(double.infinity, 8),
+                          painter: _MeterPainter(
+                            value: n,
+                            track: p.hairline,
+                            fill: db > -3 ? p.error : p.accent,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                )
+              : RepaintBoundary(
+                  child: SizedBox(
+                    height: 8,
+                    child: CustomPaint(
+                      size: const Size(double.infinity, 8),
+                      painter: _MeterPainter(
+                        value: 0,
+                        track: p.hairline,
+                        fill: p.accent,
+                      ),
                     ),
                   ),
                 ),
-              );
-            },
-          ),
         ),
       ],
     );
