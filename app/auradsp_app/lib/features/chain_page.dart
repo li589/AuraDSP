@@ -686,12 +686,15 @@ class _PluginSlotChainCard extends StatelessWidget {
               visualDensity: VisualDensity.compact,
             ),
             const SizedBox(width: AuraSpace.xs),
-            // 旁路开关
+            // 旁路开关（切换在途：spinner 替代文字 + 禁点）
             AuraChip(
               isBypassed ? l10nOf(context).chainBypassed : l10nOf(context).chainActive,
               selected: !isBypassed,
               danger: isBypassed,
-              onTap: () => manager.toggleBypass(slot: slot),
+              busy: manager.isSlotBypassPending(slot),
+              onTap: manager.isSlotBypassPending(slot)
+                  ? null
+                  : () => manager.toggleBypass(slot: slot),
             ),
           ],
         ],
