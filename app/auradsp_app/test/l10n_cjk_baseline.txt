@@ -19,4 +19,4 @@ lib/features/effects/reverb_card.dart 6
 lib/features/effects/spatial_card.dart 5
 lib/features/effects/stereo_card.dart 1
 lib/features/effects/tube_card.dart 5
-lib/features/settings/panels/hardware_io.dart 30
+lib/features/settings/panels/hardware_io.dart 2

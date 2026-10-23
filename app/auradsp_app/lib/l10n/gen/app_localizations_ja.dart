@@ -405,6 +405,91 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpDocBuiltinChannels => '• チャンネル：spl0（L 入出力）、spl1（R 入出力）';
 
   @override
+  String get ioNoInputDevices => '利用可能な入力デバイスがありません';
+
+  @override
+  String get ioRefreshDevice => 'デバイスを更新';
+
+  @override
+  String get ioLoopbackDesc => '既定のループバックモード：システムのメイン再生エンドポイントをリアルタイムに取り込みます';
+
+  @override
+  String get ioExclusiveDesc => '選択したハードウェア/仮想ポートから低レイテンシの WASAPI 排他/共有キャプチャ';
+
+  @override
+  String get ioInputLabel => '入力エンドポイント';
+
+  @override
+  String get ioVaioEndpointDesc => 'AuraVAIO 仮想入力エンドポイント（Stereo / 7.1 ch）';
+
+  @override
+  String get ioChannelStatus => 'チャンネル状態';
+
+  @override
+  String get ioVaioActive => '転送中（全二重 DMA リングバッファ）';
+
+  @override
+  String get ioVaioReady => '準備完了（システム/アプリのストリーム待ち）';
+
+  @override
+  String get ioVaioGuide =>
+      'Windows のサウンド設定やプレーヤーで既定の出力を「AuraVAIO」に設定すると、音声はこの仮想入力から AuraDSP パイプラインへ送られます。';
+
+  @override
+  String get ioAsioChannelLabel => '入力チャンネル';
+
+  @override
+  String get ioAsioActive => 'DAW ライブ注入（動作中）';
+
+  @override
+  String get ioAsioWait => 'DAW 接続待ち（ホスト未起動）';
+
+  @override
+  String get ioAsioGuide =>
+      'DAW（FL Studio / Cubase / Reaper / Ableton）の Audio Device で「AuraDSP Virtual ASIO」を選択すると、プロジェクトの音声がここにルーティングされます。';
+
+  @override
+  String get ioWasapiRenderDesc => 'WASAPI 物理レンダリング（スピーカー/ヘッドホン）';
+
+  @override
+  String get ioNoOutputDevices => '利用可能な出力デバイスがありません';
+
+  @override
+  String get ioPhysicalOutput => '物理出力';
+
+  @override
+  String get ioAutoSelect => '自動選択（非 VAIO スピーカー）';
+
+  @override
+  String get ioNoPhysicalOutputs => '利用可能な物理出力デバイスがありません';
+
+  @override
+  String get ioProcessedFrames => '処理済みフレーム';
+
+  @override
+  String get ioOutputLabel => '出力エンドポイント';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client ハードウェア出力';
+
+  @override
+  String get ioChannelMap => 'チャンネルマッピング';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return 'チャンネル $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => '出力状態';
+
+  @override
+  String get ioAsioPassthrough => 'ハードウェア直通モニタリング中（超低レイテンシ）';
+
+  @override
+  String get ioAsioReadyStatus => '準備完了（ドライバーセッション待ち）';
+
+  @override
   String get noAvailableDevice => '利用可能なデバイスなし';
 
   @override

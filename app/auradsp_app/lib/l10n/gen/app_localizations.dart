@@ -820,6 +820,168 @@ abstract class AppLocalizations {
   /// **'• 声道：spl0 (左输入/输出), spl1 (右输入/输出)'**
   String get lpDocBuiltinChannels;
 
+  /// No description provided for @ioNoInputDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用输入设备'**
+  String get ioNoInputDevices;
+
+  /// No description provided for @ioRefreshDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新设备'**
+  String get ioRefreshDevice;
+
+  /// No description provided for @ioLoopbackDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认内录/环回模式：实时采集系统主回放端点音频'**
+  String get ioLoopbackDesc;
+
+  /// No description provided for @ioExclusiveDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集'**
+  String get ioExclusiveDesc;
+
+  /// No description provided for @ioInputLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入端点'**
+  String get ioInputLabel;
+
+  /// No description provided for @ioVaioEndpointDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)'**
+  String get ioVaioEndpointDesc;
+
+  /// No description provided for @ioChannelStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道状态'**
+  String get ioChannelStatus;
+
+  /// No description provided for @ioVaioActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'活跃传输中 (全双工 DMA 环形缓冲)'**
+  String get ioVaioActive;
+
+  /// No description provided for @ioVaioReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'就绪 (等待系统/应用推流)'**
+  String get ioVaioReady;
+
+  /// No description provided for @ioVaioGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。'**
+  String get ioVaioGuide;
+
+  /// No description provided for @ioAsioChannelLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入通道'**
+  String get ioAsioChannelLabel;
+
+  /// No description provided for @ioAsioActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'DAW 实时注入 (活跃)'**
+  String get ioAsioActive;
+
+  /// No description provided for @ioAsioWait.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待 DAW 连接 (宿主未开启)'**
+  String get ioAsioWait;
+
+  /// No description provided for @ioAsioGuide.
+  ///
+  /// In zh, this message translates to:
+  /// **'在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 \"AuraDSP Virtual ASIO\" 即可将工程音频路由至此。'**
+  String get ioAsioGuide;
+
+  /// No description provided for @ioWasapiRenderDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'WASAPI 物理渲染 (扬声器/耳机)'**
+  String get ioWasapiRenderDesc;
+
+  /// No description provided for @ioNoOutputDevices.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用输出设备'**
+  String get ioNoOutputDevices;
+
+  /// No description provided for @ioPhysicalOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'物理输出'**
+  String get ioPhysicalOutput;
+
+  /// No description provided for @ioAutoSelect.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动选择（非VAIO扬声器）'**
+  String get ioAutoSelect;
+
+  /// No description provided for @ioNoPhysicalOutputs.
+  ///
+  /// In zh, this message translates to:
+  /// **'无可用物理输出设备'**
+  String get ioNoPhysicalOutputs;
+
+  /// No description provided for @ioProcessedFrames.
+  ///
+  /// In zh, this message translates to:
+  /// **'已处理帧'**
+  String get ioProcessedFrames;
+
+  /// No description provided for @ioOutputLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出端点'**
+  String get ioOutputLabel;
+
+  /// No description provided for @ioAsioHwOutput.
+  ///
+  /// In zh, this message translates to:
+  /// **'AuraDSP ASIO Client 硬件输出'**
+  String get ioAsioHwOutput;
+
+  /// No description provided for @ioChannelMap.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道映射'**
+  String get ioChannelMap;
+
+  /// No description provided for @ioChannelPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'通道 {p1} / {p2}'**
+  String ioChannelPair(int p1, int p2);
+
+  /// No description provided for @ioOutputStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出状态'**
+  String get ioOutputStatus;
+
+  /// No description provided for @ioAsioPassthrough.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在直通硬件监听 (超低延迟)'**
+  String get ioAsioPassthrough;
+
+  /// No description provided for @ioAsioReadyStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'就绪 (等待驱动会话)'**
+  String get ioAsioReadyStatus;
+
   /// No description provided for @noAvailableDevice.
   ///
   /// In zh, this message translates to:

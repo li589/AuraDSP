@@ -216,7 +216,7 @@ class _WasapiInputSubpanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: inputs.isEmpty ? '无可用输入设备' : null,
+                hint: inputs.isEmpty ? l.ioNoInputDevices : null,
                 onChanged: (v) {
                   if (v != null) model.setPipelineInputDevice(v);
                 },
@@ -224,7 +224,7 @@ class _WasapiInputSubpanel extends StatelessWidget {
             ),
             const SizedBox(width: AuraSpace.xs),
             AuraChip(
-              '刷新设备',
+              l.ioRefreshDevice,
               icon: Icons.refresh_rounded,
               onTap: () => model.refreshAudioDevices(),
             ),
@@ -232,9 +232,7 @@ class _WasapiInputSubpanel extends StatelessWidget {
         ),
         const SizedBox(height: 4),
         Text(
-          curDev.isEmpty
-              ? '默认内录/环回模式：实时采集系统主回放端点音频'
-              : '针对指定硬件/虚拟端口进行低延迟 WASAPI 独占/共享采集',
+          curDev.isEmpty ? l.ioLoopbackDesc : l.ioExclusiveDesc,
           style: monoOf(p, size: 10, color: p.textDim),
         ),
       ],
@@ -250,15 +248,16 @@ class _VaioInputSubpanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final active = model.vaioActive;
+    final l = l10nOf(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow('输入端点', 'AuraVAIO 虚拟输入端点 (Stereo / 7.1 ch)'),
-        _InfoRow('通道状态', active ? '活跃传输中 (全双工 DMA 环形缓冲)' : '就绪 (等待系统/应用推流)'),
+        _InfoRow(l.ioInputLabel, l.ioVaioEndpointDesc),
+        _InfoRow(l.ioChannelStatus, active ? l.ioVaioActive : l.ioVaioReady),
         const SizedBox(height: 2),
         Text(
-          '请在 Windows 声音设置或播放器中将默认输出选择为 "AuraVAIO"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。',
+          l.ioVaioGuide,
           style: monoOf(p, size: 10, color: p.textDim),
         ),
       ],
@@ -274,15 +273,16 @@ class _VirtualAsioInputSubpanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final active = model.asioActive;
+    final l = l10nOf(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _InfoRow('输入端点', 'AuraDSP Virtual ASIO Client Stream'),
-        _InfoRow('输入通道', active ? 'DAW 实时注入 (活跃)' : '等待 DAW 连接 (宿主未开启)'),
+        _InfoRow(l.ioAsioChannelLabel, active ? l.ioAsioActive : l.ioAsioWait),
         const SizedBox(height: 2),
         Text(
-          '在 DAW (FL Studio / Cubase / Reaper / Ableton) 的 Audio Device 中选择 "AuraDSP Virtual ASIO" 即可将工程音频路由至此。',
+          l.ioAsioGuide,
           style: monoOf(p, size: 10, color: p.textDim),
         ),
       ],
@@ -382,7 +382,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow(l.outputWasapi, 'WASAPI 物理渲染 (扬声器/耳机)'),
+        _InfoRow(l.outputWasapi, l.ioWasapiRenderDesc),
         const SizedBox(height: AuraSpace.xs),
         Row(
           children: [
@@ -467,7 +467,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: outputs.isEmpty ? '无可用输出设备' : null,
+                hint: outputs.isEmpty ? l.ioNoOutputDevices : null,
                 onChanged: (v) {
                   if (v != null) model.setPipelineOutputDevice(v);
                 },
@@ -570,7 +570,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
           Row(children: [
             SizedBox(
                 width: 104,
-                child: Text('物理输出',
+                child: Text(l.ioPhysicalOutput,
                     style: labelOf(p, size: 12, color: p.textDim))),
             Expanded(
               child: AuraDropdown<String>(
@@ -585,7 +585,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
                             color: curEndpoint.isEmpty ? p.accent : p.textDim),
                         const SizedBox(width: 8),
                         Expanded(
-                          child: Text('自动选择（非VAIO扬声器）',
+                          child: Text(l.ioAutoSelect,
                               style: TextStyle(
                                   fontSize: 12,
                                   color: curEndpoint.isEmpty
@@ -642,7 +642,7 @@ class _VaioOutputSubpanel extends StatelessWidget {
                       ),
                     ),
                 ],
-                hint: endpoints.isEmpty ? '无可用物理输出设备' : null,
+                hint: endpoints.isEmpty ? l.ioNoPhysicalOutputs : null,
                 onChanged: (v) {
                   if (v != null) model.setVaioOutputEndpoint(v);
                 },
@@ -659,10 +659,10 @@ class _VaioOutputSubpanel extends StatelessWidget {
             if (info['sr'] is num)
               _InfoRow(l.sampleRate, '${(info['sr'] as num).toInt()} Hz / 2 ch'),
             if (info['frames'] is num)
-              _InfoRow('已处理帧', '${(info['frames'] as num).toInt()} frames'),
+              _InfoRow(l.ioProcessedFrames, '${(info['frames'] as num).toInt()} frames'),
             if (info['outputEndpoint'] is String &&
                 (info['outputEndpoint'] as String).isNotEmpty)
-              _InfoRow('输出端点', '${info['outputEndpoint']}'),
+              _InfoRow(l.ioOutputLabel, '${info['outputEndpoint']}'),
           ],
         ],
       ),
@@ -677,14 +677,16 @@ class _AsioClientOutputSubpanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = model.asioActive;
+    final l = l10nOf(context);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow('输出端点', 'AuraDSP ASIO Client 硬件输出'),
-        _InfoRow('声道映射',
-            '通道 ${model.config.asioOutPair * 2 + 1} / ${model.config.asioOutPair * 2 + 2}'),
-        _InfoRow('输出状态', active ? '正在直通硬件监听 (超低延迟)' : '就绪 (等待驱动会话)'),
+        _InfoRow(l.ioOutputLabel, l.ioAsioHwOutput),
+        _InfoRow(l.ioChannelMap,
+            l.ioChannelPair(model.config.asioOutPair * 2 + 1,
+                model.config.asioOutPair * 2 + 2)),
+        _InfoRow(l.ioOutputStatus, active ? l.ioAsioPassthrough : l.ioAsioReadyStatus),
       ],
     );
   }

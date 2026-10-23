@@ -429,6 +429,96 @@ class AppLocalizationsEn extends AppLocalizations {
       '• Channels: spl0 (L in/out), spl1 (R in/out)';
 
   @override
+  String get ioNoInputDevices => 'No input devices available';
+
+  @override
+  String get ioRefreshDevice => 'Refresh devices';
+
+  @override
+  String get ioLoopbackDesc =>
+      'Default loopback mode: captures the system main playback endpoint in real time';
+
+  @override
+  String get ioExclusiveDesc =>
+      'Low-latency WASAPI exclusive/shared capture from the selected hardware/virtual port';
+
+  @override
+  String get ioInputLabel => 'Input endpoint';
+
+  @override
+  String get ioVaioEndpointDesc =>
+      'AuraVAIO virtual input endpoint (Stereo / 7.1 ch)';
+
+  @override
+  String get ioChannelStatus => 'Channel status';
+
+  @override
+  String get ioVaioActive => 'Active (full-duplex DMA ring buffer)';
+
+  @override
+  String get ioVaioReady => 'Ready (waiting for system/app stream)';
+
+  @override
+  String get ioVaioGuide =>
+      'In Windows Sound settings or your player, set the default output to \"AuraVAIO\"; audio then enters the AuraDSP pipeline via this virtual input.';
+
+  @override
+  String get ioAsioChannelLabel => 'Input channels';
+
+  @override
+  String get ioAsioActive => 'DAW live injection (active)';
+
+  @override
+  String get ioAsioWait => 'Waiting for DAW connection (host off)';
+
+  @override
+  String get ioAsioGuide =>
+      'In your DAW (FL Studio / Cubase / Reaper / Ableton) select \"AuraDSP Virtual ASIO\" as Audio Device to route project audio here.';
+
+  @override
+  String get ioWasapiRenderDesc =>
+      'WASAPI physical render (speakers/headphones)';
+
+  @override
+  String get ioNoOutputDevices => 'No output devices available';
+
+  @override
+  String get ioPhysicalOutput => 'Physical output';
+
+  @override
+  String get ioAutoSelect => 'Auto select (non-VAIO speaker)';
+
+  @override
+  String get ioNoPhysicalOutputs => 'No physical output devices available';
+
+  @override
+  String get ioProcessedFrames => 'Frames processed';
+
+  @override
+  String get ioOutputLabel => 'Output endpoint';
+
+  @override
+  String get ioAsioHwOutput => 'AuraDSP ASIO Client hardware output';
+
+  @override
+  String get ioChannelMap => 'Channel mapping';
+
+  @override
+  String ioChannelPair(int p1, int p2) {
+    return 'Channel $p1 / $p2';
+  }
+
+  @override
+  String get ioOutputStatus => 'Output status';
+
+  @override
+  String get ioAsioPassthrough =>
+      'Hardware passthrough monitoring (ultra-low latency)';
+
+  @override
+  String get ioAsioReadyStatus => 'Ready (waiting for driver session)';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override
