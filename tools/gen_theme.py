@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """gen_theme.py — 设计令牌生成器（P2-1，2026-10-23）
 
-真相源：design/tokens/aura.tokens.json（W3C Design Tokens）
+真相源：app/auradsp_app/design/tokens/aura.tokens.json（W3C Design Tokens）
 产出：  app/auradsp_app/lib/core/tokens.g.dart（**生成物，勿手改**）
 
 用法：
@@ -18,7 +18,7 @@ import os
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-SRC = os.path.join(ROOT, "design", "tokens", "aura.tokens.json")
+SRC = os.path.join(ROOT, "app", "auradsp_app", "design", "tokens", "aura.tokens.json")
 OUT = os.path.join(ROOT, "app", "auradsp_app", "lib", "core", "tokens.g.dart")
 
 PALETTES = {"aura-dark": "auraDark", "aura-light": "auraLight", "aurora": "aurora"}
@@ -87,7 +87,7 @@ def curve_expr(name, v):
 def build(tokens):
     L = []
     L.append("// GENERATED FILE — DO NOT EDIT BY HAND.")
-    L.append("// 源: design/tokens/aura.tokens.json")
+    L.append("// 源: app/auradsp_app/design/tokens/aura.tokens.json")
     L.append("// 生成: python tools/gen_theme.py（改 JSON 后必须重跑）")
     L.append("// 漂移防线: test/tokens_parity_test.dart（JSON vs 运行时常量逐项比对）")
     L.append("")

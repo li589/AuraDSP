@@ -125,7 +125,7 @@
 | `docs/forensics/` | Android 取证原始材料（dumpsys / audio_effects.xml / tombstone / jdsp live log） | **原始证据，勿删勿改**；结论见各自目录内的报告 |
 | `docs/ui-redesign/` | UI 迭代截图（含像素差分基线） | `test/ui/ui_assert.py` 的差分基线来源 |
 | `docs/参考技术手册/` | 第三方参考手册区（Microsoft WDK/Win32/UWP/MSVC/WSL、Steinberg ASIO、android_guides_cn，约 220 MB） | **本地只读，仅 README 清单入库**（PDF 体积大 + Microsoft/Steinberg 未授权公开镜像再分发）；清单与登记规则见 [参考技术手册/README.md](参考技术手册/README.md) |
-| `design/tokens/aura.tokens.json` | 三套主题（aura-dark / aura-light / aurora）的 W3C Design Token | 由 `lib/core/theme.dart` 消费 |
+| `app/auradsp_app/design/tokens/aura.tokens.json` | 三套主题（aura-dark / aura-light / aurora）的 W3C Design Token | 由 `lib/core/theme.dart` 消费 |
 
 ## 5. 文档维护约定
 

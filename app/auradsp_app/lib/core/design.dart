@@ -1,7 +1,7 @@
 /*
  * design.dart — 设计令牌的代码侧落地（间距 / 节奏 / 动效 / 排版尺度）
  *
- * 真相源：design/tokens/aura.tokens.json（W3C Design Tokens 结构）。
+ * 真相源：app/auradsp_app/design/tokens/aura.tokens.json（W3C Design Tokens 结构）。
  * 本文件只放常量与样式构造函数，不持有任何 widget，供 features/ 统一取用。
  *
  * 铁律：

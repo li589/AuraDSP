@@ -1,7 +1,7 @@
 /*
  * tokens_parity_test.dart — 设计令牌漂移防线（P2-1，2026-10-23）
  *
- * 真相源：design/tokens/aura.tokens.json
+ * 真相源：app/auradsp_app/design/tokens/aura.tokens.json
  * 消费方：lib/core/tokens.g.dart（由 tools/gen_theme.py 生成）
  * 运行时常量：AuraPalette / AuraSpace / AuraSize / AuraRadius / AuraDur / AuraCurve
  *
@@ -28,7 +28,7 @@ double _px(dynamic v) =>
     double.parse(v.toString().trim().replaceAll(RegExp(r'(px|ms)$'), ''));
 
 void main() {
-  final file = File('../../design/tokens/aura.tokens.json');
+  final file = File('design/tokens/aura.tokens.json');
   final Map<String, dynamic> tokens =
       jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
 
