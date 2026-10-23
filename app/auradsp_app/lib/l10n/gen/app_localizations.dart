@@ -4762,6 +4762,12 @@ abstract class AppLocalizations {
   /// **'生效中'**
   String get chainActive;
 
+  /// No description provided for @plugPartialBypass.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分旁路'**
+  String get plugPartialBypass;
+
   /// No description provided for @chainBypass.
   ///
   /// In zh, this message translates to:

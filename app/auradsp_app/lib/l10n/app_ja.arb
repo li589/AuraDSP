@@ -1069,6 +1069,7 @@
   },
   "plugSlotNoFx": "エフェクト未マウント",
   "chainActive": "有効中",
+  "plugPartialBypass": "部分バイパス",
   "chainBypass": "バイパス",
   "plugActive": "有効",
   "lpSaveFailed": "保存に失敗しました（不正な名前または書き込み不可）",

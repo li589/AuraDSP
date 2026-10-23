@@ -2630,6 +2630,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainActive => 'Active';
 
   @override
+  String get plugPartialBypass => 'Partial bypass';
+
+  @override
   String get chainBypass => 'Bypass';
 
   @override
