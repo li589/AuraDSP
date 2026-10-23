@@ -29,7 +29,7 @@ class _PostCard extends StatelessWidget {
             param: ParamRegistry.postGain,
             model: model,
             customLabel: l.postGain,
-            infoMessage: '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。',
+            infoMessage: l.postHintGain,
           ),
           const SizedBox(height: AuraSpace.md),
           Container(height: 1, color: p.hairline),
@@ -55,8 +55,8 @@ class _PostCard extends StatelessWidget {
                     ParamSlider(
                       param: ParamRegistry.limiterThreshold,
                       model: model,
-                      customLabel: '限幅阈值',
-                      infoMessage: '母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。',
+                      customLabel: l.postCeiling,
+                      infoMessage: l.postHintCeiling,
                       enabled: model.limiterOn,
                     ),
                     const SizedBox(height: AuraSpace.sm),
@@ -64,17 +64,17 @@ class _PostCard extends StatelessWidget {
                     ParamSlider(
                       param: ParamRegistry.limiterRelease,
                       model: model,
-                      customLabel: '释放时间',
-                      infoMessage: '限幅器包络释放衰减时间。时间较短瞬态紧实有力，时间较长音质顺滑无抽吸感。',
+                      customLabel: l.postRelease,
+                      infoMessage: l.postHintRelease,
                       enabled: model.limiterOn,
                     ),
                     const SizedBox(height: AuraSpace.sm),
                     // 开关行：1.5ms 前瞻 + 立体声联动
                     Row(
                       children: [
-                        Text('1.5ms 前瞻', style: labelOf(p, color: p.text)),
+                        Text(l.postLookahead, style: labelOf(p, color: p.text)),
                         const SizedBox(width: 4),
-                        const InfoBadge(message: '1.5ms 自适应平滑前瞻。开启后提供广播母带级零失真削峰，关闭则进入零延迟电竞/监听模式。'),
+                        InfoBadge(message: l.postHintLookahead),
                         const Spacer(),
                         ParamSwitch(
                           param: ParamRegistry.limiterLookahead,
@@ -86,9 +86,9 @@ class _PostCard extends StatelessWidget {
                     const SizedBox(height: AuraSpace.xs),
                     Row(
                       children: [
-                        Text('立体声联动', style: labelOf(p, color: p.text)),
+                        Text(l.postStereoLink, style: labelOf(p, color: p.text)),
                         const SizedBox(width: 4),
-                        const InfoBadge(message: '开启后左右声道按能量最大侧联合限幅，防止大动态瞬态导致声像意外偏移。'),
+                        InfoBadge(message: l.postHintStereoLink),
                         const Spacer(),
                         ParamSwitch(
                           param: ParamRegistry.limiterLink,

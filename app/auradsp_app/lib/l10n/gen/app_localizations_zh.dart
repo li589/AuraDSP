@@ -483,6 +483,220 @@ class AppLocalizationsZh extends AppLocalizations {
   String get ioAsioReadyStatus => '就绪 (等待驱动会话)';
 
   @override
+  String get catInput => '输入';
+
+  @override
+  String get catTone => '音色';
+
+  @override
+  String get catEq => '均衡';
+
+  @override
+  String get catStage => '声场';
+
+  @override
+  String get catSpace => '空间';
+
+  @override
+  String get catOutput => '输出';
+
+  @override
+  String get catEffect => '效果';
+
+  @override
+  String get arbmagMinPoints => '至少需要 2 个有效频点（频率 增益dB; …）';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'GraphicEQ 无效：$err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return '读取文件失败: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n 频点';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '已载入 $count 个频点';
+  }
+
+  @override
+  String get bassHintIntensity => '增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。';
+
+  @override
+  String get bassHintFrequency => '低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。';
+
+  @override
+  String get bassShelfRouting => '低频搁架声道路由';
+
+  @override
+  String get irEnvelope => '脉冲响应包络';
+
+  @override
+  String get irMirrorR => 'R (镜像)';
+
+  @override
+  String get convHintMix => '卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。';
+
+  @override
+  String get xfHintPreset => '切换经典硬件耳机串扰模拟算法预设或自定义微调。消除耳机“头中效应”，还原自然音箱声场。';
+
+  @override
+  String get xfHintCustom => '自定义串扰低通截止频率与互馈衰减深度微调。';
+
+  @override
+  String get xfHintCutoff =>
+      '串扰低通滤波器的截止频率 (300 ~ 2000 Hz)。频率越高，被互馈到对侧声道的频带范围越宽。';
+
+  @override
+  String get xfHintFeed => '低频串扰互馈衰减量 (1.0 ~ 15.0 dB)。数值越小互馈越多、声场越宽；数值越大串扰越轻微。';
+
+  @override
+  String get dqHintAttack => '频段能量越过阈值后压下来的速度。太慢吃掉瞬态，太快可能有咔哒感。';
+
+  @override
+  String get dqHintRelease => '能量跌回阈值以下后松开的速度。太短会有抽吸感，太长压住不放。';
+
+  @override
+  String get dqShapeNote => 'Mid 为钟形带宽；Low/High 为搁架斜率共振。';
+
+  @override
+  String get dqHintStaticGain => '静态基础增益，常时有效；动态部分只做衰减。';
+
+  @override
+  String get dqHintRange => '频段能量超阈后最大再衰减多少。0 = 纯静态整形。';
+
+  @override
+  String get dqHintThreshold => '该频段包络超过此电平才开始动态衰减。太低误杀，太高不动作。';
+
+  @override
+  String get dqIndepTiming => '独立动态响应时常数';
+
+  @override
+  String get dqHintBandAttack => '该频段专用的起音时间。';
+
+  @override
+  String get dqHintBandRelease => '该频段专用的释放时间。';
+
+  @override
+  String get filterHintModes => 'HP 低于该频率衰减，LP 高于该频率衰减，BP 以该频率为中心通过。';
+
+  @override
+  String get filterHintResonance => '谐振强度。BP 的带宽全靠它；HP/LP 只在转折处有峰。';
+
+  @override
+  String get haasHintDelay => '延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。';
+
+  @override
+  String get haasHintWet => '湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\n上下拖拽微调 · 双击归零';
+  }
+
+  @override
+  String get inputReset100 => '重置 100%';
+
+  @override
+  String inputFinal(String desc) {
+    return '最终: $desc';
+  }
+
+  @override
+  String get inputResetHint => '双击或点击恢复 100%';
+
+  @override
+  String get loudnessHint => '小音量自动补低频和高频，大音量直通';
+
+  @override
+  String get postHintGain => '全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。';
+
+  @override
+  String get postCeiling => '限幅阈值';
+
+  @override
+  String get postHintCeiling =>
+      '母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。';
+
+  @override
+  String get postRelease => '释放时间';
+
+  @override
+  String get postHintRelease => '限幅器包络释放衰减时间。时间较短瞬态紧实有力，时间较长音质顺滑无抽吸感。';
+
+  @override
+  String get postLookahead => '1.5ms 前瞻';
+
+  @override
+  String get postHintLookahead =>
+      '1.5ms 自适应平滑前瞻。开启后提供广播母带级零失真削峰，关闭则进入零延迟电竞/监听模式。';
+
+  @override
+  String get postStereoLink => '立体声联动';
+
+  @override
+  String get postHintStereoLink => '开启后左右声道按能量最大侧联合限幅，防止大动态瞬态导致声像意外偏移。';
+
+  @override
+  String get reverbHintMix => '混响声的音量占比。数值越高，空间空灵回荡感越强，如同置身音乐厅或教堂。';
+
+  @override
+  String get reverbHintSize => '模拟虚拟房间尺寸。尺寸越大，声场越开阔、反射间隔越长。';
+
+  @override
+  String get reverbHintDecay => '反射残响消散时间。数值越大，声音余韵回荡持续越久。';
+
+  @override
+  String get reverbHintWidth => '混响声的双耳立体声扩展度。让回声包围整个头部。';
+
+  @override
+  String get reverbHintDamp => '高频阻尼吸收。越大音色越温暖柔和，越小越明亮通透。';
+
+  @override
+  String get reverbHintDry => '原始直达声保留量。确保人声吐字清晰结实。';
+
+  @override
+  String get spatialHintRoom => '模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。';
+
+  @override
+  String get spatialHintWidth => '扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。';
+
+  @override
+  String get spatialHintFocus => '控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。';
+
+  @override
+  String get spatialHintGain => '在全自动等能量物理归一化基础上的输出增益微调 (-12 ~ +6 dB)。';
+
+  @override
+  String get spatialHintLoudness =>
+      '全站等响度自动平衡算法。自动平抑多扬声器上混带来的能量增益，彻底杜绝滑块变音量调节器的问题。';
+
+  @override
+  String get stereoHintWidth => '拉伸左右耳声像边界。适度拉伸让耳机如大音箱脱箱，拉太大可能削弱中央人声聚焦。';
+
+  @override
+  String get tubeHintColor => '模拟经典电子管偶次谐波失真。带来醇厚耐听的模拟胶片暖色调，消除数码干冷感。';
+
+  @override
+  String get tubeHintTrim => '电子管染色后的手动电平微调，只作用于湿信号（干声不动）。切换音色风格导致响度变化时用它找平。';
+
+  @override
+  String get tubeTriode => 'TRIODE (偶次谐波)';
+
+  @override
+  String get tubePentode => 'PENTODE (奇次谐波)';
+
+  @override
+  String get tubeTape => 'TAPE (磁带温润)';
+
+  @override
   String get noAvailableDevice => '无可用设备';
 
   @override
@@ -1587,9 +1801,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get dyneqRelease => '释放时间';
 
   @override
-  String get loudnessHint => '小音量自动补低频和高频，大音量直通';
-
-  @override
   String get loudnessAmount => '补偿强度';
 
   @override
@@ -2361,11 +2572,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ 代码编辑器';
-
-  @override
-  String arbmagNodes(int count) {
-    return '已载入 $count 个频点';
-  }
 
   @override
   String get arbmagApply => '应用代码';

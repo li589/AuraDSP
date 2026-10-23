@@ -41,7 +41,7 @@ class _DyneCard extends StatelessWidget {
           // 包络时间（全局共用）
           ValueSlider(
             label: l.dyneqAttack,
-            infoMessage: '频段能量越过阈值后压下来的速度。太慢吃掉瞬态，太快可能有咔哒感。',
+            infoMessage: l.dqHintAttack,
             value: m.dyneqAttackMs,
             defaultValue: ParamDefaults.dyneqAttack,
             onResetToDefault: () =>
@@ -57,7 +57,7 @@ class _DyneCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           ValueSlider(
             label: l.dyneqRelease,
-            infoMessage: '能量跌回阈值以下后松开的速度。太短会有抽吸感，太长压住不放。',
+            infoMessage: l.dqHintRelease,
             value: m.dyneqReleaseMs,
             defaultValue: ParamDefaults.dyneqRelease,
             onResetToDefault: () =>
@@ -185,7 +185,7 @@ class _DyneBand extends StatelessWidget {
         const SizedBox(height: AuraSpace.sm),
         ValueSlider(
           label: l.dyneqQ,
-          infoMessage: 'Mid 为钟形带宽；Low/High 为搁架斜率共振。',
+          infoMessage: l.dqShapeNote,
           value: q,
           defaultValue: defQ,
           onResetToDefault: () => setQ(defQ),
@@ -200,7 +200,7 @@ class _DyneBand extends StatelessWidget {
         const SizedBox(height: AuraSpace.sm),
         ValueSlider(
           label: l.dyneqGain,
-          infoMessage: '静态基础增益，常时有效；动态部分只做衰减。',
+          infoMessage: l.dqHintStaticGain,
           value: gain,
           defaultValue: defGain,
           onResetToDefault: () => setGain(defGain),
@@ -215,7 +215,7 @@ class _DyneBand extends StatelessWidget {
         const SizedBox(height: AuraSpace.sm),
         ValueSlider(
           label: l.dyneqRange,
-          infoMessage: '频段能量超阈后最大再衰减多少。0 = 纯静态整形。',
+          infoMessage: l.dqHintRange,
           value: range,
           defaultValue: defRange,
           onResetToDefault: () => setRange(defRange),
@@ -230,7 +230,7 @@ class _DyneBand extends StatelessWidget {
         const SizedBox(height: AuraSpace.sm),
         ValueSlider(
           label: l.dyneqThreshold,
-          infoMessage: '该频段包络超过此电平才开始动态衰减。太低误杀，太高不动作。',
+          infoMessage: l.dqHintThreshold,
           value: threshold,
           defaultValue: defThreshold,
           onResetToDefault: () => setThreshold(defThreshold),
@@ -277,6 +277,7 @@ class _DyneqTimingExpanderState extends State<_DyneqTimingExpander> {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
     final m = widget.model;
     final band = widget.band;
     final bandLabel = widget.bandLabel;
@@ -298,7 +299,7 @@ class _DyneqTimingExpanderState extends State<_DyneqTimingExpander> {
                   color: p.textDim,
                 ),
                 const SizedBox(width: 2),
-                Text('独立动态响应时常数', style: monoOf(p, size: 10, color: p.textDim)),
+                Text(l.dqIndepTiming, style: monoOf(p, size: 10, color: p.textDim)),
               ],
             ),
           ),
@@ -307,7 +308,7 @@ class _DyneqTimingExpanderState extends State<_DyneqTimingExpander> {
           const SizedBox(height: AuraSpace.xs),
           ValueSlider(
             label: '$bandLabel Attack',
-            infoMessage: '该频段专用的起音时间。',
+            infoMessage: l.dqHintBandAttack,
             value: band == 0 ? m.dyneqB1Attack : (band == 1 ? m.dyneqB2Attack : m.dyneqB3Attack),
             defaultValue: 2.0,
             onResetToDefault: () {
@@ -337,7 +338,7 @@ class _DyneqTimingExpanderState extends State<_DyneqTimingExpander> {
           const SizedBox(height: AuraSpace.xs),
           ValueSlider(
             label: '$bandLabel Release',
-            infoMessage: '该频段专用的释放时间。',
+            infoMessage: l.dqHintBandRelease,
             value: band == 0 ? m.dyneqB1Release : (band == 1 ? m.dyneqB2Release : m.dyneqB3Release),
             defaultValue: 120.0,
             onResetToDefault: () {

@@ -55,7 +55,7 @@ Map<String, int> _baseline() {
 void main() {
   test('lib/features + lib/ui 硬编码中文不超过基线（棘轮只降不升）', () {
     final base = _baseline();
-    expect(base, isNotEmpty, reason: '基线缺失：test/l10n_cjk_baseline.txt');
+    // 基线为空 = 债务已清零，属合法状态（仍继续扫描，防新增）。
     final offenders = <String>[];
     final stale = <String>[];
     final dir = Directory('lib/features');

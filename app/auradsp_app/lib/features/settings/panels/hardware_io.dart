@@ -278,7 +278,7 @@ class _VirtualAsioInputSubpanel extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _InfoRow('输入端点', 'AuraDSP Virtual ASIO Client Stream'),
+        _InfoRow(l.ioInputLabel, 'AuraDSP Virtual ASIO Client Stream'),
         _InfoRow(l.ioAsioChannelLabel, active ? l.ioAsioActive : l.ioAsioWait),
         const SizedBox(height: 2),
         Text(
@@ -475,7 +475,7 @@ class _WasapiOutputSubpanel extends StatelessWidget {
             ),
             const SizedBox(width: AuraSpace.xs),
             AuraChip(
-              '刷新设备',
+              l.ioRefreshDevice,
               icon: Icons.refresh_rounded,
               onTap: () => model.refreshAudioDevices(),
             ),

@@ -121,16 +121,16 @@ final Map<String, String> _stageToGroup = {
 
 /// stage id → 分类展示名（方框徽标用，随中英文切换）。
 String stageCategoryLabelOf(BuildContext ctx, String id) {
-  final isZh = Localizations.localeOf(ctx).languageCode == 'zh';
+  final l = l10nOf(ctx);
   final g = _stageToGroup[id];
   return switch (g) {
-    'chInput' => isZh ? '输入' : 'Input',
-    'chTone' => isZh ? '音色' : 'Tone',
-    'chEq' => isZh ? '均衡' : 'EQ',
-    'chSound' => isZh ? '声场' : 'Field',
-    'chSpatial' => isZh ? '空间' : 'Spatial',
-    'chOut' => isZh ? '输出' : 'Output',
-    _ => isZh ? '效果' : 'FX',
+    'chInput' => l.catInput,
+    'chTone' => l.catTone,
+    'chEq' => l.catEq,
+    'chSound' => l.catStage,
+    'chSpatial' => l.catSpace,
+    'chOut' => l.catOutput,
+    _ => l.catEffect,
   };
 }
 

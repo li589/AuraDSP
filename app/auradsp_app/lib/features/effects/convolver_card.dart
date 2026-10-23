@@ -95,7 +95,7 @@ class _ConvolverCard extends StatelessWidget {
               ],
               ValueSlider(
                 label: l.convMix,
-                infoMessage: '卷积混响混合比。0% 为原始干声，100% 完全沉浸在采样的空间声学混响中。',
+                infoMessage: l.convHintMix,
                 value: model.convMix,
                 defaultValue: ParamDefaults.convMix,
                 onResetToDefault: () =>

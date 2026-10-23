@@ -519,6 +519,252 @@ class AppLocalizationsEn extends AppLocalizations {
   String get ioAsioReadyStatus => 'Ready (waiting for driver session)';
 
   @override
+  String get catInput => 'Input';
+
+  @override
+  String get catTone => 'Tone';
+
+  @override
+  String get catEq => 'EQ';
+
+  @override
+  String get catStage => 'Field';
+
+  @override
+  String get catSpace => 'Spatial';
+
+  @override
+  String get catOutput => 'Output';
+
+  @override
+  String get catEffect => 'FX';
+
+  @override
+  String get arbmagMinPoints =>
+      'Need at least 2 valid points (freq gain dB; …)';
+
+  @override
+  String arbmagGraphicEqInvalid(String err) {
+    return 'Invalid GraphicEQ: $err';
+  }
+
+  @override
+  String arbmagReadFailed(String err) {
+    return 'Failed to read file: $err';
+  }
+
+  @override
+  String arbmagPoints(int n) {
+    return '$n points';
+  }
+
+  @override
+  String arbmagNodes(int count) {
+    return '$count nodes loaded';
+  }
+
+  @override
+  String get bassHintIntensity =>
+      'Adds low-end weight and punch. Higher = deeper bass; raise moderately to avoid boomy highs.';
+
+  @override
+  String get bassHintFrequency =>
+      'Upper limit of the bass boost. Audio below it is thickened; 60–120 Hz is a good range.';
+
+  @override
+  String get bassShelfRouting => 'Low-shelf channel routing';
+
+  @override
+  String get irEnvelope => 'Impulse envelope';
+
+  @override
+  String get irMirrorR => 'R (mirrored)';
+
+  @override
+  String get convHintMix =>
+      'Convolution reverb mix. 0% is dry; 100% fully immerses in the sampled space.';
+
+  @override
+  String get xfHintPreset =>
+      'Switch between classic headphone crossfeed presets or custom tuning; removes the in-head effect for natural speaker staging.';
+
+  @override
+  String get xfHintCustom =>
+      'Fine-tune the crossfeed low-pass cutoff and feed level.';
+
+  @override
+  String get xfHintCutoff =>
+      'Crossfeed low-pass cutoff (300–2000 Hz). Higher = wider band fed to the opposite channel.';
+
+  @override
+  String get xfHintFeed =>
+      'Low-band crossfeed attenuation (1.0–15.0 dB). Lower = more feed, wider stage; higher = subtler crossfeed.';
+
+  @override
+  String get dqHintAttack =>
+      'How fast a band compresses after crossing threshold. Too slow eats transients; too fast can click.';
+
+  @override
+  String get dqHintRelease =>
+      'How fast the band releases after dropping below threshold. Too short pumps; too long holds.';
+
+  @override
+  String get dqShapeNote => 'Mid is a bell shape; Low/High use shelf slopes.';
+
+  @override
+  String get dqHintStaticGain =>
+      'Static base gain, always active; the dynamic part only attenuates.';
+
+  @override
+  String get dqHintRange =>
+      'Maximum extra attenuation once over threshold. 0 = pure static shaping.';
+
+  @override
+  String get dqHintThreshold =>
+      'Band envelope level where dynamic attenuation starts. Too low over-triggers; too high never acts.';
+
+  @override
+  String get dqIndepTiming => 'Independent dynamic timing';
+
+  @override
+  String get dqHintBandAttack => 'Attack time dedicated to this band.';
+
+  @override
+  String get dqHintBandRelease => 'Release time dedicated to this band.';
+
+  @override
+  String get filterHintModes =>
+      'HP cuts below, LP cuts above, BP passes centered on this frequency.';
+
+  @override
+  String get filterHintResonance =>
+      'Resonance strength. It sets BP bandwidth; HP/LP only peak at the corner.';
+
+  @override
+  String get haasHintDelay =>
+      'Delayed side 0–25 ms (Haas offset). ~12 ms widens the stage; beyond that it becomes echo.';
+
+  @override
+  String get haasHintWet =>
+      'Wet (delayed difference) ratio. Lower keeps vocals centered; mono devices stay compatible.';
+
+  @override
+  String inputGainTip(String label, String gain) {
+    return '$label: $gain dB\ndrag to fine-tune · double-click to reset';
+  }
+
+  @override
+  String get inputReset100 => 'Reset 100%';
+
+  @override
+  String inputFinal(String desc) {
+    return 'Final: $desc';
+  }
+
+  @override
+  String get inputResetHint => 'Double-click or tap to restore 100%';
+
+  @override
+  String get loudnessHint =>
+      'Auto boosts lows and highs at quiet levels, transparent when loud';
+
+  @override
+  String get postHintGain =>
+      'Global output level trim. Nudge up if the DSP chain leaves things too quiet.';
+
+  @override
+  String get postCeiling => 'Ceiling';
+
+  @override
+  String get postHintCeiling =>
+      'Mastering-grade lookahead ceiling. Transients above it are transparently reduced, preventing clipping and true-peak (ISP) overs.';
+
+  @override
+  String get postRelease => 'Release';
+
+  @override
+  String get postHintRelease =>
+      'Limiter envelope release. Short = tight and punchy; long = smooth without pumping.';
+
+  @override
+  String get postLookahead => '1.5 ms lookahead';
+
+  @override
+  String get postHintLookahead =>
+      '1.5 ms adaptive smoothing lookahead. On = broadcast-grade distortion-free peak control; off = zero-latency esports/monitoring mode.';
+
+  @override
+  String get postStereoLink => 'Stereo link';
+
+  @override
+  String get postHintStereoLink =>
+      'Links both channels, limiting on the louder side to keep the image from wandering on big transients.';
+
+  @override
+  String get reverbHintMix =>
+      'Reverb level ratio. Higher = more spacious, hall-like ambience.';
+
+  @override
+  String get reverbHintSize =>
+      'Simulated room size. Larger = wider stage and longer reflection gaps.';
+
+  @override
+  String get reverbHintDecay => 'Reverb decay time. Higher = longer tails.';
+
+  @override
+  String get reverbHintWidth =>
+      'Binaural width of the reverb; wraps echoes around the head.';
+
+  @override
+  String get reverbHintDamp =>
+      'High-frequency damping. Higher = warmer; lower = brighter.';
+
+  @override
+  String get reverbHintDry =>
+      'Dry signal retention; keeps vocals articulate and solid.';
+
+  @override
+  String get spatialHintRoom =>
+      'Simulated room reflection volume. Higher = deeper, grander space with fuller tails.';
+
+  @override
+  String get spatialHintWidth =>
+      'Widens the binaural spread and virtual speaker spacing; moderate settings keep the sound full.';
+
+  @override
+  String get spatialHintFocus =>
+      'Controls center-vocal focus. Moderate boost keeps vocals centered and clear above the surrounds.';
+
+  @override
+  String get spatialHintGain =>
+      'Output gain trim on top of full auto equal-energy normalization (-12…+6 dB).';
+
+  @override
+  String get spatialHintLoudness =>
+      'Equal-loudness auto balancing. Cancels the energy gain from multi-speaker upmix so sliders never act as volume knobs.';
+
+  @override
+  String get stereoHintWidth =>
+      'Stretches the stereo image. Moderate stretch = out-of-head speaker feel; too much thins the center.';
+
+  @override
+  String get tubeHintColor =>
+      'Classic tube even-harmonic saturation; warm, filmic tone that removes digital harshness.';
+
+  @override
+  String get tubeHintTrim =>
+      'Manual level trim after tube coloration, wet path only. Use it to match loudness when switching modes.';
+
+  @override
+  String get tubeTriode => 'TRIODE (even harmonics)';
+
+  @override
+  String get tubePentode => 'PENTODE (odd harmonics)';
+
+  @override
+  String get tubeTape => 'TAPE (warm tape)';
+
+  @override
   String get noAvailableDevice => 'No device available';
 
   @override
@@ -1668,10 +1914,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get dyneqRelease => 'Release';
 
   @override
-  String get loudnessHint =>
-      'Auto boosts lows and highs at quiet levels, transparent when loud';
-
-  @override
   String get loudnessAmount => 'Amount';
 
   @override
@@ -2483,11 +2725,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get arbmagEditor => 'GraphicEQ Code Editor';
-
-  @override
-  String arbmagNodes(int count) {
-    return '$count nodes loaded';
-  }
 
   @override
   String get arbmagApply => 'Apply Code';
