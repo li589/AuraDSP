@@ -679,7 +679,7 @@ class LevelMeter extends StatelessWidget {
                         height: 8,
                         child: CustomPaint(
                           size: const Size(double.infinity, 8),
-                          painter: _MeterPainter(
+                          painter: MeterPainter(
                             value: n,
                             track: p.hairline,
                             fill: db > -3 ? p.error : p.accent,
@@ -694,7 +694,7 @@ class LevelMeter extends StatelessWidget {
                     height: 8,
                     child: CustomPaint(
                       size: const Size(double.infinity, 8),
-                      painter: _MeterPainter(
+                      painter: MeterPainter(
                         value: 0,
                         track: p.hairline,
                         fill: p.accent,
@@ -708,10 +708,10 @@ class LevelMeter extends StatelessWidget {
   }
 }
 
-class _MeterPainter extends CustomPainter {
+class MeterPainter extends CustomPainter {
   final double value;
   final Color track, fill;
-  _MeterPainter({required this.value, required this.track, required this.fill});
+  MeterPainter({required this.value, required this.track, required this.fill});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -740,7 +740,12 @@ class _MeterPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_MeterPainter old) => old.value != value;
+  // 必须比 track/fill：主题切换时父级以新 palette 重建出**新 painter 实例**，
+  // 但电平值不变——若只比 value，RenderCustomPaint 判定无需重绘，画布残留
+  // 旧主题色直到电平值变化（有音频时自愈）或元素重建（切页）。曾表现为主页
+  // 电平显示需切页才应用主题。回归测试：theme_switch_regression_test.dart。
+  bool shouldRepaint(MeterPainter old) =>
+      old.value != value || old.track != track || old.fill != fill;
 }
 
 /* ---- 频谱（32 带柱状 + 峰值保持） ---- */

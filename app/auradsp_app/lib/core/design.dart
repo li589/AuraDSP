@@ -166,8 +166,33 @@ class _Aura extends ThemeExtension<_Aura> {
   @override
   _Aura copyWith() => this;
 
+  /// 逐字段插值。MaterialApp 内部是 AnimatedTheme（默认 200ms 动画），
+  /// ThemeData.lerp 对 extensions 调用 `begin.lerp(end, t)`——若恒返回
+  /// this（旧 palette），动画全程 palette 硬停在旧值、终点才整体跳变，
+  /// 与其余 ThemeData 颜色的平滑过渡不同步。t=1 时 Tween 直接取 end
+  /// （新 ThemeData），不走本函数，故终点颜色不受插值质量影响。
   @override
-  _Aura lerp(_Aura? other, double t) => this;
+  _Aura lerp(_Aura? other, double t) {
+    if (other == null) return this;
+    Color c(Color a, Color b) => Color.lerp(a, b, t)!;
+    final a = palette, b = other.palette;
+    return _Aura(AuraPalette(
+      bg: c(a.bg, b.bg),
+      panel: c(a.panel, b.panel),
+      panelRaised: c(a.panelRaised, b.panelRaised),
+      hairline: c(a.hairline, b.hairline),
+      text: c(a.text, b.text),
+      textDim: c(a.textDim, b.textDim),
+      accent: c(a.accent, b.accent),
+      accentContrast: c(a.accentContrast, b.accentContrast),
+      accent2: c(a.accent2, b.accent2),
+      success: c(a.success, b.success),
+      warning: c(a.warning, b.warning),
+      error: c(a.error, b.error),
+      vizSpectrum: c(a.vizSpectrum, b.vizSpectrum),
+      vizGrid: c(a.vizGrid, b.vizGrid),
+    ));
+  }
 }
 
 /// buildAuraTheme 之后调用一次，把 palette 注入 ThemeExtension。
