@@ -455,7 +455,8 @@ class _DynamicAudioPanel extends StatelessWidget {
     // 1. 附加模式
     if (model.modeCategory == AudioModes.categoryAttachment) {
       if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
-        return _VoicemeeterPanel(model: model);
+        return HbBuilder(
+            tick: model.hbTick, builder: (_) => _VoicemeeterPanel(model: model));
       } else {
         return _SystemApoPanel(model: model);
       }
@@ -482,7 +483,8 @@ class _VoicemeeterPanel extends StatelessWidget {
         _InfoRow(l.audioParadigm, '${l.paradigmAttachment} · ${l.modeVoicemeeterApi}'),
         _InfoRow('连接状态', model.vbActive ? '已连接 (活跃回调)' : (note is String && note.isNotEmpty ? note : '未连接 (等待 Voicemeeter 启动)')),
         if (sr is num) _InfoRow(l.sampleRate, '${sr.toInt()} Hz'),
-        if (model.vbActive) _VbBuses(model: model),
+        if (model.vbActive)
+          HbBuilder(tick: model.hbTick, builder: (_) => _VbBuses(model: model)),
       ],
     );
   }
@@ -863,7 +865,9 @@ class _DriverLayer extends StatelessWidget {
 
     // 如果输出是 ASIO Client：显示专业 ASIO 驱动选择、缓冲档、输出声道对、刷新入口
     if (model.pipelineOutput == AudioModes.outputAsioClient) {
-      widgets.add(_AsioClientDriverRow(model: model));
+      widgets.add(HbBuilder(
+          tick: model.hbTick,
+          builder: (_) => _AsioClientDriverRow(model: model)));
     }
 
     // 如果输入是虚拟 ASIO 驱动：显示 AuraDSP Virtual ASIO 驱动注册状态与 DAW 状态卡片
@@ -1687,7 +1691,8 @@ class _OutputLayer extends StatelessWidget {
           if (model.pipelineOutput == AudioModes.outputWasapi)
             _WasapiOutputSubpanel(model: model)
           else if (model.pipelineOutput == AudioModes.outputVaio)
-            _VaioOutputSubpanel(model: model)
+            HbBuilder(tick: model.hbTick,
+                builder: (_) => _VaioOutputSubpanel(model: model))
           else
             _AsioClientOutputSubpanel(model: model),
         ],
@@ -2360,31 +2365,34 @@ class _LedMeter extends StatelessWidget {
         : (20 * (math.log(peak) / math.ln10)).clamp(-60.0, 3.0);
     // -54dB 起亮，每格 4.5dB，12 格到 0dB。
     final lit = ((db + 54) / 4.5).floor().clamp(0, 12);
-    return SizedBox(
-      height: 8,
-      child: Row(
-        children: [
-          for (var i = 0; i < 12; i++)
-            Expanded(
-              child: Padding(
-                padding: EdgeInsets.only(right: i == 11 ? 0 : 3),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 100),
-                  curve: Curves.easeOut,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(1.5),
-                    color: i < lit
-                        ? (i < 9
-                            ? p.success
-                            : i < 11
-                                ? p.warning
-                                : p.error)
-                        : p.hairline,
+    // P0-3：12 格灯段每秒随心跳重绘，隔离重绘区。
+    return RepaintBoundary(
+      child: SizedBox(
+        height: 8,
+        child: Row(
+          children: [
+            for (var i = 0; i < 12; i++)
+              Expanded(
+                child: Padding(
+                  padding: EdgeInsets.only(right: i == 11 ? 0 : 3),
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 100),
+                    curve: Curves.easeOut,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(1.5),
+                      color: i < lit
+                          ? (i < 9
+                              ? p.success
+                              : i < 11
+                                  ? p.warning
+                                  : p.error)
+                          : p.hairline,
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
       ),
     );
   }

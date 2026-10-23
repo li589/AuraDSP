@@ -6,12 +6,15 @@
  *   顶栏 = 常驻状态（引擎形态 + 三态徽标 + 延迟 + 配色快切），跨页不消失
  *   内容 = 页面（PageScaffold 统一留白）
  *
- * 页面切换走 AnimatedSwitcher（淡入 + 微位移），不再是无过渡地硬切。
+ * 页面切换走 IndexedStack（P0-1，2026-10-23：原 AnimatedSwitcher 会销毁
+ * 非当前页——切页全量重建 + initState 重跑；保活后切页零重建、状态保留，
+ * 离屏代价由 hbTick 级联 + visiblePage 定时器门控 + TickerMode 抵消）。
  */
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/engine_error_map.dart';
+import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'chain_page.dart';
@@ -35,8 +38,8 @@ class _AppShellState extends State<AppShell> {
   int _index = 0;
   bool _railCollapsed = false;
 
-  // 页面实例缓存：AnimatedSwitcher 切页时复用既有 State（保滚动/折叠态），
-  // 也避免 build 每帧构造 6 个页面对象（性能）。
+  // 页面实例缓存（P0-1）：IndexedStack 保活——切页复用既有 State
+  // （保滚动/折叠态、避免 initState 重跑），也避免 build 每帧构造页面对象。
   late final List<Widget> _pages;
 
   static const _destinations = <({IconData icon, IconData active})>[
@@ -76,7 +79,10 @@ class _AppShellState extends State<AppShell> {
             labels: labels,
             destinations: _destinations,
             index: _index,
-            onSelect: (i) => setState(() => _index = i),
+            onSelect: (i) => setState(() {
+              _index = i;
+              m.visiblePage = AppPage.values[i]; // P0-1：定时器可见性门控
+            }),
             model: m,
             collapsed: _railCollapsed,
             onToggle: () => setState(() => _railCollapsed = !_railCollapsed),
@@ -93,31 +99,17 @@ class _AppShellState extends State<AppShell> {
                 ),
                 Container(height: 1, color: p.hairline),
                 Expanded(
-                  child: AnimatedSwitcher(
-                    duration: AuraDur.page,
-                    switchInCurve: AuraCurve.emphasized,
-                    switchOutCurve: AuraCurve.emphasized,
-                    transitionBuilder: (child, anim) => FadeTransition(
-                      opacity: anim,
-                      child: SlideTransition(
-                        position: Tween(
-                          begin: const Offset(0, 0.018),
-                          end: Offset.zero,
-                        ).animate(anim),
-                        child: child,
-                      ),
-                    ),
-                    layoutBuilder: (current, previous) => Stack(
-                      fit: StackFit.expand,
-                      children: [
-                        ...previous,
-                        ?current,
-                      ],
-                    ),
-                    child: KeyedSubtree(
-                      key: ValueKey<int>(_index),
-                      child: _pages[_index],
-                    ),
+                  // P0-1（2026-10-23）：AnimatedSwitcher → IndexedStack。
+                  // 原实现切页销毁非当前页（initState 重跑、定时器重启、
+                  // settings 全量重建）；保活后切页零重建、滚动/展开态保留。
+                  // 配套：离屏页仍在树上——1s 心跳改走 hbTick 级联（P0-2），
+                  // 页面定时器按 model.visiblePage 门控，TickerMode 停离屏动画。
+                  child: IndexedStack(
+                    index: _index,
+                    children: [
+                      for (var i = 0; i < _pages.length; i++)
+                        TickerMode(enabled: i == _index, child: _pages[i]),
+                    ],
                   ),
                 ),
               ],
