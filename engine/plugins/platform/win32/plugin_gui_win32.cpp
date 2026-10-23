@@ -50,6 +50,19 @@ void ResizeDirectChildren(HWND hwnd) {
     }
 }
 
+// Z16：见 win32_util.h 声明处注释。先试 SetForegroundWindow（同进程或
+// 已持前台权限时更稳），再用 TOPMOST→NOTOPMOST 组合保证跨进程抬升；
+// NOTOPMOST 之后窗口仍居于全部非 topmost 窗口之上（含 Flutter App），
+// 但不再是常驻置顶——用户点 App 即正常回流焦点。
+void FlashEditorToFront(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    SetForegroundWindow(hwnd);
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE);
+}
+
 // C4：尺寸稳定化定时器 ID 与轮询次数。
 static constexpr int kSizeSettleMaxTicks = 6;            // 6 * 100ms = 600ms
 
