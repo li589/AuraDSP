@@ -251,7 +251,7 @@ void apply_convolver(auradsp_handle h) {
 
 void apply_comp(auradsp_handle h) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
-        /* [PATCHED-AuraDSP B1-c] compander 控制侧重置改影子构建 + 原子换
+        /* [PATCHED-AuraDSP P-018 B1-c] compander 控制侧重置改影子构建 + 原子换
          * 指针（CompressorCommit，同 B1-a liveprog / B1-b ddc 范式），
          * 替代 Z13 的「RT stage_comp 持 jdsp_lock + 此处同锁」全程互斥。
          * 背景：CompressorSetParam(forceRefresh=1) 做 FFTCompanderInit
@@ -836,7 +836,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
 
-        /* [PATCHED-AuraDSP B4] 门控改走「本次调用」参数，不再 save→写 0→restore
+        /* [PATCHED-AuraDSP P-020 B4] 门控改走「本次调用」参数，不再 save→写 0→restore
          * 全局开关。原因：这些字段由控制线程随时改写（VacuumTubeEnable /
          * ArbitraryResponseEqualizer / CompressorEnable / apply_eq …），用户
          * 操作若落在 save 与 restore 之间就会被 restore 静默回滚（界面开着、

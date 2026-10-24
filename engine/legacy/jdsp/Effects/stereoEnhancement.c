@@ -18,7 +18,7 @@ void StereoEnhancementSetParam(JamesDSPLib *jdsp, float mix)
 {
 	jdsp->sterEnh.mix = mix;
 	jdsp->sterEnh.minusMix = 1.0f - jdsp->sterEnh.mix;
-	/* [PATCHED-AuraDSP 2026-10-17] 平滑等功率增益补偿：在 mix=0.5 处温和补偿约 +1.4 dB，
+	/* [PATCHED-AuraDSP P-015 2026-10-17] 平滑等功率增益补偿：在 mix=0.5 处温和补偿约 +1.4 dB，
 	 * 消除此前原算法在中间位置硬放大 2.0 倍 (+6 dB) 导致的滑块像音量调节器剧烈暴跳问题 */
 	float x = jdsp->sterEnh.mix;
 	if (x < 0.0f) x = 0.0f;
@@ -26,7 +26,7 @@ void StereoEnhancementSetParam(JamesDSPLib *jdsp, float mix)
 	jdsp->sterEnh.gain = 1.0f + 0.75f * (x * (1.0f - x));
 }
 
-/* [PATCHED-AuraDSP 2026-10-09] 分带展宽（P-002）：每子带独立 mix。
+/* [PATCHED-AuraDSP P-002 2026-10-09] 分带展宽：每子带独立 mix。
  * bandMixUsed=0 时 Process 走上游统一 mix 路径，行为逐字节一致。 */
 void StereoEnhancementSetBandMix(JamesDSPLib *jdsp, int band, float mix)
 {

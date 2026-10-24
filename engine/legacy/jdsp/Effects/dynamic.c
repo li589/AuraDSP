@@ -1671,7 +1671,7 @@ void FFTCompanderInit(FFTCompander *cm, float fs, int tfresolution, unsigned int
 		cm->alpha = 0.5f / cm->updatePerNSmps;
 	}
 }
-/* [PATCHED-AuraDSP B1-c] comp 影子槽机制（替代 Z13 的 jdsp_lock 全程互斥）。
+/* [PATCHED-AuraDSP P-018 B1-c] comp 影子槽机制（替代 Z13 的 jdsp_lock 全程互斥）。
  *
  * 背景（全量审查 B1/P0）：CompressorSetParam(forceRefresh=1) 在控制线程做
  * FFTCompanderInit 全量重算，而 kAuraStages comp lock=1 令 RT 的 stage_comp
@@ -2206,7 +2206,7 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled)
 			jdsp->tmpBuffer[1][smp] = x2 * cm->overallGain;
 		}
 	}
-	/* [PATCHED-AuraDSP P2.4] 动态压缩增益衰减实时计量 */
+	/* [PATCHED-AuraDSP P-025 P2.4] 动态压缩增益衰减实时计量 */
 	float min_g = 1.0f;
 	if (cm->tfresolution < 3)
 	{

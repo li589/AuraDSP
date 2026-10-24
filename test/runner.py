@@ -106,6 +106,12 @@ def run_smoke_tests():
         # /R2 循环包壳必限流/R3 禁匿名 catch/R4 理由不得敷衍），含规则引擎单测、
         # 全仓扫描、接线完整性（part 共享 library import）与两处反向判红。
         "smoke_d4b_swallow.py",
+        # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
+        # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
+        # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
+        # 降级为别名。含两种真实漏网形态（编号写在说明文字里 / 日期在编号前）的
+        # 判红断言——它们按行 grep 都看着"有编号"。
+        "smoke_d6_patch_ids.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",

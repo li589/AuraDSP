@@ -22,6 +22,7 @@
 | `sync_artifacts.ps1` | 增量产物一次性同步：把引擎 DLL / 宿主 EXE / 三个桥从真相源覆盖分发到 `test/`、`app build runner`、`dist` 三处；端点缺失或单文件覆盖失败仅告警并跳过（替代手工 cp；`-WhatIf` 预演、`-PackZip` 重打包发行 zip） |
 | `bin/abi_consistency.py` | .def/engine.h/ffi.dart 45 符号一致性（`smoke_abi_consistency.py` 调它） |
 | `bin/dart_swallow_scan.py` | Dart 静默异常门禁（D4-b）：R1 空 catch 块必留痕或标记 / R2 循环体包壳必 `swallowThrottled` / R3 禁 `catch (_)` 丢弃异常 / R4 标记理由不得敷衍。词法级剥离注释与字符串，注释里的 `catch (_)` 不误判（`smoke_d4b_swallow.py` 调它，`--json` 可机器读） |
+| `bin/patch_id_scan.py` | 补丁编号门禁（D6/§7-4）：每个 `PATCHED-AuraDSP` 标记必须紧跟已登记的 `P-NNN`（编号写在说明文字里、日期在编号前都判红——这两种按行 grep 都看着"有编号"）；同一专项代号别名不得映射到两个编号；登记表不得重复编号（`smoke_d6_patch_ids.py` 调它） |
 | `bin/rebuild_plugin_cache.py` | 用引擎真实扫描结果重建 `%APPDATA%\AuraDSP\plugins\plugin_cache.json` |
 | `bin/fix_docs_links.py` | docs 搬迁后改链（P0 沉淀，可复用） |
 | `bin/scan_engine_strings.py` | 引擎内置字符串/预设数值扫描器（参数表/默认值/混响/kLat/字面量分类，缓存产 `tools/archive/_scan_cache.json`） |

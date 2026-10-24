@@ -1,7 +1,13 @@
 # engine/legacy/ 补丁登记（PATCHES.md）
 
-> 铁律 §3.3：上游源码原则上原样整合；确需扩展时打 `[PATCHED-AuraDSP <日期> P-xxx]` 标记补丁，
+> 铁律 §3.3：上游源码原则上原样整合；确需扩展时打 `[PATCHED-AuraDSP P-xxx]` 标记补丁，
 > 逐条登记于本文件（位置 / 动机 / 影响面 / 上游同步冲突风险）。禁止无登记的隐式修改。
+>
+> **编号是唯一真相源**（D6，2026-10-24）：`P-NNN` 单调递增、永不复用，每条在下方有
+> `## P-NNN` 章节。工程专项代号（`B1-c` / `D7` / `Z13` / `M3.5-c` …）一律**降级为别名**，
+> 写在编号之后（如 `P-018 B1-c`），只用于和审查报告章节对照，**不再单独充当编号**。
+> 门禁 `tools/bin/patch_id_scan.py`（随 `smoke_d6_patch_ids.py` 运行）强制三件事：
+> 每个代码标记必须紧跟 `P-\d{3}`；该编号必须在本文件有登记；同一别名不得映射到两个编号。
 
 ## P-001 liveprogWrapper.c — 宿主滑块注册（2026-10-09）
 
@@ -230,7 +236,7 @@ yquist * 0.999，
 - **内容**：采用平滑抛物线等功率增益补偿 `1.0f + 0.75f * (x * (1.0f - x))`，在 0.5 处温和补偿约 +1.4 dB 以弥补中央直达声能量分散，两端平滑归一到 1.0。
 - **行为影响**：消除 +6dB 音量突跳，立体声展宽调节过程总声能主观保持恒定。
 - **上游同步冲突风险**：低（单函数 4 行修改）。
-## B1 liveprogWrapper.c + jdspController.c + jdsp_header.h — liveprog 影子 VM 编译，RT 零锁等待（2026-10-24）
+## P-016 B1 liveprogWrapper.c + jdspController.c + jdsp_header.h — liveprog 影子 VM 编译，RT 零锁等待（2026-10-24）
 
 - **位置**：`jdsp/Effects/liveprogWrapper.c` 全文件重写（影子槽编译 + 原子换指针）；
   `jdspController.c` `stage_liveprog` enabled 判断内移 + `kAuraStages` liveprog lock 1→0；
@@ -273,7 +279,7 @@ yquist * 0.999，
   Z14 锁保持）仍持 `jdsp_lock`——两者持锁时长亚毫秒~毫秒级（非秒级），且与
   `JamesDSPSetSampleRate` 的全效果重建共用该锁，列为 B1-b/B1-c 后续专项。
 
-## B1-b Effects/vdc.c + jdspController.c + jdsp_header.h — ddc 影子视图 + countChars 栈溢出修复（2026-10-24）
+## P-017 B1-b Effects/vdc.c + jdspController.c + jdsp_header.h — ddc 影子视图 + countChars 栈溢出修复（2026-10-24）
 
 - **位置**：`jdsp/Effects/vdc.c` 尾部重写（`countChars` 递归改迭代 +
   `PeakingFilterResampler` 双 malloc 泄漏修复 + 影子视图化）；
@@ -330,7 +336,7 @@ yquist * 0.999，
 - **后续（B1 同法未竟项）**：仅剩 comp（`CompressorSetParam(forceRefresh=1)`
   全量重置，Z13 锁保持）——B1-c。
 
-## B1-c Effects/dynamic.c + jdspController.c + jdsp_header.h + engine/chain/engine_chain.cpp — comp 影子槽双缓冲，Z13 锁收口（2026-10-24）
+## P-018 B1-c Effects/dynamic.c + jdspController.c + jdsp_header.h + engine/chain/engine_chain.cpp — comp 影子槽双缓冲，Z13 锁收口（2026-10-24）
 
 - **位置**：`jdsp/Effects/dynamic.c` Compressor 段重写（`CompSlot` 选槽/
   状态携带集/`CompressorCommit` 影子提交）；`jdspController.c` `stage_comp`
@@ -394,7 +400,31 @@ yquist * 0.999，
   `JamesDSPSetSampleRate` 全效果重建仍持 `jdsp_lock`（RT 的 convolver
   stage 亦持锁），属同一把锁的剩余暴露面，列后续评估。
 
-## B4 jdsp_header.h + jdspController.c + Effects/dynamic.c + engine/chain/engine_chain.cpp — 调用级 stage 门控（RT 不再改写 vendor 开关）（2026-10-24）
+## P-019 B1-d Effects/dynamic.c + jdsp_header.h + engine/chain/engine_chain.cpp — comp 启动缺额，不再原声直通（2026-10-24）
+
+- **位置**：`Effects/dynamic.c`（新增 `CompressorStartupDeficit` / `comp_process_chunk`，
+  重写 `FFTCompanderProcessSamples`，`FFTCompanderInit` 增 `mOutputDeficit = -1` 与输入/
+  重叠缓冲清零）；`jdsp_header.h`（`FFTCompander` 增 `mOutputDeficit`，
+  `MAX_OUTPUT_BUFFERS_DRS` 2→4）；`engine/chain/engine_chain.cpp`（`compute_latency` 计入缺额）；
+  `engine/engine_internal.h`（`kCompLatProfile` 注释重写）。
+- **动机**（全量审查后新增专项）：原实现把「本块没产出」当「本块无需改动」——抽干循环在
+  `mOutputBufferCount == 0` 时一次都不执行，而 `in == out` 原地处理意味着输出缓冲里仍是
+  **未处理原声**。于是管线上电前 `ovpLen` 个样本是无压缩直通。块长与 hop 不整除时
+  （441 帧块 7 次、500 帧块 2 次）还会**周期性复发**——旧实现靠上述"泄漏"意外维持
+  收支平衡，任何一侧改动都会让洞露出来。
+- **内容**：启动先以静音吐出 `D = ovpLen − gcd(ovpLen, 完整工作块长)` 个样本（OLA 爬升段
+  本就是静音），此后 `可用输出 = D − (I mod ovpLen) ≥ 0` 恒成立；抽干不足时补静音。
+  `CompressorProcess` 取消预切块，整块交给 `FFTCompanderProcessSamples`（单次至多一个 hop，
+  防 FIFO 越界）。
+- **行为影响**：延迟 `= (fftLen − ovpLen) + D`，块长整除 hop 时 D=0。实测 48k/tf=1：
+  blk512→3584、blk256→3840、blk441→4095 帧。D 必须计入上报，否则报的比听的小。
+- **验收**：`test/smoke/smoke_b1d_comp_startup.py`（82 断言五层：源码不变式 / 启动段精确静音 /
+  稳态无饥饿洞 / 脉冲位移 == frames+D / 上报==实测）。反向验证（还原旧抽干逻辑重建 DLL）：
+  核心断言判红 23 项。
+- **上游同步冲突风险**：中高（`FFTCompanderProcessSamples` 整段重写，上游若更新需以本版为
+  基线人工合并；`CompressorProcess` 的预切块已删除）。
+
+## P-020 B4 jdsp_header.h + jdspController.c + Effects/dynamic.c + engine/chain/engine_chain.cpp — 调用级 stage 门控（RT 不再改写 vendor 开关）（2026-10-24）
 
 - **位置**：`jdsp_header.h`（`AuraStageGates` 结构 + `JDSPStageFn` 签名 +
   `CompressorProcess` / `JamesDSPProcessMultiplexedStageSet` 声明）；
@@ -428,3 +458,57 @@ yquist * 0.999，
   `auradsp_engine.def` 导出表（内部符号），签名变更不触 ABI。
 - **上游同步冲突风险**：中高（12 个 stage fn 签名 + 两个函数声明全改，上游若
   更新需以本版为基线人工合并；改动机械、逐处可对照）。
+
+## P-021 B5 jdspController.c + jdsp_header.h — 多声道声道对选择
+
+- **位置**：`jdspController.c` 新增 `stage_selected(const char *ids, const char *id)` 及其在多声道
+  处理路径的复用点；`jdsp_header.h` 对应声明区注释。
+- **动机**：多声道链里双声道效果器（comp / eq / arbmag）需要按掩码只对**选中的声道对**独立
+  处理，而不是把 8 声道整体塞进一套双声道参数。
+- **内容**：以逗号分隔的 stage id 表驱动筛选；块长 / ASRC / 交织处理镜像
+  `processFloatMultiplexd`，保证同一帧数据在两条路径上相位一致。
+- **行为影响**：空表 = 全选（默认路径行为不变）；非空表只跑指定子集。
+- **上游同步冲突风险**：低（新增静态函数 + 条件筛选，未改既有 stage 本体）。
+
+## P-022 D7 jdspController.c — ASRC 多相 FIR 抽头数单点定义（2026-10-24）
+
+- **位置**：`jdspController.c` 文件头 `AURADSP_ASRC_TAPS`（64），init 与热切两处调用点引用。
+- **动机**（全量审查 D7）：原 init 路径 `asrc_taps = 64`、热切路径 `= 32`，两处都是函数内
+  局部 `const`，谁也看不出对方。同一设备"冷启动即 96k"与"48k 起来再热切"会走**不同阶数**的
+  抗镜像滤波器——过渡带与群延迟差一倍。
+- **内容**：宏单点定义，取 64（init 是默认/质量优先路径；热切的 32 无任何注释，按历史遗留处理）。
+- **诚实标注**：Windows 桌面引擎里热切路径不可达——`JamesDSPSetSampleRate` 只被
+  `EffectDSPMainCommand`（Android AudioEffect 入口）调用，而后者不在 `.def` 导出表内。
+  故本项只有源码级门禁可守。不可达 ≠ 可以不修：Android 侧同源，将来接线立刻生效。
+- **验收**：`test/smoke/smoke_d7_asrc_consistency.py`。反向验证判红 46 项。
+- **上游同步冲突风险**：低（一处宏 + 两处引用）。
+
+## P-023 M3.5-c jdspController.c + jdsp_header.h — stage 输出峰值采样
+
+- **位置**：`jdspController.c` `JamesDSPProcess` 每个 stage 处理后的采样段（两处）；
+  `jdsp_header.h` `stageIdx` 字段注释（0..11 固定 stage ID）。
+- **动机**：可视化需要 per-stage 电平，而 vendor 原实现只产出整链峰值。
+- **内容**：每 stage 跑完后在 `tmpBuffer` 上取 `max|L|` / `max|R|`，按 `stageIdx` 归位到
+  `audioPeaks[]`；`stageIdx` 是固定表，不随链序变化。
+- **行为影响**：只读采样，不改音频路径；采样开销为每 stage 一次线性扫描。
+- **上游同步冲突风险**：低（插入式采样，与 stage 本体无关）。
+
+## P-024 Z13 jdspController.c — 多声道 RT 入口 honoring per-stage lock
+
+- **位置**：`jdspController.c` 多声道 RT 路径两处（ASRC 分支与直通分支）。
+- **动机**：该路径是引擎唯一的 RT 入口，却**完全忽略** `kAuraStages[i].lock`——comp /
+  convolver / ddc / liveprog 的控制侧重置与 RT 处理之间零互斥，属数据竞争。
+- **内容**：按 stage 的 `lock` 标志成对 `jdsp_lock` / `jdsp_unlock`，与 `JamesDSPProcess`
+  的链表锁语义对齐。
+- **后续**：B1 / B1-b / B1-c（P-016/017/018）把相关 stage 的 lock 置 0——不是"绕过锁"，
+  而是用影子快照 + 原子换指针从根上消除了共享写。
+- **上游同步冲突风险**：低（两处成对调用）。
+
+## P-025 P2.4 jdsp_header.h + Effects/dynamic.c — comp 实时增益衰减计量
+
+- **位置**：`jdsp_header.h` `JamesDSPLib.comp_gr` 字段；`Effects/dynamic.c` comp 处理时的
+  写入点。
+- **动机**：UI 需要显示压缩器当前增益衰减量（GR 表），vendor 原实现没有对外暴露。
+- **内容**：`comp_gr`（dB ≥ 0），comp 每次处理时更新，经 viz 帧上报。
+- **行为影响**：仅新增只读输出字段，不参与音频计算。
+- **上游同步冲突风险**：低（新增字段 + 一处赋值）。

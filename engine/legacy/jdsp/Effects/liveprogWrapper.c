@@ -5,7 +5,7 @@ void NSEEL_HOSTSTUB_LeaveMutex() { }
 #ifdef _WIN32
 #include <intrin.h>
 #endif
-/* [PATCHED-AuraDSP B1] 影子 VM 编译（替代原「持 jdsp_lock 原地编译」）。
+/* [PATCHED-AuraDSP P-016 B1] 影子 VM 编译（替代原「持 jdsp_lock 原地编译」）。
  *
  * 背景（全量审查 B1/P0）：原 LiveProgStringParser 持 jdsp_lock 调
  * LiveProgLoadCode→NSEEL_code_compile ×2，而 kAuraStages liveprog lock=1
@@ -165,10 +165,10 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 		*pg->vmFs = jdsp->fs;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
-	/* [PATCHED-AuraDSP 2026-10-09 P-001] 宿主滑块：编译前注册 slider1..8，
+	/* [PATCHED-AuraDSP P-001 2026-10-09] 宿主滑块：编译前注册 slider1..8，
 	 * 供 engine_api "liveprog.paramN" 写值（freevars 会清掉旧注册，
 	 * 因此必须在每次编译内紧跟 init_memRegion 重注册）。
-	 * 补丁说明见 engine/legacy/PATCHES.md [PATCHED-AuraDSP 2026-10-16 P-014] */
+	 * 补丁说明见 engine/legacy/PATCHES.md [PATCHED-AuraDSP P-014 2026-10-16] */
 	for (int aura_i = 1; aura_i <= 8; aura_i++)
 	{
 		char aura_nm[16];

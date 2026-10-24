@@ -34,7 +34,7 @@ void VTInit(VacuumTube *tb, double fs)
 		tb->needOversample = 1;
 	}
 	memset(tb->subband, 0, sizeof(tb->subband));
-	/* [PATCHED-AuraDSP 2026-10-13 P-011] Tape 阻尼状态每次 Enable 清零；
+	/* [PATCHED-AuraDSP P-011 2026-10-13] Tape 阻尼状态每次 Enable 清零；
 	 * character/drywet/outcomp 故意不碰（开关不丢用户值，由引擎 apply_tube 推送）。 */
 	tb->tapeLp[0] = 0.0f;
 	tb->tapeLp[1] = 0.0f;
@@ -45,7 +45,7 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 {
 	float upsample[2][5];
 	double bandCh1[6], bandCh2[6];
-	/* [PATCHED-AuraDSP 2026-10-13 P-011] 音色调度（纯查表+乘加，RT 安全）：
+	/* [PATCHED-AuraDSP P-011 2026-10-13] 音色调度（纯查表+乘加，RT 安全）：
 	 * Triode(0)=旧行为逐位一致；Pentode(1)=谐波更猛+静态 trim 防响度跳变；
 	 * Tape(2)=谐波减半+湿信号一阶 HF 阻尼。drywet/outcomp 在两条输出路径统一应用。 */
 	float hwMul, trim, lpCoef;
@@ -88,7 +88,7 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 			upsample[0][j] = (float)(bandCh1[0] + (harmonic2Ch1 + harmonic3Ch1 + harmonic4Ch1 + harmonic5Ch1) * hwOS + allpassCh1 + bandCh1[5]);
 			upsample[1][j] = (float)(bandCh2[0] + (harmonic2Ch2 + harmonic3Ch2 + harmonic4Ch2 + harmonic5Ch2) * hwOS + allpassCh2 + bandCh2[5]);
 		}
-		/* [PATCHED-AuraDSP 2026-10-13 P-011] wet 整形：trim→Tape阻尼→补偿→干湿混合（dry 取原始输入）。 */
+		/* [PATCHED-AuraDSP P-011 2026-10-13] wet 整形：trim→Tape阻尼→补偿→干湿混合（dry 取原始输入）。 */
 		float w1 = oversample_stepdownSmpFloat(&tb->smp[0], upsample[0]) * tb->postgain * trim;
 		float w2 = oversample_stepdownSmpFloat(&tb->smp[1], upsample[1]) * tb->postgain * trim;
 		if (lpCoef > 0.0f)
@@ -128,7 +128,7 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 			double harmonic5Ch2 = bandCh2[4] * bandCh2[4];
 		out1[j] = (float)(bandCh1[0] + (harmonic2Ch1 + harmonic3Ch1 + harmonic4Ch1 + harmonic5Ch1) * hwD + allpassCh1 + bandCh1[5]) * tb->postgain;
 		out2[j] = (float)(bandCh2[0] + (harmonic2Ch2 + harmonic3Ch2 + harmonic4Ch2 + harmonic5Ch2) * hwD + allpassCh2 + bandCh2[5]) * tb->postgain;
-		/* [PATCHED-AuraDSP 2026-10-13 P-011] wet 整形（与过采样分支同构）：trim→Tape阻尼→补偿→干湿混合。 */
+		/* [PATCHED-AuraDSP P-011 2026-10-13] wet 整形（与过采样分支同构）：trim→Tape阻尼→补偿→干湿混合。 */
 		{
 			float w1 = out1[j] * trim;
 			float w2 = out2[j] * trim;
@@ -165,7 +165,7 @@ void VacuumTubeSetGain(JamesDSPLib *jdsp, double dbGain)
 	jdsp->tube.pregain = db2magf(dbGain);
 	jdsp->tube.postgain = 1.0f / jdsp->tube.pregain;
 }
-/* [PATCHED-AuraDSP 2026-10-13 P-011] 电子管音色/混合/补偿 setter。
+/* [PATCHED-AuraDSP P-011 2026-10-13] 电子管音色/混合/补偿 setter。
  * 控制线程调用、RT 只读；x86 对齐 int/float 单字写无撕裂（与 pregain 同模式）。 */
 void VacuumTubeSetCharacter(JamesDSPLib *jdsp, int character)
 {

@@ -142,7 +142,7 @@ typedef struct str_dynfreqdomain
 	float specHannReal[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1], specHannImag[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
 	cplx tmp[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
 } FFTCompander;
-/* [PATCHED-AuraDSP B1-c] comp 影子槽（与 B1-a liveprog 影子 VM / B1-b ddc
+/* [PATCHED-AuraDSP P-018 B1-c] comp 影子槽（与 B1-a liveprog 影子 VM / B1-b ddc
  * 影子视图同范式）。原实现 `FFTCompander comp` 单体内嵌 + kAuraStages comp
  * lock=1：控制线程 CompressorSetParam(forceRefresh=1) 持 jdsp_lock 整体重置
  * compander（FFTCompanderInit 全量重算），RT 的 stage_comp 每块取同一把锁
@@ -169,7 +169,7 @@ typedef struct
 	samplerateTool smp[2];
 	SixBandsCrossover subband[2];
 	float pregain, postgain;
-	/* [PATCHED-AuraDSP 2026-10-13 P-011] 电子管音色/混合/补偿。
+	/* [PATCHED-AuraDSP P-011 2026-10-13] 电子管音色/混合/补偿。
 	 * RT 只读、控制线程写（x86 对齐字读写无撕裂，与既有 pregain 同模式）。
 	 * VTInit 不重置这 4 个字段（开关切换不丢用户值）；tapeLp 每次 Enable 清零。 */
 	int character;    /* 0 Triode / 1 Pentode / 2 Tape */
@@ -423,7 +423,7 @@ typedef struct
 	float sumStates[5];
 	float diffStates[5];
 	float mix, minusMix, gain;
-	/* [PATCHED-AuraDSP 2026-10-09] 分带展宽：每子带独立 mix（P-002，见 PATCHES.md）。
+	/* [PATCHED-AuraDSP P-002 2026-10-09] 分带展宽：每子带独立 mix。
 	 * bandMixUsed=0 时行为与上游完全一致（统一 mix）。 */
 	float bandMix[5];
 	char bandMixUsed;
@@ -434,7 +434,7 @@ typedef struct
 	NSEEL_CODEHANDLE codehandleInit, codehandleProcess;
 	float *vmFs, *input1, *input2;
 	int compileSucessfully;
-	/* [PATCHED-AuraDSP B1] 影子槽簿记：retiredAt = 本槽被换下时所期望的
+	/* [PATCHED-AuraDSP P-016 B1] 影子槽簿记：retiredAt = 本槽被换下时所期望的
 	 * eelProcCount 下界（换下时刻快照 +1）。控制侧复用本槽前要求
 	 * eelProcCount >= retiredAt，即换下后至少跑满 1 个音频块，
 	 * 确保换出瞬间仍在途的那次 LiveProgProcess 已返回
@@ -451,7 +451,7 @@ typedef struct
 {
 	char *oldFile;
 } DDC;
-/* [PATCHED-AuraDSP B1-b] DDC 影子视图：RT 块首读一次视图指针即得
+/* [PATCHED-AuraDSP P-017 B1-b] DDC 影子视图：RT 块首读一次视图指针即得
  * {sosPointer, usedSOSCount} 一致对（原实现两字段分离写在 vdcFl 上，
  * 控制侧换指针与计数非原子，只能靠 jdsp_lock 互斥——而持锁方做文件
  * 解析可达数十毫秒，RT 整段阻塞）。视图随原子指针换入，旧视图由槽
@@ -562,7 +562,7 @@ typedef struct
 	float *impulseResponse;
 	unsigned int impChannels, impulseLengthActual;
 } tmpIRData;
-/* [PATCHED-AuraDSP B4] 调用级 stage 门控覆盖。
+/* [PATCHED-AuraDSP P-020 B4] 调用级 stage 门控覆盖。
  *
  * 背景：多声道链 Category B 段原先在 RT 内 save→写 0→restore 五个 vendor
  * 开关（tubeEnabled/limiterEnabled/compEnabled/equalizerEnabled/
@@ -578,17 +578,17 @@ typedef struct
 {
 	signed char tube, comp, bass, eq, arbmag, limiter;
 } AuraStageGates;
-/* [PATCHED-AuraDSP 2026-10-09 P-004] 表驱动处理链：顺序由宿主经
+/* [PATCHED-AuraDSP P-004 2026-10-09] 表驱动处理链：顺序由宿主经
  * JamesDSPRebuildChain 重建（graph.order）。stage fn 内含各自 enabled 判断；
  * lock=1 的段（convolver/ddc/liveprog）逐段加解锁——与上游"三段连续一次
  * 加解锁"相比锁粒度更细（竞态窗口变化，数值输出等价）。
- * [PATCHED-AuraDSP B4] fn 增 gates 参数（调用级门控，见上）。 */
+ * [PATCHED-AuraDSP P-020 B4] fn 增 gates 参数（调用级门控，见上）。 */
 typedef void (*JDSPStageFn)(struct dspsys *jdsp, size_t n, const AuraStageGates *gates);
 typedef struct
 {
 	JDSPStageFn fn;
 	char lock;
-	unsigned char stageIdx; /* [PATCHED-AuraDSP M3.5-c] 0..11 对应固定 stage ID */
+	unsigned char stageIdx; /* [PATCHED-AuraDSP P-023 M3.5-c] 0..11 对应固定 stage ID */
 } JDSPChainItem;
 typedef struct dspsys
 {
@@ -599,7 +599,7 @@ typedef struct dspsys
 	// Effect
 	// Compressor
 	int compEnabled, compForceRefresh;
-	/* [PATCHED-AuraDSP B1-c] comp 影子槽（替代原单体内嵌 FFTCompander comp）：
+	/* [PATCHED-AuraDSP P-018 B1-c] comp 影子槽（替代原单体内嵌 FFTCompander comp）：
 	 * RT 块首读一次 compActive 即得一致快照（x86-64 对齐指针存/取即原子，
 	 * 数据依赖保证读取顺序）；控制线程在非活动槽 compSlots[] 上全量拷贝 +
 	 * 重建后原子换指针。compProcCount 由 RT 每块递增（CompressorProcess
@@ -612,7 +612,7 @@ typedef struct dspsys
 	FFTCompander *compActive;
 	uint64_t compProcCount, compSwapProc;
 	long compInFlight;
-	float comp_gr; /* [PATCHED-AuraDSP P2.4] 实时压缩增益衰减分贝 (dB >= 0) */
+	float comp_gr; /* [PATCHED-AuraDSP P-025 P2.4] 实时压缩增益衰减分贝 (dB >= 0) */
 	// Bass boost
 	int bassBoostEnabled;
 	DBB dbb;
@@ -633,7 +633,7 @@ typedef struct dspsys
 	Crossfeed advXF;
 	// DDC
 	int ddcEnabled, ddcForceRefresh;
-	/* [PATCHED-AuraDSP 2026-10-10 P-005] 卷积干湿比：宿主在 JamesDSPInit 后
+	/* [PATCHED-AuraDSP P-005 2026-10-10] 卷积干湿比：宿主在 JamesDSPInit 后
 	 * 提供 scratch（≥ blockSizeMax*2 floats），并在启用干湿时置 mixUsed=1。
 	 * mixUsed=0 时 stage_conv 走上游原路径（零行为变化）。 */
 	float *auraConvScratch;
@@ -654,7 +654,7 @@ typedef struct dspsys
 	Convolver1D conv;
 	// Live programmable effect
 	int liveprogEnabled;
-	/* [PATCHED-AuraDSP B1] 影子 VM 编译：RT 只读 eel 指针（块首一次，
+	/* [PATCHED-AuraDSP P-016 B1] 影子 VM 编译：RT 只读 eel 指针（块首一次，
 	 * x86-64 对齐指针存/取即原子）；EEL 编译在影子槽 eelSlots[] 上进行，
 	 * 成功后原子换指针，RT 不再需要为 liveprog 持 jdsp_lock
 	 * （stage_liveprog 的 lock 标志已置 0）。eelProcCount 由 RT 每块
@@ -749,11 +749,11 @@ extern void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularit
 extern void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy);
 extern void CompressorEnable(JamesDSPLib *jdsp, char enable);
 extern void CompressorDisable(JamesDSPLib *jdsp);
-/* [PATCHED-AuraDSP B4] enabled 由调用方决定（stage_comp 传入本次调用的门控值，
+/* [PATCHED-AuraDSP P-020 B4] enabled 由调用方决定（stage_comp 传入本次调用的门控值，
  * 使 RT 无需改写 jdsp->compEnabled）；旧签名 CompressorProcess(jdsp,n) 由
  * stage_comp 内部等价实现（读全局 compEnabled）。 */
 extern void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled);
-/* [PATCHED-AuraDSP B1-d] comp 启动缺额（工作域样本数）。
+/* [PATCHED-AuraDSP P-019 B1-d] comp 启动缺额（工作域样本数）。
  *
  * FFTCompander 每 hop(ovpLen) 才产出一块输出，而每次调用至少要写回 n 个
  * 输出样本（调用方原地处理）。块长 n 与 hop 不整除时，「已产出 - 已交付」
@@ -768,7 +768,7 @@ extern void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled);
  * 块长不整除 hop 时延迟多 D 帧（≤ ovpLen-1），这个量必须计入上报延迟，
  * 否则又是"报得比听得少"。 */
 extern unsigned int CompressorStartupDeficit(unsigned int ovpLen, unsigned int blockLen);
-/* [PATCHED-AuraDSP B1-c] 影子构建 + 原子换指针一体化提交（RT 零锁等待）。
+/* [PATCHED-AuraDSP P-018 B1-c] 影子构建 + 原子换指针一体化提交（RT 零锁等待）。
  * 参数：新 compander 参数（fgt_facT/granularity/tfresolution，变化或
  * forceRefresh 时触发 FFTCompanderInit 全量重算）；freq/gains/cpy 非空且
  * cpy=1 时复制新增益曲线；applyCurve=1 时重算 pchip/DREmult 曲线。
@@ -803,9 +803,9 @@ extern void StereoEnhancementProcess(JamesDSPLib *jdsp, size_t n);
 extern void VacuumTubeEnable(JamesDSPLib *jdsp);
 extern void VacuumTubeDisable(JamesDSPLib *jdsp);
 extern void VacuumTubeSetGain(JamesDSPLib *jdsp, double dbGain);
-extern void VacuumTubeSetCharacter(JamesDSPLib *jdsp, int character); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
-extern void VacuumTubeSetDryWet(JamesDSPLib *jdsp, float mix); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
-extern void VacuumTubeSetOutComp(JamesDSPLib *jdsp, double db); /* [PATCHED-AuraDSP 2026-10-13 P-011] */
+extern void VacuumTubeSetCharacter(JamesDSPLib *jdsp, int character); /* [PATCHED-AuraDSP P-011 2026-10-13] */
+extern void VacuumTubeSetDryWet(JamesDSPLib *jdsp, float mix); /* [PATCHED-AuraDSP P-011 2026-10-13] */
+extern void VacuumTubeSetOutComp(JamesDSPLib *jdsp, double db); /* [PATCHED-AuraDSP P-011 2026-10-13] */
 extern void VacuumTubeProcess(JamesDSPLib *jdsp, size_t n);
 // Live programmable effect
 extern const char* checkErrorCode(int errCode);
@@ -833,7 +833,7 @@ extern void CrossfeedProcess(JamesDSPLib *jdsp, size_t n);
 // Convolver
 extern void Convolver1DEnable(JamesDSPLib *jdsp);
 extern int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids); /* [PATCHED-AuraDSP P-004] */
-/* [PATCHED-AuraDSP B5] 多声道声道对选择：仅跑 ids 逗号表指定的阶段子集（默认顺序）。
+/* [PATCHED-AuraDSP P-021 B5] 多声道声道对选择：仅跑 ids 逗号表指定的阶段子集（默认顺序）。
  * 镜像 processFloatMultiplexd 的块长/ASRC/交织处理；x 与 y 可为同一缓冲。
  * samplePeaks：镜像 processInternal 的逐 stage 峰值采样（viz stage_levels 用；
  * 拆链两段时开，3b 额外对段保持 false 维持现有语义）。

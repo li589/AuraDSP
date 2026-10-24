@@ -28,7 +28,7 @@ void SOS_DF2_StereoProcess(DirectForm2 *df2, double x1, double x2, double *Out_y
 	df2->v1R = w2;
 	*Out_y2 = y2;
 }
-/* [PATCHED-AuraDSP B1-b] 改迭代实现：原版按字符递归（深度=剩余串长），
+/* [PATCHED-AuraDSP P-017 B1-b] 改迭代实现：原版按字符递归（深度=剩余串长），
  * 大 VDC 文件（实测 ~107KB，1600 段 SOS）即栈溢出崩溃（countChars 从
  * SR_48000 标记起递归到串尾）。语义不变：统计 s 中 c 的出现次数。 */
 int countChars(char* s, char c)
@@ -235,7 +235,7 @@ int PeakingFilterResampler(DirectForm2 *inputIIR, double inFs, DirectForm2 **res
 		cell[2][i] = bandwidth;
 	}
 	free(magnitude);
-	/* [PATCHED-AuraDSP B1-b] 原实现此处连续两次 malloc（第一次结果被
+	/* [PATCHED-AuraDSP P-017 B1-b] 原实现此处连续两次 malloc（第一次结果被
 	 * 第二次覆盖）→ 每次非 44.1/48k 直采频率都泄漏 outSOSCount 个
 	 * DirectForm2；删掉丢失引用的第一次分配。 */
 	DirectForm2 *temp = (DirectForm2*)malloc(outSOSCount * sizeof(DirectForm2));
@@ -247,7 +247,7 @@ int PeakingFilterResampler(DirectForm2 *inputIIR, double inFs, DirectForm2 **res
 	*resampledIIR = temp;
 	return outSOSCount;
 }
-/* [PATCHED-AuraDSP B1-b] 影子视图 + 原子换指针（替代原「持 jdsp_lock
+/* [PATCHED-AuraDSP P-017 B1-b] 影子视图 + 原子换指针（替代原「持 jdsp_lock
  * 原地换 sosPointer/usedSOSCount」）。设计同 B1-a liveprog / P-006 mEQ：
  *   - AURA_DDC_SLOTS(3) 个预分配视图槽，jdsp->ddcActive 指向活动视图；
  *   - 控制线程解析出新 SOS 数组后装填非活动槽并原子换指针；RT 块首读一次

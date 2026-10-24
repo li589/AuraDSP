@@ -9,7 +9,7 @@
 #include "jdsp_header.h"
 #define TAG "EffectDSPMain"
 
-/* [PATCHED-AuraDSP D7] ASRC 多相 FIR 抽头数——两条初始化路径必须一致。
+/* [PATCHED-AuraDSP P-022 D7] ASRC 多相 FIR 抽头数——两条初始化路径必须一致。
  *
  * 原来 JamesDSPInit 用 64、JamesDSPSetSampleRate（热切）用 32，两处都是函数内
  * 局部 `const unsigned int asrc_taps`，谁也看不出对方。后果：同一个设备
@@ -351,7 +351,7 @@ void jdsp_unlock(JamesDSPLib *jdsp)
  }
  static void stage_tube(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
- 	/* [PATCHED-AuraDSP B4] 门控取值：gates 非空且该字段 >=0 时用调用级值，
+ 	/* [PATCHED-AuraDSP P-020 B4] 门控取值：gates 非空且该字段 >=0 时用调用级值，
  	 * 否则沿用全局开关。RT 只读，绝不写回全局字段（lost update 根因）。 */
  	const char on = (gates && gates->tube >= 0) ? (char)gates->tube
  	                                            : (char)(jdsp->tubeEnabled != 0);
@@ -364,11 +364,11 @@ void jdsp_unlock(JamesDSPLib *jdsp)
  }
  static void stage_comp(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
- 	/* [PATCHED-AuraDSP B1-c] 恒调 CompressorProcess：在途守卫双计数
+ 	/* [PATCHED-AuraDSP P-018 B1-c] 恒调 CompressorProcess：在途守卫双计数
  	 * （compInFlight/compProcCount）须每块必走——停用期间块边界也要放行
  	 * 影子槽复用（compEnabled 门控已移入 CompressorProcess 内部）；
  	 * 输入 RMS 计量与输出增益/自动补偿仅在启用时执行（与原语义一致）。
- 	 * [PATCHED-AuraDSP B4] enabled 作为参数下传（不再靠 RT 改写
+ 	 * [PATCHED-AuraDSP P-020 B4] enabled 作为参数下传（不再靠 RT 改写
  	 * jdsp->compEnabled 来表达「本次调用停用」）。 */
  	const char enabled = (gates && gates->comp >= 0) ? (char)gates->comp
  	                                                 : (char)(jdsp->compEnabled != 0);
@@ -438,14 +438,14 @@ static void stage_conv(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 }
 static void stage_ddc(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
-	/* [PATCHED-AuraDSP B1-b] enabled 判断内移 DDCProcess：每块必过本
+	/* [PATCHED-AuraDSP P-017 B1-b] enabled 判断内移 DDCProcess：每块必过本
 	 * stage 推进在途守卫计数（停用期间块边界也要放行影子视图复用）。 */
 	(void)gates;
 	DDCProcess(jdsp, n);
 }
 static void stage_liveprog(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
-	/* [PATCHED-AuraDSP B1] enabled 判断内移 LiveProgProcess：每块必过本
+	/* [PATCHED-AuraDSP P-016 B1] enabled 判断内移 LiveProgProcess：每块必过本
 	 * stage 推进在途守卫计数（停用期间块边界也要放行影子槽复用）。 */
 	(void)gates;
 	LiveProgProcess(jdsp, n);
@@ -470,7 +470,7 @@ static void stage_reverb(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gate
 }
 static void stage_output(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
-	/* [PATCHED-AuraDSP B4] limiter 门控可被调用级覆盖（多声道链 Category B
+	/* [PATCHED-AuraDSP P-020 B4] limiter 门控可被调用级覆盖（多声道链 Category B
 	 * 需要「跑 postGain 但不跑 vendor limiter」，因为 MC 侧另有
 	 * limiter_process_mc 承担 lookahead/link/mask）。 */
 	const char limOn = (gates && gates->limiter >= 0) ? (char)gates->limiter
@@ -508,7 +508,7 @@ static const struct
 	char lock;
 } kAuraStages[] = {
 	{"tube", stage_tube, 0},
-	/* [PATCHED-AuraDSP B1-c] comp lock 1→0：控制侧已改影子构建 + 原子换
+	/* [PATCHED-AuraDSP P-018 B1-c] comp lock 1→0：控制侧已改影子构建 + 原子换
 	 * 指针（dynamic.c CompressorCommit + CompSlot 双缓冲），RT 块首读一次
 	 * compActive 即得一致快照，无需再与任何控制路径互斥；保留锁只会在
 	 * FFTCompanderInit 全量重算期间无谓阻塞 RT（Z13 只修了数据竞争，
@@ -521,11 +521,11 @@ static const struct
 	{"eq", stage_eq, 0},
 	{"arbmag", stage_arbmag, 0},
 	{"convolver", stage_conv, 1},
-	/* [PATCHED-AuraDSP B1-b] ddc lock 1→0：控制侧已改影子视图 + 原子换
+	/* [PATCHED-AuraDSP P-017 B1-b] ddc lock 1→0：控制侧已改影子视图 + 原子换
 	 * 指针（vdc.c），RT 块首读一次 ddcActive 即得 {sosPointer, count}
 	 * 一致对，无需再与任何控制路径互斥。 */
 	{"ddc", stage_ddc, 0},
-	/* [PATCHED-AuraDSP B1] liveprog lock 1→0：控制侧已改影子 VM 编译 +
+	/* [PATCHED-AuraDSP P-016 B1] liveprog lock 1→0：控制侧已改影子 VM 编译 +
 	 * 原子换指针（liveprogWrapper.c），RT 块首只读一次 eel 快照指针，
 	 * 无需再与任何控制路径互斥；保留锁只会在 EEL 编译/DDC 解析/
 	 * JamesDSPSetSampleRate 持锁时无谓阻塞 RT。 */
@@ -603,7 +603,7 @@ int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids)
 	return 0;
 }
 
-/* [PATCHED-AuraDSP] 上层 id 列表 → vendor stage id 列表。
+/* [PATCHED-AuraDSP P-013] 上层 id 列表 → vendor stage id 列表。
  *
  * 背景：App 的「处理顺序」页下发的是**全量**效果器 id（19 个，含 gate/filter/
  * dyneq/bassmono/haas/exciter/loudness 等自研 stage，它们在引擎自己的
@@ -681,7 +681,7 @@ void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 		jdsp->chain[i].fn(jdsp, n, (const AuraStageGates *)0); /* B4：全链一律用全局开关 */
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
-		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
+		/* [PATCHED-AuraDSP P-023 M3.5-c] 采样 stage 输出峰值 */
 		float maxL = 0.0f, maxR = 0.0f;
 		for (size_t s = 0; s < n; ++s)
 		{
@@ -708,7 +708,7 @@ void JamesDSPProcessCheckBenchmarkReady(JamesDSPLib *jdsp, size_t n)
 		jdsp->chain[i].fn(jdsp, n, (const AuraStageGates *)0); /* B4：全链一律用全局开关 */
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
-		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
+		/* [PATCHED-AuraDSP P-023 M3.5-c] 采样 stage 输出峰值 */
 		float maxL = 0.0f, maxR = 0.0f;
 		for (size_t s = 0; s < n; ++s)
 		{
@@ -1244,7 +1244,7 @@ void pfloat32Multiplexed(JamesDSPLib *jdsp, float *x, float *y, size_t n)
 	}
 }
 extern void JamesDSPOfflineResampling(float const *in, float *out, size_t lenIn, size_t lenOut, int channels, double src_ratio);
-/* [PATCHED-AuraDSP B5] 多声道声道对选择：仅跑 ids 指定的阶段子集（默认顺序），
+/* [PATCHED-AuraDSP P-021 B5] 多声道声道对选择：仅跑 ids 指定的阶段子集（默认顺序），
  * 镜像 processFloatMultiplexd 的块长/ASRC/交织处理。用于双声道效果器
  * （comp/eq/arbmag）在多声道下按掩码对选中声道对独立处理。 */
 static int stage_selected(const char *ids, const char *id)
@@ -1286,7 +1286,7 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
 			{
-				/* [PATCHED-AuraDSP Z13] honoring per-stage lock 标志：
+				/* [PATCHED-AuraDSP P-024 Z13] honoring per-stage lock 标志：
 				 * 与 JamesDSPProcess 的 chain 表锁语义对齐。此前本路径
 				 * （引擎唯一 RT 入口）完全忽略该标志，comp/convolver/ddc/
 				 * liveprog 的控制侧重置与 RT 处理零互斥。 */
@@ -1317,7 +1317,7 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 		for (unsigned int i = 0; i < kAuraStageCount; ++i)
 			if (stage_selected(ids, kAuraStages[i].id))
 			{
-				/* [PATCHED-AuraDSP Z13] 同 ASRC 分支：honoring per-stage lock */
+				/* [PATCHED-AuraDSP P-024 Z13] 同 ASRC 分支：honoring per-stage lock */
 				const char stageLock = kAuraStages[i].lock;
 				if (stageLock)
 					jdsp_lock(jdsp);
@@ -1481,7 +1481,7 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	/* [PATCHED-AuraDSP P-004] 默认处理序 */
 	JamesDSPRebuildChain(jdsp, (void *)0);
 	//
-	/* [PATCHED-AuraDSP D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与热切路径共用） */
+	/* [PATCHED-AuraDSP P-022 D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与热切路径共用） */
 	char isminphase = 1;
 	if (sample_rate < 44100.0f || sample_rate > 48000.0f)
 	{
@@ -1614,7 +1614,7 @@ void JamesDSPSetSampleRate(JamesDSPLib *jdsp, float new_sample_rate, int forceRe
 		FreeIntegerASRCHandler(&jdsp->asrc[0]);
 		FreeIntegerASRCHandler(&jdsp->asrc[1]);
 	}
-	/* [PATCHED-AuraDSP D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与 init 路径共用） */
+	/* [PATCHED-AuraDSP P-022 D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与 init 路径共用） */
 	char isminphase = 1;
 	if (new_sample_rate < 44100.0f || new_sample_rate > 48000.0f)
 	{
