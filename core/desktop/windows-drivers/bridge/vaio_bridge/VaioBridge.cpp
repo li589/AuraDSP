@@ -216,8 +216,13 @@ auraplugin::Fns g_pluginFns;
 auraplugin::Mirror g_pluginMirror;
 
 void FreeTestFile() {
+    // D2：清 kind 后**确定性**等在途块退出，替代原来的 Sleep(50) 猜测。
     InterlockedExchange(&g_vaio.tc.testKind, 0);
-    Sleep(50);
+    if (!vmcore::WaitRtDrained(&g_vaio.tc.rtInBlock)) {
+        // 极端：3s 内泵线程没退出当前块。此时 free 会踩在途读，整块保留不释放
+        // ——与 B3 quarantine 同一哲学：可控泄漏换不可控崩溃。
+        return;
+    }
     if (g_vaio.tc.testFile) {
         free((void*)g_vaio.tc.testFile);
         g_vaio.tc.testFile = nullptr;
@@ -412,6 +417,10 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         }
 
         const ULONG bytesToRead = framesToProcess * blockAlign;
+
+        // D2：本块在途计数。FreeTestFile 的排空等待以此为准（原为 Sleep(50)
+        // 猜毫秒数）。作用域到本轮 while 体末尾——本段内无 continue/break。
+        vmcore::RtInBlockGuard inBlock(&g_vaio.tc.rtInBlock);
 
         // 检查共享环是否有有效数据
         ULONGLONG totalWritten = pHeader ? pHeader->TotalBytesWritten : 0;

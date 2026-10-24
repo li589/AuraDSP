@@ -102,6 +102,16 @@ target_compile_options(vm_parallel_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_parallel_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET vm_parallel_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# D2 验收：RtInBlockGuard（成对/嵌套）+ WaitRtDrained（立即/等待/超时/排空延迟）。
+# 同样不链 auravm，只包含共享头 VmPumpCore.h；驱动无关，CI 可跑。
+add_executable(rt_drain_test
+    "${VMBRIDGE}/rt_drain_test.cpp"
+)
+target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}")
+target_compile_options(rt_drain_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET rt_drain_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET rt_drain_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
 )

@@ -10,7 +10,8 @@
 //   （零锁零分配零 syscall；仅原子量 + scratch + engine process）。
 // - Dart 线程：start/stop/set_param/test/viz/status/detect（直接调，无一进 RT）。
 // - 停止时序（防 RT 踩已释放引擎，同 05 FreeTestFile 模式）：
-//   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
+//   ASIOStop → 清 testKind → 等 rtInBlock 归零（墙钟 3s 上界，超限则保留
+//   缓冲不 free）→ dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
 #include "PluginBridge.h"
@@ -95,6 +96,9 @@ auraplugin::Mirror g_pluginMirror;
 void BridgeSink(void* ctx, float* in, float* out, int frames) {
     auto* c = static_cast<BridgeCtl*>(ctx);
     if (frames <= 0) return;
+    // D2：在途计数（下方有多条提前 return，用 RAII 保证成对；漏增会让
+    // stop 序列的排空等待立即通过 → free 掉 RT 仍在读的缓冲）。
+    vmcore::RtInBlockGuard inBlock(&c->tc.rtInBlock);
     const int ch = (c->ioCh >= 2) ? c->ioCh : 2;
     const size_t bytes = sizeof(float) * (size_t)ch * (size_t)frames;
     if (c->tc.testKind != 0) {
@@ -159,9 +163,15 @@ void DestroyEngine() {
 }
 
 void FreeTestFile() {
-    // 先清 kind 让 RT 停用，再等在途回调退出（~10ms 量级），最后释放（同 05）。
+    // D2：清 kind 后**确定性**等在途回调退出，替代原来的 Sleep(50) 猜测。
+    // 清 kind 后下一块回调不再触碰 testFile，故「rtInBlock 归零」即
+    // 「testFile 无人读」，可以安全 free。
     InterlockedExchange(&g_b.tc.testKind, 0);
-    Sleep(50);
+    if (!vmcore::WaitRtDrained(&g_b.tc.rtInBlock)) {
+        // 极端：3s 内 RT 没退出（驱动卡死 / 野指针）。此时 free 会踩在途读，
+        // 故整块保留不释放——与 B3 quarantine 同一哲学：可控泄漏换不可控崩溃。
+        return;
+    }
     if (g_b.tc.testFile) {
         free((void*)g_b.tc.testFile);
         g_b.tc.testFile = nullptr;

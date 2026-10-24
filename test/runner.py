@@ -79,6 +79,10 @@ def run_smoke_tests():
         # 引用计数回收。不得识别任何厂商名（源码不变式），卸载必须 RemoveDllDirectory
         # 否则进程搜索路径单调增长 → 后续插件解析同名 DLL 绑到私有副本 → ABI 崩溃。
         "smoke_dll_dirs.py",
+        # D2 门禁（2026-10-24）：三桥释放前的 Sleep(50) 猜测改 rtInBlock 确定
+        # 性排空（含审查漏点 VmBridge.FreeTestFile）。三层：源码不变式 /
+        # guard+排空单测 / ASIO 实测 test_stop 不再是固定 50ms。
+        "smoke_d2_rt_drain.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
