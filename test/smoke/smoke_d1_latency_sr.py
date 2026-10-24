@@ -102,12 +102,11 @@ m = re.search(r"struct\s+LatencyItem\s*\{([^}]*)\}", hdr)
 body = m.group(1) if m else ""
 check("LatencyItem has 3 fields (tier/frames/ms)",
       m is not None and "frames" in body and body.count(";") >= 3, body.strip()[:60])
-# comp 必须是结构性帧数 4096，而不是 85.0f
-comp = re.search(r"kLatComp\s*\{([^}]*)\}", hdr)
-comp_args = [x.strip() for x in comp.group(1).split(",")] if comp else []
-check("kLatComp is 4096 frames (not a ms constant)",
-      len(comp_args) == 3 and comp_args[1].startswith("4096"),
-      ",".join(comp_args))
+# comp 不得再以「固定 4096 帧」的形态留在表里：D7 实测该数字与运行时无关
+# （fftLen-ovpLen 随 tfresolution 变），已改为 kCompLatProfile 查表。
+# 这里断言"表里不再有 kLatComp"，而不是断言某个新数值——数值标定归 D7 门禁。
+check("kLatComp retired from table (comp -> kCompLatProfile)",
+      "kLatComp" not in hdr and "kCompLatProfile" in hdr)
 # arbmag 必须彻底退出表（延迟=块长，写任何常量都错）。这里断言"条目不存在"，
 # 而不是"没有 2.67 这个数字"——后者对"整条删掉"和"改成别的错值"都放行。
 check("kLatArbMag absent from table (latency = block length)",
@@ -120,7 +119,7 @@ check("compute_latency no direct .ms accumulation",
 check("compute_latency converts arbmag by block length",
       "blockSize" in chain and "FramesToMs" in chain)
 
-print("\n=== [B] 行为：comp 延迟必须随采样率缩放 ===")
+print("\n=== [B] 行为：结构性帧数按换算基准走（不是写死的毫秒常量） ===")
 b = ctypes.CDLL(DLL)
 b.auradsp_create.restype = ctypes.c_void_p
 b.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
@@ -133,7 +132,11 @@ b.auradsp_get_latency_ms.restype = ctypes.c_double
 b.auradsp_get_latency_ms.argtypes = [ctypes.c_void_p]
 
 
-def make(sr, blk=1024):
+def make(sr, blk=None):
+    # D7：comp 只在「一块的工作域长度 ≥ ovpLen(512)」时才真正处理；ASRC 采样率
+    # 下工作块 = blk·48k/sr，故块长必须按 sr 等比放大，否则测到的是"未生效"的 0。
+    if blk is None:
+        blk = 512 * max(1, int(sr // 48000))
     h = b.auradsp_create(ctypes.c_float(sr), blk)
     return h if h else None
 
@@ -144,56 +147,64 @@ def set_bool(h, pid, v):
 
 
 results = {}
-for sr, want in ((48000, 85.33), (96000, 42.67), (192000, 21.33)):
+# D7 更正：comp 的帧数属于**工作采样率域**，ASRC 启用时工作率恒 48k，
+# 故三种设备采样率下的毫秒值应当相同（都是 3584/48000 = 74.67ms）。
+# pre-D7 的两条断言要求 1:1/2:1/4 缩放，前提是"DSP 跑在设备域"——实测不成立。
+for sr in (48000, 96000, 192000):
     h = make(sr)
     if not h:
         check(f"create engine @{sr}", False)
         continue
     try:
-        # 注意：limiter 默认开启（P-012 语义：总开关默认 1，关时只做 postGain），
-        # 会固定贡献 2.0ms 名义值。用「基线差值」量 comp 的真实分量，
-        # 否则 87.33 = 85.33+2 会被误判成"不随采样率缩放"。
+        # limiter 默认 lookahead=0（0ms）、reverb 默认关，故基线为 0。
         set_bool(h, "comp.enable", False)
         set_bool(h, "limiter.enable", False)
         base = b.auradsp_get_latency_ms(h)
         rc = set_bool(h, "comp.enable", True)
         ms = b.auradsp_get_latency_ms(h) - base
         results[sr] = ms
-        # 4096 帧 / sr * 1000
-        check(f"comp latency @{int(sr/1000)}k ≈ {want}ms", abs(ms - want) < 1.0,
+        check(f"comp latency @{int(sr/1000)}k ≈ 74.67ms (工作域 3584 帧)",
+              abs(ms - 74.67) < 0.5,
               f"got {ms:.2f}ms (base={base:.2f}, rc={rc})")
     finally:
         b.auradsp_destroy(h)
 
 if len(results) == 3:
-    # pre-fix 时三者相等（全 85.0）→ 这两条必判红
-    check("96k is half of 48k", abs(results[96000] * 2 - results[48000]) < 1.0,
-          f"48k={results[48000]:.2f} 96k={results[96000]:.2f}")
-    check("192k is quarter of 48k", abs(results[192000] * 4 - results[48000]) < 2.0,
-          f"48k={results[48000]:.2f} 192k={results[192000]:.2f}")
+    # 仍是「帧数 vs 写死毫秒」的判别：写死 85.0f 时三者相等但值不对；
+    # 按设备率换算时三者呈 1:1/2:1/4（96k=37.33）→ 下面两条必红。
+    check("comp latency is device-rate independent (ASRC work domain)",
+          max(results.values()) - min(results.values()) < 0.5,
+          f"48k={results[48000]:.2f} 96k={results[96000]:.2f} 192k={results[192000]:.2f}")
 
-print("\n=== [C] 名义值与采样率无关（limiter 2ms） ===")
+print("\n=== [C] 名义值与采样率无关（reverb 30ms） ===")
+# D7 起 limiter 不再是固定 2ms 名义值（默认 lookahead=0 → 0ms；开前瞻 → 1.5ms），
+# 改用真正"与采样率无关的名义值"项来测这一性质。
 for sr in (48000, 96000):
     h = make(sr)
     if not h:
         continue
     try:
         set_bool(h, "comp.enable", False)
-        set_bool(h, "limiter.enable", True)
+        mv = ctypes.c_int32(0)
+        b.auradsp_set_param(h, b"reverb.preset", ctypes.byref(mv), 4)
         ms = b.auradsp_get_latency_ms(h)
-        check(f"limiter nominal 2ms @{int(sr/1000)}k", abs(ms - 2.0) < 0.01,
+        # 容差 0.05ms 而非 0.01：ASRC 启用时另计环形缓冲 ceil(inFs/fs) 个输入
+        # 样本（96k→48k = 0.021ms），这是 D7 如实计入的真实分量。
+        check(f"reverb nominal 30ms @{int(sr/1000)}k", abs(ms - 30.0) < 0.05,
               f"got {ms:.3f}ms")
     finally:
         b.auradsp_destroy(h)
 
-print("\n=== [D] 叠加口径自洽（48k comp+limiter） ===")
+print("\n=== [D] 叠加口径自洽（48k comp+reverb） ===")
 h = make(48000)
 if h:
     try:
         set_bool(h, "comp.enable", True)
-        set_bool(h, "limiter.enable", True)
+        mv = ctypes.c_int32(0)
+        b.auradsp_set_param(h, b"reverb.preset", ctypes.byref(mv), 4)
         ms = b.auradsp_get_latency_ms(h)
-        check("48k comp+limiter ≈ 87.33ms", abs(ms - 87.33) < 1.0, f"got {ms:.2f}ms")
+        check("48k comp(74.67)+reverb(30) ≈ 104.67ms", abs(ms - 104.67) < 0.5,
+              f"got {ms:.2f}ms")
     finally:
         b.auradsp_destroy(h)
 

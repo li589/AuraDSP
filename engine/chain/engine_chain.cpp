@@ -6,41 +6,77 @@
 
 /* 计算当前启用组合的附加延迟（ms）——纯测量。
  * ADR-006：延迟档硬约束已撤销，此函数只累加并上报，
- * 永远不返回「超档」，也不再导致任何使能请求被拒绝。 */
+ * 永远不返回「超档」，也不再导致任何使能请求被拒绝。
+ *
+ * D1：所有项走 LatencyMs()，不再直接累加 `.ms`。
+ * D7：结构性帧数一律按**工作采样率**（jdsp.fs）换算——ASRC 启用时 DSP 跑在
+ * 48k/44.1k 域，帧数属于那个域；拿设备率（h->sample_rate）换算会低估
+ * inFs/fs 倍（96k 下 2 倍）。名义值（frames==0）本就与采样率无关，照旧。 */
 void compute_latency(auradsp_handle h, double* out_ms) {
     double ms = 0.0;
-    /* D1：所有项走 LatencyMs()——结构性帧数按当前采样率换算，名义值原样取。
-     * 原来直接累加 `.ms`，把「4096 帧」的 comp 当成固定 85ms，96k 下翻倍错。 */
-    const double sr = (double)h->sample_rate;
-    if (h->p.limiter_enable.load(std::memory_order_relaxed)) ms += LatencyMs(kLatLimiter, sr);
+    const double sr = (double)h->sample_rate;          /* 设备/流采样率 */
+    const double wsr = (double)h->jdsp.fs;             /* 工作采样率（=sr 除非 ASRC） */
+    const double lat_sr = (wsr > 0.0) ? wsr : sr;      /* 结构性帧数的换算基准 */
+    if (h->p.limiter_enable.load(std::memory_order_relaxed)) {
+        /* D7：limiter 的延迟取决于模式，且默认模式是 0ms（原表写死 2.0ms
+         * 名义值，默认配置下平白高估 2ms）。见 engine_internal.h kLatDdc 后注释。 */
+        if (h->p.limiter_lookahead.load(std::memory_order_relaxed) != 0) {
+            /* 前瞻环形缓冲：写入 pos 后从 (pos+1)%la_len 读 → 实占 la_len-1 帧。
+             * la_len 按 fs 缩放，故时间恒定 ~1.5ms；延迟线在 wrapper 层（ASRC
+             * 之外），用设备采样率换算。上限与 limiter_process_mc 一致。 */
+            int la_len = (int)(0.0015 * sr + 0.5);
+            if (la_len < 1) la_len = 1;
+            if (la_len > auradsp_handle_s::kLimLookaheadMax)
+                la_len = auradsp_handle_s::kLimLookaheadMax;
+            ms += FramesToMs((double)(la_len - 1), sr);
+        }
+    }
     if (h->p.reverb_preset.load(std::memory_order_relaxed) >= 0) {
-        ms += LatencyMs(kLatReverb, sr);
+        ms += LatencyMs(kLatReverb, lat_sr);
     }
     /* 卷积：IR 已加载且使能时计入 */
     if (h->p.conv_enable.load(std::memory_order_relaxed) &&
         h->ir_ready.load(std::memory_order_relaxed)) {
-        ms += LatencyMs(kLatConvolver, sr);
+        ms += LatencyMs(kLatConvolver, lat_sr);
     }
-    if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += LatencyMs(kLatCrossfeed, sr);
+    if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += LatencyMs(kLatCrossfeed, lat_sr);
     /* VDC = 动态范围均衡器，延迟极低。此前 kLatDdc 定义了却从未计入，
      * 导致 VDC 开启时总延迟被低估。 */
     if (h->p.ddc_enable.load(std::memory_order_relaxed) &&
         h->p.ddc_ready.load(std::memory_order_relaxed)) {
-        ms += LatencyMs(kLatDdc, sr);
+        ms += LatencyMs(kLatDdc, lat_sr);
     }
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
-        ms += LatencyMs(kLatComp, sr);
+        /* D7：comp 的延迟随 tfresolution 变（不是固定 4096 帧），且只有
+         * 「一块的工作域长度 ≥ ovpLen」时才真正处理——攒不满就不产帧、整块
+         * 直通，此时延迟与压缩量都是 0。详见 engine_internal.h 的
+         * kCompLatProfile 注释与实测数据。 */
+        const int tf = h->p.comp_tfresolution.load(std::memory_order_relaxed);
+        const CompLatencyProfile& cp = kCompLatProfile[(tf >= 0 && tf <= 3) ? tf : 1];
+        if (cp.frames > 0 && cp.ovpLen > 0) {
+            /* jdsp.blockSize 是**设备域**块长（pint16 等入口写入 n），
+             * 换算成工作域帧数后才能和 ovpLen 比。首次处理前为 0 时回落
+             * 创建时的 max_block（一块的上界）。 */
+            size_t devBlk = h->jdsp.blockSize;
+            if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
+            const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
+            const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
+            if (workBlk >= (size_t)cp.ovpLen) {
+                ms += LatencyMs(LatencyItem{cp.tf, cp.frames, 0.0f}, lat_sr);
+            }
+        }
     }
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed)) {
-        /* D1：arbmag 用分块 FFT 卷积，附加延迟就是**单块帧数**（卷积器按
-         * jdsp->blockSize 加载 IR；该字段每块由 JamesDSPProcess 写入，会话内
-         * 基本恒定，故这里读到的是稳定的当前块长）。原表写死 2.67ms
-         * （=128 帧 @48k），1024 帧块下低估 8 倍。为 0（尚未处理过任何块）
-         * 时回落引擎创建时给的 max_block，它正是一块的上界。 */
-        size_t blk = h->jdsp.blockSize;
-        if (blk == 0) blk = (size_t)(h->max_block > 0 ? h->max_block : 0);
-        ms += FramesToMs((double)blk, sr);
+        /* D1/D7：arbmag 用分块 FFT 卷积，附加延迟就是**单块帧数**（卷积器按
+         * jdsp->blockSize 加载 IR）。块长存的是设备域帧数，先折到工作域，
+         * 再按工作域采样率换算——两者相除即真实时长。为 0（尚未处理过任何
+         * 块）时回落引擎创建时给的 max_block，它正是一块的上界。 */
+        size_t devBlk = h->jdsp.blockSize;
+        if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
+        const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
+        const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
+        ms += FramesToMs((double)workBlk, lat_sr);
     }
     /* Haas = 纯延迟线，按当前设定值动态上报（0..25ms，Viper 差分环绕同量级）。
      * 这是**用户设的毫秒值**（延迟线内部按 ms*sr 折算样本），不做采样率换算。 */
@@ -52,7 +88,12 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     /* 空间音效：直达径 ITD 名义 1ms（早期反射/混响尾是并行能量，不计入；
      * 与 reverb 30ms 名义口径一致）。 */
     if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
-        ms += LatencyMs(kLatSpatial, sr);
+        ms += LatencyMs(kLatSpatial, lat_sr);
+    }
+    /* D7：ASRC 中转环形缓冲的结构延迟（实测其它部分落在噪声内，见头注释）。
+     * 只在 ASRC 真正启用时计入，否则 inFs==fs、该式为 0 也无意义。 */
+    if (h->jdsp.enableASRC) {
+        ms += AsrcRingLatencyMs(sr, lat_sr);
     }
     *out_ms = ms;
 }
