@@ -1,4 +1,4 @@
-"""smoke_comp_race.py — compander 控制线程/RT 线程竞争门禁（Z13）。
+"""smoke_comp_race.py — compander 控制线程/RT 线程竞争门禁（Z13 → B1-c）。
 
 背景（2026-10-23 崩溃调查）：minidump auradsp_app.exe.16656.dmp 定位到
 dynamic.c 生产侧 `mOutputBuffer[mOutputBufferCount - 1]` 索引 -1 空写
@@ -19,10 +19,22 @@ comp.gain 滑块（11:58:25-27 三条 setParam 后 0.8s 内崩溃），与用户
 ctypes 参数对象预构建、扫描抽样）。
 
 修复前（RT comp stage 无锁 + 控制侧只持 ctrl_mutex）该竞争为进程级访问
-违例——本测试进程会直接死亡，runner 报非零退出。修复后（kAuraStages
-comp lock=1 + multiplexed RT 路径 honoring lock + apply_comp 同锁）竞争
-被互斥关闭，结构上不可能再崩。通过标准：进程存活 + 输出全程有限 +
-全部线程在超时前正常结束（无死锁）。
+违例——本测试进程会直接死亡，runner 报非零退出。Z13 修复（kAuraStages
+comp lock=1 + multiplexed RT 路径 honoring lock + apply_comp 同锁）用互斥
+关闭了竞争，但持锁时长 = FFTCompanderInit 全量重算时长（默认 tfres=1
+CWT 为重档），参数频调时 RT 反复阻塞在 EnterCriticalSection——只修了
+竞争，没修等待时长（全量审查 B1/P0）。
+
+B1-c 修复（2026-10-24）：控制侧改影子构建 + 原子换指针（CompSlot 双缓冲，
+同 B1-a liveprog / B1-b ddc 范式），stage_comp lock 置 0。本测试在 Z13
+断言基础上新增 RT 不阻塞度量：
+  - rt blocks/window：UI  hammering 期间 RT 块吞吐（Z13 下 RT 每块都要
+    等控制侧释放 jdsp_lock，吞吐塌陷；B1-c 下 RT 永不因 comp 取锁）；
+  - rt max block：单块墙钟尖峰（Z13 下单块可被锁挡整个 Init 时长；
+    B1-c 下单块只含正常 DSP + 调度噪声）。
+阈值经反向验证标定（临时还原 Z13 持锁行为重建 DLL，两项须失败）。
+通过标准：进程存活 + 输出全程有限 + 全部线程在超时前正常结束（无死锁）
++ RT 不阻塞两项。
 """
 import ctypes
 import math
@@ -93,6 +105,8 @@ stop = threading.Event()
 rt_nonfinite = []      # RT 线程记录的首个非有限输出块序号
 rt_crash = []          # RT 线程内访问违例等硬故障（竞争致死的直接证据）
 rt_blocks = [0]
+rt_max_block_ms = [0.0]   # B1-c：单块墙钟尖峰（Z13 下可被锁挡整个 Init 时长）
+rt_blocks_per_sec = [0.0] # B1-c：UI hammering 期间 RT 块吞吐
 uiA_calls = [0]
 uiB_calls = [0]
 ui_errors = []
@@ -148,7 +162,9 @@ def ui_thread_b():
 
 
 def rt_thread():
-    """模拟 RT 音频回调：预分配缓冲连续 process，每 64 块抽样扫描有限性。"""
+    """模拟 RT 音频回调：预分配缓冲连续 process，每 64 块抽样扫描有限性。
+    B1-c：逐块记录墙钟（max block）+ 总块数/总时长（blocks per sec）——
+    RT 若每块都要等控制侧释放 jdsp_lock（Z13），这两项会暴露等待时长。"""
     buf = (ctypes.c_float * (BLOCK * 2))()
     out = (ctypes.c_float * (BLOCK * 2))()
     for i in range(BLOCK):
@@ -157,7 +173,10 @@ def rt_thread():
         buf[i * 2] = s
         buf[i * 2 + 1] = s
     k = 0
+    t_first = None
+    t_last = None
     while not stop.is_set():
+        t0 = time.perf_counter()
         try:
             dll.auradsp_process(h, buf, out, BLOCK)
         except OSError as e:
@@ -166,6 +185,13 @@ def rt_thread():
             # 控制线程 FFTCompanderInit 与 RT 移位循环争抢后读出野指针）。
             rt_crash.append('block %d: %s' % (k, e))
             break
+        t1 = time.perf_counter()
+        if t_first is None:
+            t_first = t0
+        t_last = t1
+        block_ms = (t1 - t0) * 1000.0
+        if block_ms > rt_max_block_ms[0]:
+            rt_max_block_ms[0] = block_ms
         if (k & 63) == 0:
             for i in range(0, BLOCK * 2, 8):
                 v = out[i]
@@ -174,6 +200,8 @@ def rt_thread():
                     break
         k += 1
     rt_blocks[0] = k
+    if t_first is not None and t_last > t_first:
+        rt_blocks_per_sec[0] = k / (t_last - t_first)
 
 
 t_a = threading.Thread(target=ui_thread_a, daemon=True)
@@ -203,8 +231,15 @@ check('rt output always finite', not rt_nonfinite,
 check('rt produced audio (blocks>1000)', rt_blocks[0] > 1000, 'blocks=%d' % rt_blocks[0])
 check('ui A hammered gains (sweeps>50)', uiA_calls[0] > 50, 'sweeps=%d' % uiA_calls[0])
 check('ui B hammered struct params (iters>50)', uiB_calls[0] > 50, 'iters=%d' % uiB_calls[0])
-print('  [info] uiA sweeps=%d, uiB iters=%d, rt blocks=%d'
-      % (uiA_calls[0], uiB_calls[0], rt_blocks[0]))
+# B1-c：RT 不阻塞两项。Z13 下 RT 的 stage_comp 每块取 jdsp_lock，而持锁方
+# 在做全量 FFTCompanderInit（默认 tfres=1 CWT 重档，实测 ~10ms 级）——
+# 块吞吐塌陷 + 单块尖峰达到 Init 时长。反向验证（还原持锁行为）时两项失败。
+check('rt throughput not collapsed (blocks/s>=800)', rt_blocks_per_sec[0] >= 800,
+      'blocks/s=%.0f' % rt_blocks_per_sec[0])
+check('rt max block no lock-wait spike (<10ms)', rt_max_block_ms[0] < 10.0,
+      'max=%.2fms' % rt_max_block_ms[0])
+print('  [info] uiA sweeps=%d, uiB iters=%d, rt blocks=%d, rt blocks/s=%.0f, rt max block=%.2fms'
+      % (uiA_calls[0], uiB_calls[0], rt_blocks[0], rt_blocks_per_sec[0], rt_max_block_ms[0]))
 
 # 收尾：竞争测试后引擎仍可用（无状态损坏残留）
 set_i('comp.enable', 1)

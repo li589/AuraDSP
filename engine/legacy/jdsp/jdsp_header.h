@@ -135,6 +135,27 @@ typedef struct str_dynfreqdomain
 	float specHannReal[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1], specHannImag[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
 	cplx tmp[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
 } FFTCompander;
+/* [PATCHED-AuraDSP B1-c] comp 影子槽（与 B1-a liveprog 影子 VM / B1-b ddc
+ * 影子视图同范式）。原实现 `FFTCompander comp` 单体内嵌 + kAuraStages comp
+ * lock=1：控制线程 CompressorSetParam(forceRefresh=1) 持 jdsp_lock 整体重置
+ * compander（FFTCompanderInit 全量重算），RT 的 stage_comp 每块取同一把锁
+ * ⇒ 重建期间音频整段卡死（Z13 只修了数据竞争，没修等待时长）。
+ * 现改为：控制线程在非活动影子槽上全量拷贝 + 重建，成功后原子换
+ * compActive 指针；RT 块首只读一次指针，块内不碰换出实例，stage lock 置 0。
+ * 槽数取 2（1 活动 + 1 影子）：控制侧构建由 ctrl_mutex 串行，且单 RT 线程
+ * 任一时刻至多一个 comp 调用在途（至多持有一个槽），故一个影子槽足够；
+ * 在途守卫双条件（compInFlight==0 或 compProcCount>=retiredAt）覆盖排空，
+ * 音频停流时 inFlight==0 立即可复用（不受 procCount 冻结影响）。
+ * 每槽 pch.s 为构造时分配的私有插针数组（ierper 含堆指针，禁止跨槽别名）。 */
+typedef struct
+{
+	FFTCompander cm;
+	/* 本槽被换下时所期望的 compProcCount 下界（换下时刻快照 +1）。
+	 * 复用本槽要求 compProcCount >= retiredAt（换下后跑满 1 块）或
+	 * compInFlight == 0。0=从未当活动槽（立即可用）。 */
+	uint64_t retiredAt;
+} CompSlot;
+#define AURA_COMP_SLOTS 2
 typedef struct
 {
 	int needOversample;
@@ -554,7 +575,19 @@ typedef struct dspsys
 	// Effect
 	// Compressor
 	int compEnabled, compForceRefresh;
-	FFTCompander comp;
+	/* [PATCHED-AuraDSP B1-c] comp 影子槽（替代原单体内嵌 FFTCompander comp）：
+	 * RT 块首读一次 compActive 即得一致快照（x86-64 对齐指针存/取即原子，
+	 * 数据依赖保证读取顺序）；控制线程在非活动槽 compSlots[] 上全量拷贝 +
+	 * 重建后原子换指针。compProcCount 由 RT 每块递增（CompressorProcess
+	 * 入口，单写者，与 compEnabled 无关——停用期间块边界也要放行影子槽
+	 * 复用）；compSwapProc 记录换指针后观察到的快照（诊断/断言用）；
+	 * compInFlight 入口原子 +1、出口 -1，控制侧读到的 0 严谨证明无任何
+	 * 在途调用持有旧快照（x86 TSO + lock 前缀全屏障）。stage_comp 的
+	 * lock 标志已置 0。 */
+	CompSlot compSlots[AURA_COMP_SLOTS];
+	FFTCompander *compActive;
+	uint64_t compProcCount, compSwapProc;
+	long compInFlight;
 	float comp_gr; /* [PATCHED-AuraDSP P2.4] 实时压缩增益衰减分贝 (dB >= 0) */
 	// Bass boost
 	int bassBoostEnabled;
@@ -693,6 +726,16 @@ extern void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, ch
 extern void CompressorEnable(JamesDSPLib *jdsp, char enable);
 extern void CompressorDisable(JamesDSPLib *jdsp);
 extern void CompressorProcess(JamesDSPLib *jdsp, size_t n);
+/* [PATCHED-AuraDSP B1-c] 影子构建 + 原子换指针一体化提交（RT 零锁等待）。
+ * 参数：新 compander 参数（fgt_facT/granularity/tfresolution，变化或
+ * forceRefresh 时触发 FFTCompanderInit 全量重算）；freq/gains/cpy 非空且
+ * cpy=1 时复制新增益曲线；applyCurve=1 时重算 pchip/DREmult 曲线。
+ * 返回 1=已换入活动视图；<0=失败（-4 引擎忙：500ms 墙钟内无可用影子槽或
+ * 活动快照始终被 RT 占用，旧快照继续生效，不静音不退化）。 */
+extern int CompressorCommit(JamesDSPLib *jdsp, float fgt_facT, int granularity,
+                            int tfresolution, char forceRefresh,
+                            const double *freq, const double *gains,
+                            char cpy, char applyCurve);
 // Bass boost
 extern void BassBoostEnable(JamesDSPLib *jdsp);
 extern void BassBoostDisable(JamesDSPLib *jdsp);

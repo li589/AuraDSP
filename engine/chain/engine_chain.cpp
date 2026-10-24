@@ -198,35 +198,38 @@ void apply_convolver(auradsp_handle h) {
 
 void apply_comp(auradsp_handle h) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
-        /* [PATCHED-AuraDSP Z13] compander 控制侧重置与 RT 处理的互斥。
-         * 背景：CompressorSetParam(forceRefresh=1) 每次都整体重置 compander
-         * （mOutputBufferCount=0、输出缓冲指针表复位、mInputPos/readOffset
-         * 清零、窗口表重算）。此前本路径只持 ctrl_mutex（RT 不取），而 RT
-         * multiplexed 路径不看 stage lock 标志 → 两侧零互斥：RT 消耗循环
-         * while(count>0) 通过后、count-- 前被置 0 → count 变 -1 → 下一帧
-         * 生产侧 mOutputBuffer[-1] 越界空写崩溃。2026-10-23 minidump 实证
-         * （拖 comp.gain 滑块即崩，与用户报告「效果器调节时闪退」吻合）。
-         * 修法：RT 侧 kAuraStages comp lock=1（stage_comp 持 jdsp_lock），
-         * 此处同锁；JamesDSPSetSampleRate→CompressorEnable 本就在锁内。 */
-        jdsp_lock(&h->jdsp);
-        CompressorSetParam(&h->jdsp,
-                           h->p.comp_timeconstant.load(std::memory_order_relaxed),
-                           h->p.comp_granularity.load(std::memory_order_relaxed),
-                           h->p.comp_tfresolution.load(std::memory_order_relaxed),
-                           1);
+        /* [PATCHED-AuraDSP B1-c] compander 控制侧重置改影子构建 + 原子换
+         * 指针（CompressorCommit，同 B1-a liveprog / B1-b ddc 范式），
+         * 替代 Z13 的「RT stage_comp 持 jdsp_lock + 此处同锁」全程互斥。
+         * 背景：CompressorSetParam(forceRefresh=1) 做 FFTCompanderInit
+         * 全量重算（2026-10-23 minidump：拖 comp.gain 滑块即崩，根因是
+         * 重置与 RT 消耗无互斥致 mOutputBufferCount 减成 -1 越界空写）；
+         * Z13 用互斥关闭了竞争，但持锁时长即重建时长——参数频调时 RT
+         * 反复卡死。影子方案下 RT 块首只读一次 compActive 快照，控制
+         * 线程在非活动槽重建后原子换指针，两侧零交集。
+         * -4（引擎忙：RT 卡在 comp 内 >500ms 的极端场景）时旧快照继续
+         * 生效，p-struct 已存新值，下一次任意 comp.* 变更会补上——
+         * 不静音、不退化到活动槽原地重建（UAF）。 */
         double freqs[7];
         double gains[7];
         for (int i = 0; i < 7; ++i) {
             freqs[i] = (double)h->p.comp_freq[i].load(std::memory_order_relaxed);
             gains[i] = (double)h->p.comp_gain[i].load(std::memory_order_relaxed);
         }
-        CompressorSetGain(&h->jdsp, freqs, gains, 1);
-        CompressorEnable(&h->jdsp, 1);
-        jdsp_unlock(&h->jdsp);
+        CompressorCommit(&h->jdsp,
+                         h->p.comp_timeconstant.load(std::memory_order_relaxed),
+                         h->p.comp_granularity.load(std::memory_order_relaxed),
+                         h->p.comp_tfresolution.load(std::memory_order_relaxed),
+                         1, freqs, gains, 1, 1);
+        /* 本次提交自带 forceRefresh=1（全量 Init），已覆盖挂起的刷新语义
+         * （JamesDSPSetSampleRate 置位的 compForceRefresh），顺手消费避免
+         * 下一次 CompressorEnable 重复全量重建。 */
+        h->jdsp.compForceRefresh = 0;
+        h->jdsp.compEnabled = 1;
     } else {
-        jdsp_lock(&h->jdsp);
+        /* 关闭只写 enabled 标志（x86 对齐 int 原子；RT 最多少停用一块），
+         * 无结构变更，无需任何互斥。 */
         CompressorDisable(&h->jdsp);
-        jdsp_unlock(&h->jdsp);
     }
 }
 

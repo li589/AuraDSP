@@ -341,12 +341,15 @@ void jdsp_unlock(JamesDSPLib *jdsp)
  }
  static void stage_comp(JamesDSPLib *jdsp, size_t n)
  {
- 	if (jdsp->compEnabled)
- 	{
- 		double rin = jdsp->fxAutoGain[1] ? stage_rms(jdsp, n) : 0.0;
- 		CompressorProcess(jdsp, n);
+ 	/* [PATCHED-AuraDSP B1-c] 恒调 CompressorProcess：在途守卫双计数
+ 	 * （compInFlight/compProcCount）须每块必走——停用期间块边界也要放行
+ 	 * 影子槽复用（compEnabled 门控已移入 CompressorProcess 内部）；
+ 	 * 输入 RMS 计量与输出增益/自动补偿仅在启用时执行（与原语义一致）。 */
+ 	const char enabled = jdsp->compEnabled;
+ 	double rin = (enabled && jdsp->fxAutoGain[1]) ? stage_rms(jdsp, n) : 0.0;
+ 	CompressorProcess(jdsp, n);
+ 	if (enabled)
  		stage_apply_fx_gain(jdsp, n, 1, rin);
- 	}
  }
  static void stage_bass(JamesDSPLib *jdsp, size_t n)
  {
@@ -462,13 +465,15 @@ static const struct
 	char lock;
 } kAuraStages[] = {
 	{"tube", stage_tube, 0},
-	/* [PATCHED-AuraDSP Z13] comp 置 1：CompressorSetParam(forceRefresh=1) 会在
-	 * 控制线程整体重置 compander 状态（mOutputBufferCount=0、输出缓冲指针表
-	 * 复位、mInputPos/readOffset 清零），与 RT 消耗循环无互斥时 count 可被
-	 * 读到 -1 → 生产侧 mOutputBuffer[count-1] 越界空写（2026-10-23 minidump
-	 * 实证：拖 comp.gain 滑块即崩）。RT 侧持 jdsp_lock、控制侧 apply_comp
-	 * 同锁，形成互斥。历史遗漏：本标志在建 multiplexed RT 路径时未被 honoring。 */
-	{"comp", stage_comp, 1},
+	/* [PATCHED-AuraDSP B1-c] comp lock 1→0：控制侧已改影子构建 + 原子换
+	 * 指针（dynamic.c CompressorCommit + CompSlot 双缓冲），RT 块首读一次
+	 * compActive 即得一致快照，无需再与任何控制路径互斥；保留锁只会在
+	 * FFTCompanderInit 全量重算期间无谓阻塞 RT（Z13 只修了数据竞争，
+	 * 没修等待时长——参数频调时 RT 反复卡在 EnterCriticalSection）。
+	 * stage_comp 的 enabled 门控随之移入 CompressorProcess：在途计数
+	 * （compInFlight/compProcCount）须每块必走，停用期间块边界也要放行
+	 * 影子槽复用。 */
+	{"comp", stage_comp, 0},
 	{"bass", stage_bass, 0},
 	{"eq", stage_eq, 0},
 	{"arbmag", stage_arbmag, 0},

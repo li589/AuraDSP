@@ -329,3 +329,67 @@ yquist * 0.999，
   更新需以本版为基线人工合并）。
 - **后续（B1 同法未竟项）**：仅剩 comp（`CompressorSetParam(forceRefresh=1)`
   全量重置，Z13 锁保持）——B1-c。
+
+## B1-c Effects/dynamic.c + jdspController.c + jdsp_header.h + engine/chain/engine_chain.cpp — comp 影子槽双缓冲，Z13 锁收口（2026-10-24）
+
+- **位置**：`jdsp/Effects/dynamic.c` Compressor 段重写（`CompSlot` 选槽/
+  状态携带集/`CompressorCommit` 影子提交）；`jdspController.c` `stage_comp`
+  恒调 `CompressorProcess`（enabled 内移）+ `kAuraStages` comp lock 1→0；
+  `jdsp_header.h` `FFTCompander comp` 单体 → `CompSlot compSlots[2]` +
+  `compActive`/`compProcCount`/`compSwapProc`/`compInFlight`；
+  `engine/chain/engine_chain.cpp` `apply_comp` 去 `jdsp_lock` 改单次
+  `CompressorCommit`（参数+曲线一次构建一次换指针）。
+- **动机**（B1 条目预告的 comp 专项）：`CompressorSetParam(forceRefresh=1)`
+  持 `jdsp_lock` 做 `FFTCompanderInit` 全量重算（默认 tfres=1 CWT 为重档），
+  `stage_comp` 每块取同一把锁——Z13（2026-10-23）用互斥关闭了「拖滑块即崩」
+  的数据竞争，但持锁时长即重建时长：参数频调时 RT 反复阻塞在
+  `EnterCriticalSection`（反向验证实测单块尖峰 **342ms**），即用户抱怨的
+  「调参卡顿」。只修竞争没修等待时长，B1-c 收口。
+- **设计**（B1-a/B1-b 同范式）：2 个预分配 `CompSlot`（1 活动 + 1 影子——
+  控制侧构建由 ctrl_mutex 串行，单 RT 线程至多一个 comp 调用在途即至多
+  持有一个槽，一个影子槽足够；3 槽只增内存不增可用性）。控制线程
+  `CompressorCommit`：选槽（在途守卫双条件：`compInFlight==0` 或
+  `compProcCount>=retiredAt`）→ 装载 → 构建（Init/参数/曲线）→ 原子换
+  `compActive`。RT 块首只读一次指针，块内不碰换出实例。有界等待 500ms
+  墙钟，仍无槽返回 -4（旧快照继续生效），绝不退化活动槽原地重建（UAF）。
+- **状态携带集 + 验证重试**（B1-c 独有，B1-a/b 无需携带状态）：compander
+  是**有状态滤波器**，影子必须延续 RT 演化状态（否则每次调参都可闻重启）。
+  携带集 = RT 演化且构建不重写的字段：tfres>=3 平滑/斜坡/合成滤波器状态
+  （`diffGain`/`interpolatedGain`/`updateIdx`/`*step`/`z1_*`/`z2_*`）、
+  STFT 在途簿记 + 环形缓冲 + `oldBuf` 谱包络、`freq2`/`gains2` 曲线定义。
+  拷贝正确性由验证重试保证：RT 只写活动槽，若携带期间有 comp 调用进入/
+  离开（`compInFlight` 非零或 `compProcCount` 变化）则作废重拷——影子槽
+  写入与 RT 零交集，重拷无副作用。Init 构建跳过 1.19MB 全量拷贝（Init 重算
+  全部表/簿记，只带 ~130KB 携带集）；非 Init 构建（legacy SetGain 路径）
+  才全量带入——表为 RT 只读故源稳定，scratch 撕裂无害（每帧写前必读，
+  与现实现 Init 后残留上帧数据同类不变量）。
+- **等待策略教训**：首版纯 `Sleep(1)` 重试（B1-a/b 同款）在 comp 上翻车——
+  comp 是重档效果（默认 CWT，单块 C 段占比高），RT 块间隙窄，`Sleep(1)`
+  实际粒度 5-15ms 把控制线程拖到 ~285ms/次提交。改**自旋优先**
+  （`YieldProcessor` 6 万轮 ≈3ms 预算，超预算回落 Sleep），提交回到
+  ~1.4ms/次。教训：有界等待的自旋/睡眠配比须按持锁方（此处为 RT 块间隙）
+  的时长分布标定，不能照搬轻档效果的参数。
+- **自洽性修正**：`CompressorSetParam` 包装改为 applyCurve=1——携带集不含
+  `DREmult`/`headRoomdB`，若 Init 改了 `procUpTo` 而曲线不重算，换入后 RT
+  将按陈旧曲线运行；原实现靠 SetParam+SetGain 同一把锁内连续执行掩盖了
+  该窗口，影子方案下必须让每次提交自洽。
+- **行为影响**：① RT 永不因 comp 取锁（压测：3297-3570 块/s、最大块
+  1.2-1.4ms vs Z13 反向 613 块/s、最大块 342ms）；② 调参吞吐恢复
+  （uiA 633 sweeps vs 首版影子 3 sweeps）；③ 参数/曲线一次构建一次换指针，
+  无中间态窗口；④ comp 停用期间在途计数恒走（块边界放行影子槽复用）。
+- **验收**：`smoke_comp_race.py` 扩展 RT 不阻塞两项 + 原有 Z13 竞争断言
+  全绿；反向验证（临时还原 comp lock=1 + apply_comp 持锁）**两项新断言
+  失败**：613 块/s（<800）、最大块 342ms（≥10ms）——证明非空转。阈值：
+  ≥800 块/s（修复后 4× 余量）、<10ms（修复后 7× 余量，且远大于 CPython
+  GIL 切换间隔 5ms 不误报）。`smoke_comp.py` 12 项全过；全量 python
+  冒烟 100%。
+- **契约门禁**：`CompressorCommit` 的 -4 复用 B1-b 已登记的 `engine busy`
+  reason-token 口径（`apply_comp` void 契约不上抛，p-struct 已存新值，
+  下一次任意 comp.* 变更补上——-4 需 RT 卡在 comp 内 >500ms，实测不可达）。
+  `gen_param_contract.py` 指纹不覆盖 dynamic.c/jdspController.c/
+  engine_chain.cpp，fixture 无需再生。
+- **上游同步冲突风险**：高（`FFTCompander comp` 单体字段被替换为槽数组 +
+  `Compressor*` 全段重写，上游若更新需以本版为基线人工合并）。
+- **后续（B1 同法未竟项）**：无——B1 系列（liveprog/ddc/comp）全部收口。
+  `JamesDSPSetSampleRate` 全效果重建仍持 `jdsp_lock`（RT 的 convolver
+  stage 亦持锁），属同一把锁的剩余暴露面，列后续评估。
