@@ -511,11 +511,10 @@ void DestroyEngines() {
     StopBgThread();
     // Z17：确定性等在途 BUFFER_OUT 块结束（含并行 fan-in——worker 持句柄
     // process）。原 Sleep(50) 余量在重载下可能不够（块墙钟随插件成本涨），
-    // 升级为 rtInBlock 轮询；3s 上限防监控线程被拖死（极端野指针场景）。
-    for (int i = 0; i < 3000; ++i) {
-        if (InterlockedCompareExchange(&g_b.ctx.rtInBlock, 0, 0) == 0) break;
-        Sleep(1);
-    }
+    // 已是 rtInBlock 轮询；D2 起改用共用 WaitRtDrained：**按墙钟** 3s 上界。
+    // 原 `for (i<3000) Sleep(1)` 名义 3s，实际因 Sleep(1) 粒度 5-15ms
+    // 可拖到 15-45s——注释声称的上界从未成立。
+    vmcore::WaitRtDrained(&g_b.ctx.rtInBlock);
     for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
         if (g_b.ctx.eng[g] && g_b.ctx.destroy) g_b.ctx.destroy(g_b.ctx.eng[g]);
         g_b.ctx.eng[g] = nullptr;
@@ -645,13 +644,14 @@ DWORD WINAPI MonitorProc(LPVOID) {
             lastFrames = g_b.ctx.frames;
             stillRounds = 0;
             ++g_b.ctx.changes;
-            // RT-safe 重建序列：stop(+50ms 余量) → 销毁旧句柄（无回调在跑）→
-            // start 等新 STARTING 取新采样率 → 重建 → 回放参数镜像。
+            // RT-safe 重建序列：stop → 等在途块退出 → 销毁旧句柄（确认无回调
+            // 在跑）→ start 等新 STARTING 取新采样率 → 重建 → 回放参数镜像。
+            // D2：原为 Sleep(50) 余量（"应该够了吧"），改确定性排空。
             // 引擎只在本线程建/销；start 到重建完成之间 process==nullptr，泵退化为
             // 直通（不吞声、不吊野指针），绝不在音频线程 create/destroy。
             const long oldSr = g_b.ctx.sr;  // STARTING 迟到时的兜底，别退回 48k
             if (g_b.stop) g_b.stop();
-            Sleep(50);
+            vmcore::WaitRtDrained(&g_b.ctx.rtInBlock);
             DestroyEngines();
             g_b.ctx.process = nullptr;
             const LONG wantInfo =
@@ -663,6 +663,9 @@ DWORD WINAPI MonitorProc(LPVOID) {
                     started = true;
                     break;
                 }
+                // 重试退避（非"等 RT 退出"）：VM 的 start 在设备重建期间会失败，
+                // 20 次 × 50ms 共 1s 的退避窗口。D2 只收口"释放/销毁前等 RT"，
+                // 本处保留固定间隔是刻意的——这里要的是让出时间给对方状态机。
                 Sleep(50);
             }
             if (started) {
@@ -733,9 +736,14 @@ DWORD WINAPI MonitorProc(LPVOID) {
 }
 
 void FreeTestFile() {
-    // 先清 kind 让 RT 停用，再等在途回调退出（~10ms 量级），最后释放。
+    // 先清 kind 让 RT 停用，再等**在途块退出**（D2：原为 Sleep(50) 猜测——
+    // 重载时不够会 free 掉 RT 仍在读的缓冲，空闲时又白睡），最后释放。
     InterlockedExchange(&g_b.ctx.testKind, 0);
-    Sleep(50);
+    if (!vmcore::WaitRtDrained(&g_b.ctx.rtInBlock)) {
+        // 极端：3s 内 RT 没退出（驱动卡死）。free 会踩在途读 → 整块保留不释放
+        //（与 B3 quarantine 同一哲学：可控泄漏换不可控崩溃）。
+        return;
+    }
     if (g_b.ctx.testFile) {
         free((void*)g_b.ctx.testFile);
         g_b.ctx.testFile = nullptr;

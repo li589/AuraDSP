@@ -199,6 +199,42 @@ struct PumpCtx {
     bool grpBypass[kMaxGroups] = {};
 };
 
+// D2（2026-10-24）：RT 在途守卫 + 确定性排空等待（三桥共用）。
+//
+// `rtInBlock` 必须严格成对增减，否则两种故障都很隐蔽：漏增 → 销毁前的等待
+// 立即通过（等于没等，直接 free 掉 RT 还在读的缓冲 = UAF）；漏减 → 等待必然
+// 超时，把正常卸载拖到上界。音频回调有多条提前 return（无块 / 用户旁路 /
+// 无引擎句柄），手写法很容易漏，故用 RAII：析构逆序执行由编译器保证。
+// 仅两条 Interlocked，无锁 / 无分配 / 无 syscall，符合 RT 铁律。
+struct RtInBlockGuard {
+    volatile LONG* counter;
+    explicit RtInBlockGuard(volatile LONG* c) : counter(c) {
+        if (counter) InterlockedIncrement(counter);
+    }
+    ~RtInBlockGuard() {
+        if (counter) InterlockedDecrement(counter);
+    }
+    RtInBlockGuard(const RtInBlockGuard&) = delete;
+    RtInBlockGuard& operator=(const RtInBlockGuard&) = delete;
+};
+
+// 确定性排空：轮询 rtInBlock 归零，墙钟上界 maxMs（默认 3s）。
+// 替代原来的 Sleep(50)——那是在"猜一个够用的毫秒数"：重载 / 驱动线程被挂住
+// 时不够（free 掉 RT 仍在读的缓冲 = UAF），正常情况又白等 50ms。
+// 用 GetTickCount64 墙钟而不是计数循环：Sleep(1) 实际粒度 5-15ms，按 1ms 记
+// 的 3000 次循环实测可达 15-45s（注释里的"3s 上限"从未成立）。
+// 返回 false = 上界内未排空（RT 卡死 / 野指针），由调用方决定如何收场。
+inline bool WaitRtDrained(volatile LONG* counter, DWORD maxMs = 3000) {
+    if (!counter) return true;
+    const ULONGLONG deadline = GetTickCount64() + (ULONGLONG)maxMs;
+    for (;;) {
+        if (InterlockedCompareExchange(counter, 0, 0) == 0) return true;
+        if (GetTickCount64() >= deadline) break;
+        Sleep(1);
+    }
+    return InterlockedCompareExchange(counter, 0, 0) == 0;
+}
+
 inline bool PairIsSilent(const float* a, const float* b, long n) {
     // EAPO 同式：精确零才算静默（-100dBFS 的弱音也算有声，不误杀；见借鉴注）。
     for (long i = 0; i < n; ++i) {
