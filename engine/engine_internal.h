@@ -423,20 +423,28 @@ constexpr LatencyItem kLatDdc      {1, 0, 6.0f};
  * 原表写死 `{0, 0, 2.0f}` 名义值：默认配置下**高估 2ms**（真实 0ms），
  * 开前瞻时低估 0.5ms —— 两种模式都错，且"恒定 2ms"这个性质本身不存在。 */
 
-/* FFTCompander 的 STFT 结构延迟剖面（D7 实测标定）。
+/* FFTCompander 的 STFT 结构延迟剖面（D7 实测标定，B1-d 修正块长口径）。
  *
- * ovpLen = fftLen / ovpCount 同时是"一块至少要这么长才会真正处理"的门槛：
- * FFTCompanderProcessSamples 攒不满 mInputSamplesNeeded 就一帧都不产，整块
- * 原样直通——**既无压缩也无延迟**（calling 侧 `in==out` 原地处理，未写即保持
- * 输入值）。所以块长不足时 comp 的延迟必须报 0；报 74.67ms 而耳朵听 0ms，
- * 是比不报更糟的谎。
- * 实测例：48k/blk=256 → 0 帧；48k/blk=512 → 3584 帧；96k/blk=1024
- * （ASRC 后工作块 512）→ 7168 设备域帧 = 3584 工作域帧。 */
+ * ovpLen = fftLen / ovpCount 是 hop（每攒满这么多样本才产出一块输出）。
+ *     实测推翻过一版结论：ovpLen **不是**「攒不满就整块直通、延迟为 0」的门槛。
+ *     把脉冲放到第 50 块之后测，48k/blk=256 位移 3840 帧、blk=512 位移 3584 帧
+ *     ——块小不但不直通，反而**多**出一点延迟。旧断言之所以判"0ms"，是因为
+ *     脉冲放在第 8 帧（首块内），测到的是首个 hop 的启动段。
+ *
+ * 真实口径：延迟 = frames + D，D = CompressorStartupDeficit(ovpLen, workBlk)
+ *     = ovpLen - gcd(ovpLen, workBlk)（workBlk 是完整工作域块长，不裁到 hop）。
+ *     · 块长整除 hop（512/1024/2048）→ D = 0，延迟 = fftLen-ovpLen；
+ *     · 否则 D > 0（256→256、128→384、480→480、441→511），是 hop 与块长
+ *       相位不齐导致管线必须永久落后的量，实测与模型逐块一致。
+ *     B1-d 之前这段落后表现为**原声直通**（未处理的输入留在输出里）且周期性
+ *     复发；B1-d 之后改为启动时以静音交付，延迟因此确定可测。
+ * 实测例（tf=1）：48k/blk=256 → 3840 帧 = 80.00ms；48k/blk=512 → 3584 帧
+ *     = 74.67ms；96k/blk=1024（ASRC 后工作块 512）→ 7168 设备域帧 = 3584 工作域帧。 */
 struct CompLatencyProfile {
     int tf;
     int fftLen;
-    int ovpLen;   /* 0 = 时域路径，无 STFT、无门槛 */
-    int frames;   /* 工作域帧数 */
+    int ovpLen;   /* 0 = 时域路径，无 STFT */
+    int frames;   /* 工作域帧数 = fftLen - ovpLen，不含启动缺额 D */
 };
 constexpr CompLatencyProfile kCompLatProfile[4] = {
     {0, 2048, 256, 1792},   /* STFT */

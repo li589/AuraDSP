@@ -47,10 +47,11 @@ void compute_latency(auradsp_handle h, double* out_ms) {
         ms += LatencyMs(kLatDdc, lat_sr);
     }
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
-        /* D7：comp 的延迟随 tfresolution 变（不是固定 4096 帧），且只有
-         * 「一块的工作域长度 ≥ ovpLen」时才真正处理——攒不满就不产帧、整块
-         * 直通，此时延迟与压缩量都是 0。详见 engine_internal.h 的
-         * kCompLatProfile 注释与实测数据。 */
+        /* D7 + B1-d：comp 的延迟 = (fftLen - ovpLen) 帧（随 tfresolution 变）+ 启动
+         * 缺额 D。D 与「块长是否整除 hop」有关，不是 0/全有 的二值门槛：
+         *   · 块长 >= ovpLen 或整除 ovpLen → D = 0，延迟 = fftLen-ovpLen；
+         *   · 否则 D = ovpLen - gcd(ovpLen, 完整工作块长)，最多 ovpLen-1 帧。
+         * 详见 engine_internal.h 的 kCompLatProfile 注释与 B1-d 实测数据。 */
         const int tf = h->p.comp_tfresolution.load(std::memory_order_relaxed);
         const CompLatencyProfile& cp = kCompLatProfile[(tf >= 0 && tf <= 3) ? tf : 1];
         if (cp.frames > 0 && cp.ovpLen > 0) {
@@ -61,9 +62,9 @@ void compute_latency(auradsp_handle h, double* out_ms) {
             if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
             const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
             const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
-            if (workBlk >= (size_t)cp.ovpLen) {
-                ms += LatencyMs(LatencyItem{cp.tf, cp.frames, 0.0f}, lat_sr);
-            }
+            const unsigned int deficit = CompressorStartupDeficit(
+                (unsigned int)cp.ovpLen, (unsigned int)workBlk);
+            ms += FramesToMs((double)(cp.frames + (int)deficit), lat_sr);
         }
     }
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&

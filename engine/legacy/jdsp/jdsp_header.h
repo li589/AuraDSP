@@ -39,7 +39,11 @@ typedef struct
 #define FFTSIZE_DRS (8192)
 #define ANALYSIS_OVERLAP_DRS_MAX (8)
 #define HALFWNDLEN_DRS ((FFTSIZE_DRS >> 1) + 1)
-#define MAX_OUTPUT_BUFFERS_DRS 2
+/* 输出 FIFO 深度。每 hop(ovpLen) 产出一块，块长不整除 hop 时待读块数会在
+ * 0..2 间摆动；旧值 2 恰好压在边界上（mOutputBufferCount++ 后立即按
+ * count-1 取址，越界即堆写坏），且未给「启动缺额」留任何余量。
+ * 4 是纯余量，不改变延迟（延迟只取决于缺额与 OLA 长度）。 */
+#define MAX_OUTPUT_BUFFERS_DRS 4
 #define NUMPTS_DRS (7)
 #define DYN_BANDS_GAMMATONE (16)
 #define MAXORDER (12)
@@ -67,6 +71,9 @@ typedef struct str_dynfreqdomain
 	// Shared variable between all FFT length and modes and channel config
 	int  mOutputReadSampleOffset;
 	int  mOutputBufferCount; // How many buffers are actually in use
+	/* 启动缺额（样本，工作域）：首个处理块的块长决定，见
+	 * CompressorStartupDeficit()。-1 = 尚未确定（Init 后待首次调用定）。 */
+	int  mOutputDeficit;
 	unsigned int mInputSamplesNeeded;
 	float 	*mOutputBuffer[MAX_OUTPUT_BUFFERS_DRS];
 	float buffer[MAX_OUTPUT_BUFFERS_DRS][FFTSIZE_DRS >> 1];
@@ -746,6 +753,21 @@ extern void CompressorDisable(JamesDSPLib *jdsp);
  * 使 RT 无需改写 jdsp->compEnabled）；旧签名 CompressorProcess(jdsp,n) 由
  * stage_comp 内部等价实现（读全局 compEnabled）。 */
 extern void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled);
+/* [PATCHED-AuraDSP B1-d] comp 启动缺额（工作域样本数）。
+ *
+ * FFTCompander 每 hop(ovpLen) 才产出一块输出，而每次调用至少要写回 n 个
+ * 输出样本（调用方原地处理）。块长 n 与 hop 不整除时，「已产出 - 已交付」
+ * 必然要永久落后一个相位量，否则管线会在部分调用上取不到输出——旧实现在
+ * 这种情况下把**未处理的输入原样留在输出里**（原声直通，与延迟后的处理流
+ * 叠加成双声/梳状），并把整条流永久错位。
+ *
+ * 缺额 = ovpLen - gcd(ovpLen, blockLen)，blockLen = **完整工作域块长**（不是裁到
+ * hop 后的块）。启动时先以静音吐出这 D 个样本（它们对应的正是 OLA 爬升段，
+ * 本来就是静音），此后「可用输出 = D + ovpLen*floor(I/ovpLen) - I
+ * = D - (I mod ovpLen) >= 0」恒成立，任何块长都不再饥饿、不再直通。代价是
+ * 块长不整除 hop 时延迟多 D 帧（≤ ovpLen-1），这个量必须计入上报延迟，
+ * 否则又是"报得比听得少"。 */
+extern unsigned int CompressorStartupDeficit(unsigned int ovpLen, unsigned int blockLen);
 /* [PATCHED-AuraDSP B1-c] 影子构建 + 原子换指针一体化提交（RT 零锁等待）。
  * 参数：新 compander 参数（fgt_facT/granularity/tfresolution，变化或
  * forceRefresh 时触发 FFTCompanderInit 全量重算）；freq/gains/cpy 非空且

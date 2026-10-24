@@ -10,15 +10,16 @@
      工作域 —— 96k 下低估 2 倍。
 
 落地过程中另外实测出两处比报告更硬的事实（本门禁一并锁住）：
-  ④ comp 的延迟不是固定 4096 帧，而是 fftLen-ovpLen，随 tfresolution 变，
-     且块长不足 ovpLen 时整块直通（既无压缩也无延迟）。
+  ④ comp 的延迟不是固定 4096 帧，而是 fftLen-ovpLen，随 tfresolution 变。
+     （当时还写了「块长不足 ovpLen 就整块直通」——那条是测量假象，脉冲放在
+     首块内才看到 0ms；已由 B1-d 推翻并改由 smoke_b1d_comp_startup.py 锁块长口径）
   ⑤ limiter 的 2.0ms 名义值在默认配置（lookahead=0）下是**高估**，真实 0ms；
      开前瞻时是 1.5ms 而不是 2.0ms。
 
 本测试六层：
   [A] 源码不变式（taps 单点定义 / comp 剖面表 / 工作域换算 / ASRC 项接线）
   [B] ASRC 实际在跑（96k/192k 输出有限且非静音，重采样没被改坏）
-  [C] comp 延迟随 tfresolution 变，且受块长门槛约束
+  [C] comp 延迟随 tfresolution 变，且按启动缺额修正块长相位
   [D] limiter 两种模式的延迟
   [E] ASRC 环形缓冲分量
   [F] 上报值 == 脉冲实测（核心：报表不许骗人）
@@ -266,8 +267,8 @@ for sr in (96000, 192000):
           rep is not None and meas is not None and math.isfinite(meas) and peak >= 0.05,
           f"peak={peak:.4f}")
 
-# ---------------- [C] comp 延迟剖面 / 块长门槛 ----------------
-print("\n=== [C] comp 延迟 = 工作域帧数，随 tf 变，受块长门槛约束 ===")
+# ---------------- [C] comp 延迟剖面（块长口径见 B1-d 门禁） ----------------
+print("\n=== [C] comp 延迟 = 工作域帧数，随 tf 变（块长口径已由 B1-d 修正） ===")
 TF_EXPECT = {0: 1792 / 48000 * 1000, 1: 3584 / 48000 * 1000,
              2: 2048 / 48000 * 1000, 3: 0.0}
 for tf, want in TF_EXPECT.items():
@@ -275,16 +276,22 @@ for tf, want in TF_EXPECT.items():
     check(f"48k tf={tf} comp ≈ {want:.2f}ms", got is not None and abs(got - want) < 0.3,
           f"got {got:.3f}ms" if got is not None else "create failed")
 
-# 块长门槛：工作域块 < ovpLen(512, tf=1) 时 comp 整块直通 → 0ms
-for sr, blk, expect_zero in ((48000, 256, True), (48000, 512, False),
-                             (96000, 512, True), (96000, 1024, False),
-                             (192000, 1024, True), (192000, 2048, False)):
+# 旧断言「块长 < ovpLen 就整块直通 → 报 0ms」是**测量假象**（脉冲放在首块内，
+# 测到的是首个 hop 的启动段），已被 B1-d 实测推翻：块小时不但不直通，反而因
+# 相位不齐多出 D = ovpLen - gcd(ovpLen, blk) 帧。这里改成「按缺额公式报，
+# 且块长整除 hop 时等于纯帧数」，块长口径的完整矩阵见 smoke_b1d_comp_startup.py。
+from math import gcd as _gcd
+for sr, blk in ((48000, 256), (48000, 512), (96000, 512), (96000, 1024),
+                (192000, 1024), (192000, 2048)):
+    hop = 512
+    work_blk = int(round(blk * 48000.0 / sr))
+    d = hop - _gcd(hop, work_blk)
+    want = (3584 + d) * 1000.0 / 48000.0
     got = lat(sr, blk, tf=1, comp=1, la=0)
-    work_blk = blk * 48000 // sr
-    ok = got is not None and ((got < 0.3) if expect_zero else (abs(got - 74.67) < 0.5))
-    check(f"{int(sr/1000)}k blk={blk} (work={work_blk}) comp "
-          f"{'bypasses' if expect_zero else 'processes'}",
-          ok, f"got {got:.3f}ms" if got is not None else "create failed")
+    asrc = 0.0 if sr == 48000 else 0.0208
+    check(f"{int(sr/1000)}k blk={blk} (work={work_blk}) comp ≈ {want:.2f}ms + asrc",
+          got is not None and abs(got - (want + asrc)) < 0.05,
+          f"got {got:.3f}ms want {want + asrc:.3f}ms" if got is not None else "create failed")
 
 # ---------------- [D] limiter 两种模式 ----------------
 print("\n=== [D] limiter 延迟随 lookahead 模式变（默认 0ms） ===")
