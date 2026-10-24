@@ -9,39 +9,50 @@
  * 永远不返回「超档」，也不再导致任何使能请求被拒绝。 */
 void compute_latency(auradsp_handle h, double* out_ms) {
     double ms = 0.0;
-    if (h->p.limiter_enable.load(std::memory_order_relaxed)) ms += kLatLimiter.ms;
+    /* D1：所有项走 LatencyMs()——结构性帧数按当前采样率换算，名义值原样取。
+     * 原来直接累加 `.ms`，把「4096 帧」的 comp 当成固定 85ms，96k 下翻倍错。 */
+    const double sr = (double)h->sample_rate;
+    if (h->p.limiter_enable.load(std::memory_order_relaxed)) ms += LatencyMs(kLatLimiter, sr);
     if (h->p.reverb_preset.load(std::memory_order_relaxed) >= 0) {
-        ms += kLatReverb.ms;
+        ms += LatencyMs(kLatReverb, sr);
     }
     /* 卷积：IR 已加载且使能时计入 */
     if (h->p.conv_enable.load(std::memory_order_relaxed) &&
         h->ir_ready.load(std::memory_order_relaxed)) {
-        ms += kLatConvolver.ms;
+        ms += LatencyMs(kLatConvolver, sr);
     }
-    if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += kLatCrossfeed.ms;
+    if (h->p.xfeed_enable.load(std::memory_order_relaxed)) ms += LatencyMs(kLatCrossfeed, sr);
     /* VDC = 动态范围均衡器，延迟极低。此前 kLatDdc 定义了却从未计入，
      * 导致 VDC 开启时总延迟被低估。 */
     if (h->p.ddc_enable.load(std::memory_order_relaxed) &&
         h->p.ddc_ready.load(std::memory_order_relaxed)) {
-        ms += kLatDdc.ms;
+        ms += LatencyMs(kLatDdc, sr);
     }
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
-        ms += kLatComp.ms;
+        ms += LatencyMs(kLatComp, sr);
     }
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed)) {
-        ms += kLatArbMag.ms;
+        /* D1：arbmag 用分块 FFT 卷积，附加延迟就是**单块帧数**（卷积器按
+         * jdsp->blockSize 加载 IR；该字段每块由 JamesDSPProcess 写入，会话内
+         * 基本恒定，故这里读到的是稳定的当前块长）。原表写死 2.67ms
+         * （=128 帧 @48k），1024 帧块下低估 8 倍。为 0（尚未处理过任何块）
+         * 时回落引擎创建时给的 max_block，它正是一块的上界。 */
+        size_t blk = h->jdsp.blockSize;
+        if (blk == 0) blk = (size_t)(h->max_block > 0 ? h->max_block : 0);
+        ms += FramesToMs((double)blk, sr);
     }
-    /* Haas = 纯延迟线，按当前设定值动态上报（0..25ms，Viper 差分环绕同量级）。 */
+    /* Haas = 纯延迟线，按当前设定值动态上报（0..25ms，Viper 差分环绕同量级）。
+     * 这是**用户设的毫秒值**（延迟线内部按 ms*sr 折算样本），不做采样率换算。 */
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
         float dms = h->p.haas_delay_ms.load(std::memory_order_relaxed);
         if (dms < 0.0f) dms = 0.0f; if (dms > 25.0f) dms = 25.0f;
-        ms += dms;
+        ms += (double)dms;
     }
     /* 空间音效：直达径 ITD 名义 1ms（早期反射/混响尾是并行能量，不计入；
      * 与 reverb 30ms 名义口径一致）。 */
     if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
-        ms += kLatSpatial.ms;
+        ms += LatencyMs(kLatSpatial, sr);
     }
     *out_ms = ms;
 }

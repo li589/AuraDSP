@@ -369,20 +369,50 @@ inline float fv_voice_process(FvVoice& v, float in, float feedback) {
     return out;
 }
 
-/* 各效果引入的近似附加延迟 ms。
+/* 各效果引入的近似附加延迟。
  * ADR-006：延迟档硬约束已撤销，本表只用于「如实测量并上报」，
  * 不参与任何准入判定（kTierBudget / over_guard 一并删除）。
- * tier 字段保留为文档性标注，供 graph.effects 输出与 UI 排障参考。 */
-struct LatencyItem { int tier; float ms; };
-constexpr LatencyItem kLatReverb   {2, 30.0f};
-constexpr LatencyItem kLatComp     {2, 85.0f};  /* FFTCompander FFTSIZE_DRS/2 */
-constexpr LatencyItem kLatConvolver{2, 10.0f};  /* 保守下限，IR 长度另计 */
-constexpr LatencyItem kLatArbMag   {2, 2.67f};  /* 分块 FFT 卷积（128 frames @48k） */
-constexpr LatencyItem kLatCrossfeed{1, 3.0f};
-constexpr LatencyItem kLatSpatial  {1, 1.0f};  /* 直达径 ITD 最大 0.65ms 取整；
+ * tier 字段保留为文档性标注，供 graph.effects 输出与 UI 排障参考。
+ *
+ * D1（2026-10-24）：本表原来是"一律存 ms"，但其中至少两项的**物理量其实是
+ * 帧数**，只在 48k 成立——
+ *   · comp：FFTCompander 用固定 FFTSIZE_DRS=8192 → 结构性延迟恒为 4096 帧，
+ *     48k 下 85.33ms、96k 下 42.67ms。原表写死 85.0，96k 用户读到的是 2 倍。
+ *   · arbmag：分块 FFT 卷积，附加延迟 = 单块帧数（不是固定 128 帧的常量，
+ *     块长由驱动决定，常见 512/1024）。原表写死 2.67ms（=128 帧 @48k），
+ *     在 1024 帧块下低估 8 倍。
+ * 故拆成两个字段：frames > 0 表示"结构性帧数延迟，ms 按当前采样率换算"；
+ * frames == 0 表示"名义毫秒值（与采样率无关的听感标注）"，用 ms。
+ * 换算统一走 LatencyMs()，禁止在调用点手写 `/1000`。 */
+struct LatencyItem {
+    int tier;
+    int frames;  /* 结构性延迟帧数（0 = 用 ms 字段） */
+    float ms;    /* 名义毫秒值（frames == 0 时生效） */
+};
+constexpr LatencyItem kLatReverb   {2, 0, 30.0f};
+constexpr LatencyItem kLatComp     {2, 4096, 0.0f};  /* FFTCompander FFTSIZE_DRS/2 */
+constexpr LatencyItem kLatConvolver{2, 0, 10.0f};    /* 保守下限，IR 长度另计 */
+/* arbmag 刻意**不进本表**：它的附加延迟是"单块帧数"（分块 FFT 卷积按
+ * jdsp->blockSize 加载 IR），随驱动块长变，写任何常量都是错的——原表的
+ * 2.67ms 只是「128 帧 @48k」的巧合值，1024 帧块下低估 8 倍。由 compute_latency
+ * 直接按块长换算。表里留一条"定义却不用"的占位比缺失更危险。 */
+constexpr LatencyItem kLatCrossfeed{1, 0, 3.0f};
+constexpr LatencyItem kLatSpatial  {1, 0, 1.0f};  /* 直达径 ITD 最大 0.65ms 取整；
     * 早期反射/混响尾是并行能量不计入（与 reverb 30ms 名义口径一致） */
-constexpr LatencyItem kLatDdc      {1, 6.0f};
-constexpr LatencyItem kLatLimiter  {0, 2.0f};
+constexpr LatencyItem kLatDdc      {1, 0, 6.0f};
+constexpr LatencyItem kLatLimiter  {0, 0, 2.0f};
+
+/* 帧数 → 毫秒。采样率未初始化（<=0）时按 48k 名义口径兜底，绝不返回 inf/负值。 */
+inline double FramesToMs(double frames, double sample_rate) {
+    if (!(sample_rate > 0.0)) sample_rate = 48000.0;
+    return frames * 1000.0 / sample_rate;
+}
+
+/* 取一项延迟的毫秒值（frames 优先，否则用名义 ms）。 */
+inline double LatencyMs(const LatencyItem& it, double sample_rate) {
+    if (it.frames > 0) return FramesToMs((double)it.frames, sample_rate);
+    return (double)it.ms;
+}
 
 
 /* handle (moved verbatim) */

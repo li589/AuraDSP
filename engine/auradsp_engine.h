@@ -174,6 +174,15 @@ auradsp_status auradsp_set_param(auradsp_handle h, const char* id,
 auradsp_status auradsp_get_param(auradsp_handle h, const char* id,
                                  void* out_value, uint32_t bytes);
 auradsp_state  auradsp_get_state(auradsp_handle h);
+/* 当前链上各效果引入的附加延迟（毫秒）。纯测量上报，不参与任何准入判定
+ * （ADR-006 已撤销延迟档硬约束）。
+ *
+ * D1（2026-10-24）：返回值**随采样率与块长变化**——结构性延迟按帧数换算：
+ *   comp     = 4096 帧（FFTCompander 固定 FFTSIZE_DRS/2）→ 48k 85.33ms / 96k 42.67ms
+ *   arbmag   = 单块帧数（分块 FFT 卷积，随驱动块长变）
+ *   其余项为听感名义毫秒值（reverb 30 / crossfeed 3 / spatial 1 / ddc 6 /
+ *   limiter 2 / convolver 10 下限），不随采样率变。
+ * 该函数在控制线程读参数快照，无锁、无 RT 依赖，可在任意控制线程调用。 */
 double         auradsp_get_latency_ms(auradsp_handle h);
 const char*    auradsp_last_error(auradsp_handle h);
 
