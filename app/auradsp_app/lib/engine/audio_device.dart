@@ -407,16 +407,31 @@ final class WasapiOut {
     _hr('ReleaseBuffer', releaseBufferFn(renderClient, frames, 0));
   }
 
+  /// `IAudioClient::Stop` 返回 AUDCLNT_E_DEVICE_INVALIDATED（0x88890004）时
+  /// 端点已消失，客户端**不可能**再出声 —— 视为"已静音"，不算失败。
+  /// 不加这条的话，换设备后每次切后端都会被判成"停不下来"而拒绝切换。
+  static const int _kAudclntEDeviceInvalidated = 0x88890004;
+
+  /// D4-a：Start 的 HRESULT 必须检查——失败却把 `started` 置真，上层会以为
+  /// 有声。
   void start() {
     _hr('Start', startFn(client));
     started = true;
   }
 
+  /// D4-a：Stop 的 HRESULT 必须检查，且失败时**保持** `started=true`
+  /// （状态如实）。原实现丢弃返回值并无条件清零，导致"停不下来"和"已停"
+  /// 对上层完全等价 → 上层继续启动第二个后端 → 两路同时出声（真实双声）。
+  ///
+  /// 失败抛 StateError，调用方负责决定是回滚还是降级（切换路径见
+  /// `backend_switch.dart` 的 runHandover）。
   void stop() {
-    if (started) {
-      stopFn(client);
-      started = false;
+    if (!started) return;
+    final hr = stopFn(client);
+    if (hr < 0 && (hr & 0xFFFFFFFF) != _kAudclntEDeviceInvalidated) {
+      _hr('Stop', hr); // 抛；started 保持 true
     }
+    started = false;
   }
 
   void _hr(String what, int hr) {
