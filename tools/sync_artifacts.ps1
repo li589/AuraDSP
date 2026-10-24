@@ -110,6 +110,23 @@ foreach ($tgt in $Targets) {
 Write-Host ("`n=== Sync result ===")
 Write-Host ("Planned {0} files | OK {1} | Skipped {2}" -f $totalPlanned, $okFiles, $skipFiles)
 
+# Dedicated: engine -> windows-drivers\out\Release (driver tools/probes load the
+# engine from alongside; 2026-10-24 VM test caught this copy silently staying at
+# the 10-17 ABI-1 build while the truth source had moved to ABI 2).
+$DriversEngDst = Join-Path $DriversSrc 'auradsp_engine.dll'
+$EngineDllSrc = Join-Path $EngineSrc 'auradsp_engine.dll'
+if ((Test-Path $EngineDllSrc) -and (Test-Path $DriversSrc)) {
+  $totalPlanned++
+  try {
+    Copy-Item -Path $EngineDllSrc -Destination $DriversEngDst -Force
+    $okFiles++
+    Write-Host ("  OK  auradsp_engine.dll -> windows-drivers\out\Release")
+  } catch {
+    $skipFiles++
+    Write-Warning ("  copy failed (engine -> drivers out): {0}" -f $_)
+  }
+}
+
 if ($PackZip -and -not $WhatIf) {
   $folder = Join-Path $ProjectRoot 'dist\AuraDSP-Windows-x64'
   $zip = Join-Path $ProjectRoot 'dist\AuraDSP-Windows-x64.zip'
