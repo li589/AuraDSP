@@ -250,8 +250,8 @@ final class WasapiOut {
       } finally {
         malloc.free(pStore);
       }
-    } catch (_) {
-      // 实名失败不影响初始化（老驱动可能缺属性页）
+    } catch (e, st) {
+      swallow(e, st);
     }
 
     // 端点状态（1=ACTIVE 2=DISABLED 4=NOTPRESENT 8=UNPLUGGED）：幽灵设备
@@ -269,7 +269,7 @@ final class WasapiOut {
       } finally {
         malloc.free(pSt);
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
 
     // IMMDevice::Activate(IID_IAudioClient)
     final activate = _vt<NativeFunction<

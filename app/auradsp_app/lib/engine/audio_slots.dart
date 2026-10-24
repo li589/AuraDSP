@@ -65,7 +65,7 @@ void _scanChunked({
       // 失败也要收尾，避免扫描任务悬挂导致后续扫描被 begin 打断
       try {
         AuraDspLib.pluginScanEndWrap(lib, handle);
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
       send({'evt': 'pluginScanned', 'count': 0, 'json': '[]'});
     }
   }();

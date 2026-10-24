@@ -33,6 +33,7 @@ import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugin_manager.dart';
+import 'error_sink.dart';
 import 'param_schema.dart';
 import 'presets.dart';
 import 'session_memory.dart';

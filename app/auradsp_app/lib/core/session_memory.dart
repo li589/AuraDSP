@@ -15,6 +15,7 @@ import 'plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
 
+import 'error_sink.dart';
 abstract final class SessionMemory {
   static String get sessionPath =>
       '${ConfigManager.baseDir}${Platform.pathSeparator}session_state.json';
@@ -88,7 +89,8 @@ abstract final class SessionMemory {
       };
 
       return ConfigManager.writeJsonFile(sessionPath, payload);
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -100,7 +102,8 @@ abstract final class SessionMemory {
       if (!file.existsSync()) return null;
       final content = file.readAsStringSync();
       return jsonDecode(content) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -255,7 +258,7 @@ abstract final class SessionMemory {
       if (session['presetDirty'] is bool) {
         m.presetDirty = session['presetDirty'] as bool;
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 清除会话记忆
@@ -264,7 +267,8 @@ abstract final class SessionMemory {
       final file = File(sessionPath);
       if (file.existsSync()) file.deleteSync();
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

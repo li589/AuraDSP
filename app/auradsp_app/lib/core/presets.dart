@@ -15,6 +15,7 @@ import 'config.dart';
 import 'param_schema.dart';
 import 'state.dart';
 
+import 'error_sink.dart';
 class AuraPreset {
   final int schemaVersion;
   final String name;
@@ -94,11 +95,11 @@ abstract final class PresetLibrary {
       try {
         _factoryAssetCache[f] =
             await rootBundle.loadString('assets/presets/factory/$f');
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
     }
     try {
       _defaultsJson = await rootBundle.loadString('assets/presets/defaults.json');
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 确保出厂预设目录及文件已初始化。
@@ -128,11 +129,11 @@ abstract final class PresetLibrary {
         if (f.existsSync()) {
           try {
             if (f.readAsStringSync() == content) continue; // 一致，跳过
-          } catch (_) {}
+          } catch (e, st) { swallow(e, st); }
         }
         f.writeAsStringSync(content);
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   static String _safeFileName(String name) {
@@ -155,11 +156,11 @@ abstract final class PresetLibrary {
             try {
               final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
               list.add(AuraPreset.fromJson(json));
-            } catch (_) {}
+            } catch (e, st) { swallow(e, st); }
           }
         }
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
 
     // 读取用户预设
     try {
@@ -170,11 +171,11 @@ abstract final class PresetLibrary {
             try {
               final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
               list.add(AuraPreset.fromJson(json));
-            } catch (_) {}
+            } catch (e, st) { swallow(e, st); }
           }
         }
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
 
     // 兼顾历史 v1 存放于根目录的旧预设
     try {
@@ -185,11 +186,11 @@ abstract final class PresetLibrary {
             try {
               final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
               list.add(AuraPreset.fromJson(json));
-            } catch (_) {}
+            } catch (e, st) { swallow(e, st); }
           }
         }
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
 
     return list;
   }
@@ -200,7 +201,8 @@ abstract final class PresetLibrary {
       final filename = '${_safeFileName(preset.name)}.json';
       return ConfigManager.writeJsonFile(
           '$userDir${Platform.pathSeparator}$filename', preset.toJson());
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -222,7 +224,8 @@ abstract final class PresetLibrary {
         return true;
       }
       return false;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -231,7 +234,8 @@ abstract final class PresetLibrary {
   static bool exportToFile(AuraPreset preset, String destPath) {
     try {
       return ConfigManager.writeJsonFile(destPath, preset.toJson());
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -257,7 +261,8 @@ abstract final class PresetLibrary {
       );
       saveUserPreset(userPreset);
       return userPreset;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -419,7 +424,7 @@ abstract final class PresetLibrary {
       final params = obj['params'];
       if (params is Map<String, dynamic>) return params;
       if (params is Map) return Map<String, dynamic>.from(params);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     return {};
   }
 

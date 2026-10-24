@@ -20,6 +20,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart' show VizFrame;
 import 'bridge_plugin_ffi.dart';
 
+import '../core/error_sink.dart';
 typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
 typedef _DetectDart = int Function(Pointer<Utf8>, int);
 typedef _StartExC = Int32 Function(
@@ -111,7 +112,8 @@ class AuraAsioBridge {
       final drivers = raw?['drivers'] as List?;
       if (drivers == null) return null;
       return [for (final d in drivers) Map<String, dynamic>.from(d as Map)];
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'ab-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -149,7 +151,8 @@ class AuraAsioBridge {
       final n = _status(buf, 2048);
       if (n <= 0) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'ab-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -206,7 +209,8 @@ class AuraAsioBridge {
         'ts': fr.timestampMs,
         'seq': fr.seq,
       };
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'ab-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -245,7 +249,8 @@ class AuraAsioBridge {
     try {
       final rc = _getParam(idp.cast(), 0, vp.cast());
       return rc == 0 ? vp.value : null;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'ab-ffi');
       return null;
     } finally {
       malloc.free(idp);
@@ -261,7 +266,8 @@ class AuraAsioBridge {
       final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
       if (n <= 0) return null;
       return buf.toDartString(length: n);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'ab-ffi');
       return null;
     } finally {
       malloc.free(idp);

@@ -1128,7 +1128,8 @@ extension StateEvents on AppModel {
         result['rc'] as int,
         result['samples'] as int,
       );
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _onComponentLatencyResult(compId, -2, 0);
     }
   }

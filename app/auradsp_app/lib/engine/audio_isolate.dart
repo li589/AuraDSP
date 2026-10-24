@@ -26,6 +26,7 @@ import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
 
+import '../core/error_sink.dart';
 part 'audio_guid.dart';
 part 'audio_device.dart';
 part 'audio_wav.dart';
@@ -404,10 +405,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('vbmode: stop requested');
     try {
       vb?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       vb?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     vbActive = false;
     final resumeErr = resumeWasapi('vbmode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
@@ -568,10 +569,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('asiomode: stop requested');
     try {
       ab?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       ab?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     asioActive = false;
     asioDriverInUse = '';
     final resumeErr = resumeWasapi('asiomode');
@@ -673,10 +674,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('vaiomode: stop requested');
     try {
       vaio?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       vaio?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     vaioActive = false;
     vaioOutputEndpointInUse = '';
     final resumeErr = resumeWasapi('vaiomode');
@@ -2181,7 +2182,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               });
             }
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-asio'); }
         continue;
       }
       // VB 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走桥。
@@ -2229,7 +2230,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final st = vb!.status();
             if (st != null) send({'evt': 'vbstatus', ...st});
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-vb'); }
         continue;
       }
       // AuraVAIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 01 桥。
@@ -2279,7 +2280,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               });
             }
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-vaio'); }
         continue;
       }
       try {
@@ -2445,28 +2446,28 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (vbActive) {
         try {
           vb?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           vb?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         vbActive = false;
       }
       if (asioActive) {
         try {
           ab?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           ab?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         asioActive = false;
       }
       if (vaioActive) {
         try {
           vaio?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           vaio?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         vaioActive = false;
       }
       wasapi?.stop();
@@ -2476,7 +2477,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       malloc.free(inPtrEng);
       malloc.free(outPtrEng8);
       malloc.free(vizBuf);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   unawaited(pump());

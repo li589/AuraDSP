@@ -656,7 +656,8 @@ extension EqState on AppModel {
     _ffiLib ??= () {
       try {
         return AuraDspLib.load();
-      } catch (_) {
+      } catch (e, st) {
+        swallow(e, st);
         return null; // DLL 缺失：UI 退回近似曲线，不崩
       }
     }();
@@ -674,7 +675,8 @@ extension EqState on AppModel {
       List<double>? db;
       try {
         db = lib.measureEqResponse(c, engineRate, nPoints: eqResponsePoints);
-      } catch (_) {
+      } catch (e, st) {
+        swallowThrottled(e, st, 'eq-probe');
         return; // 探针异常：保留上一帧曲线
       }
       if (db == null) return;

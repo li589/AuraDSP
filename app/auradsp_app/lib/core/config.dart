@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
 
+import 'error_sink.dart';
 class AppConfig {
   /// 可视化帧率默认值。核显上 30fps 的全窗口重绘会把 GPU 顶到 ~70%
   ///（L-15 / §13.4.27.3），默认降到 20。
@@ -264,7 +265,8 @@ abstract final class ConfigManager {
       File(filePath).writeAsStringSync(
           const JsonEncoder.withIndent('  ').convert(value));
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -289,7 +291,7 @@ abstract final class ConfigManager {
         }
         return cfg;
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     // 首次运行或解析失败，生成并写入默认配置
     final cfg = AppConfig();
     save(cfg);
@@ -299,7 +301,8 @@ abstract final class ConfigManager {
   static bool save(AppConfig config) {
     try {
       return writeJsonFile(configPath, config.toJson());
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

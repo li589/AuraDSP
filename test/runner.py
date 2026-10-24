@@ -100,6 +100,12 @@ def run_smoke_tests():
         # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
         # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
         "smoke_d5_slot_timeout.py",
+        # D4-b 门禁（2026-10-24）：全仓静默异常。97 处 catch 既不留痕也不绑定
+        # 异常，泵循环更是整个迭代体包在 catch (_) {} + continue 里——一次类型
+        # 错误就能让可视化永远冻结且日志无痕。四类分治 + 四条规则（R1 空块必留痕
+        # /R2 循环包壳必限流/R3 禁匿名 catch/R4 理由不得敷衍），含规则引擎单测、
+        # 全仓扫描、接线完整性（part 共享 library import）与两处反向判红。
+        "smoke_d4b_swallow.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
