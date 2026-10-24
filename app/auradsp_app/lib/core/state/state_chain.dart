@@ -483,7 +483,8 @@ extension StateChain on AppModel {
       ddcDetails = rates.isNotEmpty
           ? '${rates.join(', ')} · ${maxPoles > 0 ? '$maxPoles 阶双二阶' : '校准矩阵'}'
           : '已解析校准矩阵';
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       ddcFileName = path.split(RegExp(r'[\\/]')).last;
       ddcDetails = '已加载校准文件';
     }

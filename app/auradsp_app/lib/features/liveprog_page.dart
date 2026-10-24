@@ -24,6 +24,7 @@ import 'eel_editor_support.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
+import '../core/error_sink.dart';
 class LiveprogPage extends StatefulWidget {
   final AppModel model;
   const LiveprogPage({super.key, required this.model});
@@ -1163,7 +1164,8 @@ abstract final class LiveprogLibrary {
       // 全文 UTF-8 试解码：malformed 抛 FormatException → 隔离。
       f.readAsStringSync(encoding: utf8);
       return null;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return 'unreadable';
     }
   }
@@ -1199,7 +1201,7 @@ abstract final class LiveprogLibrary {
     try {
       final d = Directory(dir);
       if (d.existsSync()) collect(d, external: false, folder: 'Local');
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
 
     // 2. 外部预设目录
     for (final cDir in customDirs) {
@@ -1222,7 +1224,7 @@ abstract final class LiveprogLibrary {
             folderName: folderName,
           ));
         }
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
     }
 
     items.sort((a, b) => a.name.compareTo(b.name));
@@ -1235,7 +1237,8 @@ abstract final class LiveprogLibrary {
       // v3 §3.5：加载时复检（列出后文件可能被换掉/变大）。
       if (gateCheck(f) != null) return null;
       return await f.readAsString(encoding: utf8);
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -1261,7 +1264,8 @@ abstract final class LiveprogLibrary {
       if (!f.existsSync()) return true;
       f.deleteSync();
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -1283,7 +1287,8 @@ abstract final class LiveprogLibrary {
       target.writeAsStringSync(old.readAsStringSync(encoding: utf8));
       old.deleteSync();
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -1299,7 +1304,8 @@ abstract final class LiveprogLibrary {
       if (!d.existsSync()) d.createSync(recursive: true);
       File('$dir${Platform.pathSeparator}$name').writeAsStringSync(text);
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

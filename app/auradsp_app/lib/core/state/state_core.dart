@@ -693,7 +693,7 @@ extension StateCore on AppModel {
     _fromIso = null;
     try {
       oldFrom?.close();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     if (oldIso != null) {
       await _stopAudioIsolate(oldIso, oldPort);
     }
@@ -711,20 +711,21 @@ extension StateCore on AppModel {
     });
     try {
       iso.addOnExitListener(exitPort.sendPort);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       port?.send({'cmd': 'shutdown'});
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       await done.future.timeout(const Duration(milliseconds: 800));
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       try {
         iso.kill(priority: Isolate.immediate);
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
     } finally {
       try {
         iso.removeOnExitListener(exitPort.sendPort);
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
       exitPort.close();
     }
   }

@@ -245,7 +245,7 @@ void _safeShowMenu<T>(
       position = RelativeRect.fromLTRB(screen.width / 2, screen.height / 2,
           screen.width / 2, screen.height / 2);
     }
-  } catch (_) {}
+  } catch (e, st) { swallow(e, st); }
   showMenu<T>(context: context, position: position, items: items)
       .then(onSelected)
       .catchError((_) {});

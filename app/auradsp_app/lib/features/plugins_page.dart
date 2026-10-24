@@ -24,6 +24,7 @@ import '../core/ui_helpers.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
+import '../core/error_sink.dart';
 part 'plugins/plugins_slots.dart';
 part 'plugins/plugins_dirs.dart';
 part 'plugins/plugins_hero.dart';
@@ -99,7 +100,7 @@ class _PluginsPageState extends State<PluginsPage>
       if (Platform.isWindows && Directory(vst3Dir).existsSync()) {
         Process.run('explorer.exe', [vst3Dir]);
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   void _addCustomDirDialog(BuildContext context) {

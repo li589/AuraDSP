@@ -8,6 +8,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import '../core/error_sink.dart';
 typedef _SlotLoadC = Int32 Function(Int32, Pointer<Utf8>, Pointer<Utf8>);
 typedef _SlotLoadDart = int Function(int, Pointer<Utf8>, Pointer<Utf8>);
 typedef _SlotUnloadC = Int32 Function(Int32);
@@ -233,7 +234,8 @@ class BridgePluginFfi {
   int setChannels(int slot, int mask) {
     try {
       return _setChannels(slot, mask);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'bridge-plugin-ffi');
       return 0;
     }
   }
@@ -244,7 +246,8 @@ class BridgePluginFfi {
     if (f == null || group < 0) return 0;
     try {
       return f(slot, group, mask);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'bridge-plugin-ffi');
       return 0;
     }
   }
@@ -297,7 +300,8 @@ class BridgePluginFfi {
   int getChannels(int slot) {
     try {
       return _getChannels(slot);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'bridge-plugin-ffi');
       return 0xFF;
     }
   }

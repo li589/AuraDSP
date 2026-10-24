@@ -22,6 +22,7 @@ import 'dart:io';
 
 import 'config.dart';
 
+import 'error_sink.dart';
 abstract final class PathMemory {
   static const String filePathsJson = 'file_paths.json';
   static const int version = 1;
@@ -62,7 +63,8 @@ abstract final class PathMemory {
       if (d is Map) {
         _dirs = d.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _dirs = {};
     }
   }
@@ -71,7 +73,7 @@ abstract final class PathMemory {
     try {
       final v = jsonDecode(raw);
       if (v is Map<String, dynamic>) return v;
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     return {};
   }
 
@@ -124,7 +126,7 @@ abstract final class PathMemory {
         try {
           final d = Directory(p);
           if (d.existsSync()) return d.path;
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
       }
     }
 
@@ -142,7 +144,8 @@ abstract final class PathMemory {
         'version': version,
         'dirs': _dirs,
       });
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
