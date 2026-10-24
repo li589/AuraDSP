@@ -448,10 +448,17 @@ int32_t EffectDSPMainCommand(EffectDSPMain *dspmain, uint32_t cmdCode, uint32_t 
 			{
 				int16_t viperddcEnabled = ((int16_t *)cep)[8];
 				int errCode = 0;
+				/* [PATCHED-AuraDSP Z14] 与桌面引擎 set_ddc_enable 同型收口：
+				 * DDCEnable 的 ddcForceRefresh 重解析路径（free/重装
+				 * vdcFl.sosPointer）必须与 RT stage_ddc（kAuraStages ddc
+				 * lock=1，经 JamesDSPProcessMultiplexedStageSet 持锁）及另一
+				 * 控制线程的 DDCStringParser（内部自锁）互斥。 */
+				jdsp_lock(&dspmain->jdsp);
 				if (!viperddcEnabled)
 					DDCDisable(&dspmain->jdsp);
 				else
 					errCode = DDCEnable(&dspmain->jdsp, 1);
+				jdsp_unlock(&dspmain->jdsp);
 #ifdef DEBUG
 				LOGE("viperddcEnabled: %d, success?: %d", viperddcEnabled, errCode);
 #endif

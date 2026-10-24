@@ -1257,8 +1257,9 @@ public:
         m_editorTitle = title;
         setupPluginDllDirectories(m_meta.path);
         if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
-            SetForegroundWindow(m_editorHwnd);
             ShowWindow(m_editorHwnd, SW_SHOW);
+            // Z16：闪现置顶（SetForegroundWindow 跨进程常静默失败）。
+            FlashEditorToFront(m_editorHwnd);
             return true;
         }
         if (!m_controller) {
@@ -1384,6 +1385,8 @@ public:
 
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
+        // Z16：闪现置顶——插件窗口不被 Flutter App 压在下面。
+        FlashEditorToFront(hwnd);
 
         // C4：很多插件在 attached 之前 getSize 返回 0/0 或占位值，只有
         // attached 之后才布局出真实尺寸——所以再取一次。尺寸变化就走一遍

@@ -17,11 +17,20 @@ mkdir -p "$OUT_W"
 CMAKE="$(command -v cmake || echo /c/FreeRulesPrograms/BasicToolkits/CMake/bin/cmake)"
 
 echo "=== [1/2] cmake configure ==="
+# 管道会吞掉 cmake 的退出码（set -e 只见管道末端的 tail）——先落盘再 tail，
+# 显式检查 rc。教训：2026-10-24 Phase B 首次构建 MSBuild 报 C2118 断言失败，
+# 但脚本仍打印 BUILD OK 并同步了旧 DLL，门禁被管道蒙过。
 "$CMAKE" -S "$HERE_W" -B "$OUT_W" -G "Visual Studio 18 2026" -A x64 \
-  -DCMAKE_BUILD_TYPE=Release 2>&1 | tail -5
+  -DCMAKE_BUILD_TYPE=Release > "$OUT_W/configure.log" 2>&1
+cfg_rc=$?
+tail -5 "$OUT_W/configure.log"
+[ $cfg_rc -eq 0 ] || { echo "ERROR: cmake configure failed (rc=$cfg_rc), see $OUT_W/configure.log"; exit $cfg_rc; }
 
 echo "=== [2/2] build ==="
-"$CMAKE" --build "$OUT_W" --config Release 2>&1 | tail -25
+"$CMAKE" --build "$OUT_W" --config Release > "$OUT_W/build.log" 2>&1
+build_rc=$?
+tail -25 "$OUT_W/build.log"
+[ $build_rc -eq 0 ] || { echo "ERROR: build failed (rc=$build_rc), see $OUT_W/build.log"; exit $build_rc; }
 
 DLL="$OUT_W/Release/auradsp_engine.dll"
 [ -f "$DLL" ] || { echo "ERROR: auradsp_engine.dll not produced"; exit 1; }

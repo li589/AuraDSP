@@ -1069,6 +1069,7 @@
   },
   "plugSlotNoFx": "No effect loaded",
   "chainActive": "Active",
+  "plugPartialBypass": "Partial bypass",
   "chainBypass": "Bypass",
   "plugActive": "Active",
   "lpSaveFailed": "Save failed (bad name or unwritable disk)",

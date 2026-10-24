@@ -230,3 +230,45 @@ yquist * 0.999，
 - **内容**：采用平滑抛物线等功率增益补偿 `1.0f + 0.75f * (x * (1.0f - x))`，在 0.5 处温和补偿约 +1.4 dB 以弥补中央直达声能量分散，两端平滑归一到 1.0。
 - **行为影响**：消除 +6dB 音量突跳，立体声展宽调节过程总声能主观保持恒定。
 - **上游同步冲突风险**：低（单函数 4 行修改）。
+## B1 liveprogWrapper.c + jdspController.c + jdsp_header.h — liveprog 影子 VM 编译，RT 零锁等待（2026-10-24）
+
+- **位置**：`jdsp/Effects/liveprogWrapper.c` 全文件重写（影子槽编译 + 原子换指针）；
+  `jdspController.c` `stage_liveprog` enabled 判断内移 + `kAuraStages` liveprog lock 1→0；
+  `jdsp_header.h` `LiveProg` 加 `retiredAt`、`JamesDSPLib` 的 `eel` 值改指针 +
+  新增 `eelSlots[3]`/`eelProcCount`/`eelSwapProc`/`eelInFlight`、新增 `LiveProgUnload` 声明；
+  `engine/chain/engine_chain.cpp` `lp_refresh_sliders` 适配指针；`engine/engine_param_table.h`
+  `set_liveprog_unload` 改走 API（不再越层写字段）。
+- **动机**（全量审查 B1/P0）：原 `LiveProgStringParser` 持 `jdsp_lock` 做
+  `NSEEL_code_compile ×2`（大脚本实测 ~26ms，用户自述可达 ≥2s），而 RT 的
+  `stage_liveprog` 每块取同一把锁——编译期间 RT 在 `EnterCriticalSection` 上
+  无限期等待（无超时/无优先级继承）⇒ 整段音频卡死，即「加载脚本时卡顿」根因。
+  Z13 修过同一把锁的数据竞争，但没修**等待时长**。
+- **设计**（P-006 mEQ 双缓冲同范式）：3 个预分配 LiveProg 槽（各含独立 NSEEL VM），
+  `jdsp->eel` 指向活动快照；控制线程编译进非活动影子槽后原子换指针
+  （x86-64 对齐指针存即原子；RT 块首只读一次）。在途守卫双条件任一满足即可复用
+  换下的槽：① `eelInFlight == 0`（RT 入口/出口原子增减，证明无在途调用持有旧
+  快照——覆盖音频停流时 `eelProcCount` 冻结导致连续加载全部「引擎忙」的可用性洞）；
+  ② `eelProcCount >= retiredAt`（换下后跑满 1 块）。两条件皆不满足时有界等待
+  500ms 墙钟（`Sleep(1)` 实际粒度 ~5-15ms，按时间收敛而非迭代计数），仍无槽返回
+  -4；绝不退化到活动槽原地编译（UAF）。
+- **行为影响**：① 加载/重载脚本期间 RT 零阻塞（压测：216 个编译窗口内 RT 产出
+  68k+ 块、最大块 0.3-1.5ms vs pre-B1 总产出 400 块、最大块 ~50ms）；
+  ② 编译失败时**旧脚本继续运行**（原实现先清旧 code 再编译，失败即静默停效）；
+  ③ `liveprog.enable=0` 期间块边界仍推进守卫计数（`stage_liveprog` 恒调用
+  `LiveProgProcess`，enabled 判断内移）；④ `liveprog.unload` 语义不变
+  （经 `LiveProgUnload` 置活动快照 `compileSucessfully=0`，单次 int 写 x86 原子）。
+- **RT 安全论证**：RT 只读 `jdsp->eel`（块首一次）+ 快照内指针字段（换指针后不变），
+  唯一可变共享量为 `*vmFs`（srate，单次对齐 float 写）与 `*input1/2`（per-sample
+  输入/输出寄存器，本就无锁）——均保持原有 x86 原子级访问语义，未引入新的竞争面。
+- **上游同步冲突风险**：中（`liveprogWrapper.c` 为整文件重写，上游若更新需以本版
+  为基线人工合并；`LiveProg` 结构体与 `JamesDSPLib` 布局变更需同步）。
+- **验收**：`test/smoke/smoke_liveprog_race.py`（新增，runner 已注册）——
+  RT×UI 双线程 + 逐块计时 + 编译窗口内产出比 + 旧快照存活语义 + 停流连发加载 +
+  有界等待 + 收尾健康，共 17 项断言；反向验证（临时还原 pre-B1 持锁编译）3 项核心
+  断言失败（417 块 / 1.6 块每窗口 / 40.8ms 尖峰），证明测试非空转。
+  `smoke_liveprog.py` 7 场景全过；全量 python 冒烟 100%；Dart 436/436（串行）；
+  flutter analyze 零问题。
+- **后续（B1 同法未竟项）**：comp（`CompressorSetParam(forceRefresh=1)` 全量重置，
+  Z13 锁保持）与 ddc（`DDCRefresh` free+换 `sosPointer`/`usedSOSCount` 两字段非原子，
+  Z14 锁保持）仍持 `jdsp_lock`——两者持锁时长亚毫秒~毫秒级（非秒级），且与
+  `JamesDSPSetSampleRate` 的全效果重建共用该锁，列为 B1-b/B1-c 后续专项。

@@ -263,6 +263,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
      * ch<=2 时整段跳过，立体声路径与改造前逐字节一致。 */
     const int ch = h->channel_count.load(std::memory_order_relaxed);
     const bool multichannel = (ch > 2);
+    h->last_block_ch = ch;   /* [Phase B] emit_viz 填 channel_count；与 ch_out_peak 同块同源 */
 
     /* [Input Gate: 顺序钉死在最前端] 全通道总输入增益 × 单通道平衡 */
     const float in_gain_db = h->p.input_gain.load(std::memory_order_relaxed);
@@ -279,6 +280,9 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         /* 多声道输入门控处理：缩放写入 mx_scratch 并统计本级 IN / OUT 电平 */
         float pk_in_l = 0.0f, pk_in_r = 0.0f;
         float pk_out_l = 0.0f, pk_out_r = 0.0f;
+        /* [Phase B 多声道电平] per-channel 输入峰值（增益前）→ stage 12 槽位，
+         * 与 stereo 的 input_lvl_in 语义严格一致。 */
+        float pk_in_ch[AURADSP_CH_MAX] = {};
         for (int i = 0; i < frames; ++i) {
             for (int c = 0; c < ch; ++c) {
                 const float s_raw = in[i * ch + c];
@@ -295,12 +299,15 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                     if (a_in > pk_in_r) pk_in_r = a_in;
                     if (a_out > pk_out_r) pk_out_r = a_out;
                 }
+                if (c < AURADSP_CH_MAX && a_in > pk_in_ch[c]) pk_in_ch[c] = a_in;
             }
         }
         h->input_lvl_in_l = pk_in_l > 1e-6f ? 20.0f * log10f(pk_in_l) : -120.0f;
         h->input_lvl_in_r = pk_in_r > 1e-6f ? 20.0f * log10f(pk_in_r) : -120.0f;
         h->input_lvl_out_l = pk_out_l > 1e-6f ? 20.0f * log10f(pk_out_l) : -120.0f;
         h->input_lvl_out_r = pk_out_r > 1e-6f ? 20.0f * log10f(pk_out_r) : -120.0f;
+        for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[12][c] = pk_in_ch[c];
+        for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[12][c] = 0.0f; /* 声道数下降时清陈旧槽 */
 
         const bool binaural =
             h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
@@ -317,14 +324,14 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 for (int c = 2; c < ch; ++c) out[i * ch + c] = 0.0f;
             }
             h->frames_since_viz += frames;
-            viz_write(h, h->shelf_scratch, frames);
+            viz_write(h, h->shelf_scratch, frames, 2);
         } else {
             const int mode = h->p.channels_mode.load(std::memory_order_relaxed);
             if (mode == 1) {
                 /* 模式 1: 离散多声道独立处理 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
                 process_multichannel_chain(h, h->mx_scratch, out, frames, ch);
                 h->frames_since_viz += frames;
-                viz_write(h, out, frames);
+                viz_write(h, out, frames, ch);
             } else {
                 /* 模式 0: 矩阵混音 (Phase A 修复版: 彻底解决左右环绕串扰与镜像颠倒) */
                 if (!mx_downmix(h, h->mx_scratch, h->shelf_scratch, frames, ch) || !h->mx_stereo) {
@@ -334,7 +341,11 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
                 mx_upmix(h, out, h->mx_stereo, frames, ch);
                 h->frames_since_viz += frames;
-                viz_write(h, h->mx_stereo, frames);
+                /* 频谱/历史取下混立体声（既存语义）；per-channel 电平则按
+                 * mx_upmix 后真实写进设备的 out 实测——否则 [2..N-1] 恒 -120，
+                 * 多声道默认路径上 6 根柱永久假死。 */
+                viz_write(h, h->mx_stereo, frames, 2);
+                viz_scan_out_peak(h, out, frames, ch);
             }
         }
         const int vizInt = h->viz_interval.load(std::memory_order_relaxed);
@@ -381,7 +392,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
 
     process_stereo_chain(h, h->shelf_scratch, out, frames);
     h->frames_since_viz += frames;
-    viz_write(h, out, frames);
+    viz_write(h, out, frames, 2);
     const int vizInt2 = h->viz_interval.load(std::memory_order_relaxed);
     while (h->frames_since_viz >= vizInt2) {
         h->frames_since_viz -= vizInt2;

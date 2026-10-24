@@ -1085,6 +1085,7 @@
   },
   "plugSlotNoFx": "未挂载效果器",
   "chainActive": "生效中",
+  "plugPartialBypass": "部分旁路",
   "chainBypass": "旁路",
   "plugActive": "生效",
   "lpSaveFailed": "保存失败（名称非法或磁盘不可写）",

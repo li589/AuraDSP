@@ -64,6 +64,10 @@ def run_smoke_tests():
         # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
         "smoke_plugin_host_priority.py",
         "smoke_config_and_matrix.py",
+        # ADR-003 Phase B 多声道电平门禁（2026-10-24）：ABI v2 尺寸/版本 +
+        # ch=8/6 逐声道异幅电平 + gate 动态行更新 + vendor/GR 作用域语义 +
+        # stereo 回归（MC→stereo 切换无残留泄漏）
+        "smoke_mc_channel_levels.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
@@ -88,6 +92,9 @@ def run_smoke_tests():
         # Z12 超预算自动保护门禁（2026-10-23）：注入观测值 → 收窄到热组 →
         # 回落自动恢复；手动改掩码立即取消；关保护不进入。App 占槽时让路。
         "smoke_vm_protect.py",
+        # Z17 组间并行处理门禁（2026-10-24）：串/并行双路位级对账 + 语义断言
+        # + 遥测相等 + 墙钟（8 组 × 250µs 假插件：并行 <60% 串行）。不依赖 VM 在线。
+        "smoke_vm_parallel.py",
     "smoke_apo_inspect.py",
     "smoke_apo_register.py",
     "smoke_apo_selftest.py",
@@ -118,6 +125,16 @@ def run_smoke_tests():
     # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
     # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。
     "smoke_comp_race.py",
+    # Z14 DDC 控制线程/RT 竞争门禁（2026-10-23）：高频 ddc.enable +
+    # 交替 ddc.load 两份大 VDC + RT 连续 process。修复前 enable 落入
+    # DDCStringParser 解析瞬窗即误拒；修复后控制侧同锁零误拒。
+    "smoke_ddc_race.py",
+    # B1 liveprog 影子 VM 编译门禁（2026-10-24）：RT 连续 process 逐块
+    # 计时 + UI 线程高频加载重脚本（~26ms 编译）/坏脚本/变增益脚本。
+    # 修复前（持 jdsp_lock 原地编译）RT 每窗口被挡 ~26ms、总产出仅 ~400
+    # 块、最大块 ~50ms；修复后产出 ~74k 块、最大块 <1ms、编译窗口内
+    # 每窗口 ~300 块，且停流连发加载经 eelInFlight==0 守卫全部成功。
+    "smoke_liveprog_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",

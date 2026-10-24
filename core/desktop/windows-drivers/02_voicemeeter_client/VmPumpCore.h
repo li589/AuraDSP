@@ -5,6 +5,13 @@
 // 以 smoke_vm_pump.py 为准绳。相对 02 副本只增测试注入面（testKind 等
 // 字段 + FillTestSignal + BUFFER_OUT 主对分支），供 bridge 的
 // “测试源启动即静音主输入”语义。RT 铁律不变。
+//
+// Z17（2026-10-24）组间并行：串行路径语义逐位保留（02 仍是串行参照），
+// 并行为 bridge 独有opt-in（ctx.parallelOn，AURA_VM_PARALLEL=0 可强制
+// 串行对账）。并行在 RT 回调内引入 2 次有界内核调用（SetEvent/ResetEvent，
+// ~µs 级、无阻塞无竞争）——这是“零系统调用”铁律的唯一刻意例外：并行把
+// 单回调墙钟从 Σ(8 组) 压到 ≈max(单组)（Ozone 级 6ms+ → ~1ms），收益
+// 远大于两次调用的代价；串行路径零调用不变。
 #pragma once
 
 #include <windows.h>
@@ -12,6 +19,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <vector>
@@ -125,6 +133,42 @@ struct PumpCtx {
     int testRate = 0;
     int testFileCh = 2;          // testFile 交织声道数（2..8；pump 恒 2，ASIO 桥 B2c 可为 4/6/8）
     double testPos = 0.0;  // 文件播放头（源帧单位，RT 独占，循环）
+    // ---- Z17 组间并行处理（2026-10-24；bridge 专用，02 泵冻结不跟进）----
+    // 根因：VM 单回调内 8 组串行 process，Ozone 级插件实测 0.76ms/组 @128
+    // 帧（2026-10-23 maxGroupTicks）→ 8 组 6ms+ 远超 2.67ms 回调预算即持续
+    // 爆音；Z12 保护只减用户可用的组数，不增容量。并行后单回调墙钟 ≈
+    // max(单组) 而非 Σ(8 组)（FL 多轨 mixer 同级）。
+    // per-group scratch：每组独占一对（worker 间零共享写）。主线程预分配
+    // （RT 禁分配）。共享 scratchIn/Out 保留给串行旧径与 02 对账。
+    float* scratchInG[kMaxGroups] = {};
+    float* scratchOutG[kMaxGroups] = {};
+    HANDLE workerWake = nullptr;               // 手工复位事件：RT 发布 Set / worker 等待
+    HANDLE workerThreads[kMaxGroups - 1] = {}; // 常驻 worker（RT 自身也是 claimer）
+    volatile LONG nWorkers = 0;                // 实建 worker 数
+    volatile LONG parallelOn = 0;              // 1=并行（RT 每块快照一次）；0=串行
+    volatile LONG workerStop = 0;              // 1=请求退出（主线程置位 + SetEvent）
+    volatile LONG rtInBlock = 0;               // RT 在途 BUFFER_OUT 计数（销毁句柄前等待归零）
+    // 任务发布（RT 单写；worker 只读/认领；Interlocked 全屏障保序）：
+    volatile LONG workGen = 0;        // 每块 +1：发布本块快照（RT 最后一步 bump）
+    volatile LONG workDone = 0;       // 完成组计数（fan-in 目标 = workExpect）
+    volatile LONG workExpect = 0;
+    // 认领协议：64 位打包 (gen<<32)|bitmap。CAS 抢最低位；gen 字段随块轮换，
+    // 防「上一块尾组刚完成、下一块已发布」的跨块 stale-claim（worker 持旧
+    // 快照写到旧 ab 上的竞争——实测窗口 ns 级但真实存在）。
+    volatile LONGLONG workClaimPacked = 0;
+    // 本块快照（RT 在 bump workGen 之前写完；worker 见新 gen 后读）：
+    void* curAb = nullptr;
+    long curN = 0;
+    long curMask = 0;
+    long curHaveEng = 0;
+    long curBinaural = 0;      // 块快照：worker 须与 RT 预填同口径（防测试信号翻转竞争）
+    long curTestKind = 0;      // 块快照：testKind 翻转只影响下一块
+    volatile LONG testReady = 0;      // bitmap：bit g = scratchInG[g] 已由 RT 预填测试信号
+    // 共享量 per-group 中间槽：worker 写、RT fan-in 后归约。max/OR 与顺序
+    // 无关，串/并行两条路径逐位同义（peakIn/maxDiff 本是 max-hold）。
+    double peakInGrp[kMaxGroups] = {};
+    double maxDiffGrp[kMaxGroups] = {};
+    bool grpBypass[kMaxGroups] = {};
 };
 
 inline bool PairIsSilent(const float* a, const float* b, long n) {
@@ -228,6 +272,183 @@ inline void FillTestSignal(PumpCtx* c, float* dst, long n) {
     FillTestSignalN(c, dst, n, 2);
 }
 
+// Z17：单组处理主体——串行/并行共用的唯一实现（两条路径必须逐位同义）。
+// 由原 OnVbCallback 内联 for 循环体原样提取；差异仅：
+//  1) scratch 改取每组独占对 scratchInG/OutG（并行时 worker 间零共享写；
+//     串行旧径的共享 scratchIn/Out 保留未用，02 对账与回退参考）；
+//  2) 三个共享量（peakIn/maxDiff/bypassEntered）改写 per-group 中间槽，
+//     由调用方 fan-in 后归约（max/OR 与组间顺序无关）；
+//  3) binaural/testKind 由调用方按块快照透传（原 per-group 活读，翻转时
+//     组间可撕裂；并行预填更必须同口径，否则测试信号数据竞争）。
+// testReady=true：scratchInG[g] 已由调用方（并行路径的 RT）按串行同序预填
+// 测试信号——FillTestSignal 写共享 testPhase/testRng/testPink/testPos，
+// 多线程并发即数据竞争，且各组按 g 顺序消费同一信号流才逐位一致。
+inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
+                           long mask, bool haveEng, bool binaural,
+                           long testKind, bool testReady) {
+    const long base = (long)g * 8;
+    // v2：每组主对（base+0/1）进该组引擎；组内其余 6 通道 + 组外全部透传。
+    const float* inL = ab->r[base];
+    const float* inR = ab->r[base + 1];
+    float* outL = ab->w[base];
+    float* outR = ab->w[base + 1];
+    if (!inL || !inR || !outL || !outR) {
+        // VB 没给这条总线 buffer（未路由/未分配）：标死 + 50ms 快衰，
+        // 灯半秒内灭，不钉死也不闪瞎。
+        if (g < 8) {
+            c->grpLive[g] = false;
+            DecayGrpPeak(c, g, n, 0.05);
+        }
+        return;
+    }
+    if (g < 8) c->grpLive[g] = true;
+    // 输入峰值（全组主对的最大值；smoke 据此判定"有没有声"）。
+    double grpPeak = 0.0;
+    for (long i = 0; i < n; ++i) {
+        const double a = inL[i] < 0 ? -(double)inL[i] : (double)inL[i];
+        const double b = inR[i] < 0 ? -(double)inR[i] : (double)inR[i];
+        const double m = a > b ? a : b;
+        if (m > grpPeak) grpPeak = m;
+    }
+    if (g < 8) {
+        // 冻结检测：步进 16 采、最多 64 点做 FNV 式折叠（RT 内纯整数运算）。
+        // 同一块内容连续超 0.5s → 本块峰值按 0 计（只清表头）。
+        uint32_t h = 2166136261u;
+        const long step = n > 64 ? n / 64 : 1;
+        for (long i = 0; i < n; i += step) {
+            union {
+                float f;
+                uint32_t u;
+            } xa, xb;
+            xa.f = inL[i];
+            xb.f = inR[i];
+            h ^= xa.u + 0x9e3779b9u + (h << 6) + (h >> 2);
+            h ^= xb.u + 0x9e3779b9u + (h << 6) + (h >> 2);
+        }
+        if (h == c->sigMark[g]) {
+            if (c->sigSame[g] < 1000000) ++c->sigSame[g];
+        } else {
+            c->sigMark[g] = h;
+            c->sigSame[g] = 0;
+        }
+        const long frozenAt =
+            c->sr > 0 && n > 0 ? c->sr / n / 2 : 240;  // 约 0.5s 的块数
+        if (frozenAt > 0 && c->sigSame[g] > frozenAt) grpPeak = 0.0;
+    }
+    if (g < 8) {
+        // 上升沿直接跟，释放约 200ms（旧 0.99995/块半衰期约 1s，灯要两三秒
+        // 才灭，用户读成"卡死"；200ms 人耳/人眼都跟得上，又不至于抖）。
+        if (grpPeak > c->peakGrp[g])
+            c->peakGrp[g] = grpPeak;
+        else
+            DecayGrpPeak(c, g, n, 0.2);
+    }
+    c->peakInGrp[g] = grpPeak;  // Z17：peakIn 归约中间槽（原直接 max 进 c->peakIn）
+    for (long ch = base + 2; ch < base + 8; ++ch) {
+        if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
+            memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
+    }
+    // 无引擎桥（DLL 缺失/符号不全/组超预建）或本总线被 mask 关掉：主对透传，
+    // 绝不吞声。电平表在上游已计量，不受影响；mask 与 idle 无关，重开即恢复。
+    if (!haveEng || c->eng[g] == nullptr || (mask & (1L << g)) == 0) {
+        if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
+        if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
+        return;
+    }
+    // 静音空转（组独立，EAPO 同式）。
+    if (!c->idle[g]) {
+        const int procCh = binaural ? 8 : 2;
+        // per-group scratch 优先；分配不全的极端场景回退共享对（仅串行安全，
+        // 并行判定已要求本块所有组 per-group 齐备，不会两条路混用）。
+        float* sIn = c->scratchInG[g] ? c->scratchInG[g] : c->scratchIn;
+        float* sOut = c->scratchOutG[g] ? c->scratchOutG[g] : c->scratchOut;
+        if (binaural) {
+            // 8ch：FL/FR/C/LFE/SL/SR/BL/BR 全量进引擎。
+            if (!testReady) {
+                for (long i = 0; i < n; ++i) {
+                    for (int ch = 0; ch < 8; ++ch) {
+                        const float* src = ab->r[base + ch];
+                        sIn[i * 8 + ch] = src ? src[i] : 0.0f;
+                    }
+                }
+            }
+            if (testKind != 0 && !testReady) {
+                // 测试信号仍按 stereo 生成，再展开到 FL/FR；其余置零。
+                FillTestSignal(c, sIn, n);
+                for (long i = n - 1; i >= 0; --i) {
+                    sIn[i * 8] = sIn[i * 2];
+                    sIn[i * 8 + 1] = sIn[i * 2 + 1];
+                    for (int ch = 2; ch < 8; ++ch)
+                        sIn[i * 8 + ch] = 0.0f;
+                }
+            }
+        } else if (testKind != 0) {
+            // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
+            if (!testReady) FillTestSignal(c, sIn, n);
+        } else {
+            for (long i = 0; i < n; ++i) {
+                sIn[i * 2] = inL[i];
+                sIn[i * 2 + 1] = inR[i];
+            }
+        }
+        bool outSilent = true;
+        if (c->userBypass) {
+            // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
+            for (long i = 0; i < n; ++i) {
+                outL[i] = inL[i];
+                outR[i] = inR[i];
+            }
+            // 旁路输出==输入：测试注入恒视为有声，否则看输入。
+            outSilent = (testKind != 0) ? false : PairIsSilent(inL, inR, n);
+        } else {
+            // L0：per-group process 耗时打点（QPC ~50ns × 8 组，可忽略）。
+            LARGE_INTEGER gt0, gt1;
+            QueryPerformanceCounter(&gt0);
+            c->process(c->eng[g], sIn, sOut, (int)n);
+            QueryPerformanceCounter(&gt1);
+            if (g < 8) {
+                const uint64_t gt = (uint64_t)(gt1.QuadPart - gt0.QuadPart);
+                if (gt > c->maxGroupTicks[g]) c->maxGroupTicks[g] = gt;
+            }
+            double grpDiff = 0.0;
+            for (long i = 0; i < n; ++i) {
+                const float oL = sOut[i * procCh];
+                const float oR = sOut[i * procCh + 1];
+                outL[i] = oL;
+                outR[i] = oR;
+                if (oL != 0.0f || oR != 0.0f) outSilent = false;
+                const double dL = (double)oL - (double)inL[i];
+                const double dR = (double)oR - (double)inR[i];
+                const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
+                if (d > grpDiff) grpDiff = d;
+            }
+            c->maxDiffGrp[g] = grpDiff;  // Z17：maxDiff 归约中间槽
+            if (binaural) {
+                // 双耳输出只保留 FL/FR；其余置零，避免 VM 下混把原环绕混回来。
+                for (long ch = base + 2; ch < base + 8; ++ch) {
+                    if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
+                }
+            }
+            const bool inSilent = PairIsSilent(inL, inR, n);
+            if (inSilent && outSilent)
+                c->idleSamples[g] += (uint64_t)n;
+            else
+                c->idleSamples[g] = 0;
+            c->idle[g] = c->sr > 0 &&
+                         c->idleSamples[g] >
+                             (uint64_t)c->sr * (uint64_t)(c->idleSeconds > 0 ? c->idleSeconds : 3);
+        }
+    } else {
+        c->grpBypass[g] = true;  // Z17：bypassEntered 归约中间槽
+        memcpy(outL, inL, (size_t)n * sizeof(float));
+        memcpy(outR, inR, (size_t)n * sizeof(float));
+        if (!PairIsSilent(inL, inR, n)) {
+            c->idle[g] = false;
+            c->idleSamples[g] = 0;
+        }
+    }
+}
+
 inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     auto* c = (PumpCtx*)lpUser;
     if (cmd == kCbStarting) {
@@ -255,11 +476,18 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     }
     if (cmd != kCbBufferOut) return 0;
     c->gotFirst = 1;
-    // 爆音预算：整块处理耗时打点（QPC 无等待，~50ns，可忽略；8 组串行是主要成本）。
+    // Z17：在途标记——重建/停止序列等它归零再销毁引擎句柄（并行 fan-in
+    // 期间 worker 持句柄 process；先停回调也可能有块在飞，50ms 睡眠余量
+    // 升级为确定性等待，见 DestroyEngines）。
+    InterlockedIncrement(&c->rtInBlock);
+    // 爆音预算：整块处理耗时打点（QPC 无等待，~50ns，可忽略）。
     LARGE_INTEGER t0, t1;
     QueryPerformanceCounter(&t0);
     auto* ab = (VbAudioBuffer*)lpData;
-    if (ab->nbo < 2 || ab->nbs <= 0 || ab->nbs > kMaxNbs) return 0;
+    if (ab->nbo < 2 || ab->nbs <= 0 || ab->nbs > kMaxNbs) {
+        InterlockedDecrement(&c->rtInBlock);
+        return 0;
+    }
     const long n = ab->nbs;
     // 组数 = min(nbi,nbo)/8（EAPO 同式），钳到预建 handle 数。
     int ng = (int)(ab->nbi < ab->nbo ? ab->nbi : ab->nbo) / 8;
@@ -268,164 +496,120 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     if (ng > PumpCtx::kMaxGroups) ng = PumpCtx::kMaxGroups;
     c->groups = ng;
     const bool haveEng = c->process != nullptr;
-    // 本组快照（整块统一口径，避免组间撕裂）。
+    // 本组快照（整块统一口径，避免组间撕裂）。Z17：binaural/testKind 也
+    // 按块快照（原 per-group 活读，翻转时组间可撕裂；并行预填更必须同口径，
+    // 否则 FillTestSignal 的共享相位/RNG 状态会数据竞争）。
     const long mask = InterlockedCompareExchange(&c->busMask, 0, 0);
-    for (int g = 0; g < ng; ++g) {
-        const long base = (long)g * 8;
-        // v2：每组主对（base+0/1）进该组引擎；组内其余 6 通道 + 组外全部透传。
-        const float* inL = ab->r[base];
-        const float* inR = ab->r[base + 1];
-        float* outL = ab->w[base];
-        float* outR = ab->w[base + 1];
-        if (!inL || !inR || !outL || !outR) {
-            // VB 没给这条总线 buffer（未路由/未分配）：标死 + 50ms 快衰，
-            // 灯半秒内灭，不钉死也不闪瞎。
-            if (g < 8) {
-                c->grpLive[g] = false;
-                DecayGrpPeak(c, g, n, 0.05);
+    const bool binaural = InterlockedCompareExchange(&c->binaural, 0, 0) != 0;
+    const long testKind = InterlockedCompareExchange(&c->testKind, 0, 0);
+    // 共享量归约槽清零（per-block；归约见尾部）。
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        c->peakInGrp[g] = 0.0;
+        c->maxDiffGrp[g] = 0.0;
+        c->grpBypass[g] = false;
+    }
+    // Z17 并行判定：池就绪 + 开关 + 多组 + 本块所有组 per-group scratch 齐备
+    // （分配不全的极端场景只走串行，串行内可回退共享 scratch，绝不变竞赛）。
+    bool par = c->parallelOn != 0 && c->nWorkers > 0 && ng > 1;
+    if (par) {
+        for (int g = 0; g < ng; ++g) {
+            if (!c->scratchInG[g] || !c->scratchOutG[g]) {
+                par = false;
+                break;
             }
-            continue;
         }
-        if (g < 8) c->grpLive[g] = true;
-        // 输入峰值（全组主对的最大值；smoke 据此判定“有没有声”）。
-        double grpPeak = 0.0;
-        for (long i = 0; i < n; ++i) {
-            const double a = inL[i] < 0 ? -(double)inL[i] : (double)inL[i];
-            const double b = inR[i] < 0 ? -(double)inR[i] : (double)inR[i];
-            const double m = a > b ? a : b;
-            if (m > c->peakIn) c->peakIn = m;
-            if (m > grpPeak) grpPeak = m;
-        }
-        if (g < 8) {
-            // 冻结检测：步进 16 采、最多 64 点做 FNV 式折叠（RT 内纯整数运算）。
-            // 同一块内容连续超 0.5s → 本块峰值按 0 计（只清表头）。
-            uint32_t h = 2166136261u;
-            const long step = n > 64 ? n / 64 : 1;
-            for (long i = 0; i < n; i += step) {
-                union {
-                    float f;
-                    uint32_t u;
-                } xa, xb;
-                xa.f = inL[i];
-                xb.f = inR[i];
-                h ^= xa.u + 0x9e3779b9u + (h << 6) + (h >> 2);
-                h ^= xb.u + 0x9e3779b9u + (h << 6) + (h >> 2);
-            }
-            if (h == c->sigMark[g]) {
-                if (c->sigSame[g] < 1000000) ++c->sigSame[g];
-            } else {
-                c->sigMark[g] = h;
-                c->sigSame[g] = 0;
-            }
-            const long frozenAt =
-                c->sr > 0 && n > 0 ? c->sr / n / 2 : 240;  // 约 0.5s 的块数
-            if (frozenAt > 0 && c->sigSame[g] > frozenAt) grpPeak = 0.0;
-        }
-        if (g < 8) {
-            // 上升沿直接跟，释放约 200ms（旧 0.99995/块半衰期约 1s，灯要两三秒
-            // 才灭，用户读成"卡死"；200ms 人耳/人眼都跟得上，又不至于抖）。
-            if (grpPeak > c->peakGrp[g])
-                c->peakGrp[g] = grpPeak;
-            else
-                DecayGrpPeak(c, g, n, 0.2);
-        }
-        for (long ch = base + 2; ch < base + 8; ++ch) {
-            if (ab->w[ch] && ab->r[ch] && ab->w[ch] != ab->r[ch])
-                memcpy(ab->w[ch], ab->r[ch], (size_t)n * sizeof(float));
-        }
-        // 无引擎桥（DLL 缺失/符号不全/组超预建）或本总线被 mask 关掉：主对透传，
-        // 绝不吞声。电平表在上游已计量，不受影响；mask 与 idle 无关，重开即恢复。
-        if (!haveEng || c->eng[g] == nullptr || (mask & (1L << g)) == 0) {
-            if (outL != inL) memcpy(outL, inL, (size_t)n * sizeof(float));
-            if (outR != inR) memcpy(outR, inR, (size_t)n * sizeof(float));
-            continue;
-        }
-        // 静音空转（组独立，EAPO 同式）。
-        if (!c->idle[g]) {
-            const bool binaural =
-                InterlockedCompareExchange(&c->binaural, 0, 0) != 0;
-            const int procCh = binaural ? 8 : 2;
-            if (binaural) {
-                // 8ch：FL/FR/C/LFE/SL/SR/BL/BR 全量进引擎。
-                for (long i = 0; i < n; ++i) {
-                    for (int ch = 0; ch < 8; ++ch) {
-                        const float* src = ab->r[base + ch];
-                        c->scratchIn[i * 8 + ch] = src ? src[i] : 0.0f;
-                    }
-                }
-                if (c->testKind != 0) {
-                    // 测试信号仍按 stereo 生成，再展开到 FL/FR；其余置零。
-                    FillTestSignal(c, c->scratchIn, n);
+    }
+    if (par) {
+        // ---- Z17 并行路径：发布 → 认领（RT 也是 claimer）→ fan-in ----
+        LONG todo = 0;
+        for (int g = 0; g < ng; ++g) todo |= (1L << g);
+        LONG testRdy = 0;
+        // 测试信号预填：FillTestSignal 写共享 testPhase/testRng/testPink/
+        // testPos，且各组按 g 顺序消费同一信号流——必须 RT 单线程同序执行，
+        // 才与串行路径逐位一致。只预填将真正进 DSP 的组（与 ProcessGroupVm
+        // 内的 gather 条件同口径：eng 在、mask 开、非 idle）。
+        if (testKind != 0 && haveEng) {
+            for (int g = 0; g < ng; ++g) {
+                const long base = (long)g * 8;
+                if (!ab->r[base] || !ab->r[base + 1] || !ab->w[base] ||
+                    !ab->w[base + 1])
+                    continue;
+                if (!c->eng[g] || (mask & (1L << g)) == 0 || c->idle[g]) continue;
+                float* sIn = c->scratchInG[g];
+                FillTestSignal(c, sIn, n);
+                if (binaural) {
                     for (long i = n - 1; i >= 0; --i) {
-                        c->scratchIn[i * 8] = c->scratchIn[i * 2];
-                        c->scratchIn[i * 8 + 1] = c->scratchIn[i * 2 + 1];
+                        sIn[i * 8] = sIn[i * 2];
+                        sIn[i * 8 + 1] = sIn[i * 2 + 1];
                         for (int ch = 2; ch < 8; ++ch)
-                            c->scratchIn[i * 8 + ch] = 0.0f;
+                            sIn[i * 8 + ch] = 0.0f;
                     }
                 }
-            } else if (c->testKind != 0) {
-                // 测试注入：静音主通道 VB 输入，测试信号进同一条 DSP 链。
-                FillTestSignal(c, c->scratchIn, n);
-            } else {
-                for (long i = 0; i < n; ++i) {
-                    c->scratchIn[i * 2] = inL[i];
-                    c->scratchIn[i * 2 + 1] = inR[i];
-                }
-            }
-            bool outSilent = true;
-            if (c->userBypass) {
-                // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
-                for (long i = 0; i < n; ++i) {
-                    outL[i] = inL[i];
-                    outR[i] = inR[i];
-                }
-                // 旁路输出==输入：测试注入恒视为有声，否则看输入。
-                outSilent = (c->testKind != 0) ? false : PairIsSilent(inL, inR, n);
-            } else {
-            // L0：per-group process 耗时打点（QPC ~50ns × 8 组，可忽略）。
-            LARGE_INTEGER gt0, gt1;
-            QueryPerformanceCounter(&gt0);
-            c->process(c->eng[g], c->scratchIn, c->scratchOut, (int)n);
-            QueryPerformanceCounter(&gt1);
-            if (g < 8) {
-                const uint64_t gt = (uint64_t)(gt1.QuadPart - gt0.QuadPart);
-                if (gt > c->maxGroupTicks[g]) c->maxGroupTicks[g] = gt;
-            }
-            for (long i = 0; i < n; ++i) {
-                const float oL = c->scratchOut[i * procCh];
-                const float oR = c->scratchOut[i * procCh + 1];
-                outL[i] = oL;
-                outR[i] = oR;
-                if (oL != 0.0f || oR != 0.0f) outSilent = false;
-                const double dL = (double)oL - (double)inL[i];
-                const double dR = (double)oR - (double)inR[i];
-                const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
-                if (d > c->maxDiff) c->maxDiff = d;
-            }
-            if (binaural) {
-                // 双耳输出只保留 FL/FR；其余置零，避免 VM 下混把原环绕混回来。
-                for (long ch = base + 2; ch < base + 8; ++ch) {
-                    if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
-                }
-            }
-            const bool inSilent = PairIsSilent(inL, inR, n);
-            if (inSilent && outSilent)
-                c->idleSamples[g] += (uint64_t)n;
-            else
-                c->idleSamples[g] = 0;
-            c->idle[g] = c->sr > 0 &&
-                         c->idleSamples[g] >
-                             (uint64_t)c->sr * (uint64_t)(c->idleSeconds > 0 ? c->idleSeconds : 3);
-            }  // end else(!userBypass)：正常 DSP 处理
-        } else {
-            c->bypassEntered = true;
-            memcpy(outL, inL, (size_t)n * sizeof(float));
-            memcpy(outR, inR, (size_t)n * sizeof(float));
-            if (!PairIsSilent(inL, inR, n)) {
-                c->idle[g] = false;
-                c->idleSamples[g] = 0;
+                testRdy |= (1L << g);
             }
         }
+        InterlockedExchange(&c->workDone, 0);
+        c->curAb = ab;
+        c->curN = n;
+        c->curMask = mask;
+        c->curHaveEng = haveEng ? 1 : 0;
+        c->curBinaural = binaural ? 1 : 0;
+        c->curTestKind = testKind;
+        InterlockedExchange(&c->testReady, testRdy);
+        LONG expect = 0;
+        for (LONG t = todo; t; t &= t - 1) ++expect;
+        InterlockedExchange(&c->workExpect, expect);
+        const LONG newGen = InterlockedCompareExchange(&c->workGen, 0, 0) + 1;
+        // 认领字（gen<<32|bitmap）先落、gen bump 最后：Interlocked 全屏障
+        // 保证 worker 见新 gen 时快照与认领字必已就绪（无半成品发布）。
+        InterlockedExchange64(&c->workClaimPacked,
+                              ((LONGLONG)newGen << 32) |
+                                  (LONGLONG)(uint32_t)todo);
+        InterlockedIncrement(&c->workGen);
+        SetEvent(c->workerWake);
+        // RT 自身也是 claimer（与 worker 同协议，见 VmWorkerMain）。
+        for (;;) {
+            const LONGLONG cur =
+                InterlockedCompareExchange64(&c->workClaimPacked, 0, 0);
+            if ((LONG)(cur >> 32) != newGen) break;
+            const LONG bm = (LONG)(cur & 0xFFFFFFFFLL);
+            if (!bm) break;
+            const LONG bit = bm & (~bm + 1);
+            const LONGLONG next = ((LONGLONG)newGen << 32) |
+                                  (LONGLONG)(uint32_t)(bm & ~bit);
+            if (InterlockedCompareExchange64(&c->workClaimPacked, next, cur) !=
+                cur)
+                continue;
+            int g = 0;
+            for (LONG b = bit; !(b & 1); b >>= 1) ++g;
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
+                           (testRdy & bit) != 0);
+            InterlockedIncrement(&c->workDone);
+        }
+        // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
+        // 兜底：worker 被插件崩溃杀掉等"永不发生"场景——超时放弃本块并停用
+        // 并行回串行，绝不让音频线程永久自旋（那会卡死整个 VM）。
+        uint64_t spins = 0;
+        while (InterlockedCompareExchange(&c->workDone, 0, 0) < expect) {
+            YieldProcessor();
+            if (++spins > 400000000ull) {
+                InterlockedExchange64(&c->workClaimPacked, 0);
+                InterlockedExchange(&c->parallelOn, 0);
+                break;
+            }
+        }
+        ResetEvent(c->workerWake);
+    } else {
+        // ---- 串行路径（原语义，经同一 ProcessGroupVm；testReady=false 自填）----
+        for (int g = 0; g < ng; ++g)
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
+                           false);
+    }
+    // 共享量归约（串/并行共用；max/OR 与组间顺序无关，逐位同义）。
+    for (int g = 0; g < ng; ++g) {
+        if (c->peakInGrp[g] > c->peakIn) c->peakIn = c->peakInGrp[g];
+        if (c->maxDiffGrp[g] > c->maxDiff) c->maxDiff = c->maxDiffGrp[g];
+        if (c->grpBypass[g]) c->bypassEntered = true;
     }
     // 组外通道透传。
     for (long ch = (long)ng * 8; ch < ab->nbo && ch < 128; ++ch) {
@@ -450,7 +634,136 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 c->cbOverStreak = 0;
         }
     }
+    InterlockedDecrement(&c->rtInBlock);
     return 0;
+}
+
+// Z17：常驻 worker（桥主线程建；THREAD_PRIORITY_TIME_CRITICAL——块预算
+// 2.67ms 级的音频辅助线程）。协议：等事件 → 见新 gen → 读块快照 → 与 RT
+// 同协议认领（64 位打包 CAS）→ ProcessGroupVm → 完成计数。认领循环内代际
+// 不匹配即退出重取快照（防跨块 stale-claim，见 workClaimPacked 注释）。
+static DWORD WINAPI VmWorkerMain(LPVOID param) {
+    auto* c = (PumpCtx*)param;
+    SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+    LONG lastGen = InterlockedCompareExchange(&c->workGen, 0, 0);
+    for (;;) {
+        if (c->workerStop) break;
+        const LONG gen = InterlockedCompareExchange(&c->workGen, 0, 0);
+        if (gen == lastGen) {
+            // 无新块：阻塞等事件（manual-reset，RT 发布时 Set、fan-in 后
+            // Reset）。1s 超时只为兜底检查 workerStop。
+            if (WaitForSingleObject(c->workerWake, 1000) != WAIT_OBJECT_0) {
+                if (c->workerStop) break;
+            }
+            continue;
+        }
+        lastGen = gen;
+        // 块快照（gen 屏障后就绪；binaural/testKind 必须与 RT 预填同口径）。
+        auto* ab = (VbAudioBuffer*)c->curAb;
+        const long n = c->curN;
+        const long mask = c->curMask;
+        const bool haveEng = c->curHaveEng != 0;
+        const bool binaural = c->curBinaural != 0;
+        const long testKind = c->curTestKind;
+        const LONG testRdy = InterlockedCompareExchange(&c->testReady, 0, 0);
+        for (;;) {
+            const LONGLONG cur =
+                InterlockedCompareExchange64(&c->workClaimPacked, 0, 0);
+            if ((LONG)(cur >> 32) != gen) break;  // 块已轮换：重取快照
+            const LONG bm = (LONG)(cur & 0xFFFFFFFFLL);
+            if (!bm) break;
+            const LONG bit = bm & (~bm + 1);
+            const LONGLONG next = ((LONGLONG)gen << 32) |
+                                  (LONGLONG)(uint32_t)(bm & ~bit);
+            if (InterlockedCompareExchange64(&c->workClaimPacked, next, cur) !=
+                cur)
+                continue;
+            int g = 0;
+            for (LONG b = bit; !(b & 1); b >>= 1) ++g;
+            ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
+                           (testRdy & bit) != 0);
+            InterlockedIncrement(&c->workDone);
+        }
+    }
+    return 0;
+}
+
+// Z17：worker 池生命周期（桥主线程调用；RT 只碰发布三件套）。
+// 单核/建池失败 → parallelOn 保持 0，泵走串行（scratchInG 已分配则保留——
+// 串行路径也用每组独占 scratch，见 ProcessGroupVm）。
+inline void VmParallelShutdown(PumpCtx* c);
+
+inline bool VmParallelInit(PumpCtx* c) {
+    if (!c) return false;
+    if (c->nWorkers > 0) return true;
+    // per-group scratch（串/并行都用；RT 禁分配，主线程一次性建）
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (c->scratchInG[g]) continue;
+        c->scratchInG[g] = (float*)malloc(sizeof(float) * 8 * kMaxNbs);
+        c->scratchOutG[g] = (float*)malloc(sizeof(float) * 8 * kMaxNbs);
+        if (!c->scratchInG[g] || !c->scratchOutG[g]) {
+            // 不回收已分配的：串行路径可回退共享 scratch（par 判定按组检查
+            // 齐备性，缺槽的组不会进并行）；统一回收只发生在显式 Shutdown。
+            return false;
+        }
+    }
+    // 逃生阀：环境变量强制串行（A/B 对账/排障用）
+    const char* env = getenv("AURA_VM_PARALLEL");
+    if (env && env[0] == '0') return false;
+    SYSTEM_INFO si;
+    GetSystemInfo(&si);
+    int want = (int)si.dwNumberOfProcessors - 1;  // RT 线程自占一核
+    if (want > PumpCtx::kMaxGroups - 1) want = PumpCtx::kMaxGroups - 1;
+    if (want < 1) return false;  // 单核：并行无收益（scratch 已留，串行照用）
+    c->workerWake = CreateEventW(nullptr, TRUE, FALSE, nullptr);
+    if (!c->workerWake) return false;
+    int made = 0;
+    for (int i = 0; i < want; ++i) {
+        HANDLE h = CreateThread(nullptr, 0, VmWorkerMain, c, 0, nullptr);
+        if (!h) break;
+        c->workerThreads[made++] = h;
+    }
+    c->nWorkers = made;
+    if (made == 0) {
+        CloseHandle(c->workerWake);
+        c->workerWake = nullptr;
+        return false;
+    }
+    InterlockedExchange(&c->parallelOn, 1);
+    return true;
+}
+
+inline void VmParallelShutdown(PumpCtx* c) {
+    if (!c) return;
+    InterlockedExchange(&c->parallelOn, 0);
+    // 等在途块结束（含 fan-in：worker 持引擎句柄 process，绝不在销毁句柄
+    // 途中还有 worker 在跑）
+    for (int i = 0; i < 3000; ++i) {
+        if (InterlockedCompareExchange(&c->rtInBlock, 0, 0) == 0) break;
+        Sleep(1);
+    }
+    InterlockedExchange(&c->workerStop, 1);
+    if (c->workerWake) SetEvent(c->workerWake);
+    const int nw = c->nWorkers;
+    if (nw > 0) {
+        WaitForMultipleObjects((DWORD)nw, c->workerThreads, TRUE, 3000);
+        for (int i = 0; i < nw; ++i) {
+            CloseHandle(c->workerThreads[i]);
+            c->workerThreads[i] = nullptr;
+        }
+    }
+    c->nWorkers = 0;
+    if (c->workerWake) {
+        CloseHandle(c->workerWake);
+        c->workerWake = nullptr;
+    }
+    InterlockedExchange(&c->workerStop, 0);
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        free(c->scratchInG[g]);
+        c->scratchInG[g] = nullptr;
+        free(c->scratchOutG[g]);
+        c->scratchOutG[g] = nullptr;
+    }
 }
 
 inline std::wstring ToWide(const std::string& s) {

@@ -712,6 +712,42 @@ extension StateEvents on AppModel {
         if (raw['inputOutR'] != null) {
           inputMeterOutR.value = (raw['inputOutR'] as num).toDouble();
         }
+        // [Phase B 多声道电平] per-channel 遥测：消息按 chCount 裁剪
+        // （stageCh = 21×chCount），此处规范为定长（chLevels 8、
+        // stageCh 21×8），缺列 -120，UI 侧统一索引。
+        if (raw['chCount'] != null) {
+          final cc = (raw['chCount'] as num).toInt();
+          vizChannelCount.value = cc;
+          final cl = (raw['chLevels'] as List?)
+                  ?.cast<num>()
+                  .map((e) => e.toDouble())
+                  .toList() ??
+              const <double>[];
+          final full =
+              List<double>.filled(kVizChannelMax, -120.0);
+          for (int i = 0; i < cl.length && i < kVizChannelMax; ++i) {
+            full[i] = cl[i];
+          }
+          vizChannelLevels.value = full;
+          final sc = (raw['stageCh'] as List?)
+                  ?.cast<num>()
+                  .map((e) => e.toDouble())
+                  .toList() ??
+              const <double>[];
+          final n = cc <= 0
+              ? 0
+              : (cc > kVizChannelMax ? kVizChannelMax : cc);
+          final grid = List<double>.filled(
+              kVizStageTelemetry * kVizChannelMax, -120.0);
+          if (n > 0 && sc.length >= kVizStageTelemetry * n) {
+            for (int s = 0; s < kVizStageTelemetry; ++s) {
+              for (int c = 0; c < n; ++c) {
+                grid[s * kVizChannelMax + c] = sc[s * n + c];
+              }
+            }
+          }
+          vizStageChLevels.value = grid;
+        }
         break;
       case 'error':
         final msg = raw['msg'] as String;

@@ -542,8 +542,9 @@ public:
         if (!m_isLoaded || !m_plugin) return false;
         m_editorTitle = title;
         if (m_editorOpen.load(std::memory_order_acquire) && m_editorHwnd && IsWindow(m_editorHwnd)) {
-            SetForegroundWindow(m_editorHwnd);
             ShowWindow(m_editorHwnd, SW_SHOW);
+            // Z16：闪现置顶（SetForegroundWindow 跨进程常静默失败）。
+            FlashEditorToFront(m_editorHwnd);
             return true;
         }
         if (!m_pump || !m_pump->isReady()) return false;
@@ -649,6 +650,10 @@ public:
             if (gui->show) gui->show(m_plugin);
         } catch (...) {}
         UpdateWindow(hwnd);
+
+        // Z16：闪现置顶——插件窗口不被 Flutter App 压在下面。放在
+        // set_parent/show 之后：子窗口挂载完成再抬升，z 序跟随稳定。
+        FlashEditorToFront(hwnd);
 
         // C4：部分插件在 set_parent/show 之后才布局出真实尺寸（iZotope RX
         // 系列为代表），所以再取一次并同步容器与子窗口；异步布局的插件由

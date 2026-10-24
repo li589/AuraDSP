@@ -159,3 +159,15 @@
 
 
 - **P3a (2026-10-13)**: core/desktop/engine_api -> engine/, core/desktop/vendor-src -> vendor/ (git mv, R状态). 并行改动插件/host/crossfeed/arbmag请用新路径, 内容零改行可自动跟随.
+
+## 10-19 → 10-24 精炼状态（2026-10-24 自 .workbuddy/memory 合并；详见各日期日志）
+
+- **当前状态**：分支 `dev` 与 origin/dev 同步（Z13 三修 + Z14 于 419ce89 全部推送）。未决清单 A~R 全组关闭、实质清零；仅存 #94 多声道电平 = ADR-003 Phase B 工作量（2026-10-24 夜动工）。
+- **Z13（079dbc7）**：compander 控制线程 `CompressorSetParam(forceRefresh=1)` 全量重置与 RT 消耗循环无互斥 → count 减成 -1 → `mOutputBuffer[-1]` 空写崩溃（minidump 实证）。修法 = kAuraStages comp lock=1 + `JamesDSPProcessMultiplexedStageSet` 两分支 honoring lock（此前 RT 唯一入口完全忽略该标志）+ `apply_comp` 控制侧同锁。门禁 `smoke_comp_race.py`。
+- **Z14（419ce89）**：DDC 控制路径同型收口（set_ddc_enable/set_ddc_load + jamesdsp.c cmd 1212 的 DDCEnable/DDCDisable 补 jdsp_lock）。定界事实：ctrl_mutex 排除控制-控制竞争；ddcForceRefresh 无人置位（唯一调用方传 0）→ 危险刷新路径不可达；残余为形式数据竞争，修法结构性关闭。门禁 `smoke_ddc_race.py`（重锁竞争下零死锁 + 样本级生效）。
+- **UI 三阶段重构收官**：P0（IndexedStack 保活 + hbTick 心跳 + RepaintBoundary + _notifyUi 合并）/ P1（settings 拆分 2509→父+6 part、设计系统迁 lib/ui、layering_guard）/ P2（aura.tokens.json→gen_theme.py→tokens.g.dart，parity 85 项；l10n 棘轮 218→0，三语 835+ key）。报告 `docs/30-审查/全天改动全面审查报告-2026-10-23.md`。
+- **VB 桥按路插件 + Z12 超预算保护**：每 8 声道一组建独立引擎，插件按路勾选/旁路；保护激活时收窄到监听总线（vizStick），EMA<50%×6s 恢复，手动改掩码让位 + 60s 冷却。Dart 侧 vbAutoProtect 配置 + 设置页读数行。
+- **E15 确定性流水深 v2**：深度 = ceil(回调帧/128)（1..16 自适应），传输延迟恒为 1 回调 = N×128；getLatencySlot 进程外槽改实时值。F-7 +2 块口径作废。
+- **channelsMode 真值对齐（430849f）**：引擎仅 0=矩阵下混/1=离散逐声道；UI 原三档「立体声/5.1/7.1」选 7.1 恒被拒且镜像不回滚——已改两档真值 + 三语 hint + clamp。
+- **部署核对铁律**：① DLL 导出用 ASCII `strings`（`-el` UTF-16 恒得 0）；② 一致性判源 mtime vs 构建时间，非 commit time；③ 本机 `flutter test` 全量并发 isolate 超时抖动（"did not complete" 逐轮漂移、单跑全过）= 环境性。
+- **记忆目录裁定（2026-10-11，10-24 重申）**：唯一 AI 记忆目录 = `.ai/memory/`；`.workbuddy/memory/` 已再次合并并入本目录并移除。

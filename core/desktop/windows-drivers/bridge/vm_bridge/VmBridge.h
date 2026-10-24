@@ -56,9 +56,10 @@ VBB_API int vb_get_param_str(const char* id, char* out, int cap);
 // 模拟一次 VM CHANGE（VB 推 kCbChange 时置位同标志），供 smoke 回归重建路径。
 VBB_API int vb_test_change();
 
-// 从 group0 handle 读可视化帧（408B/帧，与 auradsp_viz_read 同布局，
-// Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
-VBB_API int vb_viz_read(void* out408, int count);
+// 从 group0 handle 读可视化帧（1600B/帧 = sizeof(auradsp_viz_frame) ABI v2，
+// 与 auradsp_viz_read 同布局透传，Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
+// 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 408B 分配会堆越界）。
+VBB_API int vb_viz_read(void* out1600, int count);
 
 // 用户旁路开关（与进程内 bypass 同义：跳过 process，输入直通）。
 // 返回 0；桥未运行时返回 <0。

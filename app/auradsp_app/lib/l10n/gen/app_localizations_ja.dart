@@ -2498,6 +2498,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainActive => '有効中';
 
   @override
+  String get plugPartialBypass => '部分バイパス';
+
+  @override
   String get chainBypass => 'バイパス';
 
   @override
