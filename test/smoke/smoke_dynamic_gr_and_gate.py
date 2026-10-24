@@ -46,6 +46,7 @@ def check(name, cond, detail=''):
 
 
 class VizFrame(ctypes.Structure):
+    # [Phase B] 2026-10-24 ABI v2：尾部追加 per-channel 电平，536B → 1600B。
     _fields_ = [
         ("seq", ctypes.c_uint64),
         ("timestamp_ms", ctypes.c_double),
@@ -54,7 +55,10 @@ class VizFrame(ctypes.Structure):
         ("level_l_dbfs", ctypes.c_float),
         ("level_r_dbfs", ctypes.c_float),
         ("stage_levels_l", ctypes.c_float * 32),
-        ("stage_levels_r", ctypes.c_float * 32)
+        ("stage_levels_r", ctypes.c_float * 32),
+        ("channel_count", ctypes.c_uint32),
+        ("channel_levels", ctypes.c_float * 8),
+        ("stage_ch_levels", ctypes.c_float * (32 * 8)),
     ]
 
 

@@ -20,7 +20,13 @@ import 'package:flutter/material.dart' show Color, Locale;
 import '../engine/audio_isolate.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
-    show ParamId, kEngineStageCount, AuraDspLib, VizBands;
+    show
+        ParamId,
+        kEngineStageCount,
+        AuraDspLib,
+        VizBands,
+        kVizChannelMax,
+        kVizStageTelemetry;
 import '../engine/debug_log.dart';
 import '../engine/head_tracker.dart';
 import 'config.dart';
@@ -666,6 +672,20 @@ class AppModel extends ChangeNotifier {
   final inputMeterInR = ValueNotifier<double>(-120.0);
   final inputMeterOutL = ValueNotifier<double>(-120.0);
   final inputMeterOutR = ValueNotifier<double>(-120.0);
+
+  // [Phase B 多声道电平] per-channel 电平（ADR-003，2026-10-24）。
+  // stereo 时 [0]/[1] 与 levelL/R 同源一致；MC（5.1/7.1）为全声道。
+  // vizChannelCount=0（无帧/断流）时 UI 回退 L/R 两柱行为。
+  final vizChannelCount = ValueNotifier<int>(0);
+  /// 定长 kChannelMax；未用声道 -120。
+  final vizChannelLevels = ValueNotifier<List<double>>(
+    List.filled(kVizChannelMax, -120.0),
+  );
+  /// 扁平 [stage * kChannelMax + ch]，stage 0..kVizStageTelemetry-1 有效；
+  /// 21..31（预留/GR）恒 -120。GR 单值仍读 stageLevelsL 的 L 列。
+  final vizStageChLevels = ValueNotifier<List<double>>(
+    List.filled(kVizStageTelemetry * kVizChannelMax, -120.0),
+  );
 
   // 动态衰减量计量 (Gain Reduction, dB, 负值或 0.0)
   final grLimiter = ValueNotifier<double>(0.0);

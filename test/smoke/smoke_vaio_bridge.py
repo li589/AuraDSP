@@ -167,7 +167,8 @@ rc_gstr = b.vaio_get_param_str(b"liveprog.code", str_buf, 512)
 check("get_param_str rc>0", rc_gstr > 0, f"bytes={rc_gstr}")
 
 # 7. 可视化帧读取
-viz_buf = ctypes.create_string_buffer(536)
+# [Phase B] 2026-10-24 ABI v2：viz 帧 536B → 1600B（桥透传引擎帧）。
+viz_buf = ctypes.create_string_buffer(1600)
 viz_frames = b.vaio_viz_read(viz_buf, 1)
 check("viz_read 能够读取帧", viz_frames >= 0, f"frames={viz_frames}")
 

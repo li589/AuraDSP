@@ -13,6 +13,7 @@ import '../core/nav.dart';
 import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
+import '../engine/auradsp_ffi.dart' show kVizChannelMax;
 import 'chrome.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'widgets.dart';
@@ -811,20 +812,42 @@ class _StageStereoMeter extends StatelessWidget {
       builder: (ctx, page, _) {
         if (page != AppPage.chain) return const SizedBox.shrink();
         return ListenableBuilder(
-          listenable: Listenable.merge([model.stageLevelsL, model.stageLevelsR]),
+          // [Phase B 多声道电平] MC 态展开 per-channel 列：追加订阅
+          // chCount + stageCh 网格；stereo 时两值与旧字段同源，行为不变。
+          listenable: Listenable.merge([
+            model.stageLevelsL,
+            model.stageLevelsR,
+            model.vizChannelCount,
+            model.vizStageChLevels,
+          ]),
           builder: (ctx, _) {
             final levelsL = model.stageLevelsL.value;
             final levelsR = model.stageLevelsR.value;
-            final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
-                ? levelsL[meterIndex]
-                : -120.0;
-            final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
-                ? levelsR[meterIndex]
-                : -120.0;
+            final chCount = model.vizChannelCount.value;
 
-            // 硬件合成器分段 LED 电平表（双声道支持，可扩展多通道）
+            // MC 模式（chCount>2）且为自研效果器段（12..20）：展开全声道柱。
+            // vendor 段（0..11）MC 下只作用于 FL/FR 对（引擎 stage_ch 语义），
+            // 保持两柱；Category B（16/17/20）的 ch>=2 柱显 -120（作用域诚实）。
+            final List<double> columns;
+            if (chCount > 2 && meterIndex >= 12) {
+              final grid = model.vizStageChLevels.value;
+              columns = List<double>.generate(chCount, (c) {
+                final idx = meterIndex * kVizChannelMax + c;
+                return (idx >= 0 && idx < grid.length) ? grid[idx] : -120.0;
+              });
+            } else {
+              final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
+                  ? levelsL[meterIndex]
+                  : -120.0;
+              final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
+                  ? levelsR[meterIndex]
+                  : -120.0;
+              columns = [dbL, dbR];
+            }
+
+            // 硬件合成器分段 LED 电平表（双声道支持，MC 模式 N 柱）
             return _SynthLedLadderMeter(
-              channelsDb: [dbL, dbR],
+              channelsDb: columns,
               isEnabled: isEnabled,
               palette: p,
             );

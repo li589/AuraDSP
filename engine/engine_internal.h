@@ -15,7 +15,11 @@
 #include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
 
 #define AURADSP_VERSION "1.1.0"
-#define AURADSP_ABI 1
+/* ABI v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加
+ * channel_count + channel_levels[8] + stage_ch_levels[32][8]（536B→1596B）。
+ * 追加式布局保旧读者兼容，但 Dart Struct 定长读必须同版本——加载时
+ * auradsp_abi() 强校验（见 auradsp_ffi.dart）。 */
+#define AURADSP_ABI 2
 
 struct ScopedFtzDazGuard {
 #if defined(_M_X64) || defined(__x86_64__)
@@ -418,6 +422,17 @@ struct auradsp_handle_s {
     /* 自研效果器实时本级输出线性峰值（RT 线程每块就地扫描，emit_viz 填入 stage_levels 对应槽位） */
     float  stage_peak_l[AURADSP_STAGE_MAX] = {};
     float  stage_peak_r[AURADSP_STAGE_MAX] = {};
+    /* [Phase B 多声道电平] per-stage per-channel 线性峰值（RT 线程每块扫描）。
+     * 与 stage_peak_l/r 的关系：stereo 路径只写 l/r（逐位不变）；MC 路径由
+     * sample_stage_peak_mc 同时写两组（l/r 列取 ch0/ch1，修复 MC 下
+     * stage_levels 遥测 stale）。stage 语义同 stage_levels_* 槽位表。 */
+    float  stage_peak_ch[AURADSP_STAGE_MAX][AURADSP_CH_MAX] = {};
+    /* 最终输出（auradsp_process 的 out 缓冲）per-channel 线性峰值，
+     * 由 viz_write 按块 stride 同一趟扫描记录（stereo 时 [0]/[1] 与
+     * viz_lvl_l/r 同源）。emit_viz 转 dBFS 填 channel_levels。 */
+    float  ch_out_peak[AURADSP_CH_MAX] = {};
+    /* RT 线程每块记录的声道数（2/6/8），emit_viz 填 channel_count；0=尚无块。 */
+    int    last_block_ch = 0;
 
     /* Liveprog 状态 */
     float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */
@@ -642,7 +657,7 @@ void spatial_reset(auradsp_handle h);
 void spatial_process(auradsp_handle h, float* io, int frames);
 void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                               int frames, int ch);
-void viz_write(auradsp_handle h, const float* out, int frames);
+void viz_write(auradsp_handle h, const float* out, int frames, int ch);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);
 void gate_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void filter_process_mc(auradsp_handle h, float* io, int frames, int ch);

@@ -20,5 +20,5 @@
 ## 演进记录（2026-10-24）：多声道电平 Phase B
 
 - 引擎 MC 链（`process_multichannel_chain`，Category A/B 路线）落地后，Phase B 原描述「逐声道实例化 N-1 个引擎实例」已由该独立 MC 链路线取代，不再按原计划实施；vendor-src 打补丁仍维持「跨声道效果需求出现时才考虑」。
-- **多声道电平**（未决清单 #94）设计已定稿：`auradsp_viz_frame` 追加式扩展（`channel_count` + `channel_levels[8]` + `stage_ch_levels[32][8]`，536B→1596B，`AURADSP_ABI` 1→2），MC 链各效果器后 per-channel 峰值采样，UI 电平柱 2→N。完整设计（ABI/引擎/Dart/UI/验证矩阵）见 `docs/20-执行/多声道电平PhaseB设计-2026-10-24.md`。
+- **多声道电平**（未决清单 #94）设计已定稿：`auradsp_viz_frame` 追加式扩展（`channel_count` + `channel_levels[8]` + `stage_ch_levels[32][8]`，536B→1600B，`AURADSP_ABI` 1→2），MC 链各效果器后 per-channel 峰值采样，UI 电平柱 2→N。完整设计（ABI/引擎/Dart/UI/验证矩阵）见 `docs/20-执行/多声道电平PhaseB设计-2026-10-24.md`。
 - 诚实性约束：vendor 段与 Category B 效果（bassmono/haas/spatial）只作用于 FL/FR 对，其 per-channel 电平对 [2..7] 声道恒显 -120，不复制假装全声道；GR 槽保持单值语义。
