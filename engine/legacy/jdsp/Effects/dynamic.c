@@ -926,35 +926,87 @@ void regularSTFT(FFTCompander *cm)
 	}
 	cm->mInputSamplesNeeded = cm->ovpLen;
 }
-int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const float *inRight, unsigned int inSampleCount, float *outL, float *outR)
-{
-	unsigned int outSampleCount, maxOutSampleCount, copyCount;
-	outSampleCount = 0;
-	maxOutSampleCount = inSampleCount;
+/* ---- B1-d：启动缺额与分块处理 -------------------------------------------------
+ * 原实现两个缺陷（同一根因：把「本块没产出」当成「本块无需改动」）：
+ *   ① 抽干循环在 OutputBufferCount==0 时一次都不执行，于是输出缓冲里仍是
+ *      **未处理的输入**（调用方 in==out 原地处理），启动段最多 ovpLen 个样本
+ *      原声直通，并与稍后产出的处理流叠加（双声/梳状滤波）。
+ *   ② 块长 n 与 hop(ovpLen) 不整除时，「已产出-已交付」需要永久落后一个相位
+ *      量，否则在部分调用上必然取不到输出；旧实现靠 ① 的"泄漏"意外维持平衡，
+ *      于是泄漏是周期性的、并非只在启动时发生（实测 441 帧块 7 次、500 帧块 2 次）。
+ * 修法：显式把相位落后做出来 —— 启动先以静音吐出 D = ovpLen - gcd(ovpLen,chunk)
+ * 个样本（OLA 爬升段本来就是静音，吐静音不损失任何信号），此后可用输出恒 >= 0；
+ * 抽干仍不足时补静音，绝不把未处理的输入留在输出里。
+ * 副作用：块长不整除 hop 时延迟 = (fftLen-ovpLen) + D，D 必须计入上报延迟。 */
 
-	while (inSampleCount > 0) {
-		copyCount = min(cm->mInputSamplesNeeded, inSampleCount);
-		float *sampDL = &cm->mInput[0][cm->mInputPos];
-		float *sampDR = &cm->mInput[1][cm->mInputPos];
-		const float *max = inLeft + copyCount;
-		while (inLeft < max)
+static unsigned int comp_gcd_u(unsigned int a, unsigned int b)
+{
+	while (b) { unsigned int t = a % b; a = b; b = t; }
+	return a;
+}
+
+unsigned int CompressorStartupDeficit(unsigned int ovpLen, unsigned int blockLen)
+{
+	if (ovpLen == 0)
+		return 0;
+	/* 必须用**完整块长**，不能先裁到 ovpLen 再取 gcd：相位只由 blockLen 与
+	 * ovpLen 的最大公约数决定。实测教训：441 帧块 @hop256 的真缺额是
+	 * 256-gcd(256,441)=255，而先裁到 256 会得到 256-gcd(256,256)=0，
+	 * 脉冲位移因此少 247 帧。blockLen==0（尚未处理过任何块）按整 hop 处理。 */
+	if (blockLen == 0)
+		return 0;
+	return ovpLen - comp_gcd_u(ovpLen, blockLen);
+}
+
+/* 写 n 个立体声静音（out 与 in 可能是同一块内存，不能 memset 整片）。 */
+static void comp_zero_pairs(float *outL, float *outR, unsigned int n)
+{
+	unsigned int i;
+	for (i = 0; i < n; ++i) { *outL++ = 0.0f; *outR++ = 0.0f; }
+}
+
+/* 喂 n(<=ovpLen) 个样本：填充 → 启动缺额 → 抽干。恒写满 n 个输出样本。 */
+static void comp_process_chunk(FFTCompander *cm, const float *inLeft, const float *inRight,
+                               unsigned int inSampleCount, float *outL, float *outR)
+{
+	unsigned int outSampleCount = 0, copyCount, rem = inSampleCount;
+
+	while (rem > 0)
+	{
+		copyCount = min(cm->mInputSamplesNeeded, rem);
 		{
-			*sampDL = *inLeft;
-			*sampDR = *inRight;
-			inLeft += 1;
-			inRight += 1;
-			sampDL += 1;
-			sampDR += 1;
+			float *sampDL = &cm->mInput[0][cm->mInputPos];
+			float *sampDR = &cm->mInput[1][cm->mInputPos];
+			const float *max = inLeft + copyCount;
+			while (inLeft < max)
+			{
+				*sampDL = *inLeft;
+				*sampDR = *inRight;
+				inLeft += 1;
+				inRight += 1;
+				sampDL += 1;
+				sampDR += 1;
+			}
 		}
-		inSampleCount -= copyCount;
+		rem -= copyCount;
 		cm->mInputPos = (cm->mInputPos + copyCount) & cm->minus_fftLen;
 		cm->mInputSamplesNeeded -= copyCount;
 		if (cm->mInputSamplesNeeded == 0)
 			cm->process(cm);
 	}
-	while ((cm->mOutputBufferCount > 0) && (outSampleCount < maxOutSampleCount)) {
+	/* 启动缺额：把 OLA 爬升段的静音先交付掉，再接上真正的处理流 */
+	if (cm->mOutputDeficit > 0)
+	{
+		copyCount = min((unsigned int)cm->mOutputDeficit, inSampleCount);
+		comp_zero_pairs(outL, outR, copyCount);
+		outL += copyCount;
+		outR += copyCount;
+		outSampleCount += copyCount;
+		cm->mOutputDeficit -= (int)copyCount;
+	}
+	while ((cm->mOutputBufferCount > 0) && (outSampleCount < inSampleCount)) {
 		float *sampD = cm->mOutputBuffer[0];
-		copyCount = min(cm->ovpLen - cm->mOutputReadSampleOffset, maxOutSampleCount - outSampleCount);
+		copyCount = min(cm->ovpLen - cm->mOutputReadSampleOffset, inSampleCount - outSampleCount);
 		float *out = sampD + (cm->mOutputReadSampleOffset * 2);
 		float *max = outL + copyCount;
 		while (outL < max)
@@ -991,7 +1043,31 @@ int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const floa
 			}
 		}
 	}
-	return outSampleCount;
+	/* 仍不够：仅可能出现在启动头几块（管线还没有任何产出）。补静音而不是
+	 * 保留输入——保留输入就是原声直通。 */
+	if (outSampleCount < inSampleCount)
+		comp_zero_pairs(outL, outR, inSampleCount - outSampleCount);
+}
+
+int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const float *inRight, unsigned int inSampleCount, float *outL, float *outR)
+{
+	unsigned int done = 0;
+	if (!cm || !inLeft || !inRight || !outL || !outR || inSampleCount == 0)
+		return 0;
+	if (cm->mOutputDeficit < 0)
+		cm->mOutputDeficit = (int)CompressorStartupDeficit(cm->ovpLen, inSampleCount);
+	/* 单次至多推进一个 hop：process() 每次 ++mOutputBufferCount 并按 count-1
+	 * 取址，一次攒多个 hop 会把 FIFO 直接冲爆（旧实现的隐藏堆写，只因唯一调用
+	 * 方恰好按 ovpLen 分块才没触发）。 */
+	while (done < inSampleCount)
+	{
+		unsigned int c = inSampleCount - done;
+		if (c > cm->ovpLen)
+			c = cm->ovpLen;
+		comp_process_chunk(cm, inLeft + done, inRight + done, c, outL + done, outR + done);
+		done += c;
+	}
+	return done;
 }
 void FFTCompanderSetavgBW(FFTCompander *cm, double avgBW)
 {
@@ -1152,6 +1228,16 @@ void FFTCompanderInit(FFTCompander *cm, float fs, int tfresolution, unsigned int
 	cm->mInputPos = 0;
 	cm->mOutputBufferCount = 0;
 	cm->mOutputReadSampleOffset = 0;
+	/* B1-d：启动缺额待首次调用按实际块长确定（Init 时块长未必已知）。 */
+	cm->mOutputDeficit = -1;
+	/* B1-d：OLA 反馈态与输入环必须清零。原来只有 mInputPos/计数被重置，缓冲区
+	 * 仍是上一次 Init（影子槽被复用）留下的**上一份音频**——那段残留会被
+	 * 当成输入参与 FFT，并从爬升段直接漏进输出。首次使用恰好落在 calloc 的
+	 * 零内存上，所以这个缺陷只在改参数（重新 Init）后出现。 */
+	memset(cm->mInput[0], 0, sizeof(cm->mInput[0]));
+	memset(cm->mInput[1], 0, sizeof(cm->mInput[1]));
+	memset(cm->mOverlapStage2dash[0], 0, sizeof(cm->mOverlapStage2dash[0]));
+	memset(cm->mOverlapStage2dash[1], 0, sizeof(cm->mOverlapStage2dash[1]));
 	LLraisedCosTblFloat(cm->analysisWnd, cm->fftLen, cm->ovpCount);
 	LLCreatePostWindowFloat(cm->synthesisWnd, cm->fftLen, cm->ovpCount);
 	for (i = 0; i < cm->fftLen; ++i)
@@ -2039,13 +2125,13 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled)
 		FFTCompander *cm = jdsp->compActive;
 	if (cm->tfresolution < 3)
 	{
-		unsigned int offset = 0;
-		while (offset < n)
-		{
-			const unsigned int processing = min(n - offset, cm->ovpLen);
-			FFTCompanderProcessSamples(cm, jdsp->tmpBuffer[0] + offset, jdsp->tmpBuffer[1] + offset, processing, jdsp->tmpBuffer[0] + offset, jdsp->tmpBuffer[1] + offset);
-			offset += processing;
-		}
+		/* 整块交给 ProcessSamples：它内部按 hop 分块（填充→缺额→抽干），
+		 * 并且**必须看到完整块长**才能算出正确的启动缺额（相位由块长与 hop
+		 * 的最大公约数决定）。旧实现在这里先 `min(n-offset, ovpLen)` 预切一刀，
+		 * 使 ProcessSamples 只看到被裁短的块，缺额算错 → 441 帧块实测多 247 帧
+		 * 且中途仍会饥饿。 */
+		FFTCompanderProcessSamples(cm, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n,
+		                           jdsp->tmpBuffer[0], jdsp->tmpBuffer[1]);
 	}
 	else
 	{
