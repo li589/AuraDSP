@@ -45,4 +45,4 @@ python tools/bin/push_via_api.py main
    - Every GUI interaction test MUST bring the target window to foreground top-most (`HWND_TOPMOST + SetForegroundWindow`).
    - Every slider interaction MUST check and guarantee that the effect switch is ON before dragging (disabled sliders ignore input).
    - Mouse events MUST hit exact Thumb center pixels and use image difference assertions (`assert_images_differ`) to ensure real visual change.
-4. **Third-Party Code (`source/`)**: `source/` is read-only reference code (15 ORIGIN entries, 14 top-level clones; see `source/ORIGIN.md` and `docs/10-架构/source-参考项目审理报告.md`). Never commit nested `.git` repositories in `source/`. No LICENSE ≠ open source — GitHub default is All Rights Reserved; ViPER-family code must never be merged into this GPL-3.0 project.
+4. **Third-Party Code (`source/`)**: `source/` is read-only reference code (16 ORIGIN entries, 15 top-level clones; see `source/ORIGIN.md` and `docs/10-架构/source-参考项目审理报告.md`). Never commit nested `.git` repositories in `source/`. No LICENSE ≠ open source — GitHub default is All Rights Reserved; ViPER-family code must never be merged into this GPL-3.0 project.
