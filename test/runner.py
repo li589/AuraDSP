@@ -86,6 +86,9 @@ def run_smoke_tests():
         # D1 门禁（2026-10-24）：延迟表口径——结构性帧数（comp 4096 / arbmag 块长）
         # 按当前采样率换算，不再把 48k 换算结果当毫秒常量。多采样率缩放断言。
         "smoke_d1_latency_sr.py",
+        # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
+        # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
+        "smoke_d5_slot_timeout.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
