@@ -361,6 +361,7 @@ def check_viz(problems: list[str]) -> tuple[int, int]:
 
 BRIDGE_DIR = ROOT / "core/desktop/windows-drivers/bridge"
 BRIDGE_FFI = ROOT / "app/auradsp_app/lib/engine/bridge_plugin_ffi.dart"
+PUMP_CORE_H = ROOT / "core/desktop/windows-drivers/02_voicemeeter_client/VmPumpCore.h"
 
 BRIDGES = [
     ("asio", BRIDGE_DIR / "asio_bridge/AsioBridge.h",
@@ -434,20 +435,44 @@ def parse_bridge_ffi(path: Path) -> tuple[dict[str, int], dict[str, int]]:
 def check_bridges(problems: list[str]) -> tuple[int, int]:
     """§7-5 三项：.def ↔ 头文件 1:1、Dart 必需符号齐全、元数一致。
 
+    §7-2（P-028）追加两项：
+      B4 桥侧期望 ABI 常量（kEngineAbiExpected）与引擎头 AURADSP_ABI 联动
+         ——引擎升版忘改桥 → 桥启动时全量拒绝（宁可显式红不让静默错位）。
+      B5 三桥 cpp 必须真的调用 auradsp_abi 做加载校验（防"清单齐了、校验没了"）。
+
     返回 (桥数, 总符号数)。失败时往 problems 里追加。
     """
-    for p in (BRIDGE_FFI,):
+    for p in (BRIDGE_FFI, PUMP_CORE_H):
         if not p.exists():
             problems.append("[B0] 缺少 %s" % p)
             return 0, 0
     required, optional = parse_bridge_ffi(BRIDGE_FFI)
     total = 0
 
+    # B4：桥侧期望 ABI == 引擎 ABI（双头都读到才算数，缺一头照报）
+    pump_text = PUMP_CORE_H.read_text(encoding="utf-8", errors="replace")
+    m_pump = re.search(r"kEngineAbiExpected\s*=\s*(\d+)", pump_text)
+    m_eng = re.search(r"#define\s+AURADSP_ABI\s+(\d+)",
+                      INTERNAL_H.read_text(encoding="utf-8", errors="replace"))
+    if not m_pump or not m_eng:
+        problems.append("[B4] 找不到 ABI 常量定义（VmPumpCore.h kEngineAbiExpected "
+                        "或 engine_internal.h AURADSP_ABI）")
+    elif m_pump.group(1) != m_eng.group(1):
+        problems.append("[B4] 桥期望 ABI %s != 引擎 AURADSP_ABI %s"
+                        "（引擎升版必须同步三桥并重建）"
+                        % (m_pump.group(1), m_eng.group(1)))
+
     for prefix, h_path, def_path in BRIDGES:
         if not h_path.exists() or not def_path.exists():
             problems.append("[B1] %s 桥缺少 %s 或 %s"
                             % (prefix, h_path.name, def_path.name))
             continue
+        # B5：桥实现必须引用 auradsp_abi（加载后强校验，§7-2 P-028）
+        cpp_path = h_path.with_suffix(".cpp")
+        if not cpp_path.exists() or "auradsp_abi" not in cpp_path.read_text(
+                encoding="utf-8", errors="replace"):
+            problems.append("[B5] %s 桥实现（%s）未引用 auradsp_abi ——"
+                            "加载引擎后的 ABI 强校验丢失" % (prefix, cpp_path.name))
         try:
             header = parse_bridge_header(h_path)
         except ValueError as e:

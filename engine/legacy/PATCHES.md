@@ -549,3 +549,31 @@ yquist * 0.999，
   "Unknown" 呈现。
 - **行为影响**：音频与元数据零改动；Debug 构建多 4 条异常路径日志。
 - **上游同步冲突风险**：低（纯 catch 体新增）。
+
+## P-028 §7-2 三桥 ABI 协商 — 加载引擎后强校验 auradsp_abi() + *_abi() 导出（2026-10-24）
+
+- **位置**：`core/desktop/windows-drivers/02_voicemeeter_client/VmPumpCore.h`
+  （`FnEngAbi` + `kEngineAbiExpected`）、`bridge/asio_bridge/AsioBridge.cpp`、
+  `bridge/vaio_bridge/VaioBridge.cpp`、`bridge/vm_bridge/VmBridge.cpp`
+  （加载点校验 + `asio_abi`/`vaio_abi`/`vb_abi` 导出）、三桥 `.def`/`.h`、
+  `tools/bin/abi_consistency.py`（B4/B5）、`bridge_plugin_ffi.dart`
+  （`${prefix}_abi` 可选绑定 + assertBridgeAbi）、三桥 Dart load()。
+- **动机**（审查 §7-2）：桥按编译期 viz 帧布局（1600B）做内存透传，引擎 DLL
+  若是另一 ABI 版本，同偏移读帧全体字段静默错位；三桥原样照单全收任何
+  auradsp_engine.dll，且全目录无一处 auradsp_abi 调用。Dart↔桥之间同样
+  没有代际协商——旧桥 DLL 配新 App 时 viz 解析静默出错。
+- **内容**：(1) 三桥 TryLoadEngine 成功后解析 auradsp_abi 并与
+  kEngineAbiExpected(=2) 强比对——ASIO/VAIO 硬失败（rc -5/-3，note=
+  engine-abi-mismatch: bridge=N engine=M；发生在驱动 open 之前），VM 桥
+  引擎不可用降级透传（无引擎本就合法）；(2) 三桥新增 `*_abi()` 导出；
+  (3) 门禁 B4（kEngineAbiExpected ↔ engine_internal.h AURADSP_ABI 联动）、
+  B5（三桥 cpp 必须引用 auradsp_abi，防"清单齐了、校验没了"）；
+  (4) Dart 侧 `assertBridgeAbi`：老桥无导出→跳过（协商回落），不符→抛错。
+- **行为影响**：音频零改动；仅同代际引擎可过桥引擎门。viz_read 形参名
+  out408/out536 更名 out1600（注释纠偏，审查顺手项）。
+- **验收**：`test/smoke/smoke_g7_2_bridge_abi.py`——[C] 用 g++ 合成假引擎
+  （桩 create/process/destroy，仅 auradsp_abi 可控）：ABI=999 拒绝
+  （note=engine-abi-mismatch: bridge=2 engine=999）、ABI=2 放行（证明拒绝
+  确由 ABI 门触发）；反向验证（还原 pre-fix 重建）C1 note 断言判红
+  （假引擎穿过引擎门进到驱动 open）。
+- **上游同步冲突风险**：低（三桥加载点各一小段 + 新增导出，逻辑自包含）。

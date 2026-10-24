@@ -9,6 +9,7 @@ EXPORTS
     vaio_get_param
     vaio_get_param_str
     vaio_viz_read
+    vaio_abi
     vaio_bypass
     vaio_test_start
     vaio_test_stop

@@ -70,8 +70,8 @@ def read(p):
 # ------------------------------------------------------------------ [A] 解析单元
 print("== [A] 解析单元 ==")
 
-N_HEADER = {"asio": 28, "vaio": 27, "vb": 40}      # 含 §7-5 补上的 2+2 项声明
-N_DEF = {"asio": 28, "vaio": 27, "vb": 40}         # 含 §7-5 补上的 2+2 项导出
+N_HEADER = {"asio": 29, "vaio": 28, "vb": 41}      # 含 §7-5 的 2+2 项 + §7-2（P-028）的 *_abi
+N_DEF = {"asio": 29, "vaio": 28, "vb": 41}         # 含 §7-5 的 2+2 项 + §7-2（P-028）的 *_abi
 
 for prefix, h_path, def_path in A.BRIDGES:
     try:
@@ -88,10 +88,10 @@ for prefix, h_path, def_path in A.BRIDGES:
 required, optional = A.parse_bridge_ffi(FFI)
 check("[A3] Dart 必需符号 15 个", len(required) == 15,
       "got %d: %s" % (len(required), ",".join(sorted(required))))
-check("[A4] Dart 可选符号 6 个（_g 系列）", len(optional) == 6,
+check("[A4] Dart 可选符号 7 个（_g 系列 + _abi）", len(optional) == 7,
       "got %d: %s" % (len(optional), ",".join(sorted(optional))))
-check("[A5] 可选符号全部以 _g 结尾（回落路径可辨识）",
-      all(s.endswith("_g") for s in optional))
+check("[A5] 可选符号全部以 _g/_abi 结尾（回落路径可辨识）",
+      all(s.endswith("_g") or s.endswith("_abi") for s in optional))
 check("[A6] 必需符号元数与 typedef 对上（load=3 / unload=1 / get_channels=1）",
       required.get("_plugin_slot_load") == 3
       and required.get("_plugin_slot_unload") == 1
@@ -106,7 +106,7 @@ r = subprocess.run([sys.executable, str(BIN / "abi_consistency.py"), "--bridges-
                    cwd=str(ROOT))
 check("[B1] CLI --bridges-only 退出码 0", r.returncode == 0,
       (r.stdout or "") + (r.stderr or ""))
-check("[B2] 报告 95 个导出 1:1", "95 个导出" in r.stdout, r.stdout.strip()[-120:])
+check("[B2] 报告 98 个导出 1:1", "98 个导出" in r.stdout, r.stdout.strip()[-120:])
 check("[B3] 三座桥各自导出数正确",
       all(("%s" % n) in r.stdout for n in (28, 27, 40)) or True, "见 [B1] 输出")
 

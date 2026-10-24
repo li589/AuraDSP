@@ -10,6 +10,7 @@ EXPORTS
     asio_get_param         PRIVATE
     asio_get_param_str     PRIVATE
     asio_viz_read          PRIVATE
+    asio_abi               PRIVATE
     asio_test_start        PRIVATE
     asio_test_stop         PRIVATE
     asio_bypass            PRIVATE
