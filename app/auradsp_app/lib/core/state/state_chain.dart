@@ -441,7 +441,11 @@ extension StateChain on AppModel {
   }
 
   void clearConvolver() {
-    convEnabled = false;
+    // [PATCHED-AuraDSP P-032] 清除 IR **不再关掉效果器开关**。此前的行为
+    // 是"点清除 → 开关自动关闭 → 卡片收起"，用户无法"先备着、等文件就位再
+    // 用"。用户明确要求：无文件时回到"未加载"界面、效果内部直通
+    // （引擎侧 apply_convolver 在 conv_enable=1 且 ir_ready=false 时已走
+    // Convolver1DDisable 直通，语义正确）。
     convReady = false;
     convIrPath = null;
     convFrames = convChannels = convSrcRate = 0;

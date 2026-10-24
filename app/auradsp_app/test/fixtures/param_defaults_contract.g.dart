@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT.
 // 由 tools/gen_param_contract.py 从引擎 C++ 源码生成（引擎侧默认快照）。
 // 消费方：app/test/param_contract_test.dart（默认值一致性 + 权威对账）。
-// 覆盖引擎参数 214 个（含 21 个 set 分支动态 id）。
+// 覆盖引擎参数 215 个（含 21 个 set 分支动态 id）。
 
 class ParamDefaultRow {
   final String engineId;
@@ -57,6 +57,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('bass.autogain', 'bass_autogain', 0),
   ParamDefaultRow('bass.harmonics', 'bass_harmonics', 0.45),
   ParamDefaultRow('bass.harmonicblend', 'bass_harmonicblend', 0.5),
+  ParamDefaultRow('bass.mode', 'bass_mode', 0),
   ParamDefaultRow('bass.subfreq', 'bass_subfreq', 25.0),
   ParamDefaultRow('bass.cutoff', 'bass_cutoff_f', 120.0),
   ParamDefaultRow('bass.oversample', 'bass_oversample', 1),
@@ -285,6 +286,7 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('bass.outgain', -12.0, 6.0),
   ParamRangeRow('bass.harmonics', 0.0, 1.0),
   ParamRangeRow('bass.harmonicblend', 0.0, 1.0),
+  ParamRangeRow('bass.mode', 0.0, 2.0),
   ParamRangeRow('bass.subfreq', 10.0, 40.0),
   ParamRangeRow('bass.cutoff', 30.0, 300.0),
   ParamRangeRow('eq.outgain', -12.0, 6.0),
@@ -389,5 +391,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1172;internal:798;create:503';
+const String kContractLineCounts = 'param_table:1180;internal:805;create:503';
 

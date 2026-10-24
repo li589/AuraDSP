@@ -102,6 +102,12 @@ extension StateSession on AppModel {
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
       setFloat('bass.gain', bassGain);
+      // [PATCHED-AuraDSP P-032] ViPER 模式（谐波配方宏）必须一并下发：
+      // 它在会话快照里被保存，但本方法是手写清单（不遍历 spec）→ 此前
+      // 恢复后引擎侧仍是 0，回读把 UI 的模式覆盖成"自然低音"。
+      // 用 setInt 而非 setBassMode：配方（harmonics/blend）另行恢复，
+      // 此处只同步模式状态，避免重写配方。
+      setInt('bass.mode', bassMode);
       // 声场（v1.2）：开关位独立后，直发 bypass _mirror（旧 setFloat 会把
       // UI 的 mix/band 回写冲掉）；关闭时下发 0，UI 值保留。开时与旧行为一致。
       final stereoK = stereoOn ? 1.0 : 0.0;

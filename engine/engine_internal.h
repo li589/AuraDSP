@@ -227,6 +227,13 @@ std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一�
     std::atomic<float>    bass_subfreq{25.0f};    /* Hz [10,40] 谐波下限 */
     std::atomic<float>    bass_cutoff_f{120.0f};  /* Hz [30,300] 谐波上限 */
     std::atomic<int32_t>  bass_oversample{1};     /* 0=1x节能 1=2x高精抗混叠过采样 */
+    /* [PATCHED-AuraDSP P-032] ViPER 三模式（0=自然低音 1=纯净低音 2=超重低音）
+     * 是**UI 侧谐波配方宏**（setBassMode 写 bass.harmonics/harmonicblend），
+     * 引擎侧此前没有对应参数 → 回读 getIntNullable('bass.mode') 恒为 null，
+     * isolate 兜底成 0 后无条件覆盖 UI → 用户选任何模式都被弹回"自然低音"。
+     * 这里补一个纯状态载体参数：让回读返回用户真实选择（值域 0..2），
+     * 不参与任何 DSP 计算。 */
+    std::atomic<int32_t>  bass_mode{0};
     /* 独立滤波器（RBJ biquad：HP/LP/BP，链头 gate 之后） */
     std::atomic<int32_t>  filter_enable{0};
     std::atomic<int32_t>  filter_type{0};     /* 0=HP 1=LP 2=BP */

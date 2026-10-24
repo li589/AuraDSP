@@ -764,6 +764,12 @@ class AppModel extends ChangeNotifier {
   /// 生产代码一律默认 false，行为零变化。
   final bool _testing;
 
+  /// [PATCHED-AuraDSP P-032] testing 模式下记录已下发的 setParam 载荷。
+  /// 供回归测试断言"参数确实发到了引擎"——此前 testing 模式下 _toIso
+  /// 为 null，send 静默丢弃，任何"漏发参数"类缺陷在单测里都测不出来
+  /// （P-032 修的正是三处漏发）。
+  final List<Map<String, dynamic>> sentParamsForTesting = [];
+
   /// ChangeNotifier 保护成员的库内转发。
   ///
   /// 拆分后 AppModel 的方法迁入 `extension ... on AppModel`（part 文件），

@@ -347,6 +347,13 @@ extension StateEffects on AppModel {
       setFloat('freeverb.damp', damp);
       setFloat('freeverb.wet', wet);
       setFloat('freeverb.dry', dry);
+      // [PATCHED-AuraDSP P-032] 必须一并下发 roomSize / width：此前只发了
+      // decay/damp/wet/dry，引擎侧 freeverb.roomsize 保持旧值（默认 1.2），
+      // 500ms 后的全量回读再把 UI 改回旧值 —— 用户看到"参数和 3D 图跳两次"
+      // （roomSize 直接决定 3D 房间几何，视觉上是整个房间缩回旧尺寸）。
+      // 见 PATCHES.md P-032。
+      setFloat('freeverb.roomsize', roomSize);
+      setFloat('freeverb.width', width);
       setReverbPreset(id);
     } else if (id == -1) {
       // Issue #3 方案A：从自定义态（-2）关闭只关声音，不丢标记。
@@ -885,6 +892,12 @@ extension StateEffects on AppModel {
   /// 不再碰 shelf 引擎；配方写入谐波三滑块（随后的 slider 恢复会覆盖为快照真值）。
   void setBassMode(int mode) {
     bassMode = mode;
+    // [PATCHED-AuraDSP P-032] 必须把模式本身下发引擎：此前只写本地字段，
+    // 引擎侧没有 bass.mode 参数 → 回读 getIntNullable 恒 null → isolate
+    // 兜底 0 → params 回读把 UI 无条件覆盖成 0 → 用户选任何模式都被弹回
+    // 「自然低音」（滑块会动、模式却跳回，即用户报告的现象）。
+    // 引擎侧 bass.mode 是纯状态载体（不参与 DSP 计算），见 PATCHES.md。
+    setInt('bass.mode', mode);
     if (mode == 1) {
       setBassHarmonics(0.35);
       setBassHarmonicBlend(0.5);

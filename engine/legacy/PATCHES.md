@@ -638,3 +638,89 @@ yquist * 0.999，
 - **验收**：`test/smoke/smoke_sr_rate_alignment.py` 的 [C] 段
   （enable=0 → -0.01dB）；反向验证见 P-029 条目（还原后 [C] 判红）。
 - **上游同步冲突风险**：低（仅宿主侧两处调用点与门卫条件）。
+
+## P-031 多声道/采样率细审的 UI 一致性与诚实性修复（2026-10-24）
+
+- **位置**：`features/effects/channel_routing_selector.dart`（pairSemantics +
+  成对翻转 + 掩码规范化）、`comp_card.dart` / `eq_card.dart`（传 pairSemantics）、
+  `core/state/state_events.dart`（channelsMode 回读消费）、
+  `core/state/state_session.dart`（channels.mode 会话回放下发）、
+  `loudness_card` 之外的 `bass_card.dart` / `haas_card.dart` /
+  `spatial_card.dart` / `reverb_card.dart`（FL/FR-only 标注）、
+  `features/settings_page.dart`（采样率设备实际值）、`lib/l10n/*`（三语）。
+- **动机**（多声道/采样率细审的 UI 侧发现）：
+  (1) comp/eq 的 `*.channels` 掩码在引擎侧是**声道对**语义
+      （`(mask & (3<<p0)) == (3<<p0)`，p0=0/2/4/6 → (0,1)(2,3)(4,5)(6,7)），
+      而 UI 用逐位勾选的选择器 → 用户勾单个 C 被引擎静默忽略，
+      界面却显示"N/8 声道已选"（假开关）。
+  (2) `channels.mode` 的镜像与引擎真值永久失联：引擎已回读
+      `channelsMode`（audio_isolate.dart:931），但 `state_events.dart`
+      从不消费它；且会话恢复不回放下发 → 重启后 UI 显示"离散逐声道"
+      而引擎停在默认矩阵模式（多声道策略静默降级）。
+  (3) bassmono/haas/spatial/freeverb 永远只作用 FL/FR，卡片无任何标注。
+  (4) `spatial.binaural` 开启会完全跳过 `channels.mode`，两处开关互不告知。
+  (5) 采样率下拉是**设备请求值**，设备可拒绝并回退，UI 却只高亮所选值；
+      桥模式文案称"仅对进程内生效"，实际进程内也不生效。
+- **内容**：comp/eq 掩码改「成对翻转 + 掩码规范化」（UI 显示集合 == 引擎
+  实际生效集合，穷举 256 掩码验证）；补 `channelsMode` 回读消费与
+  `channels.mode` 会话回放下发；四个 FL/FR-only 卡片加标注；binaural 与
+  声道模式的互相接管写入 l10n；采样率卡片显示设备实际值；桥模式文案纠偏；
+  l10n 三语同步（新增 routingPairHint / flfrOnlyHint / sampleRateDeviceActual）。
+- **行为影响**：纯 UI 与文案，音频零改动。
+- **验收**：flutter analyze 零；flutter test 全绿；掩码规范化逻辑穷举验证
+  （256 种输入：无半选状态、规范化不会让引擎多生效任何通道对）。
+- **上游同步冲突风险**：极低（Dart 侧 UI 与 l10n）。
+
+## P-032 四项 UI 缺陷修复 —— 低音模式弹回 / 混响预设跳两次 / IR 清除关开关 / 响度说明重复（2026-10-25）
+
+- **位置**：`app/auradsp_app/lib/core/state/state_effects.dart`
+  （setBassMode / selectReverbPreset）、`state_events.dart`（params 回读）、
+  `state_core.dart`（_mirror + send 测试钩子）、`state_session.dart`（会话回放）、
+  `state_chain.dart`（clearConvolver）、`state.dart`（sentParamsForTesting 字段）、
+  `features/effects/loudness_card.dart`、`convolver_card.dart`、
+  `channel_routing_selector.dart` 之外的 `cards_common.dart`（_ResourceSlot +
+  _Freeverb3DPainter.shouldRepaint）、`lib/l10n/*` 无改动；
+  引擎侧：`engine/engine_internal.h`（bass_mode 字段）、
+  `engine/engine_param_table.h`（bass.mode 参数 + set_convolver_clear）。
+- **动机**（用户实测报告四项）：
+  (1) 效果-响度补偿：卡片顶部的说明行与「补偿强度」滑块气泡内容重复。
+  (2) 效果-低音增强：模式选不中——选任何项滑块会动，但模式总被弹回
+      「自然低音」。根因：`bass.mode` 只是 UI 侧谐波配方宏，**从未下发引擎**
+      （引擎参数表里没有它）→ 回读 getIntNullable 恒 null → isolate 兜底 0
+      → params 全量回读把 UI 无条件覆盖成 0。
+  (3) 效果-空间混响：点预设后参数与 3D 图跳变两次。根因：
+      `selectReverbPreset` 漏发 `freeverb.roomsize` 与 `freeverb.width`
+      → 引擎侧保持旧值（默认 1.2）→ 500ms 后的全量回读把 UI 改回旧值；
+      roomSize 直接决定 3D 房间几何（`sizeFactor`/消失点/后墙/天花板），
+      视觉上是"整个房间缩回旧尺寸"。另有两个放大因素：回读无条件覆盖把
+      自定义态(-2) 也吞掉；float32 往返尾数差让 `shouldRepaint` 恒为真。
+  (4) 效果-脉冲响应：点「清除 IR」会连带关掉效果器开关（卡片收起），
+      而用户期望是回到"未加载"界面、效果内部直通；并希望加载后显示
+      文件名（无扩展名）。
+- **内容**：
+  (1) 删除 loudness_card 顶部的重复说明行（文案仍由滑块气泡承载）。
+  (2) 引擎新增 `bass.mode`（int 0..2，**纯状态载体**，不参与 DSP 计算），
+      `setBassMode` 补 `setInt('bass.mode', mode)`；会话回放补下发
+      `bass.mode`；`_mirror` 补登记；`param_contract_test` 的
+      kUiOnlySpecIds 移除 'bass.mode'（它不再是 UI 专属）。
+  (3) `selectReverbPreset` 补下发 `freeverb.roomsize` / `freeverb.width`；
+      `_mirror` 补这两个 id 的登记；回读对本地自定义态(-2) 保持不动；
+      `_Freeverb3DPainter.shouldRepaint` 改 epsilon 比较（1e-6）消除
+      float32 尾数差导致的幽灵重绘。
+  (4) `clearConvolver` 不再置 `convEnabled=false`；引擎 `set_convolver_clear`
+      不再 `conv_enable.store(0)`——引擎侧 `apply_convolver` 在
+      conv_enable=1 且 ir_ready=false 时已走 Convolver1DDisable（直通），
+      语义本就正确；`_ResourceSlot` 标题改显 IR 文件名（去扩展名），
+      并给标题加 Flexible+ellipsis 防长名撑破布局。
+  (5) 新增 testing-only 钩子 `AppModel.sentParamsForTesting`：testing 模式
+      下记录已下发的 setParam 载荷。此前 testing 模式 `_toIso` 为 null、
+      send 静默丢弃，任何"漏发参数"类缺陷在单测里都测不出来。
+- **行为影响**：混响预设的 roomSize/width 现在真正到达引擎（听感与 3D 图
+  一致）；低音模式选择不再被回读弹回；清除 IR 不再关开关（无文件时效果
+  内部直通）；引擎参数表新增 1 个 id（215 个，param_contract 哨兵已再生）。
+- **验收**：`app/auradsp_app/test/ui_p032_fixes_test.dart` 7 项全绿
+  （bass.mode 下发 + 回读保持 / 预设下发 roomsize+width / 回读同值不跳变 /
+  自定义态不被吞 / 清除 IR 保持开关 / 响度卡片无重复行）。
+  反向验证：还原 pre-fix 行为后 4 条核心断言**全部判红**。
+- **上游同步冲突风险**：极低（Dart 侧为主；引擎侧仅新增一个状态参数与
+  一处门卫语义放宽）。

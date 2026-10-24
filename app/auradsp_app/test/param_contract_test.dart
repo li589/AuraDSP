@@ -128,7 +128,9 @@ const Set<String> kUiOnlySpecIds = {
   // EQ 预设名 / 旁路（字段直赋或 toggleEqBypass 特路）
   'eq.presetName', 'eq.bypass', 'liveprog.codeHash',
   // 宿主/路由配置（ConfigManager 域，不发电Engine）
-  'bass.mode', 'routing.apoTargetEndpoint', 'routing.asioBufSize',
+  // 注：bass.mode 曾在此登记为 UI 专属——P-032 起引擎新增了同名状态载体
+  // 参数（纯 UI 模式选择的状态回读通道，不参与 DSP 计算），故已移出。
+  'routing.apoTargetEndpoint', 'routing.asioBufSize',
   'routing.asioDriver', 'routing.asioOutPair', 'routing.attachmentMode',
   'routing.modeCategory', 'routing.monitorMirroring', 'routing.pipelineInput',
   'routing.pipelineInputDevice', 'routing.pipelineInputEnabled',
