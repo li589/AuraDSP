@@ -825,6 +825,11 @@ public:
             FreeLibrary(m_module);
             m_module = nullptr;
         }
+        // F1：回收本插件登记过的 DLL 搜索目录（AddDllDirectory 的 cookie）。
+        // 放在 FreeLibrary 之后：目录只影响后续 LoadLibrary 解析，此时插件
+        // 已卸载，不会再懒加载依赖。abandoned 路径在上面提前 return（隔离
+        // 语义下不差这几个目录，且此刻动 Win32 状态无意义）。
+        releasePluginDllDirectories(m_meta.path);
         m_isLoaded = false;
     }
 
