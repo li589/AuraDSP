@@ -1,5 +1,7 @@
 #include "win32_util.h"
 
+#include "debug_log.h"  // E5/P-027：厂商/版本提取异常路径留痕
+
 #include <windows.h>
 #include <winver.h>
 #pragma comment(lib, "version.lib")
@@ -65,6 +67,13 @@ std::string extractVendorFromPath(const std::string& filePath) {
             p = p.parent_path();
         }
     } catch (...) {
+        /* [PATCHED-AuraDSP P-027 E5] 异常路径留痕：此前把"读失败"与"字段不存在"
+         * 静默合并为空串。兜底链语义保持不变（异常仍按缺失继续降级，终点
+         * "Unknown"），但 PE 解析抛异常（缓冲分配失败等）从此可观测。WARN 仅
+         * Debug 构建落盘——Release 按设计剥离（B-1 门禁：Release DLL 零调试串），
+         * 这是 P2 的刻意权衡，不是遗漏。 */
+        AURADSP_WARN_S("[DBG PE] vendor/version 提取异常: extractVendorFromPath path="
+                       << filePath);
     }
     return "";
 }
@@ -122,6 +131,13 @@ std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath) {
             }
         }
     } catch (...) {
+        /* [PATCHED-AuraDSP P-027 E5] 异常路径留痕：此前把"读失败"与"字段不存在"
+         * 静默合并为空串。兜底链语义保持不变（异常仍按缺失继续降级，终点
+         * "Unknown"），但 PE 解析抛异常（缓冲分配失败等）从此可观测。WARN 仅
+         * Debug 构建落盘——Release 按设计剥离（B-1 门禁：Release DLL 零调试串），
+         * 这是 P2 的刻意权衡，不是遗漏。 */
+        AURADSP_WARN_S("[DBG PE] vendor/version 提取异常: extractCompanyFromVersionInfo path="
+                       << wideToUtf8(binaryPath));
     }
     return "";
 }
@@ -150,6 +166,13 @@ std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath)
             }
         }
     } catch (...) {
+        /* [PATCHED-AuraDSP P-027 E5] 异常路径留痕：此前把"读失败"与"字段不存在"
+         * 静默合并为空串。兜底链语义保持不变（异常仍按缺失继续降级，终点
+         * "Unknown"），但 PE 解析抛异常（缓冲分配失败等）从此可观测。WARN 仅
+         * Debug 构建落盘——Release 按设计剥离（B-1 门禁：Release DLL 零调试串），
+         * 这是 P2 的刻意权衡，不是遗漏。 */
+        AURADSP_WARN_S("[DBG PE] vendor/version 提取异常: extractProductVersionFromVersionInfo path="
+                       << wideToUtf8(binaryPath));
     }
     return "";
 }
@@ -193,7 +216,15 @@ std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath) {
                 }
             }
         }
-    } catch (...) {}
+    } catch (...) {
+        /* [PATCHED-AuraDSP P-027 E5] 异常路径留痕：此前把"读失败"与"字段不存在"
+         * 静默合并为空串。兜底链语义保持不变（异常仍按缺失继续降级，终点
+         * "Unknown"），但 PE 解析抛异常（缓冲分配失败等）从此可观测。WARN 仅
+         * Debug 构建落盘——Release 按设计剥离（B-1 门禁：Release DLL 零调试串），
+         * 这是 P2 的刻意权衡，不是遗漏。 */
+        AURADSP_WARN_S("[DBG PE] vendor/version 提取异常: extractVendorFromLegalCopyright path="
+                       << wideToUtf8(binaryPath));
+    }
     return "";
 }
 

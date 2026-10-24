@@ -532,3 +532,20 @@ yquist * 0.999，
   stage 16 读数在 basspsycho 开/关两态下必须相等（采样点在其之前），
   反向验证（还原 pre-fix）该断言判红。
 - **上游同步冲突风险**：低（单行移动 + 注释）。
+
+## P-027 E5 engine/plugins/platform/win32/win32_util.cpp — 厂商/版本提取异常路径留痕（2026-10-24）
+
+- **位置**：`win32_util.cpp` 的 `extractVendorFromPath` /
+  `extractCompanyFromVersionInfo` / `extractProductVersionFromVersionInfo` /
+  `extractVendorFromLegalCopyright` 四处 `catch (...)`。
+- **动机**（审查 E5）：四处把"读失败"与"字段不存在"静默合并为空串，
+  "没有"与"读失败"不可分——PE 解析抛异常（缓冲分配失败等）与正常缺失
+  完全不可观测。
+- **内容**：异常路径加 `AURADSP_WARN_S` 留痕（Debug 构建落盘）。**兜底链
+  语义刻意不变**：异常仍按缺失继续降级（CompanyName → LegalCopyright →
+  上级目录 → "Unknown"）——把异常区分为独立返回态需要给 4 函数 ×3 调用点
+  加状态管道，而下游没有任何消费者，P2 不值得。WARN 在 Release 按设计剥离
+  （B-1 门禁：Release DLL 零调试串），面向用户的"区分"由兜底链终点
+  "Unknown" 呈现。
+- **行为影响**：音频与元数据零改动；Debug 构建多 4 条异常路径日志。
+- **上游同步冲突风险**：低（纯 catch 体新增）。
