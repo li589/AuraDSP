@@ -70,6 +70,11 @@ using FnEngDestroy = void(__cdecl*)(void*);
 using FnEngSetParam = int(__cdecl*)(void*, const char*, const void*, unsigned int);
 using FnEngGetParam = int(__cdecl*)(void*, const char*, void*, unsigned int);
 using FnEngVizRead = int(__cdecl*)(void*, void*, int);
+using FnEngAbi = unsigned(__cdecl*)(void);
+// [PATCHED-AuraDSP P-028 §7-2] 桥 ABI 协商：桥按编译期 viz 帧布局（1600B/帧）做内存透传，
+// 引擎 DLL 必须同 ABI 版本——TryLoadEngine 成功后用 auradsp_abi() 强校验，
+// 缺符号或版本不符按引擎不可用处理（防跨版本静默错位读帧）。
+constexpr unsigned kEngineAbiExpected = 2u;
 
 constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测 VM 给 512/1024）
 

@@ -10,6 +10,7 @@ EXPORTS
     vb_get_param_str     PRIVATE
     vb_test_change       PRIVATE
     vb_viz_read           PRIVATE
+    vb_abi                PRIVATE
     vb_test_start         PRIVATE
     vb_test_stop          PRIVATE
     vb_bypass             PRIVATE

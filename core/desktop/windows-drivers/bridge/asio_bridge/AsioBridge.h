@@ -93,6 +93,10 @@ ASB_API int asio_get_param_str(const char* id, char* out, int cap);
 // 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 408B 分配会堆越界）。
 ASB_API int asio_viz_read(void* out1600, int count);
 
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际，
+// 当前 2）。加载桥后与引擎 auradsp_abi() 比对；不一致时调用方不得解析 viz 帧。
+ASB_API unsigned asio_abi(void);
+
 // 用户旁路开关（跳过 engine process，输入直通输出；测试注入仍生效：
 // 先填测试信号再直通，与进程内 bypass 同义）。返回 0，<0=桥未运行。
 ASB_API int asio_bypass(int on);

@@ -157,9 +157,11 @@ if os.path.exists(BRIDGE_TRUTH):
                     "vb_test_stop", "vb_bypass",
                     # §7-5：Dart 侧 audio_vbridge.dart 已在调用 auto_protect；
                     # Z12 守卫的测试注入口（smoke_vm_protect.py 用）
-                    "vb_plugin_auto_protect", "vb_protect_test"):
+                    "vb_plugin_auto_protect", "vb_protect_test",
+                    # §7-2（P-028）桥 ABI 协商导出
+                    "vb_abi"):
             getattr(b, sym)
-        print("  导出表 16/16 OK")
+        print("  导出表 17/17 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)
@@ -193,9 +195,11 @@ if os.path.exists(ASIO_TRUTH):
                     # §7-5：bridge_plugin_ffi.dart 对这两个是硬 lookup——
                     # 2026-10-24 前本桥一直漏导出，ASIO 后端下插件槽构造即抛
                     "asio_plugin_slot_set_channels",
-                    "asio_plugin_slot_get_channels"):
+                    "asio_plugin_slot_get_channels",
+                    # §7-2（P-028）桥 ABI 协商导出
+                    "asio_abi"):
             getattr(b, sym)
-        print("  导出表 15/15 OK")
+        print("  导出表 16/16 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)

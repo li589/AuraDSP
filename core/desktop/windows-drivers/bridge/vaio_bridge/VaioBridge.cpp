@@ -76,6 +76,7 @@ bool ContainsCI(const std::string& hay, const std::string& needle) {
 }
 
 using vmcore::FnEngCreate;
+using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
@@ -738,6 +739,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.hEngineMod = vmcore::TryLoadEngine(hint, used);
     if (!used.empty()) g_vaio.enginePath = used;
 
+    FnEngAbi engAbiFn = nullptr;
+    unsigned engAbi = 0;
     if (g_vaio.hEngineMod) {
         g_vaio.fnCreate = (FnEngCreate)GetProcAddress(g_vaio.hEngineMod, "auradsp_create");
         g_vaio.fnProcess = (FnEngProcess)GetProcAddress(g_vaio.hEngineMod, "auradsp_process");
@@ -745,11 +748,20 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_vaio.fnSetParam = (FnEngSetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_set_param");
         g_vaio.fnGetParam = (FnEngGetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_get_param");
         g_vaio.fnVizRead = (FnEngVizRead)GetProcAddress(g_vaio.hEngineMod, "auradsp_viz_read");
+        // [PATCHED-AuraDSP P-028 §7-2] 加载后强校验引擎 ABI（auradsp_abi 缺失也算不兼容）
+        engAbiFn = (FnEngAbi)GetProcAddress(g_vaio.hEngineMod, "auradsp_abi");
+        engAbi = engAbiFn ? engAbiFn() : 0;
+        if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "engine-abi-mismatch: bridge=%u engine=%u",
+                     vmcore::kEngineAbiExpected, engAbi);
         g_pluginFns.Resolve(g_vaio.hEngineMod);
     }
 
-    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess || !g_vaio.fnDestroy) {
-        snprintf(g_vaio.note, sizeof(g_vaio.note), "engine-load-failed");
+    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess ||
+        !g_vaio.fnDestroy || !engAbiFn || engAbi != vmcore::kEngineAbiExpected) {
+        if (!engAbiFn || engAbi == vmcore::kEngineAbiExpected)
+            snprintf(g_vaio.note, sizeof(g_vaio.note), "engine-load-failed");
         UnmapAndCloseRing();
         DestroyEngine();
         g_vaio.startRc = -3;
@@ -1098,10 +1110,13 @@ int vaio_get_param_str(const char* id, char* out, int cap) {
     return g_vaio.fnGetParam(g_vaio.pEngine, id, out, (unsigned int)cap);
 }
 
-int vaio_viz_read(void* out536, int count) {
-    if (!out536 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
-    return g_vaio.fnVizRead(g_vaio.pEngine, out536, count);
+int vaio_viz_read(void* out1600, int count) {
+    if (!out1600 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
+    return g_vaio.fnVizRead(g_vaio.pEngine, out1600, count);
 }
+
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
+unsigned vaio_abi(void) { return vmcore::kEngineAbiExpected; }
 
 int vaio_bypass(int on) {
     InterlockedExchange(&g_vaio.userBypass, on ? 1 : 0);

@@ -92,10 +92,13 @@ class AuraAsioBridge {
     for (final path in candidates) {
       try {
         _cached = AuraAsioBridge._(DynamicLibrary.open(path));
-        return _cached!;
       } catch (e) {
         lastErr = e;
+        continue;
       }
+      // §7-2（P-028）：桥 ABI 协商（老桥无导出→跳过；不符→抛错）
+      BridgePluginFfi.assertBridgeAbi(_cached!.dylib, 'asio', path);
+      return _cached!;
     }
     throw StateError(
         'auraasio_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');

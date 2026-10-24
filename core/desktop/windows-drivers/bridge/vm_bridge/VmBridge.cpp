@@ -37,6 +37,7 @@ void PathForJson(const std::string& in, char* out, size_t cap) {
 }
 
 using vmcore::FnEngCreate;
+using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
@@ -859,6 +860,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
                             (int)sizeof(g_b.enginePath), nullptr, nullptr);
     }
     FnEngCreate create = nullptr;
+    FnEngAbi engAbiFn = nullptr;
+    unsigned engAbi = 0;
     if (g_b.eng) {
         create =
             (FnEngCreate)GetProcAddress(g_b.eng, "auradsp_create");
@@ -869,10 +872,16 @@ int vb_start(const char* engine_dll, const char* params_json) {
             (FnEngDestroy)GetProcAddress(g_b.eng, "auradsp_destroy");
         g_b.vizRead =
             (FnEngVizRead)GetProcAddress(g_b.eng, "auradsp_viz_read");
+        // [PATCHED-AuraDSP P-028 §7-2] 引擎在位即强校验 ABI（缺符号同罪）；
+        // 不符按引擎不可用降级透传——VM 桥无引擎本就合法，不比 ASIO/VAIO 硬失败。
+        engAbiFn = (FnEngAbi)GetProcAddress(g_b.eng, "auradsp_abi");
+        engAbi = engAbiFn ? engAbiFn() : 0;
         g_b.getParam =
             (FnEngGetParam)GetProcAddress(g_b.eng, "auradsp_get_param");
         g_pluginFns.Resolve(g_b.eng);
-        if (create && g_b.ctx.process && g_b.ctx.destroy) {
+        const bool abiOk =
+            engAbiFn && engAbi == vmcore::kEngineAbiExpected;
+        if (abiOk && create && g_b.ctx.process && g_b.ctx.destroy) {
             g_b.ctx.scratchIn =
                 (float*)malloc(sizeof(float) * 8 * vmcore::kMaxNbs);
             g_b.ctx.scratchOut =
@@ -897,6 +906,10 @@ int vb_start(const char* engine_dll, const char* params_json) {
             }
         }
         if (!g_b.ctx.process) {
+            if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
+                snprintf(g_b.note, sizeof(g_b.note),
+                         "engine-abi-mismatch: bridge=%u engine=%u",
+                         vmcore::kEngineAbiExpected, engAbi);
             FreeLibrary(g_b.eng);
             g_b.eng = nullptr;
         }
@@ -1109,14 +1122,17 @@ int vb_test_change() {
     return 0;
 }
 
-int vb_viz_read(void* out408, int count) {
-    if (!out408 || count <= 0) return -1;
+int vb_viz_read(void* out1600, int count) {
+    if (!out1600 || count <= 0) return -1;
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     if (!g_b.vizRead) return 0;
     const int g = HottestVizGroup();
     if (!g_b.ctx.eng[g]) return 0;
-    return g_b.vizRead(g_b.ctx.eng[g], out408, count);
+    return g_b.vizRead(g_b.ctx.eng[g], out1600, count);
 }
+
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
+unsigned vb_abi(void) { return vmcore::kEngineAbiExpected; }
 
 int vb_test_start(int kind, const float* pcm, int frames, int ch, int rate) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;

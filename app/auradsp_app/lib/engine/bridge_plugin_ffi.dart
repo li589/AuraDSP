@@ -8,6 +8,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import 'auradsp_ffi.dart' show AuraDspLib;
 import '../core/error_sink.dart';
 typedef _SlotLoadC = Int32 Function(Int32, Pointer<Utf8>, Pointer<Utf8>);
 typedef _SlotLoadDart = int Function(int, Pointer<Utf8>, Pointer<Utf8>);
@@ -52,6 +53,9 @@ typedef _SlotPresetDart = int Function(int, Pointer<Utf8>);
 // P2-1（v3.3 A/B 预设）per-group state 读写。
 typedef _SlotPresetGC = Int32 Function(Int32, Int32, Pointer<Utf8>);
 typedef _SlotPresetGDart = int Function(int, int, Pointer<Utf8>);
+// §7-2（P-028）桥 ABI 协商：<prefix>_abi 返回桥编译所依据的 viz 帧布局代际。
+typedef _BridgeAbiC = Uint32 Function();
+typedef _BridgeAbiDart = int Function();
 
 class BridgePluginFfi {
   final DynamicLibrary dylib;
@@ -77,6 +81,8 @@ class BridgePluginFfi {
   late final _SlotSetChannelsGDart? _setChannelsG;
   late final _SlotPresetGDart? _savePresetG;
   late final _SlotPresetGDart? _loadPresetG;
+  // §7-2（P-028）：老桥无 <prefix>_abi 导出 → null（协商回落），有则必须比对。
+  late final _BridgeAbiDart? _bridgeAbi;
 
   BridgePluginFfi(this.dylib, this.prefix) {
     _load = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>(
@@ -119,11 +125,44 @@ class BridgePluginFfi {
         '${prefix}_plugin_slot_set_channels_g');
     _savePresetG = _lookupPresetG('${prefix}_plugin_slot_save_preset_g');
     _loadPresetG = _lookupPresetG('${prefix}_plugin_slot_load_preset_g');
+    _bridgeAbi = _lookupBridgeAbi('${prefix}_abi');
+  }
+
+  /// §7-2（P-028）桥编译所依据的 viz 帧布局代际；老桥无导出返回 null。
+  int? abi() => _bridgeAbi?.call();
+
+  /// §7-2（P-028）桥加载后的 ABI 协商（三桥 load() 共用）：
+  /// 老桥无 `<prefix>_abi` 导出 → 跳过（协商回落）；有导出且与 App 期望
+  /// （AuraDspLib.kExpectedAbi）不符 → 明确抛错——桥透传的 viz 帧布局与
+  /// Dart 的 VizFrame Struct 代际不一致，解析只会静默错位。
+  static void assertBridgeAbi(
+      DynamicLibrary dylib, String prefix, String dllName) {
+    _BridgeAbiDart fn;
+    try {
+      fn = dylib.lookupFunction<_BridgeAbiC, _BridgeAbiDart>('${prefix}_abi');
+    } on ArgumentError {
+      return; // 老桥：无协商导出，跳过
+    }
+    final v = fn();
+    if (v != AuraDspLib.kExpectedAbi) {
+      throw StateError(
+          '$dllName ABI 版本不匹配：桥 v$v != App 期望 '
+          'v${AuraDspLib.kExpectedAbi}（viz 帧布局代际不一致，'
+          '请使用与 App 同步构建的桥 DLL）。');
+    }
   }
 
   // 老桥 DLL 没有 _g 导出时返回 null（ArgumentError），调用方自动回落。
   // 不能写泛型 helper：lookupFunction 的类型参数须为具体 dart:ffi 签名，
   // 泛型占位通不过静态检查，故三处各写具名绑定。
+  _BridgeAbiDart? _lookupBridgeAbi(String name) {
+    try {
+      return dylib.lookupFunction<_BridgeAbiC, _BridgeAbiDart>(name);
+    } on ArgumentError {
+      return null;
+    }
+  }
+
   _SlotShowEditorGDart? _lookupShowEditorG(String name) {
     try {
       return dylib.lookupFunction<_SlotShowEditorGC, _SlotShowEditorGDart>(name);

@@ -139,9 +139,10 @@ EXPECT = {
     "P-025": 2,   # P2.4
     "P-026": 1,   # E4（stage16 跨模式采样点）
     "P-027": 4,   # E5（厂商/版本提取异常留痕，win32_util 四处）
+    "P-028": 4,   # §7-2（三桥 ABI 协商：VmPumpCore.h + 三桥加载点；别名字符集不含§，按无别名处理）
 }
 wrong = {k: (per_id.get(k, 0), v) for k, v in EXPECT.items() if per_id.get(k, 0) != v}
-check("14 个专项的标记数精确匹配", not wrong,
+check("15 个专项的标记数精确匹配", not wrong,
       "编号(实际,期望): " + json.dumps(wrong, ensure_ascii=False) if wrong else "")
 
 aliases = {s["alias"] for s in sites if s["alias"]}
@@ -213,8 +214,8 @@ check("编号连续无缺（P-001..P-025）",
 # （P-006 用「症状/根因/改动」、P-010 用「功能/RT 安全/验收」），强行归一化是比
 # 编号治理更大的破坏，也超出 D6 的范围。
 blocks = re.split(r"^##\s+", text, flags=re.M)
-new_blocks = [b for b in blocks if re.match(r"P-0(1[6-9]|2[0-7])\b", b)]
-check("P-016..P-027 共 12 节齐全", len(new_blocks) == 12, f"实际 {len(new_blocks)}")
+new_blocks = [b for b in blocks if re.match(r"P-0(1[6-9]|2[0-8])\b", b)]
+check("P-016..P-028 共 13 节齐全", len(new_blocks) == 13, f"实际 {len(new_blocks)}")
 
 missing = []
 for b in new_blocks:
