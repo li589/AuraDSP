@@ -348,12 +348,16 @@ void apply_params_locked(auradsp_handle h) {
 
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
- * 注意：NSEEL_VM_regvar 对同名变量幂等返回同一指针（P-001 已在编译前注册）。 */
+ * 注意：NSEEL_VM_regvar 对同名变量幂等返回同一指针（P-001 已在编译前注册）。
+ * B1：eel 为活动快照指针——编译成功后已被 LiveProgCompileAndSwap 换到
+ * 新槽，此处自然取到新 VM 的 slider 寄存器。 */
 void lp_refresh_sliders(auradsp_handle h) {
+    LiveProg* eel = h->jdsp.eel;
+    if (!eel || !eel->vm) return;
     for (int i = 0; i < 8; ++i) {
         char nm[16];
         snprintf(nm, sizeof(nm), "slider%d", i + 1);
-        h->lp_slider_ptr[i] = NSEEL_VM_regvar(h->jdsp.eel.vm, nm);
+        h->lp_slider_ptr[i] = NSEEL_VM_regvar(eel->vm, nm);
         if (h->lp_slider_ptr[i])
             *h->lp_slider_ptr[i] = h->p.lp_param[i].load(std::memory_order_relaxed);
     }
@@ -704,9 +708,34 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                           int frames, bool skip_spatial);
 
+/* [Phase B 多声道电平] MC 版 stage 峰值采样：按 stride ch 逐声道扫描，
+ * 同写 stage_peak_ch[stage][0..ch-1] 与 stage_peak_l/r（取 ch0/ch1）。
+ *
+ * l/r 列同步写是为了修复 MC 模式下 stage_levels_* 遥测 stale：MC 链不走
+ * process_stereo_chain，旧实现里这些槽位停留在上次 stereo 块的值。
+ * stereo 路径不调本函数（继续走 sample_stage_peak，逐位不变）。
+ * [ch..7] 置 0：emit_viz 对 0 峰值转 -120，诚实表达「该声道不过此效果」。
+ * 定义置于 MC 链之前：调用点在定义前，static inline 亦须先声明后使用。 */
+static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
+                                        const float* interleaved, int frames, int ch) {
+    float pk[AURADSP_CH_MAX] = {};
+    for (int i = 0; i < frames; ++i) {
+        const float* row = interleaved + (size_t)i * ch;
+        for (int c = 0; c < ch; ++c) {
+            const float a = fabsf(row[c]);
+            if (a > pk[c]) pk[c] = a;
+        }
+    }
+    for (int c = 0; c < ch; ++c) h->stage_peak_ch[stage_idx][c] = pk[c];
+    for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[stage_idx][c] = 0.0f;
+    h->stage_peak_l[stage_idx] = pk[0];
+    h->stage_peak_r[stage_idx] = ch > 1 ? pk[1] : pk[0];
+}
+
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
+    h->stage_ch_active = ch;   /* [Phase B] stage 级 per-channel 数据全声道有效 */
 
     // 1. 全量拷贝至目标工作区，就地推进
     memcpy(dst, src, (size_t)frames * ch * sizeof(float));
@@ -715,9 +744,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.gate_enable.load(std::memory_order_relaxed)) {
         gate_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 13, dst, frames, ch);   /* Stage 13: Gate stage output */
     if (h->p.filter_enable.load(std::memory_order_relaxed)) {
         filter_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 15, dst, frames, ch);   /* Stage 15: Filter output */
     auradsp::plugin_chain_process_n(h, 0, dst, (uint32_t)frames, (uint32_t)ch);
 
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
@@ -727,6 +758,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.dyneq_enable.load(std::memory_order_relaxed)) {
         dyneq_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 14, dst, frames, ch);   /* Stage 14: Dynamic EQ output */
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         tube_process_mc(h, dst, frames, ch);
     }
@@ -746,6 +778,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
+        sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
 
         const int tube_saved = h->jdsp.tubeEnabled;
         const int limiter_saved = h->jdsp.limiterEnabled;
@@ -803,9 +836,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.haas_enable.load(std::memory_order_relaxed)) {
             haas_process(h, h->mx_stereo, frames);
         }
+        sample_stage_peak_mc(h, 17, h->mx_stereo, frames, 2); /* Stage 17: Haas（仅 FL/FR 对） */
         if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
             spatial_process(h, h->mx_stereo, frames);
         }
+        sample_stage_peak_mc(h, 20, h->mx_stereo, frames, 2); /* Stage 20: Spatial（仅 FL/FR 对） */
         freeverb_process(h, h->mx_stereo, frames);
 
         for (int i = 0; i < frames; ++i) {
@@ -858,9 +893,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
         exciter_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 18, dst, frames, ch);   /* Stage 18: Exciter output */
     if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
         loudness_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 19, dst, frames, ch);   /* Stage 19: Loudness output */
     limiter_process_mc(h, dst, frames, ch);
 
     // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位
@@ -901,6 +938,9 @@ static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const floa
  */
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                                  int frames, bool skip_spatial) {
+    /* [Phase B] 立体声链只产生 L/R 两列 stage 数据——把有效列数钉回 2，
+     * 阻断矩阵/双耳模式下读到上一次 MC 模式的陈旧 stage_peak_ch。 */
+    h->stage_ch_active = 2;
     /* 低音参数：系数重算必须在本线程做。
      * 旧实现在 auradsp_set_param("bass.gain") 里直接调 BassBoostSetParam，
      * 与此处的 processFloatMultiplexd 并发访问同一个 JamesDSPLib —— 与

@@ -2485,6 +2485,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainActive => '生效中';
 
   @override
+  String get plugPartialBypass => '部分旁路';
+
+  @override
   String get chainBypass => '旁路';
 
   @override

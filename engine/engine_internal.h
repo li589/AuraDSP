@@ -15,7 +15,17 @@
 #include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
 
 #define AURADSP_VERSION "1.1.0"
-#define AURADSP_ABI 1
+/* ABI v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加
+ * channel_count + channel_levels[8] + stage_ch_levels[32][8]（536B→1596B）。
+ * 追加式布局保旧读者兼容，但 Dart Struct 定长读必须同版本——加载时
+ * auradsp_abi() 强校验（见 auradsp_ffi.dart）。 */
+#define AURADSP_ABI 2
+
+/* ABI 版本与帧尺寸联动哨兵：改 auradsp_viz_frame 尺寸必须同步升 ABI 号，
+ * 否则 Dart 侧 kExpectedAbi 校验会放行错位绑定（定长 Struct 全字段静默错位）。
+ * 放在 engine_internal.h 而非公共头：此处 ABI 宏与结构体定义同时可见。 */
+static_assert(AURADSP_ABI == 2 && sizeof(auradsp_viz_frame) == 1600,
+              "AURADSP_ABI version and auradsp_viz_frame size must bump together");
 
 struct ScopedFtzDazGuard {
 #if defined(_M_X64) || defined(__x86_64__)
@@ -418,6 +428,27 @@ struct auradsp_handle_s {
     /* 自研效果器实时本级输出线性峰值（RT 线程每块就地扫描，emit_viz 填入 stage_levels 对应槽位） */
     float  stage_peak_l[AURADSP_STAGE_MAX] = {};
     float  stage_peak_r[AURADSP_STAGE_MAX] = {};
+    /* [Phase B 多声道电平] per-stage per-channel 线性峰值（RT 线程每块扫描）。
+     * 与 stage_peak_l/r 的关系：stereo 路径只写 l/r（逐位不变）；MC 路径由
+     * sample_stage_peak_mc 同时写两组（l/r 列取 ch0/ch1，修复 MC 下
+     * stage_levels 遥测 stale）。stage 语义同 stage_levels_* 槽位表。 */
+    float  stage_peak_ch[AURADSP_STAGE_MAX][AURADSP_CH_MAX] = {};
+    /* 最终输出（auradsp_process 的 out 缓冲）per-channel 线性峰值，
+     * 由 viz_write 按块 stride 同一趟扫描记录（stereo 时 [0]/[1] 与
+     * viz_lvl_l/r 同源）。emit_viz 转 dBFS 填 channel_levels。 */
+    float  ch_out_peak[AURADSP_CH_MAX] = {};
+    /* RT 线程每块记录的声道数（2/6/8），emit_viz 填 channel_count；0=尚无块。 */
+    int    last_block_ch = 0;
+    /* [Phase B] stage 级 per-channel 电平的**有效列数**（emit_viz 用它门控
+     * stage_ch_levels 的 c 循环）。语义：最近一次跑过的链能提供 per-channel
+     * stage 数据的声道数——
+     *   process_multichannel_chain 入口置 ch（离散 MC 链，全声道逐级处理）；
+     *   process_stereo_chain 入口置 2（矩阵/双耳/stereo 走的都是立体声链，
+     *   stage 级只有 L/R 两列有意义）。
+     * 必须与 last_block_ch 分开：矩阵模式下设备是 6/8 声道（last_block_ch=8，
+     * channel_levels 经 mx_upmix 后全列有效），但 stage 链是立体声，若沿用
+     * last_block_ch 门控就会读到上一次 MC 模式的陈旧 stage_peak_ch。 */
+    int    stage_ch_active = 2;
 
     /* Liveprog 状态 */
     float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */
@@ -642,7 +673,9 @@ void spatial_reset(auradsp_handle h);
 void spatial_process(auradsp_handle h, float* io, int frames);
 void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                               int frames, int ch);
-void viz_write(auradsp_handle h, const float* out, int frames);
+void viz_write(auradsp_handle h, const float* out, int frames, int ch);
+/* [Phase B] 矩阵模式的 per-channel 输出电平实测（不动频谱历史）。 */
+void viz_scan_out_peak(auradsp_handle h, const float* out, int frames, int ch);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);
 void gate_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void filter_process_mc(auradsp_handle h, float* io, int frames, int ch);

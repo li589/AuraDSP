@@ -230,6 +230,15 @@ abstract final class EngineState {
 /// 21..31: 预留/扩展插件槽
 const int kEngineStageCount = 32;
 
+/// [Phase B 多声道电平] per-channel 数组容量（对应 C 侧 `AURADSP_CH_MAX = 8`）。
+/// 与全引擎声道 clamp 一致（vst3/clap/plugin_host_manager/delay_line 均 >8 → 8）。
+const int kVizChannelMax = 8;
+
+/// [Phase B 多声道电平] 遥测消息只发 stage 0..20（有效电平段，stage-major
+/// 扁平 21×chCount）；21..31 为预留/GR 槽，per-channel 恒 -120，由 UI 补齐。
+/// GR（24..29）是全链单值计量，仍读 stageLevelsL 的 L 列。
+const int kVizStageTelemetry = 21;
+
 /// 引擎内建的频谱 FFT 点数（auradsp_engine.cpp 的 kVizFftSize）。
 /// config.vizFftSize 与之相同时无需下发，避免无谓的缓冲区重建。
 const int kVizFftSizeDefault = 4096;
@@ -322,7 +331,11 @@ abstract final class VizBands {
   }
 }
 
-/// auradsp_viz_frame（536 字节：8+8+128+128+4+4+128+128）
+/// auradsp_viz_frame（1600 字节：8+8+128+128+4+4+128+128 + 4+32+1024+4尾填充）
+///
+/// [Phase B 多声道电平 / ADR-003] 尾部追加段（ABI v2，2026-10-24）：
+/// 前 536B 布局零变化，按旧尺寸读的消费者逐位兼容；本 Struct 定长读，
+/// 必须与引擎同 ABI 版本（加载时强校验，见 [AuraDspLib] 构造）。
 final class VizFrame extends Struct {
   @Uint64()
   external int seq;
@@ -351,6 +364,27 @@ final class VizFrame extends Struct {
   @Array(32)
   external Array<Float> stageLevelsR;
 
+  /// 本帧来源块的声道数（2/6/8）；0 = 无有效帧（UI 回退 L/R 行为）。
+  @Uint32()
+  external int channelCount;
+
+  /// 最终输出 per-channel 峰值 dBFS；[0]/[1] 恒等于 levelL/R（同源）；
+  /// 未用声道 -120。
+  @Array(8)
+  external Array<Float> channelLevels;
+
+  /// [stage * 8 + ch] 扁平布局（stage-major，与 C 的 [32][8] 一致）。
+  ///
+  /// 语义（与引擎 emit_viz 同规则）：
+  /// - stage 0..11 vendor：仅 [0]/[1] 有效（MC 下只作用于 FL/FR 对），
+  ///   [2..7] 恒 -120；
+  /// - stage 12..20 自研效果器：MC 下 [0..chCount-1] 有效，其中
+  ///   16/17/20（bassmono/haas/spatial）仅 [0]/[1] 有效；
+  /// - stage 21..23、30..31 预留槽与 24..29 GR 槽：全 -120
+  ///   （GR 是全链单值计量，读 [stageLevelsL] 的 L 列）。
+  @Array(32 * 8)
+  external Array<Float> stageChLevels;
+
   List<double> spectrumToList() =>
       List<double>.generate(32, (i) => spectrum[i]);
 
@@ -375,6 +409,36 @@ final class VizFrame extends Struct {
   double get grDyneqLow => stageLevelsL[27];
   double get grDyneqMid => stageLevelsL[28];
   double get grDyneqHigh => stageLevelsL[29];
+
+  // ---- [Phase B 多声道电平] per-channel 辅助 ----
+
+  /// per-channel 最终输出电平（长度 = channelCount；无帧时空表）。
+  List<double> channelLevelsToList() {
+    final n = channelCount <= 0 ? 0 : (channelCount > kVizChannelMax ? kVizChannelMax : channelCount);
+    return List<double>.generate(n, (i) => channelLevels[i], growable: false);
+  }
+
+  /// [stage][ch] 取值；越界 / 预留 / GR 槽返回 -120（诚实降级）。
+  double stageChLevelsAt(int stage, int ch) {
+    if (stage < 0 || stage >= 32 || ch < 0 || ch >= kVizChannelMax) return -120.0;
+    // stage >= 21 一律 -120：GR（24..29）是全链单值计量 per-channel 无意义；
+    // 预留槽（21..23/30..31）即使表被写入垃圾值也不得显示（防御性降级）。
+    if (stage >= kVizStageTelemetry) return -120.0;
+    return stageChLevels[stage * kVizChannelMax + ch];
+  }
+
+  /// 遥测裁剪版 per-stage per-channel 扁平表（stage-major，21×chCount）。
+  /// stage 0..20 各 chCount 列；isolate 消息用（GR/预留段不下发）。
+  List<double> stageChLevelsTelemetry() {
+    final n = channelCount <= 0
+        ? 0
+        : (channelCount > kVizChannelMax ? kVizChannelMax : channelCount);
+    return List<double>.generate(kVizStageTelemetry * n, (i) {
+      final stage = i ~/ n;
+      final ch = i % n;
+      return stageChLevelsAt(stage, ch);
+    }, growable: false);
+  }
 }
 
 /// auradsp_engine.dll 符号绑定（加载成功后不可变）
@@ -808,7 +872,24 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     }
   }
 
-  AuraDspLib._(this.dylib);
+  /// 期望的引擎 ABI 版本（与 engine/engine_internal.h 的 AURADSP_ABI 对应）。
+  ///
+  /// v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加
+  /// channel_count + channel_levels[8] + stage_ch_levels[32][8]，
+  /// 536B → 1600B。VizFrame Struct 定长读取，版本混搭会令**全部字段**
+  /// 静默错位——因此在加载时强校验，不匹配即明确失败。
+  static const int kExpectedAbi = 2;
+
+  AuraDspLib._(this.dylib) {
+    final v = abi();
+    if (v != kExpectedAbi) {
+      throw StateError(
+          'auradsp_engine.dll ABI 版本不匹配：App 绑定期望 v$kExpectedAbi'
+          '（viz_frame 1600B，含 per-channel 电平字段），实际 v$v。'
+          '请使用与 App 同版本的引擎 DLL——旧 DLL 帧布局缺追加字段，'
+          '混搭将导致全部字段静默错位。');
+    }
+  }
 
   static AuraDspLib? _cached;
 

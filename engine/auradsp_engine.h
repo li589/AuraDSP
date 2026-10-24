@@ -86,6 +86,11 @@ typedef enum auradsp_state {
 #if AURADSP_VENDOR_STAGES > AURADSP_STAGE_MAX
 #error "AURADSP_VENDOR_STAGES exceeds AURADSP_STAGE_MAX (ABI capacity)"
 #endif
+/* [Phase B 多声道电平] per-channel 电平数组的物理长度。8 与全引擎声道 clamp
+ * 一致（vst3/clap/plugin_host_manager/delay_line/plugin_chain_component 均
+ * channels > 8 → 8）。stage_ch_levels/channel_levels 按本长度定长，未用声道
+ * 恒 -120.0f。 */
+#define AURADSP_CH_MAX 8
 typedef struct auradsp_viz_frame {
     uint64_t seq;
     double   timestamp_ms;
@@ -118,7 +123,43 @@ typedef struct auradsp_viz_frame {
      * 21..31: 预留槽位（插件插槽 / 未来扩展，恒为 -120.0f） */
     float    stage_levels_l[AURADSP_STAGE_MAX];
     float    stage_levels_r[AURADSP_STAGE_MAX];
+    /* [Phase B 多声道电平 / ADR-003] 追加式扩展（2026-10-24，ABI 1→2）。
+     * 前 536 B 布局零变化：按旧 sizeof 读取的老消费者逐位兼容；新消费者
+     * （Dart Struct 定长读）必须与引擎同 ABI 版本，加载时经 auradsp_abi() 强校验。
+     *
+     * channel_count：本帧来源块的声道数（2/6/8）；0 = 无有效帧（UI 回退 L/R）。
+     *
+     * channel_levels：auradsp_process 最终输出 per-channel 峰值 dBFS。
+     *   未用声道 -120.0f。
+     *   **限定**：[0]/[1] 与 level_l/r_dbfs 恒等**仅在立体声路径成立**
+     *   （viz_write 同一趟扫描同源）。离散多声道（channels.mode=1）下
+     *   level_l/r 仍按立体声 stride 取 out[i*2]（既存近似，见设计文档遗留项），
+     *   此时请以 channel_levels 为准、不要假设两者相等。
+     *   矩阵模式（mode=0）的 per-channel 值取自 mx_upmix 之后的 out 实测
+     *   （spectrum 仍取 mx_stereo 下混，两者口径不同是刻意的）。
+     *
+     * stage_ch_levels[stage][ch]（stage-major）：
+     *   0..11 vendor：仅 [0]/[1] 有效（= stage_levels_l/r；MC 下 vendor 段
+     *        只作用于 FL/FR 对，ADR-003 Category B 设计语义），[2..7] 恒 -120；
+     *   12 gate 输入 / 13 gate 输出 / 14 dyneq / 15 filter / 18 exciter /
+     *        19 loudness：MC 下 [0..ch-1] 有效；
+     *   16 bassmono / 17 haas / 20 spatial（Category B 仅作用于前置对）：
+     *        仅 [0]/[1] 有效，[2..7] 恒 -120；
+     *   21..23、30..31 预留槽与 24..29 GR 槽：全 -120（GR 是全链单值计量，
+     *        per-channel 无意义；GR 仍读 stage_levels_l/r 的 L 列）。
+     *   即：stereo 模式下 [0]/[1] 与 stage_levels_l/r 逐位一致、[2..7] 恒 -120，
+     *        MC 模式下诚实反映各效果器的真实作用域，不复制假装全声道。 */
+    uint32_t channel_count;
+    float    channel_levels[AURADSP_CH_MAX];
+    float    stage_ch_levels[AURADSP_STAGE_MAX][AURADSP_CH_MAX];
 } auradsp_viz_frame;
+
+/* ABI 尺寸哨兵：536B（v1）→ 1600B（v2）。变更即编译失败，杜绝静默漂移。
+ * Dart 侧对应断言见 test/（sizeOf<VizFrame>() == 1600）。
+ * 1600 = 536 + 4(channel_count) + 32(channel_levels) + 1024(stage_ch_levels)
+ *        + 4 尾填充（struct 含 uint64/double，sizeof 须为 8 的倍数）。
+ * 用 typedef 数组而非 _Static_assert：本头是公共 ABI 头，C89 消费者亦须通吃。 */
+typedef char auradsp_viz_frame_abi_size_check[(sizeof(auradsp_viz_frame) == 1600) ? 1 : -1];
 
 /* ---- 生命周期（控制线程） ---- */
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames);

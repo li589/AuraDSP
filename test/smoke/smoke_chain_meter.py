@@ -5,6 +5,8 @@ DLL_PATH = r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\aura
 dll = ctypes.CDLL(DLL_PATH)
 
 class VizFrame(ctypes.Structure):
+    # [Phase B] 2026-10-24 ABI v2：尾部追加 channel_count + channel_levels[8]
+    # + stage_ch_levels[32][8]，536B → 1600B。追加式布局保旧读者兼容。
     _fields_ = [
         ("seq", ctypes.c_uint64),
         ("timestamp_ms", ctypes.c_double),
@@ -14,9 +16,12 @@ class VizFrame(ctypes.Structure):
         ("level_r_dbfs", ctypes.c_float),
         ("stage_levels_l", ctypes.c_float * 32),
         ("stage_levels_r", ctypes.c_float * 32),
+        ("channel_count", ctypes.c_uint32),
+        ("channel_levels", ctypes.c_float * 8),
+        ("stage_ch_levels", ctypes.c_float * (32 * 8)),
     ]
 
-assert ctypes.sizeof(VizFrame) == 536, f"Expected 536, got {ctypes.sizeof(VizFrame)}"
+assert ctypes.sizeof(VizFrame) == 1600, f"Expected 1600, got {ctypes.sizeof(VizFrame)}"
 
 dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]

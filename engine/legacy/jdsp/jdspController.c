@@ -407,8 +407,9 @@ static void stage_ddc(JamesDSPLib *jdsp, size_t n)
 }
 static void stage_liveprog(JamesDSPLib *jdsp, size_t n)
 {
-	if (jdsp->liveprogEnabled)
-		LiveProgProcess(jdsp, n);
+	/* [PATCHED-AuraDSP B1] enabled 判断内移 LiveProgProcess：每块必过本
+	 * stage 推进在途守卫计数（停用期间块边界也要放行影子槽复用）。 */
+	LiveProgProcess(jdsp, n);
 }
 static void stage_crossfeed(JamesDSPLib *jdsp, size_t n)
 {
@@ -472,7 +473,11 @@ static const struct
 	{"arbmag", stage_arbmag, 0},
 	{"convolver", stage_conv, 1},
 	{"ddc", stage_ddc, 1},
-	{"liveprog", stage_liveprog, 1},
+	/* [PATCHED-AuraDSP B1] liveprog lock 1→0：控制侧已改影子 VM 编译 +
+	 * 原子换指针（liveprogWrapper.c），RT 块首只读一次 eel 快照指针，
+	 * 无需再与任何控制路径互斥；保留锁只会在 EEL 编译/DDC 解析/
+	 * JamesDSPSetSampleRate 持锁时无谓阻塞 RT。 */
+	{"liveprog", stage_liveprog, 0},
 	{"crossfeed", stage_crossfeed, 0},
 	{"stereo", stage_stereo, 0},
 	{"reverb", stage_reverb, 0},

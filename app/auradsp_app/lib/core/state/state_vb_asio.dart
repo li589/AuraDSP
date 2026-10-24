@@ -6,7 +6,28 @@ part of '../state.dart';
 /// 方法体逐字保留自 AppModel 类体（notifyListeners() 按 P2 约定改调
 /// _notifyUi()）。
 
+/// Z15：VB 超预算保护激活时，指定路的插件处理被桥自动旁路（有效掩码收窄
+/// 到监听总线 hotGrp，其余路直通）。插件页「生效中」按钮据此显示第三态
+/// 「部分旁路」——诚实反映该路插件实际未在处理，但不新增显示点位。
+///
+/// 纯函数（不依赖 AppModel 实例）便于单测；数据源 = vbstatus 心跳
+/// （protect/hotGrp，约 1s 一拍，保护切换本身是秒级过程，1s 刷新足够）。
+bool vbRouteProtectBypassed(Map<String, dynamic> info, int group) {
+  if (group < 0) return false;
+  final protRaw = info['protect'];
+  if (protRaw is! num || protRaw.toInt() != 1) return false;
+  final hotRaw = info['hotGrp'];
+  final hot = hotRaw is num ? hotRaw.toInt() : -1;
+  return group != hot;
+}
+
 extension VbAsioState on AppModel {
+
+  /// Z15：当前编辑器目标路是否处于「保护旁路」态（见 [vbRouteProtectBypassed]）。
+  /// 与用户全旁路（isSlotBypassed）互相独立：本态为 false 时该路插件
+  /// 要么完全生效、要么被用户自己旁路。
+  bool get vbSelectedRouteProtectBypassed =>
+      vbRouteProtectBypassed(vbInfo, vbPluginEditorGroup);
 
   // ---- Voicemeeter 桥 ----
 

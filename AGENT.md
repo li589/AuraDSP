@@ -46,6 +46,7 @@
 
 ### 3.1 引擎与音频契约（RT-Safe）
 1. **音频主线程绝对禁区**：禁止 `malloc/free/new/delete`，禁止 `std::mutex/jdsp_lock` 竞态，禁止 IO/打印/系统调用。
+2. **控制/RT 互斥层级（Z13/Z14 后铁律）**：`auradsp_set_param/get_param` 全程持 `h->ctrl_mutex` → 控制-控制竞争结构上被排除；控制侧真正需防的是 vs RT——RT 入口（`JamesDSPProcessMultiplexedStageSet` 两分支 / `JamesDSPProcess`）honoring `kAuraStages[i].lock`（comp/convolver/ddc/liveprog=1）持 `jdsp_lock`，**故控制侧任何结构变更路径必须同持 `jdsp_lock`**（例：`apply_comp`、`set_ddc_enable`/`set_ddc_load`）。`jdsp_lock` **非递归**：已内部自锁的函数（`DDCStringParser`）不可再包。修法模板：RT lock=1 + 控制侧同锁 + 同型竞争门禁（`smoke_comp_race.py`/`smoke_ddc_race.py`）。
 2. **表驱动处理链（P-004）**：12 效果节点顺序经由 `graph.order` 完整重排序，非法集合必须白名单全拒；每个 stage 的峰值采样必须是 $O(1)$ 常数时间。
 3. **文件门卫（FileGate）**：加载 IR 脉冲文件或 VDC 文件必须经由六道门卫校验（magic、尺寸、NaN/Inf 检测、重采样），防崩溃与内存溢出。
 4. **"12 级"只指 vendor 链，不等于效果总数**（易错点）：

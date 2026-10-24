@@ -2018,6 +2018,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'r': -90.0,
       'stageL': List<double>.filled(lastStageLen, -90.0),
       'stageR': List<double>.filled(lastStageLen, -90.0),
+      // [Phase B] 断流补帧：per-channel 一并回落（stereo 兜底 2 柱）
+      'chCount': 2,
+      'chLevels': List<double>.filled(2, -90.0),
+      'stageCh': List<double>.filled(kVizStageTelemetry * 2, -90.0),
       'ts': now,
       'seq': -2,
     });
@@ -2300,6 +2304,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'inputInR': fr.inputLevelInR,
                 'inputOutL': fr.inputLevelOutL,
                 'inputOutR': fr.inputLevelOutR,
+                // [Phase B 多声道电平] per-channel 遥测（按 chCount 裁剪：
+                // stereo 时 21×2，MC(8) 时 21×8；GR/预留段恒 -120 由 UI 补齐）
+                'chCount': fr.channelCount,
+                'chLevels': fr.channelLevelsToList(),
+                'stageCh': fr.stageChLevelsTelemetry(),
                 'ts': fr.timestampMs,
                 'seq': fr.seq,
               });

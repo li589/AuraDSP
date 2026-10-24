@@ -879,6 +879,11 @@ class AuraChip extends StatefulWidget {
   final VoidCallback? onTap;
   final bool danger;
 
+  /// 半激活态（Z15「部分旁路」）：插件名义生效但实际被 VB 超预算保护
+  /// 旁路该路——warning 醒目但区别于 danger（用户全旁路）与 selected
+  /// （完全生效）。视觉权重与 selected 同（底色/描边），仅换警示色。
+  final bool warning;
+
   /// 切换在途：文字替换为受控尺寸的小 spinner（高度锁 chipH，不跳版），
   /// 用于旁路等异步切换的过渡反馈。onTap 应同时置 null 禁点。
   final bool busy;
@@ -890,6 +895,7 @@ class AuraChip extends StatefulWidget {
     this.onTap,
     this.danger = false,
     this.busy = false,
+    this.warning = false,
   });
 
   @override
@@ -904,11 +910,14 @@ class _AuraChipState extends State<AuraChip> {
     final p = paletteOf(context);
     final tint = widget.danger
         ? p.error
-        : (widget.selected ? p.accent : p.text);
-    final bg = widget.selected
+        : (widget.warning
+            ? p.warning
+            : (widget.selected ? p.accent : p.text));
+    final active = widget.selected || widget.warning;
+    final bg = active
         ? tint.withValues(alpha: 0.14)
         : (_hover ? hoverOn(p) : Colors.transparent);
-    final border = widget.selected
+    final border = active
         ? tint.withValues(alpha: 0.55)
         : (_hover ? p.textDim.withValues(alpha: 0.45) : p.hairline);
 

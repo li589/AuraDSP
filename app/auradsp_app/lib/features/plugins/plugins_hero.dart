@@ -501,6 +501,12 @@ class _ActivePluginHero extends StatelessWidget {
     // 插件延迟是「样本数」，必须按设备实际采样率换算，不是固定 48k。
     final latencyMs = (latencySamples / model.deviceRate * 1000.0)
         .toStringAsFixed(1);
+    // Z15 诚实化：VB 模式下若当前编辑器目标路被 Z12 超预算保护旁路
+    // （该路不进插件链、仅 vizStick 热组存活），「生效中」按钮如实
+    // 显示「部分旁路」警示态。点击逻辑不变：点本按钮 → 全旁路；
+    // 再点 → 按超预算开关回到保护旁路/正常激活。
+    final partialBypass =
+        isVb && !isBypassed && model.vbSelectedRouteProtectBypassed;
 
     // 命名规则（D4d）：槽位卡标题显示**用户所选名**——用户在扫描列表
     // 点选那一项的 name，与编辑器窗口标题（'<name> - AuraDSP Host'，
@@ -630,12 +636,17 @@ class _ActivePluginHero extends StatelessWidget {
             const SizedBox(width: AuraSpace.sm),
           ],
           // 旁路开关按钮（切换在途：spinner 替代文字 + 禁点，防连点/防卸载竞态）
+          // 三态：已旁路（danger）/ 部分旁路（warning，Z15 保护旁路的当前路）
+          // / 生效中（selected）。语义与数据源见上方 partialBypass 注释。
           AuraChip(
             isBypassed
                 ? l10nOf(context).chainBypassed
-                : l10nOf(context).chainActive,
-            selected: !isBypassed,
+                : (partialBypass
+                    ? l10nOf(context).plugPartialBypass
+                    : l10nOf(context).chainActive),
+            selected: !isBypassed && !partialBypass,
             danger: isBypassed,
+            warning: partialBypass,
             busy: manager.isSlotBypassPending(slot),
             onTap: (isBusy || manager.isSlotBypassPending(slot))
                 ? null

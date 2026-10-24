@@ -53,6 +53,11 @@ std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath);
 
 void setupPluginDllDirectories(const std::string& pluginPath);
 void ResizeDirectChildren(HWND hwnd);
+/// Z16：编辑器窗口「闪现置顶」。插件宿主进程与 Flutter App 是不同进程，
+/// SetForegroundWindow 受前台进程限制常静默失败（用户观感：插件界面
+/// 压在 App 下面）。TOPMOST→NOTOPMOST 瞬间抬升不依赖前台权限，且立即
+/// 降级非常驻置顶（不挡屏、不招投诉）。
+void FlashEditorToFront(HWND hwnd);
 void EnsureClapWindowClassRegistered();
 void EnsureVst3WindowClassRegistered();
 
