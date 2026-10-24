@@ -179,3 +179,23 @@ set_property(TARGET test_host_quarantine PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_host_quarantine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_host_quarantine PRIVATE auradsp_engine version)
 
+# F1 验收（2026-10-24）：插件依赖 DLL 搜索目录通用化 + cookie 回收
+# （不依赖任何真插件，用临时目录树验证登记/幂等/引用计数/回收/环境变量）。
+add_executable(test_dll_dirs
+    "${API}/plugins/tests/test_dll_dirs.cpp"
+    "${API}/plugins/platform/win32/win32_util.cpp"
+)
+target_include_directories(test_dll_dirs PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_dll_dirs PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_options(test_dll_dirs PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_dll_dirs PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_dll_dirs PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_dll_dirs PRIVATE version shell32 ole32 user32)
+
+
