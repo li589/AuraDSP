@@ -83,12 +83,19 @@ def run_smoke_tests():
         # 性排空（含审查漏点 VmBridge.FreeTestFile）。三层：源码不变式 /
         # guard+排空单测 / ASIO 实测 test_stop 不再是固定 50ms。
         "smoke_d2_rt_drain.py",
+        "smoke_d3_vaio_pump_wait.py",
+        # B1-d 门禁（2026-10-24）：comp 启动段原声直通。旧实现的抽干循环在
+        # 管线首块产出前不执行，输出缓冲里仍是未处理输入（调用方 in==out）；
+        # 块长不整除 hop 时还会周期性复发。改为显式启动缺额 D（吐静音）+
+        # 抽干不足补静音，延迟 = frames + D 且计入上报。
+        "smoke_b1d_comp_startup.py",
         # D1 门禁（2026-10-24）：延迟表口径——结构性帧数不再当毫秒常量。
         # D7（同日）修正其换算基准为工作采样率，具体标定值移入 D7 门禁。
         "smoke_d1_latency_sr.py",
         # D7 门禁（2026-10-24）：ASRC taps 单点定义（64/32 分叉已收）+ 延迟口径
-        # 按工作采样率域 + comp 剖面随 tf 变并受块长门槛约束 + limiter 按
-        # lookahead 模式（默认 0ms）+ ASRC 环形缓冲分量 + 上报值==脉冲实测。
+        # 按工作采样率域 + comp 剖面随 tf 变（块长口径后来被 B1-d 推翻并重写，
+        # 见下）+ limiter 按 lookahead 模式（默认 0ms）+ ASRC 环形缓冲分量 +
+        # 上报值==脉冲实测。
         "smoke_d7_asrc_consistency.py",
         # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
         # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。

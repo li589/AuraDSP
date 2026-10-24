@@ -247,6 +247,16 @@ set_property(TARGET auravaio_bridge PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreaded
 target_link_libraries(auravaio_bridge PRIVATE ole32 avrt version)
 
 # 多声道能力与扬声器向导端到端测试探针
+# D3 验收：VAIO 泵的节拍等待（事件驱动 + 上界）。驱动无关，只包含共享头
+# vaio_pump_wait.h，不链 auravaio_bridge —— CI 无虚拟声卡驱动也能跑。
+add_executable(vaio_pump_wait_test
+    "${VAIOBRIDGE}/vaio_pump_wait_test.cpp"
+)
+target_include_directories(vaio_pump_wait_test PRIVATE "${VAIOBRIDGE}")
+target_compile_options(vaio_pump_wait_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET vaio_pump_wait_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET vaio_pump_wait_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 add_executable(vaio_multichannel_probe
     "${CMAKE_CURRENT_SOURCE_DIR}/tools/vaio_multichannel_probe.cpp"
 )
