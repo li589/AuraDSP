@@ -348,12 +348,16 @@ void apply_params_locked(auradsp_handle h) {
 
 
 /* Liveprog 代码加载成功后刷新滑块指针并写回宿主存储值。
- * 注意：NSEEL_VM_regvar 对同名变量幂等返回同一指针（P-001 已在编译前注册）。 */
+ * 注意：NSEEL_VM_regvar 对同名变量幂等返回同一指针（P-001 已在编译前注册）。
+ * B1：eel 为活动快照指针——编译成功后已被 LiveProgCompileAndSwap 换到
+ * 新槽，此处自然取到新 VM 的 slider 寄存器。 */
 void lp_refresh_sliders(auradsp_handle h) {
+    LiveProg* eel = h->jdsp.eel;
+    if (!eel || !eel->vm) return;
     for (int i = 0; i < 8; ++i) {
         char nm[16];
         snprintf(nm, sizeof(nm), "slider%d", i + 1);
-        h->lp_slider_ptr[i] = NSEEL_VM_regvar(h->jdsp.eel.vm, nm);
+        h->lp_slider_ptr[i] = NSEEL_VM_regvar(eel->vm, nm);
         if (h->lp_slider_ptr[i])
             *h->lp_slider_ptr[i] = h->p.lp_param[i].load(std::memory_order_relaxed);
     }

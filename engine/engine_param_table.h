@@ -713,7 +713,9 @@ static auradsp_status get_liveprog_code(auradsp_handle h, void* out_value, uint3
 static auradsp_status set_liveprog_unload(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     h->p.lp_enable.store(0);
-    h->jdsp.eel.compileSucessfully = 0;
+    /* B1：经 API 置活动快照 compileSucessfully=0（单次 int 写，x86 原子），
+     * 取代原直接字段写——快照指针已由影子编译管理，禁越层访问。 */
+    LiveProgUnload(&h->jdsp);
     h->lp_status = 0;
     if (h->open.load()) apply_liveprog(h);
     return AURADSP_OK;
