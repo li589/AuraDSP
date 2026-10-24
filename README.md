@@ -50,7 +50,7 @@ AuraDSP/
 │   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
 │   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
 ├── tools/               # bin/ 10 · probe/ 17 · resource_pipeline/ 2 · calibration/ 1 · archive/
-├── source/              # 第三方参考仓库只读快照（16 项 ORIGIN 登记 / 15 个顶层克隆）
+├── source/              # 第三方参考仓库只读快照（17 项 ORIGIN 登记 / 16 个顶层克隆）
 ├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
 │   └── 参考技术手册/     #   第三方 PDF 手册本地只读区（约 220MB，仅 README 清单入库）
 └── .ai/                 # AI 自治沉淀区（memory/rules）
