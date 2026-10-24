@@ -83,6 +83,9 @@ def run_smoke_tests():
         # 性排空（含审查漏点 VmBridge.FreeTestFile）。三层：源码不变式 /
         # guard+排空单测 / ASIO 实测 test_stop 不再是固定 50ms。
         "smoke_d2_rt_drain.py",
+        # D1 门禁（2026-10-24）：延迟表口径——结构性帧数（comp 4096 / arbmag 块长）
+        # 按当前采样率换算，不再把 48k 换算结果当毫秒常量。多采样率缩放断言。
+        "smoke_d1_latency_sr.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",

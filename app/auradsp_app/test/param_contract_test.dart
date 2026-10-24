@@ -1157,19 +1157,39 @@ ${hits.join('\n')}''');
   // 本部分改为形态 + 防回退镜像守卫）
   // ---------------------------------------------------------------------------
   group('Part J kLat 延迟表契约', () {
-    test('引擎 kLat* 8 条形态（stages>=0 且 ms>0）', () {
+    test('引擎 kLat* 7 条形态（tier>=0 且 frames/ms 恰有一项>0）', () {
       final src = _read('engine/engine_internal.h');
-      final re = RegExp(r'kLat(\w+)\s*\{\s*(\d+),\s*([\d.]+)f?\s*\}');
+      // D1（2026-10-24）：LatencyItem 拆成 {tier, frames, ms} 三字段——
+      // 结构性帧数延迟（comp 4096 帧）按采样率换算，名义毫秒值原样用。
+      // 旧的 `{tier, ms}` 两字段正则因此匹配不到，且 `ms > 0` 对新形态失效。
+      // 新契约：每条必须**恰有一项非零**——两者皆 0 = 等于没登记（占位蒙混），
+      // 两者皆非零 = 口径含糊（不知道该用哪个），都判红。
+      final re = RegExp(
+          r'kLat(\w+)\s*\{\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)f?\s*\}');
       final rows = re.allMatches(src).map((m) => (
             name: m.group(1)!,
-            stages: int.parse(m.group(2)!),
-            ms: double.parse(m.group(3)!),
+            tier: int.parse(m.group(2)!),
+            frames: int.parse(m.group(3)!),
+            ms: double.parse(m.group(4)!),
           )).toList();
-      expect(rows.length, 8, reason: '引擎 kLat 表条目数应为 8');
+      // 7 条：arbmag 刻意不在表内（延迟=单块帧数，随驱动块长变，
+      // 由 compute_latency 直接换算；写常量必错，见 engine_internal.h 注释）。
+      expect(rows.length, 7, reason: '引擎 kLat 表条目数应为 7（arbmag 走块长）');
       for (final r in rows) {
-        expect(r.stages, greaterThanOrEqualTo(0));
-        expect(r.ms, greaterThan(0), reason: 'kLat${r.name} ms 应>0');
+        expect(r.tier, greaterThanOrEqualTo(0), reason: 'kLat${r.name} tier 应>=0');
+        final hasFrames = r.frames > 0;
+        final hasMs = r.ms > 0;
+        expect(hasFrames ^ hasMs, isTrue,
+            reason: 'kLat${r.name} 必须恰有一项非零'
+                '（frames=${r.frames} ms=${r.ms}；皆 0=没登记，皆非 0=口径含糊）');
       }
+      // comp 必须是结构性帧数 4096（= FFTSIZE_DRS/2），而不是 48k 换算出的毫秒
+      final comp = rows.firstWhere((r) => r.name == 'Comp');
+      expect(comp.frames, 4096, reason: 'kLatComp 应为 4096 帧（FFTSIZE_DRS/2）');
+      expect(comp.ms, 0.0, reason: 'kLatComp 不得再写死毫秒值');
+      // arbmag 不得以任何形态回到表里（回退即"两张皮"重现）
+      expect(RegExp(r'kLatArbMag').hasMatch(src), isFalse,
+          reason: 'kLatArbMag 不得存在——arbmag 延迟=块长，写常量必错');
     });
 
     test('Dart 无 kLat 硬编码镜像（防回退"两张皮"；C4 已删表改实测）', () {
