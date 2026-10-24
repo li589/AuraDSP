@@ -103,7 +103,15 @@ extension StateEvents on AppModel {
         }
         bassOn = (raw['bassEnable'] as int) != 0;
         bassGain = (raw['bassGain'] as num).toDouble();
-        reverbPreset = raw['reverbPreset'] as int;
+        // [PATCHED-AuraDSP P-032] 自定义态(-2) 是设计内的合法值
+        // （拖滑块后 setReverbCustomParam 置 -2；引擎只认 0..18，故 -2
+        // 从不下发）。此前无条件覆盖 → 回读把 -2 改回引擎旧 preset，
+        // "自定义"芯片跳回预设芯片。现在本地已是自定义态时保持不动；
+        // 本地为显式选择时仍采纳引擎真值（两者本应一致）。
+        final rbPreset = raw['reverbPreset'] as int;
+        if (reverbPreset != -2) {
+          reverbPreset = rbPreset;
+        }
         // 引擎真相是 0..stereoWidenMax，换算回 UI 显示刻度 0..1。
         // 开关关闭时引擎侧是"静音语义"的 0（_pushStereoChain 的 k=0 直发），
         // 不代表用户滑块记忆——2026-10-19 修复：旧实现无条件回写，用户

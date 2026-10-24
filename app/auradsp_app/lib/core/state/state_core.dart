@@ -7,6 +7,13 @@ part of '../state.dart';
 /// 原有调用点（实例调用、tear-off、跨 part 互调）解析不变。
 extension StateCore on AppModel {
   void send(Map<String, dynamic> m) {
+    // [PATCHED-AuraDSP P-032] testing 模式记录已下发的 setParam 载荷。
+    // 此前"参数有没有真的发到引擎"无法在单测里断言（_toIso 为 null 时
+    // send 静默丢弃）——P-032 的三处修复（bass.mode 下发、freeverb
+    // roomsize/width 下发）正属此类"下发了才算数"的缺陷，需要可观测。
+    if (_testing && m['cmd'] == 'setParam') {
+      sentParamsForTesting.add(Map<String, dynamic>.from(m));
+    }
     _toIso?.send(m);
   }
 
@@ -590,6 +597,22 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.fvDry) {
           fvDry = v;
+          break;
+        }
+        // [PATCHED-AuraDSP P-032] 补 freeverb.roomsize / width 的镜像：
+        // 这两个参数此前既没在 _mirror 里登记、也没在 selectReverbPreset
+        // 里下发 → 模型字段与 _paramValues 缓存、引擎真值三者脱节。
+        if (id == 'freeverb.roomsize') {
+          fvRoomSize = v;
+          break;
+        }
+        if (id == 'freeverb.width') {
+          fvWidth = v;
+          break;
+        }
+        // [PATCHED-AuraDSP P-032] bass.mode 的镜像登记（纯 UI 模式状态）。
+        if (id == 'bass.mode') {
+          bassMode = v.round();
           break;
         }
         if (id == ParamId.compEnable) {

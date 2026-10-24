@@ -307,7 +307,10 @@ static auradsp_status set_convolver_ir_path(auradsp_handle h, const void* value,
 
 static auradsp_status set_convolver_clear(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
-    h->p.conv_enable.store(0);
+    /* [PATCHED-AuraDSP P-032] 清除 IR **不再强制关闭 conv_enable**：
+     * 用户要求"无文件就回到未加载态、效果内部直通"，开关由用户自己管。
+     * apply_convolver 在 conv_enable=1 且 ir_ready=false 时走
+     * Convolver1DDisable（直通），语义已正确。 */
     h->ir_ready.store(false);
     h->ir_frames.store(0);
     h->ir_channels.store(0);
@@ -975,6 +978,10 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("bass.autogain", bass_autogain, hook_fx_gains),
     PARAM_FLOAT("bass.harmonics", bass_harmonics, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("bass.harmonicblend", bass_harmonicblend, 0.0f, 1.0f, nullptr),
+    /* [PATCHED-AuraDSP P-032] 纯状态载体：ViPER 三模式是 UI 侧谐波配方宏，
+     * 引擎不据此计算，但必须有此参数才能被回读（否则 UI 选择被回读弹回 0）。
+     * 见 engine_internal.h bass_mode 处的说明。 */
+    PARAM_INT("bass.mode", bass_mode, 0, 2, nullptr),
     PARAM_FLOAT("bass.subfreq", bass_subfreq, 10.0f, 40.0f, nullptr),
     PARAM_FLOAT("bass.cutoff", bass_cutoff_f, 30.0f, 300.0f, nullptr),
     PARAM_BOOL("bass.oversample", bass_oversample, nullptr),
