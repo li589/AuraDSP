@@ -8,6 +8,25 @@
 #include "Effects/eel2/ns-eel.h"
 #include "jdsp_header.h"
 #define TAG "EffectDSPMain"
+
+/* [PATCHED-AuraDSP D7] ASRC 多相 FIR 抽头数——两条初始化路径必须一致。
+ *
+ * 原来 JamesDSPInit 用 64、JamesDSPSetSampleRate（热切）用 32，两处都是函数内
+ * 局部 `const unsigned int asrc_taps`，谁也看不出对方。后果：同一个设备
+ * (a) 冷启动直接以 96k 起来、和 (b) 先以 48k 起来再热切到 96k，走的是不同
+ * 阶数的抗镜像/抗混叠滤波器——过渡带宽度差一倍、群延迟差一倍，音色会不一样。
+ * 抽成一处常量后这个分叉不可能再出现。
+ *
+ * 取值 64（原 init 路径的值）：init 是默认/质量优先路径，热切的 32 无任何注释
+ * 说明动机，按历史遗留处理。64 taps 在 48k 工作域只需 ~64·2 MAC/样本，
+ * 32→64 的代价在 ASRC 已启用的场景（本就非常见采样率）不构成理由。
+ *
+ * 注：本文件被 Windows 桌面引擎（auradsp_engine.dll）整体编译，但热切路径
+ * `JamesDSPSetSampleRate` 只由 `EffectDSPMainCommand`（Android AudioEffect
+ * 入口）调用，而后者不在 .def 导出表内 —— 在桌面引擎上该路径不可达。
+ * 因此本项只有源码级门禁可守，另在 smoke_d7 里注明（不可达 ≠ 可以不修：
+ * Android 侧同源，且将来若接线立刻生效）。 */
+#define AURADSP_ASRC_TAPS 64u
 // Range: 0x800000, 0x7fffff
 int32_t i32_from_p24_big_endian(const uint8_t *packed24)
 {
@@ -1462,7 +1481,7 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	/* [PATCHED-AuraDSP P-004] 默认处理序 */
 	JamesDSPRebuildChain(jdsp, (void *)0);
 	//
-	const unsigned int asrc_taps = 64;
+	/* [PATCHED-AuraDSP D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与热切路径共用） */
 	char isminphase = 1;
 	if (sample_rate < 44100.0f || sample_rate > 48000.0f)
 	{
@@ -1475,8 +1494,8 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 			jdsp->fs = 44100;
 		else
 			jdsp->fs = 48000;
-		InitIntegerASRCHandler(&jdsp->asrc[0], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, asrc_taps, isminphase, 0, 0);
-		InitIntegerASRCHandler(&jdsp->asrc[1], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, asrc_taps, isminphase, &jdsp->asrc[0].polyphaseDecimator, &jdsp->asrc[0].polyphaseInterpolator);
+		InitIntegerASRCHandler(&jdsp->asrc[0], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, AURADSP_ASRC_TAPS, isminphase, 0, 0);
+		InitIntegerASRCHandler(&jdsp->asrc[1], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, AURADSP_ASRC_TAPS, isminphase, &jdsp->asrc[0].polyphaseDecimator, &jdsp->asrc[0].polyphaseInterpolator);
 		double ratio = (double)jdsp->fs / (double)jdsp->trueSampleRate;
 		unsigned int maxDecimatedLength = (unsigned int)ceil(n * ratio);
 		unsigned int maxInterpolatedLength = (unsigned int)ceil(maxDecimatedLength / ratio);
@@ -1595,7 +1614,7 @@ void JamesDSPSetSampleRate(JamesDSPLib *jdsp, float new_sample_rate, int forceRe
 		FreeIntegerASRCHandler(&jdsp->asrc[0]);
 		FreeIntegerASRCHandler(&jdsp->asrc[1]);
 	}
-	const unsigned int asrc_taps = 32;
+	/* [PATCHED-AuraDSP D7] 抽头数见文件头 AURADSP_ASRC_TAPS（与 init 路径共用） */
 	char isminphase = 1;
 	if (new_sample_rate < 44100.0f || new_sample_rate > 48000.0f)
 	{
@@ -1607,8 +1626,8 @@ void JamesDSPSetSampleRate(JamesDSPLib *jdsp, float new_sample_rate, int forceRe
 			jdsp->fs = 44100;
 		else
 			jdsp->fs = 48000;
-		InitIntegerASRCHandler(&jdsp->asrc[0], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, asrc_taps, isminphase, 0, 0);
-		InitIntegerASRCHandler(&jdsp->asrc[1], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, asrc_taps, isminphase, &jdsp->asrc[0].polyphaseDecimator, &jdsp->asrc[0].polyphaseInterpolator);
+		InitIntegerASRCHandler(&jdsp->asrc[0], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, AURADSP_ASRC_TAPS, isminphase, 0, 0);
+		InitIntegerASRCHandler(&jdsp->asrc[1], (unsigned long long)jdsp->fs, (unsigned long long)jdsp->trueSampleRate, AURADSP_ASRC_TAPS, isminphase, &jdsp->asrc[0].polyphaseDecimator, &jdsp->asrc[0].polyphaseInterpolator);
 		double ratio = (double)jdsp->fs / (double)jdsp->trueSampleRate;
 		unsigned int maxDecimatedLength = (unsigned int)ceil(jdsp->blockSizeMax * ratio);
 		unsigned int maxInterpolatedLength = (unsigned int)ceil(maxDecimatedLength / ratio);

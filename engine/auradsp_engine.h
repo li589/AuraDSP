@@ -177,11 +177,26 @@ auradsp_state  auradsp_get_state(auradsp_handle h);
 /* 当前链上各效果引入的附加延迟（毫秒）。纯测量上报，不参与任何准入判定
  * （ADR-006 已撤销延迟档硬约束）。
  *
- * D1（2026-10-24）：返回值**随采样率与块长变化**——结构性延迟按帧数换算：
- *   comp     = 4096 帧（FFTCompander 固定 FFTSIZE_DRS/2）→ 48k 85.33ms / 96k 42.67ms
- *   arbmag   = 单块帧数（分块 FFT 卷积，随驱动块长变）
- *   其余项为听感名义毫秒值（reverb 30 / crossfeed 3 / spatial 1 / ddc 6 /
- *   limiter 2 / convolver 10 下限），不随采样率变。
+ * D1（2026-10-24）：返回值**随采样率与块长变化**——结构性延迟按帧数换算，
+ * 不再是把帧数手算成毫秒后写死进常量。
+ * D7（2026-10-24）更正口径：
+ *   · 结构性帧数一律属于**工作采样率域**。非常见采样率（96k/192k/88.2k…）
+ *     下引擎先 ASRC 到 48k/44.1k 再跑 DSP，故 comp/arbmag 的延迟**不随
+ *     设备采样率变**（96k 与 48k 报同一个毫秒数）。
+ *   · comp 的延迟随 tfresolution 变，且受块长门槛约束：
+ *       tf=0 → 37.33ms / tf=1（默认）→ 74.67ms / tf=2 → 42.67ms /
+ *       tf=3（Gammatone 时域）→ 0ms；
+ *     且当「一块的工作域长度 < ovpLen」时 comp 整块直通（攒不满一帧），
+ *     此时如实报 0 —— 报 74.67ms 而实际没处理是更糟的谎。
+ *   · arbmag = 单块帧数（分块 FFT 卷积，随驱动块长变），块长为 0 时回落
+ *     创建时的 max_block。
+ *   · ASRC 启用时另计中转环形缓冲的 ceil(inFs/fs) 个输入样本（96k→48k
+ *     ≈ 0.021ms）；多相 FIR 群延迟经实测落在 ±0.03ms 噪声内，按 0 计。
+ *   · limiter 分两种模式：limiter.lookahead=0（默认）→ 0ms；
+ *     =1 → 前瞻缓冲实占 (la_len−1)/fs ≈ 1.5ms（la_len 按 fs 缩放，故时间
+ *     恒定）。原表的固定"2ms"在默认配置下高估了 2ms。
+ *   · 其余项为听感名义毫秒值（reverb 30 / crossfeed 3 / spatial 1 / ddc 6 /
+ *     convolver 10 下限），不随采样率变。
  * 该函数在控制线程读参数快照，无锁、无 RT 依赖，可在任意控制线程调用。 */
 double         auradsp_get_latency_ms(auradsp_handle h);
 const char*    auradsp_last_error(auradsp_handle h);

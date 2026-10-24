@@ -375,32 +375,85 @@ inline float fv_voice_process(FvVoice& v, float in, float feedback) {
  * tier 字段保留为文档性标注，供 graph.effects 输出与 UI 排障参考。
  *
  * D1（2026-10-24）：本表原来是"一律存 ms"，但其中至少两项的**物理量其实是
- * 帧数**，只在 48k 成立——
- *   · comp：FFTCompander 用固定 FFTSIZE_DRS=8192 → 结构性延迟恒为 4096 帧，
- *     48k 下 85.33ms、96k 下 42.67ms。原表写死 85.0，96k 用户读到的是 2 倍。
- *   · arbmag：分块 FFT 卷积，附加延迟 = 单块帧数（不是固定 128 帧的常量，
- *     块长由驱动决定，常见 512/1024）。原表写死 2.67ms（=128 帧 @48k），
- *     在 1024 帧块下低估 8 倍。
- * 故拆成两个字段：frames > 0 表示"结构性帧数延迟，ms 按当前采样率换算"；
- * frames == 0 表示"名义毫秒值（与采样率无关的听感标注）"，用 ms。
+ * 帧数**，只在 48k 成立。故拆成两个字段：frames > 0 表示结构性帧数延迟，
+ * frames == 0 表示名义毫秒值（与采样率无关的听感标注）。换算统一走
+ * LatencyMs()，禁止在调用点手写 `/1000`。
+ *
+ * D7（2026-10-24）：D1 的两条前提都不对，一并纠正——
+ *   ① **帧数所属的采样率域是工作域 jdsp->fs，不是设备采样率**。引擎在非常见
+ *      采样率（96k/192k/88.2k…）下先 ASRC 到 48k/44.1k 再跑 DSP
+ *      （JamesDSPInit：enableASRC=1、fs=48000），所有结构性帧数（comp 的
+ *      重叠相加、arbmag 的块卷积）都活在**48k 域**。D1 用 h->sample_rate
+ *      （设备率）换算，96k 下把 74.67ms 报成 42.67ms —— 方向和"修前写死
+ *      85ms"正好相反，等于换了个错法。实测佐证：96k/blk=1024 的脉冲位移
+ *      是 7168 帧 = 2×3584，与 48k/blk=512 的 3584 帧**同为 74.67ms**。
+ *   ② **comp 不是固定 4096 帧**。FFTCompander 的延迟 = fftLen − ovpLen，
+ *      随 tfresolution 变（脉冲响应法实测，48k/96k/192k 三种设备率结果一致，
+ *      均为工作域帧数）：
+ *        tf=0 STFT   (2048/256) → 1792 帧（48k 37.33ms）
+ *        tf=1 CWT    (4096/512) → 3584 帧（48k 74.67ms）  ← 出厂默认
+ *        tf=2 CWT↔STFT(4096/512)→ 2048 帧（48k 42.67ms）
+ *        tf=3 Gammatone 时域    → 0 帧（无 STFT）
+ *      4096 是 FFTSIZE_DRS/2，从来不是运行时延迟量。故 comp 移出本表，
+ *      改按 kCompLatProfile[tf] 查表（见下）。
  * 换算统一走 LatencyMs()，禁止在调用点手写 `/1000`。 */
 struct LatencyItem {
     int tier;
-    int frames;  /* 结构性延迟帧数（0 = 用 ms 字段） */
-    float ms;    /* 名义毫秒值（frames == 0 时生效） */
+    int frames;  /* 结构性延迟帧数，**工作采样率域**（jdsp->fs）；0 = 用 ms 字段 */
+    float ms;    /* 名义毫秒值（frames == 0 时生效；与采样率无关的听感标注） */
 };
 constexpr LatencyItem kLatReverb   {2, 0, 30.0f};
-constexpr LatencyItem kLatComp     {2, 4096, 0.0f};  /* FFTCompander FFTSIZE_DRS/2 */
 constexpr LatencyItem kLatConvolver{2, 0, 10.0f};    /* 保守下限，IR 长度另计 */
 /* arbmag 刻意**不进本表**：它的附加延迟是"单块帧数"（分块 FFT 卷积按
  * jdsp->blockSize 加载 IR），随驱动块长变，写任何常量都是错的——原表的
  * 2.67ms 只是「128 帧 @48k」的巧合值，1024 帧块下低估 8 倍。由 compute_latency
- * 直接按块长换算。表里留一条"定义却不用"的占位比缺失更危险。 */
+ * 直接按块长换算。表里留一条"定义却不用"的占位比缺失更危险。
+ * comp 同理进不了本表，见 kCompLatProfile。 */
 constexpr LatencyItem kLatCrossfeed{1, 0, 3.0f};
 constexpr LatencyItem kLatSpatial  {1, 0, 1.0f};  /* 直达径 ITD 最大 0.65ms 取整；
     * 早期反射/混响尾是并行能量不计入（与 reverb 30ms 名义口径一致） */
 constexpr LatencyItem kLatDdc      {1, 0, 6.0f};
-constexpr LatencyItem kLatLimiter  {0, 0, 2.0f};
+/* limiter 刻意**不进本表**（D7）：它有两种模式，延迟差 1.5ms ——
+ *   · limiter.lookahead == 0（**出厂默认**）：0ms 实时零延迟模式，不加任何
+ *     环形缓冲，实测脉冲位移 0 帧；
+ *   · limiter.lookahead == 1：前瞻环形缓冲，延迟线实占 la_len-1 帧，
+ *     la_len = int(1.5ms × fs + 0.5)（上限 kLimLookaheadMax=576）。
+ * 故时间恒 ≈1.5ms、与采样率无关（实测 48k 71 帧 = 1.479ms、44.1k 65 帧
+ * = 1.474ms，均为 la_len-1）。
+ * 原表写死 `{0, 0, 2.0f}` 名义值：默认配置下**高估 2ms**（真实 0ms），
+ * 开前瞻时低估 0.5ms —— 两种模式都错，且"恒定 2ms"这个性质本身不存在。 */
+
+/* FFTCompander 的 STFT 结构延迟剖面（D7 实测标定）。
+ *
+ * ovpLen = fftLen / ovpCount 同时是"一块至少要这么长才会真正处理"的门槛：
+ * FFTCompanderProcessSamples 攒不满 mInputSamplesNeeded 就一帧都不产，整块
+ * 原样直通——**既无压缩也无延迟**（calling 侧 `in==out` 原地处理，未写即保持
+ * 输入值）。所以块长不足时 comp 的延迟必须报 0；报 74.67ms 而耳朵听 0ms，
+ * 是比不报更糟的谎。
+ * 实测例：48k/blk=256 → 0 帧；48k/blk=512 → 3584 帧；96k/blk=1024
+ * （ASRC 后工作块 512）→ 7168 设备域帧 = 3584 工作域帧。 */
+struct CompLatencyProfile {
+    int tf;
+    int fftLen;
+    int ovpLen;   /* 0 = 时域路径，无 STFT、无门槛 */
+    int frames;   /* 工作域帧数 */
+};
+constexpr CompLatencyProfile kCompLatProfile[4] = {
+    {0, 2048, 256, 1792},   /* STFT */
+    {1, 4096, 512, 3584},   /* CWT（默认） */
+    {2, 4096, 512, 2048},   /* CWT ↔ STFT 反变换 */
+    {3,    0,   0,    0},   /* Gammatone 时域多带 */
+};
+
+/* ASRC 附加延迟（D7）。
+ *
+ * 实测（脉冲响应法 + 三点抛物线亚样本插值）：96k −0.0064ms、192k −0.0278ms、
+ * 88.2k −0.0071ms —— 多相 FIR 的群延迟被重采样的相位对齐抵消到测量噪声内。
+ * 真实存在且可解释的是中转环形缓冲的结构量
+ * IntegerASRCHandler.calculatedLatencyWholeSystem = ceil(inFs / fs) 个**输入域**
+ * 样本（DoASRC_bwd 用 RingBufferingStereo 攒够才吐一块）：96k→48k = 2 帧
+ * = 0.0208ms。这里如实计入这 0.02ms，不用"可忽略"糊过去；多相 FIR 部分
+ * 实测为负（轻微提前），按 0 计。 */
 
 /* 帧数 → 毫秒。采样率未初始化（<=0）时按 48k 名义口径兜底，绝不返回 inf/负值。 */
 inline double FramesToMs(double frames, double sample_rate) {
@@ -412,6 +465,14 @@ inline double FramesToMs(double frames, double sample_rate) {
 inline double LatencyMs(const LatencyItem& it, double sample_rate) {
     if (it.frames > 0) return FramesToMs((double)it.frames, sample_rate);
     return (double)it.ms;
+}
+
+/* ASRC 中转环形缓冲的附加延迟（D7）。帧数与采样率同为**输入域**，故直接用
+ * 输入域采样率换算。见上方 ASRC 注释块。 */
+inline double AsrcRingLatencyMs(double in_fs, double work_fs) {
+    if (!(in_fs > 0.0) || !(work_fs > 0.0)) return 0.0;
+    const double ring_frames = std::ceil(in_fs / work_fs);
+    return FramesToMs(ring_frames, in_fs);
 }
 
 

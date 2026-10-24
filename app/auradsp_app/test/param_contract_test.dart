@@ -1157,7 +1157,7 @@ ${hits.join('\n')}''');
   // 本部分改为形态 + 防回退镜像守卫）
   // ---------------------------------------------------------------------------
   group('Part J kLat 延迟表契约', () {
-    test('引擎 kLat* 7 条形态（tier>=0 且 frames/ms 恰有一项>0）', () {
+    test('引擎 kLat* 5 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
       final src = _read('engine/engine_internal.h');
       // D1（2026-10-24）：LatencyItem 拆成 {tier, frames, ms} 三字段——
       // 结构性帧数延迟（comp 4096 帧）按采样率换算，名义毫秒值原样用。
@@ -1172,9 +1172,12 @@ ${hits.join('\n')}''');
             frames: int.parse(m.group(3)!),
             ms: double.parse(m.group(4)!),
           )).toList();
-      // 7 条：arbmag 刻意不在表内（延迟=单块帧数，随驱动块长变，
-      // 由 compute_latency 直接换算；写常量必错，见 engine_internal.h 注释）。
-      expect(rows.length, 7, reason: '引擎 kLat 表条目数应为 7（arbmag 走块长）');
+      // 5 条：arbmag / comp / limiter 三项刻意不在表内——
+      //   arbmag = 单块帧数（随驱动块长变）；
+      //   comp   = fftLen-ovpLen，随 tfresolution 变（D7 实测，见 kCompLatProfile）；
+      //   limiter= 随 lookahead 模式在 0 / ~1.5ms 之间切（D7 实测）。
+      // 三者都由 compute_latency 直接算，写常量必错。
+      expect(rows.length, 5, reason: '引擎 kLat 表条目数应为 5（arbmag/comp/limiter 走动态）');
       for (final r in rows) {
         expect(r.tier, greaterThanOrEqualTo(0), reason: 'kLat${r.name} tier 应>=0');
         final hasFrames = r.frames > 0;
@@ -1183,10 +1186,22 @@ ${hits.join('\n')}''');
             reason: 'kLat${r.name} 必须恰有一项非零'
                 '（frames=${r.frames} ms=${r.ms}；皆 0=没登记，皆非 0=口径含糊）');
       }
-      // comp 必须是结构性帧数 4096（= FFTSIZE_DRS/2），而不是 48k 换算出的毫秒
-      final comp = rows.firstWhere((r) => r.name == 'Comp');
-      expect(comp.frames, 4096, reason: 'kLatComp 应为 4096 帧（FFTSIZE_DRS/2）');
-      expect(comp.ms, 0.0, reason: 'kLatComp 不得再写死毫秒值');
+      // D7：comp 的延迟不是固定 4096 帧（那是 FFTSIZE_DRS/2，从来不是运行时
+      // 延迟量）。实测延迟 = fftLen-ovpLen，随 tfresolution 变；且块长不足
+      // ovpLen 时整块直通（0ms）。故它必须走 kCompLatProfile 剖面表。
+      expect(RegExp(r'kLatComp').hasMatch(src), isFalse,
+          reason: 'kLatComp 不得存在——comp 延迟随 tfresolution 变，须查 kCompLatProfile');
+      expect(RegExp(r'kLatLimiter').hasMatch(src), isFalse,
+          reason: 'kLatLimiter 不得存在——limiter 延迟随 lookahead 模式变（0 / ~1.5ms）');
+      final prof = RegExp(
+              r'\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}')
+          .allMatches(src)
+          .where((m) => m.group(2) == '4096' || m.group(3) == '512')
+          .toList();
+      expect(prof.length, greaterThanOrEqualTo(2),
+          reason: 'kCompLatProfile 应含 fftLen=4096 / ovpLen=512 的剖面行');
+      expect(src.contains('kCompLatProfile'), isTrue,
+          reason: 'comp 延迟剖面表 kCompLatProfile 必须存在');
       // arbmag 不得以任何形态回到表里（回退即"两张皮"重现）
       expect(RegExp(r'kLatArbMag').hasMatch(src), isFalse,
           reason: 'kLatArbMag 不得存在——arbmag 延迟=块长，写常量必错');
