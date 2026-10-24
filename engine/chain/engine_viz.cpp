@@ -9,12 +9,17 @@
  * 一次 → 两次发射之间的音频块从未进窗，环形历史是"每两块丢一块"的梳状采样
  * 信号（= 信号 × 50% 占空比方波），频谱全是混叠假峰。这就是"低音区几根柱子
  * 不显示 / 频段间距怪"的真正根因（自 1024-FFT 版本起就存在）。
- */
-void viz_write(auradsp_handle h, const float* out, int frames) {
+ *
+ * [Phase B 多声道电平] ch 参数：块的实际 stride。除历史与 L/R 峰值（仍取
+ * ch0/ch1，行为不变）外，同一趟顺带记录 ch_out_peak[0..ch-1]——与 viz_lvl_l/r
+ * 同源同趟，保证 channel_levels[0]/[1] 与 level_l/r_dbfs 逐位一致。
+ * [ch..7] 清零：声道数动态变化时杜绝跨块残留（如 MC8→stereo 切换）。 */
+void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
     const int mask = h->viz_fft_size.load(std::memory_order_relaxed) - 1;
     /* 历史写入与块峰值合并为一趟遍历：旧实现分两趟，等于把 out 多读一遍
      *（2048 帧块 = 多读 16KB）。两趟访问的下标序列完全一致，合并安全。 */
     float lvl_l = 0.0f, lvl_r = 0.0f;
+    float pk_ch[AURADSP_CH_MAX] = {};
     for (int i = 0; i < frames; ++i) {
         const float l = out[i * 2];
         const float r = out[i * 2 + 1];
@@ -24,9 +29,14 @@ void viz_write(auradsp_handle h, const float* out, int frames) {
         const float a = fabsf(l), b = fabsf(r);
         if (a > lvl_l) lvl_l = a;
         if (b > lvl_r) lvl_r = b;
+        for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) {
+            const float ac = fabsf(out[i * ch + c]);
+            if (ac > pk_ch[c]) pk_ch[c] = ac;
+        }
     }
     h->viz_lvl_l = lvl_l > 1e-6f ? 20.0f * log10f(lvl_l) : -120.0f;
     h->viz_lvl_r = lvl_r > 1e-6f ? 20.0f * log10f(lvl_r) : -120.0f;
+    for (int c = 0; c < AURADSP_CH_MAX; ++c) h->ch_out_peak[c] = (c < ch) ? pk_ch[c] : 0.0f;
 }
 
 
@@ -215,6 +225,35 @@ void emit_viz(auradsp_handle h) {
     }
     h->input_lvl_out_l = f.stage_levels_l[13];
     h->input_lvl_out_r = f.stage_levels_r[13];
+    /* [Phase B 多声道电平] per-channel 字段填充（ABI v2 追加段）。
+     * 统一裁决点：c >= last_block_ch 一律 -120（不信任任何跨块残留），
+     * c < 2 与 stage_levels_l/r 同源（stereo 逐位不变），
+     * vendor 段 0..11 与 GR 段 24..29 仅 [0]/[1] 或全 -120（作用域语义）。 */
+    const int blkCh = h->last_block_ch;
+    f.channel_count = (uint32_t)(blkCh > 0 ? blkCh : 0);
+    for (int c = 0; c < AURADSP_CH_MAX; ++c) {
+        f.channel_levels[c] = (c < blkCh && h->ch_out_peak[c] > 1e-6f)
+            ? 20.0f * log10f(h->ch_out_peak[c]) : -120.0f;
+    }
+    for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
+        for (int c = 0; c < AURADSP_CH_MAX; ++c) {
+            if (i < AURADSP_VENDOR_STAGES) {
+                /* vendor：MC 下只作用于 FL/FR 对（ADR-003 Category B），其余声道 -120 */
+                f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i]
+                                        : (c == 1) ? f.stage_levels_r[i] : -120.0f;
+            } else if (i >= 24 && i <= 29) {
+                f.stage_ch_levels[i][c] = -120.0f;   /* GR 单值计量，per-channel 无意义 */
+            } else if (c < 2) {
+                /* 自研效果器段 L/R 列与 stage_levels_l/r 同源（stereo 逐位不变） */
+                f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i] : f.stage_levels_r[i];
+            } else if (c < blkCh) {
+                const float p = h->stage_peak_ch[i][c];
+                f.stage_ch_levels[i][c] = p > 1e-6f ? 20.0f * log10f(p) : -120.0f;
+            } else {
+                f.stage_ch_levels[i][c] = -120.0f;
+            }
+        }
+    }
     h->viz_emitted.store(true, std::memory_order_relaxed);
     h->viz.push(f);
 }

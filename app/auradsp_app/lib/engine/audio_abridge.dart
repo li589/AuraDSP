@@ -199,6 +199,10 @@ class AuraAsioBridge {
         'inputInR': fr.inputLevelInR,
         'inputOutL': fr.inputLevelOutL,
         'inputOutR': fr.inputLevelOutR,
+        // [Phase B 多声道电平] per-channel 遥测（与 isolate 主路径同形）
+        'chCount': fr.channelCount,
+        'chLevels': fr.channelLevelsToList(),
+        'stageCh': fr.stageChLevelsTelemetry(),
         'ts': fr.timestampMs,
         'seq': fr.seq,
       };

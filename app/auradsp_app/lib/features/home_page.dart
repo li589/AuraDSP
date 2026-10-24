@@ -246,15 +246,7 @@ class _SpectrumCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           const FreqAxis(),
           const SizedBox(height: AuraSpace.lg),
-          Row(children: [
-            Expanded(
-                child: LevelMeter(
-                    level: model.levelL, label: 'L', active: active)),
-            const SizedBox(width: AuraSpace.lg),
-            Expanded(
-                child: LevelMeter(
-                    level: model.levelR, label: 'R', active: active)),
-          ]),
+          _OutputLevelRow(model: model, active: active),
           const SizedBox(height: AuraSpace.sm + 2),
           Align(
             alignment: Alignment.centerRight,
@@ -275,6 +267,84 @@ class _SpectrumCard extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// [Phase B 多声道电平] 输出电平条：stereo（chCount<=2/无帧）为 L/R 两柱
+/// ——与改造前逐位一致；MC（5.1/7.1）按 channelLevels 展开 N 柱。
+/// 不新增设置项/入口，只在既有电平展示组件内扩柱（Z15 原则）。
+class _OutputLevelRow extends StatelessWidget {
+  final AppModel model;
+  final bool active;
+  const _OutputLevelRow({required this.model, required this.active});
+
+  /// WAVEFORMATEX 声道序标签（与引擎 mx_* 同序：FL FR C LFE SL SR BL BR）。
+  static const _chLabels = ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
+
+  @override
+  Widget build(BuildContext context) {
+    if (!active) {
+      // 离屏：静态空轨，与现路径一致（不订阅 30fps）。
+      return Row(children: [
+        Expanded(
+            child: LevelMeter(level: model.levelL, label: 'L', active: false)),
+        const SizedBox(width: AuraSpace.lg),
+        Expanded(
+            child: LevelMeter(level: model.levelR, label: 'R', active: false)),
+      ]);
+    }
+    return ValueListenableBuilder<int>(
+      valueListenable: model.vizChannelCount,
+      builder: (_, cc, _) {
+        if (cc <= 2) {
+          // stereo：原两柱路径（levelL/R 与 channel_levels[0]/[1] 同源）。
+          return Row(children: [
+            Expanded(child: LevelMeter(level: model.levelL, label: 'L')),
+            const SizedBox(width: AuraSpace.lg),
+            Expanded(child: LevelMeter(level: model.levelR, label: 'R')),
+          ]);
+        }
+        return ValueListenableBuilder<List<double>>(
+          valueListenable: model.vizChannelLevels,
+          builder: (_, levels, _) {
+            final p = paletteOf(context);
+            final n = cc.clamp(3, 8);
+            return Row(
+              children: [
+                for (var c = 0; c < n; c++) ...[
+                  if (c > 0) const SizedBox(width: AuraSpace.sm),
+                  Expanded(
+                    child: Row(children: [
+                      SizedBox(
+                        width: 22,
+                        child: Text(_chLabels[c],
+                            style: monoOf(p, size: 9, color: p.textDim)),
+                      ),
+                      const SizedBox(width: 3),
+                      Expanded(
+                        child: RepaintBoundary(
+                          child: SizedBox(
+                            height: 8,
+                            child: CustomPaint(
+                              size: const Size(double.infinity, 8),
+                              painter: MeterPainter(
+                                value: ((levels[c] + 60) / 60).clamp(0.0, 1.0),
+                                track: p.hairline,
+                                fill: levels[c] > -3 ? p.error : p.accent,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

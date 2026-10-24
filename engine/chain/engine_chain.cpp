@@ -704,6 +704,30 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                           int frames, bool skip_spatial);
 
+/* [Phase B 多声道电平] MC 版 stage 峰值采样：按 stride ch 逐声道扫描，
+ * 同写 stage_peak_ch[stage][0..ch-1] 与 stage_peak_l/r（取 ch0/ch1）。
+ *
+ * l/r 列同步写是为了修复 MC 模式下 stage_levels_* 遥测 stale：MC 链不走
+ * process_stereo_chain，旧实现里这些槽位停留在上次 stereo 块的值。
+ * stereo 路径不调本函数（继续走 sample_stage_peak，逐位不变）。
+ * [ch..7] 置 0：emit_viz 对 0 峰值转 -120，诚实表达「该声道不过此效果」。
+ * 定义置于 MC 链之前：调用点在定义前，static inline 亦须先声明后使用。 */
+static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
+                                        const float* interleaved, int frames, int ch) {
+    float pk[AURADSP_CH_MAX] = {};
+    for (int i = 0; i < frames; ++i) {
+        const float* row = interleaved + (size_t)i * ch;
+        for (int c = 0; c < ch; ++c) {
+            const float a = fabsf(row[c]);
+            if (a > pk[c]) pk[c] = a;
+        }
+    }
+    for (int c = 0; c < ch; ++c) h->stage_peak_ch[stage_idx][c] = pk[c];
+    for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[stage_idx][c] = 0.0f;
+    h->stage_peak_l[stage_idx] = pk[0];
+    h->stage_peak_r[stage_idx] = ch > 1 ? pk[1] : pk[0];
+}
+
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
@@ -715,9 +739,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.gate_enable.load(std::memory_order_relaxed)) {
         gate_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 13, dst, frames, ch);   /* Stage 13: Gate stage output */
     if (h->p.filter_enable.load(std::memory_order_relaxed)) {
         filter_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 15, dst, frames, ch);   /* Stage 15: Filter output */
     auradsp::plugin_chain_process_n(h, 0, dst, (uint32_t)frames, (uint32_t)ch);
 
     if (h->p.shelf_enable.load(std::memory_order_relaxed) &&
@@ -727,6 +753,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.dyneq_enable.load(std::memory_order_relaxed)) {
         dyneq_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 14, dst, frames, ch);   /* Stage 14: Dynamic EQ output */
     if (h->p.tube_enable.load(std::memory_order_relaxed)) {
         tube_process_mc(h, dst, frames, ch);
     }
@@ -746,6 +773,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
+        sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
 
         const int tube_saved = h->jdsp.tubeEnabled;
         const int limiter_saved = h->jdsp.limiterEnabled;
@@ -803,9 +831,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.haas_enable.load(std::memory_order_relaxed)) {
             haas_process(h, h->mx_stereo, frames);
         }
+        sample_stage_peak_mc(h, 17, h->mx_stereo, frames, 2); /* Stage 17: Haas（仅 FL/FR 对） */
         if (h->p.spatial_enable.load(std::memory_order_relaxed)) {
             spatial_process(h, h->mx_stereo, frames);
         }
+        sample_stage_peak_mc(h, 20, h->mx_stereo, frames, 2); /* Stage 20: Spatial（仅 FL/FR 对） */
         freeverb_process(h, h->mx_stereo, frames);
 
         for (int i = 0; i < frames; ++i) {
@@ -858,9 +888,11 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
         exciter_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 18, dst, frames, ch);   /* Stage 18: Exciter output */
     if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
         loudness_process_mc(h, dst, frames, ch);
     }
+    sample_stage_peak_mc(h, 19, dst, frames, ch);   /* Stage 19: Loudness output */
     limiter_process_mc(h, dst, frames, ch);
 
     // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位

@@ -5,17 +5,21 @@ import ctypes, math
 dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
 
 class VizFrame(ctypes.Structure):
-    # 必须与 auradsp_engine.h 的 auradsp_viz_frame 逐字节一致（536 字节）。
+    # 必须与 auradsp_engine.h 的 auradsp_viz_frame 逐字节一致（1600 字节，ABI v2）。
     # 下面的 sizeof 断言用于在 ABI 再变时立刻失败，而不是静默越界。
     _fields_ = [("seq", ctypes.c_uint64), ("timestamp_ms", ctypes.c_double),
                 ("spectrum", ctypes.c_float * 32),
                 ("eq_in_spectrum", ctypes.c_float * 32),
                 ("level_l_dbfs", ctypes.c_float), ("level_r_dbfs", ctypes.c_float),
                 ("stage_levels_l", ctypes.c_float * 32),
-                ("stage_levels_r", ctypes.c_float * 32)]
+                ("stage_levels_r", ctypes.c_float * 32),
+                # [Phase B 多声道电平] 追加段（1600B 断言在文件头 typedef 处双保险）
+                ("channel_count", ctypes.c_uint32),
+                ("channel_levels", ctypes.c_float * 8),
+                ("stage_ch_levels", ctypes.c_float * (32 * 8))]
 
-assert ctypes.sizeof(VizFrame) == 536, (
-    "VizFrame out of sync with auradsp_viz_frame: expected 536, got "
+assert ctypes.sizeof(VizFrame) == 1600, (
+    "VizFrame out of sync with auradsp_viz_frame: expected 1600, got "
     + str(ctypes.sizeof(VizFrame)))
 
 dll.auradsp_create.restype = ctypes.c_void_p

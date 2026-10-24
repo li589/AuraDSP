@@ -114,7 +114,8 @@ f = ctypes.c_float(6.0)
 n = b.vb_set_param(b"tube.gain", 1, ctypes.byref(f))
 check("set_param applied", n > 0, f"handles={n}")
 
-viz = ctypes.create_string_buffer(536 * 4)
+# [Phase B] 2026-10-24 ABI v2：viz 帧 536B → 1600B（桥透传引擎帧）。
+viz = ctypes.create_string_buffer(1600 * 4)
 n = b.vb_viz_read(viz, 4)
 check("viz_read ok", n >= 0, f"n={n}")
 if (st.get("peakIn") or 0) > 1e-4:

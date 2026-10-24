@@ -64,6 +64,10 @@ def run_smoke_tests():
         # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
         "smoke_plugin_host_priority.py",
         "smoke_config_and_matrix.py",
+        # ADR-003 Phase B 多声道电平门禁（2026-10-24）：ABI v2 尺寸/版本 +
+        # ch=8/6 逐声道异幅电平 + gate 动态行更新 + vendor/GR 作用域语义 +
+        # stereo 回归（MC→stereo 切换无残留泄漏）
+        "smoke_mc_channel_levels.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
