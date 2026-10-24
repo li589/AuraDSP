@@ -112,6 +112,12 @@ def run_smoke_tests():
         # 降级为别名。含两种真实漏网形态（编号写在说明文字里 / 日期在编号前）的
         # 判红断言——它们按行 grep 都看着"有编号"。
         "smoke_d6_patch_ids.py",
+        # P-029/P-030 门禁（2026-10-24）：采样率域一致性 + 两个静默失效。
+        # 自研 DSP 链在 ASRC 之外却用工作率算系数 → 96k 下 filter -3dB 漂到
+        # 2000Hz、192k 漂到 3986Hz（对照组 vendor EQ 三档恒定）；eq.enable=0
+        # 关不掉 vendor EQ（上游 Enable 无 else）；多声道 IR（3/5/6/7/8ch）
+        # 曾"加载成功但无卷积"，现须显式拒绝。
+        "smoke_sr_rate_alignment.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         # §7-1 门禁（2026-10-24）：viz 帧的 Python 镜像单源。改造前

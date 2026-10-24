@@ -11,7 +11,8 @@
 void loudness_process(auradsp_handle h, float* io, int frames) {
     float amount = h->p.loudness_amount.load(std::memory_order_relaxed);
     if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const double lvl = stereo_block_rms(io, frames);
     h->loud_level += (lvl - h->loud_level) * 0.02;
@@ -51,7 +52,7 @@ void loudness_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 
     float amount = h->p.loudness_amount.load(std::memory_order_relaxed);
     if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
-    const float fs = (float)h->jdsp.fs;
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
 
     /* 多声道 RMS 评估（基于前两声道或全局估算回放响度） */

@@ -118,7 +118,8 @@ static inline void fdn_tick(auradsp_handle h, float in, float room,
                             float* outL, float* outR) {
     if (room != h->fdn_room_last) {
         const float rt60 = 0.6f + 3.0f * room;
-        const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+        /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+        const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
         for (int c = 0; c < auradsp_handle_s::kFdnLines; ++c) {
             float g = powf(10.0f, -3.0f * (float)h->fdn_len[c] /
                                       (rt60 * fs));
@@ -280,14 +281,14 @@ void spatial_reset(auradsp_handle h) {
     h->spat_mix_sm = mix;
     h->spat_headazim_sm = spat_clampf(
         h->p.spatial_headazim.load(std::memory_order_relaxed), -180.0f, 180.0f);
-    fdn_init_lengths(h, (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f);
+    fdn_init_lengths(h, (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f);
 }
 
 
 void spatial_process(auradsp_handle h, float* io, int frames) {
     if (!h || !io || frames <= 0) return;
 
-    const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+    const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
     const float room = spat_clampf(
         h->p.spatial_room.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float width = spat_clampf(
@@ -550,7 +551,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         return;
     }
 
-    const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+    const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
     const float room = spat_clampf(
         h->p.spatial_room.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float width = spat_clampf(

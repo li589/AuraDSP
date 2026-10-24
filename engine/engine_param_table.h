@@ -553,7 +553,8 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
     }
     h->channel_count.store(v);
     auradsp::plugin_chain_set_channel_hint(h, v);
-    /* �������仯ͬ���ı� spatial ���벼�֣���λ�� RT ״̬�� */
+    /* 通道数变化同时清空 spatial 状态（ring/history/pinna/FDN），避免直播
+     * 切换读到旧布局的延迟线；该清理在控制线程执行。 */
     spatial_reset(h);
     return AURADSP_OK;
 }

@@ -17,7 +17,8 @@ void haas_process(auradsp_handle h, float* io, int frames) {
     if (mix < 0.0f) mix = 0.0f; if (mix > 1.0f) mix = 1.0f;
     /* 延迟侧：0=右 1=左（Viper 差分环绕同款偏好开关） */
     const int dc = (h->p.haas_side.load(std::memory_order_relaxed) == 1) ? 0 : 1;
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     float d_float = (fs > 0.0f) ? (dms * 0.001f * fs) : 0.0f;
     if (d_float < 0.0f) d_float = 0.0f;
     const float max_delay = (float)(ringLen - 2);

@@ -76,9 +76,16 @@ class AppLocalizationsJa extends AppLocalizations {
   String get routingSurroundOnly => 'サラウンドのみ (4/8)';
 
   @override
+  String get routingPairHint =>
+      'ステレオペア単位で適用：FL/FR、C/LFE、SL/SR、BL/BR は対で切り替え、単独選択は無効';
+
+  @override
   String routingSelectedCount(int count) {
     return '$count/8 選択';
   }
+
+  @override
+  String get flfrOnlyHint => 'フロント FL/FR ペアにのみ適用（マルチチャンネル独立時、サラウンドと LFE は直通）';
 
   @override
   String get channelRouting => '詳細チャンネルルーティング';
@@ -764,7 +771,13 @@ class AppLocalizationsJa extends AppLocalizations {
   String get retryNow => '再試行';
 
   @override
-  String get sampleRateFollowBridge => 'ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）';
+  String sampleRateDeviceActual(int rate) {
+    return 'デバイス実測：$rate Hz';
+  }
+
+  @override
+  String get sampleRateFollowBridge =>
+      'ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）';
 
   @override
   String get latencyLabel => '遅延';
@@ -915,7 +928,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'ローカルの 4/6/8ch ファイル再生時のみ有効：マトリクスダウンミックス＝エンジンがステレオに混合して処理。チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは事前折畳）。';
+      'ローカルの 4/6/8ch ファイル再生時のみ有効（チャンネル数はファイルに依存）：マトリクスダウンミックス＝エンジンがステレオに混合して処理、チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは折畳にフォールバック）。「マルチチャンネル両耳」有効時は無視されます。';
 
   @override
   String get audioMode => 'オーディオモード';
@@ -1924,7 +1937,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      '5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音';
+      '4/5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音。有効中は設定画面の「チャンネルモード」を接管（当該設定は無効）';
 
   @override
   String get spatialFdn => 'FDN ルーム';

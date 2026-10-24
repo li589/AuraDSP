@@ -76,9 +76,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingSurroundOnly => '仅环绕 (4/8)';
 
   @override
+  String get routingPairHint => '按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效';
+
+  @override
   String routingSelectedCount(int count) {
     return '$count/8 声道已选';
   }
+
+  @override
+  String get flfrOnlyHint => '仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）';
 
   @override
   String get channelRouting => '高级声道路由';
@@ -755,7 +761,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get retryNow => '重试';
 
   @override
-  String get sampleRateFollowBridge => '桥模式跟随 VB/ASIO 设备，此处仅对进程内生效';
+  String sampleRateDeviceActual(int rate) {
+    return '设备实际：$rate Hz';
+  }
+
+  @override
+  String get sampleRateFollowBridge =>
+      '桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）';
 
   @override
   String get latencyLabel => '延迟';
@@ -906,7 +918,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      '仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。';
+      '仅播放本地 4/6/8 声道文件时生效（通道数由文件决定）：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上回落到折叠）。「多声道虚拟环绕」开启时本项不生效。';
 
   @override
   String get audioMode => '音频模式';
@@ -1911,7 +1923,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      '输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音';
+      '输入 4/5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音，并接管设置页的「声道模式」（该项此时不生效）';
 
   @override
   String get spatialFdn => 'FDN 房间';

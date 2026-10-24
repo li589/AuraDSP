@@ -577,3 +577,64 @@ yquist * 0.999，
   确由 ABI 门触发）；反向验证（还原 pre-fix 重建）C1 note 断言判红
   （假引擎穿过引擎门进到驱动 open）。
 - **上游同步冲突风险**：低（三桥加载点各一小段 + 新增导出，逻辑自包含）。
+
+## P-029 自研 DSP 链的采样率域对齐 —— 系数改用设备率（2026-10-24）
+
+- **位置**：`engine/dsp/dsp_bassmono.cpp`、`dsp_dyneq.cpp`、`dsp_exciter.cpp`、
+  `dsp_filter.cpp`、`dsp_gate.cpp`、`dsp_haas.cpp`、`dsp_loudness.cpp`、
+  `dsp_psycho.cpp`、`dsp_shelf.cpp`、`dsp_spatial.cpp`（共 23 处 `h->jdsp.fs`
+  → `h->sample_rate`）、`engine/chain/engine_chain.cpp`（`arbmag_pool` 的
+  IR 设计率同改）。
+- **动机**（多声道/采样率细审）：引擎内存在两个采样率域——设备率
+  `h->sample_rate`（驱动缓冲实际速率）与工作率 `h->jdsp.fs`（ASRC 之后
+  vendor 链的速率，非常见设备率时恒为 48k/44.1k）。vendor 链整体被 ASRC
+  包裹（`jdspController.c:1283-1313` DoASRC_fwd → stage 循环 → DoASRC_bwd），
+  因此 vendor stage 用 `jdsp->fs` 是自洽的；但**自研链在 ASRC 之外**，
+  处理的是设备率样本，却用工作率算系数 → 96k 设备上 EQ 截止频率、门限
+  attack/release、Haas 延迟、FDN 尾音整体错位一个采样率倍率。
+- **实测**（修复前，`test/smoke/smoke_sr_rate_alignment.py`）：
+  自研 filter（LP f0=1000Hz）的 -3dB 频率在 48k/96k/192k 分别为
+  1000Hz / **2000Hz（2.00x）** / **3986Hz（3.99x）**；同期 vendor EQ
+  对照组在三种设备率下均为 -6.0dB（ASRC 内自洽，证明架构本身没错，
+  错的只是跨域的那一侧）。
+- **内容**：自研链全部系数改用 `h->sample_rate`（设备率）；保留原有
+  fallback（<=0 时取 48000）。`freeverb` 与 `limiter_process_mc` 原本就用
+  `h->sample_rate`，本次统一。vendor 侧（`apply_crossfeed`、
+  `compute_latency` 的工作率项）**不动**——它们在 ASRC 内，用工作率正确。
+- **行为影响**：44.1k/48k 设备率下 `jdsp.fs == sample_rate`，**逐字节
+  无变化**；仅非常见设备率（<44.1k 或 >48k，如 32k/96k/192k）改变。
+- **验收**：`test/smoke/smoke_sr_rate_alignment.py` 三段全绿（自研 filter
+  -3dB 频率三档均为 1000Hz；vendor EQ 对照组不回退；eq.enable 关闭语义）。
+  反向验证：还原 pre-fix 行为重建 DLL 后，该脚本的 [A] 96k/192k 与 [C]
+  三条**判红**（96k 回到 2000Hz、192k 回到 3986Hz、eq.enable 关闭后仍
+  -6.01dB），证明断言非空转。
+- **上游同步冲突风险**：低（自研扩展链，不涉及 vendor 源码）。
+
+## P-030 两个静默失效修复 —— eq.enable 关闭语义 + 卷积 IR 声道门卫（2026-10-24）
+
+- **位置**：`engine/chain/engine_chain.cpp`（`apply_eq`）、
+  `engine/chain/engine_convolver.cpp`（WAV/FLAC 两处 IR 声道门卫）。
+- **动机**（多声道/采样率细审）：
+  (1) **eq.enable 开关失效**——上游 `MultimodalEqualizerEnable` 只有
+      `if (enable) equalizerEnabled = 1;`，**没有 else 分支**，标志位一旦
+      置 1 就永不归零；上游另有 `MultimodalEqualizerDisable` 才做归零，
+      但宿主从不调用它。结果用户关闭 EQ 后 EQ 仍在处理音频（实测 96k：
+      enable=1 → -6.01dB，enable=0 → -6.01dB，完全不变）。
+  (2) **多声道 IR 静默失效**——宿主门卫接受 1..8 声道 IR，但 vendor
+      卷积器是立体声对实现，`Convolver1DLoadImpulseResponse` 只有
+      1/2/4 声道分支（`convolver1D.c:97/115/133` 与 `:156/174/192`）。
+      3/5/6/7/8 声道时分配了 IR 缓冲却无分支命中 → `conv.process` 保持
+      NULL，函数仍返回 1（成功）→ 宿主置 `ir_ready=true`、UI 显示"就绪"，
+      实际输出**完全没有卷积**。
+- **内容**：(1) `apply_eq` 改为分支调用——开态 `MultimodalEqualizerEnable`、
+  关态显式 `MultimodalEqualizerDisable`（改宿主而非上游，降低同步冲突）；
+  `equalizerForceRefresh` 的消费留在 Enable 分支，关态不消费，下次打开
+  时重建一次 IR。(2) IR 声道门卫收紧为 {1,2,4}，其余显式报错
+  `convolver.ir: unsupported (channel count must be 1/2/4: stereo-pair
+  convolver)`——`unsupported` 已是登记 token（Part H 契约），无需新增登记。
+- **行为影响**：eq.enable 关闭现在真正生效（此前是确定的开关失效）；
+  3/5/6/7/8 声道 IR 由"静默无效"改为"显式报错"（原本用户会看到
+  "就绪"却听不到任何卷积）。
+- **验收**：`test/smoke/smoke_sr_rate_alignment.py` 的 [C] 段
+  （enable=0 → -0.01dB）；反向验证见 P-029 条目（还原后 [C] 判红）。
+- **上游同步冲突风险**：低（仅宿主侧两处调用点与门卫条件）。

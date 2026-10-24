@@ -9,7 +9,8 @@
 void bassmono_process(auradsp_handle h, float* io, int frames) {
     float f = h->p.bassmono_freq.load(std::memory_order_relaxed);
     if (f < 20.0f) f = 20.0f; if (f > 300.0f) f = 300.0f;
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const float a = 1.0f - expf(-2.0f * 3.14159265358979f * f / fs);
     float lpL = h->bm_lp_l, lpR = h->bm_lp_r;
