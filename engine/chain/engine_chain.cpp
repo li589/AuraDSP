@@ -831,10 +831,16 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
             bassmono_process(h, h->shelf_scratch, frames);
         }
+        /* [PATCHED-AuraDSP P-026 E4] Stage 16 采样点与 stereo 路径对齐：
+         * 采在 basspsycho **之前**。此前 MC 在 basspsycho 之后采样、stereo
+         * 在之前——同一 "BassMono" 槽两种模式量的是不同链位置，切模式时
+         * 该柱跳变；且头文件文档写的是「16: bassmono 低频单声道输出电平」，
+         * 采在 basspsycho 之后会把心理声学低音的增益算进 BassMono 柱，
+         * 槽名失真。 */
+        sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
-        sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
 
         /* [PATCHED-AuraDSP P-020 B4] 门控改走「本次调用」参数，不再 save→写 0→restore
          * 全局开关。原因：这些字段由控制线程随时改写（VacuumTubeEnable /

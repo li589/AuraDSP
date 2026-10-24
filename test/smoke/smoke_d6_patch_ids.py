@@ -25,9 +25,9 @@
 本测试五层：
   [A] 规则引擎单元：G1/G2 判红、两种漏网形态必须被拒、别名解析
   [B] 全仓门禁：0 违规 + 规模非空转 + CLI 口径一致
-  [C] 覆盖证据：12 个专项映射精确、别名集合精确、全局 grep 口径可捞全
+  [C] 覆盖证据：13 个专项映射精确、别名集合精确、全局 grep 口径可捞全
   [D] 反向判红：去掉编号 / 换成未登记号 / 别名冲突
-  [E] 登记表结构：P-001..P-025 连续无缺无重复、新条目字段齐全
+  [E] 登记表结构：P-001..P-026 连续无缺无重复、新条目字段齐全
 """
 import io
 import json
@@ -137,13 +137,15 @@ EXPECT = {
     "P-023": 3,   # M3.5-c
     "P-024": 2,   # Z13
     "P-025": 2,   # P2.4
+    "P-026": 1,   # E4（stage16 跨模式采样点）
 }
 wrong = {k: (per_id.get(k, 0), v) for k, v in EXPECT.items() if per_id.get(k, 0) != v}
-check("12 个专项的标记数精确匹配", not wrong,
+check("13 个专项的标记数精确匹配", not wrong,
       "编号(实际,期望): " + json.dumps(wrong, ensure_ascii=False) if wrong else "")
 
 aliases = {s["alias"] for s in sites if s["alias"]}
-WANT_ALIAS = {"B1", "B1-b", "B1-c", "B1-d", "B4", "B5", "D7", "M3.5-c", "Z13", "P2.4"}
+WANT_ALIAS = {"B1", "B1-b", "B1-c", "B1-d", "B4", "B5", "D7", "M3.5-c", "Z13", "P2.4",
+              "E4"}
 check("别名集合精确（多余或缺失都不行）", aliases == WANT_ALIAS,
       f"缺={sorted(WANT_ALIAS - aliases)} 多={sorted(aliases - WANT_ALIAS)}")
 
@@ -210,8 +212,8 @@ check("编号连续无缺（P-001..P-025）",
 # （P-006 用「症状/根因/改动」、P-010 用「功能/RT 安全/验收」），强行归一化是比
 # 编号治理更大的破坏，也超出 D6 的范围。
 blocks = re.split(r"^##\s+", text, flags=re.M)
-new_blocks = [b for b in blocks if re.match(r"P-0(1[6-9]|2[0-5])\b", b)]
-check("P-016..P-025 共 10 节齐全", len(new_blocks) == 10, f"实际 {len(new_blocks)}")
+new_blocks = [b for b in blocks if re.match(r"P-0(1[6-9]|2[0-6])\b", b)]
+check("P-016..P-026 共 11 节齐全", len(new_blocks) == 11, f"实际 {len(new_blocks)}")
 
 missing = []
 for b in new_blocks:
