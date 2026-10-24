@@ -122,6 +122,13 @@ def run_smoke_tests():
         # 偏移（只比 sizeof 会放行"字段顺序错但总长凑巧相同"）、M3 管版本联动。
         # 含四级反向判红 + 0xCD 哨兵包裹缓冲的越界活体守卫。
         "smoke_g7_1_viz_mirror.py",
+        # §7-5 门禁（2026-10-24）：三座桥的 .def ↔ 头文件 ↔ Dart 绑定。实测
+        # 三桥全漂且方向不同：asio/vaio 各漏导出 slot_{set,get}_channels（Dart
+        # 硬 lookup，ASIO/VAIO 后端下插件槽构造即抛 ArgumentError 再被上层吞
+        # 掉）、vb 的 auto_protect/protect_test 一直在 .def 里导出而头文件没
+        # 声明。含活体层：真相源 DLL 必须真的导出 Dart 硬绑定符号（.def 改了
+        # 没重新编译，纯清单门禁照样绿——只有这一层能抓到）。
+        "smoke_g7_5_bridge_exports.py",
         "smoke_abi_consistency.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",

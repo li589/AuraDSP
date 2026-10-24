@@ -120,6 +120,16 @@ VBB_API int vb_plugin_group_mask();
  * 排障（Dart 侧不需要）。group/slot 越界返回 0。 */
 VBB_API int vb_plugin_slot_group_ready(int slot, int group);
 
+// ---- Z12 超预算自动保护（2026-10-23）：用户开关 + 测试注入口 ----
+// 一直在 .def 里导出、cpp 里有实现，唯独头文件没有声明 —— 于是任何
+// include 本头的调用方都拿不到原型（隐式声明/链接错误），而 Dart 侧
+// audio_vbridge.dart 其实已在调用 vb_plugin_auto_protect。on < 0 = 查询；
+// 否则置位。关闭时若保护已激活，立即恢复用户掩码。
+VBB_API int vb_plugin_auto_protect(int on);
+// 测试注入（smoke_vm_protect.py）：直接喂守卫观测值（emaUs / overStreak）。
+// overStreak < 0 退出测试模式并清零观测。仅测试用，Dart 侧不需要。
+VBB_API int vb_protect_test(int emaUs, int overStreak);
+
 #ifdef __cplusplus
 }
 #endif

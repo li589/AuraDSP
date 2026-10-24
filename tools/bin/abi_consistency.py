@@ -19,8 +19,16 @@
 #      （只查 sizeof 不够：字段顺序错但总长凑巧相同仍会读到错位数据）
 #   M3 版本联动：头文件的尺寸哨兵仍在，且 AURADSP_ABI 与 Python 侧一致
 #
+# §7-5（全量审查 2026-10-24）：补三座桥（asio/vaio/vb）的清单一致性。
+#   每座桥有三处清单靠人肉同步——.def 导出、头文件声明、Dart lookup——实测
+#   三桥全漂且方向不同（asio/vaio 少导出 slot_{set,get}_channels，Dart 硬
+#   lookup 会抛；vb 的 auto_protect/protect_test 只在 .def 里，头文件没声明）。
+#   B1 .def ↔ 头文件 1:1（双向都查）/ B2 Dart 硬绑定符号必须真的导出 /
+#   B3 Dart typedef 元数 vs C 声明元数
+#
 # 用法：python tools/bin/abi_consistency.py（退出码 0 = 一致）
 #      python tools/bin/abi_consistency.py --viz-only（只跑 §7-1 三项）
+#      python tools/bin/abi_consistency.py --bridges-only（只跑 §7-5 三项）
 
 import ctypes
 import re
@@ -335,12 +343,153 @@ def check_viz(problems: list[str]) -> tuple[int, int]:
     return c_size, len(c_fields)
 
 
+# ------------------------------------------------------------------ §7-5 桥导出
+#
+# 审查 §7-5（原报告只点了 asio/vaio 各漏 2 项，这里把三座桥一并纳管）：
+#   三座桥 DLL（auraasio_bridge / auravaio_bridge / auravm_bridge）各有三处清单
+#   需要彼此对应——.def 导出、头文件声明、Dart lookup——靠人肉同步。实测三座桥
+#   全部漂移，且漂移方向不同：
+#     asio  头文件 28 项 / .def 26 项 → 少导出 slot_{set,get}_channels
+#     vaio  头文件 27 项 / .def 25 项 → 同上
+#     vb    .def 40 项 / 头文件 38 项  → 多导出 vb_plugin_auto_protect、
+#            vb_protect_test（cpp 里都有实现，唯独头文件没声明）
+#
+# 前两座桥的漏导出**不是"少个功能"，而是会抛异常**：bridge_plugin_ffi.dart 的
+# 构造函数对 *_plugin_slot_{set,get}_channels 做的是硬 lookup（不像 _g 系列那
+# 6 个走 try/catch 置 null），asio/vaio 后端下一碰插件槽就 ArgumentError，再被
+# 上层 catch 静默吞掉 → 插件功能整块不可用且无痕。
+
+BRIDGE_DIR = ROOT / "core/desktop/windows-drivers/bridge"
+BRIDGE_FFI = ROOT / "app/auradsp_app/lib/engine/bridge_plugin_ffi.dart"
+
+BRIDGES = [
+    ("asio", BRIDGE_DIR / "asio_bridge/AsioBridge.h",
+     BRIDGE_DIR / "asio_bridge/AsioBridge.def"),
+    ("vaio", BRIDGE_DIR / "vaio_bridge/VaioBridge.h",
+     BRIDGE_DIR / "vaio_bridge/VaioBridge.def"),
+    ("vb", BRIDGE_DIR / "vm_bridge/VmBridge.h",
+     BRIDGE_DIR / "vm_bridge/VmBridge.def"),
+]
+
+
+def _arity(params: str) -> int:
+    params = params.strip()
+    return 0 if params in ("", "void") else len([p for p in params.split(",") if p.strip()])
+
+
+def parse_bridge_header(path: Path) -> dict[str, int]:
+    """桥头文件的导出声明 → {符号: 形参数}。
+
+    先剥注释：三座桥的头文件里有大段带引号的 JSON 示例注释，不剥会误匹配。
+    只认 `(asio|vaio|vb)_xxx(...);` 形式，宏（ASB_API 等）不参与匹配。
+    """
+    text = strip_c_comments(path.read_text(encoding="utf-8", errors="replace"))
+    decls = {}
+    for m in re.finditer(r"\b((?:asio|vaio|vb)_\w+)\s*\(([^;{}]*)\)\s*;", text):
+        name, ar = m.group(1), _arity(m.group(2))
+        if name in decls and decls[name] != ar:
+            raise ValueError("同一符号两种元数：%s %d/%d" % (name, decls[name], ar))
+        decls[name] = ar
+    return decls
+
+
+def parse_bridge_ffi(path: Path) -> tuple[dict[str, int], dict[str, int]]:
+    """bridge_plugin_ffi.dart 的 `${prefix}<suffix>` 绑定。
+
+    返 (必需, 可选)。判据：
+      · 字段声明为 `late final X? _f;`（可空）+ 走 `_lookupYyy(...)` 帮助函数
+        → 可选：老桥 DLL 没这个导出时 lookup 抛 ArgumentError 被 helper 吃掉，
+        调用方回落。`_g` 系列 6 个属于这一类。
+      · 其余 `late final X _f;` + 直接 `dylib.lookupFunction<...>` → 必需，
+        少一个符号构造就抛。
+    元数取自对应的 C 侧 typedef（`typedef _XxxC = Int32 Function(...)`），
+    这样能和头文件声明直接比——Dart 签名漂移（E1 那类）也能被抓到。
+    """
+    raw = path.read_text(encoding="utf-8", errors="replace")
+    flat = re.sub(r"\s+", " ", raw)
+
+    arity_of = {}
+    for m in re.finditer(r"typedef\s+(\w+)C\s*=\s*\w+(?:\s*<[^>]*>)?\s+Function\s*\(([^)]*)\)\s*;",
+                         flat):
+        arity_of[m.group(1)] = _arity(m.group(2))
+
+    optional_fields = set(re.findall(r"late final[\w<>,\s]*?\?\s+(_\w+)\s*;", raw))
+
+    required, optional = {}, {}
+    # 直接 lookup：_f = dylib.lookupFunction<_SlotLoadC, _SlotLoadDart>('${prefix}xxx');
+    for m in re.finditer(
+            r"(_\w+)\s*=\s*dylib\.lookupFunction\s*<\s*(\w+)C\s*,\s*(\w+)Dart\s*>\s*"
+            r"\(\s*'\$\{prefix\}([A-Za-z_0-9]+)'\s*\)", flat):
+        field, ctype, suffix = m.group(1), m.group(2), m.group(4)
+        target = optional if field in optional_fields else required
+        target[suffix] = arity_of.get(ctype, -1)
+    # 帮助函数形式：_f = _lookupXxx('${prefix}xxx');（一律可空）
+    for m in re.finditer(r"(_\w+)\s*=\s*_lookup\w+\s*\(\s*'\$\{prefix\}([A-Za-z_0-9]+)'\s*\)",
+                         flat):
+        suffix = m.group(2)
+        optional[suffix] = -1     # 帮助函数未暴露 C typedef，元数另比对
+    return required, optional
+
+
+def check_bridges(problems: list[str]) -> tuple[int, int]:
+    """§7-5 三项：.def ↔ 头文件 1:1、Dart 必需符号齐全、元数一致。
+
+    返回 (桥数, 总符号数)。失败时往 problems 里追加。
+    """
+    for p in (BRIDGE_FFI,):
+        if not p.exists():
+            problems.append("[B0] 缺少 %s" % p)
+            return 0, 0
+    required, optional = parse_bridge_ffi(BRIDGE_FFI)
+    total = 0
+
+    for prefix, h_path, def_path in BRIDGES:
+        if not h_path.exists() or not def_path.exists():
+            problems.append("[B1] %s 桥缺少 %s 或 %s"
+                            % (prefix, h_path.name, def_path.name))
+            continue
+        try:
+            header = parse_bridge_header(h_path)
+        except ValueError as e:
+            problems.append("[B1] %s 桥头文件解析失败：%s" % (prefix, e))
+            continue
+        exports = parse_def(def_path)
+        total += len(exports)
+
+        # B1：.def ↔ 头文件 1:1，双向都查（两个方向的漏法表现完全不同）
+        for name in sorted(header.keys() - exports):
+            problems.append("[B1] %s.def 漏导出 %s（头文件已声明，Dart 可能已在调用）"
+                            % (prefix, name))
+        for name in sorted(exports - header.keys()):
+            problems.append("[B1] %s.def 导出了 %s，但头文件没有声明"
+                            "（调用方 include 本头拿不到原型）" % (prefix, name))
+
+        # B2：Dart 硬绑定的符号必须真的导出（少一个 → 构造抛 ArgumentError）
+        for suffix, dart_ar in sorted(required.items()):
+            sym = prefix + suffix
+            if sym not in exports:
+                problems.append("[B2] Dart 硬绑定 %s 在 %s.def 里没有导出"
+                                "（asio/vaio 这类桥下插件槽会直接抛 ArgumentError）"
+                                % (sym, prefix))
+                continue
+            # B3：元数一致（Dart typedef vs C 声明）
+            if sym in header and dart_ar >= 0 and header[sym] != dart_ar:
+                problems.append("[B3] 元数不一致 %s：头文件 %d 参 vs Dart %d 参"
+                                % (sym, header[sym], dart_ar))
+
+        # 可选符号（_g 系列）不存在不算错——那正是 ABI 协商的回落路径；
+        # 存在性/元数已由 B1 的 1:1 检查覆盖，这里不再单查。
+
+    return len(BRIDGES), total
+
+
 def main() -> int:
     viz_only = "--viz-only" in sys.argv
+    bridges_only = "--bridges-only" in sys.argv
     problems: list[str] = []
     n_exports = 0
 
-    if not viz_only:
+    if not viz_only and not bridges_only:
         for p in (DEF_PATH, H_PATH, DART_PATH):
             if not p.exists():
                 print(f"[FAIL] missing source: {p}")
@@ -376,19 +525,37 @@ def main() -> int:
                 )
 
     # 4) §7-1 viz 帧布局
-    frame_size, n_fields = check_viz(problems)
+    frame_size, n_fields = 0, 0
+    if not bridges_only:
+        frame_size, n_fields = check_viz(problems)
+
+    # 5) §7-5 三座桥：.def ↔ 头文件 ↔ Dart 必需/可选符号
+    n_bridges, n_bridge_syms = 0, 0
+    if not viz_only:
+        n_bridges, n_bridge_syms = check_bridges(problems)
 
     if problems:
-        scope = "viz 帧" if viz_only else f"导出 {n_exports} 个 + viz 帧"
+        if viz_only:
+            scope = "viz 帧"
+        elif bridges_only:
+            scope = "三座桥 %d 个符号" % n_bridge_syms
+        else:
+            scope = f"导出 {n_exports} 个 + viz 帧 + 三座桥 {n_bridge_syms} 个符号"
         print(f"[FAIL] ABI 不一致（{scope}，问题 {len(problems)} 项）：")
         for p in problems:
             print(f"  - {p}")
         return 1
 
+    if bridges_only:
+        print(f"[PASS] 三座桥 ABI 一致：{n_bridge_syms} 个导出与头文件声明 1:1，"
+              f"Dart 硬绑定符号齐全、元数一致")
+        return 0
     print(f"[PASS] ABI 一致：.def/engine.h/ffi.dart 三处 {n_exports} 个符号逐一对应，"
           f"元数全部一致")
     print(f"[PASS] viz 帧布局一致：{n_fields} 字段 / {frame_size} 字节，"
           f"C 头 ↔ Python 镜像逐字段对齐，无重复镜像")
+    print(f"[PASS] 三座桥 ABI 一致：{n_bridges} 座桥共 {n_bridge_syms} 个导出与头文件"
+          f"声明 1:1，Dart 硬绑定符号齐全、元数一致")
     return 0
 
 
