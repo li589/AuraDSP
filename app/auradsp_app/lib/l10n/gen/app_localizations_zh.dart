@@ -2622,6 +2622,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errEngineClosed => '引擎未运行';
 
   @override
+  String get errEngineBusy => '引擎忙，请稍后重试';
+
+  @override
   String get errInvalidLength => '长度无效';
 
   @override

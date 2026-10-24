@@ -2638,6 +2638,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errEngineClosed => 'エンジン未起動';
 
   @override
+  String get errEngineBusy => 'エンジンビジー、後ほど再試行';
+
+  @override
   String get errInvalidLength => '長さが無効';
 
   @override

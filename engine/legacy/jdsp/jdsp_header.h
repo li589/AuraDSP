@@ -422,9 +422,21 @@ typedef struct
 typedef struct
 {
 	char *oldFile;
-	int usedSOSCount;
-	DirectForm2 *sosPointer;
 } DDC;
+/* [PATCHED-AuraDSP B1-b] DDC 影子视图：RT 块首读一次视图指针即得
+ * {sosPointer, usedSOSCount} 一致对（原实现两字段分离写在 vdcFl 上，
+ * 控制侧换指针与计数非原子，只能靠 jdsp_lock 互斥——而持锁方做文件
+ * 解析可达数十毫秒，RT 整段阻塞）。视图随原子指针换入，旧视图由槽
+ * 保留至在途守卫满足后复用（与 B1-a liveprog / P-006 mEQ 同范式）。 */
+typedef struct
+{
+	DirectForm2 *sosPointer;
+	int usedSOSCount;
+	/* 换下时刻的 ddcProcCount 快照 +1；复用本槽要求
+	 * ddcProcCount >= retiredAt（换下后跑满 1 块）或 ddcInFlight == 0。 */
+	uint64_t retiredAt;
+} DDCView;
+#define AURA_DDC_SLOTS 3
 /* Minimum/maximum cut frequency (Hz) */
 /* bs2b_set_level_fcut() */
 #define BS2B_MINFCUT 300
@@ -570,6 +582,15 @@ typedef struct dspsys
 	float *auraConvScratch;
 	float auraConvWet, auraConvDry;
 	char auraConvMixUsed;
+	/* B1-b：RT 只读 ddcActive 视图指针（块首一次，x86-64 对齐指针存即
+	 * 原子）；控制侧在影子槽上构建新 SOS 数组后原子换指针，旧视图由槽
+	 * 保留至在途守卫满足后复用。ddcProcCount 由 RT 每块递增（DDCProcess
+	 * 入口，单写者）；ddcInFlight 入口 +1/出口 -1（原子）。stage_ddc 的
+	 * lock 标志已置 0。vdcFl 仅剩 oldFile（控制侧去重簿记，RT 不碰）。 */
+	DDCView *ddcActive;
+	DDCView ddcSlots[AURA_DDC_SLOTS];
+	uint64_t ddcProcCount;
+	long ddcInFlight;
 	DDC vdcFl;
 	// Convolver
 	int convolverEnabled;

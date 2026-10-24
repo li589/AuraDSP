@@ -1151,6 +1151,7 @@
   "fxCatFront": "前置整形",
   "fxCatCore": "核心处理",
   "errEngineClosed": "引擎未运行",
+  "errEngineBusy": "引擎忙，请稍后重试",
   "errInvalidLength": "长度无效",
   "errInvalidEncoding": "编码无效",
   "errInvalidPath": "路径无效",

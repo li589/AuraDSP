@@ -485,17 +485,18 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
     free(content);
     if (rc < 0) {
         h->p.ddc_ready.store(0);
-        set_error(h, "ddc.load: parse failed (need SR_44100/SR_48000 coeffs)");
+        if (rc == -4)
+            set_error(h, "ddc.load: engine busy (no free ddc slot, retryable)");
+        else
+            set_error(h, "ddc.load: parse failed (need SR_44100/SR_48000 coeffs)");
         return AURADSP_E_PARAM;
     }
     h->p.ddc_ready.store(1);
     if (h->open.load() && h->p.ddc_enable.load(std::memory_order_relaxed)) {
-        /* [PATCHED-AuraDSP Z14] 同 set_ddc_enable：DDCStringParser 已内部自锁
-         * （非递归 mutex 不可再包），此处仅包随后裸调的 DDCEnable，与 RT
-         * stage_ddc 的持锁读取形成互斥（并发控制调用已由 ctrl_mutex 串行化）。 */
-        jdsp_lock(&h->jdsp);
+        /* [PATCHED-AuraDSP B1-b] DDCStringParser/DDCEnable 已无需外部
+         * jdsp_lock：RT 块首读一次 ddcActive 快照（stage_ddc lock=0），
+         * 解析与换指针全程在控制线程（ctrl_mutex 串行化并发控制调用）。 */
         DDCEnable(&h->jdsp, 1);
-        jdsp_unlock(&h->jdsp);
     }
     return AURADSP_OK;
 }
@@ -504,29 +505,21 @@ static auradsp_status set_ddc_enable(auradsp_handle h, const void* value, uint32
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
     h->p.ddc_enable.store(v);
-    /* [PATCHED-AuraDSP Z14] DDC 控制侧与 RT stage_ddc 的互斥（Z13 comp 同型）：
-     * kAuraStages ddc lock=1，RT 经 JamesDSPProcessMultiplexedStageSet 持
-     * jdsp_lock 调 stage_ddc→DDCProcess（读 vdcFl.sosPointer/usedSOSCount）。
-     * DDCEnable 在 ddcForceRefresh 置位时会走 DDCRefresh（free 旧 sosPointer
-     * + 重解析换指针）；即便 flag=0，DDCEnable/DDCDisable 写 ddcEnabled、
-     * 读 vdcFl 也不与 RT 的加锁读取互斥——C 形式数据竞争（当前实践良性：
-     * 控制-控制已被 auradsp_set_param 的 ctrl_mutex 串行化排除，且无调用方
-     * 置位 ddcForceRefresh），但任何未来绕过 ctrl_mutex 的控制入口或置位该
-     * 标志的调用方都会把它升级为 UAF。修法 = 控制侧与 RT 同锁，结构性关闭。
-     * 注意 jdsp_lock 非递归：DDCStringParser 已内部自锁，切勿对其再包。 */
+    /* [PATCHED-AuraDSP B1-b] Z14 的 jdsp_lock 互斥已由影子视图取代：
+     * kAuraStages ddc lock=0，RT 块首读一次 ddcActive 快照；DDCEnable
+     * 的 ddcForceRefresh 重解析路径（DDCRefresh 构建新 SOS 数组 + 原子
+     * 换指针 + 在途守卫后释放旧数组）不再与 RT 的字段级读取竞争。
+     * ddcEnabled 为明文 int（x86 对齐写即原子），与 Z13 comp 开关同级。 */
     if (v && h->p.ddc_ready.load(std::memory_order_relaxed)) {
-        jdsp_lock(&h->jdsp);
         const int rc = DDCEnable(&h->jdsp, 1);
-        jdsp_unlock(&h->jdsp);
         if (rc != 1) {
             h->p.ddc_enable.store(0);
-            set_error(h, "ddc.enable: rejected");
+            set_error(h, rc == -4 ? "ddc.enable: engine busy (retryable)"
+                                  : "ddc.enable: rejected");
             return AURADSP_E_STATE;
         }
     } else {
-        jdsp_lock(&h->jdsp);
         DDCDisable(&h->jdsp);
-        jdsp_unlock(&h->jdsp);
     }
     return AURADSP_OK;
 }
