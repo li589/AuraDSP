@@ -421,7 +421,9 @@ final class VizFrame extends Struct {
   /// [stage][ch] 取值；越界 / 预留 / GR 槽返回 -120（诚实降级）。
   double stageChLevelsAt(int stage, int ch) {
     if (stage < 0 || stage >= 32 || ch < 0 || ch >= kVizChannelMax) return -120.0;
-    if (stage >= 24 && stage <= 29) return -120.0; // GR 单值语义
+    // stage >= 21 一律 -120：GR（24..29）是全链单值计量 per-channel 无意义；
+    // 预留槽（21..23/30..31）即使表被写入垃圾值也不得显示（防御性降级）。
+    if (stage >= kVizStageTelemetry) return -120.0;
     return stageChLevels[stage * kVizChannelMax + ch];
   }
 

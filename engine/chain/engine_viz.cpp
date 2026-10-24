@@ -59,6 +59,27 @@ void viz_write_eq_in(auradsp_handle h, const float* src, int frames) {
 }
 
 
+/* [Phase B 多声道电平] 只扫 per-channel 输出峰值，不碰频谱历史。
+ *
+ * 用途：矩阵模式（channels.mode=0）的频谱仍取下混立体声（mx_stereo，
+ * ADR-003 既存语义，刻意不改），但 per-channel 电平应反映 mx_upmix 之后
+ * 真实写进设备的 out 缓冲——否则 channel_levels[2..N-1] 会恒 -120，
+ * 让多声道用户的默认路径上 6 根柱永久假死（违反 G5 诚实显示）。
+ * 与 viz_write 分开调用：同一块内先 viz_write(mx_stereo,2) 再本函数，
+ * 后者覆盖 ch_out_peak[0..ch-1] 为 out 实测值。 */
+void viz_scan_out_peak(auradsp_handle h, const float* out, int frames, int ch) {
+    float pk[AURADSP_CH_MAX] = {};
+    for (int i = 0; i < frames; ++i) {
+        const float* row = out + (size_t)i * ch;
+        for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) {
+            const float a = fabsf(row[c]);
+            if (a > pk[c]) pk[c] = a;
+        }
+    }
+    for (int c = 0; c < AURADSP_CH_MAX; ++c) h->ch_out_peak[c] = (c < ch) ? pk[c] : 0.0f;
+}
+
+
 /* 频谱帧产出（RT 线程；只做 FFT + 带划分 + push，历史写入已由 viz_write 完成）。
  *
  * 关键：调用方块长可变（WASAPI 共享模式轮询下常见 200~1100 帧），
@@ -246,7 +267,7 @@ void emit_viz(auradsp_handle h) {
             } else if (c < 2) {
                 /* 自研效果器段 L/R 列与 stage_levels_l/r 同源（stereo 逐位不变） */
                 f.stage_ch_levels[i][c] = (c == 0) ? f.stage_levels_l[i] : f.stage_levels_r[i];
-            } else if (c < blkCh) {
+            } else if (c < h->stage_ch_active) {
                 const float p = h->stage_peak_ch[i][c];
                 f.stage_ch_levels[i][c] = p > 1e-6f ? 20.0f * log10f(p) : -120.0f;
             } else {

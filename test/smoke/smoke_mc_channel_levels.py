@@ -308,6 +308,47 @@ if f:
     okm = all(ch_level(f, i, c) == -120.0 for i in range(STAGE_MAX) for c in range(2, 8))
     check(okm, "stage_ch[*][2..7] == -120（MC 残留不泄漏进 stereo 帧）")
 
+# ---------------------------------------------------------------- [8] 矩阵模式
+print("=== [8] 矩阵模式（mode=0，默认值）per-channel 诚实性 ===")
+# A4 回归：矩阵模式下 channel_levels 须反映 mx_upmix 后真实 out（全列有效），
+# stage 列只保留 L/R 两列（stage 链是立体声，stage_ch_active=2 门控）——
+# 此前缺陷：[2..7] 恒 -120（假死）且 stage 行读上一次 MC 模式残留。
+assert set_i32(h, "channels.count", 8) == 0
+assert set_i32(h, "channels.mode", 0) == 0
+feed(h, 8, amps8, blocks=8)
+f = read_last_frame(h)
+check(f is not None, "viz 帧可读")
+if f:
+    check(f.channel_count == 8, "channel_count == 8（设备真实声道数）",
+          f"got {f.channel_count}")
+    okfl = abs(f.channel_levels[0] - db(amps8[0])) <= TOL and \
+           abs(f.channel_levels[1] - db(amps8[1])) <= TOL
+    # 矩阵模式 FL/FR = **下混后**过立体声链的输出（mx_downmix：C/SL/BL 以
+    # kMxSqrtHalf=-3dB 并入 L；C/SR/BR 并入 R），不是纯 FL/FR 输入。
+    kS = 0.70710678
+    exp_l_lin = amps8[0] + kS * (amps8[2] + amps8[4] + amps8[6])
+    exp_r_lin = amps8[1] + kS * (amps8[2] + amps8[5] + amps8[7])
+    okmx = abs(f.channel_levels[0] - db(exp_l_lin)) <= TOL and \
+           abs(f.channel_levels[1] - db(exp_r_lin)) <= TOL
+    check(okmx, "channel_levels[0]/[1] == 下混+链输出（矩阵语义精确公式）",
+          f"{f.channel_levels[0]:.2f}/{f.channel_levels[1]:.2f} "
+          f"want {db(exp_l_lin):.2f}/{db(exp_r_lin):.2f}")
+    check(abs(f.channel_levels[3] - db(amps8[3])) <= TOL,
+          "channel_levels[3]（LFE 逐样本直通契约）== 输入幅值",
+          f"got {f.channel_levels[3]:.2f} want {db(amps8[3]):.2f}")
+    # C = (L+R)*0.5*kS，其中 L/R 为下混后链输出
+    exp_c = db((exp_l_lin + exp_r_lin) * 0.5 * kS)
+    check(abs(f.channel_levels[2] - exp_c) <= 1.0,
+          "channel_levels[2]（C 矩阵回填）== 矩阵系数预期",
+          f"got {f.channel_levels[2]:.2f} want {exp_c:.2f}")
+    oknz = all(f.channel_levels[c] != -120.0 for c in range(4, 8))
+    check(oknz, "channel_levels[4..7] 非 -120（不再假死）")
+    okst = all(ch_level(f, 13, c) == -120.0 for c in range(2, 8))
+    check(okst, "stage_ch[13][2..7] == -120（stage 链立体声，诚实）")
+    check(abs(ch_level(f, 13, 0) - f.stage_levels_l[13]) < 1e-6 and
+          abs(ch_level(f, 13, 1) - f.stage_levels_r[13]) < 1e-6,
+          "stage_ch[13][0]/[1] == stage_levels_l/r[13]")
+
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- 汇总
