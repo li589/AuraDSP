@@ -129,6 +129,12 @@ def run_smoke_tests():
         # 声明。含活体层：真相源 DLL 必须真的导出 Dart 硬绑定符号（.def 改了
         # 没重新编译，纯清单门禁照样绿——只有这一层能抓到）。
         "smoke_g7_5_bridge_exports.py",
+        # E4 门禁（2026-10-24）：viz Stage 16 采样点跨模式同语义。MC 侧原在
+        # basspsycho 之后采样、stereo 在之前——同一 "BassMono" 槽两种模式量的
+        # 不是同一链位置，切模式该柱跳变（实测 pre-fix MC 虚高 1.47dB）。判红
+        # 原理：采样点在 basspsycho 之前 ⇔ bass 开/关两态 stage16 读数逐位相等；
+        # 另附输出 RMS 非空转证明与 stereo 回归守卫。
+        "smoke_e4_stage16_crossmode.py",
         "smoke_abi_consistency.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",

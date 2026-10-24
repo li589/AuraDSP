@@ -87,8 +87,10 @@ EXPECT_LAYOUT = [
 ]
 EXPECT_SIZE = 1600                 # 1596 + 4 字节尾填充（结构含 uint64/double）
 
-# 改造前各自手抄定义的 8 个文件（验收对象：必须已改为导入）
-ORIGINAL_EIGHT = [
+# 已知的手抄定义改导入方（验收对象：必须全部走 import，且全仓不许多出）。
+# 原 8 处是 §7-1 改造对象；smoke_e4_stage16_crossmode.py 是其后第一个新增
+# 消费方——它必须一开始就走导入，而不是再长出第 9 份手抄件。
+KNOWN_IMPORTERS = [
     "test/smoke/smoke_block1056.py",
     "test/smoke/smoke_chain_meter.py",
     "test/smoke/smoke_dynamic_gr_and_gate.py",
@@ -97,6 +99,7 @@ ORIGINAL_EIGHT = [
     "test/smoke/smoke_viz_lowfreq.py",
     "tools/bin/verify_dll_copies.py",
     "tools/probe/probe_viz_cost.py",
+    "test/smoke/smoke_e4_stage16_crossmode.py",
 ]
 
 # ---------------------------------------------------------------------------
@@ -194,19 +197,20 @@ for base in ("tools", "test"):
         if IMPORT_LINE.search(read(p)):
             importers.append(str(p.relative_to(ROOT)).replace("\\", "/"))
 importers = sorted(set(importers))
-check("[B2] 导入 `from viz_frame import VizFrame` 的文件恰为原 8 处",
-      importers == sorted(ORIGINAL_EIGHT),
-      "差异=" + json.dumps({"missing": sorted(set(ORIGINAL_EIGHT) - set(importers)),
-                           "extra": sorted(set(importers) - set(ORIGINAL_EIGHT))},
+check("[B2] 导入 `from viz_frame import VizFrame` 的文件恰为已知 %d 处"
+      % len(KNOWN_IMPORTERS),
+      importers == sorted(KNOWN_IMPORTERS),
+      "差异=" + json.dumps({"missing": sorted(set(KNOWN_IMPORTERS) - set(importers)),
+                           "extra": sorted(set(importers) - set(KNOWN_IMPORTERS))},
                           ensure_ascii=False))
 
-still_handwritten = [f for f in ORIGINAL_EIGHT
+still_handwritten = [f for f in KNOWN_IMPORTERS
                      if A.defines_viz_frame(read(ROOT / f))]
 check("[B3] 原 8 个文件均已不再手抄字段表", still_handwritten == [],
       ",".join(still_handwritten))
 
-missing_files = [f for f in ORIGINAL_EIGHT if not (ROOT / f).exists()]
-check("[B4] 原 8 个文件全部存在（防清单漂移）", missing_files == [],
+missing_files = [f for f in KNOWN_IMPORTERS if not (ROOT / f).exists()]
+check("[B4] 已知导入方文件全部存在（防清单漂移）", missing_files == [],
       ",".join(missing_files))
 
 r = subprocess.run([sys.executable, str(BIN / "abi_consistency.py"), "--viz-only"],

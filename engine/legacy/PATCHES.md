@@ -512,3 +512,23 @@ yquist * 0.999，
 - **内容**：`comp_gr`（dB ≥ 0），comp 每次处理时更新，经 viz 帧上报。
 - **行为影响**：仅新增只读输出字段，不参与音频计算。
 - **上游同步冲突风险**：低（新增字段 + 一处赋值）。
+
+## P-026 E4 engine/chain/engine_chain.cpp — Stage 16 采样点跨模式对齐（2026-10-24）
+
+- **位置**：`engine_chain.cpp` `process_multichannel_chain` 的 Category B 段（stereo 路径 `process_stereo_chain` 无改动）。
+- **动机**（审查 E4）：同一 "BassMono" 槽（viz stage 16）两种模式量的不是
+  同一链位置——MC 在 `basspsycho` **之后**采样、stereo 在**之前**。切模式时
+  该柱跳变，违反「同槽同语义」；且 `auradsp_engine.h` 文档写的是「16: bassmono
+  低频单声道输出电平」，采在 basspsycho 之后会把心理声学低音的增益算进
+  BassMono 柱，槽名失真。
+- **内容**：`sample_stage_peak_mc(h, 16, …)` 挪到 `bassmono_process` 与
+  `basspsycho_process` **之间**（`[PATCHED-AuraDSP P-026 E4]` 标记处）。
+  选「MC 侧对齐到 bassmono 之后」而不是「stereo 挪到 basspsycho 之后」，
+  因为后者会连带改变 stereo 的既有读数语义（该柱一直是 BassMono 输出，
+  `smoke_chain_meter.py` 的 20 级表也按此标定），前者只让 MC 向文档语义收敛。
+- **行为影响**：MC 模式下 stage 16 读数不再含 basspsycho 增益（bass 开且
+  amount>0 时读数变低——那是修掉了虚高）。音频零改动。
+- **验收**：`test/smoke/smoke_e4_stage16_crossmode.py`——MC 模式下
+  stage 16 读数在 basspsycho 开/关两态下必须相等（采样点在其之前），
+  反向验证（还原 pre-fix）该断言判红。
+- **上游同步冲突风险**：低（单行移动 + 注释）。
