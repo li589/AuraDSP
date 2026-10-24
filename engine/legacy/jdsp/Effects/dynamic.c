@@ -1585,81 +1585,249 @@ void FFTCompanderInit(FFTCompander *cm, float fs, int tfresolution, unsigned int
 		cm->alpha = 0.5f / cm->updatePerNSmps;
 	}
 }
-void CompressorConstructor(JamesDSPLib *jdsp)
+/* [PATCHED-AuraDSP B1-c] comp 影子槽机制（替代 Z13 的 jdsp_lock 全程互斥）。
+ *
+ * 背景（全量审查 B1/P0）：CompressorSetParam(forceRefresh=1) 在控制线程做
+ * FFTCompanderInit 全量重算，而 kAuraStages comp lock=1 令 RT 的 stage_comp
+ * 每块取同一把 jdsp_lock ⇒ 重建期间音频整段卡死。Z13（2026-10-23）只修了
+ * 「控制侧重置 vs RT 消耗」的数据竞争（拖 comp.gain 滑块即崩的 minidump），
+ * 没有修等待时长——参数频调时 RT 反复阻塞在 EnterCriticalSection。
+ *
+ * 设计（P-006 mEQ → B1-a liveprog → B1-b ddc 同范式）：
+ *   - JamesDSPLib 预分配 AURA_COMP_SLOTS(2) 个 CompSlot（1 活动 + 1 影子，
+ *     控制侧构建由 ctrl_mutex 串行且单 RT 线程至多一个 comp 调用在途，
+ *     故一个影子槽足够），compActive 指向当前活动快照；
+ *   - 控制线程全量拷贝活动快照到影子槽后重建（Init/参数/曲线），成功后
+ *     原子换 compActive 指针；RT 块首只读一次指针，块内不碰换出实例；
+ *   - 拷贝正确性由「验证重试」保证：RT 只写活动槽，若拷贝期间有 comp
+ *     调用进入/离开（compInFlight 非零或 compProcCount 变化），本次拷贝
+ *     可能撕裂，作废重拷（影子槽写入与 RT 零交集，重拷无副作用）；
+ *   - 选槽在途守卫双条件（任一满足即可复用换下的槽）：
+ *     a) compInFlight == 0——无任何在途 comp 调用（RT 入口原子 +1/出口
+ *        -1；x86 TSO + lock 前缀全屏障下，控制侧读到的 0 严谨证明无调用
+ *        持有旧快照）。覆盖音频停流（compProcCount 冻结）时的连续提交；
+ *     b) compProcCount >= retiredAt——换下后至少跑满 1 个音频块。
+ *   - 两条件皆不满足（RT 卡在长块内）时控制侧有界等待（500ms 墙钟，
+ *     Sleep(1) 实际粒度 5-15ms 故按时间收敛），仍无槽返回 -4（引擎忙，
+ *     旧快照继续生效），绝不退化到活动槽原地重建——那会与 RT 竞争（UAF）；
+ *   - stage_comp 的 lock 标志随之置 0：RT 不再为 comp 取锁。
+ */
+#include <time.h>
+#ifdef _WIN32
+#include <intrin.h>
+#else
+#include <sched.h>
+#endif
+#define kCompSlotWaitMs 500
+/* 自旋预算（轮）：RT 块间隙通常在百微秒级，先自旋可避免 Sleep(1) 的
+ * 5-15ms 实际粒度把控制线程拖垮（B1-c 实测：纯 Sleep 重试下 comp 参数
+ * 提交从 Z13 时代的 ~17ms/次劣化到 ~285ms/次）。超预算后回落 Sleep(1)，
+ * 总墙钟仍受 kCompSlotWaitMs 收敛。 */
+#define kCompSlotSpinCount 60000
+
+/* RT 在途计数（x86：lock 前缀即全屏障；POSIX：__sync 内建） */
+static long comp_inflight_inc(volatile long *p)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	double freq[NUMPTS_DRS] = { 95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0 };
-	memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
-	cm->freq2[0] = 0.0;
-	cm->gains2[0] = cm->gains2[1];
-	cm->freq2[NUMPTS_DRS + 1] = 24000.0;
-	initIerper(&cm->pch, NUMPTS_DRS + 2);
-	jdsp->comp_gr = 0.0f;
+#ifdef _WIN32
+	return _InterlockedIncrement(p);
+#else
+	return __sync_add_and_fetch((long*)p, 1);
+#endif
 }
-void CompressorDestructor(JamesDSPLib *jdsp)
+static long comp_inflight_dec(volatile long *p)
 {
-	freeIerper(&jdsp->comp.pch);
+#ifdef _WIN32
+	return _InterlockedDecrement(p);
+#else
+	return __sync_sub_and_fetch((long*)p, 1);
+#endif
 }
-void CompressorEnable(JamesDSPLib *jdsp, char enable)
+static long comp_inflight_load(volatile long *p)
 {
-	if (jdsp->compForceRefresh)
+#ifdef _WIN32
+	/* cmpxchg 同值：带 lock 前缀的读，防编译器重排 + 全屏障 */
+	return _InterlockedCompareExchange(p, 0, 0);
+#else
+	return __sync_val_compare_and_swap((long*)p, 0, 0);
+#endif
+}
+static double comp_now_ms(void)
+{
+#ifdef _WIN32
+	return (double)GetTickCount64();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+#endif
+}
+static void comp_sleep_ms(unsigned int ms)
+{
+#ifdef _WIN32
+	Sleep(ms);
+#else
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = (long)ms * 1000000L;
+	nanosleep(&ts, 0);
+#endif
+}
+static void comp_yield(void)
+{
+#ifdef _WIN32
+	YieldProcessor();
+#else
+	sched_yield();
+#endif
+}
+/* 选构建目标槽：非活动 + 在途守卫通过（双条件任一满足）：
+ *   a) compInFlight == 0（无在途调用，覆盖音频停流时 procCount 冻结）；
+ *   b) compProcCount >= retiredAt（换下后跑满 1 块）。
+ * 返回槽下标；无可用槽返回 -1（RT 卡在长块内的极端场景）。 */
+static int CompressorPickSlot(JamesDSPLib *jdsp)
+{
+	const long inFlight = comp_inflight_load(&jdsp->compInFlight);
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
 	{
-		CompressorSetParam(jdsp, jdsp->comp.fgt_facT, jdsp->comp.granularity, jdsp->comp.tfresolution, 1);
-		CompressorSetGain(jdsp, 0, 0, 0);
-		/* [PATCHED-AuraDSP Z13] 一次性消费：此前该标志只置不清，导致采样率
-		 * 变更后每一次 CompressorEnable 都全量重初始化（apply_comp 每条
-		 * comp.* 参数都会调）。刷新语义本就是 one-shot，此处补齐清除点。
-		 * 调用方契约：JamesDSPSetSampleRate 持 jdsp_lock 调用；apply_comp
-		 * 持 jdsp_lock 调用（Z13 起）——与 RT comp stage 的 jdsp_lock 互斥。 */
-		jdsp->compForceRefresh = 0;
+		CompSlot *s = &jdsp->compSlots[i];
+		if (&s->cm == jdsp->compActive)
+			continue;
+		if (inFlight != 0 && s->retiredAt != 0 && jdsp->compProcCount < s->retiredAt)
+			continue;
+		return i;
 	}
-	if (enable)
-		jdsp->compEnabled = 1;
+	return -1;
 }
-void CompressorDisable(JamesDSPLib *jdsp)
+/* 选槽 + 自旋优先的有界等待（墙钟总上界 kCompSlotWaitMs）。 */
+static int CompressorPickSlotWait(JamesDSPLib *jdsp, double deadline)
 {
-	jdsp->compEnabled = 0;
-	jdsp->comp_gr = 0.0f;
-}
-void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularity, int tfresolution, char forceRefresh)
-{
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	if ((fgt_facT != cm->fgt_facT || tfresolution != cm->tfresolution || granularity != cm->granularity) || forceRefresh)
+	int slot = CompressorPickSlot(jdsp);
+	if (slot >= 0)
+		return slot;
+	for (unsigned int spin = 0; spin < kCompSlotSpinCount; ++spin)
 	{
-		FFTCompanderInit(&jdsp->comp, jdsp->fs, tfresolution, 3, 1.0);
-		cm->fgt_facT = fgt_facT;
-		cm->tfresolution = tfresolution;
-		cm->granularity = granularity;
-		if (cm->tfresolution < 3)
+		comp_yield();
+		slot = CompressorPickSlot(jdsp);
+		if (slot >= 0)
+			return slot;
+	}
+	for (;;)
+	{
+		comp_sleep_ms(1);
+		slot = CompressorPickSlot(jdsp);
+		if (slot >= 0)
+			return slot;
+		if (comp_now_ms() >= deadline)
+			return -1;
+	}
+}
+/* 状态携带集：RT 演化、且本次构建不会重写的字段。两份构建路径都适用：
+ *  - tfres>=3 增益平滑/系数斜坡/合成滤波器状态（Init(tfres3) 只重置
+ *    Zre/Zim，这些一律不重置，必须延续否则每次调参都可闻重启）；
+ *  - STFT 在途簿记 + 环形缓冲 + oldBuf 谱包络（Init 会重置；非 Init
+ *    构建——legacy SetGain 路径——必须延续）；
+ *  - d0/d1/c1/c2/overallGain：Init(tfres3) 会写，非 Init 构建需延续；
+ *  - freq2/gains2：控制侧写、RT 不碰（源稳定），随军队列保持一致，
+ *    供 cpy=0 的曲线重算使用。
+ * 必须一致拷贝 ⇒ 验证重试（RT 只写活动槽，重拷与 RT 零交集）。 */
+static void CompressorCarryState(FFTCompander *dst, const FFTCompander *src)
+{
+	dst->mInputPos = src->mInputPos;
+	dst->mInputSamplesNeeded = src->mInputSamplesNeeded;
+	dst->mOutputBufferCount = src->mOutputBufferCount;
+	dst->mOutputReadSampleOffset = src->mOutputReadSampleOffset;
+	memcpy(dst->mInput, src->mInput, sizeof(src->mInput));
+	memcpy(dst->buffer, src->buffer, sizeof(src->buffer));
+	memcpy(dst->oldBuf, src->oldBuf, sizeof(src->oldBuf));
+	memcpy(dst->Zre, src->Zre, sizeof(src->Zre));
+	memcpy(dst->Zim, src->Zim, sizeof(src->Zim));
+	memcpy(dst->interpolatedGain, src->interpolatedGain, sizeof(src->interpolatedGain));
+	memcpy(dst->diffGain, src->diffGain, sizeof(src->diffGain));
+	dst->updateIdx = src->updateIdx;
+	memcpy(dst->c1step, src->c1step, sizeof(src->c1step));
+	memcpy(dst->c2step, src->c2step, sizeof(src->c2step));
+	memcpy(dst->d0step, src->d0step, sizeof(src->d0step));
+	memcpy(dst->d1step, src->d1step, sizeof(src->d1step));
+	dst->overallGainstep = src->overallGainstep;
+	memcpy(dst->d0, src->d0, sizeof(src->d0));
+	memcpy(dst->d1, src->d1, sizeof(src->d1));
+	memcpy(dst->c1, src->c1, sizeof(src->c1));
+	memcpy(dst->c2, src->c2, sizeof(src->c2));
+	dst->overallGain = src->overallGain;
+	memcpy(dst->z1_AL, src->z1_AL, sizeof(src->z1_AL));
+	memcpy(dst->z2_AL, src->z2_AL, sizeof(src->z2_AL));
+	memcpy(dst->z1_AR, src->z1_AR, sizeof(src->z1_AR));
+	memcpy(dst->z2_AR, src->z2_AR, sizeof(src->z2_AR));
+	memcpy(dst->freq2, src->freq2, sizeof(src->freq2));
+	memcpy(dst->gains2, src->gains2, sizeof(src->gains2));
+}
+/* 影子槽装载：initWillRun=1 时只带状态携带集（Init 会重算全部表/簿记，
+ * 省掉 1.19MB 全量拷贝）；initWillRun=0 时先全量带入表与 scratch——
+ * 表为 RT 只读（控制写）故源稳定，scratch 撕裂无害（每帧写前必读，与
+ * 当前实现 Init 后残留上帧数据同类不变量），状态字段再由携带集修正。
+ * 返回 1=装载完成；-4=墙钟超限（旧快照不受影响）。 */
+static int CompressorCopyActive(CompSlot *dst, JamesDSPLib *jdsp, double deadline, char initWillRun)
+{
+	FFTCompander *active = jdsp->compActive;
+	FFTCompander *cm = &dst->cm;
+	/* pch.s 是本槽构造时分配的私有插针数组（ierper 含堆指针，跨槽别名会
+	 * 双释放）；mOutputBuffer 末尾重绑到本槽 buffer[]（防指向活动槽）。 */
+	double *ownS = cm->pch.s;
+	if (!initWillRun)
+		memcpy(cm, active, sizeof(FFTCompander));
+	cm->pch.s = ownS;
+	for (unsigned int spin = 0;; ++spin)
+	{
+		if (comp_inflight_load(&jdsp->compInFlight) == 0)
 		{
-			cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * jdsp->comp.spectralRate)));
-			double avgBW;
-			if (!cm->granularity)
-				avgBW = 1.65;
-			else if (cm->granularity == 1)
-				avgBW = 1.45;
-			else if (cm->granularity == 2)
-				avgBW = 1.2;
-			else if (cm->granularity == 3)
-				avgBW = 1.15;
-			else
-				avgBW = 1.08;
-			FFTCompanderSetavgBW(cm, avgBW);
+			const uint64_t pc1 = jdsp->compProcCount;
+			CompressorCarryState(cm, active);
+			const uint64_t pc2 = jdsp->compProcCount;
+			if (pc1 == pc2 && comp_inflight_load(&jdsp->compInFlight) == 0)
+			{
+				for (int i = 0; i < MAX_OUTPUT_BUFFERS_DRS; ++i)
+					cm->mOutputBuffer[i] = cm->buffer[i];
+				return 1;
+			}
 		}
-		else if (cm->tfresolution == 3)
+		if (spin < kCompSlotSpinCount)
 		{
-			cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * jdsp->fs)));
+			comp_yield();
+			continue;
 		}
+		comp_sleep_ms(1);
+		if (comp_now_ms() >= deadline)
+			return -4;
 	}
 }
-void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
+/* 参数尾差（FFTCompanderInit 之后）：fgt_fac / avgBW（与原 SetParam 同式） */
+static void CompressorApplyParamTail(FFTCompander *cm, float fs)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	if (cpy)
+	if (cm->tfresolution < 3)
 	{
-		memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
-		memcpy(cm->gains2 + 1, gains, NUMPTS_DRS * sizeof(double));
+		cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * cm->spectralRate)));
+		double avgBW;
+		if (!cm->granularity)
+			avgBW = 1.65;
+		else if (cm->granularity == 1)
+			avgBW = 1.45;
+		else if (cm->granularity == 2)
+			avgBW = 1.2;
+		else if (cm->granularity == 3)
+			avgBW = 1.15;
+		else
+			avgBW = 1.08;
+		FFTCompanderSetavgBW(cm, avgBW);
 	}
+	else if (cm->tfresolution == 3)
+	{
+		cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * fs)));
+	}
+}
+/* 增益曲线尾差：端点补齐 + pchip 重绑 + DREmult/headRoomdB 重算
+ * （与原 SetGain 同式，fs 由调用方从 jdsp 传入） */
+static void CompressorApplyCurve(FFTCompander *cm, float fs)
+{
 	cm->freq2[0] = 0.0;
 	cm->gains2[0] = cm->gains2[1];
 	cm->freq2[NUMPTS_DRS + 1] = 24000.0;
@@ -1673,7 +1841,7 @@ void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
 	if (cm->tfresolution < 3)
 	{
 		for (int i = 0; i < HALFWNDLEN_DRS; i++)
-			cm->DREmultUniform[i] = getValueAt(&cm->pch.cb, i * jdsp->fs / cm->fftLen * 0.25);
+			cm->DREmultUniform[i] = getValueAt(&cm->pch.cb, i * fs / cm->fftLen * 0.25);
 		if (!cm->noGridDownsampling)
 			ShrinkGridSpectralInterpolator(cm->octaveSmooth, cm->procUpTo, cm->DREmultUniform, cm->DREmult);
 		else
@@ -1735,9 +1903,138 @@ void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
 				cm->headRoomdB = cm->DREmult[i] * 12.0f;
 	}
 }
+int CompressorCommit(JamesDSPLib *jdsp, float fgt_facT, int granularity,
+                     int tfresolution, char forceRefresh,
+                     const double *freq, const double *gains,
+                     char cpy, char applyCurve)
+{
+	if (!jdsp->compActive)
+		return -4;
+	const double deadline = comp_now_ms() + kCompSlotWaitMs;
+	int slot = CompressorPickSlotWait(jdsp, deadline);
+	if (slot < 0)
+		return -4;
+	CompSlot *dst = &jdsp->compSlots[slot];
+	FFTCompander *active = jdsp->compActive;
+	/* 变更判定以活动快照当前参数为基线（这三个字段控制侧写、RT 不碰，
+	 * 读取稳定）；判定结果同时决定影子装载范围（Init 会重算全部表/簿记，
+	 * 无需 1.19MB 全量拷贝）。 */
+	const char initWillRun = (fgt_facT != active->fgt_facT ||
+	                          tfresolution != active->tfresolution ||
+	                          granularity != active->granularity) || forceRefresh;
+	if (CompressorCopyActive(dst, jdsp, deadline, initWillRun) != 1)
+		return -4;
+	FFTCompander *cm = &dst->cm;
+	/* 构建（只写影子槽，与 RT 零交集） */
+	if (initWillRun)
+	{
+		FFTCompanderInit(cm, jdsp->fs, tfresolution, 3, 1.0);
+		cm->fgt_facT = fgt_facT;
+		cm->tfresolution = tfresolution;
+		cm->granularity = granularity;
+		CompressorApplyParamTail(cm, jdsp->fs);
+	}
+	if (cpy && freq && gains)
+	{
+		memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
+		memcpy(cm->gains2 + 1, gains, NUMPTS_DRS * sizeof(double));
+	}
+	if (applyCurve)
+		CompressorApplyCurve(cm, jdsp->fs);
+	/* 原子换指针（x86-64 对齐指针存即原子；RT 块首只读一次，数据依赖保证
+	 * 后续字段读取不会重排到指针读取之前） */
+	FFTCompander *prev = jdsp->compActive;
+	jdsp->compActive = cm;
+	dst->retiredAt = 0;
+	const uint64_t q = jdsp->compProcCount; /* 换指针后读（与 B1-a/b 同序） */
+	if (prev != cm)
+		((CompSlot *)prev)->retiredAt = q + 1;
+	jdsp->compSwapProc = q;
+	return 1;
+}
+void CompressorConstructor(JamesDSPLib *jdsp)
+{
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
+	{
+		CompSlot *s = &jdsp->compSlots[i];
+		FFTCompander *cm = &s->cm;
+		s->retiredAt = 0;
+		initIerper(&cm->pch, NUMPTS_DRS + 2);
+		if (i == 0)
+		{
+			/* 槽 0 为初始活动槽：搬入原构造的默认频点表（增益表显式清零，
+			 * 与原实现依赖零初始化内存的行为一致） */
+			double freq[NUMPTS_DRS] = { 95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0 };
+			memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
+			cm->freq2[0] = 0.0;
+			memset(cm->gains2, 0, sizeof(cm->gains2));
+			cm->gains2[0] = cm->gains2[1];
+			cm->freq2[NUMPTS_DRS + 1] = 24000.0;
+		}
+	}
+	jdsp->compActive = &jdsp->compSlots[0].cm;
+	jdsp->compProcCount = 0;
+	jdsp->compSwapProc = 0;
+	jdsp->compInFlight = 0;
+	jdsp->comp_gr = 0.0f;
+}
+void CompressorDestructor(JamesDSPLib *jdsp)
+{
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
+		freeIerper(&jdsp->compSlots[i].cm.pch);
+	jdsp->compActive = 0;
+}
+void CompressorEnable(JamesDSPLib *jdsp, char enable)
+{
+	if (jdsp->compForceRefresh)
+	{
+		/* B1-c：刷新走影子提交（替代持锁原地全量重置）。以活动快照当前参数
+		 * 为基线，forceRefresh=1 恒触发 Init。失败（-4，RT 卡在 comp 内
+		 * >500ms 的极端场景）不清标志——保留旧快照继续运行，下次 Enable /
+		 * apply_comp 补上，绝不静默丢掉刷新语义。 */
+		FFTCompander *a = jdsp->compActive;
+		if (a && CompressorCommit(jdsp, a->fgt_facT, a->granularity,
+		                          a->tfresolution, 1, 0, 0, 0, 1) == 1)
+			jdsp->compForceRefresh = 0;
+	}
+	if (enable)
+		jdsp->compEnabled = 1;
+}
+void CompressorDisable(JamesDSPLib *jdsp)
+{
+	jdsp->compEnabled = 0;
+	jdsp->comp_gr = 0.0f;
+}
+void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularity, int tfresolution, char forceRefresh)
+{
+	/* B1-c：影子构建 + 原子换指针（替代持 jdsp_lock 原地重置）。
+	 * applyCurve=1：携带集不含 DREmult/headRoomdB（曲线字段），若本次 Init
+	 * 改了 procUpTo 而曲线不重算，换入后 RT 将按陈旧曲线运行——原实现靠
+	 * SetParam+SetGain 同一把锁内连续执行掩盖了该窗口，影子方案下必须让
+	 * 每次提交自洽（用携带的 freq2/gains2 重算，与 SetGain(cpy=0) 同式）。 */
+	CompressorCommit(jdsp, fgt_facT, granularity, tfresolution, forceRefresh, 0, 0, 0, 1);
+}
+void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
+{
+	/* B1-c：同上。以活动快照当前参数为基线（参数未变不触发 Init），
+	 * 只重算增益曲线（applyCurve=1）。 */
+	FFTCompander *a = jdsp->compActive;
+	if (!a)
+		return;
+	CompressorCommit(jdsp, a->fgt_facT, a->granularity, a->tfresolution, 0, freq, gains, cpy, 1);
+}
 void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
+	/* B1-c：在途守卫双计数——RT 单写者，每块必过（stage_comp 恒在链中），
+	 * 与 compEnabled 无关：停用期间块边界也要放行影子槽复用。
+	 * compProcCount 供 retiredAt 边界判定；compInFlight 证明无调用持有
+	 * 快照（入口 +1 / 出口 -1，lock 前缀全屏障）。 */
+	jdsp->compProcCount++;
+	comp_inflight_inc(&jdsp->compInFlight);
+	if (jdsp->compEnabled)
+	{
+		/* 块首一次读取活动快照；控制侧换指针不影响本块后续样本 */
+		FFTCompander *cm = jdsp->compActive;
 	if (cm->tfresolution < 3)
 	{
 		unsigned int offset = 0;
@@ -1847,4 +2144,6 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 		gr_db = -20.0f * log10f(min_g);
 	}
 	jdsp->comp_gr = gr_db;
+	}
+	comp_inflight_dec(&jdsp->compInFlight);
 }
