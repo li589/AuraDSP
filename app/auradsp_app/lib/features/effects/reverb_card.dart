@@ -104,6 +104,16 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
 
           // 4. 高级声学物理精调（标准折叠面板）
           _SpatialReverbAdvanced(model: m),
+          // [P-031] 诚实标注：本卡效果器在引擎侧只作用于前置 FL/FR 对
+          // （engine_chain.cpp:895-903 在 mx_stereo 上处理），多声道离散
+          // 模式下环绕/LFE 不经过它。此前 UI 无任何说明，用户会以为
+          // "多声道独立处理"覆盖到本卡。
+          const SizedBox(height: AuraSpace.sm),
+          Text(
+            l.flfrOnlyHint,
+            style: captionOf(paletteOf(context), color: paletteOf(context).textDim)
+                .copyWith(fontSize: 10),
+          ),
         ],
       ),
     );

@@ -152,8 +152,20 @@ void apply_stereo(auradsp_handle h) {
 
 
 void apply_eq(auradsp_handle h) {
-    MultimodalEqualizerEnable(
-        &h->jdsp, h->p.eq_enable.load(std::memory_order_relaxed) ? 1 : 0);
+    /* [PATCHED-AuraDSP P-030] eq.enable=0 必须真的关掉 vendor EQ。
+     * 上游 MultimodalEqualizerEnable 只有 `if (enable) equalizerEnabled = 1;`
+     * ——**没有 else 分支**，标志位一旦置 1 就永不归零；上游另有一个
+     * MultimodalEqualizerDisable 才做归零，但宿主从不调它。结果：用户把
+     * eq.enable 关掉后 EQ 仍在处理音频（实测 96k：enable=1 → -6.01dB，
+     * enable=0 → -6.01dB，完全不变）。
+     * 修法（改宿主而非上游，降低同步冲突风险）：关态显式调 Disable。
+     * equalizerForceRefresh 的消费留在 Enable 分支内——关态不消费，
+     * 下次打开时会重建一次 IR（这正是想要的语义）。 */
+    if (h->p.eq_enable.load(std::memory_order_relaxed)) {
+        MultimodalEqualizerEnable(&h->jdsp, 1);
+    } else {
+        MultimodalEqualizerDisable(&h->jdsp);
+    }
 }
 
 
@@ -336,7 +348,7 @@ void arbmag_pool_reload(auradsp_handle h) {
     const unsigned block = (unsigned)h->jdsp.blockSize;
     if (block == 0) { h->arbmag_pool.loaded = 0; return; }
     float* eqFil = h->jdsp.arbMag.instance.coeffGen.GetFilter(
-        &h->jdsp.arbMag.instance.coeffGen, (float)h->jdsp.fs);
+        &h->jdsp.arbMag.instance.coeffGen, (float)h->sample_rate);
     if (!eqFil) { h->arbmag_pool.loaded = 0; return; }
     const unsigned irLen = h->jdsp.arbMag.instance.filterLen;
     for (int c = 0; c < kMxMaxChannels; ++c) {

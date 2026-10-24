@@ -10,7 +10,8 @@
  * autogain：P-010 leveler 模式（块前后 RMS 平滑，±12dB 限幅）。
  * RT 安全：纯乘加/expf 每块一次，无分配无锁；状态 RT 独占。 */
 void gate_process(auradsp_handle h, float* io, int frames) {
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const double fs_d = (double)fs;
     float thr = h->p.gate_threshold.load(std::memory_order_relaxed);
@@ -155,7 +156,7 @@ void gate_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     const uint32_t mask = (uint32_t)h->p.gate_channels.load(std::memory_order_relaxed);
     if ((mask & ((1u << ch) - 1u)) == 0) return;
 
-    const float fs = (float)h->jdsp.fs;
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const double fs_d = (double)fs;
     float thr = h->p.gate_threshold.load(std::memory_order_relaxed);

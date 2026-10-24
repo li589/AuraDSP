@@ -243,6 +243,18 @@ class _SettingsPageState extends State<SettingsPage> {
                   selected: model.config.sampleRate,
                   onChanged: (v) => model.setSampleRate(v),
                 ),
+                // [P-031] 诚实标注：这是**向设备请求**的速率，设备可以拒绝并
+                // 回退到原生值（audio_device.dart:306-332）；桥模式下更是
+                // 完全由对端决定。此前 UI 只高亮"已选 96000"，用户看不到
+                // 引擎实际跑在多少 Hz——这里补上协商后的真实值。
+                if (model.engineRate > 0 &&
+                    model.engineRate != model.config.sampleRate) ...[
+                  const SizedBox(height: AuraSpace.sm),
+                  Text(
+                    l.sampleRateDeviceActual(model.engineRate),
+                    style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                  ),
+                ],
               ],
             ),
           ),

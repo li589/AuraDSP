@@ -12,11 +12,19 @@ class ChannelRoutingSelector extends StatefulWidget {
   final String paramKey;
   final String? label;
 
+  /// 声道**对**语义（comp/eq）：引擎侧判定为 `(mask & (3<<p0)) == (3<<p0)`，
+  /// 即必须成对置位才生效（p0 = 0/2/4/6 → FL/FR、C/LFE、SL/SR、BL/BR）。
+  /// 旧 UI 允许逐位勾选，用户勾单个 C 会被引擎静默忽略（该对不成立）——
+  /// "开关下发成功但功能不工作"。此模式勾选时按整对翻转，并把掩码
+  /// 规范化成与引擎判定完全一致的集合（UI 显示即实际生效）。
+  final bool pairSemantics;
+
   const ChannelRoutingSelector({
     super.key,
     required this.model,
     required this.paramKey,
     this.label,
+    this.pairSemantics = false,
   });
 
   @override
@@ -37,6 +45,15 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     (bit: 7, code: 'BR'),
   ];
 
+  /// 引擎的声道对分组（engine/chain/engine_chain.cpp:853/919）：
+  /// FL/FR 走 `& 0x03`，其余走 `3 << p0`（p0 = 2/4/6）。
+  static const List<List<int>> _pairGroups = [
+    [0, 1],
+    [2, 3],
+    [4, 5],
+    [6, 7],
+  ];
+
   int get _mask {
     final v = widget.model.getParamById(widget.paramKey);
     if (v is int) return v;
@@ -44,10 +61,47 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     return 0xFF; // 默认全开
   }
 
+  /// 把掩码规范化到引擎实际能判定的集合：
+  /// 逐声道语义原样返回；成对语义下，组内两位不一致时**整对取消**
+  /// （引擎要求两位同时置位，半选状态等于该对不生效）。
+  int _normalizeMask(int mask) {
+    if (!widget.pairSemantics) return mask & 0xFF;
+    var m = mask & 0xFF;
+    for (final g in _pairGroups) {
+      final a = (m >> g[0]) & 1;
+      final b = (m >> g[1]) & 1;
+      if (a != b) {
+        m &= ~(1 << g[0]);
+        m &= ~(1 << g[1]);
+      }
+    }
+    return m & 0xFF;
+  }
+
   void _updateMask(int newMask) {
     // B-3（B1）：改走 setParamById 经 spec 链（setter→setInt+镜像），
     // 否则 spec getter（mirrorInt）读不到新值，UI 回显陈旧。
-    widget.model.setParamById(widget.paramKey, newMask & 0xFF);
+    widget.model.setParamById(widget.paramKey, _normalizeMask(newMask));
+  }
+
+  /// 成对语义下点击某一位 = 翻转它所属的整对。
+  int _toggleBit(int mask, int bit) {
+    if (!widget.pairSemantics) return mask ^ (1 << bit);
+    for (final g in _pairGroups) {
+      if (g.contains(bit)) {
+        final allOn = g.every((x) => (mask & (1 << x)) != 0);
+        var m = mask;
+        for (final x in g) {
+          if (allOn) {
+            m &= ~(1 << x);
+          } else {
+            m |= (1 << x);
+          }
+        }
+        return m;
+      }
+    }
+    return mask ^ (1 << bit);
   }
 
   /// 声道名走 l10n（此前手写 zh/en 双语，ja 无翻译）。
@@ -176,6 +230,13 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                         _buildChannelChip(context, p, ch, mask),
                     ],
                   ),
+                  if (widget.pairSemantics) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      l.routingPairHint,
+                      style: captionOf(p, color: p.textDim).copyWith(fontSize: 10),
+                    ),
+                  ],
                   const SizedBox(height: 10),
 
                   // 快速预设按钮行
@@ -216,7 +277,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
       color: Colors.transparent,
       child: InkWell(
         borderRadius: BorderRadius.circular(6),
-        onTap: () => _updateMask(mask ^ (1 << ch.bit)),
+        onTap: () => _updateMask(_toggleBit(mask, ch.bit)),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 150),
           padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),

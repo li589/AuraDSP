@@ -80,7 +80,8 @@ inline void rbj_hshelf(double f0, double fs, double s, double gdb,
 }  // namespace
 
 void dyneq_process(auradsp_handle h, float* io, int frames) {
-    const double fs = h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const double fs = h->sample_rate;
     if (fs <= 0.0) return;
 
     /* P3.1: 3 频段独立 Attack / Release 双时间常数 */
@@ -229,7 +230,7 @@ void dyneq_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     const uint32_t mask = (uint32_t)h->p.dyneq_channels.load(std::memory_order_relaxed);
     if ((mask & ((1u << ch) - 1u)) == 0) return;
 
-    const double fs = h->jdsp.fs;
+    const double fs = h->sample_rate;
     if (fs <= 0.0) return;
 
     /* P3.1: 3 频段独立 Attack / Release 双时间常数 */

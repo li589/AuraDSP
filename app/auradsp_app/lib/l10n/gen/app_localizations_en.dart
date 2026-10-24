@@ -76,9 +76,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingSurroundOnly => 'Surround Only (4/8)';
 
   @override
+  String get routingPairHint =>
+      'Applied per stereo pair: FL/FR, C/LFE, SL/SR and BL/BR toggle together; a single channel has no effect';
+
+  @override
   String routingSelectedCount(int count) {
     return '$count/8 Selected';
   }
+
+  @override
+  String get flfrOnlyHint =>
+      'Applies to the front FL/FR pair only (surrounds and LFE pass through in discrete multichannel)';
 
   @override
   String get channelRouting => 'Channel Routing';
@@ -833,8 +841,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get retryNow => 'Retry';
 
   @override
+  String sampleRateDeviceActual(int rate) {
+    return 'Device actual: $rate Hz';
+  }
+
+  @override
   String get sampleRateFollowBridge =>
-      'Bridge modes follow the VB/ASIO device; this applies to in-process only';
+      'Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)';
 
   @override
   String get latencyLabel => 'Latency';
@@ -987,7 +1000,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'Effective only for local 4/6/8-channel files: Matrix downmix = engine mixes to stereo before processing; Discrete = per-channel processing (pre-folded on stereo devices).';
+      'Effective only for local 4/6/8-channel files (the channel count follows the file): Matrix downmix = the engine mixes to stereo before processing; Discrete = per-channel processing (falls back to folding on stereo devices). Ignored while \'Multichannel Binaural\' is on.';
 
   @override
   String get audioMode => 'Audio Mode';
@@ -2032,7 +2045,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      'Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted';
+      'Renders 4/5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted. While it is on, it takes over \'Channel Mode\' from the settings page (that setting has no effect)';
 
   @override
   String get spatialFdn => 'FDN room';

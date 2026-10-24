@@ -22,7 +22,13 @@
  *   mode.latency     已移除（ADR-006 撤销三档延迟硬约束）。下发/回读均返回
  *                     AURADSP_E_PARAM，不静默忽略。延迟改由
  *                     auradsp_get_latency_ms() 纯测量上报 + 组件级脉冲实测徽标呈现。
- *   channels.mode    i32  0=stereo 1=5.1 2=7.1（Phase A 为矩阵包络，见 ADR-003）
+ *   channels.mode    i32  0=矩阵下混（多声道先混成立体声再处理）1=离散多声道
+ *                     （各声道独立处理，见 ADR-003 Phase B）。
+ *                     **只接受 0/1**，其它值（含历史注释里的 2）返回
+ *                     AURADSP_E_PARAM。旧版本此处注释写的是「0=stereo
+ *                     1=5.1 2=7.1」，与实现完全不符（2 从未被接受，1 是
+ *                     discrete 而非 5.1）——照旧注释写代码的下游会把 5.1
+ *                     配成离散模式、7.1 配成非法值。
  *   liveprog.enable  i32  0/1 —— EEL2 实时可编程 DSP（v1.1 增量）
  *   liveprog.code    str  UTF-8 脚本全文（@init/@sample 两段），bytes=字节数
  *   liveprog.unload  i32  停用并清编译态
@@ -37,10 +43,12 @@
  *   convolver.ready/ir.frames/ir.channels/ir.srcRate/ir.peak/ir.spectrum get 回读
  *
  * 引擎配置项（由 AppConfig 下发；改动即时生效，但见各条约束）：
- *   channels.count   i32  驱动层交织缓冲声道数：2=立体声 6=5.1 8=7.1。
+ *   channels.count   i32  驱动层交织缓冲声道数：2=立体声 4=Quad 6=5.1 8=7.1。
  *                          >2 时 auradsp_process 的 in/out 按 frames*channels
- *                          交织解释，并走 ADR-003 Phase A 的矩阵混音。
- *                          只接受 2/6/8，其它值拒绝。
+ *                          交织解释；走哪条链由 channels.mode 决定（0=矩阵
+ *                          下混，1=离散多声道独立处理）。
+ *                          只接受 2/4/6/8，其它值拒绝。（旧注释写「只接受
+ *                          2/6/8」，漏了实现里本就支持的 4。）
  *   gate.maxIrSeconds f32  FileGate 时长上限（秒，0.1~600）。此前写死 16M 帧。
  *   gate.maxFileMb    f32  FileGate 体积上限（MiB，1~4096）。此前写死 256MiB。
  *   viz.fftSize       i32  频谱 FFT 点数（2 的幂，1024~8192，默认 4096）。
@@ -139,10 +147,15 @@ typedef struct auradsp_viz_frame {
      *   （spectrum 仍取 mx_stereo 下混，两者口径不同是刻意的）。
      *
      * stage_ch_levels[stage][ch]（stage-major）：
-     *   0..11 vendor：仅 [0]/[1] 有效（= stage_levels_l/r；MC 下 vendor 段
-     *        只作用于 FL/FR 对，ADR-003 Category B 设计语义），[2..7] 恒 -120；
+     *   0..11 vendor：仅 [0]/[1] 有效（= stage_levels_l/r；离散 MC 下 vendor
+     *        段只作用于 FL/FR 对，ADR-003 Category B 设计语义），[2..7] 恒 -120；
+     *        **例外**：comp/eq 在离散 MC 下还会按声道对 (2,3)/(4,5)/(6,7)
+     *        处理（engine_chain.cpp:919），但这些声道对的 per-channel 电平
+     *        未按对回填，[2..7] 仍恒 -120 —— 已知遗留项；ADR-003 的
+     *        「vendor 段只作用 FL/FR」诚实性约束对 comp/eq 并不成立；
      *   12 gate 输入 / 13 gate 输出 / 14 dyneq / 15 filter / 18 exciter /
-     *        19 loudness：MC 下 [0..ch-1] 有效；
+     *        19 loudness：**离散模式（channels.mode=1）** 下 [0..ch-1] 有效；
+     *        矩阵模式（mode=0）走的是立体声链，仅 [0]/[1] 有效；
      *   16 bassmono / 17 haas / 20 spatial（Category B 仅作用于前置对）：
      *        仅 [0]/[1] 有效，[2..7] 恒 -120；
      *   21..23、30..31 预留槽与 24..29 GR 槽：全 -120（GR 是全链单值计量，
@@ -165,7 +178,7 @@ typedef char auradsp_viz_frame_abi_size_check[(sizeof(auradsp_viz_frame) == 1600
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames);
 void           auradsp_destroy(auradsp_handle h);
 
-/* ---- RT 音频（仅音频线程；stereo interleaved） ---- */
+/* ---- RT 音频（仅音频线程；stereo 或多声道交织，按 channels.count 解释） ---- */
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames);
 
 /* ---- 参数与状态（控制线程） ---- */
@@ -332,7 +345,7 @@ int      auradsp_plugin_get_bypass(auradsp_handle h);
 uint32_t auradsp_plugin_get_latency(auradsp_handle h);
 int      auradsp_plugin_get_status(auradsp_handle h, char* out_json, int max_len);
 
-/* PDC ��·�ӳٲ����� */
+/* PDC 路径与设备侧延迟上报（见下文 latency 段） */
 int      auradsp_plugin_set_pdc(auradsp_handle h, int enable);
 int      auradsp_plugin_get_pdc(auradsp_handle h);
 uint32_t auradsp_plugin_get_total_latency(auradsp_handle h);

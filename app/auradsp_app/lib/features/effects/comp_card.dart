@@ -161,6 +161,10 @@ class _CompressorCard extends StatelessWidget {
                 ChannelRoutingSelector(
                   model: model,
                   paramKey: 'comp.channels',
+                  // 引擎侧 comp 的多声道掩码是**声道对**语义
+                  // （engine_chain.cpp:919 `(mask & (3<<p0)) == (3<<p0)`），
+                  // 逐位勾选会被引擎静默忽略 → UI 按整对翻转。
+                  pairSemantics: true,
                 ),
               ],
             ),

@@ -15,7 +15,8 @@ void exciter_process(auradsp_handle h, float* io, int frames) {
     if (fc < 3000.0f) fc = 3000.0f; if (fc > 10000.0f) fc = 10000.0f;
     float amount = h->p.exciter_amount.load(std::memory_order_relaxed);
     if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const float a = expf(-2.0f * 3.14159265358979f * fc / fs);
     const bool os = h->p.exciter_oversample.load(std::memory_order_relaxed) != 0;
@@ -51,7 +52,7 @@ void exciter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     if (fc < 3000.0f) fc = 3000.0f; if (fc > 10000.0f) fc = 10000.0f;
     float amount = h->p.exciter_amount.load(std::memory_order_relaxed);
     if (amount < 0.0f) amount = 0.0f; if (amount > 1.0f) amount = 1.0f;
-    const float fs = (float)h->jdsp.fs;
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const float a = expf(-2.0f * 3.14159265358979f * fc / fs);
     const bool os = h->p.exciter_oversample.load(std::memory_order_relaxed) != 0;

@@ -94,6 +94,11 @@ extension StateSession on AppModel {
       setFloat(ParamId.inputBalance(1), inputBalanceL);
       setFloat(ParamId.inputBalance(2), inputBalanceR);
 
+      // [P-031] 声道模式必须随会话回放下发：它不在任何 ParamSection 里
+      // （不预设持久化），此前恢复后 UI 分段控件显示"离散逐声道"，引擎却
+      // 停在默认的矩阵模式——多声道策略在重启后静默降级。
+      setInt('channels.mode', channelsMode);
+
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
       setFloat('bass.gain', bassGain);

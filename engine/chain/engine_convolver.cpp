@@ -188,9 +188,20 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
             free(bytes); set_error(h, "convolver.ir: parse failed (WAV header corrupt)"); return AURADSP_E_PARAM;
         }
         ch = wav.channels; src_rate = (unsigned int)wav.sampleRate; frames = (size_t)wav.totalPCMFrameCount;
-        if (ch < 1 || ch > 8 || frames == 0) {
+        /* [PATCHED-AuraDSP P-030] 声道数门卫：vendor 卷积器是**立体声对**
+         * 实现，Convolver1DLoadImpulseResponse 只实现 1/2/4 声道分支
+         * （convolver1D.c:97/115/133 与 :156/174/192）。3/5/6/7/8 声道时
+         * 分配了 IR 缓冲却没有任何分支命中 → conv.process 保持 NULL，
+         * 而函数仍返回 1（成功）→ 宿主置 ir_ready=true、UI 显示"就绪"，
+         * 实际输出完全没有卷积（静默失效）。
+         * 收紧到 {1,2,4}，其余显式报错。 */
+        if ((ch != 1 && ch != 2 && ch != 4) || frames == 0) {
             drwav_uninit(&wav); free(bytes);
-            set_error(h, "convolver.ir: parse failed (invalid WAV channels/frames)");
+            if (ch != 1 && ch != 2 && ch != 4) {
+                set_error(h, "convolver.ir: unsupported (channel count must be 1/2/4: stereo-pair convolver)");
+            } else {
+                set_error(h, "convolver.ir: parse failed (invalid WAV channels/frames)");
+            }
             return AURADSP_E_PARAM;
         }
         /* 审查修复 R-2：总样本量上限（16M 帧 × 8ch 会要 512MB 分配） */
@@ -208,11 +219,15 @@ auradsp_status load_ir_file(auradsp_handle h, const char* path) {
         drflac* flac = drflac_open_memory(bytes, (size_t)fsize, nullptr);
         if (!flac) { free(bytes); set_error(h, "convolver.ir: parse failed (FLAC corrupt)"); return AURADSP_E_PARAM; }
         ch = flac->channels; src_rate = (unsigned int)flac->sampleRate; frames = (size_t)flac->totalPCMFrameCount;
-        if (ch < 1 || ch > 8 || frames == 0 ||
+        if ((ch != 1 && ch != 2 && ch != 4) || frames == 0 ||
             frames > 16u * 1024 * 1024 ||
             (unsigned long long)frames * ch > 64ull * 1024 * 1024) {
             drflac_close(flac); free(bytes);
-            set_error(h, "convolver.ir: parse failed (invalid FLAC channels/frames/length)");
+            if (ch != 1 && ch != 2 && ch != 4) {
+                set_error(h, "convolver.ir: unsupported (channel count must be 1/2/4: stereo-pair convolver)");
+            } else {
+                set_error(h, "convolver.ir: parse failed (invalid FLAC channels/frames/length)");
+            }
             return AURADSP_E_PARAM;
         }
         data = (float*)malloc(frames * ch * sizeof(float));

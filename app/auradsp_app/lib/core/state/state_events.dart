@@ -118,6 +118,13 @@ extension StateEvents on AppModel {
               .clamp(0.0, 1.0);
         }
         eqOn = (raw['eqEnable'] as int) != 0;
+        // [P-031] 声道模式回读此前无人消费：引擎已回读 channelsMode
+        // （audio_isolate.dart:931），但 params 事件里没有这一行 → 镜像与
+        // 引擎真值永久失联，UI 显示的永远是本地乐观值。此处补上，使
+        // "镜像即引擎真相"的注释成立。
+        if (raw['channelsMode'] != null) {
+          channelsMode = (raw['channelsMode'] as int).clamp(0, 1);
+        }
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
