@@ -20,6 +20,7 @@ import 'auradsp_ffi.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
+import 'backend_switch.dart';
 import 'bridge_plugin_ffi.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
@@ -286,6 +287,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
 
+  /// D4-a：桥停掉之后把 WASAPI 拉回来。返回 null = 已恢复；否则返回失败原因。
+  /// 这一步失败意味着**彻底没声**，必须让 UI 看到（`catch (_) {}` 吞掉就是
+  /// 用户静默失声、日志无痕）。三条 stop*Bridge 共用。
+  ///
+  /// 注意：本函数是 isolate 里的**局部函数**，Dart 局部函数不提升——必须声明
+  /// 在首个调用点（stopVbBridge）之前，且名字不能带前导下划线。
+  String? resumeWasapi(String tag) {
+    try {
+      wasapi?.start();
+      return null;
+    } catch (e) {
+      dbgLog('$tag: wasapi resume failed: $e');
+      return '$e';
+    }
+  }
+
   void startVbBridge() {
     if (vbActive) return;
     dbgLog('vbmode: start requested');
@@ -341,9 +358,34 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (e) {
       dbgLog('vbmode: auto-protect sync failed (old bridge dll?): $e');
     }
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：先停 WASAPI 并**确认**。停不下来就不许起 VB——否则两路同时出声
+     * （真实双声），而旧的 `catch (_) {}` 让这件事完全无声。失败时把刚起来的
+     * VB 拆掉，回到切换前状态（WASAPI 继续出声），并回报原因。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          vb?.testStop();
+        } catch (e) {
+          dbgLog('vbmode: rollback testStop failed: $e');
+        }
+        try {
+          vb?.stop();
+        } catch (e) {
+          dbgLog('vbmode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('vbmode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'vbstatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+      });
+      return;
+    }
     source = null;
     vbActive = true;
     replayPluginMirrorToBridge(vb!.plugin);
@@ -367,11 +409,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       vb?.stop();
     } catch (_) {}
     vbActive = false;
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('vbmode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'vbstatus', 'running': false});
+    send({
+      'evt': 'vbstatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* ---- ASIO 模式面（04 桥；与 VB/WASAPI 互斥） ---- */
@@ -471,9 +515,33 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 旁路态同步（用户此前可能已开旁路；桥默认关）。
     final bypassRc = ab!.setBypass(bypass);
     dbgLog('asiomode: bypass sync isolate=$bypass rc=$bypassRc');
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：同 vbmode——停不下来就不许起 ASIO，失败回滚刚起的桥。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          ab?.testStop();
+        } catch (e) {
+          dbgLog('asiomode: rollback testStop failed: $e');
+        }
+        try {
+          ab?.stop();
+        } catch (e) {
+          dbgLog('asiomode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('asiomode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'asiostatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+        'driverInUse': drv,
+      });
+      return;
+    }
     source = null;
     asioActive = true;
     asioDriverInUse = drv;
@@ -506,11 +574,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (_) {}
     asioActive = false;
     asioDriverInUse = '';
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('asiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'asiostatus', 'running': false});
+    send({
+      'evt': 'asiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* ---- AuraVAIO 虚拟声卡模式面（Mode 1 桥；与 VB/ASIO/WASAPI 互斥） ---- */
@@ -560,9 +630,32 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     dbgLog('vaiomode: replayed $replayedStr str params');
     vaio!.setBypass(bypass);
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：同 vbmode——停不下来就不许起 VAIO，失败回滚刚起的桥。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          vaio?.testStop();
+        } catch (e) {
+          dbgLog('vaiomode: rollback testStop failed: $e');
+        }
+        try {
+          vaio?.stop();
+        } catch (e) {
+          dbgLog('vaiomode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('vaiomode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'vaiostatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+      });
+      return;
+    }
     source = null;
     vaioActive = true;
     vaioOutputEndpointInUse = outputEndpointSubstr;
@@ -586,11 +679,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (_) {}
     vaioActive = false;
     vaioOutputEndpointInUse = '';
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('vaiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'vaiostatus', 'running': false});
+    send({
+      'evt': 'vaiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
@@ -1950,8 +2045,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       AuraDspLib.setValue(lib, handle, 'viz.fftSize',
           isFloat: false, value: vizFftSize.toDouble());
     }
-    wasapi?.start();
-    if (wasapi != null) {
+    /* D4-a：Start 失败既不能静默（用户以为有声），也不能升级成 fatal
+     * （引擎/桥本来还能用）——走既有的 wasapiError 降级通道。 */
+    try {
+      wasapi?.start();
+    } catch (e) {
+      wasapiError ??= 'wasapi-start: $e';
+      dbgLog('WASAPI start failed, degraded ready: $e');
+    }
+    if (wasapi != null && wasapi.started) {
       dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
     }
     lastSentState = lib.getState(handle);
