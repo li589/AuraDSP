@@ -16,3 +16,9 @@
 - **可视化**：多声道下频谱/电平取自下混后的立体声工作区（信号走向的近似），已在代码注释与本 ADR 中标注。
 - **验证**：`test/smoke/smoke_config_and_matrix.py` 断言 LFE **逐样本直通**（与处理链完全无关，max dev = 0）、环绕并入 L/R、上混回填量级合理、`channels.count` 边界、立体声路径无回归。
 - **遗留**：Phase A 无法对 C/SL/SR 做独立处理，这正是 Phase B 的动机；`writeToDevice` 侧的多声道写入在 Dart 侧已就位（按 devCh 写入），此前对 ch≥2 填 0 的限制由本 ADR 的引擎矩阵解除。
+
+## 演进记录（2026-10-24）：多声道电平 Phase B
+
+- 引擎 MC 链（`process_multichannel_chain`，Category A/B 路线）落地后，Phase B 原描述「逐声道实例化 N-1 个引擎实例」已由该独立 MC 链路线取代，不再按原计划实施；vendor-src 打补丁仍维持「跨声道效果需求出现时才考虑」。
+- **多声道电平**（未决清单 #94）设计已定稿：`auradsp_viz_frame` 追加式扩展（`channel_count` + `channel_levels[8]` + `stage_ch_levels[32][8]`，536B→1596B，`AURADSP_ABI` 1→2），MC 链各效果器后 per-channel 峰值采样，UI 电平柱 2→N。完整设计（ABI/引擎/Dart/UI/验证矩阵）见 `docs/20-执行/多声道电平PhaseB设计-2026-10-24.md`。
+- 诚实性约束：vendor 段与 Category B 效果（bassmono/haas/spatial）只作用于 FL/FR 对，其 per-channel 电平对 [2..7] 声道恒显 -120，不复制假装全声道；GR 槽保持单值语义。
