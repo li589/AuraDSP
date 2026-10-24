@@ -12,6 +12,13 @@
 // ~µs 级、无阻塞无竞争）——这是“零系统调用”铁律的唯一刻意例外：并行把
 // 单回调墙钟从 Σ(8 组) 压到 ≈max(单组)（Ozone 级 6ms+ → ~1ms），收益
 // 远大于两次调用的代价；串行路径零调用不变。
+//
+// B2（2026-10-24）fan-in 等待上界：原 4×10^8 自旋 ≈ 4-12s——worker 被插件
+// 崩溃/死锁拖住时音频线程同被钉死数秒，比要避免的"永久自旋"只差一个数量级。
+// 改 QPC 2ms 截止 + 自旋 2×10^5 兜底；超时即放弃本块：未完成组记账为
+// straggler 冻结（后续块从 todo 扣除——RT 绝不重入被占引擎），完成信号代际化
+// （straggler 的迟到完成丢弃、不串进下一块计数），超时路径不碰 parallelOn
+// （主线程所有权）。
 #pragma once
 
 #include <windows.h>
@@ -65,6 +72,14 @@ using FnEngGetParam = int(__cdecl*)(void*, const char*, void*, unsigned int);
 using FnEngVizRead = int(__cdecl*)(void*, void*, int);
 
 constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测 VM 给 512/1024）
+
+// B2：fan-in 等待截止。音频线程禁阻塞 API，纯自旋 + YieldProcessor。
+// 主判据 QPC 墙钟 2ms（块预算 2.67ms 级：正常 fan-in ≈ max(单组)，
+// 2ms 只可能被"worker 被插件崩溃/死锁拖住"命中）；自旋计数 2×10^5
+// 为 qpfInvUs 未初始化（无墙钟可用）时的同量级兜底。原 4×10^8 ≈ 4-12s：
+// 音频线程被钉死数秒——比它要避免的"永久自旋"只差一个数量级。
+constexpr double kVmFanInWaitMs = 2.0;
+constexpr uint64_t kVmFanInSpinLimit = 200000ull;
 
 struct PumpCtx {
     FnEngProcess process = nullptr;
@@ -150,8 +165,21 @@ struct PumpCtx {
     volatile LONG rtInBlock = 0;               // RT 在途 BUFFER_OUT 计数（销毁句柄前等待归零）
     // 任务发布（RT 单写；worker 只读/认领；Interlocked 全屏障保序）：
     volatile LONG workGen = 0;        // 每块 +1：发布本块快照（RT 最后一步 bump）
-    volatile LONG workDone = 0;       // 完成组计数（fan-in 目标 = workExpect）
-    volatile LONG workExpect = 0;
+    volatile LONG workExpect = 0;     // 本块 todo 组数（观测用；fan-in 判据是位图）
+    // B2：完成位图，64 位打包 (gen<<32)|doneBitmap。RT 发布时置
+    // (newGen<<32)|0；完成方 CAS 置位。代际不匹配即丢弃完成信号——
+    // 防 straggler（fan-in 超时后仍在跑的 worker）把完成串进下一块：
+    // 旧式 plain count + 每块清零在该场景令下一块 fan-in 提前放行，
+    // 该块输出缺组。CAS 竞争失败重取，无锁。
+    volatile LONGLONG workDonePacked = 0;
+    // B2：straggler 冻结位图（bit g = 该组有 worker 超时后仍在引擎内）。
+    // RT 在超时路径与下一块发布时记账（VmMarkStuck）；完成方无条件清位
+    // （VmWorkComplete——清除点在 ProcessGroupVm 完全返回之后，故"位清零"
+    // ⟹"该组输出缓冲无人在写"，可安全再认领）。发布时从 todo 扣除冻结组：
+    // RT 绝不重入被占引擎（两个线程同进一个引擎实例 = 状态撕裂/UAF 级），
+    // 该组输出冻结至 worker 真正返回。
+    volatile LONG workStuck = 0;
+    LONG curTodo = 0;  // RT 私有：上一并行块 todo 位图（超时 straggler 记账用）
     // 认领协议：64 位打包 (gen<<32)|bitmap。CAS 抢最低位；gen 字段随块轮换，
     // 防「上一块尾组刚完成、下一块已发布」的跨块 stale-claim（worker 持旧
     // 快照写到旧 ab 上的竞争——实测窗口 ns 级但真实存在）。
@@ -449,6 +477,45 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
     }
 }
 
+// B2：完成上报（RT 与 worker 同协议）。调用点保证发生在 ProcessGroupVm
+// 完全返回之后——故"置完成位"与"清冻结位"两个动作都等价于"该组输出缓冲
+// 已无人在写"，后续块可安全再认领该组。
+// 代际匹配（正常路径）：CAS 置完成位（竞争失败重取，无锁）。
+// 代际不匹配（本块已被 fan-in 超时放弃）：丢弃完成信号。
+// 两条路径都无条件清冻结位：同代内一个组只有一个 claimer，完成时引擎内
+// 必无他者，清位安全；而不清会留下"完成方先清、RT 后置位"的永久误冻
+// 窗口（见 VmMarkStuck 的 mark-then-recheck 说明）。
+inline void VmWorkComplete(PumpCtx* c, LONG gen, LONG bit) {
+    for (;;) {
+        const LONGLONG cur = InterlockedCompareExchange64(&c->workDonePacked, 0, 0);
+        if ((LONG)(cur >> 32) == gen) {
+            if (InterlockedCompareExchange64(&c->workDonePacked,
+                                             cur | (LONGLONG)(uint32_t)bit,
+                                             cur) == cur)
+                break;
+            continue;  // 与同代其他完成方竞争失败：重取再试
+        }
+        break;  // 代际已轮换：完成信号丢弃（不污染下一块位图）
+    }
+    InterlockedAnd(&c->workStuck, ~bit);
+}
+
+// B2：把"未完成"组记入冻结位图（mark-then-recheck）。完成方可能在 RT 读到
+// 完成位图之后、OR 之前落盘——此刻它看到的还是本代，走"置完成位 + 清冻结
+// 位"路径，其清位会被随后的 OR 覆盖 → 该组永久误冻。故 OR 后立刻复读
+// 完成位图，把已落盘的位再清掉。复读必须仍在本代（调用方保证在代际清零
+// 之前）。残留窗口只剩"复读后、完成方下一次 CAS 前"，那时完成方的清位
+// 必然晚于 OR，覆盖关系正确。
+inline void VmMarkStuck(PumpCtx* c, LONG bits) {
+    if (!bits) return;
+    InterlockedOr(&c->workStuck, bits);
+    const LONG doneNow =
+        (LONG)(InterlockedCompareExchange64(&c->workDonePacked, 0, 0) &
+               0xFFFFFFFFLL);
+    const LONG raced = bits & doneNow;
+    if (raced) InterlockedAnd(&c->workStuck, ~raced);
+}
+
 inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     auto* c = (PumpCtx*)lpUser;
     if (cmd == kCbStarting) {
@@ -521,15 +588,29 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
     }
     if (par) {
         // ---- Z17 并行路径：发布 → 认领（RT 也是 claimer）→ fan-in ----
+        // B2：先结清上一块的 straggler 账，再把冻结组从本块 todo 扣除。
+        // 上一块 fan-in 若超时放弃，会有组处于"已认领未完成"（worker 仍在
+        // 引擎内）；本块若放该组进 todo，认领方会重入被占引擎——两个线程
+        // 同进一个引擎实例，状态撕裂/UAF 级。故超时块必须记账，且 RT 绝不
+        // 自行重入（那会挂死音频线程）。prevDone 必须在下面的代际清零前读：
+        // 清零会抹掉旧代际位图。
+        const LONG prevDone =
+            (LONG)(InterlockedCompareExchange64(&c->workDonePacked, 0, 0) &
+                   0xFFFFFFFFLL);
+        VmMarkStuck(c, c->curTodo & ~prevDone);  // 上一代未完成组 → 冻结
+        const LONG stuck = InterlockedCompareExchange(&c->workStuck, 0, 0);
         LONG todo = 0;
         for (int g = 0; g < ng; ++g) todo |= (1L << g);
+        todo &= ~stuck;
         LONG testRdy = 0;
         // 测试信号预填：FillTestSignal 写共享 testPhase/testRng/testPink/
         // testPos，且各组按 g 顺序消费同一信号流——必须 RT 单线程同序执行，
         // 才与串行路径逐位一致。只预填将真正进 DSP 的组（与 ProcessGroupVm
-        // 内的 gather 条件同口径：eng 在、mask 开、非 idle）。
+        // 内的 gather 条件同口径：eng 在、mask 开、非 idle）。B2：冻结组
+        // 不预填——它本块不消费信号流（输出冻结），恢复后无缝续接。
         if (testKind != 0 && haveEng) {
             for (int g = 0; g < ng; ++g) {
+                if (stuck & (1L << g)) continue;
                 const long base = (long)g * 8;
                 if (!ab->r[base] || !ab->r[base + 1] || !ab->w[base] ||
                     !ab->w[base + 1])
@@ -548,7 +629,10 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
                 testRdy |= (1L << g);
             }
         }
-        InterlockedExchange(&c->workDone, 0);
+        const LONG newGen = InterlockedCompareExchange(&c->workGen, 0, 0) + 1;
+        // 完成位图切到新代际（旧代际位图作废；其未完成组已在上方结清为
+        // straggler）。必须早于 gen bump——worker 见新 gen 时位图必已就绪。
+        InterlockedExchange64(&c->workDonePacked, (LONGLONG)newGen << 32);
         c->curAb = ab;
         c->curN = n;
         c->curMask = mask;
@@ -559,7 +643,7 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
         LONG expect = 0;
         for (LONG t = todo; t; t &= t - 1) ++expect;
         InterlockedExchange(&c->workExpect, expect);
-        const LONG newGen = InterlockedCompareExchange(&c->workGen, 0, 0) + 1;
+        c->curTodo = todo;  // RT 私有：供下一块 straggler 记账
         // 认领字（gen<<32|bitmap）先落、gen bump 最后：Interlocked 全屏障
         // 保证 worker 见新 gen 时快照与认领字必已就绪（无半成品发布）。
         InterlockedExchange64(&c->workClaimPacked,
@@ -584,26 +668,61 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
                            (testRdy & bit) != 0);
-            InterlockedIncrement(&c->workDone);
+            VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
-        // 兜底：worker 被插件崩溃杀掉等"永不发生"场景——超时放弃本块并停用
-        // 并行回串行，绝不让音频线程永久自旋（那会卡死整个 VM）。
+        // B2：QPC 2ms 截止为主、自旋计数 2×10^5 兜底（qpfInvUs 未初始化时
+        // 唯一判据）。超时 = 放弃本块：未完成组记账为 straggler（后续块冻结
+        // 该组直至 worker 真正离开引擎），绝不动 parallelOn（主线程所有权，
+        // RT 侧改配置状态本身也是隐患），绝不清 workClaimPacked（代际字
+        // 天然防跨块认领）。原 4×10^8 ≈ 4-12s 会把音频线程钉死数秒。
+        LARGE_INTEGER tf0;
+        QueryPerformanceCounter(&tf0);
+        const double waitUs = kVmFanInWaitMs * 1000.0;
         uint64_t spins = 0;
-        while (InterlockedCompareExchange(&c->workDone, 0, 0) < expect) {
+        bool timedOut = false;
+        for (;;) {
+            const LONGLONG cur =
+                InterlockedCompareExchange64(&c->workDonePacked, 0, 0);
+            if ((LONG)(cur >> 32) != newGen) break;  // 防御：代际不该在此刻轮换
+            if (((LONG)(cur & 0xFFFFFFFFLL) & todo) == todo) break;
             YieldProcessor();
-            if (++spins > 400000000ull) {
-                InterlockedExchange64(&c->workClaimPacked, 0);
-                InterlockedExchange(&c->parallelOn, 0);
+            if (++spins >= kVmFanInSpinLimit) {
+                timedOut = true;
                 break;
             }
+            if (c->qpfInvUs > 0.0 && (spins & 0x3FF) == 0) {
+                LARGE_INTEGER tf1;
+                QueryPerformanceCounter(&tf1);
+                if ((double)(tf1.QuadPart - tf0.QuadPart) * c->qpfInvUs >=
+                    waitUs) {
+                    timedOut = true;
+                    break;
+                }
+            }
+        }
+        if (timedOut) {
+            // 记账：未完成组 → 冻结。VmMarkStuck 内部 recheck 消除"完成方
+            // 先清位、RT 后置位"的永久误冻窗口；此后才完成的 straggler 走
+            // 代际不匹配路径自行解冻。
+            const LONG done =
+                (LONG)(InterlockedCompareExchange64(&c->workDonePacked, 0, 0) &
+                       0xFFFFFFFFLL);
+            VmMarkStuck(c, todo & ~done);
         }
         ResetEvent(c->workerWake);
     } else {
         // ---- 串行路径（原语义，经同一 ProcessGroupVm；testReady=false 自填）----
-        for (int g = 0; g < ng; ++g)
+        // B2：串行同样跳过 straggler 冻结组——并行超时后若回串行，RT 自行
+        // 处理冻结组等于重入被占引擎（挂死音频线程）。冻结组输出保持不动，
+        // 直至 worker 真正离开引擎（VmWorkComplete 代际不匹配路径解冻）。
+        const LONG stuck = InterlockedCompareExchange(&c->workStuck, 0, 0);
+        for (int g = 0; g < ng; ++g) {
+            if (stuck & (1L << g)) continue;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
                            false);
+        }
+        c->curTodo = 0;  // 本块无并行发布：清账，防下一块误判 straggler
     }
     // 共享量归约（串/并行共用；max/OR 与组间顺序无关，逐位同义）。
     for (int g = 0; g < ng; ++g) {
@@ -640,8 +759,10 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
 
 // Z17：常驻 worker（桥主线程建；THREAD_PRIORITY_TIME_CRITICAL——块预算
 // 2.67ms 级的音频辅助线程）。协议：等事件 → 见新 gen → 读块快照 → 与 RT
-// 同协议认领（64 位打包 CAS）→ ProcessGroupVm → 完成计数。认领循环内代际
-// 不匹配即退出重取快照（防跨块 stale-claim，见 workClaimPacked 注释）。
+// 同协议认领（64 位打包 CAS）→ ProcessGroupVm → VmWorkComplete 上报完成
+// （代际化位图；本块已被 fan-in 超时放弃则丢弃完成信号并解除该组冻结）。
+// 认领循环内代际不匹配即退出重取快照（防跨块 stale-claim，见
+// workClaimPacked 注释）。
 static DWORD WINAPI VmWorkerMain(LPVOID param) {
     auto* c = (PumpCtx*)param;
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
@@ -682,7 +803,7 @@ static DWORD WINAPI VmWorkerMain(LPVOID param) {
             for (LONG b = bit; !(b & 1); b >>= 1) ++g;
             ProcessGroupVm(c, ab, g, n, mask, haveEng, binaural, testKind,
                            (testRdy & bit) != 0);
-            InterlockedIncrement(&c->workDone);
+            VmWorkComplete(c, gen, bit);
         }
     }
     return 0;
@@ -753,6 +874,13 @@ inline void VmParallelShutdown(PumpCtx* c) {
         }
     }
     c->nWorkers = 0;
+    // B2：清并行协议残留（straggler 冻结位 / 待发布账 / 完成位图），便于
+    // 后续 VmParallelInit 干净重来。被 join 超时遗弃的 worker 若仍在引擎内，
+    // 它清的是一个已作废的位（对协议无害）；"worker 永世不返回时销毁引擎
+    // 句柄"是既有残余（in-process 插件的固有面），B2 不改变该面。
+    InterlockedExchange(&c->workStuck, 0);
+    InterlockedExchange64(&c->workDonePacked, 0);
+    c->curTodo = 0;
     if (c->workerWake) {
         CloseHandle(c->workerWake);
         c->workerWake = nullptr;
