@@ -448,7 +448,7 @@ int32_t EffectDSPMainCommand(EffectDSPMain *dspmain, uint32_t cmdCode, uint32_t 
 		{
 			int16_t viperddcEnabled = ((int16_t *)cep)[8];
 			int errCode = 0;
-			/* [PATCHED-AuraDSP B1-b] Z14 的 jdsp_lock 已不需要：RT stage_ddc
+			/* [PATCHED-AuraDSP P-017 B1-b] Z14 的 jdsp_lock 已不需要：RT stage_ddc
 			 * lock=0 且块首读一次 ddcActive 快照，DDCEnable 的
 			 * ddcForceRefresh 重解析走影子视图 + 原子换指针 + 在途守卫，
 			 * 与 RT 无字段级竞争。 */

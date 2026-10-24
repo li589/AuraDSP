@@ -493,7 +493,7 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
     }
     h->p.ddc_ready.store(1);
     if (h->open.load() && h->p.ddc_enable.load(std::memory_order_relaxed)) {
-        /* [PATCHED-AuraDSP B1-b] DDCStringParser/DDCEnable 已无需外部
+        /* [PATCHED-AuraDSP P-017 B1-b] DDCStringParser/DDCEnable 已无需外部
          * jdsp_lock：RT 块首读一次 ddcActive 快照（stage_ddc lock=0），
          * 解析与换指针全程在控制线程（ctrl_mutex 串行化并发控制调用）。 */
         DDCEnable(&h->jdsp, 1);
@@ -505,7 +505,7 @@ static auradsp_status set_ddc_enable(auradsp_handle h, const void* value, uint32
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
     h->p.ddc_enable.store(v);
-    /* [PATCHED-AuraDSP B1-b] Z14 的 jdsp_lock 互斥已由影子视图取代：
+    /* [PATCHED-AuraDSP P-017 B1-b] Z14 的 jdsp_lock 互斥已由影子视图取代：
      * kAuraStages ddc lock=0，RT 块首读一次 ddcActive 快照；DDCEnable
      * 的 ddcForceRefresh 重解析路径（DDCRefresh 构建新 SOS 数组 + 原子
      * 换指针 + 在途守卫后释放旧数组）不再与 RT 的字段级读取竞争。
