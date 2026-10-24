@@ -71,6 +71,10 @@ def run_smoke_tests():
         # ch=8/6 逐声道异幅电平 + gate 动态行更新 + vendor/GR 作用域语义 +
         # stereo 回归（MC→stereo 切换无残留泄漏）
         "smoke_mc_channel_levels.py",
+        # B4 门禁（2026-10-24）：RT 不得改写 vendor 开关（lost update）。
+        # 源码不变式 + 调用级门控接线（comp FL/FR mask）+ 60 轮竞态
+        # （MC 处理中翻转 tube.enable，结束后 vendor 开关必须为 0）。
+        "smoke_rt_vendor_flags.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
         "smoke_abi_consistency.py",
