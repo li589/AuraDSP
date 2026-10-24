@@ -26,3 +26,5 @@ EXPORTS
     asio_plugin_slot_load_preset       PRIVATE
     asio_plugin_slot_set_insert_stage  PRIVATE
     asio_plugin_slot_get_insert_stage  PRIVATE
+    asio_plugin_slot_set_channels      PRIVATE
+    asio_plugin_slot_get_channels      PRIVATE
