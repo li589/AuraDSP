@@ -28,6 +28,7 @@
 #include "PluginBridge.h"
 #include "../../common/AuraVaioIpc.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
+#include "vaio_pump_wait.h"
 
 namespace {
 
@@ -179,6 +180,9 @@ struct VaioBridgeCtl {
     IMMDevice* pOutDevice = nullptr;
     IAudioClient* pAudioClient = nullptr;
     IAudioRenderClient* pRenderClient = nullptr;
+    /* D3：WASAPI 周期事件（EVENTCALLBACK）。播放引擎每消费完一个周期置位，
+     * 泵线程按事件唤醒——不再靠 Sleep 猜节拍。 */
+    HANDLE hAudioEvent = nullptr;
     WAVEFORMATEX* pMixFormat = nullptr;
     std::string outEndpointName;
     UINT32 wasapiBufferFrames = 0;
@@ -252,6 +256,13 @@ void DestroyEngine() {
 void DestroyWasapi() {
     if (g_vaio.pAudioClient) {
         g_vaio.pAudioClient->Stop();
+    }
+    /* D3：事件句柄随 client 生命周期。调用点都在泵线程 join 之后
+     * （vaio_stop → WaitForSingleObject(hPumpThread) → DestroyWasapi），
+     * 不存在"关掉别人正在等的句柄"。 */
+    if (g_vaio.hAudioEvent) {
+        CloseHandle(g_vaio.hAudioEvent);
+        g_vaio.hAudioEvent = nullptr;
     }
     if (g_vaio.pRenderClient) {
         g_vaio.pRenderClient->Release();
@@ -397,7 +408,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         UINT32 padFrames = 0;
         HRESULT hr = g_vaio.pAudioClient->GetCurrentPadding(&padFrames);
         if (FAILED(hr)) {
-            Sleep(2);
+            /* D3：原来 Sleep(2)（实际 1~15.6ms，且是忙轮询）。改为等一个周期
+             * 信号，带上界只为定期回看 stopEvent。 */
+            vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
             continue;
         }
 
@@ -406,7 +419,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                                   : 0;
 
         if (framesNeeded == 0) {
-            Sleep(1);
+            /* 缓冲已满：等播放引擎消费掉一个周期（事件唤醒），而不是 Sleep(1)
+             * 猜时间。醒来后重新取 padding —— 消费量由引擎决定，睡多久都不对。 */
+            vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
             continue;
         }
 
@@ -881,9 +896,12 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.wasapiChannels = g_vaio.pMixFormat->nChannels > 0 ? g_vaio.pMixFormat->nChannels : 2;
 
     REFERENCE_TIME bufferDuration = 200000; // 20ms
+    /* D3：事件驱动。缓冲只有 20ms，而 Sleep(1)/Sleep(2) 的实际唤醒粒度是
+     * 1~15.6ms —— 睡过头即欠载，且代码里看不出来。改为让 WASAPI 在每周期
+     * 消费完时置位事件，唤醒延迟由音频引擎保证（见 vaio_pump_wait.h 的说明）。 */
     hr = g_vaio.pAudioClient->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
-        0,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         bufferDuration,
         0,
         g_vaio.pMixFormat,
@@ -897,6 +915,27 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         DestroyWasapi();
         g_vaio.startRc = -8;
         return -8;
+    }
+
+    /* 事件必须在 Start 之前挂上，否则 EVENTCALLBACK 模式 Initialize 后
+     * 直接 Start 会失败（AUDCLNT_E_EVENTHANDLE_NOT_SET）。 */
+    g_vaio.hAudioEvent = CreateEventW(nullptr, FALSE /*auto-reset*/, FALSE, nullptr);
+    if (!g_vaio.hAudioEvent) {
+        snprintf(g_vaio.note, sizeof(g_vaio.note), "create-audio-event-failed: %lu", GetLastError());
+        UnmapAndCloseRing();
+        DestroyEngine();
+        DestroyWasapi();
+        g_vaio.startRc = -9;
+        return -9;
+    }
+    hr = g_vaio.pAudioClient->SetEventHandle(g_vaio.hAudioEvent);
+    if (FAILED(hr)) {
+        snprintf(g_vaio.note, sizeof(g_vaio.note), "set-event-handle-failed: 0x%08lX", hr);
+        UnmapAndCloseRing();
+        DestroyEngine();
+        DestroyWasapi();  // 内含 CloseHandle(hAudioEvent)
+        g_vaio.startRc = -10;
+        return -10;
     }
 
     hr = g_vaio.pAudioClient->GetBufferSize(&g_vaio.wasapiBufferFrames);
