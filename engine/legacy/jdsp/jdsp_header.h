@@ -406,7 +406,14 @@ typedef struct
 	NSEEL_CODEHANDLE codehandleInit, codehandleProcess;
 	float *vmFs, *input1, *input2;
 	int compileSucessfully;
+	/* [PATCHED-AuraDSP B1] 影子槽簿记：retiredAt = 本槽被换下时所期望的
+	 * eelProcCount 下界（换下时刻快照 +1）。控制侧复用本槽前要求
+	 * eelProcCount >= retiredAt，即换下后至少跑满 1 个音频块，
+	 * 确保换出瞬间仍在途的那次 LiveProgProcess 已返回
+	 * （与 P-006 mEQ 卷积器双缓冲同范式）。0=从未当活动槽（立即可用）。 */
+	uint64_t retiredAt;
 } LiveProg;
+#define AURA_LIVEPROG_SLOTS 3
 typedef struct
 {
 	double b0, b1, b2, a1, a2;
@@ -569,7 +576,21 @@ typedef struct dspsys
 	Convolver1D conv;
 	// Live programmable effect
 	int liveprogEnabled;
-	LiveProg eel;
+	/* [PATCHED-AuraDSP B1] 影子 VM 编译：RT 只读 eel 指针（块首一次，
+	 * x86-64 对齐指针存/取即原子）；EEL 编译在影子槽 eelSlots[] 上进行，
+	 * 成功后原子换指针，RT 不再需要为 liveprog 持 jdsp_lock
+	 * （stage_liveprog 的 lock 标志已置 0）。eelProcCount 由 RT 每块
+	 * 递增（单写者，LiveProgProcess 入口），eelSwapProc 记录换指针时刻
+	 * 快照（诊断/断言用）。 */
+	LiveProg *eel;
+	LiveProg eelSlots[AURA_LIVEPROG_SLOTS];
+	uint64_t eelProcCount, eelSwapProc;
+	/* B1：RT 在途计数器——LiveProgProcess 入口原子 +1、出口 -1（单 RT
+	 * 线程时取值 0/1）。控制侧读到的 0 证明无任何在途调用持有旧快照
+	 * （x86 TSO + lock 前缀全屏障下严谨），音频停流时据此立即可复用
+	 * 换下的槽，不受 eelProcCount 冻结影响；eelProcCount 守卫则覆盖
+	 * 「RT 在跑但块边界未过」的窗口。 */
+	long eelInFlight;
 	// Arbitrary magnitude response
 	int arbitraryMagEnabled, arbMagForceRefresh;
 	arbitraryMagnitude arbMag;
@@ -687,6 +708,7 @@ extern void LiveProgDestructor(JamesDSPLib *jdsp);
 extern int LiveProgStringParser(JamesDSPLib *jdsp, char *eelCode);
 extern void LiveProgEnable(JamesDSPLib *jdsp);
 extern void LiveProgDisable(JamesDSPLib *jdsp);
+extern void LiveProgUnload(JamesDSPLib *jdsp);
 extern void LiveProgProcess(JamesDSPLib *jdsp, size_t n);
 // DDC
 extern void DDCConstructor(JamesDSPLib *jdsp);

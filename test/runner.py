@@ -129,6 +129,12 @@ def run_smoke_tests():
     # 交替 ddc.load 两份大 VDC + RT 连续 process。修复前 enable 落入
     # DDCStringParser 解析瞬窗即误拒；修复后控制侧同锁零误拒。
     "smoke_ddc_race.py",
+    # B1 liveprog 影子 VM 编译门禁（2026-10-24）：RT 连续 process 逐块
+    # 计时 + UI 线程高频加载重脚本（~26ms 编译）/坏脚本/变增益脚本。
+    # 修复前（持 jdsp_lock 原地编译）RT 每窗口被挡 ~26ms、总产出仅 ~400
+    # 块、最大块 ~50ms；修复后产出 ~74k 块、最大块 <1ms、编译窗口内
+    # 每窗口 ~300 块，且停流连发加载经 eelInFlight==0 守卫全部成功。
+    "smoke_liveprog_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
     "smoke_dynamic_gr_and_gate.py",
