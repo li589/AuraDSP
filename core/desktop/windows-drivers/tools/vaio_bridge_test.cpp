@@ -113,12 +113,15 @@ int main(int argc, char* argv[])
     for (int i = 0; i < 15; i++)
     {
         Sleep(100);
-        char viz[512];
+        // [Phase B] ABI v2：viz 帧实际 1600B（引擎按 sizeof(auradsp_viz_frame) 写）。
+        // 此前 512B 栈缓冲接 1600B 帧 = 栈溢出；且 L/R 偏移写死 12 落在
+        // timestamp_ms 中段——level_l_dbfs 真实偏移 = 8+8+128+128 = 272。
+        char viz[1600];
         int vcnt = p_viz_read(viz, 1);
         if (vcnt > 0)
         {
-            // Viz frame format: seq (4B), ts (8B), l (4B float), r (4B float)
-            float* flt = (float*)(viz + 12);
+            // Viz frame layout: seq(8B) + ts(8B) + spectrum(128B) + eq_in(128B) → level_l/r at 272
+            float* flt = (float*)(viz + 272);
             printf("  Poll %2d: viz frames=%d, L=%.2fdB, R=%.2fdB\n", i, vcnt, flt[0], flt[1]);
         }
     }

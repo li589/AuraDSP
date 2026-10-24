@@ -21,6 +21,12 @@
  * auradsp_abi() 强校验（见 auradsp_ffi.dart）。 */
 #define AURADSP_ABI 2
 
+/* ABI 版本与帧尺寸联动哨兵：改 auradsp_viz_frame 尺寸必须同步升 ABI 号，
+ * 否则 Dart 侧 kExpectedAbi 校验会放行错位绑定（定长 Struct 全字段静默错位）。
+ * 放在 engine_internal.h 而非公共头：此处 ABI 宏与结构体定义同时可见。 */
+static_assert(AURADSP_ABI == 2 && sizeof(auradsp_viz_frame) == 1600,
+              "AURADSP_ABI version and auradsp_viz_frame size must bump together");
+
 struct ScopedFtzDazGuard {
 #if defined(_M_X64) || defined(__x86_64__)
     unsigned int oldCsr;
@@ -433,6 +439,16 @@ struct auradsp_handle_s {
     float  ch_out_peak[AURADSP_CH_MAX] = {};
     /* RT 线程每块记录的声道数（2/6/8），emit_viz 填 channel_count；0=尚无块。 */
     int    last_block_ch = 0;
+    /* [Phase B] stage 级 per-channel 电平的**有效列数**（emit_viz 用它门控
+     * stage_ch_levels 的 c 循环）。语义：最近一次跑过的链能提供 per-channel
+     * stage 数据的声道数——
+     *   process_multichannel_chain 入口置 ch（离散 MC 链，全声道逐级处理）；
+     *   process_stereo_chain 入口置 2（矩阵/双耳/stereo 走的都是立体声链，
+     *   stage 级只有 L/R 两列有意义）。
+     * 必须与 last_block_ch 分开：矩阵模式下设备是 6/8 声道（last_block_ch=8，
+     * channel_levels 经 mx_upmix 后全列有效），但 stage 链是立体声，若沿用
+     * last_block_ch 门控就会读到上一次 MC 模式的陈旧 stage_peak_ch。 */
+    int    stage_ch_active = 2;
 
     /* Liveprog 状态 */
     float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */
@@ -658,6 +674,8 @@ void spatial_process(auradsp_handle h, float* io, int frames);
 void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
                               int frames, int ch);
 void viz_write(auradsp_handle h, const float* out, int frames, int ch);
+/* [Phase B] 矩阵模式的 per-channel 输出电平实测（不动频谱历史）。 */
+void viz_scan_out_peak(auradsp_handle h, const float* out, int frames, int ch);
 void viz_write_eq_in(auradsp_handle h, const float* src, int frames);
 void gate_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void filter_process_mc(auradsp_handle h, float* io, int frames, int ch);

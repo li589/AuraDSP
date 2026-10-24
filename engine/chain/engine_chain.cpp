@@ -731,6 +731,7 @@ static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
+    h->stage_ch_active = ch;   /* [Phase B] stage 级 per-channel 数据全声道有效 */
 
     // 1. 全量拷贝至目标工作区，就地推进
     memcpy(dst, src, (size_t)frames * ch * sizeof(float));
@@ -933,6 +934,9 @@ static inline void sample_stage_peak(auradsp_handle h, int stage_idx, const floa
  */
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                                  int frames, bool skip_spatial) {
+    /* [Phase B] 立体声链只产生 L/R 两列 stage 数据——把有效列数钉回 2，
+     * 阻断矩阵/双耳模式下读到上一次 MC 模式的陈旧 stage_peak_ch。 */
+    h->stage_ch_active = 2;
     /* 低音参数：系数重算必须在本线程做。
      * 旧实现在 auradsp_set_param("bass.gain") 里直接调 BassBoostSetParam，
      * 与此处的 processFloatMultiplexd 并发访问同一个 JamesDSPLib —— 与

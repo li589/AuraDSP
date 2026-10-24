@@ -341,7 +341,11 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 process_stereo_chain(h, h->shelf_scratch, h->mx_stereo, frames);
                 mx_upmix(h, out, h->mx_stereo, frames, ch);
                 h->frames_since_viz += frames;
+                /* 频谱/历史取下混立体声（既存语义）；per-channel 电平则按
+                 * mx_upmix 后真实写进设备的 out 实测——否则 [2..N-1] 恒 -120，
+                 * 多声道默认路径上 6 根柱永久假死。 */
                 viz_write(h, h->mx_stereo, frames, 2);
+                viz_scan_out_peak(h, out, frames, ch);
             }
         }
         const int vizInt = h->viz_interval.load(std::memory_order_relaxed);

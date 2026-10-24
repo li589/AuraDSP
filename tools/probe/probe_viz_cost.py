@@ -28,6 +28,8 @@ dll.auradsp_set_param.argtypes = [ctypes.c_void_p, ctypes.c_char_p,
 
 
 class VizFrame(ctypes.Structure):
+    # [Phase B] 2026-10-24 ABI v2：尾部追加 per-channel 电平，536B → 1600B。
+    # 引擎按 sizeof=1600B/帧写，本结构体必须逐字节同步，否则堆越界。
     _fields_ = [
         ("seq", ctypes.c_uint64),
         ("timestamp_ms", ctypes.c_double),
@@ -37,7 +39,14 @@ class VizFrame(ctypes.Structure):
         ("level_r_dbfs", ctypes.c_float),
         ("stage_levels_l", ctypes.c_float * 32),
         ("stage_levels_r", ctypes.c_float * 32),
+        ("channel_count", ctypes.c_uint32),
+        ("channel_levels", ctypes.c_float * 8),
+        ("stage_ch_levels", ctypes.c_float * (32 * 8)),
     ]
+
+
+assert ctypes.sizeof(VizFrame) == 1600, (
+    f"VizFrame out of sync with auradsp_viz_frame: expected 1600, got {ctypes.sizeof(VizFrame)}")
 
 
 VizFramePtr = ctypes.POINTER(VizFrame)

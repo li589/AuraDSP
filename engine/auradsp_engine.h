@@ -130,7 +130,13 @@ typedef struct auradsp_viz_frame {
      * channel_count：本帧来源块的声道数（2/6/8）；0 = 无有效帧（UI 回退 L/R）。
      *
      * channel_levels：auradsp_process 最终输出 per-channel 峰值 dBFS。
-     *   [0]/[1] 恒等于 level_l/r_dbfs（同源同一趟扫描）；未用声道 -120.0f。
+     *   未用声道 -120.0f。
+     *   **限定**：[0]/[1] 与 level_l/r_dbfs 恒等**仅在立体声路径成立**
+     *   （viz_write 同一趟扫描同源）。离散多声道（channels.mode=1）下
+     *   level_l/r 仍按立体声 stride 取 out[i*2]（既存近似，见设计文档遗留项），
+     *   此时请以 channel_levels 为准、不要假设两者相等。
+     *   矩阵模式（mode=0）的 per-channel 值取自 mx_upmix 之后的 out 实测
+     *   （spectrum 仍取 mx_stereo 下混，两者口径不同是刻意的）。
      *
      * stage_ch_levels[stage][ch]（stage-major）：
      *   0..11 vendor：仅 [0]/[1] 有效（= stage_levels_l/r；MC 下 vendor 段

@@ -59,9 +59,10 @@ VAB_API int vaio_get_param(const char* id, int isFloat, void* out4);
 // 字符串参数回读：out 为调用方缓冲，cap 为容量；返回写入字节数（不含 NUL），<0=失败。
 VAB_API int vaio_get_param_str(const char* id, char* out, int cap);
 
-// 从引擎读可视化帧（536B/帧，与 auradsp_viz_read 同布局，Dart 侧已有解析）。
-// 返回读到帧数，0=无引擎/未运行。
-VAB_API int vaio_viz_read(void* out536, int count);
+// 从引擎读可视化帧（1600B/帧 = sizeof(auradsp_viz_frame) ABI v2，与
+// auradsp_viz_read 同布局透传，Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
+// 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 536B 分配会堆越界）。
+VAB_API int vaio_viz_read(void* out1600, int count);
 
 // 用户旁路开关（跳过 auradsp_process，输入直通输出）。返回 0，<0=桥未运行。
 VAB_API int vaio_bypass(int on);
