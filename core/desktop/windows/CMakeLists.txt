@@ -159,3 +159,23 @@ set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_plugin_chain PRIVATE auradsp_engine version)
 
+# B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
+# 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、
+# 实例方法未被调用、计数清零且不下溢、槽可复用（smoke_plugin_quarantine.py）。
+add_executable(test_host_quarantine
+    "${API}/plugins/tests/plugin_host_quarantine.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+)
+target_include_directories(test_host_quarantine PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_host_quarantine PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS AURADSP_HOST_INPROC=1)
+target_compile_options(test_host_quarantine PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_host_quarantine PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_host_quarantine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_host_quarantine PRIVATE auradsp_engine version)
+

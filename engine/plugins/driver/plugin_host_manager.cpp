@@ -94,6 +94,28 @@ void quarantineAbandonedInstance(std::unique_ptr<IPluginInstance> inst) {
     s_leak->push_back(std::move(inst));
 }
 
+/* B3（2026-10-24）：等 RT 退出临界区的有界等待。
+ * 原实现「spins < kQuiesceSpinLimit 且 inFlight.wait(0)」是立即返回的空转：
+ * atomic::wait(old) 只在「当前值 == old」时阻塞，而这里值恒非零——所谓
+ * 4096 转上限实为几十 µs，正常在途块（2.67~93ms）必然超限，于是几乎每次
+ * 卸载都走「强制排空」分支：硬清零计数后照常销毁，而 RT 可能正拿着实例跑
+ * process()（use-after-free），与 inflight_guard.h 的契约正好相反。
+ * 现改为：无系统调用快自旋 → Sleep(1) 墙钟轮询到 kQuiesceWaitMs。
+ * 返回 false = RT 异常滞留，调用方必须保留实例（移入隔离区），绝不释放。 */
+static bool waitQuiesce(std::atomic<uint32_t>& inFlight) {
+    uint32_t spins = 0;
+    const uint64_t deadline = GetTickCount64() + kQuiesceWaitMs;
+    for (;;) {
+        if (inFlight.load(std::memory_order_relaxed) == 0) return true;
+        if (++spins <= kQuiesceSpinLimit) {
+            YieldProcessor();
+            continue;
+        }
+        if (GetTickCount64() >= deadline) return false;
+        Sleep(1);
+    }
+}
+
 void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     if (slot >= kMaxPluginSlots) return;
     PluginSlot& s = m_slots[slot];
@@ -101,45 +123,53 @@ void PluginHostManager::unloadPluginSlotLocked(size_t slot) {
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
 
-    uint32_t spins = 0;
-    while (s.inFlight.load(std::memory_order_relaxed) != 0 && spins < kQuiesceSpinLimit) {
-        s.inFlight.wait(0, std::memory_order_relaxed);
-        ++spins;
-    }
+    const bool quiesced = waitQuiesce(s.inFlight);
     s.destroyPending.store(false, std::memory_order_relaxed);
-    // 强制排空安全兜底：即便音频流非活动导致计数悬垂，也绝不能锁死用户卸载
-    s.inFlight.store(0, std::memory_order_relaxed);
 
-        s.latency.store(0, std::memory_order_relaxed);
-        s.mainInChannels.store(2, std::memory_order_relaxed);
-        s.mainOutChannels.store(2, std::memory_order_relaxed);
-        s.processCalls.store(0, std::memory_order_relaxed);
-        s.inRmsBits.store(0, std::memory_order_relaxed);
-        s.outRmsBits.store(0, std::memory_order_relaxed);
-        s.maxDiffBits.store(0, std::memory_order_relaxed);
-        s.lastFrames.store(0, std::memory_order_relaxed);
-        resetTelemetryGateSlot(slot);
-        if (s.instance) {
-            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced (spins=" << spins << "), calling closeEditor");
-            s.instance->closeEditor();
-            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] deactivate");
-            s.instance->deactivate();
-            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] unload");
-            s.instance->unload();
-            if (s.instance->abandoned()) {
-                // 隔离（放弃释放）：内部线程挂死且仍引用实例，析构 =
-                // use-after-free。整体移入隔离区（可控泄漏换不可控崩溃）。
-                quarantineAbandonedInstance(std::move(s.instance));
-                AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)");
-            } else {
-                AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] reset (dtor)");
-                s.instance.reset();
-            }
-            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] complete");
-        } else {
-            AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] no instance");
-        }
+    s.latency.store(0, std::memory_order_relaxed);
+    s.mainInChannels.store(2, std::memory_order_relaxed);
+    s.mainOutChannels.store(2, std::memory_order_relaxed);
+    s.processCalls.store(0, std::memory_order_relaxed);
+    s.inRmsBits.store(0, std::memory_order_relaxed);
+    s.outRmsBits.store(0, std::memory_order_relaxed);
+    s.maxDiffBits.store(0, std::memory_order_relaxed);
+    s.lastFrames.store(0, std::memory_order_relaxed);
+    resetTelemetryGateSlot(slot);
+
+    if (!s.instance) {
+        AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] no instance");
+        return;
     }
+    if (!quiesced) {
+        // B3：超限 = RT 异常滞留。按契约保留实例——绝不 closeEditor/
+        // deactivate/unload（那同样是"使用"一个可能正被 RT 执行的实例，
+        // unload 还会卸库），更不析构。整体移入静态隔离区（可控泄漏换
+        // 不可控崩溃）。计数清零让本槽可再次装载：滞留线程晚些退出时
+        // InFlightGuard 饱和递减不会再下溢。
+        s.inFlight.store(0, std::memory_order_relaxed);
+        quarantineAbandonedInstance(std::move(s.instance));
+        AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot
+                        << "] quarantined (RT still in-flight after "
+                        << kQuiesceWaitMs << "ms)");
+        return;
+    }
+    AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] quiesced, calling closeEditor");
+    s.instance->closeEditor();
+    AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] deactivate");
+    s.instance->deactivate();
+    AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] unload");
+    s.instance->unload();
+    if (s.instance->abandoned()) {
+        // 隔离（放弃释放）：内部线程挂死且仍引用实例，析构 =
+        // use-after-free。整体移入隔离区（可控泄漏换不可控崩溃）。
+        quarantineAbandonedInstance(std::move(s.instance));
+        AURADSP_WARN_S("[DBG Slot] unloadLocked[" << slot << "] quarantined (abandoned)");
+    } else {
+        AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] reset (dtor)");
+        s.instance.reset();
+    }
+    AURADSP_DBG_S("[DBG Slot] unloadLocked[" << slot << "] complete");
+}
 
 void PluginHostManager::unloadPluginSlot(size_t slot) {
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
@@ -856,16 +886,28 @@ std::unique_ptr<IPluginInstance> PluginHostManager::detachInstanceLocked(size_t 
     s.destroyPending.store(true, std::memory_order_release);
     std::atomic_thread_fence(std::memory_order_acquire);
 
-    uint32_t spins = 0;
-    while (s.inFlight.load(std::memory_order_relaxed) != 0 && spins < kQuiesceSpinLimit) {
-        s.inFlight.wait(0, std::memory_order_relaxed);
-        ++spins;
-    }
+    const bool quiesced = waitQuiesce(s.inFlight);
     s.destroyPending.store(false, std::memory_order_relaxed);
-    s.inFlight.store(0, std::memory_order_relaxed);
     s.latency.store(0, std::memory_order_relaxed);
 
     auto instance = std::move(s.instance);
+    if (!quiesced) {
+        // B3：未能排空 = RT 异常滞留。不能交给调用方——destroyInstance 会
+        // closeEditor/deactivate/unload 并析构，而对在途实例那样做就是
+        // use-after-free。就地隔离（可控泄漏换不可控崩溃）+ 计数清零
+        // （滞留线程晚些退出时饱和递减不会下溢），返回 nullptr：所有调用点
+        // 都是 if (old) destroyInstance(...) 或空指针安全的 destroyInstance，
+        // 语义天然兼容。隔离区锁只在 quarantine 内单向获取，与 m_hostMutex
+        // 无反向序。
+        s.inFlight.store(0, std::memory_order_relaxed);
+        if (instance) {
+            quarantineAbandonedInstance(std::move(instance));
+            AURADSP_WARN_S("[DBG Slot] detachLocked[" << slot
+                            << "] quarantined (RT still in-flight after "
+                            << kQuiesceWaitMs << "ms)");
+        }
+        return nullptr;
+    }
     return instance;  // 调用方在锁外销毁
 }
 

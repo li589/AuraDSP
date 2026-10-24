@@ -63,6 +63,9 @@ def run_smoke_tests():
         # F-4 裁定守卫（2026-10-23）：宿主进程 BELOW_NORMAL 不得外溢到 RT
         # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
         "smoke_plugin_host_priority.py",
+        # B3 卸载隔离门禁（2026-10-24）：RT 滞留（假实例 process 阻塞）时卸载
+        # 必须按墙钟上界返回并保留实例，不得硬清零后照常销毁（use-after-free）。
+        "smoke_plugin_quarantine.py",
         "smoke_config_and_matrix.py",
         # ADR-003 Phase B 多声道电平门禁（2026-10-24）：ABI v2 尺寸/版本 +
         # ch=8/6 逐声道异幅电平 + gate 动态行更新 + vendor/GR 作用域语义 +
