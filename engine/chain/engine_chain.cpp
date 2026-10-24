@@ -783,25 +783,26 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
 
-        const int tube_saved = h->jdsp.tubeEnabled;
-        const int limiter_saved = h->jdsp.limiterEnabled;
-        const int comp_saved = h->jdsp.compEnabled;
-        const int eq_saved = h->jdsp.equalizerEnabled;
-        const int arbmag_saved = h->jdsp.arbitraryMagEnabled;
-        h->jdsp.tubeEnabled = 0;
-        h->jdsp.limiterEnabled = 0;
-        h->jdsp.arbitraryMagEnabled = 0; /* arbmag 逐声道改走池，不再在链内跑 FL/FR 对 */
-        if ((h->p.comp_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
-            h->jdsp.compEnabled = 0;
-        if ((h->p.eq_channels.load(std::memory_order_relaxed) & 0x03) != 0x03)
-            h->jdsp.equalizerEnabled = 0;
+        /* [PATCHED-AuraDSP B4] 门控改走「本次调用」参数，不再 save→写 0→restore
+         * 全局开关。原因：这些字段由控制线程随时改写（VacuumTubeEnable /
+         * ArbitraryResponseEqualizer / CompressorEnable / apply_eq …），用户
+         * 操作若落在 save 与 restore 之间就会被 restore 静默回滚（界面开着、
+         * 实际关了）= lost update；且字段本身非原子。gates 的 -1 = 沿用全局
+         * 开关，0/1 = 本次调用强制。 */
+        AuraStageGates g;
+        g.tube = 0;    /* tube 已由上方 tube_process_mc 逐声道处理 */
+        g.comp = ((h->p.comp_channels.load(std::memory_order_relaxed) & 0x03) == 0x03) ? -1 : 0;
+        g.bass = -1;   /* bass 只看全局 bassBoostEnabled（控制线程不写） */
+        g.eq = ((h->p.eq_channels.load(std::memory_order_relaxed) & 0x03) == 0x03) ? -1 : 0;
+        g.arbmag = 0;  /* arbmag 逐声道改走池，不在链内跑 FL/FR 对 */
+        g.limiter = 0; /* MC 侧由 limiter_process_mc 承担 lookahead/link/mask */
         /* B5 后续：拆链两段，arbmag 插在中点按 FL/FR 各自 mask 位独立处理，
          * 保持原链内顺序（eq → arbmag → convolver…）。ASRC 由两段各自往返。
          * 两段开 samplePeaks=1：等价原 processFloatMultiplexd 的逐 stage 峰值
          * 采样（viz stage_levels）；arbmag 级（stage 4）峰值由池处理后手动补。 */
         JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
                                            h->mx_stereo, (size_t)frames,
-                                           "tube,comp,bass,eq", 1);
+                                           "tube,comp,bass,eq", 1, &g);
         if (h->arbmag_pool.loaded) {
             arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 0);
             arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 1);
@@ -817,12 +818,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->mx_stereo,
                                            h->mx_stereo, (size_t)frames,
-                                           "convolver,ddc,liveprog,crossfeed,stereo,reverb,output", 1);
-        h->jdsp.compEnabled = comp_saved;
-        h->jdsp.equalizerEnabled = eq_saved;
-        h->jdsp.arbitraryMagEnabled = arbmag_saved;
-        h->jdsp.tubeEnabled = tube_saved;
-        h->jdsp.limiterEnabled = limiter_saved;
+                                           "convolver,ddc,liveprog,crossfeed,stereo,reverb,output", 1,
+                                           &g);
 
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
@@ -878,7 +875,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
                     h->shelf_scratch[i * 2 + 1] = dst[i * ch + p0 + 1];
                 }
                 JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
-                                                   h->shelf_scratch, (size_t)frames, ids, 0);
+                                                   h->shelf_scratch, (size_t)frames, ids, 0,
+                                                   (const AuraStageGates *)0);
                 for (int i = 0; i < frames; ++i) {
                     dst[i * ch + p0] = h->shelf_scratch[i * 2];
                     dst[i * ch + p0 + 1] = h->shelf_scratch[i * 2 + 1];

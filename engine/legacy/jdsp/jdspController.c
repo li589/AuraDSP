@@ -330,56 +330,70 @@ void jdsp_unlock(JamesDSPLib *jdsp)
  		}
  	}
  }
- static void stage_tube(JamesDSPLib *jdsp, size_t n)
+ static void stage_tube(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
- 	if (jdsp->tubeEnabled)
+ 	/* [PATCHED-AuraDSP B4] 门控取值：gates 非空且该字段 >=0 时用调用级值，
+ 	 * 否则沿用全局开关。RT 只读，绝不写回全局字段（lost update 根因）。 */
+ 	const char on = (gates && gates->tube >= 0) ? (char)gates->tube
+ 	                                            : (char)(jdsp->tubeEnabled != 0);
+ 	if (on)
  	{
  		double rin = jdsp->fxAutoGain[0] ? stage_rms(jdsp, n) : 0.0;
  		VacuumTubeProcess(jdsp, n);
  		stage_apply_fx_gain(jdsp, n, 0, rin);
  	}
  }
- static void stage_comp(JamesDSPLib *jdsp, size_t n)
+ static void stage_comp(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
  	/* [PATCHED-AuraDSP B1-c] 恒调 CompressorProcess：在途守卫双计数
  	 * （compInFlight/compProcCount）须每块必走——停用期间块边界也要放行
  	 * 影子槽复用（compEnabled 门控已移入 CompressorProcess 内部）；
- 	 * 输入 RMS 计量与输出增益/自动补偿仅在启用时执行（与原语义一致）。 */
- 	const char enabled = jdsp->compEnabled;
+ 	 * 输入 RMS 计量与输出增益/自动补偿仅在启用时执行（与原语义一致）。
+ 	 * [PATCHED-AuraDSP B4] enabled 作为参数下传（不再靠 RT 改写
+ 	 * jdsp->compEnabled 来表达「本次调用停用」）。 */
+ 	const char enabled = (gates && gates->comp >= 0) ? (char)gates->comp
+ 	                                                 : (char)(jdsp->compEnabled != 0);
  	double rin = (enabled && jdsp->fxAutoGain[1]) ? stage_rms(jdsp, n) : 0.0;
- 	CompressorProcess(jdsp, n);
+ 	CompressorProcess(jdsp, n, enabled != 0);
  	if (enabled)
  		stage_apply_fx_gain(jdsp, n, 1, rin);
  }
- static void stage_bass(JamesDSPLib *jdsp, size_t n)
+ static void stage_bass(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
- 	if (jdsp->bassBoostEnabled)
+ 	const char on = (gates && gates->bass >= 0) ? (char)gates->bass
+ 	                                            : (char)(jdsp->bassBoostEnabled != 0);
+ 	if (on)
  	{
  		double rin = jdsp->fxAutoGain[2] ? stage_rms(jdsp, n) : 0.0;
  		BassBoostProcess(jdsp, n);
  		stage_apply_fx_gain(jdsp, n, 2, rin);
  	}
  }
- static void stage_eq(JamesDSPLib *jdsp, size_t n)
+ static void stage_eq(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
  {
- 	if (jdsp->equalizerEnabled)
+ 	const char on = (gates && gates->eq >= 0) ? (char)gates->eq
+ 	                                          : (char)(jdsp->equalizerEnabled != 0);
+ 	if (on)
  	{
  		double rin = jdsp->fxAutoGain[3] ? stage_rms(jdsp, n) : 0.0;
  		MultimodalEqualizerProcess(jdsp, n);
  		stage_apply_fx_gain(jdsp, n, 3, rin);
  	}
  }
-static void stage_arbmag(JamesDSPLib *jdsp, size_t n)
+static void stage_arbmag(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
-	if (jdsp->arbitraryMagEnabled)
+	const char on = (gates && gates->arbmag >= 0) ? (char)gates->arbmag
+	                                              : (char)(jdsp->arbitraryMagEnabled != 0);
+	if (on)
 	{
 		double rin = jdsp->fxAutoGain[4] ? stage_rms(jdsp, n) : 0.0;
 		ArbitraryResponseEqualizerProcess(jdsp, n);
 		stage_apply_fx_gain(jdsp, n, 4, rin);
 	}
 }
-static void stage_conv(JamesDSPLib *jdsp, size_t n)
+static void stage_conv(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
+	(void)gates;
 	if (!jdsp->convolverEnabled)
 		return;
 	if (!jdsp->conv.process)
@@ -403,35 +417,45 @@ static void stage_conv(JamesDSPLib *jdsp, size_t n)
 	}
 	jdsp->conv.process(jdsp, n);
 }
-static void stage_ddc(JamesDSPLib *jdsp, size_t n)
+static void stage_ddc(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
 	/* [PATCHED-AuraDSP B1-b] enabled 判断内移 DDCProcess：每块必过本
 	 * stage 推进在途守卫计数（停用期间块边界也要放行影子视图复用）。 */
+	(void)gates;
 	DDCProcess(jdsp, n);
 }
-static void stage_liveprog(JamesDSPLib *jdsp, size_t n)
+static void stage_liveprog(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
 	/* [PATCHED-AuraDSP B1] enabled 判断内移 LiveProgProcess：每块必过本
 	 * stage 推进在途守卫计数（停用期间块边界也要放行影子槽复用）。 */
+	(void)gates;
 	LiveProgProcess(jdsp, n);
 }
-static void stage_crossfeed(JamesDSPLib *jdsp, size_t n)
+static void stage_crossfeed(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
+	(void)gates;
 	if (jdsp->crossfeedEnabled)
 		CrossfeedProcess(jdsp, n);
 }
-static void stage_stereo(JamesDSPLib *jdsp, size_t n)
+static void stage_stereo(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
+	(void)gates;
 	if (jdsp->sterEnhEnabled)
 		StereoEnhancementProcess(jdsp, n);
 }
-static void stage_reverb(JamesDSPLib *jdsp, size_t n)
+static void stage_reverb(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
+	(void)gates;
 	if (jdsp->reverbEnabled)
 		ReverbProcess(jdsp, n);
 }
-static void stage_output(JamesDSPLib *jdsp, size_t n)
+static void stage_output(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
+	/* [PATCHED-AuraDSP B4] limiter 门控可被调用级覆盖（多声道链 Category B
+	 * 需要「跑 postGain 但不跑 vendor limiter」，因为 MC 侧另有
+	 * limiter_process_mc 承担 lookahead/link/mask）。 */
+	const char limOn = (gates && gates->limiter >= 0) ? (char)gates->limiter
+	                                                  : (char)(jdsp->limiterEnabled != 0);
 	for (size_t i = 0; i < n; i++)
 	{
 		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain;
@@ -440,7 +464,7 @@ static void stage_output(JamesDSPLib *jdsp, size_t n)
 		float gR = 1.0f;
 		float rect1 = fabsf(xL);
 		float rect2 = fabsf(xR);
-		if (jdsp->limiterEnabled)
+		if (limOn)
 		{
 			float maxLR = max(rect1, rect2);
 			if (maxLR < jdsp->limiter.threshold)
@@ -635,7 +659,7 @@ void JamesDSPProcess(JamesDSPLib *jdsp, size_t n)
 	{
 		if (jdsp->chain[i].lock)
 			jdsp_lock(jdsp);
-		jdsp->chain[i].fn(jdsp, n);
+		jdsp->chain[i].fn(jdsp, n, (const AuraStageGates *)0); /* B4：全链一律用全局开关 */
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
 		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
@@ -662,7 +686,7 @@ void JamesDSPProcessCheckBenchmarkReady(JamesDSPLib *jdsp, size_t n)
 	{
 		if (jdsp->chain[i].lock)
 			jdsp_lock(jdsp);
-		jdsp->chain[i].fn(jdsp, n);
+		jdsp->chain[i].fn(jdsp, n, (const AuraStageGates *)0); /* B4：全链一律用全局开关 */
 		if (jdsp->chain[i].lock)
 			jdsp_unlock(jdsp);
 		/* [PATCHED-AuraDSP M3.5-c] 采样 stage 输出峰值 */
@@ -1219,7 +1243,8 @@ static int stage_selected(const char *ids, const char *id)
 	return 0;
 }
 void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
-                                        size_t n, const char *ids, char samplePeaks)
+                                        size_t n, const char *ids, char samplePeaks,
+                                        const AuraStageGates *gates)
 {
 	const size_t oldBlockSizeMax = jdsp->blockSizeMax;
 	if (oldBlockSizeMax < n)
@@ -1249,7 +1274,7 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 				const char stageLock = kAuraStages[i].lock;
 				if (stageLock)
 					jdsp_lock(jdsp);
-				kAuraStages[i].fn(jdsp, curDecimatedLen);
+				kAuraStages[i].fn(jdsp, curDecimatedLen, gates); /* B4 */
 				if (stageLock)
 					jdsp_unlock(jdsp);
 				if (samplePeaks && i < 16)
@@ -1277,7 +1302,7 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 				const char stageLock = kAuraStages[i].lock;
 				if (stageLock)
 					jdsp_lock(jdsp);
-				kAuraStages[i].fn(jdsp, n);
+				kAuraStages[i].fn(jdsp, n, gates); /* B4：调用级门控覆盖 */
 				if (stageLock)
 					jdsp_unlock(jdsp);
 				if (samplePeaks && i < 16)

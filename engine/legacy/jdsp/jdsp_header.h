@@ -555,11 +555,28 @@ typedef struct
 	float *impulseResponse;
 	unsigned int impChannels, impulseLengthActual;
 } tmpIRData;
+/* [PATCHED-AuraDSP B4] 调用级 stage 门控覆盖。
+ *
+ * 背景：多声道链 Category B 段原先在 RT 内 save→写 0→restore 五个 vendor
+ * 开关（tubeEnabled/limiterEnabled/compEnabled/equalizerEnabled/
+ * arbitraryMagEnabled）。这些字段由控制线程（VacuumTubeEnable/Disable、
+ * CompressorEnable/Disable、MultimodalEQEnable、ArbitraryResponseEqualizer…）
+ * 随时改写——用户操作落在 save 与 restore 之间就会被 restore 静默回滚
+ * （界面显示开着、实际关了），即 lost update；且这些字段本身非原子。
+ *
+ * 现在把「本次调用怎么算」作为参数传入：NULL = 全部沿用 jdsp 全局开关
+ * （既有行为零变化）；非 NULL 时逐字段生效，-1 = 该字段仍用全局开关。
+ * RT 绝不写全局开关字段。 */
+typedef struct
+{
+	signed char tube, comp, bass, eq, arbmag, limiter;
+} AuraStageGates;
 /* [PATCHED-AuraDSP 2026-10-09 P-004] 表驱动处理链：顺序由宿主经
  * JamesDSPRebuildChain 重建（graph.order）。stage fn 内含各自 enabled 判断；
  * lock=1 的段（convolver/ddc/liveprog）逐段加解锁——与上游"三段连续一次
- * 加解锁"相比锁粒度更细（竞态窗口变化，数值输出等价）。 */
-typedef void (*JDSPStageFn)(struct dspsys *jdsp, size_t n);
+ * 加解锁"相比锁粒度更细（竞态窗口变化，数值输出等价）。
+ * [PATCHED-AuraDSP B4] fn 增 gates 参数（调用级门控，见上）。 */
+typedef void (*JDSPStageFn)(struct dspsys *jdsp, size_t n, const AuraStageGates *gates);
 typedef struct
 {
 	JDSPStageFn fn;
@@ -725,7 +742,10 @@ extern void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularit
 extern void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy);
 extern void CompressorEnable(JamesDSPLib *jdsp, char enable);
 extern void CompressorDisable(JamesDSPLib *jdsp);
-extern void CompressorProcess(JamesDSPLib *jdsp, size_t n);
+/* [PATCHED-AuraDSP B4] enabled 由调用方决定（stage_comp 传入本次调用的门控值，
+ * 使 RT 无需改写 jdsp->compEnabled）；旧签名 CompressorProcess(jdsp,n) 由
+ * stage_comp 内部等价实现（读全局 compEnabled）。 */
+extern void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled);
 /* [PATCHED-AuraDSP B1-c] 影子构建 + 原子换指针一体化提交（RT 零锁等待）。
  * 参数：新 compander 参数（fgt_facT/granularity/tfresolution，变化或
  * forceRefresh 时触发 FFTCompanderInit 全量重算）；freq/gains/cpy 非空且
@@ -794,9 +814,11 @@ extern int JamesDSPRebuildChain(JamesDSPLib *jdsp, const char *ids); /* [PATCHED
 /* [PATCHED-AuraDSP B5] 多声道声道对选择：仅跑 ids 逗号表指定的阶段子集（默认顺序）。
  * 镜像 processFloatMultiplexd 的块长/ASRC/交织处理；x 与 y 可为同一缓冲。
  * samplePeaks：镜像 processInternal 的逐 stage 峰值采样（viz stage_levels 用；
- * 拆链两段时开，3b 额外对段保持 false 维持现有语义）。 */
+ * 拆链两段时开，3b 额外对段保持 false 维持现有语义）。
+ * gates：调用级门控覆盖（B4）；NULL = 全部沿用 jdsp 全局开关。 */
 extern void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
-                                               size_t n, const char *ids, char samplePeaks);
+                                               size_t n, const char *ids, char samplePeaks,
+                                               const AuraStageGates *gates);
 /* 把上层（App）下发的全量效果器 id 列表过滤成 vendor 认识的 12 个 stage id：
  * 保序、去重、丢弃未知 id（自研 stage 由引擎自己的链处理，不归 vendor 管），
  * 并确保 output 在末尾。out 至少需 512 字节。返回写入的字节数（不含 NUL）。 */

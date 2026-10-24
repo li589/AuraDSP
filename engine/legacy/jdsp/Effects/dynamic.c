@@ -2023,15 +2023,17 @@ void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
 		return;
 	CompressorCommit(jdsp, a->fgt_facT, a->granularity, a->tfresolution, 0, freq, gains, cpy, 1);
 }
-void CompressorProcess(JamesDSPLib *jdsp, size_t n)
+void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled)
 {
 	/* B1-c：在途守卫双计数——RT 单写者，每块必过（stage_comp 恒在链中），
-	 * 与 compEnabled 无关：停用期间块边界也要放行影子槽复用。
+	 * 与 enabled 无关：停用期间块边界也要放行影子槽复用。
 	 * compProcCount 供 retiredAt 边界判定；compInFlight 证明无调用持有
-	 * 快照（入口 +1 / 出口 -1，lock 前缀全屏障）。 */
+	 * 快照（入口 +1 / 出口 -1，lock 前缀全屏障）。
+	 * [B4] enabled 由调用方传入（stage_comp 依据调用级门控或全局
+	 * compEnabled 求值）——RT 不再为了「本次调用停用」而改写全局开关。 */
 	jdsp->compProcCount++;
 	comp_inflight_inc(&jdsp->compInFlight);
-	if (jdsp->compEnabled)
+	if (enabled)
 	{
 		/* 块首一次读取活动快照；控制侧换指针不影响本块后续样本 */
 		FFTCompander *cm = jdsp->compActive;

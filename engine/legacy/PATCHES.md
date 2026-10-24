@@ -393,3 +393,38 @@ yquist * 0.999，
 - **后续（B1 同法未竟项）**：无——B1 系列（liveprog/ddc/comp）全部收口。
   `JamesDSPSetSampleRate` 全效果重建仍持 `jdsp_lock`（RT 的 convolver
   stage 亦持锁），属同一把锁的剩余暴露面，列后续评估。
+
+## B4 jdsp_header.h + jdspController.c + Effects/dynamic.c + engine/chain/engine_chain.cpp — 调用级 stage 门控（RT 不再改写 vendor 开关）（2026-10-24）
+
+- **位置**：`jdsp_header.h`（`AuraStageGates` 结构 + `JDSPStageFn` 签名 +
+  `CompressorProcess` / `JamesDSPProcessMultiplexedStageSet` 声明）；
+  `jdspController.c`（12 个 stage fn 增 gates 形参，tube/comp/bass/eq/arbmag/
+  output 读调用级门控，其余忽略；两处链循环传 NULL）；
+  `Effects/dynamic.c`（`CompressorProcess` 增 `enabled` 形参，不再读全局
+  `compEnabled`）；`engine/chain/engine_chain.cpp`（MC Category B 段删 5 组
+  save/写0/restore，改填 gates）。
+- **动机**（审查 B4）：MC Category B 段在**音频线程**内 save→写 0→restore
+  `tubeEnabled`/`limiterEnabled`/`compEnabled`/`equalizerEnabled`/
+  `arbitraryMagEnabled`。这些字段由控制线程（`VacuumTubeEnable/Disable`、
+  `CompressorEnable/Disable`、`MultimodalEQEnable`、`ArbitraryResponse…`）
+  随时改写——用户操作落在 save 与 restore 之间就被 restore **静默回滚**
+  （界面显示开着、实际关了）；且字段本身非原子。
+- **为什么不只是「改传 ids」**：`ids` 只表达「跑哪些 stage」，表达不了本段
+  真正需要的两件事——① tube 必须**仍参与峰值采样**（viz stage 0 电平靠它
+  采样）但不执行；② comp/limiter 必须「被调用但不生效」（comp 每块必过以
+  推进 B1-c 在途计数；`output` 段的 postGain 必须照跑、只跳 limiter）。
+- **设计**：`AuraStageGates` 六字段 `signed char`，`-1` = 沿用全局开关。
+  NULL = 全链全局开关（stereo 路径与 `JamesDSPProcess` 全部传 NULL，行为
+  零变化）。RT 只读全局开关，绝不写。
+- **行为等价性**：MC ch=6 全效果参与、两种 comp/eq mask 配置（覆盖 FL/FR /
+  只覆盖 ch2-3）下 24 块输出的 sumsq/sumabs/maxabs/末 4 样本重构前后
+  **逐位相同**。
+- **验收**：新增 `test/smoke/smoke_rt_vendor_flags.py`（三层：engine/chain
+  源码不变式「无 RT 侧 vendor 开关写入 / 无 save-restore 五连」+ comp FL/FR
+  mask 门控接线 + 60 轮竞态）。反向验证（还原 save/写0/restore 重建）：源码
+  不变式直接判红，竞态门禁 60 轮中 16 轮判红（26.7%/轮），修复版 0/60。
+- **契约门禁**：`gen_param_contract.py` 指纹不覆盖本组文件，fixture 无需再生；
+  `JamesDSPProcessMultiplexedStageSet` / `CompressorProcess` 均不在
+  `auradsp_engine.def` 导出表（内部符号），签名变更不触 ABI。
+- **上游同步冲突风险**：中高（12 个 stage fn 签名 + 两个函数声明全改，上游若
+  更新需以本版为基线人工合并；改动机械、逐处可对照）。
