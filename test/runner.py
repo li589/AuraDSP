@@ -114,6 +114,14 @@ def run_smoke_tests():
         "smoke_d6_patch_ids.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
+        # §7-1 门禁（2026-10-24）：viz 帧的 Python 镜像单源。改造前
+        # tools/ 与 test/ 下各有 8 份彼此独立的手抄 ctypes 定义，ABI v1→v2
+        # 时漏改其中几份 → 脚本按旧尺寸申请缓冲、引擎按新尺寸写 → 静默堆
+        # 越界（审查 A1/A2/A3 三处其实是同一个 bug 的三个副本）。现在镜像
+        # 只在 tools/bin/viz_frame.py 定义一次，M1 抓第二份定义、M2 逐字段比
+        # 偏移（只比 sizeof 会放行"字段顺序错但总长凑巧相同"）、M3 管版本联动。
+        # 含四级反向判红 + 0xCD 哨兵包裹缓冲的越界活体守卫。
+        "smoke_g7_1_viz_mirror.py",
         "smoke_abi_consistency.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
