@@ -1135,6 +1135,7 @@
   "fxCatFront": "前置整形",
   "fxCatCore": "コア処理",
   "errEngineClosed": "エンジン未起動",
+  "errEngineBusy": "エンジンビジー、後ほど再試行",
   "errInvalidLength": "長さが無効",
   "errInvalidEncoding": "エンコーディングが無効",
   "errInvalidPath": "パスが無効",

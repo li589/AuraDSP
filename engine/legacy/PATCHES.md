@@ -272,3 +272,60 @@ yquist * 0.999，
   Z13 锁保持）与 ddc（`DDCRefresh` free+换 `sosPointer`/`usedSOSCount` 两字段非原子，
   Z14 锁保持）仍持 `jdsp_lock`——两者持锁时长亚毫秒~毫秒级（非秒级），且与
   `JamesDSPSetSampleRate` 的全效果重建共用该锁，列为 B1-b/B1-c 后续专项。
+
+## B1-b Effects/vdc.c + jdspController.c + jdsp_header.h — ddc 影子视图 + countChars 栈溢出修复（2026-10-24）
+
+- **位置**：`jdsp/Effects/vdc.c` 尾部重写（`countChars` 递归改迭代 +
+  `PeakingFilterResampler` 双 malloc 泄漏修复 + 影子视图化）；
+  `jdspController.c` `stage_ddc` 恒调 `DDCProcess`（enabled 内移）+
+  `kAuraStages` ddc lock 1→0；`jdsp_header.h` `DDC` 结构体缩为仅 `oldFile`、
+  新增 `DDCView{sosPointer,usedSOSCount,retiredAt}`/`AURA_DDC_SLOTS(3)`/
+  `ddcActive`/`ddcProcCount`/`ddcInFlight`；`engine/engine_param_table.h`
+  `set_ddc_load`/`set_ddc_enable` 去 `jdsp_lock` + -4 独立文案；
+  `engine/legacy/jamesdsp.c` cmd 1212 路径去锁（Z14 锁不再需要）。
+- **动机**（B1 条目预告的 ddc 专项 + 本次新发现的 P0）：① 原
+  `DDCStringParser` 持 `jdsp_lock` 解析（大文件 ~7-9ms），`stage_ddc`
+  每块取同一把锁——解析期间 RT 排队卡顿（同 B1-a 根因）；② 真正的杀手：
+  `countChars` 按字符**递归**计数（深度=剩余串长），VDC 文件 >~107KB 即
+  栈溢出崩溃——DDC 工具导出的巨型文件加载必崩；③ `PeakingFilterResampler`
+  双 malloc 泄漏（第一次分配被第二次覆盖后永不释放）。
+- **设计**（B1-a 同范式）：3 个预分配视图槽，`jdsp->ddcActive` 指向活动视图；
+  控制线程解析→装填非活动槽→原子换指针（x86-64 对齐指针存即原子；RT 块首
+  只读一次）。在途守卫双条件任一满足即可复用换下的槽：① `ddcInFlight == 0`
+  （RT 入口/出口原子增减——覆盖音频停流时 `ddcProcCount` 冻结导致连续加载
+  全部「引擎忙」的可用性洞）；② `ddcProcCount >= retiredAt`（换下后跑满
+  1 块）。槽内旧数组仅在复用本槽时释放（彼时守卫已保证无 RT 引用）；
+  有界等待 500ms 墙钟，仍无槽返回 -4；解析失败保留旧视图（加载失败不静音
+  正在生效的校正，同 B1-a）。
+- **countChars 修复**：递归→迭代。1.3MB/20000 段 VDC 实测 32.6ms 解析
+  不崩；`smoke_ddc_race.py` 回归线 ~260KB（>原崩溃阈值 107KB）。
+- **行为影响**：① 大 VDC 解析期间 RT 零阻塞（4s 压测：~500 个解析窗口内
+  RT 产出 49k+ 块、99 块/窗、最大块 0.37ms vs pre-B1-b 12.6 块/窗、最大块
+  9.41ms=解析持锁时长）；② 解析窗口内旧视图持续生效、换指针后新视图恰好在
+  块边界切入（during@old=3/3、after@new=32/32）；③ 音频停流时连续加载
+  5 次全部成功（≤8ms/次，`ddcInFlight==0` 守卫；pre-B1 设计下第 3 次起
+  计数冻结全「引擎忙」）。
+- **测试时间戳归属教训**：采样时间戳若取在 `process` 返回后，「swap 前开始
+  （读旧视图指针）、t1 后返回」的跨界块会被误记入 after 窗口带旧增益——
+  B1-b 首跑即踩（after=[0.1..0.2] 假失败）。改为**块首时间戳**（=视图指针
+  读取时刻）+ during 窗口 1ms 前向裕量（swap 贴近 t1、尾部仅 µs 级），
+  两侧断言与 swap 时刻完全解耦，确定性 100%。
+- **验收**：`smoke_ddc_race.py` 扩展四段全绿（大文件防崩 / RT 不阻塞 /
+  旧视图存活 / 停流连发）；反向验证（临时还原 pre-B1-b 持锁解析 +
+  stage lock=1）**3 项核心断言失败**：12.6 块/窗（<30）、最大块 9.41ms
+  （≥6ms）、解析期块被锁挡过 swap 点（during@old=0/1）——证明测试非空转。
+  阈值标定：≥30/窗（修复后 3.3× 余量；RT 迭代 ~82µs 解释器主导，跨机稳定）、
+  <6ms（修复后 16× 余量，且 > CPython GIL 切换间隔 5ms，单次解释器交接
+  最多污染 ~5ms 不误报）。`smoke_ddc.py` 2970 加载 0 失败；全量 python
+  冒烟 100%；Dart 436/436（串行，干净重跑）；flutter analyze 零问题。
+- **契约门禁**：-4 文案按 Part H reason-token 契约三方登记——新 token
+  `engine busy`（`kEngineReasonTokens` + `errEngineBusy` 三语 arb +
+  引擎侧字面量改为 `<subject>: <token>[ (detail)]` 合规形）；
+  `gen_param_contract.py` 再生 fixture（仅哨兵行 param_table 1179→1172）。
+  注意：Part H 扫描器只匹配 `set_error(h, "..."` 直接字面量，三元形式
+  `set_error(h, cond ? "..." : "...")` 天然绕过扫描——本次主动合规，
+  该盲区留待后续专项收口。
+- **上游同步冲突风险**：中高（vdc.c 尾部重写 + `DDC` 结构体缩容，上游若
+  更新需以本版为基线人工合并）。
+- **后续（B1 同法未竟项）**：仅剩 comp（`CompressorSetParam(forceRefresh=1)`
+  全量重置，Z13 锁保持）——B1-c。

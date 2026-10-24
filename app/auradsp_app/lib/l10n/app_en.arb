@@ -1135,6 +1135,7 @@
   "fxCatFront": "Front Shaping",
   "fxCatCore": "Core Processing",
   "errEngineClosed": "Engine is not running",
+  "errEngineBusy": "Engine busy, retry later",
   "errInvalidLength": "Invalid length",
   "errInvalidEncoding": "Invalid encoding",
   "errInvalidPath": "Invalid path",

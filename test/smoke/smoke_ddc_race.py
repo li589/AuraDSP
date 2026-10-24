@@ -31,6 +31,16 @@ DDCDisable 不持锁，构成同型缺口（RT 侧假设的互斥，控制侧未
 死锁/饥饿**——本修法的主要风险面）+ enable 零误拒 + 收尾样本级验证
 DDC 生效（out_on == 0.5×out_off，VDC_A 净增益 0.5）。
 
+B1-b 追加段（2026-10-24 影子视图化后）：
+  - 大文件防崩回归：countChars 原为按字符递归（深度=剩余串长），
+    ~107KB 以上 VDC 即栈溢出崩溃（用户选个大 .vdc 就崩）；已改迭代。
+    本段以 ~300KB / ~1.3MB 两份大 VDC 守门；
+  - 解析期间 RT 不阻塞：1.3MB 文件解析 ~30ms，pre-B1-b 持锁期间 RT
+    每窗口被挡 ~30ms；影子视图化后 max block 应 ≪ 15ms；
+  - 解析期间旧视图持续生效：加载增益 0.25 大文件的解析窗口内，输出
+    必须保持旧视图（VDC_A 增益 0.5）的水平，切换只在换指针后发生；
+  - 停流连发加载全部成功（ddcInFlight==0 守卫，同 B1-a liveprog）。
+
 能证明：加锁后控制侧与 RT/并发加载的互斥语义不回归（无死锁、无饿死、
 DDC 仍逐样本正确生效、引擎状态不残留损坏）；若未来出现绕过 ctrl_mutex
 的控制入口或置位 ddcForceRefresh 的路径，本测试的持续锤击可抓住退化。
@@ -71,6 +81,16 @@ def build_vdc(gain):
     def sec(b0):
         return '%.17g,%.17g,%.17g,%.17g,%.17g' % (b0, 0.0, 0.0, 0.0, 0.0)
     body = ','.join([sec(gain)] + [sec(1.0)] * (SECTIONS - 1))
+    return 'SR_44100:' + body + '\nSR_48000:' + body + '\n'
+
+
+def build_vdc_wide(gain, sections):
+    """长数字格式 VDC（每数 ~20 字符）：用文本体积而非段数撑大文件——
+    解析耗时随文本增长，RT 每样本成本只随段数增长，两者解耦。
+    用于 countChars 递归崩溃回归（>107KB）与大文件解析压测。"""
+    def sec(b0):
+        return ','.join('%.20e' % v for v in (b0, 0.0, 0.0, 0.0, 0.0))
+    body = ','.join([sec(gain)] + [sec(1.0)] * (sections - 1))
     return 'SR_44100:' + body + '\nSR_48000:' + body + '\n'
 
 
@@ -285,6 +305,204 @@ for _ in range(32):
         if v != v or v > 1e6 or v < -1e6:
             ok_tail = False
 check('engine still healthy after race', ok_tail)
+
+# ===================== B1-b 影子视图附加验证 =====================
+# 1) 大文件防崩回归（countChars 迭代化）：>107KB 即原崩溃阈值
+path_big1 = os.path.join(tmpdir, 'big1.vdc')
+with open(path_big1, 'w') as f:
+    f.write(build_vdc_wide(0.5, 1200))       # ~260KB
+rc_big1 = set_path('ddc.load', path_big1)
+size_big1 = os.path.getsize(path_big1)
+check('big VDC (~%.0fKB, above old stack-overflow threshold) loads rc==0'
+      % (size_big1 / 1024.0), rc_big1 == 0, 'rc=%d size=%d' % (rc_big1, size_big1))
+rc, ready = get_i('ddc.ready')
+check('big VDC ready == 1', rc == 0 and ready == 1, 'rc=%d ready=%d' % (rc, ready))
+
+# 2) 大文件解析期间 RT 不被阻塞（影子视图）：~1.3MB 解析 ~30ms。
+#    注意 DDCStringParser 对同内容去重——必须交替两份不同大文件，
+#    否则第二次起直接早退、解析窗口空转。
+path_big2 = os.path.join(tmpdir, 'big2.vdc')
+with open(path_big2, 'w') as f:
+    f.write(build_vdc_wide(0.5, 6000))       # ~1.3MB
+path_big3 = os.path.join(tmpdir, 'big3.vdc')
+with open(path_big3, 'w') as f:
+    f.write(build_vdc_wide(0.25, 6000))      # 同规模，增益 0.25（内容不同）
+b2 = path_big2.encode()
+big2_buf = (ctypes.c_char * len(b2)).from_buffer_copy(b2)
+b3 = path_big3.encode()
+big3_buf = (ctypes.c_char * len(b3)).from_buffer_copy(b3)
+
+# 回到 VDC_A（小文件）作为活动视图，停用 DDC——锁等待与 enabled 无关
+# （pre-B1-b stage_ddc 每块都取锁，控制侧持锁解析即挡 RT）
+assert set_path('ddc.load', path_a) == 0
+set_i('ddc.enable', 0)
+
+stop_b = threading.Event()
+parsing = threading.Event()
+blocks_during_parse = [0]
+parse_windows = [0]
+rt_max_ms_b = [0.0]
+rt_crash_b = []
+rt_blocks_b = [0]
+big_load_errors = []
+
+
+def big_load_thread():
+    n = 0
+    t0 = time.perf_counter()
+    while time.perf_counter() - t0 < 4.0:
+        buf = big2_buf if (n % 2 == 0) else big3_buf
+        ln = len(b2) if (n % 2 == 0) else len(b3)
+        parsing.set()
+        rc = dll.auradsp_set_param(h, b'ddc.load', buf, ln)
+        parsing.clear()
+        parse_windows[0] += 1
+        if rc != 0:
+            big_load_errors.append('rc=%d' % rc)
+        n += 1
+
+
+def rt_thread_b():
+    buf = (ctypes.c_float * (BLOCK * 2))()
+    out = (ctypes.c_float * (BLOCK * 2))()
+    for i in range(BLOCK):
+        s = 0.4 * math.sin(2 * math.pi * 1000.0 * i / SR)
+        buf[i * 2] = s
+        buf[i * 2 + 1] = s
+    k = 0
+    while not stop_b.is_set():
+        try:
+            t0 = time.perf_counter()
+            dll.auradsp_process(h, buf, out, BLOCK)
+            dt = (time.perf_counter() - t0) * 1000.0
+        except OSError as e:
+            rt_crash_b.append('block %d: %s' % (k, e))
+            break
+        if dt > rt_max_ms_b[0]:
+            rt_max_ms_b[0] = dt
+        if parsing.is_set():
+            blocks_during_parse[0] += 1
+        k += 1
+    rt_blocks_b[0] = k
+
+
+t_rt_b = threading.Thread(target=rt_thread_b, daemon=True)
+t_ld_b = threading.Thread(target=big_load_thread, daemon=True)
+t_rt_b.start()
+t_ld_b.start()
+t_ld_b.join(JOIN_TIMEOUT)
+ld_b_alive = t_ld_b.is_alive()
+stop_b.set()
+t_rt_b.join(JOIN_TIMEOUT)
+rt_b_alive = t_rt_b.is_alive()
+
+check('big load thread finished (no deadlock/hang)', not ld_b_alive)
+check('rt thread B finished (no deadlock/hang)', not rt_b_alive)
+check('rt B no hard fault', not rt_crash_b, str(rt_crash_b[:1]))
+check('big loads all rc==0', not big_load_errors, str(big_load_errors[:3]))
+per_window_b = (blocks_during_parse[0] / parse_windows[0]) if parse_windows[0] else 0.0
+# 阈值标定（2026-10-24 反向验证实测）：B1-b 修复后 ~97 块/窗、最大块
+# 0.43ms；pre-B1-b 持锁模拟 12 块/窗、最大块 8.74ms（=解析持锁时长）。
+# ≥30/窗：修复后 3.2× 余量（RT 迭代 ~82µs 为解释器主导，跨机稳定），
+# pre-B1-b 差 2.5× 必挂。<6ms：修复后 14× 余量，且 > CPython GIL 切换
+# 间隔 5ms——单次解释器交接最多污染 ~5ms，不会误报；pre-B1-b 的锁等待
+# 8.74ms 清晰越界。
+check('rt kept producing DURING big parses (>=30 blocks/window, shadow view)',
+      per_window_b >= 30,
+      'blocks=%d windows=%d (%.1f/window)'
+      % (blocks_during_parse[0], parse_windows[0], per_window_b))
+check('rt B max block %.2fms < 6ms (no parse-induced stall)'
+      % rt_max_ms_b[0], rt_max_ms_b[0] < 6.0)
+print('  [info] big-file: loads=%d, rt blocks=%d, max block=%.2fms, '
+      'blocks/window=%.1f, size=%.1fMB'
+      % (parse_windows[0], rt_blocks_b[0], rt_max_ms_b[0], per_window_b,
+         size_big1 / 1048576.0))
+
+# 3) 解析期间旧视图持续生效（VDC_A 增益 0.5 → big3 增益 0.25，
+#    切换只允许发生在换指针后）
+assert set_path('ddc.load', path_a) == 0   # VDC_A 增益 0.5
+assert set_i('ddc.enable', 1) == 0
+stop_c = threading.Event()
+mid_c = []
+
+
+def rt_thread_c():
+    buf = (ctypes.c_float * (BLOCK * 2))()
+    out = (ctypes.c_float * (BLOCK * 2))()
+    for i in range(BLOCK):
+        s = 0.4 * math.sin(2 * math.pi * 1000.0 * i / SR)
+        buf[i * 2] = s
+        buf[i * 2 + 1] = s
+    while not stop_c.is_set():
+        ts = time.perf_counter()  # 块首时间戳=视图指针读取时刻（非返回后）
+        dll.auradsp_process(h, buf, out, BLOCK)
+        mid_c.append((ts, max(abs(out[i]) for i in range(BLOCK * 2))))
+
+
+t_rt_c = threading.Thread(target=rt_thread_c, daemon=True)
+t_rt_c.start()
+time.sleep(0.3)
+pre_c = mid_c[-1][1] if mid_c else 0.0
+t0 = time.perf_counter()
+rc_big3 = dll.auradsp_set_param(h, b'ddc.load', big3_buf, len(b3))
+t1 = time.perf_counter()
+time.sleep(0.3)
+stop_c.set()
+t_rt_c.join(JOIN_TIMEOUT)
+# swap 发生在 [t0, t1) 内且贴近 t1（解析→装填→换指针→返回，尾部仅 µs 级）。
+# 块首时间戳 t < t1-1ms 的块必读于换指针前（旧视图）；t >= t1 的块必读于
+# 换指针后（新视图）——两侧窗口均与 swap 时刻解耦，断言确定性 100%。
+# （历史教训：时间戳若取在 process 返回后，swap 前开始、t1 后返回的跨界块
+# 会被误记入 after 窗口带旧增益，造成假失败——B1-b 首跑即踩。）
+during_c = [p for (t, p) in mid_c if t0 <= t < t1 - 0.001]
+after_c = [p for (t, p) in mid_c if t >= t1]
+ok_during_c = bool(during_c) and all(abs(p - pre_c) < 0.02 for p in during_c)
+ok_after_c = bool(after_c) and all(abs(p - 0.5 * pre_c) < 0.02 for p in after_c)
+check('old view alive DURING big parse (output stays at old gain)',
+      ok_during_c and rc_big3 == 0,
+      'rc=%d parse=%.1fms pre=%.4f during=[%.4f..%.4f] n=%d'
+      % (rc_big3, (t1 - t0) * 1000.0, pre_c,
+         min(during_c) if during_c else -1, max(during_c) if during_c else -1,
+         len(during_c)))
+check('new view engaged AFTER swap (gain 0.5 -> 0.25)',
+      ok_after_c,
+      'after=[%.4f..%.4f] expect ~%.4f n=%d'
+      % (min(after_c) if after_c else -1, max(after_c) if after_c else -1,
+         0.5 * pre_c, len(after_c)))
+print('  [info] big3 parse wall=%.1fms, %d blocks during, %d after '
+      '(during@old=%d, after@new=%d)'
+      % ((t1 - t0) * 1000.0, len(during_c), len(after_c),
+         sum(1 for p in during_c if abs(p - pre_c) < 0.02),
+         sum(1 for p in after_c if abs(p - 0.5 * pre_c) < 0.02)))
+
+# 4) 停流连发加载全部成功（ddcInFlight==0 守卫；pre-B1 设计下第 3 次起
+#    全因 ddcProcCount 冻结而「引擎忙」且重试无用）。交替两份防去重。
+rapid_rcs = []
+rapid_max_ms = 0.0
+for i in range(5):
+    buf = big2_buf if (i % 2 == 0) else big3_buf
+    ln = len(b2) if (i % 2 == 0) else len(b3)
+    t0 = time.perf_counter()
+    rc = dll.auradsp_set_param(h, b'ddc.load', buf, ln)
+    rapid_max_ms = max(rapid_max_ms, (time.perf_counter() - t0) * 1000.0)
+    rapid_rcs.append(rc)
+check('stalled-audio rapid loads all succeed (ddcInFlight==0 guard)',
+      all(rc == 0 for rc in rapid_rcs), 'rcs=%s' % rapid_rcs)
+check('stalled-audio rapid loads bounded (<1500ms each)', rapid_max_ms < 1500.0,
+      'max=%.0fms' % rapid_max_ms)
+print('  [info] rapid ddc loads rcs=%s max_wall=%.0fms' % (rapid_rcs, rapid_max_ms))
+
+# 恢复小文件 + 使能，收尾健康
+assert set_path('ddc.load', path_a) == 0
+set_i('ddc.enable', 1)
+ok_tail2 = True
+for _ in range(32):
+    dll.auradsp_process(h, sig, out_on, BLOCK)
+    for i in range(0, BLOCK * 2, 8):
+        v = out_on[i]
+        if v != v or v > 1e6 or v < -1e6:
+            ok_tail2 = False
+check('engine still healthy after B1-b section', ok_tail2)
 
 dll.auradsp_destroy(h)
 shutil.rmtree(tmpdir, ignore_errors=True)

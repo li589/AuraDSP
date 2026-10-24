@@ -5032,6 +5032,12 @@ abstract class AppLocalizations {
   /// **'引擎未运行'**
   String get errEngineClosed;
 
+  /// No description provided for @errEngineBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎忙，请稍后重试'**
+  String get errEngineBusy;
+
   /// No description provided for @errInvalidLength.
   ///
   /// In zh, this message translates to:

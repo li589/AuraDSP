@@ -14,6 +14,7 @@ import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 const Set<String> kEngineReasonTokens = {
   'engine closed',
+  'engine busy',
   'invalid length',
   'invalid encoding',
   'invalid path',
@@ -53,6 +54,8 @@ String _localized(String token, AppLocalizations l) {
   switch (token) {
     case 'engine closed':
       return l.errEngineClosed;
+    case 'engine busy':
+      return l.errEngineBusy;
     case 'invalid length':
       return l.errInvalidLength;
     case 'invalid encoding':

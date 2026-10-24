@@ -402,8 +402,9 @@ static void stage_conv(JamesDSPLib *jdsp, size_t n)
 }
 static void stage_ddc(JamesDSPLib *jdsp, size_t n)
 {
-	if (jdsp->ddcEnabled)
-		DDCProcess(jdsp, n);
+	/* [PATCHED-AuraDSP B1-b] enabled 判断内移 DDCProcess：每块必过本
+	 * stage 推进在途守卫计数（停用期间块边界也要放行影子视图复用）。 */
+	DDCProcess(jdsp, n);
 }
 static void stage_liveprog(JamesDSPLib *jdsp, size_t n)
 {
@@ -472,7 +473,10 @@ static const struct
 	{"eq", stage_eq, 0},
 	{"arbmag", stage_arbmag, 0},
 	{"convolver", stage_conv, 1},
-	{"ddc", stage_ddc, 1},
+	/* [PATCHED-AuraDSP B1-b] ddc lock 1→0：控制侧已改影子视图 + 原子换
+	 * 指针（vdc.c），RT 块首读一次 ddcActive 即得 {sosPointer, count}
+	 * 一致对，无需再与任何控制路径互斥。 */
+	{"ddc", stage_ddc, 0},
 	/* [PATCHED-AuraDSP B1] liveprog lock 1→0：控制侧已改影子 VM 编译 +
 	 * 原子换指针（liveprogWrapper.c），RT 块首只读一次 eel 快照指针，
 	 * 无需再与任何控制路径互斥；保留锁只会在 EEL 编译/DDC 解析/

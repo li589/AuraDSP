@@ -2776,6 +2776,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errEngineClosed => 'Engine is not running';
 
   @override
+  String get errEngineBusy => 'Engine busy, retry later';
+
+  @override
   String get errInvalidLength => 'Invalid length';
 
   @override
