@@ -215,6 +215,20 @@ def run_smoke_tests():
     "smoke_effects_allparams.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
+    # WP0 脚手架（多声道重构与混响边界 2026-10-25）：新参数默认/往返/越界拒绝、
+    # reverb.engine 只读与路径映射、stereo 逐位不变。后续 WP 的 smoke 骨架
+    # 一并登记（当前打印 SKIP 退出 0，实现后转真断言）。
+    "smoke_wp0_scaffold.py",
+    "smoke_reverb_boundary.py",
+    "smoke_mc_reverb.py",
+    "smoke_mc_comp_persch.py",
+    "smoke_mc_eq_persch.py",
+    "smoke_bassmono_pairs.py",
+    "smoke_postgain_persch.py",
+    "smoke_channel_switch_reset.py",
+    "smoke_spatial_style_custom.py",
+    "smoke_eq_freq_clamp.py",
+    "smoke_vb_8x8_budget.py",
     "smoke_graph_order.py",
     "smoke_ddc.py",
         "test_editor_topology.py",

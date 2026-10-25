@@ -2673,5 +2673,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errUnsupported => '不支持的操作';
 
   @override
+  String get errReadOnly => '该参数为只读';
+
+  @override
   String get errInternal => '引擎内部错误';
 }

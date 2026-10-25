@@ -568,6 +568,55 @@ static auradsp_status get_channels_count(auradsp_handle h, void* out_value, uint
     return AURADSP_OK;
 }
 
+/* ---- WP0 脚手架（多声道重构 2026-10-25）------------------------------
+ * 以下参数本阶段只做存取与越界拒绝，默认值保持旧行为；消费点：
+ *   bassmono.pairs/merge → WP4；comp.mode → WP3；
+ *   reverb.engine → 只读诊断（路径判定 reverb_path_kind，WP1 共用）。 */
+static auradsp_status set_bassmono_pairs(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v < 0 || v > 0x0F) {
+        set_error(h, "bassmono.pairs: out of range (bitmask 0..15)");
+        return AURADSP_E_PARAM;
+    }
+    h->p.bassmono_pairs.store(v);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_bassmono_merge(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v != 0 && v != 1) {
+        set_error(h, "bassmono.merge: out of range (0/1 only)");
+        return AURADSP_E_PARAM;
+    }
+    h->p.bassmono_merge.store(v);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_comp_mode(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v != 0 && v != 1) {
+        set_error(h, "comp.mode: out of range (0=per-channel, 1=per-pair)");
+        return AURADSP_E_PARAM;
+    }
+    h->p.comp_mode.store(v);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_reverb_engine_readonly(auradsp_handle h, const void*, uint32_t) {
+    set_error(h, "reverb.engine: read-only");
+    return AURADSP_E_PARAM;
+}
+
+static auradsp_status get_reverb_engine(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t rv = h->p.reverb_preset.load(std::memory_order_relaxed);
+    *(int32_t*)out_value = (rv == -1) ? -1 : reverb_path_kind(h);
+    return AURADSP_OK;
+}
+
 static auradsp_status set_gate_max_ir_seconds(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     float v = *(const float*)value;
@@ -942,6 +991,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("comp.autogain", comp_autogain, hook_fx_gains),
     PARAM_INT("comp.channels", comp_channels, 0, 255, nullptr),
     PARAM_INT("comp.channel_mask", comp_channels, 0, 255, nullptr),  /* deprecated alias of comp.channels */
+    /* WP0 脚手架：0=逐声道 8 实例，1=超预算时逐对降级（WP3 消费）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("comp.mode", comp_mode, ParamType::kInt32, set_comp_mode),
 
     // 03 卷积混响 (Convolver)
     PARAM_CUSTOM_SET_STANDARD_GET("convolver.enable", conv_enable, ParamType::kBool, set_convolver_enable),
@@ -996,6 +1047,11 @@ static const EngineParamDesc kEngineParamTable[] = {
 
     // 08 混响 (Reverb / Freeverb)
     PARAM_CUSTOM_SET_STANDARD_GET("reverb.preset", reverb_preset, ParamType::kInt32, set_reverb_preset),
+    /* WP0 脚手架：混响边界。predelay 仅立体声自定义路径消费（WP2），
+     * lfe 仅 MC FDN 路径消费（WP1）；engine 为只读诊断。 */
+    PARAM_FLOAT("reverb.predelay", reverb_predelay, 0.0f, 100.0f, nullptr),
+    PARAM_BOOL("reverb.lfe", reverb_lfe, nullptr),
+    PARAM_CUSTOM("reverb.engine", set_reverb_engine_readonly, get_reverb_engine),
     PARAM_FLOAT("reverb.outgain", reverb_outgain, -12.0f, 6.0f, nullptr),
     PARAM_BOOL("reverb.autogain", reverb_autogain, hook_reverb_autogain),
     PARAM_BOOL("freeverb.enable", fv_enable, hook_freeverb_enable),
@@ -1079,6 +1135,9 @@ static const EngineParamDesc kEngineParamTable[] = {
     // 11 低频与滤波处理 (BassMono, Shelf, Filter)
     PARAM_BOOL("bassmono.enable", bassmono_enable, nullptr),
     PARAM_FLOAT("bassmono.freq", bassmono_freq, 20.0f, 300.0f, nullptr),
+    /* WP0 脚手架：标准四对多选 + 全局合并（WP4 消费）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("bassmono.pairs", bassmono_pairs, ParamType::kInt32, set_bassmono_pairs),
+    PARAM_CUSTOM_SET_STANDARD_GET("bassmono.merge", bassmono_merge, ParamType::kInt32, set_bassmono_merge),
     PARAM_BOOL("shelf.enable", shelf_enable, nullptr),
     PARAM_FLOAT("shelf.freq", shelf_freq, 40.0f, 400.0f, hook_shelf_recalc),
     PARAM_FLOAT("shelf.gain", shelf_gain, -15.0f, 15.0f, hook_shelf_recalc),
@@ -1126,6 +1185,15 @@ static const EngineParamDesc kEngineParamTable[] = {
     // 14 输入输出与全局配置 (Input, Post Gain, Limiter, System)
     PARAM_FLOAT("input.gain", input_gain, -15.0f, 15.0f, nullptr),
     PARAM_FLOAT("post.gain", post_gain, -15.0f, 15.0f, hook_post_gain),
+    /* WP0 脚手架：逐声道输出补偿（默认 0 dB，WP5 消费）。 */
+    PARAM_FLOAT("post.gain.c0", post_gain_ch[0], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c1", post_gain_ch[1], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c2", post_gain_ch[2], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c3", post_gain_ch[3], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c4", post_gain_ch[4], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c5", post_gain_ch[5], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c6", post_gain_ch[6], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c7", post_gain_ch[7], -15.0f, 15.0f, nullptr),
     PARAM_BOOL("limiter.enable", limiter_enable, hook_limiter_enable),
     PARAM_INT("limiter.channels", limiter_channels, 0, 255, nullptr),
     PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),  /* deprecated alias of limiter.channels */
@@ -1146,6 +1214,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b3", get_gr_dyneq_b3),
     PARAM_CUSTOM("channels.count", set_channels_count, get_channels_count),
     PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
+    /* WP0 脚手架：channels.count 的自动/手动模式状态载体（纯状态）。 */
+    PARAM_INT("channels.countMode", channels_count_mode, 0, 1, nullptr),
     PARAM_CUSTOM("gate.maxIrSeconds", set_gate_max_ir_seconds, get_gate_max_ir_seconds),
     PARAM_CUSTOM("gate.maxFileMb", set_gate_max_file_mb, get_gate_max_file_mb),
     PARAM_CUSTOM("viz.fftSize", set_viz_fft_size, get_viz_fft_size),

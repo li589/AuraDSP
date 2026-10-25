@@ -1149,5 +1149,6 @@
   "errIoFailed": "ファイル読み書きに失敗",
   "errRejected": "エンジンにより値が拒否されました",
   "errUnsupported": "非サポートの操作",
+  "errReadOnly": "このパラメータは読み取り専用です",
   "errInternal": "エンジン内部エラー"
 }

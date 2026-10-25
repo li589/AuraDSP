@@ -148,11 +148,16 @@ const Set<String> kEngineOnlyIds = {
   // ---- bass：oversample（UI 未暴露） ----
   'bass.intensity',
   'bass.oversample',
+  // ---- bassmono：WP0 多对选择/全局合并（UI 于 WP4 接入） ----
+  'bassmono.merge',
+  'bassmono.pairs',
   // ---- channels：声道数/模式查询（VM/isolate 直发） ----
   'channels.count',
+  'channels.countMode',
   'channels.mode',
   // ---- comp：channel_mask（spec id = comp.channels；freq/gain 14 动态段已注册进 comp section） ----
   'comp.channel_mask',
+  'comp.mode',
   // ---- convolver：卷积 IR 查询/清空（副作用指令） ----
   'convolver.clear',
   'convolver.ir.channels',
@@ -231,6 +236,19 @@ const Set<String> kEngineOnlyIds = {
   'loudness.channel_mask',
   // ---- mode：全局模式查询 ----
   'mode.latency',
+  // ---- post：WP0 逐声道补偿（UI 于 WP5 接入） ----
+  'post.gain.c0',
+  'post.gain.c1',
+  'post.gain.c2',
+  'post.gain.c3',
+  'post.gain.c4',
+  'post.gain.c5',
+  'post.gain.c6',
+  'post.gain.c7',
+  // ---- reverb：WP0 混响边界（engine 只读诊断；predelay/lfe 于 WP1/WP2 接入） ----
+  'reverb.engine',
+  'reverb.lfe',
+  'reverb.predelay',
   // ---- shelf：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'shelf.channel_mask',
   // ---- tube：声道掩码族（channel_mask 别名仍仅引擎侧） ----
@@ -1301,7 +1319,9 @@ ${hits.join('\n')}''');
         'comp.freq1', 'comp.freq2', 'comp.freq3', 'comp.freq4', 'comp.freq5',
         'comp.freq6', 'comp.freq7', 'comp.gain1', 'comp.gain2', 'comp.gain3',
         'comp.gain4', 'comp.gain5', 'comp.gain6', 'comp.gain7',
-      }, reason: '缺默认 id 集合应为 comp 数组 14 条（设计预期，见扫描汇报 B3）');
+        'post.gain.c0', 'post.gain.c1', 'post.gain.c2', 'post.gain.c3',
+        'post.gain.c4', 'post.gain.c5', 'post.gain.c6', 'post.gain.c7',
+      }, reason: '缺默认 id 集合应为 comp/post 数组 22 条（设计预期，见扫描汇报 B3）');
     });
   });
 

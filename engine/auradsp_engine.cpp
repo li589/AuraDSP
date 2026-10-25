@@ -176,6 +176,11 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     for (int i = 0; i < 8; ++i) {
         h->p.input_ch_gain[i].store(1.0f);
     }
+    /* WP0 脚手架：逐声道输出补偿默认 0 dB（WP5 消费；显式覆盖让
+     * tools/gen_param_contract.py 能取到数组默认）。 */
+    for (int i = 0; i < 8; ++i) {
+        h->p.post_gain_ch[i].store(0.0f);
+    }
     const float default_comp_freq[7] = {95.0f, 200.0f, 400.0f, 800.0f, 1600.0f, 3400.0f, 7500.0f};
     for (int i = 0; i < 7; ++i) {
         h->p.comp_freq[i].store(default_comp_freq[i]);

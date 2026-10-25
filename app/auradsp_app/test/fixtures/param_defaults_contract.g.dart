@@ -1,7 +1,7 @@
 // GENERATED FILE — DO NOT EDIT.
 // 由 tools/gen_param_contract.py 从引擎 C++ 源码生成（引擎侧默认快照）。
 // 消费方：app/test/param_contract_test.dart（默认值一致性 + 权威对账）。
-// 覆盖引擎参数 215 个（含 21 个 set 分支动态 id）。
+// 覆盖引擎参数 230 个（含 21 个 set 分支动态 id）。
 
 class ParamDefaultRow {
   final String engineId;
@@ -43,6 +43,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('comp.autogain', 'comp_autogain', 0),
   ParamDefaultRow('comp.channels', 'comp_channels', 255),
   ParamDefaultRow('comp.channel_mask', 'comp_channels', 255),
+  ParamDefaultRow('comp.mode', 'comp_mode', 0),
   ParamDefaultRow('convolver.enable', 'conv_enable', 0),
   ParamDefaultRow('convolver.mix', 'conv_mix', 1.0),
   ParamDefaultRow('ddc.enable', 'ddc_enable', 0),
@@ -67,6 +68,8 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('eq.channels', 'eq_channels', 255),
   ParamDefaultRow('eq.channel_mask', 'eq_channels', 255),
   ParamDefaultRow('reverb.preset', 'reverb_preset', -1),
+  ParamDefaultRow('reverb.predelay', 'reverb_predelay', 0.0),
+  ParamDefaultRow('reverb.lfe', 'reverb_lfe', 0),
   ParamDefaultRow('reverb.outgain', 'reverb_outgain', 0.0),
   ParamDefaultRow('reverb.autogain', 'reverb_autogain', 0),
   ParamDefaultRow('freeverb.enable', 'fv_enable', 0),
@@ -144,6 +147,8 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('spatial.headtrack', 'spatial_headtrack', 0),
   ParamDefaultRow('bassmono.enable', 'bassmono_enable', 0),
   ParamDefaultRow('bassmono.freq', 'bassmono_freq', 120.0),
+  ParamDefaultRow('bassmono.pairs', 'bassmono_pairs', 1),
+  ParamDefaultRow('bassmono.merge', 'bassmono_merge', 0),
   ParamDefaultRow('shelf.enable', 'shelf_enable', 0),
   ParamDefaultRow('shelf.freq', 'shelf_freq', 100.0),
   ParamDefaultRow('shelf.gain', 'shelf_gain', 0.0),
@@ -182,6 +187,14 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('liveprog.enable', 'lp_enable', 0),
   ParamDefaultRow('input.gain', 'input_gain', 0.0),
   ParamDefaultRow('post.gain', 'post_gain', 0.0),
+  ParamDefaultRow('post.gain.c0', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c1', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c2', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c3', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c4', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c5', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c6', 'post_gain_ch', 0.0),
+  ParamDefaultRow('post.gain.c7', 'post_gain_ch', 0.0),
   ParamDefaultRow('limiter.enable', 'limiter_enable', 1),
   ParamDefaultRow('limiter.channels', 'limiter_channels', 255),
   ParamDefaultRow('limiter.channel_mask', 'limiter_channels', 255),
@@ -191,6 +204,7 @@ const List<ParamDefaultRow> kParamDefaultRows = [
   ParamDefaultRow('limiter.link', 'limiter_link', 1),
   ParamDefaultRow('limiter.lookahead', 'limiter_lookahead', 0),
   ParamDefaultRow('channels.mode', 'channels_mode', 0),
+  ParamDefaultRow('channels.countMode', 'channels_count_mode', 0),
 ];
 
 /// 表内无 struct member 的 custom 参数 id（无默认可校验）。
@@ -210,6 +224,7 @@ const List<String> kEngineCustomOnlyParamIds = [
   'arbmag.nodeCount',
   'bass.intensity',
   'eq.curve',
+  'reverb.engine',
   'liveprog.code',
   'liveprog.unload',
   'liveprog.status',
@@ -276,6 +291,20 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('comp.timeconstant', 0.02, 0.5),
   ParamRangeRow('comp.granularity', 0.0, 4.0),
   ParamRangeRow('comp.tfresolution', 0.0, 3.0),
+  ParamRangeRow('comp.freq1', 20.0, 20000.0),
+  ParamRangeRow('comp.freq2', 20.0, 20000.0),
+  ParamRangeRow('comp.freq3', 20.0, 20000.0),
+  ParamRangeRow('comp.freq4', 20.0, 20000.0),
+  ParamRangeRow('comp.freq5', 20.0, 20000.0),
+  ParamRangeRow('comp.freq6', 20.0, 20000.0),
+  ParamRangeRow('comp.freq7', 20.0, 20000.0),
+  ParamRangeRow('comp.gain1', -1.2, 1.2),
+  ParamRangeRow('comp.gain2', -1.2, 1.2),
+  ParamRangeRow('comp.gain3', -1.2, 1.2),
+  ParamRangeRow('comp.gain4', -1.2, 1.2),
+  ParamRangeRow('comp.gain5', -1.2, 1.2),
+  ParamRangeRow('comp.gain6', -1.2, 1.2),
+  ParamRangeRow('comp.gain7', -1.2, 1.2),
   ParamRangeRow('comp.outgain', -12.0, 6.0),
   ParamRangeRow('comp.channels', 0.0, 255.0),
   ParamRangeRow('comp.channel_mask', 0.0, 255.0),
@@ -292,6 +321,7 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('eq.outgain', -12.0, 6.0),
   ParamRangeRow('eq.channels', 0.0, 255.0),
   ParamRangeRow('eq.channel_mask', 0.0, 255.0),
+  ParamRangeRow('reverb.predelay', 0.0, 100.0),
   ParamRangeRow('reverb.outgain', -12.0, 6.0),
   ParamRangeRow('freeverb.decay', 0.0, 1.0),
   ParamRangeRow('freeverb.damp', 0.0, 1.0),
@@ -382,14 +412,23 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('loudness.channel_mask', 0.0, 255.0),
   ParamRangeRow('input.gain', -15.0, 15.0),
   ParamRangeRow('post.gain', -15.0, 15.0),
+  ParamRangeRow('post.gain.c0', -15.0, 15.0),
+  ParamRangeRow('post.gain.c1', -15.0, 15.0),
+  ParamRangeRow('post.gain.c2', -15.0, 15.0),
+  ParamRangeRow('post.gain.c3', -15.0, 15.0),
+  ParamRangeRow('post.gain.c4', -15.0, 15.0),
+  ParamRangeRow('post.gain.c5', -15.0, 15.0),
+  ParamRangeRow('post.gain.c6', -15.0, 15.0),
+  ParamRangeRow('post.gain.c7', -15.0, 15.0),
   ParamRangeRow('limiter.channels', 0.0, 255.0),
   ParamRangeRow('limiter.channel_mask', 0.0, 255.0),
   ParamRangeRow('limiter.release', 10.0, 500.0),
   ParamRangeRow('limiter.release_ms', 10.0, 500.0),
   ParamRangeRow('limiter.threshold', -24.0, 0.0),
+  ParamRangeRow('channels.countMode', 0.0, 1.0),
 ];
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1180;internal:805;create:503';
+const String kContractLineCounts = 'param_table:1250;internal:829;create:508';
 

@@ -724,3 +724,82 @@ yquist * 0.999，
   反向验证：还原 pre-fix 行为后 4 条核心断言**全部判红**。
 - **上游同步冲突风险**：极低（Dart 侧为主；引擎侧仅新增一个状态参数与
   一处门卫语义放宽）。
+
+## P-033 reverb.c + jdsp_header.h — vendor 原生参数与影子槽（计划，WP2）
+
+- **状态**：计划（WP0 于 2026-10-25 预留编号，尚未实施）。
+- **位置**：`jdsp/Effects/reverb.c`（新增 `Reverb_SetNative`）、
+  `jdsp/jdsp_header.h`（`sf_reverb_state_st reverbSlots[2]` +
+  `sf_reverb_state_st *reverbActive`、`reverbProcCount` / `reverbInFlight` /
+  `retiredAt`、`reverbOutGainDb` / `reverbAutoGain`）、
+  `jdsp/jdspController.c`（`stage_reverb` 换槽与输出增益）。
+- **动机**：立体声/矩阵/双耳路径必须使用 vendor Progenitor2；现有
+  `Reverb_SetParam` 只能整预设重建，无法承接 `freeverb.*` 自定义参数，
+  且重建 1MB 状态会在拖动时卡顿。`reverb.outgain/autogain` 目前只落在
+  自研 Freeverb，退役后会丢功能。
+- **内容**：新增 `AuraReverbNativeParams` 与 `Reverb_SetNative()`；单槽改
+  双槽影子构建 + 原子换指针（与 P-018 comp 同范式）；`freeverb.*` 参数
+  映射到 vendor 原生参数；`stage_reverb` 增加 reverb 输出增益/自动增益。
+- **行为影响**：立体声路径自定义混响从 Freeverb 切到 vendor 原生参数；
+  预设切换不再重建活动槽。默认参数下音色不变。
+- **验收**：`smoke_reverb_boundary.py`、`smoke_reverb_native_params.py`。
+- **上游同步冲突风险**：中（`sf_reverb_state_st` 布局与 `stage_reverb`
+  调用点改动；上游 reverb.c 结构稳定，冲突集中在头文件字段）。
+
+## P-034 compSlots / CompressorProcessChannel — comp 逐声道（计划，WP3）
+
+- **状态**：计划（WP0 于 2026-10-25 预留编号，尚未实施）。
+- **位置**：`jdsp/jdsp_header.h`（`CompSlot compSlots[9]`、
+  `FFTCompander *compActive[8]`）、`jdsp/Effects/compressor.c`（逐声道
+  构建/换指针）、`jdsp/jdspController.c`（MC 链第 10 步调用）。
+- **动机**：`comp.channels` 现为成对语义，C/LFE 被强制联动；工程要求
+  8 声道各自独立检测器/包络/OLA 状态，且超预算时可诚实降级为逐对。
+- **内容**：8 活动槽 + 1 影子槽；`CompressorProcessChannel()` 单声道
+  FFT 优化；参数全局共享，控制线程逐声道重建；`comp.mode=1` 时 4 对
+  实例、半选对不处理。
+- **行为影响**：MC 路径 comp 从 3 对实例改为 8 单声道实例（或 4 对降级）；
+  立体声路径不变。
+- **验收**：`smoke_mc_comp_persch.py`、`smoke_vb_8x8_budget.py`。
+- **上游同步冲突风险**：高（FFTCompander 内部状态与 3b 多路复用路径）。
+
+## P-035 EqPool — MC 路径逐声道 EQ（计划，WP3）
+
+- **状态**：计划（WP0 于 2026-10-25 预留编号，尚未实施）。
+- **位置**：`jdsp/jdsp_header.h`（`EqPool`）、`engine/dsp/dsp_eq_pool.cpp`
+  或 `jdspController.c`（控制线程加载/RT 卷积）、MC 链第 12 步。
+- **动机**：`eq.channels` 现为成对语义且 MC 路径复用 vendor 立体声 EQ；
+  工程要求每声道独立卷积状态，IR 按设备率设计以修 S-6 类偏移。
+- **内容**：8×`FFTConvolver1x1` 池；`eq_pool_reload()` 用
+  `h->sample_rate` 取 IR；`eq_pool_process_strided()` 按 mask 抽 mono
+  卷积；MC 路径 gate 掉 vendor EQ，立体声路径保持 vendor 不变。
+- **行为影响**：MC 路径 EQ 逐声道独立；立体声路径零变化。
+- **验收**：`smoke_mc_eq_persch.py`、`smoke_eq_freq_clamp.py`。
+- **上游同步冲突风险**：中（新增池为主；`FFTConvolver1x1` 为既有实现）。
+
+## P-036 vendor 状态显式 reset（预留，WP6）
+
+- **状态**：预留；WP6 若需要 `JamesDSPResetVendorState` 之类的显式
+  vendor 状态清理入口才启用，否则本号保留不用。
+- **位置**：`jdsp/jdspController.c` / `jdsp/jdsp_header.h`（待定）。
+- **动机**：`reset_channel_state()` 需要保证拓扑切换时 vendor 段（comp/
+  reverb/EQ 影子槽、延迟线）不残留旧布局状态。
+- **内容**：待 WP6 评估；优先复用现有 `Refresh` / `Disable` 路径，避免
+  新增 vendor 入口。
+- **上游同步冲突风险**：低（若启用，预计为单个显式 reset 函数）。
+
+## P-037 postGainCh — stereo/matrix/binaural 逐声道输出补偿（计划，WP5）
+
+- **状态**：计划（WP0 于 2026-10-25 预留编号，尚未实施）。
+- **位置**：`jdsp/jdsp_header.h`（`float postGainCh[2]`）、
+  `jdsp/jdspController.c`（`stage_output`）。
+- **动机**：`post.gain.c0..c7` 需要逐声道补偿；MC 路径由引擎侧
+  `post_gain_process_mc` 承担，立体声/矩阵/双耳路径必须在 vendor
+  `stage_output` 内与主增益同级，limiter 才能看到最终电平。
+- **内容**：`postGainCh[2]` 默认 1.0；新增
+  `JamesDSPSetPostGainCh(jdsp, ch, dB)`（控制线程，与
+  `JamesDSPSetPostGain` 同范式）；`stage_output` 改为
+  `tmpBuffer[c][i] * postGain * postGainCh[c]`。MC vendor 段移除 `output`。
+- **行为影响**：trim 全 0 时逐位等于旧行为。
+- **验收**：`smoke_postgain_persch.py`。
+- **上游同步冲突风险**：低（两个字段 + 一行乘法；上游 `stage_output`
+  结构稳定）。
