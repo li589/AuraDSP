@@ -15,18 +15,30 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
   Widget build(BuildContext context) {
     final l = l10nOf(context);
     final m = widget.model;
+    final p = paletteOf(context);
     final isEnabled = m.isSpatialReverbOn;
 
-    final presets = <int, String>{
-      0: l.reverbPreset0, // 大音乐厅
-      1: l.reverbPreset1, // 音乐厅
-      2: l.reverbPreset2, // 中音乐厅
-      3: l.reverbPreset3, // 小音乐厅
-      4: l.reverbPreset4, // 录音棚
-      5: l.reverbPreset5, // 房间
-      6: l.reverbPreset6, // 大礼堂
-      7: l.reverbPreset7, // 板式混响
-    };
+    // curated chip 顺序固定；标签复用 reverbPreset0..7（按听感重命名）。
+    final labels = <String>[
+      l.reverbPreset0, // 大音乐厅
+      l.reverbPreset1, // 音乐厅
+      l.reverbPreset2, // 中音乐厅
+      l.reverbPreset3, // 小音乐厅
+      l.reverbPreset4, // 录音棚
+      l.reverbPreset5, // 房间
+      l.reverbPreset6, // 大礼堂
+      l.reverbPreset7, // 板式混响
+    ];
+    final legacyId = m.reverbPreset >= 0 &&
+            !kReverbCuratedPresets.contains(m.reverbPreset)
+        ? m.reverbPreset
+        : null;
+    // 引擎徽标：优先引擎回读（reverb.engine），无回读时按本地路径兜底。
+    final engine = m.reverbPreset == -1
+        ? -1
+        : (m.reverbEngine >= 0
+            ? m.reverbEngine
+            : (m.reverbStereoPath ? 0 : 1));
 
     return SectionCard(
       index: kEffectCardIndex['reverb'],
@@ -60,21 +72,28 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
           ),
           const SizedBox(height: AuraSpace.md),
 
-          // 2. 预设空间选择
+          // 2. 预设空间选择（curated 8 档 + 旧会话 legacy 档 + 自定义）
           Wrap(
             spacing: AuraSpace.sm,
             runSpacing: AuraSpace.sm,
             children: [
-              for (final e in presets.entries)
+              for (var i = 0; i < kReverbCuratedPresets.length; i++)
                 AuraChip(
-                  e.value,
-                  selected: isEnabled && m.reverbPreset == e.key,
-                  onTap: () => m.selectReverbPreset(e.key),
+                  labels[i],
+                  selected: isEnabled &&
+                      m.reverbPreset == kReverbCuratedPresets[i],
+                  onTap: () => m.selectReverbPreset(kReverbCuratedPresets[i]),
+                ),
+              if (legacyId != null)
+                AuraChip(
+                  l.reverbLegacyPreset(legacyId),
+                  selected: isEnabled,
+                  onTap: () => m.selectReverbPreset(legacyId),
                 ),
               AuraChip(
                 l.reverbCustom,
                 icon: Icons.tune_rounded,
-                selected: isEnabled && m.reverbPreset == -2 && m.fvOn,
+                selected: isEnabled && m.reverbPreset == -2,
                 onTap: () {
                   if (m.reverbPreset != -2) {
                     m.selectReverbPreset(-2);
@@ -83,9 +102,32 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
               ),
             ],
           ),
+          const SizedBox(height: AuraSpace.sm),
+
+          // 3. 当前实际引擎（诚实显示：立体声 vendor / 多声道 FDN）
+          Row(
+            children: [
+              Text(l.reverbEngineLabel,
+                  style: labelOf(p, color: p.textDim)),
+              const SizedBox(width: 4),
+              InfoBadge(message: l.reverbEngineInfo),
+              const Spacer(),
+              _StageBadge(
+                label: engine == 1
+                    ? l.reverbEngineMc
+                    : (engine == 0
+                        ? l.reverbEngineStereo
+                        : l.reverbEngineOff),
+                color: engine == 1 ? p.accent2 : p.success,
+                icon: engine == 1
+                    ? Icons.speaker_group_rounded
+                    : Icons.surround_sound_rounded,
+              ),
+            ],
+          ),
           const SizedBox(height: AuraSpace.md),
 
-          // 3. 核心滑块：混响干湿比 (Wet/Dry Mix)
+          // 4. 核心滑块：混响干湿比 (Wet/Dry Mix)
           ValueSlider(
             label: l.reverbMix,
             infoMessage: l.reverbHintMix,
@@ -100,20 +142,27 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
             onChanged: (v) => m.setReverbCustomParam('wet', v),
             onChangedEnd: (v) => m.setReverbCustomParam('wet', v),
           ),
+
+          // 5. LFE 入混响（仅 MC 路径且源带 LFE 时显示）
+          if (m.reverbMcPath && m.fileChannels >= 6) ...[
+            const SizedBox(height: AuraSpace.sm),
+            Row(
+              children: [
+                Text(l.reverbLfe, style: labelOf(p, color: p.text)),
+                const SizedBox(width: 4),
+                InfoBadge(message: l.reverbLfeInfo),
+                const Spacer(),
+                ParamSwitch(
+                  param: ParamRegistry.reverbLfe,
+                  model: m,
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AuraSpace.md),
 
-          // 4. 高级声学物理精调（标准折叠面板）
+          // 6. 高级声学物理精调（标准折叠面板）
           _SpatialReverbAdvanced(model: m),
-          // [P-031] 诚实标注：本卡效果器在引擎侧只作用于前置 FL/FR 对
-          // （engine_chain.cpp:895-903 在 mx_stereo 上处理），多声道离散
-          // 模式下环绕/LFE 不经过它。此前 UI 无任何说明，用户会以为
-          // "多声道独立处理"覆盖到本卡。
-          const SizedBox(height: AuraSpace.sm),
-          Text(
-            l.flfrOnlyHint,
-            style: captionOf(paletteOf(context), color: paletteOf(context).textDim)
-                .copyWith(fontSize: 10),
-          ),
         ],
       ),
     );
@@ -134,12 +183,30 @@ class _SpatialReverbAdvanced extends StatelessWidget {
         '${(m.reverbOutputGain >= 0 ? "+" : "")}${m.reverbOutputGain.toStringAsFixed(1)} dB';
     final roomStr =
         '${(m.fvRoomSize).toStringAsFixed(1)}x · ${(m.fvDecay * 100).toStringAsFixed(0)}%';
+    final maxWidth = m.reverbMcPath ? 2.0 : 1.0;
 
     return AdvancedSection(
       summary: '$roomStr · $agcStr · $trimStr',
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // WP1：预延迟暂只在 MC FDN 路径暴露（立体声 vendor 原生参数在 WP2）。
+          if (m.reverbMcPath)
+            ValueSlider(
+              label: l.reverbPredelay,
+              infoMessage: l.reverbPredelayInfo,
+              value: m.reverbPredelay,
+              defaultValue: ParamDefaults.reverbPredelay,
+              onResetToDefault: () =>
+                  m.setReverbPredelay(ParamDefaults.reverbPredelay),
+              min: 0,
+              max: 100,
+              unit: 'ms',
+              enabled: isEnabled,
+              format: (v) => v.toStringAsFixed(0),
+              onChanged: m.setReverbPredelay,
+              onChangedEnd: m.setReverbPredelay,
+            ),
           ValueSlider(
             label: l.reverbRoomSize,
             infoMessage: l.reverbHintSize,
@@ -172,13 +239,14 @@ class _SpatialReverbAdvanced extends StatelessWidget {
           ),
           ValueSlider(
             label: l.reverbStereoWidth,
-            infoMessage: l.reverbHintWidth,
-            value: m.fvWidth,
+            infoMessage:
+                m.reverbMcPath ? l.reverbHintWidthMc : l.reverbHintWidth,
+            value: m.fvWidth.clamp(0.2, maxWidth),
             defaultValue: ParamDefaults.fvWidth,
             onResetToDefault: () =>
                 m.setReverbCustomParam('width', ParamDefaults.fvWidth),
             min: 0.2,
-            max: 2.0,
+            max: maxWidth,
             unit: 'x',
             enabled: isEnabled,
             format: (v) => v.toStringAsFixed(1),

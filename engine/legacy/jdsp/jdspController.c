@@ -466,7 +466,13 @@ static void stage_reverb(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gate
 {
 	(void)gates;
 	if (jdsp->reverbEnabled)
+	{
+		/* [PATCHED-AuraDSP P-033] WP1：`reverb.outgain/autogain` 随 Freeverb
+		 * 退役落地 vendor 路径（fx 槽 5，与 tube/comp/bass/eq/arbmag 同范式）。 */
+		double rin = jdsp->fxAutoGain[5] ? stage_rms(jdsp, n) : 0.0;
 		ReverbProcess(jdsp, n);
+		stage_apply_fx_gain(jdsp, n, 5, rin);
+	}
 }
 static void stage_output(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
@@ -1574,12 +1580,13 @@ void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB)
  * 控制线程调用；fx 越界忽略。切态重置平滑状态避免从旧值爬坡。 */
 void JamesDSPSetFxOutGain(JamesDSPLib *jdsp, int fx, double linGain)
 {
-	if (fx < 0 || fx > 4) return;
+	/* [PATCHED-AuraDSP P-033] fx=5=reverb（WP1：vendor 路径 outgain/autogain） */
+	if (fx < 0 || fx > 5) return;
 	jdsp->fxOutGain[fx] = (float)linGain;
 }
 void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on)
 {
-	if (fx < 0 || fx > 4) return;
+	if (fx < 0 || fx > 5) return;
 	jdsp->fxAutoGain[fx] = on ? 1 : 0;
 	if (on)
 	{
@@ -1590,7 +1597,7 @@ void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on)
 }
 void JamesDSPInitFxGains(JamesDSPLib *jdsp)
 {
-	for (int i = 0; i < 5; ++i)
+	for (int i = 0; i < 6; ++i)
 	{
 		jdsp->fxOutGain[i] = 1.0f;
 		jdsp->fxAutoGain[i] = 0;

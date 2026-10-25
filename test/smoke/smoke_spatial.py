@@ -325,12 +325,38 @@ lm, rm, _ = run_fresh(noise_mono, room=0.7)
 check('reflections energy-balanced (mono L~R)',
       abs(lm - rm) / max(lm, 1e-9) < 0.05, 'L=%.4f R=%.4f' % (lm, rm))
 
-# 2c. FDN 晚期混响：同房间/同噪声下应增加尾音能量
-l_fdn, r_fdn, _ = run_fresh(noise_mono, room=0.0, fdn=1, late=1.0)
-l_dry, r_dry, _ = run_fresh(noise_mono, room=0.0, fdn=0)
-check('FDN adds late-reverb energy',
-      l_fdn > l_dry * 1.03 and r_fdn > r_dry * 1.03,
-      'fdn=%.4f/%.4f dry=%.4f/%.4f' % (l_fdn, r_fdn, l_dry, r_dry))
+# 2c. FDN 晚期混响（WP1 语义变化）：spatial.fdn 已退役为 deprecated 写别名，
+# 晚期混响职责移交统一混响引擎（本文件拓扑 → vendor Progenitor2）。spatial 段
+# 内部不再含 FDN，旧断言「fdn 给 spatial 输出加尾音能量」随之失效；新断言改为
+# 迁移语义：fdn=1 → reverb.preset=5 + vendor 引擎上报；late → freeverb.wet。
+# 完整别名矩阵见 smoke_spatial_fdn_removed.py。
+hh = dll.auradsp_create(SR, BLOCK)
+try:
+    def _gi(pid):
+        v = i32(0)
+        dll.auradsp_get_param(hh, pid.encode(), ctypes.byref(v), 4)
+        return v.value
+
+    def _gf(pid):
+        v = f32(0)
+        dll.auradsp_get_param(hh, pid.encode(), ctypes.byref(v), 4)
+        return v.value
+
+    check('fdn alias: default reverb off', _gi('reverb.preset') == -1)
+    dll.auradsp_set_param(hh, b'spatial.fdn', ctypes.byref(i32(1)), 4)
+    dll.auradsp_set_param(hh, b'spatial.late', ctypes.byref(f32(1.0)), 4)
+    check('fdn=1 migrates to unified reverb preset 5',
+          _gi('reverb.preset') == 5, 'preset=%d' % _gi('reverb.preset'))
+    check('fdn=1 picks vendor engine on stereo/matrix topology',
+          _gi('reverb.engine') == 0, 'engine=%d' % _gi('reverb.engine'))
+    check('late=1.0 migrates into freeverb.wet',
+          abs(_gf('freeverb.wet') - 1.0) < 1e-6,
+          'wet=%.3f' % _gf('freeverb.wet'))
+    # 别名只迁移「开启」语义：fdn=0 不得关掉统一混响
+    dll.auradsp_set_param(hh, b'spatial.fdn', ctypes.byref(i32(0)), 4)
+    check('fdn=0 leaves unified reverb on', _gi('reverb.preset') == 5)
+finally:
+    dll.auradsp_destroy(hh)
 
 # 4. B3c 镜像源早期反射：脉冲尾 room=1 >> room=0；反射时刻由房间几何决定。
 def capture_ir(room, blocks=40):

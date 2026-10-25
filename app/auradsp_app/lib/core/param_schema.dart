@@ -269,7 +269,7 @@ abstract final class ParamRegistry {
   static final reverbPreset = ParamSpec<int>(
     id: 'reverb.preset', section: 'reverb', key: 'preset',
     type: ParamType.int32, defaultValue: -1,
-    min: -2, max: 17,
+    min: -2, max: 18,
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.reverbPreset,
     setter: (m, v) => m.setReverbPreset(v),
@@ -327,6 +327,20 @@ abstract final class ParamRegistry {
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.fvWidth,
     setter: (m, v) => m.setReverbCustomParam('width', v),
+  );
+  static final reverbPredelay = ParamSpec<double>(
+    id: 'reverb.predelay', section: 'reverb', key: 'predelay',
+    type: ParamType.float, defaultValue: ParamDefaults.reverbPredelay,
+    min: 0.0, max: 100.0, step: 1.0, unit: 'ms',
+    formatter: (v) => v.toStringAsFixed(0),
+    getter: (m) => m.reverbPredelay,
+    setter: (m, v) => m.setReverbPredelay(v),
+  );
+  static final reverbLfe = ParamSpec<bool>(
+    id: 'reverb.lfe', section: 'reverb', key: 'lfe',
+    type: ParamType.boolean, defaultValue: ParamDefaults.reverbLfe,
+    getter: (m) => m.reverbLfe,
+    setter: (m, v) => m.setReverbLfe(v),
   );
   static final reverbAutoGain = ParamSpec<bool>(
     id: 'reverb.autogain', section: 'reverb', key: 'autoGain',
@@ -756,20 +770,6 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: ParamDefaults.spatialBinaural,
     getter: (m) => m.spatialBinaural,
     setter: (m, v) => m.setSpatialBinaural(v),
-  );
-  static final spatialFdn = ParamSpec<bool>(
-    id: 'spatial.fdn', section: 'spatial', key: 'fdn',
-    type: ParamType.boolean, defaultValue: ParamDefaults.spatialFdn,
-    getter: (m) => m.spatialFdn,
-    setter: (m, v) => m.setSpatialFdn(v),
-  );
-  static final spatialLate = ParamSpec<double>(
-    id: 'spatial.late', section: 'spatial', key: 'late',
-    type: ParamType.float, defaultValue: ParamDefaults.spatialLate,
-    min: 0.0, max: 1.0, step: 0.01, unit: '%',
-    formatter: (v) => (v * 100).toStringAsFixed(0),
-    getter: (m) => m.spatialLate,
-    setter: (m, v) => m.setSpatialLate(v),
   );
   static final spatialHeadAzim = ParamSpec<double>(
     id: 'spatial.headazim', section: 'spatial', key: 'headAzim',
@@ -1603,20 +1603,45 @@ abstract final class ParamRegistry {
       name: 'reverb',
       specs: [
         reverbPreset, reverbDecay, reverbDamp, reverbWet, reverbDry,
-        reverbRoomSize, reverbStereoWidth, reverbAutoGain, reverbOutputGain, reverbEnable,
+        reverbRoomSize, reverbStereoWidth, reverbPredelay, reverbLfe,
+        reverbAutoGain, reverbOutputGain, reverbEnable,
       ],
       postApply: (m, rev, fullRewrite) {
-        // 自定义混响保护逻辑：preset >= 0 切预设，-1 缺键不碰现值
-        final pr = (rev['preset'] as num?)?.toInt() ?? -1;
-        if (pr >= 0) {
-          m.setReverbPreset(pr);
-        } else {
-          if (rev['decay'] != null) m.setReverbCustomParam('decay', (rev['decay'] as num).toDouble());
-          if (rev['damp'] != null) m.setReverbCustomParam('damp', (rev['damp'] as num).toDouble());
-          if (rev['wet'] != null) m.setReverbCustomParam('wet', (rev['wet'] as num).toDouble());
-          if (rev['dry'] != null) m.setReverbCustomParam('dry', (rev['dry'] as num).toDouble());
-          if (rev['roomSize'] != null) m.setReverbCustomParam('roomSize', (rev['roomSize'] as num).toDouble());
-          if (rev['stereoWidth'] != null) m.setReverbCustomParam('width', (rev['stereoWidth'] as num).toDouble());
+        // WP1 迁移（工程文档 §4.2）：
+        //   旧 `enable=1 && preset=-1` → 自定义态 -2（旧双开关的“自定义开着”）；
+        //   新 preset>=0 → 预设；preset=-2 → 自定义；
+        //   preset=-1 且未开 → 只更新自定义参数，不改变开关。
+        final pr = (rev['preset'] as num?)?.toInt();
+        final legacyOn = rev['enable'] == true;
+        final hasCustom = rev.containsKey('decay') ||
+            rev.containsKey('damp') ||
+            rev.containsKey('wet') ||
+            rev.containsKey('dry') ||
+            rev.containsKey('roomSize') ||
+            rev.containsKey('stereoWidth');
+        double? d(String k) => (rev[k] as num?)?.toDouble();
+        if (pr != null && pr >= 0) {
+          m.selectReverbPreset(pr);
+        } else if (pr == -2 || (pr == -1 && legacyOn)) {
+          m.applyReverbCustomParams(
+            decay: d('decay'),
+            damp: d('damp'),
+            wet: d('wet'),
+            dry: d('dry'),
+            roomSize: d('roomSize'),
+            width: d('stereoWidth'),
+            activate: true,
+          );
+        } else if (hasCustom) {
+          m.applyReverbCustomParams(
+            decay: d('decay'),
+            damp: d('damp'),
+            wet: d('wet'),
+            dry: d('dry'),
+            roomSize: d('roomSize'),
+            width: d('stereoWidth'),
+            activate: false,
+          );
         }
       },
     ),
@@ -1723,7 +1748,7 @@ abstract final class ParamRegistry {
       specs: [
         spatialStyle, spatialRoom, spatialWidth, spatialCenter,
         spatialOutGain, spatialAutoGain, spatialMix, spatialElevation,
-        spatialBinaural, spatialFdn, spatialLate,
+        spatialBinaural,
         spatialHeadAzim, spatialHeadTrack, spatialEnable,
       ],
     ),

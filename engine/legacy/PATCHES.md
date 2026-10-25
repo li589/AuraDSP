@@ -725,9 +725,11 @@ yquist * 0.999，
 - **上游同步冲突风险**：极低（Dart 侧为主；引擎侧仅新增一个状态参数与
   一处门卫语义放宽）。
 
-## P-033 reverb.c + jdsp_header.h — vendor 原生参数与影子槽（计划，WP2）
+## P-033 reverb.c + jdsp_header.h — vendor 原生参数与影子槽（部分实施，WP1/WP2）
 
-- **状态**：计划（WP0 于 2026-10-25 预留编号，尚未实施）。
+- **状态**：部分实施。WP1（2026-10-25）已落地 `reverb.outgain/autogain`
+  到 vendor `stage_reverb`（fx 增益槽扩展 5=reverb，退役 Freeverb 后立体声
+  路径不丢功能）；vendor 原生参数映射与影子槽仍属 WP2（尚未实施）。
 - **位置**：`jdsp/Effects/reverb.c`（新增 `Reverb_SetNative`）、
   `jdsp/jdsp_header.h`（`sf_reverb_state_st reverbSlots[2]` +
   `sf_reverb_state_st *reverbActive`、`reverbProcCount` / `reverbInFlight` /

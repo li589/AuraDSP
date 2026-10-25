@@ -194,12 +194,12 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvWet = 1.0f;
     h->jdsp.auraConvDry = 0.0f;
     h->jdsp.auraConvMixUsed = 0;
-    fv_alloc(h->fvL, sample_rate, 0);
-    fv_alloc(h->fvR, sample_rate, kFvStereoSpread);
     JamesDSPInitFxGains(&h->jdsp);
     shelf_recalc(h);
     filter_recalc(h);
     apply_params_locked(h);
+    /* WP1：MC FDN 混响 RT 状态显式复位（create 时尚未 open，直接清）。 */
+    mc_reverb_reset(h);
     /* 空间音效 RT 状态显式复位（含新增的源/耳 pinna、mix/headazim 平滑器）。
      * 控制线程一次性开销，RT 无影响。 */
     spatial_reset(h);
@@ -238,8 +238,6 @@ void auradsp_destroy(auradsp_handle h) {
         }
     }
     auradsp::plugin_chain_reset(h);
-    fv_free(h->fvL);
-    fv_free(h->fvR);
     arbmag_pool_free(h);
     delete[] h->fft_scratch;
     delete[] h->hann;
@@ -317,6 +315,7 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         const bool binaural =
             h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
             h->p.spatial_enable.load(std::memory_order_relaxed) != 0 &&
+            h->channel_count.load(std::memory_order_relaxed) >= 4 &&
             h->mx_stereo && h->shelf_scratch;
         if (binaural) {
             /* B1：6/8ch → 双耳立体声，再复用完整立体声链；

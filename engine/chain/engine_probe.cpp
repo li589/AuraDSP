@@ -43,7 +43,10 @@ void probe_isolate(auradsp_handle p, const char* comp, float probe_arg = 0.0f) {
         auradsp_set_param(p, z.id, &v, 4);
     }
     int32_t zero = 0;
-    auradsp_set_param(p, "reverb.preset", &zero, 4);   /* -1 = off */
+    /* WP1：preset=-1 才是「关」（0..18 是开启的预设号）。旧值 0 会把 vendor
+     * 混响留在探针基线里（+30ms + 尾音能量），污染每一条测量。 */
+    int32_t off = -1;
+    auradsp_set_param(p, "reverb.preset", &off, 4);   /* -1 = off */
     auradsp_set_param(p, "freeverb.enable", &zero, 4);
     const float zero_f = 0.0f;
     auradsp_set_param(p, "stereo.mix", &zero_f, 4);
@@ -268,9 +271,18 @@ const bool is_ddc = !strcmp(component, "ddc");
 
     /* 数据判定：全空输出→-3（无法测），
      * 能量与基线一致→-3（探针未能使其生效）。
-     * 若能量已改变且 first >= 0，说明组件有效介入且为即时样本级处理（真实 0 延迟）。 */
+     * 若能量已改变且 first >= 0，说明组件有效介入且为即时样本级处理（真实 0 延迟）。
+     *
+     * haas 纯延迟线特例：当前延迟为 0ms 时延迟环就是恒等映射（din*0 + delayed*1
+     * 且 r0 刚写入），输出与基线逐样本相同——「能量不变」此刻不代表组件未生效，
+     * 而是诚实的 0ms。非零延迟能量必然变化，仍走通用判据。 */
     if (first < 0) return -3;
-    if (fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0)) return -3;
+    const bool unchanged = fabs(energy - base_energy) <= 1e-9 * (base_energy + 1.0);
+    if (unchanged && !strcmp(component, "haas")) {
+        *out_samples = 0;
+        return 0;
+    }
+    if (unchanged) return -3;
 
     long delay = first - (baseline > 0 ? baseline : 0);
     if (delay < 0) delay = 0;

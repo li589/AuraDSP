@@ -10,8 +10,10 @@ part of '../state.dart';
 /// _notifyUi()）。本块为历史层叠顺序（非按效果分组），与搬迁前一致；
 /// IDE outline 可按方法名跳读。
 extension StateEffects on AppModel {
-  /// 混响预设：废除品质档拦截限制，无条件自由放行
+  /// 混响预设：废除品质档拦截限制，无条件自由放行。
+  /// `reverb.preset` 是唯一开关（-1 关 / -2 自定义 / 0..18 预设）。
   void setReverbPreset(int v, {String? autoQualityMsg}) {
+    if (v != -1) _lastReverbPreset = v;
     setInt('reverb.preset', v);
   }
 
@@ -198,20 +200,6 @@ extension StateEffects on AppModel {
     scheduleAutoSave();
   }
 
-  void setSpatialFdn(bool on) {
-    spatialFdn = on;
-    setInt(ParamId.spatialFdn, on ? 1 : 0);
-    _notifyUi();
-    scheduleAutoSave();
-  }
-
-  void setSpatialLate(double v) {
-    spatialLate = v.clamp(0.0, 1.0);
-    setFloat(ParamId.spatialLate, spatialLate);
-    _notifyUi();
-    scheduleAutoSave();
-  }
-
   /// 头部朝向（手动或 OpenTrack 外部数据；引擎按块级 15ms 平滑消费）。
   void setSpatialHeadAzim(double v, {bool persist = true}) {
     final next = v.clamp(-180.0, 180.0);
@@ -309,108 +297,127 @@ extension StateEffects on AppModel {
     _notifyUi();
   }
 
-  /// 参数化混响使能：废除品质档拦截限制，无条件自由放行
+  /// 兼容旧调用点：`freeverb.enable` 已退役，转发到唯一开关。
+  /// 旧调用点仍可工作，但不再向引擎发送 freeverb.enable。
   void setFreeverbEnabled(bool on, {String? autoQualityMsg}) {
-    fvOn = on;
-    _notifyUi();
-    _markSent(ParamId.fvEnable);
-    send({
-      'cmd': 'setParam',
-      'id': ParamId.fvEnable,
-      'value': on ? 1 : 0,
-      'isFloat': false,
-    });
+    setSpatialReverbEnabled(on);
+  }
+
+  /// 预设对应的 3D 可视化参数（仅本地；引擎按路径使用预设表或 vendor
+  /// 原生参数，不再把预设值写进 freeverb.*）。
+  (double, double, double, double, double, double) _reverbVizFor(int id) {
+    return switch (id) {
+      5 => (0.85, 0.25, 0.45, 1.0, 1.5, 1.0), // 大音乐厅
+      3 => (0.75, 0.30, 0.40, 1.0, 1.3, 1.0), // 音乐厅
+      1 => (0.65, 0.35, 0.35, 1.0, 1.1, 0.9), // 中音乐厅
+      2 => (0.55, 0.40, 0.30, 1.0, 0.9, 0.85), // 小音乐厅
+      9 => (0.45, 0.45, 0.28, 1.0, 0.8, 0.8), // 录音棚
+      7 => (0.35, 0.50, 0.25, 1.0, 0.65, 0.75), // 房间
+      11 => (0.30, 0.50, 0.30, 1.0, 1.2, 0.9), // 大礼堂
+      15 => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 板式混响
+      _ => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 非 curated 旧预设
+    };
   }
 
   void selectReverbPreset(int id) {
-    final wasCustom = reverbPreset == -2;
-    reverbPreset = id;
-    if (id >= 0 && id <= 7) {
-      final (decay, damp, wet, dry, roomSize, width) = switch (id) {
-        0 => (0.85, 0.25, 0.45, 1.0, 1.5, 1.0), // 大音乐厅
-        1 => (0.75, 0.30, 0.40, 1.0, 1.3, 1.0), // 音乐厅
-        2 => (0.65, 0.35, 0.35, 1.0, 1.1, 0.9), // 中音乐厅
-        3 => (0.55, 0.40, 0.30, 1.0, 0.9, 0.85), // 小音乐厅
-        4 => (0.45, 0.45, 0.28, 1.0, 0.8, 0.8), // 大房间
-        5 => (0.35, 0.50, 0.25, 1.0, 0.65, 0.75), // 中房间
-        6 => (0.25, 0.55, 0.20, 1.0, 0.5, 0.7), // 小房间
-        _ => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 板式混响
-      };
-      fvDecay = decay;
-      fvDamp = damp;
-      fvWet = wet;
-      fvDry = dry;
-      fvRoomSize = roomSize;
-      fvWidth = width;
-      setFreeverbEnabled(true);
-      setFloat('freeverb.decay', decay);
-      setFloat('freeverb.damp', damp);
-      setFloat('freeverb.wet', wet);
-      setFloat('freeverb.dry', dry);
-      // [PATCHED-AuraDSP P-032] 必须一并下发 roomSize / width：此前只发了
-      // decay/damp/wet/dry，引擎侧 freeverb.roomsize 保持旧值（默认 1.2），
-      // 500ms 后的全量回读再把 UI 改回旧值 —— 用户看到"参数和 3D 图跳两次"
-      // （roomSize 直接决定 3D 房间几何，视觉上是整个房间缩回旧尺寸）。
-      // 见 PATCHES.md P-032。
-      setFloat('freeverb.roomsize', roomSize);
-      setFloat('freeverb.width', width);
-      setReverbPreset(id);
-    } else if (id == -1) {
-      // Issue #3 方案A：从自定义态（-2）关闭只关声音，不丢标记。
-      // engine 照常收 -1（vendor 关）+ fv 关；Dart 侧保留 -2，开回来走 -2 分支
-      // 恢复自定义参数。从 preset/-1 关则照旧落 -1。
+    if (id < -2 || id > 18) return;
+    if (id == -1) {
+      // 记住关闭前的预设（含 -2 自定义），重新开启时恢复。
+      if (reverbPreset != -1) _lastReverbPreset = reverbPreset;
+      reverbPreset = -1;
       setReverbPreset(-1);
-      setFreeverbEnabled(false);
-      if (wasCustom) reverbPreset = -2;
-    } else if (id == -2) {
-      // 自定义模式
-      setFreeverbEnabled(true);
-      _notifyUi();
+      return;
     }
+    if (id == -2) {
+      reverbPreset = -2;
+      _lastReverbPreset = -2;
+      setReverbPreset(-2);
+      // 进入自定义态时把 UI 侧全部自定义参数下发给引擎，保证预设→自定义
+      // 切换后两引擎拿到的系数与滑块一致。
+      _pushAllReverbCustomParams();
+      return;
+    }
+    reverbPreset = id;
+    final (decay, damp, wet, dry, roomSize, width) = _reverbVizFor(id);
+    fvDecay = decay;
+    fvDamp = damp;
+    fvWet = wet;
+    fvDry = dry;
+    fvRoomSize = roomSize;
+    fvWidth = width;
+    setReverbPreset(id);
   }
 
   void setSpatialReverbEnabled(bool on) {
     if (on) {
-      if (reverbPreset == -2) {
-        // 自定义态：只开开关，不碰参数。旧逻辑无条件切 preset 0，
-        // 会吃掉刚恢复/刚调好的自定义值（预设恢复实测：wet 0.5 -> 0.45）。
-        selectReverbPreset(-2);
-      } else {
-        selectReverbPreset(reverbPreset >= 0 ? reverbPreset : 0);
-      }
+      if (reverbPreset != -1) return;
+      selectReverbPreset(_lastReverbPreset);
     } else {
       selectReverbPreset(-1);
     }
   }
 
+  void setReverbPredelay(double v) {
+    reverbPredelay = v.clamp(0.0, 100.0);
+    setFloat(ParamId.reverbPredelay, reverbPredelay);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setReverbLfe(bool on) {
+    reverbLfe = on;
+    setInt(ParamId.reverbLfe, on ? 1 : 0);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
   void setReverbCustomParam(String param, double value) {
-    reverbPreset = -2; // 联动切换为自定义模式
-    if (!fvOn) {
-      setFreeverbEnabled(true);
+    applyReverbCustomParams(
+      decay: param == 'decay' ? value : null,
+      damp: param == 'damp' ? value : null,
+      wet: param == 'wet' ? value : null,
+      dry: param == 'dry' ? value : null,
+      roomSize: param == 'roomSize' ? value : null,
+      width: param == 'width' ? value : null,
+      activate: true,
+    );
+  }
+
+  /// 批量更新混响自定义参数（预设应用/旧会话迁移用）。
+  /// [activate] 为 true 时进入自定义态（-2）；false 只更新字段与引擎参数，
+  /// 不改变开关状态（旧预设 preset=-1 仍保持关闭）。
+  void applyReverbCustomParams({
+    double? decay,
+    double? damp,
+    double? wet,
+    double? dry,
+    double? roomSize,
+    double? width,
+    bool activate = true,
+  }) {
+    if (decay != null) fvDecay = decay.clamp(0.0, 1.0);
+    if (damp != null) fvDamp = damp.clamp(0.0, 1.0);
+    if (wet != null) fvWet = wet.clamp(0.0, 1.0);
+    if (dry != null) fvDry = dry.clamp(0.0, 1.0);
+    // 引擎表 0.5..2.5；旧预设/session 里的越界值必须钳住，否则必被拒收。
+    if (roomSize != null) fvRoomSize = roomSize.clamp(0.5, 2.5);
+    // 引擎表 0.2..2.0（MC FDN 宽度上限；立体声路径 UI 另行限制到 1.0）。
+    if (width != null) fvWidth = width.clamp(0.2, 2.0);
+    if (activate) {
+      reverbPreset = -2;
+      _lastReverbPreset = -2;
+      setReverbPreset(-2);
     }
-    switch (param) {
-      case 'decay':
-        fvDecay = value;
-        setFloat('freeverb.decay', value);
-      case 'damp':
-        fvDamp = value;
-        setFloat('freeverb.damp', value);
-      case 'wet':
-        fvWet = value;
-        setFloat('freeverb.wet', value);
-      case 'dry':
-        fvDry = value;
-        setFloat('freeverb.dry', value);
-      case 'roomSize':
-        // 引擎表 0.5..2.5；旧实现无 clamp，预设/session 里的旧值（如 0.1
-        // 或 3.0）直达引擎必被拒收。2026-10-18 补钳。
-        fvRoomSize = value.clamp(0.5, 2.5);
-        setFloat('freeverb.roomsize', fvRoomSize);
-      case 'width':
-        // 引擎表 0.2..2.0（同上）。
-        fvWidth = value.clamp(0.2, 2.0);
-        setFloat('freeverb.width', fvWidth);
-    }
+    _pushAllReverbCustomParams();
+  }
+
+  void _pushAllReverbCustomParams() {
+    setFloat('freeverb.decay', fvDecay);
+    setFloat('freeverb.damp', fvDamp);
+    setFloat('freeverb.wet', fvWet);
+    setFloat('freeverb.dry', fvDry);
+    setFloat('freeverb.roomsize', fvRoomSize);
+    setFloat('freeverb.width', fvWidth);
   }
 
   void setCompEnabled(bool on) {

@@ -380,7 +380,6 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('spatial.outgain', -12.0, 6.0),
   ParamRangeRow('spatial.mix', 0.0, 1.0),
   ParamRangeRow('spatial.elevation', -30.0, 30.0),
-  ParamRangeRow('spatial.late', 0.0, 1.0),
   ParamRangeRow('spatial.headazim', -180.0, 180.0),
   ParamRangeRow('bassmono.freq', 20.0, 300.0),
   ParamRangeRow('shelf.freq', 40.0, 400.0),
@@ -430,5 +429,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1250;internal:829;create:508';
+const String kContractLineCounts = 'param_table:1327;internal:796;create:507';
 

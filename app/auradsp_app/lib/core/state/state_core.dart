@@ -145,6 +145,15 @@ extension StateCore on AppModel {
       case 'reverb.preset':
         reverbPreset = v.toInt();
         break;
+      case 'reverb.predelay':
+        reverbPredelay = v;
+        break;
+      case 'reverb.lfe':
+        reverbLfe = v != 0;
+        break;
+      case 'reverb.engine':
+        reverbEngine = v.toInt();
+        break;
       case 'stereo.mix':
         // UI 刻度 0..1 → 存显示值；引擎侧收到 v * stereoWidenMax
         stereoMix = (v / stereoWidenMax).clamp(0.0, 1.0);
@@ -297,14 +306,6 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.spatialBinaural) {
           spatialBinaural = v != 0;
-          break;
-        }
-        if (id == ParamId.spatialFdn) {
-          spatialFdn = v != 0;
-          break;
-        }
-        if (id == ParamId.spatialLate) {
-          spatialLate = v;
           break;
         }
         if (id == ParamId.spatialHeadAzim) {
@@ -577,10 +578,6 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.dyneqB3Release) {
           dyneqB3Release = v;
-          break;
-        }
-        if (id == ParamId.fvEnable) {
-          fvOn = v != 0;
           break;
         }
         if (id == ParamId.fvDecay) {

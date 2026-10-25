@@ -41,8 +41,8 @@ const Map<String, Set<String>> kAliasToEngineId = {
   'reverb.dry': {'freeverb.dry'},
   'reverb.roomSize': {'freeverb.roomsize'},
   'reverb.width': {'freeverb.width'},
-  // 总开关走 selectReverbPreset → setFreeverbEnabled
-  'reverb.enable': {'freeverb.enable'},
+  // 总开关走 reverb.preset（WP1：freeverb.enable 已退役为 deprecated 写别名）
+  'reverb.enable': {'reverb.preset'},
   // 输出增益门命名差异（UI outputgain ↔ 引擎 outgain）
   'bass.outputgain': {'bass.outgain'},
   'eq.outputgain': {'eq.outgain'},
@@ -245,10 +245,13 @@ const Set<String> kEngineOnlyIds = {
   'post.gain.c5',
   'post.gain.c6',
   'post.gain.c7',
-  // ---- reverb：WP0 混响边界（engine 只读诊断；predelay/lfe 于 WP1/WP2 接入） ----
+  // ---- reverb：WP1 混响边界（reverb.engine 只读诊断；predelay/lfe 已接 UI） ----
   'reverb.engine',
-  'reverb.lfe',
-  'reverb.predelay',
+  // WP1：freeverb.enable / spatial.fdn / spatial.late 已从 UI 退役，
+  // 引擎保留为 deprecated 写别名（旧会话迁移用），UI 不读回。
+  'freeverb.enable',
+  'spatial.fdn',
+  'spatial.late',
   // ---- shelf：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'shelf.channel_mask',
   // ---- tube：声道掩码族（channel_mask 别名仍仅引擎侧） ----
@@ -1375,12 +1378,22 @@ ${hits.join('\n')}''');
       for (final p in presets) {
         expect((p['name'] as String).isNotEmpty, isTrue);
       }
-      final card = _read('app/auradsp_app/lib/features/effects/reverb_card.dart');
-      final uiIdx = RegExp(r'(\d+):\s*l\.reverbPreset\d+')
-          .allMatches(card).map((m) => int.parse(m.group(1)!)).toSet();
+      final stateSrc = _read('app/auradsp_app/lib/core/state.dart');
+      final curated = RegExp(r'kReverbCuratedPresets\s*=\s*\[([^\]]+)\]')
+          .firstMatch(stateSrc);
+      expect(curated, isNotNull, reason: 'state.dart 缺少 kReverbCuratedPresets');
+      final uiIdx = curated!
+          .group(1)!
+          .split(',')
+          .map((s) => int.parse(s.trim()))
+          .toSet();
       expect(uiIdx, isNotEmpty, reason: 'reverb_card 预设映射解析为空');
+      expect(uiIdx.length, 8, reason: 'curated 预设应为 8 档');
       expect(uiIdx.every((i) => i >= 0 && i <= 18), isTrue,
           reason: 'UI reverb 卡索引越出引擎预设域 0..18: $uiIdx');
+      final card = _read('app/auradsp_app/lib/features/effects/reverb_card.dart');
+      expect(card.contains('kReverbCuratedPresets'), isTrue,
+          reason: 'reverb_card 必须使用 curated 预设表，禁止硬编码另一套映射');
     });
   });
 }

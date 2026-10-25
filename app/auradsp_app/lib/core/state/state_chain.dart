@@ -271,10 +271,7 @@ extension StateChain on AppModel {
       'liveprog' => lpEnabled,
       'crossfeed' => xfeedOn,
       'stereo' => stereoOn,
-      'reverb' =>
-        reverbPreset >= 0 ||
-            // 自定义态 -2：fvOn 即开着，判关会让链视图与耳朵打架。
-            (reverbPreset == -2 && fvOn),
+      'reverb' => reverbPreset != -1,
       'output' => limiterOn,
       _ => false,
     };
@@ -320,12 +317,10 @@ extension StateChain on AppModel {
       case 'stereo':
         setStereoEnabled(!stereoOn);
       case 'reverb':
-        if (reverbPreset >= 0) {
-          setInt('reverb.preset', -1);
+        if (reverbPreset != -1) {
+          selectReverbPreset(-1);
         } else {
-          // -1→preset 0；-2→重申自定义（setSpatialReverbEnabled 内保护，
-          // 直接 setReverbPreset(0) 会吃掉自定义参数）。
-          setSpatialReverbEnabled(true);
+          selectReverbPreset(_lastReverbPreset);
         }
       case 'output':
         setInt('limiter.enable', limiterOn ? 0 : 1);

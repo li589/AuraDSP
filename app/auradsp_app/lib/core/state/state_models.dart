@@ -86,13 +86,15 @@ abstract class ParamDefaults {
   static const double inputBalanceL = 1.0; // 100%
   static const double inputBalanceR = 1.0; // 100%
 
-  // Freeverb 空间混响
+  // Freeverb 空间混响（WP1：freeverb.* 为混响自定义参数 ABI 名）
   static const double fvDecay = 0.5; // 50%
   static const double fvDamp = 0.5; // 50%
   static const double fvWet = 0.35; // 35%
   static const double fvDry = 1.0; // 100%
   static const double fvRoomSize = 1.2; // 1.2x
   static const double fvWidth = 1.0; // 100%
+  static const double reverbPredelay = 0.0; // [0,100] ms
+  static const bool reverbLfe = false; // 仅 MC：LFE 入混响
 
   // 低频搁架 (Shelf)
   static const double shelfFreq = 100.0; // 100 Hz
@@ -118,8 +120,6 @@ abstract class ParamDefaults {
   static const double spatialHeadAzim = 0.0; // [-180,180] 度
   static const bool spatialHeadTrack = false;
   static const bool spatialBinaural = false; // 6/8ch→2ch 双耳虚拟环绕
-  static const bool spatialFdn = false; // FDN 晚期混响
-  static const double spatialLate = 0.25; // [0,1]
 
   // 激励器
   static const double exciterAmount = 0.3; // [0,1]
