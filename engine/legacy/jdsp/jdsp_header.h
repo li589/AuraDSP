@@ -687,11 +687,13 @@ typedef struct dspsys
 	float stagePeakR[16];
 	/* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动增益补偿（leveler）。
 	 * fx 索引：0=tube 1=comp 2=bass 3=eq 4=arbmag。
+	 * [PATCHED-AuraDSP P-033] WP1 扩展 fx=5=reverb：Freeverb 退役后
+	 * `reverb.outgain/autogain` 落到 vendor stage_reverb（原生参数仍属 WP2）。
 	 * fxOutGain 线性增益（控制线程写，RT 读，x86 对齐 float 原子）；
 	 * fxAutoGain 开关；fxAGIn/Out/Comp 为 RT 独占的平滑 RMS 与补偿增益。 */
-	float fxOutGain[5];
-	int   fxAutoGain[5];
-	float fxAGIn[5], fxAGOut[5], fxAGComp[5];
+	float fxOutGain[6];
+	int   fxAutoGain[6];
+	float fxAGIn[6], fxAGOut[6], fxAGComp[6];
 	int32_t(*i32_from_p24)(const uint8_t *);
 	void (*p24_from_i32)(int32_t, uint8_t *);
 	// I/O function pointer

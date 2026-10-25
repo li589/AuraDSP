@@ -779,6 +779,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             Pointer<Uint8> idp(String s) => AuraDspLib.idBytes(s);
             final iBass = idp('bass.enable'), iBassG = idp('bass.gain');
             final iRev = idp('reverb.preset'), iMix = idp('stereo.mix');
+            final iRevEng = idp(ParamId.reverbEngine);
+            final iRevPre = idp(ParamId.reverbPredelay);
+            final iRevLfe = idp(ParamId.reverbLfe);
             final iEq = idp('eq.enable'), iPost = idp('post.gain');
             final iLim = idp('limiter.enable');
             final iCh = idp('channels.mode');
@@ -809,8 +812,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iSpM = idp(ParamId.spatialMix);
             final iSpEl = idp(ParamId.spatialElevation);
             final iSpBi = idp(ParamId.spatialBinaural);
-            final iSpFd = idp(ParamId.spatialFdn);
-            final iSpLa = idp(ParamId.spatialLate);
             final iSpH = idp(ParamId.spatialHeadAzim), iSpT = idp(ParamId.spatialHeadTrack);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
             // P-010：每效果输出增益门 + 自动补偿
@@ -845,7 +846,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iBhS = idp(ParamId.bassSubFreq), iBhC = idp(ParamId.bassCutoffF);
             final iFtE = idp(ParamId.filterEnable), iFtT = idp(ParamId.filterType);
             final iFtF = idp(ParamId.filterFreq), iFtQ = idp(ParamId.filterQ);
-            final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
+            final iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
             final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
@@ -924,6 +925,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'bassEnable': rdInt(iBass) ?? 0,
                 'bassGain': bassGainVal,
                 'reverbPreset': rdInt(iRev) ?? -1,
+                'reverbEngine': rdInt(iRevEng) ?? -1,
+                'reverbPredelay': rdFloat(iRevPre) ?? 0.0,
+                'reverbLfe': rdInt(iRevLfe) ?? 0,
                 'stereoMix': rdFloat(iMix) ?? 0.0, // 兜底必须=ParamDefaults.stereoMix（UI 为真，原 0.5）
                 'eqEnable': rdInt(iEq) ?? 0,
                 'postGain': rdFloat(iPost) ?? 0.0,
@@ -968,13 +972,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'spatialCenter': rdFloat(iSpC) ?? 0.8,
                 'spatialOutGain': rdFloat(iSpG) ?? 0.0,
                 'spatialAutoGain': rdInt(iSpA) ?? 0,
-                // P-2 修复：补齐 mix/elevation/binaural/fdn/late（fallback 取
-                // 引擎 struct 默认：1.0 / 0.0 / 0 / 0 / 0.25，三层一致）。
+                // P-2 修复：补齐 mix/elevation/binaural（fallback 取引擎
+                // struct 默认：1.0 / 0.0 / 0，三层一致）。WP1 移除 fdn/late。
                 'spatialMix': rdFloat(iSpM) ?? 1.0,
                 'spatialElevation': rdFloat(iSpEl) ?? 0.0,
                 'spatialBinaural': rdInt(iSpBi) ?? 0,
-                'spatialFdn': rdInt(iSpFd) ?? 0,
-                'spatialLate': rdFloat(iSpLa) ?? 0.25,
                 'spatialHeadAzim': rdFloat(iSpH) ?? 0.0,
                 'spatialHeadTrack': rdInt(iSpT) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,
@@ -1044,7 +1046,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'filterType': rdInt(iFtT) ?? 0,
                 'filterFreq': rdFloat(iFtF) ?? 80.0,
                 'filterQ': rdFloat(iFtQ) ?? 0.707,
-                'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
                 'fvWet': rdFloat(iFvW) ?? 0.35, // 兜底必须=ParamDefaults.fvWet（UI 为真，原 0.3）
@@ -1086,7 +1087,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'eqCurve': eqCurveRb,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
+              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
                 malloc.free(q);
               }
             }

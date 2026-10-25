@@ -97,8 +97,11 @@ static void hook_fx_gains(auradsp_handle h) {
 
 static void hook_reverb_autogain(auradsp_handle h) {
     if (h->open.load()) {
+        /* MC FDN 读 h->p.reverb_autogain + h->rev_ag_*（dsp_mc_reverb.cpp）；
+         * vendor 路径走 fx 槽 5（P-033 WP1）。两侧都要重置/下推。 */
         h->rev_ag_in = h->rev_ag_out = 0.0;
         h->rev_ag_comp = 1.0;
+        apply_fx_gains(h);
     }
 }
 
@@ -176,6 +179,17 @@ static void hook_comp_update(auradsp_handle h) {
 
 static void hook_spatial_enable(auradsp_handle h) {
     spatial_reset(h);
+    /* WP1：spatial.enable 参与双耳路径判定（binaural && enable），会影响
+     * 混响引擎归属；切换时清 MC FDN 状态并重算 vendor enable。 */
+    mc_reverb_reset(h);
+    if (h->open.load()) apply_reverb(h);
+    compute_latency(h, &h->latency_ms);
+}
+
+static void hook_spatial_binaural(auradsp_handle h) {
+    spatial_reset(h);
+    mc_reverb_reset(h);
+    if (h->open.load()) apply_reverb(h);
     compute_latency(h, &h->latency_ms);
 }
 
@@ -199,14 +213,6 @@ static void hook_spatial_style(auradsp_handle h) {
 static void hook_spatial_autogain(auradsp_handle h) {
     h->spat_ag_in = h->spat_ag_out = 0.0;
     h->spat_ag_comp = 1.0;
-}
-
-static void hook_freeverb_enable(auradsp_handle h) {
-    compute_latency(h, &h->latency_ms);
-}
-
-static void hook_freeverb_roomsize(auradsp_handle h) {
-    fv_retune(h, (double)h->p.fv_roomsize.load());
 }
 
 static void hook_crossfeed_enable(auradsp_handle h) {
@@ -256,14 +262,72 @@ static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uin
     const int32_t v = *(const int32_t*)value;
     /* 18 = SF_REVERB_PRESET_LONGREVERB2（sf_presetreverb 最高分支）。
      * 越界会落到 switch default，comb/delay size 保持 0，下一音频块
-     * (pos+1)%size 整数模零 → SIGFPE；VM/AIDL/预设恢复均可触达。 */
+     * (pos+1)%N 整数模零 → SIGFPE；VM/AIDL/预设恢复均可触达。 */
     if (v < -2 || v > 18) return AURADSP_E_PARAM;
     if (v != h->p.reverb_preset.load(std::memory_order_relaxed)) {
         h->p.reverb_preset.store(v);
-        compute_latency(h, &h->latency_ms);
+        /* WP1：切换预设/开关时清 MC FDN 尾音（RT 侧 5ms 淡出后清状态）。 */
+        mc_reverb_reset(h);
     }
     if (h->open.load()) apply_reverb(h);
     compute_latency(h, &h->latency_ms);
+    return AURADSP_OK;
+}
+
+/* WP1：freeverb.enable 退役，保留为 reverb.preset 的 deprecated 写别名。
+ * 写 1 → 若当前关闭则恢复默认预设 0；写 0 → 关闭（-1）。 */
+static auradsp_status set_freeverb_enable_alias(auradsp_handle h, const void* value,
+                                                uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t on = *(const int32_t*)value ? 1 : 0;
+    h->p.fv_enable.store(on);
+    const int32_t rv = h->p.reverb_preset.load(std::memory_order_relaxed);
+    if (on) {
+        if (rv == -1) {
+            h->p.reverb_preset.store(0);
+            mc_reverb_reset(h);
+        }
+    } else if (rv != -1) {
+        h->p.reverb_preset.store(-1);
+        mc_reverb_reset(h);
+    }
+    if (h->open.load()) apply_reverb(h);
+    compute_latency(h, &h->latency_ms);
+    return AURADSP_OK;
+}
+
+/* WP1：spatial.fdn 已移除（MC 混响接管离散多声道晚期混响）。
+ * 保留 deprecated 写别名：写 1 且混响关闭时打开默认预设 5（LARGEHALL1）。 */
+static auradsp_status set_spatial_fdn_alias(auradsp_handle h, const void* value,
+                                            uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t on = *(const int32_t*)value ? 1 : 0;
+    h->p.spatial_fdn.store(on);
+    if (on && h->p.reverb_preset.load(std::memory_order_relaxed) == -1) {
+        h->p.reverb_preset.store(5);
+        mc_reverb_reset(h);
+        if (h->open.load()) apply_reverb(h);
+        compute_latency(h, &h->latency_ms);
+    }
+    return AURADSP_OK;
+}
+
+/* WP1：spatial.late 已移除。旧会话迁移：仅当 freeverb.wet 仍为默认 0.35
+ * 时把 late 写进 freeverb.wet，避免覆盖用户已调过的干湿比。 */
+static auradsp_status set_spatial_late_alias(auradsp_handle h, const void* value,
+                                             uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    float v = *(const float*)value;
+    if (!std::isfinite(v)) {
+        set_error(h, "param: rejected (NaN/Inf input)");
+        return AURADSP_E_PARAM;
+    }
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    h->p.spatial_late.store(v);
+    if (h->p.fv_wet.load(std::memory_order_relaxed) == 0.35f) {
+        h->p.fv_wet.store(v);
+    }
     return AURADSP_OK;
 }
 
@@ -541,9 +605,13 @@ static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uin
         return AURADSP_E_PARAM;
     }
     h->p.channels_mode.store(v);
-    /* 模式切换会改变 spatial 的输入布局/状态语义；清空 ring/history/pinna/FDN，
-     * 避免直播切换读到旧布局的延迟线。 */
+    /* 模式切换会改变 spatial 的输入布局/状态语义；清空 ring/history/pinna，
+     * 避免直播切换读到旧布局的延迟线。WP1：同时清 MC FDN 并重算混响路径
+     * （mode=0 → vendor，mode=1 → MC FDN）。 */
     spatial_reset(h);
+    mc_reverb_reset(h);
+    if (h->open.load()) apply_reverb(h);
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 
@@ -556,9 +624,14 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
     }
     h->channel_count.store(v);
     auradsp::plugin_chain_set_channel_hint(h, v);
-    /* 通道数变化同时清空 spatial 状态（ring/history/pinna/FDN），避免直播
-     * 切换读到旧布局的延迟线；该清理在控制线程执行。 */
+    /* 通道数变化同时清空 spatial 状态（ring/history/pinna），避免直播
+     * 切换读到旧布局的延迟线；该清理在控制线程执行。WP1：MC FDN 的
+     * 声道布局（LFE 索引/宽度对）随通道数变化，一并复位并重算路径
+     * （双耳路径需要 count>=4）。 */
     spatial_reset(h);
+    mc_reverb_reset(h);
+    if (h->open.load()) apply_reverb(h);
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 
@@ -1052,14 +1125,17 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("reverb.predelay", reverb_predelay, 0.0f, 100.0f, nullptr),
     PARAM_BOOL("reverb.lfe", reverb_lfe, nullptr),
     PARAM_CUSTOM("reverb.engine", set_reverb_engine_readonly, get_reverb_engine),
-    PARAM_FLOAT("reverb.outgain", reverb_outgain, -12.0f, 6.0f, nullptr),
+    PARAM_FLOAT("reverb.outgain", reverb_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("reverb.autogain", reverb_autogain, hook_reverb_autogain),
-    PARAM_BOOL("freeverb.enable", fv_enable, hook_freeverb_enable),
+    /* WP1：Freeverb 已退役；freeverb.enable 仅为 reverb.preset 的 deprecated
+     * 写别名（1 → 若关闭则设预设 0；0 → -1）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("freeverb.enable", fv_enable, ParamType::kBool,
+                                  set_freeverb_enable_alias),
     PARAM_FLOAT("freeverb.decay", fv_decay, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("freeverb.damp", fv_damp, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("freeverb.wet", fv_wet, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("freeverb.dry", fv_dry, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("freeverb.roomsize", fv_roomsize, 0.5f, 2.5f, hook_freeverb_roomsize),
+    PARAM_FLOAT("freeverb.roomsize", fv_roomsize, 0.5f, 2.5f, nullptr),
     PARAM_FLOAT("freeverb.width", fv_width, 0.2f, 2.0f, nullptr),
 
     // 09 动态均衡 (Dynamic EQ)
@@ -1126,9 +1202,13 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("spatial.autogain", spatial_autogain, hook_spatial_autogain),
     PARAM_FLOAT("spatial.mix", spatial_mix, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("spatial.elevation", spatial_elevation, -30.0f, 30.0f, nullptr),
-    PARAM_BOOL("spatial.binaural", spatial_binaural, nullptr),
-    PARAM_BOOL("spatial.fdn", spatial_fdn, nullptr),
-    PARAM_FLOAT("spatial.late", spatial_late, 0.0f, 1.0f, nullptr),
+    PARAM_BOOL("spatial.binaural", spatial_binaural, hook_spatial_binaural),
+    /* WP1：spatial.fdn/spatial.late 已从 UI/语义移除；保留 deprecated 写别名
+     * 迁移旧会话（见 set_spatial_fdn_alias / set_spatial_late_alias）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("spatial.fdn", spatial_fdn, ParamType::kBool,
+                                  set_spatial_fdn_alias),
+    PARAM_CUSTOM_SET_STANDARD_GET("spatial.late", spatial_late, ParamType::kFloat,
+                                  set_spatial_late_alias),
     PARAM_FLOAT("spatial.headazim", spatial_headazim, -180.0f, 180.0f, nullptr),
     PARAM_BOOL("spatial.headtrack", spatial_headtrack, nullptr),
 

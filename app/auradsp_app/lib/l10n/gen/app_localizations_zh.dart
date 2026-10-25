@@ -669,6 +669,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbHintDry => '原始直达声保留量。确保人声吐字清晰结实。';
 
   @override
+  String get reverbHintWidthMc =>
+      '多声道 FDN 的宽度：只扩展 FL/FR、SL/SR、BL/BR 三对；中置与 LFE 不参与。';
+
+  @override
+  String get reverbEngineLabel => '当前引擎';
+
+  @override
+  String get reverbEngineStereo => '立体声 (Vendor)';
+
+  @override
+  String get reverbEngineMc => '多声道 FDN';
+
+  @override
+  String get reverbEngineOff => '已关闭';
+
+  @override
+  String get reverbEngineInfo =>
+      '混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。';
+
+  @override
+  String get reverbLfe => 'LFE 入混响';
+
+  @override
+  String get reverbLfeInfo =>
+      '开启后 LFE 经 120Hz 低通与 -6dB 送入多声道混响；湿声回加前再经同一低通。立体声路径忽略。';
+
+  @override
+  String get reverbPredelay => '预延迟';
+
+  @override
+  String get reverbPredelayInfo =>
+      '混响前的延迟量（0–100ms）。与预设自带的基础预延迟相加；自定义模式从 0 起算。';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return '旧版预设 $id';
+  }
+
+  @override
   String get spatialHintRoom => '模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。';
 
   @override
@@ -847,28 +886,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noAudio => '空闲 — 无音频流经引擎';
 
   @override
-  String get reverbPreset0 => '音乐厅';
+  String get reverbPreset0 => '大音乐厅';
 
   @override
-  String get reverbPreset1 => '小型厅堂';
+  String get reverbPreset1 => '音乐厅';
 
   @override
-  String get reverbPreset2 => '中厅';
+  String get reverbPreset2 => '中音乐厅';
 
   @override
-  String get reverbPreset3 => '大会堂';
+  String get reverbPreset3 => '小音乐厅';
 
   @override
-  String get reverbPreset4 => '盛大厅堂';
+  String get reverbPreset4 => '录音棚';
 
   @override
-  String get reverbPreset5 => '大教堂';
+  String get reverbPreset5 => '房间';
 
   @override
-  String get reverbPreset6 => '巨型厅堂';
+  String get reverbPreset6 => '大礼堂';
 
   @override
-  String get reverbPreset7 => '山谷';
+  String get reverbPreset7 => '板式混响';
 
   @override
   String get sourceCard => '音频源';
@@ -1924,19 +1963,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get spatialBinauralInfo =>
       '输入 4/5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音，并接管设置页的「声道模式」（该项此时不生效）';
-
-  @override
-  String get spatialFdn => 'FDN 房间';
-
-  @override
-  String get spatialFdnInfo =>
-      '使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间';
-
-  @override
-  String get spatialLate => '晚期混响';
-
-  @override
-  String get spatialLateInfo => 'FDN 晚期混响送入量。越大房间尾音越明显';
 
   @override
   String get spatialHeadTrack => '头部跟随';

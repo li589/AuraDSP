@@ -161,8 +161,6 @@ extension StateSession on AppModel {
       setFloat(ParamId.spatialMix, spatialMix);
       setFloat(ParamId.spatialElevation, spatialElevation);
       setInt(ParamId.spatialBinaural, spatialBinaural ? 1 : 0);
-      setInt(ParamId.spatialFdn, spatialFdn ? 1 : 0);
-      setFloat(ParamId.spatialLate, spatialLate);
       setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
       setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
       _syncHeadTracker();
@@ -250,20 +248,16 @@ extension StateSession on AppModel {
       }
       setInt(ParamId.compEnable, compOn ? 1 : 0);
 
-      // 2. 混响
-      if (isSpatialReverbOn) {
-        setFloat('freeverb.decay', fvDecay);
-        setFloat('freeverb.damp', fvDamp);
-        setFloat('freeverb.wet', fvWet);
-        setFloat('freeverb.dry', fvDry);
-        setInt(ParamId.fvEnable, 1);
-        if (reverbPreset >= 0) {
-          setInt('reverb.preset', reverbPreset);
-        }
-      } else {
-        setInt(ParamId.fvEnable, 0);
-        setInt('reverb.preset', -1);
-      }
+      // 2. 混响（WP1：reverb.preset 是唯一开关；freeverb.* 只是自定义参数）
+      setFloat('freeverb.decay', fvDecay);
+      setFloat('freeverb.damp', fvDamp);
+      setFloat('freeverb.wet', fvWet);
+      setFloat('freeverb.dry', fvDry);
+      setFloat('freeverb.roomsize', fvRoomSize);
+      setFloat('freeverb.width', fvWidth);
+      setFloat(ParamId.reverbPredelay, reverbPredelay);
+      setInt(ParamId.reverbLfe, reverbLfe ? 1 : 0);
+      setReverbPreset(reverbPreset);
 
       // 3. EQ 状态与曲线
       setInt('eq.enable', eqOn ? 1 : 0);

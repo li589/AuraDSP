@@ -55,7 +55,7 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_gate.cpp"
     "${API}/dsp/dsp_psycho.cpp"
     "${API}/dsp/dsp_loudness.cpp"
-    "${API}/dsp/dsp_freeverb.cpp"
+    "${API}/dsp/dsp_mc_reverb.cpp"
     "${API}/dsp/dsp_dyneq.cpp"
     "${API}/chain/engine_audiofile.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}

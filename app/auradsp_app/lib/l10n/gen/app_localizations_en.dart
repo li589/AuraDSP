@@ -732,6 +732,45 @@ class AppLocalizationsEn extends AppLocalizations {
       'Dry signal retention; keeps vocals articulate and solid.';
 
   @override
+  String get reverbHintWidthMc =>
+      'Multichannel FDN width: only FL/FR, SL/SR and BL/BR are widened; C and LFE stay untouched.';
+
+  @override
+  String get reverbEngineLabel => 'Engine';
+
+  @override
+  String get reverbEngineStereo => 'Stereo (Vendor)';
+
+  @override
+  String get reverbEngineMc => 'Multichannel FDN';
+
+  @override
+  String get reverbEngineOff => 'Off';
+
+  @override
+  String get reverbEngineInfo =>
+      'Reverb follows the current channel path: matrix/binaural uses the vendor Progenitor2 stereo reverb; discrete multichannel uses an 8-line FDN. The two never run together.';
+
+  @override
+  String get reverbLfe => 'LFE into reverb';
+
+  @override
+  String get reverbLfeInfo =>
+      'Sends LFE through a 120 Hz low-pass at -6 dB into the multichannel reverb; the wet return is low-passed again. Ignored on the stereo path.';
+
+  @override
+  String get reverbPredelay => 'Pre-delay';
+
+  @override
+  String get reverbPredelayInfo =>
+      'Delay before the reverb (0–100 ms), added to the preset\'s base pre-delay; custom mode starts from 0.';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return 'Legacy preset $id';
+  }
+
+  @override
   String get spatialHintRoom =>
       'Simulated room reflection volume. Higher = deeper, grander space with fuller tails.';
 
@@ -928,28 +967,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noAudio => 'Idle — no audio stream through the engine';
 
   @override
-  String get reverbPreset0 => 'Concert Hall';
+  String get reverbPreset0 => 'Large Hall';
 
   @override
-  String get reverbPreset1 => 'Small Hall';
+  String get reverbPreset1 => 'Concert Hall';
 
   @override
   String get reverbPreset2 => 'Medium Hall';
 
   @override
-  String get reverbPreset3 => 'Grand Hall';
+  String get reverbPreset3 => 'Small Hall';
 
   @override
-  String get reverbPreset4 => 'Vast Hall';
+  String get reverbPreset4 => 'Studio';
 
   @override
-  String get reverbPreset5 => 'Cathedral';
+  String get reverbPreset5 => 'Room';
 
   @override
-  String get reverbPreset6 => 'Colossal Hall';
+  String get reverbPreset6 => 'Auditorium';
 
   @override
-  String get reverbPreset7 => 'Valley';
+  String get reverbPreset7 => 'Plate Reverb';
 
   @override
   String get sourceCard => 'Audio Source';
@@ -2046,20 +2085,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get spatialBinauralInfo =>
       'Renders 4/5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted. While it is on, it takes over \'Channel Mode\' from the settings page (that setting has no effect)';
-
-  @override
-  String get spatialFdn => 'FDN room';
-
-  @override
-  String get spatialFdnInfo =>
-      '8-line feedback delay network for late reverb, replacing Freeverb; Freeverb is skipped to avoid a double room';
-
-  @override
-  String get spatialLate => 'Late reverb';
-
-  @override
-  String get spatialLateInfo =>
-      'FDN late-reverb send. Higher values make the room tail more obvious';
 
   @override
   String get spatialHeadTrack => 'Head tracking';

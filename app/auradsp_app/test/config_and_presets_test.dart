@@ -1533,15 +1533,15 @@ void main() {
       expect(m.reverbPreset, -2);
     });
 
-    test('Issue #3 方案A：自定义态关开关保留 -2，开回来恢复参数', () {
+    test('Issue #3 方案A：自定义态关开关落 -1，开回来恢复 -2 与参数', () {
       final m = AppModel(testing: true);
       m.setReverbCustomParam('wet', 0.5);
       m.setReverbCustomParam('decay', 0.7);
       expect(m.reverbPreset, -2);
       expect(m.fvOn, isTrue);
-      // 关：只关声音，标记保持 -2，参数不动
+      // 关：引擎唯一开关落 -1，参数不动
       m.setSpatialReverbEnabled(false);
-      expect(m.reverbPreset, -2);
+      expect(m.reverbPreset, -1);
       expect(m.fvOn, isFalse);
       expect(m.fvWet, closeTo(0.5, 1e-9));
       expect(m.fvDecay, closeTo(0.7, 1e-9));
@@ -1553,7 +1553,7 @@ void main() {
       expect(m.fvDecay, closeTo(0.7, 1e-9));
     });
 
-    test('非自定义态关开关照旧落 -1，开回 preset 0', () {
+    test('非自定义态关开关落 -1，开回上次预设（不再固定 0）', () {
       final m = AppModel(testing: true);
       m.selectReverbPreset(3);
       expect(m.reverbPreset, 3);
@@ -1561,7 +1561,7 @@ void main() {
       expect(m.reverbPreset, -1);
       expect(m.fvOn, isFalse);
       m.setSpatialReverbEnabled(true);
-      expect(m.reverbPreset, 0);
+      expect(m.reverbPreset, 3);
     });
   });
 

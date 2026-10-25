@@ -3,9 +3,9 @@
 // 1. 低音增强「模式」选了会被弹回「自然低音」：根因是 bass.mode 从未下发
 //    引擎，引擎回读恒为 0 → 全量回读把 UI 覆盖。断言：setBassMode 必须真的
 //    下发 bass.mode，且回读到真实值后 UI 保持不变。
-// 2. 空间混响预设「参数和 3D 图跳两次」：根因是 selectReverbPreset 漏发
-//    freeverb.roomsize / freeverb.width → 引擎保持旧值 → 500ms 后回读把 UI
-//    改回旧值。断言：预设必须把这两个参数一起发出去。
+// 2. 空间混响预设「参数和 3D 图跳两次」：WP1 后预设只推 reverb.preset，
+//    3D 可视化参数留在本地；引擎回读 freeverb.* 只在自定义态(-2)对账。
+//    断言：预设态不下发 freeverb.*，且回读不改写本地可视化值。
 // 3. 混响「自定义」标签被回读吞掉：负值 -2 从不下发引擎，回读无条件覆盖。
 //    断言：本地为自定义态时，回读不得把它改回预设号。
 // 4. 脉冲响应「清除 IR」把效果器开关也关了：断言清除后开关保持开启、
@@ -103,22 +103,40 @@ void main() {
   });
 
   group('P-032 空间混响预设不再跳变两次', () {
-    test('selectReverbPreset 必须同时下发 roomsize 与 width', () {
+    test('selectReverbPreset 只推唯一开关，不再下发 freeverb.*', () {
       final m = AppModel(testing: true);
-      m.selectReverbPreset(1); // 音乐厅：decay .75 damp .30 room 1.3 width 1.0
-      expect(sentWith(m, 'freeverb.roomsize', value: 1.3), isTrue,
-          reason: 'roomSize 漏发 → 回读把 UI 改回引擎旧值（3D 房间"缩回"）');
-      expect(sentWith(m, 'freeverb.width', value: 1.0), isTrue);
+      m.selectReverbPreset(1); // 中音乐厅：room 1.1 width 0.9
+      expect(sentWith(m, 'reverb.preset', value: 1), isTrue);
+      expect(sentWith(m, 'freeverb.roomsize'), isFalse,
+          reason: 'WP1：预设态的可视化参数只留在本地，freeverb.* 是自定义态 ABI');
+      expect(sentWith(m, 'freeverb.width'), isFalse);
+      expect(m.fvRoomSize, closeTo(1.1, 1e-6));
+      expect(m.fvWidth, closeTo(0.9, 1e-6));
+
+      // 进入自定义态后才把整套自定义参数下发引擎。
+      m.selectReverbPreset(-2);
+      expect(sentWith(m, 'freeverb.roomsize', value: 1.1), isTrue);
+      expect(sentWith(m, 'freeverb.width', value: 0.9), isTrue);
+    });
+
+    test('预设切换后回读不改写本地 3D 值（不跳变）', () {
+      final m = AppModel(testing: true);
+      m.selectReverbPreset(3); // 音乐厅：room 1.3 width 1.0
+      // 引擎回读仍是旧的自定义参数值——预设态不得用它覆盖本地可视化值。
+      m.handleMessageForTesting(
+          fakeParams(reverbPreset: 3, fvRoomSize: 0.2, fvWidth: 0.2));
       expect(m.fvRoomSize, closeTo(1.3, 1e-6));
       expect(m.fvWidth, closeTo(1.0, 1e-6));
     });
 
-    test('预设切换后回读同值不产生跳变', () {
+    test('自定义态下 fv* 回读正常对账', () {
       final m = AppModel(testing: true);
-      m.selectReverbPreset(3); // 小音乐厅：room 0.9 width 0.85
-      m.handleMessageForTesting(fakeParams(reverbPreset: 3, fvRoomSize: 0.9, fvWidth: 0.85));
-      expect(m.fvRoomSize, closeTo(0.9, 1e-6));
-      expect(m.fvWidth, closeTo(0.85, 1e-6));
+      m.selectReverbPreset(-2);
+      m.handleMessageForTesting(
+          fakeParams(reverbPreset: 0, fvRoomSize: 1.5, fvWidth: 1.8));
+      expect(m.reverbPreset, -2);
+      expect(m.fvRoomSize, closeTo(1.5, 1e-6));
+      expect(m.fvWidth, closeTo(1.8, 1e-6));
     });
 
     test('自定义态(-2) 不被引擎回读改回预设号', () {

@@ -680,6 +680,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbHintDry => 'ドライ信号の残量。声の明瞭さと芯を保ちます。';
 
   @override
+  String get reverbHintWidthMc =>
+      'マルチチャンネル FDN の広がり。FL/FR・SL/SR・BL/BR の3ペアのみ拡張し、C と LFE は変更しません。';
+
+  @override
+  String get reverbEngineLabel => '現在のエンジン';
+
+  @override
+  String get reverbEngineStereo => 'ステレオ (Vendor)';
+
+  @override
+  String get reverbEngineMc => 'マルチチャンネル FDN';
+
+  @override
+  String get reverbEngineOff => 'オフ';
+
+  @override
+  String get reverbEngineInfo =>
+      'リバーブは現在のチャンネル経路に従います：マトリックス/バイノーラルは vendor Progenitor2、ディスクリート多チャンネルは8ライン FDN。2つが同時に動作することはありません。';
+
+  @override
+  String get reverbLfe => 'LFE をリバーブへ';
+
+  @override
+  String get reverbLfeInfo =>
+      'LFE を 120Hz ローパス＋-6dB でマルチチャンネルリバーブへ送り、ウェット戻しにも同じローパスをかけます。ステレオ経路では無効です。';
+
+  @override
+  String get reverbPredelay => 'プリディレイ';
+
+  @override
+  String get reverbPredelayInfo =>
+      'リバーブ前の遅延（0〜100ms）。プリセットの基本プリディレイに加算され、カスタムでは 0 から始まります。';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return '旧プリセット $id';
+  }
+
+  @override
   String get spatialHintRoom => '仮想空間の反射量。大きいほど奥深く豊かな空間感になります。';
 
   @override
@@ -857,28 +896,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noAudio => 'アイドル — エンジンに音声ストリームなし';
 
   @override
-  String get reverbPreset0 => 'コンサートホール';
+  String get reverbPreset0 => '大ホール';
 
   @override
-  String get reverbPreset1 => '小ホール';
+  String get reverbPreset1 => 'コンサートホール';
 
   @override
   String get reverbPreset2 => '中ホール';
 
   @override
-  String get reverbPreset3 => '大ホール';
+  String get reverbPreset3 => '小ホール';
 
   @override
-  String get reverbPreset4 => '巨大ホール';
+  String get reverbPreset4 => 'スタジオ';
 
   @override
-  String get reverbPreset5 => '大聖堂';
+  String get reverbPreset5 => 'ルーム';
 
   @override
-  String get reverbPreset6 => '超巨大ホール';
+  String get reverbPreset6 => '大講堂';
 
   @override
-  String get reverbPreset7 => '渓谷';
+  String get reverbPreset7 => 'プレート';
 
   @override
   String get sourceCard => 'オーディオソース';
@@ -1938,19 +1977,6 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get spatialBinauralInfo =>
       '4/5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音。有効中は設定画面の「チャンネルモード」を接管（当該設定は無効）';
-
-  @override
-  String get spatialFdn => 'FDN ルーム';
-
-  @override
-  String get spatialFdnInfo =>
-      '8 ライン FDN で後期リバーブを生成し Freeverb を置換。二重の部屋を避けるため Freeverb は自動スキップ';
-
-  @override
-  String get spatialLate => '後期リバーブ';
-
-  @override
-  String get spatialLateInfo => 'FDN 後期リバーブの送り量。大きいほど余韻が明確';
 
   @override
   String get spatialHeadTrack => '頭部追従';

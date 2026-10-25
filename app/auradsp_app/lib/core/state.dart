@@ -81,6 +81,10 @@ part 'state/state_vb_asio.dart';
 //      放 part 文件顶层；对外 static（外部 AppModel.xxx 调用）留类体，
 //      extension 内引用加 AppModel. 限定。
 
+/// WP1：混响卡 curated 预设（按听感排序，标签复用 reverbPreset0..7）。
+/// 引擎 `reverb.preset` 的真实 ID；非 curated 旧会话值走 legacy chip。
+const List<int> kReverbCuratedPresets = [5, 3, 1, 2, 9, 7, 11, 15];
+
 class AppModel extends ChangeNotifier {
   final HeadTracker _headTracker = HeadTracker();
 
@@ -475,8 +479,6 @@ class AppModel extends ChangeNotifier {
   double spatialMix = 1.0;
   double spatialElevation = 0.0;
   bool spatialBinaural = false;
-  bool spatialFdn = false;
-  double spatialLate = 0.25;
   // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
@@ -492,11 +494,31 @@ class AppModel extends ChangeNotifier {
   double exciterAmount = 0.3, exciterHifreq = 5000;
   bool exciterOversample = ParamDefaults.exciterOversample;
 
-  // M5-c：空间混响（Freeverb / Spatial Reverb）
-  bool fvOn = false;
+  // WP1 混响边界：`reverb.preset` 是唯一开关（-1 关 / -2 自定义 / 0..18 预设）。
+  // `freeverb.*` 仅作为“混响自定义参数”的 ABI 兼容名保留。
   double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.35, fvDry = 1.0;
   double fvRoomSize = 1.2, fvWidth = 1.0;
-  bool get isSpatialReverbOn => reverbPreset >= 0 || fvOn;
+  double reverbPredelay = 0.0; // [0,100] ms，两引擎共用
+  bool reverbLfe = false; // 仅 MC：LFE 入混响（120Hz LP + -6dB）
+  int reverbEngine = -1; // 引擎回读：0=vendor stereo、1=MC FDN、-1=off
+  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复。
+  int _lastReverbPreset = 0;
+
+  /// 混响是否开启（唯一真相：preset != -1）。
+  bool get isSpatialReverbOn => reverbPreset != -1;
+
+  /// 兼容旧调用点：`fvOn` 已降级为派生 getter。
+  bool get fvOn => reverbPreset != -1;
+
+  /// 与 engine_chain.cpp `reverb_path_kind` 对齐的 UI 侧判定：
+  /// 矩阵模式或双耳路径 → vendor 立体声；其余（含 mode=1 + 2ch）→ MC FDN。
+  bool get reverbStereoPath =>
+      channelsMode == 0 ||
+      (spatialBinaural && spatialOn && fileChannels >= 4);
+  bool get reverbMcPath => !reverbStereoPath;
+
+  /// MC FDN 是否真正在跑（路径 + 开关都满足）。
+  bool get reverbMcActive => reverbMcPath && reverbPreset != -1;
 
   // M3.5-a：处理顺序（Dart 镜像；引擎侧表驱动 P-004）
   String? graphOrder;

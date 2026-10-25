@@ -197,8 +197,8 @@ struct Params {
     std::atomic<float>    spatial_mix{1.0f};       /* [0,1] 空间化干湿比 */
     std::atomic<float>    spatial_elevation{0.0f}; /* 度 [-30,30] 虚拟舞台高度 */
     std::atomic<int32_t>  spatial_binaural{0};     /* 1=6/8ch→2ch 双耳虚拟环绕 */
-    std::atomic<int32_t>  spatial_fdn{0};          /* 1=FDN 晚期混响（替代 freeverb） */
-    std::atomic<float>    spatial_late{0.25f};     /* [0,1] FDN 晚期送量 */
+    std::atomic<int32_t>  spatial_fdn{0};          /* deprecated（WP1 移除）：旧会话写别名 */
+    std::atomic<float>    spatial_late{0.25f};     /* deprecated（WP1 移除）：旧会话写别名 */
     /* 头跟踪：headazim 始终作为手动/外部朝向消费；headtrack 仅表示外部源
      * （OpenTrack UDP）是否开启，DSP 不区分来源。 */
     std::atomic<float>    spatial_headazim{0.0f}; /* 度 [-180,180] 头部偏航 */
@@ -330,69 +330,48 @@ struct Params {
 };
 
 
-/* ---- M5-c Freeverb（Schroeder-Moorer：8 comb + 4 allpass / 声道）----
- * 经典 tuning（@44.1k）按 fs 缩放；create 分配、destroy 释放，RT 零分配。
- * 参数换算沿用 classic freeverb：feedback = 0.7+decay*0.28，damp=damp*0.4。
- * 右声道施加 +23 采样点经典立体声扩展（Stereo Spread），产生自然空间去相关。 */
-constexpr int kFvCombs = 8, kFvAllpasses = 4;
-constexpr int kFvCombTuning[kFvCombs] = {1116, 1188, 1277, 1356, 1422, 1491, 1557, 1617};
-constexpr int kFvAllpTuning[kFvAllpasses] = {556, 441, 341, 225};
-constexpr int kFvStereoSpread = 23;
-// roomsize 预分配上限（× tuning）：运行时只改有效长度 combLen/apLen，绝不重
-// 分配——RT 读到的永远是已分配区间的子集，无越界、无需等待、无需锁。
-constexpr double kFvRoomMax = 2.5;
-/* Freeverb 经典梳/全通长度标定在 44.1kHz（1116/556 等即该采样率下的采样数）。
- * 比例必须按**实际** fs 计算，不能写死 48/44.1 —— 写死意味着在 44.1k 或
- * 96k 设备上混响音调与衰减时间整体偏移（旧实现在非 48k 下必然失准）。 */
-constexpr double kFvTuningRefRate = 44100.0;
+/* ---- WP1：离散多声道 FDN 混响 ------------------------------------------
+ * 8 条延迟线 + 8x8 Hadamard 反馈 + N×8 输入 / 8×N 输出矩阵。
+ * 只在 channels.mode==1 且非双耳路径运行；立体声/矩阵/双耳路径使用 vendor
+ * Progenitor2。自研 Freeverb 已于 WP1 退役，freeverb.* 仅作为自定义参数名
+ * （ABI 兼容）保留。
+ *
+ * 内存：8×32768×4 ≈ 1.0MB + 8 路预延迟 8×19200×4 ≈ 0.6MB。
+ * 预延迟按声道独立（不是文档 §3.3 的“单环”估算），因为输入矩阵需要保留
+ * 每声道的独立内容；多出的 ~0.5MB 仍在 §6 的每 handle 预算内。
+ */
+struct McReverbState {
+    static constexpr int kLines = 8;
+    /* 170.6ms @192k；roomScale 上限 2.0 时最长 147.8ms，留 1 帧守卫。 */
+    static constexpr int kMax = 32768;
+    /* 100ms @192k。 */
+    static constexpr int kPreMax = 19200;
 
-struct FvVoice {
-    float* combBuf[kFvCombs];
-    int    combSize[kFvCombs];   // 分配长度（roomsize 上限，不变）
-    int    combLen[kFvCombs];    // 有效长度（RT 读这个；控制线程改）
-    int    combIdx[kFvCombs];
-    float  filterstore[kFvCombs];   /* 8 个 comb 独立阻尼状态，杜绝互调串扰 */
-    float  damp1 = 0, damp2 = 1;
-    float* apBuf[kFvAllpasses];
-    int    apSize[kFvAllpasses];  // 分配长度（不变）
-    int    apLen[kFvAllpasses];   // 有效长度（RT 读这个）
-    int    apIdx[kFvAllpasses];
+    float buf[kLines][kMax] = {};
+    int   pos[kLines] = {};
+    int   len[kLines] = {};       /* 当前有效长度（按 roomScale 缩放，不重分配） */
+    float lp[kLines] = {};        /* 每线一阶阻尼状态 */
+    float fb[kLines] = {};        /* 每线反馈增益 */
+    float damp = 0.0f;            /* 每线阻尼系数（每块算一次） */
+    float rt60 = 2.5f;
+    float room_scale = 1.0f;
+
+    /* 每声道预延迟（同一长度；读指针共享，写指针每声道独立）。 */
+    float pre_buf[kLines][kPreMax] = {};
+    int   pre_pos = 0;
+    float pre_len_sm = 0.0f;      /* 平滑后的延迟样本数（支持分数延迟） */
+    bool  pre_init = false;       /* reset 后首块直接对齐目标，避免从 0 扫过去 */
+
+    /* LFE 入/出 120Hz 一阶低通状态（只有 6/8ch 且 reverb.lfe=1 时使用）。 */
+    float lfe_in_lp = 0.0f;
+    float lfe_out_lp = 0.0f;
+
+    /* 重置请求（控制线程写、RT 线程消费）。直接清 1MB 延迟线会让湿声
+     * 瞬间归零形成爆音；RT 侧先做 5ms 湿声淡出，再清状态。 */
+    std::atomic<int32_t> reset_req{0};
+    float fade = 1.0f;            /* 湿声淡出系数（1=正常，0=静音） */
+    bool  fading_out = false;
 };
-
-
-/* 每样本：返回湿信号（Schroeder-Moorer 架构：8 并联 Comb 累加后串联 4 全通做扩散） */
-inline float fv_voice_process(FvVoice& v, float in, float feedback) {
-    float out = 0.0f;
-    for (int i = 0; i < kFvCombs; ++i) {
-        // 有效长度（控制线程改 roomsize 时写；读到新旧值都不越界，
-        // 越界下标就地归零，无需锁）。
-        const int len = v.combLen[i] > 0 ? v.combLen[i] : v.combSize[i];
-        int idx = v.combIdx[i];
-        if (idx >= len) idx = 0;
-        const float y = v.combBuf[i][idx];
-        v.filterstore[i] = y * v.damp2 + v.filterstore[i] * v.damp1;
-        /* 截断次正常数 (subnormal float)，防止静音时 CPU 触发微码异常陷阱 */
-        if (fabsf(v.filterstore[i]) < 1e-15f) v.filterstore[i] = 0.0f;
-        v.combBuf[i][idx] = in + v.filterstore[i] * feedback;
-        if (++idx >= len) idx = 0;
-        v.combIdx[i] = idx;
-        out += y;
-    }
-    /* 全通扩散层：以 Comb 累加输出为输入，逐级全通相位扩散 */
-    for (int i = 0; i < kFvAllpasses; ++i) {
-        const int len = v.apLen[i] > 0 ? v.apLen[i] : v.apSize[i];
-        int idx = v.apIdx[i];
-        if (idx >= len) idx = 0;
-        const float bufout = v.apBuf[i][idx];
-        const float input2 = out + bufout * 0.5f;
-        v.apBuf[i][idx] = input2;
-        if (++idx >= len) idx = 0;
-        v.apIdx[i] = idx;
-        out = bufout - input2;
-    }
-    if (fabsf(out) < 1e-15f) out = 0.0f;
-    return out;
-}
 
 /* 各效果引入的近似附加延迟。
  * ADR-006：延迟档硬约束已撤销，本表只用于「如实测量并上报」，
@@ -598,11 +577,11 @@ struct auradsp_handle_s {
     std::atomic<float> gate_max_ir_seconds{30.0f};
     std::atomic<float> gate_max_file_mb{64.0f};
 
-    /* M5-c：Freeverb（RT 独占；create 分配） */
-    FvVoice fvL, fvR;
-    /* 混响自动增益补偿平滑状态（RT 独占） */
+    /* WP1：离散多声道 FDN 混响（RT 独占；结构体内静态分配，无堆分配） */
+    McReverbState mc_rev;
+    /* 混响自动增益补偿平滑状态（RT 独占；vendor 与 MC FDN 共用） */
     double rev_ag_in = 0.0, rev_ag_out = 0.0, rev_ag_comp = 1.0;
-    float  fv_g_sm = 1.0f;     /* 混响输出总增益一阶平滑状态（2ms 时间常数） */
+    float  rev_g_sm = 1.0f;    /* 混响输出总增益一阶平滑状态（2ms 时间常数） */
 
     /* M5-b：低频搁架 biquad（系数原子写防撕裂；状态仅 RT 线程触碰；支持 8 声道） */
     struct ShelfBiquad {
@@ -700,16 +679,6 @@ struct auradsp_handle_s {
     float  spat_ap_buf[2][2][kSpatApMax]; // [耳][级] 全通延迟线
     int    spat_ap_pos[2][2];             // [耳][级] 写指针
     float  spat_lfe_lp = 0.0f;            // LFE 120Hz 低通状态
-    /* FDN 晚期混响（8 线 Hadamard；固定上限，reset 时按 fs 设长度） */
-    static constexpr int kFdnLines = 8;
-    static constexpr int kFdnMax = 16384;
-    float  fdn_buf[kFdnLines][kFdnMax];
-    int    fdn_pos[kFdnLines];
-    int    fdn_len[kFdnLines];
-    float  fdn_lp[kFdnLines];
-    float  fdn_fb[kFdnLines];
-    float  fdn_damp = 0.0f;
-    float  fdn_room_last = -1.0f;
     double spat_ag_in = 0.0, spat_ag_out = 0.0, spat_ag_comp = 1.0; // 自动增益跟随
     float  spat_g_sm = 1.0f;    /* 空间音效输出增益一阶平滑状态（2ms 时间常数） */
     float  spat_mix_sm = 1.0f;  /* 空间化干湿比平滑状态（2ms 时间常数） */
@@ -753,7 +722,10 @@ int build_eq_axis(char* txt, double sample_rate, double* freqAx, double* gainAx,
 /* cross-TU decls (destatic, signatures verbatim) */
 bool global_init();
 void global_unref();
-void freeverb_process(auradsp_handle h, float* dst, int frames);
+/* WP1：离散多声道 FDN 混响（N 进 N 出；LFE 可选入/出）。 */
+void mc_reverb_process_mc(auradsp_handle h, float* io, int frames, int ch);
+/* WP1：清 8 线 + 预延迟 + 平滑状态；通道数/模式/预设切换时调用。 */
+void mc_reverb_reset(auradsp_handle h);
 void apply_arbmag(auradsp_handle h);
 void apply_bass(auradsp_handle h);
 void apply_comp(auradsp_handle h);
@@ -781,11 +753,6 @@ void emit_viz(auradsp_handle h);
 void exciter_process(auradsp_handle h, float* io, int frames);
 void filter_process(auradsp_handle h, float* io, int frames);
 void filter_recalc(auradsp_handle h);
-void fv_alloc(FvVoice& v, double sampleRate, int spread);
-void fv_free(FvVoice& v);
-// 控制线程：按 room 缩放重算有效长度 + 清缓冲（RT 侧只读 Len/Buf，无需停泵；
-// 并发瞬间最多一个 click 级伪影，无崩溃可能）。spread 与 alloc 时一致。
-void fv_retune(struct auradsp_handle_s* h, double room);
 void gate_process(auradsp_handle h, float* io, int frames);
 void haas_process(auradsp_handle h, float* io, int frames);
 auradsp_status load_ir_file(auradsp_handle h, const char* path);

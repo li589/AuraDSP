@@ -1324,6 +1324,72 @@ abstract class AppLocalizations {
   /// **'原始直达声保留量。确保人声吐字清晰结实。'**
   String get reverbHintDry;
 
+  /// No description provided for @reverbHintWidthMc.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道 FDN 的宽度：只扩展 FL/FR、SL/SR、BL/BR 三对；中置与 LFE 不参与。'**
+  String get reverbHintWidthMc;
+
+  /// No description provided for @reverbEngineLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前引擎'**
+  String get reverbEngineLabel;
+
+  /// No description provided for @reverbEngineStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声 (Vendor)'**
+  String get reverbEngineStereo;
+
+  /// No description provided for @reverbEngineMc.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道 FDN'**
+  String get reverbEngineMc;
+
+  /// No description provided for @reverbEngineOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭'**
+  String get reverbEngineOff;
+
+  /// No description provided for @reverbEngineInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。'**
+  String get reverbEngineInfo;
+
+  /// No description provided for @reverbLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'LFE 入混响'**
+  String get reverbLfe;
+
+  /// No description provided for @reverbLfeInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后 LFE 经 120Hz 低通与 -6dB 送入多声道混响；湿声回加前再经同一低通。立体声路径忽略。'**
+  String get reverbLfeInfo;
+
+  /// No description provided for @reverbPredelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'预延迟'**
+  String get reverbPredelay;
+
+  /// No description provided for @reverbPredelayInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响前的延迟量（0–100ms）。与预设自带的基础预延迟相加；自定义模式从 0 起算。'**
+  String get reverbPredelayInfo;
+
+  /// No description provided for @reverbLegacyPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧版预设 {id}'**
+  String reverbLegacyPreset(int id);
+
   /// No description provided for @spatialHintRoom.
   ///
   /// In zh, this message translates to:
@@ -1663,49 +1729,49 @@ abstract class AppLocalizations {
   /// No description provided for @reverbPreset0.
   ///
   /// In zh, this message translates to:
-  /// **'音乐厅'**
+  /// **'大音乐厅'**
   String get reverbPreset0;
 
   /// No description provided for @reverbPreset1.
   ///
   /// In zh, this message translates to:
-  /// **'小型厅堂'**
+  /// **'音乐厅'**
   String get reverbPreset1;
 
   /// No description provided for @reverbPreset2.
   ///
   /// In zh, this message translates to:
-  /// **'中厅'**
+  /// **'中音乐厅'**
   String get reverbPreset2;
 
   /// No description provided for @reverbPreset3.
   ///
   /// In zh, this message translates to:
-  /// **'大会堂'**
+  /// **'小音乐厅'**
   String get reverbPreset3;
 
   /// No description provided for @reverbPreset4.
   ///
   /// In zh, this message translates to:
-  /// **'盛大厅堂'**
+  /// **'录音棚'**
   String get reverbPreset4;
 
   /// No description provided for @reverbPreset5.
   ///
   /// In zh, this message translates to:
-  /// **'大教堂'**
+  /// **'房间'**
   String get reverbPreset5;
 
   /// No description provided for @reverbPreset6.
   ///
   /// In zh, this message translates to:
-  /// **'巨型厅堂'**
+  /// **'大礼堂'**
   String get reverbPreset6;
 
   /// No description provided for @reverbPreset7.
   ///
   /// In zh, this message translates to:
-  /// **'山谷'**
+  /// **'板式混响'**
   String get reverbPreset7;
 
   /// No description provided for @sourceCard.
@@ -3759,30 +3825,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'输入 4/5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音，并接管设置页的「声道模式」（该项此时不生效）'**
   String get spatialBinauralInfo;
-
-  /// No description provided for @spatialFdn.
-  ///
-  /// In zh, this message translates to:
-  /// **'FDN 房间'**
-  String get spatialFdn;
-
-  /// No description provided for @spatialFdnInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间'**
-  String get spatialFdnInfo;
-
-  /// No description provided for @spatialLate.
-  ///
-  /// In zh, this message translates to:
-  /// **'晚期混响'**
-  String get spatialLate;
-
-  /// No description provided for @spatialLateInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'FDN 晚期混响送入量。越大房间尾音越明显'**
-  String get spatialLateInfo;
 
   /// No description provided for @spatialHeadTrack.
   ///

@@ -17,6 +17,9 @@ abstract final class ParamId {
   static const bassEnable = 'bass.enable';
   static const bassGain = 'bass.gain';
   static const reverbPreset = 'reverb.preset';
+  static const reverbPredelay = 'reverb.predelay';
+  static const reverbLfe = 'reverb.lfe';
+  static const reverbEngine = 'reverb.engine';
   static const stereoMix = 'stereo.mix';
   static const eqEnable = 'eq.enable';
   static const postGain = 'post.gain';
@@ -82,8 +85,6 @@ abstract final class ParamId {
   static const spatialMix = 'spatial.mix';
   static const spatialElevation = 'spatial.elevation';
   static const spatialBinaural = 'spatial.binaural';
-  static const spatialFdn = 'spatial.fdn';
-  static const spatialLate = 'spatial.late';
   // 头跟预留（Phase 2 stub：引擎只存取，DSP 不消费，无 UI）
   static const spatialHeadAzim = 'spatial.headazim';
   static const spatialHeadTrack = 'spatial.headtrack';
@@ -146,8 +147,7 @@ abstract final class ParamId {
   static const filterType = 'filter.type';
   static const filterFreq = 'filter.freq';
   static const filterQ = 'filter.q';
-  // M5-c：参数化混响（Freeverb）
-  static const fvEnable = 'freeverb.enable';
+  // WP1：混响自定义参数（ABI 兼容名仍为 freeverb.*）
   static const fvDecay = 'freeverb.decay';
   static const fvDamp = 'freeverb.damp';
   static const fvWet = 'freeverb.wet';

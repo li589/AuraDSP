@@ -31,7 +31,10 @@ void compute_latency(auradsp_handle h, double* out_ms) {
             ms += FramesToMs((double)(la_len - 1), sr);
         }
     }
-    if (h->p.reverb_preset.load(std::memory_order_relaxed) >= 0) {
+    if (h->p.reverb_preset.load(std::memory_order_relaxed) != -1 &&
+        reverb_path_kind(h) == 0) {
+        /* 只有 vendor Progenitor2 路径有 30ms 结构延迟；MC FDN 在链内
+         * 直接处理，报告 0ms。 */
         ms += LatencyMs(kLatReverb, lat_sr);
     }
     /* 卷积：IR 已加载且使能时计入 */
@@ -123,8 +126,19 @@ void apply_bass(auradsp_handle h) {
 void apply_reverb(auradsp_handle h) {
     JamesDSPLib* j = &h->jdsp;
     const int rv = h->p.reverb_preset.load(std::memory_order_relaxed);
-    if (rv >= 0) {
-        Reverb_SetParam(j, rv);   /* 重建混响（仅预设真正变化时调用） */
+    /* WP1 混响边界（工程文档 §3.2）：同一时刻只允许一套混响运行。
+     *   立体声/矩阵/双耳路径 → vendor Progenitor2；
+     *   离散多声道路径       → MC FDN（dsp_mc_reverb.cpp）。
+     * -1 关；-2 自定义（WP2 前立体声路径先落到 vendor 预设 0，保证
+     * vendor 状态有效；MC 路径走 FDN 自定义映射）。 */
+    if (reverb_path_kind(h) == 0 && rv != -1) {
+        if (rv >= 0) {
+            Reverb_SetParam(j, rv);   /* 重建混响（仅预设真正变化时调用） */
+        } else {
+            /* WP2 之前 vendor 原生参数 API 尚未落地：先以 DEFAULT 预设
+             * 建立有效状态，避免 vendor 混响处于未初始化却 enable。 */
+            Reverb_SetParam(j, 0);
+        }
         ReverbEnable(j);
     } else {
         ReverbDisable(j);
@@ -212,6 +226,7 @@ void apply_post(auradsp_handle h) {
 
 
 /* P-010：bass/eq/tube/comp 输出增益门 + 自动补偿落地 vendor stage。
+ * P-033（WP1）：reverb 扩展为 fx 槽 5，Freeverb 退役后 vendor 路径不丢功能。
  * 每项独立下推，无 vendor 锁（对齐 float 写，x86 原子；切态重置在 vendor 内）。 */
 void apply_fx_gains(auradsp_handle h) {
     static constexpr struct { std::atomic<float> Params::*db;
@@ -221,6 +236,7 @@ void apply_fx_gains(auradsp_handle h) {
         { &Params::bass_outgain, &Params::bass_autogain, 2 },
         { &Params::eq_outgain,     &Params::eq_autogain,     3 },
         { &Params::arbmag_outgain, &Params::arbmag_autogain, 4 },
+        { &Params::reverb_outgain, &Params::reverb_autogain, 5 },
     };
     for (const auto& f : kFx) {
         const float db = (h->p.*(f.db)).load(std::memory_order_relaxed);
@@ -926,7 +942,7 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         }
         JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->mx_stereo,
                                            h->mx_stereo, (size_t)frames,
-                                           "convolver,ddc,liveprog,crossfeed,stereo,reverb,output", 1,
+                                           "convolver,ddc,liveprog,crossfeed,stereo,output", 1,
                                            &g);
 
         for (int i = 0; i < frames; ++i) {
@@ -949,15 +965,12 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
             spatial_process(h, h->mx_stereo, frames);
         }
         sample_stage_peak_mc(h, 20, h->mx_stereo, frames, 2); /* Stage 20: Spatial（仅 FL/FR 对） */
-        freeverb_process(h, h->mx_stereo, frames);
 
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
     }
-
-    auradsp::plugin_chain_process_n(h, 3, dst, (uint32_t)frames, (uint32_t)ch);
 
     // 3b. B5：双声道效果器（comp/eq）按掩码对选中声道对独立处理；
     //      arbmag 升级逐声道（B5 后续）：同一对处理后按各自 mask 位进池。
@@ -1003,6 +1016,16 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         exciter_process_mc(h, dst, frames, ch);
     }
     sample_stage_peak_mc(h, 18, dst, frames, ch);   /* Stage 18: Exciter output */
+
+    /* WP1 混响边界：离散多声道路径使用 MC FDN（全声道，N 进 N 出）。
+     * 位置在 exciter 之后、plugin stage 3/loudness 之前——尾音不再经过
+     * spatial/exciter；vendor 段已移除 reverb，两套混响不会同时运行。 */
+    if (h->p.reverb_preset.load(std::memory_order_relaxed) != -1) {
+        mc_reverb_process_mc(h, dst, frames, ch);
+    }
+
+    auradsp::plugin_chain_process_n(h, 3, dst, (uint32_t)frames, (uint32_t)ch);
+
     if (h->p.loudness_enable.load(std::memory_order_relaxed)) {
         loudness_process_mc(h, dst, frames, ch);
     }
@@ -1133,14 +1156,9 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
     sample_stage_peak(h, 18, dst, frames);   /* Stage 18: Exciter output */
 
-    /* M5-c：Freeverb 在 vendor 链后（含输出限幅），wet/dry 原位混合。
-     * P-010：混响输出增益门 + 自动增益补偿（全引擎侧，reverb 不占 vendor 槽）。
-     * B3a：spatial.fdn 开启时由 spatial 内部 FDN 承担晚期混响，跳过 freeverb，
-     * 避免双房间；关掉 spatial/fdn 即恢复原行为。 */
-    if (!(h->p.spatial_enable.load(std::memory_order_relaxed) &&
-          h->p.spatial_fdn.load(std::memory_order_relaxed))) {
-        freeverb_process(h, dst, frames);
-    }
+    /* WP1：立体声/矩阵/双耳路径的混响由 vendor Progenitor2 承担
+     * （vendor 段内 stage_reverb）。自研 Freeverb 已退役；spatial.fdn
+     * 晚期混响也已移除，不再有第二套房间。 */
 
     /* Stage 3: Post-Reverb（混响后，默认阶段） */
     auradsp::plugin_chain_process(h, 3, dst, (uint32_t)frames);

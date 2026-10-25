@@ -112,6 +112,16 @@ extension StateEvents on AppModel {
         if (reverbPreset != -2) {
           reverbPreset = rbPreset;
         }
+        if (raw['reverbEngine'] != null) {
+          reverbEngine = (raw['reverbEngine'] as int).clamp(-1, 1);
+        }
+        if (raw['reverbPredelay'] != null) {
+          reverbPredelay =
+              (raw['reverbPredelay'] as num).toDouble().clamp(0.0, 100.0);
+        }
+        if (raw['reverbLfe'] != null) {
+          reverbLfe = (raw['reverbLfe'] as int) != 0;
+        }
         // 引擎真相是 0..stereoWidenMax，换算回 UI 显示刻度 0..1。
         // 开关关闭时引擎侧是"静音语义"的 0（_pushStereoChain 的 k=0 直发），
         // 不代表用户滑块记忆——2026-10-19 修复：旧实现无条件回写，用户
@@ -246,12 +256,6 @@ extension StateEvents on AppModel {
         }
         if (raw['spatialBinaural'] != null) {
           spatialBinaural = (raw['spatialBinaural'] as int) != 0;
-        }
-        if (raw['spatialFdn'] != null) {
-          spatialFdn = (raw['spatialFdn'] as int) != 0;
-        }
-        if (raw['spatialLate'] != null) {
-          spatialLate = (raw['spatialLate'] as num).toDouble();
         }
         if (raw['spatialHeadAzim'] != null) {
           spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
@@ -459,13 +463,16 @@ extension StateEvents on AppModel {
         if (raw['filterQ'] != null) {
           filterQ = (raw['filterQ'] as num).toDouble();
         }
-        if (raw['fvEnable'] != null) fvOn = (raw['fvEnable'] as int) != 0;
-        if (raw['fvDecay'] != null) {
-          fvDecay = (raw['fvDecay'] as num).toDouble();
+        // 预设模式下 fv* 只是 3D 可视化本地值，引擎保留的是自定义参数；
+        // 无条件回读会让预设切完后 3D 图“跳两次”，故仅自定义态对账。
+        if (reverbPreset == -2) {
+          if (raw['fvDecay'] != null) {
+            fvDecay = (raw['fvDecay'] as num).toDouble();
+          }
+          if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
+          if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
+          if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         }
-        if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
-        if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
-        if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         if (raw['compEnable'] != null) compOn = (raw['compEnable'] as int) != 0;
         if (raw['compTimeconstant'] != null) {
           compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
@@ -562,10 +569,10 @@ extension StateEvents on AppModel {
             }
           }
         }
-        if (raw['fvRoomSize'] != null) {
+        if (reverbPreset == -2 && raw['fvRoomSize'] != null) {
           fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
         }
-        if (raw['fvWidth'] != null) {
+        if (reverbPreset == -2 && raw['fvWidth'] != null) {
           fvWidth = (raw['fvWidth'] as num).toDouble();
         }
         if (raw['eqBandsCount'] != null) {
