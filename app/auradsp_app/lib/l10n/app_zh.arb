@@ -1165,5 +1165,6 @@
   "errIoFailed": "文件读写失败",
   "errRejected": "该值被引擎拒绝",
   "errUnsupported": "不支持的操作",
+  "errReadOnly": "该参数为只读",
   "errInternal": "引擎内部错误"
 }

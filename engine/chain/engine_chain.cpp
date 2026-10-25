@@ -131,6 +131,43 @@ void apply_reverb(auradsp_handle h) {
     }
 }
 
+/* WP0 脚手架：混响路径判定（工程文档 §2）。
+ *   0 = vendor Progenitor2 立体声路径：矩阵模式（channels.mode==0），
+ *       或双耳路径（spatial.binaural && spatial.enable && count>=4）。
+ *   1 = 离散多声道 MC FDN 路径：其余情况（含 mode=1 + count=2）。
+ * 注意与 UI 的 stereoPath 不同：mode=1 + count=2 仍按 MC FDN 处理。
+ * reverb.engine 只读参数与 WP1 的 apply_reverb 必须共用本判定。 */
+int reverb_path_kind(auradsp_handle h) {
+    if (!h) return 1;
+    if (h->p.channels_mode.load(std::memory_order_relaxed) == 0) return 0;
+    const bool binaural =
+        h->p.spatial_binaural.load(std::memory_order_relaxed) != 0 &&
+        h->p.spatial_enable.load(std::memory_order_relaxed) != 0 &&
+        h->channel_count.load(std::memory_order_relaxed) >= 4;
+    return binaural ? 0 : 1;
+}
+
+/* WP0 脚手架：拓扑变化（channels.mode/count、binaural、spatial.enable）
+ * 的统一状态清理入口。当前为空实现，WP6 落地；届时逐模块清理：
+ *   gate            gate_gain/state/hold/env/ds_lp/ds_env
+ *   filter / shelf  z1/z2[8]
+ *   dyneq           3 段 det_z1/det_z2/env/z1/z2
+ *   tube            tube_process_mc 内部逐声道状态
+ *   exciter/loudness 逐声道 one-pole / 包络
+ *   limiter         mc_limiter_* 环/包络/deque
+ *   bassmono/basspsycho  bm_lp[8] / psy_*
+ *   haas            haas_ring
+ *   spatial         spatial_reset(h)
+ *   MC reverb       mc_reverb_reset(h)（WP1 新增）
+ *   comp/eq/arbmag 池  逐声道实例 reset（卷积 FIFO 清零）
+ *   vendor 段       apply_reverb(h) + 必要的 vendor refresh（P-036 预留）
+ * 调用点（WP6）：set_channels_mode/count、hook_spatial_binaural、
+ * hook_spatial_enable；set_reverb_preset 只重置混响状态，不全量 reset。
+ * 控制线程调用；不得在音频线程执行。 */
+void reset_channel_state(auradsp_handle h) {
+    (void)h;
+}
+
 
 void apply_stereo(auradsp_handle h) {
     JamesDSPLib* j = &h->jdsp;

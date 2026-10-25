@@ -1149,5 +1149,6 @@
   "errIoFailed": "File I/O failed",
   "errRejected": "Value rejected by engine",
   "errUnsupported": "Unsupported operation",
+  "errReadOnly": "Parameter is read-only",
   "errInternal": "Internal engine error"
 }

@@ -5128,6 +5128,12 @@ abstract class AppLocalizations {
   /// **'不支持的操作'**
   String get errUnsupported;
 
+  /// No description provided for @errReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'该参数为只读'**
+  String get errReadOnly;
+
   /// No description provided for @errInternal.
   ///
   /// In zh, this message translates to:

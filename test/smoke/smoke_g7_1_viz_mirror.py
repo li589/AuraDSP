@@ -280,6 +280,10 @@ try:
 
     def check_viz_with_mirror(text):
         (tmpdir / "viz_frame.py").write_text(text, encoding="utf-8")
+        # 两次篡改（D2a/D2b）写同一路径，源码长度相同、mtime 常落在同一秒，
+        # importlib 会把 D2a 的 __pycache__ 当成仍然有效而复用旧字节码，
+        # 导致 D2b 误报 D2a 的断言（本机实测稳定复现）。每次写后清缓存。
+        shutil.rmtree(str(tmpdir / "__pycache__"), ignore_errors=True)
         A.VIZ_MIRROR = tmpdir / "viz_frame.py"
         sys.modules.pop("viz_frame", None)
         sys.path.insert(0, str(tmpdir))

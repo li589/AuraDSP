@@ -2690,5 +2690,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errUnsupported => '非サポートの操作';
 
   @override
+  String get errReadOnly => 'このパラメータは読み取り専用です';
+
+  @override
   String get errInternal => 'エンジン内部エラー';
 }

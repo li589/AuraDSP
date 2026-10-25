@@ -2828,5 +2828,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errUnsupported => 'Unsupported operation';
 
   @override
+  String get errReadOnly => 'Parameter is read-only';
+
+  @override
   String get errInternal => 'Internal engine error';
 }

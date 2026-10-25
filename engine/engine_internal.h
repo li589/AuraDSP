@@ -126,7 +126,11 @@ struct Params {
     std::atomic<int32_t>  bass_enable{0};
     std::atomic<float>    bass_gain{0.0f};      /* dB [0,15] */
     std::atomic<int32_t>  reverb_preset{-1};
-std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一单源，2026-10-19） */
+    /* WP0 脚手架（多声道重构 2026-10-25）：混响边界参数。默认保持旧行为，
+     * WP1/WP2 才消费；reverb.engine 是只读诊断参数（见 engine_param_table.h）。 */
+    std::atomic<float>    reverb_predelay{0.0f}; /* ms [0,100] */
+    std::atomic<int32_t>  reverb_lfe{0};         /* 1=LFE 入 MC FDN（120Hz LP + -6dB） */
+    std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一单源，2026-10-19） */
     /* 2026-10-16 口径决策：UI 为真。以下默认值必须与 Dart ParamDefaults
      * （app/auradsp_app/lib/core/state.dart L64-171）逐项一致，改动需同步两侧
      * 并跑 flutter test（D1 监察）+ smoke。 */
@@ -134,8 +138,14 @@ std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一�
     std::atomic<int32_t>  eq_enable{0};
     std::atomic<int32_t>  limiter_enable{1};  /* 默认开（UI 为真，原 0） */
     std::atomic<float>    post_gain{0.0f};      /* dB [-15,15] */
+    /* WP0 脚手架：逐声道输出补偿（dB，[-15,15]，默认 0）。WP5 消费；
+     * c0..c7 对应 FL/FR/C/LFE/SL/SR/BL/BR。 */
+    std::atomic<float>    post_gain_ch[8];
     /* latency_mode 已由 ADR-006 移除：延迟改为纯测量，不再有档位准入。 */
     std::atomic<int32_t>  channels_mode{0};     /* 0=stereo（Phase A，ADR-003） */
+    /* WP0 脚手架：channels.count 的纯状态载体（0=自动/1=手动，同 bass.mode
+     * 模式，不参与 DSP 计算，仅保证 UI 选择可回读）。 */
+    std::atomic<int32_t>  channels_count_mode{0};
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
     std::atomic<float>    lp_param[8];          /* slider1..8（C++20 值初始化 = 0） */
@@ -166,6 +176,11 @@ std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一�
     /* BassMono：低频单声道化（one-pole LPF，RT 线程就地处理，零延迟） */
     std::atomic<int32_t>  bassmono_enable{0};
     std::atomic<float>    bassmono_freq{120.0f}; /* Hz [20,300] */
+    /* WP0 脚手架：标准四对多选（bit0=FL/FR bit1=C/LFE bit2=SL/SR
+     * bit3=BL/BR，默认仅 FL/FR）。每对独立平均；merge=1 时再全局合并。
+     * WP4 消费，本阶段只存值。 */
+    std::atomic<int32_t>  bassmono_pairs{0x01};
+    std::atomic<int32_t>  bassmono_merge{0};
     /* Haas 差分环绕（延迟侧 0..25ms + 干湿混合；side 选延迟哪一侧） */
     std::atomic<int32_t>  haas_enable{0};
     std::atomic<float>    haas_delay_ms{12.0f};  /* ms [0,25] */
@@ -303,6 +318,9 @@ std::atomic<float>    stereo_mix{0.5f};     /* [0,1] 中性档 0.5（C3 统一�
     std::atomic<int32_t>  limiter_channels{0xFF};
     std::atomic<int32_t>  gate_channels{0xFF};
     std::atomic<int32_t>  comp_channels{0xFF};
+    /* WP0 脚手架：comp 逐对/逐声道模式（0=逐声道 8 实例，1=逐对降级）。
+     * WP3 消费；本阶段只存值。 */
+    std::atomic<int32_t>  comp_mode{0};
     std::atomic<int32_t>  arbmag_channels{0xFF};
     /* Modern Lookahead Limiter 参数（P2.3 新增；向后兼容，不破坏 ABI） */
     std::atomic<float>    limiter_release_ms{100.0f}; /* ms [10, 500]：释放时间常数 */
@@ -747,6 +765,12 @@ void apply_liveprog(auradsp_handle h);
 void apply_params_locked(auradsp_handle h);
 void apply_post(auradsp_handle h);
 void apply_reverb(auradsp_handle h);
+/* WP0 脚手架：混响路径判定（0=vendor 立体声，1=MC FDN）。
+ * 只读参数 reverb.engine 与 WP1 的 apply_reverb 共用同一判定。 */
+int reverb_path_kind(auradsp_handle h);
+/* WP0 脚手架：拓扑变化时的统一状态清理入口（当前为空实现，
+ * 逐模块清单见函数体注释；WP6 落地）。 */
+void reset_channel_state(auradsp_handle h);
 void apply_stereo(auradsp_handle h);
 void apply_tube(auradsp_handle h);
 void bassmono_process(auradsp_handle h, float* io, int frames);
