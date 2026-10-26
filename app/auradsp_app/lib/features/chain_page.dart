@@ -14,8 +14,9 @@ import '../core/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../engine/auradsp_ffi.dart' show kVizChannelMax;
-import 'chrome.dart';
 import '../l10n/gen/app_localizations.dart';
+import 'chrome.dart';
+import 'effects_page.dart' show kEffectCategories;
 import 'widgets.dart';
 
 /// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
@@ -45,11 +46,11 @@ const List<({String id, bool exposed})> kStageMeta = [
 /// stage id → 展示名（l10n；与效果器卡片名称严格对齐；未知 id 回退原文）。
 String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'gate' => l.stGate,
-      'dyneq' => l.stDyneq,
+      'dyneq' => l.dyneqTitle,
       'filter' => l.stFilter,
       'bass_shaping' => l.bassShapingTitle,
-      'bassmono' => l.stBassmono,
-      'shelf' => l.shelfTitle,
+      'bassmono' => l.bassMonoModule,
+      'shelf' => l.bassShelfModule,
       'tube' => l.tubeTitle,
       'comp' => l.compTitle,
       'bass' => l.bassBoost,
@@ -180,6 +181,21 @@ class _ChainPageState extends State<ChainPage> {
       _order = List<String>.from(kDefaultCoreOrder);
       _dirty = true;
     });
+  }
+
+  void _navigateToStage(String id) {
+    final mappedId = switch (id) {
+      'output' => 'post',
+      'bassmono' || 'shelf' => 'bass_shaping',
+      _ => id,
+    };
+    for (final entry in kEffectCategories.entries) {
+      if (entry.value.contains(mappedId)) {
+        widget.model.setEffectsCategory(entry.key);
+        widget.model.visiblePage.value = AppPage.effects;
+        break;
+      }
+    }
   }
 
   @override
@@ -322,9 +338,16 @@ class _ChainPageState extends State<ChainPage> {
                               model: widget.model,
                             ),
                             const SizedBox(width: AuraSpace.sm),
-                            Icon(Icons.chevron_right_rounded,
-                                size: 16,
-                                color: p.textDim.withValues(alpha: 0.4)),
+                            InkWell(
+                              borderRadius: BorderRadius.circular(AuraRadius.xs),
+                              onTap: () => _navigateToStage(id),
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 2.0, vertical: 4.0),
+                                child: Icon(Icons.chevron_right_rounded,
+                                    size: 16,
+                                    color: p.textDim.withValues(alpha: 0.6)),
+                              ),
+                            ),
                           ]),
                         ),
                       );
@@ -812,12 +835,13 @@ class _StageStereoMeter extends StatelessWidget {
       builder: (ctx, page, _) {
         if (page != AppPage.chain) return const SizedBox.shrink();
         return ListenableBuilder(
-          // [Phase B 多声道电平] MC 态展开 per-channel 列：追加订阅
-          // chCount + stageCh 网格；stereo 时两值与旧字段同源，行为不变。
+          // [Phase B 多声道电平] MC 态统一展开 8 声道列：追加订阅
+          // chCount + chLevels + stageCh 网格；stereo 时两值与旧字段同源，行为不变。
           listenable: Listenable.merge([
             model.stageLevelsL,
             model.stageLevelsR,
             model.vizChannelCount,
+            model.vizChannelLevels,
             model.vizStageChLevels,
           ]),
           builder: (ctx, _) {
@@ -825,15 +849,32 @@ class _StageStereoMeter extends StatelessWidget {
             final levelsR = model.stageLevelsR.value;
             final chCount = model.vizChannelCount.value;
 
-            // MC 模式（chCount>2）且为自研效果器段（12..20）：展开全声道柱。
-            // vendor 段（0..11）MC 下只作用于 FL/FR 对（引擎 stage_ch 语义），
-            // 保持两柱；Category B（16/17/20）的 ch>=2 柱显 -120（作用域诚实）。
+            // MC 模式（chCount>2）：统一显示 8 通道电平柱，整齐划一消除参差不齐。
+            // 无论 vendor 还是自研阶段，均统一生成 8 列；
+            // 未被本阶段处理的声道如实展示直通信号电平。
             final List<double> columns;
-            if (chCount > 2 && meterIndex >= 12) {
+            if (chCount > 2) {
               final grid = model.vizStageChLevels.value;
-              columns = List<double>.generate(chCount, (c) {
+              final chLevels = model.vizChannelLevels.value;
+              final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
+                  ? levelsL[meterIndex]
+                  : -120.0;
+              final dbR = (meterIndex >= 0 && meterIndex < levelsR.length)
+                  ? levelsR[meterIndex]
+                  : -120.0;
+
+              columns = List<double>.generate(8, (c) {
+                if (c == 0) return dbL;
+                if (c == 1) return dbR;
                 final idx = meterIndex * kVizChannelMax + c;
-                return (idx >= 0 && idx < grid.length) ? grid[idx] : -120.0;
+                if (idx >= 0 && idx < grid.length && grid[idx] > -119.0) {
+                  return grid[idx];
+                }
+                // 直通声道电平直通显示
+                if (c < chLevels.length && chLevels[c] > -119.0) {
+                  return chLevels[c];
+                }
+                return -120.0;
               });
             } else {
               final dbL = (meterIndex >= 0 && meterIndex < levelsL.length)
@@ -845,7 +886,7 @@ class _StageStereoMeter extends StatelessWidget {
               columns = [dbL, dbR];
             }
 
-            // 硬件合成器分段 LED 电平表（双声道支持，MC 模式 N 柱）
+            // 硬件合成器分段 LED 电平表（双声道支持，MC 模式统一 8 柱）
             return _SynthLedLadderMeter(
               channelsDb: columns,
               isEnabled: isEnabled,

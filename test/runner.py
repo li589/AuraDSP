@@ -12,6 +12,13 @@ import os
 import subprocess
 import sys
 
+# 子进程继承：GBK 控制台下 smoke/UI 脚本 print 含 '⟹'、替换字符等会
+# UnicodeEncodeError 崩溃（2026-10-26 实测 smoke_rt_vendor_flags / smoke_d6_
+# patch_ids / smoke_g7_1 / smoke_d4b_swallow / smoke_g7_5 / smoke_abi_consistency
+# 均为编码崩溃而非断言失败），固定 UTF-8 输出编码。子进程在启动时读取本变量，
+# runner 自身已初始化的 stdout 不受影响。
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DIR = os.path.join(ROOT_DIR, "test")
 SMOKE_DIR = os.path.join(TEST_DIR, "smoke")

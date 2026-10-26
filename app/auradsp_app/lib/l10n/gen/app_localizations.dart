@@ -1537,7 +1537,7 @@ abstract class AppLocalizations {
   /// No description provided for @vbProtectHint.
   ///
   /// In zh, this message translates to:
-  /// **'回调持续超预算时自动把插件收窄到监听总线，回落后自动还原'**
+  /// **'音频处理时限由驱动缓冲区决定（如 128 帧 @ 48kHz = 2.7ms 截止预算）。当效果器/插件的处理耗时（EMA）持续超过预算的 85% 时，系统自动将重负载插件收窄至当前监听总线，其余总线直通，以杜绝爆音与掉字卡顿；负载回落安全阈值后将自动恢复。'**
   String get vbProtectHint;
 
   /// No description provided for @vbProtectActive.
@@ -1545,6 +1545,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已激活：插件仅作用于监听总线，其余直通（回调超预算）'**
   String get vbProtectActive;
+
+  /// No description provided for @vbProtectActiveTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'保护已激活'**
+  String get vbProtectActiveTag;
 
   /// No description provided for @shelfTitle.
   ///
@@ -1636,10 +1642,28 @@ abstract class AppLocalizations {
   /// **'把分频点以下的低频合并为单声道，消除相位抵消与浑浊。'**
   String get bassMonoDesc;
 
+  /// No description provided for @channelSelection.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道选择'**
+  String get channelSelection;
+
+  /// No description provided for @bassShelfRoutingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择应用低频搁架滤波的目标声道，未选择的声道直接直通。'**
+  String get bassShelfRoutingHint;
+
+  /// No description provided for @bassMonoPairsTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择低频单声道化作用的声道对。未勾选的声道对保持原样直通；立体声/双耳路径仅作用于 L/R。'**
+  String get bassMonoPairsTooltip;
+
   /// No description provided for @bassMonoPairs.
   ///
   /// In zh, this message translates to:
-  /// **'作用声道对'**
+  /// **'声道选择'**
   String get bassMonoPairs;
 
   /// No description provided for @bassMonoPairCount.
@@ -2059,7 +2083,7 @@ abstract class AppLocalizations {
   /// No description provided for @channelPhaseA.
   ///
   /// In zh, this message translates to:
-  /// **'仅播放本地 4/6/8 声道文件时生效（通道数由文件决定）：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上回落到折叠）。「多声道虚拟环绕」开启时本项不生效。'**
+  /// **'当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。'**
   String get channelPhaseA;
 
   /// No description provided for @audioMode.

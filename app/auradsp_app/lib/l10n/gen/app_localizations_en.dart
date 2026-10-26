@@ -858,11 +858,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vbProtectHint =>
-      'Narrows plugins to the monitored bus when the callback stays over budget; restores automatically';
+      'Audio callback deadline is determined by the driver buffer size (e.g. 128 frames @ 48kHz = 2.7ms budget). When DSP callback duration (EMA) continuously exceeds 85% of this budget, heavy plugins are automatically narrowed to the monitored bus to prevent audio dropouts and glitches, restoring automatically when load normalizes.';
 
   @override
   String get vbProtectActive =>
       'Active: plugins only on the monitored bus, others passthrough (callback over budget)';
+
+  @override
+  String get vbProtectActiveTag => 'Protection Active';
 
   @override
   String get shelfTitle => 'Low Shelf';
@@ -918,7 +921,18 @@ class AppLocalizationsEn extends AppLocalizations {
       'Sums bass below the crossover to mono to remove phase cancellation and muddiness.';
 
   @override
-  String get bassMonoPairs => 'Channel Pairs';
+  String get channelSelection => 'Channel Selection';
+
+  @override
+  String get bassShelfRoutingHint =>
+      'Select channels to apply low-shelf filtering. Unselected channels pass through unchanged.';
+
+  @override
+  String get bassMonoPairsTooltip =>
+      'Select channel pairs for bass mono. Unselected pairs pass through unchanged; stereo/binaural paths only affect L/R.';
+
+  @override
+  String get bassMonoPairs => 'Channel Selection';
 
   @override
   String bassMonoPairCount(int count) {
@@ -1150,7 +1164,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'Effective only for local 4/6/8-channel files (the channel count follows the file): Matrix downmix = the engine mixes to stereo before processing; Discrete = per-channel processing (falls back to folding on stereo devices). Ignored while \'Multichannel Binaural\' is on.';
+      'DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.';
 
   @override
   String get audioMode => 'Audio Mode';
