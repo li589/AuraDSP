@@ -68,7 +68,7 @@ void main() {
       expect(find.text('Expand'), findsOneWidget);
 
       // 验证编辑器底部内嵌的参数滑块面板
-      expect(find.text('Script Parameter Sliders'), findsOneWidget);
+      expect(find.text('Script Sliders'), findsOneWidget);
 
       // 验证初始状态：大纲、查找替换与控制台未展开
       expect(find.byType(FindReplaceBar), findsNothing);

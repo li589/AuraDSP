@@ -831,14 +831,16 @@ dbg = 0;
 
               // 4. 查找与替换工具条
               if (_showFindReplace) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
                 FindReplaceBar(
                   codeController: _code,
                   onTextModified: () => _onCodeChanged(_code.text),
                   onClose: () => setState(() => _showFindReplace = false),
                 ),
+                const SizedBox(height: 4),
+              ] else ...[
+                const SizedBox(height: 6),
               ],
-              const SizedBox(height: 6),
 
               // 5. 代码编辑器与大纲分栏
               Container(

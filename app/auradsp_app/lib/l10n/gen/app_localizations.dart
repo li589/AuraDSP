@@ -6055,20 +6055,86 @@ abstract class AppLocalizations {
   /// No description provided for @lpSlidersPanelTitle.
   ///
   /// In zh, this message translates to:
-  /// **'脚本参数调节滑块'**
+  /// **'参数调节滑块'**
   String get lpSlidersPanelTitle;
 
   /// No description provided for @lpSlidersCollapse.
   ///
   /// In zh, this message translates to:
-  /// **'收起滑块'**
+  /// **'收起面板'**
   String get lpSlidersCollapse;
 
   /// No description provided for @lpSlidersExpand.
   ///
   /// In zh, this message translates to:
-  /// **'展开滑块'**
+  /// **'展开面板'**
   String get lpSlidersExpand;
+
+  /// No description provided for @lpTabScriptSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本参数'**
+  String get lpTabScriptSliders;
+
+  /// No description provided for @lpTabInputChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入通道 (8)'**
+  String get lpTabInputChannels;
+
+  /// No description provided for @lpTabOutputChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出通道 (8)'**
+  String get lpTabOutputChannels;
+
+  /// No description provided for @lpCustomVarTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本变量'**
+  String get lpCustomVarTag;
+
+  /// No description provided for @lpCustomVarHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）'**
+  String get lpCustomVarHint;
+
+  /// No description provided for @lpInputTrimHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'8 声道统一架构输入前级平衡与主增益'**
+  String get lpInputTrimHint;
+
+  /// No description provided for @lpOutputGainHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'8 声道后级独立输出增益补偿 (-15dB ~ +15dB)'**
+  String get lpOutputGainHint;
+
+  /// No description provided for @lpResetAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部复位'**
+  String get lpResetAll;
+
+  /// No description provided for @lpInputMasterGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局输入增益'**
+  String get lpInputMasterGain;
+
+  /// No description provided for @lpOutputMasterGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局输出增益'**
+  String get lpOutputMasterGain;
+
+  /// No description provided for @lpNoScriptSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本未声明可调变量'**
+  String get lpNoScriptSliders;
 }
 
 class _AppLocalizationsDelegate

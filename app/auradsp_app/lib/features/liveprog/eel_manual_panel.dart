@@ -9,13 +9,12 @@
  * - 一键插入代码片段到编辑器
  */
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
 import '../../core/liveprog/eel_manual_registry.dart';
 import '../../core/theme.dart';
-import '../../core/ui_helpers.dart';
-import '../chrome.dart';
 import '../widgets.dart';
 
 class EelManualPanel extends StatefulWidget {
@@ -33,27 +32,131 @@ class EelManualPanel extends StatefulWidget {
 }
 
 class _EelManualPanelState extends State<EelManualPanel> {
+  // 静态记忆：上次查看的分类、搜索词、横向与纵向滚动位置及展开项
+  static EelManualCategory? _lastCategory;
+  static double _lastScrollOffset = 0.0;
+  static double _lastListScrollOffset = 0.0;
+  static String _lastSearchText = '';
+  static final Set<String> _lastExpandedKeys = {};
+
   final _searchCtrl = TextEditingController();
+  final _categoryScrollCtrl = ScrollController();
+  final _listScrollCtrl = ScrollController();
   EelManualCategory? _selectedCategory;
   List<EelManualEntry> _filteredEntries = const [];
   final Set<String> _expandedKeys = {};
+  bool _canScrollLeft = false;
+  bool _canScrollRight = false;
 
   @override
   void initState() {
     super.initState();
-    _filteredEntries = EelManualRegistry.entries;
+    _selectedCategory = _lastCategory;
+    _expandedKeys.addAll(_lastExpandedKeys);
+    if (_lastSearchText.isNotEmpty) {
+      _searchCtrl.text = _lastSearchText;
+    }
+    _filteredEntries = EelManualRegistry.search(
+      query: _searchCtrl.text,
+      category: _selectedCategory,
+    );
     _searchCtrl.addListener(_onSearchChanged);
+    _categoryScrollCtrl.addListener(_onCategoryScroll);
+    _listScrollCtrl.addListener(_onListScroll);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (_categoryScrollCtrl.hasClients && _lastScrollOffset > 0) {
+        _categoryScrollCtrl.jumpTo(_lastScrollOffset.clamp(
+          0.0,
+          _categoryScrollCtrl.position.maxScrollExtent,
+        ));
+      }
+      if (_listScrollCtrl.hasClients && _lastListScrollOffset > 0) {
+        _listScrollCtrl.jumpTo(_lastListScrollOffset.clamp(
+          0.0,
+          _listScrollCtrl.position.maxScrollExtent,
+        ));
+      }
+      _updateScrollArrows();
+    });
   }
 
   @override
   void dispose() {
     _searchCtrl.removeListener(_onSearchChanged);
+    _categoryScrollCtrl.removeListener(_onCategoryScroll);
+    _listScrollCtrl.removeListener(_onListScroll);
     _searchCtrl.dispose();
+    _categoryScrollCtrl.dispose();
+    _listScrollCtrl.dispose();
     super.dispose();
+  }
+
+  void _onListScroll() {
+    if (!_listScrollCtrl.hasClients) return;
+    _lastListScrollOffset = _listScrollCtrl.offset;
+  }
+
+  void _onCategoryScroll() {
+    if (!_categoryScrollCtrl.hasClients) return;
+    _lastScrollOffset = _categoryScrollCtrl.offset;
+    _updateScrollArrows();
+  }
+
+  void _updateScrollArrows() {
+    if (!_categoryScrollCtrl.hasClients) return;
+    final pos = _categoryScrollCtrl.position;
+    final canLeft = pos.pixels > 3.0;
+    final canRight = pos.pixels < pos.maxScrollExtent - 3.0;
+    if (canLeft != _canScrollLeft || canRight != _canScrollRight) {
+      setState(() {
+        _canScrollLeft = canLeft;
+        _canScrollRight = canRight;
+      });
+    }
+  }
+
+  void _scrollCategories(double delta) {
+    if (!_categoryScrollCtrl.hasClients) return;
+    final target = (_categoryScrollCtrl.offset + delta).clamp(
+      0.0,
+      _categoryScrollCtrl.position.maxScrollExtent,
+    );
+    _categoryScrollCtrl.animateTo(
+      target,
+      duration: AuraDur.fast,
+      curve: AuraCurve.standard,
+    );
+  }
+
+  Widget _buildScrollArrow({
+    required AuraPalette p,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: p.panel,
+      borderRadius: BorderRadius.circular(AuraRadius.xs),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        child: Container(
+          width: 24,
+          height: 32,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(AuraRadius.xs),
+            border: Border.all(color: p.hairline),
+          ),
+          child: Icon(icon, size: 16, color: p.textDim),
+        ),
+      ),
+    );
   }
 
   void _onSearchChanged() {
     final query = _searchCtrl.text;
+    _lastSearchText = query;
     setState(() {
       _filteredEntries = EelManualRegistry.search(
         query: query,
@@ -63,6 +166,7 @@ class _EelManualPanelState extends State<EelManualPanel> {
   }
 
   void _selectCategory(EelManualCategory? cat) {
+    _lastCategory = cat;
     setState(() => _selectedCategory = cat);
     _onSearchChanged();
   }
@@ -71,8 +175,10 @@ class _EelManualPanelState extends State<EelManualPanel> {
     setState(() {
       if (_expandedKeys.contains(name)) {
         _expandedKeys.remove(name);
+        _lastExpandedKeys.remove(name);
       } else {
         _expandedKeys.add(name);
+        _lastExpandedKeys.add(name);
       }
     });
   }
@@ -152,27 +258,91 @@ class _EelManualPanelState extends State<EelManualPanel> {
                   ),
                 ),
                 const SizedBox(height: AuraSpace.xs),
-                // Categories row
-                SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: [
-                      AuraChip(
-                        l.lpAllCategories,
-                        selected: _selectedCategory == null,
-                        onTap: () => _selectCategory(null),
+                // Categories row (带拖动、鼠标滚轮、左右箭头与现代页签样式)
+                Row(
+                  children: [
+                    if (_canScrollLeft) ...[
+                      _buildScrollArrow(
+                        p: p,
+                        icon: Icons.chevron_left_rounded,
+                        onTap: () => _scrollCategories(-150),
                       ),
                       const SizedBox(width: 4),
-                      for (final cat in EelManualCategory.values) ...[
-                        AuraChip(
-                          isZh ? cat.labelZh : cat.labelEn,
-                          selected: _selectedCategory == cat,
-                          onTap: () => _selectCategory(cat),
-                        ),
-                        const SizedBox(width: 4),
-                      ],
                     ],
-                  ),
+                    Expanded(
+                      child: Listener(
+                        onPointerSignal: (pointerSignal) {
+                          if (pointerSignal is PointerScrollEvent) {
+                            final delta = pointerSignal.scrollDelta.dy != 0
+                                ? pointerSignal.scrollDelta.dy
+                                : pointerSignal.scrollDelta.dx;
+                            if (_categoryScrollCtrl.hasClients) {
+                              final target = (_categoryScrollCtrl.offset + delta).clamp(
+                                0.0,
+                                _categoryScrollCtrl.position.maxScrollExtent,
+                              );
+                              _categoryScrollCtrl.jumpTo(target);
+                            }
+                          }
+                        },
+                        child: ScrollConfiguration(
+                          behavior: ScrollConfiguration.of(context).copyWith(
+                            dragDevices: {
+                              PointerDeviceKind.touch,
+                              PointerDeviceKind.mouse,
+                              PointerDeviceKind.trackpad,
+                            },
+                          ),
+                          child: SingleChildScrollView(
+                            controller: _categoryScrollCtrl,
+                            scrollDirection: Axis.horizontal,
+                            physics: const BouncingScrollPhysics(),
+                            child: Container(
+                              height: 32,
+                              padding: const EdgeInsets.all(2),
+                              decoration: BoxDecoration(
+                                color: p.panel,
+                                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                                border: Border.all(color: p.hairline),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  _CategoryTabItem(
+                                    title: l.lpAllCategories,
+                                    count: EelManualRegistry.entries.length,
+                                    isSelected: _selectedCategory == null,
+                                    palette: p,
+                                    onTap: () => _selectCategory(null),
+                                  ),
+                                  for (final cat in EelManualCategory.values) ...[
+                                    const SizedBox(width: 2),
+                                    _CategoryTabItem(
+                                      title: isZh ? cat.labelZh : cat.labelEn,
+                                      count: EelManualRegistry.entries
+                                          .where((e) => e.category == cat)
+                                          .length,
+                                      isSelected: _selectedCategory == cat,
+                                      palette: p,
+                                      onTap: () => _selectCategory(cat),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    if (_canScrollRight) ...[
+                      const SizedBox(width: 4),
+                      _buildScrollArrow(
+                        p: p,
+                        icon: Icons.chevron_right_rounded,
+                        onTap: () => _scrollCategories(150),
+                      ),
+                    ],
+                  ],
                 ),
               ],
             ),
@@ -188,6 +358,7 @@ class _EelManualPanelState extends State<EelManualPanel> {
                     ),
                   )
                 : ListView.builder(
+                    controller: _listScrollCtrl,
                     itemCount: _filteredEntries.length,
                     padding: const EdgeInsets.all(AuraSpace.sm),
                     itemBuilder: (ctx, idx) {
@@ -402,6 +573,81 @@ class EelManualDialog {
               onInsertSnippet?.call(snippet);
             },
             onClose: () => Navigator.of(ctx).pop(),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 现代分类标签页 Item
+class _CategoryTabItem extends StatelessWidget {
+  final String title;
+  final int count;
+  final bool isSelected;
+  final AuraPalette palette;
+  final VoidCallback onTap;
+
+  const _CategoryTabItem({
+    required this.title,
+    required this.count,
+    required this.isSelected,
+    required this.palette,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = palette;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        child: AnimatedContainer(
+          duration: AuraDur.fast,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+          decoration: BoxDecoration(
+            color: isSelected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+            borderRadius: BorderRadius.circular(AuraRadius.xs),
+            border: isSelected
+                ? Border.all(color: p.accent.withValues(alpha: 0.45), width: 1)
+                : null,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                title,
+                style: monoOf(
+                  p,
+                  size: 11.5,
+                  color: isSelected ? p.accent : p.textDim,
+                ).copyWith(
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
+              const SizedBox(width: 5),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                decoration: BoxDecoration(
+                  color: isSelected
+                      ? p.accent.withValues(alpha: 0.22)
+                      : p.panelRaised,
+                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                ),
+                child: Text(
+                  '$count',
+                  style: monoOf(
+                    p,
+                    size: 9.5,
+                    color: isSelected ? p.accent : p.textDim.withValues(alpha: 0.7),
+                  ).copyWith(
+                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),

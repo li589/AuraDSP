@@ -193,8 +193,8 @@ class FindReplaceBarState extends State<FindReplaceBar> {
         const SingleActivator(LogicalKeyboardKey.escape): () => widget.onClose?.call(),
       },
       child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
-        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+        margin: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: 4),
         decoration: BoxDecoration(
           color: p.panel,
           borderRadius: BorderRadius.circular(AuraRadius.sm),

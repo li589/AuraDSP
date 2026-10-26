@@ -214,5 +214,40 @@ spl0 = spl0 * slider2 + slider4;
       expect(sliders.containsKey(1), isFalse);
       expect(sliders.containsKey(3), isFalse);
     });
+
+    test('解析带注释前缀的 slider、枚举选项与自定义变量声明', () {
+      const src = '''
+desc: Dynamic Bass Mangler
+author: remaincalm.org
+//slider1:1<0,6,1>Octaves Down
+slider15:1<0,3,1{No,Murky,Confused,Unpleasant}>Attitude
+dBassGain:100<0,100,1>Bass strength (%)
+freqSplit1:400<1,24000,1>Split 1 (Hz)
+@init
+x = 0;
+@sample
+spl0 = spl0;
+''';
+      final sliders = EelSliderParser.parse(src);
+      // slider1 (带 // 前缀)
+      expect(sliders.containsKey(1), isTrue);
+      expect(sliders[1]!.rawName, 'slider1');
+      expect(sliders[1]!.displayName, 'Octaves Down');
+      expect(sliders[1]!.defaultVal, 1.0);
+      expect(sliders[1]!.isHostSlider, isTrue);
+
+      // slider15 (带枚举)
+      expect(sliders.containsKey(15), isTrue);
+      expect(sliders[15]!.rawName, 'slider15');
+      expect(sliders[15]!.displayName, 'Attitude');
+      expect(sliders[15]!.enumOptions, ['No', 'Murky', 'Confused', 'Unpleasant']);
+      expect(sliders[15]!.isHostSlider, isFalse);
+
+      // 自定义变量
+      final customMetas = sliders.values.where((m) => !m.rawName.startsWith('slider')).toList();
+      expect(customMetas.length, 2);
+      expect(customMetas.any((m) => m.rawName == 'dBassGain' && m.defaultVal == 100.0), isTrue);
+      expect(customMetas.any((m) => m.rawName == 'freqSplit1' && m.minVal == 1.0), isTrue);
+    });
   });
 }

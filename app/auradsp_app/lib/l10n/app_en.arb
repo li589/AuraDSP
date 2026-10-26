@@ -1399,7 +1399,18 @@
   "lpLibDirInvalid": "Directory does not exist or is invalid",
   "lpLibSaveCurrent": "Save Current Script to Library",
   "lpLibCustomDirs": "External Script Directories",
-  "lpSlidersPanelTitle": "Script Parameter Sliders",
-  "lpSlidersCollapse": "Collapse Sliders",
-  "lpSlidersExpand": "Expand Sliders"
+  "lpSlidersPanelTitle": "Parameter Sliders",
+  "lpSlidersCollapse": "Collapse Panel",
+  "lpSlidersExpand": "Expand Panel",
+  "lpTabScriptSliders": "Script Sliders",
+  "lpTabInputChannels": "Input Channels (8)",
+  "lpTabOutputChannels": "Output Channels (8)",
+  "lpCustomVarTag": "Script Var",
+  "lpCustomVarHint": "Script internal variable (initialized in @init; bind to slider1..8 for host real-time control)",
+  "lpInputTrimHint": "8-channel unified architecture input trim & master gain",
+  "lpOutputGainHint": "8-channel independent output post-gain trim (-15dB ~ +15dB)",
+  "lpResetAll": "Reset All",
+  "lpInputMasterGain": "Master Input Gain",
+  "lpOutputMasterGain": "Master Output Gain",
+  "lpNoScriptSliders": "No adjustable variables declared in script"
 }
