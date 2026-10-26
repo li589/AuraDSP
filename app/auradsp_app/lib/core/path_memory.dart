@@ -33,6 +33,8 @@ abstract final class PathMemory {
   static const String slotArbmag = 'arbmagGraphicEq';
   static const String slotTestAudio = 'testAudioFile';
   static const String slotLiveprogScript = 'liveprogScript';
+  static const String slotLiveprogImportEel = 'liveprogImportEel';
+  static const String slotLiveprogAddDir = 'liveprogAddDir';
   // 文本输入式「添加目录」对话框的上次输入（播种 TextField）
   static const String slotLastScriptDir = 'lastScriptDir';
   static const String slotLastPluginDir = 'lastPluginDir';
@@ -43,6 +45,8 @@ abstract final class PathMemory {
     slotArbmag: '',
     slotTestAudio: '',
     slotLiveprogScript: 'liveprog', // ConfigManager.path 的相对子目录
+    slotLiveprogImportEel: '',
+    slotLiveprogAddDir: '',
   };
 
   static Map<String, String> _dirs = {};

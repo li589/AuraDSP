@@ -3244,4 +3244,96 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpCollapseEditor => 'Compact Editor';
+
+  @override
+  String get lpEyebrowDsp => 'Programmable DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 Editor';
+
+  @override
+  String get lpBtnApplied => 'Applied';
+
+  @override
+  String get lpBtnUnapplied => 'Unapplied';
+
+  @override
+  String get lpBtnCompile => 'Compile';
+
+  @override
+  String get lpTooltipCompileFirst => 'Code modified; compile before applying';
+
+  @override
+  String get lpMenuFile => 'File';
+
+  @override
+  String get lpFileNewBlank => 'New Blank Script';
+
+  @override
+  String get lpFileNewFromTemplate => 'New from Template...';
+
+  @override
+  String get lpFileImportApo => 'Import APO Preset...';
+
+  @override
+  String get lpFileImportEel => 'Import EEL Script...';
+
+  @override
+  String get lpFileSaveAs => 'Save As...';
+
+  @override
+  String get lpFileSaveAsPrompt => 'Enter destination path and filename:';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => 'File Already Exists';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return 'The file \"$name\" already exists. Overwrite it?';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => 'Overwrite';
+
+  @override
+  String get lpMenuEdit => 'Edit';
+
+  @override
+  String get lpEditFindReplace => 'Find & Replace';
+
+  @override
+  String get lpEditToggleOutline => 'Code Outline';
+
+  @override
+  String get lpEditFormat => 'Format Code';
+
+  @override
+  String get lpEditScrollToTop => 'Scroll to Top';
+
+  @override
+  String get lpBtnLibrary => 'Script Library';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 Script Library & Directory Manager';
+
+  @override
+  String get lpLibOpenInExplorer => 'Browse in File Manager';
+
+  @override
+  String get lpLibDirInvalid => 'Directory does not exist or is invalid';
+
+  @override
+  String get lpLibSaveCurrent => 'Save Current Script to Library';
+
+  @override
+  String get lpLibCustomDirs => 'External Script Directories';
+
+  @override
+  String get lpSlidersPanelTitle => 'Script Parameter Sliders';
+
+  @override
+  String get lpSlidersCollapse => 'Collapse Sliders';
+
+  @override
+  String get lpSlidersExpand => 'Expand Sliders';
 }

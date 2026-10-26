@@ -1361,5 +1361,42 @@
   "lpConfirmDiscardAction": "破棄して読み込む",
   "lpConsoleClear": "出力をクリア",
   "lpExpandEditor": "エディタを拡大",
-  "lpCollapseEditor": "エディタを縮小"
+  "lpCollapseEditor": "エディタを縮小",
+  "lpEyebrowDsp": "プログラマブル DSP",
+  "lpTitleEditor": "EEL2 エディタ",
+  "lpBtnApplied": "適用中",
+  "lpBtnUnapplied": "未適用",
+  "lpBtnCompile": "コンパイル",
+  "lpTooltipCompileFirst": "コードが変更されました。適用前にコンパイルしてください",
+  "lpMenuFile": "ファイル",
+  "lpFileNewBlank": "新規空白スクリプト",
+  "lpFileNewFromTemplate": "テンプレートから新規作成...",
+  "lpFileImportApo": "Equalizer APO プリセットのインポート...",
+  "lpFileImportEel": "EEL スクリプトのインポート...",
+  "lpFileSaveAs": "名前を付けて保存...",
+  "lpFileSaveAsPrompt": "保存先のパスとファイル名を入力してください：",
+  "lpFileOverwriteConfirmTitle": "ファイルが既に存在します",
+  "lpFileOverwriteConfirmBody": "ファイル「{name}」は既に存在します。上書きしますか？",
+  "@lpFileOverwriteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpFileOverwriteConfirmAction": "上書き",
+  "lpMenuEdit": "編集",
+  "lpEditFindReplace": "検索と置換",
+  "lpEditToggleOutline": "コードアウトライン",
+  "lpEditFormat": "コード整形",
+  "lpEditScrollToTop": "先頭へ移動",
+  "lpBtnLibrary": "スクリプトライブラリ",
+  "lpLibDialogTitle": "EEL2 スクリプトライブラリと外部ディレクトリ管理",
+  "lpLibOpenInExplorer": "ファイルマネージャーで開く",
+  "lpLibDirInvalid": "ディレクトリが存在しないか無効です",
+  "lpLibSaveCurrent": "現在のスクリプトを保存",
+  "lpLibCustomDirs": "外部スクリプトディレクトリ",
+  "lpSlidersPanelTitle": "スクリプトパラメータスライダー",
+  "lpSlidersCollapse": "スライダーを折りたたむ",
+  "lpSlidersExpand": "スライダーを展開"
 }

@@ -5871,6 +5871,186 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'收起编辑器'**
   String get lpCollapseEditor;
+
+  /// No description provided for @lpEyebrowDsp.
+  ///
+  /// In zh, this message translates to:
+  /// **'可编程 DSP'**
+  String get lpEyebrowDsp;
+
+  /// No description provided for @lpTitleEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 编辑器'**
+  String get lpTitleEditor;
+
+  /// No description provided for @lpBtnApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已应用'**
+  String get lpBtnApplied;
+
+  /// No description provided for @lpBtnUnapplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未应用'**
+  String get lpBtnUnapplied;
+
+  /// No description provided for @lpBtnCompile.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译'**
+  String get lpBtnCompile;
+
+  /// No description provided for @lpTooltipCompileFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码已修改，需先编译后方可应用'**
+  String get lpTooltipCompileFirst;
+
+  /// No description provided for @lpMenuFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get lpMenuFile;
+
+  /// No description provided for @lpFileNewBlank.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建空白脚本'**
+  String get lpFileNewBlank;
+
+  /// No description provided for @lpFileNewFromTemplate.
+  ///
+  /// In zh, this message translates to:
+  /// **'从模板新建...'**
+  String get lpFileNewFromTemplate;
+
+  /// No description provided for @lpFileImportApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 APO 预设...'**
+  String get lpFileImportApo;
+
+  /// No description provided for @lpFileImportEel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 EEL 脚本...'**
+  String get lpFileImportEel;
+
+  /// No description provided for @lpFileSaveAs.
+  ///
+  /// In zh, this message translates to:
+  /// **'另存为...'**
+  String get lpFileSaveAs;
+
+  /// No description provided for @lpFileSaveAsPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入保存路径与文件名：'**
+  String get lpFileSaveAsPrompt;
+
+  /// No description provided for @lpFileOverwriteConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件已存在'**
+  String get lpFileOverwriteConfirmTitle;
+
+  /// No description provided for @lpFileOverwriteConfirmBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标文件「{name}」已存在，是否确认覆盖？'**
+  String lpFileOverwriteConfirmBody(String name);
+
+  /// No description provided for @lpFileOverwriteConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖'**
+  String get lpFileOverwriteConfirmAction;
+
+  /// No description provided for @lpMenuEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get lpMenuEdit;
+
+  /// No description provided for @lpEditFindReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找与替换'**
+  String get lpEditFindReplace;
+
+  /// No description provided for @lpEditToggleOutline.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码大纲'**
+  String get lpEditToggleOutline;
+
+  /// No description provided for @lpEditFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式化代码'**
+  String get lpEditFormat;
+
+  /// No description provided for @lpEditScrollToTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳回开头'**
+  String get lpEditScrollToTop;
+
+  /// No description provided for @lpBtnLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本库'**
+  String get lpBtnLibrary;
+
+  /// No description provided for @lpLibDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 脚本库与外部目录管理'**
+  String get lpLibDialogTitle;
+
+  /// No description provided for @lpLibOpenInExplorer.
+  ///
+  /// In zh, this message translates to:
+  /// **'在文件管理器中浏览'**
+  String get lpLibOpenInExplorer;
+
+  /// No description provided for @lpLibDirInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'目录不存在或已失效'**
+  String get lpLibDirInvalid;
+
+  /// No description provided for @lpLibSaveCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前脚本到库'**
+  String get lpLibSaveCurrent;
+
+  /// No description provided for @lpLibCustomDirs.
+  ///
+  /// In zh, this message translates to:
+  /// **'外部脚本目录'**
+  String get lpLibCustomDirs;
+
+  /// No description provided for @lpSlidersPanelTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本参数调节滑块'**
+  String get lpSlidersPanelTitle;
+
+  /// No description provided for @lpSlidersCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起滑块'**
+  String get lpSlidersCollapse;
+
+  /// No description provided for @lpSlidersExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开滑块'**
+  String get lpSlidersExpand;
 }
 
 class _AppLocalizationsDelegate
