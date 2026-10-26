@@ -1509,6 +1509,100 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSave => '保存到库';
 
   @override
+  String get lpApoDialogTitle => '导入 EqualizerAPO 预设 (.txt)';
+
+  @override
+  String get lpApoDialogDesc => '将 EqualizerAPO / Peace 参量均衡文本转换为高性能 EEL2 脚本';
+
+  @override
+  String get lpApoOpenFile => '打开 .txt 文件';
+
+  @override
+  String get lpApoPasteHint =>
+      '在此粘贴 EqualizerAPO 配置文本（例如 Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41）...';
+
+  @override
+  String get lpApoSwapChannels => '声道互换 (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => '极性反转 (相位 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return '已解析出 $n 个滤波器';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return '前级增益: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => '填入编辑器';
+
+  @override
+  String get lpApoPreview => '生成的 EEL2 代码预览';
+
+  @override
+  String get lpFind => '查找';
+
+  @override
+  String get lpReplace => '替换';
+
+  @override
+  String get lpReplaceAll => '全部替换';
+
+  @override
+  String get lpFindNext => '下一个';
+
+  @override
+  String get lpFindPrev => '上一个';
+
+  @override
+  String get lpMatchCase => '区分大小写';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '第 $current 项，共 $total 项';
+  }
+
+  @override
+  String get lpNoMatches => '无匹配项';
+
+  @override
+  String get lpOutline => '代码大纲';
+
+  @override
+  String get lpOutlineEmpty => '未找到段指令或函数声明';
+
+  @override
+  String get lpTemplates => '代码模板向导';
+
+  @override
+  String get lpTemplatesDesc => '选择标准音频 DSP 起步模板，加速算法开发';
+
+  @override
+  String get lpTemplateUse => '应用此模板';
+
+  @override
+  String get lpManualSearchHint => '搜索 80+ EEL2 内置函数、关键字、寄存器...';
+
+  @override
+  String get lpManualInsert => '插入到光标处';
+
+  @override
+  String get lpManualParamTitle => '参数列表';
+
+  @override
+  String get lpManualReturnTitle => '返回值';
+
+  @override
+  String get lpManualExampleTitle => '应用示例';
+
+  @override
+  String get lpAllCategories => '全部';
+
+  @override
   String get convTitle => '脉冲响应';
 
   @override

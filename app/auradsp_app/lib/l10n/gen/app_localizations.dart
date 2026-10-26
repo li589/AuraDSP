@@ -2920,6 +2920,180 @@ abstract class AppLocalizations {
   /// **'保存到库'**
   String get lpSave;
 
+  /// No description provided for @lpApoDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 EqualizerAPO 预设 (.txt)'**
+  String get lpApoDialogTitle;
+
+  /// No description provided for @lpApoDialogDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将 EqualizerAPO / Peace 参量均衡文本转换为高性能 EEL2 脚本'**
+  String get lpApoDialogDesc;
+
+  /// No description provided for @lpApoOpenFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 .txt 文件'**
+  String get lpApoOpenFile;
+
+  /// No description provided for @lpApoPasteHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在此粘贴 EqualizerAPO 配置文本（例如 Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41）...'**
+  String get lpApoPasteHint;
+
+  /// No description provided for @lpApoSwapChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道互换 (L ↔ R)'**
+  String get lpApoSwapChannels;
+
+  /// No description provided for @lpApoInvertPolarity.
+  ///
+  /// In zh, this message translates to:
+  /// **'极性反转 (相位 180°)'**
+  String get lpApoInvertPolarity;
+
+  /// No description provided for @lpApoFiltersDetected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已解析出 {n} 个滤波器'**
+  String lpApoFiltersDetected(int n);
+
+  /// No description provided for @lpApoPreampDetected.
+  ///
+  /// In zh, this message translates to:
+  /// **'前级增益: {gain} dB'**
+  String lpApoPreampDetected(String gain);
+
+  /// No description provided for @lpApoApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'填入编辑器'**
+  String get lpApoApply;
+
+  /// No description provided for @lpApoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成的 EEL2 代码预览'**
+  String get lpApoPreview;
+
+  /// No description provided for @lpFind.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找'**
+  String get lpFind;
+
+  /// No description provided for @lpReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换'**
+  String get lpReplace;
+
+  /// No description provided for @lpReplaceAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部替换'**
+  String get lpReplaceAll;
+
+  /// No description provided for @lpFindNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一个'**
+  String get lpFindNext;
+
+  /// No description provided for @lpFindPrev.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一个'**
+  String get lpFindPrev;
+
+  /// No description provided for @lpMatchCase.
+  ///
+  /// In zh, this message translates to:
+  /// **'区分大小写'**
+  String get lpMatchCase;
+
+  /// No description provided for @lpMatchCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {current} 项，共 {total} 项'**
+  String lpMatchCount(int current, int total);
+
+  /// No description provided for @lpNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配项'**
+  String get lpNoMatches;
+
+  /// No description provided for @lpOutline.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码大纲'**
+  String get lpOutline;
+
+  /// No description provided for @lpOutlineEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到段指令或函数声明'**
+  String get lpOutlineEmpty;
+
+  /// No description provided for @lpTemplates.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码模板向导'**
+  String get lpTemplates;
+
+  /// No description provided for @lpTemplatesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择标准音频 DSP 起步模板，加速算法开发'**
+  String get lpTemplatesDesc;
+
+  /// No description provided for @lpTemplateUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用此模板'**
+  String get lpTemplateUse;
+
+  /// No description provided for @lpManualSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索 80+ EEL2 内置函数、关键字、寄存器...'**
+  String get lpManualSearchHint;
+
+  /// No description provided for @lpManualInsert.
+  ///
+  /// In zh, this message translates to:
+  /// **'插入到光标处'**
+  String get lpManualInsert;
+
+  /// No description provided for @lpManualParamTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数列表'**
+  String get lpManualParamTitle;
+
+  /// No description provided for @lpManualReturnTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回值'**
+  String get lpManualReturnTitle;
+
+  /// No description provided for @lpManualExampleTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用示例'**
+  String get lpManualExampleTitle;
+
+  /// No description provided for @lpAllCategories.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get lpAllCategories;
+
   /// No description provided for @convTitle.
   ///
   /// In zh, this message translates to:
