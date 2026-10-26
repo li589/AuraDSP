@@ -1399,7 +1399,18 @@
   "lpLibDirInvalid": "ディレクトリが存在しないか無効です",
   "lpLibSaveCurrent": "現在のスクリプトを保存",
   "lpLibCustomDirs": "外部スクリプトディレクトリ",
-  "lpSlidersPanelTitle": "スクリプトパラメータスライダー",
-  "lpSlidersCollapse": "スライダーを折りたたむ",
-  "lpSlidersExpand": "スライダーを展開"
+  "lpSlidersPanelTitle": "パラメータ調整スライダー",
+  "lpSlidersCollapse": "パネルを折りたたむ",
+  "lpSlidersExpand": "パネルを展開",
+  "lpTabScriptSliders": "スクリプトパラメータ",
+  "lpTabInputChannels": "入力チャンネル (8)",
+  "lpTabOutputChannels": "出力チャンネル (8)",
+  "lpCustomVarTag": "スクリプト変数",
+  "lpCustomVarHint": "スクリプト内部変数（@init で初期化；外部からリアルタイム調整するには slider1..8 に関連付けます）",
+  "lpInputTrimHint": "8チャンネル統一アーキテクチャの入力トリムとマスターゲイン",
+  "lpOutputGainHint": "8チャンネル後段独立出力ゲイン調整 (-15dB ~ +15dB)",
+  "lpResetAll": "すべてリセット",
+  "lpInputMasterGain": "マスター入力ゲイン",
+  "lpOutputMasterGain": "マスター出力ゲイン",
+  "lpNoScriptSliders": "スクリプト内に調整可能な変数が宣言されていません"
 }

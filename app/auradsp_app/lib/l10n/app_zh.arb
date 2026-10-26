@@ -1519,7 +1519,18 @@
   "lpLibDirInvalid": "目录不存在或已失效",
   "lpLibSaveCurrent": "保存当前脚本到库",
   "lpLibCustomDirs": "外部脚本目录",
-  "lpSlidersPanelTitle": "脚本参数调节滑块",
-  "lpSlidersCollapse": "收起滑块",
-  "lpSlidersExpand": "展开滑块"
+  "lpSlidersPanelTitle": "参数调节滑块",
+  "lpSlidersCollapse": "收起面板",
+  "lpSlidersExpand": "展开面板",
+  "lpTabScriptSliders": "脚本参数",
+  "lpTabInputChannels": "输入通道 (8)",
+  "lpTabOutputChannels": "输出通道 (8)",
+  "lpCustomVarTag": "脚本变量",
+  "lpCustomVarHint": "脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）",
+  "lpInputTrimHint": "8 声道统一架构输入前级平衡与主增益",
+  "lpOutputGainHint": "8 声道后级独立输出增益补偿 (-15dB ~ +15dB)",
+  "lpResetAll": "全部复位",
+  "lpInputMasterGain": "全局输入增益",
+  "lpOutputMasterGain": "全局输出增益",
+  "lpNoScriptSliders": "脚本未声明可调变量"
 }

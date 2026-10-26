@@ -3338,11 +3338,47 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpLibCustomDirs => 'External Script Directories';
 
   @override
-  String get lpSlidersPanelTitle => 'Script Parameter Sliders';
+  String get lpSlidersPanelTitle => 'Parameter Sliders';
 
   @override
-  String get lpSlidersCollapse => 'Collapse Sliders';
+  String get lpSlidersCollapse => 'Collapse Panel';
 
   @override
-  String get lpSlidersExpand => 'Expand Sliders';
+  String get lpSlidersExpand => 'Expand Panel';
+
+  @override
+  String get lpTabScriptSliders => 'Script Sliders';
+
+  @override
+  String get lpTabInputChannels => 'Input Channels (8)';
+
+  @override
+  String get lpTabOutputChannels => 'Output Channels (8)';
+
+  @override
+  String get lpCustomVarTag => 'Script Var';
+
+  @override
+  String get lpCustomVarHint =>
+      'Script internal variable (initialized in @init; bind to slider1..8 for host real-time control)';
+
+  @override
+  String get lpInputTrimHint =>
+      '8-channel unified architecture input trim & master gain';
+
+  @override
+  String get lpOutputGainHint =>
+      '8-channel independent output post-gain trim (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => 'Reset All';
+
+  @override
+  String get lpInputMasterGain => 'Master Input Gain';
+
+  @override
+  String get lpOutputMasterGain => 'Master Output Gain';
+
+  @override
+  String get lpNoScriptSliders => 'No adjustable variables declared in script';
 }

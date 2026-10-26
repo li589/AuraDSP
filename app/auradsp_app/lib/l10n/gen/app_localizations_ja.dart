@@ -3189,11 +3189,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpLibCustomDirs => '外部スクリプトディレクトリ';
 
   @override
-  String get lpSlidersPanelTitle => 'スクリプトパラメータスライダー';
+  String get lpSlidersPanelTitle => 'パラメータ調整スライダー';
 
   @override
-  String get lpSlidersCollapse => 'スライダーを折りたたむ';
+  String get lpSlidersCollapse => 'パネルを折りたたむ';
 
   @override
-  String get lpSlidersExpand => 'スライダーを展開';
+  String get lpSlidersExpand => 'パネルを展開';
+
+  @override
+  String get lpTabScriptSliders => 'スクリプトパラメータ';
+
+  @override
+  String get lpTabInputChannels => '入力チャンネル (8)';
+
+  @override
+  String get lpTabOutputChannels => '出力チャンネル (8)';
+
+  @override
+  String get lpCustomVarTag => 'スクリプト変数';
+
+  @override
+  String get lpCustomVarHint =>
+      'スクリプト内部変数（@init で初期化；外部からリアルタイム調整するには slider1..8 に関連付けます）';
+
+  @override
+  String get lpInputTrimHint => '8チャンネル統一アーキテクチャの入力トリムとマスターゲイン';
+
+  @override
+  String get lpOutputGainHint => '8チャンネル後段独立出力ゲイン調整 (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => 'すべてリセット';
+
+  @override
+  String get lpInputMasterGain => 'マスター入力ゲイン';
+
+  @override
+  String get lpOutputMasterGain => 'マスター出力ゲイン';
+
+  @override
+  String get lpNoScriptSliders => 'スクリプト内に調整可能な変数が宣言されていません';
 }

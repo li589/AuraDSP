@@ -3,12 +3,15 @@
  */
 
 import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/eel_slider_parser.dart';
+import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/liveprog/code_outline_panel.dart';
 import 'package:auradsp_app/features/liveprog/eel_manual_panel.dart';
 import 'package:auradsp_app/features/liveprog/equalizer_apo_dialog.dart';
 import 'package:auradsp_app/features/liveprog/find_replace_bar.dart';
 import 'package:auradsp_app/features/liveprog/new_script_wizard_dialog.dart';
+import 'package:auradsp_app/features/liveprog/sliders/liveprog_sliders_panel.dart';
 import 'package:auradsp_app/features/liveprog/toolbar/liveprog_ide_toolbar.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
@@ -335,6 +338,97 @@ spl0 = spl0;
       await tester.tap(find.text('Scroll to Top'));
       await tester.pumpAndSettle();
       expect(editAction, equals(LiveprogEditAction.scrollToTop));
+    });
+
+    testWidgets('LiveprogSlidersPanel 三类切换（脚本参数/输入通道/输出通道）与变量展示验证', (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      final activeSliders = <int, EelSliderMeta>{
+        1: const EelSliderMeta(
+          index: 1,
+          rawName: 'slider1',
+          displayName: 'Octaves Down',
+          defaultVal: 1.0,
+          minVal: 0.0,
+          maxVal: 6.0,
+          step: 1.0,
+          isHostSlider: true,
+        ),
+        101: const EelSliderMeta(
+          index: 101,
+          rawName: 'dBassGain',
+          displayName: 'Bass strength (%)',
+          defaultVal: 100.0,
+          minVal: 0.0,
+          maxVal: 100.0,
+          step: 1.0,
+          isHostSlider: false,
+        ),
+      };
+
+      await tester.pumpWidget(_wrap(LiveprogSlidersPanel(
+        model: model,
+        activeSliders: activeSliders,
+      )));
+      await tester.pumpAndSettle();
+
+      // 1. 验证 Tab 0: 脚本参数
+      expect(find.text('Script Sliders'), findsOneWidget);
+      expect(find.text('Input Channels (8)'), findsOneWidget);
+      expect(find.text('Output Channels (8)'), findsOneWidget);
+
+      expect(find.text('Octaves Down'), findsOneWidget);
+      expect(find.text('slider1'), findsOneWidget);
+      expect(find.text('Bass strength (%)'), findsOneWidget);
+      expect(find.text('dBassGain = 100.0 (0.0 ~ 100.0)'), findsOneWidget);
+      expect(find.text('Script Var'), findsAtLeastNWidgets(1));
+
+      // 2. 切换到 Tab 1: 输入通道 (8)
+      await tester.tap(find.text('Input Channels (8)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Master Input Gain'), findsOneWidget);
+      expect(find.text('FL'), findsOneWidget);
+      expect(find.text('FR'), findsOneWidget);
+      expect(find.text('C'), findsOneWidget);
+      expect(find.text('LFE'), findsOneWidget);
+      expect(find.text('SL'), findsOneWidget);
+      expect(find.text('SR'), findsOneWidget);
+      expect(find.text('BL'), findsOneWidget);
+      expect(find.text('BR'), findsOneWidget);
+
+      // 3. 切换到 Tab 2: 输出通道 (8)
+      await tester.tap(find.text('Output Channels (8)'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Master Output Gain'), findsOneWidget);
+      expect(find.text('FL'), findsOneWidget);
+      expect(find.text('FR'), findsOneWidget);
+      expect(find.text('C'), findsOneWidget);
+      expect(find.text('LFE'), findsOneWidget);
+      expect(find.text('SL'), findsOneWidget);
+      expect(find.text('SR'), findsOneWidget);
+      expect(find.text('BL'), findsOneWidget);
+      expect(find.text('BR'), findsOneWidget);
+
+      // 4. 收起面板与展开面板
+      final collapseBtn = find.byTooltip('Collapse Panel');
+      expect(collapseBtn, findsOneWidget);
+      await tester.tap(collapseBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Master Output Gain'), findsNothing);
+
+      final expandBtn = find.byTooltip('Expand Panel');
+      expect(expandBtn, findsOneWidget);
+      await tester.tap(expandBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Master Output Gain'), findsOneWidget);
     });
   });
 }

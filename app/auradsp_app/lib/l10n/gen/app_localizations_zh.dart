@@ -3167,11 +3167,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpLibCustomDirs => '外部脚本目录';
 
   @override
-  String get lpSlidersPanelTitle => '脚本参数调节滑块';
+  String get lpSlidersPanelTitle => '参数调节滑块';
 
   @override
-  String get lpSlidersCollapse => '收起滑块';
+  String get lpSlidersCollapse => '收起面板';
 
   @override
-  String get lpSlidersExpand => '展开滑块';
+  String get lpSlidersExpand => '展开面板';
+
+  @override
+  String get lpTabScriptSliders => '脚本参数';
+
+  @override
+  String get lpTabInputChannels => '输入通道 (8)';
+
+  @override
+  String get lpTabOutputChannels => '输出通道 (8)';
+
+  @override
+  String get lpCustomVarTag => '脚本变量';
+
+  @override
+  String get lpCustomVarHint =>
+      '脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）';
+
+  @override
+  String get lpInputTrimHint => '8 声道统一架构输入前级平衡与主增益';
+
+  @override
+  String get lpOutputGainHint => '8 声道后级独立输出增益补偿 (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => '全部复位';
+
+  @override
+  String get lpInputMasterGain => '全局输入增益';
+
+  @override
+  String get lpOutputMasterGain => '全局输出增益';
+
+  @override
+  String get lpNoScriptSliders => '脚本未声明可调变量';
 }
