@@ -1,4 +1,4 @@
-import 'package:auradsp_app/features/eel_editor_support.dart';
+import 'package:auradsp_app/features/liveprog/eel_editor_support.dart';
 import 'package:auradsp_app/core/liveprog/equalizer_apo_parser.dart';
 import 'package:auradsp_app/core/liveprog/rbj_biquad_generator.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';

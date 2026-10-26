@@ -214,6 +214,15 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
           ),
         );
       }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l.errIoFailed),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
     }
   }
 

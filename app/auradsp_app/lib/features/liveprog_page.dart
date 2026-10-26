@@ -28,9 +28,9 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
-import 'eel_editor_support.dart';
 import 'liveprog/code_outline_panel.dart';
 import 'liveprog/console/liveprog_console_panel.dart';
+import 'liveprog/eel_editor_support.dart';
 import 'liveprog/eel_manual_panel.dart';
 import 'liveprog/equalizer_apo_dialog.dart';
 import 'liveprog/find_replace_bar.dart';
@@ -133,6 +133,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
   void dispose() {
     widget.model.removeListener(_onModelTick);
     _compileFallback?.cancel();
+    _code.dispose();
     _editorScrollCtrl.dispose();
     _editorFocus.dispose();
     super.dispose();

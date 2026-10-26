@@ -10,7 +10,7 @@ import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../l10n/gen/app_localizations.dart';
 import '../../chrome.dart';
-import '../../eel_editor_support.dart';
+import '../eel_editor_support.dart';
 
 class LiveprogSlidersPanel extends StatefulWidget {
   final AppModel model;
@@ -160,8 +160,15 @@ class _LpSliderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final minVal = meta?.minVal ?? 0.0;
-    final maxVal = meta?.maxVal ?? 1.0;
+    var minVal = meta?.minVal ?? 0.0;
+    var maxVal = meta?.maxVal ?? 1.0;
+    if (minVal > maxVal) {
+      final tmp = minVal;
+      minVal = maxVal;
+      maxVal = tmp;
+    } else if (minVal == maxVal) {
+      maxVal = minVal + 1.0;
+    }
     final displayName = meta?.displayName ?? 'slider${index + 1}';
     final rawName = 'slider${index + 1}';
     final currentVal = model.lpParams[index].clamp(minVal, maxVal);
