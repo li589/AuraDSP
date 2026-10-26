@@ -56,7 +56,6 @@ class LiveprogPage extends StatefulWidget {
 Widget _capsuleBody(AuraPalette p, Color c, IconData icon, String text,
     {String? err}) {
   return Container(
-    margin: const EdgeInsets.only(bottom: AuraSpace.md),
     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
     decoration: BoxDecoration(
       color: c.withValues(alpha: 0.10),
@@ -118,6 +117,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
   void initState() {
     super.initState();
     widget.model.addListener(_onModelTick);
+    _code.addListener(_onEditorTick);
     _activeSliders = EelSliderParser.parse(_code.text);
     _lastCompiledCode = '';
     _isCodeDirty = true;
@@ -132,6 +132,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
   @override
   void dispose() {
     widget.model.removeListener(_onModelTick);
+    _code.removeListener(_onEditorTick);
     _compileFallback?.cancel();
     _code.dispose();
     _editorScrollCtrl.dispose();
@@ -148,22 +149,38 @@ class _LiveprogPageState extends State<LiveprogPage> {
     }
   }
 
-  /// 即时 lint + 光标行列 + 自适应滑块解析 + 脏检查
+  /// 光标移动与选择变化时的极速响应
+  void _onEditorTick() {
+    final text = _code.text;
+    final sel = _code.selection;
+    var line = 1;
+    var col = 1;
+    if (sel.isValid) {
+      final before = text.substring(0, sel.baseOffset.clamp(0, text.length));
+      final nl = before.lastIndexOf('\n');
+      line = nl < 0 ? 1 : before.split('\n').length;
+      col = before.length - (nl < 0 ? 0 : nl);
+    }
+    final dirty = text != _lastCompiledCode;
+    if (_cursorLine != line || _cursorCol != col || _isCodeDirty != dirty) {
+      if (mounted) {
+        setState(() {
+          _cursorLine = line;
+          _cursorCol = col;
+          _isCodeDirty = dirty;
+        });
+      }
+    }
+  }
+
+  /// 即时 lint + 自适应滑块解析 + 脏检查
   void _onCodeChanged(String text) {
     _runLint();
     setState(() {
       _activeSliders = EelSliderParser.parse(text);
       _isCodeDirty = text != _lastCompiledCode;
     });
-    final sel = _code.selection;
-    if (sel.isValid) {
-      final before = text.substring(0, sel.baseOffset.clamp(0, text.length));
-      final nl = before.lastIndexOf('\n');
-      setState(() {
-        _cursorLine = nl < 0 ? 1 : before.split('\n').length;
-        _cursorCol = before.length - (nl < 0 ? 0 : nl);
-      });
-    }
+    _onEditorTick();
   }
 
   void _runLint() {
@@ -541,6 +558,211 @@ dbg = 0;
     _editorFocus.requestFocus();
   }
 
+  Widget _buildCompileCapsule(
+      BuildContext context, AuraPalette p, AppLocalizations l, AppModel m) {
+    if (_compiling) {
+      final lineCount = _code.text.split('\n').length;
+      return _capsuleBody(
+        p,
+        p.accent,
+        Icons.sync_rounded,
+        '${l.lpCompilingScript} (Ln $lineCount)',
+      );
+    }
+
+    final st = m.lpStatus;
+    final err = m.lpError;
+    final failed = st < 0 || (st == 0 && err != null);
+    final ok = st == 1;
+    final running = ok && m.lpEnabled;
+    final slow = running && m.lpCompileMs >= 2000;
+
+    String? tookStr;
+    if (m.lpCompileMs >= 0) {
+      tookStr = m.lpCompileMs >= 1000
+          ? '${(m.lpCompileMs / 1000).toStringAsFixed(1)}s'
+          : '${m.lpCompileMs}ms';
+    }
+
+    if (failed) {
+      final mapped = switch (st) {
+        0 => l.lpErrInitMissing,
+        -1 => l.lpErrInitSyntax,
+        -2 => l.lpErrSampleMissing,
+        -3 => l.lpErrSampleSyntax,
+        _ => null,
+      };
+      final t =
+          '${l.lpStatusError}：${mapped ?? (err == null ? '' : localizeEngineError(err, l))}';
+      return _capsuleBody(p, p.error, Icons.error_outline_rounded, t, err: err);
+    }
+
+    if (ok) {
+      if (_isCodeDirty) {
+        final tookPart = tookStr != null ? ' · ${l.lpCompileTook(tookStr)}' : '';
+        return _capsuleBody(
+          p,
+          p.warning,
+          Icons.edit_note_rounded,
+          '${l.lpUncompiled}$tookPart · Ctrl+Enter',
+        );
+      }
+      if (running) {
+        var t = l.lpStatusOk;
+        if (tookStr != null) t = '$t · ${l.lpCompileTook(tookStr)}';
+        if (slow) t = '$t · ${l.lpCompileSlow}';
+        return _capsuleBody(
+          p,
+          slow ? p.warning : p.success,
+          Icons.check_circle_outline_rounded,
+          t,
+        );
+      } else {
+        var t = l.lpCompileSuccess;
+        if (tookStr != null) t = '$t ($tookStr)';
+        t = '$t · ${l.lpCompiledIdle}';
+        return _capsuleBody(
+          p,
+          p.accent,
+          Icons.check_circle_outline_rounded,
+          t,
+        );
+      }
+    }
+
+    if (_isCodeDirty) {
+      return _capsuleBody(
+        p,
+        p.textDim,
+        Icons.help_outline_rounded,
+        '${l.lpStatusIdle} · Ctrl+Enter',
+      );
+    }
+    return _capsuleBody(
+      p,
+      p.textDim,
+      Icons.radio_button_unchecked_rounded,
+      l.lpStatusIdle,
+    );
+  }
+
+  Widget _buildMismatchBanner(
+      AuraPalette p, AppLocalizations l, AppModel m) {
+    if (!m.lpPresetCodeMismatch) return const SizedBox.shrink();
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: p.warning.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.warning.withValues(alpha: 0.45)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded, size: 14, color: p.warning),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              l.lpCodeMismatch,
+              style: captionOf(p, color: p.warning),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusBar(AuraPalette p, AppLocalizations l, AppModel m) {
+    final st = m.lpStatus;
+    final err = m.lpError;
+    final failed = st < 0 || (st == 0 && err != null);
+
+    final Widget statusBadge;
+    if (_issues.isNotEmpty) {
+      statusBadge = InkWell(
+        onTap: () {
+          setState(() => _showConsole = true);
+          if (_issues.first.line > 0) _gotoLine(_issues.first.line);
+        },
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.warning_amber_rounded, size: 13, color: p.warning),
+              const SizedBox(width: 4),
+              Text(
+                l.lpIssues(_issues.length),
+                style: monoOf(p, size: 11, color: p.warning),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (failed) {
+      statusBadge = InkWell(
+        onTap: () => setState(() => _showConsole = true),
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline_rounded, size: 13, color: p.error),
+              const SizedBox(width: 4),
+              Text(
+                l.lpStatusError,
+                style: monoOf(p, size: 11, color: p.error),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else if (_isCodeDirty) {
+      statusBadge = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.edit_note_rounded, size: 14, color: p.accent),
+          const SizedBox(width: 4),
+          Text(
+            l.lpUncompiled,
+            style: monoOf(p, size: 11, color: p.accent),
+          ),
+        ],
+      );
+    } else {
+      statusBadge = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.check_circle_outline_rounded, size: 13, color: p.success),
+          const SizedBox(width: 4),
+          Text(
+            l.lpReady,
+            style: monoOf(p, size: 11, color: p.success),
+          ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        Text(
+          'Ln $_cursorLine, Col $_cursorCol',
+          style: monoOf(p, size: 11, color: p.textDim),
+        ),
+        const SizedBox(width: AuraSpace.md),
+        Text(
+          l.lpChars(_code.text.length),
+          style: monoOf(p, size: 11, color: p.textDim),
+        ),
+        const Spacer(),
+        statusBadge,
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
@@ -551,264 +773,166 @@ dbg = 0;
       eyebrow: l.lpEyebrowDsp,
       title: l.lpTitleEditor,
       children: [
-        // ---- 统一顶栏工具行（7大核心操作区）----
-        ListenableBuilder(
-          listenable: m,
-          builder: (_, _) => LiveprogIdeToolbar(
-            isApplied: m.lpEnabled,
-            isCompiling: _compiling,
-            isCodeDirty: _isCodeDirty,
-            isConsoleOpen: _showConsole,
-            isOutlineOpen: _showOutline,
-            isFindReplaceOpen: _showFindReplace,
-            isEditorExpanded: _expandedEditor,
-            onToggleApply: _toggleApply,
-            onCompile: _compile,
-            onFileAction: _handleFileAction,
-            onOpenLibrary: _openLibrary,
-            onEditAction: _handleEditAction,
-            onOpenManual: _openManual,
-            onToggleConsole: () => setState(() => _showConsole = !_showConsole),
-            onToggleEditorExpand: () =>
-                setState(() => _expandedEditor = !_expandedEditor),
+        // ---- IDE 核心工作区卡片（顶栏 + 编译提示条 + 编辑器 + 状态行 + 控制台紧密组合）----
+        Container(
+          decoration: BoxDecoration(
+            color: p.panel,
+            borderRadius: BorderRadius.circular(AuraRadius.md),
+            border: Border.all(color: p.hairline),
           ),
-        ),
-        const SizedBox(height: AuraSpace.md),
+          padding: const EdgeInsets.all(AuraSpace.sm),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 1. 顶栏工具行
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) => LiveprogIdeToolbar(
+                  isApplied: m.lpEnabled,
+                  isCompiling: _compiling,
+                  isCodeDirty: _isCodeDirty,
+                  isConsoleOpen: _showConsole,
+                  isOutlineOpen: _showOutline,
+                  isFindReplaceOpen: _showFindReplace,
+                  isEditorExpanded: _expandedEditor,
+                  onToggleApply: _toggleApply,
+                  onCompile: _compile,
+                  onFileAction: _handleFileAction,
+                  onOpenLibrary: _openLibrary,
+                  onEditAction: _handleEditAction,
+                  onOpenManual: _openManual,
+                  onToggleConsole: () =>
+                      setState(() => _showConsole = !_showConsole),
+                  onToggleEditorExpand: () =>
+                      setState(() => _expandedEditor = !_expandedEditor),
+                ),
+              ),
+              const SizedBox(height: 6),
 
-        // ---- 编译状态与耗时胶囊 ----
-        ListenableBuilder(
-          listenable: m,
-          builder: (_, _) {
-            if (_compiling) {
-              return Container(
-                margin: const EdgeInsets.only(bottom: AuraSpace.md),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+              // 2. 编译信息提示条 (根据状态智能响应且高度针对)
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) => _buildCompileCapsule(context, p, l, m),
+              ),
+
+              // 3. 指纹漂移警告 (若有)
+              ListenableBuilder(
+                listenable: m,
+                builder: (_, _) {
+                  if (!m.lpPresetCodeMismatch) return const SizedBox.shrink();
+                  return Column(
+                    children: [
+                      const SizedBox(height: 6),
+                      _buildMismatchBanner(p, l, m),
+                    ],
+                  );
+                },
+              ),
+
+              // 4. 查找与替换工具条
+              if (_showFindReplace) ...[
+                const SizedBox(height: 6),
+                FindReplaceBar(
+                  codeController: _code,
+                  onTextModified: () => _onCodeChanged(_code.text),
+                  onClose: () => setState(() => _showFindReplace = false),
+                ),
+              ],
+              const SizedBox(height: 6),
+
+              // 5. 代码编辑器与大纲分栏
+              Container(
+                height: _expandedEditor ? 620 : 420,
                 decoration: BoxDecoration(
-                  color: p.accent.withValues(alpha: 0.10),
+                  color: p.panelRaised,
                   borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.accent.withValues(alpha: 0.45)),
+                  border: Border.all(color: p.hairline),
                 ),
                 child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Icon(Icons.sync_rounded, size: 14, color: p.accent),
-                    const SizedBox(width: 6),
+                    if (_showOutline) ...[
+                      SizedBox(
+                        width: 200,
+                        child: CodeOutlinePanel(
+                          code: _code.text,
+                          activeLine: _cursorLine,
+                          onSelectLine: _gotoLine,
+                        ),
+                      ),
+                      VerticalDivider(width: 1, thickness: 1, color: p.hairline),
+                    ],
                     Expanded(
-                      child: Text(
-                        l.lpCompiling,
-                        style: captionOf(p, color: p.accent),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                      child: CallbackShortcuts(
+                        bindings: <ShortcutActivator, VoidCallback>{
+                          const SingleActivator(LogicalKeyboardKey.keyF,
+                              control: true): () {
+                            setState(() => _showFindReplace = !_showFindReplace);
+                          },
+                          const SingleActivator(LogicalKeyboardKey.keyS,
+                              control: true): _saveAs,
+                          const SingleActivator(LogicalKeyboardKey.enter,
+                              control: true): _compile,
+                        },
+                        child: Actions(
+                          actions: <Type, Action<Intent>>{
+                            _EelTabIntent: _EelTabAction(),
+                          },
+                          child: Shortcuts(
+                            shortcuts: const <ShortcutActivator, Intent>{
+                              SingleActivator(LogicalKeyboardKey.tab):
+                                  _EelTabIntent(shift: false),
+                              SingleActivator(LogicalKeyboardKey.tab, shift: true):
+                                  _EelTabIntent(shift: true),
+                            },
+                            child: TextField(
+                              controller: _code,
+                              focusNode: _editorFocus,
+                              scrollController: _editorScrollCtrl,
+                              maxLines: null,
+                              expands: true,
+                              style: monoOf(p, size: 12.5, color: p.text),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(AuraSpace.md),
+                              ),
+                              onChanged: _onCodeChanged,
+                            ),
+                          ),
+                        ),
                       ),
                     ),
                   ],
                 ),
-              );
-            }
-            final st = m.lpStatus;
-            final err = m.lpError;
-            final failed = st < 0 || (st == 0 && err != null);
-            final ok = st == 1;
-            final running = ok && m.lpEnabled;
-            final compiledIdle = ok && !m.lpEnabled;
-            final slow = running && m.lpCompileMs >= 2000;
-            final Color c = running
-                ? (slow ? p.warning : p.success)
-                : (failed ? p.error : p.textDim);
-            final String text;
-            if (running) {
-              text = l.lpStatusOk;
-              var t = text;
-              if (m.lpCompileMs >= 0) {
-                final took = m.lpCompileMs >= 1000
-                    ? '${(m.lpCompileMs / 1000).toStringAsFixed(1)}s'
-                    : '${m.lpCompileMs}ms';
-                t = '$t · ${l.lpCompileTook(took)}';
-              }
-              if (slow) t = '$t · ${l.lpCompileSlow}';
-              return _capsuleBody(p, c, Icons.check_circle_outline_rounded, t);
-            } else if (compiledIdle) {
-              return _capsuleBody(
-                  p, c, Icons.pause_circle_outline_rounded, l.lpCompiledIdle);
-            } else if (!failed) {
-              return _capsuleBody(
-                  p, c, Icons.radio_button_unchecked_rounded, l.lpStatusIdle);
-            } else {
-              final mapped = switch (st) {
-                0 => l.lpErrInitMissing,
-                -1 => l.lpErrInitSyntax,
-                -2 => l.lpErrSampleMissing,
-                -3 => l.lpErrSampleSyntax,
-                _ => null,
-              };
-              final t =
-                  '${l.lpStatusError}：${mapped ?? (err == null ? '' : localizeEngineError(err, l))}';
-              return _capsuleBody(p, c, Icons.error_outline_rounded, t,
-                  err: err);
-            }
-          },
-        ),
-
-        // ---- 指纹漂移警告徽标 ----
-        ListenableBuilder(
-          listenable: m,
-          builder: (_, _) {
-            if (!m.lpPresetCodeMismatch) return const SizedBox.shrink();
-            return Container(
-              margin: const EdgeInsets.only(bottom: AuraSpace.md),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-              decoration: BoxDecoration(
-                color: p.warning.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.warning.withValues(alpha: 0.45)),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 14, color: p.warning),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      l.lpCodeMismatch,
-                      style: captionOf(p, color: p.warning),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
+              const SizedBox(height: 6),
 
-        // ---- 查找与替换工具条 ----
-        if (_showFindReplace) ...[
-          FindReplaceBar(
-            codeController: _code,
-            onTextModified: () => _onCodeChanged(_code.text),
-            onClose: () => setState(() => _showFindReplace = false),
-          ),
-          const SizedBox(height: AuraSpace.sm),
-        ],
-
-        // ---- 代码编辑器与大纲分栏 ----
-        Container(
-          height: _expandedEditor ? 620 : 420,
-          decoration: BoxDecoration(
-            color: p.panelRaised,
-            borderRadius: BorderRadius.circular(AuraRadius.md),
-            border: Border.all(color: p.hairline),
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              if (_showOutline) ...[
-                SizedBox(
-                  width: 200,
-                  child: CodeOutlinePanel(
-                    code: _code.text,
-                    activeLine: _cursorLine,
-                    onSelectLine: _gotoLine,
-                  ),
+              // 6. 底部状态行
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                child: ListenableBuilder(
+                  listenable: m,
+                  builder: (_, _) => _buildStatusBar(p, l, m),
                 ),
-                VerticalDivider(width: 1, thickness: 1, color: p.hairline),
+              ),
+
+              // 7. 控制台与诊断输出面板（折叠/展开）
+              if (_showConsole) ...[
+                const SizedBox(height: 6),
+                LiveprogConsolePanel(
+                  model: m,
+                  isCompiling: _compiling,
+                  activeSliders: _activeSliders,
+                  issues: _issues,
+                  onGotoLine: _gotoLine,
+                  onClose: () => setState(() => _showConsole = false),
+                ),
               ],
-              Expanded(
-                child: CallbackShortcuts(
-                  bindings: <ShortcutActivator, VoidCallback>{
-                    const SingleActivator(LogicalKeyboardKey.keyF,
-                        control: true): () {
-                      setState(() => _showFindReplace = !_showFindReplace);
-                    },
-                    const SingleActivator(LogicalKeyboardKey.keyS,
-                        control: true): _saveAs,
-                    const SingleActivator(LogicalKeyboardKey.enter,
-                        control: true): _compile,
-                  },
-                  child: Actions(
-                    actions: <Type, Action<Intent>>{
-                      _EelTabIntent: _EelTabAction(),
-                    },
-                    child: Shortcuts(
-                      shortcuts: const <ShortcutActivator, Intent>{
-                        SingleActivator(LogicalKeyboardKey.tab):
-                            _EelTabIntent(shift: false),
-                        SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                            _EelTabIntent(shift: true),
-                      },
-                      child: TextField(
-                        controller: _code,
-                        focusNode: _editorFocus,
-                        scrollController: _editorScrollCtrl,
-                        maxLines: null,
-                        expands: true,
-                        style: monoOf(p, size: 12.5, color: p.text),
-                        decoration: const InputDecoration(
-                          border: InputBorder.none,
-                          contentPadding: EdgeInsets.all(AuraSpace.md),
-                        ),
-                        onChanged: _onCodeChanged,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
             ],
           ),
         ),
-        const SizedBox(height: AuraSpace.xs),
 
-        // ---- 底部状态行 ----
-        Row(
-          children: [
-            Text(
-              'Ln $_cursorLine, Col $_cursorCol',
-              style: monoOf(p, size: 11, color: p.textDim),
-            ),
-            const SizedBox(width: AuraSpace.md),
-            Text(
-              l.lpChars(_code.text.length),
-              style: monoOf(p, size: 11, color: p.textDim),
-            ),
-            const Spacer(),
-            if (_issues.isEmpty)
-              Row(
-                children: [
-                  Icon(Icons.check_circle_outline_rounded,
-                      size: 13, color: p.success),
-                  const SizedBox(width: 4),
-                  Text(l.lpReady, style: monoOf(p, size: 11, color: p.success)),
-                ],
-              )
-            else
-              Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 13, color: p.warning),
-                  const SizedBox(width: 4),
-                  Text(
-                    l.lpIssues(_issues.length),
-                    style: monoOf(p, size: 11, color: p.warning),
-                  ),
-                ],
-              ),
-          ],
-        ),
-
-        // ---- 控制台与诊断输出面板（折叠/展开）----
-        if (_showConsole) ...[
-          const SizedBox(height: AuraSpace.sm),
-          LiveprogConsolePanel(
-            model: m,
-            isCompiling: _compiling,
-            activeSliders: _activeSliders,
-            issues: _issues,
-            onGotoLine: _gotoLine,
-            onClose: () => setState(() => _showConsole = false),
-          ),
-        ],
-
-        // ---- 脚本参数调节滑块面板（集成在编辑器/控制台底部）----
-        const SizedBox(height: AuraSpace.sm),
+        // ---- 脚本参数调节滑块面板 ----
         LiveprogSlidersPanel(
           model: m,
           activeSliders: _activeSliders,

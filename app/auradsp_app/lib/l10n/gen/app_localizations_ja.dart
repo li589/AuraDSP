@@ -1507,7 +1507,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpOpFailed => '操作に失敗しました';
 
   @override
-  String get lpCompiledIdle => 'コンパイル済み — 右上のスイッチで適用';
+  String get lpCompiledIdle => 'コンパイル完了 · 適用をクリック';
 
   @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
@@ -3069,7 +3069,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSidebarRight => '右パネル切り替え (スライダーとコンソール)';
 
   @override
-  String get lpConsole => 'コンソールと診断出力';
+  String get lpConsole => 'コンソール';
 
   @override
   String get lpNewScriptWizard => 'スクリプトウィザード';
@@ -3091,10 +3091,19 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpConsoleClear => '出力をクリア';
 
   @override
-  String get lpExpandEditor => 'エディタを拡大';
+  String get lpExpandEditor => '拡大';
 
   @override
-  String get lpCollapseEditor => 'エディタを縮小';
+  String get lpCollapseEditor => '折りたたむ';
+
+  @override
+  String get lpUncompiled => '未コンパイル';
+
+  @override
+  String get lpCompileSuccess => 'コンパイル成功';
+
+  @override
+  String get lpCompilingScript => 'スクリプトをコンパイル中…';
 
   @override
   String get lpEyebrowDsp => 'プログラマブル DSP';

@@ -1594,7 +1594,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpOpFailed => 'Operation failed, please retry';
 
   @override
-  String get lpCompiledIdle => 'Compiled — flip the top-right switch to enable';
+  String get lpCompiledIdle => 'Compiled · Click Apply in toolbar to run';
 
   @override
   String get lpSliders => 'Script sliders (slider1..8)';
@@ -3218,7 +3218,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpSidebarRight => 'Toggle Right Panel (Sliders & Console)';
 
   @override
-  String get lpConsole => 'Console & Diagnostics';
+  String get lpConsole => 'Console';
 
   @override
   String get lpNewScriptWizard => 'Script Wizard';
@@ -3240,10 +3240,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpConsoleClear => 'Clear Output';
 
   @override
-  String get lpExpandEditor => 'Expand Editor';
+  String get lpExpandEditor => 'Expand';
 
   @override
-  String get lpCollapseEditor => 'Compact Editor';
+  String get lpCollapseEditor => 'Collapse';
+
+  @override
+  String get lpUncompiled => 'Uncompiled edits';
+
+  @override
+  String get lpCompileSuccess => 'Compiled successfully';
+
+  @override
+  String get lpCompilingScript => 'Compiling script…';
 
   @override
   String get lpEyebrowDsp => 'Programmable DSP';

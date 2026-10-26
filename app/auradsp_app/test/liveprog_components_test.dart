@@ -272,7 +272,7 @@ spl0 = spl0;
       expect(find.text('Script Library'), findsOneWidget);
       expect(find.text('Edit'), findsOneWidget);
       expect(find.text('Manual'), findsOneWidget);
-      expect(find.text('Console & Diagnostics'), findsOneWidget);
+      expect(find.text('Console'), findsOneWidget);
 
       // 点击处于禁用态的应用按钮，不应触发回调
       await tester.tap(find.text('Unapplied'), warnIfMissed: false);
