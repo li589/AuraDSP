@@ -3073,4 +3073,96 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpCollapseEditor => '收起编辑器';
+
+  @override
+  String get lpEyebrowDsp => '可编程 DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 编辑器';
+
+  @override
+  String get lpBtnApplied => '已应用';
+
+  @override
+  String get lpBtnUnapplied => '未应用';
+
+  @override
+  String get lpBtnCompile => '编译';
+
+  @override
+  String get lpTooltipCompileFirst => '代码已修改，需先编译后方可应用';
+
+  @override
+  String get lpMenuFile => '文件';
+
+  @override
+  String get lpFileNewBlank => '新建空白脚本';
+
+  @override
+  String get lpFileNewFromTemplate => '从模板新建...';
+
+  @override
+  String get lpFileImportApo => '导入 APO 预设...';
+
+  @override
+  String get lpFileImportEel => '导入 EEL 脚本...';
+
+  @override
+  String get lpFileSaveAs => '另存为...';
+
+  @override
+  String get lpFileSaveAsPrompt => '请输入保存路径与文件名：';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => '文件已存在';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return '目标文件「$name」已存在，是否确认覆盖？';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => '覆盖';
+
+  @override
+  String get lpMenuEdit => '编辑';
+
+  @override
+  String get lpEditFindReplace => '查找与替换';
+
+  @override
+  String get lpEditToggleOutline => '代码大纲';
+
+  @override
+  String get lpEditFormat => '格式化代码';
+
+  @override
+  String get lpEditScrollToTop => '跳回开头';
+
+  @override
+  String get lpBtnLibrary => '脚本库';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 脚本库与外部目录管理';
+
+  @override
+  String get lpLibOpenInExplorer => '在文件管理器中浏览';
+
+  @override
+  String get lpLibDirInvalid => '目录不存在或已失效';
+
+  @override
+  String get lpLibSaveCurrent => '保存当前脚本到库';
+
+  @override
+  String get lpLibCustomDirs => '外部脚本目录';
+
+  @override
+  String get lpSlidersPanelTitle => '脚本参数调节滑块';
+
+  @override
+  String get lpSlidersCollapse => '收起滑块';
+
+  @override
+  String get lpSlidersExpand => '展开滑块';
 }

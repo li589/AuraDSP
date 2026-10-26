@@ -1481,5 +1481,42 @@
   "lpConfirmDiscardAction": "放弃并覆盖",
   "lpConsoleClear": "清空控制台",
   "lpExpandEditor": "展开编辑器",
-  "lpCollapseEditor": "收起编辑器"
+  "lpCollapseEditor": "收起编辑器",
+  "lpEyebrowDsp": "可编程 DSP",
+  "lpTitleEditor": "EEL2 编辑器",
+  "lpBtnApplied": "已应用",
+  "lpBtnUnapplied": "未应用",
+  "lpBtnCompile": "编译",
+  "lpTooltipCompileFirst": "代码已修改，需先编译后方可应用",
+  "lpMenuFile": "文件",
+  "lpFileNewBlank": "新建空白脚本",
+  "lpFileNewFromTemplate": "从模板新建...",
+  "lpFileImportApo": "导入 APO 预设...",
+  "lpFileImportEel": "导入 EEL 脚本...",
+  "lpFileSaveAs": "另存为...",
+  "lpFileSaveAsPrompt": "请输入保存路径与文件名：",
+  "lpFileOverwriteConfirmTitle": "文件已存在",
+  "lpFileOverwriteConfirmBody": "目标文件「{name}」已存在，是否确认覆盖？",
+  "@lpFileOverwriteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpFileOverwriteConfirmAction": "覆盖",
+  "lpMenuEdit": "编辑",
+  "lpEditFindReplace": "查找与替换",
+  "lpEditToggleOutline": "代码大纲",
+  "lpEditFormat": "格式化代码",
+  "lpEditScrollToTop": "跳回开头",
+  "lpBtnLibrary": "脚本库",
+  "lpLibDialogTitle": "EEL2 脚本库与外部目录管理",
+  "lpLibOpenInExplorer": "在文件管理器中浏览",
+  "lpLibDirInvalid": "目录不存在或已失效",
+  "lpLibSaveCurrent": "保存当前脚本到库",
+  "lpLibCustomDirs": "外部脚本目录",
+  "lpSlidersPanelTitle": "脚本参数调节滑块",
+  "lpSlidersCollapse": "收起滑块",
+  "lpSlidersExpand": "展开滑块"
 }

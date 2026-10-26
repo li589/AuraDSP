@@ -3095,4 +3095,96 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpCollapseEditor => 'エディタを縮小';
+
+  @override
+  String get lpEyebrowDsp => 'プログラマブル DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 エディタ';
+
+  @override
+  String get lpBtnApplied => '適用中';
+
+  @override
+  String get lpBtnUnapplied => '未適用';
+
+  @override
+  String get lpBtnCompile => 'コンパイル';
+
+  @override
+  String get lpTooltipCompileFirst => 'コードが変更されました。適用前にコンパイルしてください';
+
+  @override
+  String get lpMenuFile => 'ファイル';
+
+  @override
+  String get lpFileNewBlank => '新規空白スクリプト';
+
+  @override
+  String get lpFileNewFromTemplate => 'テンプレートから新規作成...';
+
+  @override
+  String get lpFileImportApo => 'Equalizer APO プリセットのインポート...';
+
+  @override
+  String get lpFileImportEel => 'EEL スクリプトのインポート...';
+
+  @override
+  String get lpFileSaveAs => '名前を付けて保存...';
+
+  @override
+  String get lpFileSaveAsPrompt => '保存先のパスとファイル名を入力してください：';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => 'ファイルが既に存在します';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return 'ファイル「$name」は既に存在します。上書きしますか？';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => '上書き';
+
+  @override
+  String get lpMenuEdit => '編集';
+
+  @override
+  String get lpEditFindReplace => '検索と置換';
+
+  @override
+  String get lpEditToggleOutline => 'コードアウトライン';
+
+  @override
+  String get lpEditFormat => 'コード整形';
+
+  @override
+  String get lpEditScrollToTop => '先頭へ移動';
+
+  @override
+  String get lpBtnLibrary => 'スクリプトライブラリ';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 スクリプトライブラリと外部ディレクトリ管理';
+
+  @override
+  String get lpLibOpenInExplorer => 'ファイルマネージャーで開く';
+
+  @override
+  String get lpLibDirInvalid => 'ディレクトリが存在しないか無効です';
+
+  @override
+  String get lpLibSaveCurrent => '現在のスクリプトを保存';
+
+  @override
+  String get lpLibCustomDirs => '外部スクリプトディレクトリ';
+
+  @override
+  String get lpSlidersPanelTitle => 'スクリプトパラメータスライダー';
+
+  @override
+  String get lpSlidersCollapse => 'スライダーを折りたたむ';
+
+  @override
+  String get lpSlidersExpand => 'スライダーを展開';
 }

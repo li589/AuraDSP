@@ -1361,5 +1361,42 @@
   "lpConfirmDiscardAction": "Discard & Load",
   "lpConsoleClear": "Clear Output",
   "lpExpandEditor": "Expand Editor",
-  "lpCollapseEditor": "Compact Editor"
+  "lpCollapseEditor": "Compact Editor",
+  "lpEyebrowDsp": "Programmable DSP",
+  "lpTitleEditor": "EEL2 Editor",
+  "lpBtnApplied": "Applied",
+  "lpBtnUnapplied": "Unapplied",
+  "lpBtnCompile": "Compile",
+  "lpTooltipCompileFirst": "Code modified; compile before applying",
+  "lpMenuFile": "File",
+  "lpFileNewBlank": "New Blank Script",
+  "lpFileNewFromTemplate": "New from Template...",
+  "lpFileImportApo": "Import APO Preset...",
+  "lpFileImportEel": "Import EEL Script...",
+  "lpFileSaveAs": "Save As...",
+  "lpFileSaveAsPrompt": "Enter destination path and filename:",
+  "lpFileOverwriteConfirmTitle": "File Already Exists",
+  "lpFileOverwriteConfirmBody": "The file \"{name}\" already exists. Overwrite it?",
+  "@lpFileOverwriteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpFileOverwriteConfirmAction": "Overwrite",
+  "lpMenuEdit": "Edit",
+  "lpEditFindReplace": "Find & Replace",
+  "lpEditToggleOutline": "Code Outline",
+  "lpEditFormat": "Format Code",
+  "lpEditScrollToTop": "Scroll to Top",
+  "lpBtnLibrary": "Script Library",
+  "lpLibDialogTitle": "EEL2 Script Library & Directory Manager",
+  "lpLibOpenInExplorer": "Browse in File Manager",
+  "lpLibDirInvalid": "Directory does not exist or is invalid",
+  "lpLibSaveCurrent": "Save Current Script to Library",
+  "lpLibCustomDirs": "External Script Directories",
+  "lpSlidersPanelTitle": "Script Parameter Sliders",
+  "lpSlidersCollapse": "Collapse Sliders",
+  "lpSlidersExpand": "Expand Sliders"
 }

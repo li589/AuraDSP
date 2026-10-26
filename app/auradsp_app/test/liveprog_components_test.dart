@@ -9,6 +9,7 @@ import 'package:auradsp_app/features/liveprog/eel_manual_panel.dart';
 import 'package:auradsp_app/features/liveprog/equalizer_apo_dialog.dart';
 import 'package:auradsp_app/features/liveprog/find_replace_bar.dart';
 import 'package:auradsp_app/features/liveprog/new_script_wizard_dialog.dart';
+import 'package:auradsp_app/features/liveprog/toolbar/liveprog_ide_toolbar.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -233,5 +234,108 @@ spl0 = spl0;
       // 预览包含 M/S 编码代码
       expect(find.textContaining('mid = (spl0 + spl1) * INV_SQRT2'), findsOneWidget);
     });
+
+    testWidgets('LiveprogIdeToolbar 7大按钮渲染与编译互锁验证', (tester) async {
+      tester.view.physicalSize = const Size(1200, 600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      var toggleApplyCalled = false;
+      var compileCalled = false;
+      LiveprogFileAction? fileAction;
+      LiveprogEditAction? editAction;
+
+      // 1. 测试 isCodeDirty 为 true 时，应用按钮置灰禁用
+      await tester.pumpWidget(_wrap(LiveprogIdeToolbar(
+        isApplied: false,
+        isCompiling: false,
+        isCodeDirty: true,
+        isConsoleOpen: false,
+        isOutlineOpen: false,
+        isFindReplaceOpen: false,
+        isEditorExpanded: false,
+        onToggleApply: () => toggleApplyCalled = true,
+        onCompile: () => compileCalled = true,
+        onFileAction: (act) => fileAction = act,
+        onOpenLibrary: () {},
+        onEditAction: (act) => editAction = act,
+        onOpenManual: () {},
+        onToggleConsole: () {},
+        onToggleEditorExpand: () {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Unapplied'), findsOneWidget);
+      expect(find.text('Compile'), findsOneWidget);
+      expect(find.text('File'), findsOneWidget);
+      expect(find.text('Script Library'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
+      expect(find.text('Manual'), findsOneWidget);
+      expect(find.text('Console & Diagnostics'), findsOneWidget);
+
+      // 点击处于禁用态的应用按钮，不应触发回调
+      await tester.tap(find.text('Unapplied'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(toggleApplyCalled, isFalse);
+
+      // 点击编译按钮，应触发回调
+      await tester.tap(find.text('Compile'));
+      await tester.pumpAndSettle();
+      expect(compileCalled, isTrue);
+
+      // 2. 测试 isCodeDirty 为 false 且已应用
+      await tester.pumpWidget(_wrap(LiveprogIdeToolbar(
+        isApplied: true,
+        isCompiling: false,
+        isCodeDirty: false,
+        isConsoleOpen: false,
+        isOutlineOpen: false,
+        isFindReplaceOpen: false,
+        isEditorExpanded: false,
+        onToggleApply: () => toggleApplyCalled = true,
+        onCompile: () {},
+        onFileAction: (act) => fileAction = act,
+        onOpenLibrary: () {},
+        onEditAction: (act) => editAction = act,
+        onOpenManual: () {},
+        onToggleConsole: () {},
+        onToggleEditorExpand: () {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Applied'), findsOneWidget);
+      await tester.tap(find.text('Applied'));
+      await tester.pumpAndSettle();
+      expect(toggleApplyCalled, isTrue);
+
+      // 3. 测试文件下拉菜单
+      await tester.tap(find.text('File'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('New Blank Script'), findsOneWidget);
+      expect(find.text('New from Template...'), findsOneWidget);
+      expect(find.text('Import APO Preset...'), findsOneWidget);
+      expect(find.text('Import EEL Script...'), findsOneWidget);
+      expect(find.text('Save As...'), findsOneWidget);
+
+      await tester.tap(find.text('New Blank Script'));
+      await tester.pumpAndSettle();
+      expect(fileAction, equals(LiveprogFileAction.newBlank));
+
+      // 4. 测试编辑下拉菜单
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Find & Replace'), findsOneWidget);
+      expect(find.text('Code Outline'), findsOneWidget);
+      expect(find.text('Format Code'), findsOneWidget);
+      expect(find.text('Scroll to Top'), findsOneWidget);
+
+      await tester.tap(find.text('Scroll to Top'));
+      await tester.pumpAndSettle();
+      expect(editAction, equals(LiveprogEditAction.scrollToTop));
+    });
   });
 }
+
