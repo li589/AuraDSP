@@ -79,8 +79,9 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     ];
   }
 
-  /// 已知限制：dyneq/exciter 的引擎默认掩码 0xF7 按 8ch 位定义，4ch 下
-  /// bit3（BR）为 0，会默认跳过 BR；点“全选”写入 0x0F 可显式覆盖。
+  /// X-6（2026-10-26 已修复）：dyneq/exciter 的 no-LFE 默认掩码由引擎随
+  /// channels.count 按布局平移（4ch→0x0F、6ch→0x37），BR 不再被默认跳过；
+  /// 用户自定义掩码保留（引擎仅当仍为旧布局默认值时才平移）。
   static int fullMaskFor(int ch) {
     if (ch == 4) return 0x0F; // 1 + 2 + 4 + 8
     if (ch == 6) return 0x3F; // 1 + 2 + 4 + 8 + 16 + 32

@@ -18,7 +18,12 @@ Widget _app(AppModel model) => MaterialApp(
       home: Scaffold(body: SettingsPage(model: model)),
     );
 
-Map<String, dynamic> _paramsEvt({int channelsCount = 2, int channelsCountMode = 0}) => {
+Map<String, dynamic> _paramsEvt({
+  int channelsCount = 2,
+  int channelsCountMode = 0,
+  int? dyneqChannels,
+  int? exciterChannels,
+}) => {
       'evt': 'params',
       'bassEnable': 0,
       'bassGain': 0.0,
@@ -44,6 +49,8 @@ Map<String, dynamic> _paramsEvt({int channelsCount = 2, int channelsCountMode = 
       'shelfGain': 0.0,
       'channelsCount': channelsCount,
       'channelsCountMode': channelsCountMode,
+      if (dyneqChannels != null) ...{'dyneqChannels': dyneqChannels},
+      if (exciterChannels != null) ...{'exciterChannels': exciterChannels},
     };
 
 void main() {
@@ -142,6 +149,38 @@ void main() {
       expect(model.channelsCount, 8);
       expect(model.channelsCountMode, 0);
       expect(model.effectiveChannelCount, 8);
+    });
+
+    test('X-6 配套：params 回读 dyneq/exciter.channels 写进镜像', () {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+
+      // 回读前：无镜像，spec getter / mirrorInt 走 fallback 0xF7
+      expect(model.mirrorInt('dyneq.channels', 0xF7), 0xF7);
+      expect(model.getParamById('dyneq.channels'), 0xF7);
+      expect(model.getParamById('exciter.channels'), 0xF7);
+
+      // 引擎在 channels.count=4 平移后回读 0x0F（UI 必须采纳）
+      model.handleMessageForTesting(_paramsEvt(
+        channelsCount: 4,
+        dyneqChannels: 0x0F,
+        exciterChannels: 0x0F,
+      ));
+
+      expect(model.channelsCount, 4);
+      expect(model.mirrorInt('dyneq.channels', 0xF7), 0x0F);
+      expect(model.mirrorInt('exciter.channels', 0xF7), 0x0F);
+      expect(model.getParamById('dyneq.channels'), 0x0F);
+      expect(model.getParamById('exciter.channels'), 0x0F);
+
+      // 后续回读 6ch 默认 0x37 再次拉正（不残留旧值）
+      model.handleMessageForTesting(_paramsEvt(
+        channelsCount: 6,
+        dyneqChannels: 0x37,
+        exciterChannels: 0x37,
+      ));
+      expect(model.getParamById('dyneq.channels'), 0x37);
+      expect(model.getParamById('exciter.channels'), 0x37);
     });
   });
 

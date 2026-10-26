@@ -228,6 +228,9 @@ def run_smoke_tests():
     "smoke_bassmono_pairs.py",
     "smoke_postgain_persch.py",
     "smoke_channel_switch_reset.py",
+    # X-6 修复（2026-10-26）：dyneq/exciter no-LFE 默认掩码随 channels.count
+    # 按布局平移（4ch 0x0F / 6ch 0x37）+ 自定义掩码保留 + 4ch BR 音频级断言。
+    "smoke_channel_mask_default_follow.py",
     "smoke_spatial_style_custom.py",
     "smoke_eq_freq_clamp.py",
     "smoke_vb_8x8_budget.py",

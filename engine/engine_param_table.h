@@ -635,7 +635,21 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
         set_error(h, "channels.count: out of range (2/4/6/8 only)");
         return AURADSP_E_PARAM;
     }
+    const int32_t old_ch = h->channel_count.load(std::memory_order_relaxed);
     h->channel_count.store(v);
+    /* X-6 修复（2026-10-26）：dyneq/exciter 的 no-LFE 默认掩码随布局平移。
+     * 0xF7 是 8ch 位定义（bit3=LFE）；4ch Quad 布局下 bit3=BR，0xF7 会默认
+     * 跳过 BR。仅当掩码仍等于旧布局默认值（说明用户未自定义）时才改写为
+     * 新布局默认；用户自定义掩码原样保留（位位置语义，跨布局不做映射）。
+     * 其余效果默认 kChMaskAll(0xFF) 在所有布局下均含全部有效声道，无需平移。 */
+    if (old_ch != v) {
+        const int32_t old_def = (int32_t)ch_mask_no_lfe_for(old_ch);
+        const int32_t new_def = (int32_t)ch_mask_no_lfe_for(v);
+        if (h->p.dyneq_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.dyneq_channels.store(new_def, std::memory_order_relaxed);
+        if (h->p.exciter_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.exciter_channels.store(new_def, std::memory_order_relaxed);
+    }
     auradsp::plugin_chain_set_channel_hint(h, v);
     /* 通道数变化改变拓扑；WP6：统一调用 reset_channel_state
      * 全模块重置逐通道状态，并重算延迟。 */

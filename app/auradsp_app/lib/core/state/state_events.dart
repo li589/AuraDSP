@@ -152,6 +152,16 @@ extension StateEvents on AppModel {
             channelsCount = c;
           }
         }
+        // X-6 修复配套：dyneq/exciter 的 no-LFE 默认掩码随 channels.count
+        // 按布局平移（引擎侧 set_channels_count 完成）。UI 无本地乐观写入
+        // 时镜像一直是 fallback 0xF7，必须采纳引擎回读，否则 4ch 下选择器
+        // 显示 BR 未选而引擎实际已处理。
+        if (raw['dyneqChannels'] != null) {
+          _paramValues['dyneq.channels'] = raw['dyneqChannels'];
+        }
+        if (raw['exciterChannels'] != null) {
+          _paramValues['exciter.channels'] = raw['exciterChannels'];
+        }
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
