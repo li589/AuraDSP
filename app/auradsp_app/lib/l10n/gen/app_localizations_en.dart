@@ -1604,7 +1604,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Declared range wins; 0..1 when undeclared; changes apply live';
 
   @override
-  String get lpLibrary => 'Script library (%APPDATA%/AuraDSP/liveprog)';
+  String get lpLibrary => 'Script Library';
 
   @override
   String get lpLibraryEmpty =>
@@ -3335,7 +3335,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpLibSaveCurrent => 'Save Current Script to Library';
 
   @override
-  String get lpLibCustomDirs => 'External Script Directories';
+  String get lpLibCustomDirs => 'Script Directories';
 
   @override
   String get lpSlidersPanelTitle => 'Parameter Sliders';
@@ -3381,4 +3381,25 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpNoScriptSliders => 'No adjustable variables declared in script';
+
+  @override
+  String get lpTooltipUnapplyToCompile =>
+      'Compilation disabled while applied; unapply first';
+
+  @override
+  String get lpLibSystemInitial => '<System Default>';
+
+  @override
+  String get lpLibDirs => 'Script Directories';
+
+  @override
+  String get lpLibScriptList => 'Script List';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return 'Syntax issue on line $line: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => 'Preamp Only Mode (No Filters)';
 }

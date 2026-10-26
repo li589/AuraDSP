@@ -174,6 +174,23 @@ spl0 = spl0;
 
       // 预览区域渲染了 EEL2 脚本
       expect(find.textContaining('process_biquad'), findsWidgets);
+
+      // 验证仅 Preamp 时生成极简代码且显示纯前级增益模式
+      final editorField = find.byType(TextField).first;
+      await tester.enterText(editorField, 'Preamp: -6.0 dB\n');
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Detected 0 filters'), findsOneWidget);
+      expect(find.text('Preamp Only Mode (No Filters)'), findsOneWidget);
+      expect(find.textContaining('process_biquad'), findsNothing);
+      expect(find.textContaining('spl0 *= gain_l;'), findsWidgets);
+
+      // 验证格式错误时显示左下角语法报错
+      await tester.enterText(editorField, 'Filter 1: ON INVALID_PARAM\n');
+      await tester.pump(const Duration(milliseconds: 200));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Syntax issue on line 1'), findsOneWidget);
     });
 
     testWidgets('EelManualPanel 80+ 函数浏览、搜索过滤与展开卡片', (tester) async {
@@ -287,17 +304,19 @@ spl0 = spl0;
       await tester.pumpAndSettle();
       expect(compileCalled, isTrue);
 
-      // 2. 测试 isCodeDirty 为 false 且已应用
+      // 2. 测试 isApplied 为 true 时：允许点击 unapply，但禁止点击编译
+      var compileCalledWhenApplied = false;
       await tester.pumpWidget(_wrap(LiveprogIdeToolbar(
         isApplied: true,
         isCompiling: false,
         isCodeDirty: false,
+        hasCompiledSuccessfully: true,
         isConsoleOpen: false,
         isOutlineOpen: false,
         isFindReplaceOpen: false,
         isEditorExpanded: false,
         onToggleApply: () => toggleApplyCalled = true,
-        onCompile: () {},
+        onCompile: () => compileCalledWhenApplied = true,
         onFileAction: (act) => fileAction = act,
         onOpenLibrary: () {},
         onEditAction: (act) => editAction = act,
@@ -308,9 +327,15 @@ spl0 = spl0;
       await tester.pumpAndSettle();
 
       expect(find.text('Applied'), findsOneWidget);
+      // 点击已应用，应成功触发 unapply 回调
       await tester.tap(find.text('Applied'));
       await tester.pumpAndSettle();
       expect(toggleApplyCalled, isTrue);
+
+      // 应用状态下点击编译按钮，不应触发编译回调
+      await tester.tap(find.text('Compile'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(compileCalledWhenApplied, isFalse);
 
       // 3. 测试文件下拉菜单
       await tester.tap(find.text('File'));

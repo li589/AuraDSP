@@ -260,15 +260,16 @@ extension StateChain on AppModel {
 
   void setLiveprogCode(String text) {
     lpError = null;
-    lpCode = text;
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    lpCode = normalized;
     lpPresetCodeMismatch = false;
     lpCompileMs = -1;
-    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': normalized});
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
     // 引擎 LoadCode 已把 8 滑块清零，这里全量回推对齐；声明签名不变时
     // 保留用户已调值（只做回推），声明变化才采纳新默认值。
     // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
-    final metas = EelSliderParser.parse(text);
+    final metas = EelSliderParser.parse(normalized);
     final sig = StringBuffer();
     for (var i = 1; i <= 8; i++) {
       final meta = metas[i];

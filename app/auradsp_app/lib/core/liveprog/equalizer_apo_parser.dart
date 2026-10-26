@@ -80,19 +80,40 @@ class ApoFilter {
       'ApoFilter#$index[$channel, $type, Fc=${freq}Hz, Gain=${gainDb}dB, Q=$q, on=$enabled]';
 }
 
+/// 解析异常或警告
+class ApoParseIssue {
+  final int line;
+  final String rawText;
+  final String message;
+
+  const ApoParseIssue({
+    required this.line,
+    required this.rawText,
+    required this.message,
+  });
+
+  @override
+  String toString() => 'Line $line: $message ("$rawText")';
+}
+
 /// 完整解析结果
 class ApoConfiguration {
   final double globalPreamp;
   final double leftPreamp;
   final double rightPreamp;
   final List<ApoFilter> filters;
+  final List<ApoParseIssue> issues;
 
   const ApoConfiguration({
     this.globalPreamp = 0.0,
     this.leftPreamp = 0.0,
     this.rightPreamp = 0.0,
     this.filters = const [],
+    this.issues = const [],
   });
+
+  /// 是否包含解析异常
+  bool get hasIssues => issues.isNotEmpty;
 
   /// 左右声道是否包含独立的非全声道配置
   bool get hasStereoDifference {
@@ -143,12 +164,15 @@ class EqualizerApoParser {
     var leftPreamp = 0.0;
     var rightPreamp = 0.0;
     final filters = <ApoFilter>[];
+    final issues = <ApoParseIssue>[];
 
     var currentChannel = ApoTargetChannel.all;
     final lines = content.split(RegExp(r'\r?\n'));
     var autoIndex = 1;
 
-    for (var rawLine in lines) {
+    for (var i = 0; i < lines.length; i++) {
+      final lineNum = i + 1;
+      final rawLine = lines[i];
       final line = rawLine.trim();
       if (line.isEmpty || line.startsWith('#') || line.startsWith(';')) {
         continue;
@@ -206,6 +230,14 @@ class EqualizerApoParser {
         final gainDb = double.tryParse(fMatch.group(5)!) ?? 0.0;
         final q = double.tryParse(fMatch.group(6)!) ?? 0.707;
 
+        if (freq <= 0 || q <= 0) {
+          issues.add(ApoParseIssue(
+            line: lineNum,
+            rawText: line,
+            message: 'Frequency and Q must be positive numbers',
+          ));
+        }
+
         filters.add(ApoFilter(
           index: index,
           enabled: enabled,
@@ -216,6 +248,35 @@ class EqualizerApoParser {
           channel: currentChannel,
           rawText: line,
         ));
+        continue;
+      }
+
+      // 4. 未识别或格式异常的行
+      final lower = line.toLowerCase();
+      if (lower.startsWith('filter')) {
+        issues.add(ApoParseIssue(
+          line: lineNum,
+          rawText: line,
+          message: 'Malformed filter syntax',
+        ));
+      } else if (lower.startsWith('preamp')) {
+        issues.add(ApoParseIssue(
+          line: lineNum,
+          rawText: line,
+          message: 'Malformed preamp syntax',
+        ));
+      } else if (lower.startsWith('channel')) {
+        issues.add(ApoParseIssue(
+          line: lineNum,
+          rawText: line,
+          message: 'Malformed channel syntax',
+        ));
+      } else {
+        issues.add(ApoParseIssue(
+          line: lineNum,
+          rawText: line,
+          message: 'Unrecognized directive',
+        ));
       }
     }
 
@@ -224,6 +285,7 @@ class EqualizerApoParser {
       leftPreamp: leftPreamp,
       rightPreamp: rightPreamp,
       filters: filters,
+      issues: issues,
     );
   }
 }

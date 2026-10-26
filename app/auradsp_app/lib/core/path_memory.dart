@@ -35,6 +35,7 @@ abstract final class PathMemory {
   static const String slotLiveprogScript = 'liveprogScript';
   static const String slotLiveprogImportEel = 'liveprogImportEel';
   static const String slotLiveprogAddDir = 'liveprogAddDir';
+  static const String slotLiveprogSelectedDir = 'liveprogSelectedDir';
   // 文本输入式「添加目录」对话框的上次输入（播种 TextField）
   static const String slotLastScriptDir = 'lastScriptDir';
   static const String slotLastPluginDir = 'lastPluginDir';
@@ -87,6 +88,13 @@ abstract final class PathMemory {
     final v = _dirs[slot];
     if (v == null || v.isEmpty) return null;
     return Directory(v).existsSync() ? v : null; // 目录已消失（盘符卸载等）→ 视为无记忆
+  }
+
+  /// 取某 slot 原始记录路径（不强求该目录当前必须在磁盘存在）
+  static String? rawDirFor(String slot) {
+    _ensureLoaded();
+    final v = _dirs[slot];
+    return (v == null || v.isEmpty) ? null : v;
   }
 
   /// 记录一次成功选取：写 filePath 所在目录。

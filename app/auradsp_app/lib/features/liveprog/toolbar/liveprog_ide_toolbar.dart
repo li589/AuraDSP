@@ -36,6 +36,7 @@ class LiveprogIdeToolbar extends StatelessWidget {
   final bool isApplied;
   final bool isCompiling;
   final bool isCodeDirty;
+  final bool hasCompiledSuccessfully;
   final bool isConsoleOpen;
   final bool isOutlineOpen;
   final bool isFindReplaceOpen;
@@ -55,6 +56,7 @@ class LiveprogIdeToolbar extends StatelessWidget {
     required this.isApplied,
     required this.isCompiling,
     required this.isCodeDirty,
+    this.hasCompiledSuccessfully = false,
     required this.isConsoleOpen,
     required this.isOutlineOpen,
     required this.isFindReplaceOpen,
@@ -74,14 +76,17 @@ class LiveprogIdeToolbar extends StatelessWidget {
     final p = paletteOf(context);
     final l = AppLocalizations.of(context)!;
 
-    final canApply = !isCodeDirty && !isCompiling;
+    final canApply = isApplied
+        ? true
+        : (!isCodeDirty && !isCompiling && hasCompiledSuccessfully);
+    final canCompile = !isApplied && !isCompiling;
 
     return Wrap(
       spacing: AuraSpace.sm,
       runSpacing: AuraSpace.sm,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        // 1. 应用按钮（在未应用和已应用中切换显示；若代码修改后未编译则禁用）
+        // 1. 应用按钮（在未应用和已应用中切换显示；若代码修改后未编译则禁用；若已应用则允许点击以取消应用）
         Tooltip(
           message: canApply
               ? ''
@@ -92,7 +97,9 @@ class LiveprogIdeToolbar extends StatelessWidget {
               opacity: canApply ? 1.0 : 0.4,
               child: AuraChip(
                 isApplied ? l.lpBtnApplied : l.lpBtnUnapplied,
-                icon: isApplied ? Icons.power_settings_new_rounded : Icons.play_arrow_rounded,
+                icon: isApplied
+                    ? Icons.power_settings_new_rounded
+                    : Icons.play_arrow_rounded,
                 selected: isApplied,
                 onTap: onToggleApply,
               ),
@@ -100,12 +107,25 @@ class LiveprogIdeToolbar extends StatelessWidget {
           ),
         ),
 
-        // 2. 编译按钮（防崩溃异常文本安全隔离）
-        AuraChip(
-          l.lpBtnCompile,
-          icon: isCompiling ? Icons.sync_rounded : Icons.build_circle_outlined,
-          busy: isCompiling,
-          onTap: isCompiling ? null : onCompile,
+        // 2. 编译按钮（应用状态下禁止编译；编译中防重入）
+        Tooltip(
+          message: isApplied
+              ? l.lpTooltipUnapplyToCompile
+              : (isCompiling ? l.lpCompiling : ''),
+          child: IgnorePointer(
+            ignoring: !canCompile,
+            child: Opacity(
+              opacity: canCompile ? 1.0 : 0.4,
+              child: AuraChip(
+                l.lpBtnCompile,
+                icon: isCompiling
+                    ? Icons.sync_rounded
+                    : Icons.build_circle_outlined,
+                busy: isCompiling,
+                onTap: canCompile ? onCompile : null,
+              ),
+            ),
+          ),
         ),
 
         // 3. 文件下拉菜单

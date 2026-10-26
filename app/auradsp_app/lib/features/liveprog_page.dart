@@ -278,8 +278,19 @@ class _LiveprogPageState extends State<LiveprogPage> {
     _runLint();
   }
 
-  /// 纯编译代码并载入虚拟机（不自动改变应用开关；异常文本隔离）
+  /// 纯编译代码并载入虚拟机（应用状态下禁止编译；异常文本隔离）
   void _compile() {
+    if (widget.model.lpEnabled) {
+      ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
+        content: Text(
+          l10nOf(context).lpTooltipUnapplyToCompile,
+          style: TextStyle(color: paletteOf(context).text, fontSize: 13),
+        ),
+        duration: const Duration(seconds: 2),
+      ));
+      return;
+    }
+
     final text = _code.text;
     if (text.trim().isEmpty) return;
 
@@ -320,9 +331,14 @@ class _LiveprogPageState extends State<LiveprogPage> {
     });
   }
 
-  /// 切换应用状态（代码修改未编译时禁止点击）
+  /// 切换应用状态（未编译无法应用；已应用允许点击关闭）
   void _toggleApply() {
-    if (_isCodeDirty || _compiling) {
+    if (widget.model.lpEnabled) {
+      widget.model.setLiveprogEnabled(false);
+      return;
+    }
+    final hasCompiled = widget.model.lpStatus == 1 && widget.model.lpError == null;
+    if (_isCodeDirty || _compiling || !hasCompiled) {
       ScaffoldMessenger.maybeOf(context)?.showSnackBar(SnackBar(
         content: Text(
           l10nOf(context).lpTooltipCompileFirst,
@@ -332,8 +348,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
       ));
       return;
     }
-    final next = !widget.model.lpEnabled;
-    widget.model.setLiveprogEnabled(next);
+    widget.model.setLiveprogEnabled(true);
   }
 
   Future<bool> _confirmDiscardUnsavedIfNeeded() async {
@@ -791,6 +806,8 @@ dbg = 0;
                   isApplied: m.lpEnabled,
                   isCompiling: _compiling,
                   isCodeDirty: _isCodeDirty,
+                  hasCompiledSuccessfully:
+                      m.lpStatus == 1 && m.lpError == null && !_isCodeDirty,
                   isConsoleOpen: _showConsole,
                   isOutlineOpen: _showOutline,
                   isFindReplaceOpen: _showFindReplace,

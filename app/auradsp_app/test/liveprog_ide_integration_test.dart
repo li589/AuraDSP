@@ -380,12 +380,11 @@ void main() {
       await tester.enterText(editor, '// Modified after compile\nspl0 = spl0;\n');
       await tester.pumpAndSettle();
 
-      // 代码已脏，应用按钮再次被置灰禁用（此时处于已应用状态但被禁用）
-      // 验证尝试点击被拦截
-      await tester.tap(find.text('Applied'), warnIfMissed: false);
+      // 代码已脏，但如果当前已处于应用状态，允许点击关闭（unapply）
+      await tester.tap(find.text('Applied'));
       await tester.pumpAndSettle();
-      // 因被禁用，lpEnabled 不会被切换为 false
-      expect(model.lpEnabled, isTrue);
+      expect(model.lpEnabled, isFalse);
+      expect(find.text('Unapplied'), findsOneWidget);
     });
 
     testWidgets('脚本库 (Script Library) 独立弹窗打开与关闭交互', (tester) async {

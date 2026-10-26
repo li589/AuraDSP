@@ -2905,7 +2905,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpLibrary.
   ///
   /// In zh, this message translates to:
-  /// **'脚本库（%APPDATA%/AuraDSP/liveprog）'**
+  /// **'脚本库'**
   String get lpLibrary;
 
   /// No description provided for @lpLibraryEmpty.
@@ -6049,7 +6049,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpLibCustomDirs.
   ///
   /// In zh, this message translates to:
-  /// **'外部脚本目录'**
+  /// **'脚本目录'**
   String get lpLibCustomDirs;
 
   /// No description provided for @lpSlidersPanelTitle.
@@ -6135,6 +6135,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'脚本未声明可调变量'**
   String get lpNoScriptSliders;
+
+  /// No description provided for @lpTooltipUnapplyToCompile.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用状态下禁止编译，请先取消应用'**
+  String get lpTooltipUnapplyToCompile;
+
+  /// No description provided for @lpLibSystemInitial.
+  ///
+  /// In zh, this message translates to:
+  /// **'<系统初始>'**
+  String get lpLibSystemInitial;
+
+  /// No description provided for @lpLibDirs.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本目录'**
+  String get lpLibDirs;
+
+  /// No description provided for @lpLibScriptList.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本列表'**
+  String get lpLibScriptList;
+
+  /// No description provided for @lpApoParseError.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {line} 行语法异常: {error}'**
+  String lpApoParseError(int line, String error);
+
+  /// No description provided for @lpApoNoFiltersPreampOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'纯前级增益模式 (无滤波器)'**
+  String get lpApoNoFiltersPreampOnly;
 }
 
 class _AppLocalizationsDelegate

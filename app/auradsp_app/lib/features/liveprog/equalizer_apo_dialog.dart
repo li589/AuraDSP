@@ -9,6 +9,7 @@
  * - 一键填入编辑器
  */
 
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
@@ -39,6 +40,7 @@ class EqualizerApoDialog extends StatefulWidget {
 
 class _EqualizerApoDialogState extends State<EqualizerApoDialog> {
   late final TextEditingController _inputCtrl;
+  Timer? _debounceTimer;
   bool _swapChannels = false;
   bool _invertPolarity = false;
 
@@ -50,11 +52,12 @@ class _EqualizerApoDialogState extends State<EqualizerApoDialog> {
     super.initState();
     _inputCtrl = TextEditingController(text: widget.initialText ?? _defaultExample);
     _inputCtrl.addListener(_onInputChanged);
-    _onInputChanged();
+    _recompute();
   }
 
   @override
   void dispose() {
+    _debounceTimer?.cancel();
     _inputCtrl.removeListener(_onInputChanged);
     _inputCtrl.dispose();
     super.dispose();
@@ -68,6 +71,13 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
 ''';
 
   void _onInputChanged() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+      if (mounted) _recompute();
+    });
+  }
+
+  void _recompute() {
     final text = _inputCtrl.text;
     final config = EqualizerApoParser.parse(text);
     final generated = RbjBiquadGenerator.generate(
@@ -94,6 +104,7 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
       try {
         final content = await File(path).readAsString();
         _inputCtrl.text = content;
+        _recompute();
       } catch (_) {
         // Ignored or handled cleanly
       }
@@ -128,15 +139,12 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
               ],
             ),
           ),
-          OutlinedButton.icon(
-            icon: const Icon(Icons.file_open_rounded, size: 14),
-            label: Text(l.lpApoOpenFile),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: p.accent,
-              side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
-              visualDensity: VisualDensity.compact,
-            ),
-            onPressed: _pickFile,
+          IconButton(
+            icon: const Icon(Icons.close_rounded, size: 16),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: l.dlgClose,
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
@@ -150,8 +158,9 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
             height: dialogHeight,
             child: Column(
               children: [
-                // Status bar
+                // 状态条：左右拉伸占满一行，与下方编辑器等宽，并集成打开 .txt 文件按钮
                 Container(
+                  width: double.infinity,
                   margin: const EdgeInsets.symmetric(vertical: AuraSpace.xs),
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(
@@ -159,75 +168,93 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
                     borderRadius: BorderRadius.circular(AuraRadius.sm),
                     border: Border.all(color: p.hairline),
                   ),
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.tune_rounded, size: 14, color: p.accent),
-                      const SizedBox(width: 6),
-                      Text(
-                        l.lpApoFiltersDetected(_parsedConfig.activeFilters.length),
-                        style: monoOf(p, size: 11, color: p.text),
-                      ),
-                      const SizedBox(width: AuraSpace.md),
-                      Icon(Icons.volume_up_rounded, size: 14, color: const Color(0xFF79C0FF)),
-                      const SizedBox(width: 6),
-                      Text(
-                        l.lpApoPreampDetected(_parsedConfig.globalPreamp.toStringAsFixed(1)),
-                        style: monoOf(p, size: 11, color: p.text),
-                      ),
-                      const SizedBox(width: AuraSpace.lg),
-                      // Channel swap toggle
-                      InkWell(
-                        onTap: () {
-                          setState(() => _swapChannels = !_swapChannels);
-                          _onInputChanged();
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          scrollDirection: Axis.horizontal,
                           child: Row(
-                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                _swapChannels ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                                size: 15,
-                                color: _swapChannels ? p.accent : p.textDim,
+                              Icon(Icons.tune_rounded, size: 14, color: p.accent),
+                              const SizedBox(width: 6),
+                              Text(
+                                l.lpApoFiltersDetected(_parsedConfig.activeFilters.length),
+                                style: monoOf(p, size: 11, color: p.text),
                               ),
-                              const SizedBox(width: 4),
-                              Text(l.lpApoSwapChannels, style: captionOf(p)),
+                              const SizedBox(width: AuraSpace.md),
+                              Icon(Icons.volume_up_rounded, size: 14, color: const Color(0xFF79C0FF)),
+                              const SizedBox(width: 6),
+                              Text(
+                                l.lpApoPreampDetected(_parsedConfig.globalPreamp.toStringAsFixed(1)),
+                                style: monoOf(p, size: 11, color: p.text),
+                              ),
+                              const SizedBox(width: AuraSpace.lg),
+                              // 声道互换开关
+                              InkWell(
+                                onTap: () {
+                                  setState(() => _swapChannels = !_swapChannels);
+                                  _recompute();
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _swapChannels ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                        size: 15,
+                                        color: _swapChannels ? p.accent : p.textDim,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(l.lpApoSwapChannels, style: captionOf(p)),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: AuraSpace.sm),
+                              // 极性反转开关
+                              InkWell(
+                                onTap: () {
+                                  setState(() => _invertPolarity = !_invertPolarity);
+                                  _recompute();
+                                },
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _invertPolarity ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                        size: 15,
+                                        color: _invertPolarity ? p.accent : p.textDim,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(l.lpApoInvertPolarity, style: captionOf(p)),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ],
                           ),
                         ),
                       ),
                       const SizedBox(width: AuraSpace.sm),
-                      // Invert polarity toggle
-                      InkWell(
-                        onTap: () {
-                          setState(() => _invertPolarity = !_invertPolarity);
-                          _onInputChanged();
-                        },
-                        borderRadius: BorderRadius.circular(4),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _invertPolarity ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                                size: 15,
-                                color: _invertPolarity ? p.accent : p.textDim,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(l.lpApoInvertPolarity, style: captionOf(p)),
-                            ],
-                          ),
+                      OutlinedButton.icon(
+                        icon: const Icon(Icons.file_open_rounded, size: 14),
+                        label: Text(l.lpApoOpenFile),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: p.accent,
+                          side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
+                          visualDensity: VisualDensity.compact,
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         ),
+                        onPressed: _pickFile,
                       ),
                     ],
                   ),
                 ),
-              ),
 
                 // Two columns: Left (Raw input) and Right (EEL2 Preview)
                 Expanded(
@@ -292,6 +319,39 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
                       ),
                     ],
                   ),
+                ),
+
+                // 底部状态与异常报错行（左下角显示异常报错）
+                const SizedBox(height: AuraSpace.xs),
+                Row(
+                  children: [
+                    if (_parsedConfig.hasIssues) ...[
+                      Icon(Icons.warning_amber_rounded, size: 14, color: p.warning),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${l.lpApoParseError(_parsedConfig.issues.first.line, _parsedConfig.issues.first.message)}'
+                          '${_parsedConfig.issues.length > 1 ? " (+${_parsedConfig.issues.length - 1})" : ""}',
+                          style: captionOf(p).copyWith(color: p.warning),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ] else if (_parsedConfig.activeFilters.isEmpty) ...[
+                      Icon(Icons.info_outline_rounded, size: 14, color: p.textDim),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          l.lpApoNoFiltersPreampOnly,
+                          style: captionOf(p).copyWith(color: p.textDim),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ] else ...[
+                      const Spacer(),
+                    ],
+                  ],
                 ),
               ],
             ),

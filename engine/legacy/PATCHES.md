@@ -832,3 +832,24 @@ yquist * 0.999，
 - **验收**：`test/smoke/smoke_liveprog.py` 新增环境感知用例，全套 smoke runner 通过。
 - **上游同步冲突风险**：低。
 
+## P-039 LiveProg 多段分段解析器支持 (@init, @slider, @block, @sample) 与 @slider 块执行（已实施，2026-10-27）
+
+- **状态**：已实施（2026-10-27）。
+- **位置**：`jdsp/jdsp_header.h`（`codehandleSlider`）、
+  `jdsp/Effects/liveprogWrapper.c`（`LiveProgStringParser`、`LiveProgCompileInto`、
+  `LiveProgProcess`、`LiveProgDestructor`、`LiveProgSlotInitVM`、`checkErrorCode`）。
+- **动机**：
+  1. 上游 `LiveProgStringParser` 仅硬编码匹配 `@init` 与 `@sample`，且直接截取两段之间的所有文本作为 `@init` 内容（附带硬编码 `-(8 + 1)` 截断）；如果脚本中包含 `@slider`（如 JSFX 常用或新建模板），NSEEL 会在编译 `@init` 时因识别到非法的 `@` 指令抛出 "Syntax error at @init section"；
+  2. JSFX 规范下的 `@slider` 参数变动与初始化代码需要正确编译并在块首及初始化时触发执行，以使滑块参数计算生效；
+  3. 彻底消除 Windows `\r\n` 换行符与多余空白带来的分段截断风险。
+- **内容**：
+  1. 重写 `LiveProgStringParser`：稳健扫描行首段标记 `@init`、`@slider`、`@block`、`@sample`；
+  2. 精确切分段区间，分别送入对应编译器；
+  3. `LiveProg` 增加 `codehandleSlider`；在编译成功后执行一次 `@init` 和 `@slider`，在 `LiveProgProcess` 的块开头执行一次 `@slider`；
+  4. 释放与错误返回码完善（`-5`: Syntax error at @slider section）。
+- **行为影响**：
+  纯超集支持！带 `@slider` 的 JSFX 脚本和模板完全正常编译并执行滑块逻辑；无 `@slider` 的传统脚本完全无性能损耗。
+- **验收**：`smoke_liveprog.py` 与示例模板编译测试。
+- **上游同步冲突风险**：低。
+
+

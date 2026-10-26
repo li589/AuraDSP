@@ -1516,7 +1516,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSliderHint => '宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映';
 
   @override
-  String get lpLibrary => 'スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）';
+  String get lpLibrary => 'スクリプトライブラリ';
 
   @override
   String get lpLibraryEmpty => 'ライブラリは空です — 下の名前欄から保存できます';
@@ -3186,7 +3186,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpLibSaveCurrent => '現在のスクリプトを保存';
 
   @override
-  String get lpLibCustomDirs => '外部スクリプトディレクトリ';
+  String get lpLibCustomDirs => 'スクリプトディレクトリ';
 
   @override
   String get lpSlidersPanelTitle => 'パラメータ調整スライダー';
@@ -3230,4 +3230,24 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpNoScriptSliders => 'スクリプト内に調整可能な変数が宣言されていません';
+
+  @override
+  String get lpTooltipUnapplyToCompile => '適用中はコンパイルできません。先に適用を解除してください';
+
+  @override
+  String get lpLibSystemInitial => '<システム既定>';
+
+  @override
+  String get lpLibDirs => 'スクリプトディレクトリ';
+
+  @override
+  String get lpLibScriptList => 'スクリプト一覧';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return '$line 行目の構文エラー: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => 'プリアンプのみモード (フィルタなし)';
 }

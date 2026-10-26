@@ -155,4 +155,26 @@ print("8b) env variables perception in 6ch: out_peak=%.4f (expect 0.85)" % p6)
 assert abs(p6 - 0.85) < 0.01, p6
 set_i("channels.count", 2)
 
+# 9) [P-039] 验证 @slider 段独立编译与滑块更新计算
+slider_script = """slider1:1.0<0,5,0.1>Volume
+@init
+srate = (srate > 0) ? srate : 48000;
+dbg = 1;
+@slider
+vol = slider1 * 2.0;
+@sample
+spl0 *= vol;
+spl1 *= vol;
+"""
+assert set_str("liveprog.code", slider_script) == 0
+assert set_f("liveprog.param1", 1.5) == 0
+assert set_i("liveprog.enable", 1) == 0
+for _ in range(20):
+    for i in range(N*2): buf[i] = 0.2
+    dll.auradsp_process(h, buf, out, N)
+p_slider = peak()
+print("9) @slider section runtime exec: out_peak=%.4f (expect 0.60)" % p_slider)
+assert abs(p_slider - 0.60) < 0.01, p_slider
+
 print("PASS: liveprog engine flow all OK")
+

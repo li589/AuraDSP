@@ -556,7 +556,7 @@
   "lpCompiledIdle": "コンパイル完了 · 適用をクリック",
   "lpSliders": "スクリプトスライダー（slider1..8）",
   "lpSliderHint": "宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映",
-  "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
+  "lpLibrary": "スクリプトライブラリ",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
   "lpSave": "ライブラリに保存",
   "lpApoDialogTitle": "EqualizerAPO プリセットをインポート (.txt)",
@@ -1398,7 +1398,7 @@
   "lpLibOpenInExplorer": "ファイルマネージャーで開く",
   "lpLibDirInvalid": "ディレクトリが存在しないか無効です",
   "lpLibSaveCurrent": "現在のスクリプトを保存",
-  "lpLibCustomDirs": "外部スクリプトディレクトリ",
+  "lpLibCustomDirs": "スクリプトディレクトリ",
   "lpSlidersPanelTitle": "パラメータ調整スライダー",
   "lpSlidersCollapse": "パネルを折りたたむ",
   "lpSlidersExpand": "パネルを展開",
@@ -1412,5 +1412,21 @@
   "lpResetAll": "すべてリセット",
   "lpInputMasterGain": "マスター入力ゲイン",
   "lpOutputMasterGain": "マスター出力ゲイン",
-  "lpNoScriptSliders": "スクリプト内に調整可能な変数が宣言されていません"
+  "lpNoScriptSliders": "スクリプト内に調整可能な変数が宣言されていません",
+  "lpTooltipUnapplyToCompile": "適用中はコンパイルできません。先に適用を解除してください",
+  "lpLibSystemInitial": "<システム既定>",
+  "lpLibDirs": "スクリプトディレクトリ",
+  "lpLibScriptList": "スクリプト一覧",
+  "lpApoParseError": "{line} 行目の構文エラー: {error}",
+  "@lpApoParseError": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoNoFiltersPreampOnly": "プリアンプのみモード (フィルタなし)"
 }

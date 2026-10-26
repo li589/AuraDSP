@@ -704,13 +704,18 @@ extension StateEvents on AppModel {
           // （否则界面会一直显示"已选中"，但引擎里根本没生效）。
           // 回写与提示解耦：被同因抑制时依然要回读。
           _toIso?.send({'cmd': 'getParams'});
+          // Liveprog 脚本编译报错必须直达状态模型与 IDE，不能被 SnackBar 同因抑制吞掉
+          if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
+            lastGuard = GuardRejection(id, msg, rc);
+            lpError = lastGuard!.message;
+            eventSeq.value = ++_guardSeq;
+            _notifyUi();
+            break;
+          }
           // 同因抑制（见 _admitEngineEvent）：批量路径下同一拒绝会连成
           // 串 SnackBar；窗口内只提示第一次。
           if (!_admitEngineEvent('guard|$id|$msg')) break;
           lastGuard = GuardRejection(id, msg, rc);
-          if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
-            lpError = lastGuard!.message; // 编辑页内联标红用
-          }
           eventSeq.value = ++_guardSeq;
           _notifyUi();
         } else if (id == ParamId.convIrPath) {
