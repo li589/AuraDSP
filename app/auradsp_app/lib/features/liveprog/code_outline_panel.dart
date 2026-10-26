@@ -129,8 +129,14 @@ class CodeOutlinePanel extends StatelessWidget {
               children: [
                 Icon(Icons.list_alt_rounded, size: 14, color: p.accent),
                 const SizedBox(width: 6),
-                Text(l.lpOutline, style: labelOf(p)),
-                const Spacer(),
+                Expanded(
+                  child: Text(
+                    l.lpOutline,
+                    style: labelOf(p),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
                 Text(
                   '${items.length}',
                   style: monoOf(p, size: 10, color: p.textDim),

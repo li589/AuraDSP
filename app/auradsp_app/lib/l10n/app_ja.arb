@@ -182,12 +182,11 @@
   "catStereo": "ステレオ",
   "catOutput": "出力",
   "catEffect": "エフェクト",
-  "eelMissingSample": "@sample セクションがありません（エンジンがコンパイルを拒否します）",
   "arbmagMinPoints": "有効なポイントが 2 つ以上必要です（周波数 ゲインdB; …）",
   "arbmagGraphicEqInvalid": "GraphicEQ が無効です：{err}",
   "arbmagReadFailed": "ファイルの読み取りに失敗しました: {err}",
   "arbmagPoints": "{n} ポイント",
-  "arbmagNodes": "{n} ノード",
+  "arbmagNodes": "{count} 個の周波数ポイントを読み込みました",
   "bassHintIntensity": "低域の重さとパンチを強化。上げるほど深い低域になりますが、過剰は避けてください。",
   "bassHintFrequency": "低音ブーストの上限周波数。これ以下が増厚されます。60〜120 Hz が目安です。",
   "bassShelfRouting": "ローシェルフ チャンネルルーティング",
@@ -215,7 +214,7 @@
   "inputReset100": "100% にリセット",
   "inputFinal": "最終: {desc}",
   "inputResetHint": "ダブルクリックまたはタップで 100% に戻します",
-  "loudnessHint": "補正の強さ。小音量では高め、大音量では低めかオフ（大音量時は自動バイパス）。",
+  "loudnessHint": "小音量で低域と高域を自動補正、大音量ではスルー",
   "postHintGain": "全体出力レベルの補正。DSP チェーン後に音量が小さい場合に調整。",
   "postCeiling": "リミットしきい値",
   "postHintCeiling": "マスタリング級ルックアヘッドのしきい値。超過トランジェントを透明に抑え、クリッピングと ISP を防止します。",
@@ -312,8 +311,15 @@
   "bassMonoStereoPathHint": "ステレオ/マトリックス/バイノーラル：L/R のみに適用",
   "retryNow": "再試行",
   "sampleRateDeviceActual": "デバイス実測：{rate} Hz",
-  "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
-  "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）",  "latencyLabel": "遅延",
+  "@sampleRateDeviceActual": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）",
+  "latencyLabel": "遅延",
   "latencyMs": "遅延 {n}ms",
   "latencyTip": "アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms",
   "@latencyMs": {
@@ -785,7 +791,6 @@
   "dyneqThreshold": "スレッショルド",
   "dyneqAttack": "アタック",
   "dyneqRelease": "リリース",
-  "loudnessHint": "小音量で低域と高域を自動補正、大音量ではスルー",
   "loudnessAmount": "補正量",
   "exciterHint": "高域に倍音を足し空気感を復元",
   "exciterAmount": "倍音量",
@@ -1235,7 +1240,6 @@
   "arbmagClear": "曲線をクリア",
   "arbmagEmptyHint": "曲線が読み込まれていません。上のプリセットを選択するか、AutoEqファイルをインポートまたはコードを貼り付けてください。",
   "arbmagEditor": "GraphicEQ コードエディタ",
-  "arbmagNodes": "{count} 個の周波数ポイントを読み込みました",
   "@arbmagNodes": {
     "placeholders": {
       "count": {
@@ -1345,5 +1349,11 @@
   "errRejected": "エンジンにより値が拒否されました",
   "errUnsupported": "非サポートの操作",
   "errReadOnly": "このパラメータは読み取り専用です",
-  "errInternal": "エンジン内部エラー"
+  "errInternal": "エンジン内部エラー",
+  "lpFindReplace": "検索と置換",
+  "lpSidebarLeft": "左パネル切り替え (アウトラインとライブラリ)",
+  "lpSidebarRight": "右パネル切り替え (スライダーとコンソール)",
+  "lpConsole": "コンソールと診断出力",
+  "lpNewScriptWizard": "スクリプトウィザード",
+  "lpApoImportTitle": "APO プリセットのインポート"
 }

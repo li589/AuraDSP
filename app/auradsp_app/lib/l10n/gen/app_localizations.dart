@@ -5799,6 +5799,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'引擎内部错误'**
   String get errInternal;
+
+  /// No description provided for @lpFindReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找与替换'**
+  String get lpFindReplace;
+
+  /// No description provided for @lpSidebarLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换左侧面板 (大纲与脚本库)'**
+  String get lpSidebarLeft;
+
+  /// No description provided for @lpSidebarRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换右侧面板 (滑块与控制台)'**
+  String get lpSidebarRight;
+
+  /// No description provided for @lpConsole.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制台与诊断输出'**
+  String get lpConsole;
+
+  /// No description provided for @lpNewScriptWizard.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建脚本向导'**
+  String get lpNewScriptWizard;
+
+  /// No description provided for @lpApoImportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 APO 预设'**
+  String get lpApoImportTitle;
 }
 
 class _AppLocalizationsDelegate

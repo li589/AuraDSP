@@ -21,6 +21,11 @@ import '../core/path_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import 'eel_editor_support.dart';
+import 'liveprog/code_outline_panel.dart';
+import 'liveprog/eel_manual_panel.dart';
+import 'liveprog/equalizer_apo_dialog.dart';
+import 'liveprog/find_replace_bar.dart';
+import 'liveprog/new_script_wizard_dialog.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -88,6 +93,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
   int _lastApplyMs = 0;
   Timer? _compileFallback;
 
+  // IDE 交互状态
+  bool _showFindReplace = false;
+  bool _showOutline = false;
+  bool _showConsole = false;
+
   final TextEditingController _libraryNameController =
       TextEditingController(text: 'my-script');
 
@@ -97,6 +107,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
     widget.model.addListener(_onModelTick);
     _refreshLibrary();
     _activeSliders = EelSliderParser.parse(_code.text);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
     _runLint();
   }
 
@@ -321,67 +336,60 @@ class _LiveprogPageState extends State<LiveprogPage> {
     );
   }
 
-  void _showManualDialog(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: p.panel,
-        title: Row(
-          children: [
-            Icon(Icons.menu_book_rounded, color: p.accent, size: 20),
-            const SizedBox(width: 8),
-            Text(l.lpManual, style: sectionOf(p)),
-          ],
-        ),
-        content: SizedBox(
-          width: 520,
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  l.lpDocIntro,
-                  style: captionOf(p),
-                ),
-                const SizedBox(height: AuraSpace.md),
-                Text(l.lpDocSectionsTitle, style: labelOf(p, color: p.text)),
-                const SizedBox(height: 4),
-                _manualCodeBlock(p, l.lpDocSampleCode),
-                const SizedBox(height: AuraSpace.md),
-                Text(l.lpDocSlidersTitle, style: labelOf(p, color: p.text)),
-                const SizedBox(height: 4),
-                _manualCodeBlock(p, l.lpDocSampleSlider),
-                const SizedBox(height: AuraSpace.md),
-                Text(l.lpDocBuiltinsTitle, style: labelOf(p, color: p.text)),
-                const SizedBox(height: 4),
-                Text(
-                  l.lpDocBuiltinConsts +
-                      l.lpDocBuiltinFns +
-                      l.lpDocBuiltinChannels,
-                  style: monoOf(p, size: 12),
-                ),
-              ],
-            ),
-          ),
-        ),
-        actions: [
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: p.accent,
-              foregroundColor: p.accentContrast,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(l.dlgClose),
-          ),
-        ],
-      ),
+  Future<void> _openWizard() async {
+    final templateCode = await NewScriptWizardDialog.show(context);
+    if (templateCode != null && mounted) {
+      _code.text = templateCode;
+      _onCodeChanged(templateCode);
+    }
+  }
+
+  Future<void> _openApoConverter() async {
+    final generated = await EqualizerApoDialog.show(context);
+    if (generated != null && mounted) {
+      _code.text = generated;
+      _onCodeChanged(generated);
+    }
+  }
+
+  void _openManual() {
+    EelManualDialog.show(
+      context,
+      onInsertSnippet: _insertSnippet,
     );
   }
 
-  Widget _manualCodeBlock(AuraPalette p, String code) {
+  void _insertSnippet(String snippet) {
+    final text = _code.text;
+    final sel = _code.selection;
+    if (!sel.isValid) {
+      final newText = text.isEmpty ? snippet : '$text\n\n$snippet';
+      _code.value = TextEditingValue(
+        text: newText,
+        selection: TextSelection.collapsed(offset: newText.length),
+      );
+      _onCodeChanged(newText);
+      return;
+    }
+    final start = sel.start.clamp(0, text.length);
+    final end = sel.end.clamp(0, text.length);
+    final newText = text.replaceRange(start, end, snippet);
+    _code.value = TextEditingValue(
+      text: newText,
+      selection: TextSelection.collapsed(offset: start + snippet.length),
+    );
+    _onCodeChanged(newText);
+    _editorFocus.requestFocus();
+  }
+
+  Widget _buildConsolePanel(AuraPalette p, dynamic l, AppModel m) {
+    final st = m.lpStatus;
+    final err = m.lpError;
+    final hasErr = st < 0 || (st == 0 && err != null);
+    final statusColor = _compiling
+        ? p.accent
+        : (hasErr ? p.error : (st == 1 ? p.success : p.textDim));
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(AuraSpace.sm),
@@ -390,7 +398,88 @@ class _LiveprogPageState extends State<LiveprogPage> {
         borderRadius: BorderRadius.circular(AuraRadius.sm),
         border: Border.all(color: p.hairline),
       ),
-      child: Text(code, style: monoOf(p, size: 11)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.terminal_rounded, size: 14, color: statusColor),
+              const SizedBox(width: AuraSpace.xs),
+              Text(
+                l.lpConsole,
+                style: monoOf(p, size: 11, color: statusColor),
+              ),
+              const Spacer(),
+              Text(
+                'VM: EEL2/NSEEL · ${m.engineRate}Hz · ${m.lpCompileMs >= 0 ? '${m.lpCompileMs}ms' : '0ms'}',
+                style: monoOf(p, size: 10, color: p.textDim),
+              ),
+              const SizedBox(width: AuraSpace.xs),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 13),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: l.dlgClose,
+                onPressed: () => setState(() => _showConsole = false),
+              ),
+            ],
+          ),
+          const SizedBox(height: AuraSpace.xs),
+          Divider(color: p.hairline, height: 1),
+          const SizedBox(height: AuraSpace.xs),
+          if (_compiling)
+            Text(
+              '> Compiling script...',
+              style: monoOf(p, size: 11, color: p.accent),
+            )
+          else if (hasErr && err != null) ...[
+            Text(
+              '> [ERROR] Exit code: $st',
+              style: monoOf(p, size: 11, color: p.error),
+            ),
+            const SizedBox(height: 2),
+            SelectableText(
+              err,
+              style: monoOf(p, size: 11, color: p.error),
+            ),
+          ] else ...[
+            Text(
+              '> [OK] Script compiled successfully. Real-time audio stream ready.',
+              style: monoOf(p, size: 11, color: p.success),
+            ),
+            if (_activeSliders.isNotEmpty)
+              Text(
+                '> Sliders bound: ${_activeSliders.keys.map((k) => 'slider$k').join(', ')}',
+                style: monoOf(p, size: 10.5, color: p.textDim),
+              ),
+          ],
+          if (_issues.isNotEmpty) ...[
+            const SizedBox(height: AuraSpace.xs),
+            for (final issue in _issues)
+              InkWell(
+                onTap: issue.line > 0 ? () => _gotoLine(issue.line) : null,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 1),
+                  child: Row(
+                    children: [
+                      Icon(Icons.warning_amber_rounded, size: 11, color: p.warning),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          issue.line > 0
+                              ? l.lpIssueAt(issue.line, issue.message)
+                              : issue.message,
+                          style: monoOf(p, size: 10.5, color: p.warning),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -589,16 +678,29 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       icon: Icons.stop_rounded,
                       danger: true,
                       onTap: () => m.unloadLiveprog()),
-                  AuraChip(l.lpNew,
-                      icon: Icons.note_add_outlined, onTap: () {
-                    _code.text = LiveprogLibrary.template;
-                    _onCodeChanged(_code.text);
-                  }),
+                  AuraChip(l.lpNewScriptWizard,
+                      icon: Icons.auto_stories_rounded,
+                      onTap: _openWizard),
+                  AuraChip(l.lpApoImportTitle,
+                      icon: Icons.transform_rounded,
+                      onTap: _openApoConverter),
+                  AuraChip(l.lpFindReplace,
+                      icon: Icons.search_rounded,
+                      selected: _showFindReplace,
+                      onTap: () => setState(() => _showFindReplace = !_showFindReplace)),
+                  AuraChip(l.lpOutline,
+                      icon: Icons.account_tree_outlined,
+                      selected: _showOutline,
+                      onTap: () => setState(() => _showOutline = !_showOutline)),
                   AuraChip(l.lpFormat,
                       icon: Icons.format_align_left_rounded, onTap: _formatCode),
                   AuraChip(l.lpManual,
                       icon: Icons.menu_book_rounded,
-                      onTap: () => _showManualDialog(context)),
+                      onTap: _openManual),
+                  AuraChip(l.lpConsole,
+                      icon: Icons.terminal_rounded,
+                      selected: _showConsole,
+                      onTap: () => setState(() => _showConsole = !_showConsole)),
                 ],
               ),
               const SizedBox(height: AuraSpace.md),
@@ -729,39 +831,66 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 },
               ),
 
-              // 代码编辑器（支持语法着色）
+              // 查找与替换工具条
+              if (_showFindReplace) ...[
+                FindReplaceBar(
+                  codeController: _code,
+                  onTextModified: () => _onCodeChanged(_code.text),
+                  onClose: () => setState(() => _showFindReplace = false),
+                ),
+                const SizedBox(height: AuraSpace.sm),
+              ],
+
+              // 代码编辑器与大纲分栏（支持语法着色与大纲跳转）
               Container(
-                constraints:
-                    const BoxConstraints(minHeight: 260, maxHeight: 420),
+                height: 420,
                 decoration: BoxDecoration(
                   color: p.panelRaised,
                   borderRadius: BorderRadius.circular(AuraRadius.md),
                   border: Border.all(color: p.hairline),
                 ),
-                child: Actions(
-                  actions: <Type, Action<Intent>>{
-                    _EelTabIntent: _EelTabAction(),
-                  },
-                  child: Shortcuts(
-                    shortcuts: const <ShortcutActivator, Intent>{
-                      SingleActivator(LogicalKeyboardKey.tab):
-                          _EelTabIntent(shift: false),
-                      SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                          _EelTabIntent(shift: true),
-                    },
-                    child: TextField(
-                      controller: _code,
-                      focusNode: _editorFocus,
-                      maxLines: null,
-                      expands: true,
-                      style: monoOf(p, size: 12.5, color: p.text),
-                      decoration: const InputDecoration(
-                        border: InputBorder.none,
-                        contentPadding: EdgeInsets.all(AuraSpace.md),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    if (_showOutline) ...[
+                      SizedBox(
+                        width: 200,
+                        child: CodeOutlinePanel(
+                          code: _code.text,
+                          activeLine: _cursorLine,
+                          onSelectLine: _gotoLine,
+                        ),
                       ),
-                      onChanged: _onCodeChanged,
+                      VerticalDivider(width: 1, thickness: 1, color: p.hairline),
+                    ],
+                    Expanded(
+                      child: Actions(
+                        actions: <Type, Action<Intent>>{
+                          _EelTabIntent: _EelTabAction(),
+                        },
+                        child: Shortcuts(
+                          shortcuts: const <ShortcutActivator, Intent>{
+                            SingleActivator(LogicalKeyboardKey.tab):
+                                _EelTabIntent(shift: false),
+                            SingleActivator(LogicalKeyboardKey.tab, shift: true):
+                                _EelTabIntent(shift: true),
+                          },
+                          child: TextField(
+                            controller: _code,
+                            focusNode: _editorFocus,
+                            maxLines: null,
+                            expands: true,
+                            style: monoOf(p, size: 12.5, color: p.text),
+                            decoration: const InputDecoration(
+                              border: InputBorder.none,
+                              contentPadding: EdgeInsets.all(AuraSpace.md),
+                            ),
+                            onChanged: _onCodeChanged,
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
               ),
               const SizedBox(height: AuraSpace.xs),
@@ -804,8 +933,14 @@ class _LiveprogPageState extends State<LiveprogPage> {
                 ],
               ),
 
-              // Lint 提示列表
-              if (_issues.isNotEmpty) ...[
+              // 控制台面板
+              if (_showConsole) ...[
+                const SizedBox(height: AuraSpace.sm),
+                _buildConsolePanel(p, l, m),
+              ],
+
+              // Lint 提示列表（在控制台关闭时作为轻量胶囊呈现）
+              if (_issues.isNotEmpty && !_showConsole) ...[
                 const SizedBox(height: AuraSpace.xs),
                 Wrap(
                   spacing: AuraSpace.xs,
