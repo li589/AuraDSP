@@ -3225,4 +3225,23 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpApoImportTitle => 'Import APO TXT';
+
+  @override
+  String get lpConfirmDiscardTitle => 'Discard Changes?';
+
+  @override
+  String get lpConfirmDiscardBody =>
+      'The current script has unsaved modifications. Loading new content will discard these changes. Proceed?';
+
+  @override
+  String get lpConfirmDiscardAction => 'Discard & Load';
+
+  @override
+  String get lpConsoleClear => 'Clear Output';
+
+  @override
+  String get lpExpandEditor => 'Expand Editor';
+
+  @override
+  String get lpCollapseEditor => 'Compact Editor';
 }

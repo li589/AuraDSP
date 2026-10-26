@@ -65,108 +65,115 @@ class _NewScriptWizardDialogState extends State<NewScriptWizardDialog> {
           ),
         ],
       ),
-      content: SizedBox(
-        width: 800,
-        height: 480,
-        child: Row(
-          children: [
-            // Left list of templates
-            SizedBox(
-              width: 280,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: p.panelRaised,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: ListView.separated(
-                  itemCount: templates.length,
-                  padding: const EdgeInsets.all(AuraSpace.xs),
-                  separatorBuilder: (_, _) => const SizedBox(height: AuraSpace.xxs),
-                  itemBuilder: (ctx, idx) {
-                    final t = templates[idx];
-                    final isSelected = idx == _selectedIndex;
-                    final title = isZh ? t.titleZh : t.titleEn;
-                    final desc = isZh ? t.descZh : t.descEn;
-
-                    return InkWell(
-                      onTap: () => setState(() => _selectedIndex = idx),
+      content: Builder(
+        builder: (dialogCtx) {
+          final size = MediaQuery.sizeOf(dialogCtx);
+          final dialogWidth = (size.width - 64).clamp(320.0, 800.0);
+          final dialogHeight = (size.height - 120).clamp(360.0, 520.0);
+          return SizedBox(
+            width: dialogWidth,
+            height: dialogHeight,
+            child: Row(
+              children: [
+                // Left list of templates
+                SizedBox(
+                  width: 280,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: p.panelRaised,
                       borderRadius: BorderRadius.circular(AuraRadius.sm),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: isSelected ? p.accent.withValues(alpha: 0.15) : Colors.transparent,
+                      border: Border.all(color: p.hairline),
+                    ),
+                    child: ListView.separated(
+                      itemCount: templates.length,
+                      padding: const EdgeInsets.all(AuraSpace.xs),
+                      separatorBuilder: (_, _) => const SizedBox(height: AuraSpace.xxs),
+                      itemBuilder: (ctx, idx) {
+                        final t = templates[idx];
+                        final isSelected = idx == _selectedIndex;
+                        final title = isZh ? t.titleZh : t.titleEn;
+                        final desc = isZh ? t.descZh : t.descEn;
+
+                        return InkWell(
+                          onTap: () => setState(() => _selectedIndex = idx),
                           borderRadius: BorderRadius.circular(AuraRadius.sm),
-                          border: Border.all(
-                            color: isSelected ? p.accent : Colors.transparent,
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              title,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                                color: isSelected ? p.accent : p.text,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: isSelected ? p.accent.withValues(alpha: 0.15) : Colors.transparent,
+                              borderRadius: BorderRadius.circular(AuraRadius.sm),
+                              border: Border.all(
+                                color: isSelected ? p.accent : Colors.transparent,
                               ),
                             ),
-                            const SizedBox(height: 2),
-                            Text(
-                              desc,
-                              style: captionOf(p).copyWith(fontSize: 10.5),
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  title,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                    color: isSelected ? p.accent : p.text,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  desc,
+                                  style: captionOf(p).copyWith(fontSize: 10.5),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                          ),
+                        );
+                      },
+                    ),
+                  ),
                 ),
-              ),
-            ),
-            const SizedBox(width: AuraSpace.sm),
+                const SizedBox(width: AuraSpace.sm),
 
-            // Right preview panel
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(AuraSpace.sm),
-                decoration: BoxDecoration(
-                  color: p.panelRaised,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isZh ? selected.titleZh : selected.titleEn,
-                      style: sectionOf(p).copyWith(fontSize: 14),
+                // Right preview panel
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(AuraSpace.sm),
+                    decoration: BoxDecoration(
+                      color: p.panelRaised,
+                      borderRadius: BorderRadius.circular(AuraRadius.sm),
+                      border: Border.all(color: p.hairline),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      isZh ? selected.descZh : selected.descEn,
-                      style: captionOf(p),
-                    ),
-                    const SizedBox(height: AuraSpace.sm),
-                    Divider(height: 1, color: p.hairline),
-                    const SizedBox(height: AuraSpace.sm),
-                    Expanded(
-                      child: SingleChildScrollView(
-                        child: SelectableText(
-                          selected.code,
-                          style: monoOf(p, size: 11, color: p.text),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          isZh ? selected.titleZh : selected.titleEn,
+                          style: sectionOf(p).copyWith(fontSize: 14),
                         ),
-                      ),
+                        const SizedBox(height: 2),
+                        Text(
+                          isZh ? selected.descZh : selected.descEn,
+                          style: captionOf(p),
+                        ),
+                        const SizedBox(height: AuraSpace.sm),
+                        Divider(height: 1, color: p.hairline),
+                        const SizedBox(height: AuraSpace.sm),
+                        Expanded(
+                          child: SingleChildScrollView(
+                            child: SelectableText(
+                              selected.code,
+                              style: monoOf(p, size: 11, color: p.text),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
-                  ],
+                  ),
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
       actions: [
         TextButton(

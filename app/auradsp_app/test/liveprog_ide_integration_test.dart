@@ -23,6 +23,7 @@ import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:auradsp_app/features/chrome.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _wrap(Widget child, {Locale locale = const Locale('en')}) => MaterialApp(
@@ -57,6 +58,7 @@ void main() {
       expect(find.text('Format'), findsOneWidget);
       expect(find.text('Manual'), findsOneWidget);
       expect(find.text('Console & Diagnostics'), findsOneWidget);
+      expect(find.text('Expand Editor'), findsOneWidget);
 
       // 验证初始状态：大纲、查找替换与控制台未展开
       expect(find.byType(FindReplaceBar), findsNothing);
@@ -236,6 +238,80 @@ void main() {
       // 手册弹窗已关闭，代码中已包含 FIRProcess
       expect(find.byType(EelManualPanel), findsNothing);
       expect(find.textContaining('FIRProcess'), findsWidgets);
+    });
+
+    testWidgets('IDE 快捷键与编辑器尺寸切换与控制台清屏与未保存防丢', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 1. 切换编辑器尺寸
+      expect(find.text('Expand Editor'), findsOneWidget);
+      await tester.tap(find.text('Expand Editor'));
+      await tester.pumpAndSettle();
+      expect(find.text('Compact Editor'), findsOneWidget);
+      await tester.tap(find.text('Compact Editor'));
+      await tester.pumpAndSettle();
+      expect(find.text('Expand Editor'), findsOneWidget);
+
+      // 2. 聚焦编辑器并按 Ctrl+F 快捷键打开查找替换工具条
+      final editor = find.byType(TextField).first;
+      await tester.tap(editor);
+      await tester.pumpAndSettle();
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      await tester.sendKeyEvent(LogicalKeyboardKey.keyF);
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(FindReplaceBar), findsOneWidget);
+
+      // 3. 在查找框中按 Escape 键关闭查找替换工具条
+      await tester.sendKeyEvent(LogicalKeyboardKey.escape);
+      await tester.pumpAndSettle();
+      expect(find.byType(FindReplaceBar), findsNothing);
+
+      // 4. 打开控制台并测试清屏
+      await tester.tap(find.text('Console & Diagnostics'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('VM: EEL2/NSEEL'), findsOneWidget);
+
+      final clearBtn = find.byTooltip('Clear Output');
+      expect(clearBtn, findsOneWidget);
+      await tester.tap(clearBtn);
+      await tester.pumpAndSettle();
+      expect(find.text('> Output cleared.'), findsOneWidget);
+
+      // 5. 修改代码后触发向导，验证未保存防丢弹窗
+      await tester.enterText(editor, 'slider1:1<0,1>CustomMod\n@init\nx=1;\n@sample\n');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Script Wizard'));
+      await tester.pumpAndSettle();
+
+      // 弹出防丢弹窗
+      expect(find.text('Discard Changes?'), findsOneWidget);
+      expect(find.text('Cancel'), findsOneWidget);
+
+      // 取消放弃，向导不打开
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard Changes?'), findsNothing);
+      expect(find.byType(NewScriptWizardDialog), findsNothing);
+
+      // 再次点击向导并选择“Discard & Load”
+      await tester.tap(find.text('Script Wizard'));
+      await tester.pumpAndSettle();
+      expect(find.text('Discard & Load'), findsOneWidget);
+      await tester.tap(find.text('Discard & Load'));
+      await tester.pumpAndSettle();
+
+      // 向导弹窗成功打开
+      expect(find.byType(NewScriptWizardDialog), findsOneWidget);
     });
   });
 }

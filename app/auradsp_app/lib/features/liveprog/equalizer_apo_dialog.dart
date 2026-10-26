@@ -140,156 +140,163 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
           ),
         ],
       ),
-      content: SizedBox(
-        width: 880,
-        height: 480,
-        child: Column(
-          children: [
-            // Status bar
-            Container(
-              margin: const EdgeInsets.symmetric(vertical: AuraSpace.xs),
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: p.panelRaised,
-                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                border: Border.all(color: p.hairline),
-              ),
-              child: SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                children: [
-                  Icon(Icons.tune_rounded, size: 14, color: p.accent),
-                  const SizedBox(width: 6),
-                  Text(
-                    l.lpApoFiltersDetected(_parsedConfig.activeFilters.length),
-                    style: monoOf(p, size: 11, color: p.text),
+      content: Builder(
+        builder: (dialogCtx) {
+          final size = MediaQuery.sizeOf(dialogCtx);
+          final dialogWidth = (size.width - 64).clamp(320.0, 880.0);
+          final dialogHeight = (size.height - 120).clamp(360.0, 520.0);
+          return SizedBox(
+            width: dialogWidth,
+            height: dialogHeight,
+            child: Column(
+              children: [
+                // Status bar
+                Container(
+                  margin: const EdgeInsets.symmetric(vertical: AuraSpace.xs),
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: p.panelRaised,
+                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                    border: Border.all(color: p.hairline),
                   ),
-                  const SizedBox(width: AuraSpace.md),
-                  Icon(Icons.volume_up_rounded, size: 14, color: const Color(0xFF79C0FF)),
-                  const SizedBox(width: 6),
-                  Text(
-                    l.lpApoPreampDetected(_parsedConfig.globalPreamp.toStringAsFixed(1)),
-                    style: monoOf(p, size: 11, color: p.text),
-                  ),
-                  const SizedBox(width: AuraSpace.lg),
-                  // Channel swap toggle
-                  InkWell(
-                    onTap: () {
-                      setState(() => _swapChannels = !_swapChannels);
-                      _onInputChanged();
-                    },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _swapChannels ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                            size: 15,
-                            color: _swapChannels ? p.accent : p.textDim,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(l.lpApoSwapChannels, style: captionOf(p)),
-                        ],
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                    children: [
+                      Icon(Icons.tune_rounded, size: 14, color: p.accent),
+                      const SizedBox(width: 6),
+                      Text(
+                        l.lpApoFiltersDetected(_parsedConfig.activeFilters.length),
+                        style: monoOf(p, size: 11, color: p.text),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: AuraSpace.sm),
-                  // Invert polarity toggle
-                  InkWell(
-                    onTap: () {
-                      setState(() => _invertPolarity = !_invertPolarity);
-                      _onInputChanged();
-                    },
-                    borderRadius: BorderRadius.circular(4),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            _invertPolarity ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
-                            size: 15,
-                            color: _invertPolarity ? p.accent : p.textDim,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(l.lpApoInvertPolarity, style: captionOf(p)),
-                        ],
+                      const SizedBox(width: AuraSpace.md),
+                      Icon(Icons.volume_up_rounded, size: 14, color: const Color(0xFF79C0FF)),
+                      const SizedBox(width: 6),
+                      Text(
+                        l.lpApoPreampDetected(_parsedConfig.globalPreamp.toStringAsFixed(1)),
+                        style: monoOf(p, size: 11, color: p.text),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-            // Two columns: Left (Raw input) and Right (EEL2 Preview)
-            Expanded(
-              child: Row(
-                children: [
-                  // Left panel: Input text
-                  Expanded(
-                    flex: 4,
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: p.panelRaised,
-                        borderRadius: BorderRadius.circular(AuraRadius.sm),
-                        border: Border.all(color: p.hairline),
-                      ),
-                      child: TextField(
-                        controller: _inputCtrl,
-                        maxLines: null,
-                        expands: true,
-                        style: monoOf(p, size: 11.5, color: p.text),
-                        decoration: InputDecoration(
-                          hintText: l.lpApoPasteHint,
-                          hintStyle: captionOf(p).copyWith(color: p.textDim.withValues(alpha: 0.5)),
-                          border: InputBorder.none,
-                          contentPadding: const EdgeInsets.all(AuraSpace.sm),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: AuraSpace.sm),
-                  // Right panel: Preview code
-                  Expanded(
-                    flex: 5,
-                    child: Container(
-                      padding: const EdgeInsets.all(AuraSpace.sm),
-                      decoration: BoxDecoration(
-                        color: p.panelRaised,
-                        borderRadius: BorderRadius.circular(AuraRadius.sm),
-                        border: Border.all(color: p.hairline),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Row(
+                      const SizedBox(width: AuraSpace.lg),
+                      // Channel swap toggle
+                      InkWell(
+                        onTap: () {
+                          setState(() => _swapChannels = !_swapChannels);
+                          _onInputChanged();
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.code_rounded, size: 13, color: p.textDim),
+                              Icon(
+                                _swapChannels ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                size: 15,
+                                color: _swapChannels ? p.accent : p.textDim,
+                              ),
                               const SizedBox(width: 4),
-                              Text(l.lpApoPreview, style: captionOf(p)),
+                              Text(l.lpApoSwapChannels, style: captionOf(p)),
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Expanded(
-                            child: SingleChildScrollView(
-                              child: SelectableText(
-                                _generatedCode,
-                                style: monoOf(p, size: 11, color: p.text),
+                        ),
+                      ),
+                      const SizedBox(width: AuraSpace.sm),
+                      // Invert polarity toggle
+                      InkWell(
+                        onTap: () {
+                          setState(() => _invertPolarity = !_invertPolarity);
+                          _onInputChanged();
+                        },
+                        borderRadius: BorderRadius.circular(4),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _invertPolarity ? Icons.check_box_rounded : Icons.check_box_outline_blank_rounded,
+                                size: 15,
+                                color: _invertPolarity ? p.accent : p.textDim,
                               ),
+                              const SizedBox(width: 4),
+                              Text(l.lpApoInvertPolarity, style: captionOf(p)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+                // Two columns: Left (Raw input) and Right (EEL2 Preview)
+                Expanded(
+                  child: Row(
+                    children: [
+                      // Left panel: Input text
+                      Expanded(
+                        flex: 4,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: p.panelRaised,
+                            borderRadius: BorderRadius.circular(AuraRadius.sm),
+                            border: Border.all(color: p.hairline),
+                          ),
+                          child: TextField(
+                            controller: _inputCtrl,
+                            maxLines: null,
+                            expands: true,
+                            style: monoOf(p, size: 11.5, color: p.text),
+                            decoration: InputDecoration(
+                              hintText: l.lpApoPasteHint,
+                              hintStyle: captionOf(p).copyWith(color: p.textDim.withValues(alpha: 0.5)),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.all(AuraSpace.sm),
                             ),
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                      const SizedBox(width: AuraSpace.sm),
+                      // Right panel: Preview code
+                      Expanded(
+                        flex: 5,
+                        child: Container(
+                          padding: const EdgeInsets.all(AuraSpace.sm),
+                          decoration: BoxDecoration(
+                            color: p.panelRaised,
+                            borderRadius: BorderRadius.circular(AuraRadius.sm),
+                            border: Border.all(color: p.hairline),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(Icons.code_rounded, size: 13, color: p.textDim),
+                                  const SizedBox(width: 4),
+                                  Text(l.lpApoPreview, style: captionOf(p)),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Expanded(
+                                child: SingleChildScrollView(
+                                  child: SelectableText(
+                                    _generatedCode,
+                                    style: monoOf(p, size: 11, color: p.text),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
       actions: [
         TextButton(

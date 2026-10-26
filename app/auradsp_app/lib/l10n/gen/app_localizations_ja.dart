@@ -3076,4 +3076,23 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpApoImportTitle => 'APO プリセットのインポート';
+
+  @override
+  String get lpConfirmDiscardTitle => '変更を破棄しますか？';
+
+  @override
+  String get lpConfirmDiscardBody =>
+      '現在のスクリプトには未保存の変更があります。新しいスクリプトを読み込むと現在の変更は失われます。続行しますか？';
+
+  @override
+  String get lpConfirmDiscardAction => '破棄して読み込む';
+
+  @override
+  String get lpConsoleClear => '出力をクリア';
+
+  @override
+  String get lpExpandEditor => 'エディタを拡大';
+
+  @override
+  String get lpCollapseEditor => 'エディタを縮小';
 }

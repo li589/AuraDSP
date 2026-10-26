@@ -1355,5 +1355,11 @@
   "lpSidebarRight": "右パネル切り替え (スライダーとコンソール)",
   "lpConsole": "コンソールと診断出力",
   "lpNewScriptWizard": "スクリプトウィザード",
-  "lpApoImportTitle": "APO プリセットのインポート"
+  "lpApoImportTitle": "APO プリセットのインポート",
+  "lpConfirmDiscardTitle": "変更を破棄しますか？",
+  "lpConfirmDiscardBody": "現在のスクリプトには未保存の変更があります。新しいスクリプトを読み込むと現在の変更は失われます。続行しますか？",
+  "lpConfirmDiscardAction": "破棄して読み込む",
+  "lpConsoleClear": "出力をクリア",
+  "lpExpandEditor": "エディタを拡大",
+  "lpCollapseEditor": "エディタを縮小"
 }

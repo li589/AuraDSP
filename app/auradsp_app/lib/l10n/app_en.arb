@@ -1355,5 +1355,11 @@
   "lpSidebarRight": "Toggle Right Panel (Sliders & Console)",
   "lpConsole": "Console & Diagnostics",
   "lpNewScriptWizard": "Script Wizard",
-  "lpApoImportTitle": "Import APO TXT"
+  "lpApoImportTitle": "Import APO TXT",
+  "lpConfirmDiscardTitle": "Discard Changes?",
+  "lpConfirmDiscardBody": "The current script has unsaved modifications. Loading new content will discard these changes. Proceed?",
+  "lpConfirmDiscardAction": "Discard & Load",
+  "lpConsoleClear": "Clear Output",
+  "lpExpandEditor": "Expand Editor",
+  "lpCollapseEditor": "Compact Editor"
 }
