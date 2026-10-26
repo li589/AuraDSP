@@ -1,14 +1,18 @@
 /*
  * liveprog_ide_integration_test.dart — Liveprog IDE 整体集成与桌面交互端到端测试
  *
- * 验证：
- * 1. LiveprogPage 完整 IDE 工具栏渲染（向导、APO 预设导入、查找替换、代码大纲、参考手册、控制台）
- * 2. 查找替换浮条呼出、关键字匹配与关闭交互
- * 3. 代码大纲抽屉呼出、符号大纲提取与点击定位交互
+ * 验证（V2 规范）：
+ * 1. LiveprogPage 完整 IDE 界面呈现（眉题、EEL2编辑器标题、7大核心操作区工具栏、底部内嵌滑块面板）
+ * 2. 查找替换 (Find & Replace) 下拉菜单与交互
+ * 3. 代码大纲 (Code Outline) 侧边面板切换与符号提取
  * 4. 控制台诊断面板呼出、VM 状态与滑块绑定呈现
- * 5. 新建向导模板挑选并一键替换编辑器
- * 6. EqualizerAPO 预设导入弹窗并转换写入编辑器
- * 7. 80+ EEL2 函数参考手册弹窗模糊搜索并一键插入光标代码
+ * 5. 新建向导模板从 File 下拉菜单挑选并一键替换编辑器
+ * 6. EqualizerAPO 预设从 File 下拉菜单导入并转换写入编辑器
+ * 7. EEL2 函数参考手册弹窗模糊搜索并一键插入光标代码
+ * 8. IDE 快捷键与编辑器尺寸切换与控制台清屏与未保存防丢
+ * 9. 编译与应用状态互锁机制（代码未编译强制禁止应用）
+ * 10. 独立脚本库弹窗打开与关闭交互
+ * 11. 编辑菜单跳回开头交互
  */
 
 import 'package:auradsp_app/core/design.dart';
@@ -18,6 +22,7 @@ import 'package:auradsp_app/features/liveprog/code_outline_panel.dart';
 import 'package:auradsp_app/features/liveprog/eel_manual_panel.dart';
 import 'package:auradsp_app/features/liveprog/equalizer_apo_dialog.dart';
 import 'package:auradsp_app/features/liveprog/find_replace_bar.dart';
+import 'package:auradsp_app/features/liveprog/library/liveprog_library_dialog.dart';
 import 'package:auradsp_app/features/liveprog/new_script_wizard_dialog.dart';
 import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:auradsp_app/features/chrome.dart';
@@ -38,7 +43,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('Liveprog IDE Integration UI Tests', () {
-    testWidgets('LiveprogPage 工具栏渲染全部专业 IDE 交互组件按钮', (tester) async {
+    testWidgets('LiveprogPage 工具栏与视角布局渲染全部专业 IDE 交互组件', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -48,24 +53,29 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 验证工具栏全部 IDE 按钮存在
-      expect(find.text('Apply & compile'), findsOneWidget);
-      expect(find.text('Unload'), findsOneWidget);
-      expect(find.text('Script Wizard'), findsOneWidget);
-      expect(find.text('Import APO TXT'), findsOneWidget);
-      expect(find.text('Find & Replace'), findsOneWidget);
-      expect(find.text('Code Outline'), findsOneWidget);
-      expect(find.text('Format'), findsOneWidget);
+      // 验证页面顶部标题与眉题（V2 规范：可编程DSP替换实时编程，主标题更名 EEL2 编辑器）
+      expect(find.text('Programmable DSP'), findsOneWidget);
+      expect(find.text('EEL2 Editor'), findsOneWidget);
+
+      // 验证工具栏 7 大核心操作区按钮存在
+      expect(find.text('Unapplied'), findsOneWidget);
+      expect(find.text('Compile'), findsOneWidget);
+      expect(find.text('File'), findsOneWidget);
+      expect(find.text('Script Library'), findsOneWidget);
+      expect(find.text('Edit'), findsOneWidget);
       expect(find.text('Manual'), findsOneWidget);
       expect(find.text('Console & Diagnostics'), findsOneWidget);
       expect(find.text('Expand Editor'), findsOneWidget);
+
+      // 验证编辑器底部内嵌的参数滑块面板
+      expect(find.text('Script Parameter Sliders'), findsOneWidget);
 
       // 验证初始状态：大纲、查找替换与控制台未展开
       expect(find.byType(FindReplaceBar), findsNothing);
       expect(find.byType(CodeOutlinePanel), findsNothing);
     });
 
-    testWidgets('查找替换 (Find & Replace) 工具条切换与交互', (tester) async {
+    testWidgets('查找替换 (Find & Replace) 下拉菜单与交互', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -75,9 +85,11 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 点击查找替换按钮
-      final findBtn = find.text('Find & Replace');
-      await tester.tap(findBtn);
+      // 从 Edit 菜单中点击 Find & Replace
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Find & Replace'));
       await tester.pumpAndSettle();
 
       // 验证 FindReplaceBar 出现
@@ -105,9 +117,11 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 点击代码大纲按钮（精准匹配工具栏 Chip）
-      final outlineBtn = find.widgetWithText(AuraChip, 'Code Outline');
-      await tester.tap(outlineBtn);
+      // 从 Edit 菜单中点击 Code Outline
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Code Outline'));
       await tester.pumpAndSettle();
 
       // 验证 CodeOutlinePanel 展开并在分栏中渲染
@@ -115,8 +129,11 @@ void main() {
       expect(find.text('@init'), findsOneWidget);
       expect(find.text('@sample'), findsOneWidget);
 
-      // 再次点击代码大纲按钮关闭
-      await tester.tap(outlineBtn);
+      // 再次从 Edit 菜单中点击 Code Outline 关闭
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Code Outline').last);
       await tester.pumpAndSettle();
       expect(find.byType(CodeOutlinePanel), findsNothing);
     });
@@ -131,7 +148,7 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 点击控制台按钮（精准匹配工具栏 Chip）
+      // 点击控制台按钮
       final consoleBtn = find.widgetWithText(AuraChip, 'Console & Diagnostics');
       await tester.tap(consoleBtn);
       await tester.pumpAndSettle();
@@ -146,7 +163,7 @@ void main() {
       expect(find.textContaining('VM: EEL2/NSEEL'), findsNothing);
     });
 
-    testWidgets('新建向导 (Script Wizard) 弹窗选择并填入模板代码', (tester) async {
+    testWidgets('新建向导 (Script Wizard) 从文件菜单打开并填入模板代码', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -156,8 +173,11 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 点击新建向导按钮
-      await tester.tap(find.text('Script Wizard'));
+      // 从 File 下拉菜单中点击 New from Template...
+      await tester.tap(find.text('File'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('New from Template...'));
       await tester.pumpAndSettle();
 
       // 验证向导弹窗打开
@@ -183,8 +203,11 @@ void main() {
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
-      // 点击导入 APO 预设按钮
-      await tester.tap(find.text('Import APO TXT'));
+      // 从 File 下拉菜单中点击 Import APO Preset...
+      await tester.tap(find.text('File'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Import APO Preset...'));
       await tester.pumpAndSettle();
 
       // 验证对话框出现
@@ -211,7 +234,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 点击参考手册按钮
-      await tester.tap(find.text('Manual'));
+      await tester.tap(find.widgetWithText(AuraChip, 'Manual'));
       await tester.pumpAndSettle();
 
       // 验证手册面板出现
@@ -276,7 +299,7 @@ void main() {
       expect(find.byType(FindReplaceBar), findsNothing);
 
       // 4. 打开控制台并测试清屏
-      await tester.tap(find.text('Console & Diagnostics'));
+      await tester.tap(find.widgetWithText(AuraChip, 'Console & Diagnostics'));
       await tester.pumpAndSettle();
       expect(find.textContaining('VM: EEL2/NSEEL'), findsOneWidget);
 
@@ -290,7 +313,9 @@ void main() {
       await tester.enterText(editor, 'slider1:1<0,1>CustomMod\n@init\nx=1;\n@sample\n');
       await tester.pumpAndSettle();
 
-      await tester.tap(find.text('Script Wizard'));
+      await tester.tap(find.text('File'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('New from Template...'));
       await tester.pumpAndSettle();
 
       // 弹出防丢弹窗
@@ -304,14 +329,120 @@ void main() {
       expect(find.byType(NewScriptWizardDialog), findsNothing);
 
       // 再次点击向导并选择“Discard & Load”
-      await tester.tap(find.text('Script Wizard'));
+      await tester.tap(find.text('File'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('New from Template...'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Discard & Load'), findsOneWidget);
       await tester.tap(find.text('Discard & Load'));
       await tester.pumpAndSettle();
 
       // 向导弹窗成功打开
       expect(find.byType(NewScriptWizardDialog), findsOneWidget);
+    });
+
+    testWidgets('编译与应用状态互锁机制 (Compile & Apply Interlock)', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 初始未编译时：应用按钮显示 Unapplied 且置灰禁用
+      expect(find.text('Unapplied'), findsOneWidget);
+      expect(model.lpEnabled, isFalse);
+
+      // 点击未编译的应用按钮，因 IgnorePointer 事件被拦截，不改变状态
+      await tester.tap(find.text('Unapplied'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      expect(model.lpEnabled, isFalse);
+
+      // 点击编译按钮
+      await tester.tap(find.text('Compile'));
+      await tester.pump();
+      // 模拟引擎编译完成
+      model.lpStatus = 1;
+      model.notifyListeners();
+      await tester.pumpAndSettle();
+
+      // 编译成功后，应用按钮解锁，点击可切换为 Applied
+      await tester.tap(find.text('Unapplied'));
+      await tester.pumpAndSettle();
+      expect(model.lpEnabled, isTrue);
+      expect(find.text('Applied'), findsOneWidget);
+
+      // 用户再次编辑代码
+      final editor = find.byType(TextField).first;
+      await tester.enterText(editor, '// Modified after compile\nspl0 = spl0;\n');
+      await tester.pumpAndSettle();
+
+      // 代码已脏，应用按钮再次被置灰禁用（此时处于已应用状态但被禁用）
+      // 验证尝试点击被拦截
+      await tester.tap(find.text('Applied'), warnIfMissed: false);
+      await tester.pumpAndSettle();
+      // 因被禁用，lpEnabled 不会被切换为 false
+      expect(model.lpEnabled, isTrue);
+    });
+
+    testWidgets('脚本库 (Script Library) 独立弹窗打开与关闭交互', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 点击 Script Library 按钮
+      await tester.tap(find.widgetWithText(AuraChip, 'Script Library'));
+      await tester.pumpAndSettle();
+
+      // 验证脚本库弹窗打开
+      expect(find.byType(LiveprogLibraryDialog), findsOneWidget);
+      expect(find.text('EEL2 Script Library & Directory Manager'), findsOneWidget);
+
+      // 点击右上角关闭按钮
+      final closeBtn = find.descendant(
+        of: find.byType(LiveprogLibraryDialog),
+        matching: find.byIcon(Icons.close_rounded),
+      );
+      await tester.tap(closeBtn);
+      await tester.pumpAndSettle();
+
+      // 验证弹窗关闭
+      expect(find.byType(LiveprogLibraryDialog), findsNothing);
+    });
+
+    testWidgets('编辑菜单：跳回开头 (Scroll to Top) 交互', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 输入多行代码
+      final editor = find.byType(TextField).first;
+      await tester.enterText(editor, 'Line 1\nLine 2\nLine 3\nLine 4\nLine 5\n');
+      await tester.pumpAndSettle();
+
+      // 点击 Edit -> Scroll to Top
+      await tester.tap(find.text('Edit'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Scroll to Top'));
+      await tester.pumpAndSettle();
+
+      // 验证光标移动至开头 (offset 0)
+      final editableText = tester.widget<EditableText>(find.byType(EditableText).first);
+      expect(editableText.controller.selection.baseOffset, equals(0));
     });
   });
 }

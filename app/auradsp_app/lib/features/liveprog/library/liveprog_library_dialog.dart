@@ -403,11 +403,14 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
               children: [
                 Icon(Icons.folder_shared_outlined, size: 16, color: p.accent),
                 const SizedBox(width: AuraSpace.xs),
-                Text(
-                  l.lpLibCustomDirs,
-                  style: monoOf(p, size: 12, color: p.text),
+                Expanded(
+                  child: Text(
+                    l.lpLibCustomDirs,
+                    style: monoOf(p, size: 12, color: p.text),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const Spacer(),
+                const SizedBox(width: AuraSpace.xs),
                 OutlinedButton.icon(
                   onPressed: _addDirectory,
                   icon: const Icon(Icons.create_new_folder_rounded, size: 14),
