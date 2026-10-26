@@ -2144,6 +2144,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get spatialStyleNeutral => 'Neutral';
 
   @override
+  String get spatialStyleCustom => 'Custom';
+
+  @override
   String get spatialRoom => 'Room';
 
   @override

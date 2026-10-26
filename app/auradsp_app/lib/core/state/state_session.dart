@@ -158,10 +158,22 @@ extension StateSession on AppModel {
       setFloat(ParamId.haasMix, haasMix);
       setInt(ParamId.haasSide, haasSide);
       setInt(ParamId.spatialEnable, spatialOn ? 1 : 0);
+      // spatial.style 必须先于 room/width/center 下发：预设档的规范值由
+      // 引擎 style hook 写入；再发三个参数会触发 custom hook 把 style 改成 3。
+      // 旧会话曾把自定义态存成 0..2（UI 回读钳制所致）——若值与预设规范
+      // 不符，按自定义（3）迁移，避免启动时被预设值覆盖。
+      final spatialCustom = spatialStyle == 3 ||
+          !_spatialMatchesPreset(
+              spatialStyle, spatialRoom, spatialWidth, spatialCenter);
+      if (spatialCustom && spatialStyle != 3) {
+        spatialStyle = 3;
+      }
       setInt(ParamId.spatialStyle, spatialStyle);
-      setFloat(ParamId.spatialRoom, spatialRoom);
-      setFloat(ParamId.spatialWidth, spatialWidth);
-      setFloat(ParamId.spatialCenter, spatialCenter);
+      if (spatialCustom) {
+        setFloat(ParamId.spatialRoom, spatialRoom);
+        setFloat(ParamId.spatialWidth, spatialWidth);
+        setFloat(ParamId.spatialCenter, spatialCenter);
+      }
       setFloat(ParamId.spatialOutGain, spatialOutGain);
       setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
       setFloat(ParamId.spatialMix, spatialMix);

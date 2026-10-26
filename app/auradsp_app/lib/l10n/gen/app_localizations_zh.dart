@@ -2019,6 +2019,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialStyleNeutral => '中性';
 
   @override
+  String get spatialStyleCustom => '自定义';
+
+  @override
   String get spatialRoom => '房间';
 
   @override

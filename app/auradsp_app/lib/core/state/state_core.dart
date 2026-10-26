@@ -302,7 +302,7 @@ extension StateCore on AppModel {
           break;
         }
         if (id == ParamId.spatialStyle) {
-          spatialStyle = v.toInt().clamp(0, 2);
+          spatialStyle = v.toInt().clamp(0, 3);
           break;
         }
         if (id == ParamId.spatialRoom) {

@@ -49,11 +49,11 @@ void main() {
       expect(ch2.map((c) => c.bit).toList(), [0, 1]);
       expect(ChannelRoutingSelector.fullMaskFor(2), 0x03);
 
-      // 4ch (Quad): FL, FR, BL, BR
+      // 4ch (Quad): FL=0, FR=1, BL=2, BR=3（engine layout_for(4) 同源）
       final ch4 = ChannelRoutingSelector.channelsFor(4);
       expect(ch4.map((c) => c.code).toList(), ['FL', 'FR', 'BL', 'BR']);
-      expect(ch4.map((c) => c.bit).toList(), [0, 1, 6, 7]);
-      expect(ChannelRoutingSelector.fullMaskFor(4), 0xC3);
+      expect(ch4.map((c) => c.bit).toList(), [0, 1, 2, 3]);
+      expect(ChannelRoutingSelector.fullMaskFor(4), 0x0F);
 
       // 6ch (5.1): FL, FR, C, LFE, SL, SR
       final ch6 = ChannelRoutingSelector.channelsFor(6);
@@ -80,7 +80,7 @@ void main() {
       model.setChannelsCount(4);
 
       await tester.pumpWidget(_wrap(
-        ChannelRoutingSelector(model: model, paramKey: 'eq.channel_mask'),
+        ChannelRoutingSelector(model: model, paramKey: 'eq.channels'),
         model,
       ));
       await tester.pumpAndSettle();
@@ -104,12 +104,30 @@ void main() {
       expect(find.text('仅前置'), findsOneWidget);
       expect(find.text('仅后置'), findsOneWidget);
 
-      // 点选仅后置 (BL/BR: 0xC0)
+      // 点选仅后置 (BL/BR: bit2/3 = 0x0C，与 engine layout_for(4) 对齐)
       await tester.tap(find.text('仅后置'));
       await tester.pumpAndSettle();
 
-      expect(model.mirrorInt('eq.channel_mask', 0), 0xC0);
+      expect(model.mirrorInt('eq.channels', 0), 0x0C);
       expect(find.text('2/4 声道已选'), findsOneWidget);
+
+      // 点选全选 (0x0F)：四个声道全部处理（旧 0xC3 只覆盖 FL/FR）
+      await tester.tap(find.text('全选'));
+      await tester.pumpAndSettle();
+
+      expect(model.mirrorInt('eq.channels', 0), 0x0F);
+      expect(find.text('4/4 声道已选'), findsOneWidget);
+
+      // 单 chip 切换：FL 关 → 0x0E；再开 → 0x0F
+      await tester.tap(find.text('FL'));
+      await tester.pumpAndSettle();
+      expect(model.mirrorInt('eq.channels', 0), 0x0E);
+      expect(find.text('3/4 声道已选'), findsOneWidget);
+
+      await tester.tap(find.text('FL'));
+      await tester.pumpAndSettle();
+      expect(model.mirrorInt('eq.channels', 0), 0x0F);
+      expect(find.text('4/4 声道已选'), findsOneWidget);
     });
 
     testWidgets('6 声道模式仅渲染 6 个 chip 与无超低/仅环绕预设', (tester) async {
@@ -121,7 +139,7 @@ void main() {
       model.setChannelsCount(6);
 
       await tester.pumpWidget(_wrap(
-        ChannelRoutingSelector(model: model, paramKey: 'comp.channel_mask'),
+        ChannelRoutingSelector(model: model, paramKey: 'comp.channels'),
         model,
       ));
       await tester.pumpAndSettle();
@@ -149,14 +167,14 @@ void main() {
       await tester.tap(find.text('仅环绕'));
       await tester.pumpAndSettle();
 
-      expect(model.mirrorInt('comp.channel_mask', 0), 0x30);
+      expect(model.mirrorInt('comp.channels', 0), 0x30);
       expect(find.text('2/6 声道已选'), findsOneWidget);
 
       // 点选无超低 (0x3F & ~0x08 = 0x37)
       await tester.tap(find.text('无超低'));
       await tester.pumpAndSettle();
 
-      expect(model.mirrorInt('comp.channel_mask', 0), 0x37);
+      expect(model.mirrorInt('comp.channels', 0), 0x37);
       expect(find.text('5/6 声道已选'), findsOneWidget);
     });
   });
@@ -170,7 +188,7 @@ void main() {
       model.setChannelsCount(2);
 
       await tester.pumpWidget(_wrap(
-        ChannelRoutingSelector(model: model, paramKey: 'limiter.channel_mask'),
+        ChannelRoutingSelector(model: model, paramKey: 'limiter.channels'),
         model,
       ));
       await tester.pumpAndSettle();
@@ -197,7 +215,7 @@ void main() {
       expect(model.isStereoPath, isTrue);
 
       await tester.pumpWidget(_wrap(
-        ChannelRoutingSelector(model: model, paramKey: 'gate.channel_mask'),
+        ChannelRoutingSelector(model: model, paramKey: 'gate.channels'),
         model,
       ));
       await tester.pumpAndSettle();
@@ -225,7 +243,7 @@ void main() {
       expect(model.isStereoPath, isTrue);
 
       await tester.pumpWidget(_wrap(
-        ChannelRoutingSelector(model: model, paramKey: 'tube.channel_mask'),
+        ChannelRoutingSelector(model: model, paramKey: 'tube.channels'),
         model,
       ));
       await tester.pumpAndSettle();

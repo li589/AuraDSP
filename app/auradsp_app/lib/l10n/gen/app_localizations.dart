@@ -3922,6 +3922,12 @@ abstract class AppLocalizations {
   /// **'中性'**
   String get spatialStyleNeutral;
 
+  /// No description provided for @spatialStyleCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get spatialStyleCustom;
+
   /// No description provided for @spatialRoom.
   ///
   /// In zh, this message translates to:

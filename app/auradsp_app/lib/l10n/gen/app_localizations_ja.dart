@@ -2034,6 +2034,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialStyleNeutral => 'ニュートラル';
 
   @override
+  String get spatialStyleCustom => 'カスタム';
+
+  @override
   String get spatialRoom => 'ルーム';
 
   @override

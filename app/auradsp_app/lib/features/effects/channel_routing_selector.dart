@@ -21,7 +21,7 @@ class ChannelRoutingSelector extends StatefulWidget {
 
   /// 根据声道数返回存在的声道集合（与 engine layout_for(ch) 严格对齐）：
   /// 2ch: FL(0), FR(1)
-  /// 4ch: FL(0), FR(1), BL(6), BR(7)
+  /// 4ch: FL(0), FR(1), BL(2), BR(3)
   /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
   /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
   static List<({int bit, String code})> channelsFor(int ch) =>
@@ -39,7 +39,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
 
   /// 根据声道数返回存在的声道集合（与 engine layout_for(ch) 严格对齐）：
   /// 2ch: FL(0), FR(1)
-  /// 4ch: FL(0), FR(1), BL(6), BR(7)
+  /// 4ch: FL(0), FR(1), BL(2), BR(3)
   /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
   /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
   static List<({int bit, String code})> channelsFor(int ch) {
@@ -47,8 +47,8 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
       return const [
         (bit: 0, code: 'FL'),
         (bit: 1, code: 'FR'),
-        (bit: 6, code: 'BL'),
-        (bit: 7, code: 'BR'),
+        (bit: 2, code: 'BL'),
+        (bit: 3, code: 'BR'),
       ];
     }
     if (ch == 6) {
@@ -79,8 +79,10 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     ];
   }
 
+  /// 已知限制：dyneq/exciter 的引擎默认掩码 0xF7 按 8ch 位定义，4ch 下
+  /// bit3（BR）为 0，会默认跳过 BR；点“全选”写入 0x0F 可显式覆盖。
   static int fullMaskFor(int ch) {
-    if (ch == 4) return 0xC3; // 1 + 2 + 64 + 128
+    if (ch == 4) return 0x0F; // 1 + 2 + 4 + 8
     if (ch == 6) return 0x3F; // 1 + 2 + 4 + 8 + 16 + 32
     if (ch >= 8) return 0xFF;
     return 0x03; // 1 + 2
@@ -301,7 +303,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                             _buildPresetChip(
                                 p, l.routingPresetFront, 0x03, mask),
                             _buildPresetChip(
-                                p, l.routingPresetBack, 0xC0, mask),
+                                p, l.routingPresetBack, 0x0C, mask),
                           ] else ...[
                             _buildPresetChip(
                                 p, l.routingPresetStereo, 0x03, mask),

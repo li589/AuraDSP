@@ -721,7 +721,10 @@ abstract final class ParamRegistry {
     id: 'spatial.style', section: 'spatial', key: 'style',
     type: ParamType.int32, defaultValue: ParamDefaults.spatialStyle,
     min: 0, max: 3,
-    options: ['影院', '定位', '中性'],
+    // 预设应用时先写 style（引擎 hook 同步规范值），再写 room/width/center；
+    // 顺序反了会让 custom hook 把 style 改成 3。
+    order: -1,
+    options: ['影院', '定位', '中性', '自定义'],
     getter: (m) => m.spatialStyle,
     setter: (m, v) => m.setSpatialStyle(v),
   );

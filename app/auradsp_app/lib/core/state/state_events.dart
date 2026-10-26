@@ -246,7 +246,7 @@ extension StateEvents on AppModel {
           spatialOn = (raw['spatialEnable'] as int) != 0;
         }
         if (raw['spatialStyle'] != null) {
-          spatialStyle = (raw['spatialStyle'] as int).clamp(0, 2);
+          spatialStyle = (raw['spatialStyle'] as int).clamp(0, 3);
         }
         if (raw['spatialRoom'] != null) {
           spatialRoom = (raw['spatialRoom'] as num).toDouble();
