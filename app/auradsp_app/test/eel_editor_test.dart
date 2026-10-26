@@ -1,4 +1,4 @@
-import 'package:auradsp_app/features/eel_editor_support.dart';
+import 'package:auradsp_app/features/liveprog/eel_editor_support.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart' show Locale;
 import 'package:flutter_test/flutter_test.dart';

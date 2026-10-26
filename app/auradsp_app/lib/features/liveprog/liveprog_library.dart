@@ -123,10 +123,16 @@ abstract final class LiveprogLibrary {
 
   /// 路径收敛：只允许操作本地库或已登记外部目录之下的文件
   static bool _isUnderLibrary(String filePath, List<String> customDirs) {
-    final abs = File(filePath).absolute.path;
+    var abs = File(filePath).absolute.path;
+    if (Platform.isWindows) {
+      abs = abs.toLowerCase();
+    }
     final roots = <String>[Directory(dir).absolute.path, ...customDirs];
     for (final r in roots) {
-      final root = Directory(r).absolute.path;
+      var root = Directory(r).absolute.path;
+      if (Platform.isWindows) {
+        root = root.toLowerCase();
+      }
       if (abs == root) continue;
       if (abs.startsWith(root + Platform.pathSeparator)) return true;
     }

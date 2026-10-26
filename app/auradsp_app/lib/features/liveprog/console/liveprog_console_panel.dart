@@ -7,7 +7,7 @@ import '../../../core/design.dart';
 import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../l10n/gen/app_localizations.dart';
-import '../../eel_editor_support.dart';
+import '../eel_editor_support.dart';
 
 class LiveprogConsolePanel extends StatefulWidget {
   final AppModel model;
