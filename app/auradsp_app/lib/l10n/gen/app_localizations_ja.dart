@@ -1525,6 +1525,100 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSave => 'ライブラリに保存';
 
   @override
+  String get lpApoDialogTitle => 'EqualizerAPO プリセットをインポート (.txt)';
+
+  @override
+  String get lpApoDialogDesc =>
+      'EqualizerAPO / Peace パラメトリックEQ設定を高効率なEEL2スクリプトに変換';
+
+  @override
+  String get lpApoOpenFile => '.txt ファイルを開く';
+
+  @override
+  String get lpApoPasteHint => 'ここにEqualizerAPO設定テキストを貼り付けます...';
+
+  @override
+  String get lpApoSwapChannels => 'チャンネル入替 (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => '極性反転 (位相 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return '$n 個のフィルターを検出';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return 'プリアンプ: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => 'エディタに読み込む';
+
+  @override
+  String get lpApoPreview => '生成された EEL2 コードプレビュー';
+
+  @override
+  String get lpFind => '検索';
+
+  @override
+  String get lpReplace => '置換';
+
+  @override
+  String get lpReplaceAll => 'すべて置換';
+
+  @override
+  String get lpFindNext => '次へ';
+
+  @override
+  String get lpFindPrev => '前へ';
+
+  @override
+  String get lpMatchCase => '大文字小文字を区別';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '$total 件中 $current 件目';
+  }
+
+  @override
+  String get lpNoMatches => '一致なし';
+
+  @override
+  String get lpOutline => 'コードアウトライン';
+
+  @override
+  String get lpOutlineEmpty => 'セクションまたは関数が見つかりません';
+
+  @override
+  String get lpTemplates => 'スクリプトテンプレート';
+
+  @override
+  String get lpTemplatesDesc => 'DSPスターターテンプレートを選択して開発を高速化';
+
+  @override
+  String get lpTemplateUse => 'このテンプレートを使用';
+
+  @override
+  String get lpManualSearchHint => '80+ の EEL2 関数、キーワード、レジスタを検索...';
+
+  @override
+  String get lpManualInsert => 'カーソル位置に挿入';
+
+  @override
+  String get lpManualParamTitle => 'パラメータ';
+
+  @override
+  String get lpManualReturnTitle => '戻り値';
+
+  @override
+  String get lpManualExampleTitle => '使用例';
+
+  @override
+  String get lpAllCategories => 'すべて';
+
+  @override
   String get convTitle => 'インパルス応答';
 
   @override

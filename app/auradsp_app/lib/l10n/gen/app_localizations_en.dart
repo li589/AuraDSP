@@ -1614,6 +1614,103 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpSave => 'Save to library';
 
   @override
+  String get lpApoDialogTitle => 'Import EqualizerAPO Preset (.txt)';
+
+  @override
+  String get lpApoDialogDesc =>
+      'Convert EqualizerAPO / Peace parametric EQ text into a high-performance EEL2 script';
+
+  @override
+  String get lpApoOpenFile => 'Open .txt file';
+
+  @override
+  String get lpApoPasteHint =>
+      'Paste EqualizerAPO configuration text here (e.g. Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41)...';
+
+  @override
+  String get lpApoSwapChannels => 'Swap Channels (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => 'Invert Polarity (Phase 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return 'Detected $n filters';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return 'Preamp: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => 'Load into Editor';
+
+  @override
+  String get lpApoPreview => 'Generated EEL2 Code Preview';
+
+  @override
+  String get lpFind => 'Find';
+
+  @override
+  String get lpReplace => 'Replace';
+
+  @override
+  String get lpReplaceAll => 'Replace All';
+
+  @override
+  String get lpFindNext => 'Next match';
+
+  @override
+  String get lpFindPrev => 'Previous match';
+
+  @override
+  String get lpMatchCase => 'Match case';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get lpNoMatches => 'No matches';
+
+  @override
+  String get lpOutline => 'Code Outline';
+
+  @override
+  String get lpOutlineEmpty => 'No sections or functions found';
+
+  @override
+  String get lpTemplates => 'Script Templates';
+
+  @override
+  String get lpTemplatesDesc =>
+      'Select a starter DSP template to accelerate your audio script development';
+
+  @override
+  String get lpTemplateUse => 'Use Template';
+
+  @override
+  String get lpManualSearchHint =>
+      'Search 80+ EEL2 functions, keywords, registers...';
+
+  @override
+  String get lpManualInsert => 'Insert into Editor';
+
+  @override
+  String get lpManualParamTitle => 'Parameters';
+
+  @override
+  String get lpManualReturnTitle => 'Return Value';
+
+  @override
+  String get lpManualExampleTitle => 'Example';
+
+  @override
+  String get lpAllCategories => 'All';
+
+  @override
   String get convTitle => 'Impulse Response';
 
   @override

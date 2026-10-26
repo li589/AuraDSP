@@ -553,6 +553,59 @@
   "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
   "lpSave": "ライブラリに保存",
+  "lpApoDialogTitle": "EqualizerAPO プリセットをインポート (.txt)",
+  "lpApoDialogDesc": "EqualizerAPO / Peace パラメトリックEQ設定を高効率なEEL2スクリプトに変換",
+  "lpApoOpenFile": ".txt ファイルを開く",
+  "lpApoPasteHint": "ここにEqualizerAPO設定テキストを貼り付けます...",
+  "lpApoSwapChannels": "チャンネル入替 (L ↔ R)",
+  "lpApoInvertPolarity": "極性反転 (位相 180°)",
+  "lpApoFiltersDetected": "{n} 個のフィルターを検出",
+  "@lpApoFiltersDetected": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpApoPreampDetected": "プリアンプ: {gain} dB",
+  "@lpApoPreampDetected": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoApply": "エディタに読み込む",
+  "lpApoPreview": "生成された EEL2 コードプレビュー",
+  "lpFind": "検索",
+  "lpReplace": "置換",
+  "lpReplaceAll": "すべて置換",
+  "lpFindNext": "次へ",
+  "lpFindPrev": "前へ",
+  "lpMatchCase": "大文字小文字を区別",
+  "lpMatchCount": "{total} 件中 {current} 件目",
+  "@lpMatchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoMatches": "一致なし",
+  "lpOutline": "コードアウトライン",
+  "lpOutlineEmpty": "セクションまたは関数が見つかりません",
+  "lpTemplates": "スクリプトテンプレート",
+  "lpTemplatesDesc": "DSPスターターテンプレートを選択して開発を高速化",
+  "lpTemplateUse": "このテンプレートを使用",
+  "lpManualSearchHint": "80+ の EEL2 関数、キーワード、レジスタを検索...",
+  "lpManualInsert": "カーソル位置に挿入",
+  "lpManualParamTitle": "パラメータ",
+  "lpManualReturnTitle": "戻り値",
+  "lpManualExampleTitle": "使用例",
+  "lpAllCategories": "すべて",
   "convTitle": "インパルス応答",
   "convOpenIr": "IR ファイルを開く",
   "convClear": "IR をクリア",

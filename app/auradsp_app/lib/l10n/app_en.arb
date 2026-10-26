@@ -553,6 +553,59 @@
   "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
   "lpSave": "Save to library",
+  "lpApoDialogTitle": "Import EqualizerAPO Preset (.txt)",
+  "lpApoDialogDesc": "Convert EqualizerAPO / Peace parametric EQ text into a high-performance EEL2 script",
+  "lpApoOpenFile": "Open .txt file",
+  "lpApoPasteHint": "Paste EqualizerAPO configuration text here (e.g. Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41)...",
+  "lpApoSwapChannels": "Swap Channels (L ↔ R)",
+  "lpApoInvertPolarity": "Invert Polarity (Phase 180°)",
+  "lpApoFiltersDetected": "Detected {n} filters",
+  "@lpApoFiltersDetected": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpApoPreampDetected": "Preamp: {gain} dB",
+  "@lpApoPreampDetected": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoApply": "Load into Editor",
+  "lpApoPreview": "Generated EEL2 Code Preview",
+  "lpFind": "Find",
+  "lpReplace": "Replace",
+  "lpReplaceAll": "Replace All",
+  "lpFindNext": "Next match",
+  "lpFindPrev": "Previous match",
+  "lpMatchCase": "Match case",
+  "lpMatchCount": "{current} of {total}",
+  "@lpMatchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoMatches": "No matches",
+  "lpOutline": "Code Outline",
+  "lpOutlineEmpty": "No sections or functions found",
+  "lpTemplates": "Script Templates",
+  "lpTemplatesDesc": "Select a starter DSP template to accelerate your audio script development",
+  "lpTemplateUse": "Use Template",
+  "lpManualSearchHint": "Search 80+ EEL2 functions, keywords, registers...",
+  "lpManualInsert": "Insert into Editor",
+  "lpManualParamTitle": "Parameters",
+  "lpManualReturnTitle": "Return Value",
+  "lpManualExampleTitle": "Example",
+  "lpAllCategories": "All",
   "convTitle": "Impulse Response",
   "convOpenIr": "Open IR file",
   "convClear": "Clear IR",
