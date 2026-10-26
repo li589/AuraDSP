@@ -2887,7 +2887,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpCompiledIdle.
   ///
   /// In zh, this message translates to:
-  /// **'已编译，打开右上角开关才生效'**
+  /// **'已编译 · 点击顶栏应用生效'**
   String get lpCompiledIdle;
 
   /// No description provided for @lpSliders.
@@ -5821,7 +5821,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpConsole.
   ///
   /// In zh, this message translates to:
-  /// **'控制台与诊断输出'**
+  /// **'控制台'**
   String get lpConsole;
 
   /// No description provided for @lpNewScriptWizard.
@@ -5863,14 +5863,32 @@ abstract class AppLocalizations {
   /// No description provided for @lpExpandEditor.
   ///
   /// In zh, this message translates to:
-  /// **'展开编辑器'**
+  /// **'展开'**
   String get lpExpandEditor;
 
   /// No description provided for @lpCollapseEditor.
   ///
   /// In zh, this message translates to:
-  /// **'收起编辑器'**
+  /// **'收起'**
   String get lpCollapseEditor;
+
+  /// No description provided for @lpUncompiled.
+  ///
+  /// In zh, this message translates to:
+  /// **'未编译修改'**
+  String get lpUncompiled;
+
+  /// No description provided for @lpCompileSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译成功'**
+  String get lpCompileSuccess;
+
+  /// No description provided for @lpCompilingScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在编译脚本…'**
+  String get lpCompilingScript;
 
   /// No description provided for @lpEyebrowDsp.
   ///

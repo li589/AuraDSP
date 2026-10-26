@@ -64,8 +64,8 @@ void main() {
       expect(find.text('Script Library'), findsOneWidget);
       expect(find.text('Edit'), findsOneWidget);
       expect(find.text('Manual'), findsOneWidget);
-      expect(find.text('Console & Diagnostics'), findsOneWidget);
-      expect(find.text('Expand Editor'), findsOneWidget);
+      expect(find.text('Console'), findsOneWidget);
+      expect(find.text('Expand'), findsOneWidget);
 
       // 验证编辑器底部内嵌的参数滑块面板
       expect(find.text('Script Parameter Sliders'), findsOneWidget);
@@ -149,7 +149,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // 点击控制台按钮
-      final consoleBtn = find.widgetWithText(AuraChip, 'Console & Diagnostics');
+      final consoleBtn = find.widgetWithText(AuraChip, 'Console');
       await tester.tap(consoleBtn);
       await tester.pumpAndSettle();
 
@@ -274,13 +274,13 @@ void main() {
       await tester.pumpAndSettle();
 
       // 1. 切换编辑器尺寸
-      expect(find.text('Expand Editor'), findsOneWidget);
-      await tester.tap(find.text('Expand Editor'));
+      expect(find.text('Expand'), findsOneWidget);
+      await tester.tap(find.text('Expand'));
       await tester.pumpAndSettle();
-      expect(find.text('Compact Editor'), findsOneWidget);
-      await tester.tap(find.text('Compact Editor'));
+      expect(find.text('Collapse'), findsOneWidget);
+      await tester.tap(find.text('Collapse'));
       await tester.pumpAndSettle();
-      expect(find.text('Expand Editor'), findsOneWidget);
+      expect(find.text('Expand'), findsOneWidget);
 
       // 2. 聚焦编辑器并按 Ctrl+F 快捷键打开查找替换工具条
       final editor = find.byType(TextField).first;
@@ -299,7 +299,7 @@ void main() {
       expect(find.byType(FindReplaceBar), findsNothing);
 
       // 4. 打开控制台并测试清屏
-      await tester.tap(find.widgetWithText(AuraChip, 'Console & Diagnostics'));
+      await tester.tap(find.widgetWithText(AuraChip, 'Console'));
       await tester.pumpAndSettle();
       expect(find.textContaining('VM: EEL2/NSEEL'), findsOneWidget);
 

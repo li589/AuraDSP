@@ -1491,7 +1491,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpOpFailed => '操作失败，请重试';
 
   @override
-  String get lpCompiledIdle => '已编译，打开右上角开关才生效';
+  String get lpCompiledIdle => '已编译 · 点击顶栏应用生效';
 
   @override
   String get lpSliders => '脚本滑块（slider1..8）';
@@ -3048,7 +3048,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSidebarRight => '切换右侧面板 (滑块与控制台)';
 
   @override
-  String get lpConsole => '控制台与诊断输出';
+  String get lpConsole => '控制台';
 
   @override
   String get lpNewScriptWizard => '新建脚本向导';
@@ -3069,10 +3069,19 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpConsoleClear => '清空控制台';
 
   @override
-  String get lpExpandEditor => '展开编辑器';
+  String get lpExpandEditor => '展开';
 
   @override
-  String get lpCollapseEditor => '收起编辑器';
+  String get lpCollapseEditor => '收起';
+
+  @override
+  String get lpUncompiled => '未编译修改';
+
+  @override
+  String get lpCompileSuccess => '编译成功';
+
+  @override
+  String get lpCompilingScript => '正在编译脚本…';
 
   @override
   String get lpEyebrowDsp => '可编程 DSP';
