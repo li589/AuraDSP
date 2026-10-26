@@ -94,14 +94,119 @@ class BassShapingCard extends StatelessWidget {
           enabled: model.shelfOn,
         ),
         const SizedBox(height: AuraSpace.sm),
-        ChannelRoutingSelector(
-          model: model,
-          paramKey: 'shelf.channels',
-          label: (Localizations.localeOf(context).languageCode == 'zh')
-              ? l.bassShelfRouting
-              : 'Low-shelf Channel Routing',
-        ),
+        _buildShelfRoutingRow(context, p, l),
       ],
+    );
+  }
+
+  Widget _buildShelfRoutingRow(BuildContext context, AuraPalette p, AppLocalizations l) {
+    return ValueListenableBuilder<int>(
+      valueListenable: model.vizChannelCount,
+      builder: (context, rawCount, _) {
+        var chCount = rawCount;
+        if (chCount <= 0) chCount = model.effectiveChannelCount;
+        if (chCount > 8) chCount = 8;
+        if (chCount % 2 != 0) chCount += 1;
+
+        final channels = ChannelRoutingSelector.channelsFor(chCount);
+        final rawVal = model.getParamById('shelf.channels');
+        final int currentMask = (rawVal is int)
+            ? rawVal
+            : (rawVal is double ? rawVal.toInt() : ChannelRoutingSelector.fullMaskFor(chCount));
+
+        return Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  l.channelSelection,
+                  style: labelOf(p, size: 12).copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: model.shelfOn ? p.text : p.textDim,
+                  ),
+                ),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(message: l.bassShelfRoutingHint),
+              ],
+            ),
+            const SizedBox(width: AuraSpace.xs),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  reverse: true,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < channels.length; i++) ...[
+                        if (i > 0) const SizedBox(width: AuraSpace.xxs),
+                        _buildShelfChannelChip(
+                          p,
+                          channels[i].bit,
+                          channels[i].code,
+                          (currentMask & (1 << channels[i].bit)) != 0,
+                          model.shelfOn,
+                          currentMask,
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildShelfChannelChip(
+    AuraPalette p,
+    int bit,
+    String code,
+    bool isSelected,
+    bool enabled,
+    int currentMask,
+  ) {
+    final Color bgColor = isSelected && enabled
+        ? p.accent.withValues(alpha: 0.16)
+        : p.panelRaised.withValues(alpha: 0.40);
+    final Color borderColor = isSelected && enabled ? p.accent : p.hairline;
+    final Color textColor = !enabled
+        ? p.textDim
+        : (isSelected ? p.text : p.textDim);
+
+    return Opacity(
+      opacity: enabled ? 1.0 : 0.45,
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AuraRadius.xs),
+          mouseCursor: enabled ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          onTap: enabled
+              ? () => model.setParamById('shelf.channels', currentMask ^ (1 << bit))
+              : null,
+          child: Container(
+            height: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: bgColor,
+              borderRadius: BorderRadius.circular(AuraRadius.xs),
+              border: Border.all(color: borderColor, width: isSelected && enabled ? 1.2 : 1.0),
+            ),
+            child: Text(
+              code,
+              style: monoOf(p, size: 11, color: textColor).copyWith(
+                fontWeight: isSelected && enabled ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 
@@ -168,11 +273,6 @@ class BassShapingCard extends StatelessWidget {
                   onChanged: (v) => model.setBassmonoEnabled(v),
                 ),
               ],
-            ),
-            const SizedBox(height: AuraSpace.xs),
-            Text(
-              l.bassMonoDesc,
-              style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
             ),
             const SizedBox(height: AuraSpace.sm),
             ParamSlider(
@@ -253,18 +353,11 @@ class BassShapingCard extends StatelessWidget {
                   }
                 },
               ),
-              if (!canMerge && model.bassmonoOn) ...[
-                const SizedBox(height: AuraSpace.xs),
-                Text(
-                  l.bassMonoMergeSinglePairHint,
-                  style: captionOf(p, color: p.textDim).copyWith(fontSize: 10),
-                ),
-              ],
             ],
 
             // 摘要与诚实性提示行
             const SizedBox(height: AuraSpace.sm),
-            _buildBassmonoSummary(p, l, stereoPath, activePairs, ignoredPairs, centerLfeSelected),
+            _buildBassmonoSummary(p, l, activePairs, ignoredPairs, centerLfeSelected),
           ],
         );
       },
@@ -274,7 +367,6 @@ class BassShapingCard extends StatelessWidget {
   Widget _buildBassmonoSummary(
     AuraPalette p,
     AppLocalizations l,
-    bool stereoPath,
     int activePairs,
     int ignoredPairs,
     bool centerLfeSelected,
@@ -298,26 +390,6 @@ class BassShapingCard extends StatelessWidget {
         style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
       ),
     );
-
-    if (stereoPath) {
-      items.add(
-        Padding(
-          padding: const EdgeInsets.only(top: AuraSpace.xs),
-          child: Row(
-            children: [
-              Icon(Icons.info_outline_rounded, size: 13, color: p.textDim),
-              const SizedBox(width: AuraSpace.xs),
-              Expanded(
-                child: Text(
-                  l.bassMonoStereoPathHint,
-                  style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
 
     if (activePairs == 0) {
       items.add(

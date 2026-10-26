@@ -71,17 +71,11 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
     final l = l10nOf(context);
     final mask = _mask;
 
-    // 当前布局下全部可用对掩码
-    var allAvailMask = 0;
-    for (final pair in _pairs) {
-      if (_isAvailable(pair.bit)) allAvailMask |= (1 << pair.bit);
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        // 标题行与快捷预设
         Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
             Text(
               l.bassMonoPairs,
@@ -90,69 +84,33 @@ class _PairRouteSelectorState extends State<PairRouteSelector> {
                 color: widget.enabled ? p.text : p.textDim,
               ),
             ),
-            const Spacer(),
-            if (!widget.stereoPath && widget.enabled) ...[
-              _buildPresetChip(
-                p,
-                l.bassMonoPairAll,
-                allAvailMask,
-                mask == allAvailMask,
-              ),
-              const SizedBox(width: AuraSpace.xs),
-              _buildPresetChip(
-                p,
-                l.bassMonoPairFrontOnly,
-                0x01,
-                mask == 0x01,
-              ),
-            ],
+            const SizedBox(width: AuraSpace.xs),
+            InfoBadge(message: l.bassMonoPairsTooltip),
           ],
         ),
-        const SizedBox(height: AuraSpace.sm),
-
-        // 4 个 pair chip (响应式 Wrap)
-        Wrap(
-          spacing: AuraSpace.xs,
-          runSpacing: AuraSpace.xs,
-          children: [
-            for (final pair in _pairs)
-              _buildPairChip(context, p, l, pair, mask),
-          ],
+        const SizedBox(width: AuraSpace.xs),
+        Expanded(
+          child: Align(
+            alignment: Alignment.centerRight,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              reverse: true,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  for (var i = 0; i < _pairs.length; i++) ...[
+                    if (i > 0) const SizedBox(width: AuraSpace.xs),
+                    _buildPairChip(context, p, l, _pairs[i], mask),
+                  ],
+                ],
+              ),
+            ),
+          ),
         ),
       ],
     );
   }
 
-  Widget _buildPresetChip(
-    AuraPalette p,
-    String label,
-    int targetMask,
-    bool isCurrent,
-  ) {
-    return InkWell(
-      borderRadius: BorderRadius.circular(AuraRadius.xs),
-      onTap: () => _updateMask(targetMask),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xxs),
-        decoration: BoxDecoration(
-          color: isCurrent ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
-          borderRadius: BorderRadius.circular(AuraRadius.xs),
-          border: Border.all(
-            color: isCurrent
-                ? p.accent.withValues(alpha: 0.4)
-                : p.hairline.withValues(alpha: 0.6),
-          ),
-        ),
-        child: Text(
-          label,
-          style: captionOf(p, color: isCurrent ? p.accent : p.textDim).copyWith(
-            fontSize: 10,
-            fontWeight: isCurrent ? FontWeight.bold : FontWeight.normal,
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildPairChip(
     BuildContext context,

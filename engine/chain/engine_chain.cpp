@@ -1054,69 +1054,69 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 
         // 第二遍：增益施加 (分支：1.5ms 高精母带前瞻模式 vs 0ms 零延迟实时模式)
         for (int c = 0; c < max_c; ++c) {
-            if (!(mask & (1u << c))) continue;
+            const bool in_mask = (mask & (1u << c)) != 0;
+            if (!in_mask && !use_la) {
+                // 零延迟模式下未入掩码的声道直接保持原样直通
+                continue;
+            }
 
-            float g_target = link_mode ? linked_target : step_targets[c];
+            float g_target = in_mask ? (link_mode ? linked_target : step_targets[c]) : 1.0f;
             float final_s = 0.0f;
             float current_gain = 1.0f;
 
             if (use_la) {
-                // 1.5ms 高精母带前瞻模式：环形延迟线 + 前向最小增益淡入
+                // 直通声道时间对齐：未在 mask 中的声道同样经过延迟环，确保多声道采样严格无相位时差
                 int pos = h->mc_limiter_la_pos[c];
                 h->mc_limiter_la_buf[c][pos] = io[i * ch + c];
                 h->mc_limiter_gain_buf[c][pos] = g_target;
 
-                /* PF-2：滑动窗口最小值（单调 deque）替代每样本 O(la_len)
-                 * 全窗扫描（8ch LA 模式 576 iters/帧，≈0ms 模式 10× 成本）。
-                 * deque 存 gain_buf 的环形位置，所指引值从头到尾单调非降，
-                 * 队首即窗口最小 —— 与原"扫全部 la_len 个 slot"逐样本等价
-                 * （环形缓冲写满后全部 slot 恰好就是窗口）。la_len 变化时
-                 * 整体失效重建（la_len 仅 create 时按 fs 定，运行期不变）。 */
-                const int dqCap = (int)auradsp_handle_s::kLimLookaheadMax;
-                int* dq = h->mc_limiter_dq[c];
-                int& dq_head = h->mc_limiter_dq_head[c];
-                int& dq_count = h->mc_limiter_dq_count[c];
-                const float* gb = h->mc_limiter_gain_buf[c];
-                if (h->mc_limiter_dq_len != la_len) {
-                    dq_head = 0;
-                    dq_count = 0;
-                    h->mc_limiter_dq_len = la_len;
-                } else if (dq_count > 0 && dq[dq_head] == pos) {
-                    /* 队首是最老样本，本次写入即将覆盖它 → 已滑出窗口 */
-                    dq_head = (dq_head + 1 >= dqCap) ? 0 : dq_head + 1;
-                    --dq_count;
-                }
-                /* 入队：从队尾弹出所有不劣于新值的旧位（它们永不再成为最小；
-                 * 相等也弹，保留更晚滑出的新位，窗口语义不变） */
-                while (dq_count > 0) {
-                    const int tail = (dq_head + dq_count - 1) % dqCap;
-                    if (gb[dq[tail]] >= g_target) --dq_count; else break;
-                }
-                dq[(dq_head + dq_count) % dqCap] = pos;
-                ++dq_count;
-
-                float win_min_g = (dq_count > 0) ? gb[dq[dq_head]] : 1.0f;
-
                 int read_pos = (pos + 1) % la_len;
                 float delayed_s = h->mc_limiter_la_buf[c][read_pos];
 
-                float env_rel = h->mc_limiter_env[c];
-                if (win_min_g < env_rel) {
-                    env_rel = win_min_g;
+                if (!in_mask) {
+                    current_gain = 1.0f;
+                    final_s = delayed_s;
                 } else {
-                    env_rel += (1.0f - relCoef) * (win_min_g - env_rel);
-                }
-                h->mc_limiter_env[c] = env_rel;
+                    const int dqCap = (int)auradsp_handle_s::kLimLookaheadMax;
+                    int* dq = h->mc_limiter_dq[c];
+                    int& dq_head = h->mc_limiter_dq_head[c];
+                    int& dq_count = h->mc_limiter_dq_count[c];
+                    const float* gb = h->mc_limiter_gain_buf[c];
+                    if (h->mc_limiter_dq_len != la_len) {
+                        dq_head = 0;
+                        dq_count = 0;
+                        h->mc_limiter_dq_len = la_len;
+                    } else if (dq_count > 0 && dq[dq_head] == pos) {
+                        dq_head = (dq_head + 1 >= dqCap) ? 0 : dq_head + 1;
+                        --dq_count;
+                    }
+                    while (dq_count > 0) {
+                        const int tail = (dq_head + dq_count - 1) % dqCap;
+                        if (gb[dq[tail]] >= g_target) --dq_count; else break;
+                    }
+                    dq[(dq_head + dq_count) % dqCap] = pos;
+                    ++dq_count;
 
-                float env_la = h->mc_limiter_la_env[c];
-                if (env_rel < env_la) {
-                    env_la += attCoef * (env_rel - env_la);
-                } else {
-                    env_la = env_rel;
+                    float win_min_g = (dq_count > 0) ? gb[dq[dq_head]] : 1.0f;
+
+                    float env_rel = h->mc_limiter_env[c];
+                    if (win_min_g < env_rel) {
+                        env_rel = win_min_g;
+                    } else {
+                        env_rel += (1.0f - relCoef) * (win_min_g - env_rel);
+                    }
+                    h->mc_limiter_env[c] = env_rel;
+
+                    float env_la = h->mc_limiter_la_env[c];
+                    if (env_rel < env_la) {
+                        env_la += attCoef * (env_rel - env_la);
+                    } else {
+                        env_la = env_rel;
+                    }
+                    h->mc_limiter_la_env[c] = env_la;
+                    current_gain = env_la;
+                    final_s = delayed_s * current_gain;
                 }
-                h->mc_limiter_la_env[c] = env_la;
-                current_gain = env_la;
-                final_s = delayed_s * current_gain;
 
                 h->mc_limiter_la_pos[c] = read_pos;
             } else {

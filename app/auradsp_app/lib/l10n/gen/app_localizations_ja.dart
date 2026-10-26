@@ -796,10 +796,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbAutoProtect => '自動過負荷保護';
 
   @override
-  String get vbProtectHint => 'コールバックが継続して予算超過のとき、プラグインを監視バスに自動絞り込みし、回復後に自動復帰';
+  String get vbProtectHint =>
+      '音声処理期限はドライバのバッファサイズに基づきます（例：128フレーム@48kHz=2.7ms）。処理時間（EMA）が予算の85%を超え続けると、音飛びを防ぐためプラグインを監視バスに自動絞り込みし、負荷回復後に自動復帰します。';
 
   @override
   String get vbProtectActive => '作動中：プラグインは監視バスのみ、他はスルー（コールバック過負荷）';
+
+  @override
+  String get vbProtectActiveTag => '保護作動中';
 
   @override
   String get shelfTitle => 'ローシェルフ';
@@ -847,7 +851,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassMonoDesc => 'クロスオーバー以下の低域をモノラル化し、位相打消しと濁りを解消します。';
 
   @override
-  String get bassMonoPairs => '対象チャンネルペア';
+  String get channelSelection => 'チャンネル選択';
+
+  @override
+  String get bassShelfRoutingHint =>
+      'ローシェルフフィルターを適用するチャンネルを選択します。未選択のチャンネルはそのままスルーされます。';
+
+  @override
+  String get bassMonoPairsTooltip =>
+      '低域モノラル化を適用するチャンネルペアを選択します。未選択ペアはスルーされます。ステレオ/バイノーラルはL/Rのみ対象です。';
+
+  @override
+  String get bassMonoPairs => 'チャンネル選択';
 
   @override
   String bassMonoPairCount(int count) {
@@ -1071,7 +1086,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'ローカルの 4/6/8ch ファイル再生時のみ有効（チャンネル数はファイルに依存）：マトリクスダウンミックス＝エンジンがステレオに混合して処理、チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは折畳にフォールバック）。「マルチチャンネル両耳」有効時は無視されます。';
+      '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
 
   @override
   String get audioMode => 'オーディオモード';
