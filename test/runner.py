@@ -221,6 +221,7 @@ def run_smoke_tests():
     "smoke_wp0_scaffold.py",
     "smoke_reverb_boundary.py",
     "smoke_mc_reverb.py",
+    "smoke_reverb_native_params.py",
     "smoke_spatial_fdn_removed.py",
     "smoke_mc_comp_persch.py",
     "smoke_mc_eq_persch.py",

@@ -183,8 +183,10 @@ void mc_reverb_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     }
     const float pre_step = (pre_target - s.pre_len_sm) / (float)frames;
 
-    /* ---- LFE（6/8ch 的索引 3；默认不进 FDN） ---- */
-    const int lfe_idx = (ch >= 6) ? 3 : -1;
+    const SpeakerLayout ly = layout_for(ch);
+
+    /* ---- LFE（layout_for(ch).lfe；默认不进 FDN） ---- */
+    const int lfe_idx = ly.lfe;
     const bool lfe_on =
         (lfe_idx >= 0) && (h->p.reverb_lfe.load(std::memory_order_relaxed) != 0);
     const float lfe_a = 1.0f - expf(-2.0f * kPiF * 120.0f / fs);
@@ -205,13 +207,9 @@ void mc_reverb_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     /* ---- 宽度只处理 FL/FR、SL/SR、BL/BR；C/LFE 不动 ---- */
     int pairs[3][2];
     int np = 0;
-    if (ch >= 2) { pairs[np][0] = 0; pairs[np][1] = 1; ++np; }
-    if (ch == 4) {
-        pairs[np][0] = 2; pairs[np][1] = 3; ++np;
-    } else if (ch >= 6) {
-        pairs[np][0] = 4; pairs[np][1] = 5; ++np;
-        if (ch >= 8) { pairs[np][0] = 6; pairs[np][1] = 7; ++np; }
-    }
+    if (ly.fl >= 0 && ly.fr >= 0) { pairs[np][0] = ly.fl; pairs[np][1] = ly.fr; ++np; }
+    if (ly.sl >= 0 && ly.sr >= 0) { pairs[np][0] = ly.sl; pairs[np][1] = ly.sr; ++np; }
+    if (ly.bl >= 0 && ly.br >= 0) { pairs[np][0] = ly.bl; pairs[np][1] = ly.br; ++np; }
 
     /* ---- 重置请求：本块开始淡出；淡出到 0 后清状态再重新起尾 ---- */
     if (s.reset_req.exchange(0, std::memory_order_relaxed) != 0) {

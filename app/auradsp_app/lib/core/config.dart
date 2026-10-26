@@ -25,6 +25,8 @@ class AppConfig {
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
+  int channelsCountMode; // 0=auto, 1=manual
+  int channelsCount; // 2, 4, 6, 8
 
   // ADR-009 两大交互范式扩展
   String modeCategory; // 'attachment' | 'pipeline'
@@ -65,6 +67,8 @@ class AppConfig {
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
     this.audioMode = 'auto',
+    this.channelsCountMode = 0,
+    this.channelsCount = 2,
     String? modeCategory,
     String? attachmentMode,
     String? pipelineInput,
@@ -142,6 +146,8 @@ class AppConfig {
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
+      channelsCountMode: (audio['channelsCountMode'] as num?)?.toInt() ?? 0,
+      channelsCount: (audio['channelsCount'] as num?)?.toInt() ?? 2,
       locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
@@ -165,6 +171,8 @@ class AppConfig {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
           'audioMode': audioMode,
+          'channelsCountMode': channelsCountMode,
+          'channelsCount': channelsCount,
           'modeCategory': modeCategory,
           'attachmentMode': attachmentMode,
           'pipelineInput': pipelineInput,

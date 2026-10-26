@@ -98,6 +98,10 @@ extension StateSession on AppModel {
       // （不预设持久化），此前恢复后 UI 分段控件显示"离散逐声道"，引擎却
       // 停在默认的矩阵模式——多声道策略在重启后静默降级。
       setInt('channels.mode', channelsMode);
+      setInt('channels.countMode', channelsCountMode);
+      if (channelsCountMode == 1) {
+        setInt('channels.count', channelsCount);
+      }
 
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
@@ -147,6 +151,8 @@ extension StateSession on AppModel {
       setFloat('shelf.gain', shelfGain);
       setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
       setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+      setInt(ParamId.bassmonoPairs, bassmonoPairs);
+      setInt(ParamId.bassmonoMerge, bassmonoMerge);
       setInt(ParamId.haasEnable, haasOn ? 1 : 0);
       setFloat(ParamId.haasDelay, haasDelayMs);
       setFloat(ParamId.haasMix, haasMix);
@@ -177,6 +183,7 @@ extension StateSession on AppModel {
       setInt(ParamId.tubeAutoGain, tubeAutoGain ? 1 : 0);
       setFloat(ParamId.compOutGain, compOutputGain);
       setInt(ParamId.compAutoGain, compAutoGain ? 1 : 0);
+      setInt(ParamId.compMode, compMode);
       setFloat(ParamId.reverbOutGain, reverbOutputGain);
       setInt(ParamId.reverbAutoGain, reverbAutoGain ? 1 : 0);
       // 噪声门 + Deesser
@@ -237,6 +244,9 @@ extension StateSession on AppModel {
       setInt(ParamId.limiterLink, limiterLink ? 1 : 0);
       setInt(ParamId.limiterLookahead, limiterLookahead ? 1 : 0);
       setFloat('post.gain', postGain);
+      for (var c = 0; c < 8; c++) {
+        setFloat(ParamId.postGainCh(c), mirrorFloat(ParamId.postGainCh(c), 0.0));
+      }
 
       // 动态压限器
       setFloat(ParamId.compTimeconstant, compTimeconstant);

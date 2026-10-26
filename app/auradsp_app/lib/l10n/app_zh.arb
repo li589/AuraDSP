@@ -23,15 +23,39 @@
   "routingAllBypassed": "全旁路 (0/8)",
   "routingSurroundOnly": "仅环绕 (4/8)",
   "routingPairHint": "按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效",
-  "routingSelectedCount": "{count}/8 声道已选",
-  "@routingSelectedCount": {"placeholders": {"count": {"type": "int"}}},
+  "routingSelectedCount": "{count}/{total} 声道已选",
+  "@routingSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "routingStereoPathSummary": "直通 (立体声/矩阵路径)",
+  "routingStereoPathHint": "当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。",
   "flfrOnlyHint": "仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）",
   "channelRouting": "高级声道路由",
   "routingPresets": "快速选择:",
   "routingPresetAll": "全选",
+  "routingPresetFront": "仅前置",
+  "routingPresetBack": "仅后置",
   "routingPresetStereo": "立体声",
   "routingPresetNoLfe": "无超低",
   "routingPresetSurround": "仅环绕",
+  "channelCount": "声道数量",
+  "channelCountHint": "工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。",
+  "channelCountAuto": "自动",
+  "channelCountAutoDesc": "自动协商生效中 · 当前工作拓扑：{count} 声道",
+  "@channelCountAutoDesc": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "setConnStatus": "连接状态",
   "setConnActive": "已连接 (活跃回调)",
   "setConnIdle": "未连接 (等待 Voicemeeter 启动)",
@@ -262,6 +286,41 @@
   "shelfFreqTooltip": "设定低频搁架滤波器的分频截止频率点（40~400Hz），该频率以下的低音整体增减",
   "shelfGainTooltip": "分频点以下整体增益提升或衰减（-15~+15dB）。正值增强低频厚度，负值收紧轰鸣",
   "bassmonoFreqTooltip": "低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感",
+  "bassShapingMasterHint": "总开关：任一模块开启即生效",
+  "bassShelfModule": "低频搁架",
+  "bassMonoModule": "低频单声道化",
+  "bassMonoDesc": "把分频点以下的低频合并为单声道，消除相位抵消与浑浊。",
+  "bassMonoPairs": "作用声道对",
+  "bassMonoPairCount": "已选 {count} 对",
+  "@bassMonoPairCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoPairFront": "前置",
+  "bassMonoPairCenterLfe": "中置+超低",
+  "bassMonoPairSide": "侧环绕",
+  "bassMonoPairBack": "后环绕",
+  "bassMonoPairAll": "全部",
+  "bassMonoPairFrontOnly": "仅前置",
+  "bassMonoPairUnavailable": "当前输出无此声道对",
+  "bassMonoMerge": "合并方式",
+  "bassMonoMergePerPair": "每对独立",
+  "bassMonoMergeGlobal": "全部合并",
+  "bassMonoMergeSinglePairHint": "仅选中一对时两种方式等价",
+  "bassMonoNoneSelected": "未选择声道对 · 当前不处理",
+  "bassMonoIgnoredPairs": "已忽略 {count} 对当前不存在的声道",
+  "@bassMonoIgnoredPairs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoLfeWarning": "C/LFE 取平均会削弱中置与超低音的分离，通常不建议",
+  "bassMonoStereoPathHint": "立体声/矩阵/双耳路径：仅作用 L/R",
   "retryNow": "重试",
   "sampleRateDeviceActual": "设备实际：{rate} Hz",
   "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
@@ -282,6 +341,9 @@
   "reverbOff": "关闭",
   "stereoWiden": "立体声扩展",
   "postGain": "输出增益",
+  "postPerChannelTrim": "逐声道输出补偿",
+  "postPerChannelTrimHint": "对各个输出声道进行独立的电平微调（-15 ~ +15 dB）",
+  "postResetAllTrim": "全部归零",
   "equalizer": "均衡器",
   "limiter": "限制器",
   "engineInfo": "引擎",
@@ -1112,6 +1174,9 @@
   "compTfresTransient": "瞬态响应",
   "compTfresBalanced": "平衡",
   "compTfresFine": "高频解析",
+  "compModePairBadge": "性能模式：逐对",
+  "compModePairHint": "性能模式成对分配压缩槽位以节省计算资源与内存。需成对选择声道，半选对将不被压缩。",
+  "compModeSemiSelectedWarning": "性能模式需成对选择，半选对未生效",
   "autoGainCompensation": "自动增益补偿",
   "autoGainCompensationTooltip": "随音效提升动态平抑输出电平，防止多级叠加导致削波失真",
   "outputGainGate": "输出增益门",

@@ -23,10 +23,13 @@ abstract final class ParamId {
   static const stereoMix = 'stereo.mix';
   static const eqEnable = 'eq.enable';
   static const postGain = 'post.gain';
+  static String postGainCh(int ch) => 'post.gain.c$ch';
   static const inputGain = 'input.gain';
   static String inputBalance(int ch) => 'input.balance.$ch';
   static const limiterEnable = 'limiter.enable';
   static const channelsMode = 'channels.mode';
+  static const channelsCount = 'channels.count';
+  static const channelsCountMode = 'channels.countMode';
   // v1.1：Liveprog（EEL2 实时可编程 DSP）
   static const lpEnable = 'liveprog.enable';
   static const lpCode = 'liveprog.code';
@@ -69,6 +72,8 @@ abstract final class ParamId {
   // 低频单声道化（BassMono）
   static const bassmonoEnable = 'bassmono.enable';
   static const bassmonoFreq = 'bassmono.freq';
+  static const bassmonoPairs = 'bassmono.pairs';
+  static const bassmonoMerge = 'bassmono.merge';
   // Haas 差分环绕
   static const haasEnable = 'haas.enable';
   static const haasDelay = 'haas.delay';
@@ -171,6 +176,7 @@ abstract final class ParamId {
   static const compGain5 = 'comp.gain5';
   static const compGain6 = 'comp.gain6';
   static const compGain7 = 'comp.gain7';
+  static const compMode = 'comp.mode';
   // 任意响应 EQ（ArbMag / AutoEq GraphicEQ）
   static const arbmagEnable = 'arbmag.enable';
   static const arbmagString = 'arbmag.string';

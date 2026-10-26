@@ -160,6 +160,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     /* B5 后续：arbmag 逐声道池（句柄级，create 分配；失败不算致命——
      * pool 的空位在 process 侧永远直通，与 legacy 上游构造失败容忍一致）。 */
     arbmag_pool_alloc(h);
+    eq_pool_alloc(h);
 
     /* 注意：P-005 的 scratch 绑定必须放在 JamesDSPInit 之后——
      * JamesDSPInit 内部 memset(jdsp, 0, sizeof) 会清掉提前写入的指针 */
@@ -239,6 +240,7 @@ void auradsp_destroy(auradsp_handle h) {
     }
     auradsp::plugin_chain_reset(h);
     arbmag_pool_free(h);
+    eq_pool_free(h);
     delete[] h->fft_scratch;
     delete[] h->hann;
     delete[] h->viz_hist; delete[] h->eq_in_hist;

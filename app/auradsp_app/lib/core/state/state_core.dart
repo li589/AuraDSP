@@ -20,6 +20,12 @@ extension StateCore on AppModel {
   // ---- 命令下发 ----
 
   void setInt(String id, int v) {
+    if (id == 'channels.mode') {
+      // X-8：引擎 channels.mode 仅接受 0..1，下发前先 clamp，防非法值下发与淤积
+      v = v.clamp(0, 1);
+    } else if (id == 'channels.countMode') {
+      v = v.clamp(0, 1);
+    }
     _mirror(id, v.toDouble());
     _markSent(id);
     _notifyUi();
@@ -96,6 +102,14 @@ extension StateCore on AppModel {
     return fallback;
   }
 
+  /// 浮点镜像型参数读取（未在 ParamRegistry 单独建模的逐声道补偿等用）
+  double mirrorFloat(String id, double fallback) {
+    final v = _paramValues[id];
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    return fallback;
+  }
+
   /// 按参数 ID 通用设值
   void setParamById(String id, dynamic value, {bool notify = true}) {
     final spec = ParamRegistry.byId[id];
@@ -117,12 +131,10 @@ extension StateCore on AppModel {
   /// 检查某处理节是否处于激活状态（用于自绑定组件 enabled 联动）
   bool isSectionEnabled(String section) {
     if (section == 'input' || section == 'routing') return true;
-    if (section == 'post') return limiterOn;
-    if (section == 'shelf' ||
-        section == 'bassmono' ||
-        section == 'bass_shaping') {
-      return bassShapingOn;
-    }
+    if (section == 'post') return true;
+    if (section == 'shelf') return shelfOn;
+    if (section == 'bassmono') return bassmonoOn;
+    if (section == 'bass_shaping') return bassShapingOn;
     return isStageEnabled(section);
   }
 
@@ -184,6 +196,15 @@ extension StateCore on AppModel {
         // 且 setInt 的乐观镜像不回滚）。历史 UI 曾有非法的 2（"7.1"）档位，
         // 会淤积在镜像与自动保存里——此处 clamp 保证镜像即引擎真相。
         channelsMode = v.toInt().clamp(0, 1);
+        break;
+      case 'channels.countMode':
+        channelsCountMode = v.toInt().clamp(0, 1);
+        break;
+      case 'channels.count':
+        final c = v.toInt();
+        if (c == 2 || c == 4 || c == 6 || c == 8) {
+          channelsCount = c;
+        }
         break;
       case 'tube.enable':
         tubeOn = v != 0;
@@ -250,6 +271,14 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.bassmonoFreq) {
           bassmonoFreq = v;
+          break;
+        }
+        if (id == ParamId.bassmonoPairs) {
+          bassmonoPairs = v.toInt().clamp(0, 15);
+          break;
+        }
+        if (id == ParamId.bassmonoMerge) {
+          bassmonoMerge = v.toInt().clamp(0, 1);
           break;
         }
         if (id == ParamId.haasEnable) {
@@ -358,6 +387,10 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.compAutoGain) {
           compAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.compMode) {
+          compMode = v.toInt();
           break;
         }
         if (id == ParamId.reverbOutGain) {
@@ -789,5 +822,24 @@ extension StateCore on AppModel {
     playing = kind != 'stop';
     _notifyUi();
     send({'cmd': 'source', 'kind': kind, 'path': path});
+  }
+
+  /// 设置工作声道模式（0=自动, 1=手动）
+  void setChannelsCountMode(int mode) {
+    final m = mode.clamp(0, 1);
+    channelsCountMode = m;
+    config.channelsCountMode = m;
+    ConfigManager.save(config);
+    setInt('channels.countMode', m);
+  }
+
+  /// 设置手动工作声道数（2, 4, 6, 8）
+  void setChannelsCount(int count) {
+    if (count == 2 || count == 4 || count == 6 || count == 8) {
+      channelsCount = count;
+      config.channelsCount = count;
+      ConfigManager.save(config);
+      setInt('channels.count', count);
+    }
   }
 }

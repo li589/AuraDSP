@@ -161,11 +161,76 @@ class _CompressorCard extends StatelessWidget {
                 ChannelRoutingSelector(
                   model: model,
                   paramKey: 'comp.channels',
-                  // 引擎侧 comp 的多声道掩码是**声道对**语义
-                  // （engine_chain.cpp:919 `(mask & (3<<p0)) == (3<<p0)`），
-                  // 逐位勾选会被引擎静默忽略 → UI 按整对翻转。
-                  pairSemantics: true,
                 ),
+                if (model.compMode == 1) ...[
+                  const SizedBox(height: AuraSpace.xs),
+                  Builder(
+                    builder: (context) {
+                      final v = model.getParamById('comp.channels');
+                      final mask = (v is num) ? v.toInt() : 0xFF;
+                      const pairs = [
+                        [0, 1],
+                        [2, 3],
+                        [4, 5],
+                        [6, 7],
+                      ];
+                      var hasSemi = false;
+                      for (final pair in pairs) {
+                        final a = (mask & (1 << pair[0])) != 0;
+                        final b = (mask & (1 << pair[1])) != 0;
+                        if (a != b) {
+                          hasSemi = true;
+                          break;
+                        }
+                      }
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: p.accent2.withValues(alpha: 0.15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(color: p.accent2.withValues(alpha: 0.4), width: 0.5),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.speed_rounded, size: 12, color: p.accent2),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      l.compModePairBadge,
+                                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w600, color: p.accent2),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              InfoBadge(
+                                message: l.compModePairHint,
+                              ),
+                            ],
+                          ),
+                          if (hasSemi) ...[
+                            const SizedBox(height: 4),
+                            Row(
+                              children: [
+                                Icon(Icons.warning_amber_rounded, size: 12, color: p.warning),
+                                const SizedBox(width: 4),
+                                Text(
+                                  l.compModeSemiSelectedWarning,
+                                  style: captionOf(p, color: p.warning).copyWith(fontSize: 10),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ],
+                      );
+                    },
+                  ),
+                ],
               ],
             ),
           ),

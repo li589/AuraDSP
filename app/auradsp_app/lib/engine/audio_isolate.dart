@@ -708,6 +708,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           final t0 = DateTime.now();
           final rc = AuraDspLib.setValue(lib!, handle!, m['id'] as String,
               isFloat: m['isFloat'] as bool, value: (m['value'] as num).toDouble());
+          if (m['id'] == 'channels.count' && rc == Status.ok) {
+            engineChCount = (m['value'] as num).toInt();
+          }
           // 参数镜像 + VB 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
           paramMirror[m['id'] as String] = (
             isFloat: m['isFloat'] as bool,
@@ -785,6 +788,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iEq = idp('eq.enable'), iPost = idp('post.gain');
             final iLim = idp('limiter.enable');
             final iCh = idp('channels.mode');
+            final iChCount = idp(ParamId.channelsCount);
+            final iChCountMode = idp(ParamId.channelsCountMode);
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
             final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
@@ -799,6 +804,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iDdE = idp('ddc.enable'), iDdR = idp('ddc.ready');
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iBmE = idp(ParamId.bassmonoEnable), iBmF = idp(ParamId.bassmonoFreq);
+            final iBmP = idp(ParamId.bassmonoPairs), iBmM = idp(ParamId.bassmonoMerge);
             final iHsE = idp(ParamId.haasEnable), iHsD = idp(ParamId.haasDelay), iHsM = idp(ParamId.haasMix);
             final iHsS = idp(ParamId.haasSide);
             final iSpE = idp(ParamId.spatialEnable), iSpS = idp(ParamId.spatialStyle);
@@ -933,6 +939,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'postGain': rdFloat(iPost) ?? 0.0,
                 'limiterEnable': rdInt(iLim) ?? 1,
                 'channelsMode': rdInt(iCh) ?? 0,
+                'channelsCount': rdInt(iChCount) ?? 2,
+                'channelsCountMode': rdInt(iChCountMode) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
                 'convEnable': rdInt(iCvEn) ?? 0,
@@ -961,6 +969,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'shelfGain': rdFloat(iShG) ?? 0.0,
                 'bassmonoEnable': rdInt(iBmE) ?? 0,
                 'bassmonoFreq': rdFloat(iBmF) ?? 120.0,
+                'bassmonoPairs': rdInt(iBmP) ?? 1,
+                'bassmonoMerge': rdInt(iBmM) ?? 0,
                 'haasEnable': rdInt(iHsE) ?? 0,
                 'haasDelay': rdFloat(iHsD) ?? 12.0,
                 'haasMix': rdFloat(iHsM) ?? 1.0,
@@ -2330,34 +2340,60 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (!bypass) {
             procRounds++;
             final cm = paramMirror[ParamId.channelsMode]?.value.toInt() ?? 0;
+            final countMode =
+                paramMirror[ParamId.channelsCountMode]?.value.toInt() ?? 0;
             final binauralOn =
                 (paramMirror[ParamId.spatialEnable]?.value ?? 0) != 0 &&
                     (paramMirror[ParamId.spatialBinaural]?.value ?? 0) != 0;
-            final want = fs == null
-                ? 2
-                : localEngineChannels(
-                    hasRaw: fs.raw != null,
-                    rawCh: fs.rawCh,
-                    passthrough51: passthrough51,
-                    bypass: bypass,
-                    devCh: devCh,
-                    channelsMode: cm,
-                    binauralActive: binauralOn);
-            if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
-              fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
-              lib!.process(handle!, inPtrEng, outPtrEng8, frames);
-              engineMulti = true;
-              if (procRounds == 1) {
-                dbgLog('first process(multi ch=$want)');
+            if (countMode == 0) {
+              // 自动模式：跟随输入源与设备声道数动态调整引擎 channels.count
+              final want = fs == null
+                  ? 2
+                  : localEngineChannels(
+                      hasRaw: fs.raw != null,
+                      rawCh: fs.rawCh,
+                      passthrough51: passthrough51,
+                      bypass: bypass,
+                      devCh: devCh,
+                      channelsMode: cm,
+                      binauralActive: binauralOn);
+              if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
+                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+                if (procRounds == 1) {
+                  dbgLog('first process(multi ch=$want)');
+                }
+              } else {
+                applyEngineChannels(2);
+                if (procRounds == 1) {
+                  dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
+                }
+                lib!.process(handle!, srcPtr, outPtrEng, frames);
+                if (procRounds == 1) {
+                  dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+                }
               }
             } else {
-              applyEngineChannels(2);
-              if (procRounds == 1) {
-                dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
-              }
-              lib!.process(handle!, srcPtr, outPtrEng, frames);
-              if (procRounds == 1) {
-                dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+              // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
+              if (engineChCount > 2 && fs != null && fs.raw != null && fs.rawCh == engineChCount) {
+                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+              } else if (engineChCount > 2) {
+                // 输入非同声道数：将立体声 srcBuf 铺入 inBufEng 前两声道，其余声道补 0
+                for (var i = 0; i < frames; i++) {
+                  final base = i * engineChCount;
+                  inBufEng[base] = srcBuf[i * 2];
+                  inBufEng[base + 1] = srcBuf[i * 2 + 1];
+                  for (var c = 2; c < engineChCount; c++) {
+                    inBufEng[base + c] = 0.0;
+                  }
+                }
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+              } else {
+                lib!.process(handle!, srcPtr, outPtrEng, frames);
               }
             }
           }

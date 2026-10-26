@@ -465,13 +465,17 @@ static void stage_stereo(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gate
 static void stage_reverb(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
 {
 	(void)gates;
+	/* [PATCHED-AuraDSP P-033] ReverbProcess 每块必进推进在途守卫计数；
+	 * enabled 与 gain 处理在内部与此处协同 */
 	if (jdsp->reverbEnabled)
 	{
-		/* [PATCHED-AuraDSP P-033] WP1：`reverb.outgain/autogain` 随 Freeverb
-		 * 退役落地 vendor 路径（fx 槽 5，与 tube/comp/bass/eq/arbmag 同范式）。 */
 		double rin = jdsp->fxAutoGain[5] ? stage_rms(jdsp, n) : 0.0;
 		ReverbProcess(jdsp, n);
 		stage_apply_fx_gain(jdsp, n, 5, rin);
+	}
+	else
+	{
+		ReverbProcess(jdsp, n);
 	}
 }
 static void stage_output(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gates)
@@ -483,8 +487,8 @@ static void stage_output(JamesDSPLib *jdsp, size_t n, const AuraStageGates *gate
 	                                                  : (char)(jdsp->limiterEnabled != 0);
 	for (size_t i = 0; i < n; i++)
 	{
-		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain;
-		float xR = jdsp->tmpBuffer[1][i] * jdsp->postGain;
+		float xL = jdsp->tmpBuffer[0][i] * jdsp->postGain * jdsp->postGainCh[0];
+		float xR = jdsp->tmpBuffer[1][i] * jdsp->postGain * jdsp->postGainCh[1];
 		/* [PATCHED-AuraDSP P-012] limiter.enable=0 时跳过包络增益（只做 postGain） */
 		float gR = 1.0f;
 		float rect1 = fabsf(xL);
@@ -1528,12 +1532,15 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	JLimiterSetCoefficients(jdsp, -(double)(FLT_EPSILON * 10.0f), 100.0);
 	jdsp->limiterEnabled = 1; /* [PATCHED-AuraDSP P-012] 默认开，与上游行为一致 */
 	jdsp->postGain = 1.0f;
+	jdsp->postGainCh[0] = 1.0f; /* [PATCHED-AuraDSP P-037] */
+	jdsp->postGainCh[1] = 1.0f;
 	// Init effect
 	LiveProgConstructor(jdsp);
 	CompressorConstructor(jdsp);
 	CompressorDisable(jdsp);
 	BassBoostConstructor(jdsp);
 	BassBoostDisable(jdsp);
+	ReverbConstructor(jdsp);
 	ReverbDisable(jdsp);
 	StereoEnhancementConstructor(jdsp);
 	StereoEnhancementDisable(jdsp);
@@ -1575,6 +1582,14 @@ void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB)
 	if (pGaindB > 15.0f)
 		pGaindB = 15.0f;
 	jdsp->postGain = db2magf(pGaindB);
+}
+/* [PATCHED-AuraDSP P-037] stereo/matrix/binaural 逐声道补偿 (ch=0 FL, ch=1 FR) */
+void JamesDSPSetPostGainCh(JamesDSPLib *jdsp, int ch, double pGaindB)
+{
+	if (ch < 0 || ch >= 2) return;
+	if (pGaindB < -15.0f) pGaindB = -15.0f;
+	if (pGaindB > 15.0f) pGaindB = 15.0f;
+	jdsp->postGainCh[ch] = db2magf(pGaindB);
 }
 /* [PATCHED-AuraDSP P-010] 每效果输出增益门（线性）与自动补偿开关。
  * 控制线程调用；fx 越界忽略。切态重置平滑状态避免从旧值爬坡。 */
@@ -1680,6 +1695,7 @@ void JamesDSPFree(JamesDSPLib *jdsp)
 	LiveProgDestructor(jdsp);
 	DDCDestructor(jdsp);
 	CrossfeedDestructor(jdsp);
+	ReverbDestructor(jdsp);
 	Convolver1DDestructor(jdsp);
 	ArbitraryResponseEqualizerDestructor(jdsp);
 	MultimodalEqualizerDestructor(jdsp);

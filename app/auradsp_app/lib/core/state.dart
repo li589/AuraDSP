@@ -163,6 +163,8 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
+  int channelsCount = 2;
+  int channelsCountMode = 0; // 0=自动, 1=手动
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
   // 引擎接线待后续版本，当前仅持久化 + UI 展示。
   String audioMode = 'auto';
@@ -462,9 +464,13 @@ class AppModel extends ChangeNotifier {
   // M5-b：低音塑形（Bass Shaping：合并低频搁架与单声道化）
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
-  // 低频单声道化（BassMono，链头）
+  // 低频单声道化（BassMono，WP4 支持多声道对与合并）
   bool bassmonoOn = false;
   double bassmonoFreq = 120;
+  int bassmonoPairs = 1;
+  int bassmonoMerge = 0;
+  bool _wantedShelf = true;
+  bool _wantedBassmono = true;
   bool get bassShapingOn => shelfOn || bassmonoOn;
   // Haas 差分环绕（stereo 后 / reverb 前）
   bool haasOn = false;
@@ -510,11 +516,33 @@ class AppModel extends ChangeNotifier {
   /// 兼容旧调用点：`fvOn` 已降级为派生 getter。
   bool get fvOn => reverbPreset != -1;
 
+  /// 实际工作声道数（UI 呈现与掩码渲染的唯一真相）：
+  /// 手动模式下为 channelsCount；
+  /// 自动模式下优先取 channelsCount（来自引擎/isolate 回读，默认 2）。
+  int get effectiveChannelCount {
+    if (channelsCountMode == 1) {
+      return (channelsCount == 4 || channelsCount == 6 || channelsCount == 8) ? channelsCount : 2;
+    }
+    if (channelsCount == 4 || channelsCount == 6 || channelsCount == 8) {
+      return channelsCount;
+    }
+    return 2;
+  }
+
+  /// 判定当前是否走立体声/矩阵下混路径（掩码不生效）：
+  /// 1. 声道数 == 2
+  /// 2. 声道模式 == 0 (矩阵下混)
+  /// 3. 双耳渲染激活 (spatialBinaural && spatialOn && effectiveChannelCount >= 4)
+  bool get isStereoPath =>
+      effectiveChannelCount == 2 ||
+      channelsMode == 0 ||
+      (spatialBinaural && spatialOn && effectiveChannelCount >= 4);
+
   /// 与 engine_chain.cpp `reverb_path_kind` 对齐的 UI 侧判定：
   /// 矩阵模式或双耳路径 → vendor 立体声；其余（含 mode=1 + 2ch）→ MC FDN。
   bool get reverbStereoPath =>
       channelsMode == 0 ||
-      (spatialBinaural && spatialOn && fileChannels >= 4);
+      (spatialBinaural && spatialOn && effectiveChannelCount >= 4);
   bool get reverbMcPath => !reverbStereoPath;
 
   /// MC FDN 是否真正在跑（路径 + 开关都满足）。
@@ -534,6 +562,7 @@ class AppModel extends ChangeNotifier {
   double tubeOutputGain = ParamDefaults.tubeOutputGain;
   bool compAutoGain = ParamDefaults.compAutoGain;
   double compOutputGain = ParamDefaults.compOutputGain;
+  int compMode = ParamDefaults.compMode;
 
   // 噪声门（链头）+ Deesser + 自动增益补偿 + 迟滞/底线/保持
   bool gateOn = false;
@@ -821,6 +850,9 @@ class AppModel extends ChangeNotifier {
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
   AppModel({bool testing = false}) : _testing = testing {
     config = ConfigManager.load();
+    channelsCountMode = config.channelsCountMode.clamp(0, 1);
+    final cc = config.channelsCount;
+    channelsCount = (cc == 2 || cc == 4 || cc == 6 || cc == 8) ? cc : 2;
     // 存量 audioMode 归一化到当前平台合法集（未知回平台默认并落盘）。
     audioMode = AudioModes.normalize(config.audioMode);
     if (audioMode != config.audioMode) {

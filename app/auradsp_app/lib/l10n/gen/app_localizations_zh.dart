@@ -79,9 +79,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingPairHint => '按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 声道已选';
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total 声道已选';
   }
+
+  @override
+  String get routingStereoPathSummary => '直通 (立体声/矩阵路径)';
+
+  @override
+  String get routingStereoPathHint => '当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。';
 
   @override
   String get flfrOnlyHint => '仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）';
@@ -96,6 +102,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingPresetAll => '全选';
 
   @override
+  String get routingPresetFront => '仅前置';
+
+  @override
+  String get routingPresetBack => '仅后置';
+
+  @override
   String get routingPresetStereo => '立体声';
 
   @override
@@ -103,6 +115,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get routingPresetSurround => '仅环绕';
+
+  @override
+  String get channelCount => '声道数量';
+
+  @override
+  String get channelCountHint =>
+      '工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
+
+  @override
+  String get channelCountAuto => '自动';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return '自动协商生效中 · 当前工作拓扑：$count 声道';
+  }
 
   @override
   String get setConnStatus => '连接状态';
@@ -797,6 +824,73 @@ class AppLocalizationsZh extends AppLocalizations {
       '低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感';
 
   @override
+  String get bassShapingMasterHint => '总开关：任一模块开启即生效';
+
+  @override
+  String get bassShelfModule => '低频搁架';
+
+  @override
+  String get bassMonoModule => '低频单声道化';
+
+  @override
+  String get bassMonoDesc => '把分频点以下的低频合并为单声道，消除相位抵消与浑浊。';
+
+  @override
+  String get bassMonoPairs => '作用声道对';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '已选 $count 对';
+  }
+
+  @override
+  String get bassMonoPairFront => '前置';
+
+  @override
+  String get bassMonoPairCenterLfe => '中置+超低';
+
+  @override
+  String get bassMonoPairSide => '侧环绕';
+
+  @override
+  String get bassMonoPairBack => '后环绕';
+
+  @override
+  String get bassMonoPairAll => '全部';
+
+  @override
+  String get bassMonoPairFrontOnly => '仅前置';
+
+  @override
+  String get bassMonoPairUnavailable => '当前输出无此声道对';
+
+  @override
+  String get bassMonoMerge => '合并方式';
+
+  @override
+  String get bassMonoMergePerPair => '每对独立';
+
+  @override
+  String get bassMonoMergeGlobal => '全部合并';
+
+  @override
+  String get bassMonoMergeSinglePairHint => '仅选中一对时两种方式等价';
+
+  @override
+  String get bassMonoNoneSelected => '未选择声道对 · 当前不处理';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '已忽略 $count 对当前不存在的声道';
+  }
+
+  @override
+  String get bassMonoLfeWarning => 'C/LFE 取平均会削弱中置与超低音的分离，通常不建议';
+
+  @override
+  String get bassMonoStereoPathHint => '立体声/矩阵/双耳路径：仅作用 L/R';
+
+  @override
   String get retryNow => '重试';
 
   @override
@@ -839,6 +933,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postGain => '输出增益';
+
+  @override
+  String get postPerChannelTrim => '逐声道输出补偿';
+
+  @override
+  String get postPerChannelTrimHint => '对各个输出声道进行独立的电平微调（-15 ~ +15 dB）';
+
+  @override
+  String get postResetAllTrim => '全部归零';
 
   @override
   String get equalizer => '均衡器';
@@ -2572,6 +2675,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get compTfresFine => '高频解析';
+
+  @override
+  String get compModePairBadge => '性能模式：逐对';
+
+  @override
+  String get compModePairHint => '性能模式成对分配压缩槽位以节省计算资源与内存。需成对选择声道，半选对将不被压缩。';
+
+  @override
+  String get compModeSemiSelectedWarning => '性能模式需成对选择，半选对未生效';
 
   @override
   String get autoGainCompensation => '自动增益补偿';

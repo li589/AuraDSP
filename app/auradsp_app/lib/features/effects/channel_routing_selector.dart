@@ -12,20 +12,23 @@ class ChannelRoutingSelector extends StatefulWidget {
   final String paramKey;
   final String? label;
 
-  /// 声道**对**语义（comp/eq）：引擎侧判定为 `(mask & (3<<p0)) == (3<<p0)`，
-  /// 即必须成对置位才生效（p0 = 0/2/4/6 → FL/FR、C/LFE、SL/SR、BL/BR）。
-  /// 旧 UI 允许逐位勾选，用户勾单个 C 会被引擎静默忽略（该对不成立）——
-  /// "开关下发成功但功能不工作"。此模式勾选时按整对翻转，并把掩码
-  /// 规范化成与引擎判定完全一致的集合（UI 显示即实际生效）。
-  final bool pairSemantics;
-
   const ChannelRoutingSelector({
     super.key,
     required this.model,
     required this.paramKey,
     this.label,
-    this.pairSemantics = false,
   });
+
+  /// 根据声道数返回存在的声道集合（与 engine layout_for(ch) 严格对齐）：
+  /// 2ch: FL(0), FR(1)
+  /// 4ch: FL(0), FR(1), BL(6), BR(7)
+  /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
+  /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
+  static List<({int bit, String code})> channelsFor(int ch) =>
+      _ChannelRoutingSelectorState.channelsFor(ch);
+
+  static int fullMaskFor(int ch) =>
+      _ChannelRoutingSelectorState.fullMaskFor(ch);
 
   @override
   State<ChannelRoutingSelector> createState() => _ChannelRoutingSelectorState();
@@ -34,25 +37,54 @@ class ChannelRoutingSelector extends StatefulWidget {
 class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
   bool _expanded = false;
 
-  static const List<({int bit, String code})> _channels = [
-    (bit: 0, code: 'FL'),
-    (bit: 1, code: 'FR'),
-    (bit: 2, code: 'C'),
-    (bit: 3, code: 'LFE'),
-    (bit: 4, code: 'SL'),
-    (bit: 5, code: 'SR'),
-    (bit: 6, code: 'BL'),
-    (bit: 7, code: 'BR'),
-  ];
+  /// 根据声道数返回存在的声道集合（与 engine layout_for(ch) 严格对齐）：
+  /// 2ch: FL(0), FR(1)
+  /// 4ch: FL(0), FR(1), BL(6), BR(7)
+  /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
+  /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
+  static List<({int bit, String code})> channelsFor(int ch) {
+    if (ch == 4) {
+      return const [
+        (bit: 0, code: 'FL'),
+        (bit: 1, code: 'FR'),
+        (bit: 6, code: 'BL'),
+        (bit: 7, code: 'BR'),
+      ];
+    }
+    if (ch == 6) {
+      return const [
+        (bit: 0, code: 'FL'),
+        (bit: 1, code: 'FR'),
+        (bit: 2, code: 'C'),
+        (bit: 3, code: 'LFE'),
+        (bit: 4, code: 'SL'),
+        (bit: 5, code: 'SR'),
+      ];
+    }
+    if (ch >= 8) {
+      return const [
+        (bit: 0, code: 'FL'),
+        (bit: 1, code: 'FR'),
+        (bit: 2, code: 'C'),
+        (bit: 3, code: 'LFE'),
+        (bit: 4, code: 'SL'),
+        (bit: 5, code: 'SR'),
+        (bit: 6, code: 'BL'),
+        (bit: 7, code: 'BR'),
+      ];
+    }
+    return const [
+      (bit: 0, code: 'FL'),
+      (bit: 1, code: 'FR'),
+    ];
+  }
 
-  /// 引擎的声道对分组（engine/chain/engine_chain.cpp:853/919）：
-  /// FL/FR 走 `& 0x03`，其余走 `3 << p0`（p0 = 2/4/6）。
-  static const List<List<int>> _pairGroups = [
-    [0, 1],
-    [2, 3],
-    [4, 5],
-    [6, 7],
-  ];
+  static int fullMaskFor(int ch) {
+    if (ch == 4) return 0xC3; // 1 + 2 + 64 + 128
+    if (ch == 6) return 0x3F; // 1 + 2 + 4 + 8 + 16 + 32
+    if (ch >= 8) return 0xFF;
+    return 0x03; // 1 + 2
+  }
 
   int get _mask {
     final v = widget.model.getParamById(widget.paramKey);
@@ -61,46 +93,13 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     return 0xFF; // 默认全开
   }
 
-  /// 把掩码规范化到引擎实际能判定的集合：
-  /// 逐声道语义原样返回；成对语义下，组内两位不一致时**整对取消**
-  /// （引擎要求两位同时置位，半选状态等于该对不生效）。
-  int _normalizeMask(int mask) {
-    if (!widget.pairSemantics) return mask & 0xFF;
-    var m = mask & 0xFF;
-    for (final g in _pairGroups) {
-      final a = (m >> g[0]) & 1;
-      final b = (m >> g[1]) & 1;
-      if (a != b) {
-        m &= ~(1 << g[0]);
-        m &= ~(1 << g[1]);
-      }
-    }
-    return m & 0xFF;
-  }
-
   void _updateMask(int newMask) {
     // B-3（B1）：改走 setParamById 经 spec 链（setter→setInt+镜像），
     // 否则 spec getter（mirrorInt）读不到新值，UI 回显陈旧。
-    widget.model.setParamById(widget.paramKey, _normalizeMask(newMask));
+    widget.model.setParamById(widget.paramKey, newMask & 0xFF);
   }
 
-  /// 成对语义下点击某一位 = 翻转它所属的整对。
   int _toggleBit(int mask, int bit) {
-    if (!widget.pairSemantics) return mask ^ (1 << bit);
-    for (final g in _pairGroups) {
-      if (g.contains(bit)) {
-        final allOn = g.every((x) => (mask & (1 << x)) != 0);
-        var m = mask;
-        for (final x in g) {
-          if (allOn) {
-            m &= ~(1 << x);
-          } else {
-            m |= (1 << x);
-          }
-        }
-        return m;
-      }
-    }
     return mask ^ (1 << bit);
   }
 
@@ -127,140 +126,204 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     return code;
   }
 
-  String _getSummaryText(AppLocalizations l, int mask) {
-    if (mask == 0xFF) return l.routingAllChannels;
-    if (mask == 0x03) return l.routingStereo;
-    if (mask == 0xF7) return l.routingNoSub;
-    if (mask == 0x00) return l.routingAllBypassed;
-    if (mask == 0xF0) return l.routingSurroundOnly;
-
-    int count = 0;
-    for (int i = 0; i < 8; i++) {
-      if ((mask & (1 << i)) != 0) count++;
+  String _getSummaryText(
+    AppLocalizations l,
+    int mask,
+    int ch,
+    bool isStereoPath,
+  ) {
+    if (isStereoPath) {
+      return l.routingStereoPathSummary;
     }
-    return l.routingSelectedCount(count);
+    final activeChannels = channelsFor(ch);
+    int selected = 0;
+    for (final c in activeChannels) {
+      if ((mask & (1 << c.bit)) != 0) selected++;
+    }
+    return l.routingSelectedCount(selected, activeChannels.length);
   }
 
   @override
   Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = l10nOf(context);
-    final mask = _mask;
-    final summary = _getSummaryText(l, mask);
+    return ListenableBuilder(
+      listenable: widget.model,
+      builder: (context, _) {
+        final p = paletteOf(context);
+        final l = l10nOf(context);
+        final ch = widget.model.effectiveChannelCount;
+        final isStereo = widget.model.isStereoPath;
+        final mask = _mask;
+        final summary = _getSummaryText(l, mask, ch, isStereo);
+        final activeChannels = channelsFor(ch);
+        int selected = 0;
+        for (final c in activeChannels) {
+          if ((mask & (1 << c.bit)) != 0) selected++;
+        }
+        final isFull = selected == activeChannels.length;
 
-    return Container(
-      margin: const EdgeInsets.only(top: AuraSpace.sm),
-      decoration: BoxDecoration(
-        color: p.panelRaised.withValues(alpha: 0.35),
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(
-          color: _expanded ? p.accent.withValues(alpha: 0.3) : p.hairline.withValues(alpha: 0.5),
-          width: 1,
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 标题与展开折叠栏
-          InkWell(
+        return Container(
+          margin: const EdgeInsets.only(top: AuraSpace.sm),
+          decoration: BoxDecoration(
+            color: p.panelRaised.withValues(alpha: 0.35),
             borderRadius: BorderRadius.circular(AuraRadius.sm),
-            onTap: () => setState(() => _expanded = !_expanded),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              child: Row(
-                children: [
-                  Icon(
-                    _expanded ? Icons.keyboard_arrow_down_rounded : Icons.keyboard_arrow_right_rounded,
-                    size: 18,
-                    color: p.textDim,
-                  ),
-                  const SizedBox(width: 4),
-                  Icon(Icons.alt_route_rounded, size: 15, color: p.accent),
-                  const SizedBox(width: 6),
-                  Text(
-                    widget.label ?? l.channelRouting,
-                    style: captionOf(p, color: p.text).copyWith(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                    decoration: BoxDecoration(
-                      color: mask == 0xFF
-                          ? p.panelRaised
-                          : p.accent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: mask == 0xFF
-                            ? p.hairline
-                            : p.accent.withValues(alpha: 0.4),
-                      ),
-                    ),
-                    child: Text(
-                      summary,
-                      style: captionOf(p, color: mask == 0xFF ? p.textDim : p.accent).copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 10,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+            border: Border.all(
+              color: _expanded
+                  ? p.accent.withValues(alpha: 0.3)
+                  : p.hairline.withValues(alpha: 0.5),
+              width: 1,
             ),
           ),
-
-          // 展开面板内容
-          if (_expanded)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Divider(height: 1, thickness: 0.5, color: p.hairline),
-                  const SizedBox(height: 8),
-
-                  // 8 声道多选 Chips
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // 标题与展开折叠栏
+              InkWell(
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                onTap: () => setState(() => _expanded = !_expanded),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  child: Row(
                     children: [
-                      for (final ch in _channels)
-                        _buildChannelChip(context, p, ch, mask),
-                    ],
-                  ),
-                  if (widget.pairSemantics) ...[
-                    const SizedBox(height: 8),
-                    Text(
-                      l.routingPairHint,
-                      style: captionOf(p, color: p.textDim).copyWith(fontSize: 10),
-                    ),
-                  ],
-                  const SizedBox(height: 10),
-
-                  // 快速预设按钮行
-                  Row(
-                    children: [
-                      Text(
-                        l.routingPresets,
-                        style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                      Icon(
+                        _expanded
+                            ? Icons.keyboard_arrow_down_rounded
+                            : Icons.keyboard_arrow_right_rounded,
+                        size: 18,
+                        color: p.textDim,
                       ),
-                      const SizedBox(width: 8),
-                      _buildPresetChip(p, l.routingPresetAll, 0xFF, mask),
+                      const SizedBox(width: 4),
+                      Icon(Icons.alt_route_rounded, size: 15, color: p.accent),
                       const SizedBox(width: 6),
-                      _buildPresetChip(p, l.routingPresetStereo, 0x03, mask),
-                      const SizedBox(width: 6),
-                      _buildPresetChip(p, l.routingPresetNoLfe, 0xF7, mask),
-                      const SizedBox(width: 6),
-                      _buildPresetChip(p, l.routingPresetSurround, 0xF0, mask),
+                      Text(
+                        widget.label ?? l.channelRouting,
+                        style: captionOf(p, color: p.text).copyWith(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
+                        ),
+                      ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: (isStereo || isFull)
+                              ? p.panelRaised
+                              : p.accent.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: (isStereo || isFull)
+                                ? p.hairline
+                                : p.accent.withValues(alpha: 0.4),
+                          ),
+                        ),
+                        child: Text(
+                          summary,
+                          style: captionOf(p,
+                                  color: (isStereo || isFull)
+                                      ? p.textDim
+                                      : p.accent)
+                              .copyWith(
+                            fontWeight: FontWeight.bold,
+                            fontSize: 10,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-        ],
-      ),
+
+              // 展开面板内容
+              if (_expanded)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Divider(height: 1, thickness: 0.5, color: p.hairline),
+                      const SizedBox(height: 8),
+
+                      // U-6: 立体声/矩阵路径诚实提示
+                      if (isStereo) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 6),
+                          margin: const EdgeInsets.only(bottom: 8),
+                          decoration: BoxDecoration(
+                            color: p.panelRaised.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: p.hairline),
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(Icons.info_outline_rounded,
+                                  size: 14, color: p.textDim),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  l.routingStereoPathHint,
+                                  style: captionOf(p, color: p.textDim)
+                                      .copyWith(fontSize: 11),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      // U-7: 仅渲染当前布局实际存在的声道 Chips
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        children: [
+                          for (final chDef in activeChannels)
+                            _buildChannelChip(context, p, chDef, mask),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+
+                      // 快速预设按钮行（根据工作声道自适应）
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 6,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            l.routingPresets,
+                            style: captionOf(p, color: p.textDim)
+                                .copyWith(fontSize: 11),
+                          ),
+                          _buildPresetChip(
+                              p, l.routingPresetAll, fullMaskFor(ch), mask),
+                          if (ch == 4) ...[
+                            _buildPresetChip(
+                                p, l.routingPresetFront, 0x03, mask),
+                            _buildPresetChip(
+                                p, l.routingPresetBack, 0xC0, mask),
+                          ] else ...[
+                            _buildPresetChip(
+                                p, l.routingPresetStereo, 0x03, mask),
+                            if (ch >= 6)
+                              _buildPresetChip(p, l.routingPresetNoLfe,
+                                  fullMaskFor(ch) & ~0x08, mask),
+                            if (ch == 6)
+                              _buildPresetChip(
+                                  p, l.routingPresetSurround, 0x30, mask),
+                            if (ch >= 8)
+                              _buildPresetChip(
+                                  p, l.routingPresetSurround, 0xF0, mask),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 

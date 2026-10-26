@@ -373,7 +373,7 @@ const List<ParamRangeRow> kEngineRangeRows = [
   ParamRangeRow('crossfeed.mode', 0.0, 3.0),
   ParamRangeRow('crossfeed.fcut', 300.0, 2000.0),
   ParamRangeRow('crossfeed.feed', 1.0, 15.0),
-  ParamRangeRow('spatial.style', 0.0, 2.0),
+  ParamRangeRow('spatial.style', 0.0, 3.0),
   ParamRangeRow('spatial.room', 0.0, 1.0),
   ParamRangeRow('spatial.width', 0.5, 1.5),
   ParamRangeRow('spatial.center', 0.0, 1.0),
@@ -429,5 +429,5 @@ const List<ParamRangeRow> kEngineRangeRows = [
 
 /// 引擎源码行数哨兵（param_table / internal / create 的行数）。
 /// header/create 变更而未重生 fixture → param_contract_test 行数断言失败。
-const String kContractLineCounts = 'param_table:1327;internal:796;create:507';
+const String kContractLineCounts = 'param_table:1349;internal:816;create:509';
 

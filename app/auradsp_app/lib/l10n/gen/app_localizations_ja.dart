@@ -80,9 +80,16 @@ class AppLocalizationsJa extends AppLocalizations {
       'ステレオペア単位で適用：FL/FR、C/LFE、SL/SR、BL/BR は対で切り替え、単独選択は無効';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 選択';
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total 選択';
   }
+
+  @override
+  String get routingStereoPathSummary => '直通 (ステレオ/マトリクス)';
+
+  @override
+  String get routingStereoPathHint =>
+      'ステレオまたはマトリクスダウンミックス経路のため、全チャンネルが一括処理され、個別チャンネルマスクは無効です。';
 
   @override
   String get flfrOnlyHint => 'フロント FL/FR ペアにのみ適用（マルチチャンネル独立時、サラウンドと LFE は直通）';
@@ -97,6 +104,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get routingPresetAll => '全て';
 
   @override
+  String get routingPresetFront => 'フロントのみ';
+
+  @override
+  String get routingPresetBack => 'リアのみ';
+
+  @override
   String get routingPresetStereo => 'ステレオ';
 
   @override
@@ -104,6 +117,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get routingPresetSurround => 'サラウンド';
+
+  @override
+  String get channelCount => 'チャンネル数';
+
+  @override
+  String get channelCountHint =>
+      '動作チャンネルトポロジ。自動モードは音源とデバイスに従い、手動で2.0 / 4.0 / 5.1 / 7.1に固定も可能です。';
+
+  @override
+  String get channelCountAuto => '自動';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return '自動ネゴシエーション中 · 現在のトポロジ：$count チャンネル';
+  }
 
   @override
   String get setConnStatus => '接続状態';
@@ -807,6 +835,73 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassmonoFreqTooltip => 'この周波数（20～300Hz）以下の低域をモノラル化し、位相干渉と濁りを排除';
 
   @override
+  String get bassShapingMasterHint => 'マスター：いずれかのモジュールが有効なら動作';
+
+  @override
+  String get bassShelfModule => 'ローシェルフ';
+
+  @override
+  String get bassMonoModule => '低域モノラル化';
+
+  @override
+  String get bassMonoDesc => 'クロスオーバー以下の低域をモノラル化し、位相打消しと濁りを解消します。';
+
+  @override
+  String get bassMonoPairs => '対象チャンネルペア';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '$count ペア';
+  }
+
+  @override
+  String get bassMonoPairFront => 'フロント';
+
+  @override
+  String get bassMonoPairCenterLfe => 'センター+LFE';
+
+  @override
+  String get bassMonoPairSide => 'サイド';
+
+  @override
+  String get bassMonoPairBack => 'リア';
+
+  @override
+  String get bassMonoPairAll => 'すべて';
+
+  @override
+  String get bassMonoPairFrontOnly => 'フロントのみ';
+
+  @override
+  String get bassMonoPairUnavailable => '現在の出力にこのペアはありません';
+
+  @override
+  String get bassMonoMerge => '結合方法';
+
+  @override
+  String get bassMonoMergePerPair => 'ペアごと';
+
+  @override
+  String get bassMonoMergeGlobal => 'すべて結合';
+
+  @override
+  String get bassMonoMergeSinglePairHint => 'ペアが1組のみの場合、両モードは同じです';
+
+  @override
+  String get bassMonoNoneSelected => 'チャンネルペア未選択 · 処理しません';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '現在の出力にない $count ペアを無視しました';
+  }
+
+  @override
+  String get bassMonoLfeWarning => 'C/LFE の平均化はセンターと LFE の分離を損ないます（非推奨）';
+
+  @override
+  String get bassMonoStereoPathHint => 'ステレオ/マトリックス/バイノーラル：L/R のみに適用';
+
+  @override
   String get retryNow => '再試行';
 
   @override
@@ -849,6 +944,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get postGain => '出力ゲイン';
+
+  @override
+  String get postPerChannelTrim => 'チャンネル別出力補正';
+
+  @override
+  String get postPerChannelTrimHint => '各出力チャンネルの音量を個別に微調整します（-15 〜 +15 dB）';
+
+  @override
+  String get postResetAllTrim => 'すべてリセット';
 
   @override
   String get equalizer => 'イコライザー';
@@ -2587,6 +2691,17 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get compTfresFine => '高周波';
+
+  @override
+  String get compModePairBadge => 'ペアモード（省電力）';
+
+  @override
+  String get compModePairHint =>
+      'CPUとメモリを節約するため、チャンネルペア単位でコンプレッサースロットを割り当てます。ペアの両方を選択する必要があり、片方のみ選択されたペアはバイパスされます。';
+
+  @override
+  String get compModeSemiSelectedWarning =>
+      'ペアモードは完全なペア選択が必要です。片方のみのペアはバイパスされます';
 
   @override
   String get autoGainCompensation => '自動ゲイン補正';

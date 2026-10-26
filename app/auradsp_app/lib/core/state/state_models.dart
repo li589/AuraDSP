@@ -102,6 +102,8 @@ abstract class ParamDefaults {
 
   // 低频单声道化 (BassMono)
   static const double bassmonoFreq = 120.0; // 120 Hz [20,300]
+  static const int bassmonoPairs = 1; // 0x01 = bit 0 (FL/FR)
+  static const int bassmonoMerge = 0; // 0=per-pair, 1=global
 
   // Haas 差分环绕
   static const double haasDelayMs = 12.0; // 12 ms [0,25]
@@ -164,6 +166,7 @@ abstract class ParamDefaults {
   static const double tubeOutputGain = 0.0; // [-12, 6] dB
   static const bool compAutoGain = false;
   static const double compOutputGain = 0.0; // [-12, 6] dB
+  static const int compMode = 0; // 0=per-channel, 1=per-pair
 
   // 噪声门 + Deesser + 迟滞/底线/保持
   static const double gateThreshold = -40.0; // dB [-60,0]

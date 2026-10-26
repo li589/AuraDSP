@@ -484,17 +484,19 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
 
     const int nsrc = (ch > auradsp_handle_s::kSpatSpk)
                          ? auradsp_handle_s::kSpatSpk : ch;
+    const SpeakerLayout ly = layout_for(ch);
     float srcDeg[8];
     for (int c = 0; c < nsrc; ++c) {
         float base = 0.0f;
-        if (ch == 4) {
-            base = (c == 0) ? -30.0f : (c == 1) ? 30.0f
-                 : (c == 2) ? -150.0f : 150.0f;
-        } else {
-            base = kBinauralDeg[c];
-        }
-        if (c == 2 && ch >= 6) base = 0.0f;
-        srcDeg[c] = spat_wrap_deg((c == 2 && ch >= 6) ? -head : base * width - head);
+        if (c == ly.fl) base = -30.0f;
+        else if (c == ly.fr) base = 30.0f;
+        else if (c == ly.c) base = 0.0f;
+        else if (c == ly.lfe) base = 0.0f;
+        else if (c == ly.sl) base = -110.0f;
+        else if (c == ly.sr) base = 110.0f;
+        else if (c == ly.bl) base = -150.0f;
+        else if (c == ly.br) base = 150.0f;
+        srcDeg[c] = spat_wrap_deg((c == ly.c) ? -head : base * width - head);
     }
 
     float itdSamp[8], farGain[8], farLpA[8];
@@ -564,20 +566,14 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
 
         for (int c = 0; c < nsrc; ++c) {
             const float s = sp[c];
-            if (c == 0) { dryL += s; monoSend += 0.5f * s; }
-            else if (c == 1) { dryR += s; monoSend += 0.5f * s; }
-            else if (c == 2 && ch >= 6) { dryL += s * 0.70710678f;
-                dryR += s * 0.70710678f; monoSend += 0.70710678f * s; }
-            else if (c == 3 && ch >= 6) continue;
-            else if (ch == 4) {
-                if (c == 2) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
-                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
-            } else {
-                if ((c & 1) == 0) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
-                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
-            }
+            if (c == ly.fl) { dryL += s; monoSend += 0.5f * s; }
+            else if (c == ly.fr) { dryR += s; monoSend += 0.5f * s; }
+            else if (c == ly.c) { dryL += s * 0.70710678f; dryR += s * 0.70710678f; monoSend += 0.70710678f * s; }
+            else if (c == ly.lfe) continue;
+            else if (c == ly.sl || c == ly.bl) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
+            else if (c == ly.sr || c == ly.br) { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
 
-            const float m = (c == 2 && ch >= 6) ? s * cGain : s;
+            const float m = (c == ly.c) ? s * cGain : s;
             const float deg = srcDeg[c];
             if (fabsf(deg) < 0.5f) {
                 float l = spat_bq(h->spat_src_pinna[c][0][0],

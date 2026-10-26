@@ -148,16 +148,12 @@ const Set<String> kEngineOnlyIds = {
   // ---- bass：oversample（UI 未暴露） ----
   'bass.intensity',
   'bass.oversample',
-  // ---- bassmono：WP0 多对选择/全局合并（UI 于 WP4 接入） ----
-  'bassmono.merge',
-  'bassmono.pairs',
   // ---- channels：声道数/模式查询（VM/isolate 直发） ----
   'channels.count',
   'channels.countMode',
   'channels.mode',
   // ---- comp：channel_mask（spec id = comp.channels；freq/gain 14 动态段已注册进 comp section） ----
   'comp.channel_mask',
-  'comp.mode',
   // ---- convolver：卷积 IR 查询/清空（副作用指令） ----
   'convolver.clear',
   'convolver.ir.channels',
@@ -1293,7 +1289,8 @@ ${hits.join('\n')}''');
       for (final m in defRe.allMatches(internal)) {
         final member = m.group(1)!;
         if (member.contains('[')) continue; // 数组无聚合默认
-        final val = m.group(2)!.trim();
+        var val = m.group(2)!.trim();
+        val = val.replaceAll('(int32_t)', '').replaceAll('kChMaskAll', '0xFF').replaceAll('kChMaskNoLfe', '0xF7').trim();
         // 非数值默认（如 state{AURADSP_STATE_BYPASS} 内部哨兵）不参与范围校验
         if (!RegExp(r'^-?(?:\d+(?:\.\d+)?|0x[0-9A-Fa-f]+)f?$').hasMatch(val)) {
           continue;

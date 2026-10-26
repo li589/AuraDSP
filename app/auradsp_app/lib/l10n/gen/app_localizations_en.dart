@@ -80,9 +80,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'Applied per stereo pair: FL/FR, C/LFE, SL/SR and BL/BR toggle together; a single channel has no effect';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 Selected';
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total Selected';
   }
+
+  @override
+  String get routingStereoPathSummary => 'Direct (Stereo/Matrix Path)';
+
+  @override
+  String get routingStereoPathHint =>
+      'Current path is stereo or matrix downmix; all channels are processed together and channel masks are inactive.';
 
   @override
   String get flfrOnlyHint =>
@@ -98,6 +105,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingPresetAll => 'All';
 
   @override
+  String get routingPresetFront => 'Front Only';
+
+  @override
+  String get routingPresetBack => 'Back Only';
+
+  @override
   String get routingPresetStereo => 'Stereo';
 
   @override
@@ -105,6 +118,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get routingPresetSurround => 'Surround';
+
+  @override
+  String get channelCount => 'Channel Count';
+
+  @override
+  String get channelCountHint =>
+      'Working channel topology. Auto negotiates with source and device; or manually lock to 2.0 / 4.0 / 5.1 / 7.1.';
+
+  @override
+  String get channelCountAuto => 'Auto';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return 'Auto negotiation active · Current topology: $count ch';
+  }
 
   @override
   String get setConnStatus => 'Connection';
@@ -877,6 +905,79 @@ class AppLocalizationsEn extends AppLocalizations {
       'Frequencies below this cutoff (20–300Hz) are summed to mono to prevent phase cancellation and muddy bass';
 
   @override
+  String get bassShapingMasterHint => 'Master: active when either module is on';
+
+  @override
+  String get bassShelfModule => 'Low Shelf';
+
+  @override
+  String get bassMonoModule => 'Bass Mono';
+
+  @override
+  String get bassMonoDesc =>
+      'Sums bass below the crossover to mono to remove phase cancellation and muddiness.';
+
+  @override
+  String get bassMonoPairs => 'Channel Pairs';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '$count pair(s)';
+  }
+
+  @override
+  String get bassMonoPairFront => 'Front';
+
+  @override
+  String get bassMonoPairCenterLfe => 'Center+LFE';
+
+  @override
+  String get bassMonoPairSide => 'Side';
+
+  @override
+  String get bassMonoPairBack => 'Back';
+
+  @override
+  String get bassMonoPairAll => 'All';
+
+  @override
+  String get bassMonoPairFrontOnly => 'Front only';
+
+  @override
+  String get bassMonoPairUnavailable =>
+      'This pair is not present in the current output';
+
+  @override
+  String get bassMonoMerge => 'Merge Mode';
+
+  @override
+  String get bassMonoMergePerPair => 'Per pair';
+
+  @override
+  String get bassMonoMergeGlobal => 'Merge all';
+
+  @override
+  String get bassMonoMergeSinglePairHint =>
+      'With a single pair selected, both modes are identical';
+
+  @override
+  String get bassMonoNoneSelected =>
+      'No channel pair selected · not processing';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '$count pair(s) ignored (not present in current output)';
+  }
+
+  @override
+  String get bassMonoLfeWarning =>
+      'Averaging C/LFE weakens center/LFE separation; not recommended';
+
+  @override
+  String get bassMonoStereoPathHint =>
+      'Stereo/matrix/binaural path: applies to L/R only';
+
+  @override
   String get retryNow => 'Retry';
 
   @override
@@ -920,6 +1021,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postGain => 'Post Gain';
+
+  @override
+  String get postPerChannelTrim => 'Per-Channel Output Trim';
+
+  @override
+  String get postPerChannelTrimHint =>
+      'Fine-tune individual output channel levels (-15 to +15 dB)';
+
+  @override
+  String get postResetAllTrim => 'Reset All';
 
   @override
   String get equalizer => 'Equalizer';
@@ -2720,6 +2831,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get compTfresFine => 'High Frequency';
+
+  @override
+  String get compModePairBadge => 'Pair Mode';
+
+  @override
+  String get compModePairHint =>
+      'Allocates compression slots per channel-pair to save CPU and memory. Requires selecting both channels of a pair; semi-selected pairs pass through uncompressed.';
+
+  @override
+  String get compModeSemiSelectedWarning =>
+      'Pair mode requires selecting full pairs; semi-selected pairs are bypassed';
 
   @override
   String get autoGainCompensation => 'Auto Gain Compensation';

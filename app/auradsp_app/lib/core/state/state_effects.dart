@@ -67,6 +67,7 @@ extension StateEffects on AppModel {
   /// 频率滑块到下限不关开关）。
   void setBassmonoEnabled(bool on) {
     bassmonoOn = on;
+    if (on) _wantedBassmono = true;
     setInt(ParamId.bassmonoEnable, on ? 1 : 0);
     _notifyUi();
     scheduleAutoSave();
@@ -75,6 +76,20 @@ extension StateEffects on AppModel {
   void setBassmonoFreq(double v) {
     bassmonoFreq = v.clamp(20.0, 300.0);
     setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setBassmonoPairs(int pairs) {
+    bassmonoPairs = pairs.clamp(0, 15);
+    setInt(ParamId.bassmonoPairs, bassmonoPairs);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setBassmonoMerge(int merge) {
+    bassmonoMerge = merge.clamp(0, 1);
+    setInt(ParamId.bassmonoMerge, bassmonoMerge);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -546,6 +561,12 @@ extension StateEffects on AppModel {
     _notifyUi();
   }
 
+  void setCompMode(int v) {
+    compMode = v.clamp(0, 1);
+    setInt(ParamId.compMode, compMode);
+    _notifyUi();
+  }
+
   /// 噪声门（链头第一道）：阈值/attack/release 全下发；自动增益补偿独立开关。
   void setGateEnabled(bool on) {
     gateOn = on;
@@ -971,10 +992,21 @@ extension StateEffects on AppModel {
   /* ---- 低音塑形（Bass Shaping：合并低频搁架与单声道化） ---- */
 
   void setBassShapingEnabled(bool on) {
-    shelfOn = on;
-    bassmonoOn = on;
-    setInt(ParamId.shelfEnable, on ? 1 : 0);
-    setInt(ParamId.bassmonoEnable, on ? 1 : 0);
+    if (on) {
+      if (!_wantedShelf && !_wantedBassmono) {
+        _wantedShelf = true;
+        _wantedBassmono = true;
+      }
+      shelfOn = _wantedShelf;
+      bassmonoOn = _wantedBassmono;
+    } else {
+      _wantedShelf = shelfOn;
+      _wantedBassmono = bassmonoOn;
+      shelfOn = false;
+      bassmonoOn = false;
+    }
+    setInt(ParamId.shelfEnable, shelfOn ? 1 : 0);
+    setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -983,8 +1015,10 @@ extension StateEffects on AppModel {
 
   void setShelfEnabled(bool on) {
     shelfOn = on;
+    if (on) _wantedShelf = true;
     setInt(ParamId.shelfEnable, on ? 1 : 0);
     _notifyUi();
+    scheduleAutoSave();
   }
 
   void setShelfFreq(double f) {
