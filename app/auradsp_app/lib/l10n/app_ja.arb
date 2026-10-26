@@ -178,7 +178,8 @@
   "catTone": "トーン",
   "catEq": "イコライザー",
   "catStage": "ステージ",
-  "catSpace": "空間",
+  "catSpace": "空間効果",
+  "catStereo": "ステレオ",
   "catOutput": "出力",
   "catEffect": "エフェクト",
   "eelMissingSample": "@sample セクションがありません（エンジンがコンパイルを拒否します）",
@@ -745,7 +746,8 @@
   "haasSide": "遅延側",
   "haasSideRight": "右チャンネル",
   "haasSideLeft": "左チャンネル",
-  "fxCatSpatial": "空間",
+  "fxCatSpatial": "空間効果",
+  "fxCatStereoOnly": "ステレオ専用",
   "fxCatLate": "エキサイター・出力",
   "spatialTitle": "空間オーディオ",
   "spatialHint": "仮想 5.0 配置と初期反射で部屋の響きを再現。リバーブ / IR / 音場カードは本カードに統合",
@@ -1171,7 +1173,7 @@
   "autoGainCompensationTooltip": "音量増加に応じて出力レベルを動的に調整し、クリッピングを防止します。",
   "outputGainGate": "出力ゲインゲート",
   "outputGainGateTooltip": "このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。",
-  "arbmagSubtitle": "8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線",
+  "arbmagSubtitle": "8192点因果的最小位相FIR畳み込みエンジンに基づき、AutoEq GraphicEQ曲線や任意の周波数応答曲線を適用して音響特性を高精度に補正します。",
   "arbmagPresetFlat": "フラット (Flat)",
   "arbmagPresetHarman": "Harman ターゲット",
   "arbmagPresetDiffuse": "拡散音場 (Diffuse-Field)",
@@ -1215,6 +1217,66 @@
   },
   "fxCatFront": "前置整形",
   "fxCatCore": "コア処理",
+  "channelCenter": "センター (C)",
+  "channelLfe": "低域効果 (LFE)",
+  "channelSurroundLeft": "左サラウンド (SL)",
+  "channelSurroundRight": "右サラウンド (SR)",
+  "channelBackLeft": "左後サラウンド (BL)",
+  "channelBackRight": "右後サラウンド (BR)",
+  "inputChannelsCount": "{n} チャンネル",
+  "@inputChannelsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceTuned": "{n} ch 微調整済み",
+  "@inputBalanceTuned": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceDefault": "100% デフォルトバランス",
+  "eqPresetElectronic": "エレクトロニック (EDM)",
+  "eqPresetHiphop": "ヒップホップ",
+  "eqPresetAcoustic": "アコースティック",
+  "eqPresetMetal": "メタル",
+  "eqPresetPodcast": "ポッドキャスト",
+  "convIrPrompt": "インパルス応答 (IR) ファイルのパスを入力または選択してください：",
+  "convLoadIr": "IR を読み込む",
+  "ddcVdcPrompt": "VDC 空間補正ファイルのパスを入力または選択してください：",
+  "ddcLoadVdc": "VDC を読み込む",
+  "arbmagPrompt": "AutoEq / GraphicEQ 曲線ファイルのパスを入力または選択してください：",
+  "testAudioWavPrompt": "テストオーディオ (WAV) ファイルのパスを入力または選択してください：",
+  "testAudioMp3Prompt": "MP3 オーディオファイルのパスを入力または選択してください：",
+  "testAudioLoad": "オーディオを読み込む",
+  "pathPickerTitle": "パスを選択",
+  "pathPickerConfirm": "確認",
+  "pathPickerBrowse": "参照...",
+  "pathPickerClear": "クリア",
+  "pathPickerSelectDir": "このディレクトリを選択",
+  "pathPickerErrEmpty": "パスを入力してください",
+  "pathPickerErrDirNotExist": "指定されたディレクトリが存在しないか、アクセス権がありません",
+  "pathPickerErrFileNotExist": "指定されたファイルが存在しないか、アクセス権がありません",
+  "pathPickerErrFormat": "サポートされていないファイル形式です (対応: {exts})",
+  "@pathPickerErrFormat": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
+  "pathPickerSupported": "対応形式: {exts}",
+  "@pathPickerSupported": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
   "errEngineClosed": "エンジン未起動",
   "errEngineBusy": "エンジンビジー、後ほど再試行",
   "errInvalidLength": "長さが無効",

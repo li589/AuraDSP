@@ -7,9 +7,9 @@
  * - Phase 3: 多段交互式 EQ 频谱面板与发光 Q 旋钮
  * - Phase 4: 低音重构（谐波注入）、电子管模拟器卡片与组件级微型延迟徽标
  */
+import 'dart:io';
 import 'dart:math' as math;
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
@@ -24,6 +24,7 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/tray_service.dart';
 import '../core/ui_helpers.dart';
+import '../engine/auradsp_ffi.dart' show kVizChannelMax;
 import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'interactive_eq.dart';
@@ -81,8 +82,13 @@ const Map<String, String?> kEffectCardIndex = {
   'bass': '4',
   'eq': '5',
   'arbmag': '6',
-  'ddc': '7',
-  // 空间（spatial）：单独成类，不编号
+  // 立体声专用（stereo_only）
+  'stereo': '1',
+  'crossfeed': '2',
+  'haas': '3',
+  'convolver': '4',
+  'ddc': '5',
+  // 空间效果（spatial）：单独成类，不编号
   // 激励与输出（late）
   'exciter': '1',
   'tube': '2',
@@ -92,8 +98,9 @@ const Map<String, String?> kEffectCardIndex = {
 /// 效果分类（标题行右侧下拉过滤；无"全部"，按类分页展示）。
 const Map<String, List<String>> kEffectCategories = {
   'front': ['input', 'gate', 'filter', 'bass_shaping'],
-  'core': ['comp', 'dyneq', 'loudness', 'bass', 'eq', 'arbmag', 'ddc'],
-  'spatial': ['spatial', 'reverb', 'stereo', 'haas', 'crossfeed', 'convolver'],
+  'core': ['comp', 'dyneq', 'loudness', 'bass', 'eq', 'arbmag'],
+  'stereo_only': ['stereo', 'crossfeed', 'haas', 'convolver', 'ddc'],
+  'spatial': ['spatial', 'reverb'],
   'late': ['exciter', 'tube', 'post'],
 };
 
@@ -105,6 +112,7 @@ class EffectsPage extends StatelessWidget {
     return switch (id) {
       'front' => l.fxCatFront,
       'core' => l.fxCatCore,
+      'stereo_only' => l.fxCatStereoOnly,
       'spatial' => l.fxCatSpatial,
       'late' => l.fxCatLate,
       _ => l.fxCatCore,
@@ -142,7 +150,7 @@ class EffectsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    const order = ['front', 'core', 'spatial', 'late'];
+    const order = ['front', 'core', 'stereo_only', 'spatial', 'late'];
     return PageScaffold(
       eyebrow: l.pageEffectsEyebrow,
       title: l.pageEffectsTitle,
@@ -301,15 +309,30 @@ class _ValueSliderState extends State<ValueSlider> {
                       : null,
                 ),
               ),
-              const SizedBox(width: AuraSpace.sm),
               SizedBox(
                 width: 60,
-                child: Text(
-                  '${fmt(displayed)} ${widget.unit}',
-                  textAlign: TextAlign.right,
-                  style: monoOf(p,
-                      size: 12,
-                      color: widget.enabled ? p.text : p.textDim),
+                child: Builder(
+                  builder: (context) {
+                    final raw = fmt(displayed).trim();
+                    final u = widget.unit.trim();
+                    final bool alreadyHasUnit = u.isEmpty ||
+                        raw.endsWith(u) ||
+                        raw.endsWith('dB') ||
+                        raw.endsWith('Hz') ||
+                        raw.endsWith('kHz') ||
+                        raw.endsWith('%') ||
+                        raw.endsWith('ms') ||
+                        raw.endsWith('s') ||
+                        raw.endsWith(':1');
+                    final text = alreadyHasUnit ? raw : '$raw $u';
+                    return Text(
+                      text,
+                      textAlign: TextAlign.right,
+                      style: monoOf(p,
+                          size: 12,
+                          color: widget.enabled ? p.text : p.textDim),
+                    );
+                  },
                 ),
               ),
               if (widget.onResetToDefault != null) ...[

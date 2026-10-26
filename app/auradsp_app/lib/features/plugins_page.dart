@@ -42,8 +42,6 @@ class PluginsPage extends StatefulWidget {
 class _PluginsPageState extends State<PluginsPage>
     with WidgetsBindingObserver {
   final TextEditingController _searchCtrl = TextEditingController();
-  final TextEditingController _customDirCtrl = TextEditingController(
-      text: PathMemory.dirFor(PathMemory.slotLastPluginDir) ?? '');
   bool _deepScan = false;
   Timer? _statusTimer;
 
@@ -90,7 +88,6 @@ class _PluginsPageState extends State<PluginsPage>
     WidgetsBinding.instance.removeObserver(this);
     _statusTimer?.cancel();
     _searchCtrl.dispose();
-    _customDirCtrl.dispose();
     super.dispose();
   }
 
@@ -103,63 +100,20 @@ class _PluginsPageState extends State<PluginsPage>
     } catch (e, st) { swallow(e, st); }
   }
 
-  void _addCustomDirDialog(BuildContext context) {
-    _customDirCtrl.clear();
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        final p = paletteOf(ctx);
-        return AlertDialog(
-          backgroundColor: p.panel,
-          title: Text(l10nOf(ctx).plugAddDirTitle, style: sectionOf(p)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(l10nOf(ctx).plugAddDirPrompt,
-                  style: captionOf(p)),
-              const SizedBox(height: AuraSpace.sm),
-              TextField(
-                controller: _customDirCtrl,
-                style: monoOf(p, size: 12),
-                decoration: InputDecoration(
-                  hintText: l10nOf(ctx).plugAddDirExample,
-                  hintStyle: captionOf(p),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(AuraRadius.sm),
-                    borderSide: BorderSide(color: p.hairline),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 8),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(),
-              child: Text(l10nOf(ctx).dlgCancel, style: labelOf(p)),
-            ),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: p.accent,
-                foregroundColor: p.accentContrast,
-              ),
-              onPressed: () {
-                final path = _customDirCtrl.text.trim();
-                if (path.isNotEmpty) {
-                  PathMemory.setDir(PathMemory.slotLastPluginDir, path);
-                  widget.model.addCustomPluginDir(path);
-                  Navigator.of(ctx).pop();
-                  widget.model.pluginManager.scan(deep: _deepScan);
-                }
-              },
-              child: Text(l10nOf(ctx).plugAddScan),
-            ),
-          ],
-        );
-      },
+  Future<void> _addCustomDirDialog(BuildContext context) async {
+    final l = l10nOf(context);
+    final dir = await AuraPathPickerDialog.show(
+      context,
+      title: l.plugAddDirTitle,
+      prompt: l.plugAddDirPrompt,
+      mode: AuraPathPickerMode.directory,
+      memorySlot: PathMemory.slotLastPluginDir,
+      confirmLabel: l.plugAddScan,
     );
+    if (dir != null && dir.isNotEmpty) {
+      widget.model.addCustomPluginDir(dir);
+      widget.model.pluginManager.scan(deep: _deepScan);
+    }
   }
 
   @override

@@ -74,7 +74,11 @@ class _ArbmagCardState extends State<_ArbmagCard> {
   bool _applyGraphicEq(BuildContext context, String text) {
     final l = l10nOf(context);
     final cleaned = _cleanGraphicEqText(text);
-    if (cleaned.isEmpty) return false;
+    if (cleaned.isEmpty) {
+      widget.model.clearArbmag();
+      _codeCtrl.clear();
+      return true;
+    }
     final err = precheckGraphicEq(l, cleaned);
     if (err != null) {
       if (context.mounted) {
@@ -91,16 +95,17 @@ class _ArbmagCardState extends State<_ArbmagCard> {
 
   Future<void> _importFile(BuildContext context) async {
     final l = l10nOf(context);
-    const type = XTypeGroup(label: 'AutoEq GraphicEQ', extensions: ['txt', 'csv']);
-    final file = await openFile(
-      acceptedTypeGroups: [type],
-      initialDirectory: PathMemory.dirFor(PathMemory.slotArbmag) ??
-          PathMemory.fallbackDir(PathMemory.slotArbmag),
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.stArbmag,
+      prompt: l.arbmagPrompt,
+      allowedExtensions: const ['txt', 'csv'],
+      memorySlot: PathMemory.slotArbmag,
+      confirmLabel: l.arbmagImport,
     );
-    if (file != null) {
-      PathMemory.recordPick(PathMemory.slotArbmag, file.path);
+    if (path != null) {
       try {
-        final text = await file.readAsString();
+        final text = await File(path).readAsString();
         final cleaned = _cleanGraphicEqText(text);
         if (!context.mounted) return;
         _applyGraphicEq(context, cleaned);
@@ -132,6 +137,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
     return SectionCard(
       index: kEffectCardIndex['arbmag'],
       title: l.stArbmag,
+      titleTooltip: l.arbmagSubtitle,
       collapsed: !m.arbmagOn,
       latencyMs: m.componentLatency('arbmag').ms,
       latencyEnabled: m.isSectionEnabled('arbmag'),
@@ -149,9 +155,6 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.arbmagSubtitle, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
-
           // 1. 微缩频响曲线预览
           _ArbmagCurvePreview(
             rawString: m.arbmagString,
@@ -168,7 +171,7 @@ class _ArbmagCardState extends State<_ArbmagCard> {
             children: [
               AuraChoiceChip(
                 label: l.arbmagPresetFlat,
-                selected: m.arbmagString == _kPresetFlat,
+                selected: m.arbmagString == _kPresetFlat || m.arbmagString.isEmpty,
                 onTap: () {
                   m.setArbmagString(_kPresetFlat);
                   _codeCtrl.text = _kPresetFlat;

@@ -51,12 +51,18 @@ extension StateEffects on AppModel {
     if (xfeedMode == 0) {
       xfeedFcut = 700.0;
       xfeedFeed = 4.5;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     } else if (xfeedMode == 1) {
       xfeedFcut = 700.0;
       xfeedFeed = 6.0;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     } else if (xfeedMode == 2) {
       xfeedFcut = 650.0;
       xfeedFeed = 9.5;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     }
     setInt(ParamId.xfeedMode, xfeedMode);
     _notifyUi();
@@ -614,6 +620,9 @@ extension StateEffects on AppModel {
   /// 噪声门（链头第一道）：阈值/attack/release 全下发；自动增益补偿独立开关。
   void setGateEnabled(bool on) {
     gateOn = on;
+    if (!on) {
+      setDeesserEnabled(false);
+    }
     setInt(ParamId.gateEnable, on ? 1 : 0);
     _notifyUi();
   }

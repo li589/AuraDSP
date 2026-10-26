@@ -64,14 +64,38 @@ class _InputCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.md),
 
           // 下半区：高级展开区 - 声道平衡功能 (条形控制)
-          AdvancedSection(
-            summary: 'L: ${(model.inputBalanceL * 100).round()}% · R: ${(model.inputBalanceR * 100).round()}%',
-            helpTooltip: l.channelBalanceHint,
-            builder: (ctx) => _InputBalanceAdvanced(
-              model: model,
-              palette: p,
-              l10n: l,
-            ),
+          ValueListenableBuilder<int>(
+            valueListenable: model.vizChannelCount,
+            builder: (context, vizCh, _) {
+              var chCount = vizCh > 0 ? vizCh : model.effectiveChannelCount;
+              if (chCount <= 0) chCount = 2;
+              if (chCount > 8) chCount = 8;
+              if (chCount % 2 != 0) chCount += 1;
+
+              String summary;
+              if (chCount == 2) {
+                summary = 'L: ${(model.inputBalanceL * 100).round()}% · R: ${(model.inputBalanceR * 100).round()}%';
+              } else {
+                var customCount = 0;
+                for (var i = 0; i < chCount; i++) {
+                  final val = i == 0
+                      ? model.inputBalanceL
+                      : (i == 1 ? model.inputBalanceR : model.mirrorFloat('input.balance.${i + 1}', 1.0));
+                  if ((val - 1.0).abs() > 0.001) customCount++;
+                }
+                summary = '${l.inputChannelsCount(chCount)} · ${customCount > 0 ? l.inputBalanceTuned(customCount) : l.inputBalanceDefault}';
+              }
+
+              return AdvancedSection(
+                summary: summary,
+                helpTooltip: l.channelBalanceHint,
+                builder: (ctx) => _InputBalanceAdvanced(
+                  model: model,
+                  palette: p,
+                  l10n: l,
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -276,16 +300,44 @@ class _InputStageMeterMatrix extends StatelessWidget {
         if (page != AppPage.effects) return const SizedBox.shrink();
         return ListenableBuilder(
           listenable: Listenable.merge([
+            model.vizChannelCount,
+            model.vizStageChLevels,
             model.inputMeterInL,
             model.inputMeterInR,
             model.inputMeterOutL,
             model.inputMeterOutR,
           ]),
           builder: (context, _) {
-            final inL = model.inputMeterInL.value;
-            final inR = model.inputMeterInR.value;
-            final outL = model.inputMeterOutL.value;
-            final outR = model.inputMeterOutR.value;
+            var ch = model.vizChannelCount.value;
+            if (ch <= 0) ch = model.effectiveChannelCount;
+            if (ch > 8) ch = 8;
+            if (ch % 2 != 0) ch += 1;
+            if (ch < 2) ch = 2;
+
+            final channels = ChannelRoutingSelector.channelsFor(ch);
+            final grid = model.vizStageChLevels.value;
+
+            double getInDb(int i) {
+              if (ch == 2) {
+                return i == 0 ? model.inputMeterInL.value : model.inputMeterInR.value;
+              }
+              if (grid.length >= 14 * kVizChannelMax && i < kVizChannelMax) {
+                final v = grid[12 * kVizChannelMax + i];
+                if (v > -119.0) return v;
+              }
+              return i == 0 ? model.inputMeterInL.value : (i == 1 ? model.inputMeterInR.value : -120.0);
+            }
+
+            double getOutDb(int i) {
+              if (ch == 2) {
+                return i == 0 ? model.inputMeterOutL.value : model.inputMeterOutR.value;
+              }
+              if (grid.length >= 14 * kVizChannelMax && i < kVizChannelMax) {
+                final v = grid[13 * kVizChannelMax + i];
+                if (v > -119.0) return v;
+              }
+              return i == 0 ? model.inputMeterOutL.value : (i == 1 ? model.inputMeterOutR.value : -120.0);
+            }
 
             return Container(
               padding: const EdgeInsets.symmetric(
@@ -319,19 +371,36 @@ class _InputStageMeterMatrix extends StatelessWidget {
               ),
               const SizedBox(height: AuraSpace.xs + 2),
               // 电平柱阵列
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  // IN L & R
-                  _MeterChannelBar(label: 'L', db: inL, palette: palette),
-                  _MeterChannelBar(label: 'R', db: inR, palette: palette),
-                  // 分贝刻度尺
-                  _MeterScaleRuler(palette: palette),
-                  // OUT L & R
-                  _MeterChannelBar(label: 'L', db: outL, palette: palette),
-                  _MeterChannelBar(label: 'R', db: outR, palette: palette),
-                ],
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    // IN Channels
+                    for (var i = 0; i < channels.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 2),
+                      _MeterChannelBar(
+                        label: ch == 2 ? (i == 0 ? 'L' : 'R') : channels[i].code,
+                        db: getInDb(i),
+                        palette: palette,
+                      ),
+                    ],
+                    const SizedBox(width: 4),
+                    // 分贝刻度尺
+                    _MeterScaleRuler(palette: palette),
+                    const SizedBox(width: 4),
+                    // OUT Channels
+                    for (var i = 0; i < channels.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 2),
+                      _MeterChannelBar(
+                        label: ch == 2 ? (i == 0 ? 'L' : 'R') : channels[i].code,
+                        db: getOutDb(i),
+                        palette: palette,
+                      ),
+                    ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -425,34 +494,49 @@ class _MeterChannelBar extends StatelessWidget {
         ? '-∞'
         : (db >= 0 ? '+${db.toStringAsFixed(1)}' : db.toStringAsFixed(1));
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        // 峰值过载 LED
-        Container(
-          width: 8,
-          height: 3,
-          margin: const EdgeInsets.only(bottom: 2),
-          decoration: BoxDecoration(
-            color: isClip ? const Color(0xFFEF4444) : const Color(0xFFEF4444).withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(1),
+    return SizedBox(
+      width: 28,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          // 峰值过载 LED
+          Container(
+            width: 8,
+            height: 3,
+            margin: const EdgeInsets.only(bottom: 2),
+            decoration: BoxDecoration(
+              color: isClip ? const Color(0xFFEF4444) : const Color(0xFFEF4444).withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(1),
+            ),
           ),
-        ),
-        // 阶梯式 LED 柱
-        CustomPaint(
-          size: const Size(10, 52),
-          painter: _ChannelLedPainter(db: db, palette: palette),
-        ),
-        const SizedBox(height: 3),
-        Text(
-          label,
-          style: monoOf(palette, size: 9, color: palette.text).copyWith(fontWeight: FontWeight.bold),
-        ),
-        Text(
-          dbStr,
-          style: monoOf(palette, size: 7.5, color: isClip ? const Color(0xFFEF4444) : palette.textDim),
-        ),
-      ],
+          // 阶梯式 LED 柱
+          CustomPaint(
+            size: const Size(10, 52),
+            painter: _ChannelLedPainter(db: db, palette: palette),
+          ),
+          const SizedBox(height: 3),
+          SizedBox(
+            width: 28,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              style: monoOf(palette, size: 9, color: palette.text).copyWith(fontWeight: FontWeight.bold),
+            ),
+          ),
+          SizedBox(
+            width: 28,
+            child: Text(
+              dbStr,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.clip,
+              style: monoOf(palette, size: 7.5, color: isClip ? const Color(0xFFEF4444) : palette.textDim),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -518,55 +602,98 @@ class _InputBalanceAdvanced extends StatelessWidget {
     required this.l10n,
   });
 
+  static String channelTitle(String code, AppLocalizations l) {
+    return switch (code) {
+      'FL' || 'L' => l.channelLeft,
+      'FR' || 'R' => l.channelRight,
+      'C' => l.channelCenter,
+      'LFE' => l.channelLfe,
+      'SL' => l.channelSurroundLeft,
+      'SR' => l.channelSurroundRight,
+      'BL' => l.channelBackLeft,
+      'BR' => l.channelBackRight,
+      _ => code,
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    final isCustom = (model.inputBalanceL - 1.0).abs() > 0.001 ||
-        (model.inputBalanceR - 1.0).abs() > 0.001;
+    return ValueListenableBuilder<int>(
+      valueListenable: model.vizChannelCount,
+      builder: (context, vizCh, _) {
+        var chCount = vizCh > 0 ? vizCh : model.effectiveChannelCount;
+        if (chCount <= 0) chCount = 2;
+        if (chCount > 8) chCount = 8;
+        if (chCount % 2 != 0) chCount += 1;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (isCustom)
-          Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: AuraSpace.xs),
-              child: TextButton.icon(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        final channels = ChannelRoutingSelector.channelsFor(chCount);
+
+        double getChBalance(int i) {
+          if (i == 0) return model.getParam(ParamRegistry.inputBalanceL);
+          if (i == 1) return model.getParam(ParamRegistry.inputBalanceR);
+          return model.mirrorFloat('input.balance.${i + 1}', 1.0);
+        }
+
+        void setChBalance(int i, double v) {
+          if (i == 0) {
+            model.setParam(ParamRegistry.inputBalanceL, v);
+          } else if (i == 1) {
+            model.setParam(ParamRegistry.inputBalanceR, v);
+          } else {
+            model.setParamById('input.balance.${i + 1}', v);
+          }
+        }
+
+        bool isCustom = false;
+        for (var i = 0; i < channels.length; i++) {
+          if ((getChBalance(i) - 1.0).abs() > 0.001) {
+            isCustom = true;
+            break;
+          }
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (isCustom)
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: AuraSpace.xs),
+                  child: TextButton.icon(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 13),
+                    label: Text(l.inputReset100, style: const TextStyle(fontSize: 11)),
+                    onPressed: () {
+                      for (var i = 0; i < channels.length; i++) {
+                        setChBalance(i, 1.0);
+                      }
+                    },
+                  ),
                 ),
-                icon: const Icon(Icons.refresh_rounded, size: 13),
-                label: Text(l.inputReset100, style: const TextStyle(fontSize: 11)),
-                onPressed: () {
-                  model.setParam(ParamRegistry.inputBalanceL, 1.0);
-                  model.setParam(ParamRegistry.inputBalanceR, 1.0);
-                },
               ),
-            ),
-          ),
-        _ChannelBalanceBar(
-          label: l10n.channelLeft,
-          value: model.getParam(ParamRegistry.inputBalanceL),
-          masterGainDb: model.getParam(ParamRegistry.inputGain),
-          onChanged: (v) => model.setParam(ParamRegistry.inputBalanceL, v),
-          onReset: () => model.setParam(ParamRegistry.inputBalanceL, 1.0),
-          palette: palette,
-          l10n: l10n,
-        ),
-        const SizedBox(height: AuraSpace.sm),
-        _ChannelBalanceBar(
-          label: l10n.channelRight,
-          value: model.getParam(ParamRegistry.inputBalanceR),
-          masterGainDb: model.getParam(ParamRegistry.inputGain),
-          onChanged: (v) => model.setParam(ParamRegistry.inputBalanceR, v),
-          onReset: () => model.setParam(ParamRegistry.inputBalanceR, 1.0),
-          palette: palette,
-          l10n: l10n,
-        ),
-      ],
+            for (var i = 0; i < channels.length; i++) ...[
+              if (i > 0) const SizedBox(height: AuraSpace.sm),
+              _ChannelBalanceBar(
+                label: chCount == 2
+                    ? (i == 0 ? l.channelLeft : l.channelRight)
+                    : channelTitle(channels[i].code, l),
+                value: getChBalance(i),
+                masterGainDb: model.getParam(ParamRegistry.inputGain),
+                onChanged: (v) => setChBalance(i, v),
+                onReset: () => setChBalance(i, 1.0),
+                palette: palette,
+                l10n: l10n,
+              ),
+            ],
+          ],
+        );
+      },
     );
   }
 }

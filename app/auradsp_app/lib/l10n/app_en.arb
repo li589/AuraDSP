@@ -178,7 +178,8 @@
   "catTone": "Tone",
   "catEq": "EQ",
   "catStage": "Field",
-  "catSpace": "Spatial",
+  "catSpace": "Spatial Effects",
+  "catStereo": "Stereo",
   "catOutput": "Output",
   "catEffect": "FX",
   "eelMissingSample": "Missing @sample section (engine will refuse to compile)",
@@ -745,7 +746,8 @@
   "haasSide": "Delay side",
   "haasSideRight": "Right channel",
   "haasSideLeft": "Left channel",
-  "fxCatSpatial": "Spatial",
+  "fxCatSpatial": "Spatial Effects",
+  "fxCatStereoOnly": "Stereo Only",
   "fxCatLate": "Exciter & Output",
   "spatialTitle": "Spatial",
   "spatialHint": "Virtual 5.0 layout plus early reflections — room sound on headphones. Reverb / IR / soundstage cards live here now",
@@ -1171,7 +1173,7 @@
   "autoGainCompensationTooltip": "Dynamically compensates output level to prevent inter-stage clipping.",
   "outputGainGate": "Output Gain Trim",
   "outputGainGateTooltip": "Fine-tune the output level of this stage (-12.0 to +6.0 dB).",
-  "arbmagSubtitle": "8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves",
+  "arbmagSubtitle": "Based on an 8192-point causal minimum-phase FIR convolution engine. Supports AutoEq GraphicEQ curves or custom frequency responses to calibrate headphones and speakers with high precision.",
   "arbmagPresetFlat": "Flat",
   "arbmagPresetHarman": "Harman Target",
   "arbmagPresetDiffuse": "Diffuse-Field",
@@ -1215,6 +1217,66 @@
   },
   "fxCatFront": "Front Shaping",
   "fxCatCore": "Core Processing",
+  "channelCenter": "Center (C)",
+  "channelLfe": "LFE",
+  "channelSurroundLeft": "Surround Left (SL)",
+  "channelSurroundRight": "Surround Right (SR)",
+  "channelBackLeft": "Back Left (BL)",
+  "channelBackRight": "Back Right (BR)",
+  "inputChannelsCount": "{n} Channels",
+  "@inputChannelsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceTuned": "Tuned {n} ch",
+  "@inputBalanceTuned": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceDefault": "100% Default Balance",
+  "eqPresetElectronic": "Electronic (EDM)",
+  "eqPresetHiphop": "Hip-Hop",
+  "eqPresetAcoustic": "Acoustic",
+  "eqPresetMetal": "Metal",
+  "eqPresetPodcast": "Podcast",
+  "convIrPrompt": "Enter or select Impulse Response (IR) file path:",
+  "convLoadIr": "Load IR",
+  "ddcVdcPrompt": "Enter or select VDC calibration file path:",
+  "ddcLoadVdc": "Load VDC",
+  "arbmagPrompt": "Enter or select AutoEq / GraphicEQ curve file path:",
+  "testAudioWavPrompt": "Enter or select test audio (WAV) file path:",
+  "testAudioMp3Prompt": "Enter or select MP3 audio file path:",
+  "testAudioLoad": "Load Audio",
+  "pathPickerTitle": "Select Path",
+  "pathPickerConfirm": "Confirm",
+  "pathPickerBrowse": "Browse...",
+  "pathPickerClear": "Clear",
+  "pathPickerSelectDir": "Select This Directory",
+  "pathPickerErrEmpty": "Path cannot be empty",
+  "pathPickerErrDirNotExist": "Directory does not exist or access denied",
+  "pathPickerErrFileNotExist": "File does not exist or access denied",
+  "pathPickerErrFormat": "Unsupported file format (supported: {exts})",
+  "@pathPickerErrFormat": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
+  "pathPickerSupported": "Supported formats: {exts}",
+  "@pathPickerSupported": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
   "errEngineClosed": "Engine is not running",
   "errEngineBusy": "Engine busy, retry later",
   "errInvalidLength": "Invalid length",

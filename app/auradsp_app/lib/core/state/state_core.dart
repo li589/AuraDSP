@@ -29,12 +29,12 @@ extension StateCore on AppModel {
     _mirror(id, v.toDouble());
     _markSent(id);
     _notifyUi();
-    if (id == 'bass.enable' && v == 0) {
-      // 先渐变到 0 再关闭，避免直接置 0 造成「哒」一声。
-      _disableBassRamped();
-    } else {
-      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
+    if (id == 'gate.enable' && v == 0) {
+      if (deesserOn) {
+        setDeesserEnabled(false);
+      }
     }
+    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
     scheduleAutoSave();
   }
 
@@ -42,17 +42,7 @@ extension StateCore on AppModel {
     _mirror(id, v);
     _markSent(id);
     _notifyUi();
-    if (id == 'bass.gain') {
-      // 低音拖动约 60Hz 触发，而 BassBoostSetParam 运行在**驱动 WASAPI 的
-      // 同一线程**上（setParam 与 pump 同属一个 isolate）——不存在数据竞争，
-      // 真实成因是每次调用既阻塞音频泵、又造成系数阶跃。
-      // 单纯节流只降低频率、仍是阶跃（实测仍有「哒哒」声），故改为
-      // 20Hz 起步的**渐变爬坡**：每步最多 0.6 dB，等效于等功率交叉淡化。
-      _bassRampTarget = v;
-      _kickBassRamp();
-    } else {
-      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
-    }
+    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
     scheduleAutoSave();
   }
 
@@ -223,6 +213,16 @@ extension StateCore on AppModel {
         break;
       case 'crossfeed.mode':
         xfeedMode = v.toInt();
+        if (xfeedMode == 0) {
+          xfeedFcut = 700.0;
+          xfeedFeed = 4.5;
+        } else if (xfeedMode == 1) {
+          xfeedFcut = 700.0;
+          xfeedFeed = 6.0;
+        } else if (xfeedMode == 2) {
+          xfeedFcut = 650.0;
+          xfeedFeed = 9.5;
+        }
         break;
       case 'crossfeed.fcut':
         xfeedFcut = v;

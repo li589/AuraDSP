@@ -187,7 +187,8 @@
   "catTone": "音色",
   "catEq": "均衡",
   "catStage": "声场",
-  "catSpace": "空间",
+  "catSpace": "空间效果",
+  "catStereo": "立体声",
   "catOutput": "输出",
   "catEffect": "效果",
   "eelMissingSample": "缺少 @sample 段（引擎会拒绝编译）",
@@ -761,7 +762,8 @@
   "haasSide": "延迟侧",
   "haasSideRight": "右声道",
   "haasSideLeft": "左声道",
-  "fxCatSpatial": "空间",
+  "fxCatSpatial": "空间效果",
+  "fxCatStereoOnly": "立体声专用",
   "fxCatLate": "激励与输出",
   "spatialTitle": "空间音效",
   "spatialHint": "虚拟 5.0 摆位加早期反射，耳机上重建音箱房。混响 / 脉冲 / 声场卡片已并入本卡",
@@ -1187,7 +1189,7 @@
   "autoGainCompensationTooltip": "随音效提升动态平抑输出电平，防止多级叠加导致削波失真",
   "outputGainGate": "输出增益门",
   "outputGainGateTooltip": "微调该效果器出口电平 (-12.0 ~ +6.0 dB)",
-  "arbmagSubtitle": "8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线",
+  "arbmagSubtitle": "基于 8192 点因果最小相位 FIR 卷积引擎，支持导入 AutoEq GraphicEQ 曲线或自定义任意频响响应，高精度校正耳机与扬声器频响缺陷。",
   "arbmagPresetFlat": "平直 (Flat)",
   "arbmagPresetHarman": "Harman 目标曲线",
   "arbmagPresetDiffuse": "扩散场 (Diffuse-Field)",
@@ -1231,6 +1233,66 @@
   },
   "fxCatFront": "前置整形",
   "fxCatCore": "核心处理",
+  "channelCenter": "中央声道 (C)",
+  "channelLfe": "低频效果 (LFE)",
+  "channelSurroundLeft": "左环绕 (SL)",
+  "channelSurroundRight": "右环绕 (SR)",
+  "channelBackLeft": "左后环绕 (BL)",
+  "channelBackRight": "右后环绕 (BR)",
+  "inputChannelsCount": "{n} 声道",
+  "@inputChannelsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceTuned": "已微调 {n} 声道",
+  "@inputBalanceTuned": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceDefault": "100% 默认平衡",
+  "eqPresetElectronic": "电子舞曲 (EDM)",
+  "eqPresetHiphop": "嘻哈说唱 (Hip-Hop)",
+  "eqPresetAcoustic": "原声不插电 (Acoustic)",
+  "eqPresetMetal": "重金属 (Metal)",
+  "eqPresetPodcast": "播客语音 (Podcast)",
+  "convIrPrompt": "请输入或选择脉冲响应 (IR) 文件路径：",
+  "convLoadIr": "加载 IR",
+  "ddcVdcPrompt": "请输入或选择 VDC 空间校正文件路径：",
+  "ddcLoadVdc": "加载 VDC",
+  "arbmagPrompt": "请输入或选择 AutoEq / GraphicEQ 曲线文件路径：",
+  "testAudioWavPrompt": "请输入或选择测试音频 (WAV) 文件路径：",
+  "testAudioMp3Prompt": "请输入或选择 MP3 音频文件路径：",
+  "testAudioLoad": "加载音频",
+  "pathPickerTitle": "选择路径",
+  "pathPickerConfirm": "确认",
+  "pathPickerBrowse": "浏览...",
+  "pathPickerClear": "清空",
+  "pathPickerSelectDir": "选择此目录",
+  "pathPickerErrEmpty": "路径不能为空",
+  "pathPickerErrDirNotExist": "指定的目录不存在或无访问权限",
+  "pathPickerErrFileNotExist": "指定的文件不存在或无访问权限",
+  "pathPickerErrFormat": "不支持的文件格式 (仅支持: {exts})",
+  "@pathPickerErrFormat": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
+  "pathPickerSupported": "支持格式: {exts}",
+  "@pathPickerSupported": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
   "errEngineClosed": "引擎未运行",
   "errEngineBusy": "引擎忙，请稍后重试",
   "errInvalidLength": "长度无效",

@@ -567,7 +567,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get catStage => 'Field';
 
   @override
-  String get catSpace => 'Spatial';
+  String get catSpace => 'Spatial Effects';
+
+  @override
+  String get catStereo => 'Stereo';
 
   @override
   String get catOutput => 'Output';
@@ -2129,7 +2132,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get haasSideLeft => 'Left channel';
 
   @override
-  String get fxCatSpatial => 'Spatial';
+  String get fxCatSpatial => 'Spatial Effects';
+
+  @override
+  String get fxCatStereoOnly => 'Stereo Only';
 
   @override
   String get fxCatLate => 'Exciter & Output';
@@ -2876,7 +2882,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get arbmagSubtitle =>
-      '8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves';
+      'Based on an 8192-point causal minimum-phase FIR convolution engine. Supports AutoEq GraphicEQ curves or custom frequency responses to calibrate headphones and speakers with high precision.';
 
   @override
   String get arbmagPresetFlat => 'Flat';
@@ -2948,6 +2954,114 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fxCatCore => 'Core Processing';
+
+  @override
+  String get channelCenter => 'Center (C)';
+
+  @override
+  String get channelLfe => 'LFE';
+
+  @override
+  String get channelSurroundLeft => 'Surround Left (SL)';
+
+  @override
+  String get channelSurroundRight => 'Surround Right (SR)';
+
+  @override
+  String get channelBackLeft => 'Back Left (BL)';
+
+  @override
+  String get channelBackRight => 'Back Right (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n Channels';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return 'Tuned $n ch';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% Default Balance';
+
+  @override
+  String get eqPresetElectronic => 'Electronic (EDM)';
+
+  @override
+  String get eqPresetHiphop => 'Hip-Hop';
+
+  @override
+  String get eqPresetAcoustic => 'Acoustic';
+
+  @override
+  String get eqPresetMetal => 'Metal';
+
+  @override
+  String get eqPresetPodcast => 'Podcast';
+
+  @override
+  String get convIrPrompt => 'Enter or select Impulse Response (IR) file path:';
+
+  @override
+  String get convLoadIr => 'Load IR';
+
+  @override
+  String get ddcVdcPrompt => 'Enter or select VDC calibration file path:';
+
+  @override
+  String get ddcLoadVdc => 'Load VDC';
+
+  @override
+  String get arbmagPrompt =>
+      'Enter or select AutoEq / GraphicEQ curve file path:';
+
+  @override
+  String get testAudioWavPrompt =>
+      'Enter or select test audio (WAV) file path:';
+
+  @override
+  String get testAudioMp3Prompt => 'Enter or select MP3 audio file path:';
+
+  @override
+  String get testAudioLoad => 'Load Audio';
+
+  @override
+  String get pathPickerTitle => 'Select Path';
+
+  @override
+  String get pathPickerConfirm => 'Confirm';
+
+  @override
+  String get pathPickerBrowse => 'Browse...';
+
+  @override
+  String get pathPickerClear => 'Clear';
+
+  @override
+  String get pathPickerSelectDir => 'Select This Directory';
+
+  @override
+  String get pathPickerErrEmpty => 'Path cannot be empty';
+
+  @override
+  String get pathPickerErrDirNotExist =>
+      'Directory does not exist or access denied';
+
+  @override
+  String get pathPickerErrFileNotExist =>
+      'File does not exist or access denied';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return 'Unsupported file format (supported: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return 'Supported formats: $exts';
+  }
 
   @override
   String get errEngineClosed => 'Engine is not running';

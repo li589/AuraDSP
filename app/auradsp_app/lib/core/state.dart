@@ -960,10 +960,6 @@ class AppModel extends ChangeNotifier {
   Timer? _eqCurveTimer;
   DateTime _lastEqCurveSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  double _bassRampCur = 0.0;
-  double? _bassRampTarget;
-  Timer? _bassGainTimer;
-  bool _bassDisableAfterRamp = false;
 
   /// 引擎实测响应（dB），长度 [eqResponsePoints]；null 表示尚未取得。
   /// 绘制时应与 [eqResponseCurve] 比对，不一致说明已过期，需回退近似。
@@ -1098,7 +1094,6 @@ class AppModel extends ChangeNotifier {
       _onWindowVisibilityChanged,
     );
     _debounceSaveTimer?.cancel();
-    _bassGainTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。

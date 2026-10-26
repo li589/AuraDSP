@@ -490,66 +490,77 @@ extension EqState on AppModel {
   void applyEqPreset(String style) {
     eqPresetName = style;
     final newGains = List.filled(eqFrequencies.length, 0.0);
+
+    // 经典声学滤波器连续基函数 (对数频率空间连续平滑，杜绝高段数粗糙阶跃)
+    double bell(double x, double x0, double sigma, double gain) {
+      final d = (x - x0) / sigma;
+      return gain * math.exp(-0.5 * d * d);
+    }
+    double lowShelf(double x, double x0, double slope, double gain) {
+      return gain / (1.0 + math.exp(slope * (x - x0)));
+    }
+    double highShelf(double x, double x0, double slope, double gain) {
+      return gain / (1.0 + math.exp(-slope * (x - x0)));
+    }
+
     for (var i = 0; i < eqFrequencies.length; i++) {
       final f = eqFrequencies[i];
-      final logF = math.log(f) / math.ln10; // log10
+      final x = math.log(f) / math.ln10; // log10(f) (20Hz ≈ 1.30, 1kHz = 3.0, 20kHz ≈ 4.30)
       var g = 0.0;
       switch (style) {
         case 'pop':
-          if (logF <= 2.2) {
-            g = 3.0 * (1.0 - (logF - 1.3) / 0.9);
-          } else if (logF <= 3.2) {
-            g = -1.0;
-          } else {
-            g = 3.0 * ((logF - 3.2) / 1.1);
-          }
+          g += bell(x, 1.95, 0.35, 3.5);
+          g += bell(x, 2.7, 0.3, -1.2);
+          g += bell(x, 3.45, 0.35, 2.5);
+          g += highShelf(x, 3.9, 4.0, 2.5);
         case 'rock':
-          if (logF <= 2.0) {
-            g = 4.5;
-          } else if (logF <= 3.0) {
-            g = -2.0;
-          } else if (logF <= 3.6) {
-            g = 1.0;
-          } else {
-            g = 4.0;
-          }
+          g += bell(x, 1.9, 0.35, 4.8);
+          g += bell(x, 2.7, 0.4, -2.5);
+          g += bell(x, 3.55, 0.3, 3.0);
+          g += highShelf(x, 3.95, 4.0, 3.8);
         case 'jazz':
-          if (logF <= 2.3) {
-            g = 2.5;
-          } else if (logF <= 3.3) {
-            g = 1.5;
-          } else {
-            g = -1.0;
-          }
+          g += bell(x, 2.25, 0.4, 3.0);
+          g += bell(x, 3.0, 0.4, 1.5);
+          g += highShelf(x, 3.8, 3.5, -1.5);
         case 'classical':
-          if (logF >= 3.0 && logF <= 3.8) {
-            g = 1.5;
-          } else {
-            g = 0.5;
-          }
+          g += bell(x, 1.7, 0.3, 1.0);
+          g += bell(x, 3.2, 0.5, 1.2);
+          g += highShelf(x, 3.8, 3.0, 2.2);
         case 'vocal':
-          if (logF <= 2.0) {
-            g = -3.5;
-          } else if (logF >= 2.8 && logF <= 3.6) {
-            g = 4.0;
-          } else {
-            g = 0.0;
-          }
+          g += lowShelf(x, 2.0, 5.0, -3.5);
+          g += bell(x, 3.45, 0.35, 4.5);
+          g += bell(x, 3.9, 0.3, 1.5);
         case 'smile':
-          final x = (logF - 2.8) / 1.5;
-          g = (x * x) * 8.0 - 3.0;
+          g += lowShelf(x, 2.1, 3.5, 5.5);
+          g += bell(x, 3.0, 0.5, -2.8);
+          g += highShelf(x, 3.9, 3.5, 5.5);
         case 'bass_boost':
-          if (logF <= 2.3) {
-            g = 6.0 * (1.0 - (logF - 1.3) / 1.0);
-          } else {
-            g = 0.0;
-          }
+          g += lowShelf(x, 2.2, 4.0, 6.5);
+          g += bell(x, 1.8, 0.25, 2.0);
         case 'treble_boost':
-          if (logF >= 3.3) {
-            g = 5.0 * ((logF - 3.3) / 1.0);
-          } else {
-            g = 0.0;
-          }
+          g += highShelf(x, 3.5, 3.5, 6.0);
+        case 'electronic':
+          g += bell(x, 1.75, 0.3, 6.0);
+          g += bell(x, 2.1, 0.3, 3.0);
+          g += bell(x, 2.7, 0.35, -1.8);
+          g += highShelf(x, 3.85, 4.0, 4.5);
+        case 'hiphop':
+          g += bell(x, 1.8, 0.3, 6.5);
+          g += bell(x, 2.4, 0.35, 2.0);
+          g += bell(x, 3.4, 0.3, 2.0);
+        case 'acoustic':
+          g += bell(x, 2.0, 0.35, 2.0);
+          g += bell(x, 3.3, 0.4, 2.5);
+          g += highShelf(x, 3.9, 4.0, 2.0);
+        case 'metal':
+          g += bell(x, 1.9, 0.35, 5.0);
+          g += bell(x, 2.85, 0.4, -4.5);
+          g += bell(x, 3.55, 0.3, 3.5);
+          g += highShelf(x, 4.0, 4.5, 4.5);
+        case 'podcast':
+          g += lowShelf(x, 2.1, 5.0, -5.0);
+          g += bell(x, 3.4, 0.35, 4.0);
+          g += highShelf(x, 4.0, 4.0, -2.0);
         case 'flat':
         default:
           g = 0.0;

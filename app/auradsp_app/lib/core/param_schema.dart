@@ -1215,7 +1215,7 @@ abstract final class ParamRegistry {
     id: 'comp.threshold', section: 'comp', key: 'threshold',
     type: ParamType.float, defaultValue: -18.0,
     min: -48.0, max: 0.0, step: 0.5, unit: 'dB',
-    formatter: (v) => '${v.toStringAsFixed(1)} dB',
+    formatter: (v) => v.toStringAsFixed(1),
     getter: (m) => m.compThreshold,
     setter: (m, v) => m.setCompThreshold(v),
   );
@@ -1223,14 +1223,14 @@ abstract final class ParamRegistry {
     id: 'comp.ratio', section: 'comp', key: 'ratio',
     type: ParamType.float, defaultValue: 4.0,
     min: 1.0, max: 20.0, step: 0.1, unit: ':1',
-    formatter: (v) => '${v.toStringAsFixed(1)}:1',
+    formatter: (v) => v.toStringAsFixed(1),
     getter: (m) => m.compRatio,
     setter: (m, v) => m.setCompRatio(v),
   );
   static final compFreq1 = ParamSpec<double>(
     id: 'comp.freq1', section: 'comp', key: 'freq1',
     type: ParamType.float, defaultValue: 95.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[0],
     setter: (m, v) => m.setCompFreq(0, v),
@@ -1238,7 +1238,7 @@ abstract final class ParamRegistry {
   static final compFreq2 = ParamSpec<double>(
     id: 'comp.freq2', section: 'comp', key: 'freq2',
     type: ParamType.float, defaultValue: 200.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[1],
     setter: (m, v) => m.setCompFreq(1, v),
@@ -1246,7 +1246,7 @@ abstract final class ParamRegistry {
   static final compFreq3 = ParamSpec<double>(
     id: 'comp.freq3', section: 'comp', key: 'freq3',
     type: ParamType.float, defaultValue: 400.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[2],
     setter: (m, v) => m.setCompFreq(2, v),
@@ -1254,7 +1254,7 @@ abstract final class ParamRegistry {
   static final compFreq4 = ParamSpec<double>(
     id: 'comp.freq4', section: 'comp', key: 'freq4',
     type: ParamType.float, defaultValue: 800.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[3],
     setter: (m, v) => m.setCompFreq(3, v),
@@ -1262,7 +1262,7 @@ abstract final class ParamRegistry {
   static final compFreq5 = ParamSpec<double>(
     id: 'comp.freq5', section: 'comp', key: 'freq5',
     type: ParamType.float, defaultValue: 1600.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[4],
     setter: (m, v) => m.setCompFreq(4, v),
@@ -1270,7 +1270,7 @@ abstract final class ParamRegistry {
   static final compFreq6 = ParamSpec<double>(
     id: 'comp.freq6', section: 'comp', key: 'freq6',
     type: ParamType.float, defaultValue: 3400.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[5],
     setter: (m, v) => m.setCompFreq(5, v),
@@ -1278,7 +1278,7 @@ abstract final class ParamRegistry {
   static final compFreq7 = ParamSpec<double>(
     id: 'comp.freq7', section: 'comp', key: 'freq7',
     type: ParamType.float, defaultValue: 7500.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[6],
     setter: (m, v) => m.setCompFreq(6, v),

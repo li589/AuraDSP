@@ -528,7 +528,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catStage => '声场';
 
   @override
-  String get catSpace => '空间';
+  String get catSpace => '空间效果';
+
+  @override
+  String get catStereo => '立体声';
 
   @override
   String get catOutput => '输出';
@@ -2006,7 +2009,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get haasSideLeft => '左声道';
 
   @override
-  String get fxCatSpatial => '空间';
+  String get fxCatSpatial => '空间效果';
+
+  @override
+  String get fxCatStereoOnly => '立体声专用';
 
   @override
   String get fxCatLate => '激励与输出';
@@ -2715,7 +2721,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outputGainGateTooltip => '微调该效果器出口电平 (-12.0 ~ +6.0 dB)';
 
   @override
-  String get arbmagSubtitle => '8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线';
+  String get arbmagSubtitle =>
+      '基于 8192 点因果最小相位 FIR 卷积引擎，支持导入 AutoEq GraphicEQ 曲线或自定义任意频响响应，高精度校正耳机与扬声器频响缺陷。';
 
   @override
   String get arbmagPresetFlat => '平直 (Flat)';
@@ -2784,6 +2791,110 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fxCatCore => '核心处理';
+
+  @override
+  String get channelCenter => '中央声道 (C)';
+
+  @override
+  String get channelLfe => '低频效果 (LFE)';
+
+  @override
+  String get channelSurroundLeft => '左环绕 (SL)';
+
+  @override
+  String get channelSurroundRight => '右环绕 (SR)';
+
+  @override
+  String get channelBackLeft => '左后环绕 (BL)';
+
+  @override
+  String get channelBackRight => '右后环绕 (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n 声道';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return '已微调 $n 声道';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% 默认平衡';
+
+  @override
+  String get eqPresetElectronic => '电子舞曲 (EDM)';
+
+  @override
+  String get eqPresetHiphop => '嘻哈说唱 (Hip-Hop)';
+
+  @override
+  String get eqPresetAcoustic => '原声不插电 (Acoustic)';
+
+  @override
+  String get eqPresetMetal => '重金属 (Metal)';
+
+  @override
+  String get eqPresetPodcast => '播客语音 (Podcast)';
+
+  @override
+  String get convIrPrompt => '请输入或选择脉冲响应 (IR) 文件路径：';
+
+  @override
+  String get convLoadIr => '加载 IR';
+
+  @override
+  String get ddcVdcPrompt => '请输入或选择 VDC 空间校正文件路径：';
+
+  @override
+  String get ddcLoadVdc => '加载 VDC';
+
+  @override
+  String get arbmagPrompt => '请输入或选择 AutoEq / GraphicEQ 曲线文件路径：';
+
+  @override
+  String get testAudioWavPrompt => '请输入或选择测试音频 (WAV) 文件路径：';
+
+  @override
+  String get testAudioMp3Prompt => '请输入或选择 MP3 音频文件路径：';
+
+  @override
+  String get testAudioLoad => '加载音频';
+
+  @override
+  String get pathPickerTitle => '选择路径';
+
+  @override
+  String get pathPickerConfirm => '确认';
+
+  @override
+  String get pathPickerBrowse => '浏览...';
+
+  @override
+  String get pathPickerClear => '清空';
+
+  @override
+  String get pathPickerSelectDir => '选择此目录';
+
+  @override
+  String get pathPickerErrEmpty => '路径不能为空';
+
+  @override
+  String get pathPickerErrDirNotExist => '指定的目录不存在或无访问权限';
+
+  @override
+  String get pathPickerErrFileNotExist => '指定的文件不存在或无访问权限';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return '不支持的文件格式 (仅支持: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return '支持格式: $exts';
+  }
 
   @override
   String get errEngineClosed => '引擎未运行';
