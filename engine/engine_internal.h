@@ -299,8 +299,11 @@ struct Params {
     std::atomic<float>    arbmag_outgain{0.0f};
     std::atomic<int32_t>  arbmag_autogain{0};
     /* 多声道独立处理声道掩码 (Category A)
-     * X-6: 不改变各效果默认掩码；用 kChMaskAll (0xFF) / kChMaskNoLfe (0xF7) 常量。
-     * dyneq/exciter 默认排除 LFE (0xF7)，其余效果默认包含全声道 (0xFF)。 */
+     * 初始默认：dyneq/exciter = kChMaskNoLfe (0xF7，排除 LFE)，其余 = kChMaskAll (0xFF)。
+     * X-6（2026-10-26 修复）：channels.count 切换时 dyneq/exciter 的默认掩码随布局
+     * 平移（ch_mask_no_lfe_for：2/8ch→0xF7、4ch→0x0F、6ch→0x37），仅当仍为旧布局
+     * 默认值才改写，用户自定义掩码保留；其余效果 0xFF 在所有布局下均含全部有效声道，
+     * 无需平移。 */
     std::atomic<int32_t>  filter_channels{(int32_t)kChMaskAll};
     std::atomic<int32_t>  shelf_channels{(int32_t)kChMaskAll};
     std::atomic<int32_t>  eq_channels{(int32_t)kChMaskAll};

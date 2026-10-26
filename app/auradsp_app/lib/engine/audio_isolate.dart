@@ -820,6 +820,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iSpBi = idp(ParamId.spatialBinaural);
             final iSpH = idp(ParamId.spatialHeadAzim), iSpT = idp(ParamId.spatialHeadTrack);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
+            // X-6 修复配套：dyneq/exciter 掩码默认值随 channels.count 按布局
+            // 平移（4ch 0x0F / 6ch 0x37），UI 必须回读才能与引擎镜像一致。
+            final iExC = idp('exciter.channels'), iDyC = idp('dyneq.channels');
             // P-010：每效果输出增益门 + 自动补偿
             final iBoG = idp(ParamId.bassOutGain), iBoA = idp(ParamId.bassAutoGain);
             final iEoG = idp(ParamId.eqOutGain), iEoA = idp(ParamId.eqAutoGain);
@@ -992,6 +995,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'exciterEnable': rdInt(iExE) ?? 0,
                 'exciterAmount': rdFloat(iExA) ?? 0.3,
                 'exciterHifreq': rdFloat(iExF) ?? 5000.0,
+                'exciterChannels': rdInt(iExC) ?? 0xF7,
+                'dyneqChannels': rdInt(iDyC) ?? 0xF7,
                 'bassOutGain': rdFloat(iBoG) ?? 0.0,
                 'bassAutoGain': rdInt(iBoA) ?? 0,
                 'eqOutGain': rdFloat(iEoG) ?? 0.0,

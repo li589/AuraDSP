@@ -13,6 +13,22 @@ constexpr uint32_t kChMaskBR    = (1u << 7); /* 0x80: Back Right */
 constexpr uint32_t kChMaskAll   = 0xFF;      /* 0xFF: 全声道 (255) */
 constexpr uint32_t kChMaskNoLfe = 0xF7;      /* 0xF7: 排除 LFE (247) */
 
+/* 按布局返回"除 LFE 外全部有效声道"的默认掩码（dyneq/exciter 默认随
+ * channels.count 平移时使用）：
+ *   2ch: 0xF7  保持 ABI 初始默认不变；有效位 0x03 = FL/FR，无 LFE 可排
+ *   4ch: 0x0F  Quad 无 LFE：FL/FR/BL/BR 全开（0xF7 的 bit3 在 4ch 是 BR，
+ *              直接用 0xF7 会默认跳过 BR——即本次修复点）
+ *   6ch: 0x37  排除 LFE：FL/FR/C/SL/SR
+ *   8ch: 0xF7  排除 LFE：全声道
+ * 非标准声道数回落 kChMaskNoLfe。 */
+inline uint32_t ch_mask_no_lfe_for(int ch) {
+    switch (ch) {
+        case 4:  return 0x0F;  /* 1|2|4|8 */
+        case 6:  return 0x37;  /* 1|2|4|16|32 */
+        default: return kChMaskNoLfe;  /* 2ch/8ch 及未知：0xF7 */
+    }
+}
+
 /* 标准四对位掩码与首声道索引 (Pair 0: FL/FR, Pair 1: C/LFE, Pair 2: SL/SR, Pair 3: BL/BR) */
 constexpr uint32_t kChMaskPair[4] = {0x03, 0x0C, 0x30, 0xC0};
 constexpr int kChPairFirst[4] = {0, 2, 4, 6};
