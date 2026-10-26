@@ -815,3 +815,20 @@ yquist * 0.999，
 - **验收**：`smoke_postgain_persch.py`。
 - **上游同步冲突风险**：低（两个字段 + 一行乘法；上游 `stage_output`
   结构稳定）。
+
+## P-038 LiveProg 运行环境感知与代码冗余清理（已实施，2026-10-26）
+
+- **状态**：已实施（2026-10-26，对应细审 REM-1/REM-2/REM-3）。
+- **位置**：`jdsp/jdsp_header.h`、`jdsp/Effects/liveprogWrapper.c`、
+  `jdsp/jdspController.c`、`engine/engine_internal.h`、`engine/chain/engine_chain.cpp`。
+- **动机**：
+  1. LiveProg 脚本在 EEL 中原本仅注册 `srate`（工作率 `jdsp->fs`），脚本无法得知真实的驱动层设备采样率及当前声道数，在多声道下缺少物理环境感知（REM-1）；
+  2. `ArbmagPool` 与 `EqPool` 中 `loaded_block` 写而未读，属冗余死代码（X-9 / REM-2）；
+  3. `AURADSP_ASRC_TAPS` 注释中关于桌面端热切的不准确描述纠偏为桌面流重启架构说明（S-9 / REM-3）。
+- **内容**：
+  1. 在 `LiveProg` 虚拟机中注册 `dev_srate`、`num_ch`、`nch`，并记录环境快照 `snapFs`/`snapDevFs`/`snapNumCh`；新增 `LiveProgSetChannels` 供拓扑变更时同步；
+  2. 移除 `engine_internal.h` 与 `engine_chain.cpp` 中未被读取的 `loaded_block`；
+  3. `jdspController.c` 修正抽头数注释。
+- **验收**：`test/smoke/smoke_liveprog.py` 新增环境感知用例，全套 smoke runner 通过。
+- **上游同步冲突风险**：低。
+

@@ -595,7 +595,6 @@ struct auradsp_handle_s {
      * arbmag_pool_reload）；RT 线程只读指针，无跨线程释放。 */
     struct ArbmagPool {
         FFTConvolver1x1* conv[kMxMaxChannels] = {};
-        unsigned int     loaded_block = 0;  /* 上次成功 Load/Refresh 的 blockSize */
         int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
     } arbmag_pool;
     /* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
@@ -603,7 +602,6 @@ struct auradsp_handle_s {
      * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。 */
     struct EqPool {
         FFTConvolver1x1* conv[kMxMaxChannels] = {};
-        unsigned int     loaded_block = 0;  /* 上次成功 Load/Refresh 的 blockSize */
         int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
         float            ir_rate = 0.0f;    /* 装载时的采样率 */
     } eq_pool;

@@ -461,6 +461,10 @@ typedef struct
 	NSEEL_VMCTX vm;
 	NSEEL_CODEHANDLE codehandleInit, codehandleProcess;
 	float *vmFs, *input1, *input2;
+	/* [PATCHED-AuraDSP P-038] 宿主环境感知变量绑定与快照 */
+	float *vmDevFs, *vmNumCh, *vmNch;
+	float snapFs, snapDevFs;
+	int snapNumCh;
 	int compileSucessfully;
 	/* [PATCHED-AuraDSP P-016 B1] 影子槽簿记：retiredAt = 本槽被换下时所期望的
 	 * eelProcCount 下界（换下时刻快照 +1）。控制侧复用本槽前要求
@@ -624,6 +628,7 @@ typedef struct dspsys
 	char enableASRC;
 	IntegerASRCHandler asrc[2];
 	float trueSampleRate, fs;
+	int numChannels; /* [PATCHED-AuraDSP P-038] 当前驱动层/交织通道数 */
 	// Effect
 	// Compressor
 	int compEnabled, compForceRefresh;
@@ -861,6 +866,7 @@ extern void LiveProgEnable(JamesDSPLib *jdsp);
 extern void LiveProgDisable(JamesDSPLib *jdsp);
 extern void LiveProgUnload(JamesDSPLib *jdsp);
 extern void LiveProgProcess(JamesDSPLib *jdsp, size_t n);
+extern void LiveProgSetChannels(JamesDSPLib *jdsp, int channels); /* [PATCHED-AuraDSP P-038] */
 // DDC
 extern void DDCConstructor(JamesDSPLib *jdsp);
 extern void DDCDestructor(JamesDSPLib *jdsp);
