@@ -436,15 +436,16 @@ class _TestSourceChips extends StatelessWidget {
                 model.sourceKind == 'file' &&
                 model.sourceExt != 'mp3',
             onTap: () async {
-              const type = XTypeGroup(label: 'WAV', extensions: ['wav']);
-              final f = await openFile(
-                acceptedTypeGroups: [type],
-                initialDirectory: PathMemory.dirFor(PathMemory.slotTestAudio) ??
-                    PathMemory.fallbackDir(PathMemory.slotTestAudio),
+              final path = await AuraPathPickerDialog.show(
+                context,
+                title: l.srcFile,
+                prompt: l.testAudioWavPrompt,
+                allowedExtensions: const ['wav'],
+                memorySlot: PathMemory.slotTestAudio,
+                confirmLabel: l.testAudioLoad,
               );
-              if (f != null) {
-                PathMemory.recordPick(PathMemory.slotTestAudio, f.path);
-                model.setSource('file', path: f.path);
+              if (path != null) {
+                model.setSource('file', path: path);
               }
             },
           ),
@@ -455,15 +456,16 @@ class _TestSourceChips extends StatelessWidget {
                 model.sourceKind == 'file' &&
                 model.sourceExt == 'mp3',
             onTap: () async {
-              const type = XTypeGroup(label: 'MP3', extensions: ['mp3']);
-              final f = await openFile(
-                acceptedTypeGroups: [type],
-                initialDirectory: PathMemory.dirFor(PathMemory.slotTestAudio) ??
-                    PathMemory.fallbackDir(PathMemory.slotTestAudio),
+              final path = await AuraPathPickerDialog.show(
+                context,
+                title: l.srcMp3,
+                prompt: l.testAudioMp3Prompt,
+                allowedExtensions: const ['mp3'],
+                memorySlot: PathMemory.slotTestAudio,
+                confirmLabel: l.testAudioLoad,
               );
-              if (f != null) {
-                PathMemory.recordPick(PathMemory.slotTestAudio, f.path);
-                model.setSource('file', path: f.path);
+              if (path != null) {
+                model.setSource('file', path: path);
               }
             },
           ),

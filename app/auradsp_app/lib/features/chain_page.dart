@@ -125,6 +125,10 @@ final Map<String, String> _stageToGroup = {
 /// stage id → 分类展示名（方框徽标用，随中英文切换）。
 String stageCategoryLabelOf(BuildContext ctx, String id) {
   final l = l10nOf(ctx);
+  // 立体声专用卡片（crossfeed, stereo, haas, convolver, ddc）：徽标标签统一改为“立体声”
+  if (id == 'crossfeed' || id == 'stereo' || id == 'haas' || id == 'convolver' || id == 'ddc') {
+    return l.catStereo;
+  }
   final g = _stageToGroup[id];
   return switch (g) {
     'chInput' => l.catInput,

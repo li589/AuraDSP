@@ -355,9 +355,11 @@ class BassShapingCard extends StatelessWidget {
               ),
             ],
 
-            // 摘要与诚实性提示行
-            const SizedBox(height: AuraSpace.sm),
-            _buildBassmonoSummary(p, l, activePairs, ignoredPairs, centerLfeSelected),
+            // 警告提示行（仅在存在声道异常/未选/LFE警告时显示）
+            if (model.bassmonoOn && (activePairs == 0 || ignoredPairs > 0 || centerLfeSelected)) ...[
+              const SizedBox(height: AuraSpace.sm),
+              _buildBassmonoSummary(p, l, activePairs, ignoredPairs, centerLfeSelected),
+            ],
           ],
         );
       },
@@ -372,24 +374,10 @@ class BassShapingCard extends StatelessWidget {
     bool centerLfeSelected,
   ) {
     if (!model.bassmonoOn) {
-      return Text(
-        '—',
-        style: captionOf(p, color: p.textDim),
-      );
+      return const SizedBox.shrink();
     }
 
     final List<Widget> items = [];
-
-    final modeLabel = model.bassmonoMerge == 0 ? l.bassMonoMergePerPair : l.bassMonoMergeGlobal;
-    final summaryText =
-        '${model.bassmonoFreq.toInt()} Hz · ${l.bassMonoPairCount(activePairs)} · $modeLabel';
-
-    items.add(
-      Text(
-        summaryText,
-        style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
-      ),
-    );
 
     if (activePairs == 0) {
       items.add(
@@ -450,6 +438,8 @@ class BassShapingCard extends StatelessWidget {
         ),
       );
     }
+
+    if (items.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

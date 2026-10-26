@@ -237,9 +237,9 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                 ),
               ),
 
-              // 展开面板内容
-              if (_expanded)
-                Padding(
+              AnimatedCrossFade(
+                firstChild: const SizedBox(width: double.infinity, height: 0),
+                secondChild: Padding(
                   padding: const EdgeInsets.fromLTRB(10, 0, 10, 10),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,53 +276,61 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                         ),
                       ],
 
-                      // U-7: 仅渲染当前布局实际存在的声道 Chips
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
+                      // 同行显示：左侧为当前布局存在的声道 Chips，右侧并排右对齐小字快捷按钮（不显示“快速选择”字样）
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          for (final chDef in activeChannels)
-                            _buildChannelChip(context, p, chDef, mask),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-
-                      // 快速预设按钮行（根据工作声道自适应）
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text(
-                            l.routingPresets,
-                            style: captionOf(p, color: p.textDim)
-                                .copyWith(fontSize: 11),
+                          Expanded(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                for (final chDef in activeChannels)
+                                  _buildChannelChip(context, p, chDef, mask),
+                              ],
+                            ),
                           ),
-                          _buildPresetChip(
-                              p, l.routingPresetAll, fullMaskFor(ch), mask),
-                          if (ch == 4) ...[
-                            _buildPresetChip(
-                                p, l.routingPresetFront, 0x03, mask),
-                            _buildPresetChip(
-                                p, l.routingPresetBack, 0x0C, mask),
-                          ] else ...[
-                            _buildPresetChip(
-                                p, l.routingPresetStereo, 0x03, mask),
-                            if (ch >= 6)
-                              _buildPresetChip(p, l.routingPresetNoLfe,
-                                  fullMaskFor(ch) & ~0x08, mask),
-                            if (ch == 6)
+                          const SizedBox(width: 8),
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            spacing: 4,
+                            runSpacing: 4,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
                               _buildPresetChip(
-                                  p, l.routingPresetSurround, 0x30, mask),
-                            if (ch >= 8)
-                              _buildPresetChip(
-                                  p, l.routingPresetSurround, 0xF0, mask),
-                          ],
+                                  p, l.routingPresetAll, fullMaskFor(ch), mask),
+                              if (ch == 4) ...[
+                                _buildPresetChip(
+                                    p, l.routingPresetFront, 0x03, mask),
+                                _buildPresetChip(
+                                    p, l.routingPresetBack, 0x0C, mask),
+                              ] else ...[
+                                _buildPresetChip(
+                                    p, l.routingPresetStereo, 0x03, mask),
+                                if (ch >= 6)
+                                  _buildPresetChip(p, l.routingPresetNoLfe,
+                                      fullMaskFor(ch) & ~0x08, mask),
+                                if (ch == 6)
+                                  _buildPresetChip(
+                                      p, l.routingPresetSurround, 0x30, mask),
+                                if (ch >= 8)
+                                  _buildPresetChip(
+                                      p, l.routingPresetSurround, 0xF0, mask),
+                              ],
+                            ],
+                          ),
                         ],
                       ),
                     ],
                   ),
                 ),
+                crossFadeState: _expanded
+                    ? CrossFadeState.showSecond
+                    : CrossFadeState.showFirst,
+                duration: AuraDur.fast,
+                firstCurve: AuraCurve.standard,
+                secondCurve: AuraCurve.standard,
+              ),
             ],
           ),
         );

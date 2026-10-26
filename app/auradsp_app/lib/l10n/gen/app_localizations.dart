@@ -1069,8 +1069,14 @@ abstract class AppLocalizations {
   /// No description provided for @catSpace.
   ///
   /// In zh, this message translates to:
-  /// **'空间'**
+  /// **'空间效果'**
   String get catSpace;
+
+  /// No description provided for @catStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声'**
+  String get catStereo;
 
   /// No description provided for @catOutput.
   ///
@@ -3895,8 +3901,14 @@ abstract class AppLocalizations {
   /// No description provided for @fxCatSpatial.
   ///
   /// In zh, this message translates to:
-  /// **'空间'**
+  /// **'空间效果'**
   String get fxCatSpatial;
+
+  /// No description provided for @fxCatStereoOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声专用'**
+  String get fxCatStereoOnly;
 
   /// No description provided for @fxCatLate.
   ///
@@ -5191,7 +5203,7 @@ abstract class AppLocalizations {
   /// No description provided for @arbmagSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线'**
+  /// **'基于 8192 点因果最小相位 FIR 卷积引擎，支持导入 AutoEq GraphicEQ 曲线或自定义任意频响响应，高精度校正耳机与扬声器频响缺陷。'**
   String get arbmagSubtitle;
 
   /// No description provided for @arbmagPresetFlat.
@@ -5325,6 +5337,198 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'核心处理'**
   String get fxCatCore;
+
+  /// No description provided for @channelCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'中央声道 (C)'**
+  String get channelCenter;
+
+  /// No description provided for @channelLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频效果 (LFE)'**
+  String get channelLfe;
+
+  /// No description provided for @channelSurroundLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左环绕 (SL)'**
+  String get channelSurroundLeft;
+
+  /// No description provided for @channelSurroundRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右环绕 (SR)'**
+  String get channelSurroundRight;
+
+  /// No description provided for @channelBackLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左后环绕 (BL)'**
+  String get channelBackLeft;
+
+  /// No description provided for @channelBackRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右后环绕 (BR)'**
+  String get channelBackRight;
+
+  /// No description provided for @inputChannelsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 声道'**
+  String inputChannelsCount(int n);
+
+  /// No description provided for @inputBalanceTuned.
+  ///
+  /// In zh, this message translates to:
+  /// **'已微调 {n} 声道'**
+  String inputBalanceTuned(int n);
+
+  /// No description provided for @inputBalanceDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'100% 默认平衡'**
+  String get inputBalanceDefault;
+
+  /// No description provided for @eqPresetElectronic.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子舞曲 (EDM)'**
+  String get eqPresetElectronic;
+
+  /// No description provided for @eqPresetHiphop.
+  ///
+  /// In zh, this message translates to:
+  /// **'嘻哈说唱 (Hip-Hop)'**
+  String get eqPresetHiphop;
+
+  /// No description provided for @eqPresetAcoustic.
+  ///
+  /// In zh, this message translates to:
+  /// **'原声不插电 (Acoustic)'**
+  String get eqPresetAcoustic;
+
+  /// No description provided for @eqPresetMetal.
+  ///
+  /// In zh, this message translates to:
+  /// **'重金属 (Metal)'**
+  String get eqPresetMetal;
+
+  /// No description provided for @eqPresetPodcast.
+  ///
+  /// In zh, this message translates to:
+  /// **'播客语音 (Podcast)'**
+  String get eqPresetPodcast;
+
+  /// No description provided for @convIrPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择脉冲响应 (IR) 文件路径：'**
+  String get convIrPrompt;
+
+  /// No description provided for @convLoadIr.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载 IR'**
+  String get convLoadIr;
+
+  /// No description provided for @ddcVdcPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 VDC 空间校正文件路径：'**
+  String get ddcVdcPrompt;
+
+  /// No description provided for @ddcLoadVdc.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载 VDC'**
+  String get ddcLoadVdc;
+
+  /// No description provided for @arbmagPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 AutoEq / GraphicEQ 曲线文件路径：'**
+  String get arbmagPrompt;
+
+  /// No description provided for @testAudioWavPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择测试音频 (WAV) 文件路径：'**
+  String get testAudioWavPrompt;
+
+  /// No description provided for @testAudioMp3Prompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 MP3 音频文件路径：'**
+  String get testAudioMp3Prompt;
+
+  /// No description provided for @testAudioLoad.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载音频'**
+  String get testAudioLoad;
+
+  /// No description provided for @pathPickerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择路径'**
+  String get pathPickerTitle;
+
+  /// No description provided for @pathPickerConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认'**
+  String get pathPickerConfirm;
+
+  /// No description provided for @pathPickerBrowse.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览...'**
+  String get pathPickerBrowse;
+
+  /// No description provided for @pathPickerClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空'**
+  String get pathPickerClear;
+
+  /// No description provided for @pathPickerSelectDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择此目录'**
+  String get pathPickerSelectDir;
+
+  /// No description provided for @pathPickerErrEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'路径不能为空'**
+  String get pathPickerErrEmpty;
+
+  /// No description provided for @pathPickerErrDirNotExist.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定的目录不存在或无访问权限'**
+  String get pathPickerErrDirNotExist;
+
+  /// No description provided for @pathPickerErrFileNotExist.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定的文件不存在或无访问权限'**
+  String get pathPickerErrFileNotExist;
+
+  /// No description provided for @pathPickerErrFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持的文件格式 (仅支持: {exts})'**
+  String pathPickerErrFormat(String exts);
+
+  /// No description provided for @pathPickerSupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持格式: {exts}'**
+  String pathPickerSupported(String exts);
 
   /// No description provided for @errEngineClosed.
   ///

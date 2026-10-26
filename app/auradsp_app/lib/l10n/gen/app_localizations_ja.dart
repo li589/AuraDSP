@@ -537,7 +537,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get catStage => 'ステージ';
 
   @override
-  String get catSpace => '空間';
+  String get catSpace => '空間効果';
+
+  @override
+  String get catStereo => 'ステレオ';
 
   @override
   String get catOutput => '出力';
@@ -2022,7 +2025,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get haasSideLeft => '左チャンネル';
 
   @override
-  String get fxCatSpatial => '空間';
+  String get fxCatSpatial => '空間効果';
+
+  @override
+  String get fxCatStereoOnly => 'ステレオ専用';
 
   @override
   String get fxCatLate => 'エキサイター・出力';
@@ -2735,7 +2741,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get outputGainGateTooltip => 'このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。';
 
   @override
-  String get arbmagSubtitle => '8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線';
+  String get arbmagSubtitle =>
+      '8192点因果的最小位相FIR畳み込みエンジンに基づき、AutoEq GraphicEQ曲線や任意の周波数応答曲線を適用して音響特性を高精度に補正します。';
 
   @override
   String get arbmagPresetFlat => 'フラット (Flat)';
@@ -2805,6 +2812,110 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get fxCatCore => 'コア処理';
+
+  @override
+  String get channelCenter => 'センター (C)';
+
+  @override
+  String get channelLfe => '低域効果 (LFE)';
+
+  @override
+  String get channelSurroundLeft => '左サラウンド (SL)';
+
+  @override
+  String get channelSurroundRight => '右サラウンド (SR)';
+
+  @override
+  String get channelBackLeft => '左後サラウンド (BL)';
+
+  @override
+  String get channelBackRight => '右後サラウンド (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n チャンネル';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return '$n ch 微調整済み';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% デフォルトバランス';
+
+  @override
+  String get eqPresetElectronic => 'エレクトロニック (EDM)';
+
+  @override
+  String get eqPresetHiphop => 'ヒップホップ';
+
+  @override
+  String get eqPresetAcoustic => 'アコースティック';
+
+  @override
+  String get eqPresetMetal => 'メタル';
+
+  @override
+  String get eqPresetPodcast => 'ポッドキャスト';
+
+  @override
+  String get convIrPrompt => 'インパルス応答 (IR) ファイルのパスを入力または選択してください：';
+
+  @override
+  String get convLoadIr => 'IR を読み込む';
+
+  @override
+  String get ddcVdcPrompt => 'VDC 空間補正ファイルのパスを入力または選択してください：';
+
+  @override
+  String get ddcLoadVdc => 'VDC を読み込む';
+
+  @override
+  String get arbmagPrompt => 'AutoEq / GraphicEQ 曲線ファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioWavPrompt => 'テストオーディオ (WAV) ファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioMp3Prompt => 'MP3 オーディオファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioLoad => 'オーディオを読み込む';
+
+  @override
+  String get pathPickerTitle => 'パスを選択';
+
+  @override
+  String get pathPickerConfirm => '確認';
+
+  @override
+  String get pathPickerBrowse => '参照...';
+
+  @override
+  String get pathPickerClear => 'クリア';
+
+  @override
+  String get pathPickerSelectDir => 'このディレクトリを選択';
+
+  @override
+  String get pathPickerErrEmpty => 'パスを入力してください';
+
+  @override
+  String get pathPickerErrDirNotExist => '指定されたディレクトリが存在しないか、アクセス権がありません';
+
+  @override
+  String get pathPickerErrFileNotExist => '指定されたファイルが存在しないか、アクセス権がありません';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return 'サポートされていないファイル形式です (対応: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return '対応形式: $exts';
+  }
 
   @override
   String get errEngineClosed => 'エンジン未起動';

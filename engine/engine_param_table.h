@@ -230,6 +230,17 @@ static void hook_crossfeed_enable(auradsp_handle h) {
 }
 
 static void hook_crossfeed_mode(auradsp_handle h) {
+    const int mode = h->p.xfeed_mode.load(std::memory_order_relaxed);
+    if (mode == 0) {
+        h->p.xfeed_fcut.store(700.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(4.5f, std::memory_order_relaxed);
+    } else if (mode == 1) {
+        h->p.xfeed_fcut.store(700.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(6.0f, std::memory_order_relaxed);
+    } else if (mode == 2) {
+        h->p.xfeed_fcut.store(650.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(9.5f, std::memory_order_relaxed);
+    }
     if (h->open.load() && h->p.xfeed_enable.load()) apply_crossfeed(h);
 }
 
@@ -478,8 +489,19 @@ static bool arbmag_numeric_finite(const char* s) {
 }
 
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
-    if (bytes == 0 || bytes > 256 * 1024) {
-        set_error(h, "arbmag.string: invalid length (1..256KiB)");
+    if (bytes == 0 || (bytes == 1 && ((const char*)value)[0] == 0)) {
+        // 清空曲线：释放内存并重置节点与池状态
+        free(h->arbmag_string);
+        h->arbmag_string = nullptr;
+        h->arbmag_string_len = 0;
+        h->p.arbmag_nodes.store(0);
+        h->p.arbmag_ready.store(0);
+        h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
+        arbmag_pool_reload(h);
+        return AURADSP_OK;
+    }
+    if (bytes > 256 * 1024) {
+        set_error(h, "arbmag.string: invalid length (max 256KiB)");
         return AURADSP_E_PARAM;
     }
     char* buf = (char*)malloc((size_t)bytes + 1);

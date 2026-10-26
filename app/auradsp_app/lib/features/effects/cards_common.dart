@@ -299,8 +299,7 @@ class _ResourceSlot extends StatelessWidget {
                 style: captionOf(p).copyWith(color: p.accent),
               ),
             ],
-            // 按钮与标题同行：文字左对齐、按钮右对齐。
-            const SizedBox(width: AuraSpace.sm),
+            const Spacer(),
             Wrap(
               spacing: AuraSpace.sm,
               runSpacing: AuraSpace.sm,
