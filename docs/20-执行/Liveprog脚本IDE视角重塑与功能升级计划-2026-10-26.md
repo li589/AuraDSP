@@ -1,0 +1,266 @@
+# Liveprog 脚本 IDE 视角重塑与功能升级计划
+
+> **日期**：2026-10-26  
+> **分支**：`dev`  
+> **状态**：计划中 / 待评审  
+> **关联模块**：
+> - `app/auradsp_app/lib/features/liveprog_page.dart`（脚本工作区与 IDE 界面）
+> - `app/auradsp_app/lib/features/eel_editor_support.dart`（词法高亮、格式化、Linter）
+> - `app/auradsp_app/lib/features/liveprog/`（新增 IDE 子模块：大纲、查找替换、转换器、手册）
+> - `engine/legacy/jdsp/Effects/eel2/`（EEL2 / NSEEL 虚拟机与 C 扩展函数库）
+> - `test/smoke/smoke_eel_all_functions.py`（EEL2 全函数自动化测试套件）
+
+---
+
+## 一、升级背景与核心愿景
+
+### 1.1 现状与痛点分析
+当前 AuraDSP 的脚本选项卡（`LiveprogPage`）采用单列长卡片排版（01 编辑卡、02 滑块卡、03 预设库卡上下堆叠），在实际音频 DSP 脚本开发与调试时存在如下痛点：
+1. **界面视角割裂**：代码编辑、实时滑块调试、外部预设浏览呈垂直堆叠，编辑长脚本时无法同时监视滑块与编译输出，缺乏专业 IDE 的统一视界与停靠布局。
+2. **缺乏现代开发工具链**：无代码大纲（Code Outline / Symbol Tree）、无查找替换（Find & Replace）、无行号对齐与快捷跳转、无代码模板向导（New Script Wizard）。
+3. **EqualizerAPO 预设互通断层**：海量现成的 EqualizerAPO / Peace 格式（`.txt`）耳机与扬声器校准预设无法一键导入 AuraDSP，需要用户手动对照换算。
+4. **参考手册极其简陋**：原有手册仅为一段 10 行的粗略文本对话框，无法反映 JamesDSP EEL2 引擎内建的 80+ 个高阶 DSP、傅里叶变换（FFT/STFT）、多相滤波、矩阵代数及音频编解码函数的完整规范与入参说明。
+5. **函数工作状态缺乏系统测试**：底层 C++ 注册的大量数值计算与音频算法函数缺乏系统化测试验证套件。
+
+### 1.2 升级愿景
+将脚本选项卡从“单页脚本设置卡”全面蜕变为**面向现代音频算法工程师与发烧友的“AuraDSP Liveprog IDE”**：
+- **IDE 级工作空间**：工作区整合侧边资源管理器（内置分类预设树、用户目录）、代码符号大纲导航、多段高亮编辑器、查找/替换栏、底部控制台及右侧/浮动动态滑块调试台。
+- **Clean-Room EqualizerAPO 转换引擎**：独立实现 EqualizerAPO TXT 转 EEL2 脚本算法，支持左右独立 EQ、极性反转、声道交换及 Preamp 增益补偿。
+- **专业级 EEL2 全功能手册中心**：涵盖 9 大类 80+ 内置函数，带搜索、参数解释、原理提示、丰富范例及“一键插入光标”功能。
+- **全函数覆盖测试体系**：构建覆盖全部 EEL2 内置函数的自动化测试套件，确保函数无崩溃、输出精确、实时音频泵安全。
+
+---
+
+## 二、参考工程剖析与 Clean-Room 合规策略
+
+| 参考工程 | 关键设计与借鉴点 | 许可证限制与合规策略 |
+| :--- | :--- | :--- |
+| **`source/LiveprogIDE`** | • 现代化 IDE 布局体系（Code Editor、Project View、Code Outline、Variable Watch、Console Output）<br>• `eelang.xml` 完整词法与高亮关键字定义<br>• 代码模板向导（New File Wizard）与查找替换表单 | **无 LICENSE 声明**：<br>严格执行**设计借鉴、零代码抄袭**。在 Flutter/Dart 中采用 Aura 设计系统（`AuraPalette`, `AuraSpace`, `AuraRadius`）纯自研实现布局组件、大纲提取器与控制器。 |
+| **`source/PeaceTXT-to-EEL-converter`** | • EqualizerAPO / Peace `.txt` 格式解析规范（Channel 路由、Preamp、Filter 语法）<br>• RBJ Biquad Filter（Peaking, Low Shelf, High Shelf）自适应采样率（`srate`）计算与级联模型<br>• 左右声道独立处理、声道交换（Swap）、极性反转（Invert）工作流 | **无 LICENSE 声明**：<br>严格执行 **Clean-Room 原则**。仅将 EqualizerAPO 配置规范作为公开格式规格，在 Dart 中从零手写解析状态机与 RBJ Biquad 生成器，不借用其任何前端 JS 源码与结构。 |
+
+---
+
+## 三、IDE 级整体架构与界面布局重塑
+
+### 3.1 模块目录结构规划
+```text
+app/auradsp_app/lib/features/liveprog/
+├── liveprog_ide_page.dart         # IDE 主界面（替代原 liveprog_page.dart 内部单列结构）
+├── components/
+│   ├── ide_toolbar.dart           # 顶部工具栏（运行、卸载、新建、格式化、查找、手册、转换器）
+│   ├── code_editor_view.dart      # 核心代码编辑区（行号对齐、语法高亮、快捷键绑定）
+│   ├── find_replace_bar.dart      # 查找与替换悬浮/内嵌工具条
+│   ├── code_outline_panel.dart    # 侧边代码符号大纲导航（@init, @sample, 函数, 变量）
+│   ├── project_explorer_panel.dart# 脚本库与预设资源树（分类浏览、拖拽导入）
+│   ├── live_sliders_panel.dart    # 动态参数滑块控制台（支持折叠/侧靠）
+│   └── ide_status_bar.dart        # 底部状态栏（光标位置、错误诊断计数、编译耗时）
+├── converter/
+│   ├── equalizer_apo_parser.dart  # EqualizerAPO TXT Clean-Room 语法解析器
+│   ├── rbj_biquad_generator.dart  # RBJ 双二阶滤波器 EEL2 脚本生成引擎
+│   └── equalizer_apo_dialog.dart  # 转换导入交互弹窗（文件载入、参数调节、实时预览）
+├── manual/
+│   ├── eel_manual_registry.dart   # 80+ EEL 函数与语言特性规范全集数据库
+│   ├── eel_manual_panel.dart      # 参考手册全功能查阅面板（分类、搜索、插入代码）
+│   └── eel_templates.dart         # IDE 新建向导预设模板（直通、EQ、立体声、多波段等）
+```
+
+### 3.2 布局视界设计（Responsive IDE Workspace）
+```text
++-----------------------------------------------------------------------------------+
+| Top IDE Toolbar: [Run / Compile F5] [Unload] | [New] [Save] [Format] [Find]       |
+|                  | [Import EqualizerAPO (TXT)] [Reference Manual] | [Layout Switch]|
++-----------------------+-----------------------------------+-----------------------+
+| Left Sidebar (可折叠)  | Center Editor Area                | Right Debug Panel     |
+| [Presets] [Outline]   |                                   | (可展开/停靠)          |
+|                       |  1 | /* Audio DSP Script */       | [Live Sliders]        |
+| > distortion_lofi     |  2 | @init                        | slider1: Volume (dB)  |
+| > dynamics            |  3 |   srate = srate > 0 ? ...;   | [===o===========] 0dB |
+| v filters_eq          |  4 |   fc = 1000;                 |                       |
+|   * stftFilter.eel    |  5 | @sample                      | slider2: Cutoff (Hz)  |
+|   * peaking_eq.eel    |  6 |   spl0 = spl0 * slider1;     | [=======o=======] 1k  |
+| > utility             |  7 |   spl1 = spl1 * slider1;     |                       |
+|                       |                                   | [Compiler Console]    |
+| Outline:              |-----------------------------------| Status: OK (12ms)     |
+| @ @init               | Find: [ gain    ] [Prev] [Next]   | Memory: 65536 blocks  |
+| @ @sample             | Repl: [ volume  ] [Replace All]   | Safe RT Pump: Active  |
++-----------------------+-----------------------------------+-----------------------+
+| Bottom Status Bar: Ln 6, Col 24 | UTF-8 | 15 Lines | EEL2 | Compile: OK (12ms)    |
++-----------------------------------------------------------------------------------+
+```
+
+---
+
+## 四、EqualizerAPO 转 EEL2 转换引擎（Clean-Room）
+
+### 4.1 语法解析器（`EqualizerApoParser`）
+支持解析主流 EqualizerAPO / Peace GUI 输出的标准配置指令：
+- **通道指令**：`Channel: all` / `Channel: L` / `Channel: R` / `Channel: C` / `Channel: LFE` 等。
+- **前级增益**：`Preamp: -3.5 dB`（支持全局与单声道独立设置）。
+- **滤波器指令**：`Filter [Index]: ON [Type] Fc [Freq] Hz Gain [Gain] dB Q [Q]`。
+  - 支持类型：`PK`（峰值滤波器）、`LSC`（低架滤波器）、`HSC`（高架滤波器）、`LP`（低通滤波器）、`HP`（高通滤波器）、`BP`（带通滤波器）、`Notch`（陷波滤波器）。
+
+### 4.2 脚本生成引擎（`RbjBiquadGenerator`）
+自动生成标准、优美且高效的 EEL2 源代码：
+1. **采样率安全性**：`srate = (srate > 0) ? srate : 48000;`。
+2. **面向对象风格双二阶计算函数**：
+   ```eel
+   function biquad_init(b0, b1, b2, a0, a1, a2) instance(b0, b1, b2, a1, a2) (
+     inv_a0 = 1.0 / a0;
+     this.b0 = b0 * inv_a0;
+     this.b1 = b1 * inv_a0;
+     this.b2 = b2 * inv_a0;
+     this.a1 = a1 * inv_a0;
+     this.a2 = a2 * inv_a0;
+   );
+   function biquad_process(x) instance(b0, b1, b2, a1, a2, x1, x2, y1, y2) (
+     y = this.b0 * x + this.b1 * this.x1 + this.b2 * this.x2 - this.a1 * this.y1 - this.a2 * this.y2;
+     this.x2 = this.x1; this.x1 = x;
+     this.y2 = this.y1; this.y1 = y;
+     y;
+   );
+   ```
+3. **声道交换与极性反转**：
+   - 勾选 Channel Swap 时，在 `@sample` 开头执行声道交换；
+   - 勾选 Invert Polarity 时，输出前执行相位反转。
+4. **实时预览与交互**：
+   - 在 `EqualizerApoDialog` 中支持即时语法高亮预览、参数选项实时联动重新生成、一键载入至编辑器或导出为 `.eel` 文件。
+
+---
+
+## 五、EEL2 官方级规范参考手册（API Documentation Center）
+
+系统梳理并正规化 JamesDSP 底层 EEL2 / NSEEL 虚拟机的全部内建函数与机制，整理成结构化文档注册表 `EelManualRegistry`：
+
+```mermaid
+graph TD
+    Manual[EEL2 规范参考手册] --> Bas[语言基础与段指令]
+    Manual --> Reg[音频寄存器与系统常量]
+    Manual --> Math[初等数学与高精浮点]
+    Manual --> Vec[向量、数组与内存]
+    Manual --> DSP[滤波器与音频算法]
+    Manual --> FFT[傅里叶与频域分析 STFT]
+    Manual --> Mat[矩阵代数与求解器]
+    Manual --> IO[音频文件编解码]
+    Manual --> Sys[字符串、系统与调试]
+```
+
+### 5.1 涵盖的完整函数库分类清单
+1. **语言基础与指令**：`@init`, `@sample`, `@slider`, `@block`, `function`, `local`, `global`, `instance`, `this`, `while`, `loop`, `if`, `else`。
+2. **核心音频流寄存器**：`spl0`, `spl1`, `srate`, `num_ch`, `slider1..8`, `$PI`, `$E`, `$PHI`, `$EPS`, `$MEMBLKLIMIT`, `$DBL_MAX`。
+3. **初等数学与高精计算**：
+   - 标准：`sin, cos, tan, asin, acos, atan, atan2, sinh, cosh, tanh, sqrt, log, log10, exp, abs, sqr, min, max, sign, rand, round, floor, ceil, invsqrt, expint`
+   - 高精浮点：`xFloatS, xFloatF, xF2f32, xAdd, xSub, xMul, xDiv, xsin, xcos, xsqrt, xexp, xlog` 等。
+4. **向量与内存管理**：`[ptr]` 内存寻址、`memcpy, memset, freembuf, circshift, convolve_c, maxVec, minVec, meanVec, medianVec`。
+5. **频域分析与傅里叶变换**：
+   - FFT：`fft, ifft, fft_real, ifft_real, fft_permute, fft_ipermute`
+   - STFT：`stftStructSize, stftCheckMemoryRequirement, stftInit, stftGetWindowPower, stftForward, stftBackward, stftSetAsymWnd, getCosineWindows, getAsymmetricCosine`。
+6. **滤波器与专用音频算法**：
+   - 多相滤波器组：`InitPolyphaseFilterbank, PolyphaseFilterbankAnalysisMono/Stereo, PolyphaseFilterbankSynthesisMono/Stereo`
+   - FIR / IIR / 延迟：`FIRInit, FIRProcess, fractionalDelayLineInit/Process, IIRBandSplitterInit/Process, Conv1DInit/Process`
+   - 滤波器设计：`firls, eqnerror, zp2sos, tf2sos, roots, cplxpair, unwrap`
+   - 信号发生与分析：`InitPinkNoise, GeneratePinkNoise, arburgTrainModel, iirHilbertInit/Process, peakFinder`。
+7. **矩阵代数与优化求解器**：
+   - 矩阵算子：`linspace, rank, det, transpose, cholesky, inv, pinv_svd, pinv_fast, mldivide, mrdivide`
+   - 优化求解：`quadprog, lsqlin`
+   - 向量计算：`vectorizeAdd, vectorizeMinus, vectorizeMultiply, vectorizeDivide, lerpAt`。
+8. **音频文件读写 (I/O)**：
+   - `decodeWavFromFile, decodeFLACFromFile, decodeWavFromMemory, writeWavToFile, writeWavToBase64String`。
+9. **字符串、系统与调试**：
+   - `strlen, strcmp, stricmp, strncmp, strnicmp, match, matchi, sprintf, printf, listSystemVariable, time, time_precise, sleep, breakpoint`。
+
+### 5.2 手册组件与交互体验
+- **条目卡片结构**：
+  - 函数原型签名（如 `FIRProcess(firState, input, output, length)`）
+  - 简短描述与声学意义
+  - 参数说明表（入参类型、物理单位、有效范围）
+  - 返回值说明
+  - 典型应用代码示例（Syntax Highlighted Code Block）
+  - **“插入代码”按钮**：点击直接注入到当前编辑器光标位置。
+- **全动态搜索**：支持在左侧搜索栏即时模糊过滤，按类别筛选或全库搜索。
+
+---
+
+## 六、IDE 编辑体验深化与功能扩展
+
+1. **查找与替换工具条（`FindReplaceBar`）**：
+   - 支持快捷键 `Ctrl+F`（查找）、`Ctrl+H`（替换）；
+   - 提供匹配项计数（如 `3 of 12 matches`）、上一个/下一个遍历高亮；
+   - 支持大小写匹配、全词匹配、全部替换。
+2. **代码大纲导航器（`CodeOutlinePanel`）**：
+   - 基于轻量正则状态机实时解析当前脚本中的关键语法节点：
+     - 段标识：`@init`, `@slider`, `@sample`, `@block`；
+     - 自定义函数：`function func_name(...)`；
+     - 滑块声明：`slider1: ...`；
+   - 点击大纲节点直接平滑跳转光标并聚焦编辑器对应行。
+3. **新建脚本向导（`NewScriptWizard`）**：
+   - 提供丰富的起步模板：
+     - `Minimal Passthrough`（极简音频直通模版）
+     - `Stereo Width & Balance`（立体声声场与平衡）
+     - `Biquad Peaking EQ`（经典双二阶均衡器）
+     - `3-Band Crossover Splitter`（3段分频处理）
+     - `Polyphase Filterbank Demo`（多相滤波分析合成）
+     - `STFT Spectral Processor`（短时傅里叶变换频谱处理）
+
+---
+
+## 七、全函数验证测试策略
+
+### 7.1 测试架构
+构建 Python + C FFI 自动化验证框架 `test/smoke/smoke_eel_all_functions.py`，直接链接 `auradsp_engine.dll`，对全部 EEL2 注册函数进行逐项测试：
+
+```text
+[测试执行器: smoke_eel_all_functions.py]
+  ├── 1. 数学与初等函数测试组 (sin, cos, exp, pow, invsqrt 等)
+  ├── 2. 向量与内存测试组 (memcpy, memset, freembuf, circshift 等)
+  ├── 3. 傅里叶变换与频域测试组 (fft, ifft, stft 往返变换无损度)
+  ├── 4. 滤波器与 DSP 测试组 (FIR, DelayLine, PolyphaseFilterbank, IIRBandSplitter)
+  ├── 5. 矩阵代数与求解器测试组 (det, inv, mldivide, linspace)
+  ├── 6. 字符串与系统函数测试组 (sprintf, match, strlen, listSystemVariable)
+  └── 7. EqualizerAPO 自动生成代码编译与音频处理测试
+```
+
+### 7.2 断言与合格标准
+- 编译状态 `liveprog.status == 1`（无语法与链接错误）。
+- 音频处理循环 `auradsp_process()` 执行平稳无崩溃、无 NaN / Inf。
+- 关键算法输出与标准数学真值偏差在容差范围内（例如 `sin($PI/2) == 1.0`，FFT/IFFT 往返重构误差 $< 10^{-4}$）。
+
+---
+
+## 八、阶段实施计划与任务分解
+
+```mermaid
+gantt
+    title Liveprog IDE 视角重塑与功能升级里程碑
+    dateFormat  YYYY-MM-DD
+    section Phase 1: 核心引擎与转换算法
+    EqualizerAPO 解析与 RBJ 生成引擎开发   :p1_1, 2026-10-27, 2d
+    EEL2 全函数规范手册数据集构建 (80+ API)  :p1_2, after p1_1, 2d
+    全函数自动化测试套件开发与跑通         :p1_3, after p1_2, 2d
+
+    section Phase 2: IDE 视图与交互组件
+    IDE 布局与侧边栏 (资源管理器/大纲)       :p2_1, after p1_3, 2d
+    查找与替换条 + 语法高亮与行号优化        :p2_2, after p2_1, 2d
+    EqualizerAPO 导入对话框与模板向导接入    :p2_3, after p2_2, 1d
+    全功能参考手册查阅面板与代码插入功能     :p2_4, after p2_3, 1d
+
+    section Phase 3: 集成联调与验收
+    端到端联调与多语言 (zh/en/ja) 补齐     :p3_1, after p2_4, 1d
+    静态分析 flutter analyze + 自动化测试    :p3_2, after p3_1, 1d
+```
+
+### 详细步骤表
+
+| 阶段 | 交付物 | 验收标准 |
+| :--- | :--- | :--- |
+| **Phase 1: 算法与手册基石** | 1. `equalizer_apo_parser.dart`<br>2. `rbj_biquad_generator.dart`<br>3. `eel_manual_registry.dart`<br>4. `test/smoke/smoke_eel_all_functions.py` | • 覆盖 PK/LSC/HSC/HP/LP 等各类 APO 指令<br>• 手册收录完整 80+ 函数与规范入参<br>• Python 自动化测试 100% 通过且无崩溃 |
+| **Phase 2: IDE 交互界面与组件** | 1. `ide_toolbar.dart`<br>2. `find_replace_bar.dart`<br>3. `code_outline_panel.dart`<br>4. `equalizer_apo_dialog.dart`<br>5. `eel_manual_panel.dart` | • 支持 Ctrl+F 实时查找替换<br>• 大纲精准提取段与函数并可点击跳转<br>• 支持外部 TXT 文件选择与粘贴即时转换<br>• 参考手册支持实时搜索与一键代码插入 |
+| **Phase 3: 整合、联调与多语言** | 1. `liveprog_ide_page.dart` 组装完成<br>2. 补充 `app_zh.arb`, `app_en.arb`, `app_ja.arb`<br>3. 单元测试与门禁验证 | • `flutter analyze` 0 警告 0 错误<br>• `l10n_cjk_guard_test` 守卫通过<br>• 现有预设与脚本编辑无缝兼容 |
+
+---
+
+## 九、风险控制与代码门禁约束
+
+1. **许可证安全铁律**：严禁从 `PeaceTXT-to-EEL-converter` 和 `LiveprogIDE` 复制任何源码，所有代码、解析逻辑及 UI 结构必须为全新 Clean-Room 编写。
+2. **实时音频线程（Audio Pump）安全**：EEL2 在主音频流中运行，禁止在 `@sample` 中执行无界循环，生成脚本默认注入采样率防御与浮点有效性校验。
+3. **国际化与 CJK 守卫**：所有新增文案、错误提示、手册函数说明等必须严格走 `l10nOf(context)`，杜绝 Dart 源码中硬编码中文字符串，防止触发 `test/l10n_cjk_guard_test.dart` 失败。
+4. **设计系统一致性**：完全继承 Aura 设计系统标准组件，严禁私自硬编码随意的颜色和魔数边距。
