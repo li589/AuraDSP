@@ -37,6 +37,40 @@ class RbjBiquadGenerator {
     sb.writeln('desc: $presetName');
     sb.writeln();
 
+    // 2. 检查是否有有效滤波器：无滤波器时输出极简轻量纯前级增益脚本
+    final activeFilters = config.activeFilters;
+    final gPreamp = config.globalPreamp;
+    final lPreamp = config.leftPreamp;
+    final rPreamp = config.rightPreamp;
+
+    if (activeFilters.isEmpty) {
+      sb.writeln('@init');
+      sb.writeln('// --- Preamp Linear Gains (Preamp Only Mode) ---');
+      sb.writeln('g_preamp_db = ${_formatNum(gPreamp)};');
+      sb.writeln('l_preamp_db = ${_formatNum(lPreamp)};');
+      sb.writeln('r_preamp_db = ${_formatNum(rPreamp)};');
+      sb.writeln('gain_l = 10 ^ ((g_preamp_db + l_preamp_db) / 20);');
+      sb.writeln('gain_r = 10 ^ ((g_preamp_db + r_preamp_db) / 20);');
+      sb.writeln();
+
+      sb.writeln('@sample');
+      if (channelSwap) {
+        sb.writeln('// Step 1: Channel Swap');
+        sb.writeln('tmp_spl = spl0; spl0 = spl1; spl1 = tmp_spl;');
+        sb.writeln();
+      }
+      sb.writeln('// Step 2: Apply Preamp Gains');
+      sb.writeln('spl0 *= gain_l;');
+      sb.writeln('spl1 *= gain_r;');
+      if (invertPolarity) {
+        sb.writeln();
+        sb.writeln('// Step 3: Polarity Inversion (180 deg)');
+        sb.writeln('spl0 = -spl0;');
+        sb.writeln('spl1 = -spl1;');
+      }
+      return sb.toString();
+    }
+
     // 2. @init 段：定义常量、RBJ 函数和初始化滤波器系数
     sb.writeln('@init');
     sb.writeln('PI = 3.141592653589793;');
@@ -44,9 +78,6 @@ class RbjBiquadGenerator {
     sb.writeln();
 
     // 2.1 增益计算
-    final gPreamp = config.globalPreamp;
-    final lPreamp = config.leftPreamp;
-    final rPreamp = config.rightPreamp;
     sb.writeln('// --- Preamp Linear Gains ---');
     sb.writeln('g_preamp_db = ${_formatNum(gPreamp)};');
     sb.writeln('l_preamp_db = ${_formatNum(lPreamp)};');

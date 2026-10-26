@@ -459,7 +459,8 @@ typedef struct
 typedef struct
 {
 	NSEEL_VMCTX vm;
-	NSEEL_CODEHANDLE codehandleInit, codehandleProcess;
+	/* [PATCHED-AuraDSP P-039 2026-10-27] @slider 段独立编译句柄 */
+	NSEEL_CODEHANDLE codehandleInit, codehandleSlider, codehandleProcess;
 	float *vmFs, *input1, *input2;
 	/* [PATCHED-AuraDSP P-038] 宿主环境感知变量绑定与快照 */
 	float *vmDevFs, *vmNumCh, *vmNch;

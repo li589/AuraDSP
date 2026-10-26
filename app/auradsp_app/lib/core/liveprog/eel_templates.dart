@@ -163,15 +163,14 @@ slider1:-20<-60,0,1>Noise Level (dBFS)
 
 @init
 srate = (srate > 0) ? srate : 48000;
-mem = freembuf(0);
-freembuf(mem + 512);
-InitPinkNoise(mem);
+mem = 0;
+InitPinkNoise(mem, 16);
 
 @slider
 vol = 10 ^ (slider1 / 20);
 
 @sample
-noise = GeneratePinkNoise(mem) * vol;
+noise = GeneratePinkNoise(mem, 1.0) * vol;
 spl0 = noise;
 spl1 = noise;
 ''',
@@ -191,8 +190,7 @@ slider3:0<-12,12,0.5>High Gain (dB)
 
 @init
 srate = (srate > 0) ? srate : 48000;
-sp_mem = freembuf(0);
-freembuf(sp_mem + 2048);
+sp_mem = 0;
 IIRBandSplitterInit(sp_mem, 250, 3500);
 
 @slider

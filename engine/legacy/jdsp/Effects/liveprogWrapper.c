@@ -86,6 +86,7 @@ static void LiveProgSlotInitVM(LiveProg *pg, float fs, float devFs, int numCh)
 {
 	pg->compileSucessfully = 0;
 	pg->codehandleInit = 0;
+	pg->codehandleSlider = 0;
 	pg->codehandleProcess = 0;
 	pg->retiredAt = 0;
 	pg->vmFs = 0;
@@ -135,10 +136,12 @@ void LiveProgDestructor(JamesDSPLib *jdsp)
 		if (pg->vm)
 		{
 			NSEEL_code_free(pg->codehandleInit);
+			NSEEL_code_free(pg->codehandleSlider);
 			NSEEL_code_free(pg->codehandleProcess);
 			NSEEL_VM_free(pg->vm);
 			pg->vm = 0;
 			pg->codehandleInit = 0;
+			pg->codehandleSlider = 0;
 			pg->codehandleProcess = 0;
 			pg->vmFs = 0;
 			pg->vmDevFs = 0;
@@ -198,7 +201,7 @@ void LiveProgSetChannels(JamesDSPLib *jdsp, int channels)
 /* 在指定槽上完整编译（freevars→init_memRegion→regvar→compile×2→exec init）。
  * 只动 pg（影子槽），不碰 jdsp->eel；失败时清掉本槽残留 code handle，
  * 保证该槽可再次被选为编译目标。返回 1=成功，<0=失败（错误码口径不变）。 */
-static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextInit, char *codeTextProcess)
+static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextInit, char *codeTextSlider, char *codeTextProcess)
 {
 	if (!pg->vm)
 		return -1;
@@ -243,6 +246,11 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 		NSEEL_code_free(pg->codehandleInit);
 		pg->codehandleInit = 0;
 	}
+	if (pg->codehandleSlider)
+	{
+		NSEEL_code_free(pg->codehandleSlider);
+		pg->codehandleSlider = 0;
+	}
 	if (pg->codehandleProcess)
 	{
 		NSEEL_code_free(pg->codehandleProcess);
@@ -256,26 +264,41 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 		return -1;
 	}
 	NSEEL_code_execute(pg->codehandleInit);
+
+	if (codeTextSlider && codeTextSlider[0])
+	{
+		pg->codehandleSlider = NSEEL_code_compile(pg->vm, codeTextSlider, 0);
+		if (!pg->codehandleSlider)
+		{
+			pg->compileSucessfully = 0;
+			if (pg->codehandleInit)
+			{
+				NSEEL_code_free(pg->codehandleInit);
+				pg->codehandleInit = 0;
+			}
+			return -5;
+		}
+		NSEEL_code_execute(pg->codehandleSlider);
+	}
+
 	pg->codehandleProcess = NSEEL_code_compile(pg->vm, codeTextProcess, 0);
-	if (pg->codehandleInit && pg->codehandleProcess)
+	if (!pg->codehandleProcess)
 	{
-		pg->compileSucessfully = 1;
-		return 1;
+		pg->compileSucessfully = 0;
+		if (pg->codehandleInit)
+		{
+			NSEEL_code_free(pg->codehandleInit);
+			pg->codehandleInit = 0;
+		}
+		if (pg->codehandleSlider)
+		{
+			NSEEL_code_free(pg->codehandleSlider);
+			pg->codehandleSlider = 0;
+		}
+		return -3;
 	}
-	pg->compileSucessfully = 0;
-	/* 失败：清残留，槽可复用（原实现留着 codehandleInit 不释放，
-	 * 影子槽语义下必须清零，否则下次编译选它会带旧 code 句柄） */
-	if (pg->codehandleInit)
-	{
-		NSEEL_code_free(pg->codehandleInit);
-		pg->codehandleInit = 0;
-	}
-	if (pg->codehandleProcess)
-	{
-		NSEEL_code_free(pg->codehandleProcess);
-		pg->codehandleProcess = 0;
-	}
-	return -3;
+	pg->compileSucessfully = 1;
+	return 1;
 }
 /* 选编译目标槽：非活动 + VM 可用 + 在途守卫通过（双条件任一满足）：
  *   a) eelInFlight == 0（无在途调用，覆盖音频停流）；
@@ -297,7 +320,7 @@ static LiveProg *LiveProgPickSlot(JamesDSPLib *jdsp)
 }
 /* 影子编译 + 原子换指针。返回 1=成功并已换入；<0=失败（活动快照不变，
  * 旧代码继续有效——这正是 B1 要的「编译失败不影响正在跑的音频」）。 */
-static int LiveProgCompileAndSwap(JamesDSPLib *jdsp, char *codeTextInit, char *codeTextProcess)
+static int LiveProgCompileAndSwap(JamesDSPLib *jdsp, char *codeTextInit, char *codeTextSlider, char *codeTextProcess)
 {
 	LiveProg *target = LiveProgPickSlot(jdsp);
 	if (!target)
@@ -316,7 +339,7 @@ static int LiveProgCompileAndSwap(JamesDSPLib *jdsp, char *codeTextInit, char *c
 				return -4;
 		}
 	}
-	int rc = LiveProgCompileInto(target, jdsp, codeTextInit, codeTextProcess);
+	int rc = LiveProgCompileInto(target, jdsp, codeTextInit, codeTextSlider, codeTextProcess);
 	if (rc != 1)
 		return rc;
 	LiveProg *prev = jdsp->eel;
@@ -328,48 +351,164 @@ static int LiveProgCompileAndSwap(JamesDSPLib *jdsp, char *codeTextInit, char *c
 	jdsp->eelSwapProc = jdsp->eelProcCount;
 	return 1;
 }
+
+/* [PATCHED-AuraDSP P-039 2026-10-27] 多段分段解析辅助 */
+static const char *find_sec_hdr(const char *code, const char *secName)
+{
+	size_t nameLen = strlen(secName);
+	const char *p = code;
+	while ((p = strstr(p, secName)) != NULL)
+	{
+		const char *lineStart = p;
+		while (lineStart > code && (lineStart[-1] == ' ' || lineStart[-1] == '\t'))
+			lineStart--;
+		if (lineStart == code || lineStart[-1] == '\n' || lineStart[-1] == '\r')
+		{
+			char next = p[nameLen];
+			if (next == 0 || next == '\r' || next == '\n' || next == ' ' || next == '\t')
+				return p;
+		}
+		p += nameLen;
+	}
+	return NULL;
+}
+
+static const char *sec_skip_line(const char *hdr, size_t nameLen)
+{
+	const char *p = hdr + nameLen;
+	while (*p && *p != '\n')
+		p++;
+	if (*p == '\n')
+		p++;
+	return p;
+}
+
+typedef struct {
+	const char *name;
+	const char *hdr;
+	size_t nameLen;
+	const char *bodyStart;
+	size_t bodyLen;
+} LiveProgSecItem;
+
 int LiveProgStringParser(JamesDSPLib *jdsp, char *eelCode)
 {
-	/* B1：不再持 jdsp_lock 编译（见文件头）。分段解析是纯局部操作。 */
+	/* B1：不再持 jdsp_lock 编译。分段解析是纯局部操作。
+	 * [PATCHED-AuraDSP P-039 2026-10-27] 支持 @init, @slider, @block, @sample 四大段 */
 	long long strLen = (long long)strlen(eelCode);
-	const char *initSegment = strstr(eelCode, "@init");
-	if (!initSegment)
+	const char *initHdr = find_sec_hdr(eelCode, "@init");
+	if (!initHdr)
 		return 0;
-	else
-		initSegment += 6;
-	const char *processSegment = strstr(eelCode, "@sample");
-	if (!processSegment)
+	const char *sampleHdr = find_sec_hdr(eelCode, "@sample");
+	if (!sampleHdr)
 		return -2;
-	else
-		processSegment += 8;
-	char *codeTextInit = (char*)malloc(strLen * sizeof(char));
-	char *codeTextProcess = (char*)malloc(strLen * sizeof(char));
-	if (!codeTextInit || !codeTextProcess)
+	const char *sliderHdr = find_sec_hdr(eelCode, "@slider");
+	const char *blockHdr = find_sec_hdr(eelCode, "@block");
+
+	LiveProgSecItem secs[4];
+	int numSecs = 0;
+
+	secs[numSecs].name = "@init";
+	secs[numSecs].hdr = initHdr;
+	secs[numSecs].nameLen = 5;
+	numSecs++;
+
+	secs[numSecs].name = "@sample";
+	secs[numSecs].hdr = sampleHdr;
+	secs[numSecs].nameLen = 7;
+	numSecs++;
+
+	if (sliderHdr)
+	{
+		secs[numSecs].name = "@slider";
+		secs[numSecs].hdr = sliderHdr;
+		secs[numSecs].nameLen = 7;
+		numSecs++;
+	}
+
+	if (blockHdr)
+	{
+		secs[numSecs].name = "@block";
+		secs[numSecs].hdr = blockHdr;
+		secs[numSecs].nameLen = 6;
+		numSecs++;
+	}
+
+	/* 按源码位置升序排序 */
+	for (int i = 0; i < numSecs - 1; i++)
+	{
+		for (int j = 0; j < numSecs - 1 - i; j++)
+		{
+			if (secs[j].hdr > secs[j + 1].hdr)
+			{
+				LiveProgSecItem tmp = secs[j];
+				secs[j] = secs[j + 1];
+				secs[j + 1] = tmp;
+			}
+		}
+	}
+
+	/* 计算各段 body 范围（不截断有效分号，不残留下一个段标记） */
+	for (int i = 0; i < numSecs; i++)
+	{
+		secs[i].bodyStart = sec_skip_line(secs[i].hdr, secs[i].nameLen);
+		const char *nextHdr = (i + 1 < numSecs) ? secs[i + 1].hdr : (eelCode + strLen);
+		if (nextHdr > secs[i].bodyStart)
+			secs[i].bodyLen = (size_t)(nextHdr - secs[i].bodyStart);
+		else
+			secs[i].bodyLen = 0;
+	}
+
+	char *codeTextInit = (char*)malloc((size_t)strLen + 1);
+	char *codeTextSlider = (char*)malloc((size_t)strLen + 1);
+	char *codeTextProcess = (char*)malloc((size_t)strLen + 1);
+	if (!codeTextInit || !codeTextSlider || !codeTextProcess)
 	{
 		free(codeTextInit);
+		free(codeTextSlider);
 		free(codeTextProcess);
 		return -3;
 	}
-	memset(codeTextInit, 0, strLen * sizeof(char));
-	memset(codeTextProcess, 0, strLen * sizeof(char));
-	int errorMsg = 1;
-	if (initSegment < processSegment)
+	codeTextInit[0] = 0;
+	codeTextSlider[0] = 0;
+	codeTextProcess[0] = 0;
+
+	for (int i = 0; i < numSecs; i++)
 	{
-		long long cpyLen = processSegment - initSegment - (8 + 1);
-		if (cpyLen > 0)
-			strncpy(codeTextInit, initSegment, cpyLen);
-		if (processSegment - eelCode < strLen)
-			strcpy(codeTextProcess, processSegment);
+		if (strcmp(secs[i].name, "@init") == 0)
+		{
+			if (secs[i].bodyLen > 0)
+			{
+				memcpy(codeTextInit, secs[i].bodyStart, secs[i].bodyLen);
+				codeTextInit[secs[i].bodyLen] = 0;
+			}
+		}
+		else if (strcmp(secs[i].name, "@sample") == 0)
+		{
+			if (secs[i].bodyLen > 0)
+			{
+				memcpy(codeTextProcess, secs[i].bodyStart, secs[i].bodyLen);
+				codeTextProcess[secs[i].bodyLen] = 0;
+			}
+		}
+		else if (strcmp(secs[i].name, "@slider") == 0 || strcmp(secs[i].name, "@block") == 0)
+		{
+			if (secs[i].bodyLen > 0)
+			{
+				size_t curLen = strlen(codeTextSlider);
+				if (curLen > 0)
+				{
+					codeTextSlider[curLen++] = '\n';
+				}
+				memcpy(codeTextSlider + curLen, secs[i].bodyStart, secs[i].bodyLen);
+				codeTextSlider[curLen + secs[i].bodyLen] = 0;
+			}
+		}
 	}
-	else
-	{
-		strcpy(codeTextInit, initSegment);
-		long long cpyLen = initSegment - processSegment - (6 + 1);
-		if (cpyLen > 0)
-			strncpy(codeTextProcess, processSegment, cpyLen);
-	}
-	errorMsg = LiveProgCompileAndSwap(jdsp, codeTextInit, codeTextProcess);
+
+	int errorMsg = LiveProgCompileAndSwap(jdsp, codeTextInit, codeTextSlider, codeTextProcess);
 	free(codeTextInit);
+	free(codeTextSlider);
 	free(codeTextProcess);
 	return errorMsg;
 }
@@ -387,6 +526,8 @@ const char* checkErrorCode(int errCode)
 		return "Syntax error at @sample section";
 	case -4:
 		return "Engine busy (no free liveprog slot), retry";
+	case -5:
+		return "Syntax error at @slider section";
 	default:
 		return "No syntax errors detected";
 	}
@@ -406,6 +547,8 @@ void LiveProgProcess(JamesDSPLib *jdsp, size_t n)
 		if (eel && eel->compileSucessfully && eel->codehandleProcess &&
 		    eel->input1 && eel->input2)
 		{
+			if (eel->codehandleSlider)
+				NSEEL_code_execute(eel->codehandleSlider);
 			for (size_t i = 0; i < n; i++)
 			{
 				*eel->input1 = jdsp->tmpBuffer[0][i];

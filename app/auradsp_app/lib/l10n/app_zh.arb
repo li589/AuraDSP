@@ -683,7 +683,7 @@
   "lpCompiledIdle": "已编译 · 点击顶栏应用生效",
   "lpSliders": "脚本滑块（slider1..8）",
   "lpSliderHint": "有声明按声明，无声明默认 0..1；改动实时生效",
-  "lpLibrary": "脚本库（%APPDATA%/AuraDSP/liveprog）",
+  "lpLibrary": "脚本库",
   "lpLibraryEmpty": "库为空 — 用下方名称框保存当前代码",
   "lpSave": "保存到库",
   "lpApoDialogTitle": "导入 EqualizerAPO 预设 (.txt)",
@@ -1518,7 +1518,7 @@
   "lpLibOpenInExplorer": "在文件管理器中浏览",
   "lpLibDirInvalid": "目录不存在或已失效",
   "lpLibSaveCurrent": "保存当前脚本到库",
-  "lpLibCustomDirs": "外部脚本目录",
+  "lpLibCustomDirs": "脚本目录",
   "lpSlidersPanelTitle": "参数调节滑块",
   "lpSlidersCollapse": "收起面板",
   "lpSlidersExpand": "展开面板",
@@ -1532,5 +1532,21 @@
   "lpResetAll": "全部复位",
   "lpInputMasterGain": "全局输入增益",
   "lpOutputMasterGain": "全局输出增益",
-  "lpNoScriptSliders": "脚本未声明可调变量"
+  "lpNoScriptSliders": "脚本未声明可调变量",
+  "lpTooltipUnapplyToCompile": "应用状态下禁止编译，请先取消应用",
+  "lpLibSystemInitial": "<系统初始>",
+  "lpLibDirs": "脚本目录",
+  "lpLibScriptList": "脚本列表",
+  "lpApoParseError": "第 {line} 行语法异常: {error}",
+  "@lpApoParseError": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoNoFiltersPreampOnly": "纯前级增益模式 (无滤波器)"
 }

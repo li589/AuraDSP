@@ -110,6 +110,46 @@ abstract final class LiveprogLibrary {
     return items;
   }
 
+  /// 异步读取指定目录中的脚本条目（支持坏文件隔离 FileGate L1）
+  static Future<List<LiveprogItem>> listDirAsync(
+    String dirPath, {
+    required bool isExternal,
+    required String folderName,
+  }) async {
+    return Future(() {
+      final items = <LiveprogItem>[];
+      lastSkipped = 0;
+      try {
+        final d = Directory(dirPath);
+        if (!d.existsSync()) return items;
+
+        final files = isExternal
+            ? d.listSync(recursive: true).whereType<File>()
+            : d.listSync().whereType<File>();
+
+        for (final f in files) {
+          final p = f.path.toLowerCase();
+          if (!(p.endsWith('.eel') || p.endsWith('.txt'))) continue;
+          if (gateCheck(f) != null) {
+            lastSkipped++;
+            continue;
+          }
+          items.add(LiveprogItem(
+            name: f.uri.pathSegments.last,
+            path: f.path,
+            isExternal: isExternal,
+            folderName: folderName,
+          ));
+        }
+        items.sort((a, b) =>
+            a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      } catch (e, st) {
+        swallow(e, st);
+      }
+      return items;
+    });
+  }
+
   static Future<String?> loadFromPath(String filePath) async {
     try {
       final f = File(filePath);
@@ -176,15 +216,18 @@ abstract final class LiveprogLibrary {
     }
   }
 
-  static bool save(String name, String text) {
+  static bool save(String name, String text, [String? targetDir]) {
     try {
       if (name.contains(RegExp(r'[\\/:*?"<>|]')) || name.contains('..')) {
         return false;
       }
       if (utf8.encode(text).length > maxScriptBytes) return false;
-      final d = Directory(dir);
+      final outDir = (targetDir != null && Directory(targetDir).existsSync())
+          ? targetDir
+          : dir;
+      final d = Directory(outDir);
       if (!d.existsSync()) d.createSync(recursive: true);
-      File('$dir${Platform.pathSeparator}$name').writeAsStringSync(text);
+      File('$outDir${Platform.pathSeparator}$name').writeAsStringSync(text);
       return true;
     } catch (e, st) {
       swallow(e, st);

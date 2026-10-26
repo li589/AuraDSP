@@ -556,7 +556,7 @@
   "lpCompiledIdle": "Compiled · Click Apply in toolbar to run",
   "lpSliders": "Script sliders (slider1..8)",
   "lpSliderHint": "Declared range wins; 0..1 when undeclared; changes apply live",
-  "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
+  "lpLibrary": "Script Library",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
   "lpSave": "Save to library",
   "lpApoDialogTitle": "Import EqualizerAPO Preset (.txt)",
@@ -1398,7 +1398,7 @@
   "lpLibOpenInExplorer": "Browse in File Manager",
   "lpLibDirInvalid": "Directory does not exist or is invalid",
   "lpLibSaveCurrent": "Save Current Script to Library",
-  "lpLibCustomDirs": "External Script Directories",
+  "lpLibCustomDirs": "Script Directories",
   "lpSlidersPanelTitle": "Parameter Sliders",
   "lpSlidersCollapse": "Collapse Panel",
   "lpSlidersExpand": "Expand Panel",
@@ -1412,5 +1412,21 @@
   "lpResetAll": "Reset All",
   "lpInputMasterGain": "Master Input Gain",
   "lpOutputMasterGain": "Master Output Gain",
-  "lpNoScriptSliders": "No adjustable variables declared in script"
+  "lpNoScriptSliders": "No adjustable variables declared in script",
+  "lpTooltipUnapplyToCompile": "Compilation disabled while applied; unapply first",
+  "lpLibSystemInitial": "<System Default>",
+  "lpLibDirs": "Script Directories",
+  "lpLibScriptList": "Script List",
+  "lpApoParseError": "Syntax issue on line {line}: {error}",
+  "@lpApoParseError": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoNoFiltersPreampOnly": "Preamp Only Mode (No Filters)"
 }

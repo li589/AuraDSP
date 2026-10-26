@@ -1500,7 +1500,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSliderHint => '有声明按声明，无声明默认 0..1；改动实时生效';
 
   @override
-  String get lpLibrary => '脚本库（%APPDATA%/AuraDSP/liveprog）';
+  String get lpLibrary => '脚本库';
 
   @override
   String get lpLibraryEmpty => '库为空 — 用下方名称框保存当前代码';
@@ -3164,7 +3164,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpLibSaveCurrent => '保存当前脚本到库';
 
   @override
-  String get lpLibCustomDirs => '外部脚本目录';
+  String get lpLibCustomDirs => '脚本目录';
 
   @override
   String get lpSlidersPanelTitle => '参数调节滑块';
@@ -3208,4 +3208,24 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpNoScriptSliders => '脚本未声明可调变量';
+
+  @override
+  String get lpTooltipUnapplyToCompile => '应用状态下禁止编译，请先取消应用';
+
+  @override
+  String get lpLibSystemInitial => '<系统初始>';
+
+  @override
+  String get lpLibDirs => '脚本目录';
+
+  @override
+  String get lpLibScriptList => '脚本列表';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return '第 $line 行语法异常: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => '纯前级增益模式 (无滤波器)';
 }

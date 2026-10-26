@@ -98,7 +98,9 @@ class LiveprogLibraryDialog extends StatefulWidget {
 class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
   final TextEditingController _saveNameController =
       TextEditingController(text: 'my-script');
+  String? _selectedDir;
   List<LiveprogItem> _items = const [];
+  bool _loadingScripts = false;
   int _skippedCount = 0;
 
   // 异步检测目录存在性缓存：dirPath -> exists
@@ -108,8 +110,12 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
   @override
   void initState() {
     super.initState();
-    _refreshList();
-    _checkDirsAsync();
+    _ensureDefaultDir();
+    _initSelectedDir();
+    if (widget.model.config.customScriptDirs.isNotEmpty) {
+      _checkDirsAsync();
+    }
+    _loadScriptsForSelectedDir();
   }
 
   @override
@@ -118,24 +124,77 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     super.dispose();
   }
 
-  void _refreshList() {
-    final all = LiveprogLibrary.listAll(widget.model.config.customScriptDirs);
+  void _ensureDefaultDir() {
+    try {
+      final d = Directory(LiveprogLibrary.dir);
+      if (!d.existsSync()) {
+        d.createSync(recursive: true);
+      }
+    } catch (e, st) {
+      swallow(e, st);
+    }
+  }
+
+  void _initSelectedDir() {
+    final customDirs = widget.model.config.customScriptDirs;
+    final allDirs = [LiveprogLibrary.dir, ...customDirs];
+    final saved = PathMemory.rawDirFor(PathMemory.slotLiveprogSelectedDir);
+    if (saved != null && allDirs.contains(saved)) {
+      _selectedDir = saved;
+    } else {
+      _selectedDir = LiveprogLibrary.dir;
+    }
+  }
+
+  void _selectDirectory(String dir) {
+    if (_selectedDir == dir && !_loadingScripts) return;
     setState(() {
-      _items = all;
-      _skippedCount = LiveprogLibrary.lastSkipped;
+      _selectedDir = dir;
     });
+    PathMemory.setDir(PathMemory.slotLiveprogSelectedDir, dir);
+    _loadScriptsForSelectedDir();
+  }
+
+  /// 异步读取当前选中目录下的脚本文件
+  Future<void> _loadScriptsForSelectedDir() async {
+    final dir = _selectedDir ?? LiveprogLibrary.dir;
+    setState(() => _loadingScripts = true);
+    final isDefault = dir == LiveprogLibrary.dir;
+    final folderName = isDefault
+        ? 'Local'
+        : (Directory(dir)
+                .uri
+                .pathSegments
+                .where((s) => s.isNotEmpty)
+                .lastOrNull ??
+            dir);
+
+    final items = await LiveprogLibrary.listDirAsync(
+      dir,
+      isExternal: !isDefault,
+      folderName: folderName,
+    );
+
+    if (mounted && _selectedDir == dir) {
+      setState(() {
+        _items = items;
+        _loadingScripts = false;
+        _skippedCount = LiveprogLibrary.lastSkipped;
+      });
+    }
   }
 
   /// 每次打开或变更后异步检测外部目录是否存在
   Future<void> _checkDirsAsync() async {
-    setState(() => _checkingDirs = true);
     final dirs = widget.model.config.customScriptDirs;
+    if (dirs.isEmpty) return;
+    setState(() => _checkingDirs = true);
     final results = <String, bool>{};
 
     for (final d in dirs) {
       try {
         final dir = Directory(d);
-        results[d] = await dir.exists();
+        results[d] = dir.existsSync();
       } catch (e, st) {
         swallow(e, st);
         results[d] = false;
@@ -176,13 +235,14 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     );
 
     if (selectedDir != null && selectedDir.trim().isNotEmpty) {
-      widget.model.addCustomScriptDir(selectedDir.trim());
-      _refreshList();
+      final trimmed = selectedDir.trim();
+      widget.model.addCustomScriptDir(trimmed);
+      _selectDirectory(trimmed);
       _checkDirsAsync();
     }
   }
 
-  /// 保存当前脚本到库
+  /// 保存当前脚本到库（优先保存到当前选中的有效目录）
   Future<void> _saveCurrentScript() async {
     final l = l10nOf(context);
     final rawName = _saveNameController.text.trim();
@@ -192,7 +252,13 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         ? rawName
         : '$rawName.eel';
 
-    final destPath = '${LiveprogLibrary.dir}${Platform.pathSeparator}$fileName';
+    final targetDir = (_selectedDir != null &&
+            (_selectedDir == LiveprogLibrary.dir ||
+                (_dirExistence[_selectedDir] ?? false)))
+        ? _selectedDir!
+        : LiveprogLibrary.dir;
+
+    final destPath = '$targetDir${Platform.pathSeparator}$fileName';
     final destFile = File(destPath);
 
     if (destFile.existsSync()) {
@@ -203,9 +269,9 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
       if (!confirm) return;
     }
 
-    final ok = LiveprogLibrary.save(fileName, widget.currentCode);
+    final ok = LiveprogLibrary.save(fileName, widget.currentCode, targetDir);
     if (ok) {
-      _refreshList();
+      _loadScriptsForSelectedDir();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -311,7 +377,7 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         res,
         widget.model.config.customScriptDirs,
       );
-      if (ok) _refreshList();
+      if (ok) _loadScriptsForSelectedDir();
     }
   }
 
@@ -349,7 +415,7 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         item.path,
         widget.model.config.customScriptDirs,
       );
-      if (ok) _refreshList();
+      if (ok) _loadScriptsForSelectedDir();
     }
   }
 
@@ -358,6 +424,7 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     final p = paletteOf(context);
     final l = l10nOf(context);
     final customDirs = widget.model.config.customScriptDirs;
+    final allDirs = [LiveprogLibrary.dir, ...customDirs];
 
     return AlertDialog(
       backgroundColor: p.panel,
@@ -407,125 +474,164 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 外部目录管理行
+            // 脚本目录标题行
             Row(
               children: [
                 Icon(Icons.folder_shared_outlined, size: 16, color: p.accent),
                 const SizedBox(width: AuraSpace.xs),
-                Expanded(
-                  child: Text(
-                    l.lpLibCustomDirs,
-                    style: monoOf(p, size: 12, color: p.text),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: AuraSpace.xs),
-                OutlinedButton.icon(
-                  onPressed: _addDirectory,
-                  icon: const Icon(Icons.create_new_folder_rounded, size: 14),
-                  label: Text(l.lpAddDir),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: p.accent,
-                    side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
-                    visualDensity: VisualDensity.compact,
-                  ),
+                Text(
+                  l.lpLibDirs,
+                  style: monoOf(p, size: 12, color: p.text),
                 ),
               ],
             ),
             const SizedBox(height: AuraSpace.xs),
 
-            // 外部目录列表（异步检测存在性 + 浏览按键）
-            if (customDirs.isNotEmpty) ...[
-              Container(
-                constraints: const BoxConstraints(maxHeight: 120),
-                decoration: BoxDecoration(
-                  color: p.panelRaised,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: customDirs.length,
-                  separatorBuilder: (_, _) =>
-                      Divider(color: p.hairline, height: 1),
-                  itemBuilder: (ctx, idx) {
-                    final d = customDirs[idx];
-                    final exists = _dirExistence[d] ?? true;
-                    return Padding(
+            // 目录列表（首个为系统初始目录，支持单选与状态标记）
+            Container(
+              constraints: const BoxConstraints(maxHeight: 120),
+              decoration: BoxDecoration(
+                color: p.panelRaised,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: Border.all(color: p.hairline),
+              ),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: allDirs.length,
+                separatorBuilder: (_, _) =>
+                    Divider(color: p.hairline, height: 1),
+                itemBuilder: (ctx, idx) {
+                  final d = allDirs[idx];
+                  final isDefault = idx == 0;
+                  final isSelected = _selectedDir == d;
+                  final exists = isDefault ? true : (_dirExistence[d] ?? true);
+
+                  return InkWell(
+                    onTap: () => _selectDirectory(d),
+                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                    child: Padding(
                       padding: const EdgeInsets.symmetric(
                           horizontal: AuraSpace.sm, vertical: 4),
                       child: Row(
                         children: [
                           Icon(
-                            exists
-                                ? Icons.folder_outlined
-                                : Icons.folder_off_outlined,
+                            isSelected
+                                ? Icons.radio_button_checked
+                                : Icons.radio_button_unchecked,
+                            size: 16,
+                            color: isSelected ? p.accent : p.textDim,
+                          ),
+                          const SizedBox(width: AuraSpace.xs),
+                          Icon(
+                            isDefault
+                                ? Icons.folder_special_outlined
+                                : (exists
+                                    ? Icons.folder_outlined
+                                    : Icons.folder_off_outlined),
                             size: 15,
-                            color: exists ? p.accent : p.error,
+                            color: exists
+                                ? (isSelected ? p.accent : p.text)
+                                : p.error,
                           ),
                           const SizedBox(width: AuraSpace.xs),
                           Expanded(
                             child: Text(
                               d,
-                              style: monoOf(p,
-                                  size: 11,
-                                  color: exists ? p.text : p.error),
+                              style: monoOf(
+                                p,
+                                size: 11,
+                                color: exists
+                                    ? (isSelected ? p.accent : p.text)
+                                    : p.error,
+                              ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
                           ),
-                          if (!exists) ...[
-                            const SizedBox(width: AuraSpace.xs),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 4, vertical: 1),
-                              decoration: BoxDecoration(
-                                color: p.error.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(3),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isDefault) ...[
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 4, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: p.accent.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    l.lpLibSystemInitial,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w600,
+                                      color: p.accent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: AuraSpace.xs),
+                              ] else if (!exists) ...[
+                                Tooltip(
+                                  message: l.lpLibDirInvalid,
+                                  child: Icon(
+                                    Icons.warning_amber_rounded,
+                                    size: 16,
+                                    color: p.warning,
+                                  ),
+                                ),
+                                const SizedBox(width: AuraSpace.xs),
+                              ],
+                              // 浏览：打开平台文件管理器
+                              IconButton(
+                                tooltip: l.lpLibOpenInExplorer,
+                                icon: const Icon(Icons.open_in_new_rounded,
+                                    size: 14),
+                                visualDensity: VisualDensity.compact,
+                                color: p.textDim,
+                                onPressed: exists
+                                    ? () => _browseInFileManager(d)
+                                    : null,
                               ),
-                              child: Text(
-                                l.lpLibDirInvalid,
-                                style: TextStyle(fontSize: 10, color: p.error),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(width: AuraSpace.xs),
-                          // 浏览：打开平台文件管理器
-                          IconButton(
-                            tooltip: l.lpLibOpenInExplorer,
-                            icon: const Icon(Icons.open_in_new_rounded,
-                                size: 14),
-                            visualDensity: VisualDensity.compact,
-                            color: p.textDim,
-                            onPressed: () => _browseInFileManager(d),
-                          ),
-                          // 移除外部目录
-                          IconButton(
-                            tooltip: l.lpDeleteAction,
-                            icon: const Icon(Icons.close_rounded, size: 14),
-                            visualDensity: VisualDensity.compact,
-                            color: p.textDim,
-                            onPressed: () {
-                              widget.model.removeCustomScriptDir(d);
-                              _refreshList();
-                              _checkDirsAsync();
-                            },
+                              // 移除外部目录（默认目录禁止删除）
+                              if (!isDefault)
+                                IconButton(
+                                  tooltip: l.lpDeleteAction,
+                                  icon: const Icon(Icons.close_rounded,
+                                      size: 14),
+                                  visualDensity: VisualDensity.compact,
+                                  color: p.textDim,
+                                  onPressed: () {
+                                    widget.model.removeCustomScriptDir(d);
+                                    if (_selectedDir == d) {
+                                      _selectDirectory(LiveprogLibrary.dir);
+                                    }
+                                    _checkDirsAsync();
+                                  },
+                                ),
+                            ],
                           ),
                         ],
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  );
+                },
               ),
-              const SizedBox(height: AuraSpace.sm),
-            ],
+            ),
+            const SizedBox(height: AuraSpace.sm),
 
-            // 脚本列表区
-            Text(
-              l.lpLibrary,
-              style: monoOf(p, size: 12, color: p.text),
+            // 脚本列表标题行
+            Row(
+              children: [
+                Icon(Icons.code_rounded, size: 16, color: p.accent),
+                const SizedBox(width: AuraSpace.xs),
+                Text(
+                  l.lpLibScriptList,
+                  style: monoOf(p, size: 12, color: p.text),
+                ),
+              ],
             ),
             const SizedBox(height: AuraSpace.xs),
+
+            // 脚本列表区（异步加载动画与展示）
             Expanded(
               child: Container(
                 decoration: BoxDecoration(
@@ -533,55 +639,65 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
                   borderRadius: BorderRadius.circular(AuraRadius.sm),
                   border: Border.all(color: p.hairline),
                 ),
-                child: _items.isEmpty
+                child: _loadingScripts
                     ? Center(
-                        child: Text(l.lpLibraryEmpty, style: captionOf(p)),
+                        child: SizedBox(
+                          width: 24,
+                          height: 24,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: p.accent,
+                          ),
+                        ),
                       )
-                    : ListView.builder(
-                        itemCount: _items.length,
-                        itemBuilder: (ctx, idx) {
-                          final item = _items[idx];
-                          return ListTile(
-                            dense: true,
-                            leading: Icon(
-                              item.isExternal
-                                  ? Icons.folder_shared_rounded
-                                  : Icons.description_outlined,
-                              size: 16,
-                              color: p.accent,
-                            ),
-                            title: Text(
-                              item.isExternal
-                                  ? '${item.name} [${item.folderName}]'
-                                  : item.name,
-                              style: monoOf(p, size: 12),
-                            ),
-                            trailing: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                IconButton(
-                                  tooltip: l.lpRenameTitle,
-                                  visualDensity: VisualDensity.compact,
-                                  iconSize: 14,
-                                  color: p.textDim,
-                                  icon: const Icon(
-                                      Icons.drive_file_rename_outline_rounded),
-                                  onPressed: () => _renameItem(item),
+                    : _items.isEmpty
+                        ? Center(
+                            child: Text(l.lpLibraryEmpty, style: captionOf(p)),
+                          )
+                        : ListView.builder(
+                            itemCount: _items.length,
+                            itemBuilder: (ctx, idx) {
+                              final item = _items[idx];
+                              return ListTile(
+                                dense: true,
+                                leading: Icon(
+                                  item.isExternal
+                                      ? Icons.folder_shared_rounded
+                                      : Icons.description_outlined,
+                                  size: 16,
+                                  color: p.accent,
                                 ),
-                                IconButton(
-                                  tooltip: l.lpDeleteTitle,
-                                  visualDensity: VisualDensity.compact,
-                                  iconSize: 14,
-                                  color: p.textDim,
-                                  icon: const Icon(Icons.delete_outline_rounded),
-                                  onPressed: () => _deleteItem(item),
+                                title: Text(
+                                  item.name,
+                                  style: monoOf(p, size: 12),
                                 ),
-                              ],
-                            ),
-                            onTap: () => _onSelect(item),
-                          );
-                        },
-                      ),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      tooltip: l.lpRenameTitle,
+                                      visualDensity: VisualDensity.compact,
+                                      iconSize: 14,
+                                      color: p.textDim,
+                                      icon: const Icon(
+                                          Icons.drive_file_rename_outline_rounded),
+                                      onPressed: () => _renameItem(item),
+                                    ),
+                                    IconButton(
+                                      tooltip: l.lpDeleteTitle,
+                                      visualDensity: VisualDensity.compact,
+                                      iconSize: 14,
+                                      color: p.textDim,
+                                      icon: const Icon(
+                                          Icons.delete_outline_rounded),
+                                      onPressed: () => _deleteItem(item),
+                                    ),
+                                  ],
+                                ),
+                                onTap: () => _onSelect(item),
+                              );
+                            },
+                          ),
               ),
             ),
 
@@ -637,8 +753,23 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
         ),
       ),
       actions: [
+        OutlinedButton.icon(
+          onPressed: _addDirectory,
+          icon: const Icon(Icons.create_new_folder_rounded, size: 15),
+          label: Text(l.lpAddDir),
+          style: OutlinedButton.styleFrom(
+            foregroundColor: p.accent,
+            side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
+            minimumSize: const Size(120, 36),
+            padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
+          ),
+        ),
         FilledButton(
           onPressed: () => Navigator.of(context).pop(),
+          style: FilledButton.styleFrom(
+            minimumSize: const Size(90, 36),
+            padding: const EdgeInsets.symmetric(horizontal: AuraSpace.md),
+          ),
           child: Text(l.dlgClose),
         ),
       ],
