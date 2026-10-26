@@ -62,13 +62,34 @@
   "setDeviceDisconnected": "未连接设备",
   "setEndpointShort": "端点",
   "setEndpointWithId": "音频端点 ({shortId})",
-  "@setEndpointWithId": {"placeholders": {"shortId": {"type": "String"}}},
+  "@setEndpointWithId": {
+    "placeholders": {
+      "shortId": {
+        "type": "String"
+      }
+    }
+  },
   "setOfflineSuffix": "{name} [离线/未连接]",
-  "@setOfflineSuffix": {"placeholders": {"name": {"type": "String"}}},
+  "@setOfflineSuffix": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "setDefaultEndpoint": "默认音频端点 (Default Render)",
   "setNoEndpoint": "无可用音频端点",
   "setApoActive": "活跃处理中 ({sr}Hz · {frames} 帧)",
-  "@setApoActive": {"placeholders": {"sr": {"type": "int"}, "frames": {"type": "int"}}},
+  "@setApoActive": {
+    "placeholders": {
+      "sr": {
+        "type": "int"
+      },
+      "frames": {
+        "type": "int"
+      }
+    }
+  },
   "setApoAttached": "已挂接 (等待播放流触发)",
   "setProcessing": "处理中...",
   "setApoRegistered": "已向目标设备注册 System APO 钩子并完成服务同步",
@@ -79,7 +100,13 @@
   "setRefreshStatus": "刷新状态",
   "setApoSafetyNote": "注册表安全保护：所有变更均经 HKLM\\SOFTWARE\\AuraDSP\\Child APOs 及磁盘双层快照原子保护，卸载时 100% 还原原始驱动配置。",
   "setDriverOffline": "{name} [未检测到/离线]",
-  "@setDriverOffline": {"placeholders": {"name": {"type": "String"}}},
+  "@setDriverOffline": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "setVaioReady": "AuraVAIO KMDF 驱动已就绪 (Sysvad 虚拟声卡)",
   "setVaioMissing": "未检测到 AuraVAIO 虚拟声卡驱动",
   "setVaioDesc": "KMDF 内核模式虚拟音频驱动，提供全双工虚拟音频线缆通道",
@@ -134,18 +161,48 @@
   "compHintBandAmount": "负值为动态压缩压制，正值为动态扩展。默认 -0.35。",
   "eelUnclosedString": "字符串未闭合（跨行）",
   "eelUnmatchedClose": "多余的 \"{ch}\"（无匹配的开括号）",
-  "@eelUnmatchedClose": {"placeholders": {"ch": {"type": "String"}}},
+  "@eelUnmatchedClose": {
+    "placeholders": {
+      "ch": {
+        "type": "String"
+      }
+    }
+  },
   "eelBlockCommentUnclosed": "块注释未闭合（/* 缺少对应的 */）",
   "eelUnclosedQuote": "\"{ch}\" 未闭合（始于第 {line} 行第 {col} 列）",
-  "@eelUnclosedQuote": {"placeholders": {"ch": {"type": "String"}, "line": {"type": "int"}, "col": {"type": "int"}}},
+  "@eelUnclosedQuote": {
+    "placeholders": {
+      "ch": {
+        "type": "String"
+      },
+      "line": {
+        "type": "int"
+      },
+      "col": {
+        "type": "int"
+      }
+    }
+  },
   "eelMissingInit": "缺少 @init 段（引擎会拒绝编译）",
   "eelMissingSample": "缺少 @sample 段（引擎会拒绝编译）",
   "eelEmptyInit": "空 @init 段（vendor 要求至少一条语句）",
   "eelEmptySample": "@sample 段为空（将输出静音），确认不是漏写？",
   "eelSliderRange": "slider{n} 越界（仅 slider1..8 会联动滑块）",
-  "@eelSliderRange": {"placeholders": {"n": {"type": "int"}}},
+  "@eelSliderRange": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
   "eelReadonlyAssign": "{name} 是只读变量，赋值不会生效",
-  "@eelReadonlyAssign": {"placeholders": {"name": {"type": "String"}}},
+  "@eelReadonlyAssign": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
   "lpDocIntro": "EEL2 是针对实时音频处理的高性能表达式语言。在 AuraDSP 中，所有脚本在音频泵线程中即时执行。",
   "lpDocSectionsTitle": "核心代码段（Sections）",
   "lpDocSampleCode": "@init\n// 采样率变化或初次加载时执行，用于初始化变量与系数\n\n@sample\n// 每个采样点执行。输入输出变量为 spl0 (左声道) 和 spl1 (右声道)\nspl0 = spl0 * 0.5;\nspl1 = spl1 * 0.5;",
@@ -179,7 +236,16 @@
   "ioAsioHwOutput": "AuraDSP ASIO Client 硬件输出",
   "ioChannelMap": "声道映射",
   "ioChannelPair": "通道 {p1} / {p2}",
-  "@ioChannelPair": {"placeholders": {"p1": {"type": "int"}, "p2": {"type": "int"}}},
+  "@ioChannelPair": {
+    "placeholders": {
+      "p1": {
+        "type": "int"
+      },
+      "p2": {
+        "type": "int"
+      }
+    }
+  },
   "ioOutputStatus": "输出状态",
   "ioAsioPassthrough": "正在直通硬件监听 (超低延迟)",
   "ioAsioReadyStatus": "就绪 (等待驱动会话)",
@@ -191,16 +257,39 @@
   "catStereo": "立体声",
   "catOutput": "输出",
   "catEffect": "效果",
-  "eelMissingSample": "缺少 @sample 段（引擎会拒绝编译）",
   "arbmagMinPoints": "至少需要 2 个有效频点（频率 增益dB; …）",
   "arbmagGraphicEqInvalid": "GraphicEQ 无效：{err}",
-  "@arbmagGraphicEqInvalid": {"placeholders": {"err": {"type": "String"}}},
+  "@arbmagGraphicEqInvalid": {
+    "placeholders": {
+      "err": {
+        "type": "String"
+      }
+    }
+  },
   "arbmagReadFailed": "读取文件失败: {err}",
-  "@arbmagReadFailed": {"placeholders": {"err": {"type": "String"}}},
+  "@arbmagReadFailed": {
+    "placeholders": {
+      "err": {
+        "type": "String"
+      }
+    }
+  },
   "arbmagPoints": "{n} 频点",
-  "@arbmagPoints": {"placeholders": {"n": {"type": "int"}}},
-  "arbmagNodes": "{n} 节点",
-  "@arbmagNodes": {"placeholders": {"n": {"type": "int"}}},
+  "@arbmagPoints": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "arbmagNodes": "已载入 {count} 个频点",
+  "@arbmagNodes": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "bassHintIntensity": "增强低音量感与冲击力。越高低频下潜越震撼，建议适度提升防轰头。",
   "bassHintFrequency": "低音增强作用的最高频率。低于该频率的声音将被加厚，一般建议 60~120Hz。",
   "bassShelfRouting": "低频搁架声道路由",
@@ -225,12 +314,27 @@
   "haasHintDelay": "延迟侧 0~25ms（Haas 定位差）。12ms 附近声场出头中，太大则成回声。",
   "haasHintWet": "湿声（延迟差分）比例。拉低保中央人声聚焦，单声道设备自动兼容。",
   "inputGainTip": "{label}: {gain} dB\n上下拖拽微调 · 双击归零",
-  "@inputGainTip": {"placeholders": {"label": {"type": "String"}, "gain": {"type": "String"}}},
+  "@inputGainTip": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      },
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
   "inputReset100": "重置 100%",
   "inputFinal": "最终: {desc}",
-  "@inputFinal": {"placeholders": {"desc": {"type": "String"}}},
+  "@inputFinal": {
+    "placeholders": {
+      "desc": {
+        "type": "String"
+      }
+    }
+  },
   "inputResetHint": "双击或点击恢复 100%",
-  "loudnessHint": "补偿强度。小音量夜听开高，大音量开低或关（响亮时自动直通）。",
+  "loudnessHint": "小音量自动补低频和高频，大音量直通",
   "postHintGain": "全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。",
   "postCeiling": "限幅阈值",
   "postHintCeiling": "母带级前瞻限幅门限。超过此门限的瞬态将被透明压制，彻底防止任何削波失真与真峰值 (ISP) 溢出。",
@@ -257,7 +361,13 @@
   "reverbPredelay": "预延迟",
   "reverbPredelayInfo": "混响前的延迟量（0–100ms）。与预设自带的基础预延迟相加；自定义模式从 0 起算。",
   "reverbLegacyPreset": "旧版预设 {id}",
-  "@reverbLegacyPreset": {"placeholders": {"id": {"type": "int"}}},
+  "@reverbLegacyPreset": {
+    "placeholders": {
+      "id": {
+        "type": "int"
+      }
+    }
+  },
   "spatialHintRoom": "模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。",
   "spatialHintWidth": "扩展双耳立体声张角与虚拟环绕音箱间距。拉大可获得脱箱广阔声场，适度调控以保声音饱满。",
   "spatialHintFocus": "控制中央人声与对白结像实体聚焦感。适度提升可令人声居中清晰且不被环绕声掩盖。",
@@ -328,8 +438,15 @@
   "bassMonoStereoPathHint": "立体声/矩阵/双耳路径：仅作用 L/R",
   "retryNow": "重试",
   "sampleRateDeviceActual": "设备实际：{rate} Hz",
-  "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
-  "sampleRateFollowBridge": "桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）",  "latencyLabel": "延迟",
+  "@sampleRateDeviceActual": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "sampleRateFollowBridge": "桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）",
+  "latencyLabel": "延迟",
   "latencyMs": "延迟 {n}ms",
   "latencyTip": "算法附加延迟：仅统计引入延迟的效果（如混响 +30ms）；低延迟效果计 0ms",
   "@latencyMs": {
@@ -801,7 +918,6 @@
   "dyneqThreshold": "阈值",
   "dyneqAttack": "启动时间",
   "dyneqRelease": "释放时间",
-  "loudnessHint": "小音量自动补低频和高频，大音量直通",
   "loudnessAmount": "补偿强度",
   "exciterHint": "给高频加谐波，压缩音频的空气感来源",
   "exciterAmount": "谐波量",
@@ -1251,14 +1367,6 @@
   "arbmagClear": "清空曲线",
   "arbmagEmptyHint": "尚未加载曲线。可点击上方预设、导入 AutoEq GraphicEQ 文件或粘贴代码。",
   "arbmagEditor": "GraphicEQ 代码编辑器",
-  "arbmagNodes": "已载入 {count} 个频点",
-  "@arbmagNodes": {
-    "placeholders": {
-      "count": {
-        "type": "int"
-      }
-    }
-  },
   "arbmagApply": "应用代码",
   "arbmagInvalidFormat": "GraphicEQ 格式错误或未包含有效节点",
   "crossfeedTitle": "串扰消除",
@@ -1361,5 +1469,11 @@
   "errRejected": "该值被引擎拒绝",
   "errUnsupported": "不支持的操作",
   "errReadOnly": "该参数为只读",
-  "errInternal": "引擎内部错误"
+  "errInternal": "引擎内部错误",
+  "lpFindReplace": "查找与替换",
+  "lpSidebarLeft": "切换左侧面板 (大纲与脚本库)",
+  "lpSidebarRight": "切换右侧面板 (滑块与控制台)",
+  "lpConsole": "控制台与诊断输出",
+  "lpNewScriptWizard": "新建脚本向导",
+  "lpApoImportTitle": "导入 APO 预设"
 }

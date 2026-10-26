@@ -10,7 +10,7 @@ final AppLocalizations _zh = lookupAppLocalizations(const Locale('zh'));
 void main() {
   group('EelManualRegistry', () {
     test('条目总数与内容结构完整性', () {
-      expect(EelManualRegistry.entries.length, greaterThanOrEqualTo(20));
+      expect(EelManualRegistry.entries.length, greaterThanOrEqualTo(80));
 
       // 验证全部 9 个分类均有收录
       final categoriesFound =

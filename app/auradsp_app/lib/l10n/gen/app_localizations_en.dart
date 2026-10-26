@@ -3207,4 +3207,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get errInternal => 'Internal engine error';
+
+  @override
+  String get lpFindReplace => 'Find & Replace';
+
+  @override
+  String get lpSidebarLeft => 'Toggle Left Panel (Outline & Library)';
+
+  @override
+  String get lpSidebarRight => 'Toggle Right Panel (Sliders & Console)';
+
+  @override
+  String get lpConsole => 'Console & Diagnostics';
+
+  @override
+  String get lpNewScriptWizard => 'Script Wizard';
+
+  @override
+  String get lpApoImportTitle => 'Import APO TXT';
 }

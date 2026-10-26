@@ -3058,4 +3058,22 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get errInternal => 'エンジン内部エラー';
+
+  @override
+  String get lpFindReplace => '検索と置換';
+
+  @override
+  String get lpSidebarLeft => '左パネル切り替え (アウトラインとライブラリ)';
+
+  @override
+  String get lpSidebarRight => '右パネル切り替え (スライダーとコンソール)';
+
+  @override
+  String get lpConsole => 'コンソールと診断出力';
+
+  @override
+  String get lpNewScriptWizard => 'スクリプトウィザード';
+
+  @override
+  String get lpApoImportTitle => 'APO プリセットのインポート';
 }

@@ -182,12 +182,11 @@
   "catStereo": "Stereo",
   "catOutput": "Output",
   "catEffect": "FX",
-  "eelMissingSample": "Missing @sample section (engine will refuse to compile)",
   "arbmagMinPoints": "Need at least 2 valid points (freq gain dB; …)",
   "arbmagGraphicEqInvalid": "Invalid GraphicEQ: {err}",
   "arbmagReadFailed": "Failed to read file: {err}",
   "arbmagPoints": "{n} points",
-  "arbmagNodes": "{n} nodes",
+  "arbmagNodes": "{count} nodes loaded",
   "bassHintIntensity": "Adds low-end weight and punch. Higher = deeper bass; raise moderately to avoid boomy highs.",
   "bassHintFrequency": "Upper limit of the bass boost. Audio below it is thickened; 60–120 Hz is a good range.",
   "bassShelfRouting": "Low-shelf channel routing",
@@ -215,7 +214,7 @@
   "inputReset100": "Reset 100%",
   "inputFinal": "Final: {desc}",
   "inputResetHint": "Double-click or tap to restore 100%",
-  "loudnessHint": "Compensation strength. Higher for quiet night listening; lower or off when loud (auto-bypasses at high volume).",
+  "loudnessHint": "Auto boosts lows and highs at quiet levels, transparent when loud",
   "postHintGain": "Global output level trim. Nudge up if the DSP chain leaves things too quiet.",
   "postCeiling": "Ceiling",
   "postHintCeiling": "Mastering-grade lookahead ceiling. Transients above it are transparently reduced, preventing clipping and true-peak (ISP) overs.",
@@ -312,8 +311,15 @@
   "bassMonoStereoPathHint": "Stereo/matrix/binaural path: applies to L/R only",
   "retryNow": "Retry",
   "sampleRateDeviceActual": "Device actual: {rate} Hz",
-  "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
-  "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)",  "latencyLabel": "Latency",
+  "@sampleRateDeviceActual": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)",
+  "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",
   "@latencyMs": {
@@ -785,7 +791,6 @@
   "dyneqThreshold": "Threshold",
   "dyneqAttack": "Attack",
   "dyneqRelease": "Release",
-  "loudnessHint": "Auto boosts lows and highs at quiet levels, transparent when loud",
   "loudnessAmount": "Amount",
   "exciterHint": "Harmonic air for compressed highs",
   "exciterAmount": "Amount",
@@ -1235,7 +1240,6 @@
   "arbmagClear": "Clear Curve",
   "arbmagEmptyHint": "No curve loaded. Select a target preset above, import an AutoEq GraphicEQ file, or paste code.",
   "arbmagEditor": "GraphicEQ Code Editor",
-  "arbmagNodes": "{count} nodes loaded",
   "@arbmagNodes": {
     "placeholders": {
       "count": {
@@ -1345,5 +1349,11 @@
   "errRejected": "Value rejected by engine",
   "errUnsupported": "Unsupported operation",
   "errReadOnly": "Parameter is read-only",
-  "errInternal": "Internal engine error"
+  "errInternal": "Internal engine error",
+  "lpFindReplace": "Find & Replace",
+  "lpSidebarLeft": "Toggle Left Panel (Outline & Library)",
+  "lpSidebarRight": "Toggle Right Panel (Sliders & Console)",
+  "lpConsole": "Console & Diagnostics",
+  "lpNewScriptWizard": "Script Wizard",
+  "lpApoImportTitle": "Import APO TXT"
 }

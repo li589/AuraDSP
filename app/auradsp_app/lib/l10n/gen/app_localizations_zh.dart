@@ -3037,4 +3037,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get errInternal => '引擎内部错误';
+
+  @override
+  String get lpFindReplace => '查找与替换';
+
+  @override
+  String get lpSidebarLeft => '切换左侧面板 (大纲与脚本库)';
+
+  @override
+  String get lpSidebarRight => '切换右侧面板 (滑块与控制台)';
+
+  @override
+  String get lpConsole => '控制台与诊断输出';
+
+  @override
+  String get lpNewScriptWizard => '新建脚本向导';
+
+  @override
+  String get lpApoImportTitle => '导入 APO 预设';
 }
