@@ -78,7 +78,7 @@ AuraDSP/
 位于 low-shelf 之后、vendor 链之前。
 
 ### legacy 链（原 `libjamesdsp`，2026-10-16 收编至 `engine/legacy/`，内部 12 级可重排序）
-`tube`（Triode/Pentode/Tape 三音色 + 干湿 + 补偿）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFTCompander）· `arbmag`（任意幅度 EQ）· `convolver`（IR 卷积，带 FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程）· `crossfeed`（bs2b，含 Chu Moy / Jan Meier 模式）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post`+`limiter`（输出级）
+`tube`（Triode/Pentode/Tape 三音色 + 干湿 + 补偿）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFTCompander）· `arbmag`（任意幅度 EQ）· `convolver`（IR 卷积，带 FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程，专业 IDE + 状态互锁 + EqualizerAPO Clean-Room 极简转换 + 补丁 P-039 四段独立解析）· `crossfeed`（bs2b，含 Chu Moy / Jan Meier 模式）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post`+`limiter`（输出级）
 
 ### 插件宿主
 VST3 / CLAP 64 位进程内宿主，4 插槽 × 5 级插入拓扑（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）。
