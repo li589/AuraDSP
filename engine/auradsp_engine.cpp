@@ -196,6 +196,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->jdsp.auraConvDry = 0.0f;
     h->jdsp.auraConvMixUsed = 0;
     JamesDSPInitFxGains(&h->jdsp);
+    LiveProgSetChannels(&h->jdsp, h->channel_count.load()); /* [PATCHED-AuraDSP P-038] 同步声道数环境 */
     shelf_recalc(h);
     filter_recalc(h);
     apply_params_locked(h);

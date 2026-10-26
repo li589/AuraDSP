@@ -21,11 +21,10 @@
  * 说明动机，按历史遗留处理。64 taps 在 48k 工作域只需 ~64·2 MAC/样本，
  * 32→64 的代价在 ASRC 已启用的场景（本就非常见采样率）不构成理由。
  *
- * 注：本文件被 Windows 桌面引擎（auradsp_engine.dll）整体编译，但热切路径
- * `JamesDSPSetSampleRate` 只由 `EffectDSPMainCommand`（Android AudioEffect
- * 入口）调用，而后者不在 .def 导出表内 —— 在桌面引擎上该路径不可达。
- * 因此本项只有源码级门禁可守，另在 smoke_d7 里注明（不可达 ≠ 可以不修：
- * Android 侧同源，且将来若接线立刻生效）。 */
+ * 注：Windows 桌面端采用流重启/驱动重建架构（auradsp_create），不暴露
+ * 运行时热切接口（S-2 架构取舍）；热切路径 `JamesDSPSetSampleRate` 仅供
+ * Android AudioEffect 驱动场景调用。抽头数统一为 64 可确保两端跨平台代码
+ * 滤波器阶数一致，消除因冷启动与热重置路径分叉导致的群延迟和频响差异。 */
 #define AURADSP_ASRC_TAPS 64u
 // Range: 0x800000, 0x7fffff
 int32_t i32_from_p24_big_endian(const uint8_t *packed24)
@@ -1534,6 +1533,7 @@ void JamesDSPInit(JamesDSPLib *jdsp, int n, float sample_rate)
 	jdsp->postGain = 1.0f;
 	jdsp->postGainCh[0] = 1.0f; /* [PATCHED-AuraDSP P-037] */
 	jdsp->postGainCh[1] = 1.0f;
+	jdsp->numChannels = 2; /* [PATCHED-AuraDSP P-038] 默认双声道，后续由宿主按布局同步 */
 	// Init effect
 	LiveProgConstructor(jdsp);
 	CompressorConstructor(jdsp);

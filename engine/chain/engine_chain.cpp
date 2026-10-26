@@ -318,6 +318,10 @@ void reset_channel_state(auradsp_handle h) {
     for (int c = 0; c < 8; ++c) {
         h->post_gain_sm[c] = 1.0f;
     }
+
+    /* 14. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
+    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
 }
 
 
@@ -575,7 +579,6 @@ void arbmag_pool_free(auradsp_handle h) {
         }
     }
     h->arbmag_pool.loaded = 0;
-    h->arbmag_pool.loaded_block = 0;
 }
 
 /* 控制线程：用当前 GetFilter(eqFil) 同步重载全池。IR 源与主 conv 完全相同
@@ -597,7 +600,6 @@ void arbmag_pool_reload(auradsp_handle h) {
             return;
         }
     }
-    h->arbmag_pool.loaded_block = block;
     h->arbmag_pool.loaded = 1;
 }
 
@@ -685,7 +687,6 @@ void eq_pool_free(auradsp_handle h) {
         }
     }
     h->eq_pool.loaded = 0;
-    h->eq_pool.loaded_block = 0;
     h->eq_pool.ir_rate = 0.0f;
 }
 
@@ -729,7 +730,6 @@ void eq_pool_reload(auradsp_handle h) {
             return;
         }
     }
-    h->eq_pool.loaded_block = block;
     h->eq_pool.loaded = 1;
     h->eq_pool.ir_rate = dev_sr;
 }

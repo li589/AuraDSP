@@ -82,28 +82,46 @@ static void lp_sleep_ms(unsigned int ms)
 #endif
 }
 
-static void LiveProgSlotInitVM(LiveProg *pg, float fs)
+static void LiveProgSlotInitVM(LiveProg *pg, float fs, float devFs, int numCh)
 {
 	pg->compileSucessfully = 0;
 	pg->codehandleInit = 0;
 	pg->codehandleProcess = 0;
 	pg->retiredAt = 0;
 	pg->vmFs = 0;
+	pg->vmDevFs = 0;
+	pg->vmNumCh = 0;
+	pg->vmNch = 0;
 	pg->input1 = 0;
 	pg->input2 = 0;
+	pg->snapFs = fs;
+	pg->snapDevFs = (devFs > 0.0f) ? devFs : fs;
+	pg->snapNumCh = (numCh > 0) ? numCh : 2;
 	pg->vm = NSEEL_VM_alloc(); // create virtual machine
 	if (!pg->vm)
 		return; /* OOM：槽不可用，编译时自然跳过 */
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
 	if (pg->vmFs)
 		*pg->vmFs = fs;
+	/* [PATCHED-AuraDSP P-038] 宿主环境感知变量绑定与初始值 */
+	pg->vmDevFs = NSEEL_VM_regvar(pg->vm, "dev_srate");
+	if (pg->vmDevFs)
+		*pg->vmDevFs = pg->snapDevFs;
+	pg->vmNumCh = NSEEL_VM_regvar(pg->vm, "num_ch");
+	if (pg->vmNumCh)
+		*pg->vmNumCh = (float)pg->snapNumCh;
+	pg->vmNch = NSEEL_VM_regvar(pg->vm, "nch");
+	if (pg->vmNch)
+		*pg->vmNch = (float)pg->snapNumCh;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
 }
 void LiveProgConstructor(JamesDSPLib *jdsp)
 {
+	const float devFs = (jdsp->trueSampleRate > 0.0f) ? jdsp->trueSampleRate : jdsp->fs;
+	const int nch = (jdsp->numChannels > 0) ? jdsp->numChannels : 2;
 	for (int i = 0; i < kLiveProgSlots; ++i)
-		LiveProgSlotInitVM(&jdsp->eelSlots[i], jdsp->fs);
+		LiveProgSlotInitVM(&jdsp->eelSlots[i], jdsp->fs, devFs, nch);
 	jdsp->eel = &jdsp->eelSlots[0];
 	jdsp->eelProcCount = 0;
 	jdsp->eelSwapProc = 0;
@@ -123,6 +141,9 @@ void LiveProgDestructor(JamesDSPLib *jdsp)
 			pg->codehandleInit = 0;
 			pg->codehandleProcess = 0;
 			pg->vmFs = 0;
+			pg->vmDevFs = 0;
+			pg->vmNumCh = 0;
+			pg->vmNch = 0;
 			pg->input1 = 0;
 			pg->input2 = 0;
 		}
@@ -132,9 +153,20 @@ void LiveProgDestructor(JamesDSPLib *jdsp)
 void LiveProgEnable(JamesDSPLib *jdsp)
 {
 	LiveProg *eel = jdsp->eel;
-	/* 单次对齐 float 写（x86 原子）；RT 最多少读一个新 srate */
-	if (eel && eel->vmFs)
-		*eel->vmFs = jdsp->fs;
+	/* 单次对齐 float 写（x86 原子）；RT 最多少读一个新环境值 */
+	if (eel)
+	{
+		const float devFs = (jdsp->trueSampleRate > 0.0f) ? jdsp->trueSampleRate : jdsp->fs;
+		const float nch = (float)((jdsp->numChannels > 0) ? jdsp->numChannels : 2);
+		if (eel->vmFs)
+			*eel->vmFs = jdsp->fs;
+		if (eel->vmDevFs)
+			*eel->vmDevFs = devFs;
+		if (eel->vmNumCh)
+			*eel->vmNumCh = nch;
+		if (eel->vmNch)
+			*eel->vmNch = nch;
+	}
 	jdsp->liveprogEnabled = 1;
 }
 void LiveProgDisable(JamesDSPLib *jdsp)
@@ -147,6 +179,21 @@ void LiveProgUnload(JamesDSPLib *jdsp)
 	/* 单次 int 写（x86 原子）；RT 最多少停用一块 */
 	if (eel)
 		eel->compileSucessfully = 0;
+}
+/* [PATCHED-AuraDSP P-038] 通道数切换时同步通知活动与影子槽环境变量 */
+void LiveProgSetChannels(JamesDSPLib *jdsp, int channels)
+{
+	if (!jdsp || channels <= 0) return;
+	jdsp->numChannels = channels;
+	for (int i = 0; i < kLiveProgSlots; ++i)
+	{
+		LiveProg *pg = &jdsp->eelSlots[i];
+		pg->snapNumCh = channels;
+		if (pg->vmNumCh)
+			*pg->vmNumCh = (float)channels;
+		if (pg->vmNch)
+			*pg->vmNch = (float)channels;
+	}
 }
 /* 在指定槽上完整编译（freevars→init_memRegion→regvar→compile×2→exec init）。
  * 只动 pg（影子槽），不碰 jdsp->eel；失败时清掉本槽残留 code handle，
@@ -163,6 +210,21 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
 	if (pg->vmFs)
 		*pg->vmFs = jdsp->fs;
+	/* [PATCHED-AuraDSP P-038] 宿主环境感知变量与快照 */
+	const float devFs = (jdsp->trueSampleRate > 0.0f) ? jdsp->trueSampleRate : jdsp->fs;
+	const int nch = (jdsp->numChannels > 0) ? jdsp->numChannels : 2;
+	pg->vmDevFs = NSEEL_VM_regvar(pg->vm, "dev_srate");
+	if (pg->vmDevFs)
+		*pg->vmDevFs = devFs;
+	pg->vmNumCh = NSEEL_VM_regvar(pg->vm, "num_ch");
+	if (pg->vmNumCh)
+		*pg->vmNumCh = (float)nch;
+	pg->vmNch = NSEEL_VM_regvar(pg->vm, "nch");
+	if (pg->vmNch)
+		*pg->vmNch = (float)nch;
+	pg->snapFs = jdsp->fs;
+	pg->snapDevFs = devFs;
+	pg->snapNumCh = nch;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
 	/* [PATCHED-AuraDSP P-001 2026-10-09] 宿主滑块：编译前注册 slider1..8，
