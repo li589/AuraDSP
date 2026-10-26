@@ -188,168 +188,173 @@ class FindReplaceBarState extends State<FindReplaceBar> {
     final p = paletteOf(context);
     final l = l10nOf(context);
 
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
-      padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
-      decoration: BoxDecoration(
-        color: p.panel,
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: p.hairline),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.15),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Row 1: Find row
-          Row(
-            children: [
-              Icon(Icons.search_rounded, size: 16, color: p.textDim),
-              const SizedBox(width: AuraSpace.xs),
-              Expanded(
-                child: SizedBox(
-                  height: 28,
-                  child: TextField(
-                    controller: _findCtrl,
-                    focusNode: _findFocus,
-                    style: monoOf(p, size: 12),
-                    decoration: InputDecoration(
-                      hintText: l.lpFind,
-                      hintStyle: monoOf(p, size: 12, color: p.textDim),
-                      isDense: true,
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 6),
-                    ),
-                    onSubmitted: (_) {
-                      if (HardwareKeyboard.instance.isShiftPressed) {
-                        previousMatch();
-                      } else {
-                        nextMatch();
-                      }
-                      _findFocus.requestFocus();
-                    },
-                  ),
-                ),
-              ),
-              // Match counter
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                child: Text(
-                  _findCtrl.text.isEmpty
-                      ? ''
-                      : (_matches.isEmpty
-                          ? l.lpNoMatches
-                          : l.lpMatchCount(_currentIndex + 1, _matches.length)),
-                  style: monoOf(p, size: 11, color: _matches.isEmpty ? p.error : p.textDim),
-                ),
-              ),
-              // Match case toggle
-              IconButton(
-                tooltip: l.lpMatchCase,
-                visualDensity: VisualDensity.compact,
-                iconSize: 15,
-                color: _matchCase ? p.accent : p.textDim,
-                icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                onPressed: () {
-                  setState(() => _matchCase = !_matchCase);
-                  _performSearch();
-                },
-              ),
-              // Prev button
-              IconButton(
-                tooltip: l.lpFindPrev,
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                color: _matches.isEmpty ? p.textDim.withValues(alpha: 0.3) : p.text,
-                icon: const Icon(Icons.keyboard_arrow_up_rounded),
-                onPressed: _matches.isEmpty ? null : previousMatch,
-              ),
-              // Next button
-              IconButton(
-                tooltip: l.lpFindNext,
-                visualDensity: VisualDensity.compact,
-                iconSize: 16,
-                color: _matches.isEmpty ? p.textDim.withValues(alpha: 0.3) : p.text,
-                icon: const Icon(Icons.keyboard_arrow_down_rounded),
-                onPressed: _matches.isEmpty ? null : nextMatch,
-              ),
-              // Toggle replace row button
-              IconButton(
-                tooltip: l.lpReplace,
-                visualDensity: VisualDensity.compact,
-                iconSize: 15,
-                color: _showReplace ? p.accent : p.textDim,
-                icon: const Icon(Icons.find_replace_rounded),
-                onPressed: () => setState(() => _showReplace = !_showReplace),
-              ),
-              // Close button
-              IconButton(
-                tooltip: l.dlgClose,
-                visualDensity: VisualDensity.compact,
-                iconSize: 15,
-                color: p.textDim,
-                icon: const Icon(Icons.close_rounded),
-                onPressed: widget.onClose,
-              ),
-            ],
-          ),
-
-          // Row 2: Replace row (collapsible)
-          if (_showReplace) ...[
-            const SizedBox(height: 2),
-            Divider(height: 1, color: p.hairline.withValues(alpha: 0.5)),
-            const SizedBox(height: 2),
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): () => widget.onClose?.call(),
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
+        padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: AuraSpace.xs + 2),
+        decoration: BoxDecoration(
+          color: p.panel,
+          borderRadius: BorderRadius.circular(AuraRadius.sm),
+          border: Border.all(color: p.hairline),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Row 1: Find row
             Row(
               children: [
-                Icon(Icons.edit_note_rounded, size: 16, color: p.textDim),
+                Icon(Icons.search_rounded, size: 16, color: p.textDim),
                 const SizedBox(width: AuraSpace.xs),
                 Expanded(
                   child: SizedBox(
                     height: 28,
                     child: TextField(
-                      controller: _replaceCtrl,
-                      focusNode: _replaceFocus,
+                      controller: _findCtrl,
+                      focusNode: _findFocus,
                       style: monoOf(p, size: 12),
                       decoration: InputDecoration(
-                        hintText: l.lpReplace,
+                        hintText: l.lpFind,
                         hintStyle: monoOf(p, size: 12, color: p.textDim),
                         isDense: true,
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.symmetric(vertical: 6),
                       ),
-                      onSubmitted: (_) => replaceCurrent(),
+                      onSubmitted: (_) {
+                        if (HardwareKeyboard.instance.isShiftPressed) {
+                          previousMatch();
+                        } else {
+                          nextMatch();
+                        }
+                        _findFocus.requestFocus();
+                      },
                     ),
                   ),
                 ),
-                // Replace button
-                TextButton(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: p.text,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                // Match counter
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  child: Text(
+                    _findCtrl.text.isEmpty
+                        ? ''
+                        : (_matches.isEmpty
+                            ? l.lpNoMatches
+                            : l.lpMatchCount(_currentIndex + 1, _matches.length)),
+                    style: monoOf(p, size: 11, color: _matches.isEmpty ? p.error : p.textDim),
                   ),
-                  onPressed: _matches.isEmpty ? null : replaceCurrent,
-                  child: Text(l.lpReplace, style: captionOf(p)),
                 ),
-                // Replace All button
-                TextButton(
-                  style: TextButton.styleFrom(
-                    visualDensity: VisualDensity.compact,
-                    foregroundColor: p.accent,
-                    padding: const EdgeInsets.symmetric(horizontal: 8),
-                  ),
-                  onPressed: _matches.isEmpty ? null : replaceAll,
-                  child: Text(l.lpReplaceAll, style: captionOf(p, color: p.accent)),
+                // Match case toggle
+                IconButton(
+                  tooltip: l.lpMatchCase,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 15,
+                  color: _matchCase ? p.accent : p.textDim,
+                  icon: const Text('Aa', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                  onPressed: () {
+                    setState(() => _matchCase = !_matchCase);
+                    _performSearch();
+                  },
+                ),
+                // Prev button
+                IconButton(
+                  tooltip: l.lpFindPrev,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                  color: _matches.isEmpty ? p.textDim.withValues(alpha: 0.3) : p.text,
+                  icon: const Icon(Icons.keyboard_arrow_up_rounded),
+                  onPressed: _matches.isEmpty ? null : previousMatch,
+                ),
+                // Next button
+                IconButton(
+                  tooltip: l.lpFindNext,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 16,
+                  color: _matches.isEmpty ? p.textDim.withValues(alpha: 0.3) : p.text,
+                  icon: const Icon(Icons.keyboard_arrow_down_rounded),
+                  onPressed: _matches.isEmpty ? null : nextMatch,
+                ),
+                // Toggle replace row button
+                IconButton(
+                  tooltip: l.lpReplace,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 15,
+                  color: _showReplace ? p.accent : p.textDim,
+                  icon: const Icon(Icons.find_replace_rounded),
+                  onPressed: () => setState(() => _showReplace = !_showReplace),
+                ),
+                // Close button
+                IconButton(
+                  tooltip: l.dlgClose,
+                  visualDensity: VisualDensity.compact,
+                  iconSize: 15,
+                  color: p.textDim,
+                  icon: const Icon(Icons.close_rounded),
+                  onPressed: widget.onClose,
                 ),
               ],
             ),
+
+            // Row 2: Replace row (collapsible)
+            if (_showReplace) ...[
+              const SizedBox(height: 2),
+              Divider(height: 1, color: p.hairline.withValues(alpha: 0.5)),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(Icons.edit_note_rounded, size: 16, color: p.textDim),
+                  const SizedBox(width: AuraSpace.xs),
+                  Expanded(
+                    child: SizedBox(
+                      height: 28,
+                      child: TextField(
+                        controller: _replaceCtrl,
+                        focusNode: _replaceFocus,
+                        style: monoOf(p, size: 12),
+                        decoration: InputDecoration(
+                          hintText: l.lpReplace,
+                          hintStyle: monoOf(p, size: 12, color: p.textDim),
+                          isDense: true,
+                          border: InputBorder.none,
+                          contentPadding: const EdgeInsets.symmetric(vertical: 6),
+                        ),
+                        onSubmitted: (_) => replaceCurrent(),
+                      ),
+                    ),
+                  ),
+                  // Replace button
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: p.text,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: _matches.isEmpty ? null : replaceCurrent,
+                    child: Text(l.lpReplace, style: captionOf(p)),
+                  ),
+                  // Replace All button
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      visualDensity: VisualDensity.compact,
+                      foregroundColor: p.accent,
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    ),
+                    onPressed: _matches.isEmpty ? null : replaceAll,
+                    child: Text(l.lpReplaceAll, style: captionOf(p, color: p.accent)),
+                  ),
+                ],
+              ),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }

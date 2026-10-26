@@ -97,6 +97,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
   bool _showFindReplace = false;
   bool _showOutline = false;
   bool _showConsole = false;
+  bool _expandedEditor = false;
+  bool _consoleCleared = false;
 
   final TextEditingController _libraryNameController =
       TextEditingController(text: 'my-script');
@@ -254,7 +256,10 @@ class _LiveprogPageState extends State<LiveprogPage> {
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastApplyMs < 500) return;
     _lastApplyMs = now;
-    setState(() => _compiling = true);
+    setState(() {
+      _compiling = true;
+      _consoleCleared = false;
+    });
     widget.model.setLiveprogCode(text);
     _compileFallback?.cancel();
     _compileFallback = Timer(const Duration(seconds: 5), () {
@@ -336,7 +341,47 @@ class _LiveprogPageState extends State<LiveprogPage> {
     );
   }
 
+  Future<bool> _confirmDiscardUnsavedIfNeeded() async {
+    final current = _code.text.trim();
+    if (current.isEmpty || current == LiveprogLibrary.template.trim()) {
+      return true;
+    }
+    var confirmed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        final p = paletteOf(ctx);
+        final l = l10nOf(ctx);
+        return AlertDialog(
+          backgroundColor: p.panel,
+          title: Text(l.lpConfirmDiscardTitle, style: sectionOf(p)),
+          content: Text(l.lpConfirmDiscardBody, style: captionOf(p)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(l.dlgCancel, style: labelOf(p)),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: p.error,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () {
+                confirmed = true;
+                Navigator.of(ctx).pop();
+              },
+              child: Text(l.lpConfirmDiscardAction),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed;
+  }
+
   Future<void> _openWizard() async {
+    if (!await _confirmDiscardUnsavedIfNeeded()) return;
+    if (!mounted) return;
     final templateCode = await NewScriptWizardDialog.show(context);
     if (templateCode != null && mounted) {
       _code.text = templateCode;
@@ -345,6 +390,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   Future<void> _openApoConverter() async {
+    if (!await _confirmDiscardUnsavedIfNeeded()) return;
+    if (!mounted) return;
     final generated = await EqualizerApoDialog.show(context);
     if (generated != null && mounted) {
       _code.text = generated;
@@ -417,6 +464,14 @@ class _LiveprogPageState extends State<LiveprogPage> {
               ),
               const SizedBox(width: AuraSpace.xs),
               IconButton(
+                icon: const Icon(Icons.cleaning_services_rounded, size: 13),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: l.lpConsoleClear,
+                onPressed: () => setState(() => _consoleCleared = true),
+              ),
+              const SizedBox(width: AuraSpace.xs),
+              IconButton(
                 icon: const Icon(Icons.close_rounded, size: 13),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(),
@@ -428,7 +483,12 @@ class _LiveprogPageState extends State<LiveprogPage> {
           const SizedBox(height: AuraSpace.xs),
           Divider(color: p.hairline, height: 1),
           const SizedBox(height: AuraSpace.xs),
-          if (_compiling)
+          if (_consoleCleared)
+            Text(
+              '> Output cleared.',
+              style: monoOf(p, size: 10.5, color: p.textDim),
+            )
+          else if (_compiling)
             Text(
               '> Compiling script...',
               style: monoOf(p, size: 11, color: p.accent),
@@ -701,6 +761,11 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       icon: Icons.terminal_rounded,
                       selected: _showConsole,
                       onTap: () => setState(() => _showConsole = !_showConsole)),
+                  AuraChip(
+                    _expandedEditor ? l.lpCollapseEditor : l.lpExpandEditor,
+                    icon: _expandedEditor ? Icons.unfold_less_rounded : Icons.unfold_more_rounded,
+                    onTap: () => setState(() => _expandedEditor = !_expandedEditor),
+                  ),
                 ],
               ),
               const SizedBox(height: AuraSpace.md),
@@ -843,7 +908,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
               // 代码编辑器与大纲分栏（支持语法着色与大纲跳转）
               Container(
-                height: 420,
+                height: _expandedEditor ? 620 : 420,
                 decoration: BoxDecoration(
                   color: p.panelRaised,
                   borderRadius: BorderRadius.circular(AuraRadius.md),
@@ -864,28 +929,37 @@ class _LiveprogPageState extends State<LiveprogPage> {
                       VerticalDivider(width: 1, thickness: 1, color: p.hairline),
                     ],
                     Expanded(
-                      child: Actions(
-                        actions: <Type, Action<Intent>>{
-                          _EelTabIntent: _EelTabAction(),
-                        },
-                        child: Shortcuts(
-                          shortcuts: const <ShortcutActivator, Intent>{
-                            SingleActivator(LogicalKeyboardKey.tab):
-                                _EelTabIntent(shift: false),
-                            SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                                _EelTabIntent(shift: true),
+                      child: CallbackShortcuts(
+                        bindings: <ShortcutActivator, VoidCallback>{
+                          const SingleActivator(LogicalKeyboardKey.keyF, control: true): () {
+                            setState(() => _showFindReplace = !_showFindReplace);
                           },
-                          child: TextField(
-                            controller: _code,
-                            focusNode: _editorFocus,
-                            maxLines: null,
-                            expands: true,
-                            style: monoOf(p, size: 12.5, color: p.text),
-                            decoration: const InputDecoration(
-                              border: InputBorder.none,
-                              contentPadding: EdgeInsets.all(AuraSpace.md),
+                          const SingleActivator(LogicalKeyboardKey.keyS, control: true): _save,
+                          const SingleActivator(LogicalKeyboardKey.enter, control: true): _apply,
+                        },
+                        child: Actions(
+                          actions: <Type, Action<Intent>>{
+                            _EelTabIntent: _EelTabAction(),
+                          },
+                          child: Shortcuts(
+                            shortcuts: const <ShortcutActivator, Intent>{
+                              SingleActivator(LogicalKeyboardKey.tab):
+                                  _EelTabIntent(shift: false),
+                              SingleActivator(LogicalKeyboardKey.tab, shift: true):
+                                  _EelTabIntent(shift: true),
+                            },
+                            child: TextField(
+                              controller: _code,
+                              focusNode: _editorFocus,
+                              maxLines: null,
+                              expands: true,
+                              style: monoOf(p, size: 12.5, color: p.text),
+                              decoration: const InputDecoration(
+                                border: InputBorder.none,
+                                contentPadding: EdgeInsets.all(AuraSpace.md),
+                              ),
+                              onChanged: _onCodeChanged,
                             ),
-                            onChanged: _onCodeChanged,
                           ),
                         ),
                       ),
@@ -1098,6 +1172,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
                                 ? Icons.folder_shared_rounded
                                 : Icons.description_outlined,
                             onTap: () async {
+                              if (!await _confirmDiscardUnsavedIfNeeded()) return;
+                              if (!mounted) return;
                               final text =
                                   await LiveprogLibrary.loadFromPath(
                                       item.path);

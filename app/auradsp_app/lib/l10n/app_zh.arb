@@ -1475,5 +1475,11 @@
   "lpSidebarRight": "切换右侧面板 (滑块与控制台)",
   "lpConsole": "控制台与诊断输出",
   "lpNewScriptWizard": "新建脚本向导",
-  "lpApoImportTitle": "导入 APO 预设"
+  "lpApoImportTitle": "导入 APO 预设",
+  "lpConfirmDiscardTitle": "放弃未保存修改？",
+  "lpConfirmDiscardBody": "当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？",
+  "lpConfirmDiscardAction": "放弃并覆盖",
+  "lpConsoleClear": "清空控制台",
+  "lpExpandEditor": "展开编辑器",
+  "lpCollapseEditor": "收起编辑器"
 }

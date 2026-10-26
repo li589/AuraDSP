@@ -3055,4 +3055,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpApoImportTitle => '导入 APO 预设';
+
+  @override
+  String get lpConfirmDiscardTitle => '放弃未保存修改？';
+
+  @override
+  String get lpConfirmDiscardBody => '当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？';
+
+  @override
+  String get lpConfirmDiscardAction => '放弃并覆盖';
+
+  @override
+  String get lpConsoleClear => '清空控制台';
+
+  @override
+  String get lpExpandEditor => '展开编辑器';
+
+  @override
+  String get lpCollapseEditor => '收起编辑器';
 }

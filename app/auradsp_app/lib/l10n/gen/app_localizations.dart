@@ -5835,6 +5835,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'导入 APO 预设'**
   String get lpApoImportTitle;
+
+  /// No description provided for @lpConfirmDiscardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃未保存修改？'**
+  String get lpConfirmDiscardTitle;
+
+  /// No description provided for @lpConfirmDiscardBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？'**
+  String get lpConfirmDiscardBody;
+
+  /// No description provided for @lpConfirmDiscardAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃并覆盖'**
+  String get lpConfirmDiscardAction;
+
+  /// No description provided for @lpConsoleClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空控制台'**
+  String get lpConsoleClear;
+
+  /// No description provided for @lpExpandEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开编辑器'**
+  String get lpExpandEditor;
+
+  /// No description provided for @lpCollapseEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起编辑器'**
+  String get lpCollapseEditor;
 }
 
 class _AppLocalizationsDelegate

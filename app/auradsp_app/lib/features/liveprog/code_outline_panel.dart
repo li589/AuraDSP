@@ -8,6 +8,8 @@
  * - 点击项快速跳转至编辑器指定行
  */
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
@@ -34,7 +36,7 @@ class OutlineItem {
   });
 }
 
-class CodeOutlinePanel extends StatelessWidget {
+class CodeOutlinePanel extends StatefulWidget {
   final String code;
   final int activeLine;
   final ValueChanged<int> onSelectLine;
@@ -103,10 +105,49 @@ class CodeOutlinePanel extends StatelessWidget {
   }
 
   @override
+  State<CodeOutlinePanel> createState() => _CodeOutlinePanelState();
+}
+
+class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
+  late List<OutlineItem> _items;
+  Timer? _debounceTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = CodeOutlinePanel.extractOutline(widget.code);
+  }
+
+  @override
+  void didUpdateWidget(covariant CodeOutlinePanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.code != widget.code) {
+      _debounceTimer?.cancel();
+      if (widget.code.length < 500) {
+        _items = CodeOutlinePanel.extractOutline(widget.code);
+      } else {
+        _debounceTimer = Timer(const Duration(milliseconds: 150), () {
+          if (mounted) {
+            setState(() {
+              _items = CodeOutlinePanel.extractOutline(widget.code);
+            });
+          }
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    final items = extractOutline(code);
+    final items = _items;
 
     return Container(
       decoration: BoxDecoration(
@@ -163,7 +204,7 @@ class CodeOutlinePanel extends StatelessWidget {
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemBuilder: (ctx, idx) {
                       final item = items[idx];
-                      final isSelected = activeLine == item.line;
+                      final isSelected = widget.activeLine == item.line;
 
                       final (icon, iconColor) = switch (item.kind) {
                         OutlineKind.section => (Icons.tag_rounded, p.accent),
@@ -172,7 +213,7 @@ class CodeOutlinePanel extends StatelessWidget {
                       };
 
                       return InkWell(
-                        onTap: () => onSelectLine(item.line),
+                        onTap: () => widget.onSelectLine(item.line),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: AuraSpace.sm, vertical: 5),
                           color: isSelected ? p.accent.withValues(alpha: 0.12) : Colors.transparent,
