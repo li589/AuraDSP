@@ -129,15 +129,44 @@ void apply_reverb(auradsp_handle h) {
     /* WP1 混响边界（工程文档 §3.2）：同一时刻只允许一套混响运行。
      *   立体声/矩阵/双耳路径 → vendor Progenitor2；
      *   离散多声道路径       → MC FDN（dsp_mc_reverb.cpp）。
-     * -1 关；-2 自定义（WP2 前立体声路径先落到 vendor 预设 0，保证
-     * vendor 状态有效；MC 路径走 FDN 自定义映射）。 */
+     * -1 关；-2 自定义（WP2：立体声路径走 vendor 原生参数；MC 路径走 FDN 自定义映射）。 */
     if (reverb_path_kind(h) == 0 && rv != -1) {
         if (rv >= 0) {
             Reverb_SetParam(j, rv);   /* 重建混响（仅预设真正变化时调用） */
-        } else {
-            /* WP2 之前 vendor 原生参数 API 尚未落地：先以 DEFAULT 预设
-             * 建立有效状态，避免 vendor 混响处于未初始化却 enable。 */
-            Reverb_SetParam(j, 0);
+        } else if (rv == -2) {
+            /* [PATCHED-AuraDSP P-033] 立体声自定义混响：将 freeverb.* 与 reverb.predelay
+             * 映射为 vendor Progenitor2 原生参数（文档 §3.4）。 */
+            auto clamp_f = [](float v, float lo, float hi) -> float {
+                return v < lo ? lo : (v > hi ? hi : v);
+            };
+            AuraReverbNativeParams np;
+            const float decay = clamp_f(h->p.fv_decay.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            const float damp = clamp_f(h->p.fv_damp.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            const float wet = clamp_f(h->p.fv_wet.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            const float dry = clamp_f(h->p.fv_dry.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            const float room = clamp_f(h->p.fv_roomsize.load(std::memory_order_relaxed), 0.5f, 2.5f);
+            const float width = clamp_f(h->p.fv_width.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            const float predelay = clamp_f(h->p.reverb_predelay.load(std::memory_order_relaxed), 0.0f, 100.0f);
+
+            np.oversamplefactor = 1;
+            np.ertolate = (wet < 0.001f) ? 0.0f : 0.3f;
+            np.dry_db = (dry < 0.001f) ? -100.0f : clamp_f(20.0f * log10f(dry), -100.0f, 0.0f);
+            np.wet_db = (wet < 0.001f) ? -100.0f : clamp_f(20.0f * log10f(wet), -100.0f, 0.0f);
+            np.erefwet_db = (wet < 0.001f) ? -100.0f : clamp_f(np.wet_db - 9.0f, -100.0f, 0.0f);
+            np.ereffactor = room;
+            np.erefwidth = 0.7f;
+            np.width = width;
+            np.wander = 0.2f;
+            np.bassb = 0.15f;
+            np.spin = 0.7f;
+            np.inputlpf_hz = 18000.0f;
+            np.basslpf_hz = 500.0f;
+            np.damplpf_hz = 18000.0f * powf(1000.0f / 18000.0f, damp);
+            np.outputlpf_hz = 12000.0f;
+            np.rt60_s = 0.5f + 9.5f * decay;
+            np.delay_s = predelay / 1000.0f;
+
+            Reverb_SetNative(j, &np);
         }
         ReverbEnable(j);
     } else {
@@ -179,7 +208,116 @@ int reverb_path_kind(auradsp_handle h) {
  * hook_spatial_enable；set_reverb_preset 只重置混响状态，不全量 reset。
  * 控制线程调用；不得在音频线程执行。 */
 void reset_channel_state(auradsp_handle h) {
-    (void)h;
+    if (!h) return;
+
+    /* 1. gate */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->gate_gain[c] = 1.0f;
+        h->gate_state[c] = 1.0f;
+        h->gate_hold_cnt[c] = 0;
+        h->gate_env[c] = 0.0f;
+        h->gate_ds_lp[c] = 0.0f;
+        h->gate_ds_env[c] = 0.0f;
+    }
+    h->gate_ag_in = 0.0;
+    h->gate_ag_out = 0.0;
+    h->gate_ag_comp = 1.0;
+    h->gate_ag_g_sm = 1.0f;
+
+    /* 2. filter / shelf */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->shelf.z1[c] = 0.0;
+        h->shelf.z2[c] = 0.0;
+        h->filter.z1[c] = 0.0;
+        h->filter.z2[c] = 0.0;
+    }
+
+    /* 3. dyneq */
+    for (int b = 0; b < 3; ++b) {
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            h->dyneq_b[b].det_z1[c] = 0.0;
+            h->dyneq_b[b].det_z2[c] = 0.0;
+            h->dyneq_b[b].env[c] = 0.0;
+            h->dyneq_b[b].z1[c] = 0.0;
+            h->dyneq_b[b].z2[c] = 0.0;
+        }
+    }
+
+    /* 4. tube */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->tube_os[c].reset();
+    }
+
+    /* 5. exciter / loudness */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->exc_lp[c] = 0.0f;
+        h->exc_os[c].reset();
+        h->loud_lp[c] = 0.0f;
+        h->loud_hp[c] = 0.0f;
+    }
+    h->loud_level = 0.0;
+
+    /* 6. limiter */
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        h->mc_limiter_env[c] = 1.0f;
+        h->mc_limiter_la_env[c] = 1.0f;
+        h->mc_limiter_la_pos[c] = 0;
+        h->mc_limiter_dq_head[c] = 0;
+        h->mc_limiter_dq_count[c] = 0;
+        h->mc_limiter_prev[c][0] = 0.0f;
+        h->mc_limiter_prev[c][1] = 0.0f;
+        for (int k = 0; k < auradsp_handle_s::kLimLookaheadMax; ++k) {
+            h->mc_limiter_la_buf[c][k] = 0.0f;
+            h->mc_limiter_gain_buf[c][k] = 1.0f;
+        }
+    }
+    h->mc_limiter_dq_len = 0;
+
+    /* 7. bassmono / basspsycho */
+    for (int c = 0; c < 8; ++c) {
+        h->bm_lp[c] = 0.0f;
+    }
+    h->bm_reinit.store(0, std::memory_order_relaxed);
+    h->psy_lp_l = 0.0f;
+    h->psy_lp_r = 0.0f;
+    h->psy_sub_l = 0.0f;
+    h->psy_sub_r = 0.0f;
+    h->psycho_os[0].reset();
+    h->psycho_os[1].reset();
+
+    /* 8. haas */
+    if (h->haas_ring && h->haas_ring_len > 0) {
+        memset(h->haas_ring, 0, sizeof(float) * h->haas_ring_len);
+        h->haas_pos = 0;
+    }
+
+    /* 9. spatial */
+    spatial_reset(h);
+
+    /* 10. MC reverb */
+    mc_reverb_reset(h);
+    h->rev_ag_in = 0.0;
+    h->rev_ag_out = 0.0;
+    h->rev_ag_comp = 1.0;
+    h->rev_g_sm = 1.0f;
+
+    /* 11. arbmag_pool */
+    if (h->arbmag_pool.loaded) {
+        arbmag_pool_reload(h);
+    }
+    if (h->eq_pool.loaded) {
+        eq_pool_reload(h);
+    }
+
+    /* 12. vendor 段 */
+    if (h->open.load()) {
+        apply_reverb(h);
+    }
+
+    /* 13. post_gain 平滑状态 (WP5) */
+    for (int c = 0; c < 8; ++c) {
+        h->post_gain_sm[c] = 1.0f;
+    }
 }
 
 
@@ -214,6 +352,7 @@ void apply_eq(auradsp_handle h) {
      * 下次打开时会重建一次 IR（这正是想要的语义）。 */
     if (h->p.eq_enable.load(std::memory_order_relaxed)) {
         MultimodalEqualizerEnable(&h->jdsp, 1);
+        eq_pool_reload(h);
     } else {
         MultimodalEqualizerDisable(&h->jdsp);
     }
@@ -222,6 +361,52 @@ void apply_eq(auradsp_handle h) {
 
 void apply_post(auradsp_handle h) {
     JamesDSPSetPostGain(&h->jdsp, h->p.post_gain.load(std::memory_order_relaxed));
+    JamesDSPSetPostGainCh(&h->jdsp, 0, h->p.post_gain_ch[0].load(std::memory_order_relaxed));
+    JamesDSPSetPostGainCh(&h->jdsp, 1, h->p.post_gain_ch[1].load(std::memory_order_relaxed));
+}
+
+/* 多声道输出增益与逐声道 trim (Category A, Step 15) */
+void post_gain_process_mc(auradsp_handle h, float* io, int frames, int ch) {
+    if (!h || !io || frames <= 0 || ch <= 0) return;
+
+    const float master_db = h->p.post_gain.load(std::memory_order_relaxed);
+    const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
+    const float alpha = expf(-(float)frames / (0.010f * fs));
+
+    bool all_unity = (fabsf(master_db) < 1e-5f);
+    float target_g[8];
+    const int max_c = (ch > 8) ? 8 : ch;
+    for (int c = 0; c < max_c; ++c) {
+        const float ch_db = h->p.post_gain_ch[c].load(std::memory_order_relaxed);
+        if (fabsf(ch_db) >= 1e-5f) all_unity = false;
+        target_g[c] = powf(10.0f, (master_db + ch_db) * 0.05f);
+    }
+
+    if (all_unity) {
+        bool fully_settled = true;
+        for (int c = 0; c < max_c; ++c) {
+            if (fabsf(h->post_gain_sm[c] - 1.0f) >= 1e-5f) {
+                fully_settled = false;
+                break;
+            }
+        }
+        if (fully_settled) return; /* 全 0dB 时逐样本 bit-exact 直通 */
+    }
+
+    float g[8];
+    for (int c = 0; c < max_c; ++c) {
+        h->post_gain_sm[c] = alpha * h->post_gain_sm[c] + (1.0f - alpha) * target_g[c];
+        if (fabsf(h->post_gain_sm[c] - target_g[c]) < 1e-5f) {
+            h->post_gain_sm[c] = target_g[c];
+        }
+        g[c] = h->post_gain_sm[c];
+    }
+
+    for (int i = 0; i < frames; ++i) {
+        for (int c = 0; c < max_c; ++c) {
+            io[i * ch + c] *= g[c];
+        }
+    }
 }
 
 
@@ -451,6 +636,185 @@ void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
 }
 
 
+/* [Phase B 多声道电平] MC 版 stage 峰值采样：按 stride ch 逐声道扫描，
+ * 同写 stage_peak_ch[stage][0..ch-1] 与 stage_peak_l/r（取 ch0/ch1）。
+ *
+ * l/r 列同步写是为了修复 MC 模式下 stage_levels_* 遥测 stale：MC 链不走
+ * process_stereo_chain，旧实现里这些槽位停留在上次 stereo 块的值。
+ * stereo 路径不调本函数（继续走 sample_stage_peak，逐位不变）。
+ * [ch..7] 置 0：emit_viz 对 0 峰值转 -120，诚实表达「该声道不过此效果」。
+ * 定义置于 MC 链之前：调用点在定义前，static inline 亦须先声明后使用。 */
+static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
+                                        const float* interleaved, int frames, int ch) {
+    float pk[AURADSP_CH_MAX] = {};
+    for (int i = 0; i < frames; ++i) {
+        const float* row = interleaved + (size_t)i * ch;
+        for (int c = 0; c < ch; ++c) {
+            const float a = fabsf(row[c]);
+            if (a > pk[c]) pk[c] = a;
+        }
+    }
+    for (int c = 0; c < ch; ++c) h->stage_peak_ch[stage_idx][c] = pk[c];
+    for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[stage_idx][c] = 0.0f;
+    h->stage_peak_l[stage_idx] = pk[0];
+    h->stage_peak_r[stage_idx] = ch > 1 ? pk[1] : pk[0];
+}
+
+
+/* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
+ * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。 */
+void eq_pool_alloc(auradsp_handle h) {
+    if (!h) return;
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        if (!h->eq_pool.conv[c]) {
+            auto* conv = new (std::nothrow) FFTConvolver1x1();
+            if (!conv) return;
+            FFTConvolver1x1Init(conv);
+            h->eq_pool.conv[c] = conv;
+        }
+    }
+}
+
+void eq_pool_free(auradsp_handle h) {
+    if (!h) return;
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        if (h->eq_pool.conv[c]) {
+            FFTConvolver1x1Free(h->eq_pool.conv[c]);
+            delete h->eq_pool.conv[c];
+            h->eq_pool.conv[c] = nullptr;
+        }
+    }
+    h->eq_pool.loaded = 0;
+    h->eq_pool.loaded_block = 0;
+    h->eq_pool.ir_rate = 0.0f;
+}
+
+void eq_pool_reload(auradsp_handle h) {
+    if (!h) return;
+    const unsigned block = (unsigned)h->jdsp.blockSize;
+    if (block == 0) { h->eq_pool.loaded = 0; return; }
+    const float dev_sr = (h->sample_rate > 0.0) ? (float)h->sample_rate : 48000.0f;
+    const unsigned irLen = h->jdsp.mEQ.instance.filterLen ? h->jdsp.mEQ.instance.filterLen : 8192;
+
+    double dev_freq[NUMPTS + 2];
+    double dev_gain[NUMPTS + 2];
+    memcpy(dev_freq, h->jdsp.mEQ.freq, sizeof(dev_freq));
+    memcpy(dev_gain, h->jdsp.mEQ.gain, sizeof(dev_gain));
+    const double nyq = (double)dev_sr * 0.5;
+    for (int i = 1; i <= NUMPTS; ++i) {
+        if (dev_freq[i] >= nyq) {
+            dev_freq[i] = nyq * (1.0 - 1e-4 * (NUMPTS + 1 - i));
+        }
+    }
+    dev_freq[NUMPTS + 1] = nyq;
+    dev_gain[NUMPTS + 1] = dev_gain[NUMPTS];
+
+    ierper pch;
+    initIerper(&pch, NUMPTS + 2);
+    if (!h->jdsp.mEQ.currentInterpolationMode) {
+        pchip(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
+    } else {
+        makima(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
+    }
+    float* eqFil = InterpolatingEqMinimumPhase(&h->jdsp.mEQ.instance.coeffGen, dev_sr, (void*)(&pch));
+    freeIerper(&pch);
+
+    if (!eqFil) { h->eq_pool.loaded = 0; return; }
+
+    for (int c = 0; c < kMxMaxChannels; ++c) {
+        auto* conv = h->eq_pool.conv[c];
+        if (!conv) { h->eq_pool.loaded = 0; return; }
+        if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
+            h->eq_pool.loaded = 0;
+            return;
+        }
+    }
+    h->eq_pool.loaded_block = block;
+    h->eq_pool.loaded = 1;
+    h->eq_pool.ir_rate = dev_sr;
+}
+
+void eq_pool_process_strided(auradsp_handle h, float* io, int frames,
+                             int nch, int ch_idx) {
+    if (!h || !io || frames <= 0 || nch <= 0 || ch_idx < 0 || ch_idx >= nch)
+        return;
+    if (!(h->p.eq_channels.load(std::memory_order_relaxed) & (1u << ch_idx)))
+        return;
+    if (!h->p.eq_enable.load(std::memory_order_relaxed))
+        return;
+    auto* conv = h->eq_pool.conv[ch_idx];
+    if (!conv || !h->eq_pool.loaded) return;
+    float* scratch = arbmag_pool_get_scratch(h);
+    if (!scratch) return;
+    float* in = io + ch_idx;
+    for (int i = 0; i < frames; ++i) scratch[i] = in[(size_t)i * nch];
+
+    FFTConvolver1x1Process(conv, scratch, scratch, (unsigned)frames);
+
+    const float g = h->jdsp.fxOutGain[3]; /* 线性输出增益门（eq） */
+    if (g == 1.0f) {
+        for (int i = 0; i < frames; ++i) in[(size_t)i * nch] = scratch[i];
+    } else {
+        for (int i = 0; i < frames; ++i) in[(size_t)i * nch] = scratch[i] * g;
+    }
+}
+
+void eq_process_mc(auradsp_handle h, float* dst, int frames, int ch) {
+    if (!h || !dst || frames <= 0 || ch <= 0) return;
+    if (h->p.eq_enable.load(std::memory_order_relaxed) && h->eq_pool.loaded) {
+        for (int c = 0; c < ch; ++c) {
+            eq_pool_process_strided(h, dst, frames, ch, c);
+        }
+    }
+    sample_stage_peak_mc(h, 3, dst, frames, ch);
+}
+
+/* [PATCHED-AuraDSP P-034] 动态范围压缩器离散多声道处理（支持 8 声道独立与成对模式） */
+void comp_process_mc(auradsp_handle h, float* dst, int frames, int ch) {
+    if (!h || !dst || frames <= 0 || ch <= 0) return;
+    CompressorProcessBlockStart(&h->jdsp);
+    if (h->p.comp_enable.load(std::memory_order_relaxed)) {
+        const int mode = h->p.comp_mode.load(std::memory_order_relaxed);
+        const uint32_t mask = (uint32_t)h->p.comp_channels.load(std::memory_order_relaxed);
+        float* scratch = h->shelf_scratch;
+        const float g = h->jdsp.fxOutGain[1];
+        if (mode == 0) {
+            for (int c = 0; c < ch; ++c) {
+                if (mask & (1u << c)) {
+                    for (int i = 0; i < frames; ++i) scratch[i] = dst[i * ch + c];
+                    CompressorProcessChannel(&h->jdsp, c, scratch, scratch, (size_t)frames, 1);
+                    if (g != 1.0f) {
+                        for (int i = 0; i < frames; ++i) dst[i * ch + c] = scratch[i] * g;
+                    } else {
+                        for (int i = 0; i < frames; ++i) dst[i * ch + c] = scratch[i];
+                    }
+                }
+            }
+        } else {
+            for (int p = 0; p < 4; ++p) {
+                const int p0 = kChPairFirst[p];
+                if (p0 + 1 >= ch) break;
+                const uint32_t bits = kChMaskPair[p];
+                if ((mask & bits) == bits) {
+                    for (int c = p0; c <= p0 + 1; ++c) {
+                        for (int i = 0; i < frames; ++i) scratch[i] = dst[i * ch + c];
+                        CompressorProcessChannel(&h->jdsp, c, scratch, scratch, (size_t)frames, 1);
+                        if (g != 1.0f) {
+                            for (int i = 0; i < frames; ++i) dst[i * ch + c] = scratch[i] * g;
+                        } else {
+                            for (int i = 0; i < frames; ++i) dst[i * ch + c] = scratch[i];
+                        }
+                    }
+                }
+            }
+        }
+    }
+    CompressorProcessBlockEnd(&h->jdsp);
+    sample_stage_peak_mc(h, 1, dst, frames, ch);
+}
+
+
+
 /* 仅 create / 需要整体重建时使用 */
 void apply_params_locked(auradsp_handle h) {
     apply_bass(h);
@@ -509,10 +873,11 @@ bool mx_downmix(auradsp_handle h, const float* in, float* stereo,
     float* keep = h->mx_scratch;                 /* frames*ch，用于存 LFE 等直通声道 */
     if (!keep || !stereo || !in) return false;
 
+    const SpeakerLayout ly = layout_for(ch);
+
     for (int i = 0; i < frames; ++i) {
         const float* sp = in + (size_t)i * ch;
         float* kp = keep + (size_t)i * ch;
-        float l = 0.0f, r = 0.0f;
 
         // 全量完整留存源输入至 keep
         for (int k = 0; k < ch; ++k) {
@@ -525,34 +890,18 @@ bool mx_downmix(auradsp_handle h, const float* in, float* stereo,
             continue;
         }
 
-        if (ch == 4) {
-            // Quad 4.0: FL(0), FR(1), BL(2), BR(3)
-            l = sp[0] + sp[2] * kMxSqrtHalf;
-            r = sp[1] + sp[3] * kMxSqrtHalf;
-        } else {
-            // 5.1 / 7.1 标准声道序:
-            // 0: FL (左前) -> L
-            // 1: FR (右前) -> R
-            // 2: C  (中置) -> L+R 各 -3dB
-            // 3: LFE (低音) -> 绝不进 L/R，保留在 scratch 中原样直通
-            // 4: SL (左环绕) / 6: BL (左后) -> 仅进 L (-3dB)，绝不进 R
-            // 5: SR (右环绕) / 7: BR (右后) -> 仅进 R (-3dB)，绝不进 L
-            l = sp[0];
-            r = sp[1];
-            if (ch > 2) {
-                const float c = sp[2] * kMxSqrtHalf;
-                l += c;
-                r += c;
-            }
-            if (ch >= 6) {
-                l += sp[4] * kMxSqrtHalf;
-                r += sp[5] * kMxSqrtHalf;
-            }
-            if (ch >= 8) {
-                l += sp[6] * kMxSqrtHalf;
-                r += sp[7] * kMxSqrtHalf;
-            }
+        float l = sp[ly.fl];
+        float r = sp[ly.fr];
+        if (ly.c >= 0) {
+            const float c = sp[ly.c] * kMxSqrtHalf;
+            l += c;
+            r += c;
         }
+        if (ly.sl >= 0) l += sp[ly.sl] * kMxSqrtHalf;
+        if (ly.sr >= 0) r += sp[ly.sr] * kMxSqrtHalf;
+        if (ly.bl >= 0) l += sp[ly.bl] * kMxSqrtHalf;
+        if (ly.br >= 0) r += sp[ly.br] * kMxSqrtHalf;
+
         stereo[i * 2]     = l;
         stereo[i * 2 + 1] = r;
     }
@@ -567,6 +916,8 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
     const float* keep = h->mx_scratch;
     if (!keep || !out || !stereo) return;
 
+    const SpeakerLayout ly = layout_for(ch);
+
     for (int i = 0; i < frames; ++i) {
         const float* sp = keep + (size_t)i * ch;
         float* dp = out + (size_t)i * ch;
@@ -579,32 +930,18 @@ void mx_upmix(auradsp_handle h, float* out, const float* stereo,
             continue;
         }
 
-        if (ch == 4) {
-            // Quad 4.0
-            dp[0] = l;
-            dp[1] = r;
-            dp[2] = l * kMxSqrtHalf; // BL 严格回填 L
-            dp[3] = r * kMxSqrtHalf; // BR 严格回填 R
-        } else {
-            // 5.1 / 7.1
-            dp[0] = l;
-            dp[1] = r;
-            if (ch > 2) {
-                dp[2] = (l + r) * 0.5f * kMxSqrtHalf; // Center: 居中单声道和
-            }
-            if (ch > 3) {
-                // LFE: 正常情况逐样本 bit-exact 直通；NaN/Inf 不能绕过链尾卫士
-                dp[3] = std::isfinite(sp[3]) ? sp[3] : 0.0f;
-            }
-            if (ch >= 6) {
-                dp[4] = l * kMxSqrtHalf;              // SL: 严格取 L
-                dp[5] = r * kMxSqrtHalf;              // SR: 严格取 R
-            }
-            if (ch >= 8) {
-                dp[6] = l * kMxSqrtHalf;              // BL: 严格取 L
-                dp[7] = r * kMxSqrtHalf;              // BR: 严格取 R
-            }
+        dp[ly.fl] = l;
+        dp[ly.fr] = r;
+        if (ly.c >= 0) {
+            dp[ly.c] = (l + r) * 0.5f * kMxSqrtHalf; // Center: 居中单声道和
         }
+        if (ly.lfe >= 0) {
+            dp[ly.lfe] = std::isfinite(sp[ly.lfe]) ? sp[ly.lfe] : 0.0f;
+        }
+        if (ly.sl >= 0) dp[ly.sl] = l * kMxSqrtHalf; // SL: 严格取 L
+        if (ly.sr >= 0) dp[ly.sr] = r * kMxSqrtHalf; // SR: 严格取 R
+        if (ly.bl >= 0) dp[ly.bl] = l * kMxSqrtHalf; // BL: 严格取 L
+        if (ly.br >= 0) dp[ly.br] = r * kMxSqrtHalf; // BR: 严格取 R
     }
 }
 
@@ -829,29 +1166,7 @@ void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch) {
 void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
                           int frames, bool skip_spatial);
 
-/* [Phase B 多声道电平] MC 版 stage 峰值采样：按 stride ch 逐声道扫描，
- * 同写 stage_peak_ch[stage][0..ch-1] 与 stage_peak_l/r（取 ch0/ch1）。
- *
- * l/r 列同步写是为了修复 MC 模式下 stage_levels_* 遥测 stale：MC 链不走
- * process_stereo_chain，旧实现里这些槽位停留在上次 stereo 块的值。
- * stereo 路径不调本函数（继续走 sample_stage_peak，逐位不变）。
- * [ch..7] 置 0：emit_viz 对 0 峰值转 -120，诚实表达「该声道不过此效果」。
- * 定义置于 MC 链之前：调用点在定义前，static inline 亦须先声明后使用。 */
-static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
-                                        const float* interleaved, int frames, int ch) {
-    float pk[AURADSP_CH_MAX] = {};
-    for (int i = 0; i < frames; ++i) {
-        const float* row = interleaved + (size_t)i * ch;
-        for (int c = 0; c < ch; ++c) {
-            const float a = fabsf(row[c]);
-            if (a > pk[c]) pk[c] = a;
-        }
-    }
-    for (int c = 0; c < ch; ++c) h->stage_peak_ch[stage_idx][c] = pk[c];
-    for (int c = ch; c < AURADSP_CH_MAX; ++c) h->stage_peak_ch[stage_idx][c] = 0.0f;
-    h->stage_peak_l[stage_idx] = pk[0];
-    h->stage_peak_r[stage_idx] = ch > 1 ? pk[1] : pk[0];
-}
+
 
 /* 离散多声道处理链本体 (Phase B: Category A 独立单声道滤波 + Category B 声场保持) */
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch) {
@@ -886,69 +1201,87 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
 
     auradsp::plugin_chain_process_n(h, 1, dst, (uint32_t)frames, (uint32_t)ch);
 
+    /* [PATCHED-AuraDSP P-026 E4] Stage 16: BassMono 采样点跨模式同语义（采在 basspsycho 之前）；
+     * WP4 升级为全声道处理（支持标准四对与 merge 模式） */
+    if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
+        bassmono_process_mc(h, dst, frames, ch);
+    }
+    sample_stage_peak_mc(h, 16, dst, frames, ch); /* Stage 16: BassMono 全声道 */
+
+    /* [PATCHED-AuraDSP P-034] Step 10: comp_process_mc (全声道逐声道/成对独立压缩) */
+    comp_process_mc(h, dst, frames, ch);
+
     // 3. Category B 跨声道/声场效果器与前置 FL/FR vendor 核心（仅作用于前置立体声对，保持环绕声场完整性）
+    // Step 11: Vendor bass (前置 FL/FR 对)
     if (h->shelf_scratch && h->mx_stereo) {
         for (int i = 0; i < frames; ++i) {
             h->shelf_scratch[i * 2]     = dst[i * ch + 0];
             h->shelf_scratch[i * 2 + 1] = dst[i * ch + 1];
         }
 
-        if (h->p.bassmono_enable.load(std::memory_order_relaxed)) {
-            bassmono_process(h, h->shelf_scratch, frames);
-        }
-        /* [PATCHED-AuraDSP P-026 E4] Stage 16 采样点与 stereo 路径对齐：
-         * 采在 basspsycho **之前**。此前 MC 在 basspsycho 之后采样、stereo
-         * 在之前——同一 "BassMono" 槽两种模式量的是不同链位置，切模式时
-         * 该柱跳变；且头文件文档写的是「16: bassmono 低频单声道输出电平」，
-         * 采在 basspsycho 之后会把心理声学低音的增益算进 BassMono 柱，
-         * 槽名失真。 */
-        sample_stage_peak_mc(h, 16, h->shelf_scratch, frames, 2); /* Stage 16: BassMono（仅 FL/FR 对） */
         if (h->p.bass_enable.load(std::memory_order_relaxed)) {
             basspsycho_process(h, h->shelf_scratch, frames);
         }
 
-        /* [PATCHED-AuraDSP P-020 B4] 门控改走「本次调用」参数，不再 save→写 0→restore
-         * 全局开关。原因：这些字段由控制线程随时改写（VacuumTubeEnable /
-         * ArbitraryResponseEqualizer / CompressorEnable / apply_eq …），用户
-         * 操作若落在 save 与 restore 之间就会被 restore 静默回滚（界面开着、
-         * 实际关了）= lost update；且字段本身非原子。gates 的 -1 = 沿用全局
-         * 开关，0/1 = 本次调用强制。 */
+        /* [PATCHED-AuraDSP P-020 B4] 门控改走「本次调用」参数 */
         AuraStageGates g;
-        g.tube = 0;    /* tube 已由上方 tube_process_mc 逐声道处理 */
-        g.comp = ((h->p.comp_channels.load(std::memory_order_relaxed) & 0x03) == 0x03) ? -1 : 0;
+        g.tube = 0;    /* tube 已由 tube_process_mc 逐声道处理 */
+        g.comp = 0;    /* comp 已由 comp_process_mc 逐声道处理 */
         g.bass = -1;   /* bass 只看全局 bassBoostEnabled（控制线程不写） */
-        g.eq = ((h->p.eq_channels.load(std::memory_order_relaxed) & 0x03) == 0x03) ? -1 : 0;
+        g.eq = 0;      /* eq 已由 eq_process_mc 逐声道处理 */
         g.arbmag = 0;  /* arbmag 逐声道改走池，不在链内跑 FL/FR 对 */
         g.limiter = 0; /* MC 侧由 limiter_process_mc 承担 lookahead/link/mask */
-        /* B5 后续：拆链两段，arbmag 插在中点按 FL/FR 各自 mask 位独立处理，
-         * 保持原链内顺序（eq → arbmag → convolver…）。ASRC 由两段各自往返。
-         * 两段开 samplePeaks=1：等价原 processFloatMultiplexd 的逐 stage 峰值
-         * 采样（viz stage_levels）；arbmag 级（stage 4）峰值由池处理后手动补。 */
+
         JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
                                            h->mx_stereo, (size_t)frames,
-                                           "tube,comp,bass,eq", 1, &g);
-        if (h->arbmag_pool.loaded) {
-            arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 0);
-            arbmag_pool_process_strided(h, h->mx_stereo, frames, 2, 1);
-            float maxL = 0.0f, maxR = 0.0f;
-            for (int i = 0; i < frames; ++i) {
-                const float aL = fabsf(h->mx_stereo[i * 2]);
-                const float aR = fabsf(h->mx_stereo[i * 2 + 1]);
-                if (aL > maxL) maxL = aL;
-                if (aR > maxR) maxR = aR;
-            }
-            h->jdsp.stagePeakL[4] = maxL; /* arbmag 级输出峰值（stage 4） */
-            h->jdsp.stagePeakR[4] = maxR;
+                                           "bass", 1, &g);
+
+        for (int i = 0; i < frames; ++i) {
+            dst[i * ch + 0] = h->mx_stereo[i * 2];
+            dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
+    }
+
+    /* [PATCHED-AuraDSP P-035] Step 12: eq_process_mc (全声道逐声道独立 EQ，设备采样率 IR) */
+    eq_process_mc(h, dst, frames, ch);
+
+    // Step 13: arbmag 逐声道池统一全声道处理
+    if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
+        h->p.arbmag_ready.load(std::memory_order_relaxed) &&
+        h->arbmag_pool.loaded) {
+        for (int c = 0; c < ch; ++c) {
+            arbmag_pool_process_strided(h, dst, frames, ch, c);
+        }
+    }
+    sample_stage_peak_mc(h, 4, dst, frames, ch);
+
+    // Step 14: Category B 其余 vendor 核心（仅作用于前置 FL/FR，保持环绕声场完整性）
+    if (h->shelf_scratch && h->mx_stereo) {
+        AuraStageGates g;
+        g.tube = 0;
+        g.comp = 0;
+        g.bass = 0;
+        g.eq = 0;
+        g.arbmag = 0;
+        g.limiter = 0;
+
+        for (int i = 0; i < frames; ++i) {
+            h->mx_stereo[i * 2]     = dst[i * ch + 0];
+            h->mx_stereo[i * 2 + 1] = dst[i * ch + 1];
+        }
+
         JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->mx_stereo,
                                            h->mx_stereo, (size_t)frames,
-                                           "convolver,ddc,liveprog,crossfeed,stereo,output", 1,
+                                           "convolver,ddc,liveprog,crossfeed,stereo", 1,
                                            &g);
 
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
+
+        /* 15. post_gain_process_mc：全声道输出增益与逐声道 trim（D13 / M-4） */
+        post_gain_process_mc(h, dst, frames, ch);
 
         auradsp::plugin_chain_process_n(h, 2, dst, (uint32_t)frames, (uint32_t)ch);
 
@@ -969,45 +1302,6 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         for (int i = 0; i < frames; ++i) {
             dst[i * ch + 0] = h->mx_stereo[i * 2];
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
-        }
-    }
-
-    // 3b. B5：双声道效果器（comp/eq）按掩码对选中声道对独立处理；
-    //      arbmag 升级逐声道（B5 后续）：同一对处理后按各自 mask 位进池。
-    //      （comp/eq 仍按标准声道对 (2,3)/(4,5)/(6,7) 判定，位掩码 3<<p0；
-    //        arbMag 由池逐声道，任何单个声道位都可独立生效）
-    {
-        char ids[40];
-        for (int p0 = 2; p0 + 1 < ch; p0 += 2) {
-            const int bits = 3 << p0;
-            int idn = 0;
-            if ((h->p.comp_channels.load(std::memory_order_relaxed) & bits) == bits) {
-                memcpy(ids + idn, "comp,", 5);
-                idn += 5;
-            }
-            if ((h->p.eq_channels.load(std::memory_order_relaxed) & bits) == bits) {
-                memcpy(ids + idn, "eq,", 3);
-                idn += 3;
-            }
-            if (idn > 0) {
-                ids[idn - 1] = 0; /* 去掉末尾逗号 */
-                for (int i = 0; i < frames; ++i) {
-                    h->shelf_scratch[i * 2] = dst[i * ch + p0];
-                    h->shelf_scratch[i * 2 + 1] = dst[i * ch + p0 + 1];
-                }
-                JamesDSPProcessMultiplexedStageSet(&h->jdsp, h->shelf_scratch,
-                                                   h->shelf_scratch, (size_t)frames, ids, 0,
-                                                   (const AuraStageGates *)0);
-                for (int i = 0; i < frames; ++i) {
-                    dst[i * ch + p0] = h->shelf_scratch[i * 2];
-                    dst[i * ch + p0 + 1] = h->shelf_scratch[i * 2 + 1];
-                }
-            }
-            /* arbmag 逐声道池：pair 内每声道按各自 mask 位独立（B5 后续） */
-            if (h->arbmag_pool.loaded) {
-                arbmag_pool_process_strided(h, dst, frames, ch, p0);
-                arbmag_pool_process_strided(h, dst, frames, ch, p0 + 1);
-            }
         }
     }
 

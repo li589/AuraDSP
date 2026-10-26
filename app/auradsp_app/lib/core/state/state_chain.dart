@@ -255,7 +255,9 @@ extension StateChain on AppModel {
     return switch (stageId) {
       'tube' => tubeOn,
       'comp' => compOn,
-      'bassmono' || 'shelf' || 'bass_shaping' => bassShapingOn,
+      'shelf' => shelfOn,
+      'bassmono' => bassmonoOn,
+      'bass_shaping' => bassShapingOn,
       'gate' => gateOn,
       'dyneq' => dyneqOn,
       'filter' => filterOn,
@@ -282,7 +284,11 @@ extension StateChain on AppModel {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
-      case 'bass_shaping' || 'shelf' || 'bassmono':
+      case 'shelf':
+        setShelfEnabled(!shelfOn);
+      case 'bassmono':
+        setBassmonoEnabled(!bassmonoOn);
+      case 'bass_shaping':
         setBassShapingEnabled(!bassShapingOn);
       case 'gate':
         setGateEnabled(!gateOn);

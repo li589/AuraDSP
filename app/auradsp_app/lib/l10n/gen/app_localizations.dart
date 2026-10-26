@@ -241,8 +241,20 @@ abstract class AppLocalizations {
   /// No description provided for @routingSelectedCount.
   ///
   /// In zh, this message translates to:
-  /// **'{count}/8 声道已选'**
-  String routingSelectedCount(int count);
+  /// **'{count}/{total} 声道已选'**
+  String routingSelectedCount(int count, int total);
+
+  /// No description provided for @routingStereoPathSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'直通 (立体声/矩阵路径)'**
+  String get routingStereoPathSummary;
+
+  /// No description provided for @routingStereoPathHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。'**
+  String get routingStereoPathHint;
 
   /// No description provided for @flfrOnlyHint.
   ///
@@ -268,6 +280,18 @@ abstract class AppLocalizations {
   /// **'全选'**
   String get routingPresetAll;
 
+  /// No description provided for @routingPresetFront.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅前置'**
+  String get routingPresetFront;
+
+  /// No description provided for @routingPresetBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅后置'**
+  String get routingPresetBack;
+
   /// No description provided for @routingPresetStereo.
   ///
   /// In zh, this message translates to:
@@ -285,6 +309,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'仅环绕'**
   String get routingPresetSurround;
+
+  /// No description provided for @channelCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道数量'**
+  String get channelCount;
+
+  /// No description provided for @channelCountHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。'**
+  String get channelCountHint;
+
+  /// No description provided for @channelCountAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动'**
+  String get channelCountAuto;
+
+  /// No description provided for @channelCountAutoDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动协商生效中 · 当前工作拓扑：{count} 声道'**
+  String channelCountAutoDesc(int count);
 
   /// No description provided for @setConnStatus.
   ///
@@ -1564,6 +1612,132 @@ abstract class AppLocalizations {
   /// **'低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感'**
   String get bassmonoFreqTooltip;
 
+  /// No description provided for @bassShapingMasterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'总开关：任一模块开启即生效'**
+  String get bassShapingMasterHint;
+
+  /// No description provided for @bassShelfModule.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架'**
+  String get bassShelfModule;
+
+  /// No description provided for @bassMonoModule.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频单声道化'**
+  String get bassMonoModule;
+
+  /// No description provided for @bassMonoDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'把分频点以下的低频合并为单声道，消除相位抵消与浑浊。'**
+  String get bassMonoDesc;
+
+  /// No description provided for @bassMonoPairs.
+  ///
+  /// In zh, this message translates to:
+  /// **'作用声道对'**
+  String get bassMonoPairs;
+
+  /// No description provided for @bassMonoPairCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 对'**
+  String bassMonoPairCount(int count);
+
+  /// No description provided for @bassMonoPairFront.
+  ///
+  /// In zh, this message translates to:
+  /// **'前置'**
+  String get bassMonoPairFront;
+
+  /// No description provided for @bassMonoPairCenterLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置+超低'**
+  String get bassMonoPairCenterLfe;
+
+  /// No description provided for @bassMonoPairSide.
+  ///
+  /// In zh, this message translates to:
+  /// **'侧环绕'**
+  String get bassMonoPairSide;
+
+  /// No description provided for @bassMonoPairBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'后环绕'**
+  String get bassMonoPairBack;
+
+  /// No description provided for @bassMonoPairAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get bassMonoPairAll;
+
+  /// No description provided for @bassMonoPairFrontOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅前置'**
+  String get bassMonoPairFrontOnly;
+
+  /// No description provided for @bassMonoPairUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前输出无此声道对'**
+  String get bassMonoPairUnavailable;
+
+  /// No description provided for @bassMonoMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并方式'**
+  String get bassMonoMerge;
+
+  /// No description provided for @bassMonoMergePerPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'每对独立'**
+  String get bassMonoMergePerPair;
+
+  /// No description provided for @bassMonoMergeGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部合并'**
+  String get bassMonoMergeGlobal;
+
+  /// No description provided for @bassMonoMergeSinglePairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅选中一对时两种方式等价'**
+  String get bassMonoMergeSinglePairHint;
+
+  /// No description provided for @bassMonoNoneSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未选择声道对 · 当前不处理'**
+  String get bassMonoNoneSelected;
+
+  /// No description provided for @bassMonoIgnoredPairs.
+  ///
+  /// In zh, this message translates to:
+  /// **'已忽略 {count} 对当前不存在的声道'**
+  String bassMonoIgnoredPairs(int count);
+
+  /// No description provided for @bassMonoLfeWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'C/LFE 取平均会削弱中置与超低音的分离，通常不建议'**
+  String get bassMonoLfeWarning;
+
+  /// No description provided for @bassMonoStereoPathHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声/矩阵/双耳路径：仅作用 L/R'**
+  String get bassMonoStereoPathHint;
+
   /// No description provided for @retryNow.
   ///
   /// In zh, this message translates to:
@@ -1641,6 +1815,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'输出增益'**
   String get postGain;
+
+  /// No description provided for @postPerChannelTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐声道输出补偿'**
+  String get postPerChannelTrim;
+
+  /// No description provided for @postPerChannelTrimHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'对各个输出声道进行独立的电平微调（-15 ~ +15 dB）'**
+  String get postPerChannelTrimHint;
+
+  /// No description provided for @postResetAllTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部归零'**
+  String get postResetAllTrim;
 
   /// No description provided for @equalizer.
   ///
@@ -4923,6 +5115,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'高频解析'**
   String get compTfresFine;
+
+  /// No description provided for @compModePairBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式：逐对'**
+  String get compModePairBadge;
+
+  /// No description provided for @compModePairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式成对分配压缩槽位以节省计算资源与内存。需成对选择声道，半选对将不被压缩。'**
+  String get compModePairHint;
+
+  /// No description provided for @compModeSemiSelectedWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式需成对选择，半选对未生效'**
+  String get compModeSemiSelectedWarning;
 
   /// No description provided for @autoGainCompensation.
   ///

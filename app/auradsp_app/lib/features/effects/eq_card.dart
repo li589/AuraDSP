@@ -166,9 +166,6 @@ class _EqualizerAdvanced extends StatelessWidget {
           ChannelRoutingSelector(
             model: model,
             paramKey: 'eq.channels',
-            // 引擎侧 vendor EQ 的多声道掩码同为**声道对**语义
-            // （engine_chain.cpp:919），逐位勾选会被引擎静默忽略。
-            pairSemantics: true,
           ),
         ],
       ),

@@ -52,6 +52,7 @@ part 'effects/tube_card.dart';
 part 'effects/post_card.dart';
 part 'effects/preset_card.dart';
 part 'effects/channel_routing_selector.dart';
+part 'effects/pair_route_selector.dart';
 part 'effects/gain_reduction_meter.dart';
 
 /// 效果器卡片序号**单一真相**：**每类内**从 1 纯数字递增（类由标题行下拉

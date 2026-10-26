@@ -23,14 +23,39 @@
   "routingAllBypassed": "全バイパス (0/8)",
   "routingSurroundOnly": "サラウンドのみ (4/8)",
   "routingPairHint": "ステレオペア単位で適用：FL/FR、C/LFE、SL/SR、BL/BR は対で切り替え、単独選択は無効",
-  "routingSelectedCount": "{count}/8 選択",
+  "routingSelectedCount": "{count}/{total} 選択",
+  "@routingSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "routingStereoPathSummary": "直通 (ステレオ/マトリクス)",
+  "routingStereoPathHint": "ステレオまたはマトリクスダウンミックス経路のため、全チャンネルが一括処理され、個別チャンネルマスクは無効です。",
   "flfrOnlyHint": "フロント FL/FR ペアにのみ適用（マルチチャンネル独立時、サラウンドと LFE は直通）",
   "channelRouting": "詳細チャンネルルーティング",
   "routingPresets": "プリセット:",
   "routingPresetAll": "全て",
+  "routingPresetFront": "フロントのみ",
+  "routingPresetBack": "リアのみ",
   "routingPresetStereo": "ステレオ",
   "routingPresetNoLfe": "サブなし",
   "routingPresetSurround": "サラウンド",
+  "channelCount": "チャンネル数",
+  "channelCountHint": "動作チャンネルトポロジ。自動モードは音源とデバイスに従い、手動で2.0 / 4.0 / 5.1 / 7.1に固定も可能です。",
+  "channelCountAuto": "自動",
+  "channelCountAutoDesc": "自動ネゴシエーション中 · 現在のトポロジ：{count} チャンネル",
+  "@channelCountAutoDesc": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "setConnStatus": "接続状態",
   "setConnActive": "接続済み（コールバック動作中）",
   "setConnIdle": "未接続（Voicemeeter 起動待ち）",
@@ -245,6 +270,41 @@
   "shelfFreqTooltip": "ローシェルフのカットオフ周波数（40～400Hz）。この周波数以下の低域を一括増減",
   "shelfGainTooltip": "カットオフ以下のゲイン増減（-15～+15dB）。厚みの強調や膨らみの抑制に",
   "bassmonoFreqTooltip": "この周波数（20～300Hz）以下の低域をモノラル化し、位相干渉と濁りを排除",
+  "bassShapingMasterHint": "マスター：いずれかのモジュールが有効なら動作",
+  "bassShelfModule": "ローシェルフ",
+  "bassMonoModule": "低域モノラル化",
+  "bassMonoDesc": "クロスオーバー以下の低域をモノラル化し、位相打消しと濁りを解消します。",
+  "bassMonoPairs": "対象チャンネルペア",
+  "bassMonoPairCount": "{count} ペア",
+  "@bassMonoPairCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoPairFront": "フロント",
+  "bassMonoPairCenterLfe": "センター+LFE",
+  "bassMonoPairSide": "サイド",
+  "bassMonoPairBack": "リア",
+  "bassMonoPairAll": "すべて",
+  "bassMonoPairFrontOnly": "フロントのみ",
+  "bassMonoPairUnavailable": "現在の出力にこのペアはありません",
+  "bassMonoMerge": "結合方法",
+  "bassMonoMergePerPair": "ペアごと",
+  "bassMonoMergeGlobal": "すべて結合",
+  "bassMonoMergeSinglePairHint": "ペアが1組のみの場合、両モードは同じです",
+  "bassMonoNoneSelected": "チャンネルペア未選択 · 処理しません",
+  "bassMonoIgnoredPairs": "現在の出力にない {count} ペアを無視しました",
+  "@bassMonoIgnoredPairs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoLfeWarning": "C/LFE の平均化はセンターと LFE の分離を損ないます（非推奨）",
+  "bassMonoStereoPathHint": "ステレオ/マトリックス/バイノーラル：L/R のみに適用",
   "retryNow": "再試行",
   "sampleRateDeviceActual": "デバイス実測：{rate} Hz",
   "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
@@ -265,6 +325,9 @@
   "reverbOff": "オフ",
   "stereoWiden": "ステレオ拡張",
   "postGain": "出力ゲイン",
+  "postPerChannelTrim": "チャンネル別出力補正",
+  "postPerChannelTrimHint": "各出力チャンネルの音量を個別に微調整します（-15 〜 +15 dB）",
+  "postResetAllTrim": "すべてリセット",
   "equalizer": "イコライザー",
   "limiter": "リミッター",
   "engineInfo": "エンジン",
@@ -1095,6 +1158,9 @@
   "compTfresTransient": "過渡応答",
   "compTfresBalanced": "バランス",
   "compTfresFine": "高周波",
+  "compModePairBadge": "ペアモード（省電力）",
+  "compModePairHint": "CPUとメモリを節約するため、チャンネルペア単位でコンプレッサースロットを割り当てます。ペアの両方を選択する必要があり、片方のみ選択されたペアはバイパスされます。",
+  "compModeSemiSelectedWarning": "ペアモードは完全なペア選択が必要です。片方のみのペアはバイパスされます",
   "autoGainCompensation": "自動ゲイン補正",
   "autoGainCompensationTooltip": "音量増加に応じて出力レベルを動的に調整し、クリッピングを防止します。",
   "outputGainGate": "出力ゲインゲート",

@@ -187,10 +187,10 @@ if f:
             print(f"      ch{c}: got {f.channel_levels[c]:.2f} want {db(amps8[c]):.2f}")
     check(ok, "channel_levels 逐声道 == 20log10(幅值) ±0.5dB")
     assert_passthrough_row(f, 12, amps8, label="输入级 ")
-    for st in (13, 14, 15, 18, 19):
+    for st in (13, 14, 15, 16, 18, 19):
         assert_passthrough_row(f, st, amps8)
-    # Category B（仅 FL/FR 对）：ch>=2 恒 -120；ch0/1 与 L/R 列一致
-    for st in (16, 17, 20):
+    # Category B（仅 FL/FR 对，Haas 与 Spatial）：ch>=2 恒 -120；ch0/1 与 L/R 列一致
+    for st in (17, 20):
         okc = all(ch_level(f, st, c) == -120.0 for c in range(2, 8))
         check(okc, f"stage_ch[{st}][2..7] == -120（Category B 作用域诚实）")
         check(abs(ch_level(f, st, 0) - f.stage_levels_l[st]) < 1e-6 and

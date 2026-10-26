@@ -65,17 +65,8 @@ constexpr int kVizRingCap = 64;   /* 2 的幂 */
 /* [ADR-003] 多声道矩阵支持的最大声道数 */
 constexpr int kMxMaxChannels = 8;
 
-/* 8 声道位掩码定义 (对齐 WAVEFORMATEX / 驱动拓扑声道序) */
-constexpr uint32_t kChMaskFL    = (1u << 0); /* 0x01: Front Left */
-constexpr uint32_t kChMaskFR    = (1u << 1); /* 0x02: Front Right */
-constexpr uint32_t kChMaskC     = (1u << 2); /* 0x04: Center */
-constexpr uint32_t kChMaskLFE   = (1u << 3); /* 0x08: Low Frequency Effect */
-constexpr uint32_t kChMaskSL    = (1u << 4); /* 0x10: Surround Left */
-constexpr uint32_t kChMaskSR    = (1u << 5); /* 0x20: Surround Right */
-constexpr uint32_t kChMaskBL    = (1u << 6); /* 0x40: Back Left */
-constexpr uint32_t kChMaskBR    = (1u << 7); /* 0x80: Back Right */
-constexpr uint32_t kChMaskAll   = 0xFF;      /* 0xFF: 全声道 (255) */
-constexpr uint32_t kChMaskNoLfe = 0xF7;      /* 0xF7: 排除 LFE (247) */
+/* [WP8 M-8/M-11] 8 声道位掩码与音箱布局定义（SpeakerLayout / layout_for / kChMask*） */
+#include "chain/speaker_layout.h"
 
 constexpr int kVizFftMax = 8192;   /* 2 的幂；缓冲区按此上限一次性分配 */
 /* 默认使用长度。11.7Hz/bin @48k：20~50Hz 的前几个对数带才分得到 bin。
@@ -307,21 +298,23 @@ struct Params {
     std::atomic<int32_t>  arbmag_nodes{0};
     std::atomic<float>    arbmag_outgain{0.0f};
     std::atomic<int32_t>  arbmag_autogain{0};
-    /* 多声道独立处理声道掩码 (Category A) */
-    std::atomic<int32_t>  filter_channels{0xFF};
-    std::atomic<int32_t>  shelf_channels{0xFF};
-    std::atomic<int32_t>  eq_channels{0xFF};
-    std::atomic<int32_t>  dyneq_channels{0xF7};
-    std::atomic<int32_t>  tube_channels{0xFF};
-    std::atomic<int32_t>  exciter_channels{0xF7};
-    std::atomic<int32_t>  loudness_channels{0xFF};
-    std::atomic<int32_t>  limiter_channels{0xFF};
-    std::atomic<int32_t>  gate_channels{0xFF};
-    std::atomic<int32_t>  comp_channels{0xFF};
+    /* 多声道独立处理声道掩码 (Category A)
+     * X-6: 不改变各效果默认掩码；用 kChMaskAll (0xFF) / kChMaskNoLfe (0xF7) 常量。
+     * dyneq/exciter 默认排除 LFE (0xF7)，其余效果默认包含全声道 (0xFF)。 */
+    std::atomic<int32_t>  filter_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  shelf_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  eq_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  dyneq_channels{(int32_t)kChMaskNoLfe};
+    std::atomic<int32_t>  tube_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  exciter_channels{(int32_t)kChMaskNoLfe};
+    std::atomic<int32_t>  loudness_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  limiter_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  gate_channels{(int32_t)kChMaskAll};
+    std::atomic<int32_t>  comp_channels{(int32_t)kChMaskAll};
     /* WP0 脚手架：comp 逐对/逐声道模式（0=逐声道 8 实例，1=逐对降级）。
      * WP3 消费；本阶段只存值。 */
     std::atomic<int32_t>  comp_mode{0};
-    std::atomic<int32_t>  arbmag_channels{0xFF};
+    std::atomic<int32_t>  arbmag_channels{(int32_t)kChMaskAll};
     /* Modern Lookahead Limiter 参数（P2.3 新增；向后兼容，不破坏 ABI） */
     std::atomic<float>    limiter_release_ms{100.0f}; /* ms [10, 500]：释放时间常数 */
     std::atomic<float>    limiter_threshold{-0.1f};    /* dBFS [-24, 0]：限幅门限（P-4：对齐 Dart ParamDefaults.limiterThreshold=-0.1；0 = 0dBFS 绝对防护为历史口径，不再作默认） */
@@ -605,8 +598,18 @@ struct auradsp_handle_s {
         unsigned int     loaded_block = 0;  /* 上次成功 Load/Refresh 的 blockSize */
         int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
     } arbmag_pool;
-    /* BassMono one-pole 状态（RT 独占；系数值每块现算，天然跟随 rate/freq） */
-    float bm_lp_l = 0.0f, bm_lp_r = 0.0f;
+    /* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
+     * 解决 MC 路径下 eq.channels 逐声道独立处理以及 96k/192k 下 S-6 频偏问题。
+     * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。 */
+    struct EqPool {
+        FFTConvolver1x1* conv[kMxMaxChannels] = {};
+        unsigned int     loaded_block = 0;  /* 上次成功 Load/Refresh 的 blockSize */
+        int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
+        float            ir_rate = 0.0f;    /* 装载时的采样率 */
+    } eq_pool;
+    /* WP4: BassMono one-pole 状态（RT 独占；支持 8 声道；bm_reinit 为一次性平滑重初始化标志） */
+    float bm_lp[8] = {0.0f};
+    std::atomic<int> bm_reinit{0};
     /* 噪声门/Deesser 状态（RT 独占；支持 8 声道） */
     float gate_gain[kMxMaxChannels] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
     float gate_state[kMxMaxChannels] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
@@ -700,6 +703,12 @@ struct auradsp_handle_s {
     float* mx_scratch = nullptr;         /* max_block*kMxMaxChannels，留存各声道 */
     float* mx_stereo = nullptr;          /* max_block*2，下混后的立体声链输出 */
 
+    /* WP5: post_gain 逐声道输出平滑状态（一阶平滑 10ms，RT 独占） */
+    float post_gain_sm[8] = {1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f};
+
+    /* WP7: 防递归标志（hook_spatial_style 写 room/width/center 时不重置 style 为 3） */
+    bool spatial_style_applying = false;
+
     char   last_error[256] = {0};
 };
 
@@ -746,6 +755,7 @@ void reset_channel_state(auradsp_handle h);
 void apply_stereo(auradsp_handle h);
 void apply_tube(auradsp_handle h);
 void bassmono_process(auradsp_handle h, float* io, int frames);
+void bassmono_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void basspsycho_process(auradsp_handle h, float* io, int frames);
 void compute_latency(auradsp_handle h, double* out_ms);
 void dyneq_process(auradsp_handle h, float* io, int frames);
@@ -782,6 +792,7 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void exciter_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void loudness_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void limiter_process_mc(auradsp_handle h, float* io, int frames, int ch);
+void post_gain_process_mc(auradsp_handle h, float* io, int frames, int ch);
 /* B5 后续：arbmag 逐声道池（控制线程建/载/释，RT 只读）。
  * IR 与主 arbMag.conv 同源（GetFilter 同一份 eqFil）；loaded 为 0 时直通。
  * process_strided：处理交织缓冲中任一单声道（mask 位=1 且 enable/ready/loaded
@@ -792,5 +803,14 @@ void arbmag_pool_free(auradsp_handle h);
 void arbmag_pool_reload(auradsp_handle h);
 void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
                                  int nch, int ch_idx);
+/* [PATCHED-AuraDSP P-035] eq 逐声道池（控制线程建/载/释，RT 只读） */
+void eq_pool_alloc(auradsp_handle h);
+void eq_pool_free(auradsp_handle h);
+void eq_pool_reload(auradsp_handle h);
+void eq_pool_process_strided(auradsp_handle h, float* io, int frames,
+                             int nch, int ch_idx);
+void eq_process_mc(auradsp_handle h, float* dst, int frames, int ch);
+/* [PATCHED-AuraDSP P-034] 动态范围压缩器离散多声道处理（支持 8 声道独立与成对模式） */
+void comp_process_mc(auradsp_handle h, float* dst, int frames, int ch);
 void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, int frames, int ch);
 

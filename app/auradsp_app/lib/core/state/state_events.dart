@@ -143,6 +143,15 @@ extension StateEvents on AppModel {
         if (raw['channelsMode'] != null) {
           channelsMode = (raw['channelsMode'] as int).clamp(0, 1);
         }
+        if (raw['channelsCountMode'] != null) {
+          channelsCountMode = (raw['channelsCountMode'] as int).clamp(0, 1);
+        }
+        if (raw['channelsCount'] != null) {
+          final c = raw['channelsCount'] as int;
+          if (c == 2 || c == 4 || c == 6 || c == 8) {
+            channelsCount = c;
+          }
+        }
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
@@ -214,6 +223,12 @@ extension StateEvents on AppModel {
         }
         if (raw['bassmonoFreq'] != null) {
           bassmonoFreq = (raw['bassmonoFreq'] as num).toDouble();
+        }
+        if (raw['bassmonoPairs'] != null) {
+          bassmonoPairs = (raw['bassmonoPairs'] as int).clamp(0, 15);
+        }
+        if (raw['bassmonoMerge'] != null) {
+          bassmonoMerge = (raw['bassmonoMerge'] as int).clamp(0, 1);
         }
         if (raw['haasEnable'] != null) {
           haasOn = (raw['haasEnable'] as int) != 0;

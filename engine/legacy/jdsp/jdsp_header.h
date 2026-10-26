@@ -141,6 +141,7 @@ typedef struct str_dynfreqdomain
 	float real[2][HALFWNDLEN_DRS], imag[2][HALFWNDLEN_DRS];
 	float specHannReal[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1], specHannImag[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
 	cplx tmp[2][PREPAD + HALFWNDLEN_DRS + POSPAD - 1];
+	int isMono; /* [PATCHED-AuraDSP P-034] 1=跳过通道 1 (Right) 的 FFT/CWT/STFT，节约 50% CPU */
 } FFTCompander;
 /* [PATCHED-AuraDSP P-018 B1-c] comp 影子槽（与 B1-a liveprog 影子 VM / B1-b ddc
  * 影子视图同范式）。原实现 `FFTCompander comp` 单体内嵌 + kAuraStages comp
@@ -149,8 +150,7 @@ typedef struct str_dynfreqdomain
  * ⇒ 重建期间音频整段卡死（Z13 只修了数据竞争，没修等待时长）。
  * 现改为：控制线程在非活动影子槽上全量拷贝 + 重建，成功后原子换
  * compActive 指针；RT 块首只读一次指针，块内不碰换出实例，stage lock 置 0。
- * 槽数取 2（1 活动 + 1 影子）：控制侧构建由 ctrl_mutex 串行，且单 RT 线程
- * 任一时刻至多一个 comp 调用在途（至多持有一个槽），故一个影子槽足够；
+ * [PATCHED-AuraDSP P-034] 槽数扩充为 9（8 活动槽 + 1 影子重建槽），支持 8 声道独立实例。
  * 在途守卫双条件（compInFlight==0 或 compProcCount>=retiredAt）覆盖排空，
  * 音频停流时 inFlight==0 立即可复用（不受 procCount 冻结影响）。
  * 每槽 pch.s 为构造时分配的私有插针数组（ierper 含堆指针，禁止跨槽别名）。 */
@@ -162,7 +162,8 @@ typedef struct
 	 * compInFlight == 0。0=从未当活动槽（立即可用）。 */
 	uint64_t retiredAt;
 } CompSlot;
-#define AURA_COMP_SLOTS 2
+#define AURA_COMP_CHANNELS 8
+#define AURA_COMP_SLOTS (AURA_COMP_CHANNELS + 1)
 typedef struct
 {
 	int needOversample;
@@ -416,6 +417,33 @@ typedef enum
 	SF_REVERB_PRESET_LONGREVERB1,
 	SF_REVERB_PRESET_LONGREVERB2
 } sf_reverb_preset;
+/* [PATCHED-AuraDSP P-033] 混响原生参数与影子槽定义 */
+typedef struct {
+    int   oversamplefactor;  /* 1..2 */
+    float ertolate;          /* 0..1 早期反射湿比 */
+    float erefwet_db;        /* dB */
+    float dry_db;            /* dB */
+    float ereffactor;        /* 0.5..2.5 早期反射房间倍数 */
+    float erefwidth;         /* 0..1 */
+    float width;             /* 0..1 */
+    float wet_db;            /* dB */
+    float wander;            /* 0..1 */
+    float bassb;             /* 0..1 */
+    float spin;              /* 0..10 */
+    float inputlpf_hz;       /* Hz */
+    float basslpf_hz;        /* Hz */
+    float damplpf_hz;        /* Hz */
+    float outputlpf_hz;      /* Hz */
+    float rt60_s;            /* 0.1..30 */
+    float delay_s;           /* 0..0.1 */
+} AuraReverbNativeParams;
+
+#define AURA_REVERB_SLOTS 2
+typedef struct {
+    sf_reverb_state_st rv;
+    uint64_t retiredAt;
+} ReverbSlot;
+
 typedef struct
 {
 	char subband[2][getMemSizeWarpedPFB(5, 2)];
@@ -609,7 +637,8 @@ typedef struct dspsys
 	 * 在途调用持有旧快照（x86 TSO + lock 前缀全屏障）。stage_comp 的
 	 * lock 标志已置 0。 */
 	CompSlot compSlots[AURA_COMP_SLOTS];
-	FFTCompander *compActive;
+	/* [PATCHED-AuraDSP P-034] 8 声道独立活动实例指针 */
+	FFTCompander *compActive[AURA_COMP_CHANNELS];
 	uint64_t compProcCount, compSwapProc;
 	long compInFlight;
 	float comp_gr; /* [PATCHED-AuraDSP P-025 P2.4] 实时压缩增益衰减分贝 (dB >= 0) */
@@ -621,7 +650,12 @@ typedef struct dspsys
 	MultimodalEQ mEQ;
 	// Reverb
 	int reverbEnabled;
-	sf_reverb_state_st reverb;
+	/* [PATCHED-AuraDSP P-033] 双影子槽：RT 块首只读 reverbActive 一致指针，
+	 * 控制线程在非活动槽构建后原子换入，无锁无竞争。 */
+	sf_reverb_state_st *reverbActive;
+	ReverbSlot reverbSlots[AURA_REVERB_SLOTS];
+	uint64_t reverbProcCount, reverbSwapProc;
+	long reverbInFlight;
 	// Stereo enhancement
 	int sterEnhEnabled;
 	stereoEnhancement sterEnh;
@@ -674,6 +708,7 @@ typedef struct dspsys
 	arbitraryMagnitude arbMag;
 	// Output limiter
 	float postGain;
+	float postGainCh[2]; /* [PATCHED-AuraDSP P-037] stereo/matrix/binaural 逐声道补偿 */
 	JLimiter limiter;
 	int limiterEnabled; /* [PATCHED-AuraDSP P-012] limiter.enable 总开关（默认 1，关时只做 postGain） */
 	size_t blockSize, blockSizeMax, pw2BlockMemSize;
@@ -734,6 +769,7 @@ extern void jdsp_unlock(JamesDSPLib *jdsp);
 extern void JamesDSPFree(JamesDSPLib *jdsp);
  extern void JamesDSPInit(JamesDSPLib *jdsp, int blockSizeMax, float sample_rate);
  extern void JamesDSPSetPostGain(JamesDSPLib *jdsp, double pGaindB);
+ extern void JamesDSPSetPostGainCh(JamesDSPLib *jdsp, int ch, double pGaindB); /* [PATCHED-AuraDSP P-037] */
  /* [PATCHED-AuraDSP P-010] 每效果输出增益门 + 自动补偿（0=tube 1=comp 2=bass 3=eq 4=arbmag） */
  extern void JamesDSPSetFxOutGain(JamesDSPLib *jdsp, int fx, double linGain);
  extern void JamesDSPSetFxAutoGain(JamesDSPLib *jdsp, int fx, int on);
@@ -755,6 +791,10 @@ extern void CompressorDisable(JamesDSPLib *jdsp);
  * 使 RT 无需改写 jdsp->compEnabled）；旧签名 CompressorProcess(jdsp,n) 由
  * stage_comp 内部等价实现（读全局 compEnabled）。 */
 extern void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled);
+/* [PATCHED-AuraDSP P-034] 单声道逐通道独立压缩处理与块生命周期 */
+extern void CompressorProcessBlockStart(JamesDSPLib *jdsp);
+extern void CompressorProcessBlockEnd(JamesDSPLib *jdsp);
+extern void CompressorProcessChannel(JamesDSPLib *jdsp, int ch, const float *in, float *out, size_t n, int enabled);
 /* [PATCHED-AuraDSP P-019 B1-d] comp 启动缺额（工作域样本数）。
  *
  * FFTCompander 每 hop(ovpLen) 才产出一块输出，而每次调用至少要写回 n 个
@@ -787,7 +827,10 @@ extern void BassBoostConstructor(JamesDSPLib *jdsp);
 extern void BassBoostSetParam(JamesDSPLib *jdsp, float maxG);
 extern void BassBoostProcess(JamesDSPLib *jdsp, size_t n);
 // Reverb
+extern void ReverbConstructor(JamesDSPLib *jdsp);
+extern void ReverbDestructor(JamesDSPLib *jdsp);
 extern void Reverb_SetParam(JamesDSPLib *jdsp, int presets);
+extern void Reverb_SetNative(JamesDSPLib *jdsp, const AuraReverbNativeParams *p);
 extern void ReverbEnable(JamesDSPLib *jdsp);
 extern void ReverbDisable(JamesDSPLib *jdsp);
 extern void ReverbProcess(JamesDSPLib *jdsp, size_t n);

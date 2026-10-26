@@ -223,6 +223,46 @@ class _SettingsPageState extends State<SettingsPage> {
               onChanged: (v) => model.setInt('channels.mode', v),
             ),
           ),
+          // 声道数量（WP9 U-1）：
+          // 0=自动（跟随源与端点协商，读取 engine channels.count）
+          // 2=2.0 立体声 / 4=4.0 Quad / 6=5.1 环绕 / 8=7.1 环绕（手动锁定）
+          SectionCard(
+            title: l.channelCount,
+            hint: l.channelCountHint,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                AuraSegmented<int>(
+                  segments: [
+                    AuraSegment(0, l.channelCountAuto),
+                    const AuraSegment(2, '2.0'),
+                    const AuraSegment(4, '4.0'),
+                    const AuraSegment(6, '5.1'),
+                    const AuraSegment(8, '7.1'),
+                  ],
+                  selected: model.channelsCountMode == 0 ? 0 : model.channelsCount,
+                  onChanged: (v) {
+                    if (v == 0) {
+                      model.setChannelsCountMode(0);
+                    } else {
+                      model.setChannelsCountMode(1);
+                      model.setChannelsCount(v);
+                    }
+                  },
+                ),
+                if (model.channelsCountMode == 0) ...[
+                  const SizedBox(height: AuraSpace.xs),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2, left: 2),
+                    child: Text(
+                      l.channelCountAutoDesc(model.effectiveChannelCount),
+                      style: captionOf(p, color: p.textDim).copyWith(fontSize: 11),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
           // 采样率（发给设备的请求值；设备可回退原生值；桥模式跟对端走，
 // 此时点选仅保存偏好，回进程内/下次建链生效——置灰反而让人以为坏了，保持可点）。
           SectionCard(

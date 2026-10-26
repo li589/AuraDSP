@@ -91,7 +91,7 @@ check('enable set/get', set_i('spatial.enable', 1) == 0 and get_i('spatial.enabl
 set_i('spatial.enable', 0)
 check('style set/get+clamp',
       set_i('spatial.style', 2) == 0 and get_i('spatial.style') == (0, 2) and
-      set_i('spatial.style', 9) == 0 and get_i('spatial.style') == (0, 2) and
+      set_i('spatial.style', 9) == 0 and get_i('spatial.style') == (0, 3) and
       set_i('spatial.style', -9) == 0 and get_i('spatial.style') == (0, 0))
 check('room set/get+clamp',
       set_f('spatial.room', 0.7) == 0 and abs(get_f('spatial.room')[1] - 0.7) < 1e-6 and

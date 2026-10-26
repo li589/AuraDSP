@@ -143,8 +143,8 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
             onChangedEnd: (v) => m.setReverbCustomParam('wet', v),
           ),
 
-          // 5. LFE 入混响（仅 MC 路径且源带 LFE 时显示）
-          if (m.reverbMcPath && m.fileChannels >= 6) ...[
+          // 5. LFE 入混响（仅 MC 路径且拓扑带 LFE 时显示）
+          if (m.reverbMcPath && m.effectiveChannelCount >= 6) ...[
             const SizedBox(height: AuraSpace.sm),
             Row(
               children: [
@@ -190,23 +190,22 @@ class _SpatialReverbAdvanced extends StatelessWidget {
       builder: (ctx) => Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // WP1：预延迟暂只在 MC FDN 路径暴露（立体声 vendor 原生参数在 WP2）。
-          if (m.reverbMcPath)
-            ValueSlider(
-              label: l.reverbPredelay,
-              infoMessage: l.reverbPredelayInfo,
-              value: m.reverbPredelay,
-              defaultValue: ParamDefaults.reverbPredelay,
-              onResetToDefault: () =>
-                  m.setReverbPredelay(ParamDefaults.reverbPredelay),
-              min: 0,
-              max: 100,
-              unit: 'ms',
-              enabled: isEnabled,
-              format: (v) => v.toStringAsFixed(0),
-              onChanged: m.setReverbPredelay,
-              onChangedEnd: m.setReverbPredelay,
-            ),
+          // WP2：预延迟在立体声与多声道自定义混响均支持。
+          ValueSlider(
+            label: l.reverbPredelay,
+            infoMessage: l.reverbPredelayInfo,
+            value: m.reverbPredelay,
+            defaultValue: ParamDefaults.reverbPredelay,
+            onResetToDefault: () =>
+                m.setReverbPredelay(ParamDefaults.reverbPredelay),
+            min: 0,
+            max: 100,
+            unit: 'ms',
+            enabled: isEnabled,
+            format: (v) => v.toStringAsFixed(0),
+            onChanged: m.setReverbPredelay,
+            onChangedEnd: m.setReverbPredelay,
+          ),
           ValueSlider(
             label: l.reverbRoomSize,
             infoMessage: l.reverbHintSize,

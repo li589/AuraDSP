@@ -621,6 +621,22 @@ abstract final class ParamRegistry {
     getter: (m) => m.bassmonoOn,
     setter: (m, v) => m.setBassmonoEnabled(v),
   );
+  static final bassmonoPairs = ParamSpec<int>(
+    id: 'bassmono.pairs', section: 'bassmono', key: 'pairs',
+    type: ParamType.int32, defaultValue: ParamDefaults.bassmonoPairs,
+    min: 0, max: 15, step: 1,
+    formatter: (v) => '0x${v.toRadixString(16).toUpperCase()}',
+    getter: (m) => m.bassmonoPairs,
+    setter: (m, v) => m.setBassmonoPairs(v),
+  );
+  static final bassmonoMerge = ParamSpec<int>(
+    id: 'bassmono.merge', section: 'bassmono', key: 'merge',
+    type: ParamType.int32, defaultValue: ParamDefaults.bassmonoMerge,
+    min: 0, max: 1, step: 1,
+    formatter: (v) => v == 0 ? 'Per-pair' : 'Global',
+    getter: (m) => m.bassmonoMerge,
+    setter: (m, v) => m.setBassmonoMerge(v),
+  );
 
   /* =========================================================================
    * 7B. 低音塑形 (Bass Shaping) — 合并低频搁架与低频单声道化
@@ -704,7 +720,7 @@ abstract final class ParamRegistry {
   static final spatialStyle = ParamSpec<int>(
     id: 'spatial.style', section: 'spatial', key: 'style',
     type: ParamType.int32, defaultValue: ParamDefaults.spatialStyle,
-    min: 0, max: 2,
+    min: 0, max: 3,
     options: ['影院', '定位', '中性'],
     getter: (m) => m.spatialStyle,
     setter: (m, v) => m.setSpatialStyle(v),
@@ -1345,6 +1361,14 @@ abstract final class ParamRegistry {
     getter: (m) => m.compOn,
     setter: (m, v) => m.setCompEnabled(v),
   );
+  static final compMode = ParamSpec<int>(
+    id: 'comp.mode', section: 'comp', key: 'mode',
+    type: ParamType.int32, defaultValue: ParamDefaults.compMode,
+    min: 0, max: 1,
+    options: ['逐声道', '性能模式 (逐对)'],
+    getter: (m) => m.compMode,
+    setter: (m, v) => m.setCompMode(v),
+  );
 
   /* =========================================================================
    * 18. 任意响应均衡 (ArbMag EQ)
@@ -1729,7 +1753,7 @@ abstract final class ParamRegistry {
     // 7. 低频单声道
     ParamSection(
       name: 'bassmono',
-      specs: [bassmonoFreq, bassmonoEnable],
+      specs: [bassmonoFreq, bassmonoEnable, bassmonoPairs, bassmonoMerge],
     ),
     // 8. Haas
     ParamSection(
@@ -1805,7 +1829,7 @@ abstract final class ParamRegistry {
       name: 'comp',
       specs: [
         compTimeconstant, compGranularity, compTfresolution,
-        compAutoGain, compOutputGain, compEnable, compChannels,
+        compAutoGain, compOutputGain, compMode, compEnable, compChannels,
         ...compFreqs, ...compGains, // B2：14 动态段注册进预设系统（真实驱动引擎）
       ],
     ),
@@ -1856,6 +1880,22 @@ abstract final class ParamRegistry {
         limiterRelease, limiterThreshold, limiterLink, limiterLookahead,
         limiterChannels,
       ],
+      customSnapshot: (m, map) {
+        final trims = <double>[];
+        for (var c = 0; c < 8; c++) {
+          trims.add(m.mirrorFloat('post.gain.c$c', 0.0));
+        }
+        map['channelTrims'] = trims;
+      },
+      postApply: (m, post, fullRewrite) {
+        if (post['channelTrims'] is List) {
+          final list = post['channelTrims'] as List;
+          for (var c = 0; c < 8 && c < list.length; c++) {
+            final v = (list[c] as num).toDouble();
+            m.setFloat('post.gain.c$c', v);
+          }
+        }
+      },
     ),
     // 22. 路由
     ParamSection(

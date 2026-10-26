@@ -23,14 +23,39 @@
   "routingAllBypassed": "All Bypassed (0/8)",
   "routingSurroundOnly": "Surround Only (4/8)",
   "routingPairHint": "Applied per stereo pair: FL/FR, C/LFE, SL/SR and BL/BR toggle together; a single channel has no effect",
-  "routingSelectedCount": "{count}/8 Selected",
+  "routingSelectedCount": "{count}/{total} Selected",
+  "@routingSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "routingStereoPathSummary": "Direct (Stereo/Matrix Path)",
+  "routingStereoPathHint": "Current path is stereo or matrix downmix; all channels are processed together and channel masks are inactive.",
   "flfrOnlyHint": "Applies to the front FL/FR pair only (surrounds and LFE pass through in discrete multichannel)",
   "channelRouting": "Channel Routing",
   "routingPresets": "Presets:",
   "routingPresetAll": "All",
+  "routingPresetFront": "Front Only",
+  "routingPresetBack": "Back Only",
   "routingPresetStereo": "Stereo",
   "routingPresetNoLfe": "No LFE",
   "routingPresetSurround": "Surround",
+  "channelCount": "Channel Count",
+  "channelCountHint": "Working channel topology. Auto negotiates with source and device; or manually lock to 2.0 / 4.0 / 5.1 / 7.1.",
+  "channelCountAuto": "Auto",
+  "channelCountAutoDesc": "Auto negotiation active · Current topology: {count} ch",
+  "@channelCountAutoDesc": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "setConnStatus": "Connection",
   "setConnActive": "Connected (active callback)",
   "setConnIdle": "Not connected (waiting for Voicemeeter)",
@@ -245,6 +270,41 @@
   "shelfFreqTooltip": "Cutoff frequency for the low-shelf filter (40–400Hz); boosts or cuts everything below",
   "shelfGainTooltip": "Gain boost or cut below the cutoff frequency (-15 to +15dB). Boosts body or tightens rumble",
   "bassmonoFreqTooltip": "Frequencies below this cutoff (20–300Hz) are summed to mono to prevent phase cancellation and muddy bass",
+  "bassShapingMasterHint": "Master: active when either module is on",
+  "bassShelfModule": "Low Shelf",
+  "bassMonoModule": "Bass Mono",
+  "bassMonoDesc": "Sums bass below the crossover to mono to remove phase cancellation and muddiness.",
+  "bassMonoPairs": "Channel Pairs",
+  "bassMonoPairCount": "{count} pair(s)",
+  "@bassMonoPairCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoPairFront": "Front",
+  "bassMonoPairCenterLfe": "Center+LFE",
+  "bassMonoPairSide": "Side",
+  "bassMonoPairBack": "Back",
+  "bassMonoPairAll": "All",
+  "bassMonoPairFrontOnly": "Front only",
+  "bassMonoPairUnavailable": "This pair is not present in the current output",
+  "bassMonoMerge": "Merge Mode",
+  "bassMonoMergePerPair": "Per pair",
+  "bassMonoMergeGlobal": "Merge all",
+  "bassMonoMergeSinglePairHint": "With a single pair selected, both modes are identical",
+  "bassMonoNoneSelected": "No channel pair selected · not processing",
+  "bassMonoIgnoredPairs": "{count} pair(s) ignored (not present in current output)",
+  "@bassMonoIgnoredPairs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoLfeWarning": "Averaging C/LFE weakens center/LFE separation; not recommended",
+  "bassMonoStereoPathHint": "Stereo/matrix/binaural path: applies to L/R only",
   "retryNow": "Retry",
   "sampleRateDeviceActual": "Device actual: {rate} Hz",
   "@sampleRateDeviceActual": {"placeholders": {"rate": {"type": "int"}}},
@@ -265,6 +325,9 @@
   "reverbOff": "Off",
   "stereoWiden": "Stereo Expansion",
   "postGain": "Post Gain",
+  "postPerChannelTrim": "Per-Channel Output Trim",
+  "postPerChannelTrimHint": "Fine-tune individual output channel levels (-15 to +15 dB)",
+  "postResetAllTrim": "Reset All",
   "equalizer": "Equalizer",
   "limiter": "Limiter",
   "engineInfo": "Engine",
@@ -1095,6 +1158,9 @@
   "compTfresTransient": "Transient",
   "compTfresBalanced": "Balanced",
   "compTfresFine": "High Frequency",
+  "compModePairBadge": "Pair Mode",
+  "compModePairHint": "Allocates compression slots per channel-pair to save CPU and memory. Requires selecting both channels of a pair; semi-selected pairs pass through uncompressed.",
+  "compModeSemiSelectedWarning": "Pair mode requires selecting full pairs; semi-selected pairs are bypassed",
   "autoGainCompensation": "Auto Gain Compensation",
   "autoGainCompensationTooltip": "Dynamically compensates output level to prevent inter-stage clipping.",
   "outputGainGate": "Output Gain Trim",

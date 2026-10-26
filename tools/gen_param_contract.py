@@ -124,6 +124,11 @@ def parse_create_scalar_overrides():
 
 def fmt_cpp_default(cpp_type, lit):
     lit = lit.strip()
+    if 'kChMaskAll' in lit:
+        lit = '0xFF'
+    elif 'kChMaskNoLfe' in lit:
+        lit = '0xF7'
+    lit = lit.replace('(int32_t)', '').strip()
     if cpp_type == 'int32_t':
         if lit.lower().startswith('0x'):
             return str(int(lit, 16))
