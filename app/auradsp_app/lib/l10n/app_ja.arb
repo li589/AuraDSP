@@ -749,6 +749,7 @@
   "spatialStyleCinema": "シネマ",
   "spatialStyleImaging": "イメージング",
   "spatialStyleNeutral": "ニュートラル",
+  "spatialStyleCustom": "カスタム",
   "spatialRoom": "ルーム",
   "spatialRoomInfo": "初期反射レベルと時間スケール。0 はドライ、1 は大部屋",
   "spatialWidth": "広がり",

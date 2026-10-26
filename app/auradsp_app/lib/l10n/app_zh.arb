@@ -765,6 +765,7 @@
   "spatialStyleCinema": "影院",
   "spatialStyleImaging": "定位",
   "spatialStyleNeutral": "中性",
+  "spatialStyleCustom": "自定义",
   "spatialRoom": "房间",
   "spatialRoomInfo": "早期反射电平加反射时间缩放。0 为干摆位，1 为大房",
   "spatialWidth": "张角",

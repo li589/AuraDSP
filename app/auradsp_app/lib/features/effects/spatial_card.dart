@@ -49,6 +49,7 @@ class _SpatialCard extends StatelessWidget {
                   l.spatialStyleCinema,
                   l.spatialStyleImaging,
                   l.spatialStyleNeutral,
+                  l.spatialStyleCustom,
                 ],
               ),
             ],

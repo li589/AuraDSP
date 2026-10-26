@@ -749,6 +749,7 @@
   "spatialStyleCinema": "Cinema",
   "spatialStyleImaging": "Imaging",
   "spatialStyleNeutral": "Neutral",
+  "spatialStyleCustom": "Custom",
   "spatialRoom": "Room",
   "spatialRoomInfo": "Early-reflection level and time scaling. 0 is dry, 1 is a large room",
   "spatialWidth": "Width",

@@ -1,6 +1,24 @@
 // part of state.dart —— P5 按区拆分，extension 包装零逻辑改动。
 part of '../state.dart';
 
+/// spatial.style 0/1/2 的规范预设值（与引擎 hook_spatial_style 同源）。
+/// 3 = 自定义，不套用任何预设。
+({double room, double width, double center}) _spatialPresetFor(int style) {
+  if (style == 0) return (room: 0.7, width: 1.0, center: 0.8);
+  if (style == 1) return (room: 0.25, width: 1.1, center: 0.5);
+  return (room: 0.0, width: 1.0, center: 0.5);
+}
+
+/// 三个自定义参数是否仍与 style 0..2 的规范预设一致。
+bool _spatialMatchesPreset(
+    int style, double room, double width, double center) {
+  if (style < 0 || style > 2) return false;
+  final preset = _spatialPresetFor(style);
+  return (room - preset.room).abs() < 1e-6 &&
+      (width - preset.width).abs() < 1e-6 &&
+      (center - preset.center).abs() < 1e-6;
+}
+
 /// 全部效果 setter（同构块）：comp/bass/spatial/reverb/gate/deesser/
 /// dyneq/loudness/arbmag/filter/shelf/tube/exciter/haas/crossfeed/
 /// bassmono/limiter/inputGain 各组 + autoGain/outputGain 对 + 头追/
@@ -135,32 +153,36 @@ extension StateEffects on AppModel {
     scheduleAutoSave();
   }
 
+  /// 风格：0=影院 / 1=定位 / 2=中性 / 3=自定义。
+  ///
+  /// 预设档只下发 `spatial.style`：引擎 hook_spatial_style 会同步写入
+  /// room/width/center。若随后再下发这三个参数，引擎的
+  /// hook_spatial_custom_param 会把 style 自动改成 3——选中预设却变成
+  /// “自定义”。自定义档（3）保留当前值，不套用任何预设。
   void setSpatialStyle(int style) {
-    spatialStyle = style.clamp(0, 2);
-    // 与引擎 style 联动预设同值（set_param 侧同样会覆盖，Dart 先行保证 UI 即时）。
-    if (spatialStyle == 0) {
-      spatialRoom = 0.7;
-      spatialWidth = 1.0;
-      spatialCenter = 0.8;
-    } else if (spatialStyle == 1) {
-      spatialRoom = 0.25;
-      spatialWidth = 1.1;
-      spatialCenter = 0.5;
-    } else {
-      spatialRoom = 0.0;
-      spatialWidth = 1.0;
-      spatialCenter = 0.5;
+    spatialStyle = style.clamp(0, 3);
+    if (spatialStyle != 3) {
+      final preset = _spatialPresetFor(spatialStyle);
+      spatialRoom = preset.room;
+      spatialWidth = preset.width;
+      spatialCenter = preset.center;
     }
     setInt(ParamId.spatialStyle, spatialStyle);
-    setFloat(ParamId.spatialRoom, spatialRoom);
-    setFloat(ParamId.spatialWidth, spatialWidth);
-    setFloat(ParamId.spatialCenter, spatialCenter);
     _notifyUi();
     scheduleAutoSave();
   }
 
   void setSpatialRoom(double v) {
     spatialRoom = v.clamp(0.0, 1.0);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialRoom - _spatialPresetFor(spatialStyle).room).abs() < 1e-6) {
+      // 预设规范值：引擎 style hook 已写入，重复下发会误触自定义态。
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialRoom, spatialRoom);
     _notifyUi();
     scheduleAutoSave();
@@ -168,6 +190,14 @@ extension StateEffects on AppModel {
 
   void setSpatialWidth(double v) {
     spatialWidth = v.clamp(0.5, 1.5);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialWidth - _spatialPresetFor(spatialStyle).width).abs() < 1e-6) {
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialWidth, spatialWidth);
     _notifyUi();
     scheduleAutoSave();
@@ -175,9 +205,23 @@ extension StateEffects on AppModel {
 
   void setSpatialCenter(double v) {
     spatialCenter = v.clamp(0.0, 1.0);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialCenter - _spatialPresetFor(spatialStyle).center).abs() < 1e-6) {
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialCenter, spatialCenter);
     _notifyUi();
     scheduleAutoSave();
+  }
+
+  /// 手动改 room/width/center 时切入自定义态（对齐引擎 set hook）。
+  void _enterSpatialCustom() {
+    if (spatialStyle == 3) return;
+    setInt(ParamId.spatialStyle, 3);
   }
 
   void setSpatialOutGain(double v) {
