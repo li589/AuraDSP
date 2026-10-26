@@ -1,8 +1,8 @@
 # Liveprog 脚本 IDE 视角重塑与功能升级计划
 
-> **日期**：2026-10-26  
+> **日期**：2026-10-26（2026-10-27 全面验收闭环）  
 > **分支**：`dev`  
-> **状态**：计划中 / 待评审  
+> **状态**：已完成 (100%) / 验收通过  
 > **关联模块**：
 > - `app/auradsp_app/lib/features/liveprog_page.dart`（脚本工作区与 IDE 界面）
 > - `app/auradsp_app/lib/features/eel_editor_support.dart`（词法高亮、格式化、Linter）
@@ -341,6 +341,58 @@ lib/features/liveprog/
 `lib/features/liveprog_page.dart` 简化为胶水层与全局工作区状态协调器。
 
 ### 10.4 实施计划表
-- **Phase 1**：国际化多语言补全、`PathMemory` 记忆槽扩展与系统文件管理器浏览工具类。
-- **Phase 2**：拆分并实现 `liveprog_ide_toolbar.dart`、`liveprog_library_dialog.dart`、`liveprog_sliders_panel.dart`、`liveprog_console_panel.dart`。
-- **Phase 3**：重构 `liveprog_page.dart` 组装现代一体化 IDE，接入编译/应用互锁逻辑与跳回开头操作，补全自动化测试并提交。
+- **Phase 1**：国际化多语言补全、`PathMemory` 记忆槽扩展与系统文件管理器浏览工具类。（已完成）
+- **Phase 2**：拆分并实现 `liveprog_ide_toolbar.dart`、`liveprog_library_dialog.dart`、`liveprog_sliders_panel.dart`、`liveprog_console_panel.dart`。（已完成）
+- **Phase 3**：重构 `liveprog_page.dart` 组装现代一体化 IDE，接入编译/应用互锁逻辑与跳回开头操作，补全自动化测试并提交。（已完成）
+
+---
+
+## 十一、第三轮加固与全案落地验收闭环（2026-10-27）
+
+在完成第二轮 IDE 架构重塑与模块化拆分后，针对用户在实际体验与深度调优中提出的 4 项关键诉求，实施了全链路闭环加固：
+
+### 11.1 应用与编译状态互锁完善
+1. **应用态禁止编译**：
+   - 当 `isApplied == true`（已应用）时，工具栏“编译”按钮置灰（`Opacity: 0.4`，阻断点击），鼠标悬停显示 Tooltip 提示 `lpTooltipUnapplyToCompile`（“请先关闭应用状态再重新编译”）；
+   - 在快捷键及菜单触发路径中同样加入 `lpEnabled` 前置守卫，确保在 DSP 音频泵处于活跃处理状态时，底层不会执行编译及指令指针热替换。
+2. **脏代码无法应用，但允许随时取消应用（Unapply）**：
+   - 当用户在编辑器中键入新代码使代码变脏（`isCodeDirty == true`），或未曾编译成功时，禁止切换至应用状态（Tooltip 提示“请先编译当前脚本”）；
+   - 若系统当前**已处于应用状态**，允许用户随时点击“已应用”按钮将其切换为“未应用”（关闭 DSP 处理通道），避免用户因误编辑代码而无法关闭效果。
+
+### 11.2 EqualizerAPO 预设极简生成与 UI 诊断重构
+1. **技术路径定性与轻量代码生成**：
+   - 确认机制：EqualizerAPO 预设是在前端实时解析并直接转换为等效的 EEL2 脚本代码。
+   - **纯 Preamp 极简生成优化**：针对仅含 `Preamp: -x dB`（无滤波器）的校准配置，重构 `rbj_biquad_generator.dart`，自动转为极简前级增益代码（仅在 `@init` 计算线性倍率并在 `@sample` 线性相乘），代码量由 350+ 行缩减至 20 行，彻底剔除不必要的 RBJ Cookbook 双二阶公式。
+2. **状态条满宽与异常诊断**：
+   - 将解析状态条拉伸至与下方编辑器等宽（`width: double.infinity`），并将“打开 .txt 文件”按钮集成至该行右侧；
+   - 引入 150ms 输入防抖（`_debounceTimer`），并在左下角实时显示语法异常（如非正频率、非法 Q 值、未识别指令等带行号的具体报错提示）。
+
+### 11.3 脚本库弹窗（`LiveprogLibraryDialog`）全景重构
+1. **单选切换与非阻塞异步体验**：
+   - 目录列表左侧添加单选圆点（Radio indicator），选中即异步触发脚本列表重新扫描；
+   - 目录扫描采用 `listDirAsync` 异步流/Future，扫描时展示居中 Spinner 等待动画，UI 响应无卡顿。
+2. **失效目录与图标排布规范**：
+   - 外部目录被移除或拔出时，目录名标记为失效；
+   - 在目录项右侧操作区中，**警告感叹号与浏览（资源管理器打开）、删除按钮并列，且警告感叹号居于这组按钮的最左侧**；失效目录选中时诚实显示空白。
+3. **默认目录安全与路径持久化**：
+   - 弹窗顶部标题精简，去除默认库路径文本；
+   - 系统默认目录固定作为列表第一项展示，禁止删除，本地不存在时自动重建，右侧以 `<系统初始>` 标签标注；
+   - 扩展 `PathMemory.slotLiveprogSelectedDir`，记忆用户上次选中的目录并在打开时优先恢复；
+   - 底部操作栏将“添加外部目录”与“关闭”按钮并排展示，高度与内边距尺寸统一（36px）。
+
+### 11.4 示例脚本解析与 C 引擎补丁 P-039
+1. **根因分析**：
+   - 原 C 引擎 `LiveProgStringParser` 仅硬编码截取 `@init` 与 `@sample`，若脚本中包含 `@slider` 段，NSEEL 会在 `@init` 段内遭遇 `@` 符号并报错“Syntax error at @init section”；
+   - 引擎返回拒绝后，前端事件同因抑制机制将相同成因的拒绝事件静默拦截，导致未能及时更新 `lpError`，触发 5 秒超时等待降级。
+2. **补丁 P-039 落地**：
+   - 在 `liveprogWrapper.c` 中彻底重写解析器，完整支持 `@init`、`@slider`、`@block`、`@sample` 四段扫描与独立提取，新增 `codehandleSlider` 并在音频块首触发执行，提供错误码 `-5`；
+   - 修正模板 5 和 6 内存与调用参数语法，6 套内置模板 100% 编译通过；
+   - 前端 `state_events.dart` 对 `lpCode` 拒绝事件绕过同因抑制，收到后立即唤醒 UI。
+
+### 11.5 全案验收与质量闭环
+- **C++ 核心与驱动**：CMake MSVC 编译全绿，生成 `auradsp_engine.dll` (1.95MB) 及桥接库；
+- **Python 冒烟测试**：`test/smoke/smoke_liveprog.py` 9 个测试项 100% 通过；
+- **Flutter 测试套件**：全工程 **47 个测试套件（含 liveprog_components_test 与 liveprog_ide_integration_test）100% 全部通过**；
+- **国际化与质量门禁**：`l10n_cjk_guard_test.dart` 零违规通过，`flutter analyze` 0 报错 0 警告；
+- **全栈产物分发**：`tools/build_windows.ps1` 全栈流水线执行完毕，便携发行包 `dist/AuraDSP-Windows-x64` 同步就绪。
+
