@@ -17,6 +17,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -112,6 +113,58 @@ class _LiveprogPageState extends State<LiveprogPage> {
   bool _showOutline = false;
   bool _showConsole = false;
   bool _expandedEditor = false;
+
+  // 编辑器缩放控制与行号同步
+  static const double _kDefaultFontSize = 12.5;
+  static const double _kMinFontSize = 9.0;
+  static const double _kMaxFontSize = 26.0;
+  double _editorFontSize = _kDefaultFontSize;
+
+  double _calculateLineHeight(TextStyle style) {
+    final tp = TextPainter(
+      text: TextSpan(text: '0', style: style),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    return tp.preferredLineHeight;
+  }
+
+  void _onEditorPointerSignal(PointerSignalEvent event) {
+    if (event is PointerScrollEvent && HardwareKeyboard.instance.isControlPressed) {
+      final currentOffset =
+          _editorScrollCtrl.hasClients ? _editorScrollCtrl.offset : 0.0;
+      if (event.scrollDelta.dy < 0) {
+        _zoomEditor(0.5);
+      } else if (event.scrollDelta.dy > 0) {
+        _zoomEditor(-0.5);
+      }
+      if (_editorScrollCtrl.hasClients) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_editorScrollCtrl.hasClients) {
+            _editorScrollCtrl.jumpTo(
+              currentOffset.clamp(0.0, _editorScrollCtrl.position.maxScrollExtent),
+            );
+          }
+        });
+      }
+    }
+  }
+
+  void _zoomEditor(double delta) {
+    final newSize = (_editorFontSize + delta).clamp(_kMinFontSize, _kMaxFontSize);
+    if ((newSize - _editorFontSize).abs() > 0.001) {
+      setState(() {
+        _editorFontSize = double.parse(newSize.toStringAsFixed(1));
+      });
+    }
+  }
+
+  void _resetEditorFontSize() {
+    if ((_editorFontSize - _kDefaultFontSize).abs() > 0.001) {
+      setState(() {
+        _editorFontSize = _kDefaultFontSize;
+      });
+    }
+  }
 
   @override
   void initState() {
@@ -865,6 +918,11 @@ dbg = 0;
     final l = AppLocalizations.of(context)!;
     final m = widget.model;
 
+    final codeStyle = monoOf(p, size: _editorFontSize, color: p.text)
+        .copyWith(height: 1.5);
+    final calculatedLineHeight = _calculateLineHeight(codeStyle);
+    final gutterFontSize = (_editorFontSize - 1.0).clamp(9.0, 22.0);
+
     return PageScaffold(
       eyebrow: l.lpEyebrowDsp,
       title: l.lpTitleEditor,
@@ -941,76 +999,124 @@ dbg = 0;
               ],
 
               // 5. 代码编辑器与大纲分栏
-              Container(
-                height: _expandedEditor ? 620 : 420,
-                decoration: BoxDecoration(
-                  color: p.panelRaised,
-                  borderRadius: BorderRadius.circular(AuraRadius.sm),
-                  border: Border.all(color: p.hairline),
-                ),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+              Listener(
+                onPointerSignal: _onEditorPointerSignal,
+                child: Stack(
                   children: [
-                    if (_showOutline) ...[
-                      SizedBox(
-                        width: 200,
-                        child: CodeOutlinePanel(
-                          code: _code.text,
-                          activeLine: _cursorLine,
-                          onSelectLine: _gotoLine,
-                        ),
+                    Container(
+                      height: _expandedEditor ? 620 : 420,
+                      decoration: BoxDecoration(
+                        color: p.panelRaised,
+                        borderRadius: BorderRadius.circular(AuraRadius.sm),
+                        border: Border.all(color: p.hairline),
                       ),
-                      VerticalDivider(width: 1, thickness: 1, color: p.hairline),
-                    ],
-                    LineNumberGutter(
-                      editorScrollCtrl: _editorScrollCtrl,
-                      lineCount: _code.text.split('\n').length,
-                      errorLines: _code.errorLines,
-                      activeLine: _cursorLine,
-                      onSelectLine: _gotoLine,
-                      lineHeight: 18.75,
-                    ),
-                    Expanded(
-                      child: CallbackShortcuts(
-                        bindings: <ShortcutActivator, VoidCallback>{
-                          const SingleActivator(LogicalKeyboardKey.keyF,
-                              control: true): () {
-                            setState(() => _showFindReplace = !_showFindReplace);
-                          },
-                          const SingleActivator(LogicalKeyboardKey.keyS,
-                              control: true): _saveAs,
-                          const SingleActivator(LogicalKeyboardKey.enter,
-                              control: true): _compile,
-                        },
-                        child: Actions(
-                          actions: <Type, Action<Intent>>{
-                            _EelTabIntent: _EelTabAction(),
-                          },
-                          child: Shortcuts(
-                            shortcuts: const <ShortcutActivator, Intent>{
-                              SingleActivator(LogicalKeyboardKey.tab):
-                                  _EelTabIntent(shift: false),
-                              SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                                  _EelTabIntent(shift: true),
-                            },
-                            child: TextField(
-                              controller: _code,
-                              focusNode: _editorFocus,
-                              scrollController: _editorScrollCtrl,
-                              maxLines: null,
-                              expands: true,
-                              style: monoOf(p, size: 12.5, color: p.text)
-                                  .copyWith(height: 1.5),
-                              decoration: const InputDecoration(
-                                border: InputBorder.none,
-                                contentPadding: EdgeInsets.all(AuraSpace.md),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (_showOutline) ...[
+                            SizedBox(
+                              width: 200,
+                              child: CodeOutlinePanel(
+                                code: _code.text,
+                                activeLine: _cursorLine,
+                                onSelectLine: _gotoLine,
                               ),
-                              onChanged: _onCodeChanged,
+                            ),
+                            VerticalDivider(width: 1, thickness: 1, color: p.hairline),
+                          ],
+                          LineNumberGutter(
+                            editorScrollCtrl: _editorScrollCtrl,
+                            lineCount: _code.text.split('\n').length,
+                            errorLines: _code.errorLines,
+                            activeLine: _cursorLine,
+                            onSelectLine: _gotoLine,
+                            lineHeight: calculatedLineHeight,
+                            fontSize: gutterFontSize,
+                          ),
+                          Expanded(
+                            child: CallbackShortcuts(
+                              bindings: <ShortcutActivator, VoidCallback>{
+                                const SingleActivator(LogicalKeyboardKey.keyF,
+                                    control: true): () {
+                                  setState(() => _showFindReplace = !_showFindReplace);
+                                },
+                                const SingleActivator(LogicalKeyboardKey.keyS,
+                                    control: true): _saveAs,
+                                const SingleActivator(LogicalKeyboardKey.enter,
+                                    control: true): _compile,
+                              },
+                              child: Actions(
+                                actions: <Type, Action<Intent>>{
+                                  _EelTabIntent: _EelTabAction(),
+                                },
+                                child: Shortcuts(
+                                  shortcuts: const <ShortcutActivator, Intent>{
+                                    SingleActivator(LogicalKeyboardKey.tab):
+                                        _EelTabIntent(shift: false),
+                                    SingleActivator(LogicalKeyboardKey.tab, shift: true):
+                                        _EelTabIntent(shift: true),
+                                  },
+                                  child: TextField(
+                                    controller: _code,
+                                    focusNode: _editorFocus,
+                                    scrollController: _editorScrollCtrl,
+                                    maxLines: null,
+                                    expands: true,
+                                    style: codeStyle,
+                                    decoration: const InputDecoration(
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.all(AuraSpace.md),
+                                    ),
+                                    onChanged: _onCodeChanged,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    if ((_editorFontSize - _kDefaultFontSize).abs() > 0.01)
+                      Positioned(
+                        top: 6,
+                        left: _showOutline ? 206 : 6,
+                        child: Tooltip(
+                          message:
+                              '${(_editorFontSize / _kDefaultFontSize * 100).round()}% (点击恢复默认)',
+                          child: Material(
+                            color: Colors.transparent,
+                            child: InkWell(
+                              onTap: _resetEditorFontSize,
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: p.panelRaised.withValues(alpha: 0.95),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: p.accent.withValues(alpha: 0.75),
+                                    width: 1.2,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(alpha: 0.35),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 1),
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Icon(
+                                  Icons.restart_alt_rounded,
+                                  size: 13,
+                                  color: p.accent,
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

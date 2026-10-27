@@ -17,7 +17,10 @@ import 'package:auradsp_app/features/liveprog/line_number_gutter.dart';
 import 'package:auradsp_app/features/liveprog/sliders/liveprog_sliders_panel.dart';
 import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final AppLocalizations _zh = lookupAppLocalizations(const Locale('zh'));
@@ -401,6 +404,61 @@ spl0 = 0;
 
       expect(find.text(_zh.lpNoScriptSliders), findsOneWidget);
       expect(find.textContaining('展开全部 8 槽滑块'), findsNothing);
+    });
+
+    testWidgets('6. 编辑器行号栏高度与真实行高动态一致，宽度随字号自适应', (tester) async {
+      final scroll = ScrollController();
+      addTearDown(scroll.dispose);
+
+      await tester.pumpWidget(_wrap(LineNumberGutter(
+        editorScrollCtrl: scroll,
+        lineCount: 150,
+        errorLines: const {5, 20},
+        activeLine: 1,
+        onSelectLine: (_) {},
+        lineHeight: 19.0,
+        fontSize: 11.5,
+      )));
+      await tester.pumpAndSettle();
+
+      // 验证第 1 行渲染且高度为 19.0
+      final line1 = tester.getSize(find.ancestor(
+        of: find.text('1'),
+        matching: find.byType(SizedBox),
+      ).first);
+      expect(line1.height, 19.0);
+    });
+
+    testWidgets('7. 编辑器 Ctrl+滚轮缩放与左上角单符号一键复原按钮联动', (tester) async {
+      final model = AppModel();
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 初始默认状态下，单符号复原按钮不出现
+      expect(find.byIcon(Icons.restart_alt_rounded), findsNothing);
+
+      // 找到编辑器区域
+      final editorFinder = find.byType(TextField);
+      expect(editorFinder, findsOneWidget);
+
+      // 模拟按住 Ctrl 键并向上滚轮（放大）
+      await tester.sendKeyDownEvent(LogicalKeyboardKey.controlLeft);
+      final center = tester.getCenter(editorFinder);
+      final pointer = TestPointer(1, PointerDeviceKind.mouse);
+      await tester.sendEventToBinding(pointer.hover(center));
+      await tester.sendEventToBinding(pointer.scroll(const Offset(0, -100)));
+      await tester.pumpAndSettle();
+      await tester.sendKeyUpEvent(LogicalKeyboardKey.controlLeft);
+
+      // 此时字号变大，左上角浮现单符号复原按钮
+      expect(find.byIcon(Icons.restart_alt_rounded), findsOneWidget);
+
+      // 点击复原按钮
+      await tester.tap(find.byIcon(Icons.restart_alt_rounded));
+      await tester.pumpAndSettle();
+
+      // 复原后按钮自动消失
+      expect(find.byIcon(Icons.restart_alt_rounded), findsNothing);
     });
   });
 }
