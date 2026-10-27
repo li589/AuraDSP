@@ -7,21 +7,34 @@ part of '../state.dart';
 /// 原有调用点（实例调用、tear-off、跨 part 互调）解析不变。
 extension StateCore on AppModel {
   void send(Map<String, dynamic> m) {
+    // [PATCHED-AuraDSP P-032] testing 模式记录已下发的 setParam 载荷。
+    // 此前"参数有没有真的发到引擎"无法在单测里断言（_toIso 为 null 时
+    // send 静默丢弃）——P-032 的三处修复（bass.mode 下发、freeverb
+    // roomsize/width 下发）正属此类"下发了才算数"的缺陷，需要可观测。
+    if (_testing && m['cmd'] == 'setParam') {
+      sentParamsForTesting.add(Map<String, dynamic>.from(m));
+    }
     _toIso?.send(m);
   }
 
   // ---- 命令下发 ----
 
   void setInt(String id, int v) {
+    if (id == 'channels.mode') {
+      // X-8：引擎 channels.mode 仅接受 0..1，下发前先 clamp，防非法值下发与淤积
+      v = v.clamp(0, 1);
+    } else if (id == 'channels.countMode') {
+      v = v.clamp(0, 1);
+    }
     _mirror(id, v.toDouble());
     _markSent(id);
     _notifyUi();
-    if (id == 'bass.enable' && v == 0) {
-      // 先渐变到 0 再关闭，避免直接置 0 造成「哒」一声。
-      _disableBassRamped();
-    } else {
-      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
+    if (id == 'gate.enable' && v == 0) {
+      if (deesserOn) {
+        setDeesserEnabled(false);
+      }
     }
+    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': false});
     scheduleAutoSave();
   }
 
@@ -29,17 +42,7 @@ extension StateCore on AppModel {
     _mirror(id, v);
     _markSent(id);
     _notifyUi();
-    if (id == 'bass.gain') {
-      // 低音拖动约 60Hz 触发，而 BassBoostSetParam 运行在**驱动 WASAPI 的
-      // 同一线程**上（setParam 与 pump 同属一个 isolate）——不存在数据竞争，
-      // 真实成因是每次调用既阻塞音频泵、又造成系数阶跃。
-      // 单纯节流只降低频率、仍是阶跃（实测仍有「哒哒」声），故改为
-      // 20Hz 起步的**渐变爬坡**：每步最多 0.6 dB，等效于等功率交叉淡化。
-      _bassRampTarget = v;
-      _kickBassRamp();
-    } else {
-      send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
-    }
+    send({'cmd': 'setParam', 'id': id, 'value': v, 'isFloat': true});
     scheduleAutoSave();
   }
 
@@ -89,6 +92,14 @@ extension StateCore on AppModel {
     return fallback;
   }
 
+  /// 浮点镜像型参数读取（未在 ParamRegistry 单独建模的逐声道补偿等用）
+  double mirrorFloat(String id, double fallback) {
+    final v = _paramValues[id];
+    if (v is double) return v;
+    if (v is num) return v.toDouble();
+    return fallback;
+  }
+
   /// 按参数 ID 通用设值
   void setParamById(String id, dynamic value, {bool notify = true}) {
     final spec = ParamRegistry.byId[id];
@@ -110,12 +121,10 @@ extension StateCore on AppModel {
   /// 检查某处理节是否处于激活状态（用于自绑定组件 enabled 联动）
   bool isSectionEnabled(String section) {
     if (section == 'input' || section == 'routing') return true;
-    if (section == 'post') return limiterOn;
-    if (section == 'shelf' ||
-        section == 'bassmono' ||
-        section == 'bass_shaping') {
-      return bassShapingOn;
-    }
+    if (section == 'post') return true;
+    if (section == 'shelf') return shelfOn;
+    if (section == 'bassmono') return bassmonoOn;
+    if (section == 'bass_shaping') return bassShapingOn;
     return isStageEnabled(section);
   }
 
@@ -137,6 +146,15 @@ extension StateCore on AppModel {
         break;
       case 'reverb.preset':
         reverbPreset = v.toInt();
+        break;
+      case 'reverb.predelay':
+        reverbPredelay = v;
+        break;
+      case 'reverb.lfe':
+        reverbLfe = v != 0;
+        break;
+      case 'reverb.engine':
+        reverbEngine = v.toInt();
         break;
       case 'stereo.mix':
         // UI 刻度 0..1 → 存显示值；引擎侧收到 v * stereoWidenMax
@@ -169,6 +187,15 @@ extension StateCore on AppModel {
         // 会淤积在镜像与自动保存里——此处 clamp 保证镜像即引擎真相。
         channelsMode = v.toInt().clamp(0, 1);
         break;
+      case 'channels.countMode':
+        channelsCountMode = v.toInt().clamp(0, 1);
+        break;
+      case 'channels.count':
+        final c = v.toInt();
+        if (c == 2 || c == 4 || c == 6 || c == 8) {
+          channelsCount = c;
+        }
+        break;
       case 'tube.enable':
         tubeOn = v != 0;
         break;
@@ -186,6 +213,16 @@ extension StateCore on AppModel {
         break;
       case 'crossfeed.mode':
         xfeedMode = v.toInt();
+        if (xfeedMode == 0) {
+          xfeedFcut = 700.0;
+          xfeedFeed = 4.5;
+        } else if (xfeedMode == 1) {
+          xfeedFcut = 700.0;
+          xfeedFeed = 6.0;
+        } else if (xfeedMode == 2) {
+          xfeedFcut = 650.0;
+          xfeedFeed = 9.5;
+        }
         break;
       case 'crossfeed.fcut':
         xfeedFcut = v;
@@ -236,6 +273,14 @@ extension StateCore on AppModel {
           bassmonoFreq = v;
           break;
         }
+        if (id == ParamId.bassmonoPairs) {
+          bassmonoPairs = v.toInt().clamp(0, 15);
+          break;
+        }
+        if (id == ParamId.bassmonoMerge) {
+          bassmonoMerge = v.toInt().clamp(0, 1);
+          break;
+        }
         if (id == ParamId.haasEnable) {
           haasOn = v != 0;
           break;
@@ -257,7 +302,7 @@ extension StateCore on AppModel {
           break;
         }
         if (id == ParamId.spatialStyle) {
-          spatialStyle = v.toInt().clamp(0, 2);
+          spatialStyle = v.toInt().clamp(0, 3);
           break;
         }
         if (id == ParamId.spatialRoom) {
@@ -290,14 +335,6 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.spatialBinaural) {
           spatialBinaural = v != 0;
-          break;
-        }
-        if (id == ParamId.spatialFdn) {
-          spatialFdn = v != 0;
-          break;
-        }
-        if (id == ParamId.spatialLate) {
-          spatialLate = v;
           break;
         }
         if (id == ParamId.spatialHeadAzim) {
@@ -350,6 +387,10 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.compAutoGain) {
           compAutoGain = v != 0;
+          break;
+        }
+        if (id == ParamId.compMode) {
+          compMode = v.toInt();
           break;
         }
         if (id == ParamId.reverbOutGain) {
@@ -572,10 +613,6 @@ extension StateCore on AppModel {
           dyneqB3Release = v;
           break;
         }
-        if (id == ParamId.fvEnable) {
-          fvOn = v != 0;
-          break;
-        }
         if (id == ParamId.fvDecay) {
           fvDecay = v;
           break;
@@ -590,6 +627,22 @@ extension StateCore on AppModel {
         }
         if (id == ParamId.fvDry) {
           fvDry = v;
+          break;
+        }
+        // [PATCHED-AuraDSP P-032] 补 freeverb.roomsize / width 的镜像：
+        // 这两个参数此前既没在 _mirror 里登记、也没在 selectReverbPreset
+        // 里下发 → 模型字段与 _paramValues 缓存、引擎真值三者脱节。
+        if (id == 'freeverb.roomsize') {
+          fvRoomSize = v;
+          break;
+        }
+        if (id == 'freeverb.width') {
+          fvWidth = v;
+          break;
+        }
+        // [PATCHED-AuraDSP P-032] bass.mode 的镜像登记（纯 UI 模式状态）。
+        if (id == 'bass.mode') {
+          bassMode = v.round();
           break;
         }
         if (id == ParamId.compEnable) {
@@ -693,7 +746,7 @@ extension StateCore on AppModel {
     _fromIso = null;
     try {
       oldFrom?.close();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     if (oldIso != null) {
       await _stopAudioIsolate(oldIso, oldPort);
     }
@@ -711,20 +764,21 @@ extension StateCore on AppModel {
     });
     try {
       iso.addOnExitListener(exitPort.sendPort);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       port?.send({'cmd': 'shutdown'});
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       await done.future.timeout(const Duration(milliseconds: 800));
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       try {
         iso.kill(priority: Isolate.immediate);
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
     } finally {
       try {
         iso.removeOnExitListener(exitPort.sendPort);
-      } catch (_) {}
+      } catch (e, st) { swallow(e, st); }
       exitPort.close();
     }
   }
@@ -768,5 +822,24 @@ extension StateCore on AppModel {
     playing = kind != 'stop';
     _notifyUi();
     send({'cmd': 'source', 'kind': kind, 'path': path});
+  }
+
+  /// 设置工作声道模式（0=自动, 1=手动）
+  void setChannelsCountMode(int mode) {
+    final m = mode.clamp(0, 1);
+    channelsCountMode = m;
+    config.channelsCountMode = m;
+    ConfigManager.save(config);
+    setInt('channels.countMode', m);
+  }
+
+  /// 设置手动工作声道数（2, 4, 6, 8）
+  void setChannelsCount(int count) {
+    if (count == 2 || count == 4 || count == 6 || count == 8) {
+      channelsCount = count;
+      config.channelsCount = count;
+      ConfigManager.save(config);
+      setInt('channels.count', count);
+    }
   }
 }

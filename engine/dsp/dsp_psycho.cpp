@@ -19,7 +19,8 @@ void basspsycho_process(auradsp_handle h, float* io, int frames) {
     float fc = h->p.bass_cutoff_f.load(std::memory_order_relaxed);
     if (fc < 30.0f) fc = 30.0f; if (fc > 300.0f) fc = 300.0f;
     if (sub >= fc) sub = fc * 0.5f;
-    const float fs = (float)h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const float fs = (float)h->sample_rate;
     if (fs <= 0.0f) return;
     const float aC = 1.0f - expf(-2.0f * 3.14159265358979f * fc / fs);
     const float aS = 1.0f - expf(-2.0f * 3.14159265358979f * sub / fs);

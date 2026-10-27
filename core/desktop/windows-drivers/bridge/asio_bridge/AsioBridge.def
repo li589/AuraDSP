@@ -10,6 +10,7 @@ EXPORTS
     asio_get_param         PRIVATE
     asio_get_param_str     PRIVATE
     asio_viz_read          PRIVATE
+    asio_abi               PRIVATE
     asio_test_start        PRIVATE
     asio_test_stop         PRIVATE
     asio_bypass            PRIVATE
@@ -26,3 +27,5 @@ EXPORTS
     asio_plugin_slot_load_preset       PRIVATE
     asio_plugin_slot_set_insert_stage  PRIVATE
     asio_plugin_slot_get_insert_stage  PRIVATE
+    asio_plugin_slot_set_channels      PRIVATE
+    asio_plugin_slot_get_channels      PRIVATE

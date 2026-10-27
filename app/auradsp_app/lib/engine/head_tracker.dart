@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
+import '../core/error_sink.dart';
 /// OpenTrack UDP 头部跟踪接收器。
 ///
 /// 协议：OpenTrack 默认向 UDP 4242 发送 6 个 little-endian 值：
@@ -39,7 +40,8 @@ class HeadTracker {
         _emit(yaw, onYaw);
       });
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _socket = null;
       return false;
     }

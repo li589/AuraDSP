@@ -270,46 +270,23 @@ def mask_zero_invariant(name):
 #   PERCH   —— arbmag（逐声道池，B5 后续）：mask 第 c 位 = 声道 c 独立开关，
 #              单个声道（如 0x04 仅 C）即可独立生效；0x01 仅 FL 时 FR 直通（FL/FR 彻底解绑）
 MASKED_EFFECTS = ["dyneq", "exciter", "filter", "gate", "limiter",
-                  "loudness", "shelf", "tube"]
-PAIR_EFFECTS = ["comp", "eq"]
+                  "loudness", "shelf", "tube", "arbmag", "comp", "eq"]
 
 
-def stereo_pair_semantics(name, setup):
-    """6ch 离散：双声道效果器（comp/eq）按掩码选标准声道对处理（B5）。"""
-    def expect(mask, proc_pairs, passthru):
+def persch_semantics(name, setup):
+    """6ch 离散：逐声道语义（WP3 / B5 后续）——mask 第 c 位 = 声道 c 独立开关。
+    0x01 仅 FL（FR 直通 = 彻底解绑）、0x04 仅 C（无需完整对）。"""
+    def expect(mask, proc_ch, passthru):
         h = mk_handle(6)
         setup(h)
         set_i(h, f"{name}.channels", mask)
         src, dst = run_ch(h, 6)
-        for (a, b) in proc_pairs:
-            d = max(ch_dev(src, dst, 6, a), ch_dev(src, dst, 6, b))
-            check(d > 0.01, f"{name} mask=0x{mask:02X} 对({a},{b}) 处理 diff={d:.4f}")
+        for c in proc_ch:
+            d = ch_dev(src, dst, 6, c)
+            check(d > 0.01, f"{name} mask=0x{mask:02X} 声道{c} 处理 diff={d:.4f}")
         for c in passthru:
             d = ch_dev(src, dst, 6, c)
             check(d < 1e-6, f"{name} mask=0x{mask:02X} 声道{c} 应直通 dev={d:.2e}")
-        lib.auradsp_destroy(h)
-
-    expect(0x03, [(0, 1)], [2, 3, 4, 5])    # 仅前组
-    expect(0x0C, [(2, 3)], [0, 1, 4, 5])    # 仅中/低音组
-    expect(0x30, [(4, 5)], [0, 1, 2, 3])    # 仅后组
-    expect(0x33, [(0, 1), (4, 5)], [2, 3])  # 前+后组多选
-    expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
-
-
-def arbmag_persch_semantics(setup):
-    """6ch 离散：arbmag 逐声道池语义（B5 后续）——mask 第 c 位 = 声道 c 独立开关。
-    关键差异对 B5 对语义：0x01 仅 FL（FR 直通）、0x04 仅 C（无需完整对）。"""
-    def expect(mask, proc_ch, passthru):
-        h = mk_handle(6)
-        setup(h)
-        set_i(h, "arbmag.channels", mask)
-        src, dst = run_ch(h, 6)
-        for c in proc_ch:
-            d = ch_dev(src, dst, 6, c)
-            check(d > 0.01, f"arbmag mask=0x{mask:02X} 声道{c} 处理 diff={d:.4f}")
-        for c in passthru:
-            d = ch_dev(src, dst, 6, c)
-            check(d < 1e-6, f"arbmag mask=0x{mask:02X} 声道{c} 应直通 dev={d:.2e}")
         lib.auradsp_destroy(h)
 
     expect(0x01, [0], [1, 2, 3, 4, 5])      # 仅 FL（FR 直通 = 彻底解绑）
@@ -321,8 +298,32 @@ def arbmag_persch_semantics(setup):
     expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
 
 
+def comp_pair_semantics(setup):
+    """6ch 离散：comp.mode=1 性能回退对语义（半选对不处理，全选对按对处理）。"""
+    def expect(mask, proc_pairs, passthru):
+        h = mk_handle(6)
+        setup(h)
+        set_i(h, "comp.mode", 1)
+        set_i(h, "comp.channels", mask)
+        src, dst = run_ch(h, 6)
+        for (a, b) in proc_pairs:
+            d = max(ch_dev(src, dst, 6, a), ch_dev(src, dst, 6, b))
+            check(d > 0.01, f"comp (mode=1) mask=0x{mask:02X} 对({a},{b}) 处理 diff={d:.4f}")
+        for c in passthru:
+            d = ch_dev(src, dst, 6, c)
+            check(d < 1e-6, f"comp (mode=1) mask=0x{mask:02X} 声道{c} 应直通 dev={d:.2e}")
+        lib.auradsp_destroy(h)
+
+    expect(0x03, [(0, 1)], [2, 3, 4, 5])    # 仅前组
+    expect(0x0C, [(2, 3)], [0, 1, 4, 5])    # 仅中/低音组
+    expect(0x30, [(4, 5)], [0, 1, 2, 3])    # 仅后组
+    expect(0x33, [(0, 1), (4, 5)], [2, 3])  # 前+后组多选
+    expect(0x04, [], [0, 1, 2, 3, 4, 5])    # 半选对不处理 -> 全直通
+    expect(0x00, [], [0, 1, 2, 3, 4, 5])    # mask=0 → 全直通（不变式）
+
+
 def part2_multichannel():
-    print("\n=== [2] 多声道掩码补充（8 按声道 + 3 双声道 + arbmag 逐声道 + mask=0 不变式） ===")
+    print("\n=== [2] 多声道掩码补充（11 效果器逐声道 + comp mode=1 对语义 + mask=0 不变式） ===")
 
     def setup_arbmag(h):
         set_i(h, "arbmag.enable", 1)
@@ -338,13 +339,15 @@ def part2_multichannel():
         set_i(h, "eq.enable", 1)
         set_s(h, "eq.curve", "20:6.0;20000:6.0")
 
-    # arbmag：逐声道池语义（B5 后续）——0x01 仅 FL / 0x04 仅 C 独立生效
-    arbmag_persch_semantics(setup_arbmag)
-    # comp/eq：B5 对语义（标准声道对，无单声道粒度）
-    stereo_pair_semantics("comp", setup_comp)
-    stereo_pair_semantics("eq", setup_eq)
+    # arbmag / comp / eq：WP3 逐声道语义（0x01 仅 FL / 0x04 仅 C 独立生效）
+    persch_semantics("arbmag", setup_arbmag)
+    persch_semantics("comp", setup_comp)
+    persch_semantics("eq", setup_eq)
 
-    # 8 个按声道处理效果器：mask=0 → 全声道直通（不变式）
+    # comp mode=1：性能回退成对语义（半选对不处理，全选对按对处理）
+    comp_pair_semantics(setup_comp)
+
+    # 11 个按声道处理效果器：mask=0 → 全声道直通（不变式）
     for name in MASKED_EFFECTS:
         mask_zero_invariant(name)
 

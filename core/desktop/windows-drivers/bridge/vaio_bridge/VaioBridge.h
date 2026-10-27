@@ -64,6 +64,10 @@ VAB_API int vaio_get_param_str(const char* id, char* out, int cap);
 // 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 536B 分配会堆越界）。
 VAB_API int vaio_viz_read(void* out1600, int count);
 
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际，
+// 当前 2）。加载桥后与引擎 auradsp_abi() 比对；不一致时调用方不得解析 viz 帧。
+VAB_API unsigned vaio_abi(void);
+
 // 用户旁路开关（跳过 auradsp_process，输入直通输出）。返回 0，<0=桥未运行。
 VAB_API int vaio_bypass(int on);
 

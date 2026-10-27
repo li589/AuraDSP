@@ -55,7 +55,7 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_gate.cpp"
     "${API}/dsp/dsp_psycho.cpp"
     "${API}/dsp/dsp_loudness.cpp"
-    "${API}/dsp/dsp_freeverb.cpp"
+    "${API}/dsp/dsp_mc_reverb.cpp"
     "${API}/dsp/dsp_dyneq.cpp"
     "${API}/chain/engine_audiofile.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}
@@ -158,4 +158,44 @@ target_compile_options(test_plugin_chain PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_plugin_chain PRIVATE auradsp_engine version)
+
+# B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
+# 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、
+# 实例方法未被调用、计数清零且不下溢、槽可复用（smoke_plugin_quarantine.py）。
+add_executable(test_host_quarantine
+    "${API}/plugins/tests/plugin_host_quarantine.cpp"
+    ${AURADSP_PLUGIN_HOST_SOURCES}
+)
+target_include_directories(test_host_quarantine PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_host_quarantine PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS AURADSP_HOST_INPROC=1)
+target_compile_options(test_host_quarantine PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_host_quarantine PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_host_quarantine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_host_quarantine PRIVATE auradsp_engine version)
+
+# F1 验收（2026-10-24）：插件依赖 DLL 搜索目录通用化 + cookie 回收
+# （不依赖任何真插件，用临时目录树验证登记/幂等/引用计数/回收/环境变量）。
+add_executable(test_dll_dirs
+    "${API}/plugins/tests/test_dll_dirs.cpp"
+    "${API}/plugins/platform/win32/win32_util.cpp"
+)
+target_include_directories(test_dll_dirs PRIVATE
+    "${API}"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${API}/plugins/platform/win32"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(test_dll_dirs PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
+target_compile_options(test_dll_dirs PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET test_dll_dirs PROPERTY CXX_STANDARD 20)
+set_property(TARGET test_dll_dirs PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+target_link_libraries(test_dll_dirs PRIVATE version shell32 ole32 user32)
+
 

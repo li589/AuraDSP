@@ -97,8 +97,11 @@ static void hook_fx_gains(auradsp_handle h) {
 
 static void hook_reverb_autogain(auradsp_handle h) {
     if (h->open.load()) {
+        /* MC FDN 读 h->p.reverb_autogain + h->rev_ag_*（dsp_mc_reverb.cpp）；
+         * vendor 路径走 fx 槽 5（P-033 WP1）。两侧都要重置/下推。 */
         h->rev_ag_in = h->rev_ag_out = 0.0;
         h->rev_ag_comp = 1.0;
+        apply_fx_gains(h);
     }
 }
 
@@ -175,12 +178,31 @@ static void hook_comp_update(auradsp_handle h) {
 }
 
 static void hook_spatial_enable(auradsp_handle h) {
-    spatial_reset(h);
+    /* WP6：统一全模块重置逐通道状态并重算延迟 */
+    reset_channel_state(h);
     compute_latency(h, &h->latency_ms);
+}
+
+static void hook_spatial_binaural(auradsp_handle h) {
+    /* WP6：双耳切换改变输入布局与混响引擎归属，统一全模块重置并重算延迟 */
+    reset_channel_state(h);
+    compute_latency(h, &h->latency_ms);
+}
+
+static void hook_spatial_custom_param(auradsp_handle h) {
+    /* WP7：手动修改 room/width/center 时自动切入自定义风格(3) */
+    if (!h->spatial_style_applying) {
+        h->p.spatial_style.store(3);
+    }
 }
 
 static void hook_spatial_style(auradsp_handle h) {
     const int32_t v = h->p.spatial_style.load();
+    if (v == 3) {
+        // 自定义模式：不覆盖用户手动参数
+        return;
+    }
+    h->spatial_style_applying = true;
     if (v == 0) {  // Dolby 房
         h->p.spatial_room.store(0.7f);
         h->p.spatial_width.store(1.0f);
@@ -189,24 +211,17 @@ static void hook_spatial_style(auradsp_handle h) {
         h->p.spatial_room.store(0.25f);
         h->p.spatial_width.store(1.1f);
         h->p.spatial_center.store(0.5f);
-    } else {  // 中性
+    } else if (v == 2) {  // 中性
         h->p.spatial_room.store(0.0f);
         h->p.spatial_width.store(1.0f);
         h->p.spatial_center.store(0.5f);
     }
+    h->spatial_style_applying = false;
 }
 
 static void hook_spatial_autogain(auradsp_handle h) {
     h->spat_ag_in = h->spat_ag_out = 0.0;
     h->spat_ag_comp = 1.0;
-}
-
-static void hook_freeverb_enable(auradsp_handle h) {
-    compute_latency(h, &h->latency_ms);
-}
-
-static void hook_freeverb_roomsize(auradsp_handle h) {
-    fv_retune(h, (double)h->p.fv_roomsize.load());
 }
 
 static void hook_crossfeed_enable(auradsp_handle h) {
@@ -215,12 +230,30 @@ static void hook_crossfeed_enable(auradsp_handle h) {
 }
 
 static void hook_crossfeed_mode(auradsp_handle h) {
+    const int mode = h->p.xfeed_mode.load(std::memory_order_relaxed);
+    if (mode == 0) {
+        h->p.xfeed_fcut.store(700.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(4.5f, std::memory_order_relaxed);
+    } else if (mode == 1) {
+        h->p.xfeed_fcut.store(700.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(6.0f, std::memory_order_relaxed);
+    } else if (mode == 2) {
+        h->p.xfeed_fcut.store(650.0f, std::memory_order_relaxed);
+        h->p.xfeed_feed.store(9.5f, std::memory_order_relaxed);
+    }
     if (h->open.load() && h->p.xfeed_enable.load()) apply_crossfeed(h);
 }
 
 static void hook_crossfeed_custom(auradsp_handle h) {
     if (h->open.load() && h->p.xfeed_enable.load() && h->p.xfeed_mode.load() == 3) {
         apply_crossfeed(h);
+    }
+}
+
+/* [PATCHED-AuraDSP P-033] 自定义混响参数变更钩子：preset==-2 时触发重建 */
+static void hook_reverb_custom(auradsp_handle h) {
+    if (h->open.load() && h->p.reverb_preset.load(std::memory_order_relaxed) == -2) {
+        apply_reverb(h);
     }
 }
 
@@ -256,14 +289,72 @@ static auradsp_status set_reverb_preset(auradsp_handle h, const void* value, uin
     const int32_t v = *(const int32_t*)value;
     /* 18 = SF_REVERB_PRESET_LONGREVERB2（sf_presetreverb 最高分支）。
      * 越界会落到 switch default，comb/delay size 保持 0，下一音频块
-     * (pos+1)%size 整数模零 → SIGFPE；VM/AIDL/预设恢复均可触达。 */
+     * (pos+1)%N 整数模零 → SIGFPE；VM/AIDL/预设恢复均可触达。 */
     if (v < -2 || v > 18) return AURADSP_E_PARAM;
     if (v != h->p.reverb_preset.load(std::memory_order_relaxed)) {
         h->p.reverb_preset.store(v);
-        compute_latency(h, &h->latency_ms);
+        /* WP1：切换预设/开关时清 MC FDN 尾音（RT 侧 5ms 淡出后清状态）。 */
+        mc_reverb_reset(h);
     }
     if (h->open.load()) apply_reverb(h);
     compute_latency(h, &h->latency_ms);
+    return AURADSP_OK;
+}
+
+/* WP1：freeverb.enable 退役，保留为 reverb.preset 的 deprecated 写别名。
+ * 写 1 → 若当前关闭则恢复默认预设 0；写 0 → 关闭（-1）。 */
+static auradsp_status set_freeverb_enable_alias(auradsp_handle h, const void* value,
+                                                uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t on = *(const int32_t*)value ? 1 : 0;
+    h->p.fv_enable.store(on);
+    const int32_t rv = h->p.reverb_preset.load(std::memory_order_relaxed);
+    if (on) {
+        if (rv == -1) {
+            h->p.reverb_preset.store(0);
+            mc_reverb_reset(h);
+        }
+    } else if (rv != -1) {
+        h->p.reverb_preset.store(-1);
+        mc_reverb_reset(h);
+    }
+    if (h->open.load()) apply_reverb(h);
+    compute_latency(h, &h->latency_ms);
+    return AURADSP_OK;
+}
+
+/* WP1：spatial.fdn 已移除（MC 混响接管离散多声道晚期混响）。
+ * 保留 deprecated 写别名：写 1 且混响关闭时打开默认预设 5（LARGEHALL1）。 */
+static auradsp_status set_spatial_fdn_alias(auradsp_handle h, const void* value,
+                                            uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t on = *(const int32_t*)value ? 1 : 0;
+    h->p.spatial_fdn.store(on);
+    if (on && h->p.reverb_preset.load(std::memory_order_relaxed) == -1) {
+        h->p.reverb_preset.store(5);
+        mc_reverb_reset(h);
+        if (h->open.load()) apply_reverb(h);
+        compute_latency(h, &h->latency_ms);
+    }
+    return AURADSP_OK;
+}
+
+/* WP1：spatial.late 已移除。旧会话迁移：仅当 freeverb.wet 仍为默认 0.35
+ * 时把 late 写进 freeverb.wet，避免覆盖用户已调过的干湿比。 */
+static auradsp_status set_spatial_late_alias(auradsp_handle h, const void* value,
+                                             uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    float v = *(const float*)value;
+    if (!std::isfinite(v)) {
+        set_error(h, "param: rejected (NaN/Inf input)");
+        return AURADSP_E_PARAM;
+    }
+    if (v < 0.0f) v = 0.0f;
+    if (v > 1.0f) v = 1.0f;
+    h->p.spatial_late.store(v);
+    if (h->p.fv_wet.load(std::memory_order_relaxed) == 0.35f) {
+        h->p.fv_wet.store(v);
+    }
     return AURADSP_OK;
 }
 
@@ -307,7 +398,10 @@ static auradsp_status set_convolver_ir_path(auradsp_handle h, const void* value,
 
 static auradsp_status set_convolver_clear(auradsp_handle h, const void* /*value*/, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
-    h->p.conv_enable.store(0);
+    /* [PATCHED-AuraDSP P-032] 清除 IR **不再强制关闭 conv_enable**：
+     * 用户要求"无文件就回到未加载态、效果内部直通"，开关由用户自己管。
+     * apply_convolver 在 conv_enable=1 且 ir_ready=false 时走
+     * Convolver1DDisable（直通），语义已正确。 */
     h->ir_ready.store(false);
     h->ir_frames.store(0);
     h->ir_channels.store(0);
@@ -395,8 +489,19 @@ static bool arbmag_numeric_finite(const char* s) {
 }
 
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
-    if (bytes == 0 || bytes > 256 * 1024) {
-        set_error(h, "arbmag.string: invalid length (1..256KiB)");
+    if (bytes == 0 || (bytes == 1 && ((const char*)value)[0] == 0)) {
+        // 清空曲线：释放内存并重置节点与池状态
+        free(h->arbmag_string);
+        h->arbmag_string = nullptr;
+        h->arbmag_string_len = 0;
+        h->p.arbmag_nodes.store(0);
+        h->p.arbmag_ready.store(0);
+        h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
+        arbmag_pool_reload(h);
+        return AURADSP_OK;
+    }
+    if (bytes > 256 * 1024) {
+        set_error(h, "arbmag.string: invalid length (max 256KiB)");
         return AURADSP_E_PARAM;
     }
     char* buf = (char*)malloc((size_t)bytes + 1);
@@ -485,17 +590,18 @@ static auradsp_status set_ddc_load(auradsp_handle h, const void* value, uint32_t
     free(content);
     if (rc < 0) {
         h->p.ddc_ready.store(0);
-        set_error(h, "ddc.load: parse failed (need SR_44100/SR_48000 coeffs)");
+        if (rc == -4)
+            set_error(h, "ddc.load: engine busy (no free ddc slot, retryable)");
+        else
+            set_error(h, "ddc.load: parse failed (need SR_44100/SR_48000 coeffs)");
         return AURADSP_E_PARAM;
     }
     h->p.ddc_ready.store(1);
     if (h->open.load() && h->p.ddc_enable.load(std::memory_order_relaxed)) {
-        /* [PATCHED-AuraDSP Z14] 同 set_ddc_enable：DDCStringParser 已内部自锁
-         * （非递归 mutex 不可再包），此处仅包随后裸调的 DDCEnable，与 RT
-         * stage_ddc 的持锁读取形成互斥（并发控制调用已由 ctrl_mutex 串行化）。 */
-        jdsp_lock(&h->jdsp);
+        /* [PATCHED-AuraDSP P-017 B1-b] DDCStringParser/DDCEnable 已无需外部
+         * jdsp_lock：RT 块首读一次 ddcActive 快照（stage_ddc lock=0），
+         * 解析与换指针全程在控制线程（ctrl_mutex 串行化并发控制调用）。 */
         DDCEnable(&h->jdsp, 1);
-        jdsp_unlock(&h->jdsp);
     }
     return AURADSP_OK;
 }
@@ -504,29 +610,21 @@ static auradsp_status set_ddc_enable(auradsp_handle h, const void* value, uint32
     if (bytes < 4) return AURADSP_E_PARAM;
     const int32_t v = *(const int32_t*)value ? 1 : 0;
     h->p.ddc_enable.store(v);
-    /* [PATCHED-AuraDSP Z14] DDC 控制侧与 RT stage_ddc 的互斥（Z13 comp 同型）：
-     * kAuraStages ddc lock=1，RT 经 JamesDSPProcessMultiplexedStageSet 持
-     * jdsp_lock 调 stage_ddc→DDCProcess（读 vdcFl.sosPointer/usedSOSCount）。
-     * DDCEnable 在 ddcForceRefresh 置位时会走 DDCRefresh（free 旧 sosPointer
-     * + 重解析换指针）；即便 flag=0，DDCEnable/DDCDisable 写 ddcEnabled、
-     * 读 vdcFl 也不与 RT 的加锁读取互斥——C 形式数据竞争（当前实践良性：
-     * 控制-控制已被 auradsp_set_param 的 ctrl_mutex 串行化排除，且无调用方
-     * 置位 ddcForceRefresh），但任何未来绕过 ctrl_mutex 的控制入口或置位该
-     * 标志的调用方都会把它升级为 UAF。修法 = 控制侧与 RT 同锁，结构性关闭。
-     * 注意 jdsp_lock 非递归：DDCStringParser 已内部自锁，切勿对其再包。 */
+    /* [PATCHED-AuraDSP P-017 B1-b] Z14 的 jdsp_lock 互斥已由影子视图取代：
+     * kAuraStages ddc lock=0，RT 块首读一次 ddcActive 快照；DDCEnable
+     * 的 ddcForceRefresh 重解析路径（DDCRefresh 构建新 SOS 数组 + 原子
+     * 换指针 + 在途守卫后释放旧数组）不再与 RT 的字段级读取竞争。
+     * ddcEnabled 为明文 int（x86 对齐写即原子），与 Z13 comp 开关同级。 */
     if (v && h->p.ddc_ready.load(std::memory_order_relaxed)) {
-        jdsp_lock(&h->jdsp);
         const int rc = DDCEnable(&h->jdsp, 1);
-        jdsp_unlock(&h->jdsp);
         if (rc != 1) {
             h->p.ddc_enable.store(0);
-            set_error(h, "ddc.enable: rejected");
+            set_error(h, rc == -4 ? "ddc.enable: engine busy (retryable)"
+                                  : "ddc.enable: rejected");
             return AURADSP_E_STATE;
         }
     } else {
-        jdsp_lock(&h->jdsp);
         DDCDisable(&h->jdsp);
-        jdsp_unlock(&h->jdsp);
     }
     return AURADSP_OK;
 }
@@ -545,9 +643,10 @@ static auradsp_status set_channels_mode(auradsp_handle h, const void* value, uin
         return AURADSP_E_PARAM;
     }
     h->p.channels_mode.store(v);
-    /* 模式切换会改变 spatial 的输入布局/状态语义；清空 ring/history/pinna/FDN，
-     * 避免直播切换读到旧布局的延迟线。 */
-    spatial_reset(h);
+    /* 模式切换会改变拓扑与输入布局；WP6：统一调用 reset_channel_state
+     * 全模块重置逐通道状态，并重算延迟。 */
+    reset_channel_state(h);
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 
@@ -558,16 +657,87 @@ static auradsp_status set_channels_count(auradsp_handle h, const void* value, ui
         set_error(h, "channels.count: out of range (2/4/6/8 only)");
         return AURADSP_E_PARAM;
     }
+    const int32_t old_ch = h->channel_count.load(std::memory_order_relaxed);
     h->channel_count.store(v);
+    /* X-6 修复（2026-10-26）：dyneq/exciter 的 no-LFE 默认掩码随布局平移。
+     * 0xF7 是 8ch 位定义（bit3=LFE）；4ch Quad 布局下 bit3=BR，0xF7 会默认
+     * 跳过 BR。仅当掩码仍等于旧布局默认值（说明用户未自定义）时才改写为
+     * 新布局默认；用户自定义掩码原样保留（位位置语义，跨布局不做映射）。
+     * 其余效果默认 kChMaskAll(0xFF) 在所有布局下均含全部有效声道，无需平移。 */
+    if (old_ch != v) {
+        const int32_t old_def = (int32_t)ch_mask_no_lfe_for(old_ch);
+        const int32_t new_def = (int32_t)ch_mask_no_lfe_for(v);
+        if (h->p.dyneq_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.dyneq_channels.store(new_def, std::memory_order_relaxed);
+        if (h->p.exciter_channels.load(std::memory_order_relaxed) == old_def)
+            h->p.exciter_channels.store(new_def, std::memory_order_relaxed);
+    }
     auradsp::plugin_chain_set_channel_hint(h, v);
-    /* �������仯ͬ���ı� spatial ���벼�֣���λ�� RT ״̬�� */
-    spatial_reset(h);
+    /* 通道数变化改变拓扑；WP6：统一调用 reset_channel_state
+     * 全模块重置逐通道状态，并重算延迟。 */
+    reset_channel_state(h);
+    compute_latency(h, &h->latency_ms);
     return AURADSP_OK;
 }
 
 static auradsp_status get_channels_count(auradsp_handle h, void* out_value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     *(int32_t*)out_value = h->channel_count.load();
+    return AURADSP_OK;
+}
+
+/* ---- WP0 脚手架（多声道重构 2026-10-25）------------------------------
+ * 以下参数本阶段只做存取与越界拒绝，默认值保持旧行为；消费点：
+ *   bassmono.pairs/merge → WP4；comp.mode → WP3；
+ *   reverb.engine → 只读诊断（路径判定 reverb_path_kind，WP1 共用）。 */
+static auradsp_status set_bassmono_pairs(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v < 0 || v > 0x0F) {
+        set_error(h, "bassmono.pairs: out of range (0..15)");
+        return AURADSP_E_PARAM;
+    }
+    if (v != h->p.bassmono_pairs.load(std::memory_order_relaxed)) {
+        h->p.bassmono_pairs.store(v);
+        h->bm_reinit.store(1, std::memory_order_relaxed);
+    }
+    return AURADSP_OK;
+}
+
+static auradsp_status set_bassmono_merge(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v != 0 && v != 1) {
+        set_error(h, "bassmono.merge: out of range (0/1 only)");
+        return AURADSP_E_PARAM;
+    }
+    if (v != h->p.bassmono_merge.load(std::memory_order_relaxed)) {
+        h->p.bassmono_merge.store(v);
+        h->bm_reinit.store(1, std::memory_order_relaxed);
+    }
+    return AURADSP_OK;
+}
+
+static auradsp_status set_comp_mode(auradsp_handle h, const void* value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t v = *(const int32_t*)value;
+    if (v != 0 && v != 1) {
+        set_error(h, "comp.mode: out of range (0=per-channel, 1=per-pair)");
+        return AURADSP_E_PARAM;
+    }
+    h->p.comp_mode.store(v);
+    return AURADSP_OK;
+}
+
+static auradsp_status set_reverb_engine_readonly(auradsp_handle h, const void*, uint32_t) {
+    set_error(h, "reverb.engine: read-only");
+    return AURADSP_E_PARAM;
+}
+
+static auradsp_status get_reverb_engine(auradsp_handle h, void* out_value, uint32_t bytes) {
+    if (bytes < 4) return AURADSP_E_PARAM;
+    const int32_t rv = h->p.reverb_preset.load(std::memory_order_relaxed);
+    *(int32_t*)out_value = (rv == -1) ? -1 : reverb_path_kind(h);
     return AURADSP_OK;
 }
 
@@ -645,7 +815,10 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
     txt[bytes] = 0;
     double freqAx[NUMPTS], gainAx[NUMPTS];
     int interp = 1, op = 0;
-    const int n = build_eq_axis(txt, h->sample_rate, freqAx, gainAx, &interp, &op);
+    /* S-5：EQ 频率轴钳制必须按工作采样率域（ASRC 启用时跑在 48k/44.1k），
+     * 否则 96k 下请求 30kHz 会越界进入 vendor 最小相位 IR 设计。 */
+    const double eq_sr = (h->jdsp.fs > 0) ? (double)h->jdsp.fs : (double)h->sample_rate;
+    const int n = build_eq_axis(txt, eq_sr, freqAx, gainAx, &interp, &op);
     free(txt);
     if (n < 2) {
         set_error(h, "eq.curve: invalid length (need >= 2 points, f:g;f:g;...)");
@@ -659,6 +832,7 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
     free(h->eq_curve);
     h->eq_curve = eq_curve_new;
     h->eq_curve_len = (size_t)bytes;
+    eq_pool_reload(h);
     return AURADSP_OK;
 }
 
@@ -804,9 +978,13 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {
-        const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "param: unsupported (unknown param id)"); return AURADSP_E_PARAM; }
-        const int idx = d - '1';
+        char* end = nullptr;
+        long n = strtol(id + 14, &end, 10);
+        if (end == id + 14 || *end != '\0' || n < 1 || n > 64) {
+            set_error(h, "param: unsupported (unknown param id)");
+            return AURADSP_E_PARAM;
+        }
+        const int idx = (int)(n - 1);
         h->p.lp_param[idx].store(*(const float*)value, std::memory_order_relaxed);
         if (h->lp_slider_ptr[idx])
             *h->lp_slider_ptr[idx] = *(const float*)value;
@@ -830,9 +1008,12 @@ static auradsp_status handle_indexed_param_get(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {
-        const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) return AURADSP_E_PARAM;
-        *(float*)out_value = h->p.lp_param[d - '1'].load();
+        char* end = nullptr;
+        long n = strtol(id + 14, &end, 10);
+        if (end == id + 14 || *end != '\0' || n < 1 || n > 64) {
+            return AURADSP_E_PARAM;
+        }
+        *(float*)out_value = h->p.lp_param[n - 1].load();
         return AURADSP_OK;
     }
     return AURADSP_E_PARAM;
@@ -945,6 +1126,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("comp.autogain", comp_autogain, hook_fx_gains),
     PARAM_INT("comp.channels", comp_channels, 0, 255, nullptr),
     PARAM_INT("comp.channel_mask", comp_channels, 0, 255, nullptr),  /* deprecated alias of comp.channels */
+    /* WP0 脚手架：0=逐声道 8 实例，1=超预算时逐对降级（WP3 消费）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("comp.mode", comp_mode, ParamType::kInt32, set_comp_mode),
 
     // 03 卷积混响 (Convolver)
     PARAM_CUSTOM_SET_STANDARD_GET("convolver.enable", conv_enable, ParamType::kBool, set_convolver_enable),
@@ -981,6 +1164,10 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_BOOL("bass.autogain", bass_autogain, hook_fx_gains),
     PARAM_FLOAT("bass.harmonics", bass_harmonics, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("bass.harmonicblend", bass_harmonicblend, 0.0f, 1.0f, nullptr),
+    /* [PATCHED-AuraDSP P-032] 纯状态载体：ViPER 三模式是 UI 侧谐波配方宏，
+     * 引擎不据此计算，但必须有此参数才能被回读（否则 UI 选择被回读弹回 0）。
+     * 见 engine_internal.h bass_mode 处的说明。 */
+    PARAM_INT("bass.mode", bass_mode, 0, 2, nullptr),
     PARAM_FLOAT("bass.subfreq", bass_subfreq, 10.0f, 40.0f, nullptr),
     PARAM_FLOAT("bass.cutoff", bass_cutoff_f, 30.0f, 300.0f, nullptr),
     PARAM_BOOL("bass.oversample", bass_oversample, nullptr),
@@ -995,15 +1182,23 @@ static const EngineParamDesc kEngineParamTable[] = {
 
     // 08 混响 (Reverb / Freeverb)
     PARAM_CUSTOM_SET_STANDARD_GET("reverb.preset", reverb_preset, ParamType::kInt32, set_reverb_preset),
-    PARAM_FLOAT("reverb.outgain", reverb_outgain, -12.0f, 6.0f, nullptr),
+    /* WP0 脚手架：混响边界。predelay 仅立体声自定义路径消费（WP2），
+     * lfe 仅 MC FDN 路径消费（WP1）；engine 为只读诊断。 */
+    PARAM_FLOAT("reverb.predelay", reverb_predelay, 0.0f, 100.0f, hook_reverb_custom),
+    PARAM_BOOL("reverb.lfe", reverb_lfe, nullptr),
+    PARAM_CUSTOM("reverb.engine", set_reverb_engine_readonly, get_reverb_engine),
+    PARAM_FLOAT("reverb.outgain", reverb_outgain, -12.0f, 6.0f, hook_fx_gains),
     PARAM_BOOL("reverb.autogain", reverb_autogain, hook_reverb_autogain),
-    PARAM_BOOL("freeverb.enable", fv_enable, hook_freeverb_enable),
-    PARAM_FLOAT("freeverb.decay", fv_decay, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("freeverb.damp", fv_damp, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("freeverb.wet", fv_wet, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("freeverb.dry", fv_dry, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("freeverb.roomsize", fv_roomsize, 0.5f, 2.5f, hook_freeverb_roomsize),
-    PARAM_FLOAT("freeverb.width", fv_width, 0.2f, 2.0f, nullptr),
+    /* WP1：Freeverb 已退役；freeverb.enable 仅为 reverb.preset 的 deprecated
+     * 写别名（1 → 若关闭则设预设 0；0 → -1）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("freeverb.enable", fv_enable, ParamType::kBool,
+                                  set_freeverb_enable_alias),
+    PARAM_FLOAT("freeverb.decay", fv_decay, 0.0f, 1.0f, hook_reverb_custom),
+    PARAM_FLOAT("freeverb.damp", fv_damp, 0.0f, 1.0f, hook_reverb_custom),
+    PARAM_FLOAT("freeverb.wet", fv_wet, 0.0f, 1.0f, hook_reverb_custom),
+    PARAM_FLOAT("freeverb.dry", fv_dry, 0.0f, 1.0f, hook_reverb_custom),
+    PARAM_FLOAT("freeverb.roomsize", fv_roomsize, 0.5f, 2.5f, hook_reverb_custom),
+    PARAM_FLOAT("freeverb.width", fv_width, 0.2f, 2.0f, hook_reverb_custom),
 
     // 09 动态均衡 (Dynamic EQ)
     PARAM_BOOL("dyneq.enable", dyneq_enable, nullptr),
@@ -1061,23 +1256,30 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_FLOAT("crossfeed.fcut", xfeed_fcut, 300.0f, 2000.0f, hook_crossfeed_custom),
     PARAM_FLOAT("crossfeed.feed", xfeed_feed, 1.0f, 15.0f, hook_crossfeed_custom),
     PARAM_BOOL("spatial.enable", spatial_enable, hook_spatial_enable),
-    PARAM_INT("spatial.style", spatial_style, 0, 2, hook_spatial_style),
-    PARAM_FLOAT("spatial.room", spatial_room, 0.0f, 1.0f, nullptr),
-    PARAM_FLOAT("spatial.width", spatial_width, 0.5f, 1.5f, nullptr),
-    PARAM_FLOAT("spatial.center", spatial_center, 0.0f, 1.0f, nullptr),
+    PARAM_INT("spatial.style", spatial_style, 0, 3, hook_spatial_style),
+    PARAM_FLOAT("spatial.room", spatial_room, 0.0f, 1.0f, hook_spatial_custom_param),
+    PARAM_FLOAT("spatial.width", spatial_width, 0.5f, 1.5f, hook_spatial_custom_param),
+    PARAM_FLOAT("spatial.center", spatial_center, 0.0f, 1.0f, hook_spatial_custom_param),
     PARAM_FLOAT("spatial.outgain", spatial_outgain, -12.0f, 6.0f, nullptr),
     PARAM_BOOL("spatial.autogain", spatial_autogain, hook_spatial_autogain),
     PARAM_FLOAT("spatial.mix", spatial_mix, 0.0f, 1.0f, nullptr),
     PARAM_FLOAT("spatial.elevation", spatial_elevation, -30.0f, 30.0f, nullptr),
-    PARAM_BOOL("spatial.binaural", spatial_binaural, nullptr),
-    PARAM_BOOL("spatial.fdn", spatial_fdn, nullptr),
-    PARAM_FLOAT("spatial.late", spatial_late, 0.0f, 1.0f, nullptr),
+    PARAM_BOOL("spatial.binaural", spatial_binaural, hook_spatial_binaural),
+    /* WP1：spatial.fdn/spatial.late 已从 UI/语义移除；保留 deprecated 写别名
+     * 迁移旧会话（见 set_spatial_fdn_alias / set_spatial_late_alias）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("spatial.fdn", spatial_fdn, ParamType::kBool,
+                                  set_spatial_fdn_alias),
+    PARAM_CUSTOM_SET_STANDARD_GET("spatial.late", spatial_late, ParamType::kFloat,
+                                  set_spatial_late_alias),
     PARAM_FLOAT("spatial.headazim", spatial_headazim, -180.0f, 180.0f, nullptr),
     PARAM_BOOL("spatial.headtrack", spatial_headtrack, nullptr),
 
     // 11 低频与滤波处理 (BassMono, Shelf, Filter)
     PARAM_BOOL("bassmono.enable", bassmono_enable, nullptr),
     PARAM_FLOAT("bassmono.freq", bassmono_freq, 20.0f, 300.0f, nullptr),
+    /* WP0 脚手架：标准四对多选 + 全局合并（WP4 消费）。 */
+    PARAM_CUSTOM_SET_STANDARD_GET("bassmono.pairs", bassmono_pairs, ParamType::kInt32, set_bassmono_pairs),
+    PARAM_CUSTOM_SET_STANDARD_GET("bassmono.merge", bassmono_merge, ParamType::kInt32, set_bassmono_merge),
     PARAM_BOOL("shelf.enable", shelf_enable, nullptr),
     PARAM_FLOAT("shelf.freq", shelf_freq, 40.0f, 400.0f, hook_shelf_recalc),
     PARAM_FLOAT("shelf.gain", shelf_gain, -15.0f, 15.0f, hook_shelf_recalc),
@@ -1125,6 +1327,15 @@ static const EngineParamDesc kEngineParamTable[] = {
     // 14 输入输出与全局配置 (Input, Post Gain, Limiter, System)
     PARAM_FLOAT("input.gain", input_gain, -15.0f, 15.0f, nullptr),
     PARAM_FLOAT("post.gain", post_gain, -15.0f, 15.0f, hook_post_gain),
+    /* WP5：逐声道输出补偿（默认 0 dB）。c0/c1 联动 vendor 路径 postGainCh */
+    PARAM_FLOAT("post.gain.c0", post_gain_ch[0], -15.0f, 15.0f, hook_post_gain),
+    PARAM_FLOAT("post.gain.c1", post_gain_ch[1], -15.0f, 15.0f, hook_post_gain),
+    PARAM_FLOAT("post.gain.c2", post_gain_ch[2], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c3", post_gain_ch[3], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c4", post_gain_ch[4], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c5", post_gain_ch[5], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c6", post_gain_ch[6], -15.0f, 15.0f, nullptr),
+    PARAM_FLOAT("post.gain.c7", post_gain_ch[7], -15.0f, 15.0f, nullptr),
     PARAM_BOOL("limiter.enable", limiter_enable, hook_limiter_enable),
     PARAM_INT("limiter.channels", limiter_channels, 0, 255, nullptr),
     PARAM_INT("limiter.channel_mask", limiter_channels, 0, 255, nullptr),  /* deprecated alias of limiter.channels */
@@ -1145,6 +1356,8 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_CUSTOM_GET_ONLY("gr.dyneq.b3", get_gr_dyneq_b3),
     PARAM_CUSTOM("channels.count", set_channels_count, get_channels_count),
     PARAM_CUSTOM_SET_STANDARD_GET("channels.mode", channels_mode, ParamType::kInt32, set_channels_mode),
+    /* WP0 脚手架：channels.count 的自动/手动模式状态载体（纯状态）。 */
+    PARAM_INT("channels.countMode", channels_count_mode, 0, 1, nullptr),
     PARAM_CUSTOM("gate.maxIrSeconds", set_gate_max_ir_seconds, get_gate_max_ir_seconds),
     PARAM_CUSTOM("gate.maxFileMb", set_gate_max_file_mb, get_gate_max_file_mb),
     PARAM_CUSTOM("viz.fftSize", set_viz_fft_size, get_viz_fft_size),

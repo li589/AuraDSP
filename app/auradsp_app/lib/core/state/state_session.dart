@@ -94,9 +94,24 @@ extension StateSession on AppModel {
       setFloat(ParamId.inputBalance(1), inputBalanceL);
       setFloat(ParamId.inputBalance(2), inputBalanceR);
 
+      // [P-031] 声道模式必须随会话回放下发：它不在任何 ParamSection 里
+      // （不预设持久化），此前恢复后 UI 分段控件显示"离散逐声道"，引擎却
+      // 停在默认的矩阵模式——多声道策略在重启后静默降级。
+      setInt('channels.mode', channelsMode);
+      setInt('channels.countMode', channelsCountMode);
+      if (channelsCountMode == 1) {
+        setInt('channels.count', channelsCount);
+      }
+
       // 1. 下发全量基础开关与数值
       setInt('bass.enable', bassOn ? 1 : 0);
       setFloat('bass.gain', bassGain);
+      // [PATCHED-AuraDSP P-032] ViPER 模式（谐波配方宏）必须一并下发：
+      // 它在会话快照里被保存，但本方法是手写清单（不遍历 spec）→ 此前
+      // 恢复后引擎侧仍是 0，回读把 UI 的模式覆盖成"自然低音"。
+      // 用 setInt 而非 setBassMode：配方（harmonics/blend）另行恢复，
+      // 此处只同步模式状态，避免重写配方。
+      setInt('bass.mode', bassMode);
       // 声场（v1.2）：开关位独立后，直发 bypass _mirror（旧 setFloat 会把
       // UI 的 mix/band 回写冲掉）；关闭时下发 0，UI 值保留。开时与旧行为一致。
       final stereoK = stereoOn ? 1.0 : 0.0;
@@ -136,22 +151,34 @@ extension StateSession on AppModel {
       setFloat('shelf.gain', shelfGain);
       setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
       setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+      setInt(ParamId.bassmonoPairs, bassmonoPairs);
+      setInt(ParamId.bassmonoMerge, bassmonoMerge);
       setInt(ParamId.haasEnable, haasOn ? 1 : 0);
       setFloat(ParamId.haasDelay, haasDelayMs);
       setFloat(ParamId.haasMix, haasMix);
       setInt(ParamId.haasSide, haasSide);
       setInt(ParamId.spatialEnable, spatialOn ? 1 : 0);
+      // spatial.style 必须先于 room/width/center 下发：预设档的规范值由
+      // 引擎 style hook 写入；再发三个参数会触发 custom hook 把 style 改成 3。
+      // 旧会话曾把自定义态存成 0..2（UI 回读钳制所致）——若值与预设规范
+      // 不符，按自定义（3）迁移，避免启动时被预设值覆盖。
+      final spatialCustom = spatialStyle == 3 ||
+          !_spatialMatchesPreset(
+              spatialStyle, spatialRoom, spatialWidth, spatialCenter);
+      if (spatialCustom && spatialStyle != 3) {
+        spatialStyle = 3;
+      }
       setInt(ParamId.spatialStyle, spatialStyle);
-      setFloat(ParamId.spatialRoom, spatialRoom);
-      setFloat(ParamId.spatialWidth, spatialWidth);
-      setFloat(ParamId.spatialCenter, spatialCenter);
+      if (spatialCustom) {
+        setFloat(ParamId.spatialRoom, spatialRoom);
+        setFloat(ParamId.spatialWidth, spatialWidth);
+        setFloat(ParamId.spatialCenter, spatialCenter);
+      }
       setFloat(ParamId.spatialOutGain, spatialOutGain);
       setInt(ParamId.spatialAutoGain, spatialAutoGain ? 1 : 0);
       setFloat(ParamId.spatialMix, spatialMix);
       setFloat(ParamId.spatialElevation, spatialElevation);
       setInt(ParamId.spatialBinaural, spatialBinaural ? 1 : 0);
-      setInt(ParamId.spatialFdn, spatialFdn ? 1 : 0);
-      setFloat(ParamId.spatialLate, spatialLate);
       setFloat(ParamId.spatialHeadAzim, spatialHeadAzim);
       setInt(ParamId.spatialHeadTrack, spatialHeadTrack ? 1 : 0);
       _syncHeadTracker();
@@ -168,6 +195,7 @@ extension StateSession on AppModel {
       setInt(ParamId.tubeAutoGain, tubeAutoGain ? 1 : 0);
       setFloat(ParamId.compOutGain, compOutputGain);
       setInt(ParamId.compAutoGain, compAutoGain ? 1 : 0);
+      setInt(ParamId.compMode, compMode);
       setFloat(ParamId.reverbOutGain, reverbOutputGain);
       setInt(ParamId.reverbAutoGain, reverbAutoGain ? 1 : 0);
       // 噪声门 + Deesser
@@ -228,6 +256,9 @@ extension StateSession on AppModel {
       setInt(ParamId.limiterLink, limiterLink ? 1 : 0);
       setInt(ParamId.limiterLookahead, limiterLookahead ? 1 : 0);
       setFloat('post.gain', postGain);
+      for (var c = 0; c < 8; c++) {
+        setFloat(ParamId.postGainCh(c), mirrorFloat(ParamId.postGainCh(c), 0.0));
+      }
 
       // 动态压限器
       setFloat(ParamId.compTimeconstant, compTimeconstant);
@@ -239,20 +270,16 @@ extension StateSession on AppModel {
       }
       setInt(ParamId.compEnable, compOn ? 1 : 0);
 
-      // 2. 混响
-      if (isSpatialReverbOn) {
-        setFloat('freeverb.decay', fvDecay);
-        setFloat('freeverb.damp', fvDamp);
-        setFloat('freeverb.wet', fvWet);
-        setFloat('freeverb.dry', fvDry);
-        setInt(ParamId.fvEnable, 1);
-        if (reverbPreset >= 0) {
-          setInt('reverb.preset', reverbPreset);
-        }
-      } else {
-        setInt(ParamId.fvEnable, 0);
-        setInt('reverb.preset', -1);
-      }
+      // 2. 混响（WP1：reverb.preset 是唯一开关；freeverb.* 只是自定义参数）
+      setFloat('freeverb.decay', fvDecay);
+      setFloat('freeverb.damp', fvDamp);
+      setFloat('freeverb.wet', fvWet);
+      setFloat('freeverb.dry', fvDry);
+      setFloat('freeverb.roomsize', fvRoomSize);
+      setFloat('freeverb.width', fvWidth);
+      setFloat(ParamId.reverbPredelay, reverbPredelay);
+      setInt(ParamId.reverbLfe, reverbLfe ? 1 : 0);
+      setReverbPreset(reverbPreset);
 
       // 3. EQ 状态与曲线
       setInt('eq.enable', eqOn ? 1 : 0);

@@ -22,6 +22,7 @@ import 'dart:io';
 
 import 'config.dart';
 
+import 'error_sink.dart';
 abstract final class PathMemory {
   static const String filePathsJson = 'file_paths.json';
   static const int version = 1;
@@ -32,6 +33,9 @@ abstract final class PathMemory {
   static const String slotArbmag = 'arbmagGraphicEq';
   static const String slotTestAudio = 'testAudioFile';
   static const String slotLiveprogScript = 'liveprogScript';
+  static const String slotLiveprogImportEel = 'liveprogImportEel';
+  static const String slotLiveprogAddDir = 'liveprogAddDir';
+  static const String slotLiveprogSelectedDir = 'liveprogSelectedDir';
   // 文本输入式「添加目录」对话框的上次输入（播种 TextField）
   static const String slotLastScriptDir = 'lastScriptDir';
   static const String slotLastPluginDir = 'lastPluginDir';
@@ -42,6 +46,8 @@ abstract final class PathMemory {
     slotArbmag: '',
     slotTestAudio: '',
     slotLiveprogScript: 'liveprog', // ConfigManager.path 的相对子目录
+    slotLiveprogImportEel: '',
+    slotLiveprogAddDir: '',
   };
 
   static Map<String, String> _dirs = {};
@@ -62,7 +68,8 @@ abstract final class PathMemory {
       if (d is Map) {
         _dirs = d.map((k, v) => MapEntry(k.toString(), v.toString()));
       }
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _dirs = {};
     }
   }
@@ -71,7 +78,7 @@ abstract final class PathMemory {
     try {
       final v = jsonDecode(raw);
       if (v is Map<String, dynamic>) return v;
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     return {};
   }
 
@@ -81,6 +88,13 @@ abstract final class PathMemory {
     final v = _dirs[slot];
     if (v == null || v.isEmpty) return null;
     return Directory(v).existsSync() ? v : null; // 目录已消失（盘符卸载等）→ 视为无记忆
+  }
+
+  /// 取某 slot 原始记录路径（不强求该目录当前必须在磁盘存在）
+  static String? rawDirFor(String slot) {
+    _ensureLoaded();
+    final v = _dirs[slot];
+    return (v == null || v.isEmpty) ? null : v;
   }
 
   /// 记录一次成功选取：写 filePath 所在目录。
@@ -124,7 +138,7 @@ abstract final class PathMemory {
         try {
           final d = Directory(p);
           if (d.existsSync()) return d.path;
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
       }
     }
 
@@ -142,7 +156,8 @@ abstract final class PathMemory {
         'version': version,
         'dirs': _dirs,
       });
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

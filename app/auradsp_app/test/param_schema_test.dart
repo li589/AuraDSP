@@ -161,6 +161,11 @@ void main() {
   group('Isolate Full Readback Simulation Tests (14 Parameter Categories)', () {
     test('params 消息包含此前遗漏的 14 类参数时，AppModel 状态与 _paramValues 字典全量更新', () {
       final m = AppModel(testing: true);
+      // WP1：fv* 只在自定义态(-2)对账（预设态必须保留本地 3D 可视化值），
+      // 所以先进入自定义态，再验证这批参数的回读采纳。
+      m.selectReverbPreset(1);
+      m.setReverbCustomParam('decay', 0.62);
+      expect(m.reverbPreset, -2);
 
       // 引擎真相值与逆换算契约（state.dart:1581）：
       // 引擎 raw 值 = (band * stereoMix * 2).clamp(0, 1) * stereoWidenMax
@@ -231,6 +236,8 @@ void main() {
       expect(m.stereoOn, isTrue);
       expect(m.stereoBands[0], closeTo(0.1, 1e-6));
       expect(m.stereoBands[4], closeTo(0.5, 1e-6));
+      // 自定义态：fv* 按引擎真值对账；同时 preset 回读不得吞掉本地 -2。
+      expect(m.reverbPreset, -2);
       expect(m.fvRoomSize, closeTo(1.5, 1e-6));
       expect(m.fvWidth, closeTo(1.8, 1e-6));
       expect(m.eqBandsCount, equals(10));

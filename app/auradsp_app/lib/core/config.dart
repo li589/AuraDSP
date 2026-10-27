@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
 
+import 'error_sink.dart';
 class AppConfig {
   /// 可视化帧率默认值。核显上 30fps 的全窗口重绘会把 GPU 顶到 ~70%
   ///（L-15 / §13.4.27.3），默认降到 20。
@@ -24,6 +25,8 @@ class AppConfig {
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
+  int channelsCountMode; // 0=auto, 1=manual
+  int channelsCount; // 2, 4, 6, 8
 
   // ADR-009 两大交互范式扩展
   String modeCategory; // 'attachment' | 'pipeline'
@@ -64,6 +67,8 @@ class AppConfig {
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
     this.audioMode = 'auto',
+    this.channelsCountMode = 0,
+    this.channelsCount = 2,
     String? modeCategory,
     String? attachmentMode,
     String? pipelineInput,
@@ -141,6 +146,8 @@ class AppConfig {
       vizFps: (audio['vizFps'] as num?)?.toInt() ?? defaultVizFps,
       vizFftSize: (audio['vizFftSize'] as num?)?.toInt() ?? 4096,
       stereoWidenMax: (audio['stereoWidenMax'] as num?)?.toDouble() ?? 0.75,
+      channelsCountMode: (audio['channelsCountMode'] as num?)?.toInt() ?? 0,
+      channelsCount: (audio['channelsCount'] as num?)?.toInt() ?? 2,
       locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
@@ -164,6 +171,8 @@ class AppConfig {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
           'audioMode': audioMode,
+          'channelsCountMode': channelsCountMode,
+          'channelsCount': channelsCount,
           'modeCategory': modeCategory,
           'attachmentMode': attachmentMode,
           'pipelineInput': pipelineInput,
@@ -264,7 +273,8 @@ abstract final class ConfigManager {
       File(filePath).writeAsStringSync(
           const JsonEncoder.withIndent('  ').convert(value));
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -289,7 +299,7 @@ abstract final class ConfigManager {
         }
         return cfg;
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     // 首次运行或解析失败，生成并写入默认配置
     final cfg = AppConfig();
     save(cfg);
@@ -299,7 +309,8 @@ abstract final class ConfigManager {
   static bool save(AppConfig config) {
     try {
       return writeJsonFile(configPath, config.toJson());
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

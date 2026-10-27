@@ -11,7 +11,8 @@ void filter_recalc(auradsp_handle h) {
     double q = h->p.filter_q.load(std::memory_order_relaxed);
     if (f0 < 20.0) f0 = 20.0; if (f0 > 20000.0) f0 = 20000.0;
     if (q < 0.3) q = 0.3; if (q > 10.0) q = 10.0;
-    const double fs = h->jdsp.fs > 0.0 ? h->jdsp.fs : 48000.0;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const double fs = h->sample_rate > 0.0 ? h->sample_rate : 48000.0;
     double w0 = 2.0 * 3.14159265358979 * f0 / fs;
     if (w0 > 3.14159265358979 * 0.99) w0 = 3.14159265358979 * 0.99;
     const double cw = cos(w0), sw = sin(w0);

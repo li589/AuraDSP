@@ -120,4 +120,61 @@ p = peak()
 print("7) unload: status=%d enable=%d peak=%.4f" % (st, en, p))
 assert st == 0 and en == 0 and abs(p - 0.3) < 0.01
 
+# 8) [P-038] 环境感知变量 dev_srate / srate / num_ch / nch 验证
+env_script = """@init
+ok = 0;
+@sample
+spl0 = (dev_srate == 48000 && srate == 48000 && num_ch == 2 && nch == 2) ? 0.75 : 0.1;
+spl1 = spl0;
+"""
+assert set_str("liveprog.code", env_script) == 0
+assert set_i("liveprog.enable", 1) == 0
+run_blocks(20)
+p = peak()
+print("8) env variables perception in 2ch: out_peak=%.4f (expect 0.75)" % p)
+assert abs(p - 0.75) < 0.01, p
+
+# 8b) 切换声道数到 6 → num_ch / nch 动态同步
+buf6 = (ctypes.c_float * (N * 6))()
+out6 = (ctypes.c_float * (N * 6))()
+env_script_6ch = """@init
+ok = 0;
+@sample
+spl0 = (num_ch == 6 && nch == 6) ? 0.85 : 0.1;
+spl1 = spl0;
+"""
+assert set_i("channels.count", 6) == 0
+assert set_str("liveprog.code", env_script_6ch) == 0
+for _ in range(20):
+    for n in range(N):
+        for c in range(6):
+            buf6[6*n + c] = 0.3
+    dll.auradsp_process(h, buf6, out6, N)
+p6 = max(abs(out6[i]) for i in range(N * 6))
+print("8b) env variables perception in 6ch: out_peak=%.4f (expect 0.85)" % p6)
+assert abs(p6 - 0.85) < 0.01, p6
+set_i("channels.count", 2)
+
+# 9) [P-039] 验证 @slider 段独立编译与滑块更新计算
+slider_script = """slider1:1.0<0,5,0.1>Volume
+@init
+srate = (srate > 0) ? srate : 48000;
+dbg = 1;
+@slider
+vol = slider1 * 2.0;
+@sample
+spl0 *= vol;
+spl1 *= vol;
+"""
+assert set_str("liveprog.code", slider_script) == 0
+assert set_f("liveprog.param1", 1.5) == 0
+assert set_i("liveprog.enable", 1) == 0
+for _ in range(20):
+    for i in range(N*2): buf[i] = 0.2
+    dll.auradsp_process(h, buf, out, N)
+p_slider = peak()
+print("9) @slider section runtime exec: out_peak=%.4f (expect 0.60)" % p_slider)
+assert abs(p_slider - 0.60) < 0.01, p_slider
+
 print("PASS: liveprog engine flow all OK")
+

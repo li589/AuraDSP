@@ -10,6 +10,11 @@
 #include "../jdsp_header.h"
 #include <math.h>
 #include <string.h>
+#include <time.h>
+#ifdef _WIN32
+#include <windows.h>
+#include <intrin.h>
+#endif
 
 // utility functions
 static inline float db2lin(float db){ // dB to linear
@@ -920,20 +925,207 @@ void sf_reverb_process(sf_reverb_state_st *rv, float inputL, float inputR, float
     *outputR = outR;
 }
 // Reverb
+/* [PATCHED-AuraDSP P-033] 混响双影子槽与原生参数实现。
+ * 与 P-018 comp / B1-a liveprog 同范式：
+ *   - RT 线程块首只读 reverbActive 指针；
+ *   - 控制线程在非活动槽上构建（sf_presetreverb 或 sf_advancereverb），
+ *     构建完成后原子替换 reverbActive 指针；
+ *   - 在途守卫（双条件任一满足即可复用换下的槽）：
+ *       a) reverbInFlight == 0（无在途调用，覆盖停流/单块间隙）；
+ *       b) reverbProcCount >= retiredAt（换下后跑满 1 块）。
+ */
+#define kReverbSlotWaitMs 50
+
+static long rv_inflight_inc(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedIncrement(p);
+#else
+	return __sync_add_and_fetch((long*)p, 1);
+#endif
+}
+static long rv_inflight_dec(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedDecrement(p);
+#else
+	return __sync_sub_and_fetch((long*)p, 1);
+#endif
+}
+static long rv_inflight_load(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedCompareExchange(p, 0, 0);
+#else
+	return __sync_val_compare_and_swap((long*)p, 0, 0);
+#endif
+}
+static double rv_now_ms(void)
+{
+#ifdef _WIN32
+	return (double)GetTickCount64();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+#endif
+}
+static void rv_sleep_ms(unsigned int ms)
+{
+#ifdef _WIN32
+	Sleep(ms);
+#else
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = (long)ms * 1000000L;
+	nanosleep(&ts, 0);
+#endif
+}
+
+static ReverbSlot *ReverbPickSlot(JamesDSPLib *jdsp)
+{
+	const long inFlight = rv_inflight_load(&jdsp->reverbInFlight);
+	for (int i = 0; i < AURA_REVERB_SLOTS; ++i)
+	{
+		ReverbSlot *s = &jdsp->reverbSlots[i];
+		if (&s->rv == jdsp->reverbActive)
+			continue;
+		if (inFlight != 0 && jdsp->reverbProcCount < s->retiredAt)
+			continue;
+		return s;
+	}
+	return NULL;
+}
+
+static ReverbSlot *ReverbPickSlotWait(JamesDSPLib *jdsp, double timeout_ms)
+{
+	ReverbSlot *target = ReverbPickSlot(jdsp);
+	if (target) return target;
+	const double deadline = rv_now_ms() + timeout_ms;
+	for (;;)
+	{
+		rv_sleep_ms(1);
+		target = ReverbPickSlot(jdsp);
+		if (target) return target;
+		if (rv_now_ms() >= deadline)
+			return NULL;
+	}
+}
+
+void ReverbConstructor(JamesDSPLib *jdsp)
+{
+	memset(jdsp->reverbSlots, 0, sizeof(jdsp->reverbSlots));
+	jdsp->reverbActive = &jdsp->reverbSlots[0].rv;
+	jdsp->reverbProcCount = 0;
+	jdsp->reverbSwapProc = 0;
+	jdsp->reverbInFlight = 0;
+	jdsp->reverbEnabled = 0;
+	int rate = (int)jdsp->fs;
+	if (rate < 8000) rate = 48000;
+	sf_presetreverb(&jdsp->reverbSlots[0].rv, rate, SF_REVERB_PRESET_DEFAULT);
+}
+
+void ReverbDestructor(JamesDSPLib *jdsp)
+{
+	jdsp->reverbActive = NULL;
+	jdsp->reverbEnabled = 0;
+}
+
 void Reverb_SetParam(JamesDSPLib *jdsp, int presets)
 {
-	sf_presetreverb(&jdsp->reverb, (int)jdsp->fs, (sf_reverb_preset)presets);
+	if (presets < 0 || presets > 18) return;
+	int rate = (int)jdsp->fs;
+	if (rate < 8000) rate = 48000;
+
+	ReverbSlot *target = ReverbPickSlotWait(jdsp, kReverbSlotWaitMs);
+	if (!target)
+		return;
+
+	sf_presetreverb(&target->rv, rate, (sf_reverb_preset)presets);
+
+	ReverbSlot *prev = NULL;
+	for (int i = 0; i < AURA_REVERB_SLOTS; ++i) {
+		if (&jdsp->reverbSlots[i].rv == jdsp->reverbActive) {
+			prev = &jdsp->reverbSlots[i];
+			break;
+		}
+	}
+	jdsp->reverbActive = &target->rv;
+	target->retiredAt = 0;
+	const uint64_t q = jdsp->reverbProcCount;
+	if (prev && prev != target) {
+		prev->retiredAt = q + 1;
+	}
+	jdsp->reverbSwapProc = q;
 }
+
+void Reverb_SetNative(JamesDSPLib *jdsp, const AuraReverbNativeParams *p)
+{
+	if (!p) return;
+	int rate = (int)jdsp->fs;
+	if (rate < 8000) rate = 48000;
+
+	ReverbSlot *target = ReverbPickSlotWait(jdsp, kReverbSlotWaitMs);
+	if (!target) return;
+
+	sf_advancereverb(&target->rv, rate,
+		p->oversamplefactor,
+		p->ertolate,
+		p->erefwet_db,
+		p->dry_db,
+		p->ereffactor,
+		p->erefwidth,
+		p->width,
+		p->wet_db,
+		p->wander,
+		p->bassb,
+		p->spin,
+		p->inputlpf_hz,
+		p->basslpf_hz,
+		p->damplpf_hz,
+		p->outputlpf_hz,
+		p->rt60_s,
+		p->delay_s);
+
+	ReverbSlot *prev = NULL;
+	for (int i = 0; i < AURA_REVERB_SLOTS; ++i) {
+		if (&jdsp->reverbSlots[i].rv == jdsp->reverbActive) {
+			prev = &jdsp->reverbSlots[i];
+			break;
+		}
+	}
+	jdsp->reverbActive = &target->rv;
+	target->retiredAt = 0;
+	const uint64_t q = jdsp->reverbProcCount;
+	if (prev && prev != target) {
+		prev->retiredAt = q + 1;
+	}
+	jdsp->reverbSwapProc = q;
+}
+
 void ReverbEnable(JamesDSPLib *jdsp)
 {
 	jdsp->reverbEnabled = 1;
 }
+
 void ReverbDisable(JamesDSPLib *jdsp)
 {
 	jdsp->reverbEnabled = 0;
 }
+
 void ReverbProcess(JamesDSPLib *jdsp, size_t n)
 {
-	for (size_t i = 0; i < n; i++)
-		sf_reverb_process(&jdsp->reverb, jdsp->tmpBuffer[0][i], jdsp->tmpBuffer[1][i], &jdsp->tmpBuffer[0][i], &jdsp->tmpBuffer[1][i]);
+	jdsp->reverbProcCount++;
+	rv_inflight_inc(&jdsp->reverbInFlight);
+	if (jdsp->reverbEnabled)
+	{
+		sf_reverb_state_st *rv = jdsp->reverbActive;
+		if (rv)
+		{
+			for (size_t i = 0; i < n; i++)
+				sf_reverb_process(rv, jdsp->tmpBuffer[0][i], jdsp->tmpBuffer[1][i], &jdsp->tmpBuffer[0][i], &jdsp->tmpBuffer[1][i]);
+		}
+	}
+	rv_inflight_dec(&jdsp->reverbInFlight);
 }
+

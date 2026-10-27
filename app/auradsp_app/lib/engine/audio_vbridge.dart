@@ -12,6 +12,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart' show VizFrame;
 import 'bridge_plugin_ffi.dart';
 
+import '../core/error_sink.dart';
 typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
 typedef _DetectDart = int Function(Pointer<Utf8>, int);
 typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
@@ -97,10 +98,13 @@ class AuraVmBridge {
     for (final path in candidates) {
       try {
         _cached = AuraVmBridge._(DynamicLibrary.open(path));
-        return _cached!;
       } catch (e) {
         lastErr = e;
+        continue;
       }
+      // §7-2（P-028）：桥 ABI 协商（老桥无导出→跳过；不符→抛错）
+      BridgePluginFfi.assertBridgeAbi(_cached!.dylib, 'vb', path);
+      return _cached!;
     }
     throw StateError(
         'auravm_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
@@ -112,7 +116,8 @@ class AuraVmBridge {
       final n = _detect(buf, 2048);
       if (n <= 0) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vb-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -139,7 +144,8 @@ class AuraVmBridge {
       final n = _status(buf, 2048);
       if (n <= 0) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vb-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -196,7 +202,8 @@ class AuraVmBridge {
         'ts': fr.timestampMs,
         'seq': fr.seq,
       };
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vb-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -245,7 +252,8 @@ class AuraVmBridge {
     try {
       final rc = _getParam(idp.cast(), 0, vp.cast());
       return rc == 0 ? vp.value : null;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vb-ffi');
       return null;
     } finally {
       malloc.free(idp);
@@ -261,7 +269,8 @@ class AuraVmBridge {
       final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
       if (n <= 0) return null;
       return buf.toDartString(length: n);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vb-ffi');
       return null;
     } finally {
       malloc.free(idp);

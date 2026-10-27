@@ -2,7 +2,7 @@ import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 /// B-2 引擎错误 reason-token 本地化与脱敏（计划 D2 §4.1-4.3）。
 ///
-/// 引擎侧契约：`<subject>: <reason-token>[ (detail)]`，token 白名单 14 个
+/// 引擎侧契约：`<subject>: <reason-token>[ (detail)]`，token 白名单 15 个
 /// （与 engine/ 各 set_error 字面量、l10n arb `errXxx` 词条、
 /// test/param_contract_test.dart Part H 三方同源）。
 ///
@@ -14,6 +14,7 @@ import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 const Set<String> kEngineReasonTokens = {
   'engine closed',
+  'engine busy',
   'invalid length',
   'invalid encoding',
   'invalid path',
@@ -26,14 +27,17 @@ const Set<String> kEngineReasonTokens = {
   'io failed',
   'rejected',
   'unsupported',
+  'read-only',
   'internal',
 };
 
 /// token → arb key（`engine closed` → `errEngineClosed`），Part H 契约共用。
+/// 以非字母数字为分隔（`read-only` → `errReadOnly`），避免生成非法 Dart 标识符。
 String engineReasonArbKey(String token) {
-  final parts = token.split(' ');
+  final parts = token.split(RegExp(r'[^A-Za-z0-9]+'));
   final b = StringBuffer('err');
   for (final p in parts) {
+    if (p.isEmpty) continue;
     b.write(p[0].toUpperCase());
     b.write(p.substring(1));
   }
@@ -53,6 +57,8 @@ String _localized(String token, AppLocalizations l) {
   switch (token) {
     case 'engine closed':
       return l.errEngineClosed;
+    case 'engine busy':
+      return l.errEngineBusy;
     case 'invalid length':
       return l.errInvalidLength;
     case 'invalid encoding':
@@ -77,6 +83,8 @@ String _localized(String token, AppLocalizations l) {
       return l.errRejected;
     case 'unsupported':
       return l.errUnsupported;
+    case 'read-only':
+      return l.errReadOnly;
     case 'internal':
       return l.errInternal;
   }

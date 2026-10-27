@@ -61,6 +61,10 @@ VBB_API int vb_test_change();
 // 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 408B 分配会堆越界）。
 VBB_API int vb_viz_read(void* out1600, int count);
 
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际，
+// 当前 2）。加载桥后与引擎 auradsp_abi() 比对；不一致时调用方不得解析 viz 帧。
+VBB_API unsigned vb_abi(void);
+
 // 用户旁路开关（与进程内 bypass 同义：跳过 process，输入直通）。
 // 返回 0；桥未运行时返回 <0。
 VBB_API int vb_bypass(int on);
@@ -119,6 +123,16 @@ VBB_API int vb_plugin_group_mask();
  * 挂载先同步 eng[0]、其余组后台补齐——本函数用于冒烟验证补齐进度与
  * 排障（Dart 侧不需要）。group/slot 越界返回 0。 */
 VBB_API int vb_plugin_slot_group_ready(int slot, int group);
+
+// ---- Z12 超预算自动保护（2026-10-23）：用户开关 + 测试注入口 ----
+// 一直在 .def 里导出、cpp 里有实现，唯独头文件没有声明 —— 于是任何
+// include 本头的调用方都拿不到原型（隐式声明/链接错误），而 Dart 侧
+// audio_vbridge.dart 其实已在调用 vb_plugin_auto_protect。on < 0 = 查询；
+// 否则置位。关闭时若保护已激活，立即恢复用户掩码。
+VBB_API int vb_plugin_auto_protect(int on);
+// 测试注入（smoke_vm_protect.py）：直接喂守卫观测值（emaUs / overStreak）。
+// overStreak < 0 退出测试模式并清零观测。仅测试用，Dart 侧不需要。
+VBB_API int vb_protect_test(int emaUs, int overStreak);
 
 #ifdef __cplusplus
 }

@@ -29,9 +29,13 @@ f32 = lambda v: ctypes.c_float(v)
 rc = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(0)), 4)
 print("reverb preset rc =", rc, "| err:", dll.auradsp_last_error(h).decode())
 assert rc == 0, "ADR-006: reverb must be freely enableable, got rc=%d" % rc
-# 30ms 混响 + 2ms limiter（2026-10-16 决策 #1：UI 为真，limiter_enable
-# 默认 1，compute_latency 基线 +2ms）= 32ms
-assert dll.auradsp_get_latency_ms(h) == 32.0, "reverb latency must still be measured as 32ms (30 reverb + 2 limiter default)"
+# 30ms 混响。D7（2026-10-24）修正：旧断言按"30 混响 + 2 limiter 默认"算 32ms，
+# 但 limiter 的 2.0ms 是名义值虚报 —— limiter.lookahead 默认 0（0ms 实时模式），
+# 脉冲实测位移确实为 0；只有 lookahead=1 才有 ~1.5ms 前瞻缓冲。
+# 故默认配置下正确值就是 30ms（D7 门禁 smoke_d7_asrc_consistency.py 锁死）。
+assert abs(dll.auradsp_get_latency_ms(h) - 30.0) < 0.05, (
+    "reverb latency must be 30ms (limiter default lookahead=0 contributes 0ms), got %.3f"
+    % dll.auradsp_get_latency_ms(h))
 
 # 2) Freeverb / 卷积同样自由使能
 rc_fv = dll.auradsp_set_param(h, b"freeverb.enable", ctypes.byref(i32(1)), 4)
@@ -54,7 +58,9 @@ assert rc_get == -1, "ADR-006: mode.latency must not be readable"
 rc_off = dll.auradsp_set_param(h, b"reverb.preset", ctypes.byref(i32(-1)), 4)
 lat_off = dll.auradsp_get_latency_ms(h)
 print("reverb off rc=%d, latency=%.1f ms" % (rc_off, lat_off))
-assert rc_off == 0 and lat_off == 2.0
+# D7：limiter 默认 lookahead=0 → 贡献 0ms，故全关时基线应为 0（原断言 2.0）。
+assert rc_off == 0 and abs(lat_off) < 0.05, (
+    "all-off baseline must be 0ms (limiter default lookahead=0), got %.3f" % lat_off)
 
 # 5) 立体声上限映射：UI 100% → 引擎 0.75
 rc = dll.auradsp_set_param(h, b"stereo.mix", ctypes.byref(f32(0.75)), 4)

@@ -76,84 +76,6 @@ static inline float spat_bq(float* st, float b0, float b1, float b2,
 }
 
 
-/* ---- B3a：8 线 FDN 晚期混响 ------------------------------------------------
- * Hadamard 反馈 + 每线阻尼；长度按 fs 在 reset 时固定，room 只改反馈量。
- * 与 early reflection 共用 spatial 总线；开启时立体声链跳过 freeverb。 */
-static void fdn_init_lengths(auradsp_handle h, float fs) {
-    static const float kMs[8] =
-        {29.7f, 37.1f, 41.1f, 43.7f, 53.3f, 59.9f, 67.7f, 73.9f};
-    if (fs <= 0.0f) fs = 48000.0f;
-    for (int c = 0; c < auradsp_handle_s::kFdnLines; ++c) {
-        int len = (int)(kMs[c] * fs / 1000.0f + 0.5f);
-        if (len < 64) len = 64;
-        if (len >= auradsp_handle_s::kFdnMax) len =
-            auradsp_handle_s::kFdnMax - 1;
-        h->fdn_len[c] = len;
-        h->fdn_pos[c] = 0;
-        h->fdn_lp[c] = 0.0f;
-        h->fdn_fb[c] = 0.5f;
-        memset(h->fdn_buf[c], 0, sizeof(h->fdn_buf[c]));
-    }
-    h->fdn_damp = 1.0f - expf(-2.0f * kPiF * 3500.0f / fs);
-    h->fdn_room_last = -1.0f;
-}
-
-/* 8 点快速 Hadamard（正交，1/sqrt(8) 归一） */
-static inline void fdn_hadamard(float* v) {
-    for (int h = 1; h < 8; h <<= 1) {
-        for (int i = 0; i < 8; i += (h << 1)) {
-            for (int j = i; j < i + h; ++j) {
-                const float a = v[j], b = v[j + h];
-                v[j] = a + b;
-                v[j + h] = a - b;
-            }
-        }
-    }
-    const float s = 0.35355339f;  // 1/sqrt(8)
-    for (int i = 0; i < 8; ++i) v[i] *= s;
-}
-
-/* 每样本 FDN；in 为 mono send，输出 late L/R（未乘 late 量） */
-static inline void fdn_tick(auradsp_handle h, float in, float room,
-                            float* outL, float* outR) {
-    if (room != h->fdn_room_last) {
-        const float rt60 = 0.6f + 3.0f * room;
-        const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
-        for (int c = 0; c < auradsp_handle_s::kFdnLines; ++c) {
-            float g = powf(10.0f, -3.0f * (float)h->fdn_len[c] /
-                                      (rt60 * fs));
-            if (g > 0.995f) g = 0.995f;
-            h->fdn_fb[c] = g;
-        }
-        h->fdn_room_last = room;
-    }
-    float v[8];
-    for (int c = 0; c < auradsp_handle_s::kFdnLines; ++c) {
-        int pos = h->fdn_pos[c];
-        int rp = pos - h->fdn_len[c];
-        if (rp < 0) rp += auradsp_handle_s::kFdnMax;
-        const float x = h->fdn_buf[c][rp];
-        h->fdn_lp[c] += h->fdn_damp * (x - h->fdn_lp[c]);
-        v[c] = h->fdn_lp[c];
-    }
-    // 输入扩散：交替符号注入
-    for (int c = 0; c < 8; ++c)
-        v[c] += in * ((c & 1) ? -0.5f : 0.5f);
-    fdn_hadamard(v);
-    for (int c = 0; c < 8; ++c) {
-        v[c] *= h->fdn_fb[c];
-        const int pos = h->fdn_pos[c];
-        h->fdn_buf[c][pos] = v[c];
-        int np = pos + 1;
-        if (np >= auradsp_handle_s::kFdnMax) np = 0;
-        h->fdn_pos[c] = np;
-    }
-    const float even = v[0] + v[2] + v[4] + v[6];
-    const float odd = v[1] + v[3] + v[5] + v[7];
-    *outL = (even + odd * 0.5f) * 0.25f;
-    *outR = (odd + even * 0.5f) * 0.25f;
-}
-
 /* ---- B3b：早期反射全通扩散 ------------------------------------------------
  * Schroeder 全通：H(z)=(-g+z^-D)/(1-gz^-D)，幅频恒为 1，只改相位/瞬态。
  * 左右耳使用不同延迟，降低双耳相关；两级串联避免单级扩散不足。 */
@@ -280,14 +202,13 @@ void spatial_reset(auradsp_handle h) {
     h->spat_mix_sm = mix;
     h->spat_headazim_sm = spat_clampf(
         h->p.spatial_headazim.load(std::memory_order_relaxed), -180.0f, 180.0f);
-    fdn_init_lengths(h, (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f);
 }
 
 
 void spatial_process(auradsp_handle h, float* io, int frames) {
     if (!h || !io || frames <= 0) return;
 
-    const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+    const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
     const float room = spat_clampf(
         h->p.spatial_room.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float width = spat_clampf(
@@ -296,9 +217,6 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
         h->p.spatial_center.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float outgDb = h->p.spatial_outgain.load(std::memory_order_relaxed);
     const bool ag = h->p.spatial_autogain.load(std::memory_order_relaxed) != 0;
-    const bool fdnOn = h->p.spatial_fdn.load(std::memory_order_relaxed) != 0;
-    const float late = spat_clampf(
-        h->p.spatial_late.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float mixTarget = spat_clampf(
         h->p.spatial_mix.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float elev = spat_clampf(
@@ -496,14 +414,6 @@ void spatial_process(auradsp_handle h, float* io, int frames) {
                      ra1[1], ra2[1], eR);
         spat_decorrelate(h, fs, &eL, &eR);
 
-        // B3a：FDN 晚期混响（mono room send）
-        if (fdnOn && late > 0.0f) {
-            float fl = 0.0f, fr = 0.0f;
-            fdn_tick(h, 0.5f * (inL + inR), room, &fl, &fr);
-            oL += fl * late;
-            oR += fr * late;
-        }
-
         g_sm = alpha * g_sm + beta * outG;
         const float wetL = (oL + eL) * spat_norm * g_sm;
         const float wetR = (oR + eR) * spat_norm * g_sm;
@@ -550,7 +460,7 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         return;
     }
 
-    const float fs = (h->jdsp.fs > 0.0f) ? (float)h->jdsp.fs : 48000.0f;
+    const float fs = (h->sample_rate > 0.0f) ? (float)h->sample_rate : 48000.0f;
     const float room = spat_clampf(
         h->p.spatial_room.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float width = spat_clampf(
@@ -559,9 +469,6 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         h->p.spatial_center.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float outgDb = h->p.spatial_outgain.load(std::memory_order_relaxed);
     const bool ag = h->p.spatial_autogain.load(std::memory_order_relaxed) != 0;
-    const bool fdnOn = h->p.spatial_fdn.load(std::memory_order_relaxed) != 0;
-    const float late = spat_clampf(
-        h->p.spatial_late.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float mixTarget = spat_clampf(
         h->p.spatial_mix.load(std::memory_order_relaxed), 0.0f, 1.0f);
     const float elev = spat_clampf(
@@ -577,17 +484,19 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
 
     const int nsrc = (ch > auradsp_handle_s::kSpatSpk)
                          ? auradsp_handle_s::kSpatSpk : ch;
+    const SpeakerLayout ly = layout_for(ch);
     float srcDeg[8];
     for (int c = 0; c < nsrc; ++c) {
         float base = 0.0f;
-        if (ch == 4) {
-            base = (c == 0) ? -30.0f : (c == 1) ? 30.0f
-                 : (c == 2) ? -150.0f : 150.0f;
-        } else {
-            base = kBinauralDeg[c];
-        }
-        if (c == 2 && ch >= 6) base = 0.0f;
-        srcDeg[c] = spat_wrap_deg((c == 2 && ch >= 6) ? -head : base * width - head);
+        if (c == ly.fl) base = -30.0f;
+        else if (c == ly.fr) base = 30.0f;
+        else if (c == ly.c) base = 0.0f;
+        else if (c == ly.lfe) base = 0.0f;
+        else if (c == ly.sl) base = -110.0f;
+        else if (c == ly.sr) base = 110.0f;
+        else if (c == ly.bl) base = -150.0f;
+        else if (c == ly.br) base = 150.0f;
+        srcDeg[c] = spat_wrap_deg((c == ly.c) ? -head : base * width - head);
     }
 
     float itdSamp[8], farGain[8], farLpA[8];
@@ -657,20 +566,14 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
 
         for (int c = 0; c < nsrc; ++c) {
             const float s = sp[c];
-            if (c == 0) { dryL += s; monoSend += 0.5f * s; }
-            else if (c == 1) { dryR += s; monoSend += 0.5f * s; }
-            else if (c == 2 && ch >= 6) { dryL += s * 0.70710678f;
-                dryR += s * 0.70710678f; monoSend += 0.70710678f * s; }
-            else if (c == 3 && ch >= 6) continue;
-            else if (ch == 4) {
-                if (c == 2) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
-                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
-            } else {
-                if ((c & 1) == 0) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
-                else { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
-            }
+            if (c == ly.fl) { dryL += s; monoSend += 0.5f * s; }
+            else if (c == ly.fr) { dryR += s; monoSend += 0.5f * s; }
+            else if (c == ly.c) { dryL += s * 0.70710678f; dryR += s * 0.70710678f; monoSend += 0.70710678f * s; }
+            else if (c == ly.lfe) continue;
+            else if (c == ly.sl || c == ly.bl) { dryL += s * 0.70710678f; monoSend += 0.5f * s; }
+            else if (c == ly.sr || c == ly.br) { dryR += s * 0.70710678f; monoSend += 0.5f * s; }
 
-            const float m = (c == 2 && ch >= 6) ? s * cGain : s;
+            const float m = (c == ly.c) ? s * cGain : s;
             const float deg = srcDeg[c];
             if (fabsf(deg) < 0.5f) {
                 float l = spat_bq(h->spat_src_pinna[c][0][0],
@@ -761,13 +664,6 @@ void spatial_binaural_process(auradsp_handle h, const float* in, float* stereo,
         eR = spat_bq(h->spat_pinna[1][1], rb0[1], rb1[1], rb2[1],
                      ra1[1], ra2[1], eR);
         spat_decorrelate(h, fs, &eL, &eR);
-
-        if (fdnOn && late > 0.0f) {
-            float fl = 0.0f, fr = 0.0f;
-            fdn_tick(h, monoSend, room, &fl, &fr);
-            oL += fl * late;
-            oR += fr * late;
-        }
 
         g_sm = alpha * g_sm + beta * outG;
         const float wetL = (oL + eL) * norm * g_sm;

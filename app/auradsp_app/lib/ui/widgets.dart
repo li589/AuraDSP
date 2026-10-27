@@ -19,6 +19,7 @@ import 'chrome.dart';
 
 // l10nOf 上移后 re-export：既有 `import ...widgets.dart` 的调用方零改动。
 export '../core/ui_helpers.dart' show l10nOf;
+export 'path_picker_dialog.dart';
 
 /* ---- 区块卡片 ---- */
 

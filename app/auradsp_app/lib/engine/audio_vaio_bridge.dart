@@ -12,6 +12,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart' show VizFrame;
 import 'bridge_plugin_ffi.dart';
 
+import '../core/error_sink.dart';
 typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
 typedef _DetectDart = int Function(Pointer<Utf8>, int);
 typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
@@ -81,10 +82,13 @@ class AuraVaioBridge {
     for (final path in candidates) {
       try {
         _cached = AuraVaioBridge._(DynamicLibrary.open(path));
-        return _cached!;
       } catch (e) {
         lastErr = e;
+        continue;
       }
+      // §7-2（P-028）：桥 ABI 协商（老桥无导出→跳过；不符→抛错）
+      BridgePluginFfi.assertBridgeAbi(_cached!.dylib, 'vaio', path);
+      return _cached!;
     }
     throw StateError(
         'auravaio_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
@@ -97,7 +101,8 @@ class AuraVaioBridge {
       final n = _detect(buf, 8192);
       if (n <= 0) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vaio-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -126,7 +131,8 @@ class AuraVaioBridge {
       final n = _status(buf, 4096);
       if (n <= 0) return null;
       return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vaio-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -183,7 +189,8 @@ class AuraVaioBridge {
         'ts': fr.timestampMs,
         'seq': fr.seq,
       };
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vaio-ffi');
       return null;
     } finally {
       malloc.free(buf);
@@ -218,7 +225,8 @@ class AuraVaioBridge {
     try {
       final rc = _getParam(idp.cast(), 0, vp.cast());
       return rc == 0 ? vp.value : null;
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vaio-ffi');
       return null;
     } finally {
       malloc.free(idp);
@@ -233,7 +241,8 @@ class AuraVaioBridge {
       final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
       if (n <= 0) return null;
       return buf.toDartString(length: n);
-    } catch (_) {
+    } catch (e, st) {
+      swallowThrottled(e, st, 'vaio-ffi');
       return null;
     } finally {
       malloc.free(idp);

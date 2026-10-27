@@ -43,7 +43,7 @@ void dbgLog(String msg) {
       _dbgF!.flushSync();
     }
   } catch (_) {
-    // 日志失败绝不影响运行
+    // swallow: 日志写入本身失败无处可记——再调 swallow 会递归回这里
   }
 }
 
@@ -56,6 +56,10 @@ class ThrottledLog {
   final int head;
   final int every;
   int _n = 0;
+
+  /// 已调用次数。供调用方在「先判后建」的写法里判断是否真的命中，
+  /// 避免为一个即将被丢弃的日志格式化字符串（见 core/error_sink.dart）。
+  int get count => _n;
 
   bool get shouldLog {
     _n++;

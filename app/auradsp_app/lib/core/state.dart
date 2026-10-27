@@ -33,6 +33,7 @@ import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugin_manager.dart';
+import 'error_sink.dart';
 import 'param_schema.dart';
 import 'presets.dart';
 import 'session_memory.dart';
@@ -79,6 +80,10 @@ part 'state/state_vb_asio.dart';
 //   2. extension 作用域不含被扩展类型的 static 成员——纯函数/常量助手
 //      放 part 文件顶层；对外 static（外部 AppModel.xxx 调用）留类体，
 //      extension 内引用加 AppModel. 限定。
+
+/// WP1：混响卡 curated 预设（按听感排序，标签复用 reverbPreset0..7）。
+/// 引擎 `reverb.preset` 的真实 ID；非 curated 旧会话值走 legacy chip。
+const List<int> kReverbCuratedPresets = [5, 3, 1, 2, 9, 7, 11, 15];
 
 class AppModel extends ChangeNotifier {
   final HeadTracker _headTracker = HeadTracker();
@@ -158,6 +163,8 @@ class AppModel extends ChangeNotifier {
       inputBalanceR = ParamDefaults.inputBalanceR;
   int reverbPreset = -1;
   int channelsMode = 0;
+  int channelsCount = 2;
+  int channelsCountMode = 0; // 0=自动, 1=手动
   // 音频处理模式 id（AudioModes.optionsFor(currentOs) 取值；'auto' 表跟随当前引擎）。
   // 引擎接线待后续版本，当前仅持久化 + UI 展示。
   String audioMode = 'auto';
@@ -457,9 +464,13 @@ class AppModel extends ChangeNotifier {
   // M5-b：低音塑形（Bass Shaping：合并低频搁架与单声道化）
   bool shelfOn = false;
   double shelfFreq = 100, shelfGain = 0;
-  // 低频单声道化（BassMono，链头）
+  // 低频单声道化（BassMono，WP4 支持多声道对与合并）
   bool bassmonoOn = false;
   double bassmonoFreq = 120;
+  int bassmonoPairs = 1;
+  int bassmonoMerge = 0;
+  bool _wantedShelf = true;
+  bool _wantedBassmono = true;
   bool get bassShapingOn => shelfOn || bassmonoOn;
   // Haas 差分环绕（stereo 后 / reverb 前）
   bool haasOn = false;
@@ -474,8 +485,6 @@ class AppModel extends ChangeNotifier {
   double spatialMix = 1.0;
   double spatialElevation = 0.0;
   bool spatialBinaural = false;
-  bool spatialFdn = false;
-  double spatialLate = 0.25;
   // 头跟预留（Phase 2 stub：透传 + 持久化，无 UI；传感器就绪后 DSP 按
   // azimuth 旋转摆位，详见 engine_internal.h spatial_headazim 注释）。
   double spatialHeadAzim = 0.0;
@@ -491,11 +500,53 @@ class AppModel extends ChangeNotifier {
   double exciterAmount = 0.3, exciterHifreq = 5000;
   bool exciterOversample = ParamDefaults.exciterOversample;
 
-  // M5-c：空间混响（Freeverb / Spatial Reverb）
-  bool fvOn = false;
+  // WP1 混响边界：`reverb.preset` 是唯一开关（-1 关 / -2 自定义 / 0..18 预设）。
+  // `freeverb.*` 仅作为“混响自定义参数”的 ABI 兼容名保留。
   double fvDecay = 0.5, fvDamp = 0.5, fvWet = 0.35, fvDry = 1.0;
   double fvRoomSize = 1.2, fvWidth = 1.0;
-  bool get isSpatialReverbOn => reverbPreset >= 0 || fvOn;
+  double reverbPredelay = 0.0; // [0,100] ms，两引擎共用
+  bool reverbLfe = false; // 仅 MC：LFE 入混响（120Hz LP + -6dB）
+  int reverbEngine = -1; // 引擎回读：0=vendor stereo、1=MC FDN、-1=off
+  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复。
+  int _lastReverbPreset = 0;
+
+  /// 混响是否开启（唯一真相：preset != -1）。
+  bool get isSpatialReverbOn => reverbPreset != -1;
+
+  /// 兼容旧调用点：`fvOn` 已降级为派生 getter。
+  bool get fvOn => reverbPreset != -1;
+
+  /// 实际工作声道数（UI 呈现与掩码渲染的唯一真相）：
+  /// 手动模式下为 channelsCount；
+  /// 自动模式下优先取 channelsCount（来自引擎/isolate 回读，默认 2）。
+  int get effectiveChannelCount {
+    if (channelsCountMode == 1) {
+      return (channelsCount == 4 || channelsCount == 6 || channelsCount == 8) ? channelsCount : 2;
+    }
+    if (channelsCount == 4 || channelsCount == 6 || channelsCount == 8) {
+      return channelsCount;
+    }
+    return 2;
+  }
+
+  /// 判定当前是否走立体声/矩阵下混路径（掩码不生效）：
+  /// 1. 声道数 == 2
+  /// 2. 声道模式 == 0 (矩阵下混)
+  /// 3. 双耳渲染激活 (spatialBinaural && spatialOn && effectiveChannelCount >= 4)
+  bool get isStereoPath =>
+      effectiveChannelCount == 2 ||
+      channelsMode == 0 ||
+      (spatialBinaural && spatialOn && effectiveChannelCount >= 4);
+
+  /// 与 engine_chain.cpp `reverb_path_kind` 对齐的 UI 侧判定：
+  /// 矩阵模式或双耳路径 → vendor 立体声；其余（含 mode=1 + 2ch）→ MC FDN。
+  bool get reverbStereoPath =>
+      channelsMode == 0 ||
+      (spatialBinaural && spatialOn && effectiveChannelCount >= 4);
+  bool get reverbMcPath => !reverbStereoPath;
+
+  /// MC FDN 是否真正在跑（路径 + 开关都满足）。
+  bool get reverbMcActive => reverbMcPath && reverbPreset != -1;
 
   // M3.5-a：处理顺序（Dart 镜像；引擎侧表驱动 P-004）
   String? graphOrder;
@@ -511,6 +562,7 @@ class AppModel extends ChangeNotifier {
   double tubeOutputGain = ParamDefaults.tubeOutputGain;
   bool compAutoGain = ParamDefaults.compAutoGain;
   double compOutputGain = ParamDefaults.compOutputGain;
+  int compMode = ParamDefaults.compMode;
 
   // 噪声门（链头）+ Deesser + 自动增益补偿 + 迟滞/底线/保持
   bool gateOn = false;
@@ -636,6 +688,34 @@ class AppModel extends ChangeNotifier {
   String? ddcDetails;
   double _lastStereoMix = 0.5;
   String? lpCode;
+
+  /// Liveprog 实时未编译草稿代码（软件关闭又打开不丢失正在编辑的代码）
+  String? lpDraftCode;
+
+  /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
+  final Map<int, double> lpSliderValues = {};
+
+  double getLiveprogSliderVal(int idx, double defaultVal) {
+    if (lpSliderValues.containsKey(idx)) {
+      return lpSliderValues[idx]!;
+    }
+    if (idx >= 1 && idx <= 8) {
+      return lpParams[idx - 1];
+    }
+    return defaultVal;
+  }
+
+  void setLiveprogSliderVal(int idx, double v) {
+    lpSliderValues[idx] = v;
+    if (idx >= 1 && idx <= 8) {
+      lpParams[idx - 1] = v;
+    }
+    if (idx >= 1 && idx <= 64) {
+      setFloat('liveprog.param$idx', v);
+    }
+    _notifyUi();
+    scheduleAutoSave();
+  }
   Timer? _debounceSaveTimer;
   bool _isReplayingSession = false;
 
@@ -763,6 +843,12 @@ class AppModel extends ChangeNotifier {
   /// 生产代码一律默认 false，行为零变化。
   final bool _testing;
 
+  /// [PATCHED-AuraDSP P-032] testing 模式下记录已下发的 setParam 载荷。
+  /// 供回归测试断言"参数确实发到了引擎"——此前 testing 模式下 _toIso
+  /// 为 null，send 静默丢弃，任何"漏发参数"类缺陷在单测里都测不出来
+  /// （P-032 修的正是三处漏发）。
+  final List<Map<String, dynamic>> sentParamsForTesting = [];
+
   /// ChangeNotifier 保护成员的库内转发。
   ///
   /// 拆分后 AppModel 的方法迁入 `extension ... on AppModel`（part 文件），
@@ -792,6 +878,9 @@ class AppModel extends ChangeNotifier {
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
   AppModel({bool testing = false}) : _testing = testing {
     config = ConfigManager.load();
+    channelsCountMode = config.channelsCountMode.clamp(0, 1);
+    final cc = config.channelsCount;
+    channelsCount = (cc == 2 || cc == 4 || cc == 6 || cc == 8) ? cc : 2;
     // 存量 audioMode 归一化到当前平台合法集（未知回平台默认并落盘）。
     audioMode = AudioModes.normalize(config.audioMode);
     if (audioMode != config.audioMode) {
@@ -899,10 +988,6 @@ class AppModel extends ChangeNotifier {
   Timer? _eqCurveTimer;
   DateTime _lastEqCurveSentAt = DateTime.fromMillisecondsSinceEpoch(0);
 
-  double _bassRampCur = 0.0;
-  double? _bassRampTarget;
-  Timer? _bassGainTimer;
-  bool _bassDisableAfterRamp = false;
 
   /// 引擎实测响应（dB），长度 [eqResponsePoints]；null 表示尚未取得。
   /// 绘制时应与 [eqResponseCurve] 比对，不一致说明已过期，需回退近似。
@@ -1037,7 +1122,6 @@ class AppModel extends ChangeNotifier {
       _onWindowVisibilityChanged,
     );
     _debounceSaveTimer?.cancel();
-    _bassGainTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。

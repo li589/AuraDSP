@@ -86,8 +86,6 @@ class _VbBuses extends StatelessWidget {
         children: [
           Text(l.vbBuses, style: labelOf(p, size: 12, color: p.textDim)),
           const SizedBox(height: AuraSpace.xs),
-          _VbProtectRow(model: model),
-          const SizedBox(height: AuraSpace.xs),
           for (var g = 0; g < n; g++)
             _VbBusRow(
               name: names[g],
@@ -98,6 +96,8 @@ class _VbBuses extends StatelessWidget {
               pluginOn: (model.vbPluginGroupMask & (1 << g)) != 0,
               onPluginToggle: (v) => model.setVbPluginGroup(g, v),
             ),
+          const SizedBox(height: AuraSpace.sm),
+          _VbProtectRow(model: model),
         ],
       ),
     );
@@ -121,39 +121,96 @@ class _VbProtectRow extends StatelessWidget {
     final emaUs = (info['cbEmaUs'] as num?)?.toInt() ?? 0;
     final budgetUs = (info['budgetUs'] as num?)?.toInt() ?? 0;
     final active = prot == 1;
-    final detail = active
-        ? l.vbProtectActive
-        : (budgetUs > 0
-            ? '${l.vbProtectHint}  ·  EMA ${(emaUs / 1000).toStringAsFixed(1)}ms / '
-                '${(budgetUs / 1000).toStringAsFixed(1)}ms'
-            : l.vbProtectHint);
+
+    final double emaMs = emaUs / 1000.0;
+    final double budgetMs = budgetUs / 1000.0;
+    final int pct = budgetUs > 0 ? ((emaUs * 100) / budgetUs).round() : 0;
+
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AuraSpace.sm, vertical: 4),
+          horizontal: AuraSpace.sm, vertical: AuraSpace.xs),
       decoration: BoxDecoration(
-        color: active ? p.warning.withValues(alpha: 0.10) : p.panel,
+        color: active ? p.warning.withValues(alpha: 0.12) : p.panel,
         borderRadius: BorderRadius.circular(AuraRadius.sm),
-        border: Border.all(color: active ? p.warning : p.hairline, width: 1),
+        border: Border.all(
+          color: active ? p.warning : p.hairline,
+          width: active ? 1.2 : 1,
+        ),
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(l.vbAutoProtect,
-                    style: labelOf(p, size: 12,
-                        color: active ? p.warning : p.text)),
-                Text(detail,
-                    style: labelOf(p, size: 11,
-                        color: active ? p.warning : p.textDim)),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                l.vbAutoProtect,
+                style: labelOf(p, size: 12).copyWith(
+                  fontWeight: FontWeight.w600,
+                  color: active ? p.warning : p.text,
+                ),
+              ),
+              const SizedBox(width: AuraSpace.xs),
+              InfoBadge(message: l.vbProtectHint),
+              if (active) ...[
+                const SizedBox(width: AuraSpace.xs),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: p.warning.withValues(alpha: 0.20),
+                    borderRadius: BorderRadius.circular(AuraRadius.xs),
+                    border: Border.all(color: p.warning.withValues(alpha: 0.6), width: 0.8),
+                  ),
+                  child: Text(
+                    l.vbProtectActiveTag,
+                    style: captionOf(p, color: p.warning).copyWith(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(width: AuraSpace.sm),
+          const Spacer(),
+          if (budgetUs > 0) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(
+                  horizontal: AuraSpace.xs + 2, vertical: 2.5),
+              decoration: BoxDecoration(
+                color: (active || pct >= 85)
+                    ? p.warning.withValues(alpha: 0.15)
+                    : p.panelRaised,
+                borderRadius: BorderRadius.circular(AuraRadius.xs),
+                border: Border.all(
+                  color: (active || pct >= 85)
+                      ? p.warning.withValues(alpha: 0.5)
+                      : p.hairline.withValues(alpha: 0.6),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.speed_rounded,
+                    size: 13,
+                    color: (active || pct >= 85) ? p.warning : p.accent,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${emaMs.toStringAsFixed(1)} / ${budgetMs.toStringAsFixed(1)} ms ($pct%)',
+                    style: monoOf(p,
+                        size: 11,
+                        color: (active || pct >= 85) ? p.warning : p.text),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+          ],
           _MiniToggle(
-              on: model.vbAutoProtect,
-              onToggle: (v) => model.setVbAutoProtect(v)),
+            on: model.vbAutoProtect,
+            onToggle: (v) => model.setVbAutoProtect(v),
+          ),
         ],
       ),
     );

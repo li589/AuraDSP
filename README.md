@@ -50,7 +50,7 @@ AuraDSP/
 │   │                    #   smoke_three_key_plugins.py 需人工值守，刻意不挂载
 │   └── ui/              # 14 个 UI 脚本；runner.py --ui 默认跑 7 个
 ├── tools/               # bin/ 10 · probe/ 17 · resource_pipeline/ 2 · calibration/ 1 · archive/
-├── source/              # 第三方参考仓库只读快照（15 项 ORIGIN 登记 / 14 个顶层克隆）
+├── source/              # 第三方参考仓库只读快照（17 项 ORIGIN 登记 / 16 个顶层克隆）
 ├── docs/                # 00-总览 10-架构 20-执行 30-审查 40-回顾 90-归档
 │   └── 参考技术手册/     #   第三方 PDF 手册本地只读区（约 220MB，仅 README 清单入库）
 └── .ai/                 # AI 自治沉淀区（memory/rules）
@@ -78,7 +78,7 @@ AuraDSP/
 位于 low-shelf 之后、vendor 链之前。
 
 ### legacy 链（原 `libjamesdsp`，2026-10-16 收编至 `engine/legacy/`，内部 12 级可重排序）
-`tube`（Triode/Pentode/Tape 三音色 + 干湿 + 补偿）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFTCompander）· `arbmag`（任意幅度 EQ）· `convolver`（IR 卷积，带 FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程）· `crossfeed`（bs2b，含 Chu Moy / Jan Meier 模式）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post`+`limiter`（输出级）
+`tube`（Triode/Pentode/Tape 三音色 + 干湿 + 补偿）· `bass` · `eq`（卷积 EQ）· `comp`（DrDynamic FFTCompander）· `arbmag`（任意幅度 EQ）· `convolver`（IR 卷积，带 FileGate 六道门卫）· `ddc`（ViPER DDC）· `liveprog`（EEL2 可编程，专业 IDE + 状态互锁 + EqualizerAPO Clean-Room 极简转换 + 补丁 P-039 四段独立解析）· `crossfeed`（bs2b，含 Chu Moy / Jan Meier 模式）· `stereo`（分带展宽）· `reverb`（SF 预设）· `post`+`limiter`（输出级）
 
 ### 插件宿主
 VST3 / CLAP 64 位进程内宿主，4 插槽 × 5 级插入拓扑（Pre-DSP / Pre-Vendor / Post-Vendor / Post-Reverb / Post-Limiter）。

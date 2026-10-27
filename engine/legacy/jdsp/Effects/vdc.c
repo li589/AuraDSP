@@ -4,6 +4,9 @@
 #include <math.h>
 #include <float.h>
 #include "../jdsp_header.h"
+#ifdef _WIN32
+#include <intrin.h>
+#endif
 double SOS_DF2Process(DirectForm2 *df2, double x1)
 {
 	double w1 = x1 - df2->a1*df2->v1L - df2->a2*df2->v2L;
@@ -25,9 +28,16 @@ void SOS_DF2_StereoProcess(DirectForm2 *df2, double x1, double x2, double *Out_y
 	df2->v1R = w2;
 	*Out_y2 = y2;
 }
+/* [PATCHED-AuraDSP P-017 B1-b] 改迭代实现：原版按字符递归（深度=剩余串长），
+ * 大 VDC 文件（实测 ~107KB，1600 段 SOS）即栈溢出崩溃（countChars 从
+ * SR_48000 标记起递归到串尾）。语义不变：统计 s 中 c 的出现次数。 */
 int countChars(char* s, char c)
 {
-	return *s == '\0' ? 0 : countChars(s + 1, c) + (*s == c);
+	int n = 0;
+	for (; *s; ++s)
+		if (*s == c)
+			n++;
+	return n;
 }
 int get_doubleVDC(char *val, double *F)
 {
@@ -225,8 +235,10 @@ int PeakingFilterResampler(DirectForm2 *inputIIR, double inFs, DirectForm2 **res
 		cell[2][i] = bandwidth;
 	}
 	free(magnitude);
+	/* [PATCHED-AuraDSP P-017 B1-b] 原实现此处连续两次 malloc（第一次结果被
+	 * 第二次覆盖）→ 每次非 44.1/48k 直采频率都泄漏 outSOSCount 个
+	 * DirectForm2；删掉丢失引用的第一次分配。 */
 	DirectForm2 *temp = (DirectForm2*)malloc(outSOSCount * sizeof(DirectForm2));
-	temp = (DirectForm2 *)malloc(outSOSCount * sizeof(DirectForm2));
 	memset(temp, 0, outSOSCount * sizeof(DirectForm2));
 	for (i = 0; i < outSOSCount; i++)
 		designPeakingFilter(cell[0][i], cell[1][i], outFs, cell[2][i], &temp[i].b0, &temp[i].b1, &temp[i].b2, &temp[i].a1, &temp[i].a2);
@@ -235,25 +247,116 @@ int PeakingFilterResampler(DirectForm2 *inputIIR, double inFs, DirectForm2 **res
 	*resampledIIR = temp;
 	return outSOSCount;
 }
+/* [PATCHED-AuraDSP P-017 B1-b] 影子视图 + 原子换指针（替代原「持 jdsp_lock
+ * 原地换 sosPointer/usedSOSCount」）。设计同 B1-a liveprog / P-006 mEQ：
+ *   - AURA_DDC_SLOTS(3) 个预分配视图槽，jdsp->ddcActive 指向活动视图；
+ *   - 控制线程解析出新 SOS 数组后装填非活动槽并原子换指针；RT 块首读一次
+ *     指针即得 {sosPointer, usedSOSCount} 一致对，块内不碰换出视图；
+ *   - 在途守卫双条件任一满足即可复用换下的槽：
+ *       a) ddcInFlight == 0——无在途 DDCProcess（覆盖音频停流时
+ *          ddcProcCount 冻结导致连续加载全部「引擎忙」的可用性洞）；
+ *       b) ddcProcCount >= retiredAt——换下后跑满 1 个音频块；
+ *   - 皆不满足时有界等待 500ms 墙钟，仍无槽返回 -4（上层映射「引擎忙」），
+ *     绝不退化到活动视图原地改写（UAF）；
+ *   - stage_ddc 的 lock 标志置 0：RT 不再为 ddc 取锁。
+ */
+#define kDdcSlots AURA_DDC_SLOTS
+#define kDdcSlotWaitMs 500
+
+static long ddc_inflight_inc(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedIncrement(p);
+#else
+	return __sync_add_and_fetch((long*)p, 1);
+#endif
+}
+static long ddc_inflight_dec(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedDecrement(p);
+#else
+	return __sync_sub_and_fetch((long*)p, 1);
+#endif
+}
+static long ddc_inflight_load(volatile long *p)
+{
+#ifdef _WIN32
+	return _InterlockedCompareExchange(p, 0, 0);
+#else
+	return __sync_val_compare_and_swap((long*)p, 0, 0);
+#endif
+}
+static double ddc_now_ms(void)
+{
+#ifdef _WIN32
+	return (double)GetTickCount64();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+#endif
+}
+static void ddc_sleep_ms(unsigned int ms)
+{
+#ifdef _WIN32
+	Sleep(ms);
+#else
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = (long)ms * 1000000L;
+	nanosleep(&ts, 0);
+#endif
+}
 void DDCConstructor(JamesDSPLib *jdsp)
 {
 	jdsp->vdcFl.oldFile = 0;
-	jdsp->vdcFl.sosPointer = 0;
-	jdsp->vdcFl.usedSOSCount = 0;
+	for (int i = 0; i < kDdcSlots; ++i)
+	{
+		jdsp->ddcSlots[i].sosPointer = 0;
+		jdsp->ddcSlots[i].usedSOSCount = 0;
+		jdsp->ddcSlots[i].retiredAt = 0;
+	}
+	jdsp->ddcActive = &jdsp->ddcSlots[0];
+	jdsp->ddcProcCount = 0;
+	jdsp->ddcInFlight = 0;
 }
 void DDCDestructor(JamesDSPLib *jdsp)
 {
-	if (jdsp->vdcFl.sosPointer)
+	for (int i = 0; i < kDdcSlots; ++i)
 	{
-		free(jdsp->vdcFl.sosPointer);
-		jdsp->vdcFl.sosPointer = 0;
+		if (jdsp->ddcSlots[i].sosPointer)
+		{
+			free(jdsp->ddcSlots[i].sosPointer);
+			jdsp->ddcSlots[i].sosPointer = 0;
+		}
+		jdsp->ddcSlots[i].usedSOSCount = 0;
 	}
 	if (jdsp->vdcFl.oldFile)
 	{
 		free(jdsp->vdcFl.oldFile);
 		jdsp->vdcFl.oldFile = 0;
 	}
+	jdsp->ddcActive = 0;
 }
+/* 选编译目标视图：非活动 + 在途守卫通过（双条件任一满足）。 */
+static DDCView *DDCPickSlot(JamesDSPLib *jdsp)
+{
+	const long inFlight = ddc_inflight_load(&jdsp->ddcInFlight);
+	for (int i = 0; i < kDdcSlots; ++i)
+	{
+		DDCView *s = &jdsp->ddcSlots[i];
+		if (s == jdsp->ddcActive)
+			continue;
+		if (inFlight != 0 && jdsp->ddcProcCount < s->retiredAt)
+			continue;
+		return s;
+	}
+	return 0;
+}
+/* 解析 inStr 构建新 SOS 数组并原子换入。返回 1=成功；0=解析失败
+ * （活动视图不变，旧校正继续生效）；-4=引擎忙（无可用视图槽）。
+ * 槽内旧数组在复用本槽时才释放——彼时在途守卫已保证无 RT 引用。 */
 int DDCRefresh(JamesDSPLib *jdsp, char *inStr)
 {
 	if (!inStr)
@@ -261,31 +364,60 @@ int DDCRefresh(JamesDSPLib *jdsp, char *inStr)
 	DirectForm2 *df441 = 0, *df48 = 0;
 	int sosCount = DDCParser(inStr, &df441, &df48);
 	if (!sosCount)
+	{
+		free(df441);
+		free(df48);
 		return 0;
-	DirectForm2 *bk = jdsp->vdcFl.sosPointer;
+	}
+	DDCView *target = DDCPickSlot(jdsp);
+	if (!target)
+	{
+		const double deadline = ddc_now_ms() + kDdcSlotWaitMs;
+		for (;;)
+		{
+			ddc_sleep_ms(1);
+			target = DDCPickSlot(jdsp);
+			if (target)
+				break;
+			if (ddc_now_ms() >= deadline)
+			{
+				free(df441);
+				free(df48);
+				return -4;
+			}
+		}
+	}
+	DirectForm2 *chosen;
 	if (jdsp->fs == 44100.0f && df441)
 	{
-		jdsp->vdcFl.sosPointer = df441;
-		jdsp->vdcFl.usedSOSCount = sosCount;
+		chosen = df441;
 		free(df48);
 	}
 	else if (jdsp->fs == 48000.0f && df48)
 	{
-		jdsp->vdcFl.sosPointer = df48;
-		jdsp->vdcFl.usedSOSCount = sosCount;
+		chosen = df48;
 		free(df441);
 	}
 	else
 	{
 		DirectForm2 *dfResampled;
 		int resampledSOSCount = PeakingFilterResampler(df48, 48000.0, &dfResampled, jdsp->fs, sosCount);
-		jdsp->vdcFl.usedSOSCount = resampledSOSCount;
-		jdsp->vdcFl.sosPointer = dfResampled;
+		chosen = dfResampled;
+		sosCount = resampledSOSCount;
 		free(df441);
 		free(df48);
 	}
-	if (bk)
-		free(bk);
+	/* 装填目标视图（守卫已保证无在途 RT 引用其旧数组，先释放） */
+	if (target->sosPointer)
+		free(target->sosPointer);
+	target->sosPointer = chosen;
+	target->usedSOSCount = sosCount;
+	target->retiredAt = 0;
+	DDCView *prev = jdsp->ddcActive;
+	/* 原子换指针（x86-64 对齐指针存即原子；RT 块首只读一次） */
+	jdsp->ddcActive = target;
+	if (prev && prev != target)
+		prev->retiredAt = jdsp->ddcProcCount + 1;
 	return 1;
 }
 int DDCEnable(JamesDSPLib *jdsp, char enable)
@@ -296,10 +428,11 @@ int DDCEnable(JamesDSPLib *jdsp, char enable)
 		success = DDCRefresh(jdsp, jdsp->vdcFl.oldFile);
 		jdsp->ddcForceRefresh = 0;
 	}
-	if (!success || !jdsp->vdcFl.usedSOSCount || !jdsp->vdcFl.sosPointer)
+	DDCView *v = jdsp->ddcActive;
+	if (success != 1 || !v || !v->usedSOSCount || !v->sosPointer)
 	{
 		jdsp->ddcEnabled = 0;
-		return -1;
+		return success == 1 ? -1 : success;
 	}
 	else
 	{
@@ -314,31 +447,24 @@ void DDCDisable(JamesDSPLib *jdsp)
 }
 int DDCStringParser(JamesDSPLib *jdsp, char *newStr)
 {
-	jdsp_lock(jdsp);
+	/* B1-b：不再持 jdsp_lock——RT 改为块首读一次 ddcActive 快照
+	 * （见 DDCProcess），解析全程在控制线程，换指针原子完成。 */
 	if (jdsp->vdcFl.oldFile)
 	{
 		if (!strcmp(jdsp->vdcFl.oldFile, newStr))
-		{
-			jdsp_unlock(jdsp);
 			return 0;
-		}
-	}
-	if (jdsp->vdcFl.sosPointer)
-	{
-		free(jdsp->vdcFl.sosPointer);
-		jdsp->vdcFl.usedSOSCount = 0;
-		jdsp->vdcFl.sosPointer = 0;
 	}
 	int success = DDCRefresh(jdsp, newStr);
-	if (!success)
+	if (success != 1)
 	{
+		/* 失败保留旧视图（活动 DDC 继续生效——与 B1-a liveprog 一致：
+		 * 加载失败不影响正在跑的校正）；忙（-4）原样透传区别文案。 */
 		if (jdsp->vdcFl.oldFile)
 		{
 			free(jdsp->vdcFl.oldFile);
 			jdsp->vdcFl.oldFile = 0;
 		}
-		jdsp_unlock(jdsp);
-		return -1;
+		return success == 0 ? -1 : success;
 	}
 	if (jdsp->vdcFl.oldFile)
 		free(jdsp->vdcFl.oldFile);
@@ -346,20 +472,29 @@ int DDCStringParser(JamesDSPLib *jdsp, char *newStr)
 	jdsp->vdcFl.oldFile = (char*)malloc(stLe + 1);
 	strncpy(jdsp->vdcFl.oldFile, newStr, stLe);
 	jdsp->vdcFl.oldFile[stLe] = '\0';
-	jdsp_unlock(jdsp);
 	return 1;
 }
 void DDCProcess(JamesDSPLib *jdsp, size_t n)
 {
-	if (jdsp->vdcFl.usedSOSCount)
+	/* B1-b：在途守卫双计数（同 B1-a liveprog）——RT 单写者，每块必过
+	 * （stage_ddc 恒在链中），与 ddcEnabled 无关。 */
+	jdsp->ddcProcCount++;
+	ddc_inflight_inc(&jdsp->ddcInFlight);
+	if (jdsp->ddcEnabled)
 	{
-		for (size_t i = 0; i < n; i++)
+		/* 块首一次读取活动视图；解析期换指针不影响本块后续样本 */
+		DDCView *v = jdsp->ddcActive;
+		if (v && v->usedSOSCount && v->sosPointer)
 		{
-			double sampleOutL = (double)jdsp->tmpBuffer[0][i], sampleOutR = (double)jdsp->tmpBuffer[1][i];
-			for (int j = 0; j < jdsp->vdcFl.usedSOSCount; j++)
-				SOS_DF2_StereoProcess(&jdsp->vdcFl.sosPointer[j], sampleOutL, sampleOutR, &sampleOutL, &sampleOutR);
-			jdsp->tmpBuffer[0][i] = (float)sampleOutL;
-			jdsp->tmpBuffer[1][i] = (float)sampleOutR;
+			for (size_t i = 0; i < n; i++)
+			{
+				double sampleOutL = (double)jdsp->tmpBuffer[0][i], sampleOutR = (double)jdsp->tmpBuffer[1][i];
+				for (int j = 0; j < v->usedSOSCount; j++)
+					SOS_DF2_StereoProcess(&v->sosPointer[j], sampleOutL, sampleOutR, &sampleOutL, &sampleOutR);
+				jdsp->tmpBuffer[0][i] = (float)sampleOutL;
+				jdsp->tmpBuffer[1][i] = (float)sampleOutR;
+			}
 		}
 	}
+	ddc_inflight_dec(&jdsp->ddcInFlight);
 }

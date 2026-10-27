@@ -51,7 +51,19 @@ std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath);
 std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath);
 std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath);
 
+/* F1（2026-10-24）：插件依赖 DLL 搜索目录（通用化，不识别任何厂商名）。
+ * 幂等：同一 pluginPath 重复调用不会重复 AddDllDirectory（原实现每次
+ * showEditor 都加一遍，进程搜索路径单调增长）。
+ * 加的目录 = 插件目录 + 父目录 + 常见子目录（win64/Cores/bin/x64/lib/lib64）
+ * + 环境变量 AURADSP_PLUGIN_DLL_DIRS（分号分隔，进程级）。 */
 void setupPluginDllDirectories(const std::string& pluginPath);
+/* 回收：插件卸载/析构时调用，按引用计数 RemoveDllDirectory（环境变量目录
+ * 不回收）。与 setup 成对，缺 release 只会泄漏搜索路径，不会崩。 */
+void releasePluginDllDirectories(const std::string& pluginPath);
+/* 内省（测试与诊断用）：当前登记的目录数 / 目录列表（小写 UTF-8）/ 引用计数总和。 */
+size_t pluginDllDirectoryCount();
+std::vector<std::string> pluginDllDirectoryList();
+size_t pluginDllDirectoryRefs();
 void ResizeDirectChildren(HWND hwnd);
 /// Z16：编辑器窗口「闪现置顶」。插件宿主进程与 Flutter App 是不同进程，
 /// SetForegroundWindow 受前台进程限制常静默失败（用户观感：插件界面

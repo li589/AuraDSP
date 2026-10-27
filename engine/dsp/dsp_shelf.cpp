@@ -9,7 +9,8 @@ void shelf_recalc(auradsp_handle h) {
     const double f0 = h->p.shelf_freq.load(std::memory_order_relaxed);
     const double gdb = h->p.shelf_gain.load(std::memory_order_relaxed);
     const double A = pow(10.0, gdb / 40.0);
-    const double w0 = 2.0 * 3.14159265358979 * f0 / h->jdsp.fs;
+    /* [PATCHED-AuraDSP P-029] 自研链在 ASRC 之外、处理设备率样本，系数须用 h->sample_rate（旧用工作率 jdsp.fs，96k 下 2 倍错位） */
+    const double w0 = 2.0 * 3.14159265358979 * f0 / h->sample_rate;
     const double cw = cos(w0), sw = sin(w0);
     const double alpha = sw / (2.0 * 0.7071067811865476);
     const double sqA2a = 2.0 * sqrt(A) * alpha;

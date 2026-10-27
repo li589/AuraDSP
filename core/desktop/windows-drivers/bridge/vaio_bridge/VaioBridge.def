@@ -9,6 +9,7 @@ EXPORTS
     vaio_get_param
     vaio_get_param_str
     vaio_viz_read
+    vaio_abi
     vaio_bypass
     vaio_test_start
     vaio_test_stop
@@ -25,3 +26,5 @@ EXPORTS
     vaio_plugin_slot_load_preset
     vaio_plugin_slot_set_insert_stage
     vaio_plugin_slot_get_insert_stage
+    vaio_plugin_slot_set_channels
+    vaio_plugin_slot_get_channels

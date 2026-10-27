@@ -15,6 +15,7 @@ import 'plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
 
+import 'error_sink.dart';
 abstract final class SessionMemory {
   static String get sessionPath =>
       '${ConfigManager.baseDir}${Platform.pathSeparator}session_state.json';
@@ -59,6 +60,8 @@ abstract final class SessionMemory {
         'locale': m.locale.languageCode,
         'themeId': m.themeId.name,
         'channelsMode': m.channelsMode,
+        'channelsCountMode': m.channelsCountMode,
+        'channelsCount': m.channelsCount,
         'audioMode': m.audioMode,
         'modeCategory': m.modeCategory,
         'attachmentMode': m.attachmentMode,
@@ -78,6 +81,8 @@ abstract final class SessionMemory {
         'convIrPath': m.convIrPath,
         'ddcPath': m.ddcPath,
         'lpCode': m.lpCode,
+        'lpDraftCode': m.lpDraftCode,
+        'lpSliderValues': m.lpSliderValues.map((k, v) => MapEntry(k.toString(), v)),
         'arbmagString': m.arbmagString,
         'pluginPath': m.pluginManager.getSlotPlugin(0)?.path,
         'pluginId': m.pluginManager.getSlotPlugin(0)?.id,
@@ -88,7 +93,8 @@ abstract final class SessionMemory {
       };
 
       return ConfigManager.writeJsonFile(sessionPath, payload);
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }
@@ -100,7 +106,8 @@ abstract final class SessionMemory {
       if (!file.existsSync()) return null;
       final content = file.readAsStringSync();
       return jsonDecode(content) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return null;
     }
   }
@@ -114,6 +121,13 @@ abstract final class SessionMemory {
       if (session['channelsMode'] is num) {
         // clamp 同 state_core 镜像路径：历史 UI 的非法 2（"7.1"）不得复苏
         m.channelsMode = (session['channelsMode'] as num).toInt().clamp(0, 1);
+      }
+      if (session['channelsCountMode'] is num) {
+        m.channelsCountMode = (session['channelsCountMode'] as num).toInt().clamp(0, 1);
+      }
+      if (session['channelsCount'] is num) {
+        final c = (session['channelsCount'] as num).toInt();
+        m.channelsCount = (c == 2 || c == 4 || c == 6 || c == 8) ? c : 2;
       }
       if (session['audioMode'] is String) {
         m.audioMode = AudioModes.normalize(session['audioMode'] as String);
@@ -183,6 +197,21 @@ abstract final class SessionMemory {
       }
       if (session['lpCode'] is String) {
         m.lpCode = session['lpCode'] as String;
+      }
+      if (session['lpDraftCode'] is String) {
+        m.lpDraftCode = session['lpDraftCode'] as String;
+      }
+      if (session['lpSliderValues'] is Map) {
+        m.lpSliderValues.clear();
+        (session['lpSliderValues'] as Map).forEach((k, v) {
+          final idx = int.tryParse(k.toString());
+          if (idx != null && v is num) {
+            m.lpSliderValues[idx] = v.toDouble();
+            if (idx >= 1 && idx <= 8) {
+              m.lpParams[idx - 1] = v.toDouble();
+            }
+          }
+        });
       }
       if (session['arbmagString'] is String) {
         m.arbmagString = session['arbmagString'] as String;
@@ -255,7 +284,7 @@ abstract final class SessionMemory {
       if (session['presetDirty'] is bool) {
         m.presetDirty = session['presetDirty'] as bool;
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 清除会话记忆
@@ -264,7 +293,8 @@ abstract final class SessionMemory {
       final file = File(sessionPath);
       if (file.existsSync()) file.deleteSync();
       return true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

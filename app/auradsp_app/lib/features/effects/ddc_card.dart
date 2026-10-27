@@ -67,15 +67,17 @@ class _DdcCard extends StatelessWidget {
   }
 
   Future<void> _pickVdc(BuildContext context) async {
-    const type = XTypeGroup(label: 'VDC', extensions: ['vdc']);
-    final f = await openFile(
-      acceptedTypeGroups: [type],
-      initialDirectory: PathMemory.dirFor(PathMemory.slotDdcVdc) ??
-          PathMemory.fallbackDir(PathMemory.slotDdcVdc),
+    final l = l10nOf(context);
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.ddcFilterTitle,
+      prompt: l.ddcVdcPrompt,
+      allowedExtensions: const ['vdc'],
+      memorySlot: PathMemory.slotDdcVdc,
+      confirmLabel: l.ddcLoadVdc,
     );
-    if (f != null) {
-      PathMemory.recordPick(PathMemory.slotDdcVdc, f.path);
-      model.loadVdc(f.path);
+    if (path != null) {
+      model.loadVdc(path);
     }
   }
 }

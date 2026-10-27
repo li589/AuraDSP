@@ -269,7 +269,7 @@ abstract final class ParamRegistry {
   static final reverbPreset = ParamSpec<int>(
     id: 'reverb.preset', section: 'reverb', key: 'preset',
     type: ParamType.int32, defaultValue: -1,
-    min: -2, max: 17,
+    min: -2, max: 18,
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.reverbPreset,
     setter: (m, v) => m.setReverbPreset(v),
@@ -327,6 +327,20 @@ abstract final class ParamRegistry {
     flags: ParamFlags.presetSerializable | ParamFlags.isDerivation,
     getter: (m) => m.fvWidth,
     setter: (m, v) => m.setReverbCustomParam('width', v),
+  );
+  static final reverbPredelay = ParamSpec<double>(
+    id: 'reverb.predelay', section: 'reverb', key: 'predelay',
+    type: ParamType.float, defaultValue: ParamDefaults.reverbPredelay,
+    min: 0.0, max: 100.0, step: 1.0, unit: 'ms',
+    formatter: (v) => v.toStringAsFixed(0),
+    getter: (m) => m.reverbPredelay,
+    setter: (m, v) => m.setReverbPredelay(v),
+  );
+  static final reverbLfe = ParamSpec<bool>(
+    id: 'reverb.lfe', section: 'reverb', key: 'lfe',
+    type: ParamType.boolean, defaultValue: ParamDefaults.reverbLfe,
+    getter: (m) => m.reverbLfe,
+    setter: (m, v) => m.setReverbLfe(v),
   );
   static final reverbAutoGain = ParamSpec<bool>(
     id: 'reverb.autogain', section: 'reverb', key: 'autoGain',
@@ -607,6 +621,22 @@ abstract final class ParamRegistry {
     getter: (m) => m.bassmonoOn,
     setter: (m, v) => m.setBassmonoEnabled(v),
   );
+  static final bassmonoPairs = ParamSpec<int>(
+    id: 'bassmono.pairs', section: 'bassmono', key: 'pairs',
+    type: ParamType.int32, defaultValue: ParamDefaults.bassmonoPairs,
+    min: 0, max: 15, step: 1,
+    formatter: (v) => '0x${v.toRadixString(16).toUpperCase()}',
+    getter: (m) => m.bassmonoPairs,
+    setter: (m, v) => m.setBassmonoPairs(v),
+  );
+  static final bassmonoMerge = ParamSpec<int>(
+    id: 'bassmono.merge', section: 'bassmono', key: 'merge',
+    type: ParamType.int32, defaultValue: ParamDefaults.bassmonoMerge,
+    min: 0, max: 1, step: 1,
+    formatter: (v) => v == 0 ? 'Per-pair' : 'Global',
+    getter: (m) => m.bassmonoMerge,
+    setter: (m, v) => m.setBassmonoMerge(v),
+  );
 
   /* =========================================================================
    * 7B. 低音塑形 (Bass Shaping) — 合并低频搁架与低频单声道化
@@ -690,8 +720,11 @@ abstract final class ParamRegistry {
   static final spatialStyle = ParamSpec<int>(
     id: 'spatial.style', section: 'spatial', key: 'style',
     type: ParamType.int32, defaultValue: ParamDefaults.spatialStyle,
-    min: 0, max: 2,
-    options: ['影院', '定位', '中性'],
+    min: 0, max: 3,
+    // 预设应用时先写 style（引擎 hook 同步规范值），再写 room/width/center；
+    // 顺序反了会让 custom hook 把 style 改成 3。
+    order: -1,
+    options: ['影院', '定位', '中性', '自定义'],
     getter: (m) => m.spatialStyle,
     setter: (m, v) => m.setSpatialStyle(v),
   );
@@ -756,20 +789,6 @@ abstract final class ParamRegistry {
     type: ParamType.boolean, defaultValue: ParamDefaults.spatialBinaural,
     getter: (m) => m.spatialBinaural,
     setter: (m, v) => m.setSpatialBinaural(v),
-  );
-  static final spatialFdn = ParamSpec<bool>(
-    id: 'spatial.fdn', section: 'spatial', key: 'fdn',
-    type: ParamType.boolean, defaultValue: ParamDefaults.spatialFdn,
-    getter: (m) => m.spatialFdn,
-    setter: (m, v) => m.setSpatialFdn(v),
-  );
-  static final spatialLate = ParamSpec<double>(
-    id: 'spatial.late', section: 'spatial', key: 'late',
-    type: ParamType.float, defaultValue: ParamDefaults.spatialLate,
-    min: 0.0, max: 1.0, step: 0.01, unit: '%',
-    formatter: (v) => (v * 100).toStringAsFixed(0),
-    getter: (m) => m.spatialLate,
-    setter: (m, v) => m.setSpatialLate(v),
   );
   static final spatialHeadAzim = ParamSpec<double>(
     id: 'spatial.headazim', section: 'spatial', key: 'headAzim',
@@ -1196,7 +1215,7 @@ abstract final class ParamRegistry {
     id: 'comp.threshold', section: 'comp', key: 'threshold',
     type: ParamType.float, defaultValue: -18.0,
     min: -48.0, max: 0.0, step: 0.5, unit: 'dB',
-    formatter: (v) => '${v.toStringAsFixed(1)} dB',
+    formatter: (v) => v.toStringAsFixed(1),
     getter: (m) => m.compThreshold,
     setter: (m, v) => m.setCompThreshold(v),
   );
@@ -1204,14 +1223,14 @@ abstract final class ParamRegistry {
     id: 'comp.ratio', section: 'comp', key: 'ratio',
     type: ParamType.float, defaultValue: 4.0,
     min: 1.0, max: 20.0, step: 0.1, unit: ':1',
-    formatter: (v) => '${v.toStringAsFixed(1)}:1',
+    formatter: (v) => v.toStringAsFixed(1),
     getter: (m) => m.compRatio,
     setter: (m, v) => m.setCompRatio(v),
   );
   static final compFreq1 = ParamSpec<double>(
     id: 'comp.freq1', section: 'comp', key: 'freq1',
     type: ParamType.float, defaultValue: 95.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[0],
     setter: (m, v) => m.setCompFreq(0, v),
@@ -1219,7 +1238,7 @@ abstract final class ParamRegistry {
   static final compFreq2 = ParamSpec<double>(
     id: 'comp.freq2', section: 'comp', key: 'freq2',
     type: ParamType.float, defaultValue: 200.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[1],
     setter: (m, v) => m.setCompFreq(1, v),
@@ -1227,7 +1246,7 @@ abstract final class ParamRegistry {
   static final compFreq3 = ParamSpec<double>(
     id: 'comp.freq3', section: 'comp', key: 'freq3',
     type: ParamType.float, defaultValue: 400.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[2],
     setter: (m, v) => m.setCompFreq(2, v),
@@ -1235,7 +1254,7 @@ abstract final class ParamRegistry {
   static final compFreq4 = ParamSpec<double>(
     id: 'comp.freq4', section: 'comp', key: 'freq4',
     type: ParamType.float, defaultValue: 800.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[3],
     setter: (m, v) => m.setCompFreq(3, v),
@@ -1243,7 +1262,7 @@ abstract final class ParamRegistry {
   static final compFreq5 = ParamSpec<double>(
     id: 'comp.freq5', section: 'comp', key: 'freq5',
     type: ParamType.float, defaultValue: 1600.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[4],
     setter: (m, v) => m.setCompFreq(4, v),
@@ -1251,7 +1270,7 @@ abstract final class ParamRegistry {
   static final compFreq6 = ParamSpec<double>(
     id: 'comp.freq6', section: 'comp', key: 'freq6',
     type: ParamType.float, defaultValue: 3400.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[5],
     setter: (m, v) => m.setCompFreq(5, v),
@@ -1259,7 +1278,7 @@ abstract final class ParamRegistry {
   static final compFreq7 = ParamSpec<double>(
     id: 'comp.freq7', section: 'comp', key: 'freq7',
     type: ParamType.float, defaultValue: 7500.0,
-    min: 20.0, max: 20000.0, step: 1.0, unit: 'Hz',
+    min: 20.0, max: 20000.0, step: 1.0, unit: '',
     formatter: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : '${v.toStringAsFixed(0)} Hz',
     getter: (m) => m.compFreqs[6],
     setter: (m, v) => m.setCompFreq(6, v),
@@ -1344,6 +1363,14 @@ abstract final class ParamRegistry {
     order: 100,
     getter: (m) => m.compOn,
     setter: (m, v) => m.setCompEnabled(v),
+  );
+  static final compMode = ParamSpec<int>(
+    id: 'comp.mode', section: 'comp', key: 'mode',
+    type: ParamType.int32, defaultValue: ParamDefaults.compMode,
+    min: 0, max: 1,
+    options: ['逐声道', '性能模式 (逐对)'],
+    getter: (m) => m.compMode,
+    setter: (m, v) => m.setCompMode(v),
   );
 
   /* =========================================================================
@@ -1603,20 +1630,45 @@ abstract final class ParamRegistry {
       name: 'reverb',
       specs: [
         reverbPreset, reverbDecay, reverbDamp, reverbWet, reverbDry,
-        reverbRoomSize, reverbStereoWidth, reverbAutoGain, reverbOutputGain, reverbEnable,
+        reverbRoomSize, reverbStereoWidth, reverbPredelay, reverbLfe,
+        reverbAutoGain, reverbOutputGain, reverbEnable,
       ],
       postApply: (m, rev, fullRewrite) {
-        // 自定义混响保护逻辑：preset >= 0 切预设，-1 缺键不碰现值
-        final pr = (rev['preset'] as num?)?.toInt() ?? -1;
-        if (pr >= 0) {
-          m.setReverbPreset(pr);
-        } else {
-          if (rev['decay'] != null) m.setReverbCustomParam('decay', (rev['decay'] as num).toDouble());
-          if (rev['damp'] != null) m.setReverbCustomParam('damp', (rev['damp'] as num).toDouble());
-          if (rev['wet'] != null) m.setReverbCustomParam('wet', (rev['wet'] as num).toDouble());
-          if (rev['dry'] != null) m.setReverbCustomParam('dry', (rev['dry'] as num).toDouble());
-          if (rev['roomSize'] != null) m.setReverbCustomParam('roomSize', (rev['roomSize'] as num).toDouble());
-          if (rev['stereoWidth'] != null) m.setReverbCustomParam('width', (rev['stereoWidth'] as num).toDouble());
+        // WP1 迁移（工程文档 §4.2）：
+        //   旧 `enable=1 && preset=-1` → 自定义态 -2（旧双开关的“自定义开着”）；
+        //   新 preset>=0 → 预设；preset=-2 → 自定义；
+        //   preset=-1 且未开 → 只更新自定义参数，不改变开关。
+        final pr = (rev['preset'] as num?)?.toInt();
+        final legacyOn = rev['enable'] == true;
+        final hasCustom = rev.containsKey('decay') ||
+            rev.containsKey('damp') ||
+            rev.containsKey('wet') ||
+            rev.containsKey('dry') ||
+            rev.containsKey('roomSize') ||
+            rev.containsKey('stereoWidth');
+        double? d(String k) => (rev[k] as num?)?.toDouble();
+        if (pr != null && pr >= 0) {
+          m.selectReverbPreset(pr);
+        } else if (pr == -2 || (pr == -1 && legacyOn)) {
+          m.applyReverbCustomParams(
+            decay: d('decay'),
+            damp: d('damp'),
+            wet: d('wet'),
+            dry: d('dry'),
+            roomSize: d('roomSize'),
+            width: d('stereoWidth'),
+            activate: true,
+          );
+        } else if (hasCustom) {
+          m.applyReverbCustomParams(
+            decay: d('decay'),
+            damp: d('damp'),
+            wet: d('wet'),
+            dry: d('dry'),
+            roomSize: d('roomSize'),
+            width: d('stereoWidth'),
+            activate: false,
+          );
         }
       },
     ),
@@ -1704,7 +1756,7 @@ abstract final class ParamRegistry {
     // 7. 低频单声道
     ParamSection(
       name: 'bassmono',
-      specs: [bassmonoFreq, bassmonoEnable],
+      specs: [bassmonoFreq, bassmonoEnable, bassmonoPairs, bassmonoMerge],
     ),
     // 8. Haas
     ParamSection(
@@ -1723,7 +1775,7 @@ abstract final class ParamRegistry {
       specs: [
         spatialStyle, spatialRoom, spatialWidth, spatialCenter,
         spatialOutGain, spatialAutoGain, spatialMix, spatialElevation,
-        spatialBinaural, spatialFdn, spatialLate,
+        spatialBinaural,
         spatialHeadAzim, spatialHeadTrack, spatialEnable,
       ],
     ),
@@ -1780,7 +1832,7 @@ abstract final class ParamRegistry {
       name: 'comp',
       specs: [
         compTimeconstant, compGranularity, compTfresolution,
-        compAutoGain, compOutputGain, compEnable, compChannels,
+        compAutoGain, compOutputGain, compMode, compEnable, compChannels,
         ...compFreqs, ...compGains, // B2：14 动态段注册进预设系统（真实驱动引擎）
       ],
     ),
@@ -1831,6 +1883,22 @@ abstract final class ParamRegistry {
         limiterRelease, limiterThreshold, limiterLink, limiterLookahead,
         limiterChannels,
       ],
+      customSnapshot: (m, map) {
+        final trims = <double>[];
+        for (var c = 0; c < 8; c++) {
+          trims.add(m.mirrorFloat('post.gain.c$c', 0.0));
+        }
+        map['channelTrims'] = trims;
+      },
+      postApply: (m, post, fullRewrite) {
+        if (post['channelTrims'] is List) {
+          final list = post['channelTrims'] as List;
+          for (var c = 0; c < 8 && c < list.length; c++) {
+            final v = (list[c] as num).toDouble();
+            m.setFloat('post.gain.c$c', v);
+          }
+        }
+      },
     ),
     // 22. 路由
     ParamSection(

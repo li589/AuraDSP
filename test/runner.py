@@ -12,6 +12,13 @@ import os
 import subprocess
 import sys
 
+# 子进程继承：GBK 控制台下 smoke/UI 脚本 print 含 '⟹'、替换字符等会
+# UnicodeEncodeError 崩溃（2026-10-26 实测 smoke_rt_vendor_flags / smoke_d6_
+# patch_ids / smoke_g7_1 / smoke_d4b_swallow / smoke_g7_5 / smoke_abi_consistency
+# 均为编码崩溃而非断言失败），固定 UTF-8 输出编码。子进程在启动时读取本变量，
+# runner 自身已初始化的 stdout 不受影响。
+os.environ["PYTHONIOENCODING"] = "utf-8"
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEST_DIR = os.path.join(ROOT_DIR, "test")
 SMOKE_DIR = os.path.join(TEST_DIR, "smoke")
@@ -63,13 +70,84 @@ def run_smoke_tests():
         # F-4 裁定守卫（2026-10-23）：宿主进程 BELOW_NORMAL 不得外溢到 RT
         # 音频线程（实测音频线程仍 15=TIME_CRITICAL，降级只作用于工作线程）。
         "smoke_plugin_host_priority.py",
+        # B3 卸载隔离门禁（2026-10-24）：RT 滞留（假实例 process 阻塞）时卸载
+        # 必须按墙钟上界返回并保留实例，不得硬清零后照常销毁（use-after-free）。
+        "smoke_plugin_quarantine.py",
         "smoke_config_and_matrix.py",
         # ADR-003 Phase B 多声道电平门禁（2026-10-24）：ABI v2 尺寸/版本 +
         # ch=8/6 逐声道异幅电平 + gate 动态行更新 + vendor/GR 作用域语义 +
         # stereo 回归（MC→stereo 切换无残留泄漏）
         "smoke_mc_channel_levels.py",
+        # B4 门禁（2026-10-24）：RT 不得改写 vendor 开关（lost update）。
+        # 源码不变式 + 调用级门控接线（comp FL/FR mask）+ 60 轮竞态
+        # （MC 处理中翻转 tube.enable，结束后 vendor 开关必须为 0）。
+        "smoke_rt_vendor_flags.py",
+        # F1 门禁（2026-10-24）：插件 DLL 目录通用化 + AddDllDirectory cookie
+        # 引用计数回收。不得识别任何厂商名（源码不变式），卸载必须 RemoveDllDirectory
+        # 否则进程搜索路径单调增长 → 后续插件解析同名 DLL 绑到私有副本 → ABI 崩溃。
+        "smoke_dll_dirs.py",
+        # D2 门禁（2026-10-24）：三桥释放前的 Sleep(50) 猜测改 rtInBlock 确定
+        # 性排空（含审查漏点 VmBridge.FreeTestFile）。三层：源码不变式 /
+        # guard+排空单测 / ASIO 实测 test_stop 不再是固定 50ms。
+        "smoke_d2_rt_drain.py",
+        "smoke_d3_vaio_pump_wait.py",
+        # B1-d 门禁（2026-10-24）：comp 启动段原声直通。旧实现的抽干循环在
+        # 管线首块产出前不执行，输出缓冲里仍是未处理输入（调用方 in==out）；
+        # 块长不整除 hop 时还会周期性复发。改为显式启动缺额 D（吐静音）+
+        # 抽干不足补静音，延迟 = frames + D 且计入上报。
+        "smoke_b1d_comp_startup.py",
+        # D1 门禁（2026-10-24）：延迟表口径——结构性帧数不再当毫秒常量。
+        # D7（同日）修正其换算基准为工作采样率，具体标定值移入 D7 门禁。
+        "smoke_d1_latency_sr.py",
+        # D7 门禁（2026-10-24）：ASRC taps 单点定义（64/32 分叉已收）+ 延迟口径
+        # 按工作采样率域 + comp 剖面随 tf 变（块长口径后来被 B1-d 推翻并重写，
+        # 见下）+ limiter 按 lookahead 模式（默认 0ms）+ ASRC 环形缓冲分量 +
+        # 上报值==脉冲实测。
+        "smoke_d7_asrc_consistency.py",
+        # D5 门禁（2026-10-24）：插件槽异步等待上界 150s → 5s + 墙钟收口 +
+        # 超时兜底（同步 unload）+ timedOut 上报。数值与链路任一项回退即红。
+        "smoke_d5_slot_timeout.py",
+        # D4-b 门禁（2026-10-24）：全仓静默异常。97 处 catch 既不留痕也不绑定
+        # 异常，泵循环更是整个迭代体包在 catch (_) {} + continue 里——一次类型
+        # 错误就能让可视化永远冻结且日志无痕。四类分治 + 四条规则（R1 空块必留痕
+        # /R2 循环包壳必限流/R3 禁匿名 catch/R4 理由不得敷衍），含规则引擎单测、
+        # 全仓扫描、接线完整性（part 共享 library import）与两处反向判红。
+        "smoke_d4b_swallow.py",
+        # D6 门禁（2026-10-24）：补丁编号单点化。77 处 PATCHED 标记里 45 处不带
+        # P-NNN，PATCHES.md 号称唯一真相源却九套编号并存（拿代码里的 B5 去查表
+        # 查不到；P2.4 全仓只命中一处 PDF）。P-NNN 成为唯一权威标识，专项代号
+        # 降级为别名。含两种真实漏网形态（编号写在说明文字里 / 日期在编号前）的
+        # 判红断言——它们按行 grep 都看着"有编号"。
+        "smoke_d6_patch_ids.py",
+        # P-029/P-030 门禁（2026-10-24）：采样率域一致性 + 两个静默失效。
+        # 自研 DSP 链在 ASRC 之外却用工作率算系数 → 96k 下 filter -3dB 漂到
+        # 2000Hz、192k 漂到 3986Hz（对照组 vendor EQ 三档恒定）；eq.enable=0
+        # 关不掉 vendor EQ（上游 Enable 无 else）；多声道 IR（3/5/6/7/8ch）
+        # 曾"加载成功但无卷积"，现须显式拒绝。
+        "smoke_sr_rate_alignment.py",
         "smoke_eq_response.py",
         "smoke_latency_real_resource.py",
+        # §7-1 门禁（2026-10-24）：viz 帧的 Python 镜像单源。改造前
+        # tools/ 与 test/ 下各有 8 份彼此独立的手抄 ctypes 定义，ABI v1→v2
+        # 时漏改其中几份 → 脚本按旧尺寸申请缓冲、引擎按新尺寸写 → 静默堆
+        # 越界（审查 A1/A2/A3 三处其实是同一个 bug 的三个副本）。现在镜像
+        # 只在 tools/bin/viz_frame.py 定义一次，M1 抓第二份定义、M2 逐字段比
+        # 偏移（只比 sizeof 会放行"字段顺序错但总长凑巧相同"）、M3 管版本联动。
+        # 含四级反向判红 + 0xCD 哨兵包裹缓冲的越界活体守卫。
+        "smoke_g7_1_viz_mirror.py",
+        # §7-5 门禁（2026-10-24）：三座桥的 .def ↔ 头文件 ↔ Dart 绑定。实测
+        # 三桥全漂且方向不同：asio/vaio 各漏导出 slot_{set,get}_channels（Dart
+        # 硬 lookup，ASIO/VAIO 后端下插件槽构造即抛 ArgumentError 再被上层吞
+        # 掉）、vb 的 auto_protect/protect_test 一直在 .def 里导出而头文件没
+        # 声明。含活体层：真相源 DLL 必须真的导出 Dart 硬绑定符号（.def 改了
+        # 没重新编译，纯清单门禁照样绿——只有这一层能抓到）。
+        "smoke_g7_5_bridge_exports.py",
+        # E4 门禁（2026-10-24）：viz Stage 16 采样点跨模式同语义。MC 侧原在
+        # basspsycho 之后采样、stereo 在之前——同一 "BassMono" 槽两种模式量的
+        # 不是同一链位置，切模式该柱跳变（实测 pre-fix MC 虚高 1.47dB）。判红
+        # 原理：采样点在 basspsycho 之前 ⇔ bass 开/关两态 stage16 读数逐位相等；
+        # 另附输出 RMS 非空转证明与 stereo 回归守卫。
+        "smoke_e4_stage16_crossmode.py",
         "smoke_abi_consistency.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
@@ -144,6 +222,25 @@ def run_smoke_tests():
     "smoke_effects_allparams.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
+    # WP0 脚手架（多声道重构与混响边界 2026-10-25）：新参数默认/往返/越界拒绝、
+    # reverb.engine 只读与路径映射、stereo 逐位不变。后续 WP 的 smoke 骨架
+    # 一并登记（当前打印 SKIP 退出 0，实现后转真断言）。
+    "smoke_wp0_scaffold.py",
+    "smoke_reverb_boundary.py",
+    "smoke_mc_reverb.py",
+    "smoke_reverb_native_params.py",
+    "smoke_spatial_fdn_removed.py",
+    "smoke_mc_comp_persch.py",
+    "smoke_mc_eq_persch.py",
+    "smoke_bassmono_pairs.py",
+    "smoke_postgain_persch.py",
+    "smoke_channel_switch_reset.py",
+    # X-6 修复（2026-10-26）：dyneq/exciter no-LFE 默认掩码随 channels.count
+    # 按布局平移（4ch 0x0F / 6ch 0x37）+ 自定义掩码保留 + 4ch BR 音频级断言。
+    "smoke_channel_mask_default_follow.py",
+    "smoke_spatial_style_custom.py",
+    "smoke_eq_freq_clamp.py",
+    "smoke_vb_8x8_budget.py",
     "smoke_graph_order.py",
     "smoke_ddc.py",
         "test_editor_topology.py",

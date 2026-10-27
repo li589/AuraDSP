@@ -282,15 +282,24 @@ class _ResourceSlot extends StatelessWidget {
           children: [
             Icon(icon, size: 14, color: p.textDim),
             const SizedBox(width: 6),
-            Text(title, style: captionOf(p)),
-            const Spacer(),
-            if (detail != null)
+            // [PATCHED-AuraDSP P-032] 标题可能是一长串 IR 文件名 → 用
+            // Flexible + ellipsis 让它可压缩，不把右侧按钮挤出边界。
+            Flexible(
+              child: Text(
+                title,
+                style: captionOf(p),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+              ),
+            ),
+            if (detail != null) ...[
+              const SizedBox(width: AuraSpace.sm),
               Text(
                 detail!,
                 style: captionOf(p).copyWith(color: p.accent),
               ),
-            // 按钮与标题同行：文字左对齐、按钮右对齐。
-            const SizedBox(width: AuraSpace.sm),
+            ],
+            const Spacer(),
             Wrap(
               spacing: AuraSpace.sm,
               runSpacing: AuraSpace.sm,
@@ -840,12 +849,17 @@ class _Freeverb3DPainter extends CustomPainter {
     canvas.drawRect(Rect.fromLTWH(0, 0, w, h * 0.6), dampGrad);
   }
 
+  // [PATCHED-AuraDSP P-032] 用 epsilon 比较：引擎侧存的是 float32，UI 侧
+  // 是精确 double，回读往返必然带 ~1e-8 尾数差 → 用 != 判定会让 3D 图
+  // 在每次回读后无条件重绘一次（用户看到"图形跳两次"的另一半原因）。
+  static const double _eps = 1e-6;
+
   @override
   bool shouldRepaint(covariant _Freeverb3DPainter oldDelegate) =>
-      oldDelegate.decay != decay ||
-      oldDelegate.damp != damp ||
-      oldDelegate.roomSize != roomSize ||
-      oldDelegate.stereoWidth != stereoWidth ||
+      (oldDelegate.decay - decay).abs() > _eps ||
+      (oldDelegate.damp - damp).abs() > _eps ||
+      (oldDelegate.roomSize - roomSize).abs() > _eps ||
+      (oldDelegate.stereoWidth - stereoWidth).abs() > _eps ||
       oldDelegate.palette != palette ||
       oldDelegate.active != active;
 }

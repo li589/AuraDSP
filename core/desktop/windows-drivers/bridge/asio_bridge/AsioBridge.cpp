@@ -10,7 +10,8 @@
 //   （零锁零分配零 syscall；仅原子量 + scratch + engine process）。
 // - Dart 线程：start/stop/set_param/test/viz/status/detect（直接调，无一进 RT）。
 // - 停止时序（防 RT 踩已释放引擎，同 05 FreeTestFile 模式）：
-//   ASIOStop → 清 testKind + Sleep(50) 等在途回调 → dispose/exit → 毁引擎。
+//   ASIOStop → 清 testKind → 等 rtInBlock 归零（墙钟 3s 上界，超限则保留
+//   缓冲不 free）→ dispose/exit → 毁引擎。
 #include "AsioBridge.h"
 
 #include "PluginBridge.h"
@@ -43,6 +44,7 @@ void PathForJsonA(const std::string& in, char* out, size_t cap) {
 }
 
 using vmcore::FnEngCreate;
+using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
@@ -95,6 +97,9 @@ auraplugin::Mirror g_pluginMirror;
 void BridgeSink(void* ctx, float* in, float* out, int frames) {
     auto* c = static_cast<BridgeCtl*>(ctx);
     if (frames <= 0) return;
+    // D2：在途计数（下方有多条提前 return，用 RAII 保证成对；漏增会让
+    // stop 序列的排空等待立即通过 → free 掉 RT 仍在读的缓冲）。
+    vmcore::RtInBlockGuard inBlock(&c->tc.rtInBlock);
     const int ch = (c->ioCh >= 2) ? c->ioCh : 2;
     const size_t bytes = sizeof(float) * (size_t)ch * (size_t)frames;
     if (c->tc.testKind != 0) {
@@ -159,9 +164,15 @@ void DestroyEngine() {
 }
 
 void FreeTestFile() {
-    // 先清 kind 让 RT 停用，再等在途回调退出（~10ms 量级），最后释放（同 05）。
+    // D2：清 kind 后**确定性**等在途回调退出，替代原来的 Sleep(50) 猜测。
+    // 清 kind 后下一块回调不再触碰 testFile，故「rtInBlock 归零」即
+    // 「testFile 无人读」，可以安全 free。
     InterlockedExchange(&g_b.tc.testKind, 0);
-    Sleep(50);
+    if (!vmcore::WaitRtDrained(&g_b.tc.rtInBlock)) {
+        // 极端：3s 内 RT 没退出（驱动卡死 / 野指针）。此时 free 会踩在途读，
+        // 故整块保留不释放——与 B3 quarantine 同一哲学：可控泄漏换不可控崩溃。
+        return;
+    }
     if (g_b.tc.testFile) {
         free((void*)g_b.tc.testFile);
         g_b.tc.testFile = nullptr;
@@ -261,6 +272,8 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
     const std::string hint = (engine_dll && *engine_dll) ? engine_dll : "";
     g_b.engMod = vmcore::TryLoadEngine(hint, used);
     if (!used.empty()) g_b.enginePath = used;
+    FnEngAbi engAbiFn = nullptr;
+    unsigned engAbi = 0;
     if (g_b.engMod) {
         g_b.create = (FnEngCreate)GetProcAddress(g_b.engMod, "auradsp_create");
         g_b.process = (FnEngProcess)GetProcAddress(g_b.engMod, "auradsp_process");
@@ -268,10 +281,19 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
         g_b.setParam = (FnEngSetParam)GetProcAddress(g_b.engMod, "auradsp_set_param");
         g_b.getParam = (FnEngGetParam)GetProcAddress(g_b.engMod, "auradsp_get_param");
         g_b.vizRead = (FnEngVizRead)GetProcAddress(g_b.engMod, "auradsp_viz_read");
+        // [PATCHED-AuraDSP P-028 §7-2] 加载后强校验引擎 ABI（auradsp_abi 缺失也算不兼容）
+        engAbiFn = (FnEngAbi)GetProcAddress(g_b.engMod, "auradsp_abi");
+        engAbi = engAbiFn ? engAbiFn() : 0;
         g_pluginFns.Resolve(g_b.engMod);
     }
-    if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy) {
-        snprintf(g_b.note, sizeof(g_b.note), "engine-load-failed");
+    if (!g_b.engMod || !g_b.create || !g_b.process || !g_b.destroy ||
+        !engAbiFn || engAbi != vmcore::kEngineAbiExpected) {
+        if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
+            snprintf(g_b.note, sizeof(g_b.note),
+                     "engine-abi-mismatch: bridge=%u engine=%u",
+                     vmcore::kEngineAbiExpected, engAbi);
+        else
+            snprintf(g_b.note, sizeof(g_b.note), "engine-load-failed");
         DestroyEngine();
         g_b.startRc = -5;
         return -5;
@@ -489,12 +511,16 @@ int asio_get_param_str(const char* id, char* out, int cap) {
     return (int)strlen(out);
 }
 
-int asio_viz_read(void* out408, int count) {
-    if (!out408 || count <= 0) return -1;
+int asio_viz_read(void* out1600, int count) {
+    if (!out1600 || count <= 0) return -1;
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     if (!g_b.vizRead || !g_b.engine) return 0;
-    return (int)g_b.vizRead(g_b.engine, out408, (uint32_t)count);
+    return (int)g_b.vizRead(g_b.engine, out1600, (uint32_t)count);
 }
+
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
+// Dart/冒烟加载桥后与引擎 auradsp_abi() 比对，不一致即不得解析 viz 帧。
+unsigned asio_abi(void) { return vmcore::kEngineAbiExpected; }
 
 int asio_bypass(int on) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return -1;

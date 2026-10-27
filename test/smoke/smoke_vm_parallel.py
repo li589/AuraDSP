@@ -4,10 +4,13 @@
 驱动 vm_parallel_test.exe：两个同初态 PumpCtx 喂同一段确定性输入块序列，
 分别走串行/并行路径（唯一实现 ProcessGroupVm），逐块位级比对输出缓冲 +
 遥测终值精确相等 + 末块语义断言（变换/透传/mask/空指针组）+ 墙钟验证
-（8 组 × 250µs 假插件成本：并行应 <60% 串行）。
+（8 组 × 250µs 假插件成本：并行应 <60% 串行）+ B2 straggler 场景（worker
+卡死 → fan-in 2ms 截止 → 冻结 → 恢复，回调墙钟有界 / 无引擎重入 /
+parallelOn 不被 RT 改动 / 恢复后逐位一致）。
 
 机器无关性：位级/语义断言与核数无关；单核（workers==0）时并行退化为串行，
-exe 自动跳过墙钟断言只报 note——门禁仍应 PASS（降级路径本身被验证）。
+exe 自动跳过墙钟与 straggler 断言只报 note——门禁仍应 PASS（降级路径本身
+被验证）。
 """
 import json
 import os
@@ -73,6 +76,24 @@ if d is not None:
                   isinstance(ser, (int, float)) and isinstance(par, (int, float))
                   and par < ser,
                   'ser=%s par=%s' % (ser, par))
+
+        # ---- B2：straggler 场景（worker 卡死 → fan-in 截止 → 冻结 → 恢复）----
+        if d.get('stRan'):
+            check('straggler all ok', d.get('stOk') is True,
+                  'note=%s' % (d.get('stNote', ''),))
+            # 核心断言：fan-in 2ms 截止——回调墙钟有界（pre-B2 的 4×10^8
+            # 自旋 ≈ 4-12s / 卡死自愈 5s，反向验证据此判红）。4ms 期望值
+            # （RT 自认领 ~4 组 × 500µs + 2ms 截止），100ms 留 25× 裕量。
+            mx = d.get('stMaxCbMs', 0)
+            check('straggler fan-in bounded (max callback <100ms)',
+                  isinstance(mx, (int, float)) and 0 < mx < 100.0,
+                  'maxCbMs=%s' % (mx,))
+            check('straggler no engine re-entry', d.get('stReentered') is False)
+            check('straggler parallelOn intact (RT not mutate)',
+                  d.get('stParOn') == 1)
+            check('straggler hung group resumed', d.get('stResume') is True)
+        else:
+            print('NOTE straggler skipped: %s' % d.get('stNote', '?'))
 
 if FAIL:
     print('VMPARALLEL FAILURES:', FAIL)
