@@ -20,6 +20,7 @@ class LineNumberGutter extends StatefulWidget {
   final int activeLine;
   final ValueChanged<int> onSelectLine;
   final double lineHeight;
+  final double fontSize;
 
   const LineNumberGutter({
     super.key,
@@ -28,7 +29,8 @@ class LineNumberGutter extends StatefulWidget {
     required this.errorLines,
     required this.activeLine,
     required this.onSelectLine,
-    this.lineHeight = 18.75,
+    required this.lineHeight,
+    this.fontSize = 11.5,
   });
 
   @override
@@ -74,9 +76,9 @@ class _LineNumberGutterState extends State<LineNumberGutter> {
     final p = paletteOf(context);
     final count = widget.lineCount < 1 ? 1 : widget.lineCount;
 
-    // 自适应行号宽度：2 位数 38px，3 位数 46px，4+ 位数 54px
+    // 自适应行号宽度：随字号与行数位数动态调整
     final digits = count.toString().length;
-    final gutterWidth = (digits * 8.0 + 26.0).clamp(38.0, 60.0);
+    final gutterWidth = (digits * (widget.fontSize * 0.72) + 26.0).clamp(38.0, 90.0);
 
     return Container(
       width: gutterWidth,
@@ -117,16 +119,21 @@ class _LineNumberGutterState extends State<LineNumberGutter> {
                   padding: const EdgeInsets.only(right: 6),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       if (isError) ...[
-                        Icon(Icons.error_outline_rounded, size: 10, color: p.error),
+                        Icon(
+                          Icons.error_outline_rounded,
+                          size: (widget.fontSize * 0.85).clamp(8.0, 13.0),
+                          color: p.error,
+                        ),
                         const SizedBox(width: 2),
                       ],
                       Text(
                         '$lineNum',
-                        style: monoOf(p, size: 11.5, color: numColor).copyWith(
+                        style: monoOf(p, size: widget.fontSize, color: numColor).copyWith(
                           fontWeight: weight,
-                          height: 1.0,
+                          height: 1.5,
                         ),
                       ),
                     ],
