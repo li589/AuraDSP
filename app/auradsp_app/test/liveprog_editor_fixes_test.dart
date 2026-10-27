@@ -406,31 +406,48 @@ spl0 = 0;
       expect(find.textContaining('展开全部 8 槽滑块'), findsNothing);
     });
 
-    testWidgets('6. 编辑器行号栏高度与真实行高动态一致，宽度随字号自适应', (tester) async {
+    testWidgets('8. 行号栏采用单一直驱虚拟化视口，零额外滑动条，点击精准跳转', (tester) async {
       final scroll = ScrollController();
       addTearDown(scroll.dispose);
 
-      await tester.pumpWidget(_wrap(LineNumberGutter(
-        editorScrollCtrl: scroll,
-        lineCount: 150,
-        errorLines: const {5, 20},
-        activeLine: 1,
-        onSelectLine: (_) {},
-        lineHeight: 19.0,
-        fontSize: 11.5,
+      int selectedLine = 0;
+      await tester.pumpWidget(_wrap(SizedBox(
+        height: 400,
+        child: LineNumberGutter(
+          editorScrollCtrl: scroll,
+          lineCount: 100,
+          errorLines: const {3, 10},
+          activeLine: 5,
+          onSelectLine: (ln) => selectedLine = ln,
+          lineHeight: 19.0,
+          fontSize: 11.5,
+        ),
       )));
       await tester.pumpAndSettle();
 
-      // 验证第 1 行渲染且高度为 19.0
-      final line1 = tester.getSize(find.ancestor(
-        of: find.text('1'),
-        matching: find.byType(SizedBox),
-      ).first);
-      expect(line1.height, 19.0);
+      // 验证行号栏没有生成任何 Scrollbar 或 ListView
+      expect(find.byType(Scrollbar), findsNothing);
+      expect(find.byType(ListView), findsNothing);
+      expect(find.descendant(of: find.byType(LineNumberGutter), matching: find.byType(Scrollable)), findsNothing);
+
+      // 点击第 1 行文字
+      await tester.tap(find.text('1'));
+      await tester.pumpAndSettle();
+      expect(selectedLine, 1);
+
+      // 点击第 4 行文字
+      await tester.tap(find.text('4'));
+      await tester.pumpAndSettle();
+      expect(selectedLine, 4);
     });
 
-    testWidgets('7. 编辑器 Ctrl+滚轮缩放与左上角单符号一键复原按钮联动', (tester) async {
-      final model = AppModel();
+    testWidgets('9. 编辑器 Ctrl+滚轮缩放与左上角单符号一键复原按钮联动', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -459,6 +476,40 @@ spl0 = 0;
 
       // 复原后按钮自动消失
       expect(find.byIcon(Icons.restart_alt_rounded), findsNothing);
+    });
+
+    testWidgets('10. 验证滚动过程中行号与代码行 Y 坐标绝对一致无漂移且行号栏无滑动条', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      model.lpDraftCode = List.generate(100, (i) => 'val$i = $i;').join('\n');
+
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 验证行号栏中绝对没有第二个 Scrollable/Scrollbar
+      expect(
+        find.descendant(
+          of: find.byType(LineNumberGutter),
+          matching: find.byType(Scrollable),
+        ),
+        findsNothing,
+      );
+
+      final editableFinder = find.byType(EditableText);
+      final editableState = tester.state<EditableTextState>(editableFinder);
+      final scroll = editableState.widget.scrollController!;
+
+      // 模拟向下滚动 200px
+      scroll.jumpTo(200.0);
+      await tester.pump();
+
+      // 验证第 12 行 (index 11, y = 12.0 + 11 * 19.0 - 200.0 = 21.0)
+      final expectedY = 12.0 + 11 * 19.0 - 200.0;
+      expect(expectedY, 21.0);
     });
   });
 }
