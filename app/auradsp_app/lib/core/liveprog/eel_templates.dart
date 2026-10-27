@@ -34,7 +34,6 @@ class EelTemplates {
 slider1:0<-24,12,0.5>Master Trim (dB)
 
 @init
-srate = (srate > 0) ? srate : 48000;
 dbg = 1;
 
 @slider
@@ -57,7 +56,6 @@ spl1 *= gain;
 slider1:100<0,200,1>Stereo Width (%)
 
 @init
-srate = (srate > 0) ? srate : 48000;
 INV_SQRT2 = 0.7071067811865475;
 
 @slider
@@ -87,7 +85,6 @@ slider2:3.0<-18,18,0.5>Gain (dB)
 slider3:1.41<0.1,10,0.05>Q Factor
 
 @init
-srate = (srate > 0) ? srate : 48000;
 PI = 3.141592653589793;
 
 function calc_biquad(freq, q, gain_db) instance(b0, b1, b2, a1, a2) (
@@ -139,7 +136,8 @@ slider1:1.0<1.0,10.0,0.1>Drive
 slider2:0.0<-12.0,6.0,0.5>Output Trim (dB)
 
 @init
-srate = (srate > 0) ? srate : 48000;
+drive = 1.0;
+post_gain = 1.0;
 
 @slider
 drive = slider1;
@@ -162,7 +160,6 @@ spl1 = tanh(spl1 * drive) * post_gain;
 slider1:-20<-60,0,1>Noise Level (dBFS)
 
 @init
-srate = (srate > 0) ? srate : 48000;
 mem = 0;
 InitPinkNoise(mem, 16);
 
@@ -189,7 +186,6 @@ slider2:0<-12,12,0.5>Mid Gain (dB)
 slider3:0<-12,12,0.5>High Gain (dB)
 
 @init
-srate = (srate > 0) ? srate : 48000;
 sp_mem = 0;
 IIRBandSplitterInit(sp_mem, 250, 3500);
 

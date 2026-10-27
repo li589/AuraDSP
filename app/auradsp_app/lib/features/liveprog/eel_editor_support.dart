@@ -34,12 +34,21 @@ class EelLintIssue {
 class EelSyntaxTextEditingController extends TextEditingController {
   EelSyntaxTextEditingController({super.text});
 
+  Set<int> _errorLines = const {};
+  Set<int> get errorLines => _errorLines;
+  set errorLines(Set<int> value) {
+    if (_errorLines != value) {
+      _errorLines = value;
+      notifyListeners();
+    }
+  }
+
   static final RegExp _syntaxRegex = RegExp(
     r'(?<comment>/\*[\s\S]*?\*/|//[^\n]*)'
     r'|(?<string>"(\\.|[^"\\])*")'
     r'|(?<directive>@(init|sample|slider|block)\b)'
     r'|(?<keyword>\b(if|else|while|loop|function|local|global|instance)\b)'
-    r'|(?<variable>\b(spl[01]|slider[1-8]|srate|num_ch|tempo|play_state)\b)'
+    r'|(?<variable>\b(spl[01]|slider\d+|srate|num_ch|tempo|play_state)\b)'
     r'|(?<func>\b(sin|cos|tan|asin|acos|atan|atan2|sinh|cosh|tanh|sqrt|log|log10|exp|abs|min|max|floor|ceil|sign|rand|freembuf|memcpy|memset)\b)'
     r'|(?<number>\b\d+(\.\d+)?([eE][+-]?\d+)?\b|0x[0-9a-fA-F]+|\$[0-9a-fA-F]+)',
     multiLine: true,
@@ -58,6 +67,7 @@ class EelSyntaxTextEditingController extends TextEditingController {
 
     final spans = <TextSpan>[];
     var lastIndex = 0;
+    var currentLine = 1;
 
     // 语法色彩方案（现代深色编程高对比质感）
     const commentStyle = TextStyle(
@@ -86,12 +96,46 @@ class EelSyntaxTextEditingController extends TextEditingController {
       color: Color(0xFFFFA657),
     );
 
+    // 错误行醒目标红样式（行背景柔红 + 波浪红下划线，直接直观飘红）
+    const errorDecoration = TextStyle(
+      backgroundColor: Color(0x38FF4D4D),
+      decoration: TextDecoration.underline,
+      decorationColor: Color(0xFFFF4D4D),
+      decorationStyle: TextDecorationStyle.wavy,
+    );
+
+    void addPiece(String piece, TextStyle? tokenStyle) {
+      if (piece.isEmpty) return;
+      if (!piece.contains('\n')) {
+        final isErr = _errorLines.contains(currentLine);
+        var finalStyle = style?.merge(tokenStyle) ?? tokenStyle;
+        if (isErr) {
+          finalStyle = (finalStyle ?? const TextStyle()).merge(errorDecoration);
+        }
+        spans.add(TextSpan(text: piece, style: finalStyle));
+      } else {
+        final parts = piece.split('\n');
+        for (var i = 0; i < parts.length; i++) {
+          if (i > 0) {
+            currentLine++;
+            spans.add(const TextSpan(text: '\n'));
+          }
+          final part = parts[i];
+          if (part.isNotEmpty) {
+            final isErr = _errorLines.contains(currentLine);
+            var finalStyle = style?.merge(tokenStyle) ?? tokenStyle;
+            if (isErr) {
+              finalStyle = (finalStyle ?? const TextStyle()).merge(errorDecoration);
+            }
+            spans.add(TextSpan(text: part, style: finalStyle));
+          }
+        }
+      }
+    }
+
     for (final match in _syntaxRegex.allMatches(textVal)) {
       if (match.start > lastIndex) {
-        spans.add(TextSpan(
-          text: textVal.substring(lastIndex, match.start),
-          style: style,
-        ));
+        addPiece(textVal.substring(lastIndex, match.start), null);
       }
 
       TextStyle? matchedStyle;
@@ -111,19 +155,12 @@ class EelSyntaxTextEditingController extends TextEditingController {
         matchedStyle = numberStyle;
       }
 
-      spans.add(TextSpan(
-        text: match.group(0),
-        style: style?.merge(matchedStyle) ?? matchedStyle,
-      ));
-
+      addPiece(match.group(0)!, matchedStyle);
       lastIndex = match.end;
     }
 
     if (lastIndex < textVal.length) {
-      spans.add(TextSpan(
-        text: textVal.substring(lastIndex),
-        style: style,
-      ));
+      addPiece(textVal.substring(lastIndex), null);
     }
 
     return TextSpan(children: spans);
@@ -133,7 +170,8 @@ class EelSyntaxTextEditingController extends TextEditingController {
 /// 进阶代码格式化器
 abstract final class EelFormatter {
   /// 格式化：层级缩进、操作符规范化、分号规整与赋值对齐
-  static String format(String src) {
+  /// 默认使用 2 空格软 Tab 缩进，支持 EEL2 函数括号块与花括号块
+  static String format(String src, {String indent = '  '}) {
     if (src.isEmpty) return src;
     final lines = src.replaceAll('\r\n', '\n').split('\n');
     final processedLines = <String>[];
@@ -146,7 +184,7 @@ abstract final class EelFormatter {
       // 清理分号前多余空格: a = 1 ; -> a = 1;
       l = l.replaceAll(RegExp(r'\s+;'), ';');
 
-      final isSection = l.startsWith('@');
+      final isSection = l.startsWith('@') || l.startsWith('desc:');
       final isCommentOnly = l.startsWith('//') || l.startsWith('/*');
 
       // 非纯注释行规整常用赋值与双目操作符周围的空格
@@ -154,41 +192,107 @@ abstract final class EelFormatter {
         l = _formatOperatorsInLine(l);
       }
 
-      final opens = '{'.allMatches(l).length;
-      final closes = '}'.allMatches(l).length;
+      // 提取纯代码部分用于判断括号/块的开启与闭合（忽略注释和字符串）
+      final stripped = _stripCodeForIndent(l);
+
+      // 计算本行块开闭符号增量
+      final delta = _countDelimDelta(stripped);
 
       var printDepth = depth;
-      var nextDepth = depth;
-      if (l.startsWith('}')) printDepth = (depth - 1).clamp(0, 64);
+      var nextDepth = depth + delta;
+
+      // 如果当前行是以闭合符（如 } 或 ); 或 )）开头，则当前行自身缩进退回一层
+      final isCloser = RegExp(r'^(\}|(\);?|\)))').hasMatch(l);
+      final isCloserAndOpener =
+          RegExp(r'^(\}|(\);?|\)))\s*(else|:)\s*(\{|\()').hasMatch(l);
+
+      if (isCloser || isCloserAndOpener) {
+        printDepth = (depth - 1).clamp(0, 64);
+      }
+
       if (isSection) {
         printDepth = 0;
         nextDepth = 0;
+        depth = 0;
       }
 
-      processedLines.add(l.isEmpty ? '' : '\t' * printDepth + l);
-
-      final net = opens - closes;
-      if (net != 0) nextDepth = (nextDepth + net).clamp(0, 64);
-      depth = nextDepth;
+      processedLines.add(l.isEmpty ? '' : (indent * printDepth) + l);
+      depth = nextDepth.clamp(0, 64);
     }
 
     return _alignAssignments(processedLines).join('\n');
   }
 
+  /// 剥离行内字符串与注释，避免括号配对受干扰
+  static String _stripCodeForIndent(String line) {
+    var s = line;
+    final commentIdx = s.indexOf('//');
+    if (commentIdx >= 0) s = s.substring(0, commentIdx);
+    // 移除字符串内容
+    s = s.replaceAll(RegExp(r'"(\\.|[^"\\])*"'), '""');
+    // 移除多行注释片段
+    s = s.replaceAll(RegExp(r'/\*.*?\*/'), '');
+    return s;
+  }
+
+  /// 计算本行开启符与闭合符的净增量 (包括 { } 以及函数/控制语句括号 ( ) )
+  static int _countDelimDelta(String stripped) {
+    var opens = 0;
+    var closes = 0;
+    for (var i = 0; i < stripped.length; i++) {
+      final ch = stripped[i];
+      if (ch == '(' || ch == '{') opens++;
+      if (ch == ')' || ch == '}') closes++;
+    }
+    return opens - closes;
+  }
+
   /// 单行操作符周围规范化空格
   static String _formatOperatorsInLine(String line) {
-    // 保护字符串和行内注释
+    // 保护行内注释
     final commentIdx = line.indexOf('//');
     String codePart = commentIdx >= 0 ? line.substring(0, commentIdx) : line;
     final commentPart = commentIdx >= 0 ? line.substring(commentIdx) : '';
 
-    // 复合运算符与常见运算符空格规整
-    // 先暂存 ==, !=, <=, >=, +=, -=, *=, /=
-    codePart = codePart
-        .replaceAll(RegExp(r'\s*([+\-*/%]=)\s*'), ' \$1 ')
-        .replaceAll(RegExp(r'\s*(==|!=|<=|>=)\s*'), ' \$1 ')
-        .replaceAll(RegExp(r'(?<![=!<>+\-*/%])\s*=\s*(?![=])'), ' = ')
-        .replaceAll(RegExp(r'\s*,\s*'), ', ');
+    // 保护字符串（防止字符串内的 == 或 = 或 , 被误动）
+    final strings = <String>[];
+    codePart = codePart.replaceAllMapped(RegExp(r'"(\\.|[^"\\])*"'), (m) {
+      strings.add(m.group(0)!);
+      return '__STR_${strings.length - 1}__';
+    });
+
+    // 复合赋值运算符与关系运算符：必须使用 replaceAllMapped 正确展开捕获组，
+    // 原 Dart replaceAll 无法解析 $1 导致代码损坏变成 literal $1！
+    codePart = codePart.replaceAllMapped(
+      RegExp(r'\s*([+\-*/%]=)\s*'),
+      (m) => ' ${m[1]} ',
+    );
+    codePart = codePart.replaceAllMapped(
+      RegExp(r'\s*(==|!=|<=|>=)\s*'),
+      (m) => ' ${m[1]} ',
+    );
+
+    // 单赋值运算符 = （排除已处理好的 ==, !=, <=, >=, +=, -=, *=, /=, %=）
+    codePart = codePart.replaceAll(
+      RegExp(r'(?<![=!<>+\-*/%])\s*=\s*(?![=])'),
+      ' = ',
+    );
+
+    // 逗号后补规范空格
+    codePart = codePart.replaceAll(RegExp(r'\s*,\s*'), ', ');
+
+    // 还原受保护字符串
+    for (var k = 0; k < strings.length; k++) {
+      codePart = codePart.replaceAll('__STR_${k}__', strings[k]);
+    }
+
+    // 清理连续多余空格（单行内，但保留前导空格）
+    final leadingSpaces =
+        RegExp(r'^[\t ]*').matchAsPrefix(codePart)?.group(0) ?? '';
+    final rest = codePart
+        .substring(leadingSpaces.length)
+        .replaceAll(RegExp(r'[ ]{2,}'), ' ');
+    codePart = '$leadingSpaces$rest';
 
     return commentPart.isNotEmpty ? '$codePart $commentPart' : codePart;
   }
@@ -242,11 +346,23 @@ abstract final class EelFormatter {
     if (trimmed.isEmpty || trimmed.startsWith('//') || trimmed.startsWith('@')) {
       return false;
     }
-    if (trimmed.contains('{') || trimmed.contains('}') || trimmed.contains('if ') || trimmed.contains('while ')) {
+    if (trimmed.contains('{') ||
+        trimmed.contains('}') ||
+        trimmed.contains('if ') ||
+        trimmed.contains('while ') ||
+        trimmed.contains('+=') ||
+        trimmed.contains('-=') ||
+        trimmed.contains('*=') ||
+        trimmed.contains('/=') ||
+        trimmed.contains('%=') ||
+        trimmed.contains('==') ||
+        trimmed.contains('!=') ||
+        trimmed.contains('<=') ||
+        trimmed.contains('>=')) {
       return false;
     }
     final eqCount = '='.allMatches(trimmed).length;
-    return eqCount == 1 && !trimmed.contains('==') && !trimmed.contains('!=') && !trimmed.contains('<=') && !trimmed.contains('>=');
+    return eqCount == 1;
   }
 }
 
@@ -332,7 +448,8 @@ abstract final class EelLinter {
             ? '{'
             : (ch == ')' ? '(' : '[');
         if (stack.isEmpty || stack.last.$1 != want) {
-          issues.add(EelLintIssue(line, col, t.eelUnmatchedClose(ch)));
+          issues.add(EelLintIssue(line, col, t.eelUnmatchedClose(ch),
+              blocking: true));
         } else {
           stack.removeLast();
         }
@@ -345,10 +462,12 @@ abstract final class EelLinter {
     }
 
     if (inBlockComment) {
-      issues.add(EelLintIssue(0, 0, t.eelBlockCommentUnclosed));
+      issues.add(EelLintIssue(0, 0, t.eelBlockCommentUnclosed,
+          blocking: true));
     }
     for (final (ch, l, c) in stack.reversed) {
-      issues.add(EelLintIssue(l, c, t.eelUnclosedQuote(ch, l, c)));
+      issues.add(EelLintIssue(l, c, t.eelUnclosedQuote(ch, l, c),
+          blocking: true));
     }
     issues.addAll(_structuralChecks(t, src));
     issues.sort((a, b) => a.line.compareTo(b.line));
@@ -459,14 +578,6 @@ abstract final class EelLinter {
       }
     }
 
-    // sliderN（N>8）：EEL 会放行编译，但宿主只有 slider1..8，值永远到不了。
-    for (final m in RegExp(r'\bslider(\d+)\b').allMatches(code)) {
-      final n = int.tryParse(m.group(1) ?? '');
-      if (n != null && n > 8) {
-        issues.add(EelLintIssue(
-            lineOf(m.start), 0, t.eelSliderRange(n)));
-      }
-    }
 
     // 只读变量赋值：srate / num_ch 由宿主提供，赋值无效果。
     for (final m

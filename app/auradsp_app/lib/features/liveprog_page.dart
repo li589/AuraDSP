@@ -35,6 +35,7 @@ import 'liveprog/eel_manual_panel.dart';
 import 'liveprog/equalizer_apo_dialog.dart';
 import 'liveprog/find_replace_bar.dart';
 import 'liveprog/library/liveprog_library_dialog.dart';
+import 'liveprog/line_number_gutter.dart';
 import 'liveprog/liveprog_library.dart';
 import 'liveprog/new_script_wizard_dialog.dart';
 import 'liveprog/sliders/liveprog_sliders_panel.dart';
@@ -140,12 +141,19 @@ class _LiveprogPageState extends State<LiveprogPage> {
     super.dispose();
   }
 
-  /// 引擎回了编译结果（成功或失败）→ 松开状态。
+  /// 引擎回了编译结果（成功或失败）→ 松开状态并刷新错误飘红
   void _onModelTick() {
     if (_compiling &&
         (widget.model.lpStatus == 1 || widget.model.lpError != null)) {
       _compileFallback?.cancel();
-      if (mounted) setState(() => _compiling = false);
+      if (mounted) {
+        setState(() {
+          _compiling = false;
+          _updateErrorLines();
+        });
+      }
+    } else if (mounted) {
+      _updateErrorLines();
     }
   }
 
@@ -184,7 +192,51 @@ class _LiveprogPageState extends State<LiveprogPage> {
   }
 
   void _runLint() {
-    setState(() => _issues = EelLinter.lint(l10nOf(context), _code.text));
+    final issues = EelLinter.lint(l10nOf(context), _code.text);
+    setState(() {
+      _issues = issues;
+      _updateErrorLines();
+    });
+  }
+
+  /// 收集当前代码的错误行（词法检查 + 引擎编译报错行），驱动行号栏和代码行醒目标红
+  void _updateErrorLines() {
+    final lines = <int>{};
+    final st = widget.model.lpStatus;
+    final err = widget.model.lpError;
+    final hasCompiledCleanly = st == 1 && err == null && !_isCodeDirty;
+
+    // 若当前代码在引擎中已编译成功且未被修改，则不产生报错飘红
+    if (!hasCompiledCleanly) {
+      for (final issue in _issues) {
+        if (issue.line > 0 && issue.blocking) {
+          lines.add(issue.line);
+        }
+      }
+    }
+    if (st < 0 || (st == 0 && err != null)) {
+      if (err != null) {
+        // l10n-ignore
+        final match =
+            RegExp(r'(?:line|Line|\u7b2c)\s*(\d+)', caseSensitive: false)
+                .firstMatch(err);
+        if (match != null) {
+          final ln = int.tryParse(match.group(1) ?? '');
+          if (ln != null && ln > 0) lines.add(ln);
+        }
+      }
+      if (lines.isEmpty) {
+        final text = _code.text;
+        final target = st == -1 ? '@init' : (st == -3 ? '@sample' : null);
+        if (target != null) {
+          final idx = text.indexOf(target);
+          if (idx >= 0) {
+            lines.add(text.substring(0, idx).split('\n').length);
+          }
+        }
+      }
+    }
+    _code.errorLines = lines;
   }
 
   void _gotoLine(int line) {
@@ -229,20 +281,37 @@ class _LiveprogPageState extends State<LiveprogPage> {
     }
   }
 
+  /// 插入 Soft Tab（2 空格）或退格缩进，解决 Flutter 默认原生 Tab 渲染为 1 空格的问题
   void _insertTab({required bool indentLess}) {
     final text = _code.text;
     final sel = _code.selection;
     if (!sel.isValid || sel.isCollapsed) {
       if (!indentLess) {
         final pos = sel.baseOffset.clamp(0, text.length);
-        final newText = '${text.substring(0, pos)}\t${text.substring(pos)}';
+        final newText = '${text.substring(0, pos)}  ${text.substring(pos)}';
         _code.value = TextEditingValue(
           text: newText,
-          selection: TextSelection.collapsed(offset: pos + 1),
+          selection: TextSelection.collapsed(offset: pos + 2),
         );
       } else {
         final lineStart = text.lastIndexOf('\n', sel.baseOffset - 1) + 1;
-        if (text.startsWith('\t', lineStart)) {
+        if (text.startsWith('  ', lineStart)) {
+          final newText = text.substring(0, lineStart) +
+              text.substring(lineStart + 2);
+          _code.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(
+                offset: (sel.baseOffset - 2).clamp(0, newText.length)),
+          );
+        } else if (text.startsWith(' ', lineStart)) {
+          final newText = text.substring(0, lineStart) +
+              text.substring(lineStart + 1);
+          _code.value = TextEditingValue(
+            text: newText,
+            selection: TextSelection.collapsed(
+                offset: (sel.baseOffset - 1).clamp(0, newText.length)),
+          );
+        } else if (text.startsWith('\t', lineStart)) {
           final newText = text.substring(0, lineStart) +
               text.substring(lineStart + 1);
           _code.value = TextEditingValue(
@@ -252,6 +321,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
           );
         }
       }
+      _onCodeChanged(_code.text);
       return;
     }
     final start = sel.start.clamp(0, text.length);
@@ -261,9 +331,12 @@ class _LiveprogPageState extends State<LiveprogPage> {
     final lines = affected.split('\n');
     final rebuilt = lines.map((l) {
       if (indentLess) {
-        return l.startsWith('\t') ? l.substring(1) : l;
+        if (l.startsWith('  ')) return l.substring(2);
+        if (l.startsWith(' ')) return l.substring(1);
+        if (l.startsWith('\t')) return l.substring(1);
+        return l;
       }
-      return '\t$l';
+      return '  $l';
     }).join('\n');
     final newText = text.substring(0, lineStart) +
         rebuilt +
@@ -275,7 +348,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
         extentOffset: lineStart + rebuilt.length,
       ),
     );
-    _runLint();
+    _onCodeChanged(newText);
   }
 
   /// 纯编译代码并载入虚拟机（应用状态下禁止编译；异常文本隔离）
@@ -881,6 +954,14 @@ dbg = 0;
                       ),
                       VerticalDivider(width: 1, thickness: 1, color: p.hairline),
                     ],
+                    LineNumberGutter(
+                      editorScrollCtrl: _editorScrollCtrl,
+                      lineCount: _code.text.split('\n').length,
+                      errorLines: _code.errorLines,
+                      activeLine: _cursorLine,
+                      onSelectLine: _gotoLine,
+                      lineHeight: 18.75,
+                    ),
                     Expanded(
                       child: CallbackShortcuts(
                         bindings: <ShortcutActivator, VoidCallback>{
@@ -910,7 +991,8 @@ dbg = 0;
                               scrollController: _editorScrollCtrl,
                               maxLines: null,
                               expands: true,
-                              style: monoOf(p, size: 12.5, color: p.text),
+                              style: monoOf(p, size: 12.5, color: p.text)
+                                  .copyWith(height: 1.5),
                               decoration: const InputDecoration(
                                 border: InputBorder.none,
                                 contentPadding: EdgeInsets.all(AuraSpace.md),

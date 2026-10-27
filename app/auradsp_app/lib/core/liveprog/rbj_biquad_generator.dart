@@ -74,7 +74,6 @@ class RbjBiquadGenerator {
     // 2. @init 段：定义常量、RBJ 函数和初始化滤波器系数
     sb.writeln('@init');
     sb.writeln('PI = 3.141592653589793;');
-    sb.writeln('srate = (srate > 0) ? srate : 48000; // Sample rate fallback guard');
     sb.writeln();
 
     // 2.1 增益计算
