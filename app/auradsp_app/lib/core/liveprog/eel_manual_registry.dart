@@ -67,7 +67,7 @@ class EelManualRegistry {
       descZh: '在脚本载入、采样率改变或引擎重置时执行一次。必须包含至少一条有效语句。',
       descEn: 'Executes once when script loads or sample rate changes. Must contain at least one statement.',
       returnDesc: 'void',
-      snippet: '@init\nsrate = (srate > 0) ? srate : 48000;\ndbg = 0;',
+      snippet: '@init\ndbg = 0;\nfs = srate;',
     ),
     const EelManualEntry(
       name: '@sample',
@@ -152,10 +152,10 @@ class EelManualRegistry {
       signature: 'srate',
       summaryZh: '当前音频采样率 (Hz)',
       summaryEn: 'Current sample rate in Hz',
-      descZh: '系统内置只读寄存器，表示当前音频硬件的采样率（如 48000）。建议加入非零保护。',
-      descEn: 'Hardware sample rate in Hz (e.g., 48000).',
+      descZh: '系统内置只读寄存器，表示当前音频硬件的采样率（如 48000）。由宿主传入，脚本内不可对其赋值。',
+      descEn: 'Hardware sample rate in Hz (e.g., 48000). Provided by host and read-only.',
       returnDesc: 'float',
-      snippet: 'srate = (srate > 0) ? srate : 48000;',
+      snippet: 'w0 = 2 * 3.14159265 * freq / srate;',
     ),
     const EelManualEntry(
       name: 'slider1..slider8',
