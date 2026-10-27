@@ -185,7 +185,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setApoUnregistered =>
-      'APO hook safely removed; original system/vendor drivers restored';
+      'APO hook safely removed; original audio drivers restored';
 
   @override
   String get setApoUnregisterFailed => 'APO uninstall incomplete';
@@ -222,7 +222,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setInstallDriverUacPrompt =>
-      'Bringing up the Windows UAC prompt; click “Yes” to allow the driver installation...';
+      'Requesting administrator permission; please approve the system prompt to install audio driver components...';
 
   @override
   String get setVaioInstallOk =>
@@ -255,7 +255,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get setAsioRegisterPrompt =>
-      'Bringing up the Windows UAC prompt to register the virtual ASIO driver...';
+      'Requesting administrator permission to register virtual audio driver components...';
 
   @override
   String get setAsioRegisterOk =>
@@ -415,7 +415,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get eelEmptyInit =>
-      'Empty @init section (vendor requires at least one statement)';
+      'Empty @init section (@init requires at least one statement or variable initialization)';
 
   @override
   String get eelEmptySample =>
@@ -496,7 +496,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get ioVaioGuide =>
-      'In Windows Sound settings or your player, set the default output to \"AuraVAIO\"; audio then enters the AuraDSP pipeline via this virtual input.';
+      'In system sound settings or your media player, select \"AuraVAIO\" as the default output device to route audio through AuraDSP.';
 
   @override
   String get ioAsioChannelLabel => 'Input channels';
@@ -770,7 +770,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reverbEngineLabel => 'Engine';
 
   @override
-  String get reverbEngineStereo => 'Stereo (Vendor)';
+  String get reverbEngineStereo => 'Stereo';
 
   @override
   String get reverbEngineMc => 'Multichannel FDN';
@@ -780,7 +780,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reverbEngineInfo =>
-      'Reverb follows the current channel path: matrix/binaural uses the vendor Progenitor2 stereo reverb; discrete multichannel uses an 8-line FDN. The two never run together.';
+      'Reverb automatically adapts to the channel topology: stereo and binaural paths use classic dual-channel diffusion reverb, while discrete multichannel configurations engage an 8-delay-line Feedback Delay Network (FDN).';
 
   @override
   String get reverbLfe => 'LFE into reverb';
@@ -850,7 +850,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vbPluginTooltip =>
-      'Check = mounted plugins process this bus (vendor FX unaffected)';
+      'Checked: mounted plugins process this bus (built-in DSP effects unaffected)';
 
   @override
   String get vbPluginLockedHint =>
@@ -1892,7 +1892,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get bassModeTooltip =>
-      'Bass modes:\n• Natural: vendor boost only, no harmonics\n• Pure Bass+: light harmonics (0.35), clean body\n• Sub-woofer: heavy harmonics (0.7), deep bass on small drivers';
+      'Bass acoustic modes:\n• Natural: Pure linear dynamic bass boost with zero harmonic coloration, preserving original transients\n• Pure Bass+: Generates subtle even harmonics to enhance warmth and body contouring\n• Sub-woofer: Deep subharmonic synthesis for profound bass extension on compact drivers';
 
   @override
   String get bassCutoff => 'Cutoff Scope';
@@ -1975,7 +1975,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get sysTitle => 'System';
 
   @override
-  String get sysHint => 'Tray residency and launch at login (Windows)';
+  String get sysHint => 'System tray residency and launch at startup';
 
   @override
   String get sysTray => 'Minimize to tray';
@@ -1995,7 +1995,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sysAutostartHint =>
-      'Start AuraDSP automatically when you sign in to Windows';
+      'Start AuraDSP automatically when signing in to the system';
 
   @override
   String get latUnmeasured => 'Unmeasured';
@@ -2242,14 +2242,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spatialHint =>
-      'Virtual 5.0 layout plus early reflections — room sound on headphones. Reverb / IR / soundstage cards live here now';
+      'Recreates a virtual multi-speaker acoustic room with physical early reflections over headphones, delivering a spacious out-of-head listening experience.';
 
   @override
   String get spatialStyle => 'Style';
 
   @override
   String get spatialStyleInfo =>
-      'Style is a preset group: switching overwrites Room / Width / Center';
+      'Curated spatial presets: instantly applies calibrated room reflections, speaker width, and vocal focus.';
 
   @override
   String get spatialStyleCinema => 'Cinema';
@@ -2268,33 +2268,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spatialRoomInfo =>
-      'Early-reflection level and time scaling. 0 is dry, 1 is a large room';
+      'Room acoustic volume and early reflection strength: 0 for free-field, higher values expand room boundary reflections.';
 
   @override
   String get spatialWidth => 'Width';
 
   @override
   String get spatialWidthInfo =>
-      'Speaker spread scaling. Steers the far ear only, near ear stays direct';
+      'Soundstage width and speaker aperture: expands stereo boundary for immersive out-of-head projection.';
 
   @override
   String get spatialCenter => 'Center';
 
   @override
-  String get spatialCenterInfo => 'Center focus: dialogue and vocal energy';
+  String get spatialCenterInfo =>
+      'Center vocal imaging and dialogue focus: enhances solidity and clarity of phantom center vocals.';
 
   @override
   String get spatialOutGain => 'Output';
 
   @override
-  String get spatialOutGainInfo => 'Spatial stage output trim';
+  String get spatialOutGainInfo =>
+      'Spatial output gain trim compensation (-12 to +6 dB).';
 
   @override
   String get spatialAutoGain => 'Auto gain';
 
   @override
   String get spatialAutoGainInfo =>
-      'Rides input loudness (same follower as reverb)';
+      'Equal-loudness calibration: continuously matches input energy to prevent unexpected volume shifts.';
 
   @override
   String get spatialMix => 'Spatial mix';
@@ -2420,7 +2422,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpManualContent =>
-      '【Audio Stream Registers】\n• spl0: Left channel sample (float, nominal ±1.0)\n• spl1: Right channel sample (float, nominal ±1.0)\n• srate: Active audio device sample rate (Hz)\n\n【Sliders】\n• slider1 ~ slider8: Interactive dynamic slider variables (default 0.0 ~ 1.0)\n\n【Sections】\n• @init: Runs once on load/reset (needs at least one statement)\n• @slider: Triggered on user slider change\n• @sample: Real-time per-sample DSP loop';
+      '【Audio Stream Registers】\n• spl0: Left channel sample (float, nominal ±1.0)\n• spl1: Right channel sample (float, nominal ±1.0)\n• srate: Active audio device sample rate (Hz)\n\n【Sliders】\n• slider1 ~ slider8: Interactive dynamic slider variables (default 0.0 ~ 1.0)\n\n【Sections】\n• @init: Runs once on load/reset (requires at least one statement or variable initialization)\n• @slider: Triggered on user slider change\n• @sample: Real-time per-sample DSP loop';
 
   @override
   String get lpEditorTooltip =>
@@ -2481,10 +2483,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get chainStagePreDsp => 'Pre-DSP';
 
   @override
-  String get chainStagePreVendor => 'Pre-Vendor';
+  String get chainStagePreVendor => 'Pre-DSP Chain';
 
   @override
-  String get chainStagePostVendor => 'Post-Vendor';
+  String get chainStagePostVendor => 'Post-DSP Chain';
 
   @override
   String get chainStagePostReverb => 'Post-Reverb';
@@ -2753,7 +2755,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plugCustomEmpty =>
-      'No custom folders yet. Besides system defaults (C:\\Program Files\\Common Files\\VST3 etc.), add via top-right.';
+      'No custom folders yet. Standard system audio plugin directories are scanned automatically. Click top-right to add custom locations.';
 
   @override
   String plugMountTitle(int n) {

@@ -253,8 +253,8 @@ class _SpatialStagePainter extends CustomPainter {
     )..layout();
     titleTp.paint(canvas, const Offset(12.0, 10.0));
 
-    final widthPct = (width * 100).toInt();
-    final roomPct = (room * 100).toInt();
+    final widthPct = (width * 100).round();
+    final roomPct = (room * 100).round();
     final metricTp = TextPainter(
       text: TextSpan(
         text: 'WIDTH $widthPct% · ROOM $roomPct%',

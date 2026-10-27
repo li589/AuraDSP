@@ -213,8 +213,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setInstallDriverUac => 'UAC提权安装驱动';
 
   @override
-  String get setInstallDriverUacPrompt =>
-      '正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...';
+  String get setInstallDriverUacPrompt => '正在唤起系统管理员授权，请在系统提示中点击允许安装驱动组件...';
 
   @override
   String get setVaioInstallOk => 'AuraVAIO 驱动已成功安装并通过系统验收！';
@@ -244,7 +243,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get setAsioRegisterUac => 'UAC提权注册驱动';
 
   @override
-  String get setAsioRegisterPrompt => '正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...';
+  String get setAsioRegisterPrompt => '正在唤起系统管理员授权以注册虚拟音频驱动组件...';
 
   @override
   String get setAsioRegisterOk => '虚拟 ASIO 驱动注册成功！DAW 中现已可选';
@@ -384,7 +383,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get eelMissingSample => '缺少 @sample 段（引擎会拒绝编译）';
 
   @override
-  String get eelEmptyInit => '空 @init 段（vendor 要求至少一条语句）';
+  String get eelEmptyInit => '初始化段为空（@init 段要求包含至少一条执行语句或变量初始化）';
 
   @override
   String get eelEmptySample => '@sample 段为空（将输出静音），确认不是漏写？';
@@ -459,7 +458,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get ioVaioGuide =>
-      '请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。';
+      '请在系统声音设置或播放器中将默认输出设备选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 声学处理管线。';
 
   @override
   String get ioAsioChannelLabel => '输入通道';
@@ -706,7 +705,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbEngineLabel => '当前引擎';
 
   @override
-  String get reverbEngineStereo => '立体声 (Vendor)';
+  String get reverbEngineStereo => '立体声';
 
   @override
   String get reverbEngineMc => '多声道 FDN';
@@ -716,7 +715,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reverbEngineInfo =>
-      '混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。';
+      '混响根据当前声道拓扑自动选择：双声道立体声/双耳监听采用经典双通道扩散混响；离散多声道环境采用 8 阶反馈延迟网络 (FDN) 空间算法。';
 
   @override
   String get reverbLfe => 'LFE 入混响';
@@ -1779,7 +1778,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get bassModeTooltip =>
-      '低音增强模式：\n• 自然低音：vendor 直给提升，不加谐波\n• 纯净低音：轻量谐波（0.35），干净有形体\n• 超重低音：重谐波（0.7），小单元也出下潜';
+      '低音增强声学模式：\n• 自然低音：纯线性动态低频增益，无谐波渲染，保留原生打击瞬态\n• 纯净低音：注入适量偶次谐波，增强中低频饱满度与结像轮廓\n• 超重低音：深度次谐波合成与能量共振，使紧凑型耳机/音箱重现深潜体感';
 
   @override
   String get bassCutoff => '截止频率';
@@ -1859,7 +1858,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get sysTitle => '系统';
 
   @override
-  String get sysHint => '托盘常驻与开机启动（Windows）';
+  String get sysHint => '系统托盘常驻与开机自启动';
 
   @override
   String get sysTray => '最小化到托盘';
@@ -1877,7 +1876,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayQuit => '退出';
 
   @override
-  String get sysAutostartHint => '登录 Windows 时自动启动 AuraDSP';
+  String get sysAutostartHint => '登录系统时自动启动并后台运行 AuraDSP';
 
   @override
   String get latUnmeasured => '未测量';
@@ -2115,13 +2114,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialTitle => '空间音效';
 
   @override
-  String get spatialHint => '虚拟 5.0 摆位加早期反射，耳机上重建音箱房。混响 / 脉冲 / 声场卡片已并入本卡';
+  String get spatialHint =>
+      '基于 HRTF 空间声学模型与早期反射算法，在立体声耳机上重现多扬声器真实监听声学室的开阔声场与实体脱箱感。';
 
   @override
   String get spatialStyle => '风格';
 
   @override
-  String get spatialStyleInfo => '风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）';
+  String get spatialStyleInfo => '精选空间声学预设：一键应用预置的房间反射、扬声器张角与人声对白聚焦参数。';
 
   @override
   String get spatialStyleCinema => '影院';
@@ -2139,31 +2139,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get spatialRoom => '房间';
 
   @override
-  String get spatialRoomInfo => '早期反射电平加反射时间缩放。0 为干摆位，1 为大房';
+  String get spatialRoomInfo => '声学室体量与早期反射强度：0 为无反射自由声场，数值增大可扩展房间空间体量与壁面反射余韵。';
 
   @override
   String get spatialWidth => '张角';
 
   @override
-  String get spatialWidthInfo => '扬声器摆位张角缩放。只改变对侧耳声像，同侧直达不变';
+  String get spatialWidthInfo => '声场展宽与虚拟扬声器开角：拓展左右声场宽度，营造沉浸式脱箱感。';
 
   @override
   String get spatialCenter => '中置';
 
   @override
-  String get spatialCenterInfo => '中置声像聚焦：人声对白能量';
+  String get spatialCenterInfo => '中置声像与对白聚焦：适度提升可增强居中人声主体的凝聚力与清晰度。';
 
   @override
   String get spatialOutGain => '输出';
 
   @override
-  String get spatialOutGainInfo => '空间级输出电平补偿';
+  String get spatialOutGainInfo => '空间音效模块后级输出增益补偿 (-12 ~ +6 dB)。';
 
   @override
   String get spatialAutoGain => '自动增益';
 
   @override
-  String get spatialAutoGainInfo => '向输入响度收敛（与混响同式），防摆位后忽大忽小';
+  String get spatialAutoGainInfo => '等响度自适应控制：自动匹配输入信号有效能量，避免声场处理引起整体音量跳变。';
 
   @override
   String get spatialMix => '空间化比例';
@@ -2343,10 +2343,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get chainStagePreDsp => 'DSP 前置';
 
   @override
-  String get chainStagePreVendor => '系统原声音效前置';
+  String get chainStagePreVendor => 'DSP 主音效链前置';
 
   @override
-  String get chainStagePostVendor => '系统原声音效后置';
+  String get chainStagePostVendor => 'DSP 主音效链后置';
 
   @override
   String get chainStagePostReverb => '混响后置';
@@ -2599,7 +2599,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plugCustomEmpty =>
-      '暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。';
+      '暂未添加自定义目录。系统已自动检索平台标准音频插件目录，如需载入其他位置的插件，可点击右上角添加。';
 
   @override
   String plugMountTitle(int n) {
