@@ -141,4 +141,31 @@ slider2:0.5<0.0,1.0,0.05>Dry Wet Mix
       expect(textWidget.strutStyle!.height, equals(1.5));
     });
   });
+
+  group('4. 动态压缩器阈值平滑与节流测试', () {
+    test('缓慢拖动压缩阈值同步平滑更新 7 段增益与镜像，防风暴节流下发', () {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+
+      // 设置阈值 -24dB
+      model.setCompThreshold(-24.0, forceFlush: true);
+      expect(model.compThreshold, equals(-24.0));
+      // strength = 24.0 / 48.0 = 0.5; gain = -0.5 * 0.9 = -0.45
+      for (var i = 0; i < 7; i++) {
+        expect(model.compGains[i], closeTo(-0.45, 1e-4));
+        expect(model.mirrorFloat('comp.gain${i + 1}', 0.0), closeTo(-0.45, 1e-4));
+      }
+
+      // 微小微调 -24.1dB (diff < 0.4)
+      model.setCompThreshold(-24.1);
+      expect(model.compThreshold, equals(-24.1));
+      // 增益与镜像即时平滑跟随，保证 UI 读数无延迟
+      final newStrength = 24.1 / 48.0;
+      expect(model.compGains[0], closeTo(-newStrength * 0.9, 1e-4));
+
+      // forceFlush 立即刷入引擎下发基准
+      model.setCompThreshold(-24.1, forceFlush: true);
+      expect(model.compThreshold, equals(-24.1));
+    });
+  });
 }

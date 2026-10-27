@@ -525,16 +525,36 @@ extension StateEffects on AppModel {
     scheduleAutoSave();
   }
 
-  void setCompThreshold(double v) {
+  void setCompThreshold(double v, {bool forceFlush = false}) {
     compThreshold = v;
     // 宏观阈值联动压缩强度：阈值越深(-dB)，压限系数越负
     final strength = ((-v) / 48.0).clamp(0.0, 1.0);
     for (var i = 0; i < 7; i++) {
       compGains[i] = (-strength * 0.9).clamp(-1.2, 1.2);
-      setFloat('comp.gain${i + 1}', compGains[i]);
+      _mirror('comp.gain${i + 1}', compGains[i]);
     }
     _notifyUi();
     scheduleAutoSave();
+
+    final diff = (v - _lastDispatchedCompThreshold).abs();
+    if (_testing || forceFlush || diff >= 0.4) {
+      _compThresholdThrottleTimer?.cancel();
+      _compThresholdThrottleTimer = null;
+      _dispatchCompGainsToEngine();
+    } else {
+      _compThresholdThrottleTimer ??= Timer(const Duration(milliseconds: 30), () {
+        _compThresholdThrottleTimer = null;
+        _dispatchCompGainsToEngine();
+      });
+    }
+  }
+
+  void _dispatchCompGainsToEngine() {
+    _lastDispatchedCompThreshold = compThreshold;
+    for (var i = 0; i < 7; i++) {
+      _markSent('comp.gain${i + 1}');
+      send({'cmd': 'setParam', 'id': 'comp.gain${i + 1}', 'value': compGains[i], 'isFloat': true});
+    }
   }
 
   void setCompRatio(double v) {

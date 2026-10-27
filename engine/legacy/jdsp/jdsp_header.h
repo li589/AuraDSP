@@ -163,7 +163,7 @@ typedef struct
 	uint64_t retiredAt;
 } CompSlot;
 #define AURA_COMP_CHANNELS 8
-#define AURA_COMP_SLOTS (AURA_COMP_CHANNELS + 1)
+#define AURA_COMP_SLOTS (AURA_COMP_CHANNELS * 2)
 typedef struct
 {
 	int needOversample;
