@@ -76,7 +76,7 @@ abstract final class EelSliderParser {
         final numPart = int.tryParse(varName.substring(6));
         if (numPart != null) {
           idx = numPart;
-          isHost = idx >= 1 && idx <= 8;
+          isHost = idx >= 1 && idx <= 64;
         } else {
           idx = customIndexCounter++;
           isHost = false;

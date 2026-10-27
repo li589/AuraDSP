@@ -96,8 +96,7 @@ class _LiveprogPageState extends State<LiveprogPage> {
   int _cursorLine = 1, _cursorCol = 1;
   List<EelLintIssue> _issues = const [];
 
-  late final EelSyntaxTextEditingController _code =
-      EelSyntaxTextEditingController(text: LiveprogLibrary.template);
+  late final EelSyntaxTextEditingController _code;
 
   Map<int, EelSliderMeta> _activeSliders = {};
 
@@ -117,11 +116,18 @@ class _LiveprogPageState extends State<LiveprogPage> {
   @override
   void initState() {
     super.initState();
+    final initialCode = (widget.model.lpDraftCode != null &&
+            widget.model.lpDraftCode!.isNotEmpty)
+        ? widget.model.lpDraftCode!
+        : ((widget.model.lpCode != null && widget.model.lpCode!.isNotEmpty)
+            ? widget.model.lpCode!
+            : LiveprogLibrary.template);
+    _code = EelSyntaxTextEditingController(text: initialCode);
     widget.model.addListener(_onModelTick);
     _code.addListener(_onEditorTick);
     _activeSliders = EelSliderParser.parse(_code.text);
-    _lastCompiledCode = '';
-    _isCodeDirty = true;
+    _lastCompiledCode = widget.model.lpCode ?? '';
+    _isCodeDirty = initialCode != _lastCompiledCode;
   }
 
   @override
@@ -183,6 +189,8 @@ class _LiveprogPageState extends State<LiveprogPage> {
 
   /// 即时 lint + 自适应滑块解析 + 脏检查
   void _onCodeChanged(String text) {
+    widget.model.lpDraftCode = text;
+    widget.model.scheduleAutoSave();
     _runLint();
     setState(() {
       _activeSliders = EelSliderParser.parse(text);

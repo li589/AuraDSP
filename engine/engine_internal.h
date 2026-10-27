@@ -139,7 +139,7 @@ struct Params {
     std::atomic<int32_t>  channels_count_mode{0};
     /* Liveprog（EEL2 实时可编程 DSP；vendor 补丁 P-001 提供 slider1..8） */
     std::atomic<int32_t>  lp_enable{0};
-    std::atomic<float>    lp_param[8];          /* slider1..8（C++20 值初始化 = 0） */
+    std::atomic<float>    lp_param[64];         /* slider1..64（C++20 值初始化 = 0） */
     /* 卷积 / 脉冲响应（v1.1 M4） */
     std::atomic<int32_t>  conv_enable{0};
     std::atomic<float>    conv_mix{1.0f};      /* 干湿比 [0,1]：1=纯湿（P-005） */
@@ -550,7 +550,7 @@ struct auradsp_handle_s {
     int    stage_ch_active = 2;
 
     /* Liveprog 状态 */
-    float* lp_slider_ptr[8] = {};     /* slider1..8 的 VM 寄存器指针（代码加载后刷新） */
+    float* lp_slider_ptr[64] = {};    /* slider1..64 的 VM 寄存器指针（代码加载后刷新） */
     int    lp_status = 0;             /* 0=无代码 1=编译成功 <0=LiveProgStringParser 错误码 */
     char*  lp_code = nullptr;         /* 已下发代码副本（get_param 回读用） */
     size_t lp_code_len = 0;

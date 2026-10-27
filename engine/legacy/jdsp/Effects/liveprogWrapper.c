@@ -230,11 +230,11 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 	pg->snapNumCh = nch;
 	pg->input1 = NSEEL_VM_regvar(pg->vm, "spl0");
 	pg->input2 = NSEEL_VM_regvar(pg->vm, "spl1");
-	/* [PATCHED-AuraDSP P-001 2026-10-09] 宿主滑块：编译前注册 slider1..8，
+	/* [PATCHED-AuraDSP P-001 2026-10-09] 宿主滑块：编译前注册 slider1..64，
 	 * 供 engine_api "liveprog.paramN" 写值（freevars 会清掉旧注册，
 	 * 因此必须在每次编译内紧跟 init_memRegion 重注册）。
 	 * 补丁说明见 engine/legacy/PATCHES.md [PATCHED-AuraDSP P-014 2026-10-16] */
-	for (int aura_i = 1; aura_i <= 8; aura_i++)
+	for (int aura_i = 1; aura_i <= 64; aura_i++)
 	{
 		char aura_nm[16];
 		snprintf(aura_nm, sizeof(aura_nm), "slider%d", aura_i);

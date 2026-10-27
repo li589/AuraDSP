@@ -978,9 +978,13 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {
-        const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "param: unsupported (unknown param id)"); return AURADSP_E_PARAM; }
-        const int idx = d - '1';
+        char* end = nullptr;
+        long n = strtol(id + 14, &end, 10);
+        if (end == id + 14 || *end != '\0' || n < 1 || n > 64) {
+            set_error(h, "param: unsupported (unknown param id)");
+            return AURADSP_E_PARAM;
+        }
+        const int idx = (int)(n - 1);
         h->p.lp_param[idx].store(*(const float*)value, std::memory_order_relaxed);
         if (h->lp_slider_ptr[idx])
             *h->lp_slider_ptr[idx] = *(const float*)value;
@@ -1004,9 +1008,12 @@ static auradsp_status handle_indexed_param_get(auradsp_handle h, const char* id,
         return AURADSP_OK;
     }
     if (!strncmp(id, "liveprog.param", 14) && bytes >= 4) {
-        const char d = id[14];
-        if (d < '1' || d > '8' || id[15] != 0) return AURADSP_E_PARAM;
-        *(float*)out_value = h->p.lp_param[d - '1'].load();
+        char* end = nullptr;
+        long n = strtol(id + 14, &end, 10);
+        if (end == id + 14 || *end != '\0' || n < 1 || n > 64) {
+            return AURADSP_E_PARAM;
+        }
+        *(float*)out_value = h->p.lp_param[n - 1].load();
         return AURADSP_OK;
     }
     return AURADSP_E_PARAM;

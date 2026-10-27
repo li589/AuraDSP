@@ -262,32 +262,36 @@ extension StateChain on AppModel {
     lpError = null;
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
     lpCode = normalized;
+    lpDraftCode = normalized;
     lpPresetCodeMismatch = false;
     lpCompileMs = -1;
     send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': normalized});
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
-    // 引擎 LoadCode 已把 8 滑块清零，这里全量回推对齐；声明签名不变时
+    // 引擎 LoadCode 已把滑块清零，这里全量回推对齐；声明签名不变时
     // 保留用户已调值（只做回推），声明变化才采纳新默认值。
     // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
     final metas = EelSliderParser.parse(normalized);
     final sig = StringBuffer();
-    for (var i = 1; i <= 8; i++) {
-      final meta = metas[i];
-      if (meta != null) {
-        sig.write('$i:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
-      }
+    for (final meta in metas.values) {
+      sig.write('${meta.index}:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
     }
     if (sig.toString() != _lpDeclSig) {
       _lpDeclSig = sig.toString();
-      for (var i = 1; i <= 8; i++) {
-        final meta = metas[i];
-        if (meta != null) {
-          var d = meta.defaultVal;
-          if (meta.minVal <= meta.maxVal) {
-            d = d.clamp(meta.minVal, meta.maxVal);
-          }
-          lpParams[i - 1] = d;
+      for (final meta in metas.values) {
+        var d = meta.defaultVal;
+        if (meta.minVal <= meta.maxVal) {
+          d = d.clamp(meta.minVal, meta.maxVal);
         }
+        lpSliderValues[meta.index] = d;
+        if (meta.index >= 1 && meta.index <= 8) {
+          lpParams[meta.index - 1] = d;
+        }
+      }
+    }
+    for (final meta in metas.values) {
+      final v = lpSliderValues[meta.index] ?? meta.defaultVal;
+      if (meta.index >= 1 && meta.index <= 64) {
+        setFloat('liveprog.param${meta.index}', v);
       }
     }
     for (var i = 0; i < 8; i++) {
