@@ -523,14 +523,17 @@ void apply_comp(auradsp_handle h) {
             freqs[i] = (double)h->p.comp_freq[i].load(std::memory_order_relaxed);
             gains[i] = (double)h->p.comp_gain[i].load(std::memory_order_relaxed);
         }
+        /* 仅在初次启用或挂起全量刷新（如采样率变更）时触发 forceRefresh；
+         * 正常调参（阈值/增益/频率变动）走影子更新增益曲线，不触发 FFTCompanderInit
+         * 重置环形缓冲区，杜绝拖动滑块时音频断续。
+         * 若 granularity/tfresolution/timeconstant 变更，CompressorCommit 内部
+         * initWillRun 仍会自动识别并安全重建。 */
+        char forceRefresh = h->jdsp.compForceRefresh || !h->jdsp.compEnabled;
         CompressorCommit(&h->jdsp,
                          h->p.comp_timeconstant.load(std::memory_order_relaxed),
                          h->p.comp_granularity.load(std::memory_order_relaxed),
                          h->p.comp_tfresolution.load(std::memory_order_relaxed),
-                         1, freqs, gains, 1, 1);
-        /* 本次提交自带 forceRefresh=1（全量 Init），已覆盖挂起的刷新语义
-         * （JamesDSPSetSampleRate 置位的 compForceRefresh），顺手消费避免
-         * 下一次 CompressorEnable 重复全量重建。 */
+                         forceRefresh, freqs, gains, 1, 1);
         h->jdsp.compForceRefresh = 0;
         h->jdsp.compEnabled = 1;
     } else {
