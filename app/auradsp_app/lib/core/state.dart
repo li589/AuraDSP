@@ -688,6 +688,34 @@ class AppModel extends ChangeNotifier {
   String? ddcDetails;
   double _lastStereoMix = 0.5;
   String? lpCode;
+
+  /// Liveprog 实时未编译草稿代码（软件关闭又打开不丢失正在编辑的代码）
+  String? lpDraftCode;
+
+  /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
+  final Map<int, double> lpSliderValues = {};
+
+  double getLiveprogSliderVal(int idx, double defaultVal) {
+    if (lpSliderValues.containsKey(idx)) {
+      return lpSliderValues[idx]!;
+    }
+    if (idx >= 1 && idx <= 8) {
+      return lpParams[idx - 1];
+    }
+    return defaultVal;
+  }
+
+  void setLiveprogSliderVal(int idx, double v) {
+    lpSliderValues[idx] = v;
+    if (idx >= 1 && idx <= 8) {
+      lpParams[idx - 1] = v;
+    }
+    if (idx >= 1 && idx <= 64) {
+      setFloat('liveprog.param$idx', v);
+    }
+    _notifyUi();
+    scheduleAutoSave();
+  }
   Timer? _debounceSaveTimer;
   bool _isReplayingSession = false;
 

@@ -409,8 +409,8 @@ spl0 = spl0;
       expect(find.text('Octaves Down'), findsOneWidget);
       expect(find.text('slider1'), findsOneWidget);
       expect(find.text('Bass strength (%)'), findsOneWidget);
-      expect(find.text('dBassGain = 100.0 (0.0 ~ 100.0)'), findsOneWidget);
-      expect(find.text('Script Var'), findsAtLeastNWidgets(1));
+      expect(find.text('dBassGain'), findsOneWidget);
+      expect(find.byType(Slider), findsAtLeastNWidgets(2));
 
       // 2. 切换到 Tab 1: 输入通道 (8)
       await tester.tap(find.text('Input Channels (8)'));

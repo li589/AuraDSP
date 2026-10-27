@@ -8,11 +8,14 @@
  */
 
 import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/core/liveprog/equalizer_apo_parser.dart';
 import 'package:auradsp_app/core/liveprog/rbj_biquad_generator.dart';
 import 'package:auradsp_app/features/liveprog/eel_editor_support.dart';
 import 'package:auradsp_app/features/liveprog/line_number_gutter.dart';
+import 'package:auradsp_app/features/liveprog/sliders/liveprog_sliders_panel.dart';
+import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -20,6 +23,9 @@ import 'package:flutter_test/flutter_test.dart';
 final AppLocalizations _zh = lookupAppLocalizations(const Locale('zh'));
 
 Widget _wrap(Widget child) => MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('zh'),
       theme: withAuraExtension(ThemeData.dark(), auraDark),
       home: Scaffold(body: child),
     );
@@ -282,11 +288,119 @@ spl1 = gain * (h2.y1 - h1.y1 + h1.x1);
       expect(sliders.containsKey(14), isTrue);
       expect(sliders.containsKey(20), isTrue);
 
-      // 3. 宿主滑块与扩展自定义参数正确分流
+      // 3. 宿主滑块全面支持 1..64
       expect(sliders[1]!.isHostSlider, isTrue);
       expect(sliders[8]!.isHostSlider, isTrue);
-      expect(sliders[9]!.isHostSlider, isFalse);
-      expect(sliders[20]!.isHostSlider, isFalse);
+      expect(sliders[9]!.isHostSlider, isTrue);
+      expect(sliders[20]!.isHostSlider, isTrue);
+    });
+
+    testWidgets('6. LiveprogPage 初始化与重开恢复正在编辑的代码而非默认模板', (tester) async {
+      tester.view.physicalSize = const Size(1200, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      const customEditingCode = '''@init
+my_test_var = 42;
+
+@sample
+spl0 = spl0 * 0.5;
+spl1 = spl1 * 0.5;
+''';
+      // 模拟上次关闭软件前正在编辑的草稿
+      model.lpDraftCode = customEditingCode;
+
+      await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
+      await tester.pumpAndSettle();
+
+      // 验证编辑器展现的是草稿内容，而不是 LiveprogLibrary.template
+      expect(find.textContaining('my_test_var = 42;'), findsOneWidget);
+      expect(find.textContaining('Gain (dB)'), findsNothing);
+
+      // 验证在界面编辑修改时，实时同步更新 model.lpDraftCode
+      final textField = find.byType(TextField);
+      expect(textField, findsOneWidget);
+      await tester.enterText(textField, '''@init
+draft_v2 = 99;
+
+@sample
+spl0 = 0;
+''');
+      await tester.pump();
+      expect(model.lpDraftCode, contains('draft_v2 = 99;'));
+    });
+
+    testWidgets('7. LiveprogSlidersPanel 为所有 slider 渲染滑动条且取消无意义按钮', (tester) async {
+      tester.view.physicalSize = const Size(1000, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final model = AppModel(testing: true);
+      final activeSliders = <int, EelSliderMeta>{
+        1: const EelSliderMeta(
+          index: 1,
+          rawName: 'slider1',
+          displayName: 'Base Delay (s)',
+          defaultVal: 0.2,
+          minVal: 0.01,
+          maxVal: 1.0,
+          isHostSlider: true,
+        ),
+        9: const EelSliderMeta(
+          index: 9,
+          rawName: 'slider9',
+          displayName: 'VLFO Cycle B',
+          defaultVal: 20.0,
+          minVal: 0.0,
+          maxVal: 60.0,
+          isHostSlider: true,
+        ),
+        20: const EelSliderMeta(
+          index: 20,
+          rawName: 'slider20',
+          displayName: 'Gain (dB)',
+          defaultVal: 0.0,
+          minVal: -24.0,
+          maxVal: 24.0,
+          isHostSlider: true,
+        ),
+      };
+
+      await tester.pumpWidget(_wrap(LiveprogSlidersPanel(
+        model: model,
+        activeSliders: activeSliders,
+      )));
+      await tester.pumpAndSettle();
+
+      // 1. 验证 slider1, slider9, slider20 全部渲染了带名称的真实滑动条
+      expect(find.text('Base Delay (s)'), findsOneWidget);
+      expect(find.text('slider1'), findsOneWidget);
+      expect(find.text('VLFO Cycle B'), findsOneWidget);
+      expect(find.text('slider9'), findsOneWidget);
+      expect(find.text('Gain (dB)'), findsOneWidget);
+      expect(find.text('slider20'), findsOneWidget);
+
+      // 全部为真实 Slider，共 3 个 Slider
+      expect(find.byType(Slider), findsNWidgets(3));
+
+      // 2. 验证“自适应”、“全部8槽”等按钮已彻底移除
+      expect(find.textContaining('全部 8 槽'), findsNothing);
+      expect(find.textContaining('All 8 slots'), findsNothing);
+      expect(find.textContaining('展开全部 8 槽滑块'), findsNothing);
+      expect(find.textContaining('Expand all 8 sliders'), findsNothing);
+
+      // 3. 验证无滑块时的清爽空状态提示
+      await tester.pumpWidget(_wrap(LiveprogSlidersPanel(
+        model: model,
+        activeSliders: const {},
+      )));
+      await tester.pumpAndSettle();
+
+      expect(find.text(_zh.lpNoScriptSliders), findsOneWidget);
+      expect(find.textContaining('展开全部 8 槽滑块'), findsNothing);
     });
   });
 }

@@ -270,12 +270,12 @@ spl0 = spl0;
       expect(sliders[1]!.defaultVal, 1.0);
       expect(sliders[1]!.isHostSlider, isTrue);
 
-      // slider15 (带枚举)
+      // slider15 (带枚举，现作为 1..64 宿主滑块支持)
       expect(sliders.containsKey(15), isTrue);
       expect(sliders[15]!.rawName, 'slider15');
       expect(sliders[15]!.displayName, 'Attitude');
       expect(sliders[15]!.enumOptions, ['No', 'Murky', 'Confused', 'Unpleasant']);
-      expect(sliders[15]!.isHostSlider, isFalse);
+      expect(sliders[15]!.isHostSlider, isTrue);
 
       // 自定义变量
       final customMetas = sliders.values.where((m) => !m.rawName.startsWith('slider')).toList();

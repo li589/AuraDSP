@@ -15,7 +15,6 @@ import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../../../l10n/gen/app_localizations.dart';
-import '../../chrome.dart';
 import '../eel_editor_support.dart';
 
 class LiveprogSlidersPanel extends StatefulWidget {
@@ -35,7 +34,6 @@ class LiveprogSlidersPanel extends StatefulWidget {
 class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
   int _selectedTab = 0; // 0: script, 1: input, 2: output
   bool _expanded = true;
-  bool _showAll = false;
 
   static const _channels8 = ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
 
@@ -45,9 +43,8 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
     final l = AppLocalizations.of(context)!;
     final m = widget.model;
 
-    final scriptSliders = widget.activeSliders.values.toList();
-    final hostSliders = scriptSliders.where((s) => s.isHostSlider).toList();
-    final customVars = scriptSliders.where((s) => !s.isHostSlider).toList();
+    final scriptSliders = widget.activeSliders.values.toList()
+      ..sort((a, b) => a.index.compareTo(b.index));
 
     return Container(
       width: double.infinity,
@@ -101,21 +98,13 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
               ),
               const Spacer(),
               if (_expanded) ...[
-                if (_selectedTab == 0 && (scriptSliders.isNotEmpty || _showAll)) ...[
-                  AuraChip(
-                    _showAll ? l.lpShowAll : l.lpAdaptive(scriptSliders.length),
-                    icon: Icons.tune_rounded,
-                    selected: !_showAll,
-                    onTap: () => setState(() => _showAll = !_showAll),
-                  ),
-                  const SizedBox(width: AuraSpace.xs),
+                if (_selectedTab == 0 && scriptSliders.isNotEmpty) ...[
                   _buildResetButton(
                     tooltip: l.lpResetAll,
                     palette: p,
                     onTap: () {
-                      for (var i = 0; i < 8; i++) {
-                        final meta = widget.activeSliders[i + 1];
-                        m.setLiveprogParam(i, meta?.defaultVal ?? 0.0);
+                      for (final meta in scriptSliders) {
+                        m.setLiveprogSliderVal(meta.index, meta.defaultVal);
                       }
                     },
                   ),
@@ -175,8 +164,7 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
                       p: p,
                       l: l,
                       m: m,
-                      hostSliders: hostSliders,
-                      customVars: customVars,
+                      scriptSliders: scriptSliders,
                     );
                   case 1:
                     return _buildInputChannelsTab(
@@ -278,67 +266,37 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
     required AuraPalette p,
     required AppLocalizations l,
     required AppModel m,
-    required List<EelSliderMeta> hostSliders,
-    required List<EelSliderMeta> customVars,
+    required List<EelSliderMeta> scriptSliders,
   }) {
-    if (!_showAll && hostSliders.isEmpty && customVars.isEmpty) {
+    if (scriptSliders.isEmpty) {
       return Container(
         padding: const EdgeInsets.symmetric(
-            vertical: AuraSpace.md, horizontal: AuraSpace.sm),
+            vertical: AuraSpace.lg, horizontal: AuraSpace.sm),
         alignment: Alignment.center,
         child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(Icons.tune_outlined, size: 24, color: p.textDim),
-            const SizedBox(height: 4),
+            Icon(Icons.tune_outlined, size: 28, color: p.textDim),
+            const SizedBox(height: AuraSpace.xs),
             Text(
               l.lpNoScriptSliders,
               style: captionOf(p),
-            ),
-            const SizedBox(height: 6),
-            OutlinedButton.icon(
-              onPressed: () => setState(() => _showAll = true),
-              icon: const Icon(Icons.expand_more_rounded, size: 14),
-              label: Text(l.lpExpandSliders),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: p.accent,
-                side: BorderSide(color: p.hairline),
-                visualDensity: VisualDensity.compact,
-              ),
             ),
           ],
         ),
       );
     }
 
-    final displayedIndices = _showAll
-        ? List.generate(8, (i) => i + 1)
-        : hostSliders.map((s) => s.index).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        for (final idx in displayedIndices)
+        for (final meta in scriptSliders)
           _LpSliderRow(
             model: m,
-            index: idx - 1,
-            meta: widget.activeSliders[idx],
+            meta: meta,
+            val: m.getLiveprogSliderVal(meta.index, meta.defaultVal),
+            onChanged: (v) => m.setLiveprogSliderVal(meta.index, v),
           ),
-        if (customVars.isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Text(
-                l.lpCustomVarTag,
-                style: monoOf(p, size: 10, color: p.textDim),
-              ),
-              const SizedBox(width: 4),
-              InfoBadge(message: l.lpCustomVarHint),
-            ],
-          ),
-          const SizedBox(height: 4),
-          for (final cv in customVars)
-            _LpCustomVarRow(meta: cv),
-        ],
       ],
     );
   }
@@ -562,20 +520,22 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
 
 class _LpSliderRow extends StatelessWidget {
   final AppModel model;
-  final int index;
-  final EelSliderMeta? meta;
+  final EelSliderMeta meta;
+  final double val;
+  final ValueChanged<double> onChanged;
 
   const _LpSliderRow({
     required this.model,
-    required this.index,
-    this.meta,
+    required this.meta,
+    required this.val,
+    required this.onChanged,
   });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    var minVal = meta?.minVal ?? 0.0;
-    var maxVal = meta?.maxVal ?? 1.0;
+    var minVal = meta.minVal;
+    var maxVal = meta.maxVal;
     if (minVal > maxVal) {
       final tmp = minVal;
       minVal = maxVal;
@@ -583,14 +543,15 @@ class _LpSliderRow extends StatelessWidget {
     } else if (minVal == maxVal) {
       maxVal = minVal + 1.0;
     }
-    final displayName = meta?.displayName ?? 'slider${index + 1}';
-    final rawName = 'slider${index + 1}';
-    final currentVal = model.lpParams[index].clamp(minVal, maxVal);
+    final displayName =
+        meta.displayName.isNotEmpty ? meta.displayName : meta.rawName;
+    final rawName = meta.rawName;
+    final currentVal = val.clamp(minVal, maxVal);
 
     String valueDisplay = currentVal.toStringAsFixed(2);
-    if (meta != null && meta!.enumOptions.isNotEmpty) {
-      final intVal = currentVal.round().clamp(0, meta!.enumOptions.length - 1);
-      valueDisplay = meta!.enumOptions[intVal];
+    if (meta.enumOptions.isNotEmpty) {
+      final intVal = currentVal.round().clamp(0, meta.enumOptions.length - 1);
+      valueDisplay = meta.enumOptions[intVal];
     }
 
     return Padding(
@@ -598,7 +559,7 @@ class _LpSliderRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(
-            width: 140,
+            width: 150,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
@@ -609,9 +570,8 @@ class _LpSliderRow extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 12,
-                    fontWeight:
-                        meta != null ? FontWeight.bold : FontWeight.normal,
-                    color: meta != null ? p.accent : p.text,
+                    fontWeight: FontWeight.bold,
+                    color: p.accent,
                   ),
                 ),
                 Text(
@@ -633,7 +593,7 @@ class _LpSliderRow extends StatelessWidget {
                 value: currentVal,
                 min: minVal,
                 max: maxVal,
-                onChanged: (v) => model.setLiveprogParam(index, v),
+                onChanged: onChanged,
               ),
             ),
           ),
@@ -647,66 +607,6 @@ class _LpSliderRow extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: monoOf(p, size: 11, color: p.text),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _LpCustomVarRow extends StatelessWidget {
-  final EelSliderMeta meta;
-
-  const _LpCustomVarRow({required this.meta});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    final l = AppLocalizations.of(context)!;
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 4),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(
-        color: p.panel,
-        borderRadius: BorderRadius.circular(AuraRadius.xs),
-        border: Border.all(color: p.hairline),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-            decoration: BoxDecoration(
-              color: p.accent.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(AuraRadius.xs),
-            ),
-            child: Text(
-              l.lpCustomVarTag,
-              style: monoOf(p, size: 9.5, color: p.accent),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  meta.displayName.isNotEmpty ? meta.displayName : meta.rawName,
-                  style: monoOf(p, size: 11, color: p.text).copyWith(fontWeight: FontWeight.w600),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                Text(
-                  '${meta.rawName} = ${meta.defaultVal} (${meta.minVal} ~ ${meta.maxVal})',
-                  style: monoOf(p, size: 9.5, color: p.textDim),
-                ),
-              ],
-            ),
-          ),
-          Tooltip(
-            message: l.lpCustomVarHint,
-            child: Icon(Icons.info_outline_rounded, size: 14, color: p.textDim),
           ),
         ],
       ),

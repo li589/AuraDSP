@@ -839,7 +839,7 @@ void apply_params_locked(auradsp_handle h) {
 void lp_refresh_sliders(auradsp_handle h) {
     LiveProg* eel = h->jdsp.eel;
     if (!eel || !eel->vm) return;
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 64; ++i) {
         char nm[16];
         snprintf(nm, sizeof(nm), "slider%d", i + 1);
         h->lp_slider_ptr[i] = NSEEL_VM_regvar(eel->vm, nm);
