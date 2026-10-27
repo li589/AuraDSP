@@ -10,11 +10,10 @@
       - loudness (响度补偿)
       - limiter (限幅器)
       - gate (噪声门)
-  [2] Category B 跨声道/声场效果器不变性（FL/FR 作用，环绕声道 100% 逐样本直通保真）：
-      - haas
-      - spatial
-      - freeverb
-      - bassmono
+  [2] Category B 跨声道/声场效果器（WP1 语义）：
+      - haas：仍只作用 FL/FR（差分延迟一侧）
+      - 混响：离散多声道走 MC FDN（除 LFE 外全声道湿声；LFE 默认直通）
+      - spatial / bassmono：见各自 smoke
 """
 import ctypes
 import math
@@ -191,34 +190,73 @@ check(other_dev < 1e-6, f"Limiter: 未选中的声道 (FL/FR/C/SL/SR) 100% 保�
 lib.auradsp_destroy(h)
 
 # ---------------------------------------------------------------- [2] Category B 声场保持性
-print("\n=== [2] Category B 跨声道/声场效果器不变性验证 ===")
-# 开启 Haas 与 Freeverb，确保它们只作用于 FL/FR，后方声道与中置/低音严格直通保真
+print("\n=== [2] Category B 跨声道/声场效果器验证（WP1 语义） ===")
+# WP1：离散多声道的混响由「只作用 FL/FR 的 Freeverb」换成「全声道 MC FDN」。
+# Haas 仍只作用 FL/FR（差分延迟一侧）；MC FDN 对除 LFE 外的所有声道产生湿声
+# （reverb.lfe=0 默认 LFE 直通）。新不变式：FL/FR 受声场处理；C/SL/SR 受
+# MC FDN 处理；LFE 保持 100% 直通保真。
 h = lib.auradsp_create(48000.0, F)
 set_i32(h, "channels.count", CH)
 set_i32(h, "channels.mode", 1)
 set_i32(h, "limiter.enable", 0) # 隔离限幅器前瞻延迟
 set_i32(h, "haas.enable", 1)
-set_f32(h, "haas.delay_ms", 15.0)
+set_f32(h, "haas.delay", 15.0)   # 旧写法 haas.delay_ms 是无效 id（静默拒收），此处用真 id
 set_f32(h, "haas.mix", 0.5)
-set_i32(h, "freeverb.enable", 1)
+set_i32(h, "freeverb.enable", 1)  # deprecated 写别名 → reverb.preset=0（MC FDN）
 set_f32(h, "freeverb.wet", 0.5)
 set_f32(h, "freeverb.dry", 0.8)
 
 src, dst, sp, dp = process(h, F, CH)
-for i in range(F):
-    s = 0.3 * math.sin(2 * math.pi * 500.0 * i / 48000.0)
-    for c in range(CH):
-        src[i * CH + c] = s
-lib.auradsp_process(h, sp, dp, F)
+NB = 8
+outs = []
+for b in range(NB):
+    for i in range(F):
+        s = 0.3 * math.sin(2 * math.pi * 500.0 * (b * F + i) / 48000.0)
+        for c in range(CH):
+            src[i * CH + c] = s
+    lib.auradsp_process(h, sp, dp, F)
+    outs.append([dst[i * CH + c] for i in range(F) for c in range(CH)])
 
-fl_diff = sum(abs(dst[i * CH + 0] - src[i * CH + 0]) for i in range(F)) / F
-fr_diff = sum(abs(dst[i * CH + 1] - src[i * CH + 1]) for i in range(F)) / F
-check(fl_diff > 0.01 and fr_diff > 0.01, f"Category B: 前置 FL/FR 受到声场处理 (fl={fl_diff:.4f}, fr={fr_diff:.4f})")
+# 尾音块：输入归零后，有混响的声道应有残响尾，LFE（默认不进 FDN）必须静音
+tails = []
+for b in range(4):
+    for i in range(F * CH):
+        src[i] = 0.0
+    lib.auradsp_process(h, sp, dp, F)
+    tails.append([dst[i * CH + c] for i in range(F) for c in range(CH)])
 
-# 核心声场不变性：后方与辅助声道（C/LFE/SL/SR）不能被 Haas / 混响改变声场
-# 注意：在离散多声道模式下，Category B 不跨越前置声道污染环绕
-b_surround_dev = max(abs(dst[i * CH + c] - src[i * CH + c]) for c in (2, 3, 4, 5) for i in range(F))
-check(b_surround_dev < 1e-6, f"Category B 声场不变性：环绕/中置/低音 100% 保真直通 (max dev={b_surround_dev:.2e})")
+
+def chan_dev(c, blocks):
+    tot, n = 0.0, 0
+    for b in blocks:
+        for i in range(F):
+            s = 0.3 * math.sin(2 * math.pi * 500.0 * (b * F + i) / 48000.0)
+            tot += abs(outs[b][i * CH + c] - s)
+            n += 1
+    return tot / n
+
+
+def chan_rms(blocks_list, c):
+    vals = [blk[i * CH + c] for blk in blocks_list for i in range(F)]
+    return math.sqrt(sum(v * v for v in vals) / len(vals))
+
+
+# 只取后半段：等 MC FDN 湿声建立后逐声道与干声比较
+tail = range(NB // 2, NB)
+fl_diff = chan_dev(0, tail)
+fr_diff = chan_dev(1, tail)
+check(fr_diff > 0.05, f"Category B: Haas 差分延迟作用前置声道 (fr={fr_diff:.4f})")
+check(fl_diff > 0.003, f"Category B: 混响声场作用前置 FL (fl={fl_diff:.4f})")
+
+# WP1 后混响不再只作用前置：环绕/中置同样被 MC FDN 处理（湿声非零）
+mc_dev = max(chan_dev(c, tail) for c in (2, 4, 5))
+check(mc_dev > 1e-4, f"Category B：MC FDN 处理环绕/中置（WP1 语义）(dev={mc_dev:.2e})")
+# LFE 默认（reverb.lfe=0）不进 FDN：湿声建立期只有 dryG 缩放的干声，
+# 输入归零后无任何混响尾音（对照：中置有尾音证明混响确实在跑）
+c_tail = chan_rms(tails, 2)
+lfe_tail = chan_rms(tails, 3)
+check(c_tail > 1e-6, f"Category B：中置有 MC FDN 尾音（对照组）(rms={c_tail:.2e})")
+check(lfe_tail < 1e-9, f"Category B：LFE 无混响尾音（reverb.lfe=0 不进 FDN）(rms={lfe_tail:.2e})")
 lib.auradsp_destroy(h)
 
 print()

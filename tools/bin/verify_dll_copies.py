@@ -28,26 +28,20 @@ RUNTIME = [
 ]
 
 
-class VizFrame(ctypes.Structure):
-    # [Phase B] 2026-10-24 ABI v2：尾部追加 per-channel 电平，536B → 1600B。
-    # 引擎按 sizeof=1600B/帧写，本结构体必须逐字节同步，否则堆越界。
-    _fields_ = [
-        ("seq", ctypes.c_uint64),
-        ("timestamp_ms", ctypes.c_double),
-        ("spectrum", ctypes.c_float * BANDS),
-        ("eq_in_spectrum", ctypes.c_float * BANDS),
-        ("level_l_dbfs", ctypes.c_float),
-        ("level_r_dbfs", ctypes.c_float),
-        ("stage_levels_l", ctypes.c_float * 32),
-        ("stage_levels_r", ctypes.c_float * 32),
-        ("channel_count", ctypes.c_uint32),
-        ("channel_levels", ctypes.c_float * 8),
-        ("stage_ch_levels", ctypes.c_float * (32 * 8)),
-    ]
-
-
-assert ctypes.sizeof(VizFrame) == 1600, (
-    f"VizFrame out of sync with auradsp_viz_frame: expected 1600, got {ctypes.sizeof(VizFrame)}")
+# --- VizFrame 单一来源（§7-1 ABI 镜像门禁）---
+# ctypes 镜像只在 tools/bin/viz_frame.py 定义一次，这里不再手抄。
+# 手抄件的危险：头文件 sizeof 改了却漏改某个脚本 → 脚本按旧尺寸申请缓冲、
+# 引擎按新尺寸写 → 静默堆越界（审查 A1/A2/A3 三处即此）。viz_frame 导入时
+# 自带 sizeof / ABI 版本哨兵，出错就地抛 AssertionError。
+_VIZ_ROOT = os.path.dirname(os.path.abspath(__file__))
+while not os.path.isfile(os.path.join(_VIZ_ROOT, 'tools', 'bin', 'viz_frame.py')):
+    _VIZ_PARENT = os.path.dirname(_VIZ_ROOT)
+    if _VIZ_PARENT == _VIZ_ROOT:
+        raise ImportError('未找到 tools/bin/viz_frame.py（VizFrame 的唯一定义处）')
+    _VIZ_ROOT = _VIZ_PARENT
+if os.path.join(_VIZ_ROOT, 'tools', 'bin') not in sys.path:
+    sys.path.insert(0, os.path.join(_VIZ_ROOT, 'tools', 'bin'))
+from viz_frame import VizFrame  # noqa: E402
 
 
 def check(path):
@@ -160,9 +154,14 @@ if os.path.exists(BRIDGE_TRUTH):
                     "vb_set_param", "vb_set_param_str", "vb_get_param",
                     "vb_get_param_str", "vb_test_change", "vb_set_bus_mask",
                     "vb_viz_read", "vb_test_start",
-                    "vb_test_stop", "vb_bypass"):
+                    "vb_test_stop", "vb_bypass",
+                    # §7-5：Dart 侧 audio_vbridge.dart 已在调用 auto_protect；
+                    # Z12 守卫的测试注入口（smoke_vm_protect.py 用）
+                    "vb_plugin_auto_protect", "vb_protect_test",
+                    # §7-2（P-028）桥 ABI 协商导出
+                    "vb_abi"):
             getattr(b, sym)
-        print("  导出表 14/14 OK")
+        print("  导出表 17/17 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)
@@ -192,9 +191,15 @@ if os.path.exists(ASIO_TRUTH):
         for sym in ("asio_detect", "asio_start", "asio_start_ex", "asio_stop",
                     "asio_status", "asio_set_param", "asio_set_param_str",
                     "asio_get_param", "asio_get_param_str", "asio_viz_read",
-                    "asio_test_start", "asio_test_stop", "asio_bypass"):
+                    "asio_test_start", "asio_test_stop", "asio_bypass",
+                    # §7-5：bridge_plugin_ffi.dart 对这两个是硬 lookup——
+                    # 2026-10-24 前本桥一直漏导出，ASIO 后端下插件槽构造即抛
+                    "asio_plugin_slot_set_channels",
+                    "asio_plugin_slot_get_channels",
+                    # §7-2（P-028）桥 ABI 协商导出
+                    "asio_abi"):
             getattr(b, sym)
-        print("  导出表 13/13 OK")
+        print("  导出表 16/16 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
         sys.exit(1)

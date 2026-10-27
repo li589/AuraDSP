@@ -20,84 +20,7 @@ const _chainGroupMembers = {
   'chOut': ['exciter', 'reverb', 'loudness', 'output'],
 };
 
-/// 低音斜坡步进参数。原为 AppModel 类 static const，随四个斜坡方法
-/// （_sendBassGain/_stepBassRamp/_kickBassRamp/_disableBassRamped）迁入
-/// 本文件顶层——extension 方法体不能非限定引用类 static；无外部调用者。
-const int _bassGainMinIntervalMs = 50; // 20 Hz
-const double _bassGainStepDb = 0.6; // 每步最多推进 0.6 dB
-
 extension StateChain on AppModel {
-
-  // ---- 低音增益斜坡（防爆音） ----
-
-  void _sendBassGain(double v) {
-    _markSent('bass.gain');
-    send({'cmd': 'setParam', 'id': 'bass.gain', 'value': v, 'isFloat': true});
-  }
-
-  /// 推进一格并安排下一步；到达目标后收尾（含关闭时的延迟 disable）。
-  void _stepBassRamp() {
-    _bassGainTimer = null;
-    final target = _bassRampTarget;
-    if (target == null) return;
-    final diff = target - _bassRampCur;
-    if (diff > _bassGainStepDb) {
-      _bassRampCur += _bassGainStepDb;
-    } else if (diff < -_bassGainStepDb) {
-      _bassRampCur -= _bassGainStepDb;
-    } else {
-      _bassRampCur = target;
-    }
-    _sendBassGain(_bassRampCur);
-    _kickBassRamp();
-  }
-
-  void _kickBassRamp() {
-    final target = _bassRampTarget;
-    if (target == null) return;
-    if ((target - _bassRampCur).abs() <= _bassGainStepDb) {
-      if (_bassRampCur != target) {
-        _bassRampCur = target;
-        _sendBassGain(target);
-      }
-      _bassRampTarget = null;
-      if (_bassDisableAfterRamp) {
-        // 已渐变到 0，此时关开关才不会「哒」一声。
-        _bassDisableAfterRamp = false;
-        _markSent('bass.enable');
-        send({
-          'cmd': 'setParam',
-          'id': 'bass.enable',
-          'value': 0,
-          'isFloat': false,
-        });
-      }
-      _bassGainTimer?.cancel();
-      _bassGainTimer = null;
-      return;
-    }
-    _bassGainTimer ??= Timer(
-      const Duration(milliseconds: _bassGainMinIntervalMs),
-      _stepBassRamp,
-    );
-  }
-
-  /// 关闭低音：先把增益渐变到 0，再下发 disable（无爆音的旁路）。
-  void _disableBassRamped() {
-    if (_bassRampCur <= 0.0) {
-      _markSent('bass.enable');
-      send({
-        'cmd': 'setParam',
-        'id': 'bass.enable',
-        'value': 0,
-        'isFloat': false,
-      });
-      return;
-    }
-    _bassRampTarget = 0.0;
-    _bassDisableAfterRamp = true;
-    _kickBassRamp();
-  }
 
   // ---- 立体声链 ----
 
@@ -255,7 +178,9 @@ extension StateChain on AppModel {
     return switch (stageId) {
       'tube' => tubeOn,
       'comp' => compOn,
-      'bassmono' || 'shelf' || 'bass_shaping' => bassShapingOn,
+      'shelf' => shelfOn,
+      'bassmono' => bassmonoOn,
+      'bass_shaping' => bassShapingOn,
       'gate' => gateOn,
       'dyneq' => dyneqOn,
       'filter' => filterOn,
@@ -271,10 +196,7 @@ extension StateChain on AppModel {
       'liveprog' => lpEnabled,
       'crossfeed' => xfeedOn,
       'stereo' => stereoOn,
-      'reverb' =>
-        reverbPreset >= 0 ||
-            // 自定义态 -2：fvOn 即开着，判关会让链视图与耳朵打架。
-            (reverbPreset == -2 && fvOn),
+      'reverb' => reverbPreset != -1,
       'output' => limiterOn,
       _ => false,
     };
@@ -285,7 +207,11 @@ extension StateChain on AppModel {
     switch (stageId) {
       case 'tube':
         setInt('tube.enable', tubeOn ? 0 : 1);
-      case 'bass_shaping' || 'shelf' || 'bassmono':
+      case 'shelf':
+        setShelfEnabled(!shelfOn);
+      case 'bassmono':
+        setBassmonoEnabled(!bassmonoOn);
+      case 'bass_shaping':
         setBassShapingEnabled(!bassShapingOn);
       case 'gate':
         setGateEnabled(!gateOn);
@@ -320,12 +246,10 @@ extension StateChain on AppModel {
       case 'stereo':
         setStereoEnabled(!stereoOn);
       case 'reverb':
-        if (reverbPreset >= 0) {
-          setInt('reverb.preset', -1);
+        if (reverbPreset != -1) {
+          selectReverbPreset(-1);
         } else {
-          // -1→preset 0；-2→重申自定义（setSpatialReverbEnabled 内保护，
-          // 直接 setReverbPreset(0) 会吃掉自定义参数）。
-          setSpatialReverbEnabled(true);
+          selectReverbPreset(_lastReverbPreset);
         }
       case 'output':
         setInt('limiter.enable', limiterOn ? 0 : 1);
@@ -336,33 +260,38 @@ extension StateChain on AppModel {
 
   void setLiveprogCode(String text) {
     lpError = null;
-    lpCode = text;
+    final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    lpCode = normalized;
+    lpDraftCode = normalized;
     lpPresetCodeMismatch = false;
     lpCompileMs = -1;
-    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': text});
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': normalized});
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
-    // 引擎 LoadCode 已把 8 滑块清零，这里全量回推对齐；声明签名不变时
+    // 引擎 LoadCode 已把滑块清零，这里全量回推对齐；声明签名不变时
     // 保留用户已调值（只做回推），声明变化才采纳新默认值。
     // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
-    final metas = EelSliderParser.parse(text);
+    final metas = EelSliderParser.parse(normalized);
     final sig = StringBuffer();
-    for (var i = 1; i <= 8; i++) {
-      final meta = metas[i];
-      if (meta != null) {
-        sig.write('$i:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
-      }
+    for (final meta in metas.values) {
+      sig.write('${meta.index}:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
     }
     if (sig.toString() != _lpDeclSig) {
       _lpDeclSig = sig.toString();
-      for (var i = 1; i <= 8; i++) {
-        final meta = metas[i];
-        if (meta != null) {
-          var d = meta.defaultVal;
-          if (meta.minVal <= meta.maxVal) {
-            d = d.clamp(meta.minVal, meta.maxVal);
-          }
-          lpParams[i - 1] = d;
+      for (final meta in metas.values) {
+        var d = meta.defaultVal;
+        if (meta.minVal <= meta.maxVal) {
+          d = d.clamp(meta.minVal, meta.maxVal);
         }
+        lpSliderValues[meta.index] = d;
+        if (meta.index >= 1 && meta.index <= 8) {
+          lpParams[meta.index - 1] = d;
+        }
+      }
+    }
+    for (final meta in metas.values) {
+      final v = lpSliderValues[meta.index] ?? meta.defaultVal;
+      if (meta.index >= 1 && meta.index <= 64) {
+        setFloat('liveprog.param${meta.index}', v);
       }
     }
     for (var i = 0; i < 8; i++) {
@@ -441,7 +370,11 @@ extension StateChain on AppModel {
   }
 
   void clearConvolver() {
-    convEnabled = false;
+    // [PATCHED-AuraDSP P-032] 清除 IR **不再关掉效果器开关**。此前的行为
+    // 是"点清除 → 开关自动关闭 → 卡片收起"，用户无法"先备着、等文件就位再
+    // 用"。用户明确要求：无文件时回到"未加载"界面、效果内部直通
+    // （引擎侧 apply_convolver 在 conv_enable=1 且 ir_ready=false 时已走
+    // Convolver1DDisable 直通，语义正确）。
     convReady = false;
     convIrPath = null;
     convFrames = convChannels = convSrcRate = 0;
@@ -483,7 +416,8 @@ extension StateChain on AppModel {
       ddcDetails = rates.isNotEmpty
           ? '${rates.join(', ')} · ${maxPoles > 0 ? '$maxPoles 阶双二阶' : '校准矩阵'}'
           : '已解析校准矩阵';
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       ddcFileName = path.split(RegExp(r'[\\/]')).last;
       ddcDetails = '已加载校准文件';
     }

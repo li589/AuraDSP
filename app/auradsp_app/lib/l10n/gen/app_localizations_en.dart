@@ -76,9 +76,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingSurroundOnly => 'Surround Only (4/8)';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 Selected';
+  String get routingPairHint =>
+      'Applied per stereo pair: FL/FR, C/LFE, SL/SR and BL/BR toggle together; a single channel has no effect';
+
+  @override
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total Selected';
   }
+
+  @override
+  String get routingStereoPathSummary => 'Direct (Stereo/Matrix Path)';
+
+  @override
+  String get routingStereoPathHint =>
+      'Current path is stereo or matrix downmix; all channels are processed together and channel masks are inactive.';
+
+  @override
+  String get flfrOnlyHint =>
+      'Applies to the front FL/FR pair only (surrounds and LFE pass through in discrete multichannel)';
 
   @override
   String get channelRouting => 'Channel Routing';
@@ -90,6 +105,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get routingPresetAll => 'All';
 
   @override
+  String get routingPresetFront => 'Front Only';
+
+  @override
+  String get routingPresetBack => 'Back Only';
+
+  @override
   String get routingPresetStereo => 'Stereo';
 
   @override
@@ -97,6 +118,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get routingPresetSurround => 'Surround';
+
+  @override
+  String get channelCount => 'Channel Count';
+
+  @override
+  String get channelCountHint =>
+      'Working channel topology. Auto negotiates with source and device; or manually lock to 2.0 / 4.0 / 5.1 / 7.1.';
+
+  @override
+  String get channelCountAuto => 'Auto';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return 'Auto negotiation active · Current topology: $count ch';
+  }
 
   @override
   String get setConnStatus => 'Connection';
@@ -531,7 +567,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get catStage => 'Field';
 
   @override
-  String get catSpace => 'Spatial';
+  String get catSpace => 'Spatial Effects';
+
+  @override
+  String get catStereo => 'Stereo';
 
   @override
   String get catOutput => 'Output';
@@ -724,6 +763,45 @@ class AppLocalizationsEn extends AppLocalizations {
       'Dry signal retention; keeps vocals articulate and solid.';
 
   @override
+  String get reverbHintWidthMc =>
+      'Multichannel FDN width: only FL/FR, SL/SR and BL/BR are widened; C and LFE stay untouched.';
+
+  @override
+  String get reverbEngineLabel => 'Engine';
+
+  @override
+  String get reverbEngineStereo => 'Stereo (Vendor)';
+
+  @override
+  String get reverbEngineMc => 'Multichannel FDN';
+
+  @override
+  String get reverbEngineOff => 'Off';
+
+  @override
+  String get reverbEngineInfo =>
+      'Reverb follows the current channel path: matrix/binaural uses the vendor Progenitor2 stereo reverb; discrete multichannel uses an 8-line FDN. The two never run together.';
+
+  @override
+  String get reverbLfe => 'LFE into reverb';
+
+  @override
+  String get reverbLfeInfo =>
+      'Sends LFE through a 120 Hz low-pass at -6 dB into the multichannel reverb; the wet return is low-passed again. Ignored on the stereo path.';
+
+  @override
+  String get reverbPredelay => 'Pre-delay';
+
+  @override
+  String get reverbPredelayInfo =>
+      'Delay before the reverb (0–100 ms), added to the preset\'s base pre-delay; custom mode starts from 0.';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return 'Legacy preset $id';
+  }
+
+  @override
   String get spatialHintRoom =>
       'Simulated room reflection volume. Higher = deeper, grander space with fuller tails.';
 
@@ -783,11 +861,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vbProtectHint =>
-      'Narrows plugins to the monitored bus when the callback stays over budget; restores automatically';
+      'Audio callback deadline is determined by the driver buffer size (e.g. 128 frames @ 48kHz = 2.7ms budget). When DSP callback duration (EMA) continuously exceeds 85% of this budget, heavy plugins are automatically narrowed to the monitored bus to prevent audio dropouts and glitches, restoring automatically when load normalizes.';
 
   @override
   String get vbProtectActive =>
       'Active: plugins only on the monitored bus, others passthrough (callback over budget)';
+
+  @override
+  String get vbProtectActiveTag => 'Protection Active';
 
   @override
   String get shelfTitle => 'Low Shelf';
@@ -830,11 +911,100 @@ class AppLocalizationsEn extends AppLocalizations {
       'Frequencies below this cutoff (20–300Hz) are summed to mono to prevent phase cancellation and muddy bass';
 
   @override
+  String get bassShapingMasterHint => 'Master: active when either module is on';
+
+  @override
+  String get bassShelfModule => 'Low Shelf';
+
+  @override
+  String get bassMonoModule => 'Bass Mono';
+
+  @override
+  String get bassMonoDesc =>
+      'Sums bass below the crossover to mono to remove phase cancellation and muddiness.';
+
+  @override
+  String get channelSelection => 'Channel Selection';
+
+  @override
+  String get bassShelfRoutingHint =>
+      'Select channels to apply low-shelf filtering. Unselected channels pass through unchanged.';
+
+  @override
+  String get bassMonoPairsTooltip =>
+      'Select channel pairs for bass mono. Unselected pairs pass through unchanged; stereo/binaural paths only affect L/R.';
+
+  @override
+  String get bassMonoPairs => 'Channel Selection';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '$count pair(s)';
+  }
+
+  @override
+  String get bassMonoPairFront => 'Front';
+
+  @override
+  String get bassMonoPairCenterLfe => 'Center+LFE';
+
+  @override
+  String get bassMonoPairSide => 'Side';
+
+  @override
+  String get bassMonoPairBack => 'Back';
+
+  @override
+  String get bassMonoPairAll => 'All';
+
+  @override
+  String get bassMonoPairFrontOnly => 'Front only';
+
+  @override
+  String get bassMonoPairUnavailable =>
+      'This pair is not present in the current output';
+
+  @override
+  String get bassMonoMerge => 'Merge Mode';
+
+  @override
+  String get bassMonoMergePerPair => 'Per pair';
+
+  @override
+  String get bassMonoMergeGlobal => 'Merge all';
+
+  @override
+  String get bassMonoMergeSinglePairHint =>
+      'With a single pair selected, both modes are identical';
+
+  @override
+  String get bassMonoNoneSelected =>
+      'No channel pair selected · not processing';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '$count pair(s) ignored (not present in current output)';
+  }
+
+  @override
+  String get bassMonoLfeWarning =>
+      'Averaging C/LFE weakens center/LFE separation; not recommended';
+
+  @override
+  String get bassMonoStereoPathHint =>
+      'Stereo/matrix/binaural path: applies to L/R only';
+
+  @override
   String get retryNow => 'Retry';
 
   @override
+  String sampleRateDeviceActual(int rate) {
+    return 'Device actual: $rate Hz';
+  }
+
+  @override
   String get sampleRateFollowBridge =>
-      'Bridge modes follow the VB/ASIO device; this applies to in-process only';
+      'Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)';
 
   @override
   String get latencyLabel => 'Latency';
@@ -868,6 +1038,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postGain => 'Post Gain';
+
+  @override
+  String get postPerChannelTrim => 'Per-Channel Output Trim';
+
+  @override
+  String get postPerChannelTrimHint =>
+      'Fine-tune individual output channel levels (-15 to +15 dB)';
+
+  @override
+  String get postResetAllTrim => 'Reset All';
 
   @override
   String get equalizer => 'Equalizer';
@@ -915,28 +1095,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noAudio => 'Idle — no audio stream through the engine';
 
   @override
-  String get reverbPreset0 => 'Concert Hall';
+  String get reverbPreset0 => 'Large Hall';
 
   @override
-  String get reverbPreset1 => 'Small Hall';
+  String get reverbPreset1 => 'Concert Hall';
 
   @override
   String get reverbPreset2 => 'Medium Hall';
 
   @override
-  String get reverbPreset3 => 'Grand Hall';
+  String get reverbPreset3 => 'Small Hall';
 
   @override
-  String get reverbPreset4 => 'Vast Hall';
+  String get reverbPreset4 => 'Studio';
 
   @override
-  String get reverbPreset5 => 'Cathedral';
+  String get reverbPreset5 => 'Room';
 
   @override
-  String get reverbPreset6 => 'Colossal Hall';
+  String get reverbPreset6 => 'Auditorium';
 
   @override
-  String get reverbPreset7 => 'Valley';
+  String get reverbPreset7 => 'Plate Reverb';
 
   @override
   String get sourceCard => 'Audio Source';
@@ -987,7 +1167,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'Effective only for local 4/6/8-channel files: Matrix downmix = engine mixes to stereo before processing; Discrete = per-channel processing (pre-folded on stereo devices).';
+      'DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.';
 
   @override
   String get audioMode => 'Audio Mode';
@@ -1414,7 +1594,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpOpFailed => 'Operation failed, please retry';
 
   @override
-  String get lpCompiledIdle => 'Compiled — flip the top-right switch to enable';
+  String get lpCompiledIdle => 'Compiled · Click Apply in toolbar to run';
 
   @override
   String get lpSliders => 'Script sliders (slider1..8)';
@@ -1424,7 +1604,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Declared range wins; 0..1 when undeclared; changes apply live';
 
   @override
-  String get lpLibrary => 'Script library (%APPDATA%/AuraDSP/liveprog)';
+  String get lpLibrary => 'Script Library';
 
   @override
   String get lpLibraryEmpty =>
@@ -1432,6 +1612,103 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpSave => 'Save to library';
+
+  @override
+  String get lpApoDialogTitle => 'Import EqualizerAPO Preset (.txt)';
+
+  @override
+  String get lpApoDialogDesc =>
+      'Convert EqualizerAPO / Peace parametric EQ text into a high-performance EEL2 script';
+
+  @override
+  String get lpApoOpenFile => 'Open .txt file';
+
+  @override
+  String get lpApoPasteHint =>
+      'Paste EqualizerAPO configuration text here (e.g. Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41)...';
+
+  @override
+  String get lpApoSwapChannels => 'Swap Channels (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => 'Invert Polarity (Phase 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return 'Detected $n filters';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return 'Preamp: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => 'Load into Editor';
+
+  @override
+  String get lpApoPreview => 'Generated EEL2 Code Preview';
+
+  @override
+  String get lpFind => 'Find';
+
+  @override
+  String get lpReplace => 'Replace';
+
+  @override
+  String get lpReplaceAll => 'Replace All';
+
+  @override
+  String get lpFindNext => 'Next match';
+
+  @override
+  String get lpFindPrev => 'Previous match';
+
+  @override
+  String get lpMatchCase => 'Match case';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get lpNoMatches => 'No matches';
+
+  @override
+  String get lpOutline => 'Code Outline';
+
+  @override
+  String get lpOutlineEmpty => 'No sections or functions found';
+
+  @override
+  String get lpTemplates => 'Script Templates';
+
+  @override
+  String get lpTemplatesDesc =>
+      'Select a starter DSP template to accelerate your audio script development';
+
+  @override
+  String get lpTemplateUse => 'Use Template';
+
+  @override
+  String get lpManualSearchHint =>
+      'Search 80+ EEL2 functions, keywords, registers...';
+
+  @override
+  String get lpManualInsert => 'Insert into Editor';
+
+  @override
+  String get lpManualParamTitle => 'Parameters';
+
+  @override
+  String get lpManualReturnTitle => 'Return Value';
+
+  @override
+  String get lpManualExampleTitle => 'Example';
+
+  @override
+  String get lpAllCategories => 'All';
 
   @override
   String get convTitle => 'Impulse Response';
@@ -1952,7 +2229,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get haasSideLeft => 'Left channel';
 
   @override
-  String get fxCatSpatial => 'Spatial';
+  String get fxCatSpatial => 'Spatial Effects';
+
+  @override
+  String get fxCatStereoOnly => 'Stereo Only';
 
   @override
   String get fxCatLate => 'Exciter & Output';
@@ -1979,6 +2259,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spatialStyleNeutral => 'Neutral';
+
+  @override
+  String get spatialStyleCustom => 'Custom';
 
   @override
   String get spatialRoom => 'Room';
@@ -2032,21 +2315,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      'Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted';
-
-  @override
-  String get spatialFdn => 'FDN room';
-
-  @override
-  String get spatialFdnInfo =>
-      '8-line feedback delay network for late reverb, replacing Freeverb; Freeverb is skipped to avoid a double room';
-
-  @override
-  String get spatialLate => 'Late reverb';
-
-  @override
-  String get spatialLateInfo =>
-      'FDN late-reverb send. Higher values make the room tail more obvious';
+      'Renders 4/5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted. While it is on, it takes over \'Channel Mode\' from the settings page (that setting has no effect)';
 
   @override
   String get spatialHeadTrack => 'Head tracking';
@@ -2684,6 +2953,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get compTfresFine => 'High Frequency';
 
   @override
+  String get compModePairBadge => 'Pair Mode';
+
+  @override
+  String get compModePairHint =>
+      'Allocates compression slots per channel-pair to save CPU and memory. Requires selecting both channels of a pair; semi-selected pairs pass through uncompressed.';
+
+  @override
+  String get compModeSemiSelectedWarning =>
+      'Pair mode requires selecting full pairs; semi-selected pairs are bypassed';
+
+  @override
   String get autoGainCompensation => 'Auto Gain Compensation';
 
   @override
@@ -2699,7 +2979,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get arbmagSubtitle =>
-      '8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves';
+      'Based on an 8192-point causal minimum-phase FIR convolution engine. Supports AutoEq GraphicEQ curves or custom frequency responses to calibrate headphones and speakers with high precision.';
 
   @override
   String get arbmagPresetFlat => 'Flat';
@@ -2773,7 +3053,118 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fxCatCore => 'Core Processing';
 
   @override
+  String get channelCenter => 'Center (C)';
+
+  @override
+  String get channelLfe => 'LFE';
+
+  @override
+  String get channelSurroundLeft => 'Surround Left (SL)';
+
+  @override
+  String get channelSurroundRight => 'Surround Right (SR)';
+
+  @override
+  String get channelBackLeft => 'Back Left (BL)';
+
+  @override
+  String get channelBackRight => 'Back Right (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n Channels';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return 'Tuned $n ch';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% Default Balance';
+
+  @override
+  String get eqPresetElectronic => 'Electronic (EDM)';
+
+  @override
+  String get eqPresetHiphop => 'Hip-Hop';
+
+  @override
+  String get eqPresetAcoustic => 'Acoustic';
+
+  @override
+  String get eqPresetMetal => 'Metal';
+
+  @override
+  String get eqPresetPodcast => 'Podcast';
+
+  @override
+  String get convIrPrompt => 'Enter or select Impulse Response (IR) file path:';
+
+  @override
+  String get convLoadIr => 'Load IR';
+
+  @override
+  String get ddcVdcPrompt => 'Enter or select VDC calibration file path:';
+
+  @override
+  String get ddcLoadVdc => 'Load VDC';
+
+  @override
+  String get arbmagPrompt =>
+      'Enter or select AutoEq / GraphicEQ curve file path:';
+
+  @override
+  String get testAudioWavPrompt =>
+      'Enter or select test audio (WAV) file path:';
+
+  @override
+  String get testAudioMp3Prompt => 'Enter or select MP3 audio file path:';
+
+  @override
+  String get testAudioLoad => 'Load Audio';
+
+  @override
+  String get pathPickerTitle => 'Select Path';
+
+  @override
+  String get pathPickerConfirm => 'Confirm';
+
+  @override
+  String get pathPickerBrowse => 'Browse...';
+
+  @override
+  String get pathPickerClear => 'Clear';
+
+  @override
+  String get pathPickerSelectDir => 'Select This Directory';
+
+  @override
+  String get pathPickerErrEmpty => 'Path cannot be empty';
+
+  @override
+  String get pathPickerErrDirNotExist =>
+      'Directory does not exist or access denied';
+
+  @override
+  String get pathPickerErrFileNotExist =>
+      'File does not exist or access denied';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return 'Unsupported file format (supported: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return 'Supported formats: $exts';
+  }
+
+  @override
   String get errEngineClosed => 'Engine is not running';
+
+  @override
+  String get errEngineBusy => 'Engine busy, retry later';
 
   @override
   String get errInvalidLength => 'Invalid length';
@@ -2812,5 +3203,203 @@ class AppLocalizationsEn extends AppLocalizations {
   String get errUnsupported => 'Unsupported operation';
 
   @override
+  String get errReadOnly => 'Parameter is read-only';
+
+  @override
   String get errInternal => 'Internal engine error';
+
+  @override
+  String get lpFindReplace => 'Find & Replace';
+
+  @override
+  String get lpSidebarLeft => 'Toggle Left Panel (Outline & Library)';
+
+  @override
+  String get lpSidebarRight => 'Toggle Right Panel (Sliders & Console)';
+
+  @override
+  String get lpConsole => 'Console';
+
+  @override
+  String get lpNewScriptWizard => 'Script Wizard';
+
+  @override
+  String get lpApoImportTitle => 'Import APO TXT';
+
+  @override
+  String get lpConfirmDiscardTitle => 'Discard Changes?';
+
+  @override
+  String get lpConfirmDiscardBody =>
+      'The current script has unsaved modifications. Loading new content will discard these changes. Proceed?';
+
+  @override
+  String get lpConfirmDiscardAction => 'Discard & Load';
+
+  @override
+  String get lpConsoleClear => 'Clear Output';
+
+  @override
+  String get lpExpandEditor => 'Expand';
+
+  @override
+  String get lpCollapseEditor => 'Collapse';
+
+  @override
+  String get lpUncompiled => 'Uncompiled edits';
+
+  @override
+  String get lpCompileSuccess => 'Compiled successfully';
+
+  @override
+  String get lpCompilingScript => 'Compiling script…';
+
+  @override
+  String get lpEyebrowDsp => 'Programmable DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 Editor';
+
+  @override
+  String get lpBtnApplied => 'Applied';
+
+  @override
+  String get lpBtnUnapplied => 'Unapplied';
+
+  @override
+  String get lpBtnCompile => 'Compile';
+
+  @override
+  String get lpTooltipCompileFirst => 'Code modified; compile before applying';
+
+  @override
+  String get lpMenuFile => 'File';
+
+  @override
+  String get lpFileNewBlank => 'New Blank Script';
+
+  @override
+  String get lpFileNewFromTemplate => 'New from Template...';
+
+  @override
+  String get lpFileImportApo => 'Import APO Preset...';
+
+  @override
+  String get lpFileImportEel => 'Import EEL Script...';
+
+  @override
+  String get lpFileSaveAs => 'Save As...';
+
+  @override
+  String get lpFileSaveAsPrompt => 'Enter destination path and filename:';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => 'File Already Exists';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return 'The file \"$name\" already exists. Overwrite it?';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => 'Overwrite';
+
+  @override
+  String get lpMenuEdit => 'Edit';
+
+  @override
+  String get lpEditFindReplace => 'Find & Replace';
+
+  @override
+  String get lpEditToggleOutline => 'Code Outline';
+
+  @override
+  String get lpEditFormat => 'Format Code';
+
+  @override
+  String get lpEditScrollToTop => 'Scroll to Top';
+
+  @override
+  String get lpBtnLibrary => 'Script Library';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 Script Library & Directory Manager';
+
+  @override
+  String get lpLibOpenInExplorer => 'Browse in File Manager';
+
+  @override
+  String get lpLibDirInvalid => 'Directory does not exist or is invalid';
+
+  @override
+  String get lpLibSaveCurrent => 'Save Current Script to Library';
+
+  @override
+  String get lpLibCustomDirs => 'Script Directories';
+
+  @override
+  String get lpSlidersPanelTitle => 'Parameter Sliders';
+
+  @override
+  String get lpSlidersCollapse => 'Collapse Panel';
+
+  @override
+  String get lpSlidersExpand => 'Expand Panel';
+
+  @override
+  String get lpTabScriptSliders => 'Script Sliders';
+
+  @override
+  String get lpTabInputChannels => 'Input Channels (8)';
+
+  @override
+  String get lpTabOutputChannels => 'Output Channels (8)';
+
+  @override
+  String get lpCustomVarTag => 'Script Var';
+
+  @override
+  String get lpCustomVarHint =>
+      'Script internal variable (initialized in @init; bind to slider1..8 for host real-time control)';
+
+  @override
+  String get lpInputTrimHint =>
+      '8-channel unified architecture input trim & master gain';
+
+  @override
+  String get lpOutputGainHint =>
+      '8-channel independent output post-gain trim (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => 'Reset All';
+
+  @override
+  String get lpInputMasterGain => 'Master Input Gain';
+
+  @override
+  String get lpOutputMasterGain => 'Master Output Gain';
+
+  @override
+  String get lpNoScriptSliders => 'No adjustable variables declared in script';
+
+  @override
+  String get lpTooltipUnapplyToCompile =>
+      'Compilation disabled while applied; unapply first';
+
+  @override
+  String get lpLibSystemInitial => '<System Default>';
+
+  @override
+  String get lpLibDirs => 'Script Directories';
+
+  @override
+  String get lpLibScriptList => 'Script List';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return 'Syntax issue on line $line: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => 'Preamp Only Mode (No Filters)';
 }

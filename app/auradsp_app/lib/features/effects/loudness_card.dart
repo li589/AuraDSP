@@ -11,7 +11,6 @@ class _LoudnessCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = l10nOf(context);
-    final p = paletteOf(context);
 
     return SectionCard(
       index: kEffectCardIndex['loudness'],
@@ -33,8 +32,9 @@ class _LoudnessCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(l.loudnessHint, style: captionOf(p)),
-          const SizedBox(height: AuraSpace.sm),
+          // [P-032] 移除卡片顶部的重复说明行：同样的文案已经挂在
+          // 「补偿强度」滑块右侧的气泡（infoMessage: l.loudnessHint）上，
+          // 两处并排展示属于同一句话重复。
           ParamSlider(
             param: ParamRegistry.loudnessAmount,
             model: model,

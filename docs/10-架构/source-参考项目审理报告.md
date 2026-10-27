@@ -1,7 +1,7 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.5**（2026-10-16，新增两个 Windows APO 参考仓 tympan-apo 与 virtual-surround-sound，扩充 §2.8 / §3 / §4 / §5 / §6）
-> 范围：`source/` 下全部 15 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.7**（2026-10-25，新增 PeaceTXT-to-EEL-converter 参考仓，扩充 §1 / §2.10 / §3 / §4 / §5）
+> 范围：`source/` 下全部 17 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
@@ -27,8 +27,10 @@
 | 13 | **ViPERDSP** | `likelikeslike/ViPERDSP` (main@6fc1f1b) | 跨平台 / C++17, CMake, pffft | **All Rights Reserved（仅限个人使用）** | 1.36 MB (123 文件) | ★★★ **ViPER 效果算法层**（23 个效果 + 21,278 行；VHE/DynamicSystem/FETCompressor 等蓝本；**仅供阅读参考，禁商用与代码搬运**，见 §2.6） |
 | 14 | **tympan-apo** | `penta2himajin/tympan-apo` (main@e85f7a4) | Windows / Rust APO 框架 | MIT OR Apache-2.0 | 654 KB (61 文件) | ★★ **Windows APO 的 Rust 抽象与 COM 基础设施蓝本**（IUnknown/IClassFactory/IAudioProcessingObject/IAudioSystemEffects v1-v3，SFX/MFX/EFX；含 Win11 AEC APO 与 lock-free ring；含 CLAUDE.md 研发手记）。对照 sysapo/VAIO 模式研发 |
 | 15 | **virtual-surround-sound** | `nnyj/virtual-surround-sound` (main@b67d037) | Windows / C++ APO 转发器 | GPL-3.0（**含 NIRSOFT SoundVolumeView.exe 专有工具，注意**） | 410 KB (31 文件) | ★★ **Windows APO RT 线程转发范式 + COM 聚合陷阱实录**（VB-Cable 7.1→HeSuVi binaural→WASAPI 物理设备，~10ms 延迟；lock-free SPSC ring + 注册表监听设备切换；docs/apo-forwarder-internals.md 记录 audiodg 聚合/端点 FX slot/LPAC ACE 等踩坑）。**GPL-3.0 但工具目录含第三方专有 exe，仅作阅读参考** |
+| 16 | **LiveprogIDE** | `timschneeb/LiveprogIDE` (master@b2f3924) | 跨平台 / Qt6, C++ (QMake) | **未见 LICENSE（All Rights Reserved，默认保留所有权利）** | 12.0 MB (424 文件) | ★★ **Liveprog（EEL2）脚本 IDE / 编辑器 UX 参考**（Qt6 QCodeEditor 语法高亮 + Qt-Advanced-Docking-System 停靠布局；`src/definitions/demo.eel` 为样例脚本）。对齐引擎 `engine/legacy/` 的 liveprog(EEL2) 可编程级，可为 AuraDSP Liveprog 编辑页提供 UI 范式；**根无 LICENSE → 禁并入 GPL-3.0 主库，仅作阅读参考**。子依赖 `QCodeEditor`(MIT)、`3rdparty/docking-system`(LGPL-2.1) 已各自带许可、内容已展开并去嵌套 `.git` |
+| 17 | **PeaceTXT-to-EEL-converter** | `nanbeimerco/PeaceTXT-to-EEL-converter` (main@5de0462) | 跨平台 / 纯前端 Web (HTML+JS+CSS) | README 声明 **MIT**，但**无 LICENSE 文件**（未确认；MIT 与 GPL-3.0 兼容） | 168 KB (5 文件) | ★★ **Equalizer APO / Peace 预设 → LiveProg EEL2 脚本转换参考**（RBJ Biquad Peaking/Low-Shelf/High-Shelf 系数生成、L/R 独立 EQ、前级/声道交换/极性反转，`app.js` 的 `generateEel` 为代码生成主体）。对齐引擎 `engine/legacy/` liveprog 级与 `assets/liveprog/*.eel`，可为 AuraDSP「导入 EqualizerAPO 预设」功能提供格式与算法蓝本；与既有的 `equalizerAPO64`(#8) 构成预设格式与宿主的闭环。**README 声明 MIT 但缺 LICENSE 文件，并入前须向上游确权** |
 
-总计占用：**~768 MB**，约 **13,700** 个源文件与资源。
+总计占用：**~780 MB**，约 **14,105** 个源文件与资源。
 
 ---
 
@@ -177,6 +179,28 @@
 
 ---
 
+
+### 2.9 LiveprogIDE（EEL2 / Liveprog 脚本 IDE，2026-10-24 新增）
+
+- **背景**：由 `timschneeb`（RootlessJamesDSP 同主）维护的**嵌入式 Liveprog IDE**，README 自述 "Basic embeddable Liveprog IDE, currently supports EELang2 (JamesDSP for Linux)"；设计为 QMake `subdirs` 工程的插件，可通过 `COMPILE_STANDALONE` 编译独立 dummy 应用。
+- **技术栈**：Qt6（QMake 构建，`EELEditor.pro` / `src/src.pro`）+ `QCodeEditor`（Qt 代码编辑器，MIT，仓库内双份：`QCodeEditor/` 根级与 `3rdparty/QCodeEditor/`，均带 `LICENSE.MIT`）+ `Qt-Advanced-Docking-System`（停靠布局，LGPL-2.1，经 `.gitmodules` 声明的子模块，内容已展开并去嵌套 `.git`）。
+- **实测结构（424 文件 / 12.0 MB，不含 .git）**：`src/` 含 `eeleditor.{cpp,h,ui}`（主编辑器窗口）、`model/`（EEL 符号/文档模型）、`widgets/`、`utils/`、`definitions/demo.eel`（样例 Liveprog 脚本）、`fonts/`、`icons/`、`editorresources.qrc`；`3rdparty/docking-system/`（停靠系统，含 `src/`、`PyQtAds/`、`sip/`、`examples/`、文档）；根级 `screenshot.png`（编辑器截图）、`EELEditor.pro.user`（QtCreator 用户配置，本地产物）。
+- **许可研判（重点）**：**仓库根目录无任何 LICENSE 文件** → 按 GitHub 默认 **All Rights Reserved** 处理（保留所有权利）。子依赖 `QCodeEditor`(MIT)、`Qt-Advanced-Docking-System`(LGPL-2.1) 各自带许可、可自由借鉴其架构；但 **LiveprogIDE 本体代码（EEL 编辑器 UI/逻辑）一律不得并入 GPL-3.0 分发的 AuraDSP 主库**，仅作 Liveprog 脚本编辑器 UX 与 EEL2 语法的阅读参考。
+- **对 AuraDSP 价值**：本项目引擎 `engine/legacy/` 已实现 liveprog（EEL2 可编程）级；`app/` 侧 Liveprog 编辑页若需构建/升级脚本编辑器，本仓提供现成的 Qt EEL2 语法高亮 + 停靠式多文档 IDE 范式（UI 布局、符号模型、示例脚本组织方式）。**仅作阅读参考、禁代码搬运**（理由见许可研判）。
+
+
+### 2.10 PeaceTXT-to-EEL-converter（Equalizer APO 预设 → LiveProg EEL2 转换器，2026-10-25 新增）
+
+- **背景**：`nanbeimerco` 的纯前端 Web 工具，把 Equalizer APO 生态（Peace GUI）通用的 `.txt` 预设文件转换为 **RootlessJamesDSP LiveProg（EEL2）** 可用的 `.eel` 脚本；README 为日文，标题即 "Peace TXT to RootlessJamesDSP EEL Converter"。与已登记的 `equalizerAPO64`(#8)、`RootlessJamesDSP`(#4) 同源。
+- **技术栈**：零构建、零后端依赖的单页应用——`index.html` + `app.js`（799 行）+ `styles.css` + `jszip.min.js`（JSZip v3.10.1，MIT/GPLv3 双许可，随仓分发用于批量 ZIP 打包）。全程客户端运行、不上传文件，支持多文件拖拽批量转换与 ZIP 导出。
+- **转换算法（可直接对照 AuraDSP）**：
+  1. **滤波器模型**：采用 **RBJ（Robert Bristow-Johnson）Biquad** 系数公式，生成 `calc_peak()` / `calc_lshelf()` / `calc_hshelf()` 三个 EEL2 函数，覆盖 **PK（Peaking）/ LSC（Low Shelf）/ HSC（High Shelf）** 三类——与本仓 `engine/dsp/` 的 RBJ biquad 实现同构（shelf / filter / dyneq 均走静态 RBJ）。
+  2. **系数随采样率重算**：系数在生成的脚本内按 `srate` 动态计算而非写死，可对照本项目参数随工作采样率重建的处理方式。
+  3. **处理顺序**：前级增益（Global + L/R 线性叠加）→ 全局（ALL）滤波器 → L/R 独立 EQ（`spl0` / `spl1` 分通道）→ 声道交换（可选）→ 极性反转（可选）。
+  4. **预设解析**：`parseTxt()` 解析 Peace / Equalizer APO 的 `Filter:` / `Channel:` / `Preamp:` 段，支持 `Channel: L/R/ALL` 与逐通道前级。
+- **许可研判（与 #16 LiveprogIDE 需区别对待）**：README 的「ライセンス」章节**明确声明 "MIT License"**，但**仓库内无 LICENSE 文件** → 按本项目铁律（无 LICENSE ≠ 开源）保守记为「**声明 MIT、未落 LICENSE 文件**」。因 MIT 与 AuraDSP 的 GPL-3.0 **单向兼容**，实际合规风险显著低于 #16（后者无任何许可声明 → All Rights Reserved → 禁并入）。**处置**：阅读参考与算法对照无碍；若未来要并入其转换代码（如 `app.js` 的系数生成与文本解析逻辑），须①先请上游补齐 LICENSE 文件，或②按 RBJ 公式自研重写（公式属公开常识，本仓已有同构实现）。随仓分发的 `jszip.min.js` 为 MIT/GPLv3 双许可，可自由使用。
+- **对 AuraDSP 价值**：本项目已有 `assets/liveprog/`（47 个 `.eel`）与引擎 liveprog(EEL2) 可编程级，且 `equalizerAPO64` 已作为 Phase 7b 蓝本——本仓补齐了「**Equalizer APO 预设格式 → EEL2 脚本**」这一环，是「导入 Peace / EqualizerAPO 预设」功能的现成算法与格式参考（含 L/R 独立 EQ 与通道处理语义）。规模极小（5 文件 / 168 KB），研读成本低。
+
 ## 3. 算法与系统能力对照矩阵
 
 | 功能 / 算法需求 | AuraDSP 当前状态 | `source/` 中最佳参考仓库 | 具体参考源码路径 / 说明 |
@@ -197,6 +221,8 @@
 | **Android 免 Root 引擎** | Phase 6 规划中 | `RootlessJamesDSP` | `app/src/main/java/.../AudioCaptureService.kt`（无 Root 前台服务捕获） |
 | **Windows APO COM 抽象 / 生命周期（Rust 范式）** | Phase 7b Windows APO 路线（sysapo/VAIO） | `tympan-apo`（新增 #14） | `src/raw/`（IUnknown/IClassFactory/Dll* 导出）、`src/clsid.rs`/`src/inf.rs`/`src/fx_properties.rs`（CLSID/INF/FxProperties 注册）、`src/realtime/`（lock-free ring）；对照 equalizerAPO64/ViPER4Windows 的 C++ APO 实现，提供另一种语言范式的 COM 契约参考 |
 | **Windows APO RT 线程转发 + 设备热切换** | 当前为进程内 WASAPI pump | `virtual-surround-sound`（新增 #15） | `apo/src/vss_apo.cpp`（单文件最小 APO DLL）+ `docs/apo-forwarder-internals.md`（audiodg 聚合/端点 FX slot/LPAC ACE 踩坑实录）；lock-free SPSC ring 桥接 DSP 与 WASAPI 渲染线程，注册表监听实时切换 sink |
+| **Liveprog（EEL2）脚本编辑器 / IDE** | app/ Liveprog 编辑页（规划/待强化） | `LiveprogIDE`（新增 #16） | `src/eeleditor.{cpp,h,ui}`（Qt6 EEL2 语法高亮 + 停靠式多文档 IDE）+ `src/definitions/demo.eel`（样例脚本）；对齐引擎 `engine/legacy/` 的 liveprog 可编程级；**根无 LICENSE（ARR），仅阅读参考、禁搬运** |
+| **Equalizer APO / Peace 预设 → EEL2（liveprog）转换** | assets/liveprog 现有 47 个 .eel，无外部预设导入 | `PeaceTXT-to-EEL-converter`（新增 #17） | `app.js` 的 `parseTxt()`（Peace `.txt` 段解析）+ `generateEel()`（RBJ Biquad PK/LSC/HSC 系数 → EEL2 `calc_peak` / `calc_lshelf` / `calc_hshelf`；L/R 独立 EQ、前级、声道交换、极性反转）；为「导入 EqualizerAPO 预设」功能提供蓝本。**README 声明 MIT，缺 LICENSE 文件，并入前确权** |
 
 ---
 
@@ -205,6 +231,8 @@
 1. **嵌套 `.git` 审查**：
    - 全面递归扫描确认：`source/` 下所有目录及子目录均 **无任何 `.git` 目录残留**，彻底规避子模块递归嵌套与意外提交问题。
    - **v2.5 更新（2026-10-16）**：本轮新增的 `tympan-apo/`、`virtual-surround-sound/` 两个克隆在登记前已剥除各自的嵌套 `.git`（原各约 340–430 KB）；剥除后递归复核 `source/` 下 `.git` 数量为 **0**，铁律持续有效。
+   - **v2.6 更新（2026-10-24）**：新增 `LiveprogIDE/` 克隆（master@b2f3924）在登记前已剥除嵌套 `.git`（约 9.8 MB）；剥除后递归复核仍为 **0**，铁律持续有效。
+   - **v2.7 更新（2026-10-25）**：新增 `PeaceTXT-to-EEL-converter/` 克隆（main@5de0462）在登记前已剥除嵌套 `.git`（约 129 KB）；剥除后递归复核仍为 **0**，铁律持续有效。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
@@ -227,6 +255,8 @@
 | **P-7** | ✅ 新增闭环 | CLAP 正典上游与内置快照落差 | 新克隆 `source/clap` 为正典上游 v1.2.10；内置快照 `vendor/plugin-api/clap` 为 1.2.6（落后 8 个 draft 头），可按 §2.5 建议升级。 |
 | **P-8** | ✅ 已闭环 | ViPER4Windows 引擎源码缺失 | 已克隆补齐 `likelikeslike/ViPERDSP` main@6fc1f1b（123 文件 / 1.36 MB，.git 已剥除并登记），23 个效果模块到齐；注意其为 ViPER4Windows 钉住指针 db1c11c 的后继版本。引擎为 **All Rights Reserved 仅限个人使用**，仅作阅读参考、禁并入 AuraDSP；谱系与合规全景见 §2.7。 |
 | **P-9** | ✅ 已闭环 | 新增两个 Windows APO 参考仓（tympan-apo / virtual-surround-sound） | 2026-10-16 用户克隆至 `source/`；二者嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 分别锁定 `e85f7a4` / `b67d037`，已于 `source/ORIGIN.md` 追加 #14 / #15 登记、本报告升版 v2.5（§1 扩至 15 项、新增 §2.8、§3 补充两行、§4 审计更新）。许可研判：tympan-apo 双许可（`MIT OR Apache-2.0`，可自由借鉴架构、并入须保留声明）；virtual-surround-sound 为 GPL-3.0 但 `tools/` 含 NIRSOFT 专有 `SoundVolumeView.exe`，**该 exe 禁并入/重分发**，源码仅作阅读参考。二者维持只读参考、禁搬运定位。 |
+| **P-10** | ✅ 已闭环 | 新增 LiveprogIDE 参考仓（timschneeb/LiveprogIDE，master@b2f3924） | 2026-10-24 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `b2f3924`，已于 `source/ORIGIN.md` 追加 #16 登记、本报告升版 v2.6（§1 扩至 16 项、新增 §2.9、§3 补充一行、§4 审计更新）。许可研判：根目录**无 LICENSE 文件** → 按 **All Rights Reserved** 处理（timschneeb 作者，与 RootlessJamesDSP 同主；子依赖 QCodeEditor MIT / docking-system LGPL-2.1 各自带许可）。**根无 LICENSE → 代码禁并入 GPL-3.0 主库，仅作 EEL2/Liveprog 脚本编辑器 UX 的阅读参考**（对齐引擎 `engine/legacy/` 的 liveprog 可编程级），维持只读、禁搬运定位。 |
+| **P-11** | ✅ 已闭环 | 新增 PeaceTXT-to-EEL-converter 参考仓（nanbeimerco，main@5de0462） | 2026-10-25 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `5de0462`，已于 `source/ORIGIN.md` 追加 #17 登记、本报告升版 v2.7（§1 扩至 17 项、新增 §2.10、§3 补充一行、§4 审计更新）。许可研判：README 的「ライセンス」章节**声明 MIT**，但**仓库无 LICENSE 文件** → 保守记为「声明 MIT、未落文件」；MIT 与 GPL-3.0 单向兼容，**风险显著低于 #16 LiveprogIDE（ARR，禁并入）**。结论：阅读参考与算法对照无碍；并入代码前须请上游补 LICENSE 或按 RBJ 公式自研重写。随仓 `jszip.min.js`（JSZip v3.10.1）为 MIT/GPLv3 双许可，可自由使用。 |
 
 ---
 

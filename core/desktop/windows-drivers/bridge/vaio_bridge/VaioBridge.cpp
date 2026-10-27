@@ -28,6 +28,7 @@
 #include "PluginBridge.h"
 #include "../../common/AuraVaioIpc.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
+#include "vaio_pump_wait.h"
 
 namespace {
 
@@ -75,6 +76,7 @@ bool ContainsCI(const std::string& hay, const std::string& needle) {
 }
 
 using vmcore::FnEngCreate;
+using vmcore::FnEngAbi;
 using vmcore::FnEngDestroy;
 using vmcore::FnEngGetParam;
 using vmcore::FnEngProcess;
@@ -179,6 +181,9 @@ struct VaioBridgeCtl {
     IMMDevice* pOutDevice = nullptr;
     IAudioClient* pAudioClient = nullptr;
     IAudioRenderClient* pRenderClient = nullptr;
+    /* D3：WASAPI 周期事件（EVENTCALLBACK）。播放引擎每消费完一个周期置位，
+     * 泵线程按事件唤醒——不再靠 Sleep 猜节拍。 */
+    HANDLE hAudioEvent = nullptr;
     WAVEFORMATEX* pMixFormat = nullptr;
     std::string outEndpointName;
     UINT32 wasapiBufferFrames = 0;
@@ -216,8 +221,13 @@ auraplugin::Fns g_pluginFns;
 auraplugin::Mirror g_pluginMirror;
 
 void FreeTestFile() {
+    // D2：清 kind 后**确定性**等在途块退出，替代原来的 Sleep(50) 猜测。
     InterlockedExchange(&g_vaio.tc.testKind, 0);
-    Sleep(50);
+    if (!vmcore::WaitRtDrained(&g_vaio.tc.rtInBlock)) {
+        // 极端：3s 内泵线程没退出当前块。此时 free 会踩在途读，整块保留不释放
+        // ——与 B3 quarantine 同一哲学：可控泄漏换不可控崩溃。
+        return;
+    }
     if (g_vaio.tc.testFile) {
         free((void*)g_vaio.tc.testFile);
         g_vaio.tc.testFile = nullptr;
@@ -247,6 +257,13 @@ void DestroyEngine() {
 void DestroyWasapi() {
     if (g_vaio.pAudioClient) {
         g_vaio.pAudioClient->Stop();
+    }
+    /* D3：事件句柄随 client 生命周期。调用点都在泵线程 join 之后
+     * （vaio_stop → WaitForSingleObject(hPumpThread) → DestroyWasapi），
+     * 不存在"关掉别人正在等的句柄"。 */
+    if (g_vaio.hAudioEvent) {
+        CloseHandle(g_vaio.hAudioEvent);
+        g_vaio.hAudioEvent = nullptr;
     }
     if (g_vaio.pRenderClient) {
         g_vaio.pRenderClient->Release();
@@ -392,7 +409,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         UINT32 padFrames = 0;
         HRESULT hr = g_vaio.pAudioClient->GetCurrentPadding(&padFrames);
         if (FAILED(hr)) {
-            Sleep(2);
+            /* D3：原来 Sleep(2)（实际 1~15.6ms，且是忙轮询）。改为等一个周期
+             * 信号，带上界只为定期回看 stopEvent。 */
+            vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
             continue;
         }
 
@@ -401,7 +420,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
                                   : 0;
 
         if (framesNeeded == 0) {
-            Sleep(1);
+            /* 缓冲已满：等播放引擎消费掉一个周期（事件唤醒），而不是 Sleep(1)
+             * 猜时间。醒来后重新取 padding —— 消费量由引擎决定，睡多久都不对。 */
+            vmcore::WaitAudioPeriod(g_vaio.hAudioEvent);
             continue;
         }
 
@@ -412,6 +433,10 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         }
 
         const ULONG bytesToRead = framesToProcess * blockAlign;
+
+        // D2：本块在途计数。FreeTestFile 的排空等待以此为准（原为 Sleep(50)
+        // 猜毫秒数）。作用域到本轮 while 体末尾——本段内无 continue/break。
+        vmcore::RtInBlockGuard inBlock(&g_vaio.tc.rtInBlock);
 
         // 检查共享环是否有有效数据
         ULONGLONG totalWritten = pHeader ? pHeader->TotalBytesWritten : 0;
@@ -714,6 +739,8 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.hEngineMod = vmcore::TryLoadEngine(hint, used);
     if (!used.empty()) g_vaio.enginePath = used;
 
+    FnEngAbi engAbiFn = nullptr;
+    unsigned engAbi = 0;
     if (g_vaio.hEngineMod) {
         g_vaio.fnCreate = (FnEngCreate)GetProcAddress(g_vaio.hEngineMod, "auradsp_create");
         g_vaio.fnProcess = (FnEngProcess)GetProcAddress(g_vaio.hEngineMod, "auradsp_process");
@@ -721,11 +748,20 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         g_vaio.fnSetParam = (FnEngSetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_set_param");
         g_vaio.fnGetParam = (FnEngGetParam)GetProcAddress(g_vaio.hEngineMod, "auradsp_get_param");
         g_vaio.fnVizRead = (FnEngVizRead)GetProcAddress(g_vaio.hEngineMod, "auradsp_viz_read");
+        // [PATCHED-AuraDSP P-028 §7-2] 加载后强校验引擎 ABI（auradsp_abi 缺失也算不兼容）
+        engAbiFn = (FnEngAbi)GetProcAddress(g_vaio.hEngineMod, "auradsp_abi");
+        engAbi = engAbiFn ? engAbiFn() : 0;
+        if (engAbiFn && engAbi != vmcore::kEngineAbiExpected)
+            snprintf(g_vaio.note, sizeof(g_vaio.note),
+                     "engine-abi-mismatch: bridge=%u engine=%u",
+                     vmcore::kEngineAbiExpected, engAbi);
         g_pluginFns.Resolve(g_vaio.hEngineMod);
     }
 
-    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess || !g_vaio.fnDestroy) {
-        snprintf(g_vaio.note, sizeof(g_vaio.note), "engine-load-failed");
+    if (!g_vaio.hEngineMod || !g_vaio.fnCreate || !g_vaio.fnProcess ||
+        !g_vaio.fnDestroy || !engAbiFn || engAbi != vmcore::kEngineAbiExpected) {
+        if (!engAbiFn || engAbi == vmcore::kEngineAbiExpected)
+            snprintf(g_vaio.note, sizeof(g_vaio.note), "engine-load-failed");
         UnmapAndCloseRing();
         DestroyEngine();
         g_vaio.startRc = -3;
@@ -872,9 +908,12 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     g_vaio.wasapiChannels = g_vaio.pMixFormat->nChannels > 0 ? g_vaio.pMixFormat->nChannels : 2;
 
     REFERENCE_TIME bufferDuration = 200000; // 20ms
+    /* D3：事件驱动。缓冲只有 20ms，而 Sleep(1)/Sleep(2) 的实际唤醒粒度是
+     * 1~15.6ms —— 睡过头即欠载，且代码里看不出来。改为让 WASAPI 在每周期
+     * 消费完时置位事件，唤醒延迟由音频引擎保证（见 vaio_pump_wait.h 的说明）。 */
     hr = g_vaio.pAudioClient->Initialize(
         AUDCLNT_SHAREMODE_SHARED,
-        0,
+        AUDCLNT_STREAMFLAGS_EVENTCALLBACK,
         bufferDuration,
         0,
         g_vaio.pMixFormat,
@@ -888,6 +927,27 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
         DestroyWasapi();
         g_vaio.startRc = -8;
         return -8;
+    }
+
+    /* 事件必须在 Start 之前挂上，否则 EVENTCALLBACK 模式 Initialize 后
+     * 直接 Start 会失败（AUDCLNT_E_EVENTHANDLE_NOT_SET）。 */
+    g_vaio.hAudioEvent = CreateEventW(nullptr, FALSE /*auto-reset*/, FALSE, nullptr);
+    if (!g_vaio.hAudioEvent) {
+        snprintf(g_vaio.note, sizeof(g_vaio.note), "create-audio-event-failed: %lu", GetLastError());
+        UnmapAndCloseRing();
+        DestroyEngine();
+        DestroyWasapi();
+        g_vaio.startRc = -9;
+        return -9;
+    }
+    hr = g_vaio.pAudioClient->SetEventHandle(g_vaio.hAudioEvent);
+    if (FAILED(hr)) {
+        snprintf(g_vaio.note, sizeof(g_vaio.note), "set-event-handle-failed: 0x%08lX", hr);
+        UnmapAndCloseRing();
+        DestroyEngine();
+        DestroyWasapi();  // 内含 CloseHandle(hAudioEvent)
+        g_vaio.startRc = -10;
+        return -10;
     }
 
     hr = g_vaio.pAudioClient->GetBufferSize(&g_vaio.wasapiBufferFrames);
@@ -1050,10 +1110,13 @@ int vaio_get_param_str(const char* id, char* out, int cap) {
     return g_vaio.fnGetParam(g_vaio.pEngine, id, out, (unsigned int)cap);
 }
 
-int vaio_viz_read(void* out536, int count) {
-    if (!out536 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
-    return g_vaio.fnVizRead(g_vaio.pEngine, out536, count);
+int vaio_viz_read(void* out1600, int count) {
+    if (!out1600 || count <= 0 || !g_vaio.pEngine || !g_vaio.fnVizRead) return 0;
+    return g_vaio.fnVizRead(g_vaio.pEngine, out1600, count);
 }
+
+// §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
+unsigned vaio_abi(void) { return vmcore::kEngineAbiExpected; }
 
 int vaio_bypass(int on) {
     InterlockedExchange(&g_vaio.userBypass, on ? 1 : 0);

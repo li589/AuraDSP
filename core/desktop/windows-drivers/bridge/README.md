@@ -24,6 +24,9 @@ bridge/
 2. **契约对齐**：新增桥必须镜像 `vm_bridge/VmBridge.h` 的
    detect/start/stop/status/set_param(+_str)/get_param(+_str)/viz_read/bypass/test
    件套（ASIO 仅多 buf_size/out_pair 两个宿主参数），Dart 侧同构绑定。
+   §7-2（P-028）起另含 `<prefix>_abi()` 协商导出：桥加载引擎后必须强校验
+   `auradsp_abi()`（与 `VmPumpCore.h` 的 `kEngineAbiExpected` 比对），
+   不符按引擎不可用处理；门禁 `tools/bin/abi_consistency.py` 的 B4/B5 看守。
    ASIO 重建一律走 Dart 侧 stop+start（isolate 回放镜像），桥内不设镜像。
 3. **RT 铁律**：回调内零锁零分配；引擎建/销只在控制线程（CHANGE/ASIO reset
    一律走"停→销→启→重建→回放镜像"序列，见 `VmBridge.cpp MonitorProc`）。

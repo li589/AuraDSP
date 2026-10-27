@@ -76,9 +76,23 @@ class AppLocalizationsJa extends AppLocalizations {
   String get routingSurroundOnly => 'サラウンドのみ (4/8)';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 選択';
+  String get routingPairHint =>
+      'ステレオペア単位で適用：FL/FR、C/LFE、SL/SR、BL/BR は対で切り替え、単独選択は無効';
+
+  @override
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total 選択';
   }
+
+  @override
+  String get routingStereoPathSummary => '直通 (ステレオ/マトリクス)';
+
+  @override
+  String get routingStereoPathHint =>
+      'ステレオまたはマトリクスダウンミックス経路のため、全チャンネルが一括処理され、個別チャンネルマスクは無効です。';
+
+  @override
+  String get flfrOnlyHint => 'フロント FL/FR ペアにのみ適用（マルチチャンネル独立時、サラウンドと LFE は直通）';
 
   @override
   String get channelRouting => '詳細チャンネルルーティング';
@@ -90,6 +104,12 @@ class AppLocalizationsJa extends AppLocalizations {
   String get routingPresetAll => '全て';
 
   @override
+  String get routingPresetFront => 'フロントのみ';
+
+  @override
+  String get routingPresetBack => 'リアのみ';
+
+  @override
   String get routingPresetStereo => 'ステレオ';
 
   @override
@@ -97,6 +117,21 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get routingPresetSurround => 'サラウンド';
+
+  @override
+  String get channelCount => 'チャンネル数';
+
+  @override
+  String get channelCountHint =>
+      '動作チャンネルトポロジ。自動モードは音源とデバイスに従い、手動で2.0 / 4.0 / 5.1 / 7.1に固定も可能です。';
+
+  @override
+  String get channelCountAuto => '自動';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return '自動ネゴシエーション中 · 現在のトポロジ：$count チャンネル';
+  }
 
   @override
   String get setConnStatus => '接続状態';
@@ -502,7 +537,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get catStage => 'ステージ';
 
   @override
-  String get catSpace => '空間';
+  String get catSpace => '空間効果';
+
+  @override
+  String get catStereo => 'ステレオ';
 
   @override
   String get catOutput => '出力';
@@ -673,6 +711,45 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbHintDry => 'ドライ信号の残量。声の明瞭さと芯を保ちます。';
 
   @override
+  String get reverbHintWidthMc =>
+      'マルチチャンネル FDN の広がり。FL/FR・SL/SR・BL/BR の3ペアのみ拡張し、C と LFE は変更しません。';
+
+  @override
+  String get reverbEngineLabel => '現在のエンジン';
+
+  @override
+  String get reverbEngineStereo => 'ステレオ (Vendor)';
+
+  @override
+  String get reverbEngineMc => 'マルチチャンネル FDN';
+
+  @override
+  String get reverbEngineOff => 'オフ';
+
+  @override
+  String get reverbEngineInfo =>
+      'リバーブは現在のチャンネル経路に従います：マトリックス/バイノーラルは vendor Progenitor2、ディスクリート多チャンネルは8ライン FDN。2つが同時に動作することはありません。';
+
+  @override
+  String get reverbLfe => 'LFE をリバーブへ';
+
+  @override
+  String get reverbLfeInfo =>
+      'LFE を 120Hz ローパス＋-6dB でマルチチャンネルリバーブへ送り、ウェット戻しにも同じローパスをかけます。ステレオ経路では無効です。';
+
+  @override
+  String get reverbPredelay => 'プリディレイ';
+
+  @override
+  String get reverbPredelayInfo =>
+      'リバーブ前の遅延（0〜100ms）。プリセットの基本プリディレイに加算され、カスタムでは 0 から始まります。';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return '旧プリセット $id';
+  }
+
+  @override
   String get spatialHintRoom => '仮想空間の反射量。大きいほど奥深く豊かな空間感になります。';
 
   @override
@@ -722,10 +799,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbAutoProtect => '自動過負荷保護';
 
   @override
-  String get vbProtectHint => 'コールバックが継続して予算超過のとき、プラグインを監視バスに自動絞り込みし、回復後に自動復帰';
+  String get vbProtectHint =>
+      '音声処理期限はドライバのバッファサイズに基づきます（例：128フレーム@48kHz=2.7ms）。処理時間（EMA）が予算の85%を超え続けると、音飛びを防ぐためプラグインを監視バスに自動絞り込みし、負荷回復後に自動復帰します。';
 
   @override
   String get vbProtectActive => '作動中：プラグインは監視バスのみ、他はスルー（コールバック過負荷）';
+
+  @override
+  String get vbProtectActiveTag => '保護作動中';
 
   @override
   String get shelfTitle => 'ローシェルフ';
@@ -761,10 +842,94 @@ class AppLocalizationsJa extends AppLocalizations {
   String get bassmonoFreqTooltip => 'この周波数（20～300Hz）以下の低域をモノラル化し、位相干渉と濁りを排除';
 
   @override
+  String get bassShapingMasterHint => 'マスター：いずれかのモジュールが有効なら動作';
+
+  @override
+  String get bassShelfModule => 'ローシェルフ';
+
+  @override
+  String get bassMonoModule => '低域モノラル化';
+
+  @override
+  String get bassMonoDesc => 'クロスオーバー以下の低域をモノラル化し、位相打消しと濁りを解消します。';
+
+  @override
+  String get channelSelection => 'チャンネル選択';
+
+  @override
+  String get bassShelfRoutingHint =>
+      'ローシェルフフィルターを適用するチャンネルを選択します。未選択のチャンネルはそのままスルーされます。';
+
+  @override
+  String get bassMonoPairsTooltip =>
+      '低域モノラル化を適用するチャンネルペアを選択します。未選択ペアはスルーされます。ステレオ/バイノーラルはL/Rのみ対象です。';
+
+  @override
+  String get bassMonoPairs => 'チャンネル選択';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '$count ペア';
+  }
+
+  @override
+  String get bassMonoPairFront => 'フロント';
+
+  @override
+  String get bassMonoPairCenterLfe => 'センター+LFE';
+
+  @override
+  String get bassMonoPairSide => 'サイド';
+
+  @override
+  String get bassMonoPairBack => 'リア';
+
+  @override
+  String get bassMonoPairAll => 'すべて';
+
+  @override
+  String get bassMonoPairFrontOnly => 'フロントのみ';
+
+  @override
+  String get bassMonoPairUnavailable => '現在の出力にこのペアはありません';
+
+  @override
+  String get bassMonoMerge => '結合方法';
+
+  @override
+  String get bassMonoMergePerPair => 'ペアごと';
+
+  @override
+  String get bassMonoMergeGlobal => 'すべて結合';
+
+  @override
+  String get bassMonoMergeSinglePairHint => 'ペアが1組のみの場合、両モードは同じです';
+
+  @override
+  String get bassMonoNoneSelected => 'チャンネルペア未選択 · 処理しません';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '現在の出力にない $count ペアを無視しました';
+  }
+
+  @override
+  String get bassMonoLfeWarning => 'C/LFE の平均化はセンターと LFE の分離を損ないます（非推奨）';
+
+  @override
+  String get bassMonoStereoPathHint => 'ステレオ/マトリックス/バイノーラル：L/R のみに適用';
+
+  @override
   String get retryNow => '再試行';
 
   @override
-  String get sampleRateFollowBridge => 'ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）';
+  String sampleRateDeviceActual(int rate) {
+    return 'デバイス実測：$rate Hz';
+  }
+
+  @override
+  String get sampleRateFollowBridge =>
+      'ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）';
 
   @override
   String get latencyLabel => '遅延';
@@ -797,6 +962,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get postGain => '出力ゲイン';
+
+  @override
+  String get postPerChannelTrim => 'チャンネル別出力補正';
+
+  @override
+  String get postPerChannelTrimHint => '各出力チャンネルの音量を個別に微調整します（-15 〜 +15 dB）';
+
+  @override
+  String get postResetAllTrim => 'すべてリセット';
 
   @override
   String get equalizer => 'イコライザー';
@@ -844,28 +1018,28 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noAudio => 'アイドル — エンジンに音声ストリームなし';
 
   @override
-  String get reverbPreset0 => 'コンサートホール';
+  String get reverbPreset0 => '大ホール';
 
   @override
-  String get reverbPreset1 => '小ホール';
+  String get reverbPreset1 => 'コンサートホール';
 
   @override
   String get reverbPreset2 => '中ホール';
 
   @override
-  String get reverbPreset3 => '大ホール';
+  String get reverbPreset3 => '小ホール';
 
   @override
-  String get reverbPreset4 => '巨大ホール';
+  String get reverbPreset4 => 'スタジオ';
 
   @override
-  String get reverbPreset5 => '大聖堂';
+  String get reverbPreset5 => 'ルーム';
 
   @override
-  String get reverbPreset6 => '超巨大ホール';
+  String get reverbPreset6 => '大講堂';
 
   @override
-  String get reverbPreset7 => '渓谷';
+  String get reverbPreset7 => 'プレート';
 
   @override
   String get sourceCard => 'オーディオソース';
@@ -915,7 +1089,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      'ローカルの 4/6/8ch ファイル再生時のみ有効：マトリクスダウンミックス＝エンジンがステレオに混合して処理。チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは事前折畳）。';
+      '入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。';
 
   @override
   String get audioMode => 'オーディオモード';
@@ -1333,7 +1507,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpOpFailed => '操作に失敗しました';
 
   @override
-  String get lpCompiledIdle => 'コンパイル済み — 右上のスイッチで適用';
+  String get lpCompiledIdle => 'コンパイル完了 · 適用をクリック';
 
   @override
   String get lpSliders => 'スクリプトスライダー（slider1..8）';
@@ -1342,13 +1516,107 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSliderHint => '宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映';
 
   @override
-  String get lpLibrary => 'スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）';
+  String get lpLibrary => 'スクリプトライブラリ';
 
   @override
   String get lpLibraryEmpty => 'ライブラリは空です — 下の名前欄から保存できます';
 
   @override
   String get lpSave => 'ライブラリに保存';
+
+  @override
+  String get lpApoDialogTitle => 'EqualizerAPO プリセットをインポート (.txt)';
+
+  @override
+  String get lpApoDialogDesc =>
+      'EqualizerAPO / Peace パラメトリックEQ設定を高効率なEEL2スクリプトに変換';
+
+  @override
+  String get lpApoOpenFile => '.txt ファイルを開く';
+
+  @override
+  String get lpApoPasteHint => 'ここにEqualizerAPO設定テキストを貼り付けます...';
+
+  @override
+  String get lpApoSwapChannels => 'チャンネル入替 (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => '極性反転 (位相 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return '$n 個のフィルターを検出';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return 'プリアンプ: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => 'エディタに読み込む';
+
+  @override
+  String get lpApoPreview => '生成された EEL2 コードプレビュー';
+
+  @override
+  String get lpFind => '検索';
+
+  @override
+  String get lpReplace => '置換';
+
+  @override
+  String get lpReplaceAll => 'すべて置換';
+
+  @override
+  String get lpFindNext => '次へ';
+
+  @override
+  String get lpFindPrev => '前へ';
+
+  @override
+  String get lpMatchCase => '大文字小文字を区別';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '$total 件中 $current 件目';
+  }
+
+  @override
+  String get lpNoMatches => '一致なし';
+
+  @override
+  String get lpOutline => 'コードアウトライン';
+
+  @override
+  String get lpOutlineEmpty => 'セクションまたは関数が見つかりません';
+
+  @override
+  String get lpTemplates => 'スクリプトテンプレート';
+
+  @override
+  String get lpTemplatesDesc => 'DSPスターターテンプレートを選択して開発を高速化';
+
+  @override
+  String get lpTemplateUse => 'このテンプレートを使用';
+
+  @override
+  String get lpManualSearchHint => '80+ の EEL2 関数、キーワード、レジスタを検索...';
+
+  @override
+  String get lpManualInsert => 'カーソル位置に挿入';
+
+  @override
+  String get lpManualParamTitle => 'パラメータ';
+
+  @override
+  String get lpManualReturnTitle => '戻り値';
+
+  @override
+  String get lpManualExampleTitle => '使用例';
+
+  @override
+  String get lpAllCategories => 'すべて';
 
   @override
   String get convTitle => 'インパルス応答';
@@ -1851,7 +2119,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get haasSideLeft => '左チャンネル';
 
   @override
-  String get fxCatSpatial => '空間';
+  String get fxCatSpatial => '空間効果';
+
+  @override
+  String get fxCatStereoOnly => 'ステレオ専用';
 
   @override
   String get fxCatLate => 'エキサイター・出力';
@@ -1876,6 +2147,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get spatialStyleNeutral => 'ニュートラル';
+
+  @override
+  String get spatialStyleCustom => 'カスタム';
 
   @override
   String get spatialRoom => 'ルーム';
@@ -1924,20 +2198,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      '5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音';
-
-  @override
-  String get spatialFdn => 'FDN ルーム';
-
-  @override
-  String get spatialFdnInfo =>
-      '8 ライン FDN で後期リバーブを生成し Freeverb を置換。二重の部屋を避けるため Freeverb は自動スキップ';
-
-  @override
-  String get spatialLate => '後期リバーブ';
-
-  @override
-  String get spatialLateInfo => 'FDN 後期リバーブの送り量。大きいほど余韻が明確';
+      '4/5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音。有効中は設定画面の「チャンネルモード」を接管（当該設定は無効）';
 
   @override
   String get spatialHeadTrack => '頭部追従';
@@ -2550,6 +2811,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get compTfresFine => '高周波';
 
   @override
+  String get compModePairBadge => 'ペアモード（省電力）';
+
+  @override
+  String get compModePairHint =>
+      'CPUとメモリを節約するため、チャンネルペア単位でコンプレッサースロットを割り当てます。ペアの両方を選択する必要があり、片方のみ選択されたペアはバイパスされます。';
+
+  @override
+  String get compModeSemiSelectedWarning =>
+      'ペアモードは完全なペア選択が必要です。片方のみのペアはバイパスされます';
+
+  @override
   String get autoGainCompensation => '自動ゲイン補正';
 
   @override
@@ -2563,7 +2835,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get outputGainGateTooltip => 'このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。';
 
   @override
-  String get arbmagSubtitle => '8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線';
+  String get arbmagSubtitle =>
+      '8192点因果的最小位相FIR畳み込みエンジンに基づき、AutoEq GraphicEQ曲線や任意の周波数応答曲線を適用して音響特性を高精度に補正します。';
 
   @override
   String get arbmagPresetFlat => 'フラット (Flat)';
@@ -2635,7 +2908,114 @@ class AppLocalizationsJa extends AppLocalizations {
   String get fxCatCore => 'コア処理';
 
   @override
+  String get channelCenter => 'センター (C)';
+
+  @override
+  String get channelLfe => '低域効果 (LFE)';
+
+  @override
+  String get channelSurroundLeft => '左サラウンド (SL)';
+
+  @override
+  String get channelSurroundRight => '右サラウンド (SR)';
+
+  @override
+  String get channelBackLeft => '左後サラウンド (BL)';
+
+  @override
+  String get channelBackRight => '右後サラウンド (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n チャンネル';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return '$n ch 微調整済み';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% デフォルトバランス';
+
+  @override
+  String get eqPresetElectronic => 'エレクトロニック (EDM)';
+
+  @override
+  String get eqPresetHiphop => 'ヒップホップ';
+
+  @override
+  String get eqPresetAcoustic => 'アコースティック';
+
+  @override
+  String get eqPresetMetal => 'メタル';
+
+  @override
+  String get eqPresetPodcast => 'ポッドキャスト';
+
+  @override
+  String get convIrPrompt => 'インパルス応答 (IR) ファイルのパスを入力または選択してください：';
+
+  @override
+  String get convLoadIr => 'IR を読み込む';
+
+  @override
+  String get ddcVdcPrompt => 'VDC 空間補正ファイルのパスを入力または選択してください：';
+
+  @override
+  String get ddcLoadVdc => 'VDC を読み込む';
+
+  @override
+  String get arbmagPrompt => 'AutoEq / GraphicEQ 曲線ファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioWavPrompt => 'テストオーディオ (WAV) ファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioMp3Prompt => 'MP3 オーディオファイルのパスを入力または選択してください：';
+
+  @override
+  String get testAudioLoad => 'オーディオを読み込む';
+
+  @override
+  String get pathPickerTitle => 'パスを選択';
+
+  @override
+  String get pathPickerConfirm => '確認';
+
+  @override
+  String get pathPickerBrowse => '参照...';
+
+  @override
+  String get pathPickerClear => 'クリア';
+
+  @override
+  String get pathPickerSelectDir => 'このディレクトリを選択';
+
+  @override
+  String get pathPickerErrEmpty => 'パスを入力してください';
+
+  @override
+  String get pathPickerErrDirNotExist => '指定されたディレクトリが存在しないか、アクセス権がありません';
+
+  @override
+  String get pathPickerErrFileNotExist => '指定されたファイルが存在しないか、アクセス権がありません';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return 'サポートされていないファイル形式です (対応: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return '対応形式: $exts';
+  }
+
+  @override
   String get errEngineClosed => 'エンジン未起動';
+
+  @override
+  String get errEngineBusy => 'エンジンビジー、後ほど再試行';
 
   @override
   String get errInvalidLength => '長さが無効';
@@ -2674,5 +3054,200 @@ class AppLocalizationsJa extends AppLocalizations {
   String get errUnsupported => '非サポートの操作';
 
   @override
+  String get errReadOnly => 'このパラメータは読み取り専用です';
+
+  @override
   String get errInternal => 'エンジン内部エラー';
+
+  @override
+  String get lpFindReplace => '検索と置換';
+
+  @override
+  String get lpSidebarLeft => '左パネル切り替え (アウトラインとライブラリ)';
+
+  @override
+  String get lpSidebarRight => '右パネル切り替え (スライダーとコンソール)';
+
+  @override
+  String get lpConsole => 'コンソール';
+
+  @override
+  String get lpNewScriptWizard => 'スクリプトウィザード';
+
+  @override
+  String get lpApoImportTitle => 'APO プリセットのインポート';
+
+  @override
+  String get lpConfirmDiscardTitle => '変更を破棄しますか？';
+
+  @override
+  String get lpConfirmDiscardBody =>
+      '現在のスクリプトには未保存の変更があります。新しいスクリプトを読み込むと現在の変更は失われます。続行しますか？';
+
+  @override
+  String get lpConfirmDiscardAction => '破棄して読み込む';
+
+  @override
+  String get lpConsoleClear => '出力をクリア';
+
+  @override
+  String get lpExpandEditor => '拡大';
+
+  @override
+  String get lpCollapseEditor => '折りたたむ';
+
+  @override
+  String get lpUncompiled => '未コンパイル';
+
+  @override
+  String get lpCompileSuccess => 'コンパイル成功';
+
+  @override
+  String get lpCompilingScript => 'スクリプトをコンパイル中…';
+
+  @override
+  String get lpEyebrowDsp => 'プログラマブル DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 エディタ';
+
+  @override
+  String get lpBtnApplied => '適用中';
+
+  @override
+  String get lpBtnUnapplied => '未適用';
+
+  @override
+  String get lpBtnCompile => 'コンパイル';
+
+  @override
+  String get lpTooltipCompileFirst => 'コードが変更されました。適用前にコンパイルしてください';
+
+  @override
+  String get lpMenuFile => 'ファイル';
+
+  @override
+  String get lpFileNewBlank => '新規空白スクリプト';
+
+  @override
+  String get lpFileNewFromTemplate => 'テンプレートから新規作成...';
+
+  @override
+  String get lpFileImportApo => 'Equalizer APO プリセットのインポート...';
+
+  @override
+  String get lpFileImportEel => 'EEL スクリプトのインポート...';
+
+  @override
+  String get lpFileSaveAs => '名前を付けて保存...';
+
+  @override
+  String get lpFileSaveAsPrompt => '保存先のパスとファイル名を入力してください：';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => 'ファイルが既に存在します';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return 'ファイル「$name」は既に存在します。上書きしますか？';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => '上書き';
+
+  @override
+  String get lpMenuEdit => '編集';
+
+  @override
+  String get lpEditFindReplace => '検索と置換';
+
+  @override
+  String get lpEditToggleOutline => 'コードアウトライン';
+
+  @override
+  String get lpEditFormat => 'コード整形';
+
+  @override
+  String get lpEditScrollToTop => '先頭へ移動';
+
+  @override
+  String get lpBtnLibrary => 'スクリプトライブラリ';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 スクリプトライブラリと外部ディレクトリ管理';
+
+  @override
+  String get lpLibOpenInExplorer => 'ファイルマネージャーで開く';
+
+  @override
+  String get lpLibDirInvalid => 'ディレクトリが存在しないか無効です';
+
+  @override
+  String get lpLibSaveCurrent => '現在のスクリプトを保存';
+
+  @override
+  String get lpLibCustomDirs => 'スクリプトディレクトリ';
+
+  @override
+  String get lpSlidersPanelTitle => 'パラメータ調整スライダー';
+
+  @override
+  String get lpSlidersCollapse => 'パネルを折りたたむ';
+
+  @override
+  String get lpSlidersExpand => 'パネルを展開';
+
+  @override
+  String get lpTabScriptSliders => 'スクリプトパラメータ';
+
+  @override
+  String get lpTabInputChannels => '入力チャンネル (8)';
+
+  @override
+  String get lpTabOutputChannels => '出力チャンネル (8)';
+
+  @override
+  String get lpCustomVarTag => 'スクリプト変数';
+
+  @override
+  String get lpCustomVarHint =>
+      'スクリプト内部変数（@init で初期化；外部からリアルタイム調整するには slider1..8 に関連付けます）';
+
+  @override
+  String get lpInputTrimHint => '8チャンネル統一アーキテクチャの入力トリムとマスターゲイン';
+
+  @override
+  String get lpOutputGainHint => '8チャンネル後段独立出力ゲイン調整 (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => 'すべてリセット';
+
+  @override
+  String get lpInputMasterGain => 'マスター入力ゲイン';
+
+  @override
+  String get lpOutputMasterGain => 'マスター出力ゲイン';
+
+  @override
+  String get lpNoScriptSliders => 'スクリプト内に調整可能な変数が宣言されていません';
+
+  @override
+  String get lpTooltipUnapplyToCompile => '適用中はコンパイルできません。先に適用を解除してください';
+
+  @override
+  String get lpLibSystemInitial => '<システム既定>';
+
+  @override
+  String get lpLibDirs => 'スクリプトディレクトリ';
+
+  @override
+  String get lpLibScriptList => 'スクリプト一覧';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return '$line 行目の構文エラー: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => 'プリアンプのみモード (フィルタなし)';
 }

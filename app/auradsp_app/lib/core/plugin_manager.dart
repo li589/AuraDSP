@@ -15,6 +15,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import 'config.dart';
 
+import 'error_sink.dart';
 /// 插件格式枚举
 enum PluginFormat {
   vst3,
@@ -862,7 +863,8 @@ class PluginManager extends ChangeNotifier {
         'assets/presets/plugin_tables.json',
       );
       defaults = jsonDecode(raw) as Map<String, dynamic>;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       defaults = null;
     }
     final vt = (defaults?['vendorTable'] as Map?)?.cast<String, dynamic>();
@@ -927,7 +929,8 @@ class PluginManager extends ChangeNotifier {
         'close': (j['close'] as List?)?.cast<String>() ?? const [],
         'open': (j['open'] as List?)?.cast<String>() ?? const [],
       };
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return {'close': const [], 'open': const []};
     }
   }
@@ -970,7 +973,8 @@ class PluginManager extends ChangeNotifier {
       List existing;
       try {
         existing = (jsonDecode(f.readAsStringSync()) as List?) ?? [];
-      } catch (_) {
+      } catch (e, st) {
+        swallow(e, st);
         existing = [];
       }
       existing.removeWhere((e) => e is Map && e['path'] == meta.path);
@@ -982,7 +986,7 @@ class PluginManager extends ChangeNotifier {
       f.writeAsStringSync(jsonEncode(existing));
       // 写入日志后确保清扫定时器已激活
       _startJournalTimerIfNeeded();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 周期清扫：打开超过 kOpenHealthyMs 的条目视为「打开成功」，从日志移除。
@@ -1006,7 +1010,7 @@ class PluginManager extends ChangeNotifier {
       } else {
         f.writeAsStringSync(jsonEncode(alive));
       }
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   /// 启动时检查崩溃日志：上一进程在编辑器打开后未健康化前退出（打开即崩溃）
@@ -1025,7 +1029,7 @@ class PluginManager extends ChangeNotifier {
         }
       }
       f.deleteSync();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     if (crashed.isEmpty) return;
     var changed = false;
     for (final c in crashed) {
@@ -1565,7 +1569,7 @@ class PluginManager extends ChangeNotifier {
     final path = _abFile(slot, group, ab);
     try {
       _abDir(_abPluginKey(slot)).createSync(recursive: true);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     _commandSender?.call({
       'cmd': 'pluginSlotSavePresetG',
       'slot': slot,
@@ -1647,7 +1651,7 @@ class PluginManager extends ChangeNotifier {
     try {
       final f = File(_abFile(slot, group, ab));
       if (f.existsSync()) f.deleteSync();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     _abMeta[_abKey2(slot, group, ab)] = {
       'hasState': false,
       'source': 'custom',

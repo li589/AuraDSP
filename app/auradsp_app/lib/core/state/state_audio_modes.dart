@@ -374,7 +374,8 @@ extension AudioModesState on AppModel {
         r'HKLM\SOFTWARE\ASIO\AuraDSP Driver',
       ]);
       asioDriverInstalled = (res.exitCode == 0);
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       asioDriverInstalled = false;
     }
     _notifyUi();
@@ -571,8 +572,8 @@ extension AudioModesState on AppModel {
           }
         }
       }
-    } catch (e) {
-      // 保持安静回退
+    } catch (e, st) {
+      swallow(e, st);
     }
     _notifyUi();
   }

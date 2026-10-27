@@ -76,9 +76,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingSurroundOnly => '仅环绕 (4/8)';
 
   @override
-  String routingSelectedCount(int count) {
-    return '$count/8 声道已选';
+  String get routingPairHint => '按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效';
+
+  @override
+  String routingSelectedCount(int count, int total) {
+    return '$count/$total 声道已选';
   }
+
+  @override
+  String get routingStereoPathSummary => '直通 (立体声/矩阵路径)';
+
+  @override
+  String get routingStereoPathHint => '当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。';
+
+  @override
+  String get flfrOnlyHint => '仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）';
 
   @override
   String get channelRouting => '高级声道路由';
@@ -90,6 +102,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get routingPresetAll => '全选';
 
   @override
+  String get routingPresetFront => '仅前置';
+
+  @override
+  String get routingPresetBack => '仅后置';
+
+  @override
   String get routingPresetStereo => '立体声';
 
   @override
@@ -97,6 +115,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get routingPresetSurround => '仅环绕';
+
+  @override
+  String get channelCount => '声道数量';
+
+  @override
+  String get channelCountHint =>
+      '工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。';
+
+  @override
+  String get channelCountAuto => '自动';
+
+  @override
+  String channelCountAutoDesc(int count) {
+    return '自动协商生效中 · 当前工作拓扑：$count 声道';
+  }
 
   @override
   String get setConnStatus => '连接状态';
@@ -495,7 +528,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get catStage => '声场';
 
   @override
-  String get catSpace => '空间';
+  String get catSpace => '空间效果';
+
+  @override
+  String get catStereo => '立体声';
 
   @override
   String get catOutput => '输出';
@@ -663,6 +699,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reverbHintDry => '原始直达声保留量。确保人声吐字清晰结实。';
 
   @override
+  String get reverbHintWidthMc =>
+      '多声道 FDN 的宽度：只扩展 FL/FR、SL/SR、BL/BR 三对；中置与 LFE 不参与。';
+
+  @override
+  String get reverbEngineLabel => '当前引擎';
+
+  @override
+  String get reverbEngineStereo => '立体声 (Vendor)';
+
+  @override
+  String get reverbEngineMc => '多声道 FDN';
+
+  @override
+  String get reverbEngineOff => '已关闭';
+
+  @override
+  String get reverbEngineInfo =>
+      '混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。';
+
+  @override
+  String get reverbLfe => 'LFE 入混响';
+
+  @override
+  String get reverbLfeInfo =>
+      '开启后 LFE 经 120Hz 低通与 -6dB 送入多声道混响；湿声回加前再经同一低通。立体声路径忽略。';
+
+  @override
+  String get reverbPredelay => '预延迟';
+
+  @override
+  String get reverbPredelayInfo =>
+      '混响前的延迟量（0–100ms）。与预设自带的基础预延迟相加；自定义模式从 0 起算。';
+
+  @override
+  String reverbLegacyPreset(int id) {
+    return '旧版预设 $id';
+  }
+
+  @override
   String get spatialHintRoom => '模拟虚拟声学室的物理反射体量。数值越大空间感越深邃宏大，反射余韵越丰满。';
 
   @override
@@ -712,10 +787,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get vbAutoProtect => '超预算自动保护';
 
   @override
-  String get vbProtectHint => '回调持续超预算时自动把插件收窄到监听总线，回落后自动还原';
+  String get vbProtectHint =>
+      '音频处理时限由驱动缓冲区决定（如 128 帧 @ 48kHz = 2.7ms 截止预算）。当效果器/插件的处理耗时（EMA）持续超过预算的 85% 时，系统自动将重负载插件收窄至当前监听总线，其余总线直通，以杜绝爆音与掉字卡顿；负载回落安全阈值后将自动恢复。';
 
   @override
   String get vbProtectActive => '已激活：插件仅作用于监听总线，其余直通（回调超预算）';
+
+  @override
+  String get vbProtectActiveTag => '保护已激活';
 
   @override
   String get shelfTitle => '低频搁架';
@@ -752,10 +831,93 @@ class AppLocalizationsZh extends AppLocalizations {
       '低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感';
 
   @override
+  String get bassShapingMasterHint => '总开关：任一模块开启即生效';
+
+  @override
+  String get bassShelfModule => '低频搁架';
+
+  @override
+  String get bassMonoModule => '低频单声道化';
+
+  @override
+  String get bassMonoDesc => '把分频点以下的低频合并为单声道，消除相位抵消与浑浊。';
+
+  @override
+  String get channelSelection => '声道选择';
+
+  @override
+  String get bassShelfRoutingHint => '选择应用低频搁架滤波的目标声道，未选择的声道直接直通。';
+
+  @override
+  String get bassMonoPairsTooltip =>
+      '选择低频单声道化作用的声道对。未勾选的声道对保持原样直通；立体声/双耳路径仅作用于 L/R。';
+
+  @override
+  String get bassMonoPairs => '声道选择';
+
+  @override
+  String bassMonoPairCount(int count) {
+    return '已选 $count 对';
+  }
+
+  @override
+  String get bassMonoPairFront => '前置';
+
+  @override
+  String get bassMonoPairCenterLfe => '中置+超低';
+
+  @override
+  String get bassMonoPairSide => '侧环绕';
+
+  @override
+  String get bassMonoPairBack => '后环绕';
+
+  @override
+  String get bassMonoPairAll => '全部';
+
+  @override
+  String get bassMonoPairFrontOnly => '仅前置';
+
+  @override
+  String get bassMonoPairUnavailable => '当前输出无此声道对';
+
+  @override
+  String get bassMonoMerge => '合并方式';
+
+  @override
+  String get bassMonoMergePerPair => '每对独立';
+
+  @override
+  String get bassMonoMergeGlobal => '全部合并';
+
+  @override
+  String get bassMonoMergeSinglePairHint => '仅选中一对时两种方式等价';
+
+  @override
+  String get bassMonoNoneSelected => '未选择声道对 · 当前不处理';
+
+  @override
+  String bassMonoIgnoredPairs(int count) {
+    return '已忽略 $count 对当前不存在的声道';
+  }
+
+  @override
+  String get bassMonoLfeWarning => 'C/LFE 取平均会削弱中置与超低音的分离，通常不建议';
+
+  @override
+  String get bassMonoStereoPathHint => '立体声/矩阵/双耳路径：仅作用 L/R';
+
+  @override
   String get retryNow => '重试';
 
   @override
-  String get sampleRateFollowBridge => '桥模式跟随 VB/ASIO 设备，此处仅对进程内生效';
+  String sampleRateDeviceActual(int rate) {
+    return '设备实际：$rate Hz';
+  }
+
+  @override
+  String get sampleRateFollowBridge =>
+      '桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）';
 
   @override
   String get latencyLabel => '延迟';
@@ -788,6 +950,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get postGain => '输出增益';
+
+  @override
+  String get postPerChannelTrim => '逐声道输出补偿';
+
+  @override
+  String get postPerChannelTrimHint => '对各个输出声道进行独立的电平微调（-15 ~ +15 dB）';
+
+  @override
+  String get postResetAllTrim => '全部归零';
 
   @override
   String get equalizer => '均衡器';
@@ -835,28 +1006,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get noAudio => '空闲 — 无音频流经引擎';
 
   @override
-  String get reverbPreset0 => '音乐厅';
+  String get reverbPreset0 => '大音乐厅';
 
   @override
-  String get reverbPreset1 => '小型厅堂';
+  String get reverbPreset1 => '音乐厅';
 
   @override
-  String get reverbPreset2 => '中厅';
+  String get reverbPreset2 => '中音乐厅';
 
   @override
-  String get reverbPreset3 => '大会堂';
+  String get reverbPreset3 => '小音乐厅';
 
   @override
-  String get reverbPreset4 => '盛大厅堂';
+  String get reverbPreset4 => '录音棚';
 
   @override
-  String get reverbPreset5 => '大教堂';
+  String get reverbPreset5 => '房间';
 
   @override
-  String get reverbPreset6 => '巨型厅堂';
+  String get reverbPreset6 => '大礼堂';
 
   @override
-  String get reverbPreset7 => '山谷';
+  String get reverbPreset7 => '板式混响';
 
   @override
   String get sourceCard => '音频源';
@@ -906,7 +1077,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get channelPhaseA =>
-      '仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。';
+      '当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。';
 
   @override
   String get audioMode => '音频模式';
@@ -1320,7 +1491,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpOpFailed => '操作失败，请重试';
 
   @override
-  String get lpCompiledIdle => '已编译，打开右上角开关才生效';
+  String get lpCompiledIdle => '已编译 · 点击顶栏应用生效';
 
   @override
   String get lpSliders => '脚本滑块（slider1..8）';
@@ -1329,13 +1500,107 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSliderHint => '有声明按声明，无声明默认 0..1；改动实时生效';
 
   @override
-  String get lpLibrary => '脚本库（%APPDATA%/AuraDSP/liveprog）';
+  String get lpLibrary => '脚本库';
 
   @override
   String get lpLibraryEmpty => '库为空 — 用下方名称框保存当前代码';
 
   @override
   String get lpSave => '保存到库';
+
+  @override
+  String get lpApoDialogTitle => '导入 EqualizerAPO 预设 (.txt)';
+
+  @override
+  String get lpApoDialogDesc => '将 EqualizerAPO / Peace 参量均衡文本转换为高性能 EEL2 脚本';
+
+  @override
+  String get lpApoOpenFile => '打开 .txt 文件';
+
+  @override
+  String get lpApoPasteHint =>
+      '在此粘贴 EqualizerAPO 配置文本（例如 Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41）...';
+
+  @override
+  String get lpApoSwapChannels => '声道互换 (L ↔ R)';
+
+  @override
+  String get lpApoInvertPolarity => '极性反转 (相位 180°)';
+
+  @override
+  String lpApoFiltersDetected(int n) {
+    return '已解析出 $n 个滤波器';
+  }
+
+  @override
+  String lpApoPreampDetected(String gain) {
+    return '前级增益: $gain dB';
+  }
+
+  @override
+  String get lpApoApply => '填入编辑器';
+
+  @override
+  String get lpApoPreview => '生成的 EEL2 代码预览';
+
+  @override
+  String get lpFind => '查找';
+
+  @override
+  String get lpReplace => '替换';
+
+  @override
+  String get lpReplaceAll => '全部替换';
+
+  @override
+  String get lpFindNext => '下一个';
+
+  @override
+  String get lpFindPrev => '上一个';
+
+  @override
+  String get lpMatchCase => '区分大小写';
+
+  @override
+  String lpMatchCount(int current, int total) {
+    return '第 $current 项，共 $total 项';
+  }
+
+  @override
+  String get lpNoMatches => '无匹配项';
+
+  @override
+  String get lpOutline => '代码大纲';
+
+  @override
+  String get lpOutlineEmpty => '未找到段指令或函数声明';
+
+  @override
+  String get lpTemplates => '代码模板向导';
+
+  @override
+  String get lpTemplatesDesc => '选择标准音频 DSP 起步模板，加速算法开发';
+
+  @override
+  String get lpTemplateUse => '应用此模板';
+
+  @override
+  String get lpManualSearchHint => '搜索 80+ EEL2 内置函数、关键字、寄存器...';
+
+  @override
+  String get lpManualInsert => '插入到光标处';
+
+  @override
+  String get lpManualParamTitle => '参数列表';
+
+  @override
+  String get lpManualReturnTitle => '返回值';
+
+  @override
+  String get lpManualExampleTitle => '应用示例';
+
+  @override
+  String get lpAllCategories => '全部';
 
   @override
   String get convTitle => '脉冲响应';
@@ -1838,7 +2103,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get haasSideLeft => '左声道';
 
   @override
-  String get fxCatSpatial => '空间';
+  String get fxCatSpatial => '空间效果';
+
+  @override
+  String get fxCatStereoOnly => '立体声专用';
 
   @override
   String get fxCatLate => '激励与输出';
@@ -1863,6 +2131,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get spatialStyleNeutral => '中性';
+
+  @override
+  String get spatialStyleCustom => '自定义';
 
   @override
   String get spatialRoom => '房间';
@@ -1911,20 +2182,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get spatialBinauralInfo =>
-      '输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音';
-
-  @override
-  String get spatialFdn => 'FDN 房间';
-
-  @override
-  String get spatialFdnInfo =>
-      '使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间';
-
-  @override
-  String get spatialLate => '晚期混响';
-
-  @override
-  String get spatialLateInfo => 'FDN 晚期混响送入量。越大房间尾音越明显';
+      '输入 4/5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音，并接管设置页的「声道模式」（该项此时不生效）';
 
   @override
   String get spatialHeadTrack => '头部跟随';
@@ -2536,6 +2794,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get compTfresFine => '高频解析';
 
   @override
+  String get compModePairBadge => '性能模式：逐对';
+
+  @override
+  String get compModePairHint => '性能模式成对分配压缩槽位以节省计算资源与内存。需成对选择声道，半选对将不被压缩。';
+
+  @override
+  String get compModeSemiSelectedWarning => '性能模式需成对选择，半选对未生效';
+
+  @override
   String get autoGainCompensation => '自动增益补偿';
 
   @override
@@ -2548,7 +2815,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get outputGainGateTooltip => '微调该效果器出口电平 (-12.0 ~ +6.0 dB)';
 
   @override
-  String get arbmagSubtitle => '8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线';
+  String get arbmagSubtitle =>
+      '基于 8192 点因果最小相位 FIR 卷积引擎，支持导入 AutoEq GraphicEQ 曲线或自定义任意频响响应，高精度校正耳机与扬声器频响缺陷。';
 
   @override
   String get arbmagPresetFlat => '平直 (Flat)';
@@ -2619,7 +2887,114 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fxCatCore => '核心处理';
 
   @override
+  String get channelCenter => '中央声道 (C)';
+
+  @override
+  String get channelLfe => '低频效果 (LFE)';
+
+  @override
+  String get channelSurroundLeft => '左环绕 (SL)';
+
+  @override
+  String get channelSurroundRight => '右环绕 (SR)';
+
+  @override
+  String get channelBackLeft => '左后环绕 (BL)';
+
+  @override
+  String get channelBackRight => '右后环绕 (BR)';
+
+  @override
+  String inputChannelsCount(int n) {
+    return '$n 声道';
+  }
+
+  @override
+  String inputBalanceTuned(int n) {
+    return '已微调 $n 声道';
+  }
+
+  @override
+  String get inputBalanceDefault => '100% 默认平衡';
+
+  @override
+  String get eqPresetElectronic => '电子舞曲 (EDM)';
+
+  @override
+  String get eqPresetHiphop => '嘻哈说唱 (Hip-Hop)';
+
+  @override
+  String get eqPresetAcoustic => '原声不插电 (Acoustic)';
+
+  @override
+  String get eqPresetMetal => '重金属 (Metal)';
+
+  @override
+  String get eqPresetPodcast => '播客语音 (Podcast)';
+
+  @override
+  String get convIrPrompt => '请输入或选择脉冲响应 (IR) 文件路径：';
+
+  @override
+  String get convLoadIr => '加载 IR';
+
+  @override
+  String get ddcVdcPrompt => '请输入或选择 VDC 空间校正文件路径：';
+
+  @override
+  String get ddcLoadVdc => '加载 VDC';
+
+  @override
+  String get arbmagPrompt => '请输入或选择 AutoEq / GraphicEQ 曲线文件路径：';
+
+  @override
+  String get testAudioWavPrompt => '请输入或选择测试音频 (WAV) 文件路径：';
+
+  @override
+  String get testAudioMp3Prompt => '请输入或选择 MP3 音频文件路径：';
+
+  @override
+  String get testAudioLoad => '加载音频';
+
+  @override
+  String get pathPickerTitle => '选择路径';
+
+  @override
+  String get pathPickerConfirm => '确认';
+
+  @override
+  String get pathPickerBrowse => '浏览...';
+
+  @override
+  String get pathPickerClear => '清空';
+
+  @override
+  String get pathPickerSelectDir => '选择此目录';
+
+  @override
+  String get pathPickerErrEmpty => '路径不能为空';
+
+  @override
+  String get pathPickerErrDirNotExist => '指定的目录不存在或无访问权限';
+
+  @override
+  String get pathPickerErrFileNotExist => '指定的文件不存在或无访问权限';
+
+  @override
+  String pathPickerErrFormat(String exts) {
+    return '不支持的文件格式 (仅支持: $exts)';
+  }
+
+  @override
+  String pathPickerSupported(String exts) {
+    return '支持格式: $exts';
+  }
+
+  @override
   String get errEngineClosed => '引擎未运行';
+
+  @override
+  String get errEngineBusy => '引擎忙，请稍后重试';
 
   @override
   String get errInvalidLength => '长度无效';
@@ -2658,5 +3033,199 @@ class AppLocalizationsZh extends AppLocalizations {
   String get errUnsupported => '不支持的操作';
 
   @override
+  String get errReadOnly => '该参数为只读';
+
+  @override
   String get errInternal => '引擎内部错误';
+
+  @override
+  String get lpFindReplace => '查找与替换';
+
+  @override
+  String get lpSidebarLeft => '切换左侧面板 (大纲与脚本库)';
+
+  @override
+  String get lpSidebarRight => '切换右侧面板 (滑块与控制台)';
+
+  @override
+  String get lpConsole => '控制台';
+
+  @override
+  String get lpNewScriptWizard => '新建脚本向导';
+
+  @override
+  String get lpApoImportTitle => '导入 APO 预设';
+
+  @override
+  String get lpConfirmDiscardTitle => '放弃未保存修改？';
+
+  @override
+  String get lpConfirmDiscardBody => '当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？';
+
+  @override
+  String get lpConfirmDiscardAction => '放弃并覆盖';
+
+  @override
+  String get lpConsoleClear => '清空控制台';
+
+  @override
+  String get lpExpandEditor => '展开';
+
+  @override
+  String get lpCollapseEditor => '收起';
+
+  @override
+  String get lpUncompiled => '未编译修改';
+
+  @override
+  String get lpCompileSuccess => '编译成功';
+
+  @override
+  String get lpCompilingScript => '正在编译脚本…';
+
+  @override
+  String get lpEyebrowDsp => '可编程 DSP';
+
+  @override
+  String get lpTitleEditor => 'EEL2 编辑器';
+
+  @override
+  String get lpBtnApplied => '已应用';
+
+  @override
+  String get lpBtnUnapplied => '未应用';
+
+  @override
+  String get lpBtnCompile => '编译';
+
+  @override
+  String get lpTooltipCompileFirst => '代码已修改，需先编译后方可应用';
+
+  @override
+  String get lpMenuFile => '文件';
+
+  @override
+  String get lpFileNewBlank => '新建空白脚本';
+
+  @override
+  String get lpFileNewFromTemplate => '从模板新建...';
+
+  @override
+  String get lpFileImportApo => '导入 APO 预设...';
+
+  @override
+  String get lpFileImportEel => '导入 EEL 脚本...';
+
+  @override
+  String get lpFileSaveAs => '另存为...';
+
+  @override
+  String get lpFileSaveAsPrompt => '请输入保存路径与文件名：';
+
+  @override
+  String get lpFileOverwriteConfirmTitle => '文件已存在';
+
+  @override
+  String lpFileOverwriteConfirmBody(String name) {
+    return '目标文件「$name」已存在，是否确认覆盖？';
+  }
+
+  @override
+  String get lpFileOverwriteConfirmAction => '覆盖';
+
+  @override
+  String get lpMenuEdit => '编辑';
+
+  @override
+  String get lpEditFindReplace => '查找与替换';
+
+  @override
+  String get lpEditToggleOutline => '代码大纲';
+
+  @override
+  String get lpEditFormat => '格式化代码';
+
+  @override
+  String get lpEditScrollToTop => '跳回开头';
+
+  @override
+  String get lpBtnLibrary => '脚本库';
+
+  @override
+  String get lpLibDialogTitle => 'EEL2 脚本库与外部目录管理';
+
+  @override
+  String get lpLibOpenInExplorer => '在文件管理器中浏览';
+
+  @override
+  String get lpLibDirInvalid => '目录不存在或已失效';
+
+  @override
+  String get lpLibSaveCurrent => '保存当前脚本到库';
+
+  @override
+  String get lpLibCustomDirs => '脚本目录';
+
+  @override
+  String get lpSlidersPanelTitle => '参数调节滑块';
+
+  @override
+  String get lpSlidersCollapse => '收起面板';
+
+  @override
+  String get lpSlidersExpand => '展开面板';
+
+  @override
+  String get lpTabScriptSliders => '脚本参数';
+
+  @override
+  String get lpTabInputChannels => '输入通道 (8)';
+
+  @override
+  String get lpTabOutputChannels => '输出通道 (8)';
+
+  @override
+  String get lpCustomVarTag => '脚本变量';
+
+  @override
+  String get lpCustomVarHint =>
+      '脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）';
+
+  @override
+  String get lpInputTrimHint => '8 声道统一架构输入前级平衡与主增益';
+
+  @override
+  String get lpOutputGainHint => '8 声道后级独立输出增益补偿 (-15dB ~ +15dB)';
+
+  @override
+  String get lpResetAll => '全部复位';
+
+  @override
+  String get lpInputMasterGain => '全局输入增益';
+
+  @override
+  String get lpOutputMasterGain => '全局输出增益';
+
+  @override
+  String get lpNoScriptSliders => '脚本未声明可调变量';
+
+  @override
+  String get lpTooltipUnapplyToCompile => '应用状态下禁止编译，请先取消应用';
+
+  @override
+  String get lpLibSystemInitial => '<系统初始>';
+
+  @override
+  String get lpLibDirs => '脚本目录';
+
+  @override
+  String get lpLibScriptList => '脚本列表';
+
+  @override
+  String lpApoParseError(int line, String error) {
+    return '第 $line 行语法异常: $error';
+  }
+
+  @override
+  String get lpApoNoFiltersPreampOnly => '纯前级增益模式 (无滤波器)';
 }

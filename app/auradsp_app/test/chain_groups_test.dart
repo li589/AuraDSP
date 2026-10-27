@@ -33,11 +33,12 @@ void main() {
     expect(find.text('Input'), findsWidgets);
     expect(find.text('Tone'), findsWidgets);
     expect(find.text('EQ'), findsWidgets);
-    expect(find.text('Field'), findsWidgets);
+    expect(find.text('Stereo'), findsWidgets);
     expect(find.text('Output'), findsWidgets);
 
-    // 'Spatial' 出现 3 次：效果行标题 + 类别方框标记 + 底部信号流节点
-    expect(find.text('Spatial'), findsNWidgets(3));
+    // 'Spatial Effects' 为空间分类徽标，'Spatial' 出现 2 次（效果行标题 + 底部信号流节点）
+    expect(find.text('Spatial Effects'), findsWidgets);
+    expect(find.text('Spatial'), findsNWidgets(2));
 
     // 空间行与默认顺序（haas 之后）
     expect(kDefaultCoreOrder.indexOf('spatial'),

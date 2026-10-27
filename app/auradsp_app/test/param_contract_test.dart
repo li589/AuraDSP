@@ -41,8 +41,8 @@ const Map<String, Set<String>> kAliasToEngineId = {
   'reverb.dry': {'freeverb.dry'},
   'reverb.roomSize': {'freeverb.roomsize'},
   'reverb.width': {'freeverb.width'},
-  // 总开关走 selectReverbPreset → setFreeverbEnabled
-  'reverb.enable': {'freeverb.enable'},
+  // 总开关走 reverb.preset（WP1：freeverb.enable 已退役为 deprecated 写别名）
+  'reverb.enable': {'reverb.preset'},
   // 输出增益门命名差异（UI outputgain ↔ 引擎 outgain）
   'bass.outputgain': {'bass.outgain'},
   'eq.outputgain': {'eq.outgain'},
@@ -128,7 +128,9 @@ const Set<String> kUiOnlySpecIds = {
   // EQ 预设名 / 旁路（字段直赋或 toggleEqBypass 特路）
   'eq.presetName', 'eq.bypass', 'liveprog.codeHash',
   // 宿主/路由配置（ConfigManager 域，不发电Engine）
-  'bass.mode', 'routing.apoTargetEndpoint', 'routing.asioBufSize',
+  // 注：bass.mode 曾在此登记为 UI 专属——P-032 起引擎新增了同名状态载体
+  // 参数（纯 UI 模式选择的状态回读通道，不参与 DSP 计算），故已移出。
+  'routing.apoTargetEndpoint', 'routing.asioBufSize',
   'routing.asioDriver', 'routing.asioOutPair', 'routing.attachmentMode',
   'routing.modeCategory', 'routing.monitorMirroring', 'routing.pipelineInput',
   'routing.pipelineInputDevice', 'routing.pipelineInputEnabled',
@@ -148,6 +150,7 @@ const Set<String> kEngineOnlyIds = {
   'bass.oversample',
   // ---- channels：声道数/模式查询（VM/isolate 直发） ----
   'channels.count',
+  'channels.countMode',
   'channels.mode',
   // ---- comp：channel_mask（spec id = comp.channels；freq/gain 14 动态段已注册进 comp section） ----
   'comp.channel_mask',
@@ -229,6 +232,22 @@ const Set<String> kEngineOnlyIds = {
   'loudness.channel_mask',
   // ---- mode：全局模式查询 ----
   'mode.latency',
+  // ---- post：WP0 逐声道补偿（UI 于 WP5 接入） ----
+  'post.gain.c0',
+  'post.gain.c1',
+  'post.gain.c2',
+  'post.gain.c3',
+  'post.gain.c4',
+  'post.gain.c5',
+  'post.gain.c6',
+  'post.gain.c7',
+  // ---- reverb：WP1 混响边界（reverb.engine 只读诊断；predelay/lfe 已接 UI） ----
+  'reverb.engine',
+  // WP1：freeverb.enable / spatial.fdn / spatial.late 已从 UI 退役，
+  // 引擎保留为 deprecated 写别名（旧会话迁移用），UI 不读回。
+  'freeverb.enable',
+  'spatial.fdn',
+  'spatial.late',
   // ---- shelf：声道掩码族（channel_mask 别名仍仅引擎侧） ----
   'shelf.channel_mask',
   // ---- tube：声道掩码族（channel_mask 别名仍仅引擎侧） ----
@@ -1157,19 +1176,54 @@ ${hits.join('\n')}''');
   // 本部分改为形态 + 防回退镜像守卫）
   // ---------------------------------------------------------------------------
   group('Part J kLat 延迟表契约', () {
-    test('引擎 kLat* 8 条形态（stages>=0 且 ms>0）', () {
+    test('引擎 kLat* 5 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
       final src = _read('engine/engine_internal.h');
-      final re = RegExp(r'kLat(\w+)\s*\{\s*(\d+),\s*([\d.]+)f?\s*\}');
+      // D1（2026-10-24）：LatencyItem 拆成 {tier, frames, ms} 三字段——
+      // 结构性帧数延迟（comp 4096 帧）按采样率换算，名义毫秒值原样用。
+      // 旧的 `{tier, ms}` 两字段正则因此匹配不到，且 `ms > 0` 对新形态失效。
+      // 新契约：每条必须**恰有一项非零**——两者皆 0 = 等于没登记（占位蒙混），
+      // 两者皆非零 = 口径含糊（不知道该用哪个），都判红。
+      final re = RegExp(
+          r'kLat(\w+)\s*\{\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)f?\s*\}');
       final rows = re.allMatches(src).map((m) => (
             name: m.group(1)!,
-            stages: int.parse(m.group(2)!),
-            ms: double.parse(m.group(3)!),
+            tier: int.parse(m.group(2)!),
+            frames: int.parse(m.group(3)!),
+            ms: double.parse(m.group(4)!),
           )).toList();
-      expect(rows.length, 8, reason: '引擎 kLat 表条目数应为 8');
+      // 5 条：arbmag / comp / limiter 三项刻意不在表内——
+      //   arbmag = 单块帧数（随驱动块长变）；
+      //   comp   = fftLen-ovpLen，随 tfresolution 变（D7 实测，见 kCompLatProfile）；
+      //   limiter= 随 lookahead 模式在 0 / ~1.5ms 之间切（D7 实测）。
+      // 三者都由 compute_latency 直接算，写常量必错。
+      expect(rows.length, 5, reason: '引擎 kLat 表条目数应为 5（arbmag/comp/limiter 走动态）');
       for (final r in rows) {
-        expect(r.stages, greaterThanOrEqualTo(0));
-        expect(r.ms, greaterThan(0), reason: 'kLat${r.name} ms 应>0');
+        expect(r.tier, greaterThanOrEqualTo(0), reason: 'kLat${r.name} tier 应>=0');
+        final hasFrames = r.frames > 0;
+        final hasMs = r.ms > 0;
+        expect(hasFrames ^ hasMs, isTrue,
+            reason: 'kLat${r.name} 必须恰有一项非零'
+                '（frames=${r.frames} ms=${r.ms}；皆 0=没登记，皆非 0=口径含糊）');
       }
+      // D7：comp 的延迟不是固定 4096 帧（那是 FFTSIZE_DRS/2，从来不是运行时
+      // 延迟量）。实测延迟 = fftLen-ovpLen，随 tfresolution 变；且块长不足
+      // ovpLen 时整块直通（0ms）。故它必须走 kCompLatProfile 剖面表。
+      expect(RegExp(r'kLatComp').hasMatch(src), isFalse,
+          reason: 'kLatComp 不得存在——comp 延迟随 tfresolution 变，须查 kCompLatProfile');
+      expect(RegExp(r'kLatLimiter').hasMatch(src), isFalse,
+          reason: 'kLatLimiter 不得存在——limiter 延迟随 lookahead 模式变（0 / ~1.5ms）');
+      final prof = RegExp(
+              r'\{\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*\}')
+          .allMatches(src)
+          .where((m) => m.group(2) == '4096' || m.group(3) == '512')
+          .toList();
+      expect(prof.length, greaterThanOrEqualTo(2),
+          reason: 'kCompLatProfile 应含 fftLen=4096 / ovpLen=512 的剖面行');
+      expect(src.contains('kCompLatProfile'), isTrue,
+          reason: 'comp 延迟剖面表 kCompLatProfile 必须存在');
+      // arbmag 不得以任何形态回到表里（回退即"两张皮"重现）
+      expect(RegExp(r'kLatArbMag').hasMatch(src), isFalse,
+          reason: 'kLatArbMag 不得存在——arbmag 延迟=块长，写常量必错');
     });
 
     test('Dart 无 kLat 硬编码镜像（防回退"两张皮"；C4 已删表改实测）', () {
@@ -1235,7 +1289,8 @@ ${hits.join('\n')}''');
       for (final m in defRe.allMatches(internal)) {
         final member = m.group(1)!;
         if (member.contains('[')) continue; // 数组无聚合默认
-        final val = m.group(2)!.trim();
+        var val = m.group(2)!.trim();
+        val = val.replaceAll('(int32_t)', '').replaceAll('kChMaskAll', '0xFF').replaceAll('kChMaskNoLfe', '0xF7').trim();
         // 非数值默认（如 state{AURADSP_STATE_BYPASS} 内部哨兵）不参与范围校验
         if (!RegExp(r'^-?(?:\d+(?:\.\d+)?|0x[0-9A-Fa-f]+)f?$').hasMatch(val)) {
           continue;
@@ -1264,7 +1319,9 @@ ${hits.join('\n')}''');
         'comp.freq1', 'comp.freq2', 'comp.freq3', 'comp.freq4', 'comp.freq5',
         'comp.freq6', 'comp.freq7', 'comp.gain1', 'comp.gain2', 'comp.gain3',
         'comp.gain4', 'comp.gain5', 'comp.gain6', 'comp.gain7',
-      }, reason: '缺默认 id 集合应为 comp 数组 14 条（设计预期，见扫描汇报 B3）');
+        'post.gain.c0', 'post.gain.c1', 'post.gain.c2', 'post.gain.c3',
+        'post.gain.c4', 'post.gain.c5', 'post.gain.c6', 'post.gain.c7',
+      }, reason: '缺默认 id 集合应为 comp/post 数组 22 条（设计预期，见扫描汇报 B3）');
     });
   });
 
@@ -1318,12 +1375,22 @@ ${hits.join('\n')}''');
       for (final p in presets) {
         expect((p['name'] as String).isNotEmpty, isTrue);
       }
-      final card = _read('app/auradsp_app/lib/features/effects/reverb_card.dart');
-      final uiIdx = RegExp(r'(\d+):\s*l\.reverbPreset\d+')
-          .allMatches(card).map((m) => int.parse(m.group(1)!)).toSet();
+      final stateSrc = _read('app/auradsp_app/lib/core/state.dart');
+      final curated = RegExp(r'kReverbCuratedPresets\s*=\s*\[([^\]]+)\]')
+          .firstMatch(stateSrc);
+      expect(curated, isNotNull, reason: 'state.dart 缺少 kReverbCuratedPresets');
+      final uiIdx = curated!
+          .group(1)!
+          .split(',')
+          .map((s) => int.parse(s.trim()))
+          .toSet();
       expect(uiIdx, isNotEmpty, reason: 'reverb_card 预设映射解析为空');
+      expect(uiIdx.length, 8, reason: 'curated 预设应为 8 档');
       expect(uiIdx.every((i) => i >= 0 && i <= 18), isTrue,
           reason: 'UI reverb 卡索引越出引擎预设域 0..18: $uiIdx');
+      final card = _read('app/auradsp_app/lib/features/effects/reverb_card.dart');
+      expect(card.contains('kReverbCuratedPresets'), isTrue,
+          reason: 'reverb_card 必须使用 curated 预设表，禁止硬编码另一套映射');
     });
   });
 }

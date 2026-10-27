@@ -1,6 +1,6 @@
-import 'package:auradsp_app/features/eel_editor_support.dart';
+import 'package:auradsp_app/features/liveprog/eel_editor_support.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
-import 'package:flutter/material.dart' show Locale;
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final AppLocalizations _zh = lookupAppLocalizations(const Locale('zh'));
@@ -105,14 +105,10 @@ void main() {
       expect(hit.every((e) => !e.blocking), isTrue);
     });
 
-    test('slider9 → 越界警告且定位到行', () {
-      const src = '@init\nx = 1;\n@sample\nspl0 *= slider9;\n';
+    test('slider9..slider64 均属合法 JSFX/EEL2 滑块变量，不报越界错误', () {
+      const src = '@init\nx = 1;\n@sample\nspl0 *= slider9 + slider12 + slider20 + slider64;\n';
       final issues = EelLinter.lint(_zh, src);
-      final hit =
-          issues.where((e) => e.message.contains('slider9')).toList();
-      expect(hit.length, 1);
-      expect(hit.first.line, 4);
-      expect(hit.first.blocking, isFalse);
+      expect(issues, isEmpty);
     });
 
     test('srate 赋值 → 只读警告；== 比较不误报', () {
@@ -135,14 +131,52 @@ void main() {
   });
 
   group('EelFormatter', () {
-    test('缩进按花括号深度（Tab）', () {
+    test('缩进按花括号与软 Tab 深度（2 空格）', () {
       final out = EelFormatter.format('@init\nif (a) {\nb = 1;\n}\n');
+      expect(out, '@init\nif (a) {\n  b = 1;\n}\n');
+    });
+
+    test('支持自定义制表符缩进', () {
+      final out = EelFormatter.format('@init\nif (a) {\nb = 1;\n}\n', indent: '\t');
       expect(out, '@init\nif (a) {\n\tb = 1;\n}\n');
     });
 
-    test('} else { 形态保持同级', () {
+    test('EEL2 函数括号块与控制块正确缩进', () {
+      const src = '''@init
+function calc_peak(freq, q, gain_db) instance(b0, b1, b2, a1, a2) (
+w0 = 2 * PI * freq / srate;
+alpha = sin(w0) / (2 * q);
+this.b0 = b0;
+);
+@sample
+spl0 *= gain_l;
+spl1 *= gain_r;
+''';
+      final formatted = EelFormatter.format(src);
+      expect(formatted, '''@init
+function calc_peak(freq, q, gain_db) instance(b0, b1, b2, a1, a2) (
+  w0      = 2 * PI * freq / srate;
+  alpha   = sin(w0) / (2 * q);
+  this.b0 = b0;
+);
+@sample
+spl0 *= gain_l;
+spl1 *= gain_r;
+''');
+    });
+
+    test('复合操作符 *= += -= /= 格式化不被替换为字面量 \$1', () {
+      const src = '@sample\nspl0 *= gain_l;\nspl1 *= gain_r;\nspl0 += 0.5;\n';
+      final formatted = EelFormatter.format(src);
+      expect(formatted.contains(r'$1'), isFalse);
+      expect(formatted.contains('spl0 *= gain_l;'), isTrue);
+      expect(formatted.contains('spl1 *= gain_r;'), isTrue);
+      expect(formatted.contains('spl0 += 0.5;'), isTrue);
+    });
+
+    test('} else { 与 ) : ( 形态保持同级', () {
       final out = EelFormatter.format('@init\nif (a) {\nb = 1;\n} else {\nc = 2;\n}\n');
-      expect(out, '@init\nif (a) {\n\tb = 1;\n} else {\n\tc = 2;\n}\n');
+      expect(out, '@init\nif (a) {\n  b = 1;\n} else {\n  c = 2;\n}\n');
     });
 
     test('@section 重置深度', () {
@@ -213,6 +247,59 @@ spl0 = spl0 * slider2 + slider4;
       expect(sliders.containsKey(4), isTrue);
       expect(sliders.containsKey(1), isFalse);
       expect(sliders.containsKey(3), isFalse);
+    });
+
+    test('解析带注释前缀的 slider、枚举选项与自定义变量声明', () {
+      const src = '''
+desc: Dynamic Bass Mangler
+author: remaincalm.org
+//slider1:1<0,6,1>Octaves Down
+slider15:1<0,3,1{No,Murky,Confused,Unpleasant}>Attitude
+dBassGain:100<0,100,1>Bass strength (%)
+freqSplit1:400<1,24000,1>Split 1 (Hz)
+@init
+x = 0;
+@sample
+spl0 = spl0;
+''';
+      final sliders = EelSliderParser.parse(src);
+      // slider1 (带 // 前缀)
+      expect(sliders.containsKey(1), isTrue);
+      expect(sliders[1]!.rawName, 'slider1');
+      expect(sliders[1]!.displayName, 'Octaves Down');
+      expect(sliders[1]!.defaultVal, 1.0);
+      expect(sliders[1]!.isHostSlider, isTrue);
+
+      // slider15 (带枚举，现作为 1..64 宿主滑块支持)
+      expect(sliders.containsKey(15), isTrue);
+      expect(sliders[15]!.rawName, 'slider15');
+      expect(sliders[15]!.displayName, 'Attitude');
+      expect(sliders[15]!.enumOptions, ['No', 'Murky', 'Confused', 'Unpleasant']);
+      expect(sliders[15]!.isHostSlider, isTrue);
+
+      // 自定义变量
+      final customMetas = sliders.values.where((m) => !m.rawName.startsWith('slider')).toList();
+      expect(customMetas.length, 2);
+      expect(customMetas.any((m) => m.rawName == 'dBassGain' && m.defaultVal == 100.0), isTrue);
+      expect(customMetas.any((m) => m.rawName == 'freqSplit1' && m.minVal == 1.0), isTrue);
+    });
+  });
+
+  group('EelSyntaxTextEditingController Tests', () {
+    testWidgets('错误行应用红色背景与波浪线高亮', (tester) async {
+      final ctrl = EelSyntaxTextEditingController(
+        text: '@init\nx = 1;\n@sample\nspl0 = 1;\n',
+      );
+      ctrl.errorLines = {2};
+
+      await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+          body: TextField(controller: ctrl),
+        ),
+      ));
+
+      expect(ctrl.errorLines.contains(2), isTrue);
+      expect(ctrl.errorLines.contains(1), isFalse);
     });
   });
 }

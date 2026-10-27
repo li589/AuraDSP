@@ -171,3 +171,20 @@
 - **channelsMode 真值对齐（430849f）**：引擎仅 0=矩阵下混/1=离散逐声道；UI 原三档「立体声/5.1/7.1」选 7.1 恒被拒且镜像不回滚——已改两档真值 + 三语 hint + clamp。
 - **部署核对铁律**：① DLL 导出用 ASCII `strings`（`-el` UTF-16 恒得 0）；② 一致性判源 mtime vs 构建时间，非 commit time；③ 本机 `flutter test` 全量并发 isolate 超时抖动（"did not complete" 逐轮漂移、单跑全过）= 环境性。
 - **记忆目录裁定（2026-10-11，10-24 重申）**：唯一 AI 记忆目录 = `.ai/memory/`；`.workbuddy/memory/` 已再次合并并入本目录并移除。
+
+## Liveprog 脚本 IDE 升级与引擎 P-039 闭环（2026-10-27）
+
+- **Liveprog IDE 全景落地**：IDE 双栏布局（左侧编辑+快捷工具栏，右侧参数控制器+日志终端）、顶栏状态条与集成打开文件功能、EqualizerAPO Clean-Room 极简 EEL2 转换器、预置 6 类官方模板与脚本库。
+- **Clean-Room EqualizerAPO 转换器决策**：针对纯 Preamp 配置采用极简 EEL2 生成（20 行干净 EEL2 vs 350 行通用库），150ms 编辑防抖与语法错误捕获，极大提升脚本加载速度与纯净度。
+- **状态互锁安全决策**：① 脚本已应用状态下（`lpEnabled == true`），禁止点击 Compile（防止编译运行中的并发状态紊乱）；② 代码脏（未编译/编辑修改中）状态下，禁止点击 Apply，但**允许随时点击以取消应用退出**（`lpEnabled = false`），确保用户在写错脚本时能够无阻碍关停 DSP。
+- **脚本库异步与防御式改造**：
+  - 目录切换采用单选圆点（Radio）；
+  - 失效目录以警告感叹号在最右侧操作组居左并列排布；
+  - `<系统初始>` 目录受系统级保护（不可删除），且缺失时能自动重建内置模板；
+  - 路径记忆：引入 `slotLiveprogSelectedDir` 持久化记忆最后打开的脚本目录；
+  - **Flutter 测试大坑与教训**：在 Widget 测试中，`listDirAsync` 若使用 `Stream` 异步流遍历与 `CircularProgressIndicator` 结合，会导致 `pumpAndSettle` 持续等待流微任务而超时（10 分钟死循环）；改用 `Future(() { return listSync(); })` 配合 `isScanning` 状态指示，非阻塞且测试立即稳定 settle。
+- **引擎补丁 P-039（libjamesdsp & engine_chain）**：
+  - ① `LiveProgStringParser` 采用严格四段状态机扫描（`@init`, `@slider`, `@block`, `@sample`），`@slider` 独立编译并挂接到 block 首部执行，解决官方模板 5/6 报错；
+  - ② 修复 `engine_chain.cpp` 中编译被拒绝（格式/语法错误）时未重置缓存导致下次正确代码因“同因抑制”被静默丢弃触发 5 秒超时的严重缺陷。
+- **测试全绿与交付**：47 个 Flutter 测试套件 100% 通过；9 项 Python 冒烟测试 100% 通过；`l10n_cjk_guard_test.dart` 0 债务通过；`flutter analyze` 0 警告 0 报错；`build_windows.ps1` 全栈构建与产物同步完毕。
+

@@ -20,11 +20,13 @@ import 'auradsp_ffi.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
+import 'backend_switch.dart';
 import 'bridge_plugin_ffi.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
 
 
+import '../core/error_sink.dart';
 part 'audio_guid.dart';
 part 'audio_device.dart';
 part 'audio_wav.dart';
@@ -286,6 +288,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   /* ---- VB-Callback 模式面（与 WASAPI 路径互斥） ---- */
 
+  /// D4-a：桥停掉之后把 WASAPI 拉回来。返回 null = 已恢复；否则返回失败原因。
+  /// 这一步失败意味着**彻底没声**，必须让 UI 看到（`catch (_) {}` 吞掉就是
+  /// 用户静默失声、日志无痕）。三条 stop*Bridge 共用。
+  ///
+  /// 注意：本函数是 isolate 里的**局部函数**，Dart 局部函数不提升——必须声明
+  /// 在首个调用点（stopVbBridge）之前，且名字不能带前导下划线。
+  String? resumeWasapi(String tag) {
+    try {
+      wasapi?.start();
+      return null;
+    } catch (e) {
+      dbgLog('$tag: wasapi resume failed: $e');
+      return '$e';
+    }
+  }
+
   void startVbBridge() {
     if (vbActive) return;
     dbgLog('vbmode: start requested');
@@ -341,9 +359,34 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     } catch (e) {
       dbgLog('vbmode: auto-protect sync failed (old bridge dll?): $e');
     }
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：先停 WASAPI 并**确认**。停不下来就不许起 VB——否则两路同时出声
+     * （真实双声），而旧的 `catch (_) {}` 让这件事完全无声。失败时把刚起来的
+     * VB 拆掉，回到切换前状态（WASAPI 继续出声），并回报原因。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          vb?.testStop();
+        } catch (e) {
+          dbgLog('vbmode: rollback testStop failed: $e');
+        }
+        try {
+          vb?.stop();
+        } catch (e) {
+          dbgLog('vbmode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('vbmode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'vbstatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+      });
+      return;
+    }
     source = null;
     vbActive = true;
     replayPluginMirrorToBridge(vb!.plugin);
@@ -362,16 +405,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('vbmode: stop requested');
     try {
       vb?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       vb?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     vbActive = false;
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('vbmode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'vbstatus', 'running': false});
+    send({
+      'evt': 'vbstatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* ---- ASIO 模式面（04 桥；与 VB/WASAPI 互斥） ---- */
@@ -471,9 +516,33 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     // 旁路态同步（用户此前可能已开旁路；桥默认关）。
     final bypassRc = ab!.setBypass(bypass);
     dbgLog('asiomode: bypass sync isolate=$bypass rc=$bypassRc');
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：同 vbmode——停不下来就不许起 ASIO，失败回滚刚起的桥。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          ab?.testStop();
+        } catch (e) {
+          dbgLog('asiomode: rollback testStop failed: $e');
+        }
+        try {
+          ab?.stop();
+        } catch (e) {
+          dbgLog('asiomode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('asiomode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'asiostatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+        'driverInUse': drv,
+      });
+      return;
+    }
     source = null;
     asioActive = true;
     asioDriverInUse = drv;
@@ -500,17 +569,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('asiomode: stop requested');
     try {
       ab?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       ab?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     asioActive = false;
     asioDriverInUse = '';
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('asiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'asiostatus', 'running': false});
+    send({
+      'evt': 'asiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* ---- AuraVAIO 虚拟声卡模式面（Mode 1 桥；与 VB/ASIO/WASAPI 互斥） ---- */
@@ -560,9 +631,32 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     dbgLog('vaiomode: replayed $replayedStr str params');
     vaio!.setBypass(bypass);
-    try {
-      wasapi?.stop();
-    } catch (_) {}
+    /* D4-a：同 vbmode——停不下来就不许起 VAIO，失败回滚刚起的桥。 */
+    final handover = runHandover(
+      haltOld: () => wasapi?.stop(),
+      rollbackNew: () {
+        try {
+          vaio?.testStop();
+        } catch (e) {
+          dbgLog('vaiomode: rollback testStop failed: $e');
+        }
+        try {
+          vaio?.stop();
+        } catch (e) {
+          dbgLog('vaiomode: rollback stop failed: $e');
+        }
+      },
+      onError: dbgLog,
+    );
+    if (!handover.ok) {
+      dbgLog('vaiomode: switch aborted: ${handover.reason}');
+      send({
+        'evt': 'vaiostatus',
+        'running': false,
+        'note': 'switch-abort: ${handover.reason}',
+      });
+      return;
+    }
     source = null;
     vaioActive = true;
     vaioOutputEndpointInUse = outputEndpointSubstr;
@@ -580,17 +674,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('vaiomode: stop requested');
     try {
       vaio?.testStop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     try {
       vaio?.stop();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     vaioActive = false;
     vaioOutputEndpointInUse = '';
-    try {
-      wasapi?.start();
-    } catch (_) {}
+    final resumeErr = resumeWasapi('vaiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
-    send({'evt': 'vaiostatus', 'running': false});
+    send({
+      'evt': 'vaiostatus',
+      'running': false,
+      if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
+    });
   }
 
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
@@ -612,6 +708,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           final t0 = DateTime.now();
           final rc = AuraDspLib.setValue(lib!, handle!, m['id'] as String,
               isFloat: m['isFloat'] as bool, value: (m['value'] as num).toDouble());
+          if (m['id'] == 'channels.count' && rc == Status.ok) {
+            engineChCount = (m['value'] as num).toInt();
+          }
           // 参数镜像 + VB 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
           paramMirror[m['id'] as String] = (
             isFloat: m['isFloat'] as bool,
@@ -683,9 +782,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             Pointer<Uint8> idp(String s) => AuraDspLib.idBytes(s);
             final iBass = idp('bass.enable'), iBassG = idp('bass.gain');
             final iRev = idp('reverb.preset'), iMix = idp('stereo.mix');
+            final iRevEng = idp(ParamId.reverbEngine);
+            final iRevPre = idp(ParamId.reverbPredelay);
+            final iRevLfe = idp(ParamId.reverbLfe);
             final iEq = idp('eq.enable'), iPost = idp('post.gain');
             final iLim = idp('limiter.enable');
             final iCh = idp('channels.mode');
+            final iChCount = idp(ParamId.channelsCount);
+            final iChCountMode = idp(ParamId.channelsCountMode);
             final iLpEn = idp('liveprog.enable'), iLpSt = idp('liveprog.status');
             final iCvEn = idp('convolver.enable'), iCvRd = idp('convolver.ready');
             final iCvF = idp('convolver.ir.frames'), iCvCh = idp('convolver.ir.channels');
@@ -700,6 +804,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iDdE = idp('ddc.enable'), iDdR = idp('ddc.ready');
             final iShE = idp('shelf.enable'), iShF = idp('shelf.freq'), iShG = idp('shelf.gain');
             final iBmE = idp(ParamId.bassmonoEnable), iBmF = idp(ParamId.bassmonoFreq);
+            final iBmP = idp(ParamId.bassmonoPairs), iBmM = idp(ParamId.bassmonoMerge);
             final iHsE = idp(ParamId.haasEnable), iHsD = idp(ParamId.haasDelay), iHsM = idp(ParamId.haasMix);
             final iHsS = idp(ParamId.haasSide);
             final iSpE = idp(ParamId.spatialEnable), iSpS = idp(ParamId.spatialStyle);
@@ -713,10 +818,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iSpM = idp(ParamId.spatialMix);
             final iSpEl = idp(ParamId.spatialElevation);
             final iSpBi = idp(ParamId.spatialBinaural);
-            final iSpFd = idp(ParamId.spatialFdn);
-            final iSpLa = idp(ParamId.spatialLate);
             final iSpH = idp(ParamId.spatialHeadAzim), iSpT = idp(ParamId.spatialHeadTrack);
             final iExE = idp(ParamId.exciterEnable), iExA = idp(ParamId.exciterAmount), iExF = idp(ParamId.exciterHifreq);
+            // X-6 修复配套：dyneq/exciter 掩码默认值随 channels.count 按布局
+            // 平移（4ch 0x0F / 6ch 0x37），UI 必须回读才能与引擎镜像一致。
+            final iExC = idp('exciter.channels'), iDyC = idp('dyneq.channels');
             // P-010：每效果输出增益门 + 自动补偿
             final iBoG = idp(ParamId.bassOutGain), iBoA = idp(ParamId.bassAutoGain);
             final iEoG = idp(ParamId.eqOutGain), iEoA = idp(ParamId.eqAutoGain);
@@ -749,7 +855,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final iBhS = idp(ParamId.bassSubFreq), iBhC = idp(ParamId.bassCutoffF);
             final iFtE = idp(ParamId.filterEnable), iFtT = idp(ParamId.filterType);
             final iFtF = idp(ParamId.filterFreq), iFtQ = idp(ParamId.filterQ);
-            final iFvE = idp('freeverb.enable'), iFvD = idp('freeverb.decay');
+            final iFvD = idp('freeverb.decay');
             final iFvDa = idp('freeverb.damp'), iFvW = idp('freeverb.wet'), iFvDr = idp('freeverb.dry');
             final iCpE = idp(ParamId.compEnable), iCpT = idp(ParamId.compTimeconstant);
             final iCpG = idp(ParamId.compGranularity), iCpR = idp(ParamId.compTfresolution);
@@ -828,11 +934,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'bassEnable': rdInt(iBass) ?? 0,
                 'bassGain': bassGainVal,
                 'reverbPreset': rdInt(iRev) ?? -1,
+                'reverbEngine': rdInt(iRevEng) ?? -1,
+                'reverbPredelay': rdFloat(iRevPre) ?? 0.0,
+                'reverbLfe': rdInt(iRevLfe) ?? 0,
                 'stereoMix': rdFloat(iMix) ?? 0.0, // 兜底必须=ParamDefaults.stereoMix（UI 为真，原 0.5）
                 'eqEnable': rdInt(iEq) ?? 0,
                 'postGain': rdFloat(iPost) ?? 0.0,
                 'limiterEnable': rdInt(iLim) ?? 1,
                 'channelsMode': rdInt(iCh) ?? 0,
+                'channelsCount': rdInt(iChCount) ?? 2,
+                'channelsCountMode': rdInt(iChCountMode) ?? 0,
                 'lpEnable': rdInt(iLpEn) ?? 0,
                 'lpStatus': rdInt(iLpSt) ?? 0,
                 'convEnable': rdInt(iCvEn) ?? 0,
@@ -861,6 +972,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'shelfGain': rdFloat(iShG) ?? 0.0,
                 'bassmonoEnable': rdInt(iBmE) ?? 0,
                 'bassmonoFreq': rdFloat(iBmF) ?? 120.0,
+                'bassmonoPairs': rdInt(iBmP) ?? 1,
+                'bassmonoMerge': rdInt(iBmM) ?? 0,
                 'haasEnable': rdInt(iHsE) ?? 0,
                 'haasDelay': rdFloat(iHsD) ?? 12.0,
                 'haasMix': rdFloat(iHsM) ?? 1.0,
@@ -872,18 +985,18 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'spatialCenter': rdFloat(iSpC) ?? 0.8,
                 'spatialOutGain': rdFloat(iSpG) ?? 0.0,
                 'spatialAutoGain': rdInt(iSpA) ?? 0,
-                // P-2 修复：补齐 mix/elevation/binaural/fdn/late（fallback 取
-                // 引擎 struct 默认：1.0 / 0.0 / 0 / 0 / 0.25，三层一致）。
+                // P-2 修复：补齐 mix/elevation/binaural（fallback 取引擎
+                // struct 默认：1.0 / 0.0 / 0，三层一致）。WP1 移除 fdn/late。
                 'spatialMix': rdFloat(iSpM) ?? 1.0,
                 'spatialElevation': rdFloat(iSpEl) ?? 0.0,
                 'spatialBinaural': rdInt(iSpBi) ?? 0,
-                'spatialFdn': rdInt(iSpFd) ?? 0,
-                'spatialLate': rdFloat(iSpLa) ?? 0.25,
                 'spatialHeadAzim': rdFloat(iSpH) ?? 0.0,
                 'spatialHeadTrack': rdInt(iSpT) ?? 0,
                 'exciterEnable': rdInt(iExE) ?? 0,
                 'exciterAmount': rdFloat(iExA) ?? 0.3,
                 'exciterHifreq': rdFloat(iExF) ?? 5000.0,
+                'exciterChannels': rdInt(iExC) ?? 0xF7,
+                'dyneqChannels': rdInt(iDyC) ?? 0xF7,
                 'bassOutGain': rdFloat(iBoG) ?? 0.0,
                 'bassAutoGain': rdInt(iBoA) ?? 0,
                 'eqOutGain': rdFloat(iEoG) ?? 0.0,
@@ -948,7 +1061,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'filterType': rdInt(iFtT) ?? 0,
                 'filterFreq': rdFloat(iFtF) ?? 80.0,
                 'filterQ': rdFloat(iFtQ) ?? 0.707,
-                'fvEnable': rdInt(iFvE) ?? 0,
                 'fvDecay': rdFloat(iFvD) ?? 0.5,
                 'fvDamp': rdFloat(iFvDa) ?? 0.5,
                 'fvWet': rdFloat(iFvW) ?? 0.35, // 兜底必须=ParamDefaults.fvWet（UI 为真，原 0.3）
@@ -990,7 +1102,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                 'eqCurve': eqCurveRb,
               });
             } finally {
-              for (final q in [iBass, iBassG, iRev, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvE, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
+              for (final q in [iBass, iBassG, iRev, iRevEng, iRevPre, iRevLfe, iMix, iEq, iPost, iLim, iCh, iLpEn, iLpSt, iCvEn, iCvRd, iCvF, iCvCh, iCvSr, iCvPk, iCvSpec, iTb, iXf, iSbU, iShE, iShF, iShG, iBmE, iBmF, iHsE, iHsD, iHsM, iHsS, iExE, iExA, iExF, iBoG, iBoA, iEoG, iEoA, iToG, iToA, iCoG, iCoA, iRoG, iRoA, iGtE, iGtT, iGtA, iGtR, iGtG, iDsE, iDsF, iDsA, iLdE, iLdA, iBhH, iBhB, iBhS, iBhC, iFtE, iFtT, iFtF, iFtQ, iFvD, iFvDa, iFvW, iFvDr, iCvM, iDdE, iDdR, iCpE, iCpT, iCpG, iCpR, iArbE, iArbR, iArbN, iLpCode, iArbStr, iEqCurve]) {
                 malloc.free(q);
               }
             }
@@ -1950,8 +2062,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       AuraDspLib.setValue(lib, handle, 'viz.fftSize',
           isFloat: false, value: vizFftSize.toDouble());
     }
-    wasapi?.start();
-    if (wasapi != null) {
+    /* D4-a：Start 失败既不能静默（用户以为有声），也不能升级成 fatal
+     * （引擎/桥本来还能用）——走既有的 wasapiError 降级通道。 */
+    try {
+      wasapi?.start();
+    } catch (e) {
+      wasapiError ??= 'wasapi-start: $e';
+      dbgLog('WASAPI start failed, degraded ready: $e');
+    }
+    if (wasapi != null && wasapi.started) {
       dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
     }
     lastSentState = lib.getState(handle);
@@ -2079,7 +2198,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               });
             }
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-asio'); }
         continue;
       }
       // VB 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走桥。
@@ -2127,7 +2246,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final st = vb!.status();
             if (st != null) send({'evt': 'vbstatus', ...st});
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-vb'); }
         continue;
       }
       // AuraVAIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 01 桥。
@@ -2177,7 +2296,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               });
             }
           }
-        } catch (_) {}
+        } catch (e, st) { swallowThrottled(e, st, 'pump-vaio'); }
         continue;
       }
       try {
@@ -2226,34 +2345,60 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (!bypass) {
             procRounds++;
             final cm = paramMirror[ParamId.channelsMode]?.value.toInt() ?? 0;
+            final countMode =
+                paramMirror[ParamId.channelsCountMode]?.value.toInt() ?? 0;
             final binauralOn =
                 (paramMirror[ParamId.spatialEnable]?.value ?? 0) != 0 &&
                     (paramMirror[ParamId.spatialBinaural]?.value ?? 0) != 0;
-            final want = fs == null
-                ? 2
-                : localEngineChannels(
-                    hasRaw: fs.raw != null,
-                    rawCh: fs.rawCh,
-                    passthrough51: passthrough51,
-                    bypass: bypass,
-                    devCh: devCh,
-                    channelsMode: cm,
-                    binauralActive: binauralOn);
-            if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
-              fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
-              lib!.process(handle!, inPtrEng, outPtrEng8, frames);
-              engineMulti = true;
-              if (procRounds == 1) {
-                dbgLog('first process(multi ch=$want)');
+            if (countMode == 0) {
+              // 自动模式：跟随输入源与设备声道数动态调整引擎 channels.count
+              final want = fs == null
+                  ? 2
+                  : localEngineChannels(
+                      hasRaw: fs.raw != null,
+                      rawCh: fs.rawCh,
+                      passthrough51: passthrough51,
+                      bypass: bypass,
+                      devCh: devCh,
+                      channelsMode: cm,
+                      binauralActive: binauralOn);
+              if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
+                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+                if (procRounds == 1) {
+                  dbgLog('first process(multi ch=$want)');
+                }
+              } else {
+                applyEngineChannels(2);
+                if (procRounds == 1) {
+                  dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
+                }
+                lib!.process(handle!, srcPtr, outPtrEng, frames);
+                if (procRounds == 1) {
+                  dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+                }
               }
             } else {
-              applyEngineChannels(2);
-              if (procRounds == 1) {
-                dbgLog('first process: in0=${srcBuf[0]} in1=${srcBuf[1]}');
-              }
-              lib!.process(handle!, srcPtr, outPtrEng, frames);
-              if (procRounds == 1) {
-                dbgLog('first process done: out0=${engOut[0]} out1=${engOut[1]}');
+              // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
+              if (engineChCount > 2 && fs != null && fs.raw != null && fs.rawCh == engineChCount) {
+                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+              } else if (engineChCount > 2) {
+                // 输入非同声道数：将立体声 srcBuf 铺入 inBufEng 前两声道，其余声道补 0
+                for (var i = 0; i < frames; i++) {
+                  final base = i * engineChCount;
+                  inBufEng[base] = srcBuf[i * 2];
+                  inBufEng[base + 1] = srcBuf[i * 2 + 1];
+                  for (var c = 2; c < engineChCount; c++) {
+                    inBufEng[base + c] = 0.0;
+                  }
+                }
+                lib!.process(handle!, inPtrEng, outPtrEng8, frames);
+                engineMulti = true;
+              } else {
+                lib!.process(handle!, srcPtr, outPtrEng, frames);
               }
             }
           }
@@ -2343,28 +2488,28 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       if (vbActive) {
         try {
           vb?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           vb?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         vbActive = false;
       }
       if (asioActive) {
         try {
           ab?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           ab?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         asioActive = false;
       }
       if (vaioActive) {
         try {
           vaio?.testStop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         try {
           vaio?.stop();
-        } catch (_) {}
+        } catch (e, st) { swallow(e, st); }
         vaioActive = false;
       }
       wasapi?.stop();
@@ -2374,7 +2519,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       malloc.free(inPtrEng);
       malloc.free(outPtrEng8);
       malloc.free(vizBuf);
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   unawaited(pump());

@@ -1,6 +1,24 @@
 // part of state.dart —— P5 按区拆分，extension 包装零逻辑改动。
 part of '../state.dart';
 
+/// spatial.style 0/1/2 的规范预设值（与引擎 hook_spatial_style 同源）。
+/// 3 = 自定义，不套用任何预设。
+({double room, double width, double center}) _spatialPresetFor(int style) {
+  if (style == 0) return (room: 0.7, width: 1.0, center: 0.8);
+  if (style == 1) return (room: 0.25, width: 1.1, center: 0.5);
+  return (room: 0.0, width: 1.0, center: 0.5);
+}
+
+/// 三个自定义参数是否仍与 style 0..2 的规范预设一致。
+bool _spatialMatchesPreset(
+    int style, double room, double width, double center) {
+  if (style < 0 || style > 2) return false;
+  final preset = _spatialPresetFor(style);
+  return (room - preset.room).abs() < 1e-6 &&
+      (width - preset.width).abs() < 1e-6 &&
+      (center - preset.center).abs() < 1e-6;
+}
+
 /// 全部效果 setter（同构块）：comp/bass/spatial/reverb/gate/deesser/
 /// dyneq/loudness/arbmag/filter/shelf/tube/exciter/haas/crossfeed/
 /// bassmono/limiter/inputGain 各组 + autoGain/outputGain 对 + 头追/
@@ -10,8 +28,10 @@ part of '../state.dart';
 /// _notifyUi()）。本块为历史层叠顺序（非按效果分组），与搬迁前一致；
 /// IDE outline 可按方法名跳读。
 extension StateEffects on AppModel {
-  /// 混响预设：废除品质档拦截限制，无条件自由放行
+  /// 混响预设：废除品质档拦截限制，无条件自由放行。
+  /// `reverb.preset` 是唯一开关（-1 关 / -2 自定义 / 0..18 预设）。
   void setReverbPreset(int v, {String? autoQualityMsg}) {
+    if (v != -1) _lastReverbPreset = v;
     setInt('reverb.preset', v);
   }
 
@@ -31,12 +51,18 @@ extension StateEffects on AppModel {
     if (xfeedMode == 0) {
       xfeedFcut = 700.0;
       xfeedFeed = 4.5;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     } else if (xfeedMode == 1) {
       xfeedFcut = 700.0;
       xfeedFeed = 6.0;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     } else if (xfeedMode == 2) {
       xfeedFcut = 650.0;
       xfeedFeed = 9.5;
+      setFloat(ParamId.xfeedFcut, xfeedFcut);
+      setFloat(ParamId.xfeedFeed, xfeedFeed);
     }
     setInt(ParamId.xfeedMode, xfeedMode);
     _notifyUi();
@@ -65,6 +91,7 @@ extension StateEffects on AppModel {
   /// 频率滑块到下限不关开关）。
   void setBassmonoEnabled(bool on) {
     bassmonoOn = on;
+    if (on) _wantedBassmono = true;
     setInt(ParamId.bassmonoEnable, on ? 1 : 0);
     _notifyUi();
     scheduleAutoSave();
@@ -73,6 +100,20 @@ extension StateEffects on AppModel {
   void setBassmonoFreq(double v) {
     bassmonoFreq = v.clamp(20.0, 300.0);
     setFloat(ParamId.bassmonoFreq, bassmonoFreq);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setBassmonoPairs(int pairs) {
+    bassmonoPairs = pairs.clamp(0, 15);
+    setInt(ParamId.bassmonoPairs, bassmonoPairs);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setBassmonoMerge(int merge) {
+    bassmonoMerge = merge.clamp(0, 1);
+    setInt(ParamId.bassmonoMerge, bassmonoMerge);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -118,32 +159,36 @@ extension StateEffects on AppModel {
     scheduleAutoSave();
   }
 
+  /// 风格：0=影院 / 1=定位 / 2=中性 / 3=自定义。
+  ///
+  /// 预设档只下发 `spatial.style`：引擎 hook_spatial_style 会同步写入
+  /// room/width/center。若随后再下发这三个参数，引擎的
+  /// hook_spatial_custom_param 会把 style 自动改成 3——选中预设却变成
+  /// “自定义”。自定义档（3）保留当前值，不套用任何预设。
   void setSpatialStyle(int style) {
-    spatialStyle = style.clamp(0, 2);
-    // 与引擎 style 联动预设同值（set_param 侧同样会覆盖，Dart 先行保证 UI 即时）。
-    if (spatialStyle == 0) {
-      spatialRoom = 0.7;
-      spatialWidth = 1.0;
-      spatialCenter = 0.8;
-    } else if (spatialStyle == 1) {
-      spatialRoom = 0.25;
-      spatialWidth = 1.1;
-      spatialCenter = 0.5;
-    } else {
-      spatialRoom = 0.0;
-      spatialWidth = 1.0;
-      spatialCenter = 0.5;
+    spatialStyle = style.clamp(0, 3);
+    if (spatialStyle != 3) {
+      final preset = _spatialPresetFor(spatialStyle);
+      spatialRoom = preset.room;
+      spatialWidth = preset.width;
+      spatialCenter = preset.center;
     }
     setInt(ParamId.spatialStyle, spatialStyle);
-    setFloat(ParamId.spatialRoom, spatialRoom);
-    setFloat(ParamId.spatialWidth, spatialWidth);
-    setFloat(ParamId.spatialCenter, spatialCenter);
     _notifyUi();
     scheduleAutoSave();
   }
 
   void setSpatialRoom(double v) {
     spatialRoom = v.clamp(0.0, 1.0);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialRoom - _spatialPresetFor(spatialStyle).room).abs() < 1e-6) {
+      // 预设规范值：引擎 style hook 已写入，重复下发会误触自定义态。
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialRoom, spatialRoom);
     _notifyUi();
     scheduleAutoSave();
@@ -151,6 +196,14 @@ extension StateEffects on AppModel {
 
   void setSpatialWidth(double v) {
     spatialWidth = v.clamp(0.5, 1.5);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialWidth - _spatialPresetFor(spatialStyle).width).abs() < 1e-6) {
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialWidth, spatialWidth);
     _notifyUi();
     scheduleAutoSave();
@@ -158,9 +211,23 @@ extension StateEffects on AppModel {
 
   void setSpatialCenter(double v) {
     spatialCenter = v.clamp(0.0, 1.0);
+    if (spatialStyle >= 0 &&
+        spatialStyle <= 2 &&
+        (spatialCenter - _spatialPresetFor(spatialStyle).center).abs() < 1e-6) {
+      _notifyUi();
+      scheduleAutoSave();
+      return;
+    }
+    _enterSpatialCustom();
     setFloat(ParamId.spatialCenter, spatialCenter);
     _notifyUi();
     scheduleAutoSave();
+  }
+
+  /// 手动改 room/width/center 时切入自定义态（对齐引擎 set hook）。
+  void _enterSpatialCustom() {
+    if (spatialStyle == 3) return;
+    setInt(ParamId.spatialStyle, 3);
   }
 
   void setSpatialOutGain(double v) {
@@ -194,20 +261,6 @@ extension StateEffects on AppModel {
   void setSpatialBinaural(bool on) {
     spatialBinaural = on;
     setInt(ParamId.spatialBinaural, on ? 1 : 0);
-    _notifyUi();
-    scheduleAutoSave();
-  }
-
-  void setSpatialFdn(bool on) {
-    spatialFdn = on;
-    setInt(ParamId.spatialFdn, on ? 1 : 0);
-    _notifyUi();
-    scheduleAutoSave();
-  }
-
-  void setSpatialLate(double v) {
-    spatialLate = v.clamp(0.0, 1.0);
-    setFloat(ParamId.spatialLate, spatialLate);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -309,101 +362,127 @@ extension StateEffects on AppModel {
     _notifyUi();
   }
 
-  /// 参数化混响使能：废除品质档拦截限制，无条件自由放行
+  /// 兼容旧调用点：`freeverb.enable` 已退役，转发到唯一开关。
+  /// 旧调用点仍可工作，但不再向引擎发送 freeverb.enable。
   void setFreeverbEnabled(bool on, {String? autoQualityMsg}) {
-    fvOn = on;
-    _notifyUi();
-    _markSent(ParamId.fvEnable);
-    send({
-      'cmd': 'setParam',
-      'id': ParamId.fvEnable,
-      'value': on ? 1 : 0,
-      'isFloat': false,
-    });
+    setSpatialReverbEnabled(on);
+  }
+
+  /// 预设对应的 3D 可视化参数（仅本地；引擎按路径使用预设表或 vendor
+  /// 原生参数，不再把预设值写进 freeverb.*）。
+  (double, double, double, double, double, double) _reverbVizFor(int id) {
+    return switch (id) {
+      5 => (0.85, 0.25, 0.45, 1.0, 1.5, 1.0), // 大音乐厅
+      3 => (0.75, 0.30, 0.40, 1.0, 1.3, 1.0), // 音乐厅
+      1 => (0.65, 0.35, 0.35, 1.0, 1.1, 0.9), // 中音乐厅
+      2 => (0.55, 0.40, 0.30, 1.0, 0.9, 0.85), // 小音乐厅
+      9 => (0.45, 0.45, 0.28, 1.0, 0.8, 0.8), // 录音棚
+      7 => (0.35, 0.50, 0.25, 1.0, 0.65, 0.75), // 房间
+      11 => (0.30, 0.50, 0.30, 1.0, 1.2, 0.9), // 大礼堂
+      15 => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 板式混响
+      _ => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 非 curated 旧预设
+    };
   }
 
   void selectReverbPreset(int id) {
-    final wasCustom = reverbPreset == -2;
-    reverbPreset = id;
-    if (id >= 0 && id <= 7) {
-      final (decay, damp, wet, dry, roomSize, width) = switch (id) {
-        0 => (0.85, 0.25, 0.45, 1.0, 1.5, 1.0), // 大音乐厅
-        1 => (0.75, 0.30, 0.40, 1.0, 1.3, 1.0), // 音乐厅
-        2 => (0.65, 0.35, 0.35, 1.0, 1.1, 0.9), // 中音乐厅
-        3 => (0.55, 0.40, 0.30, 1.0, 0.9, 0.85), // 小音乐厅
-        4 => (0.45, 0.45, 0.28, 1.0, 0.8, 0.8), // 大房间
-        5 => (0.35, 0.50, 0.25, 1.0, 0.65, 0.75), // 中房间
-        6 => (0.25, 0.55, 0.20, 1.0, 0.5, 0.7), // 小房间
-        _ => (0.70, 0.15, 0.35, 1.0, 1.0, 1.0), // 板式混响
-      };
-      fvDecay = decay;
-      fvDamp = damp;
-      fvWet = wet;
-      fvDry = dry;
-      fvRoomSize = roomSize;
-      fvWidth = width;
-      setFreeverbEnabled(true);
-      setFloat('freeverb.decay', decay);
-      setFloat('freeverb.damp', damp);
-      setFloat('freeverb.wet', wet);
-      setFloat('freeverb.dry', dry);
-      setReverbPreset(id);
-    } else if (id == -1) {
-      // Issue #3 方案A：从自定义态（-2）关闭只关声音，不丢标记。
-      // engine 照常收 -1（vendor 关）+ fv 关；Dart 侧保留 -2，开回来走 -2 分支
-      // 恢复自定义参数。从 preset/-1 关则照旧落 -1。
+    if (id < -2 || id > 18) return;
+    if (id == -1) {
+      // 记住关闭前的预设（含 -2 自定义），重新开启时恢复。
+      if (reverbPreset != -1) _lastReverbPreset = reverbPreset;
+      reverbPreset = -1;
       setReverbPreset(-1);
-      setFreeverbEnabled(false);
-      if (wasCustom) reverbPreset = -2;
-    } else if (id == -2) {
-      // 自定义模式
-      setFreeverbEnabled(true);
-      _notifyUi();
+      return;
     }
+    if (id == -2) {
+      reverbPreset = -2;
+      _lastReverbPreset = -2;
+      setReverbPreset(-2);
+      // 进入自定义态时把 UI 侧全部自定义参数下发给引擎，保证预设→自定义
+      // 切换后两引擎拿到的系数与滑块一致。
+      _pushAllReverbCustomParams();
+      return;
+    }
+    reverbPreset = id;
+    final (decay, damp, wet, dry, roomSize, width) = _reverbVizFor(id);
+    fvDecay = decay;
+    fvDamp = damp;
+    fvWet = wet;
+    fvDry = dry;
+    fvRoomSize = roomSize;
+    fvWidth = width;
+    setReverbPreset(id);
   }
 
   void setSpatialReverbEnabled(bool on) {
     if (on) {
-      if (reverbPreset == -2) {
-        // 自定义态：只开开关，不碰参数。旧逻辑无条件切 preset 0，
-        // 会吃掉刚恢复/刚调好的自定义值（预设恢复实测：wet 0.5 -> 0.45）。
-        selectReverbPreset(-2);
-      } else {
-        selectReverbPreset(reverbPreset >= 0 ? reverbPreset : 0);
-      }
+      if (reverbPreset != -1) return;
+      selectReverbPreset(_lastReverbPreset);
     } else {
       selectReverbPreset(-1);
     }
   }
 
+  void setReverbPredelay(double v) {
+    reverbPredelay = v.clamp(0.0, 100.0);
+    setFloat(ParamId.reverbPredelay, reverbPredelay);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
+  void setReverbLfe(bool on) {
+    reverbLfe = on;
+    setInt(ParamId.reverbLfe, on ? 1 : 0);
+    _notifyUi();
+    scheduleAutoSave();
+  }
+
   void setReverbCustomParam(String param, double value) {
-    reverbPreset = -2; // 联动切换为自定义模式
-    if (!fvOn) {
-      setFreeverbEnabled(true);
+    applyReverbCustomParams(
+      decay: param == 'decay' ? value : null,
+      damp: param == 'damp' ? value : null,
+      wet: param == 'wet' ? value : null,
+      dry: param == 'dry' ? value : null,
+      roomSize: param == 'roomSize' ? value : null,
+      width: param == 'width' ? value : null,
+      activate: true,
+    );
+  }
+
+  /// 批量更新混响自定义参数（预设应用/旧会话迁移用）。
+  /// [activate] 为 true 时进入自定义态（-2）；false 只更新字段与引擎参数，
+  /// 不改变开关状态（旧预设 preset=-1 仍保持关闭）。
+  void applyReverbCustomParams({
+    double? decay,
+    double? damp,
+    double? wet,
+    double? dry,
+    double? roomSize,
+    double? width,
+    bool activate = true,
+  }) {
+    if (decay != null) fvDecay = decay.clamp(0.0, 1.0);
+    if (damp != null) fvDamp = damp.clamp(0.0, 1.0);
+    if (wet != null) fvWet = wet.clamp(0.0, 1.0);
+    if (dry != null) fvDry = dry.clamp(0.0, 1.0);
+    // 引擎表 0.5..2.5；旧预设/session 里的越界值必须钳住，否则必被拒收。
+    if (roomSize != null) fvRoomSize = roomSize.clamp(0.5, 2.5);
+    // 引擎表 0.2..2.0（MC FDN 宽度上限；立体声路径 UI 另行限制到 1.0）。
+    if (width != null) fvWidth = width.clamp(0.2, 2.0);
+    if (activate) {
+      reverbPreset = -2;
+      _lastReverbPreset = -2;
+      setReverbPreset(-2);
     }
-    switch (param) {
-      case 'decay':
-        fvDecay = value;
-        setFloat('freeverb.decay', value);
-      case 'damp':
-        fvDamp = value;
-        setFloat('freeverb.damp', value);
-      case 'wet':
-        fvWet = value;
-        setFloat('freeverb.wet', value);
-      case 'dry':
-        fvDry = value;
-        setFloat('freeverb.dry', value);
-      case 'roomSize':
-        // 引擎表 0.5..2.5；旧实现无 clamp，预设/session 里的旧值（如 0.1
-        // 或 3.0）直达引擎必被拒收。2026-10-18 补钳。
-        fvRoomSize = value.clamp(0.5, 2.5);
-        setFloat('freeverb.roomsize', fvRoomSize);
-      case 'width':
-        // 引擎表 0.2..2.0（同上）。
-        fvWidth = value.clamp(0.2, 2.0);
-        setFloat('freeverb.width', fvWidth);
-    }
+    _pushAllReverbCustomParams();
+  }
+
+  void _pushAllReverbCustomParams() {
+    setFloat('freeverb.decay', fvDecay);
+    setFloat('freeverb.damp', fvDamp);
+    setFloat('freeverb.wet', fvWet);
+    setFloat('freeverb.dry', fvDry);
+    setFloat('freeverb.roomsize', fvRoomSize);
+    setFloat('freeverb.width', fvWidth);
   }
 
   void setCompEnabled(bool on) {
@@ -532,9 +611,18 @@ extension StateEffects on AppModel {
     _notifyUi();
   }
 
+  void setCompMode(int v) {
+    compMode = v.clamp(0, 1);
+    setInt(ParamId.compMode, compMode);
+    _notifyUi();
+  }
+
   /// 噪声门（链头第一道）：阈值/attack/release 全下发；自动增益补偿独立开关。
   void setGateEnabled(bool on) {
     gateOn = on;
+    if (!on) {
+      setDeesserEnabled(false);
+    }
     setInt(ParamId.gateEnable, on ? 1 : 0);
     _notifyUi();
   }
@@ -885,6 +973,12 @@ extension StateEffects on AppModel {
   /// 不再碰 shelf 引擎；配方写入谐波三滑块（随后的 slider 恢复会覆盖为快照真值）。
   void setBassMode(int mode) {
     bassMode = mode;
+    // [PATCHED-AuraDSP P-032] 必须把模式本身下发引擎：此前只写本地字段，
+    // 引擎侧没有 bass.mode 参数 → 回读 getIntNullable 恒 null → isolate
+    // 兜底 0 → params 回读把 UI 无条件覆盖成 0 → 用户选任何模式都被弹回
+    // 「自然低音」（滑块会动、模式却跳回，即用户报告的现象）。
+    // 引擎侧 bass.mode 是纯状态载体（不参与 DSP 计算），见 PATCHES.md。
+    setInt('bass.mode', mode);
     if (mode == 1) {
       setBassHarmonics(0.35);
       setBassHarmonicBlend(0.5);
@@ -951,10 +1045,21 @@ extension StateEffects on AppModel {
   /* ---- 低音塑形（Bass Shaping：合并低频搁架与单声道化） ---- */
 
   void setBassShapingEnabled(bool on) {
-    shelfOn = on;
-    bassmonoOn = on;
-    setInt(ParamId.shelfEnable, on ? 1 : 0);
-    setInt(ParamId.bassmonoEnable, on ? 1 : 0);
+    if (on) {
+      if (!_wantedShelf && !_wantedBassmono) {
+        _wantedShelf = true;
+        _wantedBassmono = true;
+      }
+      shelfOn = _wantedShelf;
+      bassmonoOn = _wantedBassmono;
+    } else {
+      _wantedShelf = shelfOn;
+      _wantedBassmono = bassmonoOn;
+      shelfOn = false;
+      bassmonoOn = false;
+    }
+    setInt(ParamId.shelfEnable, shelfOn ? 1 : 0);
+    setInt(ParamId.bassmonoEnable, bassmonoOn ? 1 : 0);
     _notifyUi();
     scheduleAutoSave();
   }
@@ -963,8 +1068,10 @@ extension StateEffects on AppModel {
 
   void setShelfEnabled(bool on) {
     shelfOn = on;
+    if (on) _wantedShelf = true;
     setInt(ParamId.shelfEnable, on ? 1 : 0);
     _notifyUi();
+    scheduleAutoSave();
   }
 
   void setShelfFreq(double f) {

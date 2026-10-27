@@ -18,6 +18,7 @@ import 'package:nativeapi/nativeapi.dart'
 import 'package:nativeapi_flutter/nativeapi_flutter.dart' show ImageAsset;
 import 'package:window_manager/window_manager.dart';
 
+import 'error_sink.dart';
 /// 开机自启（Windows = HKCU Run 键；nativeapi 的 LaunchAtLogin 常驻引用）
 class AutoStartService {
   AutoStartService._();
@@ -125,7 +126,8 @@ class TrayService {
 
       _icon = icon;
       _ready = true;
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _ready = false;
     }
   }
@@ -144,7 +146,7 @@ class TrayService {
       await WindowManager.instance.restore();
       await WindowManager.instance.show();
       await WindowManager.instance.focus();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
   }
 
   Future<void> _quitApp() async {
@@ -179,7 +181,7 @@ class _WindowCloseListener extends WindowListener {
   void onWindowClose() async {
     try {
       await WindowManager.instance.hide();
-    } catch (_) {}
+    } catch (e, st) { swallow(e, st); }
     TrayService.instance.setWindowVisible(false);
   }
 

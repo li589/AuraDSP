@@ -103,7 +103,25 @@ extension StateEvents on AppModel {
         }
         bassOn = (raw['bassEnable'] as int) != 0;
         bassGain = (raw['bassGain'] as num).toDouble();
-        reverbPreset = raw['reverbPreset'] as int;
+        // [PATCHED-AuraDSP P-032] 自定义态(-2) 是设计内的合法值
+        // （拖滑块后 setReverbCustomParam 置 -2；引擎只认 0..18，故 -2
+        // 从不下发）。此前无条件覆盖 → 回读把 -2 改回引擎旧 preset，
+        // "自定义"芯片跳回预设芯片。现在本地已是自定义态时保持不动；
+        // 本地为显式选择时仍采纳引擎真值（两者本应一致）。
+        final rbPreset = raw['reverbPreset'] as int;
+        if (reverbPreset != -2) {
+          reverbPreset = rbPreset;
+        }
+        if (raw['reverbEngine'] != null) {
+          reverbEngine = (raw['reverbEngine'] as int).clamp(-1, 1);
+        }
+        if (raw['reverbPredelay'] != null) {
+          reverbPredelay =
+              (raw['reverbPredelay'] as num).toDouble().clamp(0.0, 100.0);
+        }
+        if (raw['reverbLfe'] != null) {
+          reverbLfe = (raw['reverbLfe'] as int) != 0;
+        }
         // 引擎真相是 0..stereoWidenMax，换算回 UI 显示刻度 0..1。
         // 开关关闭时引擎侧是"静音语义"的 0（_pushStereoChain 的 k=0 直发），
         // 不代表用户滑块记忆——2026-10-19 修复：旧实现无条件回写，用户
@@ -118,6 +136,32 @@ extension StateEvents on AppModel {
               .clamp(0.0, 1.0);
         }
         eqOn = (raw['eqEnable'] as int) != 0;
+        // [P-031] 声道模式回读此前无人消费：引擎已回读 channelsMode
+        // （audio_isolate.dart:931），但 params 事件里没有这一行 → 镜像与
+        // 引擎真值永久失联，UI 显示的永远是本地乐观值。此处补上，使
+        // "镜像即引擎真相"的注释成立。
+        if (raw['channelsMode'] != null) {
+          channelsMode = (raw['channelsMode'] as int).clamp(0, 1);
+        }
+        if (raw['channelsCountMode'] != null) {
+          channelsCountMode = (raw['channelsCountMode'] as int).clamp(0, 1);
+        }
+        if (raw['channelsCount'] != null) {
+          final c = raw['channelsCount'] as int;
+          if (c == 2 || c == 4 || c == 6 || c == 8) {
+            channelsCount = c;
+          }
+        }
+        // X-6 修复配套：dyneq/exciter 的 no-LFE 默认掩码随 channels.count
+        // 按布局平移（引擎侧 set_channels_count 完成）。UI 无本地乐观写入
+        // 时镜像一直是 fallback 0xF7，必须采纳引擎回读，否则 4ch 下选择器
+        // 显示 BR 未选而引擎实际已处理。
+        if (raw['dyneqChannels'] != null) {
+          _paramValues['dyneq.channels'] = raw['dyneqChannels'];
+        }
+        if (raw['exciterChannels'] != null) {
+          _paramValues['exciter.channels'] = raw['exciterChannels'];
+        }
         postGain = (raw['postGain'] as num).toDouble();
         limiterOn = (raw['limiterEnable'] as int) != 0;
         lpEnabled = (raw['lpEnable'] as int) != 0;
@@ -190,6 +234,12 @@ extension StateEvents on AppModel {
         if (raw['bassmonoFreq'] != null) {
           bassmonoFreq = (raw['bassmonoFreq'] as num).toDouble();
         }
+        if (raw['bassmonoPairs'] != null) {
+          bassmonoPairs = (raw['bassmonoPairs'] as int).clamp(0, 15);
+        }
+        if (raw['bassmonoMerge'] != null) {
+          bassmonoMerge = (raw['bassmonoMerge'] as int).clamp(0, 1);
+        }
         if (raw['haasEnable'] != null) {
           haasOn = (raw['haasEnable'] as int) != 0;
         }
@@ -206,7 +256,7 @@ extension StateEvents on AppModel {
           spatialOn = (raw['spatialEnable'] as int) != 0;
         }
         if (raw['spatialStyle'] != null) {
-          spatialStyle = (raw['spatialStyle'] as int).clamp(0, 2);
+          spatialStyle = (raw['spatialStyle'] as int).clamp(0, 3);
         }
         if (raw['spatialRoom'] != null) {
           spatialRoom = (raw['spatialRoom'] as num).toDouble();
@@ -231,12 +281,6 @@ extension StateEvents on AppModel {
         }
         if (raw['spatialBinaural'] != null) {
           spatialBinaural = (raw['spatialBinaural'] as int) != 0;
-        }
-        if (raw['spatialFdn'] != null) {
-          spatialFdn = (raw['spatialFdn'] as int) != 0;
-        }
-        if (raw['spatialLate'] != null) {
-          spatialLate = (raw['spatialLate'] as num).toDouble();
         }
         if (raw['spatialHeadAzim'] != null) {
           spatialHeadAzim = (raw['spatialHeadAzim'] as num).toDouble();
@@ -444,13 +488,16 @@ extension StateEvents on AppModel {
         if (raw['filterQ'] != null) {
           filterQ = (raw['filterQ'] as num).toDouble();
         }
-        if (raw['fvEnable'] != null) fvOn = (raw['fvEnable'] as int) != 0;
-        if (raw['fvDecay'] != null) {
-          fvDecay = (raw['fvDecay'] as num).toDouble();
+        // 预设模式下 fv* 只是 3D 可视化本地值，引擎保留的是自定义参数；
+        // 无条件回读会让预设切完后 3D 图“跳两次”，故仅自定义态对账。
+        if (reverbPreset == -2) {
+          if (raw['fvDecay'] != null) {
+            fvDecay = (raw['fvDecay'] as num).toDouble();
+          }
+          if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
+          if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
+          if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         }
-        if (raw['fvDamp'] != null) fvDamp = (raw['fvDamp'] as num).toDouble();
-        if (raw['fvWet'] != null) fvWet = (raw['fvWet'] as num).toDouble();
-        if (raw['fvDry'] != null) fvDry = (raw['fvDry'] as num).toDouble();
         if (raw['compEnable'] != null) compOn = (raw['compEnable'] as int) != 0;
         if (raw['compTimeconstant'] != null) {
           compTimeconstant = (raw['compTimeconstant'] as num).toDouble();
@@ -547,10 +594,10 @@ extension StateEvents on AppModel {
             }
           }
         }
-        if (raw['fvRoomSize'] != null) {
+        if (reverbPreset == -2 && raw['fvRoomSize'] != null) {
           fvRoomSize = (raw['fvRoomSize'] as num).toDouble();
         }
-        if (raw['fvWidth'] != null) {
+        if (reverbPreset == -2 && raw['fvWidth'] != null) {
           fvWidth = (raw['fvWidth'] as num).toDouble();
         }
         if (raw['eqBandsCount'] != null) {
@@ -657,13 +704,18 @@ extension StateEvents on AppModel {
           // （否则界面会一直显示"已选中"，但引擎里根本没生效）。
           // 回写与提示解耦：被同因抑制时依然要回读。
           _toIso?.send({'cmd': 'getParams'});
+          // Liveprog 脚本编译报错必须直达状态模型与 IDE，不能被 SnackBar 同因抑制吞掉
+          if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
+            lastGuard = GuardRejection(id, msg, rc);
+            lpError = lastGuard!.message;
+            eventSeq.value = ++_guardSeq;
+            _notifyUi();
+            break;
+          }
           // 同因抑制（见 _admitEngineEvent）：批量路径下同一拒绝会连成
           // 串 SnackBar；窗口内只提示第一次。
           if (!_admitEngineEvent('guard|$id|$msg')) break;
           lastGuard = GuardRejection(id, msg, rc);
-          if (id == ParamId.lpCode || id.startsWith('liveprog.')) {
-            lpError = lastGuard!.message; // 编辑页内联标红用
-          }
           eventSeq.value = ++_guardSeq;
           _notifyUi();
         } else if (id == ParamId.convIrPath) {
@@ -1128,7 +1180,8 @@ extension StateEvents on AppModel {
         result['rc'] as int,
         result['samples'] as int,
       );
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       _onComponentLatencyResult(compId, -2, 0);
     }
   }

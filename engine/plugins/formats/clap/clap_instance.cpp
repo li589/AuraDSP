@@ -236,6 +236,9 @@ public:
             AURADSP_DBG("[DBG CLAP unload] step 5 done");
             m_module = nullptr;
         }
+        // F1：回收本插件登记过的 DLL 搜索目录（AddDllDirectory 的 cookie）。
+        // 在 FreeLibrary 之后执行：目录只影响后续 LoadLibrary 解析。
+        releasePluginDllDirectories(m_meta.path);
         m_isLoaded = false;
         AURADSP_DBG("[DBG CLAP unload] complete");
     }

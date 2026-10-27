@@ -254,138 +254,113 @@ void genWndDBL(double *wnd, unsigned int N, char *type)
 	}
 }
 #include "info.h"
+/* [PATCHED-AuraDSP P-034] 支持单声道 isMono 优化（跳过右通道 50% 计算） */
 static inline void conjugatePadFilteringDepad(FFTCompander *cm)
 {
 	unsigned int i;
-	for (i = 0; i < cm->prepad; ++i)
+	const int nch = cm->isMono ? 1 : 2;
+	for (int c = 0; c < nch; ++c)
 	{
-		cm->specHannReal[0][cm->prepad - i - 1] = cm->specHannReal[0][cm->prepad + i + 1];
-		cm->specHannImag[0][cm->prepad - i - 1] = -cm->specHannImag[0][cm->prepad + i + 1];
-		cm->specHannReal[1][cm->prepad - i - 1] = cm->specHannReal[1][cm->prepad + i + 1];
-		cm->specHannImag[1][cm->prepad - i - 1] = -cm->specHannImag[1][cm->prepad + i + 1];
-	}
-	for (i = 0; i < cm->pospad - 1; ++i)
-	{
-		cm->specHannReal[0][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[0][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannImag[0][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[0][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannReal[1][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[1][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannImag[1][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[1][cm->prepad + cm->halfLen - cm->pospad + i];
+		for (i = 0; i < cm->prepad; ++i)
+		{
+			cm->specHannReal[c][cm->prepad - i - 1] = cm->specHannReal[c][cm->prepad + i + 1];
+			cm->specHannImag[c][cm->prepad - i - 1] = -cm->specHannImag[c][cm->prepad + i + 1];
+		}
+		for (i = 0; i < cm->pospad - 1; ++i)
+		{
+			cm->specHannReal[c][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[c][cm->prepad + cm->halfLen - cm->pospad + i];
+			cm->specHannImag[c][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[c][cm->prepad + cm->halfLen - cm->pospad + i];
+		}
 	}
 	// LTV Gaussian
 	cplx z1[2], z2[2], o[2], st[2];
-	z1[0].real = z1[0].imag = 0;
-	z2[0].real = z2[0].imag = 0;
-	z1[1].real = z1[1].imag = 0;
-	z2[1].real = z2[1].imag = 0;
+	for (int c = 0; c < nch; ++c) { z1[c].real = z1[c].imag = 0; z2[c].real = z2[c].imag = 0; }
 	for (i = 0; i < cm->prepad + cm->halfLen + cm->pospad - 1; i++)
 	{
-		o[0].real = cm->specHannReal[0][i] - z1[0].real - z2[0].real;
-		o[0].imag = cm->specHannImag[0][i] - z1[0].imag - z2[0].imag;
-		st[0].real = cm->gauss_c2[i] * z1[0].real;
-		st[0].imag = cm->gauss_c2[i] * z1[0].imag;
-		cm->tmp[0][i].real = cm->gauss_b[i] * o[0].real + 2 * st[0].real + z2[0].real;
-		cm->tmp[0][i].imag = cm->gauss_b[i] * o[0].imag + 2 * st[0].imag + z2[0].imag;
-		z2[0].real = z2[0].real + st[0].real;
-		z2[0].imag = z2[0].imag + st[0].imag;
-		z1[0].real = z1[0].real + cm->gauss_c1[i] * o[0].real;
-		z1[0].imag = z1[0].imag + cm->gauss_c1[i] * o[0].imag;
-		o[1].real = cm->specHannReal[1][i] - z1[1].real - z2[1].real;
-		o[1].imag = cm->specHannImag[1][i] - z1[1].imag - z2[1].imag;
-		st[1].real = cm->gauss_c2[i] * z1[1].real;
-		st[1].imag = cm->gauss_c2[i] * z1[1].imag;
-		cm->tmp[1][i].real = cm->gauss_b[i] * o[1].real + 2 * st[1].real + z2[1].real;
-		cm->tmp[1][i].imag = cm->gauss_b[i] * o[1].imag + 2 * st[1].imag + z2[1].imag;
-		z2[1].real = z2[1].real + st[1].real;
-		z2[1].imag = z2[1].imag + st[1].imag;
-		z1[1].real = z1[1].real + cm->gauss_c1[i] * o[1].real;
-		z1[1].imag = z1[1].imag + cm->gauss_c1[i] * o[1].imag;
+		for (int c = 0; c < nch; ++c)
+		{
+			o[c].real = cm->specHannReal[c][i] - z1[c].real - z2[c].real;
+			o[c].imag = cm->specHannImag[c][i] - z1[c].imag - z2[c].imag;
+			st[c].real = cm->gauss_c2[i] * z1[c].real;
+			st[c].imag = cm->gauss_c2[i] * z1[c].imag;
+			cm->tmp[c][i].real = cm->gauss_b[i] * o[c].real + 2 * st[c].real + z2[c].real;
+			cm->tmp[c][i].imag = cm->gauss_b[i] * o[c].imag + 2 * st[c].imag + z2[c].imag;
+			z2[c].real = z2[c].real + st[c].real;
+			z2[c].imag = z2[c].imag + st[c].imag;
+			z1[c].real = z1[c].real + cm->gauss_c1[i] * o[c].real;
+			z1[c].imag = z1[c].imag + cm->gauss_c1[i] * o[c].imag;
+		}
 	}
-	z1[0].real = z1[0].imag = 0;
-	z2[0].real = z2[0].imag = 0;
-	z1[1].real = z1[1].imag = 0;
-	z2[1].real = z2[1].imag = 0;
+	for (int c = 0; c < nch; ++c) { z1[c].real = z1[c].imag = 0; z2[c].real = z2[c].imag = 0; }
 	for (i = cm->prepad + cm->halfLen + cm->pospad - 1; i-- > 0; )
 	{
-		o[0].real = cm->tmp[0][i].real - z1[0].real - z2[0].real;
-		o[0].imag = cm->tmp[0][i].imag - z1[0].imag - z2[0].imag;
-		st[0].real = cm->gauss_c2[i] * z1[0].real;
-		st[0].imag = cm->gauss_c2[i] * z1[0].imag;
-		cm->specHannReal[0][i] = cm->gauss_b[i] * o[0].real + 2 * st[0].real + z2[0].real;
-		cm->specHannImag[0][i] = cm->gauss_b[i] * o[0].imag + 2 * st[0].imag + z2[0].imag;
-		z2[0].real = z2[0].real + st[0].real;
-		z2[0].imag = z2[0].imag + st[0].imag;
-		z1[0].real = z1[0].real + cm->gauss_c1[i] * o[0].real;
-		z1[0].imag = z1[0].imag + cm->gauss_c1[i] * o[0].imag;
-		o[1].real = cm->tmp[1][i].real - z1[1].real - z2[1].real;
-		o[1].imag = cm->tmp[1][i].imag - z1[1].imag - z2[1].imag;
-		st[1].real = cm->gauss_c2[i] * z1[1].real;
-		st[1].imag = cm->gauss_c2[i] * z1[1].imag;
-		cm->specHannReal[1][i] = cm->gauss_b[i] * o[1].real + 2 * st[1].real + z2[1].real;
-		cm->specHannImag[1][i] = cm->gauss_b[i] * o[1].imag + 2 * st[1].imag + z2[1].imag;
-		z2[1].real = z2[1].real + st[1].real;
-		z2[1].imag = z2[1].imag + st[1].imag;
-		z1[1].real = z1[1].real + cm->gauss_c1[i] * o[1].real;
-		z1[1].imag = z1[1].imag + cm->gauss_c1[i] * o[1].imag;
+		for (int c = 0; c < nch; ++c)
+		{
+			o[c].real = cm->tmp[c][i].real - z1[c].real - z2[c].real;
+			o[c].imag = cm->tmp[c][i].imag - z1[c].imag - z2[c].imag;
+			st[c].real = cm->gauss_c2[i] * z1[c].real;
+			st[c].imag = cm->gauss_c2[i] * z1[c].imag;
+			cm->specHannReal[c][i] = cm->gauss_b[i] * o[c].real + 2 * st[c].real + z2[c].real;
+			cm->specHannImag[c][i] = cm->gauss_b[i] * o[c].imag + 2 * st[c].imag + z2[c].imag;
+			z2[c].real = z2[c].real + st[c].real;
+			z2[c].imag = z2[c].imag + st[c].imag;
+			z1[c].real = z1[c].real + cm->gauss_c1[i] * o[c].real;
+			z1[c].imag = z1[c].imag + cm->gauss_c1[i] * o[c].imag;
+		}
 	}
-	//for (i = 0; i < cm->prepad + cm->halfLen + cm->pospad - 1; ++i)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->specHannReal[i], cm->specHannImag[i]);
-	for (i = cm->prepad; i < cm->prepad + cm->halfLen; ++i)
+	for (int c = 0; c < nch; ++c)
 	{
-		cm->specHannReal[0][i - cm->prepad] = cm->specHannReal[0][i] * cm->corrF[i - cm->prepad];
-		cm->specHannImag[0][i - cm->prepad] = cm->specHannImag[0][i] * cm->corrF[i - cm->prepad];
-		cm->specHannReal[1][i - cm->prepad] = cm->specHannReal[1][i] * cm->corrF[i - cm->prepad];
-		cm->specHannImag[1][i - cm->prepad] = cm->specHannImag[1][i] * cm->corrF[i - cm->prepad];
+		for (i = cm->prepad; i < cm->prepad + cm->halfLen; ++i)
+		{
+			cm->specHannReal[c][i - cm->prepad] = cm->specHannReal[c][i] * cm->corrF[i - cm->prepad];
+			cm->specHannImag[c][i - cm->prepad] = cm->specHannImag[c][i] * cm->corrF[i - cm->prepad];
+		}
+		cm->specHannImag[c][0] = cm->specHannImag[c][cm->halfLen - 1] = 0;
 	}
-	cm->specHannImag[0][0] = cm->specHannImag[0][cm->halfLen - 1] = 0;
-	cm->specHannImag[1][0] = cm->specHannImag[1][cm->halfLen - 1] = 0;
 }
 FILE *dbg = 0;
 //int ifa = 0;
+/* [PATCHED-AuraDSP P-034] CWTFrameInversion 单声道感知优化：跳过未使用的通道 1 (R) */
 void CWTFrameInversion(FFTCompander *cm)
 {
 	//ifa++;
 	unsigned int i, j;
+	const int nch = cm->isMono ? 1 : 2;
 	// Forward transform
 	for (i = 0; i < cm->fftLen; ++i)
 	{
 		const unsigned int k = (i + cm->mInputPos) & cm->minus_fftLen;
 		//fwrite(&cm->mInput[0][k], sizeof(float), 1, dbg);
-		cm->fftBuf[0][cm->bitrevfftshift[i]] = cm->mInput[0][k];
-		cm->fftBuf[1][cm->bitrevfftshift[i]] = cm->mInput[1][k];
+		for (int c = 0; c < nch; ++c)
+			cm->fftBuf[c][cm->bitrevfftshift[i]] = cm->mInput[c][k];
 	}
-	cm->fft(cm->fftBuf[0], cm->mSineTab);
-	cm->fft(cm->fftBuf[1], cm->mSineTab);
+	for (int c = 0; c < nch; ++c)
+		cm->fft(cm->fftBuf[c], cm->mSineTab);
 	int symIdx;
-	for (i = 1; i < cm->halfLen; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		symIdx = cm->fftLen - i;
-		cm->real[0][i] = cm->fftBuf[0][i] + cm->fftBuf[0][symIdx];
-		cm->imag[0][i] = -(cm->fftBuf[0][i] - cm->fftBuf[0][symIdx]);
-		cm->real[1][i] = cm->fftBuf[1][i] + cm->fftBuf[1][symIdx];
-		cm->imag[1][i] = -(cm->fftBuf[1][i] - cm->fftBuf[1][symIdx]);
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			cm->real[c][i] = cm->fftBuf[c][i] + cm->fftBuf[c][symIdx];
+			cm->imag[c][i] = -(cm->fftBuf[c][i] - cm->fftBuf[c][symIdx]);
+		}
+		cm->real[c][0] = cm->fftBuf[c][0] * 2.0f;
+		cm->imag[c][0] = 0;
 	}
-	cm->real[0][0] = cm->fftBuf[0][0] * 2.0f;
-	cm->imag[0][0] = 0;
-	cm->real[1][0] = cm->fftBuf[1][0] * 2.0f;
-	cm->imag[1][0] = 0;
-	//for (i = 0; i < cm->halfLen; ++i)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->real[i], cm->imag[i]);
 	// Hann windowing
-	cm->specHannReal[0][cm->prepad + 0] = (cm->real[0][0] * 2.0f + cm->real[0][1] + cm->real[0][1]) / 8.0f; // DC
-	cm->specHannImag[0][cm->prepad + 0] = 0.0; // DC
-	cm->specHannReal[1][cm->prepad + 0] = (cm->real[1][0] * 2.0f + cm->real[1][1] + cm->real[1][1]) / 8.0f; // DC
-	cm->specHannImag[1][cm->prepad + 0] = 0.0; // DC
-	for (i = 1; i < cm->halfLen - 1; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		cm->specHannReal[0][cm->prepad + i] = (cm->real[0][i] * 2.0f + cm->real[0][i - 1] + cm->real[0][i + 1]) / 8.0f;
-		cm->specHannImag[0][cm->prepad + i] = (cm->imag[0][i] * 2.0f + cm->imag[0][i - 1] + cm->imag[0][i + 1]) / 8.0f;
-		cm->specHannReal[1][cm->prepad + i] = (cm->real[1][i] * 2.0f + cm->real[1][i - 1] + cm->real[1][i + 1]) / 8.0f;
-		cm->specHannImag[1][cm->prepad + i] = (cm->imag[1][i] * 2.0f + cm->imag[1][i - 1] + cm->imag[1][i + 1]) / 8.0f;
+		cm->specHannReal[c][cm->prepad + 0] = (cm->real[c][0] * 2.0f + cm->real[c][1] + cm->real[c][1]) / 8.0f; // DC
+		cm->specHannImag[c][cm->prepad + 0] = 0.0; // DC
+		for (i = 1; i < cm->halfLen - 1; i++)
+		{
+			cm->specHannReal[c][cm->prepad + i] = (cm->real[c][i] * 2.0f + cm->real[c][i - 1] + cm->real[c][i + 1]) / 8.0f;
+			cm->specHannImag[c][cm->prepad + i] = (cm->imag[c][i] * 2.0f + cm->imag[c][i - 1] + cm->imag[c][i + 1]) / 8.0f;
+		}
+		cm->specHannReal[c][cm->prepad + cm->halfLen - 1] = (cm->real[c][cm->halfLen - 1] * 2.0f + cm->real[c][cm->halfLen - 2] + cm->real[c][cm->halfLen - 2]) / 8.0f; // Nyquist
+		cm->specHannImag[c][cm->prepad + cm->halfLen - 1] = 0.0f;
 	}
-	cm->specHannReal[0][cm->prepad + cm->halfLen - 1] = (cm->real[0][cm->halfLen - 1] * 2.0f + cm->real[0][cm->halfLen - 2] + cm->real[0][cm->halfLen - 2]) / 8.0f; // Nyquist
-	cm->specHannImag[0][cm->prepad + cm->halfLen - 1] = 0.0f;
-	cm->specHannReal[1][cm->prepad + cm->halfLen - 1] = (cm->real[1][cm->halfLen - 1] * 2.0f + cm->real[1][cm->halfLen - 2] + cm->real[1][cm->halfLen - 2]) / 8.0f; // Nyquist
-	cm->specHannImag[1][cm->prepad + cm->halfLen - 1] = 0.0f;
 	conjugatePadFilteringDepad(cm);
 	// Spectral analysis
 	float leftMag, rightMag, mask;
@@ -401,15 +376,22 @@ void CWTFrameInversion(FFTCompander *cm)
 		{
 			float lR = cm->specHannReal[0][i];
 			float lI = cm->specHannImag[0][i];
-			float rR = cm->specHannReal[1][i];
-			float rI = cm->specHannImag[1][i];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			if (nch > 1)
+			{
+				float rR = cm->specHannReal[1][i];
+				float rI = cm->specHannImag[1][i];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			}
+			else
+			{
+				cm->mag[i] = leftMag;
+			}
 		}
 		ShrinkGridSpectralInterpolator(cm->octaveSmooth, cm->procUpTo, cm->mag, cm->aheight);
 		for (i = 0; i < cm->smallGridSize; i++)
@@ -432,12 +414,12 @@ void CWTFrameInversion(FFTCompander *cm)
 				size_t j = fast_upper_bound4(lv1, lpLen + 3, &val);
 				mask = ((val - lv1[j - 1]) * lv2[j - 1]) * (cm->finalGain[j] - cm->finalGain[j - 1]) + cm->finalGain[j - 1];
 			}
-			cm->specHannReal[0][i] = cm->specHannReal[0][i] * mask;
-			cm->specHannImag[0][i] = cm->specHannImag[0][i] * mask;
-			cm->specHannReal[1][i] = cm->specHannReal[1][i] * mask;
-			cm->specHannImag[1][i] = cm->specHannImag[1][i] * mask;
+			for (int c = 0; c < nch; ++c)
+			{
+				cm->specHannReal[c][i] = cm->specHannReal[c][i] * mask;
+				cm->specHannImag[c][i] = cm->specHannImag[c][i] * mask;
+			}
 		}
-		//printf("\n");
 	}
 	else
 	{
@@ -445,104 +427,86 @@ void CWTFrameInversion(FFTCompander *cm)
 		{
 			float lR = cm->specHannReal[0][i];
 			float lI = cm->specHannImag[0][i];
-			float rR = cm->specHannReal[1][i];
-			float rI = cm->specHannImag[1][i];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			float magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			float magNormalized;
+			if (nch > 1)
+			{
+				float rR = cm->specHannReal[1][i];
+				float rI = cm->specHannImag[1][i];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			}
+			else
+			{
+				magNormalized = mag2db(leftMag);
+			}
 			cm->oldBuf[i] = cm->oldBuf[i] + cm->fgt_fac * (magNormalized - cm->oldBuf[i]);
 			// Log conversion
 			mask = processfftComp(cm, i, magNormalized);
-			cm->specHannReal[0][i] = cm->specHannReal[0][i] * mask;
-			cm->specHannImag[0][i] = cm->specHannImag[0][i] * mask;
-			cm->specHannReal[1][i] = cm->specHannReal[1][i] * mask;
-			cm->specHannImag[1][i] = cm->specHannImag[1][i] * mask;
+			for (int c = 0; c < nch; ++c)
+			{
+				cm->specHannReal[c][i] = cm->specHannReal[c][i] * mask;
+				cm->specHannImag[c][i] = cm->specHannImag[c][i] * mask;
+			}
 		}
 	}
-	cm->imag[0][0] = cm->imag[1][0] = 0;
-	//for (i = 0; i < cm->halfLen; ++i)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->specHannReal[i], cm->specHannImag[i]);
-	//fwrite(cm->specHannReal[1], sizeof(float), cm->halfLen, dbg);
-	//fwrite(cm->specHannImag[1], sizeof(float), cm->halfLen, dbg);
+	for (int c = 0; c < nch; ++c)
+		cm->imag[c][0] = 0;
+
 	// Inverse transform
-	cm->real[0][0] = (cm->specHannReal[0][0] * 2.0f + cm->specHannReal[0][1] + cm->specHannReal[0][1]) / 4.0f; // DC
-	cm->imag[0][0] = 0.0; // DC
-	cm->real[1][0] = (cm->specHannReal[1][0] * 2.0f + cm->specHannReal[1][1] + cm->specHannReal[1][1]) / 4.0f; // DC
-	cm->imag[1][0] = 0.0; // DC
-	for (i = 1; i < cm->halfLen - 1; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		cm->real[0][i] = (cm->specHannReal[0][i] * 2.0f + cm->specHannReal[0][i - 1] + cm->specHannReal[0][i + 1]) / 4.0f;
-		cm->imag[0][i] = (cm->specHannImag[0][i] * 2.0f + cm->specHannImag[0][i - 1] + cm->specHannImag[0][i + 1]) / 4.0f;
-		cm->real[1][i] = (cm->specHannReal[1][i] * 2.0f + cm->specHannReal[1][i - 1] + cm->specHannReal[1][i + 1]) / 4.0f;
-		cm->imag[1][i] = (cm->specHannImag[1][i] * 2.0f + cm->specHannImag[1][i - 1] + cm->specHannImag[1][i + 1]) / 4.0f;
+		cm->real[c][0] = (cm->specHannReal[c][0] * 2.0f + cm->specHannReal[c][1] + cm->specHannReal[c][1]) / 4.0f; // DC
+		cm->imag[c][0] = 0.0; // DC
+		for (i = 1; i < cm->halfLen - 1; i++)
+		{
+			cm->real[c][i] = (cm->specHannReal[c][i] * 2.0f + cm->specHannReal[c][i - 1] + cm->specHannReal[c][i + 1]) / 4.0f;
+			cm->imag[c][i] = (cm->specHannImag[c][i] * 2.0f + cm->specHannImag[c][i - 1] + cm->specHannImag[c][i + 1]) / 4.0f;
+		}
+		cm->real[c][cm->halfLen - 1] = (cm->specHannReal[c][cm->halfLen - 1] * 2.0f + cm->specHannReal[c][cm->halfLen - 2] + cm->specHannReal[c][cm->halfLen - 2]) / 4.0f; // Nyquist
+		cm->imag[c][cm->halfLen - 1] = 0.0;
+		cm->fftBuf[c][0] = cm->real[c][0];
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			unsigned int bitRevFwd = cm->mBitRev[i];
+			unsigned int bitRevSym = cm->mBitRev[symIdx];
+			cm->fftBuf[c][bitRevFwd] = cm->real[c][i] + (-cm->imag[c][i]);
+			cm->fftBuf[c][bitRevSym] = cm->real[c][i] - (-cm->imag[c][i]);
+		}
+		cm->fft(cm->fftBuf[c], cm->mSineTab);
+		for (i = 0; i < cm->fftLen; ++i)
+		{
+			cm->getbackCorrectedToSpectrum1[c][cm->mBitRev[i]] = cm->fftBuf[c][i] * prec_correctionWnd[i];
+		}
+		cm->fft(cm->getbackCorrectedToSpectrum1[c], cm->mSineTab);
+		float getbackCorrectedToSpectrum1Re = cm->getbackCorrectedToSpectrum1[c][0] / cm->fftLen;
+		cm->specHannReal[c][cm->prepad + 0] = cm->real[c][0] * prec_wndCorrectionWeightingLF[0] + getbackCorrectedToSpectrum1Re * prec_wndCorrectionWeightingHF[0];
+		cm->specHannImag[c][cm->prepad + 0] = 0;
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			getbackCorrectedToSpectrum1Re = (cm->getbackCorrectedToSpectrum1[c][i] + cm->getbackCorrectedToSpectrum1[c][symIdx]) * cm->scalarGain;
+			float getbackCorrectedToSpectrum1Im = (-(cm->getbackCorrectedToSpectrum1[c][i] - cm->getbackCorrectedToSpectrum1[c][symIdx])) * cm->scalarGain;
+			cm->specHannReal[c][cm->prepad + i] = cm->real[c][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Re * prec_wndCorrectionWeightingHF[i];
+			cm->specHannImag[c][cm->prepad + i] = cm->imag[c][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Im * prec_wndCorrectionWeightingHF[i];
+		}
+		// Conjugate pad
+		for (i = 0; i < cm->prepad; ++i)
+		{
+			cm->specHannReal[c][cm->prepad - i - 1] = cm->specHannReal[c][cm->prepad + i + 1];
+			cm->specHannImag[c][cm->prepad - i - 1] = -cm->specHannImag[c][cm->prepad + i + 1];
+		}
+		for (i = 0; i < cm->pospad - 1; ++i)
+		{
+			cm->specHannReal[c][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[c][cm->prepad + cm->halfLen - cm->pospad + i];
+			cm->specHannImag[c][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[c][cm->prepad + cm->halfLen - cm->pospad + i];
+		}
 	}
-	cm->real[0][cm->halfLen - 1] = (cm->specHannReal[0][cm->halfLen - 1] * 2.0f + cm->specHannReal[0][cm->halfLen - 2] + cm->specHannReal[0][cm->halfLen - 2]) / 4.0f; // Nyquist
-	cm->imag[0][cm->halfLen - 1] = 0.0;
-	cm->real[1][cm->halfLen - 1] = (cm->specHannReal[1][cm->halfLen - 1] * 2.0f + cm->specHannReal[1][cm->halfLen - 2] + cm->specHannReal[1][cm->halfLen - 2]) / 4.0f; // Nyquist
-	cm->imag[1][cm->halfLen - 1] = 0.0;
-	cm->fftBuf[0][0] = cm->real[0][0];
-	cm->fftBuf[1][0] = cm->real[1][0];
-	for (i = 1; i < cm->halfLen; i++)
-	{
-		symIdx = cm->fftLen - i;
-		unsigned int bitRevFwd = cm->mBitRev[i];
-		unsigned int bitRevSym = cm->mBitRev[symIdx];
-		cm->fftBuf[0][bitRevFwd] = cm->real[0][i] + (-cm->imag[0][i]);
-		cm->fftBuf[0][bitRevSym] = cm->real[0][i] - (-cm->imag[0][i]);
-		cm->fftBuf[1][bitRevFwd] = cm->real[1][i] + (-cm->imag[1][i]);
-		cm->fftBuf[1][bitRevSym] = cm->real[1][i] - (-cm->imag[1][i]);
-	}
-	//for (i = 0; i < cm->halfLen; ++i)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->real[i], cm->imag[i]);
-	cm->fft(cm->fftBuf[0], cm->mSineTab);
-	cm->fft(cm->fftBuf[1], cm->mSineTab);
-	for (i = 0; i < cm->fftLen; ++i)
-	{
-		cm->getbackCorrectedToSpectrum1[0][cm->mBitRev[i]] = cm->fftBuf[0][i] * prec_correctionWnd[i];
-		cm->getbackCorrectedToSpectrum1[1][cm->mBitRev[i]] = cm->fftBuf[1][i] * prec_correctionWnd[i];
-	}
-	cm->fft(cm->getbackCorrectedToSpectrum1[0], cm->mSineTab);
-	cm->fft(cm->getbackCorrectedToSpectrum1[1], cm->mSineTab);
-	float getbackCorrectedToSpectrum1Re1 = cm->getbackCorrectedToSpectrum1[0][0] / cm->fftLen;
-	cm->specHannReal[0][cm->prepad + 0] = cm->real[0][0] * prec_wndCorrectionWeightingLF[0] + getbackCorrectedToSpectrum1Re1 * prec_wndCorrectionWeightingHF[0];
-	cm->specHannImag[0][cm->prepad + 0] = 0;
-	float getbackCorrectedToSpectrum1Re2 = cm->getbackCorrectedToSpectrum1[1][0] / cm->fftLen;
-	cm->specHannReal[1][cm->prepad + 0] = cm->real[1][0] * prec_wndCorrectionWeightingLF[0] + getbackCorrectedToSpectrum1Re2 * prec_wndCorrectionWeightingHF[0];
-	cm->specHannImag[1][cm->prepad + 0] = 0;
-	for (i = 1; i < cm->halfLen; i++)
-	{
-		symIdx = cm->fftLen - i;
-		getbackCorrectedToSpectrum1Re1 = (cm->getbackCorrectedToSpectrum1[0][i] + cm->getbackCorrectedToSpectrum1[0][symIdx]) * cm->scalarGain;
-		float getbackCorrectedToSpectrum1Im1 = (-(cm->getbackCorrectedToSpectrum1[0][i] - cm->getbackCorrectedToSpectrum1[0][symIdx])) * cm->scalarGain;
-		cm->specHannReal[0][cm->prepad + i] = cm->real[0][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Re1 * prec_wndCorrectionWeightingHF[i];
-		cm->specHannImag[0][cm->prepad + i] = cm->imag[0][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Im1 * prec_wndCorrectionWeightingHF[i];
-		getbackCorrectedToSpectrum1Re2 = (cm->getbackCorrectedToSpectrum1[1][i] + cm->getbackCorrectedToSpectrum1[1][symIdx]) * cm->scalarGain;
-		float getbackCorrectedToSpectrum1Im2 = (-(cm->getbackCorrectedToSpectrum1[1][i] - cm->getbackCorrectedToSpectrum1[1][symIdx])) * cm->scalarGain;
-		cm->specHannReal[1][cm->prepad + i] = cm->real[1][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Re2 * prec_wndCorrectionWeightingHF[i];
-		cm->specHannImag[1][cm->prepad + i] = cm->imag[1][i] * prec_wndCorrectionWeightingLF[i] + getbackCorrectedToSpectrum1Im2 * prec_wndCorrectionWeightingHF[i];
-		//printf("%d %1.14lf %1.14lf\n", i + 1, re, im);
-	}
-	// Conjugate pad
-	for (i = 0; i < cm->prepad; ++i)
-	{
-		cm->specHannReal[0][cm->prepad - i - 1] = cm->specHannReal[0][cm->prepad + i + 1];
-		cm->specHannImag[0][cm->prepad - i - 1] = -cm->specHannImag[0][cm->prepad + i + 1];
-		cm->specHannReal[1][cm->prepad - i - 1] = cm->specHannReal[1][cm->prepad + i + 1];
-		cm->specHannImag[1][cm->prepad - i - 1] = -cm->specHannImag[1][cm->prepad + i + 1];
-	}
-	for (i = 0; i < cm->pospad - 1; ++i)
-	{
-		cm->specHannReal[0][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[0][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannImag[0][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[0][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannReal[1][cm->prepad + cm->halfLen + cm->pospad - i - 2] = cm->specHannReal[1][cm->prepad + cm->halfLen - cm->pospad + i];
-		cm->specHannImag[1][cm->prepad + cm->halfLen + cm->pospad - i - 2] = -cm->specHannImag[1][cm->prepad + cm->halfLen - cm->pospad + i];
-	}
-	//for (i = 0; i < cm->prepad + cm->halfLen + cm->pospad - 1; i++)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->specHannReal[i], cm->specHannImag[i]);
 	unsigned int ptrAcc = 0;
 	for (i = 0; i < cm->halfLen; i++)
 	{
@@ -552,94 +516,92 @@ void CWTFrameInversion(FFTCompander *cm)
 		for (j = 0; j < numMultiplications; j++)
 		{
 			unsigned int readIdx = ptrAcc + j;
-			sumRe[0] += cm->specHannReal[0][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
-			sumIm[0] += cm->specHannImag[0][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
-			sumRe[1] += cm->specHannReal[1][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
-			sumIm[1] += cm->specHannImag[1][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
-			//printf("%d, ", readIdx);
+			for (int c = 0; c < nch; ++c)
+			{
+				sumRe[c] += cm->specHannReal[c][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
+				sumIm[c] += cm->specHannImag[c][prec_mtxElementPos[readIdx]] * (float)prec_correctionMatrix[readIdx];
+			}
 		}
-		cm->real[0][i] = sumRe[0];
-		cm->imag[0][i] = sumIm[0];
-		cm->real[1][i] = sumRe[1];
-		cm->imag[1][i] = sumIm[1];
+		for (int c = 0; c < nch; ++c)
+		{
+			cm->real[c][i] = sumRe[c];
+			cm->imag[c][i] = sumIm[c];
+		}
 		ptrAcc += numMultiplications;
 	}
-	cm->fftBuf[0][0] = cm->real[0][0] / cm->fftLen;
-	cm->fftBuf[1][0] = cm->real[1][0] / cm->fftLen;
-	for (i = 1; i < cm->halfLen; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		symIdx = cm->fftLen - i;
-		unsigned int bitRevFwd = cm->mBitRev[i];
-		unsigned int bitRevSym = cm->mBitRev[symIdx];
-		cm->fftBuf[0][bitRevFwd] = (cm->real[0][i] + (-cm->imag[0][i])) / cm->fftLen;
-		cm->fftBuf[0][bitRevSym] = (cm->real[0][i] - (-cm->imag[0][i])) / cm->fftLen;
-		cm->fftBuf[1][bitRevFwd] = (cm->real[1][i] + (-cm->imag[1][i])) / cm->fftLen;
-		cm->fftBuf[1][bitRevSym] = (cm->real[1][i] - (-cm->imag[1][i])) / cm->fftLen;
+		cm->fftBuf[c][0] = cm->real[c][0] / cm->fftLen;
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			unsigned int bitRevFwd = cm->mBitRev[i];
+			unsigned int bitRevSym = cm->mBitRev[symIdx];
+			cm->fftBuf[c][bitRevFwd] = (cm->real[c][i] + (-cm->imag[c][i])) / cm->fftLen;
+			cm->fftBuf[c][bitRevSym] = (cm->real[c][i] - (-cm->imag[c][i])) / cm->fftLen;
+		}
+		cm->fft(cm->fftBuf[c], cm->mSineTab);
 	}
-	cm->fft(cm->fftBuf[0], cm->mSineTab);
-	cm->fft(cm->fftBuf[1], cm->mSineTab);
-	//fwrite(cm->fftBuf, sizeof(float), cm->fftLen, dbg);
 	cm->mOutputBufferCount++;
 	float *outBuffer = cm->mOutputBuffer[cm->mOutputBufferCount - 1];
 	unsigned int currentBlockIndex, nextBlockIndex, blockOffset;
 	for (i = 0; i < cm->ovpLen; ++i)
 	{
-		outBuffer[0] = cm->mOverlapStage2dash[0][0][i] + cm->fftBuf[0][i];
-		outBuffer[1] = cm->mOverlapStage2dash[1][0][i] + cm->fftBuf[1][i];
+		for (int c = 0; c < nch; ++c)
+			outBuffer[c] = cm->mOverlapStage2dash[c][0][i] + cm->fftBuf[c][i];
+		if (nch == 1)
+			outBuffer[1] = 0.0f;
 		outBuffer += 2;
 		// overlapping
 		currentBlockIndex = 0;
 		nextBlockIndex = 1;
 		blockOffset = cm->ovpLen;
 		while (nextBlockIndex < cm->ovpCount - 1) {
-			cm->mOverlapStage2dash[0][currentBlockIndex][i] = cm->mOverlapStage2dash[0][nextBlockIndex][i] + cm->fftBuf[0][blockOffset + i];
-			cm->mOverlapStage2dash[1][currentBlockIndex][i] = cm->mOverlapStage2dash[1][nextBlockIndex][i] + cm->fftBuf[1][blockOffset + i];
+			for (int c = 0; c < nch; ++c)
+				cm->mOverlapStage2dash[c][currentBlockIndex][i] = cm->mOverlapStage2dash[c][nextBlockIndex][i] + cm->fftBuf[c][blockOffset + i];
 			currentBlockIndex++;
 			nextBlockIndex++;
 			blockOffset += cm->ovpLen;
 		}
-		cm->mOverlapStage2dash[0][currentBlockIndex][i] = cm->fftBuf[0][blockOffset + i];
-		cm->mOverlapStage2dash[1][currentBlockIndex][i] = cm->fftBuf[1][blockOffset + i];
+		for (int c = 0; c < nch; ++c)
+			cm->mOverlapStage2dash[c][currentBlockIndex][i] = cm->fftBuf[c][blockOffset + i];
 	}
 	cm->mInputSamplesNeeded = cm->ovpLen;
 }
+/* [PATCHED-AuraDSP P-034] CWTFrameSTFTInversion 单声道感知优化：跳过未使用的通道 1 (R) */
 void CWTFrameSTFTInversion(FFTCompander *cm)
 {
 	//ifa++;
 	unsigned int i, j;
+	const int nch = cm->isMono ? 1 : 2;
 	// Forward transform
 	for (i = 0; i < cm->fftLen; ++i)
 	{
 		const unsigned int k = (i + cm->mInputPos) & cm->minus_fftLen;
-		cm->fftBuf[0][cm->bitrevfftshift[i]] = cm->mInput[0][k] * cm->analysisWnd[i];
-		cm->fftBuf[1][cm->bitrevfftshift[i]] = cm->mInput[1][k] * cm->analysisWnd[i];
+		for (int c = 0; c < nch; ++c)
+			cm->fftBuf[c][cm->bitrevfftshift[i]] = cm->mInput[c][k] * cm->analysisWnd[i];
 	}
-	cm->fft(cm->fftBuf[0], cm->mSineTab);
-	cm->fft(cm->fftBuf[1], cm->mSineTab);
+	for (int c = 0; c < nch; ++c)
+		cm->fft(cm->fftBuf[c], cm->mSineTab);
 	int symIdx;
-	for (i = 1; i < cm->halfLen; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		symIdx = cm->fftLen - i;
-		cm->real[0][i] = cm->fftBuf[0][i] + cm->fftBuf[0][symIdx];
-		cm->imag[0][i] = -(cm->fftBuf[0][i] - cm->fftBuf[0][symIdx]);
-		cm->real[1][i] = cm->fftBuf[1][i] + cm->fftBuf[1][symIdx];
-		cm->imag[1][i] = -(cm->fftBuf[1][i] - cm->fftBuf[1][symIdx]);
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			cm->real[c][i] = cm->fftBuf[c][i] + cm->fftBuf[c][symIdx];
+			cm->imag[c][i] = -(cm->fftBuf[c][i] - cm->fftBuf[c][symIdx]);
+		}
+		cm->real[c][0] = cm->fftBuf[c][0] * 2.0f;
+		cm->imag[c][0] = 0;
 	}
-	cm->real[0][0] = cm->fftBuf[0][0] * 2.0f;
-	cm->imag[0][0] = 0;
-	cm->real[1][0] = cm->fftBuf[1][0] * 2.0f;
-	cm->imag[1][0] = 0;
-	//for (i = 0; i < cm->halfLen; ++i)
-	//	printf("%d %1.14lf %1.14lf\n", i + 1, cm->real[i], cm->imag[i]);
 	// Hann windowing
-	memcpy(cm->specHannReal[0] + cm->prepad, cm->real[0], cm->halfLen * sizeof(float));
-	memcpy(cm->specHannImag[0] + cm->prepad, cm->imag[0], cm->halfLen * sizeof(float));
-	memcpy(cm->specHannReal[1] + cm->prepad, cm->real[1], cm->halfLen * sizeof(float));
-	memcpy(cm->specHannImag[1] + cm->prepad, cm->imag[1], cm->halfLen * sizeof(float));
+	for (int c = 0; c < nch; ++c)
+	{
+		memcpy(cm->specHannReal[c] + cm->prepad, cm->real[c], cm->halfLen * sizeof(float));
+		memcpy(cm->specHannImag[c] + cm->prepad, cm->imag[c], cm->halfLen * sizeof(float));
+	}
 	conjugatePadFilteringDepad(cm);
-	//fwrite(cm->specHannReal[1], sizeof(float), cm->halfLen, dbg);
-	//fwrite(cm->specHannImag[1], sizeof(float), cm->halfLen, dbg);
-
 
 	// Spectral analysis
 	float leftMag, rightMag, mask;
@@ -656,15 +618,22 @@ void CWTFrameSTFTInversion(FFTCompander *cm)
 		{
 			float lR = cm->specHannReal[0][i];
 			float lI = cm->specHannImag[0][i];
-			float rR = cm->specHannReal[1][i];
-			float rI = cm->specHannImag[1][i];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			if (nch > 1)
+			{
+				float rR = cm->specHannReal[1][i];
+				float rI = cm->specHannImag[1][i];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			}
+			else
+			{
+				cm->mag[i] = leftMag;
+			}
 		}
 		ShrinkGridSpectralInterpolator(cm->octaveSmooth, cm->procUpTo, cm->mag, cm->aheight);
 		for (i = 0; i < cm->smallGridSize; i++)
@@ -687,12 +656,12 @@ void CWTFrameSTFTInversion(FFTCompander *cm)
 				size_t j = fast_upper_bound4(lv1, lpLen + 3, &val);
 				mask = ((val - lv1[j - 1]) * lv2[j - 1]) * (cm->finalGain[j] - cm->finalGain[j - 1]) + cm->finalGain[j - 1];
 			}
-			cm->real[0][i] = cm->real[0][i] * mask;
-			cm->imag[0][i] = cm->imag[0][i] * mask;
-			cm->real[1][i] = cm->real[1][i] * mask;
-			cm->imag[1][i] = cm->imag[1][i] * mask;
+			for (int c = 0; c < nch; ++c)
+			{
+				cm->real[c][i] = cm->real[c][i] * mask;
+				cm->imag[c][i] = cm->imag[c][i] * mask;
+			}
 		}
-		//printf("\n");
 	}
 	else
 	{
@@ -700,56 +669,65 @@ void CWTFrameSTFTInversion(FFTCompander *cm)
 		{
 			float lR = cm->specHannReal[0][i];
 			float lI = cm->specHannImag[0][i];
-			float rR = cm->specHannReal[1][i];
-			float rI = cm->specHannImag[1][i];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			float magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			float magNormalized;
+			if (nch > 1)
+			{
+				float rR = cm->specHannReal[1][i];
+				float rI = cm->specHannImag[1][i];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			}
+			else
+			{
+				magNormalized = mag2db(leftMag);
+			}
 			cm->oldBuf[i] = cm->oldBuf[i] + cm->fgt_fac * (magNormalized - cm->oldBuf[i]);
 			// Log conversion
 			mask = processfftComp(cm, i, magNormalized);
-			cm->real[0][i] = cm->real[0][i] * mask;
-			cm->imag[0][i] = cm->imag[0][i] * mask;
-			cm->real[1][i] = cm->real[1][i] * mask;
-			cm->imag[1][i] = cm->imag[1][i] * mask;
+			for (int c = 0; c < nch; ++c)
+			{
+				cm->real[c][i] = cm->real[c][i] * mask;
+				cm->imag[c][i] = cm->imag[c][i] * mask;
+			}
 		}
 	}
-	cm->imag[0][0] = cm->imag[1][0] = 0;
+	for (int c = 0; c < nch; ++c)
+		cm->imag[c][0] = 0;
 
-	cm->fftBuf[0][0] = cm->real[0][0];
-	cm->fftBuf[1][0] = cm->real[1][0];
-	for (i = 1; i < cm->halfLen; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		symIdx = cm->fftLen - i;
-		unsigned int bitRevFwd = cm->mBitRev[i];
-		unsigned int bitRevSym = cm->mBitRev[symIdx];
-		cm->fftBuf[0][bitRevFwd] = (cm->real[0][i] + (-cm->imag[0][i])) * cm->shiftCentre[i];
-		cm->fftBuf[0][bitRevSym] = (cm->real[0][i] - (-cm->imag[0][i])) * cm->shiftCentre[i];
-		cm->fftBuf[1][bitRevFwd] = (cm->real[1][i] + (-cm->imag[1][i])) * cm->shiftCentre[i];
-		cm->fftBuf[1][bitRevSym] = (cm->real[1][i] - (-cm->imag[1][i])) * cm->shiftCentre[i];
+		cm->fftBuf[c][0] = cm->real[c][0];
+		for (i = 1; i < cm->halfLen; i++)
+		{
+			symIdx = cm->fftLen - i;
+			unsigned int bitRevFwd = cm->mBitRev[i];
+			unsigned int bitRevSym = cm->mBitRev[symIdx];
+			cm->fftBuf[c][bitRevFwd] = (cm->real[c][i] + (-cm->imag[c][i])) * cm->shiftCentre[i];
+			cm->fftBuf[c][bitRevSym] = (cm->real[c][i] - (-cm->imag[c][i])) * cm->shiftCentre[i];
+		}
+		cm->fft(cm->fftBuf[c], cm->mSineTab);
+		for (i = 0; i < cm->ovpLen * 2; i++)
+		{
+			cm->fftBuf[c][i] = cm->fftBuf[c][i + (cm->fftLen / 2 - cm->ovpLen)] * cm->synthesisWnd[i];
+		}
 	}
-	cm->fft(cm->fftBuf[0], cm->mSineTab);
-	cm->fft(cm->fftBuf[1], cm->mSineTab);
-	for (i = 0; i < cm->ovpLen * 2; i++)
-	{
-		cm->fftBuf[0][i] = cm->fftBuf[0][i + (cm->fftLen / 2 - cm->ovpLen)] * cm->synthesisWnd[i];
-		cm->fftBuf[1][i] = cm->fftBuf[1][i + (cm->fftLen / 2 - cm->ovpLen)] * cm->synthesisWnd[i];
-	}
-	//fwrite(cm->fftBuf, sizeof(float), cm->ovpLen * 2, dbg);
 	cm->mOutputBufferCount++;
 	float *outBuffer = cm->mOutputBuffer[cm->mOutputBufferCount - 1];
 	for (i = 0; i < cm->ovpLen; ++i)
 	{
-		outBuffer[0] = cm->mOverlapStage2dash[0][0][i] + cm->fftBuf[0][i];
-		outBuffer[1] = cm->mOverlapStage2dash[1][0][i] + cm->fftBuf[1][i];
+		for (int c = 0; c < nch; ++c)
+			outBuffer[c] = cm->mOverlapStage2dash[c][0][i] + cm->fftBuf[c][i];
+		if (nch == 1)
+			outBuffer[1] = 0.0f;
 		outBuffer += 2;
 		// overlapping
-		cm->mOverlapStage2dash[0][0][i] = cm->fftBuf[0][cm->ovpLen + i];
-		cm->mOverlapStage2dash[1][0][i] = cm->fftBuf[1][cm->ovpLen + i];
+		for (int c = 0; c < nch; ++c)
+			cm->mOverlapStage2dash[c][0][i] = cm->fftBuf[c][cm->ovpLen + i];
 	}
 	cm->mInputSamplesNeeded = cm->ovpLen;
 }
@@ -761,26 +739,34 @@ double complexMultiplicationConj(double xReal, double xImag, double yReal, doubl
 {
 	return xReal * yReal - xImag * yImag;
 }
+/* [PATCHED-AuraDSP P-034] regularSTFT 单声道感知优化：跳过未使用的通道 1 (R) */
 void regularSTFT(FFTCompander *cm)
 {
 	unsigned int i;
+	const int nch = cm->isMono ? 1 : 2;
 	// copy to temporary buffer and FHT
 	for (i = 0; i < cm->fftLen; ++i)
 	{
 		const unsigned int k = (i + cm->mInputPos) & cm->minus_fftLen;
 		const float w = cm->analysisWnd[i];
 		cm->mTempLBuffer[cm->mBitRev[i]] = (cm->mInput[0][k] * w);
-		cm->mTempRBuffer[cm->mBitRev[i]] = (cm->mInput[1][k] * w);
+		if (nch > 1)
+			cm->mTempRBuffer[cm->mBitRev[i]] = (cm->mInput[1][k] * w);
 	}
 	cm->fft(cm->mTempLBuffer, cm->mSineTab);
-	cm->fft(cm->mTempRBuffer, cm->mSineTab);
+	if (nch > 1)
+		cm->fft(cm->mTempRBuffer, cm->mSineTab);
 	// Spectral analysis
 	int symIdx;
 	float lR = cm->mTempLBuffer[0] * 2.0f;
-	float rR = cm->mTempRBuffer[0] * 2.0f;
+	float rR = 0.0f;
 	float leftMag, rightMag, mask;
 	cm->timeDomainOut[0][0] = lR;
-	cm->timeDomainOut[1][0] = rR;
+	if (nch > 1)
+	{
+		rR = cm->mTempRBuffer[0] * 2.0f;
+		cm->timeDomainOut[1][0] = rR;
+	}
 	unsigned int bitRevFwd, bitRevSym;
 	//idxFrame++;
 	unsigned int specLen = *((unsigned int *)(cm->octaveSmooth));
@@ -791,8 +777,15 @@ void regularSTFT(FFTCompander *cm)
 	if (!cm->noGridDownsampling)
 	{
 		leftMag = fabsf(lR);
-		rightMag = fabsf(rR);
-		cm->mag[0] = (leftMag + rightMag) * 0.5f;
+		if (nch > 1)
+		{
+			rightMag = fabsf(rR);
+			cm->mag[0] = (leftMag + rightMag) * 0.5f;
+		}
+		else
+		{
+			cm->mag[0] = leftMag;
+		}
 		for (i = 1; i < cm->procUpTo; i++)
 		{
 			symIdx = cm->fftLen - i;
@@ -800,15 +793,22 @@ void regularSTFT(FFTCompander *cm)
 			bitRevSym = cm->mBitRev[symIdx];
 			lR = cm->mTempLBuffer[i] + cm->mTempLBuffer[symIdx];
 			float lI = cm->mTempLBuffer[i] - cm->mTempLBuffer[symIdx];
-			rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
-			float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			if (nch > 1)
+			{
+				rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
+				float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				cm->mag[i] = (leftMag + rightMag) * 0.5f;
+			}
+			else
+			{
+				cm->mag[i] = leftMag;
+			}
 		}
 		ShrinkGridSpectralInterpolator(cm->octaveSmooth, cm->procUpTo, cm->mag, cm->aheight);
 		for (i = 0; i < cm->smallGridSize; i++)
@@ -836,25 +836,37 @@ void regularSTFT(FFTCompander *cm)
 			}
 			lR = cm->mTempLBuffer[i] + cm->mTempLBuffer[symIdx];
 			float lI = cm->mTempLBuffer[i] - cm->mTempLBuffer[symIdx];
-			rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
-			float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
 			cm->timeDomainOut[0][bitRevFwd] = (lR + lI) * mask;
 			cm->timeDomainOut[0][bitRevSym] = (lR - lI) * mask;
-			cm->timeDomainOut[1][bitRevFwd] = (rR + rI) * mask;
-			cm->timeDomainOut[1][bitRevSym] = (rR - rI) * mask;
+			if (nch > 1)
+			{
+				rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
+				float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
+				cm->timeDomainOut[1][bitRevFwd] = (rR + rI) * mask;
+				cm->timeDomainOut[1][bitRevSym] = (rR - rI) * mask;
+			}
 		}
 		//printf("\n");
 	}
 	else
 	{
 		leftMag = fabsf(cm->mTempLBuffer[0]);
-		rightMag = fabsf(cm->mTempRBuffer[0]);
-		float magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+		float magNormalized;
+		if (nch > 1)
+		{
+			rightMag = fabsf(cm->mTempRBuffer[0]);
+			magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+		}
+		else
+		{
+			magNormalized = mag2db(leftMag);
+		}
 		cm->oldBuf[0] = cm->oldBuf[0] + cm->fgt_fac * (magNormalized - cm->oldBuf[0]);
 		// Log conversion
 		float mask = processfftComp(cm, 0, magNormalized);
 		cm->timeDomainOut[0][0] = cm->mTempLBuffer[0] * mask;
-		cm->timeDomainOut[1][0] = cm->mTempRBuffer[0] * mask;
+		if (nch > 1)
+			cm->timeDomainOut[1][0] = cm->mTempRBuffer[0] * mask;
 		for (i = 1; i < cm->procUpTo; i++)
 		{
 			symIdx = cm->fftLen - i;
@@ -862,22 +874,34 @@ void regularSTFT(FFTCompander *cm)
 			bitRevSym = cm->mBitRev[symIdx];
 			lR = cm->mTempLBuffer[i] + cm->mTempLBuffer[symIdx];
 			float lI = cm->mTempLBuffer[i] - cm->mTempLBuffer[symIdx];
-			rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
-			float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
 			float absV1 = fabsf(lR);
 			float absV2 = fabsf(lI);
 			leftMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			absV1 = fabsf(rR);
-			absV2 = fabsf(rI);
-			rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
-			magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			if (nch > 1)
+			{
+				rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
+				float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
+				absV1 = fabsf(rR);
+				absV2 = fabsf(rI);
+				rightMag = max((127.0f / 128.0f) * max(absV1, absV2) + (3.0f / 16.0f) * min(absV1, absV2), (27.0f / 32.0f) * max(absV1, absV2) + (71.0f / 128.0f) * min(absV1, absV2));
+				magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+			}
+			else
+			{
+				magNormalized = mag2db(leftMag);
+			}
 			cm->oldBuf[i] = cm->oldBuf[i] + cm->fgt_fac * (magNormalized - cm->oldBuf[i]);
 			// Log conversion
 			mask = processfftComp(cm, i, magNormalized);
 			cm->timeDomainOut[0][bitRevFwd] = (lR + lI) * mask;
 			cm->timeDomainOut[0][bitRevSym] = (lR - lI) * mask;
-			cm->timeDomainOut[1][bitRevFwd] = (rR + rI) * mask;
-			cm->timeDomainOut[1][bitRevSym] = (rR - rI) * mask;
+			if (nch > 1)
+			{
+				rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
+				float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
+				cm->timeDomainOut[1][bitRevFwd] = (rR + rI) * mask;
+				cm->timeDomainOut[1][bitRevSym] = (rR - rI) * mask;
+			}
 		}
 	}
 	for (i = cm->procUpTo; i < cm->halfLen; i++)
@@ -887,74 +911,130 @@ void regularSTFT(FFTCompander *cm)
 		bitRevSym = cm->mBitRev[symIdx];
 		lR = cm->mTempLBuffer[i] + cm->mTempLBuffer[symIdx];
 		float lI = cm->mTempLBuffer[i] - cm->mTempLBuffer[symIdx];
-		rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
-		float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
 		cm->timeDomainOut[0][bitRevFwd] = lR + lI;
 		cm->timeDomainOut[0][bitRevSym] = lR - lI;
-		cm->timeDomainOut[1][bitRevFwd] = rR + rI;
-		cm->timeDomainOut[1][bitRevSym] = rR - rI;
+		if (nch > 1)
+		{
+			rR = cm->mTempRBuffer[i] + cm->mTempRBuffer[symIdx];
+			float rI = cm->mTempRBuffer[i] - cm->mTempRBuffer[symIdx];
+			cm->timeDomainOut[1][bitRevFwd] = rR + rI;
+			cm->timeDomainOut[1][bitRevSym] = rR - rI;
+		}
 	}
 	// reconstitute left/right channels
-	cm->fft(cm->timeDomainOut[0], cm->mSineTab);
-	cm->fft(cm->timeDomainOut[1], cm->mSineTab);
-	for (i = 0; i < cm->fftLen; i++)
+	for (int c = 0; c < nch; ++c)
 	{
-		cm->timeDomainOut[0][i] = cm->timeDomainOut[0][i] * cm->synthesisWnd[i];
-		cm->timeDomainOut[1][i] = cm->timeDomainOut[1][i] * cm->synthesisWnd[i];
+		cm->fft(cm->timeDomainOut[c], cm->mSineTab);
+		for (i = 0; i < cm->fftLen; i++)
+			cm->timeDomainOut[c][i] = cm->timeDomainOut[c][i] * cm->synthesisWnd[i];
 	}
 	cm->mOutputBufferCount++;
 	float *outBuffer = cm->mOutputBuffer[cm->mOutputBufferCount - 1];
 	unsigned int currentBlockIndex, nextBlockIndex, blockOffset;
 	for (i = 0; i < cm->ovpLen; ++i)
 	{
-		outBuffer[0] = cm->mOverlapStage2dash[0][0][i] + cm->timeDomainOut[0][i];
-		outBuffer[1] = cm->mOverlapStage2dash[1][0][i] + cm->timeDomainOut[1][i];
+		for (int c = 0; c < nch; ++c)
+			outBuffer[c] = cm->mOverlapStage2dash[c][0][i] + cm->timeDomainOut[c][i];
+		if (nch == 1)
+			outBuffer[1] = 0.0f;
 		outBuffer += 2;
 		// overlapping
 		currentBlockIndex = 0;
 		nextBlockIndex = 1;
 		blockOffset = cm->ovpLen;
 		while (nextBlockIndex < cm->ovpCount - 1) {
-			cm->mOverlapStage2dash[0][currentBlockIndex][i] = cm->mOverlapStage2dash[0][nextBlockIndex][i] + cm->timeDomainOut[0][blockOffset + i];
-			cm->mOverlapStage2dash[1][currentBlockIndex][i] = cm->mOverlapStage2dash[1][nextBlockIndex][i] + cm->timeDomainOut[1][blockOffset + i];
+			for (int c = 0; c < nch; ++c)
+				cm->mOverlapStage2dash[c][currentBlockIndex][i] = cm->mOverlapStage2dash[c][nextBlockIndex][i] + cm->timeDomainOut[c][blockOffset + i];
 			currentBlockIndex++;
 			nextBlockIndex++;
 			blockOffset += cm->ovpLen;
 		}
-		cm->mOverlapStage2dash[0][currentBlockIndex][i] = cm->timeDomainOut[0][blockOffset + i];
-		cm->mOverlapStage2dash[1][currentBlockIndex][i] = cm->timeDomainOut[1][blockOffset + i];
+		for (int c = 0; c < nch; ++c)
+			cm->mOverlapStage2dash[c][currentBlockIndex][i] = cm->timeDomainOut[c][blockOffset + i];
 	}
 	cm->mInputSamplesNeeded = cm->ovpLen;
 }
-int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const float *inRight, unsigned int inSampleCount, float *outL, float *outR)
-{
-	unsigned int outSampleCount, maxOutSampleCount, copyCount;
-	outSampleCount = 0;
-	maxOutSampleCount = inSampleCount;
+/* ---- B1-d：启动缺额与分块处理 -------------------------------------------------
+ * 原实现两个缺陷（同一根因：把「本块没产出」当成「本块无需改动」）：
+ *   ① 抽干循环在 OutputBufferCount==0 时一次都不执行，于是输出缓冲里仍是
+ *      **未处理的输入**（调用方 in==out 原地处理），启动段最多 ovpLen 个样本
+ *      原声直通，并与稍后产出的处理流叠加（双声/梳状滤波）。
+ *   ② 块长 n 与 hop(ovpLen) 不整除时，「已产出-已交付」需要永久落后一个相位
+ *      量，否则在部分调用上必然取不到输出；旧实现靠 ① 的"泄漏"意外维持平衡，
+ *      于是泄漏是周期性的、并非只在启动时发生（实测 441 帧块 7 次、500 帧块 2 次）。
+ * 修法：显式把相位落后做出来 —— 启动先以静音吐出 D = ovpLen - gcd(ovpLen,chunk)
+ * 个样本（OLA 爬升段本来就是静音，吐静音不损失任何信号），此后可用输出恒 >= 0；
+ * 抽干仍不足时补静音，绝不把未处理的输入留在输出里。
+ * 副作用：块长不整除 hop 时延迟 = (fftLen-ovpLen) + D，D 必须计入上报延迟。 */
 
-	while (inSampleCount > 0) {
-		copyCount = min(cm->mInputSamplesNeeded, inSampleCount);
-		float *sampDL = &cm->mInput[0][cm->mInputPos];
-		float *sampDR = &cm->mInput[1][cm->mInputPos];
-		const float *max = inLeft + copyCount;
-		while (inLeft < max)
+static unsigned int comp_gcd_u(unsigned int a, unsigned int b)
+{
+	while (b) { unsigned int t = a % b; a = b; b = t; }
+	return a;
+}
+
+unsigned int CompressorStartupDeficit(unsigned int ovpLen, unsigned int blockLen)
+{
+	if (ovpLen == 0)
+		return 0;
+	/* 必须用**完整块长**，不能先裁到 ovpLen 再取 gcd：相位只由 blockLen 与
+	 * ovpLen 的最大公约数决定。实测教训：441 帧块 @hop256 的真缺额是
+	 * 256-gcd(256,441)=255，而先裁到 256 会得到 256-gcd(256,256)=0，
+	 * 脉冲位移因此少 247 帧。blockLen==0（尚未处理过任何块）按整 hop 处理。 */
+	if (blockLen == 0)
+		return 0;
+	return ovpLen - comp_gcd_u(ovpLen, blockLen);
+}
+
+/* 写 n 个立体声静音（out 与 in 可能是同一块内存，不能 memset 整片）。 */
+static void comp_zero_pairs(float *outL, float *outR, unsigned int n)
+{
+	unsigned int i;
+	for (i = 0; i < n; ++i) { *outL++ = 0.0f; *outR++ = 0.0f; }
+}
+
+/* 喂 n(<=ovpLen) 个样本：填充 → 启动缺额 → 抽干。恒写满 n 个输出样本。 */
+static void comp_process_chunk(FFTCompander *cm, const float *inLeft, const float *inRight,
+                               unsigned int inSampleCount, float *outL, float *outR)
+{
+	unsigned int outSampleCount = 0, copyCount, rem = inSampleCount;
+
+	while (rem > 0)
+	{
+		copyCount = min(cm->mInputSamplesNeeded, rem);
 		{
-			*sampDL = *inLeft;
-			*sampDR = *inRight;
-			inLeft += 1;
-			inRight += 1;
-			sampDL += 1;
-			sampDR += 1;
+			float *sampDL = &cm->mInput[0][cm->mInputPos];
+			float *sampDR = &cm->mInput[1][cm->mInputPos];
+			const float *max = inLeft + copyCount;
+			while (inLeft < max)
+			{
+				*sampDL = *inLeft;
+				*sampDR = *inRight;
+				inLeft += 1;
+				inRight += 1;
+				sampDL += 1;
+				sampDR += 1;
+			}
 		}
-		inSampleCount -= copyCount;
+		rem -= copyCount;
 		cm->mInputPos = (cm->mInputPos + copyCount) & cm->minus_fftLen;
 		cm->mInputSamplesNeeded -= copyCount;
 		if (cm->mInputSamplesNeeded == 0)
 			cm->process(cm);
 	}
-	while ((cm->mOutputBufferCount > 0) && (outSampleCount < maxOutSampleCount)) {
+	/* 启动缺额：把 OLA 爬升段的静音先交付掉，再接上真正的处理流 */
+	if (cm->mOutputDeficit > 0)
+	{
+		copyCount = min((unsigned int)cm->mOutputDeficit, inSampleCount);
+		comp_zero_pairs(outL, outR, copyCount);
+		outL += copyCount;
+		outR += copyCount;
+		outSampleCount += copyCount;
+		cm->mOutputDeficit -= (int)copyCount;
+	}
+	while ((cm->mOutputBufferCount > 0) && (outSampleCount < inSampleCount)) {
 		float *sampD = cm->mOutputBuffer[0];
-		copyCount = min(cm->ovpLen - cm->mOutputReadSampleOffset, maxOutSampleCount - outSampleCount);
+		copyCount = min(cm->ovpLen - cm->mOutputReadSampleOffset, inSampleCount - outSampleCount);
 		float *out = sampD + (cm->mOutputReadSampleOffset * 2);
 		float *max = outL + copyCount;
 		while (outL < max)
@@ -991,7 +1071,127 @@ int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const floa
 			}
 		}
 	}
-	return outSampleCount;
+	/* 仍不够：仅可能出现在启动头几块（管线还没有任何产出）。补静音而不是
+	 * 保留输入——保留输入就是原声直通。 */
+	if (outSampleCount < inSampleCount)
+		comp_zero_pairs(outL, outR, inSampleCount - outSampleCount);
+}
+
+int FFTCompanderProcessSamples(FFTCompander *cm, const float *inLeft, const float *inRight, unsigned int inSampleCount, float *outL, float *outR)
+{
+	unsigned int done = 0;
+	if (!cm || !inLeft || !inRight || !outL || !outR || inSampleCount == 0)
+		return 0;
+	if (cm->mOutputDeficit < 0)
+		cm->mOutputDeficit = (int)CompressorStartupDeficit(cm->ovpLen, inSampleCount);
+	/* 单次至多推进一个 hop：process() 每次 ++mOutputBufferCount 并按 count-1
+	 * 取址，一次攒多个 hop 会把 FIFO 直接冲爆（旧实现的隐藏堆写，只因唯一调用
+	 * 方恰好按 ovpLen 分块才没触发）。 */
+	while (done < inSampleCount)
+	{
+		unsigned int c = inSampleCount - done;
+		if (c > cm->ovpLen)
+			c = cm->ovpLen;
+		comp_process_chunk(cm, inLeft + done, inRight + done, c, outL + done, outR + done);
+		done += c;
+	}
+	return done;
+}
+
+/* [PATCHED-AuraDSP P-034] 单声道分块处理与样本推进 */
+static void comp_zero_mono(float *out, unsigned int n)
+{
+	unsigned int i;
+	for (i = 0; i < n; ++i) { *out++ = 0.0f; }
+}
+
+static void comp_process_chunk_mono(FFTCompander *cm, const float *in,
+                                    unsigned int inSampleCount, float *out)
+{
+	unsigned int outSampleCount = 0, copyCount, rem = inSampleCount;
+
+	while (rem > 0)
+	{
+		copyCount = min(cm->mInputSamplesNeeded, rem);
+		{
+			float *sampD = &cm->mInput[0][cm->mInputPos];
+			const float *max = in + copyCount;
+			while (in < max)
+			{
+				*sampD = *in;
+				in += 1;
+				sampD += 1;
+			}
+		}
+		rem -= copyCount;
+		cm->mInputPos = (cm->mInputPos + copyCount) & cm->minus_fftLen;
+		cm->mInputSamplesNeeded -= copyCount;
+		if (cm->mInputSamplesNeeded == 0)
+			cm->process(cm);
+	}
+	/* 启动缺额：把 OLA 爬升段的静音先交付掉，再接上真正的处理流 */
+	if (cm->mOutputDeficit > 0)
+	{
+		copyCount = min((unsigned int)cm->mOutputDeficit, inSampleCount);
+		comp_zero_mono(out, copyCount);
+		out += copyCount;
+		outSampleCount += copyCount;
+		cm->mOutputDeficit -= (int)copyCount;
+	}
+	while ((cm->mOutputBufferCount > 0) && (outSampleCount < inSampleCount)) {
+		float *sampD = cm->mOutputBuffer[0];
+		copyCount = min(cm->ovpLen - cm->mOutputReadSampleOffset, inSampleCount - outSampleCount);
+		float *src = sampD + (cm->mOutputReadSampleOffset * 2);
+		float *max = out + copyCount;
+		while (out < max)
+		{
+			*out = *src;
+			src += 2;
+			out += 1;
+		}
+		outSampleCount += copyCount;
+		cm->mOutputReadSampleOffset += copyCount;
+		if (cm->mOutputReadSampleOffset >= cm->ovpLen)
+		{
+			cm->mOutputBufferCount--;
+			cm->mOutputReadSampleOffset = 0;
+			if (cm->mOutputBufferCount > 0) {
+				unsigned int i;
+				float *moveToEnd = cm->mOutputBuffer[0];
+				for (i = 1; i < MAX_OUTPUT_BUFFERS_DRS; i++)
+					cm->mOutputBuffer[i - 1] = cm->mOutputBuffer[i];
+				cm->mOutputBuffer[MAX_OUTPUT_BUFFERS_DRS - 1] = 0;
+				for (i = 0; i < MAX_OUTPUT_BUFFERS_DRS; i++)
+				{
+					if (!cm->mOutputBuffer[i])
+					{
+						cm->mOutputBuffer[i] = moveToEnd;
+						break;
+					}
+				}
+			}
+		}
+	}
+	if (outSampleCount < inSampleCount)
+		comp_zero_mono(out, inSampleCount - outSampleCount);
+}
+
+int FFTCompanderProcessSamplesMono(FFTCompander *cm, const float *in, unsigned int inSampleCount, float *out)
+{
+	unsigned int done = 0;
+	if (!cm || !in || !out || inSampleCount == 0)
+		return 0;
+	if (cm->mOutputDeficit < 0)
+		cm->mOutputDeficit = (int)CompressorStartupDeficit(cm->ovpLen, inSampleCount);
+	while (done < inSampleCount)
+	{
+		unsigned int c = inSampleCount - done;
+		if (c > cm->ovpLen)
+			c = cm->ovpLen;
+		comp_process_chunk_mono(cm, in + done, c, out + done);
+		done += c;
+	}
+	return done;
 }
 void FFTCompanderSetavgBW(FFTCompander *cm, double avgBW)
 {
@@ -1152,6 +1352,16 @@ void FFTCompanderInit(FFTCompander *cm, float fs, int tfresolution, unsigned int
 	cm->mInputPos = 0;
 	cm->mOutputBufferCount = 0;
 	cm->mOutputReadSampleOffset = 0;
+	/* B1-d：启动缺额待首次调用按实际块长确定（Init 时块长未必已知）。 */
+	cm->mOutputDeficit = -1;
+	/* B1-d：OLA 反馈态与输入环必须清零。原来只有 mInputPos/计数被重置，缓冲区
+	 * 仍是上一次 Init（影子槽被复用）留下的**上一份音频**——那段残留会被
+	 * 当成输入参与 FFT，并从爬升段直接漏进输出。首次使用恰好落在 calloc 的
+	 * 零内存上，所以这个缺陷只在改参数（重新 Init）后出现。 */
+	memset(cm->mInput[0], 0, sizeof(cm->mInput[0]));
+	memset(cm->mInput[1], 0, sizeof(cm->mInput[1]));
+	memset(cm->mOverlapStage2dash[0], 0, sizeof(cm->mOverlapStage2dash[0]));
+	memset(cm->mOverlapStage2dash[1], 0, sizeof(cm->mOverlapStage2dash[1]));
 	LLraisedCosTblFloat(cm->analysisWnd, cm->fftLen, cm->ovpCount);
 	LLCreatePostWindowFloat(cm->synthesisWnd, cm->fftLen, cm->ovpCount);
 	for (i = 0; i < cm->fftLen; ++i)
@@ -1585,81 +1795,258 @@ void FFTCompanderInit(FFTCompander *cm, float fs, int tfresolution, unsigned int
 		cm->alpha = 0.5f / cm->updatePerNSmps;
 	}
 }
-void CompressorConstructor(JamesDSPLib *jdsp)
+/* [PATCHED-AuraDSP P-018 B1-c] comp 影子槽机制（替代 Z13 的 jdsp_lock 全程互斥）。
+ *
+ * 背景（全量审查 B1/P0）：CompressorSetParam(forceRefresh=1) 在控制线程做
+ * FFTCompanderInit 全量重算，而 kAuraStages comp lock=1 令 RT 的 stage_comp
+ * 每块取同一把 jdsp_lock ⇒ 重建期间音频整段卡死。Z13（2026-10-23）只修了
+ * 「控制侧重置 vs RT 消耗」的数据竞争（拖 comp.gain 滑块即崩的 minidump），
+ * 没有修等待时长——参数频调时 RT 反复阻塞在 EnterCriticalSection。
+ *
+ * 设计（P-006 mEQ → B1-a liveprog → B1-b ddc 同范式）：
+ *   - JamesDSPLib 预分配 AURA_COMP_SLOTS(2) 个 CompSlot（1 活动 + 1 影子，
+ *     控制侧构建由 ctrl_mutex 串行且单 RT 线程至多一个 comp 调用在途，
+ *     故一个影子槽足够），compActive 指向当前活动快照；
+ *   - 控制线程全量拷贝活动快照到影子槽后重建（Init/参数/曲线），成功后
+ *     原子换 compActive 指针；RT 块首只读一次指针，块内不碰换出实例；
+ *   - 拷贝正确性由「验证重试」保证：RT 只写活动槽，若拷贝期间有 comp
+ *     调用进入/离开（compInFlight 非零或 compProcCount 变化），本次拷贝
+ *     可能撕裂，作废重拷（影子槽写入与 RT 零交集，重拷无副作用）；
+ *   - 选槽在途守卫双条件（任一满足即可复用换下的槽）：
+ *     a) compInFlight == 0——无任何在途 comp 调用（RT 入口原子 +1/出口
+ *        -1；x86 TSO + lock 前缀全屏障下，控制侧读到的 0 严谨证明无调用
+ *        持有旧快照）。覆盖音频停流（compProcCount 冻结）时的连续提交；
+ *     b) compProcCount >= retiredAt——换下后至少跑满 1 个音频块。
+ *   - 两条件皆不满足（RT 卡在长块内）时控制侧有界等待（500ms 墙钟，
+ *     Sleep(1) 实际粒度 5-15ms 故按时间收敛），仍无槽返回 -4（引擎忙，
+ *     旧快照继续生效），绝不退化到活动槽原地重建——那会与 RT 竞争（UAF）；
+ *   - stage_comp 的 lock 标志随之置 0：RT 不再为 comp 取锁。
+ */
+#include <time.h>
+#ifdef _WIN32
+#include <intrin.h>
+#else
+#include <sched.h>
+#endif
+#define kCompSlotWaitMs 500
+/* 自旋预算（轮）：RT 块间隙通常在百微秒级，先自旋可避免 Sleep(1) 的
+ * 5-15ms 实际粒度把控制线程拖垮（B1-c 实测：纯 Sleep 重试下 comp 参数
+ * 提交从 Z13 时代的 ~17ms/次劣化到 ~285ms/次）。超预算后回落 Sleep(1)，
+ * 总墙钟仍受 kCompSlotWaitMs 收敛。 */
+#define kCompSlotSpinCount 60000
+
+/* RT 在途计数（x86：lock 前缀即全屏障；POSIX：__sync 内建） */
+static long comp_inflight_inc(volatile long *p)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	double freq[NUMPTS_DRS] = { 95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0 };
-	memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
-	cm->freq2[0] = 0.0;
-	cm->gains2[0] = cm->gains2[1];
-	cm->freq2[NUMPTS_DRS + 1] = 24000.0;
-	initIerper(&cm->pch, NUMPTS_DRS + 2);
-	jdsp->comp_gr = 0.0f;
+#ifdef _WIN32
+	return _InterlockedIncrement(p);
+#else
+	return __sync_add_and_fetch((long*)p, 1);
+#endif
 }
-void CompressorDestructor(JamesDSPLib *jdsp)
+static long comp_inflight_dec(volatile long *p)
 {
-	freeIerper(&jdsp->comp.pch);
+#ifdef _WIN32
+	return _InterlockedDecrement(p);
+#else
+	return __sync_sub_and_fetch((long*)p, 1);
+#endif
 }
-void CompressorEnable(JamesDSPLib *jdsp, char enable)
+static long comp_inflight_load(volatile long *p)
 {
-	if (jdsp->compForceRefresh)
+#ifdef _WIN32
+	/* cmpxchg 同值：带 lock 前缀的读，防编译器重排 + 全屏障 */
+	return _InterlockedCompareExchange(p, 0, 0);
+#else
+	return __sync_val_compare_and_swap((long*)p, 0, 0);
+#endif
+}
+static double comp_now_ms(void)
+{
+#ifdef _WIN32
+	return (double)GetTickCount64();
+#else
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (double)ts.tv_sec * 1000.0 + (double)ts.tv_nsec / 1000000.0;
+#endif
+}
+static void comp_sleep_ms(unsigned int ms)
+{
+#ifdef _WIN32
+	Sleep(ms);
+#else
+	struct timespec ts;
+	ts.tv_sec = 0;
+	ts.tv_nsec = (long)ms * 1000000L;
+	nanosleep(&ts, 0);
+#endif
+}
+static void comp_yield(void)
+{
+#ifdef _WIN32
+	YieldProcessor();
+#else
+	sched_yield();
+#endif
+}
+/* 选构建目标槽：非活动 + 在途守卫通过（双条件任一满足）：
+ *   a) compInFlight == 0（无在途调用，覆盖音频停流时 procCount 冻结）；
+ *   b) compProcCount >= retiredAt（换下后跑满 1 块）。
+ * 返回槽下标；无可用槽返回 -1（RT 卡在长块内的极端场景）。 */
+/* [PATCHED-AuraDSP P-034] 选构建目标槽：非活动 + 在途守卫通过（双条件任一满足）：
+ *   a) compInFlight == 0（无在途调用，覆盖音频停流时 procCount 冻结）；
+ *   b) compProcCount >= retiredAt（换下后跑满 1 块）。
+ * 返回槽下标；无可用槽返回 -1（RT 卡在长块内的极端场景）。 */
+static int CompressorPickSlot(JamesDSPLib *jdsp)
+{
+	const long inFlight = comp_inflight_load(&jdsp->compInFlight);
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
 	{
-		CompressorSetParam(jdsp, jdsp->comp.fgt_facT, jdsp->comp.granularity, jdsp->comp.tfresolution, 1);
-		CompressorSetGain(jdsp, 0, 0, 0);
-		/* [PATCHED-AuraDSP Z13] 一次性消费：此前该标志只置不清，导致采样率
-		 * 变更后每一次 CompressorEnable 都全量重初始化（apply_comp 每条
-		 * comp.* 参数都会调）。刷新语义本就是 one-shot，此处补齐清除点。
-		 * 调用方契约：JamesDSPSetSampleRate 持 jdsp_lock 调用；apply_comp
-		 * 持 jdsp_lock 调用（Z13 起）——与 RT comp stage 的 jdsp_lock 互斥。 */
-		jdsp->compForceRefresh = 0;
-	}
-	if (enable)
-		jdsp->compEnabled = 1;
-}
-void CompressorDisable(JamesDSPLib *jdsp)
-{
-	jdsp->compEnabled = 0;
-	jdsp->comp_gr = 0.0f;
-}
-void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularity, int tfresolution, char forceRefresh)
-{
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	if ((fgt_facT != cm->fgt_facT || tfresolution != cm->tfresolution || granularity != cm->granularity) || forceRefresh)
-	{
-		FFTCompanderInit(&jdsp->comp, jdsp->fs, tfresolution, 3, 1.0);
-		cm->fgt_facT = fgt_facT;
-		cm->tfresolution = tfresolution;
-		cm->granularity = granularity;
-		if (cm->tfresolution < 3)
+		CompSlot *s = &jdsp->compSlots[i];
+		int isActive = 0;
+		for (int k = 0; k < AURA_COMP_CHANNELS; ++k)
 		{
-			cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * jdsp->comp.spectralRate)));
-			double avgBW;
-			if (!cm->granularity)
-				avgBW = 1.65;
-			else if (cm->granularity == 1)
-				avgBW = 1.45;
-			else if (cm->granularity == 2)
-				avgBW = 1.2;
-			else if (cm->granularity == 3)
-				avgBW = 1.15;
-			else
-				avgBW = 1.08;
-			FFTCompanderSetavgBW(cm, avgBW);
+			if (&s->cm == jdsp->compActive[k]) { isActive = 1; break; }
 		}
-		else if (cm->tfresolution == 3)
-		{
-			cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * jdsp->fs)));
-		}
+		if (isActive)
+			continue;
+		if (inFlight != 0 && s->retiredAt != 0 && jdsp->compProcCount < s->retiredAt)
+			continue;
+		return i;
+	}
+	return -1;
+}
+/* 选槽 + 自旋优先的有界等待（墙钟总上界 kCompSlotWaitMs）。 */
+static int CompressorPickSlotWait(JamesDSPLib *jdsp, double deadline)
+{
+	int slot = CompressorPickSlot(jdsp);
+	if (slot >= 0)
+		return slot;
+	for (unsigned int spin = 0; spin < kCompSlotSpinCount; ++spin)
+	{
+		comp_yield();
+		slot = CompressorPickSlot(jdsp);
+		if (slot >= 0)
+			return slot;
+	}
+	for (;;)
+	{
+		comp_sleep_ms(1);
+		slot = CompressorPickSlot(jdsp);
+		if (slot >= 0)
+			return slot;
+		if (comp_now_ms() >= deadline)
+			return -1;
 	}
 }
-void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
+/* 状态携带集：RT 演化、且本次构建不会重写的字段。两份构建路径都适用：
+ *  - tfres>=3 增益平滑/系数斜坡/合成滤波器状态（Init(tfres3) 只重置
+ *    Zre/Zim，这些一律不重置，必须延续否则每次调参都可闻重启）；
+ *  - STFT 在途簿记 + 环形缓冲 + oldBuf 谱包络（Init 会重置；非 Init
+ *    构建——legacy SetGain 路径——必须延续）；
+ *  - d0/d1/c1/c2/overallGain：Init(tfres3) 会写，非 Init 构建需延续；
+ *  - freq2/gains2：控制侧写、RT 不碰（源稳定），随军队列保持一致，
+ *    供 cpy=0 的曲线重算使用。
+ * 必须一致拷贝 ⇒ 验证重试（RT 只写活动槽，重拷与 RT 零交集）。 */
+static void CompressorCarryState(FFTCompander *dst, const FFTCompander *src)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
-	if (cpy)
+	dst->mInputPos = src->mInputPos;
+	dst->mInputSamplesNeeded = src->mInputSamplesNeeded;
+	dst->mOutputBufferCount = src->mOutputBufferCount;
+	dst->mOutputReadSampleOffset = src->mOutputReadSampleOffset;
+	memcpy(dst->mInput, src->mInput, sizeof(src->mInput));
+	memcpy(dst->buffer, src->buffer, sizeof(src->buffer));
+	memcpy(dst->oldBuf, src->oldBuf, sizeof(src->oldBuf));
+	memcpy(dst->Zre, src->Zre, sizeof(src->Zre));
+	memcpy(dst->Zim, src->Zim, sizeof(src->Zim));
+	memcpy(dst->interpolatedGain, src->interpolatedGain, sizeof(src->interpolatedGain));
+	memcpy(dst->diffGain, src->diffGain, sizeof(src->diffGain));
+	dst->updateIdx = src->updateIdx;
+	memcpy(dst->c1step, src->c1step, sizeof(src->c1step));
+	memcpy(dst->c2step, src->c2step, sizeof(src->c2step));
+	memcpy(dst->d0step, src->d0step, sizeof(src->d0step));
+	memcpy(dst->d1step, src->d1step, sizeof(src->d1step));
+	dst->overallGainstep = src->overallGainstep;
+	memcpy(dst->d0, src->d0, sizeof(src->d0));
+	memcpy(dst->d1, src->d1, sizeof(src->d1));
+	memcpy(dst->c1, src->c1, sizeof(src->c1));
+	memcpy(dst->c2, src->c2, sizeof(src->c2));
+	dst->overallGain = src->overallGain;
+	memcpy(dst->z1_AL, src->z1_AL, sizeof(src->z1_AL));
+	memcpy(dst->z2_AL, src->z2_AL, sizeof(src->z2_AL));
+	memcpy(dst->z1_AR, src->z1_AR, sizeof(src->z1_AR));
+	memcpy(dst->z2_AR, src->z2_AR, sizeof(src->z2_AR));
+	memcpy(dst->freq2, src->freq2, sizeof(src->freq2));
+	memcpy(dst->gains2, src->gains2, sizeof(src->gains2));
+}
+/* 影子槽装载：initWillRun=1 时只带状态携带集（Init 会重算全部表/簿记，
+ * 省掉 1.19MB 全量拷贝）；initWillRun=0 时先全量带入表与 scratch——
+ * 表为 RT 只读（控制写）故源稳定，scratch 撕裂无害（每帧写前必读，与
+ * 当前实现 Init 后残留上帧数据同类不变量），状态字段再由携带集修正。
+ * 返回 1=装载完成；-4=墙钟超限（旧快照不受影响）。 */
+static int CompressorCopyActive(CompSlot *dst, JamesDSPLib *jdsp, FFTCompander *active, double deadline, char initWillRun)
+{
+	if (!active) return -4;
+	FFTCompander *cm = &dst->cm;
+	/* pch.s 是本槽构造时分配的私有插针数组（ierper 含堆指针，跨槽别名会
+	 * 双释放）；mOutputBuffer 末尾重绑到本槽 buffer[]（防指向活动槽）。 */
+	double *ownS = cm->pch.s;
+	if (!initWillRun)
+		memcpy(cm, active, sizeof(FFTCompander));
+	cm->pch.s = ownS;
+	for (unsigned int spin = 0;; ++spin)
 	{
-		memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
-		memcpy(cm->gains2 + 1, gains, NUMPTS_DRS * sizeof(double));
+		if (comp_inflight_load(&jdsp->compInFlight) == 0)
+		{
+			const uint64_t pc1 = jdsp->compProcCount;
+			CompressorCarryState(cm, active);
+			const uint64_t pc2 = jdsp->compProcCount;
+			if (pc1 == pc2 && comp_inflight_load(&jdsp->compInFlight) == 0)
+			{
+				for (int i = 0; i < MAX_OUTPUT_BUFFERS_DRS; ++i)
+					cm->mOutputBuffer[i] = cm->buffer[i];
+				return 1;
+			}
+		}
+		if (spin < kCompSlotSpinCount)
+		{
+			comp_yield();
+			continue;
+		}
+		comp_sleep_ms(1);
+		if (comp_now_ms() >= deadline)
+			return -4;
 	}
+}
+/* 参数尾差（FFTCompanderInit 之后）：fgt_fac / avgBW（与原 SetParam 同式） */
+static void CompressorApplyParamTail(FFTCompander *cm, float fs)
+{
+	if (cm->tfresolution < 3)
+	{
+		cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * cm->spectralRate)));
+		double avgBW;
+		if (!cm->granularity)
+			avgBW = 1.65;
+		else if (cm->granularity == 1)
+			avgBW = 1.45;
+		else if (cm->granularity == 2)
+			avgBW = 1.2;
+		else if (cm->granularity == 3)
+			avgBW = 1.15;
+		else
+			avgBW = 1.08;
+		FFTCompanderSetavgBW(cm, avgBW);
+	}
+	else if (cm->tfresolution == 3)
+	{
+		cm->fgt_fac = (float)(1.0 - exp(-1.0 / (cm->fgt_facT * fs)));
+	}
+}
+/* 增益曲线尾差：端点补齐 + pchip 重绑 + DREmult/headRoomdB 重算
+ * （与原 SetGain 同式，fs 由调用方从 jdsp 传入） */
+static void CompressorApplyCurve(FFTCompander *cm, float fs)
+{
 	cm->freq2[0] = 0.0;
 	cm->gains2[0] = cm->gains2[1];
 	cm->freq2[NUMPTS_DRS + 1] = 24000.0;
@@ -1673,7 +2060,7 @@ void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
 	if (cm->tfresolution < 3)
 	{
 		for (int i = 0; i < HALFWNDLEN_DRS; i++)
-			cm->DREmultUniform[i] = getValueAt(&cm->pch.cb, i * jdsp->fs / cm->fftLen * 0.25);
+			cm->DREmultUniform[i] = getValueAt(&cm->pch.cb, i * fs / cm->fftLen * 0.25);
 		if (!cm->noGridDownsampling)
 			ShrinkGridSpectralInterpolator(cm->octaveSmooth, cm->procUpTo, cm->DREmultUniform, cm->DREmult);
 		else
@@ -1735,18 +2122,304 @@ void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
 				cm->headRoomdB = cm->DREmult[i] * 12.0f;
 	}
 }
-void CompressorProcess(JamesDSPLib *jdsp, size_t n)
+/* [PATCHED-AuraDSP P-034] 逐声道重建提交：遍历 8 个声道活动槽 */
+int CompressorCommit(JamesDSPLib *jdsp, float fgt_facT, int granularity,
+                     int tfresolution, char forceRefresh,
+                     const double *freq, const double *gains,
+                     char cpy, char applyCurve)
 {
-	FFTCompander *cm = (FFTCompander *)(&jdsp->comp);
+	if (!jdsp->compActive[0])
+		return -4;
+	const double deadline = comp_now_ms() + kCompSlotWaitMs;
+
+	for (int ch = 0; ch < AURA_COMP_CHANNELS; ++ch)
+	{
+		int slot = CompressorPickSlotWait(jdsp, deadline);
+		if (slot < 0)
+			return -4;
+		CompSlot *dst = &jdsp->compSlots[slot];
+		FFTCompander *active = jdsp->compActive[ch];
+		/* 变更判定以活动快照当前参数为基线（这三个字段控制侧写、RT 不碰，
+		 * 读取稳定）；判定结果同时决定影子装载范围（Init 会重算全部表/簿记，
+		 * 无需 1.19MB 全量拷贝）。 */
+		const char initWillRun = (fgt_facT != active->fgt_facT ||
+		                          tfresolution != active->tfresolution ||
+		                          granularity != active->granularity) || forceRefresh;
+		if (CompressorCopyActive(dst, jdsp, active, deadline, initWillRun) != 1)
+			return -4;
+		FFTCompander *cm = &dst->cm;
+		/* 构建（只写影子槽，与 RT 零交集） */
+		if (initWillRun)
+		{
+			FFTCompanderInit(cm, jdsp->fs, tfresolution, 3, 1.0);
+			cm->fgt_facT = fgt_facT;
+			cm->tfresolution = tfresolution;
+			cm->granularity = granularity;
+			CompressorApplyParamTail(cm, jdsp->fs);
+		}
+		if (cpy && freq && gains)
+		{
+			memcpy(cm->freq2 + 1, freq, NUMPTS_DRS * sizeof(double));
+			memcpy(cm->gains2 + 1, gains, NUMPTS_DRS * sizeof(double));
+		}
+		if (applyCurve)
+			CompressorApplyCurve(cm, jdsp->fs);
+		cm->isMono = (ch > 0) ? 1 : 0;
+		/* 原子换指针（x86-64 对齐指针存即原子；RT 块首只读一次，数据依赖保证
+		 * 后续字段读取不会重排到指针读取之前） */
+		FFTCompander *prev = jdsp->compActive[ch];
+		jdsp->compActive[ch] = cm;
+		dst->retiredAt = 0;
+		const uint64_t q = jdsp->compProcCount; /* 换指针后读（与 B1-a/b 同序） */
+		if (prev != cm)
+			((CompSlot *)prev)->retiredAt = q + 1;
+		jdsp->compSwapProc = q;
+	}
+	return 1;
+}
+
+/* [PATCHED-AuraDSP P-034] 初始化 9 个槽位与 8 个活动通道指针 */
+void CompressorConstructor(JamesDSPLib *jdsp)
+{
+	double defaultFreq[NUMPTS_DRS] = { 95.0, 200.0, 400.0, 800.0, 1600.0, 3400.0, 7500.0 };
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
+	{
+		CompSlot *s = &jdsp->compSlots[i];
+		FFTCompander *cm = &s->cm;
+		s->retiredAt = 0;
+		initIerper(&cm->pch, NUMPTS_DRS + 2);
+		memcpy(cm->freq2 + 1, defaultFreq, NUMPTS_DRS * sizeof(double));
+		cm->freq2[0] = 0.0;
+		memset(cm->gains2, 0, sizeof(cm->gains2));
+		cm->gains2[0] = cm->gains2[1];
+		cm->freq2[NUMPTS_DRS + 1] = 24000.0;
+		cm->isMono = (i > 0) ? 1 : 0;
+	}
+	for (int i = 0; i < AURA_COMP_CHANNELS; ++i)
+	{
+		jdsp->compActive[i] = &jdsp->compSlots[i].cm;
+		jdsp->compActive[i]->isMono = (i > 0) ? 1 : 0;
+	}
+	jdsp->compProcCount = 0;
+	jdsp->compSwapProc = 0;
+	jdsp->compInFlight = 0;
+	jdsp->comp_gr = 0.0f;
+}
+
+void CompressorDestructor(JamesDSPLib *jdsp)
+{
+	for (int i = 0; i < AURA_COMP_SLOTS; ++i)
+		freeIerper(&jdsp->compSlots[i].cm.pch);
+	for (int i = 0; i < AURA_COMP_CHANNELS; ++i)
+		jdsp->compActive[i] = 0;
+}
+
+void CompressorEnable(JamesDSPLib *jdsp, char enable)
+{
+	if (jdsp->compForceRefresh)
+	{
+		/* B1-c：刷新走影子提交（替代持锁原地全量重置）。以活动快照当前参数
+		 * 为基线，forceRefresh=1 恒触发 Init。失败（-4，RT 卡在 comp 内
+		 * >500ms 的极端场景）不清标志——保留旧快照继续运行，下次 Enable /
+		 * apply_comp 补上，绝不静默丢掉刷新语义。 */
+		FFTCompander *a = jdsp->compActive[0];
+		if (a && CompressorCommit(jdsp, a->fgt_facT, a->granularity,
+		                          a->tfresolution, 1, 0, 0, 0, 1) == 1)
+			jdsp->compForceRefresh = 0;
+	}
+	if (enable)
+		jdsp->compEnabled = 1;
+}
+
+void CompressorDisable(JamesDSPLib *jdsp)
+{
+	jdsp->compEnabled = 0;
+	jdsp->comp_gr = 0.0f;
+}
+
+void CompressorSetParam(JamesDSPLib *jdsp, float fgt_facT, int granularity, int tfresolution, char forceRefresh)
+{
+	/* B1-c：影子构建 + 原子换指针（替代持 jdsp_lock 原地重置）。
+	 * applyCurve=1：携带集不含 DREmult/headRoomdB（曲线字段），若本次 Init
+	 * 改了 procUpTo 而曲线不重算，换入后 RT 将按陈旧曲线运行——原实现靠
+	 * SetParam+SetGain 同一把锁内连续执行掩盖了该窗口，影子方案下必须让
+	 * 每次提交自洽（用携带的 freq2/gains2 重算，与 SetGain(cpy=0) 同式）。 */
+	CompressorCommit(jdsp, fgt_facT, granularity, tfresolution, forceRefresh, 0, 0, 0, 1);
+}
+
+void CompressorSetGain(JamesDSPLib *jdsp, double *freq, double *gains, char cpy)
+{
+	/* B1-c：同上。以活动快照当前参数为基线（参数未变不触发 Init），
+	 * 只重算增益曲线（applyCurve=1）。 */
+	FFTCompander *a = jdsp->compActive[0];
+	if (!a)
+		return;
+	CompressorCommit(jdsp, a->fgt_facT, a->granularity, a->tfresolution, 0, freq, gains, cpy, 1);
+}
+
+/* [PATCHED-AuraDSP P-034] 块处理生命周期与多声道逐通道处理 */
+void CompressorProcessBlockStart(JamesDSPLib *jdsp)
+{
+	jdsp->compProcCount++;
+	comp_inflight_inc(&jdsp->compInFlight);
+	jdsp->comp_gr = 0.0f;
+}
+
+void CompressorProcessBlockEnd(JamesDSPLib *jdsp)
+{
+	comp_inflight_dec(&jdsp->compInFlight);
+}
+
+void CompressorProcess(JamesDSPLib *jdsp, size_t n, int enabled)
+{
+	/* B1-c：在途守卫双计数——RT 单写者，每块必过（stage_comp 恒在链中），
+	 * 与 enabled 无关：停用期间块边界也要放行影子槽复用。
+	 * compProcCount 供 retiredAt 边界判定；compInFlight 证明无调用持有
+	 * 快照（入口 +1 / 出口 -1，lock 前缀全屏障）。
+	 * [B4] enabled 由调用方传入（stage_comp 依据调用级门控或全局
+	 * compEnabled 求值）——RT 不再为了「本次调用停用」而改写全局开关。 */
+	CompressorProcessBlockStart(jdsp);
+	if (enabled)
+	{
+		/* 块首一次读取活动快照；控制侧换指针不影响本块后续样本 */
+		FFTCompander *cm = jdsp->compActive[0];
+		if (cm)
+		{
+			cm->isMono = 0;
+			if (cm->tfresolution < 3)
+			{
+				/* 整块交给 ProcessSamples：它内部按 hop 分块（填充→缺额→抽干），
+				 * 并且**必须看到完整块长**才能算出正确的启动缺额（相位由块长与 hop
+				 * 的最大公约数决定）。 */
+				FFTCompanderProcessSamples(cm, jdsp->tmpBuffer[0], jdsp->tmpBuffer[1], (unsigned int)n,
+				                           jdsp->tmpBuffer[0], jdsp->tmpBuffer[1]);
+			}
+			else
+			{
+				unsigned int smp, i, sb;
+				float yre, yim;
+				float *ZreL = cm->Zre;
+				float *ZimL = cm->Zim;
+				float *ZreR = ZreL + DYN_BANDS_GAMMATONE;
+				float *ZimR = ZimL + DYN_BANDS_GAMMATONE;
+				for (smp = 0; smp < n; smp++)
+				{
+					for (sb = 0; sb < DYN_BANDS_GAMMATONE; sb++)
+					{
+						filter2(&ZreL[sb], &ZimL[sb], &cm->bRe[sb], &cm->aRe[sb], &cm->aIm[sb], jdsp->tmpBuffer[0][smp], &yre, &yim);
+						float leftMag = hypotf(yre, yim);
+						filter2(&ZreR[sb], &ZimR[sb], &cm->bRe[sb], &cm->aRe[sb], &cm->aIm[sb], jdsp->tmpBuffer[1][smp], &yre, &yim);
+						float rightMag = hypotf(yre, yim);
+						float magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+						cm->oldBuf[sb] = cm->oldBuf[sb] + cm->fgt_fac * (magNormalized - cm->oldBuf[sb]);
+						cm->interpolatedGain[sb + 1] = processfftCompdB(cm, sb, magNormalized);
+					}
+					cm->interpolatedGain[0] = cm->interpolatedGain[1];
+					cm->interpolatedGain[DYN_BANDS_GAMMATONE + 1] = cm->interpolatedGain[DYN_BANDS_GAMMATONE];
+					float *gn = cm->interpolatedGain + 1;
+					cm->diffGain[0] = gn[0] + cm->dsSm * (cm->diffGain[0] - gn[0]);
+					for (sb = 0; sb < DYN_BANDS_GAMMATONE - 1; sb++)
+					{
+						float diff = gn[sb + 1] - gn[sb];
+						cm->diffGain[sb + 1] = diff + cm->dsSm * (cm->diffGain[sb + 1] - diff);
+					}
+					cm->updateIdx = (cm->updateIdx + 1) & (cm->updatePerNSmps - 1);
+					if (cm->updateIdx == 0)
+					{
+						float c1, c2, d0, d1, unityGain;
+						HSHOSVF2nd(cm->diffGain[0 + 1], cm->diffGain[0], &c1, &c2, &d0, &d1, &unityGain, cm->trigo);
+						cm->d0step[0] = (d0 - cm->d0[0]) * cm->alpha;
+						cm->d1step[0] = (d1 - cm->d1[0]) * cm->alpha;
+						cm->c1step[0] = (c1 - cm->c1[0]) * cm->alpha;
+						cm->c2step[0] = (c2 - cm->c2[0]) * cm->alpha;
+						cm->overallGainstep = (unityGain - cm->overallGain) * cm->alpha;
+						for (sb = 1; sb < DYN_BANDS_GAMMATONE - 1; sb++)
+						{
+							HSHOSVF2ndNoOverallGain(cm->diffGain[sb + 1], &c1, &c2, &d0, &d1, cm->trigo + sb * 4);
+							cm->d0step[sb] = (d0 - cm->d0[sb]) * cm->alpha;
+							cm->d1step[sb] = (d1 - cm->d1[sb]) * cm->alpha;
+							cm->c1step[sb] = (c1 - cm->c1[sb]) * cm->alpha;
+							cm->c2step[sb] = (c2 - cm->c2[sb]) * cm->alpha;
+						}
+					}
+					for (sb = 0; sb < DYN_BANDS_GAMMATONE - 1; sb++)
+					{
+						cm->d0[sb] += cm->d0step[sb];
+						cm->d1[sb] += cm->d1step[sb];
+						cm->c1[sb] += cm->c1step[sb];
+						cm->c2[sb] += cm->c2step[sb];
+					}
+					cm->overallGain += cm->overallGainstep;
+					float x1 = jdsp->tmpBuffer[0][smp];
+					float x2 = jdsp->tmpBuffer[1][smp];
+					for (i = 0; i < DYN_BANDS_GAMMATONE - 1; i++)
+					{
+						float y1 = x1 - cm->z1_AL[i] - cm->z2_AL[i];
+						x1 = cm->d0[i] * y1 + cm->d1[i] * cm->z1_AL[i] + cm->z2_AL[i];
+						cm->z2_AL[i] = cm->z2_AL[i] + cm->c2[i] * cm->z1_AL[i];
+						cm->z1_AL[i] = cm->z1_AL[i] + cm->c1[i] * y1;
+						float y2 = x2 - cm->z1_AR[i] - cm->z2_AR[i];
+						x2 = cm->d0[i] * y2 + cm->d1[i] * cm->z1_AR[i] + cm->z2_AR[i];
+						cm->z2_AR[i] = cm->z2_AR[i] + cm->c2[i] * cm->z1_AR[i];
+						cm->z1_AR[i] = cm->z1_AR[i] + cm->c1[i] * y2;
+					}
+					jdsp->tmpBuffer[0][smp] = x1 * cm->overallGain;
+					jdsp->tmpBuffer[1][smp] = x2 * cm->overallGain;
+				}
+			}
+			/* [PATCHED-AuraDSP P-025 P2.4] 动态压缩增益衰减实时计量 */
+			float min_g = 1.0f;
+			if (cm->tfresolution < 3)
+			{
+				unsigned int count = cm->smallGridSize > 0 ? cm->smallGridSize : (cm->procUpTo > 0 ? cm->procUpTo : 1);
+				if (count > HALFWNDLEN_DRS) count = HALFWNDLEN_DRS;
+				for (unsigned int i = 0; i < count; ++i)
+				{
+					if (cm->finalGain[i] > 0.0f && cm->finalGain[i] < min_g) min_g = cm->finalGain[i];
+				}
+			}
+			else
+			{
+				float og = cm->overallGain > 0.0f ? cm->overallGain : 1.0f;
+				for (int sb = 0; sb < DYN_BANDS_GAMMATONE; ++sb)
+				{
+					float g = cm->interpolatedGain[sb + 1] * og;
+					if (g > 0.0f && g < min_g) min_g = g;
+				}
+			}
+			float gr_db = 0.0f;
+			if (min_g < 0.999f && min_g > 1e-6f)
+			{
+				gr_db = -20.0f * log10f(min_g);
+			}
+			jdsp->comp_gr = gr_db;
+		}
+	}
+	CompressorProcessBlockEnd(jdsp);
+}
+
+/* [PATCHED-AuraDSP P-034] 单声道逐通道独立压缩处理 */
+void CompressorProcessChannel(JamesDSPLib *jdsp, int ch, const float *in, float *out, size_t n, int enabled)
+{
+	if (!jdsp || ch < 0 || ch >= AURA_COMP_CHANNELS || !in || !out || n == 0)
+		return;
+	if (!enabled)
+	{
+		if (in != out)
+			memcpy(out, in, n * sizeof(float));
+		return;
+	}
+	FFTCompander *cm = jdsp->compActive[ch];
+	if (!cm)
+	{
+		if (in != out)
+			memcpy(out, in, n * sizeof(float));
+		return;
+	}
+	cm->isMono = 1;
 	if (cm->tfresolution < 3)
 	{
-		unsigned int offset = 0;
-		while (offset < n)
-		{
-			const unsigned int processing = min(n - offset, cm->ovpLen);
-			FFTCompanderProcessSamples(cm, jdsp->tmpBuffer[0] + offset, jdsp->tmpBuffer[1] + offset, processing, jdsp->tmpBuffer[0] + offset, jdsp->tmpBuffer[1] + offset);
-			offset += processing;
-		}
+		FFTCompanderProcessSamplesMono(cm, in, (unsigned int)n, out);
 	}
 	else
 	{
@@ -1754,17 +2427,13 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 		float yre, yim;
 		float *ZreL = cm->Zre;
 		float *ZimL = cm->Zim;
-		float *ZreR = ZreL + DYN_BANDS_GAMMATONE;
-		float *ZimR = ZimL + DYN_BANDS_GAMMATONE;
 		for (smp = 0; smp < n; smp++)
 		{
 			for (sb = 0; sb < DYN_BANDS_GAMMATONE; sb++)
 			{
-				filter2(&ZreL[sb], &ZimL[sb], &cm->bRe[sb], &cm->aRe[sb], &cm->aIm[sb], jdsp->tmpBuffer[0][smp], &yre, &yim);
+				filter2(&ZreL[sb], &ZimL[sb], &cm->bRe[sb], &cm->aRe[sb], &cm->aIm[sb], in[smp], &yre, &yim);
 				float leftMag = hypotf(yre, yim);
-				filter2(&ZreR[sb], &ZimR[sb], &cm->bRe[sb], &cm->aRe[sb], &cm->aIm[sb], jdsp->tmpBuffer[1][smp], &yre, &yim);
-				float rightMag = hypotf(yre, yim);
-				float magNormalized = mag2db((leftMag + rightMag) * 0.5f);
+				float magNormalized = mag2db(leftMag);
 				cm->oldBuf[sb] = cm->oldBuf[sb] + cm->fgt_fac * (magNormalized - cm->oldBuf[sb]);
 				cm->interpolatedGain[sb + 1] = processfftCompdB(cm, sb, magNormalized);
 			}
@@ -1804,24 +2473,17 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 				cm->c2[sb] += cm->c2step[sb];
 			}
 			cm->overallGain += cm->overallGainstep;
-			float x1 = jdsp->tmpBuffer[0][smp];
-			float x2 = jdsp->tmpBuffer[1][smp];
+			float x1 = in[smp];
 			for (i = 0; i < DYN_BANDS_GAMMATONE - 1; i++)
 			{
 				float y1 = x1 - cm->z1_AL[i] - cm->z2_AL[i];
 				x1 = cm->d0[i] * y1 + cm->d1[i] * cm->z1_AL[i] + cm->z2_AL[i];
 				cm->z2_AL[i] = cm->z2_AL[i] + cm->c2[i] * cm->z1_AL[i];
 				cm->z1_AL[i] = cm->z1_AL[i] + cm->c1[i] * y1;
-				float y2 = x2 - cm->z1_AR[i] - cm->z2_AR[i];
-				x2 = cm->d0[i] * y2 + cm->d1[i] * cm->z1_AR[i] + cm->z2_AR[i];
-				cm->z2_AR[i] = cm->z2_AR[i] + cm->c2[i] * cm->z1_AR[i];
-				cm->z1_AR[i] = cm->z1_AR[i] + cm->c1[i] * y2;
 			}
-			jdsp->tmpBuffer[0][smp] = x1 * cm->overallGain;
-			jdsp->tmpBuffer[1][smp] = x2 * cm->overallGain;
+			out[smp] = x1 * cm->overallGain;
 		}
 	}
-	/* [PATCHED-AuraDSP P2.4] 动态压缩增益衰减实时计量 */
 	float min_g = 1.0f;
 	if (cm->tfresolution < 3)
 	{
@@ -1841,10 +2503,9 @@ void CompressorProcess(JamesDSPLib *jdsp, size_t n)
 			if (g > 0.0f && g < min_g) min_g = g;
 		}
 	}
-	float gr_db = 0.0f;
 	if (min_g < 0.999f && min_g > 1e-6f)
 	{
-		gr_db = -20.0f * log10f(min_g);
+		float gr_db = -20.0f * log10f(min_g);
+		if (gr_db > jdsp->comp_gr) jdsp->comp_gr = gr_db;
 	}
-	jdsp->comp_gr = gr_db;
 }

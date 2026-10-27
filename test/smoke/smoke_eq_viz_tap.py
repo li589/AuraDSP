@@ -66,21 +66,20 @@ def load_band_edges():
     return vals
 
 
-class VizFrame(ctypes.Structure):
-    # [Phase B] 2026-10-24 ABI v2：尾部追加 per-channel 电平，536B → 1600B。
-    _fields_ = [
-        ("seq", ctypes.c_uint64),
-        ("timestamp_ms", ctypes.c_double),
-        ("spectrum", ctypes.c_float * BANDS),
-        ("eq_in_spectrum", ctypes.c_float * BANDS),
-        ("level_l_dbfs", ctypes.c_float),
-        ("level_r_dbfs", ctypes.c_float),
-        ("stage_levels_l", ctypes.c_float * 32),
-        ("stage_levels_r", ctypes.c_float * 32),
-        ("channel_count", ctypes.c_uint32),
-        ("channel_levels", ctypes.c_float * 8),
-        ("stage_ch_levels", ctypes.c_float * (32 * 8)),
-    ]
+# --- VizFrame 单一来源（§7-1 ABI 镜像门禁）---
+# ctypes 镜像只在 tools/bin/viz_frame.py 定义一次，这里不再手抄。
+# 手抄件的危险：头文件 sizeof 改了却漏改某个脚本 → 脚本按旧尺寸申请缓冲、
+# 引擎按新尺寸写 → 静默堆越界（审查 A1/A2/A3 三处即此）。viz_frame 导入时
+# 自带 sizeof / ABI 版本哨兵，出错就地抛 AssertionError。
+_VIZ_ROOT = os.path.dirname(os.path.abspath(__file__))
+while not os.path.isfile(os.path.join(_VIZ_ROOT, 'tools', 'bin', 'viz_frame.py')):
+    _VIZ_PARENT = os.path.dirname(_VIZ_ROOT)
+    if _VIZ_PARENT == _VIZ_ROOT:
+        raise ImportError('未找到 tools/bin/viz_frame.py（VizFrame 的唯一定义处）')
+    _VIZ_ROOT = _VIZ_PARENT
+if os.path.join(_VIZ_ROOT, 'tools', 'bin') not in sys.path:
+    sys.path.insert(0, os.path.join(_VIZ_ROOT, 'tools', 'bin'))
+from viz_frame import VizFrame  # noqa: E402
 
 
 def main() -> int:

@@ -22,13 +22,40 @@
   "routingNoSub": "サブなし (7/8)",
   "routingAllBypassed": "全バイパス (0/8)",
   "routingSurroundOnly": "サラウンドのみ (4/8)",
-  "routingSelectedCount": "{count}/8 選択",
+  "routingPairHint": "ステレオペア単位で適用：FL/FR、C/LFE、SL/SR、BL/BR は対で切り替え、単独選択は無効",
+  "routingSelectedCount": "{count}/{total} 選択",
+  "@routingSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "routingStereoPathSummary": "直通 (ステレオ/マトリクス)",
+  "routingStereoPathHint": "ステレオまたはマトリクスダウンミックス経路のため、全チャンネルが一括処理され、個別チャンネルマスクは無効です。",
+  "flfrOnlyHint": "フロント FL/FR ペアにのみ適用（マルチチャンネル独立時、サラウンドと LFE は直通）",
   "channelRouting": "詳細チャンネルルーティング",
   "routingPresets": "プリセット:",
   "routingPresetAll": "全て",
+  "routingPresetFront": "フロントのみ",
+  "routingPresetBack": "リアのみ",
   "routingPresetStereo": "ステレオ",
   "routingPresetNoLfe": "サブなし",
   "routingPresetSurround": "サラウンド",
+  "channelCount": "チャンネル数",
+  "channelCountHint": "動作チャンネルトポロジ。自動モードは音源とデバイスに従い、手動で2.0 / 4.0 / 5.1 / 7.1に固定も可能です。",
+  "channelCountAuto": "自動",
+  "channelCountAutoDesc": "自動ネゴシエーション中 · 現在のトポロジ：{count} チャンネル",
+  "@channelCountAutoDesc": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "setConnStatus": "接続状態",
   "setConnActive": "接続済み（コールバック動作中）",
   "setConnIdle": "未接続（Voicemeeter 起動待ち）",
@@ -151,15 +178,15 @@
   "catTone": "トーン",
   "catEq": "イコライザー",
   "catStage": "ステージ",
-  "catSpace": "空間",
+  "catSpace": "空間効果",
+  "catStereo": "ステレオ",
   "catOutput": "出力",
   "catEffect": "エフェクト",
-  "eelMissingSample": "@sample セクションがありません（エンジンがコンパイルを拒否します）",
   "arbmagMinPoints": "有効なポイントが 2 つ以上必要です（周波数 ゲインdB; …）",
   "arbmagGraphicEqInvalid": "GraphicEQ が無効です：{err}",
   "arbmagReadFailed": "ファイルの読み取りに失敗しました: {err}",
   "arbmagPoints": "{n} ポイント",
-  "arbmagNodes": "{n} ノード",
+  "arbmagNodes": "{count} 個の周波数ポイントを読み込みました",
   "bassHintIntensity": "低域の重さとパンチを強化。上げるほど深い低域になりますが、過剰は避けてください。",
   "bassHintFrequency": "低音ブーストの上限周波数。これ以下が増厚されます。60〜120 Hz が目安です。",
   "bassShelfRouting": "ローシェルフ チャンネルルーティング",
@@ -187,7 +214,7 @@
   "inputReset100": "100% にリセット",
   "inputFinal": "最終: {desc}",
   "inputResetHint": "ダブルクリックまたはタップで 100% に戻します",
-  "loudnessHint": "補正の強さ。小音量では高め、大音量では低めかオフ（大音量時は自動バイパス）。",
+  "loudnessHint": "小音量で低域と高域を自動補正、大音量ではスルー",
   "postHintGain": "全体出力レベルの補正。DSP チェーン後に音量が小さい場合に調整。",
   "postCeiling": "リミットしきい値",
   "postHintCeiling": "マスタリング級ルックアヘッドのしきい値。超過トランジェントを透明に抑え、クリッピングと ISP を防止します。",
@@ -203,6 +230,17 @@
   "reverbHintWidth": "リバーブのバイノーラル広がり。残響を頭の周りに包み込みます。",
   "reverbHintDamp": "高域ダンピング。大きいと温かみ、小さいと明るく透通った音色。",
   "reverbHintDry": "ドライ信号の残量。声の明瞭さと芯を保ちます。",
+  "reverbHintWidthMc": "マルチチャンネル FDN の広がり。FL/FR・SL/SR・BL/BR の3ペアのみ拡張し、C と LFE は変更しません。",
+  "reverbEngineLabel": "現在のエンジン",
+  "reverbEngineStereo": "ステレオ (Vendor)",
+  "reverbEngineMc": "マルチチャンネル FDN",
+  "reverbEngineOff": "オフ",
+  "reverbEngineInfo": "リバーブは現在のチャンネル経路に従います：マトリックス/バイノーラルは vendor Progenitor2、ディスクリート多チャンネルは8ライン FDN。2つが同時に動作することはありません。",
+  "reverbLfe": "LFE をリバーブへ",
+  "reverbLfeInfo": "LFE を 120Hz ローパス＋-6dB でマルチチャンネルリバーブへ送り、ウェット戻しにも同じローパスをかけます。ステレオ経路では無効です。",
+  "reverbPredelay": "プリディレイ",
+  "reverbPredelayInfo": "リバーブ前の遅延（0〜100ms）。プリセットの基本プリディレイに加算され、カスタムでは 0 から始まります。",
+  "reverbLegacyPreset": "旧プリセット {id}",
   "spatialHintRoom": "仮想空間の反射量。大きいほど奥深く豊かな空間感になります。",
   "spatialHintWidth": "バイノーラルの広がりと仮想スピーカー間隔を拡大。適度な設定で豊かさを保ちます。",
   "spatialHintFocus": "センターの声の結像を制御。適度に上げるとボーカルが明瞭に中央へ。",
@@ -219,8 +257,9 @@
   "vbPluginTooltip": "チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）",
   "vbPluginLockedHint": "バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）",
   "vbAutoProtect": "自動過負荷保護",
-  "vbProtectHint": "コールバックが継続して予算超過のとき、プラグインを監視バスに自動絞り込みし、回復後に自動復帰",
+  "vbProtectHint": "音声処理期限はドライバのバッファサイズに基づきます（例：128フレーム@48kHz=2.7ms）。処理時間（EMA）が予算の85%を超え続けると、音飛びを防ぐためプラグインを監視バスに自動絞り込みし、負荷回復後に自動復帰します。",
   "vbProtectActive": "作動中：プラグインは監視バスのみ、他はスルー（コールバック過負荷）",
+  "vbProtectActiveTag": "保護作動中",
   "shelfTitle": "ローシェルフ",
   "shelfHint": "コーナー以下を持ち上げ/抑えて薄い低音や膨らみを整える",
   "shelfFreq": "ゲイン周波数",
@@ -232,8 +271,54 @@
   "shelfFreqTooltip": "ローシェルフのカットオフ周波数（40～400Hz）。この周波数以下の低域を一括増減",
   "shelfGainTooltip": "カットオフ以下のゲイン増減（-15～+15dB）。厚みの強調や膨らみの抑制に",
   "bassmonoFreqTooltip": "この周波数（20～300Hz）以下の低域をモノラル化し、位相干渉と濁りを排除",
+  "bassShapingMasterHint": "マスター：いずれかのモジュールが有効なら動作",
+  "bassShelfModule": "ローシェルフ",
+  "bassMonoModule": "低域モノラル化",
+  "bassMonoDesc": "クロスオーバー以下の低域をモノラル化し、位相打消しと濁りを解消します。",
+  "channelSelection": "チャンネル選択",
+  "bassShelfRoutingHint": "ローシェルフフィルターを適用するチャンネルを選択します。未選択のチャンネルはそのままスルーされます。",
+  "bassMonoPairsTooltip": "低域モノラル化を適用するチャンネルペアを選択します。未選択ペアはスルーされます。ステレオ/バイノーラルはL/Rのみ対象です。",
+  "bassMonoPairs": "チャンネル選択",
+  "bassMonoPairCount": "{count} ペア",
+  "@bassMonoPairCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoPairFront": "フロント",
+  "bassMonoPairCenterLfe": "センター+LFE",
+  "bassMonoPairSide": "サイド",
+  "bassMonoPairBack": "リア",
+  "bassMonoPairAll": "すべて",
+  "bassMonoPairFrontOnly": "フロントのみ",
+  "bassMonoPairUnavailable": "現在の出力にこのペアはありません",
+  "bassMonoMerge": "結合方法",
+  "bassMonoMergePerPair": "ペアごと",
+  "bassMonoMergeGlobal": "すべて結合",
+  "bassMonoMergeSinglePairHint": "ペアが1組のみの場合、両モードは同じです",
+  "bassMonoNoneSelected": "チャンネルペア未選択 · 処理しません",
+  "bassMonoIgnoredPairs": "現在の出力にない {count} ペアを無視しました",
+  "@bassMonoIgnoredPairs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoLfeWarning": "C/LFE の平均化はセンターと LFE の分離を損ないます（非推奨）",
+  "bassMonoStereoPathHint": "ステレオ/マトリックス/バイノーラル：L/R のみに適用",
   "retryNow": "再試行",
-  "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従（本設定はプロセス内のみ有効）",
+  "sampleRateDeviceActual": "デバイス実測：{rate} Hz",
+  "@sampleRateDeviceActual": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "sampleRateFollowBridge": "ブリッジモードではVB/ASIOデバイスに追従。本選択は優先度として保存されるのみ（プロセス内モードへ戻すか次回起動時に適用）",
   "latencyLabel": "遅延",
   "latencyMs": "遅延 {n}ms",
   "latencyTip": "アルゴリズム追加レイテンシ：遅延を生む効果のみ加算（例：リバーブ +30ms）。低遅延効果は 0ms",
@@ -251,6 +336,9 @@
   "reverbOff": "オフ",
   "stereoWiden": "ステレオ拡張",
   "postGain": "出力ゲイン",
+  "postPerChannelTrim": "チャンネル別出力補正",
+  "postPerChannelTrimHint": "各出力チャンネルの音量を個別に微調整します（-15 〜 +15 dB）",
+  "postResetAllTrim": "すべてリセット",
   "equalizer": "イコライザー",
   "limiter": "リミッター",
   "engineInfo": "エンジン",
@@ -275,14 +363,14 @@
   "aboutBody": "AuraDSP Engines + AuraDSP UI。DSP コアは libjamesdsp（ソース統合、GPL 系）。",
   "spectrum": "リアルタイムスペクトル",
   "noAudio": "アイドル — エンジンに音声ストリームなし",
-  "reverbPreset0": "コンサートホール",
-  "reverbPreset1": "小ホール",
+  "reverbPreset0": "大ホール",
+  "reverbPreset1": "コンサートホール",
   "reverbPreset2": "中ホール",
-  "reverbPreset3": "大ホール",
-  "reverbPreset4": "巨大ホール",
-  "reverbPreset5": "大聖堂",
-  "reverbPreset6": "超巨大ホール",
-  "reverbPreset7": "渓谷",
+  "reverbPreset3": "小ホール",
+  "reverbPreset4": "スタジオ",
+  "reverbPreset5": "ルーム",
+  "reverbPreset6": "大講堂",
+  "reverbPreset7": "プレート",
   "sourceCard": "オーディオソース",
   "srcTone": "テストトーン 440Hz",
   "srcPink": "ピンクノイズ",
@@ -298,7 +386,7 @@
   "channelMode": "チャンネルモード",
   "channelsMatrix": "マトリクスダウンミックス",
   "channelsDiscrete": "チャンネル別処理",
-  "channelPhaseA": "ローカルの 4/6/8ch ファイル再生時のみ有効：マトリクスダウンミックス＝エンジンがステレオに混合して処理。チャンネル別処理＝各チャンネルを独立処理（ステレオデバイスでは事前折畳）。",
+  "channelPhaseA": "入力またはデバイスがマルチチャンネル（4.0 / 5.1 / 7.1）時のDSP方針：ディスクリート＝全チャンネルが独立してDSPを通過、エフェクターごとのマスク設定やアップミックスに対応；マトリックス＝ステレオに畳み込んでDSP処理後に再展開（LFE直通）。バイノーラル仮想サラウンド有効時はそちらが最優先されます。",
   "audioMode": "オーディオモード",
   "audioModeHint": "モード切替は即時有効；WASAPI は最終的に AuraVAIO のみに収束",
   "audioParadigm": "処理パラダイム",
@@ -465,12 +553,65 @@
   "lpDeleteAction": "削除",
   "lpRenameTitle": "スクリプト名変更",
   "lpOpFailed": "操作に失敗しました",
-  "lpCompiledIdle": "コンパイル済み — 右上のスイッチで適用",
+  "lpCompiledIdle": "コンパイル完了 · 適用をクリック",
   "lpSliders": "スクリプトスライダー（slider1..8）",
   "lpSliderHint": "宣言があれば宣言範囲、なければ 0..1。変更はリアルタイム反映",
-  "lpLibrary": "スクリプトライブラリ（%APPDATA%/AuraDSP/liveprog）",
+  "lpLibrary": "スクリプトライブラリ",
   "lpLibraryEmpty": "ライブラリは空です — 下の名前欄から保存できます",
   "lpSave": "ライブラリに保存",
+  "lpApoDialogTitle": "EqualizerAPO プリセットをインポート (.txt)",
+  "lpApoDialogDesc": "EqualizerAPO / Peace パラメトリックEQ設定を高効率なEEL2スクリプトに変換",
+  "lpApoOpenFile": ".txt ファイルを開く",
+  "lpApoPasteHint": "ここにEqualizerAPO設定テキストを貼り付けます...",
+  "lpApoSwapChannels": "チャンネル入替 (L ↔ R)",
+  "lpApoInvertPolarity": "極性反転 (位相 180°)",
+  "lpApoFiltersDetected": "{n} 個のフィルターを検出",
+  "@lpApoFiltersDetected": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpApoPreampDetected": "プリアンプ: {gain} dB",
+  "@lpApoPreampDetected": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoApply": "エディタに読み込む",
+  "lpApoPreview": "生成された EEL2 コードプレビュー",
+  "lpFind": "検索",
+  "lpReplace": "置換",
+  "lpReplaceAll": "すべて置換",
+  "lpFindNext": "次へ",
+  "lpFindPrev": "前へ",
+  "lpMatchCase": "大文字小文字を区別",
+  "lpMatchCount": "{total} 件中 {current} 件目",
+  "@lpMatchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoMatches": "一致なし",
+  "lpOutline": "コードアウトライン",
+  "lpOutlineEmpty": "セクションまたは関数が見つかりません",
+  "lpTemplates": "スクリプトテンプレート",
+  "lpTemplatesDesc": "DSPスターターテンプレートを選択して開発を高速化",
+  "lpTemplateUse": "このテンプレートを使用",
+  "lpManualSearchHint": "80+ の EEL2 関数、キーワード、レジスタを検索...",
+  "lpManualInsert": "カーソル位置に挿入",
+  "lpManualParamTitle": "パラメータ",
+  "lpManualReturnTitle": "戻り値",
+  "lpManualExampleTitle": "使用例",
+  "lpAllCategories": "すべて",
   "convTitle": "インパルス応答",
   "convOpenIr": "IR ファイルを開く",
   "convClear": "IR をクリア",
@@ -650,7 +791,6 @@
   "dyneqThreshold": "スレッショルド",
   "dyneqAttack": "アタック",
   "dyneqRelease": "リリース",
-  "loudnessHint": "小音量で低域と高域を自動補正、大音量ではスルー",
   "loudnessAmount": "補正量",
   "exciterHint": "高域に倍音を足し空気感を復元",
   "exciterAmount": "倍音量",
@@ -664,7 +804,8 @@
   "haasSide": "遅延側",
   "haasSideRight": "右チャンネル",
   "haasSideLeft": "左チャンネル",
-  "fxCatSpatial": "空間",
+  "fxCatSpatial": "空間効果",
+  "fxCatStereoOnly": "ステレオ専用",
   "fxCatLate": "エキサイター・出力",
   "spatialTitle": "空間オーディオ",
   "spatialHint": "仮想 5.0 配置と初期反射で部屋の響きを再現。リバーブ / IR / 音場カードは本カードに統合",
@@ -673,6 +814,7 @@
   "spatialStyleCinema": "シネマ",
   "spatialStyleImaging": "イメージング",
   "spatialStyleNeutral": "ニュートラル",
+  "spatialStyleCustom": "カスタム",
   "spatialRoom": "ルーム",
   "spatialRoomInfo": "初期反射レベルと時間スケール。0 はドライ、1 は大部屋",
   "spatialWidth": "広がり",
@@ -688,11 +830,7 @@
   "spatialElevation": "高さ",
   "spatialElevationInfo": "仮想ステージの仰角。正で音像が上がり、負で下がる",
   "spatialBinaural": "マルチチャンネル両耳",
-  "spatialBinauralInfo": "5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音",
-  "spatialFdn": "FDN ルーム",
-  "spatialFdnInfo": "8 ライン FDN で後期リバーブを生成し Freeverb を置換。二重の部屋を避けるため Freeverb は自動スキップ",
-  "spatialLate": "後期リバーブ",
-  "spatialLateInfo": "FDN 後期リバーブの送り量。大きいほど余韻が明確",
+  "spatialBinauralInfo": "4/5.1/7.1 を両耳ステレオへレンダリング（ヘッドホン）。出力は FL/FR のみ、他チャンネルは無音。有効中は設定画面の「チャンネルモード」を接管（当該設定は無効）",
   "spatialHeadTrack": "頭部追従",
   "spatialHeadTrackInfo": "OpenTrack UDP（ポート 4242）の頭部方位を受信。オフ時は手動角度を使用",
   "spatialHeadAzim": "頭部方位",
@@ -1086,11 +1224,14 @@
   "compTfresTransient": "過渡応答",
   "compTfresBalanced": "バランス",
   "compTfresFine": "高周波",
+  "compModePairBadge": "ペアモード（省電力）",
+  "compModePairHint": "CPUとメモリを節約するため、チャンネルペア単位でコンプレッサースロットを割り当てます。ペアの両方を選択する必要があり、片方のみ選択されたペアはバイパスされます。",
+  "compModeSemiSelectedWarning": "ペアモードは完全なペア選択が必要です。片方のみのペアはバイパスされます",
   "autoGainCompensation": "自動ゲイン補正",
   "autoGainCompensationTooltip": "音量増加に応じて出力レベルを動的に調整し、クリッピングを防止します。",
   "outputGainGate": "出力ゲインゲート",
   "outputGainGateTooltip": "このエフェクトの出力レベルを微調整 (-12.0 ~ +6.0 dB)。",
-  "arbmagSubtitle": "8192点因果的最小位相FIR畳み込み · 任意応答とAutoEq曲線",
+  "arbmagSubtitle": "8192点因果的最小位相FIR畳み込みエンジンに基づき、AutoEq GraphicEQ曲線や任意の周波数応答曲線を適用して音響特性を高精度に補正します。",
   "arbmagPresetFlat": "フラット (Flat)",
   "arbmagPresetHarman": "Harman ターゲット",
   "arbmagPresetDiffuse": "拡散音場 (Diffuse-Field)",
@@ -1099,7 +1240,6 @@
   "arbmagClear": "曲線をクリア",
   "arbmagEmptyHint": "曲線が読み込まれていません。上のプリセットを選択するか、AutoEqファイルをインポートまたはコードを貼り付けてください。",
   "arbmagEditor": "GraphicEQ コードエディタ",
-  "arbmagNodes": "{count} 個の周波数ポイントを読み込みました",
   "@arbmagNodes": {
     "placeholders": {
       "count": {
@@ -1134,7 +1274,68 @@
   },
   "fxCatFront": "前置整形",
   "fxCatCore": "コア処理",
+  "channelCenter": "センター (C)",
+  "channelLfe": "低域効果 (LFE)",
+  "channelSurroundLeft": "左サラウンド (SL)",
+  "channelSurroundRight": "右サラウンド (SR)",
+  "channelBackLeft": "左後サラウンド (BL)",
+  "channelBackRight": "右後サラウンド (BR)",
+  "inputChannelsCount": "{n} チャンネル",
+  "@inputChannelsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceTuned": "{n} ch 微調整済み",
+  "@inputBalanceTuned": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceDefault": "100% デフォルトバランス",
+  "eqPresetElectronic": "エレクトロニック (EDM)",
+  "eqPresetHiphop": "ヒップホップ",
+  "eqPresetAcoustic": "アコースティック",
+  "eqPresetMetal": "メタル",
+  "eqPresetPodcast": "ポッドキャスト",
+  "convIrPrompt": "インパルス応答 (IR) ファイルのパスを入力または選択してください：",
+  "convLoadIr": "IR を読み込む",
+  "ddcVdcPrompt": "VDC 空間補正ファイルのパスを入力または選択してください：",
+  "ddcLoadVdc": "VDC を読み込む",
+  "arbmagPrompt": "AutoEq / GraphicEQ 曲線ファイルのパスを入力または選択してください：",
+  "testAudioWavPrompt": "テストオーディオ (WAV) ファイルのパスを入力または選択してください：",
+  "testAudioMp3Prompt": "MP3 オーディオファイルのパスを入力または選択してください：",
+  "testAudioLoad": "オーディオを読み込む",
+  "pathPickerTitle": "パスを選択",
+  "pathPickerConfirm": "確認",
+  "pathPickerBrowse": "参照...",
+  "pathPickerClear": "クリア",
+  "pathPickerSelectDir": "このディレクトリを選択",
+  "pathPickerErrEmpty": "パスを入力してください",
+  "pathPickerErrDirNotExist": "指定されたディレクトリが存在しないか、アクセス権がありません",
+  "pathPickerErrFileNotExist": "指定されたファイルが存在しないか、アクセス権がありません",
+  "pathPickerErrFormat": "サポートされていないファイル形式です (対応: {exts})",
+  "@pathPickerErrFormat": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
+  "pathPickerSupported": "対応形式: {exts}",
+  "@pathPickerSupported": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
   "errEngineClosed": "エンジン未起動",
+  "errEngineBusy": "エンジンビジー、後ほど再試行",
   "errInvalidLength": "長さが無効",
   "errInvalidEncoding": "エンコーディングが無効",
   "errInvalidPath": "パスが無効",
@@ -1147,5 +1348,85 @@
   "errIoFailed": "ファイル読み書きに失敗",
   "errRejected": "エンジンにより値が拒否されました",
   "errUnsupported": "非サポートの操作",
-  "errInternal": "エンジン内部エラー"
+  "errReadOnly": "このパラメータは読み取り専用です",
+  "errInternal": "エンジン内部エラー",
+  "lpFindReplace": "検索と置換",
+  "lpSidebarLeft": "左パネル切り替え (アウトラインとライブラリ)",
+  "lpSidebarRight": "右パネル切り替え (スライダーとコンソール)",
+  "lpConsole": "コンソール",
+  "lpNewScriptWizard": "スクリプトウィザード",
+  "lpApoImportTitle": "APO プリセットのインポート",
+  "lpConfirmDiscardTitle": "変更を破棄しますか？",
+  "lpConfirmDiscardBody": "現在のスクリプトには未保存の変更があります。新しいスクリプトを読み込むと現在の変更は失われます。続行しますか？",
+  "lpConfirmDiscardAction": "破棄して読み込む",
+  "lpConsoleClear": "出力をクリア",
+  "lpExpandEditor": "拡大",
+  "lpCollapseEditor": "折りたたむ",
+  "lpUncompiled": "未コンパイル",
+  "lpCompileSuccess": "コンパイル成功",
+  "lpCompilingScript": "スクリプトをコンパイル中…",
+  "lpEyebrowDsp": "プログラマブル DSP",
+  "lpTitleEditor": "EEL2 エディタ",
+  "lpBtnApplied": "適用中",
+  "lpBtnUnapplied": "未適用",
+  "lpBtnCompile": "コンパイル",
+  "lpTooltipCompileFirst": "コードが変更されました。適用前にコンパイルしてください",
+  "lpMenuFile": "ファイル",
+  "lpFileNewBlank": "新規空白スクリプト",
+  "lpFileNewFromTemplate": "テンプレートから新規作成...",
+  "lpFileImportApo": "Equalizer APO プリセットのインポート...",
+  "lpFileImportEel": "EEL スクリプトのインポート...",
+  "lpFileSaveAs": "名前を付けて保存...",
+  "lpFileSaveAsPrompt": "保存先のパスとファイル名を入力してください：",
+  "lpFileOverwriteConfirmTitle": "ファイルが既に存在します",
+  "lpFileOverwriteConfirmBody": "ファイル「{name}」は既に存在します。上書きしますか？",
+  "@lpFileOverwriteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpFileOverwriteConfirmAction": "上書き",
+  "lpMenuEdit": "編集",
+  "lpEditFindReplace": "検索と置換",
+  "lpEditToggleOutline": "コードアウトライン",
+  "lpEditFormat": "コード整形",
+  "lpEditScrollToTop": "先頭へ移動",
+  "lpBtnLibrary": "スクリプトライブラリ",
+  "lpLibDialogTitle": "EEL2 スクリプトライブラリと外部ディレクトリ管理",
+  "lpLibOpenInExplorer": "ファイルマネージャーで開く",
+  "lpLibDirInvalid": "ディレクトリが存在しないか無効です",
+  "lpLibSaveCurrent": "現在のスクリプトを保存",
+  "lpLibCustomDirs": "スクリプトディレクトリ",
+  "lpSlidersPanelTitle": "パラメータ調整スライダー",
+  "lpSlidersCollapse": "パネルを折りたたむ",
+  "lpSlidersExpand": "パネルを展開",
+  "lpTabScriptSliders": "スクリプトパラメータ",
+  "lpTabInputChannels": "入力チャンネル (8)",
+  "lpTabOutputChannels": "出力チャンネル (8)",
+  "lpCustomVarTag": "スクリプト変数",
+  "lpCustomVarHint": "スクリプト内部変数（@init で初期化；外部からリアルタイム調整するには slider1..8 に関連付けます）",
+  "lpInputTrimHint": "8チャンネル統一アーキテクチャの入力トリムとマスターゲイン",
+  "lpOutputGainHint": "8チャンネル後段独立出力ゲイン調整 (-15dB ~ +15dB)",
+  "lpResetAll": "すべてリセット",
+  "lpInputMasterGain": "マスター入力ゲイン",
+  "lpOutputMasterGain": "マスター出力ゲイン",
+  "lpNoScriptSliders": "スクリプト内に調整可能な変数が宣言されていません",
+  "lpTooltipUnapplyToCompile": "適用中はコンパイルできません。先に適用を解除してください",
+  "lpLibSystemInitial": "<システム既定>",
+  "lpLibDirs": "スクリプトディレクトリ",
+  "lpLibScriptList": "スクリプト一覧",
+  "lpApoParseError": "{line} 行目の構文エラー: {error}",
+  "@lpApoParseError": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoNoFiltersPreampOnly": "プリアンプのみモード (フィルタなし)"
 }

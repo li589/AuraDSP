@@ -232,11 +232,35 @@ abstract class AppLocalizations {
   /// **'仅环绕 (4/8)'**
   String get routingSurroundOnly;
 
+  /// No description provided for @routingPairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按立体声对生效：FL/FR、C/LFE、SL/SR、BL/BR 成对勾选，单选无效'**
+  String get routingPairHint;
+
   /// No description provided for @routingSelectedCount.
   ///
   /// In zh, this message translates to:
-  /// **'{count}/8 声道已选'**
-  String routingSelectedCount(int count);
+  /// **'{count}/{total} 声道已选'**
+  String routingSelectedCount(int count, int total);
+
+  /// No description provided for @routingStereoPathSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'直通 (立体声/矩阵路径)'**
+  String get routingStereoPathSummary;
+
+  /// No description provided for @routingStereoPathHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前处于立体声或矩阵下混路径，所有声道统一处理，独立声道掩码不生效。'**
+  String get routingStereoPathHint;
+
+  /// No description provided for @flfrOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅作用于前置 FL/FR 对（多声道离散时环绕与 LFE 直通）'**
+  String get flfrOnlyHint;
 
   /// No description provided for @channelRouting.
   ///
@@ -256,6 +280,18 @@ abstract class AppLocalizations {
   /// **'全选'**
   String get routingPresetAll;
 
+  /// No description provided for @routingPresetFront.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅前置'**
+  String get routingPresetFront;
+
+  /// No description provided for @routingPresetBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅后置'**
+  String get routingPresetBack;
+
   /// No description provided for @routingPresetStereo.
   ///
   /// In zh, this message translates to:
@@ -273,6 +309,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'仅环绕'**
   String get routingPresetSurround;
+
+  /// No description provided for @channelCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道数量'**
+  String get channelCount;
+
+  /// No description provided for @channelCountHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'工作声道拓扑。自动模式跟随输入源与输出端点协商；亦可手动锁定 2.0 / 4.0 / 5.1 / 7.1。'**
+  String get channelCountHint;
+
+  /// No description provided for @channelCountAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动'**
+  String get channelCountAuto;
+
+  /// No description provided for @channelCountAutoDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动协商生效中 · 当前工作拓扑：{count} 声道'**
+  String channelCountAutoDesc(int count);
 
   /// No description provided for @setConnStatus.
   ///
@@ -1009,8 +1069,14 @@ abstract class AppLocalizations {
   /// No description provided for @catSpace.
   ///
   /// In zh, this message translates to:
-  /// **'空间'**
+  /// **'空间效果'**
   String get catSpace;
+
+  /// No description provided for @catStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声'**
+  String get catStereo;
 
   /// No description provided for @catOutput.
   ///
@@ -1312,6 +1378,72 @@ abstract class AppLocalizations {
   /// **'原始直达声保留量。确保人声吐字清晰结实。'**
   String get reverbHintDry;
 
+  /// No description provided for @reverbHintWidthMc.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道 FDN 的宽度：只扩展 FL/FR、SL/SR、BL/BR 三对；中置与 LFE 不参与。'**
+  String get reverbHintWidthMc;
+
+  /// No description provided for @reverbEngineLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前引擎'**
+  String get reverbEngineLabel;
+
+  /// No description provided for @reverbEngineStereo.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声 (Vendor)'**
+  String get reverbEngineStereo;
+
+  /// No description provided for @reverbEngineMc.
+  ///
+  /// In zh, this message translates to:
+  /// **'多声道 FDN'**
+  String get reverbEngineMc;
+
+  /// No description provided for @reverbEngineOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关闭'**
+  String get reverbEngineOff;
+
+  /// No description provided for @reverbEngineInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。'**
+  String get reverbEngineInfo;
+
+  /// No description provided for @reverbLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'LFE 入混响'**
+  String get reverbLfe;
+
+  /// No description provided for @reverbLfeInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后 LFE 经 120Hz 低通与 -6dB 送入多声道混响；湿声回加前再经同一低通。立体声路径忽略。'**
+  String get reverbLfeInfo;
+
+  /// No description provided for @reverbPredelay.
+  ///
+  /// In zh, this message translates to:
+  /// **'预延迟'**
+  String get reverbPredelay;
+
+  /// No description provided for @reverbPredelayInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'混响前的延迟量（0–100ms）。与预设自带的基础预延迟相加；自定义模式从 0 起算。'**
+  String get reverbPredelayInfo;
+
+  /// No description provided for @reverbLegacyPreset.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧版预设 {id}'**
+  String reverbLegacyPreset(int id);
+
   /// No description provided for @spatialHintRoom.
   ///
   /// In zh, this message translates to:
@@ -1411,7 +1543,7 @@ abstract class AppLocalizations {
   /// No description provided for @vbProtectHint.
   ///
   /// In zh, this message translates to:
-  /// **'回调持续超预算时自动把插件收窄到监听总线，回落后自动还原'**
+  /// **'音频处理时限由驱动缓冲区决定（如 128 帧 @ 48kHz = 2.7ms 截止预算）。当效果器/插件的处理耗时（EMA）持续超过预算的 85% 时，系统自动将重负载插件收窄至当前监听总线，其余总线直通，以杜绝爆音与掉字卡顿；负载回落安全阈值后将自动恢复。'**
   String get vbProtectHint;
 
   /// No description provided for @vbProtectActive.
@@ -1419,6 +1551,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已激活：插件仅作用于监听总线，其余直通（回调超预算）'**
   String get vbProtectActive;
+
+  /// No description provided for @vbProtectActiveTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'保护已激活'**
+  String get vbProtectActiveTag;
 
   /// No description provided for @shelfTitle.
   ///
@@ -1486,16 +1624,166 @@ abstract class AppLocalizations {
   /// **'低于此分频点的低频信号混合为单声道（20~300Hz），集中低音能量，消除低频相位抵消与混浊感'**
   String get bassmonoFreqTooltip;
 
+  /// No description provided for @bassShapingMasterHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'总开关：任一模块开启即生效'**
+  String get bassShapingMasterHint;
+
+  /// No description provided for @bassShelfModule.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频搁架'**
+  String get bassShelfModule;
+
+  /// No description provided for @bassMonoModule.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频单声道化'**
+  String get bassMonoModule;
+
+  /// No description provided for @bassMonoDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'把分频点以下的低频合并为单声道，消除相位抵消与浑浊。'**
+  String get bassMonoDesc;
+
+  /// No description provided for @channelSelection.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道选择'**
+  String get channelSelection;
+
+  /// No description provided for @bassShelfRoutingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择应用低频搁架滤波的目标声道，未选择的声道直接直通。'**
+  String get bassShelfRoutingHint;
+
+  /// No description provided for @bassMonoPairsTooltip.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择低频单声道化作用的声道对。未勾选的声道对保持原样直通；立体声/双耳路径仅作用于 L/R。'**
+  String get bassMonoPairsTooltip;
+
+  /// No description provided for @bassMonoPairs.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道选择'**
+  String get bassMonoPairs;
+
+  /// No description provided for @bassMonoPairCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已选 {count} 对'**
+  String bassMonoPairCount(int count);
+
+  /// No description provided for @bassMonoPairFront.
+  ///
+  /// In zh, this message translates to:
+  /// **'前置'**
+  String get bassMonoPairFront;
+
+  /// No description provided for @bassMonoPairCenterLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'中置+超低'**
+  String get bassMonoPairCenterLfe;
+
+  /// No description provided for @bassMonoPairSide.
+  ///
+  /// In zh, this message translates to:
+  /// **'侧环绕'**
+  String get bassMonoPairSide;
+
+  /// No description provided for @bassMonoPairBack.
+  ///
+  /// In zh, this message translates to:
+  /// **'后环绕'**
+  String get bassMonoPairBack;
+
+  /// No description provided for @bassMonoPairAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get bassMonoPairAll;
+
+  /// No description provided for @bassMonoPairFrontOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅前置'**
+  String get bassMonoPairFrontOnly;
+
+  /// No description provided for @bassMonoPairUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前输出无此声道对'**
+  String get bassMonoPairUnavailable;
+
+  /// No description provided for @bassMonoMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并方式'**
+  String get bassMonoMerge;
+
+  /// No description provided for @bassMonoMergePerPair.
+  ///
+  /// In zh, this message translates to:
+  /// **'每对独立'**
+  String get bassMonoMergePerPair;
+
+  /// No description provided for @bassMonoMergeGlobal.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部合并'**
+  String get bassMonoMergeGlobal;
+
+  /// No description provided for @bassMonoMergeSinglePairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅选中一对时两种方式等价'**
+  String get bassMonoMergeSinglePairHint;
+
+  /// No description provided for @bassMonoNoneSelected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未选择声道对 · 当前不处理'**
+  String get bassMonoNoneSelected;
+
+  /// No description provided for @bassMonoIgnoredPairs.
+  ///
+  /// In zh, this message translates to:
+  /// **'已忽略 {count} 对当前不存在的声道'**
+  String bassMonoIgnoredPairs(int count);
+
+  /// No description provided for @bassMonoLfeWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'C/LFE 取平均会削弱中置与超低音的分离，通常不建议'**
+  String get bassMonoLfeWarning;
+
+  /// No description provided for @bassMonoStereoPathHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声/矩阵/双耳路径：仅作用 L/R'**
+  String get bassMonoStereoPathHint;
+
   /// No description provided for @retryNow.
   ///
   /// In zh, this message translates to:
   /// **'重试'**
   String get retryNow;
 
+  /// No description provided for @sampleRateDeviceActual.
+  ///
+  /// In zh, this message translates to:
+  /// **'设备实际：{rate} Hz'**
+  String sampleRateDeviceActual(int rate);
+
   /// No description provided for @sampleRateFollowBridge.
   ///
   /// In zh, this message translates to:
-  /// **'桥模式跟随 VB/ASIO 设备，此处仅对进程内生效'**
+  /// **'桥模式跟随 VB/ASIO 设备，此处选择仅保存偏好（切回进程内模式或下次启动才生效）'**
   String get sampleRateFollowBridge;
 
   /// No description provided for @latencyLabel.
@@ -1557,6 +1845,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'输出增益'**
   String get postGain;
+
+  /// No description provided for @postPerChannelTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'逐声道输出补偿'**
+  String get postPerChannelTrim;
+
+  /// No description provided for @postPerChannelTrimHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'对各个输出声道进行独立的电平微调（-15 ~ +15 dB）'**
+  String get postPerChannelTrimHint;
+
+  /// No description provided for @postResetAllTrim.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部归零'**
+  String get postResetAllTrim;
 
   /// No description provided for @equalizer.
   ///
@@ -1645,49 +1951,49 @@ abstract class AppLocalizations {
   /// No description provided for @reverbPreset0.
   ///
   /// In zh, this message translates to:
-  /// **'音乐厅'**
+  /// **'大音乐厅'**
   String get reverbPreset0;
 
   /// No description provided for @reverbPreset1.
   ///
   /// In zh, this message translates to:
-  /// **'小型厅堂'**
+  /// **'音乐厅'**
   String get reverbPreset1;
 
   /// No description provided for @reverbPreset2.
   ///
   /// In zh, this message translates to:
-  /// **'中厅'**
+  /// **'中音乐厅'**
   String get reverbPreset2;
 
   /// No description provided for @reverbPreset3.
   ///
   /// In zh, this message translates to:
-  /// **'大会堂'**
+  /// **'小音乐厅'**
   String get reverbPreset3;
 
   /// No description provided for @reverbPreset4.
   ///
   /// In zh, this message translates to:
-  /// **'盛大厅堂'**
+  /// **'录音棚'**
   String get reverbPreset4;
 
   /// No description provided for @reverbPreset5.
   ///
   /// In zh, this message translates to:
-  /// **'大教堂'**
+  /// **'房间'**
   String get reverbPreset5;
 
   /// No description provided for @reverbPreset6.
   ///
   /// In zh, this message translates to:
-  /// **'巨型厅堂'**
+  /// **'大礼堂'**
   String get reverbPreset6;
 
   /// No description provided for @reverbPreset7.
   ///
   /// In zh, this message translates to:
-  /// **'山谷'**
+  /// **'板式混响'**
   String get reverbPreset7;
 
   /// No description provided for @sourceCard.
@@ -1783,7 +2089,7 @@ abstract class AppLocalizations {
   /// No description provided for @channelPhaseA.
   ///
   /// In zh, this message translates to:
-  /// **'仅播放本地 4/6/8 声道文件时生效：矩阵下混＝送入引擎混合为立体声处理；离散逐声道＝各声道独立处理（立体声设备上预先折叠）。'**
+  /// **'当输入音频或输出设备为多声道（4.0 / 5.1 / 7.1）时的 DSP 策略：离散多声道＝全声道独立流经 DSP，各效果器可独立指定作用声道，支持多声道插件与上混；矩阵下混＝折叠为立体声流经 DSP 效果器后再上混回填环绕声道（超低音直接直通）。「双耳虚拟环绕」开启时优先级最高，将自动以 HRIR 渲染为耳机立体声。'**
   String get channelPhaseA;
 
   /// No description provided for @audioMode.
@@ -2581,7 +2887,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpCompiledIdle.
   ///
   /// In zh, this message translates to:
-  /// **'已编译，打开右上角开关才生效'**
+  /// **'已编译 · 点击顶栏应用生效'**
   String get lpCompiledIdle;
 
   /// No description provided for @lpSliders.
@@ -2599,7 +2905,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpLibrary.
   ///
   /// In zh, this message translates to:
-  /// **'脚本库（%APPDATA%/AuraDSP/liveprog）'**
+  /// **'脚本库'**
   String get lpLibrary;
 
   /// No description provided for @lpLibraryEmpty.
@@ -2613,6 +2919,180 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存到库'**
   String get lpSave;
+
+  /// No description provided for @lpApoDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 EqualizerAPO 预设 (.txt)'**
+  String get lpApoDialogTitle;
+
+  /// No description provided for @lpApoDialogDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'将 EqualizerAPO / Peace 参量均衡文本转换为高性能 EEL2 脚本'**
+  String get lpApoDialogDesc;
+
+  /// No description provided for @lpApoOpenFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'打开 .txt 文件'**
+  String get lpApoOpenFile;
+
+  /// No description provided for @lpApoPasteHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在此粘贴 EqualizerAPO 配置文本（例如 Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41）...'**
+  String get lpApoPasteHint;
+
+  /// No description provided for @lpApoSwapChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'声道互换 (L ↔ R)'**
+  String get lpApoSwapChannels;
+
+  /// No description provided for @lpApoInvertPolarity.
+  ///
+  /// In zh, this message translates to:
+  /// **'极性反转 (相位 180°)'**
+  String get lpApoInvertPolarity;
+
+  /// No description provided for @lpApoFiltersDetected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已解析出 {n} 个滤波器'**
+  String lpApoFiltersDetected(int n);
+
+  /// No description provided for @lpApoPreampDetected.
+  ///
+  /// In zh, this message translates to:
+  /// **'前级增益: {gain} dB'**
+  String lpApoPreampDetected(String gain);
+
+  /// No description provided for @lpApoApply.
+  ///
+  /// In zh, this message translates to:
+  /// **'填入编辑器'**
+  String get lpApoApply;
+
+  /// No description provided for @lpApoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'生成的 EEL2 代码预览'**
+  String get lpApoPreview;
+
+  /// No description provided for @lpFind.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找'**
+  String get lpFind;
+
+  /// No description provided for @lpReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'替换'**
+  String get lpReplace;
+
+  /// No description provided for @lpReplaceAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部替换'**
+  String get lpReplaceAll;
+
+  /// No description provided for @lpFindNext.
+  ///
+  /// In zh, this message translates to:
+  /// **'下一个'**
+  String get lpFindNext;
+
+  /// No description provided for @lpFindPrev.
+  ///
+  /// In zh, this message translates to:
+  /// **'上一个'**
+  String get lpFindPrev;
+
+  /// No description provided for @lpMatchCase.
+  ///
+  /// In zh, this message translates to:
+  /// **'区分大小写'**
+  String get lpMatchCase;
+
+  /// No description provided for @lpMatchCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {current} 项，共 {total} 项'**
+  String lpMatchCount(int current, int total);
+
+  /// No description provided for @lpNoMatches.
+  ///
+  /// In zh, this message translates to:
+  /// **'无匹配项'**
+  String get lpNoMatches;
+
+  /// No description provided for @lpOutline.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码大纲'**
+  String get lpOutline;
+
+  /// No description provided for @lpOutlineEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到段指令或函数声明'**
+  String get lpOutlineEmpty;
+
+  /// No description provided for @lpTemplates.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码模板向导'**
+  String get lpTemplates;
+
+  /// No description provided for @lpTemplatesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择标准音频 DSP 起步模板，加速算法开发'**
+  String get lpTemplatesDesc;
+
+  /// No description provided for @lpTemplateUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用此模板'**
+  String get lpTemplateUse;
+
+  /// No description provided for @lpManualSearchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索 80+ EEL2 内置函数、关键字、寄存器...'**
+  String get lpManualSearchHint;
+
+  /// No description provided for @lpManualInsert.
+  ///
+  /// In zh, this message translates to:
+  /// **'插入到光标处'**
+  String get lpManualInsert;
+
+  /// No description provided for @lpManualParamTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数列表'**
+  String get lpManualParamTitle;
+
+  /// No description provided for @lpManualReturnTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'返回值'**
+  String get lpManualReturnTitle;
+
+  /// No description provided for @lpManualExampleTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用示例'**
+  String get lpManualExampleTitle;
+
+  /// No description provided for @lpAllCategories.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部'**
+  String get lpAllCategories;
 
   /// No description provided for @convTitle.
   ///
@@ -3595,8 +4075,14 @@ abstract class AppLocalizations {
   /// No description provided for @fxCatSpatial.
   ///
   /// In zh, this message translates to:
-  /// **'空间'**
+  /// **'空间效果'**
   String get fxCatSpatial;
+
+  /// No description provided for @fxCatStereoOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'立体声专用'**
+  String get fxCatStereoOnly;
 
   /// No description provided for @fxCatLate.
   ///
@@ -3645,6 +4131,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'中性'**
   String get spatialStyleNeutral;
+
+  /// No description provided for @spatialStyleCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get spatialStyleCustom;
 
   /// No description provided for @spatialRoom.
   ///
@@ -3739,32 +4231,8 @@ abstract class AppLocalizations {
   /// No description provided for @spatialBinauralInfo.
   ///
   /// In zh, this message translates to:
-  /// **'输入 5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音'**
+  /// **'输入 4/5.1/7.1 时把全部声道渲染为双耳立体声（耳机）。开启后输出仅 FL/FR，其余声道静音，并接管设置页的「声道模式」（该项此时不生效）'**
   String get spatialBinauralInfo;
-
-  /// No description provided for @spatialFdn.
-  ///
-  /// In zh, this message translates to:
-  /// **'FDN 房间'**
-  String get spatialFdn;
-
-  /// No description provided for @spatialFdnInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'使用 8 线反馈延迟网络生成晚期混响，替代 Freeverb；开启后自动跳过 Freeverb 避免双房间'**
-  String get spatialFdnInfo;
-
-  /// No description provided for @spatialLate.
-  ///
-  /// In zh, this message translates to:
-  /// **'晚期混响'**
-  String get spatialLate;
-
-  /// No description provided for @spatialLateInfo.
-  ///
-  /// In zh, this message translates to:
-  /// **'FDN 晚期混响送入量。越大房间尾音越明显'**
-  String get spatialLateInfo;
 
   /// No description provided for @spatialHeadTrack.
   ///
@@ -4864,6 +5332,24 @@ abstract class AppLocalizations {
   /// **'高频解析'**
   String get compTfresFine;
 
+  /// No description provided for @compModePairBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式：逐对'**
+  String get compModePairBadge;
+
+  /// No description provided for @compModePairHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式成对分配压缩槽位以节省计算资源与内存。需成对选择声道，半选对将不被压缩。'**
+  String get compModePairHint;
+
+  /// No description provided for @compModeSemiSelectedWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'性能模式需成对选择，半选对未生效'**
+  String get compModeSemiSelectedWarning;
+
   /// No description provided for @autoGainCompensation.
   ///
   /// In zh, this message translates to:
@@ -4891,7 +5377,7 @@ abstract class AppLocalizations {
   /// No description provided for @arbmagSubtitle.
   ///
   /// In zh, this message translates to:
-  /// **'8192点因果最小相位 FIR 卷积 · 自由频响与 AutoEq 曲线'**
+  /// **'基于 8192 点因果最小相位 FIR 卷积引擎，支持导入 AutoEq GraphicEQ 曲线或自定义任意频响响应，高精度校正耳机与扬声器频响缺陷。'**
   String get arbmagSubtitle;
 
   /// No description provided for @arbmagPresetFlat.
@@ -5026,11 +5512,209 @@ abstract class AppLocalizations {
   /// **'核心处理'**
   String get fxCatCore;
 
+  /// No description provided for @channelCenter.
+  ///
+  /// In zh, this message translates to:
+  /// **'中央声道 (C)'**
+  String get channelCenter;
+
+  /// No description provided for @channelLfe.
+  ///
+  /// In zh, this message translates to:
+  /// **'低频效果 (LFE)'**
+  String get channelLfe;
+
+  /// No description provided for @channelSurroundLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左环绕 (SL)'**
+  String get channelSurroundLeft;
+
+  /// No description provided for @channelSurroundRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右环绕 (SR)'**
+  String get channelSurroundRight;
+
+  /// No description provided for @channelBackLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'左后环绕 (BL)'**
+  String get channelBackLeft;
+
+  /// No description provided for @channelBackRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'右后环绕 (BR)'**
+  String get channelBackRight;
+
+  /// No description provided for @inputChannelsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{n} 声道'**
+  String inputChannelsCount(int n);
+
+  /// No description provided for @inputBalanceTuned.
+  ///
+  /// In zh, this message translates to:
+  /// **'已微调 {n} 声道'**
+  String inputBalanceTuned(int n);
+
+  /// No description provided for @inputBalanceDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'100% 默认平衡'**
+  String get inputBalanceDefault;
+
+  /// No description provided for @eqPresetElectronic.
+  ///
+  /// In zh, this message translates to:
+  /// **'电子舞曲 (EDM)'**
+  String get eqPresetElectronic;
+
+  /// No description provided for @eqPresetHiphop.
+  ///
+  /// In zh, this message translates to:
+  /// **'嘻哈说唱 (Hip-Hop)'**
+  String get eqPresetHiphop;
+
+  /// No description provided for @eqPresetAcoustic.
+  ///
+  /// In zh, this message translates to:
+  /// **'原声不插电 (Acoustic)'**
+  String get eqPresetAcoustic;
+
+  /// No description provided for @eqPresetMetal.
+  ///
+  /// In zh, this message translates to:
+  /// **'重金属 (Metal)'**
+  String get eqPresetMetal;
+
+  /// No description provided for @eqPresetPodcast.
+  ///
+  /// In zh, this message translates to:
+  /// **'播客语音 (Podcast)'**
+  String get eqPresetPodcast;
+
+  /// No description provided for @convIrPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择脉冲响应 (IR) 文件路径：'**
+  String get convIrPrompt;
+
+  /// No description provided for @convLoadIr.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载 IR'**
+  String get convLoadIr;
+
+  /// No description provided for @ddcVdcPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 VDC 空间校正文件路径：'**
+  String get ddcVdcPrompt;
+
+  /// No description provided for @ddcLoadVdc.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载 VDC'**
+  String get ddcLoadVdc;
+
+  /// No description provided for @arbmagPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 AutoEq / GraphicEQ 曲线文件路径：'**
+  String get arbmagPrompt;
+
+  /// No description provided for @testAudioWavPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择测试音频 (WAV) 文件路径：'**
+  String get testAudioWavPrompt;
+
+  /// No description provided for @testAudioMp3Prompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或选择 MP3 音频文件路径：'**
+  String get testAudioMp3Prompt;
+
+  /// No description provided for @testAudioLoad.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载音频'**
+  String get testAudioLoad;
+
+  /// No description provided for @pathPickerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择路径'**
+  String get pathPickerTitle;
+
+  /// No description provided for @pathPickerConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认'**
+  String get pathPickerConfirm;
+
+  /// No description provided for @pathPickerBrowse.
+  ///
+  /// In zh, this message translates to:
+  /// **'浏览...'**
+  String get pathPickerBrowse;
+
+  /// No description provided for @pathPickerClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空'**
+  String get pathPickerClear;
+
+  /// No description provided for @pathPickerSelectDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择此目录'**
+  String get pathPickerSelectDir;
+
+  /// No description provided for @pathPickerErrEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'路径不能为空'**
+  String get pathPickerErrEmpty;
+
+  /// No description provided for @pathPickerErrDirNotExist.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定的目录不存在或无访问权限'**
+  String get pathPickerErrDirNotExist;
+
+  /// No description provided for @pathPickerErrFileNotExist.
+  ///
+  /// In zh, this message translates to:
+  /// **'指定的文件不存在或无访问权限'**
+  String get pathPickerErrFileNotExist;
+
+  /// No description provided for @pathPickerErrFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'不支持的文件格式 (仅支持: {exts})'**
+  String pathPickerErrFormat(String exts);
+
+  /// No description provided for @pathPickerSupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持格式: {exts}'**
+  String pathPickerSupported(String exts);
+
   /// No description provided for @errEngineClosed.
   ///
   /// In zh, this message translates to:
   /// **'引擎未运行'**
   String get errEngineClosed;
+
+  /// No description provided for @errEngineBusy.
+  ///
+  /// In zh, this message translates to:
+  /// **'引擎忙，请稍后重试'**
+  String get errEngineBusy;
 
   /// No description provided for @errInvalidLength.
   ///
@@ -5104,11 +5788,389 @@ abstract class AppLocalizations {
   /// **'不支持的操作'**
   String get errUnsupported;
 
+  /// No description provided for @errReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'该参数为只读'**
+  String get errReadOnly;
+
   /// No description provided for @errInternal.
   ///
   /// In zh, this message translates to:
   /// **'引擎内部错误'**
   String get errInternal;
+
+  /// No description provided for @lpFindReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找与替换'**
+  String get lpFindReplace;
+
+  /// No description provided for @lpSidebarLeft.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换左侧面板 (大纲与脚本库)'**
+  String get lpSidebarLeft;
+
+  /// No description provided for @lpSidebarRight.
+  ///
+  /// In zh, this message translates to:
+  /// **'切换右侧面板 (滑块与控制台)'**
+  String get lpSidebarRight;
+
+  /// No description provided for @lpConsole.
+  ///
+  /// In zh, this message translates to:
+  /// **'控制台'**
+  String get lpConsole;
+
+  /// No description provided for @lpNewScriptWizard.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建脚本向导'**
+  String get lpNewScriptWizard;
+
+  /// No description provided for @lpApoImportTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 APO 预设'**
+  String get lpApoImportTitle;
+
+  /// No description provided for @lpConfirmDiscardTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃未保存修改？'**
+  String get lpConfirmDiscardTitle;
+
+  /// No description provided for @lpConfirmDiscardBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前脚本包含未保存的修改。加载新内容将覆盖现有修改。是否继续？'**
+  String get lpConfirmDiscardBody;
+
+  /// No description provided for @lpConfirmDiscardAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'放弃并覆盖'**
+  String get lpConfirmDiscardAction;
+
+  /// No description provided for @lpConsoleClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空控制台'**
+  String get lpConsoleClear;
+
+  /// No description provided for @lpExpandEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开'**
+  String get lpExpandEditor;
+
+  /// No description provided for @lpCollapseEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get lpCollapseEditor;
+
+  /// No description provided for @lpUncompiled.
+  ///
+  /// In zh, this message translates to:
+  /// **'未编译修改'**
+  String get lpUncompiled;
+
+  /// No description provided for @lpCompileSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译成功'**
+  String get lpCompileSuccess;
+
+  /// No description provided for @lpCompilingScript.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在编译脚本…'**
+  String get lpCompilingScript;
+
+  /// No description provided for @lpEyebrowDsp.
+  ///
+  /// In zh, this message translates to:
+  /// **'可编程 DSP'**
+  String get lpEyebrowDsp;
+
+  /// No description provided for @lpTitleEditor.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 编辑器'**
+  String get lpTitleEditor;
+
+  /// No description provided for @lpBtnApplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'已应用'**
+  String get lpBtnApplied;
+
+  /// No description provided for @lpBtnUnapplied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未应用'**
+  String get lpBtnUnapplied;
+
+  /// No description provided for @lpBtnCompile.
+  ///
+  /// In zh, this message translates to:
+  /// **'编译'**
+  String get lpBtnCompile;
+
+  /// No description provided for @lpTooltipCompileFirst.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码已修改，需先编译后方可应用'**
+  String get lpTooltipCompileFirst;
+
+  /// No description provided for @lpMenuFile.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件'**
+  String get lpMenuFile;
+
+  /// No description provided for @lpFileNewBlank.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建空白脚本'**
+  String get lpFileNewBlank;
+
+  /// No description provided for @lpFileNewFromTemplate.
+  ///
+  /// In zh, this message translates to:
+  /// **'从模板新建...'**
+  String get lpFileNewFromTemplate;
+
+  /// No description provided for @lpFileImportApo.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 APO 预设...'**
+  String get lpFileImportApo;
+
+  /// No description provided for @lpFileImportEel.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入 EEL 脚本...'**
+  String get lpFileImportEel;
+
+  /// No description provided for @lpFileSaveAs.
+  ///
+  /// In zh, this message translates to:
+  /// **'另存为...'**
+  String get lpFileSaveAs;
+
+  /// No description provided for @lpFileSaveAsPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入保存路径与文件名：'**
+  String get lpFileSaveAsPrompt;
+
+  /// No description provided for @lpFileOverwriteConfirmTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'文件已存在'**
+  String get lpFileOverwriteConfirmTitle;
+
+  /// No description provided for @lpFileOverwriteConfirmBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标文件「{name}」已存在，是否确认覆盖？'**
+  String lpFileOverwriteConfirmBody(String name);
+
+  /// No description provided for @lpFileOverwriteConfirmAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖'**
+  String get lpFileOverwriteConfirmAction;
+
+  /// No description provided for @lpMenuEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get lpMenuEdit;
+
+  /// No description provided for @lpEditFindReplace.
+  ///
+  /// In zh, this message translates to:
+  /// **'查找与替换'**
+  String get lpEditFindReplace;
+
+  /// No description provided for @lpEditToggleOutline.
+  ///
+  /// In zh, this message translates to:
+  /// **'代码大纲'**
+  String get lpEditToggleOutline;
+
+  /// No description provided for @lpEditFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'格式化代码'**
+  String get lpEditFormat;
+
+  /// No description provided for @lpEditScrollToTop.
+  ///
+  /// In zh, this message translates to:
+  /// **'跳回开头'**
+  String get lpEditScrollToTop;
+
+  /// No description provided for @lpBtnLibrary.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本库'**
+  String get lpBtnLibrary;
+
+  /// No description provided for @lpLibDialogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'EEL2 脚本库与外部目录管理'**
+  String get lpLibDialogTitle;
+
+  /// No description provided for @lpLibOpenInExplorer.
+  ///
+  /// In zh, this message translates to:
+  /// **'在文件管理器中浏览'**
+  String get lpLibOpenInExplorer;
+
+  /// No description provided for @lpLibDirInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'目录不存在或已失效'**
+  String get lpLibDirInvalid;
+
+  /// No description provided for @lpLibSaveCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前脚本到库'**
+  String get lpLibSaveCurrent;
+
+  /// No description provided for @lpLibCustomDirs.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本目录'**
+  String get lpLibCustomDirs;
+
+  /// No description provided for @lpSlidersPanelTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'参数调节滑块'**
+  String get lpSlidersPanelTitle;
+
+  /// No description provided for @lpSlidersCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起面板'**
+  String get lpSlidersCollapse;
+
+  /// No description provided for @lpSlidersExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开面板'**
+  String get lpSlidersExpand;
+
+  /// No description provided for @lpTabScriptSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本参数'**
+  String get lpTabScriptSliders;
+
+  /// No description provided for @lpTabInputChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'输入通道 (8)'**
+  String get lpTabInputChannels;
+
+  /// No description provided for @lpTabOutputChannels.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出通道 (8)'**
+  String get lpTabOutputChannels;
+
+  /// No description provided for @lpCustomVarTag.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本变量'**
+  String get lpCustomVarTag;
+
+  /// No description provided for @lpCustomVarHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本内部变量（在 @init 赋初值；若需在宿主中实时调节，可映射至 slider1..8）'**
+  String get lpCustomVarHint;
+
+  /// No description provided for @lpInputTrimHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'8 声道统一架构输入前级平衡与主增益'**
+  String get lpInputTrimHint;
+
+  /// No description provided for @lpOutputGainHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'8 声道后级独立输出增益补偿 (-15dB ~ +15dB)'**
+  String get lpOutputGainHint;
+
+  /// No description provided for @lpResetAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部复位'**
+  String get lpResetAll;
+
+  /// No description provided for @lpInputMasterGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局输入增益'**
+  String get lpInputMasterGain;
+
+  /// No description provided for @lpOutputMasterGain.
+  ///
+  /// In zh, this message translates to:
+  /// **'全局输出增益'**
+  String get lpOutputMasterGain;
+
+  /// No description provided for @lpNoScriptSliders.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本未声明可调变量'**
+  String get lpNoScriptSliders;
+
+  /// No description provided for @lpTooltipUnapplyToCompile.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用状态下禁止编译，请先取消应用'**
+  String get lpTooltipUnapplyToCompile;
+
+  /// No description provided for @lpLibSystemInitial.
+  ///
+  /// In zh, this message translates to:
+  /// **'<系统初始>'**
+  String get lpLibSystemInitial;
+
+  /// No description provided for @lpLibDirs.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本目录'**
+  String get lpLibDirs;
+
+  /// No description provided for @lpLibScriptList.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本列表'**
+  String get lpLibScriptList;
+
+  /// No description provided for @lpApoParseError.
+  ///
+  /// In zh, this message translates to:
+  /// **'第 {line} 行语法异常: {error}'**
+  String lpApoParseError(int line, String error);
+
+  /// No description provided for @lpApoNoFiltersPreampOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'纯前级增益模式 (无滤波器)'**
+  String get lpApoNoFiltersPreampOnly;
 }
 
 class _AppLocalizationsDelegate

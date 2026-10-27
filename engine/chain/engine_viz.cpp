@@ -21,8 +21,8 @@ void viz_write(auradsp_handle h, const float* out, int frames, int ch) {
     float lvl_l = 0.0f, lvl_r = 0.0f;
     float pk_ch[AURADSP_CH_MAX] = {};
     for (int i = 0; i < frames; ++i) {
-        const float l = out[i * 2];
-        const float r = out[i * 2 + 1];
+        const float l = out[i * ch];
+        const float r = out[i * ch + 1];
         h->viz_hist[h->viz_hist_pos * 2]     = l;
         h->viz_hist[h->viz_hist_pos * 2 + 1] = r;
         h->viz_hist_pos = (h->viz_hist_pos + 1) & mask;

@@ -3,6 +3,16 @@
 part of '../effects_page.dart';
 /* ---- 03 脉冲响应卷积 (Convolver) ---- */
 
+/// IR 文件名（去扩展名）——用于覆盖资源槽标题「脉冲响应 (IR)」，
+/// 让用户一眼看到当前加载的是哪个文件。
+/// [PATCHED-AuraDSP P-032] 用户要求：加载后显示文件名（无扩展名）。
+String _irDisplayName(String? path) {
+  if (path == null || path.isEmpty) return '';
+  final name = path.split(RegExp(r'[/\\]')).last;
+  final dot = name.lastIndexOf('.');
+  return (dot > 0 ? name.substring(0, dot) : name).trim();
+}
+
 /// 文件资源槽：带边框、标题行与状态位的按钮组。
 ///
 /// 卷积 / VDC 两张卡片此前都是裸 `Wrap` 丢几个 chip，与下方内容既无分组也无
@@ -76,7 +86,11 @@ class _ConvolverCard extends StatelessWidget {
             children: [
               _ResourceSlot(
                 icon: Icons.graphic_eq_outlined,
-                title: l.convIrTitle,
+                // [PATCHED-AuraDSP P-032] 标题处显示当前 IR 文件名（无扩展名），
+                // 覆盖「脉冲响应 (IR)」字样；无路径时回退到原标题。
+                title: _irDisplayName(model.convIrPath).isNotEmpty
+                    ? _irDisplayName(model.convIrPath)
+                    : l.convIrTitle,
                 detail: '${model.convChannels}ch · $dur',
                 actions: [
                   AuraChip(l.convOpenIr, icon: Icons.folder_open_outlined,
@@ -157,16 +171,17 @@ class _ConvolverCard extends StatelessWidget {
   }
 
   Future<void> _pickIr(BuildContext context) async {
-    const type = XTypeGroup(label: 'Audio IR (*.irs, *.wav, *.flac)',
-        extensions: ['irs', 'wav', 'flac']);
-    final f = await openFile(
-      acceptedTypeGroups: [type],
-      initialDirectory: PathMemory.dirFor(PathMemory.slotConvolverIr) ??
-          PathMemory.fallbackDir(PathMemory.slotConvolverIr),
+    final l = l10nOf(context);
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.convIrTitle,
+      prompt: l.convIrPrompt,
+      allowedExtensions: const ['irs', 'wav', 'flac'],
+      memorySlot: PathMemory.slotConvolverIr,
+      confirmLabel: l.convLoadIr,
     );
-    if (f != null) {
-      PathMemory.recordPick(PathMemory.slotConvolverIr, f.path);
-      model.loadConvolverIr(f.path);
+    if (path != null) {
+      model.loadConvolverIr(path);
     }
   }
 }

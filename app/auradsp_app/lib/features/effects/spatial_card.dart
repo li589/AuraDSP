@@ -49,6 +49,7 @@ class _SpatialCard extends StatelessWidget {
                   l.spatialStyleCinema,
                   l.spatialStyleImaging,
                   l.spatialStyleNeutral,
+                  l.spatialStyleCustom,
                 ],
               ),
             ],
@@ -116,26 +117,6 @@ class _SpatialCard extends StatelessWidget {
           const SizedBox(height: AuraSpace.sm),
           Row(
             children: [
-              Text(l.spatialFdn, style: labelOf(p, color: p.text)),
-              const SizedBox(width: 4),
-              InfoBadge(message: l.spatialFdnInfo),
-              const Spacer(),
-              ParamSwitch(
-                param: ParamRegistry.spatialFdn,
-                model: model,
-              ),
-            ],
-          ),
-          const SizedBox(height: AuraSpace.sm),
-          ParamSlider(
-            param: ParamRegistry.spatialLate,
-            model: model,
-            customLabel: l.spatialLate,
-            infoMessage: l.spatialLateInfo,
-          ),
-          const SizedBox(height: AuraSpace.sm),
-          Row(
-            children: [
               Text(l.spatialHeadTrack, style: labelOf(p, color: p.text)),
               const SizedBox(width: 4),
               InfoBadge(message: l.spatialHeadTrackInfo),
@@ -172,6 +153,15 @@ class _SpatialCard extends StatelessWidget {
                 model: model,
               ),
             ],
+          ),
+          // [P-031] 诚实标注：本卡效果器在引擎侧只作用于前置 FL/FR 对
+          // （engine_chain.cpp:895-903 在 mx_stereo 上处理），多声道离散
+          // 模式下环绕/LFE 不经过它。此前 UI 无任何说明，用户会以为
+          // "多声道独立处理"覆盖到本卡。
+          const SizedBox(height: AuraSpace.sm),
+          Text(
+            l.flfrOnlyHint,
+            style: captionOf(p, color: p.textDim).copyWith(fontSize: 10),
           ),
         ],
       ),

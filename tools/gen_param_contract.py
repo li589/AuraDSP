@@ -46,24 +46,26 @@ def sha16(path):
 
 
 def parse_param_table():
-    """→ [(id, kind, member_or_None, min_or_None, max_or_None)]（kEngineParamTable 数组内）。"""
+    """→ [(id, kind, member_or_None, explicit_array_idx_or_None, min_or_None, max_or_None)]
+    （kEngineParamTable 数组内）。显式下标用于 post.gain.c0 → post_gain_ch[0]
+    这类 0 基 id；未写显式下标时沿用 id 尾部数字 = 下标+1 的历史约定。"""
     src = open(PARAM_TABLE, encoding='utf-8').read()
     start = src.index('static const EngineParamDesc kEngineParamTable[]')
     end = src.index('\n};', start)
     body = src[start:end]
     pat = re.compile(
         r'PARAM_(FLOAT|INT|BOOL|CUSTOM_SET_STANDARD_GET|CUSTOM|CUSTOM_SET_ONLY|CUSTOM_GET_ONLY)'
-        r'\(\s*"([^"]+)"\s*(?:,\s*([A-Za-z0-9_]+))?'
+        r'\(\s*"([^"]+)"\s*(?:,\s*([A-Za-z0-9_]+)(?:\[(\d+)\])?)?'
         r'(?:\s*,\s*(-?[\d.]+f?))?(?:\s*,\s*(-?[\d.]+f?))?')
     rows = []
     member_kinds = {'FLOAT', 'INT', 'BOOL', 'CUSTOM_SET_STANDARD_GET'}
     for m in pat.finditer(body):
-        kind, pid, arg2, lo, hi = m.groups()
+        kind, pid, arg2, arr_idx, lo, hi = m.groups()
         member = arg2 if kind in member_kinds else None
         rng = None
         if kind in ('FLOAT', 'INT') and lo is not None and hi is not None:
             rng = (float(lo.rstrip('f')), float(hi.rstrip('f')))
-        rows.append((pid, kind, member, rng))
+        rows.append((pid, kind, member, int(arr_idx) if arr_idx is not None else None, rng))
     return rows
 
 
@@ -122,6 +124,11 @@ def parse_create_scalar_overrides():
 
 def fmt_cpp_default(cpp_type, lit):
     lit = lit.strip()
+    if 'kChMaskAll' in lit:
+        lit = '0xFF'
+    elif 'kChMaskNoLfe' in lit:
+        lit = '0xF7'
+    lit = lit.replace('(int32_t)', '').strip()
     if cpp_type == 'int32_t':
         if lit.lower().startswith('0x'):
             return str(int(lit, 16))
@@ -148,7 +155,7 @@ def main():
     # id -> 该 id 使用的数组下标（comp.freq1 → comp_freq[0]）
     array_index_by_id = {}
     seen_ids = set()
-    for pid, kind, member, rng in rows:
+    for pid, kind, member, explicit_idx, rng in rows:
         if pid in seen_ids:
             problems.append(f'重复 id: {pid}')
         seen_ids.add(pid)
@@ -164,12 +171,16 @@ def main():
         if sdef is not None:
             default_rows.append((pid, member, fmt_cpp_default(cpp_type, sdef)))
         else:
-            # 数组 member：约定 id 尾部数字 = 下标+1（comp.freq1 → [0]）
-            m = re.search(r'(\d+)$', pid)
-            if not m:
-                problems.append(f'{pid}: 数组 member {member} 无下标约定，需显式登记')
-                continue
-            idx = int(m.group(1)) - 1
+            # 数组 member：显式下标优先（post.gain.c0 → [0]）；否则约定
+            # id 尾部数字 = 下标+1（comp.freq1 → [0]）。
+            if explicit_idx is not None:
+                idx = explicit_idx
+            else:
+                m = re.search(r'(\d+)$', pid)
+                if not m:
+                    problems.append(f'{pid}: 数组 member {member} 无下标约定，需显式登记')
+                    continue
+                idx = int(m.group(1)) - 1
             if member not in overrides:
                 problems.append(f'{pid}: 数组 {member} 在 create 无默认覆盖且 struct 无初值')
                 continue

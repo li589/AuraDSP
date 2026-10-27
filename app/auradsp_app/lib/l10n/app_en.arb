@@ -22,13 +22,40 @@
   "routingNoSub": "No Sub (7/8)",
   "routingAllBypassed": "All Bypassed (0/8)",
   "routingSurroundOnly": "Surround Only (4/8)",
-  "routingSelectedCount": "{count}/8 Selected",
+  "routingPairHint": "Applied per stereo pair: FL/FR, C/LFE, SL/SR and BL/BR toggle together; a single channel has no effect",
+  "routingSelectedCount": "{count}/{total} Selected",
+  "@routingSelectedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "routingStereoPathSummary": "Direct (Stereo/Matrix Path)",
+  "routingStereoPathHint": "Current path is stereo or matrix downmix; all channels are processed together and channel masks are inactive.",
+  "flfrOnlyHint": "Applies to the front FL/FR pair only (surrounds and LFE pass through in discrete multichannel)",
   "channelRouting": "Channel Routing",
   "routingPresets": "Presets:",
   "routingPresetAll": "All",
+  "routingPresetFront": "Front Only",
+  "routingPresetBack": "Back Only",
   "routingPresetStereo": "Stereo",
   "routingPresetNoLfe": "No LFE",
   "routingPresetSurround": "Surround",
+  "channelCount": "Channel Count",
+  "channelCountHint": "Working channel topology. Auto negotiates with source and device; or manually lock to 2.0 / 4.0 / 5.1 / 7.1.",
+  "channelCountAuto": "Auto",
+  "channelCountAutoDesc": "Auto negotiation active · Current topology: {count} ch",
+  "@channelCountAutoDesc": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
   "setConnStatus": "Connection",
   "setConnActive": "Connected (active callback)",
   "setConnIdle": "Not connected (waiting for Voicemeeter)",
@@ -151,15 +178,15 @@
   "catTone": "Tone",
   "catEq": "EQ",
   "catStage": "Field",
-  "catSpace": "Spatial",
+  "catSpace": "Spatial Effects",
+  "catStereo": "Stereo",
   "catOutput": "Output",
   "catEffect": "FX",
-  "eelMissingSample": "Missing @sample section (engine will refuse to compile)",
   "arbmagMinPoints": "Need at least 2 valid points (freq gain dB; …)",
   "arbmagGraphicEqInvalid": "Invalid GraphicEQ: {err}",
   "arbmagReadFailed": "Failed to read file: {err}",
   "arbmagPoints": "{n} points",
-  "arbmagNodes": "{n} nodes",
+  "arbmagNodes": "{count} nodes loaded",
   "bassHintIntensity": "Adds low-end weight and punch. Higher = deeper bass; raise moderately to avoid boomy highs.",
   "bassHintFrequency": "Upper limit of the bass boost. Audio below it is thickened; 60–120 Hz is a good range.",
   "bassShelfRouting": "Low-shelf channel routing",
@@ -187,7 +214,7 @@
   "inputReset100": "Reset 100%",
   "inputFinal": "Final: {desc}",
   "inputResetHint": "Double-click or tap to restore 100%",
-  "loudnessHint": "Compensation strength. Higher for quiet night listening; lower or off when loud (auto-bypasses at high volume).",
+  "loudnessHint": "Auto boosts lows and highs at quiet levels, transparent when loud",
   "postHintGain": "Global output level trim. Nudge up if the DSP chain leaves things too quiet.",
   "postCeiling": "Ceiling",
   "postHintCeiling": "Mastering-grade lookahead ceiling. Transients above it are transparently reduced, preventing clipping and true-peak (ISP) overs.",
@@ -203,6 +230,17 @@
   "reverbHintWidth": "Binaural width of the reverb; wraps echoes around the head.",
   "reverbHintDamp": "High-frequency damping. Higher = warmer; lower = brighter.",
   "reverbHintDry": "Dry signal retention; keeps vocals articulate and solid.",
+  "reverbHintWidthMc": "Multichannel FDN width: only FL/FR, SL/SR and BL/BR are widened; C and LFE stay untouched.",
+  "reverbEngineLabel": "Engine",
+  "reverbEngineStereo": "Stereo (Vendor)",
+  "reverbEngineMc": "Multichannel FDN",
+  "reverbEngineOff": "Off",
+  "reverbEngineInfo": "Reverb follows the current channel path: matrix/binaural uses the vendor Progenitor2 stereo reverb; discrete multichannel uses an 8-line FDN. The two never run together.",
+  "reverbLfe": "LFE into reverb",
+  "reverbLfeInfo": "Sends LFE through a 120 Hz low-pass at -6 dB into the multichannel reverb; the wet return is low-passed again. Ignored on the stereo path.",
+  "reverbPredelay": "Pre-delay",
+  "reverbPredelayInfo": "Delay before the reverb (0–100 ms), added to the preset's base pre-delay; custom mode starts from 0.",
+  "reverbLegacyPreset": "Legacy preset {id}",
   "spatialHintRoom": "Simulated room reflection volume. Higher = deeper, grander space with fuller tails.",
   "spatialHintWidth": "Widens the binaural spread and virtual speaker spacing; moderate settings keep the sound full.",
   "spatialHintFocus": "Controls center-vocal focus. Moderate boost keeps vocals centered and clear above the surrounds.",
@@ -219,8 +257,9 @@
   "vbPluginTooltip": "Check = mounted plugins process this bus (vendor FX unaffected)",
   "vbPluginLockedHint": "Plugins do not run while bus processing is off (state kept; resumes instantly)",
   "vbAutoProtect": "Auto over-budget protection",
-  "vbProtectHint": "Narrows plugins to the monitored bus when the callback stays over budget; restores automatically",
+  "vbProtectHint": "Audio callback deadline is determined by the driver buffer size (e.g. 128 frames @ 48kHz = 2.7ms budget). When DSP callback duration (EMA) continuously exceeds 85% of this budget, heavy plugins are automatically narrowed to the monitored bus to prevent audio dropouts and glitches, restoring automatically when load normalizes.",
   "vbProtectActive": "Active: plugins only on the monitored bus, others passthrough (callback over budget)",
+  "vbProtectActiveTag": "Protection Active",
   "shelfTitle": "Low Shelf",
   "shelfHint": "Lift or cut everything below the corner; fixes thin recordings or boomy lows",
   "shelfFreq": "Gain Frequency",
@@ -232,8 +271,54 @@
   "shelfFreqTooltip": "Cutoff frequency for the low-shelf filter (40–400Hz); boosts or cuts everything below",
   "shelfGainTooltip": "Gain boost or cut below the cutoff frequency (-15 to +15dB). Boosts body or tightens rumble",
   "bassmonoFreqTooltip": "Frequencies below this cutoff (20–300Hz) are summed to mono to prevent phase cancellation and muddy bass",
+  "bassShapingMasterHint": "Master: active when either module is on",
+  "bassShelfModule": "Low Shelf",
+  "bassMonoModule": "Bass Mono",
+  "bassMonoDesc": "Sums bass below the crossover to mono to remove phase cancellation and muddiness.",
+  "channelSelection": "Channel Selection",
+  "bassShelfRoutingHint": "Select channels to apply low-shelf filtering. Unselected channels pass through unchanged.",
+  "bassMonoPairsTooltip": "Select channel pairs for bass mono. Unselected pairs pass through unchanged; stereo/binaural paths only affect L/R.",
+  "bassMonoPairs": "Channel Selection",
+  "bassMonoPairCount": "{count} pair(s)",
+  "@bassMonoPairCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoPairFront": "Front",
+  "bassMonoPairCenterLfe": "Center+LFE",
+  "bassMonoPairSide": "Side",
+  "bassMonoPairBack": "Back",
+  "bassMonoPairAll": "All",
+  "bassMonoPairFrontOnly": "Front only",
+  "bassMonoPairUnavailable": "This pair is not present in the current output",
+  "bassMonoMerge": "Merge Mode",
+  "bassMonoMergePerPair": "Per pair",
+  "bassMonoMergeGlobal": "Merge all",
+  "bassMonoMergeSinglePairHint": "With a single pair selected, both modes are identical",
+  "bassMonoNoneSelected": "No channel pair selected · not processing",
+  "bassMonoIgnoredPairs": "{count} pair(s) ignored (not present in current output)",
+  "@bassMonoIgnoredPairs": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "bassMonoLfeWarning": "Averaging C/LFE weakens center/LFE separation; not recommended",
+  "bassMonoStereoPathHint": "Stereo/matrix/binaural path: applies to L/R only",
   "retryNow": "Retry",
-  "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this applies to in-process only",
+  "sampleRateDeviceActual": "Device actual: {rate} Hz",
+  "@sampleRateDeviceActual": {
+    "placeholders": {
+      "rate": {
+        "type": "int"
+      }
+    }
+  },
+  "sampleRateFollowBridge": "Bridge modes follow the VB/ASIO device; this choice is only saved as a preference (it applies after switching back to in-process mode or on the next launch)",
   "latencyLabel": "Latency",
   "latencyMs": "Latency {n}ms",
   "latencyTip": "Added algorithmic latency: only latency-introducing effects count (e.g. reverb +30ms); low-latency effects add 0ms",
@@ -251,6 +336,9 @@
   "reverbOff": "Off",
   "stereoWiden": "Stereo Expansion",
   "postGain": "Post Gain",
+  "postPerChannelTrim": "Per-Channel Output Trim",
+  "postPerChannelTrimHint": "Fine-tune individual output channel levels (-15 to +15 dB)",
+  "postResetAllTrim": "Reset All",
   "equalizer": "Equalizer",
   "limiter": "Limiter",
   "engineInfo": "Engine",
@@ -275,14 +363,14 @@
   "aboutBody": "AuraDSP Engines + AuraDSP UI. DSP core built from libjamesdsp sources (GPL-family licensed).",
   "spectrum": "Live spectrum",
   "noAudio": "Idle — no audio stream through the engine",
-  "reverbPreset0": "Concert Hall",
-  "reverbPreset1": "Small Hall",
+  "reverbPreset0": "Large Hall",
+  "reverbPreset1": "Concert Hall",
   "reverbPreset2": "Medium Hall",
-  "reverbPreset3": "Grand Hall",
-  "reverbPreset4": "Vast Hall",
-  "reverbPreset5": "Cathedral",
-  "reverbPreset6": "Colossal Hall",
-  "reverbPreset7": "Valley",
+  "reverbPreset3": "Small Hall",
+  "reverbPreset4": "Studio",
+  "reverbPreset5": "Room",
+  "reverbPreset6": "Auditorium",
+  "reverbPreset7": "Plate Reverb",
   "sourceCard": "Audio Source",
   "srcTone": "Test Tone 440Hz",
   "srcPink": "Pink Noise",
@@ -298,7 +386,7 @@
   "channelMode": "Channel Mode",
   "channelsMatrix": "Matrix downmix",
   "channelsDiscrete": "Discrete per-channel",
-  "channelPhaseA": "Effective only for local 4/6/8-channel files: Matrix downmix = engine mixes to stereo before processing; Discrete = per-channel processing (pre-folded on stereo devices).",
+  "channelPhaseA": "DSP strategy when input or output device is multi-channel (4.0 / 5.1 / 7.1): Discrete = all channels independently pass through DSP with per-effect masks and upmixing plugin support; Matrix = folded to stereo for DSP and upmixed back to surround (LFE passthrough). Binaural Virtual Surround takes highest priority when enabled.",
   "audioMode": "Audio Mode",
   "audioModeHint": "Mode switches apply instantly; WASAPI will converge on AuraVAIO only",
   "audioParadigm": "Processing Paradigm",
@@ -465,12 +553,65 @@
   "lpDeleteAction": "Delete",
   "lpRenameTitle": "Rename script",
   "lpOpFailed": "Operation failed, please retry",
-  "lpCompiledIdle": "Compiled — flip the top-right switch to enable",
+  "lpCompiledIdle": "Compiled · Click Apply in toolbar to run",
   "lpSliders": "Script sliders (slider1..8)",
   "lpSliderHint": "Declared range wins; 0..1 when undeclared; changes apply live",
-  "lpLibrary": "Script library (%APPDATA%/AuraDSP/liveprog)",
+  "lpLibrary": "Script Library",
   "lpLibraryEmpty": "Library is empty — save current code with the name field below",
   "lpSave": "Save to library",
+  "lpApoDialogTitle": "Import EqualizerAPO Preset (.txt)",
+  "lpApoDialogDesc": "Convert EqualizerAPO / Peace parametric EQ text into a high-performance EEL2 script",
+  "lpApoOpenFile": "Open .txt file",
+  "lpApoPasteHint": "Paste EqualizerAPO configuration text here (e.g. Filter: ON PK Fc 1000 Hz Gain -3.0 dB Q 1.41)...",
+  "lpApoSwapChannels": "Swap Channels (L ↔ R)",
+  "lpApoInvertPolarity": "Invert Polarity (Phase 180°)",
+  "lpApoFiltersDetected": "Detected {n} filters",
+  "@lpApoFiltersDetected": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "lpApoPreampDetected": "Preamp: {gain} dB",
+  "@lpApoPreampDetected": {
+    "placeholders": {
+      "gain": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoApply": "Load into Editor",
+  "lpApoPreview": "Generated EEL2 Code Preview",
+  "lpFind": "Find",
+  "lpReplace": "Replace",
+  "lpReplaceAll": "Replace All",
+  "lpFindNext": "Next match",
+  "lpFindPrev": "Previous match",
+  "lpMatchCase": "Match case",
+  "lpMatchCount": "{current} of {total}",
+  "@lpMatchCount": {
+    "placeholders": {
+      "current": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "lpNoMatches": "No matches",
+  "lpOutline": "Code Outline",
+  "lpOutlineEmpty": "No sections or functions found",
+  "lpTemplates": "Script Templates",
+  "lpTemplatesDesc": "Select a starter DSP template to accelerate your audio script development",
+  "lpTemplateUse": "Use Template",
+  "lpManualSearchHint": "Search 80+ EEL2 functions, keywords, registers...",
+  "lpManualInsert": "Insert into Editor",
+  "lpManualParamTitle": "Parameters",
+  "lpManualReturnTitle": "Return Value",
+  "lpManualExampleTitle": "Example",
+  "lpAllCategories": "All",
   "convTitle": "Impulse Response",
   "convOpenIr": "Open IR file",
   "convClear": "Clear IR",
@@ -650,7 +791,6 @@
   "dyneqThreshold": "Threshold",
   "dyneqAttack": "Attack",
   "dyneqRelease": "Release",
-  "loudnessHint": "Auto boosts lows and highs at quiet levels, transparent when loud",
   "loudnessAmount": "Amount",
   "exciterHint": "Harmonic air for compressed highs",
   "exciterAmount": "Amount",
@@ -664,7 +804,8 @@
   "haasSide": "Delay side",
   "haasSideRight": "Right channel",
   "haasSideLeft": "Left channel",
-  "fxCatSpatial": "Spatial",
+  "fxCatSpatial": "Spatial Effects",
+  "fxCatStereoOnly": "Stereo Only",
   "fxCatLate": "Exciter & Output",
   "spatialTitle": "Spatial",
   "spatialHint": "Virtual 5.0 layout plus early reflections — room sound on headphones. Reverb / IR / soundstage cards live here now",
@@ -673,6 +814,7 @@
   "spatialStyleCinema": "Cinema",
   "spatialStyleImaging": "Imaging",
   "spatialStyleNeutral": "Neutral",
+  "spatialStyleCustom": "Custom",
   "spatialRoom": "Room",
   "spatialRoomInfo": "Early-reflection level and time scaling. 0 is dry, 1 is a large room",
   "spatialWidth": "Width",
@@ -688,11 +830,7 @@
   "spatialElevation": "Elevation",
   "spatialElevationInfo": "Virtual stage elevation. Positive lifts the image, negative lowers it",
   "spatialBinaural": "Multichannel binaural",
-  "spatialBinauralInfo": "Renders 5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted",
-  "spatialFdn": "FDN room",
-  "spatialFdnInfo": "8-line feedback delay network for late reverb, replacing Freeverb; Freeverb is skipped to avoid a double room",
-  "spatialLate": "Late reverb",
-  "spatialLateInfo": "FDN late-reverb send. Higher values make the room tail more obvious",
+  "spatialBinauralInfo": "Renders 4/5.1/7.1 channels to binaural stereo for headphones. Output is FL/FR only; other channels are muted. While it is on, it takes over 'Channel Mode' from the settings page (that setting has no effect)",
   "spatialHeadTrack": "Head tracking",
   "spatialHeadTrackInfo": "Receives head yaw from OpenTrack UDP (port 4242); off uses the manual angle",
   "spatialHeadAzim": "Head azimuth",
@@ -1086,11 +1224,14 @@
   "compTfresTransient": "Transient",
   "compTfresBalanced": "Balanced",
   "compTfresFine": "High Frequency",
+  "compModePairBadge": "Pair Mode",
+  "compModePairHint": "Allocates compression slots per channel-pair to save CPU and memory. Requires selecting both channels of a pair; semi-selected pairs pass through uncompressed.",
+  "compModeSemiSelectedWarning": "Pair mode requires selecting full pairs; semi-selected pairs are bypassed",
   "autoGainCompensation": "Auto Gain Compensation",
   "autoGainCompensationTooltip": "Dynamically compensates output level to prevent inter-stage clipping.",
   "outputGainGate": "Output Gain Trim",
   "outputGainGateTooltip": "Fine-tune the output level of this stage (-12.0 to +6.0 dB).",
-  "arbmagSubtitle": "8192-pt causal min-phase FIR convolution · Arbitrary response & AutoEq curves",
+  "arbmagSubtitle": "Based on an 8192-point causal minimum-phase FIR convolution engine. Supports AutoEq GraphicEQ curves or custom frequency responses to calibrate headphones and speakers with high precision.",
   "arbmagPresetFlat": "Flat",
   "arbmagPresetHarman": "Harman Target",
   "arbmagPresetDiffuse": "Diffuse-Field",
@@ -1099,7 +1240,6 @@
   "arbmagClear": "Clear Curve",
   "arbmagEmptyHint": "No curve loaded. Select a target preset above, import an AutoEq GraphicEQ file, or paste code.",
   "arbmagEditor": "GraphicEQ Code Editor",
-  "arbmagNodes": "{count} nodes loaded",
   "@arbmagNodes": {
     "placeholders": {
       "count": {
@@ -1134,7 +1274,68 @@
   },
   "fxCatFront": "Front Shaping",
   "fxCatCore": "Core Processing",
+  "channelCenter": "Center (C)",
+  "channelLfe": "LFE",
+  "channelSurroundLeft": "Surround Left (SL)",
+  "channelSurroundRight": "Surround Right (SR)",
+  "channelBackLeft": "Back Left (BL)",
+  "channelBackRight": "Back Right (BR)",
+  "inputChannelsCount": "{n} Channels",
+  "@inputChannelsCount": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceTuned": "Tuned {n} ch",
+  "@inputBalanceTuned": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      }
+    }
+  },
+  "inputBalanceDefault": "100% Default Balance",
+  "eqPresetElectronic": "Electronic (EDM)",
+  "eqPresetHiphop": "Hip-Hop",
+  "eqPresetAcoustic": "Acoustic",
+  "eqPresetMetal": "Metal",
+  "eqPresetPodcast": "Podcast",
+  "convIrPrompt": "Enter or select Impulse Response (IR) file path:",
+  "convLoadIr": "Load IR",
+  "ddcVdcPrompt": "Enter or select VDC calibration file path:",
+  "ddcLoadVdc": "Load VDC",
+  "arbmagPrompt": "Enter or select AutoEq / GraphicEQ curve file path:",
+  "testAudioWavPrompt": "Enter or select test audio (WAV) file path:",
+  "testAudioMp3Prompt": "Enter or select MP3 audio file path:",
+  "testAudioLoad": "Load Audio",
+  "pathPickerTitle": "Select Path",
+  "pathPickerConfirm": "Confirm",
+  "pathPickerBrowse": "Browse...",
+  "pathPickerClear": "Clear",
+  "pathPickerSelectDir": "Select This Directory",
+  "pathPickerErrEmpty": "Path cannot be empty",
+  "pathPickerErrDirNotExist": "Directory does not exist or access denied",
+  "pathPickerErrFileNotExist": "File does not exist or access denied",
+  "pathPickerErrFormat": "Unsupported file format (supported: {exts})",
+  "@pathPickerErrFormat": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
+  "pathPickerSupported": "Supported formats: {exts}",
+  "@pathPickerSupported": {
+    "placeholders": {
+      "exts": {
+        "type": "String"
+      }
+    }
+  },
   "errEngineClosed": "Engine is not running",
+  "errEngineBusy": "Engine busy, retry later",
   "errInvalidLength": "Invalid length",
   "errInvalidEncoding": "Invalid encoding",
   "errInvalidPath": "Invalid path",
@@ -1147,5 +1348,85 @@
   "errIoFailed": "File I/O failed",
   "errRejected": "Value rejected by engine",
   "errUnsupported": "Unsupported operation",
-  "errInternal": "Internal engine error"
+  "errReadOnly": "Parameter is read-only",
+  "errInternal": "Internal engine error",
+  "lpFindReplace": "Find & Replace",
+  "lpSidebarLeft": "Toggle Left Panel (Outline & Library)",
+  "lpSidebarRight": "Toggle Right Panel (Sliders & Console)",
+  "lpConsole": "Console",
+  "lpNewScriptWizard": "Script Wizard",
+  "lpApoImportTitle": "Import APO TXT",
+  "lpConfirmDiscardTitle": "Discard Changes?",
+  "lpConfirmDiscardBody": "The current script has unsaved modifications. Loading new content will discard these changes. Proceed?",
+  "lpConfirmDiscardAction": "Discard & Load",
+  "lpConsoleClear": "Clear Output",
+  "lpExpandEditor": "Expand",
+  "lpCollapseEditor": "Collapse",
+  "lpUncompiled": "Uncompiled edits",
+  "lpCompileSuccess": "Compiled successfully",
+  "lpCompilingScript": "Compiling script…",
+  "lpEyebrowDsp": "Programmable DSP",
+  "lpTitleEditor": "EEL2 Editor",
+  "lpBtnApplied": "Applied",
+  "lpBtnUnapplied": "Unapplied",
+  "lpBtnCompile": "Compile",
+  "lpTooltipCompileFirst": "Code modified; compile before applying",
+  "lpMenuFile": "File",
+  "lpFileNewBlank": "New Blank Script",
+  "lpFileNewFromTemplate": "New from Template...",
+  "lpFileImportApo": "Import APO Preset...",
+  "lpFileImportEel": "Import EEL Script...",
+  "lpFileSaveAs": "Save As...",
+  "lpFileSaveAsPrompt": "Enter destination path and filename:",
+  "lpFileOverwriteConfirmTitle": "File Already Exists",
+  "lpFileOverwriteConfirmBody": "The file \"{name}\" already exists. Overwrite it?",
+  "@lpFileOverwriteConfirmBody": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "lpFileOverwriteConfirmAction": "Overwrite",
+  "lpMenuEdit": "Edit",
+  "lpEditFindReplace": "Find & Replace",
+  "lpEditToggleOutline": "Code Outline",
+  "lpEditFormat": "Format Code",
+  "lpEditScrollToTop": "Scroll to Top",
+  "lpBtnLibrary": "Script Library",
+  "lpLibDialogTitle": "EEL2 Script Library & Directory Manager",
+  "lpLibOpenInExplorer": "Browse in File Manager",
+  "lpLibDirInvalid": "Directory does not exist or is invalid",
+  "lpLibSaveCurrent": "Save Current Script to Library",
+  "lpLibCustomDirs": "Script Directories",
+  "lpSlidersPanelTitle": "Parameter Sliders",
+  "lpSlidersCollapse": "Collapse Panel",
+  "lpSlidersExpand": "Expand Panel",
+  "lpTabScriptSliders": "Script Sliders",
+  "lpTabInputChannels": "Input Channels (8)",
+  "lpTabOutputChannels": "Output Channels (8)",
+  "lpCustomVarTag": "Script Var",
+  "lpCustomVarHint": "Script internal variable (initialized in @init; bind to slider1..8 for host real-time control)",
+  "lpInputTrimHint": "8-channel unified architecture input trim & master gain",
+  "lpOutputGainHint": "8-channel independent output post-gain trim (-15dB ~ +15dB)",
+  "lpResetAll": "Reset All",
+  "lpInputMasterGain": "Master Input Gain",
+  "lpOutputMasterGain": "Master Output Gain",
+  "lpNoScriptSliders": "No adjustable variables declared in script",
+  "lpTooltipUnapplyToCompile": "Compilation disabled while applied; unapply first",
+  "lpLibSystemInitial": "<System Default>",
+  "lpLibDirs": "Script Directories",
+  "lpLibScriptList": "Script List",
+  "lpApoParseError": "Syntax issue on line {line}: {error}",
+  "@lpApoParseError": {
+    "placeholders": {
+      "line": {
+        "type": "int"
+      },
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "lpApoNoFiltersPreampOnly": "Preamp Only Mode (No Filters)"
 }

@@ -45,20 +45,20 @@ def check(cond, label, detail=""):
         FAILURES.append(label)
 
 
-class VizFrame(ctypes.Structure):
-    _fields_ = [
-        ("seq", ctypes.c_uint64),
-        ("timestamp_ms", ctypes.c_double),
-        ("spectrum", ctypes.c_float * VIZ_BANDS),
-        ("eq_in_spectrum", ctypes.c_float * VIZ_BANDS),
-        ("level_l_dbfs", ctypes.c_float),
-        ("level_r_dbfs", ctypes.c_float),
-        ("stage_levels_l", ctypes.c_float * STAGE_MAX),
-        ("stage_levels_r", ctypes.c_float * STAGE_MAX),
-        ("channel_count", ctypes.c_uint32),
-        ("channel_levels", ctypes.c_float * CH_MAX),
-        ("stage_ch_levels", ctypes.c_float * (STAGE_MAX * CH_MAX)),
-    ]
+# --- VizFrame 单一来源（§7-1 ABI 镜像门禁）---
+# ctypes 镜像只在 tools/bin/viz_frame.py 定义一次，这里不再手抄。
+# 手抄件的危险：头文件 sizeof 改了却漏改某个脚本 → 脚本按旧尺寸申请缓冲、
+# 引擎按新尺寸写 → 静默堆越界（审查 A1/A2/A3 三处即此）。viz_frame 导入时
+# 自带 sizeof / ABI 版本哨兵，出错就地抛 AssertionError。
+_VIZ_ROOT = os.path.dirname(os.path.abspath(__file__))
+while not os.path.isfile(os.path.join(_VIZ_ROOT, 'tools', 'bin', 'viz_frame.py')):
+    _VIZ_PARENT = os.path.dirname(_VIZ_ROOT)
+    if _VIZ_PARENT == _VIZ_ROOT:
+        raise ImportError('未找到 tools/bin/viz_frame.py（VizFrame 的唯一定义处）')
+    _VIZ_ROOT = _VIZ_PARENT
+if os.path.join(_VIZ_ROOT, 'tools', 'bin') not in sys.path:
+    sys.path.insert(0, os.path.join(_VIZ_ROOT, 'tools', 'bin'))
+from viz_frame import VizFrame  # noqa: E402
 
 
 lib = ctypes.CDLL(DLL)
@@ -187,10 +187,10 @@ if f:
             print(f"      ch{c}: got {f.channel_levels[c]:.2f} want {db(amps8[c]):.2f}")
     check(ok, "channel_levels 逐声道 == 20log10(幅值) ±0.5dB")
     assert_passthrough_row(f, 12, amps8, label="输入级 ")
-    for st in (13, 14, 15, 18, 19):
+    for st in (13, 14, 15, 16, 18, 19):
         assert_passthrough_row(f, st, amps8)
-    # Category B（仅 FL/FR 对）：ch>=2 恒 -120；ch0/1 与 L/R 列一致
-    for st in (16, 17, 20):
+    # Category B（仅 FL/FR 对，Haas 与 Spatial）：ch>=2 恒 -120；ch0/1 与 L/R 列一致
+    for st in (17, 20):
         okc = all(ch_level(f, st, c) == -120.0 for c in range(2, 8))
         check(okc, f"stage_ch[{st}][2..7] == -120（Category B 作用域诚实）")
         check(abs(ch_level(f, st, 0) - f.stage_levels_l[st]) < 1e-6 and

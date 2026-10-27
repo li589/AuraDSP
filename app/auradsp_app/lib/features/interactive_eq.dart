@@ -19,7 +19,6 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart';
-import '../l10n/gen/app_localizations.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -377,22 +376,31 @@ class _PresetDropdown extends StatelessWidget {
   const _PresetDropdown({required this.model});
 
   /// 预设 id → 展示名（展示名走 l10n，不能是 const）。
-  static List<(String, String)> _presetsOf(AppLocalizations l) => [
-    ('flat', l.eqPresetFlat),
-    ('pop', l.eqPresetPop),
-    ('rock', l.eqPresetRock),
-    ('jazz', l.eqPresetJazz),
-    ('classical', l.eqPresetClassical),
-    ('vocal', l.eqPresetVocal),
-    ('smile', l.eqPresetSmile),
-    ('bass_boost', l.eqPresetBass),
-    ('treble_boost', l.eqPresetTreble),
-  ];
+  static List<(String, String)> _presetsOf(BuildContext context) {
+    final l = l10nOf(context);
+    return [
+      ('flat', l.eqPresetFlat),
+      ('pop', l.eqPresetPop),
+      ('rock', l.eqPresetRock),
+      ('jazz', l.eqPresetJazz),
+      ('classical', l.eqPresetClassical),
+      ('vocal', l.eqPresetVocal),
+      ('smile', l.eqPresetSmile),
+      ('bass_boost', l.eqPresetBass),
+      ('treble_boost', l.eqPresetTreble),
+      ('electronic', l.eqPresetElectronic),
+      ('hiphop', l.eqPresetHiphop),
+      ('acoustic', l.eqPresetAcoustic),
+      ('metal', l.eqPresetMetal),
+      ('podcast', l.eqPresetPodcast),
+    ];
+  }
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final cur = _presetsOf(l10nOf(context)).firstWhere(
+    final presets = _presetsOf(context);
+    final cur = presets.firstWhere(
       (e) => e.$1 == model.eqPresetName,
       orElse: () => ('custom', l10nOf(context).eqPresetCustom),
     );
@@ -407,7 +415,7 @@ class _PresetDropdown extends StatelessWidget {
       ),
       onSelected: model.applyEqPreset,
       itemBuilder: (context) => [
-        for (final item in _presetsOf(l10nOf(context)))
+        for (final item in presets)
           PopupMenuItem<String>(
             value: item.$1,
             child: Row(
