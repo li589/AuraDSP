@@ -478,7 +478,7 @@ class _IrWaveformPainter extends CustomPainter {
       final y = (yFrac * (h - 16) + 6).clamp(6.0, h - 10);
       canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
 
-      final label = isLogScale ? '${val.toInt()}dB' : '${(val * 100).toInt()}%';
+      final label = isLogScale ? '${val.toInt()}dB' : '${(val * 100).round()}%';
       final tp = TextPainter(
         text: TextSpan(text: label, style: textStyle),
         textDirection: TextDirection.ltr,
@@ -588,7 +588,7 @@ class _IrWaveformPainter extends CustomPainter {
 
 /* ---- 3D 声场空间渲染 (高级可视化：透视网格 + 声波扩散 + 衰减光晕) ---- */
 
-/* ---- 3D 声学室空间渲染 (极简无框置顶视效：深度透视 + 对称声波 + 空间尺寸响应) ---- */
+/* ---- 3D 高级声学腔体仿真渲染 (深邃透视 + 物理漫反射扩散粒子 + 声学吸音构架 + 专业 HUD) ---- */
 
 class _Freeverb3DStage extends StatelessWidget {
   final double decay;
@@ -611,36 +611,21 @@ class _Freeverb3DStage extends StatelessWidget {
     return ClipRRect(
       borderRadius: BorderRadius.circular(AuraRadius.sm),
       child: Container(
-        height: 140,
+        height: 154,
         decoration: BoxDecoration(
-          color: p.panelRaised.withValues(alpha: 0.6),
-          border: Border.all(color: p.hairline.withValues(alpha: 0.6)),
+          color: p.panelRaised.withValues(alpha: 0.75),
+          border: Border.all(color: p.hairline.withValues(alpha: 0.65)),
         ),
-        child: Stack(
-          children: [
-            Positioned.fill(
-              child: CustomPaint(
-                size: Size.infinite,
-                painter: _Freeverb3DPainter(
-                  decay: decay,
-                  damp: damp,
-                  roomSize: roomSize,
-                  stereoWidth: stereoWidth,
-                  palette: p,
-                  active: active,
-                ),
-              ),
-            ),
-            // 右上角极简度量（微弱透明度，不喧宾夺主）
-            Positioned(
-              top: 6,
-              right: 10,
-              child: Text(
-                'Room ${roomSize.toStringAsFixed(1)}x · Decay ${(decay * 100).toStringAsFixed(0)}% · Width ${stereoWidth.toStringAsFixed(1)}',
-                style: monoOf(p, size: 9, color: p.textDim.withValues(alpha: 0.6)),
-              ),
-            ),
-          ],
+        child: CustomPaint(
+          size: Size.infinite,
+          painter: _Freeverb3DPainter(
+            decay: decay,
+            damp: damp,
+            roomSize: roomSize,
+            stereoWidth: stereoWidth,
+            palette: p,
+            active: active,
+          ),
         ),
       ),
     );
@@ -668,190 +653,432 @@ class _Freeverb3DPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    final baseAlpha = active ? 1.0 : 0.2;
-    // 空间尺寸增强系数：0.4 ~ 2.4
-    final sizeFactor = (roomSize / 1.2).clamp(0.4, 2.4);
+    if (w <= 0 || h <= 0) return;
 
-    // 消失点（透视中心）：roomSize 越大，透视深远感越强
+    final baseAlpha = active ? 1.0 : 0.22;
+    // 空间体量膨胀因子：0.5 ~ 2.4
+    final sizeFactor = (roomSize / 1.2).clamp(0.5, 2.4);
+
+    // ── 0. 声学暗场底衬与景深光晕 ──
+    final bgRect = Rect.fromLTWH(0, 0, w, h);
+    final bgShader = RadialGradient(
+      center: const Alignment(0.0, -0.2),
+      radius: 1.1,
+      colors: [
+        active
+            ? palette.accent.withValues(alpha: 0.08)
+            : palette.panelRaised.withValues(alpha: 0.4),
+        palette.panelRaised.withValues(alpha: 0.95),
+      ],
+    ).createShader(bgRect);
+    canvas.drawRect(bgRect, Paint()..shader = bgShader);
+
+    // 消失点（透视汇聚中心）
     final vpX = w / 2;
-    final vpY = (h * (0.22 - (sizeFactor - 1.0) * 0.06)).clamp(h * 0.08, h * 0.30);
+    final vpY = (h * (0.24 - (sizeFactor - 1.0) * 0.05)).clamp(h * 0.10, h * 0.32);
 
-    // 地面四角
-    final flL = Offset(w * 0.03, h * 0.98);
-    final flR = Offset(w * 0.97, h * 0.98);
-    final backHalfW = (w * (0.32 / math.sqrt(sizeFactor))).clamp(w * 0.16, w * 0.42);
-    final bkL = Offset(vpX - backHalfW, vpY + 16);
-    final bkR = Offset(vpX + backHalfW, vpY + 16);
+    // 房间地面与边界关键坐标点
+    final flL = Offset(w * 0.02, h * 0.98);
+    final flR = Offset(w * 0.98, h * 0.98);
+    final backHalfW = (w * (0.34 / math.sqrt(sizeFactor))).clamp(w * 0.18, w * 0.42);
+    final bkL = Offset(vpX - backHalfW, vpY + 14);
+    final bkR = Offset(vpX + backHalfW, vpY + 14);
 
-    // ── 1. 透视地板网格 ──
-    final gridPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.22 * baseAlpha)
+    // ── 1. 地面高精密声学雷达网格 (Perspective Acoustic Floor Grid) ──
+    final floorGridPaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.18 * baseAlpha)
       ..strokeWidth = 0.6;
 
-    // 纵深线（左→右均匀 8 条）
-    for (var i = 0; i <= 8; i++) {
-      final t = i / 8.0;
+    // 纵深放射线（10 条，向消失点汇聚）
+    const numLongLines = 10;
+    for (var i = 0; i <= numLongLines; i++) {
+      final t = i / numLongLines;
       final botX = flL.dx + (flR.dx - flL.dx) * t;
       final topX = bkL.dx + (bkR.dx - bkL.dx) * t;
-      canvas.drawLine(
-        Offset(botX, flL.dy),
-        Offset(topX, bkL.dy),
-        gridPaint,
-      );
+      canvas.drawLine(Offset(botX, flL.dy), Offset(topX, bkL.dy), floorGridPaint);
     }
-    // 横向线（6 条，近疏远密）
-    for (var i = 0; i <= 6; i++) {
-      final t = math.pow(i / 6.0, 1.6);
+
+    // 横向等时间距离线（7 条，按指数透视排布）
+    const numLatLines = 7;
+    for (var i = 0; i <= numLatLines; i++) {
+      final t = math.pow(i / numLatLines, 1.7).toDouble();
       final y = flL.dy + (bkL.dy - flL.dy) * t;
       final lx = flL.dx + (bkL.dx - flL.dx) * t;
       final rx = flR.dx + (bkR.dx - flR.dx) * t;
-      canvas.drawLine(Offset(lx, y), Offset(rx, y), gridPaint);
+      canvas.drawLine(Offset(lx, y), Offset(rx, y), floorGridPaint);
     }
 
-    // ── 2. 3D 空间立体线框盒子（地面 + 后墙 + 天花板） ──
-    final wallPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.38 * baseAlpha)
-      ..strokeWidth = 1.0;
-    canvas.drawLine(flL, bkL, wallPaint);
-    canvas.drawLine(flR, bkR, wallPaint);
-    canvas.drawLine(flL, flR, wallPaint);
-    canvas.drawLine(bkL, bkR, wallPaint);
-
-    // 天花板高度与后墙轮廓
-    final ceilH = (22.0 * math.sqrt(sizeFactor)).clamp(16.0, 38.0);
+    // ── 2. 3D 声学室后墙与天花板吸音吊顶 (Ceiling Acoustic Baffles) ──
+    final ceilH = (26.0 * math.sqrt(sizeFactor)).clamp(18.0, 44.0);
     final ceilL = Offset(bkL.dx, bkL.dy - ceilH);
     final ceilR = Offset(bkR.dx, bkR.dy - ceilH);
-    final ceilPaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.22 * baseAlpha)
-      ..strokeWidth = 0.8;
-    canvas.drawLine(ceilL, ceilR, ceilPaint);
-    canvas.drawLine(bkL, ceilL, ceilPaint);
-    canvas.drawLine(bkR, ceilR, ceilPaint);
 
-    // 侧墙透视延伸线（增强立方体感）
-    final sidePaint = Paint()
-      ..color = palette.vizGrid.withValues(alpha: 0.12 * baseAlpha)
-      ..strokeWidth = 0.5;
-    canvas.drawLine(Offset(flL.dx, flL.dy - h * 0.7), ceilL, sidePaint);
-    canvas.drawLine(Offset(flR.dx, flR.dy - h * 0.7), ceilR, sidePaint);
+    // 后墙半透明体块
+    final backWallPath = Path()
+      ..moveTo(bkL.dx, bkL.dy)
+      ..lineTo(bkR.dx, bkR.dy)
+      ..lineTo(ceilR.dx, ceilR.dy)
+      ..lineTo(ceilL.dx, ceilL.dy)
+      ..close();
+    final backWallPaint = Paint()
+      ..color = (active ? palette.accent : palette.textDim).withValues(alpha: 0.04 * baseAlpha)
+      ..style = PaintingStyle.fill;
+    canvas.drawPath(backWallPath, backWallPaint);
 
-    if (!active) return;
+    final wallFramePaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.35 * baseAlpha)
+      ..strokeWidth = 0.9;
+    canvas.drawPath(backWallPath, wallFramePaint..style = PaintingStyle.stroke);
 
-    // ── 3. 声源位置 ──
-    final widthOff = (w * 0.22 * stereoWidth).clamp(16.0, w * 0.44);
-    final srcY = h * 0.78;
+    // 侧墙与地面主轮廓线
+    canvas.drawLine(flL, bkL, wallFramePaint);
+    canvas.drawLine(flR, bkR, wallFramePaint);
+
+    // 悬浮天花板声学吊顶棱线 (Acoustic Cloud Ribs)
+    final topFrontL = Offset(flL.dx, flL.dy - h * 0.76);
+    final topFrontR = Offset(flR.dx, flR.dy - h * 0.76);
+    final ceilingRibPaint = Paint()
+      ..color = palette.vizGrid.withValues(alpha: 0.16 * baseAlpha)
+      ..strokeWidth = 0.6;
+    canvas.drawLine(topFrontL, ceilL, ceilingRibPaint);
+    canvas.drawLine(topFrontR, ceilR, ceilingRibPaint);
+
+    // ── 3. 左右侧壁声学吸音扩散格栅 (Acoustic Diffuser Panels) ──
+    final panelCount = 4;
+    for (var i = 1; i <= panelCount; i++) {
+      final t1 = (i - 0.7) / panelCount;
+      final t2 = (i - 0.2) / panelCount;
+
+      final p1Bottom = Offset(flL.dx + (bkL.dx - flL.dx) * t1, flL.dy + (bkL.dy - flL.dy) * t1);
+      final p1Top = Offset(topFrontL.dx + (ceilL.dx - topFrontL.dx) * t1, topFrontL.dy + (ceilL.dy - topFrontL.dy) * t1);
+      final p2Bottom = Offset(flL.dx + (bkL.dx - flL.dx) * t2, flL.dy + (bkL.dy - flL.dy) * t2);
+      final p2Top = Offset(topFrontL.dx + (ceilL.dx - topFrontL.dx) * t2, topFrontL.dy + (ceilL.dy - topFrontL.dy) * t2);
+
+      // 左侧吸音块
+      final leftPanel = Path()
+        ..moveTo(p1Bottom.dx, p1Bottom.dy)
+        ..lineTo(p2Bottom.dx, p2Bottom.dy)
+        ..lineTo(p2Top.dx, p2Top.dy)
+        ..lineTo(p1Top.dx, p1Top.dy)
+        ..close();
+      canvas.drawPath(
+        leftPanel,
+        Paint()
+          ..color = (active ? palette.accent2 : palette.textDim).withValues(alpha: 0.035 * baseAlpha)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawPath(
+        leftPanel,
+        Paint()
+          ..color = palette.hairline.withValues(alpha: 0.20 * baseAlpha)
+          ..strokeWidth = 0.5
+          ..style = PaintingStyle.stroke,
+      );
+
+      // 右侧吸音块
+      final pr1Bottom = Offset(flR.dx + (bkR.dx - flR.dx) * t1, flR.dy + (bkR.dy - flR.dy) * t1);
+      final pr1Top = Offset(topFrontR.dx + (ceilR.dx - topFrontR.dx) * t1, topFrontR.dy + (ceilR.dy - topFrontR.dy) * t1);
+      final pr2Bottom = Offset(flR.dx + (bkR.dx - flR.dx) * t2, flR.dy + (bkR.dy - flR.dy) * t2);
+      final pr2Top = Offset(topFrontR.dx + (ceilR.dx - topFrontR.dx) * t2, topFrontR.dy + (ceilR.dy - topFrontR.dy) * t2);
+
+      final rightPanel = Path()
+        ..moveTo(pr1Bottom.dx, pr1Bottom.dy)
+        ..lineTo(pr2Bottom.dx, pr2Bottom.dy)
+        ..lineTo(pr2Top.dx, pr2Top.dy)
+        ..lineTo(pr1Top.dx, pr1Top.dy)
+        ..close();
+      canvas.drawPath(
+        rightPanel,
+        Paint()
+          ..color = (active ? palette.accent2 : palette.textDim).withValues(alpha: 0.035 * baseAlpha)
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawPath(
+        rightPanel,
+        Paint()
+          ..color = palette.hairline.withValues(alpha: 0.20 * baseAlpha)
+          ..strokeWidth = 0.5
+          ..style = PaintingStyle.stroke,
+      );
+    }
+
+    // ── 4. L/R 全频专业监听音箱与声学波导 (Virtual Studio Monitors) ──
+    final widthOff = (w * 0.24 * stereoWidth).clamp(20.0, w * 0.44);
+    final srcY = h * 0.76;
     final srcL = Offset(vpX - widthOff, srcY);
     final srcR = Offset(vpX + widthOff, srcY);
 
-    // 声源光晕（外圈漫反射）
-    final srcGlow = Paint()
-      ..color = palette.accent.withValues(alpha: 0.25)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(srcL, 8, srcGlow);
-    canvas.drawCircle(srcR, 8, srcGlow);
+    if (active) {
+      // 4.1 音箱波导扩散辐射锥 (Waveguide Dispersion Cones)
+      final coneHalfAngle = (0.28 + 0.15 * stereoWidth).clamp(0.20, 0.48);
+      final coneLength = 54.0 * sizeFactor;
 
-    // 声源实心点
-    final srcDot = Paint()
-      ..color = palette.accent.withValues(alpha: 0.9)
-      ..style = PaintingStyle.fill;
-    canvas.drawCircle(srcL, 3.5, srcDot);
-    canvas.drawCircle(srcR, 3.5, srcDot);
+      void drawMonitorCone(Offset pos, double directionSign) {
+        final centerDir = -math.pi * 0.5 + directionSign * 0.25;
+        final conePath = Path()
+          ..moveTo(pos.dx, pos.dy)
+          ..lineTo(
+            pos.dx + coneLength * math.cos(centerDir - coneHalfAngle),
+            pos.dy + coneLength * math.sin(centerDir - coneHalfAngle),
+          )
+          ..lineTo(
+            pos.dx + coneLength * math.cos(centerDir + coneHalfAngle),
+            pos.dy + coneLength * math.sin(centerDir + coneHalfAngle),
+          )
+          ..close();
 
-    // ── 4. 早期反射路径（声源 → 侧墙反弹点 → 远处交叉） ──
-    final reflAlpha = (0.18 * (1.0 - damp * 0.6)).clamp(0.04, 0.25) * baseAlpha;
-    final reflPaint = Paint()
-      ..color = palette.accent.withValues(alpha: reflAlpha)
-      ..strokeWidth = 0.9
-      ..style = PaintingStyle.stroke;
+        final coneShader = RadialGradient(
+          center: Alignment.center,
+          radius: 0.9,
+          colors: [
+            palette.accent.withValues(alpha: 0.18),
+            palette.accent.withValues(alpha: 0.01),
+          ],
+        ).createShader(Rect.fromCircle(center: pos, radius: coneLength));
+        canvas.drawPath(conePath, Paint()..shader = coneShader);
+      }
 
-    final wallHitL = Offset(flL.dx + (bkL.dx - flL.dx) * 0.45, flL.dy + (bkL.dy - flL.dy) * 0.45);
-    final wallHitR = Offset(flR.dx + (bkR.dx - flR.dx) * 0.45, flR.dy + (bkR.dy - flR.dy) * 0.45);
-    canvas.drawLine(srcL, wallHitL, reflPaint);
-    canvas.drawLine(wallHitL, bkR, reflPaint..strokeWidth = 0.5);
-    canvas.drawLine(srcR, wallHitR, reflPaint..strokeWidth = 0.9);
-    canvas.drawLine(wallHitR, bkL, reflPaint..strokeWidth = 0.5);
+      drawMonitorCone(srcL, 1.0);
+      drawMonitorCone(srcR, -1.0);
 
-    // 直达路径（到后墙中心）
-    final directPaint = Paint()
-      ..color = palette.accent.withValues(alpha: 0.12 * baseAlpha)
-      ..strokeWidth = 0.7
-      ..style = PaintingStyle.stroke;
-    final backCenter = Offset(vpX, (bkL.dy + bkR.dy) / 2);
-    canvas.drawLine(srcL, backCenter, directPaint);
-    canvas.drawLine(srcR, backCenter, directPaint);
+      // 4.2 早期镜面反射路径 (First-order Specular Ray Paths)
+      final reflAlpha = (0.22 * (1.0 - damp * 0.5)).clamp(0.06, 0.32);
+      final rayPaint = Paint()
+        ..color = palette.accent.withValues(alpha: reflAlpha)
+        ..strokeWidth = 0.8
+        ..style = PaintingStyle.stroke;
 
-    // ── 5. 衰减扩散环（修复右音箱扩散朝向：左右关于中轴对称向房间内前方扩散） ──
-    final ringCount = (3 + decay * 4).toInt().clamp(2, 7);
-    for (var i = 1; i <= ringCount; i++) {
-      final t = i / (ringCount + 1);
-      final ringAlpha = (0.16 * (1.0 - t) * decay * (1.0 - damp * 0.4)).clamp(0.02, 0.22);
-      final ringPaint = Paint()
-        ..color = palette.accent.withValues(alpha: ringAlpha * baseAlpha)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = (1.2 - t * 0.6).clamp(0.3, 1.2);
+      // 侧壁首反射交点
+      final hitL = Offset(flL.dx + (bkL.dx - flL.dx) * 0.48, flL.dy + (bkL.dy - flL.dy) * 0.48);
+      final hitR = Offset(flR.dx + (bkR.dx - flR.dx) * 0.48, flR.dy + (bkR.dy - flR.dy) * 0.48);
 
-      final radius = 14.0 + t * 52 * sizeFactor;
+      canvas.drawLine(srcL, hitL, rayPaint);
+      canvas.drawLine(hitL, bkR, rayPaint..strokeWidth = 0.5);
+      canvas.drawLine(srcR, hitR, rayPaint..strokeWidth = 0.8);
+      canvas.drawLine(hitR, bkL, rayPaint..strokeWidth = 0.5);
 
-      // 左声源波纹弧（向右前方扩散，中心约 -0.44π）
-      canvas.drawArc(
-        Rect.fromCircle(center: srcL, radius: radius),
-        -math.pi * 0.70,
-        math.pi * 0.52,
-        false,
-        ringPaint,
-      );
-      // 右声源波纹弧（向左前方扩散，中心约 -0.56π，绝对对称，杜绝向右下扩散错误）
-      canvas.drawArc(
-        Rect.fromCircle(center: srcR, radius: radius),
-        -math.pi * 0.82,
-        math.pi * 0.52,
-        false,
-        ringPaint,
+      // 侧壁反射高光点 (Wall Impact Highlights)
+      final impactGlow = Paint()
+        ..color = palette.accent2.withValues(alpha: 0.5)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4.0);
+      canvas.drawCircle(hitL, 2.5, impactGlow);
+      canvas.drawCircle(hitR, 2.5, impactGlow);
+
+      // 4.3 动态球面波前扩散弧 (Spherical Wavefront Arcs)
+      final ringCount = (4 + decay * 4).round().clamp(3, 8);
+      for (var i = 1; i <= ringCount; i++) {
+        final t = i / (ringCount + 1);
+        final ringAlpha = (0.20 * (1.0 - t) * (0.3 + 0.7 * decay) * (1.0 - damp * 0.35)).clamp(0.02, 0.25);
+        final wavePaint = Paint()
+          ..color = palette.accent.withValues(alpha: ringAlpha)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = (1.4 - t * 0.8).clamp(0.4, 1.4);
+
+        final radius = 12.0 + t * 62.0 * sizeFactor;
+
+        // 左音箱对称波弧
+        canvas.drawArc(
+          Rect.fromCircle(center: srcL, radius: radius),
+          -math.pi * 0.72,
+          math.pi * 0.54,
+          false,
+          wavePaint,
+        );
+        // 右音箱对称波弧
+        canvas.drawArc(
+          Rect.fromCircle(center: srcR, radius: radius),
+          -math.pi * 0.82,
+          math.pi * 0.54,
+          false,
+          wavePaint,
+        );
+      }
+
+      // 4.4 声学漫反射衰减粒子群 (Stochastic Diffusion Cloud)
+      // 粒子数量与分布随 decay 与 roomSize 呼吸扩散，色彩受 damp 阻尼高频吸收影响
+      const particleTotal = 36;
+      final pActiveCount = (14 + decay * 22).round().clamp(10, particleTotal);
+      final particlePaint = Paint()..style = PaintingStyle.fill;
+
+      // damp 越高，微粒色调越偏温暖柔和；damp 越低，微粒越明亮通透
+      final pColor = Color.lerp(palette.accent, palette.accent2, damp.clamp(0.0, 1.0)) ?? palette.accent;
+
+      for (var i = 0; i < pActiveCount; i++) {
+        final seedX = (math.sin(i * 91.73) * 0.5 + 0.5);
+        final seedY = (math.cos(i * 47.19) * 0.5 + 0.5);
+        final seedDepth = (math.sin(i * 123.45 + 1.2) * 0.5 + 0.5);
+
+        // 透视深度映射
+        final px = (vpX - backHalfW * 1.3) + seedX * (backHalfW * 2.6);
+        final py = (bkL.dy - ceilH * 0.5) + seedY * (flL.dy - bkL.dy + ceilH * 0.5) * 0.85;
+
+        if (px >= flL.dx + 10 && px <= flR.dx - 10 && py >= bkL.dy - ceilH && py <= flL.dy - 6) {
+          final pAlpha = ((0.10 + 0.35 * seedDepth) * decay * (1.0 - damp * 0.4)).clamp(0.03, 0.45);
+          final pRadius = (0.9 + 1.4 * (1.0 - seedDepth));
+          particlePaint.color = pColor.withValues(alpha: pAlpha);
+          canvas.drawCircle(Offset(px, py), pRadius, particlePaint);
+        }
+      }
+
+      // 4.5 后墙大空间能量晕染 (Diffuse Field Halo)
+      final backGlow = Paint()
+        ..color = palette.accent.withValues(alpha: (0.10 * decay * (1.0 - damp * 0.4)).clamp(0.02, 0.18))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, 22 * sizeFactor);
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(vpX, vpY + 12),
+          width: (bkR.dx - bkL.dx) * 0.90,
+          height: 28 * sizeFactor,
+        ),
+        backGlow,
       );
     }
 
-    // ── 6. 后墙漫反射光晕 ──
-    final backGlow = Paint()
-      ..color = palette.accent.withValues(alpha: (0.08 * decay * (1.0 - damp * 0.5)).clamp(0.01, 0.15))
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 20 * sizeFactor);
-    canvas.drawOval(
-      Rect.fromCenter(center: Offset(vpX, vpY + 14), width: (bkR.dx - bkL.dx) * 0.85, height: 24 * sizeFactor),
-      backGlow,
+    // ── 5. 音箱实体精绘 (Studio Monitor Pods) ──
+    void drawSpeakerBox(Offset pos, bool isLeft) {
+      // 音箱底盘高光
+      if (active) {
+        final haloPaint = Paint()
+          ..color = palette.accent.withValues(alpha: 0.35)
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+        canvas.drawCircle(pos, 8.0, haloPaint);
+      }
+
+      // 箱体外壳
+      final boxRect = Rect.fromCenter(center: pos, width: 14.0, height: 16.0);
+      final boxRRect = RRect.fromRectAndRadius(boxRect, const Radius.circular(2.5));
+      canvas.drawRRect(
+        boxRRect,
+        Paint()
+          ..color = palette.panelRaised
+          ..style = PaintingStyle.fill,
+      );
+      canvas.drawRRect(
+        boxRRect,
+        Paint()
+          ..color = active ? palette.accent : palette.textDim.withValues(alpha: 0.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.0,
+      );
+
+      // 低音单元大纸盆
+      final wooferCenter = Offset(pos.dx, pos.dy + 2.5);
+      canvas.drawCircle(
+        wooferCenter,
+        3.5,
+        Paint()
+          ..color = active ? palette.accent.withValues(alpha: 0.6) : palette.textDim.withValues(alpha: 0.3)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.8,
+      );
+      canvas.drawCircle(
+        wooferCenter,
+        1.5,
+        Paint()
+          ..color = active ? palette.accent : palette.textDim
+          ..style = PaintingStyle.fill,
+      );
+
+      // 高音丝膜球顶
+      final tweeterCenter = Offset(pos.dx, pos.dy - 3.8);
+      canvas.drawCircle(
+        tweeterCenter,
+        1.3,
+        Paint()
+          ..color = active ? palette.accent2 : palette.textDim
+          ..style = PaintingStyle.fill,
+      );
+
+      // 声道标识 L / R
+      final chTp = TextPainter(
+        text: TextSpan(
+          text: isLeft ? 'L' : 'R',
+          style: monoOf(palette, size: 7.5, color: active ? palette.accent : palette.textDim)
+              .copyWith(fontWeight: FontWeight.w700),
+        ),
+        textDirection: TextDirection.ltr,
+      )..layout();
+      chTp.paint(canvas, Offset(pos.dx - chTp.width / 2, pos.dy + 9.5));
+    }
+
+    drawSpeakerBox(srcL, true);
+    drawSpeakerBox(srcR, false);
+
+    // ── 6. 监听席位与声学受体 (Binaural Receiver Position) ──
+    final listenerY = h * 0.92;
+    final listenerPos = Offset(vpX, listenerY);
+    if (active) {
+      final listenerGlow = Paint()
+        ..color = palette.accent2.withValues(alpha: 0.15)
+        ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8.0);
+      canvas.drawCircle(listenerPos, 9.0, listenerGlow);
+    }
+    // 监听席双耳几何指示
+    final recvPaint = Paint()
+      ..color = active ? palette.accent2 : palette.textDim.withValues(alpha: 0.6)
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(listenerPos, 3.0, recvPaint);
+    canvas.drawCircle(
+      listenerPos,
+      5.5,
+      Paint()
+        ..color = active ? palette.accent2.withValues(alpha: 0.7) : palette.textDim.withValues(alpha: 0.3)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.8,
     );
 
-    // ── 7. 聆听位置指示（小三角底部中央） ──
-    final listenerY = h * 0.92;
-    final listenerPaint = Paint()
-      ..color = palette.accent.withValues(alpha: 0.5)
-      ..style = PaintingStyle.fill;
-    final triPath = Path()
-      ..moveTo(vpX, listenerY - 5)
-      ..lineTo(vpX - 4, listenerY + 2)
-      ..lineTo(vpX + 4, listenerY + 2)
-      ..close();
-    canvas.drawPath(triPath, listenerPaint);
-
-    final listGlow = Paint()
-      ..color = palette.accent.withValues(alpha: 0.1)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
-    canvas.drawCircle(Offset(vpX, listenerY - 2), 8, listGlow);
-
-    // ── 8. 阻尼渐变蒙层 ──
-    final dampGrad = Paint()
-      ..shader = LinearGradient(
-        begin: Alignment.topCenter,
-        end: Alignment.center,
-        colors: [
-          palette.bg.withValues(alpha: (damp * 0.4).clamp(0.0, 0.35)),
-          palette.bg.withValues(alpha: 0.0),
+    // ── 7. 专业声学仪表 HUD (Acoustic Telemetry Overlay) ──
+    // 7.1 左上角：声学腔体模型标识
+    final titleTp = TextPainter(
+      text: TextSpan(
+        children: [
+          TextSpan(
+            text: 'ACOUSTIC CAVITY MODEL · ',
+            style: monoOf(palette, size: 8, color: palette.textDim.withValues(alpha: 0.7))
+                .copyWith(fontWeight: FontWeight.w600),
+          ),
+          TextSpan(
+            text: active ? 'ACTIVE SIMULATION' : 'STANDBY',
+            style: monoOf(palette, size: 8, color: active ? palette.accent : palette.textDim.withValues(alpha: 0.4))
+                .copyWith(fontWeight: FontWeight.w700),
+          ),
         ],
-      ).createShader(Rect.fromLTWH(0, 0, w, h));
-    canvas.drawRect(Rect.fromLTWH(0, 0, w, h * 0.6), dampGrad);
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    titleTp.paint(canvas, const Offset(12.0, 9.0));
+
+    // 7.2 右上角：RT60 估算、声学扩散率、吸音阻尼指标 HUD
+    final estRt60 = (0.35 + roomSize * 1.55 * (0.25 + decay * 0.85)).clamp(0.4, 6.5);
+    final diffusionPct = (stereoWidth * 65.0).round().clamp(25, 100);
+    final dampPct = (damp * 100).round();
+
+    final hudText = active
+        ? 'RT60 ~${estRt60.toStringAsFixed(2)}s · DIFF $diffusionPct% · DAMP $dampPct%'
+        : 'RT60 -- · ROOM ${roomSize.toStringAsFixed(1)}x';
+    final hudTp = TextPainter(
+      text: TextSpan(
+        text: hudText,
+        style: monoOf(palette, size: 8, color: active ? palette.accent : palette.textDim.withValues(alpha: 0.5))
+            .copyWith(fontWeight: FontWeight.w700),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    hudTp.paint(canvas, Offset(w - 12.0 - hudTp.width, 9.0));
+
+    // 7.3 左下角微标尺：等效声学容积感知
+    final approxVolM3 = (math.pow(roomSize * 10.0, 3) * 0.85).round().clamp(60, 18500);
+    final volTp = TextPainter(
+      text: TextSpan(
+        text: 'VOL ~${approxVolM3}m³ · SPREAD ${(stereoWidth * 100).round()}%',
+        style: monoOf(palette, size: 7.5, color: palette.textDim.withValues(alpha: 0.45)),
+      ),
+      textDirection: TextDirection.ltr,
+    )..layout();
+    volTp.paint(canvas, Offset(12.0, h - 17.0));
   }
 
-  // [PATCHED-AuraDSP P-032] 用 epsilon 比较：引擎侧存的是 float32，UI 侧
-  // 是精确 double，回读往返必然带 ~1e-8 尾数差 → 用 != 判定会让 3D 图
-  // 在每次回读后无条件重绘一次（用户看到"图形跳两次"的另一半原因）。
+  // [PATCHED-AuraDSP] epsilon 保护，阻断单精度 IEEE754 尾数抖动
   static const double _eps = 1e-6;
 
   @override
@@ -863,3 +1090,4 @@ class _Freeverb3DPainter extends CustomPainter {
       oldDelegate.palette != palette ||
       oldDelegate.active != active;
 }
+

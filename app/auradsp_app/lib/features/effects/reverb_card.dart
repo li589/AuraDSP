@@ -29,7 +29,7 @@ class _SpatialReverbCardState extends State<_SpatialReverbCard> {
       l.reverbPreset6, // 大礼堂
       l.reverbPreset7, // 板式混响
     ];
-    final legacyId = m.reverbPreset >= 0 &&
+    final legacyId = m.reverbPreset > 0 &&
             !kReverbCuratedPresets.contains(m.reverbPreset)
         ? m.reverbPreset
         : null;

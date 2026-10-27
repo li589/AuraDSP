@@ -507,8 +507,8 @@ class AppModel extends ChangeNotifier {
   double reverbPredelay = 0.0; // [0,100] ms，两引擎共用
   bool reverbLfe = false; // 仅 MC：LFE 入混响（120Hz LP + -6dB）
   int reverbEngine = -1; // 引擎回读：0=vendor stereo、1=MC FDN、-1=off
-  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复。
-  int _lastReverbPreset = 0;
+  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复，默认大音乐厅(5)。
+  int _lastReverbPreset = 5;
 
   /// 混响是否开启（唯一真相：preset != -1）。
   bool get isSpatialReverbOn => reverbPreset != -1;
