@@ -1363,6 +1363,7 @@
   "lpExpandEditor": "Expand",
   "lpCollapseEditor": "Collapse",
   "lpUncompiled": "Uncompiled edits",
+  "lpRunningOldCode": "Running previous code",
   "lpCompileSuccess": "Compiled successfully",
   "lpCompilingScript": "Compiling script…",
   "lpEyebrowDsp": "Programmable DSP",

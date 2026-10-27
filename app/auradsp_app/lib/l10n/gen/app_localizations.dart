@@ -5878,6 +5878,12 @@ abstract class AppLocalizations {
   /// **'未编译修改'**
   String get lpUncompiled;
 
+  /// No description provided for @lpRunningOldCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前应用旧代码'**
+  String get lpRunningOldCode;
+
   /// No description provided for @lpCompileSuccess.
   ///
   /// In zh, this message translates to:

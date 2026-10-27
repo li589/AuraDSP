@@ -75,7 +75,7 @@ class LineNumberGutter extends StatelessWidget {
                 final children = <Widget>[];
                 for (int i = startIdx; i <= endIdx; i++) {
                   final lineNum = i + 1;
-                  final top = AuraSpace.md + i * lineHeight - scrollOffset;
+                  final top = AuraSpace.md + i * lineHeight - scrollOffset - 1.5;
                   final isError = errorLines.contains(lineNum);
                   final isActive = lineNum == activeLine;
 
@@ -115,6 +115,11 @@ class LineNumberGutter extends StatelessWidget {
                               ],
                               Text(
                                 '$lineNum',
+                                strutStyle: StrutStyle(
+                                  fontSize: fontSize,
+                                  height: 1.5,
+                                  forceStrutHeight: true,
+                                ),
                                 style: monoOf(p,
                                         size: fontSize, color: numColor)
                                     .copyWith(

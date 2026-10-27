@@ -1363,6 +1363,7 @@
   "lpExpandEditor": "拡大",
   "lpCollapseEditor": "折りたたむ",
   "lpUncompiled": "未コンパイル",
+  "lpRunningOldCode": "前回のコードを実行中",
   "lpCompileSuccess": "コンパイル成功",
   "lpCompilingScript": "スクリプトをコンパイル中…",
   "lpEyebrowDsp": "プログラマブル DSP",

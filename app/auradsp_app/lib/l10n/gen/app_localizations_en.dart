@@ -3251,6 +3251,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpUncompiled => 'Uncompiled edits';
 
   @override
+  String get lpRunningOldCode => 'Running previous code';
+
+  @override
   String get lpCompileSuccess => 'Compiled successfully';
 
   @override

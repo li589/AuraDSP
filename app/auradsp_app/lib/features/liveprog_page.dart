@@ -749,11 +749,12 @@ dbg = 0;
     if (ok) {
       if (_isCodeDirty) {
         final tookPart = tookStr != null ? ' · ${l.lpCompileTook(tookStr)}' : '';
+        final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
         return _capsuleBody(
           p,
           p.warning,
           Icons.edit_note_rounded,
-          '${l.lpUncompiled}$tookPart · Ctrl+Enter',
+          '${l.lpUncompiled}$runningOld$tookPart · Ctrl+Enter',
         );
       }
       if (running) {
@@ -870,13 +871,14 @@ dbg = 0;
         ),
       );
     } else if (_isCodeDirty) {
+      final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
       statusBadge = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.edit_note_rounded, size: 14, color: p.accent),
           const SizedBox(width: 4),
           Text(
-            l.lpUncompiled,
+            '${l.lpUncompiled}$runningOld',
             style: monoOf(p, size: 11, color: p.accent),
           ),
         ],
@@ -1063,7 +1065,14 @@ dbg = 0;
                                     maxLines: null,
                                     expands: true,
                                     style: codeStyle,
+                                    strutStyle: StrutStyle(
+                                      fontFamily: codeStyle.fontFamily,
+                                      fontSize: codeStyle.fontSize,
+                                      height: codeStyle.height,
+                                      forceStrutHeight: true,
+                                    ),
                                     decoration: const InputDecoration(
+                                      isDense: true,
                                       border: InputBorder.none,
                                       contentPadding: EdgeInsets.all(AuraSpace.md),
                                     ),

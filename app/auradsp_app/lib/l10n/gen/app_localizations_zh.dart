@@ -3078,6 +3078,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpUncompiled => '未编译修改';
 
   @override
+  String get lpRunningOldCode => '当前应用旧代码';
+
+  @override
   String get lpCompileSuccess => '编译成功';
 
   @override
