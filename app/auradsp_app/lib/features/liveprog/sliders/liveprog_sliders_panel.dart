@@ -548,10 +548,101 @@ class _LpSliderRow extends StatelessWidget {
     final rawName = meta.rawName;
     final currentVal = val.clamp(minVal, maxVal);
 
-    String valueDisplay = currentVal.toStringAsFixed(2);
-    if (meta.enumOptions.isNotEmpty) {
-      final intVal = currentVal.round().clamp(0, meta.enumOptions.length - 1);
-      valueDisplay = meta.enumOptions[intVal];
+    final isEnum = meta.enumOptions.isNotEmpty;
+
+    // 枚举选项下拉框交互
+    if (isEnum) {
+      final selectedInt = currentVal.round().clamp(0, meta.enumOptions.length - 1);
+      return Padding(
+        padding: const EdgeInsets.only(bottom: AuraSpace.xs + 2),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 150,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    displayName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: p.accent,
+                    ),
+                  ),
+                  Text(
+                    rawName,
+                    style: monoOf(p, size: 9.5, color: p.textDim),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+            Expanded(
+              child: Container(
+                height: 32,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                decoration: BoxDecoration(
+                  color: p.panel,
+                  borderRadius: BorderRadius.circular(AuraRadius.xs),
+                  border: Border.all(color: p.hairline),
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<int>(
+                    value: selectedInt,
+                    isExpanded: true,
+                    dropdownColor: p.panelRaised,
+                    icon: Icon(Icons.arrow_drop_down_rounded, size: 18, color: p.accent),
+                    style: monoOf(p, size: 11.5, color: p.text),
+                    items: [
+                      for (int i = 0; i < meta.enumOptions.length; i++)
+                        DropdownMenuItem<int>(
+                          value: i,
+                          child: Text(
+                            meta.enumOptions[i],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                    ],
+                    onChanged: (newIdx) {
+                      if (newIdx != null) {
+                        onChanged(newIdx.toDouble());
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: AuraSpace.sm),
+            SizedBox(
+              width: 50,
+              child: Text(
+                '#$selectedInt',
+                textAlign: TextAlign.right,
+                style: monoOf(p, size: 11, color: p.accent).copyWith(fontWeight: FontWeight.bold),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    // 普通数值滑块交互（支持 step 步长吸附与合理 divisions）
+    final step = meta.step > 0 ? meta.step : 0.01;
+    final totalSteps = ((maxVal - minVal) / step).round();
+    final int? divisions = (totalSteps >= 2 && totalSteps <= 200) ? totalSteps : null;
+
+    String valueDisplay;
+    if (step >= 1.0 && (minVal % 1.0 == 0) && (maxVal % 1.0 == 0)) {
+      valueDisplay = currentVal.round().toString();
+    } else if (step >= 0.1) {
+      valueDisplay = currentVal.toStringAsFixed(1);
+    } else {
+      valueDisplay = currentVal.toStringAsFixed(2);
     }
 
     return Padding(
@@ -593,7 +684,15 @@ class _LpSliderRow extends StatelessWidget {
                 value: currentVal,
                 min: minVal,
                 max: maxVal,
-                onChanged: onChanged,
+                divisions: divisions,
+                onChanged: (raw) {
+                  double snapped = raw;
+                  if (meta.step > 0) {
+                    snapped = (raw / meta.step).round() * meta.step;
+                    snapped = snapped.clamp(minVal, maxVal);
+                  }
+                  onChanged(snapped);
+                },
               ),
             ),
           ),

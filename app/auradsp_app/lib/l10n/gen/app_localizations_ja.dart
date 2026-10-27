@@ -3104,6 +3104,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpUncompiled => '未コンパイル';
 
   @override
+  String get lpRunningOldCode => '前回のコードを実行中';
+
+  @override
   String get lpCompileSuccess => 'コンパイル成功';
 
   @override

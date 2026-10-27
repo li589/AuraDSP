@@ -1483,6 +1483,7 @@
   "lpExpandEditor": "展开",
   "lpCollapseEditor": "收起",
   "lpUncompiled": "未编译修改",
+  "lpRunningOldCode": "当前应用旧代码",
   "lpCompileSuccess": "编译成功",
   "lpCompilingScript": "正在编译脚本…",
   "lpEyebrowDsp": "可编程 DSP",
