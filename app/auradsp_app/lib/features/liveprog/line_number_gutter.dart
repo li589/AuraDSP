@@ -1,11 +1,11 @@
 /*
  * line_number_gutter.dart — Liveprog IDE 编辑器行号栏
  *
- * 功能：
- * 1. 随编辑器文本纵向滚动同步联动；
- * 2. 标示当前光标激活行与错误行；
- * 3. 出错行行号醒目标红（p.error 加粗 + 错误圆点），直观提示代码问题；
- * 4. 支持点击行号快速跳转光标到指定行。
+ * 架构重构（单一直驱虚拟化视口）：
+ * 1. 彻底移除 Scrollable/ListView，根绝系统在行号列自动生成二次死滑动条；
+ * 2. 由 editorScrollCtrl 单一直驱，仅渲染视口内可见行（startIdx..endIdx）；
+ * 3. 几何坐标与 TextField 排版管线 100% 严密对齐（AuraSpace.md + i * lineHeight - scrollOffset）；
+ * 4. 完整保留 InkWell、Icon 与 Text 原生交互，支持错误行标红与点击跳转。
  */
 
 import 'package:flutter/material.dart';
@@ -13,7 +13,7 @@ import 'package:flutter/material.dart';
 import '../../core/design.dart';
 import '../../core/theme.dart';
 
-class LineNumberGutter extends StatefulWidget {
+class LineNumberGutter extends StatelessWidget {
   final ScrollController editorScrollCtrl;
   final int lineCount;
   final Set<int> errorLines;
@@ -34,51 +34,14 @@ class LineNumberGutter extends StatefulWidget {
   });
 
   @override
-  State<LineNumberGutter> createState() => _LineNumberGutterState();
-}
-
-class _LineNumberGutterState extends State<LineNumberGutter> {
-  late final ScrollController _gutterScrollCtrl;
-
-  @override
-  void initState() {
-    super.initState();
-    _gutterScrollCtrl = ScrollController(
-      initialScrollOffset: widget.editorScrollCtrl.hasClients
-          ? widget.editorScrollCtrl.offset
-          : 0.0,
-    );
-    widget.editorScrollCtrl.addListener(_onEditorScroll);
-  }
-
-  void _onEditorScroll() {
-    if (!mounted || !_gutterScrollCtrl.hasClients || !widget.editorScrollCtrl.hasClients) {
-      return;
-    }
-    final target = widget.editorScrollCtrl.offset.clamp(
-      0.0,
-      _gutterScrollCtrl.position.maxScrollExtent,
-    );
-    if ((_gutterScrollCtrl.offset - target).abs() > 0.5) {
-      _gutterScrollCtrl.jumpTo(target);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.editorScrollCtrl.removeListener(_onEditorScroll);
-    _gutterScrollCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    final count = widget.lineCount < 1 ? 1 : widget.lineCount;
+    final count = lineCount < 1 ? 1 : lineCount;
 
     // 自适应行号宽度：随字号与行数位数动态调整
     final digits = count.toString().length;
-    final gutterWidth = (digits * (widget.fontSize * 0.72) + 26.0).clamp(38.0, 90.0);
+    final gutterWidth =
+        (digits * (fontSize * 0.72) + 26.0).clamp(38.0, 90.0);
 
     return Container(
       width: gutterWidth,
@@ -86,60 +49,92 @@ class _LineNumberGutterState extends State<LineNumberGutter> {
         color: p.panel.withValues(alpha: 0.65),
         border: Border(right: BorderSide(color: p.hairline)),
       ),
-      child: NotificationListener<ScrollNotification>(
-        onNotification: (_) => true, // 拦截手势，由编辑器单一驱动滚动
-        child: ListView.builder(
-          controller: _gutterScrollCtrl,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: const EdgeInsets.symmetric(vertical: AuraSpace.md),
-          itemCount: count,
-          itemExtent: widget.lineHeight,
-          itemBuilder: (context, idx) {
-            final lineNum = idx + 1;
-            final isError = widget.errorLines.contains(lineNum);
-            final isActive = lineNum == widget.activeLine;
+      child: ClipRect(
+        child: AnimatedBuilder(
+          animation: editorScrollCtrl,
+          builder: (context, _) {
+            final scrollOffset =
+                editorScrollCtrl.hasClients ? editorScrollCtrl.offset : 0.0;
 
-            Color numColor;
-            FontWeight weight = FontWeight.normal;
-            if (isError) {
-              numColor = p.error;
-              weight = FontWeight.bold;
-            } else if (isActive) {
-              numColor = p.text;
-              weight = FontWeight.w600;
-            } else {
-              numColor = p.textDim;
-            }
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final height = constraints.maxHeight;
+                if (lineHeight <= 0 || height <= 0) {
+                  return const SizedBox.shrink();
+                }
 
-            return InkWell(
-              onTap: () => widget.onSelectLine(lineNum),
-              child: SizedBox(
-                height: widget.lineHeight,
-                child: Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.end,
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      if (isError) ...[
-                        Icon(
-                          Icons.error_outline_rounded,
-                          size: (widget.fontSize * 0.85).clamp(8.0, 13.0),
-                          color: p.error,
-                        ),
-                        const SizedBox(width: 2),
-                      ],
-                      Text(
-                        '$lineNum',
-                        style: monoOf(p, size: widget.fontSize, color: numColor).copyWith(
-                          fontWeight: weight,
-                          height: 1.5,
+                // 仅计算视口内的可见行范围 (0-based)
+                final startIdx = ((scrollOffset - AuraSpace.md) / lineHeight)
+                    .floor()
+                    .clamp(0, count - 1);
+                final endIdx =
+                    ((scrollOffset + height - AuraSpace.md) / lineHeight)
+                        .ceil()
+                        .clamp(0, count - 1);
+
+                final children = <Widget>[];
+                for (int i = startIdx; i <= endIdx; i++) {
+                  final lineNum = i + 1;
+                  final top = AuraSpace.md + i * lineHeight - scrollOffset;
+                  final isError = errorLines.contains(lineNum);
+                  final isActive = lineNum == activeLine;
+
+                  Color numColor;
+                  FontWeight weight = FontWeight.normal;
+                  if (isError) {
+                    numColor = p.error;
+                    weight = FontWeight.bold;
+                  } else if (isActive) {
+                    numColor = p.text;
+                    weight = FontWeight.w600;
+                  } else {
+                    numColor = p.textDim;
+                  }
+
+                  children.add(
+                    Positioned(
+                      top: top,
+                      left: 0,
+                      right: 0,
+                      height: lineHeight,
+                      child: InkWell(
+                        onTap: () => onSelectLine(lineNum),
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 6),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            crossAxisAlignment: CrossAxisAlignment.center,
+                            children: [
+                              if (isError) ...[
+                                Icon(
+                                  Icons.error_outline_rounded,
+                                  size: (fontSize * 0.85).clamp(8.0, 13.0),
+                                  color: p.error,
+                                ),
+                                const SizedBox(width: 2),
+                              ],
+                              Text(
+                                '$lineNum',
+                                style: monoOf(p,
+                                        size: fontSize, color: numColor)
+                                    .copyWith(
+                                  fontWeight: weight,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
-                    ],
-                  ),
-                ),
-              ),
+                    ),
+                  );
+                }
+
+                return Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: children,
+                );
+              },
             );
           },
         ),
@@ -147,3 +142,4 @@ class _LineNumberGutterState extends State<LineNumberGutter> {
     );
   }
 }
+
