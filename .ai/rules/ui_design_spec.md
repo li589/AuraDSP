@@ -79,21 +79,25 @@ AuraDSP 采用跨平台自适应响应系统：
 
 ## 5. 处理链与卡片命名对齐规范
 
-- `chain_page.dart` 中处理链节点的展示名映射函数 `stageLabelOf(l, id)`，必须与 `effects_page.dart` 对应卡片的标题以及 Arb 国际化文件严格一一对应：
-  - `gate` $\rightarrow$ `l.stGate`（输入门控）
-  - `bassmono` $\rightarrow$ `l.stBassmono`（低频单声道）
-  - `tube` $\rightarrow$ `l.tubeTitle`（电子管温润）
+- `chain_page.dart` 中处理链节点（`kStageMeta` 共 20 个阶段）的展示名映射函数 `stageLabelOf(l, id)`，必须与 `effects_page.dart` 对应卡片的标题以及 Arb 国际化文件严格一一对应：
+  - `gate` $\rightarrow$ `l.stGate`（噪声门）
+  - `dyneq` $\rightarrow$ `l.dyneqTitle`（动态均衡器）
+  - `filter` $\rightarrow$ `l.stFilter`（滤波器）
+  - `bassmono` $\rightarrow$ `l.bassMonoModule`（低频单声道化）
+  - `tube` $\rightarrow$ `l.tubeTitle`（电子管模拟器）
   - `comp` $\rightarrow$ `l.compTitle`（动态压限器）
   - `bass` $\rightarrow$ `l.bassBoost`（低音增强）
-  - `eq` $\rightarrow$ `l.eqMultiBand`（图形均衡器）
-  - `arbmag` $\rightarrow$ `l.stArbmag`（自由幅频响应）
-  - `convolver` $\rightarrow$ `l.convTitle`（卷积混响）
-  - `ddc` $\rightarrow$ `l.ddcTitle`（耳机校准）
-  - `liveprog` $\rightarrow$ `l.stScript`（实时脚本）
+  - `eq` $\rightarrow$ `l.eqMultiBand`（多段图形均衡器）
+  - `arbmag` $\rightarrow$ `l.stArbmag`（任意响应 EQ）
+  - `convolver` $\rightarrow$ `l.convTitle`（脉冲响应）
+  - `ddc` $\rightarrow$ `l.ddcTitle`（VDC 空间校正）
+  - `liveprog` $\rightarrow$ `l.stScript`（脚本）
   - `crossfeed` $\rightarrow$ `l.crossfeedTitle`（串扰消除）
-  - `stereo` $\rightarrow$ `l.stereoWiden`（立体声拓宽）
-  - `haas` $\rightarrow$ `l.stHaas`（哈斯环绕）
-  - `exciter` $\rightarrow$ `l.stExciter`（高频激励器）
+  - `stereo` $\rightarrow$ `l.stereoWiden`（立体声扩展）
+  - `haas` $\rightarrow$ `l.stHaas`（差分环绕）
+  - `spatial` $\rightarrow$ `l.spatialTitle`（空间音效）
+  - `exciter` $\rightarrow$ `l.stExciter`（激励器）
+  - `loudness` $\rightarrow$ `l.stLoudness`（响度补偿）
   - `reverb` $\rightarrow$ `l.spatialReverbTitle`（空间混响）
   - `output` $\rightarrow$ `l.postGain`（输出增益）
 - 严禁同一效果器在处理链页和效果页使用不同的同义词。
