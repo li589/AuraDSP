@@ -5,6 +5,9 @@ class _FilterPills extends StatelessWidget {
   final int countAll;
   final int countVst3;
   final int countClap;
+  final int countVst2;
+  final int countAu;
+  final int countLv2;
   final ValueChanged<String> onSelect;
 
   const _FilterPills({
@@ -12,6 +15,9 @@ class _FilterPills extends StatelessWidget {
     required this.countAll,
     required this.countVst3,
     required this.countClap,
+    this.countVst2 = 0,
+    this.countAu = 0,
+    this.countLv2 = 0,
     required this.onSelect,
   });
 
@@ -19,9 +25,9 @@ class _FilterPills extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
 
-    Widget pill(String id, String label, int count) {
+    Widget pill(String id, String label, int count, {bool comingSoon = false}) {
       final isSel = selected == id;
-      return GestureDetector(
+      final body = GestureDetector(
         onTap: () => onSelect(id),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -63,6 +69,13 @@ class _FilterPills extends StatelessWidget {
           ),
         ),
       );
+      if (!comingSoon) return body;
+      // 预留格式（VST2/AU/LV2）：按钮可见、灰显、不可点——扫描/挂载驱动
+      // 尚未实现（2026-10-28 用户定案先占位），悬停给出明确说明。
+      return Tooltip(
+        message: l10nOf(context).plugFormatSoon,
+        child: Opacity(opacity: 0.45, child: IgnorePointer(child: body)),
+      );
     }
 
     return Row(
@@ -73,13 +86,22 @@ class _FilterPills extends StatelessWidget {
         pill('vst3', 'VST3', countVst3),
         const SizedBox(width: 6),
         pill('clap', 'CLAP', countClap),
+        const SizedBox(width: 6),
+        pill('vst2', 'VST2', countVst2, comingSoon: true),
+        const SizedBox(width: 6),
+        pill('au', 'AU', countAu, comingSoon: true),
+        const SizedBox(width: 6),
+        pill('lv2', 'LV2', countLv2, comingSoon: true),
       ],
     );
   }
 }
 
 /// 插件列表视图
-class _PluginListView extends StatelessWidget {
+///
+/// 2026-10-28：厂商分组可折叠；列表固定最大高度 + 滚动条，并用
+/// [AuraWheelScrollScope] 独占滚轮（列表可滚时不再带动整页）。
+class _PluginListView extends StatefulWidget {
   final PluginManager manager;
   final int slot;
   final ValueChanged<PluginMetadata> onLoad;
@@ -93,11 +115,34 @@ class _PluginListView extends StatelessWidget {
   });
 
   @override
+  State<_PluginListView> createState() => _PluginListViewState();
+}
+
+class _PluginListViewState extends State<_PluginListView> {
+  final ScrollController _scrollCtrl = ScrollController();
+
+  /// 折叠的厂商分组（键 = PluginManager.pluginGroups 的键，空串 = 未知厂商）。
+  final Set<String> _collapsed = <String>{};
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final manager = widget.manager;
+    final slot = widget.slot;
+    final onLoad = widget.onLoad;
+    final onUnload = widget.onUnload;
     final p = paletteOf(context);
-    final list = manager.filteredPlugins;
+    final groups = manager.pluginGroups;
 
     if (manager.plugins.isEmpty) {
+      // 扫描中且尚无结果 → 动画占位（用户 2026-10-28 要求）；非扫描态才
+      // 显示「没有插件」空态，避免扫到一半闪空文案。
+      if (manager.isScanning) return const _ScanningPlaceholder();
       return Container(
         height: 180,
         alignment: Alignment.center,
@@ -117,7 +162,7 @@ class _PluginListView extends StatelessWidget {
       );
     }
 
-    if (list.isEmpty) {
+    if (groups.isEmpty) {
       return Container(
         height: 140,
         alignment: Alignment.center,
@@ -125,14 +170,39 @@ class _PluginListView extends StatelessWidget {
       );
     }
 
+    // 打平为「厂商头 + 插件行」序列，保持 ListView 懒构建；折叠组只留头。
+    final rows = <_PluginRow>[];
+    groups.forEach((vendor, plugins) {
+      final collapsed = _collapsed.contains(vendor);
+      rows.add(_PluginRow.header(vendor, plugins.length));
+      if (!collapsed) rows.addAll(plugins.map(_PluginRow.item));
+    });
+
     return Container(
       constraints: const BoxConstraints(maxHeight: 460),
-      child: ListView.separated(
-        shrinkWrap: true,
-        itemCount: list.length,
-        separatorBuilder: (_, _) => const SizedBox(height: 6),
-        itemBuilder: (context, index) {
-          final plugin = list[index];
+      child: Scrollbar(
+        controller: _scrollCtrl,
+        thumbVisibility: true,
+        child: ListView.builder(
+            controller: _scrollCtrl,
+            physics: const AuraListScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final row = rows[index];
+              if (row.header) {
+                return _VendorHeader(
+                  vendor: row.vendor,
+                  count: row.vendorCount,
+                  collapsed: _collapsed.contains(row.vendor),
+                  onTap: () => setState(() {
+                    if (!_collapsed.remove(row.vendor)) {
+                      _collapsed.add(row.vendor);
+                    }
+                  }),
+                );
+              }
+              final plugin = row.plugin!;
           final isLoadedInThisSlot = manager.isSlotActive(slot) &&
               manager.getSlotPlugin(slot)?.path == plugin.path;
 
@@ -165,7 +235,143 @@ class _PluginListView extends StatelessWidget {
             onUnload: onUnload,
             busy: manager.isSlotBusy(slot),
           );
-        },
+            },
+          ),
+      ),
+    );
+  }
+}
+
+/// 列表行（厂商头 / 插件项）的中性载体。
+class _PluginRow {
+  final bool header;
+  final String vendor;
+  final int vendorCount;
+  final PluginMetadata? plugin;
+
+  const _PluginRow._({
+    required this.header,
+    this.vendor = '',
+    this.vendorCount = 0,
+    this.plugin,
+  });
+
+  factory _PluginRow.header(String vendor, int count) =>
+      _PluginRow._(header: true, vendor: vendor, vendorCount: count);
+
+  factory _PluginRow.item(PluginMetadata p) =>
+      _PluginRow._(header: false, plugin: p);
+}
+
+/// 厂商分组头：字典序由 PluginManager.pluginGroups 保证；空厂商显示
+/// 「未知厂商」（l10n），不抢占排头。
+class _VendorHeader extends StatelessWidget {
+  final String vendor;
+  final int count;
+  final bool collapsed;
+  final VoidCallback onTap;
+
+  const _VendorHeader({
+    required this.vendor,
+    required this.count,
+    required this.collapsed,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    final label = vendor.isEmpty ? l10nOf(context).plugUnknownVendor : vendor;
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      child: Padding(
+      padding: const EdgeInsets.fromLTRB(2, AuraSpace.sm, 2, AuraSpace.xs),
+      child: Row(
+        children: [
+          Icon(
+            collapsed
+                ? Icons.chevron_right_rounded
+                : Icons.expand_more_rounded,
+            size: 16,
+            color: p.textDim,
+          ),
+          Container(
+            width: 3,
+            height: 12,
+            decoration: BoxDecoration(
+              color: p.accent.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: p.textDim,
+                letterSpacing: 0.3,
+              ),
+            ),
+          ),
+          Text('$count', style: monoOf(p, size: 10, color: p.textDim)),
+        ],
+      ),
+      ),
+    );
+  }
+}
+
+/// 扫描中的动画占位（呼吸透明度 + 提示文案），替代「扫到一半空列表闪文案」。
+class _ScanningPlaceholder extends StatefulWidget {
+  const _ScanningPlaceholder();
+
+  @override
+  State<_ScanningPlaceholder> createState() => _ScanningPlaceholderState();
+}
+
+class _ScanningPlaceholderState extends State<_ScanningPlaceholder>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    return Container(
+      height: 180,
+      alignment: Alignment.center,
+      child: FadeTransition(
+        opacity: Tween<double>(begin: 0.35, end: 0.85).animate(_ctrl),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.manage_search_rounded, size: 32, color: p.accent),
+            const SizedBox(height: AuraSpace.sm),
+            Text(
+              l10nOf(context).plugScanning,
+              style: captionOf(p, color: p.textDim),
+            ),
+          ],
+        ),
       ),
     );
   }

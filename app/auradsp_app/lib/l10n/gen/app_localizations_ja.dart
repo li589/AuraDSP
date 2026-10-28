@@ -182,7 +182,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setApoAttachFailed => 'APO アタッチ未完了';
 
   @override
-  String get setApoUnregistered => 'APO フックを安全に解除し元のシステム/ベンダードライバーを復元';
+  String get setApoUnregistered => 'APO フックを安全に解除し元のオーディオドライバーを復元';
 
   @override
   String get setApoUnregisterFailed => 'APO アンインストール未完了';
@@ -216,7 +216,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get setInstallDriverUacPrompt =>
-      'Windows の UAC ダイアログを表示しています。システムのプロンプトで「はい」をクリックしてインストールを許可してください…';
+      '管理者権限をリクエストしています。システムのプロンプトでドライバーコンポーネントのインストールを許可してください…';
 
   @override
   String get setVaioInstallOk => 'AuraVAIO ドライバーのインストールと検証が完了しました！';
@@ -246,8 +246,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get setAsioRegisterUac => 'ドライバーを登録（UAC）';
 
   @override
-  String get setAsioRegisterPrompt =>
-      '仮想 ASIO ドライバーを登録するため Windows の UAC ダイアログを表示しています…';
+  String get setAsioRegisterPrompt => '仮想オーディオドライバーを登録するため管理者権限をリクエストしています…';
 
   @override
   String get setAsioRegisterOk => '仮想 ASIO ドライバーの登録に成功しました。DAW で選択可能になりました';
@@ -393,7 +392,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get eelMissingSample => '@sample セクションがありません（エンジンがコンパイルを拒否します）';
 
   @override
-  String get eelEmptyInit => '空の @init セクション（vendor は少なくとも 1 文必要）';
+  String get eelEmptyInit => '@init セクションが空です（@init には少なくとも1つの実行文または初期化が必要です）';
 
   @override
   String get eelEmptySample => '@sample セクションが空です（出力は無音になります）。意図した記述ですか？';
@@ -468,7 +467,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get ioVaioGuide =>
-      'Windows のサウンド設定やプレーヤーで既定の出力を「AuraVAIO」に設定すると、音声はこの仮想入力から AuraDSP パイプラインへ送られます。';
+      'システムのサウンド設定または再生ソフトで既定の出力を「AuraVAIO」に指定すると、音声が AuraDSP にルーティングされます。';
 
   @override
   String get ioAsioChannelLabel => '入力チャンネル';
@@ -718,7 +717,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get reverbEngineLabel => '現在のエンジン';
 
   @override
-  String get reverbEngineStereo => 'ステレオ (Vendor)';
+  String get reverbEngineStereo => 'ステレオ';
 
   @override
   String get reverbEngineMc => 'マルチチャンネル FDN';
@@ -728,7 +727,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get reverbEngineInfo =>
-      'リバーブは現在のチャンネル経路に従います：マトリックス/バイノーラルは vendor Progenitor2、ディスクリート多チャンネルは8ライン FDN。2つが同時に動作することはありません。';
+      '現在のチャンネル構成に応じてリバーブエンジンが自動選択されます：ステレオおよびバイノーラル経路ではクラシックなデュアルチャンネル拡散リバーブ、多チャンネル環境では8次FDN（フィードバック遅延ネットワーク）アルゴリズムが動作します。';
 
   @override
   String get reverbLfe => 'LFE をリバーブへ';
@@ -790,7 +789,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get vbBuses => 'VBバス（オフ=スルー）';
 
   @override
-  String get vbPluginTooltip => 'チェックで該当バスにプラグインを適用（ベンダーFXは影響なし）';
+  String get vbPluginTooltip =>
+      'チェック時：マウント済みプラグインがこのバスを処理します（内蔵DSPエフェクトには影響しません）';
 
   @override
   String get vbPluginLockedHint => 'バス処理オフ中はプラグイン動作停止（状態保持、オンで即時復帰）';
@@ -1680,7 +1680,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get presetDeleted => 'プリセットを削除しました';
 
   @override
-  String get presetDeleteFail => '削除失敗';
+  String get presetDeleteFail => '削除に失敗しました（ファイルが使用中か、既に存在しません）';
 
   @override
   String get presetLoaded => 'プリセットを適用しました';
@@ -1795,7 +1795,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get bassModeTooltip =>
-      '低音モード：\n• ナチュラル：ベンダー直ブースト、倍音なし\n• ピュアベース+：軽量倍音（0.35）\n• サブウーファー：重量倍音（0.7）、小型機でも重低音';
+      '低音強化アコースティックモード：\n• ナチュラル：倍音付加のないリニアダイナミックブースト、原音のアタック感を維持\n• ピュア低音+：適度な偶数次倍音を付加し、太さと輪郭を補強\n• サブウーファー：サブハーモニック合成により、小型ドライバーでも深い重低音の沈み込みを再現';
 
   @override
   String get bassCutoff => 'カットオフ周波数';
@@ -1875,7 +1875,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get sysTitle => 'システム';
 
   @override
-  String get sysHint => 'トレイ常住とログイン時起動（Windows）';
+  String get sysHint => 'トレイ常駐とシステム起動時自動開始';
 
   @override
   String get sysTray => 'トレイに最小化';
@@ -1893,7 +1893,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get trayQuit => '終了';
 
   @override
-  String get sysAutostartHint => 'Windows サインイン時に AuraDSP を自動起動';
+  String get sysAutostartHint => 'システムログイン時に AuraDSP を自動起動';
 
   @override
   String get latUnmeasured => '未測定';
@@ -2131,13 +2131,15 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialTitle => '空間オーディオ';
 
   @override
-  String get spatialHint => '仮想 5.0 配置と初期反射で部屋の響きを再現。リバーブ / IR / 音場カードは本カードに統合';
+  String get spatialHint =>
+      'HRTF 空間音響モデルと初期反射アルゴリズムに基づき、ヘッドホン上でリアルなマルチスピーカー試聴室の広大な音場と定位感を再現します。';
 
   @override
   String get spatialStyle => 'スタイル';
 
   @override
-  String get spatialStyleInfo => 'スタイルはプリセット群：切替で Room / Width / Center を上書き';
+  String get spatialStyleInfo =>
+      '空間音響プリセット：調整された部屋の初期反射・音場幅・ボーカルフォーカスを一括適用します。';
 
   @override
   String get spatialStyleCinema => 'シネマ';
@@ -2155,31 +2157,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get spatialRoom => 'ルーム';
 
   @override
-  String get spatialRoomInfo => '初期反射レベルと時間スケール。0 はドライ、1 は大部屋';
+  String get spatialRoomInfo =>
+      '部屋の体積と初期反射の強さ：0 は反射のない自由音場、数値を上げると部屋の広がりと壁面反射が増加します。';
 
   @override
   String get spatialWidth => '広がり';
 
   @override
-  String get spatialWidthInfo => 'スピーカー配置の広がり。遠耳のみ変化し近耳は直達のまま';
+  String get spatialWidthInfo => '音場幅と仮想スピーカーの広がり：左右の音場を広げ、自然なステレオ定位感を提供します。';
 
   @override
   String get spatialCenter => 'センター';
 
   @override
-  String get spatialCenterInfo => 'センターフォーカス：台詞とボーカル';
+  String get spatialCenterInfo => 'センター音像とダイアログフォーカス：中央ボーカルの明瞭度と定位密度を向上させます。';
 
   @override
   String get spatialOutGain => '出力';
 
   @override
-  String get spatialOutGainInfo => '空間ステージの出力トリム';
+  String get spatialOutGainInfo => '空間エフェクト出力ゲイン補正（-12〜+6 dB）。';
 
   @override
   String get spatialAutoGain => '自動ゲイン';
 
   @override
-  String get spatialAutoGainInfo => '入力ラウドネスに追従（リバーブと同式）';
+  String get spatialAutoGainInfo =>
+      '等ラウドネス自動制御：入力レベルに追従し、音場処理による意図しない音量変化を防止します。';
 
   @override
   String get spatialMix => '空間化ミックス';
@@ -2301,7 +2305,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpManualContent =>
-      '【コアオーディオレジスタ】\n• spl0: 左チャンネルサンプル（浮動小数点、公称 ±1.0）\n• spl1: 右チャンネルサンプル（浮動小数点、公称 ±1.0）\n• srate: 現在のデバイス実サンプリング周波数 (Hz)\n\n【スライダー変数】\n• slider1 ~ slider8: 動的スライダーパラメータ（デフォルト 0.0 ~ 1.0）\n\n【セクション構文】\n• @init: ロードまたはリセット時に1回実行（1文以上必須）\n• @slider: スライダー操作時に実行\n• @sample: サンプルごとにリアルタイム実行';
+      '【コアオーディオレジスタ】\n• spl0: 左チャンネルサンプル（浮動小数点、公称 ±1.0）\n• spl1: 右チャンネルサンプル（浮動小数点、公称 ±1.0）\n• srate: 現在のデバイス実サンプリング周波数 (Hz)\n\n【スライダー変数】\n• slider1 ~ slider8: 動的スライダーパラメータ（デフォルト 0.0 ~ 1.0）\n\n【セクション構文】\n• @init: ロードまたはリセット時に1回実行（1文以上の実行文または初期化が必須）\n• @slider: スライダー操作時に実行\n• @sample: サンプルごとにリアルタイム実行';
 
   @override
   String get lpEditorTooltip =>
@@ -2359,10 +2363,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String get chainStagePreDsp => 'DSP 前';
 
   @override
-  String get chainStagePreVendor => 'ベンダーチェーン前';
+  String get chainStagePreVendor => 'DSPメインチェーン前';
 
   @override
-  String get chainStagePostVendor => 'ベンダーチェーン後';
+  String get chainStagePostVendor => 'DSPメインチェーン後';
 
   @override
   String get chainStagePostReverb => 'リバーブ後';
@@ -2605,17 +2609,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugBypassed => 'バイパス中';
 
   @override
-  String get plugCustomTitle => 'カスタムプラグイン検索フォルダ';
+  String get plugCustomTitle => 'プラグインスキャンフォルダ';
 
   @override
-  String get plugCustomHint => '他ドライブやDAWのVST3/CLAPパスを追加。スキャン時に自動統合。';
+  String get plugCustomHint =>
+      'スキャンするフォルダにチェックを入れます（標準フォルダは自動登録済み、内蔵フォルダは削除不可）。チェックしたフォルダとそのサブフォルダのみ走査します。';
 
   @override
   String get plugCustomAdd => 'フォルダを追加';
 
   @override
-  String get plugCustomEmpty =>
-      'カスタムフォルダはまだありません。システム既定（C:\\Program Files\\Common Files\\VST3等）のほか、右上から追加できます。';
+  String get plugCustomEmpty => 'スキャンフォルダが空です。「フォルダを追加」からプラグインの場所を選択してください。';
 
   @override
   String plugMountTitle(int n) {
@@ -3100,6 +3104,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpUncompiled => '未コンパイル';
 
   @override
+  String get lpRunningOldCode => '前回のコードを実行中';
+
+  @override
   String get lpCompileSuccess => 'コンパイル成功';
 
   @override
@@ -3250,4 +3257,44 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpApoNoFiltersPreampOnly => 'プリアンプのみモード (フィルタなし)';
+
+  @override
+  String get plugScanDirsSelectAll => 'すべて選択';
+
+  @override
+  String get plugScanDirsClear => 'すべてのチェックを外す';
+
+  @override
+  String plugScanDirsEnabledCount(int enabled, int total) {
+    return '$enabled/$total 件有効';
+  }
+
+  @override
+  String get plugScanDirsBuiltin => '内蔵';
+
+  @override
+  String get plugScanDirsBuiltinHint => 'アプリ同梱のフォルダー。自動作成され、削除できません';
+
+  @override
+  String get plugScanDirsRemove => 'この項目を削除';
+
+  @override
+  String get plugFormatSoon => 'この形式のスキャンとホスト機能は今後のバージョンで対応予定です';
+
+  @override
+  String get liveprogFontReset => 'クリックで既定値に戻す';
+
+  @override
+  String get presetDeleteTitle => 'プリセットを削除';
+
+  @override
+  String get presetDeleteBody => 'このプリセットを削除しますか？元に戻せません。';
+
+  @override
+  String get presetDeleteAction => '削除';
+
+  @override
+  String presetOverwritten(String name) {
+    return '同名のプリセット「$name」を上書きしました';
+  }
 }

@@ -78,11 +78,12 @@ constexpr unsigned kEngineAbiExpected = 2u;
 
 constexpr int kMaxNbs = 4096;  // 超出则该对透传（防爆栈/堆，实测 VM 给 512/1024）
 
-// B2：fan-in 等待截止。音频线程禁阻塞 API，纯自旋 + YieldProcessor。
-// 主判据 QPC 墙钟 2ms（块预算 2.67ms 级：正常 fan-in ≈ max(单组)，
-// 2ms 只可能被"worker 被插件崩溃/死锁拖住"命中）；自旋计数 2×10^5
-// 为 qpfInvUs 未初始化（无墙钟可用）时的同量级兜底。原 4×10^8 ≈ 4-12s：
-// 音频线程被钉死数秒——比它要避免的"永久自旋"只差一个数量级。
+// B2：fan-in 等待截止（2026-10-27 改为预算感知，见 fan-in 处）。音频线程
+// 禁阻塞 API，纯自旋 + YieldProcessor。墙钟可用时主判据是"回调总时长 ≤
+// budget − margin"（大缓冲如本机 VB 2048 帧/42.7ms 预算给足余量，慢组不被
+// 误冻；小缓冲 128 帧/2.67ms ≈ 旧 2ms 行为）；qpfInvUs 未初始化（无墙钟）
+// 时回落自旋计数 2×10^5 兜底（≈2ms 同量级）。原 4×10^8 ≈ 4-12s：音频
+// 线程被钉死数秒——比它要避免的"永久自旋"只差一个数量级。
 constexpr double kVmFanInWaitMs = 2.0;
 constexpr uint64_t kVmFanInSpinLimit = 200000ull;
 
@@ -184,6 +185,7 @@ struct PumpCtx {
     // RT 绝不重入被占引擎（两个线程同进一个引擎实例 = 状态撕裂/UAF 级），
     // 该组输出冻结至 worker 真正返回。
     volatile LONG workStuck = 0;
+    volatile LONG fanTimeouts = 0;  // fan-in 超时（冻结事件）累计（RT 单写；status 诊断）
     LONG curTodo = 0;  // RT 私有：上一并行块 todo 位图（超时 straggler 记账用）
     // 认领协议：64 位打包 (gen<<32)|bitmap。CAS 抢最低位；gen 字段随块轮换，
     // 防「上一块尾组刚完成、下一块已发布」的跨块 stale-claim（worker 持旧
@@ -712,14 +714,33 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             VmWorkComplete(c, newGen, bit);
         }
         // fan-in：音频线程禁阻塞 API，纯自旋（YieldProcessor 降耗降温）。
-        // B2：QPC 2ms 截止为主、自旋计数 2×10^5 兜底（qpfInvUs 未初始化时
-        // 唯一判据）。超时 = 放弃本块：未完成组记账为 straggler（后续块冻结
-        // 该组直至 worker 真正离开引擎），绝不动 parallelOn（主线程所有权，
-        // RT 侧改配置状态本身也是隐患），绝不清 workClaimPacked（代际字
-        // 天然防跨块认领）。原 4×10^8 ≈ 4-12s 会把音频线程钉死数秒。
+        // B2：QPC 墙钟为主判据、自旋计数仅作 qpf 不可用时的兜底（2×10^5，
+        // 与旧固定 2ms 同量级）。超时 = 放弃本块：未完成组记账为 straggler
+        // （后续块冻结该组直至 worker 真正离开引擎），绝不动 parallelOn
+        // （主线程所有权，RT 侧改配置状态本身也是隐患），绝不清
+        // workClaimPacked（代际字天然防跨块认领）。原 4×10^8 ≈ 4-12s 会把
+        // 音频线程钉死数秒。
+        //
+        // 截止 = 预算感知（2026-10-27）：**从回调起点**钳总时长 ≤ budget −
+        // margin（margin = max(200µs, 7.5% 预算)）。背景：本机 VB 缓冲
+        // 2048 帧（预算 42.7ms）下单组 Ozone process ≈ 27ms，固定 2ms 截止
+        // 会在加载/CPU 争用令组间耗时不均时，把稍慢的组误冻成 straggler
+        // ——其输出停在上一块（陈旧/跳变 = 可听卡顿），而回调远未超预算
+        // （实测 maxCbUs ≈ maxGrp0 + 2ms，正是每块撞截止的证据）。预算
+        // 感知后：128 帧小缓冲 ≈ 旧行为（且总时长真正钳进预算），大缓冲
+        // 给足余量，慢组得以完成而不再被误冻；总时长仍恒有上界 = 预算。
         LARGE_INTEGER tf0;
         QueryPerformanceCounter(&tf0);
-        const double waitUs = kVmFanInWaitMs * 1000.0;
+        // 墙钟可用时的总耗时上界（从回调起点 t0 计）：budget − margin。
+        // 0 = 无墙钟（回落旧固定 2ms + 自旋兜底）。
+        double deadlineTotalUs = 0.0;
+        if (c->qpfInvUs > 0.0 && c->sr > 0 && c->nbs > 0) {
+            const long budgetUs =
+                (long)((double)c->nbs * 1000000.0 / (double)c->sr);
+            double marginUs = (double)budgetUs * 0.075;
+            if (marginUs < 200.0) marginUs = 200.0;
+            deadlineTotalUs = (double)budgetUs - marginUs;
+        }
         uint64_t spins = 0;
         bool timedOut = false;
         for (;;) {
@@ -728,21 +749,25 @@ inline long OnVbCallback(void* lpUser, long cmd, void* lpData, long /*nnn*/) {
             if ((LONG)(cur >> 32) != newGen) break;  // 防御：代际不该在此刻轮换
             if (((LONG)(cur & 0xFFFFFFFFLL) & todo) == todo) break;
             YieldProcessor();
-            if (++spins >= kVmFanInSpinLimit) {
+            if (c->qpfInvUs > 0.0) {
+                // 墙钟为主判据（0x3FF 采样降 QPC 开销；自旋计数不封顶——
+                // 截止由墙钟决定，计数只做采样节奏）。
+                if ((++spins & 0x3FF) == 0) {
+                    LARGE_INTEGER tf1;
+                    QueryPerformanceCounter(&tf1);
+                    if ((double)(tf1.QuadPart - t0.QuadPart) * c->qpfInvUs >=
+                        deadlineTotalUs) {
+                        timedOut = true;
+                        break;
+                    }
+                }
+            } else if (++spins >= kVmFanInSpinLimit) {
                 timedOut = true;
                 break;
             }
-            if (c->qpfInvUs > 0.0 && (spins & 0x3FF) == 0) {
-                LARGE_INTEGER tf1;
-                QueryPerformanceCounter(&tf1);
-                if ((double)(tf1.QuadPart - tf0.QuadPart) * c->qpfInvUs >=
-                    waitUs) {
-                    timedOut = true;
-                    break;
-                }
-            }
         }
         if (timedOut) {
+            InterlockedIncrement(&c->fanTimeouts);  // 诊断：冻结事件累计
             // 记账：未完成组 → 冻结。VmMarkStuck 内部 recheck 消除"完成方
             // 先清位、RT 后置位"的永久误冻窗口；此后才完成的 straggler 走
             // 代际不匹配路径自行解冻。

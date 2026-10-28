@@ -355,9 +355,10 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
                 viz_scan_out_peak(h, out, frames, ch);
             }
         }
-        const int vizInt = h->viz_interval.load(std::memory_order_relaxed);
-        while (h->frames_since_viz >= vizInt) {
-            h->frames_since_viz -= vizInt;
+        int vizInt = h->viz_interval.load(std::memory_order_relaxed);
+        if (vizInt < 64) vizInt = 480;
+        if (h->frames_since_viz >= vizInt) {
+            h->frames_since_viz %= vizInt;
             emit_viz(h);
         }
         return;
@@ -400,9 +401,10 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     process_stereo_chain(h, h->shelf_scratch, out, frames);
     h->frames_since_viz += frames;
     viz_write(h, out, frames, 2);
-    const int vizInt2 = h->viz_interval.load(std::memory_order_relaxed);
-    while (h->frames_since_viz >= vizInt2) {
-        h->frames_since_viz -= vizInt2;
+    int vizInt2 = h->viz_interval.load(std::memory_order_relaxed);
+    if (vizInt2 < 64) vizInt2 = 480;
+    if (h->frames_since_viz >= vizInt2) {
+        h->frames_since_viz %= vizInt2;
         emit_viz(h);
     }
 }

@@ -103,6 +103,13 @@ static void* PluginEngineAt(int g) {
 // （ctx 会被 memset，CHANGE 重建不丢，重建后经 ApplyPluginGroupMask 重放）。
 static volatile LONG g_pluginGroupMask = 0xFF;
 
+// 加载期平滑（2026-10-27）：后台补挂期间临时旁路全部已加载链。
+// 实测 @128 帧：补挂第 2/3 个 Ozone 时在跑组 process 峰值 5-6ms（预算
+// 2.67ms），每秒 15-20 块超预算；旁路后同窗口 0 超预算，恢复后无尖峰。
+// 只在预算紧张（<8ms）且已有实例在跑时启用；恢复走 ApplyPluginGroupMask，
+// 用户掩码 / Z12 保护态原样重放，不记忆也不覆盖用户开关。
+static volatile LONG g_loadSuspending = 0;  // 1 = 补挂批次进行中（链全旁路）
+
 // ---- Z12 超预算自动保护（2026-10-23）--------------------------------------
 // 症状：Ozone 12 级重插件逐组串行（每实例 ~0.76ms 均 / 2.33ms 峰 @128 帧），
 // N≥2 组即超预算（128 帧 @48k = 2.67ms）→ VM 回调持续欠载 → 必卡。
@@ -132,6 +139,10 @@ static void ApplyPluginGroupMask() {
     if (InterlockedCompareExchange(&g_protectActive, 0, 0)) {
         eff = 1 << InterlockedCompareExchange(&g_protectHot, 0, 0);
     }
+    // 加载期：全部链旁路。Ozone 初始化与在跑实例争用会令 process 峰值
+    // 冲到 5-6ms；旁路让 RT 只做透传，补挂结束后由 EndLoadSuspension
+    // 清除标记并重放用户/保护掩码。
+    if (InterlockedCompareExchange(&g_loadSuspending, 0, 0)) eff = 0;
     for (int g = 0; g < g_b.ctx.nEng; ++g) {
         if (g_b.ctx.eng[g]) {
             g_pluginFns.chainSetEnabled(g_b.ctx.eng[g], (eff >> g) & 1);
@@ -151,12 +162,16 @@ static void InitProtectObs() {
     InterlockedExchange(&g_b.ctx.protectTestMode, 0);
     InterlockedExchange(&g_protectActive, 0);
     InterlockedExchange(&g_protectUnderWakes, 0);
+    InterlockedExchange(&g_loadSuspending, 0);
 }
 
 // 守卫一次轮询（后台补齐线程调用，非 RT）。所有引擎/链操作都在本线程，
 // RT 路径零新增成本。
 static void ProtectTick() {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return;
+    // 加载旁路期观测不代表真实负载（旁路本身就是 0.02ms 级透传），
+    // 不参与保护状态机，避免无谓进入/退出。
+    if (InterlockedCompareExchange(&g_loadSuspending, 0, 0)) return;
     if (g_b.ctx.nEng <= 1) return;  // 单组无从收窄
     if (!g_pluginFns.HasChainEnable()) return;
     const long sr = g_b.ctx.sr, nbs = g_b.ctx.nbs;
@@ -240,6 +255,43 @@ static bool GroupNeedsPlugin(int g) {
     return ((pm >> g) & 1) != 0 && ((bm >> g) & 1) != 0;
 }
 
+// ---- 加载期平滑（2026-10-27）---------------------------------------------
+// 预算够宽时不必旁路：补挂尖峰实测 5-6ms，384 帧 @48k（8ms）以上已能吸收，
+// 旁路只会白丢几秒插件音色。sr/nbs 未就绪（回调还没跑）时也不旁路——没有
+// 音频在跑，本来就无抖动可言。
+static bool LoadSuspensionUseful() {
+    const long sr = g_b.ctx.sr, nbs = g_b.ctx.nbs;
+    if (sr <= 0 || nbs <= 0) return false;
+    const long budgetUs = (long)((double)nbs * 1000000.0 / (double)sr);
+    return budgetUs > 0 && budgetUs < 8000;
+}
+
+// 是否有组已挂过插件（同步挂载时用于判断「在跑实例会被加载争用」）。
+static bool AnyPluginLoaded() {
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (g_grpLoaded[g].load(std::memory_order_acquire) != 0) return true;
+    }
+    return false;
+}
+
+// 幂等：首个调用者置位并立即旁路全部链；已有旁路时不再重复下发。
+static void BeginLoadSuspension() {
+    if (!LoadSuspensionUseful()) return;
+    if (InterlockedExchange(&g_loadSuspending, 1) == 0) ApplyPluginGroupMask();
+}
+
+// 队列排空才恢复。只在 worker / 无后台 job 的同步路径调用——后台 job 一旦
+// 入队，恢复权归 worker（否则「worker 已取走 job、调用方却看到队列空」会把
+// 旁路提前撤掉，正好赶上加载尖峰）。
+static void EndLoadSuspensionIfIdle() {
+    {
+        std::lock_guard<std::mutex> lk(g_bgMutex);
+        if (!g_bgJobs.empty()) return;
+    }
+    if (InterlockedExchange(&g_loadSuspending, 0)) ApplyPluginGroupMask();
+}
+
+
 // 后台补一个组：加载 → 镜像状态回放 → 挂起预设应用。
 // 返回 true = 该组已就绪。
 static bool LoadGroupForSlot(int g, int slot, const char* path, const char* id) {
@@ -285,6 +337,8 @@ static void GroupLoadWorker() {
             }
         }
         if (hasJob) {
+            const bool suspend = LoadSuspensionUseful();
+            if (suspend) BeginLoadSuspension();
             const int n = PluginEngineCount();
             HANDLE thr = GetCurrentThread();
             const int oldPrio = GetThreadPriority(thr);
@@ -296,6 +350,7 @@ static void GroupLoadWorker() {
                 LoadGroupForSlot(g, job.slot, job.path.c_str(), job.id.c_str());
             }
             SetThreadPriority(thr, oldPrio);
+            if (suspend) EndLoadSuspensionIfIdle();
         }
         ProtectTick();
     }
@@ -319,6 +374,9 @@ static void StopBgThread() {
     }
     g_bgCv.notify_all();
     if (g_bgThread.joinable()) g_bgThread.join();
+    // 兜底：worker 在 stop 前若卡在加载中，join 返回时批次已结束；清掉
+    // 旁路标记并重放掩码（引擎此时仍有效，调用方随后才销毁）。
+    if (InterlockedExchange(&g_loadSuspending, 0)) ApplyPluginGroupMask();
 }
 
 // 掩码新使能的组：若镜像里已有插件、但该组实例尚缺（加载时被掩码跳过），
@@ -1031,8 +1089,9 @@ int vb_status(char* out, int cap) {
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
                      "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
                      "\"protect\":%d,\"cbEmaUs\":%ld,\"budgetUs\":%ld,"
-                     "\"hotGrp\":%d,\"plugMask\":%d,"
+                     "\"hotGrp\":%d,\"plugMask\":%d,\"loadSuspend\":%d,"
                      "\"parallel\":%d,\"workers\":%d,"
+                     "\"stuckG\":%ld,\"fanTimeouts\":%ld,"
                      "\"peakGrp\":%s,\"maxGroupUs\":%s,\"edition\":%d,\"engine\":\"%s\"}",
                       InterlockedCompareExchange(&g_b.running, 0, 0) ? "true"
                                                                      : "false",
@@ -1048,9 +1107,12 @@ int vb_status(char* out, int cap) {
                       protOn ? InterlockedCompareExchange(&g_protectHot, 0, 0)
                              : -1,
                      InterlockedCompareExchange(&g_pluginGroupMask, 0, 0),
+                     (int)InterlockedCompareExchange(&g_loadSuspending, 0, 0),
                      (int)(InterlockedCompareExchange(&g_b.ctx.parallelOn, 0, 0) &&
                            g_b.ctx.nWorkers > 0),
                      (int)g_b.ctx.nWorkers,
+                     InterlockedCompareExchange(&g_b.ctx.workStuck, 0, 0),
+                     InterlockedCompareExchange(&g_b.ctx.fanTimeouts, 0, 0),
                      peaks, maxG, g_b.edition, eng);
     // peakGrp 已在回调级衰减，此处不再动（避免与回调线程叠加衰减失真）。
     return (n >= 0 && n < cap) ? n : -1;
@@ -1211,6 +1273,10 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
     SetThreadPriority(thr, THREAD_PRIORITY_BELOW_NORMAL);
     // 加速（2026-10-23）：只同步加载 eng[0]（~2-3.7s，实测 Ozone 12），
     // 其余组后台补齐（原逐组同步：4 组 9.7s / 8 组近 20s）。
+    // 加载期平滑：已有实例在跑时先旁路（含正在被替换的旧实例），失败/单组
+    // 路径立即恢复；多组时恢复权交给后台 worker（队列排空才恢复）。
+    const bool suspendSync = LoadSuspensionUseful() && AnyPluginLoaded();
+    if (suspendSync) BeginLoadSuspension();
     int rc0;
     {
         std::lock_guard<std::mutex> eng(g_engineMut);
@@ -1218,7 +1284,10 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
                                    g_pluginMirror, slot, path, plugin_id);
     }
     SetThreadPriority(thr, oldPrio);
-    if (rc0 != 1) return 0;   // eng[0] 失败 = 整体失败（镜像未被改写）
+    if (rc0 != 1) {   // eng[0] 失败 = 整体失败（镜像未被改写）
+        if (suspendSync) EndLoadSuspensionIfIdle();
+        return 0;
+    }
     g_grpLoaded[0].fetch_or(1u << slot);
     // 新加载：该槽的挂起预设作废（旧请求属于上一次挂载）。
     {
@@ -1233,6 +1302,10 @@ int vb_plugin_slot_load(int slot, const char* path, const char* plugin_id) {
                                                 plugin_id ? plugin_id : ""});
         }
         g_bgCv.notify_one();
+        // 注意：此处不得 End——worker 可能已取走 job（队列空）但尚未开始/
+        // 正在加载，提前恢复正好撞上尖峰。worker 在批次排空时统一恢复。
+    } else if (suspendSync) {
+        EndLoadSuspensionIfIdle();
     }
     return 1;
 }
@@ -1242,6 +1315,10 @@ int vb_plugin_slot_unload(int slot) {
     // 取消在途/排队中的后台补齐（代际递增），并与其互斥（不得并发碰引擎）。
     g_bgGen.fetch_add(1);
     const int n = PluginEngineCount();
+    // 卸载 teardown 同样是重操作；已有其它实例在跑时同样先旁路，避免
+    // deactivate/destroy 与 RT process 争用（与 load 同源，实测同窗口）。
+    const bool suspend = LoadSuspensionUseful() && AnyPluginLoaded();
+    if (suspend) BeginLoadSuspension();
     // 同 load：卸载 teardown 也是重操作，降优先级护 RT。
     HANDLE thr = GetCurrentThread();
     int oldPrio = GetThreadPriority(thr);
@@ -1261,6 +1338,9 @@ int vb_plugin_slot_unload(int slot) {
         for (int g = 0; g < PumpCtx::kMaxGroups; ++g) g_pendHasPreset[g][slot] = false;
     }
     SetThreadPriority(thr, oldPrio);
+    // 队列里可能还有被代际作废的补挂 job——worker 逐个取走后才算排空；
+    // 若此刻已空则立即恢复用户/保护掩码。
+    if (suspend) EndLoadSuspensionIfIdle();
     return n > 0 ? 1 : 0;
 }
 

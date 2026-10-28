@@ -34,10 +34,18 @@ void _scanChunked({
       });
 
       var guard = 0;
+      var processed = 0;
+      var aborted = false;
       while (true) {
         final stepped =
             AuraDspLib.pluginScanStepWrap(lib, handle, maxItems: batchSize);
-        if (stepped <= 0) break;
+        if (stepped <= 0) {
+          // 引擎侧 0 = 扫描任务不存在/中断（含宿主进程超时被杀）。
+          // 与「候选全部处理完」区分：后者 processed 已达 total。
+          if (candidateTotal > 0 && processed < candidateTotal) aborted = true;
+          break;
+        }
+        processed += stepped;
         final pr = AuraDspLib.pluginScanProgressWrap(lib, handle);
         final total = pr.total < 0 ? candidateTotal : pr.total;
         if (total > 0) candidateTotal = total;
@@ -59,6 +67,7 @@ void _scanChunked({
         'evt': 'pluginScanned',
         'count': totalCount,
         'json': allJson,
+        if (aborted) 'aborted': true,
       });
     } catch (e) {
       send({'evt': 'error', 'msg': '插件扫描失败：$e'});
@@ -66,7 +75,12 @@ void _scanChunked({
       try {
         AuraDspLib.pluginScanEndWrap(lib, handle);
       } catch (e, st) { swallow(e, st); }
-      send({'evt': 'pluginScanned', 'count': 0, 'json': '[]'});
+      send({
+        'evt': 'pluginScanned',
+        'count': 0,
+        'json': '[]',
+        'aborted': true,
+      });
     }
   }();
 }

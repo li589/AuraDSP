@@ -44,6 +44,8 @@ dll.auradsp_plugin_get_item.restype = ctypes.c_int
 dll.auradsp_plugin_get_item.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
 dll.auradsp_plugin_load.restype = ctypes.c_int
 dll.auradsp_plugin_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+dll.auradsp_plugin_set_bypass.restype = ctypes.c_int
+dll.auradsp_plugin_set_bypass.argtypes = [ctypes.c_void_p, ctypes.c_int]
 dll.auradsp_plugin_unload.restype = ctypes.c_int
 dll.auradsp_plugin_unload.argtypes = [ctypes.c_void_p]
 dll.auradsp_plugin_get_status.restype = ctypes.c_int
@@ -173,6 +175,8 @@ assert TARGET, f"test plugin containing {PLUGIN_NAME!r} not found"
 
 print(f"=== [3] remote load {TARGET['name']} ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
+# P-041 挂载即旁路：显式解旁路（remote 宿主进程 commit 同样置旁路）。
+assert dll.auradsp_plugin_set_bypass(handle, 0) == 1
 status = get_status(handle)
 assert status["hasActive"] and status["plugin"] is not None
 assert status.get("remoteMode") is True, f"expected remoteMode, got {status}"
@@ -268,6 +272,7 @@ print(f"  per-callback latency: 256-frame callbacks -> transport 256, "
 
 print("=== [4b] replacing a loaded remote plugin keeps processing ===")
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
+assert dll.auradsp_plugin_set_bypass(handle, 0) == 1  # P-041 挂载即旁路
 out, src = wait_for_ramp_processed(handle)
 assert_processing(out, src, "[4b] plugin replacement")
 
@@ -280,6 +285,7 @@ while state == 1 and time.time() < deadline:
     time.sleep(0.05)
     state = dll.auradsp_plugin_slot_task_state(handle, 0)
 assert state == 2, f"async replacement failed, task_state={state}"
+assert dll.auradsp_plugin_set_bypass(handle, 0) == 1  # P-041 挂载即旁路
 out, src = wait_for_ramp_processed(handle)
 assert_processing(out, src, "[4c] async replacement")
 
@@ -306,6 +312,7 @@ print("engine survived; host crash reported and bypassed")
 print("=== [7] reload relaunches host and restores processing ===")
 assert dll.auradsp_plugin_unload(handle) == 1
 assert dll.auradsp_plugin_load(handle, TARGET["path"].encode("utf-8"), b"") == 1
+assert dll.auradsp_plugin_set_bypass(handle, 0) == 1  # P-041 挂载即旁路
 out, src = wait_for_ramp_processed(handle)
 assert_processing(out, src, "[7] reloaded remote plugin")
 status = get_status(handle)

@@ -851,5 +851,132 @@ yquist * 0.999，
   纯超集支持！带 `@slider` 的 JSFX 脚本和模板完全正常编译并执行滑块逻辑；无 `@slider` 的传统脚本完全无性能损耗。
 - **验收**：`smoke_liveprog.py` 与示例模板编译测试。
 - **上游同步冲突风险**：低。
+## P-040 混响 3D 声学画师 shouldRepaint 浮点 epsilon（实施：2026-10-27）
 
+- **状态**：已实施（2026-10-27）
+- **位置**：`app/auradsp_app/lib/features/effects/cards_common.dart`（`_Freeverb3DPainter.shouldRepaint`）。
+- **动机**：画师参数（decay/damp/roomSize/stereoWidth）由动画/旋钮连续驱动，受单精度 IEEE754 舍入影响可能产生 1e-7 级尾数抖动；直接 `!=` 比较会把「等值不同位」误判为变化，触发无谓的逐帧重绘，多个编辑器同开时放大 UI 卡顿。
+- **内容**：引入 `static const double _eps = 1e-6;`，`shouldRepaint` 中四路参数比较全部带 `_eps` 容差，只有真实变化才触发重绘。
+- **行为影响**：无（纯绘制刷新判定收紧，绘制结果逐位不变）。
+- **验收**：D6 门禁全绿（本条目即登记）。
+- **上游同步冲突风险**：无（纯 Flutter 侧逻辑，无 vendor 代码）。
+## P-041 插件挂载即旁路——假旁路根治 + 编辑器无可视化闭环（实施：2026-10-28）
 
+- **状态**：已实施（2026-10-28）
+- **位置**：`engine/plugins/driver/plugin_host_manager.cpp`（`commitInstanceLocked`）
+  + `app/auradsp_app/lib/core/plugin_manager.dart`（`onPluginSlotLoaded`）
+  + `app/auradsp_app/lib/core/state/state_session.dart`（回放恒发 bypass）
+  + `app/auradsp_app/lib/engine/audio_isolate.dart`（在途加载 bypass 暂存）
+  + 9 个冒烟测试补显式解旁路。
+- **动机**（用户实测两症状，同根因）：
+  ① **假旁路**：UI 显示旁路但音频实际流经插件。UI 侧 2026-10-22 已有
+  「挂载即旁路」策略（挂载成功后下发 bypass:true），但引擎
+  `commitInstanceLocked` 出厂激活（`bypassed.store(false)`）在三处把它
+  打掉：VB 后台补挂组 `LoadGroupForSlot` 的 `SlotLoad` 会用刚 commit 的
+  引擎态（bypass=0）**回写镜像**，覆盖 UI 已下发的 1 → 组 1..N-1 全部
+  激活；异步加载窗口内先到的 bypass 请求被 commit 的 false 抹掉；
+  会话回放保存为激活的槽被 `onPluginSlotLoaded` 的无条件 mount-bypass
+  下发覆盖成旁路（且旧回放只发 true 不发 false，激活槽无人解旁路）。
+  ② **编辑器无可视化**：编辑器固定开在组 0（`PluginEngine()`），而组 0
+  是唯一真旁路的实例（组 1..N-1 被 ① 误激活）→ 无 processBlock → 无
+  表针，可听效果全部来自被误激活的组。**定性为 bug 而非策略**，无需
+  「显示/不显示实时流」开关。
+- **内容**：引擎挂载恒旁路（commit 存 true，单源真值，三路时序全部
+  免疫）；UI 删除冗余 mount-bypass 下发（它是会话回放覆盖的根源）；
+  会话回放恒发保存的 bypass 值；isolate 对在途加载窗口内的 bypass
+  请求暂存、load 完成后补发（非桥异步路径竞态）；VB 桥路径 load 同步
+  无竞态、镜像回写在挂载旁路语义下自洽（无需改桥）。
+- **与 Z12 超预算保护的适配**：槽级 bypass 与链级 enable 正交——旁路槽
+  不进音频路径（`processInterleavedN` 早退），挂载窗口内链零负载，天然
+  不触发保护；用户解旁路后若重插件超预算，Z12 链级收窄照常生效（链
+  掩码决定哪些组进路径，槽 bypass 决定槽是否进路径），保护退出后掩码
+  重放不碰槽 bypass。加载期旁路（g_loadSuspending）同理不受影响。
+- **行为影响**：① 所有模式（本地/VAIO/ASIO/APO/VB）挂载后槽一律旁路
+  （UI 橙色「旁路」），用户显式打开才生效——与 UI 既有显示语义首次
+  真正对齐；② 挂载瞬间重插件零音频冲击（此前出厂激活会立即吃 CPU）；
+  ③ 旁路期间 F-2 真旁路把插件 deactivate（VST3 setActive(false)），
+  编辑器无表针属预期；④ 优雅卸载的 bypass:true 前置（unload 流程）
+  与挂载旁路衔接一致，无残留。
+- **验收**：`smoke_plugin_bypass_lifecycle` 挂载断言翻转（==1）+ 5 轮
+  切换稳态逐位不回归；`smoke_vm_plugin_load_fast` 新增「挂载即旁路」+
+  「解旁路后 processCalls 恢复」断言；9 个旧契约冒烟补显式解旁路后
+  全量 100%；flutter analyze 零问题；plugin/会话相关 Dart 测试全过。
+  9 个测试文件：plugin_host / plugin_host_process（4 处 load）/ pdc /
+  bus / chain_stages / channels / chain_enable / cross_mode_consistency /
+  bypass_lifecycle。
+- **上游同步冲突风险**：低（engine 单行语义翻转 + Dart 三处小改；
+  vendor 代码零触碰）。
+
+## P-042 插件扫描目录改版——显式目录列表 / 平台预置 / 内置目录 / 厂商分组（实施：2026-10-28）
+
+- **状态**：已实施（2026-10-28）
+- **位置**：新增 `app/auradsp_app/lib/core/plugin_scan_dirs.dart`（模型 +
+  平台目录发现）与 `lib/features/plugins/plugin_scan_dirs.dart`（独立 UI 文件，
+  原 `plugins_dirs.dart` 的 part 文件删除）；`lib/core/config.dart`
+  （`customPluginDirs` → `pluginScanDirs` 条目 + `pluginScanDirsSeeded` 迁移）、
+  `lib/core/text_collation.dart`（新增）、`lib/core/state/state_session.dart`
+  （目录操作 API + 内置目录归一 + 首次播种）、`lib/core/plugin_manager.dart`
+  （`setScanDirs` / `pluginGroups` / 预留格式计数）、
+  `lib/features/plugins/plugins_list.dart`（厂商分组 + 扫描占位 + 格式药丸）、
+  `lib/features/plugins_page.dart`（挂载新 section、移除右上角打开文件夹）、
+  三语 arb + gen-l10n。
+- **动机**（用户定案）：① 「自定义插件检索目录」名不副实——实际依赖引擎隐式
+  默认目录，用户移除/取消勾选在引擎侧不生效；② 目录管理展示形态差（Chip 墙，
+  无勾选、无逐条打开）；③ 插件列表无分组，百级条目难找。
+- **内容**：
+  · 目录即真值：`pluginScanDirs` 条目含 path/enabled/builtin；UI 多选列表
+    （左复选框、右「打开文件夹」「移除该条」），列表左上全选（三态）+ 清除；
+    「添加目录」保留在卡片头；插件库卡片右上角打开文件夹按钮删除。
+  · 平台预置：仅首次播种（`pluginScanDirsSeeded`），且目录必须真实存在——
+    Windows：CommonProgramFiles/LOCALAPPDATA 的 VST3/CLAP 与 VST2 常见目录 +
+    HKLM/HKCU\SOFTWARE\VST 的 VSTPluginsPath（reg.exe best-effort）；
+    macOS：/Library 与 ~/Library/Audio/Plug-Ins 下 VST3/CLAP/VST/Components；
+    Linux：/usr/lib、/usr/local/lib 与 ~/.{vst3,clap,lv2,vst}。
+  · 内置目录：`<配置根>/plugins` 自动创建、恒启用、不可移除（UI 禁用移除按钮
+    并标注「内置」），为未来自带插件预留。
+  · 引擎只扫传入目录：`collectSearchPathsLocked` 有显式目录时不再叠加默认目录
+    （空输入保留默认兜底，兼容脚本/冒烟）。
+  · 列表按厂商分组：厂商字典序（大小写/变音符号折叠 + 数字自然序；非拉丁按
+    码位稳定排序，明确不做拼音序），组内插件同名序，未知厂商沉底。
+  · 预留格式：FilterPills 增加 VST2 / AU / LV2（灰显不可点 + 悬停「后续版本
+    支持」）；`PluginFormat` 已能解析三种格式，驱动实现后即刻可用。
+- **附带修复**（本轮门禁暴露的历史欠款）：① `liveprog_page.dart` 字号恢复
+  提示硬编码中文 → `liveprogFontReset` 三语词条（CJK 棘轮归零）；②
+  `setLiveprogParam` 未同步 `lpSliderValues` → 同签名重应用会复活声明默认值，
+  用户旋钮值被覆盖（10-27 滑块重构遗留，`config_and_presets` Liveprog v2 用例
+  抓到）；③ `eel_editor_test` 断言串与 10-27 改版后的 `eelEmptyInit` 文案漂移
+  → 改为匹配 @init 语义（保持定位/blocking/行号意图）。
+- **验收**：新增 `test/plugin_scan_dirs_test.dart` 11 项（排序/迁移/目录过滤/
+  分组）全过；`flutter analyze` 零问题；`config_and_presets` 86 项全过；
+  全量 Dart 串行 559 项中仅剩环境型 loading/did-not-complete（被点名文件单跑
+  全过）；`runner.py --smoke` 100%。
+- **上游同步冲突风险**：低（全部为 Dart 侧与 UI；引擎仅一处目录收集策略）。
+
+## P-043 深扫挂死防护——单项超时 / 宿主 IPC 超时 / 前端中断保列表（实施：2026-10-28）
+
+- **状态**：已实施（2026-10-28）
+- **位置**：`engine/plugins/driver/plugin_scanner.cpp`（单项元数据查询超时守卫）、
+  `engine/plugins/api/plugin_host.h`（ScanJob 诊断计数）、
+  `engine/plugins/host/plugin_host_client.{h,cpp}`（带超时的 IPC 读 + 超时杀宿主）、
+  `app/auradsp_app/lib/engine/audio_slots.dart`（中断判定）、
+  `lib/core/plugin_manager.dart` + `lib/core/state/state_events.dart`（aborted
+  语义：保留上次结果 + 提示）。
+- **动机**（用户实测）：深扫需 LoadLibrary/实例化插件，个别插件在现场卡死
+  （甚至弹出自己的 UI），整条扫描链路永久阻塞，UI 停在「正在扫描」，只能重启
+  应用；且一次失败会把整份插件列表清空。
+- **内容**：
+  · 进程内深扫：每个候选的元数据查询放 detached worker，主扫描线程最多等
+    2500ms；超时 → 放弃该候选并回退「快速信息」条目（标注「深度扫描超时」，
+    仍可正常尝试挂载——挂载路径有独立的异步超时保护），扫描继续推进。放弃
+    线程无法安全回收，设上限 4（`kScanAbandonLimit`），超过即停止深扫（后续
+    候选降级快扫）。硬隔离仍建议 `AURA_PLUGIN_HOST_MODE=process`（进程外宿主）。
+  · 进程外宿主：`readAllTimeout`（PeekNamedPipe 轮询 2ms + 进程存活检查），
+    扫描类操作 8s、其余 60s；超时 = 杀宿主进程 + 标记管道失效，下次操作自动
+    重启干净宿主。
+  · 前端：`_scanChunked` 区分「正常扫完」与「中途中断」（stepped==0 且
+    processed<total）→ `pluginScanned.aborted`；管理器收到 aborted 时**保留
+    上次成功列表**并提示「扫描中断…」，绝不用残缺/空表覆盖。
+- **验收**：`runner.py --smoke` 100%（含 plugin_host_process / plugin_bus 等
+  深扫相关）；引擎构建零警告；Dart 侧 aborted 语义由既有用例回归。
+- **上游同步冲突风险**：低-中（scanner 的扫描循环改写为守卫形态；宿主客户端
+  请求签名增可选参数，调用点默认值兼容）。

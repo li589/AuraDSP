@@ -108,6 +108,8 @@ def load_dll():
         ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
     dll.auradsp_plugin_load.restype = ctypes.c_int
     dll.auradsp_plugin_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
+    dll.auradsp_plugin_set_bypass.restype = ctypes.c_int
+    dll.auradsp_plugin_set_bypass.argtypes = [ctypes.c_void_p, ctypes.c_int]
     dll.auradsp_plugin_get_status.argtypes = [
         ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
     dll.auradsp_plugin_get_status.restype = ctypes.c_int
@@ -160,6 +162,8 @@ def run_worker(mode, out_path):
 
     assert dll.auradsp_plugin_load(
         handle, target["path"].encode("utf-8"), b"") == 1, f"{mode}: plugin load failed"
+    # P-041 挂载即旁路：显式解旁路（remote/process 两模式同此语义）。
+    assert dll.auradsp_plugin_set_bypass(handle, 0) == 1, f"{mode}: un-bypass failed"
     status = get_status(dll, handle)
     latency = int(dll.auradsp_plugin_get_latency(handle))
     print(f"[{mode}] loaded {target['name']}, latency={latency}, "

@@ -63,7 +63,11 @@ class _SlotTab extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
 
-    return InkWell(
+    return LayoutBuilder(builder: (context, constraints) {
+      // 2026-10-28：窄宽度下文字必然溢出插槽边界——退化为「大圈号居中」
+      // 的紧凑形态（用户定案：圈 1 / 圈 2 那种序号标记）。
+      final compact = constraints.maxWidth < 150;
+      return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(AuraRadius.md),
       child: Stack(
@@ -71,8 +75,9 @@ class _SlotTab extends StatelessWidget {
         children: [
           AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(
-            horizontal: AuraSpace.md, vertical: AuraSpace.sm + 2),
+        padding: EdgeInsets.symmetric(
+            horizontal: compact ? AuraSpace.xs : AuraSpace.md,
+            vertical: AuraSpace.sm + 2),
         decoration: BoxDecoration(
           color: isSelected
               ? p.accent.withValues(alpha: 0.12)
@@ -83,11 +88,40 @@ class _SlotTab extends StatelessWidget {
             width: isSelected ? 1.5 : 1.0,
           ),
         ),
-        child: Row(
+        child: compact
+            ? Center(
+                child: Container(
+              width: compact ? 34 : 28,
+              height: compact ? 34 : 28,
+              decoration: BoxDecoration(
+                color: isSelected ? p.accent : p.hairline,
+                shape: BoxShape.circle,
+              ),
+              alignment: Alignment.center,
+              child: busy
+                  ? SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: isSelected ? p.accentContrast : p.accent,
+                      ),
+                    )
+                  : Text(
+                      '${slotIdx + 1}',
+                      style: TextStyle(
+                        color: isSelected ? p.accentContrast : p.textDim,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                ),
+              )
+            : Row(
           children: [
             Container(
-              width: 28,
-              height: 28,
+              width: compact ? 34 : 28,
+              height: compact ? 34 : 28,
               decoration: BoxDecoration(
                 color: isSelected ? p.accent : p.hairline,
                 shape: BoxShape.circle,
@@ -109,7 +143,7 @@ class _SlotTab extends StatelessWidget {
                       style: TextStyle(
                         color: isSelected ? p.accentContrast : p.textDim,
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
+                        fontSize: compact ? 16 : 13,
                       ),
                     ),
             ),
@@ -169,7 +203,7 @@ class _SlotTab extends StatelessWidget {
           ),
           ),
           // 右上角诚实状态（2026-10-22）：生效=绿点 / 旁路=橙点。
-          if (isActive)
+          if (isActive && !compact)
             Positioned(
               top: 6,
               right: 6,
@@ -187,6 +221,7 @@ class _SlotTab extends StatelessWidget {
         ],
       ),
     );
+      });
   }
 }
 

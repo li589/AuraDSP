@@ -375,6 +375,9 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
     // 注册 MMCSS Pro Audio 优先级调度
     DWORD taskIndex = 0;
     HANDLE hMmcss = AvSetMmThreadCharacteristicsW(L"Pro Audio", &taskIndex);
+#if defined(_M_X64) || defined(__x86_64__)
+    _mm_setcsr(_mm_getcsr() | 0x8040); // 永久开启 FTZ | DAZ，防止次正规数 microcode trap 拖垮 RT 线程
+#endif
 
     LARGE_INTEGER qpcFreq;
     QueryPerformanceFrequency(&qpcFreq);
@@ -441,7 +444,10 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
         // 检查共享环是否有有效数据
         ULONGLONG totalWritten = pHeader ? pHeader->TotalBytesWritten : 0;
         ULONGLONG availBytes = 0;
-        if (totalWritten > userBytesRead) {
+        if (totalWritten < userBytesRead) {
+            // 内核重置或驱动重启：跟进对齐到当前写入位置，防止死锁滞后
+            userBytesRead = totalWritten;
+        } else if (totalWritten > userBytesRead) {
             availBytes = totalWritten - userBytesRead;
             // 环形缓冲覆写超载处理：若落后超过一整圈，强制跟进到最新一圈头部
             if (availBytes > (ULONGLONG)dataSize) {

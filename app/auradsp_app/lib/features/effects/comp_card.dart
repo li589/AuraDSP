@@ -43,6 +43,7 @@ class _CompressorCard extends StatelessWidget {
             model: model,
             customLabel: l.compThreshold,
             infoMessage: l.compHintThreshold,
+            onChangedEnd: (v) => model.setCompThreshold(v, forceFlush: true),
           ),
           const SizedBox(height: AuraSpace.sm),
 

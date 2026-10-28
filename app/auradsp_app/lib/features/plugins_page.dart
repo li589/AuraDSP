@@ -11,22 +11,22 @@
  */
 
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/path_memory.dart';
-import '../core/plugin_manager.dart';
+import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../ui/wheel_scroll.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
 import '../core/error_sink.dart';
+import 'plugins/plugin_scan_dirs.dart';
 part 'plugins/plugins_slots.dart';
-part 'plugins/plugins_dirs.dart';
 part 'plugins/plugins_hero.dart';
 part 'plugins/plugins_list.dart';
 part 'plugins/plugins_badges.dart';
@@ -91,15 +91,6 @@ class _PluginsPageState extends State<PluginsPage>
     super.dispose();
   }
 
-  void _openPluginFolder() {
-    try {
-      const vst3Dir = r'C:\Program Files\Common Files\VST3';
-      if (Platform.isWindows && Directory(vst3Dir).existsSync()) {
-        Process.run('explorer.exe', [vst3Dir]);
-      }
-    } catch (e, st) { swallow(e, st); }
-  }
-
   Future<void> _addCustomDirDialog(BuildContext context) async {
     final l = l10nOf(context);
     final dir = await AuraPathPickerDialog.show(
@@ -111,7 +102,7 @@ class _PluginsPageState extends State<PluginsPage>
       confirmLabel: l.plugAddScan,
     );
     if (dir != null && dir.isNotEmpty) {
-      widget.model.addCustomPluginDir(dir);
+      widget.model.addPluginScanDir(dir);
       widget.model.pluginManager.scan(deep: _deepScan);
     }
   }
@@ -147,11 +138,10 @@ class _PluginsPageState extends State<PluginsPage>
             model: widget.model,
             manager: manager,
             slot: currentSlot,
-            onScanTap: () => manager.scan(deep: _deepScan),
           ),
 
-          // 2. 自定义检索目录管理
-          _CustomDirsSection(
+          // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
+          PluginScanDirsSection(
             model: widget.model,
             onAddDir: () => _addCustomDirDialog(context),
             onRescan: () => manager.scan(deep: _deepScan),
@@ -201,14 +191,6 @@ class _PluginsPageState extends State<PluginsPage>
                         horizontal: AuraSpace.md, vertical: AuraSpace.xs),
                     visualDensity: VisualDensity.compact,
                   ),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                // 打开目录
-                IconButton(
-                  tooltip: l10nOf(context).plugOpenFolder,
-                  icon: const Icon(Icons.folder_open_rounded, size: 18),
-                  onPressed: _openPluginFolder,
-                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -276,13 +258,22 @@ class _PluginsPageState extends State<PluginsPage>
                       ),
                     ),
                     const SizedBox(width: AuraSpace.md),
-                    // 格式药丸 Filter
-                    _FilterPills(
-                      selected: manager.filterFormat,
-                      countAll: manager.countAll,
-                      countVst3: manager.countVst3,
-                      countClap: manager.countClap,
-                      onSelect: (fmt) => manager.setFilterFormat(fmt),
+                    // 格式药丸 Filter —— 窄窗口下允许横向滚动，避免挤压搜索框
+                    // 或撑破整行（2026-10-28 窄宽度回归）。
+                    Flexible(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _FilterPills(
+                          selected: manager.filterFormat,
+                          countAll: manager.countAll,
+                          countVst3: manager.countVst3,
+                          countClap: manager.countClap,
+                          countVst2: manager.countVst2,
+                          countAu: manager.countAu,
+                          countLv2: manager.countLv2,
+                          onSelect: (fmt) => manager.setFilterFormat(fmt),
+                        ),
+                      ),
                     ),
                   ],
                 ),

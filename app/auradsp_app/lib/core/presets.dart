@@ -16,6 +16,7 @@ import 'param_schema.dart';
 import 'state.dart';
 
 import 'error_sink.dart';
+import '../engine/debug_log.dart';
 class AuraPreset {
   final int schemaVersion;
   final String name;
@@ -74,6 +75,10 @@ abstract final class PresetLibrary {
 
   /// 出厂预设资产清单（assets/presets/factory/）。代码中不存任何预设内容，
   /// 只存文件名索引；内容一律来自 JSON 资产（2026-10-16 决策）。
+  ///
+  /// 注意：pubspec 按**目录**打包该资产，故清单与目录是两套真相——只往目录
+  /// 放文件而不登记，编译仍通过但永不落盘（静默不出现）。两侧一致性由
+  /// `test/preset_defaults_contract_test.dart` 门禁钉住。
   static const List<String> _factoryAssetFiles = [
     'Pop Vocal Clarity.json',
     'Rock Bass Impact.json',
@@ -85,6 +90,13 @@ abstract final class PresetLibrary {
 
   static final Map<String, String> _factoryAssetCache = {};
   static String? _defaultsJson;
+
+  /// 出厂预设资产清单的只读视图（供一致性门禁比对目录内容）。
+  static List<String> get factoryAssetFiles =>
+      List.unmodifiable(_factoryAssetFiles);
+
+  /// 当前预设 schema 版本（`snapshot` 写入、`importFromFile` 校验的唯一真源）。
+  static const int schemaVersionCurrent = 3;
 
   /// 预载出厂预设与默认基线资产（异步）。rootBundle 仅提供异步 API，
   /// 而 ensureInitialized/apply 在同步路径上——故 main 启动时预载一次
@@ -142,6 +154,57 @@ abstract final class PresetLibrary {
         .toLowerCase();
   }
 
+  /// 名称的稳定短哈希（FNV-1a 32 位 → 8 位十六进制），仅用于文件名去碰撞。
+  static String _nameHash(String name) {
+    var h = 0x811c9dc5;
+    for (final c in name.codeUnits) {
+      h ^= c;
+      h = (h * 0x01000193) & 0xFFFFFFFF;
+    }
+    return h.toRadixString(16).padLeft(8, '0');
+  }
+
+  /// 定位某个预设名对应的落盘文件（不含出厂预设）。
+  ///
+  /// 文件名来自 [_safeFileName]，而它**会碰撞**（`My Song` 与 `My_Song` 都得到
+  /// `my_song.json`）——所以不能只凭文件名判断，必须读回 JSON 里的 name 对账。
+  /// 冲突副本的文件名带 [_nameHash] 后缀；另外兼容 v1 落在根目录的历史形态。
+  static File? _findUserPresetFile(String name) {
+    final sep = Platform.pathSeparator;
+    final base = _safeFileName(name);
+    final hashed = '${base}_${_nameHash(name)}.json';
+    final candidates = <String>[
+      '$userDir$sep$base.json',
+      '$userDir$sep$hashed',
+      '$baseDir$sep$base.json',
+      '$baseDir$sep$hashed',
+    ];
+    for (final p in candidates) {
+      final f = File(p);
+      if (!f.existsSync()) continue;
+      try {
+        final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+        if ((j['name'] as String?) == name) return f;
+      } catch (e, st) { swallow(e, st); }
+    }
+    return null;
+  }
+
+  /// 同名去重用的可用名称：`Name` → `Name (2)` → `Name (3)` …
+  /// 后缀是纯数字，语言无关（不需要 l10n 词条）。
+  static String _uniqueUserName(String base) {
+    final taken = <String>{};
+    for (final p in listAll()) {
+      if (!p.isFactory) taken.add(p.name.toLowerCase());
+    }
+    if (!taken.contains(base.toLowerCase())) return base;
+    for (var i = 2; i < 1000; i++) {
+      final cand = '$base ($i)';
+      if (!taken.contains(cand.toLowerCase())) return cand;
+    }
+    return '$base (${DateTime.now().millisecondsSinceEpoch})';
+  }
+
   /// 获取所有预设（出厂预设排在前，用户预设排在后）
   static List<AuraPreset> listAll() {
     ensureInitialized();
@@ -192,15 +255,36 @@ abstract final class PresetLibrary {
       }
     } catch (e, st) { swallow(e, st); }
 
+    // 顺序确定性（2026-10-28）：listSync 给的是文件系统序，增删文件后会漂，
+    // 预设 chip 的位置随之跳变。出厂在前、用户在后，各自按名称不区分大小写。
+    list.sort((a, b) {
+      if (a.isFactory != b.isFactory) return a.isFactory ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return list;
   }
 
-  /// 保存为用户预设
+  /// 保存为用户预设。
+  ///
+  /// 落盘名由名称归一化而来，而归一化会碰撞（`My Song` / `My_Song` →
+  /// 同一个 `my_song.json`）。故：① 先按**内容对账**找已存在的同名预设，
+  /// 命中即原地覆盖；② 没找到但首选文件名已被别的预设占用 → 追加名称短哈希，
+  /// 绝不静默覆盖他人数据。
   static bool saveUserPreset(AuraPreset preset) {
     try {
-      final filename = '${_safeFileName(preset.name)}.json';
-      return ConfigManager.writeJsonFile(
-          '$userDir${Platform.pathSeparator}$filename', preset.toJson());
+      final existing = _findUserPresetFile(preset.name);
+      final String path;
+      if (existing != null) {
+        path = existing.path;
+      } else {
+        final base = _safeFileName(preset.name);
+        final preferred = '$userDir${Platform.pathSeparator}$base.json';
+        path = File(preferred).existsSync()
+            ? '$userDir${Platform.pathSeparator}'
+                '${base}_${_nameHash(preset.name)}.json'
+            : preferred;
+      }
+      return ConfigManager.writeJsonFile(path, preset.toJson());
     } catch (e, st) {
       swallow(e, st);
       return false;
@@ -211,19 +295,10 @@ abstract final class PresetLibrary {
   static bool deletePreset(AuraPreset preset) {
     if (preset.isFactory) return false;
     try {
-      final filename = '${_safeFileName(preset.name)}.json';
-      final file = File('$userDir${Platform.pathSeparator}$filename');
-      if (file.existsSync()) {
-        file.deleteSync();
-        return true;
-      }
-      // 检查历史目录
-      final legacy = File('$baseDir${Platform.pathSeparator}$filename');
-      if (legacy.existsSync()) {
-        legacy.deleteSync();
-        return true;
-      }
-      return false;
+      final f = _findUserPresetFile(preset.name);
+      if (f == null) return false;
+      f.deleteSync();
+      return true;
     } catch (e, st) {
       swallow(e, st);
       return false;
@@ -240,7 +315,12 @@ abstract final class PresetLibrary {
     }
   }
 
-  /// 从外部文件导入预设
+  /// 从外部文件导入预设。
+  ///
+  /// 两道闸门（2026-10-28）：
+  /// - **版本闸门**：高于 [schemaVersionCurrent] 的文件来自更新版本的应用，
+  ///   本版本读不懂它的节 —— 静默「导入了但什么也没发生」比拒绝更糟，直接返回 null；
+  /// - **同名不覆盖**：导入是外部来源，覆盖用户已有预设属数据丢失，改名加序号。
   static AuraPreset? importFromFile(String srcPath) {
     try {
       final file = File(srcPath);
@@ -248,10 +328,14 @@ abstract final class PresetLibrary {
       final content = file.readAsStringSync();
       final json = jsonDecode(content) as Map<String, dynamic>;
       final preset = AuraPreset.fromJson(json);
-      // 导入后存入用户预设
+      if (preset.schemaVersion < 1 ||
+          preset.schemaVersion > schemaVersionCurrent) {
+        return null;
+      }
+      // 导入后存入用户预设（出厂同名不受影响：出厂只读，改名只针对用户侧）
       final userPreset = AuraPreset(
         schemaVersion: preset.schemaVersion,
-        name: preset.name,
+        name: _uniqueUserName(preset.name),
         category: preset.category,
         description: preset.description,
         author: preset.author.isEmpty ? 'Imported' : preset.author,
@@ -278,9 +362,14 @@ abstract final class PresetLibrary {
     final paramsMap = <String, dynamic>{};
 
     for (final section in ParamRegistry.sections) {
+      // 会话级参数（sessionOnly，如 routing 的设备端点/ASIO 配置）不入预设：
+      // 它们只随 SessionMemory 走（该文件有同名的显式字段持久化），避免
+      // 「载入预设 → 用户的输出设备/ASIO 设置被清空并落盘」。
+      if (_isSessionOnlySection(section)) continue;
       final secMap = <String, dynamic>{};
       for (final spec in section.specs) {
         if (!spec.isPresetSerializable) continue;
+        if (spec.isSessionOnly) continue;
         final val = spec.read(m);
         if (spec.subSection != null) {
           final subMap = secMap.putIfAbsent(
@@ -303,7 +392,7 @@ abstract final class PresetLibrary {
     }
 
     return AuraPreset(
-      schemaVersion: 3,
+      schemaVersion: schemaVersionCurrent,
       name: name,
       category: category,
       description: description,
@@ -319,11 +408,16 @@ abstract final class PresetLibrary {
   ///   节/键一律取默认基线值，取代旧「缺节不碰」合并语义；
   /// - fullRewrite=false（效果器自有预设）：只应用预设实际携带的节，
   ///   每节内部同样以基线补齐缺失键（只覆盖自己的所有配置）。
-  /// 有意不复写的例外：chainOrder（全局路由选择）。
+  /// 有意不复写的例外：
+  /// - chainOrder（全局路由选择）；
+  /// - 会话级参数（`sessionOnly`，全部 routing 设备/ASIO/模式镜像）——整节
+  ///   跳过，预设不携带也不复写（2026-10-28：此前该标志无消费方，导致载入
+  ///   预设会清空输出设备与 ASIO 缓冲并即时落盘）。
   static void apply(AppModel m, AuraPreset preset, {bool fullRewrite = true}) {
     final p = fullRewrite ? _mergeDefaults(preset.params) : preset.params;
 
     for (final section in ParamRegistry.sections) {
+      if (_isSessionOnlySection(section)) continue;
       final secData = (p[section.name] as Map<String, dynamic>?) ?? {};
       if (secData.isEmpty) continue;
 
@@ -339,6 +433,7 @@ abstract final class PresetLibrary {
       final postSpecs = <ParamSpec>[];
       for (final spec in section.specs) {
         if (!spec.isPresetSerializable) continue;
+        if (spec.isSessionOnly) continue;
         if (spec.isDerivation) continue;
         if (spec.order >= 100) {
           postSpecs.add(spec);
@@ -376,7 +471,14 @@ abstract final class PresetLibrary {
     // → 进入自定义/未保存态。会话恢复路径（restoreMemoryImage）随后
     // 会用会话里存的锚点覆盖本值，见 session_memory.dart。
     m.appliedPresetFingerprint = fingerprintOf(m);
+    // 应用即归零（2026-10-28）：此前要等下一次防抖 evaluatePresetDirty
+    // 才清，界面上「自定义（未保存）」徽标会多挂一个防抖窗口。
+    m.presetDirty = false;
   }
+
+  /// 整节都是会话级参数（`sessionOnly`）→ 该节与预设系统完全无关。
+  static bool _isSessionOnlySection(ParamSection s) =>
+      s.specs.isNotEmpty && s.specs.every((x) => x.isSessionOnly);
 
   static void _applySpec(
       AppModel m, ParamSpec spec, Map<String, dynamic> secData) {
@@ -418,7 +520,15 @@ abstract final class PresetLibrary {
 
   static Map<String, dynamic> _defaultsParams() {
     final raw = _defaultsJson;
-    if (raw == null || raw.isEmpty) return {};
+    if (raw == null || raw.isEmpty) {
+      // 降级留痕（2026-10-28）：资产未预载/缺失时 _mergeDefaults 会原样返回，
+      // 语义从「全部复写」悄悄退回「缺节不碰」。此前无任何留痕，排障只能靠猜。
+      if (!_defaultsMissingReported) {
+        _defaultsMissingReported = true;
+        dbgLog('[PresetLibrary] defaults.json 未预载：fullRewrite 退化为合并且不复位缺失键');
+      }
+      return {};
+    }
     try {
       final obj = jsonDecode(raw) as Map<String, dynamic>;
       final params = obj['params'];
@@ -427,6 +537,8 @@ abstract final class PresetLibrary {
     } catch (e, st) { swallow(e, st); }
     return {};
   }
+
+  static bool _defaultsMissingReported = false;
 
   static Map<String, dynamic> _deepMergeMaps(
       Map<String, dynamic> base, Map<String, dynamic> over) {

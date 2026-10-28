@@ -1,0 +1,4 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" role="img" aria-label="AuraDSP">
+  <defs><linearGradient id="auraGrad" x1="52" y1="44" x2="204" y2="212" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#D4FF3F"/><stop offset="0.55" stop-color="#9BF873"/><stop offset="1" stop-color="#64F0DC"/></linearGradient></defs>
+  <g transform="translate(128,128) scale(1.32) translate(-128,-128)"><path d="M58 198 128 52 198 198" fill="none" stroke="url(#auraGrad)" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/><path d="M94 150H104C109 150 112 140 116 140C120 140 124 145 128 150C132 155 136 160 140 160C144 160 148 150 152 150H162" fill="none" stroke="url(#auraGrad)" stroke-width="11" stroke-linecap="round" stroke-linejoin="round"/></g>
+</svg>

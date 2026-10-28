@@ -150,6 +150,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   final List<_PluginSlotCfg> pluginMirror =
       List<_PluginSlotCfg>.generate(_kPluginSlots, (_) => _PluginSlotCfg());
 
+  // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
+  // 引擎 commit 会把槽置为挂载旁路（engine mount-bypass）。若 bypass 命令
+  // 恰好落在 load 在途窗口（会话回放紧随 load 下发 bypass），直接透传会被
+  // commit 覆盖——暂存到此处，load 完成后补发。桥路径 load 是同步的，
+  // 天然无此竞态，不走暂存。
+  final Set<int> slotLoadInFlight = <int>{};
+  final Map<int, bool> slotPendingBypass = <int, bool>{};
+
   /// 当前真正处理音频的后端插件入口；未进桥返回 null（走本地引擎）。
   BridgePluginFfi? activePluginBridge() {
     try {
@@ -1469,7 +1477,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final dirs = (m['dirs'] as List?)?.map((e) => e.toString()).toList();
               final dir = (m['dir'] as String?) ?? '';
               final deep = (m['deep'] as bool?) ?? false;
-              final scanDir = (dirs != null && dirs.isNotEmpty) ? dirs.join(';') : dir;
+              // 2026-10-28：dirs 非 null = 调用方显式给出目录集（可能为空）。
+              // 空表用 ';' 作「显式空」哨兵：引擎按 ';' 拆分得到零个有效
+              // 路径 → 不再回落默认目录（否则全取消勾选仍会扫出插件）。
+              final scanDir =
+                  dirs != null ? (dirs.isEmpty ? ';' : dirs.join(';')) : dir;
               // C2：分块扫描是异步的——本 case 在同步消息循环里（不能 await），
               // 故以 fire-and-forget 启动，扫描在事件循环里与音频泵交替推进，
               // 进度与完成都以事件回传（对外契约与同步路径一致）。
@@ -1608,6 +1620,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final l = lib;
             final h = handle;
             if (l != null && h != null) {
+              slotLoadInFlight.add(slot);
               unawaited(_slotLoadAsync(l, h, slot, path, id, send).then((rc) {
                 if (rc == 1) {
                   pluginMirror[slot]
@@ -1619,6 +1632,22 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                         AuraDspLib.pluginSlotGetInsertStageWrap(l, h, slot);
                 } else {
                   pluginMirror[slot] = _PluginSlotCfg();
+                }
+                // P-041：补发在途窗口内暂存的 bypass（会话回放时序）。
+                final pendingBypass = slotPendingBypass.remove(slot);
+                slotLoadInFlight.remove(slot);
+                if (rc == 1 && pendingBypass != null) {
+                  final brc = AuraDspLib.pluginSlotSetBypassWrap(
+                      l, h, slot, pendingBypass);
+                  if (brc == 1) pluginMirror[slot].bypass = pendingBypass;
+                  send({
+                    'evt': 'pluginSlotBypass',
+                    'slot': slot,
+                    'bypass': pendingBypass,
+                    'rc': brc,
+                    'status':
+                        AuraDspLib.pluginSlotGetStatusJson(l, h, slot),
+                  });
                 }
               }));
             }
@@ -1660,6 +1689,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final l = lib;
             final h = handle;
             if (l != null && h != null) {
+              // P-041：卸载作废在途加载的暂存 bypass（槽已不存在）。
+              slotPendingBypass.remove(slot);
               unawaited(_slotUnloadAsync(l, h, slot, send).then((rc) {
                 if (rc == 1) pluginMirror[slot] = _PluginSlotCfg();
               }));
@@ -1684,6 +1715,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               break;
             }
             if (lib != null && handle != null) {
+              // P-041：load 在途窗口内暂存（commit 挂载旁路会覆盖透传值）。
+              if (slotLoadInFlight.contains(slot)) {
+                slotPendingBypass[slot] = bypassVal;
+                send({
+                  'evt': 'pluginSlotBypass',
+                  'slot': slot,
+                  'bypass': bypassVal,
+                  'rc': 1,
+                });
+                break;
+              }
               final rc = AuraDspLib.pluginSlotSetBypassWrap(lib, handle, slot, bypassVal);
               if (rc == 1) pluginMirror[slot].bypass = bypassVal;
               final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);

@@ -6,22 +6,115 @@ part of '../state.dart';
 /// 方法体逐字保留自 AppModel 类体（notifyListeners() 按 P2 约定改调
 /// _notifyUi()）。
 extension StateSession on AppModel {
-  void addCustomPluginDir(String dir) {
-    final path = dir.trim();
-    if (path.isNotEmpty && !config.customPluginDirs.contains(path)) {
-      config.customPluginDirs.add(path);
-      ConfigManager.save(config);
-      pluginManager.setCustomDirs(config.customPluginDirs);
-      _notifyUi();
+  // ---- 插件扫描目录（2026-10-28 改版，P-042） ----
+  //
+  // 语义：列表即真值——引擎只扫描 enabled 条目；平台预置目录首次播种后
+  // 由用户全权管理（清空不再自动加回）；内置目录（随应用分发的插件）
+  // 自动创建、恒启用、不可移除。
+
+  /// 内置插件目录（未来自带开源/自研插件）。subDir 顺手完成创建。
+  String get bundledPluginDir => ConfigManager.subDir('plugins').path;
+
+  /// 启动时调用一次：保证内置条目存在（保留其勾选态）+ 平台目录首次播种
+  /// + 同步扫描集。内置目录只禁止删除，是否参与扫描由用户勾选决定。
+  void ensurePluginScanDirs() {
+    final dirs = config.pluginScanDirs;
+    final builtinPath = bundledPluginDir;
+
+    // 内置条目归一：只允许一条、builtin 标记不可被配置篡改；
+    // enabled 尊重用户勾选（2026-10-28：只禁止删除，不禁止取消勾选，
+    // 否则「全选/清除」在存在内置项时无法表达真实全选语义）。
+    dirs.removeWhere((e) => e.builtin && e.path != builtinPath);
+    final idx = dirs.indexWhere((e) => e.path == builtinPath);
+    if (idx >= 0) {
+      dirs[idx] = dirs[idx].copyWith(builtin: true);
+    } else {
+      dirs.insert(
+        0,
+        PluginScanDirEntry(path: builtinPath, enabled: true, builtin: true),
+      );
     }
+
+    // 平台预置目录：仅首次播种（目录必须真实存在，见 PluginScanDirs.discover）。
+    if (!config.pluginScanDirsSeeded) {
+      final known = dirs
+          .map((e) => Platform.isWindows ? e.path.toLowerCase() : e.path)
+          .toSet();
+      for (final p in PluginScanDirs.discover()) {
+        final key = Platform.isWindows ? p.toLowerCase() : p;
+        if (known.add(key)) {
+          dirs.add(PluginScanDirEntry(path: p));
+        }
+      }
+      config.pluginScanDirsSeeded = true;
+    }
+
+    ConfigManager.save(config);
+    _syncPluginScanDirs();
   }
 
-  void removeCustomPluginDir(String dir) {
-    if (config.customPluginDirs.remove(dir)) {
-      ConfigManager.save(config);
-      pluginManager.setCustomDirs(config.customPluginDirs);
-      _notifyUi();
+  void _syncPluginScanDirs() {
+    pluginManager.setScanDirs(
+      config.pluginScanDirs
+          .where((e) => e.enabled)
+          .map((e) => e.path)
+          .toList(growable: false),
+    );
+  }
+
+  void addPluginScanDir(String dir) {
+    final path = dir.trim();
+    if (path.isEmpty) return;
+    final exists = config.pluginScanDirs.any(
+      (e) => Platform.isWindows
+          ? e.path.toLowerCase() == path.toLowerCase()
+          : e.path == path,
+    );
+    if (exists) return;
+    config.pluginScanDirs.add(PluginScanDirEntry(path: path));
+    ConfigManager.save(config);
+    _syncPluginScanDirs();
+    _notifyUi();
+  }
+
+  /// 移除条目；内置目录拒绝移除（返回 false，UI 侧按钮本身也禁用）。
+  bool removePluginScanDir(String dir) {
+    final i = config.pluginScanDirs.indexWhere((e) => e.path == dir);
+    if (i < 0) return false;
+    if (config.pluginScanDirs[i].builtin) return false;
+    config.pluginScanDirs.removeAt(i);
+    ConfigManager.save(config);
+    _syncPluginScanDirs();
+    _notifyUi();
+    return true;
+  }
+
+  /// 勾选/取消单个目录（内置目录同样可取消勾选——只禁止删除）。
+  void setPluginScanDirEnabled(String dir, bool enabled) {
+    final i = config.pluginScanDirs.indexWhere((e) => e.path == dir);
+    if (i < 0) return;
+    final e = config.pluginScanDirs[i];
+    if (e.enabled == enabled) return;
+    config.pluginScanDirs[i] = e.copyWith(enabled: enabled);
+    ConfigManager.save(config);
+    _syncPluginScanDirs();
+    _notifyUi();
+  }
+
+  /// 全选 / 清除（清除 = 全部取消勾选，含内置目录——与全选严格对称）。
+  void setAllPluginScanDirsEnabled(bool enabled) {
+    var changed = false;
+    for (var i = 0; i < config.pluginScanDirs.length; i++) {
+      final e = config.pluginScanDirs[i];
+      if (e.enabled != enabled) {
+        config.pluginScanDirs[i] = e.copyWith(enabled: enabled);
+        changed = true;
+      }
     }
+    if (!changed) return;
+    ConfigManager.save(config);
+    _syncPluginScanDirs();
+    _notifyUi();
   }
 
   // ---- 自定义脚本目录 ----
@@ -364,13 +457,14 @@ extension StateSession on AppModel {
                 'stage': item.stage,
               });
             }
-            if (item.bypass) {
-              send({
-                'cmd': 'pluginSlotSetBypass',
-                'slot': item.slot,
-                'bypass': true,
-              });
-            }
+            // P-041（2026-10-28）：引擎挂载即旁路，回放必须**恒发**保存的
+            // 旁路值——旧实现只发 true，保存为激活的槽挂载后被引擎挂载旁路
+            // 卡死（无人下发 false）。
+            send({
+              'cmd': 'pluginSlotSetBypass',
+              'slot': item.slot,
+              'bypass': item.bypass,
+            });
           }
         }
       } else if (savedPluginPath != null &&
@@ -382,9 +476,8 @@ extension StateSession on AppModel {
           'path': savedPluginPath!,
           'id': savedPluginId,
         });
-        if (savedPluginBypass) {
-          send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': true});
-        }
+        // P-041：恒发保存的旁路值（挂载即旁路，激活槽必须显式解旁路）。
+        send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': savedPluginBypass});
       }
     } finally {
       _isReplayingSession = false;

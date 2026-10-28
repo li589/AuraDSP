@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AuraDSP concept 2: Ripple source">
+  <defs>
+    <linearGradient id="aura" x1="74" y1="182" x2="222" y2="34" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D4FF3F"/>
+      <stop offset="0.55" stop-color="#9BF873"/>
+      <stop offset="1" stop-color="#64F0DC"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke="url(#aura)" stroke-linecap="round">
+    <path d="M74 130a52 52 0 0 1 52 52" stroke-width="18"/>
+    <path d="M74 98a84 84 0 0 1 84 84" stroke-width="15"/>
+    <path d="M74 66a116 116 0 0 1 116 116" stroke-width="12"/>
+    <path d="M74 34a148 148 0 0 1 148 148" stroke-width="9"/>
+  </g>
+  <circle cx="74" cy="182" r="17" fill="url(#aura)"/>
+</svg>

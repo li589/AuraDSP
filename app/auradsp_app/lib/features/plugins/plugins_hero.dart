@@ -400,13 +400,11 @@ class _ActivePluginHero extends StatelessWidget {
   final AppModel model;
   final PluginManager manager;
   final int slot;
-  final VoidCallback onScanTap;
 
   const _ActivePluginHero({
     required this.model,
     required this.manager,
     required this.slot,
-    required this.onScanTap,
   });
 
   @override
@@ -447,22 +445,6 @@ class _ActivePluginHero extends StatelessWidget {
               ),
               const SizedBox(height: AuraSpace.xs),
               Text(l10nOf(context).plugMountEmptyHint, style: captionOf(p)),
-              if (manager.plugins.isEmpty && !manager.isScanning) ...[
-                const SizedBox(height: AuraSpace.md),
-                OutlinedButton.icon(
-                  onPressed: onScanTap,
-                  icon: const Icon(Icons.search_rounded, size: 16),
-                  label: Text(l10nOf(context).plugScanNow),
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: p.accent,
-                    side: BorderSide(color: p.accent.withValues(alpha: 0.4)),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AuraSpace.md,
-                      vertical: AuraSpace.xs,
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -830,33 +812,6 @@ class _ActivePluginHero extends StatelessWidget {
 
             const SizedBox(height: AuraSpace.md),
             Divider(color: p.hairline, height: 1),
-            const SizedBox(height: AuraSpace.sm),
-
-            // 2026-10-22：槽位遥测诊断行（「插件有输入但听不到效果」投诉的
-            // 一锤定音判别）。口径 = 引擎 getStatusJsonSlot 的 F-8a 抽取遥测：
-            //   maxDiff ≈ 0 且 outRms ≈ inRms → 槽位实际在直通（旁路/判死/
-            //   传输失败），效果根本没上流；
-            //   maxDiff > 0 → 效果已应用，问题在下游监听路由。
-            // processCalls 停涨 = 插件从未被音频线程调用（挂载没进链）。
-            // remoteMode 标记当前引擎是否走进程外宿主（二进制陈旧排查）。
-            Row(
-              children: [
-                Icon(Icons.monitor_heart_rounded, size: 14, color: p.textDim),
-                const SizedBox(width: AuraSpace.xs),
-                Expanded(
-                  child: Text(
-                    'in ${status.inRms.toStringAsFixed(4)}'
-                    ' · out ${status.outRms.toStringAsFixed(4)}'
-                    ' · Δmax ${status.maxDiff.toStringAsFixed(4)}'
-                    ' · calls ${status.processCalls}'
-                    '${status.remoteMode ? (status.remoteFailed ? " · remote✗" : " · remote✓") : ""}',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: monoOf(p, size: 10.5, color: p.textDim),
-                  ),
-                ),
-              ],
-            ),
             const SizedBox(height: AuraSpace.sm),
 
             // 处理链插入阶段选择栏
