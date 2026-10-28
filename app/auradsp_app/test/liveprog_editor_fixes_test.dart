@@ -102,11 +102,14 @@ spl0 *= gain_l;
       await tester.pumpWidget(_wrap(
         LineNumberGutter(
           editorScrollCtrl: scroll,
-          lineCount: 5,
+          metrics: EditorLineMetrics(
+            tops: List<double>.generate(5, (i) => i * 20.0),
+            heights: List<double>.filled(5, 20.0),
+            lineAdvance: 20.0,
+          ),
           errorLines: const {3},
           activeLine: 2,
           onSelectLine: (ln) => selected = ln,
-          lineHeight: 20.0,
         ),
       ));
 
@@ -415,11 +418,14 @@ spl0 = 0;
         height: 400,
         child: LineNumberGutter(
           editorScrollCtrl: scroll,
-          lineCount: 100,
+          metrics: EditorLineMetrics(
+            tops: List<double>.generate(100, (i) => i * 19.0),
+            heights: List<double>.filled(100, 19.0),
+            lineAdvance: 19.0,
+          ),
           errorLines: const {3, 10},
           activeLine: 5,
           onSelectLine: (ln) => selectedLine = ln,
-          lineHeight: 19.0,
           fontSize: 11.5,
         ),
       )));
