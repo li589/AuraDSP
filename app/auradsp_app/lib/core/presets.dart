@@ -74,6 +74,10 @@ abstract final class PresetLibrary {
 
   /// 出厂预设资产清单（assets/presets/factory/）。代码中不存任何预设内容，
   /// 只存文件名索引；内容一律来自 JSON 资产（2026-10-16 决策）。
+  ///
+  /// 注意：pubspec 按**目录**打包该资产，故清单与目录是两套真相——只往目录
+  /// 放文件而不登记，编译仍通过但永不落盘（静默不出现）。两侧一致性由
+  /// `test/preset_defaults_contract_test.dart` 门禁钉住。
   static const List<String> _factoryAssetFiles = [
     'Pop Vocal Clarity.json',
     'Rock Bass Impact.json',
@@ -85,6 +89,10 @@ abstract final class PresetLibrary {
 
   static final Map<String, String> _factoryAssetCache = {};
   static String? _defaultsJson;
+
+  /// 出厂预设资产清单的只读视图（供一致性门禁比对目录内容）。
+  static List<String> get factoryAssetFiles =>
+      List.unmodifiable(_factoryAssetFiles);
 
   /// 预载出厂预设与默认基线资产（异步）。rootBundle 仅提供异步 API，
   /// 而 ensureInitialized/apply 在同步路径上——故 main 启动时预载一次
@@ -192,6 +200,12 @@ abstract final class PresetLibrary {
       }
     } catch (e, st) { swallow(e, st); }
 
+    // 顺序确定性（2026-10-28）：listSync 给的是文件系统序，增删文件后会漂，
+    // 预设 chip 的位置随之跳变。出厂在前、用户在后，各自按名称不区分大小写。
+    list.sort((a, b) {
+      if (a.isFactory != b.isFactory) return a.isFactory ? -1 : 1;
+      return a.name.toLowerCase().compareTo(b.name.toLowerCase());
+    });
     return list;
   }
 
@@ -278,9 +292,14 @@ abstract final class PresetLibrary {
     final paramsMap = <String, dynamic>{};
 
     for (final section in ParamRegistry.sections) {
+      // 会话级参数（sessionOnly，如 routing 的设备端点/ASIO 配置）不入预设：
+      // 它们只随 SessionMemory 走（该文件有同名的显式字段持久化），避免
+      // 「载入预设 → 用户的输出设备/ASIO 设置被清空并落盘」。
+      if (_isSessionOnlySection(section)) continue;
       final secMap = <String, dynamic>{};
       for (final spec in section.specs) {
         if (!spec.isPresetSerializable) continue;
+        if (spec.isSessionOnly) continue;
         final val = spec.read(m);
         if (spec.subSection != null) {
           final subMap = secMap.putIfAbsent(
@@ -319,11 +338,16 @@ abstract final class PresetLibrary {
   ///   节/键一律取默认基线值，取代旧「缺节不碰」合并语义；
   /// - fullRewrite=false（效果器自有预设）：只应用预设实际携带的节，
   ///   每节内部同样以基线补齐缺失键（只覆盖自己的所有配置）。
-  /// 有意不复写的例外：chainOrder（全局路由选择）。
+  /// 有意不复写的例外：
+  /// - chainOrder（全局路由选择）；
+  /// - 会话级参数（`sessionOnly`，全部 routing 设备/ASIO/模式镜像）——整节
+  ///   跳过，预设不携带也不复写（2026-10-28：此前该标志无消费方，导致载入
+  ///   预设会清空输出设备与 ASIO 缓冲并即时落盘）。
   static void apply(AppModel m, AuraPreset preset, {bool fullRewrite = true}) {
     final p = fullRewrite ? _mergeDefaults(preset.params) : preset.params;
 
     for (final section in ParamRegistry.sections) {
+      if (_isSessionOnlySection(section)) continue;
       final secData = (p[section.name] as Map<String, dynamic>?) ?? {};
       if (secData.isEmpty) continue;
 
@@ -339,6 +363,7 @@ abstract final class PresetLibrary {
       final postSpecs = <ParamSpec>[];
       for (final spec in section.specs) {
         if (!spec.isPresetSerializable) continue;
+        if (spec.isSessionOnly) continue;
         if (spec.isDerivation) continue;
         if (spec.order >= 100) {
           postSpecs.add(spec);
@@ -376,7 +401,14 @@ abstract final class PresetLibrary {
     // → 进入自定义/未保存态。会话恢复路径（restoreMemoryImage）随后
     // 会用会话里存的锚点覆盖本值，见 session_memory.dart。
     m.appliedPresetFingerprint = fingerprintOf(m);
+    // 应用即归零（2026-10-28）：此前要等下一次防抖 evaluatePresetDirty
+    // 才清，界面上「自定义（未保存）」徽标会多挂一个防抖窗口。
+    m.presetDirty = false;
   }
+
+  /// 整节都是会话级参数（`sessionOnly`）→ 该节与预设系统完全无关。
+  static bool _isSessionOnlySection(ParamSection s) =>
+      s.specs.isNotEmpty && s.specs.every((x) => x.isSessionOnly);
 
   static void _applySpec(
       AppModel m, ParamSpec spec, Map<String, dynamic> secData) {

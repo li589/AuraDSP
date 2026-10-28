@@ -52,7 +52,9 @@ abstract final class SessionMemory {
       final payload = {
         // v5：+ appliedPresetFingerprint / presetDirty —— 未保存的自定义态
         // 随会话记忆，重启后仍显示「自定义（未保存）」（决策 #3）。
-        'version': 6,
+        // v7（2026-10-28）：指纹不再包含 routing（sessionOnly 移出预设系统）
+        // → 恢复端按版本丢弃 v6 及更早的锚点，见 restoreMemoryImage。
+        'version': 7,
         'savedAt': DateTime.now().toIso8601String(),
         'activePresetName': m.activePresetName,
         'appliedPresetFingerprint': m.appliedPresetFingerprint,
@@ -277,12 +279,18 @@ abstract final class SessionMemory {
       // 仍显示「自定义（未保存）」。apply 上面把指纹锚到了回放后的状态，
       // 这里必须用会话里存的锚点/脏标记覆盖，否则脏态被误清。
       // 旧版（v4 及更早）会话无这两个键 → 保持默认（无锚点、不脏），平滑升级。
-      if (session['appliedPresetFingerprint'] is String) {
-        m.appliedPresetFingerprint =
-            session['appliedPresetFingerprint'] as String;
-      }
-      if (session['presetDirty'] is bool) {
-        m.presetDirty = session['presetDirty'] as bool;
+      // v7（2026-10-28）：指纹的构成变了（routing 退出预设/指纹），v6 及更早
+      // 存的锚点与新版算法必然失配 → 升级后会误报「自定义（未保存）」。故按
+      // 版本号丢弃旧锚点，由上面 apply 写入的新锚点重新起算（一次性的脏态归零）。
+      final sessionVersion = (session['version'] as num?)?.toInt() ?? 0;
+      if (sessionVersion >= 7) {
+        if (session['appliedPresetFingerprint'] is String) {
+          m.appliedPresetFingerprint =
+              session['appliedPresetFingerprint'] as String;
+        }
+        if (session['presetDirty'] is bool) {
+          m.presetDirty = session['presetDirty'] as bool;
+        }
       }
     } catch (e, st) { swallow(e, st); }
   }

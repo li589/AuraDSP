@@ -324,7 +324,9 @@ void main() {
 
         expect(SessionMemory.save(m), isTrue);
         final session = SessionMemory.load()!;
-        expect(session['version'], 6);
+        // v7（2026-10-28）：routing 移出预设/指纹，锚点算法变更 → 版本抬一位，
+        // 恢复端据此丢弃 v6 及更早的锚点（否则升级后误显「自定义（未保存）」）。
+        expect(session['version'], 7);
         expect(session['presetDirty'], isTrue);
         expect(session['appliedPresetFingerprint'], anchor);
 
