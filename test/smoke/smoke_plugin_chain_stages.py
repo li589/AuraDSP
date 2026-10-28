@@ -26,6 +26,9 @@ lib.auradsp_plugin_slot_load.argtypes = [ctypes.c_void_p, ctypes.c_int32,
                                          ctypes.c_char_p, ctypes.c_char_p]
 lib.auradsp_plugin_slot_unload.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_unload.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+lib.auradsp_plugin_slot_set_bypass.restype = ctypes.c_int32
+lib.auradsp_plugin_slot_set_bypass.argtypes = [ctypes.c_void_p, ctypes.c_int32,
+                                               ctypes.c_int32]
 lib.auradsp_plugin_slot_set_insert_stage.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_set_insert_stage.argtypes = [ctypes.c_void_p, ctypes.c_int32,
                                                     ctypes.c_int32]
@@ -44,6 +47,8 @@ try:
     if lib.auradsp_plugin_slot_load(h, 0, PLUGIN.encode("utf-8"), b"") != 1:
         print("[FAIL] Pro-Q 4 load")
         sys.exit(1)
+    # P-041 挂载即旁路：显式解旁路（旁路槽不进路径，stage 处理测不到）。
+    assert lib.auradsp_plugin_slot_set_bypass(h, 0, 0) == 1
 
     buf = ctypes.create_string_buffer(4096)
     previous_calls = 0

@@ -9,8 +9,9 @@
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
+import '../ui/wheel_scroll.dart';
 import '../core/nav.dart';
-import '../core/plugin_manager.dart';
+import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../engine/auradsp_ffi.dart' show kVizChannelMax;
@@ -150,6 +151,15 @@ class ChainPage extends StatefulWidget {
 }
 
 class _ChainPageState extends State<ChainPage> {
+  /// 处理链列表滚动控制器（2026-10-28：列表封顶 + 滚轮不带动整页）。
+  final ScrollController _chainScrollCtrl = ScrollController();
+
+  @override
+  void dispose() {
+    _chainScrollCtrl.dispose();
+    super.dispose();
+  }
+
   late List<String> _order;
   bool _dirty = false;
 
@@ -226,8 +236,19 @@ class _ChainPageState extends State<ChainPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(
-                  height: 54.0 * _order.length + 8,
-                  child: ReorderableListView.builder(
+                  // 2026-10-28：按视口自适应封顶——超出即内部滚动（滚轮
+                  // 不带动整页），窗口足够高时自然展开不封。
+                  height: (54.0 * _order.length + 8).clamp(
+                    0.0,
+                    (MediaQuery.sizeOf(context).height * 0.6)
+                        .clamp(320.0, 900.0),
+                  ),
+                  child: Scrollbar(
+                    controller: _chainScrollCtrl,
+                    thumbVisibility: true,
+                    child: ReorderableListView.builder(
+                    scrollController: _chainScrollCtrl,
+                    physics: const AuraListScrollPhysics(),
                     buildDefaultDragHandles: false,
                     itemCount: _order.length,
                     onReorder: (oldI, newI) { // ignore: deprecated_member_use
@@ -356,6 +377,7 @@ class _ChainPageState extends State<ChainPage> {
                         ),
                       );
                     },
+                    ),
                   ),
                 ),
                 const SizedBox(height: AuraSpace.md),

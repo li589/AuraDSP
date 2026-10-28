@@ -154,14 +154,19 @@ void main() {
       expect(exported, isTrue);
       expect(File(tmpExport).existsSync(), isTrue);
 
-      // 4. 从临时文件导入
+      // 4. 从临时文件导入（2026-10-28：同名不覆盖 → 改名加序号）
       final imported = PresetLibrary.importFromFile(tmpExport);
       expect(imported, isNotNull);
-      expect(imported!.name, 'Unit_Test_Preset_Alpha');
+      expect(imported!.name, startsWith('Unit_Test_Preset_Alpha'),
+          reason: '导入的外部文件不得静默覆盖用户已有同名预设');
+      expect(imported.name, isNot('Unit_Test_Preset_Alpha'));
+      expect(imported.params.isNotEmpty, isTrue);
 
-      // 5. 删除用户预设
+      // 5. 删除用户预设（含导入副本）
       final deleted = PresetLibrary.deletePreset(found.first);
       expect(deleted, isTrue);
+      expect(PresetLibrary.deletePreset(imported), isTrue,
+          reason: '带序号的导入副本必须能按名称定位并删除（文件名对账不能依赖归一化猜测）');
 
       // 清理临时文件
       try {
@@ -324,7 +329,9 @@ void main() {
 
         expect(SessionMemory.save(m), isTrue);
         final session = SessionMemory.load()!;
-        expect(session['version'], 6);
+        // v7（2026-10-28）：routing 移出预设/指纹，锚点算法变更 → 版本抬一位，
+        // 恢复端据此丢弃 v6 及更早的锚点（否则升级后误显「自定义（未保存）」）。
+        expect(session['version'], 7);
         expect(session['presetDirty'], isTrue);
         expect(session['appliedPresetFingerprint'], anchor);
 
@@ -1651,5 +1658,47 @@ void main() {
       }
     });
   });
-}
 
+  // P3-2（2026-10-28）：枚举结果为空时此前会塞 3~2 条带「Realtek / USB Audio
+  // Device」名字的伪造设备。启动初期用户选中即写入 config 并落盘，语义是
+  // 「选了一个不存在的设备」。设备面板自带「默认设备」项与失效项兜底。
+  group('P3-2: 设备列表不伪造', () {
+    test('无枚举结果时两个列表都为空，且不含任何硬编码厂商名', () {
+      final m = AppModel(testing: true);
+      m.wasapiDevices = <AudioDeviceItem>[];
+      m.vaioDetectInfo = <String, dynamic>{};
+      expect(m.filteredWasapiInputs, isEmpty);
+      expect(m.filteredWasapiOutputs, isEmpty);
+      final all = <AudioDeviceItem>[
+        ...m.filteredWasapiInputs,
+        ...m.filteredWasapiOutputs,
+      ];
+      expect(
+        all.any((d) => d.name.toLowerCase().contains('realtek')),
+        isFalse,
+        reason: '不得把厂商名当占位数据写进设备列表',
+      );
+    });
+
+    test('有真实设备时按渲染/录制拆分，并过滤虚拟驱动自身', () {
+      final m = AppModel(testing: true);
+      m.wasapiDevices = <AudioDeviceItem>[
+        const AudioDeviceItem(
+            id: 'a', name: 'Speakers (USB DAC)', isRender: true),
+        const AudioDeviceItem(
+            id: 'b', name: 'AuraVAIO Virtual', isRender: true),
+        const AudioDeviceItem(id: 'c', name: 'Mic (USB)', isRender: false),
+      ];
+      expect(
+        m.filteredWasapiOutputs.map((e) => e.name).toList(),
+        ['Speakers (USB DAC)'],
+      );
+      // 输入侧允许环回（播放端点内录），故 render 端点也在列表里；
+      // 两个列表共同的行为是「只过滤虚拟驱动自身」。
+      expect(
+        m.filteredWasapiInputs.map((e) => e.name).toList(),
+        ['Speakers (USB DAC)', 'Mic (USB)'],
+      );
+    });
+  });
+}

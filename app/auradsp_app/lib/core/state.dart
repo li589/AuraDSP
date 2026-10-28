@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
+import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
     show
@@ -32,7 +33,7 @@ import '../engine/head_tracker.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
-import 'plugin_manager.dart';
+import 'plugins/plugin_manager.dart';
 import 'error_sink.dart';
 import 'param_schema.dart';
 import 'presets.dart';
@@ -226,25 +227,10 @@ class AppModel extends ChangeNotifier {
       }
       list.add(d);
     }
-    if (list.isEmpty) {
-      list.addAll([
-        const AudioDeviceItem(
-          id: 'def_render',
-          name: '系统扬声器 / 扬声器 (Realtek High Definition Audio)',
-          isRender: true,
-        ),
-        const AudioDeviceItem(
-          id: 'def_mic',
-          name: '麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)',
-          isRender: false,
-        ),
-        const AudioDeviceItem(
-          id: 'def_stereo_mix',
-          name: '立体声混音 (Realtek Audio)',
-          isRender: false,
-        ),
-      ]);
-    }
+    // 空列表就返回空（2026-10-28）：此前这里塞 3 条带「Realtek / 英特尔智音」
+    // 名字的**伪造设备**。启动初期引擎尚未上报枚举结果时，UI 会显示并不存在
+    // 的设备；用户选中即写入 config 并落盘，下次被 routing.postApply 的
+    // exists 校验清成空串。设备面板已有「默认设备」项与失效项兜底，无需伪造。
     return list;
   }
 
@@ -286,20 +272,7 @@ class AppModel extends ChangeNotifier {
           list.add(AudioDeviceItem(id: id, name: name, isRender: true));
         }
       }
-      if (list.isEmpty) {
-        list.addAll([
-          const AudioDeviceItem(
-            id: 'def_render_realtek',
-            name: '扬声器 (Realtek High Definition Audio)',
-            isRender: true,
-          ),
-          const AudioDeviceItem(
-            id: 'def_render_usb',
-            name: '耳机 (USB Audio Device)',
-            isRender: true,
-          ),
-        ]);
-      }
+      // 同 filteredWasapiInputs：不再伪造「Realtek / USB Audio Device」占位项。
     }
     return list;
   }
@@ -507,8 +480,8 @@ class AppModel extends ChangeNotifier {
   double reverbPredelay = 0.0; // [0,100] ms，两引擎共用
   bool reverbLfe = false; // 仅 MC：LFE 入混响（120Hz LP + -6dB）
   int reverbEngine = -1; // 引擎回读：0=vendor stereo、1=MC FDN、-1=off
-  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复。
-  int _lastReverbPreset = 0;
+  // 关闭前的预设（会话内记忆，不持久化）：-1 关闭后重新开启时恢复，默认大音乐厅(5)。
+  int _lastReverbPreset = 5;
 
   /// 混响是否开启（唯一真相：preset != -1）。
   bool get isSpatialReverbOn => reverbPreset != -1;
@@ -915,7 +888,9 @@ class AppModel extends ChangeNotifier {
     // 从一开始就不是合法路——不能等首次模式切换才生效）。
     pluginManager.setVbMultiBus(audioMode == 'vbcallback');
     pluginManager.addListener(notifyListeners);
-    pluginManager.setCustomDirs(config.customPluginDirs);
+    // 2026-10-28：扫描目录单源在 config.pluginScanDirs；该方法同时
+    // 补内置条目、首次播种平台目录并同步参与扫描的目录集。
+    ensurePluginScanDirs();
     pluginManager.loadCache();
 
     if (config.autoRestoreSession && !_testing) {
@@ -987,6 +962,10 @@ class AppModel extends ChangeNotifier {
   String? _pendingEqCurve;
   Timer? _eqCurveTimer;
   DateTime _lastEqCurveSentAt = DateTime.fromMillisecondsSinceEpoch(0);
+
+  // comp.threshold 宏观节流状态（下发逻辑见 state_effects.dart）
+  Timer? _compThresholdThrottleTimer;
+  double _lastDispatchedCompThreshold = -999.0;
 
 
   /// 引擎实测响应（dB），长度 [eqResponsePoints]；null 表示尚未取得。
@@ -1124,6 +1103,7 @@ class AppModel extends ChangeNotifier {
     _debounceSaveTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
+    _compThresholdThrottleTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);
     _toIso?.send({'cmd': 'shutdown'});

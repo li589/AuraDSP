@@ -120,6 +120,44 @@ class _LiveprogPageState extends State<LiveprogPage> {
   static const double _kMaxFontSize = 26.0;
   double _editorFontSize = _kDefaultFontSize;
 
+  // 逻辑行排版几何缓存（文本/宽度/字号变化才重算，滚动与光标移动零成本）
+  EditorLineMetrics? _lineMetrics;
+  String? _lineMetricsText;
+  double? _lineMetricsTextWidth;
+  double? _lineMetricsScaledFont;
+
+  /// 取得与编辑器同参量的逐逻辑行几何；命中缓存时直接复用
+  EditorLineMetrics _resolveLineMetrics({
+    required String text,
+    required TextStyle style,
+    required StrutStyle strutStyle,
+    required double textWidth,
+    required TextScaler textScaler,
+    required double fallbackLineAdvance,
+  }) {
+    final scaledFont = textScaler.scale(style.fontSize ?? 0);
+    final cached = _lineMetrics;
+    if (cached != null &&
+        _lineMetricsText == text &&
+        _lineMetricsTextWidth == textWidth &&
+        _lineMetricsScaledFont == scaledFont) {
+      return cached;
+    }
+    final metrics = EditorLineMetrics.compute(
+      text: text,
+      style: style,
+      strutStyle: strutStyle,
+      textWidth: textWidth,
+      textScaler: textScaler,
+      fallbackLineAdvance: fallbackLineAdvance,
+    );
+    _lineMetrics = metrics;
+    _lineMetricsText = text;
+    _lineMetricsTextWidth = textWidth;
+    _lineMetricsScaledFont = scaledFont;
+    return metrics;
+  }
+
   double _calculateLineHeight(TextStyle style) {
     final tp = TextPainter(
       text: TextSpan(text: '0', style: style),
@@ -749,11 +787,12 @@ dbg = 0;
     if (ok) {
       if (_isCodeDirty) {
         final tookPart = tookStr != null ? ' · ${l.lpCompileTook(tookStr)}' : '';
+        final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
         return _capsuleBody(
           p,
           p.warning,
           Icons.edit_note_rounded,
-          '${l.lpUncompiled}$tookPart · Ctrl+Enter',
+          '${l.lpUncompiled}$runningOld$tookPart · Ctrl+Enter',
         );
       }
       if (running) {
@@ -870,13 +909,14 @@ dbg = 0;
         ),
       );
     } else if (_isCodeDirty) {
+      final runningOld = m.lpEnabled ? ' (${l.lpRunningOldCode})' : '';
       statusBadge = Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.edit_note_rounded, size: 14, color: p.accent),
           const SizedBox(width: 4),
           Text(
-            l.lpUncompiled,
+            '${l.lpUncompiled}$runningOld',
             style: monoOf(p, size: 11, color: p.accent),
           ),
         ],
@@ -920,8 +960,20 @@ dbg = 0;
 
     final codeStyle = monoOf(p, size: _editorFontSize, color: p.text)
         .copyWith(height: 1.5);
+    final codeStrut = StrutStyle(
+      fontFamily: codeStyle.fontFamily,
+      fontSize: codeStyle.fontSize,
+      height: codeStyle.height,
+      forceStrutHeight: true,
+    );
     final calculatedLineHeight = _calculateLineHeight(codeStyle);
     final gutterFontSize = (_editorFontSize - 1.0).clamp(9.0, 22.0);
+    final lineCount = _code.text.split('\n').length;
+    final gutterWidth = LineNumberGutter.widthFor(
+      lineCount: lineCount,
+      fontSize: gutterFontSize,
+    );
+    final textScaler = MediaQuery.textScalerOf(context);
 
     return PageScaffold(
       eyebrow: l.lpEyebrowDsp,
@@ -1010,70 +1062,98 @@ dbg = 0;
                         borderRadius: BorderRadius.circular(AuraRadius.sm),
                         border: Border.all(color: p.hairline),
                       ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          if (_showOutline) ...[
-                            SizedBox(
-                              width: 200,
-                              child: CodeOutlinePanel(
-                                code: _code.text,
+                      child: LayoutBuilder(
+                        builder: (context, box) {
+                          // 编辑区文本可用宽度 = 内容区 − 大纲栏 − 行号栏 − 左右 contentPadding
+                          final editorTextWidth = (box.maxWidth -
+                                  (_showOutline ? 201.0 : 0.0) -
+                                  gutterWidth -
+                                  AuraSpace.md * 2)
+                              .clamp(1.0, double.infinity);
+                          final lineMetrics = _resolveLineMetrics(
+                            text: _code.text,
+                            style: codeStyle,
+                            strutStyle: codeStrut,
+                            textWidth: editorTextWidth,
+                            textScaler: textScaler,
+                            fallbackLineAdvance: calculatedLineHeight,
+                          );
+
+                          return Row(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              if (_showOutline) ...[
+                                SizedBox(
+                                  width: 200,
+                                  child: CodeOutlinePanel(
+                                    code: _code.text,
+                                    activeLine: _cursorLine,
+                                    onSelectLine: _gotoLine,
+                                  ),
+                                ),
+                                VerticalDivider(
+                                    width: 1,
+                                    thickness: 1,
+                                    color: p.hairline),
+                              ],
+                              LineNumberGutter(
+                                editorScrollCtrl: _editorScrollCtrl,
+                                metrics: lineMetrics,
+                                errorLines: _code.errorLines,
                                 activeLine: _cursorLine,
                                 onSelectLine: _gotoLine,
+                                fontSize: gutterFontSize,
                               ),
-                            ),
-                            VerticalDivider(width: 1, thickness: 1, color: p.hairline),
-                          ],
-                          LineNumberGutter(
-                            editorScrollCtrl: _editorScrollCtrl,
-                            lineCount: _code.text.split('\n').length,
-                            errorLines: _code.errorLines,
-                            activeLine: _cursorLine,
-                            onSelectLine: _gotoLine,
-                            lineHeight: calculatedLineHeight,
-                            fontSize: gutterFontSize,
-                          ),
-                          Expanded(
-                            child: CallbackShortcuts(
-                              bindings: <ShortcutActivator, VoidCallback>{
-                                const SingleActivator(LogicalKeyboardKey.keyF,
-                                    control: true): () {
-                                  setState(() => _showFindReplace = !_showFindReplace);
-                                },
-                                const SingleActivator(LogicalKeyboardKey.keyS,
-                                    control: true): _saveAs,
-                                const SingleActivator(LogicalKeyboardKey.enter,
-                                    control: true): _compile,
-                              },
-                              child: Actions(
-                                actions: <Type, Action<Intent>>{
-                                  _EelTabIntent: _EelTabAction(),
-                                },
-                                child: Shortcuts(
-                                  shortcuts: const <ShortcutActivator, Intent>{
-                                    SingleActivator(LogicalKeyboardKey.tab):
-                                        _EelTabIntent(shift: false),
-                                    SingleActivator(LogicalKeyboardKey.tab, shift: true):
-                                        _EelTabIntent(shift: true),
+                              Expanded(
+                                child: CallbackShortcuts(
+                                  bindings: <ShortcutActivator, VoidCallback>{
+                                    const SingleActivator(LogicalKeyboardKey.keyF,
+                                        control: true): () {
+                                      setState(() =>
+                                          _showFindReplace = !_showFindReplace);
+                                    },
+                                    const SingleActivator(LogicalKeyboardKey.keyS,
+                                        control: true): _saveAs,
+                                    const SingleActivator(
+                                        LogicalKeyboardKey.enter,
+                                        control: true): _compile,
                                   },
-                                  child: TextField(
-                                    controller: _code,
-                                    focusNode: _editorFocus,
-                                    scrollController: _editorScrollCtrl,
-                                    maxLines: null,
-                                    expands: true,
-                                    style: codeStyle,
-                                    decoration: const InputDecoration(
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.all(AuraSpace.md),
+                                  child: Actions(
+                                    actions: <Type, Action<Intent>>{
+                                      _EelTabIntent: _EelTabAction(),
+                                    },
+                                    child: Shortcuts(
+                                      shortcuts:
+                                          const <ShortcutActivator, Intent>{
+                                        SingleActivator(LogicalKeyboardKey.tab):
+                                            _EelTabIntent(shift: false),
+                                        SingleActivator(LogicalKeyboardKey.tab,
+                                            shift: true):
+                                            _EelTabIntent(shift: true),
+                                      },
+                                      child: TextField(
+                                        controller: _code,
+                                        focusNode: _editorFocus,
+                                        scrollController: _editorScrollCtrl,
+                                        maxLines: null,
+                                        expands: true,
+                                        style: codeStyle,
+                                        strutStyle: codeStrut,
+                                        decoration: const InputDecoration(
+                                          isDense: true,
+                                          border: InputBorder.none,
+                                          contentPadding:
+                                              EdgeInsets.all(AuraSpace.md),
+                                        ),
+                                        onChanged: _onCodeChanged,
+                                      ),
                                     ),
-                                    onChanged: _onCodeChanged,
                                   ),
                                 ),
                               ),
-                            ),
-                          ),
-                        ],
+                            ],
+                          );
+                        },
                       ),
                     ),
                     if ((_editorFontSize - _kDefaultFontSize).abs() > 0.01)
@@ -1082,7 +1162,7 @@ dbg = 0;
                         left: _showOutline ? 206 : 6,
                         child: Tooltip(
                           message:
-                              '${(_editorFontSize / _kDefaultFontSize * 100).round()}% (点击恢复默认)',
+                              '${(_editorFontSize / _kDefaultFontSize * 100).round()}% (${l10nOf(context).liveprogFontReset})',
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(

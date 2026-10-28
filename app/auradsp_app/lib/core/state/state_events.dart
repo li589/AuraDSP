@@ -110,7 +110,7 @@ extension StateEvents on AppModel {
         // 本地为显式选择时仍采纳引擎真值（两者本应一致）。
         final rbPreset = raw['reverbPreset'] as int;
         if (reverbPreset != -2) {
-          reverbPreset = rbPreset;
+          reverbPreset = (rbPreset == 0) ? kReverbCuratedPresets.first : rbPreset;
         }
         if (raw['reverbEngine'] != null) {
           reverbEngine = (raw['reverbEngine'] as int).clamp(-1, 1);
@@ -259,13 +259,16 @@ extension StateEvents on AppModel {
           spatialStyle = (raw['spatialStyle'] as int).clamp(0, 3);
         }
         if (raw['spatialRoom'] != null) {
-          spatialRoom = (raw['spatialRoom'] as num).toDouble();
+          final v = (raw['spatialRoom'] as num).toDouble();
+          spatialRoom = (v * 10000.0).round() / 10000.0;
         }
         if (raw['spatialWidth'] != null) {
-          spatialWidth = (raw['spatialWidth'] as num).toDouble();
+          final v = (raw['spatialWidth'] as num).toDouble();
+          spatialWidth = (v * 10000.0).round() / 10000.0;
         }
         if (raw['spatialCenter'] != null) {
-          spatialCenter = (raw['spatialCenter'] as num).toDouble();
+          final v = (raw['spatialCenter'] as num).toDouble();
+          spatialCenter = (v * 10000.0).round() / 10000.0;
         }
         if (raw['spatialOutGain'] != null) {
           spatialOutGain = (raw['spatialOutGain'] as num).toDouble();
@@ -908,7 +911,11 @@ extension StateEvents on AppModel {
         _notifyUi();
         break;
       case 'pluginScanned':
-        pluginManager.onPluginScanned(raw['count'] as int, raw['json']);
+        pluginManager.onPluginScanned(
+          raw['count'] as int,
+          raw['json'],
+          aborted: raw['aborted'] == true,
+        );
         _notifyUi();
         break;
       case 'pluginList':

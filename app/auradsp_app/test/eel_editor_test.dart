@@ -89,8 +89,10 @@ void main() {
     test('空 @init → blocking 且定位到行', () {
       const src = '@init\n@sample\nspl0 = 1;\n';
       final issues = EelLinter.lint(_zh, src);
+      // 2026-10-28：文案已改为「初始化段为空（@init …）」，断言改为
+      // 匹配 @init 语义（保持「能定位到空 @init 段」的原始意图）。
       final hit =
-          issues.where((e) => e.message.contains('空 @init')).toList();
+          issues.where((e) => e.message.contains('@init')).toList();
       expect(hit.length, 1);
       expect(hit.first.blocking, isTrue);
       expect(hit.first.line, 1);

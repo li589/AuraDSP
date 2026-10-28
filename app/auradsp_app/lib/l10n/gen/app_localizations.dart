@@ -481,7 +481,7 @@ abstract class AppLocalizations {
   /// No description provided for @setInstallDriverUacPrompt.
   ///
   /// In zh, this message translates to:
-  /// **'正在唤起 Windows UAC 授权弹窗，请在系统提示中点击“是”允许安装驱动...'**
+  /// **'正在唤起系统管理员授权，请在系统提示中点击允许安装驱动组件...'**
   String get setInstallDriverUacPrompt;
 
   /// No description provided for @setVaioInstallOk.
@@ -541,7 +541,7 @@ abstract class AppLocalizations {
   /// No description provided for @setAsioRegisterPrompt.
   ///
   /// In zh, this message translates to:
-  /// **'正在唤起 Windows UAC 授权弹窗注册虚拟 ASIO 驱动...'**
+  /// **'正在唤起系统管理员授权以注册虚拟音频驱动组件...'**
   String get setAsioRegisterPrompt;
 
   /// No description provided for @setAsioRegisterOk.
@@ -805,7 +805,7 @@ abstract class AppLocalizations {
   /// No description provided for @eelEmptyInit.
   ///
   /// In zh, this message translates to:
-  /// **'空 @init 段（vendor 要求至少一条语句）'**
+  /// **'初始化段为空（@init 段要求包含至少一条执行语句或变量初始化）'**
   String get eelEmptyInit;
 
   /// No description provided for @eelEmptySample.
@@ -937,7 +937,7 @@ abstract class AppLocalizations {
   /// No description provided for @ioVaioGuide.
   ///
   /// In zh, this message translates to:
-  /// **'请在 Windows 声音设置或播放器中将默认输出选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 核心管线处理。'**
+  /// **'请在系统声音设置或播放器中将默认输出设备选择为 \"AuraVAIO\"，声音将通过此虚拟输入端点送入 AuraDSP 声学处理管线。'**
   String get ioVaioGuide;
 
   /// No description provided for @ioAsioChannelLabel.
@@ -1393,7 +1393,7 @@ abstract class AppLocalizations {
   /// No description provided for @reverbEngineStereo.
   ///
   /// In zh, this message translates to:
-  /// **'立体声 (Vendor)'**
+  /// **'立体声'**
   String get reverbEngineStereo;
 
   /// No description provided for @reverbEngineMc.
@@ -1411,7 +1411,7 @@ abstract class AppLocalizations {
   /// No description provided for @reverbEngineInfo.
   ///
   /// In zh, this message translates to:
-  /// **'混响按当前声道路径自动选择：矩阵/双耳路径用 vendor Progenitor2 立体声混响；离散多声道用 8 线 FDN。两套引擎不会同时运行。'**
+  /// **'混响根据当前声道拓扑自动选择：双声道立体声/双耳监听采用经典双通道扩散混响；离散多声道环境采用 8 阶反馈延迟网络 (FDN) 空间算法。'**
   String get reverbEngineInfo;
 
   /// No description provided for @reverbLfe.
@@ -3217,7 +3217,7 @@ abstract class AppLocalizations {
   /// No description provided for @presetDeleteFail.
   ///
   /// In zh, this message translates to:
-  /// **'删除失败'**
+  /// **'删除失败（文件可能被占用或已不存在）'**
   String get presetDeleteFail;
 
   /// No description provided for @presetLoaded.
@@ -3439,7 +3439,7 @@ abstract class AppLocalizations {
   /// No description provided for @bassModeTooltip.
   ///
   /// In zh, this message translates to:
-  /// **'低音增强模式：\n• 自然低音：vendor 直给提升，不加谐波\n• 纯净低音：轻量谐波（0.35），干净有形体\n• 超重低音：重谐波（0.7），小单元也出下潜'**
+  /// **'低音增强声学模式：\n• 自然低音：纯线性动态低频增益，无谐波渲染，保留原生打击瞬态\n• 纯净低音：注入适量偶次谐波，增强中低频饱满度与结像轮廓\n• 超重低音：深度次谐波合成与能量共振，使紧凑型耳机/音箱重现深潜体感'**
   String get bassModeTooltip;
 
   /// No description provided for @bassCutoff.
@@ -3595,7 +3595,7 @@ abstract class AppLocalizations {
   /// No description provided for @sysHint.
   ///
   /// In zh, this message translates to:
-  /// **'托盘常驻与开机启动（Windows）'**
+  /// **'系统托盘常驻与开机自启动'**
   String get sysHint;
 
   /// No description provided for @sysTray.
@@ -3631,7 +3631,7 @@ abstract class AppLocalizations {
   /// No description provided for @sysAutostartHint.
   ///
   /// In zh, this message translates to:
-  /// **'登录 Windows 时自动启动 AuraDSP'**
+  /// **'登录系统时自动启动并后台运行 AuraDSP'**
   String get sysAutostartHint;
 
   /// No description provided for @latUnmeasured.
@@ -4099,7 +4099,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialHint.
   ///
   /// In zh, this message translates to:
-  /// **'虚拟 5.0 摆位加早期反射，耳机上重建音箱房。混响 / 脉冲 / 声场卡片已并入本卡'**
+  /// **'基于 HRTF 空间声学模型与早期反射算法，在立体声耳机上重现多扬声器真实监听声学室的开阔声场与实体脱箱感。'**
   String get spatialHint;
 
   /// No description provided for @spatialStyle.
@@ -4111,7 +4111,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialStyleInfo.
   ///
   /// In zh, this message translates to:
-  /// **'风格即整组预设：切换会覆盖房间 / 张角 / 中置（引擎与界面同步）'**
+  /// **'精选空间声学预设：一键应用预置的房间反射、扬声器张角与人声对白聚焦参数。'**
   String get spatialStyleInfo;
 
   /// No description provided for @spatialStyleCinema.
@@ -4147,7 +4147,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialRoomInfo.
   ///
   /// In zh, this message translates to:
-  /// **'早期反射电平加反射时间缩放。0 为干摆位，1 为大房'**
+  /// **'声学室体量与早期反射强度：0 为无反射自由声场，数值增大可扩展房间空间体量与壁面反射余韵。'**
   String get spatialRoomInfo;
 
   /// No description provided for @spatialWidth.
@@ -4159,7 +4159,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialWidthInfo.
   ///
   /// In zh, this message translates to:
-  /// **'扬声器摆位张角缩放。只改变对侧耳声像，同侧直达不变'**
+  /// **'声场展宽与虚拟扬声器开角：拓展左右声场宽度，营造沉浸式脱箱感。'**
   String get spatialWidthInfo;
 
   /// No description provided for @spatialCenter.
@@ -4171,7 +4171,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialCenterInfo.
   ///
   /// In zh, this message translates to:
-  /// **'中置声像聚焦：人声对白能量'**
+  /// **'中置声像与对白聚焦：适度提升可增强居中人声主体的凝聚力与清晰度。'**
   String get spatialCenterInfo;
 
   /// No description provided for @spatialOutGain.
@@ -4183,7 +4183,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialOutGainInfo.
   ///
   /// In zh, this message translates to:
-  /// **'空间级输出电平补偿'**
+  /// **'空间音效模块后级输出增益补偿 (-12 ~ +6 dB)。'**
   String get spatialOutGainInfo;
 
   /// No description provided for @spatialAutoGain.
@@ -4195,7 +4195,7 @@ abstract class AppLocalizations {
   /// No description provided for @spatialAutoGainInfo.
   ///
   /// In zh, this message translates to:
-  /// **'向输入响度收敛（与混响同式），防摆位后忽大忽小'**
+  /// **'等响度自适应控制：自动匹配输入信号有效能量，避免声场处理引起整体音量跳变。'**
   String get spatialAutoGainInfo;
 
   /// No description provided for @spatialMix.
@@ -4537,13 +4537,13 @@ abstract class AppLocalizations {
   /// No description provided for @chainStagePreVendor.
   ///
   /// In zh, this message translates to:
-  /// **'系统原声音效前置'**
+  /// **'DSP 主音效链前置'**
   String get chainStagePreVendor;
 
   /// No description provided for @chainStagePostVendor.
   ///
   /// In zh, this message translates to:
-  /// **'系统原声音效后置'**
+  /// **'DSP 主音效链后置'**
   String get chainStagePostVendor;
 
   /// No description provided for @chainStagePostReverb.
@@ -4975,13 +4975,13 @@ abstract class AppLocalizations {
   /// No description provided for @plugCustomTitle.
   ///
   /// In zh, this message translates to:
-  /// **'自定义插件检索目录'**
+  /// **'插件扫描目录'**
   String get plugCustomTitle;
 
   /// No description provided for @plugCustomHint.
   ///
   /// In zh, this message translates to:
-  /// **'添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。'**
+  /// **'勾选需要扫描的目录（平台标准目录已自动预置；内置目录不可移除）。扫描只遍历勾选项及其子目录。'**
   String get plugCustomHint;
 
   /// No description provided for @plugCustomAdd.
@@ -4993,7 +4993,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugCustomEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'暂未添加自定义目录。除系统默认路径（C:\\Program Files\\Common Files\\VST3 等）外，可点击右上角添加。'**
+  /// **'扫描目录列表为空。点击「添加目录」选择插件所在文件夹。'**
   String get plugCustomEmpty;
 
   /// No description provided for @plugMountTitle.
@@ -5878,6 +5878,12 @@ abstract class AppLocalizations {
   /// **'未编译修改'**
   String get lpUncompiled;
 
+  /// No description provided for @lpRunningOldCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前应用旧代码'**
+  String get lpRunningOldCode;
+
   /// No description provided for @lpCompileSuccess.
   ///
   /// In zh, this message translates to:
@@ -6171,6 +6177,78 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'纯前级增益模式 (无滤波器)'**
   String get lpApoNoFiltersPreampOnly;
+
+  /// No description provided for @plugScanDirsSelectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get plugScanDirsSelectAll;
+
+  /// No description provided for @plugScanDirsClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除全部勾选'**
+  String get plugScanDirsClear;
+
+  /// No description provided for @plugScanDirsEnabledCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已启用 {enabled}/{total}'**
+  String plugScanDirsEnabledCount(int enabled, int total);
+
+  /// No description provided for @plugScanDirsBuiltin.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置'**
+  String get plugScanDirsBuiltin;
+
+  /// No description provided for @plugScanDirsBuiltinHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用自带插件目录，自动创建且不可移除'**
+  String get plugScanDirsBuiltinHint;
+
+  /// No description provided for @plugScanDirsRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除该条'**
+  String get plugScanDirsRemove;
+
+  /// No description provided for @plugFormatSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'该格式的扫描与挂载将在后续版本支持'**
+  String get plugFormatSoon;
+
+  /// No description provided for @liveprogFontReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击恢复默认'**
+  String get liveprogFontReset;
+
+  /// No description provided for @presetDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除预设'**
+  String get presetDeleteTitle;
+
+  /// No description provided for @presetDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除该预设吗？不可撤销。'**
+  String get presetDeleteBody;
+
+  /// No description provided for @presetDeleteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get presetDeleteAction;
+
+  /// No description provided for @presetOverwritten.
+  ///
+  /// In zh, this message translates to:
+  /// **'已覆盖同名预设「{name}」'**
+  String presetOverwritten(String name);
 }
 
 class _AppLocalizationsDelegate

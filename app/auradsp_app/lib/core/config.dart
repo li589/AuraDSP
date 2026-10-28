@@ -11,6 +11,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
+import 'plugins/plugin_scan_dirs.dart';
 
 import 'error_sink.dart';
 class AppConfig {
@@ -60,7 +61,12 @@ class AppConfig {
   double maxFileSizeMb;
 
   // 自定义检索与外部预设目录
-  List<String> customPluginDirs;
+  /// 插件扫描目录（2026-10-28 改版）：显式条目 + 勾选态 + 内置标记。
+  /// 旧版 `customPluginDirs`（纯路径表）在 [fromJson] 中自动迁移。
+  List<PluginScanDirEntry> pluginScanDirs;
+
+  /// 平台预置目录是否已做过一次性播种（用户清空列表后不再自动加回）。
+  bool pluginScanDirsSeeded;
   List<String> customScriptDirs;
 
   AppConfig({
@@ -95,7 +101,8 @@ class AppConfig {
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
-    List<String>? customPluginDirs,
+    List<PluginScanDirEntry>? pluginScanDirs,
+    this.pluginScanDirsSeeded = false,
     List<String>? customScriptDirs,
   })  : modeCategory = modeCategory ?? AudioModes.categoryForMode(audioMode),
         attachmentMode = attachmentMode ??
@@ -107,7 +114,7 @@ class AppConfig {
             (audioMode == 'asio'
                 ? AudioModes.outputAsioClient
                 : (audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi)),
-        customPluginDirs = customPluginDirs ?? [],
+        pluginScanDirs = pluginScanDirs ?? [],
         customScriptDirs = customScriptDirs ?? [];
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
@@ -154,15 +161,42 @@ class AppConfig {
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
-      customPluginDirs: (paths['customPluginDirs'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
-          [],
+      // 2026-10-28 改版：pluginScanDirs 为显式条目；旧配置只有
+      // customPluginDirs（路径字符串），读入时一律迁移为「启用、非内置」。
+      pluginScanDirs: _readPluginScanDirs(paths),
+      pluginScanDirsSeeded: (paths['pluginScanDirsSeeded'] as bool?) ?? false,
       customScriptDirs: (paths['customScriptDirs'] as List?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
     );
+  }
+
+  /// 扫描目录解析（含旧键迁移）。容错：坏条目跳过，不因单条脏数据丢全表。
+  static List<PluginScanDirEntry> _readPluginScanDirs(Map<String, dynamic> paths) {
+    final out = <PluginScanDirEntry>[];
+    final raw = paths['pluginScanDirs'];
+    if (raw is List) {
+      for (final item in raw) {
+        if (item is Map) {
+          final entry = PluginScanDirEntry.fromJson(
+            Map<String, dynamic>.from(item),
+          );
+          if (entry.path.trim().isNotEmpty) out.add(entry);
+        } else if (item is String && item.trim().isNotEmpty) {
+          out.add(PluginScanDirEntry(path: item));
+        }
+      }
+      return out;
+    }
+    final legacy = paths['customPluginDirs'];
+    if (legacy is List) {
+      for (final item in legacy) {
+        final p = item?.toString().trim() ?? '';
+        if (p.isNotEmpty) out.add(PluginScanDirEntry(path: p));
+      }
+    }
+    return out;
   }
 
   Map<String, dynamic> toJson() => {
@@ -205,7 +239,8 @@ class AppConfig {
           'maxFileSizeMb': maxFileSizeMb,
         },
         'paths': {
-          'customPluginDirs': customPluginDirs,
+          'pluginScanDirs': pluginScanDirs.map((e) => e.toJson()).toList(),
+          'pluginScanDirsSeeded': pluginScanDirsSeeded,
           'customScriptDirs': customScriptDirs,
         },
       };

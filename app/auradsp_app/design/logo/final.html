@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<title>AuraDSP · 品牌定稿</title>
+<style>
+  @font-face { font-family:'AuraDisplay'; src:url('../../assets/fonts/BricolageGrotesque.ttf'); font-weight:100 900; }
+  :root { --bg:#0b0c10; --tile:#0e0f13; --line:#2a2f3a; --text:#e8eaf0; --dim:#9aa3b2; --lime:#d4ff3f; --cyan:#64f0dc; }
+  * { box-sizing:border-box; }
+  body { margin:0; padding:44px 40px 64px; background:var(--bg); color:var(--text); font-family:'AuraDisplay','Segoe UI',sans-serif; }
+  h1 { font-size:30px; font-weight:700; margin:0 0 6px; letter-spacing:-.01em; }
+  h1 .g { background:linear-gradient(100deg,var(--lime),var(--cyan)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .sub { color:var(--dim); font-family:Consolas,monospace; font-size:12px; letter-spacing:.04em; margin-bottom:34px; }
+  .card { background:#111319; border:1px solid var(--line); border-radius:14px; padding:26px; margin-bottom:18px; }
+  .label { font-family:Consolas,monospace; font-size:10px; letter-spacing:.08em; color:var(--dim); margin-bottom:18px; }
+  .hero { display:flex; align-items:center; justify-content:center; padding:52px 24px; border-radius:12px; background:var(--tile); border:1px solid rgba(255,255,255,.05); }
+  .hero img { width:min(560px,86%); }
+  .lighthero { background:#f4f1ea; border-color:#e2ddcf; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+  .row { display:flex; align-items:flex-end; gap:22px; flex-wrap:wrap; }
+  .sz { display:flex; flex-direction:column; align-items:center; gap:8px; }
+  .sz .tile { background:var(--tile); border:1px solid rgba(255,255,255,.06); display:grid; place-items:center; }
+  .sz span { font-family:Consolas,monospace; font-size:10px; color:var(--dim); }
+  .t256 { width:256px; height:256px; border-radius:56px; }
+  .t128 { width:128px; height:128px; border-radius:28px; }
+  .t64 { width:64px; height:64px; border-radius:17px; }
+  .t48 { width:48px; height:48px; border-radius:13px; }
+  .t32 { width:32px; height:32px; border-radius:9px; }
+  .t24 { width:24px; height:24px; border-radius:7px; }
+  .t20 { width:20px; height:20px; border-radius:6px; }
+  .t16 { width:16px; height:16px; border-radius:5px; }
+  .tile img { width:100%; height:100%; display:block; }
+  .lightbg { background:#f4f1ea !important; border-color:#e2ddcf !important; }
+  .taskbar { display:flex; align-items:center; gap:20px; padding:10px 18px; border-radius:10px; background:#202020; }
+  .taskbar.light { background:#f0f0f0; margin-top:10px; }
+  .taskbar img { display:block; }
+  .taskbar .cap { font-family:Consolas,monospace; font-size:10px; color:#9aa3b2; margin-right:6px; }
+  .taskbar.light .cap { color:#6e6a60; }
+  .colors { display:grid; grid-template-columns:repeat(6,1fr); gap:10px; }
+  .sw { border-radius:8px; height:74px; border:1px solid rgba(255,255,255,.07); padding:9px 10px; display:flex; flex-direction:column; justify-content:flex-end; font-family:Consolas,monospace; font-size:10px; }
+  .sw b { font-weight:600; letter-spacing:.02em; }
+  .specs { display:grid; grid-template-columns:repeat(3,1fr); gap:18px; color:var(--dim); font-size:13px; line-height:1.65; }
+  .specs b { color:var(--text); display:block; font-size:12px; letter-spacing:.02em; margin-bottom:3px; font-family:Consolas,monospace; }
+  .foot { color:var(--dim); font-size:12px; line-height:1.7; }
+  code { font-family:Consolas,monospace; color:#c7ff5e; }
+  @media (max-width:900px) { .grid2 { grid-template-columns:1fr; } .colors { grid-template-columns:repeat(3,1fr); } .specs { grid-template-columns:1fr; } }
+</style></head><body>
+  <h1>AuraDSP <span class="g">Brand Mark</span></h1>
+  <div class="sub">FINAL v1 · AURA A · LIME → CYAN · 2026-10-28</div>
+
+  <div class="card">
+    <div class="label">01 / PRIMARY LOCKUP · DARK</div>
+    <div class="hero"><img src="auradsp-lockup-dark.svg" alt="AuraDSP"></div>
+  </div>
+
+  <div class="card">
+    <div class="label">02 / LIGHT THEME LOCKUP</div>
+    <div class="hero lighthero"><img src="auradsp-lockup-light.svg" alt="AuraDSP"></div>
+  </div>
+
+  <div class="grid2">
+    <div class="card">
+      <div class="label">03 / APP ICON</div>
+      <div class="row">
+        <div class="sz"><div class="tile t256"><img src="icons/auradsp-app-256.png" alt=""></div><span>256</span></div>
+        <div class="sz"><div class="tile t64"><img src="icons/auradsp-app-64.png" alt=""></div><span>64</span></div>
+        <div class="sz"><div class="tile t32"><img src="icons/auradsp-app-32.png" alt=""></div><span>32</span></div>
+        <div class="sz"><div class="tile t16"><img src="icons/auradsp-app-16.png" alt=""></div><span>16</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="label">04 / LIGHT BACKGROUND</div>
+      <div class="row">
+        <div class="sz"><div class="tile t128 lightbg"><img src="icons/auradsp-app-128.png" alt=""></div><span>128</span></div>
+        <div class="sz"><div class="tile t64 lightbg"><img src="icons/auradsp-app-64.png" alt=""></div><span>64</span></div>
+        <div class="sz"><div class="tile t32 lightbg"><img src="icons/auradsp-app-32.png" alt=""></div><span>32</span></div>
+        <div class="sz"><div class="tile t16 lightbg"><img src="icons/auradsp-app-16.png" alt=""></div><span>16</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">05 / TRAY · 16–40 PX</div>
+    <div class="taskbar">
+      <span class="cap">DARK</span>
+      <img src="icons/auradsp-tray-40.png" width="40" alt=""><img src="icons/auradsp-tray-32.png" width="32" alt="">
+      <img src="icons/auradsp-tray-24.png" width="24" alt=""><img src="icons/auradsp-tray-20.png" width="20" alt="">
+      <img src="icons/auradsp-tray-16.png" width="16" alt="">
+    </div>
+    <div class="taskbar light">
+      <span class="cap">LIGHT</span>
+      <img src="icons/auradsp-tray-dark-40.png" width="40" alt=""><img src="icons/auradsp-tray-dark-32.png" width="32" alt="">
+      <img src="icons/auradsp-tray-dark-24.png" width="24" alt=""><img src="icons/auradsp-tray-dark-20.png" width="20" alt="">
+      <img src="icons/auradsp-tray-dark-16.png" width="16" alt="">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">06 / SYMBOL &amp; WORDMARK</div>
+    <div class="row" style="align-items:center">
+      <img src="auradsp-mark.svg" width="120" alt="">
+      <img src="auradsp-wordmark-light.svg" width="360" alt="">
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">07 / COLOR</div>
+    <div class="colors">
+      <div class="sw" style="background:#D4FF3F;color:#10130A"><b>#D4FF3F</b><span>gradient 0</span></div>
+      <div class="sw" style="background:#9BF873;color:#10130A"><b>#9BF873</b><span>gradient 55</span></div>
+      <div class="sw" style="background:#64F0DC;color:#04110E"><b>#64F0DC</b><span>gradient 1</span></div>
+      <div class="sw" style="background:#0E0F13;color:#E8EAF0"><b>#0E0F13</b><span>icon tile</span></div>
+      <div class="sw" style="background:#5B7A00;color:#fff"><b>#5B7A00</b><span>light 0</span></div>
+      <div class="sw" style="background:#0E7C6B;color:#fff"><b>#0E7C6B</b><span>light 1</span></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="label">08 / SPECS</div>
+    <div class="specs">
+      <div><b>CONSTRUCTION</b>256 单位网格；A 顶点 (128,52)，双脚 (58,198)/(198,198)，笔画 23；横杠为平滑波形，基线 y=150、振幅 ±10、笔画 11，两端与腿内缘相接；光环 r=94/104。</div>
+      <div><b>CLEAR SPACE</b>横排锁定的最小留白 = 字标大写高度的 50%；图标四周至少保留圆角半径的 1/2。</div>
+      <div><b>MINIMUM SIZE</b>符号单独使用 ≥16px；横排锁定 ≥96px 宽。16/20/24px App 图标与所有托盘图标使用去光环简化版。</div>
+    </div>
+  </div>
+
+  <p class="foot">字标已转曲（Bricolage Grotesque 700），不依赖字体。<br>
+  全套导出：<code>icons/auradsp-app-*.png</code>（16–1024）、<code>icons/auradsp.ico</code>、<code>icons/auradsp-tray.ico</code>。<br>
+  深色版用于 App 默认主题；浅色版使用设计令牌 olive/teal 渐变，保证浅底对比度。</p>
+</body></html>

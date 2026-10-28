@@ -145,7 +145,8 @@ extension StateCore on AppModel {
         bassGain = v;
         break;
       case 'reverb.preset':
-        reverbPreset = v.toInt();
+        final p = v.toInt();
+        reverbPreset = (p == 0) ? kReverbCuratedPresets.first : p;
         break;
       case 'reverb.predelay':
         reverbPredelay = v;
@@ -306,15 +307,15 @@ extension StateCore on AppModel {
           break;
         }
         if (id == ParamId.spatialRoom) {
-          spatialRoom = v;
+          spatialRoom = (v * 10000.0).round() / 10000.0;
           break;
         }
         if (id == ParamId.spatialWidth) {
-          spatialWidth = v;
+          spatialWidth = (v * 10000.0).round() / 10000.0;
           break;
         }
         if (id == ParamId.spatialCenter) {
-          spatialCenter = v;
+          spatialCenter = (v * 10000.0).round() / 10000.0;
           break;
         }
         if (id == ParamId.spatialOutGain) {

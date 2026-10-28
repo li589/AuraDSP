@@ -105,6 +105,8 @@ print(f"Attempting to load plugin: {target_plugin['name']} from {target_plugin['
 load_rc = dll.auradsp_plugin_load(h, target_plugin['path'].encode('utf-8'), b"")
 print(f"Load result: rc = {load_rc}")
 assert load_rc == 1, f"Failed to load plugin {target_plugin['name']}"
+# P-041 挂载即旁路（2026-10-28）：显式解旁路恢复本测试「加载即激活」前提。
+assert dll.auradsp_plugin_set_bypass(h, 0) == 1, "un-bypass after load failed"
 
 dll.auradsp_plugin_get_status(h, status_buf, 4096)
 status_loaded = json.loads(status_buf.value.decode('utf-8'))

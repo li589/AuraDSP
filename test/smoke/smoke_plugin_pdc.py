@@ -71,6 +71,8 @@ def get_status(dll, handle):
 def run(dll, handle, mode):
     assert dll.auradsp_plugin_scan(handle, b"", 0) > 0, "scan failed"
     assert dll.auradsp_plugin_load(handle, PLUGIN_PATH.encode("utf-8"), b"") == 1
+    # P-041 挂载即旁路：显式解旁路（旁路槽不进路径，PDC 延迟无从测起）。
+    assert dll.auradsp_plugin_set_bypass(handle, 0) == 1
     active_status = get_status(dll, handle)
     assert active_status.get("hasActive"), "plugin not active after load"
     slot_latency = dll.auradsp_plugin_get_latency(handle)

@@ -135,7 +135,9 @@
     },
     "bassmono": {
       "freq": 120.0,
-      "enable": false
+      "enable": false,
+      "pairs": 1,
+      "merge": 0
     },
     "haas": {
       "delay": 12.0,
@@ -241,6 +243,7 @@
       "tfresolution": 1,
       "autoGain": false,
       "outputGain": 0.0,
+      "mode": 0,
       "enable": false,
       "channels": 255,
       "freq1": 95.0,
@@ -292,23 +295,17 @@
       "threshold": -0.1,
       "link": true,
       "lookahead": false,
-      "channels": 255
-    },
-    "routing": {
-      "modeCategory": "pipeline",
-      "attachmentMode": "sysapo",
-      "pipelineInput": "wasapi",
-      "pipelineOutput": "wasapi",
-      "pipelineInputDevice": "",
-      "pipelineOutputDevice": "",
-      "pipelineInputEnabled": true,
-      "pipelineOutputEnabled": true,
-      "asioDriver": "",
-      "asioBufSize": 0,
-      "asioOutPair": 0,
-      "vaioOutputEndpoint": "",
-      "apoTargetEndpoint": "",
-      "monitorMirroring": false
+      "channels": 255,
+      "channelTrims": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ]
     }
   }
 }

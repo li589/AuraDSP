@@ -59,9 +59,17 @@ b.vb_plugin_slot_unload.restype = ctypes.c_int
 b.vb_plugin_slot_unload.argtypes = [ctypes.c_int]
 b.vb_plugin_slot_group_ready.restype = ctypes.c_int
 b.vb_plugin_slot_group_ready.argtypes = [ctypes.c_int, ctypes.c_int]
+b.vb_plugin_slot_get_status.restype = ctypes.c_int
+b.vb_plugin_slot_get_status.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+b.vb_plugin_slot_set_bypass.restype = ctypes.c_int
+b.vb_plugin_slot_set_bypass.argtypes = [ctypes.c_int, ctypes.c_int]
 b.vb_plugin_group_enable.restype = ctypes.c_int
 b.vb_plugin_group_enable.argtypes = [ctypes.c_int]
 b.vb_plugin_group_mask.restype = ctypes.c_int
+b.vb_test_start.restype = ctypes.c_int
+b.vb_test_start.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int,
+                            ctypes.c_int, ctypes.c_int]
+b.vb_test_stop.restype = ctypes.c_int
 
 fails = []
 
@@ -84,6 +92,16 @@ def status():
 
 def ready_map(slot, n):
     return [b.vb_plugin_slot_group_ready(slot, g) for g in range(n)]
+
+
+def slot_status(slot=0):
+    buf = ctypes.create_string_buffer(2048)
+    if b.vb_plugin_slot_get_status(slot, buf, 2048) <= 0:
+        return {}
+    try:
+        return json.loads(buf.value.decode("utf-8", "replace"))
+    except ValueError:
+        return {}
 
 
 buf = ctypes.create_string_buffer(2048)
@@ -120,6 +138,11 @@ try:
         b.vb_stop()
         sys.exit(0)
 
+    # 测试音注入（2026-10-27）：无声时组被判 idle 而跳过 process，
+    # 下面的 processCalls 恢复断言会误判。先注入 tone 再挂载。
+    tone_rc = b.vb_test_start(1, None, 0, 0, 0)
+    print(f"[0] test tone rc={tone_rc}")
+
     # ---- [1] 掩码 0x01：只加载组 0，其余组被跳过 ----
     b.vb_plugin_group_enable(1)
     t0 = time.time()
@@ -131,19 +154,55 @@ try:
     check("掩码外组未加载（跳过生效）", all(v == 0 for v in r[1:]), f"ready={r}")
     print(f"[1] mask=0x01: load={t_first:.2f}s ready={r}")
     check("同步段不含逐组扇出（< 8s）", t_first < 8.0, f"load={t_first:.2f}s")
+    # P-041 挂载即旁路（2026-10-28）：挂载后槽必须处于旁路态——这正是
+    # 「假旁路」修复的回归线（旧引擎 commit 出厂激活，UI 旁路形同虚设）。
+    st1 = slot_status(0)
+    check("挂载即旁路（P-041 mount-bypass）", st1.get("bypassed") is True,
+          f"bypassed={st1.get('bypassed')}")
 
     # ---- [2] 掩码全开：新使能组后台补挂（无需重新 mount）----
     b.vb_plugin_group_enable(0xFF)
     t0 = time.time()
+    saw_suspend = False
     while time.time() - t0 < BACKFILL_TIMEOUT_S:
         r = ready_map(0, n)
+        if status().get("loadSuspend") == 1:
+            saw_suspend = True
         if all(v == 1 for v in r):
             break
         time.sleep(0.5)
     t_fill = time.time() - t0
     r = ready_map(0, n)
     check("后台补齐完成（掩码全开）", all(v == 1 for v in r), f"ready={r}")
-    print(f"[2] backfill {n - 1} groups: {t_fill:.2f}s (total≈{t_first + t_fill:.2f}s)")
+    st = status()
+    check("补挂结束旁路已撤（loadSuspend==0）", st.get("loadSuspend") == 0,
+          f"loadSuspend={st.get('loadSuspend')}")
+    budget_us = st.get("budgetUs", 0)
+    if budget_us and budget_us < 8000:
+        check("预算紧张时旁路曾启用（loadSuspend 曾见 1）", saw_suspend,
+              f"budgetUs={budget_us}")
+    else:
+        print(f"NOTE 预算 {budget_us}µs ≥ 8ms：加载旁路门不启用（本机 "
+              f"2048 帧常态），suspend_seen={saw_suspend} 仅记录")
+    print(f"[2] backfill {n - 1} groups: {t_fill:.2f}s "
+          f"(total≈{t_first + t_fill:.2f}s) suspend_seen={saw_suspend} "
+          f"stuckG={st.get('stuckG')} fanTimeouts={st.get('fanTimeouts')}")
+    if st.get("frames", 0) > 0:
+        # P-041：挂载即旁路 → 先显式解旁路（用户「打开」语义），插件链
+        # 才会恢复处理；补挂组的 bypass 一致性也在此一并验证（解旁路对
+        # 全组生效，此前镜像被 SlotLoad 回写出厂值覆盖的 bug 已修）。
+        assert b.vb_plugin_slot_set_bypass(0, 0) == 1, "set_bypass(0) failed"
+        time.sleep(0.3)
+        st_ub = slot_status(0)
+        check("解旁路后槽激活（bypassed==false）", st_ub.get("bypassed") is False,
+              f"bypassed={st_ub.get('bypassed')}")
+        c0 = slot_status(0).get("processCalls", 0)
+        time.sleep(1.5)
+        c1 = slot_status(0).get("processCalls", 0)
+        check("补挂后插件链恢复处理（processCalls 增长）", c1 > c0,
+              f"calls {c0}->{c1} frames={st.get('frames')}")
+    else:
+        print("NOTE 回调未跑（frames=0），processCalls 恢复不断言")
 
     # ---- [3] unload 清零 ----
     check("unload rc==1", b.vb_plugin_slot_unload(0) == 1)
@@ -151,6 +210,10 @@ try:
     check("unload 后全部清零", all(v == 0 for v in r), f"ready={r}")
     print(f"[3] unload cleared: ready={r}")
 finally:
+    try:
+        b.vb_test_stop()
+    except Exception:
+        pass
     b.vb_plugin_group_enable(0xFF)
     b.vb_stop()
 

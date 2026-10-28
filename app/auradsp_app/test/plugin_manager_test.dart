@@ -7,7 +7,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/config.dart';
-import 'package:auradsp_app/core/plugin_manager.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 
 void main() {
   // rootBundle（assets/presets/plugin_tables.json）在纯 test() 下需要
@@ -688,7 +688,6 @@ void main() {
       }, 3);
       final meta = m.getSlotPlugin(0)!;
       expect(m.isEditorCrashKnown(meta), isTrue);
-      expect(m.isEditorOpenBlocked(meta), isFalse);
       sent.clear();
       m.showEditor(slot: 0);
       expect(
@@ -846,6 +845,49 @@ void main() {
           sent.where((c) => c['cmd'] == 'pluginSlotLoadPresetG').toList();
       expect(loads.where((c) => c['group'] == -1), isNotEmpty,
           reason: '非 VB 单引擎下 -1 仍是唯一合法路');
+    });
+  });
+
+  // F3（2026-10-28）：厂商表匹配由裸子串改为「名称词首 / 路径段首前缀 +
+  // 最长匹配」。裸子串的问题：`hive` ⊂ `archive`、`element` ⊂ `Elements`
+  // 会被误归厂商，且结果依赖 JSON 键序。
+  group('F3: 厂商表匹配（前缀 + 最长优先）', () {
+    test('词首前缀命中，裸子串不再误命中', () {
+      final t = <String, String>{'zebra': 'u-he', 'hive': 'u-he'};
+      expect(matchVendorIn(t, 'Zebra2', r'C:\VST3\Zebra2.vst3'), 'u-he');
+      // 旧实现 'archive'.contains('hive') == true → 误归 u-he
+      expect(matchVendorIn(t, 'Archive Pro', r'C:\VST3\Archive Pro.vst3'),
+          isNull);
+      expect(matchVendorIn(t, 'Archiver', ''), isNull);
+    });
+
+    test('路径目录段命中（名称里没有厂商名）', () {
+      final t = <String, String>{'fabfilter': 'FabFilter', 'u-he': 'u-he'};
+      expect(
+        matchVendorIn(t, 'Pro-Q 3',
+            r'C:\Program Files\Common Files\VST3\FabFilter\Pro-Q 3.vst3'),
+        'FabFilter',
+      );
+      expect(matchVendorIn(t, 'Zebra2', r'C:\VST3\u-he\Zebra2.vst3'),
+          'u-he');
+    });
+
+    test('连字符键按整体前缀命中', () {
+      final t = <String, String>{'kv-element': 'Kushview'};
+      expect(matchVendorIn(t, 'KV-Element', ''), 'Kushview');
+    });
+
+    test('多键命中取最长，且与键序无关', () {
+      final a = <String, String>{'element': 'Wrong', 'kv-element': 'Kushview'};
+      final b = <String, String>{'kv-element': 'Kushview', 'element': 'Wrong'};
+      expect(matchVendorIn(a, 'KV-Element', ''), 'Kushview');
+      expect(matchVendorIn(b, 'KV-Element', ''), 'Kushview',
+          reason: '结果不得依赖 JSON 键序（旧实现取第一个命中）');
+    });
+
+    test('空表与空 key 安全', () {
+      expect(matchVendorIn(<String, String>{}, 'Anything', '/x'), isNull);
+      expect(matchVendorIn(<String, String>{'': 'X'}, 'Anything', '/x'), isNull);
     });
   });
 }

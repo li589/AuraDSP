@@ -386,14 +386,20 @@ extension StateEffects on AppModel {
 
   void selectReverbPreset(int id) {
     if (id < -2 || id > 18) return;
-    if (id == -1) {
+    // 禁止显示与使用旧版预设 0，统一规整到精选第一档（5 大音乐厅）
+    final targetId = (id == 0) ? kReverbCuratedPresets.first : id;
+    if (targetId == -1) {
       // 记住关闭前的预设（含 -2 自定义），重新开启时恢复。
-      if (reverbPreset != -1) _lastReverbPreset = reverbPreset;
+      if (reverbPreset != -1) {
+        _lastReverbPreset = (reverbPreset <= 0 && reverbPreset != -2)
+            ? kReverbCuratedPresets.first
+            : reverbPreset;
+      }
       reverbPreset = -1;
       setReverbPreset(-1);
       return;
     }
-    if (id == -2) {
+    if (targetId == -2) {
       reverbPreset = -2;
       _lastReverbPreset = -2;
       setReverbPreset(-2);
@@ -402,21 +408,25 @@ extension StateEffects on AppModel {
       _pushAllReverbCustomParams();
       return;
     }
-    reverbPreset = id;
-    final (decay, damp, wet, dry, roomSize, width) = _reverbVizFor(id);
+    reverbPreset = targetId;
+    _lastReverbPreset = targetId;
+    final (decay, damp, wet, dry, roomSize, width) = _reverbVizFor(targetId);
     fvDecay = decay;
     fvDamp = damp;
     fvWet = wet;
     fvDry = dry;
     fvRoomSize = roomSize;
     fvWidth = width;
-    setReverbPreset(id);
+    setReverbPreset(targetId);
   }
 
   void setSpatialReverbEnabled(bool on) {
     if (on) {
       if (reverbPreset != -1) return;
-      selectReverbPreset(_lastReverbPreset);
+      final target = (_lastReverbPreset <= 0 && _lastReverbPreset != -2)
+          ? kReverbCuratedPresets.first
+          : _lastReverbPreset;
+      selectReverbPreset(target);
     } else {
       selectReverbPreset(-1);
     }
@@ -515,16 +525,36 @@ extension StateEffects on AppModel {
     scheduleAutoSave();
   }
 
-  void setCompThreshold(double v) {
+  void setCompThreshold(double v, {bool forceFlush = false}) {
     compThreshold = v;
     // 宏观阈值联动压缩强度：阈值越深(-dB)，压限系数越负
     final strength = ((-v) / 48.0).clamp(0.0, 1.0);
     for (var i = 0; i < 7; i++) {
       compGains[i] = (-strength * 0.9).clamp(-1.2, 1.2);
-      setFloat('comp.gain${i + 1}', compGains[i]);
+      _mirror('comp.gain${i + 1}', compGains[i]);
     }
     _notifyUi();
     scheduleAutoSave();
+
+    final diff = (v - _lastDispatchedCompThreshold).abs();
+    if (_testing || forceFlush || diff >= 0.4) {
+      _compThresholdThrottleTimer?.cancel();
+      _compThresholdThrottleTimer = null;
+      _dispatchCompGainsToEngine();
+    } else {
+      _compThresholdThrottleTimer ??= Timer(const Duration(milliseconds: 30), () {
+        _compThresholdThrottleTimer = null;
+        _dispatchCompGainsToEngine();
+      });
+    }
+  }
+
+  void _dispatchCompGainsToEngine() {
+    _lastDispatchedCompThreshold = compThreshold;
+    for (var i = 0; i < 7; i++) {
+      _markSent('comp.gain${i + 1}');
+      send({'cmd': 'setParam', 'id': 'comp.gain${i + 1}', 'value': compGains[i], 'isFloat': true});
+    }
   }
 
   void setCompRatio(double v) {
