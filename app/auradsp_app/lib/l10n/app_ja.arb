@@ -1447,5 +1447,10 @@
   "plugScanDirsBuiltinHint": "アプリ同梱のフォルダー。自動作成され、削除できません",
   "plugScanDirsRemove": "この項目を削除",
   "plugFormatSoon": "この形式のスキャンとホスト機能は今後のバージョンで対応予定です",
-  "liveprogFontReset": "クリックで既定値に戻す"
+  "liveprogFontReset": "クリックで既定値に戻す",
+  "presetDeleteTitle": "プリセットを削除",
+  "presetDeleteBody": "このプリセットを削除しますか？元に戻せません。",
+  "presetDeleteAction": "削除",
+  "presetDeleteFail": "削除に失敗しました（ファイルが使用中か、既に存在しません）",
+  "presetOverwritten": "同名のプリセット「{name}」を上書きしました"
 }

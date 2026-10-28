@@ -1567,5 +1567,17 @@
   "plugScanDirsBuiltinHint": "应用自带插件目录，自动创建且不可移除",
   "plugScanDirsRemove": "移除该条",
   "plugFormatSoon": "该格式的扫描与挂载将在后续版本支持",
-  "liveprogFontReset": "点击恢复默认"
+  "liveprogFontReset": "点击恢复默认",
+  "presetDeleteTitle": "删除预设",
+  "presetDeleteBody": "确定删除该预设吗？不可撤销。",
+  "presetDeleteAction": "删除",
+  "presetDeleteFail": "删除失败（文件可能被占用或已不存在）",
+  "presetOverwritten": "已覆盖同名预设「{name}」",
+  "@presetOverwritten": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
 }

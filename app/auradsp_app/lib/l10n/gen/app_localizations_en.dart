@@ -1775,7 +1775,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get presetDeleted => 'Preset deleted';
 
   @override
-  String get presetDeleteFail => 'Delete failed';
+  String get presetDeleteFail =>
+      'Delete failed (file may be locked or already gone)';
 
   @override
   String get presetLoaded => 'Preset loaded';
@@ -3435,4 +3436,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get liveprogFontReset => 'click to reset';
+
+  @override
+  String get presetDeleteTitle => 'Delete preset';
+
+  @override
+  String get presetDeleteBody => 'Delete this preset? This cannot be undone.';
+
+  @override
+  String get presetDeleteAction => 'Delete';
+
+  @override
+  String presetOverwritten(String name) {
+    return 'Overwrote the existing preset \"$name\"';
+  }
 }

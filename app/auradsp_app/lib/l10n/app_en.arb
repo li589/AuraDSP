@@ -1447,5 +1447,10 @@
   "plugScanDirsBuiltinHint": "Folder shipped with the app; created automatically and cannot be removed",
   "plugScanDirsRemove": "Remove this folder",
   "plugFormatSoon": "Scanning and hosting for this format will arrive in a later release",
-  "liveprogFontReset": "click to reset"
+  "liveprogFontReset": "click to reset",
+  "presetDeleteTitle": "Delete preset",
+  "presetDeleteBody": "Delete this preset? This cannot be undone.",
+  "presetDeleteAction": "Delete",
+  "presetDeleteFail": "Delete failed (file may be locked or already gone)",
+  "presetOverwritten": "Overwrote the existing preset \"{name}\""
 }

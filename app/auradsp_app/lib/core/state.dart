@@ -227,25 +227,10 @@ class AppModel extends ChangeNotifier {
       }
       list.add(d);
     }
-    if (list.isEmpty) {
-      list.addAll([
-        const AudioDeviceItem(
-          id: 'def_render',
-          name: '系统扬声器 / 扬声器 (Realtek High Definition Audio)',
-          isRender: true,
-        ),
-        const AudioDeviceItem(
-          id: 'def_mic',
-          name: '麦克风阵列 (适用于数字麦克风的英特尔® 智音技术)',
-          isRender: false,
-        ),
-        const AudioDeviceItem(
-          id: 'def_stereo_mix',
-          name: '立体声混音 (Realtek Audio)',
-          isRender: false,
-        ),
-      ]);
-    }
+    // 空列表就返回空（2026-10-28）：此前这里塞 3 条带「Realtek / 英特尔智音」
+    // 名字的**伪造设备**。启动初期引擎尚未上报枚举结果时，UI 会显示并不存在
+    // 的设备；用户选中即写入 config 并落盘，下次被 routing.postApply 的
+    // exists 校验清成空串。设备面板已有「默认设备」项与失效项兜底，无需伪造。
     return list;
   }
 
@@ -287,20 +272,7 @@ class AppModel extends ChangeNotifier {
           list.add(AudioDeviceItem(id: id, name: name, isRender: true));
         }
       }
-      if (list.isEmpty) {
-        list.addAll([
-          const AudioDeviceItem(
-            id: 'def_render_realtek',
-            name: '扬声器 (Realtek High Definition Audio)',
-            isRender: true,
-          ),
-          const AudioDeviceItem(
-            id: 'def_render_usb',
-            name: '耳机 (USB Audio Device)',
-            isRender: true,
-          ),
-        ]);
-      }
+      // 同 filteredWasapiInputs：不再伪造「Realtek / USB Audio Device」占位项。
     }
     return list;
   }

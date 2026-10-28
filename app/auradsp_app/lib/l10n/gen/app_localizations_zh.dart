@@ -1663,7 +1663,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get presetDeleted => '预设已删除';
 
   @override
-  String get presetDeleteFail => '删除失败';
+  String get presetDeleteFail => '删除失败（文件可能被占用或已不存在）';
 
   @override
   String get presetLoaded => '预设已载入';
@@ -3256,4 +3256,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get liveprogFontReset => '点击恢复默认';
+
+  @override
+  String get presetDeleteTitle => '删除预设';
+
+  @override
+  String get presetDeleteBody => '确定删除该预设吗？不可撤销。';
+
+  @override
+  String get presetDeleteAction => '删除';
+
+  @override
+  String presetOverwritten(String name) {
+    return '已覆盖同名预设「$name」';
+  }
 }

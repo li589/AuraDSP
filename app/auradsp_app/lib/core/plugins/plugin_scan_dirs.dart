@@ -79,11 +79,17 @@ abstract final class PluginScanDirs {
     }
 
     if (Platform.isWindows) {
+      // 兜底不写死盘符（系统盘可能不是 C:）：一律由 SystemDrive/SystemRoot
+      // 派生。两者都拿不到就给 null，add() 跳过——宁可少一个候选目录，
+      // 也不去猜一个可能属于别人的路径（F1「盘符钉死」的教训）。
+      final drive = _systemDrive(e);
+      String? underDrive(String leaf) =>
+          drive == null ? null : '$drive\\$leaf';
       final common = e['CommonProgramFiles'] ??
-          r'C:\Program Files\Common Files';
-      final programFiles = e['ProgramFiles'] ?? r'C:\Program Files';
-      final programFilesX86 = e['ProgramFiles(x86)'] ??
-          r'C:\Program Files (x86)';
+          underDrive(r'Program Files\Common Files');
+      final programFiles = e['ProgramFiles'] ?? underDrive('Program Files');
+      final programFilesX86 =
+          e['ProgramFiles(x86)'] ?? underDrive('Program Files (x86)');
       final localApp = e['LOCALAPPDATA'];
       final appData = e['APPDATA'];
 
@@ -136,6 +142,25 @@ abstract final class PluginScanDirs {
 
     return discoverFrom(candidates);
   }
+
+  /// 系统盘根（形如 `C:`）。优先 `SystemDrive`，其次从 `SystemRoot`
+  /// （`C:\Windows`）截取；两者都缺失返回 null——不猜盘符。
+  static String? _systemDrive(Map<String, String> env) {
+    var sd = (env['SystemDrive'] ?? '').trim();
+    while (sd.endsWith('\\') || sd.endsWith('/')) {
+      sd = sd.substring(0, sd.length - 1);
+    }
+    if (RegExp(r'^[A-Za-z]:$').hasMatch(sd)) return sd.toUpperCase();
+    final sr = (env['SystemRoot'] ?? '').trim();
+    final m = RegExp(r'^([A-Za-z]:)\\').firstMatch(sr);
+    return m?.group(1)?.toUpperCase();
+  }
+
+  /// [_systemDrive] 的只读壳，供单元测试钉住「不写死盘符」这条不变量。
+  /// 本文件刻意不引入 flutter/foundation，故不用 @visibleForTesting 注解，
+  /// 按仓库既有的 `...ForTest` 命名约定。
+  static String? systemDriveForTest(Map<String, String> env) =>
+      _systemDrive(env);
 
   /// 存在性过滤 + 规范化 + 去重（保留发现顺序）。
   static List<String> discoverFrom(Iterable<String> candidates) {
