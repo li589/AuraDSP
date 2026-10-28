@@ -258,16 +258,22 @@ class _PluginsPageState extends State<PluginsPage>
                       ),
                     ),
                     const SizedBox(width: AuraSpace.md),
-                    // 格式药丸 Filter
-                    _FilterPills(
-                      selected: manager.filterFormat,
-                      countAll: manager.countAll,
-                      countVst3: manager.countVst3,
-                      countClap: manager.countClap,
-                      countVst2: manager.countVst2,
-                      countAu: manager.countAu,
-                      countLv2: manager.countLv2,
-                      onSelect: (fmt) => manager.setFilterFormat(fmt),
+                    // 格式药丸 Filter —— 窄窗口下允许横向滚动，避免挤压搜索框
+                    // 或撑破整行（2026-10-28 窄宽度回归）。
+                    Flexible(
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: _FilterPills(
+                          selected: manager.filterFormat,
+                          countAll: manager.countAll,
+                          countVst3: manager.countVst3,
+                          countClap: manager.countClap,
+                          countVst2: manager.countVst2,
+                          countAu: manager.countAu,
+                          countLv2: manager.countLv2,
+                          onSelect: (fmt) => manager.setFilterFormat(fmt),
+                        ),
+                      ),
                     ),
                   ],
                 ),

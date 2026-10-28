@@ -14,12 +14,20 @@ class _FeatureBadge extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    // 2026-10-28：徽标文案可能很长（英文尤其），窄窗口下必须允许换行，
+    // 否则 Row 直接溢出视口（无障碍/窄宽度回归）。
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Icon(icon, size: 15, color: color),
         const SizedBox(width: 6),
-        Text(label, style: captionOf(p, color: p.text)),
+        Flexible(
+          child: Text(
+            label,
+            softWrap: true,
+            style: captionOf(p, color: p.text),
+          ),
+        ),
       ],
     );
   }

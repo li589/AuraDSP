@@ -183,11 +183,9 @@ class _PluginListViewState extends State<_PluginListView> {
       child: Scrollbar(
         controller: _scrollCtrl,
         thumbVisibility: true,
-        child: AuraWheelScrollScope(
-          controller: _scrollCtrl,
-          child: ListView.builder(
+        child: ListView.builder(
             controller: _scrollCtrl,
-            physics: const NeverScrollableScrollPhysics(),
+            physics: const AuraListScrollPhysics(),
             shrinkWrap: true,
             itemCount: rows.length,
             itemBuilder: (context, index) {
@@ -239,7 +237,6 @@ class _PluginListViewState extends State<_PluginListView> {
           );
             },
           ),
-        ),
       ),
     );
   }

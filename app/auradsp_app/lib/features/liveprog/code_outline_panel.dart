@@ -207,11 +207,9 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                 : Scrollbar(
                     controller: _outlineScrollCtrl,
                     thumbVisibility: true,
-                    child: AuraWheelScrollScope(
-                      controller: _outlineScrollCtrl,
-                      child: ListView.builder(
+                    child: ListView.builder(
                     controller: _outlineScrollCtrl,
-                    physics: const NeverScrollableScrollPhysics(),
+                    physics: const AuraListScrollPhysics(),
                     itemCount: items.length,
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemBuilder: (ctx, idx) {
@@ -267,7 +265,6 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                         ),
                       );
                     },
-                      ),
                     ),
                   ),
           ),

@@ -1,52 +1,27 @@
-// wheel_scroll.dart —— 内层列表独占鼠标滚轮（2026-10-28 用户定案）。
+// wheel_scroll.dart —— 列表滚轮门控（2026-10-28，修正版）。
 //
-// 需求：脚本 / 插件 / 处理链三个核心页面里，鼠标在「已达到最大显示高度、
-// 滚动条可触发」的列表内滚动时，只滚列表、不带动整页；鼠标在列表外滚动
-// 时整页正常滚动。
+// 需求：脚本 / 插件 / 处理链页面里，鼠标在「可滚动列表」内滚动时只滚列表、
+// 不带动整页；列表不可滚动（内容未超高度）时滚轮放行给页面；列表外滚页面。
 //
-// 实现要点：
-// - 列表本身 physics 必须设为 NeverScrollableScrollPhysics：否则它的
-//   Scrollable 会先注册 PointerSignalResolver，把它自己也滚不动的滚轮
-//   事件「吃掉」（表现为悬停短列表也挡住页面滚动）。
-// - 本组件用 Listener 接收滚轮信号，仅当列表**确实可滚动**
-//   （maxScrollExtent > minScrollExtent）时向 PointerSignalResolver
-//   注册并手动 jumpTo；不可滚动时不注册 → 事件穿透给页面 Scrollable。
-// - 滚动条请用 Scrollbar(controller: 同一 controller, thumbVisibility: true)；
-//   Scrollbar 拖拽走 position.jumpTo，不受 physics 限制。
-import 'package:flutter/gestures.dart';
-import 'package:flutter/material.dart';
+// 为什么用自定义 ScrollPhysics 而不是手动 Listener：
+// Flutter 的 Scrollable 只在 `physics.shouldAcceptUserOffset(position)` 为真
+// 时才注册滚轮信号（scrollable.dart `_receivedPointerSignal`）。默认 physics
+// 会对「不可滚动的短列表」也返回 true，把滚轮吃掉（短列表挡住页面）；而
+// NeverScrollableScrollPhysics 又会让滚动条拖拽失效（拖拽走 applyUserOffset，
+// 但列表被物理禁止）。这里按「是否存在滚动区间」精确表态：
+//   - maxScrollExtent > minScrollExtent → true：滚轮滚列表（到顶到底也不带动
+//     页面，符合用户口径），Scrollbar 拖拽正常；
+//   - 否则 false：滚轮穿透给页面。
+import 'package:flutter/widgets.dart';
 
-class AuraWheelScrollScope extends StatelessWidget {
-  final ScrollController controller;
-  final Widget child;
-
-  const AuraWheelScrollScope({
-    super.key,
-    required this.controller,
-    required this.child,
-  });
+class AuraListScrollPhysics extends ScrollPhysics {
+  const AuraListScrollPhysics({super.parent});
 
   @override
-  Widget build(BuildContext context) {
-    return Listener(
-      onPointerSignal: (event) {
-        if (event is! PointerScrollEvent) return;
-        if (!controller.hasClients) return;
-        final pos = controller.position;
-        if (!pos.hasContentDimensions ||
-            pos.maxScrollExtent <= pos.minScrollExtent) {
-          return; // 列表不可滚：放行，滚轮滚页面。
-        }
-        GestureBinding.instance.pointerSignalResolver.register(event, (e) {
-          final delta = (e as PointerScrollEvent).scrollDelta.dy;
-          final target = (pos.pixels + delta)
-              .clamp(pos.minScrollExtent, pos.maxScrollExtent);
-          if ((target - pos.pixels).abs() > 0.01) {
-            controller.jumpTo(target);
-          }
-        });
-      },
-      child: child,
-    );
-  }
+  AuraListScrollPhysics applyTo(ScrollPhysics? ancestor) =>
+      AuraListScrollPhysics(parent: buildParent(ancestor));
+
+  @override
+  bool shouldAcceptUserOffset(ScrollMetrics position) =>
+      position.maxScrollExtent > position.minScrollExtent;
 }
