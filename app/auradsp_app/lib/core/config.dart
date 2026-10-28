@@ -11,7 +11,7 @@ import 'dart:io';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
-import 'plugin_scan_dirs.dart';
+import 'plugins/plugin_scan_dirs.dart';
 
 import 'error_sink.dart';
 class AppConfig {

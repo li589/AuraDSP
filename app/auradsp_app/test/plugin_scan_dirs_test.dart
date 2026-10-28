@@ -12,9 +12,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/config.dart';
-import 'package:auradsp_app/core/plugin_manager.dart';
-import 'package:auradsp_app/core/plugin_scan_dirs.dart';
-import 'package:auradsp_app/core/text_collation.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
+import 'package:auradsp_app/core/plugins/plugin_scan_dirs.dart';
+import 'package:auradsp_app/core/plugins/text_collation.dart';
 
 PluginMetadata _p(String name, String vendor, {String path = ''}) {
   return PluginMetadata(

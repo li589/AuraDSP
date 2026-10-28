@@ -11,7 +11,7 @@ import 'dart:io';
 
 import 'config.dart';
 import 'audio_modes.dart';
-import 'plugin_manager.dart';
+import 'plugins/plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
 
