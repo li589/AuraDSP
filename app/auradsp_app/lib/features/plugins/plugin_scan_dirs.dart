@@ -14,7 +14,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
 import '../../core/error_sink.dart';
-import '../../core/plugin_scan_dirs.dart';
+import '../../core/plugins/plugin_scan_dirs.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../widgets.dart';

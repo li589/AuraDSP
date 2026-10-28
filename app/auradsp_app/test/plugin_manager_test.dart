@@ -7,7 +7,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/config.dart';
-import 'package:auradsp_app/core/plugin_manager.dart';
+import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 
 void main() {
   // rootBundle（assets/presets/plugin_tables.json）在纯 test() 下需要

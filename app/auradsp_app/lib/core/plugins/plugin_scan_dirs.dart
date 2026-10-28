@@ -12,7 +12,7 @@
 // 内置目录路径由调用方传入（ConfigManager 计算）。
 import 'dart:io';
 
-import 'error_sink.dart';
+import '../error_sink.dart';
 
 /// 一条扫描目录。`enabled` = 参与扫描；`builtin` = 应用自带、不可移除。
 class PluginScanDirEntry {

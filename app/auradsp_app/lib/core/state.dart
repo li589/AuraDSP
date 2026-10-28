@@ -18,7 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
-import 'plugin_scan_dirs.dart';
+import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
     show
@@ -33,7 +33,7 @@ import '../engine/head_tracker.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
-import 'plugin_manager.dart';
+import 'plugins/plugin_manager.dart';
 import 'error_sink.dart';
 import 'param_schema.dart';
 import 'presets.dart';

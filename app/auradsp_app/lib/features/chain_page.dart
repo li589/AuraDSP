@@ -10,7 +10,7 @@ import 'package:flutter/material.dart';
 
 import '../core/design.dart';
 import '../core/nav.dart';
-import '../core/plugin_manager.dart';
+import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../engine/auradsp_ffi.dart' show kVizChannelMax;
