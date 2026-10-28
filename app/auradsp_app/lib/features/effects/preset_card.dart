@@ -33,6 +33,38 @@ class _PresetCardState extends State<_PresetCard> {
     });
   }
 
+  /// 删除前的二次确认（2026-10-28）：此前点 × 即删，误触无挽回。
+  Future<bool> _confirmDelete(AuraPreset item) async {
+    final l = l10nOf(context);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) {
+        final p = paletteOf(ctx);
+        return AlertDialog(
+          backgroundColor: p.panel,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(AuraRadius.md),
+            side: BorderSide(color: p.hairline),
+          ),
+          title: Text(l.presetDeleteTitle, style: sectionOf(p)),
+          content: Text('${item.name}\n${l.presetDeleteBody}', style: labelOf(p)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(l.dlgCancel),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: FilledButton.styleFrom(backgroundColor: p.error),
+              child: Text(l.presetDeleteAction),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed == true;
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
@@ -123,15 +155,17 @@ class _PresetCardState extends State<_PresetCard> {
                       ),
                       const SizedBox(width: 2),
                       InkWell(
-                        onTap: () {
-                          PresetLibrary.deletePreset(item);
+                        onTap: () async {
+                          if (!await _confirmDelete(item)) return;
+                          final deleted = PresetLibrary.deletePreset(item);
+                          if (!context.mounted) return;
                           _reload();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                              content: Text(l.presetDeleted),
-                              duration: const Duration(milliseconds: 1200),
-                            ));
-                          }
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(deleted
+                                ? l.presetDeleted
+                                : l.presetDeleteFail),
+                            duration: const Duration(milliseconds: 1200),
+                          ));
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
@@ -190,12 +224,20 @@ class _PresetCardState extends State<_PresetCard> {
                 onTap: () {
                   final name = _saveNameCtrl.text.trim();
                   if (name.isEmpty) return;
+                  // 同名保存 = 覆盖（预设身份由名称决定），但必须让用户看到这一点，
+                  // 否则「保存成功」的提示掩盖了旧内容已被替换。
+                  final overwriting =
+                      _presets.any((e) => !e.isFactory && e.name == name);
                   final ok = m.saveAsUserPreset(name);
                   if (ok) _saveNameCtrl.clear();
                   _reload();
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                      content: Text(ok ? l.presetSaved : l.presetSaveFail),
+                      content: Text(!ok
+                          ? l.presetSaveFail
+                          : overwriting
+                              ? l.presetOverwritten(name)
+                              : l.presetSaved),
                       duration: const Duration(milliseconds: 1400),
                     ));
                   }

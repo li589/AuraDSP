@@ -1680,7 +1680,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get presetDeleted => 'プリセットを削除しました';
 
   @override
-  String get presetDeleteFail => '削除失敗';
+  String get presetDeleteFail => '削除に失敗しました（ファイルが使用中か、既に存在しません）';
 
   @override
   String get presetLoaded => 'プリセットを適用しました';
@@ -3283,4 +3283,18 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get liveprogFontReset => 'クリックで既定値に戻す';
+
+  @override
+  String get presetDeleteTitle => 'プリセットを削除';
+
+  @override
+  String get presetDeleteBody => 'このプリセットを削除しますか？元に戻せません。';
+
+  @override
+  String get presetDeleteAction => '削除';
+
+  @override
+  String presetOverwritten(String name) {
+    return '同名のプリセット「$name」を上書きしました';
+  }
 }

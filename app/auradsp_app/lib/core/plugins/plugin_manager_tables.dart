@@ -63,9 +63,6 @@ extension PluginManagerTables on PluginManager {
     return false;
   }
 
-  /// 兼容旧调用点：历史崩溃不再阻止打开。
-  bool isEditorOpenBlocked(PluginMetadata meta) => false;
-
   void _sendQuarantineToEngine() {
     _commandSender?.call({
       'cmd': 'setEditorQuarantineList',
@@ -106,16 +103,9 @@ extension PluginManagerTables on PluginManager {
     }
   }
 
-  /// 厂商表填充：命中（小写 name/path 子串）即覆盖引擎 vendor 字段。
-  String? _vendorLookup(PluginMetadata meta) {
-    final ln = meta.name.toLowerCase();
-    final lp = meta.path.toLowerCase();
-    for (final e in _vendorTable.entries) {
-      if (ln.contains(e.key)) return e.value;
-      if (lp.contains(e.key)) return e.value;
-    }
-    return null;
-  }
+  /// 厂商表填充：命中即覆盖引擎 vendor 字段（数据驱动，引擎不硬编码厂商名）。
+  String? _vendorLookup(PluginMetadata meta) =>
+      matchVendorIn(_vendorTable, meta.name, meta.path);
 
   /// 崩溃日志：记录「正在打开该插件编辑器」。进程若在健康期内退出
   /// （未及 sweep 移除），下次启动自动登记。
@@ -232,4 +222,43 @@ extension PluginManagerTables on PluginManager {
       },
     );
   }
+}
+
+/// 厂商表匹配（纯函数，2026-10-28 加固 —— 替代裸子串）。
+///
+/// 规则：
+/// 1. 名称**整体前缀**命中（`KV-Element` ← `kv-element`，保留连字符键）；
+/// 2. 名称按非字母数字切词后**词首前缀**命中（`Zebra2` ← `zebra`）；
+/// 3. 路径按目录段前缀命中（`...\u-he\Zebra2.vst3` ← `u-he`）；
+/// 4. 多个 key 同时命中取**最长**者（等长按字典序），消除对 JSON 键序的
+///    隐式依赖。
+///
+/// 为什么废弃裸子串：`hive` ⊂ `archive`、`element` ⊂ `Elements` 这类误归厂商
+/// 无法从代码层拦，而厂商名会直接显示在插件列表里。
+String? matchVendorIn(Map<String, String> table, String name, String path) {
+  if (table.isEmpty) return null;
+  final ln = name.toLowerCase();
+  final lp = path.toLowerCase();
+  final nameTokens =
+      ln.split(RegExp(r'[^a-z0-9]+')).where((t) => t.isNotEmpty).toList();
+  final pathSegments =
+      lp.split(RegExp(r'[\\/]+')).where((s) => s.isNotEmpty).toList();
+
+  String? bestKey;
+  String? bestVendor;
+  for (final e in table.entries) {
+    final k = e.key.toLowerCase();
+    if (k.isEmpty) continue;
+    final hit = ln.startsWith(k) ||
+        nameTokens.any((t) => t.startsWith(k)) ||
+        pathSegments.any((s) => s.startsWith(k));
+    if (!hit) continue;
+    if (bestKey == null ||
+        k.length > bestKey.length ||
+        (k.length == bestKey.length && k.compareTo(bestKey) < 0)) {
+      bestKey = k;
+      bestVendor = e.value;
+    }
+  }
+  return bestVendor;
 }

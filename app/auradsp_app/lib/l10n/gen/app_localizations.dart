@@ -3217,7 +3217,7 @@ abstract class AppLocalizations {
   /// No description provided for @presetDeleteFail.
   ///
   /// In zh, this message translates to:
-  /// **'删除失败'**
+  /// **'删除失败（文件可能被占用或已不存在）'**
   String get presetDeleteFail;
 
   /// No description provided for @presetLoaded.
@@ -6225,6 +6225,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'点击恢复默认'**
   String get liveprogFontReset;
+
+  /// No description provided for @presetDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除预设'**
+  String get presetDeleteTitle;
+
+  /// No description provided for @presetDeleteBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定删除该预设吗？不可撤销。'**
+  String get presetDeleteBody;
+
+  /// No description provided for @presetDeleteAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除'**
+  String get presetDeleteAction;
+
+  /// No description provided for @presetOverwritten.
+  ///
+  /// In zh, this message translates to:
+  /// **'已覆盖同名预设「{name}」'**
+  String presetOverwritten(String name);
 }
 
 class _AppLocalizationsDelegate
