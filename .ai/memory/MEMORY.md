@@ -188,3 +188,176 @@
   - ② 修复 `engine_chain.cpp` 中编译被拒绝（格式/语法错误）时未重置缓存导致下次正确代码因“同因抑制”被静默丢弃触发 5 秒超时的严重缺陷。
 - **测试全绿与交付**：47 个 Flutter 测试套件 100% 通过；9 项 Python 冒烟测试 100% 通过；`l10n_cjk_guard_test.dart` 0 债务通过；`flutter analyze` 0 警告 0 报错；`build_windows.ps1` 全栈构建与产物同步完毕。
 
+---
+
+## 10-24 → 10-28 精炼状态（2026-10-28 自 .workbuddy/memory 合并；详见各日期日志）
+
+> 搬迁自平台工作记忆 `.workbuddy/memory/MEMORY.md`（该目录不进 git、跨智能体不可见）。
+> 覆盖 10-24 之后沉淀的范式：影子快照/在途守卫、三桥清单、延迟口径、补丁编号、静默异常出口、
+> 插件 DLL 搜索目录、viz 帧 Python 镜像单源、预设系统边界与基线门禁、测试与环境坑。
+> **此后 Windows 引擎/桥/插件/预设的既定范式以本节为准**；新增内容直接写在这里，
+> `.workbuddy/memory/MEMORY.md` 仅作平台工作副本，改动须同步回本节。
+
+仓库 D:\temp_desktop\Proj\JamesDSP，分支 dev。引擎 C（legacy/jdsp）+ Flutter
+前端（app/auradsp_app）。事实源 DLL：core/desktop/windows/out/Release，
+core/desktop/windows/build_engine.sh（**不在仓库根**）构建后自动调
+tools/sync_artifacts.ps1 分发 test/ 等三处。
+
+### 既定范式
+- RT/控制互斥：影子快照 + 块边界原子换指针（P-006 mEQ → B1-a liveprog →
+  B1-b ddc）。控制线程在非活动槽构建，成功后原子换活动指针；RT 块首读一次
+  指针，块内不碰换出实例。
+- 在途守卫双条件：inFlight==0（RT 入口/出口原子增减，覆盖音频停流计数冻结）
+  或 procCount >= retiredAt（换下后跑满 1 块）。有界等待按 GetTickCount64
+  墙钟（Sleep(1) 实际粒度 5-15ms）。无槽返回 -4，绝不退化到活动槽原地写。
+- 加载失败保留旧快照（不静音生效中的效果）。
+- 插件 DLL 搜索目录（F1）：不识别厂商名，规则=插件目录 + 父目录 +
+  win64/Cores/bin/x64/lib/lib64（相对两者各扫）+ AURADSP_PLUGIN_DLL_DIRS；
+  cookie 必须记账 + 引用计数 + RemoveDllDirectory（否则搜索路径单调增长 →
+  同名依赖绑到别人私有副本 → ABI 崩溃，边界 P0）。卸载侧成对 release。
+- 审查 §8 路线 **9/9 完成**：B1-c b50e27f / B2 cc9f03d / B3 8705adf /
+  B4 4446b1d / F1 bfce6e1 / D2 15531b3 / D1 b7819fe / D5 90b15dc / D7 c76f9bd。
+  其后追加：B1-d af54ead / D4-a 91c6e4a / D3 0fc65b1 / D4-b 5e1f3e7 /
+  D6 d8f380f / §7-1 ABI 镜像 778ead1 / §7-5 三桥 .def 扩面 07dc569 /
+  E4 stage16 跨模式 ca3526b / E5+E6 27f5722 / G1 销账 f253981 /
+  §7-2 桥 ABI 协商（P-028）f4638ec。余项仅剩：E1 _onMessage 拆分（大重构，
+  建议单独立项）；E2/E3 已随审查轮落地核实。
+- **viz 帧 Python 镜像单源（§7-1 定论）**：ctypes 镜像只在
+  `tools/bin/viz_frame.py`（导入即跑 sizeof 哨兵 + FIELD_OFFSETS），其余一律
+  `from viz_frame import VizFrame`；门禁 `abi_consistency.py` 三项：M1 全仓
+  不许第二份字段表（判据=方括号区域内含 stage_ch_levels 元组）/ M2 解析头文件
+  按 名称/偏移/尺寸 逐字段比（只查 sizeof 会放行「顺序错但总长凑巧」）/
+  M3 sizeof 哨兵 + AURADSP_ABI 联动。消费方路径解析**向上找仓库根**，
+  不写 '..' 深度算术。冒烟合成片段必须用字符串拼接，否则 M1 自己命中自己。
+- **三桥清单（§7-5 定论）**：asio/vaio/vb 各有 .def ↔ 头文件 ↔ Dart lookup
+  三处清单；门禁 `abi_consistency.py --bridges-only`：B1 双向 1:1 / B2 Dart
+  硬绑定符号必须真导出（必需=直接 lookupFunction，可选=`X?` 字段 + `_lookup`
+  helper 即 _g 系列 6 个）/ B3 Dart typedef 元数 vs C 声明。**活体层不可省**
+  （.def 改了忘重建，纯清单门禁照样绿）。桥重建：cmake --build
+  core/desktop/windows-drivers/out --target auravm/auraasio/auravaio_bridge。
+- **补丁编号（D6 定论）**：`P-NNN` 是唯一权威标识，单调递增永不复用，登记在
+  `engine/legacy/PATCHES.md`（P-001..P-025）。工程专项代号（B1-c/D7/Z13/M3.5-c…）
+  **降级为别名**写在编号后（`P-018 B1-c`），只用于对照审查报告章节。
+  门禁 `tools/bin/patch_id_scan.py` 四规则：编号必须紧跟标记 / 必须已登记 /
+  别名不得映射两个编号 / 登记表不得重复。
+- **静默异常（D4-b 定论）**：出口在 `lib/core/error_sink.dart`——`swallow(e,st)`
+  冷路径、`swallowThrottled(e,st,tag)` 热路径（head 20 + every 500，先判后建）。
+  门禁 `tools/bin/dart_swallow_scan.py` 四规则：R1 空块必留痕或标记 / R2 循环
+  包壳必 throttled（不接受标记豁免）/ R3 禁 `catch (_)` / R4 理由不得敷衍。
+- **延迟口径（D1→D7→B1-d 定论，别再翻车）**：结构性帧数属**工作采样率域**
+  （jdsp.fs），不是设备率——96k 下引擎先 ASRC 到 48k 再跑 DSP。
+  **comp 延迟 = (fftLen − ovpLen) + D**，`D = ovpLen − gcd(ovpLen, 完整工作
+  块长)`；块长整除 hop 时 D=0。实测 48k tf=1：blk512→3584、blk256→3840、
+  blk441→4095。fftLen 随 tfresolution（tf0 1792 / tf1 默认 3584 / tf2 2048 /
+  tf3 0）。D7 曾断言「块长 < ovpLen(512) 时整块直通 = 0ms」——**已被 B1-d
+  推翻**：那是启动缺额没吐导致的直通 bug，不是设计。limiter 默认 lookahead=0 → 0ms，
+  =1 才 (la_len−1)/fs≈1.5ms（原表写死 2.0 是虚报）。ASRC 自身 <0.03ms，
+  只计环形缓冲 ceil(inFs/fs)。
+- comp 启动段直通（B1-d）：根因是「把本块没产出当成本块无需改动」——抽干循环
+  在 OutputBufferCount==0 时一次都不跑 → 输出缓冲仍是未处理原声；且块长与 hop
+  不整除时周期性复发（441 帧块 7 次、500 帧 2 次）。修法 = 启动吐 D 个静音
+  （OLA 爬升段本就静音），此后 可用输出 = D − (I mod ovpLen) ≥ 0 恒成立。
+  代价是延迟 +D，必须计入上报。MAX_OUTPUT_BUFFERS_DRS 2→4（旧值压在越界边界）。
+- 桥的 RT 排空（D2）：三处 FreeTestFile + VmBridge 重建序列统一用
+  `VmPumpCore.h` 的 `RtInBlockGuard`（RAII 成对）+ `WaitRtDrained`（墙钟 3s）。
+  禁止固定 Sleep 等 RT；超限保留不 free（可控泄漏换不可控崩溃）。
+- **预设系统边界（2026-10-28 定论，commit 8486e11）**：`sessionOnly` 标志的语义
+  是「只随会话记忆、不入预设」——routing 全节（设备端点/ASIO/模式镜像 14 项）
+  必须靠它排除，否则载入预设会清空用户设备并即时落盘。`snapshot`/`apply` 双侧
+  都要过滤（节级 `_isSessionOnlySection` + spec 级），漏一侧即单向失效。
+  `defaults.json` 是 fullRewrite 的基线，**与 ParamRegistry 的一致性必须常驻门禁**
+  （生成器 zz_gen 是一次性工具，不跑就漂）；出厂预设键集须与基线完全相同
+  （多=孤儿键、缺=取不到基线）。指纹=f(快照)，快照里放「apply 不回写」的镜像参数
+  → 只切模式就误标「自定义（未保存）」。会话 payload 版本随指纹算法变更抬位，
+  旧锚点按版本丢弃。
+
+### 测试 SOP
+- 反向验证必须做：临时还原 pre-fix 行为重建 DLL，核心断言须失败（非空转证明）。
+- 测试时间戳取块首（=视图指针读取时刻），取返回后会误归跨界块假失败（B1-b 踩）。
+- 断言阈值须用反向验证实测数据标定；时序阈值要避开 CPython GIL 切换间隔 5ms。
+- race 测试压测须防引擎同内容去重早退（交替不同输入）。
+- flutter test 全量并发有 isolate 超时抖动（失败文件逐轮漂移、单跑全过）。
+  **治本法：`--concurrency=1 --timeout=90s`**。**不要为"清残留"杀 dart.exe**——
+  杀了再跑会抖出 `Connection closed before test suite loaded`；直接重跑即全绿。
+  `did not complete` 会**连挂两轮同一文件**（D4-b 轮 settings_asio 连挂两轮、
+  第三轮才全绿）。判据是「单跑全过」；别因为连着两轮同一文件就去改代码。
+- 批量改写 SOP：先 dry-run 打印每文件处数 → **倒序**替换（行号不漂）→
+  **先改块体、后补 import**（import 在文件头会平移后面所有行号）→ 映射表键的
+  路径前缀必须与传入的 rel 完全一致（D4-b 踩：表里 `engine/...`、传的是
+  `lib/engine/...`，22 个 tag 静默失效且门禁照样绿——因为它只查有留痕）。
+- 计时口径：`GetTickCount64` 分辨率 15.6ms，量不了亚毫秒；`Sleep(n)` 只保证
+  「至少 n」，本机实测 `Sleep(1)` 真耗时 10~15.9ms。精确计时一律 QPC +
+  自旋到点（`SwitchToThread`），并加同机 `Sleep(1)` 基线对照，断言写成
+  「事件唤醒 < 基线 − 5ms」，结论不依赖机器定时器分辨率（D3 踩）。
+- 门禁四件套：runner.py --smoke 100% / flutter test --concurrency=1 全绿 /
+  flutter analyze 零 / build_engine.sh 重建同步。
+
+### 契约门禁坑
+- Part H reason-token：set_error 字面量须匹配 `<subject>: <token>[ (detail)]`，
+  新 token 三方登记（engine_error_map.dart kEngineReasonTokens + arb zh/en/ja
+  errXxx + 引擎字面量）。扫描器不匹配三元写法（盲区）。
+- 引擎行数变化后 param_contract fixture 哨兵过期：python tools/gen_param_contract.py
+  再生，确认仅哨兵行变化。
+- dart analyze/编辑后 gen 文件（l10n gen 在 lib/l10n/gen，受 l10n.yaml 指向）。
+- **判标记绝不能按行 grep**（D6 踩）：`grep -v 'P-[0-9]\{3\}'` 会漏掉
+  「编号写在说明文字里」和「日期在编号前」两种形态（同一行别的 P-NNN 把整行
+  过滤掉了），15 处全部漏网。正解=按标记结构解析（`[PATCHED-AuraDSP <tail>]`
+  再判 tail 是否以 P-NNN 开头）。同理扫 `catch (_)` 要先剥注释与字符串。
+- **文件名从名称推导的落盘物（预设）**：保存/删除都不能再靠推导，必须回读内容
+  对账（归一化会碰撞：`My Song` 与 `My_Song` → 同一个 `my_song.json`）；冲突副本
+  加 FNV-1a 短哈希。导入必须版本闸门（`> schemaVersionCurrent` 拒绝）+ 同名改名
+  `Name (2)`（纯数字后缀，语言无关）。
+- **插件表匹配（F3 定论）**：禁裸子串、禁依赖 JSON 键序。规则=名称整体前缀 /
+  切词后词首前缀 / 路径目录段前缀，多键同时命中取最长（等长按字典序）。
+  `hive ⊂ archive`、`element ⊂ Elements` 这类误归只能靠前缀+最长消掉。
+  匹配逻辑做成**纯函数**（`matchVendorIn`）才可单测——私有方法验不了。
+- **设备列表禁伪造占位项**：空枚举就返回空，面板本就有「默认设备」+「已失效」项。
+  另注意语义：输入侧**允许环回**，`isRender=true` 的端点本就该出现在输入列表里。
+- **路径兜底禁写死盘符**（F1 反模式）：Program Files 系列一律由 `SystemDrive`
+  派生（→ `SystemRoot` → null 不猜）。宁可少一个候选目录，不去猜别人的路径。
+
+### 环境
+- 沙箱拦 git stash/npm install/rm（部分场景），bash 工具 cd 前缀可能被剥
+  （用 bash -c 'cd ... && ...' 包装）；长 heredoc 可能被 shell 破坏（改 Write+拼接）。
+- MSYS 路径转换会破坏 /开头的 Windows 路径参数（脚本内用原始字符串）。
+- **md 大文档禁用 Edit/Write**：保存时会跑格式化器，把「引用块内含裸 `|` 的段落」
+  误判成表格 → 插入伪造行 `| - | - |` / `| --- | --- |` 并重排既有表格空格，
+  表现为整段"被吞"+ 上百行假删除。正解=python 脚本字节级替换
+  （`git show HEAD:file` 取底稿 → 精确插入 → 写回），内容里避免裸 `|`。
+  校验三件套：`git diff HEAD --numstat`（不是 `git diff --numstat`，后者比暂存区）
+  + `grep -cE '^\|( *\|)+ *$'` 须为 0 + 标题集合 diff 无漂移。
+- `dart.exe language-server`（VS Code LSP）不可杀；只清非 language-server 的残留。
+
+- **插件扫描目录（P-042 定论）**：目录单源 = `config.pluginScanDirs`
+  （path/enabled/builtin）+ `pluginScanDirsSeeded` 一次性播种平台目录
+  （Win 注册表 HKCU/HKLM\SOFTWARE\VST + 标准目录 / macOS Audio/Plug-Ins /
+  Linux 标准路径，仅收真实存在）；内置目录 `<配置根>/plugins` 自动建、不可移除；
+  引擎 `collectSearchPathsLocked` 有显式目录时只扫传入项（空输入才默认兜底）。
+  列表排序 `core/text_collation`（大小写/变音折叠 + 数字自然序 + 非拉丁码位
+  稳定序，明确不做拼音）；厂商分组未知沉底。
+- **深扫挂死（P-043 定论）**：进程内单项元数据查询 ≤2500ms（detached worker +
+  CV，放弃线程上限 4 → 之后降级快扫）；进程外宿主 IPC 读超时（scan 8s /
+  其它 60s，超时杀宿主下次自动重启）；Dart 侧 aborted 保留上次列表。
+- **构建坑**：`tools/build_windows.ps1` 第 5 步会 `Remove-Item -Recurse` 整个
+  dist 目录（1588 文件）→ 被安全闸门拦；正确做法 = 先 `build_engine.sh`
+  （sync_artifacts 含 dist），再 `Copy-Item runner\Release\* → dist` 增量覆盖。
+  App 运行时 dist/test 副本会被锁 → 必须先关 App。
+
+- **core/plugins 结构（2026-10-28 重构）**：插件域全部在 `lib/core/plugins/`——
+  `plugin_models.dart`（纯数据）、`plugin_manager.dart`（库入口 + export models）、
+  part 扩展 slots/tables/events/cache/ab、`plugin_scan_dirs.dart`、
+  `text_collation.dart`。拆分范式：extension part + 类内 `_notify()` 代理；
+  extension 内类静态成员须 `PluginManager.xxx` 限定，实例字段留类体。
+
+- **列表滚轮隔离（2026-10-28 定论）**：列表 `physics: NeverScrollableScrollPhysics`
+  + `AuraWheelScrollScope(controller)`（ui/wheel_scroll.dart）；可滚动才注册
+  PointerSignalResolver（首注册者胜）、不可滚动放行页面。直接给 ListView
+  默认 physics 会让它的 Scrollable 先吃掉滚轮（短列表也挡住页面）。
+
+- **滚轮隔离与滚动条（2026-10-28 修正定论）**：不要用 NeverScrollableScrollPhysics
+  做滚轮隔离——Scrollbar 拖拽同样受 physics.shouldAcceptUserOffset 门控
+  （scrollbar.dart handleThumbPressUpdate），会连带拖不动。正解 = 自定义
+  ScrollPhysics，`shouldAcceptUserOffset => maxScrollExtent>minScrollExtent`
+  （ui/wheel_scroll.dart AuraListScrollPhysics）。
+- **扫描目录空表契约**：UI 恒发 dirs；空表 → isolate 发 ';' 显式空哨兵，
+  引擎按 ';' 拆零路径、不回落默认目录（'' 仍保留给旧脚本兼容）。
