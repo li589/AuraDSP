@@ -105,8 +105,8 @@ typedef struct auradsp_viz_frame {
     float    spectrum[AURADSP_VIZ_BANDS];
     /* [EQ tap] vendor 链入口（即均衡器输入）的同规格 32 段频谱。
      *
-     * spectrum 取的是**整条链的最终输出**（EQ 之后的混响/卷积/Freeverb/
-     * 插件全都算在内），所以拿它当均衡器面板的背景柱是错的：面板上看到的
+     * spectrum 取的是**整条链的最终输出**（EQ 之后的 vendor 混响/MC FDN/
+     * 卷积/插件全都算在内），所以拿它当均衡器面板的背景柱是错的：面板上看到的
      * 频谱并不是均衡器输出的东西，调整 EQ 时背景柱几乎不动。
      *
      * EQ 位于 libjamesdsp 的单体链内部（processFloatMultiplexd 一次跑完

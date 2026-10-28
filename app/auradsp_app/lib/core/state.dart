@@ -707,8 +707,8 @@ class AppModel extends ChangeNotifier {
 
   /// vendor 链入口（= 均衡器输入）的 32 段频谱，口径与 [spectrum] 相同。
   ///
-  /// [spectrum] 取的是整条链的**最终输出**——EQ 之后的混响 / 卷积 /
-  /// Freeverb / 插件全都算在内。拿它当均衡器面板的背景柱，用户看到的
+  /// [spectrum] 取的是整条链的**最终输出**——EQ 之后的 vendor 混响 /
+  /// MC FDN / 卷积 / 插件全都算在内。拿它当均衡器面板的背景柱，用户看到的
   /// 频谱并不是均衡器输出的东西，调 EQ 时背景柱几乎不动。
   final eqInSpectrum = ValueNotifier<List<double>>(List.filled(32, 0));
   final levelL = ValueNotifier<double>(-90);

@@ -201,7 +201,7 @@ struct Params {
     std::atomic<int32_t>  exciter_oversample{1}; /* 0=1x节能 1=2x高精抗混叠过采样 */
     /* 每效果输出增益门（dB [-12,6]）+ 自动增益补偿开关。
      * bass/eq/tube/comp 落地 vendor（P-010 的 fxOutGain/fxAutoGain）；
-     * reverb 落地引擎侧 Freeverb。 */
+     * reverb 落 vendor fx 槽 5（立体声路径）/ MC FDN（离散多声道）。 */
     std::atomic<float>    bass_outgain{0.0f};
     std::atomic<int32_t>  bass_autogain{0};
     std::atomic<float>    eq_outgain{0.0f};
@@ -274,7 +274,8 @@ struct Params {
     std::atomic<float>    dyneq_h_gain{0.0f};
     std::atomic<float>    dyneq_h_range{6.0f};
     std::atomic<float>    dyneq_h_threshold{-30.0f};
-    /* M5-c：参数化混响（Freeverb，T2 档） */
+    /* M5-c：混响自定义参数（freeverb.* 为 ABI 兼容名；
+     * 立体声路径映射 vendor Progenitor2，离散多声道路径驱动 MC FDN）。 */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
     std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
