@@ -1180,7 +1180,7 @@ static const EngineParamDesc kEngineParamTable[] = {
     PARAM_INT("eq.channels", eq_channels, 0, 255, nullptr),
     PARAM_INT("eq.channel_mask", eq_channels, 0, 255, nullptr),  /* deprecated alias of eq.channels */
 
-    // 08 混响 (Reverb / Freeverb)
+    // 08 混响 (Reverb；freeverb.* 为自定义参数/兼容别名)
     PARAM_CUSTOM_SET_STANDARD_GET("reverb.preset", reverb_preset, ParamType::kInt32, set_reverb_preset),
     /* WP0 脚手架：混响边界。predelay 仅立体声自定义路径消费（WP2），
      * lfe 仅 MC FDN 路径消费（WP1）；engine 为只读诊断。 */

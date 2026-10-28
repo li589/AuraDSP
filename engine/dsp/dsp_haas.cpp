@@ -4,8 +4,8 @@
 
 
 /* Haas 差分环绕（延迟 D 的那一侧由 haas.side 决定 + 干湿混合，另一侧恒直通
- * 保单声道兼容）。位置：Stage 2 后 / Freeverb 前——vendor 内部展宽拆不出来，
- * vendor 出口是能挂的最晚空间点（spec 链序 stereo→haas→reverb 的可实现形态）。
+ * 保单声道兼容）。位置：Stage 2 后 / 离散 MC 混响前——vendor 内部展宽拆不出来，
+ * vendor 出口是能挂的最晚空间点（立体声混响已在 vendor 段内完成）。
  * RT 安全：纯延迟线，无分配无锁；mix=0 时仍持续录制延迟环，
  * 避免开轮瞬间爆出陈旧音频。 */
 void haas_process(auradsp_handle h, float* io, int frames) {

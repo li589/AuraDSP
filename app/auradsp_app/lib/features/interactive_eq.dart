@@ -219,7 +219,7 @@ class _InteractiveSpectrumEQPanelState
                                         painter: _SpectrumEQPainter(
                                           palette: p,
                                           // 背景柱画的是**均衡器输出**频谱，不是整链输出：
-                                          // EQ 之后的混响/卷积/Freeverb/插件全都混在
+                                          // EQ 之后的 vendor 混响/MC FDN/卷积/插件全都混在
                                           // model.spectrum 里，拿它当背景，用户看到的根本不是
                                           // 均衡器输出的东西。EQ 在 vendor 单体链内部拿不到
                                           // 输出 tap，于是按 |Y| = |X|·|H_eq| 用 EQ 输入谱
