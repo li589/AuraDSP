@@ -1477,7 +1477,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final dirs = (m['dirs'] as List?)?.map((e) => e.toString()).toList();
               final dir = (m['dir'] as String?) ?? '';
               final deep = (m['deep'] as bool?) ?? false;
-              final scanDir = (dirs != null && dirs.isNotEmpty) ? dirs.join(';') : dir;
+              // 2026-10-28：dirs 非 null = 调用方显式给出目录集（可能为空）。
+              // 空表用 ';' 作「显式空」哨兵：引擎按 ';' 拆分得到零个有效
+              // 路径 → 不再回落默认目录（否则全取消勾选仍会扫出插件）。
+              final scanDir =
+                  dirs != null ? (dirs.isEmpty ? ';' : dirs.join(';')) : dir;
               // C2：分块扫描是异步的——本 case 在同步消息循环里（不能 await），
               // 故以 fire-and-forget 启动，扫描在事件循环里与音频泵交替推进，
               // 进度与完成都以事件回传（对外契约与同步路径一致）。

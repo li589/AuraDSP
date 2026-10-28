@@ -29,16 +29,13 @@ Widget _host({
               child: Scrollbar(
                 controller: listCtrl,
                 thumbVisibility: true,
-                child: AuraWheelScrollScope(
+                child: ListView.builder(
                   controller: listCtrl,
-                  child: ListView.builder(
-                    controller: listCtrl,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: items,
-                    itemBuilder: (_, i) => SizedBox(
-                      height: 40,
-                      child: Text('item $i'),
-                    ),
+                  physics: const AuraListScrollPhysics(),
+                  itemCount: items,
+                  itemBuilder: (_, i) => SizedBox(
+                    height: 40,
+                    child: Text('item $i'),
                   ),
                 ),
               ),
@@ -60,6 +57,7 @@ Future<void> _wheel(WidgetTester tester, Offset pos, double dy) async {
   await tester.pumpAndSettle();
 }
 
+
 void main() {
   testWidgets('列表可滚：滚轮只滚列表，页面不跟随', (tester) async {
     final pageCtrl = ScrollController();
@@ -77,6 +75,13 @@ void main() {
 
     expect(listCtrl.offset, greaterThan(0), reason: '列表应当滚动');
     expect(pageCtrl.offset, 0, reason: '页面不应跟随滚动');
+
+    // 同一门控也是 Scrollbar 拖拽的前提（SDK handleThumbPressUpdate 检查
+    // physics.shouldAcceptUserOffset）：可滚列表必须返回 true。
+    final pos = tester
+        .state<ScrollableState>(find.byType(Scrollable).last)
+        .position;
+    expect(pos.physics.shouldAcceptUserOffset(pos), isTrue);
   });
 
   testWidgets('列表不可滚：滚轮放行给页面', (tester) async {
@@ -95,6 +100,11 @@ void main() {
 
     expect(listCtrl.offset, 0, reason: '列表无区间，不应滚动');
     expect(pageCtrl.offset, greaterThan(0), reason: '页面应当滚动');
+    final pos = tester
+        .state<ScrollableState>(find.byType(Scrollable).last)
+        .position;
+    expect(pos.physics.shouldAcceptUserOffset(pos), isFalse,
+        reason: '无滚动区间时必须放行滚轮/不拦页面');
   });
 
   testWidgets('列表外滚轮：页面正常滚动', (tester) async {
@@ -113,4 +123,5 @@ void main() {
     expect(pageCtrl.offset, greaterThan(0), reason: '页面应当滚动');
     expect(listCtrl.offset, 0, reason: '列表不应被滚动');
   });
+
 }

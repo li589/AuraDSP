@@ -357,7 +357,10 @@ class PluginManager extends ChangeNotifier {
     _commandSender?.call({
       'cmd': 'pluginScan',
       'dir': dir,
-      'dirs': allDirs.isNotEmpty ? allDirs : null,
+      // 2026-10-28 修复：**恒发** dirs（含空表）。旧实现空表发 null，isolate
+      // 回落到引擎的「默认目录兜底」——用户把勾选全部取消后仍能扫出插件。
+      // 空表由 isolate 转成显式空哨兵（见 audio_slots.dart）。
+      'dirs': allDirs,
       'deep': deep,
     });
   }

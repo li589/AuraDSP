@@ -246,11 +246,9 @@ class _ChainPageState extends State<ChainPage> {
                   child: Scrollbar(
                     controller: _chainScrollCtrl,
                     thumbVisibility: true,
-                    child: AuraWheelScrollScope(
-                      controller: _chainScrollCtrl,
-                      child: ReorderableListView.builder(
+                    child: ReorderableListView.builder(
                     scrollController: _chainScrollCtrl,
-                    physics: const NeverScrollableScrollPhysics(),
+                    physics: const AuraListScrollPhysics(),
                     buildDefaultDragHandles: false,
                     itemCount: _order.length,
                     onReorder: (oldI, newI) { // ignore: deprecated_member_use
@@ -379,7 +377,6 @@ class _ChainPageState extends State<ChainPage> {
                         ),
                       );
                     },
-                      ),
                     ),
                   ),
                 ),

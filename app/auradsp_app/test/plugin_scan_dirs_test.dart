@@ -175,4 +175,15 @@ void main() {
       expect(m.config.pluginScanDirs.any((e) => e.builtin), isTrue);
     });
   });
+
+  test('全部取消勾选时 scan 下发空 dirs（显式空，不再回落默认目录）', () {
+    final sent = <Map<String, dynamic>>[];
+    final m = PluginManager(commandSender: (msg) => sent.add(msg));
+    m.setScanDirs(const []);
+    m.scan();
+    final cmd = sent.last;
+    expect(cmd['cmd'], 'pluginScan');
+    expect(cmd['dirs'], isEmpty,
+        reason: '空表必须显式下发，null 会触发引擎默认目录兜底');
+  });
 }
