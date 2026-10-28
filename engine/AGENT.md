@@ -36,10 +36,12 @@ engine/
 3. `auradsp_engine.cpp`：`set_param`（存值+钳位；需即时下发才调 vendor setter）
    + `get_param` 回读。钳位与 dsp 内双保险。
 4. `chain/engine_chain.cpp`：`process_stereo_chain` 内按链序调用（注释写清相对位置）。
-   当前链序：gate → deesser → filter → bassmono → basspsycho → Stage 0 Pre-DSP 插件 →
+   当前立体声链序：gate(+deesser) → filter → bassmono → basspsycho → Stage 0 Pre-DSP 插件 →
    shelf → dyneq → Stage 1 Pre-Vendor 插件 → vendor 12 级链 → Stage 2 Post-Vendor 插件 →
-   haas → spatial → exciter → freeverb → Stage 3 Post-Reverb 插件 → loudness → NaN/Inf 清洗 +
+   haas → spatial → exciter → Stage 3 Post-Reverb 插件 → loudness → NaN/Inf 清洗 +
    ±10 钳位 → Stage 4 Post-Limiter 插件。
+   混响边界（WP1）：立体声/矩阵/双耳路径由 vendor Progenitor2 承担；离散多声道路径在
+   exciter 之后、Stage 3 之前调用 MC FDN（`dsp_mc_reverb.cpp`），两套混响不会同时运行。
 5. `core/desktop/windows/CMakeLists.txt`：源表加文件。
 6. `test/smoke/smoke_xxx.py` + `test/runner.py` 登记（未登记 = 废测）。
 7. `graph.effects` 注册表加条目 **并同步计数注释**；容量门 2048（payload 近 1KB，
@@ -59,7 +61,7 @@ engine/
   `post`+`limiter` 两条展示）；`graph.order` 经 `JamesDSPRebuildChain` 严格校验
   （12 个恰好一次，集合非法返回 -1 且保持原表）。
   engine 自研 stage 顺序钉死在 chain 里，重排页只动展示序（Issue #4）。
-  ⚠️ App 侧下发的是**全量** 19 个 id（含 7 个自研 stage），必须先过
+  ⚠️ App 侧下发的是**全量** 19 个 id（含 8 个自研 stage），必须先过
   `JamesDSPFilterVendorOrder`（P-013）过滤成 vendor 的 12 个再喂 `RebuildChain`，
   否则任何 App 载荷都必然 -1（2026-10-16 修复）。
 

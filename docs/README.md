@@ -136,4 +136,4 @@
 3. **真相源同步**：目录、依赖方向、构建命令、已验证决策表变化，必须同步 `项目架构与开发规范.md` §2/§4/§5/§6。
 4. **不复述代码**：文档记录**为什么**与**契约**，字段级细节以头文件注释为准（见 `engine/auradsp_engine.h` 参数语义表）。
 5. **每日沉淀**：会话记忆与教训写入 `.ai/memory/`（AI 自治沉淀区，无需人工介入）。
-6. **链接检查**：文档增删/移动后运行 `python tools/bin/check_doc_links.py`；当前项目文档相对链接应为 0 missing。`docs/参考技术手册/` 为第三方镜像，内部相对链接不纳入检查。
+6. **链接检查**：文档增删/移动后运行 `python tools/bin/check_doc_links.py`；活文档（`00-总览/`、`adr/`、根 `README.md`/`AGENT.md`/`CLAUDE.md`、`engine/AGENT.md`、UI 规范）应为 0 missing。`30-审查/` 与 `20-执行/` 中指向已删除/迁移文件的 dated 历史链接不原地改写，当前登记 11 条（`dsp_freeverb.cpp` 与 2026-10-20 迁移前的 `engine/host/*`）；`docs/参考技术手册/` 为第三方镜像，内部相对链接不纳入检查。

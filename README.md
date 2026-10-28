@@ -14,7 +14,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | 关键面 | 现状 |
 |---|---|
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
-| 处理能力 | 23 个处理阶段 = 自研 11 个效果 TU + vendor 12 级可重排序链 + 插件 4 槽 × 5 级插入 |
+| 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
 | 插件宿主 | VST3 / CLAP 64 位；默认进程内，`AURA_PLUGIN_HOST_MODE=process` 切进程外硬隔离 |
 | 质量门禁 | analyze 零问题 · Dart 55 个测试文件 / 580+ 用例 · 引擎冒烟 110 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 |
 
@@ -80,12 +80,12 @@ Android 侧为 `root` / `rootless`。驱动套件在 `core/desktop/windows-drive
 ```text
 输入
  │
- ├→ 前级（Category A，8 声道独立掩码）
- │     gate · deesser · filter · bassmono · bass（心理声学）· shelf · dyneq · comp
- ├→ 插件 Pre-DSP（4 槽 × 5 级拓扑之一）
- ├→ vendor 12 级链（legacy，内部可重排序）
- ├→ 后级舞台：haas · spatial · exciter · loudness · Freeverb
- └→ 输出级：Lookahead Limiter → 安全钳位 → 插件 Post-Limiter
+ ├→ 前级：gate(+deesser) · filter · bassmono · bass（心理声学）· Stage 0 Pre-DSP 插件
+ │     · shelf · dyneq · Stage 1 Pre-Vendor 插件
+ ├→ vendor 12 级链（legacy，内部可重排序；立体声/矩阵/双耳混响 = Progenitor2）
+ ├→ 后级：Stage 2 Post-Vendor 插件 · haas · spatial · exciter
+ ├→ 混响：离散多声道在 exciter 后、Stage 3 前走 MC FDN（`dsp_mc_reverb.cpp`）
+ └→ 输出：Stage 3 Post-Reverb 插件 · loudness · Lookahead Limiter → 安全钳位 → Stage 4 Post-Limiter 插件
  │
 输出
 ```
@@ -101,10 +101,10 @@ Android 侧为 `root` / `rootless`。驱动套件在 `core/desktop/windows-drive
 | `shelf` | 低频搁架 biquad |
 | `dyneq` | 三段全参数动态 EQ（见下） |
 | `haas` | Haas 差分环绕 |
-| `spatial` | 参数化 HRTF + 镜像源早期反射 + FDN 晚期 |
+| `spatial` | 参数化 HRTF + 镜像源早期反射（晚期混响由 vendor / MC FDN 承担） |
 | `exciter` | 谐波激励器 |
 | `loudness` | 等响度补偿（简化 ISO 226） |
-| `freeverb` | 参数化混响（Schroeder-Moorer） |
+| `mc_reverb` | 离散多声道 FDN 混响（`dsp_mc_reverb.cpp`；立体声/矩阵/双耳走 vendor Progenitor2） |
 
 `dyneq` 细节：Low shelf 20–500Hz / Mid bell 200–8kHz / High shelf 2k–20kHz，每段含
 `enable / freq / q / gain / range / threshold`，全局 `attack / release`；静态 RBJ + 动态谱减
