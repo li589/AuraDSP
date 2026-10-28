@@ -859,7 +859,18 @@ void PluginHostManager::commitInstanceLocked(size_t slot, std::unique_ptr<IPlugi
                                                     : (bus.mainInChannels > 0 ? bus.mainInChannels : 2),
                             std::memory_order_relaxed);
     s.hasActive.store(true, std::memory_order_release);
-    s.bypassed.store(false, std::memory_order_release);
+    /* P-041 挂载即旁路（2026-10-28）：新实例落座时槽强制进入旁路态。
+     * 旧实现 store(false)（出厂激活）与 UI 的「挂载即旁路」策略脱节：
+     * VB 多总线下后台补挂组在 SlotLoad 回写镜像时会把用户已下发的
+     * bypass=1 覆盖成引擎出厂的 0 → 组 1..N-1 实际激活而 UI 显示旁路
+     * （假旁路）；异步加载竞态下先到的 setBypass(true) 也会被本处的
+     * false 抹掉。改为挂载恒旁路后：三条路（同步挂载 / 后台补挂 /
+     * 会话回放）全部以「旁路 → 用户显式取消旁路」单一路径生效；
+     * 旁路期间实例不进音频路径（processInterleavedN 早退），编辑器
+     * 打开也无表针（预期行为），用户启用后恢复。会话回放恢复用户
+     * 保存的旁路值由 Dart 侧在 load 完成后显式下发（恒发，见
+     * state_session.dart）。 */
+    s.bypassed.store(true, std::memory_order_release);
     s.processCalls.store(0, std::memory_order_relaxed);
     s.inRmsBits.store(0, std::memory_order_relaxed);
     s.outRmsBits.store(0, std::memory_order_relaxed);

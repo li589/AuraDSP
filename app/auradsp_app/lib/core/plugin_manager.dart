@@ -1154,13 +1154,11 @@ class PluginManager extends ChangeNotifier {
         // P2 边界：挂载成功后自动应用激活 A/B 预设（若有记录）——
         // 模式切换/重挂后插件是出厂态，不恢复会丢调音。
         _restoreAbAfterLoad(slot);
-        // 默认旁路（2026-10-22）：挂载即旁路态（诚实显示橙色旁路），
-        // 大插件不立即冲击音频；用户手动取消旁路才生效。
-        _commandSender?.call({
-          'cmd': 'pluginSlotSetBypass',
-          'slot': slot,
-          'bypass': true,
-        });
+        // 挂载即旁路（P-041，2026-10-28）：引擎 commitInstanceLocked 现在
+        // 挂载时恒置旁路（本处旧的 bypass:true 冗余下发已删——它会在会话
+        // 回放恢复 bypass=false 的槽之后到达，把用户保存的激活态覆盖成
+        // 旁路）。UI 状态直接跟随引擎回读：挂载后 isSlotBypassed==true，
+        // 用户手动取消旁路才生效。
       }
       _slotStages[slot] = stage;
       _parseStatusJsonForSlot(slot, rawStatus);

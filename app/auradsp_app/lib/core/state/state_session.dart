@@ -364,13 +364,14 @@ extension StateSession on AppModel {
                 'stage': item.stage,
               });
             }
-            if (item.bypass) {
-              send({
-                'cmd': 'pluginSlotSetBypass',
-                'slot': item.slot,
-                'bypass': true,
-              });
-            }
+            // P-041（2026-10-28）：引擎挂载即旁路，回放必须**恒发**保存的
+            // 旁路值——旧实现只发 true，保存为激活的槽挂载后被引擎挂载旁路
+            // 卡死（无人下发 false）。
+            send({
+              'cmd': 'pluginSlotSetBypass',
+              'slot': item.slot,
+              'bypass': item.bypass,
+            });
           }
         }
       } else if (savedPluginPath != null &&
@@ -382,9 +383,8 @@ extension StateSession on AppModel {
           'path': savedPluginPath!,
           'id': savedPluginId,
         });
-        if (savedPluginBypass) {
-          send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': true});
-        }
+        // P-041：恒发保存的旁路值（挂载即旁路，激活槽必须显式解旁路）。
+        send({'cmd': 'pluginSlotSetBypass', 'slot': 0, 'bypass': savedPluginBypass});
       }
     } finally {
       _isReplayingSession = false;

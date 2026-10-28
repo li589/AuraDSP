@@ -860,3 +860,49 @@ yquist * 0.999，
 - **行为影响**：无（纯绘制刷新判定收紧，绘制结果逐位不变）。
 - **验收**：D6 门禁全绿（本条目即登记）。
 - **上游同步冲突风险**：无（纯 Flutter 侧逻辑，无 vendor 代码）。
+## P-041 插件挂载即旁路——假旁路根治 + 编辑器无可视化闭环（实施：2026-10-28）
+
+- **状态**：已实施（2026-10-28）
+- **位置**：`engine/plugins/driver/plugin_host_manager.cpp`（`commitInstanceLocked`）
+  + `app/auradsp_app/lib/core/plugin_manager.dart`（`onPluginSlotLoaded`）
+  + `app/auradsp_app/lib/core/state/state_session.dart`（回放恒发 bypass）
+  + `app/auradsp_app/lib/engine/audio_isolate.dart`（在途加载 bypass 暂存）
+  + 9 个冒烟测试补显式解旁路。
+- **动机**（用户实测两症状，同根因）：
+  ① **假旁路**：UI 显示旁路但音频实际流经插件。UI 侧 2026-10-22 已有
+  「挂载即旁路」策略（挂载成功后下发 bypass:true），但引擎
+  `commitInstanceLocked` 出厂激活（`bypassed.store(false)`）在三处把它
+  打掉：VB 后台补挂组 `LoadGroupForSlot` 的 `SlotLoad` 会用刚 commit 的
+  引擎态（bypass=0）**回写镜像**，覆盖 UI 已下发的 1 → 组 1..N-1 全部
+  激活；异步加载窗口内先到的 bypass 请求被 commit 的 false 抹掉；
+  会话回放保存为激活的槽被 `onPluginSlotLoaded` 的无条件 mount-bypass
+  下发覆盖成旁路（且旧回放只发 true 不发 false，激活槽无人解旁路）。
+  ② **编辑器无可视化**：编辑器固定开在组 0（`PluginEngine()`），而组 0
+  是唯一真旁路的实例（组 1..N-1 被 ① 误激活）→ 无 processBlock → 无
+  表针，可听效果全部来自被误激活的组。**定性为 bug 而非策略**，无需
+  「显示/不显示实时流」开关。
+- **内容**：引擎挂载恒旁路（commit 存 true，单源真值，三路时序全部
+  免疫）；UI 删除冗余 mount-bypass 下发（它是会话回放覆盖的根源）；
+  会话回放恒发保存的 bypass 值；isolate 对在途加载窗口内的 bypass
+  请求暂存、load 完成后补发（非桥异步路径竞态）；VB 桥路径 load 同步
+  无竞态、镜像回写在挂载旁路语义下自洽（无需改桥）。
+- **与 Z12 超预算保护的适配**：槽级 bypass 与链级 enable 正交——旁路槽
+  不进音频路径（`processInterleavedN` 早退），挂载窗口内链零负载，天然
+  不触发保护；用户解旁路后若重插件超预算，Z12 链级收窄照常生效（链
+  掩码决定哪些组进路径，槽 bypass 决定槽是否进路径），保护退出后掩码
+  重放不碰槽 bypass。加载期旁路（g_loadSuspending）同理不受影响。
+- **行为影响**：① 所有模式（本地/VAIO/ASIO/APO/VB）挂载后槽一律旁路
+  （UI 橙色「旁路」），用户显式打开才生效——与 UI 既有显示语义首次
+  真正对齐；② 挂载瞬间重插件零音频冲击（此前出厂激活会立即吃 CPU）；
+  ③ 旁路期间 F-2 真旁路把插件 deactivate（VST3 setActive(false)），
+  编辑器无表针属预期；④ 优雅卸载的 bypass:true 前置（unload 流程）
+  与挂载旁路衔接一致，无残留。
+- **验收**：`smoke_plugin_bypass_lifecycle` 挂载断言翻转（==1）+ 5 轮
+  切换稳态逐位不回归；`smoke_vm_plugin_load_fast` 新增「挂载即旁路」+
+  「解旁路后 processCalls 恢复」断言；9 个旧契约冒烟补显式解旁路后
+  全量 100%；flutter analyze 零问题；plugin/会话相关 Dart 测试全过。
+  9 个测试文件：plugin_host / plugin_host_process（4 处 load）/ pdc /
+  bus / chain_stages / channels / chain_enable / cross_mode_consistency /
+  bypass_lifecycle。
+- **上游同步冲突风险**：低（engine 单行语义翻转 + Dart 三处小改；
+  vendor 代码零触碰）。

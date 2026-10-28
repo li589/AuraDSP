@@ -42,6 +42,9 @@ lib.auradsp_plugin_slot_load.argtypes = [ctypes.c_void_p, ctypes.c_int32,
                                          ctypes.c_char_p, ctypes.c_char_p]
 lib.auradsp_plugin_slot_unload.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_unload.argtypes = [ctypes.c_void_p, ctypes.c_int32]
+lib.auradsp_plugin_slot_set_bypass.restype = ctypes.c_int32
+lib.auradsp_plugin_slot_set_bypass.argtypes = [ctypes.c_void_p, ctypes.c_int32,
+                                               ctypes.c_int32]
 lib.auradsp_plugin_slot_get_status.restype = ctypes.c_int32
 lib.auradsp_plugin_slot_get_status.argtypes = [ctypes.c_void_p, ctypes.c_int32,
                                                ctypes.c_char_p, ctypes.c_int32]
@@ -97,6 +100,8 @@ def main():
     assert target, "no plugin found"
     assert lib.auradsp_plugin_slot_load(h, 0, target["path"].encode(),
                                         target.get("id", "").encode()) == 1, "load failed"
+    # P-041 挂载即旁路：显式解旁路（旁路槽 max_diff 恒 0，[1] 判据失效）。
+    assert lib.auradsp_plugin_slot_set_bypass(h, 0, 0) == 1
 
     # 预跑若干块，让插件流水稳定（首块含懒启动暂态）
     run_stream(h)
