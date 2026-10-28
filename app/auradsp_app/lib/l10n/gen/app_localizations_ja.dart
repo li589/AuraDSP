@@ -2609,17 +2609,17 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugBypassed => 'バイパス中';
 
   @override
-  String get plugCustomTitle => 'カスタムプラグイン検索フォルダ';
+  String get plugCustomTitle => 'プラグインスキャンフォルダ';
 
   @override
-  String get plugCustomHint => '他ドライブやDAWのVST3/CLAPパスを追加。スキャン時に自動統合。';
+  String get plugCustomHint =>
+      'スキャンするフォルダにチェックを入れます（標準フォルダは自動登録済み、内蔵フォルダは削除不可）。チェックしたフォルダとそのサブフォルダのみ走査します。';
 
   @override
   String get plugCustomAdd => 'フォルダを追加';
 
   @override
-  String get plugCustomEmpty =>
-      'カスタムフォルダはまだありません。標準オーディオプラグインパスは自動的にスキャンされます。右上から追加できます。';
+  String get plugCustomEmpty => 'スキャンフォルダが空です。「フォルダを追加」からプラグインの場所を選択してください。';
 
   @override
   String plugMountTitle(int n) {
@@ -3257,4 +3257,30 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get lpApoNoFiltersPreampOnly => 'プリアンプのみモード (フィルタなし)';
+
+  @override
+  String get plugScanDirsSelectAll => 'すべて選択';
+
+  @override
+  String get plugScanDirsClear => 'すべてのチェックを外す';
+
+  @override
+  String plugScanDirsEnabledCount(int enabled, int total) {
+    return '$enabled/$total 件有効';
+  }
+
+  @override
+  String get plugScanDirsBuiltin => '内蔵';
+
+  @override
+  String get plugScanDirsBuiltinHint => 'アプリ同梱のフォルダー。自動作成され、削除できません';
+
+  @override
+  String get plugScanDirsRemove => 'この項目を削除';
+
+  @override
+  String get plugFormatSoon => 'この形式のスキャンとホスト機能は今後のバージョンで対応予定です';
+
+  @override
+  String get liveprogFontReset => 'クリックで既定値に戻す';
 }

@@ -1078,10 +1078,10 @@
     }
   },
   "plugBypassed": "Bypassed",
-  "plugCustomTitle": "Custom Plugin Search Folders",
-  "plugCustomHint": "Add VST3/CLAP paths from other drives or your DAW; they merge into scans automatically.",
+  "plugCustomTitle": "Plugin Scan Folders",
+  "plugCustomHint": "Check the folders to scan (standard platform folders are pre-added; the built-in folder cannot be removed). Only checked folders and their subfolders are scanned.",
   "plugCustomAdd": "Add Folder",
-  "plugCustomEmpty": "No custom folders yet. Standard system audio plugin directories are scanned automatically. Click top-right to add custom locations.",
+  "plugCustomEmpty": "The scan folder list is empty. Use \"Add folder\" to pick a plugin directory.",
   "plugMountTitle": "Mount Status (Slot {n})",
   "@plugMountTitle": {
     "placeholders": {
@@ -1429,5 +1429,23 @@
       }
     }
   },
-  "lpApoNoFiltersPreampOnly": "Preamp Only Mode (No Filters)"
+  "lpApoNoFiltersPreampOnly": "Preamp Only Mode (No Filters)",
+  "plugScanDirsSelectAll": "Select all",
+  "plugScanDirsClear": "Clear all checks",
+  "plugScanDirsEnabledCount": "{enabled}/{total} enabled",
+  "@plugScanDirsEnabledCount":   {
+    "placeholders": {
+      "enabled": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "plugScanDirsBuiltin": "Built-in",
+  "plugScanDirsBuiltinHint": "Folder shipped with the app; created automatically and cannot be removed",
+  "plugScanDirsRemove": "Remove this folder",
+  "plugFormatSoon": "Scanning and hosting for this format will arrive in a later release",
+  "liveprogFontReset": "click to reset"
 }

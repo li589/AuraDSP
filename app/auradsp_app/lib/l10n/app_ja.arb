@@ -1078,10 +1078,10 @@
     }
   },
   "plugBypassed": "バイパス中",
-  "plugCustomTitle": "カスタムプラグイン検索フォルダ",
-  "plugCustomHint": "他ドライブやDAWのVST3/CLAPパスを追加。スキャン時に自動統合。",
+  "plugCustomTitle": "プラグインスキャンフォルダ",
+  "plugCustomHint": "スキャンするフォルダにチェックを入れます（標準フォルダは自動登録済み、内蔵フォルダは削除不可）。チェックしたフォルダとそのサブフォルダのみ走査します。",
   "plugCustomAdd": "フォルダを追加",
-  "plugCustomEmpty": "カスタムフォルダはまだありません。標準オーディオプラグインパスは自動的にスキャンされます。右上から追加できます。",
+  "plugCustomEmpty": "スキャンフォルダが空です。「フォルダを追加」からプラグインの場所を選択してください。",
   "plugMountTitle": "マウント状態（スロット{n}）",
   "@plugMountTitle": {
     "placeholders": {
@@ -1429,5 +1429,23 @@
       }
     }
   },
-  "lpApoNoFiltersPreampOnly": "プリアンプのみモード (フィルタなし)"
+  "lpApoNoFiltersPreampOnly": "プリアンプのみモード (フィルタなし)",
+  "plugScanDirsSelectAll": "すべて選択",
+  "plugScanDirsClear": "すべてのチェックを外す",
+  "plugScanDirsEnabledCount": "{enabled}/{total} 件有効",
+  "@plugScanDirsEnabledCount":   {
+    "placeholders": {
+      "enabled": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "plugScanDirsBuiltin": "内蔵",
+  "plugScanDirsBuiltinHint": "アプリ同梱のフォルダー。自動作成され、削除できません",
+  "plugScanDirsRemove": "この項目を削除",
+  "plugFormatSoon": "この形式のスキャンとホスト機能は今後のバージョンで対応予定です",
+  "liveprogFontReset": "クリックで既定値に戻す"
 }

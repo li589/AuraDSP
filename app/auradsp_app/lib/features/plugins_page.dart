@@ -11,7 +11,6 @@
  */
 
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
@@ -25,8 +24,8 @@ import 'chrome.dart';
 import 'widgets.dart';
 
 import '../core/error_sink.dart';
+import 'plugins/plugin_scan_dirs.dart';
 part 'plugins/plugins_slots.dart';
-part 'plugins/plugins_dirs.dart';
 part 'plugins/plugins_hero.dart';
 part 'plugins/plugins_list.dart';
 part 'plugins/plugins_badges.dart';
@@ -91,15 +90,6 @@ class _PluginsPageState extends State<PluginsPage>
     super.dispose();
   }
 
-  void _openPluginFolder() {
-    try {
-      const vst3Dir = r'C:\Program Files\Common Files\VST3';
-      if (Platform.isWindows && Directory(vst3Dir).existsSync()) {
-        Process.run('explorer.exe', [vst3Dir]);
-      }
-    } catch (e, st) { swallow(e, st); }
-  }
-
   Future<void> _addCustomDirDialog(BuildContext context) async {
     final l = l10nOf(context);
     final dir = await AuraPathPickerDialog.show(
@@ -111,7 +101,7 @@ class _PluginsPageState extends State<PluginsPage>
       confirmLabel: l.plugAddScan,
     );
     if (dir != null && dir.isNotEmpty) {
-      widget.model.addCustomPluginDir(dir);
+      widget.model.addPluginScanDir(dir);
       widget.model.pluginManager.scan(deep: _deepScan);
     }
   }
@@ -150,8 +140,8 @@ class _PluginsPageState extends State<PluginsPage>
             onScanTap: () => manager.scan(deep: _deepScan),
           ),
 
-          // 2. 自定义检索目录管理
-          _CustomDirsSection(
+          // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
+          PluginScanDirsSection(
             model: widget.model,
             onAddDir: () => _addCustomDirDialog(context),
             onRescan: () => manager.scan(deep: _deepScan),
@@ -201,14 +191,6 @@ class _PluginsPageState extends State<PluginsPage>
                         horizontal: AuraSpace.md, vertical: AuraSpace.xs),
                     visualDensity: VisualDensity.compact,
                   ),
-                ),
-                const SizedBox(width: AuraSpace.sm),
-                // 打开目录
-                IconButton(
-                  tooltip: l10nOf(context).plugOpenFolder,
-                  icon: const Icon(Icons.folder_open_rounded, size: 18),
-                  onPressed: _openPluginFolder,
-                  visualDensity: VisualDensity.compact,
                 ),
               ],
             ),
@@ -282,6 +264,9 @@ class _PluginsPageState extends State<PluginsPage>
                       countAll: manager.countAll,
                       countVst3: manager.countVst3,
                       countClap: manager.countClap,
+                      countVst2: manager.countVst2,
+                      countAu: manager.countAu,
+                      countLv2: manager.countLv2,
                       onSelect: (fmt) => manager.setFilterFormat(fmt),
                     ),
                   ],

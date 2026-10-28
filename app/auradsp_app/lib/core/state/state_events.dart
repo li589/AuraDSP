@@ -911,7 +911,11 @@ extension StateEvents on AppModel {
         _notifyUi();
         break;
       case 'pluginScanned':
-        pluginManager.onPluginScanned(raw['count'] as int, raw['json']);
+        pluginManager.onPluginScanned(
+          raw['count'] as int,
+          raw['json'],
+          aborted: raw['aborted'] == true,
+        );
         _notifyUi();
         break;
       case 'pluginList':

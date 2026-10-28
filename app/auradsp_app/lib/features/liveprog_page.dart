@@ -1091,7 +1091,7 @@ dbg = 0;
                         left: _showOutline ? 206 : 6,
                         child: Tooltip(
                           message:
-                              '${(_editorFontSize / _kDefaultFontSize * 100).round()}% (点击恢复默认)',
+                              '${(_editorFontSize / _kDefaultFontSize * 100).round()}% (${l10nOf(context).liveprogFontReset})',
                           child: Material(
                             color: Colors.transparent,
                             child: InkWell(

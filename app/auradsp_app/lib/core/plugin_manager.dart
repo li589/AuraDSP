@@ -16,16 +16,27 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'config.dart';
 
 import 'error_sink.dart';
+import 'text_collation.dart';
 /// 插件格式枚举
 enum PluginFormat {
   vst3,
   clap,
+
+  /// 以下三种为 2026-10-28 预留（扫描/挂载驱动尚未实现，UI 分类按钮先占位）：
+  /// VST2（Windows dll / macOS vst / Linux so）、AU（macOS 独占）、
+  /// LV2（Linux 开源标准）。引擎产出这些格式时列表角标/筛选即刻可用。
+  vst2,
+  au,
+  lv2,
   unknown;
 
   static PluginFormat fromString(String val) {
     final s = val.toLowerCase().trim();
     if (s.contains('vst3')) return PluginFormat.vst3;
     if (s.contains('clap')) return PluginFormat.clap;
+    if (s.contains('vst2') || s == 'vst') return PluginFormat.vst2;
+    if (s == 'au' || s.contains('audiounit')) return PluginFormat.au;
+    if (s.contains('lv2')) return PluginFormat.lv2;
     return PluginFormat.unknown;
   }
 
@@ -35,6 +46,12 @@ enum PluginFormat {
         return 'VST3';
       case PluginFormat.clap:
         return 'CLAP';
+      case PluginFormat.vst2:
+        return 'VST2';
+      case PluginFormat.au:
+        return 'AU';
+      case PluginFormat.lv2:
+        return 'LV2';
       case PluginFormat.unknown:
         return 'OTHER';
     }
@@ -345,7 +362,7 @@ class PluginManager extends ChangeNotifier {
 
   int _selectedSlot = 0;
 
-  List<String> _customDirs = [];
+  List<String> _scanDirs = [];
   bool _isScanning = false;
   String _filterFormat = 'all'; // 'all', 'vst3', 'clap'
   String _searchQuery = '';
@@ -415,7 +432,7 @@ class PluginManager extends ChangeNotifier {
   // --- Getters ---
   List<PluginMetadata> get plugins => List.unmodifiable(_plugins);
   int get selectedSlot => _selectedSlot;
-  List<String> get customDirs => List.unmodifiable(_customDirs);
+  List<String> get scanDirs => List.unmodifiable(_scanDirs);
   bool get isScanning => _isScanning;
 
   /// 扫描进度：已处理候选数 / 候选总数 / 已发现插件数
@@ -490,6 +507,40 @@ class PluginManager extends ChangeNotifier {
   int get countClap =>
       _plugins.where((p) => p.format == PluginFormat.clap).length;
 
+  /// 预留格式计数（驱动未实现时恒 0，分类按钮照常显示占位）。
+  int get countVst2 =>
+      _plugins.where((p) => p.format == PluginFormat.vst2).length;
+  int get countAu =>
+      _plugins.where((p) => p.format == PluginFormat.au).length;
+  int get countLv2 =>
+      _plugins.where((p) => p.format == PluginFormat.lv2).length;
+
+  /// 厂商分组（2026-10-28）：厂商按字典序（大小写/变音折叠 + 自然序），
+  /// 组内插件按名称同序；未知厂商（空串键）固定沉底。
+  Map<String, List<PluginMetadata>> get pluginGroups {
+    final map = <String, List<PluginMetadata>>{};
+    for (final p in filteredPlugins) {
+      final key = TextCollation.vendorKey(p.vendor);
+      map.putIfAbsent(key, () => <PluginMetadata>[]).add(p);
+    }
+    for (final list in map.values) {
+      list.sort((a, b) => TextCollation.comparePluginNames(
+            a.name,
+            b.name,
+            a.path,
+            b.path,
+          ));
+    }
+    final keys = map.keys.toList()
+      ..sort((a, b) {
+        if (a.isEmpty != b.isEmpty) return a.isEmpty ? 1 : -1;
+        return TextCollation.compare(a, b);
+      });
+    return <String, List<PluginMetadata>>{
+      for (final k in keys) k: map[k]!,
+    };
+  }
+
   /// 过滤后的插件列表
   List<PluginMetadata> get filteredPlugins {
     var list = _plugins;
@@ -534,8 +585,9 @@ class PluginManager extends ChangeNotifier {
   }
 
   // 自定义扫描目录管理
-  void setCustomDirs(List<String> dirs) {
-    _customDirs = List.from(dirs);
+  /// 同步「参与扫描」的目录（调用方已按 enabled 过滤；内置目录恒在其中）。
+  void setScanDirs(List<String> dirs) {
+    _scanDirs = List.from(dirs);
     notifyListeners();
   }
 
@@ -560,7 +612,7 @@ class PluginManager extends ChangeNotifier {
 
     final allDirs = <String>[];
     if (dir.isNotEmpty) allDirs.add(dir);
-    for (final cd in _customDirs) {
+    for (final cd in _scanDirs) {
       if (!allDirs.contains(cd) && Directory(cd).existsSync()) {
         allDirs.add(cd);
       }
@@ -1105,9 +1157,19 @@ class PluginManager extends ChangeNotifier {
         '可能是格式不兼容、位数不符或文件已损坏。';
   }
 
-  void onPluginScanned(int count, dynamic rawJson) {
+  /// 扫描完成。`aborted` = 中途失败（深扫插件挂死/IPC 超时等）：此时
+  /// 引擎可能只回传了残缺列表甚至空表，**保留上一次成功结果**并提示，
+  /// 避免「一次坏插件把整个插件库清空」的观感事故。
+  void onPluginScanned(int count, dynamic rawJson, {bool aborted = false}) {
     _isScanning = false;
     _scanDone = _scanTotal; // 收尾：进度条走满（避免停在 99% 的观感）
+    if (aborted) {
+      _lastScanCount = _plugins.length;
+      _lastNotice = '扫描中断：有插件在读取元数据时无响应（已超时跳过），'
+          '已保留上次扫描结果。可取消「深度遍历」后重试。';
+      notifyListeners();
+      return;
+    }
     _lastScanCount = count;
     _parsePluginsJson(rawJson);
     saveCache();

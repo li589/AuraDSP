@@ -333,6 +333,14 @@ extension StateChain on AppModel {
   }
 
   void setLiveprogParam(int index, double v) {
+    /* 2026-10-28：同步 lpSliderValues——10-27 滑块重构后本方法只下发
+     * setFloat，用户调过的值不进 lpSliderValues；同签名代码重应用时
+     * setLiveprogCode 从 lpSliderValues 取“当前值”，取不到就回落到声明
+     * 默认值，表现为「只改注释重应用 → 用户旋钮值被默认值覆盖」
+     * （config_and_presets Liveprog v2 用例抓到）。 */
+    if (index >= 0 && index < 8) {
+      lpSliderValues[index + 1] = v;
+    }
     setFloat('liveprog.param${index + 1}', v);
   }
 

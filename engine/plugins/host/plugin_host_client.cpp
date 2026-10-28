@@ -37,6 +37,41 @@ bool readAll(HANDLE pipe, void* data, size_t size) {
     return true;
 }
 
+/* 2026-10-28：带超时的读。先 PeekNamedPipe 看可读字节，再按可用量读；
+ * 期间轮询宿主进程存活（进程死了立即失败，不空等到超时）。 */
+bool readAllTimeout(HANDLE pipe, void* data, size_t size, HANDLE proc,
+                    int timeoutMs) {
+    auto* p = static_cast<uint8_t*>(data);
+    const auto deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(timeoutMs);
+    while (size > 0) {
+        DWORD avail = 0;
+        if (!PeekNamedPipe(pipe, nullptr, 0, nullptr, &avail, nullptr)) return false;
+        if (avail > 0) {
+            DWORD got = 0;
+            const DWORD chunk = static_cast<DWORD>(
+                (size > 0x7fffffffu ? 0x7fffffffu : size) < avail
+                    ? (size > 0x7fffffffu ? 0x7fffffffu : size)
+                    : avail);
+            if (!ReadFile(pipe, p, chunk, &got, nullptr) || got == 0) return false;
+            p += got;
+            size -= got;
+            continue;
+        }
+        if (proc && WaitForSingleObject(proc, 0) != WAIT_TIMEOUT) return false;
+        if (std::chrono::steady_clock::now() >= deadline) return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(2));
+    }
+    return true;
+}
+
+/* 超时/失联的宿主不可复用：杀进程并让下次 ensureHostLocked 重启。 */
+void killHostOnTimeout(HANDLE& proc) {
+    if (!proc) return;
+    TerminateProcess(proc, 0xE0000001u);
+    WaitForSingleObject(proc, 2000);
+}
+
 std::wstring moduleDirectory() {
     HMODULE mod = GetModuleHandleW(L"auradsp_engine.dll");
     if (!mod) mod = GetModuleHandleW(nullptr);
@@ -234,7 +269,8 @@ bool PluginHostClient::connectPipeLocked() {
 }
 
 bool PluginHostClient::requestLocked(ipc::Op op, const std::vector<uint8_t>& payload,
-                                     std::string* outPayload, int32_t* outStatus) {
+                                     std::string* outPayload, int32_t* outStatus,
+                                     int timeoutMs) {
     if (!m_pipe || !m_region) return false;
     if (payload.size() > ipc::kMaxControlPayload) return false;
 
@@ -252,7 +288,9 @@ bool PluginHostClient::requestLocked(ipc::Op op, const std::vector<uint8_t>& pay
     }
 
     ipc::MsgResponse response = {};
-    if (!readAll(m_pipe, &response, sizeof(response))) {
+    if (!readAllTimeout(m_pipe, &response, sizeof(response), m_process, timeoutMs)) {
+        // 超时或宿主死亡：杀进程（幂等）+ 标记管道失效。下次请求自动重启。
+        killHostOnTimeout(m_process);
         m_pipeHealthy = false;
         return false;
     }
@@ -266,7 +304,8 @@ bool PluginHostClient::requestLocked(ipc::Op op, const std::vector<uint8_t>& pay
     std::string body;
     if (response.payloadSize > 0) {
         body.resize(response.payloadSize);
-        if (!readAll(m_pipe, body.data(), body.size())) {
+        if (!readAllTimeout(m_pipe, body.data(), body.size(), m_process,
+                            timeoutMs)) {
             m_pipeHealthy = false;
             return false;
         }
@@ -278,10 +317,11 @@ bool PluginHostClient::requestLocked(ipc::Op op, const std::vector<uint8_t>& pay
 }
 
 bool PluginHostClient::request(ipc::Op op, const std::vector<uint8_t>& payload,
-                               std::string* outPayload, int32_t* outStatus) {
+                               std::string* outPayload, int32_t* outStatus,
+                               int timeoutMs) {
     std::lock_guard<std::mutex> lock(m_mutex);
     if (!ensureHostLocked()) return false;
-    if (!requestLocked(op, payload, outPayload, outStatus)) {
+    if (!requestLocked(op, payload, outPayload, outStatus, timeoutMs)) {
         closeHostHandlesLocked();
         return false;
     }
@@ -289,8 +329,8 @@ bool PluginHostClient::request(ipc::Op op, const std::vector<uint8_t>& payload,
 }
 
 bool PluginHostClient::simple(ipc::Op op, const std::vector<uint8_t>& payload,
-                              int32_t* outStatus) {
-    return request(op, payload, nullptr, outStatus);
+                              int32_t* outStatus, int timeoutMs) {
+    return request(op, payload, nullptr, outStatus, timeoutMs);
 }
 
 bool PluginHostClient::load(uint32_t slot, const std::string& path,
@@ -437,7 +477,7 @@ int PluginHostClient::scanBegin(const std::string& extraDirsJson, bool deepScan)
     w.str(extraDirsJson);
     w.u8(deepScan ? 1 : 0);
     int32_t status = 0;
-    if (!simple(ipc::Op::ScanBegin, w.data(), &status)) return 0;
+    if (!simple(ipc::Op::ScanBegin, w.data(), &status, 8000)) return 0;
     return status;
 }
 
@@ -445,13 +485,13 @@ int PluginHostClient::scanStep(int maxItems) {
     ipc::Writer w;
     w.i32(maxItems);
     int32_t status = 0;
-    if (!simple(ipc::Op::ScanStep, w.data(), &status)) return 0;
+    if (!simple(ipc::Op::ScanStep, w.data(), &status, 8000)) return 0;
     return status;
 }
 
 int PluginHostClient::scanEnd() {
     int32_t status = 0;
-    if (!simple(ipc::Op::ScanEnd, {}, &status)) return 0;
+    if (!simple(ipc::Op::ScanEnd, {}, &status, 8000)) return 0;
     return status;
 }
 

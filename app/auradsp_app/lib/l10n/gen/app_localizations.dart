@@ -4975,13 +4975,13 @@ abstract class AppLocalizations {
   /// No description provided for @plugCustomTitle.
   ///
   /// In zh, this message translates to:
-  /// **'自定义插件检索目录'**
+  /// **'插件扫描目录'**
   String get plugCustomTitle;
 
   /// No description provided for @plugCustomHint.
   ///
   /// In zh, this message translates to:
-  /// **'添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。'**
+  /// **'勾选需要扫描的目录（平台标准目录已自动预置；内置目录不可移除）。扫描只遍历勾选项及其子目录。'**
   String get plugCustomHint;
 
   /// No description provided for @plugCustomAdd.
@@ -4993,7 +4993,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugCustomEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'暂未添加自定义目录。系统已自动检索平台标准音频插件目录，如需载入其他位置的插件，可点击右上角添加。'**
+  /// **'扫描目录列表为空。点击「添加目录」选择插件所在文件夹。'**
   String get plugCustomEmpty;
 
   /// No description provided for @plugMountTitle.
@@ -6177,6 +6177,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'纯前级增益模式 (无滤波器)'**
   String get lpApoNoFiltersPreampOnly;
+
+  /// No description provided for @plugScanDirsSelectAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选'**
+  String get plugScanDirsSelectAll;
+
+  /// No description provided for @plugScanDirsClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除全部勾选'**
+  String get plugScanDirsClear;
+
+  /// No description provided for @plugScanDirsEnabledCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'已启用 {enabled}/{total}'**
+  String plugScanDirsEnabledCount(int enabled, int total);
+
+  /// No description provided for @plugScanDirsBuiltin.
+  ///
+  /// In zh, this message translates to:
+  /// **'内置'**
+  String get plugScanDirsBuiltin;
+
+  /// No description provided for @plugScanDirsBuiltinHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'应用自带插件目录，自动创建且不可移除'**
+  String get plugScanDirsBuiltinHint;
+
+  /// No description provided for @plugScanDirsRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除该条'**
+  String get plugScanDirsRemove;
+
+  /// No description provided for @plugFormatSoon.
+  ///
+  /// In zh, this message translates to:
+  /// **'该格式的扫描与挂载将在后续版本支持'**
+  String get plugFormatSoon;
+
+  /// No description provided for @liveprogFontReset.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击恢复默认'**
+  String get liveprogFontReset;
 }
 
 class _AppLocalizationsDelegate

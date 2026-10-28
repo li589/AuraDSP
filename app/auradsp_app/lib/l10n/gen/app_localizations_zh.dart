@@ -2589,17 +2589,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugBypassed => '旁路';
 
   @override
-  String get plugCustomTitle => '自定义插件检索目录';
+  String get plugCustomTitle => '插件扫描目录';
 
   @override
-  String get plugCustomHint => '添加其他硬盘分区或 DAW 的 VST3/CLAP 路径，扫描时将自动合并遍历。';
+  String get plugCustomHint => '勾选需要扫描的目录（平台标准目录已自动预置；内置目录不可移除）。扫描只遍历勾选项及其子目录。';
 
   @override
   String get plugCustomAdd => '添加目录';
 
   @override
-  String get plugCustomEmpty =>
-      '暂未添加自定义目录。系统已自动检索平台标准音频插件目录，如需载入其他位置的插件，可点击右上角添加。';
+  String get plugCustomEmpty => '扫描目录列表为空。点击「添加目录」选择插件所在文件夹。';
 
   @override
   String plugMountTitle(int n) {
@@ -3231,4 +3230,30 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpApoNoFiltersPreampOnly => '纯前级增益模式 (无滤波器)';
+
+  @override
+  String get plugScanDirsSelectAll => '全选';
+
+  @override
+  String get plugScanDirsClear => '清除全部勾选';
+
+  @override
+  String plugScanDirsEnabledCount(int enabled, int total) {
+    return '已启用 $enabled/$total';
+  }
+
+  @override
+  String get plugScanDirsBuiltin => '内置';
+
+  @override
+  String get plugScanDirsBuiltinHint => '应用自带插件目录，自动创建且不可移除';
+
+  @override
+  String get plugScanDirsRemove => '移除该条';
+
+  @override
+  String get plugFormatSoon => '该格式的扫描与挂载将在后续版本支持';
+
+  @override
+  String get liveprogFontReset => '点击恢复默认';
 }
