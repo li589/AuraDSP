@@ -13,6 +13,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/plugins/plugin_manager.dart';
+import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/plugins/plugin_scan_dirs.dart';
 import 'package:auradsp_app/core/plugins/text_collation.dart';
 
@@ -145,6 +146,33 @@ void main() {
         groups['acme']!.map((e) => e.name).toList(),
         ['Alpha EQ', 'Plugin 2', 'Plugin 10'],
       );
+    });
+  });
+
+  group('内置目录勾选语义（2026-10-28 修正）', () {
+    test('内置目录可取消勾选但不可删除；全选/清除严格对称', () {
+      final m = AppModel(testing: true);
+      final dirs = m.config.pluginScanDirs;
+      expect(dirs.any((e) => e.builtin), isTrue,
+          reason: '内置插件目录条目必须存在');
+      final builtin = dirs.firstWhere((e) => e.builtin);
+
+      // 可取消勾选（只禁止删除）
+      m.setPluginScanDirEnabled(builtin.path, false);
+      expect(
+        m.config.pluginScanDirs.firstWhere((e) => e.builtin).enabled,
+        isFalse,
+      );
+
+      // 清除 → 全部取消（含内置），全选 → 全部勾选
+      m.setAllPluginScanDirsEnabled(false);
+      expect(m.config.pluginScanDirs.every((e) => !e.enabled), isTrue);
+      m.setAllPluginScanDirsEnabled(true);
+      expect(m.config.pluginScanDirs.every((e) => e.enabled), isTrue);
+
+      // 不可删除
+      expect(m.removePluginScanDir(builtin.path), isFalse);
+      expect(m.config.pluginScanDirs.any((e) => e.builtin), isTrue);
     });
   });
 }

@@ -98,7 +98,10 @@ class _FilterPills extends StatelessWidget {
 }
 
 /// 插件列表视图
-class _PluginListView extends StatelessWidget {
+///
+/// 2026-10-28：厂商分组可折叠；列表固定最大高度 + 滚动条，并用
+/// [AuraWheelScrollScope] 独占滚轮（列表可滚时不再带动整页）。
+class _PluginListView extends StatefulWidget {
   final PluginManager manager;
   final int slot;
   final ValueChanged<PluginMetadata> onLoad;
@@ -112,7 +115,27 @@ class _PluginListView extends StatelessWidget {
   });
 
   @override
+  State<_PluginListView> createState() => _PluginListViewState();
+}
+
+class _PluginListViewState extends State<_PluginListView> {
+  final ScrollController _scrollCtrl = ScrollController();
+
+  /// 折叠的厂商分组（键 = PluginManager.pluginGroups 的键，空串 = 未知厂商）。
+  final Set<String> _collapsed = <String>{};
+
+  @override
+  void dispose() {
+    _scrollCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final manager = widget.manager;
+    final slot = widget.slot;
+    final onLoad = widget.onLoad;
+    final onUnload = widget.onUnload;
     final p = paletteOf(context);
     final groups = manager.pluginGroups;
 
@@ -147,24 +170,41 @@ class _PluginListView extends StatelessWidget {
       );
     }
 
-    // 打平为「厂商头 + 插件行」序列，保持 ListView 懒构建。
+    // 打平为「厂商头 + 插件行」序列，保持 ListView 懒构建；折叠组只留头。
     final rows = <_PluginRow>[];
     groups.forEach((vendor, plugins) {
+      final collapsed = _collapsed.contains(vendor);
       rows.add(_PluginRow.header(vendor, plugins.length));
-      rows.addAll(plugins.map(_PluginRow.item));
+      if (!collapsed) rows.addAll(plugins.map(_PluginRow.item));
     });
 
     return Container(
       constraints: const BoxConstraints(maxHeight: 460),
-      child: ListView.builder(
-        shrinkWrap: true,
-        itemCount: rows.length,
-        itemBuilder: (context, index) {
-          final row = rows[index];
-          if (row.header) {
-            return _VendorHeader(vendor: row.vendor, count: row.vendorCount);
-          }
-          final plugin = row.plugin!;
+      child: Scrollbar(
+        controller: _scrollCtrl,
+        thumbVisibility: true,
+        child: AuraWheelScrollScope(
+          controller: _scrollCtrl,
+          child: ListView.builder(
+            controller: _scrollCtrl,
+            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true,
+            itemCount: rows.length,
+            itemBuilder: (context, index) {
+              final row = rows[index];
+              if (row.header) {
+                return _VendorHeader(
+                  vendor: row.vendor,
+                  count: row.vendorCount,
+                  collapsed: _collapsed.contains(row.vendor),
+                  onTap: () => setState(() {
+                    if (!_collapsed.remove(row.vendor)) {
+                      _collapsed.add(row.vendor);
+                    }
+                  }),
+                );
+              }
+              final plugin = row.plugin!;
           final isLoadedInThisSlot = manager.isSlotActive(slot) &&
               manager.getSlotPlugin(slot)?.path == plugin.path;
 
@@ -197,7 +237,9 @@ class _PluginListView extends StatelessWidget {
             onUnload: onUnload,
             busy: manager.isSlotBusy(slot),
           );
-        },
+            },
+          ),
+        ),
       ),
     );
   }
@@ -229,17 +271,34 @@ class _PluginRow {
 class _VendorHeader extends StatelessWidget {
   final String vendor;
   final int count;
+  final bool collapsed;
+  final VoidCallback onTap;
 
-  const _VendorHeader({required this.vendor, required this.count});
+  const _VendorHeader({
+    required this.vendor,
+    required this.count,
+    required this.collapsed,
+    required this.onTap,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final label = vendor.isEmpty ? l10nOf(context).plugUnknownVendor : vendor;
-    return Padding(
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AuraRadius.sm),
+      child: Padding(
       padding: const EdgeInsets.fromLTRB(2, AuraSpace.sm, 2, AuraSpace.xs),
       child: Row(
         children: [
+          Icon(
+            collapsed
+                ? Icons.chevron_right_rounded
+                : Icons.expand_more_rounded,
+            size: 16,
+            color: p.textDim,
+          ),
           Container(
             width: 3,
             height: 12,
@@ -264,6 +323,7 @@ class _VendorHeader extends StatelessWidget {
           ),
           Text('$count', style: monoOf(p, size: 10, color: p.textDim)),
         ],
+      ),
       ),
     );
   }

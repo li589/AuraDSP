@@ -13,6 +13,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
+import '../../ui/wheel_scroll.dart';
 import '../../core/theme.dart';
 import '../../core/ui_helpers.dart';
 
@@ -109,6 +110,9 @@ class CodeOutlinePanel extends StatefulWidget {
 }
 
 class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
+  /// 大纲列表滚动控制器（2026-10-28：滚轮不带动整页）。
+  final ScrollController _outlineScrollCtrl = ScrollController();
+
   late List<OutlineItem> _items;
   Timer? _debounceTimer;
 
@@ -139,6 +143,7 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
 
   @override
   void dispose() {
+    _outlineScrollCtrl.dispose();
     _debounceTimer?.cancel();
     super.dispose();
   }
@@ -199,7 +204,14 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                       ),
                     ),
                   )
-                : ListView.builder(
+                : Scrollbar(
+                    controller: _outlineScrollCtrl,
+                    thumbVisibility: true,
+                    child: AuraWheelScrollScope(
+                      controller: _outlineScrollCtrl,
+                      child: ListView.builder(
+                    controller: _outlineScrollCtrl,
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: items.length,
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     itemBuilder: (ctx, idx) {
@@ -255,6 +267,8 @@ class _CodeOutlinePanelState extends State<CodeOutlinePanel> {
                         ),
                       );
                     },
+                      ),
+                    ),
                   ),
           ),
         ],
