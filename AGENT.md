@@ -1,7 +1,7 @@
 # AGENT.md — AuraDSP 智能体协作总纲与工程指南
 
 > 本文档专为 AI 编码智能体（Antigravity、Codex、Cursor、Claude、AutoDev 等）编写，旨在帮助智能体秒级熟悉项目全貌、架构铁律、目录规范与工作流。
-> **最近对齐**：2026-10-19（同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1/B2a/B2b/B2c/B3a/B3b/B3c（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕、VM 8ch、本地多声道入引擎、ASIO 双线 2/4/6/8 档多声道传输、FDN、全通扩散、镜像源早期反射）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
+> **最近对齐**：2026-10-28（复核 Freeverb 退役、链页 20 级、VizFrame 1600B（ABI v2）；2026-10-19 已同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1/B2a/B2b/B2c/B3a/B3b/B3c（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕、VM 8ch、本地多声道入引擎、ASIO 双线 2/4/6/8 档多声道传输、FDN、全通扩散、镜像源早期反射）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
 
 ---
 
@@ -19,7 +19,7 @@
 | **第三方源码** | `vendor/` | C / C++ | **只读**：仅剩 `plugin-api/{clap,steinberg}`（行业接口标准）。原 `libjamesdsp/` 已于 2026-10-16 收编至 `engine/legacy/`（见下「核心引擎」行与 `engine/legacy/PATCHES.md`）；补丁仍须 `[PATCHED-AuraDSP P-xxx]` 标注并登记 `engine/legacy/PATCHES.md` |
 | **运行资源** | `assets/` | IR / VDC / EEL | **P3b 后由 `resource/` 改名**：`convolver/`、`ddc/`、`liveprog/` + `manifest.json`。本地约 251MB；`.gitignore` 已写 `/assets/**/*.irs`+`.vdc` 规则（走 release 附件），但**规则不回溯——仍有 2214 个历史 `.irs`/`.vdc`（约 73MB）处于跟踪中**，去跟踪（`git rm --cached`）属待裁定项，未擅动；新增大二进制不会被跟踪 |
 | **应用前端** | `app/auradsp_app/` | Flutter 3.47.7+, Dart FFI | 现代暗黑精致音频工作站 UI；6 页导航体系（主页/效果/脚本/插件/处理链/可视化）；高频可视化与状态隔离 |
-| **无锁桥接** | `engine/auradsp_engine.h/.cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 536 字节定长 `VizFrame`（含 32 带输出频谱 + 32 带 EQ 输入频谱、总峰值及 21 节点 per-stage 电平/GR 槽位；`sizeof == 536` 断言守护 ABI，改动须同步全部 ctypes 镜像） |
+| **无锁桥接** | `engine/auradsp_engine.h/.cpp` | SPSC 无锁环形缓冲区 | 引擎以 30fps 向 UI 单向推送 1600 字节定长 `VizFrame`（ABI v2；前 536B 与 v1 兼容；含 32 带输出频谱 + 32 带 EQ 输入频谱、总峰值及 21 节点 per-stage 电平/GR 槽位及 per-channel 电平；`sizeof == 1600` 断言守护 ABI，改动须同步全部 ctypes 镜像） |
 | **参考源码** | `source/` | C/C++/Java/Kotlin | 第三方参考代码库（只读，严禁嵌套 `.git`，严禁在此写代码） |
 
 > ⚠️ **路径易错点（P3a/P3b 后务必核对）**：本仓已走向"顶层扁平化"，旧路径一律失效——引擎在 `engine/`（**不是** `core/desktop/engine_api`），第三方在 `vendor/`（**不是** `core/desktop/vendor-src`），资源在 `assets/`（**不是** `resource/`）。写任何文档或脚本前先按此核对，避免制造新的漂移。
