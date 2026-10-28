@@ -2744,18 +2744,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugBypassed => 'Bypassed';
 
   @override
-  String get plugCustomTitle => 'Custom Plugin Search Folders';
+  String get plugCustomTitle => 'Plugin Scan Folders';
 
   @override
   String get plugCustomHint =>
-      'Add VST3/CLAP paths from other drives or your DAW; they merge into scans automatically.';
+      'Check the folders to scan (standard platform folders are pre-added; the built-in folder cannot be removed). Only checked folders and their subfolders are scanned.';
 
   @override
   String get plugCustomAdd => 'Add Folder';
 
   @override
   String get plugCustomEmpty =>
-      'No custom folders yet. Standard system audio plugin directories are scanned automatically. Click top-right to add custom locations.';
+      'The scan folder list is empty. Use \"Add folder\" to pick a plugin directory.';
 
   @override
   String plugMountTitle(int n) {
@@ -3407,4 +3407,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpApoNoFiltersPreampOnly => 'Preamp Only Mode (No Filters)';
+
+  @override
+  String get plugScanDirsSelectAll => 'Select all';
+
+  @override
+  String get plugScanDirsClear => 'Clear all checks';
+
+  @override
+  String plugScanDirsEnabledCount(int enabled, int total) {
+    return '$enabled/$total enabled';
+  }
+
+  @override
+  String get plugScanDirsBuiltin => 'Built-in';
+
+  @override
+  String get plugScanDirsBuiltinHint =>
+      'Folder shipped with the app; created automatically and cannot be removed';
+
+  @override
+  String get plugScanDirsRemove => 'Remove this folder';
+
+  @override
+  String get plugFormatSoon =>
+      'Scanning and hosting for this format will arrive in a later release';
+
+  @override
+  String get liveprogFontReset => 'click to reset';
 }

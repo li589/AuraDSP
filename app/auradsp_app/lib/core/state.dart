@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
+import 'plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
     show
@@ -915,7 +916,9 @@ class AppModel extends ChangeNotifier {
     // 从一开始就不是合法路——不能等首次模式切换才生效）。
     pluginManager.setVbMultiBus(audioMode == 'vbcallback');
     pluginManager.addListener(notifyListeners);
-    pluginManager.setCustomDirs(config.customPluginDirs);
+    // 2026-10-28：扫描目录单源在 config.pluginScanDirs；该方法同时
+    // 补内置条目、首次播种平台目录并同步参与扫描的目录集。
+    ensurePluginScanDirs();
     pluginManager.loadCache();
 
     if (config.autoRestoreSession && !_testing) {

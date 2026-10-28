@@ -371,6 +371,10 @@ public:
         std::vector<PluginScanner::ScanCandidate> candidates;
         size_t cursor = 0;
         bool deep = false;
+        /* 2026-10-28 深扫挂死防护：单项元数据查询超时次数与被放弃的
+         * worker 线程数（超时线程无法安全回收，计入诊断并设上限）。 */
+        int timedOut = 0;
+        int abandonedThreads = 0;
     };
     std::unique_ptr<ScanJob> m_scanJob;
     /* 上次扫描结果按二进制路径缓存（含文件大小+修改时间戳）。

@@ -72,11 +72,18 @@ private:
     bool ensureHostLocked();
     void closeHostHandlesLocked();
     bool connectPipeLocked();
+    /* timeoutMs：等宿主回复的上界（2026-10-28）。深扫单项可能让宿主卡在
+     * LoadLibrary/实例化（无响应），旧实现阻塞 ReadFile 永久等待，UI 永远
+     * 停在「正在扫描」。超时 = 认为宿主失联：杀进程 + 标记管道失效，下次
+     * 调用 ensureHostLocked 会重启一个干净宿主。 */
     bool requestLocked(ipc::Op op, const std::vector<uint8_t>& payload,
-                       std::string* outPayload, int32_t* outStatus);
+                       std::string* outPayload, int32_t* outStatus,
+                       int timeoutMs = 60000);
     bool request(ipc::Op op, const std::vector<uint8_t>& payload,
-                 std::string* outPayload, int32_t* outStatus);
-    bool simple(ipc::Op op, const std::vector<uint8_t>& payload, int32_t* outStatus);
+                 std::string* outPayload, int32_t* outStatus,
+                 int timeoutMs = 60000);
+    bool simple(ipc::Op op, const std::vector<uint8_t>& payload,
+                int32_t* outStatus, int timeoutMs = 60000);
 
     std::atomic<bool> m_processMode{false};
     std::atomic<uint32_t> m_hostPid{0};

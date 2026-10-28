@@ -11,7 +11,11 @@
 
 #include <algorithm>
 #include <chrono>
+#include <condition_variable>
 #include <filesystem>
+#include <memory>
+#include <mutex>
+#include <thread>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -98,6 +102,54 @@ std::vector<PluginMetadata> scanCandidateMeta(const PluginScanner::ScanCandidate
     }
     out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
     return out;
+}
+
+// 深扫单项超时（2026-10-28 用户实测：个别插件在 LoadLibrary / 实例化阶段
+// 挂死，整条扫描链路卡住，UI 永远停在「正在扫描」）。
+//
+// 策略：元数据查询放到 detached worker 线程，主扫描线程最多等
+// kScanItemTimeoutMs。超时 → 放弃该候选并回退「快速信息」条目（仍出现在
+// 列表里，标注超时；用户可正常尝试挂载——挂载路径有独立的异步超时保护），
+// 扫描继续推进。
+//
+// 已知代价：挂死的线程无法安全终止（C++ 无取消语义），会一直停在
+// LoadLibrary/DllMain 里。每个超时项泄漏一条线程；同一模块的后续
+// LoadLibrary 可能被全局装载锁挡住——这是进程内托管的固有上限，故
+// 宿主设「放弃线程上限」（scanStep 内检查），超过即中止本轮扫描并保留
+// 已扫结果。真正的硬隔离需 AURA_PLUGIN_HOST_MODE=process（进程外托管）。
+constexpr int kScanItemTimeoutMs = 2500;
+
+// 放弃线程上限：超过即不再继续深扫（避免无限泄漏把进程拖垮）。
+constexpr int kScanAbandonLimit = 4;
+
+struct GuardedMetaState {
+    std::mutex m;
+    std::condition_variable cv;
+    bool done = false;
+    std::vector<PluginMetadata> out;
+};
+
+// 返回 true = 在超时内完成；false = 超时（结果不可用，线程被放弃）。
+bool queryMetaWithTimeout(const PluginScanner::ScanCandidate& c, bool deep,
+                          int timeoutMs, std::vector<PluginMetadata>& out) {
+    auto state = std::make_shared<GuardedMetaState>();
+    std::thread([state, c, deep]() {
+        std::vector<PluginMetadata> r = scanCandidateMeta(c, deep);
+        {
+            std::lock_guard<std::mutex> lk(state->m);
+            state->out = std::move(r);
+            state->done = true;
+        }
+        state->cv.notify_all();
+    }).detach();
+
+    std::unique_lock<std::mutex> lk(state->m);
+    if (!state->cv.wait_for(lk, std::chrono::milliseconds(timeoutMs),
+                            [&] { return state->done; })) {
+        return false;
+    }
+    out = std::move(state->out);
+    return true;
 }
 
 // 文件指纹：大小 + 修改时间。仅用于缓存有效性判定，失败时返回 false
@@ -197,8 +249,24 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
     // PluginHostManager::scanBegin/scanStep，两边共用 enumerate 与同一套
     // 元数据提取实现，保证「一次性 == 分块」结果一致。
     std::vector<PluginMetadata> results;
+    int abandoned = 0;
     for (const auto& c : enumerate(searchPaths)) {
-        for (auto& m : scanCandidateMeta(c, deepScan)) results.push_back(std::move(m));
+        std::vector<PluginMetadata> metas;
+        bool ok = true;
+        if (deepScan && abandoned < kScanAbandonLimit) {
+            ok = queryMetaWithTimeout(c, deepScan, kScanItemTimeoutMs, metas);
+            if (!ok) ++abandoned;
+        } else if (deepScan) {
+            ok = false;   // 放弃线程已达上限：不再深扫，全部回退快扫
+        } else {
+            metas = scanCandidateMeta(c, deepScan);
+        }
+        if (!ok) {
+            PluginMetadata q = makeQuickMeta(c.binaryPath, c.displayName, c.format);
+            q.errorMessage = "深度扫描超时：插件无响应，已回退为快速信息";
+            metas.push_back(std::move(q));
+        }
+        for (auto& m : metas) results.push_back(std::move(m));
     }
     return results;
 }
@@ -255,15 +323,20 @@ int PluginHostManager::scanPlugins(const std::string& extraDirsJson, bool deepSc
 //------------------------------------------------------------------------------
 
 std::vector<std::string> PluginHostManager::collectSearchPathsLocked(const std::string& extraDirsJson) const {
-    std::vector<std::string> searchPaths = PluginScanner::getDefaultSearchPaths();
+    /* 2026-10-28（P-042）：扫描目录单源在 UI 列表——调用方传了目录就**只**
+     * 扫这些目录（含平台预置条目，UI 已负责发现与勾选），不再叠加隐式默认
+     * 目录（旧行为会让用户「移除/取消勾选」在引擎侧失效）。
+     * 空输入保留默认目录兜底：兼容直接调 API 的脚本/冒烟与旧版调用方。 */
+    std::vector<std::string> searchPaths;
     if (!extraDirsJson.empty()) {
         std::istringstream iss(extraDirsJson);
         std::string path;
         while (std::getline(iss, path, ';')) {
             if (!path.empty() && fs::exists(path)) searchPaths.push_back(path);
         }
+        return searchPaths;
     }
-    return searchPaths;
+    return PluginScanner::getDefaultSearchPaths();
 }
 
 int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan) {
@@ -317,9 +390,29 @@ int PluginHostManager::scanStep(int maxItems) {
             }
         }
 
-        for (auto& m : scanCandidateMeta(c, job.deep)) {
-            m_scannedPlugins.push_back(std::move(m));
+        std::vector<PluginMetadata> metas;
+        bool ok = true;
+        if (job.deep) {
+            if (job.abandonedThreads < kScanAbandonLimit) {
+                ok = queryMetaWithTimeout(c, true, kScanItemTimeoutMs, metas);
+                if (!ok) {
+                    ++job.timedOut;
+                    ++job.abandonedThreads;
+                }
+            } else {
+                // 放弃线程已达上限：停止深扫（降级快扫），并让上层把本轮
+                // 标记为中断（Dart 侧保留上次结果 + 提示）。
+                ok = false;
+            }
+        } else {
+            metas = scanCandidateMeta(c, false);
         }
+        if (!ok) {
+            PluginMetadata q = makeQuickMeta(c.binaryPath, c.displayName, c.format);
+            q.errorMessage = "深度扫描超时：插件无响应，已回退为快速信息";
+            metas.push_back(std::move(q));
+        }
+        for (auto& m : metas) m_scannedPlugins.push_back(std::move(m));
     }
     return processed;
 }

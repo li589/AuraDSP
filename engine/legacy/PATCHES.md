@@ -906,3 +906,77 @@ yquist * 0.999，
   bypass_lifecycle。
 - **上游同步冲突风险**：低（engine 单行语义翻转 + Dart 三处小改；
   vendor 代码零触碰）。
+
+## P-042 插件扫描目录改版——显式目录列表 / 平台预置 / 内置目录 / 厂商分组（实施：2026-10-28）
+
+- **状态**：已实施（2026-10-28）
+- **位置**：新增 `app/auradsp_app/lib/core/plugin_scan_dirs.dart`（模型 +
+  平台目录发现）与 `lib/features/plugins/plugin_scan_dirs.dart`（独立 UI 文件，
+  原 `plugins_dirs.dart` 的 part 文件删除）；`lib/core/config.dart`
+  （`customPluginDirs` → `pluginScanDirs` 条目 + `pluginScanDirsSeeded` 迁移）、
+  `lib/core/text_collation.dart`（新增）、`lib/core/state/state_session.dart`
+  （目录操作 API + 内置目录归一 + 首次播种）、`lib/core/plugin_manager.dart`
+  （`setScanDirs` / `pluginGroups` / 预留格式计数）、
+  `lib/features/plugins/plugins_list.dart`（厂商分组 + 扫描占位 + 格式药丸）、
+  `lib/features/plugins_page.dart`（挂载新 section、移除右上角打开文件夹）、
+  三语 arb + gen-l10n。
+- **动机**（用户定案）：① 「自定义插件检索目录」名不副实——实际依赖引擎隐式
+  默认目录，用户移除/取消勾选在引擎侧不生效；② 目录管理展示形态差（Chip 墙，
+  无勾选、无逐条打开）；③ 插件列表无分组，百级条目难找。
+- **内容**：
+  · 目录即真值：`pluginScanDirs` 条目含 path/enabled/builtin；UI 多选列表
+    （左复选框、右「打开文件夹」「移除该条」），列表左上全选（三态）+ 清除；
+    「添加目录」保留在卡片头；插件库卡片右上角打开文件夹按钮删除。
+  · 平台预置：仅首次播种（`pluginScanDirsSeeded`），且目录必须真实存在——
+    Windows：CommonProgramFiles/LOCALAPPDATA 的 VST3/CLAP 与 VST2 常见目录 +
+    HKLM/HKCU\SOFTWARE\VST 的 VSTPluginsPath（reg.exe best-effort）；
+    macOS：/Library 与 ~/Library/Audio/Plug-Ins 下 VST3/CLAP/VST/Components；
+    Linux：/usr/lib、/usr/local/lib 与 ~/.{vst3,clap,lv2,vst}。
+  · 内置目录：`<配置根>/plugins` 自动创建、恒启用、不可移除（UI 禁用移除按钮
+    并标注「内置」），为未来自带插件预留。
+  · 引擎只扫传入目录：`collectSearchPathsLocked` 有显式目录时不再叠加默认目录
+    （空输入保留默认兜底，兼容脚本/冒烟）。
+  · 列表按厂商分组：厂商字典序（大小写/变音符号折叠 + 数字自然序；非拉丁按
+    码位稳定排序，明确不做拼音序），组内插件同名序，未知厂商沉底。
+  · 预留格式：FilterPills 增加 VST2 / AU / LV2（灰显不可点 + 悬停「后续版本
+    支持」）；`PluginFormat` 已能解析三种格式，驱动实现后即刻可用。
+- **附带修复**（本轮门禁暴露的历史欠款）：① `liveprog_page.dart` 字号恢复
+  提示硬编码中文 → `liveprogFontReset` 三语词条（CJK 棘轮归零）；②
+  `setLiveprogParam` 未同步 `lpSliderValues` → 同签名重应用会复活声明默认值，
+  用户旋钮值被覆盖（10-27 滑块重构遗留，`config_and_presets` Liveprog v2 用例
+  抓到）；③ `eel_editor_test` 断言串与 10-27 改版后的 `eelEmptyInit` 文案漂移
+  → 改为匹配 @init 语义（保持定位/blocking/行号意图）。
+- **验收**：新增 `test/plugin_scan_dirs_test.dart` 11 项（排序/迁移/目录过滤/
+  分组）全过；`flutter analyze` 零问题；`config_and_presets` 86 项全过；
+  全量 Dart 串行 559 项中仅剩环境型 loading/did-not-complete（被点名文件单跑
+  全过）；`runner.py --smoke` 100%。
+- **上游同步冲突风险**：低（全部为 Dart 侧与 UI；引擎仅一处目录收集策略）。
+
+## P-043 深扫挂死防护——单项超时 / 宿主 IPC 超时 / 前端中断保列表（实施：2026-10-28）
+
+- **状态**：已实施（2026-10-28）
+- **位置**：`engine/plugins/driver/plugin_scanner.cpp`（单项元数据查询超时守卫）、
+  `engine/plugins/api/plugin_host.h`（ScanJob 诊断计数）、
+  `engine/plugins/host/plugin_host_client.{h,cpp}`（带超时的 IPC 读 + 超时杀宿主）、
+  `app/auradsp_app/lib/engine/audio_slots.dart`（中断判定）、
+  `lib/core/plugin_manager.dart` + `lib/core/state/state_events.dart`（aborted
+  语义：保留上次结果 + 提示）。
+- **动机**（用户实测）：深扫需 LoadLibrary/实例化插件，个别插件在现场卡死
+  （甚至弹出自己的 UI），整条扫描链路永久阻塞，UI 停在「正在扫描」，只能重启
+  应用；且一次失败会把整份插件列表清空。
+- **内容**：
+  · 进程内深扫：每个候选的元数据查询放 detached worker，主扫描线程最多等
+    2500ms；超时 → 放弃该候选并回退「快速信息」条目（标注「深度扫描超时」，
+    仍可正常尝试挂载——挂载路径有独立的异步超时保护），扫描继续推进。放弃
+    线程无法安全回收，设上限 4（`kScanAbandonLimit`），超过即停止深扫（后续
+    候选降级快扫）。硬隔离仍建议 `AURA_PLUGIN_HOST_MODE=process`（进程外宿主）。
+  · 进程外宿主：`readAllTimeout`（PeekNamedPipe 轮询 2ms + 进程存活检查），
+    扫描类操作 8s、其余 60s；超时 = 杀宿主进程 + 标记管道失效，下次操作自动
+    重启干净宿主。
+  · 前端：`_scanChunked` 区分「正常扫完」与「中途中断」（stepped==0 且
+    processed<total）→ `pluginScanned.aborted`；管理器收到 aborted 时**保留
+    上次成功列表**并提示「扫描中断…」，绝不用残缺/空表覆盖。
+- **验收**：`runner.py --smoke` 100%（含 plugin_host_process / plugin_bus 等
+  深扫相关）；引擎构建零警告；Dart 侧 aborted 语义由既有用例回归。
+- **上游同步冲突风险**：低-中（scanner 的扫描循环改写为守卫形态；宿主客户端
+  请求签名增可选参数，调用点默认值兼容）。
