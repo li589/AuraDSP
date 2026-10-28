@@ -166,6 +166,12 @@ private:
         // 即 Main；此处显式置位，语义不依赖默认值）。
         t_pluginThreadRole = PluginThreadRole::Main;
         m_threadId = GetCurrentThreadId();
+        // 泵线程同时是 JUCE MessageManager（本 DLL 全部编辑器窗口消息/绘制/
+        // 定时器）的执行线程。系统繁忙（多编辑器同开 + DSP 满载）时 NORMAL
+        // 优先级会被同层线程抢调度，表现为拧旋钮/切模块不跟手。抬到
+        // ABOVE_NORMAL(1)——远低于音频 RT 线程（15=TIME_CRITICAL），
+        // 音频保护不受影响；消息循环阻塞等待，无空转代价。
+        SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_ABOVE_NORMAL);
         m_ready.store(true, std::memory_order_release);
         MSG msg;
         for (;;) {
