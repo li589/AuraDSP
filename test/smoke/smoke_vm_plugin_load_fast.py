@@ -61,6 +61,8 @@ b.vb_plugin_slot_group_ready.restype = ctypes.c_int
 b.vb_plugin_slot_group_ready.argtypes = [ctypes.c_int, ctypes.c_int]
 b.vb_plugin_slot_get_status.restype = ctypes.c_int
 b.vb_plugin_slot_get_status.argtypes = [ctypes.c_int, ctypes.c_char_p, ctypes.c_int]
+b.vb_plugin_slot_set_bypass.restype = ctypes.c_int
+b.vb_plugin_slot_set_bypass.argtypes = [ctypes.c_int, ctypes.c_int]
 b.vb_plugin_group_enable.restype = ctypes.c_int
 b.vb_plugin_group_enable.argtypes = [ctypes.c_int]
 b.vb_plugin_group_mask.restype = ctypes.c_int
@@ -152,6 +154,11 @@ try:
     check("掩码外组未加载（跳过生效）", all(v == 0 for v in r[1:]), f"ready={r}")
     print(f"[1] mask=0x01: load={t_first:.2f}s ready={r}")
     check("同步段不含逐组扇出（< 8s）", t_first < 8.0, f"load={t_first:.2f}s")
+    # P-041 挂载即旁路（2026-10-28）：挂载后槽必须处于旁路态——这正是
+    # 「假旁路」修复的回归线（旧引擎 commit 出厂激活，UI 旁路形同虚设）。
+    st1 = slot_status(0)
+    check("挂载即旁路（P-041 mount-bypass）", st1.get("bypassed") is True,
+          f"bypassed={st1.get('bypassed')}")
 
     # ---- [2] 掩码全开：新使能组后台补挂（无需重新 mount）----
     b.vb_plugin_group_enable(0xFF)
@@ -181,6 +188,14 @@ try:
           f"(total≈{t_first + t_fill:.2f}s) suspend_seen={saw_suspend} "
           f"stuckG={st.get('stuckG')} fanTimeouts={st.get('fanTimeouts')}")
     if st.get("frames", 0) > 0:
+        # P-041：挂载即旁路 → 先显式解旁路（用户「打开」语义），插件链
+        # 才会恢复处理；补挂组的 bypass 一致性也在此一并验证（解旁路对
+        # 全组生效，此前镜像被 SlotLoad 回写出厂值覆盖的 bug 已修）。
+        assert b.vb_plugin_slot_set_bypass(0, 0) == 1, "set_bypass(0) failed"
+        time.sleep(0.3)
+        st_ub = slot_status(0)
+        check("解旁路后槽激活（bypassed==false）", st_ub.get("bypassed") is False,
+              f"bypassed={st_ub.get('bypassed')}")
         c0 = slot_status(0).get("processCalls", 0)
         time.sleep(1.5)
         c1 = slot_status(0).get("processCalls", 0)

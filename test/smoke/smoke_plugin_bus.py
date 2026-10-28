@@ -31,6 +31,8 @@ def load_dll():
     dll.auradsp_plugin_scan.restype = ctypes.c_int
     dll.auradsp_plugin_load.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_char_p]
     dll.auradsp_plugin_load.restype = ctypes.c_int
+    dll.auradsp_plugin_set_bypass.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    dll.auradsp_plugin_set_bypass.restype = ctypes.c_int
     dll.auradsp_plugin_unload.argtypes = [ctypes.c_void_p]
     dll.auradsp_plugin_unload.restype = ctypes.c_int
     dll.auradsp_plugin_get_status.argtypes = [
@@ -65,6 +67,8 @@ def process_blocks(dll, handle, frames=256, blocks=16):
 def check_vst3(dll, handle):
     assert dll.auradsp_plugin_load(handle, VST3_PATH.encode("utf-8"), b"") == 1, \
         "BC PatchWork load failed"
+    # P-041 挂载即旁路：显式解旁路（旁路槽不进路径，bus 处理测不到）。
+    assert dll.auradsp_plugin_set_bypass(handle, 0) == 1
     status = get_status(dll, handle)
     bus = status.get("busInfo") or {}
     print(f"  VST3 busInfo: {bus}")
@@ -88,6 +92,8 @@ def check_vst3(dll, handle):
 def check_clap(dll, handle):
     assert dll.auradsp_plugin_load(handle, CLAP_PATH.encode("utf-8"), b"") == 1, \
         "KV-Element-FX load failed"
+    # P-041 挂载即旁路：显式解旁路。
+    assert dll.auradsp_plugin_set_bypass(handle, 0) == 1
     status = get_status(dll, handle)
     bus = status.get("busInfo") or {}
     print(f"  CLAP busInfo: {bus}")

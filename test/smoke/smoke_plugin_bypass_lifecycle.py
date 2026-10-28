@@ -116,6 +116,14 @@ def main():
         handle, target["path"].encode("utf-8"), b"") == 1, "plugin load failed"
     print(f"[1] loaded {target['name']}")
 
+    # ---- [1b] P-041 挂载即旁路（2026-10-28）：新契约，挂载后槽必须处于
+    # 旁路态（旧契约 ==0 已随 commitInstanceLocked 的 mount-bypass 翻转）。
+    assert dll.auradsp_plugin_slot_get_bypass(handle, 0) == 1, \
+        "P-041: fresh mount must be bypassed"
+    # 用户显式解旁路后才进入激活态（旧版 [2] 直接测激活的前提）。
+    assert dll.auradsp_plugin_slot_set_bypass(handle, 0, 0) == 1
+    time.sleep(SETTLE_MS / 1000.0)
+
     # ---- [2] 激活态基线：输出差分显著高于空链（插件真在处理）----
     active_diff = measure()
     assert active_diff > ACTIVE_RATIO * empty_diff, (
