@@ -20,6 +20,7 @@ import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../ui/wheel_scroll.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 
@@ -137,7 +138,6 @@ class _PluginsPageState extends State<PluginsPage>
             model: widget.model,
             manager: manager,
             slot: currentSlot,
-            onScanTap: () => manager.scan(deep: _deepScan),
           ),
 
           // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）

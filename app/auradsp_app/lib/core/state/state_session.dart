@@ -15,16 +15,19 @@ extension StateSession on AppModel {
   /// 内置插件目录（未来自带开源/自研插件）。subDir 顺手完成创建。
   String get bundledPluginDir => ConfigManager.subDir('plugins').path;
 
-  /// 启动时调用一次：保证内置条目存在 + 平台目录首次播种 + 同步扫描集。
+  /// 启动时调用一次：保证内置条目存在（保留其勾选态）+ 平台目录首次播种
+  /// + 同步扫描集。内置目录只禁止删除，是否参与扫描由用户勾选决定。
   void ensurePluginScanDirs() {
     final dirs = config.pluginScanDirs;
     final builtinPath = bundledPluginDir;
 
-    // 内置条目归一：只允许一条、恒启用、builtin 标记不可被配置篡改。
+    // 内置条目归一：只允许一条、builtin 标记不可被配置篡改；
+    // enabled 尊重用户勾选（2026-10-28：只禁止删除，不禁止取消勾选，
+    // 否则「全选/清除」在存在内置项时无法表达真实全选语义）。
     dirs.removeWhere((e) => e.builtin && e.path != builtinPath);
     final idx = dirs.indexWhere((e) => e.path == builtinPath);
     if (idx >= 0) {
-      dirs[idx] = dirs[idx].copyWith(enabled: true, builtin: true);
+      dirs[idx] = dirs[idx].copyWith(builtin: true);
     } else {
       dirs.insert(
         0,
@@ -86,12 +89,11 @@ extension StateSession on AppModel {
     return true;
   }
 
-  /// 勾选/取消单个目录（内置目录恒启用）。
+  /// 勾选/取消单个目录（内置目录同样可取消勾选——只禁止删除）。
   void setPluginScanDirEnabled(String dir, bool enabled) {
     final i = config.pluginScanDirs.indexWhere((e) => e.path == dir);
     if (i < 0) return;
     final e = config.pluginScanDirs[i];
-    if (e.builtin && !enabled) return;
     if (e.enabled == enabled) return;
     config.pluginScanDirs[i] = e.copyWith(enabled: enabled);
     ConfigManager.save(config);
@@ -99,14 +101,13 @@ extension StateSession on AppModel {
     _notifyUi();
   }
 
-  /// 全选 / 清除（清除 = 全部取消勾选；内置目录保持启用）。
+  /// 全选 / 清除（清除 = 全部取消勾选，含内置目录——与全选严格对称）。
   void setAllPluginScanDirsEnabled(bool enabled) {
     var changed = false;
     for (var i = 0; i < config.pluginScanDirs.length; i++) {
       final e = config.pluginScanDirs[i];
-      final target = e.builtin ? true : enabled;
-      if (e.enabled != target) {
-        config.pluginScanDirs[i] = e.copyWith(enabled: target);
+      if (e.enabled != enabled) {
+        config.pluginScanDirs[i] = e.copyWith(enabled: enabled);
         changed = true;
       }
     }
