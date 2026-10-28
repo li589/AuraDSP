@@ -1078,7 +1078,7 @@ class _Freeverb3DPainter extends CustomPainter {
     volTp.paint(canvas, Offset(12.0, h - 17.0));
   }
 
-  // [PATCHED-AuraDSP] epsilon 保护，阻断单精度 IEEE754 尾数抖动
+  // [PATCHED-AuraDSP P-040] epsilon 保护，阻断单精度 IEEE754 尾数抖动
   static const double _eps = 1e-6;
 
   @override

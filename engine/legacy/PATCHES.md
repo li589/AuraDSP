@@ -851,5 +851,12 @@ yquist * 0.999，
   纯超集支持！带 `@slider` 的 JSFX 脚本和模板完全正常编译并执行滑块逻辑；无 `@slider` 的传统脚本完全无性能损耗。
 - **验收**：`smoke_liveprog.py` 与示例模板编译测试。
 - **上游同步冲突风险**：低。
+## P-040 混响 3D 声学画师 shouldRepaint 浮点 epsilon（实施：2026-10-27）
 
-
+- **状态**：已实施（2026-10-27）
+- **位置**：`app/auradsp_app/lib/features/effects/cards_common.dart`（`_Freeverb3DPainter.shouldRepaint`）。
+- **动机**：画师参数（decay/damp/roomSize/stereoWidth）由动画/旋钮连续驱动，受单精度 IEEE754 舍入影响可能产生 1e-7 级尾数抖动；直接 `!=` 比较会把「等值不同位」误判为变化，触发无谓的逐帧重绘，多个编辑器同开时放大 UI 卡顿。
+- **内容**：引入 `static const double _eps = 1e-6;`，`shouldRepaint` 中四路参数比较全部带 `_eps` 容差，只有真实变化才触发重绘。
+- **行为影响**：无（纯绘制刷新判定收紧，绘制结果逐位不变）。
+- **验收**：D6 门禁全绿（本条目即登记）。
+- **上游同步冲突风险**：无（纯 Flutter 侧逻辑，无 vendor 代码）。

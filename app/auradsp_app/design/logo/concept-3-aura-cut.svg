@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="AuraDSP concept 3: Aura cut">
+  <defs>
+    <linearGradient id="aura" x1="52" y1="40" x2="204" y2="216" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#D4FF3F"/>
+      <stop offset="0.55" stop-color="#9BF873"/>
+      <stop offset="1" stop-color="#64F0DC"/>
+    </linearGradient>
+    <mask id="aCut">
+      <rect width="256" height="256" fill="#fff"/>
+      <g fill="none" stroke="#000" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M76 202 128 54 180 202" stroke-width="34"/>
+        <path d="M97 151h62" stroke-width="26"/>
+      </g>
+    </mask>
+  </defs>
+  <circle cx="128" cy="128" r="104" fill="none" stroke="url(#aura)" stroke-width="3" opacity="0.28"/>
+  <circle cx="128" cy="128" r="91" fill="url(#aura)" mask="url(#aCut)"/>
+</svg>

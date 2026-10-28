@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>AuraDSP · Logo concepts v1</title>
+<style>
+  @font-face {
+    font-family: 'AuraDisplay';
+    src: url('../../assets/fonts/BricolageGrotesque.ttf') format('truetype');
+    font-weight: 100 900;
+    font-display: swap;
+  }
+  :root {
+    --bg: #0b0c10;
+    --tile: #0e0f13;
+    --line: #2a2f3a;
+    --text: #e8eaf0;
+    --dim: #9aa3b2;
+    --lime: #d4ff3f;
+    --cyan: #64f0dc;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 40px 36px 64px;
+    background: var(--bg); color: var(--text);
+    font-family: 'AuraDisplay', 'Segoe UI', system-ui, sans-serif;
+  }
+  h1 { font-size: 30px; font-weight: 700; margin: 0 0 6px; letter-spacing: -0.01em; }
+  h1 .grad { background: linear-gradient(100deg, var(--lime), var(--cyan)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .sub { color: var(--dim); font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 12px; letter-spacing: 0.04em; margin-bottom: 36px; }
+  .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; }
+  .card { background: #111319; border: 1px solid var(--line); border-radius: 14px; padding: 22px 22px 18px; }
+  .hero { width: 100%; aspect-ratio: 1; border-radius: 26%; background: var(--tile); display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; }
+  .hero::after { content: ''; position: absolute; inset: 0; border-radius: inherit; box-shadow: inset 0 0 60px rgba(212,255,63,0.05); pointer-events: none; }
+  .hero img { width: 76%; height: 76%; }
+  .sizes { display: flex; align-items: flex-end; gap: 14px; margin-top: 16px; }
+  .sz { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .sz .tile { background: var(--tile); border: 1px solid rgba(255,255,255,0.06); display: grid; place-items: center; }
+  .sz .tile img { width: 92%; height: 92%; }
+  .sz span { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 10px; color: var(--dim); }
+  .t64 { width: 64px; height: 64px; border-radius: 17px; }
+  .t32 { width: 32px; height: 32px; border-radius: 9px; }
+  .t16 { width: 16px; height: 16px; border-radius: 5px; }
+  .name { margin: 18px 0 4px; font-size: 17px; font-weight: 650; letter-spacing: 0.01em; }
+  .desc { margin: 0; color: var(--dim); font-size: 13px; line-height: 1.55; }
+  .tag { display: inline-block; margin-top: 12px; font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 10px; letter-spacing: 0.06em; color: var(--lime); border: 1px solid rgba(212,255,63,0.35); border-radius: 4px; padding: 3px 7px; }
+  .band { margin-top: 28px; background: #f4f1ea; border-radius: 14px; padding: 24px; display: flex; align-items: center; gap: 28px; }
+  .band .tile { width: 88px; height: 88px; border-radius: 22px; background: #1a1b18; display: grid; place-items: center; }
+  .band .tile img { width: 76%; }
+  .band .strip { display: flex; gap: 10px; align-items: flex-end; }
+  .band .strip .b { background: #fff; border: 1px solid #e2ddcf; display: grid; place-items: center; border-radius: 8px; padding: 6px; }
+  .band .strip .b img { display: block; }
+  .band .cap { font-family: 'IBM Plex Mono', Consolas, monospace; font-size: 11px; color: #6e6a60; letter-spacing: 0.04em; }
+  .lockup { margin-top: 34px; display: flex; align-items: center; gap: 18px; }
+  .lockup .mark { width: 56px; height: 56px; border-radius: 15px; background: var(--tile); display: grid; place-items: center; border: 1px solid rgba(255,255,255,0.06); }
+  .lockup .mark img { width: 76%; }
+  .lockup .word { font-size: 34px; font-weight: 700; letter-spacing: -0.02em; }
+  .lockup .word em { font-style: normal; color: var(--dim); font-weight: 450; }
+  .note { margin-top: 14px; color: var(--dim); font-size: 12px; line-height: 1.6; max-width: 900px; }
+  .note code { font-family: 'IBM Plex Mono', Consolas, monospace; color: #c7ff5e; }
+</style>
+</head>
+<body>
+  <h1>AuraDSP <span class="grad">Logo Concepts</span></h1>
+  <div class="sub">v1 · SOUND WAVE AURA · LIME #D4FF3F → CYAN #64F0DC · 2026-10-28</div>
+
+  <div class="grid">
+    <div class="card">
+      <div class="hero"><img src="concept-1-aura-a.svg" alt="Concept 1"></div>
+      <div class="sizes">
+        <div class="sz"><div class="tile t64"><img src="concept-1-aura-a.svg" alt=""></div><span>64</span></div>
+        <div class="sz"><div class="tile t32"><img src="concept-1-aura-a.svg" alt=""></div><span>32</span></div>
+        <div class="sz"><div class="tile t16"><img src="concept-1-aura-a.svg" alt=""></div><span>16</span></div>
+      </div>
+      <div class="name">01 · Aura A</div>
+      <p class="desc">字母 A 为骨架，横杠化作脉冲波形，外圈两层光环表示辐射。品牌名与图形强绑定，小尺寸最稳。</p>
+      <span class="tag">SAFE / LEGIBLE</span>
+    </div>
+
+    <div class="card">
+      <div class="hero"><img src="concept-2-ripple-source.svg" alt="Concept 2"></div>
+      <div class="sizes">
+        <div class="sz"><div class="tile t64"><img src="concept-2-ripple-source.svg" alt=""></div><span>64</span></div>
+        <div class="sz"><div class="tile t32"><img src="concept-2-ripple-source.svg" alt=""></div><span>32</span></div>
+        <div class="sz"><div class="tile t16"><img src="concept-2-ripple-source.svg" alt=""></div><span>16</span></div>
+      </div>
+      <div class="name">02 · Ripple Source</div>
+      <p class="desc">左下声源点向右上扩散四道四分之一弧，最贴近「声波光环」本意。形态独特，但 16px 依赖轮廓。</p>
+      <span class="tag">DISTINCT / RADIAL</span>
+    </div>
+
+    <div class="card">
+      <div class="hero"><img src="concept-3-aura-cut.svg" alt="Concept 3"></div>
+      <div class="sizes">
+        <div class="sz"><div class="tile t64"><img src="concept-3-aura-cut.svg" alt=""></div><span>64</span></div>
+        <div class="sz"><div class="tile t32"><img src="concept-3-aura-cut.svg" alt=""></div><span>32</span></div>
+        <div class="sz"><div class="tile t16"><img src="concept-3-aura-cut.svg" alt=""></div><span>16</span></div>
+      </div>
+      <div class="name">03 · Aura Cut</div>
+      <p class="desc">渐变圆盘中央镂空出 A 字负形，外圈细环收束。面状最抢眼，16px 仍是一个清晰的圆形徽章。</p>
+      <span class="tag">BOLD / SOLID</span>
+    </div>
+  </div>
+
+  <div class="band">
+    <div class="tile"><img src="concept-1-aura-a.svg" alt=""></div>
+    <div class="strip">
+      <div class="b"><img src="concept-1-aura-a.svg" width="80" alt=""></div>
+      <div class="b"><img src="concept-1-aura-a.svg" width="48" alt=""></div>
+      <div class="b"><img src="concept-1-aura-a.svg" width="32" alt=""></div>
+      <div class="b"><img src="concept-1-aura-a.svg" width="20" alt=""></div>
+    </div>
+    <div class="cap">LIGHT THEME / 14% GREY<br>背景适应检查</div>
+  </div>
+
+  <div class="lockup">
+    <div class="mark"><img src="concept-1-aura-a.svg" alt=""></div>
+    <div class="word">Aura<em>DSP</em></div>
+  </div>
+  <p class="note">字标暂用 Bricolage Grotesque 700（App 标题字体）。定稿后会转曲为 SVG 路径，并输出 16–512px PNG / 多尺寸 <code>.ico</code>，替换现有 Flutter 默认图标。</p>
+</body>
+</html>
