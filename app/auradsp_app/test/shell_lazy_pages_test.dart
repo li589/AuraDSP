@@ -13,6 +13,7 @@ import 'package:auradsp_app/features/plugins_page.dart';
 import 'package:auradsp_app/features/shell.dart';
 import 'package:auradsp_app/features/visualizer_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/main.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -65,5 +66,32 @@ void main() {
     );
     // 未访问页始终没有实例
     expect(find.byType(VisualizerPage, skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('ShellGate 只随连接态计数切换 fatal / shell', (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    final model = AppModel(testing: true);
+    await tester.pumpWidget(MaterialApp(
+      localizationsDelegates: AppLocalizations.localizationsDelegates,
+      supportedLocales: AppLocalizations.supportedLocales,
+      locale: const Locale('en'),
+      theme: withAuraExtension(ThemeData.dark(), auraDark),
+      home: ShellGate(model: model),
+    ));
+    await tester.pump();
+    expect(find.byType(AppShell), findsOneWidget);
+
+    // 连接态计数是 ShellGate 的唯一触发源（根层不再监听整份 AppModel）。
+    model.setConn(EngineConn.fatal);
+    await tester.pump();
+    expect(find.byType(AppShell), findsNothing);
+
+    model.setConn(EngineConn.connecting);
+    await tester.pump();
+    expect(find.byType(AppShell), findsOneWidget);
   });
 }
