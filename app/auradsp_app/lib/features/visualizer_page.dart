@@ -1,22 +1,26 @@
 /*
- * visualizer_page.dart — 可视化页：引擎 RT 线程 → SPSC ring → UI 拉取的终点
+ * visualizer_page.dart — 可视化聚合入口页：多风格渲染舞台 + 沉浸全屏 + 实时声学仪表
  *
- * 布局不走 PageScaffold：本页只有一个主舞台 + 一条电平带，需要「占满剩余高度」，
- * 因此直接 Column + Expanded 布局，保证频谱是页面的绝对主体。
- * 峰值保持线在 UI 侧计算（PeakHolder），不给引擎加任何负担。
+ * 模块化拆分目录：
+ *   - models/      : VisualizerConfig, VisualizerStyle, VisualizerColorTheme
+ *   - controllers/ : PeakPhysicsEngine, WaveformSynthesizer
+ *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb
+ *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters
  */
 import 'dart:math' as math;
-
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
-import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import 'chrome.dart';
-import 'widgets.dart';
+import 'visualizer/models/visualizer_types.dart';
+import 'visualizer/views/visualizer_drawer.dart';
+import 'visualizer/views/visualizer_meters.dart';
+import 'visualizer/views/visualizer_stage.dart';
 
 class VisualizerPage extends StatefulWidget {
   final AppModel model;
@@ -27,260 +31,195 @@ class VisualizerPage extends StatefulWidget {
 }
 
 class _VisualizerPageState extends State<VisualizerPage> {
-  final PeakHolder _peaks = PeakHolder();
-  final ValueNotifier<List<double>> _peakNotifier =
-      ValueNotifier<List<double>>(List.filled(32, 0));
-
-  @override
-  void initState() {
-    super.initState();
-    widget.model.spectrum.addListener(_onSpectrum);
-  }
-
-  void _onSpectrum() {
-    // R2（2026-10-23）：离屏不更新峰值（IndexedStack 保活 = 本页仍在树上，
-    // 30fps 写入会带动 SpectrumView repaint 与 _peakNotifier 订阅方重建）。
-    // 回页后下一帧（≤33ms）即恢复。
-    if (widget.model.visiblePage.value != AppPage.visualizer) return;
-    _peakNotifier.value = List.of(_peaks.update(widget.model.spectrum.value));
-  }
+  VisualizerConfig _config = const VisualizerConfig();
+  bool _drawerOpen = false;
+  final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
-    widget.model.spectrum.removeListener(_onSpectrum);
-    _peakNotifier.dispose();
+    _focusNode.dispose();
     super.dispose();
+  }
+
+  void _toggleFullscreen() {
+    setState(() {
+      _config = _config.copyWith(isMaximized: !_config.isMaximized);
+    });
+  }
+
+  void _openDrawer() {
+    setState(() => _drawerOpen = true);
+  }
+
+  void _closeDrawer() {
+    setState(() => _drawerOpen = false);
+  }
+
+  void _handleKeyEvent(KeyEvent event) {
+    if (event is KeyDownEvent) {
+      if (event.logicalKey == LogicalKeyboardKey.f11) {
+        _toggleFullscreen();
+      } else if (event.logicalKey == LogicalKeyboardKey.escape &&
+          _config.isMaximized) {
+        _toggleFullscreen();
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // R2（2026-10-23）：页可见性门控——离屏时高频读数（峰值/电平）不订阅
-    // 30fps 通知器。AmbientSpectrum/SpectrumView 的 CustomPainter repaint
-    // 离屏不实际绘制，无需门控。
     return ValueListenableBuilder<AppPage>(
       valueListenable: widget.model.visiblePage,
-      builder: (_, page, _) =>
-          _buildBody(context, active: page == AppPage.visualizer),
+      builder: (_, page, _) => _buildBody(
+        context,
+        active: page == AppPage.visualizer,
+      ),
     );
   }
 
   Widget _buildBody(BuildContext context, {required bool active}) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    return Stack(
-      fit: StackFit.expand,
-      children: [
-        AmbientSpectrum(spectrum: widget.model.spectrum, palette: p),
-        if (p.isDark) const GrainOverlay(),
-        Padding(
-          padding: EdgeInsets.fromLTRB(context.responsivePageX,
-              AuraSpace.pageTop, context.responsivePageX, AuraSpace.pageBottom),
-          child: Center(
-            child: ConstrainedBox(
-              constraints:
-                  BoxConstraints(maxWidth: context.responsiveMaxW),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  PageHeader(
-                    eyebrow: l.pageVisualizerEyebrow,
-                    title: l.pageVisualizerTitle,
-                    trailing: _PeakReadout(
-                        spectrum: widget.model.spectrum,
-                        label: l.peakLabel,
-                        active: active),
-                  ),
-                  const SizedBox(height: AuraSpace.xl),
-                  Expanded(
-                    child: ListenableBuilder(
-                      listenable: widget.model,
-                      builder: (_, _) => _Stage(
-                        playing: widget.model.liveSpectrum,
-                        spectrum: widget.model.spectrum,
-                        peaks: _peakNotifier,
-                        emptyText: l.noAudio,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AuraSpace.xl),
-                  SectionCard(
-                    index: '01',
-                    title: l.levelsTitle,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(children: [
-                          Expanded(
-                              child: LevelMeter(
-                                  level: widget.model.levelL,
-                                  label: 'L',
-                                  active: active)),
-                          const SizedBox(width: AuraSpace.xl),
-                          Expanded(
-                              child: LevelMeter(
-                                  level: widget.model.levelR,
-                                  label: 'R',
-                                  active: active)),
-                        ]),
-                        const SizedBox(height: AuraSpace.sm + 2),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          // R2：离屏不订阅 levelL/R——静态读数替代。
-                          child: active
-                              ? ValueListenableBuilder<double>(
-                                  valueListenable: widget.model.levelL,
-                                  builder: (_, lDb, _) =>
-                                      ValueListenableBuilder<double>(
-                                    valueListenable: widget.model.levelR,
-                                    builder: (_, rDb, _) => Text(
-                                        'L ${dbfsText(lDb)}  R ${dbfsText(rDb)} dBFS',
-                                        style: monoOf(
-                                            p, size: 11, color: p.textDim)),
-                                  ),
-                                )
-                              : Text(
-                                  'L ${dbfsText(-90.0)}  R ${dbfsText(-90.0)} dBFS',
-                                  style: monoOf(p, size: 11, color: p.textDim)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
 
-/* ---- 主舞台 ---- */
-
-class _Stage extends StatelessWidget {
-  final bool playing;
-  final ValueListenable<List<double>> spectrum;
-  final ValueListenable<List<double>> peaks;
-  final String emptyText;
-  const _Stage({
-    required this.playing,
-    required this.spectrum,
-    required this.peaks,
-    required this.emptyText,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    return AnimatedContainer(
-      duration: AuraDur.base,
-      curve: AuraCurve.standard,
-      decoration: BoxDecoration(
-        color: p.bg,
-        borderRadius: BorderRadius.circular(AuraRadius.md),
-        border: Border.all(
-            color: playing ? p.accent.withValues(alpha: 0.22) : p.hairline,
-            width: 1),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: playing
-          ? _StageContent(spectrum: spectrum, peaks: peaks)
-          : Center(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.graphic_eq_outlined, size: 36, color: p.textDim),
-                  const SizedBox(height: AuraSpace.md),
-                  Text(emptyText, style: captionOf(p)),
-                ],
-              ),
-            ),
-    );
-  }
-}
-
-class _StageContent extends StatelessWidget {
-  final ValueListenable<List<double>> spectrum;
-  final ValueListenable<List<double>> peaks;
-  const _StageContent({required this.spectrum, required this.peaks});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-          AuraSpace.xl, AuraSpace.lg, AuraSpace.xl, AuraSpace.md),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: _handleKeyEvent,
+      child: Stack(
+        fit: StackFit.expand,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: SpectrumView(
-                    spectrum: spectrum,
-                    peaks: peaks,
-                    barGap: 3,
-                    gridAccent: true,
+          // 背景微动微晕
+          AmbientSpectrum(spectrum: widget.model.spectrum, palette: p),
+          if (p.isDark) const GrainOverlay(),
+
+          // 主视效展示层：独占全屏或标准工作区
+          if (_config.isMaximized)
+            Positioned.fill(
+              child: VisualizerStage(
+                playing: widget.model.liveSpectrum,
+                spectrum: widget.model.spectrum,
+                levelL: widget.model.levelL,
+                levelR: widget.model.levelR,
+                config: _config,
+                onStyleChanged: (st) =>
+                    setState(() => _config = _config.copyWith(style: st)),
+                onToggleFullscreen: _toggleFullscreen,
+                onOpenDrawer: _openDrawer,
+                emptyText: l.noAudio,
+                active: active,
+              ),
+            )
+          else
+            Padding(
+              padding: EdgeInsets.fromLTRB(
+                context.responsivePageX,
+                AuraSpace.pageTop,
+                context.responsivePageX,
+                AuraSpace.pageBottom,
+              ),
+              child: Center(
+                child: ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: context.responsiveMaxW),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // 顶栏标头
+                      PageHeader(
+                        eyebrow: l.pageVisualizerEyebrow,
+                        title: l.pageVisualizerTitle,
+                        trailing: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _PeakReadout(
+                              spectrum: widget.model.spectrum,
+                              label: l.peakLabel,
+                              active: active,
+                            ),
+                            const SizedBox(width: AuraSpace.md),
+                            IconButton(
+                              icon: const Icon(Icons.tune_rounded, size: 20),
+                              color: p.textDim,
+                              tooltip: 'Visualizer Settings',
+                              onPressed: _openDrawer,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: AuraSpace.xl),
+
+                      // 核心视效舞台
+                      Expanded(
+                        child: ListenableBuilder(
+                          listenable: widget.model,
+                          builder: (_, _) => VisualizerStage(
+                            playing: widget.model.liveSpectrum,
+                            spectrum: widget.model.spectrum,
+                            levelL: widget.model.levelL,
+                            levelR: widget.model.levelR,
+                            config: _config,
+                            onStyleChanged: (st) => setState(
+                                () => _config = _config.copyWith(style: st)),
+                            onToggleFullscreen: _toggleFullscreen,
+                            onOpenDrawer: _openDrawer,
+                            emptyText: l.noAudio,
+                            active: active,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: AuraSpace.xl),
+
+                      // 底部声学测量电平
+                      VisualizerMeters(
+                        model: widget.model,
+                        active: active,
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AuraSpace.sm),
-                const FreqAxis(),
-              ],
+              ),
             ),
-          ),
-          const SizedBox(width: AuraSpace.md),
-          // 右侧 dB 纵轴（绘图区同高，底部预留 FreqAxis 高度）
-          const _DbScale(),
+
+          // 浮动参数抽屉侧滑面板
+          if (_drawerOpen) ...[
+            GestureDetector(
+              onTap: _closeDrawer,
+              child: Container(
+                color: Colors.black.withValues(alpha: 0.45),
+              ),
+            ),
+            Align(
+              alignment: Alignment.centerRight,
+              child: VisualizerConfigDrawer(
+                config: _config,
+                onConfigChanged: (newCfg) =>
+                    setState(() => _config = newCfg),
+                onClose: _closeDrawer,
+                onResetToDefaults: () =>
+                    setState(() => _config = const VisualizerConfig()),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 }
 
-/// 右侧 dB 纵轴：0/-15/-30/-45/-60 dBFS，与频谱横向网格线（4 等分）对位
-class _DbScale extends StatelessWidget {
-  const _DbScale();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    const marks = ['0', '-15', '-30', '-45', '-60'];
-    return SizedBox(
-      width: 28,
-      child: Padding(
-        // 与频谱绘图区上下对齐（给 FreqAxis 留出同高空间：14 轴高 + 8 间距）
-        padding: const EdgeInsets.only(bottom: 22),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final m in marks)
-              Text(m,
-                  style: monoOf(p, size: 10,
-                      color: p.textDim.withValues(alpha: 0.7))),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 /* ---- 峰值读数（页面右上） ---- */
-
 class _PeakReadout extends StatelessWidget {
   final ValueListenable<List<double>> spectrum;
   final String label;
-  /// R2（2026-10-23）：false = 宿主页离屏，不订阅 spectrum。
   final bool active;
-  const _PeakReadout(
-      {required this.spectrum, required this.label, this.active = true});
+  const _PeakReadout({
+    required this.spectrum,
+    required this.label,
+    this.active = true,
+  });
 
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     if (!active) {
-      // 离屏：静态占位（保持占位尺寸，回页父级重建即恢复订阅）。
       return StatReadout(
         label: label,
         value: dbfsText(-90.0),
