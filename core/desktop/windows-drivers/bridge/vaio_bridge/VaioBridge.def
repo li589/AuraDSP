@@ -28,3 +28,18 @@ EXPORTS
     vaio_plugin_slot_get_insert_stage
     vaio_plugin_slot_set_channels
     vaio_plugin_slot_get_channels
+    ; ---- P5 统一桥契约（bridge/common/aurabridge.h；旧前缀保留一个版本）----
+    ab_abi_version
+    ab_capabilities
+    ab_detect
+    ab_start
+    ab_stop
+    ab_status
+    ab_set_param
+    ab_set_param_str
+    ab_get_param
+    ab_get_param_str
+    ab_viz_read
+    ab_bypass
+    ab_test_start
+    ab_test_stop

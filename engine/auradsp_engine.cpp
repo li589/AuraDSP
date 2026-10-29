@@ -22,6 +22,7 @@
 
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <mutex>
@@ -78,6 +79,52 @@ namespace {
 /* 进程级全局初始化（NSEEL JIT 运行时），引用计数（对齐 Android 侧做法） */
 std::mutex g_global_mutex;
 int g_global_ref = 0;
+
+/* [P2 静音门控] 读环境变量（create 控制线程一次性；不进 RT 路径）。
+ * 返回 false = 未设置。用 Win32 API 避开 MSVC 对 getenv 的 C4996。 */
+bool read_env(const char* name, char* buf, size_t cap) {
+    if (!buf || cap == 0) return false;
+    buf[0] = '\0';
+#ifdef _WIN32
+    const DWORD n = GetEnvironmentVariableA(name, buf, (DWORD)cap);
+    return n > 0 && n < cap;
+#else
+    const char* v = std::getenv(name);
+    if (!v) return false;
+    std::snprintf(buf, cap, "%s", v);
+    return true;
+#endif
+}
+
+/* [P2 静音门控] 门控状态推进（RT 线程，无锁无分配）。
+ * 进入条件：输入连续静音 ≥ hold 且**本块输出残量** ≤ -120 dBFS（混响/延迟
+ * 尾巴必须真的衰减完，否则切零会听到断崖）。退出只在块首输入扫描处发生。 */
+void gate_update(auradsp_handle h, float in_peak, float out_peak, int frames) {
+    if (!h->gate_enabled) {
+        h->gate_active = false;
+        h->gate_silent_frames = 0;
+        h->gate_idle_frames = 0;
+        return;
+    }
+    if (h->gate_active) {
+        h->gate_idle_frames += frames;
+        return;
+    }
+    if (in_peak <= h->gate_peak_thresh) {
+        if (h->gate_silent_frames < h->gate_hold_frames) {
+            h->gate_silent_frames += frames;
+            if (h->gate_silent_frames > h->gate_hold_frames)
+                h->gate_silent_frames = h->gate_hold_frames;
+        }
+    } else {
+        h->gate_silent_frames = 0;
+    }
+    if (h->gate_silent_frames >= h->gate_hold_frames &&
+        out_peak <= h->gate_resid_thresh) {
+        h->gate_active = true;
+        h->gate_idle_frames = 0;
+    }
+}
 
 }  // namespace
 
@@ -186,6 +233,21 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     for (int i = 0; i < 8; ++i) {
         h->p.post_gain_ch[i].store(0.0f);
     }
+    /* [P2 静音门控] hold=2000ms；AURADSP_GATE=0 关闭；AURADSP_GATE_DB 覆盖
+     * 静音判定阈值（默认 -90 dBFS）。create 为控制线程，读环境安全。 */
+    h->gate_hold_frames = (int)(2.0f * sample_rate);
+    if (h->gate_hold_frames < 1) h->gate_hold_frames = 1;
+    {
+        char env[32];
+        if (read_env("AURADSP_GATE", env, sizeof(env)) && env[0] == '0')
+            h->gate_enabled = false;
+        if (read_env("AURADSP_GATE_DB", env, sizeof(env))) {
+            float db = (float)atof(env);
+            if (db < -140.0f) db = -140.0f;
+            if (db > 0.0f) db = 0.0f;
+            h->gate_peak_thresh = powf(10.0f, db * 0.05f);
+        }
+    }
     const float default_comp_freq[7] = {95.0f, 200.0f, 400.0f, 800.0f, 1600.0f, 3400.0f, 7500.0f};
     for (int i = 0; i < 7; ++i) {
         h->p.comp_freq[i].store(default_comp_freq[i]);
@@ -274,6 +336,62 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     const int ch = h->channel_count.load(std::memory_order_relaxed);
     const bool multichannel = (ch > 2);
     h->last_block_ch = ch;   /* [Phase B] emit_viz 填 channel_count；与 ch_out_peak 同块同源 */
+
+    /* [P2 静音门控] 非处理态（旁路/停止）一律直通，门控状态清零重来——
+     * 旁路时若沿用 gated 会把用户音频吞成零。 */
+    if (st != AURADSP_STATE_PROCESSING) {
+        h->gate_active = false;
+        h->gate_silent_frames = 0;
+        h->gate_idle_frames = 0;
+    }
+    /* gated：整条效果链跳过，直出零。输入扫描是这里唯一的工作量，用于
+     * 「信号回来当块退出」（无淡入）。 */
+    if (h->gate_active) {
+        float in_peak = 0.0f;
+        const int n_in = frames * ch;
+        for (int i = 0; i < n_in; ++i) {
+            const float a = fabsf(in[i]);
+            if (a > in_peak) in_peak = a;
+        }
+        if (in_peak > h->gate_peak_thresh) {
+            h->gate_active = false;
+            h->gate_silent_frames = 0;
+            h->gate_idle_frames = 0;
+        } else {
+            memset(out, 0, (size_t)frames * (size_t)ch * sizeof(float));
+            h->gate_idle_frames += frames;
+            h->input_lvl_in_l = h->input_lvl_in_r = -120.0f;
+            h->input_lvl_out_l = h->input_lvl_out_r = -120.0f;
+            for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
+                h->stage_peak_l[i] = 0.0f;
+                h->stage_peak_r[i] = 0.0f;
+                for (int c = 0; c < AURADSP_CH_MAX; ++c)
+                    h->stage_peak_ch[i][c] = 0.0f;
+            }
+            for (int i = 0; i < AURADSP_VENDOR_STAGES; ++i) {
+                h->jdsp.stagePeakL[i] = 0.0f;
+                h->jdsp.stagePeakR[i] = 0.0f;
+            }
+            h->gr_limiter.store(0.0f, std::memory_order_relaxed);
+            h->gr_comp.store(0.0f, std::memory_order_relaxed);
+            h->gr_gate.store(0.0f, std::memory_order_relaxed);
+            for (int i = 0; i < 3; ++i)
+                h->gr_dyneq[i].store(0.0f, std::memory_order_relaxed);
+            /* 频谱/EQ 输入历史同样写零：emit_viz 照常产出（UI 回落不冻结），
+             * 且不会把 gated 前的最后一窗能量冻在频谱上。 */
+            memset(h->shelf_scratch, 0, (size_t)frames * 2 * sizeof(float));
+            viz_write(h, h->shelf_scratch, frames, 2);
+            if (h->eq_in_hist) viz_write_eq_in(h, h->shelf_scratch, frames);
+            h->frames_since_viz += frames;
+            int vizIntG = h->viz_interval.load(std::memory_order_relaxed);
+            if (vizIntG < 64) vizIntG = 480;
+            if (h->frames_since_viz >= vizIntG) {
+                h->frames_since_viz %= vizIntG;
+                emit_viz(h);
+            }
+            return;
+        }
+    }
 
     /* [Input Gate: 顺序钉死在最前端] 全通道总输入增益 × 单通道平衡 */
     const float in_gain_db = h->p.input_gain.load(std::memory_order_relaxed);
@@ -365,6 +483,15 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             h->frames_since_viz %= vizInt;
             emit_viz(h);
         }
+        /* [P2 静音门控] 用本块实测输入/输出峰值推进门控（多声道取全通道）。 */
+        {
+            float pk_in_max = 0.0f, pk_out_max = 0.0f;
+            for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) {
+                if (pk_in_ch[c] > pk_in_max) pk_in_max = pk_in_ch[c];
+                if (h->ch_out_peak[c] > pk_out_max) pk_out_max = h->ch_out_peak[c];
+            }
+            gate_update(h, pk_in_max, pk_out_max, frames);
+        }
         return;
     }
 
@@ -411,6 +538,11 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->frames_since_viz %= vizInt2;
         emit_viz(h);
     }
+    gate_update(h,
+                pk_in_l > pk_in_r ? pk_in_l : pk_in_r,
+                h->ch_out_peak[0] > h->ch_out_peak[1] ? h->ch_out_peak[0]
+                                                      : h->ch_out_peak[1],
+                frames);
 }
 
 #include "engine_param_table.h"

@@ -72,6 +72,8 @@ struct BridgeCtl {
     long inCh = 0, outCh = 0, inLat = 0, outLat = 0;
     double sr = 0.0;
     long nbs = 0;
+    // P3 静音门控（单组语义：整个 io 块一组）。start 时按驱动采样率配置。
+    aurabridge::SilenceGate gate;
     // 运行态
     volatile LONG running = 0;
     volatile LONG userBypass = 0;
@@ -113,7 +115,23 @@ void BridgeSink(void* ctx, float* in, float* out, int frames) {
         return;
     }
     if (c->process && c->engine) {
+        // P3 静音门控（单组）。测试注入是信号、旁路已提前返回，两者都不门控。
+        const int testKind = InterlockedCompareExchange(&c->tc.testKind, 0, 0);
+        if (c->gate.enabled && testKind == 0) {
+            const float inPeak =
+                aurabridge::GateScanInterleaved(in, (long long)frames * ch);
+            if (c->gate.Tick(inPeak, frames)) {
+                // 必须整块写零：驱动输出缓冲残留旧数据会变成嗡嗡声。
+                memset(out, 0, bytes);
+                c->gate.NoteOutput(0.0f);
+                return;
+            }
+        }
         c->process(c->engine, in, out, frames);
+        if (c->gate.enabled) {
+            c->gate.NoteOutput(
+                aurabridge::GateScanInterleaved(out, (long long)frames * ch));
+        }
     } else {
         memcpy(out, in, bytes);  // 无引擎：透传，绝不吞声
     }
@@ -161,6 +179,9 @@ void DestroyEngine() {
     g_b.vizRead = nullptr;
     g_b.destroy = nullptr;
     g_b.enginePath.clear();
+    // P3：引擎没了门控一并作废（下次 start 会重新 Configure）。
+    g_b.gate.Reset();
+    g_b.gate.enabled = false;
 }
 
 void FreeTestFile() {
@@ -384,6 +405,8 @@ int asio_start_ex(const char* driver_name, const char* engine_dll,
     }
 
     // 7) 挂 sink（必须在 start 前；RT 启动后不再更改指针）
+    // P3：采样率/缓冲已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
+    g_b.gate.Configure((long long)(g_b.sr > 0.0 ? g_b.sr : 48000.0));
     g_b.host.set_process_sink(&BridgeSink, &g_b);
 
     // 8) 预下发参数 + 启动
@@ -462,6 +485,7 @@ int asio_status(char* out, int cap) {
         "\"startRc\":%d,\"note\":\"%s\",\"bypass\":%ld,\"testKind\":%ld,"
         "\"paramsApplied\":%d,\"paramsFailed\":%d,"
         "\"resetPending\":%d,\"latenciesChanged\":%d,\"dropouts\":%lu,"
+        "\"gated\":%d,\"idleMs\":%lld,"
         "\"engine\":\"%s\",\"engineOk\":%s}",
         InterlockedCompareExchange(&g_b.running, 0, 0) ? "true" : "false",
         (unsigned long long)sw, g_b.sr, g_b.nbs,
@@ -474,7 +498,9 @@ int asio_status(char* out, int cap) {
         g_b.paramsApplied, g_b.paramsFailed,
         g_b.host.reset_pending() ? 1 : 0,
         g_b.host.latencies_changed() ? 1 : 0,
-        g_b.dropouts, eng,
+        g_b.dropouts,
+        g_b.gate.enabled && g_b.gate.gated ? 1 : 0, g_b.gate.IdleMs(),
+        eng,
         (g_b.engine && g_b.process) ? "true" : "false");
     return (n >= 0 && n < cap) ? n : -1;
 }
@@ -656,3 +682,23 @@ int asio_plugin_slot_get_channels(int slot) {
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0xFF;
     return auraplugin::SlotGetChannels(g_b.engine, g_pluginFns, slot);
 }
+
+// ---- P5 统一桥契约（ab_*）：旧前缀过渡转发，见 bridge/common/aurabridge.h ----
+// ASIO 的驱动名/缓冲档/输出声道对经 config_json 归一（旧 App 仍走 asio_start_ex）。
+#include "aurabridge.h"
+
+static int AbStartAdapt(const char* engine_dll, const char* params_json,
+                        const char* config_json) {
+    char driver[512];
+    abcfg::StrInto(config_json, "driver", driver, (int)sizeof(driver), "");
+    return asio_start_ex(driver, engine_dll, params_json,
+                         abcfg::Long(config_json, "bufSize", 0),
+                         abcfg::Long(config_json, "outPair", 0),
+                         abcfg::Long(config_json, "channels", 2));
+}
+#define AB_LEGACY asio
+#define AB_CAPS_JSON                        \
+    "{\"bridge\":\"asio\",\"busGroups\":1," \
+    "\"pluginGroups\":1,\"autoProtect\":false,\"gating\":true," \
+    "\"driverList\":true}"
+#include "aurabridge_impl.h"

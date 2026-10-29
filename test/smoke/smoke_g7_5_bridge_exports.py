@@ -71,7 +71,11 @@ def read(p):
 print("== [A] 解析单元 ==")
 
 N_HEADER = {"asio": 29, "vaio": 28, "vb": 41}      # 含 §7-5 的 2+2 项 + §7-2（P-028）的 *_abi
-N_DEF = {"asio": 29, "vaio": 28, "vb": 41}         # 含 §7-5 的 2+2 项 + §7-2（P-028）的 *_abi
+# P5（统一桥契约 ab_*，2026-10-29）：三桥各追加 14 项（声明在 common/aurabridge.h，
+# 不并入各自头文件——见 abi_consistency.py 的 AB_COMMON_H 说明）。
+AB_EXPORTS = 14
+N_DEF = {"asio": 29 + AB_EXPORTS, "vaio": 28 + AB_EXPORTS,
+         "vb": 41 + AB_EXPORTS}
 
 for prefix, h_path, def_path in A.BRIDGES:
     try:
@@ -106,9 +110,9 @@ r = subprocess.run([sys.executable, str(BIN / "abi_consistency.py"), "--bridges-
                    cwd=str(ROOT))
 check("[B1] CLI --bridges-only 退出码 0", r.returncode == 0,
       (r.stdout or "") + (r.stderr or ""))
-check("[B2] 报告 98 个导出 1:1", "98 个导出" in r.stdout, r.stdout.strip()[-120:])
+check("[B2] 报告 140 个导出 1:1", "140 个导出" in r.stdout, r.stdout.strip()[-120:])
 check("[B3] 三座桥各自导出数正确",
-      all(("%s" % n) in r.stdout for n in (28, 27, 40)) or True, "见 [B1] 输出")
+      all(("%s" % n) in r.stdout for n in (43, 42, 55)) or True, "见 [B1] 输出")
 
 # ------------------------------------------------------------------ [C] 活体
 print("== [C] 活体：真相源 DLL 真的导出 Dart 硬绑定符号 ==")
@@ -221,6 +225,11 @@ for d in (ROOT / "app" / "auradsp_app" / "lib", ROOT / "test"):
     for f in d.rglob("*"):
         if f.is_file() and f.suffix in (".dart", ".py", ".cpp", ".h", ".c", ".cc"):
             corpus.append((f, read(f)))
+# P5（统一桥契约）：ab_* 的声明源就是公共契约头（Dart 侧按 `${abiPrefix}_` 动态
+# 拼名，不会有字面量）。只纳入这一个文件——整目录纳入会把「每个旧导出都由自己的
+# 定义兜底」变成恒真，门禁自己失效。
+AB_CONTRACT = BRIDGE_DIR / "common" / "aurabridge.h"
+corpus.append((AB_CONTRACT, read(AB_CONTRACT)))
 
 for prefix, _h, def_path in A.BRIDGES:
     exports = A.parse_def(def_path)

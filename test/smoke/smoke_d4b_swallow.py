@@ -29,7 +29,8 @@
   [A] 规则引擎单元：构造 8 段片段，逐条验证 R1/R2/R3/R4 判红、注释与字符串排除
   [B] 全仓门禁：0 违规，且规模非空转
   [C] 覆盖证据：代码级 `catch (_)` 仅剩 1 处（debug_log 自引用，带标记）；
-      热路径 22 处全部是 swallowThrottled；swallow 调用 ≥ 70
+      热路径 10 处全部是 swallowThrottled（P1 收敛：三桥 5×3→5、泵循环 3→1）；
+      swallow 调用 ≥ 70
   [D] 反向验证：把真实源码里已修的一处改回 `catch (_) {}`，门禁必须判红
       （不做这层，就无法排除「扫描器什么都没扫到也算通过」的空转）
   [E] 接线完整性：每个调用 swallow 的文件（或其 part 所属 library）都 import 了
@@ -135,7 +136,7 @@ check("扫描规模非空转（>= 140 处 catch）", len(all_sites) >= 140, f"�
 by_class = {}
 for s in all_sites:
     by_class[s["class"]] = by_class.get(s["class"], 0) + 1
-check("存在 C 类（循环包壳）且已全部转 throttled", by_class.get("C", 0) == 3,
+check("存在 C 类（循环包壳）且已全部转 throttled", by_class.get("C", 0) == 1,
       f"分类={by_class}")
 
 # 子进程口径也必须一致（防止模块内与 CLI 判定漂移）
@@ -157,22 +158,43 @@ check("代码级 catch (_) 仅剩 1 处（debug_log 自引用）", under_code ==
       f"实际 {under_code} 处")
 
 throttled = sum(1 for s in all_sites if "swallowThrottled(" in s["logged"])
-check("热路径限流出口 22 处", throttled == 22, f"实际 {throttled}")
+# P1 收敛后：三桥公共面 5 处 × 3 份 → AudioBridgeCore 一份 5 处；
+# 泵循环三个后端分支 3 处 → 单点 1 处。10 = 5 + 3(bridge-plugin-ffi) + 1(eq-probe) + 1(pump)。
+check("热路径限流出口 10 处", throttled == 10, f"实际 {throttled}")
 
 plain = sum(1 for s in all_sites if "swallow(" in s["logged"])
 check("普通留痕出口 >= 70 处", plain >= 70, f"实际 {plain}")
 
-# 三座桥 + 泵循环必须各自带 tag，而不是共用一个（共用会让「哪座桥坏了」不可辨）
+# 三座桥 + 泵循环必须各自带 tag，而不是共用一个（共用会让「哪座桥坏了」不可辨）。
+# P1 收敛后三桥公共面共用 AudioBridgeCore 的 catch（tag 取构造参数 logTag），
+# 泵循环三份收敛为一份（tag 由后端派生）——静态字面量必须连构造点一起扫。
+iso_src = read(os.path.join(LIB, "engine", "audio_isolate.dart"))
 tags = set()
 for p in iter_dart(LIB):
-    tags.update(re.findall(r"swallowThrottled\(e, st, '([^']+)'\)", read(p)))
-WANT_TAGS = {"pump-asio", "pump-vb", "pump-vaio",
-             "vb-ffi", "ab-ffi", "vaio-ffi", "bridge-plugin-ffi", "eq-probe"}
-check("限流 tag 覆盖全部 8 个独立来源（多余或缺失都不行）",
+    src = read(p)
+    tags.update(t for t in re.findall(
+        r"swallowThrottled\(e, st, '([^']+)'\)", src) if '$' not in t)
+    tags.update(re.findall(r"logTag:\s*'([^']+)'", src))
+WANT_TAGS = {"vb-ffi", "ab-ffi", "vaio-ffi", "bridge-plugin-ffi", "eq-probe"}
+check("限流 tag 覆盖各自独立来源（多余或缺失都不行）",
       tags == WANT_TAGS,
       f"缺={sorted(WANT_TAGS - tags)} 多={sorted(tags - WANT_TAGS)}")
-check("泵循环三个后端各用独立 tag",
-      {"pump-asio", "pump-vb", "pump-vaio"} <= tags, f"tags={sorted(tags)}")
+
+# 泵循环单点 catch 的 tag 必须由实际后端派生（vm→vb，与 viz backend 同口径），
+# 展开后逐字还原旧三份 pump-vb/pump-asio/pump-vaio——共用不可辨的常量才判红。
+pump_tags = set()
+m_pump = re.search(r"swallowThrottled\(e, st, 'pump-\$(\w+)'\)", iso_src)
+if m_pump:
+    var = m_pump.group(1)
+    m_map = re.search(r"%s\s*=\s*(\w+)\s*==\s*'vm'\s*\?\s*'vb'\s*:\s*\1" % var, iso_src)
+    if m_map:
+        base = m_map.group(1)
+        if re.search(r"%s\s*=\s*bridgeManager\.activeId" % base, iso_src):
+            pump_tags = {'pump-' + ('vb' if b == 'vm' else b)
+                         for b in ('vm', 'asio', 'vaio')}
+check("泵循环 tag 由 activeId 派生且还原旧三个 tag",
+      pump_tags == {"pump-vb", "pump-asio", "pump-vaio"},
+      f"tags={sorted(pump_tags)}")
 
 # ---------------------------------------------------------------- [D] 反向验证
 print("\n== [D] 反向验证 ==")
@@ -189,11 +211,12 @@ if src.count(needle) >= 1:
 
 # 循环体退回普通留痕也必须判红（R2 单独反向验证）
 ISO = os.path.join(LIB, "engine", "audio_isolate.dart")
-iso = read(ISO)
-m = re.search(r"swallowThrottled\(e, st, 'pump-vb'\)", iso)
-check("反向验证锚点 2 存在（pump-vb）", m is not None)
+iso = iso_src
+m = re.search(r"swallowThrottled\(e, st, 'pump-\$vizBackend'\)", iso)
+check("反向验证锚点 2 存在（泵循环派生 tag）", m is not None)
 if m:
-    broken2 = iso.replace("swallowThrottled(e, st, 'pump-vb')", "swallow(e, st)", 1)
+    broken2 = iso.replace(
+        "swallowThrottled(e, st, 'pump-$vizBackend')", "swallow(e, st)", 1)
     rv2 = [s for s in S.analyze_source(broken2, "audio_isolate.dart") if s["violations"]]
     check("泵循环退回 swallow 后 R2 判红",
           any(v.startswith("R2") for s in rv2 for v in s["violations"]),

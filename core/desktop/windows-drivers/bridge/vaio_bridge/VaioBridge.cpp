@@ -201,6 +201,9 @@ struct VaioBridgeCtl {
     volatile LONG stopEvent = 0;
     volatile LONG userBypass = 0;
 
+    // P3 静音门控（单组语义：整个环块一组）。start 时按物理输出采样率配置。
+    aurabridge::SilenceGate gate;
+
     uint64_t totalPumpedFrames = 0;
     double peakIn = 0.0;
     double peakOut = 0.0;
@@ -252,6 +255,9 @@ void DestroyEngine() {
     g_vaio.fnGetParam = nullptr;
     g_vaio.fnVizRead = nullptr;
     g_vaio.enginePath.clear();
+    // P3：引擎没了门控一并作废（下次 start 会重新 Configure）。
+    g_vaio.gate.Reset();
+    g_vaio.gate.enabled = false;
 }
 
 void DestroyWasapi() {
@@ -497,8 +503,15 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             // 用户旁路：直通，不跑 DSP
             memcpy(g_vaio.scratchOut, g_vaio.scratchIn, bytesToRead);
         } else if (g_vaio.pEngine && g_vaio.fnProcess) {
-            // 21 项音效链处理（交织 float32）
-            g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchIn, g_vaio.scratchOut, (int)framesToProcess);
+            // P3 静音门控（单组）：GATED 时整块写零、跳过 DSP；测试注入是
+            // 信号、用户旁路已提前返回，两者都不门控。
+            const bool gateOn = g_vaio.gate.enabled && g_vaio.tc.testKind == 0;
+            if (gateOn && g_vaio.gate.Tick((float)curPeakIn, (long long)framesToProcess)) {
+                memset(g_vaio.scratchOut, 0, bytesToRead);
+            } else {
+                // 21 项音效链处理（交织 float32）
+                g_vaio.fnProcess(g_vaio.pEngine, g_vaio.scratchIn, g_vaio.scratchOut, (int)framesToProcess);
+            }
         } else {
             memcpy(g_vaio.scratchOut, g_vaio.scratchIn, bytesToRead);
         }
@@ -511,6 +524,8 @@ DWORD WINAPI VaioPumpThreadProc(LPVOID) {
             if (val > curPeakOut) curPeakOut = val;
         }
         g_vaio.peakOut = (double)curPeakOut;
+        // P3：记录引擎实际输出峰值，供下一块「尾音已衰完」判据（gated 时 0）。
+        if (g_vaio.gate.enabled) g_vaio.gate.NoteOutput(curPeakOut);
 
         QueryPerformanceCounter(&t1);
         double pumpUs = (double)(t1.QuadPart - t0.QuadPart) * qpcToUs;
@@ -1012,6 +1027,10 @@ int vaio_start(const char* engine_dll, const char* params_json, const char* outp
     ReplayMirroredParams();
 
     // 8. 启动 RT 音频泵线程
+    // P3：采样率已定稿，配置静音门控（AURADSP_GATE=0 时禁用）。
+    g_vaio.gate.Configure(
+        (long long)(g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate
+                                            : g_vaio.ringSampleRate));
     InterlockedExchange(&g_vaio.stopEvent, 0);
     g_vaio.hPumpThread = CreateThread(nullptr, 0, VaioPumpThreadProc, nullptr, 0, nullptr);
     if (!g_vaio.hPumpThread) {
@@ -1064,7 +1083,8 @@ int vaio_status(char* out, int cap) {
         "{\"running\":%s,\"frames\":%llu,\"sr\":%lu,\"channels\":%lu,\"bits\":%lu,"
         "\"peakIn\":%.4f,\"peakOut\":%.4f,\"maxPumpUs\":%.2f,\"startRc\":%d,\"note\":\"%s\","
         "\"outputEndpoint\":\"%s\",\"engineOk\":%s,\"enginePath\":\"%s\","
-        "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld}",
+        "\"paramsApplied\":%d,\"paramsFailed\":%d,\"bypass\":%ld,\"testKind\":%ld,"
+        "\"gated\":%d,\"idleMs\":%lld}",
         isRunning ? "true" : "false",
         (unsigned long long)g_vaio.totalPumpedFrames,
         g_vaio.wasapiSampleRate ? g_vaio.wasapiSampleRate : g_vaio.ringSampleRate,
@@ -1081,7 +1101,9 @@ int vaio_status(char* out, int cap) {
         g_vaio.paramsApplied,
         g_vaio.paramsFailed,
         InterlockedCompareExchange(&g_vaio.userBypass, 0, 0),
-        InterlockedCompareExchange(&g_vaio.tc.testKind, 0, 0)
+        InterlockedCompareExchange(&g_vaio.tc.testKind, 0, 0),
+        (isRunning && g_vaio.gate.enabled && g_vaio.gate.gated) ? 1 : 0,
+        g_vaio.gate.IdleMs()
     );
 
     if (n < 0 || n >= cap) return -1;
@@ -1252,3 +1274,20 @@ int vaio_plugin_slot_get_channels(int slot) {
     if (!g_vaio.pEngine || !g_pluginFns.Ready()) return 0xFF;
     return g_pluginFns.getChannels(g_vaio.pEngine, slot);
 }
+
+// ---- P5 统一桥契约（ab_*）：旧前缀过渡转发，见 bridge/common/aurabridge.h ----
+// VAIO 的物理输出端点子串经 config_json 归一（旧 App 仍走 vaio_start）。
+#include "aurabridge.h"
+
+static int AbStartAdapt(const char* engine_dll, const char* params_json,
+                        const char* config_json) {
+    char ep[512];
+    abcfg::StrInto(config_json, "endpoint", ep, (int)sizeof(ep), "");
+    return vaio_start(engine_dll, params_json, ep);
+}
+#define AB_LEGACY vaio
+#define AB_CAPS_JSON                        \
+    "{\"bridge\":\"vaio\",\"busGroups\":1," \
+    "\"pluginGroups\":1,\"autoProtect\":false,\"gating\":true," \
+    "\"endpoints\":true}"
+#include "aurabridge_impl.h"

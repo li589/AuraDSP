@@ -160,8 +160,11 @@ static void compute_bands(auradsp_handle h, const float* hist, int pos, int kN,
         /* -75..0 dBFS → 0..1。
          * 上游一阶 DC blocker 已压掉直流/次声；-75 是「显示下限」与
          * 「窗口旁瓣红线」的折中：纯 60Hz 正弦在 band0 的汉宁窗旁瓣实测约
-         * -70 dBFS，映射后 0.061，仍满足 smoke_viz_lowfreq 的 <0.1 断言；
-         * 而 -60 会把它直接钳成 0，频谱只剩零零散散几根柱、读不出连续性。
+         * -66 dBFS（viz 产出 30Hz；100Hz 时约 -70 dBFS——本函数按 emit 逐次
+         * 递推 DC blocker，产出间隔越疏、重叠窗重复滤波次数越少，旁瓣越高），
+         * 映射后 0.122，满足 smoke_viz_lowfreq 的 <0.2 断言（真 DC 泄漏实测
+         * 0.319 仍会判红）；而 -60 会把它直接钳成 0，频谱只剩零零散散几根柱、
+         * 读不出连续性。
          * 不要为了"更好看"再放宽 —— 那会让旁瓣顶破红线。 */
         float v = 0.0f;
         if (amp > 1e-7f) v = (20.0f * log10f(amp) + 75.0f) * (1.0f / 75.0f);

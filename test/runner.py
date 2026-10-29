@@ -149,6 +149,10 @@ def run_smoke_tests():
         # 另附输出 RMS 非空转证明与 stereo 回归守卫。
         "smoke_e4_stage16_crossmode.py",
         "smoke_abi_consistency.py",
+        # P5 统一桥契约（2026-10-29）：清单门禁之外，查真相源 DLL 是否真导出
+        # 14 个 ab_*、ab_abi_version、capabilities 自报、ab_detect 与旧前缀同源，
+        # 以及 VM 运行态 ab_start→status(gated/idleMs)→ab_stop。
+        "smoke_bridge_unified_abi.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
     "smoke_ir_block_jitter.py",
@@ -241,6 +245,10 @@ def run_smoke_tests():
     "smoke_spatial_style_custom.py",
     "smoke_eq_freq_clamp.py",
     "smoke_vb_8x8_budget.py",
+    # P2/P3 静音门控（2026-10-29）：引擎 gated 快路径（hold 2s + 残量
+    # -120dB 双条件、同块退出、viz 照常发射、开效果器后 gated 耗时
+    # <25%）+ 桥层状态机单测（silence_gate_test.exe，三桥共用头）。
+    "smoke_silence_gate.py",
     "smoke_graph_order.py",
     "smoke_ddc.py",
         "test_editor_topology.py",

@@ -21,6 +21,7 @@ import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
 import 'backend_switch.dart';
+import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 import 'debug_log.dart';
 import 'local_channel_policy.dart';
@@ -62,17 +63,8 @@ double _cfgDouble(Map<String, dynamic> cfg, String key, double fallback) {
 ///
 /// 桥各自持有独立引擎；Dart 必须在命令到达时同步记下，桥 start 成功后
 /// 回放，桥 stop 后同步回本地引擎。插件内部状态（旋钮值）不在镜像内，
-/// 属已知 MVP 限制。
+/// 属已知 MVP 限制。类定义在 bridge_manager.dart（P1 收敛）。
 const int _kPluginSlots = 4;
-
-class _PluginSlotCfg {
-  bool loaded = false;
-  String path = '';
-  String id = '';
-  bool bypass = false;
-  int stage = 3;
-  int channels = 0xFF;
-}
 
 void audioIsolateMain(Map<String, dynamic> cfg) {
   final toMain = cfg['toMain'] as SendPort;
@@ -124,7 +116,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   bool vaioActive = false;
   AuraVaioBridge? vaio;
   String vaioOutputEndpointInUse = '';
-  int vaioStatusTick = 0;
+  // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
+  bool bridgeVizNullLogged = false;
+  bool bridgeNoCbLogged = false;
+  bool bridgeVizOkLogged = false;
+  int bridgeStatusAt = 0; // 桥 start 时刻（t+5s 无回调诊断）
+  int bridgeStatusPollAt = 0; // 上次 status 轮询（1s 节流）
+  // P4 静音门控：桥上报 gated=1 时泵降到 50ms；gated=0 下一轮即回落 10ms。
+  bool bridgeGated = false;
   // 参数镜像：每次 setParam 记录，vb_start 后全量回放，保证两边一致。
   final Map<String, ({bool isFloat, double value})> paramMirror = {};
   // 字符串参数镜像（liveprog.code / arbmag.string）：成功才记；进 VB 时全量
@@ -136,19 +135,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int vbPluginGroupMask = 0xFF;
   // Z12 超预算自动保护（进桥后与 pluginGroupMask 同步下发；桥默认开）。
   bool vbAutoProtect = true;
-  int vbStatusTick = 0;
-  bool vbVizNullLogged = false;
-  bool vbNoCbLogged = false;
-  bool vbVizOkLogged = false;
-  int vbStatusAt = 0;
-  bool vaioVizNullLogged = false;
-  bool vaioNoCbLogged = false;
-  bool vaioVizOkLogged = false;
-  int vaioStatusAt = 0;
 
   // 插件槽会话镜像：无论当前走本地还是桥，插件命令都先落到这里。
-  final List<_PluginSlotCfg> pluginMirror =
-      List<_PluginSlotCfg>.generate(_kPluginSlots, (_) => _PluginSlotCfg());
+  final List<PluginSlotCfg> pluginMirror =
+      List<PluginSlotCfg>.generate(_kPluginSlots, (_) => PluginSlotCfg());
+
+  // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
+  // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
+  final BridgeManager bridgeManager = BridgeManager();
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
   // 引擎 commit 会把槽置为挂载旁路（engine mount-bypass）。若 bypass 命令
@@ -161,62 +155,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   /// 当前真正处理音频的后端插件入口；未进桥返回 null（走本地引擎）。
   BridgePluginFfi? activePluginBridge() {
     try {
-      if (vbActive) return vb?.plugin;
-      if (asioActive) return ab?.plugin;
-      if (vaioActive) return vaio?.plugin;
+      return bridgeManager.active?.plugin;
     } catch (e) {
       dbgLog('plugin: bridge ABI missing: $e');
     }
     return null;
-  }
-
-  /// 桥 start 成功后按镜像回放（桥内引擎是新建的空状态）。
-  void replayPluginMirrorToBridge(BridgePluginFfi pb) {
-    var ok = 0;
-    var failed = 0;
-    for (var i = 0; i < _kPluginSlots; ++i) {
-      final c = pluginMirror[i];
-      if (!c.loaded) continue;
-      final rc = pb.load(i, c.path, id: c.id);
-      if (rc == 1) {
-        pb.setChannels(i, c.channels);
-        pb.setInsertStage(i, c.stage);
-        pb.setBypass(i, c.bypass);
-        c.stage = pb.getInsertStage(i);
-        c.bypass = pb.getBypass(i);
-        c.channels = pb.getChannels(i);
-        ++ok;
-        send({
-          'evt': 'pluginSlotLoaded',
-          'slot': i,
-          'path': c.path,
-          'rc': 1,
-          'status': pb.getStatus(i),
-          'stage': c.stage,
-          'busy': false,
-        });
-        send({
-          'evt': 'pluginSlotBypass',
-          'slot': i,
-          'bypass': c.bypass,
-          'rc': 1,
-          'status': pb.getStatus(i),
-        });
-      } else {
-        c.loaded = false;
-        ++failed;
-        send({
-          'evt': 'pluginSlotLoaded',
-          'slot': i,
-          'path': c.path,
-          'rc': 0,
-          'status': pb.getStatus(i),
-          'stage': 3,
-          'busy': false,
-        });
-      }
-    }
-    dbgLog('plugin: bridge replay ok=$ok failed=$failed');
   }
 
   /// 桥 stop 后把镜像同步回本地引擎（否则本地 handle 还挂着旧插件，
@@ -325,7 +268,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     if (vbActive) return;
     dbgLog('vbmode: start requested');
     try {
-      vb ??= AuraVmBridge.load();
+      vb ??= bridgeManager.load<AuraVmBridge>('vm');
     } catch (e) {
       send(
           {'evt': 'vbstatus', 'running': false, 'note': 'bridge-missing: $e'});
@@ -342,24 +285,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       });
       return;
     }
-    // 全量回放参数镜像（setParamStr 如 liveprog.code 暂不同步：桥 handle 用默认值）。
-    var replayed = 0;
-    for (final e in paramMirror.entries) {
-      vb!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
-      replayed++;
-    }
-    dbgLog('vbmode: replayed $replayed params');
-    // 字符串参数回放（LiveProg/ArbMag 在 VB 下生效就靠这次；桥内镜像只负责
-    // CHANGE 重建，首次进桥必须由这里推过去）。
-    var replayedStr = 0;
-    for (final e in paramStrMirror.entries) {
-      final brc = vb!.setParamStr(e.key, e.value);
-      if (brc > 0) replayedStr++;
-    }
-    dbgLog('vbmode: replayed $replayedStr str params');
-    // 旁路态同步（用户此前可能已开旁路；桥默认关）。
-    final bypassRc = vb!.setBypass(bypass);
-    dbgLog('vbmode: bypass sync isolate=$bypass rc=$bypassRc');
+    // 全量回放参数/字符串/旁路镜像（P1：统一由 BridgeManager 执行；
+    // 字符串参数如 liveprog.code 在 VB 下生效就靠这次）。
+    bridgeManager.replaySession(vb!,
+        params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
     // 总线掩码同步（model 持久化的选择；桥默认全开）。
     final maskRc = vb!.setBusMask(vbBusMask);
     dbgLog('vbmode: busmask sync isolate=$vbBusMask rc=$maskRc');
@@ -406,11 +335,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     source = null;
     vbActive = true;
-    replayPluginMirrorToBridge(vb!.plugin);
-    vbVizNullLogged = false;
-    vbNoCbLogged = false;
-    vbVizOkLogged = false;
-    vbStatusAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeManager.setActive('vm', vb!);
+    bridgeManager.replayPluginMirror(vb!, pluginMirror, send);
+    bridgeVizNullLogged = false;
+    bridgeNoCbLogged = false;
+    bridgeVizOkLogged = false;
+    bridgeGated = false;
+    bridgeStatusPollAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeStatusAt = bridgeStatusPollAt;
     final st = vb!.status();
     dbgLog('vbmode: started handles=${st?['handles']} groups=${st?['groups']} '
         'frames=${st?['frames']} peakIn=${st?['peakIn']} note=${st?['note']}');
@@ -427,6 +359,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       vb?.stop();
     } catch (e, st) { swallow(e, st); }
     vbActive = false;
+    bridgeManager.clearActive(vb!);
     final resumeErr = resumeWasapi('vbmode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
     send({
@@ -441,7 +374,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   /// 驱动清单回执：无论后续能否启动，都先把 detect 结果发给设置页。
   void detectAsioDrivers() {
     try {
-      ab ??= AuraAsioBridge.load();
+      ab ??= bridgeManager.load<AuraAsioBridge>('asio');
     } catch (e) {
       send({'evt': 'asiodrivers', 'drivers': [], 'note': 'bridge-missing: $e'});
       return;
@@ -481,7 +414,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('asiomode: start requested driver="$driver" '
         'buf=$bufSize pair=$outPair ch=$channels');
     try {
-      ab ??= AuraAsioBridge.load();
+      ab ??= bridgeManager.load<AuraAsioBridge>('asio');
     } catch (e) {
       send({'evt': 'asiostatus', 'running': false, 'note': 'bridge-missing: $e'});
       return;
@@ -516,23 +449,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       });
       return;
     }
-    // 全量回放参数镜像（与 vbmode 同款：桥 handle 用默认值起步）。
-    var replayed = 0;
-    for (final e in paramMirror.entries) {
-      ab!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
-      replayed++;
-    }
-    dbgLog('asiomode: replayed $replayed params');
-    // 字符串参数回放（LiveProg/ArbMag 在 ASIO 下生效就靠这次；ASIO 重建一律
-    // 走本函数，重放必到）。
-    var replayedStr = 0;
-    for (final e in paramStrMirror.entries) {
-      if (ab!.setParamStr(e.key, e.value) == 0) replayedStr++;
-    }
-    dbgLog('asiomode: replayed $replayedStr str params');
-    // 旁路态同步（用户此前可能已开旁路；桥默认关）。
-    final bypassRc = ab!.setBypass(bypass);
-    dbgLog('asiomode: bypass sync isolate=$bypass rc=$bypassRc');
+    // 全量回放参数/字符串/旁路镜像（P1：统一由 BridgeManager 执行；
+    // ASIO 重建一律走本函数，重放必到）。
+    bridgeManager.replaySession(ab!,
+        params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
     /* D4-a：同 vbmode——停不下来就不许起 ASIO，失败回滚刚起的桥。 */
     final handover = runHandover(
       haltOld: () => wasapi?.stop(),
@@ -562,14 +482,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     source = null;
     asioActive = true;
+    bridgeManager.setActive('asio', ab!);
     asioDriverInUse = drv;
     asioBufSize = bufSize;
     asioOutPair = outPair;
-    replayPluginMirrorToBridge(ab!.plugin);
-    vbVizNullLogged = false;
-    vbNoCbLogged = false;
-    vbVizOkLogged = false;
-    vbStatusAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeManager.replayPluginMirror(ab!, pluginMirror, send);
+    bridgeVizNullLogged = false;
+    bridgeNoCbLogged = false;
+    bridgeVizOkLogged = false;
+    bridgeGated = false;
+    bridgeStatusPollAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeStatusAt = bridgeStatusPollAt;
     final st = ab!.status();
     // 桥可能按驱动能力把 io 声道数向下取档（如 6→2）；以桥回报的真值为准，
     // 供文件声道变化时的热切判断与状态展示。
@@ -591,6 +514,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       ab?.stop();
     } catch (e, st) { swallow(e, st); }
     asioActive = false;
+    bridgeManager.clearActive(ab!);
     asioDriverInUse = '';
     final resumeErr = resumeWasapi('asiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
@@ -605,7 +529,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   void detectVaio() {
     try {
-      vaio ??= AuraVaioBridge.load();
+      vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
     } catch (e) {
       send({'evt': 'vaiodetect', 'found': false, 'note': 'bridge-missing: $e', 'endpoints': []});
       return;
@@ -618,7 +542,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     if (vaioActive) return;
     dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
     try {
-      vaio ??= AuraVaioBridge.load();
+      vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
     } catch (e) {
       send({'evt': 'vaiostatus', 'running': false, 'note': 'bridge-missing: $e'});
       return;
@@ -634,20 +558,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       });
       return;
     }
-    // 回放参数镜像
-    var replayed = 0;
-    for (final e in paramMirror.entries) {
-      vaio!.setParam(e.key, isFloat: e.value.isFloat, value: e.value.value);
-      replayed++;
-    }
-    dbgLog('vaiomode: replayed $replayed params');
-    var replayedStr = 0;
-    for (final e in paramStrMirror.entries) {
-      final brc = vaio!.setParamStr(e.key, e.value);
-      if (brc >= 0) replayedStr++;
-    }
-    dbgLog('vaiomode: replayed $replayedStr str params');
-    vaio!.setBypass(bypass);
+    // 回放参数/字符串/旁路镜像（P1：统一由 BridgeManager 执行）。
+    bridgeManager.replaySession(vaio!,
+        params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
     /* D4-a：同 vbmode——停不下来就不许起 VAIO，失败回滚刚起的桥。 */
     final handover = runHandover(
       haltOld: () => wasapi?.stop(),
@@ -676,12 +589,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     }
     source = null;
     vaioActive = true;
+    bridgeManager.setActive('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
-    replayPluginMirrorToBridge(vaio!.plugin);
-    vaioVizNullLogged = false;
-    vaioNoCbLogged = false;
-    vaioVizOkLogged = false;
-    vaioStatusAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
+    bridgeVizNullLogged = false;
+    bridgeNoCbLogged = false;
+    bridgeVizOkLogged = false;
+    bridgeGated = false;
+    bridgeStatusPollAt = DateTime.now().millisecondsSinceEpoch;
+    bridgeStatusAt = bridgeStatusPollAt;
     final st = vaio!.status();
     send({'evt': 'vaiostatus', ...?st, 'running': true});
   }
@@ -696,6 +612,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       vaio?.stop();
     } catch (e, st) { swallow(e, st); }
     vaioActive = false;
+    bridgeManager.clearActive(vaio!);
     vaioOutputEndpointInUse = '';
     final resumeErr = resumeWasapi('vaiomode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
@@ -704,6 +621,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'running': false,
       if (resumeErr != null) 'note': 'wasapi-resume-failed: $resumeErr',
     });
+  }
+
+  /// 停掉除 [keep] 之外的其余桥（互斥切换唯一入口）。
+  /// D4-a（WASAPI 回升）由各 stop*Bridge 内部承担，不在切换层另写一份。
+  void stopOtherBridges(String keep) {
+    if (keep != 'vm' && vbActive) stopVbBridge();
+    if (keep != 'asio' && asioActive) stopAsioBridge();
+    if (keep != 'vaio' && vaioActive) stopVaioBridge();
   }
 
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
@@ -728,29 +653,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           if (m['id'] == 'channels.count' && rc == Status.ok) {
             engineChCount = (m['value'] as num).toInt();
           }
-          // 参数镜像 + VB 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
+          // 参数镜像 + 桥同路由（setParamStr 如 liveprog.code 暂不同步）。
           paramMirror[m['id'] as String] = (
             isFloat: m['isFloat'] as bool,
             value: (m['value'] as num).toDouble()
           );
-                    if (vbActive && vb != null) {
-            final brc = vb!.setParam(m['id'] as String,
+          final brcBridge = bridgeManager.active;
+          if (brcBridge != null) {
+            final bridgeId = bridgeManager.activeId ?? '?';
+            final brc = brcBridge.setParam(m['id'] as String,
                 isFloat: m['isFloat'] as bool,
                 value: (m['value'] as num).toDouble());
             // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
-            if (brc == 0) dbgLog('vbmode: setParam ${m['id']} applied 0');
-          }
-          if (asioActive && ab != null) {
-            final arc = ab!.setParam(m['id'] as String,
-                isFloat: m['isFloat'] as bool,
-                value: (m['value'] as num).toDouble());
-            if (arc == 0) dbgLog('asiomode: setParam ${m['id']} applied 0');
-          }
-          if (vaioActive && vaio != null) {
-            final vrc = vaio!.setParam(m['id'] as String,
-                isFloat: m['isFloat'] as bool,
-                value: (m['value'] as num).toDouble());
-            if (vrc != 0) dbgLog('vaiomode: setParam ${m['id']} rc=$vrc');
+            if (brc == 0 || (bridgeId == 'vaio' && brc != 0)) {
+              dbgLog('$bridgeId: setParam ${m['id']} rc=$brc');
+            }
           }
           final tookMs = DateTime.now().difference(t0).inMilliseconds;
           // 关键证据：引擎应用耗时。旧实现全量重建混响/EQ 时这里是几十~几百 ms。
@@ -1135,27 +1052,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (rc == Status.ok) {
               paramStrMirror[m['id'] as String] = m['text'] as String;
             }
-            if (vbActive && vb != null) {
+            final activeBridge = bridgeManager.active;
+            if (activeBridge != null) {
               final brc =
-                  vb!.setParamStr(m['id'] as String, m['text'] as String);
-              // 桥 handle 为空（如 CHANGE 重建间隙）会返回 0：记一笔备查。
-              if (brc == 0) {
-                dbgLog('vbmode: setParamStr ${m['id']} applied 0');
-              }
-            }
-            if (asioActive && ab != null) {
-              // ASIO 约定与 VB 不同：0=ok，<0=失败（桥内无镜像，重建一律走
-              // Dart 侧 stop+start + paramStrMirror 回放）。
-              final arc =
-                  ab!.setParamStr(m['id'] as String, m['text'] as String);
-              if (arc != 0) {
-                dbgLog('asiomode: setParamStr ${m['id']} rc=$arc');
-              }
-            }
-            if (vaioActive && vaio != null) {
-              final vrc = vaio!.setParamStr(m['id'] as String, m['text'] as String);
-              if (vrc < 0) {
-                dbgLog('vaiomode: setParamStr ${m['id']} rc=$vrc');
+                  activeBridge.setParamStr(m['id'] as String, m['text'] as String);
+              // 各桥返回约定：VB >0=生效，ASIO 0=ok，VAIO >=0=ok；0/<0 均记一笔。
+              if (brc <= 0) {
+                dbgLog('${bridgeManager.activeId}: setParamStr ${m['id']} '
+                    'rc=$brc');
               }
             }
             final tookMs = DateTime.now().difference(t0).inMilliseconds;
@@ -1169,30 +1073,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
               // 桥下读桥 handle 的编译状态（进程内 handle 只是影子，不跑音频）。
-              int? bst;
-              if (vbActive && vb != null) {
-                bst = vb!.getIntParam('liveprog.status');
-              } else if (asioActive && ab != null) {
-                bst = ab!.getIntParam('liveprog.status');
-              } else if (vaioActive && vaio != null) {
-                bst = vaio!.getIntParam('liveprog.status');
-              }
+              final bst = bridgeManager.active?.getIntParam('liveprog.status');
               final st = bst ??
                   AuraDspLib.getInt(lib, handle, 'liveprog.status');
               send({'evt': 'liveprog', 'status': st});
             }
             if (rc == Status.ok && m['id'] == 'arbmag.string') {
-              int? bNodes, bReady;
-              if (vbActive && vb != null) {
-                bNodes = vb!.getIntParam('arbmag.nodeCount');
-                bReady = vb!.getIntParam('arbmag.ready');
-              } else if (asioActive && ab != null) {
-                bNodes = ab!.getIntParam('arbmag.nodeCount');
-                bReady = ab!.getIntParam('arbmag.ready');
-              } else if (vaioActive && vaio != null) {
-                bNodes = vaio!.getIntParam('arbmag.nodeCount');
-                bReady = vaio!.getIntParam('arbmag.ready');
-              }
+              final activeBridge = bridgeManager.active;
+              final bNodes = activeBridge?.getIntParam('arbmag.nodeCount');
+              final bReady = activeBridge?.getIntParam('arbmag.ready');
               final nodes = bNodes ??
                   AuraDspLib.getInt(lib, handle, 'arbmag.nodeCount');
               final ready = bReady ??
@@ -1203,8 +1092,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
         case 'source':
           final kind = m['kind'] as String;
-          // VB 模式：测试源走桥注入（自动静音主通道 VB 输入），isolate 本地 source 保持空。
-          if (vbActive && vb != null && kind != 'stop') {
+          // 桥模式：测试源走桥注入（自动静音桥输入），isolate 本地 source 保持空。
+          // P1：VB/ASIO/VAIO 同构部分收敛为一份；ASIO 多声道（B2c）与热切保留
+          // 专属分支，行为与旧三份一致。
+          final srcBridge = bridgeManager.active;
+          if (srcBridge != null && kind != 'stop') {
             final tk = kind == 'tone'
                 ? 1
                 : kind == 'pink'
@@ -1212,124 +1104,57 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     : kind == 'file'
                         ? 3
                         : 0;
+            final bridgeId = bridgeManager.activeId;
+            final isAsio = bridgeId == 'asio';
+            final label = isAsio ? 'ASIO' : (bridgeId == 'vaio' ? 'VAIO' : 'VB');
             if (tk == 3) {
               final fpath = m['path'] as String;
               final lb = lib;
+              // B2c（ASIO）：多声道文件按原始声道注入（4/6/8 才有 raw 直通；
+              // 其余回落 fold 立体声）。声道与当前桥 io 声道不符则热切桥。
               final decoded = fpath.toLowerCase().endsWith('.mp3')
                   ? (lb == null ? null : decodeMp3File(lb, fpath))
-                  : decodeWavFile(fpath);
+                  : (isAsio
+                      ? decodeWavFile(fpath, fold: false)
+                      : decodeWavFile(fpath));
               if (decoded == null) {
-                send({'evt': 'error', 'msg': 'VB模式文件解析失败'});
+                send({'evt': 'error', 'msg': '$label模式文件解析失败'});
               } else {
-                final n = decoded.data.length ~/ 2;
-                final ptr = malloc<Float>(decoded.data.length);
-                try {
-                  ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
-                  vb!.testStart(3,
-                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
-                } finally {
-                  malloc.free(ptr);
-                }
-              }
-            } else if (tk != 0) {
-              vb!.testStart(tk);
-            }
-            send({'evt': 'playing', 'playing': true});
-            break;
-          }
-          if (vbActive && vb != null && kind == 'stop') {
-            vb!.testStop();
-          }
-          // ASIO 模式：测试源走桥注入（自动静音驱动输入），isolate 本地 source
-          // 保持空——此前缺这支，ASIO 下点试音只有 playing 显示没有声。
-          if (asioActive && ab != null && kind != 'stop') {
-            final tk = kind == 'tone'
-                ? 1
-                : kind == 'pink'
-                    ? 2
-                    : kind == 'file'
-                        ? 3
-                        : 0;
-            if (tk == 3) {
-              final fpath = m['path'] as String;
-              final lb = lib;
-              // B2c：多声道文件按原始声道注入（4/6/8 才有 raw 直通；其余回落 fold
-              // 立体声）。声道数与当前桥 io 声道数不符则热切桥（重建引擎）。
-              final decoded = fpath.toLowerCase().endsWith('.mp3')
-                  ? (lb == null ? null : decodeMp3File(lb, fpath))
-                  : decodeWavFile(fpath, fold: false);
-              if (decoded == null) {
-                send({'evt': 'error', 'msg': 'ASIO模式文件解析失败'});
-              } else {
-                final srcCh = decoded.channels;
-                final ch = (srcCh == 4 || srcCh == 6 || srcCh == 8) ? srcCh : 2;
-                if (ch != asioCh) {
-                  final drv = asioDriverInUse;
-                  final bs = asioBufSize, op = asioOutPair;
-                  dbgLog('asiomode: fileCh=$ch != ioCh=$asioCh → restart bridge');
-                  stopAsioBridge();
-                  startAsioBridge(
-                      driver: drv, bufSize: bs, outPair: op, channels: ch);
-                  if (!asioActive || ab == null) {
-                    send({'evt': 'error', 'msg': 'ASIO多声道重启失败'});
-                    break;
+                var ch = 2;
+                if (isAsio) {
+                  final srcCh = decoded.channels;
+                  ch = (srcCh == 4 || srcCh == 6 || srcCh == 8) ? srcCh : 2;
+                  if (ch != asioCh) {
+                    final drv = asioDriverInUse;
+                    final bs = asioBufSize, op = asioOutPair;
+                    dbgLog('asiomode: fileCh=$ch != ioCh=$asioCh → restart bridge');
+                    stopAsioBridge();
+                    startAsioBridge(
+                        driver: drv, bufSize: bs, outPair: op, channels: ch);
+                    if (!asioActive || ab == null) {
+                      send({'evt': 'error', 'msg': 'ASIO多声道重启失败'});
+                      break;
+                    }
                   }
                 }
                 final n = decoded.data.length ~/ ch;
                 final ptr = malloc<Float>(decoded.data.length);
                 try {
                   ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
-                  ab!.testStart(3,
+                  srcBridge.testStart(3,
                       pcm: ptr, frames: n, ch: ch, rate: decoded.sampleRate);
                 } finally {
                   malloc.free(ptr);
                 }
               }
             } else if (tk != 0) {
-              ab!.testStart(tk);
+              srcBridge.testStart(tk);
             }
             send({'evt': 'playing', 'playing': true});
             break;
           }
-          if (asioActive && ab != null && kind == 'stop') {
-            ab!.testStop();
-          }
-          // AuraVAIO 模式：测试源走桥注入
-          if (vaioActive && vaio != null && kind != 'stop') {
-            final tk = kind == 'tone'
-                ? 1
-                : kind == 'pink'
-                    ? 2
-                    : kind == 'file'
-                        ? 3
-                        : 0;
-            if (tk == 3) {
-              final fpath = m['path'] as String;
-              final lb = lib;
-              final decoded = fpath.toLowerCase().endsWith('.mp3')
-                  ? (lb == null ? null : decodeMp3File(lb, fpath))
-                  : decodeWavFile(fpath);
-              if (decoded == null) {
-                send({'evt': 'error', 'msg': 'VAIO模式文件解析失败'});
-              } else {
-                final n = decoded.data.length ~/ 2;
-                final ptr = malloc<Float>(decoded.data.length);
-                try {
-                  ptr.asTypedList(decoded.data.length).setAll(0, decoded.data);
-                  vaio!.testStart(3,
-                      pcm: ptr, frames: n, ch: 2, rate: decoded.sampleRate);
-                } finally {
-                  malloc.free(ptr);
-                }
-              }
-            } else if (tk != 0) {
-              vaio!.testStart(tk);
-            }
-            send({'evt': 'playing', 'playing': true});
-            break;
-          }
-          if (vaioActive && vaio != null && kind == 'stop') {
-            vaio!.testStop();
+          if (srcBridge != null) {
+            srcBridge.testStop();
           }
           switch (kind) {
             case 'stop':
@@ -1378,8 +1203,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'vbmode':
           if (m['on'] as bool) {
-            if (asioActive) stopAsioBridge();
-            if (vaioActive) stopVaioBridge();
+            stopOtherBridges('vm');
             startVbBridge();
           } else {
             stopVbBridge();
@@ -1387,10 +1211,9 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'asiomode':
           if (m['on'] as bool) {
-            // VB 与 ASIO 互斥：切 ASIO 前先停 VB（主 isolate 的 setAudioMode
+            // 三桥互斥由 stopOtherBridges 统一收口（主 isolate 的 setAudioMode
             // 已保证一次只选一个模式，这里防御性再压一遍）。
-            if (vbActive) stopVbBridge();
-            if (vaioActive) stopVaioBridge();
+            stopOtherBridges('asio');
             startAsioBridge(
               driver: (m['driver'] as String?) ?? '',
               bufSize: (m['bufSize'] as num?)?.toInt() ?? 0,
@@ -1417,8 +1240,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'vaiomode':
           if (m['on'] as bool) {
-            if (vbActive) stopVbBridge();
-            if (asioActive) stopAsioBridge();
+            stopOtherBridges('vaio');
             startVaioBridge(
               outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
             );
@@ -1438,15 +1260,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'bypass':
           bypass = m['value'] as bool;
-          if (vbActive && vb != null) {
-            vb!.setBypass(bypass);
-          }
-          if (asioActive && ab != null) {
-            ab!.setBypass(bypass);
-          }
-          if (vaioActive && vaio != null) {
-            vaio!.setBypass(bypass);
-          }
+          bridgeManager.active?.setBypass(bypass);
           break;
         case 'source51':
           // 0=混缩（默认） 1=直通；桥注入（试音）恒走 fold stereo，本旗只管本地渲染。
@@ -1612,7 +1426,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                   'busy': false,
                 });
               } else {
-                pluginMirror[slot] = _PluginSlotCfg();
+                pluginMirror[slot] = PluginSlotCfg();
                 send({
                   'evt': 'pluginSlotLoaded',
                   'slot': slot,
@@ -1640,7 +1454,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     ..stage =
                         AuraDspLib.pluginSlotGetInsertStageWrap(l, h, slot);
                 } else {
-                  pluginMirror[slot] = _PluginSlotCfg();
+                  pluginMirror[slot] = PluginSlotCfg();
                 }
                 // P-041：补发在途窗口内暂存的 bypass（会话回放时序）。
                 final pendingBypass = slotPendingBypass.remove(slot);
@@ -1684,7 +1498,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             if (pb != null) {
               send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': true});
               final rc = pb.unload(slot);
-              if (rc == 1) pluginMirror[slot] = _PluginSlotCfg();
+              if (rc == 1) pluginMirror[slot] = PluginSlotCfg();
               send({
                 'evt': 'pluginSlotUnloaded',
                 'slot': slot,
@@ -1701,7 +1515,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               // P-041：卸载作废在途加载的暂存 bypass（槽已不存在）。
               slotPendingBypass.remove(slot);
               unawaited(_slotUnloadAsync(l, h, slot, send).then((rc) {
-                if (rc == 1) pluginMirror[slot] = _PluginSlotCfg();
+                if (rc == 1) pluginMirror[slot] = PluginSlotCfg();
               }));
             }
             break;
@@ -2168,15 +1982,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   var wasapiErrRounds = 0;
   var pumpRounds = 0;
   var procRounds = 0;
-  // 桥 viz 断流守卫（VB/ASIO 共用口径，各自独立计时）：桥引擎停产（VB 退出/
-  // 暂停无声/组 idle）时 vizRead 持续 null，之前是什么都不发，UI 永冻在最后一
-  // 帧。超 1.5s 无新帧：补一帧全零让频谱/电平回落（只补一次，活数据即恢复）。
-  int vbStaleSince = 0;
-  bool vbStaleSent = false;
-  int asioStaleSince = 0;
-  bool asioStaleSent = false;
-  int vaioStaleSince = 0;
-  bool vaioStaleSent = false;
+  // 桥 viz 断流守卫（三桥共用：同一时刻只有一个后端出声）：桥引擎停产（VB
+  // 退出/暂停无声/组 idle）时 vizRead 持续 null，之前是什么都不发，UI 永冻在
+  // 最后一帧。超 1.5s 无新帧：补一帧全零让频谱/电平回落（只补一次）。
+  int bridgeStaleSince = 0;
+  bool bridgeStaleSent = false;
   void sendStaleViz(String backend, int now) {
     if (vizSuspended) return;
     send({
@@ -2199,15 +2009,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   Future<void> pump() async {
     dbgLog('pump loop start');
     while (running) {
-      /* 自适应轮询间隔（2026-10-29）：原实现无论场景恒定 5ms（200 次唤醒/s），
-       * 但只有「本地 WASAPI 正在喂音频」才需要这个节奏。
+      /* 自适应轮询间隔（2026-10-29）：
        *   · WASAPI 播放中 → 5ms：维持低延迟供数；
-       *   · 桥模式（VB/ASIO/VAIO）→ 10ms：泵只拉 viz(50ms 节流)+状态；
-       *   · 无音源/无设备 → 20ms：不产生音频工作，只等命令与状态。
-       * 最小化播放时桥模式唤醒从 200/s 降到 100/s，纯空闲降到 50/s。 */
+       *   · 桥模式（VB/ASIO/VAIO）→ 10ms：泵只拉 viz(vizIntervalMs 节流)+状态；
+       *     桥上报 gated=1（静音门控生效）→ 50ms：无音频工作，仅保状态；
+       *   · 无音源/无设备 → 20ms：不产生音频工作，只等命令与状态。 */
       final int pumpDelayMs;
-      if (asioActive || vbActive || vaioActive) {
-        pumpDelayMs = 10;
+      if (bridgeManager.active != null) {
+        pumpDelayMs = bridgeGated ? 50 : 10;
       } else if (wasapi != null && source != null) {
         pumpDelayMs = 5;
       } else {
@@ -2215,153 +2024,65 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       }
       await Future<void>.delayed(Duration(milliseconds: pumpDelayMs));
       pumpRounds++;
-      // ASIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 04 桥。
-      if (asioActive && ab != null) {
+      // 桥模式：WASAPI 泵暂停（设备已 stop），可视化与状态走当前后端。
+      // P1：三桥共用一段（互斥保证只有一个 active）；P4：gated 时降载。
+      final brc = bridgeManager.active;
+      if (brc != null) {
+        final backend = bridgeManager.activeId ?? '?';
+        final vizBackend = backend == 'vm' ? 'vb' : backend;
         try {
           final now = DateTime.now().millisecondsSinceEpoch;
-          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
+          if (!vizSuspended &&
+              (lastViz == null || now - lastViz! >= vizIntervalMs)) {
             lastViz = now;
-            final v = ab!.vizRead();
+            final v = brc.vizRead();
             if (v != null) {
-              asioStaleSince = 0;
-              asioStaleSent = false;
-              v['backend'] = 'asio';
+              bridgeStaleSince = 0;
+              bridgeStaleSent = false;
+              v['backend'] = vizBackend;
               send({'evt': 'viz', ...v});
-              if (!vbVizOkLogged) {
-                vbVizOkLogged = true;
-                dbgLog('asiomode: viz flowing l=${v['l']} r=${v['r']}');
+              if (!bridgeVizOkLogged) {
+                bridgeVizOkLogged = true;
+                dbgLog('$backend: viz flowing l=${v['l']} r=${v['r']}');
               }
             } else {
-              if (!vbVizNullLogged) {
-                vbVizNullLogged = true;
-                dbgLog('asiomode: first null viz');
-              }
-              if (asioStaleSince == 0) asioStaleSince = now;
-              if (!asioStaleSent && now - asioStaleSince > 1500) {
-                asioStaleSent = true;
-                sendStaleViz('asio', now);
-              }
-            }
-            // 启动 5s 后仍无回调帧：驱动 RT 线程没在跑（对照 status 的 switches）。
-            if (!vbNoCbLogged && now - vbStatusAt > 5000) {
-              vbNoCbLogged = true;
-              final st0 = ab!.status();
-              dbgLog('asiomode: t+5s switches=${st0?['switches']} '
-                  'sr=${st0?['sr']} nbs=${st0?['nbs']} '
-                  'peakIn=${st0?['peakIn']} peakOut=${st0?['peakOut']} '
-                  'bypass=${st0?['bypass']} note=${st0?['note']}');
-            }
-          }
-          vbStatusTick++;
-          if (vbStatusTick % 100 == 0) { // 10ms 泵 → 1s
-            final st = ab!.status();
-            if (st != null) {
-              send({
-                'evt': 'asiostatus',
-                ...st,
-                'driverInUse': asioDriverInUse,
-              });
-            }
-          }
-        } catch (e, st) { swallowThrottled(e, st, 'pump-asio'); }
-        continue;
-      }
-      // VB 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走桥。
-      if (vbActive && vb != null) {
-        try {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
-            lastViz = now;
-            final v = vb!.vizRead();
-            if (v != null) {
-              vbStaleSince = 0;
-              vbStaleSent = false;
-              v['backend'] = 'vb';
-              send({'evt': 'viz', ...v});
-              if (!vbVizOkLogged) {
-                vbVizOkLogged = true;
-                dbgLog('vbmode: viz flowing l=${v['l']} r=${v['r']}');
-              }
-            } else {
-              if (!vbVizNullLogged) {
+              if (!bridgeVizNullLogged) {
                 // 首个空 viz 记一笔（桥 handle 未就绪或对端静默的早期信号）。
-                vbVizNullLogged = true;
-                dbgLog('vbmode: first null viz');
+                bridgeVizNullLogged = true;
+                dbgLog('$backend: first null viz');
               }
-              if (vbStaleSince == 0) vbStaleSince = now;
-              if (!vbStaleSent && now - vbStaleSince > 1500) {
-                vbStaleSent = true;
-                sendStaleViz('vb', now);
+              if (bridgeStaleSince == 0) bridgeStaleSince = now;
+              if (!bridgeStaleSent && now - bridgeStaleSince > 1500) {
+                bridgeStaleSent = true;
+                sendStaleViz(vizBackend, now);
               }
             }
-            // 启动 5s 后仍无回调帧：路由/引擎二选一，看同周期 status 的 frames/handles。
-            if (!vbNoCbLogged &&
-                now - vbStatusAt > 5000) {
-              vbNoCbLogged = true;
-              final st0 = vb!.status();
-              dbgLog('vbmode: t+5s handles=${st0?['handles']} '
-                  'frames=${st0?['frames']} peakIn=${st0?['peakIn']} '
-                  'vizGrp=${st0?['vizGrp']} '
-                  'testKind=${st0?['testKind']} bypass=${st0?['bypass']} '
-                  'note=${st0?['note']}');
+            // 启动 5s 后仍无回调帧：看同周期 status 的 frames/handles/switches。
+            if (!bridgeNoCbLogged && now - bridgeStatusAt > 5000) {
+              bridgeNoCbLogged = true;
+              dbgLog('$backend: t+5s ${brc.status()}');
             }
           }
-          vbStatusTick++;
-          if (vbStatusTick % 100 == 0) { // 10ms 泵 → 1s
-            final st = vb!.status();
-            if (st != null) send({'evt': 'vbstatus', ...st});
-          }
-        } catch (e, st) { swallowThrottled(e, st, 'pump-vb'); }
-        continue;
-      }
-      // AuraVAIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 01 桥。
-      if (vaioActive && vaio != null) {
-        try {
-          final now = DateTime.now().millisecondsSinceEpoch;
-          if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {
-            lastViz = now;
-            final v = vaio!.vizRead();
-            if (v != null) {
-              vaioStaleSince = 0;
-              vaioStaleSent = false;
-              v['backend'] = 'vaio';
-              send({'evt': 'viz', ...v});
-              if (!vaioVizOkLogged) {
-                vaioVizOkLogged = true;
-                dbgLog('vaiomode: viz flowing l=${v['l']} r=${v['r']}');
-              }
-            } else {
-              if (!vaioVizNullLogged) {
-                vaioVizNullLogged = true;
-                dbgLog('vaiomode: first null viz');
-              }
-              if (vaioStaleSince == 0) vaioStaleSince = now;
-              if (!vaioStaleSent && now - vaioStaleSince > 1500) {
-                vaioStaleSent = true;
-                sendStaleViz('vaio', now);
-              }
-            }
-            if (!vaioNoCbLogged && now - vaioStatusAt > 5000) {
-              vaioNoCbLogged = true;
-              final st0 = vaio!.status();
-              dbgLog('vaiomode: t+5s frames=${st0?['frames']} '
-                  'sr=${st0?['sr']} peakIn=${st0?['peakIn']} '
-                  'peakOut=${st0?['peakOut']} bypass=${st0?['bypass']} '
-                  'note=${st0?['note']}');
-            }
-          }
-          vaioStatusTick++;
-          if (vaioStatusTick % 100 == 0) { // 10ms 泵 → 1s
-            final st = vaio!.status();
+          // status 轮询：平时 1s；gated 时每轮都读（50ms 泵），信号回来当轮
+          // 即回落 10ms（P4）。
+          if (bridgeGated || now - bridgeStatusPollAt >= 1000) {
+            bridgeStatusPollAt = now;
+            final st = brc.status();
             if (st != null) {
+              final evt = backend == 'vm'
+                  ? 'vbstatus'
+                  : (backend == 'asio' ? 'asiostatus' : 'vaiostatus');
               send({
-                'evt': 'vaiostatus',
+                'evt': evt,
                 ...st,
-                'outputEndpoint': vaioOutputEndpointInUse,
+                if (backend == 'asio') 'driverInUse': asioDriverInUse,
+                if (backend == 'vaio')
+                  'outputEndpoint': vaioOutputEndpointInUse,
               });
+              bridgeGated = ((st['gated'] as num?)?.toInt() ?? 0) == 1;
             }
           }
-        } catch (e, st) { swallowThrottled(e, st, 'pump-vaio'); }
+        } catch (e, st) { swallowThrottled(e, st, 'pump-$vizBackend'); }
         continue;
       }
       try {

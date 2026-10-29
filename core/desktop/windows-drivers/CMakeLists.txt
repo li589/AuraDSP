@@ -70,7 +70,7 @@ add_library(auravm STATIC
     "${VMCLIENT}/VmAudioCallback.cpp"
 )
 
-target_include_directories(auravm PUBLIC "${VMCLIENT}")
+target_include_directories(auravm PUBLIC "${VMCLIENT}" "${BRIDGECOMMON}")
 target_compile_options(auravm PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -96,7 +96,7 @@ set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL
 add_executable(vm_parallel_test
     "${VMBRIDGE}/vm_parallel_test.cpp"
 )
-target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}")
+target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
 target_link_libraries(vm_parallel_test PRIVATE version)
 target_compile_options(vm_parallel_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_parallel_test PROPERTY CXX_STANDARD 20)
@@ -107,10 +107,20 @@ set_property(TARGET vm_parallel_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreade
 add_executable(rt_drain_test
     "${VMBRIDGE}/rt_drain_test.cpp"
 )
-target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}")
+target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
 target_compile_options(rt_drain_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET rt_drain_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET rt_drain_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+# P3 门禁：桥层静音门控状态机（三桥共用 bridge/common/SilenceGate.h）。
+# 驱动无关（不链任何桥 DLL），CI 无 VM/ASIO/VAIO 也能跑。
+add_executable(silence_gate_test
+    "${BRIDGECOMMON}/silence_gate_test.cpp"
+)
+target_include_directories(silence_gate_test PRIVATE "${BRIDGECOMMON}")
+target_compile_options(silence_gate_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET silence_gate_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET silence_gate_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
