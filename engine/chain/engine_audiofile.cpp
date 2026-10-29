@@ -11,35 +11,22 @@
 #define DRMP3_IMPLEMENTATION
 #include "legacy/jdsp/Effects/eel2/dr_mp3.h"
 
+#include "platform/port/fs.h"
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
 namespace {
 
 constexpr size_t kMaxMp3Bytes = 64u * 1024u * 1024u;
 
-/* 二进制整文件读入（wide 路径优先；成功返回 malloc 缓冲 + 大小）。 */
+/* 二进制整文件读入（UTF-8 路径经平台端口；成功返回 malloc 缓冲 + 大小）。 */
 unsigned char* read_bin_file(const char* utf8path, size_t* out_size) {
     *out_size = 0;
     if (!utf8path || !utf8path[0]) return nullptr;
-    FILE* fp = nullptr;
-#ifdef _WIN32
-    const int wlen = MultiByteToWideChar(CP_UTF8, 0, utf8path, -1, nullptr, 0);
-    if (wlen <= 0) return nullptr;
-    wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
-    if (!wpath) return nullptr;
-    MultiByteToWideChar(CP_UTF8, 0, utf8path, -1, wpath, wlen);
-    fp = _wfopen(wpath, L"rb");
-    free(wpath);
-#else
-    fp = fopen(utf8path, "rb");
-#endif
+    FILE* fp = auradsp::platform::fopen_utf8(utf8path, "rb");
     if (!fp) return nullptr;
     fseek(fp, 0, SEEK_END);
     const long sz = ftell(fp);
