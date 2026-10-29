@@ -10,6 +10,7 @@ class VisualizerHud extends StatelessWidget {
   final bool visible;
   final ValueChanged<VisualizerStyle> onStyleChanged;
   final VoidCallback onToggleFullscreen;
+  final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
   final VoidCallback onResetPeaks;
 
@@ -19,6 +20,7 @@ class VisualizerHud extends StatelessWidget {
     required this.visible,
     required this.onStyleChanged,
     required this.onToggleFullscreen,
+    required this.onToggleLyrics,
     required this.onOpenDrawer,
     required this.onResetPeaks,
   });
@@ -65,6 +67,15 @@ class VisualizerHud extends StatelessWidget {
                 width: 1,
                 color: p.hairline,
               ),
+
+              // 歌词显示开关
+              _ActionButton(
+                icon: Icons.lyrics_rounded,
+                tooltip: config.showLyrics ? 'Hide Lyrics' : 'Show Lyrics',
+                active: config.showLyrics,
+                onTap: onToggleLyrics,
+              ),
+              const SizedBox(width: 4),
 
               // 复位峰值
               _ActionButton(
@@ -154,11 +165,13 @@ class _StyleButton extends StatelessWidget {
 class _ActionButton extends StatelessWidget {
   final IconData icon;
   final String tooltip;
+  final bool active;
   final VoidCallback onTap;
 
   const _ActionButton({
     required this.icon,
     required this.tooltip,
+    this.active = false,
     required this.onTap,
   });
 
@@ -174,10 +187,13 @@ class _ActionButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: Colors.transparent,
+            color: active ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
             borderRadius: BorderRadius.circular(AuraRadius.sm),
+            border: active
+                ? Border.all(color: p.accent.withValues(alpha: 0.4), width: 1)
+                : null,
           ),
-          child: Icon(icon, size: 18, color: p.textDim),
+          child: Icon(icon, size: 18, color: active ? p.accent : p.textDim),
         ),
       ),
     );

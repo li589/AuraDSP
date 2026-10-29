@@ -122,6 +122,12 @@ class VisualizerConfig {
   /// 是否独占最大化舞台（隐去外层留白）
   final bool isMaximized;
 
+  /// 是否开启实时歌词覆盖显示
+  final bool showLyrics;
+
+  /// 是否显示歌词双语翻译
+  final bool showTranslation;
+
   const VisualizerConfig({
     this.style = VisualizerStyle.bars,
     this.colorTheme = VisualizerColorTheme.system,
@@ -134,6 +140,8 @@ class VisualizerConfig {
     this.showPeaks = true,
     this.showDbScale = true,
     this.isMaximized = false,
+    this.showLyrics = false,
+    this.showTranslation = true,
   });
 
   VisualizerConfig copyWith({
@@ -148,6 +156,8 @@ class VisualizerConfig {
     bool? showPeaks,
     bool? showDbScale,
     bool? isMaximized,
+    bool? showLyrics,
+    bool? showTranslation,
   }) {
     return VisualizerConfig(
       style: style ?? this.style,
@@ -161,6 +171,8 @@ class VisualizerConfig {
       showPeaks: showPeaks ?? this.showPeaks,
       showDbScale: showDbScale ?? this.showDbScale,
       isMaximized: isMaximized ?? this.isMaximized,
+      showLyrics: showLyrics ?? this.showLyrics,
+      showTranslation: showTranslation ?? this.showTranslation,
     );
   }
 }

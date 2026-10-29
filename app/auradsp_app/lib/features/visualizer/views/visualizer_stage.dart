@@ -7,6 +7,9 @@ import '../../../core/theme.dart';
 import '../../../ui/widgets.dart' show FreqAxis;
 import '../controllers/peak_physics_engine.dart';
 import '../controllers/waveform_synthesizer.dart';
+import '../lyrics/models/lyric_models.dart';
+import '../lyrics/services/media_sync_service.dart';
+import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../styles/style_cyber_grid.dart';
@@ -25,7 +28,9 @@ class VisualizerStage extends StatefulWidget {
   final VisualizerConfig config;
   final ValueChanged<VisualizerStyle> onStyleChanged;
   final VoidCallback onToggleFullscreen;
+  final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
+  final MediaSyncService? mediaSync;
   final String emptyText;
   final bool active;
 
@@ -38,7 +43,9 @@ class VisualizerStage extends StatefulWidget {
     required this.config,
     required this.onStyleChanged,
     required this.onToggleFullscreen,
+    required this.onToggleLyrics,
     required this.onOpenDrawer,
+    this.mediaSync,
     required this.emptyText,
     required this.active,
   });
@@ -153,6 +160,23 @@ class _VisualizerStageState extends State<VisualizerStage>
               else
                 _buildIdlePlaceholder(p),
 
+              // 实时歌词叠加展示层
+              if (widget.config.showLyrics && widget.mediaSync != null)
+                ValueListenableBuilder<LyricDocument>(
+                  valueListenable: widget.mediaSync!.currentLyrics,
+                  builder: (_, doc, _) => ValueListenableBuilder<int>(
+                    valueListenable: widget.mediaSync!.activeLineIndex,
+                    builder: (_, activeIdx, _) => Container(
+                      color: p.bg.withValues(alpha: 0.72),
+                      child: LyricView(
+                        document: doc,
+                        activeIndex: activeIdx,
+                        showTranslation: widget.config.showTranslation,
+                      ),
+                    ),
+                  ),
+                ),
+
               // 底部悬浮控制岛 HUD
               Align(
                 alignment: Alignment.bottomCenter,
@@ -168,6 +192,10 @@ class _VisualizerStageState extends State<VisualizerStage>
                     onToggleFullscreen: () {
                       _onUserPointerActivity();
                       widget.onToggleFullscreen();
+                    },
+                    onToggleLyrics: () {
+                      _onUserPointerActivity();
+                      widget.onToggleLyrics();
                     },
                     onOpenDrawer: () {
                       _onUserPointerActivity();
