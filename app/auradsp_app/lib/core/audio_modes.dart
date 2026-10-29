@@ -14,7 +14,7 @@
  * 方向锁定：WASAPI 渲染最终只收敛于 AuraVAIO 模式，sysapo 回归纯配置面；
  * 进程内链路是过渡形态，不再上新功能。
  */
-import 'dart:io' show Platform;
+import '../platform/platform_profile.dart';
 
 abstract final class AudioModes {
   // ADR-009 两大交互范式
@@ -75,13 +75,7 @@ abstract final class AudioModes {
     'macos': 'system',
   };
 
-  static String currentOs() {
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isAndroid) return 'android';
-    if (Platform.isLinux) return 'linux';
-    if (Platform.isMacOS) return 'macos';
-    return 'other';
-  }
+  static String currentOs() => PlatformProfile.os;
 
   static List<String> optionsFor(String os) {
     switch (os) {

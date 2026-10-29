@@ -1,5 +1,64 @@
-// part of audio_isolate.dart —— P1 按区拆分，纯搬运零改行。
-part of 'audio_isolate.dart';
+// audio_out_wasapi.dart —— Windows WASAPI 设备输出（COM vtable 直调）。
+//
+// M4 由 lib/engine/audio_device.dart + audio_guid.dart 合并拆出：
+//   - 独立 library（原为 audio_isolate.dart 的 part），只暴露 AudioOut 实现；
+//   - 设备位深/声道转换随实现内聚（write 内完成 GetBuffer→转换→ReleaseBuffer）。
+// 行为与拆分前等价：COM vtable 索引、HRESULT 检查、端点排障日志均未改。
+//
+// WASAPI：shared 模式轮询推（v1；event-driven 待后续迭代，CPU 开销可忽略）。
+// COM vtable 索引按 x64 ABI 手写（IUnknown 0-2 起）。
+import 'dart:ffi';
+import 'dart:typed_data';
+
+import 'package:ffi/ffi.dart';
+
+import '../../core/error_sink.dart';
+import '../../platform/platform_profile.dart';
+import '../debug_log.dart';
+import 'audio_out.dart';
+
+/* ---------------- GUID ---------------- */
+
+final class Guid extends Struct {
+  @Uint32()
+  external int d1;
+  @Uint16()
+  external int d2;
+  @Uint16()
+  external int d3;
+  @Array(8)
+  external Array<Uint8> d4;
+
+  static Pointer<Guid> alloc(String s) {
+    final p = malloc<Guid>();
+    final hex = s.replaceAll('-', '');
+    p.ref.d1 = int.parse(hex.substring(0, 8), radix: 16);
+    p.ref.d2 = int.parse(hex.substring(8, 12), radix: 16);
+    p.ref.d3 = int.parse(hex.substring(12, 16), radix: 16);
+    for (var i = 0; i < 8; i++) {
+      p.ref.d4[i] = int.parse(hex.substring(16 + i * 2, 18 + i * 2), radix: 16);
+    }
+    return p;
+  }
+}
+
+const _iidDeviceEnumerator = 'A95664D2-9614-4F35-A746-DE8DB63617E6';
+const _clsidDeviceEnumerator = 'BCDE0395-E52F-467C-8E3D-C4579291692E';
+const _iidAudioClient = '1CB9AD4C-DBFA-4C32-B178-C2F568A703B2';
+const _iidAudioRenderClient = 'F294ACFC-3146-4483-A7BF-ADDCA7C260E2';
+
+// KSDATAFORMAT_SUBTYPE_* 在 WAVEFORMATEXTENSIBLE 内存中的小端字节
+// {00000003-0000-0010-8000-00AA00389B71} IEEE_FLOAT
+const _subFloatLe = [
+  0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+  0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71
+];
+// {00000001-0000-0010-8000-00AA00389B71} PCM
+const _subPcmLe = [
+  0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+  0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71
+];
+
 bool _matchLe(Pointer<Uint8> b, int off, List<int> want) {
   for (var i = 0; i < want.length; i++) {
     if (b[off + i] != want[i]) return false;
@@ -7,45 +66,10 @@ bool _matchLe(Pointer<Uint8> b, int off, List<int> want) {
   return true;
 }
 
-/// 把引擎输出（stereo interleaved）按设备混音格式写入 WASAPI 缓冲。
-/// 共享模式通常为 float32，但部分驱动为 int32/int16——按位深正确转换。
-/// Phase 2 直通：src 可为 Nch 交织（srcCh），超出设备声道截断、不足补零。
-void writeToDevice(WasapiOut w, Pointer<Float> devOut, int frames, int devCh,
-    Float32List src, {int srcCh = 2}) {
-  void put(int i, double v) {
-    final c = v.clamp(-1.0, 1.0);
-    if (w.mix.isFloat) {
-      devOut[i] = c;
-    } else if (w.mix.bitsPerSample == 16) {
-      devOut.cast<Int16>()[i] = (c * 32767).toInt();
-    } else {
-      devOut.cast<Int32>()[i] = (c * 2147483647).toInt();
-    }
-  }
-
-  if (devCh == 2 && srcCh == 2) {
-    if (w.mix.isFloat) {
-      devOut.asTypedList(frames * 2).setRange(0, frames * 2, src);
-      return;
-    }
-    for (var i = 0; i < frames * 2; i++) {
-      put(i, src[i]);
-    }
-    return;
-  }
-  for (var f = 0; f < frames; f++) {
-    for (var c = 0; c < devCh; c++) {
-      put(f * devCh + c, c < srcCh ? src[f * srcCh + c] : 0.0);
-    }
-  }
-}
-
 Pointer<T> _vt<T extends NativeType>(Pointer<Void> obj, int index) {
   final vtbl = obj.cast<Pointer<Pointer<Void>>>().value;
   return vtbl[index].cast<T>();
 }
-
-/* ---------------- WASAPI COM 绑定 ---------------- */
 
 /// WAVEFORMATEX / WAVEFORMATEXTENSIBLE 兼容读取
 final class WavFormatEx {
@@ -110,8 +134,41 @@ final class WavFormatEx {
   }
 }
 
+/// 把引擎输出（stereo interleaved）按设备混音格式写入 WASAPI 缓冲。
+/// 共享模式通常为 float32，但部分驱动为 int32/int16——按位深正确转换。
+/// Phase 2 直通：src 可为 Nch 交织（srcCh），超出设备声道截断、不足补零。
+void _writeToDevice(WavFormatEx mix, Pointer<Float> devOut, int frames,
+    int devCh, Float32List src, {int srcCh = 2}) {
+  void put(int i, double v) {
+    final c = v.clamp(-1.0, 1.0);
+    if (mix.isFloat) {
+      devOut[i] = c;
+    } else if (mix.bitsPerSample == 16) {
+      devOut.cast<Int16>()[i] = (c * 32767).toInt();
+    } else {
+      devOut.cast<Int32>()[i] = (c * 2147483647).toInt();
+    }
+  }
+
+  if (devCh == 2 && srcCh == 2) {
+    if (mix.isFloat) {
+      devOut.asTypedList(frames * 2).setRange(0, frames * 2, src);
+      return;
+    }
+    for (var i = 0; i < frames * 2; i++) {
+      put(i, src[i]);
+    }
+    return;
+  }
+  for (var f = 0; f < frames; f++) {
+    for (var c = 0; c < devCh; c++) {
+      put(f * devCh + c, c < srcCh ? src[f * srcCh + c] : 0.0);
+    }
+  }
+}
+
 /// WASAPI 输出（COM vtable 直调，全部显式 Dart 签名）
-final class WasapiOut {
+final class WasapiOut implements AudioOut {
   final DynamicLibrary ole32 = DynamicLibrary.open('ole32.dll');
 
   late final int Function(Pointer<Guid>, Pointer<Void>, int, Pointer<Guid>,
@@ -140,13 +197,24 @@ final class WasapiOut {
 
   late final Pointer<Void> enumerator, device, client, renderClient;
   late final WavFormatEx mix;
+  @override
   late final int bufferFrames;
 
+  @override
   bool started = false;
 
   /// 本次 init 选中的端点实名（排障用；_hr 失败时拼进异常，红屏直接见名）。
   String endpointName = '';
 
+  /// 实际协商到的设备采样率（供泵循环/引擎建链使用）。
+  @override
+  int get sampleRate => mix.sampleRate;
+
+  /// 实际协商到的设备声道数。
+  @override
+  int get channels => mix.channels;
+
+  @override
   void init({int? requestedSampleRate}) {
     dbgLog('WASAPI init: begin');
     final hr = coInitializeEx(0, 0x0); // COINIT_MULTITHREADED
@@ -330,7 +398,7 @@ final class WasapiOut {
       hrInit = initializeFn(client, 0, 0, 200000, 0, fmtPtr, nullptr);
       malloc.free(rejected);
     }
-    // mix 必须反映**实际协商到的**格式，后续 writeToDevice 的位深换算依赖它
+    // mix 必须反映**实际协商到的**格式，后续 write 的位深换算依赖它
     if (requestedRateApplied) {
       mix = WavFormatEx.read(customFmt!.cast<Void>());
       dbgLog('negotiated format: rate=${mix.sampleRate} '
@@ -386,7 +454,8 @@ final class WasapiOut {
         .asFunction<int Function(Pointer<Void>)>();
   }
 
-  int getCurrentPaddingNow() {
+  @override
+  int currentPadding() {
     final p = malloc<Uint32>();
     _hr('GetCurrentPadding', getCurrentPadding(client, p));
     final v = p.value;
@@ -394,7 +463,7 @@ final class WasapiOut {
     return v;
   }
 
-  Pointer<Float> getBuffer(int frames) {
+  Pointer<Float> _getBuffer(int frames) {
     final p = malloc<Pointer<Uint8>>();
     // 注意：IAudioRenderClient 的方法必须用 renderClient 作 this
     _hr('GetBuffer', getBufferFn(renderClient, frames, p));
@@ -403,8 +472,15 @@ final class WasapiOut {
     return data;
   }
 
-  void releaseBuffer(int frames) {
+  void _releaseBuffer(int frames) {
     _hr('ReleaseBuffer', releaseBufferFn(renderClient, frames, 0));
+  }
+
+  @override
+  void write(Float32List src, {required int frames, int srcCh = 2}) {
+    final devOut = _getBuffer(frames);
+    _writeToDevice(mix, devOut, frames, mix.channels, src, srcCh: srcCh);
+    _releaseBuffer(frames);
   }
 
   /// `IAudioClient::Stop` 返回 AUDCLNT_E_DEVICE_INVALIDATED（0x88890004）时
@@ -414,6 +490,7 @@ final class WasapiOut {
 
   /// D4-a：Start 的 HRESULT 必须检查——失败却把 `started` 置真，上层会以为
   /// 有声。
+  @override
   void start() {
     _hr('Start', startFn(client));
     started = true;
@@ -425,6 +502,7 @@ final class WasapiOut {
   ///
   /// 失败抛 StateError，调用方负责决定是回滚还是降级（切换路径见
   /// `backend_switch.dart` 的 runHandover）。
+  @override
   void stop() {
     if (!started) return;
     final hr = stopFn(client);
@@ -441,4 +519,13 @@ final class WasapiOut {
           '${endpointName.isNotEmpty ? " (endpoint: $endpointName)" : ""}');
     }
   }
+}
+
+/// 当前平台的本地设备输出实现。
+///
+/// M4 只有 WASAPI：Linux 实现落地后在此接入（Dart 无按 OS 选择的条件导入，
+/// 由能力位 + 实现文件集中分派，避免出现空壳库）。
+AudioOut? createAudioOut() {
+  if (!PlatformProfile.supportsLocalDevice) return null;
+  return WasapiOut();
 }

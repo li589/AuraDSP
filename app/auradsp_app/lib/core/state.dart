@@ -30,6 +30,7 @@ import '../engine/auradsp_ffi.dart'
         kVizStageTelemetry;
 import '../engine/debug_log.dart';
 import '../engine/head_tracker.dart';
+import '../platform/platform_profile.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';

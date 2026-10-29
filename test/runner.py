@@ -158,6 +158,9 @@ def run_smoke_tests():
         # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
         # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
         "smoke_platform_isolation.py",
+        # M4 Dart 平台隔离门禁（2026-10-29）：lib/ 业务文件零 Platform.is；
+        # PlatformProfile 成员齐全；AudioOut 端口/工厂/WASAPI 实现归位。
+        "smoke_dart_platform_quarantine.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",

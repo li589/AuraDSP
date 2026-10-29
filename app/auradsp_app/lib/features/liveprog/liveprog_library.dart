@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../../core/config.dart';
 import '../../core/error_sink.dart';
+import '../../platform/platform_profile.dart';
 
 /// 脚本库条目
 class LiveprogItem {
@@ -163,16 +164,10 @@ abstract final class LiveprogLibrary {
 
   /// 路径收敛：只允许操作本地库或已登记外部目录之下的文件
   static bool _isUnderLibrary(String filePath, List<String> customDirs) {
-    var abs = File(filePath).absolute.path;
-    if (Platform.isWindows) {
-      abs = abs.toLowerCase();
-    }
+    final abs = PlatformProfile.pathKey(File(filePath).absolute.path);
     final roots = <String>[Directory(dir).absolute.path, ...customDirs];
     for (final r in roots) {
-      var root = Directory(r).absolute.path;
-      if (Platform.isWindows) {
-        root = root.toLowerCase();
-      }
+      final root = PlatformProfile.pathKey(Directory(r).absolute.path);
       if (abs == root) continue;
       if (abs.startsWith(root + Platform.pathSeparator)) return true;
     }

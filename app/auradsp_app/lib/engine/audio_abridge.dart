@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
+import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 
@@ -37,11 +38,9 @@ class AuraAsioBridge implements AudioBridgeCommon {
 
   static AuraAsioBridge load() {
     if (_cached != null) return _cached!;
-    final candidates = <String>[
-      'auraasio_bridge.dll',
-      'engine\\auraasio_bridge.dll',
-    ];
-    final envPath = Platform.environment['AURADSP_ASIO_BRIDGE_DLL'];
+    final candidates =
+        List<String>.of(PlatformProfile.bridgeLibraryCandidates('asio'));
+    final envPath = Platform.environment[PlatformProfile.bridgeEnvVar('asio')];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
     Object? lastErr;
     for (final path in candidates) {
@@ -56,7 +55,8 @@ class AuraAsioBridge implements AudioBridgeCommon {
       return _cached!;
     }
     throw StateError(
-        'auraasio_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
+        '${candidates.isEmpty ? 'auraasio_bridge' : candidates.first} not found '
+        '(tried: ${candidates.join(", ")}) — $lastErr');
   }
 
   /// 驱动清单（UTF-8 显示名列表；桥内持有 SDK load 键映射）。

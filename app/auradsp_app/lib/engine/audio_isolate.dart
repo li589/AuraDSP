@@ -17,6 +17,8 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart';
+import 'audio_out/audio_out.dart';
+import 'audio_out/audio_out_wasapi.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
@@ -28,8 +30,6 @@ import 'local_channel_policy.dart';
 
 
 import '../core/error_sink.dart';
-part 'audio_guid.dart';
-part 'audio_device.dart';
 part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
@@ -87,7 +87,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   AuraDspLib? lib;
   Pointer<Void>? handle;
-  WasapiOut? wasapi;
+  AudioOut? wasapi;
   Source? source;
   bool bypass = false;
   // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
@@ -1843,7 +1843,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 代价：每次约数十毫秒，故只在用户显式点击时触发，绝不进音频路径。
             final comp = (m['comp'] as String?) ?? '';
             final l = lib;
-            final rate = wasapi?.mix.sampleRate.toDouble() ?? 48000.0;
+            final rate = wasapi?.sampleRate.toDouble() ?? 48000.0;
             if (l == null || comp.isEmpty) {
               send({
                 'evt': 'componentLatency',
@@ -1899,16 +1899,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('engine dll loaded');
     String? wasapiError;
     try {
-      wasapi = WasapiOut()
-        ..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
+      wasapi = createAudioOut()
+        ?..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
     } catch (e) {
       wasapi = null;
       wasapiError = e.toString();
       dbgLog('WASAPI unavailable, degraded ready: $wasapiError');
     }
+    if (wasapi == null && wasapiError == null) {
+      // 平台不支持本地设备输出（AudioOut 端口返回空）：同样走降级就绪。
+      wasapiError = 'local audio out unavailable on this platform';
+      dbgLog('local audio out unsupported, degraded ready');
+    }
     // 无输出设备时按请求速率建引擎（有设备则跟设备协商值）。
     final engineRate = wasapi != null
-        ? wasapi.mix.sampleRate.toDouble()
+        ? wasapi.sampleRate.toDouble()
         : (requestedRate > 0
             ? requestedRate.toDouble()
             : kFallbackSampleRate.toDouble());
@@ -1945,8 +1950,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'abi': lib.abi(),
       'version': lib.version().toDartString(),
       // 无输出设备时 deviceRate=0，UI 据此展示降级态而非红屏。
-      'deviceRate': wasapi?.mix.sampleRate ?? 0,
-      'deviceCh': wasapi?.mix.channels ?? 0,
+      'deviceRate': wasapi?.sampleRate ?? 0,
+      'deviceCh': wasapi?.channels ?? 0,
       'bufferFrames': wasapi?.bufferFrames ?? 0,
       'latencyMs': lib.getLatencyMs(handle),
     });
@@ -2093,7 +2098,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           noteIdle(DateTime.now().millisecondsSinceEpoch);
           continue;
         }
-        final padding = w.getCurrentPaddingNow();
+        final padding = w.currentPadding();
         final avail = w.bufferFrames - padding;
         if (avail <= 0 || source == null) {
           noteIdle(DateTime.now().millisecondsSinceEpoch);
@@ -2107,11 +2112,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         }
 
         if (source != null) {
-          source!.fill(srcBuf, frames, w.mix.sampleRate);
+          source!.fill(srcBuf, frames, w.sampleRate);
           if (frames > maxBlock) {
             dbgLog('GUARD: frames=$frames > maxBlock=$maxBlock!');
           }
-          final devCh = w.mix.channels;
+          final devCh = w.channels;
           final fs = source is FileSource ? source as FileSource : null;
           // 5.1 直通判定（本地渲染 only）：raw 就绪 + 用户开直通 +
           // 设备声道兜得住；任一不满足回落 fold。引擎照常跑 fold 版供 viz。
@@ -2147,7 +2152,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                       channelsMode: cm,
                       binauralActive: binauralOn);
               if (fs != null && want > 2 && applyEngineChannels(want) == fs.rawCh) {
-                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                fs.fillRaw(inBufEng, frames, w.sampleRate);
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
                 if (procRounds == 1) {
@@ -2166,7 +2171,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             } else {
               // 手动模式：保持引擎 channels.count 不变（用户/配置锁定，不调用 applyEngineChannels 覆盖）
               if (engineChCount > 2 && fs != null && fs.raw != null && fs.rawCh == engineChCount) {
-                fs.fillRaw(inBufEng, frames, w.mix.sampleRate);
+                fs.fillRaw(inBufEng, frames, w.sampleRate);
                 lib!.process(handle!, inPtrEng, outPtrEng8, frames);
                 engineMulti = true;
               } else if (engineChCount > 2) {
@@ -2186,19 +2191,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               }
             }
           }
-          final devOut = w.getBuffer(frames);
           if (rawSrc != null) {
-            rawSrc.fillRaw(inBufEng, frames, w.mix.sampleRate);
-            writeToDevice(w, devOut, frames, devCh, inBufEng, srcCh: rawSrc.rawCh);
+            rawSrc.fillRaw(inBufEng, frames, w.sampleRate);
+            w.write(inBufEng, frames: frames, srcCh: rawSrc.rawCh);
           } else if (engineMulti) {
             // 引擎输出 Nch：devCh==2 写 L/R；devCh>=N 写全部（环绕监听）。
-            writeToDevice(w, devOut, frames, devCh,
-                outPtrEng8.asTypedList(frames * engineChCount),
-                srcCh: engineChCount);
+            w.write(outPtrEng8.asTypedList(frames * engineChCount),
+                frames: frames, srcCh: engineChCount);
           } else {
-            writeToDevice(w, devOut, frames, devCh, bypass ? srcBuf : engOut);
+            w.write(bypass ? srcBuf : engOut, frames: frames);
           }
-          w.releaseBuffer(frames);
 
           // 可视化节流拉取：引擎 ~33ms 产一帧（30Hz，仍高于 UI 消费），
           // UI 按 vizFps（默认 20fps）拉取，

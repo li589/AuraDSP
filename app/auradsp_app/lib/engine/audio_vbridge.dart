@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
+import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 
@@ -51,11 +52,9 @@ class AuraVmBridge implements AudioBridgeCommon {
 
   static AuraVmBridge load() {
     if (_cached != null) return _cached!;
-    final candidates = <String>[
-      'auravm_bridge.dll',
-      'engine\\auravm_bridge.dll',
-    ];
-    final envPath = Platform.environment['AURADSP_VB_BRIDGE_DLL'];
+    final candidates =
+        List<String>.of(PlatformProfile.bridgeLibraryCandidates('vm'));
+    final envPath = Platform.environment[PlatformProfile.bridgeEnvVar('vm')];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
     Object? lastErr;
     for (final path in candidates) {
@@ -70,7 +69,8 @@ class AuraVmBridge implements AudioBridgeCommon {
       return _cached!;
     }
     throw StateError(
-        'auravm_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
+        '${candidates.isEmpty ? 'auravm_bridge' : candidates.first} not found '
+        '(tried: ${candidates.join(", ")}) — $lastErr');
   }
 
   Map<String, dynamic>? detect() => core.detectJson(2048);
