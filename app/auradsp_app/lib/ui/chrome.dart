@@ -722,36 +722,41 @@ class _PulseDotState extends State<PulseDot>
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: widget.size * 2.6,
-        height: widget.size * 2.6,
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (_, _) {
-            final t = Curves.easeInOut.transform(_c.value);
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                // 光晕
-                Container(
-                  width: widget.size + t * widget.size * 1.5,
-                  height: widget.size + t * widget.size * 1.5,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.color.withValues(alpha: 0.30 * (1 - t)),
+  // RepaintBoundary（2026-10-29）：呼吸动画 60fps 持续整场播放；此前它没有
+  // 独立图层，每帧把最近的整条顶栏/hero 行标脏重绘。加边界后每帧只重绘
+  // 这颗 ~16px 圆点，非可视化页面的 GPU 占用回到接近 0。
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: SizedBox(
+          width: widget.size * 2.6,
+          height: widget.size * 2.6,
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, _) {
+              final t = Curves.easeInOut.transform(_c.value);
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 光晕
+                  Container(
+                    width: widget.size + t * widget.size * 1.5,
+                    height: widget.size + t * widget.size * 1.5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color.withValues(alpha: 0.30 * (1 - t)),
+                    ),
                   ),
-                ),
-                Container(
-                  width: widget.size,
-                  height: widget.size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.color,
+                  Container(
+                    width: widget.size,
+                    height: widget.size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color,
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       );
 }

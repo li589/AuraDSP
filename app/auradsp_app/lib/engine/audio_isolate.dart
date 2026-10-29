@@ -252,9 +252,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   //
   // 关键：WASAPI 下 avail 间歇性 <= 0 是常态，若「每次进入空闲就补发」，
   // 零帧会与紧随其后的真实帧在 ~200Hz 上交替，表现为频谱/电平疯狂闪烁。
-  // 故必须持续空闲满 80 轮（400ms / 每轮 5ms）才补发一次。
-  const idleVizRounds = 80;
-  var idleRounds = 0;
+  // 故必须持续空闲满 400ms 才补发一次。
+  //
+  // 用**时间**而非轮数计时：泵的轮询间隔会随场景在 5/10/20ms 间切换
+  // （见 pump()），按轮数计会在慢泵下把 400ms 拖成 1.6s。
+  const idleVizMs = 400;
+  int idleSinceMs = 0; // 0 = 当前不在空闲期
   var idleVizSent = false;
   var lastSpectrumLen = 32;
   var lastStageLen = 32; // 与 kEngineStageCount 对齐
@@ -273,6 +276,12 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'ts': DateTime.now().millisecondsSinceEpoch,
       'seq': -1,
     });
+  }
+
+  /// 记录一次「本轮回无音频可喂」；持续空闲满 idleVizMs 补一帧全零。
+  void noteIdle(int now) {
+    if (idleSinceMs == 0) idleSinceMs = now;
+    if (!idleVizSent && now - idleSinceMs >= idleVizMs) sendIdleViz();
   }
 
   /// B2b：把本地 handle 的 `channels.count` 对齐到引擎应处理的工作声道数。
@@ -2190,7 +2199,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   Future<void> pump() async {
     dbgLog('pump loop start');
     while (running) {
-      await Future<void>.delayed(const Duration(milliseconds: 5));
+      /* 自适应轮询间隔（2026-10-29）：原实现无论场景恒定 5ms（200 次唤醒/s），
+       * 但只有「本地 WASAPI 正在喂音频」才需要这个节奏。
+       *   · WASAPI 播放中 → 5ms：维持低延迟供数；
+       *   · 桥模式（VB/ASIO/VAIO）→ 10ms：泵只拉 viz(50ms 节流)+状态；
+       *   · 无音源/无设备 → 20ms：不产生音频工作，只等命令与状态。
+       * 最小化播放时桥模式唤醒从 200/s 降到 100/s，纯空闲降到 50/s。 */
+      final int pumpDelayMs;
+      if (asioActive || vbActive || vaioActive) {
+        pumpDelayMs = 10;
+      } else if (wasapi != null && source != null) {
+        pumpDelayMs = 5;
+      } else {
+        pumpDelayMs = 20;
+      }
+      await Future<void>.delayed(Duration(milliseconds: pumpDelayMs));
       pumpRounds++;
       // ASIO 模式：WASAPI 泵暂停（设备已 stop），可视化与状态走 04 桥。
       if (asioActive && ab != null) {
@@ -2230,7 +2253,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
           vbStatusTick++;
-          if (vbStatusTick % 200 == 0) {
+          if (vbStatusTick % 100 == 0) { // 10ms 泵 → 1s
             final st = ab!.status();
             if (st != null) {
               send({
@@ -2284,7 +2307,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
           vbStatusTick++;
-          if (vbStatusTick % 200 == 0) {
+          if (vbStatusTick % 100 == 0) { // 10ms 泵 → 1s
             final st = vb!.status();
             if (st != null) send({'evt': 'vbstatus', ...st});
           }
@@ -2328,7 +2351,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             }
           }
           vaioStatusTick++;
-          if (vaioStatusTick % 200 == 0) {
+          if (vaioStatusTick % 100 == 0) { // 10ms 泵 → 1s
             final st = vaio!.status();
             if (st != null) {
               send({
@@ -2346,18 +2369,16 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         if (w == null) {
           // 无输出设备（降级就绪）：引擎照跑、viz 照发，只是不渲染；
           // 界面由 wasapiError 事件展示原因 + 重试。
-          idleRounds++;
-          if (idleRounds >= idleVizRounds) sendIdleViz();
+          noteIdle(DateTime.now().millisecondsSinceEpoch);
           continue;
         }
         final padding = w.getCurrentPaddingNow();
         final avail = w.bufferFrames - padding;
         if (avail <= 0 || source == null) {
-          idleRounds++;
-          if (idleRounds >= idleVizRounds) sendIdleViz();
+          noteIdle(DateTime.now().millisecondsSinceEpoch);
           continue;
         }
-        idleRounds = 0;
+        idleSinceMs = 0;
         final frames = math.min(avail, maxBlock);
         if (pumpRounds <= 30 || pumpRounds % 2000 == 0) {
           dbgLog('pump#$pumpRounds padding=$padding avail=$avail frames=$frames '
