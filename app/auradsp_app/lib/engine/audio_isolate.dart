@@ -2479,7 +2479,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           w.releaseBuffer(frames);
 
-          // 可视化节流拉取：引擎 ~10ms 产一帧，UI 33ms 拉一次，
+          // 可视化节流拉取：引擎 ~33ms 产一帧（30Hz，仍高于 UI 消费），
+          // UI 按 vizFps（默认 20fps）拉取，
           // 一次最多读 8 帧并只取最新（避免队列积压导致画面滞后）
           final now = DateTime.now().millisecondsSinceEpoch;
           if (!vizSuspended && (lastViz == null || now - lastViz! >= vizIntervalMs)) {

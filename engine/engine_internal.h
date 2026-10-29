@@ -502,7 +502,7 @@ struct auradsp_handle_s {
     float* hann = nullptr;            /* kVizFftMax floats */
     float* viz_hist = nullptr;        /* kVizFftMax*2，L/R 交织环形历史窗 */
     std::atomic<int> viz_fft_size{kVizFftDefault};  /* 实际使用长度（2 的幂，<= kVizFftMax） */
-    std::atomic<int> viz_interval{480};              /* 产出间隔（帧）= fs/100，即 10ms */
+    std::atomic<int> viz_interval{1600};             /* 产出间隔（帧）= fs/30，约 33ms */
     std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */
     int    viz_hist_pos = 0;          /* 下一个写入帧位（亦指向窗内最旧帧） */
     int    frames_since_viz = 0;
