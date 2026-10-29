@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(auravm_drivers LANGUAGES C CXX)
 
+# M3（2026-10-29）：产物路径保持 out/<Config>/（verify_dll_copies.py、Flutter runner
+# 同步与桥 smoke 依赖它）；构建中间文件由根工程统一到 build/<platform>/<arch>/。
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+
 # 独立于引擎构建（解耦铁律）；用户态只需要 Windows SDK。
 set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
@@ -294,5 +300,12 @@ target_compile_options(auraasio_driver PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auraasio_driver PROPERTY CXX_STANDARD 20)
 set_property(TARGET auraasio_driver PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auraasio_driver PRIVATE ole32 advapi32 winmm avrt version)
+
+
+# M3（2026-10-29）：桥的统一构建入口。三桥仍是各自独立的 DLL（Dart 按后端分别
+# 加载，合并会破坏惰性加载与故障域隔离），这里只提供聚合 target，供根预设 /
+# build_windows.ps1 一次构建（cmake --build --preset ... --target auradsp_bridges）。
+add_custom_target(auradsp_bridges
+    DEPENDS auravm_bridge auravaio_bridge auraasio_bridge)
 
 

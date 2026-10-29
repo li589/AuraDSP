@@ -58,7 +58,10 @@ OS 头（`windows.h` / `mmdeviceapi.h` 等）与平台符号（`_WIN32` / `_wfop
    ±10 钳位 → Stage 4 Post-Limiter 插件。
    混响边界（WP1）：立体声/矩阵/双耳路径由 vendor Progenitor2 承担；离散多声道路径在
    exciter 之后、Stage 3 之前调用 MC FDN（`dsp_mc_reverb.cpp`），两套混响不会同时运行。
-5. `core/desktop/windows/CMakeLists.txt`：源表加文件。
+5. `core/desktop/windows/CMakeLists.txt`：源表加文件。target 分层固定为
+   `auradsp_core`（STATIC：legacy C + 根 C ABI + chain/dsp）→ `auradsp_engine`
+   （SHARED：核心 + `platform/windows/*` 适配 + 插件子系统）；OS 实现只能进 engine
+   或 `plugins/platform/win32`，不得回流 core（M3，2026-10-29）。
 6. `test/smoke/smoke_xxx.py` + `test/runner.py` 登记（未登记 = 废测）。
 7. `graph.effects` 注册表加条目 **并同步计数注释**；容量门 2048（payload 近 1KB，
    小 buffer 宁可 E_PARAM 也不断尾残 JSON）。

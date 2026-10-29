@@ -148,9 +148,15 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 
 **桌面引擎**（产物 `core/desktop/windows/out/Release/auradsp_engine.dll`，脚本会自动同步多副本）
 
+```powershell
+# 统一入口（M3）：同一棵构建树 build/windows/x64，产物仍写回各子工程 out/<Config>/
+cmake --preset windows-x64
+cmake --build --preset windows-x64-release --target auradsp_engine auradsp_plugin_host
+```
+
 ```bash
 cd core/desktop/windows && bash build_engine.sh
-# 等价：cmake -S . -B out && cmake --build out --config Release
+# 等价（子工程单独配置）：cmake -S . -B out && cmake --build out --config Release
 ```
 
 **UI 应用**（`--no-tree-shake-icons` 必须带，否则图标被裁）
