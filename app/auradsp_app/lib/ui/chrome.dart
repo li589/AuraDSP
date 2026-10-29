@@ -102,7 +102,11 @@ class _PageScaffoldState extends State<PageScaffold>
           child: c,
         ),
       ),
-      child: child,
+      // 每张卡片独立图层（2026-10-29）：入场时 Opacity 只混合缓存纹理，
+      // 不逐帧重绘卡片；滚动时整列位移只做图层合成，不再重画所有卡片
+      // 的圆角/描边/阴影（此前 SingleChildScrollView 单列无边界，滚动
+      // 每帧重绘整页内容，是滚动 GPU 峰值的主因）。
+      child: RepaintBoundary(child: child),
     );
   }
 

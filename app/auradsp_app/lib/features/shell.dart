@@ -40,7 +40,11 @@ class _AppShellState extends State<AppShell> {
 
   // 页面实例缓存（P0-1）：IndexedStack 保活——切页复用既有 State
   // （保滚动/折叠态、避免 initState 重跑），也避免 build 每帧构造页面对象。
-  late final List<Widget> _pages;
+  //
+  // 惰性实例化（2026-10-29）：启动只构建首屏 Home；其余五页在首次访问时
+  // 才 mount，之后照旧保活。原实现 6 页全量 initState（含 Liveprog 编辑器、
+  // 插件表、效果器全量卡片）是启动峰值内存/CPU 的主要来源之一。
+  late final List<Widget?> _pages;
 
   static const _destinations = <({IconData icon, IconData active})>[
     (icon: Icons.home_outlined, active: Icons.home),
@@ -56,13 +60,30 @@ class _AppShellState extends State<AppShell> {
     super.initState();
     final m = widget.model;
     _pages = [
-      HomePage(model: m),
-      EffectsPage(model: m),
-      LiveprogPage(model: m),
-      PluginsPage(model: m),
-      ChainPage(model: m),
-      VisualizerPage(model: m),
+      HomePage(model: m), // 首屏立即构建
+      null, // Effects
+      null, // Liveprog
+      null, // Plugins
+      null, // Chain
+      null, // Visualizer
     ];
+  }
+
+  /// 取（必要时创建）指定页实例；创建结果写回缓存，后续切页零重建。
+  Widget _pageAt(int i) {
+    final cached = _pages[i];
+    if (cached != null) return cached;
+    final m = widget.model;
+    final created = switch (i) {
+      0 => HomePage(model: m),
+      1 => EffectsPage(model: m),
+      2 => LiveprogPage(model: m),
+      3 => PluginsPage(model: m),
+      4 => ChainPage(model: m),
+      _ => VisualizerPage(model: m),
+    };
+    _pages[i] = created;
+    return created;
   }
 
   @override
@@ -108,7 +129,14 @@ class _AppShellState extends State<AppShell> {
                     index: _index,
                     children: [
                       for (var i = 0; i < _pages.length; i++)
-                        TickerMode(enabled: i == _index, child: _pages[i]),
+                        TickerMode(
+                          enabled: i == _index,
+                          // 未访问过的离屏页保持零开销占位；当前页在同一帧
+                          // 内实例化（先 setState 再 build，无闪烁）。
+                          child: i == _index || _pages[i] != null
+                              ? _pageAt(i)
+                              : const SizedBox.shrink(),
+                        ),
                     ],
                   ),
                 ),
@@ -205,16 +233,21 @@ class _Rail extends StatelessWidget {
                     children: [
                       _BrandMark(p: p),
                       const SizedBox(width: AuraSpace.sm + 2),
-                      Text('AuraDSP',
-                          style: TextStyle(
-                            fontFamily: 'AuraDisplay',
-                            fontFamilyFallback: kDisplayCjkFallback,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: -0.2,
-                            color: p.text,
-                          )),
-                      const Spacer(),
+                      // Expanded + 省略号：字号放大/回退字体偏宽时不再顶出
+                      // 固定宽的导航栏（此前在测试字体下溢出 6.6px）。
+                      Expanded(
+                        child: Text('AuraDSP',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontFamily: 'AuraDisplay',
+                              fontFamilyFallback: kDisplayCjkFallback,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: -0.2,
+                              color: p.text,
+                            )),
+                      ),
                       _RailToggle(collapsed: false, onTap: onToggle),
                     ],
                   ),
