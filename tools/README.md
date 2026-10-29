@@ -8,7 +8,8 @@
 > 只做观测/取证/生成、需要人工参与 → 留 `tools/`。
 >
 > **目录**：`bin/` 可重复运行的工程工具；`probe/` 一次性诊断探针（用完即归档）；
-> `calibration/`、`resource_pipeline/` 主题工具；`archive/` 过程产物（gitignored）。
+> `calibration/`、`resource_pipeline/` 主题工具；`windows/` Windows-only 构建/同步/远程入口
+> （根级同名文件是薄转发，原命令行不变）；`archive/` 过程产物（gitignored）。
 
 ---
 
@@ -19,7 +20,10 @@
 | `bin/run_tests.py` | 统一测试执行入口桥接（转发 `test/runner.py`） |
 | `bin/push_via_api.py` | GitHub REST API 离线/受限网络推送兜底（自行组装 blob/tree/commit，sha 逐字一致） |
 | `bin/verify_dll_copies.py` | DLL 三处同哈希单向校验（仅校验；**分发**已改由 `sync_artifacts.ps1` 负责） |
-| `sync_artifacts.ps1` | 增量产物一次性同步：把引擎 DLL / 宿主 EXE / 三个桥从真相源覆盖分发到 `test/`、`app build runner`、`dist` 三处；端点缺失或单文件覆盖失败仅告警并跳过（替代手工 cp；`-WhatIf` 预演、`-PackZip` 重打包发行 zip） |
+| `windows/sync_artifacts.ps1` | 增量产物一次性同步：把引擎 DLL / 宿主 EXE / 三个桥从真相源覆盖分发到 `test/`、`app build runner`、`dist` 三处；端点缺失或单文件覆盖失败仅告警并跳过（替代手工 cp；`-WhatIf` 预演、`-PackZip` 重打包发行 zip） |
+| `windows/build_windows.ps1` | Windows 全栈构建/产物整理/资源打包流水线（根 CMake preset → 引擎/桥/Flutter → dist；根级 `tools/build_windows.ps1` 薄转发，命令不变） |
+| `windows/remote_win10.ps1` | Win10 虚拟机远程命令（ssh 封装；根级同名薄转发） |
+| `windows/*.bat` | 增量引擎构建与两组 smoke 快捷批处理（根级同名薄转发；内容仍为历史硬编码入口） |
 | `bin/abi_consistency.py` | .def/engine.h/ffi.dart 45 符号一致性（`smoke_abi_consistency.py` 调它） |
 | `bin/dart_swallow_scan.py` | Dart 静默异常门禁（D4-b）：R1 空 catch 块必留痕或标记 / R2 循环体包壳必 `swallowThrottled` / R3 禁 `catch (_)` 丢弃异常 / R4 标记理由不得敷衍。词法级剥离注释与字符串，注释里的 `catch (_)` 不误判（`smoke_d4b_swallow.py` 调它，`--json` 可机器读） |
 | `bin/patch_id_scan.py` | 补丁编号门禁（D6/§7-4）：每个 `PATCHED-AuraDSP` 标记必须紧跟已登记的 `P-NNN`（编号写在说明文字里、日期在编号前都判红——这两种按行 grep 都看着"有编号"）；同一专项代号别名不得映射到两个编号；登记表不得重复编号（`smoke_d6_patch_ids.py` 调它） |

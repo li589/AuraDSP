@@ -24,6 +24,31 @@ TEST_DIR = os.path.join(ROOT_DIR, "test")
 SMOKE_DIR = os.path.join(TEST_DIR, "smoke")
 UI_DIR = os.path.join(TEST_DIR, "ui")
 
+# M5（2026-10-29）平台标记：'windows' = 依赖 Win32 / 引擎 DLL / 注册表 / COM；
+# 'any' = 纯源码扫描，可在任意平台运行。未列出的 smoke 默认 windows（引擎当前
+# 只有 Windows 产物）。出现可用的 Linux/Android 引擎后逐项下调标记，不设全局开关。
+PLATFORM_ANY = {
+    "smoke_platform_isolation.py",
+    "smoke_dart_platform_quarantine.py",
+}
+
+if sys.platform.startswith("win"):
+    CURRENT_PLATFORM = "windows"
+elif sys.platform.startswith("linux"):
+    CURRENT_PLATFORM = "linux"
+elif sys.platform == "darwin":
+    CURRENT_PLATFORM = "macos"
+else:
+    CURRENT_PLATFORM = "other"
+
+
+def required_platform(smoke_file):
+    return "any" if smoke_file in PLATFORM_ANY else "windows"
+
+
+def platform_supported(required):
+    return required == "any" or required == CURRENT_PLATFORM
+
 
 def run_smoke_tests():
     print("========================================")
@@ -268,23 +293,36 @@ def run_smoke_tests():
         "test_editor_size_c4.py",
     ]
     all_pass = True
+    passed = skipped = failed = 0
+    skipped_files = []
     for sf in smoke_files:
         path = os.path.join(SMOKE_DIR, sf)
         if not os.path.exists(path):
             print(f"[WARN] File not found: {sf}")
             continue
+        req = required_platform(sf)
+        if not platform_supported(req):
+            print(f"[SKIP] {sf} (requires {req}, current {CURRENT_PLATFORM})")
+            skipped += 1
+            skipped_files.append(sf)
+            continue
         print(f"\n---> Running {sf}...")
         res = subprocess.run([sys.executable, path], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:
             print(f"[FAIL] {sf} returned code {res.returncode}")
+            failed += 1
             all_pass = False
         else:
             print(f"[PASS] {sf}")
+            passed += 1
     print("\n========================================")
     if all_pass:
         print("  ALL SMOKE TESTS PASSED [100%]        ")
     else:
         print("  SOME SMOKE TESTS FAILED!             ")
+    print(f"  PASS {passed} | SKIP {skipped} | FAIL {failed}   ")
+    if skipped_files:
+        print("  SKIPPED: " + ", ".join(skipped_files))
     print("========================================")
     return 0 if all_pass else 1
 
@@ -293,6 +331,11 @@ def run_ui_tests(target=None):
     print("========================================")
     print("  Running AuraDSP UI Automation Tests  ")
     print("========================================")
+    # M5：UI 自动化全部依赖 Windows 窗口栈与 ui_test_kit，非 Windows 统一跳过。
+    if not platform_supported("windows"):
+        print(f"  ALL UI TESTS SKIPPED (requires windows, current {CURRENT_PLATFORM})")
+        print("========================================")
+        return 0
     if target:
         target_path = os.path.join(UI_DIR, target if target.endswith(".py") else f"{target}.py")
         if not os.path.exists(target_path):
