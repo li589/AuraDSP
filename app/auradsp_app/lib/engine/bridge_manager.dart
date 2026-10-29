@@ -14,6 +14,7 @@ import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
 
+import '../platform/platform_profile.dart';
 import 'auradsp_ffi.dart' show VizFrame;
 import 'audio_abridge.dart';
 import 'audio_bridge.dart' show resolveBridgePrefix, unifiedStart;
@@ -305,24 +306,24 @@ List<BridgeDesc> builtinBridgeDescs() => [
       BridgeDesc(
         id: 'vm',
         displayName: 'Voicemeeter',
-        dllName: 'auravm_bridge.dll',
-        envVar: 'AURADSP_VB_BRIDGE_DLL',
+        dllName: PlatformProfile.bridgeLibraryName('vm'),
+        envVar: PlatformProfile.bridgeEnvVar('vm'),
         prefix: 'vb',
         load: AuraVmBridge.load,
       ),
       BridgeDesc(
         id: 'asio',
         displayName: 'ASIO',
-        dllName: 'auraasio_bridge.dll',
-        envVar: 'AURADSP_ASIO_BRIDGE_DLL',
+        dllName: PlatformProfile.bridgeLibraryName('asio'),
+        envVar: PlatformProfile.bridgeEnvVar('asio'),
         prefix: 'asio',
         load: AuraAsioBridge.load,
       ),
       BridgeDesc(
         id: 'vaio',
         displayName: 'AuraVAIO',
-        dllName: 'auravaio_bridge.dll',
-        envVar: 'AURADSP_VAIO_BRIDGE_DLL',
+        dllName: PlatformProfile.bridgeLibraryName('vaio'),
+        envVar: PlatformProfile.bridgeEnvVar('vaio'),
         prefix: 'vaio',
         load: AuraVaioBridge.load,
       ),

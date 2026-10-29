@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/error_sink.dart';
+import '../../../core/file_shell.dart';
 import '../../../core/path_memory.dart';
 import '../../../core/state.dart';
 import '../../../core/theme.dart';
@@ -210,19 +211,7 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
   }
 
   /// 打开目标平台文件管理器
-  Future<void> _browseInFileManager(String path) async {
-    try {
-      if (Platform.isWindows) {
-        await Process.run('explorer.exe', [path]);
-      } else if (Platform.isMacOS) {
-        await Process.run('open', [path]);
-      } else if (Platform.isLinux) {
-        await Process.run('xdg-open', [path]);
-      }
-    } catch (e, st) {
-      swallow(e, st);
-    }
-  }
+  Future<void> _browseInFileManager(String path) => openInFileManager(path);
 
   /// 添加外部目录（统一选择 UI + 单独记忆）
   Future<void> _addDirectory() async {

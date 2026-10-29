@@ -13,6 +13,7 @@
 import 'dart:io';
 
 import '../error_sink.dart';
+import '../../platform/platform_profile.dart';
 
 /// 一条扫描目录。`enabled` = 参与扫描；`builtin` = 应用自带、不可移除。
 class PluginScanDirEntry {
@@ -78,7 +79,7 @@ abstract final class PluginScanDirs {
       candidates.add('$base$sep$leaf');
     }
 
-    if (Platform.isWindows) {
+    if (PlatformProfile.os == 'windows') {
       // 兜底不写死盘符（系统盘可能不是 C:）：一律由 SystemDrive/SystemRoot
       // 派生。两者都拿不到就给 null，add() 跳过——宁可少一个候选目录，
       // 也不去猜一个可能属于别人的路径（F1「盘符钉死」的教训）。
@@ -110,7 +111,7 @@ abstract final class PluginScanDirs {
       // 注册表（HKLM/HKCU\SOFTWARE\VST 的 VSTPluginsPath 值）——Best-effort：
       // reg.exe 查询失败（无权限/无该项）静默跳过。
       candidates.addAll(_registryVstPluginDirs());
-    } else if (Platform.isMacOS) {
+    } else if (PlatformProfile.os == 'macos') {
       const sys = '/Library/Audio/Plug-Ins';
       final home = e['HOME'];
       for (final leaf in const ['VST3', 'CLAP', 'VST', 'Components']) {
@@ -180,8 +181,7 @@ abstract final class PluginScanDirs {
   static String _normalize(String path) => path.trim().replaceAll('/', Platform.pathSeparator).replaceAll(RegExp(r'[\\/]+$'), '');
 
   /// Windows 路径大小写不敏感；其余平台敏感（只折叠分隔符差异）。
-  static String _dedupeKey(String path) =>
-      Platform.isWindows ? path.toLowerCase() : path;
+  static String _dedupeKey(String path) => PlatformProfile.pathKey(path);
 
   static bool _isDirectory(String path) {
     try {
@@ -195,7 +195,7 @@ abstract final class PluginScanDirs {
   /// 读 HKLM/HKCU\SOFTWARE\VST 下各子键的 VSTPluginsPath（VST2 安装器惯例）。
   /// 完全 best-effort：任何失败（无 reg.exe / 无权限 / 无该项）返回空表。
   static List<String> _registryVstPluginDirs() {
-    if (!Platform.isWindows) return const [];
+    if (PlatformProfile.os != 'windows') return const [];
     final out = <String>[];
     for (final root in const ['HKLM', 'HKCU']) {
       try {

@@ -84,7 +84,7 @@ void main() {
 
   group('Part B 源码不变式（切换路径不许静默）', () {
     final isolate = _read('lib/engine/audio_isolate.dart');
-    final device = _read('lib/engine/audio_device.dart');
+    final device = _read('lib/engine/audio_out/audio_out_wasapi.dart');
     final switchSrc = _read('lib/engine/backend_switch.dart');
 
     test('runHandover 实现含「停旧→回滚」两条路径', () {

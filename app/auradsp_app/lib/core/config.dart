@@ -12,6 +12,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
 import 'plugins/plugin_scan_dirs.dart';
+import '../platform/platform_profile.dart';
 
 import 'error_sink.dart';
 class AppConfig {
@@ -260,15 +261,7 @@ abstract final class ConfigManager {
       _baseDir = Directory.systemTemp.createTempSync('auradsp_test_').path;
       return _baseDir!;
     }
-    if (Platform.isWindows) {
-      final appData = Platform.environment['APPDATA'];
-      _baseDir = appData != null
-          ? '$appData${Platform.pathSeparator}AuraDSP'
-          : 'AuraDSP';
-    } else {
-      final home = Platform.environment['HOME'] ?? '.';
-      _baseDir = '$home${Platform.pathSeparator}.config${Platform.pathSeparator}auradsp';
-    }
+    _baseDir = PlatformProfile.configDir;
     return _baseDir!;
   }
 

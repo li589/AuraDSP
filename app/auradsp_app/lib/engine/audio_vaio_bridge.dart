@@ -11,6 +11,7 @@ import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
+import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 
@@ -35,11 +36,9 @@ class AuraVaioBridge implements AudioBridgeCommon {
 
   static AuraVaioBridge load() {
     if (_cached != null) return _cached!;
-    final candidates = <String>[
-      'auravaio_bridge.dll',
-      'engine\\auravaio_bridge.dll',
-    ];
-    final envPath = Platform.environment['AURADSP_VAIO_BRIDGE_DLL'];
+    final candidates =
+        List<String>.of(PlatformProfile.bridgeLibraryCandidates('vaio'));
+    final envPath = Platform.environment[PlatformProfile.bridgeEnvVar('vaio')];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
     Object? lastErr;
     for (final path in candidates) {
@@ -54,7 +53,8 @@ class AuraVaioBridge implements AudioBridgeCommon {
       return _cached!;
     }
     throw StateError(
-        'auravaio_bridge.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
+        '${candidates.isEmpty ? 'auravaio_bridge' : candidates.first} not found '
+        '(tried: ${candidates.join(", ")}) — $lastErr');
   }
 
   /// 检测驱动存在性并获取物理端点列表。

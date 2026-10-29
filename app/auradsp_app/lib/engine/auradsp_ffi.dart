@@ -12,6 +12,8 @@ import 'dart:math' as math;
 
 import 'package:ffi/ffi.dart';
 
+import '../platform/platform_profile.dart';
+
 /// 参数 ID 常量（engine_api 参数模型 v1 + v1.1 liveprog 增量）
 abstract final class ParamId {
   static const bassEnable = 'bass.enable';
@@ -918,14 +920,8 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
       return lib;
     }
     if (_cached != null) return _cached!;
-    final candidates = <String>[
-      'auradsp_engine.dll', // exe 旁（bundle root）
-      'engine\\auradsp_engine.dll', // engine/ 子目录
-      'build\\windows\\x64\\runner\\Release\\auradsp_engine.dll', // 桌面 Release 构建产物
-      'build\\windows\\x64\\runner\\Debug\\auradsp_engine.dll',   // 桌面 Debug 构建产物
-      '..\\..\\core\\desktop\\windows\\out\\Release\\auradsp_engine.dll', // 单测 CWD (app/auradsp_app)
-      'core\\desktop\\windows\\out\\Release\\auradsp_engine.dll',       // 仓库根目录 CWD
-    ];
+    final candidates =
+        List<String>.of(PlatformProfile.engineLibraryCandidates);
     final envPath = Platform.environment['AURADSP_ENGINE_DLL'];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
     Object? lastErr;
@@ -939,7 +935,8 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
       }
     }
     throw StateError(
-        'auradsp_engine.dll not found (tried: ${candidates.join(", ")}) — $lastErr');
+        '${candidates.isEmpty ? 'auradsp_engine' : candidates.first} not found '
+        '(tried: ${candidates.join(", ")}) — $lastErr');
   }
 
   /// 便捷：字符串参数 ID → 原生 buffer
