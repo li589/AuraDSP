@@ -17,9 +17,16 @@
     {
       "name": "linux-x64",
       "displayName": "Linux x64 (占位)",
-      "description": "占位：M6 后才由 Linux 主机启用；本轮根工程在非 Windows 上直接报错。",
+      "description": "占位：Linux 里程碑接入前不启用；本轮根工程在非 Windows 上直接报错。",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/linux/x64"
+    },
+    {
+      "name": "android-arm64",
+      "displayName": "Android arm64-v8a (占位)",
+      "description": "占位：NDK 工具链未接入根 CMake，core/android/*/build*.sh 仍独立走 NDK clang；本轮不构建。",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/android/arm64-v8a"
     }
   ],
   "buildPresets": [
