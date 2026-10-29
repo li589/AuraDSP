@@ -14,7 +14,7 @@ engine/
 ├── dsp/                         # 自研效果，一效果一文件（11 个）
 ├── platform/                    # 平台端口-适配器（M1，2026-10-29）
 │   ├── port/                    #   纯声明 fs.h / env.h / log.h / module.h（核心唯一允许的平台抽象）
-│   └── windows/                 #   唯一 OS 落点：fs_win / env_win / log_win / win_compat
+│   └── windows/                 #   引擎核心唯一 OS 落点：fs_win / env_win / log_win / win_compat
 └── plugins/                     # 插件宿主：api/plugin_host.h + driver/ + formats/ +
                                  #   platform/win32/（含 host/ 远程宿主、module_pump.h、plugin_module.cpp）
                                  #   + integration/ + tests/

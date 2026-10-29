@@ -331,16 +331,19 @@ def run_ui_tests(target=None):
     print("========================================")
     print("  Running AuraDSP UI Automation Tests  ")
     print("========================================")
-    # M5：UI 自动化全部依赖 Windows 窗口栈与 ui_test_kit，非 Windows 统一跳过。
-    if not platform_supported("windows"):
-        print(f"  ALL UI TESTS SKIPPED (requires windows, current {CURRENT_PLATFORM})")
-        print("========================================")
-        return 0
+    # target 先解析校验：非 Windows 整体跳过时也不吞掉拼写错误。
+    target_path = None
     if target:
         target_path = os.path.join(UI_DIR, target if target.endswith(".py") else f"{target}.py")
         if not os.path.exists(target_path):
             print(f"[ERROR] UI test not found: {target_path}")
             return 1
+    # M5：UI 自动化全部依赖 Windows 窗口栈与 ui_test_kit，非 Windows 统一跳过。
+    if not platform_supported("windows"):
+        print(f"  ALL UI TESTS SKIPPED (requires windows, current {CURRENT_PLATFORM})")
+        print("========================================")
+        return 0
+    if target_path:
         targets = [target_path]
     else:
         targets = [

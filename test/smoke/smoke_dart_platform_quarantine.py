@@ -23,7 +23,7 @@ ENGINE_DIR = os.path.join(APP_LIB, "engine")
 PROFILE_FILE = os.path.join(APP_LIB, "platform", "platform_profile.dart")
 
 # 生成物目录（l10n/gen）不做平台判断，扫描时排除。
-SKIP_DIRS = ("platform", os.path.join("l10n", "gen"))
+SKIP_DIRS = ("platform", "l10n/gen")
 
 FAIL = []
 
