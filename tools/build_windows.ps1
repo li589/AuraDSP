@@ -32,6 +32,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# M3（2026-10-29）：统一走根 CMakePresets（构建树 build/windows/x64），
+# 产物仍写回 core/desktop/{windows,windows-drivers}/out/<Config>/。
+$BuildPreset = "windows-x64-$($BuildType.ToLower())"
+$ConfigureArgs = @("--preset", "windows-x64")
+if ($SkipDrivers) { $ConfigureArgs += "-DAURADSP_BUILD_BRIDGES=OFF" } else { $ConfigureArgs += "-DAURADSP_BUILD_BRIDGES=ON" }
+
 # 项目根目录解析
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = (Resolve-Path "$ScriptDir\..").Path
@@ -70,18 +76,13 @@ if ($RunningApps) {
 # -------------------------------------------------------------------------
 if (-not $SkipEngine) {
     Write-Host "`n[2/6] 检查与编译 C++ 核心引擎 (auradsp_engine.dll)..." -ForegroundColor Yellow
-    $EngineSourceDir = Join-Path $ProjectRoot "core\desktop\windows"
-    $EngineOutDir = Join-Path $EngineSourceDir "out"
+    $EngineOutDir = Join-Path $ProjectRoot "core\desktop\windows\out"
 
-    if (-not (Test-Path $EngineOutDir)) {
-        New-Item -ItemType Directory -Path $EngineOutDir -Force | Out-Null
-    }
+    Write-Host "  配置 CMake (预设 windows-x64，构建树 build/windows/x64)..."
+    cmake @ConfigureArgs | Out-Null
 
-    Write-Host "  配置 CMake (core/desktop/windows)..."
-    cmake -S "$EngineSourceDir" -B "$EngineOutDir" -A x64 | Out-Null
-
-    Write-Host "  编译 Release 引擎动态库与进程外插件宿主..."
-    cmake --build "$EngineOutDir" --config $BuildType --target auradsp_engine auradsp_plugin_host
+    Write-Host "  编译 $BuildType 引擎动态库与进程外插件宿主..."
+    cmake --build --preset $BuildPreset --target auradsp_engine auradsp_plugin_host
 
     $EngineDll = Join-Path $EngineOutDir "$BuildType\auradsp_engine.dll"
     if (-not (Test-Path $EngineDll)) {
@@ -104,18 +105,13 @@ if (-not $SkipEngine) {
 # -------------------------------------------------------------------------
 if (-not $SkipDrivers) {
     Write-Host "`n[3/6] 检查与编译 C++ 驱动常驻桥..." -ForegroundColor Yellow
-    $DriversSourceDir = Join-Path $ProjectRoot "core\desktop\windows-drivers"
-    $DriversOutDir = Join-Path $DriversSourceDir "out"
+    $DriversOutDir = Join-Path $ProjectRoot "core\desktop\windows-drivers\out"
 
-    if (-not (Test-Path $DriversOutDir)) {
-        New-Item -ItemType Directory -Path $DriversOutDir -Force | Out-Null
-    }
+    Write-Host "  配置 CMake (预设 windows-x64；桥与引擎同一构建树)..."
+    cmake @ConfigureArgs | Out-Null
 
-    Write-Host "  配置 CMake (core/desktop/windows-drivers)..."
-    cmake -S "$DriversSourceDir" -B "$DriversOutDir" -A x64 | Out-Null
-
-    Write-Host "  编译桥接动态库 (auravm_bridge, auravaio_bridge, auraasio_bridge)..."
-    cmake --build "$DriversOutDir" --config $BuildType --target auravm_bridge auravaio_bridge auraasio_bridge
+    Write-Host "  编译桥接动态库 (auradsp_bridges: vm / vaio / asio)..."
+    cmake --build --preset $BuildPreset --target auradsp_bridges
 
     foreach ($Bridge in @("auravm_bridge.dll", "auravaio_bridge.dll", "auraasio_bridge.dll")) {
         $DllPath = Join-Path $DriversOutDir "$BuildType\$Bridge"

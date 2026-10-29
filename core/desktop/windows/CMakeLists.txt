@@ -9,6 +9,13 @@ if(NOT WIN32)
     set(AURADSP_PLUGIN_HOST_REMOTE OFF CACHE BOOL "Build out-of-process plugin host (Windows only)" FORCE)
 endif()
 
+# M3（2026-10-29）：产物路径保持 out/<Config>/（build_engine.sh、verify_dll_copies.py、
+# Flutter runner 同步与历史 smoke 都依赖它）；构建中间文件由根工程统一到
+# build/<platform>/<arch>/（本子工程单独配置时仍落在 out/）。
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 set(LEGACY     "${API}/legacy")
@@ -51,19 +58,16 @@ file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
 list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
 
-add_library(auradsp_engine SHARED
+# M3（2026-10-29）：可移植核心收口为静态库（legacy C + 根 C ABI + chain/dsp）。
+# 源表只此一处；插件宿主与测试继续复用 AURADSP_PLUGIN_HOST_SOURCES，不链核心。
+add_library(auradsp_core STATIC
     ${ENGINE_C}
     "${API}/auradsp_engine.cpp"
-    # M1 平台隔离（2026-10-29）：核心只依赖 platform/port 端口声明，
-    # 以下 Windows 实现是唯一 OS 落点（含 Win7 CreateFile2 回退）。
-    "${API}/platform/windows/win_compat.cpp"
-    "${API}/platform/windows/fs_win.cpp"
-    "${API}/platform/windows/env_win.cpp"
-    "${API}/platform/windows/log_win.cpp"
     "${API}/chain/engine_chain.cpp"
     "${API}/chain/engine_convolver.cpp"
     "${API}/chain/engine_viz.cpp"
     "${API}/chain/engine_probe.cpp"
+    "${API}/chain/engine_audiofile.cpp"
     "${API}/dsp/dsp_shelf.cpp"
     "${API}/dsp/dsp_filter.cpp"
     "${API}/dsp/dsp_bassmono.cpp"
@@ -75,12 +79,47 @@ add_library(auradsp_engine SHARED
     "${API}/dsp/dsp_loudness.cpp"
     "${API}/dsp/dsp_mc_reverb.cpp"
     "${API}/dsp/dsp_dyneq.cpp"
-    "${API}/chain/engine_audiofile.cpp"
+)
+target_include_directories(auradsp_core PUBLIC
+    "${API}"
+    "${API}/chain"
+    "${API}/plugins/api"
+    "${API}/plugins/driver"
+    "${LEGACY}"
+    "${LEGACY}/jdsp"
+    "${PLUGIN_API}"
+)
+target_compile_definitions(auradsp_core PRIVATE
+    NDEBUG
+    _CRT_SECURE_NO_WARNINGS
+    _WIN32_WINNT=0x0601
+    WINVER=0x0601
+    NTDDI_VERSION=0x06010000
+)
+target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHsc)
+# engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
+# <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
+# 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
+target_compile_options(auradsp_core PRIVATE /FI"${API}/auradsp_msvc_shim.h")
+set_source_files_properties(${ENGINE_C} PROPERTIES LANGUAGE C)
+set_property(TARGET auradsp_core PROPERTY C_STANDARD 11)
+set_property(TARGET auradsp_core PROPERTY CXX_STANDARD 20)
+set_property(TARGET auradsp_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+# 引擎 DLL：核心 + Windows 平台适配（M1/M2 唯一 OS 落点）+ 插件子系统。
+add_library(auradsp_engine SHARED
+    # M1 平台隔离（2026-10-29）：核心只依赖 platform/port 端口声明，
+    # 以下 Windows 实现是唯一 OS 落点（含 Win7 CreateFile2 回退）。
+    "${API}/platform/windows/win_compat.cpp"
+    "${API}/platform/windows/fs_win.cpp"
+    "${API}/platform/windows/env_win.cpp"
+    "${API}/platform/windows/log_win.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}
     ${AURADSP_PLUGIN_INTEGRATION_SOURCES}
     ${AURADSP_PLUGIN_REMOTE_SOURCES}
     "${API}/auradsp_engine.def"
 )
+target_link_libraries(auradsp_engine PRIVATE auradsp_core)
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
@@ -113,12 +152,8 @@ if(AURADSP_DBG_LOG)
     target_compile_definitions(auradsp_engine PRIVATE AURADSP_DBG_LOG)
 endif()
 target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
-# engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
-# <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
-# 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
+# 与核心相同的强制 shim，保持历史编译行为（legacy C 已全部移入 auradsp_core）。
 target_compile_options(auradsp_engine PRIVATE /FI"${API}/auradsp_msvc_shim.h")
-set_source_files_properties(${ENGINE_C} PROPERTIES LANGUAGE C)
-set_property(TARGET auradsp_engine PROPERTY C_STANDARD 11)
 set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
 set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 # 只导出 .def 里声明的 auradsp_* 符号（防符号泄漏，对齐 Android 侧 version_script 策略）
