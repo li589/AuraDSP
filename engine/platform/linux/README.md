@@ -17,12 +17,12 @@
 
 ## 2. 待实现端口
 
-| 端口 | 声明 | Windows 现状（`engine/platform/windows/`） | Linux 目标 |
+| 端口 | 声明 | Windows 现状 | Linux 目标 |
 |---|---|---|---|
 | 文件 | `port/fs.h` `fopen_utf8` | UTF-8→UTF-16 + `_wfopen` | 直接 `fopen`（glibc 按 UTF-8 字节直通，文件名无需转码） |
 | 环境变量 | `port/env.h` `get_env` | `GetEnvironmentVariableA` | `getenv` + 容量/NUL 语义对齐（未设置或超容量返回 false） |
 | 日志 | `port/log.h` `log_level` / `log_emit` | `OutputDebugStringA`；`AURADSP_LOG` 首次读取后粘性缓存 | `stderr`（格式逐字保留 `[AuraDSP][file:line] msg\n`）或 syslog |
-| 模块 | `port/module.h` `module_open_utf8` / `module_symbol` / `module_close` / `module_last_error` | `LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH)` | `dlopen(RTLD_NOW)` / `dlsym` / `dlclose` / `dlerror` |
+| 模块 | `port/module.h` `module_open_utf8` / `module_symbol` / `module_close` / `module_last_error` | `plugins/platform/win32/plugin_module.cpp`：`LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH)` | `dlopen(RTLD_NOW)` / `dlsym` / `dlclose` / `dlerror` |
 
 实现时必须逐项对齐的语义：
 
@@ -37,7 +37,7 @@
 | 项 | 归属 |
 |---|---|
 | 设备输出（PipeWire / PulseAudio / ALSA） | App 侧 `AudioOut`：`audio_out_linux.dart` 落地后由 `createAudioOut()` 工厂接入，调用方不变 |
-| 桥（VM / VAIO / ASIO） | `bridge/` 只实现 `ab_*` 契约（`bridge/common/aurabridge.h`）+ Dart `BridgeDesc`；Windows 三桥不跨平台 |
+| 桥（VM / VAIO / ASIO） | `bridge/` 只实现 `ab_*` 契约（`core/desktop/windows-drivers/bridge/common/aurabridge.h`）+ Dart `BridgeDesc`；Windows 三桥不跨平台 |
 | 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 走 CMake `AURADSP_PLUGIN_HOST_REMOTE=OFF` 直通 |
 | 插件编辑器 GUI | 方案 §8 的 `port/gui.h` 属 N4「插件生态跨平台」独立立项，尚未建立 |
 

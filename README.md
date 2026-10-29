@@ -152,6 +152,7 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 # 统一入口（M3）：同一棵构建树 build/windows/x64，产物仍写回各子工程 out/<Config>/
 cmake --preset windows-x64
 cmake --build --preset windows-x64-release --target auradsp_engine auradsp_plugin_host
+# 未装 Steinberg ASIO SDK 时：cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
 ```
 
 ```bash
@@ -165,13 +166,13 @@ cd core/desktop/windows && bash build_engine.sh
 cd app/auradsp_app
 flutter build windows --release --no-tree-shake-icons
 flutter analyze
-flutter test --concurrency=1          # 并发跑会因 isolate 超时抖动，必须串行
+flutter test --concurrency=1 --timeout=90s   # 并发/默认超时会因 isolate 超时抖动，必须串行并放宽超时
 ```
 
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，110 项登记）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，120 项登记）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
