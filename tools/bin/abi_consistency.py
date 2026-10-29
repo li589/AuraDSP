@@ -362,6 +362,10 @@ def check_viz(problems: list[str]) -> tuple[int, int]:
 BRIDGE_DIR = ROOT / "core/desktop/windows-drivers/bridge"
 BRIDGE_FFI = ROOT / "app/auradsp_app/lib/engine/bridge_plugin_ffi.dart"
 PUMP_CORE_H = ROOT / "core/desktop/windows-drivers/02_voicemeeter_client/VmPumpCore.h"
+# P5（统一桥契约）：三桥共用的 ab_* 声明在 common/aurabridge.h，而非各自头文件。
+# 不能把它的声明并进各桥头文件（那又是一份手抄件）——这里作为第三个声明源参与
+# B1 的双向比对：任一桥 .def 漏了某个 ab_* 导出，B1 立刻点名。
+AB_COMMON_H = BRIDGE_DIR / "common/aurabridge.h"
 
 BRIDGES = [
     ("asio", BRIDGE_DIR / "asio_bridge/AsioBridge.h",
@@ -379,14 +383,14 @@ def _arity(params: str) -> int:
 
 
 def parse_bridge_header(path: Path) -> dict[str, int]:
-    """桥头文件的导出声明 → {符号: 形参数}。
+    """桥头文件 / 统一契约头的导出声明 → {符号: 形参数}。
 
     先剥注释：三座桥的头文件里有大段带引号的 JSON 示例注释，不剥会误匹配。
-    只认 `(asio|vaio|vb)_xxx(...);` 形式，宏（ASB_API 等）不参与匹配。
+    只认 `(asio|vaio|vb|ab)_xxx(...);` 形式，宏（ASB_API 等）不参与匹配。
     """
     text = strip_c_comments(path.read_text(encoding="utf-8", errors="replace"))
     decls = {}
-    for m in re.finditer(r"\b((?:asio|vaio|vb)_\w+)\s*\(([^;{}]*)\)\s*;", text):
+    for m in re.finditer(r"\b((?:asio|vaio|vb|ab)_\w+)\s*\(([^;{}]*)\)\s*;", text):
         name, ar = m.group(1), _arity(m.group(2))
         if name in decls and decls[name] != ar:
             raise ValueError("同一符号两种元数：%s %d/%d" % (name, decls[name], ar))
@@ -475,6 +479,8 @@ def check_bridges(problems: list[str]) -> tuple[int, int]:
                             "加载引擎后的 ABI 强校验丢失" % (prefix, cpp_path.name))
         try:
             header = parse_bridge_header(h_path)
+            if AB_COMMON_H.exists():
+                header.update(parse_bridge_header(AB_COMMON_H))  # ab_* 统一契约
         except ValueError as e:
             problems.append("[B1] %s 桥头文件解析失败：%s" % (prefix, e))
             continue

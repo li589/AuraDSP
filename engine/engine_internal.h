@@ -539,6 +539,18 @@ struct auradsp_handle_s {
     float  ch_out_peak[AURADSP_CH_MAX] = {};
     /* RT 线程每块记录的声道数（2/6/8），emit_viz 填 channel_count；0=尚无块。 */
     int    last_block_ch = 0;
+    /* [P2 静音门控] 输入连续静音 ≥ hold 且本链输出残余 < -120 dBFS 时，
+     * 跳过整条效果链、直出零（省 CPU/降功耗）；输入一旦有信号当块退出，
+     * 无淡入淡出。仅 RT 线程读写；AURADSP_GATE=0 关闭，AURADSP_GATE_DB
+     * 覆盖阈值（默认 -90 dBFS）。 */
+    bool   gate_enabled = true;
+    bool   gate_active = false;
+    int    gate_silent_frames = 0;   /* 连续静音帧数（封顶 hold，防溢出） */
+    int    gate_hold_frames = 0;     /* = 2000ms × fs（create 时按实际 fs 定） */
+    float  gate_peak_thresh = 3.16227766e-5f; /* -90 dBFS 线性 */
+    float  gate_resid_thresh = 1e-6f;         /* -120 dBFS 线性 */
+    int    gate_idle_frames = 0;     /* gated 连续帧数（诊断/桥侧读数） */
+
     /* [Phase B] stage 级 per-channel 电平的**有效列数**（emit_viz 用它门控
      * stage_ch_levels 的 c 循环）。语义：最近一次跑过的链能提供 per-channel
      * stage 数据的声道数——

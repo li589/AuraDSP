@@ -1,82 +1,37 @@
-// audio_abridge.dart — ASIO-Client 常驻桥 FFI（bridge/asio_bridge/auraasio_bridge.dll）。
-// Client 线：打开第三方 ASIO 驱动。未来的 Driver 线（自身作为驱动）另起炉灶，
-// 不共用本绑定。
+// audio_abridge.dart — ASIO 常驻桥 FFI（bridge/asio_bridge/auraasio_bridge.dll）。
 //
-// 与 AuraVmBridge 同候选策略：exe 旁 → engine/ 子目录 → 环境变量
-// AURADSP_ASIO_BRIDGE_DLL。刻意不含硬编码开发机路径（产品铁律）。
-// 所有调用均在 isolate 线程（控制面），RT 线程只跑驱动 bufferSwitch 本身。
+// 加载策略与 VM 桥一致：exe 旁 → engine/ 子目录 → 环境变量
+// AURADSP_ASIO_BRIDGE_DLL。控制面调用均在 isolate 线程；RT 由驱动回调驱动。
 //
-// 与 VB 桥的两处契约差异（见 AsioBridge.h）：
-//   1. start 多两个宿主参数 buf_size / out_pair（C long = Win64 下 32 位，
-//      FFI 侧用 Int32——ctypes.c_long 同口径）；
-//   2. detect 输出驱动清单（{"count":N,"drivers":[{name,dll,clsid}]}），
-//      name 为 UTF-8 显示名，start 原样传回即可（桥内做注册表名映射）。
+// P1 收敛：公共导出委托 AudioBridgeCore；本文件只保留 ASIO 专属面
+// （asio_start_ex / 驱动清单 detect 形状）。
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show Platform;
 
 import 'package:ffi/ffi.dart';
 
-import 'auradsp_ffi.dart' show VizFrame;
+import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 
-import '../core/error_sink.dart';
-typedef _DetectC = Int32 Function(Pointer<Utf8>, Int32);
-typedef _DetectDart = int Function(Pointer<Utf8>, int);
 typedef _StartExC = Int32 Function(
     Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Int32, Int32);
 typedef _StartExDart = int Function(
     Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int, int);
-typedef _StopC = Int32 Function();
-typedef _StopDart = int Function();
-typedef _StatusC = Int32 Function(Pointer<Utf8>, Int32);
-typedef _StatusDart = int Function(Pointer<Utf8>, int);
-typedef _SetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
-typedef _SetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
-typedef _VizReadC = Int32 Function(Pointer<Void>, Int32);
-typedef _VizReadDart = int Function(Pointer<Void>, int);
-typedef _TestStartC = Int32 Function(Int32, Pointer<Float>, Int32, Int32, Int32);
-typedef _TestStartDart = int Function(int, Pointer<Float>, int, int, int);
-typedef _TestStopC = Int32 Function();
-typedef _TestStopDart = int Function();
-typedef _BypassC = Int32 Function(Int32);
-typedef _BypassDart = int Function(int);
-typedef _SetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
-typedef _SetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
-typedef _GetParamC = Int32 Function(Pointer<Utf8>, Int32, Pointer<Void>);
-typedef _GetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
-typedef _GetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
-typedef _GetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 
-class AuraAsioBridge {
-  final DynamicLibrary dylib;
-  late final BridgePluginFfi plugin = BridgePluginFfi(dylib, 'asio');
-  late final _DetectDart _detect =
-      dylib.lookupFunction<_DetectC, _DetectDart>('asio_detect');
+class AuraAsioBridge implements AudioBridgeCommon {
+  final AudioBridgeCore core;
+
+  AuraAsioBridge._(DynamicLibrary dylib)
+      : core = AudioBridgeCore(dylib, 'asio', logTag: 'ab-ffi');
+
+  DynamicLibrary get dylib => core.dylib;
+
+  @override
+  BridgePluginFfi get plugin => core.plugin;
+
   late final _StartExDart _startEx =
       dylib.lookupFunction<_StartExC, _StartExDart>('asio_start_ex');
-  late final _StopDart _stop =
-      dylib.lookupFunction<_StopC, _StopDart>('asio_stop');
-  late final _StatusDart _status =
-      dylib.lookupFunction<_StatusC, _StatusDart>('asio_status');
-  late final _SetParamDart _setParam =
-      dylib.lookupFunction<_SetParamC, _SetParamDart>('asio_set_param');
-  late final _VizReadDart _vizRead =
-      dylib.lookupFunction<_VizReadC, _VizReadDart>('asio_viz_read');
-  late final _TestStartDart _testStart =
-      dylib.lookupFunction<_TestStartC, _TestStartDart>('asio_test_start');
-  late final _TestStopDart _testStop =
-      dylib.lookupFunction<_TestStopC, _TestStopDart>('asio_test_stop');
-  late final _BypassDart _bypass =
-      dylib.lookupFunction<_BypassC, _BypassDart>('asio_bypass');
-  late final _SetParamStrDart _setParamStr = dylib.lookupFunction<
-      _SetParamStrC, _SetParamStrDart>('asio_set_param_str');
-  late final _GetParamDart _getParam =
-      dylib.lookupFunction<_GetParamC, _GetParamDart>('asio_get_param');
-  late final _GetParamStrDart _getParamStr = dylib.lookupFunction<
-      _GetParamStrC, _GetParamStrDart>('asio_get_param_str');
-
-  AuraAsioBridge._(this.dylib);
 
   static AuraAsioBridge? _cached;
 
@@ -107,20 +62,10 @@ class AuraAsioBridge {
   /// 驱动清单（UTF-8 显示名列表；桥内持有 SDK load 键映射）。
   /// 返回 null = 桥加载失败/枚举失败；空 list = 注册表无 ASIO 驱动。
   List<Map<String, dynamic>>? detect() {
-    final buf = malloc<Uint8>(4096).cast<Utf8>();
-    try {
-      final n = _detect(buf, 4096);
-      if (n <= 0) return null;
-      final raw = jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-      final drivers = raw?['drivers'] as List?;
-      if (drivers == null) return null;
-      return [for (final d in drivers) Map<String, dynamic>.from(d as Map)];
-    } catch (e, st) {
-      swallowThrottled(e, st, 'ab-ffi');
-      return null;
-    } finally {
-      malloc.free(buf);
-    }
+    final raw = core.detectJson(4096);
+    final drivers = raw?['drivers'] as List?;
+    if (drivers == null) return null;
+    return [for (final d in drivers) Map<String, dynamic>.from(d as Map)];
   }
 
   /// 启动常驻桥。[driver] 为 detect 的 name（UTF-8 显示名）；[engineDll]
@@ -134,6 +79,17 @@ class AuraAsioBridge {
       int bufSize = 0,
       int outPair = 0,
       int channels = 2}) {
+    // P5：新桥走统一契约 ab_start（驱动名/缓冲档/输出声道对经 config_json 归一）。
+    final ab = core.startUnified(
+        engineDll,
+        paramsJson,
+        jsonEncode({
+          'driver': driver,
+          'bufSize': bufSize,
+          'outPair': outPair,
+          'channels': channels,
+        }));
+    if (ab != null) return ab;
     final dp = driver.toNativeUtf8();
     final ep = engineDll.toNativeUtf8();
     final pp = paramsJson.toNativeUtf8();
@@ -146,135 +102,36 @@ class AuraAsioBridge {
     }
   }
 
-  int stop() => _stop();
+  @override
+  int stop() => core.stop();
 
-  Map<String, dynamic>? status() {
-    final buf = malloc<Uint8>(2048).cast<Utf8>();
-    try {
-      final n = _status(buf, 2048);
-      if (n <= 0) return null;
-      return jsonDecode(buf.toDartString(length: n)) as Map<String, dynamic>?;
-    } catch (e, st) {
-      swallowThrottled(e, st, 'ab-ffi');
-      return null;
-    } finally {
-      malloc.free(buf);
-    }
-  }
+  @override
+  Map<String, dynamic>? status() => core.statusJson(2048);
 
-  int setParam(String id, {required bool isFloat, required double value}) {
-    final idp = id.toNativeUtf8();
-    try {
-      if (isFloat) {
-        final vp = malloc<Float>();
-        try {
-          vp.value = value;
-          return _setParam(idp.cast(), 1, vp.cast());
-        } finally {
-          malloc.free(vp);
-        }
-      } else {
-        final vp = malloc<Int32>();
-        try {
-          vp.value = value.toInt();
-          return _setParam(idp.cast(), 0, vp.cast());
-        } finally {
-          malloc.free(vp);
-        }
-      }
-    } finally {
-      malloc.free(idp);
-    }
-  }
+  @override
+  int setParam(String id, {required bool isFloat, required double value}) =>
+      core.setParam(id, isFloat: isFloat, value: value);
 
-  /// 读可视化帧，返回与 isolate viz 事件同形 map（调用方节流）。
-  Map<String, dynamic>? vizRead() {
-    final buf = malloc<VizFrame>(4);
-    try {
-      final n = _vizRead(buf.cast(), 4);
-      if (n <= 0) return null;
-      final fr = (buf + (n - 1)).ref;
-      return {
-        'spectrum': fr.spectrumToList(),
-        'eqIn': fr.eqInSpectrumToList(),
-        'l': fr.levelLDbfs,
-        'r': fr.levelRDbfs,
-        'stageL': fr.stageLevelsLToList(),
-        'stageR': fr.stageLevelsRToList(),
-        'inputInL': fr.inputLevelInL,
-        'inputInR': fr.inputLevelInR,
-        'inputOutL': fr.inputLevelOutL,
-        'inputOutR': fr.inputLevelOutR,
-        // [Phase B 多声道电平] per-channel 遥测（与 isolate 主路径同形）
-        'chCount': fr.channelCount,
-        'chLevels': fr.channelLevelsToList(),
-        'stageCh': fr.stageChLevelsTelemetry(),
-        'ts': fr.timestampMs,
-        'seq': fr.seq,
-      };
-    } catch (e, st) {
-      swallowThrottled(e, st, 'ab-ffi');
-      return null;
-    } finally {
-      malloc.free(buf);
-    }
-  }
+  @override
+  Map<String, dynamic>? vizRead() => core.vizRead();
 
-  /// 测试注入：kind 1=正弦440 2=粉噪 3=文件（pcm 交织立体声 float32）。
-  /// bridge 内拷贝，返回后调用方可释放。
+  @override
   int testStart(int kind,
-      {Pointer<Float>? pcm, int frames = 0, int ch = 2, int rate = 0}) {
-    final p = pcm ?? nullptr;
-    return _testStart(kind, p, frames, ch, rate);
-  }
+          {Pointer<Float>? pcm, int frames = 0, int ch = 2, int rate = 0}) =>
+      core.testStart(kind, pcm: pcm, frames: frames, ch: ch, rate: rate);
 
-  int testStop() => _testStop();
+  @override
+  int testStop() => core.testStop();
 
-  int setBypass(bool on) => _bypass(on ? 1 : 0);
+  @override
+  int setBypass(bool on) => core.setBypass(on);
 
-  /// 字符串参数（liveprog.code / arbmag.string）：返回 0=ok，<0=失败。
-  /// ASIO 重建一律走 Dart 侧 stop+start（isolate 回放 paramStrMirror）。
-  int setParamStr(String id, String text) {
-    final idp = id.toNativeUtf8();
-    final tp = text.toNativeUtf8();
-    try {
-      return _setParamStr(idp.cast(), tp.cast(), tp.length);
-    } finally {
-      malloc.free(idp);
-      malloc.free(tp);
-    }
-  }
+  @override
+  int setParamStr(String id, String text) => core.setParamStr(id, text);
 
-  /// int 参数回读，失败返回 null。
-  int? getIntParam(String id) {
-    final idp = id.toNativeUtf8();
-    final vp = malloc<Int32>();
-    try {
-      final rc = _getParam(idp.cast(), 0, vp.cast());
-      return rc == 0 ? vp.value : null;
-    } catch (e, st) {
-      swallowThrottled(e, st, 'ab-ffi');
-      return null;
-    } finally {
-      malloc.free(idp);
-      malloc.free(vp);
-    }
-  }
+  @override
+  int? getIntParam(String id) => core.getIntParam(id);
 
-  /// 字符串参数回读，失败返回 null。
-  String? getParamStr(String id) {
-    final idp = id.toNativeUtf8();
-    final buf = malloc<Uint8>(256 * 1024 + 1).cast<Utf8>();
-    try {
-      final n = _getParamStr(idp.cast(), buf, 256 * 1024 + 1);
-      if (n <= 0) return null;
-      return buf.toDartString(length: n);
-    } catch (e, st) {
-      swallowThrottled(e, st, 'ab-ffi');
-      return null;
-    } finally {
-      malloc.free(idp);
-      malloc.free(buf);
-    }
-  }
+  @override
+  String? getParamStr(String id) => core.getParamStr(id);
 }

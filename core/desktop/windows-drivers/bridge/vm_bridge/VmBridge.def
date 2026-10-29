@@ -41,3 +41,18 @@ EXPORTS
     vb_plugin_auto_protect           PRIVATE
     vb_protect_test                  PRIVATE
     vb_plugin_slot_group_ready       PRIVATE
+    ; ---- P5 统一桥契约（bridge/common/aurabridge.h；旧前缀保留一个版本）----
+    ab_abi_version        PRIVATE
+    ab_capabilities       PRIVATE
+    ab_detect             PRIVATE
+    ab_start              PRIVATE
+    ab_stop               PRIVATE
+    ab_status             PRIVATE
+    ab_set_param          PRIVATE
+    ab_set_param_str      PRIVATE
+    ab_get_param          PRIVATE
+    ab_get_param_str      PRIVATE
+    ab_viz_read           PRIVATE
+    ab_bypass             PRIVATE
+    ab_test_start         PRIVATE
+    ab_test_stop          PRIVATE

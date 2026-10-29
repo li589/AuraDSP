@@ -96,6 +96,7 @@ KNOWN_IMPORTERS = [
     "test/smoke/smoke_dynamic_gr_and_gate.py",
     "test/smoke/smoke_eq_viz_tap.py",
     "test/smoke/smoke_mc_channel_levels.py",
+    "test/smoke/smoke_silence_gate.py",
     "test/smoke/smoke_viz_lowfreq.py",
     "tools/bin/verify_dll_copies.py",
     "tools/probe/probe_viz_cost.py",
