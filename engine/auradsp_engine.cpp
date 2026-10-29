@@ -18,6 +18,7 @@
  */
 #include "auradsp_engine.h"
 #include "engine_internal.h"
+#include "platform/port/env.h"
 #include "plugins/integration/plugin_chain_adapter.h"
 
 #include <atomic>
@@ -32,48 +33,6 @@
 #include <xmmintrin.h>
 #endif
 
-#ifdef _WIN32
-#include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
-
-// Windows 7 兼容补丁：提供 CreateFile2 回退，避免 MSVC STL <filesystem> 静态依赖 Win8+ 的 CreateFile2 导致 Win7 LoadLibrary 127
-extern "C" {
-    typedef struct _CREATEFILE2_EXTENDED_PARAMETERS_SHIM {
-        DWORD dwSize;
-        DWORD dwFileAttributes;
-        DWORD dwFileFlags;
-        DWORD dwSecurityQosFlags;
-        LPSECURITY_ATTRIBUTES lpSecurityAttributes;
-        HANDLE hTemplateFile;
-    } CREATEFILE2_EXTENDED_PARAMETERS_SHIM;
-
-    static HANDLE WINAPI AuraFallback_CreateFile2(
-        LPCWSTR lpFileName,
-        DWORD dwDesiredAccess,
-        DWORD dwShareMode,
-        DWORD dwCreationDisposition,
-        CREATEFILE2_EXTENDED_PARAMETERS_SHIM* pCreateExParams)
-    {
-        typedef HANDLE (WINAPI *PFN_CF2)(LPCWSTR, DWORD, DWORD, DWORD, void*);
-        static PFN_CF2 s_real = (PFN_CF2)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CreateFile2");
-        if (s_real) {
-            return s_real(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, pCreateExParams);
-        }
-        DWORD dwFlagsAndAttributes = 0;
-        DWORD dwSecurityFlags = 0;
-        if (pCreateExParams && pCreateExParams->dwSize >= sizeof(CREATEFILE2_EXTENDED_PARAMETERS_SHIM)) {
-            dwFlagsAndAttributes = pCreateExParams->dwFileAttributes | pCreateExParams->dwFileFlags;
-            dwSecurityFlags = pCreateExParams->dwSecurityQosFlags;
-        }
-        return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
-                           pCreateExParams ? pCreateExParams->lpSecurityAttributes : NULL,
-                           dwCreationDisposition, dwFlagsAndAttributes | dwSecurityFlags,
-                           pCreateExParams ? pCreateExParams->hTemplateFile : NULL);
-    }
-
-    void* __imp_CreateFile2 = (void*)AuraFallback_CreateFile2;
-}
-#endif
-
 namespace {
 
 /* 进程级全局初始化（NSEEL JIT 运行时），引用计数（对齐 Android 侧做法） */
@@ -81,19 +40,9 @@ std::mutex g_global_mutex;
 int g_global_ref = 0;
 
 /* [P2 静音门控] 读环境变量（create 控制线程一次性；不进 RT 路径）。
- * 返回 false = 未设置。用 Win32 API 避开 MSVC 对 getenv 的 C4996。 */
+ * 平台差异已收敛到 port/env.h。 */
 bool read_env(const char* name, char* buf, size_t cap) {
-    if (!buf || cap == 0) return false;
-    buf[0] = '\0';
-#ifdef _WIN32
-    const DWORD n = GetEnvironmentVariableA(name, buf, (DWORD)cap);
-    return n > 0 && n < cap;
-#else
-    const char* v = std::getenv(name);
-    if (!v) return false;
-    std::snprintf(buf, cap, "%s", v);
-    return true;
-#endif
+    return auradsp::platform::get_env(name, buf, cap);
 }
 
 /* [P2 静音门控] 门控状态推进（RT 线程，无锁无分配）。

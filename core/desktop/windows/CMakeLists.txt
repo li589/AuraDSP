@@ -42,6 +42,12 @@ list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
 add_library(auradsp_engine SHARED
     ${ENGINE_C}
     "${API}/auradsp_engine.cpp"
+    # M1 平台隔离（2026-10-29）：核心只依赖 platform/port 端口声明，
+    # 以下 Windows 实现是唯一 OS 落点（含 Win7 CreateFile2 回退）。
+    "${API}/platform/windows/win_compat.cpp"
+    "${API}/platform/windows/fs_win.cpp"
+    "${API}/platform/windows/env_win.cpp"
+    "${API}/platform/windows/log_win.cpp"
     "${API}/chain/engine_chain.cpp"
     "${API}/chain/engine_convolver.cpp"
     "${API}/chain/engine_viz.cpp"

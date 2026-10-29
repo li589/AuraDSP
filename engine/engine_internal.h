@@ -12,7 +12,6 @@
 #include <mutex>
 #include <new>
 #include <xmmintrin.h>
-#include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
 
 #define AURADSP_VERSION "1.1.0"
 /* ABI v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加
