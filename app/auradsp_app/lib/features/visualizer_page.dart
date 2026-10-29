@@ -17,6 +17,7 @@ import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/ui_helpers.dart';
 import 'chrome.dart';
+import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/models/visualizer_types.dart';
 import 'visualizer/views/visualizer_drawer.dart';
 import 'visualizer/views/visualizer_meters.dart';
@@ -32,13 +33,21 @@ class VisualizerPage extends StatefulWidget {
 
 class _VisualizerPageState extends State<VisualizerPage> {
   VisualizerConfig _config = const VisualizerConfig();
+  final MediaSyncService _mediaSync = MediaSyncService();
   bool _drawerOpen = false;
   final FocusNode _focusNode = FocusNode();
 
   @override
   void dispose() {
     _focusNode.dispose();
+    _mediaSync.dispose();
     super.dispose();
+  }
+
+  void _toggleLyrics() {
+    setState(() {
+      _config = _config.copyWith(showLyrics: !_config.showLyrics);
+    });
   }
 
   void _toggleFullscreen() {
@@ -104,7 +113,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
                 onStyleChanged: (st) =>
                     setState(() => _config = _config.copyWith(style: st)),
                 onToggleFullscreen: _toggleFullscreen,
+                onToggleLyrics: _toggleLyrics,
                 onOpenDrawer: _openDrawer,
+                mediaSync: _mediaSync,
                 emptyText: l.noAudio,
                 active: active,
               ),
@@ -160,7 +171,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             onStyleChanged: (st) => setState(
                                 () => _config = _config.copyWith(style: st)),
                             onToggleFullscreen: _toggleFullscreen,
+                            onToggleLyrics: _toggleLyrics,
                             onOpenDrawer: _openDrawer,
+                            mediaSync: _mediaSync,
                             emptyText: l.noAudio,
                             active: active,
                           ),

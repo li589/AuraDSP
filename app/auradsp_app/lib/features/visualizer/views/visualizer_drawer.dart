@@ -207,6 +207,26 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   info: 'Show 0 to -60 dBFS acoustic scale along right border',
                   onChanged: (v) => onConfigChanged(config.copyWith(showDbScale: v)),
                 ),
+                const SizedBox(height: 12),
+
+                // 4. 歌词与字幕选项
+                _SectionTitle(
+                  title: 'LYRICS & SUBTITLES',
+                  info: 'Configure synchronized scrolling lyrics display',
+                ),
+                const SizedBox(height: 6),
+                _ToggleRow(
+                  label: 'Lyrics Overlay',
+                  value: config.showLyrics,
+                  info: 'Overlay synchronized lyrics above the visualizer stage',
+                  onChanged: (v) => onConfigChanged(config.copyWith(showLyrics: v)),
+                ),
+                _ToggleRow(
+                  label: 'Bilingual Translation',
+                  value: config.showTranslation,
+                  info: 'Display translated lyrics beneath primary line if available',
+                  onChanged: (v) => onConfigChanged(config.copyWith(showTranslation: v)),
+                ),
               ],
             ),
           ),
