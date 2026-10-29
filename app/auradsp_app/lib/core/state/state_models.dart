@@ -86,7 +86,7 @@ abstract class ParamDefaults {
   static const double inputBalanceL = 1.0; // 100%
   static const double inputBalanceR = 1.0; // 100%
 
-  // Freeverb 空间混响（WP1：freeverb.* 为混响自定义参数 ABI 名）
+  // 空间混响自定义参数（WP1：freeverb.* 为 ABI 兼容名）
   static const double fvDecay = 0.5; // 50%
   static const double fvDamp = 0.5; // 50%
   static const double fvWet = 0.35; // 35%

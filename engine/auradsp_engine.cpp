@@ -167,10 +167,14 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
 
     for (int i = 0; i < kVizFftMax; ++i) h->hann[i] = 0.0f;
     rebuild_hann(h, kVizFftDefault);
-    /* 产出间隔按实际 fs 归一到 10ms，44.1k/96k 下帧率才不会漂。
+    /* 产出间隔按实际 fs 归一到 33ms（≈30Hz）。
+     * UI 侧默认 vizFps=20、每 50ms 拉一次且只取最新帧——旧实现 100Hz
+     * 发射（fs/100）意味着约 70% 的双路 4096 点 FFT + 32 带映射在 RT
+     * 线程上白算。30Hz 仍高于 UI 消费上限，不产生可见空档；44.1k/96k
+     * 同样按 fs 归一。
      * 不用 std::max：Windows 头把 max 定义成宏，会把 std::max 展开坏
      * （MSVC C2589）。 */
-    int viz_int = (int)(h->sample_rate / 100.0 + 0.5);
+    int viz_int = (int)(h->sample_rate / 30.0 + 0.5);
     if (viz_int < 1) viz_int = 1;
     h->viz_interval.store(viz_int);
 

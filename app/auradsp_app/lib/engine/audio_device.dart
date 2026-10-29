@@ -305,8 +305,8 @@ final class WasapiOut {
 
     // 若 config.sampleRate 指定了与设备原生不同的速率，就按该速率请求 shared
     // 格式（config.sampleRate 此前从不被消费，引擎实际一直跟着设备走）。
-    // 这不只是"配置生效"：引擎的 Freeverb 梳状滤波长度按 fs 标定，
-    // 在 44.1k/96k 设备上混响音调与延迟都会偏。
+    // 这不只是"配置生效"：引擎混响（vendor Progenitor2 / MC FDN）的
+    // 延迟线长度按 fs 标定，在 44.1k/96k 设备上混响音调与延迟都会偏。
     Pointer<Void> fmtPtr = pFmt.value;
     Pointer<Uint8>? customFmt;
     var requestedRateApplied = false;

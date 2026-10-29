@@ -9,14 +9,13 @@
  *   3. 动效：交错入场（一次编排的页面加载）、PulseDot 呼吸、AuraSwitch/
  *      AuraSegmented/AuraChip 的即时按压与滑动反馈。
  */
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
-
-import 'package:flutter/scheduler.dart';
 
 import '../core/design.dart';
 import '../core/theme.dart';
@@ -103,7 +102,11 @@ class _PageScaffoldState extends State<PageScaffold>
           child: c,
         ),
       ),
-      child: child,
+      // 每张卡片独立图层（2026-10-29）：入场时 Opacity 只混合缓存纹理，
+      // 不逐帧重绘卡片；滚动时整列位移只做图层合成，不再重画所有卡片
+      // 的圆角/描边/阴影（此前 SingleChildScrollView 单列无边界，滚动
+      // 每帧重绘整页内容，是滚动 GPU 峰值的主因）。
+      child: RepaintBoundary(child: child),
     );
   }
 
@@ -276,11 +279,11 @@ class AmbientSpectrum extends StatefulWidget {
   State<AmbientSpectrum> createState() => _AmbientSpectrumState();
 }
 
-class _AmbientSpectrumState extends State<AmbientSpectrum>
-    with SingleTickerProviderStateMixin {
-  /// 驱动 painter 重绘的时钟。音频停止后引擎不再产出 viz 帧，
-  /// 而 painter 的 repaint 原本只挂在 spectrum 上 → 画面定格在最后一帧。
-  /// 由看门狗在「无新帧」时拨动它，配合 painter 内部的快速衰减归零。
+class _AmbientSpectrumState extends State<AmbientSpectrum> {
+  // 仅在需要时拨动：painter 的 repaint 只挂 _clock（不再直接挂 spectrum）。
+  // 由本 state 在 spectrum 帧到达时节流到 ~20fps 拨一次；无信号期由
+  // stale 衰减 Timer 拨动。彻底移除原来的常驻 60fps Ticker——它在有信号时
+  // 不做任何有效工作却持续 force-schedule 帧，是后台 GPU/CPU 占用的主因。
   final ValueNotifier<int> _clock = ValueNotifier<int>(0);
 
   late _AmbientPainter _painter = _AmbientPainter(
@@ -289,63 +292,113 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
     clock: _clock,
   );
 
-  Ticker? _watchdog;
+  // 页面是否处于可见栈位（IndexedStack 离屏页 TickerMode=false）。
+  // 据此摘除 spectrum 订阅与一切 Timer，离屏页不再因 30fps 帧调度占用。
+  bool _pageActive = true;
+
+  // spectrum 帧节流：paint 间隔下限。把全屏雾化 blit 从 30fps 降到 20fps，
+  // 视觉几乎无差（氛围层低不透明度 + 柱体攻击/释放本就迟钝），GPU 全屏
+  // 纹理上传/合成开销直接砍 1/3。
+  static const _paintIntervalMs = 50; // 20fps
+  int _lastPaintMs = 0;
+
+  // 无信号判定与衰减：帧停滞后 _staleMs 触发一次性 stale，随后 _decayTimer
+  // 以 ~30fps 步进衰减直到柱体归零即停。有信号期这两个 Timer 都不持有，
+  // 也不占用任何帧回调。
+  static const _staleMs = 200;
+  static const _decayIntervalMs = 33;
+  Timer? _staleTimer;
+  Timer? _decayTimer;
   int _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
 
-  /// 超过该时长没有新频谱帧即判定为「无信号」（音频停止/欠载）。
-  static const _staleMs = 200;
+  bool get _effective =>
+      _pageActive && TrayService.instance.isWindowVisible.value;
 
   @override
   void initState() {
     super.initState();
-    _watchdog = createTicker(_onTick);
     widget.spectrum.addListener(_onFrame);
     TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+    // 首帧到达前也可能已有历史值（切页回来），先武装一次无信号检测。
+    _armStaleTimer();
   }
 
-  void _onVisibilityChanged() {
-    if (!TrayService.instance.isWindowVisible.value) {
-      _stopTicking();
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final active = TickerMode.valuesOf(context).enabled;
+    if (_pageActive != active) {
+      _pageActive = active;
+      _syncSubscription();
+    }
+  }
+
+  void _onVisibilityChanged() => _syncSubscription();
+
+  /// 按可见性挂/摘 stale 监视 Timer。spectrum 监听始终挂着（离屏时
+  /// _onFrame 早退，零开销且不调度帧）。
+  void _syncSubscription() {
+    if (_effective) {
+      _armStaleTimer();
+      // 回页/窗口恢复时补一次重绘：离屏期间保留的是最后一帧位图，
+      // 若期间柱子未归零且没有新帧，这里主动拨钟让画面立即刷新。
+      if (_painter.maxValue > AmbientEnvelope.epsilon) _clock.value++;
     } else {
-      _ensureTicking();
-    }
-  }
-
-  /// 看门狗只在「有东西可能变陈旧」时跑：柱子已全部归零则完全不占用帧回调。
-  void _ensureTicking() {
-    if (!TrayService.instance.isWindowVisible.value) return;
-    if (_watchdog != null && !_watchdog!.isTicking) {
-      _watchdog!.start();
-    }
-  }
-
-  void _stopTicking() {
-    if (_watchdog != null && _watchdog!.isTicking) {
-      _watchdog!.stop();
+      _staleTimer?.cancel();
+      _staleTimer = null;
+      _decayTimer?.cancel();
+      _decayTimer = null;
     }
   }
 
   void _onFrame() {
-    if (!TrayService.instance.isWindowVisible.value) return;
+    if (!_effective) return;
     _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
-    // 恢复真实信号：下一帧 paint 会重新按 spectrum 重采样。
+    // 恢复真实信号：paint 时重新按 spectrum 重采样。
     _painter.clearStale();
-    _ensureTicking();
+    // 有新帧：停掉可能正在跑的衰减循环。
+    _decayTimer?.cancel();
+    _decayTimer = null;
+    _armStaleTimer();
+    // 节流 repaint：距上次 paint ≥ _paintIntervalMs 才拨动 _clock。
+    if (_lastFrameMs - _lastPaintMs >= _paintIntervalMs) {
+      _lastPaintMs = _lastFrameMs;
+      _clock.value++;
+    }
   }
 
-  void _onTick(Duration _) {
+  /// 幂等武装：已武装则不重建 Timer。有信号期每 200ms 才需要一个
+  /// Timer 到期回调，避免每帧 create/cancel 的分配抖动。
+  void _armStaleTimer() {
+    if (_staleTimer?.isActive ?? false) return;
+    _staleTimer = Timer(const Duration(milliseconds: _staleMs), _onStale);
+  }
+
+  void _onStale() {
+    if (!_effective) return;
+    // 到期时仍有新帧（Timer 武装后帧又刷新过）→ 继续等下一轮。
     final idle = DateTime.now().millisecondsSinceEpoch - _lastFrameMs;
     if (idle < _staleMs) {
-      // 仍有信号；但若柱子已全平，也无需继续监视。
-      if (_painter.maxValue <= 0) _stopTicking();
+      _armStaleTimer();
       return;
     }
-    // stale 期间不再吃陈旧的 spectrum 值（否则会被重新抬高、永不归零），
-    // 只做快速衰减；返回 false 表示已衰减干净，停表。
+    // 进入无信号期：周期性衰减直到柱体归零。
+    _decayTimer?.cancel();
+    _decayTimer =
+        Timer.periodic(const Duration(milliseconds: _decayIntervalMs), _onDecay);
+  }
+
+  void _onDecay(Timer _) {
+    if (!_effective) {
+      _decayTimer?.cancel();
+      _decayTimer = null;
+      return;
+    }
     if (_painter.decayStale()) {
       _clock.value++;
     } else {
-      _stopTicking();
+      _decayTimer?.cancel();
+      _decayTimer = null;
     }
   }
 
@@ -366,9 +419,8 @@ class _AmbientSpectrumState extends State<AmbientSpectrum>
   @override
   void dispose() {
     TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
-    _stopTicking();
-    _watchdog?.dispose();
-    _watchdog = null;
+    _staleTimer?.cancel();
+    _decayTimer?.cancel();
     widget.spectrum.removeListener(_onFrame);
     _clock.dispose();
     _painter.dispose();
@@ -474,7 +526,7 @@ class _AmbientPainter extends CustomPainter {
     required this.spectrum,
     required this.palette,
     required this.clock,
-  }) : super(repaint: Listenable.merge([spectrum, clock]));
+  }) : super(repaint: clock);
 
   _AmbientPainter withPalette(AuraPalette p,
       {required ValueListenable<int> clock}) {
@@ -674,36 +726,41 @@ class _PulseDotState extends State<PulseDot>
   }
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: widget.size * 2.6,
-        height: widget.size * 2.6,
-        child: AnimatedBuilder(
-          animation: _c,
-          builder: (_, _) {
-            final t = Curves.easeInOut.transform(_c.value);
-            return Stack(
-              alignment: Alignment.center,
-              children: [
-                // 光晕
-                Container(
-                  width: widget.size + t * widget.size * 1.5,
-                  height: widget.size + t * widget.size * 1.5,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.color.withValues(alpha: 0.30 * (1 - t)),
+  // RepaintBoundary（2026-10-29）：呼吸动画 60fps 持续整场播放；此前它没有
+  // 独立图层，每帧把最近的整条顶栏/hero 行标脏重绘。加边界后每帧只重绘
+  // 这颗 ~16px 圆点，非可视化页面的 GPU 占用回到接近 0。
+  Widget build(BuildContext context) => RepaintBoundary(
+        child: SizedBox(
+          width: widget.size * 2.6,
+          height: widget.size * 2.6,
+          child: AnimatedBuilder(
+            animation: _c,
+            builder: (_, _) {
+              final t = Curves.easeInOut.transform(_c.value);
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  // 光晕
+                  Container(
+                    width: widget.size + t * widget.size * 1.5,
+                    height: widget.size + t * widget.size * 1.5,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color.withValues(alpha: 0.30 * (1 - t)),
+                    ),
                   ),
-                ),
-                Container(
-                  width: widget.size,
-                  height: widget.size,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.color,
+                  Container(
+                    width: widget.size,
+                    height: widget.size,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: widget.color,
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       );
 }
