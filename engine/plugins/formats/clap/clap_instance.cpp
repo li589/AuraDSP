@@ -3,6 +3,7 @@
 #include "clap_metadata.h"
 #include "debug_log.h"
 #include "module_pump.h"
+#include "platform/port/module.h"
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
 #include "win32_util.h"
@@ -67,18 +68,19 @@ public:
             m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
             return false;
         }
-        m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        m_module = platform::module_open_utf8(binaryPath.c_str());
         if (!m_module) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to load CLAP library: " + std::to_string(GetLastError());
+            m_meta.errorMessage = "Failed to load CLAP library: " + std::to_string(platform::module_last_error());
             return false;
         }
 
-        m_entry = reinterpret_cast<const clap_plugin_entry_t*>(GetProcAddress(m_module, "clap_entry"));
+        m_entry = reinterpret_cast<const clap_plugin_entry_t*>(
+            platform::module_symbol(m_module, "clap_entry"));
         if (!m_entry) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "Missing 'clap_entry' symbol in CLAP binary";
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             return false;
         }
@@ -100,7 +102,7 @@ public:
             m_meta.isCompatible = false;
             m_meta.errorMessage = "CLAP main thread failed to start";
             m_pump.reset();
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             m_entry = nullptr;
             return false;
@@ -180,7 +182,7 @@ public:
             // init 正常返回错误：线程健康，先释放共享泵引用（可能顺带停线程），
             // 再卸载模块。与 VST3 侧失败路径对齐（B3 时 CLAP 漏了停线程）。
             m_pump.reset();
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             return false;
         }
@@ -232,7 +234,7 @@ public:
         m_pump.reset();
         if (m_module) {
             AURADSP_DBG("[DBG CLAP unload] step 5: FreeLibrary");
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             AURADSP_DBG("[DBG CLAP unload] step 5 done");
             m_module = nullptr;
         }
@@ -1022,7 +1024,7 @@ private:
     static void hostRequestProcess(const struct clap_host* host) {}
     static void hostRequestCallback(const struct clap_host* host) {}
 
-    HMODULE m_module = nullptr;
+    void* m_module = nullptr;
     const clap_plugin_entry_t* m_entry = nullptr;
     const clap_plugin_factory_t* m_factory = nullptr;
     const clap_plugin_t* m_plugin = nullptr;

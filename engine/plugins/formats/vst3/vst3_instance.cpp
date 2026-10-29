@@ -2,6 +2,7 @@
 #include "auradsp_engine.h"
 #include "debug_log.h"
 #include "module_pump.h"
+#include "platform/port/module.h"
 #include "plugin_bundle.h"
 #include "plugin_metadata_util.h"
 #include "vst3_metadata.h"
@@ -554,19 +555,20 @@ public:
             m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
             return false;
         }
-        m_module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+        m_module = platform::module_open_utf8(binaryPath.c_str());
         if (!m_module) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to load VST3 DLL: " + std::to_string(GetLastError());
+            m_meta.errorMessage = "Failed to load VST3 DLL: " + std::to_string(platform::module_last_error());
             return false;
         }
 
         typedef Steinberg::IPluginFactory* (PLUGIN_API *GetFactoryFunc)();
-        auto getFactory = reinterpret_cast<GetFactoryFunc>(GetProcAddress(m_module, "GetPluginFactory"));
+        auto getFactory = reinterpret_cast<GetFactoryFunc>(
+            platform::module_symbol(m_module, "GetPluginFactory"));
         if (!getFactory) {
             m_meta.isCompatible = false;
             m_meta.errorMessage = "Missing GetPluginFactory export in VST3 binary";
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             return false;
         }
@@ -588,7 +590,7 @@ public:
             m_meta.isCompatible = false;
             m_meta.errorMessage = "VST3 main thread failed to start";
             m_pump.reset();
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             return false;
         }
@@ -753,7 +755,7 @@ public:
             }
             // init 正常返回错误：线程健康，先释放共享泵引用再卸载模块。
             m_pump.reset();
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
             return false;
         }
@@ -822,7 +824,7 @@ public:
         // FreeLibrary——确保卸载 DLL 时其中代码已无人执行。
         m_pump.reset();
         if (m_module) {
-            FreeLibrary(m_module);
+            platform::module_close(m_module);
             m_module = nullptr;
         }
         // F1：回收本插件登记过的 DLL 搜索目录（AddDllDirectory 的 cookie）。
@@ -1599,7 +1601,7 @@ public:
     }
 
 private:
-    HMODULE m_module = nullptr;
+    void* m_module = nullptr;
     Steinberg::IPluginFactory* m_factory = nullptr;
     Steinberg::Vst::IComponent* m_component = nullptr;
     Steinberg::Vst::IAudioProcessor* m_processor = nullptr;
