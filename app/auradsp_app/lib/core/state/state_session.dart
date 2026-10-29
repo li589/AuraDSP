@@ -520,6 +520,7 @@ extension StateSession on AppModel {
     themeId = id;
     config.themeId = id.name;
     ConfigManager.save(config);
+    appearanceTick.value++;
     _notifyUi();
     scheduleAutoSave();
   }
@@ -528,6 +529,7 @@ extension StateSession on AppModel {
     locale = l;
     config.locale = l.languageCode;
     ConfigManager.save(config);
+    appearanceTick.value++;
     _notifyUi();
     scheduleAutoSave();
   }

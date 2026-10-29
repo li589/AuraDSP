@@ -700,7 +700,7 @@ extension StateCore on AppModel {
   // ---- isolate 生命周期 ----
 
   void _spawn() {
-    conn = EngineConn.connecting;
+    setConn(EngineConn.connecting);
     _notifyUi();
     final port = ReceivePort();
     _fromIso = port;
@@ -752,7 +752,7 @@ extension StateCore on AppModel {
       await _stopAudioIsolate(oldIso, oldPort);
     }
     if (token != _restartToken) return;
-    conn = EngineConn.connecting;
+    setConn(EngineConn.connecting);
     playing = false; // 就绪前不画频谱；重推音源后由 setSource 恢复
     _spawn();
   }

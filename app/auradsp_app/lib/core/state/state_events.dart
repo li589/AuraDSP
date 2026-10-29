@@ -34,7 +34,7 @@ extension StateEvents on AppModel {
         // 否则曲线、响应和生产链使用三套不同的频率假设。
         _rebuildEqGridForSampleRate(notify: false);
         latencyMs = (raw['latencyMs'] as num).toDouble();
-        conn = EngineConn.ready;
+        setConn(EngineConn.ready);
         engineState = 1;
         _fatalRetries = 0; // 活过来了，backoff 计数清零
         // 输出恢复即清除降级标记（deviceRate>0 = 真有设备）。
@@ -651,7 +651,7 @@ extension StateEvents on AppModel {
         _notifyUi();
         break;
       case 'fatal':
-        conn = EngineConn.fatal;
+        setConn(EngineConn.fatal);
         fatalMsg = raw['msg'] as String;
         _notifyUi();
         // 设备被占是持续态（对端独占释放前不会好）：backoff 重起，
