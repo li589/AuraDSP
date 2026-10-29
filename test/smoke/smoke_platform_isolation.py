@@ -1,13 +1,15 @@
-"""smoke_platform_isolation.py — M1 平台隔离门禁（2026-10-29）。
+"""smoke_platform_isolation.py — M1/M2 平台隔离门禁（2026-10-29）。
 
-验收标准（方案《跨平台基础框架与平台依赖剥离方案-2026-10-29》F1）：
+验收标准（方案《跨平台基础框架与平台依赖剥离方案-2026-10-29》F1 + M2）：
   1. 引擎可移植核心（engine 根文件 / chain / dsp / plugins/integration）内
      零 OS 头（windows.h 等）与零 Win32 符号（_WIN32 / WINAPI / _wfopen /
      MultiByteToWideChar / OutputDebugString / GetEnvironmentVariableA）。
      排除：engine/legacy/**（上游移植）、engine/platform/**（适配层）、
-     engine/plugins/{api,driver,formats,host,platform,tests}（M2 才归类）。
+     engine/plugins/{api,driver,formats,platform,tests}（M2 已按平台归类）。
   2. 端口头（engine/platform/port/*.h）保持纯声明：自身不得 include OS 头。
   3. 正向断言：port 头与 Windows 实现文件必须存在（防"删了实现留下声明"）。
+  4. M2 结构断言：远程宿主只在 plugins/platform/win32/host/；Win32 模块泵
+     只在 platform/win32/；formats 不再直接 LoadLibrary/GetProcAddress/FreeLibrary。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -38,8 +40,23 @@ OS_SYMBOL = re.compile(
 SCAN_DIRS = ("", "chain", "dsp", os.path.join("plugins", "integration"))
 SRC_EXTS = (".c", ".cc", ".cpp", ".h", ".hpp")
 
-PORT_HEADERS = ("fs.h", "env.h", "log.h")
+PORT_HEADERS = ("fs.h", "env.h", "log.h", "module.h")
 WIN_IMPLS = ("win_compat.cpp", "fs_win.cpp", "env_win.cpp", "log_win.cpp")
+
+# M2：远程宿主与 Win32 模块加载的唯一归属地（相对 engine/）
+M2_HOST_DIR = os.path.join("plugins", "platform", "win32", "host")
+M2_HOST_FILES = (
+    "auradsp_plugin_host_main.cpp",
+    "plugin_host_client.cpp",
+    "plugin_host_client.h",
+    "plugin_ipc_protocol.h",
+    "plugin_shared_region.cpp",
+    "plugin_shared_region.h",
+    "process_plugin_proxy.cpp",
+    "process_plugin_proxy.h",
+)
+DIRECT_MODULE_LOAD = re.compile(
+    r"\bLoadLibrary(?:ExW|ExA|W|A)?\s*\(|\bGetProcAddress\s*\(|\bFreeLibrary\s*\(")
 
 
 def iter_core_files():
@@ -97,6 +114,39 @@ def impl_presence():
         check(f"Windows 实现存在: {name}", os.path.isfile(fp), fp)
 
 
+def m2_layout():
+    legacy_host = os.path.join(ENGINE, "plugins", "host")
+    check("M2 远程宿主已迁出 plugins/host", not os.path.isdir(legacy_host), legacy_host)
+    host_dir = os.path.join(ENGINE, M2_HOST_DIR)
+    for name in M2_HOST_FILES:
+        fp = os.path.join(host_dir, name)
+        check(f"M2 远程宿主文件位于 platform/win32/host: {name}", os.path.isfile(fp), fp)
+    check("M2 模块泵位于 platform/win32",
+          os.path.isfile(os.path.join(ENGINE, "plugins", "platform", "win32", "module_pump.h")),
+          "plugins/platform/win32/module_pump.h")
+    check("M2 模块泵已从 driver 移除",
+          not os.path.isfile(os.path.join(ENGINE, "plugins", "driver", "module_pump.h")),
+          "plugins/driver/module_pump.h")
+    module_impl = os.path.join(ENGINE, "plugins", "platform", "win32", "plugin_module.cpp")
+    check("M2 模块加载端口 Windows 实现存在", os.path.isfile(module_impl), module_impl)
+
+    # formats 的模块加载必须走 port/module.h，不得直接调 Win32 模块 API
+    hits = []
+    fmt_root = os.path.join(ENGINE, "plugins", "formats")
+    for dirpath, _dirnames, filenames in os.walk(fmt_root):
+        for fn in sorted(filenames):
+            if not fn.endswith(SRC_EXTS):
+                continue
+            fp = os.path.join(dirpath, fn)
+            rel = os.path.relpath(fp, ENGINE).replace(os.sep, "/")
+            src = strip_comments(open(fp, encoding="utf-8", errors="replace").read())
+            for n, code in enumerate(src.splitlines(), 1):
+                if DIRECT_MODULE_LOAD.search(code):
+                    hits.append(f"{rel}:{n}")
+    check("M2 formats 零直接模块加载 API（LoadLibrary/GetProcAddress/FreeLibrary）",
+          not hits, "; ".join(hits[:6]))
+
+
 def negative_self_test():
     bad = '#include <windows.h>\n#ifdef _WIN32\n'
     check("自检：扫描器能判红 OS 头", bool(OS_INCLUDE.search(bad)))
@@ -107,6 +157,7 @@ if __name__ == "__main__":
     core_scan()
     port_purity()
     impl_presence()
+    m2_layout()
     negative_self_test()
     if FAIL:
         print(f"\n{len(FAIL)} FAIL: {FAIL}")

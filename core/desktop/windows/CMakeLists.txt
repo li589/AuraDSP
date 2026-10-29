@@ -1,6 +1,14 @@
 cmake_minimum_required(VERSION 3.20)
 project(auradsp_engine LANGUAGES C CXX)
 
+# M2（2026-10-29）：插件远程宿主是 Windows 强依赖组件（共享内存 + CreateProcess +
+# Win32 窗口）。Windows 默认 ON（行为不变）；非 Windows / 裁剪构建置 OFF：引擎走
+# AURADSP_HOST_INPROC 进程内路径，且不构建独立宿主进程。
+option(AURADSP_PLUGIN_HOST_REMOTE "Build out-of-process plugin host (Windows only)" ON)
+if(NOT WIN32)
+    set(AURADSP_PLUGIN_HOST_REMOTE OFF CACHE BOOL "Build out-of-process plugin host (Windows only)" FORCE)
+endif()
+
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
 set(LEGACY     "${API}/legacy")
@@ -9,6 +17,7 @@ set(AURADSP_PLUGIN_HOST_SOURCES
     "${API}/plugins/platform/win32/plugin_gui_win32.cpp"
     "${API}/plugins/platform/win32/win32_util.cpp"
     "${API}/plugins/platform/win32/plugin_paths.cpp"
+    "${API}/plugins/platform/win32/plugin_module.cpp"
     "${API}/plugins/driver/plugin_bundle.cpp"
     "${API}/plugins/driver/plugin_scanner.cpp"
     "${API}/plugins/driver/plugin_driver_registry.cpp"
@@ -30,10 +39,13 @@ set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_abi.cpp"
 )
 set(AURADSP_PLUGIN_REMOTE_SOURCES
-    "${API}/plugins/host/plugin_shared_region.cpp"
-    "${API}/plugins/host/plugin_host_client.cpp"
-    "${API}/plugins/host/process_plugin_proxy.cpp"
+    "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
+    "${API}/plugins/platform/win32/host/plugin_host_client.cpp"
+    "${API}/plugins/platform/win32/host/process_plugin_proxy.cpp"
 )
+if(NOT AURADSP_PLUGIN_HOST_REMOTE)
+    set(AURADSP_PLUGIN_REMOTE_SOURCES "")
+endif()
 
 file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
 # 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
@@ -74,7 +86,7 @@ target_include_directories(auradsp_engine PRIVATE
     "${API}/chain"
     "${API}/plugins/api"
     "${API}/plugins/driver"
-    "${API}/plugins/host"
+    "${API}/plugins/platform/win32/host"
     "${API}/plugins/platform/win32"
     "${LEGACY}"
     "${LEGACY}/jdsp"
@@ -88,6 +100,11 @@ target_compile_definitions(auradsp_engine PRIVATE
     WINVER=0x0601
     NTDDI_VERSION=0x06010000
 )
+if(NOT AURADSP_PLUGIN_HOST_REMOTE)
+    # 远程宿主被裁剪：插件改在引擎进程内加载（与 auradsp_plugin_host / 测试的
+    # AURADSP_HOST_INPROC=1 同一路径），不引用 ProcessPluginProxy / 共享内存 IPC。
+    target_compile_definitions(auradsp_engine PRIVATE AURADSP_HOST_INPROC=1)
+endif()
 # B-1 调试日志（计划 D1）：宿主 [DBG 诊断默认编译期剥离（Release DLL strings 扫描
 # 无 [DBG 由 smoke_release_strings.py 门禁）；-DAURADSP_DBG_LOG=ON 重建可恢复输出
 # （OutputDebugString 通道，运行期再受环境变量 AURADSP_LOG=0|1|2 控制）。
@@ -108,28 +125,30 @@ set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedD
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
-add_executable(auradsp_plugin_host
-    "${API}/plugins/host/auradsp_plugin_host_main.cpp"
-    "${API}/plugins/host/plugin_shared_region.cpp"
-    ${AURADSP_PLUGIN_HOST_SOURCES}
-)
-target_include_directories(auradsp_plugin_host PRIVATE
-    "${API}"
-    "${API}/plugins/api"
-    "${API}/plugins/driver"
-    "${API}/plugins/host"
-    "${API}/plugins/platform/win32"
-    "${PLUGIN_API}"
-)
-target_compile_definitions(auradsp_plugin_host PRIVATE
-    NDEBUG
-    _CRT_SECURE_NO_WARNINGS
-    AURADSP_HOST_INPROC=1
-)
-target_compile_options(auradsp_plugin_host PRIVATE /utf-8 /W1 /EHsc)
-set_property(TARGET auradsp_plugin_host PROPERTY CXX_STANDARD 20)
-set_property(TARGET auradsp_plugin_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(auradsp_plugin_host PRIVATE version)
+if(AURADSP_PLUGIN_HOST_REMOTE)
+    add_executable(auradsp_plugin_host
+        "${API}/plugins/platform/win32/host/auradsp_plugin_host_main.cpp"
+        "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
+        ${AURADSP_PLUGIN_HOST_SOURCES}
+    )
+    target_include_directories(auradsp_plugin_host PRIVATE
+        "${API}"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/win32"
+        "${PLUGIN_API}"
+    )
+    target_compile_definitions(auradsp_plugin_host PRIVATE
+        NDEBUG
+        _CRT_SECURE_NO_WARNINGS
+        AURADSP_HOST_INPROC=1
+    )
+    target_compile_options(auradsp_plugin_host PRIVATE /utf-8 /W1 /EHsc)
+    set_property(TARGET auradsp_plugin_host PROPERTY CXX_STANDARD 20)
+    set_property(TARGET auradsp_plugin_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    target_link_libraries(auradsp_plugin_host PRIVATE version)
+endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 add_executable(test_plugin_direct
     "${API}/plugins/tests/plugin_host_direct.cpp"
