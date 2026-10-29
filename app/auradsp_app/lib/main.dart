@@ -100,9 +100,12 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
         ),
       );
     }
-    return ListenableBuilder(
-      listenable: model,
-      builder: (_, _) {
+    // 只订阅「外观」计数（主题/语言）。此前监听整份 AppModel：任何参数拖动、
+    // 引擎事件、预设载入都会重建 MaterialApp → ShellGate → 六个保活页，
+    // 是交互期 CPU 的主要放大器。连接态由 ShellGate 自己订阅 connTick。
+    return ValueListenableBuilder<int>(
+      valueListenable: model.appearanceTick,
+      builder: (_, _, _) {
         return MaterialApp(
           title: 'AuraDSP',
           debugShowCheckedModeBanner: false,
@@ -147,18 +150,25 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
 class ShellGate extends StatelessWidget {
   final AppModel model;
   const ShellGate({super.key, required this.model});
+
   @override
   Widget build(BuildContext context) {
-    switch (model.conn) {
-      case EngineConn.fatal:
-        return _FatalPage(msg: model.fatalMsg ?? '');
-      case EngineConn.connecting:
-      case EngineConn.ready:
-        return Stack(children: [
-          AppShell(model: model),
-          EventBanner(model: model),
-        ]);
-    }
+    // 只订阅连接态：参数/事件粗通知不再波及整棵 Shell。
+    return ValueListenableBuilder<int>(
+      valueListenable: model.connTick,
+      builder: (_, _, _) {
+        switch (model.conn) {
+          case EngineConn.fatal:
+            return _FatalPage(msg: model.fatalMsg ?? '');
+          case EngineConn.connecting:
+          case EngineConn.ready:
+            return Stack(children: [
+              AppShell(model: model),
+              EventBanner(model: model),
+            ]);
+        }
+      },
+    );
   }
 }
 

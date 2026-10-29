@@ -1434,7 +1434,8 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     /* Stage 2: Post-Vendor（主效果后 / 混响前） */
     auradsp::plugin_chain_process(h, 2, dst, (uint32_t)frames);
 
-    /* Haas 差分环绕（Stage 2 后 / Freeverb 前） */
+    /* Haas 差分环绕（Stage 2 后 / 离散 MC 混响前；
+     * 立体声路径的混响已在 vendor 段内完成）。 */
     if (h->p.haas_enable.load(std::memory_order_relaxed)) {
         haas_process(h, dst, frames);
     }
@@ -1447,7 +1448,8 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
     sample_stage_peak(h, 20, dst, frames);   /* Stage 20: Spatial output */
 
-    /* 激励器（Haas 后 / Freeverb 前：最后一道音色工序，再进房间） */
+    /* 激励器（Haas 后 / 离散 MC 混响前：最后一道音色工序，再进房间；
+     * 立体声路径的混响已在 vendor 段内完成）。 */
     if (h->p.exciter_enable.load(std::memory_order_relaxed)) {
         exciter_process(h, dst, frames);
     }

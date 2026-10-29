@@ -4,8 +4,8 @@
 
 
 /* 激励器（XHiFi 式高频修复）：HPF 取高频成分 → tanh 生成谐波 → 按量混回。
- * 位置：Haas 后 / Freeverb 前——vendor 内部 EQ/tube 拆不出来，谐波不进
- * tube 保暖声不糊；进 room 前加，房间带一点 shimmer。
+ * 位置：Haas 后 / 离散 MC 混响前——vendor 内部 EQ/tube 拆不出来，谐波不进
+ * tube 保暖声不糊；进 room 前加，房间带一点 shimmer（立体声混响已在 vendor 段）。
  * tanh 整形本想复用 tube 链路，但 tube 的 waveshaper 在 vendor 内部
  * （VacuumTube*），引擎侧无原生共用函数——此处用标准 tanhf，drive 固
  * 定 2.0 不暴露；输出天然限幅 ±0.5×amount，amount=1 也不刺耳。

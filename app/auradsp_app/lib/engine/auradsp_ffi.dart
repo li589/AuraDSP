@@ -354,7 +354,7 @@ final class VizFrame extends Struct {
   /// vendor 链入口（均衡器输入）的 32 段频谱，语义与 [spectrum] 相同。
   ///
   /// 均衡器面板的背景柱必须用它，而不是 [spectrum]（整链最终输出，
-  /// 含 EQ 之后的混响/卷积/Freeverb/插件）。EQ 在 libjamesdsp 单体链
+  /// 含 EQ 之后的 vendor 混响/MC FDN/卷积/插件）。EQ 在 libjamesdsp 单体链
   /// 内部拿不到输出，输出谱由 UI 用实测响应合成。
   @Array(32)
   external Array<Float> eqInSpectrum;

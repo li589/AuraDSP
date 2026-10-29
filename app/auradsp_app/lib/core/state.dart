@@ -703,12 +703,27 @@ class AppModel extends ChangeNotifier {
   /// **不再**触发粗粒度 notifyListeners——否则 IndexedStack 保活后
   /// 离屏页面会被每秒整树重建。
   final ValueNotifier<int> hbTick = ValueNotifier<int>(0);
+
+  /// 外观（主题/语言）变更计数。根 MaterialApp 只订阅它——否则任何参数/
+  /// 引擎事件的粗通知都会把整棵应用（含 IndexedStack 里全部保活页）重建。
+  final ValueNotifier<int> appearanceTick = ValueNotifier<int>(0);
+
+  /// 连接态（connecting/ready/fatal）变更计数。ShellGate 只关心这一状态，
+  /// 独立订阅，避免根层监听整份 AppModel。
+  final ValueNotifier<int> connTick = ValueNotifier<int>(0);
+
+  /// 唯一连接态写入口：同步 conn 并通知 ShellGate。
+  void setConn(EngineConn next) {
+    if (conn == next) return;
+    conn = next;
+    connTick.value++;
+  }
   final spectrum = ValueNotifier<List<double>>(List.filled(32, 0));
 
   /// vendor 链入口（= 均衡器输入）的 32 段频谱，口径与 [spectrum] 相同。
   ///
-  /// [spectrum] 取的是整条链的**最终输出**——EQ 之后的混响 / 卷积 /
-  /// Freeverb / 插件全都算在内。拿它当均衡器面板的背景柱，用户看到的
+  /// [spectrum] 取的是整条链的**最终输出**——EQ 之后的 vendor 混响 /
+  /// MC FDN / 卷积 / 插件全都算在内。拿它当均衡器面板的背景柱，用户看到的
   /// 频谱并不是均衡器输出的东西，调 EQ 时背景柱几乎不动。
   final eqInSpectrum = ValueNotifier<List<double>>(List.filled(32, 0));
   final levelL = ValueNotifier<double>(-90);
@@ -1095,6 +1110,8 @@ class AppModel extends ChangeNotifier {
   void dispose() {
     _disposed = true;
     hbTick.dispose();
+    appearanceTick.dispose();
+    connTick.dispose();
     visiblePage.dispose();
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(

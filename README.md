@@ -4,7 +4,7 @@
 ![platform](https://img.shields.io/badge/platform-Windows_10%2F11_%7C_Android-0078d6?style=flat-square)
 ![engine](https://img.shields.io/badge/engine-C%2B%2B20-00599c?style=flat-square)
 ![ui](https://img.shields.io/badge/UI-Flutter_3.47-02569b?style=flat-square)
-![dsp](https://img.shields.io/badge/DSP-23_stages-8957e5?style=flat-square)
+![dsp](https://img.shields.io/badge/DSP-23_units-8957e5?style=flat-square)
 ![plugins](https://img.shields.io/badge/plugins-VST3_%7C_CLAP-4b8bbe?style=flat-square)
 
 **跨平台全局音频效果系统** —— 一套 Flutter 界面 + 一族自研引擎，把系统级音频链路接管下来做实时 DSP。

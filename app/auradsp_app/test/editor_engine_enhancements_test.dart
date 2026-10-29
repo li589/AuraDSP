@@ -118,11 +118,14 @@ slider2:0.5<0.0,1.0,0.05>Dry Wet Mix
               width: 100,
               child: LineNumberGutter(
                 editorScrollCtrl: ctrl,
-                lineCount: 5,
+                metrics: EditorLineMetrics(
+                  tops: List<double>.generate(5, (i) => i * 17.25),
+                  heights: List<double>.filled(5, 17.25),
+                  lineAdvance: 17.25,
+                ),
                 errorLines: const {},
                 activeLine: 1,
                 onSelectLine: (_) {},
-                lineHeight: 18.75,
                 fontSize: 11.5,
               ),
             ),

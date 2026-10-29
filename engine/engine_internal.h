@@ -201,7 +201,7 @@ struct Params {
     std::atomic<int32_t>  exciter_oversample{1}; /* 0=1x节能 1=2x高精抗混叠过采样 */
     /* 每效果输出增益门（dB [-12,6]）+ 自动增益补偿开关。
      * bass/eq/tube/comp 落地 vendor（P-010 的 fxOutGain/fxAutoGain）；
-     * reverb 落地引擎侧 Freeverb。 */
+     * reverb 落 vendor fx 槽 5（立体声路径）/ MC FDN（离散多声道）。 */
     std::atomic<float>    bass_outgain{0.0f};
     std::atomic<int32_t>  bass_autogain{0};
     std::atomic<float>    eq_outgain{0.0f};
@@ -274,7 +274,8 @@ struct Params {
     std::atomic<float>    dyneq_h_gain{0.0f};
     std::atomic<float>    dyneq_h_range{6.0f};
     std::atomic<float>    dyneq_h_threshold{-30.0f};
-    /* M5-c：参数化混响（Freeverb，T2 档） */
+    /* M5-c：混响自定义参数（freeverb.* 为 ABI 兼容名；
+     * 立体声路径映射 vendor Progenitor2，离散多声道路径驱动 MC FDN）。 */
     std::atomic<int32_t>  fv_enable{0};
     std::atomic<float>    fv_decay{0.5f};       /* 0..1 → feedback 0.7..0.98 */
     std::atomic<float>    fv_damp{0.5f};        /* 0..1 */
@@ -501,7 +502,7 @@ struct auradsp_handle_s {
     float* hann = nullptr;            /* kVizFftMax floats */
     float* viz_hist = nullptr;        /* kVizFftMax*2，L/R 交织环形历史窗 */
     std::atomic<int> viz_fft_size{kVizFftDefault};  /* 实际使用长度（2 的幂，<= kVizFftMax） */
-    std::atomic<int> viz_interval{480};              /* 产出间隔（帧）= fs/100，即 10ms */
+    std::atomic<int> viz_interval{1600};             /* 产出间隔（帧）= fs/30，约 33ms */
     std::atomic<bool> viz_emitted{false};           /* 是否已产出过频谱帧（窗体重建的安全闸） */
     int    viz_hist_pos = 0;          /* 下一个写入帧位（亦指向窗内最旧帧） */
     int    frames_since_viz = 0;
