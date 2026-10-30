@@ -1374,6 +1374,30 @@ class AppLocalizationsZh extends AppLocalizations {
   String get peakLabel => '峰值';
 
   @override
+  String get visualizerSettingsTip => '可视化设置';
+
+  @override
+  String get visualizerShowLyricsTip => '显示歌词';
+
+  @override
+  String get visualizerHideLyricsTip => '隐藏歌词';
+
+  @override
+  String get visualizerResetPeakTip => '重置峰值保持';
+
+  @override
+  String get visualizerEnterOsFullscreenTip => '系统全屏（OS 窗口）';
+
+  @override
+  String get visualizerExitOsFullscreenTip => '退出系统全屏（Esc / F11）';
+
+  @override
+  String get visualizerMaximizeStageTip => '最大化舞台';
+
+  @override
+  String get visualizerRestoreStageTip => '退出舞台最大化';
+
+  @override
   String get themeSwitchTip => '切换配色方案';
 
   @override

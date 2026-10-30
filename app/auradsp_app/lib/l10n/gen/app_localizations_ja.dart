@@ -1391,6 +1391,30 @@ class AppLocalizationsJa extends AppLocalizations {
   String get peakLabel => 'ピーク';
 
   @override
+  String get visualizerSettingsTip => 'ビジュアライザー設定';
+
+  @override
+  String get visualizerShowLyricsTip => '歌詞を表示';
+
+  @override
+  String get visualizerHideLyricsTip => '歌詞を非表示';
+
+  @override
+  String get visualizerResetPeakTip => 'ピークホールドをリセット';
+
+  @override
+  String get visualizerEnterOsFullscreenTip => 'システム全画面（OS ウィンドウ）';
+
+  @override
+  String get visualizerExitOsFullscreenTip => 'システム全画面を終了（Esc / F11）';
+
+  @override
+  String get visualizerMaximizeStageTip => 'ステージを最大化';
+
+  @override
+  String get visualizerRestoreStageTip => 'ステージ最大化を解除';
+
+  @override
   String get themeSwitchTip => '配色を切り替え';
 
   @override

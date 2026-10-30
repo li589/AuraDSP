@@ -2662,6 +2662,54 @@ abstract class AppLocalizations {
   /// **'峰值'**
   String get peakLabel;
 
+  /// No description provided for @visualizerSettingsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'可视化设置'**
+  String get visualizerSettingsTip;
+
+  /// No description provided for @visualizerShowLyricsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示歌词'**
+  String get visualizerShowLyricsTip;
+
+  /// No description provided for @visualizerHideLyricsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏歌词'**
+  String get visualizerHideLyricsTip;
+
+  /// No description provided for @visualizerResetPeakTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置峰值保持'**
+  String get visualizerResetPeakTip;
+
+  /// No description provided for @visualizerEnterOsFullscreenTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统全屏（OS 窗口）'**
+  String get visualizerEnterOsFullscreenTip;
+
+  /// No description provided for @visualizerExitOsFullscreenTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出系统全屏（Esc / F11）'**
+  String get visualizerExitOsFullscreenTip;
+
+  /// No description provided for @visualizerMaximizeStageTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'最大化舞台'**
+  String get visualizerMaximizeStageTip;
+
+  /// No description provided for @visualizerRestoreStageTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'退出舞台最大化'**
+  String get visualizerRestoreStageTip;
+
   /// No description provided for @themeSwitchTip.
   ///
   /// In zh, this message translates to:

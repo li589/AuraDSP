@@ -1475,6 +1475,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get peakLabel => 'Peak';
 
   @override
+  String get visualizerSettingsTip => 'Visualizer settings';
+
+  @override
+  String get visualizerShowLyricsTip => 'Show lyrics';
+
+  @override
+  String get visualizerHideLyricsTip => 'Hide lyrics';
+
+  @override
+  String get visualizerResetPeakTip => 'Reset peak hold';
+
+  @override
+  String get visualizerEnterOsFullscreenTip => 'System fullscreen (OS window)';
+
+  @override
+  String get visualizerExitOsFullscreenTip =>
+      'Exit system fullscreen (Esc / F11)';
+
+  @override
+  String get visualizerMaximizeStageTip => 'Maximize stage';
+
+  @override
+  String get visualizerRestoreStageTip => 'Exit stage maximize';
+
+  @override
   String get themeSwitchTip => 'Cycle color scheme';
 
   @override
