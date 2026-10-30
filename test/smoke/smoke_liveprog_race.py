@@ -290,7 +290,12 @@ t1 = time.perf_counter()
 time.sleep(0.1)
 stop2.set()
 t_rt2.join(JOIN_TIMEOUT)
-during = [p for (t, p) in mid if t0 <= t < t1]
+# 时间戳取在 auradsp_process 返回之后，而快照 swap 发生在 set_param 返回之前：
+# 窗口末尾这一小段里的块可能已完成 swap 却仍满足 t < t1。留 2ms 边界余量
+# （窗口约 35ms、每秒数千块，余量外仍有上百个块），真回归（编译一开始就换
+# 快照）依然会立刻被抓到。
+TAIL_MARGIN_S = 0.002
+during = [p for (t, p) in mid if t0 <= t < (t1 - TAIL_MARGIN_S)]
 ok_during = bool(during) and all(abs(p - pre) < 0.02 for p in during)
 check('old snapshot alive DURING compile (output tracks pre-compile gain)',
       ok_during and rc == 0,
