@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
 
-/// 粒子龙卷风：确定性螺旋粒子风暴
+/// 粒子龙卷风：确定性粒子漏斗
 ///
-/// 性能要点：
-/// - 粒子与尘埃参数为进程级静态种子表（固定随机源），每帧零随机、零列表分配；
-/// - 螺旋股复用同一条 Path（逐股 reset），辉光合并后仅模糊一次；
-/// - 纯 Canvas 2D，不依赖 dart:io / 窗口 API，全平台一致。
+/// 设计要点：
+/// - 用极淡的锥体轮廓 + 3 条纵向渐隐的螺旋导引线勾勒漏斗，而不是满屏缠绕丝线；
+/// - 108 个轨道粒子按 `sin(angle)` 做前后景深：背面暗而小、正面亮而大，形成体积感；
+/// - 粒子自地面向顶部缓慢上升并同步旋转，低频增强半径/转速，高频只点亮少量火花；
+/// - 粒子种子为进程级静态表，每帧零随机、零列表分配。
 class ParticleTornadoPainter extends CustomPainter {
   final List<double> bands;
   final VisualizerPalette palette;
@@ -17,25 +18,27 @@ class ParticleTornadoPainter extends CustomPainter {
   final double animationTime;
   final double lineWidth;
 
-  static const int _strandCount = 5;
-  static const int _nodes = 44;
-  static const int _dustCount = 48;
+  static const int _particleCount = 108;
+  static const int _groundCount = 24;
+  static const int _strandCount = 3;
+  static const int _strandSamples = 40;
 
-  /// 螺旋股相位（固定，保证姿态稳定）
-  static const List<double> _strandPhase = [0.0, 1.26, 2.52, 3.78, 5.04];
+  static const List<double> _strandPhases = [0.0, 2.09, 4.19];
 
-  /// 尘埃种子：[相位, 轨道速度, 抖动, 尺寸] × _dustCount
-  static final List<double> _dustSeeds = _buildDustSeeds();
+  /// 粒子种子：[初始高度, 上升速度, 初始相位, 轨道速度, 径向抖动, 尺寸] × N
+  static final List<double> _particleSeeds = _buildParticleSeeds();
 
-  final Paint _filamentPaint = Paint()..style = PaintingStyle.stroke;
-  final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
-  final Paint _dotPaintA = Paint()..style = PaintingStyle.fill;
-  final Paint _dotPaintB = Paint()..style = PaintingStyle.fill;
-  final Paint _sparkPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _dustPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _capPaint = Paint()..style = PaintingStyle.fill;
+  /// 地面尘种：[相位, 角速度, 半径系数, 尺寸] × N
+  static final List<double> _groundSeeds = _buildGroundSeeds();
+
+  final Paint _hazePaint = Paint()..style = PaintingStyle.fill;
+  final Paint _conePaint = Paint()..style = PaintingStyle.fill;
+  final Paint _strandPaint = Paint()..style = PaintingStyle.stroke;
+  final Paint _particlePaint = Paint()..style = PaintingStyle.fill;
+  final Paint _groundPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _glowPaint = Paint()..style = PaintingStyle.fill;
   final Path _strandPath = Path();
-  final Path _glowPath = Path();
+  final Path _conePath = Path();
 
   ParticleTornadoPainter({
     required this.bands,
@@ -45,15 +48,30 @@ class ParticleTornadoPainter extends CustomPainter {
     this.lineWidth = 1.5,
   });
 
-  static List<double> _buildDustSeeds() {
-    final rnd = math.Random(20251030);
-    final out = List<double>.filled(_dustCount * 4, 0.0);
-    for (var i = 0; i < _dustCount; i++) {
+  static List<double> _buildParticleSeeds() {
+    final rnd = math.Random(20251031);
+    final out = List<double>.filled(_particleCount * 6, 0.0);
+    for (var i = 0; i < _particleCount; i++) {
+      final o = i * 6;
+      out[o] = rnd.nextDouble(); // 初始高度 0 地面 → 1 顶部
+      out[o + 1] = 0.022 + rnd.nextDouble() * 0.045; // 上升速度
+      out[o + 2] = rnd.nextDouble() * math.pi * 2; // 初始相位
+      out[o + 3] = 0.7 + rnd.nextDouble() * 0.7; // 轨道速度倍率
+      out[o + 4] = 0.86 + rnd.nextDouble() * 0.28; // 径向抖动
+      out[o + 5] = 0.7 + rnd.nextDouble() * 1.1; // 基础尺寸
+    }
+    return out;
+  }
+
+  static List<double> _buildGroundSeeds() {
+    final rnd = math.Random(4481);
+    final out = List<double>.filled(_groundCount * 4, 0.0);
+    for (var i = 0; i < _groundCount; i++) {
       final o = i * 4;
-      out[o] = rnd.nextDouble() * math.pi * 2; // 初始相位
-      out[o + 1] = 0.35 + rnd.nextDouble() * 0.9; // 角速度
-      out[o + 2] = rnd.nextDouble() * math.pi * 2; // 抖动相位
-      out[o + 3] = 0.6 + rnd.nextDouble() * 1.4; // 尺寸
+      out[o] = rnd.nextDouble() * math.pi * 2;
+      out[o + 1] = 0.5 + rnd.nextDouble() * 0.9;
+      out[o + 2] = 1.0 + rnd.nextDouble() * 0.55;
+      out[o + 3] = 0.8 + rnd.nextDouble() * 0.8;
     }
     return out;
   }
@@ -70,128 +88,220 @@ class ParticleTornadoPainter extends CustomPainter {
 
     final bass = _avg(0, math.max(1, n ~/ 8));
     final mid = _avg(n ~/ 4, n ~/ 2);
+    final treble = _avg((n * 3) ~/ 4, n);
     final minDim = math.min(w, h);
 
     final cx = w / 2.0;
-    final baseY = h * 0.9;
-    final maxR = minDim * (0.22 + bass * 0.12);
-    final funnelH = h * (0.68 + bass * 0.08);
-    final sway = w * 0.03 * math.sin(t * 0.35);
-    final spin = t * (0.9 + bass * 1.1);
+    final baseY = h * 0.88;
+    final maxR = minDim * (0.16 + bass * 0.07);
+    final funnelH = h * (0.62 + bass * 0.06) * (1.0 + mid * 0.03);
+    final sway = w * 0.018 * math.sin(t * 0.3);
+    final spin = t * (1.1 + bass * 0.8);
 
-    // 底部低频冲击光池（径向渐变收边，避免出现实心圆盘）
-    final capCenter = Offset(cx + sway * 0.2, baseY);
-    final capRadius = maxR * (1.0 + bass * 0.5);
-    _capPaint.shader = RadialGradient(
+    _drawGroundHaze(canvas, cx, baseY, maxR, minDim, bass);
+    _drawCone(canvas, cx, baseY, maxR, funnelH, bass);
+    _drawStrands(canvas, cx, baseY, maxR, funnelH, sway, spin, t);
+    _drawGroundDust(canvas, cx, baseY, maxR, t, bass, treble);
+    _drawParticles(
+      canvas,
+      cx,
+      baseY,
+      maxR,
+      funnelH,
+      sway,
+      spin,
+      t,
+      n,
+      bass,
+      treble,
+    );
+
+    if (bloom > 0.05) {
+      // 整体低频辉光：只对底部光池加一次模糊，不放大粒子噪声
+      _glowPaint
+        ..shader = RadialGradient(
+          colors: [
+            palette.glow.withValues(alpha: 0.08 + bloom * 0.16 + bass * 0.1),
+            palette.glow.withValues(alpha: 0.0),
+          ],
+        ).createShader(
+          Rect.fromCenter(
+            center: Offset(cx, baseY),
+            width: maxR * 3.2,
+            height: minDim * 0.3,
+          ),
+        )
+        ..maskFilter = MaskFilter.blur(
+          BlurStyle.normal,
+          math.max(2.0, bloom * 5.0),
+        );
+      canvas.drawOval(
+        Rect.fromCenter(
+          center: Offset(cx, baseY),
+          width: maxR * 3.2,
+          height: minDim * 0.18,
+        ),
+        _glowPaint,
+      );
+    }
+  }
+
+  /// 底部光池：椭圆径向渐变，交代地面与中心落点
+  void _drawGroundHaze(
+    Canvas canvas,
+    double cx,
+    double baseY,
+    double maxR,
+    double minDim,
+    double bass,
+  ) {
+    _hazePaint.shader = RadialGradient(
       colors: [
-        palette.glow.withValues(alpha: 0.1 + bass * 0.22),
+        palette.secondary.withValues(alpha: 0.10 + bass * 0.16),
+        palette.primary.withValues(alpha: 0.04 + bass * 0.06),
         palette.glow.withValues(alpha: 0.0),
       ],
+      stops: const [0.0, 0.5, 1.0],
     ).createShader(
       Rect.fromCenter(
-        center: capCenter,
-        width: capRadius * 2.2,
-        height: minDim * 0.22,
+        center: Offset(cx, baseY),
+        width: maxR * 3.4,
+        height: minDim * 0.26,
       ),
     );
     canvas.drawOval(
       Rect.fromCenter(
-        center: capCenter,
-        width: capRadius * 2.2,
-        height: minDim * 0.11,
+        center: Offset(cx, baseY),
+        width: maxR * 3.4,
+        height: minDim * 0.14,
       ),
-      _capPaint,
+      _hazePaint,
     );
-
-    // 第一遍：合并螺旋路径，让辉光铺在粒子下方
-    _glowPath.reset();
-    for (var sIdx = 0; sIdx < _strandCount; sIdx++) {
-      _buildStrand(sIdx, cx, baseY, maxR, funnelH, sway, spin, t, n, mid);
-      _glowPath.addPath(_strandPath, Offset.zero);
-    }
-
-    if (bloom > 0.05) {
-      _glowPaint
-        ..shader = null
-        ..color = palette.glow.withValues(alpha: 0.16 + bloom * 0.32)
-        ..strokeWidth = lineWidth * 2.4
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          math.max(1.5, bloom * 5.5),
-        );
-      canvas.drawPath(_glowPath, _glowPaint);
-    }
-
-    // 第二遍：细丝 + 粒子
-    _filamentPaint.color = palette.primary.withValues(alpha: 0.2);
-    _dotPaintA.color = palette.primary.withValues(alpha: 0.5);
-    _dotPaintB.color = palette.secondary.withValues(alpha: 0.55);
-    _sparkPaint.color = palette.peak.withValues(alpha: 0.8);
-
-    for (var sIdx = 0; sIdx < _strandCount; sIdx++) {
-      _buildStrand(sIdx, cx, baseY, maxR, funnelH, sway, spin, t, n, mid);
-      _filamentPaint.strokeWidth = lineWidth * 0.8;
-      canvas.drawPath(_strandPath, _filamentPaint);
-      _drawStrandParticles(
-        canvas,
-        sIdx,
-        cx,
-        baseY,
-        maxR,
-        funnelH,
-        sway,
-        spin,
-        t,
-        n,
-      );
-    }
-
-    _drawDust(canvas, cx, baseY, maxR, t);
   }
 
-  /// 构建第 [sIdx] 条螺旋股（0 底部 → 1 顶部）。
-  void _buildStrand(
-    int sIdx,
+  /// 极淡的漏斗锥体：下窄上宽，仅提供轮廓 cohesion（透明度 3%~6%）
+  void _drawCone(
+    Canvas canvas,
     double cx,
     double baseY,
     double maxR,
     double funnelH,
-    double sway,
-    double spin,
-    double t,
-    int n,
-    double mid,
+    double bass,
   ) {
-    final phase = _strandPhase[sIdx % _strandPhase.length];
-
-    _strandPath.reset();
-    for (var k = 0; k < _nodes; k++) {
-      final u = k / (_nodes - 1);
-      final bandIdx = (u * (n - 1)).round().clamp(0, n - 1);
-      final energy = bands[bandIdx];
-
-      // 下窄上宽的漏斗轮廓，能量向外推
-      final profile = math.pow(u, 1.35).toDouble();
-      final radius =
-          maxR * (0.1 + 0.9 * profile) * (0.88 + energy * 0.4 + mid * 0.08);
-      // 约 1.6 圈螺旋，股间错相形成缠绕
-      final angle = phase + spin + u * 10.0 + t * u * 0.45;
-
-      final x = cx + sway * (1.0 - u) + math.cos(angle) * radius;
-      final y = baseY - u * funnelH + math.sin(angle) * radius * 0.18;
-
-      if (k == 0) {
-        _strandPath.moveTo(x, y);
+    _conePath.reset();
+    const samples = 18;
+    for (var s = 0; s <= samples; s++) {
+      final u = s / samples;
+      final x = cx - maxR * _profile(u);
+      final y = baseY - u * funnelH;
+      if (s == 0) {
+        _conePath.moveTo(x, y);
       } else {
-        _strandPath.lineTo(x, y);
+        _conePath.lineTo(x, y);
       }
     }
+    for (var s = samples; s >= 0; s--) {
+      final u = s / samples;
+      _conePath.lineTo(cx + maxR * _profile(u), baseY - u * funnelH);
+    }
+    _conePath.close();
+
+    _conePaint.shader = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: [
+        palette.primary.withValues(alpha: 0.055 + bass * 0.03),
+        palette.secondary.withValues(alpha: 0.02),
+        palette.glow.withValues(alpha: 0.0),
+      ],
+      stops: const [0.0, 0.6, 1.0],
+    ).createShader(
+      Rect.fromLTWH(cx - maxR, baseY - funnelH, maxR * 2, funnelH),
+    );
+    canvas.drawPath(_conePath, _conePaint);
   }
 
-  /// 在螺旋节点上散布粒子；近处（底部）更大，模拟透视。
-  void _drawStrandParticles(
+  /// 3 条合并绘制的螺旋导引线，底部亮、顶部渐隐
+  void _drawStrands(
     Canvas canvas,
-    int sIdx,
+    double cx,
+    double baseY,
+    double maxR,
+    double funnelH,
+    double sway,
+    double spin,
+    double t,
+  ) {
+    _strandPath.reset();
+    for (var sIdx = 0; sIdx < _strandCount; sIdx++) {
+      final phase = _strandPhases[sIdx];
+      for (var k = 0; k <= _strandSamples; k++) {
+        final u = k / _strandSamples;
+        final angle = phase + spin + u * 8.0;
+        final r = maxR * _profile(u) * (1.0 + 0.03 * math.sin(t * 0.6 + phase));
+        final x = cx + sway * (1.0 - u) + math.cos(angle) * r;
+        final y = baseY - u * funnelH + math.sin(angle) * r * 0.20;
+        if (k == 0) {
+          _strandPath.moveTo(x, y);
+        } else {
+          _strandPath.lineTo(x, y);
+        }
+      }
+    }
+
+    _strandPaint
+      ..shader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: [
+          palette.primary.withValues(alpha: 0.20),
+          palette.secondary.withValues(alpha: 0.08),
+          palette.glow.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.55, 1.0],
+      ).createShader(
+        Rect.fromLTWH(cx - maxR, baseY - funnelH, maxR * 2, funnelH),
+      )
+      ..strokeWidth = lineWidth * 0.8;
+    canvas.drawPath(_strandPath, _strandPaint);
+  }
+
+  /// 地面尘：绕基座旋转的扁椭圆尘环
+  void _drawGroundDust(
+    Canvas canvas,
+    double cx,
+    double baseY,
+    double maxR,
+    double t,
+    double bass,
+    double treble,
+  ) {
+    for (var i = 0; i < _groundCount; i++) {
+      final o = i * 4;
+      final phase = _groundSeeds[o];
+      final speed = _groundSeeds[o + 1];
+      final radiusFactor = _groundSeeds[o + 2];
+      final sizeSeed = _groundSeeds[o + 3];
+
+      final angle = phase + t * speed * (0.6 + bass * 0.7);
+      final radius = maxR * radiusFactor;
+      final x = cx + math.cos(angle) * radius;
+      final y = baseY + math.sin(angle) * radius * 0.24;
+      final twinkle = 0.5 + 0.5 * math.sin(t * 1.8 + phase);
+
+      _groundPaint.color = (i.isEven ? palette.secondary : palette.primary)
+          .withValues(alpha: 0.08 + twinkle * 0.18 + treble * 0.06);
+      canvas.drawCircle(
+        Offset(x, y),
+        sizeSeed * (0.7 + twinkle * 0.5),
+        _groundPaint,
+      );
+    }
+  }
+
+  /// 轨道粒子：按深度分配透明度与尺寸，形成漏斗体积
+  void _drawParticles(
+    Canvas canvas,
     double cx,
     double baseY,
     double maxR,
@@ -200,53 +310,53 @@ class ParticleTornadoPainter extends CustomPainter {
     double spin,
     double t,
     int n,
+    double bass,
+    double treble,
   ) {
-    final phase = _strandPhase[sIdx % _strandPhase.length];
+    for (var i = 0; i < _particleCount; i++) {
+      final o = i * 6;
+      final u = (_particleSeeds[o] + t * _particleSeeds[o + 1]) % 1.0;
+      final phase = _particleSeeds[o + 2];
+      final orbitSpeed = _particleSeeds[o + 3];
+      final radialJitter = _particleSeeds[o + 4];
+      final sizeSeed = _particleSeeds[o + 5];
 
-    for (var k = 0; k < _nodes; k++) {
-      final u = k / (_nodes - 1);
       final bandIdx = (u * (n - 1)).round().clamp(0, n - 1);
       final energy = bands[bandIdx];
 
-      final profile = math.pow(u, 1.35).toDouble();
-      final radius =
-          maxR * (0.1 + 0.9 * profile) * (0.88 + energy * 0.4);
-      final angle = phase + spin + u * 10.0 + t * u * 0.45;
-
+      final angle = phase + spin * orbitSpeed + u * 8.0;
+      final radius = maxR * _profile(u) * radialJitter;
+      final depth = math.sin(angle); // -1 背面 → +1 正面
+      final front = (depth + 1.0) * 0.5;
       final x = cx + sway * (1.0 - u) + math.cos(angle) * radius;
-      final y = baseY - u * funnelH + math.sin(angle) * radius * 0.18;
+      final y = baseY - u * funnelH + depth * radius * 0.20;
 
-      final sizePx = 0.9 + (1.0 - u) * 1.7 + energy * 1.1;
-      final paint =
-          k % 7 == 0 ? _sparkPaint : (k.isEven ? _dotPaintA : _dotPaintB);
-      canvas.drawCircle(Offset(x, y), sizePx, paint);
+      // 接近顶部时渐隐，避免漏斗口出现一圈硬边粒子
+      final fadeTop = u > 0.88 ? ((1.0 - u) / 0.12).clamp(0.0, 1.0) : 1.0;
+      final alpha = (0.06 + 0.52 * front) *
+          fadeTop *
+          (0.55 + energy * 0.7 + bass * 0.15);
+
+      final size = sizeSeed *
+          (0.7 + front * 1.4 + energy * 1.0) *
+          (1.0 - 0.28 * u);
+
+      if (i % 11 == 0) {
+        _particlePaint
+          ..color = palette.peak.withValues(alpha: alpha + treble * 0.12)
+          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.2);
+      } else {
+        _particlePaint
+          ..color = (i % 4 == 0 ? palette.secondary : palette.primary)
+              .withValues(alpha: alpha)
+          ..maskFilter = null;
+      }
+      canvas.drawCircle(Offset(x, y), math.max(0.6, size), _particlePaint);
     }
   }
 
-  void _drawDust(Canvas canvas, double cx, double baseY, double maxR, double t) {
-    for (var i = 0; i < _dustCount; i++) {
-      final o = i * 4;
-      final phase = _dustSeeds[o];
-      final speed = _dustSeeds[o + 1];
-      final wobblePhase = _dustSeeds[o + 2];
-      final sizePx = _dustSeeds[o + 3];
-
-      final angle = phase + t * speed;
-      final life = (t * 0.16 + i / _dustCount) % 1.0; // 0 地面 → 1 顶部
-      final radius = maxR * (0.2 + life * 0.9);
-      final x = cx + math.cos(angle) * radius;
-      final y = baseY - life * maxR * 0.9 + math.sin(angle) * radius * 0.24;
-
-      final twinkle = 0.5 + 0.5 * math.sin(t * 1.6 + wobblePhase);
-      _dustPaint.color = (i.isEven ? palette.secondary : palette.primary)
-          .withValues(alpha: 0.18 + twinkle * 0.42);
-      canvas.drawCircle(
-        Offset(x, y),
-        sizePx * (0.7 + twinkle * 0.6),
-        _dustPaint,
-      );
-    }
-  }
+  /// 漏斗半径剖面：底部 0.16 → 顶部 1.0
+  double _profile(double u) => 0.16 + 0.84 * math.pow(u, 0.9).toDouble();
 
   double _avg(int from, int to) {
     if (bands.isEmpty) return 0.0;

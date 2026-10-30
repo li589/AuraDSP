@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
 
-/// 流体丝绸：低频驱动的流场丝带
+/// 流体丝绸：三层宽幅半透明绸带 + 中央高光
 ///
-/// 性能要点：
-/// - 每帧只创建一个渐变 shader 与两个 Path（丝带路径复用 reset）；
-/// - 辉光只对合并后的路径做一次模糊，避免逐丝带 blur；
-/// - 不含任何平台相关 API，Android / iOS / macOS / Windows 通用。
+/// 设计要点：
+/// - 只用 3 条大面积绸带，层间相位错开，形成前后景深而不是满屏平行线；
+/// - 绸带厚度向两端收窄并横向淡出，避免左右边界被硬切；
+/// - 低频驱动呼吸（厚度/亮度），中频驱动横向摆动，高频只点亮中央细高光；
+/// - 每帧仅 3 条填充路径 + 一次合并辉光模糊，无散点粒子。
 class FluidSilkPainter extends CustomPainter {
   final List<double> bands;
   final VisualizerPalette palette;
@@ -17,15 +18,21 @@ class FluidSilkPainter extends CustomPainter {
   final double animationTime;
   final double lineWidth;
 
-  static const int _ribbonCount = 7;
-  static const int _samples = 30;
-  static const int _dropletCount = 12;
+  static const int _bandCount = 3;
+  static const int _samples = 44;
 
-  final Paint _silkPaint = Paint()..style = PaintingStyle.stroke;
-  final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
+  /// 三条绸带的垂直基准线（画面高度比例）
+  static const List<double> _lanes = [0.37, 0.5, 0.63];
+
+  /// 层间相位错开，避免三条带同相位重叠
+  static const List<double> _phaseOffsets = [0.0, 2.1, 4.2];
+
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _corePaint = Paint()..style = PaintingStyle.stroke;
+  final Paint _glowPaint = Paint()..style = PaintingStyle.fill;
   final Paint _haloPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _dropletPaint = Paint()..style = PaintingStyle.fill;
-  final Path _ribbonPath = Path();
+  final Path _bandPath = Path();
+  final Path _corePath = Path();
   final Path _glowPath = Path();
 
   FluidSilkPainter({
@@ -46,133 +53,161 @@ class FluidSilkPainter extends CustomPainter {
     final n = bands.length;
     if (n == 0) return;
 
-    // 频段能量分解：低频决定呼吸，中频决定摆幅，高频决定细纹
-    final bass = _avg(0, 4);
+    final bass = _avg(0, math.max(1, n ~/ 8));
     final mid = _avg(n ~/ 4, n ~/ 2);
     final treble = _avg((n * 3) ~/ 4, n);
+    final amp = h * (0.03 + 0.10 * mid + 0.05 * bass);
 
-    _drawLiquidHalo(canvas, size, bass);
+    _drawBackdrop(canvas, size, bass);
 
-    // 单次渐变着色：左右横向流动的丝绸配色
-    _silkPaint.shader = LinearGradient(
-      begin: Alignment.centerLeft,
-      end: Alignment.centerRight,
-      colors: [
-        palette.primary.withValues(alpha: 0.8),
-        palette.secondary.withValues(alpha: 0.92),
-        palette.primary.withValues(alpha: 0.8),
-      ],
-      stops: const [0.0, 0.5, 1.0],
-    ).createShader(Offset.zero & size);
-
-    // 第一遍：仅构建合并路径，让辉光落在丝带下方
+    // 第一遍：合并三条填充带，让辉光整体模糊一次
     _glowPath.reset();
-    for (var r = 0; r < _ribbonCount; r++) {
-      _buildRibbon(r, w, h, t, n, bass);
-      _glowPath.addPath(_ribbonPath, Offset.zero);
+    for (var i = 0; i < _bandCount; i++) {
+      _buildBand(i, w, h, t, n, bass, amp);
+      _glowPath.addPath(_bandPath, Offset.zero);
     }
 
     if (bloom > 0.05) {
       _glowPaint
         ..shader = null
-        ..color = palette.glow.withValues(alpha: 0.16 + bloom * 0.3)
-        ..strokeWidth = lineWidth * 2.6 + mid * 2.2
+        ..color = palette.glow.withValues(alpha: 0.10 + bloom * 0.2)
         ..maskFilter = MaskFilter.blur(
           BlurStyle.normal,
-          math.max(1.5, bloom * 5.0),
+          math.max(2.0, bloom * 6.0),
         );
       canvas.drawPath(_glowPath, _glowPaint);
     }
 
-    // 第二遍：绘制清晰的丝绸主体
-    for (var r = 0; r < _ribbonCount; r++) {
-      _buildRibbon(r, w, h, t, n, bass);
-      _silkPaint.strokeWidth =
-          lineWidth * (0.8 + (r % 3) * 0.32) + mid * 1.6;
-      canvas.drawPath(_ribbonPath, _silkPaint);
-    }
+    // 第二遍：逐层绘制绸带本体与中央高光
+    for (var i = 0; i < _bandCount; i++) {
+      _buildBand(i, w, h, t, n, bass, amp);
 
-    _drawDroplets(canvas, size, t, treble);
+      final color = Color.lerp(
+        palette.primary,
+        palette.secondary,
+        i / (_bandCount - 1),
+      )!;
+      final alpha = 0.13 + 0.10 * bass + (i == 1 ? 0.04 : 0.0);
+
+      _fillPaint.shader = LinearGradient(
+        begin: Alignment.centerLeft,
+        end: Alignment.centerRight,
+        colors: [
+          color.withValues(alpha: 0.0),
+          color.withValues(alpha: alpha),
+          color.withValues(alpha: alpha * 0.82),
+          color.withValues(alpha: 0.0),
+        ],
+        stops: const [0.0, 0.18, 0.8, 1.0],
+      ).createShader(Offset.zero & size);
+      canvas.drawPath(_bandPath, _fillPaint);
+
+      // 中央细高光：高频只提亮线条，不增加图形数量
+      _buildCore(i, w, h, t, amp, n);
+      _corePaint
+        ..shader = LinearGradient(
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+          colors: [
+            color.withValues(alpha: 0.0),
+            palette.peak.withValues(alpha: 0.22 + treble * 0.3),
+            color.withValues(alpha: 0.5 + bass * 0.2),
+            color.withValues(alpha: 0.0),
+          ],
+          stops: const [0.0, 0.3, 0.72, 1.0],
+        ).createShader(Offset.zero & size)
+        ..strokeWidth = lineWidth * 1.1 + treble * 0.7;
+      canvas.drawPath(_corePath, _corePaint);
+    }
   }
 
-  /// 构建第 [r] 条丝带：纵向分道铺开 + 低频呼吸 + 高频细纹。
-  void _buildRibbon(
-    int r,
+  /// 极简背景：中央低频呼吸光晕 + 顶部微弱冷光
+  void _drawBackdrop(Canvas canvas, Size size, double bass) {
+    final center = Offset(size.width / 2.0, size.height * 0.52);
+    final radius = math.max(size.width, size.height) * (0.5 + bass * 0.2);
+    _haloPaint.shader = RadialGradient(
+      colors: [
+        palette.primary.withValues(alpha: 0.06 + bass * 0.12),
+        palette.secondary.withValues(alpha: 0.02 + bass * 0.04),
+        palette.glow.withValues(alpha: 0.0),
+      ],
+      stops: const [0.0, 0.55, 1.0],
+    ).createShader(Rect.fromCircle(center: center, radius: radius));
+    canvas.drawCircle(center, radius, _haloPaint);
+  }
+
+  /// 构建第 [index] 条绸带的填充轮廓（上缘正向 + 下缘反向）。
+  void _buildBand(
+    int index,
     double w,
     double h,
     double t,
     int n,
     double bass,
+    double amp,
   ) {
-    final lane = (r - (_ribbonCount - 1) / 2.0) / _ribbonCount;
-    final phase = t * (0.4 + r * 0.05) + r * 1.3;
+    final thickness = h * (0.045 + 0.055 * bass) * (0.85 + index * 0.08);
 
-    _ribbonPath.reset();
+    _bandPath.reset();
     for (var s = 0; s <= _samples; s++) {
       final u = s / _samples;
-      final edge = math.sin(math.pi * u);
-      final bandIdx = (u * (n - 1)).round().clamp(0, n - 1);
-      final energy = bands[bandIdx];
-
+      final centerY = _centerY(index, u, t, h, amp, n);
+      final half = thickness * _taper(u) * 0.5;
       final x = w * (0.02 + 0.96 * u);
-      final flow = math.sin(u * 3.4 + phase);
-      final fine = math.sin(u * 10.5 - t * 1.5 + r * 2.1);
-
-      // 分道基准线，避免所有丝带在左右两端收束成一团
-      final baseY = h *
-          (0.5 +
-              lane * 0.56 +
-              0.035 * math.sin(t * 0.35 + r * 0.9));
-      final amplitude = h * (0.045 + 0.15 * energy + 0.05 * bass);
-
-      final y = baseY +
-          amplitude * flow +
-          amplitude * 0.32 * fine * edge;
+      final y = (centerY - half).clamp(1.0, h - 1.0);
 
       if (s == 0) {
-        _ribbonPath.moveTo(x, y.clamp(2.0, h - 2.0));
+        _bandPath.moveTo(x, y);
       } else {
-        _ribbonPath.lineTo(x, y.clamp(2.0, h - 2.0));
+        _bandPath.lineTo(x, y);
+      }
+    }
+    for (var s = _samples; s >= 0; s--) {
+      final u = s / _samples;
+      final centerY = _centerY(index, u, t, h, amp, n);
+      final half = thickness * _taper(u) * 0.5;
+      final x = w * (0.02 + 0.96 * u);
+      final y = (centerY + half).clamp(1.0, h - 1.0);
+      _bandPath.lineTo(x, y);
+    }
+    _bandPath.close();
+  }
+
+  /// 构建绸带中央高光曲线
+  void _buildCore(int index, double w, double h, double t, double amp, int n) {
+    _corePath.reset();
+    for (var s = 0; s <= _samples; s++) {
+      final u = s / _samples;
+      final y = _centerY(index, u, t, h, amp, n).clamp(1.0, h - 1.0);
+      final x = w * (0.02 + 0.96 * u);
+      if (s == 0) {
+        _corePath.moveTo(x, y);
+      } else {
+        _corePath.lineTo(x, y);
       }
     }
   }
 
-  void _drawLiquidHalo(Canvas canvas, Size size, double bass) {
-    final center = Offset(size.width / 2.0, size.height * 0.56);
-    final radius = math.max(size.width, size.height) * (0.55 + bass * 0.3);
-    _haloPaint.shader = RadialGradient(
-      colors: [
-        palette.glow.withValues(alpha: 0.1 + bass * 0.28),
-        palette.glow.withValues(alpha: 0.0),
-      ],
-      stops: const [0.0, 1.0],
-    ).createShader(Rect.fromCircle(center: center, radius: radius));
-    canvas.drawCircle(center, radius, _haloPaint);
-  }
+  /// 绸带两端收窄系数（0.2 → 1 → 0.2）
+  double _taper(double u) =>
+      0.2 + 0.8 * math.pow(math.sin(math.pi * u), 0.7).toDouble();
 
-  void _drawDroplets(Canvas canvas, Size size, double t, double treble) {
-    final w = size.width;
-    final h = size.height;
-    for (var i = 0; i < _dropletCount; i++) {
-      // 沿丝带方向缓慢漂移的光点
-      final u = (i / _dropletCount + t * 0.028) % 1.0;
-      final edge = math.sin(math.pi * u);
-      final lane = (i % 5 - 2) / 5.0;
-      final x = w * (0.02 + 0.96 * u);
-      final y = h * (0.5 + lane * 0.62 + 0.035 * math.sin(t * 0.35 + i)) +
-          edge *
-              h *
-              (0.09 + 0.16 * treble) *
-              math.sin(u * 3.4 + t * 0.45 + i * 0.9);
+  /// 绸带中心线的垂直位移（轮廓与高光共用，保证贴合）
+  double _centerY(int index, double u, double t, double h, double amp, int n) {
+    final bandIdx = (u * (n - 1)).round().clamp(0, n - 1);
+    final energy = bands[bandIdx];
+    final phase = _phaseOffsets[index];
+    final envelope = 0.25 + 0.75 * math.sin(math.pi * u);
 
-      _dropletPaint.color = (i.isEven ? palette.secondary : palette.primary)
-          .withValues(alpha: 0.35 + 0.5 * (0.5 + 0.5 * math.sin(t * 2.2 + i)));
-      canvas.drawCircle(
-        Offset(x, y.clamp(2.0, h - 2.0)),
-        1.2 + 1.6 * (0.5 + 0.5 * math.sin(t * 1.7 + i * 1.3)),
-        _dropletPaint,
-      );
-    }
+    return _lanes[index] * h +
+        h * 0.012 * math.sin(t * 0.22 + phase) +
+        amp * (1.0 + energy * 0.35) *
+            (0.65 * math.sin(u * math.pi * 2.0 * 1.05 + t * 0.42 + phase) +
+                0.35 *
+                    math.sin(
+                      u * math.pi * 2.0 * 2.35 - t * 0.3 + phase * 1.6,
+                    )) *
+            envelope;
   }
 
   double _avg(int from, int to) {

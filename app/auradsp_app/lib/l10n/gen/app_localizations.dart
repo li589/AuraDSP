@@ -2680,6 +2680,60 @@ abstract class AppLocalizations {
   /// **'隐藏歌词'**
   String get visualizerHideLyricsTip;
 
+  /// No description provided for @visualizerLyricsNoMedia.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到正在播放的媒体'**
+  String get visualizerLyricsNoMedia;
+
+  /// No description provided for @visualizerLyricsNoMediaHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在系统中播放音乐后，歌词会自动匹配并滚动显示'**
+  String get visualizerLyricsNoMediaHint;
+
+  /// No description provided for @visualizerLyricsSearching.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检索歌词…'**
+  String get visualizerLyricsSearching;
+
+  /// No description provided for @visualizerLyricsSearchingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在为当前曲目匹配在线歌词'**
+  String get visualizerLyricsSearchingHint;
+
+  /// No description provided for @visualizerLyricsNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到匹配的歌词'**
+  String get visualizerLyricsNotFound;
+
+  /// No description provided for @visualizerLyricsNotFoundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可重新获取，或选择本地 LRC 文件手动加载'**
+  String get visualizerLyricsNotFoundHint;
+
+  /// No description provided for @visualizerLyricsReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词已加载'**
+  String get visualizerLyricsReady;
+
+  /// No description provided for @visualizerLyricsRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新获取'**
+  String get visualizerLyricsRetry;
+
+  /// No description provided for @visualizerLyricsPickLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地 LRC'**
+  String get visualizerLyricsPickLocal;
+
   /// No description provided for @visualizerResetPeakTip.
   ///
   /// In zh, this message translates to:

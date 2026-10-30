@@ -33,6 +33,9 @@ class MockMediaSessionProvider implements MediaSessionProvider {
   }
 }
 
+/// 歌词检索状态：为 UI 提供可见反馈（无媒体 / 检索中 / 已就绪 / 未找到）
+enum LyricsSyncState { idle, noMedia, searching, ready, notFound }
+
 /// 统一媒体时钟同步与歌词编排调度服务
 class MediaSyncService {
   final MediaSessionProvider _provider;
@@ -51,6 +54,9 @@ class MediaSyncService {
       ValueNotifier<LyricDocument>(LyricDocument.empty);
 
   final ValueNotifier<int> activeLineIndex = ValueNotifier<int>(-1);
+
+  final ValueNotifier<LyricsSyncState> lyricsState =
+      ValueNotifier<LyricsSyncState>(LyricsSyncState.idle);
 
   Timer? _ticker;
   DateTime? _lastSyncTime;
@@ -76,6 +82,14 @@ class MediaSyncService {
     _sessionSub = _provider.trackStream.listen((track) {
       updateTrack(track);
     });
+
+    // 再次开启歌词时若已有曲目但歌词为空（上次检索失败/尚未检索），立即补拉一次
+    final track = currentTrack.value;
+    if (track.hasContent &&
+        currentLyrics.value.isEmpty &&
+        lyricsState.value != LyricsSyncState.searching) {
+      unawaited(retryLyrics());
+    }
   }
 
   /// 停止自动同步监听
@@ -132,14 +146,47 @@ class MediaSyncService {
     if (_disposed) return;
     currentLyrics.value = doc;
     activeLineIndex.value = doc.isNotEmpty ? 0 : -1;
+    lyricsState.value =
+        doc.isNotEmpty ? LyricsSyncState.ready : LyricsSyncState.notFound;
+  }
+
+  /// 手动重新检索当前曲目歌词（忽略“同曲轮询不重复请求”的节流）
+  Future<void> retryLyrics() async {
+    if (_disposed) return;
+    final track = currentTrack.value;
+    if (!track.hasContent) {
+      lyricsState.value = LyricsSyncState.noMedia;
+      return;
+    }
+
+    final generation = ++_trackGeneration;
+    lyricsState.value = LyricsSyncState.searching;
+
+    final doc = await _onlineService.fetchLyrics(
+      trackName: track.title,
+      artistName: track.artist,
+      duration: track.duration,
+    );
+
+    if (_disposed || generation != _trackGeneration) return;
+
+    if (doc != null && doc.isNotEmpty) {
+      currentLyrics.value = doc;
+      activeLineIndex.value = doc.findLineIndex(_basePosition);
+      lyricsState.value = LyricsSyncState.ready;
+    } else {
+      currentLyrics.value = LyricDocument.empty;
+      activeLineIndex.value = -1;
+      lyricsState.value = LyricsSyncState.notFound;
+    }
   }
 
   /// Update current track metadata and search for lyrics
   Future<void> updateTrack(MediaTrackMetadata track) async {
     if (_disposed) return;
-    final generation = ++_trackGeneration;
-    final titleChanged = track.title != currentTrack.value.title ||
-        track.artist != currentTrack.value.artist;
+    final previous = currentTrack.value;
+    final titleChanged =
+        track.title != previous.title || track.artist != previous.artist;
 
     currentTrack.value = track;
     _isPlaying = track.isPlaying;
@@ -147,9 +194,13 @@ class MediaSyncService {
     if (titleChanged) {
       _basePosition = track.position;
       _lastSyncTime = DateTime.now();
-      // 换曲即清空旧歌词，避免新曲目沿用上一首的歌词与行指针
+      // 换曲即作废在途检索，并清空旧歌词，避免新曲目沿用上一首的歌词与行指针
+      _trackGeneration++;
       currentLyrics.value = LyricDocument.empty;
       activeLineIndex.value = -1;
+      lyricsState.value = track.hasContent
+          ? LyricsSyncState.searching
+          : LyricsSyncState.noMedia;
     } else if (track.position > Duration.zero) {
       // 若外部上报了有效时间轴（如 Spotify/Edge），则以此校准时钟；
       // 若外部上报为 0（如网易云等国内播放器 SMTC 不传 timeline），则维持当前递增时钟，避免被归零重置
@@ -162,17 +213,22 @@ class MediaSyncService {
     if (!track.hasContent) {
       currentLyrics.value = LyricDocument.empty;
       activeLineIndex.value = -1;
+      lyricsState.value = LyricsSyncState.noMedia;
       return;
     }
 
-    // 同一曲目的轮询：仅校正行指针，避免每秒重复发起网络查询
+    // 同一曲目的轮询：仅校正行指针，避免每秒重复发起网络查询。
+    // 注意不得递增 _trackGeneration，否则会作废耗时超过一次轮询间隔的在线检索结果。
     if (!titleChanged) {
       if (currentLyrics.value.isNotEmpty) {
         activeLineIndex.value =
             currentLyrics.value.findLineIndex(_basePosition);
+        lyricsState.value = LyricsSyncState.ready;
       }
       return;
     }
+
+    final generation = _trackGeneration;
 
     // 尝试在线检索歌词（LrcLib 优先，QQ 音乐多语言保底）
     final doc = await _onlineService.fetchLyrics(
@@ -187,6 +243,9 @@ class MediaSyncService {
     if (doc != null && doc.isNotEmpty) {
       currentLyrics.value = doc;
       activeLineIndex.value = doc.findLineIndex(_basePosition);
+      lyricsState.value = LyricsSyncState.ready;
+    } else {
+      lyricsState.value = LyricsSyncState.notFound;
     }
   }
 
@@ -220,5 +279,6 @@ class MediaSyncService {
     currentTrack.dispose();
     currentLyrics.dispose();
     activeLineIndex.dispose();
+    lyricsState.dispose();
   }
 }

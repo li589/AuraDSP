@@ -1383,6 +1383,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerHideLyricsTip => '隐藏歌词';
 
   @override
+  String get visualizerLyricsNoMedia => '未检测到正在播放的媒体';
+
+  @override
+  String get visualizerLyricsNoMediaHint => '在系统中播放音乐后，歌词会自动匹配并滚动显示';
+
+  @override
+  String get visualizerLyricsSearching => '正在检索歌词…';
+
+  @override
+  String get visualizerLyricsSearchingHint => '正在为当前曲目匹配在线歌词';
+
+  @override
+  String get visualizerLyricsNotFound => '未找到匹配的歌词';
+
+  @override
+  String get visualizerLyricsNotFoundHint => '可重新获取，或选择本地 LRC 文件手动加载';
+
+  @override
+  String get visualizerLyricsReady => '歌词已加载';
+
+  @override
+  String get visualizerLyricsRetry => '重新获取';
+
+  @override
+  String get visualizerLyricsPickLocal => '本地 LRC';
+
+  @override
   String get visualizerResetPeakTip => '重置峰值保持';
 
   @override

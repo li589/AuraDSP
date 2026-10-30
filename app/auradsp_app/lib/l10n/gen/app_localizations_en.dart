@@ -1484,6 +1484,36 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerHideLyricsTip => 'Hide lyrics';
 
   @override
+  String get visualizerLyricsNoMedia => 'No active media session';
+
+  @override
+  String get visualizerLyricsNoMediaHint =>
+      'Play music in any app and lyrics will be matched automatically';
+
+  @override
+  String get visualizerLyricsSearching => 'Searching for lyrics…';
+
+  @override
+  String get visualizerLyricsSearchingHint =>
+      'Matching online lyrics for the current track';
+
+  @override
+  String get visualizerLyricsNotFound => 'No matching lyrics found';
+
+  @override
+  String get visualizerLyricsNotFoundHint =>
+      'Retry, or load a local LRC file manually';
+
+  @override
+  String get visualizerLyricsReady => 'Lyrics loaded';
+
+  @override
+  String get visualizerLyricsRetry => 'Retry';
+
+  @override
+  String get visualizerLyricsPickLocal => 'Local LRC';
+
+  @override
   String get visualizerResetPeakTip => 'Reset peak hold';
 
   @override
