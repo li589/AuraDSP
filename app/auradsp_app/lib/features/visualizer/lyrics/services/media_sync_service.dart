@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
+import '../../../../core/error_sink.dart';
 import '../../../../platform/platform_profile.dart';
 import '../models/lyric_models.dart';
 import '../parsers/lrc_parser.dart';
@@ -83,8 +84,9 @@ class LrcLibOnlineClient {
         _cache[queryKey] = doc;
         return doc;
       }
-    } catch (_) {
-      // Network or parse failure, swallow gracefully
+    } catch (e, st) {
+      // 网络或解析失败：留痕但不打断歌词加载
+      swallow(e, st);
     }
     return null;
   }
@@ -200,8 +202,9 @@ class MediaSyncService {
           return true;
         }
       }
-    } catch (_) {
-      // File IO failure
+    } catch (e, st) {
+      // 本地歌词文件读取失败属可预期路径，留痕后回退
+      swallow(e, st);
     }
     return false;
   }

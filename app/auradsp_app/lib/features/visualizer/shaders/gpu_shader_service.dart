@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import '../../../core/error_sink.dart';
+
 /// Available hardware-accelerated fragment shader types
 enum GpuShaderType {
   aurora('shaders/aurora_wave.frag'),
@@ -40,8 +42,9 @@ class GpuShaderService {
       _initialized = true;
       _failed = false;
       return true;
-    } catch (_) {
-      // In headless test environments or unsupported rasterizers, fail gracefully
+    } catch (e, st) {
+      // 无头测试环境或不支持的光栅器：留痕后降级为纯 CPU 渲染
+      swallow(e, st);
       _failed = true;
       _initialized = true;
       return false;
