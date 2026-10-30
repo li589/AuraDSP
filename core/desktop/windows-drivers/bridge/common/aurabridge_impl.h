@@ -1,12 +1,12 @@
-// aurabridge_impl.h — 统一 `ab_*` → 旧前缀的过渡转发实现（P5）。
+// aurabridge_impl.h — 统一 `ab_*` 导出面的实现（P5；2026-10-30 清理后唯一导出面）。
 //
 // 三桥的公共导出语义本来就同构，P5 不再复制 13 份实现：每座桥 cpp 尾部只做
 //     #define AB_LEGACY vb
 //     #define AB_CAPS_JSON "{...}"
 //     static int AbStartAdapt(...) { ... }   // start 的宿主参数映射
 //     #include "aurabridge_impl.h"
-// 一个版本后（旧 App 淘汰）：删掉本文件与 .def 里的旧前缀，各桥直接把旧前缀
-// 实现改名成 ab_*（或保留本文件、去掉 AB_OLD 宏）。
+// 旧前缀实现体（vb_*/asio_*/vaio_*）仍留在各桥 cpp 内，但已从 .def 下线、
+// 不再对外导出；本文件是公共面唯一出口。新代码只允许调用 ab_*。
 #pragma once
 
 #ifndef AB_LEGACY

@@ -34,8 +34,12 @@ if not path:
 print(f"[SMOKE_VAIO] Using bridge: {path}")
 
 b = ctypes.CDLL(path)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bridge_compat import alias_common, start_vaio  # noqa: E402
+
+alias_common(b, "vaio")
+b.vaio_start = start_vaio(b)
 b.vaio_detect.restype = ctypes.c_int
-b.vaio_start.restype = ctypes.c_int
 b.vaio_stop.restype = ctypes.c_int
 b.vaio_status.restype = ctypes.c_int
 b.vaio_set_param.restype = ctypes.c_int
@@ -48,7 +52,6 @@ b.vaio_test_start.restype = ctypes.c_int
 b.vaio_test_stop.restype = ctypes.c_int
 
 b.vaio_detect.argtypes = [ctypes.c_char_p, ctypes.c_int]
-b.vaio_start.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p]
 b.vaio_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
 b.vaio_set_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
 b.vaio_set_param_str.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_int]

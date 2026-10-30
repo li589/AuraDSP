@@ -1,19 +1,8 @@
 LIBRARY auravm_bridge
 EXPORTS
-    vb_detect             PRIVATE
-    vb_start              PRIVATE
-    vb_stop               PRIVATE
-    vb_status             PRIVATE
-    vb_set_param         PRIVATE
-    vb_set_param_str     PRIVATE
-    vb_get_param         PRIVATE
-    vb_get_param_str     PRIVATE
-    vb_test_change       PRIVATE
-    vb_viz_read           PRIVATE
+    ; ---- VB 专属面（不在统一契约内）----
     vb_abi                PRIVATE
-    vb_test_start         PRIVATE
-    vb_test_stop          PRIVATE
-    vb_bypass             PRIVATE
+    vb_test_change        PRIVATE
     vb_set_bus_mask       PRIVATE
     vb_plugin_slot_load              PRIVATE
     vb_plugin_slot_unload            PRIVATE
@@ -41,7 +30,7 @@ EXPORTS
     vb_plugin_auto_protect           PRIVATE
     vb_protect_test                  PRIVATE
     vb_plugin_slot_group_ready       PRIVATE
-    ; ---- P5 统一桥契约（bridge/common/aurabridge.h；旧前缀保留一个版本）----
+    ; ---- 统一桥契约（bridge/common/aurabridge.h）：唯一公共导出面 ----
     ab_abi_version        PRIVATE
     ab_capabilities       PRIVATE
     ab_detect             PRIVATE

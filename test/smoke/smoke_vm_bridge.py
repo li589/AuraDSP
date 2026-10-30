@@ -27,8 +27,13 @@ if not path:
     sys.exit(0)
 
 b = ctypes.CDLL(path)
+# 2026-10-30 过渡期清理：公共面只导出 ab_*，测试沿用旧名做局部别名。
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bridge_compat import alias_common, start_vm  # noqa: E402
+
+alias_common(b, "vb")
+b.vb_start = start_vm(b)
 b.vb_detect.restype = ctypes.c_int
-b.vb_start.restype = ctypes.c_int
 b.vb_stop.restype = ctypes.c_int
 b.vb_status.restype = ctypes.c_int
 b.vb_set_param.restype = ctypes.c_int
@@ -36,7 +41,6 @@ b.vb_viz_read.restype = ctypes.c_int
 b.vb_test_start.restype = ctypes.c_int
 b.vb_test_stop.restype = ctypes.c_int
 b.vb_detect.argtypes = [ctypes.c_char_p, ctypes.c_int]
-b.vb_start.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
 b.vb_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
 b.vb_set_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
 b.vb_viz_read.argtypes = [ctypes.c_void_p, ctypes.c_int]

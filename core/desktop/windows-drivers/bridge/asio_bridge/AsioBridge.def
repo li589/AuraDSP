@@ -1,19 +1,7 @@
 LIBRARY auraasio_bridge
 EXPORTS
-    asio_detect            PRIVATE
-    asio_start             PRIVATE
-    asio_start_ex          PRIVATE
-    asio_stop              PRIVATE
-    asio_status            PRIVATE
-    asio_set_param         PRIVATE
-    asio_set_param_str     PRIVATE
-    asio_get_param         PRIVATE
-    asio_get_param_str     PRIVATE
-    asio_viz_read          PRIVATE
+    ; ---- ASIO 专属面（不在统一契约内）----
     asio_abi               PRIVATE
-    asio_test_start        PRIVATE
-    asio_test_stop         PRIVATE
-    asio_bypass            PRIVATE
     asio_plugin_slot_load              PRIVATE
     asio_plugin_slot_unload            PRIVATE
     asio_plugin_slot_set_bypass        PRIVATE
@@ -29,7 +17,7 @@ EXPORTS
     asio_plugin_slot_get_insert_stage  PRIVATE
     asio_plugin_slot_set_channels      PRIVATE
     asio_plugin_slot_get_channels      PRIVATE
-    ; ---- P5 统一桥契约（bridge/common/aurabridge.h；旧前缀保留一个版本）----
+    ; ---- 统一桥契约（bridge/common/aurabridge.h）：唯一公共导出面 ----
     ab_abi_version        PRIVATE
     ab_capabilities       PRIVATE
     ab_detect             PRIVATE
