@@ -1410,6 +1410,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerLyricsPickLocal => '本地 LRC';
 
   @override
+  String get visualizerLyricsCalibrate => '校准到这一行';
+
+  @override
   String get visualizerResetPeakTip => '重置峰值保持';
 
   @override

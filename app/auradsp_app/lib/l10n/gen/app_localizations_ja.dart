@@ -1427,6 +1427,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerLyricsPickLocal => 'ローカル LRC';
 
   @override
+  String get visualizerLyricsCalibrate => 'この行に合わせる';
+
+  @override
   String get visualizerResetPeakTip => 'ピークホールドをリセット';
 
   @override

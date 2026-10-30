@@ -514,6 +514,7 @@
   "visualizerLyricsReady": "Lyrics loaded",
   "visualizerLyricsRetry": "Retry",
   "visualizerLyricsPickLocal": "Local LRC",
+  "visualizerLyricsCalibrate": "Calibrate to this line",
   "visualizerResetPeakTip": "Reset peak hold",
   "visualizerDisplayRestoreTip": "Restore: standard page layout",
   "visualizerDisplayStageTip": "App fullscreen: stage fills the window",

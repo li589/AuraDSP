@@ -2734,6 +2734,12 @@ abstract class AppLocalizations {
   /// **'本地 LRC'**
   String get visualizerLyricsPickLocal;
 
+  /// No description provided for @visualizerLyricsCalibrate.
+  ///
+  /// In zh, this message translates to:
+  /// **'校准到这一行'**
+  String get visualizerLyricsCalibrate;
+
   /// No description provided for @visualizerResetPeakTip.
   ///
   /// In zh, this message translates to:

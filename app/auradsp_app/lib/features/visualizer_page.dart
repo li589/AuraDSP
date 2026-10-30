@@ -51,6 +51,11 @@ class _VisualizerPageState extends State<VisualizerPage> {
   VisualizerDisplayMode _displayMode = VisualizerDisplayMode.restore;
   final FocusNode _focusNode = FocusNode();
 
+  /// 播放状态的选择性监听：模型每帧都会 notify（频谱/电平），
+  /// 若直接 ListenableBuilder(model) 会让整个舞台子树以音频帧率重建，
+  /// 造成 UI 不跟手与大量短命对象。此处只在“是否在播放”翻转时触发重建。
+  final ValueNotifier<bool> _playing = ValueNotifier<bool>(false);
+
   /// OS 全屏请求串行化：快速连点时保证「最后一次意图」最终生效。
   Future<void> _fullscreenChain = Future<void>.value();
 
@@ -59,6 +64,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
     super.initState();
     // 页面保活在 IndexedStack 中：切到其它页时兜底复位，避免整应用停留在沉浸态。
     widget.model.visiblePage.addListener(_onVisiblePageChanged);
+    _playing.value = widget.model.liveSpectrum;
+    widget.model.addListener(_onModelChanged);
     // 页面初始即为可视页时（如应用直接恢复到可视化页）不会触发变更回调，这里兜底启动
     if (widget.model.visiblePage.value == AppPage.visualizer) {
       _mediaSync.startAutoSync();
@@ -68,6 +75,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
   @override
   void dispose() {
     widget.model.visiblePage.removeListener(_onVisiblePageChanged);
+    widget.model.removeListener(_onModelChanged);
+    _playing.dispose();
     if (_displayMode == VisualizerDisplayMode.immersive) {
       widget.model.visualizerImmersive.value = false;
       _queueSystemFullscreen(false);
@@ -75,6 +84,14 @@ class _VisualizerPageState extends State<VisualizerPage> {
     _focusNode.dispose();
     _mediaSync.dispose();
     super.dispose();
+  }
+
+  /// 模型通知：仅当“是否在播放”变化时才驱动舞台重建
+  void _onModelChanged() {
+    final playing = widget.model.liveSpectrum;
+    if (playing != _playing.value) {
+      _playing.value = playing;
+    }
   }
 
   void _onVisiblePageChanged() {
@@ -300,10 +317,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
                       // 核心视效舞台（三档共用同一实例，状态与动画不重建）
                       Expanded(
-                        child: ListenableBuilder(
-                          listenable: widget.model,
-                          builder: (_, _) => VisualizerStage(
-                            playing: widget.model.liveSpectrum,
+                        child: ValueListenableBuilder<bool>(
+                          valueListenable: _playing,
+                          builder: (_, playing, _) => VisualizerStage(
+                            playing: playing,
                             spectrum: widget.model.spectrum,
                             levelL: widget.model.levelL,
                             levelR: widget.model.levelR,

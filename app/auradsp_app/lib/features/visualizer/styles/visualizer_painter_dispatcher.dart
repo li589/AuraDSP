@@ -65,7 +65,6 @@ CustomPainter buildVisualizerPainter({
 
     case VisualizerStyle.auroraShader:
       return GpuShaderPainter(
-        program: GpuShaderService.instance.getProgram(GpuShaderType.aurora),
         shaderType: GpuShaderType.aurora,
         bands: rawBands,
         palette: palette,
@@ -75,7 +74,6 @@ CustomPainter buildVisualizerPainter({
 
     case VisualizerStyle.tunnelShader:
       return GpuShaderPainter(
-        program: GpuShaderService.instance.getProgram(GpuShaderType.tunnel),
         shaderType: GpuShaderType.tunnel,
         bands: rawBands,
         palette: palette,

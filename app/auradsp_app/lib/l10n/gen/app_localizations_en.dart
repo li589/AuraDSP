@@ -1514,6 +1514,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerLyricsPickLocal => 'Local LRC';
 
   @override
+  String get visualizerLyricsCalibrate => 'Calibrate to this line';
+
+  @override
   String get visualizerResetPeakTip => 'Reset peak hold';
 
   @override

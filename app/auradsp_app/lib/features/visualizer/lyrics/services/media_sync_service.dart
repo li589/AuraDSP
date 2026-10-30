@@ -63,6 +63,19 @@ class MediaSyncService {
   Duration _basePosition = Duration.zero;
   bool _isPlaying = false;
 
+  /// 用户手动点选某行歌词时产生的显示相位偏移（解决播放器不推送时间轴/时间轴不准）。
+  /// 只影响歌词高亮，不回写媒体时钟；换曲归零。
+  Duration _userOffset = Duration.zero;
+
+  /// 同一曲目轮询时允许的整体前跳阈值（真实 seek 或播放器校准）
+  static const Duration _forwardResync = Duration(milliseconds: 400);
+
+  /// 回跳超过该幅度才认为是真实向后拖拽（否则视为 SMTC 快照滞后）
+  static const Duration _backwardSeekFloor = Duration(seconds: 3);
+
+  /// 行切换滞回：越过行首/行尾不足该值时保持当前行，压住边界来回翻动
+  static const Duration _lineSwitchGuard = Duration(milliseconds: 140);
+
   MediaSyncService({
     MediaSessionProvider? provider,
     OnlineLyricsService? onlineService,
@@ -113,19 +126,56 @@ class MediaSyncService {
     _ticker = Timer.periodic(const Duration(milliseconds: 50), (_) => _tick());
   }
 
+  /// 单调播放时钟：暂停时冻结在锚点，播放时按真实流逝时间推进。
+  /// 所有歌词定位都从这一个读数出发，保证高亮不会因外部快照来回跳。
+  Duration _estimatedPosition() {
+    if (!_isPlaying || _lastSyncTime == null) return _basePosition;
+    return _basePosition + DateTime.now().difference(_lastSyncTime!);
+  }
+
+  void _anchorClock(Duration position) {
+    _basePosition = position;
+    _lastSyncTime = DateTime.now();
+  }
+
+  /// 当前用于歌词定位的显示相位（单调时钟 + 用户手动校准偏移）
+  Duration get displayPosition => _estimatedPosition() + _userOffset;
+
   void _tick() {
     if (!_isPlaying || _lastSyncTime == null) return;
 
-    final elapsed = DateTime.now().difference(_lastSyncTime!);
-    final curPos = _basePosition + elapsed;
-
     final doc = currentLyrics.value;
-    if (doc.isNotEmpty) {
-      final idx = doc.findLineIndex(curPos);
-      if (idx != activeLineIndex.value) {
-        activeLineIndex.value = idx;
-      }
+    if (doc.isEmpty) return;
+
+    final curPos = displayPosition;
+    final candidate = doc.findLineIndex(curPos);
+    final current = activeLineIndex.value;
+    final idx = _debounceLineSwitch(doc, curPos, current, candidate);
+    if (idx != current) {
+      activeLineIndex.value = idx;
     }
+  }
+
+  /// 边界滞回：向前进入新行需越过该行行首 [_lineSwitchGuard]；
+  /// 向后回退需退到当前行行首之前同样的距离。避免时间在行界来回摆动时字形反复缩放。
+  int _debounceLineSwitch(
+    LyricDocument doc,
+    Duration pos,
+    int current,
+    int candidate,
+  ) {
+    if (candidate == current) return current;
+    if (current < 0 || current >= doc.lines.length) return candidate;
+
+    if (candidate > current) {
+      // findLineIndex 内部会叠加文档 offset，这里换算回显示相位空间的行首
+      final lineStart = doc.lines[candidate].startTime - doc.offset;
+      if (pos < lineStart + _lineSwitchGuard) return current;
+    } else {
+      final currentStart = doc.lines[current].startTime - doc.offset;
+      if (pos + _lineSwitchGuard >= currentStart) return current;
+    }
+    return candidate;
   }
 
   /// Manually or automatically update playback status and position
@@ -134,8 +184,7 @@ class MediaSyncService {
     required bool isPlaying,
   }) {
     if (_disposed) return;
-    _basePosition = position;
-    _lastSyncTime = DateTime.now();
+    _anchorClock(position);
     _isPlaying = isPlaying;
     _syncTicker();
     _tick();
@@ -144,10 +193,26 @@ class MediaSyncService {
   /// Load a lyric document directly (e.g. from a local file or test)
   void loadLyricDocument(LyricDocument doc) {
     if (_disposed) return;
+    _userOffset = Duration.zero;
     currentLyrics.value = doc;
-    activeLineIndex.value = doc.isNotEmpty ? 0 : -1;
+    activeLineIndex.value = doc.isNotEmpty ? doc.findLineIndex(displayPosition) : -1;
     lyricsState.value =
         doc.isNotEmpty ? LyricsSyncState.ready : LyricsSyncState.notFound;
+  }
+
+  /// 手动校准：把目标行对齐到“此刻”，只改歌词相位，不回写媒体时钟。
+  ///
+  /// 适用于不推送 timeline 的播放器（显示时钟自身递增），也适用于时间轴有偏差
+  /// 的播放器（后续轮询继续按 playerPosition + _userOffset 定位）。
+  void calibrateToLine(int index) {
+    if (_disposed) return;
+    final doc = currentLyrics.value;
+    if (index < 0 || index >= doc.lines.length) return;
+
+    final target = doc.lines[index].startTime;
+    _userOffset = target - doc.offset - _estimatedPosition();
+    activeLineIndex.value = index;
+    if (_isPlaying && _ticker == null) _startTicker();
   }
 
   /// 手动重新检索当前曲目歌词（忽略“同曲轮询不重复请求”的节流）
@@ -172,7 +237,7 @@ class MediaSyncService {
 
     if (doc != null && doc.isNotEmpty) {
       currentLyrics.value = doc;
-      activeLineIndex.value = doc.findLineIndex(_basePosition);
+      activeLineIndex.value = doc.findLineIndex(displayPosition);
       lyricsState.value = LyricsSyncState.ready;
     } else {
       currentLyrics.value = LyricDocument.empty;
@@ -189,11 +254,11 @@ class MediaSyncService {
         track.title != previous.title || track.artist != previous.artist;
 
     currentTrack.value = track;
-    _isPlaying = track.isPlaying;
 
     if (titleChanged) {
-      _basePosition = track.position;
-      _lastSyncTime = DateTime.now();
+      _userOffset = Duration.zero;
+      _isPlaying = track.isPlaying;
+      _anchorClock(track.position);
       // 换曲即作废在途检索，并清空旧歌词，避免新曲目沿用上一首的歌词与行指针
       _trackGeneration++;
       currentLyrics.value = LyricDocument.empty;
@@ -201,11 +266,28 @@ class MediaSyncService {
       lyricsState.value = track.hasContent
           ? LyricsSyncState.searching
           : LyricsSyncState.noMedia;
-    } else if (track.position > Duration.zero) {
-      // 若外部上报了有效时间轴（如 Spotify/Edge），则以此校准时钟；
-      // 若外部上报为 0（如网易云等国内播放器 SMTC 不传 timeline），则维持当前递增时钟，避免被归零重置
-      _basePosition = track.position;
-      _lastSyncTime = DateTime.now();
+    } else {
+      // 同一曲目：SMTC 每秒快照本身可能滞后，若直接覆盖锚点会让（显示）时间回跳，
+      // 行指针便在相邻两行之间来回翻动。因此以单调时钟为准，只接受明显的前跳与大回退。
+      final estimated = _estimatedPosition();
+      if (!track.isPlaying) {
+        // 暂停：把已流逝时间折算进锚点后冻结
+        _anchorClock(estimated);
+      } else if (!_isPlaying) {
+        // 从暂停恢复：只接受更靠后的位置，避免恢复瞬间回跳
+        _anchorClock(
+          track.position > estimated ? track.position : estimated,
+        );
+      } else if (track.position > Duration.zero) {
+        final delta = track.position - estimated;
+        if (delta >= _forwardResync) {
+          _anchorClock(track.position);
+        } else if (delta <= -_backwardSeekFloor) {
+          _anchorClock(track.position);
+        }
+        // 小幅回退（≤3s）判定为快照滞后，忽略并保持当前单调时钟
+      }
+      _isPlaying = track.isPlaying;
     }
 
     _syncTicker();
@@ -221,8 +303,13 @@ class MediaSyncService {
     // 注意不得递增 _trackGeneration，否则会作废耗时超过一次轮询间隔的在线检索结果。
     if (!titleChanged) {
       if (currentLyrics.value.isNotEmpty) {
-        activeLineIndex.value =
-            currentLyrics.value.findLineIndex(_basePosition);
+        final doc = currentLyrics.value;
+        final idx = doc.findLineIndex(displayPosition);
+        final resolved =
+            _debounceLineSwitch(doc, displayPosition, activeLineIndex.value, idx);
+        if (resolved != activeLineIndex.value) {
+          activeLineIndex.value = resolved;
+        }
         lyricsState.value = LyricsSyncState.ready;
       }
       return;
@@ -242,7 +329,7 @@ class MediaSyncService {
 
     if (doc != null && doc.isNotEmpty) {
       currentLyrics.value = doc;
-      activeLineIndex.value = doc.findLineIndex(_basePosition);
+      activeLineIndex.value = doc.findLineIndex(displayPosition);
       lyricsState.value = LyricsSyncState.ready;
     } else {
       lyricsState.value = LyricsSyncState.notFound;

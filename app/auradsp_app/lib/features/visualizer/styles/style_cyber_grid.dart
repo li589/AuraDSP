@@ -110,12 +110,12 @@ class CyberGridPainter extends CustomPainter {
       );
     }
 
-    // 辉光
+    // 辉光：加宽低透地平线替代每帧模糊图层
     if (bloom > 0.1) {
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.75))
+        ..color = palette.glow.withValues(alpha: (bloom * 0.18).clamp(0.0, 0.32))
         ..strokeWidth = lineWidth * 1.8 + bloom * 3.5
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 4.0);
+        ..maskFilter = null;
       canvas.drawLine(
         Offset(0, horizonY),
         Offset(size.width, horizonY),

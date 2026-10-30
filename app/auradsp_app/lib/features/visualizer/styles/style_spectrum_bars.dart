@@ -53,9 +53,11 @@ class SpectrumBarsPainter extends CustomPainter {
 
     final bool drawGlow = bloom > 0.1;
     if (drawGlow) {
+      // 不再使用 MaskFilter.blur：每帧对几十根柱各做一次模糊会反复分配整屏图层，
+      // 长时间播放会把进程内存推到 GB 级并拖慢光栅线程。改用加宽底衬模拟辉光。
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.75))
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 5.0);
+        ..shader = null
+        ..color = palette.glow.withValues(alpha: (bloom * 0.16).clamp(0.0, 0.32));
     }
 
     // 均匀柱宽与对称边距排布，消除高低频宽窄不一致问题
@@ -78,9 +80,15 @@ class SpectrumBarsPainter extends CustomPainter {
 
         canvas.drawRRect(rrect, _barPaint);
 
-        // 辉光仿真（共用同一模糊滤镜，仅对可见高度柱生效）
+        // 辉光底衬（加宽矩形，无模糊图层）
         if (drawGlow && h > 4.0) {
-          canvas.drawRRect(rrect, _glowPaint);
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(
+              Rect.fromLTWH(left - 1.0, top - 1.5, barWidth + 2.0, h + 2.0),
+              const Radius.circular(3.0),
+            ),
+            _glowPaint,
+          );
         }
       }
 

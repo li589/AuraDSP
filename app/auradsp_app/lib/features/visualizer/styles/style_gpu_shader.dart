@@ -7,7 +7,6 @@ import '../shaders/gpu_shader_service.dart';
 
 /// Hardware-accelerated GPU Fragment Shader Visualizer Painter
 class GpuShaderPainter extends CustomPainter {
-  final FragmentProgram? program;
   final GpuShaderType shaderType;
   final List<double> bands;
   final VisualizerPalette palette;
@@ -15,7 +14,6 @@ class GpuShaderPainter extends CustomPainter {
   final double sensitivity;
 
   GpuShaderPainter({
-    required this.program,
     required this.shaderType,
     required this.bands,
     required this.palette,
@@ -35,9 +33,8 @@ class GpuShaderPainter extends CustomPainter {
       treble = ((bands[20] + bands[24] + bands[28]) / 3.0 * sensitivity).clamp(0.0, 2.0);
     }
 
-    if (program != null) {
-      final shader = program!.fragmentShader();
-
+    final shader = GpuShaderService.instance.shaderFor(shaderType);
+    if (shader != null) {
       // Uniform indices mapping:
       // vec2 uResolution (floats 0, 1)
       shader.setFloat(0, size.width);

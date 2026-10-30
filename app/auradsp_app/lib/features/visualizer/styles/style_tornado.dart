@@ -131,10 +131,8 @@ class ParticleTornadoPainter extends CustomPainter {
             height: minDim * 0.3,
           ),
         )
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          math.max(2.0, bloom * 5.0),
-        );
+        // 渐变本身就有柔边，不再叠加每帧模糊图层
+        ..maskFilter = null;
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(cx, baseY),
@@ -341,16 +339,13 @@ class ParticleTornadoPainter extends CustomPainter {
           (0.7 + front * 1.4 + energy * 1.0) *
           (1.0 - 0.28 * u);
 
-      if (i % 11 == 0) {
-        _particlePaint
-          ..color = palette.peak.withValues(alpha: alpha + treble * 0.12)
-          ..maskFilter = MaskFilter.blur(BlurStyle.normal, 1.2);
-      } else {
-        _particlePaint
-          ..color = (i % 4 == 0 ? palette.secondary : palette.primary)
-              .withValues(alpha: alpha)
-          ..maskFilter = null;
-      }
+      // 亮粒子只用峰值色提亮，不再逐个加模糊滤镜（每帧上百个模糊图层会拖垮光栅）
+      _particlePaint
+        ..color = (i % 11 == 0
+                ? palette.peak
+                : (i % 4 == 0 ? palette.secondary : palette.primary))
+            .withValues(alpha: i % 11 == 0 ? alpha + treble * 0.12 : alpha)
+        ..maskFilter = null;
       canvas.drawCircle(Offset(x, y), math.max(0.6, size), _particlePaint);
     }
   }

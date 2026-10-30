@@ -73,12 +73,12 @@ class PulseOrbPainter extends CustomPainter {
     _ringPaint.color = palette.primary;
     canvas.drawPath(path, _ringPaint);
 
-    // 辉光扩散
+    // 辉光扩散（加宽低透地平描，避免每帧模糊图层）
     if (bloom > 0.1) {
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.45).clamp(0.0, 0.75))
+        ..color = palette.glow.withValues(alpha: (bloom * 0.2).clamp(0.0, 0.34))
         ..strokeWidth = 3.5 + bloom * 4.0
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 6.0);
+        ..maskFilter = null;
       canvas.drawPath(path, _glowPaint);
     }
 
