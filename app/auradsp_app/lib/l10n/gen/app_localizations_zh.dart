@@ -1386,16 +1386,13 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerResetPeakTip => '重置峰值保持';
 
   @override
-  String get visualizerEnterOsFullscreenTip => '系统全屏（OS 窗口）';
+  String get visualizerDisplayRestoreTip => '还原：标准页面布局';
 
   @override
-  String get visualizerExitOsFullscreenTip => '退出系统全屏（Esc / F11）';
+  String get visualizerDisplayStageTip => '软件全屏：视效铺满应用窗口';
 
   @override
-  String get visualizerMaximizeStageTip => '最大化舞台';
-
-  @override
-  String get visualizerRestoreStageTip => '退出舞台最大化';
+  String get visualizerDisplayImmersiveTip => '仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）';
 
   @override
   String get themeSwitchTip => '切换配色方案';

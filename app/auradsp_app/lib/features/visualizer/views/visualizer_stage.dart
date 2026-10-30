@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
@@ -17,17 +18,17 @@ import '../styles/visualizer_painter_dispatcher.dart';
 import 'visualizer_db_scale.dart';
 import 'visualizer_hud.dart';
 
-/// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互、窗口与系统全屏沉浸）
+/// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互、三档全屏沉浸）
 class VisualizerStage extends StatefulWidget {
   final bool playing;
   final ValueListenable<List<double>> spectrum;
   final ValueListenable<double> levelL;
   final ValueListenable<double> levelR;
   final VisualizerConfig config;
+  final VisualizerDisplayMode displayMode;
   final ValueChanged<VisualizerStyle> onStyleChanged;
-  final VoidCallback onToggleFullscreen;
-  final VoidCallback onToggleSystemFullscreen;
-  final bool isSystemFullscreen;
+  final VoidCallback onToggleStageMode;
+  final ValueChanged<VisualizerDisplayMode> onDisplayModeChanged;
   final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
   final MediaSyncService? mediaSync;
@@ -41,10 +42,10 @@ class VisualizerStage extends StatefulWidget {
     required this.levelL,
     required this.levelR,
     required this.config,
+    this.displayMode = VisualizerDisplayMode.restore,
     required this.onStyleChanged,
-    required this.onToggleFullscreen,
-    required this.onToggleSystemFullscreen,
-    this.isSystemFullscreen = false,
+    required this.onToggleStageMode,
+    required this.onDisplayModeChanged,
     required this.onToggleLyrics,
     required this.onOpenDrawer,
     this.mediaSync,
@@ -83,11 +84,10 @@ class _VisualizerStageState extends State<VisualizerStage>
     });
   }
 
+  /// 每帧仅推进时间轴，不再 setState 重建整页（HUD/歌词等只在数据变化时重建）。
   void _onTick() {
-    if (!mounted || !widget.active) return;
-    setState(() {
-      _time += 0.016;
-    });
+    if (!widget.active) return;
+    _time += 0.016;
   }
 
   @override
@@ -99,6 +99,9 @@ class _VisualizerStageState extends State<VisualizerStage>
       } else {
         _animController.stop();
       }
+    }
+    if (widget.playing != oldWidget.playing) {
+      _syncHudWithPlayback();
     }
   }
 
@@ -118,11 +121,22 @@ class _VisualizerStageState extends State<VisualizerStage>
 
   void _startHudTimer() {
     _hudHideTimer?.cancel();
+    // 静音/暂停时保持 HUD 常驻，用户随时可再次操作；仅播放中自动隐退。
+    if (!widget.playing) return;
     _hudHideTimer = Timer(const Duration(seconds: 3), () {
       if (mounted && _hudVisible) {
         setState(() => _hudVisible = false);
       }
     });
+  }
+
+  void _syncHudWithPlayback() {
+    _hudHideTimer?.cancel();
+    if (!widget.playing) {
+      if (!_hudVisible) setState(() => _hudVisible = true);
+      return;
+    }
+    _startHudTimer();
   }
 
   void _resetPeaks() {
@@ -133,21 +147,20 @@ class _VisualizerStageState extends State<VisualizerStage>
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final palette = VisualizerPalette.resolve(widget.config.colorTheme, p);
+    final expanded = widget.displayMode.isExpanded;
 
     return MouseRegion(
       onHover: (_) => _onUserPointerActivity(),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: _onUserPointerActivity,
-        onDoubleTap: widget.onToggleFullscreen,
+        onDoubleTap: widget.onToggleStageMode,
         child: AnimatedContainer(
           duration: AuraDur.base,
-          curve: AuraCurve.standard,
+          curve: AuraCurve.emphasized,
           decoration: BoxDecoration(
             color: p.bg,
-            borderRadius: BorderRadius.circular(
-              widget.config.isMaximized ? 0 : AuraRadius.md,
-            ),
+            borderRadius: BorderRadius.circular(expanded ? 0 : AuraRadius.md),
             border: Border.all(
               color: widget.playing
                   ? palette.primary.withValues(alpha: 0.28)
@@ -186,22 +199,18 @@ class _VisualizerStageState extends State<VisualizerStage>
               Align(
                 alignment: Alignment.bottomCenter,
                 child: Padding(
-                  padding: const EdgeInsets.only(bottom: 16),
+                  padding: EdgeInsets.only(bottom: expanded ? 20 : 16),
                   child: VisualizerHud(
                     config: widget.config,
+                    displayMode: widget.displayMode,
                     visible: _hudVisible,
-                    isSystemFullscreen: widget.isSystemFullscreen,
                     onStyleChanged: (style) {
                       _onUserPointerActivity();
                       widget.onStyleChanged(style);
                     },
-                    onToggleFullscreen: () {
+                    onDisplayModeChanged: (mode) {
                       _onUserPointerActivity();
-                      widget.onToggleFullscreen();
-                    },
-                    onToggleSystemFullscreen: () {
-                      _onUserPointerActivity();
-                      widget.onToggleSystemFullscreen();
+                      widget.onDisplayModeChanged(mode);
                     },
                     onToggleLyrics: () {
                       _onUserPointerActivity();
@@ -226,83 +235,87 @@ class _VisualizerStageState extends State<VisualizerStage>
   }
 
   Widget _buildActiveCanvas(VisualizerPalette palette) {
-    return ValueListenableBuilder<List<double>>(
-      valueListenable: widget.spectrum,
-      builder: (_, rawBands, _) {
-        final peaks = _peakEngine.update(
-          rawBands,
-          targetBands: widget.config.barCount,
-          sensitivity: widget.config.sensitivity,
-          gravity: widget.config.gravity,
-          decay: widget.config.decayRate,
-        );
+    // 时间轴每帧推进只重建这一层画布，避免整页（含 HUD/歌词）60fps 重建。
+    return AnimatedBuilder(
+      animation: _animController,
+      builder: (_, _) => ValueListenableBuilder<List<double>>(
+        valueListenable: widget.spectrum,
+        builder: (_, rawBands, _) {
+          final peaks = _peakEngine.update(
+            rawBands,
+            targetBands: widget.config.barCount,
+            sensitivity: widget.config.sensitivity,
+            gravity: widget.config.gravity,
+            decay: widget.config.decayRate,
+          );
 
-        _waveformSynth.update(
-          rawBands,
-          levelLDbfs: widget.levelL.value,
-          levelRDbfs: widget.levelR.value,
-          sensitivity: widget.config.sensitivity,
-        );
+          _waveformSynth.update(
+            rawBands,
+            levelLDbfs: widget.levelL.value,
+            levelRDbfs: widget.levelR.value,
+            sensitivity: widget.config.sensitivity,
+          );
 
-        // 统一使用物理引擎平滑后的频段渲染柱状谱，消除低频抖动与条宽错位
-        final painter = buildVisualizerPainter(
-          style: widget.config.style,
-          config: widget.config,
-          palette: palette,
-          rawBands: _peakEngine.renderedBands.isNotEmpty
-              ? _peakEngine.renderedBands
-              : rawBands,
-          peaks: peaks,
-          waveformSynth: _waveformSynth,
-          time: _time,
-        );
+          // 统一使用物理引擎平滑后的频段渲染柱状谱，消除低频抖动与条宽错位
+          final painter = buildVisualizerPainter(
+            style: widget.config.style,
+            config: widget.config,
+            palette: palette,
+            rawBands: _peakEngine.renderedBands.isNotEmpty
+                ? _peakEngine.renderedBands
+                : rawBands,
+            peaks: peaks,
+            waveformSynth: _waveformSynth,
+            time: _time,
+          );
 
-        if (widget.config.style == VisualizerStyle.bars) {
-          return Padding(
-            padding: const EdgeInsets.fromLTRB(
-              AuraSpace.xl,
-              AuraSpace.lg,
-              AuraSpace.xl,
-              AuraSpace.md,
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Expanded(
-                        child: RepaintBoundary(
-                          child: CustomPaint(
-                            painter: painter,
-                            child: const SizedBox.expand(),
+          if (widget.config.style == VisualizerStyle.bars) {
+            return Padding(
+              padding: const EdgeInsets.fromLTRB(
+                AuraSpace.xl,
+                AuraSpace.lg,
+                AuraSpace.xl,
+                AuraSpace.md,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Expanded(
+                          child: RepaintBoundary(
+                            child: CustomPaint(
+                              painter: painter,
+                              child: const SizedBox.expand(),
+                            ),
                           ),
                         ),
-                      ),
-                      if (widget.config.showGrid) ...[
-                        const SizedBox(height: AuraSpace.sm),
-                        const FreqAxis(),
+                        if (widget.config.showGrid) ...[
+                          const SizedBox(height: AuraSpace.sm),
+                          const FreqAxis(),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                if (widget.config.showDbScale) ...[
-                  const SizedBox(width: AuraSpace.md),
-                  const VisualizerDbScale(),
+                  if (widget.config.showDbScale) ...[
+                    const SizedBox(width: AuraSpace.md),
+                    const VisualizerDbScale(),
+                  ],
                 ],
-              ],
+              ),
+            );
+          }
+
+          return RepaintBoundary(
+            child: CustomPaint(
+              painter: painter,
+              child: const SizedBox.expand(),
             ),
           );
-        }
-
-        return RepaintBoundary(
-          child: CustomPaint(
-            painter: painter,
-            child: const SizedBox.expand(),
-          ),
-        );
-      },
+        },
+      ),
     );
   }
 

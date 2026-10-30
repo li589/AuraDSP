@@ -2686,29 +2686,23 @@ abstract class AppLocalizations {
   /// **'重置峰值保持'**
   String get visualizerResetPeakTip;
 
-  /// No description provided for @visualizerEnterOsFullscreenTip.
+  /// No description provided for @visualizerDisplayRestoreTip.
   ///
   /// In zh, this message translates to:
-  /// **'系统全屏（OS 窗口）'**
-  String get visualizerEnterOsFullscreenTip;
+  /// **'还原：标准页面布局'**
+  String get visualizerDisplayRestoreTip;
 
-  /// No description provided for @visualizerExitOsFullscreenTip.
+  /// No description provided for @visualizerDisplayStageTip.
   ///
   /// In zh, this message translates to:
-  /// **'退出系统全屏（Esc / F11）'**
-  String get visualizerExitOsFullscreenTip;
+  /// **'软件全屏：视效铺满应用窗口'**
+  String get visualizerDisplayStageTip;
 
-  /// No description provided for @visualizerMaximizeStageTip.
+  /// No description provided for @visualizerDisplayImmersiveTip.
   ///
   /// In zh, this message translates to:
-  /// **'最大化舞台'**
-  String get visualizerMaximizeStageTip;
-
-  /// No description provided for @visualizerRestoreStageTip.
-  ///
-  /// In zh, this message translates to:
-  /// **'退出舞台最大化'**
-  String get visualizerRestoreStageTip;
+  /// **'仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）'**
+  String get visualizerDisplayImmersiveTip;
 
   /// No description provided for @themeSwitchTip.
   ///

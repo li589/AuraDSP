@@ -96,29 +96,51 @@ class _AppShellState extends State<AppShell> {
     return Scaffold(
       body: Row(
         children: [
-          _Rail(
-            labels: labels,
-            destinations: _destinations,
-            index: _index,
-            onSelect: (i) => setState(() {
-              _index = i;
-              m.visiblePage.value = AppPage.values[i]; // P0-1：定时器可见性门控 + R2 高频消费点门控
-            }),
-            model: m,
-            collapsed: _railCollapsed,
-            onToggle: () => setState(() => _railCollapsed = !_railCollapsed),
-            onOpenSettings: _openSettings,
+          // 仅视效沉浸档：折叠左栏导航（零宽占位，IndexedStack 层级不变、页面状态不丢）
+          ValueListenableBuilder<bool>(
+            valueListenable: m.visualizerImmersive,
+            builder: (_, immersive, _) => immersive
+                ? const SizedBox.shrink()
+                : Row(
+                    children: [
+                      _Rail(
+                        labels: labels,
+                        destinations: _destinations,
+                        index: _index,
+                        onSelect: (i) => setState(() {
+                          _index = i;
+                          m.visiblePage.value = AppPage.values[i]; // P0-1：定时器可见性门控 + R2 高频消费点门控
+                        }),
+                        model: m,
+                        collapsed: _railCollapsed,
+                        onToggle: () =>
+                            setState(() => _railCollapsed = !_railCollapsed),
+                        onOpenSettings: _openSettings,
+                      ),
+                      Container(width: 1, color: p.hairline),
+                    ],
+                  ),
           ),
-          Container(width: 1, color: p.hairline),
           Expanded(
             child: Column(
               children: [
-                _TopBar(
-                  model: m,
-                  onCycleTheme: _cycleTheme,
-                  onOpenSettings: _openSettings,
+                // 仅视效沉浸档：折叠顶部状态栏
+                ValueListenableBuilder<bool>(
+                  valueListenable: m.visualizerImmersive,
+                  builder: (_, immersive, _) => immersive
+                      ? const SizedBox.shrink()
+                      : Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _TopBar(
+                              model: m,
+                              onCycleTheme: _cycleTheme,
+                              onOpenSettings: _openSettings,
+                            ),
+                            Container(height: 1, color: p.hairline),
+                          ],
+                        ),
                 ),
-                Container(height: 1, color: p.hairline),
                 Expanded(
                   // P0-1（2026-10-23）：AnimatedSwitcher → IndexedStack。
                   // 原实现切页销毁非当前页（initState 重跑、定时器重启、
