@@ -15,6 +15,7 @@ void main() {
       expect(cfg.decayRate, 0.6);
       expect(cfg.gravity, 1.8);
       expect(cfg.barCount, 32);
+      expect(cfg.lineWidth, 1.5);
       expect(cfg.bloom, 0.5);
       expect(cfg.showGrid, isTrue);
       expect(cfg.showPeaks, isTrue);

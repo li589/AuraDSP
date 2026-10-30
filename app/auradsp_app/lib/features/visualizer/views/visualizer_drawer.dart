@@ -161,6 +161,21 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   onChanged: (v) => onConfigChanged(config.copyWith(bloom: v)),
                   onChangedEnd: (v) => onConfigChanged(config.copyWith(bloom: v)),
                 ),
+                const SizedBox(height: 8),
+                ValueSlider(
+                  label: 'Line Thickness',
+                  value: config.lineWidth,
+                  defaultValue: 1.5,
+                  onResetToDefault: () =>
+                      onConfigChanged(config.copyWith(lineWidth: 1.5)),
+                  min: 0.8,
+                  max: 3.5,
+                  format: (v) => v.toStringAsFixed(1),
+                  unit: 'px',
+                  infoMessage: 'Stroke width of oscilloscope beam, Lissajous curves, and vector lines',
+                  onChanged: (v) => onConfigChanged(config.copyWith(lineWidth: v)),
+                  onChangedEnd: (v) => onConfigChanged(config.copyWith(lineWidth: v)),
+                ),
                 const SizedBox(height: 12),
 
                 // 频段分度选择

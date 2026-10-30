@@ -4,10 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../engine/auradsp_ffi.dart' show VizBands;
 import '../models/visualizer_themes.dart';
 
-/// 柱状频谱渲染画笔
+/// 柱状频谱渲染画笔（均匀宽频柱、防抖动弹道与清晰悬浮峰值线）
 class SpectrumBarsPainter extends CustomPainter {
-  static const double _minBarWidth = 2.5;
-
   final List<double> bands;
   final List<double> peaks;
   final VisualizerPalette palette;
@@ -36,38 +34,35 @@ class SpectrumBarsPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (size.width <= 0 || size.height <= 0) return;
 
-    // 绘制横纵网格
+    // 绘制横纵参考网格
     if (showGrid) {
       _drawGrid(canvas, size);
     }
 
-    final n = math.max(1, bands.length);
-    final hasPeaks = showPeaks && peaks.length >= n;
+    final barCount = bands.length;
+    if (barCount == 0) return;
 
-    for (var i = 0; i < n; i++) {
+    final hasPeaks = showPeaks && peaks.length >= barCount;
+
+    // 均匀柱宽与对称边距排布，消除高低频宽窄不一致问题
+    final double gap = barCount > 40 ? 2.0 : 3.0;
+    final double totalGaps = (barCount - 1) * gap;
+    final double barWidth = math.max(2.0, (size.width - totalGaps) / barCount);
+    final double actualTotalSpan = barCount * barWidth + totalGaps;
+    final double leftOffset = (size.width - actualTotalSpan) / 2.0;
+
+    for (var i = 0; i < barCount; i++) {
       final v = bands[i].clamp(0.0, 1.0);
-      final h = v * size.height;
+      final h = v * (size.height - 4.0); // 留出顶部峰值线物理间隙
 
-      // 对数坐标跨度与居中对齐
-      final double x0, x1;
-      if (n == VizBands.count) {
-        x0 = VizBands.edgeX(i) * size.width;
-        x1 = VizBands.edgeX(i + 1) * size.width;
-      } else {
-        x0 = (i / n) * size.width;
-        x1 = ((i + 1) / n) * size.width;
-      }
-
-      final span = x1 - x0;
-      final bw = math.max(_minBarWidth, span - 2.5);
-      final left = x0 + (span - bw) / 2.0;
+      final left = leftOffset + i * (barWidth + gap);
       final top = size.height - h;
 
       if (h > 0.5) {
-        final barRect = Rect.fromLTWH(left, top, bw, h);
+        final barRect = Rect.fromLTWH(left, top, barWidth, h);
         final rrect = RRect.fromRectAndRadius(barRect, const Radius.circular(2.0));
 
-        // 垂直渐变着色
+        // 垂直多色渐变着色
         _barPaint.shader = LinearGradient(
           begin: Alignment.bottomCenter,
           end: Alignment.topCenter,
@@ -76,25 +71,30 @@ class SpectrumBarsPainter extends CustomPainter {
 
         canvas.drawRRect(rrect, _barPaint);
 
-        // 辉光模拟
+        // 辉光仿真
         if (bloom > 0.1 && h > 4.0) {
           _glowPaint
-            ..color = palette.glow.withValues(alpha: (bloom * 0.45).clamp(0.0, 0.8))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 6.0);
+            ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.75))
+            ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 5.0);
           canvas.drawRRect(rrect, _glowPaint);
         }
       }
 
-      // 绘制峰值保持线
+      // 绘制物理峰值保持小白条（清晰悬浮于柱顶，绝不淹没覆盖）
       if (hasPeaks) {
         final pkVal = peaks[i].clamp(0.0, 1.0);
-        if (pkVal > 0.02) {
-          final pkY = size.height - pkVal * size.height;
-          canvas.drawLine(
-            Offset(left, pkY),
-            Offset(left + bw, pkY),
-            _peakPaint,
-          );
+        if (pkVal > 0.015) {
+          final barTopY = size.height - h;
+          final peakTargetY = size.height - pkVal * (size.height - 4.0);
+          final pkY = math.min(barTopY - 2.5, peakTargetY - 2.5);
+
+          if (pkY >= 0) {
+            canvas.drawLine(
+              Offset(left, pkY),
+              Offset(left + barWidth, pkY),
+              _peakPaint,
+            );
+          }
         }
       }
     }
@@ -117,4 +117,3 @@ class SpectrumBarsPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant SpectrumBarsPainter oldDelegate) => true;
 }
-

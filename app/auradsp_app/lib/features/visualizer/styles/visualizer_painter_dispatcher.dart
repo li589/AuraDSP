@@ -31,6 +31,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         showGrid: config.showGrid,
         bloom: config.bloom,
+        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.goniometer:
@@ -39,6 +40,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         showGrid: config.showGrid,
         bloom: config.bloom,
+        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.cyberGrid:
@@ -47,6 +49,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         bloom: config.bloom,
         animationTime: time,
+        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.pulseOrb:
@@ -55,6 +58,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         bloom: config.bloom,
         animationTime: time,
+        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.auroraShader:
@@ -84,6 +88,7 @@ CustomPainter buildVisualizerPainter({
         palette: palette,
         time: time,
         sensitivity: config.sensitivity,
+        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.bars:
@@ -97,4 +102,3 @@ CustomPainter buildVisualizerPainter({
       );
   }
 }
-
