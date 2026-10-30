@@ -68,12 +68,13 @@ enum VisualizerStyle {
     description: 'Winamp MilkDrop 2 procedural music visualizer engine',
   ),
 
-  /// 流体丝绸：低频驱动的流场丝带
-  fluid(
-    id: 'fluid',
-    label: 'Fluid Silk',
+  /// 流体动力学：频谱驱动的二维不可压流场（Stable Fluids）
+  fluidDynamics(
+    id: 'fluidDynamics',
+    label: 'Fluid Dynamics',
     icon: Icons.water_rounded,
-    description: 'Layered translucent silk bands with bass breathing and mid-band sway',
+    description:
+        'Real-time 2D incompressible fluid simulation with spectral force injection',
   ),
 
   /// 粒子龙卷风：螺旋上升的确定性粒子风暴
@@ -262,7 +263,7 @@ extension VisualizerStyleL10n on VisualizerStyle {
         VisualizerStyle.auroraShader => l.visualizerStyleAurora,
         VisualizerStyle.tunnelShader => l.visualizerStyleTunnel,
         VisualizerStyle.milkDrop => l.visualizerStyleMilkdrop,
-        VisualizerStyle.fluid => l.visualizerStyleFluid,
+        VisualizerStyle.fluidDynamics => l.visualizerStyleFluid,
         VisualizerStyle.tornado => l.visualizerStyleTornado,
       };
 }

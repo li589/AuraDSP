@@ -12,7 +12,7 @@
  *   - models/      : VisualizerConfig, VisualizerStyle, VisualizerColorTheme
  *   - controllers/ : PeakPhysicsEngine, WaveformSynthesizer
  *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb,
- *                    FluidSilk, ParticleTornado, GpuShader, Milkdrop, Atmosphere
+ *                    FluidDynamics, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
 import 'dart:io';

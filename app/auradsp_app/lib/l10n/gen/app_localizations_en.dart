@@ -1673,7 +1673,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get visualizerStyleMilkdrop => 'MilkDrop';
 
   @override
-  String get visualizerStyleFluid => 'Fluid Silk';
+  String get visualizerStyleFluid => 'Fluid Dynamics';
 
   @override
   String get visualizerStyleTornado => 'Particle Tornado';

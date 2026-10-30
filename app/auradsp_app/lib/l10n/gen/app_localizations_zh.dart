@@ -1552,7 +1552,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerStyleMilkdrop => 'MilkDrop';
 
   @override
-  String get visualizerStyleFluid => '流体丝绸';
+  String get visualizerStyleFluid => '流体动力学';
 
   @override
   String get visualizerStyleTornado => '粒子龙卷风';

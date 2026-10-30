@@ -41,7 +41,7 @@ class VisualizerCanvasViewport extends StatelessWidget {
         VisualizerStyle.auroraShader ||
         VisualizerStyle.tunnelShader ||
         VisualizerStyle.milkDrop ||
-        VisualizerStyle.fluid ||
+        VisualizerStyle.fluidDynamics ||
         VisualizerStyle.tornado =>
           false,
         _ => true,
