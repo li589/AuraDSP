@@ -1,9 +1,13 @@
+import 'dart:math' as math;
+
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/state.dart';
 import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
+import '../../../ui/chrome.dart' show StatReadout;
 import '../../../ui/widgets.dart' show LevelMeter, SectionCard;
 
 /// 可视化底栏：专业录音室多通道电平与 dBFS 精确实时读数
@@ -68,6 +72,51 @@ class VisualizerMeters extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// 峰值读数（页面右上标头）
+class VisualizerPeakReadout extends StatelessWidget {
+  final ValueListenable<List<double>> spectrum;
+  final String label;
+  final bool active;
+
+  const VisualizerPeakReadout({
+    super.key,
+    required this.spectrum,
+    required this.label,
+    this.active = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+    if (!active) {
+      return StatReadout(
+        label: label,
+        value: dbfsText(-90.0),
+        unit: 'dBFS',
+        size: 20,
+        valueColor: p.textDim,
+      );
+    }
+    return ValueListenableBuilder<List<double>>(
+      valueListenable: spectrum,
+      builder: (_, bands, _) {
+        var peak = 0.0;
+        for (final v in bands) {
+          peak = math.max(peak, v);
+        }
+        final db = bands.isEmpty || peak <= 0 ? -90.0 : peak * 60 - 60;
+        return StatReadout(
+          label: label,
+          value: dbfsText(db),
+          unit: 'dBFS',
+          size: 20,
+          valueColor: db > -3 ? p.error : p.accent,
+        );
+      },
     );
   }
 }

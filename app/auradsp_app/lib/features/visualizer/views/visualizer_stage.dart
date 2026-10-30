@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/theme.dart';
-import '../../../ui/widgets.dart' show FreqAxis;
 import '../controllers/peak_physics_engine.dart';
 import '../controllers/waveform_synthesizer.dart';
 import '../lyrics/models/lyric_models.dart';
@@ -14,10 +13,8 @@ import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../shaders/gpu_shader_service.dart';
-import '../styles/style_atmosphere.dart';
-import '../styles/visualizer_painter_dispatcher.dart';
-import 'visualizer_db_scale.dart';
 import 'visualizer_hud.dart';
+import 'visualizer_viewport.dart';
 
 /// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互、三档全屏沉浸）
 class VisualizerStage extends StatefulWidget {
@@ -175,25 +172,38 @@ class _VisualizerStageState extends State<VisualizerStage>
             children: [
               // 主画面渲染视口
               if (widget.playing)
-                _buildActiveCanvas(palette)
+                VisualizerCanvasViewport(
+                  animation: _animController,
+                  spectrum: widget.spectrum,
+                  levelL: widget.levelL,
+                  levelR: widget.levelR,
+                  config: widget.config,
+                  palette: palette,
+                  peakEngine: _peakEngine,
+                  waveformSynth: _waveformSynth,
+                  time: _time,
+                )
               else
-                _buildIdlePlaceholder(p),
+                VisualizerIdlePlaceholder(emptyText: widget.emptyText),
 
-              // 实时歌词叠加展示层
+              // 实时歌词叠加展示层：仅在有歌词时覆盖，避免遮挡主视效
               if (widget.config.showLyrics && widget.mediaSync != null)
                 ValueListenableBuilder<LyricDocument>(
                   valueListenable: widget.mediaSync!.currentLyrics,
-                  builder: (_, doc, _) => ValueListenableBuilder<int>(
-                    valueListenable: widget.mediaSync!.activeLineIndex,
-                    builder: (_, activeIdx, _) => Container(
-                      color: p.bg.withValues(alpha: 0.72),
-                      child: LyricView(
-                        document: doc,
-                        activeIndex: activeIdx,
-                        showTranslation: widget.config.showTranslation,
+                  builder: (_, doc, _) {
+                    if (doc.isEmpty) return const SizedBox.shrink();
+                    return ValueListenableBuilder<int>(
+                      valueListenable: widget.mediaSync!.activeLineIndex,
+                      builder: (_, activeIdx, _) => Container(
+                        color: p.bg.withValues(alpha: 0.72),
+                        child: LyricView(
+                          document: doc,
+                          activeIndex: activeIdx,
+                          showTranslation: widget.config.showTranslation,
+                        ),
                       ),
-                    ),
-                  ),
+                    );
+                  },
                 ),
 
               // 底部悬浮控制岛 HUD
@@ -231,141 +241,6 @@ class _VisualizerStageState extends State<VisualizerStage>
             ],
           ),
         ),
-      ),
-    );
-  }
-
-  Widget _buildActiveCanvas(VisualizerPalette palette) {
-    // 时间轴每帧推进只重建这一层画布，避免整页（含 HUD/歌词）60fps 重建。
-    return AnimatedBuilder(
-      animation: _animController,
-      builder: (_, _) => ValueListenableBuilder<List<double>>(
-        valueListenable: widget.spectrum,
-        builder: (_, rawBands, _) {
-          final peaks = _peakEngine.update(
-            rawBands,
-            targetBands: widget.config.barCount,
-            sensitivity: widget.config.sensitivity,
-            gravity: widget.config.gravity,
-            decay: widget.config.decayRate,
-          );
-
-          _waveformSynth.update(
-            rawBands,
-            levelLDbfs: widget.levelL.value,
-            levelRDbfs: widget.levelR.value,
-            sensitivity: widget.config.sensitivity,
-          );
-
-          final renderedBands = _peakEngine.renderedBands.isNotEmpty
-              ? _peakEngine.renderedBands
-              : rawBands;
-
-          // 统一使用物理引擎平滑后的频段渲染柱状谱，消除低频抖动与条宽错位
-          final painter = buildVisualizerPainter(
-            style: widget.config.style,
-            config: widget.config,
-            palette: palette,
-            rawBands: renderedBands,
-            peaks: peaks,
-            waveformSynth: _waveformSynth,
-            time: _time,
-          );
-
-          Widget body;
-          if (widget.config.style == VisualizerStyle.bars) {
-            body = Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AuraSpace.xl,
-                AuraSpace.lg,
-                AuraSpace.xl,
-                AuraSpace.md,
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              painter: painter,
-                              child: const SizedBox.expand(),
-                            ),
-                          ),
-                        ),
-                        if (widget.config.showGrid) ...[
-                          const SizedBox(height: AuraSpace.sm),
-                          const FreqAxis(),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (widget.config.showDbScale) ...[
-                    const SizedBox(width: AuraSpace.md),
-                    const VisualizerDbScale(),
-                  ],
-                ],
-              ),
-            );
-          } else {
-            body = RepaintBoundary(
-              child: CustomPaint(
-                painter: painter,
-                child: const SizedBox.expand(),
-              ),
-            );
-          }
-
-          // 氛围底层：除自带满屏输出的着色器/MilkDrop 外，统一叠加低频光晕与微尘
-          if (_usesAmbience(widget.config.style)) {
-            body = Stack(
-              fit: StackFit.expand,
-              children: [
-                IgnorePointer(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: AtmospherePainter(
-                        bands: renderedBands,
-                        palette: palette,
-                        animationTime: _time,
-                        intensity: 0.55 + widget.config.bloom * 0.45,
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
-                  ),
-                ),
-                body,
-              ],
-            );
-          }
-
-          return body;
-        },
-      ),
-    );
-  }
-
-  /// 自带满屏输出的风格不再叠加氛围层（避免重复绘制与遮挡）。
-  bool _usesAmbience(VisualizerStyle style) => switch (style) {
-        VisualizerStyle.auroraShader ||
-        VisualizerStyle.tunnelShader ||
-        VisualizerStyle.milkDrop =>
-          false,
-        _ => true,
-      };
-
-  Widget _buildIdlePlaceholder(AuraPalette p) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.graphic_eq_outlined, size: 40, color: p.textDim),
-          const SizedBox(height: AuraSpace.md),
-          Text(widget.emptyText, style: captionOf(p)),
-        ],
       ),
     );
   }

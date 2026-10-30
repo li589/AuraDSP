@@ -3,7 +3,23 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/models/lyric_models.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/parsers/lrc_parser.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/services/media_sync_service.dart';
+import 'package:auradsp_app/features/visualizer/lyrics/services/online_lyrics_service.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/views/lyric_view.dart';
+
+/// 离线歌词源：单元测试不得触网，检索结果完全由用例注入
+class _FakeOnlineLyricsService extends OnlineLyricsService {
+  final LyricDocument? document;
+
+  _FakeOnlineLyricsService([this.document]);
+
+  @override
+  Future<LyricDocument?> fetchLyrics({
+    required String trackName,
+    required String artistName,
+    Duration? duration,
+  }) async =>
+      document;
+}
 
 void main() {
   group('LrcParser Tests', () {
@@ -74,7 +90,10 @@ void main() {
 
   group('MediaSyncService Tests', () {
     test('Track and playback state updates', () async {
-      final service = MediaSyncService();
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: _FakeOnlineLyricsService(),
+      );
 
       const track = MediaTrackMetadata(
         title: 'Cyberpulse',
@@ -98,6 +117,74 @@ void main() {
 
       expect(service.currentLyrics.value.lines.length, 2);
       expect(service.activeLineIndex.value, 0);
+
+      service.dispose();
+    });
+
+    test('AutoSync with MockMediaSessionProvider emits track and updates lyrics', () async {
+      final doc = LrcParser.parse('''
+[00:00.00]First line
+[00:03.00]Second line
+''');
+      final mockProvider = MockMediaSessionProvider();
+      final service = MediaSyncService(
+        provider: mockProvider,
+        onlineService: _FakeOnlineLyricsService(doc),
+      );
+      service.startAutoSync();
+
+      mockProvider.emitTrack(const MediaTrackMetadata(
+        title: 'Song',
+        artist: 'Artist',
+        position: Duration(seconds: 4),
+        isPlaying: true,
+      ));
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      expect(service.currentTrack.value.title, 'Song');
+      expect(service.currentLyrics.value.lines.length, 2);
+      expect(service.activeLineIndex.value, 1);
+
+      service.dispose();
+    });
+
+    test('SMTC zero-timeline protection preserves clock progression for NetEase CloudMusic', () async {
+      final doc = LrcParser.parse('''
+[00:00.00]Intro
+[00:01.00]Verse 1
+[00:02.00]Verse 2
+''');
+      final mockProvider = MockMediaSessionProvider();
+      final service = MediaSyncService(
+        provider: mockProvider,
+        onlineService: _FakeOnlineLyricsService(doc),
+      );
+      service.startAutoSync();
+
+      // 1. Initial track arrival with position 0
+      mockProvider.emitTrack(const MediaTrackMetadata(
+        title: 'NetEase Song',
+        artist: 'Artist',
+        position: Duration.zero,
+        isPlaying: true,
+      ));
+
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(service.activeLineIndex.value, 0);
+
+      // 2. Simulate subsequent NetEase SMTC poll still reporting position 0 while song is playing.
+      // Clock must continue to advance, not get reset to zero!
+      await Future<void>.delayed(const Duration(milliseconds: 1100));
+      mockProvider.emitTrack(const MediaTrackMetadata(
+        title: 'NetEase Song',
+        artist: 'Artist',
+        position: Duration.zero,
+        isPlaying: true,
+      ));
+
+      await Future<void>.delayed(const Duration(milliseconds: 60));
+      // After ~1.1s elapsed, it should have advanced to Verse 1 (>= 1.0s)
+      expect(service.activeLineIndex.value, greaterThanOrEqualTo(1));
 
       service.dispose();
     });
