@@ -11,9 +11,31 @@ import '../styles/style_atmosphere.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
 import 'visualizer_db_scale.dart';
 
+/// 时间驱动的 CustomPainter：把动画时间轴作为 [repaint] 监听。
+///
+/// 2026-10-31 审查修复：旧实现把 double time 塞进 StatelessWidget，
+/// 父级 build 不随帧重跑 → 时间冻结（流体不流动 / MilkDrop 旋转跳变）。
+/// 现在 CustomPaint 直接在时间轴通知时重绘，**不重建任何 Widget**，
+/// 逐帧也不产生新的 widget/painter 树。
+class _TimedPainter extends CustomPainter {
+  final ValueListenable<double> time;
+  final CustomPainter Function(double time) build;
+
+  _TimedPainter({required this.time, required this.build}) : super(repaint: time);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    build(time.value).paint(canvas, size);
+  }
+
+  @override
+  bool shouldRepaint(covariant _TimedPainter oldDelegate) =>
+      oldDelegate.build != build;
+}
+
 /// 视效主舞台活跃渲染画布视口
 class VisualizerCanvasViewport extends StatelessWidget {
-  final Animation<double> animation;
+  final ValueListenable<double> time;
   final ValueListenable<List<double>> spectrum;
   final ValueListenable<double> levelL;
   final ValueListenable<double> levelR;
@@ -21,11 +43,10 @@ class VisualizerCanvasViewport extends StatelessWidget {
   final VisualizerPalette palette;
   final PeakPhysicsEngine peakEngine;
   final WaveformSynthesizer waveformSynth;
-  final double time;
 
   const VisualizerCanvasViewport({
     super.key,
-    required this.animation,
+    required this.time,
     required this.spectrum,
     required this.levelL,
     required this.levelR,
@@ -33,7 +54,6 @@ class VisualizerCanvasViewport extends StatelessWidget {
     required this.palette,
     required this.peakEngine,
     required this.waveformSynth,
-    required this.time,
   });
 
   bool _usesAmbience(VisualizerStyle style) => switch (style) {
@@ -49,112 +69,108 @@ class VisualizerCanvasViewport extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: animation,
-      builder: (_, _) => ValueListenableBuilder<List<double>>(
-        valueListenable: spectrum,
-        builder: (_, rawBands, _) {
-          final peaks = peakEngine.update(
-            rawBands,
-            targetBands: config.barCount,
-            sensitivity: config.sensitivity,
-            gravity: config.gravity,
-            decay: config.decayRate,
-          );
+    return ValueListenableBuilder<List<double>>(
+      valueListenable: spectrum,
+      builder: (_, rawBands, _) {
+        final peaks = peakEngine.update(
+          rawBands,
+          targetBands: config.barCount,
+          sensitivity: config.sensitivity,
+          gravity: config.gravity,
+          decay: config.decayRate,
+        );
 
-          waveformSynth.update(
-            rawBands,
-            levelLDbfs: levelL.value,
-            levelRDbfs: levelR.value,
-            sensitivity: config.sensitivity,
-          );
+        waveformSynth.update(
+          rawBands,
+          levelLDbfs: levelL.value,
+          levelRDbfs: levelR.value,
+          sensitivity: config.sensitivity,
+        );
 
-          final renderedBands = peakEngine.renderedBands.isNotEmpty
-              ? peakEngine.renderedBands
-              : rawBands;
+        final renderedBands = peakEngine.renderedBands.isNotEmpty
+            ? peakEngine.renderedBands
+            : rawBands;
 
-          final painter = buildVisualizerPainter(
-            style: config.style,
-            config: config,
-            palette: palette,
-            rawBands: renderedBands,
-            peaks: peaks,
-            waveformSynth: waveformSynth,
-            time: time,
-          );
-
-          Widget body;
-          if (config.style == VisualizerStyle.bars) {
-            body = Padding(
-              padding: const EdgeInsets.fromLTRB(
-                AuraSpace.xl,
-                AuraSpace.lg,
-                AuraSpace.xl,
-                AuraSpace.md,
+        final paintLayer = RepaintBoundary(
+          child: CustomPaint(
+            painter: _TimedPainter(
+              time: time,
+              build: (t) => buildVisualizerPainter(
+                style: config.style,
+                config: config,
+                palette: palette,
+                rawBands: renderedBands,
+                peaks: peaks,
+                waveformSynth: waveformSynth,
+                time: t,
               ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Expanded(
-                          child: RepaintBoundary(
-                            child: CustomPaint(
-                              painter: painter,
-                              child: const SizedBox.expand(),
-                            ),
-                          ),
-                        ),
-                        if (config.showGrid) ...[
-                          const SizedBox(height: AuraSpace.sm),
-                          const FreqAxis(),
-                        ],
-                      ],
-                    ),
-                  ),
-                  if (config.showDbScale) ...[
-                    const SizedBox(width: AuraSpace.md),
-                    const VisualizerDbScale(),
-                  ],
-                ],
-              ),
-            );
-          } else {
-            body = RepaintBoundary(
-              child: CustomPaint(
-                painter: painter,
-                child: const SizedBox.expand(),
-              ),
-            );
-          }
+            ),
+            child: const SizedBox.expand(),
+          ),
+        );
 
-          if (_usesAmbience(config.style)) {
-            body = Stack(
-              fit: StackFit.expand,
+        Widget body;
+        if (config.style == VisualizerStyle.bars) {
+          body = Padding(
+            padding: const EdgeInsets.fromLTRB(
+              AuraSpace.xl,
+              AuraSpace.lg,
+              AuraSpace.xl,
+              AuraSpace.md,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                IgnorePointer(
-                  child: RepaintBoundary(
-                    child: CustomPaint(
-                      painter: AtmospherePainter(
-                        bands: renderedBands,
-                        palette: palette,
-                        animationTime: time,
-                        intensity: 0.55 + config.bloom * 0.45,
-                      ),
-                      child: const SizedBox.expand(),
-                    ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Expanded(child: paintLayer),
+                      if (config.showGrid) ...[
+                        const SizedBox(height: AuraSpace.sm),
+                        const FreqAxis(),
+                      ],
+                    ],
                   ),
                 ),
-                body,
+                if (config.showDbScale) ...[
+                  const SizedBox(width: AuraSpace.md),
+                  const VisualizerDbScale(),
+                ],
               ],
-            );
-          }
+            ),
+          );
+        } else {
+          body = paintLayer;
+        }
 
-          return body;
-        },
-      ),
+        if (_usesAmbience(config.style)) {
+          body = Stack(
+            fit: StackFit.expand,
+            children: [
+              IgnorePointer(
+                child: RepaintBoundary(
+                  child: CustomPaint(
+                    painter: _TimedPainter(
+                      time: time,
+                      build: (t) => AtmospherePainter(
+                        bands: renderedBands,
+                        palette: palette,
+                        animationTime: t,
+                        intensity: 0.55 + config.bloom * 0.45,
+                      ),
+                    ),
+                    child: const SizedBox.expand(),
+                  ),
+                ),
+              ),
+              body,
+            ],
+          );
+        }
+
+        return body;
+      },
     );
   }
 }

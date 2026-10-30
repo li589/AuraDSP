@@ -65,7 +65,11 @@ class _VisualizerStageState extends State<VisualizerStage>
   late final AnimationController _animController;
   Timer? _hudHideTimer;
   bool _hudVisible = true;
-  double _time = 0.0;
+
+  /// 动画时间轴（秒）。必须是可监听量：父级 build 只在播放态/配置变化时
+  /// 执行，若把裸 double 传进视口，时间会被冻结在最后一次 build 的数值
+  /// （2026-10-31 审查发现的“背景不动/旋转跳变”根因）。
+  final ValueNotifier<double> _time = ValueNotifier<double>(0.0);
 
   @override
   void initState() {
@@ -84,10 +88,10 @@ class _VisualizerStageState extends State<VisualizerStage>
     });
   }
 
-  /// 每帧仅推进时间轴，不再 setState 重建整页（HUD/歌词等只在数据变化时重建）。
+  /// 每帧仅推进时间轴（视口通过 repaint 监听直接重绘，不重建页面）。
   void _onTick() {
     if (!widget.active) return;
-    _time += 0.016;
+    _time.value += 0.016;
   }
 
   @override
@@ -108,6 +112,7 @@ class _VisualizerStageState extends State<VisualizerStage>
   @override
   void dispose() {
     _hudHideTimer?.cancel();
+    _time.dispose();
     _animController.dispose();
     super.dispose();
   }
@@ -357,7 +362,7 @@ class _VisualizerStageState extends State<VisualizerStage>
               // 主画面渲染视口
               if (widget.playing)
                 VisualizerCanvasViewport(
-                  animation: _animController,
+                  time: _time,
                   spectrum: widget.spectrum,
                   levelL: widget.levelL,
                   levelR: widget.levelR,
@@ -365,7 +370,6 @@ class _VisualizerStageState extends State<VisualizerStage>
                   palette: palette,
                   peakEngine: _peakEngine,
                   waveformSynth: _waveformSynth,
-                  time: _time,
                 )
               else
                 VisualizerIdlePlaceholder(emptyText: widget.emptyText),
