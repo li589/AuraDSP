@@ -110,8 +110,14 @@ class MediaSyncService {
   Duration _basePosition = Duration.zero;
   bool _isPlaying = false;
 
-  MediaSyncService() {
-    _startTicker();
+  /// 仅在播放时启动 20Hz 行同步 ticker，停播即释放，避免页面常驻空转。
+  void _syncTicker() {
+    if (_isPlaying) {
+      _startTicker();
+    } else {
+      _ticker?.cancel();
+      _ticker = null;
+    }
   }
 
   void _startTicker() {
@@ -142,6 +148,7 @@ class MediaSyncService {
     _basePosition = position;
     _lastSyncTime = DateTime.now();
     _isPlaying = isPlaying;
+    _syncTicker();
     _tick();
   }
 
@@ -157,6 +164,7 @@ class MediaSyncService {
     _basePosition = track.position;
     _lastSyncTime = DateTime.now();
     _isPlaying = track.isPlaying;
+    _syncTicker();
 
     if (!track.hasContent) {
       currentLyrics.value = LyricDocument.empty;

@@ -14,6 +14,7 @@ import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 
 import '../core/design.dart';
+import '../core/error_sink.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
 import '../core/ui_helpers.dart';
@@ -46,7 +47,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
     if (PlatformProfile.supportsWindowManagement) {
       windowManager.isFullScreen().then((isFull) {
         if (mounted) setState(() => _isSystemFullscreen = isFull);
-      }).catchError((_) {});
+      }).catchError((Object e, StackTrace st) => swallow(e, st));
     }
   }
 
@@ -77,7 +78,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
         if (mounted) {
           setState(() => _isSystemFullscreen = !isFull);
         }
-      } catch (_) {}
+      } catch (e, st) {
+        swallow(e, st);
+      }
     } else {
       setState(() => _isSystemFullscreen = !_isSystemFullscreen);
       if (_isSystemFullscreen) {
@@ -187,7 +190,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             IconButton(
                               icon: const Icon(Icons.tune_rounded, size: 20),
                               color: p.textDim,
-                              tooltip: 'Visualizer Settings',
+                              tooltip: l.visualizerSettingsTip,
                               onPressed: _openDrawer,
                             ),
                           ],

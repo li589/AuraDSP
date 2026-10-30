@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/theme.dart';
+import '../../../core/ui_helpers.dart';
 import '../models/visualizer_types.dart';
 
 /// 模式下拉选择触发按钮
@@ -128,11 +129,12 @@ class VisualizerSystemFullscreenButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
 
     return Tooltip(
       message: isSystemFullscreen
-          ? 'Exit OS Fullscreen (Esc / F11)'
-          : 'System Fullscreen (OS Window)',
+          ? l.visualizerExitOsFullscreenTip
+          : l.visualizerEnterOsFullscreenTip,
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(AuraRadius.sm),

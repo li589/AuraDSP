@@ -8,6 +8,7 @@ import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_hud_buttons.dart';
 import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 void main() {
   group('VisualizerConfig & Models', () {
@@ -160,6 +161,8 @@ void main() {
       Widget buildHud() {
         return MaterialApp(
           theme: withAuraExtension(ThemeData.dark(), auraDark),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
             body: StatefulBuilder(
               builder: (context, setState) {

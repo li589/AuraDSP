@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
 import '../../../core/theme.dart';
+import '../../../core/ui_helpers.dart';
 import '../models/visualizer_types.dart';
 import 'visualizer_hud_buttons.dart';
 
@@ -57,6 +58,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
 
     return AnimatedOpacity(
       opacity: widget.visible ? 1.0 : 0.0,
@@ -141,7 +143,9 @@ class _VisualizerHudState extends State<VisualizerHud> {
                   // 歌词显示开关
                   VisualizerActionButton(
                     icon: Icons.lyrics_rounded,
-                    tooltip: widget.config.showLyrics ? 'Hide Lyrics' : 'Show Lyrics',
+                    tooltip: widget.config.showLyrics
+                        ? l.visualizerHideLyricsTip
+                        : l.visualizerShowLyricsTip,
                     active: widget.config.showLyrics,
                     onTap: () {
                       _closeMenu();
@@ -153,7 +157,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                   // 复位峰值
                   VisualizerActionButton(
                     icon: Icons.refresh_rounded,
-                    tooltip: 'Reset Peak Hold',
+                    tooltip: l.visualizerResetPeakTip,
                     onTap: () {
                       _closeMenu();
                       widget.onResetPeaks();
@@ -174,7 +178,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                   // 展开参数抽屉
                   VisualizerActionButton(
                     icon: Icons.tune_rounded,
-                    tooltip: 'Visualizer Settings',
+                    tooltip: l.visualizerSettingsTip,
                     onTap: () {
                       _closeMenu();
                       widget.onOpenDrawer();
@@ -187,7 +191,9 @@ class _VisualizerHudState extends State<VisualizerHud> {
                     icon: widget.config.isMaximized
                         ? Icons.close_fullscreen_rounded
                         : Icons.open_in_full_rounded,
-                    tooltip: widget.config.isMaximized ? 'Exit Stage Maximize' : 'Maximize Stage',
+                    tooltip: widget.config.isMaximized
+                        ? l.visualizerRestoreStageTip
+                        : l.visualizerMaximizeStageTip,
                     onTap: () {
                       _closeMenu();
                       widget.onToggleFullscreen();

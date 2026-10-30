@@ -1,3 +1,4 @@
+import 'dart:collection';
 import 'dart:math' as math;
 
 /// 物理重力与双向弹道阻尼峰值引擎
@@ -10,8 +11,9 @@ class PeakPhysicsEngine {
   /// 保持时间（帧数，以 60fps 计约 16 帧 = 260ms）
   static const int _defaultHoldFrames = 16;
 
-  List<double> get renderedBands => _renderedBands;
-  List<double> get peaks => _peaks;
+  /// 只读视图：防止调用方误改引擎内部状态。
+  List<double> get renderedBands => UnmodifiableListView(_renderedBands);
+  List<double> get peaks => UnmodifiableListView(_peaks);
 
   /// 重置并对齐频段数
   void _ensureSize(int count) {
@@ -98,7 +100,7 @@ class PeakPhysicsEngine {
       _peaks[i] = _peaks[i].clamp(0.0, 1.0);
     }
 
-    return _peaks;
+    return UnmodifiableListView(_peaks);
   }
 
   /// 频段重采样与灵敏度缩放

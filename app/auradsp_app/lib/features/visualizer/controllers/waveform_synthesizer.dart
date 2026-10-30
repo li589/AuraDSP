@@ -45,9 +45,9 @@ class WaveformSynthesizer {
     _smoothedAmpR += (targetAmpR - _smoothedAmpR) * alphaR;
 
     // 2. 泛音能量低通滤波（消除失真吉他与强打击乐瞬态谐波引发的剧烈形状骤变）
-    final targetBass = ((spectrum[1] + spectrum[2] + spectrum[3]) / 3.0 * sensitivity).clamp(0.0, 1.2);
-    final targetMid = ((spectrum[10] + spectrum[12] + spectrum[14]) / 3.0 * sensitivity).clamp(0.0, 1.2);
-    final targetTreble = ((spectrum[22] + spectrum[24] + spectrum[26]) / 3.0 * sensitivity).clamp(0.0, 1.2);
+    final targetBass = ((_bandAt(spectrum, 1) + _bandAt(spectrum, 2) + _bandAt(spectrum, 3)) / 3.0 * sensitivity).clamp(0.0, 1.2);
+    final targetMid = ((_bandAt(spectrum, 10) + _bandAt(spectrum, 12) + _bandAt(spectrum, 14)) / 3.0 * sensitivity).clamp(0.0, 1.2);
+    final targetTreble = ((_bandAt(spectrum, 22) + _bandAt(spectrum, 24) + _bandAt(spectrum, 26)) / 3.0 * sensitivity).clamp(0.0, 1.2);
 
     _smoothedBass += (targetBass - _smoothedBass) * 0.28;
     _smoothedMid += (targetMid - _smoothedMid) * 0.28;
@@ -79,6 +79,12 @@ class WaveformSynthesizer {
       final s = (yL - yR) * 0.7071;
       lissajousPoints[i] = Offset(s, -m);
     }
+  }
+
+  /// 按需取频段值：频谱段数不足 27 时退化为最后一档，避免每帧绘制路径越界。
+  static double _bandAt(List<double> spectrum, int index) {
+    final i = index < spectrum.length ? index : spectrum.length - 1;
+    return spectrum[i];
   }
 
   /// 代数软饱和曲线：y = x / sqrt(1 + x^2)
