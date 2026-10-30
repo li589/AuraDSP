@@ -1947,6 +1947,9 @@ abstract final class ParamRegistry {
     ParamSection(
       name: 'comp',
       specs: [
+        // 阈值/比率必须在 freq/gain 之前：阈值 setter 会重算 7 段增益，
+        // 随后由 compGainN 写回快照值（注册顺序即应用顺序）。
+        compThreshold, compRatio,
         compTimeconstant, compGranularity, compTfresolution,
         compAutoGain, compOutputGain, compMode, compEnable, compChannels,
         ...compFreqs, ...compGains, // B2：14 动态段注册进预设系统（真实驱动引擎）

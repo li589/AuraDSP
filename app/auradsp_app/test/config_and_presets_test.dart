@@ -1767,5 +1767,57 @@ void main() {
       expect(m2.visualizerConfig.value.lyricsSource, LyricsSource.kugou);
       expect(m2.visualizerConfig.value.barCount, 64);
     });
+
+    test('根目录配置文件不会被当成幽灵预设', () {
+      // 预设根目录同时住着 config.json / session_state.json / file_paths.json……
+      // 旧实现把根目录下**所有** *.json 当预设 → listAll 里出现删不掉的
+      // "Unnamed" 条目；点选即 params 为空 → 全量复写 = 静默恢复出厂。
+      final sep = Platform.pathSeparator;
+      final root = ConfigManager.baseDir;
+      final probes = <String, String>{
+        'config.json': '{"sampleRate":48000,"maxBlockFrames":1024}',
+        'session_state.json': '{"ok":true}',
+        'file_paths.json': '{"lastIr":"C:/ir.wav"}',
+        'empty_params.json': '{"name":"Broken","parameters":{}}',
+      };
+      final written = <File>[];
+      probes.forEach((name, content) {
+        final f = File('$root$sep$name');
+        f.writeAsStringSync(content);
+        written.add(f);
+      });
+      addTearDown(() {
+        for (final f in written) {
+          if (f.existsSync()) f.deleteSync();
+        }
+      });
+
+      final all = PresetLibrary.listAll();
+      expect(
+        all.where((p) => probes.keys.any(
+            (n) => p.name == n || p.name == n.replaceAll('.json', ''))),
+        isEmpty,
+        reason: '非预设 JSON 不得进入预设列表',
+      );
+      expect(all.any((p) => p.name == 'Broken'), isFalse,
+          reason: 'parameters 为空的条目不是有效预设');
+      expect(all.any((p) => p.name == 'Unnamed'), isFalse,
+          reason: '"Unnamed" 是旧实现给无 name 文件补的默认名，属幽灵预设特征');
+    });
+
+    test('出厂预设应用不覆盖用户可视化偏好', () {
+      final m = AppModel(testing: true)..setVisualizerConfig(custom);
+      final factory = PresetLibrary.listAll().where((p) => p.isFactory).toList();
+      expect(factory, isNotEmpty, reason: '出厂预设资产应已落盘');
+      for (final p in factory) {
+        PresetLibrary.apply(m, p);
+        expect(m.visualizerConfig.value.style, VisualizerStyle.tornado,
+            reason: '出厂预设 ${p.name} 不得重置可视化风格');
+        expect(m.visualizerConfig.value.colorTheme, VisualizerColorTheme.aurora,
+            reason: '出厂预设 ${p.name} 不得重置可视化配色');
+        expect(m.visualizerConfig.value.showLyrics, isTrue,
+            reason: '出厂预设 ${p.name} 不得关闭歌词');
+      }
+    });
   });
 }

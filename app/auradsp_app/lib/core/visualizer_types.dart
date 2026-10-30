@@ -340,17 +340,25 @@ class VisualizerConfig {
     if (json == null || json.isEmpty) return const VisualizerConfig();
     double d(String key, double def, double lo, double hi) {
       final v = json[key];
-      if (v is num) return v.toDouble().clamp(lo, hi);
+      if (v is num && v.isFinite) return v.toDouble().clamp(lo, hi);
       return def;
     }
 
     bool b(String key, bool def) => json[key] is bool ? json[key] as bool : def;
+
+    /// 类型安全取字符串：脏配置里非 String 值不得触发 TypeError
+    /// （否则 ConfigManager.load 的 catch 会把整份配置覆盖成默认值）。
+    String? s(String key) {
+      final v = json[key];
+      return v is String ? v : null;
+    }
+
     final barCount = (json['barCount'] is num)
         ? (json['barCount'] as num).toInt()
         : 32;
     return VisualizerConfig(
-      style: VisualizerStyle.fromId(json['style'] as String?),
-      colorTheme: VisualizerColorTheme.fromId(json['colorTheme'] as String?),
+      style: VisualizerStyle.fromId(s('style')),
+      colorTheme: VisualizerColorTheme.fromId(s('colorTheme')),
       sensitivity: d('sensitivity', 1.0, 0.2, 3.0),
       decayRate: d('decayRate', 0.6, 0.1, 0.95),
       gravity: d('gravity', 1.8, 0.5, 4.0),
@@ -362,9 +370,48 @@ class VisualizerConfig {
       showDbScale: b('showDbScale', true),
       showLyrics: b('showLyrics', false),
       showTranslation: b('showTranslation', true),
-      lyricsSource: LyricsSource.fromId(json['lyricsSource'] as String?),
+      lyricsSource: LyricsSource.fromId(s('lyricsSource')),
     );
   }
+
+  /// 值相等：setVisualizerConfig 的「无变化不写盘」守卫依赖它。
+  @override
+  bool operator ==(Object other) {
+    if (identical(this, other)) return true;
+    return other is VisualizerConfig &&
+        other.style == style &&
+        other.colorTheme == colorTheme &&
+        other.sensitivity == sensitivity &&
+        other.decayRate == decayRate &&
+        other.gravity == gravity &&
+        other.barCount == barCount &&
+        other.lineWidth == lineWidth &&
+        other.bloom == bloom &&
+        other.showGrid == showGrid &&
+        other.showPeaks == showPeaks &&
+        other.showDbScale == showDbScale &&
+        other.showLyrics == showLyrics &&
+        other.showTranslation == showTranslation &&
+        other.lyricsSource == lyricsSource;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+        style,
+        colorTheme,
+        sensitivity,
+        decayRate,
+        gravity,
+        barCount,
+        lineWidth,
+        bloom,
+        showGrid,
+        showPeaks,
+        showDbScale,
+        showLyrics,
+        showTranslation,
+        lyricsSource,
+      );
 }
 
 /// 风格与配色的多语言显示名（枚举内 label 仅作英文兜底）
