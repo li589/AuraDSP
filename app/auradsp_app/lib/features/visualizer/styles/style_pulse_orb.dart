@@ -47,24 +47,27 @@ class PulseOrbPainter extends CustomPainter {
     final coreR = baseRadius * (0.8 + bass * 0.45 + mid * 0.15);
     canvas.drawCircle(center, coreR, _corePaint);
 
-    // 环绕多边形谐振声波环（根据中高频能量变形）
-    const vertexCount = 48;
-    final path = Path();
+    // 环绕谐振声波环（对称镜像频段映射与贝塞尔圆弧闭合，消除接缝突变）
+    const vertexCount = 64;
+    final pts = <Offset>[];
     for (var i = 0; i < vertexCount; i++) {
       final angle = (i / vertexCount) * 2 * math.pi;
-      final bandIndex = (i % bands.length);
+      final u = i / vertexCount;
+      final mirrorU = 1.0 - (2.0 * u - 1.0).abs();
+      final bandIndex = (mirrorU * (bands.length - 1)).round().clamp(0, bands.length - 1);
       final energy = bands.isNotEmpty ? bands[bandIndex] : 0.0;
 
       final r = baseRadius * (1.15 + energy * 0.55 + math.sin(angle * 6 + animationTime * 2) * 0.06);
-      final x = center.dx + math.cos(angle) * r;
-      final y = center.dy + math.sin(angle) * r;
-
-      if (i == 0) {
-        path.moveTo(x, y);
-      } else {
-        path.lineTo(x, y);
-      }
+      pts.add(Offset(center.dx + math.cos(angle) * r, center.dy + math.sin(angle) * r));
     }
+
+    final path = Path()..moveTo(pts[0].dx, pts[0].dy);
+    for (var i = 1; i < pts.length; i++) {
+      final midX = (pts[i - 1].dx + pts[i].dx) / 2.0;
+      final midY = (pts[i - 1].dy + pts[i].dy) / 2.0;
+      path.quadraticBezierTo(pts[i - 1].dx, pts[i - 1].dy, midX, midY);
+    }
+    path.quadraticBezierTo(pts.last.dx, pts.last.dy, pts[0].dx, pts[0].dy);
     path.close();
 
     _ringPaint.color = palette.primary;

@@ -16,7 +16,6 @@ import 'package:window_manager/window_manager.dart';
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
-import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
 import 'chrome.dart';
@@ -185,55 +184,6 @@ class _VisualizerPageState extends State<VisualizerPage> {
                               active: active,
                             ),
                             const SizedBox(width: AuraSpace.md),
-                            // 系统真全屏按钮（置于电平峰值右侧、高级选项左侧，带独立强调视觉）
-                            Tooltip(
-                              message: _isSystemFullscreen
-                                  ? 'Exit OS Fullscreen (Esc / F11)'
-                                  : 'System Fullscreen (OS Window)',
-                              child: InkWell(
-                                onTap: _toggleSystemFullscreen,
-                                borderRadius: BorderRadius.circular(AuraRadius.sm),
-                                child: AnimatedContainer(
-                                  duration: AuraDur.fast,
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: _isSystemFullscreen
-                                        ? p.accent.withValues(alpha: 0.28)
-                                        : p.accent.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(AuraRadius.sm),
-                                    border: Border.all(
-                                      color: _isSystemFullscreen
-                                          ? p.accent
-                                          : p.accent.withValues(alpha: 0.45),
-                                      width: 1.2,
-                                    ),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        _isSystemFullscreen
-                                            ? Icons.fullscreen_exit_rounded
-                                            : Icons.aspect_ratio_rounded,
-                                        size: 16,
-                                        color: p.accent,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'OS',
-                                        style: TextStyle(
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                          color: p.accent,
-                                          letterSpacing: 0.5,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: AuraSpace.sm),
                             IconButton(
                               icon: const Icon(Icons.tune_rounded, size: 20),
                               color: p.textDim,

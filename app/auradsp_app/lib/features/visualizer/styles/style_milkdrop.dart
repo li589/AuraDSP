@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
 import '../plugins/milkdrop_preset.dart';
 
-/// Winamp MilkDrop 2 经典算法模拟与自适应画布绘制器
+/// Winamp MilkDrop 2 经典拓扑与自适应连续环绘制器（对称镜像无缝闭合）
 class MilkdropPainter extends CustomPainter {
   final MilkdropPreset preset;
   final List<double> bands;
@@ -21,6 +21,19 @@ class MilkdropPainter extends CustomPainter {
     required this.sensitivity,
     this.lineWidth = 1.5,
   });
+
+  /// 对称镜像连续采样：[0, 1) 映射为 0 -> 1 -> 0，消除环状结构首尾低频到高频的突变断开
+  static double sampleMirroredEnergy(List<double> bands, double normPos) {
+    if (bands.isEmpty) return 0.0;
+    final mirrorU = 1.0 - (2.0 * (normPos % 1.0) - 1.0).abs();
+    final floatIdx = mirrorU * (bands.length - 1);
+    final i0 = floatIdx.floor();
+    final i1 = math.min(i0 + 1, bands.length - 1);
+    final frac = floatIdx - i0;
+    // 余弦连续插值柔化
+    final smoothFrac = (1.0 - math.cos(frac * math.pi)) / 2.0;
+    return bands[i0] * (1.0 - smoothFrac) + bands[i1] * smoothFrac;
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -76,7 +89,7 @@ class MilkdropPainter extends CustomPainter {
     double mid,
     double treble,
   ) {
-    final ringCount = 8;
+    const ringCount = 8;
     for (var i = 0; i < ringCount; i++) {
       final frac = (i + 1) / ringCount;
       final currentR = r * frac * (0.6 + bass * 0.35);
@@ -101,25 +114,25 @@ class MilkdropPainter extends CustomPainter {
     double mid,
     double treble,
   ) {
-    final path = Path();
-    const points = 72;
-    var first = true;
+    const points = 96;
+    final screenPts = <Offset>[];
 
-    for (var i = 0; i < points; i++) {
-      final theta = (i / points) * 4.0 * math.pi + time * 1.5;
-      final bandIdx = (i % (bands.isEmpty ? 1 : bands.length));
-      final energy = bands.isNotEmpty ? bands[bandIdx] * sensitivity : 0.0;
-      final dist = (i / points) * r * 0.85 + energy * 25.0 * (1.0 + bass);
+    for (var i = 0; i <= points; i++) {
+      final normPos = (i / points) % 1.0;
+      final theta = normPos * 2.0 * math.pi + time * 1.2;
+      final energy = sampleMirroredEnergy(bands, normPos) * sensitivity;
+      final dist = (0.35 + normPos * 0.45) * r + energy * 26.0 * (1.0 + bass);
 
       final x = cx + dist * math.cos(theta);
       final y = cy + dist * math.sin(theta);
+      screenPts.add(Offset(x, y));
+    }
 
-      if (first) {
-        path.moveTo(x, y);
-        first = false;
-      } else {
-        path.lineTo(x, y);
-      }
+    final path = Path()..moveTo(screenPts[0].dx, screenPts[0].dy);
+    for (var i = 1; i < screenPts.length; i++) {
+      final midX = (screenPts[i - 1].dx + screenPts[i].dx) / 2.0;
+      final midY = (screenPts[i - 1].dy + screenPts[i].dy) / 2.0;
+      path.quadraticBezierTo(screenPts[i - 1].dx, screenPts[i - 1].dy, midX, midY);
     }
 
     final paint = Paint()
@@ -138,34 +151,31 @@ class MilkdropPainter extends CustomPainter {
     double mid,
     double treble,
   ) {
-    const rays = 24;
+    const rays = 36;
     final rayPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = lineWidth * 1.1
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < rays; i++) {
-      final angle = (i / rays) * 2.0 * math.pi + time * 0.6;
-      final bandIdx = (i % (bands.isEmpty ? 1 : bands.length));
-      final amp = bands.isNotEmpty ? bands[bandIdx] * sensitivity : 0.0;
+      final normPos = i / rays;
+      final angle = normPos * 2.0 * math.pi + time * 0.6;
+      final amp = sampleMirroredEnergy(bands, normPos) * sensitivity;
 
-      final inner = r * 0.2 * (1.0 + mid * 0.4);
-      final outer = r * (0.35 + amp * 0.5 + bass * 0.25);
+      final inner = r * 0.22 * (1.0 + mid * 0.4);
+      final outer = r * (0.36 + amp * 0.48 + bass * 0.22);
 
       final x1 = cx + inner * math.cos(angle);
       final y1 = cy + inner * math.sin(angle);
       final x2 = cx + outer * math.cos(angle);
       final y2 = cy + outer * math.sin(angle);
 
-      final color = Color.lerp(palette.primary, palette.secondary, i / rays)!;
+      final color = Color.lerp(palette.primary, palette.secondary, normPos)!;
       rayPaint.color = color.withValues(alpha: (0.4 + amp * 0.6).clamp(0.0, 1.0));
       canvas.drawLine(Offset(x1, y1), Offset(x2, y2), rayPaint);
     }
   }
 
   @override
-  bool shouldRepaint(covariant MilkdropPainter oldDelegate) {
-    return true;
-  }
+  bool shouldRepaint(covariant MilkdropPainter oldDelegate) => true;
 }
-

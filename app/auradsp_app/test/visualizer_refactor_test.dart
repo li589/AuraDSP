@@ -1,8 +1,12 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_hud_buttons.dart';
+import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/theme.dart';
 
 void main() {
@@ -128,6 +132,99 @@ void main() {
 
       expect(synth.waveL.every((v) => v == 0.0), isTrue);
       expect(synth.waveR.every((v) => v == 0.0), isTrue);
+    });
+
+    test('High dynamic rock music simulation prevents explosion and clipping distortion', () {
+      final synth = WaveformSynthesizer();
+      // Simulate extreme sudden peak transient (+6 dBFS, high treble and bass)
+      final loudSpectrum = List.generate(32, (i) => 1.5);
+      synth.update(loudSpectrum, levelLDbfs: 6.0, levelRDbfs: 6.0, sensitivity: 2.0);
+
+      expect(synth.waveL.length, WaveformSynthesizer.pointCount);
+      for (final val in synth.waveL) {
+        expect(val.isFinite, isTrue);
+        expect(val, inInclusiveRange(-1.0, 1.0));
+      }
+      for (final pt in synth.lissajousPoints) {
+        expect(pt.dx.isFinite, isTrue);
+        expect(pt.dy.isFinite, isTrue);
+      }
+    });
+  });
+
+  group('VisualizerHud Widget Tests', () {
+    testWidgets('Toggles style menu, selects mode, and auto-hides menu when HUD is invisible', (tester) async {
+      VisualizerStyle currentStyle = VisualizerStyle.bars;
+      bool hudVisible = true;
+
+      Widget buildHud() {
+        return MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: StatefulBuilder(
+              builder: (context, setState) {
+                return Stack(
+                  children: [
+                    Positioned(
+                      bottom: 20,
+                      left: 0,
+                      right: 0,
+                      child: VisualizerHud(
+                        config: VisualizerConfig(style: currentStyle),
+                        visible: hudVisible,
+                        isSystemFullscreen: false,
+                        onStyleChanged: (newStyle) {
+                          setState(() => currentStyle = newStyle);
+                        },
+                        onToggleFullscreen: () {},
+                        onToggleSystemFullscreen: () {},
+                        onToggleLyrics: () {},
+                        onOpenDrawer: () {},
+                        onResetPeaks: () {},
+                      ),
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+        );
+      }
+
+      await tester.pumpWidget(buildHud());
+      await tester.pumpAndSettle();
+
+      // Initially, dropdown button is displayed with bars style
+      expect(find.byType(VisualizerStyleDropdownButton), findsOneWidget);
+      expect(find.byType(VisualizerMenuItem), findsNothing);
+
+      // Tap the dropdown button to open menu
+      await tester.tap(find.byType(VisualizerStyleDropdownButton));
+      await tester.pumpAndSettle();
+
+      // Menu items are now visible
+      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length));
+
+      // Tap Oscilloscope item
+      final oscilloscopeItem = find.widgetWithText(VisualizerMenuItem, VisualizerStyle.oscilloscope.label);
+      expect(oscilloscopeItem, findsOneWidget);
+      await tester.tap(oscilloscopeItem);
+      await tester.pumpAndSettle();
+
+      expect(currentStyle, VisualizerStyle.oscilloscope);
+      // Menu automatically closes after selection
+      expect(find.byType(VisualizerMenuItem), findsNothing);
+
+      // Open menu again
+      await tester.tap(find.byType(VisualizerStyleDropdownButton));
+      await tester.pumpAndSettle();
+      expect(find.byType(VisualizerMenuItem), findsNWidgets(VisualizerStyle.values.length));
+
+      // Make HUD invisible -> menu should automatically close
+      hudVisible = false;
+      await tester.pumpWidget(buildHud());
+      await tester.pumpAndSettle();
+      expect(find.byType(VisualizerMenuItem), findsNothing);
     });
   });
 }
