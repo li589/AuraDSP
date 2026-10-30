@@ -5,6 +5,7 @@ import 'package:auradsp_app/core/config.dart';
 import 'package:auradsp_app/core/presets.dart';
 import 'package:auradsp_app/core/session_memory.dart';
 import 'package:auradsp_app/core/state.dart';
+import 'package:auradsp_app/core/visualizer_types.dart';
 import 'package:auradsp_app/features/liveprog_page.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -1699,6 +1700,72 @@ void main() {
         m.filteredWasapiInputs.map((e) => e.name).toList(),
         ['Speakers (USB DAC)', 'Mic (USB)'],
       );
+    });
+  });
+
+  group('可视化配置持久化（2026-10-31）', () {
+    const custom = VisualizerConfig(
+      style: VisualizerStyle.tornado,
+      colorTheme: VisualizerColorTheme.aurora,
+      sensitivity: 2.2,
+      barCount: 64,
+      showLyrics: true,
+      lyricsSource: LyricsSource.kugou,
+    );
+
+    test('config.json round-trip 保留全部可视化参数', () {
+      final cfg = AppConfig(visualizerConfig: custom);
+      final restored = AppConfig.fromJson(cfg.toJson());
+      expect(restored.visualizerConfig.style, VisualizerStyle.tornado);
+      expect(restored.visualizerConfig.colorTheme, VisualizerColorTheme.aurora);
+      expect(restored.visualizerConfig.sensitivity, 2.2);
+      expect(restored.visualizerConfig.barCount, 64);
+      expect(restored.visualizerConfig.showLyrics, isTrue);
+      expect(restored.visualizerConfig.lyricsSource, LyricsSource.kugou);
+    });
+
+    test('预设快照包含 visualizer 节，应用后可完整恢复', () {
+      final m = AppModel(testing: true)..setVisualizerConfig(custom);
+      final snap = PresetLibrary.snapshot(m, name: '__viz_preset__');
+      expect((snap.params['visualizer'] as Map).containsKey('style'), isTrue,
+          reason: '可视化参数必须进入预设快照，否则预设不完整');
+      // 逐键对齐：VisualizerConfig 新增字段若忘了注册 ParamSpec，
+      // 这里会红（防止「新增可视化参数只进 config 不进预设」的静默缺口）。
+      expect(
+        (snap.params['visualizer'] as Map).keys.toSet(),
+        const VisualizerConfig().toJson().keys.toSet(),
+        reason: 'visualizer 节键集必须与 VisualizerConfig.toJson 完全一致',
+      );
+
+      final m2 = AppModel(testing: true);
+      PresetLibrary.apply(
+        m2,
+        AuraPreset(
+          name: '__viz_preset__',
+          createdAt: DateTime.now().toIso8601String(),
+          params: snap.params,
+        ),
+      );
+      expect(m2.visualizerConfig.value.style, VisualizerStyle.tornado);
+      expect(m2.visualizerConfig.value.sensitivity, 2.2);
+      expect(m2.visualizerConfig.value.lyricsSource, LyricsSource.kugou);
+      expect(m2.visualizerConfig.value.showLyrics, isTrue);
+    });
+
+    test('会话记忆保存并恢复可视化配置', () {
+      final m = AppModel(testing: true)..setVisualizerConfig(custom);
+      expect(SessionMemory.save(m), isTrue);
+
+      final session = SessionMemory.load();
+      expect(session, isNotNull);
+      expect(session!['visualizer'], isA<Map>());
+      expect((session['visualizer'] as Map)['style'], 'tornado');
+
+      final m2 = AppModel(testing: true);
+      SessionMemory.restoreMemoryImage(m2, session);
+      expect(m2.visualizerConfig.value.style, VisualizerStyle.tornado);
+      expect(m2.visualizerConfig.value.lyricsSource, LyricsSource.kugou);
+      expect(m2.visualizerConfig.value.barCount, 64);
     });
   });
 }

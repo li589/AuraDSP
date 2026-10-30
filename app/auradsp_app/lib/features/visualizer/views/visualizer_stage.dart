@@ -177,6 +177,7 @@ class _VisualizerStageState extends State<VisualizerStage>
           LyricsSyncState.searching => l.visualizerLyricsSearching,
           LyricsSyncState.ready => l.visualizerLyricsReady,
           LyricsSyncState.notFound => l.visualizerLyricsNotFound,
+          LyricsSyncState.unsupported => l.visualizerLyricsUnsupported,
         };
         final statusHint = switch (state) {
           LyricsSyncState.idle || LyricsSyncState.noMedia =>
@@ -184,6 +185,7 @@ class _VisualizerStageState extends State<VisualizerStage>
           LyricsSyncState.searching => l.visualizerLyricsSearchingHint,
           LyricsSyncState.ready => l.visualizerLyricsNotFoundHint,
           LyricsSyncState.notFound => l.visualizerLyricsNotFoundHint,
+          LyricsSyncState.unsupported => l.visualizerLyricsUnsupportedHint,
         };
 
         final docTitle = doc.title?.trim() ?? '';
@@ -301,15 +303,13 @@ class _VisualizerStageState extends State<VisualizerStage>
                           LyricsSyncState.searching => Icons.hourglass_top_rounded,
                           LyricsSyncState.notFound => Icons.search_off_rounded,
                           LyricsSyncState.ready => Icons.lyrics_outlined,
+                          LyricsSyncState.unsupported =>
+                            Icons.desktop_access_disabled_rounded,
                           LyricsSyncState.idle || LyricsSyncState.noMedia =>
                             Icons.music_off_rounded,
                         },
                         title: statusTitle,
                         hint: statusHint,
-                        retryLabel: l.visualizerLyricsRetry,
-                        localLabel: l.visualizerLyricsPickLocal,
-                        onRetry: _retryLyrics,
-                        onPickLocal: widget.onOpenLocalLrc,
                       )
                     : LyricView(
                         document: doc,
@@ -443,26 +443,22 @@ class _LyricsActionIcon extends StatelessWidget {
   }
 }
 
-/// 无歌词时的可见空态：状态说明 + 重新获取 / 本地 LRC 入口
+/// 无歌词时的可见空态：只给状态说明。
+///
+/// 2026-10-31：移除居中的「重新获取 / 本地 LRC」按钮——歌词层右上角已有
+/// 两个入口图标，空态再放按钮会在沉浸视效上造成干扰；未找到歌词时只保留
+/// 一行干净的状态文案。
 class _LyricsEmptyState extends StatelessWidget {
   final IconData icon;
   final bool busy;
   final String title;
   final String hint;
-  final String retryLabel;
-  final String localLabel;
-  final VoidCallback onRetry;
-  final VoidCallback? onPickLocal;
 
   const _LyricsEmptyState({
     required this.icon,
     required this.busy,
     required this.title,
     required this.hint,
-    required this.retryLabel,
-    required this.localLabel,
-    required this.onRetry,
-    required this.onPickLocal,
   });
 
   @override
@@ -521,25 +517,6 @@ class _LyricsEmptyState extends StatelessWidget {
                 height: 1.45,
                 color: p.textDim,
               ),
-            ),
-            const SizedBox(height: AuraSpace.lg),
-            Wrap(
-              spacing: AuraSpace.sm,
-              runSpacing: AuraSpace.sm,
-              alignment: WrapAlignment.center,
-              children: [
-                FilledButton.tonalIcon(
-                  onPressed: busy ? null : onRetry,
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  label: Text(retryLabel),
-                ),
-                if (onPickLocal != null)
-                  OutlinedButton.icon(
-                    onPressed: onPickLocal,
-                    icon: const Icon(Icons.folder_open_rounded, size: 16),
-                    label: Text(localLabel),
-                  ),
-              ],
             ),
           ],
         ),

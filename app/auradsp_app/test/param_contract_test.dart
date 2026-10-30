@@ -105,6 +105,13 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.pipelineOutputDevice', // 管道输出设备，ConfigManager 域
   'routing.pipelineOutputEnabled', // 管道输出开关，ConfigManager 域
   'routing.vaioOutputEndpoint', // AuraVAIO 端点，ConfigManager 域
+  // 可视化配置（2026-10-31）：AppModel.visualizerConfig → config.json /
+  // SessionMemory / 预设快照，全部不符发引擎（纯 Dart 侧状态）。
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.sensitivity',
+  'visualizer.decayRate', 'visualizer.gravity', 'visualizer.barCount',
+  'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
+  'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
+  'visualizer.showTranslation', 'visualizer.lyricsSource',
 };
 
 /// Part A（getter/setter 运行时闭环）排除项：setter 写入门槛非对称或空实现，
@@ -118,6 +125,9 @@ const Set<String> kNonRoundtripSpecIds = {
   'routing.attachmentMode', // noop setter：同上
   'routing.pipelineInput', // noop setter：同上
   'routing.pipelineOutput', // noop setter：同上
+  // 可视化枚举型 spec（2026-10-31）：setter 走 fromId() 归一，未知探针值
+  // 会被安全回落到默认枚举，探针无法原样读回（业务上正是期望的容错行为）。
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.lyricsSource',
 };
 
 /// Part C：UI 专属 spec——引擎无对应参数（经 alias 归一后仍不在引擎表）。
@@ -136,6 +146,12 @@ const Set<String> kUiOnlySpecIds = {
   'routing.pipelineInputDevice', 'routing.pipelineInputEnabled',
   'routing.pipelineOutput', 'routing.pipelineOutputDevice',
   'routing.pipelineOutputEnabled', 'routing.vaioOutputEndpoint',
+  // 可视化配置（2026-10-31）：引擎无对应参数，纯 UI/宿主配置域
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.sensitivity',
+  'visualizer.decayRate', 'visualizer.gravity', 'visualizer.barCount',
+  'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
+  'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
+  'visualizer.showTranslation', 'visualizer.lyricsSource',
 };
 
 /// Part C：引擎侧参数 UI 不通过 registry 暴露的状态/掩码/计量/别名族/

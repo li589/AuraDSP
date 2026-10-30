@@ -291,6 +291,14 @@ class VisualizerConfigDrawer extends StatelessWidget {
                     onChanged: (v) =>
                         onConfigChanged(config.copyWith(showTranslation: v)),
                   ),
+                  const SizedBox(height: 10),
+                  // R6（2026-10-31）：在线歌词来源可选（默认自动依次回退）
+                  VisualizerLyricsSourcePicker(
+                    value: config.lyricsSource,
+                    onChanged: (source) => onConfigChanged(
+                      config.copyWith(lyricsSource: source),
+                    ),
+                  ),
                 ],
               ),
             ),

@@ -2713,7 +2713,7 @@ abstract class AppLocalizations {
   /// No description provided for @visualizerLyricsNotFoundHint.
   ///
   /// In zh, this message translates to:
-  /// **'可重新获取，或选择本地 LRC 文件手动加载'**
+  /// **'可在右上角重新获取，或选择本地 LRC 文件手动加载'**
   String get visualizerLyricsNotFoundHint;
 
   /// No description provided for @visualizerLyricsReady.
@@ -2733,6 +2733,72 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'本地 LRC'**
   String get visualizerLyricsPickLocal;
+
+  /// No description provided for @visualizerLyricsPickLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择本地 LRC 歌词文件'**
+  String get visualizerLyricsPickLocalTitle;
+
+  /// No description provided for @visualizerLyricsPickLocalPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或粘贴 .lrc 歌词文件的完整路径：'**
+  String get visualizerLyricsPickLocalPrompt;
+
+  /// No description provided for @visualizerLyricsUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前平台暂不支持系统媒体会话'**
+  String get visualizerLyricsUnsupported;
+
+  /// No description provided for @visualizerLyricsUnsupportedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍可在右上角选择本地 LRC 文件手动加载歌词'**
+  String get visualizerLyricsUnsupportedHint;
+
+  /// No description provided for @visualizerLyricsSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词来源'**
+  String get visualizerLyricsSource;
+
+  /// No description provided for @visualizerLyricsSourceInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动按顺序尝试各在线歌词库；也可固定使用某一个来源'**
+  String get visualizerLyricsSourceInfo;
+
+  /// No description provided for @visualizerLyricsSourceAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动（依次回退）'**
+  String get visualizerLyricsSourceAuto;
+
+  /// No description provided for @visualizerLyricsSourceLrclib.
+  ///
+  /// In zh, this message translates to:
+  /// **'LrcLib'**
+  String get visualizerLyricsSourceLrclib;
+
+  /// No description provided for @visualizerLyricsSourceNetease.
+  ///
+  /// In zh, this message translates to:
+  /// **'网易云音乐'**
+  String get visualizerLyricsSourceNetease;
+
+  /// No description provided for @visualizerLyricsSourceQq.
+  ///
+  /// In zh, this message translates to:
+  /// **'QQ 音乐'**
+  String get visualizerLyricsSourceQq;
+
+  /// No description provided for @visualizerLyricsSourceKugou.
+  ///
+  /// In zh, this message translates to:
+  /// **'酷狗音乐'**
+  String get visualizerLyricsSourceKugou;
 
   /// No description provided for @visualizerLyricsCalibrate.
   ///

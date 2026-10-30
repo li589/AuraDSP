@@ -306,6 +306,22 @@
         0.0,
         0.0
       ]
+    },
+    "visualizer": {
+      "style": "bars",
+      "colorTheme": "system",
+      "sensitivity": 1.0,
+      "decayRate": 0.6,
+      "gravity": 1.8,
+      "barCount": 32,
+      "lineWidth": 1.5,
+      "bloom": 0.5,
+      "showGrid": true,
+      "showPeaks": true,
+      "showDbScale": true,
+      "showLyrics": false,
+      "showTranslation": true,
+      "lyricsSource": "auto"
     }
   }
 }
