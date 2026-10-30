@@ -24,10 +24,12 @@ abstract final class PlatformProfile {
   /// VST3/CLAP 插件宿主管线可用（Windows 先行；其它平台后续独立立项）。
   static bool get supportsPlugins => Platform.isWindows;
 
-  /// 本地设备泵循环（AudioOut）可用。Linux 实现随新平台补入；
-  /// 当前 Linux 上创建 WASAPI 实现会失败并走既有的降级就绪通道。
-  static bool get supportsLocalDevice =>
-      Platform.isWindows || Platform.isLinux;
+  /// 本地设备泵循环（AudioOut）可用。
+  /// R4（M6 审查遗留）：与实现保持一致——当前唯一实现是 WASAPI，故仅 Windows；
+  /// Linux 的 `audio_out_linux.dart` 落地后由 `createAudioOut()` 工厂按 OS 分派
+  /// 并在此扩为 Linux（此前 Linux 为 true 但工厂只能构造 WasapiOut，启动失败
+  /// 依赖降级通道兜底，属能力位与实现不一致）。
+  static bool get supportsLocalDevice => Platform.isWindows;
 
   /// 是否支持系统桌面窗口管理与真全屏切换。
   static bool get supportsWindowManagement =>
