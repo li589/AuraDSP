@@ -8,12 +8,22 @@ class PeakPhysicsEngine {
   final List<double> _velocities = [];
   final List<int> _holdTimers = [];
 
+  /// 重采样目标缓冲：跨帧复用，避免每帧新建列表（20fps 渲染零分配约定）
+  final List<double> _resampled = [];
+
+  /// 只读视图缓存：列表对象本身跨帧复用（clear/addAll 不改身份），
+  /// 因此视图只需构造一次，逐帧 getter 不再产生包装对象。
+  late final UnmodifiableListView<double> _renderedView =
+      UnmodifiableListView(_renderedBands);
+  late final UnmodifiableListView<double> _peaksView =
+      UnmodifiableListView(_peaks);
+
   /// 保持时间（帧数，以 60fps 计约 16 帧 = 260ms）
   static const int _defaultHoldFrames = 16;
 
   /// 只读视图：防止调用方误改引擎内部状态。
-  List<double> get renderedBands => UnmodifiableListView(_renderedBands);
-  List<double> get peaks => UnmodifiableListView(_peaks);
+  List<double> get renderedBands => _renderedView;
+  List<double> get peaks => _peaksView;
 
   /// 重置并对齐频段数
   void _ensureSize(int count) {
@@ -30,6 +40,9 @@ class PeakPhysicsEngine {
       _holdTimers
         ..clear()
         ..addAll(List.filled(count, 0));
+      _resampled
+        ..clear()
+        ..addAll(List.filled(count, 0.0));
     }
   }
 
@@ -54,8 +67,8 @@ class PeakPhysicsEngine {
     if (inputBands.isEmpty) return const [];
     _ensureSize(targetBands);
 
-    // 1. 重采样并应用灵敏度缩放
-    final target = _resample(inputBands, targetBands, sensitivity);
+    // 1. 重采样并应用灵敏度缩放（写入复用缓冲，不再新建列表）
+    final target = _resampleInto(inputBands, targetBands, sensitivity);
 
     // 2. 频谱柱弹道平滑：即时捕捉瞬态，平滑阻尼回落以消除低频高频闪烁
     final falloffBase = math.max(0.012, (1.0 - decay * 0.45) * 0.05);
@@ -100,19 +113,19 @@ class PeakPhysicsEngine {
       _peaks[i] = _peaks[i].clamp(0.0, 1.0);
     }
 
-    return UnmodifiableListView(_peaks);
+    return _peaksView;
   }
 
-  /// 频段重采样与灵敏度缩放
-  List<double> _resample(List<double> src, int targetCount, double sensitivity) {
+  /// 频段重采样与灵敏度缩放（结果写入 [_resampled]，零逐帧分配）
+  List<double> _resampleInto(
+      List<double> src, int targetCount, double sensitivity) {
     if (src.length == targetCount) {
-      if ((sensitivity - 1.0).abs() < 1e-4) {
-        return [for (final v in src) v.clamp(0.0, 1.0)];
+      for (var i = 0; i < targetCount; i++) {
+        _resampled[i] = (src[i] * sensitivity).clamp(0.0, 1.0);
       }
-      return [for (final v in src) (v * sensitivity).clamp(0.0, 1.0)];
+      return _resampled;
     }
 
-    final out = List<double>.filled(targetCount, 0.0);
     final ratio = (src.length - 1) / math.max(1, targetCount - 1);
 
     for (var i = 0; i < targetCount; i++) {
@@ -121,9 +134,9 @@ class PeakPhysicsEngine {
       final i1 = math.min(i0 + 1, src.length - 1);
       final frac = srcPos - i0;
       final interpolated = src[i0] * (1.0 - frac) + src[i1] * frac;
-      out[i] = (interpolated * sensitivity).clamp(0.0, 1.0);
+      _resampled[i] = (interpolated * sensitivity).clamp(0.0, 1.0);
     }
 
-    return out;
+    return _resampled;
   }
 }
