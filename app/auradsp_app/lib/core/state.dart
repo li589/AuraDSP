@@ -179,6 +179,10 @@ class AppModel extends ChangeNotifier {
   /// 才订阅数据通知器（IndexedStack 保活 = 离屏页仍在树上，SDK 实证全子
   /// 节点仍参与 layout，纯 VLB 消费点会随数据 30fps 重建）。
   final visiblePage = ValueNotifier<AppPage>(AppPage.home);
+
+  /// 可视化「仅视效」沉浸档：shell 据此折叠左栏导航与顶栏，
+  /// 让视效舞台真正铺满整个应用窗口。
+  final visualizerImmersive = ValueNotifier<bool>(false);
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
@@ -1114,6 +1118,7 @@ class AppModel extends ChangeNotifier {
     appearanceTick.dispose();
     connTick.dispose();
     visiblePage.dispose();
+    visualizerImmersive.dispose();
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(
       _onWindowVisibilityChanged,

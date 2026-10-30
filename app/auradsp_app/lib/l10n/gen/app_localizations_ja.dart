@@ -1403,16 +1403,14 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerResetPeakTip => 'ピークホールドをリセット';
 
   @override
-  String get visualizerEnterOsFullscreenTip => 'システム全画面（OS ウィンドウ）';
+  String get visualizerDisplayRestoreTip => '標準レイアウトに戻す';
 
   @override
-  String get visualizerExitOsFullscreenTip => 'システム全画面を終了（Esc / F11）';
+  String get visualizerDisplayStageTip => 'アプリ内全画面：ステージをウィンドウ全体に表示';
 
   @override
-  String get visualizerMaximizeStageTip => 'ステージを最大化';
-
-  @override
-  String get visualizerRestoreStageTip => 'ステージ最大化を解除';
+  String get visualizerDisplayImmersiveTip =>
+      'ビジュアライザーのみ：ナビゲーションとメーターを隠す（Esc で段階的に戻る）';
 
   @override
   String get themeSwitchTip => '配色を切り替え';

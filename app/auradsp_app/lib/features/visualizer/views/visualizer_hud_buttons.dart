@@ -29,10 +29,14 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
         duration: AuraDur.fast,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: isOpen ? p.accent.withValues(alpha: 0.18) : p.panelRaised.withValues(alpha: 0.7),
+          color: isOpen
+              ? p.accent.withValues(alpha: 0.18)
+              : p.panelRaised.withValues(alpha: 0.7),
           borderRadius: BorderRadius.circular(AuraRadius.sm),
           border: Border.all(
-            color: isOpen ? p.accent.withValues(alpha: 0.8) : p.hairline.withValues(alpha: 0.8),
+            color: isOpen
+                ? p.accent.withValues(alpha: 0.8)
+                : p.hairline.withValues(alpha: 0.8),
             width: 1,
           ),
         ),
@@ -51,7 +55,9 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Icon(
-              isOpen ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded,
+              isOpen
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
               size: 16,
               color: p.textDim,
             ),
@@ -86,7 +92,9 @@ class VisualizerMenuItem extends StatelessWidget {
         height: 34,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: isSelected ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+          color: isSelected
+              ? p.accent.withValues(alpha: 0.16)
+              : Colors.transparent,
         ),
         child: Row(
           children: [
@@ -115,15 +123,15 @@ class VisualizerMenuItem extends StatelessWidget {
   }
 }
 
-/// 系统窗口真全屏按钮
-class VisualizerSystemFullscreenButton extends StatelessWidget {
-  final bool isSystemFullscreen;
-  final VoidCallback onTap;
+/// 三档全屏分段控件：还原 / 软件全屏 / 仅视效沉浸
+class VisualizerDisplayModeSwitcher extends StatelessWidget {
+  final VisualizerDisplayMode mode;
+  final ValueChanged<VisualizerDisplayMode> onChanged;
 
-  const VisualizerSystemFullscreenButton({
+  const VisualizerDisplayModeSwitcher({
     super.key,
-    required this.isSystemFullscreen,
-    required this.onTap,
+    required this.mode,
+    required this.onChanged,
   });
 
   @override
@@ -131,50 +139,78 @@ class VisualizerSystemFullscreenButton extends StatelessWidget {
     final p = paletteOf(context);
     final l = l10nOf(context);
 
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(
+        color: p.panelRaised.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        border: Border.all(color: p.hairline.withValues(alpha: 0.7), width: 1),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _DisplayModeSegment(
+            icon: VisualizerDisplayMode.restore.icon,
+            tooltip: l.visualizerDisplayRestoreTip,
+            selected: mode == VisualizerDisplayMode.restore,
+            onTap: () => onChanged(VisualizerDisplayMode.restore),
+          ),
+          _DisplayModeSegment(
+            icon: VisualizerDisplayMode.stage.icon,
+            tooltip: l.visualizerDisplayStageTip,
+            selected: mode == VisualizerDisplayMode.stage,
+            onTap: () => onChanged(VisualizerDisplayMode.stage),
+          ),
+          _DisplayModeSegment(
+            icon: VisualizerDisplayMode.immersive.icon,
+            tooltip: l.visualizerDisplayImmersiveTip,
+            selected: mode == VisualizerDisplayMode.immersive,
+            onTap: () => onChanged(VisualizerDisplayMode.immersive),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DisplayModeSegment extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _DisplayModeSegment({
+    required this.icon,
+    required this.tooltip,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = paletteOf(context);
+
     return Tooltip(
-      message: isSystemFullscreen
-          ? l.visualizerExitOsFullscreenTip
-          : l.visualizerEnterOsFullscreenTip,
+      message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
+        borderRadius: BorderRadius.circular(AuraRadius.xs),
+        mouseCursor: SystemMouseCursors.click,
         child: AnimatedContainer(
           duration: AuraDur.fast,
-          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+          curve: AuraCurve.standard,
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
           decoration: BoxDecoration(
-            color: isSystemFullscreen
-                ? p.accent.withValues(alpha: 0.28)
-                : p.accent.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
+            color: selected
+                ? p.accent.withValues(alpha: 0.22)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(AuraRadius.xs),
             border: Border.all(
-              color: isSystemFullscreen
-                  ? p.accent
-                  : p.accent.withValues(alpha: 0.45),
-              width: 1.2,
+              color: selected ? p.accent : Colors.transparent,
+              width: 1,
             ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                isSystemFullscreen
-                    ? Icons.fullscreen_exit_rounded
-                    : Icons.aspect_ratio_rounded,
-                size: 17,
-                color: p.accent,
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'OS',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: p.accent,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ],
-          ),
+          child: Icon(icon, size: 16, color: selected ? p.accent : p.textDim),
         ),
       ),
     );
@@ -208,7 +244,9 @@ class VisualizerActionButton extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.all(7),
           decoration: BoxDecoration(
-            color: active ? p.accent.withValues(alpha: 0.16) : Colors.transparent,
+            color: active
+                ? p.accent.withValues(alpha: 0.16)
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(AuraRadius.sm),
             border: active
                 ? Border.all(color: p.accent.withValues(alpha: 0.4), width: 1)

@@ -25,7 +25,6 @@ void main() {
       expect(cfg.showGrid, isTrue);
       expect(cfg.showPeaks, isTrue);
       expect(cfg.showDbScale, isTrue);
-      expect(cfg.isMaximized, isFalse);
     });
 
     test('copyWith updates fields immutably', () {
@@ -34,14 +33,24 @@ void main() {
         style: VisualizerStyle.oscilloscope,
         colorTheme: VisualizerColorTheme.neonCyber,
         sensitivity: 2.5,
-        isMaximized: true,
+        showLyrics: true,
       );
 
       expect(updated.style, VisualizerStyle.oscilloscope);
       expect(updated.colorTheme, VisualizerColorTheme.neonCyber);
       expect(updated.sensitivity, 2.5);
-      expect(updated.isMaximized, isTrue);
+      expect(updated.showLyrics, isTrue);
       expect(updated.decayRate, 0.6); // unchanged
+    });
+
+    test('Display mode tiers and expansion semantics', () {
+      expect(VisualizerDisplayMode.restore.isExpanded, isFalse);
+      expect(VisualizerDisplayMode.stage.isExpanded, isTrue);
+      expect(VisualizerDisplayMode.immersive.isExpanded, isTrue);
+      expect(
+        VisualizerDisplayMode.values.map((m) => m.id).toSet(),
+        {'restore', 'stage', 'immersive'},
+      );
     });
 
     test('Palette resolution across themes', () {
@@ -156,6 +165,7 @@ void main() {
   group('VisualizerHud Widget Tests', () {
     testWidgets('Toggles style menu, selects mode, and auto-hides menu when HUD is invisible', (tester) async {
       VisualizerStyle currentStyle = VisualizerStyle.bars;
+      VisualizerDisplayMode currentMode = VisualizerDisplayMode.restore;
       bool hudVisible = true;
 
       Widget buildHud() {
@@ -174,13 +184,14 @@ void main() {
                       right: 0,
                       child: VisualizerHud(
                         config: VisualizerConfig(style: currentStyle),
+                        displayMode: currentMode,
                         visible: hudVisible,
-                        isSystemFullscreen: false,
                         onStyleChanged: (newStyle) {
                           setState(() => currentStyle = newStyle);
                         },
-                        onToggleFullscreen: () {},
-                        onToggleSystemFullscreen: () {},
+                        onDisplayModeChanged: (newMode) {
+                          setState(() => currentMode = newMode);
+                        },
                         onToggleLyrics: () {},
                         onOpenDrawer: () {},
                         onResetPeaks: () {},
@@ -217,6 +228,15 @@ void main() {
       expect(currentStyle, VisualizerStyle.oscilloscope);
       // Menu automatically closes after selection
       expect(find.byType(VisualizerMenuItem), findsNothing);
+
+      // 三档全屏分段控件（还原 / 软件全屏 / 仅视效沉浸）
+      expect(find.byType(VisualizerDisplayModeSwitcher), findsOneWidget);
+      await tester.tap(find.byIcon(VisualizerDisplayMode.immersive.icon));
+      await tester.pumpAndSettle();
+      expect(currentMode, VisualizerDisplayMode.immersive);
+      await tester.tap(find.byIcon(VisualizerDisplayMode.restore.icon));
+      await tester.pumpAndSettle();
+      expect(currentMode, VisualizerDisplayMode.restore);
 
       // Open menu again
       await tester.tap(find.byType(VisualizerStyleDropdownButton));

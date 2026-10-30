@@ -111,6 +111,38 @@ enum VisualizerColorTheme {
   });
 }
 
+/// 可视化显示档位（单一状态机，替代「舞台最大化 + OS 全屏」双布尔）
+enum VisualizerDisplayMode {
+  /// 还原：标准页面布局（页头 + 舞台 + 电平表 + 应用外框）
+  restore(
+    id: 'restore',
+    icon: Icons.close_fullscreen_rounded,
+  ),
+
+  /// 软件全屏：舞台铺满应用窗口，隐藏页头与电平表，窗口本身不变
+  stage(
+    id: 'stage',
+    icon: Icons.open_in_full_rounded,
+  ),
+
+  /// 仅视效全屏：舞台铺满窗口并隐藏应用导航/顶栏，桌面端同时进入 OS 全屏
+  immersive(
+    id: 'immersive',
+    icon: Icons.fullscreen_rounded,
+  );
+
+  final String id;
+  final IconData icon;
+
+  const VisualizerDisplayMode({
+    required this.id,
+    required this.icon,
+  });
+
+  /// 舞台是否脱离标准工作区（软件全屏与沉浸档均为铺满）。
+  bool get isExpanded => this != VisualizerDisplayMode.restore;
+}
+
 /// 可视化综合参数配置状态
 class VisualizerConfig {
   /// 当前激活的可视化风格
@@ -146,9 +178,6 @@ class VisualizerConfig {
   /// 是否显示右侧 dBFS 刻度
   final bool showDbScale;
 
-  /// 是否独占最大化舞台（隐去外层留白）
-  final bool isMaximized;
-
   /// 是否开启实时歌词覆盖显示
   final bool showLyrics;
 
@@ -167,7 +196,6 @@ class VisualizerConfig {
     this.showGrid = true,
     this.showPeaks = true,
     this.showDbScale = true,
-    this.isMaximized = false,
     this.showLyrics = false,
     this.showTranslation = true,
   });
@@ -184,7 +212,6 @@ class VisualizerConfig {
     bool? showGrid,
     bool? showPeaks,
     bool? showDbScale,
-    bool? isMaximized,
     bool? showLyrics,
     bool? showTranslation,
   }) {
@@ -200,7 +227,6 @@ class VisualizerConfig {
       showGrid: showGrid ?? this.showGrid,
       showPeaks: showPeaks ?? this.showPeaks,
       showDbScale: showDbScale ?? this.showDbScale,
-      isMaximized: isMaximized ?? this.isMaximized,
       showLyrics: showLyrics ?? this.showLyrics,
       showTranslation: showTranslation ?? this.showTranslation,
     );
