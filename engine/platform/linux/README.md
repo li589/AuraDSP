@@ -26,7 +26,10 @@
 
 实现时必须逐项对齐的语义：
 
-- `fopen_utf8` 返回 `FILE*`，调用方负责 `fclose`；失败返回 `nullptr`。
+- `fopen_utf8` 返回 `FILE*`，调用方负责 `fclose`；失败返回 `nullptr`。可选 out 参数
+  `FsOpenError*` 回传失败原因（R2：`invalid_encoding` / `out_of_memory` /
+  `open_failed`），调用方据此区分 `E_PARAM` 与 `E_IO`；Linux 直通 `fopen` 下
+  `invalid_encoding` 不会出现（UTF-8 字节原样传给内核）。
 - `get_env` 失败（未设置/写越界）返回 false，`buf` 恒以 NUL 结尾。
 - `log_level` 默认 2、钳位 0–2、进程内粘性；`log_emit(min_level, ...)` 低于当前级别直接丢弃。
 - `module_last_error` 返回最近一次失败的文本（Windows 为 `GetLastError`，Linux 为

@@ -81,8 +81,20 @@ if (-not $SkipEngine) {
     Write-Host "  配置 CMake (预设 windows-x64，构建树 build/windows/x64)..."
     cmake @ConfigureArgs | Out-Null
 
-    Write-Host "  编译 $BuildType 引擎动态库与进程外插件宿主..."
-    cmake --build --preset $BuildPreset --target auradsp_engine auradsp_plugin_host
+    # R3（M6 审查遗留）：auradsp_plugin_host target 仅在 AURADSP_PLUGIN_HOST_REMOTE=ON
+    # 时存在（Windows 默认 ON；非 Windows / 裁剪配置为 OFF）。从 CMake 缓存读取实际
+    # 值决定 target 集合，避免 OFF 时构建因 target 不存在而失败。
+    $CMakeCache = Join-Path $ProjectRoot "build\windows\x64\CMakeCache.txt"
+    $HostRemote = $true
+    if (Test-Path $CMakeCache) {
+        $CacheLine = Select-String -Path $CMakeCache -Pattern '^AURADSP_PLUGIN_HOST_REMOTE:BOOL=(ON|OFF)' | Select-Object -First 1
+        if ($CacheLine -and $CacheLine.Matches[0].Groups[1].Value -eq 'OFF') { $HostRemote = $false }
+    }
+    $EngineTargets = @("auradsp_engine")
+    if ($HostRemote) { $EngineTargets += "auradsp_plugin_host" }
+
+    Write-Host "  编译 $BuildType 引擎动态库$(if ($HostRemote) { '与进程外插件宿主' })..."
+    cmake --build --preset $BuildPreset --target @EngineTargets
 
     $EngineDll = Join-Path $EngineOutDir "$BuildType\auradsp_engine.dll"
     if (-not (Test-Path $EngineDll)) {
@@ -91,11 +103,15 @@ if (-not $SkipEngine) {
     $EngineSize = (Get-Item $EngineDll).Length
     Write-Host "  -> 核心引擎就绪: auradsp_engine.dll ($([math]::Round($EngineSize / 1MB, 2)) MB)" -ForegroundColor Green
 
-    $PluginHostExe = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
-    if (-not (Test-Path $PluginHostExe)) {
-        throw "插件宿主编译完成但未找到产物: $PluginHostExe"
+    if ($HostRemote) {
+        $PluginHostExe = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
+        if (-not (Test-Path $PluginHostExe)) {
+            throw "插件宿主编译完成但未找到产物: $PluginHostExe"
+        }
+        Write-Host "  -> 进程外插件宿主就绪: auradsp_plugin_host.exe" -ForegroundColor Green
+    } else {
+        Write-Host "  -> AURADSP_PLUGIN_HOST_REMOTE=OFF：跳过进程外插件宿主（引擎走进程内路径）" -ForegroundColor DarkGray
     }
-    Write-Host "  -> 进程外插件宿主就绪: auradsp_plugin_host.exe" -ForegroundColor Green
 } else {
     Write-Host "`n[2/6] 已跳过核心引擎编译 (-SkipEngine)" -ForegroundColor DarkGray
 }

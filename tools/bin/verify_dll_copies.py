@@ -150,20 +150,25 @@ if os.path.exists(BRIDGE_TRUTH):
             sys.exit(2)
     try:
         b = ctypes.CDLL(BRIDGE_TRUTH)
-        for sym in ("vb_detect", "vb_start", "vb_stop", "vb_status",
-                    "vb_set_param", "vb_set_param_str", "vb_get_param",
-                    "vb_get_param_str", "vb_test_change", "vb_set_bus_mask",
-                    "vb_viz_read", "vb_test_start",
-                    "vb_test_stop", "vb_bypass",
-                    # §7-5：Dart 侧 audio_vbridge.dart 已在调用 auto_protect；
+        # a25db9e（旧前缀下线）后通用面收敛为 ab_*；vb_* 仅保留 VB 专属
+        # 扩展（test_change/set_bus_mask/plugin_*）与 ABI 协商导出。
+        # 此表曾漏改导致 F6 门禁恒红（vb_detect 等 12 个已删符号）。
+        for sym in ("ab_detect", "ab_start", "ab_stop", "ab_status",
+                    "ab_set_param", "ab_set_param_str",
+                    "ab_get_param", "ab_get_param_str",
+                    "ab_viz_read", "ab_bypass",
+                    "ab_test_start", "ab_test_stop",
+                    "vb_abi", "vb_test_change", "vb_set_bus_mask",
                     # Z12 守卫的测试注入口（smoke_vm_protect.py 用）
-                    "vb_plugin_auto_protect", "vb_protect_test",
-                    # §7-2（P-028）桥 ABI 协商导出
-                    "vb_abi"):
+                    "vb_plugin_auto_protect", "vb_protect_test"):
             getattr(b, sym)
-        print("  导出表 17/17 OK")
+        print("  导出表 18/18 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
+        sys.exit(1)
+    except AttributeError as e:
+        # 缺符号抛 AttributeError（非 OSError），此前未捕获会裸 traceback。
+        print(f"  桥导出缺失: {e}")
         sys.exit(1)
 else:
     print("  跳过（真相源未构建）")
@@ -188,20 +193,26 @@ if os.path.exists(ASIO_TRUTH):
             sys.exit(2)
     try:
         b = ctypes.CDLL(ASIO_TRUTH)
-        for sym in ("asio_detect", "asio_start", "asio_start_ex", "asio_stop",
-                    "asio_status", "asio_set_param", "asio_set_param_str",
-                    "asio_get_param", "asio_get_param_str", "asio_viz_read",
-                    "asio_test_start", "asio_test_stop", "asio_bypass",
-                    # §7-5：bridge_plugin_ffi.dart 对这两个是硬 lookup——
-                    # 2026-10-24 前本桥一直漏导出，ASIO 后端下插件槽构造即抛
+        # 同 VB 段（a25db9e 旧前缀收敛）：通用面 ab_*；asio_* 仅保留
+        # 本桥专属扩展（plugin_slot_*/abi）。asio_start_ex 已随收敛删除。
+        for sym in ("ab_abi_version", "ab_capabilities",
+                    "ab_detect", "ab_start", "ab_stop", "ab_status",
+                    "ab_set_param", "ab_set_param_str",
+                    "ab_get_param", "ab_get_param_str",
+                    "ab_viz_read", "ab_bypass",
+                    "ab_test_start", "ab_test_stop",
+                    # bridge_plugin_ffi.dart 硬 lookup 的本桥专属扩展
                     "asio_plugin_slot_set_channels",
                     "asio_plugin_slot_get_channels",
                     # §7-2（P-028）桥 ABI 协商导出
                     "asio_abi"):
             getattr(b, sym)
-        print("  导出表 16/16 OK")
+        print("  导出表 18/18 OK")
     except OSError as e:
         print(f"  桥加载失败: {e}")
+        sys.exit(1)
+    except AttributeError as e:
+        print(f"  桥导出缺失: {e}")
         sys.exit(1)
 else:
     print("  跳过（真相源未构建）")

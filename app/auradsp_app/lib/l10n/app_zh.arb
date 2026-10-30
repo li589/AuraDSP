@@ -1228,6 +1228,10 @@
   "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
   "plugAddScan": "添加并扫描",
   "plugTitle": "插件中心",
+  "plugUnsupported": "插件功能在当前平台不可用",
+  "@plugUnsupported": {
+    "description": "R4：非 Windows 平台插件宿主不可用时的占位提示"
+  },
   "plugLibTitle": "第三方效果器库",
   "plugLibHint": "系统标准 VST3 / CLAP 64 位专业插件扫描与管理，支持无缝延迟补偿与高保真超低延迟运行。",
   "plugDeepScan": "深度遍历",

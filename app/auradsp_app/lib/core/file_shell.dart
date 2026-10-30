@@ -9,13 +9,20 @@ import 'error_sink.dart';
 
 Future<void> openInFileManager(String path) async {
   try {
+    // R5（M6 审查遗留）：default 收窄为仅 linux——旧实现对 os == 'other'
+    // 也执行 xdg-open（Linux 专用命令），在未知桌面平台必然失败；
+    // 其余未知平台直接返回失败（不发进程）。
     switch (PlatformProfile.os) {
       case 'windows':
         await Process.run('explorer.exe', [path]);
       case 'macos':
         await Process.run('open', [path]);
-      default:
+      case 'linux':
         await Process.run('xdg-open', [path]);
+      default:
+        throw UnsupportedError(
+          'openInFileManager: unsupported os "${PlatformProfile.os}"',
+        );
     }
   } catch (e, st) {
     swallow(e, st);

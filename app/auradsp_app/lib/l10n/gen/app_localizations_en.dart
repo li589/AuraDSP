@@ -2893,6 +2893,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugTitle => 'Plugin Center';
 
   @override
+  String get plugUnsupported => 'Plugins are not available on this platform';
+
+  @override
   String get plugLibTitle => 'Third-party Effect Library';
 
   @override

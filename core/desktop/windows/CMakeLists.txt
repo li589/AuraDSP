@@ -106,11 +106,21 @@ set_property(TARGET auradsp_core PROPERTY C_STANDARD 11)
 set_property(TARGET auradsp_core PROPERTY CXX_STANDARD 20)
 set_property(TARGET auradsp_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
+# R1（M6 审查遗留，2026-10-30）：Win7 CreateFile2 回退统一编入所有含
+# <filesystem> 的目标（OBJECT 库 = 无条件随目标链接，与直接编入源文件等价；
+# 静态库会有成员按需抽取问题，故不用 STATIC）。此前只有 auradsp_engine 编入，
+# auradsp_plugin_host 与插件测试 EXE 编 plugin_scanner.cpp（<filesystem>）但缺
+# __imp_CreateFile2，_WIN32_WINNT=0x0601 下 Win7 加载失败。
+add_library(auradsp_wincompat OBJECT
+    "${API}/platform/windows/win_compat.cpp"
+)
+set_property(TARGET auradsp_wincompat PROPERTY CXX_STANDARD 20)
+set_property(TARGET auradsp_wincompat PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
 # 引擎 DLL：核心 + Windows 平台适配（M1/M2 唯一 OS 落点）+ 插件子系统。
 add_library(auradsp_engine SHARED
     # M1 平台隔离（2026-10-29）：核心只依赖 platform/port 端口声明，
-    # 以下 Windows 实现是唯一 OS 落点（含 Win7 CreateFile2 回退）。
-    "${API}/platform/windows/win_compat.cpp"
+    # 以下 Windows 实现是唯一 OS 落点（含 Win7 CreateFile2 回退，见 auradsp_wincompat）。
     "${API}/platform/windows/fs_win.cpp"
     "${API}/platform/windows/env_win.cpp"
     "${API}/platform/windows/log_win.cpp"
@@ -119,7 +129,7 @@ add_library(auradsp_engine SHARED
     ${AURADSP_PLUGIN_REMOTE_SOURCES}
     "${API}/auradsp_engine.def"
 )
-target_link_libraries(auradsp_engine PRIVATE auradsp_core)
+target_link_libraries(auradsp_engine PRIVATE auradsp_core auradsp_wincompat)
 target_include_directories(auradsp_engine PRIVATE
     "${API}"
     "${API}/chain"
@@ -182,7 +192,8 @@ if(AURADSP_PLUGIN_HOST_REMOTE)
     target_compile_options(auradsp_plugin_host PRIVATE /utf-8 /W1 /EHsc)
     set_property(TARGET auradsp_plugin_host PROPERTY CXX_STANDARD 20)
     set_property(TARGET auradsp_plugin_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-    target_link_libraries(auradsp_plugin_host PRIVATE version)
+    # R1：plugin_scanner.cpp 用 <filesystem> → 必须带 Win7 CreateFile2 回退。
+    target_link_libraries(auradsp_plugin_host PRIVATE auradsp_wincompat version)
 endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 add_executable(test_plugin_direct
@@ -200,7 +211,7 @@ target_compile_definitions(test_plugin_direct PRIVATE NDEBUG _CRT_SECURE_NO_WARN
 target_compile_options(test_plugin_direct PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_direct PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_direct PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(test_plugin_direct PRIVATE auradsp_engine version)
+target_link_libraries(test_plugin_direct PRIVATE auradsp_engine auradsp_wincompat version)
 
 add_executable(test_plugin_chain
     "${API}/plugins/tests/plugin_chain_consistency.cpp"
@@ -217,7 +228,7 @@ target_compile_definitions(test_plugin_chain PRIVATE NDEBUG _CRT_SECURE_NO_WARNI
 target_compile_options(test_plugin_chain PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_plugin_chain PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_plugin_chain PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(test_plugin_chain PRIVATE auradsp_engine version)
+target_link_libraries(test_plugin_chain PRIVATE auradsp_engine auradsp_wincompat version)
 
 # B3 验收（2026-10-24）：RT 异常滞留时卸载必须隔离实例而不是硬清零后销毁。
 # 假实例 process() 阻塞注入"插件死锁在音频线程内"，断言 dtor 未跑、
@@ -237,7 +248,7 @@ target_compile_definitions(test_host_quarantine PRIVATE NDEBUG _CRT_SECURE_NO_WA
 target_compile_options(test_host_quarantine PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_host_quarantine PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_host_quarantine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(test_host_quarantine PRIVATE auradsp_engine version)
+target_link_libraries(test_host_quarantine PRIVATE auradsp_engine auradsp_wincompat version)
 
 # F1 验收（2026-10-24）：插件依赖 DLL 搜索目录通用化 + cookie 回收
 # （不依赖任何真插件，用临时目录树验证登记/幂等/引用计数/回收/环境变量）。
@@ -256,6 +267,7 @@ target_compile_definitions(test_dll_dirs PRIVATE NDEBUG _CRT_SECURE_NO_WARNINGS)
 target_compile_options(test_dll_dirs PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_dll_dirs PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_dll_dirs PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
-target_link_libraries(test_dll_dirs PRIVATE version shell32 ole32 user32)
+# R1：win32_util.h 头内用 <filesystem> → 同样需要 Win7 CreateFile2 回退。
+target_link_libraries(test_dll_dirs PRIVATE auradsp_wincompat version shell32 ole32 user32)
 
 

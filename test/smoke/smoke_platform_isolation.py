@@ -10,6 +10,11 @@
   3. 正向断言：port 头与 Windows 实现文件必须存在（防"删了实现留下声明"）。
   4. M2 结构断言：远程宿主只在 plugins/platform/win32/host/；Win32 模块泵
      只在 platform/win32/；formats 不再直接 LoadLibrary/GetProcAddress/FreeLibrary。
+  5. R6（M6 审查遗留，2026-10-30）CMake 分层文本断言：auradsp_core 源表零
+     platform/ 源；engine 目标编入全部 4 个 Windows 端口实现（经
+     auradsp_wincompat + fs/env/log）；AURADSP_PLUGIN_HOST_SOURCES 含模块
+     实现且 engine/宿主/插件测试目标均引用该源表；
+     AURADSP_PLUGIN_HOST_REMOTE=OFF 分支自洽（清空 remote 源 + INPROC 门控）。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -19,6 +24,7 @@ import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ENGINE = os.path.join(ROOT, "engine")
+CMAKE_FILE = os.path.join(ROOT, "core", "desktop", "windows", "CMakeLists.txt")
 
 FAIL = []
 
@@ -153,11 +159,136 @@ def negative_self_test():
     check("自检：扫描器能判红 Win32 符号", bool(OS_SYMBOL.search(bad)))
 
 
+def _cmake_call_block(src, start_pat):
+    """取 start_pat 起的 CMake 调用块（如 add_library(...) / set(...)，
+    自首个 '(' 起深度配对到 ')'）。入参 src 应已去 # 注释。"""
+    m = re.search(start_pat, src)
+    if not m:
+        return ""
+    op = src.find("(", m.start())
+    if op < 0:
+        return ""
+    depth = 0
+    for i in range(op, len(src)):
+        if src[i] == "(":
+            depth += 1
+        elif src[i] == ")":
+            depth -= 1
+            if depth == 0:
+                return src[op:i + 1]
+    return ""
+
+
+_IF_TOKEN = re.compile(r"\bif\s*\(|\bendif\b", re.IGNORECASE)
+
+
+def _cmake_if_blocks(src, cond_pat):
+    """返回所有匹配 cond_pat 的 if 条件块（条件头 + 嵌套体到配对 endif）。
+    同一条件可能出现多次（如 NOT AURADSP_PLUGIN_HOST_REMOTE），全部返回。"""
+    blocks = []
+    for m in re.finditer(cond_pat, src):
+        # 跳过条件头本身的 '(' ... ')'，进入块体。
+        op = src.find("(", m.start())
+        depth = 0
+        i = op
+        header_end = -1
+        while i < len(src):
+            if src[i] == "(":
+                depth += 1
+            elif src[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    header_end = i + 1
+                    break
+            i += 1
+        if header_end < 0:
+            continue
+        body_depth = 1
+        end = -1
+        for tok in _IF_TOKEN.finditer(src, header_end):
+            if tok.group(0).lower().startswith("if"):
+                body_depth += 1
+            else:
+                body_depth -= 1
+                if body_depth == 0:
+                    end = tok.end()
+                    break
+        blocks.append(src[m.start():end if end > 0 else len(src)])
+    return blocks
+
+
+def cmake_layering():
+    """R6：F1 门禁补 CMake 分层文本断言（M3 分层回归防护）。"""
+    if not os.path.isfile(CMAKE_FILE):
+        check("R6 CMakeLists 存在", False, CMAKE_FILE)
+        return
+    raw = open(CMAKE_FILE, encoding="utf-8", errors="replace").read()
+    src = re.sub(r"#[^\n]*", "", raw)
+
+    # 1. auradsp_core 源表零 platform/ 源（可移植核心不编任何平台适配）。
+    core_block = _cmake_call_block(src, r"add_library\s*\(\s*auradsp_core\b")
+    check("R6 auradsp_core 源表存在", bool(core_block))
+    check("R6 auradsp_core 零 platform/ 源",
+          "platform/" not in core_block,
+          "core 源表出现 platform/ 路径")
+
+    # 2. engine 目标编入全部 4 个 Windows 端口实现：
+    #    win_compat 经 auradsp_wincompat（OBJECT 库）+ fs/env/log 直编。
+    engine_block = _cmake_call_block(src, r"add_library\s*\(\s*auradsp_engine\b")
+    check("R6 auradsp_engine 源表存在", bool(engine_block))
+    check("R6 engine 链入 auradsp_wincompat（CreateFile2 回退）",
+          "auradsp_wincompat" in engine_block
+          or "auradsp_wincompat" in _cmake_call_block(
+              src, r"target_link_libraries\s*\(\s*auradsp_engine\b"),
+          "auradsp_engine 未引用 auradsp_wincompat")
+    for impl in ("fs_win.cpp", "env_win.cpp", "log_win.cpp"):
+        check(f"R6 engine 编入 {impl}", impl in engine_block)
+
+    # 3. 模块实现唯一归属 win32 且进入共享源表（engine/宿主/测试复用）；
+    #    各目标定义块内必须显式出现 ${AURADSP_PLUGIN_HOST_SOURCES}。
+    host_sources = _cmake_call_block(src, r"set\s*\(\s*AURADSP_PLUGIN_HOST_SOURCES\b")
+    check("R6 AURADSP_PLUGIN_HOST_SOURCES 含 plugin_module.cpp",
+          "plugin_module.cpp" in host_sources)
+    targets_with_host_src = (
+        "auradsp_engine", "auradsp_plugin_host",
+        "test_plugin_direct", "test_plugin_chain", "test_host_quarantine",
+    )
+    for tgt in targets_with_host_src:
+        call = _cmake_call_block(
+            src, rf"(?:add_library|add_executable)\s*\(\s*{re.escape(tgt)}\b")
+        check(f"R6 {tgt} 编入 AURADSP_PLUGIN_HOST_SOURCES",
+              "${AURADSP_PLUGIN_HOST_SOURCES}" in call,
+              f"{tgt} 目标定义块未引用插件共享源表")
+
+    # 4. REMOTE=OFF 分支自洽：清空 remote 源（源表级）+ 引擎 INPROC 门控，
+    #    两处 NOT 分支都要覆盖；ON 块内构建宿主且仅在块内定义。
+    off_blocks = _cmake_if_blocks(src, r"if\s*\(\s*NOT\s+AURADSP_PLUGIN_HOST_REMOTE\b")
+    check("R6 REMOTE=OFF 分支存在（≥1）", len(off_blocks) >= 1)
+    check("R6 REMOTE=OFF 清空 AURADSP_PLUGIN_REMOTE_SOURCES",
+          any(re.search(r'set\s*\(\s*AURADSP_PLUGIN_REMOTE_SOURCES\s+""\s*\)', b)
+              for b in off_blocks),
+          "所有 OFF 分支均未清空 remote 源")
+    check("R6 REMOTE=OFF 引擎置 AURADSP_HOST_INPROC",
+          any("AURADSP_HOST_INPROC" in b for b in off_blocks),
+          "OFF 分支未门控 AURADSP_HOST_INPROC")
+    on_blocks = _cmake_if_blocks(src, r"if\s*\(\s*AURADSP_PLUGIN_HOST_REMOTE\b")
+    on_body = "\n".join(on_blocks)
+    check("R6 REMOTE=ON 块构建 auradsp_plugin_host",
+          "add_executable" in on_body and "auradsp_plugin_host" in on_body)
+    # 宿主目标的 add_executable 必须落在 ON 块内（块外不得再定义同名目标）。
+    outside_def = _cmake_call_block(
+        src.replace(on_body, ""), r"add_executable\s*\(\s*auradsp_plugin_host\b")
+    check("R6 auradsp_plugin_host 仅在 REMOTE=ON 块内定义",
+          not outside_def,
+          "ON 块外存在 add_executable(auradsp_plugin_host")
+
+
 if __name__ == "__main__":
     core_scan()
     port_purity()
     impl_presence()
     m2_layout()
+    cmake_layering()
     negative_self_test()
     if FAIL:
         print(f"\n{len(FAIL)} FAIL: {FAIL}")
