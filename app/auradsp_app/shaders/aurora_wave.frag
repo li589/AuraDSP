@@ -29,3 +29,4 @@ void main() {
     vec4 col = mix(uColor1, uColor2, sin(p.x * 1.5 + uTime) * 0.5 + 0.5);
     fragColor = vec4(col.rgb * intensity, intensity * col.a);
 }
+
