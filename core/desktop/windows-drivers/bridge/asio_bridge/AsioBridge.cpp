@@ -15,6 +15,7 @@
 #include "AsioBridge.h"
 
 #include "PluginBridge.h"
+#include "VizSilence.h"
 #include "../../04_asio_client/AsioHost.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"  // TryLoadEngine / FillTestSignal / FnEng*
 
@@ -90,6 +91,9 @@ struct BridgeCtl {
 };
 
 BridgeCtl g_b;
+
+// GATED 后引擎不再产 viz 帧；单组静音时补合法静音帧（仅控制线程）。
+static aurabridge::SilentVizEmitter g_silentViz;
 
 // 插件槽转发：单引擎（g_b.engine），Dart 在 start 成功后按会话镜像重放。
 auraplugin::Fns g_pluginFns;
@@ -541,7 +545,14 @@ int asio_viz_read(void* out1600, int count) {
     if (!out1600 || count <= 0) return -1;
     if (!InterlockedCompareExchange(&g_b.running, 0, 0)) return 0;
     if (!g_b.vizRead || !g_b.engine) return 0;
-    return (int)g_b.vizRead(g_b.engine, out1600, (uint32_t)count);
+    const int n = (int)g_b.vizRead(g_b.engine, out1600, (uint32_t)count);
+    if (n > 0) return n;
+    // P3 收口：GATED 时不跑 process，引擎 ring 无新帧；补一帧合法静音帧。
+    // 旁路/测试注入期间门控不 Tick（gated 可能是旧值），一律不补。
+    if (!g_b.gate.enabled || !g_b.gate.gated) return 0;
+    if (InterlockedCompareExchange(&g_b.userBypass, 0, 0)) return 0;
+    if (InterlockedCompareExchange(&g_b.tc.testKind, 0, 0) != 0) return 0;
+    return g_silentViz.Emit(out1600, 0, g_b.ioCh);
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
