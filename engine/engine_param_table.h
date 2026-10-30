@@ -264,6 +264,12 @@ static void hook_reverb_custom(auradsp_handle h) {
 static auradsp_status set_bass_intensity(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     float intensity = *(const float*)value;
+    /* NaN/Inf 必须拒绝：< / > 钳制对 NaN 恒 false，会直接污染谐波增益与
+     * vendor 二阶节状态（链尾卫士只能清输出，清不掉状态）。 */
+    if (!std::isfinite(intensity)) {
+        set_error(h, "bass.intensity: rejected (NaN/Inf input)");
+        return AURADSP_E_PARAM;
+    }
     if (intensity < 0.0f) intensity = 0.0f;
     if (intensity > 1.0f) intensity = 1.0f;
     float gain = intensity * 15.0f;
@@ -370,6 +376,7 @@ static auradsp_status set_convolver_enable(auradsp_handle h, const void* value, 
 static auradsp_status set_convolver_mix(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     float v = *(const float*)value;
+    if (!std::isfinite(v)) { set_error(h, "convolver.mix: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
     if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f;
     h->p.conv_mix.store(v);
     h->jdsp.auraConvWet = v;
@@ -490,30 +497,37 @@ static bool arbmag_numeric_finite(const char* s) {
 
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes == 0 || (bytes == 1 && ((const char*)value)[0] == 0)) {
-        // 清空曲线：释放内存并重置节点与池状态
+        // 清空曲线：先停用 vendor 路径（否则 RT 仍用上一份 IR 卷积），
+        // 再按 legacy 自己的释放路径回收节点（直接写 nodesCount=0 会漏掉
+        // 每个 EqNode 的 free，进程生命周期内不回收）。
         free(h->arbmag_string);
         h->arbmag_string = nullptr;
         h->arbmag_string_len = 0;
         h->p.arbmag_nodes.store(0);
         h->p.arbmag_ready.store(0);
-        h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
-        arbmag_pool_reload(h);
+        ArbitraryResponseEqualizerDisable(&h->jdsp);
+        EqNodesFree(&h->jdsp.arbMag.instance.coeffGen);
+        // 逐声道池直接标记未装载，走 RT 直通分支（不再加载零 IR）
+        h->arbmag_pool.loaded = 0;
         return AURADSP_OK;
     }
     if (bytes > 256 * 1024) {
         set_error(h, "arbmag.string: invalid length (max 256KiB)");
         return AURADSP_E_PARAM;
     }
-    char* buf = (char*)malloc((size_t)bytes + 1);
-    if (!buf) { set_error(h, "arbmag.string: out of memory"); return AURADSP_E_IO; }
-    memcpy(buf, value, bytes);
-    buf[bytes] = 0;
-    if (!arbmag_numeric_finite(buf)) {
-        free(buf);
+    /* 先分配副本再提交（2026-10-31 审查修复）：旧实现先让 vendor 生效、
+     * 后分配持久副本，OOM 时返回 E_IO 但引擎状态已变，get_param 回读与
+     * 实际状态打架。现在副本分配失败时状态完全不变。 */
+    char* arbmag_new = (char*)malloc((size_t)bytes + 1);
+    if (!arbmag_new) { set_error(h, "arbmag.string: out of memory"); return AURADSP_E_IO; }
+    memcpy(arbmag_new, value, bytes);
+    arbmag_new[bytes] = 0;
+    if (!arbmag_numeric_finite(arbmag_new)) {
+        free(arbmag_new);
         set_error(h, "arbmag.string: parse failed (non-finite numeric token)");
         return AURADSP_E_PARAM;
     }
-    ArbitraryResponseEqualizerStringParser(&h->jdsp, buf);
+    ArbitraryResponseEqualizerStringParser(&h->jdsp, arbmag_new);
     const int nodes = (int)h->jdsp.arbMag.instance.coeffGen.nodesCount;
     /* B 轮复查：畸形输入（如 "20:6.0" 无 GraphicEQ 前缀）会被 legacy 解析器
      * 产出垃圾 nodesCount，apply_arbmag 随之越界读 → 引擎 AV（实测读 0xFF..FF）。
@@ -525,13 +539,12 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
         } else {
             h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
         }
-        free(buf);
+        free(arbmag_new);
         set_error(h, "arbmag.string: parse failed (invalid curve)");
         h->p.arbmag_nodes.store(0);
         h->p.arbmag_ready.store(0);
         return AURADSP_E_PARAM;
     }
-    free(buf);
     h->p.arbmag_nodes.store(nodes);
     h->p.arbmag_ready.store(nodes > 0 ? 1 : 0);
     if (h->open.load() && h->p.arbmag_enable.load(std::memory_order_relaxed)) {
@@ -541,10 +554,6 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
          * 新 IR——多声道链按 mask 位决定是否进池，进池前池必须已装载。 */
         arbmag_pool_reload(h);
     }
-    char* arbmag_new = (char*)malloc((size_t)bytes + 1);
-    if (!arbmag_new) { set_error(h, "arbmag.string: out of memory (copy)"); return AURADSP_E_IO; }
-    memcpy(arbmag_new, value, bytes);
-    arbmag_new[bytes] = 0;
     free(h->arbmag_string);
     h->arbmag_string = arbmag_new;
     h->arbmag_string_len = (size_t)bytes;
@@ -744,6 +753,7 @@ static auradsp_status get_reverb_engine(auradsp_handle h, void* out_value, uint3
 static auradsp_status set_gate_max_ir_seconds(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     float v = *(const float*)value;
+    if (!std::isfinite(v)) { set_error(h, "gate.maxIrSeconds: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
     if (v < 0.1f) v = 0.1f;
     if (v > 600.0f) v = 600.0f;
     h->gate_max_ir_seconds.store(v);
@@ -759,6 +769,7 @@ static auradsp_status get_gate_max_ir_seconds(auradsp_handle h, void* out_value,
 static auradsp_status set_gate_max_file_mb(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes < 4) return AURADSP_E_PARAM;
     float v = *(const float*)value;
+    if (!std::isfinite(v)) { set_error(h, "gate.maxFileMb: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
     if (v < 1.0f) v = 1.0f;
     if (v > 4096.0f) v = 4096.0f;
     h->gate_max_file_mb.store(v);
@@ -824,11 +835,12 @@ static auradsp_status set_eq_curve(auradsp_handle h, const void* value, uint32_t
         set_error(h, "eq.curve: invalid length (need >= 2 points, f:g;f:g;...)");
         return AURADSP_E_PARAM;
     }
-    MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
+    /* 先分配持久副本再提交（OOM 时不得改变引擎状态，否则回读与实配不符） */
     char* eq_curve_new = (char*)malloc((size_t)bytes + 1);
     if (!eq_curve_new) { set_error(h, "eq.curve: out of memory (copy)"); return AURADSP_E_IO; }
     memcpy(eq_curve_new, value, bytes);
     eq_curve_new[bytes] = 0;
+    MultimodalEqualizerAxisInterpolation(&h->jdsp, interp, op, freqAx, gainAx);
     free(h->eq_curve);
     h->eq_curve = eq_curve_new;
     h->eq_curve_len = (size_t)bytes;
@@ -854,19 +866,26 @@ static auradsp_status set_liveprog_code(auradsp_handle h, const void* value, uin
     if (!buf) { set_error(h, "liveprog.code: out of memory"); return AURADSP_E_IO; }
     memcpy(buf, value, bytes);
     buf[bytes] = 0;
+    /* 先分配持久副本再编译：编译成功但副本 OOM 时不得留下「引擎已换脚本、
+     * 回读仍是旧脚本」的分裂状态。 */
+    char* lp_new = (char*)malloc((size_t)bytes + 1);
+    if (!lp_new) {
+        free(buf);
+        set_error(h, "liveprog.code: out of memory (copy)");
+        return AURADSP_E_IO;
+    }
+    memcpy(lp_new, value, bytes);
+    lp_new[bytes] = 0;
     const int rc = LiveProgStringParser(&h->jdsp, buf);
     free(buf);
     if (rc != 1) {
+        free(lp_new);
         h->lp_status = rc;
         set_error(h, checkErrorCode(rc));
         return AURADSP_E_PARAM;
     }
     lp_refresh_sliders(h);
     h->lp_status = 1;
-    char* lp_new = (char*)malloc((size_t)bytes + 1);
-    if (!lp_new) { set_error(h, "liveprog.code: out of memory (copy)"); return AURADSP_E_IO; }
-    memcpy(lp_new, value, bytes);
-    lp_new[bytes] = 0;
     free(h->lp_code);
     h->lp_code = lp_new;
     h->lp_code_len = bytes;
@@ -962,6 +981,7 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
         if (d < '1' || d > '5' || id[12] != 0) { set_error(h, "param: unsupported (unknown param id)"); return AURADSP_E_PARAM; }
         const int idx = d - '1';
         float v = *(const float*)value;
+        if (!std::isfinite(v)) { set_error(h, "param: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
         if (v < 0.0f) v = 0.0f; if (v > 1.0f) v = 1.0f;
         h->p.stereo_band[idx].store(v, std::memory_order_relaxed);
         h->p.stereo_band_used.store(1);
@@ -973,6 +993,7 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
         if (d < '1' || d > '8' || id[15] != 0) { set_error(h, "param: unsupported (unknown input balance channel)"); return AURADSP_E_PARAM; }
         const int idx = d - '1';
         float v = *(const float*)value;
+        if (!std::isfinite(v)) { set_error(h, "param: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
         if (v < 0.0f) v = 0.0f; if (v > 2.0f) v = 2.0f;
         h->p.input_ch_gain[idx].store(v, std::memory_order_relaxed);
         return AURADSP_OK;
@@ -985,9 +1006,11 @@ static auradsp_status handle_indexed_param_set(auradsp_handle h, const char* id,
             return AURADSP_E_PARAM;
         }
         const int idx = (int)(n - 1);
-        h->p.lp_param[idx].store(*(const float*)value, std::memory_order_relaxed);
+        const float v = *(const float*)value;
+        if (!std::isfinite(v)) { set_error(h, "param: rejected (NaN/Inf input)"); return AURADSP_E_PARAM; }
+        h->p.lp_param[idx].store(v, std::memory_order_relaxed);
         if (h->lp_slider_ptr[idx])
-            *h->lp_slider_ptr[idx] = *(const float*)value;
+            *h->lp_slider_ptr[idx] = v;
         return AURADSP_OK;
     }
     set_error(h, "param: unsupported (unknown param id)");

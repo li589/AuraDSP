@@ -495,6 +495,13 @@ struct auradsp_handle_s {
     float sample_rate = 48000.0f;
     int max_block = 2048;
     double latency_ms = 0.0;
+    /* 控制侧 crossfeed 已应用的档位镜像（2026-10-31）：只有档位/采样率
+     * （自定义模式还含 fcut/feed）真正变化时才重建 bs2b，避免拖动滑块时
+     * 每 tick 清空滤波器历史造成爆音。仅控制线程访问。 */
+    int    xfeed_state_mode{-1};
+    unsigned xfeed_state_fs{0};
+    float  xfeed_state_fcut{-1.0f};
+    float  xfeed_state_feed{-1.0f};
     /* E-03：最近一次 process() 的设备域块长快照（RT 写、控制线程读）。
      * 延迟计算原先直接读 jdsp.blockSize——该字段由 legacy 入口在 RT 内写，
      * 读侧无同步属 C++ 数据竞争；改为本原子快照后读侧无需触碰 vendor 结构。 */

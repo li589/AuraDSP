@@ -146,7 +146,9 @@ void apply_reverb(auradsp_handle h) {
             const float wet = clamp_f(h->p.fv_wet.load(std::memory_order_relaxed), 0.0f, 1.0f);
             const float dry = clamp_f(h->p.fv_dry.load(std::memory_order_relaxed), 0.0f, 1.0f);
             const float room = clamp_f(h->p.fv_roomsize.load(std::memory_order_relaxed), 0.5f, 2.5f);
-            const float width = clamp_f(h->p.fv_width.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            // fv_width 语义 0.2..2.0（与 MC 混响路径一致）；vendor 只接受 0..1，
+            // 下限对齐 0.2（旧实现 0..1 会把 0.2 以下也放行，且 >1 静默饱和）。
+            const float width = clamp_f(h->p.fv_width.load(std::memory_order_relaxed), 0.2f, 2.0f);
             const float predelay = clamp_f(h->p.reverb_predelay.load(std::memory_order_relaxed), 0.0f, 100.0f);
 
             np.oversamplefactor = 1;
@@ -156,7 +158,8 @@ void apply_reverb(auradsp_handle h) {
             np.erefwet_db = (wet < 0.001f) ? -100.0f : clamp_f(np.wet_db - 9.0f, -100.0f, 0.0f);
             np.ereffactor = room;
             np.erefwidth = 0.7f;
-            np.width = width;
+            // vendor width 域是 0..1：>1 的加宽在 Progenitor2 上饱和为 1.0
+            np.width = width > 1.0f ? 1.0f : width;
             np.wander = 0.2f;
             np.bassb = 0.15f;
             np.spin = 0.7f;
@@ -465,6 +468,26 @@ void apply_crossfeed(auradsp_handle h) {
         CrossfeedEnable(&h->jdsp, 1);
         const int mode = h->p.xfeed_mode.load(std::memory_order_relaxed);
         const unsigned int fs = (unsigned int)h->jdsp.fs;
+        float fcut = 0.0f, feed = 0.0f;
+        if (mode == 3) {
+            fcut = h->p.xfeed_fcut.load(std::memory_order_relaxed);
+            if (fcut < 300.0f) fcut = 300.0f;
+            if (fcut > 2000.0f) fcut = 2000.0f;
+            feed = h->p.xfeed_feed.load(std::memory_order_relaxed);
+            if (feed < 1.0f) feed = 1.0f;
+            if (feed > 15.0f) feed = 15.0f;
+        }
+        /* 2026-10-31 审查修复：BS2BInit 会 memset 整块 bs2b 状态。旧实现
+         * 每次参数变更都重建 → 拖 fcut/feed 滑块时滤波器历史被反复清空，
+         * 表现为咔哒声与瞬态失真。只在档位/采样率（自定义模式含系数）
+         * 真正变化时重建；纯开关切换不丢历史。 */
+        const bool sameModeAndFs =
+            h->xfeed_state_mode == mode && h->xfeed_state_fs == fs;
+        const bool sameCoefficients = mode != 3 ||
+            (fabsf(h->xfeed_state_fcut - fcut) < 1.0f &&
+             fabsf(h->xfeed_state_feed - feed) < 0.05f);
+        if (sameModeAndFs && sameCoefficients) return;
+
         if (mode == 1) {
             /* Chu Moy: 700 Hz, 6.0 dB */
             h->jdsp.advXF.mode = 0;
@@ -475,12 +498,6 @@ void apply_crossfeed(auradsp_handle h) {
             BS2BInit(&h->jdsp.advXF.bs2b[1], fs, BS2B_JMEIER_CLEVEL);
         } else if (mode == 3) {
             /* Custom: fcut & feed */
-            float fcut = h->p.xfeed_fcut.load(std::memory_order_relaxed);
-            if (fcut < 300.0f) fcut = 300.0f;
-            if (fcut > 2000.0f) fcut = 2000.0f;
-            float feed = h->p.xfeed_feed.load(std::memory_order_relaxed);
-            if (feed < 1.0f) feed = 1.0f;
-            if (feed > 15.0f) feed = 15.0f;
             int flevel = BS2BCalculateflevel((unsigned int)fcut, (unsigned int)(feed * 10.0f));
             h->jdsp.advXF.mode = 0;
             BS2BInit(&h->jdsp.advXF.bs2b[0], fs, flevel);
@@ -489,8 +506,17 @@ void apply_crossfeed(auradsp_handle h) {
             h->jdsp.advXF.mode = 0;
             BS2BInit(&h->jdsp.advXF.bs2b[0], fs, BS2B_DEFAULT_CLEVEL);
         }
+        h->xfeed_state_mode = mode;
+        h->xfeed_state_fs = fs;
+        h->xfeed_state_fcut = fcut;
+        h->xfeed_state_feed = feed;
     } else {
         CrossfeedDisable(&h->jdsp);
+        // 关闭后清镜像：再次开启（尤其 fs 已变）必须重新初始化
+        h->xfeed_state_mode = -1;
+        h->xfeed_state_fs = 0;
+        h->xfeed_state_fcut = -1.0f;
+        h->xfeed_state_feed = -1.0f;
     }
 }
 

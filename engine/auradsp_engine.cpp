@@ -106,6 +106,14 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (max_block_frames <= 0 || max_block_frames > 16384) return nullptr;
     if (!global_init()) return nullptr;
 
+    /* 失败路径的全局引用回收（2026-10-31 审查修复）：create 内所有
+     * return nullptr 分支此前都漏了 global_unref()，失败一次引用计数永久 +1。
+     * RAII 守卫让任意早退自动回收，成功时解除。 */
+    struct GlobalRefGuard {
+        bool armed = true;
+        ~GlobalRefGuard() { if (armed) global_unref(); }
+    } ref_guard;
+
     auto* h = new (std::nothrow) auradsp_handle_s();
     if (!h) return nullptr;
     h->sample_rate = sample_rate;
@@ -242,6 +250,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->mc_limiter_dq_len = 0; /* PF-2：0 != 任何 la_len，首块强制重建 deque */
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
+    ref_guard.armed = false;
     return h;
 }
 
@@ -312,7 +321,9 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             h->gate_idle_frames = 0;
         } else {
             memset(out, 0, (size_t)frames * (size_t)ch * sizeof(float));
-            h->gate_idle_frames += frames;
+            /* 上限封顶（与 gate_silent_frames 同口径）：48k 连续静音
+             * 12.4 小时后 int 会溢出成 UB，仅为诊断字段。 */
+            if (h->gate_idle_frames < (1 << 30)) h->gate_idle_frames += frames;
             h->input_lvl_in_l = h->input_lvl_in_r = -120.0f;
             h->input_lvl_out_l = h->input_lvl_out_r = -120.0f;
             for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
