@@ -103,17 +103,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   int engineChCount = 2;
 
   // VB-Callback 模式面（05 桥）：与 WASAPI 路径互斥，一次只跑一边。
-  bool vbActive = false;
+  // 当前后端唯一真相源是 BridgeManager.activeId（不再维护 vbActive 等副本）。
   AuraVmBridge? vb;
   // ASIO 模式面（04 桥）：与 VB/WASAPI 同互斥（一次只跑一个后端）。
-  bool asioActive = false;
   AuraAsioBridge? ab;
   String asioDriverInUse = ''; // 当前桥会话用的驱动名（诊断对账用）
   int asioBufSize = 0; // 当前桥会话缓冲档（B2c：文件声道变化时热切复用）
   int asioOutPair = 0; // 当前桥会话输出块起始声道（同上）
   int asioCh = 2;      // 当前桥会话 io 声道数（B2c：2/4/6/8）
   // AuraVAIO 虚拟声卡模式面（Mode 1 桥）：与 VB/ASIO/WASAPI 互斥。
-  bool vaioActive = false;
   AuraVaioBridge? vaio;
   String vaioOutputEndpointInUse = '';
   // 桥模式共用诊断/节流状态（P1：同一时刻只有一个后端出声，不再按后端各一份）。
@@ -265,7 +263,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void startVbBridge() {
-    if (vbActive) return;
+    if (bridgeManager.isActive('vm')) return;
     dbgLog('vbmode: start requested');
     try {
       vb ??= bridgeManager.load<AuraVmBridge>('vm');
@@ -334,8 +332,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       return;
     }
     source = null;
-    vbActive = true;
-    bridgeManager.setActive('vm', vb!);
+    bridgeManager.switchTo('vm', vb!);
     bridgeManager.replayPluginMirror(vb!, pluginMirror, send);
     bridgeVizNullLogged = false;
     bridgeNoCbLogged = false;
@@ -350,7 +347,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void stopVbBridge() {
-    if (!vbActive) return;
+    if (!bridgeManager.isActive('vm')) return;
     dbgLog('vbmode: stop requested');
     try {
       vb?.testStop();
@@ -358,7 +355,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       vb?.stop();
     } catch (e, st) { swallow(e, st); }
-    vbActive = false;
     bridgeManager.clearActive(vb!);
     final resumeErr = resumeWasapi('vbmode');
     unawaited(syncPluginMirrorToLocal(lib, handle));
@@ -410,7 +406,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       required int bufSize,
       required int outPair,
       int channels = 2}) {
-    if (asioActive) return;
+    if (bridgeManager.isActive('asio')) return;
     dbgLog('asiomode: start requested driver="$driver" '
         'buf=$bufSize pair=$outPair ch=$channels');
     try {
@@ -481,8 +477,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       return;
     }
     source = null;
-    asioActive = true;
-    bridgeManager.setActive('asio', ab!);
+    bridgeManager.switchTo('asio', ab!);
     asioDriverInUse = drv;
     asioBufSize = bufSize;
     asioOutPair = outPair;
@@ -505,7 +500,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void stopAsioBridge() {
-    if (!asioActive) return;
+    if (!bridgeManager.isActive('asio')) return;
     dbgLog('asiomode: stop requested');
     try {
       ab?.testStop();
@@ -513,7 +508,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       ab?.stop();
     } catch (e, st) { swallow(e, st); }
-    asioActive = false;
     bridgeManager.clearActive(ab!);
     asioDriverInUse = '';
     final resumeErr = resumeWasapi('asiomode');
@@ -539,7 +533,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void startVaioBridge({String outputEndpointSubstr = ''}) {
-    if (vaioActive) return;
+    if (bridgeManager.isActive('vaio')) return;
     dbgLog('vaiomode: start requested output="$outputEndpointSubstr"');
     try {
       vaio ??= bridgeManager.load<AuraVaioBridge>('vaio');
@@ -588,8 +582,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       return;
     }
     source = null;
-    vaioActive = true;
-    bridgeManager.setActive('vaio', vaio!);
+    bridgeManager.switchTo('vaio', vaio!);
     vaioOutputEndpointInUse = outputEndpointSubstr;
     bridgeManager.replayPluginMirror(vaio!, pluginMirror, send);
     bridgeVizNullLogged = false;
@@ -603,7 +596,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   void stopVaioBridge() {
-    if (!vaioActive) return;
+    if (!bridgeManager.isActive('vaio')) return;
     dbgLog('vaiomode: stop requested');
     try {
       vaio?.testStop();
@@ -611,7 +604,6 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     try {
       vaio?.stop();
     } catch (e, st) { swallow(e, st); }
-    vaioActive = false;
     bridgeManager.clearActive(vaio!);
     vaioOutputEndpointInUse = '';
     final resumeErr = resumeWasapi('vaiomode');
@@ -624,11 +616,20 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   }
 
   /// 停掉除 [keep] 之外的其余桥（互斥切换唯一入口）。
+  /// 当前后端唯一真相源是 BridgeManager.activeId；不另存三份 bool。
   /// D4-a（WASAPI 回升）由各 stop*Bridge 内部承担，不在切换层另写一份。
   void stopOtherBridges(String keep) {
-    if (keep != 'vm' && vbActive) stopVbBridge();
-    if (keep != 'asio' && asioActive) stopAsioBridge();
-    if (keep != 'vaio' && vaioActive) stopVaioBridge();
+    final cur = bridgeManager.activeId;
+    if (cur == null || cur == keep) return;
+    if (cur == 'vm') {
+      stopVbBridge();
+    } else if (cur == 'asio') {
+      stopAsioBridge();
+    } else if (cur == 'vaio') {
+      stopVaioBridge();
+    } else {
+      dbgLog('stopOtherBridges: unknown active=$cur');
+    }
   }
 
   /* 高频日志采样器：setParam / setParamStr 每帧都可能触发（拖滑块 ~60Hz），
@@ -1131,7 +1132,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
                     stopAsioBridge();
                     startAsioBridge(
                         driver: drv, bufSize: bs, outPair: op, channels: ch);
-                    if (!asioActive || ab == null) {
+                    if (!bridgeManager.isActive('asio') || ab == null) {
                       send({'evt': 'error', 'msg': 'ASIO多声道重启失败'});
                       break;
                     }
@@ -1226,7 +1227,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'asiorestart':
           // 驱动/缓冲/声道数变更：热切换（stop → start 新参数）。
-          if (!asioActive) break;
+          if (!bridgeManager.isActive('asio')) break;
           stopAsioBridge();
           startAsioBridge(
             driver: (m['driver'] as String?) ?? '',
@@ -1249,7 +1250,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           }
           break;
         case 'vaiorestart':
-          if (!vaioActive) break;
+          if (!bridgeManager.isActive('vaio')) break;
           stopVaioBridge();
           startVaioBridge(
             outputEndpointSubstr: (m['outputEndpoint'] as String?) ?? '',
@@ -1268,14 +1269,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           break;
         case 'setBusMask':
           vbBusMask = (m['mask'] as int) & 0xFF;
-          if (vbActive && vb != null) {
+          if (bridgeManager.isActive('vm') && vb != null) {
             vb!.setBusMask(vbBusMask);
           }
           break;
         case 'setPluginGroupMask':
           // 按路插件处理掩码（bit g = 组 g 总线吃插件链）。
           vbPluginGroupMask = (m['mask'] as int) & 0xFF;
-          if (vbActive && vb != null) {
+          if (bridgeManager.isActive('vm') && vb != null) {
             try {
               vb!.pluginGroupEnable(vbPluginGroupMask);
             } catch (e) {
@@ -1286,7 +1287,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         case 'setPluginAutoProtect':
           // Z12 超预算自动保护开关（桥关闭时立即恢复用户掩码）。
           vbAutoProtect = (m['on'] as bool?) ?? true;
-          if (vbActive && vb != null) {
+          if (bridgeManager.isActive('vm') && vb != null) {
             try {
               vb!.pluginAutoProtect(vbAutoProtect ? 1 : 0);
             } catch (e) {
@@ -2270,34 +2271,17 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         }
       }
     }
-    // 收尾
+    // 收尾：DLL 驻留但会话必须停。按 manager 的已加载表逐个停（比三份
+    // bool 更可靠：detect-only 实例也覆盖，记账漂移也不会漏停）。
     try {
-      if (vbActive) {
+      for (final b in bridgeManager.loadedBridges) {
         try {
-          vb?.testStop();
+          b.testStop();
         } catch (e, st) { swallow(e, st); }
         try {
-          vb?.stop();
+          b.stop();
         } catch (e, st) { swallow(e, st); }
-        vbActive = false;
-      }
-      if (asioActive) {
-        try {
-          ab?.testStop();
-        } catch (e, st) { swallow(e, st); }
-        try {
-          ab?.stop();
-        } catch (e, st) { swallow(e, st); }
-        asioActive = false;
-      }
-      if (vaioActive) {
-        try {
-          vaio?.testStop();
-        } catch (e, st) { swallow(e, st); }
-        try {
-          vaio?.stop();
-        } catch (e, st) { swallow(e, st); }
-        vaioActive = false;
+        bridgeManager.clearActive(b);
       }
       wasapi?.stop();
     } catch (e, st) {

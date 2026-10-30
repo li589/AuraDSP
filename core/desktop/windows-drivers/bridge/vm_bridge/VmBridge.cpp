@@ -8,6 +8,7 @@
 #include "VmBridge.h"
 
 #include "PluginBridge.h"
+#include "VizSilence.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 #include "../../02_voicemeeter_client/VmRemoteLoader.h"
 
@@ -1073,6 +1074,24 @@ static int HottestVizGroup() {
     return best;
 }
 
+// P3 收口：整桥静音判定——与 status 的 gated 同口径（所有已建引擎且门控启用
+// 的组都 GATED/idle）。viz_read 用它决定是否补静音帧；status 仍需自行统计
+// idleMs，故不合并。
+static bool AllGroupsGated() {
+    int groups = 0;
+    int gated = 0;
+    for (int g = 0; g < g_b.ctx.nEng && g < vmcore::PumpCtx::kMaxGroups; ++g) {
+        const aurabridge::SilenceGate& gt = g_b.ctx.gate[g];
+        if (!gt.enabled) continue;
+        ++groups;
+        if (gt.gated || g_b.ctx.idle[g]) ++gated;
+    }
+    return groups > 0 && gated == groups;
+}
+
+// GATED 后引擎不再产 viz 帧；整桥静音时由桥补合法静音帧（仅控制线程）。
+static aurabridge::SilentVizEmitter g_silentViz;
+
 int vb_status(char* out, int cap) {
     if (!out || cap <= 0) return -1;
     LARGE_INTEGER qpf;
@@ -1233,7 +1252,15 @@ int vb_viz_read(void* out1600, int count) {
     if (!g_b.vizRead) return 0;
     const int g = HottestVizGroup();
     if (!g_b.ctx.eng[g]) return 0;
-    return g_b.vizRead(g_b.ctx.eng[g], out1600, count);
+    const int n = g_b.vizRead(g_b.ctx.eng[g], out1600, count);
+    if (n > 0) return n;
+    // P3 收口：门控 GATED 后桥不再调 process，引擎 ring 不再产帧。整桥静音
+    // 时补一帧合法静音帧，UI 不再先冻结 1.5s 等 stale 兜底。旁路/测试注入
+    // 期间门控不 Tick（gated 可能是旧值），一律不补。
+    if (InterlockedCompareExchange(&g_b.ctx.userBypass, 0, 0)) return 0;
+    if (InterlockedCompareExchange(&g_b.ctx.testKind, 0, 0) != 0) return 0;
+    if (!AllGroupsGated()) return 0;
+    return g_silentViz.Emit(out1600, 0, g_b.ctx.binaural ? 8 : 2);
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。

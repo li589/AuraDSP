@@ -344,8 +344,9 @@ class PluginSlotCfg {
 
 /// 桥生命周期与互斥的唯一入口（音频 isolate 内使用）。
 ///
-/// - [acquire]/[release]：注册项惰性 load + 引用计数；DLL 驻留（见文件头）。
-/// - [active]/[activeId]：当前真正出声的后端（null = WASAPI 本地路径）。
+/// - [load]：注册项惰性 load；DLL 驻留（见文件头）。
+/// - [switchTo]/[clearActive]/[isActive]：当前真正出声的后端（null = WASAPI
+///   本地路径）唯一记账；isolate 不再维护按后端三份 bool。
 /// - 镜像回放：参数/字符串/插件三份复制粘贴收敛为一次调用。
 class BridgeManager {
   BridgeManager({List<BridgeDesc>? descs})
@@ -359,6 +360,12 @@ class BridgeManager {
 
   AudioBridgeCommon? get active => _active;
   String? get activeId => _activeId;
+
+  /// 当前出声后端是否为 [id]（isolate 的唯一真相源；不再维护三份 bool）。
+  bool isActive(String id) => _activeId == id && _active != null;
+
+  /// 已加载的桥实例（DLL 驻留：stop 不删表）。收尾时逐实例停会话用。
+  Iterable<AudioBridgeCommon> get loadedBridges => _instances.values;
 
   BridgeDesc? descOf(String id) => _descs[id];
 
@@ -375,8 +382,14 @@ class BridgeManager {
     return inst as T;
   }
 
-  /// 标记当前出声后端。调用方在桥 start 成功（handover 通过）后调用。
-  void setActive(String id, AudioBridgeCommon bridge) {
+  /// 切换当前出声后端。调用方必须已停掉旧桥（音频 isolate 的
+  /// stopOtherBridges 收口）；这里只做唯一记账，意外叠加时留痕——D4-a 不允许
+  /// 两路同时出声，出现即说明切换路径有 bug。
+  void switchTo(String id, AudioBridgeCommon bridge) {
+    final prev = _activeId;
+    if (prev != null && prev != id) {
+      dbgLog('bridge: switchTo $prev -> $id without stop');
+    }
     _activeId = id;
     _active = bridge;
   }

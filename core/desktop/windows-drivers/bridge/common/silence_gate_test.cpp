@@ -13,6 +13,7 @@
 #include <cstring>
 
 #include "SilenceGate.h"
+#include "VizSilence.h"
 
 static int g_fail = 0;
 
@@ -132,6 +133,70 @@ int main() {
         const float b[2] = {-0.7f, 0.0f};
         const float* planes[2] = {a, b};
         check("scan-planes", approx(aurabridge::GateScanPlanes(planes, 2, 2), 0.7f));
+    }
+
+    // 8) 静音 viz 帧（桥 GATED 补帧）：合法 -120dB，不是 memset 0 的 0dBFS
+    {
+        static_assert(aurabridge::kVizFrameBytes == 1600, "viz frame bytes");
+        alignas(8) unsigned char buf[aurabridge::kVizFrameBytes * 2];
+        memset(buf, 0xA5, sizeof(buf));
+        aurabridge::SilentVizEmitter em;
+        check("silent-viz-emits-one", em.Emit(buf, 1, 8) == 1);
+
+        bool prefixUntouched = true;
+        for (size_t i = 0; i < aurabridge::kVizFrameBytes; ++i) {
+            if (buf[i] != 0xA5) {
+                prefixUntouched = false;
+                break;
+            }
+        }
+        check("silent-viz-only-index", prefixUntouched);
+
+        const auto* f = reinterpret_cast<const aurabridge::VizFrameMirror*>(
+            buf + aurabridge::kVizFrameBytes);
+        check("silent-viz-seq-tagged",
+              (f->seq & aurabridge::kSyntheticVizSeqTag) ==
+                  aurabridge::kSyntheticVizSeqTag);
+        check("silent-viz-channels", f->channel_count == 8);
+        check("silent-viz-levels--120",
+              approx(f->level_l_dbfs, -120.0f) &&
+                  approx(f->level_r_dbfs, -120.0f));
+
+        bool stageOk = true;
+        for (int i = 0; i < aurabridge::kVizStageMax; ++i) {
+            const bool gr =
+                i >= aurabridge::kVizGrFirst && i <= aurabridge::kVizGrLast;
+            const float want = gr ? 0.0f : -120.0f;
+            if (!approx(f->stage_levels_l[i], want) ||
+                !approx(f->stage_levels_r[i], want)) {
+                stageOk = false;
+            }
+        }
+        check("silent-viz-stage-levels-gr-zero", stageOk);
+
+        bool bandsOk = true, chOk = true;
+        for (int i = 0; i < aurabridge::kVizBands; ++i) {
+            if (f->spectrum[i] != 0.0f || f->eq_in_spectrum[i] != 0.0f)
+                bandsOk = false;
+        }
+        for (int c = 0; c < aurabridge::kVizChannelMax; ++c) {
+            if (!approx(f->channel_levels[c], -120.0f)) chOk = false;
+        }
+        for (int i = 0; i < aurabridge::kVizStageMax; ++i) {
+            for (int c = 0; c < aurabridge::kVizChannelMax; ++c) {
+                if (!approx(f->stage_ch_levels[i][c], -120.0f)) chOk = false;
+            }
+        }
+        check("silent-viz-spectrum-zero", bandsOk);
+        check("silent-viz-channel-levels--120", chOk);
+
+        // 连续补帧：seq 单调递增，声道数按调用方钳制。
+        const uint64_t s1 = f->seq;
+        em.Emit(buf, 0, 2);
+        const auto* f2 =
+            reinterpret_cast<const aurabridge::VizFrameMirror*>(buf);
+        check("silent-viz-seq-monotonic", f2->seq > s1);
+        check("silent-viz-clamps-channels", f2->channel_count == 2);
     }
 
     std::printf("%s  total_failures=%d\n", g_fail ? "FAIL" : "PASS", g_fail);
