@@ -44,6 +44,20 @@ class SpectrumBarsPainter extends CustomPainter {
 
     final hasPeaks = showPeaks && peaks.length >= barCount;
 
+    // 整幅画布共用一个渐变 shader 与模糊滤镜：避免每根柱重复创建（32~64 次/帧）
+    _barPaint.shader = LinearGradient(
+      begin: Alignment.bottomCenter,
+      end: Alignment.topCenter,
+      colors: palette.gradient,
+    ).createShader(Offset.zero & size);
+
+    final bool drawGlow = bloom > 0.1;
+    if (drawGlow) {
+      _glowPaint
+        ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.75))
+        ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 5.0);
+    }
+
     // 均匀柱宽与对称边距排布，消除高低频宽窄不一致问题
     final double gap = barCount > 40 ? 2.0 : 3.0;
     final double totalGaps = (barCount - 1) * gap;
@@ -62,20 +76,10 @@ class SpectrumBarsPainter extends CustomPainter {
         final barRect = Rect.fromLTWH(left, top, barWidth, h);
         final rrect = RRect.fromRectAndRadius(barRect, const Radius.circular(2.0));
 
-        // 垂直多色渐变着色
-        _barPaint.shader = LinearGradient(
-          begin: Alignment.bottomCenter,
-          end: Alignment.topCenter,
-          colors: palette.gradient,
-        ).createShader(barRect);
-
         canvas.drawRRect(rrect, _barPaint);
 
-        // 辉光仿真
-        if (bloom > 0.1 && h > 4.0) {
-          _glowPaint
-            ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.75))
-            ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 5.0);
+        // 辉光仿真（共用同一模糊滤镜，仅对可见高度柱生效）
+        if (drawGlow && h > 4.0) {
           canvas.drawRRect(rrect, _glowPaint);
         }
       }

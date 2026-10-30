@@ -11,7 +11,8 @@
  * 模块化拆分目录：
  *   - models/      : VisualizerConfig, VisualizerStyle, VisualizerColorTheme
  *   - controllers/ : PeakPhysicsEngine, WaveformSynthesizer
- *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb, GpuShader, Milkdrop
+ *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb,
+ *                    FluidSilk, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
 import 'dart:math' as math;

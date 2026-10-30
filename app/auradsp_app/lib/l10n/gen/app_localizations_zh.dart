@@ -1395,6 +1395,154 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerDisplayImmersiveTip => '仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）';
 
   @override
+  String get visualizerDrawerTitle => '可视化设置';
+
+  @override
+  String get visualizerDrawerCloseTip => '关闭设置';
+
+  @override
+  String get visualizerSectionPalette => '色彩主题';
+
+  @override
+  String get visualizerSectionPaletteInfo => '选择频谱与波形配色方案';
+
+  @override
+  String get visualizerSectionDynamics => '动态与阻尼';
+
+  @override
+  String get visualizerSectionDynamicsInfo => '调节音频能量响应灵敏度与衰减物理';
+
+  @override
+  String get visualizerSectionVisuals => '画面与参考线';
+
+  @override
+  String get visualizerSectionVisualsInfo => '微调辉光、网格与刻度';
+
+  @override
+  String get visualizerSectionLyrics => '歌词与字幕';
+
+  @override
+  String get visualizerSectionLyricsInfo => '配置同步滚动歌词显示';
+
+  @override
+  String get visualizerSensitivity => '灵敏度';
+
+  @override
+  String get visualizerSensitivityInfo => '音频能量放大倍率，决定视觉跳动幅度';
+
+  @override
+  String get visualizerDecay => '衰减阻尼';
+
+  @override
+  String get visualizerDecayInfo => '峰值与频谱下落时的空气阻尼阻力';
+
+  @override
+  String get visualizerGravity => '重力';
+
+  @override
+  String get visualizerGravityInfo => '把峰值持续拉向底部的重力加速度';
+
+  @override
+  String get visualizerBloom => '磷光辉光';
+
+  @override
+  String get visualizerBloomInfo => '阴极射线余辉与 LED 光晕强度';
+
+  @override
+  String get visualizerLineWidth => '线条粗细';
+
+  @override
+  String get visualizerLineWidthInfo => '示波光束、相位曲线与向量线的描边宽度';
+
+  @override
+  String get visualizerBandsDensity => '频段密度';
+
+  @override
+  String get visualizerBandsDensityInfo => '选择 32 或 64 频段分辨率';
+
+  @override
+  String get visualizerToggleGrid => '参考网格';
+
+  @override
+  String get visualizerToggleGridInfo =>
+      '显示 100Hz / 1kHz / 10kHz 倍频程与水平 dB 参考线';
+
+  @override
+  String get visualizerTogglePeaks => '峰值保持线';
+
+  @override
+  String get visualizerTogglePeaksInfo => '在频谱柱顶部保留重力回落的峰值线';
+
+  @override
+  String get visualizerToggleDbScale => 'dBFS 刻度';
+
+  @override
+  String get visualizerToggleDbScaleInfo => '在右侧边框显示 0 至 -60 dBFS 声压刻度';
+
+  @override
+  String get visualizerToggleLyrics => '歌词叠加';
+
+  @override
+  String get visualizerToggleLyricsInfo => '在视效舞台上叠加同步歌词';
+
+  @override
+  String get visualizerToggleTranslation => '双语翻译';
+
+  @override
+  String get visualizerToggleTranslationInfo => '在歌词主行下方显示可用译文（需先开启歌词）';
+
+  @override
+  String get visualizerResetDefaults => '恢复出厂设置';
+
+  @override
+  String get visualizerResetDefaultsTip => '将所有可视化参数恢复为默认值';
+
+  @override
+  String get visualizerStyleBars => '频谱柱';
+
+  @override
+  String get visualizerStyleOscilloscope => '示波器';
+
+  @override
+  String get visualizerStyleGoniometer => '相位仪';
+
+  @override
+  String get visualizerStyleCyberGrid => '赛博网格';
+
+  @override
+  String get visualizerStylePulseOrb => '脉冲星云';
+
+  @override
+  String get visualizerStyleAurora => '极光飘带';
+
+  @override
+  String get visualizerStyleTunnel => '霓虹隧道';
+
+  @override
+  String get visualizerStyleMilkdrop => 'MilkDrop';
+
+  @override
+  String get visualizerStyleFluid => '流体丝绸';
+
+  @override
+  String get visualizerStyleTornado => '粒子龙卷风';
+
+  @override
+  String get visualizerThemeSystem => '跟随系统';
+
+  @override
+  String get visualizerThemeNeonCyber => '赛博霓虹';
+
+  @override
+  String get visualizerThemeAmberTube => '琥珀电子管';
+
+  @override
+  String get visualizerThemeMatrixGreen => '矩阵磷光';
+
+  @override
+  String get visualizerThemeAuroraGlow => '极光';
+
+  @override
   String get themeSwitchTip => '切换配色方案';
 
   @override

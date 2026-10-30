@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../l10n/gen/app_localizations.dart';
+
 /// 可视化展示风格
 enum VisualizerStyle {
   /// 经典对数频段柱状谱 + 物理保持线
@@ -64,6 +66,22 @@ enum VisualizerStyle {
     label: 'MilkDrop',
     icon: Icons.album_rounded,
     description: 'Winamp MilkDrop 2 procedural music visualizer engine',
+  ),
+
+  /// 流体丝绸：低频驱动的流场丝带
+  fluid(
+    id: 'fluid',
+    label: 'Fluid Silk',
+    icon: Icons.water_rounded,
+    description: 'Audio-driven curl-noise flow field with luminous silk ribbons',
+  ),
+
+  /// 粒子龙卷风：螺旋上升的确定性粒子风暴
+  tornado(
+    id: 'tornado',
+    label: 'Particle Tornado',
+    icon: Icons.cyclone_rounded,
+    description: 'Deterministic spiral particle vortex driven by low-frequency impact',
   );
 
   final String id;
@@ -231,4 +249,30 @@ class VisualizerConfig {
       showTranslation: showTranslation ?? this.showTranslation,
     );
   }
+}
+
+/// 风格与配色的多语言显示名（枚举内 label 仅作英文兜底）
+extension VisualizerStyleL10n on VisualizerStyle {
+  String labelOf(AppLocalizations l) => switch (this) {
+        VisualizerStyle.bars => l.visualizerStyleBars,
+        VisualizerStyle.oscilloscope => l.visualizerStyleOscilloscope,
+        VisualizerStyle.goniometer => l.visualizerStyleGoniometer,
+        VisualizerStyle.cyberGrid => l.visualizerStyleCyberGrid,
+        VisualizerStyle.pulseOrb => l.visualizerStylePulseOrb,
+        VisualizerStyle.auroraShader => l.visualizerStyleAurora,
+        VisualizerStyle.tunnelShader => l.visualizerStyleTunnel,
+        VisualizerStyle.milkDrop => l.visualizerStyleMilkdrop,
+        VisualizerStyle.fluid => l.visualizerStyleFluid,
+        VisualizerStyle.tornado => l.visualizerStyleTornado,
+      };
+}
+
+extension VisualizerColorThemeL10n on VisualizerColorTheme {
+  String labelOf(AppLocalizations l) => switch (this) {
+        VisualizerColorTheme.system => l.visualizerThemeSystem,
+        VisualizerColorTheme.neonCyber => l.visualizerThemeNeonCyber,
+        VisualizerColorTheme.amberTube => l.visualizerThemeAmberTube,
+        VisualizerColorTheme.matrixGreen => l.visualizerThemeMatrixGreen,
+        VisualizerColorTheme.aurora => l.visualizerThemeAuroraGlow,
+      };
 }

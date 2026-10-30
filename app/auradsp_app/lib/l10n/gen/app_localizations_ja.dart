@@ -1413,6 +1413,153 @@ class AppLocalizationsJa extends AppLocalizations {
       'ビジュアライザーのみ：ナビゲーションとメーターを隠す（Esc で段階的に戻る）';
 
   @override
+  String get visualizerDrawerTitle => 'ビジュアライザー設定';
+
+  @override
+  String get visualizerDrawerCloseTip => '設定を閉じる';
+
+  @override
+  String get visualizerSectionPalette => 'カラーパレット';
+
+  @override
+  String get visualizerSectionPaletteInfo => 'スペクトルと波形の配色テーマを選択';
+
+  @override
+  String get visualizerSectionDynamics => 'ダイナミクスと減衰';
+
+  @override
+  String get visualizerSectionDynamicsInfo => '音声エネルギーへの応答感度と減衰物理を調整';
+
+  @override
+  String get visualizerSectionVisuals => '表示とガイド';
+
+  @override
+  String get visualizerSectionVisualsInfo => 'グロー、グリッド、スケールを微調整';
+
+  @override
+  String get visualizerSectionLyrics => '歌詞と字幕';
+
+  @override
+  String get visualizerSectionLyricsInfo => '同期スクロール歌詞の表示を設定';
+
+  @override
+  String get visualizerSensitivity => '感度';
+
+  @override
+  String get visualizerSensitivityInfo => '音量エネルギーの倍率（視覚的な跳ね返り量）';
+
+  @override
+  String get visualizerDecay => '減衰ダンピング';
+
+  @override
+  String get visualizerDecayInfo => 'ピークとスペクトルが落下する際の空気抵抗';
+
+  @override
+  String get visualizerGravity => '重力';
+
+  @override
+  String get visualizerGravityInfo => 'ピークを下へ引き戻す重力加速度';
+
+  @override
+  String get visualizerBloom => 'リン光グロー';
+
+  @override
+  String get visualizerBloomInfo => 'ブラウン管の残光と LED 発光の強さ';
+
+  @override
+  String get visualizerLineWidth => '線の太さ';
+
+  @override
+  String get visualizerLineWidthInfo => 'オシロスコープのビーム、位相曲線、ベクター線の描線幅';
+
+  @override
+  String get visualizerBandsDensity => 'バンド密度';
+
+  @override
+  String get visualizerBandsDensityInfo => '32 または 64 バンドの周波数分解能を選択';
+
+  @override
+  String get visualizerToggleGrid => '参照グリッド';
+
+  @override
+  String get visualizerToggleGridInfo => '100Hz / 1kHz / 10kHz と水平 dB 参照線を表示';
+
+  @override
+  String get visualizerTogglePeaks => 'ピークホールド線';
+
+  @override
+  String get visualizerTogglePeaksInfo => 'スペクトルバー上に重力落下するピーク線を残す';
+
+  @override
+  String get visualizerToggleDbScale => 'dBFS スケール';
+
+  @override
+  String get visualizerToggleDbScaleInfo => '右端に 0 〜 -60 dBFS の音圧スケールを表示';
+
+  @override
+  String get visualizerToggleLyrics => '歌詞オーバーレイ';
+
+  @override
+  String get visualizerToggleLyricsInfo => 'ビジュアライザーステージに同期歌詞を重ねる';
+
+  @override
+  String get visualizerToggleTranslation => '二言語翻訳';
+
+  @override
+  String get visualizerToggleTranslationInfo => '歌詞の下に利用可能な訳文を表示（歌詞表示が前提）';
+
+  @override
+  String get visualizerResetDefaults => '初期設定に戻す';
+
+  @override
+  String get visualizerResetDefaultsTip => 'ビジュアライザーの全パラメータを初期値に戻す';
+
+  @override
+  String get visualizerStyleBars => 'スペクトルバー';
+
+  @override
+  String get visualizerStyleOscilloscope => 'オシロスコープ';
+
+  @override
+  String get visualizerStyleGoniometer => 'フェーズスコープ';
+
+  @override
+  String get visualizerStyleCyberGrid => 'サイバーグリッド';
+
+  @override
+  String get visualizerStylePulseOrb => 'パルスネビュラ';
+
+  @override
+  String get visualizerStyleAurora => 'オーロラリボン';
+
+  @override
+  String get visualizerStyleTunnel => 'ネオンタワー';
+
+  @override
+  String get visualizerStyleMilkdrop => 'MilkDrop';
+
+  @override
+  String get visualizerStyleFluid => 'フルイドシルク';
+
+  @override
+  String get visualizerStyleTornado => 'パーティクル竜巻';
+
+  @override
+  String get visualizerThemeSystem => 'システムテーマ';
+
+  @override
+  String get visualizerThemeNeonCyber => 'サイバーネオン';
+
+  @override
+  String get visualizerThemeAmberTube => 'アンバー真空管';
+
+  @override
+  String get visualizerThemeMatrixGreen => 'マトリックスリン光';
+
+  @override
+  String get visualizerThemeAuroraGlow => 'オーロラグロー';
+
+  @override
   String get themeSwitchTip => '配色を切り替え';
 
   @override

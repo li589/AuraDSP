@@ -21,6 +21,7 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
 
     return InkWell(
       onTap: onTap,
@@ -46,7 +47,7 @@ class VisualizerStyleDropdownButton extends StatelessWidget {
             Icon(selectedStyle.icon, size: 16, color: p.accent),
             const SizedBox(width: 8),
             Text(
-              selectedStyle.label,
+              selectedStyle.labelOf(l),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -84,6 +85,7 @@ class VisualizerMenuItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    final l = l10nOf(context);
 
     return InkWell(
       onTap: onTap,
@@ -106,7 +108,9 @@ class VisualizerMenuItem extends StatelessWidget {
             const SizedBox(width: 9),
             Expanded(
               child: Text(
-                style.label,
+                style.labelOf(l),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 12,
                   fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,

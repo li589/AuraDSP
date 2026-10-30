@@ -2704,6 +2704,300 @@ abstract class AppLocalizations {
   /// **'仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）'**
   String get visualizerDisplayImmersiveTip;
 
+  /// No description provided for @visualizerDrawerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'可视化设置'**
+  String get visualizerDrawerTitle;
+
+  /// No description provided for @visualizerDrawerCloseTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭设置'**
+  String get visualizerDrawerCloseTip;
+
+  /// No description provided for @visualizerSectionPalette.
+  ///
+  /// In zh, this message translates to:
+  /// **'色彩主题'**
+  String get visualizerSectionPalette;
+
+  /// No description provided for @visualizerSectionPaletteInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择频谱与波形配色方案'**
+  String get visualizerSectionPaletteInfo;
+
+  /// No description provided for @visualizerSectionDynamics.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态与阻尼'**
+  String get visualizerSectionDynamics;
+
+  /// No description provided for @visualizerSectionDynamicsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'调节音频能量响应灵敏度与衰减物理'**
+  String get visualizerSectionDynamicsInfo;
+
+  /// No description provided for @visualizerSectionVisuals.
+  ///
+  /// In zh, this message translates to:
+  /// **'画面与参考线'**
+  String get visualizerSectionVisuals;
+
+  /// No description provided for @visualizerSectionVisualsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'微调辉光、网格与刻度'**
+  String get visualizerSectionVisualsInfo;
+
+  /// No description provided for @visualizerSectionLyrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词与字幕'**
+  String get visualizerSectionLyrics;
+
+  /// No description provided for @visualizerSectionLyricsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置同步滚动歌词显示'**
+  String get visualizerSectionLyricsInfo;
+
+  /// No description provided for @visualizerSensitivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'灵敏度'**
+  String get visualizerSensitivity;
+
+  /// No description provided for @visualizerSensitivityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频能量放大倍率，决定视觉跳动幅度'**
+  String get visualizerSensitivityInfo;
+
+  /// No description provided for @visualizerDecay.
+  ///
+  /// In zh, this message translates to:
+  /// **'衰减阻尼'**
+  String get visualizerDecay;
+
+  /// No description provided for @visualizerDecayInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'峰值与频谱下落时的空气阻尼阻力'**
+  String get visualizerDecayInfo;
+
+  /// No description provided for @visualizerGravity.
+  ///
+  /// In zh, this message translates to:
+  /// **'重力'**
+  String get visualizerGravity;
+
+  /// No description provided for @visualizerGravityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'把峰值持续拉向底部的重力加速度'**
+  String get visualizerGravityInfo;
+
+  /// No description provided for @visualizerBloom.
+  ///
+  /// In zh, this message translates to:
+  /// **'磷光辉光'**
+  String get visualizerBloom;
+
+  /// No description provided for @visualizerBloomInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'阴极射线余辉与 LED 光晕强度'**
+  String get visualizerBloomInfo;
+
+  /// No description provided for @visualizerLineWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'线条粗细'**
+  String get visualizerLineWidth;
+
+  /// No description provided for @visualizerLineWidthInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'示波光束、相位曲线与向量线的描边宽度'**
+  String get visualizerLineWidthInfo;
+
+  /// No description provided for @visualizerBandsDensity.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段密度'**
+  String get visualizerBandsDensity;
+
+  /// No description provided for @visualizerBandsDensityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 32 或 64 频段分辨率'**
+  String get visualizerBandsDensityInfo;
+
+  /// No description provided for @visualizerToggleGrid.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考网格'**
+  String get visualizerToggleGrid;
+
+  /// No description provided for @visualizerToggleGridInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示 100Hz / 1kHz / 10kHz 倍频程与水平 dB 参考线'**
+  String get visualizerToggleGridInfo;
+
+  /// No description provided for @visualizerTogglePeaks.
+  ///
+  /// In zh, this message translates to:
+  /// **'峰值保持线'**
+  String get visualizerTogglePeaks;
+
+  /// No description provided for @visualizerTogglePeaksInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在频谱柱顶部保留重力回落的峰值线'**
+  String get visualizerTogglePeaksInfo;
+
+  /// No description provided for @visualizerToggleDbScale.
+  ///
+  /// In zh, this message translates to:
+  /// **'dBFS 刻度'**
+  String get visualizerToggleDbScale;
+
+  /// No description provided for @visualizerToggleDbScaleInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在右侧边框显示 0 至 -60 dBFS 声压刻度'**
+  String get visualizerToggleDbScaleInfo;
+
+  /// No description provided for @visualizerToggleLyrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词叠加'**
+  String get visualizerToggleLyrics;
+
+  /// No description provided for @visualizerToggleLyricsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在视效舞台上叠加同步歌词'**
+  String get visualizerToggleLyricsInfo;
+
+  /// No description provided for @visualizerToggleTranslation.
+  ///
+  /// In zh, this message translates to:
+  /// **'双语翻译'**
+  String get visualizerToggleTranslation;
+
+  /// No description provided for @visualizerToggleTranslationInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在歌词主行下方显示可用译文（需先开启歌词）'**
+  String get visualizerToggleTranslationInfo;
+
+  /// No description provided for @visualizerResetDefaults.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复出厂设置'**
+  String get visualizerResetDefaults;
+
+  /// No description provided for @visualizerResetDefaultsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'将所有可视化参数恢复为默认值'**
+  String get visualizerResetDefaultsTip;
+
+  /// No description provided for @visualizerStyleBars.
+  ///
+  /// In zh, this message translates to:
+  /// **'频谱柱'**
+  String get visualizerStyleBars;
+
+  /// No description provided for @visualizerStyleOscilloscope.
+  ///
+  /// In zh, this message translates to:
+  /// **'示波器'**
+  String get visualizerStyleOscilloscope;
+
+  /// No description provided for @visualizerStyleGoniometer.
+  ///
+  /// In zh, this message translates to:
+  /// **'相位仪'**
+  String get visualizerStyleGoniometer;
+
+  /// No description provided for @visualizerStyleCyberGrid.
+  ///
+  /// In zh, this message translates to:
+  /// **'赛博网格'**
+  String get visualizerStyleCyberGrid;
+
+  /// No description provided for @visualizerStylePulseOrb.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲星云'**
+  String get visualizerStylePulseOrb;
+
+  /// No description provided for @visualizerStyleAurora.
+  ///
+  /// In zh, this message translates to:
+  /// **'极光飘带'**
+  String get visualizerStyleAurora;
+
+  /// No description provided for @visualizerStyleTunnel.
+  ///
+  /// In zh, this message translates to:
+  /// **'霓虹隧道'**
+  String get visualizerStyleTunnel;
+
+  /// No description provided for @visualizerStyleMilkdrop.
+  ///
+  /// In zh, this message translates to:
+  /// **'MilkDrop'**
+  String get visualizerStyleMilkdrop;
+
+  /// No description provided for @visualizerStyleFluid.
+  ///
+  /// In zh, this message translates to:
+  /// **'流体丝绸'**
+  String get visualizerStyleFluid;
+
+  /// No description provided for @visualizerStyleTornado.
+  ///
+  /// In zh, this message translates to:
+  /// **'粒子龙卷风'**
+  String get visualizerStyleTornado;
+
+  /// No description provided for @visualizerThemeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统'**
+  String get visualizerThemeSystem;
+
+  /// No description provided for @visualizerThemeNeonCyber.
+  ///
+  /// In zh, this message translates to:
+  /// **'赛博霓虹'**
+  String get visualizerThemeNeonCyber;
+
+  /// No description provided for @visualizerThemeAmberTube.
+  ///
+  /// In zh, this message translates to:
+  /// **'琥珀电子管'**
+  String get visualizerThemeAmberTube;
+
+  /// No description provided for @visualizerThemeMatrixGreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'矩阵磷光'**
+  String get visualizerThemeMatrixGreen;
+
+  /// No description provided for @visualizerThemeAuroraGlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'极光'**
+  String get visualizerThemeAuroraGlow;
+
   /// No description provided for @themeSwitchTip.
   ///
   /// In zh, this message translates to:
