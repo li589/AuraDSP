@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
 
-/// 实时双通道示波器渲染画笔
+/// 实时双通道示波器渲染画笔（支持光滑曲线样条与动态微调线宽）
 class OscilloscopePainter extends CustomPainter {
   final List<double> waveL;
   final List<double> waveR;
   final VisualizerPalette palette;
   final bool showGrid;
   final double bloom;
+  final double lineWidth;
 
   final Paint _gridPaint = Paint()..strokeWidth = 1;
   final Paint _zeroLinePaint = Paint()..strokeWidth = 1;
@@ -21,22 +22,25 @@ class OscilloscopePainter extends CustomPainter {
     required this.palette,
     required this.showGrid,
     required this.bloom,
+    this.lineWidth = 1.5,
   }) {
     _gridPaint.color = palette.grid;
     _zeroLinePaint.color = palette.grid.withValues(alpha: 0.35);
 
     _waveLPaint
       ..color = palette.primary
-      ..strokeWidth = 2.0
+      ..strokeWidth = lineWidth
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
     _waveRPaint
       ..color = palette.secondary.withValues(alpha: 0.85)
-      ..strokeWidth = 1.6
+      ..strokeWidth = mathMax(0.7, lineWidth * 0.85)
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
   }
+
+  static double mathMax(double a, double b) => a > b ? a : b;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -44,7 +48,7 @@ class OscilloscopePainter extends CustomPainter {
 
     final centerY = size.height / 2.0;
 
-    // 绘制示波器网格
+    // 绘制示波器参考网格
     if (showGrid) {
       _drawOscilloscopeGrid(canvas, size, centerY);
     }
@@ -57,25 +61,33 @@ class OscilloscopePainter extends CustomPainter {
     final stepX = size.width / (n - 1);
     final amp = size.height * 0.42;
 
-    for (var i = 0; i < n; i++) {
-      final x = i * stepX;
-      final yL = centerY - waveL[i] * amp;
-      final yR = centerY - waveR[i] * amp;
+    pathL.moveTo(0, centerY - waveL[0] * amp);
+    pathR.moveTo(0, centerY - waveR[0] * amp);
 
-      if (i == 0) {
-        pathL.moveTo(x, yL);
-        pathR.moveTo(x, yR);
-      } else {
-        pathL.lineTo(x, yL);
-        pathR.lineTo(x, yR);
-      }
+    // 二次贝塞尔光滑样条曲线插值，彻底消除生硬折线
+    for (var i = 1; i < n; i++) {
+      final prevX = (i - 1) * stepX;
+      final curX = i * stepX;
+      final prevYL = centerY - waveL[i - 1] * amp;
+      final curYL = centerY - waveL[i] * amp;
+      final prevYR = centerY - waveR[i - 1] * amp;
+      final curYR = centerY - waveR[i] * amp;
+
+      final midXL = (prevX + curX) / 2.0;
+      final midYL = (prevYL + curYL) / 2.0;
+      final midYR = (prevYR + curYR) / 2.0;
+
+      pathL.quadraticBezierTo(prevX, prevYL, midXL, midYL);
+      pathR.quadraticBezierTo(prevX, prevYR, midXL, midYR);
     }
+    pathL.lineTo(size.width, centerY - waveL[n - 1] * amp);
+    pathR.lineTo(size.width, centerY - waveR[n - 1] * amp);
 
     // 荧光余辉 Glow 模拟
     if (bloom > 0.1) {
       _glowPaint
         ..color = palette.glow.withValues(alpha: (bloom * 0.5).clamp(0.0, 0.75))
-        ..strokeWidth = 3.5 + bloom * 4.0
+        ..strokeWidth = lineWidth * 2.0 + bloom * 4.0
         ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 5.0);
       canvas.drawPath(pathL, _glowPaint);
       canvas.drawPath(pathR, _glowPaint);
@@ -106,4 +118,3 @@ class OscilloscopePainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant OscilloscopePainter oldDelegate) => true;
 }
-

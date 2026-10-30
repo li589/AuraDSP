@@ -8,6 +8,7 @@ class PulseOrbPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;
   final double animationTime;
+  final double lineWidth;
 
   final Paint _ringPaint = Paint()..style = PaintingStyle.stroke;
   final Paint _corePaint = Paint()..style = PaintingStyle.fill;
@@ -19,8 +20,9 @@ class PulseOrbPainter extends CustomPainter {
     required this.palette,
     required this.bloom,
     required this.animationTime,
+    this.lineWidth = 1.5,
   }) {
-    _ringPaint.strokeWidth = 2.0;
+    _ringPaint.strokeWidth = lineWidth;
     _corePaint.color = palette.secondary.withValues(alpha: 0.85);
     _particlePaint.color = palette.primary;
   }

@@ -131,6 +131,9 @@ class VisualizerConfig {
   /// 频段细分数量 (32 或 64)
   final int barCount;
 
+  /// 线条粗细/光束粗细 (0.8 ~ 3.5px，出厂 1.5px)
+  final double lineWidth;
+
   /// 辉光/余辉模糊度 (0.0 ~ 1.0)
   final double bloom;
 
@@ -159,6 +162,7 @@ class VisualizerConfig {
     this.decayRate = 0.6,
     this.gravity = 1.8,
     this.barCount = 32,
+    this.lineWidth = 1.5,
     this.bloom = 0.5,
     this.showGrid = true,
     this.showPeaks = true,
@@ -175,6 +179,7 @@ class VisualizerConfig {
     double? decayRate,
     double? gravity,
     int? barCount,
+    double? lineWidth,
     double? bloom,
     bool? showGrid,
     bool? showPeaks,
@@ -190,6 +195,7 @@ class VisualizerConfig {
       decayRate: decayRate ?? this.decayRate,
       gravity: gravity ?? this.gravity,
       barCount: barCount ?? this.barCount,
+      lineWidth: lineWidth ?? this.lineWidth,
       bloom: bloom ?? this.bloom,
       showGrid: showGrid ?? this.showGrid,
       showPeaks: showPeaks ?? this.showPeaks,

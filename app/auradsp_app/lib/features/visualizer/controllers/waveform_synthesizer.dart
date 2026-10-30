@@ -3,7 +3,7 @@ import 'dart:ui' show Offset;
 
 /// 真实感高刷时域波形与立体声利萨如相位序列合成器
 class WaveformSynthesizer {
-  static const int pointCount = 128;
+  static const int pointCount = 384;
 
   final List<double> waveL = List.filled(pointCount, 0.0);
   final List<double> waveR = List.filled(pointCount, 0.0);

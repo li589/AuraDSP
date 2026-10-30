@@ -8,6 +8,7 @@ class CyberGridPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double bloom;
   final double animationTime;
+  final double lineWidth;
 
   final Paint _wirePaint = Paint()..style = PaintingStyle.stroke;
   final Paint _horizonPaint = Paint()..strokeWidth = 2.0;
@@ -19,11 +20,14 @@ class CyberGridPainter extends CustomPainter {
     required this.palette,
     required this.bloom,
     required this.animationTime,
+    this.lineWidth = 1.5,
   }) {
     _wirePaint
       ..color = palette.primary.withValues(alpha: 0.8)
-      ..strokeWidth = 1.4;
-    _horizonPaint.color = palette.secondary;
+      ..strokeWidth = lineWidth * 0.9;
+    _horizonPaint
+      ..color = palette.secondary
+      ..strokeWidth = lineWidth * 1.3;
     _sunPaint.color = palette.secondary.withValues(alpha: 0.25);
   }
 

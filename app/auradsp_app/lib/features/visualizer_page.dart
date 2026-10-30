@@ -4,18 +4,21 @@
  * 模块化拆分目录：
  *   - models/      : VisualizerConfig, VisualizerStyle, VisualizerColorTheme
  *   - controllers/ : PeakPhysicsEngine, WaveformSynthesizer
- *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb
- *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters
+ *   - styles/      : SpectrumBars, Oscilloscope, Goniometer, CyberGrid, PulseOrb, GpuShader, Milkdrop
+ *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/state.dart';
+import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../platform/platform_profile.dart';
 import 'chrome.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/models/visualizer_types.dart';
@@ -35,7 +38,18 @@ class _VisualizerPageState extends State<VisualizerPage> {
   VisualizerConfig _config = const VisualizerConfig();
   final MediaSyncService _mediaSync = MediaSyncService();
   bool _drawerOpen = false;
+  bool _isSystemFullscreen = false;
   final FocusNode _focusNode = FocusNode();
+
+  @override
+  void initState() {
+    super.initState();
+    if (PlatformProfile.supportsWindowManagement) {
+      windowManager.isFullScreen().then((isFull) {
+        if (mounted) setState(() => _isSystemFullscreen = isFull);
+      }).catchError((_) {});
+    }
+  }
 
   @override
   void dispose() {
@@ -56,6 +70,25 @@ class _VisualizerPageState extends State<VisualizerPage> {
     });
   }
 
+  Future<void> _toggleSystemFullscreen() async {
+    if (PlatformProfile.supportsWindowManagement) {
+      try {
+        final isFull = await windowManager.isFullScreen();
+        await windowManager.setFullScreen(!isFull);
+        if (mounted) {
+          setState(() => _isSystemFullscreen = !isFull);
+        }
+      } catch (_) {}
+    } else {
+      setState(() => _isSystemFullscreen = !_isSystemFullscreen);
+      if (_isSystemFullscreen) {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      } else {
+        SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      }
+    }
+  }
+
   void _openDrawer() {
     setState(() => _drawerOpen = true);
   }
@@ -67,10 +100,13 @@ class _VisualizerPageState extends State<VisualizerPage> {
   void _handleKeyEvent(KeyEvent event) {
     if (event is KeyDownEvent) {
       if (event.logicalKey == LogicalKeyboardKey.f11) {
-        _toggleFullscreen();
-      } else if (event.logicalKey == LogicalKeyboardKey.escape &&
-          _config.isMaximized) {
-        _toggleFullscreen();
+        _toggleSystemFullscreen();
+      } else if (event.logicalKey == LogicalKeyboardKey.escape) {
+        if (_isSystemFullscreen) {
+          _toggleSystemFullscreen();
+        } else if (_config.isMaximized) {
+          _toggleFullscreen();
+        }
       }
     }
   }
@@ -113,6 +149,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
                 onStyleChanged: (st) =>
                     setState(() => _config = _config.copyWith(style: st)),
                 onToggleFullscreen: _toggleFullscreen,
+                onToggleSystemFullscreen: _toggleSystemFullscreen,
+                isSystemFullscreen: _isSystemFullscreen,
                 onToggleLyrics: _toggleLyrics,
                 onOpenDrawer: _openDrawer,
                 mediaSync: _mediaSync,
@@ -147,6 +185,55 @@ class _VisualizerPageState extends State<VisualizerPage> {
                               active: active,
                             ),
                             const SizedBox(width: AuraSpace.md),
+                            // 系统真全屏按钮（置于电平峰值右侧、高级选项左侧，带独立强调视觉）
+                            Tooltip(
+                              message: _isSystemFullscreen
+                                  ? 'Exit OS Fullscreen (Esc / F11)'
+                                  : 'System Fullscreen (OS Window)',
+                              child: InkWell(
+                                onTap: _toggleSystemFullscreen,
+                                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                                child: AnimatedContainer(
+                                  duration: AuraDur.fast,
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: _isSystemFullscreen
+                                        ? p.accent.withValues(alpha: 0.28)
+                                        : p.accent.withValues(alpha: 0.12),
+                                    borderRadius: BorderRadius.circular(AuraRadius.sm),
+                                    border: Border.all(
+                                      color: _isSystemFullscreen
+                                          ? p.accent
+                                          : p.accent.withValues(alpha: 0.45),
+                                      width: 1.2,
+                                    ),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        _isSystemFullscreen
+                                            ? Icons.fullscreen_exit_rounded
+                                            : Icons.aspect_ratio_rounded,
+                                        size: 16,
+                                        color: p.accent,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'OS',
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: p.accent,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: AuraSpace.sm),
                             IconButton(
                               icon: const Icon(Icons.tune_rounded, size: 20),
                               color: p.textDim,
@@ -171,6 +258,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             onStyleChanged: (st) => setState(
                                 () => _config = _config.copyWith(style: st)),
                             onToggleFullscreen: _toggleFullscreen,
+                            onToggleSystemFullscreen: _toggleSystemFullscreen,
+                            isSystemFullscreen: _isSystemFullscreen,
                             onToggleLyrics: _toggleLyrics,
                             onOpenDrawer: _openDrawer,
                             mediaSync: _mediaSync,

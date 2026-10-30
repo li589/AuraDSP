@@ -17,7 +17,7 @@ import '../styles/visualizer_painter_dispatcher.dart';
 import 'visualizer_db_scale.dart';
 import 'visualizer_hud.dart';
 
-/// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互与全屏沉浸）
+/// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互、窗口与系统全屏沉浸）
 class VisualizerStage extends StatefulWidget {
   final bool playing;
   final ValueListenable<List<double>> spectrum;
@@ -26,6 +26,8 @@ class VisualizerStage extends StatefulWidget {
   final VisualizerConfig config;
   final ValueChanged<VisualizerStyle> onStyleChanged;
   final VoidCallback onToggleFullscreen;
+  final VoidCallback onToggleSystemFullscreen;
+  final bool isSystemFullscreen;
   final VoidCallback onToggleLyrics;
   final VoidCallback onOpenDrawer;
   final MediaSyncService? mediaSync;
@@ -41,6 +43,8 @@ class VisualizerStage extends StatefulWidget {
     required this.config,
     required this.onStyleChanged,
     required this.onToggleFullscreen,
+    required this.onToggleSystemFullscreen,
+    this.isSystemFullscreen = false,
     required this.onToggleLyrics,
     required this.onOpenDrawer,
     this.mediaSync,
@@ -186,6 +190,7 @@ class _VisualizerStageState extends State<VisualizerStage>
                   child: VisualizerHud(
                     config: widget.config,
                     visible: _hudVisible,
+                    isSystemFullscreen: widget.isSystemFullscreen,
                     onStyleChanged: (style) {
                       _onUserPointerActivity();
                       widget.onStyleChanged(style);
@@ -193,6 +198,10 @@ class _VisualizerStageState extends State<VisualizerStage>
                     onToggleFullscreen: () {
                       _onUserPointerActivity();
                       widget.onToggleFullscreen();
+                    },
+                    onToggleSystemFullscreen: () {
+                      _onUserPointerActivity();
+                      widget.onToggleSystemFullscreen();
                     },
                     onToggleLyrics: () {
                       _onUserPointerActivity();
@@ -235,11 +244,14 @@ class _VisualizerStageState extends State<VisualizerStage>
           sensitivity: widget.config.sensitivity,
         );
 
+        // 统一使用物理引擎平滑后的频段渲染柱状谱，消除低频抖动与条宽错位
         final painter = buildVisualizerPainter(
           style: widget.config.style,
           config: widget.config,
           palette: palette,
-          rawBands: rawBands,
+          rawBands: _peakEngine.renderedBands.isNotEmpty
+              ? _peakEngine.renderedBands
+              : rawBands,
           peaks: peaks,
           waveformSynth: _waveformSynth,
           time: _time,

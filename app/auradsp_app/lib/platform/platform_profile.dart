@@ -29,6 +29,10 @@ abstract final class PlatformProfile {
   static bool get supportsLocalDevice =>
       Platform.isWindows || Platform.isLinux;
 
+  /// 是否支持系统桌面窗口管理与真全屏切换。
+  static bool get supportsWindowManagement =>
+      Platform.isWindows || Platform.isLinux || Platform.isMacOS;
+
   /// 配置根目录（Windows: %APPDATA%/AuraDSP；其它: ~/.config/auradsp）。
   static String get configDir {
     if (Platform.isWindows) {

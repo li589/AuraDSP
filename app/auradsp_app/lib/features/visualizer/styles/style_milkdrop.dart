@@ -11,6 +11,7 @@ class MilkdropPainter extends CustomPainter {
   final VisualizerPalette palette;
   final double time;
   final double sensitivity;
+  final double lineWidth;
 
   MilkdropPainter({
     required this.preset,
@@ -18,6 +19,7 @@ class MilkdropPainter extends CustomPainter {
     required this.palette,
     required this.time,
     required this.sensitivity,
+    this.lineWidth = 1.5,
   });
 
   @override
@@ -83,7 +85,7 @@ class MilkdropPainter extends CustomPainter {
 
       final paint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5 + bass * 2.5
+        ..strokeWidth = lineWidth + bass * 2.0
         ..color = color.withValues(alpha: alpha);
 
       canvas.drawCircle(Offset(cx, cy), currentR, paint);
@@ -122,7 +124,7 @@ class MilkdropPainter extends CustomPainter {
 
     final paint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0 + treble * 2.0
+      ..strokeWidth = lineWidth * 1.1 + treble * 1.8
       ..color = palette.primary.withValues(alpha: 0.85);
     canvas.drawPath(path, paint);
   }
@@ -139,7 +141,7 @@ class MilkdropPainter extends CustomPainter {
     const rays = 24;
     final rayPaint = Paint()
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.8
+      ..strokeWidth = lineWidth * 1.1
       ..strokeCap = StrokeCap.round;
 
     for (var i = 0; i < rays; i++) {
