@@ -34,80 +34,13 @@
 extern "C" {
 #endif
 
-// 驱动清单 JSON（UTF-8，写入 out，返回字节数不含尾零，<0=失败）：
-// {"count":N,"drivers":[{"name":"FL Studio ASIO",
-//   "dll":"C:/.../FLStudioASIO.dll","clsid":"{...}"}, ...]}
-// name 为 UTF-8 显示名（中文驱动名正确显示）——asio_start 传回此值即可，
-// 桥内按 SDK 语义完成"显示名 → 注册表原始名"映射（SDK load 键不暴露给 UI）。
-ASB_API int asio_detect(char* out, int cap);
-
-// 启动常驻桥。driver_name 为 detect 的 name（UTF-8 显示名；内部按 SDK 语义
-// 用注册表原始名 load——中文名驱动请传 name 字段，桥内完成映射）。
-// engine_dll="" 则自动搜索（复用 05 的 TryLoadEngine 候选路径）。
-// params_json="" 则不预下发，格式 "id=f1.5;id2=i3"（float 含 '.'/'e'，
-// 其余按 int），失败条目计数进 status.paramsFailed。
-// buf_size<=0 用驱动 preferredSize；out_pair 为输出块起始声道，<0 按 0。
-// 返回：0=ok；<0=失败（note 见 status）。非阻塞（ASIO 回调自有线程）。
-// 兼容入口：等价 asio_start_ex(..., channels=2)（既有调用方零改动）。
-ASB_API int asio_start(const char* driver_name, const char* engine_dll,
-                       const char* params_json, long buf_size, long out_pair);
-
-// 多声道入口（B2c）：channels ∈ {2,4,6,8} 为 io 声道数（引擎 channels.count 由
-// 桥按此强制对齐）；桥按驱动能力自动降级（in/outCh 不足或 out_pair 余量不够时
-// 向下取档，note 上报 "ioCh A->B"）。输入 ch0..nCh-1、输出 out_pair..out_pair+nCh-1。
-ASB_API int asio_start_ex(const char* driver_name, const char* engine_dll,
-                          const char* params_json, long buf_size, long out_pair,
-                          long channels);
-
-// 停止：ASIOStop → disposeBuffers → ASIOExit → removeDriver → 销毁引擎 →
-// 释放（与 start 严格配对，幂等）。
-ASB_API int asio_stop();
-
-// 状态 JSON（调用方 buffer，无分配；driverRaw 为注册表原始字节，不保证合法
-// UTF-8，故不上屏——只进 note 排障）：
-// {"running":true,"switches":N,"sr":48000,"nbs":512,"driver":"...",
-//  "outPair":0,"ioCh":2,"inCh":8,"outCh":8,"inLatency":0,"outLatency":0,
-//  "peakIn":0.0,"peakOut":0.0,"maxCbUs":0.0,"startRc":0,"note":"",
-//  "bypass":0,"testKind":0,"paramsApplied":0,"paramsFailed":0,
-//  "engine":"C:/.../auradsp_engine.dll","engineOk":true}
-ASB_API int asio_status(char* out, int cap);
-
-// 参数即时下发到引擎 handle（引擎 set_param 本就支持 live 调用）。
-// 返回 0=ok，<0=桥未运行/参数缺失。
-ASB_API int asio_set_param(const char* id, int isFloat, const void* v4);
-
-// 字符串参数（liveprog.code / arbmag.string）：同 auradsp_set_param 字节语义
-// （UTF-8，不含 NUL；引擎内部拷贝编译）。ASIO 重建一律走 Dart 侧 stop+start
-// （isolate 回放 paramStrMirror），桥内不另设镜像。返回 0=ok，<0=失败。
-ASB_API int asio_set_param_str(const char* id, const char* utf8, int bytes);
-
-// 参数回读（诊断/回归用）。out4 为 4 字节缓冲；返回 0=ok，<0=失败。
-ASB_API int asio_get_param(const char* id, int isFloat, void* out4);
-
-// 字符串参数回读：out 为调用方缓冲，cap 为容量；返回写入字节数（不含 NUL），
-// <0=失败。
-ASB_API int asio_get_param_str(const char* id, char* out, int cap);
-
-// 读可视化帧（1600B/帧 = sizeof(auradsp_viz_frame) ABI v2，与
-// auradsp_viz_read 同布局透传，Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
-// 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 408B 分配会堆越界）。
-ASB_API int asio_viz_read(void* out1600, int count);
+// 公共导出面已收敛为 common/aurabridge.h 的 ab_*（2026-10-30 清理）。
+// 旧前缀实现体（asio_detect/asio_start_ex/.../asio_bypass）仍在本桥内部使用，
+// 但**不再导出**；ASIO 专属面（asio_abi / 插件槽）保留。
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际，
 // 当前 2）。加载桥后与引擎 auradsp_abi() 比对；不一致时调用方不得解析 viz 帧。
 ASB_API unsigned asio_abi(void);
-
-// 用户旁路开关（跳过 engine process，输入直通输出；测试注入仍生效：
-// 先填测试信号再直通，与进程内 bypass 同义）。返回 0，<0=桥未运行。
-ASB_API int asio_bypass(int on);
-
-// 测试注入：kind 1=正弦440 2=粉噪 3=文件。kind=3 时拷贝 pcm
-// （交织 float32，frames 帧，ch ∈ {1..8} 声道，rate 采样率；单声道铺双声道，
-// 多声道原样存储；语义同 FileSource，经 05 FillTestSignalN）。启动即静音
-// ASIO 输入，测试信号进同一条 DSP 链。返回 0=ok，<0=未运行/参数错。
-ASB_API int asio_test_start(int kind, const float* pcm, int frames, int ch, int rate);
-// 停止测试：先清 kind（RT 可见），等 50ms 让在途回调退出，再释放文件缓冲。
-ASB_API int asio_test_stop();
 
 // ---- 插件槽（单引擎）----
 // 与 auradsp_plugin_slot_* 同语义（1=成功/0=失败）；桥未运行或无引擎时 0。

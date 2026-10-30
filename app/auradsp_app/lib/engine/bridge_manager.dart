@@ -17,7 +17,7 @@ import 'package:ffi/ffi.dart';
 import '../platform/platform_profile.dart';
 import 'auradsp_ffi.dart' show VizFrame;
 import 'audio_abridge.dart';
-import 'audio_bridge.dart' show resolveBridgePrefix, unifiedStart;
+import 'audio_bridge.dart' show abStart;
 import 'audio_vaio_bridge.dart';
 import 'audio_vbridge.dart';
 import 'bridge_plugin_ffi.dart';
@@ -77,56 +77,47 @@ typedef _GetParamDart = int Function(Pointer<Utf8>, int, Pointer<Void>);
 typedef _GetParamStrC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Int32);
 typedef _GetParamStrDart = int Function(Pointer<Utf8>, Pointer<Utf8>, int);
 
-/// 三桥共用 FFI 实现：公共面按 [`abiPrefix`] 拼导出名（新桥 `ab_*`，老桥旧前缀），
-/// 方法体与旧三份拷贝逐字同构。绑定类只保留「前缀加载 + 专属导出」。
+/// 三桥共用 FFI 实现：公共面按常量 `ab_*` 绑定（过渡期清理后唯一导出面），
+/// 方法体与旧三份拷贝逐字同构。绑定类只保留「桥专属导出」。
 class AudioBridgeCore {
   AudioBridgeCore(this.dylib, this.prefix, {String? logTag})
-      : logTag = logTag ?? '$prefix-ffi',
-        // P5 统一契约：新桥公共面走 ab_*，老桥回落旧前缀（插件槽面仍走 prefix）。
-        abiPrefix = resolveBridgePrefix(dylib, prefix);
+      : logTag = logTag ?? '$prefix-ffi';
 
   final DynamicLibrary dylib;
 
   /// 旧前缀（'vb' / 'asio' / 'vaio'）：桥专属导出 + 插件槽面。
   final String prefix;
 
-  /// 公共导出面实际使用的前缀（新桥 'ab'）。
-  final String abiPrefix;
-
-  /// 是否已切换到统一契约（诊断用）。
-  bool get unifiedContract => abiPrefix == 'ab';
-
-  /// 若桥支持统一契约，则优先走 ab_start（configJson 承载桥专属宿主参数）；
-  /// 老桥返回 null，调用方回落各自旧前缀 start。
-  int? startUnified(String engineDll, String params, String configJson) =>
-      unifiedContract ? unifiedStart(dylib, engineDll, params, configJson) : null;
+  /// 统一启动（configJson 承载桥专属宿主参数）。
+  int start(String engineDll, String params, String configJson) =>
+      abStart(dylib, engineDll, params, configJson);
 
   /// 错误/异常节流日志 tag（沿用旧值：vb-ffi / ab-ffi / vaio-ffi）。
   final String logTag;
 
   late final BridgePluginFfi plugin = BridgePluginFfi(dylib, prefix);
   late final _DetectDart _detect =
-      dylib.lookupFunction<_DetectC, _DetectDart>('${abiPrefix}_detect');
+      dylib.lookupFunction<_DetectC, _DetectDart>('ab_detect');
   late final _StopDart _stop =
-      dylib.lookupFunction<_StopC, _StopDart>('${abiPrefix}_stop');
+      dylib.lookupFunction<_StopC, _StopDart>('ab_stop');
   late final _StatusDart _status =
-      dylib.lookupFunction<_StatusC, _StatusDart>('${abiPrefix}_status');
+      dylib.lookupFunction<_StatusC, _StatusDart>('ab_status');
   late final _SetParamDart _setParam =
-      dylib.lookupFunction<_SetParamC, _SetParamDart>('${abiPrefix}_set_param');
+      dylib.lookupFunction<_SetParamC, _SetParamDart>('ab_set_param');
   late final _VizReadDart _vizRead =
-      dylib.lookupFunction<_VizReadC, _VizReadDart>('${abiPrefix}_viz_read');
+      dylib.lookupFunction<_VizReadC, _VizReadDart>('ab_viz_read');
   late final _TestStartDart _testStart = dylib
-      .lookupFunction<_TestStartC, _TestStartDart>('${abiPrefix}_test_start');
+      .lookupFunction<_TestStartC, _TestStartDart>('ab_test_start');
   late final _TestStopDart _testStop =
-      dylib.lookupFunction<_TestStopC, _TestStopDart>('${abiPrefix}_test_stop');
+      dylib.lookupFunction<_TestStopC, _TestStopDart>('ab_test_stop');
   late final _BypassDart _bypass =
-      dylib.lookupFunction<_BypassC, _BypassDart>('${abiPrefix}_bypass');
+      dylib.lookupFunction<_BypassC, _BypassDart>('ab_bypass');
   late final _SetParamStrDart _setParamStr = dylib.lookupFunction<
-      _SetParamStrC, _SetParamStrDart>('${abiPrefix}_set_param_str');
+      _SetParamStrC, _SetParamStrDart>('ab_set_param_str');
   late final _GetParamDart _getParam =
-      dylib.lookupFunction<_GetParamC, _GetParamDart>('${abiPrefix}_get_param');
+      dylib.lookupFunction<_GetParamC, _GetParamDart>('ab_get_param');
   late final _GetParamStrDart _getParamStr = dylib.lookupFunction<
-      _GetParamStrC, _GetParamStrDart>('${abiPrefix}_get_param_str');
+      _GetParamStrC, _GetParamStrDart>('ab_get_param_str');
 
   /// 原始 detect JSON（各桥自行解释形状）。
   Map<String, dynamic>? detectJson(int cap) {

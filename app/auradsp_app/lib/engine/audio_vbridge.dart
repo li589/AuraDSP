@@ -4,19 +4,15 @@
 // AURADSP_VB_BRIDGE_DLL。刻意不含硬编码开发机路径（产品铁律）。
 // 所有调用均在 isolate 线程（控制面），RT 线程只跑 VB 回调本身。
 //
-// P1 收敛：公共导出（stop/status/set_param/viz_read/test_*/bypass/参数回读）
-// 全部委托 AudioBridgeCore；本文件只保留 VB 专属面（start/总线掩码/插件掩码）。
+// P1 收敛：公共导出（start/stop/status/set_param/viz_read/test_*/bypass/参数回读）
+// 全部委托 AudioBridgeCore；本文件只保留 VB 专属面（总线掩码/插件掩码）。
 import 'dart:ffi';
 import 'dart:io' show Platform;
-
-import 'package:ffi/ffi.dart';
 
 import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
 
-typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>);
-typedef _StartDart = int Function(Pointer<Utf8>, Pointer<Utf8>);
 typedef _BusMaskC = Int32 Function(Int32);
 typedef _BusMaskDart = int Function(int);
 typedef _PluginGroupEnableC = Int32 Function(Int32);
@@ -35,8 +31,6 @@ class AuraVmBridge implements AudioBridgeCommon {
   @override
   BridgePluginFfi get plugin => core.plugin;
 
-  late final _StartDart _start =
-      dylib.lookupFunction<_StartC, _StartDart>('vb_start');
   late final _BusMaskDart _busMask =
       dylib.lookupFunction<_BusMaskC, _BusMaskDart>('vb_set_bus_mask');
   late final _PluginGroupEnableDart _pluginGroupEnable =
@@ -76,19 +70,8 @@ class AuraVmBridge implements AudioBridgeCommon {
   Map<String, dynamic>? detect() => core.detectJson(2048);
 
   /// 启动常驻泵。engineDll 传引擎真相源绝对路径（AppModel 经 loadedPath 给）。
-  int start(String engineDll, String params) {
-    // P5：新桥走统一契约 ab_start（VM 无宿主参数，config 传空对象）。
-    final ab = core.startUnified(engineDll, params, '{}');
-    if (ab != null) return ab;
-    final ep = engineDll.toNativeUtf8();
-    final pp = params.toNativeUtf8();
-    try {
-      return _start(ep.cast(), pp.cast());
-    } finally {
-      malloc.free(ep);
-      malloc.free(pp);
-    }
-  }
+  int start(String engineDll, String params) =>
+      core.start(engineDll, params, '{}');
 
   @override
   int stop() => core.stop();

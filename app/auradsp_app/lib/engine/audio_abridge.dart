@@ -4,21 +4,14 @@
 // AURADSP_ASIO_BRIDGE_DLL。控制面调用均在 isolate 线程；RT 由驱动回调驱动。
 //
 // P1 收敛：公共导出委托 AudioBridgeCore；本文件只保留 ASIO 专属面
-// （asio_start_ex / 驱动清单 detect 形状）。
+// （驱动清单 detect 形状 + start 的宿主参数映射）。
 import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show Platform;
 
-import 'package:ffi/ffi.dart';
-
 import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
-
-typedef _StartExC = Int32 Function(
-    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, Int32, Int32, Int32);
-typedef _StartExDart = int Function(
-    Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>, int, int, int);
 
 class AuraAsioBridge implements AudioBridgeCommon {
   final AudioBridgeCore core;
@@ -30,9 +23,6 @@ class AuraAsioBridge implements AudioBridgeCommon {
 
   @override
   BridgePluginFfi get plugin => core.plugin;
-
-  late final _StartExDart _startEx =
-      dylib.lookupFunction<_StartExC, _StartExDart>('asio_start_ex');
 
   static AuraAsioBridge? _cached;
 
@@ -79,8 +69,8 @@ class AuraAsioBridge implements AudioBridgeCommon {
       int bufSize = 0,
       int outPair = 0,
       int channels = 2}) {
-    // P5：新桥走统一契约 ab_start（驱动名/缓冲档/输出声道对经 config_json 归一）。
-    final ab = core.startUnified(
+    // 驱动名/缓冲档/输出声道对经 config_json 归一，三桥共用 ab_start。
+    return core.start(
         engineDll,
         paramsJson,
         jsonEncode({
@@ -89,17 +79,6 @@ class AuraAsioBridge implements AudioBridgeCommon {
           'outPair': outPair,
           'channels': channels,
         }));
-    if (ab != null) return ab;
-    final dp = driver.toNativeUtf8();
-    final ep = engineDll.toNativeUtf8();
-    final pp = paramsJson.toNativeUtf8();
-    try {
-      return _startEx(dp.cast(), ep.cast(), pp.cast(), bufSize, outPair, channels);
-    } finally {
-      malloc.free(dp);
-      malloc.free(ep);
-      malloc.free(pp);
-    }
   }
 
   @override

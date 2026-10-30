@@ -70,12 +70,13 @@ def read(p):
 # ------------------------------------------------------------------ [A] 解析单元
 print("== [A] 解析单元 ==")
 
-N_HEADER = {"asio": 29, "vaio": 28, "vb": 41}      # 含 §7-5 的 2+2 项 + §7-2（P-028）的 *_abi
-# P5（统一桥契约 ab_*，2026-10-29）：三桥各追加 14 项（声明在 common/aurabridge.h，
-# 不并入各自头文件——见 abi_consistency.py 的 AB_COMMON_H 说明）。
+N_HEADER = {"asio": 16, "vaio": 16, "vb": 29}      # 旧前缀公共面已于 2026-10-30 下线
+# 统一契约 ab_*（common/aurabridge.h）14 项：声明只出现在 AB_COMMON_H，
+# 由 abi_consistency.py 参与 B1 双向比对。
 AB_EXPORTS = 14
-N_DEF = {"asio": 29 + AB_EXPORTS, "vaio": 28 + AB_EXPORTS,
-         "vb": 41 + AB_EXPORTS}
+N_DEF = {"asio": N_HEADER["asio"] + AB_EXPORTS,
+         "vaio": N_HEADER["vaio"] + AB_EXPORTS,
+         "vb": N_HEADER["vb"] + AB_EXPORTS}
 
 for prefix, h_path, def_path in A.BRIDGES:
     try:
@@ -110,9 +111,10 @@ r = subprocess.run([sys.executable, str(BIN / "abi_consistency.py"), "--bridges-
                    cwd=str(ROOT))
 check("[B1] CLI --bridges-only 退出码 0", r.returncode == 0,
       (r.stdout or "") + (r.stderr or ""))
-check("[B2] 报告 140 个导出 1:1", "140 个导出" in r.stdout, r.stdout.strip()[-120:])
-check("[B3] 三座桥各自导出数正确",
-      all(("%s" % n) in r.stdout for n in (43, 42, 55)) or True, "见 [B1] 输出")
+check("[B2] 报告 %d 个导出 1:1" % sum(N_DEF.values()),
+      ("%d 个导出" % sum(N_DEF.values())) in r.stdout, r.stdout.strip()[-120:])
+check("[B3] 有且仅有一套公共面（ab_*），无旧前缀重复导出",
+      "103 个导出" in r.stdout, "见 [B1] 输出")
 
 # ------------------------------------------------------------------ [C] 活体
 print("== [C] 活体：真相源 DLL 真的导出 Dart 硬绑定符号 ==")

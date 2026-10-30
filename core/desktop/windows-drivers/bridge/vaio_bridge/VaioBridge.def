@@ -1,18 +1,7 @@
 LIBRARY auravaio_bridge
 EXPORTS
-    vaio_detect
-    vaio_start
-    vaio_stop
-    vaio_status
-    vaio_set_param
-    vaio_set_param_str
-    vaio_get_param
-    vaio_get_param_str
-    vaio_viz_read
+    ; ---- VAIO 专属面（不在统一契约内）----
     vaio_abi
-    vaio_bypass
-    vaio_test_start
-    vaio_test_stop
     vaio_plugin_slot_load
     vaio_plugin_slot_unload
     vaio_plugin_slot_set_bypass
@@ -28,7 +17,7 @@ EXPORTS
     vaio_plugin_slot_get_insert_stage
     vaio_plugin_slot_set_channels
     vaio_plugin_slot_get_channels
-    ; ---- P5 统一桥契约（bridge/common/aurabridge.h；旧前缀保留一个版本）----
+    ; ---- 统一桥契约（bridge/common/aurabridge.h）：唯一公共导出面 ----
     ab_abi_version
     ab_capabilities
     ab_detect

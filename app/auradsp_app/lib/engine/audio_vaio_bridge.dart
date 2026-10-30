@@ -9,14 +9,9 @@ import 'dart:convert';
 import 'dart:ffi';
 import 'dart:io' show Platform;
 
-import 'package:ffi/ffi.dart';
-
 import '../platform/platform_profile.dart';
 import 'bridge_manager.dart';
 import 'bridge_plugin_ffi.dart';
-
-typedef _StartC = Int32 Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
-typedef _StartDart = int Function(Pointer<Utf8>, Pointer<Utf8>, Pointer<Utf8>);
 
 class AuraVaioBridge implements AudioBridgeCommon {
   final AudioBridgeCore core;
@@ -28,9 +23,6 @@ class AuraVaioBridge implements AudioBridgeCommon {
 
   @override
   BridgePluginFfi get plugin => core.plugin;
-
-  late final _StartDart _start =
-      dylib.lookupFunction<_StartC, _StartDart>('vaio_start');
 
   static AuraVaioBridge? _cached;
 
@@ -61,22 +53,10 @@ class AuraVaioBridge implements AudioBridgeCommon {
   Map<String, dynamic>? detect() => core.detectJson(8192);
 
   /// 启动常驻泵。engineDll 传引擎绝对路径；outputEndpointSubstr 为目标物理输出设备子串。
-  int start(String engineDll, String params, {String outputEndpointSubstr = ''}) {
-    // P5：新桥走统一契约 ab_start（端点子串经 config_json 归一）。
-    final ab = core.startUnified(
-        engineDll, params, jsonEncode({'endpoint': outputEndpointSubstr}));
-    if (ab != null) return ab;
-    final ep = engineDll.toNativeUtf8();
-    final pp = params.toNativeUtf8();
-    final op = outputEndpointSubstr.toNativeUtf8();
-    try {
-      return _start(ep.cast(), pp.cast(), op.cast());
-    } finally {
-      malloc.free(ep);
-      malloc.free(pp);
-      malloc.free(op);
-    }
-  }
+  int start(String engineDll, String params, {String outputEndpointSubstr = ''}) =>
+      // 端点子串经 config_json 归一，三桥共用 ab_start。
+      core.start(engineDll, params,
+          jsonEncode({'endpoint': outputEndpointSubstr}));
 
   @override
   int stop() => core.stop();

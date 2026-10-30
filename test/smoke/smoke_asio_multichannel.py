@@ -30,8 +30,12 @@ if not path:
     sys.exit(0)
 
 b = ctypes.CDLL(path)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bridge_compat import alias_common, start_asio  # noqa: E402
+
+alias_common(b, "asio")
+b.asio_start_ex = start_asio(b)
 b.asio_detect.restype = ctypes.c_int
-b.asio_start_ex.restype = ctypes.c_int
 b.asio_stop.restype = ctypes.c_int
 b.asio_status.restype = ctypes.c_int
 b.asio_get_param.restype = ctypes.c_int
@@ -39,8 +43,6 @@ b.asio_test_start.restype = ctypes.c_int
 b.asio_test_stop.restype = ctypes.c_int
 b.asio_bypass.restype = ctypes.c_int
 b.asio_detect.argtypes = [ctypes.c_char_p, ctypes.c_int]
-b.asio_start_ex.argtypes = [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
-                            ctypes.c_long, ctypes.c_long, ctypes.c_long]
 b.asio_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
 b.asio_get_param.argtypes = [ctypes.c_char_p, ctypes.c_int, ctypes.c_void_p]
 b.asio_test_start.argtypes = [ctypes.c_int, ctypes.c_void_p, ctypes.c_int,

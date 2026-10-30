@@ -201,10 +201,15 @@ else:
         print(f"SKIP（DLL 加载失败：{e}）")
         b = None
     if b is not None:
+        # 2026-10-30 过渡期清理：公共面只导出 ab_*，先做旧名别名再绑定签名。
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        from bridge_compat import alias_common, start_asio  # noqa: E402
+
+        alias_common(b, "asio")
+        b.asio_start = start_asio(b)
+
         for fn, rt, at in (
             ("asio_detect", ctypes.c_int, [ctypes.c_char_p, ctypes.c_int]),
-            ("asio_start", ctypes.c_int,
-             [ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p, ctypes.c_long, ctypes.c_long]),
             ("asio_stop", ctypes.c_int, []),
             ("asio_test_start", ctypes.c_int,
              [ctypes.c_int, ctypes.c_void_p, ctypes.c_int, ctypes.c_int, ctypes.c_int]),
