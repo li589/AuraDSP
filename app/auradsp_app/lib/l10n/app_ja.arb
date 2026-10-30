@@ -1101,6 +1101,7 @@
   "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
   "plugAddScan": "追加してスキャン",
   "plugTitle": "プラグインセンター",
+  "plugUnsupported": "このプラットフォームではプラグインは利用できません",
   "plugLibTitle": "サードパーティエフェクトライブラリ",
   "plugLibHint": "システム標準64ビットVST3 / CLAPフォルダとカスタムフォルダをスキャン・管理。ゼロ遅延/先読み補償、ステレオプレーンRT-Safe。",
   "plugDeepScan": "ディープスキャン",

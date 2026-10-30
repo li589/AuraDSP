@@ -18,7 +18,7 @@
 
 | 端口 | Android 落点 | 约束 |
 |---|---|---|
-| `port/fs.h` `fopen_utf8` | 直接 `fopen`（bionic 按 UTF-8 直通） | 应用沙箱路径与 vendor 路径的权限差异由调用方保证 |
+| `port/fs.h` `fopen_utf8` | 直接 `fopen`（bionic 按 UTF-8 直通）；可选 `FsOpenError*` 回传失败原因（R2） | 应用沙箱路径与 vendor 路径的权限差异由调用方保证 |
 | `port/env.h` `get_env` | `getenv` + NUL/容量语义对齐 | vendor 进程受 SELinux 限制，环境变量不可作为配置真相源 |
 | `port/log.h` `log_level` / `log_emit` | `__android_log_print`（标签沿用 `AURADSP`） | 格式逐字保留 `[AuraDSP][file:line] msg\n` |
 | `port/module.h` | `dlopen` / `dlsym` / `dlclose` / `dlerror` | HAL 进程的 linker namespace 与 SELinux 决定可加载路径，不能沿用 Windows 的「目录优先」搜索语义 |

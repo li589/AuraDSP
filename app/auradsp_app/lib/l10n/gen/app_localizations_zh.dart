@@ -2723,6 +2723,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugTitle => '插件中心';
 
   @override
+  String get plugUnsupported => '插件功能在当前平台不可用';
+
+  @override
   String get plugLibTitle => '第三方效果器库';
 
   @override

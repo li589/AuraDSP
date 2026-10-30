@@ -5248,6 +5248,12 @@ abstract class AppLocalizations {
   /// **'插件中心'**
   String get plugTitle;
 
+  /// R4：非 Windows 平台插件宿主不可用时的占位提示
+  ///
+  /// In zh, this message translates to:
+  /// **'插件功能在当前平台不可用'**
+  String get plugUnsupported;
+
   /// No description provided for @plugLibTitle.
   ///
   /// In zh, this message translates to:

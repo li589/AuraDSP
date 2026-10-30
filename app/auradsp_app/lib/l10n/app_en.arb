@@ -1101,6 +1101,7 @@
   "plugAddDirExample": "E.g.: D:\\AudioPlugins\\VST3",
   "plugAddScan": "Add & Scan",
   "plugTitle": "Plugin Center",
+  "plugUnsupported": "Plugins are not available on this platform",
   "plugLibTitle": "Third-party Effect Library",
   "plugLibHint": "Scans and manages system-standard 64-bit VST3 / CLAP folders plus custom folders. Zero-latency and lookahead compensation, stereo-plane RT-Safe.",
   "plugDeepScan": "Deep scan",

@@ -2743,6 +2743,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugTitle => 'プラグインセンター';
 
   @override
+  String get plugUnsupported => 'このプラットフォームではプラグインは利用できません';
+
+  @override
   String get plugLibTitle => 'サードパーティエフェクトライブラリ';
 
   @override

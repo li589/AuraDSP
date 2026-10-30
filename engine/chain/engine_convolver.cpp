@@ -18,8 +18,24 @@ char* read_text_file(auradsp_handle h, const char* path, long max_bytes,
                      auradsp_status* st) {
     *st = AURADSP_OK;
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); *st = AURADSP_E_PARAM; return nullptr; }
-    FILE* fp = auradsp::platform::fopen_utf8(path, "rb");
-    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open)"); *st = AURADSP_E_IO; return nullptr; }
+    /* R2（M6 审查遗留）：区分打开失败原因——UTF-8 非法 → E_PARAM（与 M1 前一致），
+     * OOM / 文件打不开 → E_IO。 */
+    auradsp::platform::FsOpenError fs_err = auradsp::platform::FsOpenError::none;
+    FILE* fp = auradsp::platform::fopen_utf8(path, "rb", &fs_err);
+    if (!fp) {
+        using auradsp::platform::FsOpenError;
+        if (fs_err == FsOpenError::invalid_encoding) {
+            set_error(h, "convolver.ir.path: invalid encoding");
+            *st = AURADSP_E_PARAM;
+        } else if (fs_err == FsOpenError::out_of_memory) {
+            set_error(h, "convolver.ir.path: out of memory");
+            *st = AURADSP_E_IO;
+        } else {
+            set_error(h, "convolver.ir: io failed (cannot open)");
+            *st = AURADSP_E_IO;
+        }
+        return nullptr;
+    }
     fseek(fp, 0, SEEK_END);
     const long sz = ftell(fp);
     if (sz <= 0 || sz > max_bytes) {
@@ -136,9 +152,23 @@ void rebuild_hann(auradsp_handle h, int n) {
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); return AURADSP_E_PARAM; }
-    /* 审查修复 R-1：UTF-8 路径经平台端口打开（Windows 内部转 wide）。 */
-    FILE* fp = auradsp::platform::fopen_utf8(path, "rb");
-    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open file)"); return AURADSP_E_IO; }
+    /* 审查修复 R-1：UTF-8 路径经平台端口打开（Windows 内部转 wide）。
+     * R2（M6 审查遗留）：UTF-8 非法 → E_PARAM，OOM/打不开 → E_IO。 */
+    auradsp::platform::FsOpenError fs_err = auradsp::platform::FsOpenError::none;
+    FILE* fp = auradsp::platform::fopen_utf8(path, "rb", &fs_err);
+    if (!fp) {
+        using auradsp::platform::FsOpenError;
+        if (fs_err == FsOpenError::invalid_encoding) {
+            set_error(h, "convolver.ir.path: invalid encoding");
+            return AURADSP_E_PARAM;
+        }
+        if (fs_err == FsOpenError::out_of_memory) {
+            set_error(h, "convolver.ir.path: out of memory");
+            return AURADSP_E_IO;
+        }
+        set_error(h, "convolver.ir: io failed (cannot open file)");
+        return AURADSP_E_IO;
+    }
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: io failed (seek failed)"); return AURADSP_E_IO; }
     const long fsize = ftell(fp);
     if (fsize <= 44) { fclose(fp); set_error(h, "convolver.ir: file too small"); return AURADSP_E_PARAM; }
