@@ -641,6 +641,7 @@
   "visualizerLyricsReady": "歌词已加载",
   "visualizerLyricsRetry": "重新获取",
   "visualizerLyricsPickLocal": "本地 LRC",
+  "visualizerLyricsCalibrate": "校准到这一行",
   "visualizerResetPeakTip": "重置峰值保持",
   "visualizerDisplayRestoreTip": "还原：标准页面布局",
   "visualizerDisplayStageTip": "软件全屏：视效铺满应用窗口",

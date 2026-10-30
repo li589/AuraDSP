@@ -21,6 +21,11 @@ class GpuShaderService {
   bool _initialized = false;
   bool _failed = false;
 
+  /// 每类着色器只创建一个 FragmentShader 实例并复用。
+  /// 之前每帧调用 program.fragmentShader()，等于每秒新建几十个原生 shader 对象，
+  /// 在 Windows/Skia 下会持续占用原生内存并触发频繁的着色器状态重建。
+  final Map<GpuShaderType, FragmentShader> _shaderCache = {};
+
   bool get isReady => _initialized && !_failed;
 
   FragmentProgram? getProgram(GpuShaderType type) {
@@ -30,6 +35,17 @@ class GpuShaderService {
       case GpuShaderType.tunnel:
         return _tunnelProgram;
     }
+  }
+
+  /// 复用型 FragmentShader：调用方每帧只更新 uniform，不再新建对象。
+  FragmentShader? shaderFor(GpuShaderType type) {
+    final cached = _shaderCache[type];
+    if (cached != null) return cached;
+    final program = getProgram(type);
+    if (program == null) return null;
+    final shader = program.fragmentShader();
+    _shaderCache[type] = shader;
+    return shader;
   }
 
   /// Initialize and compile shaders asynchronously

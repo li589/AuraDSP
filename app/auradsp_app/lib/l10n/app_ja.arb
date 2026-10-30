@@ -514,6 +514,7 @@
   "visualizerLyricsReady": "歌詞を読み込みました",
   "visualizerLyricsRetry": "再取得",
   "visualizerLyricsPickLocal": "ローカル LRC",
+  "visualizerLyricsCalibrate": "この行に合わせる",
   "visualizerResetPeakTip": "ピークホールドをリセット",
   "visualizerDisplayRestoreTip": "標準レイアウトに戻す",
   "visualizerDisplayStageTip": "アプリ内全画面：ステージをウィンドウ全体に表示",

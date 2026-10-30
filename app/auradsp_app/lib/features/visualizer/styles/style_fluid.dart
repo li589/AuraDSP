@@ -60,7 +60,9 @@ class FluidSilkPainter extends CustomPainter {
 
     _drawBackdrop(canvas, size, bass);
 
-    // 第一遍：合并三条填充带，让辉光整体模糊一次
+    // 第一遍：合并三条填充带做一次低透底衬。
+    // 刻意不再使用 MaskFilter.blur：整屏绸带每帧模糊一次会不断申请全尺寸图层，
+    // 长时间播放导致进程内存飙升且光栅线程卡顿；改用低透明度轮廓叠加。
     _glowPath.reset();
     for (var i = 0; i < _bandCount; i++) {
       _buildBand(i, w, h, t, n, bass, amp);
@@ -70,11 +72,8 @@ class FluidSilkPainter extends CustomPainter {
     if (bloom > 0.05) {
       _glowPaint
         ..shader = null
-        ..color = palette.glow.withValues(alpha: 0.10 + bloom * 0.2)
-        ..maskFilter = MaskFilter.blur(
-          BlurStyle.normal,
-          math.max(2.0, bloom * 6.0),
-        );
+        ..maskFilter = null
+        ..color = palette.glow.withValues(alpha: 0.05 + bloom * 0.09);
       canvas.drawPath(_glowPath, _glowPaint);
     }
 

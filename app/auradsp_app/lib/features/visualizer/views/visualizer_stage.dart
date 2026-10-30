@@ -314,6 +314,7 @@ class _VisualizerStageState extends State<VisualizerStage>
                         document: doc,
                         activeIndex: sync.activeLineIndex.value,
                         showTranslation: widget.config.showTranslation,
+                        onLineCalibrate: sync.calibrateToLine,
                       ),
               ),
             ],

@@ -36,9 +36,8 @@ void main() {
       expect(VisualizerStyle.milkDrop.label, 'MilkDrop');
     });
 
-    test('GpuShaderPainter draws fallback when program is uncompiled', () {
+    test('GpuShaderPainter draws fallback when shader is uncompiled', () {
       final painter = GpuShaderPainter(
-        program: null,
         shaderType: GpuShaderType.aurora,
         bands: List.filled(32, 0.5),
         palette: testPalette,

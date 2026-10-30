@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show PointerDeviceKind;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -270,6 +271,73 @@ void main() {
 
       service.dispose();
     });
+
+    test('Stale SMTC snapshot never rewinds the active lyric line', () async {
+      final doc = LrcParser.parse('''
+[00:00.00]A
+[00:01.00]B
+[00:02.00]C
+''');
+      final provider = MockMediaSessionProvider();
+      final service = MediaSyncService(
+        provider: provider,
+        onlineService: _FakeOnlineLyricsService(doc),
+      );
+      service.startAutoSync();
+
+      const track = MediaTrackMetadata(
+        title: 'Poller',
+        artist: 'Artist',
+        position: Duration.zero,
+        isPlaying: true,
+      );
+      provider.emitTrack(track);
+      await Future<void>.delayed(const Duration(milliseconds: 1300));
+      expect(service.activeLineIndex.value, greaterThanOrEqualTo(1));
+
+      // 同曲轮询上报一个明显滞后的位置（快照滞后约 1s），不得让行指针回退
+      provider.emitTrack(track.copyWith(
+        position: const Duration(milliseconds: 200),
+      ));
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(service.activeLineIndex.value, greaterThanOrEqualTo(1));
+
+      service.dispose();
+    });
+
+    test('Calibrating a line survives subsequent same-track polls', () async {
+      final doc = LrcParser.parse('''
+[00:00.00]Zero
+[00:10.00]Ten
+[00:20.00]Twenty
+''');
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: _FakeOnlineLyricsService(doc),
+      );
+
+      const track = MediaTrackMetadata(
+        title: 'Manual',
+        artist: 'Artist',
+        position: Duration(seconds: 5),
+        isPlaying: true,
+      );
+      await service.updateTrack(track);
+      service.loadLyricDocument(doc);
+      expect(service.activeLineIndex.value, 0);
+
+      service.calibrateToLine(2);
+      expect(service.activeLineIndex.value, 2);
+
+      // 播放器继续每秒上报旧时间轴，校准偏移必须保留，行指针不得被拉回
+      await service.updateTrack(
+        track.copyWith(position: const Duration(seconds: 5)),
+      );
+      await Future<void>.delayed(const Duration(milliseconds: 120));
+      expect(service.activeLineIndex.value, 2);
+
+      service.dispose();
+    });
   });
 
   group('LyricView Widget Tests', () {
@@ -307,6 +375,49 @@ void main() {
 
       expect(find.text('Hello world'), findsOneWidget);
       expect(find.text('Welcome to AuraDSP'), findsOneWidget);
+    });
+
+    testWidgets('Hover reveals calibrate action and taps the hovered line',
+        (tester) async {
+      final doc = LrcParser.parse('''
+[00:01.00]Hello world
+[00:05.00]Welcome to AuraDSP
+''');
+      int? calibrated;
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: SizedBox(
+              height: 360,
+              child: LyricView(
+                document: doc,
+                activeIndex: 0,
+                onLineCalibrate: (i) => calibrated = i,
+              ),
+            ),
+          ),
+        ),
+      );
+
+      final gesture = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      await gesture.addPointer(location: Offset.zero);
+      addTearDown(gesture.removePointer);
+
+      await gesture.moveTo(tester.getCenter(find.text('Hello world')));
+      await tester.pump(const Duration(milliseconds: 200));
+
+      // 悬停行右侧出现校准按钮；点击后回调携带该行下标
+      final icon = find.byIcon(Icons.my_location_rounded).first;
+      expect(icon, findsOneWidget);
+      await tester.tap(icon);
+      await tester.pump();
+
+      expect(calibrated, 0);
     });
   });
 

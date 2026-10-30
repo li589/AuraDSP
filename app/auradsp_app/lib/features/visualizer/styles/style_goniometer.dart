@@ -67,12 +67,12 @@ class GoniometerPainter extends CustomPainter {
       }
     }
 
-    // 荧光余辉
+    // 荧光余辉（加宽低透地平描，避免每帧模糊图层）
     if (bloom > 0.1) {
       _glowPaint
-        ..color = palette.glow.withValues(alpha: (bloom * 0.4).clamp(0.0, 0.7))
+        ..color = palette.glow.withValues(alpha: (bloom * 0.18).clamp(0.0, 0.32))
         ..strokeWidth = lineWidth * 2.0 + bloom * 3.5
-        ..maskFilter = MaskFilter.blur(BlurStyle.normal, bloom * 4.0);
+        ..maskFilter = null;
       canvas.drawPath(path, _glowPaint);
     }
 
