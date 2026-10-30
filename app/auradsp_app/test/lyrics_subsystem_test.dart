@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/models/lyric_models.dart';
@@ -5,6 +7,11 @@ import 'package:auradsp_app/features/visualizer/lyrics/parsers/lrc_parser.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/services/media_sync_service.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/services/online_lyrics_service.dart';
 import 'package:auradsp_app/features/visualizer/lyrics/views/lyric_view.dart';
+import 'package:auradsp_app/core/design.dart';
+import 'package:auradsp_app/core/theme.dart';
+import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
+import 'package:auradsp_app/features/visualizer/views/visualizer_stage.dart';
+import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 
 /// 离线歌词源：单元测试不得触网，检索结果完全由用例注入
 class _FakeOnlineLyricsService extends OnlineLyricsService {
@@ -19,6 +26,22 @@ class _FakeOnlineLyricsService extends OnlineLyricsService {
     Duration? duration,
   }) async =>
       document;
+}
+
+/// 可手动控制完成时机的歌词源：用于验证慢速检索不会被同曲轮询作废
+class _DeferredOnlineLyricsService extends OnlineLyricsService {
+  final Completer<LyricDocument?> completer = Completer<LyricDocument?>();
+  int calls = 0;
+
+  @override
+  Future<LyricDocument?> fetchLyrics({
+    required String trackName,
+    required String artistName,
+    Duration? duration,
+  }) {
+    calls++;
+    return completer.future;
+  }
 }
 
 void main() {
@@ -188,6 +211,65 @@ void main() {
 
       service.dispose();
     });
+
+    test('Same-track polling does not discard slow online lyric results', () async {
+      final provider = MockMediaSessionProvider();
+      final online = _DeferredOnlineLyricsService();
+      final service = MediaSyncService(
+        provider: provider,
+        onlineService: online,
+      );
+
+      const track = MediaTrackMetadata(
+        title: 'Slow Song',
+        artist: 'Artist',
+        position: Duration(seconds: 5),
+        isPlaying: true,
+      );
+
+      final first = service.updateTrack(track);
+      // 模拟 SMTC 每秒轮询再次上报同一曲目（真实场景下会导致慢速检索被作废）
+      final second = service.updateTrack(
+        track.copyWith(position: const Duration(seconds: 6)),
+      );
+      expect(service.lyricsState.value, LyricsSyncState.searching);
+      expect(online.calls, 1);
+
+      online.completer.complete(LrcParser.parse('''
+[00:00.00]First line
+[00:05.00]Second line
+'''));
+      await first;
+      await second;
+
+      expect(service.currentLyrics.value.lines.length, 2);
+      expect(service.lyricsState.value, LyricsSyncState.ready);
+      expect(service.activeLineIndex.value, greaterThanOrEqualTo(0));
+
+      service.dispose();
+    });
+
+    test('Exposes no-media and not-found states for visible UI feedback', () async {
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: _FakeOnlineLyricsService(),
+      );
+
+      expect(service.lyricsState.value, LyricsSyncState.idle);
+
+      await service.updateTrack(MediaTrackMetadata.empty);
+      expect(service.lyricsState.value, LyricsSyncState.noMedia);
+
+      await service.updateTrack(const MediaTrackMetadata(
+        title: 'Unknown Track',
+        artist: 'Nobody',
+        isPlaying: true,
+      ));
+      expect(service.lyricsState.value, LyricsSyncState.notFound);
+      expect(service.currentLyrics.value.isEmpty, isTrue);
+
+      service.dispose();
+    });
   });
 
   group('LyricView Widget Tests', () {
@@ -225,6 +307,60 @@ void main() {
 
       expect(find.text('Hello world'), findsOneWidget);
       expect(find.text('Welcome to AuraDSP'), findsOneWidget);
+    });
+  });
+
+  group('VisualizerStage Lyrics Overlay', () {
+    testWidgets('Shows visible status and actions when enabled without media',
+        (tester) async {
+      tester.view.physicalSize = const Size(900, 560);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: _FakeOnlineLyricsService(),
+      );
+      addTearDown(service.dispose);
+
+      final spectrum =
+          ValueNotifier<List<double>>(List<double>.filled(32, 0.0));
+      final level = ValueNotifier<double>(-60.0);
+      addTearDown(spectrum.dispose);
+      addTearDown(level.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: VisualizerStage(
+              playing: false,
+              spectrum: spectrum,
+              levelL: level,
+              levelR: level,
+              config: const VisualizerConfig(showLyrics: true),
+              onStyleChanged: (_) {},
+              onToggleStageMode: () {},
+              onDisplayModeChanged: (_) {},
+              onToggleLyrics: () {},
+              onOpenDrawer: () {},
+              onOpenLocalLrc: () {},
+              mediaSync: service,
+              emptyText: 'No audio',
+              active: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      // 头部与空态卡片都应给出可见文案，而不是整层被隐藏
+      expect(find.text('No active media session'), findsWidgets);
+      expect(find.text('Retry'), findsOneWidget);
+      expect(find.text('Local LRC'), findsOneWidget);
     });
   });
 }

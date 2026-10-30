@@ -15,6 +15,9 @@
  *                    FluidSilk, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
+import 'dart:io';
+
+import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -26,6 +29,7 @@ import '../core/state.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
 import 'chrome.dart';
+import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/models/visualizer_types.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
@@ -55,6 +59,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
     super.initState();
     // 页面保活在 IndexedStack 中：切到其它页时兜底复位，避免整应用停留在沉浸态。
     widget.model.visiblePage.addListener(_onVisiblePageChanged);
+    // 页面初始即为可视页时（如应用直接恢复到可视化页）不会触发变更回调，这里兜底启动
+    if (widget.model.visiblePage.value == AppPage.visualizer) {
+      _mediaSync.startAutoSync();
+    }
   }
 
   @override
@@ -87,9 +95,38 @@ class _VisualizerPageState extends State<VisualizerPage> {
   }
 
   void _toggleLyrics() {
+    final enabling = !_config.showLyrics;
     setState(() {
-      _config = _config.copyWith(showLyrics: !_config.showLyrics);
+      _config = _config.copyWith(showLyrics: enabling);
     });
+    if (enabling) {
+      // 打开歌词即建立媒体监听；有曲目但歌词为空时服务内部会自动补拉
+      _mediaSync.startAutoSync();
+    } else {
+      // 关闭歌词时仅停止订阅与行同步，媒体子进程保留以便再次开启时秒级复用
+      _mediaSync.stopAutoSync();
+    }
+  }
+
+  /// 手动加载本地 LRC 文件（在线检索无结果或离线曲目时的兜底）
+  Future<void> _pickLocalLrc() async {
+    try {
+      const typeGroup = XTypeGroup(
+        label: 'LRC',
+        extensions: <String>['lrc'],
+      );
+      final file = await openFile(acceptedTypeGroups: const [typeGroup]);
+      if (file == null) return;
+
+      final content = await File(file.path).readAsString();
+      final doc = LrcParser.parse(content);
+      if (doc.isNotEmpty) {
+        _mediaSync.loadLyricDocument(doc);
+      }
+    } catch (e, st) {
+      // 文件读取/选择失败属可预期路径，留痕后静默回退
+      swallow(e, st);
+    }
   }
 
   /// 应用显示档位：页面布局 + shell 沉浸标志 + OS 窗口全屏三者同步。
@@ -279,6 +316,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             onDisplayModeChanged: _applyDisplayMode,
                             onToggleLyrics: _toggleLyrics,
                             onOpenDrawer: _openDrawer,
+                            onOpenLocalLrc: _pickLocalLrc,
                             mediaSync: _mediaSync,
                             emptyText: l.noAudio,
                             active: active,

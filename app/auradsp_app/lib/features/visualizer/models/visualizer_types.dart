@@ -73,7 +73,7 @@ enum VisualizerStyle {
     id: 'fluid',
     label: 'Fluid Silk',
     icon: Icons.water_rounded,
-    description: 'Audio-driven curl-noise flow field with luminous silk ribbons',
+    description: 'Layered translucent silk bands with bass breathing and mid-band sway',
   ),
 
   /// 粒子龙卷风：螺旋上升的确定性粒子风暴
@@ -81,7 +81,7 @@ enum VisualizerStyle {
     id: 'tornado',
     label: 'Particle Tornado',
     icon: Icons.cyclone_rounded,
-    description: 'Deterministic spiral particle vortex driven by low-frequency impact',
+    description: 'Coherent particle funnel vortex with depth-sorted orbiting dust',
   );
 
   final String id;

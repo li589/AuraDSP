@@ -1400,6 +1400,33 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerHideLyricsTip => '歌詞を非表示';
 
   @override
+  String get visualizerLyricsNoMedia => '再生中のメディアがありません';
+
+  @override
+  String get visualizerLyricsNoMediaHint => '音楽を再生すると歌詞が自動で照合・表示されます';
+
+  @override
+  String get visualizerLyricsSearching => '歌詞を検索中…';
+
+  @override
+  String get visualizerLyricsSearchingHint => '現在の曲のオンライン歌詞を照合しています';
+
+  @override
+  String get visualizerLyricsNotFound => '一致する歌詞が見つかりません';
+
+  @override
+  String get visualizerLyricsNotFoundHint => '再取得するか、ローカル LRC ファイルを選択してください';
+
+  @override
+  String get visualizerLyricsReady => '歌詞を読み込みました';
+
+  @override
+  String get visualizerLyricsRetry => '再取得';
+
+  @override
+  String get visualizerLyricsPickLocal => 'ローカル LRC';
+
+  @override
   String get visualizerResetPeakTip => 'ピークホールドをリセット';
 
   @override
