@@ -214,9 +214,10 @@ class _VisualizerStageState extends State<VisualizerStage>
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
+              // 浅色底上视效色彩更亮，遮罩需要更实，否则歌词（尤其非当前行）对比不足
               colors: [
-                p.bg.withValues(alpha: 0.58),
-                p.bg.withValues(alpha: 0.8),
+                p.bg.withValues(alpha: p.isDark ? 0.58 : 0.74),
+                p.bg.withValues(alpha: p.isDark ? 0.8 : 0.9),
               ],
             ),
           ),

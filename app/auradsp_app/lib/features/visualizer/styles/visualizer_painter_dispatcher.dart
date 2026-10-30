@@ -101,13 +101,12 @@ CustomPainter buildVisualizerPainter({
         bloom: config.bloom,
       );
 
-    case VisualizerStyle.fluid:
-      return FluidSilkPainter(
+    case VisualizerStyle.fluidDynamics:
+      return FluidDynamicsPainter(
         bands: rawBands,
         palette: palette,
         bloom: config.bloom,
         animationTime: time,
-        lineWidth: config.lineWidth,
       );
 
     case VisualizerStyle.tornado:

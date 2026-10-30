@@ -185,7 +185,7 @@ void main() {
         VisualizerStyle.goniometer,
         VisualizerStyle.cyberGrid,
         VisualizerStyle.pulseOrb,
-        VisualizerStyle.fluid,
+        VisualizerStyle.fluidDynamics,
         VisualizerStyle.tornado,
       ]) {
         final recorder = ui.PictureRecorder();

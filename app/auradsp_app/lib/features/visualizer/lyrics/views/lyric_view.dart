@@ -173,6 +173,12 @@ class _LyricLineTileState extends State<_LyricLineTile> {
   @override
   Widget build(BuildContext context) {
     final p = Theme.of(context).extension<AuraPalette>() ?? auraDark;
+    // 浅色主题下 textDim 与米色底明度接近，沿用深色主题的低透明度会明显发灰；
+    // 这里按底色明度提升非当前行的不透明度，保持“主次分明但可读”。
+    final inactiveTextColor =
+        p.textDim.withValues(alpha: p.isDark ? 0.45 : 0.82);
+    final inactiveTranslationColor =
+        p.textDim.withValues(alpha: p.isDark ? 0.3 : 0.58);
 
     return MouseRegion(
       onEnter: (_) {
@@ -206,9 +212,7 @@ class _LyricLineTileState extends State<_LyricLineTile> {
                       fontSize: widget.isActive ? 20 : 15,
                       fontWeight:
                           widget.isActive ? FontWeight.w700 : FontWeight.w400,
-                      color: widget.isActive
-                          ? p.text
-                          : p.textDim.withValues(alpha: 0.45),
+                      color: widget.isActive ? p.text : inactiveTextColor,
                       letterSpacing: 0.3,
                       height: 1.35,
                     ),
@@ -227,7 +231,7 @@ class _LyricLineTileState extends State<_LyricLineTile> {
                         fontWeight: FontWeight.w400,
                         color: widget.isActive
                             ? p.accent.withValues(alpha: 0.88)
-                            : p.textDim.withValues(alpha: 0.3),
+                            : inactiveTranslationColor,
                         height: 1.25,
                       ),
                       child: Text(widget.line.translation!),

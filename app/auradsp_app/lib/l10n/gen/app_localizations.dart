@@ -3019,7 +3019,7 @@ abstract class AppLocalizations {
   /// No description provided for @visualizerStyleFluid.
   ///
   /// In zh, this message translates to:
-  /// **'流体丝绸'**
+  /// **'流体动力学'**
   String get visualizerStyleFluid;
 
   /// No description provided for @visualizerStyleTornado.
