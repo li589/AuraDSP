@@ -980,3 +980,21 @@ yquist * 0.999，
   深扫相关）；引擎构建零警告；Dart 侧 aborted 语义由既有用例回归。
 - **上游同步冲突风险**：低-中（scanner 的扫描循环改写为守卫形态；宿主客户端
   请求签名增可选参数，调用点默认值兼容）。
+
+## P-044 pchip 初始化报警静默化（实施：2026-10-30）
+
+- **状态**：已实施（2026-10-30）
+- **位置**：`engine/legacy/jdsp/generalDSP/interpolation.c`
+  （`cubic_hermite_init`）。
+- **动机**（全量审查 E-01）：原 vendor 对非严格递增横坐标逐点 `printf`。
+  用户拖动 comp 频带滑块造成频点交叉时，控制线程同步 IO 实测刷出
+  **5008 行 / 389 KB** 日志；且报警后并不中止，`upper_bound` 仍会在无序
+  数组上取段，导致压缩曲线失真。
+- **内容**：删除 `n < 4` 与单调性检查的 `printf`，改为 `assert`（Release
+  `/DNDEBUG` 下零开销零输出，Debug 仍能在开发期发现新的违规调用方）。
+  合法性由引擎侧 `apply_comp` 保证：7 组 `freqN/gainN` 先按频率成对排序，
+  再以 1 Hz 最小间隔拉开并回压到 20000 Hz 上限（见 `engine/chain/
+  engine_chain.cpp` 的 `sort_comp_bands`）。
+- **验收**：`smoke_comp_band_order.py`（交叉/等值/全 20000 三组频带，
+  输出有限性 + 参数回读 + 子进程日志零报警）；`runner.py --smoke` 全绿。
+- **上游同步冲突风险**：低（仅删除两处输出，函数签名与数值行为不变）。

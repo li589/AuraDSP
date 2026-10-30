@@ -495,6 +495,10 @@ struct auradsp_handle_s {
     float sample_rate = 48000.0f;
     int max_block = 2048;
     double latency_ms = 0.0;
+    /* E-03：最近一次 process() 的设备域块长快照（RT 写、控制线程读）。
+     * 延迟计算原先直接读 jdsp.blockSize——该字段由 legacy 入口在 RT 内写，
+     * 读侧无同步属 C++ 数据竞争；改为本原子快照后读侧无需触碰 vendor 结构。 */
+    std::atomic<int> lat_block_frames{0};
 
     /* 频谱工作区（RT 线程专用，create 时分配） */
     float* fft_scratch = nullptr;     /* kVizFftMax floats */

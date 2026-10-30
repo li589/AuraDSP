@@ -87,7 +87,13 @@ class _VisualizerHudState extends State<VisualizerHud> {
                         key: const ValueKey('visualizer-style-menu'),
                         padding: const EdgeInsets.only(bottom: 6),
                         child: Container(
-                          width: 175,
+                          // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
+                          // 截断；按语言放宽（其他语言 190，ja 205）。
+                          width:
+                              Localizations.localeOf(context).languageCode ==
+                                      'ja'
+                                  ? 205
+                                  : 190,
                           padding: const EdgeInsets.symmetric(vertical: 4),
                           decoration: BoxDecoration(
                             color: p.panel.withValues(alpha: 0.96),

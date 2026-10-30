@@ -60,8 +60,9 @@ void compute_latency(auradsp_handle h, double* out_ms) {
         if (cp.frames > 0 && cp.ovpLen > 0) {
             /* jdsp.blockSize 是**设备域**块长（pint16 等入口写入 n），
              * 换算成工作域帧数后才能和 ovpLen 比。首次处理前为 0 时回落
-             * 创建时的 max_block（一块的上界）。 */
-            size_t devBlk = h->jdsp.blockSize;
+             * 创建时的 max_block（一块的上界）。E-03：读 RT 侧维护的原子
+             * 快照，避免直接读 vendor 结构里的非原子字段。 */
+            size_t devBlk = (size_t)h->lat_block_frames.load(std::memory_order_relaxed);
             if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
             const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
             const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
@@ -73,10 +74,10 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed)) {
         /* D1/D7：arbmag 用分块 FFT 卷积，附加延迟就是**单块帧数**（卷积器按
-         * jdsp->blockSize 加载 IR）。块长存的是设备域帧数，先折到工作域，
+         * 块长加载 IR）。块长存的是设备域帧数，先折到工作域，
          * 再按工作域采样率换算——两者相除即真实时长。为 0（尚未处理过任何
          * 块）时回落引擎创建时给的 max_block，它正是一块的上界。 */
-        size_t devBlk = h->jdsp.blockSize;
+        size_t devBlk = (size_t)h->lat_block_frames.load(std::memory_order_relaxed);
         if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
         const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
         const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
@@ -503,6 +504,34 @@ void apply_convolver(auradsp_handle h) {
 }
 
 
+/* E-01：7 个频带按频率成对排序并强制严格递增（最小间隔 1Hz）。
+ * 参数表对 comp.freqN 各自只做 [20,20000] 钳制，用户把相邻滑块拖交叉后
+ * 传给 pchip 的横坐标不再单调：interpolation.c 逐点 printf 刷日志（控制
+ * 线程同步 IO，实测一次拖动 5008 行/389KB），upper_bound 在无序数组上
+ * 还会取错分段导致增益曲线失真。排序不改变「频率→增益」语义，只恢复
+ * 横坐标单调；等值频点按最小间隔拉开，避免插值分母为 0。 */
+static void sort_comp_bands(double* freqs, double* gains) {
+    for (int i = 1; i < 7; ++i) {
+        for (int j = i; j > 0 && freqs[j] < freqs[j - 1]; --j) {
+            const double tf = freqs[j];
+            freqs[j] = freqs[j - 1];
+            freqs[j - 1] = tf;
+            const double tg = gains[j];
+            gains[j] = gains[j - 1];
+            gains[j - 1] = tg;
+        }
+    }
+    const double kMinGap = 1.0;
+    for (int i = 1; i < 7; ++i) {
+        if (freqs[i] < freqs[i - 1] + kMinGap) freqs[i] = freqs[i - 1] + kMinGap;
+    }
+    /* 上限侧回压：最坏（全 20000）从 19994 起排，仍在 [20,20000] 内。 */
+    if (freqs[6] > 20000.0) freqs[6] = 20000.0;
+    for (int i = 5; i >= 0; --i) {
+        if (freqs[i] > freqs[i + 1] - kMinGap) freqs[i] = freqs[i + 1] - kMinGap;
+    }
+}
+
 void apply_comp(auradsp_handle h) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
         /* [PATCHED-AuraDSP P-018 B1-c] compander 控制侧重置改影子构建 + 原子换
@@ -523,6 +552,7 @@ void apply_comp(auradsp_handle h) {
             freqs[i] = (double)h->p.comp_freq[i].load(std::memory_order_relaxed);
             gains[i] = (double)h->p.comp_gain[i].load(std::memory_order_relaxed);
         }
+        sort_comp_bands(freqs, gains);
         /* 仅在初次启用或挂起全量刷新（如采样率变更）时触发 forceRefresh；
          * 正常调参（阈值/增益/频率变动）走影子更新增益曲线，不触发 FFTCompanderInit
          * 重置环形缓冲区，杜绝拖动滑块时音频断续。

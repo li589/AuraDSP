@@ -69,6 +69,9 @@ def run_smoke_tests():
         # iZotope Ozone/RX 12 加载契约：setProcessing 返回 kNotImplemented 不得致命，
         # 且 process() 音频必须存活；机器上无 iZotope 插件时自动 SKIP
         "smoke_plugin_izotope_setproc.py",
+        # T-01：三大商业插件（Pro-Q 3 / Ozone 12 / Element FX）load→unload
+        # 全链路。默认无 GUI（`--gui` 才开编辑器）；本机未安装目标插件时 SKIP。
+        "smoke_three_key_plugins.py",
         "smoke_plugin_pdc.py",
         "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
@@ -160,6 +163,9 @@ def run_smoke_tests():
         # 偏移（只比 sizeof 会放行"字段顺序错但总长凑巧相同"）、M3 管版本联动。
         # 含四级反向判红 + 0xCD 哨兵包裹缓冲的越界活体守卫。
         "smoke_g7_1_viz_mirror.py",
+        # §7-2 门禁（T-02 登记）：三桥 abi 与引擎 auradsp_abi 同代际 + gcc
+        # 合成假引擎验证 ABI 不匹配拒绝 / 匹配放行。
+        "smoke_g7_2_bridge_abi.py",
         # §7-5 门禁（2026-10-24）：三座桥的 .def ↔ 头文件 ↔ Dart 绑定。实测
         # 三桥全漂且方向不同：asio/vaio 各漏导出 slot_{set,get}_channels（Dart
         # 硬 lookup，ASIO/VAIO 后端下插件槽构造即抛 ArgumentError 再被上层吞
@@ -234,6 +240,9 @@ def run_smoke_tests():
     "smoke_input.py",
     "smoke_bass.py",
     "smoke_comp.py",
+    # E-01 门禁：comp 频点交叉/等值/全 20000Hz 时输出有限 + 参数回读不变；
+    # 子进程日志层断言 pchip 不再刷 "Abscissas..." 报警。
+    "smoke_comp_band_order.py",
     # Z13 compander 控制线程/RT 竞争门禁（2026-10-23）：双 UI 线程高频拖
     # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
     # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。

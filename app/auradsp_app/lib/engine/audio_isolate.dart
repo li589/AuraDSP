@@ -2300,13 +2300,21 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         vaioActive = false;
       }
       wasapi?.stop();
-      if (handle != null) lib?.destroy(handle);
+    } catch (e, st) {
+      swallow(e, st);
+    } finally {
+      // F-01：任何一条桥停止抛异常都不能跳过引擎销毁与缓冲区释放。
+      // destroy 自身再套一层 try（桥已死时可能抛），malloc.free 是不抛的，
+      // 放在 destroy 之后保证 5 块缓冲一定归还。
+      try {
+        if (handle != null) lib?.destroy(handle);
+      } catch (e, st) { swallow(e, st); }
       malloc.free(srcPtr);
       malloc.free(outPtrEng);
       malloc.free(inPtrEng);
       malloc.free(outPtrEng8);
       malloc.free(vizBuf);
-    } catch (e, st) { swallow(e, st); }
+    }
   }
 
   unawaited(pump());

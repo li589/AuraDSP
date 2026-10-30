@@ -291,7 +291,7 @@ flowchart TD
 1. **C++ 引擎层**：`python test/runner.py --smoke` 全部单测 **100% PASS**（包含 `smoke_convolver_spectrum`, `smoke_chain_meter`, `smoke_convolver`, `smoke_guard_flow`, `smoke_liveprog`, `smoke_viz_lowfreq`, `smoke_block1056` 7 项全部通过）；
 2. **Dart 静态分析**：`flutter analyze` 报告 **0 issues found** (0 error, 0 warning, 0 info)；
 3. **前置置顶自动化 UI 运行时验证**：
-   - 编写 `test/ui/ui_verify_deep_redesign.py`，采用 DPI 物理坐标、WinSta0\Default 桌面切换与前置置顶保障；
+   - 编写 `tools/probe/ui_verify_deep_redesign.py`（原 `test/ui/`，T-05 归档），采用 DPI 物理坐标、WinSta0\Default 桌面切换与前置置顶保障；
    - 自动化运行全流程 **100% PASS**，生成 5 张高分辨率实测截图归档于 `docs/ui-redesign/`：
      - `deep_redesign_01_effects_overview.png`：效果页全景、01 低音增强卡片、02 空间混响统一卡片与右上角 `[ 0.0 ms ↻ ]` 延迟徽标；
      - `deep_redesign_02_spatial_reverb_3d.png`：空间混响 3D 声学室透视网格与预设空间选择；
