@@ -34,3 +34,4 @@ class VisualizerDbScale extends StatelessWidget {
     );
   }
 }
+

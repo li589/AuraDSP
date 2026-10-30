@@ -97,3 +97,4 @@ CustomPainter buildVisualizerPainter({
       );
   }
 }
+
