@@ -104,19 +104,28 @@ class _VisualizerHudState extends State<VisualizerHud> {
                               ),
                             ],
                           ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              for (final style in VisualizerStyle.values)
-                                VisualizerMenuItem(
-                                  style: style,
-                                  isSelected: widget.config.style == style,
-                                  onTap: () {
-                                    widget.onStyleChanged(style);
-                                    _closeMenu();
-                                  },
-                                ),
-                            ],
+                          child: ConstrainedBox(
+                            // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
+                            constraints: BoxConstraints(
+                              maxHeight:
+                                  MediaQuery.sizeOf(context).height * 0.45,
+                            ),
+                            child: SingleChildScrollView(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  for (final style in VisualizerStyle.values)
+                                    VisualizerMenuItem(
+                                      style: style,
+                                      isSelected: widget.config.style == style,
+                                      onTap: () {
+                                        widget.onStyleChanged(style);
+                                        _closeMenu();
+                                      },
+                                    ),
+                                ],
+                              ),
+                            ),
                           ),
                         ),
                       )

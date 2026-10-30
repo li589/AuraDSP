@@ -14,6 +14,7 @@ import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
 import '../shaders/gpu_shader_service.dart';
+import '../styles/style_atmosphere.dart';
 import '../styles/visualizer_painter_dispatcher.dart';
 import 'visualizer_db_scale.dart';
 import 'visualizer_hud.dart';
@@ -256,21 +257,24 @@ class _VisualizerStageState extends State<VisualizerStage>
             sensitivity: widget.config.sensitivity,
           );
 
+          final renderedBands = _peakEngine.renderedBands.isNotEmpty
+              ? _peakEngine.renderedBands
+              : rawBands;
+
           // 统一使用物理引擎平滑后的频段渲染柱状谱，消除低频抖动与条宽错位
           final painter = buildVisualizerPainter(
             style: widget.config.style,
             config: widget.config,
             palette: palette,
-            rawBands: _peakEngine.renderedBands.isNotEmpty
-                ? _peakEngine.renderedBands
-                : rawBands,
+            rawBands: renderedBands,
             peaks: peaks,
             waveformSynth: _waveformSynth,
             time: _time,
           );
 
+          Widget body;
           if (widget.config.style == VisualizerStyle.bars) {
-            return Padding(
+            body = Padding(
               padding: const EdgeInsets.fromLTRB(
                 AuraSpace.xl,
                 AuraSpace.lg,
@@ -306,18 +310,52 @@ class _VisualizerStageState extends State<VisualizerStage>
                 ],
               ),
             );
+          } else {
+            body = RepaintBoundary(
+              child: CustomPaint(
+                painter: painter,
+                child: const SizedBox.expand(),
+              ),
+            );
           }
 
-          return RepaintBoundary(
-            child: CustomPaint(
-              painter: painter,
-              child: const SizedBox.expand(),
-            ),
-          );
+          // 氛围底层：除自带满屏输出的着色器/MilkDrop 外，统一叠加低频光晕与微尘
+          if (_usesAmbience(widget.config.style)) {
+            body = Stack(
+              fit: StackFit.expand,
+              children: [
+                IgnorePointer(
+                  child: RepaintBoundary(
+                    child: CustomPaint(
+                      painter: AtmospherePainter(
+                        bands: renderedBands,
+                        palette: palette,
+                        animationTime: _time,
+                        intensity: 0.55 + widget.config.bloom * 0.45,
+                      ),
+                      child: const SizedBox.expand(),
+                    ),
+                  ),
+                ),
+                body,
+              ],
+            );
+          }
+
+          return body;
         },
       ),
     );
   }
+
+  /// 自带满屏输出的风格不再叠加氛围层（避免重复绘制与遮挡）。
+  bool _usesAmbience(VisualizerStyle style) => switch (style) {
+        VisualizerStyle.auroraShader ||
+        VisualizerStyle.tunnelShader ||
+        VisualizerStyle.milkDrop =>
+          false,
+        _ => true,
+      };
 
   Widget _buildIdlePlaceholder(AuraPalette p) {
     return Center(
