@@ -20,13 +20,22 @@ class WindowsSmtcProvider implements MediaSessionProvider {
   MediaTrackMetadata _lastTrack = MediaTrackMetadata.empty;
   bool _disposed = false;
 
+  /// 主动停止标记：stop() 后不得再由 exitCode 回调自动重启（旧实现只在
+  /// dispose 时检查 _disposed，关闭歌词后子进程仍每秒轮询且被自动拉起）。
+  bool _stopped = true;
+
+  /// 启动中标记：Process.start 是异步的，防止并发 start() 拉起两个进程。
+  bool _starting = false;
+
   @override
   Stream<MediaTrackMetadata> get trackStream => _controller.stream;
 
   /// 启动系统媒体监听进程
   void start() {
-    if (_disposed || _process != null) return;
+    if (_disposed || _starting || _process != null) return;
     if (PlatformProfile.os != 'windows') return;
+    _stopped = false;
+    _starting = true;
 
     try {
       const psScript = r'''
@@ -92,7 +101,8 @@ try {
         ],
         mode: ProcessStartMode.normal,
       ).then((proc) {
-        if (_disposed) {
+        _starting = false;
+        if (_disposed || _stopped) {
           proc.kill();
           return;
         }
@@ -115,14 +125,15 @@ try {
 
         proc.exitCode.then((_) {
           _process = null;
-          // 若异常提前退出且未被销毁，10秒后重试启动保持韧性
-          if (!_disposed) {
+          // 仅在“未销毁且未被主动停止”时才自动重试；stop() 后彻底静默。
+          if (!_disposed && !_stopped) {
             Future.delayed(const Duration(seconds: 10), () {
-              if (!_disposed) start();
+              if (!_disposed && !_stopped) start();
             });
           }
         });
       }).catchError((e, st) {
+        _starting = false;
         swallow(e, st);
       });
     } catch (e, st) {
@@ -169,13 +180,20 @@ try {
     }
   }
 
-  @override
-  void dispose() {
-    _disposed = true;
+  /// 主动停止监听子进程（关闭歌词 / 离开可视化页）。可再次 start() 恢复。
+  void stop() {
+    _stopped = true;
+    _starting = false;
     _stdoutSub?.cancel();
     _stdoutSub = null;
     _process?.kill();
     _process = null;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    stop();
     _controller.close();
   }
 }

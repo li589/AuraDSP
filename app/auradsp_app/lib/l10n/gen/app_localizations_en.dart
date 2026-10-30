@@ -3173,6 +3173,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lpSaveFailed => 'Save failed (bad name or unwritable disk)';
 
   @override
+  String get lpFileImportFailed =>
+      'Script import failed: the file is unreadable or not valid text';
+
+  @override
+  String get gateStateOpen => 'OPEN';
+
+  @override
+  String get gateStateHold => 'HOLD';
+
+  @override
+  String get gateStateClosed => 'CLOSED';
+
+  @override
   String get chainVstTitle =>
       'Third-party VST / CLAP Plugin Slots & Stage Order';
 

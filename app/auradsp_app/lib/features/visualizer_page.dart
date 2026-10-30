@@ -54,6 +54,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
   VisualizerDisplayMode _displayMode = VisualizerDisplayMode.restore;
   final FocusNode _focusNode = FocusNode();
 
+  /// 帮助问号可见性控制器：本页不走 PageScaffold，必须自建 Scope，
+  /// 否则移动端 InfoBadge 因找不到 Scope 而永久不可见（审查发现）。
+  final HelpVisibilityController _helpController = HelpVisibilityController();
+
   /// 配置变化监听所需的镜像（仅用于识别“歌词开关/歌词来源”翻转）
   bool _lyricsEnabled = false;
   LyricsSource _lastLyricsSource = LyricsSource.auto;
@@ -94,6 +98,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
       _queueSystemFullscreen(false);
     }
     _focusNode.dispose();
+    _helpController.dispose();
     _mediaSync.dispose();
     super.dispose();
   }
@@ -133,6 +138,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
       _focusNode.requestFocus();
       return;
     }
+    // 离开页面即停媒体监听：旧实现只在关闭歌词时停订阅，切页后
+    // SMTC PowerShell 子进程仍每秒轮询（审查发现的后台空转）。
+    _mediaSync.stopAutoSync();
     if (_displayMode != VisualizerDisplayMode.restore) {
       _applyDisplayMode(VisualizerDisplayMode.restore);
     }
@@ -270,11 +278,19 @@ class _VisualizerPageState extends State<VisualizerPage> {
     final l = l10nOf(context);
     final expanded = _displayMode.isExpanded;
 
-    return KeyboardListener(
-      focusNode: _focusNode,
-      autofocus: true,
-      onKeyEvent: _handleKeyEvent,
-      child: Stack(
+    return HelpVisibilityScope(
+      controller: _helpController,
+      child: NotificationListener<ScrollNotification>(
+        // 移动端：滚动会话内让 InfoBadge 短暂可见（桌面端恒可见，无副作用）
+        onNotification: (_) {
+          _helpController.recordScroll();
+          return false;
+        },
+        child: KeyboardListener(
+          focusNode: _focusNode,
+          autofocus: true,
+          onKeyEvent: _handleKeyEvent,
+          child: Stack(
         fit: StackFit.expand,
         children: [
           // 背景微动微晕
@@ -426,7 +442,9 @@ class _VisualizerPageState extends State<VisualizerPage> {
             onResetToDefaults: () =>
                 widget.model.setVisualizerConfig(const VisualizerConfig()),
           ),
-        ],
+            ],
+          ),
+        ),
       ),
     );
   }

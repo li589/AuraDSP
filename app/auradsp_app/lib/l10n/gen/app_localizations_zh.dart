@@ -2989,6 +2989,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSaveFailed => '保存失败（名称非法或磁盘不可写）';
 
   @override
+  String get lpFileImportFailed => '脚本导入失败：文件无法读取或不是有效文本';
+
+  @override
+  String get gateStateOpen => '开启';
+
+  @override
+  String get gateStateHold => '保持';
+
+  @override
+  String get gateStateClosed => '关闭';
+
+  @override
   String get chainVstTitle => '第三方 VST / CLAP 插件挂载槽与阶段处理顺序';
 
   @override

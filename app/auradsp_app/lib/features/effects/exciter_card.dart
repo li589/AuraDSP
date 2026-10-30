@@ -64,7 +64,7 @@ class _ExciterCard extends StatelessWidget {
             model: model,
             customLabel: l.exciterHifreq,
             infoMessage: l.exciterHifreqInfo,
-            customFormat: (v) => '${(v / 1000).toStringAsFixed(1)}k',
+            customFormat: (v) => '${(v / 1000).toStringAsFixed(1)} kHz',
           ),
           ChannelRoutingSelector(
             model: model,

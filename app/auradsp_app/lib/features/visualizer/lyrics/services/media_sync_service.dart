@@ -139,10 +139,14 @@ class MediaSyncService {
     }
   }
 
-  /// 停止自动同步监听
+  /// 停止自动同步监听（同时停掉 SMTC 子进程，避免后台每秒轮询）
   void stopAutoSync() {
     _sessionSub?.cancel();
     _sessionSub = null;
+    final p = _provider;
+    if (p is WindowsSmtcProvider) {
+      p.stop();
+    }
   }
 
   /// 仅在播放时启动 20Hz 行同步 ticker，停播即释放，避免页面常驻空转。

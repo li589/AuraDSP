@@ -97,8 +97,11 @@ void _scanChunked({
 /// `await Future<void>.delayed` 让出事件循环 → 音频泵照常推进。
 Future<int> _slotLoadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
     String path, String id, void Function(Map<String, dynamic>) send) async {
-  final (rc, timedOut) = await _submitAndWait(lib, handle, slot, send,
+  final (rc, timedOut, accepted) = await _submitAndWait(lib, handle, slot, send,
       isLoad: true, path: path, id: id);
+  // 被拒（该槽已有任务在跑）：在跑的任务自己会发终态事件。这里不得再发
+  // rc=0 的“失败”帧——UI 会把 pluginMirror 清成未加载（2026-10-31 审查）。
+  if (!accepted) return 0;
   final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
   final stage = AuraDspLib.pluginSlotGetInsertStageWrap(lib, handle, slot);
   send({
@@ -120,8 +123,9 @@ Future<int> _slotLoadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
 /// FreeLibrary，实测 p50 18.2ms、max 231.3ms）也必须移出事件循环。
 Future<int> _slotUnloadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
     void Function(Map<String, dynamic>) send) async {
-  final (rc, timedOut) = await _submitAndWait(lib, handle, slot, send,
+  final (rc, timedOut, accepted) = await _submitAndWait(lib, handle, slot, send,
       isLoad: false);
+  if (!accepted) return 0;
   final statusJson = AuraDspLib.pluginSlotGetStatusJson(lib, handle, slot);
   send({
     'evt': 'pluginSlotUnloaded',
@@ -144,8 +148,9 @@ Future<int> _slotUnloadAsync(AuraDspLib lib, Pointer<Void> handle, int slot,
 const int kSlotTaskPollMs = 5;
 const int kSlotTaskMaxWaitMs = 5000;
 
-/// C3：提交异步任务并轮询到终态。返回 `(语义码, 是否超时)`。
-/// 语义码：1 成功 / 0 失败（与引擎 load/unload 的返回约定一致）。
+/// C3：提交异步任务并轮询到终态。返回 `(语义码, 是否超时, 是否被接受)`。
+/// 语义码：1 成功 / 0 失败（与引擎 load/unload 的返回约定一致）；第三个
+/// 分量 false 表示任务根本没入队（该槽已有任务在跑）——调用方不得发终态。
 ///
 /// 超时（D5）：不再静默返回 0——先做兜底收口，再由调用方把 `timedOut` 带给 UI。
 /// 兜底为什么走**同步** unload：`submitSlotUnloadAsync` 在 `taskState == 1` 时
@@ -155,13 +160,13 @@ const int kSlotTaskMaxWaitMs = 5000;
 ///
 /// 被拒（该槽已有任务在跑）时**不发**终态事件——那个在跑的任务自己会发，
 /// 这里静默返回避免误报"失败"。
-Future<(int, bool)> _submitAndWait(AuraDspLib lib, Pointer<Void> handle, int slot,
+Future<(int, bool, bool)> _submitAndWait(AuraDspLib lib, Pointer<Void> handle, int slot,
     void Function(Map<String, dynamic>) send,
     {required bool isLoad, String path = '', String id = ''}) async {
   final accepted = isLoad
       ? AuraDspLib.pluginSlotLoadAsyncWrap(lib, handle, slot, path, id: id)
       : AuraDspLib.pluginSlotUnloadAsyncWrap(lib, handle, slot);
-  if (accepted == 0) return (0, false);
+  if (accepted == 0) return (0, false, false);
 
   send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': true});
   final sw = Stopwatch()..start();
@@ -171,7 +176,7 @@ Future<(int, bool)> _submitAndWait(AuraDspLib lib, Pointer<Void> handle, int slo
     // 实际粒度 5-15ms，3000 次循环名义 3s、实测 15-45s）。
     while (sw.elapsedMilliseconds < kSlotTaskMaxWaitMs) {
       final st = AuraDspLib.pluginSlotTaskStateWrap(lib, handle, slot);
-      if (st != 1) return (st == 2 ? 1 : 0, false);
+      if (st != 1) return (st == 2 ? 1 : 0, false, true);
       // 关键：让出事件循环，音频泵才能在这 5ms 内推进。
       await Future<void>.delayed(const Duration(milliseconds: kSlotTaskPollMs));
     }
@@ -179,7 +184,7 @@ Future<(int, bool)> _submitAndWait(AuraDspLib lib, Pointer<Void> handle, int slo
   } finally {
     send({'evt': 'pluginSlotBusy', 'slot': slot, 'busy': false});
   }
-  return (0, true);
+  return (0, true, true);
 }
 
 /// D5 超时兜底：该槽的异步任务卡在 RUNNING，异步 unload 会被

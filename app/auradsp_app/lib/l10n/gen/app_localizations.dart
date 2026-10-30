@@ -5722,6 +5722,30 @@ abstract class AppLocalizations {
   /// **'保存失败（名称非法或磁盘不可写）'**
   String get lpSaveFailed;
 
+  /// No description provided for @lpFileImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本导入失败：文件无法读取或不是有效文本'**
+  String get lpFileImportFailed;
+
+  /// No description provided for @gateStateOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启'**
+  String get gateStateOpen;
+
+  /// No description provided for @gateStateHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持'**
+  String get gateStateHold;
+
+  /// No description provided for @gateStateClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get gateStateClosed;
+
   /// No description provided for @chainVstTitle.
   ///
   /// In zh, this message translates to:
