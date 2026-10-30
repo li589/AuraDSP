@@ -143,8 +143,11 @@ check('comp.enable 开启', set_i(dll, h, 'comp.enable', 1) == 0)
 exercise(dll, h)
 dll.auradsp_destroy(h)
 
+# runner.py 给子进程固定 PYTHONIOENCODING=utf-8；这里必须显式按 UTF-8 解码，
+# 否则 text=True 会走本机 locale（GBK）→ UnicodeDecodeError，CHILD_OK 丢失。
 proc = subprocess.run([sys.executable, os.path.abspath(__file__), '--child'],
-                      capture_output=True, text=True, timeout=120)
+                      capture_output=True, text=True, timeout=120,
+                      encoding='utf-8', errors='replace')
 log = (proc.stdout or '') + (proc.stderr or '')
 check('子进程交叉序列执行成功', proc.returncode == 0,
       f'rc={proc.returncode}')
