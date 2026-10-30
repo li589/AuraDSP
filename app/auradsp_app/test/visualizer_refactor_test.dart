@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -6,7 +7,11 @@ import 'package:auradsp_app/features/visualizer/models/visualizer_types.dart';
 import 'package:auradsp_app/features/visualizer/models/visualizer_themes.dart';
 import 'package:auradsp_app/features/visualizer/controllers/peak_physics_engine.dart';
 import 'package:auradsp_app/features/visualizer/controllers/waveform_synthesizer.dart';
+import 'package:auradsp_app/features/visualizer/plugins/milkdrop_preset.dart';
 import 'package:auradsp_app/features/visualizer/styles/style_atmosphere.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_fluid.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_milkdrop.dart';
+import 'package:auradsp_app/features/visualizer/styles/style_tornado.dart';
 import 'package:auradsp_app/features/visualizer/styles/visualizer_painter_dispatcher.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_drawer.dart';
 import 'package:auradsp_app/features/visualizer/views/visualizer_hud.dart';
@@ -251,6 +256,104 @@ void main() {
         expect(find.text(l.visualizerThemeAuroraGlow), findsOneWidget);
       });
     }
+  });
+
+  group('风格运动性（2026-10-31 重做回归）', () {
+    const size = Size(420, 260);
+
+    Future<Uint8List> rasterize(CustomPainter painter) async {
+      final recorder = ui.PictureRecorder();
+      final canvas = Canvas(recorder);
+      painter.paint(canvas, size);
+      final image = await recorder
+          .endRecording()
+          .toImage(size.width.toInt(), size.height.toInt());
+      final data = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+      image.dispose();
+      return data!.buffer.asUint8List();
+    }
+
+    int changedPixels(Uint8List a, Uint8List b) {
+      var changed = 0;
+      for (var i = 0; i < a.length; i += 4) {
+        final dr = (a[i] - b[i]).abs();
+        final dg = (a[i + 1] - b[i + 1]).abs();
+        final db = (a[i + 2] - b[i + 2]).abs();
+        if (dr + dg + db > 12) changed++;
+      }
+      return changed;
+    }
+
+    List<double> bands() => List<double>.generate(32, (i) => 0.45 + 0.3 * (i % 5) / 4);
+
+    test('FluidDynamics：整屏持续流动（两张相隔帧的像素明显不同）', () async {
+      final palette = VisualizerPalette.resolve(VisualizerColorTheme.neonCyber, auraDark);
+      var t = 1.0;
+      final frames = <Uint8List>[];
+      for (var round = 0; round < 2; round++) {
+        for (var i = 0; i < 12; i++) {
+          t += 0.016;
+          FluidDynamicsPainter(
+            bands: bands(),
+            palette: palette,
+            bloom: 0.5,
+            animationTime: t,
+          ).paint(Canvas(ui.PictureRecorder()), size);
+        }
+        frames.add(await rasterize(FluidDynamicsPainter(
+          bands: bands(),
+          palette: palette,
+          bloom: 0.5,
+          animationTime: t,
+        )));
+      }
+      final changed = changedPixels(frames[0], frames[1]);
+      expect(changed, greaterThan(500),
+          reason: '流体背景必须整屏在动（当前变化像素=$changed）');
+    });
+
+    test('ParticleTornado：随时间旋转且画面有实质变化', () async {
+      final palette = VisualizerPalette.resolve(VisualizerColorTheme.aurora, auraDark);
+      final a = await rasterize(ParticleTornadoPainter(
+        bands: bands(),
+        palette: palette,
+        bloom: 0.5,
+        animationTime: 1.0,
+        lineWidth: 1.5,
+      ));
+      final b = await rasterize(ParticleTornadoPainter(
+        bands: bands(),
+        palette: palette,
+        bloom: 0.5,
+        animationTime: 3.0,
+        lineWidth: 1.5,
+      ));
+      expect(changedPixels(a, b), greaterThan(300),
+          reason: '龙卷风必须持续旋转/上升');
+    });
+
+    test('MilkDrop：拓扑缓慢连续旋转（相隔 2 秒仍有明显位移）', () async {
+      final palette = VisualizerPalette.resolve(VisualizerColorTheme.neonCyber, auraDark);
+      final preset = MilkdropPreset.builtInPresets.first;
+      final a = await rasterize(MilkdropPainter(
+        preset: preset,
+        bands: bands(),
+        palette: palette,
+        time: 1.0,
+        sensitivity: 1.0,
+        lineWidth: 1.5,
+      ));
+      final b = await rasterize(MilkdropPainter(
+        preset: preset,
+        bands: bands(),
+        palette: palette,
+        time: 3.0,
+        sensitivity: 1.0,
+        lineWidth: 1.5,
+      ));
+      expect(changedPixels(a, b), greaterThan(120),
+          reason: 'MilkDrop 必须缓慢持续旋转，而不是静止/跳变');
+    });
   });
 
   group('VisualizerHud Widget Tests', () {
