@@ -3012,6 +3012,18 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSaveFailed => '保存に失敗しました（不正な名前または書き込み不可）';
 
   @override
+  String get lpFileImportFailed => 'スクリプトの読み込みに失敗しました（ファイルが読めないか無効なテキストです）';
+
+  @override
+  String get gateStateOpen => '開';
+
+  @override
+  String get gateStateHold => '保持';
+
+  @override
+  String get gateStateClosed => '閉';
+
+  @override
   String get chainVstTitle => 'サードパーティVST / CLAPプラグインスロットとステージ順序';
 
   @override

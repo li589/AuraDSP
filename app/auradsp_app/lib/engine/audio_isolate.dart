@@ -214,6 +214,11 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'r': -90.0,
       'stageL': List<double>.filled(lastStageLen, -90.0),
       'stageR': List<double>.filled(lastStageLen, -90.0),
+      // [Phase B] 空闲补帧：per-channel 一并回落（旧实现缺这三键，
+      // UI 的多声道电平会永久冻结在最后一帧）。
+      'chCount': 2,
+      'chLevels': List<double>.filled(2, -90.0),
+      'stageCh': List<double>.filled(kVizStageTelemetry * 2, -90.0),
       'ts': DateTime.now().millisecondsSinceEpoch,
       'seq': -1,
     });

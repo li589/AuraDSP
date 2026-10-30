@@ -40,18 +40,14 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
               onChanged: (v) => model.setAttachmentMode(v),
             ),
           ] else ...[
-            // 管线模式：输入端 + 输出端（上下文字对齐，带 InfoBadge 与 hover 气泡）
-            Tooltip(
-              message: l.pipelineInHint,
-              waitDuration: const Duration(milliseconds: 300),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(l.pipelineIn, style: labelOf(p, size: 12, color: p.textDim)),
-                  const SizedBox(width: AuraSpace.xs),
-                  InfoBadge(message: l.pipelineInHint),
-                ],
-              ),
+            // 管线模式：输入端 + 输出端（上下文字对齐，帮助提示统一由 InfoBadge 承担）
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(l.pipelineIn, style: labelOf(p, size: 12, color: p.textDim)),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(message: l.pipelineInHint),
+              ],
             ),
             const SizedBox(height: AuraSpace.xs),
             AuraSegmented<String>(
@@ -67,17 +63,13 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
               onChanged: (v) => model.setPipelineInput(v),
             ),
             const SizedBox(height: AuraSpace.sm),
-            Tooltip(
-              message: l.pipelineOutHint,
-              waitDuration: const Duration(milliseconds: 300),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(l.pipelineOut, style: labelOf(p, size: 12, color: p.textDim)),
-                  const SizedBox(width: AuraSpace.xs),
-                  InfoBadge(message: l.pipelineOutHint),
-                ],
-              ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(l.pipelineOut, style: labelOf(p, size: 12, color: p.textDim)),
+                const SizedBox(width: AuraSpace.xs),
+                InfoBadge(message: l.pipelineOutHint),
+              ],
             ),
             const SizedBox(height: AuraSpace.xs),
             AuraSegmented<String>(

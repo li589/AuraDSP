@@ -348,13 +348,13 @@ class GateActivityIndicator extends StatelessWidget {
         String statusText;
         if (isOpen) {
           dotColor = const Color(0xFF2BD48D); // 纯绿通透
-          statusText = 'OPEN';
+          statusText = l10nOf(context).gateStateOpen;
         } else if (isMuted) {
           dotColor = p.textDim.withValues(alpha: 0.4); // 灰色关闭
-          statusText = 'CLOSED';
+          statusText = l10nOf(context).gateStateClosed;
         } else {
           dotColor = const Color(0xFFF5A623); // 琥珀正在动作
-          statusText = 'HOLD';
+          statusText = l10nOf(context).gateStateHold;
         }
 
         return Container(
