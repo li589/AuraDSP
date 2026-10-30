@@ -12,14 +12,12 @@ import '../lyrics/services/media_sync_service.dart';
 import '../lyrics/views/lyric_view.dart';
 import '../models/visualizer_themes.dart';
 import '../models/visualizer_types.dart';
-import '../styles/style_cyber_grid.dart';
-import '../styles/style_goniometer.dart';
-import '../styles/style_oscilloscope.dart';
-import '../styles/style_pulse_orb.dart';
-import '../styles/style_spectrum_bars.dart';
+import '../shaders/gpu_shader_service.dart';
+import '../styles/visualizer_painter_dispatcher.dart';
+import 'visualizer_db_scale.dart';
 import 'visualizer_hud.dart';
 
-/// 可视化核心舞台（支持 5 大视效引擎切换、鼠标隐退交互与全屏沉浸）
+/// 可视化核心舞台（支持多视效引擎切换、鼠标隐退交互与全屏沉浸）
 class VisualizerStage extends StatefulWidget {
   final bool playing;
   final ValueListenable<List<double>> spectrum;
@@ -76,6 +74,9 @@ class _VisualizerStageState extends State<VisualizerStage>
       _animController.repeat();
     }
     _startHudTimer();
+    GpuShaderService.instance.initialize().then((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   void _onTick() {
@@ -234,6 +235,16 @@ class _VisualizerStageState extends State<VisualizerStage>
           sensitivity: widget.config.sensitivity,
         );
 
+        final painter = buildVisualizerPainter(
+          style: widget.config.style,
+          config: widget.config,
+          palette: palette,
+          rawBands: rawBands,
+          peaks: peaks,
+          waveformSynth: _waveformSynth,
+          time: _time,
+        );
+
         if (widget.config.style == VisualizerStyle.bars) {
           return Padding(
             padding: const EdgeInsets.fromLTRB(
@@ -252,14 +263,7 @@ class _VisualizerStageState extends State<VisualizerStage>
                       Expanded(
                         child: RepaintBoundary(
                           child: CustomPaint(
-                            painter: SpectrumBarsPainter(
-                              bands: rawBands,
-                              peaks: peaks,
-                              palette: palette,
-                              showGrid: widget.config.showGrid,
-                              showPeaks: widget.config.showPeaks,
-                              bloom: widget.config.bloom,
-                            ),
+                            painter: painter,
                             child: const SizedBox.expand(),
                           ),
                         ),
@@ -273,59 +277,11 @@ class _VisualizerStageState extends State<VisualizerStage>
                 ),
                 if (widget.config.showDbScale) ...[
                   const SizedBox(width: AuraSpace.md),
-                  const _DbScale(),
+                  const VisualizerDbScale(),
                 ],
               ],
             ),
           );
-        }
-
-        CustomPainter painter;
-        switch (widget.config.style) {
-          case VisualizerStyle.oscilloscope:
-            painter = OscilloscopePainter(
-              waveL: _waveformSynth.waveL,
-              waveR: _waveformSynth.waveR,
-              palette: palette,
-              showGrid: widget.config.showGrid,
-              bloom: widget.config.bloom,
-            );
-            break;
-          case VisualizerStyle.goniometer:
-            painter = GoniometerPainter(
-              points: _waveformSynth.lissajousPoints,
-              palette: palette,
-              showGrid: widget.config.showGrid,
-              bloom: widget.config.bloom,
-            );
-            break;
-          case VisualizerStyle.cyberGrid:
-            painter = CyberGridPainter(
-              bands: rawBands,
-              palette: palette,
-              bloom: widget.config.bloom,
-              animationTime: _time,
-            );
-            break;
-          case VisualizerStyle.pulseOrb:
-            painter = PulseOrbPainter(
-              bands: rawBands,
-              palette: palette,
-              bloom: widget.config.bloom,
-              animationTime: _time,
-            );
-            break;
-          case VisualizerStyle.bars:
-            // Handled above
-            painter = SpectrumBarsPainter(
-              bands: rawBands,
-              peaks: peaks,
-              palette: palette,
-              showGrid: widget.config.showGrid,
-              showPeaks: widget.config.showPeaks,
-              bloom: widget.config.bloom,
-            );
-            break;
         }
 
         return RepaintBoundary(
@@ -351,36 +307,3 @@ class _VisualizerStageState extends State<VisualizerStage>
     );
   }
 }
-
-/// 右侧 dB 纵轴：0/-15/-30/-45/-60 dBFS
-class _DbScale extends StatelessWidget {
-  const _DbScale();
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    const marks = ['0', '-15', '-30', '-45', '-60'];
-    return SizedBox(
-      width: 28,
-      child: Padding(
-        padding: const EdgeInsets.only(bottom: 22),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (final m in marks)
-              Text(
-                m,
-                style: monoOf(
-                  p,
-                  size: 10,
-                  color: p.textDim.withValues(alpha: 0.7),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-

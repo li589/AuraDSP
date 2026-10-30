@@ -1,0 +1,50 @@
+import 'dart:ui';
+
+/// Available hardware-accelerated fragment shader types
+enum GpuShaderType {
+  aurora('shaders/aurora_wave.frag'),
+  tunnel('shaders/neon_tunnel.frag');
+
+  final String assetPath;
+  const GpuShaderType(this.assetPath);
+}
+
+/// Service managing compilation and caching of Flutter GPU FragmentProgram shaders
+class GpuShaderService {
+  static final GpuShaderService instance = GpuShaderService._();
+  GpuShaderService._();
+
+  FragmentProgram? _auroraProgram;
+  FragmentProgram? _tunnelProgram;
+  bool _initialized = false;
+  bool _failed = false;
+
+  bool get isReady => _initialized && !_failed;
+
+  FragmentProgram? getProgram(GpuShaderType type) {
+    switch (type) {
+      case GpuShaderType.aurora:
+        return _auroraProgram;
+      case GpuShaderType.tunnel:
+        return _tunnelProgram;
+    }
+  }
+
+  /// Initialize and compile shaders asynchronously
+  Future<bool> initialize() async {
+    if (_initialized) return isReady;
+
+    try {
+      _auroraProgram = await FragmentProgram.fromAsset(GpuShaderType.aurora.assetPath);
+      _tunnelProgram = await FragmentProgram.fromAsset(GpuShaderType.tunnel.assetPath);
+      _initialized = true;
+      _failed = false;
+      return true;
+    } catch (_) {
+      // In headless test environments or unsupported rasterizers, fail gracefully
+      _failed = true;
+      _initialized = true;
+      return false;
+    }
+  }
+}

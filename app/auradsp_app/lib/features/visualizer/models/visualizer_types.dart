@@ -40,6 +40,30 @@ enum VisualizerStyle {
     label: 'Pulse Nebula',
     icon: Icons.lens_blur_rounded,
     description: 'Tri-band decomposed acoustic energy orb with surrounding orbital particle nebula',
+  ),
+
+  /// GPU 硬件加速极光流体着色器 (FragmentProgram)
+  auroraShader(
+    id: 'auroraShader',
+    label: 'Aurora Ribbon',
+    icon: Icons.waves_rounded,
+    description: 'GPU fragment shader generating waving northern lights ribbons',
+  ),
+
+  /// GPU 硬件加速霓虹穿梭隧道着色器 (FragmentProgram)
+  tunnelShader(
+    id: 'tunnelShader',
+    label: 'Neon Tunnel',
+    icon: Icons.filter_tilt_shift_rounded,
+    description: 'GPU fragment shader rendering infinite audio-reactive warp tunnel',
+  ),
+
+  /// Winamp MilkDrop 2 / projectM 外部视效引擎
+  milkDrop(
+    id: 'milkDrop',
+    label: 'MilkDrop',
+    icon: Icons.album_rounded,
+    description: 'Winamp MilkDrop 2 procedural music visualizer engine',
   );
 
   final String id;
