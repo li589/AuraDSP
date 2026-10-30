@@ -209,7 +209,11 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 	compileContext *ctx = (compileContext*)pg->vm;
 	NSEEL_VM_freevars(pg->vm);
 	NSEEL_init_memRegion(pg->vm);
-	memset(ctx->ram_state, 0, sizeof(ctx->ram_state));
+	/* [AuraDSP 2026-10-30] gmem 每次编译前清零（旧内嵌数组的 memset 语义）。
+	 * 未分配时不主动分配：首次编译由 NSEEL_VM_getram() 惰性 calloc，本身就是
+	 * 全零；空脚本或不用 RAM 的脚本保持零成本。 */
+	if (ctx->ram_state)
+		memset(ctx->ram_state, 0, (size_t)NSEEL_RAM_ITEMSPERBLOCK * sizeof(float));
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
 	if (pg->vmFs)
 		*pg->vmFs = jdsp->fs;

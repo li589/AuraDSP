@@ -60,6 +60,8 @@ def run_smoke_tests():
         "smoke_convolver.py",
         "smoke_guard_flow.py",
         "smoke_liveprog.py",
+        # 2026-10-30：gmem 区从「每 VM 内嵌 64MB」改为按需分配，防止回归
+        "smoke_liveprog_gmem.py",
         "smoke_viz_lowfreq.py",
         "smoke_latency_probe.py",
         "smoke_block1056.py",

@@ -139,6 +139,10 @@ typedef struct
 	NSEEL_CODEHANDLE codePtr;
 	pthread_t threadID;
 } abstractThreads;
+/* [AuraDSP 2026-10-30] gmem 访问器：首次真正用到 RAM 时才 calloc 64MB。
+ * 未引用 gmem/tds 等 RAM 特性的脚本不再为每个 VM 预占 64MB。 */
+float *NSEEL_VM_getram(NSEEL_VMCTX ctx);
+#define EEL_RAM(c) NSEEL_VM_getram((NSEEL_VMCTX)(c))
 typedef struct
 {
 	pthread_mutex_t globalLocker;
@@ -173,7 +177,11 @@ typedef struct
   const char *function_curName; // name of current function
   float (*onString)(void *caller_this, eelStringSegmentRec *list);
   codeHandleType *tmpCodeHandle;
-  float ram_state[NSEEL_RAM_ITEMSPERBLOCK];
+  /* [AuraDSP 2026-10-30] 原为内嵌 float[1<<24]（64MB），每个 VM 一建就吃满，
+   * 而 VM 三槽 × 每桥 8 handle 让空闲进程白占 ~1.5GB。改为首次真正用到
+   * RAM（x[y]/gmem/tds…）时 calloc（仍全零，语义不变），未用 RAM 的脚本
+   * 零成本；NSEEL_VM_free 释放。 */
+  float *ram_state;
   void *caller_this;
   eel_builtin_memRegion *region_context;
   char printfbuf[20000];
