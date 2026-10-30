@@ -140,11 +140,61 @@ class _FluidField {
     _applyFlow(dt, bands);
     _applyTurbulence(dt, bands);
     _inject(dt, bands);
+    _injectHaze();
     _advectVelocity(dt);
     _confineVorticity(dt);
     _project();
     _advectDye(dt);
     _relaxVelocity(dt);
+  }
+
+  /// 全场漂移墨云（2026-10-31）：旧实现只从底边喷嘴注入染料，上半屏几乎是
+  /// 空的，看起来「整个背景都不动」。这里在整张画布上维持 3 团缓慢游走的
+  /// 低浓度墨云——它们被流场拉伸后铺满整屏，任何时刻都有可见的流动结构。
+  ///
+  /// 只覆盖 blob 的包围盒（每团约 40×40 格），不遍历全网格；用 max 而非累加，
+  /// 避免持续注入把画面堆成一层均匀浓雾。
+  void _injectHaze() {
+    // 每条：[横向游走幅度, 角频率X, 相位, 纵向游走幅度, 半径(格), 峰值浓度]
+    const blobs = <List<double>>[
+      [0.42, 0.55, 0.0, 0.18, 24.0, 0.15],
+      [0.75, 2.10, 0.48, 0.15, 20.0, 0.12],
+      [0.15, 4.20, 0.50, 0.17, 16.0, 0.09],
+    ];
+
+    for (var bi = 0; bi < blobs.length; bi++) {
+      final b = blobs[bi];
+      final centerX = (_nx - 1) * (0.5 + b[0] * math.sin(_simTime * b[1] + b[2]));
+      final centerY =
+          (_ny - 1) * (0.52 + b[3] * 0.5 * math.sin(_simTime * 0.065 + b[2] * 1.7));
+      final radius = b[4] + 2.0 * math.sin(_simTime * 0.12 + bi * 2.0);
+      final peak = b[5];
+      final r2 = radius * radius;
+
+      final xStart = (centerX - radius * 1.6).floor().clamp(1, _nx - 2);
+      final xEnd = (centerX + radius * 1.6).ceil().clamp(1, _nx - 2);
+      final yStart = (centerY - radius * 1.6).floor().clamp(1, _ny - 2);
+      final yEnd = (centerY + radius * 1.6).ceil().clamp(1, _ny - 2);
+
+      for (var y = yStart; y <= yEnd; y++) {
+        final rowBase = y * _nx;
+        final dy = y - centerY;
+        for (var x = xStart; x <= xEnd; x++) {
+          final dx = x - centerX;
+          final d2 = dx * dx + dy * dy;
+          if (d2 > r2 * 2.6) continue;
+          final falloff =
+              math.exp(-d2 / (r2 * 1.6)) * (1.0 - d2 / (r2 * 3.4));
+          if (falloff <= 0.02) continue;
+          final target = peak * falloff;
+          final cell = rowBase + x;
+          if (target > _dye[cell]) _dye[cell] = target;
+          // 搭配极弱的上升/旋转扰动，让墨云自己也在缓慢变形
+          _v[cell] -= falloff * 0.6;
+          _u[cell] += math.sin(_simTime * 0.2 + y * 0.3) * falloff * 0.5;
+        }
+      }
+    }
   }
 
   /// 首帧铺一层很淡的全场染料。
@@ -159,7 +209,9 @@ class _FluidField {
     for (var i = 0; i < _cells; i++) {
       _dye[i] = _rng.nextDouble();
     }
-    for (var pass = 0; pass < 3; pass++) {
+    // 6 遍可分离模糊：得到更接近墨云的大尺度底噪。3 遍时特征只有 2~3 格宽，
+    // 平流后整屏都是高频颗粒，看起来像噪点而不是流体。
+    for (var pass = 0; pass < 6; pass++) {
       _blurField(_dye, _dyePrev);
     }
 
@@ -305,12 +357,12 @@ class _FluidField {
     final strength = (1.6 + level * 5.0) * dt;
     final time = _simTime;
 
-    final kx1 = 0.10 + level * 0.04;
-    final ky1 = 0.13 + level * 0.05;
-    const kx2 = 0.30;
-    const ky2 = 0.34;
-    const kx3 = 0.58;
-    const ky3 = 0.62;
+    final kx1 = 0.07 + level * 0.03;
+    final ky1 = 0.09 + level * 0.035;
+    const kx2 = 0.22;
+    const ky2 = 0.26;
+    const kx3 = 0.46;
+    const ky3 = 0.50;
     final phaseX1 = time * 0.62;
     final phaseY1 = time * 0.48;
     final phaseX2 = -time * 0.95 + 1.3;
@@ -381,9 +433,11 @@ class _FluidField {
     // 速度都用“格/秒”计，过大会让半拉格朗日平流每一步跨多半格，把染料抹成雾
     final base = 1.0 + level * 2.0;
     final drift = 1.2 + level * 2.8;
-    final omega = 0.04 + level * 0.12;
-    // 牵引强度不宜过大，否则每帧都把湍流速度拉回刚性旋转场，涡旋长不出来
-    final blend = math.min(1.0, dt * 0.4);
+    // 旋转略强于旧值：整个背景要能看出缓慢旋转，而不是只有底部在冒气
+    final omega = 0.055 + level * 0.145;
+    // 牵引强度不宜过大，否则每帧都把湍流速度拉回刚性旋转场，涡旋长不出来；
+    // 但也不能太小，否则背景大尺度运动几乎停滞。
+    final blend = math.min(1.0, dt * 0.6);
     final centerX = (_nx - 1) * 0.5;
     final centerY = (_ny - 1) * 0.5;
 
@@ -582,7 +636,8 @@ class _FluidField {
   /// 抵消一阶数值扩散，最后把结果夹在回溯点邻域的极值之间避免振铃。
   void _advectDye(double dt) {
     _dyePrev.setAll(0, _dye);
-    final decay = math.exp(-0.03 * dt);
+    // 染料耗散放慢：旧值 0.03 会让结构在几秒内淡掉，背景很快变回静止底图
+    final decay = math.exp(-0.012 * dt);
 
     for (var y = 0; y < _ny; y++) {
       final rowBase = y * _nx;
@@ -742,8 +797,8 @@ class _FluidField {
       colors.length > 1 ? colors[1] : palette.secondary,
       palette.peak,
     ];
-    final rampStart = lightBackground ? 0.12 : 0.2;
-    final rampSpan = lightBackground ? 0.4 : 0.5;
+    final rampStart = lightBackground ? 0.06 : 0.10;
+    final rampSpan = lightBackground ? 0.42 : 0.55;
     final rampExponent = lightBackground ? 0.9 : 0.85;
 
     for (var i = 0; i < _lutSize; i++) {
