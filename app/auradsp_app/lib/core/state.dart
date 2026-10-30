@@ -192,12 +192,22 @@ class AppModel extends ChangeNotifier {
 
   /// 唯一写入口：同步 config 落盘 + 主隔离通知 + 防抖会话保存。
   /// [persistConfig] 仅会话回放/预设应用批量写时置 false，避免逐项写盘。
+  ///
+  /// config.json 写盘做 300ms 防抖（2026-10-31 审查修复）：抽屉滑块拖动
+  /// 每秒触发 ~60 次，旧实现每次同步全量 JSON 写主线程；一次预设切换也会
+  /// 因 14 个 spec 连写 14 次。会话记忆已有防抖兜底，这里合并为一次写盘。
+  Timer? _vizConfigSaveTimer;
+
   void setVisualizerConfig(VisualizerConfig next, {bool persistConfig = true}) {
-    if (!persistConfig && config.visualizerConfig == next) return;
+    if (config.visualizerConfig == next) return;
     config.visualizerConfig = next;
     visualizerConfig.value = next;
     if (persistConfig && !_isReplayingSession) {
-      ConfigManager.save(config);
+      _vizConfigSaveTimer?.cancel();
+      _vizConfigSaveTimer = Timer(const Duration(milliseconds: 300), () {
+        _vizConfigSaveTimer = null;
+        ConfigManager.save(config);
+      });
     }
     _notifyUi();
     scheduleAutoSave();
@@ -997,6 +1007,11 @@ class AppModel extends ChangeNotifier {
   /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
   int _restartToken = 0;
 
+  /// 托盘可见性监听是否已订阅：_spawn() 每次（含重启）都会调用，
+  /// 旧实现每次都 addListener → 重启一次叠一个监听（重复下发
+  /// setVizSuspended 且常驻泄漏）。
+  bool _trayVisibilitySubscribed = false;
+
   // fatal-backoff 重试计数（'ready' 到达即清零；只对设备失效用）。
   int _fatalRetries = 0;
 
@@ -1149,9 +1164,16 @@ class AppModel extends ChangeNotifier {
     TrayService.instance.isWindowVisible.removeListener(
       _onWindowVisibilityChanged,
     );
+    _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
+    // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失
+    if (_vizConfigSaveTimer != null) {
+      _vizConfigSaveTimer!.cancel();
+      _vizConfigSaveTimer = null;
+      ConfigManager.save(config);
+    }
     _compThresholdThrottleTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);

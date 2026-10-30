@@ -152,6 +152,9 @@ const Set<String> kUiOnlySpecIds = {
   'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
   'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
   'visualizer.showTranslation', 'visualizer.lyricsSource',
+  // 压缩器宏控（2026-10-31 接线进 registry）：阈值经 alias 归一为
+  // comp.gain1..7（引擎侧有对应参数，故不入 uiOnly）；比率仅 UI 传递曲线。
+  'comp.ratio',
 };
 
 /// Part C：引擎侧参数 UI 不通过 registry 暴露的状态/掩码/计量/别名族/
@@ -276,10 +279,8 @@ const Set<String> kEngineOnlyIds = {
 /// ParamRegistry.allParams）的孤儿 spec。与实测差集精确相等；
 /// 将它们接线进 registry 时同步删此条目。
 const Set<String> kOrphanStaticSpecIds = {
-  // 待引擎补充（B2 排期，方案文档 2026-10-19 §2.2）：
-  // FFTCompander 外围"阈值输入偏移 + 比率增益标度"宏控映射，需 vendor 语义验证 + 听感校准。
-  'comp.ratio', // 引擎无 comp.ratio 参数（vendor 多段压缩无比率）；UI 核心滑块 + 传递曲线可视化依赖，暂保留
-  'comp.threshold', // 同上：宏观阈值；7 段 gain 已注册进 comp section，macro 本体未挂
+  // 2026-10-31：comp.threshold / comp.ratio 已接线进 comp section（此前
+  // 只存不读，重启丢失阈值与比率），此处不再登记孤儿。
 };
 
 /// Part D：已登记的"spec.defaultValue ≠ 引擎默认"分歧（P-4 类）。
