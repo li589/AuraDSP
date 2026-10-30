@@ -25,7 +25,7 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXPECTED_ABI = 2
 
 fails = []

@@ -273,9 +273,13 @@ void auradsp_destroy(auradsp_handle h) {
 }
 
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
-    if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
+    /* ABI 是公开边界：空缓冲指针在内部 FFI 契约里虽不会出现，但违规调用
+     * 会直接踩空；一次分支换内存安全（RT 开销可忽略）。 */
+    if (!h || !in || !out || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
     if (frames > h->max_block) frames = h->max_block;
+    /* E-03：给控制侧延迟计算留一个无竞争的设备域块长快照。 */
+    h->lat_block_frames.store(frames, std::memory_order_relaxed);
 
     ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
@@ -580,6 +584,9 @@ auradsp_state auradsp_get_state(auradsp_handle h) {
 
 double auradsp_get_latency_ms(auradsp_handle h) {
     if (!h) return 0;
+    /* E-03：jdsp.fs / enableASRC 由控制侧在 ASRC 重配时改写，读侧必须与
+     * set_param 同锁才能避免形式上的数据竞争（块长已走原子快照）。 */
+    std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     double ms = 0.0;
     compute_latency(h, &ms);
     return ms;

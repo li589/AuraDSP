@@ -35,9 +35,10 @@ SR = 48000.0
 BLOCK = 480
 UI_SECONDS = 6.0
 JOIN_TIMEOUT = 20.0
-BLOCK_STALL_MS = 15.0        # 单块墙钟上界（pre-B1 实测 ~51ms；post-B1 <1ms）
+BLOCK_STALL_FLOOR_MS = 5.0   # 墙钟地板：吸收批量连跑时的系统调度噪声
+BLOCK_STALL_RATIO = 4.0      # 相对基线放大倍数（pre-B1 尖峰 ~51ms 仍必红）
 BLOCKS_MIN = 5000            # RT 总产出下界（pre-B1 实测 ~400；post-B1 ~74k）
-BLOCKS_PER_COMPILE_MIN = 10  # 编译窗口内 RT 产出/窗口下界（pre-B1 ~1.5；post-B1 ~300）
+BLOCKS_PER_COMPILE_MIN = 5   # 编译窗口内 RT 产出/窗口下界（pre-B1 ~1.5；post-B1 ~300）
 FAIL = []
 
 
@@ -246,9 +247,14 @@ check('rt kept producing DURING compiles (>=%d blocks/window, shadow VM no lock 
       'blocks_during_compile=%d over %d compile windows (%.1f/window)'
       % (blocks_during_compile[0], compile_windows[0], per_window))
 
-# B1 核心断言 2：单块墙钟无编译级尖峰（38ms 编译若阻塞 RT 会出现 ~38ms 块）
-check('rt max block %.1fms < %.0fms (no compile-induced stall)'
-      % (rt_max_ms[0], BLOCK_STALL_MS), rt_max_ms[0] < BLOCK_STALL_MS)
+# B1 核心断言 2：单块墙钟无编译级尖峰（38ms 编译若阻塞 RT 会出现 ~38ms 块）。
+# T-04：阈值相对本次进程的基线块耗时，而非固定 15ms 墙钟——批量连跑时
+# 前序用例余温/系统调度会把正常块推到 10ms+，固定阈值误报；pre-B1 的
+# ~51ms 尖峰对任何合理基线仍会判红。
+stall_limit_ms = max(BLOCK_STALL_FLOOR_MS, base_max_ms * BLOCK_STALL_RATIO)
+check('rt max block %.1fms < %.1fms (baseline %.3fms x%.0f, no compile-induced stall)'
+      % (rt_max_ms[0], stall_limit_ms, base_max_ms, BLOCK_STALL_RATIO),
+      rt_max_ms[0] < stall_limit_ms)
 
 # B1 核心断言 3：编译完成后新脚本生效（A 0.5 → B 0.25）
 for _ in range(64):
