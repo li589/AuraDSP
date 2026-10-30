@@ -73,9 +73,16 @@ class _VisualizerPageState extends State<VisualizerPage> {
 
   void _onVisiblePageChanged() {
     if (!mounted) return;
-    if (widget.model.visiblePage.value != AppPage.visualizer &&
-        _displayMode != VisualizerDisplayMode.restore) {
+    if (widget.model.visiblePage.value == AppPage.visualizer) {
+      // 回到页面时恢复键盘焦点，F11 / Esc 立即可用
+      _focusNode.requestFocus();
+      return;
+    }
+    if (_displayMode != VisualizerDisplayMode.restore) {
       _applyDisplayMode(VisualizerDisplayMode.restore);
+    }
+    if (_drawerOpen) {
+      setState(() => _drawerOpen = false);
     }
   }
 
