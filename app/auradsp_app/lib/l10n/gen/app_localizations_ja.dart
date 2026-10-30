@@ -1415,7 +1415,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get visualizerLyricsNotFound => '一致する歌詞が見つかりません';
 
   @override
-  String get visualizerLyricsNotFoundHint => '再取得するか、ローカル LRC ファイルを選択してください';
+  String get visualizerLyricsNotFoundHint =>
+      '右上の操作から再取得、またはローカル LRC ファイルを選択してください';
 
   @override
   String get visualizerLyricsReady => '歌詞を読み込みました';
@@ -1425,6 +1426,40 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get visualizerLyricsPickLocal => 'ローカル LRC';
+
+  @override
+  String get visualizerLyricsPickLocalTitle => 'ローカル LRC 歌詞ファイルを選択';
+
+  @override
+  String get visualizerLyricsPickLocalPrompt => '.lrc ファイルのフルパスを入力または貼り付け：';
+
+  @override
+  String get visualizerLyricsUnsupported => 'このプラットフォームではシステムメディアセッションを利用できません';
+
+  @override
+  String get visualizerLyricsUnsupportedHint => '右上の操作からローカル LRC ファイルを選択できます';
+
+  @override
+  String get visualizerLyricsSource => '歌詞ソース';
+
+  @override
+  String get visualizerLyricsSourceInfo =>
+      '自動では各オンライン歌詞ライブラリを順に試します。単一ソースに固定することもできます';
+
+  @override
+  String get visualizerLyricsSourceAuto => '自動（順次フォールバック）';
+
+  @override
+  String get visualizerLyricsSourceLrclib => 'LrcLib';
+
+  @override
+  String get visualizerLyricsSourceNetease => 'NetEase Cloud Music';
+
+  @override
+  String get visualizerLyricsSourceQq => 'QQ Music';
+
+  @override
+  String get visualizerLyricsSourceKugou => 'Kugou Music';
 
   @override
   String get visualizerLyricsCalibrate => 'この行に合わせる';

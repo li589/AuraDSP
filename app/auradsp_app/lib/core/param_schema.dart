@@ -7,6 +7,7 @@
  */
 
 import 'state.dart';
+import 'visualizer_types.dart';
 
 /// 参数数据类型
 enum ParamType {
@@ -1608,6 +1609,121 @@ abstract final class ParamRegistry {
     setter: (m, v) => m.setMonitorMirroring(v),
   );
 
+  /* ---- 可视化参数（2026-10-31）：AppModel.visualizerConfig 的预设角 ----
+   * 全部为纯 Dart 侧状态（不下发引擎）；id 按契约测试要求字面量书写。 */
+  static final vizStyle = ParamSpec<String>(
+    id: 'visualizer.style', section: 'visualizer', key: 'style',
+    type: ParamType.string, defaultValue: 'bars',
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.style.id,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(style: VisualizerStyle.fromId(v))),
+  );
+  static final vizColorTheme = ParamSpec<String>(
+    id: 'visualizer.colorTheme', section: 'visualizer', key: 'colorTheme',
+    type: ParamType.string, defaultValue: 'system',
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.colorTheme.id,
+    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
+        .copyWith(colorTheme: VisualizerColorTheme.fromId(v))),
+  );
+  static final vizSensitivity = ParamSpec<double>(
+    id: 'visualizer.sensitivity', section: 'visualizer', key: 'sensitivity',
+    type: ParamType.float, defaultValue: 1.0, min: 0.2, max: 3.0, step: 0.1,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.sensitivity,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(sensitivity: v)),
+  );
+  static final vizDecayRate = ParamSpec<double>(
+    id: 'visualizer.decayRate', section: 'visualizer', key: 'decayRate',
+    type: ParamType.float, defaultValue: 0.6, min: 0.1, max: 0.95,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.decayRate,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(decayRate: v)),
+  );
+  static final vizGravity = ParamSpec<double>(
+    id: 'visualizer.gravity', section: 'visualizer', key: 'gravity',
+    type: ParamType.float, defaultValue: 1.8, min: 0.5, max: 4.0,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.gravity,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(gravity: v)),
+  );
+  static final vizBarCount = ParamSpec<int>(
+    id: 'visualizer.barCount', section: 'visualizer', key: 'barCount',
+    type: ParamType.int32, defaultValue: 32, min: 32, max: 64,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.barCount,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(barCount: v)),
+  );
+  static final vizLineWidth = ParamSpec<double>(
+    id: 'visualizer.lineWidth', section: 'visualizer', key: 'lineWidth',
+    type: ParamType.float, defaultValue: 1.5, min: 0.8, max: 3.5,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.lineWidth,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(lineWidth: v)),
+  );
+  static final vizBloom = ParamSpec<double>(
+    id: 'visualizer.bloom', section: 'visualizer', key: 'bloom',
+    type: ParamType.float, defaultValue: 0.5, min: 0.0, max: 1.0,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.bloom,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(bloom: v)),
+  );
+  static final vizShowGrid = ParamSpec<bool>(
+    id: 'visualizer.showGrid', section: 'visualizer', key: 'showGrid',
+    type: ParamType.boolean, defaultValue: true,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.showGrid,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(showGrid: v)),
+  );
+  static final vizShowPeaks = ParamSpec<bool>(
+    id: 'visualizer.showPeaks', section: 'visualizer', key: 'showPeaks',
+    type: ParamType.boolean, defaultValue: true,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.showPeaks,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(showPeaks: v)),
+  );
+  static final vizShowDbScale = ParamSpec<bool>(
+    id: 'visualizer.showDbScale', section: 'visualizer', key: 'showDbScale',
+    type: ParamType.boolean, defaultValue: true,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.showDbScale,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(showDbScale: v)),
+  );
+  static final vizShowLyrics = ParamSpec<bool>(
+    id: 'visualizer.showLyrics', section: 'visualizer', key: 'showLyrics',
+    type: ParamType.boolean, defaultValue: false,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.showLyrics,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(showLyrics: v)),
+  );
+  static final vizShowTranslation = ParamSpec<bool>(
+    id: 'visualizer.showTranslation', section: 'visualizer', key: 'showTranslation',
+    type: ParamType.boolean, defaultValue: true,
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.showTranslation,
+    setter: (m, v) => m.setVisualizerConfig(
+        m.visualizerConfig.value.copyWith(showTranslation: v)),
+  );
+  static final vizLyricsSource = ParamSpec<String>(
+    id: 'visualizer.lyricsSource', section: 'visualizer', key: 'lyricsSource',
+    type: ParamType.string, defaultValue: 'auto',
+    category: ParamCategory.hidden,
+    getter: (m) => m.visualizerConfig.value.lyricsSource.id,
+    setter: (m, v) => m.setVisualizerConfig(m.visualizerConfig.value
+        .copyWith(lyricsSource: LyricsSource.fromId(v))),
+  );
+
   /* =========================================================================
    * 全量处理节登记表 (Ordered Sections)
    * ========================================================================= */
@@ -1900,7 +2016,17 @@ abstract final class ParamRegistry {
         }
       },
     ),
-    // 22. 路由
+    // 22. 可视化（2026-10-31）：风格/配色/动态参数/歌词源全部纳入预设与
+    // 指纹。纯 Dart 侧参数（不下发引擎，故 realtimeSafe 位无意义，保持默认）。
+    ParamSection(
+      name: 'visualizer',
+      specs: [
+        vizStyle, vizColorTheme, vizSensitivity, vizDecayRate, vizGravity,
+        vizBarCount, vizLineWidth, vizBloom, vizShowGrid, vizShowPeaks,
+        vizShowDbScale, vizShowLyrics, vizShowTranslation, vizLyricsSource,
+      ],
+    ),
+    // 23. 路由
     ParamSection(
       name: 'routing',
       specs: [

@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/error_sink.dart';
+import '../../../../core/visualizer_types.dart';
 import '../../../../platform/platform_profile.dart';
 import '../models/lyric_models.dart';
 import '../parsers/lrc_parser.dart';
@@ -33,8 +34,9 @@ class MockMediaSessionProvider implements MediaSessionProvider {
   }
 }
 
-/// 歌词检索状态：为 UI 提供可见反馈（无媒体 / 检索中 / 已就绪 / 未找到）
-enum LyricsSyncState { idle, noMedia, searching, ready, notFound }
+/// 歌词检索状态：为 UI 提供可见反馈
+/// （无媒体 / 检索中 / 已就绪 / 未找到 / 平台不支持系统媒体会话）
+enum LyricsSyncState { idle, noMedia, searching, ready, notFound, unsupported }
 
 /// 统一媒体时钟同步与歌词编排调度服务
 class MediaSyncService {
@@ -76,14 +78,39 @@ class MediaSyncService {
   /// 行切换滞回：越过行首/行尾不足该值时保持当前行，压住边界来回翻动
   static const Duration _lineSwitchGuard = Duration(milliseconds: 140);
 
+  /// 当前平台是否具备系统媒体会话服务（Windows SMTC）。Linux/Android 等
+  /// 平台尚无对应提供者时，UI 用干净的「暂不支持」标注替代「未检测到媒体」，
+  /// 避免用户误以为有媒体在放却匹配不到。
+  final bool _hasSystemMediaSession;
+
   MediaSyncService({
     MediaSessionProvider? provider,
     OnlineLyricsService? onlineService,
+    LyricsSource lyricsSource = LyricsSource.auto,
+    bool? hasSystemMediaSession,
   })  : _provider = provider ??
             (PlatformProfile.os == 'windows'
                 ? WindowsSmtcProvider()
                 : MockMediaSessionProvider()),
-        _onlineService = onlineService ?? OnlineLyricsService();
+        _onlineService = onlineService ?? OnlineLyricsService(),
+        _hasSystemMediaSession = hasSystemMediaSession ??
+            (provider != null || PlatformProfile.os == 'windows') {
+    // 注入的来源随服务一起生效（测试的离线假源同样继承该字段）。
+    _onlineService.preference = lyricsSource;
+  }
+
+  /// 切换在线歌词来源（R6）：清空旧源缓存，并在有曲目时立即用新源重试。
+  void setLyricsSource(LyricsSource source) {
+    if (_disposed || _onlineService.preference == source) return;
+    _onlineService.preference = source;
+    _onlineService.clearCache();
+    if (currentTrack.value.hasContent) {
+      unawaited(retryLyrics());
+    }
+  }
+
+  /// 平台媒体会话是否可用（UI 状态文案据此区分 unsupported 与 noMedia）。
+  bool get hasSystemMediaSession => _hasSystemMediaSession;
 
   /// 启动系统媒体传输控制 (SMTC) 监听，自动绑定歌词
   void startAutoSync() {
@@ -95,6 +122,13 @@ class MediaSyncService {
     _sessionSub = _provider.trackStream.listen((track) {
       updateTrack(track);
     });
+
+    // 无系统媒体会话服务（Linux/Android 等）：干净标注「暂不支持」，
+    // 仍保留本地 LRC 手动加载能力。
+    if (!_hasSystemMediaSession && currentLyrics.value.isEmpty) {
+      lyricsState.value = LyricsSyncState.unsupported;
+      return;
+    }
 
     // 再次开启歌词时若已有曲目但歌词为空（上次检索失败/尚未检索），立即补拉一次
     final track = currentTrack.value;
@@ -220,7 +254,9 @@ class MediaSyncService {
     if (_disposed) return;
     final track = currentTrack.value;
     if (!track.hasContent) {
-      lyricsState.value = LyricsSyncState.noMedia;
+      lyricsState.value = _hasSystemMediaSession
+          ? LyricsSyncState.noMedia
+          : LyricsSyncState.unsupported;
       return;
     }
 
@@ -265,7 +301,9 @@ class MediaSyncService {
       activeLineIndex.value = -1;
       lyricsState.value = track.hasContent
           ? LyricsSyncState.searching
-          : LyricsSyncState.noMedia;
+          : (_hasSystemMediaSession
+              ? LyricsSyncState.noMedia
+              : LyricsSyncState.unsupported);
     } else {
       // 同一曲目：SMTC 每秒快照本身可能滞后，若直接覆盖锚点会让（显示）时间回跳，
       // 行指针便在相邻两行之间来回翻动。因此以单调时钟为准，只接受明显的前跳与大回退。
@@ -295,7 +333,9 @@ class MediaSyncService {
     if (!track.hasContent) {
       currentLyrics.value = LyricDocument.empty;
       activeLineIndex.value = -1;
-      lyricsState.value = LyricsSyncState.noMedia;
+      lyricsState.value = _hasSystemMediaSession
+          ? LyricsSyncState.noMedia
+          : LyricsSyncState.unsupported;
       return;
     }
 

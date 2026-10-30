@@ -1398,7 +1398,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get visualizerLyricsNotFound => '未找到匹配的歌词';
 
   @override
-  String get visualizerLyricsNotFoundHint => '可重新获取，或选择本地 LRC 文件手动加载';
+  String get visualizerLyricsNotFoundHint => '可在右上角重新获取，或选择本地 LRC 文件手动加载';
 
   @override
   String get visualizerLyricsReady => '歌词已加载';
@@ -1408,6 +1408,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get visualizerLyricsPickLocal => '本地 LRC';
+
+  @override
+  String get visualizerLyricsPickLocalTitle => '选择本地 LRC 歌词文件';
+
+  @override
+  String get visualizerLyricsPickLocalPrompt => '请输入或粘贴 .lrc 歌词文件的完整路径：';
+
+  @override
+  String get visualizerLyricsUnsupported => '当前平台暂不支持系统媒体会话';
+
+  @override
+  String get visualizerLyricsUnsupportedHint => '仍可在右上角选择本地 LRC 文件手动加载歌词';
+
+  @override
+  String get visualizerLyricsSource => '歌词来源';
+
+  @override
+  String get visualizerLyricsSourceInfo => '自动按顺序尝试各在线歌词库；也可固定使用某一个来源';
+
+  @override
+  String get visualizerLyricsSourceAuto => '自动（依次回退）';
+
+  @override
+  String get visualizerLyricsSourceLrclib => 'LrcLib';
+
+  @override
+  String get visualizerLyricsSourceNetease => '网易云音乐';
+
+  @override
+  String get visualizerLyricsSourceQq => 'QQ 音乐';
+
+  @override
+  String get visualizerLyricsSourceKugou => '酷狗音乐';
 
   @override
   String get visualizerLyricsCalibrate => '校准到这一行';

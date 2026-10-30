@@ -17,7 +17,6 @@
  */
 import 'dart:io';
 
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -25,13 +24,15 @@ import 'package:window_manager/window_manager.dart';
 import '../core/design.dart';
 import '../core/error_sink.dart';
 import '../core/nav.dart';
+import '../core/path_memory.dart';
 import '../core/state.dart';
 import '../core/ui_helpers.dart';
+import '../core/visualizer_types.dart';
 import '../platform/platform_profile.dart';
+import '../ui/path_picker_dialog.dart';
 import 'chrome.dart';
 import 'visualizer/lyrics/parsers/lrc_parser.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
-import 'visualizer/models/visualizer_types.dart';
 import 'visualizer/views/visualizer_drawer_widgets.dart';
 import 'visualizer/views/visualizer_meters.dart';
 import 'visualizer/views/visualizer_stage.dart';
@@ -45,11 +46,17 @@ class VisualizerPage extends StatefulWidget {
 }
 
 class _VisualizerPageState extends State<VisualizerPage> {
-  VisualizerConfig _config = const VisualizerConfig();
-  final MediaSyncService _mediaSync = MediaSyncService();
+  /// 媒体同步服务：构造时带上配置里的歌词来源（预置在首次访问页面时创建）。
+  late final MediaSyncService _mediaSync = MediaSyncService(
+    lyricsSource: widget.model.visualizerConfig.value.lyricsSource,
+  );
   bool _drawerOpen = false;
   VisualizerDisplayMode _displayMode = VisualizerDisplayMode.restore;
   final FocusNode _focusNode = FocusNode();
+
+  /// 配置变化监听所需的镜像（仅用于识别“歌词开关/歌词来源”翻转）
+  bool _lyricsEnabled = false;
+  LyricsSource _lastLyricsSource = LyricsSource.auto;
 
   /// 播放状态的选择性监听：模型每帧都会 notify（频谱/电平），
   /// 若直接 ListenableBuilder(model) 会让整个舞台子树以音频帧率重建，
@@ -66,6 +73,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
     widget.model.visiblePage.addListener(_onVisiblePageChanged);
     _playing.value = widget.model.liveSpectrum;
     widget.model.addListener(_onModelChanged);
+    final cfg = widget.model.visualizerConfig.value;
+    _lyricsEnabled = cfg.showLyrics;
+    _lastLyricsSource = cfg.lyricsSource;
+    widget.model.visualizerConfig.addListener(_onVisualizerConfigChanged);
     // 页面初始即为可视页时（如应用直接恢复到可视化页）不会触发变更回调，这里兜底启动
     if (widget.model.visiblePage.value == AppPage.visualizer) {
       _mediaSync.startAutoSync();
@@ -76,6 +87,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
   void dispose() {
     widget.model.visiblePage.removeListener(_onVisiblePageChanged);
     widget.model.removeListener(_onModelChanged);
+    widget.model.visualizerConfig.removeListener(_onVisualizerConfigChanged);
     _playing.dispose();
     if (_displayMode == VisualizerDisplayMode.immersive) {
       widget.model.visualizerImmersive.value = false;
@@ -91,6 +103,24 @@ class _VisualizerPageState extends State<VisualizerPage> {
     final playing = widget.model.liveSpectrum;
     if (playing != _playing.value) {
       _playing.value = playing;
+    }
+  }
+
+  /// 可视化配置变化：歌词开关翻转 → 启停媒体监听；歌词来源切换 → 换源重试。
+  /// 这样预设载入 / 会话恢复 / 抽屉修改三条路径都走同一反应逻辑。
+  void _onVisualizerConfigChanged() {
+    final cfg = widget.model.visualizerConfig.value;
+    if (cfg.lyricsSource != _lastLyricsSource) {
+      _lastLyricsSource = cfg.lyricsSource;
+      _mediaSync.setLyricsSource(cfg.lyricsSource);
+    }
+    if (cfg.showLyrics != _lyricsEnabled) {
+      _lyricsEnabled = cfg.showLyrics;
+      if (cfg.showLyrics) {
+        _mediaSync.startAutoSync();
+      } else {
+        _mediaSync.stopAutoSync();
+      }
     }
   }
 
@@ -112,36 +142,36 @@ class _VisualizerPageState extends State<VisualizerPage> {
   }
 
   void _toggleLyrics() {
-    final enabling = !_config.showLyrics;
-    setState(() {
-      _config = _config.copyWith(showLyrics: enabling);
-    });
-    if (enabling) {
-      // 打开歌词即建立媒体监听；有曲目但歌词为空时服务内部会自动补拉
-      _mediaSync.startAutoSync();
-    } else {
-      // 关闭歌词时仅停止订阅与行同步，媒体子进程保留以便再次开启时秒级复用
-      _mediaSync.stopAutoSync();
-    }
+    final cfg = widget.model.visualizerConfig.value;
+    // 启停媒体监听由 _onVisualizerConfigChanged 统一响应（预设/会话同路径）
+    widget.model.setVisualizerConfig(cfg.copyWith(showLyrics: !cfg.showLyrics));
   }
 
-  /// 手动加载本地 LRC 文件（在线检索无结果或离线曲目时的兜底）
+  /// 手动加载本地 LRC 文件（在线检索无结果或离线曲目时的兜底）。
+  ///
+  /// R4（2026-10-31）：统一走 AuraPathPickerDialog——项目铁律要求所有
+  /// 文件/目录选择都必须经这个专用 UI（支持键入路径、系统选择器、扩展名
+  /// 校验与路径记忆），不得在页面里直接用 file_selector。
   Future<void> _pickLocalLrc() async {
-    try {
-      const typeGroup = XTypeGroup(
-        label: 'LRC',
-        extensions: <String>['lrc'],
-      );
-      final file = await openFile(acceptedTypeGroups: const [typeGroup]);
-      if (file == null) return;
+    final l = l10nOf(context);
+    final path = await AuraPathPickerDialog.show(
+      context,
+      title: l.visualizerLyricsPickLocalTitle,
+      prompt: l.visualizerLyricsPickLocalPrompt,
+      allowedExtensions: const ['lrc'],
+      memorySlot: PathMemory.slotLyricsLrc,
+      confirmLabel: l.visualizerLyricsPickLocal,
+    );
+    if (path == null || path.isEmpty) return;
 
-      final content = await File(file.path).readAsString();
+    try {
+      final content = await File(path).readAsString();
       final doc = LrcParser.parse(content);
       if (doc.isNotEmpty) {
         _mediaSync.loadLyricDocument(doc);
       }
     } catch (e, st) {
-      // 文件读取/选择失败属可预期路径，留痕后静默回退
+      // 文件读取失败属可预期路径，留痕后静默回退
       swallow(e, st);
     }
   }
@@ -220,12 +250,22 @@ class _VisualizerPageState extends State<VisualizerPage> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<AppPage>(
       valueListenable: widget.model.visiblePage,
-      builder: (_, page, _) =>
-          _buildBody(context, active: page == AppPage.visualizer),
+      builder: (_, page, _) => ValueListenableBuilder<VisualizerConfig>(
+        valueListenable: widget.model.visualizerConfig,
+        builder: (_, config, _) => _buildBody(
+          context,
+          active: page == AppPage.visualizer,
+          config: config,
+        ),
+      ),
     );
   }
 
-  Widget _buildBody(BuildContext context, {required bool active}) {
+  Widget _buildBody(
+    BuildContext context, {
+    required bool active,
+    required VisualizerConfig config,
+  }) {
     final p = paletteOf(context);
     final l = l10nOf(context);
     final expanded = _displayMode.isExpanded;
@@ -324,11 +364,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
                             spectrum: widget.model.spectrum,
                             levelL: widget.model.levelL,
                             levelR: widget.model.levelR,
-                            config: _config,
+                            config: config,
                             displayMode: _displayMode,
-                            onStyleChanged: (st) => setState(
-                              () => _config = _config.copyWith(style: st),
-                            ),
+                            onStyleChanged: (st) => widget.model
+                                .setVisualizerConfig(config.copyWith(style: st)),
                             onToggleStageMode: _toggleStageMode,
                             onDisplayModeChanged: _applyDisplayMode,
                             onToggleLyrics: _toggleLyrics,
@@ -380,11 +419,12 @@ class _VisualizerPageState extends State<VisualizerPage> {
           // 浮动参数抽屉：淡入 + 右侧滑入，关闭时反向过渡
           VisualizerDrawerOverlay(
             open: _drawerOpen,
-            config: _config,
-            onConfigChanged: (newCfg) => setState(() => _config = newCfg),
+            config: config,
+            onConfigChanged: (newCfg) =>
+                widget.model.setVisualizerConfig(newCfg),
             onClose: _closeDrawer,
             onResetToDefaults: () =>
-                setState(() => _config = const VisualizerConfig()),
+                widget.model.setVisualizerConfig(const VisualizerConfig()),
           ),
         ],
       ),

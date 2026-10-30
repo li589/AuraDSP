@@ -45,6 +45,21 @@ class _DeferredOnlineLyricsService extends OnlineLyricsService {
   }
 }
 
+/// 计数用离线源：验证换源后立即重试
+class _CountingOnlineLyricsService extends OnlineLyricsService {
+  int calls = 0;
+
+  @override
+  Future<LyricDocument?> fetchLyrics({
+    required String trackName,
+    required String artistName,
+    Duration? duration,
+  }) async {
+    calls++;
+    return null;
+  }
+}
+
 void main() {
   group('LrcParser Tests', () {
     const sampleLrc = '''
@@ -419,6 +434,49 @@ void main() {
 
       expect(calibrated, 0);
     });
+
+    testWidgets('当前行离开可视区后自动归位（R2）', (tester) async {
+      final buffer = StringBuffer();
+      for (var i = 0; i < 40; i++) {
+        buffer.writeln(
+            '[00:${(i * 2).toString().padLeft(2, '0')}.00]Line $i');
+      }
+      final doc = LrcParser.parse(buffer.toString());
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(
+            body: SizedBox(
+              height: 320,
+              child: LyricView(document: doc, activeIndex: 5),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // 手动向下滚很远：当前行（第 5 行）离开可视区
+      await tester.drag(find.byType(ListView), const Offset(0, -900));
+      await tester.pump();
+
+      final scrollable =
+          tester.state<ScrollableState>(find.byType(Scrollable).first);
+      expect(scrollable.position.pixels, greaterThan(150),
+          reason: '前置条件：手动滚动应已远离起始位置');
+
+      // 松手 900ms 后应自动归位到当前行
+      await tester.pump(const Duration(milliseconds: 1200));
+      await tester.pumpAndSettle();
+
+      final viewRect = tester.getRect(find.byType(LyricView));
+      final lineRect = tester.getRect(find.text('Line 5'));
+      expect(lineRect.top, greaterThanOrEqualTo(viewRect.top - 1));
+      expect(lineRect.bottom, lessThanOrEqualTo(viewRect.bottom + 1),
+          reason: '当前行必须回到可视区内');
+    });
   });
 
   group('VisualizerStage Lyrics Overlay', () {
@@ -470,8 +528,135 @@ void main() {
 
       // 头部与空态卡片都应给出可见文案，而不是整层被隐藏
       expect(find.text('No active media session'), findsWidgets);
-      expect(find.text('Retry'), findsOneWidget);
-      expect(find.text('Local LRC'), findsOneWidget);
+      // 2026-10-31：居中空态不再放「重新获取 / 本地 LRC」按钮——
+      // 两个入口只在歌词层右上角的图标里（避免干扰沉浸视效）。
+      expect(find.text('Retry'), findsNothing);
+      expect(find.text('Local LRC'), findsNothing);
+    });
+
+    testWidgets('Shows clean unsupported notice when platform lacks media session',
+        (tester) async {
+      tester.view.physicalSize = const Size(900, 560);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: _FakeOnlineLyricsService(),
+        hasSystemMediaSession: false,
+      );
+      addTearDown(service.dispose);
+      service.startAutoSync();
+      addTearDown(service.stopAutoSync);
+
+      final spectrum =
+          ValueNotifier<List<double>>(List<double>.filled(32, 0.0));
+      final level = ValueNotifier<double>(-60.0);
+      addTearDown(spectrum.dispose);
+      addTearDown(level.dispose);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          locale: const Locale('en'),
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          theme: withAuraExtension(ThemeData.dark(), auraDark),
+          home: Scaffold(
+            body: VisualizerStage(
+              playing: false,
+              spectrum: spectrum,
+              levelL: level,
+              levelR: level,
+              config: const VisualizerConfig(showLyrics: true),
+              onStyleChanged: (_) {},
+              onToggleStageMode: () {},
+              onDisplayModeChanged: (_) {},
+              onToggleLyrics: () {},
+              onOpenDrawer: () {},
+              onOpenLocalLrc: () {},
+              mediaSync: service,
+              emptyText: 'No audio',
+              active: false,
+            ),
+          ),
+        ),
+      );
+      await tester.pump(const Duration(milliseconds: 50));
+
+      expect(service.lyricsState.value, LyricsSyncState.unsupported);
+      expect(
+        find.text('System media session is unavailable on this platform'),
+        findsWidgets,
+      );
+    });
+  });
+
+  group('LyricsSource (R6)', () {
+    test('默认来源为 auto，且 auto 的回退顺序覆盖四个后端', () {
+      const cfg = VisualizerConfig();
+      expect(cfg.lyricsSource, LyricsSource.auto);
+      expect(LyricsSource.autoOrder, const [
+        LyricsSource.lrclib,
+        LyricsSource.netease,
+        LyricsSource.qq,
+        LyricsSource.kugou,
+      ]);
+    });
+
+    test('VisualizerConfig JSON round-trip 保留歌词来源与全部参数', () {
+      const original = VisualizerConfig(
+        style: VisualizerStyle.fluidDynamics,
+        colorTheme: VisualizerColorTheme.aurora,
+        sensitivity: 1.8,
+        decayRate: 0.42,
+        gravity: 2.6,
+        barCount: 64,
+        lineWidth: 2.4,
+        bloom: 0.72,
+        showGrid: false,
+        showPeaks: false,
+        showDbScale: false,
+        showLyrics: true,
+        showTranslation: false,
+        lyricsSource: LyricsSource.netease,
+      );
+      final restored = VisualizerConfig.fromJson(original.toJson());
+      expect(restored.style, VisualizerStyle.fluidDynamics);
+      expect(restored.colorTheme, VisualizerColorTheme.aurora);
+      expect(restored.sensitivity, 1.8);
+      expect(restored.decayRate, 0.42);
+      expect(restored.gravity, 2.6);
+      expect(restored.barCount, 64);
+      expect(restored.lineWidth, 2.4);
+      expect(restored.bloom, 0.72);
+      expect(restored.showGrid, isFalse);
+      expect(restored.showPeaks, isFalse);
+      expect(restored.showDbScale, isFalse);
+      expect(restored.showLyrics, isTrue);
+      expect(restored.showTranslation, isFalse);
+      expect(restored.lyricsSource, LyricsSource.netease);
+    });
+
+    test('切换来源会清空缓存并对当前曲目立即重试', () async {
+      final provider = MockMediaSessionProvider();
+      final online = _CountingOnlineLyricsService();
+      final service = MediaSyncService(
+        provider: provider,
+        onlineService: online,
+      );
+
+      await service.updateTrack(const MediaTrackMetadata(
+        title: 'Song',
+        artist: 'Artist',
+        isPlaying: true,
+      ));
+      expect(online.calls, 1);
+
+      service.setLyricsSource(LyricsSource.qq);
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      expect(online.calls, 2, reason: '换源后应立即用新来源重试');
+
+      service.dispose();
     });
   });
 }
