@@ -70,9 +70,9 @@ class _VisualizerHudState extends State<VisualizerHud> {
           ignoring: !widget.visible,
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 模式选择浮动菜单（直接锚定在底栏左侧上方，随底栏自动收放）
+              // 模式选择浮动菜单（直接居中锚定在底栏上方，随底栏自动收放）
               AnimatedSwitcher(
                 duration: AuraDur.fast,
                 switchInCurve: AuraCurve.emphasized,
@@ -85,7 +85,7 @@ class _VisualizerHudState extends State<VisualizerHud> {
                 child: _menuOpen
                     ? Padding(
                         key: const ValueKey('visualizer-style-menu'),
-                        padding: const EdgeInsets.only(left: 12, bottom: 6),
+                        padding: const EdgeInsets.only(bottom: 6),
                         child: Container(
                           width: 175,
                           padding: const EdgeInsets.symmetric(vertical: 4),

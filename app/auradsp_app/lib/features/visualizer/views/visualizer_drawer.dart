@@ -7,6 +7,7 @@ import '../../../core/theme.dart';
 import '../../../core/ui_helpers.dart';
 import '../../effects_page.dart' show ValueSlider;
 import '../models/visualizer_types.dart';
+import 'visualizer_drawer_widgets.dart';
 
 /// 可视化高级参数调节侧边抽屉面板
 ///
@@ -95,50 +96,20 @@ class VisualizerConfigDrawer extends StatelessWidget {
                 ),
                 children: [
                   // 1. 色彩主题选择
-                  _SectionTitle(
+                  VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionPalette,
                     info: l.visualizerSectionPaletteInfo,
                   ),
                   const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final theme in VisualizerColorTheme.values)
-                        ChoiceChip(
-                          label: Text(theme.labelOf(l)),
-                          selected: config.colorTheme == theme,
-                          visualDensity: VisualDensity.compact,
-                          showCheckmark: false,
-                          labelStyle: TextStyle(
-                            fontSize: 12,
-                            color: config.colorTheme == theme
-                                ? p.accent
-                                : p.textDim,
-                            fontWeight: config.colorTheme == theme
-                                ? FontWeight.w600
-                                : FontWeight.normal,
-                          ),
-                          side: BorderSide(
-                            color: config.colorTheme == theme
-                                ? p.accent.withValues(alpha: 0.55)
-                                : p.hairline,
-                            width: 1,
-                          ),
-                          onSelected: (val) {
-                            if (val) {
-                              onConfigChanged(
-                                config.copyWith(colorTheme: theme),
-                              );
-                            }
-                          },
-                        ),
-                    ],
+                  VisualizerThemeChips(
+                    selectedTheme: config.colorTheme,
+                    onSelected: (theme) =>
+                        onConfigChanged(config.copyWith(colorTheme: theme)),
                   ),
                   const SizedBox(height: 20),
 
                   // 2. 核心动态调节
-                  _SectionTitle(
+                  VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionDynamics,
                     info: l.visualizerSectionDynamicsInfo,
                   ),
@@ -196,7 +167,7 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   const SizedBox(height: 20),
 
                   // 3. 画面细节与辉光
-                  _SectionTitle(
+                  VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionVisuals,
                     info: l.visualizerSectionVisualsInfo,
                   ),
@@ -275,21 +246,21 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   // 辅助线开关
-                  _ToggleRow(
+                  VisualizerDrawerToggleRow(
                     label: l.visualizerToggleGrid,
                     value: config.showGrid,
                     info: l.visualizerToggleGridInfo,
                     onChanged: (v) =>
                         onConfigChanged(config.copyWith(showGrid: v)),
                   ),
-                  _ToggleRow(
+                  VisualizerDrawerToggleRow(
                     label: l.visualizerTogglePeaks,
                     value: config.showPeaks,
                     info: l.visualizerTogglePeaksInfo,
                     onChanged: (v) =>
                         onConfigChanged(config.copyWith(showPeaks: v)),
                   ),
-                  _ToggleRow(
+                  VisualizerDrawerToggleRow(
                     label: l.visualizerToggleDbScale,
                     value: config.showDbScale,
                     info: l.visualizerToggleDbScaleInfo,
@@ -299,19 +270,19 @@ class VisualizerConfigDrawer extends StatelessWidget {
                   const SizedBox(height: 12),
 
                   // 4. 歌词与字幕选项
-                  _SectionTitle(
+                  VisualizerDrawerSectionTitle(
                     title: l.visualizerSectionLyrics,
                     info: l.visualizerSectionLyricsInfo,
                   ),
                   const SizedBox(height: 6),
-                  _ToggleRow(
+                  VisualizerDrawerToggleRow(
                     label: l.visualizerToggleLyrics,
                     value: config.showLyrics,
                     info: l.visualizerToggleLyricsInfo,
                     onChanged: (v) =>
                         onConfigChanged(config.copyWith(showLyrics: v)),
                   ),
-                  _ToggleRow(
+                  VisualizerDrawerToggleRow(
                     label: l.visualizerToggleTranslation,
                     value: config.showTranslation,
                     info: l.visualizerToggleTranslationInfo,
@@ -356,91 +327,6 @@ class VisualizerConfigDrawer extends StatelessWidget {
             ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _SectionTitle extends StatelessWidget {
-  final String title;
-  final String info;
-
-  const _SectionTitle({required this.title, required this.info});
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-
-    return Row(
-      children: [
-        Flexible(
-          child: Text(
-            title,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11,
-              fontWeight: FontWeight.w700,
-              color: p.textDim,
-              letterSpacing: 0.6,
-            ),
-          ),
-        ),
-        const SizedBox(width: 6),
-        InfoBadge(message: info),
-      ],
-    );
-  }
-}
-
-class _ToggleRow extends StatelessWidget {
-  final String label;
-  final bool value;
-  final String info;
-  final bool enabled;
-  final ValueChanged<bool> onChanged;
-
-  const _ToggleRow({
-    required this.label,
-    required this.value,
-    required this.info,
-    required this.onChanged,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Row(
-              children: [
-                Flexible(
-                  child: Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: labelOf(
-                      p,
-                      color: enabled ? p.text : p.textDim,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 6),
-                InfoBadge(message: info),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: value,
-            onChanged: enabled ? onChanged : null,
-          ),
-        ],
       ),
     );
   }

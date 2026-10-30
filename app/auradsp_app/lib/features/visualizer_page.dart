@@ -15,9 +15,6 @@
  *                    FluidSilk, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
-import 'dart:math' as math;
-
-import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
@@ -31,7 +28,7 @@ import '../platform/platform_profile.dart';
 import 'chrome.dart';
 import 'visualizer/lyrics/services/media_sync_service.dart';
 import 'visualizer/models/visualizer_types.dart';
-import 'visualizer/views/visualizer_drawer.dart';
+import 'visualizer/views/visualizer_drawer_widgets.dart';
 import 'visualizer/views/visualizer_meters.dart';
 import 'visualizer/views/visualizer_stage.dart';
 
@@ -75,6 +72,8 @@ class _VisualizerPageState extends State<VisualizerPage> {
   void _onVisiblePageChanged() {
     if (!mounted) return;
     if (widget.model.visiblePage.value == AppPage.visualizer) {
+      // 首次进入页面才启动系统媒体监听，避免应用启动即拉起常驻进程
+      _mediaSync.startAutoSync();
       // 回到页面时恢复键盘焦点，F11 / Esc 立即可用
       _focusNode.requestFocus();
       return;
@@ -239,7 +238,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
                                     trailing: Row(
                                       mainAxisSize: MainAxisSize.min,
                                       children: [
-                                        _PeakReadout(
+                                        VisualizerPeakReadout(
                                           spectrum: widget.model.spectrum,
                                           label: l.peakLabel,
                                           active: active,
@@ -324,101 +323,16 @@ class _VisualizerPageState extends State<VisualizerPage> {
           ),
 
           // 浮动参数抽屉：淡入 + 右侧滑入，关闭时反向过渡
-          Positioned.fill(
-            child: AnimatedSwitcher(
-              duration: AuraDur.base,
-              switchInCurve: AuraCurve.emphasized,
-              switchOutCurve: Curves.easeInCubic,
-              layoutBuilder: (current, previous) => Stack(
-                fit: StackFit.expand,
-                children: [...previous, ?current],
-              ),
-              transitionBuilder: (child, animation) => FadeTransition(
-                opacity: animation,
-                child: SlideTransition(
-                  position: Tween<Offset>(
-                    begin: const Offset(0.08, 0),
-                    end: Offset.zero,
-                  ).animate(animation),
-                  child: child,
-                ),
-              ),
-              child: _drawerOpen
-                  ? Stack(
-                      key: const ValueKey('visualizer-drawer'),
-                      children: [
-                        Positioned.fill(
-                          child: GestureDetector(
-                            onTap: _closeDrawer,
-                            child: ColoredBox(
-                              color: Colors.black.withValues(alpha: 0.45),
-                            ),
-                          ),
-                        ),
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: VisualizerConfigDrawer(
-                            config: _config,
-                            onConfigChanged: (newCfg) =>
-                                setState(() => _config = newCfg),
-                            onClose: _closeDrawer,
-                            onResetToDefaults: () => setState(
-                              () => _config = const VisualizerConfig(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : const SizedBox.shrink(
-                      key: ValueKey('visualizer-drawer-closed'),
-                    ),
-            ),
+          VisualizerDrawerOverlay(
+            open: _drawerOpen,
+            config: _config,
+            onConfigChanged: (newCfg) => setState(() => _config = newCfg),
+            onClose: _closeDrawer,
+            onResetToDefaults: () =>
+                setState(() => _config = const VisualizerConfig()),
           ),
         ],
       ),
-    );
-  }
-}
-
-/* ---- 峰值读数（页面右上） ---- */
-class _PeakReadout extends StatelessWidget {
-  final ValueListenable<List<double>> spectrum;
-  final String label;
-  final bool active;
-  const _PeakReadout({
-    required this.spectrum,
-    required this.label,
-    this.active = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final p = paletteOf(context);
-    if (!active) {
-      return StatReadout(
-        label: label,
-        value: dbfsText(-90.0),
-        unit: 'dBFS',
-        size: 20,
-        valueColor: p.textDim,
-      );
-    }
-    return ValueListenableBuilder<List<double>>(
-      valueListenable: spectrum,
-      builder: (_, bands, _) {
-        var peak = 0.0;
-        for (final v in bands) {
-          peak = math.max(peak, v);
-        }
-        final db = bands.isEmpty || peak <= 0 ? -90.0 : peak * 60 - 60;
-        return StatReadout(
-          label: label,
-          value: dbfsText(db),
-          unit: 'dBFS',
-          size: 20,
-          valueColor: db > -3 ? p.error : p.accent,
-        );
-      },
     );
   }
 }

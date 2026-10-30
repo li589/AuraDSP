@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 
@@ -7,97 +6,43 @@ import '../../../../core/error_sink.dart';
 import '../../../../platform/platform_profile.dart';
 import '../models/lyric_models.dart';
 import '../parsers/lrc_parser.dart';
+import 'online_lyrics_service.dart';
+import 'windows_smtc_provider.dart';
 
-/// Provider interface for capturing media session information across platforms
+/// 跨平台媒体会话提供者接口
 abstract interface class MediaSessionProvider {
-  Future<MediaTrackMetadata?> getActiveTrack();
+  Stream<MediaTrackMetadata> get trackStream;
   void dispose();
 }
 
-/// Fallback / mock media session provider for testing and unsupported OS
+/// 单元测试或不支持平台的虚设提供者
 class MockMediaSessionProvider implements MediaSessionProvider {
-  @override
-  Future<MediaTrackMetadata?> getActiveTrack() async => null;
+  final StreamController<MediaTrackMetadata> _controller =
+      StreamController<MediaTrackMetadata>.broadcast();
 
   @override
-  void dispose() {}
-}
+  Stream<MediaTrackMetadata> get trackStream => _controller.stream;
 
-/// Open online lyrics client using LrcLib API (public, no authentication needed)
-class LrcLibOnlineClient {
-  static final HttpClient _client = HttpClient()
-    ..connectionTimeout = const Duration(seconds: 4);
+  void emitTrack(MediaTrackMetadata track) {
+    if (!_controller.isClosed) _controller.add(track);
+  }
 
-  final Map<String, LyricDocument> _cache = {};
-
-  /// Fetch synchronized lyrics from LrcLib by title and artist
-  Future<LyricDocument?> fetchLyrics({
-    required String trackName,
-    required String artistName,
-    Duration? duration,
-  }) async {
-    final queryKey = '${trackName.trim().toLowerCase()}_${artistName.trim().toLowerCase()}';
-    if (_cache.containsKey(queryKey)) {
-      return _cache[queryKey];
-    }
-
-    try {
-      final uri = Uri.https('lrclib.net', '/api/get', {
-        'track_name': trackName,
-        'artist_name': artistName,
-        if (duration != null && duration.inSeconds > 0)
-          'duration': duration.inSeconds.toString(),
-      });
-
-      final request = await _client.getUrl(uri);
-      final response = await request.close().timeout(const Duration(seconds: 5));
-
-      if (response.statusCode != 200) {
-        return null;
-      }
-
-      final body = await response.transform(utf8.decoder).join();
-      final data = jsonDecode(body) as Map<String, dynamic>?;
-
-      if (data == null) return null;
-
-      final syncedLrc = data['syncedLyrics'] as String?;
-      if (syncedLrc != null && syncedLrc.trim().isNotEmpty) {
-        final doc = LrcParser.parse(syncedLrc);
-        _cache[queryKey] = doc;
-        return doc;
-      }
-
-      final plainLyrics = data['plainLyrics'] as String?;
-      if (plainLyrics != null && plainLyrics.trim().isNotEmpty) {
-        // Fallback for plain un-synced text
-        final lines = plainLyrics
-            .split('\n')
-            .where((l) => l.trim().isNotEmpty)
-            .map((l) => LyricLine(
-                  startTime: Duration.zero,
-                  endTime: const Duration(seconds: 3600),
-                  text: l.trim(),
-                ))
-            .toList();
-        final doc = LyricDocument(lines: lines, title: trackName, artist: artistName);
-        _cache[queryKey] = doc;
-        return doc;
-      }
-    } catch (e, st) {
-      // 网络或解析失败：留痕但不打断歌词加载
-      swallow(e, st);
-    }
-    return null;
+  @override
+  void dispose() {
+    _controller.close();
   }
 }
 
-/// Unified media synchronization and lyrics orchestrator service
+/// 统一媒体时钟同步与歌词编排调度服务
 class MediaSyncService {
-  final LrcLibOnlineClient _onlineClient = LrcLibOnlineClient();
+  final MediaSessionProvider _provider;
+  final OnlineLyricsService _onlineService;
 
-  /// Normalized platform OS key from PlatformProfile
-  String get platformOs => PlatformProfile.os;
+  StreamSubscription<MediaTrackMetadata>? _sessionSub;
+
+  /// 每次换曲自增，用于丢弃过期的在线歌词查询结果
+  int _trackGeneration = 0;
+  bool _disposed = false;
 
   final ValueNotifier<MediaTrackMetadata> currentTrack =
       ValueNotifier<MediaTrackMetadata>(MediaTrackMetadata.empty);
@@ -111,6 +56,33 @@ class MediaSyncService {
   DateTime? _lastSyncTime;
   Duration _basePosition = Duration.zero;
   bool _isPlaying = false;
+
+  MediaSyncService({
+    MediaSessionProvider? provider,
+    OnlineLyricsService? onlineService,
+  })  : _provider = provider ??
+            (PlatformProfile.os == 'windows'
+                ? WindowsSmtcProvider()
+                : MockMediaSessionProvider()),
+        _onlineService = onlineService ?? OnlineLyricsService();
+
+  /// 启动系统媒体传输控制 (SMTC) 监听，自动绑定歌词
+  void startAutoSync() {
+    _sessionSub?.cancel();
+    final p = _provider;
+    if (p is WindowsSmtcProvider) {
+      p.start();
+    }
+    _sessionSub = _provider.trackStream.listen((track) {
+      updateTrack(track);
+    });
+  }
+
+  /// 停止自动同步监听
+  void stopAutoSync() {
+    _sessionSub?.cancel();
+    _sessionSub = null;
+  }
 
   /// 仅在播放时启动 20Hz 行同步 ticker，停播即释放，避免页面常驻空转。
   void _syncTicker() {
@@ -147,6 +119,7 @@ class MediaSyncService {
     required Duration position,
     required bool isPlaying,
   }) {
+    if (_disposed) return;
     _basePosition = position;
     _lastSyncTime = DateTime.now();
     _isPlaying = isPlaying;
@@ -156,16 +129,34 @@ class MediaSyncService {
 
   /// Load a lyric document directly (e.g. from a local file or test)
   void loadLyricDocument(LyricDocument doc) {
+    if (_disposed) return;
     currentLyrics.value = doc;
     activeLineIndex.value = doc.isNotEmpty ? 0 : -1;
   }
 
   /// Update current track metadata and search for lyrics
   Future<void> updateTrack(MediaTrackMetadata track) async {
+    if (_disposed) return;
+    final generation = ++_trackGeneration;
+    final titleChanged = track.title != currentTrack.value.title ||
+        track.artist != currentTrack.value.artist;
+
     currentTrack.value = track;
-    _basePosition = track.position;
-    _lastSyncTime = DateTime.now();
     _isPlaying = track.isPlaying;
+
+    if (titleChanged) {
+      _basePosition = track.position;
+      _lastSyncTime = DateTime.now();
+      // 换曲即清空旧歌词，避免新曲目沿用上一首的歌词与行指针
+      currentLyrics.value = LyricDocument.empty;
+      activeLineIndex.value = -1;
+    } else if (track.position > Duration.zero) {
+      // 若外部上报了有效时间轴（如 Spotify/Edge），则以此校准时钟；
+      // 若外部上报为 0（如网易云等国内播放器 SMTC 不传 timeline），则维持当前递增时钟，避免被归零重置
+      _basePosition = track.position;
+      _lastSyncTime = DateTime.now();
+    }
+
     _syncTicker();
 
     if (!track.hasContent) {
@@ -174,16 +165,28 @@ class MediaSyncService {
       return;
     }
 
-    // Try online lyrics retrieval if network is enabled
-    final doc = await _onlineClient.fetchLyrics(
+    // 同一曲目的轮询：仅校正行指针，避免每秒重复发起网络查询
+    if (!titleChanged) {
+      if (currentLyrics.value.isNotEmpty) {
+        activeLineIndex.value =
+            currentLyrics.value.findLineIndex(_basePosition);
+      }
+      return;
+    }
+
+    // 尝试在线检索歌词（LrcLib 优先，QQ 音乐多语言保底）
+    final doc = await _onlineService.fetchLyrics(
       trackName: track.title,
       artistName: track.artist,
       duration: track.duration,
     );
 
+    // 查询期间已切歌或服务已释放：丢弃过期结果
+    if (_disposed || generation != _trackGeneration) return;
+
     if (doc != null && doc.isNotEmpty) {
       currentLyrics.value = doc;
-      activeLineIndex.value = doc.findLineIndex(track.position);
+      activeLineIndex.value = doc.findLineIndex(_basePosition);
     }
   }
 
@@ -210,7 +213,10 @@ class MediaSyncService {
   }
 
   void dispose() {
+    _disposed = true;
+    stopAutoSync();
     _ticker?.cancel();
+    _provider.dispose();
     currentTrack.dispose();
     currentLyrics.dispose();
     activeLineIndex.dispose();
