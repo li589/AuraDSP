@@ -8,7 +8,12 @@
 #include "process_plugin_proxy.h"
 #endif
 
-#include <windows.h>
+#if defined(_MSC_VER)
+// SEH 常量（EXCEPTION_EXECUTE_HANDLER）；非 MSVC 走标准 try/catch，无需该头。
+#include <excpt.h>
+#endif
+
+#include "platform/port/time.h"
 
 #include <algorithm>
 #include <cmath>
@@ -100,19 +105,19 @@ void quarantineAbandonedInstance(std::unique_ptr<IPluginInstance> inst) {
  * 4096 转上限实为几十 µs，正常在途块（2.67~93ms）必然超限，于是几乎每次
  * 卸载都走「强制排空」分支：硬清零计数后照常销毁，而 RT 可能正拿着实例跑
  * process()（use-after-free），与 inflight_guard.h 的契约正好相反。
- * 现改为：无系统调用快自旋 → Sleep(1) 墙钟轮询到 kQuiesceWaitMs。
+ * 现改为：无系统调用快自旋 → sleep_ms(1) 墙钟轮询到 kQuiesceWaitMs。
  * 返回 false = RT 异常滞留，调用方必须保留实例（移入隔离区），绝不释放。 */
 static bool waitQuiesce(std::atomic<uint32_t>& inFlight) {
     uint32_t spins = 0;
-    const uint64_t deadline = GetTickCount64() + kQuiesceWaitMs;
+    const uint64_t deadline = platform::now_ms() + kQuiesceWaitMs;
     for (;;) {
         if (inFlight.load(std::memory_order_relaxed) == 0) return true;
         if (++spins <= kQuiesceSpinLimit) {
-            YieldProcessor();
+            platform::cpu_relax();
             continue;
         }
-        if (GetTickCount64() >= deadline) return false;
-        Sleep(1);
+        if (platform::now_ms() >= deadline) return false;
+        platform::sleep_ms(1);
     }
 }
 

@@ -71,7 +71,9 @@ public:
         m_module = platform::module_open_utf8(binaryPath.c_str());
         if (!m_module) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "Failed to load CLAP library: " + std::to_string(platform::module_last_error());
+            const char* err = platform::module_last_error_text();
+            m_meta.errorMessage = "Failed to load CLAP library: " +
+                std::string(err && *err ? err : "unknown error");
             return false;
         }
 

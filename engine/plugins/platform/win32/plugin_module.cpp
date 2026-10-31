@@ -4,6 +4,8 @@
 
 #include <windows.h>
 
+#include <cstdio>
+
 #include "win32_util.h"
 
 namespace auradsp {
@@ -31,6 +33,29 @@ void module_close(void* module) {
 
 unsigned long module_last_error() {
     return static_cast<unsigned long>(GetLastError());
+}
+
+const char* module_last_error_text() {
+    thread_local char buf[320];
+    buf[0] = '\0';
+    const DWORD code = GetLastError();
+    if (code == 0) return buf;
+
+    const DWORD n = FormatMessageA(
+        FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+        nullptr, code, 0, buf, (DWORD)sizeof(buf), nullptr);
+    if (n == 0) {
+        snprintf(buf, sizeof(buf), "Win32 error %lu",
+                 static_cast<unsigned long>(code));
+        return buf;
+    }
+    // 系统文案自带尾部换行/回车；诊断串保持单行。
+    DWORD len = n;
+    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r' ||
+                       buf[len - 1] == ' ' || buf[len - 1] == '.')) {
+        buf[--len] = '\0';
+    }
+    return buf;
 }
 
 } // namespace platform
