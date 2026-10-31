@@ -401,12 +401,19 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   未启用总线直通，不减少引擎实例数。旧记忆写「固定建 8 个引擎」不准确，实为「按版型建 N 个」。
 
 ### 文档口径纪律（2026-10-31 补充）
-- **`assets/` 跟踪实况（2026-10-31 实测；旧口径「2214 个 / 73MB」已作废）**：已跟踪 **2443 个**
-  `.irs`/`.vdc` = **241.6MB**（2002 个 `.irs` 241.2MB + 441 个 `.vdc` 0.4MB）。工作区 `assets/`
-  合计 2501 文件 / 242.9MB；`.git` 仓库总体积 203.6MB；单个最大已跟踪资源 7.33MB（远低于 GitHub
-  单文件 100MB 限制，故当前不紧急，但新增 `.irs` 会线性推高仓库体积）。测量命令
-  `git -c core.quotepath=false ls-tree -r -l HEAD -- assets`。去跟踪仍属待裁定项
-  （`git rm --cached` 只脱索引不瘦历史，真正瘦库需 `filter-repo` 重写历史），**未 owner 确认不得擅动**。
+- **`assets/` 跟踪实况（2026-10-31 夜已闭环，旧口径「2214 个 / 73MB」「2443 个仍在跟踪」均已作废）**：
+  重写前曾跟踪 **2443 个** `.irs`/`.vdc` = **241.6MB**（2002 `.irs` 241.2MB + 441 `.vdc` 0.4MB），
+  测量命令 `git -c core.quotepath=false ls-tree -r -l HEAD -- assets`。D-2 已按 owner 裁定执行：
+  `git filter-repo --force --invert-paths --path-glob 'assets/*.irs' --path-glob 'assets/*.vdc'
+  --path-glob 'resource/*.irs' --path-glob 'resource/*.vdc'`（**必须带 `resource/**` 前缀**——P3b 改名
+  前的旧路径也在历史里，全历史共 4428 条相关路径），随后 force-push 全部 ref。现在分支与标签
+  历史中 `.irs`/`.vdc` 条目为 **0**，本地 `.git` 203.6MB → 50.6MB（`size-pack` 200.45 → 45.01 MiB），
+  工作区 `assets/` 2501 文件 / 242.9MB 保持不变。**资源走 release 附件**（Release v0.5.0 挂 5 个包，
+  含 `auradsp-resource-full.zip` 全量），`manifest.json` + `README.md` 仍在版本控制内作台账。
+  回归门禁 `tools/bin/assets_untracked_scan.py`（索引层/树层/忽略规则/台账保留/反向自检 5 项断言）。
+  **GitHub 侧未清**：隐藏命名空间 `refs/pull/*`（PR #7–#15 的头提交）仍钉着含大二进制的树，
+  推送删除被拒（`deny updating a hidden ref`），故远端 `diskUsage` 不降；清理需删旧 PR 或申请
+  GitHub Support purge——**未 owner 确认不得擅动**。
 - **登记类数字必须标「测量日期 + 测量命令」**：文件数/体积这类统计会随资源持续补入而失真
   （本次 2214 → 2443 即为实例）。口径变更时在文档里显式标注旧值作废。
 - **改 md 大文档走 python 字节级替换**，绕开 md 格式化器（它会把「引用块内含裸 `|` 的段落」误判成表格，
