@@ -1,6 +1,12 @@
 cmake_minimum_required(VERSION 3.20)
 project(auravm_drivers LANGUAGES C CXX)
 
+# M3（2026-10-29）：产物路径保持 out/<Config>/（verify_dll_copies.py、Flutter runner
+# 同步与桥 smoke 依赖它）；构建中间文件由根工程统一到 build/<platform>/<arch>/。
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+
 # 独立于引擎构建（解耦铁律）；用户态只需要 Windows SDK。
 set(VMCLIENT "${CMAKE_CURRENT_SOURCE_DIR}/02_voicemeeter_client")
 set(APO "${CMAKE_CURRENT_SOURCE_DIR}/03_system_apo")
@@ -70,7 +76,7 @@ add_library(auravm STATIC
     "${VMCLIENT}/VmAudioCallback.cpp"
 )
 
-target_include_directories(auravm PUBLIC "${VMCLIENT}")
+target_include_directories(auravm PUBLIC "${VMCLIENT}" "${BRIDGECOMMON}")
 target_compile_options(auravm PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auravm PROPERTY CXX_STANDARD 20)
 set_property(TARGET auravm PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
@@ -96,7 +102,7 @@ set_property(TARGET vm_pump_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL
 add_executable(vm_parallel_test
     "${VMBRIDGE}/vm_parallel_test.cpp"
 )
-target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}")
+target_include_directories(vm_parallel_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
 target_link_libraries(vm_parallel_test PRIVATE version)
 target_compile_options(vm_parallel_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET vm_parallel_test PROPERTY CXX_STANDARD 20)
@@ -107,10 +113,20 @@ set_property(TARGET vm_parallel_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreade
 add_executable(rt_drain_test
     "${VMBRIDGE}/rt_drain_test.cpp"
 )
-target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}")
+target_include_directories(rt_drain_test PRIVATE "${VMCLIENT}" "${BRIDGECOMMON}")
 target_compile_options(rt_drain_test PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET rt_drain_test PROPERTY CXX_STANDARD 20)
 set_property(TARGET rt_drain_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+
+# P3 门禁：桥层静音门控状态机（三桥共用 bridge/common/SilenceGate.h）。
+# 驱动无关（不链任何桥 DLL），CI 无 VM/ASIO/VAIO 也能跑。
+add_executable(silence_gate_test
+    "${BRIDGECOMMON}/silence_gate_test.cpp"
+)
+target_include_directories(silence_gate_test PRIVATE "${BRIDGECOMMON}")
+target_compile_options(silence_gate_test PRIVATE /utf-8 /W1 /EHsc)
+set_property(TARGET silence_gate_test PROPERTY CXX_STANDARD 20)
+set_property(TARGET silence_gate_test PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 
 add_library(auraapo_inspect STATIC
     "${APO}/ApoInspector.cpp"
@@ -284,5 +300,12 @@ target_compile_options(auraasio_driver PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET auraasio_driver PROPERTY CXX_STANDARD 20)
 set_property(TARGET auraasio_driver PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(auraasio_driver PRIVATE ole32 advapi32 winmm avrt version)
+
+
+# M3（2026-10-29）：桥的统一构建入口。三桥仍是各自独立的 DLL（Dart 按后端分别
+# 加载，合并会破坏惰性加载与故障域隔离），这里只提供聚合 target，供根预设 /
+# build_windows.ps1 一次构建（cmake --build --preset ... --target auradsp_bridges）。
+add_custom_target(auradsp_bridges
+    DEPENDS auravm_bridge auravaio_bridge auraasio_bridge)
 
 

@@ -16,7 +16,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
 | 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
 | 插件宿主 | VST3 / CLAP 64 位；默认进程内，`AURA_PLUGIN_HOST_MODE=process` 切进程外硬隔离 |
-| 质量门禁 | analyze 零问题 · Dart 55 个测试文件 / 580+ 用例 · 引擎冒烟 110 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 |
+| 质量门禁 | analyze 零问题 · Dart 59 个测试文件 / 580+ 用例 · 引擎冒烟 123 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 |
 
 目录：[它是什么](#1-它是什么) · [形态矩阵](#2-形态矩阵) · [音频链路](#3-音频链路) · [近期里程碑](#4-近期里程碑) · [快速开始](#5-快速开始) · [仓库结构](#6-仓库结构) · [质量门禁](#7-质量门禁) · [文档入口](#8-文档入口) · [许可证与致谢](#9-许可证与致谢)
 
@@ -148,9 +148,16 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 
 **桌面引擎**（产物 `core/desktop/windows/out/Release/auradsp_engine.dll`，脚本会自动同步多副本）
 
+```powershell
+# 统一入口（M3）：同一棵构建树 build/windows/x64，产物仍写回各子工程 out/<Config>/
+cmake --preset windows-x64
+cmake --build --preset windows-x64-release --target auradsp_engine auradsp_plugin_host
+# 未装 Steinberg ASIO SDK 时：cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
+```
+
 ```bash
 cd core/desktop/windows && bash build_engine.sh
-# 等价：cmake -S . -B out && cmake --build out --config Release
+# 等价（子工程单独配置）：cmake -S . -B out && cmake --build out --config Release
 ```
 
 **UI 应用**（`--no-tree-shake-icons` 必须带，否则图标被裁）
@@ -159,13 +166,13 @@ cd core/desktop/windows && bash build_engine.sh
 cd app/auradsp_app
 flutter build windows --release --no-tree-shake-icons
 flutter analyze
-flutter test --concurrency=1          # 并发跑会因 isolate 超时抖动，必须串行
+python ../../tools/bin/run_dart_tests.py      # T-03：按文件串行 + 失败单文件重试两次（全量并发不可信）
 ```
 
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，110 项登记）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，123 项登记）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
@@ -203,8 +210,7 @@ AuraDSP/
 │   └── android/                     registrar / spike-global-effect / stubs / aidl-gen / vendor-src
 ├── app/auradsp_app/         Flutter 3.47.7 · 121 个 dart（不含 l10n 生成）· 21 张效果卡
 ├── test/
-│   ├── smoke/                       112 个 smoke_*.py；runner 登记 110
-│   │                                未登记 2 个：three_key_plugins（人工值守）、g7_2_bridge_abi（需三桥产物）
+│   ├── smoke/                       123 个脚本（117 个 smoke_*.py + 6 个插件/桥专用）；runner 全部登记
 │   └── ui/                          14 个 UI 脚本；runner 默认跑 7 个
 ├── tools/                   bin 14 · probe 22 · resource_pipeline 2 · calibration 1（archive/ 不入库）
 ├── source/                  第三方参考仓库只读快照（17 项）
@@ -223,8 +229,8 @@ AuraDSP/
 | 门禁 | 命令 | 覆盖范围 |
 |---|---|---|
 | Dart 静态分析 | `flutter analyze` | 全量 lib + test，要求零问题 |
-| Dart 单测 | `flutter test --concurrency=1` | 55 个测试文件；串行执行避免 isolate 抖动 |
-| 引擎冒烟 | `python test/runner.py --smoke` | 110 项：DSP 正确性、插件生命周期、桥 ABI、竞态 |
+| Dart 单测 | `python tools/bin/run_dart_tests.py` | 59 个测试文件；按文件串行 + 失败单文件重试两次（全量并发不可信） |
+| 引擎冒烟 | `python test/runner.py --smoke` | 123 项：DSP 正确性、插件生命周期、桥 ABI、竞态 |
 | ABI 一致性 | `python tools/bin/abi_consistency.py` | `.def` ↔ 头文件 ↔ `ffi.dart` 三处符号与签名 |
 | DLL 副本同步 | `python tools/bin/verify_dll_copies.py --sync` | 三处副本哈希一致（禁手拷） |
 | 补丁编号 | `python tools/bin/patch_id_scan.py` | `P-NNN` 唯一、单调、已登记、别名不歧义 |

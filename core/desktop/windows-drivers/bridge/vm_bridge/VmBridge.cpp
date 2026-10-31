@@ -8,6 +8,7 @@
 #include "VmBridge.h"
 
 #include "PluginBridge.h"
+#include "VizSilence.h"
 #include "../../02_voicemeeter_client/VmPumpCore.h"
 #include "../../02_voicemeeter_client/VmRemoteLoader.h"
 
@@ -69,6 +70,7 @@ struct BridgeCtl {
     int edition = 0;
     int groupCount = PumpCtx::kMaxGroups;  // 版型应建引擎数（重建沿用，不看会漂的 ctx.groups）
     int busMask = 0xFF;  // 总线处理掩码（bit=组使能；memset 会清 ctx，session 级保管在此）
+    long long gateSr = 0;  // P3：门控 hold 换算用的采样率（STARTING 迟到时 monitor 补配）
     char note[128] = {};
     char enginePath[MAX_PATH * 2] = {};
     int paramsApplied = 0;
@@ -578,8 +580,26 @@ void DestroyEngines() {
         if (g_b.ctx.eng[g] && g_b.ctx.destroy) g_b.ctx.destroy(g_b.ctx.eng[g]);
         g_b.ctx.eng[g] = nullptr;
         g_grpLoaded[g].store(0);
+        // P3：句柄销毁后门控状态一并作废（避免下次 start 沿用旧 gated）。
+        g_b.ctx.gate[g].Reset();
+        g_b.ctx.gate[g].enabled = false;
     }
     g_b.ctx.nEng = 0;
+}
+
+// P3 静音门控：逐组配置（控制线程）。采样率未由 STARTING 送达时按 48k 配
+// hold（初始引擎同样固定 48k 建），CHANGE 重建会用实际 sr 重新配置。
+// 没有引擎的组保持禁用——没有 DSP 可跳，门控无意义。
+void ConfigureGates(long long sr) {
+    g_b.gateSr = sr > 0 ? sr : 48000;
+    for (int g = 0; g < PumpCtx::kMaxGroups; ++g) {
+        if (g < g_b.ctx.nEng) {
+            g_b.ctx.gate[g].Configure(sr > 0 ? sr : 48000);
+        } else {
+            g_b.ctx.gate[g].Reset();
+            g_b.ctx.gate[g].enabled = false;
+        }
+    }
 }
 
 void RebuildEngines(int groups, float sr) {
@@ -619,6 +639,7 @@ void RebuildEngines(int groups, float sr) {
         g_b.ctx.sigMark[g] = 0;
         g_b.ctx.sigSame[g] = 0;
     }
+    ConfigureGates((long long)(sr > 0.0f ? sr : 48000.0f));
     g_b.ctx.gotFirst = 0;
     // 新句柄是出厂态：把桥内插件镜像回放到**全部组引擎**（BUGFIX 2026-10-22：
     // 原来只回放 eng[0]，CHANGE 重建后非 A1 总线丢失插件，监听总线无效果）。
@@ -698,6 +719,10 @@ DWORD WINAPI MonitorProc(LPVOID) {
     int grace = 25;  // 启动宽限 ~5s（VB 首包可能来得慢，别一上来就判死刑）
     bool gone = false;
     while (!InterlockedCompareExchange(&g_b.stopEvent, 0, 0)) {
+        // P3：STARTING 在 start 返回后送达真实采样率，hold=2000ms 需按它换算。
+        // 只在变化时重配（控制线程；AURADSP_GATE 环境变量也只在这里读）。
+        const long long liveSr = g_b.ctx.sr;
+        if (liveSr > 0 && liveSr != g_b.gateSr) ConfigureGates(liveSr);
         if (InterlockedExchange(&g_b.ctx.pendingChange, 0) != 0) {
             // 重建窗口内帧计数本就不动，看门狗此时闭嘴（别把"重启中"判成"走了"）。
             lastFrames = g_b.ctx.frames;
@@ -982,6 +1007,8 @@ int vb_start(const char* engine_dll, const char* params_json) {
         LeaveCtl(true);
         return -4;
     }
+    // P3 静音门控：初始引擎已建（48k），此刻逐组启用；CHANGE 重建再按实际 sr。
+    ConfigureGates((long long)(g_b.ctx.sr > 0 ? g_b.ctx.sr : 48000));
     g_b.monitor = CreateThread(nullptr, 0, MonitorProc, nullptr, 0, nullptr);
     InterlockedExchange(&g_b.running, 1);
     // 启动后应用按路插件掩码（新引擎出厂 = 链全开，会话掩码覆盖之）。
@@ -1047,6 +1074,24 @@ static int HottestVizGroup() {
     return best;
 }
 
+// P3 收口：整桥静音判定——与 status 的 gated 同口径（所有已建引擎且门控启用
+// 的组都 GATED/idle）。viz_read 用它决定是否补静音帧；status 仍需自行统计
+// idleMs，故不合并。
+static bool AllGroupsGated() {
+    int groups = 0;
+    int gated = 0;
+    for (int g = 0; g < g_b.ctx.nEng && g < vmcore::PumpCtx::kMaxGroups; ++g) {
+        const aurabridge::SilenceGate& gt = g_b.ctx.gate[g];
+        if (!gt.enabled) continue;
+        ++groups;
+        if (gt.gated || g_b.ctx.idle[g]) ++gated;
+    }
+    return groups > 0 && gated == groups;
+}
+
+// GATED 后引擎不再产 viz 帧；整桥静音时由桥补合法静音帧（仅控制线程）。
+static aurabridge::SilentVizEmitter g_silentViz;
+
 int vb_status(char* out, int cap) {
     if (!out || cap <= 0) return -1;
     LARGE_INTEGER qpf;
@@ -1082,9 +1127,25 @@ int vb_status(char* out, int cap) {
     if (g_b.ctx.sr > 0 && g_b.ctx.nbs > 0)
         budgetUs = (long)((double)g_b.ctx.nbs * 1000000.0 / (double)g_b.ctx.sr);
     const int protOn = InterlockedCompareExchange(&g_protectActive, 0, 0);
+    // P3 门控遥测：整桥空闲 = 所有有引擎的组都 GATED（部分组有声时不降泵，
+    // viz 照常跟热组）。idleMs 取各组 GATED 时长的最大值。
+    int gateGroups = 0;
+    int gateGated = 0;
+    long long idleMs = 0;
+    for (int g = 0; g < g_b.ctx.nEng && g < vmcore::PumpCtx::kMaxGroups; ++g) {
+        const aurabridge::SilenceGate& gt = g_b.ctx.gate[g];
+        if (!gt.enabled) continue;
+        ++gateGroups;
+        if (gt.gated || g_b.ctx.idle[g]) {
+            ++gateGated;
+            if (gt.gated && gt.IdleMs() > idleMs) idleMs = gt.IdleMs();
+        }
+    }
+    const int gated = (gateGroups > 0 && gateGated == gateGroups) ? 1 : 0;
     int n = snprintf(out, (size_t)cap,
                      "{\"running\":%s,\"frames\":%llu,\"sr\":%ld,\"nbs\":%ld,"
                      "\"groups\":%d,\"handles\":%d,\"peakIn\":%.6f,"
+                     "\"gated\":%d,\"idleMs\":%lld,"
                      "\"maxCbUs\":%.1f,\"startRc\":%d,\"note\":\"%s\","
                      "\"testKind\":%ld,\"bypass\":%ld,\"vizGrp\":%d,"
                      "\"changes\":%lld,\"mirrorN\":%d,\"busMask\":%d,\"grpLive\":%d,"
@@ -1097,6 +1158,7 @@ int vb_status(char* out, int cap) {
                                                                      : "false",
                       (unsigned long long)g_b.ctx.frames, g_b.ctx.sr,
                       g_b.ctx.nbs, g_b.ctx.groups, g_b.ctx.nEng, g_b.ctx.peakIn,
+                      gated, idleMs,
                       cbUs, g_b.startRc, g_b.note, (long)g_b.ctx.testKind,
                       (long)g_b.ctx.userBypass, vizGrp,
                       (long long)g_b.ctx.changes, g_mirrorN + g_strMirrorN,
@@ -1190,7 +1252,15 @@ int vb_viz_read(void* out1600, int count) {
     if (!g_b.vizRead) return 0;
     const int g = HottestVizGroup();
     if (!g_b.ctx.eng[g]) return 0;
-    return g_b.vizRead(g_b.ctx.eng[g], out1600, count);
+    const int n = g_b.vizRead(g_b.ctx.eng[g], out1600, count);
+    if (n > 0) return n;
+    // P3 收口：门控 GATED 后桥不再调 process，引擎 ring 不再产帧。整桥静音
+    // 时补一帧合法静音帧，UI 不再先冻结 1.5s 等 stale 兜底。旁路/测试注入
+    // 期间门控不 Tick（gated 可能是旧值），一律不补。
+    if (InterlockedCompareExchange(&g_b.ctx.userBypass, 0, 0)) return 0;
+    if (InterlockedCompareExchange(&g_b.ctx.testKind, 0, 0) != 0) return 0;
+    if (!AllGroupsGated()) return 0;
+    return g_silentViz.Emit(out1600, 0, g_b.ctx.binaural ? 8 : 2);
 }
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际）。
@@ -1575,3 +1645,16 @@ int vb_protect_test(int emaUs, int overStreak) {
     InterlockedExchange(&g_b.ctx.cbOverStreak, (LONG)overStreak);
     return 1;
 }
+
+// ---- P5 统一桥契约（ab_*）：旧前缀过渡转发，见 bridge/common/aurabridge.h ----
+// VM 没有宿主专属启动参数，config_json 忽略（方案 §4.1 过渡期，保留一个版本）。
+static int AbStartAdapt(const char* engine_dll, const char* params_json,
+                        const char* config_json) {
+    (void)config_json;
+    return vb_start(engine_dll, params_json);
+}
+#define AB_LEGACY vb
+#define AB_CAPS_JSON                     \
+    "{\"bridge\":\"vm\",\"busGroups\":8," \
+    "\"pluginGroups\":8,\"autoProtect\":true,\"gating\":true}"
+#include "aurabridge_impl.h"

@@ -15,6 +15,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
 import '../../core/error_sink.dart';
+import '../../core/file_shell.dart';
 import '../../core/plugins/plugin_scan_dirs.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -254,17 +255,3 @@ class _ScanDirRow extends StatelessWidget {
   }
 }
 
-/// 在系统文件管理器中打开目录（跨平台，失败静默——纯锦上添花功能）。
-Future<void> openInFileManager(String path) async {
-  try {
-    if (Platform.isWindows) {
-      await Process.run('explorer.exe', [path]);
-    } else if (Platform.isMacOS) {
-      await Process.run('open', [path]);
-    } else {
-      await Process.run('xdg-open', [path]);
-    }
-  } catch (e, st) {
-    swallow(e, st);
-  }
-}

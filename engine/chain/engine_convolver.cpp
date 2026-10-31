@@ -1,5 +1,6 @@
 /* P2 split: moved verbatim from auradsp_engine.cpp (pure move, no logic change). */
 #include "engine_internal.h"
+#include "platform/port/fs.h"
 #include <cstdint> /* INT32_MAX（S-11 钳位） */
 #include "legacy/jdsp/Effects/eel2/dr_wav.h"
 #include "legacy/jdsp/Effects/eel2/dr_flac.h"
@@ -10,24 +11,31 @@
  * （调用方不持锁，解码失败不连坐音频）→ L4 解码后健全性（NaN/Inf/声道/长度）。
  * 采样率不匹配 → JamesDSPOfflineResampling 重采样到引擎 fs（44.1↔48 等）。
  * 成功 → Convolver1DLoadImpulseResponse(updateOld=1) 持久化到 vendor 存储。 */
-/* 通用 UTF-8 路径文本读入（R-1 修复：Windows 走 _wfopen，避免 ANSI 代码页）。
- * 成功返回 malloc 的 NUL 结尾内容，失败置 error 返回 nullptr。 */
+/* 通用 UTF-8 路径文本读入（R-1：Windows 内部转 wide，避免 ANSI 代码页）。
+ * 成功返回 malloc 的 NUL 结尾内容，失败置 error 返回 nullptr。
+ * 路径打开已收敛到 port/fs.h（平台隔离 M1）。 */
 char* read_text_file(auradsp_handle h, const char* path, long max_bytes,
                      auradsp_status* st) {
     *st = AURADSP_OK;
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); *st = AURADSP_E_PARAM; return nullptr; }
-#ifdef _WIN32
-    const int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    if (wlen <= 0) { set_error(h, "convolver.ir.path: invalid encoding"); *st = AURADSP_E_PARAM; return nullptr; }
-    wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
-    if (!wpath) { set_error(h, "convolver.ir.path: out of memory"); *st = AURADSP_E_IO; return nullptr; }
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
-    FILE* fp = _wfopen(wpath, L"rb");
-    free(wpath);
-#else
-    FILE* fp = fopen(path, "rb");
-#endif
-    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open)"); *st = AURADSP_E_IO; return nullptr; }
+    /* R2（M6 审查遗留）：区分打开失败原因——UTF-8 非法 → E_PARAM（与 M1 前一致），
+     * OOM / 文件打不开 → E_IO。 */
+    auradsp::platform::FsOpenError fs_err = auradsp::platform::FsOpenError::none;
+    FILE* fp = auradsp::platform::fopen_utf8(path, "rb", &fs_err);
+    if (!fp) {
+        using auradsp::platform::FsOpenError;
+        if (fs_err == FsOpenError::invalid_encoding) {
+            set_error(h, "convolver.ir.path: invalid encoding");
+            *st = AURADSP_E_PARAM;
+        } else if (fs_err == FsOpenError::out_of_memory) {
+            set_error(h, "convolver.ir.path: out of memory");
+            *st = AURADSP_E_IO;
+        } else {
+            set_error(h, "convolver.ir: io failed (cannot open)");
+            *st = AURADSP_E_IO;
+        }
+        return nullptr;
+    }
     fseek(fp, 0, SEEK_END);
     const long sz = ftell(fp);
     if (sz <= 0 || sz > max_bytes) {
@@ -144,20 +152,23 @@ void rebuild_hann(auradsp_handle h, int n) {
 auradsp_status load_ir_file(auradsp_handle h, const char* path) {
     /* L2：路径与文件尺寸限额 */
     if (!path || !path[0]) { set_error(h, "convolver.ir.path: invalid path (empty)"); return AURADSP_E_PARAM; }
-    /* 审查修复 R-1：Windows fopen 走 ANSI 代码页，中文路径必挂——
-     * UTF-8 → UTF-16 后走 _wfopen */
-#ifdef _WIN32
-    int wlen = MultiByteToWideChar(CP_UTF8, 0, path, -1, nullptr, 0);
-    if (wlen <= 0) { set_error(h, "convolver.ir.path: invalid encoding"); return AURADSP_E_PARAM; }
-    wchar_t* wpath = (wchar_t*)malloc((size_t)wlen * sizeof(wchar_t));
-    if (!wpath) { set_error(h, "convolver.ir.path: out of memory"); return AURADSP_E_IO; }
-    MultiByteToWideChar(CP_UTF8, 0, path, -1, wpath, wlen);
-    FILE* fp = _wfopen(wpath, L"rb");
-    free(wpath);
-#else
-    FILE* fp = fopen(path, "rb");
-#endif
-    if (!fp) { set_error(h, "convolver.ir: io failed (cannot open file)"); return AURADSP_E_IO; }
+    /* 审查修复 R-1：UTF-8 路径经平台端口打开（Windows 内部转 wide）。
+     * R2（M6 审查遗留）：UTF-8 非法 → E_PARAM，OOM/打不开 → E_IO。 */
+    auradsp::platform::FsOpenError fs_err = auradsp::platform::FsOpenError::none;
+    FILE* fp = auradsp::platform::fopen_utf8(path, "rb", &fs_err);
+    if (!fp) {
+        using auradsp::platform::FsOpenError;
+        if (fs_err == FsOpenError::invalid_encoding) {
+            set_error(h, "convolver.ir.path: invalid encoding");
+            return AURADSP_E_PARAM;
+        }
+        if (fs_err == FsOpenError::out_of_memory) {
+            set_error(h, "convolver.ir.path: out of memory");
+            return AURADSP_E_IO;
+        }
+        set_error(h, "convolver.ir: io failed (cannot open file)");
+        return AURADSP_E_IO;
+    }
     if (fseek(fp, 0, SEEK_END) != 0) { fclose(fp); set_error(h, "convolver.ir: io failed (seek failed)"); return AURADSP_E_IO; }
     const long fsize = ftell(fp);
     if (fsize <= 44) { fclose(fp); set_error(h, "convolver.ir: file too small"); return AURADSP_E_PARAM; }

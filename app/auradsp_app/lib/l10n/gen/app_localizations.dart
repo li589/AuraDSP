@@ -2662,6 +2662,468 @@ abstract class AppLocalizations {
   /// **'峰值'**
   String get peakLabel;
 
+  /// No description provided for @visualizerSettingsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'可视化设置'**
+  String get visualizerSettingsTip;
+
+  /// No description provided for @visualizerShowLyricsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示歌词'**
+  String get visualizerShowLyricsTip;
+
+  /// No description provided for @visualizerHideLyricsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'隐藏歌词'**
+  String get visualizerHideLyricsTip;
+
+  /// No description provided for @visualizerLyricsNoMedia.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到正在播放的媒体'**
+  String get visualizerLyricsNoMedia;
+
+  /// No description provided for @visualizerLyricsNoMediaHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'在系统中播放音乐后，歌词会自动匹配并滚动显示'**
+  String get visualizerLyricsNoMediaHint;
+
+  /// No description provided for @visualizerLyricsSearching.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在检索歌词…'**
+  String get visualizerLyricsSearching;
+
+  /// No description provided for @visualizerLyricsSearchingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'正在为当前曲目匹配在线歌词'**
+  String get visualizerLyricsSearchingHint;
+
+  /// No description provided for @visualizerLyricsNotFound.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到匹配的歌词'**
+  String get visualizerLyricsNotFound;
+
+  /// No description provided for @visualizerLyricsNotFoundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'可在右上角重新获取，或选择本地 LRC 文件手动加载'**
+  String get visualizerLyricsNotFoundHint;
+
+  /// No description provided for @visualizerLyricsReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词已加载'**
+  String get visualizerLyricsReady;
+
+  /// No description provided for @visualizerLyricsRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新获取'**
+  String get visualizerLyricsRetry;
+
+  /// No description provided for @visualizerLyricsPickLocal.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地 LRC'**
+  String get visualizerLyricsPickLocal;
+
+  /// No description provided for @visualizerLyricsPickLocalTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择本地 LRC 歌词文件'**
+  String get visualizerLyricsPickLocalTitle;
+
+  /// No description provided for @visualizerLyricsPickLocalPrompt.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入或粘贴 .lrc 歌词文件的完整路径：'**
+  String get visualizerLyricsPickLocalPrompt;
+
+  /// No description provided for @visualizerLyricsUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前平台暂不支持系统媒体会话'**
+  String get visualizerLyricsUnsupported;
+
+  /// No description provided for @visualizerLyricsUnsupportedHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍可在右上角选择本地 LRC 文件手动加载歌词'**
+  String get visualizerLyricsUnsupportedHint;
+
+  /// No description provided for @visualizerLyricsSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词来源'**
+  String get visualizerLyricsSource;
+
+  /// No description provided for @visualizerLyricsSourceInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动按顺序尝试各在线歌词库；也可固定使用某一个来源'**
+  String get visualizerLyricsSourceInfo;
+
+  /// No description provided for @visualizerLyricsSourceAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动（依次回退）'**
+  String get visualizerLyricsSourceAuto;
+
+  /// No description provided for @visualizerLyricsSourceLrclib.
+  ///
+  /// In zh, this message translates to:
+  /// **'LrcLib'**
+  String get visualizerLyricsSourceLrclib;
+
+  /// No description provided for @visualizerLyricsSourceNetease.
+  ///
+  /// In zh, this message translates to:
+  /// **'网易云音乐'**
+  String get visualizerLyricsSourceNetease;
+
+  /// No description provided for @visualizerLyricsSourceQq.
+  ///
+  /// In zh, this message translates to:
+  /// **'QQ 音乐'**
+  String get visualizerLyricsSourceQq;
+
+  /// No description provided for @visualizerLyricsSourceKugou.
+  ///
+  /// In zh, this message translates to:
+  /// **'酷狗音乐'**
+  String get visualizerLyricsSourceKugou;
+
+  /// No description provided for @visualizerLyricsCalibrate.
+  ///
+  /// In zh, this message translates to:
+  /// **'校准到这一行'**
+  String get visualizerLyricsCalibrate;
+
+  /// No description provided for @visualizerResetPeakTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'重置峰值保持'**
+  String get visualizerResetPeakTip;
+
+  /// No description provided for @visualizerDisplayRestoreTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'还原：标准页面布局'**
+  String get visualizerDisplayRestoreTip;
+
+  /// No description provided for @visualizerDisplayStageTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'软件全屏：视效铺满应用窗口'**
+  String get visualizerDisplayStageTip;
+
+  /// No description provided for @visualizerDisplayImmersiveTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）'**
+  String get visualizerDisplayImmersiveTip;
+
+  /// No description provided for @visualizerDrawerTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'可视化设置'**
+  String get visualizerDrawerTitle;
+
+  /// No description provided for @visualizerDrawerCloseTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭设置'**
+  String get visualizerDrawerCloseTip;
+
+  /// No description provided for @visualizerSectionPalette.
+  ///
+  /// In zh, this message translates to:
+  /// **'色彩主题'**
+  String get visualizerSectionPalette;
+
+  /// No description provided for @visualizerSectionPaletteInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择频谱与波形配色方案'**
+  String get visualizerSectionPaletteInfo;
+
+  /// No description provided for @visualizerSectionDynamics.
+  ///
+  /// In zh, this message translates to:
+  /// **'动态与阻尼'**
+  String get visualizerSectionDynamics;
+
+  /// No description provided for @visualizerSectionDynamicsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'调节音频能量响应灵敏度与衰减物理'**
+  String get visualizerSectionDynamicsInfo;
+
+  /// No description provided for @visualizerSectionVisuals.
+  ///
+  /// In zh, this message translates to:
+  /// **'画面与参考线'**
+  String get visualizerSectionVisuals;
+
+  /// No description provided for @visualizerSectionVisualsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'微调辉光、网格与刻度'**
+  String get visualizerSectionVisualsInfo;
+
+  /// No description provided for @visualizerSectionLyrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词与字幕'**
+  String get visualizerSectionLyrics;
+
+  /// No description provided for @visualizerSectionLyricsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'配置同步滚动歌词显示'**
+  String get visualizerSectionLyricsInfo;
+
+  /// No description provided for @visualizerSensitivity.
+  ///
+  /// In zh, this message translates to:
+  /// **'灵敏度'**
+  String get visualizerSensitivity;
+
+  /// No description provided for @visualizerSensitivityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频能量放大倍率，决定视觉跳动幅度'**
+  String get visualizerSensitivityInfo;
+
+  /// No description provided for @visualizerDecay.
+  ///
+  /// In zh, this message translates to:
+  /// **'衰减阻尼'**
+  String get visualizerDecay;
+
+  /// No description provided for @visualizerDecayInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'峰值与频谱下落时的空气阻尼阻力'**
+  String get visualizerDecayInfo;
+
+  /// No description provided for @visualizerGravity.
+  ///
+  /// In zh, this message translates to:
+  /// **'重力'**
+  String get visualizerGravity;
+
+  /// No description provided for @visualizerGravityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'把峰值持续拉向底部的重力加速度'**
+  String get visualizerGravityInfo;
+
+  /// No description provided for @visualizerBloom.
+  ///
+  /// In zh, this message translates to:
+  /// **'磷光辉光'**
+  String get visualizerBloom;
+
+  /// No description provided for @visualizerBloomInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'阴极射线余辉与 LED 光晕强度'**
+  String get visualizerBloomInfo;
+
+  /// No description provided for @visualizerLineWidth.
+  ///
+  /// In zh, this message translates to:
+  /// **'线条粗细'**
+  String get visualizerLineWidth;
+
+  /// No description provided for @visualizerLineWidthInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'示波光束、相位曲线与向量线的描边宽度'**
+  String get visualizerLineWidthInfo;
+
+  /// No description provided for @visualizerBandsDensity.
+  ///
+  /// In zh, this message translates to:
+  /// **'频段密度'**
+  String get visualizerBandsDensity;
+
+  /// No description provided for @visualizerBandsDensityInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择 32 或 64 频段分辨率'**
+  String get visualizerBandsDensityInfo;
+
+  /// No description provided for @visualizerToggleGrid.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考网格'**
+  String get visualizerToggleGrid;
+
+  /// No description provided for @visualizerToggleGridInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示 100Hz / 1kHz / 10kHz 倍频程与水平 dB 参考线'**
+  String get visualizerToggleGridInfo;
+
+  /// No description provided for @visualizerTogglePeaks.
+  ///
+  /// In zh, this message translates to:
+  /// **'峰值保持线'**
+  String get visualizerTogglePeaks;
+
+  /// No description provided for @visualizerTogglePeaksInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在频谱柱顶部保留重力回落的峰值线'**
+  String get visualizerTogglePeaksInfo;
+
+  /// No description provided for @visualizerToggleDbScale.
+  ///
+  /// In zh, this message translates to:
+  /// **'dBFS 刻度'**
+  String get visualizerToggleDbScale;
+
+  /// No description provided for @visualizerToggleDbScaleInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在右侧边框显示 0 至 -60 dBFS 声压刻度'**
+  String get visualizerToggleDbScaleInfo;
+
+  /// No description provided for @visualizerToggleLyrics.
+  ///
+  /// In zh, this message translates to:
+  /// **'歌词叠加'**
+  String get visualizerToggleLyrics;
+
+  /// No description provided for @visualizerToggleLyricsInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在视效舞台上叠加同步歌词'**
+  String get visualizerToggleLyricsInfo;
+
+  /// No description provided for @visualizerToggleTranslation.
+  ///
+  /// In zh, this message translates to:
+  /// **'双语翻译'**
+  String get visualizerToggleTranslation;
+
+  /// No description provided for @visualizerToggleTranslationInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'在歌词主行下方显示可用译文（需先开启歌词）'**
+  String get visualizerToggleTranslationInfo;
+
+  /// No description provided for @visualizerResetDefaults.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复出厂设置'**
+  String get visualizerResetDefaults;
+
+  /// No description provided for @visualizerResetDefaultsTip.
+  ///
+  /// In zh, this message translates to:
+  /// **'将所有可视化参数恢复为默认值'**
+  String get visualizerResetDefaultsTip;
+
+  /// No description provided for @visualizerStyleBars.
+  ///
+  /// In zh, this message translates to:
+  /// **'频谱柱'**
+  String get visualizerStyleBars;
+
+  /// No description provided for @visualizerStyleOscilloscope.
+  ///
+  /// In zh, this message translates to:
+  /// **'示波器'**
+  String get visualizerStyleOscilloscope;
+
+  /// No description provided for @visualizerStyleGoniometer.
+  ///
+  /// In zh, this message translates to:
+  /// **'相位仪'**
+  String get visualizerStyleGoniometer;
+
+  /// No description provided for @visualizerStyleCyberGrid.
+  ///
+  /// In zh, this message translates to:
+  /// **'赛博网格'**
+  String get visualizerStyleCyberGrid;
+
+  /// No description provided for @visualizerStylePulseOrb.
+  ///
+  /// In zh, this message translates to:
+  /// **'脉冲星云'**
+  String get visualizerStylePulseOrb;
+
+  /// No description provided for @visualizerStyleAurora.
+  ///
+  /// In zh, this message translates to:
+  /// **'极光飘带'**
+  String get visualizerStyleAurora;
+
+  /// No description provided for @visualizerStyleTunnel.
+  ///
+  /// In zh, this message translates to:
+  /// **'霓虹隧道'**
+  String get visualizerStyleTunnel;
+
+  /// No description provided for @visualizerStyleMilkdrop.
+  ///
+  /// In zh, this message translates to:
+  /// **'MilkDrop'**
+  String get visualizerStyleMilkdrop;
+
+  /// No description provided for @visualizerStyleFluid.
+  ///
+  /// In zh, this message translates to:
+  /// **'流体动力学'**
+  String get visualizerStyleFluid;
+
+  /// No description provided for @visualizerStyleTornado.
+  ///
+  /// In zh, this message translates to:
+  /// **'粒子龙卷风'**
+  String get visualizerStyleTornado;
+
+  /// No description provided for @visualizerThemeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'跟随系统'**
+  String get visualizerThemeSystem;
+
+  /// No description provided for @visualizerThemeNeonCyber.
+  ///
+  /// In zh, this message translates to:
+  /// **'赛博霓虹'**
+  String get visualizerThemeNeonCyber;
+
+  /// No description provided for @visualizerThemeAmberTube.
+  ///
+  /// In zh, this message translates to:
+  /// **'琥珀电子管'**
+  String get visualizerThemeAmberTube;
+
+  /// No description provided for @visualizerThemeMatrixGreen.
+  ///
+  /// In zh, this message translates to:
+  /// **'矩阵磷光'**
+  String get visualizerThemeMatrixGreen;
+
+  /// No description provided for @visualizerThemeAuroraGlow.
+  ///
+  /// In zh, this message translates to:
+  /// **'极光'**
+  String get visualizerThemeAuroraGlow;
+
   /// No description provided for @themeSwitchTip.
   ///
   /// In zh, this message translates to:
@@ -4852,6 +5314,12 @@ abstract class AppLocalizations {
   /// **'插件中心'**
   String get plugTitle;
 
+  /// R4：非 Windows 平台插件宿主不可用时的占位提示
+  ///
+  /// In zh, this message translates to:
+  /// **'插件功能在当前平台不可用'**
+  String get plugUnsupported;
+
   /// No description provided for @plugLibTitle.
   ///
   /// In zh, this message translates to:
@@ -5253,6 +5721,30 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'保存失败（名称非法或磁盘不可写）'**
   String get lpSaveFailed;
+
+  /// No description provided for @lpFileImportFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'脚本导入失败：文件无法读取或不是有效文本'**
+  String get lpFileImportFailed;
+
+  /// No description provided for @gateStateOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启'**
+  String get gateStateOpen;
+
+  /// No description provided for @gateStateHold.
+  ///
+  /// In zh, this message translates to:
+  /// **'保持'**
+  String get gateStateHold;
+
+  /// No description provided for @gateStateClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get gateStateClosed;
 
   /// No description provided for @chainVstTitle.
   ///

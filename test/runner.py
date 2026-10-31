@@ -24,6 +24,31 @@ TEST_DIR = os.path.join(ROOT_DIR, "test")
 SMOKE_DIR = os.path.join(TEST_DIR, "smoke")
 UI_DIR = os.path.join(TEST_DIR, "ui")
 
+# M5（2026-10-29）平台标记：'windows' = 依赖 Win32 / 引擎 DLL / 注册表 / COM；
+# 'any' = 纯源码扫描，可在任意平台运行。未列出的 smoke 默认 windows（引擎当前
+# 只有 Windows 产物）。出现可用的 Linux/Android 引擎后逐项下调标记，不设全局开关。
+PLATFORM_ANY = {
+    "smoke_platform_isolation.py",
+    "smoke_dart_platform_quarantine.py",
+}
+
+if sys.platform.startswith("win"):
+    CURRENT_PLATFORM = "windows"
+elif sys.platform.startswith("linux"):
+    CURRENT_PLATFORM = "linux"
+elif sys.platform == "darwin":
+    CURRENT_PLATFORM = "macos"
+else:
+    CURRENT_PLATFORM = "other"
+
+
+def required_platform(smoke_file):
+    return "any" if smoke_file in PLATFORM_ANY else "windows"
+
+
+def platform_supported(required):
+    return required == "any" or required == CURRENT_PLATFORM
+
 
 def run_smoke_tests():
     print("========================================")
@@ -35,6 +60,8 @@ def run_smoke_tests():
         "smoke_convolver.py",
         "smoke_guard_flow.py",
         "smoke_liveprog.py",
+        # 2026-10-30：gmem 区从「每 VM 内嵌 64MB」改为按需分配，防止回归
+        "smoke_liveprog_gmem.py",
         "smoke_viz_lowfreq.py",
         "smoke_latency_probe.py",
         "smoke_block1056.py",
@@ -44,6 +71,9 @@ def run_smoke_tests():
         # iZotope Ozone/RX 12 加载契约：setProcessing 返回 kNotImplemented 不得致命，
         # 且 process() 音频必须存活；机器上无 iZotope 插件时自动 SKIP
         "smoke_plugin_izotope_setproc.py",
+        # T-01：三大商业插件（Pro-Q 3 / Ozone 12 / Element FX）load→unload
+        # 全链路。默认无 GUI（`--gui` 才开编辑器）；本机未安装目标插件时 SKIP。
+        "smoke_three_key_plugins.py",
         "smoke_plugin_pdc.py",
         "smoke_plugin_bus.py",
         "smoke_plugin_chain.py",
@@ -135,6 +165,9 @@ def run_smoke_tests():
         # 偏移（只比 sizeof 会放行"字段顺序错但总长凑巧相同"）、M3 管版本联动。
         # 含四级反向判红 + 0xCD 哨兵包裹缓冲的越界活体守卫。
         "smoke_g7_1_viz_mirror.py",
+        # §7-2 门禁（T-02 登记）：三桥 abi 与引擎 auradsp_abi 同代际 + gcc
+        # 合成假引擎验证 ABI 不匹配拒绝 / 匹配放行。
+        "smoke_g7_2_bridge_abi.py",
         # §7-5 门禁（2026-10-24）：三座桥的 .def ↔ 头文件 ↔ Dart 绑定。实测
         # 三桥全漂且方向不同：asio/vaio 各漏导出 slot_{set,get}_channels（Dart
         # 硬 lookup，ASIO/VAIO 后端下插件槽构造即抛 ArgumentError 再被上层吞
@@ -149,8 +182,18 @@ def run_smoke_tests():
         # 另附输出 RMS 非空转证明与 stereo 回归守卫。
         "smoke_e4_stage16_crossmode.py",
         "smoke_abi_consistency.py",
+        # P5 统一桥契约（2026-10-29）：清单门禁之外，查真相源 DLL 是否真导出
+        # 14 个 ab_*、ab_abi_version、capabilities 自报、ab_detect 与旧前缀同源，
+        # 以及 VM 运行态 ab_start→status(gated/idleMs)→ab_stop。
+        "smoke_bridge_unified_abi.py",
         # B-1 调试串门禁：源码零 cout [DBG + Release DLL 无 [DBG（计划 D1 §3.3）
         "smoke_release_strings.py",
+        # M1 平台隔离门禁（2026-10-29）：引擎可移植核心零 OS 头/Win32 符号；
+        # 端口头纯声明 + Windows 实现存在 + 扫描器反向自检。
+        "smoke_platform_isolation.py",
+        # M4 Dart 平台隔离门禁（2026-10-29）：lib/ 业务文件零 Platform.is；
+        # PlatformProfile 成员齐全；AudioOut 端口/工厂/WASAPI 实现归位。
+        "smoke_dart_platform_quarantine.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
@@ -199,6 +242,9 @@ def run_smoke_tests():
     "smoke_input.py",
     "smoke_bass.py",
     "smoke_comp.py",
+    # E-01 门禁：comp 频点交叉/等值/全 20000Hz 时输出有限 + 参数回读不变；
+    # 子进程日志层断言 pchip 不再刷 "Abscissas..." 报警。
+    "smoke_comp_band_order.py",
     # Z13 compander 控制线程/RT 竞争门禁（2026-10-23）：双 UI 线程高频拖
     # comp.gain*/结构参数 + RT 连续 process。修复前实测访问违例（生产崩溃
     # 同根：FFTCompanderInit 重置 count/指针表与 RT 消耗循环无互斥）。
@@ -241,6 +287,10 @@ def run_smoke_tests():
     "smoke_spatial_style_custom.py",
     "smoke_eq_freq_clamp.py",
     "smoke_vb_8x8_budget.py",
+    # P2/P3 静音门控（2026-10-29）：引擎 gated 快路径（hold 2s + 残量
+    # -120dB 双条件、同块退出、viz 照常发射、开效果器后 gated 耗时
+    # <25%）+ 桥层状态机单测（silence_gate_test.exe，三桥共用头）。
+    "smoke_silence_gate.py",
     "smoke_graph_order.py",
     "smoke_ddc.py",
         "test_editor_topology.py",
@@ -254,23 +304,36 @@ def run_smoke_tests():
         "test_editor_size_c4.py",
     ]
     all_pass = True
+    passed = skipped = failed = 0
+    skipped_files = []
     for sf in smoke_files:
         path = os.path.join(SMOKE_DIR, sf)
         if not os.path.exists(path):
             print(f"[WARN] File not found: {sf}")
             continue
+        req = required_platform(sf)
+        if not platform_supported(req):
+            print(f"[SKIP] {sf} (requires {req}, current {CURRENT_PLATFORM})")
+            skipped += 1
+            skipped_files.append(sf)
+            continue
         print(f"\n---> Running {sf}...")
         res = subprocess.run([sys.executable, path], cwd=ROOT_DIR, check=False)
         if res.returncode != 0:
             print(f"[FAIL] {sf} returned code {res.returncode}")
+            failed += 1
             all_pass = False
         else:
             print(f"[PASS] {sf}")
+            passed += 1
     print("\n========================================")
     if all_pass:
         print("  ALL SMOKE TESTS PASSED [100%]        ")
     else:
         print("  SOME SMOKE TESTS FAILED!             ")
+    print(f"  PASS {passed} | SKIP {skipped} | FAIL {failed}   ")
+    if skipped_files:
+        print("  SKIPPED: " + ", ".join(skipped_files))
     print("========================================")
     return 0 if all_pass else 1
 
@@ -279,11 +342,19 @@ def run_ui_tests(target=None):
     print("========================================")
     print("  Running AuraDSP UI Automation Tests  ")
     print("========================================")
+    # target 先解析校验：非 Windows 整体跳过时也不吞掉拼写错误。
+    target_path = None
     if target:
         target_path = os.path.join(UI_DIR, target if target.endswith(".py") else f"{target}.py")
         if not os.path.exists(target_path):
             print(f"[ERROR] UI test not found: {target_path}")
             return 1
+    # M5：UI 自动化全部依赖 Windows 窗口栈与 ui_test_kit，非 Windows 统一跳过。
+    if not platform_supported("windows"):
+        print(f"  ALL UI TESTS SKIPPED (requires windows, current {CURRENT_PLATFORM})")
+        print("========================================")
+        return 0
+    if target_path:
         targets = [target_path]
     else:
         targets = [

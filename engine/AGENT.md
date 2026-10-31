@@ -12,13 +12,29 @@ engine/
 ├── chain/                       # 链与 IO：engine_chain / engine_convolver / engine_viz /
 │                                #   engine_probe / engine_audiofile
 ├── dsp/                         # 自研效果，一效果一文件（11 个）
+├── platform/                    # 平台端口-适配器（M1，2026-10-29）
+│   ├── port/                    #   纯声明 fs.h / env.h / log.h / module.h（核心唯一允许的平台抽象）
+│   └── windows/                 #   引擎核心唯一 OS 落点：fs_win / env_win / log_win / win_compat
 └── plugins/                     # 插件宿主：api/plugin_host.h + driver/ + formats/ +
-                                 #   platform/win32/ + integration/ + tests/
+                                 #   platform/win32/（含 host/ 远程宿主、module_pump.h、plugin_module.cpp）
+                                 #   + integration/ + tests/
 ```
 
 引用链/宿主文件时用 `chain/xxx.cpp`、`plugins/{api,driver,formats,platform/win32,integration,tests}/xxx.cpp`
 相对路径；**旧扁平路径（`engine_chain.cpp` 直接躺在 engine/ 根）自 P4b（`cec8064`）起失效，
 旧 `engine/host/` 自 P1（2026-10-20）起失效**，文档/脚本/CMake 一律按新结构写。
+
+平台约束（M1 起）：根目录 / `chain/` / `dsp/` / `plugins/integration/` 的代码**禁止**出现
+OS 头（`windows.h` / `mmdeviceapi.h` 等）与平台符号（`_WIN32` / `_wfopen` / `OutputDebugString` /
+`GetEnvironmentVariable` 等）；文件、环境变量、日志一律走 `platform/port/*.h`，实现只加在
+`platform/windows/`。门禁：`python test/smoke/smoke_platform_isolation.py`（每次 runner）。
+
+插件平台归属（M2 起）：远程宿主（共享内存 + `CreateProcess`）在
+`plugins/platform/win32/host/`；Win32 模块泵在 `plugins/platform/win32/module_pump.h`；
+插件二进制加载/符号解析/卸载统一走 `platform/port/module.h`（Windows 实现在
+`plugins/platform/win32/plugin_module.cpp`），`formats/` 内禁止直接调
+`LoadLibrary` / `GetProcAddress` / `FreeLibrary`。远程宿主由 CMake
+`AURADSP_PLUGIN_HOST_REMOTE` 控制（Windows 默认 ON，OFF 时引擎走 `AURADSP_HOST_INPROC`）。
 
 ## 1. RT 安全（铁律）
 
@@ -42,7 +58,10 @@ engine/
    ±10 钳位 → Stage 4 Post-Limiter 插件。
    混响边界（WP1）：立体声/矩阵/双耳路径由 vendor Progenitor2 承担；离散多声道路径在
    exciter 之后、Stage 3 之前调用 MC FDN（`dsp_mc_reverb.cpp`），两套混响不会同时运行。
-5. `core/desktop/windows/CMakeLists.txt`：源表加文件。
+5. `core/desktop/windows/CMakeLists.txt`：源表加文件。target 分层固定为
+   `auradsp_core`（STATIC：legacy C + 根 C ABI + chain/dsp）→ `auradsp_engine`
+   （SHARED：核心 + `platform/windows/*` 适配 + 插件子系统）；OS 实现只能进 engine
+   或 `plugins/platform/win32`，不得回流 core（M3，2026-10-29）。
 6. `test/smoke/smoke_xxx.py` + `test/runner.py` 登记（未登记 = 废测）。
 7. `graph.effects` 注册表加条目 **并同步计数注释**；容量门 2048（payload 近 1KB，
    小 buffer 宁可 E_PARAM 也不断尾残 JSON）。

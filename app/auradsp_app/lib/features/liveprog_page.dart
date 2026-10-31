@@ -639,7 +639,14 @@ dbg = 0;
             _onCodeChanged(content);
           }
         } catch (e, st) {
+          // 用户主动导入失败必须有反馈（旧实现只写日志，用户会误以为成功）
           swallow(e, st);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(l10nOf(context).lpFileImportFailed),
+              duration: const Duration(seconds: 3),
+            ));
+          }
         }
       }
     }
@@ -678,6 +685,12 @@ dbg = 0;
       }
     } catch (e, st) {
       swallow(e, st);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(l.lpSaveFailed),
+          duration: const Duration(seconds: 3),
+        ));
+      }
     }
   }
 

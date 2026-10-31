@@ -38,10 +38,10 @@ extension StateSession on AppModel {
     // 平台预置目录：仅首次播种（目录必须真实存在，见 PluginScanDirs.discover）。
     if (!config.pluginScanDirsSeeded) {
       final known = dirs
-          .map((e) => Platform.isWindows ? e.path.toLowerCase() : e.path)
+          .map((e) => PlatformProfile.pathKey(e.path))
           .toSet();
       for (final p in PluginScanDirs.discover()) {
-        final key = Platform.isWindows ? p.toLowerCase() : p;
+        final key = PlatformProfile.pathKey(p);
         if (known.add(key)) {
           dirs.add(PluginScanDirEntry(path: p));
         }
@@ -66,9 +66,7 @@ extension StateSession on AppModel {
     final path = dir.trim();
     if (path.isEmpty) return;
     final exists = config.pluginScanDirs.any(
-      (e) => Platform.isWindows
-          ? e.path.toLowerCase() == path.toLowerCase()
-          : e.path == path,
+      (e) => PlatformProfile.pathKey(e.path) == PlatformProfile.pathKey(path),
     );
     if (exists) return;
     config.pluginScanDirs.add(PluginScanDirEntry(path: path));

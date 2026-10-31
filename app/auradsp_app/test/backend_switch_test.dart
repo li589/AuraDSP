@@ -84,7 +84,7 @@ void main() {
 
   group('Part B 源码不变式（切换路径不许静默）', () {
     final isolate = _read('lib/engine/audio_isolate.dart');
-    final device = _read('lib/engine/audio_device.dart');
+    final device = _read('lib/engine/audio_out/audio_out_wasapi.dart');
     final switchSrc = _read('lib/engine/backend_switch.dart');
 
     test('runHandover 实现含「停旧→回滚」两条路径', () {
@@ -94,11 +94,12 @@ void main() {
     });
 
     test('三处切换点都走 runHandover（VB / ASIO / VAIO）', () {
-      // 每个切换点后面紧跟自己的 Active 标志置位，用 it 定位段落再查 runHandover
+      // 每个切换点后面紧跟 manager.switchTo 的唯一记账，用 it 定位段落再查
+      // runHandover（isolate 不再维护 vbActive/asioActive/vaioActive 副本）。
       for (final marker in const [
-        'vbActive = true;',
-        'asioActive = true;',
-        'vaioActive = true;',
+        "bridgeManager.switchTo('vm', vb!);",
+        "bridgeManager.switchTo('asio', ab!);",
+        "bridgeManager.switchTo('vaio', vaio!);",
       ]) {
         final at = isolate.indexOf(marker);
         expect(at, greaterThan(0), reason: '找不到 $marker');

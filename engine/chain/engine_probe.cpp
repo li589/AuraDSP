@@ -401,7 +401,15 @@ int auradsp_probe_eq_response(int sample_rate, const char* curve, int n_points,
     if (!jd->tmpBuffer[0]) {
         const size_t ctMemBlk = (size_t)jd->blockSizeMax * 2 + (size_t)kImp * 4;
         jd->tmpBuffer[0] = (float*)malloc(ctMemBlk * sizeof(float));
-        if (!jd->tmpBuffer[0]) { free(re); free(jd); return AURADSP_E_IO; }
+        if (!jd->tmpBuffer[0]) {
+            /* OOM 分支也要走 vendor 释放 + 全局引用回收（旧实现裸 free 会
+             * 漏掉 JamesDSPInit 分配的缓冲并让全局引用泄漏）。 */
+            JamesDSPFree(jd);
+            free(re);
+            free(jd);
+            global_unref();
+            return AURADSP_E_IO;
+        }
         jd->tmpBuffer[1] = jd->tmpBuffer[0] + jd->blockSizeMax;
         jd->tmpBuffer[2] = jd->tmpBuffer[1] + jd->blockSizeMax;
         jd->tmpBuffer[3] = jd->tmpBuffer[2] + kImp;
@@ -451,6 +459,8 @@ MultimodalEqualizerAxisInterpolation(jd, interp, op, freqAx, gainAx);
     free(re);
     JamesDSPFree(jd);
     free(jd);
+    /* 与 global_init() 配对：旧实现每次 EQ 响应实测都泄漏一个全局引用。 */
+    global_unref();
     return AURADSP_OK;
 }
 }  // extern "C"

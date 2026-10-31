@@ -1475,6 +1475,262 @@ class AppLocalizationsEn extends AppLocalizations {
   String get peakLabel => 'Peak';
 
   @override
+  String get visualizerSettingsTip => 'Visualizer settings';
+
+  @override
+  String get visualizerShowLyricsTip => 'Show lyrics';
+
+  @override
+  String get visualizerHideLyricsTip => 'Hide lyrics';
+
+  @override
+  String get visualizerLyricsNoMedia => 'No active media session';
+
+  @override
+  String get visualizerLyricsNoMediaHint =>
+      'Play music in any app and lyrics will be matched automatically';
+
+  @override
+  String get visualizerLyricsSearching => 'Searching for lyrics…';
+
+  @override
+  String get visualizerLyricsSearchingHint =>
+      'Matching online lyrics for the current track';
+
+  @override
+  String get visualizerLyricsNotFound => 'No matching lyrics found';
+
+  @override
+  String get visualizerLyricsNotFoundHint =>
+      'Use the top-right actions to retry or pick a local LRC file';
+
+  @override
+  String get visualizerLyricsReady => 'Lyrics loaded';
+
+  @override
+  String get visualizerLyricsRetry => 'Retry';
+
+  @override
+  String get visualizerLyricsPickLocal => 'Local LRC';
+
+  @override
+  String get visualizerLyricsPickLocalTitle => 'Select local LRC lyrics file';
+
+  @override
+  String get visualizerLyricsPickLocalPrompt =>
+      'Enter or paste the full path of the .lrc file:';
+
+  @override
+  String get visualizerLyricsUnsupported =>
+      'System media session is unavailable on this platform';
+
+  @override
+  String get visualizerLyricsUnsupportedHint =>
+      'You can still pick a local LRC file from the top-right action';
+
+  @override
+  String get visualizerLyricsSource => 'Lyrics source';
+
+  @override
+  String get visualizerLyricsSourceInfo =>
+      'Auto tries each online lyrics library in order; or pin a single source';
+
+  @override
+  String get visualizerLyricsSourceAuto => 'Auto (fallback chain)';
+
+  @override
+  String get visualizerLyricsSourceLrclib => 'LrcLib';
+
+  @override
+  String get visualizerLyricsSourceNetease => 'NetEase Cloud Music';
+
+  @override
+  String get visualizerLyricsSourceQq => 'QQ Music';
+
+  @override
+  String get visualizerLyricsSourceKugou => 'Kugou Music';
+
+  @override
+  String get visualizerLyricsCalibrate => 'Calibrate to this line';
+
+  @override
+  String get visualizerResetPeakTip => 'Reset peak hold';
+
+  @override
+  String get visualizerDisplayRestoreTip => 'Restore: standard page layout';
+
+  @override
+  String get visualizerDisplayStageTip =>
+      'App fullscreen: stage fills the window';
+
+  @override
+  String get visualizerDisplayImmersiveTip =>
+      'Visualizer only: hide navigation and meters (Esc steps back)';
+
+  @override
+  String get visualizerDrawerTitle => 'Visualizer Settings';
+
+  @override
+  String get visualizerDrawerCloseTip => 'Close settings';
+
+  @override
+  String get visualizerSectionPalette => 'COLOR PALETTE';
+
+  @override
+  String get visualizerSectionPaletteInfo =>
+      'Select spectrum and waveform color theme';
+
+  @override
+  String get visualizerSectionDynamics => 'DYNAMICS & DAMPING';
+
+  @override
+  String get visualizerSectionDynamicsInfo =>
+      'Configure audio energy response sensitivity and decay physics';
+
+  @override
+  String get visualizerSectionVisuals => 'VISUALS & GUIDES';
+
+  @override
+  String get visualizerSectionVisualsInfo =>
+      'Fine-tune phosphor bloom, grid lines, and scales';
+
+  @override
+  String get visualizerSectionLyrics => 'LYRICS & SUBTITLES';
+
+  @override
+  String get visualizerSectionLyricsInfo =>
+      'Configure synchronized scrolling lyrics display';
+
+  @override
+  String get visualizerSensitivity => 'Sensitivity';
+
+  @override
+  String get visualizerSensitivityInfo =>
+      'Audio energy scaling multiplier for visual bounce';
+
+  @override
+  String get visualizerDecay => 'Falloff Decay';
+
+  @override
+  String get visualizerDecayInfo =>
+      'Air damping resistance for peak and spectrum decay';
+
+  @override
+  String get visualizerGravity => 'Gravity';
+
+  @override
+  String get visualizerGravityInfo =>
+      'Gravitational acceleration pulling peak meters downward';
+
+  @override
+  String get visualizerBloom => 'Phosphor Bloom';
+
+  @override
+  String get visualizerBloomInfo =>
+      'Cathode-ray persistence and LED glow intensity';
+
+  @override
+  String get visualizerLineWidth => 'Line Thickness';
+
+  @override
+  String get visualizerLineWidthInfo =>
+      'Stroke width of oscilloscope beam, phase curves, and vector lines';
+
+  @override
+  String get visualizerBandsDensity => 'Bands Density';
+
+  @override
+  String get visualizerBandsDensityInfo =>
+      'Select 32 or 64 frequency resolution bands';
+
+  @override
+  String get visualizerToggleGrid => 'Reference Grid';
+
+  @override
+  String get visualizerToggleGridInfo =>
+      'Display 100Hz, 1kHz, 10kHz octave and horizontal dB lines';
+
+  @override
+  String get visualizerTogglePeaks => 'Peak Hold Lines';
+
+  @override
+  String get visualizerTogglePeaksInfo =>
+      'Retain physical gravity bounce lines on top of spectrum bars';
+
+  @override
+  String get visualizerToggleDbScale => 'dBFS Vertical Scale';
+
+  @override
+  String get visualizerToggleDbScaleInfo =>
+      'Show 0 to -60 dBFS acoustic scale along right border';
+
+  @override
+  String get visualizerToggleLyrics => 'Lyrics Overlay';
+
+  @override
+  String get visualizerToggleLyricsInfo =>
+      'Overlay synchronized lyrics above the visualizer stage';
+
+  @override
+  String get visualizerToggleTranslation => 'Bilingual Translation';
+
+  @override
+  String get visualizerToggleTranslationInfo =>
+      'Show translated lyrics beneath the primary line (lyrics overlay must be on)';
+
+  @override
+  String get visualizerResetDefaults => 'Reset Defaults';
+
+  @override
+  String get visualizerResetDefaultsTip =>
+      'Restore all visualizer parameters to factory defaults';
+
+  @override
+  String get visualizerStyleBars => 'Spectrum Bars';
+
+  @override
+  String get visualizerStyleOscilloscope => 'Oscilloscope';
+
+  @override
+  String get visualizerStyleGoniometer => 'Phase Scope';
+
+  @override
+  String get visualizerStyleCyberGrid => 'Cyber Grid';
+
+  @override
+  String get visualizerStylePulseOrb => 'Pulse Nebula';
+
+  @override
+  String get visualizerStyleAurora => 'Aurora Ribbon';
+
+  @override
+  String get visualizerStyleTunnel => 'Neon Tunnel';
+
+  @override
+  String get visualizerStyleMilkdrop => 'MilkDrop';
+
+  @override
+  String get visualizerStyleFluid => 'Fluid Dynamics';
+
+  @override
+  String get visualizerStyleTornado => 'Particle Tornado';
+
+  @override
+  String get visualizerThemeSystem => 'System Theme';
+
+  @override
+  String get visualizerThemeNeonCyber => 'Cyber Neon';
+
+  @override
+  String get visualizerThemeAmberTube => 'Amber Tube';
+
+  @override
+  String get visualizerThemeMatrixGreen => 'Matrix Phosphor';
+
+  @override
+  String get visualizerThemeAuroraGlow => 'Aurora Glow';
+
+  @override
   String get themeSwitchTip => 'Cycle color scheme';
 
   @override
@@ -2674,6 +2930,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get plugTitle => 'Plugin Center';
 
   @override
+  String get plugUnsupported => 'Plugins are not available on this platform';
+
+  @override
   String get plugLibTitle => 'Third-party Effect Library';
 
   @override
@@ -2912,6 +3171,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpSaveFailed => 'Save failed (bad name or unwritable disk)';
+
+  @override
+  String get lpFileImportFailed =>
+      'Script import failed: the file is unreadable or not valid text';
+
+  @override
+  String get gateStateOpen => 'OPEN';
+
+  @override
+  String get gateStateHold => 'HOLD';
+
+  @override
+  String get gateStateClosed => 'CLOSED';
 
   @override
   String get chainVstTitle =>

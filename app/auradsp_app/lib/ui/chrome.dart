@@ -519,6 +519,10 @@ class _AmbientPainter extends CustomPainter {
   /// 单复用柱体画笔
   final Paint _barPaint = Paint();
 
+  /// 柱体渐变 shader：整幅离屏图共用一份（旧实现每根柱每帧新建
+  /// `ui.Gradient.linear` → 72 个/帧 × 20fps 的 Skia 原生分配）。
+  ui.Shader? _barShader;
+
   /// 同步小图双缓冲句柄（严格单实例轮替，零异步跨帧，杜绝 UAF 悬挂指针）
   ui.Image? _lastImg;
 
@@ -534,6 +538,10 @@ class _AmbientPainter extends CustomPainter {
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       n._env.smooth[i] = _env.smooth[i];
     }
+    // 2026-10-31：把上一帧小图的所有权转交给新 painter。旧实现两个实例
+    // 各自持有同一张图却不释放前者的引用，换主题时遗留一张未 dispose 的 GPU 小图。
+    n._lastImg = _lastImg;
+    _lastImg = null;
     return n;
   }
 
@@ -581,20 +589,24 @@ class _AmbientPainter extends CustomPainter {
     final recorder = ui.PictureRecorder();
     final c = Canvas(recorder, const Rect.fromLTWH(0, 0, lw, lh));
 
+    // 整幅离屏图共用一份垂直渐隐 shader：柱体越矮只用到渐变底部（不透明度
+    // 更高），高柱自然淡出顶部，视觉与原逐柱渐变一致，但每帧零 Shader 创建。
+    _barShader ??= ui.Gradient.linear(
+      Offset(0, lh),
+      Offset(0, 0),
+      [
+        palette.accent.withValues(alpha: baseAlpha / 255),
+        palette.accent.withValues(alpha: 0.0),
+      ],
+    );
+    _barPaint.shader = _barShader;
+
     // 每根柱子独立从底部至顶部垂直渐隐消融
     for (var i = 0; i < bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
       if (v < 0.02) continue;
       final h = v * lh * 0.92;
       final rect = Rect.fromLTWH(i * bw, lh - h, bw * 0.62, h);
-      _barPaint.shader = ui.Gradient.linear(
-        Offset(0, lh),
-        Offset(0, lh - h),
-        [
-          palette.accent.withValues(alpha: baseAlpha / 255),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-      );
       c.drawRect(rect, _barPaint);
     }
 

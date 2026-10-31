@@ -12,6 +12,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
 import 'plugins/plugin_scan_dirs.dart';
+import 'visualizer_types.dart';
+import '../platform/platform_profile.dart';
 
 import 'error_sink.dart';
 class AppConfig {
@@ -69,6 +71,11 @@ class AppConfig {
   bool pluginScanDirsSeeded;
   List<String> customScriptDirs;
 
+  /// 可视化配置（2026-10-31）：风格/配色/动态/歌词源等全部参数。
+  /// 这里是跨重启的持久化副本；运行时真相源是 AppModel.visualizerConfig，
+  /// 同一份数据另随会话记忆与预设系统保存/恢复。
+  VisualizerConfig visualizerConfig;
+
   AppConfig({
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
@@ -104,6 +111,7 @@ class AppConfig {
     List<PluginScanDirEntry>? pluginScanDirs,
     this.pluginScanDirsSeeded = false,
     List<String>? customScriptDirs,
+    VisualizerConfig? visualizerConfig,
   })  : modeCategory = modeCategory ?? AudioModes.categoryForMode(audioMode),
         attachmentMode = attachmentMode ??
             ((audioMode == 'vbcallback' || audioMode == 'voicemeeter_api')
@@ -115,11 +123,13 @@ class AppConfig {
                 ? AudioModes.outputAsioClient
                 : (audioMode == 'vaio' ? AudioModes.outputVaio : AudioModes.outputWasapi)),
         pluginScanDirs = pluginScanDirs ?? [],
-        customScriptDirs = customScriptDirs ?? [];
+        customScriptDirs = customScriptDirs ?? [],
+        visualizerConfig = visualizerConfig ?? const VisualizerConfig();
 
   factory AppConfig.fromJson(Map<String, dynamic> json) {
     final audio = (json['audio'] as Map<String, dynamic>?) ?? {};
     final ui = (json['ui'] as Map<String, dynamic>?) ?? {};
+    final viz = (json['visualizer'] as Map<String, dynamic>?) ?? {};
     final safety = (json['safety'] as Map<String, dynamic>?) ?? {};
     final paths = (json['paths'] as Map<String, dynamic>?) ?? {};
 
@@ -169,6 +179,7 @@ class AppConfig {
               ?.map((e) => e.toString())
               .toList() ??
           [],
+      visualizerConfig: VisualizerConfig.fromJson(viz),
     );
   }
 
@@ -243,6 +254,7 @@ class AppConfig {
           'pluginScanDirsSeeded': pluginScanDirsSeeded,
           'customScriptDirs': customScriptDirs,
         },
+        'visualizer': visualizerConfig.toJson(),
       };
 }
 
@@ -260,15 +272,7 @@ abstract final class ConfigManager {
       _baseDir = Directory.systemTemp.createTempSync('auradsp_test_').path;
       return _baseDir!;
     }
-    if (Platform.isWindows) {
-      final appData = Platform.environment['APPDATA'];
-      _baseDir = appData != null
-          ? '$appData${Platform.pathSeparator}AuraDSP'
-          : 'AuraDSP';
-    } else {
-      final home = Platform.environment['HOME'] ?? '.';
-      _baseDir = '$home${Platform.pathSeparator}.config${Platform.pathSeparator}auradsp';
-    }
+    _baseDir = PlatformProfile.configDir;
     return _baseDir!;
   }
 

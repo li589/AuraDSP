@@ -60,8 +60,9 @@ void compute_latency(auradsp_handle h, double* out_ms) {
         if (cp.frames > 0 && cp.ovpLen > 0) {
             /* jdsp.blockSize 是**设备域**块长（pint16 等入口写入 n），
              * 换算成工作域帧数后才能和 ovpLen 比。首次处理前为 0 时回落
-             * 创建时的 max_block（一块的上界）。 */
-            size_t devBlk = h->jdsp.blockSize;
+             * 创建时的 max_block（一块的上界）。E-03：读 RT 侧维护的原子
+             * 快照，避免直接读 vendor 结构里的非原子字段。 */
+            size_t devBlk = (size_t)h->lat_block_frames.load(std::memory_order_relaxed);
             if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
             const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
             const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
@@ -73,10 +74,10 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed)) {
         /* D1/D7：arbmag 用分块 FFT 卷积，附加延迟就是**单块帧数**（卷积器按
-         * jdsp->blockSize 加载 IR）。块长存的是设备域帧数，先折到工作域，
+         * 块长加载 IR）。块长存的是设备域帧数，先折到工作域，
          * 再按工作域采样率换算——两者相除即真实时长。为 0（尚未处理过任何
          * 块）时回落引擎创建时给的 max_block，它正是一块的上界。 */
-        size_t devBlk = h->jdsp.blockSize;
+        size_t devBlk = (size_t)h->lat_block_frames.load(std::memory_order_relaxed);
         if (devBlk == 0) devBlk = (size_t)(h->max_block > 0 ? h->max_block : 0);
         const double ratio = (sr > 0.0) ? (lat_sr / sr) : 1.0;
         const size_t workBlk = (size_t)((double)devBlk * ratio + 0.5);
@@ -145,7 +146,9 @@ void apply_reverb(auradsp_handle h) {
             const float wet = clamp_f(h->p.fv_wet.load(std::memory_order_relaxed), 0.0f, 1.0f);
             const float dry = clamp_f(h->p.fv_dry.load(std::memory_order_relaxed), 0.0f, 1.0f);
             const float room = clamp_f(h->p.fv_roomsize.load(std::memory_order_relaxed), 0.5f, 2.5f);
-            const float width = clamp_f(h->p.fv_width.load(std::memory_order_relaxed), 0.0f, 1.0f);
+            // fv_width 语义 0.2..2.0（与 MC 混响路径一致）；vendor 只接受 0..1，
+            // 下限对齐 0.2（旧实现 0..1 会把 0.2 以下也放行，且 >1 静默饱和）。
+            const float width = clamp_f(h->p.fv_width.load(std::memory_order_relaxed), 0.2f, 2.0f);
             const float predelay = clamp_f(h->p.reverb_predelay.load(std::memory_order_relaxed), 0.0f, 100.0f);
 
             np.oversamplefactor = 1;
@@ -155,7 +158,8 @@ void apply_reverb(auradsp_handle h) {
             np.erefwet_db = (wet < 0.001f) ? -100.0f : clamp_f(np.wet_db - 9.0f, -100.0f, 0.0f);
             np.ereffactor = room;
             np.erefwidth = 0.7f;
-            np.width = width;
+            // vendor width 域是 0..1：>1 的加宽在 Progenitor2 上饱和为 1.0
+            np.width = width > 1.0f ? 1.0f : width;
             np.wander = 0.2f;
             np.bassb = 0.15f;
             np.spin = 0.7f;
@@ -464,6 +468,26 @@ void apply_crossfeed(auradsp_handle h) {
         CrossfeedEnable(&h->jdsp, 1);
         const int mode = h->p.xfeed_mode.load(std::memory_order_relaxed);
         const unsigned int fs = (unsigned int)h->jdsp.fs;
+        float fcut = 0.0f, feed = 0.0f;
+        if (mode == 3) {
+            fcut = h->p.xfeed_fcut.load(std::memory_order_relaxed);
+            if (fcut < 300.0f) fcut = 300.0f;
+            if (fcut > 2000.0f) fcut = 2000.0f;
+            feed = h->p.xfeed_feed.load(std::memory_order_relaxed);
+            if (feed < 1.0f) feed = 1.0f;
+            if (feed > 15.0f) feed = 15.0f;
+        }
+        /* 2026-10-31 审查修复：BS2BInit 会 memset 整块 bs2b 状态。旧实现
+         * 每次参数变更都重建 → 拖 fcut/feed 滑块时滤波器历史被反复清空，
+         * 表现为咔哒声与瞬态失真。只在档位/采样率（自定义模式含系数）
+         * 真正变化时重建；纯开关切换不丢历史。 */
+        const bool sameModeAndFs =
+            h->xfeed_state_mode == mode && h->xfeed_state_fs == fs;
+        const bool sameCoefficients = mode != 3 ||
+            (fabsf(h->xfeed_state_fcut - fcut) < 1.0f &&
+             fabsf(h->xfeed_state_feed - feed) < 0.05f);
+        if (sameModeAndFs && sameCoefficients) return;
+
         if (mode == 1) {
             /* Chu Moy: 700 Hz, 6.0 dB */
             h->jdsp.advXF.mode = 0;
@@ -474,12 +498,6 @@ void apply_crossfeed(auradsp_handle h) {
             BS2BInit(&h->jdsp.advXF.bs2b[1], fs, BS2B_JMEIER_CLEVEL);
         } else if (mode == 3) {
             /* Custom: fcut & feed */
-            float fcut = h->p.xfeed_fcut.load(std::memory_order_relaxed);
-            if (fcut < 300.0f) fcut = 300.0f;
-            if (fcut > 2000.0f) fcut = 2000.0f;
-            float feed = h->p.xfeed_feed.load(std::memory_order_relaxed);
-            if (feed < 1.0f) feed = 1.0f;
-            if (feed > 15.0f) feed = 15.0f;
             int flevel = BS2BCalculateflevel((unsigned int)fcut, (unsigned int)(feed * 10.0f));
             h->jdsp.advXF.mode = 0;
             BS2BInit(&h->jdsp.advXF.bs2b[0], fs, flevel);
@@ -488,8 +506,17 @@ void apply_crossfeed(auradsp_handle h) {
             h->jdsp.advXF.mode = 0;
             BS2BInit(&h->jdsp.advXF.bs2b[0], fs, BS2B_DEFAULT_CLEVEL);
         }
+        h->xfeed_state_mode = mode;
+        h->xfeed_state_fs = fs;
+        h->xfeed_state_fcut = fcut;
+        h->xfeed_state_feed = feed;
     } else {
         CrossfeedDisable(&h->jdsp);
+        // 关闭后清镜像：再次开启（尤其 fs 已变）必须重新初始化
+        h->xfeed_state_mode = -1;
+        h->xfeed_state_fs = 0;
+        h->xfeed_state_fcut = -1.0f;
+        h->xfeed_state_feed = -1.0f;
     }
 }
 
@@ -502,6 +529,34 @@ void apply_convolver(auradsp_handle h) {
         Convolver1DDisable(&h->jdsp);
 }
 
+
+/* E-01：7 个频带按频率成对排序并强制严格递增（最小间隔 1Hz）。
+ * 参数表对 comp.freqN 各自只做 [20,20000] 钳制，用户把相邻滑块拖交叉后
+ * 传给 pchip 的横坐标不再单调：interpolation.c 逐点 printf 刷日志（控制
+ * 线程同步 IO，实测一次拖动 5008 行/389KB），upper_bound 在无序数组上
+ * 还会取错分段导致增益曲线失真。排序不改变「频率→增益」语义，只恢复
+ * 横坐标单调；等值频点按最小间隔拉开，避免插值分母为 0。 */
+static void sort_comp_bands(double* freqs, double* gains) {
+    for (int i = 1; i < 7; ++i) {
+        for (int j = i; j > 0 && freqs[j] < freqs[j - 1]; --j) {
+            const double tf = freqs[j];
+            freqs[j] = freqs[j - 1];
+            freqs[j - 1] = tf;
+            const double tg = gains[j];
+            gains[j] = gains[j - 1];
+            gains[j - 1] = tg;
+        }
+    }
+    const double kMinGap = 1.0;
+    for (int i = 1; i < 7; ++i) {
+        if (freqs[i] < freqs[i - 1] + kMinGap) freqs[i] = freqs[i - 1] + kMinGap;
+    }
+    /* 上限侧回压：最坏（全 20000）从 19994 起排，仍在 [20,20000] 内。 */
+    if (freqs[6] > 20000.0) freqs[6] = 20000.0;
+    for (int i = 5; i >= 0; --i) {
+        if (freqs[i] > freqs[i + 1] - kMinGap) freqs[i] = freqs[i + 1] - kMinGap;
+    }
+}
 
 void apply_comp(auradsp_handle h) {
     if (h->p.comp_enable.load(std::memory_order_relaxed)) {
@@ -523,6 +578,7 @@ void apply_comp(auradsp_handle h) {
             freqs[i] = (double)h->p.comp_freq[i].load(std::memory_order_relaxed);
             gains[i] = (double)h->p.comp_gain[i].load(std::memory_order_relaxed);
         }
+        sort_comp_bands(freqs, gains);
         /* 仅在初次启用或挂起全量刷新（如采样率变更）时触发 forceRefresh；
          * 正常调参（阈值/增益/频率变动）走影子更新增益曲线，不触发 FFTCompanderInit
          * 重置环形缓冲区，杜绝拖动滑块时音频断续。

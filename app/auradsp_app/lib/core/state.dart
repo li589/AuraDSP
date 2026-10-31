@@ -30,6 +30,7 @@ import '../engine/auradsp_ffi.dart'
         kVizStageTelemetry;
 import '../engine/debug_log.dart';
 import '../engine/head_tracker.dart';
+import '../platform/platform_profile.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
@@ -40,6 +41,7 @@ import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
 import 'tray_service.dart';
+import 'visualizer_types.dart';
 
 part 'state/state_models.dart';
 part 'state/state_core.dart';
@@ -178,6 +180,38 @@ class AppModel extends ChangeNotifier {
   /// 才订阅数据通知器（IndexedStack 保活 = 离屏页仍在树上，SDK 实证全子
   /// 节点仍参与 layout，纯 VLB 消费点会随数据 30fps 重建）。
   final visiblePage = ValueNotifier<AppPage>(AppPage.home);
+
+  /// 可视化「仅视效」沉浸档：shell 据此折叠左栏导航与顶栏，
+  /// 让视效舞台真正铺满整个应用窗口。
+  final visualizerImmersive = ValueNotifier<bool>(false);
+
+  /// 可视化配置唯一真相源（2026-10-31）：风格/配色/动态参数/歌词源等。
+  /// 挂 AppModel 而不是页面私有状态，才能同时进入
+  /// 「预设系统（ParamRegistry.visualizer 节）+ 会话记忆 + config.json」。
+  late final ValueNotifier<VisualizerConfig> visualizerConfig;
+
+  /// 唯一写入口：同步 config 落盘 + 主隔离通知 + 防抖会话保存。
+  /// [persistConfig] 仅会话回放/预设应用批量写时置 false，避免逐项写盘。
+  ///
+  /// config.json 写盘做 300ms 防抖（2026-10-31 审查修复）：抽屉滑块拖动
+  /// 每秒触发 ~60 次，旧实现每次同步全量 JSON 写主线程；一次预设切换也会
+  /// 因 14 个 spec 连写 14 次。会话记忆已有防抖兜底，这里合并为一次写盘。
+  Timer? _vizConfigSaveTimer;
+
+  void setVisualizerConfig(VisualizerConfig next, {bool persistConfig = true}) {
+    if (config.visualizerConfig == next) return;
+    config.visualizerConfig = next;
+    visualizerConfig.value = next;
+    if (persistConfig && !_isReplayingSession) {
+      _vizConfigSaveTimer?.cancel();
+      _vizConfigSaveTimer = Timer(const Duration(milliseconds: 300), () {
+        _vizConfigSaveTimer = null;
+        ConfigManager.save(config);
+      });
+    }
+    _notifyUi();
+    scheduleAutoSave();
+  }
   // VB 总线掩码（bit g=第 g 条总线进 DSP；落盘，进桥时下发；CHANGE 重建不丢）。
   int vbBusMask = 0xFF;
   // 按路插件处理掩码（bit g=组 g 总线吃插件链；落盘，进桥时下发）。
@@ -866,6 +900,9 @@ class AppModel extends ChangeNotifier {
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
   AppModel({bool testing = false}) : _testing = testing {
     config = ConfigManager.load();
+    // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
+    // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
+    visualizerConfig = ValueNotifier<VisualizerConfig>(config.visualizerConfig);
     channelsCountMode = config.channelsCountMode.clamp(0, 1);
     final cc = config.channelsCount;
     channelsCount = (cc == 2 || cc == 4 || cc == 6 || cc == 8) ? cc : 2;
@@ -969,6 +1006,11 @@ class AppModel extends ChangeNotifier {
   /// isolate 重启（采样率等 spawn 期配置变更用）：关旧端口、杀旧实例、重起。
   /// 就绪后标准回放 + _pendingRestartPush 重推音源/bypass。
   int _restartToken = 0;
+
+  /// 托盘可见性监听是否已订阅：_spawn() 每次（含重启）都会调用，
+  /// 旧实现每次都 addListener → 重启一次叠一个监听（重复下发
+  /// setVizSuspended 且常驻泄漏）。
+  bool _trayVisibilitySubscribed = false;
 
   // fatal-backoff 重试计数（'ready' 到达即清零；只对设备失效用）。
   int _fatalRetries = 0;
@@ -1097,6 +1139,9 @@ class AppModel extends ChangeNotifier {
 
   void resetConfig() {
     config = ConfigManager.resetToDefaults();
+    // 可视化配置同属 config.json：复位必须同步刷新运行时真相源，
+    // 否则界面仍停留在旧风格/旧歌词源。
+    visualizerConfig.value = config.visualizerConfig;
     // 「恢复默认」必须连带清除会话记忆：否则 autoRestoreSession 开启时
     // 下次启动 restoreMemoryImage 把旧参数全部还原（用户心智：全部归零）。
     // 先取消挂起的防抖保存——否则 500ms 后的 timer 会把文件写回来。
@@ -1113,13 +1158,22 @@ class AppModel extends ChangeNotifier {
     appearanceTick.dispose();
     connTick.dispose();
     visiblePage.dispose();
+    visualizerImmersive.dispose();
+    visualizerConfig.dispose();
     _headTracker.stop();
     TrayService.instance.isWindowVisible.removeListener(
       _onWindowVisibilityChanged,
     );
+    _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
+    // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失
+    if (_vizConfigSaveTimer != null) {
+      _vizConfigSaveTimer!.cancel();
+      _vizConfigSaveTimer = null;
+      ConfigManager.save(config);
+    }
     _compThresholdThrottleTimer?.cancel();
     // 测试隔离：testing 构造不落盘（且 _iso/_fromIso 本来就是 null，?. 本就安全）。
     if (!_testing) SessionMemory.save(this);

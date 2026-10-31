@@ -1,6 +1,4 @@
 @echo off
-set PYTHON="C:\Program Files\Python\Python312\python.exe"
-cd /d D:\temp_desktop\Proj\JamesDSP
-echo === smoke_plugin_host_process.py ===
-%PYTHON% test\smoke\smoke_plugin_host_process.py
-echo EXIT_PROCESS=%ERRORLEVEL%
+REM Thin entry kept for stable command lines (M5 platform grouping).
+call "%~dp0windows\run_smoke_process.bat" %*
+exit /b %ERRORLEVEL%

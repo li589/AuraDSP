@@ -9,6 +9,7 @@
  *   arbmagGraphicEq 任意响应导入（txt/csv）
  *   testAudioFile   测试音频文件（WAV/MP3 同一槽：都是测试音选取）
  *   liveprogScript  liveprog 脚本浏览器当前目录
+ *   lyricsLrc       可视化歌词层「本地 LRC」选择目录
  *
  * 保存频率与触发条件（2026-10-16 定）：
  *   - 选取成功（file_selector 返回路径）→ 立即写盘（选取是低频人工动作，
@@ -36,6 +37,8 @@ abstract final class PathMemory {
   static const String slotLiveprogImportEel = 'liveprogImportEel';
   static const String slotLiveprogAddDir = 'liveprogAddDir';
   static const String slotLiveprogSelectedDir = 'liveprogSelectedDir';
+  // 本地 LRC 歌词文件（可视化歌词层）
+  static const String slotLyricsLrc = 'lyricsLrc';
   // 文本输入式「添加目录」对话框的上次输入（播种 TextField）
   static const String slotLastScriptDir = 'lastScriptDir';
   static const String slotLastPluginDir = 'lastPluginDir';
@@ -48,6 +51,7 @@ abstract final class PathMemory {
     slotLiveprogScript: 'liveprog', // ConfigManager.path 的相对子目录
     slotLiveprogImportEel: '',
     slotLiveprogAddDir: '',
+    slotLyricsLrc: '',
   };
 
   static Map<String, String> _dirs = {};

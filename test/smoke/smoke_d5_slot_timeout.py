@@ -92,14 +92,17 @@ check("pluginSlotLoaded event carries timedOut", "if (timedOut) 'timedOut': true
 check("both events carry timedOut",
       code.count("'timedOut': true") >= 2, f"count={code.count(chr(39)+'timedOut'+chr(39)+': true')}")
 
-print("\n=== [E] 调用点接住二元组 ===")
-tuples = len(re.findall(r"final\s+\(rc,\s*timedOut\)\s*=\s*await\s+_submitAndWait", code))
-check("both call sites destructure (rc, timedOut)", tuples == 2, f"found {tuples}")
-check("_submitAndWait returns (int, bool)",
-      re.search(r"Future<\(int,\s*bool\)>\s+_submitAndWait", code) is not None)
+print("\n=== [E] 调用点接住三元组（rc, timedOut, accepted） ===")
+tuples = len(re.findall(r"final\s+\(rc,\s*timedOut,\s*accepted\)\s*=\s*await\s+_submitAndWait", code))
+check("both call sites destructure (rc, timedOut, accepted)", tuples == 2, f"found {tuples}")
+check("_submitAndWait returns (int, bool, bool)",
+      re.search(r"Future<\(int,\s*bool,\s*bool\)>\s+_submitAndWait", code) is not None)
+# 被拒（该槽已有任务在跑）不得再发终态事件（否则 UI 误报失败并清镜像）
+check("rejected path skips terminal event", code.count("if (!accepted) return 0;") >= 2,
+      f"count={code.count('if (!accepted) return 0;')}")
 
 print("\n=== [F] 超时仍归属失败语义（rc=0） ===")
-check("timeout returns rc=0 + timedOut=true", "return (0, true);" in code)
+check("timeout returns rc=0 + timedOut=true + accepted=true", "return (0, true, true);" in code)
 
 print()
 if fails:

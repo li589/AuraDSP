@@ -163,7 +163,11 @@ typedef struct
 	uint64_t retiredAt;
 } CompSlot;
 #define AURA_COMP_CHANNELS 8
-#define AURA_COMP_SLOTS (AURA_COMP_CHANNELS * 2)
+/* [AuraDSP P-046 2026-10-31] 8 活动槽 + 1 个轮换影子槽（原实现误写成
+ * CHANNELS*2=16，每个 FFTCompander ~1.5MB → 每引擎白占 10.8MB；VB 8 总线
+ * +1 软件引擎共 9 份，进程多出近 100MB）。P-034 的设计文档本来就是 9 槽：
+ * CompressorCommit 逐声道选一个非活动槽、换指针后等退休槽安全再复用。 */
+#define AURA_COMP_SLOTS (AURA_COMP_CHANNELS + 1)
 typedef struct
 {
 	int needOversample;

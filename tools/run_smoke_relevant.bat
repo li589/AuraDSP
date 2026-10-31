@@ -1,10 +1,4 @@
 @echo off
-set PYTHON="C:\Program Files\Python\Python312\python.exe"
-cd /d D:\temp_desktop\Proj\JamesDSP
-echo === smoke_plugin_host.py ===
-%PYTHON% test\smoke\smoke_plugin_host.py
-echo EXIT_HOST=%ERRORLEVEL%
-echo.
-echo === smoke_plugin_bypass_lifecycle.py ===
-%PYTHON% test\smoke\smoke_plugin_bypass_lifecycle.py
-echo EXIT_BYPASS=%ERRORLEVEL%
+REM Thin entry kept for stable command lines (M5 platform grouping).
+call "%~dp0windows\run_smoke_relevant.bat" %*
+exit /b %ERRORLEVEL%

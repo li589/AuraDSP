@@ -23,6 +23,8 @@
 
 #include <windows.h>
 
+#include "SilenceGate.h"
+
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
@@ -131,6 +133,10 @@ struct PumpCtx {
     // 总线处理掩码（bit g = 第 g 组进 DSP；0 = 该总线直通）。桥经 vb_set_bus_mask
     // 下发；电平表照常计量（仅跳过 process），重开即恢复，无需等 idle 退出。
     volatile LONG busMask = 0xFF;
+    // ---- P3 静音门控（bridge 专用；pump 不碰，enabled 恒 false 即原行为）----
+    // 组级独立实例：只有有信号的总线才进 DSP，其余 7 组零消耗（方案 §3.3）。
+    // 桥在 RebuildEngines（采样率已知处，控制线程）逐组 Configure 启用。
+    aurabridge::SilenceGate gate[kMaxGroups];
     // L0（P2 性能）：每组 process 耗时峰值（QPC ticks），status 暴露供
     // 爆音定位（8 组串行是回调主成本，直方图定位真凶组）。
     uint64_t maxGroupTicks[8] = {};
@@ -381,6 +387,9 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
         const double m = a > b ? a : b;
         if (m > grpPeak) grpPeak = m;
     }
+    // P3：门控用真实输入峰值——冻结检测只清表头，不得把"冻住的非零流"
+    // 当成静音送进门控（否则那条总线会真的被切零）。
+    const float gateInPeak = (float)grpPeak;
     if (g < 8) {
         // 冻结检测：步进 16 采、最多 64 点做 FNV 式折叠（RT 内纯整数运算）。
         // 同一块内容连续超 0.5s → 本块峰值按 0 计（只清表头）。
@@ -462,6 +471,17 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                 sIn[i * 2 + 1] = inR[i];
             }
         }
+        // P3：组级静音门控。只对真正会进 DSP 的组生效（测试注入是信号、
+        // 用户旁路本就直通，两者都不门控）。GATED 时整组 8 通道输出写零——
+        // 严禁留 VB 缓冲旧数据（那会变成嗡嗡声，方案风险清单 6）。
+        if (c->gate[g].enabled && testKind == 0 && !c->userBypass &&
+            c->gate[g].Tick(gateInPeak, n)) {
+            for (long ch = base; ch < base + 8; ++ch) {
+                if (ab->w[ch]) memset(ab->w[ch], 0, (size_t)n * sizeof(float));
+            }
+            c->gate[g].NoteOutput(0.0f);
+            return;
+        }
         bool outSilent = true;
         if (c->userBypass) {
             // 用户旁路：跳过 process，输入直通（测试信号同样直通）。
@@ -492,6 +512,16 @@ inline void ProcessGroupVm(PumpCtx* c, VbAudioBuffer* ab, int g, long n,
                 const double dR = (double)oR - (double)inR[i];
                 const double d = dL < 0 ? -dL : (dR < 0 ? -dR : (dL > dR ? dL : dR));
                 if (d > grpDiff) grpDiff = d;
+            }
+            // P3：记录引擎实际输出峰值，供下一块门控的「尾音已衰完」判据。
+            if (c->gate[g].enabled) {
+                float outPeak = 0.0f;
+                const long total = n * procCh;
+                for (long i = 0; i < total; ++i) {
+                    const float a = std::fabs(sOut[i]);
+                    if (a > outPeak) outPeak = a;
+                }
+                c->gate[g].NoteOutput(outPeak);
             }
             c->maxDiffGrp[g] = grpDiff;  // Z17：maxDiff 归约中间槽
             if (binaural) {

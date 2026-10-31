@@ -7,7 +7,7 @@
 > vaio 为内核态，见 `01_vaio_driver/`）。
 >
 > 刻意**不在**本目录的 Windows-only 代码：进程内 WASAPI 渲染
-> （`app/auradsp_app/lib/engine/audio_device.dart`，Dart 直调 COM）。
+> （`app/auradsp_app/lib/engine/audio_out/audio_out_wasapi.dart`，Dart 直调 COM）。
 > 本目录是 C++/CMake 运输层（SDK/WDK 门禁、dumpbin 导出表、ctypes smoke），
 > 一个 Dart 文件搬进来两边都不沾；真要收编只能重写成 `00_wasapi_engine` DLL
 > （render 线程 + FFI + smoke 全套），而主力通路（ADR-001）在 Dart 侧跑得好好的——

@@ -718,9 +718,12 @@ extension StateCore on AppModel {
       _iso = iso;
     });
     port.listen(_onMessage);
-    TrayService.instance.isWindowVisible.addListener(
-      _onWindowVisibilityChanged,
-    );
+    if (!_trayVisibilitySubscribed) {
+      _trayVisibilitySubscribed = true;
+      TrayService.instance.isWindowVisible.addListener(
+        _onWindowVisibilityChanged,
+      );
+    }
   }
 
   void _onWindowVisibilityChanged() {

@@ -1,5 +1,6 @@
 #include "vst3_metadata.h"
 
+#include "platform/port/module.h"
 #include "plugin_metadata_util.h"
 #include "win32_util.h"
 
@@ -154,13 +155,14 @@ bool queryVst3Metadata(const std::string& bundlePath,
                        const std::string& binaryPath,
                        std::vector<PluginMetadata>& outPlugins) {
     std::wstring wpath = utf8ToWide(binaryPath);
-    HMODULE module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    void* module = platform::module_open_utf8(binaryPath.c_str());
     if (!module) return false;
 
     bool success = false;
     try {
         typedef Steinberg::IPluginFactory* (PLUGIN_API *GetFactoryFunc)();
-        auto getFactory = reinterpret_cast<GetFactoryFunc>(GetProcAddress(module, "GetPluginFactory"));
+        auto getFactory = reinterpret_cast<GetFactoryFunc>(
+            platform::module_symbol(module, "GetPluginFactory"));
         if (getFactory) {
             Steinberg::IPluginFactory* factory = getFactory();
             if (factory) {
@@ -188,7 +190,7 @@ bool queryVst3Metadata(const std::string& bundlePath,
     } catch (...) {
         success = false;
     }
-    FreeLibrary(module);
+    platform::module_close(module);
     return success;
 }
 

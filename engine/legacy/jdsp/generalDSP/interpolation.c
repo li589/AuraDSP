@@ -1,25 +1,23 @@
 #include <stdlib.h>
 #include <math.h>
 #include <float.h>
+#include <assert.h>
 #include "../jdsp_header.h"
+/* [PATCHED-AuraDSP P-044] 静默化 pchip 初始化报警。
+ * 原 vendor 在横坐标非严格递增时对每个违例点 printf 一次；用户拖动
+ * comp 频带滑块使频点交叉时，控制线程同步 IO 实测刷出 5008 行 / 389KB，
+ * 而调用方并未因此停下（upper_bound 仍会继续用无序数组插值）。现在
+ * 引擎侧 apply_comp 已先按频率成对排序并拉开 1Hz，合法输入恒单调；
+ * 保留 Debug 断言供开发期发现新的违规调用方，Release 零输出。 */
 void cubic_hermite_init(cubic_hermite *cuher, double* x, double* y, double* dydx, int n)
 {
 	cuher->x_ = x;
 	cuher->y_ = y;
 	cuher->dydx_ = dydx;
-	if (n < 4)
-	{
-		printf("Must be at least four data points.");
-	}
+	assert(n >= 4);
 	cuher->n = n;
-	double x0 = cuher->x_[0];
 	for (int i = 1; i < n; ++i)
-	{
-		double x1 = cuher->x_[i];
-		if (x1 <= x0)
-			printf("Abscissas must be listed in strictly increasing order x0 < x1 < ... < x_{n-1}");
-		x0 = x1;
-	}
+		assert(cuher->x_[i] > cuher->x_[i - 1]);
 }
 double getValueAt(cubic_hermite *cuher, double x)
 {

@@ -209,7 +209,11 @@ static int LiveProgCompileInto(LiveProg *pg, JamesDSPLib *jdsp, char *codeTextIn
 	compileContext *ctx = (compileContext*)pg->vm;
 	NSEEL_VM_freevars(pg->vm);
 	NSEEL_init_memRegion(pg->vm);
-	memset(ctx->ram_state, 0, sizeof(ctx->ram_state));
+	/* [AuraDSP 2026-10-31 P-045] gmem 每次编译前清零（旧内嵌数组的 memset 语义）。
+	 * 不再 memset 整个 64MB：只清已提交前缀——惰性分配器保证未提交页本来就是
+	 * 全零，语义等价，同时避免「一编译就提交满 64MB」。 */
+	if (ctx->ram_state)
+		aura_eel_ram_clear(ctx->ram_state);
 	pg->vmFs = NSEEL_VM_regvar(pg->vm, "srate");
 	if (pg->vmFs)
 		*pg->vmFs = jdsp->fs;

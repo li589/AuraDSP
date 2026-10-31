@@ -105,6 +105,13 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.pipelineOutputDevice', // 管道输出设备，ConfigManager 域
   'routing.pipelineOutputEnabled', // 管道输出开关，ConfigManager 域
   'routing.vaioOutputEndpoint', // AuraVAIO 端点，ConfigManager 域
+  // 可视化配置（2026-10-31）：AppModel.visualizerConfig → config.json /
+  // SessionMemory / 预设快照，全部不符发引擎（纯 Dart 侧状态）。
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.sensitivity',
+  'visualizer.decayRate', 'visualizer.gravity', 'visualizer.barCount',
+  'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
+  'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
+  'visualizer.showTranslation', 'visualizer.lyricsSource',
 };
 
 /// Part A（getter/setter 运行时闭环）排除项：setter 写入门槛非对称或空实现，
@@ -118,6 +125,9 @@ const Set<String> kNonRoundtripSpecIds = {
   'routing.attachmentMode', // noop setter：同上
   'routing.pipelineInput', // noop setter：同上
   'routing.pipelineOutput', // noop setter：同上
+  // 可视化枚举型 spec（2026-10-31）：setter 走 fromId() 归一，未知探针值
+  // 会被安全回落到默认枚举，探针无法原样读回（业务上正是期望的容错行为）。
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.lyricsSource',
 };
 
 /// Part C：UI 专属 spec——引擎无对应参数（经 alias 归一后仍不在引擎表）。
@@ -136,6 +146,15 @@ const Set<String> kUiOnlySpecIds = {
   'routing.pipelineInputDevice', 'routing.pipelineInputEnabled',
   'routing.pipelineOutput', 'routing.pipelineOutputDevice',
   'routing.pipelineOutputEnabled', 'routing.vaioOutputEndpoint',
+  // 可视化配置（2026-10-31）：引擎无对应参数，纯 UI/宿主配置域
+  'visualizer.style', 'visualizer.colorTheme', 'visualizer.sensitivity',
+  'visualizer.decayRate', 'visualizer.gravity', 'visualizer.barCount',
+  'visualizer.lineWidth', 'visualizer.bloom', 'visualizer.showGrid',
+  'visualizer.showPeaks', 'visualizer.showDbScale', 'visualizer.showLyrics',
+  'visualizer.showTranslation', 'visualizer.lyricsSource',
+  // 压缩器宏控（2026-10-31 接线进 registry）：阈值经 alias 归一为
+  // comp.gain1..7（引擎侧有对应参数，故不入 uiOnly）；比率仅 UI 传递曲线。
+  'comp.ratio',
 };
 
 /// Part C：引擎侧参数 UI 不通过 registry 暴露的状态/掩码/计量/别名族/
@@ -260,10 +279,8 @@ const Set<String> kEngineOnlyIds = {
 /// ParamRegistry.allParams）的孤儿 spec。与实测差集精确相等；
 /// 将它们接线进 registry 时同步删此条目。
 const Set<String> kOrphanStaticSpecIds = {
-  // 待引擎补充（B2 排期，方案文档 2026-10-19 §2.2）：
-  // FFTCompander 外围"阈值输入偏移 + 比率增益标度"宏控映射，需 vendor 语义验证 + 听感校准。
-  'comp.ratio', // 引擎无 comp.ratio 参数（vendor 多段压缩无比率）；UI 核心滑块 + 传递曲线可视化依赖，暂保留
-  'comp.threshold', // 同上：宏观阈值；7 段 gain 已注册进 comp section，macro 本体未挂
+  // 2026-10-31：comp.threshold / comp.ratio 已接线进 comp section（此前
+  // 只存不读，重启丢失阈值与比率），此处不再登记孤儿。
 };
 
 /// Part D：已登记的"spec.defaultValue ≠ 引擎默认"分歧（P-4 类）。

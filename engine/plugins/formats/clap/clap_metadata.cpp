@@ -1,5 +1,6 @@
 #include "clap_metadata.h"
 
+#include "platform/port/module.h"
 #include "plugin_metadata_util.h"
 #include "win32_util.h"
 
@@ -111,12 +112,13 @@ bool queryClapMetadata(const std::string& bundlePath,
                        const std::string& binaryPath,
                        std::vector<PluginMetadata>& outPlugins) {
     std::wstring wpath = utf8ToWide(binaryPath);
-    HMODULE module = LoadLibraryExW(wpath.c_str(), NULL, LOAD_WITH_ALTERED_SEARCH_PATH);
+    void* module = platform::module_open_utf8(binaryPath.c_str());
     if (!module) return false;
 
     bool success = false;
     try {
-        auto entry = reinterpret_cast<const clap_plugin_entry_t*>(GetProcAddress(module, "clap_entry"));
+        auto entry = reinterpret_cast<const clap_plugin_entry_t*>(
+            platform::module_symbol(module, "clap_entry"));
         if (entry && entry->init && entry->init(bundlePath.c_str())) {
             auto factory = reinterpret_cast<const clap_plugin_factory_t*>(entry->get_factory(CLAP_PLUGIN_FACTORY_ID));
             if (factory && factory->get_plugin_count) {
@@ -138,7 +140,7 @@ bool queryClapMetadata(const std::string& bundlePath,
     } catch (...) {
         success = false;
     }
-    FreeLibrary(module);
+    platform::module_close(module);
     return success;
 }
 

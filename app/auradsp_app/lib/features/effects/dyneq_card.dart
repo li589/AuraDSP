@@ -178,7 +178,7 @@ class _DyneBand extends StatelessWidget {
           max: freqMax,
           unit: 'Hz',
           enabled: en,
-          format: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}k' : v.toStringAsFixed(0),
+          format: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : v.toStringAsFixed(0),
           onChanged: setFreq,
           onChangedEnd: setFreq,
         ),

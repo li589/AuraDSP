@@ -240,17 +240,29 @@ abstract final class PresetLibrary {
       }
     } catch (e, st) { swallow(e, st); }
 
-    // 兼顾历史 v1 存放于根目录的旧预设
+    // 兼顾历史 v1 存放于根目录的旧预设。
+    // 2026-10-31 审查修复：根目录同时住着 config.json / session_state.json /
+    // file_paths.json，旧实现把**所有** *.json 当预设 → 生成删不掉的
+    // "Unnamed" 幽灵条目，点一下 params 为空 → 全量复写 = 静默恢复出厂。
+    // 只接受「有 name + parameters/params」的预设形态。
     try {
       final rDir = Directory(baseDir);
       if (rDir.existsSync()) {
         for (final f in rDir.listSync().whereType<File>()) {
-          if (f.path.toLowerCase().endsWith('.json')) {
-            try {
-              final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-              list.add(AuraPreset.fromJson(json));
-            } catch (e, st) { swallow(e, st); }
-          }
+          if (!f.path.toLowerCase().endsWith('.json')) continue;
+          try {
+            final json = jsonDecode(f.readAsStringSync());
+            if (json is! Map<String, dynamic>) continue;
+            final name = json['name'];
+            final params = json['parameters'] ?? json['params'];
+            if (name is! String ||
+                name.isEmpty ||
+                params is! Map ||
+                params.isEmpty) {
+              continue; // 非预设文件（配置文件/会话/路径记忆等）
+            }
+            list.add(AuraPreset.fromJson(json));
+          } catch (e, st) { swallow(e, st); }
         }
       }
     } catch (e, st) { swallow(e, st); }
@@ -418,6 +430,14 @@ abstract final class PresetLibrary {
 
     for (final section in ParamRegistry.sections) {
       if (_isSessionOnlySection(section)) continue;
+      // 可视化偏好节（2026-10-31）：只在**用户预设显式携带**时应用。
+      // 出厂预设 / 旧版预设的 visualizer 段是生成基线时补进去的出厂值，
+      // 让它们覆盖用户已定制的风格/配色/歌词源会导致「载入音效预设 =
+      // 视觉风格被重置」，与 theme/locale（只随 config）的口径不一致。
+      if (section.name == 'visualizer' &&
+          (preset.isFactory || !preset.params.containsKey('visualizer'))) {
+        continue;
+      }
       final secData = (p[section.name] as Map<String, dynamic>?) ?? {};
       if (secData.isEmpty) continue;
 

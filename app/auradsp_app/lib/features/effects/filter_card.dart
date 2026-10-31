@@ -54,7 +54,7 @@ class _FilterCard extends StatelessWidget {
             customLabel: l.filterFreq,
             infoMessage: l.filterHintModes,
             customFormat: (v) => v >= 1000
-                ? '${(v / 1000).toStringAsFixed(1)}k'
+                ? '${(v / 1000).toStringAsFixed(1)} kHz'
                 : v.toStringAsFixed(0),
           ),
           const SizedBox(height: AuraSpace.sm),

@@ -60,8 +60,9 @@ LAZY_REASONS = {'ok', 'none', 'todo', 'n/a', 'na', 'xx', 'fixme', '...'}
 
 
 def repo_root():
+    # 本文件位于 <repo>/tools/bin/，仓库根需上跳两级
     here = os.path.dirname(os.path.abspath(__file__))
-    return os.path.dirname(here)
+    return os.path.dirname(os.path.dirname(here))
 
 
 # ---------------------------------------------------------------- 词法剥离

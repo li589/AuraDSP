@@ -25,7 +25,7 @@ import subprocess
 import sys
 import tempfile
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 EXPECTED_ABI = 2
 
 fails = []
@@ -48,7 +48,7 @@ r = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "bin",
                     "--bridges-only"],
                    capture_output=True, text=True, cwd=ROOT)
 check("[A] abi_consistency --bridges-only 全绿", r.returncode == 0,
-      (r.stdout + r.stderr).strip().splitlines()[-1] if r.returncode else "3 桥 98 符号")
+      (r.stdout + r.stderr).strip().splitlines()[-1] if r.returncode else "3 桥 103 符号")
 
 # ---- [B] 活体层 ----
 BRIDGES = [
@@ -158,10 +158,11 @@ __declspec(dllexport) int auradsp_viz_read(void* h, void* out, unsigned n) {
             note_skip("[C] auraasio_bridge.dll 不存在")
         else:
             b = ctypes.CDLL(asio_path)
-            b.asio_start.restype = ctypes.c_int
-            b.asio_start.argtypes = [ctypes.c_char_p, ctypes.c_char_p,
-                                     ctypes.c_char_p, ctypes.c_long,
-                                     ctypes.c_long]
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            from bridge_compat import alias_common, start_asio  # noqa: E402
+
+            alias_common(b, "asio")
+            b.asio_start = start_asio(b)
             b.asio_stop.restype = ctypes.c_int
             b.asio_status.restype = ctypes.c_int
             b.asio_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
