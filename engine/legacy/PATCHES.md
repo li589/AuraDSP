@@ -980,3 +980,65 @@ yquist * 0.999，
   深扫相关）；引擎构建零警告；Dart 侧 aborted 语义由既有用例回归。
 - **上游同步冲突风险**：低-中（scanner 的扫描循环改写为守卫形态；宿主客户端
   请求签名增可选参数，调用点默认值兼容）。
+
+## P-044 pchip 初始化报警静默化（实施：2026-10-30）
+
+- **状态**：已实施（2026-10-30）
+- **位置**：`engine/legacy/jdsp/generalDSP/interpolation.c`
+  （`cubic_hermite_init`）。
+- **动机**（全量审查 E-01）：原 vendor 对非严格递增横坐标逐点 `printf`。
+  用户拖动 comp 频带滑块造成频点交叉时，控制线程同步 IO 实测刷出
+  **5008 行 / 389 KB** 日志；且报警后并不中止，`upper_bound` 仍会在无序
+  数组上取段，导致压缩曲线失真。
+- **内容**：删除 `n < 4` 与单调性检查的 `printf`，改为 `assert`（Release
+  `/DNDEBUG` 下零开销零输出，Debug 仍能在开发期发现新的违规调用方）。
+  合法性由引擎侧 `apply_comp` 保证：7 组 `freqN/gainN` 先按频率成对排序，
+  再以 1 Hz 最小间隔拉开并回压到 20000 Hz 上限（见 `engine/chain/
+  engine_chain.cpp` 的 `sort_comp_bands`）。
+- **验收**：`smoke_comp_band_order.py`（交叉/等值/全 20000 三组频带，
+  输出有限性 + 参数回读 + 子进程日志零报警）；`runner.py --smoke` 全绿。
+- **上游同步冲突风险**：低（仅删除两处输出，函数签名与数值行为不变）。
+
+## P-045 eel2/nseel-compiler.c + liveprogWrapper.c + Effects/aura_eel_ram.c — gmem 按需物理提交（2026-10-31）
+
+- **状态**：已实施（2026-10-31）
+- **位置**：`engine/legacy/jdsp/Effects/eel2/nseel-compiler.c`
+  （`NSEEL_VM_getram` / `NSEEL_VM_free`）、`engine/legacy/jdsp/Effects/liveprogWrapper.c`
+  （`LiveProgCompileInto`）、新增 `engine/legacy/jdsp/Effects/aura_eel_ram.{h,c}`。
+- **动机**（内存审查）：EEL2 的 gmem 是 `1<<24` 个 float（64MB）。VB 回调模式下
+  一个进程创建 8 个总线引擎（+1 软件引擎），每个引擎编译同一份 liveprog 脚本；
+  脚本一旦引用 gmem（`x[y]` / tds / IIR 分频等），每个 VM 实打实 `calloc(64MB)`；
+  且 `LiveProgCompileInto` 每次编译还 `memset` 整块 64MB（把所有页都触碰一遍）。
+  实测 9 个 VM = 576MB 常驻，叠加每 handle ~25MB 的 vendor 结构后进程约 1.4GB。
+- **内容**：
+  - 新增 `aura_eel_ram_*` 分配器：Windows 走 `VirtualAlloc(MEM_RESERVE, PAGE_NOACCESS)`
+    + 预提交 1MB + VEH（`AddVectoredExceptionHandler`）按 64KB 页提交；POSIX 继续
+    `calloc`（本身惰性零页）。已提交前缀由 SRW 锁保护的登记表记录。
+  - 编译前清零改为 `aura_eel_ram_clear()`：只 memset 已提交前缀；未提交页天然为 0，
+    与旧「整块 memset」语义一致。
+  - `NSEEL_VM_free` 改走 `aura_eel_ram_free()`（`VirtualFree(MEM_RELEASE)`）。
+- **验收**：`smoke_liveprog_gmem.py` 新增 [E] 单句柄增长 < 60MB（旧 ~89MB）、
+  [F] 8 并发引擎总增长 < 320MB（旧 ~700MB）、[G] 深层 `gmem[3000000]` 页提交
+  读写正确；`smoke_liveprog` / `smoke_liveprog_race` / `smoke_chain_meter` 全绿。
+- **风险**：Windows 下首次触碰未提交页会走一次 VEH + `VirtualAlloc(64KB)`。
+  预提交 1MB 覆盖绝大多数脚本的低地址用法；只有深层/大延迟线脚本会在运行期
+  偶发按页提交（每 64KB 一次），不在音频块热路径的常规节奏内。
+- **上游同步冲突风险**：中（`nseel-compiler.c` 两处函数体 + 头文件声明；
+  逻辑替换，签名与 ABI 不变）。
+
+## P-046 jdsp_header.h — comp 槽位按 P-034 设计收回 9 槽（2026-10-31）
+
+- **状态**：已实施（2026-10-31）
+- **位置**：`engine/legacy/jdsp/jdsp_header.h`（`AURA_COMP_SLOTS`）。
+- **动机**（内存审查）：P-034 文档与 `CompressorCommit` 注释都写「8 活动槽 +
+  1 影子槽」，但宏实际是 `AURA_COMP_CHANNELS * 2 = 16`。每个 `FFTCompander`
+  ～1.5MB，每引擎因此白占 ~10.8MB；VB 回调的 8 总线 + 1 软件引擎共 9 份，
+  进程多出约 100MB。
+- **内容**：`AURA_COMP_SLOTS` 改为 `AURA_COMP_CHANNELS + 1`（9）。提交路径
+  本就是「逐声道选非活动槽 → 换指针 → 退休槽满足 `compInFlight==0` 或
+  `compProcCount>=retiredAt` 后复用」，9 槽语义与 P-034 完全一致；
+  8 通道逐次重建时最多多等几个音频块边界，仍受 `kCompSlotWaitMs=500ms` 上界。
+- **验收**：`smoke_liveprog_race.py`（RT max 2.49ms < 5ms，168 次编译无卡顿）、
+  `smoke_b1d_comp_startup.py`(82)、`smoke_comp_band_order.py`、
+  `smoke_chain_meter.py` 全绿；9 空引擎进程增量 327.7MB → 250.7MB。
+- **上游同步冲突风险**：低（单宏值 + 注释）。

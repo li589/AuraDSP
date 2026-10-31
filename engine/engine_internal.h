@@ -12,7 +12,6 @@
 #include <mutex>
 #include <new>
 #include <xmmintrin.h>
-#include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
 
 #define AURADSP_VERSION "1.1.0"
 /* ABI v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加
@@ -496,6 +495,17 @@ struct auradsp_handle_s {
     float sample_rate = 48000.0f;
     int max_block = 2048;
     double latency_ms = 0.0;
+    /* 控制侧 crossfeed 已应用的档位镜像（2026-10-31）：只有档位/采样率
+     * （自定义模式还含 fcut/feed）真正变化时才重建 bs2b，避免拖动滑块时
+     * 每 tick 清空滤波器历史造成爆音。仅控制线程访问。 */
+    int    xfeed_state_mode{-1};
+    unsigned xfeed_state_fs{0};
+    float  xfeed_state_fcut{-1.0f};
+    float  xfeed_state_feed{-1.0f};
+    /* E-03：最近一次 process() 的设备域块长快照（RT 写、控制线程读）。
+     * 延迟计算原先直接读 jdsp.blockSize——该字段由 legacy 入口在 RT 内写，
+     * 读侧无同步属 C++ 数据竞争；改为本原子快照后读侧无需触碰 vendor 结构。 */
+    std::atomic<int> lat_block_frames{0};
 
     /* 频谱工作区（RT 线程专用，create 时分配） */
     float* fft_scratch = nullptr;     /* kVizFftMax floats */
@@ -539,6 +549,18 @@ struct auradsp_handle_s {
     float  ch_out_peak[AURADSP_CH_MAX] = {};
     /* RT 线程每块记录的声道数（2/6/8），emit_viz 填 channel_count；0=尚无块。 */
     int    last_block_ch = 0;
+    /* [P2 静音门控] 输入连续静音 ≥ hold 且本链输出残余 < -120 dBFS 时，
+     * 跳过整条效果链、直出零（省 CPU/降功耗）；输入一旦有信号当块退出，
+     * 无淡入淡出。仅 RT 线程读写；AURADSP_GATE=0 关闭，AURADSP_GATE_DB
+     * 覆盖阈值（默认 -90 dBFS）。 */
+    bool   gate_enabled = true;
+    bool   gate_active = false;
+    int    gate_silent_frames = 0;   /* 连续静音帧数（封顶 hold，防溢出） */
+    int    gate_hold_frames = 0;     /* = 2000ms × fs（create 时按实际 fs 定） */
+    float  gate_peak_thresh = 3.16227766e-5f; /* -90 dBFS 线性 */
+    float  gate_resid_thresh = 1e-6f;         /* -120 dBFS 线性 */
+    int    gate_idle_frames = 0;     /* gated 连续帧数（诊断/桥侧读数） */
+
     /* [Phase B] stage 级 per-channel 电平的**有效列数**（emit_viz 用它门控
      * stage_ch_levels 的 c 循环）。语义：最近一次跑过的链能提供 per-channel
      * stage 数据的声道数——

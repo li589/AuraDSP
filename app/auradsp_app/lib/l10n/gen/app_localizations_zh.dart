@@ -1374,6 +1374,238 @@ class AppLocalizationsZh extends AppLocalizations {
   String get peakLabel => '峰值';
 
   @override
+  String get visualizerSettingsTip => '可视化设置';
+
+  @override
+  String get visualizerShowLyricsTip => '显示歌词';
+
+  @override
+  String get visualizerHideLyricsTip => '隐藏歌词';
+
+  @override
+  String get visualizerLyricsNoMedia => '未检测到正在播放的媒体';
+
+  @override
+  String get visualizerLyricsNoMediaHint => '在系统中播放音乐后，歌词会自动匹配并滚动显示';
+
+  @override
+  String get visualizerLyricsSearching => '正在检索歌词…';
+
+  @override
+  String get visualizerLyricsSearchingHint => '正在为当前曲目匹配在线歌词';
+
+  @override
+  String get visualizerLyricsNotFound => '未找到匹配的歌词';
+
+  @override
+  String get visualizerLyricsNotFoundHint => '可在右上角重新获取，或选择本地 LRC 文件手动加载';
+
+  @override
+  String get visualizerLyricsReady => '歌词已加载';
+
+  @override
+  String get visualizerLyricsRetry => '重新获取';
+
+  @override
+  String get visualizerLyricsPickLocal => '本地 LRC';
+
+  @override
+  String get visualizerLyricsPickLocalTitle => '选择本地 LRC 歌词文件';
+
+  @override
+  String get visualizerLyricsPickLocalPrompt => '请输入或粘贴 .lrc 歌词文件的完整路径：';
+
+  @override
+  String get visualizerLyricsUnsupported => '当前平台暂不支持系统媒体会话';
+
+  @override
+  String get visualizerLyricsUnsupportedHint => '仍可在右上角选择本地 LRC 文件手动加载歌词';
+
+  @override
+  String get visualizerLyricsSource => '歌词来源';
+
+  @override
+  String get visualizerLyricsSourceInfo => '自动按顺序尝试各在线歌词库；也可固定使用某一个来源';
+
+  @override
+  String get visualizerLyricsSourceAuto => '自动（依次回退）';
+
+  @override
+  String get visualizerLyricsSourceLrclib => 'LrcLib';
+
+  @override
+  String get visualizerLyricsSourceNetease => '网易云音乐';
+
+  @override
+  String get visualizerLyricsSourceQq => 'QQ 音乐';
+
+  @override
+  String get visualizerLyricsSourceKugou => '酷狗音乐';
+
+  @override
+  String get visualizerLyricsCalibrate => '校准到这一行';
+
+  @override
+  String get visualizerResetPeakTip => '重置峰值保持';
+
+  @override
+  String get visualizerDisplayRestoreTip => '还原：标准页面布局';
+
+  @override
+  String get visualizerDisplayStageTip => '软件全屏：视效铺满应用窗口';
+
+  @override
+  String get visualizerDisplayImmersiveTip => '仅视效全屏：隐藏导航与电平，只留视觉内容（Esc 逐级退出）';
+
+  @override
+  String get visualizerDrawerTitle => '可视化设置';
+
+  @override
+  String get visualizerDrawerCloseTip => '关闭设置';
+
+  @override
+  String get visualizerSectionPalette => '色彩主题';
+
+  @override
+  String get visualizerSectionPaletteInfo => '选择频谱与波形配色方案';
+
+  @override
+  String get visualizerSectionDynamics => '动态与阻尼';
+
+  @override
+  String get visualizerSectionDynamicsInfo => '调节音频能量响应灵敏度与衰减物理';
+
+  @override
+  String get visualizerSectionVisuals => '画面与参考线';
+
+  @override
+  String get visualizerSectionVisualsInfo => '微调辉光、网格与刻度';
+
+  @override
+  String get visualizerSectionLyrics => '歌词与字幕';
+
+  @override
+  String get visualizerSectionLyricsInfo => '配置同步滚动歌词显示';
+
+  @override
+  String get visualizerSensitivity => '灵敏度';
+
+  @override
+  String get visualizerSensitivityInfo => '音频能量放大倍率，决定视觉跳动幅度';
+
+  @override
+  String get visualizerDecay => '衰减阻尼';
+
+  @override
+  String get visualizerDecayInfo => '峰值与频谱下落时的空气阻尼阻力';
+
+  @override
+  String get visualizerGravity => '重力';
+
+  @override
+  String get visualizerGravityInfo => '把峰值持续拉向底部的重力加速度';
+
+  @override
+  String get visualizerBloom => '磷光辉光';
+
+  @override
+  String get visualizerBloomInfo => '阴极射线余辉与 LED 光晕强度';
+
+  @override
+  String get visualizerLineWidth => '线条粗细';
+
+  @override
+  String get visualizerLineWidthInfo => '示波光束、相位曲线与向量线的描边宽度';
+
+  @override
+  String get visualizerBandsDensity => '频段密度';
+
+  @override
+  String get visualizerBandsDensityInfo => '选择 32 或 64 频段分辨率';
+
+  @override
+  String get visualizerToggleGrid => '参考网格';
+
+  @override
+  String get visualizerToggleGridInfo =>
+      '显示 100Hz / 1kHz / 10kHz 倍频程与水平 dB 参考线';
+
+  @override
+  String get visualizerTogglePeaks => '峰值保持线';
+
+  @override
+  String get visualizerTogglePeaksInfo => '在频谱柱顶部保留重力回落的峰值线';
+
+  @override
+  String get visualizerToggleDbScale => 'dBFS 刻度';
+
+  @override
+  String get visualizerToggleDbScaleInfo => '在右侧边框显示 0 至 -60 dBFS 声压刻度';
+
+  @override
+  String get visualizerToggleLyrics => '歌词叠加';
+
+  @override
+  String get visualizerToggleLyricsInfo => '在视效舞台上叠加同步歌词';
+
+  @override
+  String get visualizerToggleTranslation => '双语翻译';
+
+  @override
+  String get visualizerToggleTranslationInfo => '在歌词主行下方显示可用译文（需先开启歌词）';
+
+  @override
+  String get visualizerResetDefaults => '恢复出厂设置';
+
+  @override
+  String get visualizerResetDefaultsTip => '将所有可视化参数恢复为默认值';
+
+  @override
+  String get visualizerStyleBars => '频谱柱';
+
+  @override
+  String get visualizerStyleOscilloscope => '示波器';
+
+  @override
+  String get visualizerStyleGoniometer => '相位仪';
+
+  @override
+  String get visualizerStyleCyberGrid => '赛博网格';
+
+  @override
+  String get visualizerStylePulseOrb => '脉冲星云';
+
+  @override
+  String get visualizerStyleAurora => '极光飘带';
+
+  @override
+  String get visualizerStyleTunnel => '霓虹隧道';
+
+  @override
+  String get visualizerStyleMilkdrop => 'MilkDrop';
+
+  @override
+  String get visualizerStyleFluid => '流体动力学';
+
+  @override
+  String get visualizerStyleTornado => '粒子龙卷风';
+
+  @override
+  String get visualizerThemeSystem => '跟随系统';
+
+  @override
+  String get visualizerThemeNeonCyber => '赛博霓虹';
+
+  @override
+  String get visualizerThemeAmberTube => '琥珀电子管';
+
+  @override
+  String get visualizerThemeMatrixGreen => '矩阵磷光';
+
+  @override
+  String get visualizerThemeAuroraGlow => '极光';
+
+  @override
   String get themeSwitchTip => '切换配色方案';
 
   @override
@@ -2524,6 +2756,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugTitle => '插件中心';
 
   @override
+  String get plugUnsupported => '插件功能在当前平台不可用';
+
+  @override
   String get plugLibTitle => '第三方效果器库';
 
   @override
@@ -2752,6 +2987,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get lpSaveFailed => '保存失败（名称非法或磁盘不可写）';
+
+  @override
+  String get lpFileImportFailed => '脚本导入失败：文件无法读取或不是有效文本';
+
+  @override
+  String get gateStateOpen => '开启';
+
+  @override
+  String get gateStateHold => '保持';
+
+  @override
+  String get gateStateClosed => '关闭';
 
   @override
   String get chainVstTitle => '第三方 VST / CLAP 插件挂载槽与阶段处理顺序';

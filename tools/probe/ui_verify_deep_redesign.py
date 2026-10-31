@@ -18,12 +18,15 @@ try:
 except OSError:
     pass
 
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+# T-05 归档后 ui_test_kit 仍留在 test/ui（受 runner 维护），这里显式补路径。
+sys.path.append(os.path.join(ROOT, "test", "ui"))
 sys.path.append(os.path.dirname(__file__))
 import ui_test_kit as kit  # noqa: E402
 from PIL import ImageGrab  # noqa: E402
 
 user32 = kit.user32
-DOCS_OUT = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+DOCS_OUT = os.path.join(ROOT, "docs", "ui-redesign")
 os.makedirs(DOCS_OUT, exist_ok=True)
 
 

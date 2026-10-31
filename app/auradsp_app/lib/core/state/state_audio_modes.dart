@@ -179,7 +179,7 @@ extension AudioModesState on AppModel {
   /// 刷新所有 WASAPI 端点与音频设备
   Future<void> refreshAudioDevices() async {
     refreshVaioDetect();
-    if (_testing || !Platform.isWindows) return;
+    if (_testing || !PlatformProfile.supportsBridges) return;
     try {
       final exe = _findApoInspectExe();
       if (exe != null && exe.existsSync()) {
@@ -261,7 +261,7 @@ extension AudioModesState on AppModel {
 
   /// 一键 UAC 提权安装 AuraVAIO 虚拟声卡驱动
   Future<bool> installVaioDriver({bool elevated = true}) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     try {
       final script = _findVaioInstallScript();
       if (script == null) {
@@ -307,7 +307,7 @@ extension AudioModesState on AppModel {
 
   /// 一键 UAC 提权卸载 AuraVAIO 虚拟声卡驱动
   Future<bool> uninstallVaioDriver({bool elevated = true}) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     try {
       final script = _findVaioInstallScript();
       if (script == null) return false;
@@ -363,7 +363,7 @@ extension AudioModesState on AppModel {
 
   /// 检查 AuraDSP Virtual ASIO 驱动在 Windows 系统的注册状态
   Future<void> checkAsioDriverStatus() async {
-    if (!Platform.isWindows) {
+    if (!PlatformProfile.supportsBridges) {
       asioDriverInstalled = false;
       _notifyUi();
       return;
@@ -383,7 +383,7 @@ extension AudioModesState on AppModel {
 
   /// 一键注册 AuraDSP 虚拟 ASIO 驱动到系统（支持 Windows UAC 提权授权）
   Future<bool> registerAsioDriver({bool elevated = true}) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     try {
       final script = _findAsioRegisterScript();
       if (script != null) {
@@ -422,7 +422,7 @@ extension AudioModesState on AppModel {
 
   /// 一键反注册 AuraDSP 虚拟 ASIO 驱动（支持 Windows UAC 提权授权）
   Future<bool> unregisterAsioDriver({bool elevated = true}) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     try {
       final script = _findAsioRegisterScript();
       if (script != null) {
@@ -509,7 +509,7 @@ extension AudioModesState on AppModel {
 
   /// 检查 System APO 在系统注册与端点挂载状态，并检测心跳
   Future<void> checkApoStatus({double timeout = 0.4}) async {
-    if (!Platform.isWindows) {
+    if (!PlatformProfile.supportsBridges) {
       apoAttached = false;
       apoHeartbeatAlive = false;
       _notifyUi();
@@ -584,7 +584,7 @@ extension AudioModesState on AppModel {
     bool? composite,
     bool elevated = true,
   }) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     isApoOperating = true;
     lastApoError = null;
     _notifyUi();
@@ -651,7 +651,7 @@ extension AudioModesState on AppModel {
     String? endpointNameOrId,
     bool elevated = true,
   }) async {
-    if (!Platform.isWindows) return false;
+    if (!PlatformProfile.supportsBridges) return false;
     isApoOperating = true;
     lastApoError = null;
     _notifyUi();

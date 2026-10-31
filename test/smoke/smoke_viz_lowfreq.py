@@ -54,7 +54,11 @@ assert -13 < lvl < -9, "level mismatch: %s" % lvl
 assert b[4] > 0.3, "FAIL: 50-63Hz band (band4) not lit: %s" % b[:8]
 peak = max(range(8), key=lambda i: b[i])
 assert peak in (4, 5), "FAIL: peak in band %d (expect 4/5 for 60Hz)" % peak
-# DC 修复断言：band0 不应因直流泄漏常亮
-assert b[0] < 0.1, "FAIL: band0 DC leakage: %.3f" % b[0]
+# DC 修复断言：band0 不应因直流泄漏常亮。
+# 阈值 0.2：60Hz 正弦在 band0（20–25Hz）的汉宁窗旁瓣随 viz 产出间隔变化——
+# 100Hz 产出时 engine_viz.cpp 记录为 0.061，2026-10-29 产出降到 30Hz 后
+# DC blocker 重复递推次数变少，旁瓣升到 0.122（AURADSP_GATE=0 复测逐位相同，
+# 与静音门控无关）。真正的直流泄漏实测 0.319，0.2 仍能判红；不要再放宽。
+assert b[0] < 0.2, "FAIL: band0 DC leakage: %.3f" % b[0]
 print("PASS: 60Hz lands in band4/5 (peak band=%d=%.3f), band0=%.3f (no DC leak)" % (peak, b[peak], b[0]))
 dll.auradsp_destroy(h)

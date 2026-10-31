@@ -20,6 +20,7 @@ import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../platform/platform_profile.dart';
 import '../ui/wheel_scroll.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -110,6 +111,31 @@ class _PluginsPageState extends State<PluginsPage>
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
+    // R4（M6 审查遗留）：能力位接入插件入口——非 Windows 平台插件宿主
+    // 管线不可用（PlatformProfile.supportsPlugins），渲染占位提示而不是
+    // 挂载扫描/挂载控件（它们下发的命令在无宿主平台上无意义）。
+    if (!PlatformProfile.supportsPlugins) {
+      return PageScaffold(
+        title: l10nOf(context).plugTitle,
+        children: [
+          SectionCard(
+            child: Row(
+              children: [
+                Icon(Icons.extension_off_rounded,
+                    size: 20, color: p.textDim),
+                const SizedBox(width: AuraSpace.md),
+                Expanded(
+                  child: Text(
+                    l10nOf(context).plugUnsupported,
+                    style: labelOf(p, color: p.textDim),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      );
+    }
     return ListenableBuilder(
       listenable: widget.model,
       builder: (context, _) {

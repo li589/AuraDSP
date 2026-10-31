@@ -38,7 +38,7 @@ void transposeFlt(float *src, float *dst, int32_t n, int32_t m)
 static float NSEEL_CGEN_CALL _eel_matTranspose(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -51,7 +51,7 @@ static float NSEEL_CGEN_CALL _eel_matTranspose(void *opaque, INT_PTR num_param, 
 static float NSEEL_CGEN_CALL _eel_matPinv(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -77,7 +77,7 @@ static float NSEEL_CGEN_CALL _eel_matPinv(void *opaque, INT_PTR num_param, float
 static float NSEEL_CGEN_CALL _eel_matPinvFast(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -103,7 +103,7 @@ static float NSEEL_CGEN_CALL _eel_matPinvFast(void *opaque, INT_PTR num_param, f
 static float NSEEL_CGEN_CALL _eel_cholesky(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	if (rows1 != cols1)
@@ -126,7 +126,7 @@ static float NSEEL_CGEN_CALL _eel_cholesky(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_inv_chol(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	if (rows1 != cols1)
@@ -149,7 +149,7 @@ static float NSEEL_CGEN_CALL _eel_inv_chol(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_matInv(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	if (rows1 != cols1)
@@ -172,7 +172,7 @@ static float NSEEL_CGEN_CALL _eel_matInv(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL _eel_mldivide(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -211,7 +211,7 @@ static float NSEEL_CGEN_CALL _eel_mldivide(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_mrdivide(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t rows1 = (int32_t)*parms[1];
 	int32_t cols1 = (int32_t)*parms[2];
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
@@ -250,7 +250,7 @@ static float NSEEL_CGEN_CALL _eel_mrdivide(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_quadprog(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t problemLength = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *H = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR));
 	float *f = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR));
@@ -343,7 +343,7 @@ void transpose_matrix_vector_mult_float(const float *mat, const float *vec, doub
 static float NSEEL_CGEN_CALL _eel_lsqlin(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t equationsLength = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	int32_t problemLength = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	float *C = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR));
@@ -413,7 +413,7 @@ static float NSEEL_CGEN_CALL _eel_lsqlin(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL _eel_roots(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
 	int32_t offs2 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *polyRe = __NSEEL_RAMAlloc(blocks, offs2);
@@ -448,7 +448,7 @@ static float NSEEL_CGEN_CALL _eel_roots(void *opaque, INT_PTR num_param, float *
 static float NSEEL_CGEN_CALL _eel_cplxpair(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
 	int32_t offs2 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *polyRe = __NSEEL_RAMAlloc(blocks, offs2);
@@ -482,7 +482,7 @@ static float NSEEL_CGEN_CALL _eel_cplxpair(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_firls(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	float *F = __NSEEL_RAMAlloc(blocks, offs2);
@@ -528,7 +528,7 @@ static float NSEEL_CGEN_CALL _eel_firls(void *opaque, INT_PTR num_param, float *
 static float NSEEL_CGEN_CALL _eel_eqnerror(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t M = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	int32_t N = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	int32_t gridLen = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
@@ -576,7 +576,7 @@ static float NSEEL_CGEN_CALL _eel_eqnerror(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL _eel_unwrap(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t N = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	float *x = __NSEEL_RAMAlloc(blocks, (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
 	double tol = 0.0;
@@ -588,7 +588,7 @@ static float NSEEL_CGEN_CALL _eel_unwrap(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL _eel_zp2sos(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *zRe = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -631,7 +631,7 @@ static float NSEEL_CGEN_CALL _eel_zp2sos(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL _eel_tf2sos(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *b = __NSEEL_RAMAlloc(blocks, offs1);
 	int32_t bLen = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);

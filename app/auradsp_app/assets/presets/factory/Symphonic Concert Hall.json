@@ -238,6 +238,8 @@
       "enable": false
     },
     "comp": {
+      "threshold": -18.0,
+      "ratio": 4.0,
       "timeconstant": 0.14,
       "granularity": 1,
       "tfresolution": 1,
@@ -306,6 +308,22 @@
         0.0,
         0.0
       ]
+    },
+    "visualizer": {
+      "style": "bars",
+      "colorTheme": "system",
+      "sensitivity": 1.0,
+      "decayRate": 0.6,
+      "gravity": 1.8,
+      "barCount": 32,
+      "lineWidth": 1.5,
+      "bloom": 0.5,
+      "showGrid": true,
+      "showPeaks": true,
+      "showDbScale": true,
+      "showLyrics": false,
+      "showTranslation": true,
+      "lyricsSource": "auto"
     }
   }
 }

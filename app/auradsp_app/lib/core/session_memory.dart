@@ -14,6 +14,7 @@ import 'audio_modes.dart';
 import 'plugins/plugin_manager.dart';
 import 'presets.dart';
 import 'state.dart';
+import 'visualizer_types.dart';
 
 import 'error_sink.dart';
 abstract final class SessionMemory {
@@ -91,6 +92,9 @@ abstract final class SessionMemory {
         'pluginBypass': m.pluginManager.isSlotBypassed(0),
         'pluginPdc': m.pluginManager.pdcEnabled,
         'slots': slotSnapshots,
+        // 可视化配置（2026-10-31）：此前只存在页面私有状态，重启即丢。
+        // 与 config.json 同源；会话快照优先（用户改完立刻退出也能恢复）。
+        'visualizer': m.visualizerConfig.value.toJson(),
         'parameters': snapshot.params,
       };
 
@@ -217,6 +221,17 @@ abstract final class SessionMemory {
       }
       if (session['arbmagString'] is String) {
         m.arbmagString = session['arbmagString'] as String;
+      }
+
+      // 可视化配置（2026-10-31）：会话快照优先于 config.json，
+      // 兼容旧会话（无该键 → 保持 config 已加载的值）。
+      if (session['visualizer'] is Map) {
+        m.setVisualizerConfig(
+          VisualizerConfig.fromJson(
+            Map<String, dynamic>.from(session['visualizer'] as Map),
+          ),
+          persistConfig: false,
+        );
       }
 
       // 多插槽恢复

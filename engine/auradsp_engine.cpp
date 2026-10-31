@@ -18,10 +18,12 @@
  */
 #include "auradsp_engine.h"
 #include "engine_internal.h"
+#include "platform/port/env.h"
 #include "plugins/integration/plugin_chain_adapter.h"
 
 #include <atomic>
 #include <cmath>
+#include <cstdlib>
 #include <cstring>
 #include <cstdio>
 #include <mutex>
@@ -31,53 +33,47 @@
 #include <xmmintrin.h>
 #endif
 
-#ifdef _WIN32
-#include <windows.h> /* MultiByteToWideChar / _wfopen（审查修复 R-1） */
-
-// Windows 7 兼容补丁：提供 CreateFile2 回退，避免 MSVC STL <filesystem> 静态依赖 Win8+ 的 CreateFile2 导致 Win7 LoadLibrary 127
-extern "C" {
-    typedef struct _CREATEFILE2_EXTENDED_PARAMETERS_SHIM {
-        DWORD dwSize;
-        DWORD dwFileAttributes;
-        DWORD dwFileFlags;
-        DWORD dwSecurityQosFlags;
-        LPSECURITY_ATTRIBUTES lpSecurityAttributes;
-        HANDLE hTemplateFile;
-    } CREATEFILE2_EXTENDED_PARAMETERS_SHIM;
-
-    static HANDLE WINAPI AuraFallback_CreateFile2(
-        LPCWSTR lpFileName,
-        DWORD dwDesiredAccess,
-        DWORD dwShareMode,
-        DWORD dwCreationDisposition,
-        CREATEFILE2_EXTENDED_PARAMETERS_SHIM* pCreateExParams)
-    {
-        typedef HANDLE (WINAPI *PFN_CF2)(LPCWSTR, DWORD, DWORD, DWORD, void*);
-        static PFN_CF2 s_real = (PFN_CF2)GetProcAddress(GetModuleHandleW(L"kernel32.dll"), "CreateFile2");
-        if (s_real) {
-            return s_real(lpFileName, dwDesiredAccess, dwShareMode, dwCreationDisposition, pCreateExParams);
-        }
-        DWORD dwFlagsAndAttributes = 0;
-        DWORD dwSecurityFlags = 0;
-        if (pCreateExParams && pCreateExParams->dwSize >= sizeof(CREATEFILE2_EXTENDED_PARAMETERS_SHIM)) {
-            dwFlagsAndAttributes = pCreateExParams->dwFileAttributes | pCreateExParams->dwFileFlags;
-            dwSecurityFlags = pCreateExParams->dwSecurityQosFlags;
-        }
-        return CreateFileW(lpFileName, dwDesiredAccess, dwShareMode,
-                           pCreateExParams ? pCreateExParams->lpSecurityAttributes : NULL,
-                           dwCreationDisposition, dwFlagsAndAttributes | dwSecurityFlags,
-                           pCreateExParams ? pCreateExParams->hTemplateFile : NULL);
-    }
-
-    void* __imp_CreateFile2 = (void*)AuraFallback_CreateFile2;
-}
-#endif
-
 namespace {
 
 /* 进程级全局初始化（NSEEL JIT 运行时），引用计数（对齐 Android 侧做法） */
 std::mutex g_global_mutex;
 int g_global_ref = 0;
+
+/* [P2 静音门控] 读环境变量（create 控制线程一次性；不进 RT 路径）。
+ * 平台差异已收敛到 port/env.h。 */
+bool read_env(const char* name, char* buf, size_t cap) {
+    return auradsp::platform::get_env(name, buf, cap);
+}
+
+/* [P2 静音门控] 门控状态推进（RT 线程，无锁无分配）。
+ * 进入条件：输入连续静音 ≥ hold 且**本块输出残量** ≤ -120 dBFS（混响/延迟
+ * 尾巴必须真的衰减完，否则切零会听到断崖）。退出只在块首输入扫描处发生。 */
+void gate_update(auradsp_handle h, float in_peak, float out_peak, int frames) {
+    if (!h->gate_enabled) {
+        h->gate_active = false;
+        h->gate_silent_frames = 0;
+        h->gate_idle_frames = 0;
+        return;
+    }
+    if (h->gate_active) {
+        h->gate_idle_frames += frames;
+        return;
+    }
+    if (in_peak <= h->gate_peak_thresh) {
+        if (h->gate_silent_frames < h->gate_hold_frames) {
+            h->gate_silent_frames += frames;
+            if (h->gate_silent_frames > h->gate_hold_frames)
+                h->gate_silent_frames = h->gate_hold_frames;
+        }
+    } else {
+        h->gate_silent_frames = 0;
+    }
+    if (h->gate_silent_frames >= h->gate_hold_frames &&
+        out_peak <= h->gate_resid_thresh) {
+        h->gate_active = true;
+        h->gate_idle_frames = 0;
+    }
+}
 
 }  // namespace
 
@@ -109,6 +105,14 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     if (sample_rate < 8000 || sample_rate > 192000) return nullptr;
     if (max_block_frames <= 0 || max_block_frames > 16384) return nullptr;
     if (!global_init()) return nullptr;
+
+    /* 失败路径的全局引用回收（2026-10-31 审查修复）：create 内所有
+     * return nullptr 分支此前都漏了 global_unref()，失败一次引用计数永久 +1。
+     * RAII 守卫让任意早退自动回收，成功时解除。 */
+    struct GlobalRefGuard {
+        bool armed = true;
+        ~GlobalRefGuard() { if (armed) global_unref(); }
+    } ref_guard;
 
     auto* h = new (std::nothrow) auradsp_handle_s();
     if (!h) return nullptr;
@@ -186,6 +190,21 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     for (int i = 0; i < 8; ++i) {
         h->p.post_gain_ch[i].store(0.0f);
     }
+    /* [P2 静音门控] hold=2000ms；AURADSP_GATE=0 关闭；AURADSP_GATE_DB 覆盖
+     * 静音判定阈值（默认 -90 dBFS）。create 为控制线程，读环境安全。 */
+    h->gate_hold_frames = (int)(2.0f * sample_rate);
+    if (h->gate_hold_frames < 1) h->gate_hold_frames = 1;
+    {
+        char env[32];
+        if (read_env("AURADSP_GATE", env, sizeof(env)) && env[0] == '0')
+            h->gate_enabled = false;
+        if (read_env("AURADSP_GATE_DB", env, sizeof(env))) {
+            float db = (float)atof(env);
+            if (db < -140.0f) db = -140.0f;
+            if (db > 0.0f) db = 0.0f;
+            h->gate_peak_thresh = powf(10.0f, db * 0.05f);
+        }
+    }
     const float default_comp_freq[7] = {95.0f, 200.0f, 400.0f, 800.0f, 1600.0f, 3400.0f, 7500.0f};
     for (int i = 0; i < 7; ++i) {
         h->p.comp_freq[i].store(default_comp_freq[i]);
@@ -231,6 +250,7 @@ auradsp_handle auradsp_create(float sample_rate, int max_block_frames) {
     h->mc_limiter_dq_len = 0; /* PF-2：0 != 任何 la_len，首块强制重建 deque */
     h->open.store(true);
     h->state.store(AURADSP_STATE_PROCESSING);
+    ref_guard.armed = false;
     return h;
 }
 
@@ -262,9 +282,13 @@ void auradsp_destroy(auradsp_handle h) {
 }
 
 void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) {
-    if (!h || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
+    /* ABI 是公开边界：空缓冲指针在内部 FFI 契约里虽不会出现，但违规调用
+     * 会直接踩空；一次分支换内存安全（RT 开销可忽略）。 */
+    if (!h || !in || !out || !h->open.load(std::memory_order_acquire) || frames <= 0) return;
     /* 内存安全防御：防御驱动层 frames > max_block 导致的 scratch 堆缓冲区溢出 */
     if (frames > h->max_block) frames = h->max_block;
+    /* E-03：给控制侧延迟计算留一个无竞争的设备域块长快照。 */
+    h->lat_block_frames.store(frames, std::memory_order_relaxed);
 
     ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
@@ -274,6 +298,64 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     const int ch = h->channel_count.load(std::memory_order_relaxed);
     const bool multichannel = (ch > 2);
     h->last_block_ch = ch;   /* [Phase B] emit_viz 填 channel_count；与 ch_out_peak 同块同源 */
+
+    /* [P2 静音门控] 非处理态（旁路/停止）一律直通，门控状态清零重来——
+     * 旁路时若沿用 gated 会把用户音频吞成零。 */
+    if (st != AURADSP_STATE_PROCESSING) {
+        h->gate_active = false;
+        h->gate_silent_frames = 0;
+        h->gate_idle_frames = 0;
+    }
+    /* gated：整条效果链跳过，直出零。输入扫描是这里唯一的工作量，用于
+     * 「信号回来当块退出」（无淡入）。 */
+    if (h->gate_active) {
+        float in_peak = 0.0f;
+        const int n_in = frames * ch;
+        for (int i = 0; i < n_in; ++i) {
+            const float a = fabsf(in[i]);
+            if (a > in_peak) in_peak = a;
+        }
+        if (in_peak > h->gate_peak_thresh) {
+            h->gate_active = false;
+            h->gate_silent_frames = 0;
+            h->gate_idle_frames = 0;
+        } else {
+            memset(out, 0, (size_t)frames * (size_t)ch * sizeof(float));
+            /* 上限封顶（与 gate_silent_frames 同口径）：48k 连续静音
+             * 12.4 小时后 int 会溢出成 UB，仅为诊断字段。 */
+            if (h->gate_idle_frames < (1 << 30)) h->gate_idle_frames += frames;
+            h->input_lvl_in_l = h->input_lvl_in_r = -120.0f;
+            h->input_lvl_out_l = h->input_lvl_out_r = -120.0f;
+            for (int i = 0; i < AURADSP_STAGE_MAX; ++i) {
+                h->stage_peak_l[i] = 0.0f;
+                h->stage_peak_r[i] = 0.0f;
+                for (int c = 0; c < AURADSP_CH_MAX; ++c)
+                    h->stage_peak_ch[i][c] = 0.0f;
+            }
+            for (int i = 0; i < AURADSP_VENDOR_STAGES; ++i) {
+                h->jdsp.stagePeakL[i] = 0.0f;
+                h->jdsp.stagePeakR[i] = 0.0f;
+            }
+            h->gr_limiter.store(0.0f, std::memory_order_relaxed);
+            h->gr_comp.store(0.0f, std::memory_order_relaxed);
+            h->gr_gate.store(0.0f, std::memory_order_relaxed);
+            for (int i = 0; i < 3; ++i)
+                h->gr_dyneq[i].store(0.0f, std::memory_order_relaxed);
+            /* 频谱/EQ 输入历史同样写零：emit_viz 照常产出（UI 回落不冻结），
+             * 且不会把 gated 前的最后一窗能量冻在频谱上。 */
+            memset(h->shelf_scratch, 0, (size_t)frames * 2 * sizeof(float));
+            viz_write(h, h->shelf_scratch, frames, 2);
+            if (h->eq_in_hist) viz_write_eq_in(h, h->shelf_scratch, frames);
+            h->frames_since_viz += frames;
+            int vizIntG = h->viz_interval.load(std::memory_order_relaxed);
+            if (vizIntG < 64) vizIntG = 480;
+            if (h->frames_since_viz >= vizIntG) {
+                h->frames_since_viz %= vizIntG;
+                emit_viz(h);
+            }
+            return;
+        }
+    }
 
     /* [Input Gate: 顺序钉死在最前端] 全通道总输入增益 × 单通道平衡 */
     const float in_gain_db = h->p.input_gain.load(std::memory_order_relaxed);
@@ -365,6 +447,15 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
             h->frames_since_viz %= vizInt;
             emit_viz(h);
         }
+        /* [P2 静音门控] 用本块实测输入/输出峰值推进门控（多声道取全通道）。 */
+        {
+            float pk_in_max = 0.0f, pk_out_max = 0.0f;
+            for (int c = 0; c < ch && c < AURADSP_CH_MAX; ++c) {
+                if (pk_in_ch[c] > pk_in_max) pk_in_max = pk_in_ch[c];
+                if (h->ch_out_peak[c] > pk_out_max) pk_out_max = h->ch_out_peak[c];
+            }
+            gate_update(h, pk_in_max, pk_out_max, frames);
+        }
         return;
     }
 
@@ -411,6 +502,11 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
         h->frames_since_viz %= vizInt2;
         emit_viz(h);
     }
+    gate_update(h,
+                pk_in_l > pk_in_r ? pk_in_l : pk_in_r,
+                h->ch_out_peak[0] > h->ch_out_peak[1] ? h->ch_out_peak[0]
+                                                      : h->ch_out_peak[1],
+                frames);
 }
 
 #include "engine_param_table.h"
@@ -499,6 +595,9 @@ auradsp_state auradsp_get_state(auradsp_handle h) {
 
 double auradsp_get_latency_ms(auradsp_handle h) {
     if (!h) return 0;
+    /* E-03：jdsp.fs / enableASRC 由控制侧在 ASRC 重配时改写，读侧必须与
+     * set_param 同锁才能避免形式上的数据竞争（块长已走原子快照）。 */
+    std::lock_guard<std::mutex> lk(h->ctrl_mutex);
     double ms = 0.0;
     compute_latency(h, &ms);
     return ms;

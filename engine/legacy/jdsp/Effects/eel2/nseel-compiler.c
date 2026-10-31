@@ -139,7 +139,7 @@ struct opcodeRec
 float *dataSectionToRamDisk(void *opaque, size_t len)
 {
 	compileContext *c = (compileContext*)opaque;
-	return c->ram_state + (NSEEL_RAM_ITEMSPERBLOCK - len);
+	return EEL_RAM(c) + (NSEEL_RAM_ITEMSPERBLOCK - len);
 }
 static void *newTmpBlock(compileContext *ctx, int32_t size)
 {
@@ -718,7 +718,7 @@ int32_t STFTCartesianInverse(float *indexer, float *analysisWnd, float *ptr)
 static float NSEEL_CGEN_CALL stftInit(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float *start1 = parms[0];
 	int32_t offs1 = (int32_t)(*start1 + NSEEL_CLOSEFACTOR);
 	float *start2 = parms[1];
@@ -741,7 +741,7 @@ void STFT_SetWnd(int32_t *indexFw, float *stftFloatStruct, float *desired_analys
 static float NSEEL_CGEN_CALL stftSetAsymWnd(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext *)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float *start1 = parms[0];
 	int32_t offs1 = (int32_t)(*start1 + NSEEL_CLOSEFACTOR);
 	float *start2 = parms[1];
@@ -761,7 +761,7 @@ static float NSEEL_CGEN_CALL stftSetAsymWnd(void *opaque, INT_PTR num_param, flo
 static float NSEEL_CGEN_CALL stftGetWindowPower(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float *start1 = parms[0];
 	int32_t offs1 = (int32_t)(*start1 + NSEEL_CLOSEFACTOR);
 	float *start2 = parms[1];
@@ -777,7 +777,7 @@ static float NSEEL_CGEN_CALL stftGetWindowPower(void *opaque, INT_PTR num_param,
 static float NSEEL_CGEN_CALL stftForward(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *ptr = __NSEEL_RAMAlloc(blocks, (uint64_t)offs);
 	int32_t offs1 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -793,7 +793,7 @@ static float NSEEL_CGEN_CALL stftForward(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL stftBackward(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *ptr = __NSEEL_RAMAlloc(blocks, (uint64_t)offs);
 	int32_t offs1 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -822,7 +822,7 @@ int32_t STFT_DynConstructor(float *indexer, int32_t fftLen, int32_t analysisOvp,
 static float NSEEL_CGEN_CALL stftCheckMemoryRequirement(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	uint32_t offs1 = (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t fftlen = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -963,7 +963,7 @@ static float NSEEL_CGEN_CALL iirHilbertProcess(float *blocks, float *offptr, flo
 static float NSEEL_CGEN_CALL iirHilbertInit(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext *)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float *start1 = parms[0];
 	int32_t offs1 = (int32_t)(*start1 + NSEEL_CLOSEFACTOR);
 	IIRHilbert *hil = (IIRHilbert *)__NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
@@ -1343,7 +1343,7 @@ static float NSEEL_CGEN_CALL arburgCheckMemoryRequirement(float *blocks, float *
 static float NSEEL_CGEN_CALL arburgTrainModel(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	char *burg = (char*)__NSEEL_RAMAlloc(blocks, (uint64_t)offs);
 	int32_t offs1 = (int32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
@@ -1406,7 +1406,7 @@ float * NSEEL_CGEN_CALL __NSEEL_circshift(float *blocks, float *offptr, float *s
 static float NSEEL_CGEN_CALL _eel_vectorizeAssignScalar(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t resultPtr = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *result = __NSEEL_RAMAlloc(blocks, (uint64_t)resultPtr);
 	int32_t numElements = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -1417,7 +1417,7 @@ static float NSEEL_CGEN_CALL _eel_vectorizeAssignScalar(void *opaque, INT_PTR nu
 static float NSEEL_CGEN_CALL _eel_vectorizeAdd(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t resultPtr = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *result = __NSEEL_RAMAlloc(blocks, (uint64_t)resultPtr);
 	int32_t numElements = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -1432,7 +1432,7 @@ static float NSEEL_CGEN_CALL _eel_vectorizeAdd(void *opaque, INT_PTR num_param, 
 static float NSEEL_CGEN_CALL _eel_vectorizeMinus(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t resultPtr = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *result = __NSEEL_RAMAlloc(blocks, (uint64_t)resultPtr);
 	int32_t numElements = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -1447,7 +1447,7 @@ static float NSEEL_CGEN_CALL _eel_vectorizeMinus(void *opaque, INT_PTR num_param
 static float NSEEL_CGEN_CALL _eel_vectorizeMultiply(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t resultPtr = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *result = __NSEEL_RAMAlloc(blocks, (uint64_t)resultPtr);
 	int32_t numElements = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -1462,7 +1462,7 @@ static float NSEEL_CGEN_CALL _eel_vectorizeMultiply(void *opaque, INT_PTR num_pa
 static float NSEEL_CGEN_CALL _eel_vectorizeDivide(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t resultPtr = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *result = __NSEEL_RAMAlloc(blocks, (uint64_t)resultPtr);
 	int32_t numElements = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -2129,7 +2129,7 @@ static int32_t eel_string_match(compileContext *c, const char *fmt, const char *
 static float NSEEL_CGEN_CALL getCosineWindows(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext *)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float *start1 = parms[0];
 	int32_t offs2 = (int32_t)(*start1 + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs2);
@@ -2142,7 +2142,7 @@ static float NSEEL_CGEN_CALL getCosineWindows(void *opaque, INT_PTR num_param, f
 static float NSEEL_CGEN_CALL getAsymmetricCosine(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext *)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	uint32_t offs1 = (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *analysisWnd = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	uint32_t offs2 = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -2848,7 +2848,7 @@ static float NSEEL_CGEN_CALL _eel_importFloatArrayFromString(void *opaque, float
 	compileContext *c = (compileContext*)opaque;
 	const char *FLTBuf = (const char*)GetStringForIndex(c->region_context, *fn_index, 0);
 	uint32_t offs1 = (uint32_t)(*pointer + NSEEL_CLOSEFACTOR);
-	float *userspaceFLT = __NSEEL_RAMAlloc(c->ram_state, offs1);
+	float *userspaceFLT = __NSEEL_RAMAlloc(EEL_RAM(c), offs1);
 	int32_t elements;
 	float *convertedFLT = string2FloatArray((char*)FLTBuf, &elements);
 	memcpy(userspaceFLT, convertedFLT, elements * sizeof(float));
@@ -3075,7 +3075,7 @@ static float NSEEL_CGEN_CALL pinkNoiseInit(void *opaque, INT_PTR num_param, floa
 	if (num_param < 2)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int pinkness = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3090,7 +3090,7 @@ static float NSEEL_CGEN_CALL pinkNoiseInit(void *opaque, INT_PTR num_param, floa
 static float NSEEL_CGEN_CALL pinkNoiseGen(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	PinkNoise *noiseStruct = (PinkNoise*)indexer;
@@ -3102,7 +3102,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankInit(void *opaque, INT_PTR num_p
 	if (num_param < 4)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	float fs = *parms[0];
 	unsigned int N = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	if (N < 2)
@@ -3137,7 +3137,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankChangeWarpingFactor(void *opaque
 	if (num_param < 3)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	float fs = *parms[1];
@@ -3151,7 +3151,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankGetPhaseCorrector(void *opaque, 
 	if (num_param < 3)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	float corrFact = *parms[1];
@@ -3170,7 +3170,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankGetDecimationFactor(void *opaque
 	if (num_param < 2)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3185,7 +3185,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankAnalysisMono(void *opaque, INT_P
 	if (num_param < 4)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3203,7 +3203,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankSynthesisMono(void *opaque, INT_
 	if (num_param < 2)
 		return 0;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3218,7 +3218,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankAnalysisStereo(void *opaque, INT
 	if (num_param < 7)
 		return -1;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer1 = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3240,7 +3240,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankSynthesisStereo(void *opaque, IN
 	if (num_param < 6)
 		return -1;
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t offs1 = (int32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float *indexer1 = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
 	int32_t offs2 = (int32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3259,7 +3259,7 @@ static float NSEEL_CGEN_CALL PolyphaseFilterbankSynthesisStereo(void *opaque, IN
 static float NSEEL_CGEN_CALL _eel_iirBandSplitterInit(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	uint32_t offs1 = (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	float fs = *parms[1];
 	float *tdsbStruct = __NSEEL_RAMAlloc(blocks, (uint64_t)offs1);
@@ -3361,7 +3361,7 @@ static float NSEEL_CGEN_CALL _eel_iirBandSplitterClearState(float *blocks, float
 static float NSEEL_CGEN_CALL _eel_iirBandSplitterProcess(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *tdsbStruct = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
+	float *tdsbStruct = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
 	int32_t bands = (int32_t)(tdsbStruct[0] + NSEEL_CLOSEFACTOR);
 	double out[8];
 	switch (bands)
@@ -3428,7 +3428,7 @@ static float NSEEL_CGEN_CALL _eel_iirBandSplitterProcess(void *opaque, INT_PTR n
 static float NSEEL_CGEN_CALL _eel_initfftconv1d(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	void *ptr;
 	char convType;
 	if (num_param == 3)
@@ -3482,7 +3482,7 @@ static float NSEEL_CGEN_CALL _eel_initfftconv1d(void *opaque, INT_PTR num_param,
 static float NSEEL_CGEN_CALL _eel_processfftconv1d(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int32_t idx = (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR);
 	void *ptr = c->region_context->memRegion[idx];
 	char convType = c->region_context->type[idx];
@@ -3683,7 +3683,7 @@ static float NSEEL_CGEN_CALL _eel_HPFDiv(void *opaque, INT_PTR num_param, float 
 static float NSEEL_CGEN_CALL _eel_HPFfrexp(void *opaque, INT_PTR num_param, float **parms)
 {
 	HPFREPEATBLK1O
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int p;
 	xpr br = xfrexp(*x, &p);
 	uint32_t offs2 = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3716,7 +3716,7 @@ static float NSEEL_CGEN_CALL _eel_HPFfmod(void *opaque, INT_PTR num_param, float
 static float NSEEL_CGEN_CALL _eel_HPFsfmod(void *opaque, INT_PTR num_param, float **parms)
 {
 	HPFREPEATBLK1O
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	int p;
 	xpr br = xsfmod(*x, &p);
 	uint32_t offs2 = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
@@ -3852,7 +3852,7 @@ void JamesDSPOfflineResampling(float const *in, float *out, size_t lenIn, size_t
 static float NSEEL_CGEN_CALL _eel_flacDecodeFile(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	const char *filename = (const char*)GetStringForIndex(c->region_context, *parms[0], 0);
 	uint32_t channels, fs;
 	uint64_t frameCount;
@@ -3912,7 +3912,7 @@ static float NSEEL_CGEN_CALL _eel_flacDecodeFile(void *opaque, INT_PTR num_param
 static float NSEEL_CGEN_CALL _eel_flacDecodeMemory(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	const char *base64String = (const char*)GetStringForIndex(c->region_context, *parms[0], 0);
 	size_t actualSize;
 	unsigned char *memoryBlk = base64_decode((const unsigned char*)base64String, strlen(base64String), &actualSize);
@@ -3975,7 +3975,7 @@ static float NSEEL_CGEN_CALL _eel_flacDecodeMemory(void *opaque, INT_PTR num_par
 static float NSEEL_CGEN_CALL _eel_wavDecodeFile(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	const char *filename = (const char*)GetStringForIndex(c->region_context, *parms[0], 0);
 	uint32_t channels, fs;
 	uint64_t frameCount;
@@ -4035,7 +4035,7 @@ static float NSEEL_CGEN_CALL _eel_wavDecodeFile(void *opaque, INT_PTR num_param,
 static float NSEEL_CGEN_CALL _eel_wavDecodeMemory(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	const char *base64String = (const char*)GetStringForIndex(c->region_context, *parms[0], 0);
 	size_t actualSize;
 	unsigned char *memoryBlk = base64_decode((const unsigned char*)base64String, strlen(base64String), &actualSize);
@@ -4293,9 +4293,9 @@ unsigned int peakfinder(unsigned int elements, const float *input, float sel, un
 static float NSEEL_CGEN_CALL _eel_peakFinder(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
-	float *input = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
-	float *output = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[4] + NSEEL_CLOSEFACTOR));
+	float *blocks = EEL_RAM(c);
+	float *input = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[0] + NSEEL_CLOSEFACTOR));
+	float *output = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[4] + NSEEL_CLOSEFACTOR));
 	uint32_t n = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	float sel = *parms[2];
 	uint32_t maximaMinima = (uint32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
@@ -4304,7 +4304,7 @@ static float NSEEL_CGEN_CALL _eel_peakFinder(void *opaque, INT_PTR num_param, fl
 static float NSEEL_CGEN_CALL _eel_writeWavFile(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	const char *filename = (const char*)GetStringForIndex(c->region_context, *parms[0], 0);
 	uint32_t channels = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	uint32_t fs = (uint32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
@@ -4333,7 +4333,7 @@ static float NSEEL_CGEN_CALL _eel_writeWavFile(void *opaque, INT_PTR num_param, 
 static float NSEEL_CGEN_CALL _eel_writeWavMemory(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	s_str *dest = (s_str*)GetStringForIndex(c->region_context, *parms[0], 1);
 	uint32_t channels = (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR);
 	uint32_t fs = (uint32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
@@ -4371,7 +4371,7 @@ static float NSEEL_CGEN_CALL _eel_writeWavMemory(void *opaque, INT_PTR num_param
 static float NSEEL_CGEN_CALL _eel_listSystemVariable(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *blocks = c->ram_state;
+	float *blocks = EEL_RAM(c);
 	char badStr[128];
 	stbsp_snprintf(badStr, 128, "Listing system variables\n");
 	EEL_STRING_STDOUT_WRITE(badStr, strlen(badStr));
@@ -4399,7 +4399,7 @@ static float NSEEL_CGEN_CALL _eel_listSystemVariable(void *opaque, INT_PTR num_p
 static float NSEEL_CGEN_CALL _eel_linspace(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *vec = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[3] + NSEEL_CLOSEFACTOR));
+	float *vec = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[3] + NSEEL_CLOSEFACTOR));
 	int32_t n = (int32_t)(*parms[2] + NSEEL_CLOSEFACTOR);
 	float d = (*parms[1] - *parms[0]) / (float)(n - 1);
 	for (int32_t i = 0; i < n; i++)
@@ -4450,8 +4450,8 @@ size_t fast_upper_bound4(float *vec, size_t n, float *value)
 static float _eel_lerp(void *opaque, INT_PTR num_param, float **parms)
 {
 	compileContext *c = (compileContext*)opaque;
-	float *x = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR));
-	float *y = __NSEEL_RAMAlloc(c->ram_state, (uint32_t)(*parms[2] + NSEEL_CLOSEFACTOR));
+	float *x = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[1] + NSEEL_CLOSEFACTOR));
+	float *y = __NSEEL_RAMAlloc(EEL_RAM(c), (uint32_t)(*parms[2] + NSEEL_CLOSEFACTOR));
 	uint32_t pts = (uint32_t)(*parms[3] + NSEEL_CLOSEFACTOR);
 	if (*parms[0] == x[0])
 		return y[0];
@@ -5174,6 +5174,10 @@ opcodeRec *nseel_createIfElse(compileContext *ctx, opcodeRec *code1, opcodeRec *
 }
 opcodeRec *nseel_createMemoryAccess(compileContext *ctx, opcodeRec *code1, opcodeRec *code2)
 {
+	/* [AuraDSP 2026-10-30] 任何 x[y] 内存访问都走这里，且运行时用 r12
+	 * (= handle->ramPtr) 做基址：编译期必须确保 gmem 区已分配，否则
+	 * ramPtr 为 NULL，第一次读写就 AV。 */
+	EEL_RAM(ctx);
 	if (code2 && (code2->opcodeType != OPCODETYPE_DIRECTVALUE || code2->parms.dv.directValue != 0.0f))
 	{
 		code1 = nseel_createSimpleCompiledFunction(ctx, FN_ADD, 2, code1, code2);
@@ -7307,6 +7311,7 @@ NSEEL_CODEHANDLE NSEEL_code_compile_ex(NSEEL_VMCTX _ctx, const char *_expression
 	}
 	ctx->last_error_string[0] = 0;
 	if (!_expression || !*_expression) return 0;
+
 	_expression_end = _expression + strlen(_expression);
 	oldCommonFunctionList = ctx->functions_common;
 	ctx->isGeneratingCommonFunction = 0;
@@ -7817,6 +7822,17 @@ void NSEEL_init_memRegion(NSEEL_VMCTX _ctx)
 		InitRegion_context(ctx->region_context);
 	}
 }
+/* [AuraDSP 2026-10-31 P-045] gmem 区：64MB 只保留地址空间，首次访问按页提交
+ * （Windows VEH；POSIX 依赖 calloc 的惰性零页）。语义仍是全零，脚本未触及
+ * 的页不消耗物理内存。返回 NULL = 内存不足；调用方按「编译失败」处理。 */
+float *NSEEL_VM_getram(NSEEL_VMCTX _ctx)
+{
+	compileContext *ctx = (compileContext*)_ctx;
+	if (!ctx) return 0;
+	if (!ctx->ram_state)
+		ctx->ram_state = (float*)aura_eel_ram_alloc();
+	return ctx->ram_state;
+}
 NSEEL_VMCTX NSEEL_VM_alloc() // return a handle
 {
 	// Context
@@ -7850,6 +7866,8 @@ void NSEEL_VM_free(NSEEL_VMCTX _ctx) // free when done with a VM and ALL of its 
 		freeBlocks(&ctx->tmpblocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head_data);  // free blocks
+		aura_eel_ram_free(ctx->ram_state);  /* [AuraDSP P-045] 惰性 gmem 区 */
+		ctx->ram_state = 0;
 		ctx->scanner = 0;
 		free(ctx);
 	}
@@ -7873,7 +7891,13 @@ void NSEEL_VM_SetStringFunc(NSEEL_VMCTX ctx, float(*onString)(void *caller_this,
 }
 void *NSEEL_PProc_RAM(void *data, int32_t data_size, compileContext *ctx)
 {
-	if (data_size > 0) data = EEL_GLUE_set_immediate(data, (INT_PTR)ctx->ram_state);
+	/* [AuraDSP 2026-10-30] gmem 指针嵌入点：脚本第一次真正引用 RAM 时才分配。 */
+	if (data_size > 0)
+	{
+		float *ram = EEL_RAM(ctx);
+		if (ram) data = EEL_GLUE_set_immediate(data, (INT_PTR)ram);
+		else ctx->errVar = 1;
+	}
 	return data;
 }
 void *NSEEL_PProc_THIS(void *data, int32_t data_size, compileContext *ctx)

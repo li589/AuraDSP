@@ -40,6 +40,9 @@ extension VbAsioState on AppModel {
     config.vbBusMask = vbBusMask;
     ConfigManager.save(config);
     _toIso?.send({'cmd': 'setBusMask', 'mask': vbBusMask});
+    // 关掉当前编辑器所在总线后，目标路会脱离有效掩码 → 与按路插件开关
+    // 走同一回落逻辑（否则 UI 下拉指向不存在的 items）。
+    _fallbackVbPluginEditorGroup();
     _notifyUi();
   }
 

@@ -334,7 +334,7 @@ class _CompBandRow extends StatelessWidget {
             max: maxFreq,
             unit: 'Hz',
             enabled: model.compOn,
-            format: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)}k' : v.toStringAsFixed(0),
+            format: (v) => v >= 1000 ? '${(v / 1000).toStringAsFixed(1)} kHz' : v.toStringAsFixed(0),
             onChanged: (v) => model.setCompFreq(bandIndex, v),
             onChangedEnd: (v) => model.setCompFreq(bandIndex, v),
             onResetToDefault: () => model.setCompFreq(bandIndex, defaultFreq),

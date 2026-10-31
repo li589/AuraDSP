@@ -16,6 +16,7 @@ import '../core/design.dart';
 import '../core/path_memory.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
+import '../platform/platform_profile.dart';
 
 enum AuraPathPickerMode {
   file,
@@ -171,10 +172,11 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
     final l = l10nOf(context);
 
     final String defaultHint = widget.mode == AuraPathPickerMode.directory
-        ? (Platform.isWindows ? r'C:\Path\To\Folder' : '/path/to/folder')
-        : (Platform.isWindows
-            ? 'C:\\Path\\To\\file.${widget.allowedExtensions?.first ?? "ext"}'
-            : '/path/to/file.${widget.allowedExtensions?.first ?? "ext"}');
+        ? PlatformProfile.pathPlaceholder(directory: true)
+        : PlatformProfile.pathPlaceholder(
+            directory: false,
+            extension: widget.allowedExtensions?.first,
+          );
 
     return AlertDialog(
       backgroundColor: p.panel,

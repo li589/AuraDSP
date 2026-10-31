@@ -568,7 +568,12 @@ class _ActivePluginHero extends StatelessWidget {
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     isExpanded: true,
-                    value: editorGroup >= 0 && editorGroup < routeCount
+                    // 值必须同时满足「路号合法」与「当前生效掩码包含该路」，
+                    // 否则 DropdownButton 会因 value 不在 items 里触发断言，
+                    // 或显示空白（关掉总线后编辑器目标路未回落）。
+                    value: editorGroup >= 0 &&
+                            editorGroup < routeCount &&
+                            (routeMask & (1 << editorGroup)) != 0
                         ? editorGroup
                         : null,
                     isDense: true,

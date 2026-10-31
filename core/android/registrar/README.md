@@ -33,12 +33,12 @@ Android 14+ AIDL 效果库正式核心，从 Spike2 验证骨架收敛而来（�
 
 ```bash
 cd core/android/registrar
-bash build.sh        # 产出 out/libspikeeq.so（复用 ../spike-global-effect 的
-                     # gen/、aidl-src/、third-party/ 基础设施）
+bash build.sh        # 产出 out/libspikeeq.so（依赖 ../aidl-gen、../vendor-src、
+                     # ../stubs 的统一基础设施）
 ```
 
 部署验证：把 `out/libspikeeq.so` 复制到 `../spike-global-effect/out/` 后执行
-`bash ../spike-global-effect/deploy/deploy.sh`，再用 `attach-test/MiniAttach.dex` 挂载验证。
+`bash ../spike-global-effect/deploy/deploy.sh`，再用 `attach-test/classes.dex` 挂载验证。
 
 ## 已验证行为（Android 16 / Ace 6T，Enforcing）
 
@@ -57,6 +57,7 @@ bash build.sh        # 产出 out/libspikeeq.so（复用 ../spike-global-effect 
 
 ## 迁移待办
 
-- `../spike-global-effect/gen`、`aidl-src/`、`third-party/` 将迁入
-  `core/android/`（aidl-gen / third-party）成为统一基础设施。
-- libjamesdsp 引擎接入：实现 IAudioEngine，替换 SpikeEqEngine。
+- ~~`../spike-global-effect/gen`、`aidl-src/`、`third-party/` 迁入 `core/android/`~~
+  已完成：统一为 `core/android/aidl-gen/` + `vendor-src/` + `stubs/`。
+- libjamesdsp 引擎接入：`examples/jamesdsp_engine/` 已完成静态编入与可听验证，
+  binder 参数通道待接。

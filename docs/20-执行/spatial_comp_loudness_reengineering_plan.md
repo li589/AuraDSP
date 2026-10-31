@@ -42,7 +42,7 @@
 - **根因分析**：
   1. **空间音频 HRTF 上混能量超载**：[`dsp_spatial.cpp:113-145`](file:///d:/temp_desktop/Proj/JamesDSP/engine/dsp/dsp_spatial.cpp#L113-L145) 将立体声上混为 5 声道，近耳直达声、远耳延迟声、中置声全都是无归一化直接 `+=` 累加，再加上早期反射 `eL, eR` 和高频双二阶峰值，导致信号总能量暴增 +8dB ~ +10dB！虽然有慢速 AGC，但 AGC 时间常数极长（0.05/0.1），用户拉动滑块时音量忽大忽小、剧烈漂移；
   2. **立体声展宽 (Stereo Widen) 增益突变**：[`stereoEnhancement.c:21-25`](file:///d:/temp_desktop/Proj/JamesDSP/engine/legacy/jdsp/Effects/stereoEnhancement.c#L21-L25) 的增益公式在 `mix=0.5` 处硬生生放大了 2.0 倍（+6dB），在 `mix=0` 与 `1.0` 处又是 1.0 倍，拉滑块就像在坐音量过山车；
-  3. **混响 (Freeverb) 直达声未衰减**：[`dsp_freeverb.cpp:89`](file:///d:/temp_desktop/Proj/JamesDSP/engine/dsp/dsp_freeverb.cpp#L89) 直达声 `dryG` 在预设中恒为 1.0，湿声直接加上去，缺乏专业的恒能量交叉淡入淡出（Constant-Power Crossfade $\cos/\sin$），越加混响整体音量越响。
+  3. **混响 (Freeverb) 直达声未衰减**：[`dsp_mc_reverb.cpp`](file:///d:/temp_desktop/Proj/JamesDSP/engine/dsp/dsp_mc_reverb.cpp)（原 `dsp_freeverb.cpp:89`，WP1 后并入该文件） 直达声 `dryG` 在预设中恒为 1.0，湿声直接加上去，缺乏专业的恒能量交叉淡入淡出（Constant-Power Crossfade $\cos/\sin$），越加混响整体音量越响。
 
 ### 5. 空间音频图示过于“AI 化”、简陋不优雅
 - **根因分析**：

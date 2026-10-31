@@ -18,67 +18,20 @@
 extern "C" {
 #endif
 
-// 环境检测：JSON 写入 out（UTF-8），返回写入字节数（不含尾零），<0=失败。
-// {"found":true,"edition":3,"editionName":"Potato","installDir":"...",
-//  "appVersion":"...","remoteVersion":"...","tierReached":2}
-VBB_API int vb_detect(char* out, int cap);
-
-// 启动常驻泵。engine_dll="" 则自动搜索；params_json="" 则不预下发，
-// 格式 "id=f1.5;id2=i3"（float 含 '.'/'e'，其余按 int），失败条目计数进 status。
-// 返回：0=ok；1=OUT 槽被占；<0=失败（见 note）。非阻塞（VB 回调自有线程）。
-VBB_API int vb_start(const char* engine_dll, const char* params_json);
-
-// 停止：stop + logout + unreg + 销毁引擎 + 释放（与 start 严格配对，幂等）。
-VBB_API int vb_stop();
-
-// 状态 JSON（调用方 buffer，无分配）：
-// {"running":true,"frames":N,"sr":48000,"nbs":512,"groups":8,"handles":8,
-//  "peakIn":0.0,"maxCbUs":0.0,"startRc":0,"note":"","testKind":0,"edition":3}
-VBB_API int vb_status(char* out, int cap);
-
-// 参数即时下发到全部 live handle（引擎 set_param 本就支持 live 调用，
-// isolate 侧同契约）。返回成功 handle 数，<0=桥未运行。
-VBB_API int vb_set_param(const char* id, int isFloat, const void* v4);
-
-// 字符串参数（liveprog.code / arbmag.string）：同 auradsp_set_param 的字节语义
-// （UTF-8 字节串，不含 NUL；调用返回后调用方缓冲可释放，引擎内部已拷贝编译）。
-// 下发全部 live handle 并记入镜像（CHANGE 重建后回放）。返回成功 handle 数。
-VBB_API int vb_set_param_str(const char* id, const char* utf8, int bytes);
-
-// 参数回读（group0，诊断/回归用：CHANGE 重建后验证参数真的还在）。
-// out4 为 4 字节缓冲；返回 0=ok，<0=失败。
-VBB_API int vb_get_param(const char* id, int isFloat, void* out4);
-
-// 字符串参数回读（group0）：out 为调用方缓冲，cap 为容量；返回写入字节数
-// （不含 NUL），<0=失败（空间不足/无此参数/桥未运行）。
-VBB_API int vb_get_param_str(const char* id, char* out, int cap);
+// 公共导出面已收敛为 common/aurabridge.h 的 ab_*（2026-10-30 清理）。
+// 旧前缀实现体（vb_detect/vb_start/.../vb_bypass）仍在本桥内部使用，但**不再
+// 导出**；VB 专属面（vb_abi / vb_set_bus_mask / vb_test_change / 插件槽）保留。
 
 // 模拟一次 VM CHANGE（VB 推 kCbChange 时置位同标志），供 smoke 回归重建路径。
 VBB_API int vb_test_change();
-
-// 从 group0 handle 读可视化帧（1600B/帧 = sizeof(auradsp_viz_frame) ABI v2，
-// 与 auradsp_viz_read 同布局透传，Dart 侧已有解析）。返回读到帧数，0=无引擎/未运行。
-// 注意：桥不做帧长协商，调用方缓冲必须按 1600B/帧分配（旧 408B 分配会堆越界）。
-VBB_API int vb_viz_read(void* out1600, int count);
 
 // §7-2（P-028）桥 ABI 协商：返回桥编译所依据的引擎 ABI 版本（viz 帧布局代际，
 // 当前 2）。加载桥后与引擎 auradsp_abi() 比对；不一致时调用方不得解析 viz 帧。
 VBB_API unsigned vb_abi(void);
 
-// 用户旁路开关（与进程内 bypass 同义：跳过 process，输入直通）。
-// 返回 0；桥未运行时返回 <0。
-VBB_API int vb_bypass(int on);
-
 // 总线处理掩码：bit g 置位 = 第 g 组（即第 g 条总线）进 DSP，清零 = 该总线直通。
 // 电平表照常计量；CHANGE 重建/session 内保持。返回生效后的掩码，<0=桥未运行。
 VBB_API int vb_set_bus_mask(int mask);
-
-// 测试注入：kind 1=正弦440 2=粉噪 3=文件。kind=3 时拷贝 pcm
-//（交织立体声 float32，frames 帧，ch 声道，rate 采样率；语义同 FileSource）。
-// 启动即静音主通道 VB 输入，测试信号进同一条 DSP 链。返回 0=ok，<0=未运行。
-VBB_API int vb_test_start(int kind, const float* pcm, int frames, int ch, int rate);
-// 停止测试：先清 kind（RT 可见），等 50ms 让在途回调退出，再释放文件缓冲。
-VBB_API int vb_test_stop();
 
 // ---- 插件槽（BUGFIX 2026-10-22：写操作同步全部组引擎，读/编辑器 eng[0]）----
 // 与 auradsp_plugin_slot_* 同语义（1=成功/0=失败）；桥未运行或无引擎时 0。

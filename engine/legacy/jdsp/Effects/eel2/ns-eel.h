@@ -74,6 +74,8 @@ void NSEEL_quit(); // Delete global variables
 int32_t *NSEEL_getstats(); // returns a pointer to 5 ints... source bytes, static code bytes, call code bytes, data bytes, number of code handles
 void NSEEL_VM_freevars(NSEEL_VMCTX _ctx);
 void NSEEL_init_memRegion(NSEEL_VMCTX ctx);
+/* [AuraDSP 2026-10-30] gmem 区惰性分配（首次使用时 calloc 64MB），返回 NULL=OOM。 */
+float *NSEEL_VM_getram(NSEEL_VMCTX ctx);
 NSEEL_VMCTX NSEEL_VM_alloc(); // return a handle
 void NSEEL_VM_free(NSEEL_VMCTX ctx); // free when done with a VM and ALL of its code have been freed, as well
 // validateFunc can return error message if not permitted

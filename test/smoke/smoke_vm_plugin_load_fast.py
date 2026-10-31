@@ -46,10 +46,13 @@ if not ppath:
     sys.exit(0)
 
 b = ctypes.CDLL(bpath)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from bridge_compat import alias_common, start_vm  # noqa: E402
+
+alias_common(b, "vb")
+b.vb_start = start_vm(b)
 b.vb_detect.restype = ctypes.c_int
 b.vb_detect.argtypes = [ctypes.c_char_p, ctypes.c_int]
-b.vb_start.restype = ctypes.c_int
-b.vb_start.argtypes = [ctypes.c_char_p, ctypes.c_char_p]
 b.vb_stop.restype = ctypes.c_int
 b.vb_status.restype = ctypes.c_int
 b.vb_status.argtypes = [ctypes.c_char_p, ctypes.c_int]
