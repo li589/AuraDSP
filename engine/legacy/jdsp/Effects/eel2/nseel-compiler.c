@@ -7822,14 +7822,15 @@ void NSEEL_init_memRegion(NSEEL_VMCTX _ctx)
 		InitRegion_context(ctx->region_context);
 	}
 }
-/* [AuraDSP 2026-10-30] gmem 区（原内嵌 64MB float[1<<24]）惰性分配。
- * 返回 NULL = 内存不足；调用方按「编译失败」处理即可。 */
+/* [AuraDSP 2026-10-31 P-045] gmem 区：64MB 只保留地址空间，首次访问按页提交
+ * （Windows VEH；POSIX 依赖 calloc 的惰性零页）。语义仍是全零，脚本未触及
+ * 的页不消耗物理内存。返回 NULL = 内存不足；调用方按「编译失败」处理。 */
 float *NSEEL_VM_getram(NSEEL_VMCTX _ctx)
 {
 	compileContext *ctx = (compileContext*)_ctx;
 	if (!ctx) return 0;
 	if (!ctx->ram_state)
-		ctx->ram_state = (float*)calloc(NSEEL_RAM_ITEMSPERBLOCK, sizeof(float));
+		ctx->ram_state = (float*)aura_eel_ram_alloc();
 	return ctx->ram_state;
 }
 NSEEL_VMCTX NSEEL_VM_alloc() // return a handle
@@ -7865,7 +7866,7 @@ void NSEEL_VM_free(NSEEL_VMCTX _ctx) // free when done with a VM and ALL of its 
 		freeBlocks(&ctx->tmpblocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head);  // free blocks
 		freeBlocks(&ctx->blocks_head_data);  // free blocks
-		free(ctx->ram_state);  // [AuraDSP 2026-10-30] 惰性 gmem 区
+		aura_eel_ram_free(ctx->ram_state);  /* [AuraDSP P-045] 惰性 gmem 区 */
 		ctx->ram_state = 0;
 		ctx->scanner = 0;
 		free(ctx);
