@@ -24,9 +24,19 @@ endif()
 # M3（2026-10-29）：产物路径保持 out/<Config>/（build_engine.sh、verify_dll_copies.py、
 # Flutter runner 同步与历史 smoke 都依赖它）；构建中间文件由根工程统一到
 # build/<platform>/<arch>/（本子工程单独配置时仍落在 out/）。
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+#
+# CP-02 补充（2026-11-01）：裁剪构建（AURADSP_ENABLE_PLUGINS=OFF）使用独立的
+# out-noplugins/<Config>/。两棵构建树如果共用 out/，OFF 构建会覆盖 ON 的
+# auradsp_core.lib；下一次 ON 增量构建可能误链 NO_PLUGINS 版核心（handle 布局不同，
+# 插件字段错位）。输出目录分离后，两种配置可并存且互不污染。
+if(AURADSP_ENABLE_PLUGINS)
+    set(AURADSP_OUT_DIR_NAME "out")
+else()
+    set(AURADSP_OUT_DIR_NAME "out-noplugins")
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
 
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
