@@ -15,6 +15,9 @@
      auradsp_wincompat + fs/env/log）；AURADSP_PLUGIN_HOST_SOURCES 含模块
      实现且 engine/宿主/插件测试目标均引用该源表；
      AURADSP_PLUGIN_HOST_REMOTE=OFF 分支自洽（清空 remote 源 + INPROC 门控）。
+  6. CP-12/CP-16（2026-11-01）：`plugins/driver/` 不得直接包含 OS 头
+     （Win32 入口须经 `plugins/platform/win32` 或 `platform/port`）；
+     `port/time.h` 纳入端口头纯声明检查。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -46,7 +49,7 @@ OS_SYMBOL = re.compile(
 SCAN_DIRS = ("", "chain", "dsp", os.path.join("plugins", "integration"))
 SRC_EXTS = (".c", ".cc", ".cpp", ".h", ".hpp")
 
-PORT_HEADERS = ("fs.h", "env.h", "log.h", "module.h")
+PORT_HEADERS = ("fs.h", "env.h", "log.h", "module.h", "time.h")
 WIN_IMPLS = ("win_compat.cpp", "fs_win.cpp", "env_win.cpp", "log_win.cpp")
 
 # M2：远程宿主与 Win32 模块加载的唯一归属地（相对 engine/）
@@ -150,6 +153,27 @@ def m2_layout():
                 if DIRECT_MODULE_LOAD.search(code):
                     hits.append(f"{rel}:{n}")
     check("M2 formats 零直接模块加载 API（LoadLibrary/GetProcAddress/FreeLibrary）",
+          not hits, "; ".join(hits[:6]))
+
+
+def driver_os_isolation():
+    """CP-12/CP-16：driver 层不得直接包含 OS 头（Win32 入口须经 platform/win32）。
+    历史上 windows.h 藏在 plugin_host_manager.cpp，F1 因扫描面排除 driver 而漏检；
+    该文件已改走 port/time.h，此断言防回潮。"""
+    driver_dir = os.path.join(ENGINE, "plugins", "driver")
+    hits = []
+    if os.path.isdir(driver_dir):
+        for dirpath, _dirnames, filenames in os.walk(driver_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(SRC_EXTS):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, ENGINE).replace(os.sep, "/")
+                src = strip_comments(open(fp, encoding="utf-8", errors="replace").read())
+                for n, code in enumerate(src.splitlines(), 1):
+                    if OS_INCLUDE.search(code):
+                        hits.append(f"{rel}:{n}")
+    check("CP-12 driver 零直接 OS 头（Win32 入口须经 platform/win32/port）",
           not hits, "; ".join(hits[:6]))
 
 
@@ -288,6 +312,7 @@ if __name__ == "__main__":
     port_purity()
     impl_presence()
     m2_layout()
+    driver_os_isolation()
     cmake_layering()
     negative_self_test()
     if FAIL:

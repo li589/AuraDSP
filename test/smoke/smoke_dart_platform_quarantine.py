@@ -10,6 +10,8 @@
      WASAPI 实现在 audio_out_wasapi.dart 且由 createAudioOut 工厂分派；
      audio_isolate.dart 不再定义 WasapiOut（类型面已解耦）；
      旧的 audio_device.dart / audio_guid.dart 已删除。
+  4. F7（CP-14，2026-11-01）：依赖方向门禁——`lib/core/` 不得 import/export
+     `features/` 或 `ui/`（依赖方向 features → core → engine）。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -36,6 +38,10 @@ def check(name, cond, detail=""):
 
 PLATFORM_API = re.compile(r"\bPlatform\.is[A-Za-z]+\b|\bdefaultTargetPlatform\b")
 CLASS_WASAPI_OUT = re.compile(r"\bclass\s+WasapiOut\b")
+# F7：core 只能被 features 依赖，不得反向 import UI 层。
+CORE_TO_UPPER = re.compile(
+    r"\b(?:import|export)\s+['\"](?:\.\./)+(?:features|ui)/"
+    r"|\b(?:import|export)\s+['\"]package:auradsp_app/(?:features|ui)/")
 
 PROFILE_MEMBERS = (
     "static String get os",
@@ -95,6 +101,24 @@ def quarantine_scan():
           PROFILE_FILE)
 
 
+def dependency_direction():
+    """F7：lib/core 不得反向依赖 features/ui（依赖方向 features → core）。"""
+    core_dir = os.path.join(APP_LIB, "core")
+    hits = []
+    if os.path.isdir(core_dir):
+        for dirpath, _dirnames, filenames in os.walk(core_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(".dart"):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, APP_LIB).replace(os.sep, "/")
+                for n, code in enumerate(strip_comments(read(fp)).splitlines(), 1):
+                    if CORE_TO_UPPER.search(code):
+                        hits.append(f"{rel}:{n}")
+    check("F7 lib/core 零 import/export features/ui（依赖方向单向）",
+          not hits, "; ".join(hits[:8]))
+
+
 def profile_contract():
     src = read(PROFILE_FILE)
     code = strip_comments(src)
@@ -138,10 +162,15 @@ def negative_self_test():
     check("自检：扫描器能判红 Platform.is", bool(PLATFORM_API.search(bad)))
     check("自检：扫描器能判红 WasapiOut 定义",
           bool(CLASS_WASAPI_OUT.search("final class WasapiOut implements AudioOut {}")))
+    check("自检：扫描器能判红 core→features 反向依赖",
+          bool(CORE_TO_UPPER.search("import '../features/settings_page.dart';")))
+    check("自检：扫描器能判红 core→ui 反向依赖",
+          bool(CORE_TO_UPPER.search("export 'package:auradsp_app/ui/widgets.dart';")))
 
 
 if __name__ == "__main__":
     quarantine_scan()
+    dependency_direction()
     profile_contract()
     m4_structure()
     negative_self_test()
