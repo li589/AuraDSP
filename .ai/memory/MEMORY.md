@@ -361,3 +361,86 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   （ui/wheel_scroll.dart AuraListScrollPhysics）。
 - **扫描目录空表契约**：UI 恒发 dirs；空表 → isolate 发 ';' 显式空哨兵，
   引擎按 ';' 拆零路径、不回落默认目录（'' 仍保留给旧脚本兼容）。
+
+## 10-31 未决任务复核（2026-10-31）
+
+- **未决任务三分类台账（2026-10-31 定案）**：在册遗留一律按「已闭环 / 仍在册 / 待裁定」维护。
+  台账落点 `docs/30-审查/未决任务复核-2026-10-31.md`，真相源入口 `docs/00-总览/项目架构与开发规范.md` §9。
+  复核纪律=**逐项回代码/产物/分支取证，不采信历史文档口径**；凡称「已闭环」须给出可复核取证位置
+  （文件行号 / 产物时间戳 / 测试名）。当前状态：销账 4 项、仍在册 8 项、待裁定 4 项。
+- **已销账（勿再当未完成）**：① 32 位插件挂载——PE 头判定 → `isCompatible=false` → 三道拦截
+  （列表灰显角标 / Dart `loadPlugin` / 引擎侧拒绝）+ 三语文案 + `plugin_manager_test.dart` D2 两例
+  + `smoke_plugin_arch_detect.py`；② dist zip 重打包（`dist/AuraDSP-Windows-x64.zip`
+  136,050,921 B @ 2026-10-31 12:10:09）；③ P-045 / P-046 内存专项（`eb95d8f` / `b5d0b41`）。
+- **仍在册高危（本仓唯一一组）**：L-01 / L-02 / L-03 —— 控制线程与 RT 线程共享可变 DSP 状态。
+  L-01 `engine/chain/engine_chain.cpp:752 eq_pool_reload`、L-03 `:646 arbmag_pool_reload`
+  （`loaded` 仍是普通 int，跨线程读写无原子保护）、L-02 `:214 reset_channel_state` 直清 RT 在用状态。
+  改法范式已由 `mc_rev.reset_req` 给出（request 位 + RT 侧淡出后清），L-02 可直接复制该模式。
+- **L-04 收窄**：淡出机制**早就存在**（`engine/dsp/dsp_mc_reverb.cpp:110-112` 置 request 位、
+  `:214-218` RT 侧消费 → 5ms 淡出 → `mc_clear_state` → 重新起尾），真实缺口只是
+  「参数/预设切换路径未触发该请求位」。改法应为「淡出后清」而非「直接清」，
+  比 10-31 复核时记录的估计便宜得多；仍需 5.1 实机试听确认爆音条件。
+- **E1 编号归属存疑**：` _onMessage` 全仓唯一实现在 **Dart 侧**
+  `app/auradsp_app/lib/core/state/state_events.dart:16`（isolate 事件路由全量 case 分发），
+  却在 10-28 记忆中挂在「Windows 引擎/桥」条目组之下（该组其余条目均为 C++ 侧）。
+  **立项前先确认 E1 的原始定义**，避免拆错对象。
+- **VST2 / AU / LV2**：引擎侧只有 `engine/plugins/formats/{clap,vst3}`，无驱动；Dart 侧
+  `PluginFormat` 枚举已含三种，但注释明确其定位是「引擎产出这些格式时角标/筛选即刻可用」的预留，
+  **不是挂载支持**。补驱动前需先做授权与 ABI 取舍（VST2 需 `fst` 头 / AU 仅 macOS / LV2 与 CLAP 有 ABI 冲突面）。
+- **VB 总线掩码裁剪引擎（内存后续项，~180MB）**：`VmBridge.cpp:605 RebuildEngines(groups, sr)`
+  按 VM 版型应建数建引擎（上限 `PumpCtx::kMaxGroups`），**不看 `busMask`**；`vb_set_bus_mask` 只让
+  未启用总线直通，不减少引擎实例数。旧记忆写「固定建 8 个引擎」不准确，实为「按版型建 N 个」。
+
+### 文档口径纪律（2026-10-31 补充）
+- **`assets/` 跟踪实况（2026-10-31 实测；旧口径「2214 个 / 73MB」已作废）**：已跟踪 **2443 个**
+  `.irs`/`.vdc` = **241.6MB**（2002 个 `.irs` 241.2MB + 441 个 `.vdc` 0.4MB）。工作区 `assets/`
+  合计 2501 文件 / 242.9MB；`.git` 仓库总体积 203.6MB；单个最大已跟踪资源 7.33MB（远低于 GitHub
+  单文件 100MB 限制，故当前不紧急，但新增 `.irs` 会线性推高仓库体积）。测量命令
+  `git -c core.quotepath=false ls-tree -r -l HEAD -- assets`。去跟踪仍属待裁定项
+  （`git rm --cached` 只脱索引不瘦历史，真正瘦库需 `filter-repo` 重写历史），**未 owner 确认不得擅动**。
+- **登记类数字必须标「测量日期 + 测量命令」**：文件数/体积这类统计会随资源持续补入而失真
+  （本次 2214 → 2443 即为实例）。口径变更时在文档里显式标注旧值作废。
+- **改 md 大文档走 python 字节级替换**，绕开 md 格式化器（它会把「引用块内含裸 `|` 的段落」误判成表格，
+  插入伪造行并「吞掉」整段，表现为上百行假删除）。校验三件套：`git diff HEAD --numstat`
+  + `grep -cE '^\|( *\|)+ *$'` 须为 0 + 标题集合 diff 无漂移。
+- **python 字节替换脚本四个坑（2026-10-31 实测）**：① 校验了命中却忘了真正 `replace`——文件 mtime 变了
+  但内容没变，极易误判为「已生效」；② 同文件多条编辑若各自基于原文快照写回会互相覆盖 → 按文件分组、
+  在上一条结果上继续应用；③ 残留检查「旧串必须消失」在**新串以旧串开头**时必然误判 → 改为
+  「旧串**不是**新串前缀时才要求旧串消失」；④ 多行新串须按文件实际换行风格转换（本仓 4 个目标文档均为纯 CRLF）。
+- **PowerShell here-string 会破坏反斜杠与引号**：`` ` `` 是转义符（`assets/` 里的反引号被吞），
+  中文在 `python -c` 传参时也被控制台编码破坏（表现为诊断脚本匹配不到目标行）。
+  **正解**：诊断/替换脚本一律 Write 成 `.py` 文件再 `python file.py` 执行，不走 `-c` 与 here-string。
+  与既有纪律「带反斜杠的代码一律用 Write/Edit，不用 heredoc」同源。
+- **git 统计非 ASCII 路径必须关 quotepath**：`git ls-files` 默认对非 ASCII 路径加引号转义，
+  `Get-Item` 收到的是带引号的转义串 → 报「路径不存在」，误判成「文件丢了」。
+  正解：`git -c core.quotepath=false ls-tree -r -l HEAD -- <path>`（按大小）或 `-z`（NUL 分隔）。
+
+### D-1 限幅器链尾语义（2026-10-31 当日裁定 · ADR-010）
+
+- **裁定**：限幅器是内置信号链**最后一道门** —— 总输出增益 `post.gain`、逐声道 trim `post.gain.cN`、
+  响度补偿全部排在限幅器之前，其后不得再有增益级。推论：限幅开启时上推 post gain 表现为 GR 上升
+  而非电平上升；限幅关闭时 post gain 才是纯输出增益。
+- **L-05 前提是错的（改判误报）**：10-31 全量复核记「`post_gain_process_mc` 是限幅之后（step 15）」。
+  实测四路全部合规 —— 立体声/矩阵/双耳的 post gain 在 vendor `stage_output` 内（`postGain × postGainCh`，
+  其后才是 vendor 限幅与链尾 wrapper 前瞻限幅）；离散多声道的 `post_gain_process_mc` 在 step 15，
+  限幅器在链尾。**复核遗留项时必须先回代码逐行核对前提，不能直接采信报告描述。**
+- **真问题在「契约无门禁」**：这条链序此前只写在注释里，无任何测试执行 —— 与 10-28 预设复检的
+  P1「契约写在标志/注释里但无人执行」同型。裁定必须配门禁，否则下次重构照样改坏。
+- **落地**：[ADR-010](../adr/ADR-010-limiter-as-final-gate.md)（含四项例外：插件 stage 4 Post-Limiter、
+  `limiter.channels` 掩码、样本安全卫士 ±10 钳位、vendor 内部 0 dBFS 限幅器）+ 新门禁
+  `test/smoke/smoke_limiter_final_gate.py`（四路径 × 限幅开/关反向对照，已挂 `runner.py`）
+  + 引擎四处 `[ADR-010]` 注释 + `postHintGain` 三语文案（说明该参数作用于限幅器之前）。
+- **反向验证范式（可复用）**：把 post gain 临时移到限幅器之后重建引擎 → 多声道路径 3 项断言精确转红
+  （peak 0.796 > 门限 0.501、gr.limiter = 0、LFE trim 1.589 > 门限），而走 vendor 实现的立体声/矩阵/双耳
+  **仍全绿** —— 一并证明门禁覆盖了**两套不同的 post gain 实现**，不是单点断言。
+
+### 环境坑（2026-10-31 实踩）
+
+- **本机 `bash` 是 WSL 不是 Git Bash**：`C:\WINDOWS\system32\bash.exe` 解析优先，Git Bash 在
+  `C:\FreeRulesPrograms\BasicToolkits\Git\bin\bash.exe`。`build_engine.sh` 依赖 MSYS 专有的
+  `pwd -W`，在 WSL bash 下**第 13 行即失败**（`pwd: -W: invalid option`）。
+- **管道吞退出码**：构建命令被 `| tail` / `| Select-Object` 包裹时，脚本 `set -e` 保护不到外层，
+  失败也显示「成功」。必须显式检查 `$LASTEXITCODE` 或直接核对 `BUILD OK` 标记 + DLL mtime。
+- **产物分发可能被运行中的 App 锁住**：`sync_artifacts.ps1` 对 `app/.../runner/Release` 的副本会报
+  「being used by another process」并跳过（`test/` 与 `dist/` 正常）。本轮仅注释变更故无影响；
+  有行为变更时须先关 App 再重建。
