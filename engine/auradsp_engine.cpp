@@ -290,6 +290,15 @@ void auradsp_process(auradsp_handle h, const float* in, float* out, int frames) 
     /* E-03：给控制侧延迟计算留一个无竞争的设备域块长快照。 */
     h->lat_block_frames.store(frames, std::memory_order_relaxed);
 
+    /* [PATCHED-AuraDSP P-047] L-02：消费拓扑变更的 RT 状态重置请求。
+     * 控制线程（reset_channel_state）只置位 reset_req；真正的状态清理在 RT
+     * 执行 —— 控制线程直清 RT 正在使用的非原子状态是数据竞争（gate/filter/
+     * dyneq/tube/limiter/haas/spatial）。放在此处的理由：早于门控与任一处理
+     * 分支，保证本块按新拓扑开始时状态已是干净的。 */
+    if (h->reset_req.exchange(0, std::memory_order_acq_rel) != 0) {
+        reset_channel_state_rt(h);
+    }
+
     ScopedFtzDazGuard ftzGuard;
     const int st = h->state.load(std::memory_order_relaxed);
 

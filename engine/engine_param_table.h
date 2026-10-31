@@ -495,6 +495,26 @@ static bool arbmag_numeric_finite(const char* s) {
     return true;
 }
 
+/* [PATCHED-AuraDSP P-048] L-03：arbMag 主卷积的刷新必须与 RT 的 Process 互斥。
+ *
+ * 实况：vendor 的 ArbitraryResponseEqualizerStringParser 会对 arbMag.conv 做
+ * 原位 RefreshImpulseResponse（改写 _segmentsLL/RRIRRe/Im 与 _current/_overlap），
+ * 而 RT 的 stage_arbmag 正在同一对象上跑 FFTConvolver2x2Process ⇒ 数据竞争
+ * （IR 段指针与 _current 被边处理边改写）。同族的 Enable(forceRefresh) 路径
+ * 更重：它对 arbMag.conv 做 Free + Load（释放后使用 ⇒ UAF，崩溃级）。
+ *
+ * 修法：kAuraStages 的 arbmag stage 置 lock=1（RT 取 jdsp_lock），控制侧
+ * 刷新前同持 jdsp_lock —— 符合仓库既有约定「控制侧结构变更路径必须同持
+ * jdsp_lock」。Enable(forceRefresh) 路径本身已在 vendor 内部持锁，无需改。
+ * 代价：刷新期间 RT 在 arbmag stage 上阻塞一次（亚毫秒级，远小于 comp 的
+ * 全量重算，不产生可闻卡顿）。
+ */
+static void arbmag_refresh_vendor_conv(auradsp_handle h, char* curve) {
+    jdsp_lock(&h->jdsp);
+    ArbitraryResponseEqualizerStringParser(&h->jdsp, curve);
+    jdsp_unlock(&h->jdsp);
+}
+
 static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uint32_t bytes) {
     if (bytes == 0 || (bytes == 1 && ((const char*)value)[0] == 0)) {
         // 清空曲线：先停用 vendor 路径（否则 RT 仍用上一份 IR 卷积），
@@ -507,8 +527,9 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
         h->p.arbmag_ready.store(0);
         ArbitraryResponseEqualizerDisable(&h->jdsp);
         EqNodesFree(&h->jdsp.arbMag.instance.coeffGen);
-        // 逐声道池直接标记未装载，走 RT 直通分支（不再加载零 IR）
-        h->arbmag_pool.loaded = 0;
+        // 逐声道池发布「未装载」活动槽，走 RT 直通分支（不再加载零 IR）
+        // [PATCHED-AuraDSP P-047] 双槽化后不能直写活动槽的 loaded（与 RT 读竞争）。
+        arbmag_pool_disable(h);
         return AURADSP_OK;
     }
     if (bytes > 256 * 1024) {
@@ -527,7 +548,8 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
         set_error(h, "arbmag.string: parse failed (non-finite numeric token)");
         return AURADSP_E_PARAM;
     }
-    ArbitraryResponseEqualizerStringParser(&h->jdsp, arbmag_new);
+    /* [PATCHED-AuraDSP P-048] L-03：刷新主卷积须与 RT 互斥（同持 jdsp_lock）。 */
+    arbmag_refresh_vendor_conv(h, arbmag_new);
     const int nodes = (int)h->jdsp.arbMag.instance.coeffGen.nodesCount;
     /* B 轮复查：畸形输入（如 "20:6.0" 无 GraphicEQ 前缀）会被 legacy 解析器
      * 产出垃圾 nodesCount，apply_arbmag 随之越界读 → 引擎 AV（实测读 0xFF..FF）。
@@ -535,7 +557,8 @@ static auradsp_status set_arbmag_string(auradsp_handle h, const void* value, uin
      * 绝不让部分损坏的 coeffGen 进入后续 process。 */
     if (nodes < 2 || nodes > 65536) {
         if (h->arbmag_string && h->arbmag_string_len) {
-            ArbitraryResponseEqualizerStringParser(&h->jdsp, h->arbmag_string);
+            /* [PATCHED-AuraDSP P-048] 同上：回滚到上一份合法曲线也要与 RT 互斥。 */
+            arbmag_refresh_vendor_conv(h, h->arbmag_string);
         } else {
             h->jdsp.arbMag.instance.coeffGen.nodesCount = 0;
         }

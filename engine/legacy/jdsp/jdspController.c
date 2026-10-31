@@ -528,7 +528,16 @@ static const struct
 	{"comp", stage_comp, 0},
 	{"bass", stage_bass, 0},
 	{"eq", stage_eq, 0},
-	{"arbmag", stage_arbmag, 0},
+	/* [PATCHED-AuraDSP P-048] arbmag lock 0→1：L-03 主卷积原位刷新竞态。
+	 * vendor 的 ArbitraryResponseEqualizerStringParser 会对 arbMag.conv 做
+	 * 原位 RefreshImpulseResponse，Enable(forceRefresh) 更会 Free + Load
+	 * （释放后使用 ⇒ UAF），而 RT 的 stage_arbmag 正在同一对象上跑
+	 * FFTConvolver2x2Process。修法是控制侧刷新时同持 jdsp_lock、RT 侧
+	 * stage_arbmag 也取 jdsp_lock（仓库既有约定：控制侧结构变更路径必须
+	 * 同持 jdsp_lock）。刷新耗时亚毫秒级，不产生可闻卡顿。
+	 * 注：离散多声道路径不走 vendor 链的 arbmag（改用逐声道池），故该锁
+	 * 只影响立体声 / 矩阵 / 双耳路径。 */
+	{"arbmag", stage_arbmag, 1},
 	{"convolver", stage_conv, 1},
 	/* [PATCHED-AuraDSP P-017 B1-b] ddc lock 1→0：控制侧已改影子视图 + 原子换
 	 * 指针（vdc.c），RT 块首读一次 ddcActive 即得 {sosPointer, count}

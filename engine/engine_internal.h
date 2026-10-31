@@ -492,6 +492,12 @@ struct auradsp_handle_s {
     std::mutex ctrl_mutex;            /* 仅保护 init/teardown/参数应用，不进 process */
     std::atomic<int> state{AURADSP_STATE_BYPASS};
     std::atomic<bool> open{false};
+    /* [PATCHED-AuraDSP P-047] 拓扑变更的 RT 状态重置请求（L-02）。
+     * 控制线程（reset_channel_state）只置位本标志并完成控制侧工作；RT 在
+     * auradsp_process 入口消费并执行真正的 RT 状态清理 —— 控制线程不再直清
+     * RT 正在使用的非原子状态（gate / filter / dyneq / tube / limiter / ...）。
+     * 同范式见 McReverbState::reset_req（dsp_mc_reverb.cpp）。 */
+    std::atomic<int> reset_req{0};
     float sample_rate = 48000.0f;
     int max_block = 2048;
     double latency_ms = 0.0;
@@ -614,23 +620,61 @@ struct auradsp_handle_s {
         double z1[kMxMaxChannels] = {};
         double z2[kMxMaxChannels] = {};
     } filter;
+    /* [PATCHED-AuraDSP P-047] 逐声道卷积池的「影子槽」通用结构（eq / arbmag 共用）。
+     *
+     * 缺陷（L-01 / L-03）：控制线程对池内共享的 FFTConvolver1x1 调
+     * LoadImpulseResponse —— 其首步即 FFTConvolver1x1Free（free 掉 _fftBuffer /
+     * _overlap / _inputBuffer / _segments*），而 RT 线程此刻可能正在同一实例上跑
+     * FFTConvolver1x1Process ⇒ 释放后使用（UAF），崩溃级，不是听感问题。
+     *
+     * 方案（照抄仓内 comp（B1-c）/ liveprog（B1）/ ddc（B1-b）影子槽范式，
+     * 与 vendor 侧 P-006 mEQ 卷积器双缓冲同式）：
+     *   - 每个池 2 个 bank（bank0 = 活动槽，bank1 = 影子槽），每 bank 持有
+     *     kMxMaxChannels 个卷积器；
+     *   - 控制线程只在影子 bank 上重建 IR，成功后原子发布 active 下标；
+     *   - RT 块首只读一次 active 下标，块内不碰换出的 bank；
+     *   - 换下的 bank 记 retired_at = 换出时刻 proc_count 快照 + 1；
+     *     复用（= 写入）一个已退役的 bank 前必须过在途守卫双条件任一：
+     *       (a) in_flight == 0 —— 当前没有任何 RT 块在途。覆盖音频停流时
+     *           proc_count 冻结的场景（否则参数改动永远不生效）。
+     *       (b) proc_count >= retired_at —— 换出后已跑满一个音频块。
+     *     两条件皆不满足 → 控制侧有界等待（500ms 墙钟，自旋优先），
+     *     仍不可用则放弃本次重载（旧 IR 继续生效）；绝不原地重建活动槽。
+     *
+     * 读写不相交性：控制线程只写非活动 bank，RT 只读活动快照 bank；active 的
+     * release/acquire 配对建立 happens-before，故 bank 内 conv[] / loaded 可用
+     * 普通字段（conv[] 指针在 alloc 之后再不改，只有 IR 内容会变）。 */
+    struct PoolBank {
+        FFTConvolver1x1* conv[kMxMaxChannels] = {};
+        uint64_t          retired_at = 0;   /* 0 = 从未当活动槽 */
+        int               loaded = 0;       /* 该槽 IR 是否已装载（0 = 直通） */
+    };
     /* B5 后续：arbmag 逐声道池（8×FFTConvolver1x1，IR 与主 arbMag.conv 同源）。
      * 生命周期：句柄级 new[]/delete[]（create 分配、destroy 释放，RT 零分配）；
      * 内容：控制线程在 set_arbmag_string 生效路径重建/重载（带上 blockSize；
      * 注意 jdsp 块长重分配的 Refresh 钩子只刷新主 conv，池另行同步见
-     * arbmag_pool_reload）；RT 线程只读指针，无跨线程释放。 */
+     * arbmag_pool_reload）。[PATCHED-AuraDSP P-047] 双槽化，见上方 PoolBank。 */
     struct ArbmagPool {
-        FFTConvolver1x1* conv[kMxMaxChannels] = {};
-        int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
+        PoolBank          bank[2];
+        std::atomic<int>      active{0};        /* 当前活动槽下标 */
+        std::atomic<uint64_t> proc_count{0};    /* RT 每块递增（换出快照基准） */
+        std::atomic<int>      in_flight{0};     /* RT 在途计数 */
     } arbmag_pool;
     /* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
      * 解决 MC 路径下 eq.channels 逐声道独立处理以及 96k/192k 下 S-6 频偏问题。
-     * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。 */
+     * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。
+     * [PATCHED-AuraDSP P-047] 双槽化（L-01），见上方 PoolBank。 */
     struct EqPool {
-        FFTConvolver1x1* conv[kMxMaxChannels] = {};
-        int              loaded = 0;        /* IR 是否已装载（0=空池，直通） */
-        float            ir_rate = 0.0f;    /* 装载时的采样率 */
+        PoolBank          bank[2];
+        std::atomic<int>      active{0};
+        std::atomic<uint64_t> proc_count{0};
+        std::atomic<int>      in_flight{0};
+        float                 ir_rate = 0.0f;    /* 装载时的采样率（控制侧） */
     } eq_pool;
+    /* RT 独占：本块快照的池活动槽下标（process_multichannel_chain 入口取一次，
+     * 块内不再改；控制线程换指针不影响本块后续样本）。 */
+    int eq_pool_bank = 0;
+    int arbmag_pool_bank = 0;
     /* WP4: BassMono one-pole 状态（RT 独占；支持 8 声道；bm_reinit 为一次性平滑重初始化标志） */
     float bm_lp[8] = {0.0f};
     std::atomic<int> bm_reinit{0};
@@ -773,9 +817,14 @@ void apply_reverb(auradsp_handle h);
 /* WP0 脚手架：混响路径判定（0=vendor 立体声，1=MC FDN）。
  * 只读参数 reverb.engine 与 WP1 的 apply_reverb 共用同一判定。 */
 int reverb_path_kind(auradsp_handle h);
-/* WP0 脚手架：拓扑变化时的统一状态清理入口（当前为空实现，
- * 逐模块清单见函数体注释；WP6 落地）。 */
+/* WP0 脚手架：拓扑变化时的统一状态清理入口。
+ * [PATCHED-AuraDSP P-047] 拆为控制侧（本函数，控制线程）+ RT 侧
+ * （reset_channel_state_rt，音频线程）：控制线程不再直清 RT 正在使用的
+ * 非原子状态（L-02）。逐模块清单见 engine_chain.cpp 的函数体注释。 */
 void reset_channel_state(auradsp_handle h);
+/* [PATCHED-AuraDSP P-047] L-02：RT 侧状态清理。只在音频线程调用
+ * （auradsp_process 入口消费 reset_req 时）。 */
+void reset_channel_state_rt(auradsp_handle h);
 void apply_stereo(auradsp_handle h);
 void apply_tube(auradsp_handle h);
 void bassmono_process(auradsp_handle h, float* io, int frames);
@@ -825,6 +874,8 @@ void post_gain_process_mc(auradsp_handle h, float* io, int frames, int ch);
 void arbmag_pool_alloc(auradsp_handle h);
 void arbmag_pool_free(auradsp_handle h);
 void arbmag_pool_reload(auradsp_handle h);
+/* [PATCHED-AuraDSP P-047] 发布「未装载」活动槽（曲线清空 ⇒ 池直通）。 */
+void arbmag_pool_disable(auradsp_handle h);
 void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
                                  int nch, int ch_idx);
 /* [PATCHED-AuraDSP P-035] eq 逐声道池（控制线程建/载/释，RT 只读） */

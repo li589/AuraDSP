@@ -267,6 +267,12 @@ def run_smoke_tests():
     # 超门限」两组对照，后者是反向验证：post gain 若被挪到限幅器之后，
     # 前者必红而后者仍绿 → 门禁非空转。此前该不变量只写在注释里，无人执行。
     "smoke_limiter_final_gate.py",
+    # P-047 逐声道卷积池 / 主卷积 / 拓扑重置的并发门禁（L-01 / L-02 / L-03）：
+    # 控制线程高频改 EQ/arbmag 曲线与开关（触发池重载）+ 切 channels.mode/
+    # count/spatial（触发 reset_channel_state），RT 线程连续 process。
+    # 修复前为单池实现：控制线程 LoadImpulseResponse 释放池内卷积器内存与 RT
+    # 的 Process 竞争 ⇒ UAF（访问违例 / 输出被野指针污染）。
+    "smoke_pool_race.py",
     "smoke_dynamic_gr_and_gate.py",
     "smoke_multichannel_discrete.py",
     # B 轮补充：全参数扫描（159 有界参数 roundtrip/clamp/NaN/默认回读）+ 多声道掩码

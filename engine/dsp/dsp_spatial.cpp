@@ -176,8 +176,11 @@ static int spat_image_taps(float fs, float room, float head,
     return m;
 }
 
-/* 控制线程/开关切换时调用：清空全部 RT 状态，避免残留瞬态。
- * 不在音频线程调用。 */
+/* 开关切换 / 拓扑变更时调用：清空全部 RT 状态，避免残留瞬态。
+ * [PATCHED-AuraDSP P-047] L-02：改由 **音频线程** 调用（reset_channel_state_rt
+ * 在 auradsp_process 入口消费 reset_req 时执行）—— 原先由控制线程直调，
+ * 与 RT 正在使用这些状态并发 ⇒ 数据竞争。本函数只做 memset + 标量写，
+ * RT 安全（无分配、无锁、无 IO）。 */
 void spatial_reset(auradsp_handle h) {
     if (!h) return;
     for (int s = 0; s < auradsp_handle_s::kSpatSpk; ++s) {

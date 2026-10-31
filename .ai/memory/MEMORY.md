@@ -367,15 +367,24 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
 - **未决任务三分类台账（2026-10-31 定案）**：在册遗留一律按「已闭环 / 仍在册 / 待裁定」维护。
   台账落点 `docs/30-审查/未决任务复核-2026-10-31.md`，真相源入口 `docs/00-总览/项目架构与开发规范.md` §9。
   复核纪律=**逐项回代码/产物/分支取证，不采信历史文档口径**；凡称「已闭环」须给出可复核取证位置
-  （文件行号 / 产物时间戳 / 测试名）。当前状态：销账 4 项、仍在册 8 项、待裁定 4 项。
+  （文件行号 / 产物时间戳 / 测试名）。当前状态：销账 8 项、仍在册 5 项、待裁定 3 项。
 - **已销账（勿再当未完成）**：① 32 位插件挂载——PE 头判定 → `isCompatible=false` → 三道拦截
   （列表灰显角标 / Dart `loadPlugin` / 引擎侧拒绝）+ 三语文案 + `plugin_manager_test.dart` D2 两例
   + `smoke_plugin_arch_detect.py`；② dist zip 重打包（`dist/AuraDSP-Windows-x64.zip`
   136,050,921 B @ 2026-10-31 12:10:09）；③ P-045 / P-046 内存专项（`eb95d8f` / `b5d0b41`）。
-- **仍在册高危（本仓唯一一组）**：L-01 / L-02 / L-03 —— 控制线程与 RT 线程共享可变 DSP 状态。
-  L-01 `engine/chain/engine_chain.cpp:752 eq_pool_reload`、L-03 `:646 arbmag_pool_reload`
-  （`loaded` 仍是普通 int，跨线程读写无原子保护）、L-02 `:214 reset_channel_state` 直清 RT 在用状态。
-  改法范式已由 `mc_rev.reset_req` 给出（request 位 + RT 侧淡出后清），L-02 可直接复制该模式。
+- **~~仍在册高危（本仓唯一一组）~~ → 已销账（2026-10-31 晚 P0 双池专项）**：L-01 / L-02 / L-03
+  三项高危并发已闭环，通用契约落 **ADR-011**（`docs/adr/ADR-011-no-shared-mutable-dsp-state.md`）：
+  **控制线程与 RT 线程不得共享可变 DSP 状态**，三选一——影子槽 + 原子发布 / 请求位 + RT 消费 /
+  同持 `jdsp_lock`。落地：eq 与 arbmag 两池改 **2 bank（活动槽 + 影子槽）**，控制侧只在影子
+  bank 重建 IR 后原子发布 `active`，RT 在 `process_multichannel_chain` 入口取一次快照；
+  `loaded` 下沉到 bank 内（不再是跨线程裸 `int`）；在途守卫与 comp B1-c 同式
+  （`in_flight==0` 或 `proc_count>=retired_at`），有界等待 500ms 墙钟，仍不可用则放弃本次重载。
+  L-03 主 conv 走 `kAuraStages` 的 `arbmag` stage `lock 0→1` + 控制侧同持 `jdsp_lock`；
+  L-02 拆为 `reset_channel_state`（控制侧置 `reset_req`）+ `reset_channel_state_rt`（RT 消费）。
+  登记 PATCHES.md **P-047 / P-048**；门禁 `test/smoke/smoke_pool_race.py`（已挂 runner.py，
+  四阶段）；反向验证脚本化可复现：`python tools/probe/prefix_toggle.py revert|restore`。
+  **教训：池的 `LoadImpulseResponse` 首步即 `Free` ⇒ 与 RT 的 `Process` 并发是 UAF（崩溃级），
+  不是听感问题；「原位刷新」是撕裂级；两者都无锁。**
 - **L-04 收窄**：淡出机制**早就存在**（`engine/dsp/dsp_mc_reverb.cpp:110-112` 置 request 位、
   `:214-218` RT 侧消费 → 5ms 淡出 → `mc_clear_state` → 重新起尾），真实缺口只是
   「参数/预设切换路径未触发该请求位」。改法应为「淡出后清」而非「直接清」，

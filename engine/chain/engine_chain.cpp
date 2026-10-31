@@ -1,6 +1,8 @@
 /* P2 split from auradsp_engine.cpp; Phase 3 routes plugin stages through PluginChainComponent. */
 #include "engine_internal.h"
 #include "plugins/integration/plugin_chain_adapter.h"
+#include <chrono>
+#include <thread>
 
 
 
@@ -195,23 +197,65 @@ int reverb_path_kind(auradsp_handle h) {
 }
 
 /* WP0 脚手架：拓扑变化（channels.mode/count、binaural、spatial.enable）
- * 的统一状态清理入口。当前为空实现，WP6 落地；届时逐模块清理：
- *   gate            gate_gain/state/hold/env/ds_lp/ds_env
- *   filter / shelf  z1/z2[8]
- *   dyneq           3 段 det_z1/det_z2/env/z1/z2
- *   tube            tube_process_mc 内部逐声道状态
- *   exciter/loudness 逐声道 one-pole / 包络
- *   limiter         mc_limiter_* 环/包络/deque
- *   bassmono/basspsycho  bm_lp[8] / psy_*
- *   haas            haas_ring
- *   spatial         spatial_reset(h)
- *   MC reverb       mc_reverb_reset(h)（WP1 新增）
- *   comp/eq/arbmag 池  逐声道实例 reset（卷积 FIFO 清零）
- *   vendor 段       apply_reverb(h) + 必要的 vendor refresh（P-036 预留）
- * 调用点（WP6）：set_channels_mode/count、hook_spatial_binaural、
+ * 的统一状态清理入口。WP6 落地。
+ *
+ * [PATCHED-AuraDSP P-047] 拆成「控制侧」+「RT 侧」两段（L-02）：
+ *   - 控制侧（reset_channel_state，控制线程）：只做控制线程自己的事
+ *     （池重载、vendor 段重建、liveprog 声道数）+ 置位 reset_req 标志；
+ *   - RT 侧（reset_channel_state_rt，音频线程）：真正清理 RT 独占状态。
+ * 原实现在控制线程直清 gate / filter / dyneq / tube / limiter / haas /
+ * spatial 等 RT 正在使用的非原子状态 ⇒ 数据竞争（切通道数或空间开关时可能
+ * 撕裂出 NaN / 爆音）。同范式见 McReverbState::reset_req（dsp_mc_reverb.cpp）。
+ *
+ * 逐模块清理：
+ *   gate            gate_gain/state/hold/env/ds_lp/ds_env      [RT 侧]
+ *   filter / shelf  z1/z2[8]                                   [RT 侧]
+ *   dyneq           3 段 det_z1/det_z2/env/z1/z2               [RT 侧]
+ *   tube            tube_process_mc 内部逐声道状态             [RT 侧]
+ *   exciter/loudness 逐声道 one-pole / 包络                    [RT 侧]
+ *   limiter         mc_limiter_* 环/包络/deque                  [RT 侧]
+ *   bassmono/basspsycho  bm_lp[8] / psy_*                     [RT 侧]
+ *   haas            haas_ring                                   [RT 侧]
+ *   spatial         spatial_reset(h)                           [RT 侧]
+ *   post_gain       post_gain_sm[8]                            [RT 侧]
+ *   MC reverb       mc_reverb_reset(h)（本身即请求式）         [控制侧]
+ *   comp/eq/arbmag 池  逐声道实例重载（P-047 双槽化后与 RT 零交集）[控制侧]
+ *   vendor 段       apply_reverb(h) + 必要的 vendor refresh（P-036 预留）[控制侧]
+ *   liveprog 声道数 LiveProgSetChannels                       [控制侧]
+ *
+ * 调用点：set_channels_mode/count、hook_spatial_binaural、
  * hook_spatial_enable；set_reverb_preset 只重置混响状态，不全量 reset。
  * 控制线程调用；不得在音频线程执行。 */
 void reset_channel_state(auradsp_handle h) {
+    if (!h) return;
+
+    /* 1. 池重载（控制线程；P-047 双槽化后与 RT 零交集） */
+    if (h->arbmag_pool.bank[h->arbmag_pool.active.load(std::memory_order_acquire)].loaded) {
+        arbmag_pool_reload(h);
+    }
+    if (h->eq_pool.bank[h->eq_pool.active.load(std::memory_order_acquire)].loaded) {
+        eq_pool_reload(h);
+    }
+
+    /* 2. MC reverb（请求式：淡出后由 RT 清） */
+    mc_reverb_reset(h);
+
+    /* 3. vendor 段 */
+    if (h->open.load()) {
+        apply_reverb(h);
+    }
+
+    /* 4. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
+    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
+    LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
+
+    /* 5. 请求 RT 侧清理独占状态（RT 在 auradsp_process 入口消费） */
+    h->reset_req.store(1, std::memory_order_release);
+}
+
+/* RT 侧：清理全部 RT 独占的逐声道 / 逐块状态。
+ * 只在音频线程调用（auradsp_process 入口消费 reset_req 时）。 */
+void reset_channel_state_rt(auradsp_handle h) {
     if (!h) return;
 
     /* 1. gate */
@@ -295,37 +339,20 @@ void reset_channel_state(auradsp_handle h) {
         h->haas_pos = 0;
     }
 
-    /* 9. spatial */
+    /* 9. spatial（RT 独占状态：环形缓冲 / 历史 / one-pole） */
     spatial_reset(h);
 
-    /* 10. MC reverb */
-    mc_reverb_reset(h);
+    /* 10. MC 混响自动增益补偿平滑状态（RT 独占；混响本体由 mc_rev.reset_req
+     * 走「淡出后清」路径，见 reset_channel_state 控制侧） */
     h->rev_ag_in = 0.0;
     h->rev_ag_out = 0.0;
     h->rev_ag_comp = 1.0;
     h->rev_g_sm = 1.0f;
 
-    /* 11. arbmag_pool */
-    if (h->arbmag_pool.loaded) {
-        arbmag_pool_reload(h);
-    }
-    if (h->eq_pool.loaded) {
-        eq_pool_reload(h);
-    }
-
-    /* 12. vendor 段 */
-    if (h->open.load()) {
-        apply_reverb(h);
-    }
-
-    /* 13. post_gain 平滑状态 (WP5) */
+    /* 11. post_gain 平滑状态 (WP5) */
     for (int c = 0; c < 8; ++c) {
         h->post_gain_sm[c] = 1.0f;
     }
-
-    /* 14. liveprog 环境感知 [PATCHED-AuraDSP P-038] */
-    const int cur_ch = h->channel_count.load(std::memory_order_relaxed);
-    LiveProgSetChannels(&h->jdsp, cur_ch > 0 ? cur_ch : 2);
 }
 
 
@@ -620,61 +647,171 @@ void apply_arbmag(auradsp_handle h) {
 }
 
 
+/* ======================================================================
+ * [PATCHED-AuraDSP P-047] 逐声道卷积池的双槽（影子槽）基础设施
+ *
+ * 与 legacy 侧 comp（B1-c）/ liveprog（B1）/ ddc（B1-b）影子槽范式同式：
+ *   控制侧在非活动影子槽重建 → 原子发布活动槽 → 旧槽退役并延迟回收。
+ * 完整设计说明见 engine_internal.h 的 PoolBank 注释。
+ * ====================================================================== */
+
+/* 墙钟上界与自旋预算：照抄 comp B1-c 的 kCompSlotWaitMs / kCompSlotSpinCount。
+ * 自旋优先的原因：RT 块间隙通常在百微秒级，纯 sleep 的毫秒级实际粒度会把
+ * 控制线程拖垮；超预算后回落 sleep，总墙钟仍受 kPoolSlotWaitMs 收敛。 */
+static constexpr double kPoolSlotWaitMs = 500.0;
+static constexpr unsigned int kPoolSlotSpinCount = 60000;
+
+static double pool_now_ms() {
+    using namespace std::chrono;
+    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+}
+static void pool_yield() { std::this_thread::yield(); }
+static void pool_sleep_ms(unsigned int ms) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+}
+
+/* 选影子槽：活动槽的对偶（act ^ 1）。
+ * 在途守卫双条件任一满足即可复用该槽：
+ *   (a) in_flight == 0 —— 无 RT 块在途（覆盖音频停流时 proc_count 冻结）；
+ *   (b) proc_count >= retired_at —— 换出后已跑满一个音频块。
+ * 返回影子槽下标；-1 = 墙钟超限仍不可用（放弃本次重载，旧 IR 继续生效）。 */
+static int pool_pick_shadow(auradsp_handle_s::PoolBank* banks,
+                            std::atomic<int>& active,
+                            std::atomic<uint64_t>& proc_count,
+                            std::atomic<int>& in_flight,
+                            double deadline) {
+    for (unsigned int spin = 0;; ++spin) {
+        const int act = active.load(std::memory_order_acquire);
+        const int shadow = act ^ 1;
+        const uint64_t ra = banks[shadow].retired_at;
+        if (ra == 0) return shadow;   /* 从未当活动槽 → 立即可用 */
+        const uint64_t pc = proc_count.load(std::memory_order_acquire);
+        const int inf = in_flight.load(std::memory_order_acquire);
+        if (inf == 0 || pc >= ra) return shadow;   /* 在途守卫通过 */
+        if (pool_now_ms() >= deadline) return -1;
+        if (spin < kPoolSlotSpinCount) { pool_yield(); continue; }
+        pool_sleep_ms(1);
+    }
+}
+
+/* 发布影子槽为新的活动槽，并把旧活动槽标记退役。
+ * retired_at = 换出时刻的 proc_count 快照 + 1（与 comp B1-c 同序：换指针后读）。
+ * 正确性：proc_count 在 RT 块首递增，retired_at = q+1 意味着「换出后至少又开过
+ * 一个块」；该块快照到的是新活动槽，而快照到旧槽的那一块必然已结束 ⇒ 旧槽可写。 */
+static void pool_publish(auradsp_handle_s::PoolBank* banks,
+                         std::atomic<int>& active,
+                         std::atomic<uint64_t>& proc_count,
+                         int shadow) {
+    banks[shadow].retired_at = 0;   /* 影子槽复位（即将成为活动槽） */
+    const int prev = active.exchange(shadow, std::memory_order_release);
+    const uint64_t q = proc_count.load(std::memory_order_acquire);
+    if (prev != shadow) banks[prev].retired_at = q + 1;   /* 旧活动槽退役 */
+}
+
 /* B5 后续：arbmag 逐声道池（8×FFTConvolver1x1，IR 与主 arbMag.conv 同源）。
  * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。
  * 内容等价性：同一 eqFil、同一 blockSize 下，1x1 输出 == 2x2 对应声道输出
- * （独立 inputBuffer/segments，无跨声道状态）。 */
+ * （独立 inputBuffer/segments，无跨声道状态）。
+ * [PATCHED-AuraDSP P-047] 双槽化（L-03）：每池 2 个 bank，控制侧在影子 bank
+ * 上重建 IR 后原子发布，RT 块首只读一次活动 bank。 */
 void arbmag_pool_alloc(auradsp_handle h) {
     if (!h) return;
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        if (!h->arbmag_pool.conv[c]) {
-            auto* conv = new (std::nothrow) FFTConvolver1x1();
-            if (!conv) return; /* OOM：保持空位，process 侧直通 */
-            FFTConvolver1x1Init(conv);
-            h->arbmag_pool.conv[c] = conv;
+    for (int b = 0; b < 2; ++b) {
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            if (!h->arbmag_pool.bank[b].conv[c]) {
+                auto* conv = new (std::nothrow) FFTConvolver1x1();
+                if (!conv) return; /* OOM：保持空位，process 侧直通 */
+                FFTConvolver1x1Init(conv);
+                h->arbmag_pool.bank[b].conv[c] = conv;
+            }
         }
     }
 }
 
 void arbmag_pool_free(auradsp_handle h) {
     if (!h) return;
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        if (h->arbmag_pool.conv[c]) {
-            FFTConvolver1x1Free(h->arbmag_pool.conv[c]);
-            delete h->arbmag_pool.conv[c];
-            h->arbmag_pool.conv[c] = nullptr;
+    for (int b = 0; b < 2; ++b) {
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            if (h->arbmag_pool.bank[b].conv[c]) {
+                FFTConvolver1x1Free(h->arbmag_pool.bank[b].conv[c]);
+                delete h->arbmag_pool.bank[b].conv[c];
+                h->arbmag_pool.bank[b].conv[c] = nullptr;
+            }
         }
+        h->arbmag_pool.bank[b].loaded = 0;
+        h->arbmag_pool.bank[b].retired_at = 0;
     }
-    h->arbmag_pool.loaded = 0;
+    h->arbmag_pool.active.store(0, std::memory_order_release);
+    h->arbmag_pool.proc_count.store(0, std::memory_order_relaxed);
+    h->arbmag_pool.in_flight.store(0, std::memory_order_relaxed);
 }
 
 /* 控制线程：用当前 GetFilter(eqFil) 同步重载全池。IR 源与主 conv 完全相同
  * （同一 coeffGen.GetFilter(fs) 调用——注意主链 StringParser/Enable 的
- * ForceRefresh 路径也会重算 eqFil；池与主 conv 共用同一份，不存在漂移）。 */
+ * ForceRefresh 路径也会重算 eqFil；池与主 conv 共用同一份，不存在漂移）。
+ * [PATCHED-AuraDSP P-047] 改为「影子 bank 重建 + 原子发布」：原实现直接在
+ * 活动卷积器上 LoadImpulseResponse（内部 free + 重分配），与 RT 的 Process
+ * 竞争 ⇒ 释放后使用（UAF）。 */
 void arbmag_pool_reload(auradsp_handle h) {
     if (!h) return;
+    /* 曲线已清空（ready=0）时不重建：此时 coeffGen 的节点已被 EqNodesFree
+     * 释放，重建只会得到一条平坦 IR，与「曲线已清空 ⇒ 直通」的语义不符。 */
+    if (!h->p.arbmag_ready.load(std::memory_order_relaxed)) return;
     const unsigned block = (unsigned)h->jdsp.blockSize;
-    if (block == 0) { h->arbmag_pool.loaded = 0; return; }
-    float* eqFil = h->jdsp.arbMag.instance.coeffGen.GetFilter(
-        &h->jdsp.arbMag.instance.coeffGen, (float)h->sample_rate);
-    if (!eqFil) { h->arbmag_pool.loaded = 0; return; }
     const unsigned irLen = h->jdsp.arbMag.instance.filterLen;
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        auto* conv = h->arbmag_pool.conv[c];
-        if (!conv) { h->arbmag_pool.loaded = 0; return; }
-        if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
-            h->arbmag_pool.loaded = 0;
-            return;
+    float* eqFil = nullptr;
+    if (block != 0 && irLen != 0) {
+        eqFil = h->jdsp.arbMag.instance.coeffGen.GetFilter(
+            &h->jdsp.arbMag.instance.coeffGen, (float)h->sample_rate);
+    }
+
+    /* 选影子槽（在途守卫 + 有界等待）。守卫不通过则放弃本次重载：旧 IR 继续
+     * 生效 —— 绝不原地重建活动槽（那会与 RT 竞争 → UAF）。 */
+    const double deadline = pool_now_ms() + kPoolSlotWaitMs;
+    const int shadow = pool_pick_shadow(h->arbmag_pool.bank, h->arbmag_pool.active,
+                                        h->arbmag_pool.proc_count, h->arbmag_pool.in_flight,
+                                        deadline);
+    if (shadow < 0) return;
+
+    /* 在影子槽上装载（与 RT 零交集） */
+    auradsp_handle_s::PoolBank& sb = h->arbmag_pool.bank[shadow];
+    int ok = 0;
+    if (eqFil && block != 0 && irLen != 0) {
+        ok = 1;
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            auto* conv = sb.conv[c];
+            if (!conv) { ok = 0; break; }
+            if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
+                ok = 0;
+                break;
+            }
         }
     }
-    h->arbmag_pool.loaded = 1;
+    sb.loaded = ok;   /* 0 = 未装载 → RT 直通（与旧语义一致） */
+    pool_publish(h->arbmag_pool.bank, h->arbmag_pool.active,
+                 h->arbmag_pool.proc_count, shadow);
+}
+
+/* 发布一个「未装载」的活动槽（等效旧语义的 loaded = 0 → RT 直通）。
+ * 走影子槽 + 在途守卫，不直写活动槽（直写会与 RT 读 loaded 竞争）。
+ * 守卫不通过时放弃：此时 arbmag_ready=0 已让 RT 直通，池内残留 IR 不会被使用。 */
+void arbmag_pool_disable(auradsp_handle h) {
+    if (!h) return;
+    const int shadow = pool_pick_shadow(h->arbmag_pool.bank, h->arbmag_pool.active,
+                                        h->arbmag_pool.proc_count, h->arbmag_pool.in_flight,
+                                        pool_now_ms());   /* 已过期的墙钟 ⇒ 不等待 */
+    if (shadow < 0) return;
+    h->arbmag_pool.bank[shadow].loaded = 0;
+    pool_publish(h->arbmag_pool.bank, h->arbmag_pool.active,
+                 h->arbmag_pool.proc_count, shadow);
 }
 
 /* RT 线程：交织缓冲单声道处理（无分配、无锁）。
- * 选中（mask 位 && enable && ready && 池已装载）→ 抽 mono 进 shelf_scratch、
+ * 选中（mask 位 && enable && ready && 活动 bank 已装载）→ 抽 mono 进 shelf_scratch、
  * 1x1 卷积、应用输出增益门 fxOutGain[4]（静态线性增益；autogain 为逐块平滑，
  * 多声道逐声道路径不重复应用共享平滑状态——保持与单声道场景一致的确定性），
- * 写回交织缓冲。未选中 → 原样直通。 */
+ * 写回交织缓冲。未选中 → 原样直通。
+ * [PATCHED-AuraDSP P-047] 只读本块快照的活动 bank（块首取一次）。 */
 static inline float* arbmag_pool_get_scratch(auradsp_handle h) {
     return h && h->shelf_scratch ? h->shelf_scratch : nullptr;
 }
@@ -687,8 +824,10 @@ void arbmag_pool_process_strided(auradsp_handle h, float* io, int frames,
     if (!h->p.arbmag_enable.load(std::memory_order_relaxed) ||
         !h->p.arbmag_ready.load(std::memory_order_relaxed))
         return;
-    auto* conv = h->arbmag_pool.conv[ch_idx];
-    if (!conv || !h->arbmag_pool.loaded) return;
+    const auradsp_handle_s::PoolBank& bk = h->arbmag_pool.bank[h->arbmag_pool_bank];
+    if (!bk.loaded) return;
+    auto* conv = bk.conv[ch_idx];
+    if (!conv) return;
     float* scratch = arbmag_pool_get_scratch(h);
     if (!scratch) return;
     float* in = io + ch_idx;
@@ -731,74 +870,99 @@ static inline void sample_stage_peak_mc(auradsp_handle h, int stage_idx,
 
 
 /* [PATCHED-AuraDSP P-035] eq 逐声道池（8×FFTConvolver1x1，IR 与主 mEQ.instance.coeffGen 同源但按设备采样率生成）。
- * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。 */
+ * 线程契约：alloc/free/reload 全部控制线程；RT 线程只读池指针与 loaded 标志。
+ * [PATCHED-AuraDSP P-047] 双槽化（L-01）：见上方 PoolBank 注释。 */
 void eq_pool_alloc(auradsp_handle h) {
     if (!h) return;
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        if (!h->eq_pool.conv[c]) {
-            auto* conv = new (std::nothrow) FFTConvolver1x1();
-            if (!conv) return;
-            FFTConvolver1x1Init(conv);
-            h->eq_pool.conv[c] = conv;
+    for (int b = 0; b < 2; ++b) {
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            if (!h->eq_pool.bank[b].conv[c]) {
+                auto* conv = new (std::nothrow) FFTConvolver1x1();
+                if (!conv) return;
+                FFTConvolver1x1Init(conv);
+                h->eq_pool.bank[b].conv[c] = conv;
+            }
         }
     }
 }
 
 void eq_pool_free(auradsp_handle h) {
     if (!h) return;
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        if (h->eq_pool.conv[c]) {
-            FFTConvolver1x1Free(h->eq_pool.conv[c]);
-            delete h->eq_pool.conv[c];
-            h->eq_pool.conv[c] = nullptr;
+    for (int b = 0; b < 2; ++b) {
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            if (h->eq_pool.bank[b].conv[c]) {
+                FFTConvolver1x1Free(h->eq_pool.bank[b].conv[c]);
+                delete h->eq_pool.bank[b].conv[c];
+                h->eq_pool.bank[b].conv[c] = nullptr;
+            }
         }
+        h->eq_pool.bank[b].loaded = 0;
+        h->eq_pool.bank[b].retired_at = 0;
     }
-    h->eq_pool.loaded = 0;
+    h->eq_pool.active.store(0, std::memory_order_release);
+    h->eq_pool.proc_count.store(0, std::memory_order_relaxed);
+    h->eq_pool.in_flight.store(0, std::memory_order_relaxed);
     h->eq_pool.ir_rate = 0.0f;
 }
 
 void eq_pool_reload(auradsp_handle h) {
     if (!h) return;
     const unsigned block = (unsigned)h->jdsp.blockSize;
-    if (block == 0) { h->eq_pool.loaded = 0; return; }
     const float dev_sr = (h->sample_rate > 0.0) ? (float)h->sample_rate : 48000.0f;
     const unsigned irLen = h->jdsp.mEQ.instance.filterLen ? h->jdsp.mEQ.instance.filterLen : 8192;
 
-    double dev_freq[NUMPTS + 2];
-    double dev_gain[NUMPTS + 2];
-    memcpy(dev_freq, h->jdsp.mEQ.freq, sizeof(dev_freq));
-    memcpy(dev_gain, h->jdsp.mEQ.gain, sizeof(dev_gain));
-    const double nyq = (double)dev_sr * 0.5;
-    for (int i = 1; i <= NUMPTS; ++i) {
-        if (dev_freq[i] >= nyq) {
-            dev_freq[i] = nyq * (1.0 - 1e-4 * (NUMPTS + 1 - i));
+    float* eqFil = nullptr;
+    if (block != 0) {
+        double dev_freq[NUMPTS + 2];
+        double dev_gain[NUMPTS + 2];
+        memcpy(dev_freq, h->jdsp.mEQ.freq, sizeof(dev_freq));
+        memcpy(dev_gain, h->jdsp.mEQ.gain, sizeof(dev_gain));
+        const double nyq = (double)dev_sr * 0.5;
+        for (int i = 1; i <= NUMPTS; ++i) {
+            if (dev_freq[i] >= nyq) {
+                dev_freq[i] = nyq * (1.0 - 1e-4 * (NUMPTS + 1 - i));
+            }
+        }
+        dev_freq[NUMPTS + 1] = nyq;
+        dev_gain[NUMPTS + 1] = dev_gain[NUMPTS];
+
+        ierper pch;
+        initIerper(&pch, NUMPTS + 2);
+        if (!h->jdsp.mEQ.currentInterpolationMode) {
+            pchip(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
+        } else {
+            makima(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
+        }
+        eqFil = InterpolatingEqMinimumPhase(&h->jdsp.mEQ.instance.coeffGen, dev_sr, (void*)(&pch));
+        freeIerper(&pch);
+    }
+
+    /* [PATCHED-AuraDSP P-047] 影子槽重建 + 原子发布（原实现在活动卷积器上直接
+     * LoadImpulseResponse，与 RT 的 Process 竞争 ⇒ UAF）。守卫不通过则放弃本次
+     * 重载：旧 IR 继续生效 —— 绝不原地重建活动槽。 */
+    const double deadline = pool_now_ms() + kPoolSlotWaitMs;
+    const int shadow = pool_pick_shadow(h->eq_pool.bank, h->eq_pool.active,
+                                        h->eq_pool.proc_count, h->eq_pool.in_flight,
+                                        deadline);
+    if (shadow < 0) return;
+
+    auradsp_handle_s::PoolBank& sb = h->eq_pool.bank[shadow];
+    int ok = 0;
+    if (eqFil && block != 0) {
+        ok = 1;
+        for (int c = 0; c < kMxMaxChannels; ++c) {
+            auto* conv = sb.conv[c];
+            if (!conv) { ok = 0; break; }
+            if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
+                ok = 0;
+                break;
+            }
         }
     }
-    dev_freq[NUMPTS + 1] = nyq;
-    dev_gain[NUMPTS + 1] = dev_gain[NUMPTS];
-
-    ierper pch;
-    initIerper(&pch, NUMPTS + 2);
-    if (!h->jdsp.mEQ.currentInterpolationMode) {
-        pchip(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
-    } else {
-        makima(&pch, dev_freq, dev_gain, NUMPTS + 2, 1, 1);
-    }
-    float* eqFil = InterpolatingEqMinimumPhase(&h->jdsp.mEQ.instance.coeffGen, dev_sr, (void*)(&pch));
-    freeIerper(&pch);
-
-    if (!eqFil) { h->eq_pool.loaded = 0; return; }
-
-    for (int c = 0; c < kMxMaxChannels; ++c) {
-        auto* conv = h->eq_pool.conv[c];
-        if (!conv) { h->eq_pool.loaded = 0; return; }
-        if (!FFTConvolver1x1LoadImpulseResponse(conv, block, eqFil, irLen)) {
-            h->eq_pool.loaded = 0;
-            return;
-        }
-    }
-    h->eq_pool.loaded = 1;
-    h->eq_pool.ir_rate = dev_sr;
+    sb.loaded = ok;
+    if (ok) h->eq_pool.ir_rate = dev_sr;
+    pool_publish(h->eq_pool.bank, h->eq_pool.active,
+                 h->eq_pool.proc_count, shadow);
 }
 
 void eq_pool_process_strided(auradsp_handle h, float* io, int frames,
@@ -809,8 +973,10 @@ void eq_pool_process_strided(auradsp_handle h, float* io, int frames,
         return;
     if (!h->p.eq_enable.load(std::memory_order_relaxed))
         return;
-    auto* conv = h->eq_pool.conv[ch_idx];
-    if (!conv || !h->eq_pool.loaded) return;
+    const auradsp_handle_s::PoolBank& bk = h->eq_pool.bank[h->eq_pool_bank];
+    if (!bk.loaded) return;
+    auto* conv = bk.conv[ch_idx];
+    if (!conv) return;
     float* scratch = arbmag_pool_get_scratch(h);
     if (!scratch) return;
     float* in = io + ch_idx;
@@ -828,7 +994,8 @@ void eq_pool_process_strided(auradsp_handle h, float* io, int frames,
 
 void eq_process_mc(auradsp_handle h, float* dst, int frames, int ch) {
     if (!h || !dst || frames <= 0 || ch <= 0) return;
-    if (h->p.eq_enable.load(std::memory_order_relaxed) && h->eq_pool.loaded) {
+    const auradsp_handle_s::PoolBank& bk = h->eq_pool.bank[h->eq_pool_bank];
+    if (h->p.eq_enable.load(std::memory_order_relaxed) && bk.loaded) {
         for (int c = 0; c < ch; ++c) {
             eq_pool_process_strided(h, dst, frames, ch, c);
         }
@@ -1240,6 +1407,21 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     if (!h || !src || !dst || frames <= 0 || ch <= 0) return;
     h->stage_ch_active = ch;   /* [Phase B] stage 级 per-channel 数据全声道有效 */
 
+    /* [PATCHED-AuraDSP P-047] 池在途守卫的块级计数 + 活动 bank 快照。
+     * 顺序与 legacy comp（B1-c CompressorProcessBlockStart）同式：先递增
+     * proc_count / in_flight，再取快照。含义：
+     *   proc_count —— 已开始的 MC 块数（换出快照的基准，单调递增）；
+     *   in_flight —— 当前在途的 MC 块数（0 = 此刻无 RT 在用池）。
+     * 控制侧复用已退役 bank 前须过守卫双条件任一（见 pool_pick_shadow）：
+     * in_flight == 0，或 proc_count >= retired_at。 */
+    h->eq_pool.proc_count.fetch_add(1, std::memory_order_relaxed);
+    h->arbmag_pool.proc_count.fetch_add(1, std::memory_order_relaxed);
+    h->eq_pool.in_flight.fetch_add(1, std::memory_order_relaxed);
+    h->arbmag_pool.in_flight.fetch_add(1, std::memory_order_relaxed);
+    /* 块首只读一次活动 bank：控制线程此后换指针不影响本块后续样本。 */
+    h->eq_pool_bank = h->eq_pool.active.load(std::memory_order_acquire);
+    h->arbmag_pool_bank = h->arbmag_pool.active.load(std::memory_order_acquire);
+
     // 1. 全量拷贝至目标工作区，就地推进
     memcpy(dst, src, (size_t)frames * ch * sizeof(float));
 
@@ -1313,9 +1495,10 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     eq_process_mc(h, dst, frames, ch);
 
     // Step 13: arbmag 逐声道池统一全声道处理
+    /* [PATCHED-AuraDSP P-047] loaded 改读「本块快照的活动 bank」。 */
     if (h->p.arbmag_enable.load(std::memory_order_relaxed) &&
         h->p.arbmag_ready.load(std::memory_order_relaxed) &&
-        h->arbmag_pool.loaded) {
+        h->arbmag_pool.bank[h->arbmag_pool_bank].loaded) {
         for (int c = 0; c < ch; ++c) {
             arbmag_pool_process_strided(h, dst, frames, ch, c);
         }
@@ -1410,6 +1593,12 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
     }
 
     auradsp::plugin_chain_process_n(h, 4, dst, (uint32_t)frames, (uint32_t)ch);
+
+    /* [PATCHED-AuraDSP P-047] MC 块结束：释放在途守卫计数。
+     * 顺序：先递减 in_flight（表示「此刻无 RT 在用池」），proc_count 保持单调
+     * 递增作为换出快照基准。本函数无提前返回，故计数必然配平。 */
+    h->eq_pool.in_flight.fetch_sub(1, std::memory_order_relaxed);
+    h->arbmag_pool.in_flight.fetch_sub(1, std::memory_order_relaxed);
 }
 
 
