@@ -11,8 +11,11 @@
 | **App 内输出**（AAudio / Oboe） | App 侧 `AudioOut` 端口 | 低延迟客户端 API，运行在 App 进程；Android 实现落地后由 `createAudioOut()` 工厂接入，不改 DSP |
 | **系统效果 HAL 注入** | `core/android/` | 效果库运行在 audioserver/vendor 进程（`hal_audio_default`），由 effects HAL `dlopen`；入口见 [core/android/README.md](../../../core/android/README.md) |
 
-两条路径共用同一份引擎与 C ABI（`engine/auradsp_engine.h`）。HAL 注入不是 App 内的
-`AudioOut` 实现，也不经过 Dart 泵循环；`AudioOut` 在 Android 上仍归 App 侧。
+两条路径的**目标**是共用同一份引擎与 C ABI（`engine/auradsp_engine.h`）。当前实况：
+`core/android` 的 HAL 示例仍静态编入 `core/android/vendor-src/libjamesdsp`（上游提取快照，
+不含 `engine/legacy` 的 AuraDSP 本地补丁），与桌面 `engine/legacy` 不是同一份代码；
+差异见 `python tools/bin/legacy_copy_drift.py` 与跨平台基础审查 CP-03。统一内核属独立立项，
+本轮不改 Android 构建。HAL 注入不是 App 内的 `AudioOut` 实现，也不经过 Dart 泵循环。
 
 ## 2. 端口待实现项
 

@@ -1064,7 +1064,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get engineFailedBody =>
-      'auradsp_engine.dll 未找到或初始化失败。若 DLL 已随包存在，请查看下方错误详情定位（常见：音频设备/COM 初始化问题）。';
+      '引擎库未找到或初始化失败。若引擎库已随包存在，请查看下方错误详情定位（常见：音频设备/后端初始化问题）。';
 
   @override
   String get channelMode => '声道模式';
@@ -1869,7 +1869,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get presetHint =>
-      '保存/载入引擎全量参数快照（%APPDATA%/AuraDSP/presets）；T2 效果在音乐档下会被守卫拒绝（诚实提示）';
+      '保存/载入引擎全量参数快照（配置目录下 presets/）；T2 效果在音乐档下会被守卫拒绝（诚实提示）';
 
   @override
   String get presetLoadHint => '点击载入：';
@@ -2679,7 +2679,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpSlidersHint => '滑块条已自适应当前脚本声明与引用的 slider 参数；支持点击右上角切换模式。';
 
   @override
-  String get lpLibraryHint => '支持本地 %APPDATA% 库与外部多预设文件夹自动索引。';
+  String get lpLibraryHint => '支持本地脚本库与外部多预设文件夹自动索引。';
 
   @override
   String get convIrTitle => '脉冲响应 (IR)';

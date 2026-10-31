@@ -3,6 +3,11 @@
 完整 JamesDSP 引擎（`vendor-src/libjamesdsp`，83 个 C 源文件）挂载到 EffectRegistrar 框架，
 产出与 libspikeeq.so 相同 dlsym 契约（`createEffect`/`queryEffect`/`destroyEffect` 三导出）的 AIDL 效果库。
 
+> **与桌面引擎的关系（CP-03，2026-11-01）**：本目录编入的是上游快照，**不是**
+> `engine/legacy`（桌面版含 40+ 条 AuraDSP 补丁：liveprog 影子 VM、EEL2 惰性 gmem、
+> 并发/NaN/清空等修复）。两副本差异用 `python tools/bin/legacy_copy_drift.py` 查看；
+> 不要把这里的修改当作桌面修复已同步，反之亦然。
+
 ## 构建与产物
 
 ```bash

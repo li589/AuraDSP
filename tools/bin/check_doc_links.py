@@ -61,7 +61,10 @@ def resolve(src: str, raw: str):
     if raw.startswith(("http://", "https://", "mailto:", "#")):
         return None
     if raw.startswith("file:///"):
-        target = urllib.parse.unquote(raw[8:]).replace("/", "\\")
+        target = urllib.parse.unquote(raw[8:])
+        # CP-22（2026-11-01）：反斜杠仅在 Windows 上需要；POSIX 保持正斜杠。
+        if os.name == "nt":
+            target = target.replace("/", "\\")
         return os.path.normpath(re.split(r"#", target)[0])
     target = urllib.parse.unquote(raw.split("#", 1)[0].strip())
     if not target:

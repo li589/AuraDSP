@@ -892,9 +892,9 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
     final v = abi();
     if (v != kExpectedAbi) {
       throw StateError(
-          'auradsp_engine.dll ABI 版本不匹配：App 绑定期望 v$kExpectedAbi'
+          '引擎库 ABI 版本不匹配：App 绑定期望 v$kExpectedAbi'
           '（viz_frame 1600B，含 per-channel 电平字段），实际 v$v。'
-          '请使用与 App 同版本的引擎 DLL——旧 DLL 帧布局缺追加字段，'
+          '请使用与 App 同版本的引擎库——旧库帧布局缺追加字段，'
           '混搭将导致全部字段静默错位。');
     }
   }

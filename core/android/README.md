@@ -64,6 +64,9 @@
   create/setParameter/open/command、release 全链通过（Android 16 / Ace 6T / Enforcing）。
 - 引擎接入：[examples/jamesdsp_engine/README.md](registrar/examples/jamesdsp_engine/README.md)
   （完整 libjamesdsp 静态编入，默认 BassBoost +6dB 可听验证；binder 参数通道待接）。
+  **注意**：此处编入的是 `vendor-src/libjamesdsp` 上游快照，**不是**桌面 `engine/legacy`
+  （后者含 40+ 条 AuraDSP 本地补丁）。两者差异用
+  `python tools/bin/legacy_copy_drift.py` 查看；统一内核见跨平台基础审查 CP-03。
 
 ## 5. 已知限制
 
