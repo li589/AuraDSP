@@ -5,6 +5,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
+import 'visualizer_time_aware.dart';
 
 /// 流体动力学：基于 Stable Fluids（Jos Stam）的二维不可压流场模拟
 ///
@@ -19,13 +20,13 @@ import '../models/visualizer_themes.dart';
 /// 不使用 MaskFilter.blur / ImageFilter / ui.Image，避免逐帧申请全尺寸图层
 /// 或上传纹理；栅格、顶点、颜色与索引缓冲全部复用，只有 ui.Vertices 每帧
 /// 新建一次，交由引擎 finalizer 回收。
-class FluidDynamicsPainter extends CustomPainter {
+class FluidDynamicsPainter extends CustomPainter implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
   final double bloom;
-  final double animationTime;
+  double animationTime;
 
-  /// CustomPainter 每帧重建，流场状态需跨帧保留，故共享单例。
+  /// 流场状态需跨帧保留；画笔实例也由视口缓存，整场播放只有这一份。
   static final _FluidField _field = _FluidField();
 
   FluidDynamicsPainter({
@@ -34,6 +35,9 @@ class FluidDynamicsPainter extends CustomPainter {
     required this.bloom,
     required this.animationTime,
   });
+
+  @override
+  void setVisualizerTime(double time) => animationTime = time;
 
   @override
   void paint(Canvas canvas, Size size) {

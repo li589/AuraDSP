@@ -16,6 +16,10 @@ class OscilloscopePainter extends CustomPainter {
   final Paint _waveRPaint = Paint()..style = PaintingStyle.stroke;
   final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
 
+  /// 轨迹 Path 跨帧复用（画笔实例由视口缓存）：整场播放只有这两条原生路径。
+  final Path _pathL = Path();
+  final Path _pathR = Path();
+
   OscilloscopePainter({
     required this.waveL,
     required this.waveR,
@@ -56,8 +60,8 @@ class OscilloscopePainter extends CustomPainter {
     final n = waveL.length;
     if (n < 2) return;
 
-    final pathL = Path();
-    final pathR = Path();
+    final pathL = _pathL..reset();
+    final pathR = _pathR..reset();
     final stepX = size.width / (n - 1);
     final amp = size.height * 0.42;
 

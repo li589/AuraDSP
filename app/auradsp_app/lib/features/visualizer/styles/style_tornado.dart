@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
+import 'visualizer_time_aware.dart';
 
 /// 粒子龙卷风：确定性粒子漏斗（2026-10-31 重做）
 ///
@@ -14,11 +15,12 @@ import '../models/visualizer_themes.dart';
 /// 3. **运动拖尾**：每颗粒子额外画一段短拖尾（按前一时刻位置），形成速度感，
 ///    不再是漂浮的圆点；前后景只影响亮度/尺寸，纵向偏移极小，避免错位；
 /// 4. 全部种子为进程级静态表：每帧零随机、零列表分配、零 MaskFilter。
-class ParticleTornadoPainter extends CustomPainter {
+class ParticleTornadoPainter extends CustomPainter
+    implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
   final double bloom;
-  final double animationTime;
+  double animationTime;
   final double lineWidth;
 
   static const int _particleCount = 150;
@@ -56,6 +58,9 @@ class ParticleTornadoPainter extends CustomPainter {
     required this.animationTime,
     this.lineWidth = 1.5,
   });
+
+  @override
+  void setVisualizerTime(double time) => animationTime = time;
 
   static List<double> _buildParticleSeeds() {
     final rnd = math.Random(20251031);
