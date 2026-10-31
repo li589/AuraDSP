@@ -3,13 +3,18 @@
 
 背景：EEL2 的 compileContext 原先把 gmem 区内嵌为 float[1<<24]（64MB），
 每个 VM 一建就吃满；每 handle 3 个 LiveProg 槽 × 8 个 VM 句柄 = 1.5GB。
-清理后改为「脚本真正引用 RAM（x[y]/gmem/tds…）时才 calloc」，语义不变。
+2026-10-30 先改为「脚本真正引用 RAM（x[y]/gmem/tds…）时才分配」；
+2026-10-31（P-045）进一步把 64MB 改为「地址空间保留 + 首次访问按 64KB 页提交」
+（Windows VEH），并把编译前 memset 收窄为只清已提交前缀。
 
 判据（清单门禁与功能冒烟都查不到）：
   [A] 不含 RAM 访问的脚本编译后，句柄内存增量远低于 64MB/VM 的旧口径
   [B] gmem 首次分配仍全零；写入后可读回（gmem 往返）
   [C] 同一 VM 重新编译时 gmem 被清零（旧 memset 语义）
   [D] 用 gmem 的脚本编译后音频正确（0.4 输入 → 0.2 输出）
+  [E] 引用 gmem 的脚本按需物理提交（单句柄 < 60MB，旧口径 ~89MB）
+  [F] VB 八总线形态 8 个并发 gmem 引擎总增长 < 320MB（旧口径 ~700MB）
+  [G] 深层 gmem（VEH 页提交）读写正确
 
 用法：python test/smoke/smoke_liveprog_gmem.py（退出码 0 = 全绿）
 """
@@ -151,6 +156,71 @@ set_i(h, "liveprog.enable", 1)
 peak = run(h)
 check("[D] 再切回 gmem 脚本音频仍正确", rc == 0 and abs(peak - 0.2) < 0.02,
       "peak=%.4f" % peak)
+dll.auradsp_destroy(h)
+
+# ---- [E] gmem 按需物理提交（2026-10-31）：不再整块 64MB ----
+# 旧口径：引用 gmem 的脚本 = 每 VM 实打实 64MB（句柄约 25MB → 每个句柄 ~89MB）。
+# 新口径：64MB 只保留地址空间，首次访问按 64KB 页提交；低偏移脚本
+# （SCRIPT_WRITE 只碰 gmem[7]/[999]/[12345]）应只有句柄 + 1MB 预提交。
+base = priv_mb()
+h = dll.auradsp_create(SR, N)
+rc = set_str(h, "liveprog.code", SCRIPT_WRITE)
+ok = rc == 0 and get_i(h, "liveprog.status") == 1
+after = priv_mb()
+if base is not None and after is not None:
+    delta = after - base
+    check("[E] gmem 脚本按需提交（单句柄增长 < 60MB，旧口径约 89MB）",
+          ok and delta < 60.0, "delta=%.1f MB rc=%d" % (delta, rc))
+else:
+    print("NOTE  psutil 缺失，跳过 [E] 内存断言")
+    check("[E] gmem 脚本编译成功", ok, "rc=%d" % rc)
+dll.auradsp_destroy(h)
+
+# ---- [F] VB 八总线形态：8 个并发 gmem 引擎不得回到 700MB 量级 ----
+base = priv_mb()
+hs = []
+ok = True
+for _ in range(8):
+    hh = dll.auradsp_create(SR, N)
+    if not hh:
+        ok = False
+        break
+    hs.append(hh)
+    if set_str(hh, "liveprog.code", SCRIPT_WRITE) != 0:
+        ok = False
+for hh in hs:
+    run(hh, blocks=2)
+after = priv_mb()
+if base is not None and after is not None:
+    delta = after - base
+    # 新口径：8 × (句柄 ~25MB + 1MB 预提交) ≈ 210MB；
+    # 旧口径：8 × (句柄 + 64MB) ≈ 700MB。留出插件链/堆碎片余量。
+    check("[F] 8 个 gmem 引擎总增长 < 320MB（旧口径约 700MB）",
+          ok and delta < 320.0, "delta=%.1f MB ok=%s" % (delta, ok))
+else:
+    print("NOTE  psutil 缺失，跳过 [F] 内存断言")
+    check("[F] 8 个 gmem 引擎编译成功", ok)
+for hh in hs:
+    dll.auradsp_destroy(hh)
+
+# ---- [G] 深层 gmem 页按需提交（VEH 路径）----
+# gmem[3000000] ≈ 11.4MB 偏移，落在 1MB 预提交之外：必须由首次访问触发
+# 页提交；读写值正确才证明「未提交页 = 零 + 提交后可写」语义成立。
+SCRIPT_DEEP = "\n".join([
+    "@init",
+    "gmem[3000000] = 0.25;",
+    "gmem[3000123] = 0.5;",
+    "@sample",
+    "ok = (gmem[3000000] == 0.25) && (gmem[3000123] == 0.5) ? 1 : 0;",
+    "spl0 = 0.2 * ok;",
+    "spl1 = 0.2 * ok;",
+])
+h = dll.auradsp_create(SR, N)
+rc = set_str(h, "liveprog.code", SCRIPT_DEEP)
+set_i(h, "liveprog.enable", 1)
+peak = run(h)
+check("[G] 深层 gmem 页按需提交且读写正确", rc == 0 and abs(peak - 0.2) < 0.02,
+      "peak=%.4f rc=%d" % (peak, rc))
 dll.auradsp_destroy(h)
 
 print("=" * 46)

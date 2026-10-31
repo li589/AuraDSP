@@ -143,6 +143,11 @@ typedef struct
  * 未引用 gmem/tds 等 RAM 特性的脚本不再为每个 VM 预占 64MB。 */
 float *NSEEL_VM_getram(NSEEL_VMCTX ctx);
 #define EEL_RAM(c) NSEEL_VM_getram((NSEEL_VMCTX)(c))
+/* [AuraDSP 2026-10-31 P-045] gmem 惰性物理提交：64MB 只保留地址空间，
+ * 首次访问按页提交（Windows VEH）。见 Effects/aura_eel_ram.h。 */
+void *aura_eel_ram_alloc(void);
+void aura_eel_ram_clear(void *base);
+void aura_eel_ram_free(void *base);
 typedef struct
 {
 	pthread_mutex_t globalLocker;
