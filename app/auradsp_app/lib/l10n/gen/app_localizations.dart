@@ -1291,7 +1291,7 @@ abstract class AppLocalizations {
   /// No description provided for @postHintGain.
   ///
   /// In zh, this message translates to:
-  /// **'全局总输出音量补偿。多重 DSP 处理后若音量偏小可适当微调。'**
+  /// **'全局总输出音量补偿，作用于限幅器之前。限幅器开启时上推会被门限兜住（表现为 LIMIT 表下坠），关掉限幅器才是纯输出增益。'**
   String get postHintGain;
 
   /// No description provided for @postCeiling.

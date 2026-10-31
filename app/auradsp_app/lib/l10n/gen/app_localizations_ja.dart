@@ -663,7 +663,8 @@ class AppLocalizationsJa extends AppLocalizations {
   String get loudnessHint => '小音量で低域と高域を自動補正、大音量ではスルー';
 
   @override
-  String get postHintGain => '全体出力レベルの補正。DSP チェーン後に音量が小さい場合に調整。';
+  String get postHintGain =>
+      '全体出力レベルの補正。リミッターより前に適用されます。リミッター ON の場合は天井で抑止され（LIMIT メーターが下がります）、OFF の場合は純粋な出力ゲインになります。';
 
   @override
   String get postCeiling => 'リミットしきい値';
