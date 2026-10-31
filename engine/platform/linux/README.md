@@ -44,7 +44,7 @@
 |---|---|
 | 设备输出（PipeWire / PulseAudio / ALSA） | App 侧 `AudioOut`：`audio_out_linux.dart` 落地后由 `createAudioOut()` 工厂接入，调用方不变 |
 | 桥（VM / VAIO / ASIO） | `bridge/` 只实现 `ab_*` 契约（`core/desktop/windows-drivers/bridge/common/aurabridge.h`）+ Dart `BridgeDesc`；Windows 三桥不跨平台 |
-| 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 需 `AURADSP_ENABLE_PLUGINS=OFF` 才能裁剪整个插件子系统（**该开关待落地，见跨平台基础审查 CP-02**）。当前的 `AURADSP_PLUGIN_HOST_REMOTE=OFF` 只裁掉远程宿主，仍会编译 Win32 插件驱动/格式实现，不等于可移植 |
+| 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 用 `AURADSP_ENABLE_PLUGINS=OFF`（2026-11-01 已落地）整体裁掉 VST3/CLAP 宿主，引擎编入 `plugins/integration/{plugin_chain_adapter_stub,plugin_abi_stub}.cpp`，插件阶段直通且 C ABI 导出集不变。`AURADSP_PLUGIN_HOST_REMOTE=OFF` 只裁远程宿主，**不等于**可移植（仍编 Win32 插件驱动/格式实现） |
 | 插件编辑器 GUI | 方案 §8 的 `port/gui.h` 属 N4「插件生态跨平台」独立立项，尚未建立 |
 
 ## 4. 构建与验证（本轮不产出）

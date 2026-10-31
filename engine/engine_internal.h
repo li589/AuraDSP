@@ -3,7 +3,9 @@
 #pragma once
 
 #include "auradsp_engine.h"
+#ifndef AURADSP_NO_PLUGINS
 #include "plugins/integration/plugin_engine_state.h"
+#endif
 #include "dsp/dsp_oversample.h"
 #include "dsp/dsp_lookahead_limiter.h"
 #include <atomic>
@@ -764,7 +766,9 @@ struct auradsp_handle_s {
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */
     float* conv_scratch = nullptr;    /* max_block*2，卷积干湿比（P-005）用 */
 
+#ifndef AURADSP_NO_PLUGINS
     auradsp::PluginEngineState plugin;
+#endif
 
     /* [ADR-003 Phase A] 多声道矩阵工作区 */
     std::atomic<int> channel_count{2};   /* 驱动层交织缓冲的声道数（2=立体声） */

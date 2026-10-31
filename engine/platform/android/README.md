@@ -26,7 +26,9 @@
 ## 3. 插件宿主与 GUI
 
 - **进程外插件宿主不适用**：`engine/plugins/platform/win32/host/`（共享内存 + `CreateProcess`）
-  是 Windows 模型；Android 走 `AURADSP_PLUGIN_HOST_REMOTE=OFF` 直通（M2 开关）。
+  是 Windows 模型；Android 走 `AURADSP_ENABLE_PLUGINS=OFF`（2026-11-01 已落地）整体裁剪
+  VST3/CLAP 子系统（链阶段直通、C ABI 导出集不变）。`AURADSP_PLUGIN_HOST_REMOTE=OFF`
+  只裁远程宿主，不裁 Win32 插件驱动/格式实现。
 - **VST3 / CLAP 不落地**：无桌面窗口栈与插件目录约定；编辑器 GUI 属方案 N4 独立立项。
 - 若未来需要 Android 原生效果扩展，走 `core/android/registrar` 的 `registrar::IAudioEngine`
   三步接入（见 `core/android/registrar/README.md`），不复用桌面插件格式。

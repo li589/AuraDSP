@@ -268,13 +268,31 @@ def cmake_layering():
     for impl in ("fs_win.cpp", "env_win.cpp", "log_win.cpp"):
         check(f"R6 engine 编入 {impl}", impl in engine_block)
 
-    # 3. 模块实现唯一归属 win32 且进入共享源表（engine/宿主/测试复用）；
-    #    各目标定义块内必须显式出现 ${AURADSP_PLUGIN_HOST_SOURCES}。
+    # 3. 模块实现唯一归属 win32 且进入共享源表（宿主/测试复用）；
+    #    CP-02（2026-11-01）：引擎改经 AURADSP_ENGINE_PLUGIN_SOURCES 间接引用，
+    #    ON = host+integration(+remote)，OFF = 两个 stub（导出集不变）。
     host_sources = _cmake_call_block(src, r"set\s*\(\s*AURADSP_PLUGIN_HOST_SOURCES\b")
     check("R6 AURADSP_PLUGIN_HOST_SOURCES 含 plugin_module.cpp",
           "plugin_module.cpp" in host_sources)
+    check("R6 engine 引用 AURADSP_ENGINE_PLUGIN_SOURCES",
+          "${AURADSP_ENGINE_PLUGIN_SOURCES}" in engine_block,
+          "engine 未引用插件源表开关变量")
+    plugin_blocks = _cmake_if_blocks(src, r"if\s*\(\s*AURADSP_ENABLE_PLUGINS\b")
+    switch_blocks = [b for b in plugin_blocks if "AURADSP_ENGINE_PLUGIN_SOURCES" in b]
+    check("R6 插件源表开关分支存在", bool(switch_blocks))
+    switch_body = "\n".join(switch_blocks)
+    check("R6 插件 ON 分支引用 host+integration 源表",
+          "${AURADSP_PLUGIN_HOST_SOURCES}" in switch_body
+          and "${AURADSP_PLUGIN_INTEGRATION_SOURCES}" in switch_body)
+    check("R6 插件 OFF 分支使用 ABI/链阶段 stub",
+          "plugin_chain_adapter_stub.cpp" in switch_body
+          and "plugin_abi_stub.cpp" in switch_body)
+    no_plug_blocks = _cmake_if_blocks(src, r"if\s*\(\s*NOT\s+AURADSP_ENABLE_PLUGINS\b")
+    check("R6 插件 OFF 置 AURADSP_NO_PLUGINS",
+          any("AURADSP_NO_PLUGINS" in b for b in no_plug_blocks),
+          "OFF 分支未定义 AURADSP_NO_PLUGINS")
     targets_with_host_src = (
-        "auradsp_engine", "auradsp_plugin_host",
+        "auradsp_plugin_host",
         "test_plugin_direct", "test_plugin_chain", "test_host_quarantine",
     )
     for tgt in targets_with_host_src:
@@ -295,7 +313,8 @@ def cmake_layering():
     check("R6 REMOTE=OFF 引擎置 AURADSP_HOST_INPROC",
           any("AURADSP_HOST_INPROC" in b for b in off_blocks),
           "OFF 分支未门控 AURADSP_HOST_INPROC")
-    on_blocks = _cmake_if_blocks(src, r"if\s*\(\s*AURADSP_PLUGIN_HOST_REMOTE\b")
+    on_blocks = _cmake_if_blocks(
+        src, r"if\s*\(\s*AURADSP_ENABLE_PLUGINS\s+AND\s+AURADSP_PLUGIN_HOST_REMOTE\b")
     on_body = "\n".join(on_blocks)
     check("R6 REMOTE=ON 块构建 auradsp_plugin_host",
           "add_executable" in on_body and "auradsp_plugin_host" in on_body)
