@@ -250,6 +250,17 @@ def cmake_layering():
     src = re.sub(r"#[^\n]*", "", raw)
 
     # 1. auradsp_core 源表零 platform/ 源（可移植核心不编任何平台适配）。
+    #    CP-27（2026-11-01）：源表抽到 engine/core_sources.cmake，需同样零 platform/。
+    core_sources = os.path.join(ENGINE, "core_sources.cmake")
+    check("CP-27 核心源表 engine/core_sources.cmake 存在", os.path.isfile(core_sources),
+          core_sources)
+    if os.path.isfile(core_sources):
+        css = open(core_sources, encoding="utf-8", errors="replace").read()
+        css = re.sub(r"#[^\n]*", "", css)  # 注释里的“不得含 platform/”说明不算源
+        check("CP-27 核心源表零 platform/ 源", "platform/" not in css,
+              "core_sources.cmake 出现 platform/ 路径")
+        check("CP-27 核心源表含 chain/dsp 关键源",
+              "chain/engine_chain.cpp" in css and "dsp/dsp_dyneq.cpp" in css)
     core_block = _cmake_call_block(src, r"add_library\s*\(\s*auradsp_core\b")
     check("R6 auradsp_core 源表存在", bool(core_block))
     check("R6 auradsp_core 零 platform/ 源",

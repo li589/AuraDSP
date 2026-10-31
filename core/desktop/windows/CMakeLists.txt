@@ -91,31 +91,15 @@ else()
     )
 endif()
 
-file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
-# 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
-list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
+# CP-27（2026-11-01）：可移植核心源表抽到 engine/core_sources.cmake（唯一真相），
+# Windows / 未来 Linux 目标共用同一份清单；本文件不再手写 chain/dsp 源。
+include("${API}/core_sources.cmake")
 
 # M3（2026-10-29）：可移植核心收口为静态库（legacy C + 根 C ABI + chain/dsp）。
-# 源表只此一处；插件宿主与测试继续复用 AURADSP_PLUGIN_HOST_SOURCES，不链核心。
+# 插件宿主与测试继续复用 AURADSP_PLUGIN_HOST_SOURCES，不链核心。
 add_library(auradsp_core STATIC
-    ${ENGINE_C}
-    "${API}/auradsp_engine.cpp"
-    "${API}/chain/engine_chain.cpp"
-    "${API}/chain/engine_convolver.cpp"
-    "${API}/chain/engine_viz.cpp"
-    "${API}/chain/engine_probe.cpp"
-    "${API}/chain/engine_audiofile.cpp"
-    "${API}/dsp/dsp_shelf.cpp"
-    "${API}/dsp/dsp_filter.cpp"
-    "${API}/dsp/dsp_bassmono.cpp"
-    "${API}/dsp/dsp_haas.cpp"
-    "${API}/dsp/dsp_spatial.cpp"
-    "${API}/dsp/dsp_exciter.cpp"
-    "${API}/dsp/dsp_gate.cpp"
-    "${API}/dsp/dsp_psycho.cpp"
-    "${API}/dsp/dsp_loudness.cpp"
-    "${API}/dsp/dsp_mc_reverb.cpp"
-    "${API}/dsp/dsp_dyneq.cpp"
+    ${AURADSP_CORE_LEGACY_C}
+    ${AURADSP_CORE_CXX_SOURCES}
 )
 target_include_directories(auradsp_core PUBLIC
     "${API}"
@@ -138,7 +122,7 @@ target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHsc)
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
 # 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
 target_compile_options(auradsp_core PRIVATE /FI"${API}/auradsp_msvc_shim.h")
-set_source_files_properties(${ENGINE_C} PROPERTIES LANGUAGE C)
+set_source_files_properties(${AURADSP_CORE_LEGACY_C} PROPERTIES LANGUAGE C)
 set_property(TARGET auradsp_core PROPERTY C_STANDARD 11)
 set_property(TARGET auradsp_core PROPERTY CXX_STANDARD 20)
 set_property(TARGET auradsp_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
