@@ -9,6 +9,10 @@
 bash build_jdsp.sh     # → out/libjdsp.so (≈5.6MB, NDK 30, aarch64, android34)
 ```
 
+> NDK 根目录优先 `ANDROID_NDK` / `ANDROID_NDK_HOME`（macOS/Linux 必设）；未设置时回退
+> 历史 Windows 路径。脚本按 `uname -s` 选择 `windows-x86_64` / `darwin-x86_64` /
+> `linux-x86_64` 宿主标签，无 `cygpath` 时自动直通（CP-13，2026-11-01）。
+
 | 项 | 值 |
 |---|---|
 | impl UUID | `6d5d0f7a-3c1e-4a9b-8b2d-9f0a1c2d3e4f`（新，勿与 spike 混用） |

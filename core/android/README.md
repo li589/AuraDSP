@@ -50,6 +50,12 @@
 （`odm_etc` 标签）→ `killall audioserver`（init 自动拉起）→ logcat/dumpsys 验证。
 `-Wl,-z,max-page-size=16384` 为 Android 15+ 16KB page 硬要求。
 
+> **NDK 路径（CP-13，2026-11-01）**：三个构建脚本优先读 `ANDROID_NDK` /
+> `ANDROID_NDK_HOME`（macOS/Linux 必设），未设置时回退到历史 Windows 路径
+> （`D:/myPrograms/.../ndk/30.0.14904198`）。宿主标签按 `uname -s` 自动选择
+> `windows-x86_64` / `darwin-x86_64` / `linux-x86_64`；无 `cygpath`/`pwd -W`
+> 的环境使用直通实现，命令本身不变。
+
 ## 4. 验证结论入口
 
 - Spike（legacy 接口可行性）：[spike-global-effect/README.md](spike-global-effect/README.md)；
