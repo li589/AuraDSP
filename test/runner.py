@@ -261,6 +261,12 @@ def run_smoke_tests():
     "smoke_liveprog_race.py",
     "smoke_limiter.py",
     "smoke_lookahead_limiter.py",
+    # ADR-010 门禁（2026-10-31 D-1 裁定）：限幅器是链尾最后一道门——
+    # 总输出增益 / 逐声道 trim 必须排在限幅器之前。四条路径（立体声 / 矩阵 /
+    # 双耳 / 离散多声道）各跑「限幅开 → 峰值 ≤ 门限」与「限幅关 → 峰值显著
+    # 超门限」两组对照，后者是反向验证：post gain 若被挪到限幅器之后，
+    # 前者必红而后者仍绿 → 门禁非空转。此前该不变量只写在注释里，无人执行。
+    "smoke_limiter_final_gate.py",
     "smoke_dynamic_gr_and_gate.py",
     "smoke_multichannel_discrete.py",
     # B 轮补充：全参数扫描（159 有界参数 roundtrip/clamp/NaN/默认回读）+ 多声道掩码
