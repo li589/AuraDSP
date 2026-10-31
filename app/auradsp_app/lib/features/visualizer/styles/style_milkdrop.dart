@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../models/visualizer_themes.dart';
 import '../plugins/milkdrop_preset.dart';
+import 'visualizer_time_aware.dart';
 
 /// Winamp MilkDrop 2 经典拓扑（2026-10-31 重做）
 ///
@@ -15,11 +16,11 @@ import '../plugins/milkdrop_preset.dart';
 /// 3. 同心环变成随低频呼吸的波动环，绕轴缓慢旋进；
 /// 4. 背景径向渐变之外再叠一层旋转的椭圆微光，整屏都有缓慢流动感。
 /// 采样点为静态缓冲，每帧不分配 List。
-class MilkdropPainter extends CustomPainter {
+class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   final MilkdropPreset preset;
   final List<double> bands;
   final VisualizerPalette palette;
-  final double time;
+  double time;
   final double sensitivity;
   final double lineWidth;
 
@@ -40,6 +41,9 @@ class MilkdropPainter extends CustomPainter {
     required this.sensitivity,
     this.lineWidth = 1.5,
   });
+
+  @override
+  void setVisualizerTime(double t) => time = t;
 
   /// 缓慢且方向恒定的旋转角（rad）。所有拓扑共享，保证观感一致。
   double get _rotation => time * 0.30;

@@ -4,14 +4,18 @@ import 'package:flutter/material.dart' show CustomPainter, Alignment, RadialGrad
 
 import '../models/visualizer_themes.dart';
 import '../shaders/gpu_shader_service.dart';
+import 'visualizer_time_aware.dart';
 
 /// Hardware-accelerated GPU Fragment Shader Visualizer Painter
-class GpuShaderPainter extends CustomPainter {
+class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
   final GpuShaderType shaderType;
   final List<double> bands;
   final VisualizerPalette palette;
-  final double time;
+  double time;
   final double sensitivity;
+
+  /// 整场播放复用同一个 Paint（shader 实例由 GpuShaderService 持有）。
+  final Paint _shaderPaint = Paint();
 
   GpuShaderPainter({
     required this.shaderType,
@@ -20,6 +24,9 @@ class GpuShaderPainter extends CustomPainter {
     required this.time,
     required this.sensitivity,
   });
+
+  @override
+  void setVisualizerTime(double t) => time = t;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -62,8 +69,8 @@ class GpuShaderPainter extends CustomPainter {
       shader.setFloat(12, c2.b);
       shader.setFloat(13, c2.a);
 
-      final paint = Paint()..shader = shader;
-      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), paint);
+      _shaderPaint.shader = shader;
+      canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), _shaderPaint);
     } else {
       // Graceful fallback gradient if shader is compiling or unsupported
       _drawFallback(canvas, size, bass, mid);

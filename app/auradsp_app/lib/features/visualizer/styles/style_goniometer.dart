@@ -16,6 +16,9 @@ class GoniometerPainter extends CustomPainter {
   final Paint _dotPaint = Paint()..style = PaintingStyle.fill;
   final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
 
+  /// 李萨如轨迹 Path 跨帧复用；点列直接流式计算，不再分配 `List<Offset>`。
+  final Path _path = Path();
+
   GoniometerPainter({
     required this.points,
     required this.palette,
@@ -48,23 +51,24 @@ class GoniometerPainter extends CustomPainter {
 
     if (points.isEmpty) return;
 
-    final path = Path();
-    final screenPoints = <Offset>[
-      for (final p in points)
-        Offset(center.dx + p.dx * radius, center.dy + p.dy * radius),
-    ];
-
-    path.moveTo(screenPoints[0].dx, screenPoints[0].dy);
-    for (var i = 1; i < screenPoints.length; i++) {
-      final p0 = screenPoints[i - 1];
-      final p1 = screenPoints[i];
-      final midX = (p0.dx + p1.dx) / 2.0;
-      final midY = (p0.dy + p1.dy) / 2.0;
-      path.quadraticBezierTo(p0.dx, p0.dy, midX, midY);
+    final path = _path..reset();
+    final sx = center.dx + points[0].dx * radius;
+    final sy = center.dy + points[0].dy * radius;
+    path.moveTo(sx, sy);
+    var prevX = sx;
+    var prevY = sy;
+    for (var i = 1; i < points.length; i++) {
+      final p1x = center.dx + points[i].dx * radius;
+      final p1y = center.dy + points[i].dy * radius;
+      final midX = (prevX + p1x) / 2.0;
+      final midY = (prevY + p1y) / 2.0;
+      path.quadraticBezierTo(prevX, prevY, midX, midY);
 
       if (i % 8 == 0 && (points[i].dx.abs() > 0.1 || points[i].dy.abs() > 0.1)) {
-        canvas.drawCircle(p1, math.max(1.5, lineWidth * 1.2), _dotPaint);
+        canvas.drawCircle(Offset(p1x, p1y), math.max(1.5, lineWidth * 1.2), _dotPaint);
       }
+      prevX = p1x;
+      prevY = p1y;
     }
 
     // 荧光余辉（加宽低透地平描，避免每帧模糊图层）

@@ -1,13 +1,14 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../models/visualizer_themes.dart';
+import 'visualizer_time_aware.dart';
 
 /// 反应式音频光环与星云粒子渲染画笔
-class PulseOrbPainter extends CustomPainter {
+class PulseOrbPainter extends CustomPainter implements VisualizerTimeAware {
   final List<double> bands;
   final VisualizerPalette palette;
   final double bloom;
-  final double animationTime;
+  double animationTime;
   final double lineWidth;
 
   final Paint _ringPaint = Paint()..style = PaintingStyle.stroke;
@@ -15,17 +16,26 @@ class PulseOrbPainter extends CustomPainter {
   final Paint _particlePaint = Paint()..style = PaintingStyle.fill;
   final Paint _glowPaint = Paint()..style = PaintingStyle.stroke;
 
+  /// 谐振环 Path 跨帧复用；粒子色在构造时预计算（整场播放零逐帧 Color 分配）。
+  final Path _path = Path();
+  final Color _particleA;
+  final Color _particleB;
+
   PulseOrbPainter({
     required this.bands,
     required this.palette,
     required this.bloom,
     required this.animationTime,
     this.lineWidth = 1.5,
-  }) {
+  })  : _particleA = palette.primary.withValues(alpha: 0.75),
+        _particleB = palette.secondary.withValues(alpha: 0.75) {
     _ringPaint.strokeWidth = lineWidth;
     _corePaint.color = palette.secondary.withValues(alpha: 0.85);
     _particlePaint.color = palette.primary;
   }
+
+  @override
+  void setVisualizerTime(double time) => animationTime = time;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -49,7 +59,8 @@ class PulseOrbPainter extends CustomPainter {
 
     // 环绕谐振声波环（对称镜像频段映射与贝塞尔圆弧闭合，消除接缝突变）
     const vertexCount = 64;
-    final pts = <Offset>[];
+    final path = _path..reset();
+    var firstX = 0.0, firstY = 0.0, prevX = 0.0, prevY = 0.0;
     for (var i = 0; i < vertexCount; i++) {
       final angle = (i / vertexCount) * 2 * math.pi;
       final u = i / vertexCount;
@@ -58,16 +69,21 @@ class PulseOrbPainter extends CustomPainter {
       final energy = bands.isNotEmpty ? bands[bandIndex] : 0.0;
 
       final r = baseRadius * (1.15 + energy * 0.55 + math.sin(angle * 6 + animationTime * 2) * 0.06);
-      pts.add(Offset(center.dx + math.cos(angle) * r, center.dy + math.sin(angle) * r));
+      final x = center.dx + math.cos(angle) * r;
+      final y = center.dy + math.sin(angle) * r;
+      if (i == 0) {
+        path.moveTo(x, y);
+        firstX = x;
+        firstY = y;
+      } else {
+        final midX = (prevX + x) / 2.0;
+        final midY = (prevY + y) / 2.0;
+        path.quadraticBezierTo(prevX, prevY, midX, midY);
+      }
+      prevX = x;
+      prevY = y;
     }
-
-    final path = Path()..moveTo(pts[0].dx, pts[0].dy);
-    for (var i = 1; i < pts.length; i++) {
-      final midX = (pts[i - 1].dx + pts[i].dx) / 2.0;
-      final midY = (pts[i - 1].dy + pts[i].dy) / 2.0;
-      path.quadraticBezierTo(pts[i - 1].dx, pts[i - 1].dy, midX, midY);
-    }
-    path.quadraticBezierTo(pts.last.dx, pts.last.dy, pts[0].dx, pts[0].dy);
+    path.quadraticBezierTo(prevX, prevY, firstX, firstY);
     path.close();
 
     _ringPaint.color = palette.primary;
@@ -91,7 +107,7 @@ class PulseOrbPainter extends CustomPainter {
       final py = center.dy + math.sin(pAngle) * dist;
       final pr = (1.5 + (i % 4) * 0.8 + treble * 2.0).clamp(1.0, 5.0);
 
-      _particlePaint.color = (i % 2 == 0 ? palette.primary : palette.secondary).withValues(alpha: 0.75);
+      _particlePaint.color = (i % 2 == 0 ? _particleA : _particleB);
       canvas.drawCircle(Offset(px, py), pr, _particlePaint);
     }
   }

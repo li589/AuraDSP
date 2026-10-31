@@ -88,10 +88,18 @@ class _VisualizerStageState extends State<VisualizerStage>
     });
   }
 
+  /// 2026-10-31：时间轴每两帧推进一次（30fps）。Intel 核显上
+  /// 60fps 全屏重绘会让光栅线程落后、GPU 表面排队（实测可视化页可涨到
+  /// 2GB+）；30fps 对慢速旋转/流动观感无差别，帧生产量减半。
+  int _tickParity = 0;
+
   /// 每帧仅推进时间轴（视口通过 repaint 监听直接重绘，不重建页面）。
   void _onTick() {
     if (!widget.active) return;
-    _time.value += 0.016;
+    _tickParity ^= 1;
+    if (_tickParity == 0) {
+      _time.value += 0.032;
+    }
   }
 
   @override

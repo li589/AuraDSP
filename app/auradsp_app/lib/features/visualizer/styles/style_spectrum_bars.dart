@@ -18,6 +18,11 @@ class SpectrumBarsPainter extends CustomPainter {
   final Paint _peakPaint = Paint()..strokeWidth = 2.0;
   final Paint _glowPaint = Paint();
 
+  /// 渐变 shader 按画布尺寸缓存：画笔实例由视口缓存复用，窗口不变时
+  /// 整场播放只创建一次（旧实现每帧新建 Skia Shader，原生内存靠 finalizer 回收）。
+  Shader? _barShader;
+  Size _barShaderSize = Size.zero;
+
   SpectrumBarsPainter({
     required this.bands,
     required this.peaks,
@@ -44,12 +49,16 @@ class SpectrumBarsPainter extends CustomPainter {
 
     final hasPeaks = showPeaks && peaks.length >= barCount;
 
-    // 整幅画布共用一个渐变 shader 与模糊滤镜：避免每根柱重复创建（32~64 次/帧）
-    _barPaint.shader = LinearGradient(
-      begin: Alignment.bottomCenter,
-      end: Alignment.topCenter,
-      colors: palette.gradient,
-    ).createShader(Offset.zero & size);
+    // 整幅画布共用一个渐变 shader：按尺寸缓存，仅在窗口尺寸变化时重建
+    if (_barShader == null || _barShaderSize != size) {
+      _barShaderSize = size;
+      _barShader = LinearGradient(
+        begin: Alignment.bottomCenter,
+        end: Alignment.topCenter,
+        colors: palette.gradient,
+      ).createShader(Offset.zero & size);
+    }
+    _barPaint.shader = _barShader;
 
     final bool drawGlow = bloom > 0.1;
     if (drawGlow) {
