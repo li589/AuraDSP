@@ -77,3 +77,12 @@ engine/_scan_cache.json
 # 素材源 test/data/ab_gate_voice.wav / ab_limiter_drums.wav 正常入库）
 test/data/*.A.wav
 test/data/*.B.wav
+
+# --- 取证原始日志 / tombstone / logcat：一次性运行产物，体积大，不进版本控制 ---
+# 2026-10-31 清理：docs/forensics/2026-10-08_crash1/ 整目录（5 文件 / 36.05MB）
+# 已从版本控制移除（历史未清，owner 裁定；原始文本仍留在重写前历史中）。
+# 保留 docs/forensics/2026-10-08_Ace6T_A16/ —— 其 报告.md 明确把 01~05 号文件
+# 列为「本目录原始数据」并直接引用，属自洽取证包。
+*.log
+docs/forensics/**/tombstone_*.txt
+docs/forensics/**/logcat_*.txt
