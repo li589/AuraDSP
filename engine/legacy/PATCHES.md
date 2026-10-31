@@ -1042,3 +1042,85 @@ yquist * 0.999，
   `smoke_b1d_comp_startup.py`(82)、`smoke_comp_band_order.py`、
   `smoke_chain_meter.py` 全绿；9 空引擎进程增量 327.7MB → 250.7MB。
 - **上游同步冲突风险**：低（单宏值 + 注释）。
+
+## P-047 engine/engine_internal.h + engine/chain/engine_chain.cpp + engine/auradsp_engine.cpp + engine/engine_param_table.h + engine/dsp/dsp_spatial.cpp — 逐声道池双槽化 + 拓扑重置改请求位（L-01 / L-02，2026-10-31）
+
+- **状态**：已实施（2026-10-31）
+- **依据**：`docs/adr/ADR-011-no-shared-mutable-dsp-state.md`；
+  `docs/30-审查/未决任务复核-2026-10-31.md` §3.1（L-01）/ §3.2（L-03 池部分）/ §3.3（L-02）
+- **位置**：
+  - `engine/engine_internal.h`：新增嵌套结构 `auradsp_handle_s::PoolBank`；
+    `ArbmagPool` / `EqPool` 由「8 个裸指针 + 裸 int loaded」改为「2 个 bank +
+    `active` / `proc_count` / `in_flight` 三个原子量」；新增 `reset_req` 原子标志与
+    RT 独占快照字段 `eq_pool_bank` / `arbmag_pool_bank`。
+  - `engine/chain/engine_chain.cpp`：新增影子槽基础设施（`pool_now_ms` /
+    `pool_yield` / `pool_sleep_ms` / `pool_pick_shadow` / `pool_publish`）；
+    `arbmag_pool_alloc/free/reload` 与 `eq_pool_alloc/free/reload` 改走影子槽；
+    新增 `arbmag_pool_disable`；`arbmag_pool_process_strided` /
+    `eq_pool_process_strided` / `eq_process_mc` 改读块首快照；
+    `process_multichannel_chain` 入口取快照并维护守卫计数、出口释放在途计数；
+    `reset_channel_state` 拆为控制侧 + 新增 RT 侧 `reset_channel_state_rt`。
+  - `engine/auradsp_engine.cpp`：`auradsp_process` 入口消费 `reset_req`。
+  - `engine/engine_param_table.h`：`arbmag_pool_disable` 取代直写 `loaded`；
+    新增 `arbmag_refresh_vendor_conv`（与 P-048 配套的锁）。
+  - `engine/dsp/dsp_spatial.cpp`：`spatial_reset` 的调用方由控制线程迁至 RT 线程
+    （只做 memset + 标量写，RT 安全）。
+- **动机**：控制线程对池内共享 `FFTConvolver1x1` 调 `LoadImpulseResponse`，而该函数
+  首步即 `FFTConvolver1x1Free`（free 掉 `_fftBuffer` / `_overlap` / `_inputBuffer` /
+  `_segments*`），RT 此刻可能正在同一实例上跑 `FFTConvolver1x1Process`
+  ⇒ **释放后使用（UAF）**，崩溃级。`EqPool.loaded` / `ArbmagPool.loaded` 还是跨线程
+  读写的裸 `int`。另：`reset_channel_state` 直清 RT 正在使用的非原子状态
+  （gate / filter / shelf / dyneq / tube / limiter / haas / spatial …）⇒ 数据竞争。
+- **内容**：
+  1. **双槽化（L-01 / L-03 池）**：每个池 2 个 bank（活动槽 + 影子槽），每 bank 持有
+     `kMxMaxChannels` 个卷积器。控制线程只在影子 bank 上重建 IR，成功后原子发布
+     `active`；RT 在 `process_multichannel_chain` 入口取一次快照，块内不碰换出的 bank。
+     `loaded` 标志下沉到 bank 内（不再是跨线程裸 `int`）。
+  2. **在途守卫**（与 comp B1-c 同式）：复用已退役 bank 前须满足 (a) `in_flight == 0`
+     或 (b) `proc_count >= retired_at`；皆不满足时控制侧有界等待 500ms 墙钟
+     （自旋 60000 次优先），仍不可用则放弃本次重载（旧 IR 继续生效），
+     **绝不原地重建活动槽**。
+  3. **请求位（L-02）**：`reset_channel_state` 只做控制侧工作并置位 `reset_req`；
+     RT 在 `auradsp_process` 入口消费后执行 `reset_channel_state_rt`。
+- **验收**：`test/smoke/smoke_pool_race.py`（已挂 `runner.py`）。反向验证（脚本化，
+  `python tools/probe/prefix_toggle.py revert` → 重建）四阶段全部转红：
+  阶段① RT 第 12 块访问违例、阶段② RT 第 11 块访问违例、阶段③ 撕裂 1342.7%
+  （阈值 700%）、阶段④ RT 第 225 块访问违例；`restore` + 重建后 43 项全绿。
+- **上游同步冲突风险**：无（不涉及 vendor 代码；`engine/` 为自研层）。
+  内存代价：两池卷积器数量各翻倍，合计约 **+2.3MB**。
+
+## P-048 jdspController.c — arbmag stage 取 jdsp_lock（L-03 主卷积原位刷新竞态，2026-10-31）
+
+- **状态**：已实施（2026-10-31）
+- **位置**：`engine/legacy/jdsp/jdspController.c`（`kAuraStages[]` 表项 `arbmag`）。
+- **动机**（`docs/30-审查/未决任务复核-2026-10-31.md` L-03，ADR-011）：
+  vendor 的 `ArbitraryResponseEqualizerStringParser`（`Effects/arbEqConv.c`）对
+  `jdsp->arbMag.conv` 做**原位** `FFTConvolver2x2RefreshImpulseResponse`
+  —— 逐段改写 IR 的频域段（`_segmentsLL/RRIRRe/Im`）。而 RT 的 `stage_arbmag`
+  正在**同一个对象**上跑 `FFTConvolver2x2Process`（`arbEqConv.c:53`），
+  两者无任何互斥 ⇒ RT 可能读到「一半新、一半旧」的 IR，滤波器响应既不是
+  曲线 A 也不是曲线 B（撕裂）。实测（`tools/probe/probe_arbmag_tear.py`）：
+  无锁时块间最大相对偏离 2397% / 1002% / 3794% / 50810%；加锁后稳定在
+  341.52% / 341.47% / 341.66% / 341.5%（合法瞬态，两分布完全不重叠）。
+- **内容**：`kAuraStages[]` 的 `arbmag` 项 `lock` 由 `0` 改为 `1`，RT 在该 stage
+  取 `jdsp_lock`；控制侧（`engine/engine_param_table.h` 的
+  `arbmag_refresh_vendor_conv`）刷新主卷积前同持 `jdsp_lock`。符合 CLAUDE.md
+  既有铁律「控制侧结构变更路径必须同持 jdsp_lock」。
+- **为何不用影子槽**：主卷积是 vendor 的 `FFTConvolver2x2`，双缓冲需侵入
+  `ArbEqConv` / `arbitraryMagnitude` 结构体（新增 convB + activeConv + 守卫计数），
+  而刷新本身只是 IR 段重写、无全量重算，耗时亚毫秒级 —— 锁的持有时长可控。
+  对比：comp/ddc/liveprog 当年改影子槽，正是因为它们持锁时长 = 全量重算时长
+  （comp 实测单块尖峰 342ms）。逐声道池（eq / arbmag 池）走的是影子槽路线，
+  见 `engine/engine_internal.h` 的 `PoolBank` 与 ADR-011。
+- **影响面**：离散多声道路径不走 vendor 链的 arbmag（改用逐声道池，见
+  `process_multichannel_chain` 的 `g.arbmag = 0`），该锁只影响立体声 / 矩阵 /
+  双耳三条路径。刷新期间 RT 在 arbmag stage 阻塞一次（实测单块尖峰
+  1.08~1.79ms，无可闻卡顿）。
+- **附带说明**：`arbMag` 的 Free+Load 崩溃级路径
+  （`ArbitraryResponseEqualizerEnable(forceRefresh)`）在 Windows 桌面端**不可达**
+  —— `JamesDSPSetSampleRate` 仅由 Android AudioEffect 入口 `EffectDSPMainCommand`
+  调用，不在 `.def` 导出表内（与 P-022 的「热切路径仅供 Android」同源）。
+  该路径仅 Android 侧同源存在，加锁改造同样覆盖之。
+- **验收**：`test/smoke/smoke_pool_race.py` 阶段③（撕裂检测）反向验证转红
+  （max_dev 1342.7% > 阈值 700%），还原后全绿。
+- **上游同步冲突风险**：低（`kAuraStages[]` 表项单字符 `0`→`1` + 注释）。
