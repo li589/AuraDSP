@@ -215,7 +215,7 @@
   "inputFinal": "Final: {desc}",
   "inputResetHint": "Double-click or tap to restore 100%",
   "loudnessHint": "Auto boosts lows and highs at quiet levels, transparent when loud",
-  "postHintGain": "Global output level trim. Nudge up if the DSP chain leaves things too quiet.",
+  "postHintGain": "Global output level trim, applied BEFORE the limiter. With the limiter on, raising it is absorbed by the ceiling (the LIMIT meter drops); with the limiter off it is a pure output gain.",
   "postCeiling": "Ceiling",
   "postHintCeiling": "Mastering-grade lookahead ceiling. Transients above it are transparently reduced, preventing clipping and true-peak (ISP) overs.",
   "postRelease": "Release",

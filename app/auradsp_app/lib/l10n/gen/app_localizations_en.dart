@@ -709,7 +709,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postHintGain =>
-      'Global output level trim. Nudge up if the DSP chain leaves things too quiet.';
+      'Global output level trim, applied BEFORE the limiter. With the limiter on, raising it is absorbed by the ceiling (the LIMIT meter drops); with the limiter off it is a pure output gain.';
 
   @override
   String get postCeiling => 'Ceiling';

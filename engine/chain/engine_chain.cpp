@@ -373,7 +373,15 @@ void apply_post(auradsp_handle h) {
     JamesDSPSetPostGainCh(&h->jdsp, 1, h->p.post_gain_ch[1].load(std::memory_order_relaxed));
 }
 
-/* 多声道输出增益与逐声道 trim (Category A, Step 15) */
+/* 多声道输出增益与逐声道 trim (Category A, Step 15)
+ *
+ * [ADR-010 不变量] 限幅器是内置信号链的最后一道门。
+ * 本函数（总输出增益 + 逐声道 trim）**必须**排在 limiter_process_mc 之前：
+ * 限幅器开启时，post.gain 上推只会表现为 GR 上升，最终输出仍被门限兜住；
+ * 限幅器关闭时 post.gain 才是纯输出增益。
+ * 反向（post gain 排到限幅器之后）会架空限幅器的保护——禁止这样改。
+ * 门禁：test/smoke/smoke_limiter_final_gate.py（立体声 / 矩阵 / 双耳 / 离散多声道
+ * 四路径 × 「限幅开 → 峰值 ≤ 门限」×「限幅关 → 峰值超门限」反向对照）。 */
 void post_gain_process_mc(auradsp_handle h, float* io, int frames, int ch) {
     if (!h || !io || frames <= 0 || ch <= 0) return;
 
@@ -1339,7 +1347,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
             dst[i * ch + 1] = h->mx_stereo[i * 2 + 1];
         }
 
-        /* 15. post_gain_process_mc：全声道输出增益与逐声道 trim（D13 / M-4） */
+        /* 15. post_gain_process_mc：全声道输出增益与逐声道 trim（D13 / M-4）
+         * [ADR-010] 必须早于本链末尾的 limiter_process_mc——限幅器是最后一道门。 */
         post_gain_process_mc(h, dst, frames, ch);
 
         auradsp::plugin_chain_process_n(h, 2, dst, (uint32_t)frames, (uint32_t)ch);
@@ -1383,6 +1392,8 @@ void process_multichannel_chain(auradsp_handle h, const float* src, float* dst, 
         loudness_process_mc(h, dst, frames, ch);
     }
     sample_stage_peak_mc(h, 19, dst, frames, ch);   /* Stage 19: Loudness output */
+    /* [ADR-010] 限幅器 = 本链最后一道门：post gain / trim / loudness 全部在其之前，
+     * 链内不得再有任何会抬电平的环节排到它后面。 */
     limiter_process_mc(h, dst, frames, ch);
 
     // 5. 全局多声道输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位
@@ -1524,7 +1535,9 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     }
     sample_stage_peak(h, 19, dst, frames);   /* Stage 19: Loudness output */
 
-    /* Modern Lookahead Limiter (P2.3 立体声母带限幅) */
+    /* Modern Lookahead Limiter (P2.3 立体声母带限幅)
+     * [ADR-010] 限幅器 = 立体声链最后一道门。本链的 post gain / 逐声道 trim
+     * 在 vendor stage_output 内施加（早于此处），故限幅器看到的是最终电平。 */
     limiter_process_mc(h, dst, frames, 2);
 
     /* 全局输出样本安全卫士：过滤 NaN / Inf 异常浮点并实施 [-10.0, +10.0] 极限钳位 */
