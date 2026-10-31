@@ -6,7 +6,7 @@ AuraDSP is a next-generation high-fidelity audio DSP engine and modern desktop U
 - **Windows Driver Suite (`core/desktop/windows-drivers/`)**: Decoupled transport/format layer — `01_vaio_driver/` (PortCls/WaveRT AuraVAIO virtual sound card, modern + Win7 legacy tracks), `02_voicemeeter_client/` (VM callback pump), `03_system_apo/` (self-built APO `AuraApo.dll` + Configurator/selftest/tone_play/probes), `04_asio_client/` + `04_asio_driver/` (ASIO host and virtual driver), `bridge/` (unnumbered FFI bridges: `common/PluginBridge.h` + `vm_bridge/`, `asio_bridge/`, `vaio_bridge/`). Separate CMake, NOT part of engine build. See its README.
 - **Platform Shell (`core/`)**: `core/desktop/windows/` (CMake + WASAPI, DLL truth source `out/Release/auradsp_engine.dll`), `core/android/` (AIDL effects HAL registrar/spike/stubs).
 - **Frontend App (`app/auradsp_app/`)**: Flutter 3.47.7+, Dart FFI, lockless SPSC ring buffer for 30fps visualization frames (1600-byte `auradsp_viz_frame`, ABI v2; first 536 bytes v1-compatible). 6-page navigation; audio backend modes (vaio/vbcallback/sysapo/asio) persisted in `lib/core/audio_modes.dart` (vbcallback/asio live-switch; vaio/sysapo selection persisted).
-- **Assets (`assets/`)**: IR/VDC/EEL runtime resources (242.9MB local, 2501 files). `.irs`/`.vdc` are gitignored for NEW files, but 2443 historical files (241.6MB = 2002 `.irs` + 441 `.vdc`) remain tracked — measured 2026-10-31 via `git ls-tree -r -l HEAD -- assets`; the older "2214 files / 73MB" figure is obsolete. Removal pending owner decision, do not `git rm --cached` unilaterally.
+- **Assets (`assets/`)**: IR/VDC/EEL runtime resources (242.9MB local, 2501 files). `.irs`/`.vdc` are **not in git at all** (D-2 closed 2026-10-31: `git filter-repo` rewrote every ref — including the pre-P3b `resource/` prefix — and force-pushed; local `.git` 203.6MB → 50.6MB, `size-pack` 200.45 → 45.01 MiB). They ship via release attachments (`auradsp-resource-full.zip` on Release v0.5.0) and are embedded in `dist/AuraDSP-Windows-x64.zip`. `assets/manifest.json` + `assets/README.md` stay versioned as the resource ledger. Guarded by `tools/bin/assets_untracked_scan.py` — never `git add -f` these.
 - **Reference Docs (`docs/参考技术手册/`)**: Third-party PDF manuals (Microsoft WDK/Win32/UWP/MSVC/WSL, Steinberg ASIO, android_guides_cn, ~220MB) — local read-only, only README manifest committed. Do not push PDFs (GitHub 100MB limit + redistribution not licensed).
 - **Testing (`test/`)**: `test/smoke/` for C++ DLL tests via ctypes; `test/ui/` for topmost automated GUI assertions.
 - **Tools (`tools/`)**: Developer utilities, diagnostic probes, and generator tools.
@@ -19,6 +19,9 @@ python test/runner.py --smoke
 
 # UI automated verification (requires window, top-most foreground activated)
 python test/runner.py --ui
+
+# D-2 gate: .irs/.vdc runtime resources must never re-enter git
+python tools/bin/assets_untracked_scan.py
 
 # Flutter lint & analyze
 cd app/auradsp_app && flutter analyze
