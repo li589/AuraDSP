@@ -411,6 +411,9 @@ constexpr LatencyItem kLatConvolver{2, 0, 10.0f};    /* 保守下限，IR 长度
  * 2.67ms 只是「128 帧 @48k」的巧合值，1024 帧块下低估 8 倍。由 compute_latency
  * 直接按块长换算。表里留一条"定义却不用"的占位比缺失更危险。
  * comp 同理进不了本表，见 kCompLatProfile。 */
+/* 心理声学低音：vendor 滤波器组固定 192 帧（工作采样率域），实测
+ * 44.1k→176 帧、48k→192、96k/192k→384/771（设备域）均为 4.0ms。 */
+constexpr LatencyItem kLatBass     {1, 192, 0.0f};
 constexpr LatencyItem kLatCrossfeed{1, 0, 3.0f};
 constexpr LatencyItem kLatSpatial  {1, 0, 1.0f};  /* 直达径 ITD 最大 0.65ms 取整；
     * 早期反射/混响尾是并行能量不计入（与 reverb 30ms 名义口径一致） */
