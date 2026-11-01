@@ -16,7 +16,6 @@ dependencies:
   file_selector: ^1.0.3
   ffi: ^2.1.0
   window_manager: ^0.5.2
-  tray_manager: ^0.8.0
   nativeapi: ^0.5.2
   nativeapi_flutter: ^0.5.2
   # Linux 媒体会话（MPRIS over 会话总线，S5b）：纯 Dart D-Bus 客户端。

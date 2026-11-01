@@ -1,7 +1,7 @@
 /*
  * tray_service.dart — 系统托盘 / 关窗→托盘 / 开机自启 统一服务
  *
- * 职责（桌面集成，基于 window_manager + tray_manager(nativeapi)）：
+ * 职责（桌面集成，基于 window_manager + nativeapi 的 TrayIcon）：
  *   1. 托盘图标 + 工具提示（Windows: assets/tray_icon.ico 多尺寸；
  *      Linux: assets/tray_icon.png，SNI 面板只认 PNG，S5b）
  *   2. 关窗→托盘：setPreventClose 拦截 WM_CLOSE，隐藏窗口而非退出（音乐继续）
@@ -24,7 +24,7 @@ import '../platform_profile.dart';
 import '../port/autostart.dart';
 import '../port/window.dart';
 
-/// 托盘服务（单例）。平台耦合实现（window_manager / tray_manager / nativeapi）。
+/// 托盘服务（单例）。平台耦合实现（window_manager / nativeapi）。
 /// 同时实现 WindowPort：core 侧只经可见性契约暂停高频泵。
 class TrayService implements WindowPort {
   TrayService._();

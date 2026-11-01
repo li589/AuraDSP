@@ -16,6 +16,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import '../debug_log.dart';
+import '../native_library_loader.dart';
 
 const _paStreamRecord = 2; // PA_STREAM_RECORD
 const _paSampleFloat32Le = 5; // PA_SAMPLE_FLOAT32LE
@@ -88,20 +89,12 @@ class PulseAudioIn {
 
   void _loadLibs() {
     if (_simple != null) return;
-    DynamicLibrary openFirst(List<String> names) {
-      Object? last;
-      for (final n in names) {
-        try {
-          return DynamicLibrary.open(n);
-        } catch (e) {
-          last = e;
-        }
-      }
-      throw StateError('PulseAudio library not found: $last');
-    }
-
-    _simple = openFirst(const ['libpulse-simple.so.0', 'libpulse-simple.so']);
-    _pulse = openFirst(const ['libpulse.so.0', 'libpulse.so']);
+    _simple = NativeLibraryLoader.openFirst(
+        const ['libpulse-simple.so.0', 'libpulse-simple.so'],
+        what: 'PulseAudio library');
+    _pulse = NativeLibraryLoader.openFirst(
+        const ['libpulse.so.0', 'libpulse.so'],
+        what: 'PulseAudio library');
   }
 
   String _errorText(int code) {

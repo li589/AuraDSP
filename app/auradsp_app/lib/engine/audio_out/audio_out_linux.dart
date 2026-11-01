@@ -24,6 +24,7 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 
 import '../debug_log.dart';
+import '../native_library_loader.dart';
 import 'audio_out.dart';
 
 /* ---------------- PulseAudio simple API 绑定 ---------------- */
@@ -101,21 +102,12 @@ class _PulseLib {
           'pa_strerror');
 
   static _PulseLib load() {
-    DynamicLibrary openFirst(List<String> names) {
-      Object? last;
-      for (final n in names) {
-        try {
-          return DynamicLibrary.open(n);
-        } catch (e) {
-          last = e;
-        }
-      }
-      throw StateError('PulseAudio library not found (${names.join(", ")}): $last');
-    }
-
     return _PulseLib._(
-      openFirst(const ['libpulse-simple.so.0', 'libpulse-simple.so']),
-      openFirst(const ['libpulse.so.0', 'libpulse.so']),
+      NativeLibraryLoader.openFirst(
+          const ['libpulse-simple.so.0', 'libpulse-simple.so'],
+          what: 'PulseAudio library'),
+      NativeLibraryLoader.openFirst(const ['libpulse.so.0', 'libpulse.so'],
+          what: 'PulseAudio library'),
     );
   }
 

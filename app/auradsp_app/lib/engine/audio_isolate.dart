@@ -1971,10 +1971,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       wasapi?.start();
     } catch (e) {
       wasapiError ??= 'wasapi-start: $e';
-      dbgLog('WASAPI start failed, degraded ready: $e');
+      dbgLog('AudioOut start failed, degraded ready: $e');
     }
     if (wasapi != null && wasapi.started) {
-      dbgLog('WASAPI started, latency=${lib.getLatencyMs(handle)}ms');
+      // 后端名取运行时类型（WasapiOut / PulseAudioOut）：旧文案在 Linux
+      // 也写 WASAPI，S5c 改为平台中立（字段名 wasapi 是历史命名，
+      // 类型实为 AudioOut 抽象，不在本阶段改名）。
+      dbgLog(
+          'AudioOut started (${wasapi.runtimeType}), latency=${lib.getLatencyMs(handle)}ms');
     }
     lastSentState = lib.getState(handle);
     lastSentLatency = lib.getLatencyMs(handle);

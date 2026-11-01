@@ -18,6 +18,7 @@ import 'dart:io';
 import 'package:ffi/ffi.dart';
 
 import '../debug_log.dart';
+import '../native_library_loader.dart';
 
 /* ---------------- 纯逻辑（可单测） ---------------- */
 
@@ -144,14 +145,9 @@ class _PulseMainLib {
           'pa_strerror');
 
   static _PulseMainLib load() {
-    for (final n in const ['libpulse.so.0', 'libpulse.so']) {
-      try {
-        return _PulseMainLib._(DynamicLibrary.open(n));
-      } catch (_) {
-        // 试下一个 soname。
-      }
-    }
-    throw StateError('libpulse not found');
+    return _PulseMainLib._(NativeLibraryLoader.openFirst(
+        const ['libpulse.so.0', 'libpulse.so'],
+        what: 'libpulse'));
   }
 
   String errorText(int code) {

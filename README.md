@@ -58,7 +58,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | **Desktop** | Windows 10 / 11 | 进程内 WASAPI 泵 + `auradsp_engine.dll`（DLL 进程内 FFI） | ● 主力，全功能 |
 | **Root** | Android（KSU / Magisk） | AIDL effects HAL 注入，系统级全局 | ● 端到端打通 + 重启持久化 |
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
-| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ◐ 移植中（`feature/linux`）：引擎与 App 闭环已通、CI 全绿；三模式功能对等已交付（S5a：系统 / 虚拟 sink / snd-aloop 驱动）；桌面体验已补齐（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话），治理收尾见方案 S5c |
+| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ◐ 移植中（`feature/linux`）：引擎与 App 闭环已通、CI 全绿；三模式功能对等已交付（S5a：系统 / 虚拟 sink / snd-aloop 驱动）；桌面体验已补齐（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾已完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化） |
 
 **Windows 四种音频后端**（`app/auradsp_app/lib/core/audio_modes.dart`）：
 
