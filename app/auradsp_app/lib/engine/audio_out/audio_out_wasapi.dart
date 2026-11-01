@@ -16,6 +16,7 @@ import '../../core/error_sink.dart';
 import '../../platform/platform_profile.dart';
 import '../debug_log.dart';
 import 'audio_out.dart';
+import 'audio_out_linux.dart';
 
 /* ---------------- GUID ---------------- */
 
@@ -523,9 +524,11 @@ final class WasapiOut implements AudioOut {
 
 /// 当前平台的本地设备输出实现。
 ///
-/// M4 只有 WASAPI：Linux 实现落地后在此接入（Dart 无按 OS 选择的条件导入，
-/// 由能力位 + 实现文件集中分派，避免出现空壳库）。
+/// M4 只有 WASAPI；S3（ADR-012 D-6）起 Linux 接入 PulseAudio simple API
+/// 实现（Dart 无按 OS 选择的条件导入，由能力位 + 实现文件集中分派，
+/// 避免出现空壳库）。
 AudioOut? createAudioOut() {
   if (!PlatformProfile.supportsLocalDevice) return null;
+  if (PlatformProfile.os == 'linux') return PulseAudioOut();
   return WasapiOut();
 }

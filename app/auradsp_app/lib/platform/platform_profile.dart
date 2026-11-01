@@ -25,11 +25,11 @@ abstract final class PlatformProfile {
   static bool get supportsPlugins => Platform.isWindows;
 
   /// 本地设备泵循环（AudioOut）可用。
-  /// R4（M6 审查遗留）：与实现保持一致——当前唯一实现是 WASAPI，故仅 Windows；
-  /// Linux 的 `audio_out_linux.dart` 落地后由 `createAudioOut()` 工厂按 OS 分派
-  /// 并在此扩为 Linux（此前 Linux 为 true 但工厂只能构造 WasapiOut，启动失败
-  /// 依赖降级通道兜底，属能力位与实现不一致）。
-  static bool get supportsLocalDevice => Platform.isWindows;
+  /// R4（M6 审查遗留）：与实现保持一致——Windows 走 WASAPI，Linux 走
+  /// PulseAudio simple API（`audio_out_linux.dart`，S3 / ADR-012 D-6 起），
+  /// `createAudioOut()` 工厂按 OS 分派，两边能力位与实现一致。
+  static bool get supportsLocalDevice =>
+      Platform.isWindows || Platform.isLinux;
 
   /// 是否支持系统桌面窗口管理与真全屏切换。
   static bool get supportsWindowManagement =>
@@ -87,9 +87,12 @@ abstract final class PlatformProfile {
     }
     if (Platform.isLinux) {
       return const [
-        'libauradsp_engine.so',
+        'libauradsp_engine.so', // 裸名：dlopen 经 runner/lib 的 RPATH 命中 bundle lib/
+        'lib/libauradsp_engine.so', // bundle 根为 CWD 时的 lib/ 子目录
         'engine/libauradsp_engine.so',
         'build/linux/x64/release/bundle/lib/libauradsp_engine.so',
+        '../../core/desktop/linux/out/Release/libauradsp_engine.so', // 单测 CWD (app/auradsp_app)
+        'core/desktop/linux/out/Release/libauradsp_engine.so', // 仓库根目录 CWD
       ];
     }
     if (Platform.isMacOS) {

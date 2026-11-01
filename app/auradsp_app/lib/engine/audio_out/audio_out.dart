@@ -2,7 +2,8 @@
 //
 // 方案：docs/10-架构/跨平台基础框架与平台依赖剥离方案-2026-10-29.md ADR-CP-3。
 // 设备输出归 App 侧：引擎 DLL 只做 DSP，不持有设备（Android 走 HAL，不经过本端口）。
-// 实现：当前仅 audio_out_wasapi.dart（Windows）；Linux/macOS 实现随新平台补入。
+// 实现：audio_out_wasapi.dart（Windows）与 audio_out_linux.dart
+// （Linux / PulseAudio simple API，S3 起）；macOS 实现随新平台补入。
 import 'dart:typed_data';
 
 abstract class AudioOut {
