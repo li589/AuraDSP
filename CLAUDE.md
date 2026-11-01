@@ -41,6 +41,16 @@ powershell -ExecutionPolicy Bypass -File tools/sync_artifacts.ps1
 python tools/bin/push_via_api.py main
 ```
 
+## Branching Policy (2026-11-01 owner ruling, ADR-012)
+```
+feature/linux  --(code, verified)-->  dev  --(dev-verified, dev decides)-->  main
+```
+- **All Linux code lives on `feature/linux`** (branched from `dev`). Merge into `dev` only after it verifies (Linux build + smoke + ABI gates green).
+- **`main` is merged by decision of `dev`**, not automatically.
+- One-way: `feature/linux -> dev -> main`. `feature/linux` must never target `main` directly.
+- Decision records (ADR / plan docs / ledger) go through the normal `dev -> main` PR path and are **not** Linux code.
+- See [ADR-012](docs/adr/ADR-012-linux-platform-rulings-and-branch-policy.md) and [Linux 适配方案](docs/10-架构/Linux适配方案-2026-11-01.md).
+
 ## Critical Engineering Constraints
 1. **Audio Real-Time Safety**: Under NO circumstances should memory allocation (`malloc`, `new`), locks (`std::mutex`), or I/O be performed on the audio processing thread.
 2. **Icon Tree-Shaking Warning**: Always pass `--no-tree-shake-icons` when compiling Flutter, or MaterialIcons will silently render blank glyphs.

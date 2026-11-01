@@ -1,7 +1,7 @@
 # AGENT.md — AuraDSP 智能体协作总纲与工程指南
 
 > 本文档专为 AI 编码智能体（Antigravity、Codex、Cursor、Claude、AutoDev 等）编写，旨在帮助智能体秒级熟悉项目全貌、架构铁律、目录规范与工作流。
-> **最近对齐**：2026-10-31（D-1 裁定：限幅器是内置信号链最后一道门，ADR-010 + 门禁 `smoke_limiter_final_gate.py`；D-2 `assets` 大二进制去跟踪已闭环——`filter-repo` 重写全部历史并 force-push，本地 `.git` 203.6MB → 50.6MB，分支/标签历史中 `.irs`/`.vdc` 条目为 0，回归门禁 `tools/bin/assets_untracked_scan.py`；D-3 dev→main 已合并（PR #15）；未决任务复核：在册遗留销账 10 项 / 仍在册 4 项 / 待裁定 1 项，见 `docs/30-审查/未决任务复核-2026-10-31.md`）；2026-10-28（复核 Freeverb 退役、链页 20 级、VizFrame 1600B（ABI v2）；2026-10-19 已同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1/B2a/B2b/B2c/B3a/B3b/B3c（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕、VM 8ch、本地多声道入引擎、ASIO 双线 2/4/6/8 档多声道传输、FDN、全通扩散、镜像源早期反射）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
+> **最近对齐**：**2026-11-01**（**Linux 适配方案已出稿**：三轴全面取证（引擎 C++ / APP / 构建测试门禁）→ `docs/10-架构/Linux适配方案-2026-11-01.md`；**同日 owner 裁定 Linux 三项产品语义**（D-5 追求功能对等 / D-6 PulseAudio simple API 优先 / D-7 首期只做插件消费者并隐藏 Linux 插件目录 UI）→ [ADR-012](docs/adr/ADR-012-linux-platform-rulings-and-branch-policy.md)；**分支策略：`feature/linux → dev → main`**（单向；Linux 代码全在 `feature/linux`，验证通过后合 dev，**dev 决定是否合 main**）；台账：销账 13 项 / 仍在册 4 项 / 待裁定 1 项（仅 D-4））；2026-10-31（D-1 裁定：限幅器是内置信号链最后一道门，ADR-010 + 门禁 `smoke_limiter_final_gate.py`；D-2 `assets` 大二进制已闭环——`filter-repo` 重写全部历史并 force-push，本地 `.git` 203.6MB → 50.6MB，分支/标签历史中 `.irs`/`.vdc` 条目为 0，回归门禁 `tools/bin/assets_untracked_scan.py`；D-3 dev→main 已合并（PR #15））；2026-10-28（复核 Freeverb 退役、链页 20 级、VizFrame 1600B（ABI v2）；2026-10-19 已同步引擎尖端 Phase 1~3、多声道 Phase 1~3、空间音效 L1 + Phase A/B1/B2a/B2b/B2c/B3a/B3b/B3c（头跟踪/仰角/mix/OpenTrack、6/8ch 双耳虚拟环绕、VM 8ch、本地多声道入引擎、ASIO 双线 2/4/6/8 档多声道传输、FDN、全通散射、镜像源早期反射）、VizFrame 536B/21 节点电平、`graph.effects` 21 项、VAIO 4.0/5.1/7.1 与四模式驱动实况、`.irs`/`.vdc` 跟踪实况）。
 
 ---
 
@@ -87,6 +87,17 @@
    - `chain_page.dart` 的 `stageLabelOf(l, id)` 与 `effects_page.dart` 卡片标题和 Arb 词条必须 100% 对应，严禁同名异义或同义异词。
 
 ---
+
+## 3.6 分支策略（2026-11-01 owner 裁定，ADR-012）
+
+```
+feature/linux  ──(实现代码，验证通过)──▶  dev  ──(dev 验证合并后，dev 决定)──▶  main
+```
+
+- **Linux 代码全部在 `feature/linux`**（从 `dev` 切出）；验证通过后合入 `dev`；`main` 的合并**由 `dev` 决定**，非自动。
+- **单向合并**：`feature/linux → dev → main`；`feature/linux` **不得直连 `main`**。
+- **决策记录（ADR / 方案文档 / 台账）走 `dev → main` 常规 PR 路径**，不属于代码；它们不应阻塞 Linux 开发。
+- 分支命名：`feature/<主题>`。
 
 ## 4. 常用命令速查
 
