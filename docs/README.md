@@ -118,6 +118,7 @@
 - [源码重组与目录规范方案-2026-10-13.md](源码重组与目录规范方案-2026-10-13.md) — scc 实测诊断（巨文件/DLL 散落/生成文件入仓/依赖倒挂）→ 目标目录树 → 命名/分层/DLL/文档/跨平台政策 → P0~P3 迁移分期（只动结构不改行为）
 - [跨平台基础框架与平台依赖剥离方案-2026-10-29.md](10-架构/跨平台基础框架与平台依赖剥离方案-2026-10-29.md) — Linux/Android 基础框架：端口-适配器边界（`engine/platform/port` + `<os>`）、平台强依赖组件归类、`AudioOut` 归 App 侧（修正 10-13 §8）、根 CMake 单一入口、Dart `PlatformProfile` 单点；M0~M6 分期与 fitness functions / 风险登记（M0–M6 已落地，不实现新平台）
 - [APP-目录重组与平台适配层方案-2026-11-01.md](10-架构/APP-目录重组与平台适配层方案-2026-11-01.md) — APP 侧平台耦合收口：`platform/port` 七端口 + 按领域适配实现、`core/io` 统一加载治理（ResourceGate/DocumentStore/ResourceLocator）、`ResourcePicker` 统一选择、注册表/进程单点、插件目录平台化；A1~A4 已落地，A5/A6 后续
+- [调试体系与控件实测-2026-11-01.md](20-执行/调试体系与控件实测-2026-11-01.md) — 统一 `DebugTrace` 事件总线：`ui.control → param.send → engine.ack` 三段式；`--debug/--debug-log` + `tools/debug/run_debug.ps1` 命令行启动；HUD 覆盖率与打印规范门禁（禁止业务直接 print/debugPrint）
 
 ### 3.10 2026-10-17/18 引擎尖端、多声道与空间音效
 - [空间音效升级方案-2026-10-18.md](10-架构/空间音效升级方案-2026-10-18.md) — L1 现状基线、Tier A~D 升级路线（头跟踪/方向 pinna/5.1 虚拟环绕/HRIR/FDN）、目标渲染器架构、验收与风险；**Phase A + B1 + B2a + B3a/B3b/B3c 已落地**，含 UI 去 Dolby/DTS 品牌化记录

@@ -54,7 +54,7 @@ extension PluginManagerCache on PluginManager {
       }
       final decoded = read.data!;
       if (decoded['schema'] != kCacheSchemaVersion) {
-        debugPrint(
+        dbgLog(
           '[PluginManager] loadCache：缓存 schema 不符或为旧版裸 list，'
           '整份丢弃，等待重新扫描',
         );
@@ -62,7 +62,7 @@ extension PluginManagerCache on PluginManager {
       }
       final list = decoded['plugins'];
       if (list is! List) {
-        debugPrint('[PluginManager] loadCache：信封缺少 plugins 数组，丢弃');
+        dbgLog('[PluginManager] loadCache：信封缺少 plugins 数组，丢弃');
         return;
       }
       _plugins = list
@@ -73,13 +73,13 @@ extension PluginManagerCache on PluginManager {
       if (dropped > 0) {
         // 回写清理，避免每次启动重复展示失效条目
         await saveCache();
-        debugPrint('[PluginManager] loadCache 剔除失效插件条目 $dropped 个');
+        dbgLog('[PluginManager] loadCache 剔除失效插件条目 $dropped 个');
       }
       if (_plugins.isNotEmpty) {
         _notify();
       }
     } catch (e) {
-      debugPrint('[PluginManager] loadCache error: $e');
+      dbgLog('[PluginManager] loadCache error: $e');
     }
   }
 
@@ -90,7 +90,7 @@ extension PluginManagerCache on PluginManager {
       // 拒绝写回，避免把坏数据固化成"官方缓存"。
       if (_plugins.isNotEmpty &&
           _plugins.every((p) => p.vendor.isEmpty || p.vendor == 'Unknown')) {
-        debugPrint(
+        dbgLog(
           '[PluginManager] saveCache 自检未过'
           '（vendor 全空/Unknown），拒绝写回缓存',
         );
@@ -116,7 +116,7 @@ extension PluginManagerCache on PluginManager {
       };
       await file.writeAsString(jsonEncode(envelope), flush: true);
     } catch (e) {
-      debugPrint('[PluginManager] saveCache error: $e');
+      dbgLog('[PluginManager] saveCache error: $e');
     }
   }
 }

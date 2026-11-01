@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
+import 'debug/debug_trace.dart';
 import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'

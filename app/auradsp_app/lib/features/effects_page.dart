@@ -14,6 +14,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/param_schema.dart';
@@ -298,6 +299,11 @@ class _ValueSliderState extends State<ValueSlider> {
                   onChanged: widget.enabled
                       ? (v) {
                           setState(() => _dragging = v);
+                          DebugTrace.instance.uiControl(
+                            widget.label,
+                            v,
+                            widget: 'slider',
+                          );
                           widget.onChanged(v);
                         }
                       : null,

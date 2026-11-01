@@ -17,6 +17,7 @@ import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
@@ -898,7 +899,11 @@ class AuraSegmented<T> extends StatelessWidget {
                           Widget btn = GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: enabled
-                                ? () => onChanged!(segments[k].value)
+                                ? () {
+                                    DebugTrace.instance.tap(
+                                        'segment', segments[k].label);
+                                    onChanged!(segments[k].value);
+                                  }
                                 : null,
                             child: Center(
                               child: AnimatedDefaultTextStyle(
@@ -998,7 +1003,12 @@ class _AuraChipState extends State<AuraChip> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                DebugTrace.instance.tap('chip', widget.label);
+                widget.onTap!();
+              },
         child: AnimatedContainer(
           duration: AuraDur.fast,
           curve: AuraCurve.standard,
@@ -1218,7 +1228,13 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
           child: DropdownButton<T>(
             value: effectiveValue,
             items: uniqueItems,
-            onChanged: enabled ? widget.onChanged : null,
+            onChanged: enabled
+                ? (v) {
+                    DebugTrace.instance
+                        .tap('dropdown', '${widget.value ?? '-'} -> $v');
+                    widget.onChanged!(v);
+                  }
+                : null,
             isDense: true,
             isExpanded: widget.isExpanded,
             dropdownColor: p.panelRaised,

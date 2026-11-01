@@ -278,6 +278,9 @@ def run_smoke_tests():
     # B 轮补充：全参数扫描（159 有界参数 roundtrip/clamp/NaN/默认回读）+ 多声道掩码
     # （8 按声道效果器 mask=0 不变式 + arbmag/comp/eq 立体声实现语义登记）
     "smoke_effects_allparams.py",
+    # 调试体系门禁（2026-11-01）：禁止业务代码直接 print/debugPrint；
+    # DebugTrace/HUD/命令行启动器必须存在，控件动作与引擎回执统一进 JSONL。
+    "smoke_debug_policy.py",
     "smoke_oversample_aliasing.py",
     "smoke_reverb.py",
     # WP0 脚手架（多声道重构与混响边界 2026-10-25）：新参数默认/往返/越界拒绝、

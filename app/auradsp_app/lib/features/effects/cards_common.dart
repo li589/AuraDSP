@@ -45,6 +45,7 @@ class ParamSlider extends StatelessWidget {
   Widget build(BuildContext context) {
     final val = model.getParam(param);
     final isEn = enabled ?? model.isSectionEnabled(param.section);
+    DebugTrace.instance.registerControl(param.id, kind: 'slider');
     return ValueSlider(
       label: customLabel ?? param.key,
       infoMessage: infoMessage,
@@ -59,10 +60,14 @@ class ParamSlider extends StatelessWidget {
       overriddenNote: overriddenNote,
       onResetToDefault: onResetToDefault ?? () => model.setParam(param, param.defaultValue),
       onChanged: (v) {
+        DebugTrace.instance.uiControl(param.id, v,
+            widget: 'slider', section: param.section);
         model.setParam(param, v);
         onChanged?.call(v);
       },
       onChangedEnd: (v) {
+        DebugTrace.instance.uiControl(param.id, v,
+            widget: 'slider.end', section: param.section);
         model.setParam(param, v);
         onChangedEnd?.call(v);
       },
@@ -89,10 +94,13 @@ class ParamSwitch extends StatelessWidget {
   Widget build(BuildContext context) {
     final val = model.getParam(param);
     final isEn = enabled ?? (param.key == 'enable' || param.key == 'on' ? true : model.isSectionEnabled(param.section));
+    DebugTrace.instance.registerControl(param.id, kind: 'switch');
     return AuraSwitch(
       value: val,
       onChanged: isEn
           ? (v) {
+              DebugTrace.instance.uiControl(param.id, v,
+                  widget: 'switch', section: param.section);
               model.setParam(param, v);
               onChanged?.call(v);
             }
@@ -123,6 +131,7 @@ class ParamChoiceChips extends StatelessWidget {
     final cur = model.getParam(param);
     final opts = labels ?? param.options ?? const [];
     final isEn = enabled ?? model.isSectionEnabled(param.section);
+    DebugTrace.instance.registerControl(param.id, kind: 'choice');
     return Wrap(
       spacing: AuraSpace.sm,
       runSpacing: AuraSpace.xs,
@@ -132,6 +141,8 @@ class ParamChoiceChips extends StatelessWidget {
           selected: cur == idx,
           onTap: isEn
               ? () {
+                  DebugTrace.instance.uiControl(param.id, idx,
+                      widget: 'choice', section: param.section);
                   model.setParam(param, idx);
                   onChanged?.call(idx);
                 }
@@ -164,12 +175,15 @@ class ParamAutoGainRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isEn = enabled ?? model.isSectionEnabled(param.section);
+    DebugTrace.instance.registerControl(param.id, kind: 'autogain');
     return _AutoGainRow(
       label: label,
       tooltip: tooltip,
       value: model.getParam(param),
       enabled: isEn,
       onChanged: (v) {
+        DebugTrace.instance.uiControl(param.id, v,
+            widget: 'autogain', section: param.section);
         model.setParam(param, v);
         onChanged?.call(v);
       },

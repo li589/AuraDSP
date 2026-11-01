@@ -9,28 +9,37 @@ import 'dart:ui' show PlatformDispatcher;
 
 import 'package:flutter/material.dart';
 
+import 'core/debug/debug_trace.dart';
 import 'core/design.dart';
 import 'core/presets.dart';
 import 'core/state.dart';
 import 'core/theme.dart';
 import 'platform/adapters.dart';
 import 'engine/debug_log.dart';
+import 'features/debug/debug_hud.dart';
 import 'features/shell.dart';
 import 'features/widgets.dart';
 import 'l10n/gen/app_localizations.dart';
 
-void main() {
-  // 全局异常落文件（%TEMP%\auradsp_debug.log），与音频 isolate 共用
+void main(List<String> args) {
+  // 调试总线：--debug / --debug-log=<path> 时才产生结构化 JSONL 事件流。
+  DebugTrace.instance.initFromArgs(args);
+  DebugTrace.instance.event('lifecycle', 'app.start', data: {'args': args});
+  // 全局异常落文件（%TEMP%\auradsp_debug.log），与音频 isolate 共用；
+  // 同时进入结构化调试流（若开启）。
   FlutterError.onError = (d) {
     dbgLog('FLUTTER ERROR: ${d.exception}\n${d.stack}');
+    DebugTrace.instance.log('error', 'FLUTTER: ${d.exception}');
     FlutterError.presentError(d);
   };
   PlatformDispatcher.instance.onError = (e, st) {
     dbgLog('PLATFORM ERROR: $e\n$st');
+    DebugTrace.instance.log('error', 'PLATFORM: $e');
     return false;
   };
   runZonedGuarded(() => runApp(const AuraApp()), (e, st) {
     dbgLog('ZONE ERROR: $e\n$st');
+    DebugTrace.instance.log('error', 'ZONE: $e');
   });
 }
 
@@ -132,9 +141,11 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
             // 引起 AnimatedSwitcher 页面切换与按钮微交互假死。
             // 显存与后台节流已由 chrome 背景光晕与音频可视化监听器精准独立接管。
             // 此处使用透明 Listener 守卫：任何指针落入均自愈拉起可见性。
+            final body = child ?? const SizedBox.shrink();
             return Listener(
               behavior: HitTestBehavior.translucent,
-              onPointerDown: (_) {
+              onPointerDown: (e) {
+                DebugTrace.instance.pointer(e.position.dx, e.position.dy);
                 if (!PlatformAdapters.instance.window.isVisible) {
                   PlatformAdapters.instance.window.setVisible(true);
                 }
@@ -144,7 +155,17 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
                   PlatformAdapters.instance.window.setVisible(true);
                 }
               },
-              child: child ?? const SizedBox.shrink(),
+              child: Stack(
+                children: [
+                  body,
+                  if (DebugTrace.instance.enabled)
+                    const Positioned(
+                      right: 12,
+                      bottom: 12,
+                      child: DebugTraceHud(),
+                    ),
+                ],
+              ),
             );
           },
         );

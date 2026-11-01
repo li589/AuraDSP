@@ -188,7 +188,7 @@ extension PluginManagerEvents on PluginManager {
         return v != null && v != meta.vendor ? meta.copyWith(vendor: v) : meta;
       }).toList();
     } catch (e) {
-      debugPrint('[PluginManager] Error parsing plugins JSON: $e');
+      dbgLog('[PluginManager] Error parsing plugins JSON: $e');
     }
   }
 
@@ -215,7 +215,7 @@ extension PluginManagerEvents on PluginManager {
         _slotChannels[slot] = (map['channels'] as num?)?.toInt() ?? 0xFF;
       }
     } catch (e) {
-      debugPrint(
+      dbgLog(
         '[PluginManager] Error parsing status JSON for slot $slot: $e',
       );
     }

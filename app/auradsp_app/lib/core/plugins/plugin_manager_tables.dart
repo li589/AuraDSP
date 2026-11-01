@@ -100,7 +100,7 @@ extension PluginManagerTables on PluginManager {
         },
       );
     } catch (e) {
-      debugPrint('[PluginManager] quarantine config save failed: $e');
+      dbgLog('[PluginManager] quarantine config save failed: $e');
     }
   }
 

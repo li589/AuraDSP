@@ -14,6 +14,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../../engine/debug_log.dart';
 import '../config.dart';
 import '../error_sink.dart';
 import '../io/document_store.dart';

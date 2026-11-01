@@ -196,10 +196,6 @@ void _forceUnloadStuckSlot(AuraDspLib lib, Pointer<Void> handle, int slot) {
   } catch (e) {
     // 兜底失败不掩盖超时事实：rc=0 + timedOut=true 已由调用方发出。
     // 留痕以便现场排查（此时槽位可能仍被锁在 RUNNING）。
-    assert(() {
-      // ignore: avoid_print
-      print('[audio_slots] D5 超时兜底 unload 失败 slot=$slot: $e');
-      return true;
-    }());
+    dbgLog('[audio_slots] D5 超时兜底 unload 失败 slot=$slot: $e');
   }
 }

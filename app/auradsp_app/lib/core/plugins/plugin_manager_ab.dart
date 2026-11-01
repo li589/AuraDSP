@@ -67,7 +67,7 @@ extension PluginManagerAb on PluginManager {
         }
       });
     } catch (e) {
-      debugPrint('[PluginManager] ab load error: $e');
+      dbgLog('[PluginManager] ab load error: $e');
     }
   }
 
@@ -104,7 +104,7 @@ extension PluginManagerAb on PluginManager {
       }
       DocumentStore.writeJson(_abMetaPath(id), {'slots': slots});
     } catch (e) {
-      debugPrint('[PluginManager] ab persist error: $e');
+      dbgLog('[PluginManager] ab persist error: $e');
     }
   }
 
@@ -188,7 +188,7 @@ extension PluginManagerAb on PluginManager {
             m['hasState'] = false;
           }
         } catch (e) {
-          debugPrint('[PluginManager] ab inherit error: $e');
+          dbgLog('[PluginManager] ab inherit error: $e');
         }
         m['source'] = 'inherit:$inheritFrom';
         // Ch 跟随**源预设快照**的 chMask（不是源路由的当前记忆——

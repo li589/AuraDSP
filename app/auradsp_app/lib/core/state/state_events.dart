@@ -690,12 +690,20 @@ extension StateEvents on AppModel {
         final rc = raw['rc'] as int;
         final id = raw['id'] as String;
         final t0 = _pendingSentAt.remove(id);
+        final tookMs = t0 == null
+            ? -1
+            : DateTime.now().millisecondsSinceEpoch - t0;
         if (t0 != null) {
           // 点击 → 引擎确认 的回环耗时（定位"生效慢"到底慢在哪一段）
-          dbgLog(
-            'rt $id = ${DateTime.now().millisecondsSinceEpoch - t0}ms rc=$rc',
-          );
+          dbgLog('rt $id = ${tookMs}ms rc=$rc');
         }
+        // 调试总线：DSP 层实际接收/拒绝的回执，与 ui/param 事件按 id 对齐。
+        DebugTrace.instance.paramAck(
+          id,
+          rc,
+          tookMs,
+          msg: (raw['msg'] as String?) ?? '',
+        );
         // v3：脚本编译耗时回传（成功失败都记，供胶囊展示）
         if (id == ParamId.lpCode && raw['tookMs'] is int) {
           lpCompileMs = raw['tookMs'] as int;

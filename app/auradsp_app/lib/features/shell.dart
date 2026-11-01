@@ -12,6 +12,7 @@
  */
 import 'package:flutter/material.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/engine_error_map.dart';
 import '../core/nav.dart';
@@ -442,7 +443,11 @@ class _RailToggleState extends State<_RailToggle> {
           onTapDown: (_) => setState(() => _down = true),
           onTapUp: (_) => setState(() => _down = false),
           onTapCancel: () => setState(() => _down = false),
-          onTap: widget.onTap,
+          onTap: () {
+            DebugTrace.instance
+                .tap('rail', widget.collapsed ? 'expand' : 'collapse');
+            widget.onTap();
+          },
           child: AnimatedScale(
             duration: AuraDur.instant,
             scale: _down ? 0.92 : 1.0,
@@ -507,7 +512,10 @@ class _NavItemState extends State<_NavItem> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTap: () {
+          DebugTrace.instance.tap('nav', widget.label);
+          widget.onTap();
+        },
         child: AnimatedContainer(
           duration: AuraDur.fast,
           curve: AuraCurve.standard,
@@ -666,7 +674,10 @@ class _IconActionState extends State<_IconAction> {
           onTapDown: (_) => setState(() => _down = true),
           onTapUp: (_) => setState(() => _down = false),
           onTapCancel: () => setState(() => _down = false),
-          onTap: widget.onTap,
+          onTap: () {
+            DebugTrace.instance.tap('icon', widget.tooltip);
+            widget.onTap();
+          },
           child: AnimatedScale(
             duration: AuraDur.instant,
             scale: _down ? 0.92 : 1.0,
