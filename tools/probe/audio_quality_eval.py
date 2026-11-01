@@ -186,8 +186,10 @@ def build_eq_curve(eq, sr=SR):
         axis.append(nyq)
     axis = np.array(axis, dtype=float)
     total = np.zeros_like(axis)
+    # A-06：目标曲线按工作域参考率计算（非 44.1/48 设备率走 ASRC 48k 域）。
+    ref_sr = 48000.0
     for c, g, q in zip(freqs, gains, qs):
-        total += eq_peaking_db(axis, float(c), float(g), float(q), sr)
+        total += eq_peaking_db(axis, float(c), float(g), float(q), ref_sr)
     total = np.clip(total, -18.0, 18.0)
     interp = int(eq.get('interp', 1))
     opmode = {1: 2, 2: 5}.get(int(eq.get('filter', 0)), 0)

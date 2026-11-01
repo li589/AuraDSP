@@ -589,12 +589,16 @@ extension EqState on AppModel {
     if (eqFrequencies.isNotEmpty && eqFrequencies.last < nyquist) {
       axis.add(nyquist);
     }
+    /* A-06：Q 的归一化带宽会随采样率变化——同一组 gains/qs 在 96k/192k
+     * 与 48k 生成的曲线不同（实测 V-Shape 20k 差 9 dB、Pop 10k 差 9.5 dB）。
+     * 引擎 DSP 在非常见采样率下经 ASRC 跑 48k 工作域，故目标曲线固定按
+     * 48k 参考率计算：48/96/192k 完全一致；44.1k 仅 Nyquist 附近保留差异。 */
     final target = eqTargetGains(
       targetFreqs: axis,
       centers: eqFrequencies,
       peakGains: eqGains,
       qs: eqQs,
-      sampleRate: engineRate,
+      sampleRate: 48000,
     );
     final buffer = StringBuffer(
       'eqm:$eqInterp:${eqOpModeForFilter(eqFilter)};',
