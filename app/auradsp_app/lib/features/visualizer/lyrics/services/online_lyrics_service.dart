@@ -35,14 +35,25 @@ class OnlineLyricsService {
 
   final Map<String, LyricDocument> _cache = {};
 
-  /// 切换来源后清空结果缓存，避免旧源的命中掩盖新源的真实检索。
-  void clearCache() => _cache.clear();
+  /// 负命中缓存：同一曲目在 TTL 内不再重复请求。
+  /// 旧实现只缓存成功结果，某首歌没歌词时每次元数据抖动都会重新打网；
+  /// 现在把「确实没有」也记住，避免 UI 反复进入 searching。
+  final Map<String, DateTime> _missCache = {};
+  static const Duration _missTtl = Duration(minutes: 10);
 
-  /// 检索同步歌词（按 preference 分派；auto 模式依次回退）
+  /// 切换来源后清空结果/负命中缓存，避免旧源的结论掩盖新源的真实检索。
+  void clearCache() {
+    _cache.clear();
+    _missCache.clear();
+  }
+
+  /// 检索同步歌词（按 preference 分派；auto 模式依次回退）。
+  /// [force] = 用户手动重试，跳过负命中缓存。
   Future<LyricDocument?> fetchLyrics({
     required String trackName,
     required String artistName,
     Duration? duration,
+    bool force = false,
   }) async {
     final cleanTrack = trackName.trim();
     final cleanArtist = artistName.trim();
@@ -52,6 +63,13 @@ class OnlineLyricsService {
         '${preference.id}|${cleanTrack.toLowerCase()}_${cleanArtist.toLowerCase()}';
     final cached = _cache[queryKey];
     if (cached != null) return cached;
+    if (!force) {
+      final missAt = _missCache[queryKey];
+      if (missAt != null &&
+          DateTime.now().difference(missAt) < _missTtl) {
+        return null;
+      }
+    }
 
     final sources = preference == LyricsSource.auto
         ? LyricsSource.autoOrder
@@ -61,9 +79,11 @@ class OnlineLyricsService {
       final doc = await _fetchFrom(source, cleanTrack, cleanArtist, duration);
       if (doc != null && doc.isNotEmpty) {
         _cache[queryKey] = doc;
+        _missCache.remove(queryKey);
         return doc;
       }
     }
+    _missCache[queryKey] = DateTime.now();
     return null;
   }
 

@@ -45,8 +45,17 @@ class MediaSyncService {
 
   StreamSubscription<MediaTrackMetadata>? _sessionSub;
 
-  /// 每次换曲自增，用于丢弃过期的在线歌词查询结果
-  int _trackGeneration = 0;
+  /// 当前曲目的归一化键（title+artist）。SMTC 每秒快照可能出现空白/大小写/
+  /// 多余空格抖动，用归一化键比较，避免把同一首歌误判成换曲。
+  String? _trackKey;
+  DateTime? _lastContentAt;
+
+  /// 同一键已有在途检索：每秒轮询时直接复用，避免重复打网。
+  String? _inflightKey;
+
+  /// 用户手动加载了本地歌词 → 同一曲目下不被在线结果覆盖。
+  bool _manualLyrics = false;
+
   bool _disposed = false;
 
   final ValueNotifier<MediaTrackMetadata> currentTrack =
@@ -78,6 +87,10 @@ class MediaSyncService {
   /// 行切换滞回：越过行首/行尾不足该值时保持当前行，压住边界来回翻动
   static const Duration _lineSwitchGuard = Duration(milliseconds: 140);
 
+  /// SMTC 空窗容忍：部分播放器会短暂返回 empty（切歌/暂停/会话重建）。
+  /// 宽限期内保留上一条曲目与歌词，避免「清空 → 重新 searching」反复闪烁。
+  static const Duration _emptyGrace = Duration(seconds: 5);
+
   /// 当前平台是否具备系统媒体会话服务（Windows SMTC）。Linux/Android 等
   /// 平台尚无对应提供者时，UI 用干净的「暂不支持」标注替代「未检测到媒体」，
   /// 避免用户误以为有媒体在放却匹配不到。
@@ -103,7 +116,7 @@ class MediaSyncService {
     if (_disposed || _onlineService.preference == source) return;
     _onlineService.preference = source;
     _onlineService.clearCache();
-    if (currentTrack.value.hasContent) {
+    if (currentTrack.value.hasContent && !_manualLyrics) {
       unawaited(retryLyrics());
     }
   }
@@ -225,6 +238,7 @@ class MediaSyncService {
   void loadLyricDocument(LyricDocument doc) {
     if (_disposed) return;
     _userOffset = Duration.zero;
+    _manualLyrics = doc.isNotEmpty;
     currentLyrics.value = doc;
     activeLineIndex.value = doc.isNotEmpty ? doc.findLineIndex(displayPosition) : -1;
     lyricsState.value =
@@ -246,7 +260,15 @@ class MediaSyncService {
     if (_isPlaying && _ticker == null) _startTicker();
   }
 
-  /// 手动重新检索当前曲目歌词（忽略“同曲轮询不重复请求”的节流）
+  /// 曲目标识归一化：去首尾空白、折叠连续空白、忽略大小写。
+  /// 只用于「是否同一首歌」判断，不改变展示文本。
+  static String _keyOf(MediaTrackMetadata track) {
+    String norm(String s) =>
+        s.trim().replaceAll(RegExp(r'\s+'), ' ').toLowerCase();
+    return '${norm(track.title)}\u0000${norm(track.artist)}';
+  }
+
+  /// 手动重新检索当前曲目歌词（强制跳过负命中缓存）。
   Future<void> retryLyrics() async {
     if (_disposed) return;
     final track = currentTrack.value;
@@ -257,50 +279,91 @@ class MediaSyncService {
       return;
     }
 
-    final generation = ++_trackGeneration;
+    final key = _keyOf(track);
+    _trackKey = key;
+    _lastContentAt = DateTime.now();
+    _manualLyrics = false;
+    await _search(track, key, manual: true);
+  }
+
+  /// 在线检索当前曲目。同键已有在途请求时直接复用其结果，避免并发重复打网。
+  Future<void> _search(
+    MediaTrackMetadata track,
+    String key, {
+    required bool manual,
+  }) async {
+    if (_inflightKey == key) return;
+    _inflightKey = key;
     lyricsState.value = LyricsSyncState.searching;
+    try {
+      final doc = await _onlineService.fetchLyrics(
+        trackName: track.title,
+        artistName: track.artist,
+        duration: track.duration,
+        force: manual,
+      );
 
-    final doc = await _onlineService.fetchLyrics(
-      trackName: track.title,
-      artistName: track.artist,
-      duration: track.duration,
-    );
+      // 查询期间已切曲 / 本地歌词已手动固定 / 服务释放：丢弃结果。
+      if (_disposed || _trackKey != key || _manualLyrics) return;
 
-    if (_disposed || generation != _trackGeneration) return;
-
-    if (doc != null && doc.isNotEmpty) {
-      currentLyrics.value = doc;
-      activeLineIndex.value = doc.findLineIndex(displayPosition);
-      lyricsState.value = LyricsSyncState.ready;
-    } else {
-      currentLyrics.value = LyricDocument.empty;
-      activeLineIndex.value = -1;
-      lyricsState.value = LyricsSyncState.notFound;
+      if (doc != null && doc.isNotEmpty) {
+        currentLyrics.value = doc;
+        activeLineIndex.value = doc.findLineIndex(displayPosition);
+        lyricsState.value = LyricsSyncState.ready;
+      } else {
+        currentLyrics.value = LyricDocument.empty;
+        activeLineIndex.value = -1;
+        lyricsState.value = LyricsSyncState.notFound;
+      }
+    } finally {
+      if (_inflightKey == key) _inflightKey = null;
     }
   }
 
   /// Update current track metadata and search for lyrics
   Future<void> updateTrack(MediaTrackMetadata track) async {
     if (_disposed) return;
-    final previous = currentTrack.value;
-    final titleChanged =
-        track.title != previous.title || track.artist != previous.artist;
 
+    // SMTC 抖动容忍（2026-11-01）：部分播放器会短暂返回 empty（切歌/暂停/
+    // 会话重建），或标题/歌手在空白与真实值之间交替。宽限期内保留上一条
+    // 曲目与歌词，避免「清空 → 重新 searching」的持续加载循环。
+    if (!track.hasContent) {
+      final last = _lastContentAt;
+      if (currentTrack.value.hasContent &&
+          last != null &&
+          DateTime.now().difference(last) < _emptyGrace) {
+        return;
+      }
+      _trackKey = null;
+      _lastContentAt = null;
+      _inflightKey = null;
+      _manualLyrics = false;
+      currentTrack.value = track;
+      currentLyrics.value = LyricDocument.empty;
+      activeLineIndex.value = -1;
+      lyricsState.value = _hasSystemMediaSession
+          ? LyricsSyncState.noMedia
+          : LyricsSyncState.unsupported;
+      _syncTicker();
+      return;
+    }
+
+    final key = _keyOf(track);
+    final trackChanged = key != _trackKey;
+    _lastContentAt = DateTime.now();
     currentTrack.value = track;
 
-    if (titleChanged) {
+    if (trackChanged) {
+      // 换曲：作废旧检索、清空旧歌词；结果有效性由 _trackKey 判定，
+      // 不再依赖自增 generation（同曲重试不会互相作废）。
+      _trackKey = key;
+      _manualLyrics = false;
       _userOffset = Duration.zero;
       _isPlaying = track.isPlaying;
       _anchorClock(track.position);
-      // 换曲即作废在途检索，并清空旧歌词，避免新曲目沿用上一首的歌词与行指针
-      _trackGeneration++;
       currentLyrics.value = LyricDocument.empty;
       activeLineIndex.value = -1;
-      lyricsState.value = track.hasContent
-          ? LyricsSyncState.searching
-          : (_hasSystemMediaSession
-              ? LyricsSyncState.noMedia
-              : LyricsSyncState.unsupported);
+      lyricsState.value = LyricsSyncState.searching;
     } else {
       // 同一曲目：SMTC 每秒快照本身可能滞后，若直接覆盖锚点会让（显示）时间回跳，
       // 行指针便在相邻两行之间来回翻动。因此以单调时钟为准，只接受明显的前跳与大回退。
@@ -327,23 +390,13 @@ class MediaSyncService {
 
     _syncTicker();
 
-    if (!track.hasContent) {
-      currentLyrics.value = LyricDocument.empty;
-      activeLineIndex.value = -1;
-      lyricsState.value = _hasSystemMediaSession
-          ? LyricsSyncState.noMedia
-          : LyricsSyncState.unsupported;
-      return;
-    }
-
     // 同一曲目的轮询：仅校正行指针，避免每秒重复发起网络查询。
-    // 注意不得递增 _trackGeneration，否则会作废耗时超过一次轮询间隔的在线检索结果。
-    if (!titleChanged) {
+    if (!trackChanged) {
       if (currentLyrics.value.isNotEmpty) {
         final doc = currentLyrics.value;
         final idx = doc.findLineIndex(displayPosition);
-        final resolved =
-            _debounceLineSwitch(doc, displayPosition, activeLineIndex.value, idx);
+        final resolved = _debounceLineSwitch(
+            doc, displayPosition, activeLineIndex.value, idx);
         if (resolved != activeLineIndex.value) {
           activeLineIndex.value = resolved;
         }
@@ -352,25 +405,7 @@ class MediaSyncService {
       return;
     }
 
-    final generation = _trackGeneration;
-
-    // 尝试在线检索歌词（LrcLib 优先，QQ 音乐多语言保底）
-    final doc = await _onlineService.fetchLyrics(
-      trackName: track.title,
-      artistName: track.artist,
-      duration: track.duration,
-    );
-
-    // 查询期间已切歌或服务已释放：丢弃过期结果
-    if (_disposed || generation != _trackGeneration) return;
-
-    if (doc != null && doc.isNotEmpty) {
-      currentLyrics.value = doc;
-      activeLineIndex.value = doc.findLineIndex(displayPosition);
-      lyricsState.value = LyricsSyncState.ready;
-    } else {
-      lyricsState.value = LyricsSyncState.notFound;
-    }
+    await _search(track, key, manual: false);
   }
 
   /// Look for companion .lrc file on disk
