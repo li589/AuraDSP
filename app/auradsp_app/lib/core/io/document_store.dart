@@ -14,6 +14,22 @@ abstract final class DocumentStore {
     return ResourceGate.readJson(path, maxBytes: maxBytes);
   }
 
+  /// 读取 JSON 数组（如插件编辑器崩溃日志）。缺失/坏格式返回 null。
+  static List<dynamic>? readJsonList(
+    String path, {
+    int maxBytes = ResourceGate.maxJsonBytes,
+  }) {
+    final read = ResourceGate.readText(path, maxBytes: maxBytes);
+    if (!read.ok) return null;
+    try {
+      final decoded = jsonDecode(read.text!);
+      return decoded is List ? decoded : null;
+    } catch (e, st) {
+      swallow(e, st);
+      return null;
+    }
+  }
+
   static bool writeJson(String path, Object? value) {
     try {
       return writeText(

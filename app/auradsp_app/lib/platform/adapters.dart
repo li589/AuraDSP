@@ -14,10 +14,11 @@ import 'platform_profile.dart';
 import 'plugins/plugin_dirs_desktop.dart';
 import 'plugins/plugin_dirs_mobile.dart';
 import 'plugins/plugin_dirs_windows.dart';
+import 'plugins/plugin_host_windows.dart';
 import 'port/autostart.dart';
-import 'port/file_dialog.dart';
 import 'port/media_session.dart';
 import 'port/plugin_dirs.dart';
+import 'port/plugin_host.dart';
 import 'port/registry.dart';
 import 'port/shell_open.dart';
 import 'port/window.dart';
@@ -29,22 +30,22 @@ import 'tray/tray_service.dart';
 
 final class PlatformAdapters {
   PlatformAdapters({
-    required this.dialog,
     required this.shell,
     required this.registry,
     required this.autoStart,
     required this.pluginDirs,
+    required this.pluginHost,
     required this.mediaSession,
     required this.windowsSystem,
     required this.window,
     required this.picker,
   });
 
-  final FileDialogPort dialog;
   final ShellOpenPort shell;
   final RegistryPort registry;
   final AutoStartPort autoStart;
   final PluginDirsPort pluginDirs;
+  final PluginHostPort pluginHost;
   final MediaSessionPort mediaSession;
   final WindowsSystemPort windowsSystem;
   final WindowPort window;
@@ -74,7 +75,6 @@ final class PlatformAdapters {
     final window = TrayService.instance..bindAutoStart(autoStart);
 
     return PlatformAdapters(
-      dialog: dialog,
       shell: isDesktop
           ? const DesktopShellOpen()
           : const NullShellOpen(),
@@ -85,6 +85,8 @@ final class PlatformAdapters {
         'macos' || 'linux' => const DesktopPluginDirs(),
         _ => const MobilePluginDirs(),
       },
+      pluginHost:
+          isWindows ? const WindowsPluginHost() : const NullPluginHost(),
       mediaSession:
           isWindows ? const WindowsMediaSession() : const NullMediaSession(),
       windowsSystem: isWindows

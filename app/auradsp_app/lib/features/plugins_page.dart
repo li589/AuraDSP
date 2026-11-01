@@ -20,7 +20,7 @@ import '../core/plugins/plugin_manager.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
-import '../platform/platform_profile.dart';
+import '../platform/adapters.dart';
 import '../ui/wheel_scroll.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -98,7 +98,7 @@ class _PluginsPageState extends State<PluginsPage>
       context,
       title: l.plugAddDirTitle,
       prompt: l.plugAddDirPrompt,
-      mode: AuraPathPickerMode.directory,
+      mode: ResourcePickMode.directory,
       memorySlot: PathMemory.slotLastPluginDir,
       confirmLabel: l.plugAddScan,
     );
@@ -111,10 +111,9 @@ class _PluginsPageState extends State<PluginsPage>
   @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
-    // R4（M6 审查遗留）：能力位接入插件入口——非 Windows 平台插件宿主
-    // 管线不可用（PlatformProfile.supportsPlugins），渲染占位提示而不是
-    // 挂载扫描/挂载控件（它们下发的命令在无宿主平台上无意义）。
-    if (!PlatformProfile.supportsPlugins) {
+    // A6-1：插件宿主能力经 PluginHostPort 统一声明，页面不再直接读平台布尔。
+    // 非宿主平台渲染占位提示，避免下发无意义的扫描/挂载命令。
+    if (!PlatformAdapters.instance.pluginHost.capabilities.supported) {
       return PageScaffold(
         title: l10nOf(context).plugTitle,
         children: [

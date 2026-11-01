@@ -6,6 +6,7 @@ import 'dart:io';
 
 import '../../core/config.dart';
 import '../../core/error_sink.dart';
+import '../../core/io/document_store.dart';
 import '../../core/io/resource_gate.dart';
 import '../../platform/platform_profile.dart';
 
@@ -173,10 +174,7 @@ abstract final class LiveprogLibrary {
   static bool deletePath(String filePath, List<String> customDirs) {
     try {
       if (!_isUnderLibrary(filePath, customDirs)) return false;
-      final f = File(filePath);
-      if (!f.existsSync()) return true;
-      f.deleteSync();
-      return true;
+      return DocumentStore.delete(filePath);
     } catch (e, st) {
       swallow(e, st);
       return false;
@@ -197,10 +195,10 @@ abstract final class LiveprogLibrary {
       if (!read.ok) return false;
       final sep = Platform.pathSeparator;
       final parent = old.parent.path;
-      final target = File('$parent$sep$newName');
-      if (target.existsSync()) return false;
-      target.writeAsStringSync(read.text!);
-      old.deleteSync();
+      final target = '$parent$sep$newName';
+      if (ResourceGate.fileExists(target)) return false;
+      if (!DocumentStore.writeText(target, read.text!)) return false;
+      DocumentStore.delete(oldPath);
       return true;
     } catch (e, st) {
       swallow(e, st);
@@ -217,10 +215,7 @@ abstract final class LiveprogLibrary {
       final outDir = (targetDir != null && Directory(targetDir).existsSync())
           ? targetDir
           : dir;
-      final d = Directory(outDir);
-      if (!d.existsSync()) d.createSync(recursive: true);
-      File('$outDir${Platform.pathSeparator}$name').writeAsStringSync(text);
-      return true;
+      return DocumentStore.writeText('$outDir${Platform.pathSeparator}$name', text);
     } catch (e, st) {
       swallow(e, st);
       return false;

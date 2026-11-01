@@ -102,7 +102,7 @@ extension PluginManagerAb on PluginManager {
               {'hasState': false, 'source': 'custom', 'chMask': 0xFF},
         };
       }
-      File(_abMetaPath(id)).writeAsStringSync(jsonEncode({'slots': slots}));
+      DocumentStore.writeJson(_abMetaPath(id), {'slots': slots});
     } catch (e) {
       debugPrint('[PluginManager] ab persist error: $e');
     }

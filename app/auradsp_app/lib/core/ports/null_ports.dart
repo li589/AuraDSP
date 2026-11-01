@@ -11,6 +11,7 @@ import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import '../../platform/port/autostart.dart';
 import '../../platform/port/media_session.dart';
 import '../../platform/port/plugin_dirs.dart';
+import '../../platform/port/plugin_host.dart';
 import '../../platform/port/registry.dart';
 import '../../platform/port/shell_open.dart';
 import '../../platform/port/window.dart';
@@ -22,6 +23,13 @@ final class NullPluginDirs implements PluginDirsPort {
 
   @override
   List<String> discover({Map<String, String>? env}) => const [];
+}
+
+final class NullPluginHost implements PluginHostPort {
+  const NullPluginHost();
+
+  @override
+  PluginHostCapabilities get capabilities => PluginHostCapabilities.none;
 }
 
 final class NullRegistry implements RegistryPort {

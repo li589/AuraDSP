@@ -18,16 +18,14 @@ import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
 
-enum AuraPathPickerMode {
-  file,
-  directory,
-}
+/// 选择模式唯一真相在 core；此处 re-export 方便既有 UI 调用点继续只 import 本文件。
+export '../core/selection/resource_picker.dart' show ResourcePickMode;
 
 class AuraPathPickerDialog extends StatefulWidget {
   final String title;
   final String? prompt;
   final String? initialPath;
-  final AuraPathPickerMode mode;
+  final ResourcePickMode mode;
   final List<String>? allowedExtensions;
   final String? memorySlot;
   final String? confirmLabel;
@@ -37,7 +35,7 @@ class AuraPathPickerDialog extends StatefulWidget {
     required this.title,
     this.prompt,
     this.initialPath,
-    this.mode = AuraPathPickerMode.file,
+    this.mode = ResourcePickMode.file,
     this.allowedExtensions,
     this.memorySlot,
     this.confirmLabel,
@@ -49,7 +47,7 @@ class AuraPathPickerDialog extends StatefulWidget {
     required String title,
     String? prompt,
     String? initialPath,
-    AuraPathPickerMode mode = AuraPathPickerMode.file,
+    ResourcePickMode mode = ResourcePickMode.file,
     List<String>? allowedExtensions,
     String? memorySlot,
     String? confirmLabel,
@@ -77,10 +75,6 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
   late final TextEditingController _controller;
   String? _errorText;
 
-  ResourcePickMode get _mode => widget.mode == AuraPathPickerMode.directory
-      ? ResourcePickMode.directory
-      : ResourcePickMode.file;
-
   ResourcePicker get _picker => PlatformAdapters.instance.picker;
 
   @override
@@ -102,10 +96,10 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
       ResourcePickRequest(
         title: widget.title,
         prompt: widget.prompt,
-        mode: _mode,
+        mode: widget.mode,
         allowedExtensions: widget.allowedExtensions,
         memorySlot: widget.memorySlot,
-        confirmLabel: widget.mode == AuraPathPickerMode.directory
+        confirmLabel: widget.mode == ResourcePickMode.directory
             ? l.pathPickerSelectDir
             : null,
       ),
@@ -127,7 +121,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
 
     final issue = ResourcePicker.validate(
       path,
-      mode: _mode,
+      mode: widget.mode,
       allowedExtensions: widget.allowedExtensions,
     );
     if (issue != ResourceIssue.ok) {
@@ -136,7 +130,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
     }
 
     if (widget.memorySlot != null) {
-      _picker.remember(widget.memorySlot!, path, mode: _mode);
+      _picker.remember(widget.memorySlot!, path, mode: widget.mode);
     }
 
     Navigator.of(context).pop(path);
@@ -147,7 +141,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
     if (issue == ResourceIssue.badExtension) {
       return l.pathPickerErrFormat(widget.allowedExtensions!.join(', '));
     }
-    return _mode == ResourcePickMode.directory
+    return widget.mode == ResourcePickMode.directory
         ? l.pathPickerErrDirNotExist
         : l.pathPickerErrFileNotExist;
   }
@@ -157,7 +151,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
     final p = paletteOf(context);
     final l = l10nOf(context);
 
-    final String defaultHint = widget.mode == AuraPathPickerMode.directory
+    final String defaultHint = widget.mode == ResourcePickMode.directory
         ? PlatformProfile.pathPlaceholder(directory: true)
         : PlatformProfile.pathPlaceholder(
             directory: false,
@@ -176,7 +170,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
       title: Row(
         children: [
           Icon(
-            widget.mode == AuraPathPickerMode.directory
+            widget.mode == ResourcePickMode.directory
                 ? Icons.folder_rounded
                 : Icons.insert_drive_file_rounded,
             size: 18,
@@ -280,7 +274,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
             // 左下角：系统文件/文件夹选择按钮
             OutlinedButton.icon(
               icon: Icon(
-                widget.mode == AuraPathPickerMode.directory
+                widget.mode == ResourcePickMode.directory
                     ? Icons.folder_open_rounded
                     : Icons.file_open_rounded,
                 size: 15,

@@ -626,7 +626,7 @@ dbg = 0;
     final path = await AuraPathPickerDialog.show(
       context,
       title: l.lpFileImportEel,
-      mode: AuraPathPickerMode.file,
+      mode: ResourcePickMode.file,
       allowedExtensions: const ['eel', 'txt'],
       memorySlot: PathMemory.slotLiveprogImportEel,
     );
@@ -658,7 +658,7 @@ dbg = 0;
       context,
       title: l.lpFileSaveAs,
       prompt: l.lpFileSaveAsPrompt,
-      mode: AuraPathPickerMode.file,
+      mode: ResourcePickMode.file,
       allowedExtensions: const ['eel', 'txt'],
       memorySlot: null, // 不记录到任何记忆和脚本库
     );

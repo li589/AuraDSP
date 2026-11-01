@@ -9,12 +9,10 @@
 //   [每行] 复选框 | 路径（内置条目带「内置」角标） | 打开文件夹 | 移除该条
 // 内置目录不可移除（按钮禁用），但**可以取消勾选**（2026-10-28 修正：
 // 只禁止删除，不禁止取消扫描，否则全选/清除无法表达真实全选语义）。
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
-import '../../core/error_sink.dart';
+import '../../core/io/resource_gate.dart';
 import '../../core/plugins/plugin_scan_dirs.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
@@ -167,7 +165,7 @@ class _ScanDirRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     final l = l10nOf(context);
-    final exists = _safeDirExists(entry.path);
+    final exists = ResourceGate.directoryExists(entry.path);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -246,13 +244,5 @@ class _ScanDirRow extends StatelessWidget {
     );
   }
 
-  static bool _safeDirExists(String path) {
-    try {
-      return Directory(path).existsSync();
-    } catch (e, st) {
-      swallow(e, st);
-      return false;
-    }
-  }
 }
 

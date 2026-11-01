@@ -33,36 +33,6 @@ final class FileSelectorDialog implements FileDialogPort {
   }
 
   @override
-  Future<List<String>> openFiles({
-    String? title,
-    List<String> extensions = const [],
-    String? initialDirectory,
-  }) async {
-    final files = await fs.openFiles(
-      acceptedTypeGroups: _typeGroups(title, extensions) ?? const [],
-      initialDirectory: initialDirectory,
-      confirmButtonText: null,
-    );
-    return [for (final f in files) f.path];
-  }
-
-  @override
-  Future<String?> saveFile({
-    String? title,
-    List<String> extensions = const [],
-    String? initialDirectory,
-    String? suggestedName,
-  }) async {
-    final location = await fs.getSaveLocation(
-      acceptedTypeGroups: _typeGroups(title, extensions) ?? const [],
-      initialDirectory: initialDirectory,
-      suggestedName: suggestedName,
-      confirmButtonText: null,
-    );
-    return location?.path;
-  }
-
-  @override
   Future<String?> selectDirectory({
     String? title,
     String? initialDirectory,

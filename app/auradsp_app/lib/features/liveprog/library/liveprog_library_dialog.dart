@@ -220,7 +220,7 @@ class _LiveprogLibraryDialogState extends State<LiveprogLibraryDialog> {
     final selectedDir = await AuraPathPickerDialog.show(
       context,
       title: l.lpAddDir,
-      mode: AuraPathPickerMode.directory,
+      mode: ResourcePickMode.directory,
       memorySlot: PathMemory.slotLiveprogAddDir,
     );
 
