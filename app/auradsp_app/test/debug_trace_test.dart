@@ -16,7 +16,7 @@ void main() {
     expect(t.enabled, isTrue);
     t.uiControl('eq.enable', true, widget: 'switch', section: 'eq');
     t.paramSent('eq.enable', 1, kind: 'int');
-    t.paramAck('eq.enable', 0, 12);
+    t.paramAck('eq.enable', 0, 12, value: 1);
     t.flush();
     final lines = File(path).readAsLinesSync().where((l) => l.trim().isNotEmpty).toList();
     expect(lines, isNotEmpty);
@@ -28,8 +28,9 @@ void main() {
     expect(t.ackCount, greaterThanOrEqualTo(1));
     // HUD 单行摘要：回执必须写成 rc=0，不能落成 “id = 0”（会被误读成参数值）。
     final ackEv = t.lastEvents.lastWhere((e) => e.cat == 'engine');
+    expect(ackEv.oneLine, contains('val=1'));
     expect(ackEv.oneLine, contains('rc=0'));
-    expect(ackEv.oneLine, contains('12ms'));
+    expect(ackEv.oneLine, contains('took=12ms'));
     expect(ackEv.oneLine, isNot(contains(' = 0')));
     final sendEv = t.lastEvents.lastWhere((e) => e.cat == 'param');
     expect(sendEv.oneLine, contains('= 1'));
@@ -53,10 +54,11 @@ void main() {
     ));
     t.uiControl('eq.enable', true, widget: 'switch');
     t.paramSent('eq.enable', 1, kind: 'int');
-    t.paramAck('eq.enable', 0, 5);
+    t.paramAck('eq.enable', 0, 5, value: 1);
     // 面板靠 150ms 轮询采样；事件里发生在 build 阶段也不影响显示。
     await tester.pump(const Duration(milliseconds: 300));
-    expect(find.textContaining('ack eq.enable rc=0 5ms'), findsOneWidget);
+    expect(
+        find.textContaining('ack eq.enable val=1 rc=0 took=5ms'), findsOneWidget);
     expect(find.textContaining('send eq.enable = 1'), findsOneWidget);
     expect(find.textContaining('ACK 1'), findsOneWidget);
 

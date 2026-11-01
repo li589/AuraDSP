@@ -683,7 +683,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             final e = lib.lastError(handle);
             err = e == nullptr ? null : e.toDartString();
           }
-          send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
+          send({'evt': 'paramResult', 'id': m['id'], 'value': m['value'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
           if (rc == Status.ok) {
             // 仅在状态/延迟真的变化时才回推，避免拖滑块时 UI 整页双倍重建
             final st = lib.getState(handle);
@@ -1076,7 +1076,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
               final e = lib.lastError(handle);
               err = e == nullptr ? null : e.toDartString();
             }
-            send({'evt': 'paramResult', 'id': m['id'], 'rc': rc, 'msg': err, 'tookMs': tookMs});
+            send({
+              'evt': 'paramResult',
+              'id': m['id'],
+              // 字符串只回长度，避免把脚本源码整段搬运到主 isolate。
+              'value': 'len=${(m['text'] as String).length}',
+              'rc': rc,
+              'msg': err,
+              'tookMs': tookMs,
+            });
             if (rc == Status.ok && m['id'] == 'liveprog.code') {
               // 桥下读桥 handle 的编译状态（进程内 handle 只是影子，不跑音频）。
               final bst = bridgeManager.active?.getIntParam('liveprog.status');

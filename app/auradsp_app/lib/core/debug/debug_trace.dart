@@ -8,7 +8,7 @@
  * 事件类别：
  *   ui     用户点击/拖动（控件类型、参数 id、值）
  *   param  发往音频 isolate 的参数命令（setParam/setParamStr）
- *   engine 引擎回执 paramResult（rc、耗时、拒绝原因）
+ *   engine 引擎回执 paramResult（已接收值、rc、耗时、拒绝原因）
  *   command 非参数命令（bypass/getParams/音频模式/播放等）
  *   lifecycle/debug  启动、会话、异常
  *
@@ -41,11 +41,15 @@ class DebugEvent {
     final suffix = id == null ? '' : ' $id';
     if (cat == 'engine') {
       final rc = data?['rc'];
+      final value = data?['value'];
       final tookMs = data?['tookMs'];
       final msg = data?['msg'];
-      final ms = (tookMs is int && tookMs >= 0) ? ' ${tookMs}ms' : '';
+      // val= 是音频 isolate 回显的“已接收值”，与 [param] send 的 = 值对照；
+      // 耗时写成 took=…ms，避免被误读成回传的数值。
+      final v = value == null ? '' : ' val=$value';
+      final ms = (tookMs is int && tookMs >= 0) ? ' took=${tookMs}ms' : '';
       final m = (msg is String && msg.isNotEmpty) ? ' · $msg' : '';
-      return '#$seq [$cat] $action$suffix rc=$rc$ms$m';
+      return '#$seq [$cat] $action$suffix$v rc=$rc$ms$m';
     }
     final value = data?['value'] ?? data?['cmd'];
     final v = value == null ? '' : ' = $value';
@@ -218,11 +222,12 @@ class DebugTrace {
     event('param', 'send', data: {'id': id, 'value': value, 'kind': kind});
   }
 
-  void paramAck(String id, int rc, int tookMs, {String? msg}) {
+  void paramAck(String id, int rc, int tookMs, {Object? value, String? msg}) {
     if (!enabled) return;
     if (rc == 0) _acked.add(id);
     event('engine', 'ack', data: {
       'id': id,
+      'value': ?value,
       'rc': rc,
       'tookMs': tookMs,
       if (msg != null && msg.isNotEmpty) 'msg': msg,
