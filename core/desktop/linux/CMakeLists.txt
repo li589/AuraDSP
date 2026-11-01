@@ -95,6 +95,18 @@ target_compile_options(auradsp_core PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-include stdint.h>
     $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
 )
+# GCC 14 起把三条 C 诊断从警告升为默认错误（incompatible-pointer-types /
+# implicit-function-declaration / int-conversion）。legacy C 是冻结代码
+# （只读，MSVC 与 GCC ≤13 均以警告通过），不改源码、只在 Linux 目标把
+# 这三条降回警告，与 -include stdint.h 同类的工具链垫片。CI 首跑
+# （ubuntu-latest = GCC 14）由 crossfeed.c 抓到，2026-11-01。
+if(CMAKE_C_COMPILER_ID STREQUAL "GNU")
+    target_compile_options(auradsp_core PRIVATE
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=incompatible-pointer-types>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=implicit-function-declaration>
+        $<$<COMPILE_LANGUAGE:C>:-Wno-error=int-conversion>
+    )
+endif()
 set_source_files_properties(${AURADSP_CORE_LEGACY_C} PROPERTIES LANGUAGE C)
 if(NOT AURADSP_ENABLE_PLUGINS)
     # 与 Windows 裁剪构建同义：core 内的 handle 定义必须与引擎使用同一

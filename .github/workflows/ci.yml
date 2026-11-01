@@ -90,8 +90,12 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      # 桥/驱动套件需要 Steinberg ASIO SDK（授权制外部工具链，本机路径
+      # 引用、不入库），stock runner 没有 —— 用工程自带的
+      # AURADSP_BUILD_BRIDGES=OFF（即 build_windows.ps1 -SkipDrivers
+      # 的同一开关）只建引擎 + 插件宿主；三桥由本机 Windows 构建覆盖。
       - name: Configure
-        run: cmake --preset windows-x64
+        run: cmake --preset windows-x64 -DAURADSP_BUILD_BRIDGES=OFF
       - name: Build
         run: cmake --build --preset windows-x64-release
 
@@ -100,8 +104,18 @@ jobs:
     name: J6 dart-tests
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    # 依赖 J2 并取回引擎产物：ui_stereo_restore 等用例走引擎真探针
+    # （probe_is_supported 经 FFI 实测），无 .so 时断言落空 —— 本地
+    # 跑得过正是因为工作区里有构建好的引擎。CI 必须复刻同一条件，
+    # 把产物放到 engine_artifact 的仓库相对候选路径上。
+    needs: build-engine-linux
     steps:
       - uses: actions/checkout@v4
+      - name: Download engine artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libauradsp_engine-linux
+          path: core/desktop/linux/out/Release
       - name: Install Linux build deps
         run: |
           sudo apt-get update
