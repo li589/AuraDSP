@@ -17,46 +17,7 @@ import 'package:ffi/ffi.dart';
 
 import '../debug_log.dart';
 import '../native_library_loader.dart';
-
-const _paStreamRecord = 2; // PA_STREAM_RECORD
-const _paSampleFloat32Le = 5; // PA_SAMPLE_FLOAT32LE
-
-final class _PaSampleSpec extends Struct {
-  @Int32()
-  external int format;
-  @Uint32()
-  external int rate;
-  @Uint8()
-  external int channels;
-}
-
-final class _PaBufferAttr extends Struct {
-  @Uint32()
-  external int maxlength;
-  @Uint32()
-  external int tlength;
-  @Uint32()
-  external int prebuf;
-  @Uint32()
-  external int minreq;
-  @Uint32()
-  external int fragsize;
-}
-
-typedef _PaSimpleNewNative = Pointer<Void> Function(
-    Pointer<Utf8>,
-    Pointer<Utf8>,
-    Int32,
-    Pointer<Utf8>,
-    Pointer<Utf8>,
-    Pointer<_PaSampleSpec>,
-    Pointer<Void>,
-    Pointer<_PaBufferAttr>,
-    Pointer<Int32>);
-typedef _PaSimpleReadNative = Int32 Function(
-    Pointer<Void>, Pointer<Void>, Size, Pointer<Int32>);
-typedef _PaSimpleFreeNative = Void Function(Pointer<Void>);
-typedef _PaStrerrorNative = Pointer<Utf8> Function(Int32);
+import 'pulse_simple_ffi.dart';
 
 class PulseAudioIn {
   /// 采集分片帧数：512 帧 @48k ≈ 10.7ms，钳制 read 的单次阻塞时长。
@@ -64,18 +25,15 @@ class PulseAudioIn {
 
   DynamicLibrary? _simple;
   DynamicLibrary? _pulse;
-  late final _new = _simple!.lookupFunction<_PaSimpleNewNative,
-      Pointer<Void> Function(Pointer<Utf8>, Pointer<Utf8>, int, Pointer<Utf8>,
-          Pointer<Utf8>, Pointer<_PaSampleSpec>, Pointer<Void>,
-          Pointer<_PaBufferAttr>, Pointer<Int32>)>('pa_simple_new');
-  late final _read = _simple!.lookupFunction<_PaSimpleReadNative,
-      int Function(Pointer<Void>, Pointer<Void>, int, Pointer<Int32>)>(
-      'pa_simple_read');
+  late final _new = _simple!
+      .lookupFunction<PaSimpleNewNative, PaSimpleNewDart>('pa_simple_new');
+  late final _read = _simple!
+      .lookupFunction<PaSimpleReadNative, PaSimpleIoDart>('pa_simple_read');
   late final _free = _simple!
-      .lookupFunction<_PaSimpleFreeNative, void Function(Pointer<Void>)>(
+      .lookupFunction<PaSimpleFreeNative, void Function(Pointer<Void>)>(
           'pa_simple_free');
   late final _strerror =
-      _pulse!.lookupFunction<_PaStrerrorNative, Pointer<Utf8> Function(int)>(
+      _pulse!.lookupFunction<PaStrerrorNative, Pointer<Utf8> Function(int)>(
           'pa_strerror');
 
   Pointer<Void> _stream = nullptr;
@@ -110,11 +68,11 @@ class PulseAudioIn {
   void open({required String device, int rate = 48000}) {
     close();
     _loadLibs();
-    final spec = malloc<_PaSampleSpec>();
-    spec.ref.format = _paSampleFloat32Le;
+    final spec = malloc<PaSampleSpec>();
+    spec.ref.format = paSampleFloat32Le;
     spec.ref.rate = rate;
     spec.ref.channels = 2;
-    final attr = malloc<_PaBufferAttr>();
+    final attr = malloc<PaBufferAttr>();
     attr.ref.maxlength = 0xFFFFFFFF;
     attr.ref.tlength = 0xFFFFFFFF;
     attr.ref.prebuf = 0xFFFFFFFF;
@@ -125,7 +83,7 @@ class PulseAudioIn {
     final dev = device.toNativeUtf8();
     final pErr = malloc<Int32>();
     try {
-      final s = _new(nullptr, name, _paStreamRecord, dev, streamName, spec,
+      final s = _new(nullptr, name, paStreamRecord, dev, streamName, spec,
           nullptr, attr, pErr);
       if (s == nullptr) {
         throw StateError(

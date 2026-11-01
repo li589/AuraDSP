@@ -42,6 +42,10 @@ class MprisProvider implements MediaSessionProvider {
   bool _disposed = false;
   bool _polling = false;
 
+  /// 总线故障态：失败只在进入故障时记一次（审查 F2）——无桌面会话的
+  /// 环境里 2 秒一轮的轮询若每轮都 swallow，会把错误汇刷满。
+  bool _busDown = false;
+
   @override
   Stream<MediaTrackMetadata> get trackStream => _controller.stream;
 
@@ -87,12 +91,17 @@ class MprisProvider implements MediaSessionProvider {
           bestScore = score;
         }
       }
+      _busDown = false;
       _emit(best ?? MediaTrackMetadata.empty);
     } catch (e, st) {
-      // 会话总线不可用（无桌面会话等）：静默降级为无曲目，不刷错误流。
+      // 会话总线不可用（无桌面会话等）：静默降级为无曲目；旧客户端
+      // 先关再弃，故障只在进入时记一次（审查 F2）。
+      final stale = _client;
       _client = null;
+      if (stale != null) unawaited(stale.close());
       _emit(MediaTrackMetadata.empty);
-      if (!_disposed) swallow(e, st);
+      if (!_disposed && !_busDown) swallow(e, st);
+      _busDown = true;
     } finally {
       _polling = false;
     }

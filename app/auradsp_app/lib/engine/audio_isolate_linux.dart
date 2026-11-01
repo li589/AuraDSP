@@ -105,10 +105,17 @@ class LinuxModeController {
       driverLoaded = _service.asoundLoopbackLoaded();
     } catch (_) {}
     try {
-      virtualPresent = _service.virtualSinkPresent();
-    } catch (_) {}
-    try {
-      loopbackSource = _service.findLoopbackSource();
+      // sink/source 名单一次会话取齐（probeNames，审查 F3）：原先两次
+      // 独立查询各开一条 pa_context 会话，服务端异常时超时翻倍。
+      final probe = _service.probeNames();
+      virtualPresent =
+          probe.sinks.contains(PulseContextService.virtualSinkName);
+      for (final n in probe.sources) {
+        if (isLoopbackSourceName(n)) {
+          loopbackSource = n;
+          break;
+        }
+      }
     } catch (_) {}
     return {
       'evt': 'linuxstatus',

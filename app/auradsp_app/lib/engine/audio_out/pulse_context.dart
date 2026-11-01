@@ -175,33 +175,40 @@ class _Session {
   }
 
   void open({Duration timeout = const Duration(seconds: 5)}) {
-    _mainloop = lib.mainloopNew();
-    if (_mainloop == nullptr) throw StateError('pa_mainloop_new failed');
-    final api = lib.mainloopGetApi(_mainloop);
-    final name = 'AuraDSP'.toNativeUtf8();
     try {
-      _context = lib.contextNew(api, name);
-    } finally {
-      malloc.free(name);
-    }
-    if (_context == nullptr) throw StateError('pa_context_new failed');
-    lib.contextSetStateCallback(_context, _stateCb.nativeFunction, nullptr);
-    if (lib.contextConnect(_context, nullptr, 0, nullptr) < 0) {
-      throw StateError(
-          'pa_context_connect failed: ${lib.errorText(lib.contextErrno(_context))}');
-    }
-    final deadline = DateTime.now().add(timeout);
-    while (true) {
-      final st = _stateCell.value;
-      if (st == _paContextReady) return;
-      if (st == _paContextFailed || st == _paContextTerminated) {
+      _mainloop = lib.mainloopNew();
+      if (_mainloop == nullptr) throw StateError('pa_mainloop_new failed');
+      final api = lib.mainloopGetApi(_mainloop);
+      final name = 'AuraDSP'.toNativeUtf8();
+      try {
+        _context = lib.contextNew(api, name);
+      } finally {
+        malloc.free(name);
+      }
+      if (_context == nullptr) throw StateError('pa_context_new failed');
+      lib.contextSetStateCallback(_context, _stateCb.nativeFunction, nullptr);
+      if (lib.contextConnect(_context, nullptr, 0, nullptr) < 0) {
         throw StateError(
-            'pa_context not ready (state=$st): ${lib.errorText(lib.contextErrno(_context))}');
+            'pa_context_connect failed: ${lib.errorText(lib.contextErrno(_context))}');
       }
-      if (DateTime.now().isAfter(deadline)) {
-        throw StateError('pa_context connect timeout');
+      final deadline = DateTime.now().add(timeout);
+      while (true) {
+        final st = _stateCell.value;
+        if (st == _paContextReady) return;
+        if (st == _paContextFailed || st == _paContextTerminated) {
+          throw StateError(
+              'pa_context not ready (state=$st): ${lib.errorText(lib.contextErrno(_context))}');
+        }
+        if (DateTime.now().isAfter(deadline)) {
+          throw StateError('pa_context connect timeout');
+        }
+        lib.mainloopIterate(_mainloop, 1, nullptr);
       }
-      lib.mainloopIterate(_mainloop, 1, nullptr);
+    } catch (_) {
+      // 打开失败时调用方拿不到本对象（级联构造），必须自清理已建的
+      // 原生资源再外抛，否则每次失败泄漏一条 mainloop/context（审查 F1）。
+      close();
+      rethrow;
     }
   }
 
@@ -228,7 +235,13 @@ class _Session {
 
   Pointer<Void> get context => _context;
 
+  bool _closed = false;
+
+  /// 幂等关闭（open 失败自清理与调用方 finally 可能各调一次，重复释放
+  /// 原生对象会崩溃，故以 _closed 守卫，审查 F1）。
   void close() {
+    if (_closed) return;
+    _closed = true;
     if (_context != nullptr) {
       lib.contextDisconnect(_context);
       lib.contextUnref(_context);
@@ -256,9 +269,8 @@ class PulseContextService {
   _PulseMainLib? _libField;
   _PulseMainLib get _lib => _libField ??= _PulseMainLib.load();
 
-  /// 在一个会话里收集 sink/source 名列表（info 结构首字段即 name）。
-  List<String> _listNames({required bool sinks}) {
-    final session = _Session(_lib)..open();
+  /// 在既有会话里收集 sink/source 名列表（info 结构首字段即 name）。
+  List<String> _collectNames(_Session session, {required bool sinks}) {
     final names = <String>[];
     final doneCell = malloc<Int32>()..value = 0;
     final cb = NativeCallable<_InfoCbNative>.isolateLocal(
@@ -282,13 +294,36 @@ class PulseContextService {
     } finally {
       cb.close();
       malloc.free(doneCell);
-      session.close();
     }
     return names;
   }
 
+  List<String> _listNames({required bool sinks}) {
+    final session = _Session(_lib)..open();
+    try {
+      return _collectNames(session, sinks: sinks);
+    } finally {
+      session.close();
+    }
+  }
+
   List<String> sinkNames() => _listNames(sinks: true);
   List<String> sourceNames() => _listNames(sinks: false);
+
+  /// 一次会话内同时取 sink/source 名单（状态查询专用：分开调
+  /// virtualSinkPresent + findLoopbackSource 要各开一条会话，服务端
+  /// 异常时每条都可能耗满超时，审查 F3）。
+  ({List<String> sinks, List<String> sources}) probeNames() {
+    final session = _Session(_lib)..open();
+    try {
+      return (
+        sinks: _collectNames(session, sinks: true),
+        sources: _collectNames(session, sinks: false),
+      );
+    } finally {
+      session.close();
+    }
+  }
 
   bool virtualSinkPresent() => sinkNames().contains(virtualSinkName);
 
