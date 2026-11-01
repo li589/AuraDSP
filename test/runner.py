@@ -30,6 +30,8 @@ UI_DIR = os.path.join(TEST_DIR, "ui")
 PLATFORM_ANY = {
     "smoke_platform_isolation.py",
     "smoke_dart_platform_quarantine.py",
+    # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
+    "smoke_linux_source_table.py",
 }
 
 if sys.platform.startswith("win"):
@@ -194,6 +196,9 @@ def run_smoke_tests():
         # M4 Dart 平台隔离门禁（2026-10-29）：lib/ 业务文件零 Platform.is；
         # PlatformProfile 成员齐全；AudioOut 端口/工厂/WASAPI 实现归位。
         "smoke_dart_platform_quarantine.py",
+        # S2 Linux 源表门禁（2026-11-01，ADR-012 §4.3）：Linux 编译闭包不含
+        # jamesdsp.c / Win32 源、gcc shim 与 stdint 前置注入在场、.map 同源。
+        "smoke_linux_source_table.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",

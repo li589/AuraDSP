@@ -1,0 +1,66 @@
+/* auradsp_engine.map — Linux version script（ELF 导出控制）。
+ * 由 tools/bin/gen_engine_map.py 从 engine/auradsp_engine.def 同源生成，
+ * 勿手改：改导出集请改 .def 后重跑生成脚本（--check 可作门禁校验）。
+ * 匿名版本：global = .def 全部符号；local: * 收起其余符号，
+ * 使 .so 动态导出集与 Windows .def 恒等（ADR-012 / Linux 方案 §3.5）。 */
+{
+  global:
+    auradsp_create;
+    auradsp_destroy;
+    auradsp_process;
+    auradsp_set_param;
+    auradsp_get_param;
+    auradsp_get_state;
+    auradsp_get_latency_ms;
+    auradsp_last_error;
+    auradsp_viz_read;
+    auradsp_version;
+    auradsp_abi;
+    auradsp_plugin_scan;
+    auradsp_plugin_scan_begin;
+    auradsp_plugin_scan_step;
+    auradsp_plugin_scan_progress;
+    auradsp_plugin_scan_end;
+    auradsp_plugin_get_count;
+    auradsp_plugin_get_item;
+    auradsp_plugin_get_all;
+    auradsp_plugin_slot_load;
+    auradsp_plugin_slot_unload;
+    auradsp_plugin_slot_load_async;
+    auradsp_plugin_slot_unload_async;
+    auradsp_plugin_slot_task_state;
+    auradsp_plugin_slot_set_bypass;
+    auradsp_plugin_slot_get_bypass;
+    auradsp_plugin_slot_get_latency;
+    auradsp_plugin_slot_get_status;
+    auradsp_plugin_slot_show_editor;
+    auradsp_plugin_slot_close_editor;
+    auradsp_plugin_slot_is_editor_open;
+    auradsp_plugin_slot_save_preset;
+    auradsp_plugin_slot_load_preset;
+    auradsp_plugin_slot_set_insert_stage;
+    auradsp_plugin_slot_get_insert_stage;
+    auradsp_plugin_slot_set_channels;
+    auradsp_plugin_slot_get_channels;
+    auradsp_plugin_set_pdc;
+    auradsp_plugin_chain_get_enabled;
+    auradsp_plugin_chain_set_enabled;
+    auradsp_plugin_get_pdc;
+    auradsp_plugin_get_total_latency;
+    auradsp_plugin_load;
+    auradsp_plugin_unload;
+    auradsp_plugin_set_bypass;
+    auradsp_plugin_get_bypass;
+    auradsp_plugin_get_latency;
+    auradsp_plugin_get_status;
+    auradsp_plugin_get_num_slots;
+    auradsp_plugin_set_editor_quarantine_list;
+    auradsp_probe_component;
+    auradsp_probe_component_with_resource;
+    auradsp_probe_component_current;
+    auradsp_probe_eq_response;
+    auradsp_decode_audio_file;
+    auradsp_free_audio_buffer;
+  local:
+    *;
+};
