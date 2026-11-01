@@ -1,6 +1,6 @@
 {
   "name": "Rock Bass Impact",
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "isFactory": true,
   "category": "重低音",
   "description": "心理声学谐波强化，低频下潜强劲下沉，配合现代五极管动态饱和",
@@ -11,13 +11,13 @@
       "balanceR": 1.0
     },
     "bass": {
-      "intensity": 0.85,
-      "mode": 2,
+      "intensity": 0.46,
+      "mode": 1,
       "cutoff": 140.0,
-      "harmonics": 0.75,
-      "harmonicBlend": 0.65,
+      "harmonics": 0.2,
+      "harmonicBlend": 0.5,
       "subFloor": 20.0,
-      "gain": 0.0,
+      "gain": 6.9,
       "autoGain": false,
       "outputGain": 0.0,
       "enable": true
@@ -37,10 +37,10 @@
       "enable": false
     },
     "tube": {
-      "gain": 5.5,
+      "gain": 3.5,
       "style": 1,
-      "compensation": -1.0,
-      "mix": 0.85,
+      "compensation": 0.0,
+      "mix": 1.0,
       "autoGain": false,
       "outputGain": 0.0,
       "oversample": true,
@@ -76,21 +76,21 @@
         16000.0
       ],
       "gains": [
-        5.0,
-        4.5,
-        3.5,
-        2.0,
+        -0.5,
         1.0,
-        -1.0,
-        -1.5,
-        -1.0,
-        0.5,
-        1.5,
-        2.5,
-        3.5,
-        4.0,
-        3.0,
-        2.0
+        1.0,
+        0.0,
+        -0.8,
+        -0.9,
+        0.2,
+        0.6,
+        0.2,
+        0.7,
+        1.6,
+        2.1,
+        2.1,
+        2.3,
+        3.2
       ],
       "qs": [
         1.414,
@@ -111,7 +111,7 @@
       ]
     },
     "stereo": {
-      "mix": 0.35,
+      "mix": 0.0,
       "bandUsed": false,
       "on": false,
       "band0": 0.5,
@@ -291,7 +291,7 @@
       ]
     },
     "post": {
-      "gain": 0.0,
+      "gain": -1.5,
       "limiterEnable": true,
       "release": 100.0,
       "threshold": -0.1,

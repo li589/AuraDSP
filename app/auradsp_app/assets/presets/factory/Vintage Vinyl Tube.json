@@ -1,6 +1,6 @@
 {
   "name": "Vintage Vinyl Tube",
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "isFactory": true,
   "category": "模拟复古",
   "description": "模拟磁带温润饱和与电子管轻微二阶谐波染色，抚平数码生硬感",
@@ -11,13 +11,13 @@
       "balanceR": 1.0
     },
     "bass": {
-      "intensity": 0.6,
+      "intensity": 0.25,
       "mode": 0,
       "cutoff": 120.0,
-      "harmonics": 0.4,
+      "harmonics": 0.3,
       "harmonicBlend": 0.5,
       "subFloor": 30.0,
-      "gain": 0.0,
+      "gain": 3.75,
       "autoGain": false,
       "outputGain": 0.0,
       "enable": true
@@ -37,7 +37,7 @@
       "enable": false
     },
     "tube": {
-      "gain": 6.0,
+      "gain": 4.0,
       "style": 2,
       "compensation": 0.5,
       "mix": 1.0,
@@ -76,21 +76,21 @@
         16000.0
       ],
       "gains": [
-        2.0,
-        2.5,
-        2.0,
-        1.5,
-        1.0,
-        0.5,
-        0.0,
-        -0.5,
-        -0.5,
-        0.0,
-        0.5,
-        -0.5,
+        -1.1,
+        -0.7,
+        -0.8,
         -1.0,
-        -2.0,
-        -3.0
+        -1.0,
+        -0.6,
+        0.1,
+        0.2,
+        -0.3,
+        -0.3,
+        -0.2,
+        -0.1,
+        0.5,
+        1.8,
+        5.0
       ],
       "qs": [
         1.414,
@@ -111,7 +111,7 @@
       ]
     },
     "stereo": {
-      "mix": 0.2,
+      "mix": 0.0,
       "bandUsed": false,
       "on": false,
       "band0": 0.5,
@@ -291,7 +291,7 @@
       ]
     },
     "post": {
-      "gain": 0.0,
+      "gain": -0.27999999999999936,
       "limiterEnable": true,
       "release": 100.0,
       "threshold": -0.1,
