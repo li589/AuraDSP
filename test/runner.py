@@ -41,6 +41,8 @@ PLATFORM_ANY = {
     # S4 补强（2026-11-01）：同步工具与 CI 骨架门禁，两平台可跑。
     "smoke_sync_artifacts_tool.py",
     "smoke_ci_workflow.py",
+    # S5b（2026-11-02）：XDG 目录规范源码守护，两平台可跑。
+    "smoke_xdg_paths.py",
 }
 
 # PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
@@ -368,6 +370,8 @@ def run_smoke_tests():
         "smoke_linux_virtual_sink.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
+        # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。
+        "smoke_xdg_paths.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",

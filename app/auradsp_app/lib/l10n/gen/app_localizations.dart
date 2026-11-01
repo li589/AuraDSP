@@ -4066,6 +4066,12 @@ abstract class AppLocalizations {
   /// **'配置存储目录: {path}'**
   String memDir(String path);
 
+  /// No description provided for @memDataDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据存储目录: {path}'**
+  String memDataDir(String path);
+
   /// No description provided for @memClear.
   ///
   /// In zh, this message translates to:
@@ -5149,7 +5155,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpAddDirExample.
   ///
   /// In zh, this message translates to:
-  /// **'例：D:\\AudioScripts\\EelPresets'**
+  /// **'例：…/AudioScripts/EelPresets'**
   String get lpAddDirExample;
 
   /// No description provided for @lpChars.
@@ -5341,7 +5347,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugAddDirExample.
   ///
   /// In zh, this message translates to:
-  /// **'例：D:\\AudioPlugins\\VST3'**
+  /// **'例：…/AudioPlugins/VST3'**
   String get plugAddDirExample;
 
   /// No description provided for @plugAddScan.

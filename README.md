@@ -16,7 +16,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
 | 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
 | 插件宿主 | VST3 / CLAP 64 位；默认进程内，`AURA_PLUGIN_HOST_MODE=process` 切进程外硬隔离 |
-| 质量门禁 | analyze 零问题 · Dart 61 个测试文件 / 580+ 用例 · 引擎冒烟 135 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 七 job（Win/Linux 双流水线） |
+| 质量门禁 | analyze 零问题 · Dart 63 个测试文件 / 580+ 用例 · 引擎冒烟 136 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 七 job（Win/Linux 双流水线） |
 
 目录：[它是什么](#1-它是什么) · [形态矩阵](#2-形态矩阵) · [音频链路](#3-音频链路) · [近期里程碑](#4-近期里程碑) · [快速开始](#5-快速开始) · [仓库结构](#6-仓库结构) · [质量门禁](#7-质量门禁) · [文档入口](#8-文档入口) · [许可证与致谢](#9-许可证与致谢)
 
@@ -58,7 +58,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | **Desktop** | Windows 10 / 11 | 进程内 WASAPI 泵 + `auradsp_engine.dll`（DLL 进程内 FFI） | ● 主力，全功能 |
 | **Root** | Android（KSU / Magisk） | AIDL effects HAL 注入，系统级全局 | ● 端到端打通 + 重启持久化 |
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
-| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ◐ 移植中（`feature/linux`）：引擎与 App 闭环已通、CI 全绿；三模式功能对等已交付（S5a：系统 / 虚拟 sink / snd-aloop 驱动），桌面体验与治理收尾见方案 S5b/S5c |
+| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ◐ 移植中（`feature/linux`）：引擎与 App 闭环已通、CI 全绿；三模式功能对等已交付（S5a：系统 / 虚拟 sink / snd-aloop 驱动）；桌面体验已补齐（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话），治理收尾见方案 S5c |
 
 **Windows 四种音频后端**（`app/auradsp_app/lib/core/audio_modes.dart`）：
 
@@ -184,7 +184,7 @@ python ../../tools/bin/run_dart_tests.py      # T-03：按文件串行 + 失败�
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，135 项登记，按平台自动切换）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，136 项登记，按平台自动切换）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
@@ -242,7 +242,7 @@ AuraDSP/
 |---|---|---|
 | Dart 静态分析 | `flutter analyze` | 全量 lib + test，要求零问题 |
 | Dart 单测 | `python tools/bin/run_dart_tests.py` | 61 个测试文件；按文件串行 + 失败单文件重试两次（全量并发不可信）；Windows 范式专属 4 文件在非 Windows 主机显式 SKIP-PLATFORM |
-| 引擎冒烟 | `python test/runner.py --smoke` | 135 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
+| 引擎冒烟 | `python test/runner.py --smoke` | 136 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
 | ABI 一致性 | `python tools/bin/abi_consistency.py` | `.def` ↔ 头文件 ↔ `ffi.dart` ↔ `.map`（Linux version script）四处符号与签名 |
 | CI | `.github/workflows/ci.yml` | 七 job：静态门禁 / Linux 构建+冒烟 / ABI / Windows 构建 / Dart 测试 / 资源守卫，push 与 PR 均触发 |
 | DLL 副本同步 | `python tools/bin/verify_dll_copies.py --sync` | 三处副本哈希一致（禁手拷） |
@@ -251,7 +251,7 @@ AuraDSP/
 | 硬编码中文 | `test/l10n_cjk_guard_test.dart` | 棘轮：`lib/features` + `lib/ui` 基线只降不升 |
 
 最近一轮（2026-10-28）：analyze 零问题、Dart 580+ 用例通过、冒烟 100%。
-Linux 侧（2026-11-01，`feature/linux`）：analyze 零问题、Dart 57 文件通过 + 4 平台跳过、Linux 冒烟 PASS 10 / SKIP 125（Windows 专属）/ FAIL 0、GitHub CI 七 job 全绿。
+Linux 侧（2026-11-02，`feature/linux`）：analyze 零问题、Dart 59 文件通过 + 4 平台跳过、Linux 冒烟 PASS 11 / SKIP 125（Windows 专属）/ FAIL 0、GitHub CI 七 job 全绿（S5a 已确认；S5b 以推送后 CI 为准）。
 
 ---
 

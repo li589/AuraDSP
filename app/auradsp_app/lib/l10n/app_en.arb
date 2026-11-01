@@ -781,7 +781,15 @@
       }
     }
   },
-  "memClear": "Clear Session Memory",
+    "memDataDir": "Data directory: {path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "Clear Session Memory",
   "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
   "memReset": "Reset External Config to Defaults",
   "memResetDone": "config.json has been reset to the standard template",
@@ -1020,7 +1028,7 @@
   },
   "lpAddDirTitle": "Add External Script Preset Folder",
   "lpAddDirPrompt": "Enter the full folder path containing .eel / .txt script presets:",
-  "lpAddDirExample": "E.g.: D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "E.g.: …/AudioScripts/EelPresets",
   "lpChars": "{n} chars",
   "@lpChars": {
     "placeholders": {
@@ -1116,7 +1124,7 @@
   "sliderResetTip": "Click to reset to default",
   "plugAddDirTitle": "Add Plugin Search Folder",
   "plugAddDirPrompt": "Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:",
-  "plugAddDirExample": "E.g.: D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "E.g.: …/AudioPlugins/VST3",
   "plugAddScan": "Add & Scan",
   "plugTitle": "Plugin Center",
   "plugUnsupported": "Plugins are not available on this platform",

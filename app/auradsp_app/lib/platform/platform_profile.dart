@@ -37,7 +37,13 @@ abstract final class PlatformProfile {
   static bool get supportsWindowManagement =>
       Platform.isWindows || Platform.isLinux || Platform.isMacOS;
 
-  /// 配置根目录（Windows: %APPDATA%/AuraDSP；其它: ~/.config/auradsp）。
+  /// 配置根目录（Windows: %APPDATA%/AuraDSP；Linux: XDG，见下；其它:
+  /// ~/.config/auradsp）。
+  ///
+  /// Linux 按 XDG Base Directory 规范（S5b）：`$XDG_CONFIG_HOME/auradsp`，
+  /// 未设时 `~/.config/auradsp`。XDG 变量为相对路径时按规范忽略。
+  /// `$HOME` 缺失时回退系统临时目录——旧实现回退 `'.'` 会把配置散落到
+  /// 进程工作目录（方案 §S5b 登记的问题），不再复现。
   static String get configDir {
     if (Platform.isWindows) {
       final appData = Platform.environment['APPDATA'];
@@ -45,9 +51,51 @@ abstract final class PlatformProfile {
           ? '$appData${Platform.pathSeparator}AuraDSP'
           : 'AuraDSP';
     }
-    final home = Platform.environment['HOME'] ?? '.';
-    return '$home${Platform.pathSeparator}.config'
-        '${Platform.pathSeparator}auradsp';
+    final sep = Platform.pathSeparator;
+    if (Platform.isLinux) {
+      final xdg = Platform.environment['XDG_CONFIG_HOME'];
+      if (xdg != null && xdg.startsWith('/')) {
+        return [xdg, 'auradsp'].join(sep);
+      }
+    }
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) {
+      return [Directory.systemTemp.path, 'auradsp'].join(sep);
+    }
+    return [home, '.config', 'auradsp'].join(sep);
+  }
+
+  /// XDG 配置主目录本身（Linux: $XDG_CONFIG_HOME，未设时 ~/.config；
+  /// HOME 缺失时为系统临时目录）。autostart 等需要在 auradsp 子目录
+  /// 之外落点的场景用它与 [configDir] 保持同源规则；非 Linux 返回
+  /// [configDir]（其它平台无此概念，调用方只在 Linux 使用）。
+  static String get xdgConfigHome {
+    if (!Platform.isLinux) return configDir;
+    final sep = Platform.pathSeparator;
+    final xdg = Platform.environment['XDG_CONFIG_HOME'];
+    if (xdg != null && xdg.startsWith('/')) return xdg;
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) return Directory.systemTemp.path;
+    return [home, '.config'].join(sep);
+  }
+
+  /// 用户数据根目录（预设 / 会话 / 插件数据 / 脚本库等，S5b XDG 拆分）。
+  ///
+  /// Linux: `$XDG_DATA_HOME/auradsp`，未设时 `~/.local/share/auradsp`；
+  /// 其它平台与 [configDir] 相同（Windows 历史布局不变）。拆分前 Linux
+  /// 存量数据由 ConfigManager 首次访问时迁移（见 core/config.dart）。
+  static String get dataDir {
+    if (!Platform.isLinux) return configDir;
+    final sep = Platform.pathSeparator;
+    final xdg = Platform.environment['XDG_DATA_HOME'];
+    if (xdg != null && xdg.startsWith('/')) {
+        return [xdg, 'auradsp'].join(sep);
+      }
+    final home = Platform.environment['HOME'];
+    if (home == null || home.isEmpty) {
+      return [Directory.systemTemp.path, 'auradsp'].join(sep);
+    }
+    return [home, '.local', 'share', 'auradsp'].join(sep);
   }
 
   /// 当前可执行文件所在目录（安装目录；资源探测的基线）。

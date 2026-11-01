@@ -38,6 +38,14 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
             l.memDir(ConfigManager.baseDir),
             style: monoOf(p, size: 10, color: p.textDim),
           ),
+          // S5b：Linux 上数据根与配置根分离（XDG），一并展示；同根时不重复。
+          if (ConfigManager.dataDir != ConfigManager.baseDir) ...[
+            const SizedBox(height: 2),
+            Text(
+              l.memDataDir(ConfigManager.dataDir),
+              style: monoOf(p, size: 10, color: p.textDim),
+            ),
+          ],
           const SizedBox(height: AuraSpace.sm),
           Row(
             children: [

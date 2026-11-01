@@ -2,7 +2,7 @@
  * session_memory.dart — AuraDSP 持久化会话记忆引擎
  *
  * 职责：在用户调音与参数变动时，防抖自动保存全局状态快照到
- * ConfigManager.baseDir/session_state.json。
+ * ConfigManager.dataDir/session_state.json（S5b 起用户数据根）。
  * 启动时自动读取并无缝重放下发，实现“退出即保存，打开即恢复”。
  */
 
@@ -19,7 +19,7 @@ import 'visualizer_types.dart';
 import 'error_sink.dart';
 abstract final class SessionMemory {
   static String get sessionPath =>
-      '${ConfigManager.baseDir}${Platform.pathSeparator}session_state.json';
+      '${ConfigManager.dataDir}${Platform.pathSeparator}session_state.json';
 
   /// 保存会话快照
   static bool save(AppModel m) {

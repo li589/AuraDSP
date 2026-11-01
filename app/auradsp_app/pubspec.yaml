@@ -19,6 +19,8 @@ dependencies:
   tray_manager: ^0.8.0
   nativeapi: ^0.5.2
   nativeapi_flutter: ^0.5.2
+  # Linux 媒体会话（MPRIS over 会话总线，S5b）：纯 Dart D-Bus 客户端。
+  dbus: ^0.7.10
 
 dev_dependencies:
   flutter_test:
@@ -35,6 +37,7 @@ flutter:
     - assets/presets/factory/
     - assets/presets/plugin_tables.json
     - assets/tray_icon.ico
+    - assets/tray_icon.png
 
   shaders:
     - shaders/aurora_wave.frag

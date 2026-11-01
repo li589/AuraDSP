@@ -2240,6 +2240,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String memDataDir(String path) {
+    return 'Data directory: $path';
+  }
+
+  @override
   String get memClear => 'Clear Session Memory';
 
   @override
@@ -2829,7 +2834,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter the full folder path containing .eel / .txt script presets:';
 
   @override
-  String get lpAddDirExample => 'E.g.: D:\\AudioScripts\\EelPresets';
+  String get lpAddDirExample => 'E.g.: …/AudioScripts/EelPresets';
 
   @override
   String lpChars(int n) {
@@ -2946,7 +2951,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:';
 
   @override
-  String get plugAddDirExample => 'E.g.: D:\\AudioPlugins\\VST3';
+  String get plugAddDirExample => 'E.g.: …/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => 'Add & Scan';

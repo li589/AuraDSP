@@ -49,8 +49,8 @@ abstract final class LiveprogLibrary {
     }
   }
 
-  /// 统一走 ConfigManager.baseDir
-  static String get dir => _dir ??= ConfigManager.path('liveprog');
+  /// 统一走 ConfigManager.dataDir（S5b 起用户数据根）
+  static String get dir => _dir ??= ConfigManager.dataPath('liveprog');
 
   /// 聚合本地库与用户自定义外部目录
   static List<LiveprogItem> listAll(List<String> customDirs) {

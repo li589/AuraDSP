@@ -908,7 +908,15 @@
       }
     }
   },
-  "memClear": "清除会话记忆",
+    "memDataDir": "数据存储目录: {path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "清除会话记忆",
   "memCleared": "已清除持久化会话记忆，下次启动将使用纯净默认值",
   "memReset": "重置外置配置为默认",
   "memResetDone": "已重置 config.json 为标准配置模板",
@@ -1147,7 +1155,7 @@
   },
   "lpAddDirTitle": "添加外部脚本预设目录",
   "lpAddDirPrompt": "请输入包含 .eel / .txt 脚本预设的完整文件夹路径：",
-  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "例：…/AudioScripts/EelPresets",
   "lpChars": "{n} 字符",
   "@lpChars": {
     "placeholders": {
@@ -1243,7 +1251,7 @@
   "sliderResetTip": "点击重置默认值",
   "plugAddDirTitle": "添加插件检索目录",
   "plugAddDirPrompt": "请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：",
-  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "例：…/AudioPlugins/VST3",
   "plugAddScan": "添加并扫描",
   "plugTitle": "插件中心",
   "plugUnsupported": "插件功能在当前平台不可用",

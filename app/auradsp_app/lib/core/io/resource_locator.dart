@@ -11,7 +11,9 @@ import '../error_sink.dart';
 abstract final class ResourceLocator {
   /// `resources/{subFolder}` 的候选目录（按优先级）：
   /// exe 旁 resources → exe 旁 assets → 配置中心 resources → 配置中心子目录
-  /// → 工程 assets → 仓库 assets。
+  /// → 数据中心 resources → 数据中心子目录 → 工程 assets → 仓库 assets。
+  /// 数据中心两项是 S5b XDG 拆分的补项：Linux 用户投放的 IR/DDC 资源
+  /// 按规范应落在 $XDG_DATA_HOME，排在配置中心之后不改变既有优先级。
   static List<String> candidateDirs(String subFolder) {
     if (subFolder.isEmpty) return const [];
     final sep = Platform.pathSeparator;
@@ -23,6 +25,8 @@ abstract final class ResourceLocator {
       '$exeDir$sep$assets',
       ConfigManager.path(resources),
       ConfigManager.path(subFolder),
+      ConfigManager.dataPath(resources),
+      ConfigManager.dataPath(subFolder),
       assets,
       ['..', '..', 'assets', subFolder].join(sep),
     ];

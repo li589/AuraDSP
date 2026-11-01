@@ -27,7 +27,7 @@ extension PluginManagerAb on PluginManager {
   }
 
   Directory _abDir(String pluginId) => Directory(
-      ConfigManager.path('plugin_presets${Platform.pathSeparator}.ab${Platform.pathSeparator}$pluginId'));
+      ConfigManager.dataPath('plugin_presets${Platform.pathSeparator}.ab${Platform.pathSeparator}$pluginId'));
 
   String _abFile(int slot, int route, String ab) =>
       '${_abDir(_abPluginKey(slot)).path}${Platform.pathSeparator}s${slot}_r$route$ab.aurapreset';

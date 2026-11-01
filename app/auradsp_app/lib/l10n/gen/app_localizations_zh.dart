@@ -2101,6 +2101,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String memDataDir(String path) {
+    return '数据存储目录: $path';
+  }
+
+  @override
   String get memClear => '清除会话记忆';
 
   @override
@@ -2663,7 +2668,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpAddDirPrompt => '请输入包含 .eel / .txt 脚本预设的完整文件夹路径：';
 
   @override
-  String get lpAddDirExample => '例：D:\\AudioScripts\\EelPresets';
+  String get lpAddDirExample => '例：…/AudioScripts/EelPresets';
 
   @override
   String lpChars(int n) {
@@ -2773,7 +2778,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugAddDirPrompt => '请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：';
 
   @override
-  String get plugAddDirExample => '例：D:\\AudioPlugins\\VST3';
+  String get plugAddDirExample => '例：…/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => '添加并扫描';

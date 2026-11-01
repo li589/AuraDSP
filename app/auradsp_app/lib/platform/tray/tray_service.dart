@@ -2,7 +2,8 @@
  * tray_service.dart — 系统托盘 / 关窗→托盘 / 开机自启 统一服务
  *
  * 职责（桌面集成，基于 window_manager + tray_manager(nativeapi)）：
- *   1. 托盘图标 + 工具提示（assets/tray_icon.ico，多尺寸 16/32/48）
+ *   1. 托盘图标 + 工具提示（Windows: assets/tray_icon.ico 多尺寸；
+ *      Linux: assets/tray_icon.png，SNI 面板只认 PNG，S5b）
  *   2. 关窗→托盘：setPreventClose 拦截 WM_CLOSE，隐藏窗口而非退出（音乐继续）
  *   3. 托盘交互：左键单击恢复窗口；右键菜单（显示主窗口 / 开机自启开关 / 退出）
  *   4. 开机自启：由 AutoStartPort 注入（Windows 实现 = platform/autostart/）
@@ -62,7 +63,16 @@ class TrayService implements WindowPort {
       // 2) 托盘图标
       final icon = TrayIcon.create();
       if (icon == null) return;
-      icon.icon = ImageAsset.fromAsset('assets/tray_icon.ico');
+      // 图标格式按平台：Windows 用 .ico（多尺寸），Linux 的
+      // StatusNotifierItem 面板普遍只认 PNG（S5b；源图 design/logo/icons/
+      // auradsp-tray-48.png）。左键恢复窗口走下方 TrayIconClickedEvent
+      // 监听——nativeapi 的 Linux 实现把 SNI 的 Activate（主键点击）
+      // 映射为该事件；右键菜单为所有桌面环境的保底路径（R10 登记）。
+      icon.icon = ImageAsset.fromAsset(
+        PlatformProfile.isLinux
+            ? 'assets/tray_icon.png'
+            : 'assets/tray_icon.ico',
+      );
       icon.setTooltip('AuraDSP');
       icon.setContextMenuTrigger(ContextMenuTrigger.rightClicked);
 

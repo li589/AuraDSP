@@ -781,7 +781,15 @@
       }
     }
   },
-  "memClear": "セッションメモリをクリア",
+    "memDataDir": "データディレクトリ：{path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "セッションメモリをクリア",
   "memCleared": "永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します",
   "memReset": "外部設定をデフォルトにリセット",
   "memResetDone": "config.json を標準テンプレートにリセットしました",
@@ -1020,7 +1028,7 @@
   },
   "lpAddDirTitle": "外部スクリプトプリセットフォルダを追加",
   "lpAddDirPrompt": ".eel / .txt スクリプトプリセットを含むフォルダのフルパスを入力：",
-  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "例：…/AudioScripts/EelPresets",
   "lpChars": "{n}文字",
   "@lpChars": {
     "placeholders": {
@@ -1116,7 +1124,7 @@
   "sliderResetTip": "クリックでデフォルトにリセット",
   "plugAddDirTitle": "プラグイン検索フォルダを追加",
   "plugAddDirPrompt": "64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：",
-  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "例：…/AudioPlugins/VST3",
   "plugAddScan": "追加してスキャン",
   "plugTitle": "プラグインセンター",
   "plugUnsupported": "このプラットフォームではプラグインは利用できません",
