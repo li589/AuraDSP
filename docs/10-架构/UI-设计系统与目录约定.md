@@ -72,7 +72,11 @@ features/ 一律经 Aura* 常量取数值，禁止散落魔法数
 lib/
 ├── engine/      传输层（FFI / isolate / 桥）——不依赖 UI
 ├── core/        state / config / theme / design / l10n / tokens.g
-├── features/    页面与业务组件——只经 core/ 访问基础设施
+│   ├── io/         统一加载治理（ResourceGate / DocumentStore / ResourceLocator）
+│   ├── selection/  统一选择治理（ResourcePicker）
+│   └── ports/      端口空实现（AppModel 缺省注入）
+├── platform/    平台耦合唯一落点：port 契约 + 按领域归类的适配实现
+├── features/    页面与业务组件——只经 core/ 与 platform 端口访问基础设施
 └── ui/          设计系统（P1-2 已落地）：chrome.dart（骨架/基础控件）、widgets.dart（卡片/仪表）
 ```
 
