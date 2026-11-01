@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:auradsp_app/core/debug/debug_trace.dart';
+import 'package:auradsp_app/features/debug/debug_hud.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -24,6 +26,40 @@ void main() {
     expect(rows.any((r) => r['cat'] == 'engine' && r['action'] == 'ack'), isTrue);
     expect(t.controlCount, greaterThanOrEqualTo(1));
     expect(t.ackCount, greaterThanOrEqualTo(1));
+    // HUD 单行摘要：回执必须写成 rc=0，不能落成 “id = 0”（会被误读成参数值）。
+    final ackEv = t.lastEvents.lastWhere((e) => e.cat == 'engine');
+    expect(ackEv.oneLine, contains('rc=0'));
+    expect(ackEv.oneLine, contains('12ms'));
+    expect(ackEv.oneLine, isNot(contains(' = 0')));
+    final sendEv = t.lastEvents.lastWhere((e) => e.cat == 'param');
+    expect(sendEv.oneLine, contains('= 1'));
+    t.resetForTesting();
+    dir.deleteSync(recursive: true);
+  });
+
+  testWidgets('HUD 自动跟随新事件（无需点标题），回执显示 rc=0', (tester) async {
+    final dir = Directory.systemTemp.createTempSync('aura_dbg_hud_');
+    final path = '${dir.path}/trace.jsonl';
+    final t = DebugTrace.instance;
+    t.resetForTesting();
+    t.initFromArgs(['--debug', '--debug-log=$path']);
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: Stack(children: const [
+          Positioned(right: 12, bottom: 12, child: DebugTraceHud()),
+        ]),
+      ),
+    ));
+    t.uiControl('eq.enable', true, widget: 'switch');
+    t.paramSent('eq.enable', 1, kind: 'int');
+    t.paramAck('eq.enable', 0, 5);
+    // 面板靠 150ms 轮询采样；事件里发生在 build 阶段也不影响显示。
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(find.textContaining('ack eq.enable rc=0 5ms'), findsOneWidget);
+    expect(find.textContaining('send eq.enable = 1'), findsOneWidget);
+    expect(find.textContaining('ACK 1'), findsOneWidget);
+
     t.resetForTesting();
     dir.deleteSync(recursive: true);
   });

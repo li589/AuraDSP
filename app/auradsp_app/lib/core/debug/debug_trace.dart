@@ -32,10 +32,22 @@ class DebugEvent {
   final String action;
   final Map<String, Object?>? data;
 
+  /// 单行摘要。
+  ///
+  /// engine 回执里的 `rc` 是往返结果而不是被设置的值，必须写成 `rc=0`；
+  /// 旧写法把它当 value 打印（`eq.enable = 0`），看起来像参数被设成了 0。
   String get oneLine {
     final id = data?['id'];
-    final value = data?['value'] ?? data?['rc'] ?? data?['cmd'];
     final suffix = id == null ? '' : ' $id';
+    if (cat == 'engine') {
+      final rc = data?['rc'];
+      final tookMs = data?['tookMs'];
+      final msg = data?['msg'];
+      final ms = (tookMs is int && tookMs >= 0) ? ' ${tookMs}ms' : '';
+      final m = (msg is String && msg.isNotEmpty) ? ' · $msg' : '';
+      return '#$seq [$cat] $action$suffix rc=$rc$ms$m';
+    }
+    final value = data?['value'] ?? data?['cmd'];
     final v = value == null ? '' : ' = $value';
     return '#$seq [$cat] $action$suffix$v';
   }
@@ -50,7 +62,6 @@ class DebugTrace {
   bool console = false;
   String logPath = '';
 
-  final ValueNotifier<int> revision = ValueNotifier<int>(0);
   final List<DebugEvent> _last = <DebugEvent>[];
   final Set<String> _controls = <String>{};
   final Set<String> _acked = <String>{};
@@ -132,7 +143,6 @@ class DebugTrace {
     _acked.clear();
     _seq = 0;
     _initialized = false;
-    revision.value++;
   }
 
   void event(String cat, String action, {Map<String, Object?>? data}) {
@@ -158,7 +168,6 @@ class DebugTrace {
       // 事件序列化失败不能反过来影响业务；只记一条最小行。
       _pending.write('{"ts":"$ts","seq":${e.seq},"cat":"debug","action":"encode_error","data":"$err"}\n');
     }
-    revision.value++;
   }
 
   /// UI 控件登记：首次出现记一条 register，供覆盖率面板统计。

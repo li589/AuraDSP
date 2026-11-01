@@ -1193,7 +1193,7 @@ ${hits.join('\n')}''');
   // 本部分改为形态 + 防回退镜像守卫）
   // ---------------------------------------------------------------------------
   group('Part J kLat 延迟表契约', () {
-    test('引擎 kLat* 5 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
+    test('引擎 kLat* 6 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
       final src = _read('engine/engine_internal.h');
       // D1（2026-10-24）：LatencyItem 拆成 {tier, frames, ms} 三字段——
       // 结构性帧数延迟（comp 4096 帧）按采样率换算，名义毫秒值原样用。
@@ -1208,12 +1208,13 @@ ${hits.join('\n')}''');
             frames: int.parse(m.group(3)!),
             ms: double.parse(m.group(4)!),
           )).toList();
-      // 5 条：arbmag / comp / limiter 三项刻意不在表内——
+      // 6 条：reverb / convolver / bass / crossfeed / spatial / ddc。
+      // arbmag / comp / limiter 三项刻意不在表内——
       //   arbmag = 单块帧数（随驱动块长变）；
       //   comp   = fftLen-ovpLen，随 tfresolution 变（D7 实测，见 kCompLatProfile）；
       //   limiter= 随 lookahead 模式在 0 / ~1.5ms 之间切（D7 实测）。
       // 三者都由 compute_latency 直接算，写常量必错。
-      expect(rows.length, 5, reason: '引擎 kLat 表条目数应为 5（arbmag/comp/limiter 走动态）');
+      expect(rows.length, 6, reason: '引擎 kLat 表条目数应为 6（arbmag/comp/limiter 走动态）');
       for (final r in rows) {
         expect(r.tier, greaterThanOrEqualTo(0), reason: 'kLat${r.name} tier 应>=0');
         final hasFrames = r.frames > 0;
