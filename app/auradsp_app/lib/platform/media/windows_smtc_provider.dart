@@ -2,10 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import '../../../../core/error_sink.dart';
-import '../../../../platform/platform_profile.dart';
-import '../models/lyric_models.dart';
-import 'media_sync_service.dart';
+import '../../core/error_sink.dart';
+import '../../core/media_track.dart';
+import '../platform_profile.dart';
+import '../port/media_session.dart';
 
 /// Windows 宿主 SMTC (System Media Transport Controls) 媒体会话提供者
 ///
@@ -31,6 +31,7 @@ class WindowsSmtcProvider implements MediaSessionProvider {
   Stream<MediaTrackMetadata> get trackStream => _controller.stream;
 
   /// 启动系统媒体监听进程
+  @override
   void start() {
     if (_disposed || _starting || _process != null) return;
     if (PlatformProfile.os != 'windows') return;
@@ -181,6 +182,7 @@ try {
   }
 
   /// 主动停止监听子进程（关闭歌词 / 离开可视化页）。可再次 start() 恢复。
+  @override
   void stop() {
     _stopped = true;
     _starting = false;

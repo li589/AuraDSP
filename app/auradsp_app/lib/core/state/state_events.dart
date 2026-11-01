@@ -18,7 +18,7 @@ extension StateEvents on AppModel {
     switch (raw['evt'] as String) {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
-        if (!TrayService.instance.isWindowVisible.value) {
+        if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
         }
         break;
@@ -727,7 +727,7 @@ extension StateEvents on AppModel {
         }
         break;
       case 'viz':
-        if (!TrayService.instance.isWindowVisible.value) break;
+        if (!window.isVisible) break;
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();

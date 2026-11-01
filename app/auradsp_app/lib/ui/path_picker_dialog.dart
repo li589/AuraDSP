@@ -7,13 +7,13 @@
  * 3. 集成存在性检测、扩展名校验与 PathMemory 自动记忆；
  * 4. 统一 UI 样式，遵循 AuraDSP 设计系统。
  */
-import 'dart:io';
+import '../core/io/resource_gate.dart';
 
-import 'package:file_selector/file_selector.dart';
+import '../core/selection/resource_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
-import '../core/path_memory.dart';
+import '../platform/adapters.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
@@ -77,12 +77,16 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
   late final TextEditingController _controller;
   String? _errorText;
 
+  ResourcePickMode get _mode => widget.mode == AuraPathPickerMode.directory
+      ? ResourcePickMode.directory
+      : ResourcePickMode.file;
+
+  ResourcePicker get _picker => PlatformAdapters.instance.picker;
+
   @override
   void initState() {
     super.initState();
-    final init = widget.initialPath ??
-        (widget.memorySlot != null ? PathMemory.dirFor(widget.memorySlot!) : null) ??
-        '';
+    final init = widget.initialPath ?? (_picker.initialDirectory(widget.memorySlot) ?? '');
     _controller = TextEditingController(text: init);
   }
 
@@ -94,34 +98,22 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
 
   Future<void> _openNativePicker() async {
     final l = l10nOf(context);
-    final initialDir = PathMemory.dirFor(widget.memorySlot ?? '') ??
-        (widget.memorySlot != null ? PathMemory.fallbackDir(widget.memorySlot!) : null);
-
-    if (widget.mode == AuraPathPickerMode.directory) {
-      final dir = await getDirectoryPath(
-        initialDirectory: initialDir,
-        confirmButtonText: l.pathPickerSelectDir,
-      );
-      if (dir != null) {
-        _controller.text = dir;
-        if (mounted) {
-          setState(() => _errorText = null);
-        }
-      }
-    } else {
-      final typeGroup = widget.allowedExtensions != null && widget.allowedExtensions!.isNotEmpty
-          ? [XTypeGroup(label: widget.title, extensions: widget.allowedExtensions)]
-          : null;
-      final file = await openFile(
-        acceptedTypeGroups: typeGroup ?? const [],
-        initialDirectory: initialDir,
-      );
-      if (file != null) {
-        _controller.text = file.path;
-        if (mounted) {
-          setState(() => _errorText = null);
-        }
-      }
+    final picked = await _picker.browse(
+      ResourcePickRequest(
+        title: widget.title,
+        prompt: widget.prompt,
+        mode: _mode,
+        allowedExtensions: widget.allowedExtensions,
+        memorySlot: widget.memorySlot,
+        confirmLabel: widget.mode == AuraPathPickerMode.directory
+            ? l.pathPickerSelectDir
+            : null,
+      ),
+    );
+    if (picked == null) return;
+    _controller.text = picked;
+    if (mounted) {
+      setState(() => _errorText = null);
     }
   }
 
@@ -133,37 +125,31 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
       return;
     }
 
-    if (widget.mode == AuraPathPickerMode.directory) {
-      final dir = Directory(path);
-      if (!dir.existsSync()) {
-        setState(() => _errorText = l.pathPickerErrDirNotExist);
-        return;
-      }
-    } else {
-      final file = File(path);
-      if (!file.existsSync()) {
-        setState(() => _errorText = l.pathPickerErrFileNotExist);
-        return;
-      }
-      if (widget.allowedExtensions != null && widget.allowedExtensions!.isNotEmpty) {
-        final ext = path.contains('.') ? path.split('.').last.toLowerCase() : '';
-        final allowed = widget.allowedExtensions!.map((e) => e.toLowerCase()).toList();
-        if (!allowed.contains(ext)) {
-          setState(() => _errorText = l.pathPickerErrFormat(widget.allowedExtensions!.join(', ')));
-          return;
-        }
-      }
+    final issue = ResourcePicker.validate(
+      path,
+      mode: _mode,
+      allowedExtensions: widget.allowedExtensions,
+    );
+    if (issue != ResourceIssue.ok) {
+      setState(() => _errorText = _messageFor(issue));
+      return;
     }
 
     if (widget.memorySlot != null) {
-      if (widget.mode == AuraPathPickerMode.directory) {
-        PathMemory.setDir(widget.memorySlot!, path);
-      } else {
-        PathMemory.recordPick(widget.memorySlot!, path);
-      }
+      _picker.remember(widget.memorySlot!, path, mode: _mode);
     }
 
     Navigator.of(context).pop(path);
+  }
+
+  String _messageFor(ResourceIssue issue) {
+    final l = l10nOf(context);
+    if (issue == ResourceIssue.badExtension) {
+      return l.pathPickerErrFormat(widget.allowedExtensions!.join(', '));
+    }
+    return _mode == ResourcePickMode.directory
+        ? l.pathPickerErrDirNotExist
+        : l.pathPickerErrFileNotExist;
   }
 
   @override

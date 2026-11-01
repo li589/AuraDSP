@@ -48,6 +48,12 @@ abstract final class PlatformProfile {
         '${Platform.pathSeparator}auradsp';
   }
 
+  /// 当前可执行文件所在目录（安装目录；资源探测的基线）。
+  static String get executableDir => File(Platform.resolvedExecutable).parent.path;
+
+  /// 是否运行在 `flutter test` 沙箱（测试进程自带 FLUTTER_TEST=true）。
+  static bool get isTestRun => Platform.environment['FLUTTER_TEST'] == 'true';
+
   /// 比较用路径键：Windows 大小写不敏感，其余平台保留原样。
   static String pathKey(String path) =>
       Platform.isWindows ? path.toLowerCase() : path;

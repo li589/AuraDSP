@@ -18,10 +18,12 @@
  *   - 失败/取消 → 不写（保持上次记忆）。
  * 单一事实源：各 UI 不再自持 _dir 静态字段，一律经 PathMemory 读写。
  */
-import 'dart:convert';
 import 'dart:io';
 
 import 'config.dart';
+import 'io/document_store.dart';
+import 'io/resource_gate.dart';
+import 'io/resource_locator.dart';
 
 import 'error_sink.dart';
 abstract final class PathMemory {
@@ -63,27 +65,15 @@ abstract final class PathMemory {
   static void _ensureLoaded() {
     if (_loaded) return;
     _loaded = true;
-    try {
-      final f = File(_path);
-      if (!f.existsSync()) return;
-      final raw = f.readAsStringSync();
-      final obj = _decode(raw);
-      final d = obj['dirs'];
-      if (d is Map) {
-        _dirs = d.map((k, v) => MapEntry(k.toString(), v.toString()));
-      }
-    } catch (e, st) {
-      swallow(e, st);
+    final read = DocumentStore.readJson(_path);
+    if (!read.ok) {
       _dirs = {};
+      return;
     }
-  }
-
-  static Map<String, dynamic> _decode(String raw) {
-    try {
-      final v = jsonDecode(raw);
-      if (v is Map<String, dynamic>) return v;
-    } catch (e, st) { swallow(e, st); }
-    return {};
+    final d = read.data!['dirs'];
+    if (d is Map) {
+      _dirs = d.map((k, v) => MapEntry(k.toString(), v.toString()));
+    }
   }
 
   /// 取某 slot 记忆目录；无记忆时返回 null（调用方自行决定初始目录）。
@@ -91,7 +81,8 @@ abstract final class PathMemory {
     _ensureLoaded();
     final v = _dirs[slot];
     if (v == null || v.isEmpty) return null;
-    return Directory(v).existsSync() ? v : null; // 目录已消失（盘符卸载等）→ 视为无记忆
+    // 目录已消失（盘符卸载等）→ 视为无记忆
+    return ResourceGate.directoryExists(v) ? v : null;
   }
 
   /// 取某 slot 原始记录路径（不强求该目录当前必须在磁盘存在）
@@ -116,9 +107,8 @@ abstract final class PathMemory {
     return _flush();
   }
 
-  /// slot 的兜底初始目录（无记忆时）：
-  /// 优先智能探测安装包/运行目录资源库（`resources/{subFolder}`）、
-  /// 用户配置中心（`%APPDATA%/AuraDSP/resources/{subFolder}`）以及工程 assets。
+  /// slot 的兜底初始目录（无记忆时）：统一由 ResourceLocator 探测
+  /// 安装包/运行目录资源库、配置中心与工程 assets。
   static String? fallbackDir(String slot) {
     final subFolder = switch (slot) {
       slotConvolverIr => 'convolver',
@@ -128,28 +118,16 @@ abstract final class PathMemory {
     };
 
     if (subFolder.isNotEmpty) {
-      final exeDir = File(Platform.resolvedExecutable).parent.path;
-      final candidates = <String>[
-        '$exeDir${Platform.pathSeparator}resources${Platform.pathSeparator}$subFolder',
-        '$exeDir${Platform.pathSeparator}assets${Platform.pathSeparator}$subFolder',
-        ConfigManager.path('resources${Platform.pathSeparator}$subFolder'),
-        ConfigManager.path(subFolder),
-        'assets${Platform.pathSeparator}$subFolder',
-        '..${Platform.pathSeparator}..${Platform.pathSeparator}assets${Platform.pathSeparator}$subFolder',
-      ];
-
-      for (final p in candidates) {
-        try {
-          final d = Directory(p);
-          if (d.existsSync()) return d.path;
-        } catch (e, st) { swallow(e, st); }
-      }
+      final found = ResourceLocator.firstExistingDirectory(
+        ResourceLocator.candidateDirs(subFolder),
+      );
+      if (found != null) return found;
     }
 
     final rel = _fallbackDir[slot];
     if (rel == null || rel.isEmpty) return null;
     final p = ConfigManager.path(rel);
-    return Directory(p).existsSync() ? p : null;
+    return ResourceGate.directoryExists(p) ? p : null;
   }
 
   static bool _flush() {

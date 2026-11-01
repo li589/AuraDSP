@@ -24,6 +24,7 @@ import 'package:flutter/services.dart';
 import '../core/design.dart';
 import '../core/engine_error_map.dart';
 import '../core/error_sink.dart';
+import '../core/io/resource_gate.dart';
 import '../core/path_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -630,23 +631,22 @@ dbg = 0;
       memorySlot: PathMemory.slotLiveprogImportEel,
     );
     if (path != null && path.trim().isNotEmpty) {
-      final file = File(path.trim());
-      if (file.existsSync()) {
-        try {
-          final content = await file.readAsString(encoding: utf8);
-          if (mounted) {
-            _code.text = content;
-            _onCodeChanged(content);
-          }
-        } catch (e, st) {
-          // 用户主动导入失败必须有反馈（旧实现只写日志，用户会误以为成功）
-          swallow(e, st);
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-              content: Text(l10nOf(context).lpFileImportFailed),
-              duration: const Duration(seconds: 3),
-            ));
-          }
+      final read = ResourceGate.readText(
+        path.trim(),
+        maxBytes: LiveprogLibrary.maxScriptBytes,
+      );
+      if (read.ok) {
+        if (mounted) {
+          _code.text = read.text!;
+          _onCodeChanged(read.text!);
+        }
+      } else {
+        // 用户主动导入失败必须有反馈（旧实现只写日志，用户会误以为成功）
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(l10nOf(context).lpFileImportFailed),
+            duration: const Duration(seconds: 3),
+          ));
         }
       }
     }

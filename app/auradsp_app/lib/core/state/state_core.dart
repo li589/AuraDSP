@@ -720,16 +720,14 @@ extension StateCore on AppModel {
     port.listen(_onMessage);
     if (!_trayVisibilitySubscribed) {
       _trayVisibilitySubscribed = true;
-      TrayService.instance.isWindowVisible.addListener(
-        _onWindowVisibilityChanged,
-      );
+      window.visibleListenable.addListener(_onWindowVisibilityChanged);
     }
   }
 
   void _onWindowVisibilityChanged() {
     send({
       'cmd': 'setVizSuspended',
-      'value': !TrayService.instance.isWindowVisible.value,
+      'value': !window.isVisible,
     });
   }
 

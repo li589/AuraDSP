@@ -16,6 +16,7 @@ import 'package:flutter/services.dart' show rootBundle;
 
 import '../config.dart';
 import '../error_sink.dart';
+import '../io/document_store.dart';
 import 'plugin_models.dart';
 import 'text_collation.dart';
 

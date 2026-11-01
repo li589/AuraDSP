@@ -6,8 +6,9 @@
  * 启动时自动加载，缺失时自动生成标准模板，支持热更新与重置。
  */
 
-import 'dart:convert';
 import 'dart:io';
+
+import 'io/document_store.dart';
 
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'audio_modes.dart';
@@ -268,7 +269,7 @@ abstract final class ConfigManager {
     // 根因史：plugin_cache 曾被假数据覆盖（事后补了 baseDirOverride）；
     // AppModel 构造回放真实 session 曾让 stereoBandUsed 断言失败（§13.4.26）。
     // 显式 baseDirOverride 仍优先（个别测试可自选目录）。
-    if (Platform.environment['FLUTTER_TEST'] == 'true') {
+    if (PlatformProfile.isTestRun) {
       _baseDir = Directory.systemTemp.createTempSync('auradsp_test_').path;
       return _baseDir!;
     }
@@ -300,45 +301,29 @@ abstract final class ConfigManager {
 
   /// 以两空格缩进把 [value] 写成 JSON 文件，自动建父目录。
   ///
-  /// 此前 config / presets / session_memory 各自重复「mkdir + JsonEncoder +
-  /// writeAsStringSync」三行样板（6 处），格式与错误处理容易各自漂移。
-  /// 返回是否写成功——**绝不抛异常**，调用方多数在 try/catch 里做持久化，
-  /// 一次磁盘错误不该把 UI 逻辑打断。
-  static bool writeJsonFile(String filePath, Object? value) {
-    try {
-      final dir = Directory(filePath.substring(0, filePath.lastIndexOf(
-          Platform.pathSeparator)));
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-      File(filePath).writeAsStringSync(
-          const JsonEncoder.withIndent('  ').convert(value));
-      return true;
-    } catch (e, st) {
-      swallow(e, st);
-      return false;
-    }
-  }
+  /// 实现已收敛到 `core/io/document_store.dart`（统一落盘治理）；
+  /// 本方法保留为兼容薄委托，旧调用零改动。
+  static bool writeJsonFile(String filePath, Object? value) =>
+      DocumentStore.writeJson(filePath, value);
 
   static String get configPath =>
       '$baseDir${Platform.pathSeparator}config.json';
 
   static AppConfig load() {
-    try {
-      final file = File(configPath);
-      if (file.existsSync()) {
-        final content = file.readAsStringSync();
-        final json = jsonDecode(content) as Map<String, dynamic>;
-        final cfg = AppConfig.fromJson(json);
-        // v2 -> v3 迁移：可视化帧率旧默认 30 在核显上把 GPU 顶到 ~70%
-        //（30fps 全窗口重绘，见 §13.4.27.3）。旧配置里 vizFps 恒为旧默认
-        //（无 UI 可改），故按版本号安全强制降到新默认并落盘新版本。
-        final ver = (json['version'] as num?)?.toInt() ?? 0;
-        if (ver < 3) {
-          cfg.vizFps = AppConfig.defaultVizFps;
-          save(cfg);
-        }
-        return cfg;
+    final read = DocumentStore.readJson(configPath);
+    if (read.ok) {
+      final json = read.data!;
+      final cfg = AppConfig.fromJson(json);
+      // v2 -> v3 迁移：可视化帧率旧默认 30 在核显上把 GPU 顶到 ~70%
+      //（30fps 全窗口重绘，见 §13.4.27.3）。旧配置里 vizFps 恒为旧默认
+      //（无 UI 可改），故按版本号安全强制降到新默认并落盘新版本。
+      final ver = (json['version'] as num?)?.toInt() ?? 0;
+      if (ver < 3) {
+        cfg.vizFps = AppConfig.defaultVizFps;
+        save(cfg);
       }
-    } catch (e, st) { swallow(e, st); }
+      return cfg;
+    }
     // 首次运行或解析失败，生成并写入默认配置
     final cfg = AppConfig();
     save(cfg);

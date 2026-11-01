@@ -47,14 +47,13 @@ extension PluginManagerCache on PluginManager {
   /// schema 不符的缓存整份丢弃——宁可重启后为空等重扫，也不展示陈旧数据。
   Future<void> loadCache() async {
     try {
-      final file = _getCacheFile();
-      if (!await file.exists()) {
+      final read = DocumentStore.readJson(_getCacheFile().path);
+      if (!read.ok) {
+        // 缺文件 / 坏 JSON / 超大文件：一律等重扫，不呈现陈旧数据。
         return;
       }
-      final text = await file.readAsString();
-      final dynamic decoded = jsonDecode(text);
-      if (decoded is! Map<String, dynamic> ||
-          decoded['schema'] != kCacheSchemaVersion) {
+      final decoded = read.data!;
+      if (decoded['schema'] != kCacheSchemaVersion) {
         debugPrint(
           '[PluginManager] loadCache：缓存 schema 不符或为旧版裸 list，'
           '整份丢弃，等待重新扫描',

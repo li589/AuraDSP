@@ -72,9 +72,11 @@ extension PluginManagerTables on PluginManager {
 
   Map<String, List<String>> _readQuarantineConfig() {
     try {
-      final f = PluginManager._quarantineConfigFile();
-      if (!f.existsSync()) return {'close': const [], 'open': const []};
-      final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final read = DocumentStore.readJson(
+        PluginManager._quarantineConfigFile().path,
+      );
+      if (!read.ok) return {'close': const [], 'open': const []};
+      final j = read.data!;
       return {
         'close': (j['close'] as List?)?.cast<String>() ?? const [],
         'open': (j['open'] as List?)?.cast<String>() ?? const [],
@@ -90,13 +92,12 @@ extension PluginManagerTables on PluginManager {
     required List<String> open,
   }) {
     try {
-      final f = PluginManager._quarantineConfigFile();
-      if (!f.existsSync()) f.parent.createSync(recursive: true);
-      f.writeAsStringSync(
-        jsonEncode({
+      ConfigManager.writeJsonFile(
+        PluginManager._quarantineConfigFile().path,
+        {
           'close': close.where((p) => p.isNotEmpty).toSet().toList(),
           'open': open.where((p) => p.isNotEmpty).toSet().toList(),
-        }),
+        },
       );
     } catch (e) {
       debugPrint('[PluginManager] quarantine config save failed: $e');

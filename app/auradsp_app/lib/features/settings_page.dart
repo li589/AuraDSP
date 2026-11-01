@@ -19,9 +19,9 @@ import '../core/path_memory.dart';
 import '../core/session_memory.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
-import '../core/tray_service.dart';
 import '../core/ui_helpers.dart';
 import '../l10n/gen/app_localizations.dart';
+import '../platform/adapters.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 

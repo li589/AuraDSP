@@ -47,9 +47,9 @@ extension PluginManagerAb on PluginManager {
     _abActive.removeWhere((k, _) => k.startsWith('$slot|'));
     _abMeta.removeWhere((k, _) => k.startsWith('$slot|'));
     try {
-      final f = File(_abMetaPath(id));
-      if (!f.existsSync()) return;
-      final raw = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final read = DocumentStore.readJson(_abMetaPath(id));
+      if (!read.ok) return;
+      final raw = read.data!;
       final slots = (raw['slots'] as Map<String, dynamic>?) ?? {};
       final sr = (slots['$slot'] as Map<String, dynamic>?) ?? {};
       sr.forEach((rk, rv) {

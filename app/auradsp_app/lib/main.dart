@@ -13,7 +13,7 @@ import 'core/design.dart';
 import 'core/presets.dart';
 import 'core/state.dart';
 import 'core/theme.dart';
-import 'core/tray_service.dart';
+import 'platform/adapters.dart';
 import 'engine/debug_log.dart';
 import 'features/shell.dart';
 import 'features/widgets.dart';
@@ -58,7 +58,7 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      TrayService.instance.setWindowVisible(true);
+      PlatformAdapters.instance.window.setVisible(true);
     }
   }
 
@@ -77,16 +77,23 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
     // 构造前完成，否则会话恢复/预设读取拿不到资产数据。
     await PresetLibrary.preloadFactoryAssets();
     // 托盘/关窗拦截（非核心路径：失败不阻塞启动，仅不提供托盘）
-    await TrayService.instance.init();
+    final adapters = PlatformAdapters.instance;
+    await adapters.window.init();
     if (!mounted) return;
-    setState(() => _model ??= AppModel());
+    // 平台端口在组合根注入：core 不 import 具体平台实现（门禁 F11）。
+    setState(() => _model ??= AppModel(
+          window: adapters.window,
+          pluginDirs: adapters.pluginDirs,
+          registry: adapters.registry,
+          windowsSystem: adapters.windowsSystem,
+        ));
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _model?.dispose();
-    TrayService.instance.dispose();
+    PlatformAdapters.instance.window.dispose();
     super.dispose();
   }
 
@@ -117,7 +124,7 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
           home: ShellGate(model: model),
           builder: (ctx, child) {
             final l = l10nOf(ctx);
-            TrayService.instance.applyLocale(
+            PlatformAdapters.instance.window.applyLocale(
                 Localizations.localeOf(ctx).toString(),
                 l.trayShow, l.sysAutostart, l.trayQuit);
             // 避免在根层级包裹 TickerMode(enabled: isVisible)：
@@ -128,13 +135,13 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
             return Listener(
               behavior: HitTestBehavior.translucent,
               onPointerDown: (_) {
-                if (!TrayService.instance.isWindowVisible.value) {
-                  TrayService.instance.setWindowVisible(true);
+                if (!PlatformAdapters.instance.window.isVisible) {
+                  PlatformAdapters.instance.window.setVisible(true);
                 }
               },
               onPointerHover: (_) {
-                if (!TrayService.instance.isWindowVisible.value) {
-                  TrayService.instance.setWindowVisible(true);
+                if (!PlatformAdapters.instance.window.isVisible) {
+                  PlatformAdapters.instance.window.setVisible(true);
                 }
               },
               child: child ?? const SizedBox.shrink(),

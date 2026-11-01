@@ -26,7 +26,7 @@ import 'chrome.dart';
 import 'widgets.dart';
 
 import '../core/error_sink.dart';
-import 'plugins/plugin_scan_dirs.dart';
+import 'plugins/plugin_scan_dirs_section.dart';
 part 'plugins/plugins_slots.dart';
 part 'plugins/plugins_hero.dart';
 part 'plugins/plugins_list.dart';

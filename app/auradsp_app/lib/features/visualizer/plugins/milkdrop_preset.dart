@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import '../../../core/error_sink.dart';
+import '../../../core/io/resource_gate.dart';
 
 /// Structured metadata for a Winamp MilkDrop 2 (.milk) preset
 class MilkdropPreset {
@@ -64,14 +65,12 @@ class MilkdropPreset {
       return MilkdropPreset(name: name, filePath: path);
     }
 
-    try {
-      final content = file.readAsStringSync();
-      return parseString(name, path, content);
-    } catch (e, st) {
-      // 损坏或不可读的预设文件：留痕并回退为默认参数
-      swallow(e, st);
+    final read = ResourceGate.readText(path);
+    if (!read.ok) {
+      // 损坏或不可读的预设文件：回退为默认参数
       return MilkdropPreset(name: name, filePath: path);
     }
+    return parseString(name, path, read.text!);
   }
 
   /// Parse MilkDrop configuration text

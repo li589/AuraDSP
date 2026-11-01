@@ -15,10 +15,10 @@ import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
 import '../../core/error_sink.dart';
-import '../../core/file_shell.dart';
 import '../../core/plugins/plugin_scan_dirs.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
+import '../../platform/adapters.dart';
 import '../widgets.dart';
 
 class PluginScanDirsSection extends StatelessWidget {
@@ -132,7 +132,8 @@ class PluginScanDirsSection extends StatelessWidget {
                       model.setPluginScanDirEnabled(e.path, v);
                       onRescan();
                     },
-                    onOpen: () => openInFileManager(e.path),
+                    onOpen: () =>
+                        PlatformAdapters.instance.shell.openPath(e.path),
                     onRemove: e.builtin
                         ? null
                         : () {

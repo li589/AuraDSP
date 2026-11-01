@@ -59,110 +59,12 @@ class PluginScanDirEntry {
   int get hashCode => Object.hash(path, enabled, builtin);
 }
 
-/// 平台预置目录发现。只返回**当前设备真实存在**的目录（规范化、去重）。
+/// 插件扫描目录模型与通用过滤。
 ///
-/// Windows：VST3/CLAP 标准共享目录 + 用户级目录 + VST2 常见目录（为未来
-/// 32 位/VST2 支持预留，注册表 HKLM/HKCU\SOFTWARE\VST 的 VSTPluginsPath
-/// 一并探测——读不到就跳过，绝不让发现流程抛错）。
-/// Linux：/usr/lib、/usr/local/lib、~\\.{vst3,clap,lv2,vst} 等。
-/// macOS：/Library/Audio/Plug-Ins 与 ~/Library/Audio/Plug-Ins 下的
-/// VST3/CLAP/VST/Components（AU，预留）。
+/// 平台预置目录发现已迁至 `lib/platform/plugins/plugin_dirs_*.dart`
+/// （方案：APP-目录重组与平台适配层方案-2026-11-01 §6）；本文件只保留
+/// 平台无关的条目模型、存在性过滤、规范化与去重。
 abstract final class PluginScanDirs {
-  /// 平台预置候选（按平台特性枚举；存在性过滤在 [discover] 内做）。
-  static List<String> discover({Map<String, String>? env}) {
-    final e = env ?? Platform.environment;
-    final candidates = <String>[];
-    final sep = Platform.pathSeparator;
-
-    void add(String? base, String leaf) {
-      if (base == null || base.isEmpty) return;
-      candidates.add('$base$sep$leaf');
-    }
-
-    if (PlatformProfile.os == 'windows') {
-      // 兜底不写死盘符（系统盘可能不是 C:）：一律由 SystemDrive/SystemRoot
-      // 派生。两者都拿不到就给 null，add() 跳过——宁可少一个候选目录，
-      // 也不去猜一个可能属于别人的路径（F1「盘符钉死」的教训）。
-      final drive = _systemDrive(e);
-      String? underDrive(String leaf) =>
-          drive == null ? null : '$drive\\$leaf';
-      final common = e['CommonProgramFiles'] ??
-          underDrive(r'Program Files\Common Files');
-      final programFiles = e['ProgramFiles'] ?? underDrive('Program Files');
-      final programFilesX86 =
-          e['ProgramFiles(x86)'] ?? underDrive('Program Files (x86)');
-      final localApp = e['LOCALAPPDATA'];
-      final appData = e['APPDATA'];
-
-      // VST3 / CLAP：共享 + 用户级（插件安装器的事实标准位置）。
-      add(common, 'VST3');
-      add(common, 'CLAP');
-      if (localApp != null) {
-        candidates.add('$localApp\\Programs\\Common\\VST3');
-        candidates.add('$localApp\\Programs\\Common\\CLAP');
-        candidates.add('$localApp\\Programs\\Common\\VST2');
-      }
-      // 旧式 VST2 目录（未来格式，先入列表便于用户统一管理）。
-      add(programFiles, 'VstPlugins');
-      add(programFiles, 'Steinberg${sep}VSTPlugins');
-      add(programFilesX86, 'VstPlugins');
-      add(programFilesX86, 'Steinberg${sep}VSTPlugins');
-      if (appData != null) candidates.add('$appData\\VST3');
-      // 注册表（HKLM/HKCU\SOFTWARE\VST 的 VSTPluginsPath 值）——Best-effort：
-      // reg.exe 查询失败（无权限/无该项）静默跳过。
-      candidates.addAll(_registryVstPluginDirs());
-    } else if (PlatformProfile.os == 'macos') {
-      const sys = '/Library/Audio/Plug-Ins';
-      final home = e['HOME'];
-      for (final leaf in const ['VST3', 'CLAP', 'VST', 'Components']) {
-        add(sys, leaf);
-        if (home != null && home.isNotEmpty) {
-          candidates.add('$home/Library/Audio/Plug-Ins/$leaf');
-        }
-      }
-    } else {
-      // Linux 及其它类 Unix。
-      const sysDirs = [
-        '/usr/lib/vst3',
-        '/usr/local/lib/vst3',
-        '/usr/lib/clap',
-        '/usr/local/lib/clap',
-        '/usr/lib/lv2',
-        '/usr/local/lib/lv2',
-        '/usr/lib/vst',
-        '/usr/local/lib/vst',
-      ];
-      candidates.addAll(sysDirs);
-      final home = e['HOME'];
-      if (home != null && home.isNotEmpty) {
-        for (final leaf in const ['vst3', 'clap', 'lv2', 'vst']) {
-          candidates.add('$home/.$leaf');
-        }
-      }
-    }
-
-    return discoverFrom(candidates);
-  }
-
-  /// 系统盘根（形如 `C:`）。优先 `SystemDrive`，其次从 `SystemRoot`
-  /// （`C:\Windows`）截取；两者都缺失返回 null——不猜盘符。
-  static String? _systemDrive(Map<String, String> env) {
-    var sd = (env['SystemDrive'] ?? '').trim();
-    while (sd.endsWith('\\') || sd.endsWith('/')) {
-      sd = sd.substring(0, sd.length - 1);
-    }
-    if (RegExp(r'^[A-Za-z]:$').hasMatch(sd)) return sd.toUpperCase();
-    final sr = (env['SystemRoot'] ?? '').trim();
-    final m = RegExp(r'^([A-Za-z]:)\\').firstMatch(sr);
-    return m?.group(1)?.toUpperCase();
-  }
-
-  /// [_systemDrive] 的只读壳，供单元测试钉住「不写死盘符」这条不变量。
-  /// 本文件刻意不引入 flutter/foundation，故不用 @visibleForTesting 注解，
-  /// 按仓库既有的 `...ForTest` 命名约定。
-  static String? systemDriveForTest(Map<String, String> env) =>
-      _systemDrive(env);
-
   /// 存在性过滤 + 规范化 + 去重（保留发现顺序）。
   static List<String> discoverFrom(Iterable<String> candidates) {
     final out = <String>[];
@@ -190,36 +92,5 @@ abstract final class PluginScanDirs {
       swallow(e, st);
       return false;
     }
-  }
-
-  /// 读 HKLM/HKCU\SOFTWARE\VST 下各子键的 VSTPluginsPath（VST2 安装器惯例）。
-  /// 完全 best-effort：任何失败（无 reg.exe / 无权限 / 无该项）返回空表。
-  static List<String> _registryVstPluginDirs() {
-    if (PlatformProfile.os != 'windows') return const [];
-    final out = <String>[];
-    for (final root in const ['HKLM', 'HKCU']) {
-      try {
-        final r = Process.runSync('reg', [
-          'query',
-          '$root\\SOFTWARE\\VST',
-          '/s',
-          '/v',
-          'VSTPluginsPath',
-        ], runInShell: false);
-        if (r.exitCode != 0) continue;
-        final text = r.stdout.toString();
-        // 输出形如 `    VSTPluginsPath    REG_SZ    D:\VST\Plugins`
-        for (final line in text.split(RegExp(r'\r?\n'))) {
-          final idx = line.indexOf('REG_SZ');
-          if (idx < 0) continue;
-          final value = line.substring(idx + 'REG_SZ'.length).trim();
-          if (value.isNotEmpty) out.add(value);
-        }
-      } catch (e, st) {
-        // 注册表探测是尽力而为，不参与任何错误上报。
-        swallow(e, st);
-      }
-    }
-    return out;
   }
 }

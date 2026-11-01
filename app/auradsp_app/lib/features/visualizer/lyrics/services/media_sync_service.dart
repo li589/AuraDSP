@@ -1,22 +1,16 @@
 import 'dart:async';
-import 'dart:io';
 import 'package:flutter/foundation.dart';
 
 import '../../../../core/error_sink.dart';
+import '../../../../core/io/resource_gate.dart';
 import '../../../../core/visualizer_types.dart';
-import '../../../../platform/platform_profile.dart';
+import '../../../../platform/adapters.dart';
+import '../../../../platform/port/media_session.dart';
 import '../models/lyric_models.dart';
 import '../parsers/lrc_parser.dart';
 import 'online_lyrics_service.dart';
-import 'windows_smtc_provider.dart';
 
-/// 跨平台媒体会话提供者接口
-abstract interface class MediaSessionProvider {
-  Stream<MediaTrackMetadata> get trackStream;
-  void dispose();
-}
-
-/// 单元测试或不支持平台的虚设提供者
+/// 单元测试用假提供者（生产路径由 MediaSessionPort 创建）。
 class MockMediaSessionProvider implements MediaSessionProvider {
   final StreamController<MediaTrackMetadata> _controller =
       StreamController<MediaTrackMetadata>.broadcast();
@@ -27,6 +21,12 @@ class MockMediaSessionProvider implements MediaSessionProvider {
   void emitTrack(MediaTrackMetadata track) {
     if (!_controller.isClosed) _controller.add(track);
   }
+
+  @override
+  void start() {}
+
+  @override
+  void stop() {}
 
   @override
   void dispose() {
@@ -88,13 +88,12 @@ class MediaSyncService {
     OnlineLyricsService? onlineService,
     LyricsSource lyricsSource = LyricsSource.auto,
     bool? hasSystemMediaSession,
-  })  : _provider = provider ??
-            (PlatformProfile.os == 'windows'
-                ? WindowsSmtcProvider()
-                : MockMediaSessionProvider()),
+  })  : _provider =
+            provider ?? PlatformAdapters.instance.mediaSession.create(),
         _onlineService = onlineService ?? OnlineLyricsService(),
         _hasSystemMediaSession = hasSystemMediaSession ??
-            (provider != null || PlatformProfile.os == 'windows') {
+            (provider != null ||
+                PlatformAdapters.instance.mediaSession.supported) {
     // 注入的来源随服务一起生效（测试的离线假源同样继承该字段）。
     _onlineService.preference = lyricsSource;
   }
@@ -115,10 +114,7 @@ class MediaSyncService {
   /// 启动系统媒体传输控制 (SMTC) 监听，自动绑定歌词
   void startAutoSync() {
     _sessionSub?.cancel();
-    final p = _provider;
-    if (p is WindowsSmtcProvider) {
-      p.start();
-    }
+    _provider.start();
     _sessionSub = _provider.trackStream.listen((track) {
       updateTrack(track);
     });
@@ -143,10 +139,7 @@ class MediaSyncService {
   void stopAutoSync() {
     _sessionSub?.cancel();
     _sessionSub = null;
-    final p = _provider;
-    if (p is WindowsSmtcProvider) {
-      p.stop();
-    }
+    _provider.stop();
   }
 
   /// 仅在播放时启动 20Hz 行同步 ticker，停播即释放，避免页面常驻空转。
@@ -386,10 +379,9 @@ class MediaSyncService {
       final extIdx = audioFilePath.lastIndexOf('.');
       if (extIdx <= 0) return false;
       final lrcPath = '${audioFilePath.substring(0, extIdx)}.lrc';
-      final file = File(lrcPath);
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        final doc = LrcParser.parse(content);
+      final read = ResourceGate.readText(lrcPath);
+      if (read.ok) {
+        final doc = LrcParser.parse(read.text!);
         if (doc.isNotEmpty) {
           loadLyricDocument(doc);
           return true;

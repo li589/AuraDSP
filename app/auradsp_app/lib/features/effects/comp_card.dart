@@ -385,12 +385,13 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
     widget.model.levelR.addListener(_updateTarget);
     widget.model.grComp.addListener(_updateTarget);
     widget.model.addListener(_onModelChanged);
-    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(
+        _onVisibilityChanged);
     _updateTarget();
   }
 
   void _onVisibilityChanged() {
-    if (!TrayService.instance.isWindowVisible.value) {
+    if (!PlatformAdapters.instance.window.isVisible) {
       if (_ticker.isActive) {
         _ticker.stop();
         _lastElapsed = Duration.zero;
@@ -402,7 +403,8 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
 
   @override
   void dispose() {
-    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(
+        _onVisibilityChanged);
     _ticker.dispose();
     widget.model.levelL.removeListener(_updateTarget);
     widget.model.levelR.removeListener(_updateTarget);
@@ -413,14 +415,14 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
 
   void _onModelChanged() {
     _updateTarget();
-    if (mounted && widget.model.compOn && TrayService.instance.isWindowVisible.value) {
+    if (mounted && widget.model.compOn && PlatformAdapters.instance.window.isVisible) {
       setState(() {});
     }
   }
 
   void _updateTarget() {
     final model = widget.model;
-    if (!model.compOn || !TrayService.instance.isWindowVisible.value) {
+    if (!model.compOn || !PlatformAdapters.instance.window.isVisible) {
       if (_ticker.isActive) {
         _ticker.stop();
         _lastElapsed = Duration.zero;
@@ -480,7 +482,7 @@ class _CompressorTransferScopeState extends State<_CompressorTransferScope>
 
   void _onTick(Duration elapsed) {
     if (!mounted) return;
-    if (!widget.model.compOn || !TrayService.instance.isWindowVisible.value) {
+    if (!widget.model.compOn || !PlatformAdapters.instance.window.isVisible) {
       if (_ticker.isActive) {
         _ticker.stop();
         _lastElapsed = Duration.zero;

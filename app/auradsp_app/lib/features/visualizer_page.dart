@@ -15,14 +15,14 @@
  *                    FluidDynamics, ParticleTornado, GpuShader, Milkdrop, Atmosphere
  *   - views/       : VisualizerStage, VisualizerHud, VisualizerDrawer, VisualizerMeters, VisualizerDbScale
  */
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:window_manager/window_manager.dart';
+
+import '../platform/adapters.dart';
 
 import '../core/design.dart';
 import '../core/error_sink.dart';
+import '../core/io/resource_gate.dart';
 import '../core/nav.dart';
 import '../core/path_memory.dart';
 import '../core/state.dart';
@@ -172,15 +172,12 @@ class _VisualizerPageState extends State<VisualizerPage> {
     );
     if (path == null || path.isEmpty) return;
 
-    try {
-      final content = await File(path).readAsString();
-      final doc = LrcParser.parse(content);
-      if (doc.isNotEmpty) {
-        _mediaSync.loadLyricDocument(doc);
-      }
-    } catch (e, st) {
-      // 文件读取失败属可预期路径，留痕后静默回退
-      swallow(e, st);
+    // 读取统一经 ResourceGate（大小/编码/坏文件策略单点）。
+    final read = ResourceGate.readText(path);
+    if (!read.ok) return;
+    final doc = LrcParser.parse(read.text!);
+    if (doc.isNotEmpty) {
+      _mediaSync.loadLyricDocument(doc);
     }
   }
 
@@ -219,7 +216,7 @@ class _VisualizerPageState extends State<VisualizerPage> {
     _fullscreenChain = _fullscreenChain
         .then((_) async {
           if (PlatformProfile.supportsWindowManagement) {
-            await windowManager.setFullScreen(enable);
+            await PlatformAdapters.instance.window.setFullScreen(enable);
           } else {
             await SystemChrome.setEnabledSystemUIMode(
               enable ? SystemUiMode.immersiveSticky : SystemUiMode.edgeToEdge,

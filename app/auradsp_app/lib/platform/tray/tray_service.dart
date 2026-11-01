@@ -11,45 +11,22 @@
  * 失败只置 ready=false，不抛异常、不阻塞启动——非核心路径）。
  * 退出走托盘菜单「退出」或应用内退出（dispose 移除图标并放行）。
  */
-import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueListenable, ValueNotifier;
 import 'package:nativeapi/nativeapi.dart'
-    show ContextMenuTrigger, LaunchAtLogin, Menu, MenuItem, MenuItemClickedEvent,
+    show ContextMenuTrigger, Menu, MenuItem, MenuItemClickedEvent,
         MenuItemState, MenuItemType, TrayIcon, TrayIconClickedEvent;
 import 'package:nativeapi_flutter/nativeapi_flutter.dart' show ImageAsset;
 import 'package:window_manager/window_manager.dart';
 
-import 'error_sink.dart';
-/// 开机自启（Windows = HKCU Run 键；nativeapi 的 LaunchAtLogin 常驻引用）
-class AutoStartService {
-  AutoStartService._();
-  static final AutoStartService instance = AutoStartService._();
+import '../../core/error_sink.dart';
+import '../../core/ports/null_ports.dart';
+import '../platform_profile.dart';
+import '../port/autostart.dart';
+import '../port/window.dart';
 
-  LaunchAtLogin? _handle;
-
-  /// 懒初始化原生句柄（首次查询/设置时创建，失败返回 false）。
-  bool _ensure() {
-    _handle ??= LaunchAtLogin.createWithIdAndDisplayName(
-      'com.auradsp.app',
-      'AuraDSP',
-    );
-    return _handle != null;
-  }
-
-  /// 当前是否已开启自启；原生不可用返回 null。
-  bool? get enabled {
-    if (!_ensure()) return null;
-    return _handle!.isEnabled;
-  }
-
-  /// 设置自启开关；返回操作是否成功。
-  bool setEnabled(bool on) {
-    if (!_ensure()) return false;
-    return on ? _handle!.enable() : _handle!.disable();
-  }
-}
-
-/// 托盘服务（单例）
-class TrayService {
+/// 托盘服务（单例）。平台耦合实现（window_manager / tray_manager / nativeapi）。
+/// 同时实现 WindowPort：core 侧只经可见性契约暂停高频泵。
+class TrayService implements WindowPort {
   TrayService._();
   static final TrayService instance = TrayService._();
 
@@ -61,11 +38,22 @@ class TrayService {
   MenuItem? _quitItem;
   String _curLocale = '';
 
+  /// 自启端口（组合根在 adapters 装配后注入，避免 tray ↔ adapters 循环依赖）。
+  AutoStartPort _autoStart = const NullAutoStart();
+
+  void bindAutoStart(AutoStartPort port) => _autoStart = port;
+
   /// 是否已初始化（供 UI 判断托盘/自启可用）
   bool get ready => _ready;
 
   /// 初始化托盘 + 关窗拦截；任何一步失败只置 _ready=false，不抛（非核心路径）。
+  /// 移动端没有桌面窗口/托盘：直接返回（isWindowVisible 保持 true，UI 不受影响）。
+  @override
   Future<void> init() async {
+    if (!PlatformProfile.supportsWindowManagement) {
+      _ready = false;
+      return;
+    }
     try {
       // 1) 窗口管理器：拦截关闭 → 隐藏到托盘
       await WindowManager.instance.ensureInitialized();
@@ -93,13 +81,13 @@ class TrayService {
 
       final autostartItem = MenuItem.createWithLabelAndType(
         'Launch at login', MenuItemType.checkbox)!;
-      autostartItem.state = AutoStartService.instance.enabled ?? false
+      autostartItem.state = _autoStart.enabled ?? false
           ? MenuItemState.checked
           : MenuItemState.unchecked;
       autostartItem.addListener((event) {
         if (event is MenuItemClickedEvent) {
-          final cur = AutoStartService.instance.enabled ?? false;
-          AutoStartService.instance.setEnabled(!cur);
+          final cur = _autoStart.enabled ?? false;
+          _autoStart.setEnabled(!cur);
           // checkbox 原生不自动翻转，手动同步可见状态
           autostartItem.state = !cur
               ? MenuItemState.checked
@@ -134,6 +122,31 @@ class TrayService {
 
   final ValueNotifier<bool> isWindowVisible = ValueNotifier<bool>(true);
 
+  @override
+  ValueListenable<bool> get visibleListenable => isWindowVisible;
+
+  @override
+  bool get isVisible => isWindowVisible.value;
+
+  @override
+  void setVisible(bool visible) => setWindowVisible(visible);
+
+  @override
+  bool get supportsFullScreen => PlatformProfile.supportsWindowManagement;
+
+  @override
+  Future<void> setFullScreen(bool enabled) async {
+    if (!supportsFullScreen) return;
+    try {
+      await WindowManager.instance.setFullScreen(enabled);
+    } catch (e, st) {
+      swallow(e, st);
+    }
+  }
+
+  @override
+  Future<void> show() => _showWindow();
+
   void setWindowVisible(bool visible) {
     if (isWindowVisible.value == visible) return;
     isWindowVisible.value = visible;
@@ -157,6 +170,7 @@ class TrayService {
   /// 移除托盘图标（退出时调用）
   /// 应用当前语言到托盘菜单（label live 更新；去重防无谓重建）。
   /// 由 MaterialApp.builder 在 locale 变化时调用（有 context 可取 l10n）。
+  @override
   void applyLocale(String localeTag, String showText, String autostartText,
       String quitText) {
     if (localeTag == _curLocale) return;
@@ -166,6 +180,7 @@ class TrayService {
     _quitItem?.label = quitText;
   }
 
+  @override
   Future<void> dispose() async {
     _icon?.dispose();
     _icon = null;
