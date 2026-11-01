@@ -35,6 +35,9 @@ OUT_JSON = os.path.join(ROOT, 'build', 'audio_quality_eval.json')
 
 SR = 48000
 BLOCK = 480
+# A-06：EQ 目标曲线的共享参考率（与 state_eq.dart 的 eqTargetReferenceRate 一致）。
+# 44.1k/48k 工作域都按这一条 48k 曲线采样，避免 RBJ 钟形的高频裙边随工作率漂移。
+EQ_TARGET_REFERENCE_RATE = 48000
 
 lib = ctypes.CDLL(DLL)
 lib.auradsp_create.restype = ctypes.c_void_p
@@ -172,11 +175,33 @@ def eq_peaking_db(f, center, gain_db, q, sr):
     return 10.0 * np.log10(np.maximum(mag_sq, 1e-30))
 
 
+def eq_working_rate(sr):
+    """设备采样率 → 引擎 DSP 工作采样率（镜像 jdspController.c JamesDSPInit）。
+
+    44.1k..48k 原生；其余经 ASRC 折叠：整数倍关系优先 48k，其次 44.1k，
+    都不匹配回退 48k（96k/192k→48k，88.2k/176.4k/22.05k→44.1k，32k→48k）。
+    """
+    if sr <= 0:
+        return 48000
+    r = int(sr)
+    if 44100 <= r <= 48000:
+        return r
+    if r != 48000 and (r % 48000 == 0 or 48000 % r == 0):
+        return 48000
+    if r != 44100 and (r % 44100 == 0 or 44100 % r == 0):
+        return 44100
+    return 48000
+
+
 def build_eq_curve(eq, sr=SR):
     freqs = list(eq.get('frequencies') or [])
     gains = list(eq.get('gains') or [])
     qs = list(eq.get('qs') or [eq.get('q', 1.414)] * len(freqs))
-    nyq = min(20000.0, sr / 2.0)
+    # A-06：EQ 实际跑在 ASRC 之后的工作域，频率轴/Nyquist 按工作率；
+    # 钟形本身固定按 48k 共享参考率计算（见 EQ_TARGET_REFERENCE_RATE），
+    # 否则 44.1k 与 48k 的高频裙边不同、同一预设会随设备率变声。
+    ref_sr = float(EQ_TARGET_REFERENCE_RATE)
+    nyq = min(20000.0, float(eq_working_rate(sr)) / 2.0)
     axis = []
     if freqs and freqs[0] > 20:
         axis.append(20.0)
@@ -186,8 +211,6 @@ def build_eq_curve(eq, sr=SR):
         axis.append(nyq)
     axis = np.array(axis, dtype=float)
     total = np.zeros_like(axis)
-    # A-06：目标曲线按工作域参考率计算（非 44.1/48 设备率走 ASRC 48k 域）。
-    ref_sr = 48000.0
     for c, g, q in zip(freqs, gains, qs):
         total += eq_peaking_db(axis, float(c), float(g), float(q), ref_sr)
     total = np.clip(total, -18.0, 18.0)
@@ -377,7 +400,9 @@ def fr_steady(engine, freqs, level_dbfs=-24.0, warm_s=0.5, meas_s=2.0):
     """
     sr, block = engine.sr, engine.block
     nw = int(round(warm_s * sr / block)) * block
-    nm = int(round(meas_s * sr / block)) * block
+    # A-06：测量窗取整数样本，保证 df = sr/len(seg) 恰好为 1 Hz（44.1k 下
+    # 按块对齐会得到 len=44100±480，df≠1，基波 bin 取整后出现 scalloping）。
+    nm = int(round(meas_s * sr))
     amp = 10.0 ** (level_dbfs / 20.0)
     out = []
     for f in freqs:

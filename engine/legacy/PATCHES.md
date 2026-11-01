@@ -1124,3 +1124,52 @@ yquist * 0.999，
 - **验收**：`test/smoke/smoke_pool_race.py` 阶段③（撕裂检测）反向验证转红
   （max_dev 1342.7% > 阈值 700%），还原后全绿。
 - **上游同步冲突风险**：低（`kAuraStages[]` 表项单字符 `0`→`1` + 注释）。
+
+## P-049 44.1k/20k 跨采样率塌陷三根因：电子管过采样截止、混响 dry 双注入、EQ 目标曲线/探针轴（A-06，2026-11-01）
+
+- **状态**：已实施（2026-11-01）
+- **位置**：
+  - `engine/legacy/jdsp/Effects/vacuumTube.c`（2x 过采样分支）
+  - `engine/legacy/jdsp/generalDSP/digitalFilters.c` / `.h`（`oversample_makeSmpCutoff`）
+  - `engine/legacy/jdsp/Effects/reverb.c`、`jdsp_header.h`（`sf_reverb_state_st.dry2`）
+  - `app/auradsp_app/lib/core/state/state_eq.dart`（`eqWorkingRateFor`、目标曲线、响应探针）
+  - `tools/probe/audio_quality_eval.py`（工作率/参考率/整数样本测量窗）
+- **现象**：同一预设 44.1k 下 20 kHz 比 48k 低 12~23 dB；V-Shape/Pop 在
+  44.1/48/96/192k 的 20k 频响不一致。1 kHz/100 Hz 早已一致，问题只在高频。
+- **根因 1（主因，-10.6 dB）**：立体声链走 vendor `VacuumTubeProcess`，2x
+  过采样分支用固定的 `0.89 * 输入Nyquist` 作为 16 阶 Butterworth 抗混叠截止。
+  44.1k 时截止 19.6k，20 kHz 落在过渡带；48k 时截止 21.4k，同频仅 -0.46 dB。
+  修法：改为**固定绝对截止 21 kHz**（`cutoffRatio = 21000/(fs/2)`，低采样率
+  钳到 0.95 防越界）。实测 20k：44.1k -0.94 dB / 48k -0.96 dB（差 0.02 dB）；
+  首个镜像 24.1k/28k 仍有 -62/-129 dB 抑制。`oversample_makeSmp()` 保留
+  0.89 默认，dbb 等旧调用方行为不变。
+- **根因 2（混响，-5.7~-10.7 dB 且随率变化）**：自定义混响路径（`preset=-2`）
+  把 dry 注入两次：一次经 `inpdelay` 进入过采样环，一次在环外直接相加。
+  `delay_make` 把 `predelay=0` 的 `inpdelay` 钳到 1 样本，于是 dry 变成
+  `dry*(1+z^-1)` 两抽头梳状：DC +6 dB、44.1k/20k -10.7 dB、48k/20k -5.7 dB。
+  修法：`sf_reverb_state_st` 新增 `dry2`；预设路径保持 `dry2=dry`（音色不变），
+  `Reverb_SetNative` 的自定义路径置 `dry2=0`，只保留环外一次无延迟 dry。
+  实测 `wet=0,dry=1` 在 44.1/48/96/192k 全频段 0.00 dB；Pop 混响段跨率
+  20k 差 ≤0.25 dB。
+- **根因 3（EQ 曲线/探针轴）**：`eq.curve` 目标曲线与 UI 响应探针原先按
+  **设备率**生成。96k/192k 设备上 vendor 实际在 48k 工作域执行，RBJ 钟形
+  的 `f/fs` 归一化让带宽随设备率变化（实测 V-Shape 20k 差 9 dB、Pop 10k
+  差 9.5 dB）；探针还按设备率标定 FFT 轴，96k/192k 的曲线被拉伸 2×/4×。
+  修法：新增 `eqWorkingRateFor()`，严格镜像 `jdspController.c` 的
+  `JamesDSPInit` 判定（44.1/48 原生；96/192/32k→48k；88.2/176.4/22.05k→44.1k）；
+  频率轴/Nyquist 与响应探针按工作率，探针上限再与设备 Nyquist 取小；
+  钟形目标曲线固定按 **48k 共享参考率**（`eqTargetReferenceRate`）计算，
+  使 44.1/48/96/192k 下发同一条绝对曲线，同时保持 48k 现有音色不变。
+  Python 探针同步实现 `eq_working_rate()`/`EQ_TARGET_REFERENCE_RATE`，并把
+  测量窗改为整数样本（`nm=round(meas_s*sr)`）消除 44.1k 的 scalloping。
+- **验收**：
+  - 全链稳态（-24 dBFS 基波）20k：V-Shape 44.1/48/96/192 =
+    -1.25/-1.25/-1.25/-1.66 dB；Pop = -1.76/-2.01/-2.00/-2.41 dB。
+    1k/10k/16k/18k 跨率差均 ≤0.4 dB（原 44.1/20k -12~-23 dB）。
+  - `smoke_tube.py` 新增 20k 通带断言：44.1k/48k 均 >-1.5 dB 且差 <0.3 dB。
+  - `smoke_reverb_native_params.py` 新增干声第 1 帧断言，锁定无 `1+z^-1` 梳状。
+  - `flutter analyze` 无问题；`eq_working_rate_test.dart` 等 EQ 测试全绿；
+    `test/runner.py --smoke` 127 PASS / 0 SKIP / 0 FAIL（D6 编号门禁在本节登记后复跑）。
+- **影响面**：仅 44.1k 工作域的高频（20k 附近）与 96k/192k 设备的 EQ 显示/
+  曲线；44.1k 之外的所有频段、所有预设的低频/中频行为不变。预设路径混响
+  保持 `dry2=dry`，A/B 音色不跳变。

@@ -630,6 +630,9 @@ void sf_advancereverb(sf_reverb_state_st *rv, int rate, int oversamplefactor, fl
 	rv->ertolate = ertolate;
 	rv->erefwet = db2lin(erefwet);
 	rv->dry = db2lin(dry);
+	/* 预设路径默认沿用旧行为（环内 + 环外各一次 dry），音色不变。
+	 * 自定义 native 路径会在 Reverb_SetNative 里把 dry2 清零。 */
+	rv->dry2 = rv->dry;
 	wet = db2lin(wet);
 	rv->wet1 = wet * (width * 0.5f + 0.5f);
 	rv->wet2 = wet * ((1.0f - width) * 0.5f);
@@ -913,9 +916,9 @@ void sf_reverb_process(sf_reverb_state_st *rv, float inputL, float inputR, float
         outL = delay_step(&rv->lastdelayL, biquad_step(&rv->lastlpfL, outL));
         outR = delay_step(&rv->lastdelayR, biquad_step(&rv->lastlpfR, outR));
         osL[i2] = outL * rv->wet1 + outR * rv->wet2 +
-                  delay_step(&rv->inpdelayL, osL[i2]) * rv->dry;
+                  delay_step(&rv->inpdelayL, osL[i2]) * rv->dry2;
         osR[i2] = outR * rv->wet1 + outL * rv->wet2 +
-                  delay_step(&rv->inpdelayR, osR[i2]) * rv->dry;
+                  delay_step(&rv->inpdelayR, osR[i2]) * rv->dry2;
     }
     float outL = oversample_stepdown(&rv->oversampleL, osL);
     float outR = oversample_stepdown(&rv->oversampleR, osR);
@@ -1086,6 +1089,11 @@ void Reverb_SetNative(JamesDSPLib *jdsp, const AuraReverbNativeParams *p)
 		p->outputlpf_hz,
 		p->rt60_s,
 		p->delay_s);
+
+	/* [PATCHED-AuraDSP P-049] 自定义路径只保留环外那一次无延迟 dry。
+	 * 环内 dry 会经 1 样本 inpdelay 形成 dry*(1+z^-1) 梳状，
+	 * 使 dry=1.0 时 DC +6 dB、44.1k/20k -10.7 dB（48k 仅 -5.7 dB）。 */
+	target->rv.dry2 = 0.0f;
 
 	ReverbSlot *prev = NULL;
 	for (int i = 0; i < AURA_REVERB_SLOTS; ++i) {

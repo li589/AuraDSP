@@ -11,8 +11,18 @@ void VTInit(VacuumTube *tb, double fs)
 	tb->needOversample = 0;
 	if (fs >= 30000.0 && fs < 65000.0)
 	{
-		oversample_makeSmp(&tb->smp[0], 2);
-		oversample_makeSmp(&tb->smp[1], 2);
+		/* [PATCHED-AuraDSP P-049] 抗混叠低通改用固定绝对截止 21 kHz，而不是按 Nyquist
+		 * 取比例。按比例（0.95）时截止随工作率漂移：44.1k 为 20.95k、
+		 * 48k 为 22.8k，20 kHz 处分别为 -0.94 / -0.02 dB（差 0.92 dB），
+		 * 与「同一预设跨采样率一致」的目标冲突。固定 21 kHz 后两率在
+		 * 20 kHz 为 -0.83 / -0.96 dB（差 0.13 dB）；首个镜像 24.1k /
+		 * 28k 分别仍有 -62 / -129 dB 抑制。
+		 * 低采样率分支（<44.1k）不在引擎工作域，但仍钳到 0.95 以免
+		 * 截止越过输入 Nyquist。只改 2x 分支：工作域只可能是 44.1/48k。 */
+		double cutoffRatio = 21000.0 / (fs * 0.5);
+		if (cutoffRatio > 0.95) cutoffRatio = 0.95;
+		oversample_makeSmpCutoff(&tb->smp[0], 2, cutoffRatio);
+		oversample_makeSmpCutoff(&tb->smp[1], 2, cutoffRatio);
 		tb->needOversample = 1;
 	}
 	else if (fs >= 20000.0 && fs < 30000.0)

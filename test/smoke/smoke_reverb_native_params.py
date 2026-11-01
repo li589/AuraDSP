@@ -139,6 +139,12 @@ for _ in range(20):
 out_impulse = e.process_block(impulse_block)
 check("dry=1, wet=0 preserves input impulse at sample 0", abs(out_impulse[0] - 1.0) < 0.1,
       "first=%.4f" % out_impulse[0])
+# A-06：predelay=0 时 inpdelay 被钳到 1 样本，环内 dry 会形成 dry*(1+z^-1)
+# 的两抽头梳状（DC +6dB，44.1k/20k -10.7dB）。自定义路径已置 dry2=0，
+# 干声只能出现在第 0 帧；第 1 帧必须接近 0。
+check("dry=1, wet=0 has no 1-sample delayed dry (no 1+z^-1 comb)",
+      abs(out_impulse[2]) < 0.02 and abs(out_impulse[3]) < 0.02,
+      "frame1=(%.4f, %.4f)" % (out_impulse[2], out_impulse[3]))
 
 # 接下来的块尾音应几乎为 0
 tail_dry_only = []

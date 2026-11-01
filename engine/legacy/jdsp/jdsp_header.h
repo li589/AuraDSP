@@ -402,6 +402,15 @@ typedef struct
 	float ertolate; // early reflection mix parameters
 	float erefwet;
 	float dry;
+	/* [PATCHED-AuraDSP P-049] 过采样域内的 dry 系数。
+	 * 原实现把 dry 注入两次：一次经 inpdelay（predelay>=0 时 size 被钳到 1，
+	 * 形成 1 样本延迟）进入过采样环，一次在环外直接相加。两者构成
+	 * dry*(1+z^-1) 的两抽头梳状：DC +6 dB，20 kHz/44.1k 衰减 -10.7 dB，
+	 * 且衰减量随采样率变化（48k 同频仅 -5.7 dB）。这是 Pop 在 44.1k
+	 * 高频塌陷的直接原因。
+	 * 预设路径保持 dry2 = dry（音色不变）；自定义 native 路径由
+	 * Reverb_SetNative 置 dry2 = 0，只保留环外那一次无延迟的 dry。 */
+	float dry2;
 } sf_reverb_state_st;
 typedef enum
 {

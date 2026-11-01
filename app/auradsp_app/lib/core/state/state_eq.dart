@@ -90,6 +90,11 @@ const List<double> eqFreqs31 = [
 ///
 /// Nyquist 上限取 fs/2 并留一点点余量：恰好等于 Nyquist 的频点
 /// 在最小相位 IR 设计里仍属边界，稳妥起见一并裁掉。
+///
+/// 注意：这里的 [sampleRate] 是**设备**采样率，不是 [eqWorkingRateFor] 的
+/// 工作率——网格是用户可见的频带列表，必须按设备能回放的 Nyquist 裁剪，
+/// 否则 44.1k 设备会显示 20k 以上根本无法出声的频带。EQ 目标曲线与响应
+/// 探针则按工作率计算（见 `_pushEqCurve` / `_scheduleEqResponse`）。
 List<double> eqGridFor(int count, int sampleRate) {
   final List<double> base = switch (count) {
     7 => eqFreqs7,
@@ -108,6 +113,47 @@ List<double> eqGridFor(int count, int sampleRate) {
   if (cut.isEmpty) return <double>[base.first];
   return cut;
 }
+
+/// 设备采样率 → 引擎实际 DSP 工作采样率。
+///
+/// 与 `engine/legacy/jdsp/jdspController.c` 的 `JamesDSPInit` 判定逐字对应：
+/// - `[44.1k, 48k]` 区间原生处理，工作率 = 设备率；
+/// - 其余采样率经 ASRC 折叠到 48k/44.1k 域：整数倍关系优先 48k，其次
+///   44.1k，都不匹配则回退 48k（96k/192k → 48k，88.2k/176.4k/22.05k →
+///   44.1k，32k → 48k）。
+///
+/// 目标曲线的频率轴、Nyquist 钳位和响应探针都按该工作率计算。vendor
+/// 的 RBJ 峰值系数用 `f/fs` 归一化，同一组 center/gain/Q 在不同采样率下
+/// 会得到不同的带宽；若按设备率算、而 DSP 实际在 44.1k/48k 域执行，
+/// 同一预设的曲线就会随设备率走形（A-06：V-Shape 在 96k/192k 下 20k
+/// 差 9 dB、Pop 10k 差 9.5 dB）。钟形本身的参考率另见
+/// [eqTargetReferenceRate]（固定 48k，保证 44.1k 与 48k 的绝对曲线一致）。
+int eqWorkingRateFor(int sampleRate) {
+  if (sampleRate <= 0) return 48000;
+  if (sampleRate >= 44100 && sampleRate <= 48000) return sampleRate;
+  if (sampleRate != 48000 &&
+      (sampleRate % 48000 == 0 || 48000 % sampleRate == 0)) {
+    return 48000;
+  }
+  if (sampleRate != 44100 &&
+      (sampleRate % 44100 == 0 || 44100 % sampleRate == 0)) {
+    return 44100;
+  }
+  return 48000;
+}
+
+/// EQ 目标曲线的共享参考率。
+///
+/// 引擎工作域只可能是 44.1k 或 48k，但 RBJ 峰值钟形的 `f/fs` 归一化
+/// 会让同一组 center/gain/Q 在两个工作率下得到略不同的高频裙边：
+/// 16 kHz 带在 20 kHz 处 44.1k 比 48k 低约 0.7 dB。若按各工作率分别
+/// 计算，同一个预设就会随设备采样率轻微变声；以预设调音基准 48k 为
+/// 共享参考，44.1/48/96/192k 的 EQ 实测响应差可收敛到 ≤0.01 dB，
+/// 同时保持 48k 上现有的绝对音色不变。
+///
+/// 频率轴仍按 [eqWorkingRateFor] 的 Nyquist 生成，响应探针也按工作率
+/// 重建（见 `_pushEqCurve` / `_scheduleEqResponse`）。
+const int eqTargetReferenceRate = 48000;
 
 /// UI 架构选项 → vendor `operatingMode`。
 ///
@@ -248,7 +294,6 @@ List<double> composeEqOutputSpectrum(
 }
 
 extension EqState on AppModel {
-
   // ---- 采样率网格重建 ----
 
   /// C4：按当前采样率重建 EQ 频率网格，增益按**频率**重新映射。
@@ -518,16 +563,20 @@ extension EqState on AppModel {
       final d = (x - x0) / sigma;
       return gain * math.exp(-0.5 * d * d);
     }
+
     double lowShelf(double x, double x0, double slope, double gain) {
       return gain / (1.0 + math.exp(slope * (x - x0)));
     }
+
     double highShelf(double x, double x0, double slope, double gain) {
       return gain / (1.0 + math.exp(-slope * (x - x0)));
     }
 
     for (var i = 0; i < eqFrequencies.length; i++) {
       final f = eqFrequencies[i];
-      final x = math.log(f) / math.ln10; // log10(f) (20Hz ≈ 1.30, 1kHz = 3.0, 20kHz ≈ 4.30)
+      final x =
+          math.log(f) /
+          math.ln10; // log10(f) (20Hz ≈ 1.30, 1kHz = 3.0, 20kHz ≈ 4.30)
       var g = 0.0;
       switch (style) {
         case 'pop':
@@ -598,7 +647,11 @@ extension EqState on AppModel {
   void _pushEqCurve() {
     // C3：锚点与频点都必须落在 Nyquist 以内。引擎原先只按 f<=96000 校验，
     // 低采样率（如 32k，Nyquist=16k）下硬编码的 20000 锚点会变成越界点。
-    final nyquist = math.min(20000.0, engineRate / 2.0);
+    // A-06：Nyquist 按**工作率**取——EQ 实际在 ASRC 之后的工作域执行，
+    // `build_eq_axis` 也按 `jdsp.fs` 钳制；按设备率钳制会在 32k 等场景下
+    // 让曲线提前结束、剩余频带被 vendor 以最后一个增益外推。
+    final workRate = eqWorkingRateFor(engineRate);
+    final nyquist = math.min(20000.0, workRate / 2.0);
     // 先列出要序列化的目标频率轴（含 20Hz 起点与 Nyquist 终点），
     // 再按各频点峰值增益 + Q 合成该轴上的目标增益（见 [eqTargetGains]）。
     final axis = <double>[];
@@ -611,16 +664,17 @@ extension EqState on AppModel {
     if (eqFrequencies.isNotEmpty && eqFrequencies.last < nyquist) {
       axis.add(nyquist);
     }
-    /* A-06：Q 的归一化带宽会随采样率变化——同一组 gains/qs 在 96k/192k
-     * 与 48k 生成的曲线不同（实测 V-Shape 20k 差 9 dB、Pop 10k 差 9.5 dB）。
-     * 引擎 DSP 在非常见采样率下经 ASRC 跑 48k 工作域，故目标曲线固定按
-     * 48k 参考率计算：48/96/192k 完全一致；44.1k 仅 Nyquist 附近保留差异。 */
+    /* A-06：目标曲线用共享参考率 48k 计算。引擎工作域是 44.1/48k，
+     * RBJ 钟形的带宽按 f/fs 归一化，同一组 gains/qs 在 44.1k 与 48k
+     * 会得到不同的高频裙边（16k 带在 20k 处差约 0.7 dB）。按共享参考
+     * 计算后，44.1/48/96/192k 下发的是同一条绝对曲线，实测 EQ 响应
+     * 差 ≤0.01 dB；48k 上的绝对音色保持不变。 */
     final target = eqTargetGains(
       targetFreqs: axis,
       centers: eqFrequencies,
       peakGains: eqGains,
       qs: eqQs,
-      sampleRate: 48000,
+      sampleRate: eqTargetReferenceRate,
     );
     /* 旁路对比：目标曲线压成全平（等效不施加任何 EQ），但 eq.enable 保持 1——
      * 卡片/开关不收起，用户可以在 A/B 之间反复切，且曲线仍在视野里。 */
@@ -717,8 +771,24 @@ extension EqState on AppModel {
       final lib = _probeLib;
       if (lib == null) return;
       List<double>? db;
+      /* A-06：探针必须按工作率重建——`auradsp_probe_eq_response` 内部
+       * 用 `JamesDSPInit(sample_rate)` 再按 `sample_rate/kImp` 标定 FFT
+       * 频率轴；传设备率会让 96k/192k 的曲线被拉伸 2×/4×（EQ 实际在
+       * 48k 域）。传工作率后，探针显示的曲线与实际听到的一致。
+       * 上限再与设备 Nyquist 取小：32k 等低采样率设备仍只显示可回放
+       * 到 16k 的响应（44.1/48/96/192k 两者都是 20k，不受影响）。 */
+      final workRate = eqWorkingRateFor(engineRate);
+      final fMax = math.min(
+        AuraDspLib.responseFMax(sampleRate: workRate),
+        AuraDspLib.responseFMax(sampleRate: engineRate),
+      );
       try {
-        db = lib.measureEqResponse(c, engineRate, nPoints: eqResponsePoints);
+        db = lib.measureEqResponse(
+          c,
+          workRate,
+          nPoints: eqResponsePoints,
+          fMax: fMax,
+        );
       } catch (e, st) {
         swallowThrottled(e, st, 'eq-probe');
         return; // 探针异常：保留上一帧曲线
@@ -726,7 +796,7 @@ extension EqState on AppModel {
       if (db == null) return;
       eqResponseDb = db;
       eqResponseCurve = c;
-      eqResponseFMax = AuraDspLib.responseFMax(sampleRate: engineRate);
+      eqResponseFMax = fMax;
       _notifyUi();
     });
   }
