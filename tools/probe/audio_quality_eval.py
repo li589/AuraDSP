@@ -380,9 +380,9 @@ def fr_steady(engine, freqs, level_dbfs=-24.0, warm_s=0.5, meas_s=2.0):
     out = []
     for f in freqs:
         t = np.arange(nw + nm) / sr
-        x = np.zeros((len(t), 2), dtype=np.float32)
-        x[:, 0] = amp * np.sin(2 * np.pi * f * t)
-        x[:, 1] = x[:, 0]
+        x = np.zeros((len(t), engine.channels), dtype=np.float32)
+        for c in range(engine.channels):
+            x[:, c] = amp * np.sin(2 * np.pi * f * t)
         y = engine.render(x)
         seg = y[nw:nw + nm, 0].astype(np.float64)
         win = np.hanning(len(seg))
@@ -469,7 +469,10 @@ def noise_floor(engine, settle_s=1.0, meas_s=1.0):
 
 
 def rt60(ir, sr, onset):
-    seg = ir[onset:].astype(np.float64)
+    # 跳过直达声/早期反射前 50ms：否则稀疏脉冲的直接峰会把 Schroeder
+    # 曲线前 5–25dB 段压成“直达衰减”，低湿声时严重低估 RT60。
+    skip = int(0.05 * sr)
+    seg = ir[onset + skip:].astype(np.float64)
     if len(seg) < 64:
         return None
     # Schroeder 反向能量
@@ -583,6 +586,7 @@ def measure_preset(name, preset, sr=SR, quick=False):
     grid = peak_freq_grid()
     fr = fr_db(ir, e.sr, grid, 0.05, start=onset)
     fr_steady_db = fr_steady(e, grid, -24.0, 0.5, 2.0)
+    rv_on = bool(preset.get('params', {}).get('reverb', {}).get('enable'))
     res = {
         'name': preset.get('name'),
         'category': preset.get('category'),
@@ -592,7 +596,7 @@ def measure_preset(name, preset, sr=SR, quick=False):
         'latency_samples_measured': int(onset),
         'fr_db_direct': [(float(f), round(float(v), 2)) for f, v in zip(grid, fr)],
         'fr_db_steady': [(float(f), round(float(v), 2)) for f, v in zip(grid, fr_steady_db)],
-        'rt60_s': rt60(ir, e.sr, onset),
+        'rt60_s': rt60(ir, e.sr, onset) if rv_on else 0.0,
         'thdn_1k_minus12': thdn_metrics(e, 1000.0, -12.0),
         'thdn_100_minus12': thdn_metrics(e, 100.0, -12.0),
         'thdn_10k_minus12': thdn_metrics(e, 10000.0, -12.0),
