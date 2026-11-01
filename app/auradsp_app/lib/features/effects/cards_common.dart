@@ -292,36 +292,43 @@ class _ResourceSlot extends StatelessWidget {
         borderRadius: BorderRadius.circular(AuraRadius.md),
       ),
       child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(icon, size: 14, color: p.textDim),
-            const SizedBox(width: 6),
-            // [PATCHED-AuraDSP P-032] 标题可能是一长串 IR 文件名 → 用
-            // Flexible + ellipsis 让它可压缩，不把右侧按钮挤出边界。
-            Flexible(
-              child: Text(
-                title,
-                style: captionOf(p),
-                overflow: TextOverflow.ellipsis,
-                maxLines: 1,
-              ),
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Icon(icon, size: 14, color: p.textDim),
+          const SizedBox(width: 6),
+          // 标题+状态占满剩余宽度，动作按钮才稳定贴右。
+          // 旧写法 Flexible(标题) + Spacer 会平分剩余空间，标题用不满的那半
+          // 会留在原位，按钮被挤到中间（用户实测“居中的打开文件按钮”）。
+          Expanded(
+            child: Row(
+              children: [
+                Flexible(
+                  child: Text(
+                    title,
+                    style: captionOf(p),
+                    overflow: TextOverflow.ellipsis,
+                    maxLines: 1,
+                  ),
+                ),
+                if (detail != null) ...[
+                  const SizedBox(width: AuraSpace.sm),
+                  Text(
+                    detail!,
+                    style: captionOf(p).copyWith(color: p.accent),
+                  ),
+                ],
+              ],
             ),
-            if (detail != null) ...[
-              const SizedBox(width: AuraSpace.sm),
-              Text(
-                detail!,
-                style: captionOf(p).copyWith(color: p.accent),
-              ),
-            ],
-            const Spacer(),
-            Wrap(
-              spacing: AuraSpace.sm,
-              runSpacing: AuraSpace.sm,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: actions,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: AuraSpace.sm),
+          Wrap(
+            spacing: AuraSpace.sm,
+            runSpacing: AuraSpace.sm,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: actions,
+          ),
+        ],
+      ),
     );
   }
 }
