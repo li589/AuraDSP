@@ -34,6 +34,7 @@
 | [ADR-009](adr/ADR-009-audio-processing-paradigms-and-settings-restructure.md) | Windows 底层音频两大交互范式（附加模式与管线模式）与设置面板重构 | 已接受 |
 | [ADR-010](adr/ADR-010-limiter-as-final-gate.md) | **限幅器是内置信号链的最后一道门**：post gain / 逐声道 trim / 响度补偿全部排在限幅器之前；例外登记（插件 stage 4、`limiter.channels` 掩码等） | 已接受 |
 | [ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) | **控制线程与 RT 线程不得共享可变 DSP 状态**：三选一 —— 影子槽 + 原子发布 / 请求位 + RT 消费 / 同持 `jdsp_lock`；落地 L-01/L-02/L-03（逐声道池双槽化 + 拓扑重置请求位 + arbmag 主卷积加锁） | 已接受 |
+| [ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md) | **Linux 平台三项产品语义裁定 + 分支策略**：D-5 Linux 音频后端**追求功能对等**（`system`/`virtual`/`driver` 三模式齐备，全部落在 PulseAudio 栈上，不需自研内核模块）、D-6 音频栈**PulseAudio simple API 优先**（ALSA 留二期）、D-7 首期**只做插件消费者 + 隐藏 Linux 插件目录 UI**；分支策略 `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定） | 已接受 |
 
 > ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
 
@@ -118,7 +119,7 @@
 - [源码重组与目录规范方案-2026-10-13.md](源码重组与目录规范方案-2026-10-13.md) — scc 实测诊断（巨文件/DLL 散落/生成文件入仓/依赖倒挂）→ 目标目录树 → 命名/分层/DLL/文档/跨平台政策 → P0~P3 迁移分期（只动结构不改行为）
 - [跨平台基础框架与平台依赖剥离方案-2026-10-29.md](10-架构/跨平台基础框架与平台依赖剥离方案-2026-10-29.md) — Linux/Android 基础框架：端口-适配器边界（`engine/platform/port` + `<os>`）、平台强依赖组件归类、`AudioOut` 归 App 侧（修正 10-13 §8）、根 CMake 单一入口、Dart `PlatformProfile` 单点；M0~M6 分期与 fitness functions / 风险登记（M0–M6 已落地，不实现新平台）
 - [APP-目录重组与平台适配层方案-2026-11-01.md](10-架构/APP-目录重组与平台适配层方案-2026-11-01.md) — APP 侧平台耦合收口：`platform/port` 七端口 + 按领域适配实现、`core/io` 统一加载治理（ResourceGate/DocumentStore/ResourceLocator）、`ResourcePicker` 统一选择、注册表/进程单点、插件目录平台化；A1~A4 已落地，A5/A6 后续
-- [Linux适配方案-2026-11-01.md](10-架构/Linux适配方案-2026-11-01.md) — **Linux 适配方案稿（本轮只出方案、不改代码）**：三轴全面取证（引擎 C++ / APP / 构建测试门禁）后定稿。关键实测：引擎核心零 Win32 泄漏、裁剪 stub 与真实实现 C ABI 56 符号全等（导出集契约不破）、`linux/` 仍是原始 flutter create 脚手架、**Linux 上 `runner.py --smoke` 是 125 SKIP + 2 PASS 的假绿**（`PLATFORM_ANY` 默认拒绝式）、全仓无 CI。分期 S0~S5（S0 NDK clang 预验证 16 个未在 GCC 编译过的 legacy 补丁 → S1 门禁口径 → S2 引擎 Linux 目标 → S3 App 最小闭环 → S4 同步治理与 CI → S5 体验补齐）；**待裁定 D-5 音频后端选项集 / D-6 音频栈选型 / D-7 首期插件能力边界**（三项均含推荐项与后果分析）
+- [Linux适配方案-2026-11-01.md](10-架构/Linux适配方案-2026-11-01.md) — **Linux 适配方案（已裁定）**：三轴全面取证（引擎 C++ / APP / 构建测试门禁）后定稿。关键实测：引擎核心零 Win32 泄漏、裁剪 stub 与真实实现 C ABI 56 符号全等（导出集契约不破）、`linux/` 仍是原始 flutter create 脚手架、**Linux 上 `runner.py --smoke` 是 125 SKIP + 2 PASS 的假绿**（`PLATFORM_ANY` 默认拒绝式）、全仓无 CI。分期 S0~S5c（S0 NDK clang 预验证 16 个未在 GCC 编译过的 legacy 补丁 → S1 门禁口径 → S2 引擎 Linux 目标 → S3 App 最小闭环 → S4 同步治理与 CI → S5a Linux 虚拟设备/内核虚拟声卡 → S5b 桌面体验 → S5c 治理收尾）；**三项产品语义已于 2026-11-01 裁定**（[ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md)）；**分支策略** `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定）
 - [调试体系与控件实测-2026-11-01.md](20-执行/调试体系与控件实测-2026-11-01.md) — 统一 `DebugTrace` 事件总线：`ui.control → param.send → engine.ack` 三段式；`--debug/--debug-log` + `tools/debug/run_debug.ps1` 命令行启动；HUD 覆盖率与打印规范门禁（禁止业务直接 print/debugPrint）
 
 ### 3.10 2026-10-17/18 引擎尖端、多声道与空间音效
