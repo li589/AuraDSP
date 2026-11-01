@@ -72,6 +72,15 @@ jobs:
         with:
           name: libauradsp_engine-linux
           path: core/desktop/linux/out/Release
+      # 起一个带 null-sink 的 PulseAudio，让 smoke_linux_pulse_output
+      # 在流水线里实跑而不是自 SKIP（无服务时该门禁按惯例跳过）。
+      - name: Start PulseAudio with null sink
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pulseaudio
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=auradsp_ci
+          pactl set-default-sink auradsp_ci
       - name: Run smoke suite
         run: python3 test/runner.py --smoke
 

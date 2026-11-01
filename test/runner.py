@@ -38,6 +38,19 @@ PLATFORM_ANY = {
     "smoke_linux_source_table.py",
     # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
     "smoke_linux_engine_process.py",
+    # S4 补强（2026-11-01）：同步工具与 CI 骨架门禁，两平台可跑。
+    "smoke_sync_artifacts_tool.py",
+    "smoke_ci_workflow.py",
+}
+
+# PLATFORM_LINUX（2026-11-01，测试补强轮）：与 PLATFORM_WINDOWS 对称的
+# 显式标记 —— 只在 Linux 有意义的门禁（ELF 导出集 / PulseAudio 通路 /
+# Linux bundle 布局）。runner 按当前平台自动切换：非 Linux 主机上
+# 这些条目计 SKIP 而不是误跑或误红。
+PLATFORM_LINUX = {
+    "smoke_linux_engine_exports.py",
+    "smoke_linux_pulse_output.py",
+    "smoke_linux_bundle_layout.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -183,6 +196,8 @@ def required_platform(smoke_file):
         return "any"
     if smoke_file in PLATFORM_WINDOWS:
         return "windows"
+    if smoke_file in PLATFORM_LINUX:
+        return "linux"
     return "any"  # S1 翻转后的默认：未登记者按跨平台处理，禁止静默 SKIP
 
 
@@ -341,6 +356,15 @@ def run_smoke_tests():
         # 非零，与 verify_dll_copies 同口径）；产物经 engine_artifact 解析，
         # 缺失时自 SKIP。Windows 上该产物不存在 → 自 SKIP 不误红。
         "smoke_linux_engine_process.py",
+        # 测试补强轮（2026-11-01）：Linux 三门禁（PLATFORM_LINUX，非 Linux
+        # 主机由 runner 自动 SKIP）——.so 导出集 == .def 恒等、PulseAudio
+        # 输出通路契约、发布 bundle 布局；外加两条跨平台工具门禁：
+        # sync_artifacts 干跑语义、CI 工作流骨架。
+        "smoke_linux_engine_exports.py",
+        "smoke_linux_pulse_output.py",
+        "smoke_linux_bundle_layout.py",
+        "smoke_sync_artifacts_tool.py",
+        "smoke_ci_workflow.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",
