@@ -13,7 +13,13 @@
 #include <cstring>
 #include <mutex>
 #include <new>
+/* S4（2026-11-01）：xmmintrin 仅 x86 有；无条件包含会阻塞 ARM64 编译。
+ * 本头内唯一的 _mm_* 使用（ScopedFtzDazGuard）已有同口径架构守卫与
+ * 非 x86 空实现回退，故包含也按 x86 条件化，其它架构不再拉入。 */
+#if defined(__x86_64__) || defined(__i386__) || defined(_M_X64) || \
+    defined(_M_IX86)
 #include <xmmintrin.h>
+#endif
 
 #define AURADSP_VERSION "1.1.0"
 /* ABI v2（2026-10-24，Phase B 多声道电平）：auradsp_viz_frame 尾部追加

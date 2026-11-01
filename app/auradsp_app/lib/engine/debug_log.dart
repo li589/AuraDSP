@@ -23,9 +23,12 @@ const Duration _flushInterval = Duration(milliseconds: 200);
 void dbgLog(String msg) {
   try {
     if (_dbgF == null) {
+      // 路径分隔符必须走平台值：硬编码 '\\' 在 Windows 正确，但在
+      // Linux 会拼出文件名带反斜杠的怪路径（S3 遗留，S4 由
+      // error_sink_test 的端到端用例在 Linux 上抓到并在此修复）。
       final path =
           '${Platform.environment['TEMP'] ?? Directory.systemTemp.path}'
-          r'\auradsp_debug.log';
+          '${Platform.pathSeparator}auradsp_debug.log';
       final f = File(path);
       if (!f.existsSync()) f.createSync(recursive: true);
       _dbgF = f.openSync(mode: FileMode.append);

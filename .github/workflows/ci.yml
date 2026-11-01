@@ -1,0 +1,131 @@
+# AuraDSP CI（S4 落地，《Linux适配方案-2026-11-01》§4.1）
+#
+# Job 形态与方案一一对应：
+#   J1 gate-static        静态门禁（跨平台纯 Python，不需要构建产物）
+#   J2 build-engine-linux Linux 引擎构建（cmake preset）
+#   J3 smoke-linux        Linux smoke 全套（依赖 J2 产物）
+#   J4 abi-linux          ABI 一致性（含 S4 新增的 version script 校验）
+#   J5 build-engine-windows Windows 引擎构建（与 Linux 同等对待）
+#   J6 dart-tests         Dart 测试门禁（run_dart_tests.py 串行+重试）
+#   J7 asset-guard        资源守卫（.irs/.vdc 等不得入库）
+#
+# 与方案的一处口径扩展：方案把 J4/J5/J6/J7 定为 PR 触发；这里 push
+# 同样触发，让 feature/linux 在提 PR 之前就先全绿一遍（分支策略：
+# feature/linux 只向 dev 提 PR，PR 时同一套 job 再跑一次）。
+name: CI
+
+on:
+  push:
+    branches: [feature/linux, dev]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # J1 静态门禁 ------------------------------------------------------
+  gate-static:
+    name: J1 gate-static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Version script freshness (.def -> .map)
+        run: python3 tools/bin/gen_engine_map.py --check
+      - name: Platform isolation gate
+        run: python3 test/smoke/smoke_platform_isolation.py
+      - name: Dart platform quarantine gate
+        run: python3 test/smoke/smoke_dart_platform_quarantine.py
+      - name: Linux source table gate
+        run: python3 test/smoke/smoke_linux_source_table.py
+
+  # J2 Linux 引擎构建 -------------------------------------------------
+  build-engine-linux:
+    name: J2 build-engine-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++ python3
+      - name: Configure
+        run: cmake --preset linux-x64
+      - name: Build
+        run: cmake --build --preset linux-x64-release
+      - name: Upload engine artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: libauradsp_engine-linux
+          path: core/desktop/linux/out/Release/libauradsp_engine.so
+          if-no-files-found: error
+
+  # J3 Linux smoke ----------------------------------------------------
+  smoke-linux:
+    name: J3 smoke-linux
+    runs-on: ubuntu-latest
+    needs: build-engine-linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download engine artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libauradsp_engine-linux
+          path: core/desktop/linux/out/Release
+      - name: Run smoke suite
+        run: python3 test/runner.py --smoke
+
+  # J4 ABI 一致性 -------------------------------------------------------
+  abi-linux:
+    name: J4 abi-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: ABI consistency (.def / .h / Dart FFI / .map / viz / bridges)
+        run: python3 tools/bin/abi_consistency.py
+
+  # J5 Windows 引擎构建 -------------------------------------------------
+  build-engine-windows:
+    name: J5 build-engine-windows
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: cmake --preset windows-x64
+      - name: Build
+        run: cmake --build --preset windows-x64-release
+
+  # J6 Dart 测试 --------------------------------------------------------
+  dart-tests:
+    name: J6 dart-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-14-dev
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Pub get
+        working-directory: app/auradsp_app
+        run: flutter pub get
+      # 注意（方案 §4.1）：run_dart_tests.py 的重试参数是在 Windows
+      # 本机标定的；Linux CI 上若出现基建型抖动，先重标定再动门禁。
+      # Windows 范式专属的 4 个测试文件（ASIO/VAIO/插件宿主 UI）由
+      # 脚本内的 WINDOWS_ONLY 清单在非 Windows 主机显式 SKIP-PLATFORM，
+      # 与 Python 侧 runner.py 的 PLATFORM_WINDOWS 同口径（S4）。
+      - name: Dart tests (serial + retry gate)
+        run: python3 tools/bin/run_dart_tests.py
+
+  # J7 资源守卫 ---------------------------------------------------------
+  asset-guard:
+    name: J7 asset-guard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Untracked asset scan (.irs/.vdc must not be tracked)
+        run: python3 tools/bin/assets_untracked_scan.py
