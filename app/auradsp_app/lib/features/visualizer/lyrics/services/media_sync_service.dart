@@ -91,6 +91,11 @@ class MediaSyncService {
   /// 宽限期内保留上一条曲目与歌词，避免「清空 → 重新 searching」反复闪烁。
   static const Duration _emptyGrace = Duration(seconds: 5);
 
+  /// 检索兜底预算：OnlineLyricsService 内部已有 6s 总预算；这里再兜一层，
+  /// 防止未来新增源/异常路径绕开内部预算导致 UI 永久 searching。
+  /// 可注入缩短预算（单元测试验证兜底路径）。
+  final Duration _searchBudget;
+
   /// 当前平台是否具备系统媒体会话服务（Windows SMTC）。Linux/Android 等
   /// 平台尚无对应提供者时，UI 用干净的「暂不支持」标注替代「未检测到媒体」，
   /// 避免用户误以为有媒体在放却匹配不到。
@@ -101,9 +106,12 @@ class MediaSyncService {
     OnlineLyricsService? onlineService,
     LyricsSource lyricsSource = LyricsSource.auto,
     bool? hasSystemMediaSession,
+    Duration searchBudget = const Duration(seconds: 8),
   })  : _provider =
             provider ?? PlatformAdapters.instance.mediaSession.create(),
         _onlineService = onlineService ?? OnlineLyricsService(),
+        // ignore: prefer_initializing_formals (公开形参名 searchBudget 不能直接绑定私有字段)
+        _searchBudget = searchBudget,
         _hasSystemMediaSession = hasSystemMediaSession ??
             (provider != null ||
                 PlatformAdapters.instance.mediaSession.supported) {
@@ -296,12 +304,14 @@ class MediaSyncService {
     _inflightKey = key;
     lyricsState.value = LyricsSyncState.searching;
     try {
-      final doc = await _onlineService.fetchLyrics(
-        trackName: track.title,
-        artistName: track.artist,
-        duration: track.duration,
-        force: manual,
-      );
+      final doc = await _onlineService
+          .fetchLyrics(
+            trackName: track.title,
+            artistName: track.artist,
+            duration: track.duration,
+            force: manual,
+          )
+          .timeout(_searchBudget, onTimeout: () => null);
 
       // 查询期间已切曲 / 本地歌词已手动固定 / 服务释放：丢弃结果。
       if (_disposed || _trackKey != key || _manualLyrics) return;

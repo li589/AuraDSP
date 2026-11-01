@@ -39,7 +39,13 @@ class OnlineLyricsService {
   /// 旧实现只缓存成功结果，某首歌没歌词时每次元数据抖动都会重新打网；
   /// 现在把「确实没有」也记住，避免 UI 反复进入 searching。
   final Map<String, DateTime> _missCache = {};
-  static const Duration _missTtl = Duration(minutes: 10);
+  static const Duration _missTtl = Duration(minutes: 3);
+
+  /// auto 模式的单源预算（并发竞速）：弱网下每个源最多等 3s。
+  static const Duration _sourceBudget = Duration(seconds: 3);
+
+  /// auto 模式的总预算：并发竞速的最终兜底，防止异常源绕开单源预算。
+  static const Duration _totalBudget = Duration(seconds: 6);
 
   /// 切换来源后清空结果/负命中缓存，避免旧源的结论掩盖新源的真实检索。
   void clearCache() {
@@ -75,13 +81,36 @@ class OnlineLyricsService {
         ? LyricsSource.autoOrder
         : <LyricsSource>[preference];
 
-    for (final source in sources) {
-      final doc = await _fetchFrom(source, cleanTrack, cleanArtist, duration);
-      if (doc != null && doc.isNotEmpty) {
-        _cache[queryKey] = doc;
-        _missCache.remove(queryKey);
-        return doc;
+    // auto 模式并发竞速：弱网下串行回退会逐个吃满超时（用户看到长时间
+    // “加载歌词”）；并发后每个源最多 3s，任一源命中立即返回。
+    final completer = Completer<LyricDocument?>();
+    var pending = sources.length;
+    void settle(LyricDocument? doc) {
+      if (doc != null && doc.isNotEmpty && !completer.isCompleted) {
+        completer.complete(doc);
+        return;
       }
+      pending--;
+      if (pending == 0 && !completer.isCompleted) completer.complete(null);
+    }
+
+    for (final source in sources) {
+      _fetchFrom(source, cleanTrack, cleanArtist, duration)
+          .timeout(_sourceBudget, onTimeout: () => null)
+          .then(settle, onError: (e, st) {
+        swallow(e, st);
+        settle(null);
+      });
+    }
+
+    final doc = await completer.future.timeout(
+      _totalBudget,
+      onTimeout: () => null,
+    );
+    if (doc != null && doc.isNotEmpty) {
+      _cache[queryKey] = doc;
+      _missCache.remove(queryKey);
+      return doc;
     }
     _missCache[queryKey] = DateTime.now();
     return null;
@@ -106,16 +135,20 @@ class OnlineLyricsService {
   Future<Map<String, dynamic>?> _getJson(
     Uri uri, {
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 4),
+    Duration timeout = const Duration(seconds: 2),
   }) async {
     try {
-      final req = await _client.getUrl(uri);
+      final req = await _client.getUrl(uri).timeout(timeout);
       req.headers.set('User-Agent', headers?['user-agent'] ?? _ua);
       headers?.forEach((k, v) {
         if (k != 'user-agent') req.headers.set(k, v);
       });
       final resp = await req.close().timeout(timeout);
-      if (resp.statusCode != 200) return null;
+      if (resp.statusCode != 200) {
+        // 未消费的响应体可能阻塞连接回收；弱网下必须主动排空并限时。
+        await resp.drain<void>().timeout(timeout, onTimeout: () {});
+        return null;
+      }
       final body = await resp
           .transform(utf8.decoder)
           .join()
@@ -175,16 +208,20 @@ class OnlineLyricsService {
   Future<List<dynamic>?> _getJsonList(
     Uri uri, {
     Map<String, String>? headers,
-    Duration timeout = const Duration(seconds: 4),
+    Duration timeout = const Duration(seconds: 2),
   }) async {
     try {
-      final req = await _client.getUrl(uri);
+      final req = await _client.getUrl(uri).timeout(timeout);
       req.headers.set('User-Agent', headers?['user-agent'] ?? _ua);
       headers?.forEach((k, v) {
         if (k != 'user-agent') req.headers.set(k, v);
       });
       final resp = await req.close().timeout(timeout);
-      if (resp.statusCode != 200) return null;
+      if (resp.statusCode != 200) {
+        // 未消费的响应体可能阻塞连接回收；弱网下必须主动排空并限时。
+        await resp.drain<void>().timeout(timeout, onTimeout: () {});
+        return null;
+      }
       final body = await resp
           .transform(utf8.decoder)
           .join()

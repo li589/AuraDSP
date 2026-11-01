@@ -65,6 +65,23 @@ class _CountingOnlineLyricsService extends OnlineLyricsService {
   }
 }
 
+/// 永不返回的歌词源：验证弱网/挂起时检索预算能收敛 UI 状态
+class _HangingOnlineLyricsService extends OnlineLyricsService {
+  final Completer<LyricDocument?> never = Completer<LyricDocument?>();
+  int calls = 0;
+
+  @override
+  Future<LyricDocument?> fetchLyrics({
+    required String trackName,
+    required String artistName,
+    Duration? duration,
+    bool force = false,
+  }) {
+    calls++;
+    return never.future;
+  }
+}
+
 void main() {
   group('LrcParser Tests', () {
     const sampleLrc = '''
@@ -171,6 +188,27 @@ void main() {
       await service.retryLyrics();
       expect(online.calls, 2);
       expect(online.lastForce, isTrue);
+
+      service.dispose();
+    });
+
+    test('检索挂起时按预算收敛为 notFound，不永久 searching', () async {
+      final online = _HangingOnlineLyricsService();
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: online,
+        hasSystemMediaSession: true,
+        searchBudget: const Duration(milliseconds: 50),
+      );
+      const track = MediaTrackMetadata(
+        title: 'Slow Network',
+        artist: 'Artist',
+        isPlaying: true,
+      );
+
+      await service.updateTrack(track);
+      expect(online.calls, 1);
+      expect(service.lyricsState.value, LyricsSyncState.notFound);
 
       service.dispose();
     });
