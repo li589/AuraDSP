@@ -25,13 +25,147 @@ SMOKE_DIR = os.path.join(TEST_DIR, "smoke")
 UI_DIR = os.path.join(TEST_DIR, "ui")
 
 # M5（2026-10-29）平台标记：'windows' = 依赖 Win32 / 引擎 DLL / 注册表 / COM；
-# 'any' = 纯源码扫描，可在任意平台运行。未列出的 smoke 默认 windows（引擎当前
-# 只有 Windows 产物）。出现可用的 Linux/Android 引擎后逐项下调标记，不设全局开关。
+# 'any' = 纯源码扫描，可在任意平台运行。
+# S1（2026-11-01）口径翻转：旧口径「未列出默认 windows」会让新加的跨平台
+# smoke 在 Linux 上被静默 SKIP 造成假绿。现改为：PLATFORM_WINDOWS 显式列出
+# 全部 Windows 专属 smoke（翻转时由旧注册表全量生成，行为与旧口径逐项等价），
+# 未列出的 smoke 默认 'any'。新 smoke 若依赖 Windows，必须显式登记到
+# PLATFORM_WINDOWS；能在 Linux 跑通的既有 smoke，从 PLATFORM_WINDOWS 摘除即可。
 PLATFORM_ANY = {
     "smoke_platform_isolation.py",
     "smoke_dart_platform_quarantine.py",
     # S2（2026-11-01）：Linux 源表闭包门禁，纯文本/源表扫描，任意平台可跑。
     "smoke_linux_source_table.py",
+    # S1（2026-11-01）：Linux 引擎信号链功能门禁（产物缺失时自 SKIP）。
+    "smoke_linux_engine_process.py",
+}
+
+PLATFORM_WINDOWS = {
+    "smoke_convolver_spectrum.py",
+    "smoke_chain_meter.py",
+    "smoke_convolver.py",
+    "smoke_guard_flow.py",
+    "smoke_liveprog.py",
+    "smoke_liveprog_gmem.py",
+    "smoke_viz_lowfreq.py",
+    "smoke_latency_probe.py",
+    "smoke_block1056.py",
+    "smoke_plugin_host.py",
+    "smoke_plugin_host_process.py",
+    "smoke_plugin_host_editor.py",
+    "smoke_plugin_izotope_setproc.py",
+    "smoke_three_key_plugins.py",
+    "smoke_plugin_pdc.py",
+    "smoke_plugin_bus.py",
+    "smoke_plugin_chain.py",
+    "smoke_plugin_chain_stages.py",
+    "smoke_plugin_channels.py",
+    "smoke_plugin_metadata.py",
+    "smoke_plugin_arch_detect.py",
+    "smoke_multislot_and_stages.py",
+    "smoke_cross_mode_consistency.py",
+    "smoke_plugin_prime_no_double_send.py",
+    "smoke_plugin_chain_enable.py",
+    "smoke_plugin_bypass_lifecycle.py",
+    "smoke_vm_plugin_load_fast.py",
+    "smoke_plugin_host_priority.py",
+    "smoke_plugin_quarantine.py",
+    "smoke_config_and_matrix.py",
+    "smoke_mc_channel_levels.py",
+    "smoke_rt_vendor_flags.py",
+    "smoke_dll_dirs.py",
+    "smoke_d2_rt_drain.py",
+    "smoke_d3_vaio_pump_wait.py",
+    "smoke_b1d_comp_startup.py",
+    "smoke_d1_latency_sr.py",
+    "smoke_d7_asrc_consistency.py",
+    "smoke_d5_slot_timeout.py",
+    "smoke_d4b_swallow.py",
+    "smoke_d6_patch_ids.py",
+    "smoke_sr_rate_alignment.py",
+    "smoke_eq_response.py",
+    "smoke_latency_real_resource.py",
+    "smoke_g7_1_viz_mirror.py",
+    "smoke_g7_2_bridge_abi.py",
+    "smoke_g7_5_bridge_exports.py",
+    "smoke_e4_stage16_crossmode.py",
+    "smoke_abi_consistency.py",
+    "smoke_bridge_unified_abi.py",
+    "smoke_release_strings.py",
+    "smoke_ir_block_jitter.py",
+    "smoke_eq_viz_tap.py",
+    "smoke_bassmono.py",
+    "smoke_haas.py",
+    "smoke_spatial.py",
+    "smoke_spatial_binaural.py",
+    "smoke_exciter.py",
+    "smoke_fx_gain.py",
+    "smoke_arbmag.py",
+    "smoke_string_readback.py",
+    "smoke_gate_deesser.py",
+    "smoke_dyneq.py",
+    "smoke_mp3.py",
+    "smoke_vm_detect.py",
+    "smoke_vm_pump.py",
+    "smoke_vm_bridge.py",
+    "smoke_vm_protect.py",
+    "smoke_vm_parallel.py",
+    "smoke_apo_inspect.py",
+    "smoke_apo_register.py",
+    "smoke_apo_selftest.py",
+    "smoke_asio_probe.py",
+    "smoke_asio_tone.py",
+    "smoke_asio_driver.py",
+    "smoke_asio_bridge.py",
+    "smoke_asio_multichannel.py",
+    "smoke_vaio_bridge.py",
+    "smoke_crossfeed.py",
+    "smoke_basspsycho.py",
+    "smoke_filter.py",
+    "smoke_loudness.py",
+    "smoke_tube.py",
+    "smoke_stereo.py",
+    "smoke_shelf.py",
+    "smoke_input.py",
+    "smoke_bass.py",
+    "smoke_comp.py",
+    "smoke_comp_band_order.py",
+    "smoke_comp_race.py",
+    "smoke_ddc_race.py",
+    "smoke_liveprog_race.py",
+    "smoke_limiter.py",
+    "smoke_lookahead_limiter.py",
+    "smoke_limiter_final_gate.py",
+    "smoke_pool_race.py",
+    "smoke_dynamic_gr_and_gate.py",
+    "smoke_multichannel_discrete.py",
+    "smoke_effects_allparams.py",
+    "smoke_debug_policy.py",
+    "smoke_oversample_aliasing.py",
+    "smoke_reverb.py",
+    "smoke_wp0_scaffold.py",
+    "smoke_reverb_boundary.py",
+    "smoke_mc_reverb.py",
+    "smoke_reverb_native_params.py",
+    "smoke_spatial_fdn_removed.py",
+    "smoke_mc_comp_persch.py",
+    "smoke_mc_eq_persch.py",
+    "smoke_bassmono_pairs.py",
+    "smoke_postgain_persch.py",
+    "smoke_channel_switch_reset.py",
+    "smoke_channel_mask_default_follow.py",
+    "smoke_spatial_style_custom.py",
+    "smoke_eq_freq_clamp.py",
+    "smoke_vb_8x8_budget.py",
+    "smoke_silence_gate.py",
+    "smoke_graph_order.py",
+    "smoke_ddc.py",
+    "test_editor_topology.py",
+    "probe_component.py",
+    "test_cross_system_verify.py",
+    "bench_scan_c2.py",
+    "bench_load_async_c3.py",
+    "test_editor_size_c4.py",
 }
 
 if sys.platform.startswith("win"):
@@ -45,7 +179,11 @@ else:
 
 
 def required_platform(smoke_file):
-    return "any" if smoke_file in PLATFORM_ANY else "windows"
+    if smoke_file in PLATFORM_ANY:
+        return "any"
+    if smoke_file in PLATFORM_WINDOWS:
+        return "windows"
+    return "any"  # S1 翻转后的默认：未登记者按跨平台处理，禁止静默 SKIP
 
 
 def platform_supported(required):
@@ -199,6 +337,10 @@ def run_smoke_tests():
         # S2 Linux 源表门禁（2026-11-01，ADR-012 §4.3）：Linux 编译闭包不含
         # jamesdsp.c / Win32 源、gcc shim 与 stdint 前置注入在场、.map 同源。
         "smoke_linux_source_table.py",
+        # S1 Linux 引擎功能门禁（2026-11-01）：.so 信号链真实跑通（EQ tap
+        # 非零，与 verify_dll_copies 同口径）；产物经 engine_artifact 解析，
+        # 缺失时自 SKIP。Windows 上该产物不存在 → 自 SKIP 不误红。
+        "smoke_linux_engine_process.py",
     "smoke_ir_block_jitter.py",
     "smoke_eq_viz_tap.py",
     "smoke_bassmono.py",

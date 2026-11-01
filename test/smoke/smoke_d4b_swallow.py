@@ -42,7 +42,9 @@ import os
 import re
 import sys
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+# S1（2026-11-01）：仓库根由 __file__ 推导，替代作者机硬编码
+# D:\temp_desktop\Proj\JamesDSP（见 test/engine_artifact.py）。
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 APP = os.path.join(ROOT, "app", "auradsp_app")
 LIB = os.path.join(APP, "lib")
 SINK = os.path.join(LIB, "core", "error_sink.dart")
