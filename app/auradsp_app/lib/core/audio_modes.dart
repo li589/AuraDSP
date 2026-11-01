@@ -118,11 +118,24 @@ abstract final class AudioModes {
   }
 
   /// 将范式与细分项合成底层的 audioMode
+  ///
+  /// Windows 走 ADR-009 两范式合成（默认）。Linux（ADR-012 D-5）没有
+  /// 范式分层、UI 直选三模式：传入 [os] = 'linux' 时，候选值
+  /// （[attachmentMode] 优先、否则 [pipelineOut]）本身就是模式 id，
+  /// 在三 id 内即产出、否则回落 Linux 默认——保证三个 Linux id
+  /// 都能被合成路径产出（S5a 修复点：旧实现只产 Windows 四 id）。
   static String composeMode({
     required String category,
     String? attachmentMode,
     String? pipelineOut,
+    String? os,
   }) {
+    if (os == 'linux' || os == 'macos') {
+      final candidate = attachmentMode ?? pipelineOut;
+      final opts = optionsFor(os!);
+      if (candidate != null && opts.contains(candidate)) return candidate;
+      return defaultFor(os);
+    }
     if (category == categoryAttachment) {
       if (attachmentMode == attachVoicemeeterApi || attachmentMode == 'vbcallback') {
         return 'vbcallback';

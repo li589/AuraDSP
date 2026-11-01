@@ -2458,6 +2458,48 @@ abstract class AppLocalizations {
   /// **'System APO'**
   String get modeSysApo;
 
+  /// No description provided for @linuxModeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get linuxModeSystem;
+
+  /// No description provided for @linuxModeVirtual.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟声卡'**
+  String get linuxModeVirtual;
+
+  /// No description provided for @linuxModeDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'内核驱动'**
+  String get linuxModeDriver;
+
+  /// No description provided for @linuxModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统：本机输出；虚拟声卡：其他应用把声音播入 AuraDSP 虚拟设备；内核驱动：经 snd-aloop 回环声卡接入。'**
+  String get linuxModeHint;
+
+  /// No description provided for @linuxDriverMissingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1,1，再重新选择内核驱动模式。'**
+  String get linuxDriverMissingHint;
+
+  /// No description provided for @linuxVirtualReadyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。'**
+  String get linuxVirtualReadyHint;
+
+  /// No description provided for @linuxCaptureInactiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。'**
+  String get linuxCaptureInactiveHint;
+
   /// No description provided for @modeAsio.
   ///
   /// In zh, this message translates to:

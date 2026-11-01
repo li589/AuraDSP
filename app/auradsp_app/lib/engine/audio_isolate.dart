@@ -19,6 +19,8 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
 import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/audio_in_linux.dart';
+import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
 import 'audio_abridge.dart';
 import 'audio_vaio_bridge.dart';
@@ -33,6 +35,7 @@ import '../core/error_sink.dart';
 part 'audio_wav.dart';
 part 'audio_sources.dart';
 part 'audio_slots.dart';
+part 'audio_isolate_linux.dart';
 
 
 
@@ -141,6 +144,15 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // P1 桥治理：注册表 + 惰性加载 + 当前后端（vm/asio/vaio）。
   // 未选中的桥全程不 load；同一时刻只有一个后端出声（互斥见 stopOtherBridges）。
   final BridgeManager bridgeManager = BridgeManager();
+
+  // S5a（ADR-012 D-5）：Linux 三模式管线（virtual/driver 的采集侧组建）。
+  // 非 Linux 平台永不被命令触达，构造零副作用。
+  final linuxModes = LinuxModeController(
+    getSource: () => source,
+    setSource: (s) => source = s,
+    send: send,
+    deviceRate: () => wasapi?.sampleRate ?? 48000,
+  );
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
   // 引擎 commit 会把槽置为挂载旁路（engine mount-bypass）。若 bypass 命令
@@ -1214,6 +1226,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             'playing': source != null,
             'srcCh': fs0?.fileCh ?? 2,
           });
+          break;
+        case 'linuxmode':
+          // ADR-012 D-5：Linux 三模式切换（组建/拆除采集管线）。
+          linuxModes.applyMode(m['mode'] as String? ?? 'system');
+          break;
+        case 'linuxstatus':
+          linuxModes.reportStatus();
           break;
         case 'vbmode':
           if (m['on'] as bool) {

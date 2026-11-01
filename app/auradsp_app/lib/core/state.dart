@@ -246,6 +246,12 @@ class AppModel extends ChangeNotifier {
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
   // AuraVAIO 桥状态（01 桥；isolate 回推，与 VB/ASIO 互斥）。
   bool vaioActive = false;
+  // S5a（ADR-012 D-5）：Linux 三模式状态（isolate 的 linuxstatus 事件回推，
+  // 设置页据此渲染可用性与提示，不拿它当错误态）。
+  bool linuxCaptureActive = false;
+  bool linuxVirtualSink = false;
+  bool linuxDriverLoaded = false;
+  String linuxModeNote = '';
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
 

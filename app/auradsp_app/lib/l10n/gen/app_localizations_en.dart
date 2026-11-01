@@ -1368,6 +1368,31 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => 'System';
+
+  @override
+  String get linuxModeVirtual => 'Virtual';
+
+  @override
+  String get linuxModeDriver => 'Kernel driver';
+
+  @override
+  String get linuxModeHint =>
+      'System: local output. Virtual: other apps play into the AuraDSP virtual device. Kernel driver: route audio through the snd-aloop loopback card.';
+
+  @override
+  String get linuxDriverMissingHint =>
+      'The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1,1 in a terminal, then select the kernel driver mode again.';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      'Virtual device auradsp_virtual is ready: pick it as the output device in other apps to route them through AuraDSP.';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      'Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

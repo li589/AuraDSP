@@ -35,6 +35,7 @@ extension AudioModesState on AppModel {
     final isAsio = valid == 'asio';
     final wasVaio = audioMode == 'vaio';
     final isVaio = valid == 'vaio';
+    final linuxModeBefore = audioMode;
     audioMode = valid;
     config.audioMode = valid;
     // F-3：VB 多总线标志随模式切换更新。必须在 onAudioModeSwitching
@@ -79,6 +80,11 @@ extension AudioModesState on AppModel {
         vaioActive = false;
         vaioInfo = {};
       }
+    }
+    if (PlatformProfile.isLinux && linuxModeBefore != valid) {
+      // ADR-012 D-5：Linux 模式变化时让 isolate 重组管线（virtual 建
+      // 虚拟 sink + monitor 采集；driver 接 snd-aloop 源；system 拆除）。
+      _toIso?.send({'cmd': 'linuxmode', 'mode': valid});
     }
     _notifyUi();
   }

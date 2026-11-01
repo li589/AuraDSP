@@ -1269,6 +1269,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => '系统';
+
+  @override
+  String get linuxModeVirtual => '虚拟声卡';
+
+  @override
+  String get linuxModeDriver => '内核驱动';
+
+  @override
+  String get linuxModeHint =>
+      '系统：本机输出；虚拟声卡：其他应用把声音播入 AuraDSP 虚拟设备；内核驱动：经 snd-aloop 回环声卡接入。';
+
+  @override
+  String get linuxDriverMissingHint =>
+      '未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1,1，再重新选择内核驱动模式。';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      '虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      '采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

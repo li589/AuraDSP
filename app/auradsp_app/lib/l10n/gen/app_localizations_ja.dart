@@ -1286,6 +1286,31 @@ class AppLocalizationsJa extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => 'システム';
+
+  @override
+  String get linuxModeVirtual => '仮想サウンド';
+
+  @override
+  String get linuxModeDriver => 'カーネルドライバ';
+
+  @override
+  String get linuxModeHint =>
+      'システム：ローカル出力。仮想サウンド：他アプリの音声を AuraDSP 仮想デバイスへ入力。カーネルドライバ：snd-aloop ループバック経由で接続。';
+
+  @override
+  String get linuxDriverMissingHint =>
+      'snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1,1 を実行してから、カーネルドライバモードを選び直してください。';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      '仮想デバイス auradsp_virtual の準備ができました。他アプリの出力デバイスでこれを選ぶと AuraDSP 経由になります。';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      'キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

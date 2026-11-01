@@ -99,4 +99,36 @@ void main() {
             pipelineOut: AudioModes.outputWasapi),
         'vaio');
   });
+
+  test('Linux three modes (ADR-012 D-5): options, normalize, compose', () {
+    expect(AudioModes.optionsFor('linux'), ['system', 'virtual', 'driver']);
+    expect(AudioModes.defaultFor('linux'), 'system');
+    expect(AudioModes.normalize('virtual', 'linux'), 'virtual');
+    expect(AudioModes.normalize('driver', 'linux'), 'driver');
+    // Windows ids are not valid on Linux and fall back to the default.
+    expect(AudioModes.normalize('vaio', 'linux'), 'system');
+    expect(AudioModes.normalize(null, 'linux'), 'system');
+    // composeMode with os=linux produces each of the three ids directly.
+    for (final id in ['system', 'virtual', 'driver']) {
+      expect(
+          AudioModes.composeMode(
+              category: AudioModes.categoryPipeline,
+              pipelineOut: id,
+              os: 'linux'),
+          id);
+      expect(
+          AudioModes.composeMode(
+              category: AudioModes.categoryAttachment,
+              attachmentMode: id,
+              os: 'linux'),
+          id);
+    }
+    // Unknown candidates fall back to the Linux default.
+    expect(
+        AudioModes.composeMode(
+            category: AudioModes.categoryPipeline,
+            pipelineOut: 'vaio',
+            os: 'linux'),
+        'system');
+  });
 }

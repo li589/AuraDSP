@@ -51,6 +51,7 @@ PLATFORM_LINUX = {
     "smoke_linux_engine_exports.py",
     "smoke_linux_pulse_output.py",
     "smoke_linux_bundle_layout.py",
+    "smoke_linux_virtual_sink.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -363,6 +364,8 @@ def run_smoke_tests():
         "smoke_linux_engine_exports.py",
         "smoke_linux_pulse_output.py",
         "smoke_linux_bundle_layout.py",
+        # S5a：virtual 模式平台机制（null-sink + monitor 采集链路）。
+        "smoke_linux_virtual_sink.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
     "smoke_ir_block_jitter.py",

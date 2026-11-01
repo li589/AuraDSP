@@ -10,8 +10,12 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
   final p = paletteOf(context);
 
   return [
-    // 1. 音频范式与模式（ADR-009：附加模式原地挂载；普通管线模式端到端流转）
-    SectionCard(
+    // 1. 音频模式。Linux（ADR-012 D-5）无范式分层、直选三模式；其余
+    // 平台走 ADR-009 两范式（附加模式原地挂载；管线模式端到端流转）。
+    if (PlatformProfile.isLinux)
+      _linuxModeCard(context, model)
+    else
+      SectionCard(
       title: l.audioParadigm,
       hint: l.audioParadigmHint,
       child: Column(
@@ -179,4 +183,49 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
       ),
     ),
   ];
+}
+
+/// Linux 三模式直选卡（ADR-012 D-5）：system / virtual / driver。
+/// 状态来自 isolate 的 linuxstatus 事件：driver 未加载 snd-aloop 时
+/// 给「先加载模块」的操作提示（不是错误）；virtual 就绪给接入指引；
+/// 采集未建立给检查提示。
+Widget _linuxModeCard(BuildContext context, AppModel model) {
+  final l = l10nOf(context);
+  final p = paletteOf(context);
+  final String? note;
+  if (model.audioMode == 'driver' && !model.linuxDriverLoaded) {
+    note = l.linuxDriverMissingHint;
+  } else if (model.audioMode == 'driver' && !model.linuxCaptureActive) {
+    note = l.linuxCaptureInactiveHint;
+  } else if (model.audioMode == 'virtual' && model.linuxVirtualSink) {
+    note = l.linuxVirtualReadyHint;
+  } else if (model.audioMode == 'virtual' && !model.linuxCaptureActive) {
+    note = l.linuxCaptureInactiveHint;
+  } else {
+    note = null;
+  }
+  return SectionCard(
+    title: l.audioParadigm,
+    hint: l.linuxModeHint,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l.audioMode, style: labelOf(p, size: 12, color: p.textDim)),
+        const SizedBox(height: AuraSpace.xs),
+        AuraSegmented<String>(
+          segments: [
+            AuraSegment('system', l.linuxModeSystem),
+            AuraSegment('virtual', l.linuxModeVirtual),
+            AuraSegment('driver', l.linuxModeDriver),
+          ],
+          selected: model.audioMode,
+          onChanged: (v) => model.setAudioMode(v),
+        ),
+        if (note != null) ...[
+          const SizedBox(height: AuraSpace.sm),
+          Text(note, style: labelOf(p, size: 12, color: p.textDim)),
+        ],
+      ],
+    ),
+  );
 }
