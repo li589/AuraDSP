@@ -138,10 +138,10 @@ set_f('tube.mix', 1.0)
 set_f('tube.compensation', 0.0)
 
 
-def goertzel_power(ys, freq):
+def goertzel_power(ys, freq, sr=None):
     # 单频点 DFT 功率（稳态段）：线性拟合残差会被全通相移污染，谐波能量必须直测。
     n = len(ys)
-    w = 2 * math.pi * freq / SR
+    w = 2 * math.pi * freq / (SR if sr is None else sr)
     cw, sw = math.cos(w), math.sin(w)
     s0 = s1 = s2 = 0.0
     for y in ys:
@@ -201,6 +201,51 @@ rms6 = math.sqrt(sum(y * y for y in ys6) / len(ys6))
 ratio = rms6 / rms0 if rms0 > 0 else 0.0
 check('comp +6dB ~= x2 (5%)', abs(ratio - 2.0) < 0.10, 'ratio=%.4f' % ratio)
 set_f('tube.compensation', 0.0)
+
+# A-06: 2x 过采样低通必须把 20 kHz 留在通带内，且 44.1k/48k 工作域一致。
+# 原实现按 0.89*Nyquist 设截止：44.1k 域截止 19.6k，20k 落进 16 阶
+# Butterworth 过渡带，整链 20k 塌陷 -10.6 dB；48k 域仅 -0.46 dB。
+# 现改为固定绝对截止 21 kHz（低采样率钳到 0.95*Nyquist）。
+def tube_fund_db(sr, freq=20000.0, amp=10.0 ** (-24.0 / 20.0), blocks=40):
+    hh = dll.auradsp_create(float(sr), BLOCK)
+    assert hh, 'create failed for %d' % sr
+    def si(pid, v):
+        return dll.auradsp_set_param(hh, pid.encode(), ctypes.byref(i32(v)), 4)
+    def sf(pid, v):
+        return dll.auradsp_set_param(hh, pid.encode(), ctypes.byref(f32(v)), 4)
+    si('limiter.enable', 0)
+    si('post.enable', 0)
+    si('tube.enable', 1)
+    si('tube.style', 0)
+    si('tube.oversample', 1)
+    sf('tube.gain', 0.0)
+    sf('tube.mix', 1.0)
+    n0 = 0
+    ys = []
+    for b in range(blocks):
+        buf = (ctypes.c_float * (BLOCK * 2))()
+        for i in range(BLOCK):
+            s = amp * math.sin(2 * math.pi * freq * (n0 + i) / sr)
+            buf[i * 2] = s
+            buf[i * 2 + 1] = s
+        out = (ctypes.c_float * (BLOCK * 2))()
+        dll.auradsp_process(hh, buf, out, BLOCK)
+        n0 += BLOCK
+        if b >= blocks - 8:
+            ys.extend(out[i * 2] for i in range(BLOCK))
+    dll.auradsp_destroy(hh)
+    w = 2.0 * math.pi * freq / sr
+    re = sum(y * math.cos(w * i) for i, y in enumerate(ys))
+    im = sum(y * math.sin(w * i) for i, y in enumerate(ys))
+    fund = 2.0 * math.sqrt(re * re + im * im) / len(ys)
+    return 20.0 * math.log10(max(fund, 1e-12) / amp)
+
+db441, db48 = tube_fund_db(44100), tube_fund_db(48000)
+print('  tube 20k passband: 44.1k=%+.2f dB  48k=%+.2f dB' % (db441, db48))
+check('tube 44.1k 20k passband (>-1.5dB)', db441 > -1.5, '%.2f dB' % db441)
+check('tube 48k 20k passband (>-1.5dB)', db48 > -1.5, '%.2f dB' % db48)
+check('tube 20k 44.1k/48k match (<0.3dB)', abs(db441 - db48) < 0.3,
+      '44.1k=%.2f 48k=%.2f' % (db441, db48))
 
 dll.auradsp_destroy(h)
 

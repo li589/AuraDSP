@@ -16,6 +16,7 @@ import 'package:auradsp_app/core/plugins/plugin_manager.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/plugins/plugin_scan_dirs.dart';
 import 'package:auradsp_app/core/plugins/text_collation.dart';
+import 'package:auradsp_app/platform/plugins/plugin_dirs_windows.dart';
 
 PluginMetadata _p(String name, String vendor, {String path = ''}) {
   return PluginMetadata(
@@ -191,17 +192,17 @@ void main() {
   // 系统装在 D: 的机器会去扫一个不存在的路径（F1「盘符钉死」的同类反模式）。
   group('P3-1: 系统盘解析不写死 C:', () {
     test('优先 SystemDrive，并规范化大小写与尾部分隔符', () {
-      expect(PluginScanDirs.systemDriveForTest({'SystemDrive': 'D:'}), 'D:');
-      expect(PluginScanDirs.systemDriveForTest({'SystemDrive': 'c:'}), 'C:');
-      expect(PluginScanDirs.systemDriveForTest({'SystemDrive': 'C:\\'}), 'C:');
-      expect(PluginScanDirs.systemDriveForTest({'SystemDrive': 'C:/'}), 'C:');
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemDrive': 'D:'}), 'D:');
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemDrive': 'c:'}), 'C:');
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemDrive': 'C:\\'}), 'C:');
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemDrive': 'C:/'}), 'C:');
     });
 
     test('退化到 SystemRoot，再退化到 null（绝不猜盘符）', () {
-      expect(PluginScanDirs.systemDriveForTest({'SystemRoot': r'E:\Windows'}),
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemRoot': r'E:\Windows'}),
           'E:');
-      expect(PluginScanDirs.systemDriveForTest({}), isNull);
-      expect(PluginScanDirs.systemDriveForTest({'SystemDrive': 'nonsense'}),
+      expect(WindowsPluginDirs.systemDriveForTest({}), isNull);
+      expect(WindowsPluginDirs.systemDriveForTest({'SystemDrive': 'nonsense'}),
           isNull);
     });
   });

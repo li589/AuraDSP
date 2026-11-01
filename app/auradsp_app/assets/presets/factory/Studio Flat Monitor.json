@@ -1,6 +1,6 @@
 {
   "name": "Studio Flat Monitor",
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "isFactory": true,
   "category": "专业监听",
   "description": "全频带线性直通，零额外染色与平直响应，供母带与录音回放基准对比",
@@ -56,7 +56,7 @@
       "bypass": false,
       "autoGain": false,
       "outputGain": 0.0,
-      "enable": true,
+      "enable": false,
       "channels": 255,
       "frequencies": [
         25.0,
@@ -76,21 +76,21 @@
         16000.0
       ],
       "gains": [
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0,
-        0
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
       ],
       "qs": [
         1.414,
@@ -291,8 +291,8 @@
       ]
     },
     "post": {
-      "gain": 0.0,
-      "limiterEnable": true,
+      "gain": 0.009999999999999787,
+      "limiterEnable": false,
       "release": 100.0,
       "threshold": -0.1,
       "link": true,

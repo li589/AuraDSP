@@ -11,8 +11,11 @@
 | **App 内输出**（AAudio / Oboe） | App 侧 `AudioOut` 端口 | 低延迟客户端 API，运行在 App 进程；Android 实现落地后由 `createAudioOut()` 工厂接入，不改 DSP |
 | **系统效果 HAL 注入** | `core/android/` | 效果库运行在 audioserver/vendor 进程（`hal_audio_default`），由 effects HAL `dlopen`；入口见 [core/android/README.md](../../../core/android/README.md) |
 
-两条路径共用同一份引擎与 C ABI（`engine/auradsp_engine.h`）。HAL 注入不是 App 内的
-`AudioOut` 实现，也不经过 Dart 泵循环；`AudioOut` 在 Android 上仍归 App 侧。
+两条路径的**目标**是共用同一份引擎与 C ABI（`engine/auradsp_engine.h`）。当前实况：
+`core/android` 的 HAL 示例仍静态编入 `core/android/vendor-src/libjamesdsp`（上游提取快照，
+不含 `engine/legacy` 的 AuraDSP 本地补丁），与桌面 `engine/legacy` 不是同一份代码；
+差异见 `python tools/bin/legacy_copy_drift.py` 与跨平台基础审查 CP-03。统一内核属独立立项，
+本轮不改 Android 构建。HAL 注入不是 App 内的 `AudioOut` 实现，也不经过 Dart 泵循环。
 
 ## 2. 端口待实现项
 
@@ -26,7 +29,9 @@
 ## 3. 插件宿主与 GUI
 
 - **进程外插件宿主不适用**：`engine/plugins/platform/win32/host/`（共享内存 + `CreateProcess`）
-  是 Windows 模型；Android 走 `AURADSP_PLUGIN_HOST_REMOTE=OFF` 直通（M2 开关）。
+  是 Windows 模型；Android 走 `AURADSP_ENABLE_PLUGINS=OFF`（2026-11-01 已落地）整体裁剪
+  VST3/CLAP 子系统（链阶段直通、C ABI 导出集不变）。`AURADSP_PLUGIN_HOST_REMOTE=OFF`
+  只裁远程宿主，不裁 Win32 插件驱动/格式实现。
 - **VST3 / CLAP 不落地**：无桌面窗口栈与插件目录约定；编辑器 GUI 属方案 N4 独立立项。
 - 若未来需要 Android 原生效果扩展，走 `core/android/registrar` 的 `registrar::IAudioEngine`
   三步接入（见 `core/android/registrar/README.md`），不复用桌面插件格式。

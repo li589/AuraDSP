@@ -1301,61 +1301,65 @@ void JamesDSPProcessMultiplexedStageSet(JamesDSPLib *jdsp, float *x, float *y,
 	if (jdsp->enableASRC)
 	{
 		unsigned int curDecimatedLen = DoASRC_fwd(jdsp, n);
-		for (unsigned int i = 0; i < kAuraStageCount; ++i)
-			if (stage_selected(ids, kAuraStages[i].id))
+		for (int ci = 0; ci < jdsp->chainLen; ++ci)
+		{
+			const unsigned int sidx = jdsp->chain[ci].stageIdx;
+			if (sidx >= kAuraStageCount || !stage_selected(ids, kAuraStages[sidx].id))
+				continue;
+			/* [PATCHED-AuraDSP P-024 Z13] honoring per-stage lock 标志：
+			 * 与 JamesDSPProcess 的 chain 表锁语义对齐。此前本路径
+			 * （引擎唯一 RT 入口）完全忽略该标志，comp/convolver/ddc/
+			 * liveprog 的控制侧重置与 RT 处理零互斥。 */
+			const char stageLock = jdsp->chain[ci].lock;
+			if (stageLock)
+				jdsp_lock(jdsp);
+			jdsp->chain[ci].fn(jdsp, curDecimatedLen, gates); /* B4 */
+			if (stageLock)
+				jdsp_unlock(jdsp);
+			if (samplePeaks && sidx < 16)
 			{
-				/* [PATCHED-AuraDSP P-024 Z13] honoring per-stage lock 标志：
-				 * 与 JamesDSPProcess 的 chain 表锁语义对齐。此前本路径
-				 * （引擎唯一 RT 入口）完全忽略该标志，comp/convolver/ddc/
-				 * liveprog 的控制侧重置与 RT 处理零互斥。 */
-				const char stageLock = kAuraStages[i].lock;
-				if (stageLock)
-					jdsp_lock(jdsp);
-				kAuraStages[i].fn(jdsp, curDecimatedLen, gates); /* B4 */
-				if (stageLock)
-					jdsp_unlock(jdsp);
-				if (samplePeaks && i < 16)
+				float maxL = 0.0f, maxR = 0.0f;
+				for (unsigned int s = 0; s < curDecimatedLen; ++s)
 				{
-					float maxL = 0.0f, maxR = 0.0f;
-					for (unsigned int s = 0; s < curDecimatedLen; ++s)
-					{
-						float aL = fabsf(jdsp->tmpBuffer[0][s]);
-						float aR = fabsf(jdsp->tmpBuffer[1][s]);
-						if (aL > maxL) maxL = aL;
-						if (aR > maxR) maxR = aR;
-					}
-					jdsp->stagePeakL[i] = maxL;
-					jdsp->stagePeakR[i] = maxR;
+					float aL = fabsf(jdsp->tmpBuffer[0][s]);
+					float aR = fabsf(jdsp->tmpBuffer[1][s]);
+					if (aL > maxL) maxL = aL;
+					if (aR > maxR) maxR = aR;
 				}
+				jdsp->stagePeakL[sidx] = maxL;
+				jdsp->stagePeakR[sidx] = maxR;
 			}
+		}
 		DoASRC_bwd(jdsp, curDecimatedLen, n);
 	}
 	else
 	{
-		for (unsigned int i = 0; i < kAuraStageCount; ++i)
-			if (stage_selected(ids, kAuraStages[i].id))
+		for (int ci = 0; ci < jdsp->chainLen; ++ci)
+		{
+			const unsigned int sidx = jdsp->chain[ci].stageIdx;
+			if (sidx >= kAuraStageCount || !stage_selected(ids, kAuraStages[sidx].id))
+				continue;
+			/* [PATCHED-AuraDSP P-024 Z13] 同 ASRC 分支：honoring per-stage lock */
+			const char stageLock = jdsp->chain[ci].lock;
+			if (stageLock)
+				jdsp_lock(jdsp);
+			jdsp->chain[ci].fn(jdsp, n, gates); /* B4：调用级门控覆盖 */
+			if (stageLock)
+				jdsp_unlock(jdsp);
+			if (samplePeaks && sidx < 16)
 			{
-				/* [PATCHED-AuraDSP P-024 Z13] 同 ASRC 分支：honoring per-stage lock */
-				const char stageLock = kAuraStages[i].lock;
-				if (stageLock)
-					jdsp_lock(jdsp);
-				kAuraStages[i].fn(jdsp, n, gates); /* B4：调用级门控覆盖 */
-				if (stageLock)
-					jdsp_unlock(jdsp);
-				if (samplePeaks && i < 16)
+				float maxL = 0.0f, maxR = 0.0f;
+				for (size_t s = 0; s < n; ++s)
 				{
-					float maxL = 0.0f, maxR = 0.0f;
-					for (size_t s = 0; s < n; ++s)
-					{
-						float aL = fabsf(jdsp->tmpBuffer[0][s]);
-						float aR = fabsf(jdsp->tmpBuffer[1][s]);
-						if (aL > maxL) maxL = aL;
-						if (aR > maxR) maxR = aR;
-					}
-					jdsp->stagePeakL[i] = maxL;
-					jdsp->stagePeakR[i] = maxR;
+					float aL = fabsf(jdsp->tmpBuffer[0][s]);
+					float aR = fabsf(jdsp->tmpBuffer[1][s]);
+					if (aL > maxL) maxL = aL;
+					if (aR > maxR) maxR = aR;
 				}
+				jdsp->stagePeakL[sidx] = maxL;
+				jdsp->stagePeakR[sidx] = maxR;
 			}
+		}
 	}
 	for (size_t i = 0; i < n; i++)
 	{

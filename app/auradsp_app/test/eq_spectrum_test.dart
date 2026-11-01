@@ -34,6 +34,23 @@ void _withIsolatedModel(void Function(AppModel m) body) {
   }
 }
 
+/// 异步版：曲线下发有 50ms 节流，断言"真的发出去"需要等一个补发周期。
+Future<void> _withIsolatedModelAsync(
+    Future<void> Function(AppModel m) body) async {
+  final dir = Directory.systemTemp.createTempSync('auradsp_eq_q_test');
+  ConfigManager.baseDirOverride = dir.path;
+  final m = AppModel(testing: true);
+  try {
+    await body(m);
+  } finally {
+    m.dispose();
+    ConfigManager.baseDirOverride = null;
+    try {
+      dir.deleteSync(recursive: true);
+    } catch (_) {}
+  }
+}
+
 /// 一条平坦（0 dB）的响应曲线，长度与引擎探针一致。
 List<double> flatResponse() => List<double>.filled(129, 0.0);
 
@@ -310,6 +327,69 @@ void main() {
         final eq = snap.params['eq'] as Map;
         expect((eq['qs'] as List)[0], closeTo(3.0, 1e-9));
         expect((eq['gains'] as List)[0], closeTo(6.0, 1e-9));
+      });
+    });
+  });
+
+  group('段数切换与旁路对比', () {
+    test('预设状态下 15→31→15 按预设重建，曲线回到原样', () {
+      _withIsolatedModel((m) {
+        expect(m.eqBandsCount, 15);
+        m.applyEqPreset('pop');
+        final base = List<double>.from(m.eqGains);
+        m.setEqBandsCount(31);
+        expect(m.eqGains.length, 31);
+        m.setEqBandsCount(15);
+        expect(m.eqGains.length, 15);
+        for (var i = 0; i < base.length; i++) {
+          expect(m.eqGains[i], closeTo(base[i], 1e-9), reason: 'band $i');
+        }
+        expect(m.eqPresetName, 'pop');
+      });
+    });
+
+    test('旁路对比不下发 eq.enable，开关与卡片状态不变', () async {
+      await _withIsolatedModelAsync((m) async {
+        m.eqOn = true;
+        m.sentParamsForTesting.clear();
+        m.sentStrParamsForTesting.clear();
+        m.setEqBypass(true);
+        // 曲线下发有 50ms 节流，等一个补发周期再判断。
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(m.eqBypass, isTrue);
+        expect(m.eqOn, isTrue, reason: '旁路对比不能把效果器开关关掉');
+        expect(m.isEqActive, isFalse);
+        expect(
+          m.sentParamsForTesting.where((e) => e['id'] == 'eq.enable'),
+          isEmpty,
+          reason: '旁路只切目标曲线，不碰 eq.enable',
+        );
+        expect(m.sentStrParamsForTesting.any((e) => e['id'] == 'eq.curve'),
+            isTrue,
+            reason: '旁路必须真的把曲线压平下发');
+        m.setEqBypass(false);
+        expect(m.eqOn, isTrue);
+        expect(m.isEqActive, isTrue);
+      });
+    });
+
+    test('滤波器架构 / 插值切换会重推 eq.curve', () async {
+      await _withIsolatedModelAsync((m) async {
+        m.applyEqPreset('pop');
+        m.sentStrParamsForTesting.clear();
+        m.setEqFilter(1);
+        expect(m.eqFilter, 1);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(m.sentStrParamsForTesting.any((e) => e['id'] == 'eq.curve'),
+            isTrue,
+            reason: 'IIR6 模式编码在 eq.curve 前缀，必须下发');
+        m.sentStrParamsForTesting.clear();
+        m.setEqInterp(0);
+        expect(m.eqInterp, 0);
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(m.sentStrParamsForTesting.any((e) => e['id'] == 'eq.curve'),
+            isTrue,
+            reason: '插值算法同样在 eq.curve 前缀，必须下发');
       });
     });
   });

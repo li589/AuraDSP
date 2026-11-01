@@ -22,7 +22,8 @@
 | 文件 | `port/fs.h` `fopen_utf8` | UTF-8→UTF-16 + `_wfopen` | 直接 `fopen`（glibc 按 UTF-8 字节直通，文件名无需转码） |
 | 环境变量 | `port/env.h` `get_env` | `GetEnvironmentVariableA` | `getenv` + 容量/NUL 语义对齐（未设置或超容量返回 false） |
 | 日志 | `port/log.h` `log_level` / `log_emit` | `OutputDebugStringA`；`AURADSP_LOG` 首次读取后粘性缓存 | `stderr`（格式逐字保留 `[AuraDSP][file:line] msg\n`）或 syslog |
-| 模块 | `port/module.h` `module_open_utf8` / `module_symbol` / `module_close` / `module_last_error` | `plugins/platform/win32/plugin_module.cpp`：`LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH)` | `dlopen(RTLD_NOW)` / `dlsym` / `dlclose` / `dlerror` |
+| 模块 | `port/module.h` `module_open_utf8` / `module_symbol` / `module_close` / `module_last_error` / `module_last_error_text` | `plugins/platform/win32/plugin_module.cpp`：`LoadLibraryExW(LOAD_WITH_ALTERED_SEARCH_PATH)` | `dlopen(RTLD_NOW)` / `dlsym` / `dlclose` / `dlerror` |
+| 时间/自旋 | `port/time.h` `now_ms` / `sleep_ms` / `cpu_relax` | header-only 标准 C++（`steady_clock` / `sleep_for` / x86 pause） | 同左，无需平台实现 |
 
 实现时必须逐项对齐的语义：
 
@@ -32,8 +33,10 @@
   `invalid_encoding` 不会出现（UTF-8 字节原样传给内核）。
 - `get_env` 失败（未设置/写越界）返回 false，`buf` 恒以 NUL 结尾。
 - `log_level` 默认 2、钳位 0–2、进程内粘性；`log_emit(min_level, ...)` 低于当前级别直接丢弃。
-- `module_last_error` 返回最近一次失败的文本（Windows 为 `GetLastError`，Linux 为
-  `dlerror()` 捕获串，注意后者读取即清除）。
+- `module_last_error` 返回数值错误码（Windows 为 `GetLastError`，Linux 为失败点
+  `errno`/0）；`module_last_error_text` 返回同一失败的可读文本（Windows 为
+  `FormatMessage` 系统文案，Linux 为 `dlerror()` 捕获串，注意后者读取即清除，
+  实现需在失败点就地快照到线程局部缓冲）。
 
 ## 3. 不在本目录
 
@@ -41,7 +44,7 @@
 |---|---|
 | 设备输出（PipeWire / PulseAudio / ALSA） | App 侧 `AudioOut`：`audio_out_linux.dart` 落地后由 `createAudioOut()` 工厂接入，调用方不变 |
 | 桥（VM / VAIO / ASIO） | `bridge/` 只实现 `ab_*` 契约（`core/desktop/windows-drivers/bridge/common/aurabridge.h`）+ Dart `BridgeDesc`；Windows 三桥不跨平台 |
-| 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 走 CMake `AURADSP_PLUGIN_HOST_REMOTE=OFF` 直通 |
+| 插件宿主 | 远程宿主（`engine/plugins/platform/win32/host/`，共享内存 + `CreateProcess`）为 Windows-only；Linux 用 `AURADSP_ENABLE_PLUGINS=OFF`（2026-11-01 已落地）整体裁掉 VST3/CLAP 宿主，引擎编入 `plugins/integration/{plugin_chain_adapter_stub,plugin_abi_stub}.cpp`，插件阶段直通且 C ABI 导出集不变。`AURADSP_PLUGIN_HOST_REMOTE=OFF` 只裁远程宿主，**不等于**可移植（仍编 Win32 插件驱动/格式实现） |
 | 插件编辑器 GUI | 方案 §8 的 `port/gui.h` 属 N4「插件生态跨平台」独立立项，尚未建立 |
 
 ## 4. 构建与验证（本轮不产出）

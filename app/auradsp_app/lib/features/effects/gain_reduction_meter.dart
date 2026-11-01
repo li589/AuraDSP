@@ -55,14 +55,14 @@ class _GainReductionMeterState extends State<GainReductionMeter>
     if ((_currentGr > 0.05 || _peakGr > 0.05) &&
         !_ticker.isActive &&
         mounted &&
-        TrayService.instance.isWindowVisible.value) {
+        PlatformAdapters.instance.window.isVisible) {
       _ticker.start();
     }
   }
 
   void _onTick(Duration elapsed) {
     if (!mounted) return;
-    if (!TrayService.instance.isWindowVisible.value) {
+    if (!PlatformAdapters.instance.window.isVisible) {
       if (_ticker.isActive) _ticker.stop();
       return;
     }

@@ -72,9 +72,11 @@ extension PluginManagerTables on PluginManager {
 
   Map<String, List<String>> _readQuarantineConfig() {
     try {
-      final f = PluginManager._quarantineConfigFile();
-      if (!f.existsSync()) return {'close': const [], 'open': const []};
-      final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
+      final read = DocumentStore.readJson(
+        PluginManager._quarantineConfigFile().path,
+      );
+      if (!read.ok) return {'close': const [], 'open': const []};
+      final j = read.data!;
       return {
         'close': (j['close'] as List?)?.cast<String>() ?? const [],
         'open': (j['open'] as List?)?.cast<String>() ?? const [],
@@ -90,16 +92,15 @@ extension PluginManagerTables on PluginManager {
     required List<String> open,
   }) {
     try {
-      final f = PluginManager._quarantineConfigFile();
-      if (!f.existsSync()) f.parent.createSync(recursive: true);
-      f.writeAsStringSync(
-        jsonEncode({
+      ConfigManager.writeJsonFile(
+        PluginManager._quarantineConfigFile().path,
+        {
           'close': close.where((p) => p.isNotEmpty).toSet().toList(),
           'open': open.where((p) => p.isNotEmpty).toSet().toList(),
-        }),
+        },
       );
     } catch (e) {
-      debugPrint('[PluginManager] quarantine config save failed: $e');
+      dbgLog('[PluginManager] quarantine config save failed: $e');
     }
   }
 
@@ -111,22 +112,17 @@ extension PluginManagerTables on PluginManager {
   /// （未及 sweep 移除），下次启动自动登记。
   void _journalEditorOpened(PluginMetadata meta) {
     try {
-      final f = PluginManager._editorJournalFile();
-      if (!f.existsSync()) f.parent.createSync(recursive: true);
-      List existing;
-      try {
-        existing = (jsonDecode(f.readAsStringSync()) as List?) ?? [];
-      } catch (e, st) {
-        swallow(e, st);
-        existing = [];
-      }
+      final path = PluginManager._editorJournalFile().path;
+      final existing = List<dynamic>.from(
+        DocumentStore.readJsonList(path) ?? const <dynamic>[],
+      );
       existing.removeWhere((e) => e is Map && e['path'] == meta.path);
       existing.add({
         'path': meta.path,
         'name': meta.name,
         'openedAt': DateTime.now().millisecondsSinceEpoch,
       });
-      f.writeAsStringSync(jsonEncode(existing));
+      DocumentStore.writeJson(path, existing);
       // 写入日志后确保清扫定时器已激活
       _startJournalTimerIfNeeded();
     } catch (e, st) { swallow(e, st); }
@@ -135,23 +131,23 @@ extension PluginManagerTables on PluginManager {
   /// 周期清扫：打开超过 PluginManager.kOpenHealthyMs 的条目视为「打开成功」，从日志移除。
   void sweepEditorJournal() {
     try {
-      final f = PluginManager._editorJournalFile();
-      if (!f.existsSync()) return;
-      final now = DateTime.now().millisecondsSinceEpoch;
-      final j = jsonDecode(f.readAsStringSync());
-      if (j is! List) {
-        f.deleteSync();
+      final path = PluginManager._editorJournalFile().path;
+      final j = DocumentStore.readJsonList(path);
+      if (j == null) {
+        // 缺失/坏格式：坏文件直接清掉，等待下次重建
+        DocumentStore.delete(path);
         return;
       }
+      final now = DateTime.now().millisecondsSinceEpoch;
       final alive = j.where((e) {
         if (e is! Map) return false;
         final t = e['openedAt'];
         return t is int && (now - t) < PluginManager.kOpenHealthyMs;
       }).toList();
       if (alive.isEmpty) {
-        f.deleteSync();
+        DocumentStore.delete(path);
       } else {
-        f.writeAsStringSync(jsonEncode(alive));
+        DocumentStore.writeJson(path, alive);
       }
     } catch (e, st) { swallow(e, st); }
   }
@@ -161,17 +157,18 @@ extension PluginManagerTables on PluginManager {
   void _autoRegisterFromCrashJournal() {
     List<String> crashed = [];
     try {
-      final f = PluginManager._editorJournalFile();
-      if (!f.existsSync()) return;
-      final j = jsonDecode(f.readAsStringSync());
-      if (j is List) {
-        for (final e in j) {
-          if (e is! Map) continue;
-          final p = _crashPattern(e['name'] as String?, e['path'] as String?);
-          if (p != null && p.isNotEmpty) crashed.add(p);
-        }
+      final path = PluginManager._editorJournalFile().path;
+      final j = DocumentStore.readJsonList(path);
+      if (j == null) {
+        DocumentStore.delete(path);
+        return;
       }
-      f.deleteSync();
+      for (final e in j) {
+        if (e is! Map) continue;
+        final p = _crashPattern(e['name'] as String?, e['path'] as String?);
+        if (p != null && p.isNotEmpty) crashed.add(p);
+      }
+      DocumentStore.delete(path);
     } catch (e, st) { swallow(e, st); }
     if (crashed.isEmpty) return;
     var changed = false;

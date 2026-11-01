@@ -15,6 +15,9 @@
      auradsp_wincompat + fs/env/log）；AURADSP_PLUGIN_HOST_SOURCES 含模块
      实现且 engine/宿主/插件测试目标均引用该源表；
      AURADSP_PLUGIN_HOST_REMOTE=OFF 分支自洽（清空 remote 源 + INPROC 门控）。
+  6. CP-12/CP-16（2026-11-01）：`plugins/driver/` 不得直接包含 OS 头
+     （Win32 入口须经 `plugins/platform/win32` 或 `platform/port`）；
+     `port/time.h` 纳入端口头纯声明检查。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -46,7 +49,7 @@ OS_SYMBOL = re.compile(
 SCAN_DIRS = ("", "chain", "dsp", os.path.join("plugins", "integration"))
 SRC_EXTS = (".c", ".cc", ".cpp", ".h", ".hpp")
 
-PORT_HEADERS = ("fs.h", "env.h", "log.h", "module.h")
+PORT_HEADERS = ("fs.h", "env.h", "log.h", "module.h", "time.h")
 WIN_IMPLS = ("win_compat.cpp", "fs_win.cpp", "env_win.cpp", "log_win.cpp")
 
 # M2：远程宿主与 Win32 模块加载的唯一归属地（相对 engine/）
@@ -153,6 +156,27 @@ def m2_layout():
           not hits, "; ".join(hits[:6]))
 
 
+def driver_os_isolation():
+    """CP-12/CP-16：driver 层不得直接包含 OS 头（Win32 入口须经 platform/win32）。
+    历史上 windows.h 藏在 plugin_host_manager.cpp，F1 因扫描面排除 driver 而漏检；
+    该文件已改走 port/time.h，此断言防回潮。"""
+    driver_dir = os.path.join(ENGINE, "plugins", "driver")
+    hits = []
+    if os.path.isdir(driver_dir):
+        for dirpath, _dirnames, filenames in os.walk(driver_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(SRC_EXTS):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, ENGINE).replace(os.sep, "/")
+                src = strip_comments(open(fp, encoding="utf-8", errors="replace").read())
+                for n, code in enumerate(src.splitlines(), 1):
+                    if OS_INCLUDE.search(code):
+                        hits.append(f"{rel}:{n}")
+    check("CP-12 driver 零直接 OS 头（Win32 入口须经 platform/win32/port）",
+          not hits, "; ".join(hits[:6]))
+
+
 def negative_self_test():
     bad = '#include <windows.h>\n#ifdef _WIN32\n'
     check("自检：扫描器能判红 OS 头", bool(OS_INCLUDE.search(bad)))
@@ -226,6 +250,17 @@ def cmake_layering():
     src = re.sub(r"#[^\n]*", "", raw)
 
     # 1. auradsp_core 源表零 platform/ 源（可移植核心不编任何平台适配）。
+    #    CP-27（2026-11-01）：源表抽到 engine/core_sources.cmake，需同样零 platform/。
+    core_sources = os.path.join(ENGINE, "core_sources.cmake")
+    check("CP-27 核心源表 engine/core_sources.cmake 存在", os.path.isfile(core_sources),
+          core_sources)
+    if os.path.isfile(core_sources):
+        css = open(core_sources, encoding="utf-8", errors="replace").read()
+        css = re.sub(r"#[^\n]*", "", css)  # 注释里的“不得含 platform/”说明不算源
+        check("CP-27 核心源表零 platform/ 源", "platform/" not in css,
+              "core_sources.cmake 出现 platform/ 路径")
+        check("CP-27 核心源表含 chain/dsp 关键源",
+              "chain/engine_chain.cpp" in css and "dsp/dsp_dyneq.cpp" in css)
     core_block = _cmake_call_block(src, r"add_library\s*\(\s*auradsp_core\b")
     check("R6 auradsp_core 源表存在", bool(core_block))
     check("R6 auradsp_core 零 platform/ 源",
@@ -244,13 +279,31 @@ def cmake_layering():
     for impl in ("fs_win.cpp", "env_win.cpp", "log_win.cpp"):
         check(f"R6 engine 编入 {impl}", impl in engine_block)
 
-    # 3. 模块实现唯一归属 win32 且进入共享源表（engine/宿主/测试复用）；
-    #    各目标定义块内必须显式出现 ${AURADSP_PLUGIN_HOST_SOURCES}。
+    # 3. 模块实现唯一归属 win32 且进入共享源表（宿主/测试复用）；
+    #    CP-02（2026-11-01）：引擎改经 AURADSP_ENGINE_PLUGIN_SOURCES 间接引用，
+    #    ON = host+integration(+remote)，OFF = 两个 stub（导出集不变）。
     host_sources = _cmake_call_block(src, r"set\s*\(\s*AURADSP_PLUGIN_HOST_SOURCES\b")
     check("R6 AURADSP_PLUGIN_HOST_SOURCES 含 plugin_module.cpp",
           "plugin_module.cpp" in host_sources)
+    check("R6 engine 引用 AURADSP_ENGINE_PLUGIN_SOURCES",
+          "${AURADSP_ENGINE_PLUGIN_SOURCES}" in engine_block,
+          "engine 未引用插件源表开关变量")
+    plugin_blocks = _cmake_if_blocks(src, r"if\s*\(\s*AURADSP_ENABLE_PLUGINS\b")
+    switch_blocks = [b for b in plugin_blocks if "AURADSP_ENGINE_PLUGIN_SOURCES" in b]
+    check("R6 插件源表开关分支存在", bool(switch_blocks))
+    switch_body = "\n".join(switch_blocks)
+    check("R6 插件 ON 分支引用 host+integration 源表",
+          "${AURADSP_PLUGIN_HOST_SOURCES}" in switch_body
+          and "${AURADSP_PLUGIN_INTEGRATION_SOURCES}" in switch_body)
+    check("R6 插件 OFF 分支使用 ABI/链阶段 stub",
+          "plugin_chain_adapter_stub.cpp" in switch_body
+          and "plugin_abi_stub.cpp" in switch_body)
+    no_plug_blocks = _cmake_if_blocks(src, r"if\s*\(\s*NOT\s+AURADSP_ENABLE_PLUGINS\b")
+    check("R6 插件 OFF 置 AURADSP_NO_PLUGINS",
+          any("AURADSP_NO_PLUGINS" in b for b in no_plug_blocks),
+          "OFF 分支未定义 AURADSP_NO_PLUGINS")
     targets_with_host_src = (
-        "auradsp_engine", "auradsp_plugin_host",
+        "auradsp_plugin_host",
         "test_plugin_direct", "test_plugin_chain", "test_host_quarantine",
     )
     for tgt in targets_with_host_src:
@@ -271,7 +324,8 @@ def cmake_layering():
     check("R6 REMOTE=OFF 引擎置 AURADSP_HOST_INPROC",
           any("AURADSP_HOST_INPROC" in b for b in off_blocks),
           "OFF 分支未门控 AURADSP_HOST_INPROC")
-    on_blocks = _cmake_if_blocks(src, r"if\s*\(\s*AURADSP_PLUGIN_HOST_REMOTE\b")
+    on_blocks = _cmake_if_blocks(
+        src, r"if\s*\(\s*AURADSP_ENABLE_PLUGINS\s+AND\s+AURADSP_PLUGIN_HOST_REMOTE\b")
     on_body = "\n".join(on_blocks)
     check("R6 REMOTE=ON 块构建 auradsp_plugin_host",
           "add_executable" in on_body and "auradsp_plugin_host" in on_body)
@@ -288,6 +342,7 @@ if __name__ == "__main__":
     port_purity()
     impl_presence()
     m2_layout()
+    driver_os_isolation()
     cmake_layering()
     negative_self_test()
     if FAIL:

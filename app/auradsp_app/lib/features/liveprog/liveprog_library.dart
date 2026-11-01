@@ -6,6 +6,8 @@ import 'dart:io';
 
 import '../../core/config.dart';
 import '../../core/error_sink.dart';
+import '../../core/io/document_store.dart';
+import '../../core/io/resource_gate.dart';
 import '../../platform/platform_profile.dart';
 
 /// 脚本库条目
@@ -34,16 +36,16 @@ abstract final class LiveprogLibrary {
   static int lastSkipped = 0;
 
   /// 门检：null = 放行，否则为原因码（'tooLarge' / 'unreadable'）。
-  /// 纯函数，可单测。
+  /// 读取策略统一走 ResourceGate（大小上限 + UTF-8 严格解码）。
   static String? gateCheck(File f) {
-    try {
-      if (f.lengthSync() > maxScriptBytes) return 'tooLarge';
-      // 全文 UTF-8 试解码：malformed 抛 FormatException → 隔离。
-      f.readAsStringSync(encoding: utf8);
-      return null;
-    } catch (e, st) {
-      swallow(e, st);
-      return 'unreadable';
+    final read = ResourceGate.readText(f.path, maxBytes: maxScriptBytes);
+    switch (read.issue) {
+      case ResourceIssue.ok:
+        return null;
+      case ResourceIssue.tooLarge:
+        return 'tooLarge';
+      default:
+        return 'unreadable';
     }
   }
 
@@ -152,14 +154,8 @@ abstract final class LiveprogLibrary {
   }
 
   static Future<String?> loadFromPath(String filePath) async {
-    try {
-      final f = File(filePath);
-      if (gateCheck(f) != null) return null;
-      return await f.readAsString(encoding: utf8);
-    } catch (e, st) {
-      swallow(e, st);
-      return null;
-    }
+    final read = ResourceGate.readText(filePath, maxBytes: maxScriptBytes);
+    return read.ok ? read.text : null;
   }
 
   /// 路径收敛：只允许操作本地库或已登记外部目录之下的文件
@@ -178,10 +174,7 @@ abstract final class LiveprogLibrary {
   static bool deletePath(String filePath, List<String> customDirs) {
     try {
       if (!_isUnderLibrary(filePath, customDirs)) return false;
-      final f = File(filePath);
-      if (!f.existsSync()) return true;
-      f.deleteSync();
-      return true;
+      return DocumentStore.delete(filePath);
     } catch (e, st) {
       swallow(e, st);
       return false;
@@ -198,12 +191,14 @@ abstract final class LiveprogLibrary {
       if (!_isUnderLibrary(oldPath, customDirs)) return false;
       final old = File(oldPath);
       if (!old.existsSync() || gateCheck(old) != null) return false;
+      final read = ResourceGate.readText(oldPath, maxBytes: maxScriptBytes);
+      if (!read.ok) return false;
       final sep = Platform.pathSeparator;
       final parent = old.parent.path;
-      final target = File('$parent$sep$newName');
-      if (target.existsSync()) return false;
-      target.writeAsStringSync(old.readAsStringSync(encoding: utf8));
-      old.deleteSync();
+      final target = '$parent$sep$newName';
+      if (ResourceGate.fileExists(target)) return false;
+      if (!DocumentStore.writeText(target, read.text!)) return false;
+      DocumentStore.delete(oldPath);
       return true;
     } catch (e, st) {
       swallow(e, st);
@@ -220,10 +215,7 @@ abstract final class LiveprogLibrary {
       final outDir = (targetDir != null && Directory(targetDir).existsSync())
           ? targetDir
           : dir;
-      final d = Directory(outDir);
-      if (!d.existsSync()) d.createSync(recursive: true);
-      File('$outDir${Platform.pathSeparator}$name').writeAsStringSync(text);
-      return true;
+      return DocumentStore.writeText('$outDir${Platform.pathSeparator}$name', text);
     } catch (e, st) {
       swallow(e, st);
       return false;

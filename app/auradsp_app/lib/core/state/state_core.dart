@@ -14,7 +14,46 @@ extension StateCore on AppModel {
     if (_testing && m['cmd'] == 'setParam') {
       sentParamsForTesting.add(Map<String, dynamic>.from(m));
     }
-    _toIso?.send(m);
+    if (_testing && m['cmd'] == 'setParamStr') {
+      sentStrParamsForTesting.add({
+        'id': m['id'],
+        'len': (m['text'] as String?)?.length ?? 0,
+      });
+    }
+    // 调试总线：所有真正发往音频 isolate 的命令都留痕。setParam 单独成类，
+    // 便于和 state_events 的 paramResult 回执按 id 对齐；长文本已截断。
+    final cmd = m['cmd'];
+    final port = _toIso;
+    if (port == null) {
+      // 音频 isolate 尚未连接：命令实际被丢弃，不能记成“已下发”而制造
+      // 永远等不到 ack 的假阳性。单独记 send.dropped 供启动期排障。
+      if (cmd == 'setParam' || cmd == 'setParamStr') {
+        DebugTrace.instance.event('param', 'send.dropped', data: {
+          'id': m['id'],
+          'cmd': cmd,
+        });
+      } else if (cmd is String) {
+        DebugTrace.instance.event('command', 'send.dropped', data: {'cmd': cmd});
+      }
+      return;
+    }
+    if (cmd == 'setParam') {
+      DebugTrace.instance.paramSent(
+        (m['id'] as String?) ?? '?',
+        m['value'],
+        kind: (m['isFloat'] as bool?) == true ? 'float' : 'int',
+      );
+    } else if (cmd == 'setParamStr') {
+      final text = (m['text'] as String?) ?? '';
+      DebugTrace.instance.paramSent(
+        (m['id'] as String?) ?? '?',
+        'len=${text.length}',
+        kind: 'string',
+      );
+    } else if (cmd is String) {
+      DebugTrace.instance.command(cmd, m);
+    }
+    port.send(m);
   }
 
   // ---- 命令下发 ----
@@ -720,16 +759,14 @@ extension StateCore on AppModel {
     port.listen(_onMessage);
     if (!_trayVisibilitySubscribed) {
       _trayVisibilitySubscribed = true;
-      TrayService.instance.isWindowVisible.addListener(
-        _onWindowVisibilityChanged,
-      );
+      window.visibleListenable.addListener(_onWindowVisibilityChanged);
     }
   }
 
   void _onWindowVisibilityChanged() {
     send({
       'cmd': 'setVizSuspended',
-      'value': !TrayService.instance.isWindowVisible.value,
+      'value': !window.isVisible,
     });
   }
 

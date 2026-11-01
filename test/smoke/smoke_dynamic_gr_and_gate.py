@@ -288,15 +288,17 @@ print("\n--- 6. Limiter & Compressor GR Metering ---")
 # 6.1 Limiter GR
 reset_engine()
 set_i("limiter.enable", 1)
-set_f("limiter.threshold", -6.0)       # -6 dBFS (vendor chain limits input to 0 dBFS / 1.0)
+set_f("limiter.threshold", -6.0)       # -6 dBFS
 set_f("limiter.release_ms", 50.0)
 set_i("limiter.lookahead", 1)
 
-# 输入 +6dBFS 信号 (amp = 2.0)
+# 输入 +6dBFS 信号 (amp = 2.0)；ADR-010/A-01 后立体声链只有链尾现代限幅器，
+# 从 +6 dBFS 压到 -6 dBFS 应为 12 dB GR（旧断言 6 dB 依赖已移除的 vendor
+# legacy limiter 先压到 0 dBFS，属双限幅器的旧行为）。
 process_freq_burst(1000.0, 2.0, blocks=40)
 rc, gr_lim = get_f("gr.limiter")
-check("limiter GR detects +6dB overload (~6dB attenuation)",
-      5.0 <= gr_lim <= 7.0, f"expected GR ~ 6dB, got {gr_lim:.2f}dB")
+check("limiter GR detects +6dBFS->-6dBFS overload (~12dB attenuation)",
+      11.0 <= gr_lim <= 13.0, f"expected GR ~ 12dB, got {gr_lim:.2f}dB")
 
 # 6.2 Compressor GR
 reset_engine()

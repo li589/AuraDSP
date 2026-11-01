@@ -482,7 +482,7 @@ abstract final class ParamRegistry {
     id: 'eq.bypass', section: 'eq', key: 'bypass',
     type: ParamType.boolean, defaultValue: false,
     getter: (m) => m.eqBypass,
-    setter: (m, v) => m.eqBypass = v,
+    setter: (m, v) => m.setEqBypass(v),
   );
   static final eqAutoGain = ParamSpec<bool>(
     id: 'eq.autogain', section: 'eq', key: 'autoGain',

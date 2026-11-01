@@ -17,10 +17,11 @@ import 'package:flutter/foundation.dart'
     show ValueListenable, visibleForTesting;
 import 'package:flutter/material.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
-import '../core/tray_service.dart';
+import '../platform/adapters.dart';
 import '../engine/auradsp_ffi.dart' show VizBands;
 
 /* ==================== 1. 页面骨架 ==================== */
@@ -312,13 +313,13 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
   int _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
 
   bool get _effective =>
-      _pageActive && TrayService.instance.isWindowVisible.value;
+      _pageActive && PlatformAdapters.instance.window.isVisible;
 
   @override
   void initState() {
     super.initState();
     widget.spectrum.addListener(_onFrame);
-    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(_onVisibilityChanged);
     // 首帧到达前也可能已有历史值（切页回来），先武装一次无信号检测。
     _armStaleTimer();
   }
@@ -418,7 +419,7 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
 
   @override
   void dispose() {
-    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(_onVisibilityChanged);
     _staleTimer?.cancel();
     _decayTimer?.cancel();
     widget.spectrum.removeListener(_onFrame);
@@ -556,7 +557,7 @@ class _AmbientPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (!TrayService.instance.isWindowVisible.value) return;
+    if (!PlatformAdapters.instance.window.isVisible) return;
     if (_env.stale) {
       // 无信号：只衰减，不重采样陈旧数据
       _env.decay();
@@ -701,14 +702,14 @@ class _PulseDotState extends State<PulseDot>
   @override
   void initState() {
     super.initState();
-    if (widget.active && TrayService.instance.isWindowVisible.value) {
+    if (widget.active && PlatformAdapters.instance.window.isVisible) {
       _c.repeat();
     }
-    TrayService.instance.isWindowVisible.addListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.addListener(_onVisibilityChanged);
   }
 
   void _onVisibilityChanged() {
-    if (!TrayService.instance.isWindowVisible.value) {
+    if (!PlatformAdapters.instance.window.isVisible) {
       if (_c.isAnimating) _c.stop();
     } else if (widget.active && !_c.isAnimating) {
       _c.repeat();
@@ -718,7 +719,7 @@ class _PulseDotState extends State<PulseDot>
   @override
   void didUpdateWidget(PulseDot old) {
     super.didUpdateWidget(old);
-    final visible = TrayService.instance.isWindowVisible.value;
+    final visible = PlatformAdapters.instance.window.isVisible;
     if (widget.active && visible && !_c.isAnimating) {
       _c.repeat();
     } else if (!visible && _c.isAnimating) {
@@ -732,7 +733,7 @@ class _PulseDotState extends State<PulseDot>
 
   @override
   void dispose() {
-    TrayService.instance.isWindowVisible.removeListener(_onVisibilityChanged);
+    PlatformAdapters.instance.window.visibleListenable.removeListener(_onVisibilityChanged);
     _c.dispose();
     super.dispose();
   }
@@ -898,7 +899,11 @@ class AuraSegmented<T> extends StatelessWidget {
                           Widget btn = GestureDetector(
                             behavior: HitTestBehavior.opaque,
                             onTap: enabled
-                                ? () => onChanged!(segments[k].value)
+                                ? () {
+                                    DebugTrace.instance.tap(
+                                        'segment', segments[k].label);
+                                    onChanged!(segments[k].value);
+                                  }
                                 : null,
                             child: Center(
                               child: AnimatedDefaultTextStyle(
@@ -998,7 +1003,12 @@ class _AuraChipState extends State<AuraChip> {
       onExit: (_) => setState(() => _hover = false),
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
+        onTap: widget.onTap == null
+            ? null
+            : () {
+                DebugTrace.instance.tap('chip', widget.label);
+                widget.onTap!();
+              },
         child: AnimatedContainer(
           duration: AuraDur.fast,
           curve: AuraCurve.standard,
@@ -1218,7 +1228,13 @@ class _AuraDropdownState<T> extends State<AuraDropdown<T>> {
           child: DropdownButton<T>(
             value: effectiveValue,
             items: uniqueItems,
-            onChanged: enabled ? widget.onChanged : null,
+            onChanged: enabled
+                ? (v) {
+                    DebugTrace.instance
+                        .tap('dropdown', '${widget.value ?? '-'} -> $v');
+                    widget.onChanged!(v);
+                  }
+                : null,
             isDense: true,
             isExpanded: widget.isExpanded,
             dropdownColor: p.panelRaised,

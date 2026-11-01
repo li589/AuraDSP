@@ -22,7 +22,8 @@
 ## 构建
 
 ```bash
-# NDK r30: D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198
+# NDK r30 缺省路径: D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198
+# macOS/Linux 请先 export ANDROID_NDK=<NDK 根目录>（脚本按 uname 选择宿主标签）
 cd core/android/spike-global-effect
 aarch64-linux-android34-clang -O2 -fPIC -shared -Wall src/spike_eq.c \
   -o out/libspikeeq.so -llog -lm -Wl,-z,max-page-size=16384

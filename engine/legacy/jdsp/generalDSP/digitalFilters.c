@@ -194,12 +194,20 @@ void ButterworthCalcCoefficients(const double fs, const double freq1_cutoff, flo
 #define M_2PI (M_PI * 2.0)
 #endif
 // oversample
-void oversample_makeSmp(samplerateTool *oversample, int factor)
+void oversample_makeSmpCutoff(samplerateTool *oversample, int factor, double cutoffRatio)
 {
 	oversample->factor = factor;
-	ButterworthCalcCoefficients(2 * oversample->factor, 0.89, &oversample->gain, oversample->coeffs); // 0.89 Antialiasing
+	/* [PATCHED-AuraDSP P-049] cutoffRatio 是「相对输入 Nyquist」的截止比例；
+	 * ButterworthCalcCoefficients 的 fs 参数传 2*factor（高采样率以输入
+	 * Nyquist 为单位），故直接传比例。 */
+	ButterworthCalcCoefficients(2 * oversample->factor, cutoffRatio, &oversample->gain, oversample->coeffs);
 	memset(&oversample->lpfU, 0, sizeof(iirSOS));
 	memset(&oversample->lpfD, 0, sizeof(iirSOS));
+}
+void oversample_makeSmp(samplerateTool *oversample, int factor)
+{
+	/* 保留原行为：dbb 等旧调用方仍按 0.89 设计。 */
+	oversample_makeSmpCutoff(oversample, factor, 0.89);
 }
 // output length must be oversample->factor
 void oversample_stepupSmp(samplerateTool *oversample, float input, float *output)

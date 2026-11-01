@@ -95,8 +95,9 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
             children: [
               Text(l.sysAutostart, style: labelOf(p, size: 12)),
               AuraSwitch(
-                value: AutoStartService.instance.enabled ?? false,
-                onChanged: (v) => AutoStartService.instance.setEnabled(v),
+                value: PlatformAdapters.instance.autoStart.enabled ?? false,
+                onChanged: (v) =>
+                    PlatformAdapters.instance.autoStart.setEnabled(v),
               ),
             ],
           ),

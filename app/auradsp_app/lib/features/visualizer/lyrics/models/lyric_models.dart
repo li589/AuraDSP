@@ -1,3 +1,7 @@
+// `MediaTrackMetadata` 已上移至 core/media_track.dart（平台端口需要消费它，
+// platform/ 不能反向依赖 features/）。此处 re-export 保持既有 import 不变。
+export '../../../../core/media_track.dart';
+
 /// Models for timed lyrics, syllables, and media session metadata
 class LyricSyllable {
   final Duration startTime;
@@ -112,43 +116,4 @@ class LyricDocument {
   }
 }
 
-/// Normalized media playback track metadata
-class MediaTrackMetadata {
-  final String title;
-  final String artist;
-  final String album;
-  final Duration duration;
-  final Duration position;
-  final bool isPlaying;
 
-  const MediaTrackMetadata({
-    this.title = '',
-    this.artist = '',
-    this.album = '',
-    this.duration = Duration.zero,
-    this.position = Duration.zero,
-    this.isPlaying = false,
-  });
-
-  static const MediaTrackMetadata empty = MediaTrackMetadata();
-
-  bool get hasContent => title.isNotEmpty || artist.isNotEmpty;
-
-  MediaTrackMetadata copyWith({
-    String? title,
-    String? artist,
-    String? album,
-    Duration? duration,
-    Duration? position,
-    bool? isPlaying,
-  }) {
-    return MediaTrackMetadata(
-      title: title ?? this.title,
-      artist: artist ?? this.artist,
-      album: album ?? this.album,
-      duration: duration ?? this.duration,
-      position: position ?? this.position,
-      isPlaying: isPlaying ?? this.isPlaying,
-    );
-  }
-}

@@ -1,8 +1,8 @@
 {
   "name": "V-Shape Smile Hi-Fi",
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "isFactory": true,
-  "category": "流行流行",
+  "category": "流行",
   "description": "两端提升中间平缓的经典 Smile 调音，能量充沛，明快抓耳",
   "params": {
     "input": {
@@ -11,13 +11,13 @@
       "balanceR": 1.0
     },
     "bass": {
-      "intensity": 0.7,
+      "intensity": 0.35,
       "mode": 0,
       "cutoff": 130.0,
-      "harmonics": 0.5,
+      "harmonics": 0.2,
       "harmonicBlend": 0.5,
       "subFloor": 25.0,
-      "gain": 0.0,
+      "gain": 5.25,
       "autoGain": false,
       "outputGain": 0.0,
       "enable": true
@@ -37,10 +37,10 @@
       "enable": false
     },
     "tube": {
-      "gain": 3.5,
+      "gain": 3.0,
       "style": 0,
       "compensation": 0.0,
-      "mix": 0.8,
+      "mix": 1.0,
       "autoGain": false,
       "outputGain": 0.0,
       "oversample": true,
@@ -76,21 +76,21 @@
         16000.0
       ],
       "gains": [
-        5.0,
-        4.0,
-        3.0,
-        1.5,
-        0.0,
-        -1.5,
+        1.4,
+        0.9,
+        -0.1,
+        -1.2,
         -2.5,
-        -2.5,
-        -1.5,
-        0.0,
-        1.5,
-        3.0,
-        4.0,
-        5.0,
-        5.5
+        -2.6,
+        -1.0,
+        0.1,
+        0.2,
+        0.4,
+        1.1,
+        2.0,
+        2.8,
+        3.8,
+        7.0
       ],
       "qs": [
         1.414,
@@ -111,7 +111,7 @@
       ]
     },
     "stereo": {
-      "mix": 0.35,
+      "mix": 0.0,
       "bandUsed": false,
       "on": false,
       "band0": 0.5,
@@ -291,7 +291,7 @@
       ]
     },
     "post": {
-      "gain": 0.0,
+      "gain": -1.5,
       "limiterEnable": true,
       "release": 100.0,
       "threshold": -0.1,

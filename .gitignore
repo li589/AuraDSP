@@ -23,6 +23,8 @@ venv/
 
 # --- 构建产物 ---
 **/out/
+# CP-02（2026-11-01）：AURADSP_ENABLE_PLUGINS=OFF 的独立产物目录
+**/out-noplugins/
 **/build/
 # AuraVAIO 内核驱动 MSBuild 产物：两条轨各自的 x64/ 输出与其中的包目录
 # （AuraVaioDriver/、AuraVaioDriverLegacy/）。不用裸 **/x64/，避免误伤

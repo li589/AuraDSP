@@ -18,7 +18,7 @@ extension StateEvents on AppModel {
     switch (raw['evt'] as String) {
       case 'isoReady':
         _toIso = raw['port'] as SendPort;
-        if (!TrayService.instance.isWindowVisible.value) {
+        if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
         }
         break;
@@ -690,12 +690,23 @@ extension StateEvents on AppModel {
         final rc = raw['rc'] as int;
         final id = raw['id'] as String;
         final t0 = _pendingSentAt.remove(id);
+        final tookMs = t0 == null
+            ? -1
+            : DateTime.now().millisecondsSinceEpoch - t0;
         if (t0 != null) {
           // 点击 → 引擎确认 的回环耗时（定位"生效慢"到底慢在哪一段）
-          dbgLog(
-            'rt $id = ${DateTime.now().millisecondsSinceEpoch - t0}ms rc=$rc',
-          );
+          dbgLog('rt $id = ${tookMs}ms rc=$rc');
         }
+        // 调试总线：DSP 层实际接收/拒绝的回执，与 ui/param 事件按 id 对齐。
+        // value 是音频 isolate 回显的“已接收值”（字符串回长度），
+        // 让 HUD 能直接对照“发出去的值 / DSP 收到的值 / rc”。
+        DebugTrace.instance.paramAck(
+          id,
+          rc,
+          tookMs,
+          value: raw['value'],
+          msg: (raw['msg'] as String?) ?? '',
+        );
         // v3：脚本编译耗时回传（成功失败都记，供胶囊展示）
         if (id == ParamId.lpCode && raw['tookMs'] is int) {
           lpCompileMs = raw['tookMs'] as int;
@@ -727,7 +738,7 @@ extension StateEvents on AppModel {
         }
         break;
       case 'viz':
-        if (!TrayService.instance.isWindowVisible.value) break;
+        if (!window.isVisible) break;
         spectrum.value = (raw['spectrum'] as List).cast<double>();
         if (raw['eqIn'] != null) {
           eqInSpectrum.value = (raw['eqIn'] as List).cast<double>();

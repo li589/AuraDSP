@@ -10,6 +10,14 @@
      WASAPI 实现在 audio_out_wasapi.dart 且由 createAudioOut 工厂分派；
      audio_isolate.dart 不再定义 WasapiOut（类型面已解耦）；
      旧的 audio_device.dart / audio_guid.dart 已删除。
+  4. F7（CP-14，2026-11-01）：依赖方向门禁——`lib/core/` 不得 import/export
+     `features/` 或 `ui/`（依赖方向 features → core → engine）。
+  5. F9/F10（APP 目录重组方案 2026-11-01）：非 `lib/platform/` 文件不得直连
+     `file_selector/window_manager/tray_manager/nativeapi` 或具体平台实现目录，
+     不得出现 `Process.run/start` 与 `reg.exe`；`Platform.environment/
+     resolvedExecutable` 只允许 platform 与 engine。
+  6. F11：`lib/core/` 只允许 import `platform/platform_profile.dart` 与
+     `platform/port/*`，不得依赖具体实现或组合根 `adapters.dart`。
 
 反向自检：脚本用一段合成违规文本证明扫描器真的会判红（非恒真门禁）。
 """
@@ -35,7 +43,35 @@ def check(name, cond, detail=""):
 
 
 PLATFORM_API = re.compile(r"\bPlatform\.is[A-Za-z]+\b|\bdefaultTargetPlatform\b")
+# F9（APP-目录重组方案 2026-11-01）：平台第三方包/具体实现只允许 lib/platform/。
+PLATFORM_ONLY_SNIPPETS = (
+    "package:file_selector/",
+    "package:window_manager/",
+    "package:tray_manager/",
+    "package:nativeapi/",
+    "package:nativeapi_flutter/",
+    "platform/dialogs/",
+    "platform/shell/",
+    "platform/registry/",
+    "platform/autostart/",
+    "platform/tray/",
+    "platform/media/",
+    "platform/plugins/",
+    "platform/system/",
+)
+# F10：进程与注册表调用只允许 lib/platform/。
+PROCESS_API = re.compile(r"\bProcess\.(?:run|runSync|start)\b")
+REG_EXE = re.compile(r"reg\.exe")
+# 环境变量/可执行文件路径：engine/ 的 DLL/桥覆盖属于传输层，允许；其余只允许 platform。
+PLATFORM_ENV = re.compile(r"\bPlatform\.(?:environment|resolvedExecutable)\b")
+# F11：core 只能依赖 platform_profile 与 port 契约。
+CORE_PLATFORM_IMPORT = re.compile(
+    r"\b(?:import|export)\s+['\"]([^'\"]*platform/[^'\"]*)['\"]")
 CLASS_WASAPI_OUT = re.compile(r"\bclass\s+WasapiOut\b")
+# F7：core 只能被 features 依赖，不得反向 import UI 层。
+CORE_TO_UPPER = re.compile(
+    r"\b(?:import|export)\s+['\"](?:\.\./)+(?:features|ui)/"
+    r"|\b(?:import|export)\s+['\"]package:auradsp_app/(?:features|ui)/")
 
 PROFILE_MEMBERS = (
     "static String get os",
@@ -43,6 +79,8 @@ PROFILE_MEMBERS = (
     "static bool get supportsPlugins",
     "static bool get supportsLocalDevice",
     "static String get configDir",
+    "static String get executableDir",
+    "static bool get isTestRun",
     "static String pathKey(",
     "static String pathPlaceholder(",
     "static List<String> get engineLibraryCandidates",
@@ -95,6 +133,70 @@ def quarantine_scan():
           PROFILE_FILE)
 
 
+def dependency_direction():
+    """F7：lib/core 不得反向依赖 features/ui（依赖方向 features → core）。"""
+    core_dir = os.path.join(APP_LIB, "core")
+    hits = []
+    if os.path.isdir(core_dir):
+        for dirpath, _dirnames, filenames in os.walk(core_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(".dart"):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, APP_LIB).replace(os.sep, "/")
+                for n, code in enumerate(strip_comments(read(fp)).splitlines(), 1):
+                    if CORE_TO_UPPER.search(code):
+                        hits.append(f"{rel}:{n}")
+    check("F7 lib/core 零 import/export features/ui（依赖方向单向）",
+          not hits, "; ".join(hits[:8]))
+
+
+def _core_platform_allowed(target):
+    """core 只允许 platform_profile 与 port 契约。"""
+    return (target.endswith("platform/platform_profile.dart")
+            or "/platform/port/" in target)
+
+
+def platform_implementation_quarantine():
+    """F9/F10：非 platform/ 文件不得直连平台包、进程、注册表、环境路径。"""
+    hits = []
+    for fp in iter_lib_files():  # 已排除 lib/platform/ 与 l10n/gen
+        rel = os.path.relpath(fp, APP_LIB).replace(os.sep, "/")
+        for n, code in enumerate(strip_comments(read(fp)).splitlines(), 1):
+            for snippet in PLATFORM_ONLY_SNIPPETS:
+                if snippet in code:
+                    hits.append(f"{rel}:{n} ({snippet})")
+                    break
+            if PROCESS_API.search(code):
+                hits.append(f"{rel}:{n} (Process)")
+            if REG_EXE.search(code):
+                hits.append(f"{rel}:{n} (reg.exe)")
+            if PLATFORM_ENV.search(code) and not rel.startswith("engine/"):
+                hits.append(f"{rel}:{n} (Platform.env/exe)")
+    check("F9/F10 非 platform 文件零平台包/进程/注册表/环境直连",
+          not hits, "; ".join(hits[:8]))
+
+
+def core_port_boundary():
+    """F11：core 不得依赖平台具体实现或组合根。"""
+    hits = []
+    core_dir = os.path.join(APP_LIB, "core")
+    if os.path.isdir(core_dir):
+        for dirpath, _dirnames, filenames in os.walk(core_dir):
+            for fn in sorted(filenames):
+                if not fn.endswith(".dart"):
+                    continue
+                fp = os.path.join(dirpath, fn)
+                rel = os.path.relpath(fp, APP_LIB).replace(os.sep, "/")
+                for n, code in enumerate(strip_comments(read(fp)).splitlines(), 1):
+                    for m in CORE_PLATFORM_IMPORT.finditer(code):
+                        target = m.group(1)
+                        if not _core_platform_allowed(target):
+                            hits.append(f"{rel}:{n} -> {target}")
+    check("F11 lib/core 只依赖 platform_profile/port（不依赖具体实现）",
+          not hits, "; ".join(hits[:8]))
+
+
 def profile_contract():
     src = read(PROFILE_FILE)
     code = strip_comments(src)
@@ -138,10 +240,28 @@ def negative_self_test():
     check("自检：扫描器能判红 Platform.is", bool(PLATFORM_API.search(bad)))
     check("自检：扫描器能判红 WasapiOut 定义",
           bool(CLASS_WASAPI_OUT.search("final class WasapiOut implements AudioOut {}")))
+    check("自检：扫描器能判红 core→features 反向依赖",
+          bool(CORE_TO_UPPER.search("import '../features/settings_page.dart';")))
+    check("自检：扫描器能判红 core→ui 反向依赖",
+          bool(CORE_TO_UPPER.search("export 'package:auradsp_app/ui/widgets.dart';")))
+    check("自检：F9 判红 file_selector",
+          any(s in "import 'package:file_selector/file_selector.dart';"
+              for s in PLATFORM_ONLY_SNIPPETS))
+    check("自检：F10 判红 Process.run",
+          bool(PROCESS_API.search("await Process.run('x', []);")))
+    check("自检：F10 判红 reg.exe",
+          bool(REG_EXE.search("Process.run('reg.exe', []);")))
+    check("自检：F11 判红 core→adapters",
+          not _core_platform_allowed("../platform/adapters.dart"))
+    check("自检：F11 放行 core→port",
+          _core_platform_allowed("../../platform/port/file_dialog.dart"))
 
 
 if __name__ == "__main__":
     quarantine_scan()
+    dependency_direction()
+    platform_implementation_quarantine()
+    core_port_boundary()
     profile_contract()
     m4_structure()
     negative_self_test()

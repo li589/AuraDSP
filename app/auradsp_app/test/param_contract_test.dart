@@ -78,7 +78,6 @@ const Map<String, String> kSetterHelper = {
 /// kUiOnlySpecIds 登记的是"引擎无此参数"。
 const Set<String> kNoEngineWriteSpecIds = {
   // 字段直赋（m.xxx = v）
-  'eq.bypass', // toggleEqBypass 特路消费；引擎无 eq.bypass
   'eq.presetName', // UI 预设名，不入引擎
   'stereo.bandUsed', // 字段直赋，_pushStereoChain 间接影响 bandUsed 推送
   // 空实现 noop（setter 是 (m, v) {}）
@@ -90,11 +89,9 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.pipelineOutput', // 宿主路由配置，ConfigManager 域
   // 方法链为空（方法体走 config.* + ConfigManager.save，不引用任何引擎 id）
   'comp.ratio', // 引擎无 comp.ratio 参数（vendor 多段压缩无比率）；静态孤儿 spec
-  'eq.filter', // setEqFilter 仅切 UI 滤波类型
-  'eq.interp', // setEqInterp 仅切 UI 插值
-  // 注：eq.bandsCount / eq.q 不在此列——二者经 setEqBandsCount/fillEqQ →
-  // _pushEqCurve 向引擎下发 eq.curve（链非空；引擎无同名参数，形态走
-  // kUiOnlySpecIds 豁免期望断言）
+  // 注：eq.bandsCount / eq.q / eq.filter / eq.interp / eq.bypass 不在此列——
+  // 它们都经 _pushEqCurve 向引擎下发 eq.curve（链非空；引擎无同名参数，
+  // 形态走 kUiOnlySpecIds 豁免期望断言）
   'routing.apoTargetEndpoint', // APO 端点，ConfigManager 域
   'routing.asioBufSize', // ASIO 缓冲档，ConfigManager 域
   'routing.asioDriver', // ASIO 驱动，ConfigManager 域
@@ -1193,7 +1190,7 @@ ${hits.join('\n')}''');
   // 本部分改为形态 + 防回退镜像守卫）
   // ---------------------------------------------------------------------------
   group('Part J kLat 延迟表契约', () {
-    test('引擎 kLat* 5 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
+    test('引擎 kLat* 6 条形态（tier>=0 且 frames/ms 恰有一项>0；comp/limiter/arbmag 走动态）', () {
       final src = _read('engine/engine_internal.h');
       // D1（2026-10-24）：LatencyItem 拆成 {tier, frames, ms} 三字段——
       // 结构性帧数延迟（comp 4096 帧）按采样率换算，名义毫秒值原样用。
@@ -1208,12 +1205,13 @@ ${hits.join('\n')}''');
             frames: int.parse(m.group(3)!),
             ms: double.parse(m.group(4)!),
           )).toList();
-      // 5 条：arbmag / comp / limiter 三项刻意不在表内——
+      // 6 条：reverb / convolver / bass / crossfeed / spatial / ddc。
+      // arbmag / comp / limiter 三项刻意不在表内——
       //   arbmag = 单块帧数（随驱动块长变）；
       //   comp   = fftLen-ovpLen，随 tfresolution 变（D7 实测，见 kCompLatProfile）；
       //   limiter= 随 lookahead 模式在 0 / ~1.5ms 之间切（D7 实测）。
       // 三者都由 compute_latency 直接算，写常量必错。
-      expect(rows.length, 5, reason: '引擎 kLat 表条目数应为 5（arbmag/comp/limiter 走动态）');
+      expect(rows.length, 6, reason: '引擎 kLat 表条目数应为 6（arbmag/comp/limiter 走动态）');
       for (final r in rows) {
         expect(r.tier, greaterThanOrEqualTo(0), reason: 'kLat${r.name} tier 应>=0');
         final hasFrames = r.frames > 0;

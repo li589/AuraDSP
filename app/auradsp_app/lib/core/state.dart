@@ -5,7 +5,7 @@
  * 可观察状态；viz 高频数据走独立 ValueNotifier（30fps），避免整页重建。
  */
 import 'dart:async';
-import 'dart:convert' show jsonDecode, utf8;
+import 'dart:convert' show jsonDecode;
 import 'dart:io';
 import 'dart:ffi';
 import 'dart:isolate';
@@ -18,6 +18,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Color, Locale;
 
 import '../engine/audio_isolate.dart';
+import 'debug/debug_trace.dart';
 import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
@@ -31,16 +32,21 @@ import '../engine/auradsp_ffi.dart'
 import '../engine/debug_log.dart';
 import '../engine/head_tracker.dart';
 import '../platform/platform_profile.dart';
+import '../platform/port/plugin_dirs.dart';
+import '../platform/port/registry.dart';
+import '../platform/port/window.dart';
+import '../platform/port/windows_system.dart';
 import 'config.dart';
 import 'audio_modes.dart';
 import 'eel_slider_parser.dart';
 import 'plugins/plugin_manager.dart';
 import 'error_sink.dart';
+import 'io/resource_gate.dart';
 import 'param_schema.dart';
+import 'ports/null_ports.dart';
 import 'presets.dart';
 import 'session_memory.dart';
 import 'theme.dart';
-import 'tray_service.dart';
 import 'visualizer_types.dart';
 
 part 'state/state_models.dart';
@@ -90,6 +96,12 @@ const List<int> kReverbCuratedPresets = [5, 3, 1, 2, 9, 7, 11, 15];
 
 class AppModel extends ChangeNotifier {
   final HeadTracker _headTracker = HeadTracker();
+
+  /// 平台端口（组合根在 main.dart 注入；测试/缺省走 core/ports/null_ports）。
+  final PluginDirsPort pluginDirs;
+  final RegistryPort registry;
+  final WindowsSystemPort windowsSystem;
+  final WindowPort window;
 
   /// 声场展宽的引擎侧安全上限。
   /// libjamesdsp 的展宽在 mix=1.0 时执行 `band - centre`（中置完全剥离），
@@ -871,6 +883,11 @@ class AppModel extends ChangeNotifier {
   /// （P-032 修的正是三处漏发）。
   final List<Map<String, dynamic>> sentParamsForTesting = [];
 
+  /// 同 [sentParamsForTesting]，记录字符串参数（`eq.curve` / `liveprog.code` 等）。
+  /// 只存 id + 长度：曲线/脚本全文不值得在测试里整段搬运，断言“有没有下发”
+  /// 已足够（架构/插值切换只改曲线前缀，不下发独立参数）。
+  final List<Map<String, dynamic>> sentStrParamsForTesting = [];
+
   /// ChangeNotifier 保护成员的库内转发。
   ///
   /// 拆分后 AppModel 的方法迁入 `extension ... on AppModel`（part 文件），
@@ -898,7 +915,17 @@ class AppModel extends ChangeNotifier {
   }
 
   // ignore: prefer_initializing_formals (testing 是公开测试 API，不可用 this._testing 私有形参)
-  AppModel({bool testing = false}) : _testing = testing {
+  AppModel({
+    bool testing = false,
+    PluginDirsPort? pluginDirs,
+    RegistryPort? registry,
+    WindowsSystemPort? windowsSystem,
+    WindowPort? window,
+  })  : _testing = testing,
+        pluginDirs = pluginDirs ?? const NullPluginDirs(),
+        registry = registry ?? const NullRegistry(),
+        windowsSystem = windowsSystem ?? const NullWindowsSystem(),
+        window = window ?? NullWindowPort() {
     config = ConfigManager.load();
     // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
     // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
@@ -1161,7 +1188,7 @@ class AppModel extends ChangeNotifier {
     visualizerImmersive.dispose();
     visualizerConfig.dispose();
     _headTracker.stop();
-    TrayService.instance.isWindowVisible.removeListener(
+    window.visibleListenable.removeListener(
       _onWindowVisibilityChanged,
     );
     _trayVisibilitySubscribed = false;

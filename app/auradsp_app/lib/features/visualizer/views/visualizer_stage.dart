@@ -196,7 +196,9 @@ class _VisualizerStageState extends State<VisualizerStage>
           LyricsSyncState.idle || LyricsSyncState.noMedia =>
             l.visualizerLyricsNoMediaHint,
           LyricsSyncState.searching => l.visualizerLyricsSearchingHint,
-          LyricsSyncState.ready => l.visualizerLyricsNotFoundHint,
+          LyricsSyncState.ready => doc.artist?.isNotEmpty == true
+              ? doc.artist!
+              : l.visualizerLyricsReady,
           LyricsSyncState.notFound => l.visualizerLyricsNotFoundHint,
           LyricsSyncState.unsupported => l.visualizerLyricsUnsupportedHint,
         };

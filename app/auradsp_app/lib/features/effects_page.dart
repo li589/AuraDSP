@@ -7,7 +7,6 @@
  * - Phase 3: 多段交互式 EQ 频谱面板与发光 Q 旋钮
  * - Phase 4: 低音重构（谐波注入）、电子管模拟器卡片与组件级微型延迟徽标
  */
-import 'dart:io';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
@@ -15,14 +14,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/nav.dart';
 import '../core/param_schema.dart';
+import '../core/io/resource_gate.dart';
 import '../core/path_memory.dart';
 import '../core/presets.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
-import '../core/tray_service.dart';
+import '../platform/adapters.dart';
 import '../core/ui_helpers.dart';
 import '../engine/auradsp_ffi.dart' show kVizChannelMax;
 import '../l10n/gen/app_localizations.dart';
@@ -298,6 +299,11 @@ class _ValueSliderState extends State<ValueSlider> {
                   onChanged: widget.enabled
                       ? (v) {
                           setState(() => _dragging = v);
+                          DebugTrace.instance.uiControl(
+                            widget.label,
+                            v,
+                            widget: 'slider',
+                          );
                           widget.onChanged(v);
                         }
                       : null,

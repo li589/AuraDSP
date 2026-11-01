@@ -1077,7 +1077,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get engineFailedBody =>
-      'auradsp_engine.dll が見つからないか、初期化に失敗しました。DLL が同梱済みの場合は、下のエラー詳細を確認してください（音声デバイス / COM 初期化が主因）。';
+      'エンジンライブラリが見つからないか、初期化に失敗しました。同梱済みの場合は下のエラー詳細を確認してください（音声デバイス / バックエンド初期化が主因）。';
 
   @override
   String get channelMode => 'チャンネルモード';
@@ -1888,7 +1888,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get presetHint =>
-      'エンジン全パラメータのスナップショット保存/読込（%APPDATA%/AuraDSP/presets）。T2 効果は音楽モードでガード拒否（明示）';
+      'エンジン全パラメータのスナップショット保存/読込（設定ディレクトリ配下の presets/）。T2 効果は音楽モードでガード拒否（明示）';
 
   @override
   String get presetLoadHint => 'クリックで読込：';
@@ -2701,7 +2701,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpSlidersHint => 'スライダーは現在のスクリプトのslider宣言/参照に適応。右上でモード切替可。';
 
   @override
-  String get lpLibraryHint => 'ローカル%APPDATA%ライブラリと外部プリセットフォルダの自動索引に対応。';
+  String get lpLibraryHint => 'ローカルスクリプトライブラリと外部プリセットフォルダの自動索引に対応。';
 
   @override
   String get convIrTitle => 'インパルス応答 (IR)';

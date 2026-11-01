@@ -9,12 +9,34 @@ if(NOT WIN32)
     set(AURADSP_PLUGIN_HOST_REMOTE OFF CACHE BOOL "Build out-of-process plugin host (Windows only)" FORCE)
 endif()
 
+# CP-02（跨平台基础审查 2026-11-01）：插件子系统（VST3/CLAP 扫描/加载/编辑器）整体开关。
+# Windows 默认 ON（行为不变）；Linux/macOS 置 OFF 时排除全部 Win32 插件源，改用
+# plugins/integration/{plugin_chain_adapter_stub,plugin_abi_stub}.cpp 保持 C ABI 导出集。
+option(AURADSP_ENABLE_PLUGINS "Build VST3/CLAP plugin hosting subsystem (Windows only)" ON)
+if(NOT WIN32)
+    set(AURADSP_ENABLE_PLUGINS OFF CACHE BOOL "Build VST3/CLAP plugin hosting subsystem (Windows only)" FORCE)
+endif()
+if(NOT AURADSP_ENABLE_PLUGINS)
+    # 进程外宿主依赖插件子系统，裁剪时必须一并关闭。
+    set(AURADSP_PLUGIN_HOST_REMOTE OFF CACHE BOOL "Build out-of-process plugin host (Windows only)" FORCE)
+endif()
+
 # M3（2026-10-29）：产物路径保持 out/<Config>/（build_engine.sh、verify_dll_copies.py、
 # Flutter runner 同步与历史 smoke 都依赖它）；构建中间文件由根工程统一到
 # build/<platform>/<arch>/（本子工程单独配置时仍落在 out/）。
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out")
+#
+# CP-02 补充（2026-11-01）：裁剪构建（AURADSP_ENABLE_PLUGINS=OFF）使用独立的
+# out-noplugins/<Config>/。两棵构建树如果共用 out/，OFF 构建会覆盖 ON 的
+# auradsp_core.lib；下一次 ON 增量构建可能误链 NO_PLUGINS 版核心（handle 布局不同，
+# 插件字段错位）。输出目录分离后，两种配置可并存且互不污染。
+if(AURADSP_ENABLE_PLUGINS)
+    set(AURADSP_OUT_DIR_NAME "out")
+else()
+    set(AURADSP_OUT_DIR_NAME "out-noplugins")
+endif()
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}")
 
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
@@ -54,31 +76,30 @@ if(NOT AURADSP_PLUGIN_HOST_REMOTE)
     set(AURADSP_PLUGIN_REMOTE_SOURCES "")
 endif()
 
-file(GLOB_RECURSE ENGINE_C CONFIGURE_DEPENDS "${LEGACY}/*.c")
-# 排除与顶层重名的 eel2/cpthread.c（对齐 Android 侧 build_jdsp.sh 策略）
-list(FILTER ENGINE_C EXCLUDE REGEX "eel2/cpthread\\.c$")
+# CP-02：引擎实际编入的插件源表。ON = 完整插件子系统；OFF = 两个 ABI/链阶段 stub，
+# 导出集与 plugin_abi.cpp 同集（F3 要求不增不减），但所有能力返回「不可用」。
+if(AURADSP_ENABLE_PLUGINS)
+    set(AURADSP_ENGINE_PLUGIN_SOURCES
+        ${AURADSP_PLUGIN_HOST_SOURCES}
+        ${AURADSP_PLUGIN_INTEGRATION_SOURCES}
+        ${AURADSP_PLUGIN_REMOTE_SOURCES}
+    )
+else()
+    set(AURADSP_ENGINE_PLUGIN_SOURCES
+        "${API}/plugins/integration/plugin_chain_adapter_stub.cpp"
+        "${API}/plugins/integration/plugin_abi_stub.cpp"
+    )
+endif()
+
+# CP-27（2026-11-01）：可移植核心源表抽到 engine/core_sources.cmake（唯一真相），
+# Windows / 未来 Linux 目标共用同一份清单；本文件不再手写 chain/dsp 源。
+include("${API}/core_sources.cmake")
 
 # M3（2026-10-29）：可移植核心收口为静态库（legacy C + 根 C ABI + chain/dsp）。
-# 源表只此一处；插件宿主与测试继续复用 AURADSP_PLUGIN_HOST_SOURCES，不链核心。
+# 插件宿主与测试继续复用 AURADSP_PLUGIN_HOST_SOURCES，不链核心。
 add_library(auradsp_core STATIC
-    ${ENGINE_C}
-    "${API}/auradsp_engine.cpp"
-    "${API}/chain/engine_chain.cpp"
-    "${API}/chain/engine_convolver.cpp"
-    "${API}/chain/engine_viz.cpp"
-    "${API}/chain/engine_probe.cpp"
-    "${API}/chain/engine_audiofile.cpp"
-    "${API}/dsp/dsp_shelf.cpp"
-    "${API}/dsp/dsp_filter.cpp"
-    "${API}/dsp/dsp_bassmono.cpp"
-    "${API}/dsp/dsp_haas.cpp"
-    "${API}/dsp/dsp_spatial.cpp"
-    "${API}/dsp/dsp_exciter.cpp"
-    "${API}/dsp/dsp_gate.cpp"
-    "${API}/dsp/dsp_psycho.cpp"
-    "${API}/dsp/dsp_loudness.cpp"
-    "${API}/dsp/dsp_mc_reverb.cpp"
-    "${API}/dsp/dsp_dyneq.cpp"
+    ${AURADSP_CORE_LEGACY_C}
+    ${AURADSP_CORE_CXX_SOURCES}
 )
 target_include_directories(auradsp_core PUBLIC
     "${API}"
@@ -101,10 +122,15 @@ target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHsc)
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
 # 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
 target_compile_options(auradsp_core PRIVATE /FI"${API}/auradsp_msvc_shim.h")
-set_source_files_properties(${ENGINE_C} PROPERTIES LANGUAGE C)
+set_source_files_properties(${AURADSP_CORE_LEGACY_C} PROPERTIES LANGUAGE C)
 set_property(TARGET auradsp_core PROPERTY C_STANDARD 11)
 set_property(TARGET auradsp_core PROPERTY CXX_STANDARD 20)
 set_property(TARGET auradsp_core PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+if(NOT AURADSP_ENABLE_PLUGINS)
+    # CP-02：engine_internal.h 的 handle 定义在 core 内编译；裁剪时必须与引擎
+    # 使用同一 AURADSP_NO_PLUGINS 视图，否则 handle 仍要求 PluginEngineState 符号。
+    target_compile_definitions(auradsp_core PRIVATE AURADSP_NO_PLUGINS=1)
+endif()
 
 # R1（M6 审查遗留，2026-10-30）：Win7 CreateFile2 回退统一编入所有含
 # <filesystem> 的目标（OBJECT 库 = 无条件随目标链接，与直接编入源文件等价；
@@ -124,9 +150,7 @@ add_library(auradsp_engine SHARED
     "${API}/platform/windows/fs_win.cpp"
     "${API}/platform/windows/env_win.cpp"
     "${API}/platform/windows/log_win.cpp"
-    ${AURADSP_PLUGIN_HOST_SOURCES}
-    ${AURADSP_PLUGIN_INTEGRATION_SOURCES}
-    ${AURADSP_PLUGIN_REMOTE_SOURCES}
+    ${AURADSP_ENGINE_PLUGIN_SOURCES}
     "${API}/auradsp_engine.def"
 )
 target_link_libraries(auradsp_engine PRIVATE auradsp_core auradsp_wincompat)
@@ -154,6 +178,11 @@ if(NOT AURADSP_PLUGIN_HOST_REMOTE)
     # AURADSP_HOST_INPROC=1 同一路径），不引用 ProcessPluginProxy / 共享内存 IPC。
     target_compile_definitions(auradsp_engine PRIVATE AURADSP_HOST_INPROC=1)
 endif()
+if(NOT AURADSP_ENABLE_PLUGINS)
+    # CP-02：插件子系统整体裁剪。engine_internal.h 的 plugin 成员与
+    # plugins/integration 的真实实现均被排除，改由两个 stub 提供 C ABI 导出。
+    target_compile_definitions(auradsp_engine PRIVATE AURADSP_NO_PLUGINS=1)
+endif()
 # B-1 调试日志（计划 D1）：宿主 [DBG 诊断默认编译期剥离（Release DLL strings 扫描
 # 无 [DBG 由 smoke_release_strings.py 门禁）；-DAURADSP_DBG_LOG=ON 重建可恢复输出
 # （OutputDebugString 通道，运行期再受环境变量 AURADSP_LOG=0|1|2 控制）。
@@ -170,7 +199,7 @@ set_property(TARGET auradsp_engine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedD
 set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
-if(AURADSP_PLUGIN_HOST_REMOTE)
+if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     add_executable(auradsp_plugin_host
         "${API}/plugins/platform/win32/host/auradsp_plugin_host_main.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
@@ -196,6 +225,8 @@ if(AURADSP_PLUGIN_HOST_REMOTE)
     target_link_libraries(auradsp_plugin_host PRIVATE auradsp_wincompat version)
 endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
+# CP-02：三个插件测试 EXE 直接编译 AURADSP_PLUGIN_HOST_SOURCES，裁剪构建不产出。
+if(AURADSP_ENABLE_PLUGINS)
 add_executable(test_plugin_direct
     "${API}/plugins/tests/plugin_host_direct.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}
@@ -249,6 +280,7 @@ target_compile_options(test_host_quarantine PRIVATE /utf-8 /W1 /EHsc)
 set_property(TARGET test_host_quarantine PROPERTY CXX_STANDARD 20)
 set_property(TARGET test_host_quarantine PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_link_libraries(test_host_quarantine PRIVATE auradsp_engine auradsp_wincompat version)
+endif()  # AURADSP_ENABLE_PLUGINS
 
 # F1 验收（2026-10-24）：插件依赖 DLL 搜索目录通用化 + cookie 回收
 # （不依赖任何真插件，用临时目录树验证登记/幂等/引用计数/回收/环境变量）。

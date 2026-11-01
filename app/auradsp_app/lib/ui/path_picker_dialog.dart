@@ -7,27 +7,25 @@
  * 3. 集成存在性检测、扩展名校验与 PathMemory 自动记忆；
  * 4. 统一 UI 样式，遵循 AuraDSP 设计系统。
  */
-import 'dart:io';
+import '../core/io/resource_gate.dart';
 
-import 'package:file_selector/file_selector.dart';
+import '../core/selection/resource_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../core/design.dart';
-import '../core/path_memory.dart';
+import '../platform/adapters.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/platform_profile.dart';
 
-enum AuraPathPickerMode {
-  file,
-  directory,
-}
+/// 选择模式唯一真相在 core；此处 re-export 方便既有 UI 调用点继续只 import 本文件。
+export '../core/selection/resource_picker.dart' show ResourcePickMode;
 
 class AuraPathPickerDialog extends StatefulWidget {
   final String title;
   final String? prompt;
   final String? initialPath;
-  final AuraPathPickerMode mode;
+  final ResourcePickMode mode;
   final List<String>? allowedExtensions;
   final String? memorySlot;
   final String? confirmLabel;
@@ -37,7 +35,7 @@ class AuraPathPickerDialog extends StatefulWidget {
     required this.title,
     this.prompt,
     this.initialPath,
-    this.mode = AuraPathPickerMode.file,
+    this.mode = ResourcePickMode.file,
     this.allowedExtensions,
     this.memorySlot,
     this.confirmLabel,
@@ -49,7 +47,7 @@ class AuraPathPickerDialog extends StatefulWidget {
     required String title,
     String? prompt,
     String? initialPath,
-    AuraPathPickerMode mode = AuraPathPickerMode.file,
+    ResourcePickMode mode = ResourcePickMode.file,
     List<String>? allowedExtensions,
     String? memorySlot,
     String? confirmLabel,
@@ -77,12 +75,12 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
   late final TextEditingController _controller;
   String? _errorText;
 
+  ResourcePicker get _picker => PlatformAdapters.instance.picker;
+
   @override
   void initState() {
     super.initState();
-    final init = widget.initialPath ??
-        (widget.memorySlot != null ? PathMemory.dirFor(widget.memorySlot!) : null) ??
-        '';
+    final init = widget.initialPath ?? (_picker.initialDirectory(widget.memorySlot) ?? '');
     _controller = TextEditingController(text: init);
   }
 
@@ -94,34 +92,22 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
 
   Future<void> _openNativePicker() async {
     final l = l10nOf(context);
-    final initialDir = PathMemory.dirFor(widget.memorySlot ?? '') ??
-        (widget.memorySlot != null ? PathMemory.fallbackDir(widget.memorySlot!) : null);
-
-    if (widget.mode == AuraPathPickerMode.directory) {
-      final dir = await getDirectoryPath(
-        initialDirectory: initialDir,
-        confirmButtonText: l.pathPickerSelectDir,
-      );
-      if (dir != null) {
-        _controller.text = dir;
-        if (mounted) {
-          setState(() => _errorText = null);
-        }
-      }
-    } else {
-      final typeGroup = widget.allowedExtensions != null && widget.allowedExtensions!.isNotEmpty
-          ? [XTypeGroup(label: widget.title, extensions: widget.allowedExtensions)]
-          : null;
-      final file = await openFile(
-        acceptedTypeGroups: typeGroup ?? const [],
-        initialDirectory: initialDir,
-      );
-      if (file != null) {
-        _controller.text = file.path;
-        if (mounted) {
-          setState(() => _errorText = null);
-        }
-      }
+    final picked = await _picker.browse(
+      ResourcePickRequest(
+        title: widget.title,
+        prompt: widget.prompt,
+        mode: widget.mode,
+        allowedExtensions: widget.allowedExtensions,
+        memorySlot: widget.memorySlot,
+        confirmLabel: widget.mode == ResourcePickMode.directory
+            ? l.pathPickerSelectDir
+            : null,
+      ),
+    );
+    if (picked == null) return;
+    _controller.text = picked;
+    if (mounted) {
+      setState(() => _errorText = null);
     }
   }
 
@@ -133,37 +119,31 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
       return;
     }
 
-    if (widget.mode == AuraPathPickerMode.directory) {
-      final dir = Directory(path);
-      if (!dir.existsSync()) {
-        setState(() => _errorText = l.pathPickerErrDirNotExist);
-        return;
-      }
-    } else {
-      final file = File(path);
-      if (!file.existsSync()) {
-        setState(() => _errorText = l.pathPickerErrFileNotExist);
-        return;
-      }
-      if (widget.allowedExtensions != null && widget.allowedExtensions!.isNotEmpty) {
-        final ext = path.contains('.') ? path.split('.').last.toLowerCase() : '';
-        final allowed = widget.allowedExtensions!.map((e) => e.toLowerCase()).toList();
-        if (!allowed.contains(ext)) {
-          setState(() => _errorText = l.pathPickerErrFormat(widget.allowedExtensions!.join(', ')));
-          return;
-        }
-      }
+    final issue = ResourcePicker.validate(
+      path,
+      mode: widget.mode,
+      allowedExtensions: widget.allowedExtensions,
+    );
+    if (issue != ResourceIssue.ok) {
+      setState(() => _errorText = _messageFor(issue));
+      return;
     }
 
     if (widget.memorySlot != null) {
-      if (widget.mode == AuraPathPickerMode.directory) {
-        PathMemory.setDir(widget.memorySlot!, path);
-      } else {
-        PathMemory.recordPick(widget.memorySlot!, path);
-      }
+      _picker.remember(widget.memorySlot!, path, mode: widget.mode);
     }
 
     Navigator.of(context).pop(path);
+  }
+
+  String _messageFor(ResourceIssue issue) {
+    final l = l10nOf(context);
+    if (issue == ResourceIssue.badExtension) {
+      return l.pathPickerErrFormat(widget.allowedExtensions!.join(', '));
+    }
+    return widget.mode == ResourcePickMode.directory
+        ? l.pathPickerErrDirNotExist
+        : l.pathPickerErrFileNotExist;
   }
 
   @override
@@ -171,7 +151,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
     final p = paletteOf(context);
     final l = l10nOf(context);
 
-    final String defaultHint = widget.mode == AuraPathPickerMode.directory
+    final String defaultHint = widget.mode == ResourcePickMode.directory
         ? PlatformProfile.pathPlaceholder(directory: true)
         : PlatformProfile.pathPlaceholder(
             directory: false,
@@ -190,7 +170,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
       title: Row(
         children: [
           Icon(
-            widget.mode == AuraPathPickerMode.directory
+            widget.mode == ResourcePickMode.directory
                 ? Icons.folder_rounded
                 : Icons.insert_drive_file_rounded,
             size: 18,
@@ -294,7 +274,7 @@ class _AuraPathPickerDialogState extends State<AuraPathPickerDialog> {
             // 左下角：系统文件/文件夹选择按钮
             OutlinedButton.icon(
               icon: Icon(
-                widget.mode == AuraPathPickerMode.directory
+                widget.mode == ResourcePickMode.directory
                     ? Icons.folder_open_rounded
                     : Icons.file_open_rounded,
                 size: 15,

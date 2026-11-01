@@ -19,6 +19,12 @@ void compute_latency(auradsp_handle h, double* out_ms) {
     const double sr = (double)h->sample_rate;          /* 设备/流采样率 */
     const double wsr = (double)h->jdsp.fs;             /* 工作采样率（=sr 除非 ASRC） */
     const double lat_sr = (wsr > 0.0) ? wsr : sr;      /* 结构性帧数的换算基准 */
+    /* 心理声学低音：vendor basspsycho 使用 192 帧（48k 下 4ms）线性相位
+     * FIR，实测 onset 在 44.1/48/96/192k 均为 4.0ms（帧数随工作采样率缩放）。
+     * 该模块此前从未计入总延迟，导致开着低音增强时上报值偏小 4ms。 */
+    if (h->p.bass_enable.load(std::memory_order_relaxed)) {
+        ms += LatencyMs(kLatBass, lat_sr);
+    }
     if (h->p.limiter_enable.load(std::memory_order_relaxed)) {
         /* D7：limiter 的延迟取决于模式，且默认模式是 0ms（原表写死 2.0ms
          * 名义值，默认配置下平白高估 2ms）。见 engine_internal.h kLatDdc 后注释。 */
@@ -294,6 +300,8 @@ void reset_channel_state_rt(auradsp_handle h) {
     /* 4. tube */
     for (int c = 0; c < kMxMaxChannels; ++c) {
         h->tube_os[c].reset();
+        for (int i = 0; i < 32; ++i) h->tube_dry[c][i] = 0.0f;
+        h->tube_dry_pos[c] = 0;
     }
 
     /* 5. exciter / loudness */
@@ -1201,6 +1209,16 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         if (!(mask & (1u << c))) continue;
         for (int i = 0; i < frames; ++i) {
             const float x = io[i * ch + c];
+            /* [A-12] 干声与过采样湿声对齐：半带 FIR 群延迟 21 样本。
+             * 只在 os 路径且 mix<1 时启用；mix=1 时干声不参与，避免无谓延迟。 */
+            float dry = x;
+            if (os && mix > 0.0f && mix < 1.0f) {
+                const int pos = h->tube_dry_pos[c] & 31;
+                const int rd = (pos + 32 - auradsp::HalfbandOversampler2x::kLatencySamples) & 31;
+                dry = h->tube_dry[c][rd];
+                h->tube_dry[c][pos] = x;
+                h->tube_dry_pos[c] = (pos + 1) & 31;
+            }
             float drive = x * pregain;
             float sat;
             if (os) {
@@ -1228,7 +1246,7 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
                 }
             }
             float wet = sat * postgain * comp;
-            io[i * ch + c] = x * (1.0f - mix) + wet * mix;
+            io[i * ch + c] = dry * (1.0f - mix) + wet * mix;
         }
     }
 }
@@ -1680,9 +1698,28 @@ void process_stereo_chain(auradsp_handle h, const float* src, float* dst,
     /* [EQ tap] EQ 输入 = vendor 链入口。EQ 在库的单体链内部，拆不出后级，
      * 只能取前级；此处已过 pre-DSP / 前置插件 / 低架，尚未进 EQ。 */
     viz_write_eq_in(h, src, frames);
-    /* libjamesdsp 稳态无分配；块超限时内部自动重分配（pfloat32Multiplexed） */
-    h->jdsp.processFloatMultiplexd(&h->jdsp, const_cast<float*>(src), dst,
-                                   (size_t)frames);
+    /* [ADR-010] vendor 链的 stage_output 内置一套 legacy limiter；立体声路径
+     * 此前直接走 processFloatMultiplexd（无调用级门控），legacy limiter 与
+     * 链尾 limiter_process_mc 形成**双限幅器串联**：
+     *   · legacy 门限固定为 vendor 默认 1.0（0dBFS），不跟随 limiter.threshold；
+     *   · 现代限幅器只看到 legacy 已压过的信号，GR 计量系统性偏低；
+     *   · 同一套 limiter.enable 在立体声与离散多声道下行为不同。
+     * 这里改走 StageSet 全链并显式 gates.limiter=0，让 post gain 仍在
+     * stage_output 内施加，而限幅只由链尾 limiter_process_mc 做一次。
+     * 其余 gates 置 -1 = 沿用全局开关，保持原有音色链不变。 */
+    {
+        AuraStageGates gates;
+        gates.tube = -1;
+        gates.comp = -1;
+        gates.bass = -1;
+        gates.eq = -1;
+        gates.arbmag = -1;
+        gates.limiter = 0;
+        JamesDSPProcessMultiplexedStageSet(
+            &h->jdsp, const_cast<float*>(src), dst, (size_t)frames,
+            "tube,comp,bass,eq,arbmag,convolver,ddc,reverb,stereo,crossfeed,liveprog,output",
+            1, &gates);
+    }
     /* P2.4: 提取 Compressor GR 实时计量 */
     h->gr_comp.store(h->p.comp_enable.load(std::memory_order_relaxed) ? h->jdsp.comp_gr : 0.0f,
                      std::memory_order_relaxed);

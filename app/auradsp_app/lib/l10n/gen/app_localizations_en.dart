@@ -1154,7 +1154,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get engineFailedBody =>
-      'auradsp_engine.dll was not found or failed to initialize. If the DLL is already bundled, check the error details below (common causes: audio device / COM initialization).';
+      'The engine library was not found or failed to initialize. If it is already bundled, check the error details below (common causes: audio device / backend initialization).';
 
   @override
   String get channelMode => 'Channel Mode';
@@ -2003,7 +2003,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get presetHint =>
-      'Save/load full engine parameter snapshots (%APPDATA%/AuraDSP/presets); T2 effects get guard-rejected in Music tier (honest, not silent)';
+      'Save/load full engine parameter snapshots (under the config dir/presets); T2 effects get guard-rejected in Music tier (honest, not silent)';
 
   @override
   String get presetLoadHint => 'Click to load:';
@@ -2848,7 +2848,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get lpLibraryHint =>
-      'Supports the local %APPDATA% library plus auto-indexed external preset folders.';
+      'Supports the local script library plus auto-indexed external preset folders.';
 
   @override
   String get convIrTitle => 'Impulse Response (IR)';

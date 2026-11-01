@@ -3,7 +3,7 @@
  *
  * 规范：统一 Schema v2，区分出厂预设 (只读) 与用户预设。
  * 覆盖全部 8 大效果卡片完整参数（包含交互式 EQ 曲线、低音谐波、电子管饱和度等）。
- * 存储路径：%APPDATA%/AuraDSP/presets/
+ * 存储路径：ConfigManager.baseDir/presets/
  */
 
 import 'dart:convert';
@@ -12,6 +12,8 @@ import 'dart:io';
 import 'package:flutter/services.dart' show rootBundle;
 
 import 'config.dart';
+import 'io/document_store.dart';
+import 'io/resource_gate.dart';
 import 'param_schema.dart';
 import 'state.dart';
 
@@ -128,7 +130,8 @@ abstract final class PresetLibrary {
         for (final name in _factoryAssetFiles) {
           final diskFile = File('assets/presets/factory/$name');
           if (diskFile.existsSync()) {
-            _factoryAssetCache[name] = diskFile.readAsStringSync();
+            final read = ResourceGate.readText(diskFile.path);
+            if (read.ok) _factoryAssetCache[name] = read.text!;
           }
         }
       }
@@ -139,9 +142,8 @@ abstract final class PresetLibrary {
         final f = File(
             '$factoryDir${Platform.pathSeparator}${_safeFileName(name)}');
         if (f.existsSync()) {
-          try {
-            if (f.readAsStringSync() == content) continue; // 一致，跳过
-          } catch (e, st) { swallow(e, st); }
+          final read = ResourceGate.readText(f.path);
+          if (read.ok && read.text == content) continue; // 一致，跳过
         }
         f.writeAsStringSync(content);
       }
@@ -182,10 +184,8 @@ abstract final class PresetLibrary {
     for (final p in candidates) {
       final f = File(p);
       if (!f.existsSync()) continue;
-      try {
-        final j = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-        if ((j['name'] as String?) == name) return f;
-      } catch (e, st) { swallow(e, st); }
+      final read = DocumentStore.readJson(p);
+      if (read.ok && (read.data!['name'] as String?) == name) return f;
     }
     return null;
   }
@@ -212,31 +212,17 @@ abstract final class PresetLibrary {
 
     // 读取出厂预设
     try {
-      final fDir = Directory(factoryDir);
-      if (fDir.existsSync()) {
-        for (final f in fDir.listSync().whereType<File>()) {
-          if (f.path.toLowerCase().endsWith('.json')) {
-            try {
-              final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-              list.add(AuraPreset.fromJson(json));
-            } catch (e, st) { swallow(e, st); }
-          }
-        }
+      for (final f in DocumentStore.listJsonFiles(factoryDir)) {
+        final read = DocumentStore.readJson(f.path);
+        if (read.ok) list.add(AuraPreset.fromJson(read.data!));
       }
     } catch (e, st) { swallow(e, st); }
 
     // 读取用户预设
     try {
-      final uDir = Directory(userDir);
-      if (uDir.existsSync()) {
-        for (final f in uDir.listSync().whereType<File>()) {
-          if (f.path.toLowerCase().endsWith('.json')) {
-            try {
-              final json = jsonDecode(f.readAsStringSync()) as Map<String, dynamic>;
-              list.add(AuraPreset.fromJson(json));
-            } catch (e, st) { swallow(e, st); }
-          }
-        }
+      for (final f in DocumentStore.listJsonFiles(userDir)) {
+        final read = DocumentStore.readJson(f.path);
+        if (read.ok) list.add(AuraPreset.fromJson(read.data!));
       }
     } catch (e, st) { swallow(e, st); }
 
@@ -246,24 +232,19 @@ abstract final class PresetLibrary {
     // "Unnamed" 幽灵条目，点一下 params 为空 → 全量复写 = 静默恢复出厂。
     // 只接受「有 name + parameters/params」的预设形态。
     try {
-      final rDir = Directory(baseDir);
-      if (rDir.existsSync()) {
-        for (final f in rDir.listSync().whereType<File>()) {
-          if (!f.path.toLowerCase().endsWith('.json')) continue;
-          try {
-            final json = jsonDecode(f.readAsStringSync());
-            if (json is! Map<String, dynamic>) continue;
-            final name = json['name'];
-            final params = json['parameters'] ?? json['params'];
-            if (name is! String ||
-                name.isEmpty ||
-                params is! Map ||
-                params.isEmpty) {
-              continue; // 非预设文件（配置文件/会话/路径记忆等）
-            }
-            list.add(AuraPreset.fromJson(json));
-          } catch (e, st) { swallow(e, st); }
+      for (final f in DocumentStore.listJsonFiles(baseDir)) {
+        final read = DocumentStore.readJson(f.path);
+        if (!read.ok) continue;
+        final json = read.data!;
+        final name = json['name'];
+        final params = json['parameters'] ?? json['params'];
+        if (name is! String ||
+            name.isEmpty ||
+            params is! Map ||
+            params.isEmpty) {
+          continue; // 非预设文件（配置文件/会话/路径记忆等）
         }
+        list.add(AuraPreset.fromJson(json));
       }
     } catch (e, st) { swallow(e, st); }
 
@@ -335,11 +316,9 @@ abstract final class PresetLibrary {
   /// - **同名不覆盖**：导入是外部来源，覆盖用户已有预设属数据丢失，改名加序号。
   static AuraPreset? importFromFile(String srcPath) {
     try {
-      final file = File(srcPath);
-      if (!file.existsSync()) return null;
-      final content = file.readAsStringSync();
-      final json = jsonDecode(content) as Map<String, dynamic>;
-      final preset = AuraPreset.fromJson(json);
+      final read = DocumentStore.readJson(srcPath);
+      if (!read.ok) return null;
+      final preset = AuraPreset.fromJson(read.data!);
       if (preset.schemaVersion < 1 ||
           preset.schemaVersion > schemaVersionCurrent) {
         return null;

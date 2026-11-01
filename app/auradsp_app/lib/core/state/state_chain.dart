@@ -401,10 +401,10 @@ extension StateChain on AppModel {
 
   void parseVdcMetadata(String path) {
     try {
-      final f = File(path);
-      if (!f.existsSync()) return;
+      final read = ResourceGate.readText(path);
+      if (!read.ok) return;
       ddcFileName = path.split(RegExp(r'[\\/]')).last;
-      final lines = f.readAsLinesSync();
+      final lines = read.text!.split(RegExp(r'\r?\n'));
       final rates = <String>[];
       int maxPoles = 0;
       for (final line in lines) {

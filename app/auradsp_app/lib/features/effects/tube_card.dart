@@ -55,17 +55,10 @@ class _TubeCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: AuraSpace.sm),
-          Row(
-            children: [
-              const Spacer(),
-              HqOversampleBadge(
-                active: model.tubeOversample,
-                onChanged: model.setTubeOversample,
-              ),
-            ],
-          ),
           const SizedBox(height: AuraSpace.md),
+          // 过采样开关已移除：立体声走 vendor 六频带电子管，是否过采样由
+          // VTInit 按采样率决定，tube.oversample 只作用于离散多声道路径。
+          // 保留引擎默认 1（2x），离散多声道恒为高精度，避免假控件。
           _TubeAdvanced(model: model),
         ],
       ),

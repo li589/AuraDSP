@@ -3,11 +3,29 @@
 # Target: aarch64 Android 14+ (API 34), 16KB page alignment
 set -e
 
-SPK="$(cd "$(dirname "$0")" && pwd -W)"
-NDK_BIN="D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/bin"
-CXX="$NDK_BIN/clang++.exe"
-TARGET="--target=aarch64-linux-android34 --sysroot=D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
-NM="$NDK_BIN/llvm-nm.exe"
+SPK="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || true)"
+# CP-13（2026-11-01）：macOS/Linux 无 cygpath/pwd -W 时提供直通实现。
+if [ -z "$SPK" ] || ! command -v cygpath >/dev/null 2>&1; then
+    cygpath() { case "${1:-}" in -w|-m|-u) shift ;; esac; printf '%s' "${1:-}"; }
+    export -f cygpath
+    SPK="$(cd "$(dirname "$0")" && pwd)"
+fi
+
+# NDK：优先 ANDROID_NDK / ANDROID_NDK_HOME；缺省回退历史 Windows 路径。
+NDK_ROOT="${ANDROID_NDK:-${ANDROID_NDK_HOME:-${NDK_ROOT:-D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198}}}"
+case "$(uname -s)" in
+    Darwin) NDK_HOST_TAG=darwin-x86_64 ;;
+    Linux)  NDK_HOST_TAG=linux-x86_64 ;;
+    *)      NDK_HOST_TAG=windows-x86_64 ;;
+esac
+NDK_BIN="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/bin"
+CXX="$NDK_BIN/clang++"
+NM="$NDK_BIN/llvm-nm"
+if [ "$NDK_HOST_TAG" = "windows-x86_64" ]; then
+    CXX="$CXX.exe"
+    NM="$NM.exe"
+fi
+TARGET="--target=aarch64-linux-android34 --sysroot=$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/sysroot"
 
 # mixed paths (forward slashes) are safe for both bash and clang
 INC_SPIKE="$(cygpath -m "$SPK")/src/aidl"

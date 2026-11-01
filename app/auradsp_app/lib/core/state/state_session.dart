@@ -35,12 +35,12 @@ extension StateSession on AppModel {
       );
     }
 
-    // 平台预置目录：仅首次播种（目录必须真实存在，见 PluginScanDirs.discover）。
+    // 平台预置目录：仅首次播种（目录必须真实存在，见 platform/plugins）。
     if (!config.pluginScanDirsSeeded) {
       final known = dirs
           .map((e) => PlatformProfile.pathKey(e.path))
           .toSet();
-      for (final p in PluginScanDirs.discover()) {
+      for (final p in pluginDirs.discover()) {
         final key = PlatformProfile.pathKey(p);
         if (known.add(key)) {
           dirs.add(PluginScanDirEntry(path: p));

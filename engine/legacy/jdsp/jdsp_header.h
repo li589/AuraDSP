@@ -181,6 +181,10 @@ typedef struct
 	float drywet;     /* 湿比 0..1（0=干声直通，1=全湿=旧行为） */
 	float outcomp;    /* 输出补偿 dB（只作用于湿信号） */
 	float tapeLp[2];  /* Tape 档 HF 阻尼一阶状态 */
+	/* [A-12] drywet<1 时干声延迟线：与过采样湿声的主峰（约 10 样本）对齐，
+	 * 避免干湿混合产生梳状深坑。仅 oversample 路径使用。 */
+	float dryDelay[2][32];
+	int   dryPos[2];
 } VacuumTube;
 typedef struct
 {
@@ -398,6 +402,15 @@ typedef struct
 	float ertolate; // early reflection mix parameters
 	float erefwet;
 	float dry;
+	/* [PATCHED-AuraDSP P-049] 过采样域内的 dry 系数。
+	 * 原实现把 dry 注入两次：一次经 inpdelay（predelay>=0 时 size 被钳到 1，
+	 * 形成 1 样本延迟）进入过采样环，一次在环外直接相加。两者构成
+	 * dry*(1+z^-1) 的两抽头梳状：DC +6 dB，20 kHz/44.1k 衰减 -10.7 dB，
+	 * 且衰减量随采样率变化（48k 同频仅 -5.7 dB）。这是 Pop 在 44.1k
+	 * 高频塌陷的直接原因。
+	 * 预设路径保持 dry2 = dry（音色不变）；自定义 native 路径由
+	 * Reverb_SetNative 置 dry2 = 0，只保留环外那一次无延迟的 dry。 */
+	float dry2;
 } sf_reverb_state_st;
 typedef enum
 {

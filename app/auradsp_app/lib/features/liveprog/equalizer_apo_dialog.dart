@@ -10,12 +10,11 @@
  */
 
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/material.dart';
 
 import '../../core/design.dart';
-import '../../core/error_sink.dart';
+import '../../core/io/resource_gate.dart';
 import '../../core/liveprog/equalizer_apo_parser.dart';
 import '../../core/liveprog/rbj_biquad_generator.dart';
 import '../../core/path_memory.dart';
@@ -102,14 +101,10 @@ Filter 4: ON HSC Fc 8000 Hz Gain 2.0 dB Q 0.71
       memorySlot: PathMemory.slotLastScriptDir,
     );
     if (path != null && mounted) {
-      try {
-        final content = await File(path).readAsString();
-        _inputCtrl.text = content;
-        _recompute();
-      } catch (e, st) {
-        // 拾取文件读取失败：保持原输入，用户可重试（自愿操作，失败不打扰）。
-        swallow(e, st);
-      }
+      final read = ResourceGate.readText(path);
+      if (!read.ok) return;
+      _inputCtrl.text = read.text!;
+      _recompute();
     }
   }
 

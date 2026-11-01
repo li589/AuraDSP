@@ -16,5 +16,13 @@ void* module_symbol(void* module, const char* symbol_name);
 void module_close(void* module);
 unsigned long module_last_error();
 
+/* 最近一次失败的可读文本（含平台错误码/系统文案）。
+ * Windows：GetLastError + FormatMessage（失败时退化为 "Win32 error N"）。
+ * Linux/Android：dlerror() 捕获串（读取即清除，实现需在失败点就地快照）。
+ * 线程契约：返回线程局部缓冲，仅控制线程可用；无错误时返回空串（非 null）。
+ * CP-11（2026-11-01）：与 module_last_error 并存——数值用于机器判断，
+ * 文本用于诊断展示，避免 Linux 的 dlerror 文本被迫塞进 unsigned long。 */
+const char* module_last_error_text();
+
 } // namespace platform
 } // namespace auradsp

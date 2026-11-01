@@ -25,6 +25,7 @@ class _FakeOnlineLyricsService extends OnlineLyricsService {
     required String trackName,
     required String artistName,
     Duration? duration,
+    bool force = false,
   }) async =>
       document;
 }
@@ -39,6 +40,7 @@ class _DeferredOnlineLyricsService extends OnlineLyricsService {
     required String trackName,
     required String artistName,
     Duration? duration,
+    bool force = false,
   }) {
     calls++;
     return completer.future;
@@ -48,15 +50,35 @@ class _DeferredOnlineLyricsService extends OnlineLyricsService {
 /// 计数用离线源：验证换源后立即重试
 class _CountingOnlineLyricsService extends OnlineLyricsService {
   int calls = 0;
+  bool? lastForce;
 
   @override
   Future<LyricDocument?> fetchLyrics({
     required String trackName,
     required String artistName,
     Duration? duration,
+    bool force = false,
   }) async {
     calls++;
+    lastForce = force;
     return null;
+  }
+}
+
+/// 永不返回的歌词源：验证弱网/挂起时检索预算能收敛 UI 状态
+class _HangingOnlineLyricsService extends OnlineLyricsService {
+  final Completer<LyricDocument?> never = Completer<LyricDocument?>();
+  int calls = 0;
+
+  @override
+  Future<LyricDocument?> fetchLyrics({
+    required String trackName,
+    required String artistName,
+    Duration? duration,
+    bool force = false,
+  }) {
+    calls++;
+    return never.future;
   }
 }
 
@@ -128,6 +150,69 @@ void main() {
   });
 
   group('MediaSyncService Tests', () {
+    test('同曲元数据抖动 / 短暂 empty 不重复检索（2026-11-01 回归）', () async {
+      final online = _CountingOnlineLyricsService();
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: online,
+        hasSystemMediaSession: true,
+      );
+      const track = MediaTrackMetadata(
+        title: 'Song',
+        artist: 'Artist',
+        isPlaying: true,
+        position: Duration(seconds: 1),
+        duration: Duration(minutes: 3),
+      );
+
+      await service.updateTrack(track);
+      expect(online.calls, 1);
+
+      // 同一首歌：大小写/首尾空白抖动不得触发第二次检索
+      await service.updateTrack(track.copyWith(
+        title: '  SONG  ',
+        artist: ' artist ',
+      ));
+      expect(online.calls, 1);
+
+      // 播放器短暂返回 empty：宽限期内保留当前曲目与歌词
+      await service.updateTrack(MediaTrackMetadata.empty);
+      expect(service.currentTrack.value.hasContent, isTrue);
+      expect(online.calls, 1);
+
+      // empty 恢复为同一首歌：仍不得重复检索
+      await service.updateTrack(track);
+      expect(online.calls, 1);
+
+      // 手动重试必须绕过负命中缓存
+      await service.retryLyrics();
+      expect(online.calls, 2);
+      expect(online.lastForce, isTrue);
+
+      service.dispose();
+    });
+
+    test('检索挂起时按预算收敛为 notFound，不永久 searching', () async {
+      final online = _HangingOnlineLyricsService();
+      final service = MediaSyncService(
+        provider: MockMediaSessionProvider(),
+        onlineService: online,
+        hasSystemMediaSession: true,
+        searchBudget: const Duration(milliseconds: 50),
+      );
+      const track = MediaTrackMetadata(
+        title: 'Slow Network',
+        artist: 'Artist',
+        isPlaying: true,
+      );
+
+      await service.updateTrack(track);
+      expect(online.calls, 1);
+      expect(service.lyricsState.value, LyricsSyncState.notFound);
+
+      service.dispose();
+    });
+
     test('Track and playback state updates', () async {
       final service = MediaSyncService(
         provider: MockMediaSessionProvider(),

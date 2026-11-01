@@ -7,19 +7,36 @@
 #   ../stubs/        platform shims (cutils/libbase/libutils replacements)
 set -e
 
-REG_W="$(cd "$(dirname "$0")" && pwd -W)"          # windows path (D:/...)
-CORE_W="$(cd "$REG_W/.." && pwd -W)"
+REG_W="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || true)"   # windows path (D:/...)
+# CP-13（2026-11-01）：macOS/Linux 无 cygpath/pwd -W 时提供直通实现。
+if [ -z "$REG_W" ] || ! command -v cygpath >/dev/null 2>&1; then
+    cygpath() { case "${1:-}" in -w|-m|-u) shift ;; esac; printf '%s' "${1:-}"; }
+    export -f cygpath
+    REG_W="$(cd "$(dirname "$0")" && pwd)"
+fi
+CORE_W="$(cd "$REG_W/.." && pwd -W 2>/dev/null || true)"
+[ -n "$CORE_W" ] || CORE_W="$(cd "$REG_W/.." && pwd)"
 REG="$(cygpath -u "$REG_W")"
 CORE="$(cygpath -u "$CORE_W")"
 
-NDK_BIN="D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/bin"
-CXX="$NDK_BIN/clang++.exe"
-TARGET="--target=aarch64-linux-android34 --sysroot=D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
-NM="$NDK_BIN/llvm-nm.exe"
+# NDK：优先 ANDROID_NDK / ANDROID_NDK_HOME；缺省回退历史 Windows 路径。
+NDK_ROOT="${ANDROID_NDK:-${ANDROID_NDK_HOME:-${NDK_ROOT:-D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198}}}"
+case "$(uname -s)" in
+    Darwin) NDK_HOST_TAG=darwin-x86_64 ;;
+    Linux)  NDK_HOST_TAG=linux-x86_64 ;;
+    *)      NDK_HOST_TAG=windows-x86_64 ;;
+esac
+NDK_BIN="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/bin"
+SYSROOT="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/sysroot"
+CXX="$NDK_BIN/clang++"
+NM="$NDK_BIN/llvm-nm"
+if [ "$NDK_HOST_TAG" = "windows-x86_64" ]; then
+    CXX="$CXX.exe"
+    NM="$NM.exe"
+fi
+TARGET="--target=aarch64-linux-android34 --sysroot=$SYSROOT"
 
-INC_REG="D:$(echo "$REG_W" | cut -c3-)"   # unused placeholder; kept simple below
-
-CXXFLAGS="--target=aarch64-linux-android34 --sysroot=D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/sysroot -std=c++20 -O2 -fPIC -fvisibility=hidden -frtti -fexceptions \
+CXXFLAGS="$TARGET -std=c++20 -O2 -fPIC -fvisibility=hidden -frtti -fexceptions \
   -I$(cygpath -m "$REG_W")/include \
   -I$(cygpath -m "$REG_W")/examples/spike_eq \
   -I$(cygpath -m "$CORE_W")/stubs/include \

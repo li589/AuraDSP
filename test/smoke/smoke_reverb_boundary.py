@@ -261,6 +261,7 @@ freeverb_cpp = os.path.join(ROOT, "engine", "dsp", "dsp_freeverb.cpp")
 mc_cpp = os.path.join(ROOT, "engine", "dsp", "dsp_mc_reverb.cpp")
 chain_cpp = os.path.join(ROOT, "engine", "chain", "engine_chain.cpp")
 cmake = os.path.join(ROOT, "core", "desktop", "windows", "CMakeLists.txt")
+core_sources = os.path.join(ROOT, "engine", "core_sources.cmake")
 
 check("dsp_freeverb.cpp removed", not os.path.exists(freeverb_cpp))
 check("dsp_mc_reverb.cpp exists", os.path.exists(mc_cpp))
@@ -268,8 +269,13 @@ if os.path.exists(chain_cpp):
     chain = open(chain_cpp, encoding="utf-8").read()
     check("engine_chain has no freeverb_process call", "freeverb_process" not in chain)
     check("engine_chain calls mc_reverb_process_mc", "mc_reverb_process_mc" in chain)
-if os.path.exists(cmake):
-    cm = open(cmake, encoding="utf-8").read()
+if os.path.exists(cmake) or os.path.exists(core_sources):
+    # CP-27（2026-11-01）：chain/dsp 源表已抽到 engine/core_sources.cmake，
+    # 断言需同时覆盖 Windows CMake 与唯一源表。
+    cm = ""
+    for p in (cmake, core_sources):
+        if os.path.exists(p):
+            cm += open(p, encoding="utf-8").read()
     check("CMake no dsp_freeverb.cpp", "dsp_freeverb.cpp" not in cm)
     check("CMake includes dsp_mc_reverb.cpp", "dsp_mc_reverb.cpp" in cm)
 

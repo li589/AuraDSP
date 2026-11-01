@@ -1,6 +1,6 @@
 {
   "name": "Symphonic Concert Hall",
-  "schemaVersion": 1,
+  "schemaVersion": 3,
   "isFactory": true,
   "category": "空间声学",
   "description": "大动态 3D 声学室模拟，深度去相关声场展宽，带来身临其境的音乐厅听感",
@@ -11,29 +11,29 @@
       "balanceR": 1.0
     },
     "bass": {
-      "intensity": 0.5,
-      "mode": 1,
+      "intensity": 0.0,
+      "mode": 0,
       "cutoff": 100.0,
-      "harmonics": 0.3,
+      "harmonics": 0.1,
       "harmonicBlend": 0.5,
       "subFloor": 25.0,
       "gain": 0.0,
       "autoGain": false,
       "outputGain": 0.0,
-      "enable": true
+      "enable": false
     },
     "reverb": {
-      "preset": 3,
-      "decay": 0.75,
+      "preset": -2,
+      "decay": 0.5,
       "damp": 0.45,
-      "wet": 0.45,
+      "wet": 0.15,
       "dry": 0.9,
       "roomSize": 1.8,
       "stereoWidth": 1.6,
-      "predelay": 0.0,
+      "predelay": 25.0,
       "lfe": false,
       "autoGain": false,
-      "outputGain": 0.0,
+      "outputGain": -6.0,
       "enable": true
     },
     "tube": {
@@ -76,21 +76,21 @@
         16000.0
       ],
       "gains": [
-        1.0,
-        1.0,
-        0.5,
-        0.5,
+        -1.0,
         0.0,
         0.0,
-        0.5,
-        1.0,
-        1.5,
-        1.5,
-        1.0,
-        1.0,
-        1.5,
-        1.5,
-        1.0
+        0.0,
+        0.6263090938898391,
+        -0.7521203164375012,
+        -1.6383525409816122,
+        -1.0820757213265486,
+        -0.5783757694140004,
+        -2.0,
+        -2.0,
+        -1.5,
+        -1.3361991762785714,
+        -1.0823657421783623,
+        1.3150000000000002
       ],
       "qs": [
         1.414,
@@ -111,7 +111,7 @@
       ]
     },
     "stereo": {
-      "mix": 0.65,
+      "mix": 0.0,
       "bandUsed": false,
       "on": false,
       "band0": 0.5,
@@ -129,8 +129,8 @@
     },
     "shelf": {
       "freq": 100.0,
-      "gain": 6.0,
-      "enable": true,
+      "gain": 0.0,
+      "enable": false,
       "channels": 255
     },
     "bassmono": {
@@ -291,7 +291,7 @@
       ]
     },
     "post": {
-      "gain": 0.0,
+      "gain": 5.0,
       "limiterEnable": true,
       "release": 100.0,
       "threshold": -0.1,

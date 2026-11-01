@@ -104,18 +104,18 @@ class _ArbmagCardState extends State<_ArbmagCard> {
       confirmLabel: l.arbmagImport,
     );
     if (path != null) {
-      try {
-        final text = await File(path).readAsString();
-        final cleaned = _cleanGraphicEqText(text);
-        if (!context.mounted) return;
-        _applyGraphicEq(context, cleaned);
-      } catch (e) {
+      final read = ResourceGate.readText(path);
+      if (!read.ok) {
         if (context.mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(l.arbmagReadFailed(e.toString()))),
+            SnackBar(content: Text(l.arbmagReadFailed('${read.issue}'))),
           );
         }
+        return;
       }
+      final cleaned = _cleanGraphicEqText(read.text!);
+      if (!context.mounted) return;
+      _applyGraphicEq(context, cleaned);
     }
   }
 

@@ -181,9 +181,12 @@ extension AudioModesState on AppModel {
     refreshVaioDetect();
     if (_testing || !PlatformProfile.supportsBridges) return;
     try {
-      final exe = _findApoInspectExe();
-      if (exe != null && exe.existsSync()) {
-        final res = await Process.run(exe.path, [], stdoutEncoding: utf8);
+      final exePath = _findApoInspectExe();
+      if (exePath != null) {
+        final res =
+            await windowsSystem.inspectAudioDevices(
+          exePath,
+        );
         if (res.exitCode == 0) {
           final stdout = (res.stdout as String).trim();
           final lines = stdout.split('\n');
@@ -227,35 +230,17 @@ extension AudioModesState on AppModel {
     }
   }
 
-  // ---- 辅助可执行文件查找 ----
+  // ---- 辅助可执行文件查找（统一走 WindowsSystemPort）----
 
-  File? _findApoInspectExe() {
-    var dir = Directory.current;
-    for (var i = 0; i < 4; i++) {
-      final candidate = File(
-        '${dir.path}/core/desktop/windows-drivers/out/Release/apo_inspect.exe',
-      );
-      if (candidate.existsSync()) return candidate;
-      final parent = dir.parent;
-      if (parent.path == dir.path) break;
-      dir = parent;
-    }
-    return null;
-  }
+  String? _findApoInspectExe() =>
+      windowsSystem.findRepoFile(const [
+        'core/desktop/windows-drivers/out/Release/apo_inspect.exe',
+      ]);
 
-  File? _findVaioInstallScript() {
-    var dir = Directory.current;
-    for (var i = 0; i < 4; i++) {
-      final candidate = File(
-        '${dir.path}/core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1',
-      );
-      if (candidate.existsSync()) return candidate;
-      final parent = dir.parent;
-      if (parent.path == dir.path) break;
-      dir = parent;
-    }
-    return null;
-  }
+  String? _findVaioInstallScript() =>
+      windowsSystem.findRepoFile(const [
+        'core/desktop/windows-drivers/01_vaio_driver/install_driver.ps1',
+      ]);
 
   // ---- VAIO 驱动安装 ----
 
@@ -269,24 +254,11 @@ extension AudioModesState on AppModel {
         _notifyUi();
         return false;
       }
-      ProcessResult res;
-      if (elevated) {
-        // 通过 PowerShell Start-Process -Verb RunAs 唤起 Windows UAC 管理员提权确认框
-        final cmd =
-            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'install\', \'-Config\', \'Release\'';
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        res = await Process.run('powershell', [
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-Action',
-          'install',
-          '-Config',
-          'Release',
-        ]);
-      }
+      final res = await windowsSystem.vaioDriver(
+        script,
+        install: true,
+        elevated: elevated,
+      );
       refreshVaioDetect();
       await refreshAudioDevices();
       final ok = res.exitCode == 0;
@@ -311,22 +283,11 @@ extension AudioModesState on AppModel {
     try {
       final script = _findVaioInstallScript();
       if (script == null) return false;
-      ProcessResult res;
-      if (elevated) {
-        final cmd =
-            'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'uninstall\', \'-RemoveTestCert\'';
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        res = await Process.run('powershell', [
-          '-ExecutionPolicy',
-          'Bypass',
-          '-File',
-          script.path,
-          '-Action',
-          'uninstall',
-          '-RemoveTestCert',
-        ]);
-      }
+      final res = await windowsSystem.vaioDriver(
+        script,
+        install: false,
+        elevated: elevated,
+      );
       refreshVaioDetect();
       await refreshAudioDevices();
       final ok = res.exitCode == 0;
@@ -369,11 +330,10 @@ extension AudioModesState on AppModel {
       return;
     }
     try {
-      final res = await Process.run('reg.exe', [
-        'query',
+      // 注册表读取统一经 RegistryPort（reg.exe 只在 platform/registry/）。
+      asioDriverInstalled = registry.keyExists(
         r'HKLM\SOFTWARE\ASIO\AuraDSP Driver',
-      ]);
-      asioDriverInstalled = (res.exitCode == 0);
+      );
     } catch (e, st) {
       swallow(e, st);
       asioDriverInstalled = false;
@@ -387,22 +347,12 @@ extension AudioModesState on AppModel {
     try {
       final script = _findAsioRegisterScript();
       if (script != null) {
-        ProcessResult res;
-        if (elevated) {
-          // 唤起 Windows UAC 提权对话框执行注册
-          final cmd =
-              'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'register\'';
-          res = await Process.run('powershell', ['-Command', cmd]);
-        } else {
-          res = await Process.run('powershell', [
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            script.path,
-            '-Action',
-            'register',
-          ]);
-        }
+        final res =
+            await windowsSystem.asioDriverScript(
+          script,
+          register: true,
+          elevated: elevated,
+        );
         await checkAsioDriverStatus();
         final ok = res.exitCode == 0 && asioDriverInstalled;
         if (!ok) {
@@ -426,21 +376,12 @@ extension AudioModesState on AppModel {
     try {
       final script = _findAsioRegisterScript();
       if (script != null) {
-        ProcessResult res;
-        if (elevated) {
-          final cmd =
-              'Start-Process powershell -Verb RunAs -Wait -ArgumentList \'-ExecutionPolicy\', \'Bypass\', \'-File\', \'"${script.path}"\', \'-Action\', \'unregister\'';
-          res = await Process.run('powershell', ['-Command', cmd]);
-        } else {
-          res = await Process.run('powershell', [
-            '-ExecutionPolicy',
-            'Bypass',
-            '-File',
-            script.path,
-            '-Action',
-            'unregister',
-          ]);
-        }
+        final res =
+            await windowsSystem.asioDriverScript(
+          script,
+          register: false,
+          elevated: elevated,
+        );
         await checkAsioDriverStatus();
         final ok = res.exitCode == 0 && !asioDriverInstalled;
         if (!ok) {
@@ -458,49 +399,23 @@ extension AudioModesState on AppModel {
     return false;
   }
 
-  File? _findAsioRegisterScript() {
-    var dir = Directory.current;
-    for (var i = 0; i < 4; i++) {
-      final candidates = [
-        File(
-          '${dir.path}/core/desktop/windows-drivers/04_asio_driver/register_driver.ps1',
-        ),
-        File('${dir.path}/scripts/register_driver.ps1'),
-        File('${dir.path}/register_driver.ps1'),
-        File('${dir.path}/../scripts/register_driver.ps1'),
-      ];
-      for (final c in candidates) {
-        if (c.existsSync()) return c;
-      }
-      final parent = dir.parent;
-      if (parent.path == dir.path) break;
-      dir = parent;
-    }
-    return null;
-  }
+  String? _findAsioRegisterScript() =>
+      windowsSystem.findRepoFile(const [
+        'core/desktop/windows-drivers/04_asio_driver/register_driver.ps1',
+        'scripts/register_driver.ps1',
+        'register_driver.ps1',
+        '../scripts/register_driver.ps1',
+      ]);
 
   // ---- System APO 运维 ----
 
-  File? _findApoConfigScript() {
-    var dir = Directory.current;
-    for (var i = 0; i < 4; i++) {
-      final candidates = [
-        File(
-          '${dir.path}/core/desktop/windows-drivers/03_system_apo/apo_config.py',
-        ),
-        File('${dir.path}/scripts/apo_config.py'),
-        File('${dir.path}/apo_config.py'),
-        File('${dir.path}/../scripts/apo_config.py'),
-      ];
-      for (final c in candidates) {
-        if (c.existsSync()) return c;
-      }
-      final parent = dir.parent;
-      if (parent.path == dir.path) break;
-      dir = parent;
-    }
-    return null;
-  }
+  String? _findApoConfigScript() =>
+      windowsSystem.findRepoFile(const [
+        'core/desktop/windows-drivers/03_system_apo/apo_config.py',
+        'scripts/apo_config.py',
+        'apo_config.py',
+        '../scripts/apo_config.py',
+      ]);
 
   void setApoCompositeMode(bool enabled) {
     apoCompositeMode = enabled;
@@ -518,13 +433,11 @@ extension AudioModesState on AppModel {
     try {
       final script = _findApoConfigScript();
       if (script != null) {
-        final res = await Process.run('python', [
-          script.path,
-          'status',
-          '--timeout',
-          timeout.toString(),
-          '--json',
-        ]);
+        final res =
+            await windowsSystem.apoStatus(
+          script,
+          timeout,
+        );
         if (res.exitCode == 0) {
           final out = res.stdout.toString().trim();
           final lines = out
@@ -609,24 +522,12 @@ extension AudioModesState on AppModel {
       }
 
       final useComposite = composite ?? apoCompositeMode;
-      ProcessResult res;
-      if (elevated) {
-        final modeArg = useComposite ? ", '--composite'" : "";
-        final cmd =
-            "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'install', '\"$target\"', '--yes', '--force'$modeArg";
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        final args = [
-          script.path,
-          'install',
-          target,
-          '--yes',
-          '--force',
-          if (useComposite) '--composite',
-          '--json',
-        ];
-        res = await Process.run('python', args);
-      }
+      final res = await windowsSystem.apoInstall(
+        script,
+        target: target,
+        composite: useComposite,
+        elevated: elevated,
+      );
 
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);
@@ -668,22 +569,11 @@ extension AudioModesState on AppModel {
       final target = (endpointNameOrId != null && endpointNameOrId.isNotEmpty)
           ? endpointNameOrId
           : config.apoTargetEndpoint;
-      ProcessResult res;
-      if (elevated) {
-        final targetArg = target.isNotEmpty ? ", '\"$target\"'" : "";
-        final cmd =
-            "Start-Process python -Verb RunAs -Wait -ArgumentList '\"${script.path}\"', 'uninstall'$targetArg, '--yes'";
-        res = await Process.run('powershell', ['-Command', cmd]);
-      } else {
-        final args = [
-          script.path,
-          'uninstall',
-          if (target.isNotEmpty) target,
-          '--yes',
-          '--json',
-        ];
-        res = await Process.run('python', args);
-      }
+      final res = await windowsSystem.apoUninstall(
+        script,
+        target: target,
+        elevated: elevated,
+      );
 
       await Future.delayed(const Duration(milliseconds: 600));
       await checkApoStatus(timeout: 0.6);

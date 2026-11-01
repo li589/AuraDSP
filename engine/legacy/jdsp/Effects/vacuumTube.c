@@ -11,8 +11,18 @@ void VTInit(VacuumTube *tb, double fs)
 	tb->needOversample = 0;
 	if (fs >= 30000.0 && fs < 65000.0)
 	{
-		oversample_makeSmp(&tb->smp[0], 2);
-		oversample_makeSmp(&tb->smp[1], 2);
+		/* [PATCHED-AuraDSP P-049] 抗混叠低通改用固定绝对截止 21 kHz，而不是按 Nyquist
+		 * 取比例。按比例（0.95）时截止随工作率漂移：44.1k 为 20.95k、
+		 * 48k 为 22.8k，20 kHz 处分别为 -0.94 / -0.02 dB（差 0.92 dB），
+		 * 与「同一预设跨采样率一致」的目标冲突。固定 21 kHz 后两率在
+		 * 20 kHz 为 -0.83 / -0.96 dB（差 0.13 dB）；首个镜像 24.1k /
+		 * 28k 分别仍有 -62 / -129 dB 抑制。
+		 * 低采样率分支（<44.1k）不在引擎工作域，但仍钳到 0.95 以免
+		 * 截止越过输入 Nyquist。只改 2x 分支：工作域只可能是 44.1/48k。 */
+		double cutoffRatio = 21000.0 / (fs * 0.5);
+		if (cutoffRatio > 0.95) cutoffRatio = 0.95;
+		oversample_makeSmpCutoff(&tb->smp[0], 2, cutoffRatio);
+		oversample_makeSmpCutoff(&tb->smp[1], 2, cutoffRatio);
 		tb->needOversample = 1;
 	}
 	else if (fs >= 20000.0 && fs < 30000.0)
@@ -38,6 +48,9 @@ void VTInit(VacuumTube *tb, double fs)
 	 * character/drywet/outcomp 故意不碰（开关不丢用户值，由引擎 apply_tube 推送）。 */
 	tb->tapeLp[0] = 0.0f;
 	tb->tapeLp[1] = 0.0f;
+	memset(tb->dryDelay, 0, sizeof(tb->dryDelay));
+	tb->dryPos[0] = 0;
+	tb->dryPos[1] = 0;
 	init6BandsCrossover(&tb->subband[0], fs, 300.0, 950.0, 2200.0, 4000.0, 6000.0);
 	init6BandsCrossover(&tb->subband[1], fs, 300.0, 950.0, 2200.0, 4000.0, 6000.0);
 }
@@ -91,6 +104,20 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 		/* [PATCHED-AuraDSP P-011 2026-10-13] wet 整形：trim→Tape阻尼→补偿→干湿混合（dry 取原始输入）。 */
 		float w1 = oversample_stepdownSmpFloat(&tb->smp[0], upsample[0]) * tb->postgain * trim;
 		float w2 = oversample_stepdownSmpFloat(&tb->smp[1], upsample[1]) * tb->postgain * trim;
+		/* [A-12] 干声与过采样湿声主峰（约 10 样本）对齐，避免 drywet<1 梳状。 */
+		float dry1 = x1[i], dry2 = x2[i];
+		if (wetK > 0.0f && wetK < 1.0f)
+		{
+			const int kDryDelay = 10;
+			int p0 = tb->dryPos[0] & 31;
+			int p1 = tb->dryPos[1] & 31;
+			dry1 = tb->dryDelay[0][(p0 + 32 - kDryDelay) & 31];
+			dry2 = tb->dryDelay[1][(p1 + 32 - kDryDelay) & 31];
+			tb->dryDelay[0][p0] = x1[i];
+			tb->dryDelay[1][p1] = x2[i];
+			tb->dryPos[0] = (p0 + 1) & 31;
+			tb->dryPos[1] = (p1 + 1) & 31;
+		}
 		if (lpCoef > 0.0f)
 		{
 			tb->tapeLp[0] += lpCoef * (w1 - tb->tapeLp[0]);
@@ -100,8 +127,8 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 		}
 		w1 *= compLin;
 		w2 *= compLin;
-		out1[i] = x1[i] * dryK + w1 * wetK;
-		out2[i] = x2[i] * dryK + w2 * wetK;
+		out1[i] = dry1 * dryK + w1 * wetK;
+		out2[i] = dry2 * dryK + w2 * wetK;
 		}
 	}
 	else

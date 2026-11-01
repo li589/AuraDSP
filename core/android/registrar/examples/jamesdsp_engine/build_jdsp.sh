@@ -10,15 +10,36 @@
 # Output: out/libjdsp.so (same 3-symbol HAL dlsym contract as libspikeeq.so)
 set -e
 
-HERE_W="$(cd "$(dirname "$0")" && pwd -W)"         # examples/jamesdsp_engine
-REG_W="$(cd "$HERE_W/../.." && pwd -W)"            # registrar/
-CORE_W="$(cd "$REG_W/.." && pwd -W)"               # core/android/
+HERE_W="$(cd "$(dirname "$0")" && pwd -W 2>/dev/null || true)"
+# CP-13（2026-11-01）：macOS/Linux 无 cygpath/pwd -W 时提供直通实现，
+# 使脚本内既有的 $(cygpath -m/-w/-u ...) 调用无需逐处改写。
+if [ -z "$HERE_W" ] || ! command -v cygpath >/dev/null 2>&1; then
+    cygpath() { case "${1:-}" in -w|-m|-u) shift ;; esac; printf '%s' "${1:-}"; }
+    export -f cygpath
+    HERE_W="$(cd "$(dirname "$0")" && pwd)"
+fi
+REG_W="$(cd "$HERE_W/../.." && pwd -W 2>/dev/null || true)"
+[ -n "$REG_W" ] || REG_W="$(cd "$HERE_W/../.." && pwd)"
+CORE_W="$(cd "$REG_W/.." && pwd -W 2>/dev/null || true)"
+[ -n "$CORE_W" ] || CORE_W="$(cd "$REG_W/.." && pwd)"
 
-NDK_BIN="D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/bin"
-SYSROOT="D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198/toolchains/llvm/prebuilt/windows-x86_64/sysroot"
-CC="$NDK_BIN/clang.exe"
-CXX="$NDK_BIN/clang++.exe"
-NM="$NDK_BIN/llvm-nm.exe"
+# NDK：优先 ANDROID_NDK / ANDROID_NDK_HOME；缺省回退历史 Windows 路径。
+NDK_ROOT="${ANDROID_NDK:-${ANDROID_NDK_HOME:-${NDK_ROOT:-D:/myPrograms/AndroidDevelop/Android-SDK/ndk/30.0.14904198}}}"
+case "$(uname -s)" in
+    Darwin) NDK_HOST_TAG=darwin-x86_64 ;;
+    Linux)  NDK_HOST_TAG=linux-x86_64 ;;
+    *)      NDK_HOST_TAG=windows-x86_64 ;;
+esac
+NDK_BIN="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/bin"
+SYSROOT="$NDK_ROOT/toolchains/llvm/prebuilt/$NDK_HOST_TAG/sysroot"
+CC="$NDK_BIN/clang"
+CXX="$NDK_BIN/clang++"
+NM="$NDK_BIN/llvm-nm"
+if [ "$NDK_HOST_TAG" = "windows-x86_64" ]; then
+    CC="$CC.exe"
+    CXX="$CXX.exe"
+    NM="$NM.exe"
+fi
 
 OUT_DIR="$HERE_W/out"
 mkdir -p "$OUT_DIR/obj_c" "$OUT_DIR/obj_cpp"
