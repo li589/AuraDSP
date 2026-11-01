@@ -116,7 +116,10 @@ class OnlineLyricsService {
       });
       final resp = await req.close().timeout(timeout);
       if (resp.statusCode != 200) return null;
-      final body = await resp.transform(utf8.decoder).join();
+      final body = await resp
+          .transform(utf8.decoder)
+          .join()
+          .timeout(timeout);
       final decoded = jsonDecode(body);
       return decoded is Map<String, dynamic> ? decoded : null;
     } catch (e, st) {
@@ -182,7 +185,10 @@ class OnlineLyricsService {
       });
       final resp = await req.close().timeout(timeout);
       if (resp.statusCode != 200) return null;
-      final body = await resp.transform(utf8.decoder).join();
+      final body = await resp
+          .transform(utf8.decoder)
+          .join()
+          .timeout(timeout);
       final decoded = jsonDecode(body);
       return decoded is List ? decoded : null;
     } catch (e, st) {
