@@ -1,13 +1,13 @@
 /*
  * tray_service.dart — 系统托盘 / 关窗→托盘 / 开机自启 统一服务
  *
- * 职责（Windows 桌面集成，基于 window_manager + tray_manager(nativeapi)）：
+ * 职责（桌面集成，基于 window_manager + tray_manager(nativeapi)）：
  *   1. 托盘图标 + 工具提示（assets/tray_icon.ico，多尺寸 16/32/48）
  *   2. 关窗→托盘：setPreventClose 拦截 WM_CLOSE，隐藏窗口而非退出（音乐继续）
  *   3. 托盘交互：左键单击恢复窗口；右键菜单（显示主窗口 / 开机自启开关 / 退出）
- *   4. 开机自启：HKCU Run（nativeapi.launchAtLogin），设置页与托盘菜单可读可写
+ *   4. 开机自启：由 AutoStartPort 注入（Windows 实现 = platform/autostart/）
  *
- * 用法：main() 里 `await TrayService.instance.init()`（engine 就绪前即可；
+ * 用法：main() 通过 PlatformAdapters.instance.window 调用 init()（engine 就绪前即可；
  * 失败只置 ready=false，不抛异常、不阻塞启动——非核心路径）。
  * 退出走托盘菜单「退出」或应用内退出（dispose 移除图标并放行）。
  */
@@ -19,7 +19,6 @@ import 'package:nativeapi_flutter/nativeapi_flutter.dart' show ImageAsset;
 import 'package:window_manager/window_manager.dart';
 
 import '../../core/error_sink.dart';
-import '../../core/ports/null_ports.dart';
 import '../platform_profile.dart';
 import '../port/autostart.dart';
 import '../port/window.dart';
@@ -39,7 +38,7 @@ class TrayService implements WindowPort {
   String _curLocale = '';
 
   /// 自启端口（组合根在 adapters 装配后注入，避免 tray ↔ adapters 循环依赖）。
-  AutoStartPort _autoStart = const NullAutoStart();
+  AutoStartPort? _autoStart;
 
   void bindAutoStart(AutoStartPort port) => _autoStart = port;
 
@@ -81,13 +80,13 @@ class TrayService implements WindowPort {
 
       final autostartItem = MenuItem.createWithLabelAndType(
         'Launch at login', MenuItemType.checkbox)!;
-      autostartItem.state = _autoStart.enabled ?? false
+      autostartItem.state = _autoStart?.enabled ?? false
           ? MenuItemState.checked
           : MenuItemState.unchecked;
       autostartItem.addListener((event) {
         if (event is MenuItemClickedEvent) {
-          final cur = _autoStart.enabled ?? false;
-          _autoStart.setEnabled(!cur);
+          final cur = _autoStart?.enabled ?? false;
+          _autoStart?.setEnabled(!cur);
           // checkbox 原生不自动翻转，手动同步可见状态
           autostartItem.state = !cur
               ? MenuItemState.checked

@@ -3,7 +3,7 @@
  *
  * 规范：统一 Schema v2，区分出厂预设 (只读) 与用户预设。
  * 覆盖全部 8 大效果卡片完整参数（包含交互式 EQ 曲线、低音谐波、电子管饱和度等）。
- * 存储路径：%APPDATA%/AuraDSP/presets/
+ * 存储路径：ConfigManager.baseDir/presets/
  */
 
 import 'dart:convert';

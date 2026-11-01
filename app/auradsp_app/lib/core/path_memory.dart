@@ -2,7 +2,7 @@
  * path_memory.dart — 外部文件选取路径记忆（统一 JSON）
  *
  * 所有「打开外部文件/文件夹」的选取器共享这一个 json
- * （%APPDATA%/AuraDSP/file_paths.json），按 slot 分槽记忆上次目录：
+ * （ConfigManager.baseDir/file_paths.json），按 slot 分槽记忆上次目录：
  *
  *   convolverIr     卷积 IR（irs/wav/flac）
  *   ddcVdc          DDC 表（vdc）
@@ -25,7 +25,6 @@ import 'io/document_store.dart';
 import 'io/resource_gate.dart';
 import 'io/resource_locator.dart';
 
-import 'error_sink.dart';
 abstract final class PathMemory {
   static const String filePathsJson = 'file_paths.json';
   static const int version = 1;
@@ -130,19 +129,10 @@ abstract final class PathMemory {
     return ResourceGate.directoryExists(p) ? p : null;
   }
 
-  static bool _flush() {
-    try {
-      final dir = Directory(ConfigManager.baseDir);
-      if (!dir.existsSync()) dir.createSync(recursive: true);
-      return ConfigManager.writeJsonFile(_path, {
+  static bool _flush() => DocumentStore.writeJson(_path, {
         'version': version,
         'dirs': _dirs,
       });
-    } catch (e, st) {
-      swallow(e, st);
-      return false;
-    }
-  }
 
   /// 测试辅助：重置内存态（不删盘）。
   static void resetForTest() {

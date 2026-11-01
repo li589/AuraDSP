@@ -2,7 +2,8 @@
  * config.dart — AuraDSP 全局外置配置中心
  *
  * 职责：接管原本散落在代码各处的硬编码参数（采样率、缓冲区、安全阈值、界面偏好等）。
- * 存储路径：%APPDATA%/AuraDSP/config.json。
+ * 存储路径：ConfigManager.baseDir/config.json
+ *（Windows: %APPDATA%/AuraDSP；其它: ~/.config/auradsp）。
  * 启动时自动加载，缺失时自动生成标准模板，支持热更新与重置。
  */
 
