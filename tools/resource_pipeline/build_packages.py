@@ -32,7 +32,7 @@ if sys.stdout.encoding != 'utf-8':
     except Exception:
         pass
 
-PROJECT_ROOT = Path(r"D:\temp_desktop\Proj\JamesDSP")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESOURCE_DIR = PROJECT_ROOT / "assets"
 DIST_DIR = PROJECT_ROOT / "dist" / "resources"
 

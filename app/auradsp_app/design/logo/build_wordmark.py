@@ -11,7 +11,7 @@ from fontTools.pens.transformPen import TransformPen
 from fontTools.ttLib import TTFont
 from fontTools.varLib.instancer import instantiateVariableFont
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 SRC = os.path.join(ROOT, r"app\auradsp_app\assets\fonts\BricolageGrotesque.ttf")
 OUT = os.path.join(ROOT, r"app\auradsp_app\design\logo")
 

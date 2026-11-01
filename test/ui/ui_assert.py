@@ -3,7 +3,7 @@
 from PIL import Image
 import os
 
-D = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+D = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
 im05 = Image.open(os.path.join(D, "05-home-v2.png")).convert("RGB")
 im06 = Image.open(os.path.join(D, "06-home-rail-collapsed.png")).convert("RGB")
 im07 = Image.open(os.path.join(D, "07-home-rail-expanded.png")).convert("RGB")

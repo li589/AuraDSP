@@ -17,7 +17,7 @@ user32.SetWindowPos(h, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
 user32.SetForegroundWindow(h); time.sleep(0.6)
 pt = wt.POINT(0, 0); user32.ClientToScreen(h, ctypes.byref(pt)); cl, ct = pt.x, pt.y
 print("client origin (%d,%d)" % (cl, ct))
-OUT = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
 os.makedirs(OUT, exist_ok=True)
 
 def click(x, y):

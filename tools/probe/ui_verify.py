@@ -67,7 +67,7 @@ def main():
     print("window rect (physical): %dx%d at (%d,%d); client origin (%d,%d)" % (
         r - l, b - t, l, t, cl, ct))
 
-    out = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+    out = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
     os.makedirs(out, exist_ok=True)
     time.sleep(1.2)  # 等入场动画结束
 

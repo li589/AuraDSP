@@ -33,7 +33,7 @@ import sys
 from math import gcd
 
 # S1（2026-11-01）：仓库根由 __file__ 推导，替代作者机硬编码
-# D:\temp_desktop\Proj\JamesDSP（见 test/engine_artifact.py）。
+# 旧写法为作者机绝对路径（见 test/engine_artifact.py 说明）。
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 CANDS = [
     os.environ.get("AURADSP_ENGINE_DLL", ""),

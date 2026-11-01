@@ -3,7 +3,11 @@ import math
 import os
 import sys
 
-DLL_PATH = r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll"
+# S1 迁移（2026-11-01）：路径统一走 test/engine_artifact 解析
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
+DLL_PATH = _elp()
 dll = ctypes.CDLL(DLL_PATH)
 
 

@@ -70,7 +70,7 @@ def main():
     activate(hwnd)
     cl, ct = client_origin(hwnd)
     print("client origin: (%d,%d)" % (cl, ct))
-    out = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+    out = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
     os.makedirs(out, exist_ok=True)
     time.sleep(1.0)
 

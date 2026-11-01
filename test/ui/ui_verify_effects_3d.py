@@ -23,7 +23,7 @@ from PIL import ImageGrab
 user32 = ctypes.windll.user32
 EP = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
 
-OUT = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
 os.makedirs(OUT, exist_ok=True)
 
 

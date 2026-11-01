@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from ui_test_kit import AuraAppSession
 
 _SCRATCH = os.path.join(tempfile.gettempdir(), 'auradsp_ui_scratch.png')
-OUT_DIR = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+OUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
 os.makedirs(OUT_DIR, exist_ok=True)
 
 # 分类下拉（1400x900 实测）：按钮中心 (1280,205)，项高 72，选中项对齐按钮。

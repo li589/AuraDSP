@@ -3,7 +3,7 @@
 
 背景：《Linux适配方案》T2/D-4 —— 此前 100+ 个 smoke 各自拼
 `core/desktop/windows/out/Release/auradsp_engine.dll`，另有十余处硬编码
-作者机绝对路径 `D:\\temp_desktop\\Proj\\JamesDSP`。产物位置一旦变化
+作者机绝对路径（仓库根的旧机器地址）。产物位置一旦变化
 （新平台、新构建目录）就要全仓改。产物路径只许在这里定义一次：
 
   Windows: core/desktop/windows/out/<Config>/auradsp_engine.dll
@@ -71,7 +71,7 @@ def find_engine_lib(root=None, platform=None, config="Release"):
 def repo_root_from(file_path, levels=2):
     """由 __file__ 推导仓库根：test/smoke/x.py 与 tools/bin/x.py 均为 2 层。
 
-    替代 `ROOT = r"D:\\temp_desktop\\Proj\\JamesDSP"` 硬编码（S1-②）。
+    替代 `ROOT = <作者机绝对路径>` 硬编码（S1-②）。
     """
     path = os.path.dirname(os.path.abspath(file_path))
     for _ in range(levels):
