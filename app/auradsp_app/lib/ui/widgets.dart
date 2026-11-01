@@ -10,6 +10,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/material.dart';
 
+import '../core/debug/debug_trace.dart';
 import '../core/design.dart';
 import '../core/state.dart';
 import '../core/theme.dart';
@@ -981,7 +982,14 @@ class AuraChoiceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = paletteOf(context);
     return InkWell(
-      onTap: onTap,
+      // 调试总线：选项 chip 没有参数语义（多数经 setter 间接触发），
+      // 至少留下可读 label，避免调试面板只看到坐标兜底事件。
+      onTap: onTap == null
+          ? null
+          : () {
+              DebugTrace.instance.tap('choice', label);
+              onTap!();
+            },
       borderRadius: BorderRadius.circular(AuraRadius.xs),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),

@@ -293,8 +293,15 @@ extension EqState on AppModel {
       newQs.add(bi < oldQs.length ? oldQs[bi] : eqQ);
     }
     eqFrequencies = target;
-    eqGains = newGains;
     eqQs = newQs;
+    if (eqPresetName != 'custom') {
+      // 预设是解析式曲线：换网格后必须按同一预设在**新频点**上重建，
+      // 插值会把曲线改形（15→31→15 回不到原样）。
+      applyEqPreset(eqPresetName);
+      if (notify) _notifyUi();
+      return;
+    }
+    eqGains = newGains;
     _pushEqCurve();
     if (notify) _notifyUi();
   }
@@ -349,9 +356,16 @@ extension EqState on AppModel {
       }
     }
     eqFrequencies = List.from(newFreqs);
-    eqGains = newGains;
     eqQs = newQs;
-    _pushEqCurve();
+    if (eqPresetName != 'custom') {
+      // 选了预设时段数切换必须“按段数+预设”重取样，而不是把旧网格插值搬过来：
+      // 插值会让 Pop/Jazz 等曲线在 15→31→15 后变形，名字却还挂着原预设。
+      applyEqPreset(eqPresetName);
+    } else {
+      // 自定义曲线没有可重取的解析式，只能按对数频率插值迁移。
+      eqGains = newGains;
+      _pushEqCurve();
+    }
   }
 
   void setEqBandGain(int index, double gain) {
@@ -381,9 +395,10 @@ extension EqState on AppModel {
   }
 
   void setEqFilter(int filter) {
-    // 架构选择目前只属于 UI/预设状态，尚未映射到引擎工作模式。
+    // 架构与插值都编码在 eq.curve 前缀（eqm:<interp>:<mode>），
+    // 必须重推曲线引擎才会换 FIR/IIR；旧实现只改 UI 字段，引擎一直跑旧架构。
     eqFilter = filter;
-    _notifyUi();
+    _pushEqCurve();
   }
 
   /// 按**频率**应用一条 EQ 曲线（C4）。
@@ -470,15 +485,22 @@ extension EqState on AppModel {
   }
 
   void setEqInterp(int interp) {
-    // 插值选择目前只属于 UI/预设状态，尚未映射到引擎工作模式。
+    // 同 setEqFilter：插值算法在前缀里，必须重推 eq.curve 才生效。
     eqInterp = interp;
-    _notifyUi();
+    _pushEqCurve();
   }
 
-  void toggleEqBypass() {
-    eqBypass = !eqBypass;
-    setInt('eq.enable', (eqOn && !eqBypass) ? 1 : 0);
-    _notifyUi();
+  void toggleEqBypass() => setEqBypass(!eqBypass);
+
+  /// 旁路对比开关（预设/会话恢复也走这里）。
+  ///
+  /// 只切“送进引擎的目标曲线”（旁路 = 全平），不动 eq.enable：
+  /// 旧实现直接下发 eq.enable=0，卡片会跟着开关一起收起——对比时既看不到
+  /// 曲线，也不能继续调参，对用户很不友好。
+  void setEqBypass(bool on) {
+    if (eqBypass == on) return;
+    eqBypass = on;
+    _pushEqCurve();
   }
 
   void flattenEq() {
@@ -600,6 +622,13 @@ extension EqState on AppModel {
       qs: eqQs,
       sampleRate: 48000,
     );
+    /* 旁路对比：目标曲线压成全平（等效不施加任何 EQ），但 eq.enable 保持 1——
+     * 卡片/开关不收起，用户可以在 A/B 之间反复切，且曲线仍在视野里。 */
+    if (eqBypass) {
+      for (var i = 0; i < target.length; i++) {
+        target[i] = 0.0;
+      }
+    }
     final buffer = StringBuffer(
       'eqm:$eqInterp:${eqOpModeForFilter(eqFilter)};',
     );

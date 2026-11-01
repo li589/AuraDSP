@@ -14,6 +14,12 @@ extension StateCore on AppModel {
     if (_testing && m['cmd'] == 'setParam') {
       sentParamsForTesting.add(Map<String, dynamic>.from(m));
     }
+    if (_testing && m['cmd'] == 'setParamStr') {
+      sentStrParamsForTesting.add({
+        'id': m['id'],
+        'len': (m['text'] as String?)?.length ?? 0,
+      });
+    }
     // 调试总线：所有真正发往音频 isolate 的命令都留痕。setParam 单独成类，
     // 便于和 state_events 的 paramResult 回执按 id 对齐；长文本已截断。
     final cmd = m['cmd'];

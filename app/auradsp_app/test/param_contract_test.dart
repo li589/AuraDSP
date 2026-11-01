@@ -78,7 +78,6 @@ const Map<String, String> kSetterHelper = {
 /// kUiOnlySpecIds 登记的是"引擎无此参数"。
 const Set<String> kNoEngineWriteSpecIds = {
   // 字段直赋（m.xxx = v）
-  'eq.bypass', // toggleEqBypass 特路消费；引擎无 eq.bypass
   'eq.presetName', // UI 预设名，不入引擎
   'stereo.bandUsed', // 字段直赋，_pushStereoChain 间接影响 bandUsed 推送
   // 空实现 noop（setter 是 (m, v) {}）
@@ -90,11 +89,9 @@ const Set<String> kNoEngineWriteSpecIds = {
   'routing.pipelineOutput', // 宿主路由配置，ConfigManager 域
   // 方法链为空（方法体走 config.* + ConfigManager.save，不引用任何引擎 id）
   'comp.ratio', // 引擎无 comp.ratio 参数（vendor 多段压缩无比率）；静态孤儿 spec
-  'eq.filter', // setEqFilter 仅切 UI 滤波类型
-  'eq.interp', // setEqInterp 仅切 UI 插值
-  // 注：eq.bandsCount / eq.q 不在此列——二者经 setEqBandsCount/fillEqQ →
-  // _pushEqCurve 向引擎下发 eq.curve（链非空；引擎无同名参数，形态走
-  // kUiOnlySpecIds 豁免期望断言）
+  // 注：eq.bandsCount / eq.q / eq.filter / eq.interp / eq.bypass 不在此列——
+  // 它们都经 _pushEqCurve 向引擎下发 eq.curve（链非空；引擎无同名参数，
+  // 形态走 kUiOnlySpecIds 豁免期望断言）
   'routing.apoTargetEndpoint', // APO 端点，ConfigManager 域
   'routing.asioBufSize', // ASIO 缓冲档，ConfigManager 域
   'routing.asioDriver', // ASIO 驱动，ConfigManager 域

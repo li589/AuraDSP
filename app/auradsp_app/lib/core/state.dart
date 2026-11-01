@@ -883,6 +883,11 @@ class AppModel extends ChangeNotifier {
   /// （P-032 修的正是三处漏发）。
   final List<Map<String, dynamic>> sentParamsForTesting = [];
 
+  /// 同 [sentParamsForTesting]，记录字符串参数（`eq.curve` / `liveprog.code` 等）。
+  /// 只存 id + 长度：曲线/脚本全文不值得在测试里整段搬运，断言“有没有下发”
+  /// 已足够（架构/插值切换只改曲线前缀，不下发独立参数）。
+  final List<Map<String, dynamic>> sentStrParamsForTesting = [];
+
   /// ChangeNotifier 保护成员的库内转发。
   ///
   /// 拆分后 AppModel 的方法迁入 `extension ... on AppModel`（part 文件），

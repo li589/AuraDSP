@@ -30,7 +30,7 @@ powershell -File tools\debug\run_debug.ps1 -Log D:\tmp\aura_trace.jsonl -Exe D:\
 |---|---|---|
 | `ui` | `control.register` | 参数控件首次出现在页面上 |
 | `ui` | `control` | 用户拖动滑块/切换开关/选择 chip，含参数 id、值、section |
-| `ui` | `tap` | 通用 chip / segment / dropdown 点击，含可读 label |
+| `ui` | `tap` | 通用 chip / segment / dropdown / choice 点击，含可读 label |
 | `ui` | `pointer` | 根级指针兜底（x/y），覆盖没有语义标签的自定义控件 |
 | `param` | `send` | 主 isolate 发往音频 isolate 的 `setParam`/`setParamStr` |
 | `engine` | `ack` | DSP 层回执 `paramResult`：`value`（已接收值）、`rc`、`tookMs`、拒绝原因 |
