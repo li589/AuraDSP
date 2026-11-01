@@ -181,6 +181,10 @@ typedef struct
 	float drywet;     /* 湿比 0..1（0=干声直通，1=全湿=旧行为） */
 	float outcomp;    /* 输出补偿 dB（只作用于湿信号） */
 	float tapeLp[2];  /* Tape 档 HF 阻尼一阶状态 */
+	/* [A-12] drywet<1 时干声延迟线：与过采样湿声的主峰（约 10 样本）对齐，
+	 * 避免干湿混合产生梳状深坑。仅 oversample 路径使用。 */
+	float dryDelay[2][32];
+	int   dryPos[2];
 } VacuumTube;
 typedef struct
 {

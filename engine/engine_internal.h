@@ -764,6 +764,10 @@ struct auradsp_handle_s {
     /* 2x 多相半带过采样器实例（RT 独占，静态预分配零分配） */
     auradsp::HalfbandOversampler2x exc_os[kMxMaxChannels];
     auradsp::HalfbandOversampler2x tube_os[kMxMaxChannels];
+    /* A-12：tube_mix<1 时干声延迟线，与 tube_os 的 21 样本群延迟对齐。
+     * 只在 oversample 路径使用；容量 32 覆盖 21 样本。 */
+    float tube_dry[kMxMaxChannels][32] = {};
+    int   tube_dry_pos[kMxMaxChannels] = {};
     auradsp::HalfbandOversampler2x psycho_os[2];
 
     float* shelf_scratch = nullptr;   /* max_block*2，vendor 链前置处理用 */

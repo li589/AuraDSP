@@ -300,6 +300,8 @@ void reset_channel_state_rt(auradsp_handle h) {
     /* 4. tube */
     for (int c = 0; c < kMxMaxChannels; ++c) {
         h->tube_os[c].reset();
+        for (int i = 0; i < 32; ++i) h->tube_dry[c][i] = 0.0f;
+        h->tube_dry_pos[c] = 0;
     }
 
     /* 5. exciter / loudness */
@@ -1207,6 +1209,16 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
         if (!(mask & (1u << c))) continue;
         for (int i = 0; i < frames; ++i) {
             const float x = io[i * ch + c];
+            /* [A-12] 干声与过采样湿声对齐：半带 FIR 群延迟 21 样本。
+             * 只在 os 路径且 mix<1 时启用；mix=1 时干声不参与，避免无谓延迟。 */
+            float dry = x;
+            if (os && mix > 0.0f && mix < 1.0f) {
+                const int pos = h->tube_dry_pos[c] & 31;
+                const int rd = (pos + 32 - auradsp::HalfbandOversampler2x::kLatencySamples) & 31;
+                dry = h->tube_dry[c][rd];
+                h->tube_dry[c][pos] = x;
+                h->tube_dry_pos[c] = (pos + 1) & 31;
+            }
             float drive = x * pregain;
             float sat;
             if (os) {
@@ -1234,7 +1246,7 @@ void tube_process_mc(auradsp_handle h, float* io, int frames, int ch) {
                 }
             }
             float wet = sat * postgain * comp;
-            io[i * ch + c] = x * (1.0f - mix) + wet * mix;
+            io[i * ch + c] = dry * (1.0f - mix) + wet * mix;
         }
     }
 }

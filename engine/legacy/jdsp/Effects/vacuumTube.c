@@ -38,6 +38,9 @@ void VTInit(VacuumTube *tb, double fs)
 	 * character/drywet/outcomp 故意不碰（开关不丢用户值，由引擎 apply_tube 推送）。 */
 	tb->tapeLp[0] = 0.0f;
 	tb->tapeLp[1] = 0.0f;
+	memset(tb->dryDelay, 0, sizeof(tb->dryDelay));
+	tb->dryPos[0] = 0;
+	tb->dryPos[1] = 0;
 	init6BandsCrossover(&tb->subband[0], fs, 300.0, 950.0, 2200.0, 4000.0, 6000.0);
 	init6BandsCrossover(&tb->subband[1], fs, 300.0, 950.0, 2200.0, 4000.0, 6000.0);
 }
@@ -91,6 +94,20 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 		/* [PATCHED-AuraDSP P-011 2026-10-13] wet 整形：trim→Tape阻尼→补偿→干湿混合（dry 取原始输入）。 */
 		float w1 = oversample_stepdownSmpFloat(&tb->smp[0], upsample[0]) * tb->postgain * trim;
 		float w2 = oversample_stepdownSmpFloat(&tb->smp[1], upsample[1]) * tb->postgain * trim;
+		/* [A-12] 干声与过采样湿声主峰（约 10 样本）对齐，避免 drywet<1 梳状。 */
+		float dry1 = x1[i], dry2 = x2[i];
+		if (wetK > 0.0f && wetK < 1.0f)
+		{
+			const int kDryDelay = 10;
+			int p0 = tb->dryPos[0] & 31;
+			int p1 = tb->dryPos[1] & 31;
+			dry1 = tb->dryDelay[0][(p0 + 32 - kDryDelay) & 31];
+			dry2 = tb->dryDelay[1][(p1 + 32 - kDryDelay) & 31];
+			tb->dryDelay[0][p0] = x1[i];
+			tb->dryDelay[1][p1] = x2[i];
+			tb->dryPos[0] = (p0 + 1) & 31;
+			tb->dryPos[1] = (p1 + 1) & 31;
+		}
 		if (lpCoef > 0.0f)
 		{
 			tb->tapeLp[0] += lpCoef * (w1 - tb->tapeLp[0]);
@@ -100,8 +117,8 @@ void VTProcess(VacuumTube *tb, float *x1, float *x2, float *out1, float *out2, s
 		}
 		w1 *= compLin;
 		w2 *= compLin;
-		out1[i] = x1[i] * dryK + w1 * wetK;
-		out2[i] = x2[i] * dryK + w2 * wetK;
+		out1[i] = dry1 * dryK + w1 * wetK;
+		out2[i] = dry2 * dryK + w2 * wetK;
 		}
 	}
 	else

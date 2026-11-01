@@ -20,6 +20,9 @@ public:
     static constexpr int kNumTaps = 43;
     static constexpr int kMidTap = 21;
     static constexpr int kHalfCoeffs = 11;
+    /* 线性相位半带 FIR 的群延迟（输入采样域）：上/下采样各 10.5 样本，
+     * 合计 21 样本。干湿混合时干声必须延迟同长度，否则会产生梳状。 */
+    static constexpr int kLatencySamples = 21;
 
     // 11 个唯一的非零对称系数 h[2*j], j = 0..10
     static inline const float kCoeffs[kHalfCoeffs] = {
