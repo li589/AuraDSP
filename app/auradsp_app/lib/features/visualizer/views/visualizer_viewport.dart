@@ -19,31 +19,45 @@ import 'visualizer_db_scale.dart';
 /// 2026-10-31 内存优化：旧实现每帧 `build(time)` 新建一个画笔，Path /
 /// Paint / Shader 等 Skia 原生对象只能等 GC finalizer 回收；在核显上还会
 /// 让光栅线程落后、GPU 表面排队（实测可视化页可涨到 2GB+）。
-class _RepaintPainter extends CustomPainter {
-  final CustomPainter delegate;
-  final ValueListenable<double>? time;
+/// 单层合批渲染画笔：将背景氛围层与主视效画笔合并到同一个 Canvas 进行绘制
+/// 彻底废除双层全屏 RepaintBoundary 堆叠，消除双份全屏离屏 Surface 显存占用与 GPU 排队。
+class _CompositeVisualizerPainter extends CustomPainter {
+  final CustomPainter? ambience;
+  final CustomPainter mainPainter;
+  final ValueListenable<double>? mainTime;
+  final ValueListenable<double>? ambienceTime;
 
-  _RepaintPainter({required this.delegate, this.time})
-      : super(repaint: time);
+  _CompositeVisualizerPainter({
+    this.ambience,
+    required this.mainPainter,
+    this.mainTime,
+    this.ambienceTime,
+  }) : super(repaint: mainTime ?? ambienceTime);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final t = time;
-    final d = delegate;
-    if (t != null && d is VisualizerTimeAware) {
-      (d as VisualizerTimeAware).setVisualizerTime(t.value);
+    final a = ambience;
+    if (a != null) {
+      final at = ambienceTime;
+      if (at != null && a is VisualizerTimeAware) {
+        (a as VisualizerTimeAware).setVisualizerTime(at.value);
+      }
+      a.paint(canvas, size);
     }
-    d.paint(canvas, size);
+    final mt = mainTime;
+    final mp = mainPainter;
+    if (mt != null && mp is VisualizerTimeAware) {
+      (mp as VisualizerTimeAware).setVisualizerTime(mt.value);
+    }
+    mp.paint(canvas, size);
   }
 
   @override
-  bool shouldRepaint(covariant _RepaintPainter oldDelegate) {
-    if (oldDelegate.delegate != delegate || oldDelegate.time != time) {
+  bool shouldRepaint(covariant _CompositeVisualizerPainter oldDelegate) {
+    if (oldDelegate.ambience != ambience || oldDelegate.mainPainter != mainPainter) {
       return true;
     }
-    // 无时间监听：重绘的唯一来源是频谱帧导致的 widget 重建
-    // （数据列表是原地复用的，wrapper 必须在这里放行）。
-    return time == null;
+    return mainTime == null;
   }
 }
 
@@ -190,11 +204,18 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
             : rawBands;
 
         final delegate = _delegateFor(renderedBands, peaks);
+        final bool usesAmbience = _usesAmbience(widget.config.style);
+        final CustomPainter? ambienceDelegate =
+            usesAmbience ? _ambienceFor(renderedBands) : null;
+
+        // 单层合批渲染：将背景氛围与主画笔合为一个 CustomPaint，0 额外 GPU 离屏缓冲
         final paintLayer = RepaintBoundary(
           child: CustomPaint(
-            painter: _RepaintPainter(
-              delegate: delegate,
-              time: delegate is VisualizerTimeAware ? widget.time : null,
+            painter: _CompositeVisualizerPainter(
+              ambience: ambienceDelegate,
+              mainPainter: delegate,
+              mainTime: delegate is VisualizerTimeAware ? widget.time : null,
+              ambienceTime: usesAmbience ? _ambienceTime : null,
             ),
             child: const SizedBox.expand(),
           ),
@@ -235,27 +256,23 @@ class _VisualizerCanvasViewportState extends State<VisualizerCanvasViewport> {
           body = paintLayer;
         }
 
-        if (_usesAmbience(widget.config.style)) {
-          body = Stack(
+        // 视效风格切换过渡动效：280ms 交叉平滑淡入淡出，彻底消除突变跳跃感
+        return AnimatedSwitcher(
+          duration: const Duration(milliseconds: 280),
+          switchInCurve: Curves.easeOutCubic,
+          switchOutCurve: Curves.easeInCubic,
+          layoutBuilder: (currentChild, previousChildren) => Stack(
             fit: StackFit.expand,
             children: [
-              IgnorePointer(
-                child: RepaintBoundary(
-                  child: CustomPaint(
-                    painter: _RepaintPainter(
-                      delegate: _ambienceFor(renderedBands),
-                      time: _ambienceTime,
-                    ),
-                    child: const SizedBox.expand(),
-                  ),
-                ),
-              ),
-              body,
+              ...previousChildren,
+              ?currentChild,
             ],
-          );
-        }
-
-        return body;
+          ),
+          child: KeyedSubtree(
+            key: ValueKey(widget.config.style),
+            child: body,
+          ),
+        );
       },
     );
   }

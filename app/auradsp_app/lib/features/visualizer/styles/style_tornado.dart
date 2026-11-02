@@ -60,6 +60,22 @@ class ParticleTornadoPainter extends CustomPainter
   final Path _strandPathBack = Path();
   final Path _conePath = Path();
 
+  /// 着色器缓存：按 (Size, Palette, 量化档) 复用，杜绝逐帧产生 Skia C++ 对象
+  static final Map<String, Shader> _shaderCache = {};
+
+  static Shader _getOrCreateShader(String key, Shader Function() factory) {
+    var s = _shaderCache[key];
+    if (s == null) {
+      if (_shaderCache.length > 48) {
+        _shaderCache.clear();
+      }
+      s = factory();
+      _shaderCache[key] = s;
+    }
+    return s;
+  }
+
+
   ParticleTornadoPainter({
     required this.bands,
     required this.palette,
@@ -177,21 +193,20 @@ class ParticleTornadoPainter extends CustomPainter
     // 7. 顶部深邃风眼口外沿呼吸微光
     _drawTopEyeMouthGlow(canvas, cx, baseY, maxR, funnelH, _smoothedBass, sway);
 
-    // 8. 全局泛光
+    // 8. 全局泛光（Shader 按尺寸与平滑低音 6 档量化缓存，杜绝逐帧分配）
     if (bloom > 0.05) {
-      _glowPaint
-        ..shader = RadialGradient(
-          colors: [
-            palette.glow.withValues(alpha: (0.06 + bloom * 0.14 + _smoothedBass * 0.08)),
-            palette.glow.withValues(alpha: 0.0),
-          ],
-        ).createShader(
-          Rect.fromCenter(
-            center: Offset(cx + sway * 0.6, baseY - funnelH * 0.35),
-            width: maxR * 3.6,
-            height: funnelH * 1.1,
-          ),
-        );
+      final bassLvl = (_smoothedBass * 5.0).round().clamp(0, 5);
+      final glowRect = Rect.fromCenter(
+        center: Offset(cx, baseY - funnelH * 0.35),
+        width: maxR * 3.6,
+        height: funnelH * 1.1,
+      );
+      _glowPaint.shader = _getOrCreateShader('glow_x__', () => RadialGradient(
+        colors: [
+          palette.glow.withValues(alpha: (0.06 + bloom * 0.14 + (bassLvl / 5.0) * 0.08)),
+          palette.glow.withValues(alpha: 0.0),
+        ],
+      ).createShader(glowRect));
       canvas.drawOval(
         Rect.fromCenter(
           center: Offset(cx + sway * 0.6, baseY - funnelH * 0.35),
@@ -225,17 +240,18 @@ class ParticleTornadoPainter extends CustomPainter
   ) {
     final center = Offset(cx + sway, baseY);
 
-    // a. 底部广域环境微光沉降池
-    _hazePaint.shader = RadialGradient(
+    final bassLvl = (bass * 5.0).round().clamp(0, 5);
+
+    // a. 底部广域环境微光沉降池（Shader 复用）
+    final hazeRect = Rect.fromCenter(center: Offset(cx, baseY), width: maxR * 3.8, height: minDim * 0.30);
+    _hazePaint.shader = _getOrCreateShader('haze____', () => RadialGradient(
       colors: [
-        palette.secondary.withValues(alpha: 0.16 + bass * 0.18),
-        palette.primary.withValues(alpha: 0.06 + bass * 0.08),
+        palette.secondary.withValues(alpha: 0.16 + (bassLvl / 5.0) * 0.18),
+        palette.primary.withValues(alpha: 0.06 + (bassLvl / 5.0) * 0.08),
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
-    ).createShader(
-      Rect.fromCenter(center: center, width: maxR * 3.8, height: minDim * 0.30),
-    );
+    ).createShader(hazeRect));
     canvas.drawOval(
       Rect.fromCenter(
         center: center,
@@ -245,23 +261,24 @@ class ParticleTornadoPainter extends CustomPainter
       _hazePaint,
     );
 
-    // b. 同心进动高能吸积环（三道不同半径的优雅椭圆环）
+    // b. 同心进动高能吸积环（三道不同半径的优雅椭圆环，Shader 复用）
     const ringMultipliers = [0.45, 0.85, 1.35];
     for (var ri = 0; ri < ringMultipliers.length; ri++) {
-      final mul = ringMultipliers[ri] * (1.0 + bass * 0.06);
+      final mul = ringMultipliers[ri] * (1.0 + (bassLvl / 5.0) * 0.06);
       final rw = maxR * mul;
       final rh = rw * _pitchSin;
-      final ringAlpha = (0.12 - ri * 0.03 + bass * 0.10).clamp(0.02, 0.35);
+      final ringAlpha = (0.12 - ri * 0.03 + (bassLvl / 5.0) * 0.10).clamp(0.02, 0.35);
+      final ringRect = Rect.fromCenter(center: Offset(cx, baseY), width: rw, height: rh);
 
       _ringPaint
-        ..shader = SweepGradient(
+        ..shader = _getOrCreateShader('ring_____', () => SweepGradient(
           colors: [
             palette.primary.withValues(alpha: ringAlpha),
             palette.secondary.withValues(alpha: ringAlpha * 1.8),
             palette.primary.withValues(alpha: ringAlpha * 0.5),
             palette.primary.withValues(alpha: ringAlpha),
           ],
-        ).createShader(Rect.fromCenter(center: center, width: rw, height: rh))
+        ).createShader(ringRect))
         ..strokeWidth = (1.2 + (2 - ri) * 0.4) * (lineWidth / 1.5);
 
       canvas.drawOval(
@@ -270,18 +287,17 @@ class ParticleTornadoPainter extends CustomPainter
       );
     }
 
-    // c. 风眼中心深邃极核（中央极度致密的高能焦点）
-    final coreR = maxR * (0.18 + bass * 0.05);
-    _hazePaint.shader = RadialGradient(
+    // c. 风眼中心深邃极核（中央极度致密的高能焦点，Shader 复用）
+    final coreR = maxR * (0.18 + (bassLvl / 5.0) * 0.05);
+    final coreRect = Rect.fromCenter(center: Offset(cx, baseY), width: coreR * 2, height: coreR * 2 * _pitchSin);
+    _hazePaint.shader = _getOrCreateShader('core____', () => RadialGradient(
       colors: [
-        palette.peak.withValues(alpha: 0.30 + bass * 0.40),
-        palette.primary.withValues(alpha: 0.12 + bass * 0.15),
+        palette.peak.withValues(alpha: 0.30 + (bassLvl / 5.0) * 0.40),
+        palette.primary.withValues(alpha: 0.12 + (bassLvl / 5.0) * 0.15),
         palette.primary.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
-    ).createShader(
-      Rect.fromCenter(center: center, width: coreR * 2, height: coreR * 2 * _pitchSin),
-    );
+    ).createShader(coreRect));
     canvas.drawOval(
       Rect.fromCenter(center: center, width: coreR * 2, height: coreR * 2 * _pitchSin),
       _hazePaint,
@@ -337,7 +353,7 @@ class ParticleTornadoPainter extends CustomPainter
 
     final alphaBase = isFront ? 0.22 : 0.08;
     _strandPaint
-      ..shader = LinearGradient(
+      ..shader = _getOrCreateShader('strand____', () => LinearGradient(
         begin: Alignment.bottomCenter,
         end: Alignment.topCenter,
         colors: [
@@ -348,7 +364,7 @@ class ParticleTornadoPainter extends CustomPainter
         stops: const [0.0, 0.65, 1.0],
       ).createShader(
         Rect.fromLTWH(cx - maxR * 1.5, baseY - funnelH, maxR * 3.0, funnelH),
-      )
+      ))
       ..strokeWidth = (isFront ? lineWidth * 1.1 : lineWidth * 0.7);
 
     canvas.drawPath(path, _strandPaint);
@@ -395,17 +411,18 @@ class ParticleTornadoPainter extends CustomPainter
       funnelH,
     );
 
-    // 核心微光体积填充：底部浓、上部自然淡出，两侧柔和衰减
-    _conePaint.shader = LinearGradient(
+    final coneBassLvl = (bass * 5.0).round().clamp(0, 5);
+    // 核心微光体积填充：底部浓、上部自然淡出，两侧柔和衰减（Shader 复用）
+    _conePaint.shader = _getOrCreateShader('cone____', () => LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
       colors: [
-        palette.primary.withValues(alpha: 0.09 + bass * 0.07),
-        palette.secondary.withValues(alpha: 0.04 + bass * 0.03),
+        palette.primary.withValues(alpha: 0.09 + (coneBassLvl / 5.0) * 0.07),
+        palette.secondary.withValues(alpha: 0.04 + (coneBassLvl / 5.0) * 0.03),
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.55, 1.0],
-    ).createShader(coneRect);
+    ).createShader(coneRect));
 
     canvas.drawPath(_conePath, _conePaint);
   }
@@ -568,14 +585,15 @@ class ParticleTornadoPainter extends CustomPainter
       height: topR * 2.0 * _pitchSin,
     );
 
+    final eyeBassLvl = (bass * 5.0).round().clamp(0, 5);
     _ringPaint
-      ..shader = LinearGradient(
+      ..shader = _getOrCreateShader('topEye____', () => LinearGradient(
         colors: [
-          palette.primary.withValues(alpha: 0.08 + bass * 0.12),
-          palette.secondary.withValues(alpha: 0.15 + bass * 0.18),
+          palette.primary.withValues(alpha: 0.08 + (eyeBassLvl / 5.0) * 0.12),
+          palette.secondary.withValues(alpha: 0.15 + (eyeBassLvl / 5.0) * 0.18),
           palette.glow.withValues(alpha: 0.04),
         ],
-      ).createShader(eyeRect)
+      ).createShader(eyeRect))
       ..strokeWidth = lineWidth * 0.85;
 
     canvas.drawOval(eyeRect, _ringPaint);

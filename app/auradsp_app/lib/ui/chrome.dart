@@ -461,7 +461,7 @@ class AmbientEnvelope {
   static const int bars = 72;
   static const double release = 0.82;     // 有信号时的释放系数
   static const double staleDecay = 0.70;  // 无信号时的快速衰减
-  static const double epsilon = 0.0008;
+  static const double epsilon = 0.005; // 真实静音底噪截断门限（~-46dBFS），保障闲置 0fps 休眠
 
   /// 氛围柱的频率覆盖范围（对数均分到 [focusMinHz, focusMaxHz]）。
   ///
@@ -533,7 +533,14 @@ class _AmbientPainter extends CustomPainter {
   final AmbientEnvelope _env = AmbientEnvelope();
 
   final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _haloPaint = Paint()..style = PaintingStyle.fill;
   final Path _wavePath = Path();
+
+  // 着色器尺寸/调色板缓存：整场播放绝不逐帧重新生成 Shader
+  Shader? _waveShader;
+  Size _waveShaderSize = Size.zero;
+  Shader? _haloShader;
+  Size _haloShaderSize = Size.zero;
 
   _AmbientPainter({
     required this.spectrum,
@@ -576,20 +583,52 @@ class _AmbientPainter extends CustomPainter {
 
     final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
-    final baseAlpha = (0.16 * intensity * 255).round();
+    final baseAlpha = (0.18 * intensity * 255).round();
 
     final w = size.width;
     final h = size.height;
     if (w <= 0 || h <= 0) return;
 
+    // 1. 低频毛玻璃弥散光晕（Bass Frosted Bloom）：提取低频能量，在屏幕底部模拟真实光学毛玻璃扩散
+    var bassSum = 0.0;
+    const bassCount = 12;
+    for (var i = 0; i < bassCount; i++) {
+      bassSum += _env.smooth[i];
+    }
+    final bass = (bassSum / bassCount).clamp(0.0, 1.0);
+
+    if (_haloShader == null || _haloShaderSize != size) {
+      _haloShaderSize = size;
+      _haloShader = ui.Gradient.radial(
+        Offset(w * 0.5, h * 0.98),
+        w * 0.75,
+        [
+          palette.accent.withValues(alpha: 0.16 * intensity),
+          palette.accent.withValues(alpha: 0.05 * intensity),
+          palette.accent.withValues(alpha: 0.0),
+        ],
+        const [0.0, 0.45, 1.0],
+      );
+    }
+    _haloPaint.shader = _haloShader;
+    final haloW = w * (0.85 + bass * 0.35);
+    final haloH = h * (0.42 + bass * 0.30);
+    canvas.drawOval(
+      Rect.fromCenter(
+        center: Offset(w * 0.5, h * 0.98),
+        width: haloW,
+        height: haloH,
+      ),
+      _haloPaint,
+    );
+
+    // 2. 平滑波浪极光场：通过贝塞尔样条将 72 根柱体的高度平滑串联
     const bars = AmbientEnvelope.bars;
-    final maxWaveH = h * 0.42;
+    final maxWaveH = h * 0.44;
 
     _wavePath.reset();
     _wavePath.moveTo(0, h);
 
-    // 平滑波浪极光：通过贝塞尔样条将 72 根柱体的高度平滑串联
-    // 纯矢量原生绘制，彻底废除 Picture.toImageSync，零离屏纹理分配，GPU 占用趋零
     final double stepX = w / (bars - 1);
     double prevX = 0;
     final firstV = (_env.smooth[0] / peak).clamp(0.0, 1.0);
@@ -610,14 +649,18 @@ class _AmbientPainter extends CustomPainter {
     _wavePath.lineTo(w, h);
     _wavePath.close();
 
-    _fillPaint.shader = ui.Gradient.linear(
-      Offset(0, h),
-      Offset(0, h - maxWaveH),
-      [
-        palette.accent.withValues(alpha: baseAlpha / 255),
-        palette.accent.withValues(alpha: 0.0),
-      ],
-    );
+    if (_waveShader == null || _waveShaderSize != size) {
+      _waveShaderSize = size;
+      _waveShader = ui.Gradient.linear(
+        Offset(0, h),
+        Offset(0, h - maxWaveH),
+        [
+          palette.accent.withValues(alpha: baseAlpha / 255),
+          palette.accent.withValues(alpha: 0.0),
+        ],
+      );
+    }
+    _fillPaint.shader = _waveShader;
     canvas.drawPath(_wavePath, _fillPaint);
   }
 

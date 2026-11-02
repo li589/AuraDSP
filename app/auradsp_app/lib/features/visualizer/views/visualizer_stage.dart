@@ -79,7 +79,7 @@ class _VisualizerStageState extends State<VisualizerStage>
       duration: const Duration(seconds: 10),
     )..addListener(_onTick);
 
-    if (widget.active) {
+    if (widget.active && widget.playing) {
       _animController.repeat();
     }
     _startHudTimer();
@@ -95,7 +95,7 @@ class _VisualizerStageState extends State<VisualizerStage>
 
   /// 每帧仅推进时间轴（视口通过 repaint 监听直接重绘，不重建页面）。
   void _onTick() {
-    if (!widget.active) return;
+    if (!widget.active || !widget.playing) return;
     _tickParity ^= 1;
     if (_tickParity == 0) {
       _time.value += 0.032;
@@ -105,11 +105,13 @@ class _VisualizerStageState extends State<VisualizerStage>
   @override
   void didUpdateWidget(VisualizerStage oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.active != oldWidget.active) {
-      if (widget.active) {
+    final shouldRun = widget.active && widget.playing;
+    final wasRunning = oldWidget.active && oldWidget.playing;
+    if (shouldRun != wasRunning) {
+      if (shouldRun) {
         if (!_animController.isAnimating) _animController.repeat();
       } else {
-        _animController.stop();
+        if (_animController.isAnimating) _animController.stop();
       }
     }
     if (widget.playing != oldWidget.playing) {
