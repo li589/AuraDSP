@@ -19,6 +19,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
 import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/audio_in_alsa.dart';
 import 'audio_out/audio_in_linux.dart';
 import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
@@ -157,6 +158,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     setSource: (s) => source = s,
     send: send,
     deviceRate: () => audioOut?.sampleRate ?? 48000,
+    alsaExpert: _cfgStr(cfg, 'linuxAudioBackend', 'pulse') == 'alsa',
+    alsaCaptureDevice: _cfgStr(cfg, 'alsaCaptureDevice', ''),
   );
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
