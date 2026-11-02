@@ -186,24 +186,34 @@ List<Widget> buildAudioTab(BuildContext context, AppModel model) {
 }
 
 /// Linux 三模式直选卡（ADR-012 D-5）：system / virtual / driver。
-/// 状态来自 isolate 的 linuxstatus 事件：driver 未加载 snd-aloop 时
-/// 给「先加载模块」的操作提示（不是错误）；virtual 就绪给接入指引；
-/// 采集未建立给检查提示。
+/// 提示文案由纯决策 linuxModeHintId 收敛（打磨二期）：
+/// isolate 的具体失败 note（linuxModeNote，此前只存不用）优先渲染，
+/// 其次是默认输出=虚拟 sink 的反馈告警，其余派生提示（驱动缺失 /
+/// 采集未建立 / 虚拟就绪指引）按状态旗标给出。
 Widget _linuxModeCard(BuildContext context, AppModel model) {
   final l = l10nOf(context);
   final p = paletteOf(context);
-  final String? note;
-  if (model.audioMode == 'driver' && !model.linuxDriverLoaded) {
-    note = l.linuxDriverMissingHint;
-  } else if (model.audioMode == 'driver' && !model.linuxCaptureActive) {
-    note = l.linuxCaptureInactiveHint;
-  } else if (model.audioMode == 'virtual' && model.linuxVirtualSink) {
-    note = l.linuxVirtualReadyHint;
-  } else if (model.audioMode == 'virtual' && !model.linuxCaptureActive) {
-    note = l.linuxCaptureInactiveHint;
-  } else {
-    note = null;
-  }
+  final hintId = linuxModeHintId(
+    mode: model.audioMode,
+    note: model.linuxModeNote,
+    driverLoaded: model.linuxDriverLoaded,
+    captureActive: model.linuxCaptureActive,
+    virtualSinkPresent: model.linuxVirtualSink,
+    defaultIsVirtual: model.linuxDefaultIsVirtual,
+  );
+  final String? note = switch (hintId) {
+    'note:virtual-sink-unavailable' => l.linuxNoteVirtualUnavailable,
+    'note:loopback-source-unavailable' => l.linuxNoteLoopbackUnavailable,
+    'note:alsa-capture-unavailable' => l.linuxNoteAlsaCaptureUnavailable,
+    'note:pulse-unavailable' => l.linuxNotePulseUnavailable,
+    'note:capture-lost' => l.linuxNoteCaptureLost,
+    'driver-missing' => l.linuxDriverMissingHint,
+    'feedback-warning' => l.linuxFeedbackWarning,
+    'capture-inactive' => l.linuxCaptureInactiveHint,
+    'output-to-virtual' => l.linuxOutputToVirtualHint,
+    'virtual-ready' => l.linuxVirtualReadyHint,
+    _ => null,
+  };
   return SectionCard(
     title: l.audioParadigm,
     hint: l.linuxModeHint,

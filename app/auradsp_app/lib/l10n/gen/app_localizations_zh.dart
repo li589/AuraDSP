@@ -1294,6 +1294,33 @@ class AppLocalizationsZh extends AppLocalizations {
       '采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。';
 
   @override
+  String get linuxNoteVirtualUnavailable =>
+      '虚拟设备创建失败：PulseAudio 拒绝加载虚拟设备模块，请检查音频服务后重新选择虚拟设备模式。';
+
+  @override
+  String get linuxNoteLoopbackUnavailable =>
+      'snd-aloop 已加载，但未找到可用的回环采集源，请刷新状态或重新加载模块后再试。';
+
+  @override
+  String get linuxNoteAlsaCaptureUnavailable =>
+      'ALSA 采集设备打开失败：设备可能被占用，或协商采样率与当前输出不一致，请检查设备设置。';
+
+  @override
+  String get linuxNotePulseUnavailable =>
+      'PulseAudio 服务不可用：请确认系统音频服务正在运行，然后重新选择模式。';
+
+  @override
+  String get linuxNoteCaptureLost => '采集中断：采集设备或音频服务已断开，当前输出为静音。重新选择一次模式即可恢复。';
+
+  @override
+  String get linuxFeedbackWarning =>
+      '警告：系统默认输出当前就是 auradsp_virtual，会形成反馈环。请在系统声音设置中把默认输出改回真实设备。';
+
+  @override
+  String get linuxOutputToVirtualHint =>
+      '提示：系统默认输出当前是 auradsp_virtual，处理后的声音会被送入虚拟设备、在本机听不到。建议在系统声音设置中改回真实设备。';
+
+  @override
   String get linuxOutputSink => '输出设备';
 
   @override

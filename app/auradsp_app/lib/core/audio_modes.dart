@@ -149,3 +149,47 @@ abstract final class AudioModes {
   }
 }
 
+/// Linux 三模式卡的提示决策（打磨二期，纯逻辑可单测）。
+///
+/// 把 isolate 回推的状态（失败 note + 旗标）收敛为一个提示 id，
+/// UI 层只做 id 到 l10n 文案的映射。优先级（高到低）：
+///   1. isolate 的具体失败 note（`note:<token>`）——原因最具体，
+///      优先于一切派生提示；snd-aloop-not-loaded 归入
+///      driver-missing（已有专门文案）；未知 token 不拦截，
+///      落到派生逻辑，防协议演进时提示空白；
+///   2. driver 模式且模块未加载 -> driver-missing；
+///   3. virtual 模式且系统默认输出就是虚拟 sink -> feedback-warning
+///      （采集的正是它的 monitor，处理结果又写回它 = 反馈环）；
+///   4. virtual/driver 且采集未建立 -> capture-inactive（排在
+///      virtual-ready 之前：sink 在位但采集没起来时报「就绪」
+///      是误导，打磨二期顺序修正）；
+///   5. 非 virtual 模式且默认输出是虚拟 sink -> output-to-virtual
+///      （处理结果会被送进虚拟设备、本机听不见）；
+///   6. virtual 且 sink 在位 -> virtual-ready（接入指引）；
+///   7. 其余 -> ''（无提示）。
+String linuxModeHintId({
+  required String mode,
+  required String note,
+  required bool driverLoaded,
+  required bool captureActive,
+  required bool virtualSinkPresent,
+  required bool defaultIsVirtual,
+}) {
+  const knownNotes = {
+    'virtual-sink-unavailable',
+    'loopback-source-unavailable',
+    'alsa-capture-unavailable',
+    'pulse-unavailable',
+    'capture-lost',
+  };
+  if (knownNotes.contains(note)) return 'note:$note';
+  if (note == 'snd-aloop-not-loaded') return 'driver-missing';
+  if (mode == 'driver' && !driverLoaded) return 'driver-missing';
+  if (mode == 'virtual' && defaultIsVirtual) return 'feedback-warning';
+  if ((mode == 'virtual' || mode == 'driver') && !captureActive) {
+    return 'capture-inactive';
+  }
+  if (mode != 'virtual' && defaultIsVirtual) return 'output-to-virtual';
+  if (mode == 'virtual' && virtualSinkPresent) return 'virtual-ready';
+  return '';
+}

@@ -145,4 +145,71 @@ void main() {
     expect(pickLoopbackSource(['auradsp_virtual.monitor', inp]), inp);
     expect(pickLoopbackSource(['auradsp_virtual.monitor']), isNull);
   });
+
+  group('linuxModeHintId (polish phase 2)', () {
+    String hint({
+      String mode = 'system',
+      String note = '',
+      bool driverLoaded = false,
+      bool captureActive = false,
+      bool virtualSinkPresent = false,
+      bool defaultIsVirtual = false,
+    }) =>
+        linuxModeHintId(
+          mode: mode,
+          note: note,
+          driverLoaded: driverLoaded,
+          captureActive: captureActive,
+          virtualSinkPresent: virtualSinkPresent,
+          defaultIsVirtual: defaultIsVirtual,
+        );
+
+    test('specific isolate notes win over derived hints', () {
+      expect(hint(mode: 'virtual', note: 'virtual-sink-unavailable'),
+          'note:virtual-sink-unavailable');
+      expect(hint(mode: 'driver', note: 'alsa-capture-unavailable',
+          driverLoaded: true), 'note:alsa-capture-unavailable');
+      expect(hint(mode: 'virtual', note: 'capture-lost',
+          captureActive: false), 'note:capture-lost');
+      // 具体 note 优先于反馈告警（先处理失败原因）。
+      expect(hint(mode: 'virtual', note: 'pulse-unavailable',
+          defaultIsVirtual: true), 'note:pulse-unavailable');
+    });
+
+    test('snd-aloop note and missing module map to driver-missing', () {
+      expect(hint(mode: 'driver', note: 'snd-aloop-not-loaded'),
+          'driver-missing');
+      expect(hint(mode: 'driver'), 'driver-missing');
+    });
+
+    test('unknown notes fall through to derived hints', () {
+      expect(hint(mode: 'virtual', note: 'some-future-note',
+          captureActive: true, virtualSinkPresent: true), 'virtual-ready');
+    });
+
+    test('feedback warning beats ready, inactive beats ready', () {
+      // 默认输出=虚拟 sink：反馈告警优先于就绪指引。
+      expect(hint(mode: 'virtual', captureActive: true,
+          virtualSinkPresent: true, defaultIsVirtual: true),
+          'feedback-warning');
+      // sink 在位但采集未建立：报未建立，不报就绪（二期顺序修正）。
+      expect(hint(mode: 'virtual', virtualSinkPresent: true),
+          'capture-inactive');
+    });
+
+    test('output-to-virtual is a soft notice outside virtual mode', () {
+      expect(hint(mode: 'system', defaultIsVirtual: true),
+          'output-to-virtual');
+      expect(hint(mode: 'driver', driverLoaded: true, captureActive: true,
+          defaultIsVirtual: true), 'output-to-virtual');
+    });
+
+    test('quiet states produce no hint', () {
+      expect(hint(mode: 'system'), '');
+      expect(hint(mode: 'driver', driverLoaded: true, captureActive: true),
+          '');
+      expect(hint(mode: 'virtual', captureActive: true,
+          virtualSinkPresent: true), 'virtual-ready');
+    });
+  });
 }

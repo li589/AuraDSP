@@ -29,6 +29,10 @@ class PulseCaptureSource implements LinuxCaptureSource {
   final PulseAudioIn _input;
   bool _failed = false;
 
+  /// 首次失败时的一次性回调（控制器据此回推 capture-lost 状态；
+  /// 在泵的 fill 内触发，只许做轻量发送，不得阻塞，见控制器注释）。
+  void Function()? onFailed;
+
   @override
   String get device => _input.device;
   @override
@@ -47,6 +51,7 @@ class PulseCaptureSource implements LinuxCaptureSource {
     } catch (e) {
       _failed = true;
       dbgLog('PULSE-IN capture failed (silenced): $e');
+      onFailed?.call();
       for (var i = 0; i < frames * 2; i++) {
         out[i] = 0;
       }
@@ -67,6 +72,9 @@ class AlsaCaptureSource implements LinuxCaptureSource {
   final AlsaAudioIn _input;
   bool _failed = false;
 
+  /// 同 PulseCaptureSource.onFailed。
+  void Function()? onFailed;
+
   @override
   String get device => _input.device;
   @override
@@ -85,6 +93,7 @@ class AlsaCaptureSource implements LinuxCaptureSource {
     } catch (e) {
       _failed = true;
       dbgLog('ALSA-IN capture failed (silenced): $e');
+      onFailed?.call();
       for (var i = 0; i < frames * 2; i++) {
         out[i] = 0;
       }
@@ -129,6 +138,15 @@ class LinuxModeController {
   LinuxCaptureSource? _capture;
   Source? _savedSource;
 
+  // 最近一次完整探测的缓存：采集失败回推（_sendCaptureLost）发生在
+  // 泵的 fill 路径上，不能在那里再开 PA 会话探测（PA 恰在此时多半
+  // 不可用，连接超时会把泵堵住数秒），故用缓存值拼轻量事件。
+  bool _lastDriverLoaded = false;
+  bool _lastVirtualPresent = false;
+  bool _lastDefaultIsVirtual = false;
+  String? _lastDefaultSink;
+  String? _lastLoopbackSource;
+
   String get mode => _mode;
 
   void _detachCapture({required bool restoreSaved}) {
@@ -148,7 +166,7 @@ class LinuxModeController {
     _savedSource = current; // 切回 system 时恢复（测试源等）
     final input = PulseAudioIn();
     input.open(device: device, rate: _deviceRate());
-    final cap = PulseCaptureSource(input);
+    final cap = PulseCaptureSource(input)..onFailed = _sendCaptureLost;
     _capture = cap;
     _setSource(cap);
     dbgLog('LINUXMODE capture attached: $device');
@@ -174,7 +192,7 @@ class LinuxModeController {
       throw StateError('ALSA capture rate mismatch: $device negotiated '
           '$got Hz but the pump runs at ${_deviceRate()} Hz');
     }
-    final cap = AlsaCaptureSource(input);
+    final cap = AlsaCaptureSource(input)..onFailed = _sendCaptureLost;
     _capture = cap;
     _setSource(cap);
     dbgLog('LINUXMODE capture attached (ALSA): $device');
@@ -206,6 +224,12 @@ class LinuxModeController {
     } catch (e, st) {
       swallow(e, st);
     }
+    _lastDriverLoaded = driverLoaded;
+    _lastVirtualPresent = virtualPresent;
+    _lastDefaultSink = defaultSink;
+    _lastLoopbackSource = loopbackSource;
+    _lastDefaultIsVirtual =
+        defaultSink == PulseContextService.virtualSinkName;
     return {
       'evt': 'linuxstatus',
       'mode': _mode,
@@ -216,8 +240,31 @@ class LinuxModeController {
       // 设备面板展示用：PulseAudio 默认输出与当前采集源（无采集时为空）。
       'defaultSink': defaultSink,
       'captureSource': _capture?.device ?? '',
+      // 默认输出就是虚拟 sink 本人（virtual 模式下构成反馈环，
+      // UI 据此告警，打磨二期）。
+      'defaultIsVirtual': _lastDefaultIsVirtual,
       'note': ?note,
     };
+  }
+
+  /// 采集中途失效的回推：状态转「未建立」+ note=capture-lost，
+  /// 让 UI 提示用户重选模式恢复（此前失败只置 Source 内部标志，
+  /// UI 仍显示已建立、用户面对静音无从下手，打磨二期）。
+  /// 只用缓存拼事件：本方法在泵的 fill 里被回调，不能开 PA 会话。
+  void _sendCaptureLost() {
+    dbgLog('LINUXMODE capture lost (mode=$_mode); pushing capture-lost');
+    _send({
+      'evt': 'linuxstatus',
+      'mode': _mode,
+      'active': false,
+      'virtualSink': _lastVirtualPresent,
+      'driverLoaded': _lastDriverLoaded,
+      'loopbackSource': _lastLoopbackSource,
+      'defaultSink': _lastDefaultSink,
+      'captureSource': _capture?.device ?? '',
+      'defaultIsVirtual': _lastDefaultIsVirtual,
+      'note': 'capture-lost',
+    });
   }
 
   /// 只查询不改管线（设置页打开/isolate 就绪时用）。
