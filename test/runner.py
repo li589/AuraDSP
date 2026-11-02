@@ -58,6 +58,8 @@ PLATFORM_LINUX = {
     "smoke_linux_driver_loopback.py",
     # 二期 A3（2026-11-02）：ALSA 专家模式源码不变量 + libasound 活体契约。
     "smoke_linux_alsa_backend.py",
+    # 二期插件阶段四（2026-11-02）：插件宿主源码不变量 + CLAP 全链活体。
+    "smoke_linux_plugin_host.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -378,6 +380,9 @@ def run_smoke_tests():
         # 二期 A3（2026-11-02）：ALSA 专家模式——源码不变量 + libasound
         # 对 null 设备的活体契约（协商/writei/readi/delay/缺设备错误面）。
         "smoke_linux_alsa_backend.py",
+        # 二期插件阶段四（2026-11-02）：插件宿主——posix 平台层/App 接线
+        # 源码不变量 + 现场编译 CLAP 资产经 C ABI 全链活体断言。
+        "smoke_linux_plugin_host.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
         # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。
