@@ -753,6 +753,9 @@ extension StateCore on AppModel {
       'vizFftSize': config.vizFftSize,
       'maxIrDurationSeconds': config.maxIrDurationSeconds,
       'maxFileSizeMb': config.maxFileSizeMb,
+      'linuxAudioBackend': config.linuxAudioBackend,
+      'alsaOutputDevice': config.alsaOutputDevice,
+      'alsaCaptureDevice': config.alsaCaptureDevice,
     }).then((iso) {
       _iso = iso;
     });

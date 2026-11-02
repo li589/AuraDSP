@@ -127,6 +127,8 @@ class _LinuxDevicePanel extends StatelessWidget {
     final sink = model.linuxDefaultSink;
     final captureOn = model.linuxCaptureActive;
     final capSource = model.linuxCaptureSource;
+    final alsa = model.config.linuxAudioBackend == 'alsa';
+    final alsaDevice = model.config.alsaOutputDevice;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -138,7 +140,7 @@ class _LinuxDevicePanel extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('PulseAudio (Linux)',
+                  Text(alsa ? 'ALSA (Linux)' : 'PulseAudio (Linux)',
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w600,
@@ -160,8 +162,49 @@ class _LinuxDevicePanel extends StatelessWidget {
           ],
         ),
         const SizedBox(height: AuraSpace.xs),
-        _InfoRow(l.linuxOutputSink,
-            sink.isEmpty ? l.linuxOutputSinkDefault : sink),
+        Row(children: [
+          SizedBox(
+              width: 104,
+              child: Text(l.linuxBackendLabel,
+                  style: labelOf(p, size: 12, color: p.textDim))),
+          Expanded(
+            child: AuraDropdown<String>(
+              value: alsa ? 'alsa' : 'pulse',
+              items: [
+                DropdownMenuItem<String>(
+                  value: 'pulse',
+                  child: Text(l.linuxBackendPulse,
+                      style: const TextStyle(fontSize: 12)),
+                ),
+                DropdownMenuItem<String>(
+                  value: 'alsa',
+                  child: Text(l.linuxBackendAlsa,
+                      style: const TextStyle(fontSize: 12)),
+                ),
+              ],
+              hint: '—',
+              onChanged: (v) {
+                if (v != null) model.setLinuxAudioBackend(v);
+              },
+            ),
+          ),
+        ]),
+        const SizedBox(height: AuraSpace.xs),
+        if (!alsa)
+          _InfoRow(l.linuxOutputSink,
+              sink.isEmpty ? l.linuxOutputSinkDefault : sink)
+        else
+          Row(children: [
+            Expanded(
+              child: _InfoRow(l.linuxAlsaOutDevice,
+                  alsaDevice.isEmpty ? l.linuxAlsaDeviceUnset : alsaDevice),
+            ),
+            AuraChip(
+              l.linuxAlsaDeviceEdit,
+              icon: Icons.edit_rounded,
+              onTap: () => _editAlsaDevice(context),
+            ),
+          ]),
         if (info != null)
           _InfoRow(
             l.linuxOutputFormat,
@@ -178,10 +221,42 @@ class _LinuxDevicePanel extends StatelessWidget {
         _InfoRow(l.linuxModeDriver,
             model.linuxDriverLoaded ? l.linuxDriverPresent : l.linuxDriverAbsent),
         const SizedBox(height: AuraSpace.xs),
-        Text(l.linuxDeviceHint,
+        Text(alsa ? l.linuxAlsaExpertHint : l.linuxDeviceHint,
             style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
       ],
     );
+  }
+
+  Future<void> _editAlsaDevice(BuildContext context) async {
+    final l = l10nOf(context);
+    final controller =
+        TextEditingController(text: model.config.alsaOutputDevice);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(l.linuxAlsaOutDevice,
+            style: const TextStyle(fontSize: 14)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            hintText: 'hw:0,0 / plughw:1,0 / default',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(l.dlgCancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: Text(l.dlgSave),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result != null) model.setAlsaOutputDevice(result);
   }
 }
 

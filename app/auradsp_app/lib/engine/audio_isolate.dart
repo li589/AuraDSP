@@ -62,6 +62,11 @@ double _cfgDouble(Map<String, dynamic> cfg, String key, double fallback) {
   return v is num ? v.toDouble() : fallback;
 }
 
+String _cfgStr(Map<String, dynamic> cfg, String key, String fallback) {
+  final v = cfg[key];
+  return v is String ? v : fallback;
+}
+
 /// 桥模式下插件配置的会话镜像（path/id/bypass/stage）。
 ///
 /// 桥各自持有独立引擎；Dart 必须在命令到达时同步记下，桥 start 成功后
@@ -1932,8 +1937,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     dbgLog('engine dll loaded');
     String? audioOutError;
     try {
-      audioOut = createAudioOut()
-        ?..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
+      audioOut = createAudioOut(
+        linuxBackend: _cfgStr(cfg, 'linuxAudioBackend', 'pulse'),
+        alsaDevice: _cfgStr(cfg, 'alsaOutputDevice', ''),
+      )?..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
     } catch (e) {
       audioOut = null;
       audioOutError = e.toString();

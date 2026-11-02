@@ -1328,6 +1328,28 @@ class AppLocalizationsZh extends AppLocalizations {
       '输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。';
 
   @override
+  String get linuxBackendLabel => '音频后端';
+
+  @override
+  String get linuxBackendPulse => 'PulseAudio（默认）';
+
+  @override
+  String get linuxBackendAlsa => 'ALSA 直连（专家模式）';
+
+  @override
+  String get linuxAlsaOutDevice => 'ALSA 输出设备';
+
+  @override
+  String get linuxAlsaDeviceEdit => '编辑';
+
+  @override
+  String get linuxAlsaDeviceUnset => 'default（未指定）';
+
+  @override
+  String get linuxAlsaExpertHint =>
+      '专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

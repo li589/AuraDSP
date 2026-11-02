@@ -1427,6 +1427,28 @@ class AppLocalizationsEn extends AppLocalizations {
       'Output always goes to the PulseAudio default sink. Do not set auradsp_virtual as the system default output, or processed audio will be captured again and create a feedback loop.';
 
   @override
+  String get linuxBackendLabel => 'Audio backend';
+
+  @override
+  String get linuxBackendPulse => 'PulseAudio (default)';
+
+  @override
+  String get linuxBackendAlsa => 'ALSA direct (expert)';
+
+  @override
+  String get linuxAlsaOutDevice => 'ALSA output device';
+
+  @override
+  String get linuxAlsaDeviceEdit => 'Edit';
+
+  @override
+  String get linuxAlsaDeviceUnset => 'default (unset)';
+
+  @override
+  String get linuxAlsaExpertHint =>
+      'Expert mode talks to the ALSA device directly (period 256 frames) for lower latency than PulseAudio. Changing the backend or device restarts the audio engine. On PipeWire systems an hw: device may be held by the session manager and fail to open; the failure is surfaced in the status.';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override
