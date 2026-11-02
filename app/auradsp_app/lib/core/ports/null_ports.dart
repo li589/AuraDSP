@@ -69,6 +69,11 @@ final class NullAutoStart implements AutoStartPort {
   bool? get enabled => null;
 
   @override
+  ValueListenable<bool> get enabledListenable => _alwaysFalse;
+
+  static final ValueNotifier<bool> _alwaysFalse = ValueNotifier<bool>(false);
+
+  @override
   bool setEnabled(bool on) => false;
 }
 
@@ -155,7 +160,9 @@ final class NullWindowPort implements WindowPort {
   }
 
   @override
-  Future<void> init() async {}
+  Future<void> init({bool startInTray = false}) async {
+    if (startInTray) _visible.value = false;
+  }
 
   @override
   Future<void> dispose() async {}

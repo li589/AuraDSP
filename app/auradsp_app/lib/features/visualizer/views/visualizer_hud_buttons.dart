@@ -221,8 +221,8 @@ class _DisplayModeSegment extends StatelessWidget {
   }
 }
 
-/// HUD 通用动作图标按钮
-class VisualizerActionButton extends StatelessWidget {
+/// HUD 通用动作图标按钮（带精致 Hover 微光与轻弹触觉反馈）
+class VisualizerActionButton extends StatefulWidget {
   final IconData icon;
   final String tooltip;
   final bool active;
@@ -237,26 +237,58 @@ class VisualizerActionButton extends StatelessWidget {
   });
 
   @override
+  State<VisualizerActionButton> createState() => _VisualizerActionButtonState();
+}
+
+class _VisualizerActionButtonState extends State<VisualizerActionButton> {
+  bool _hovered = false;
+  bool _pressed = false;
+
+  @override
   Widget build(BuildContext context) {
     final p = paletteOf(context);
 
+    final bg = widget.active
+        ? p.accent.withValues(alpha: 0.18)
+        : (_hovered ? p.accent.withValues(alpha: 0.10) : Colors.transparent);
+
+    final iconColor = widget.active
+        ? p.accent
+        : (_hovered ? p.text : p.textDim);
+
+    final border = widget.active
+        ? Border.all(color: p.accent.withValues(alpha: 0.45), width: 1)
+        : (_hovered
+            ? Border.all(color: p.accent.withValues(alpha: 0.22), width: 1)
+            : Border.all(color: Colors.transparent, width: 1));
+
     return Tooltip(
-      message: tooltip,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(AuraRadius.sm),
-        child: Container(
-          padding: const EdgeInsets.all(7),
-          decoration: BoxDecoration(
-            color: active
-                ? p.accent.withValues(alpha: 0.16)
-                : Colors.transparent,
-            borderRadius: BorderRadius.circular(AuraRadius.sm),
-            border: active
-                ? Border.all(color: p.accent.withValues(alpha: 0.4), width: 1)
-                : null,
+      message: widget.tooltip,
+      child: MouseRegion(
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
+        cursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          onTapDown: (_) => setState(() => _pressed = true),
+          onTapUp: (_) => setState(() => _pressed = false),
+          onTapCancel: () => setState(() => _pressed = false),
+          onTap: widget.onTap,
+          child: AnimatedScale(
+            scale: _pressed ? 0.92 : (_hovered ? 1.05 : 1.0),
+            duration: AuraDur.fast,
+            curve: AuraCurve.standard,
+            child: AnimatedContainer(
+              duration: AuraDur.fast,
+              curve: AuraCurve.standard,
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: bg,
+                borderRadius: BorderRadius.circular(AuraRadius.sm),
+                border: border,
+              ),
+              child: Icon(widget.icon, size: 18, color: iconColor),
+            ),
           ),
-          child: Icon(icon, size: 18, color: active ? p.accent : p.textDim),
         ),
       ),
     );

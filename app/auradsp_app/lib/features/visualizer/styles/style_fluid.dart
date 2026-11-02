@@ -160,17 +160,19 @@ class _FluidField {
   /// 避免持续注入把画面堆成一层均匀浓雾。
   void _injectHaze() {
     // 每条：[横向游走幅度, 角频率X, 相位, 纵向游走幅度, 半径(格), 峰值浓度]
+    // [横向中心, 横向游走幅度, 角频率X, 纵向中心, 纵向游走幅度, 角频率Y, 半径(格), 峰值浓度]
     const blobs = <List<double>>[
-      [0.42, 0.55, 0.0, 0.18, 24.0, 0.15],
-      [0.75, 2.10, 0.48, 0.15, 20.0, 0.12],
-      [0.15, 4.20, 0.50, 0.17, 16.0, 0.09],
+      [0.50, 0.35, 0.55, 0.50, 0.28, 0.35, 28.0, 0.16],
+      [0.26, 0.20, 0.85, 0.24, 0.18, 0.55, 24.0, 0.14],
+      [0.74, 0.20, 0.90, 0.26, 0.18, 0.60, 24.0, 0.14],
+      [0.35, 0.25, 1.10, 0.72, 0.18, 0.45, 22.0, 0.13],
+      [0.80, 0.16, 0.75, 0.64, 0.20, 0.70, 20.0, 0.12],
     ];
 
     for (var bi = 0; bi < blobs.length; bi++) {
       final b = blobs[bi];
-      final centerX = (_nx - 1) * (0.5 + b[0] * math.sin(_simTime * b[1] + b[2]));
-      final centerY =
-          (_ny - 1) * (0.52 + b[3] * 0.5 * math.sin(_simTime * 0.065 + b[2] * 1.7));
+      final centerX = (_nx - 1) * (b[0] + b[1] * math.sin(_simTime * b[2] + bi * 1.3));
+      final centerY = (_ny - 1) * (b[3] + b[4] * math.sin(_simTime * b[5] + bi * 2.1));
       final radius = b[4] + 2.0 * math.sin(_simTime * 0.12 + bi * 2.0);
       final peak = b[5];
       final r2 = radius * radius;
@@ -277,9 +279,9 @@ class _FluidField {
     if (bands.isEmpty) return;
 
     const nozzleCount = 9;
-    // 留出最底两行作固壁与排水，注入点在壁面之上
-    final bottom = _ny - 3;
-    const rowWeights = <double>[1.0, 0.75, 0.5, 0.3];
+    // 注入点贴紧底边缘，保证射流与染料完整铺满下视口
+    final bottom = _ny - 1;
+    const rowWeights = <double>[1.0, 0.85, 0.65, 0.40];
 
     for (var i = 0; i < nozzleCount; i++) {
       final phase = i / (nozzleCount - 1);
@@ -445,7 +447,7 @@ class _FluidField {
     final centerX = (_nx - 1) * 0.5;
     final centerY = (_ny - 1) * 0.5;
 
-    for (var y = 1; y < _ny; y++) {
+    for (var y = 0; y < _ny; y++) {
       final rowBase = y * _nx;
       final dy = y - centerY;
       final shear = base *
@@ -686,13 +688,11 @@ class _FluidField {
       }
     }
 
-    // 底边与顶边吸收：固壁处染料会缓慢堆积成亮带，让它随时间淡出。
+    // 边界饱和度柔和夹取，防止极度堆叠的同时确保上下边缘不留空白
     final floorRow = (_ny - 1) * _nx;
     for (var x = 0; x < _nx; x++) {
-      _dye[floorRow + x] *= 0.2;
-      _dye[floorRow - _nx + x] *= 0.4;
-      _dye[x] *= 0.35;
-      _dye[_nx + x] *= 0.6;
+      if (_dye[floorRow + x] > 0.82) _dye[floorRow + x] = 0.82;
+      if (_dye[x] > 0.82) _dye[x] = 0.82;
     }
   }
 
@@ -736,10 +736,11 @@ class _FluidField {
     var total = 0.0;
     var cursor = 0;
     for (var y = 0; y <= _ny; y++) {
-      final sampleY = y - 0.5;
+      final sampleY = y == 0 ? 0.0 : (y == _ny ? (_ny - 1.0) : (y - 0.5));
       for (var x = 0; x <= _nx; x++) {
-        // 顶点落在格角上，按格心坐标双线性采样，消除最近格取样留下的块状锯齿
-        final dye = _sample(_dye, x - 0.5, sampleY);
+        final sampleX = x == 0 ? 0.0 : (x == _nx ? (_nx - 1.0) : (x - 0.5));
+        // 顶点落在格角上，边缘顶点严丝合缝采样边格，杜绝边界留白
+        final dye = _sample(_dye, sampleX, sampleY);
         total += dye;
         final level = _gammaIndex(dye);
         _colors[cursor++] = level <= 0 ? 0 : table[level];

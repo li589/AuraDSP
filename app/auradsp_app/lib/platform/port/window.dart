@@ -23,7 +23,8 @@ abstract interface class WindowPort {
   Future<void> show();
 
   /// 初始化桌面窗口/托盘（移动端为空操作）。
-  Future<void> init();
+  /// [startInTray] 为 true 时表示开机自启静默模式，启动后窗口保持隐藏在托盘。
+  Future<void> init({bool startInTray = false});
 
   /// 注销托盘/窗口监听。
   Future<void> dispose();

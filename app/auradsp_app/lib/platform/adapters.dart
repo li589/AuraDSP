@@ -74,7 +74,7 @@ final class PlatformAdapters {
         isWindows ? const WindowsRegistry() : const NullRegistry();
     final dialog = const FileSelectorDialog();
     final autoStart = isWindows
-        ? WindowsAutoStart()
+        ? WindowsAutoStart(registry)
         : os == 'linux'
             ? LinuxAutoStart()
             : const NullAutoStart();

@@ -48,17 +48,24 @@ class TrayService implements WindowPort {
 
   /// 初始化托盘 + 关窗拦截；任何一步失败只置 _ready=false，不抛（非核心路径）。
   /// 移动端没有桌面窗口/托盘：直接返回（isWindowVisible 保持 true，UI 不受影响）。
+  /// [startInTray] 为 true 时表示开机自启静默模式，启动后窗口保持隐藏在托盘。
   @override
-  Future<void> init() async {
+  Future<void> init({bool startInTray = false}) async {
     if (!PlatformProfile.supportsWindowManagement) {
       _ready = false;
       return;
+    }
+    if (startInTray) {
+      isWindowVisible.value = false;
     }
     try {
       // 1) 窗口管理器：拦截关闭 → 隐藏到托盘
       await WindowManager.instance.ensureInitialized();
       await WindowManager.instance.setPreventClose(true);
       WindowManager.instance.addListener(_WindowCloseListener());
+      if (startInTray) {
+        await WindowManager.instance.hide();
+      }
 
       // 2) 托盘图标
       final icon = TrayIcon.create();
@@ -97,11 +104,13 @@ class TrayService implements WindowPort {
         if (event is MenuItemClickedEvent) {
           final cur = _autoStart?.enabled ?? false;
           _autoStart?.setEnabled(!cur);
-          // checkbox 原生不自动翻转，手动同步可见状态
-          autostartItem.state = !cur
-              ? MenuItemState.checked
-              : MenuItemState.unchecked;
         }
+      });
+      // 监听自启动状态，保持托盘菜单与设置页实时同步
+      _autoStart?.enabledListenable.addListener(() {
+        final on = _autoStart?.enabled ?? false;
+        autostartItem.state =
+            on ? MenuItemState.checked : MenuItemState.unchecked;
       });
       menu.addItem(autostartItem);
       _autostartItem = autostartItem;
