@@ -196,7 +196,7 @@ void main() {
       expect(manager.pdcEnabled, isFalse);
     });
 
-    test('D2: incompatible plugin is intercepted before dispatch (32-bit supported on Windows)', () {
+    test('D2: incompatible plugin is intercepted before dispatch (32-bit supported on Windows/Linux)', () {
       final meta32 = PluginMetadata.fromJson({
         'id': 'x86-1',
         'name': 'Legacy 32bit FX',
@@ -209,10 +209,10 @@ void main() {
       });
 
       final before = dispatchedCmds.length;
-      if (Platform.isWindows) {
+      if (Platform.isWindows || Platform.isLinux) {
         expect(meta32.isSupported, isTrue);
         manager.loadPlugin(meta32);
-        // Windows 平台支持 32 位双位桥，正常下发 pluginSlotLoad
+        // Windows/Linux 均支持 32 位双宿主桥，正常下发 pluginSlotLoad
         expect(dispatchedCmds.length, before + 1);
         expect(dispatchedCmds.last['cmd'], 'pluginSlotLoad');
         // 模拟槽位 0 挂载完成释放 busy

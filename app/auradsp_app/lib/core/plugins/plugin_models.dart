@@ -130,10 +130,16 @@ class PluginMetadata {
   int get hashCode => path.hashCode ^ id.hashCode;
 
   /// 当前平台下是否支持加载与运行该插件。
-  /// Windows 平台已具备 32 位进程宿主桥（支持 32 位 VST3/CLAP），
-  /// 其它平台当前仅支持 64 位插件。
+  /// Windows 与 Linux 均已具备 32 位进程宿主桥（plugin_host_x86，
+  /// 支持 32 位 VST3/CLAP 经隔离宿主加载），故两平台下 32 位插件
+  /// 与 64 位同等对待（列表不灰显、显示「32 位」角标、可正常挂载）；
+  /// 其它平台当前仅支持 64 位插件。注意桥加载要求进程外模式
+  /// （AURA_PLUGIN_HOST_MODE=process，与 Windows 同口径）；进程内
+  /// 模式下引擎侧 load 仍会以 D2 文案拒绝 32 位插件（双保险）。
   bool get isSupported =>
-      isCompatible || (PlatformProfile.isWindows && !is64Bit);
+      isCompatible ||
+      (!is64Bit &&
+          (PlatformProfile.isWindows || PlatformProfile.isLinux));
 
   /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
   PluginMetadata copyWith({
