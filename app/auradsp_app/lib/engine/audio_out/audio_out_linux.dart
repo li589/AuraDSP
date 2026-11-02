@@ -15,7 +15,10 @@
 //   - 失败一律抛 StateError（pa_strerror 文案），由 audio_isolate 的
 //     降级通道兜底（引擎照跑、无声不红屏），与 WASAPI 的 _hr 风格一致；
 //   - stop 用 pa_simple_flush 丢弃在途音频（真的静音），失败保持
-//     started=true 并抛错（同 WASAPI D4-a 口径，防双路出声）。
+//     started=true 并抛错（同 WASAPI D4-a 口径，防双路出声）；
+//   - 输出流显式绑定打开时的默认 sink 并跟随其变化：用户在系统
+//     里切换默认输出（插耳机/接 USB 声卡）后，write 路径节流查询
+//     并把流迁到新默认（不迁入自家虚拟 sink，防回授）。
 //
 // FFI 说明：libpulse-simple 只在 init 时打开（构造零副作用），结构体与
 // 函数原型在 pulse_simple_ffi.dart 单源定义；pa_strerror 在 libpulse
@@ -28,6 +31,7 @@ import 'package:ffi/ffi.dart';
 import '../debug_log.dart';
 import '../native_library_loader.dart';
 import 'audio_out.dart';
+import 'pulse_context.dart';
 import 'pulse_simple_ffi.dart';
 
 class _PulseLib {
@@ -89,6 +93,22 @@ class PulseAudioOut implements AudioOut {
   Pointer<Float>? _stage;
   int _stageFrames = 0;
 
+  /// 本流当前绑定的 sink 名（打开时显式指定；服务端查询失败回退
+  /// dev=nullptr 时为 null，跟随检查首次成功后会显式重开以落名）。
+  String? _targetSink;
+
+  /// 默认 sink 跟随（热切换）：write 路径上每 [_followIntervalMs]
+  /// 查一次服务端默认 sink，变了就先开新流再释放旧流迁移过去。
+  /// 决策走 pulse_context 的 shouldRetargetSink（不迁入自家虚拟
+  /// sink，防回授）。查询失败/迁移失败不打断播放：失败目标 30 秒
+  /// 内不重试，避免坏设备每 2 秒刷日志。
+  PulseContextService? _followService;
+  static const int _followIntervalMs = 2000;
+  static const int _followRetryMs = 30000;
+  int _lastFollowCheckMs = 0;
+  String? _followFailSink;
+  int _followFailMs = 0;
+
   @override
   bool started = false;
 
@@ -103,14 +123,9 @@ class PulseAudioOut implements AudioOut {
   @override
   int get bufferFrames => _bufferFrames;
 
-  @override
-  void init({int? requestedSampleRate}) {
-    if (_stream != nullptr) return; // 重复 init 幂等（同 WASAPI 字段复用）
-    final lib = _lib ??= _PulseLib.load();
-    final rate = (requestedSampleRate != null && requestedSampleRate > 0)
-        ? requestedSampleRate
-        : 48000;
-    dbgLog('PULSE init: begin rate=$rate');
+  /// 打开一条绑定到 [device] 的播放流（device=null 走服务端默认）。
+  /// init 与默认 sink 跟随迁移共用；失败抛 StateError。
+  Pointer<Void> _openStream(_PulseLib lib, int rate, String? device) {
     final spec = malloc<PaSampleSpec>();
     spec.ref.format = paSampleFloat32Le;
     spec.ref.rate = rate;
@@ -123,25 +138,91 @@ class PulseAudioOut implements AudioOut {
     attr.ref.fragsize = 0xFFFFFFFF;
     final name = 'AuraDSP'.toNativeUtf8();
     final streamName = 'Audio Effects'.toNativeUtf8();
+    final devPtr = device == null ? nullptr : device.toNativeUtf8();
     final pErr = malloc<Int32>();
     try {
-      final s = lib._new(nullptr, name, paStreamPlayback, nullptr,
+      final s = lib._new(nullptr, name, paStreamPlayback, devPtr,
           streamName, spec, nullptr, attr, pErr);
       if (s == nullptr) {
         throw StateError(
             'pa_simple_new failed: ${lib.errorText(pErr.value)}');
       }
-      _stream = s;
+      return s;
     } finally {
       malloc.free(spec);
       malloc.free(attr);
       malloc.free(name);
       malloc.free(streamName);
+      if (device != null) malloc.free(devPtr);
       malloc.free(pErr);
     }
+  }
+
+  @override
+  void init({int? requestedSampleRate}) {
+    if (_stream != nullptr) return; // 重复 init 幂等（同 WASAPI 字段复用）
+    final lib = _lib ??= _PulseLib.load();
+    final rate = (requestedSampleRate != null && requestedSampleRate > 0)
+        ? requestedSampleRate
+        : 48000;
+    dbgLog('PULSE init: begin rate=$rate');
+    // 显式绑定当前默认 sink 并记名：跟随迁移需要知道本流在哪台
+    // 设备上；查询失败（服务端未就绪）回退 dev=nullptr，名字留空，
+    // 待跟随检查首次成功后显式重开落名。
+    String? device;
+    try {
+      device = (_followService ??= PulseContextService()).defaultSinkName();
+    } catch (_) {
+      device = null;
+    }
+    if (device == PulseContextService.virtualSinkName) {
+      // 默认就是自家虚拟 sink（virtual 模式误配）：显式绑定会把
+      // 输出喂回采集端。回退 nullptr 亦无济于事（默认仍是它），
+      // 但至少不落名，让跟随逻辑在其恢复正常后接管；模式层已对
+      // 这一配置打过警告日志。
+      device = null;
+    }
+    _stream = _openStream(lib, rate, device);
+    _targetSink = device;
     _sampleRate = rate;
     _bufferFrames = targetBufferFrames;
-    dbgLog('PULSE init: stream open rate=$rate bufferFrames=$_bufferFrames');
+    dbgLog('PULSE init: stream open rate=$rate bufferFrames=$_bufferFrames '
+        'sink=${device ?? "(server default)"}');
+  }
+
+  /// 默认 sink 跟随检查（write 路径节流调用）。服务端默认输出被
+  /// 用户在系统里切换（插耳机/接 USB 声卡等）时把本流迁过去；
+  /// 本流以阻塞写为节流、迁移为先开后放，切换间隙仅一轮写周期。
+  void _maybeFollowDefaultSink() {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    if (now - _lastFollowCheckMs < _followIntervalMs) return;
+    _lastFollowCheckMs = now;
+    final String? current;
+    try {
+      current =
+          (_followService ??= PulseContextService()).defaultSinkName();
+    } catch (_) {
+      return; // 服务端不可达：保持现流，下轮再试
+    }
+    if (!shouldRetargetSink(target: _targetSink, current: current)) return;
+    final sink = current!;
+    if (_followFailSink == sink && now - _followFailMs < _followRetryMs) {
+      return; // 同一目标刚失败过，冷却内不重试也不刷日志
+    }
+    try {
+      final lib = _lib!;
+      final next = _openStream(lib, _sampleRate, sink);
+      final old = _stream;
+      _stream = next;
+      _targetSink = sink;
+      _followFailSink = null;
+      if (old != nullptr) lib._free(old);
+      dbgLog('PULSE follow: output retargeted to $sink');
+    } catch (e) {
+      _followFailSink = sink;
+      _followFailMs = now;
+      dbgLog('PULSE follow: retarget to $sink failed (kept current): $e');
+    }
   }
 
   @override
@@ -174,6 +255,7 @@ class PulseAudioOut implements AudioOut {
       throw StateError('PulseAudioOut.write before init');
     }
     if (frames <= 0) return;
+    _maybeFollowDefaultSink();
     if (_stage == null || _stageFrames < frames) {
       if (_stage != null) malloc.free(_stage!);
       _stage = malloc<Float>(frames * 2);
@@ -256,6 +338,9 @@ class PulseAudioOut implements AudioOut {
       _stage = null;
       _stageFrames = 0;
     }
+    _targetSink = null;
+    _lastFollowCheckMs = 0;
+    _followFailSink = null;
     started = false;
   }
 }

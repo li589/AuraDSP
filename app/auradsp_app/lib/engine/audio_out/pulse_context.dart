@@ -51,6 +51,18 @@ String? pickLoopbackSource(Iterable<String> sources) {
   return fallback;
 }
 
+/// 输出流是否应跟随默认 sink 迁移（纯逻辑，可单测）。
+///
+/// [target] 是输出流当前绑定的 sink（null = 打开时未能确定），
+/// [current] 是服务端当前默认 sink。迁移条件：默认已变且新默认
+/// 不是我们自己的虚拟 sink —— 跟随进 auradsp_virtual 会把输出喂回
+/// 采集端形成回授环，此时保持现绑定不动。
+bool shouldRetargetSink({required String? target, required String? current}) {
+  if (current == null || current.isEmpty) return false;
+  if (current == PulseContextService.virtualSinkName) return false;
+  return current != target;
+}
+
 /* ---------------- pa_context FFI ---------------- */
 
 // pa_context_state: 0 UNCONNECTED 1 CONNECTING 2 AUTHORIZING
