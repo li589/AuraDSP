@@ -354,6 +354,24 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
 
   void _onFrame() {
     if (!_effective) return;
+    final src = widget.spectrum.value;
+    var hasSignal = false;
+    for (var i = 0; i < src.length; i++) {
+      if (src[i] > AmbientEnvelope.epsilon) {
+        hasSignal = true;
+        break;
+      }
+    }
+
+    // 真实静音且能量已归零：彻底停止拨钟看门狗，进入 0fps 深度休眠，杜绝闲置重绘
+    if (!hasSignal && _painter.maxValue <= AmbientEnvelope.epsilon) {
+      _decayTimer?.cancel();
+      _decayTimer = null;
+      _staleTimer?.cancel();
+      _staleTimer = null;
+      return;
+    }
+
     _lastFrameMs = DateTime.now().millisecondsSinceEpoch;
     // 恢复真实信号：paint 时重新按 spectrum 重采样。
     _painter.clearStale();
@@ -514,18 +532,8 @@ class _AmbientPainter extends CustomPainter {
   final ValueListenable<int> clock;
   final AmbientEnvelope _env = AmbientEnvelope();
 
-  /// 双线性放大画笔（固定 medium 滤波，通过低分图双线性放大实现纯正高斯状雾化光晕）
-  final Paint _blitPaint = Paint()..filterQuality = FilterQuality.medium;
-
-  /// 单复用柱体画笔
-  final Paint _barPaint = Paint();
-
-  /// 柱体渐变 shader：整幅离屏图共用一份（旧实现每根柱每帧新建
-  /// `ui.Gradient.linear` → 72 个/帧 × 20fps 的 Skia 原生分配）。
-  ui.Shader? _barShader;
-
-  /// 同步小图双缓冲句柄（严格单实例轮替，零异步跨帧，杜绝 UAF 悬挂指针）
-  ui.Image? _lastImg;
+  final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
+  final Path _wavePath = Path();
 
   _AmbientPainter({
     required this.spectrum,
@@ -539,10 +547,6 @@ class _AmbientPainter extends CustomPainter {
     for (var i = 0; i < AmbientEnvelope.bars; i++) {
       n._env.smooth[i] = _env.smooth[i];
     }
-    // 2026-10-31：把上一帧小图的所有权转交给新 painter。旧实现两个实例
-    // 各自持有同一张图却不释放前者的引用，换主题时遗留一张未 dispose 的 GPU 小图。
-    n._lastImg = _lastImg;
-    _lastImg = null;
     return n;
   }
 
@@ -566,11 +570,7 @@ class _AmbientPainter extends CustomPainter {
     }
 
     if (_env.maxValue <= AmbientEnvelope.epsilon) {
-      // 静音期无须光栅化任何内容，零 GPU / 显存开销；释放已有小图
-      if (_lastImg != null) {
-        _lastImg!.dispose();
-        _lastImg = null;
-      }
+      // 静音期无须绘制任何内容，零 GPU / 显存开销
       return;
     }
 
@@ -578,63 +578,53 @@ class _AmbientPainter extends CustomPainter {
     final intensity = palette.isDark ? 1.0 : 0.45;
     final baseAlpha = (0.16 * intensity * 255).round();
 
-    // 低分图离屏尺寸：144×90 像素（像素总数 12,960，显存仅约 50KB）
-    // 宽 144px 对应 72 根柱子（槽宽 2px：柱宽 1.25px，间距 0.75px）
-    // 经双线性插值 10~15 倍放大到全屏后，原本小图硬边被自然平滑为真实的高斯雾化柔和光晕，
-    // 完全复原最原始优化前的暗色弥散质感，彻底消除生硬的塑料外层框与假地平线。
-    const lw = 144.0;
-    const lh = 90.0;
+    final w = size.width;
+    final h = size.height;
+    if (w <= 0 || h <= 0) return;
+
     const bars = AmbientEnvelope.bars;
-    const bw = lw / bars;
+    final maxWaveH = h * 0.42;
 
-    final recorder = ui.PictureRecorder();
-    final c = Canvas(recorder, const Rect.fromLTWH(0, 0, lw, lh));
+    _wavePath.reset();
+    _wavePath.moveTo(0, h);
 
-    // 整幅离屏图共用一份垂直渐隐 shader：柱体越矮只用到渐变底部（不透明度
-    // 更高），高柱自然淡出顶部，视觉与原逐柱渐变一致，但每帧零 Shader 创建。
-    _barShader ??= ui.Gradient.linear(
-      Offset(0, lh),
-      Offset(0, 0),
+    // 平滑波浪极光：通过贝塞尔样条将 72 根柱体的高度平滑串联
+    // 纯矢量原生绘制，彻底废除 Picture.toImageSync，零离屏纹理分配，GPU 占用趋零
+    final double stepX = w / (bars - 1);
+    double prevX = 0;
+    final firstV = (_env.smooth[0] / peak).clamp(0.0, 1.0);
+    double prevY = h - firstV * maxWaveH * 0.92;
+    _wavePath.lineTo(prevX, prevY);
+
+    for (var i = 1; i < bars; i++) {
+      final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
+      final currX = i * stepX;
+      final currY = h - v * maxWaveH * 0.92;
+      final midX = (prevX + currX) / 2.0;
+      final midY = (prevY + currY) / 2.0;
+      _wavePath.quadraticBezierTo(prevX, prevY, midX, midY);
+      prevX = currX;
+      prevY = currY;
+    }
+    _wavePath.lineTo(w, prevY);
+    _wavePath.lineTo(w, h);
+    _wavePath.close();
+
+    _fillPaint.shader = ui.Gradient.linear(
+      Offset(0, h),
+      Offset(0, h - maxWaveH),
       [
         palette.accent.withValues(alpha: baseAlpha / 255),
         palette.accent.withValues(alpha: 0.0),
       ],
     );
-    _barPaint.shader = _barShader;
-
-    // 每根柱子独立从底部至顶部垂直渐隐消融
-    for (var i = 0; i < bars; i++) {
-      final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
-      if (v < 0.02) continue;
-      final h = v * lh * 0.92;
-      final rect = Rect.fromLTWH(i * bw, lh - h, bw * 0.62, h);
-      c.drawRect(rect, _barPaint);
-    }
-
-    final pic = recorder.endRecording();
-    final img = pic.toImageSync(144, 90);
-    pic.dispose();
-
-    // 双线性平滑放大铺满全屏，呈现深邃自然的原始氛围雾化
-    canvas.drawImageRect(
-      img,
-      const Rect.fromLTWH(0, 0, lw, lh),
-      Offset.zero & size,
-      _blitPaint,
-    );
-
-    // 安全生命周期管理：释放上一帧纹理，保留当前帧直到下一帧完成
-    _lastImg?.dispose();
-    _lastImg = img;
+    canvas.drawPath(_wavePath, _fillPaint);
   }
 
   @override
   bool shouldRepaint(_AmbientPainter old) => old.palette != palette;
 
-  void dispose() {
-    _lastImg?.dispose();
-    _lastImg = null;
-  }
+  void dispose() {}
 }
 
 /// 程序化细噪点：给大面积纯色底加一层"物质感"，非贴图、可复现。

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -88,10 +89,8 @@ class _VisualizerHudState extends State<VisualizerHud> {
                     ? Padding(
                         key: const ValueKey('visualizer-style-menu'),
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: ClipRRect(
+                        child: _GlassSurface(
                           borderRadius: BorderRadius.circular(AuraRadius.md),
-                          child: BackdropFilter(
-                            filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                             child: Container(
                               // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
                               // 截断；按语言放宽（其他语言 190，ja 205）。
@@ -141,18 +140,15 @@ class _VisualizerHudState extends State<VisualizerHud> {
                               ),
                             ),
                           ),
-                        ),
-                      )
+                        )
                     : const SizedBox.shrink(
                         key: ValueKey('visualizer-style-menu-closed'),
                       ),
               ),
 
               // 主底栏容器（毛玻璃悬浮效果）
-              ClipRRect(
+              _GlassSurface(
                 borderRadius: BorderRadius.circular(AuraRadius.lg),
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
                   child: Container(
                     padding: const EdgeInsets.symmetric(
                       horizontal: 12,
@@ -242,12 +238,38 @@ class _VisualizerHudState extends State<VisualizerHud> {
                         ),
                       ],
                     ),
-                  ),
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// 平台自适应磨砂面板容器：
+/// Linux 环境（特别是虚拟机 llvmpipe 软件渲染）BackdropFilter 会引发高 CPU 卷积开销造成严重卡顿；
+/// 降级为高不透明度面板质感（alpha 0.94），免去全屏采样卷积，帧率显著提升。
+class _GlassSurface extends StatelessWidget {
+  final BorderRadius borderRadius;
+  final Widget child;
+  const _GlassSurface({required this.borderRadius, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (defaultTargetPlatform == TargetPlatform.linux) {
+      return ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
+      );
+    }
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: child,
       ),
     );
   }
