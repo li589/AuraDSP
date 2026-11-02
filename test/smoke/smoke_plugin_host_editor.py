@@ -60,7 +60,7 @@ SWP_NOACTIVATE = 0x0010
 
 
 def hosts_for_parent(parent_pid):
-    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe', 'auradsp_plugin_host.exe') } | "
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe') } | "
               "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script],
                             capture_output=True, text=True, timeout=20)

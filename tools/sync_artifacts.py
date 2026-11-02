@@ -53,7 +53,6 @@ def platform_layout():
             (engine_src, "auradsp_engine.dll"),
             (engine_src, "plugin_host_x64.exe"),
             (engine_src, "plugin_host_x86.exe"),
-            (engine_src, "auradsp_plugin_host.exe"),
             (drivers_src, "auravm_bridge.dll"),
             (drivers_src, "auraasio_bridge.dll"),
             (drivers_src, "auravaio_bridge.dll"),

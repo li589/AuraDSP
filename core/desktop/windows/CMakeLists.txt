@@ -230,21 +230,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     # R1：plugin_scanner.cpp 用 <filesystem> → 必须带 Win7 CreateFile2 回退。
     target_link_libraries(${HOST_EXE_TARGET_NAME} PRIVATE auradsp_wincompat version)
 
-    # 历史目标名兼容与产物别名（双宿主阶段定案）：
-    # 64 位构建产出 plugin_host_x64.exe，并在输出目录保留 auradsp_plugin_host.exe 兼容副本；
-    # 32 位构建产出 plugin_host_x86.exe。
-    # 保留 auradsp_plugin_host 自定义目标，使旧构建脚本中的 --target auradsp_plugin_host 仍有效。
-    if(NOT TARGET auradsp_plugin_host)
-        add_custom_target(auradsp_plugin_host ALL DEPENDS ${HOST_EXE_TARGET_NAME})
-    endif()
-    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
-        add_custom_command(TARGET ${HOST_EXE_TARGET_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:${HOST_EXE_TARGET_NAME}>
-                $<TARGET_FILE_DIR:${HOST_EXE_TARGET_NAME}>/auradsp_plugin_host.exe
-            COMMENT "Creating legacy auradsp_plugin_host.exe compatibility copy"
-        )
-    endif()
+    # 双宿主架构：64 位产出 plugin_host_x64.exe，32 位产出 plugin_host_x86.exe。
 endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 # CP-02：三个插件测试 EXE 直接编译 AURADSP_PLUGIN_HOST_SOURCES，裁剪构建不产出。

@@ -68,7 +68,7 @@ class _LyricViewState extends State<LyricView> {
     }
     if (docChanged ||
         widget.activeIndex != oldWidget.activeIndex && widget.activeIndex >= 0) {
-      _scheduleScrollToActiveLine();
+      _scheduleScrollToActiveLine(force: true);
     }
   }
 
@@ -179,10 +179,13 @@ class _LyricViewState extends State<LyricView> {
     final max = pos.maxScrollExtent;
     final clamped = target.clamp(pos.minScrollExtent, max.isFinite ? max : target);
 
-    // 容差取视口的 30%：当前行位于上/下三分之一附近时不打扰用户；
-    // 一旦真正离开可视区（或被要求强制归位）立即平滑滚回。
-    final tolerance = pos.viewportDimension * 0.30;
-    if (!force && (pos.pixels - clamped).abs() <= tolerance) return;
+    // 用户手动拖拽时不强行打断（除非 force 且明确切换行）
+    if (_userDragging && !force) return;
+
+    // 容差收敛：切行或偏离居中点超过 4px 即平滑居中，
+    // 避免“走好几条到了下面才回位”的滞后感。
+    final tolerance = force ? 1.5 : 4.0;
+    if ((pos.pixels - clamped).abs() <= tolerance) return;
 
     final usedExact = _offsetOfLine(widget.activeIndex) != null;
     _scrollController.animateTo(
@@ -214,7 +217,7 @@ class _LyricViewState extends State<LyricView> {
         _returnTimer?.cancel();
         _returnTimer = Timer(const Duration(milliseconds: 900), () {
           if (!mounted || _userDragging) return;
-          _ensureActiveVisible();
+          _ensureActiveVisible(force: true);
         });
       }
     }
