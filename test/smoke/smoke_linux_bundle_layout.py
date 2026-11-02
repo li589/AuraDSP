@@ -36,6 +36,8 @@ def main():
 
     check(has("auradsp_app"), "可执行文件 auradsp_app 在位")
     check(has("lib", "libauradsp_engine.so"), "lib/ 内引擎 .so 在位")
+    check(has("lib", "plugin_host_x64"),
+          "lib/ 内进程外插件宿主 plugin_host_x64 在位（双宿主架构）")
     check(has("lib", "libflutter_linux_gtk.so"), "Flutter 运行时在位")
     check(has("resources", "manifest.json"), "resources/manifest.json 在位")
     check(has("resources", "ddc"), "resources/ddc/ 在位")

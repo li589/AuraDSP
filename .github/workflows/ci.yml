@@ -59,7 +59,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: libauradsp_engine-linux
-          path: core/desktop/linux/out/Release/libauradsp_engine.so
+          path: |
+            core/desktop/linux/out/Release/libauradsp_engine.so
+            core/desktop/linux/out/Release/plugin_host_x64
           if-no-files-found: error
 
   # J3 Linux smoke ----------------------------------------------------

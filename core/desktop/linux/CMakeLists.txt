@@ -47,6 +47,12 @@ endif()
 # noplugins，与 Windows 同口径）：core 的 NO_PLUGINS 视图须与链接进
 # 同一 .so 的源一致，独立目录防增量构建混杂。
 option(AURADSP_ENABLE_PLUGINS "Build VST3/CLAP plugin hosting subsystem" ON)
+# 进程外宿主（与 Windows 同名同义）：ON 时引擎编入远程客户端/代理
+# （platform/posix/host），运行时经 AURA_PLUGIN_HOST_MODE=process
+# 启用 plugin_host_x64 隔离宿主，未启用时同进程内直通（manager 的
+# remoteMode 运行时分派，两路俱在）；OFF 时引擎定义 HOST_INPROC
+# 恒进程内（裁剪构建）。宿主可执行体随 ON 一并产出。
+option(AURADSP_PLUGIN_HOST_REMOTE "Build out-of-process plugin host (plugin_host_x64)" ON)
 if(AURADSP_ENABLE_PLUGINS)
     set(AURADSP_OUT_DIR_NAME "out")
 else()
@@ -179,12 +185,20 @@ target_include_directories(auradsp_engine PRIVATE
 )
 if(AURADSP_ENABLE_PLUGINS)
     # 引擎目标 C++20（atomic::notify_all 等在插件层；探针实测）。
-    # 进程内宿主标记与 Windows 的 REMOTE=OFF 同名同义；远程主机
-    # （双宿主架构）由后续阶段在 host/ 下接入，不动此处默认。
     set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
-    target_compile_definitions(auradsp_engine PRIVATE
-        AURADSP_HOST_INPROC=1
-    )
+    if(AURADSP_PLUGIN_HOST_REMOTE)
+        # 远程模式：不定义 HOST_INPROC，manager 在运行时按
+        # client.start()（环境变量 + 宿主在位）分派远程/进程内。
+        target_sources(auradsp_engine PRIVATE
+            "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+            "${API}/plugins/platform/posix/host/plugin_host_client_posix.cpp"
+            "${API}/plugins/platform/win32/host/process_plugin_proxy.cpp"
+        )
+    else()
+        target_compile_definitions(auradsp_engine PRIVATE
+            AURADSP_HOST_INPROC=1
+        )
+    endif()
     target_include_directories(auradsp_engine PRIVATE
         "${API}/plugins/driver"
         "${API}/plugins/platform/win32/host"
@@ -205,3 +219,55 @@ target_link_libraries(auradsp_engine PRIVATE
     ${CMAKE_DL_LIBS}
     m
 )
+
+# 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
+# Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
+# （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议
+# 与引擎协作；产物与引擎 .so 同目录（客户端 dladdr 定位）。
+if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
+    add_executable(plugin_host_x64
+        "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
+        "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+        "${API}/platform/linux/fs_linux.cpp"
+        "${API}/platform/linux/env_linux.cpp"
+        "${API}/platform/linux/log_linux.cpp"
+        "${API}/platform/linux/module_linux.cpp"
+        "${API}/plugins/driver/plugin_bundle.cpp"
+        "${API}/plugins/driver/plugin_scanner.cpp"
+        "${API}/plugins/driver/plugin_driver_registry.cpp"
+        "${API}/plugins/driver/plugin_json.cpp"
+        "${API}/plugins/driver/plugin_thread.cpp"
+        "${API}/plugins/driver/plugin_host_manager.cpp"
+        "${API}/plugins/driver/plugin_chain_component.cpp"
+        "${API}/plugins/formats/clap/clap_driver.cpp"
+        "${API}/plugins/formats/clap/clap_instance.cpp"
+        "${API}/plugins/formats/clap/clap_metadata.cpp"
+        "${API}/plugins/formats/vst3/vst3_driver.cpp"
+        "${API}/plugins/formats/vst3/vst3_instance.cpp"
+        "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+        "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+    )
+    set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)
+    target_compile_definitions(plugin_host_x64 PRIVATE
+        AURADSP_HOST_INPROC=1
+    )
+    target_compile_options(plugin_host_x64 PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
+    )
+    target_include_directories(plugin_host_x64 PRIVATE
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/posix"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_link_libraries(plugin_host_x64 PRIVATE
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+        m
+    )
+endif()

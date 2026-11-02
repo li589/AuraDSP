@@ -11,8 +11,11 @@
      C ABI（现行签名：create(采样率, 块长)、slot_load(path, id)）
      完成 create→scan→get_all 元数据断言→slot_load→status
      hasActive→set_bypass→process 峰值断言（0.8×0.5=0.4）→
-     unload→destroy。引擎产物缺失时活体半自 SKIP（CI 的 J3 会
-     下载 J2 产物实跑；本地先构建引擎即可）。
+     unload→destroy。引擎旁有 plugin_host_x64 时追加 remote 半：
+     AURA_PLUGIN_HOST_MODE=process 下同链重跑，断言 status 的
+     remoteMode=true、宿主进程在位、经共享内存环的 process 峰值
+     同为 0.4。引擎产物缺失时活体半自 SKIP（CI 的 J3 会下载
+     J2 产物实跑；本地先构建引擎即可）。
 
 注意：若引擎是 OFF（stub）构建，scan 返回 0 —— 活体半据此
 FAIL 并提示构建口味不对（J2 默认产物为 ON 构建）。
@@ -22,6 +25,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import tempfile
 
 TEST_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -85,6 +89,70 @@ def source_invariants():
           "插件页扫描目录区不再对 Linux 隐藏")
 
 
+def run_chain(lib, plug_dir, mode):
+    """一条完整的 C ABI 插件链（现行签名）。mode: inproc/remote。
+    remote 模式下音频经共享内存环传输，结果按 E15 流水语义在
+    后续回调到达，故连跑数次取末次峰值；inproc 首调即断言。"""
+    lib.auradsp_create.restype = ctypes.c_void_p
+    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+    h = lib.auradsp_create(48000.0, 4096)
+    check(bool(h), f"[{mode}] auradsp_create(48000, 4096) 成功")
+    if not h:
+        return
+    H = ctypes.c_void_p(h)
+    n = lib.auradsp_plugin_scan(H, plug_dir.encode())
+    check(n >= 1, f"[{mode}] scan 找到门禁插件（n={n}；为 0 说明引擎是 "
+                  "stub 构建，口味不对）")
+    if n < 1:
+        return
+    buf = ctypes.create_string_buffer(262144)
+    rc = lib.auradsp_plugin_get_all(H, buf, 262144)
+    items = json.loads(buf.value.decode()) if rc >= 1 else []
+    check(len(items) >= 1, f"[{mode}] get_all 返回至少一条")
+    if not items:
+        return
+    it = items[0]
+    check(it.get("name") == "Probe Gain" and it.get("format") == "CLAP",
+          f"[{mode}] 元数据 name/format 正确"
+          f"（{it.get('name')}/{it.get('format')}）")
+    check(it.get("vendor") == "AuraDSP Probe",
+          f"[{mode}] 元数据 vendor 经工厂信息得到（{it.get('vendor')}）")
+    rc = lib.auradsp_plugin_slot_load(
+        H, 0, it["path"].encode(), it["id"].encode())
+    check(rc == 1, f"[{mode}] slot_load(path, id) 成功（rc={rc}）")
+    if rc != 1:
+        return
+    sbuf = ctypes.create_string_buffer(65536)
+    lib.auradsp_plugin_slot_get_status(H, 0, sbuf, 65536)
+    st = json.loads(sbuf.value.decode())
+    check(st.get("hasActive") is True, f"[{mode}] status hasActive=true")
+    if mode == "remote":
+        check(st.get("remoteMode") is True,
+              "[remote] status remoteMode=true（确实走了隔离宿主）")
+        hosts = subprocess.run(["pgrep", "-c", "-x", "plugin_host_x64"],
+                               capture_output=True, text=True).stdout.strip()
+        check(hosts.isdigit() and int(hosts) >= 1,
+              f"[remote] plugin_host_x64 进程在位（{hosts}）")
+    rc = lib.auradsp_plugin_slot_set_bypass(H, 0, 0)
+    check(rc == 1, f"[{mode}] set_bypass(0) 成功（rc={rc}）")
+    src = (ctypes.c_float * 2048)()
+    dst = (ctypes.c_float * 2048)()
+    for i in range(2048):
+        src[i] = 0.8
+    peak = 0.0
+    calls = 1 if mode == "inproc" else 6
+    for _ in range(calls):
+        lib.auradsp_process(H, src, dst, 1024)
+        peak = max(abs(dst[i]) for i in range(2048))
+        if mode == "remote":
+            time.sleep(0.01)
+    check(abs(peak - 0.4) < 1e-3,
+          f"[{mode}] process 峰值 {peak:.4f} == 0.8×0.5（插件真实生效）")
+    rc = lib.auradsp_plugin_slot_unload(H, 0)
+    check(rc == 1, f"[{mode}] slot_unload 成功（rc={rc}）")
+    lib.auradsp_destroy(H)
+
+
 def live_chain():
     lib_path = engine_artifact.find_engine_lib()
     if not lib_path or not os.path.isfile(lib_path):
@@ -115,51 +183,24 @@ def live_chain():
         return
 
     lib = ctypes.CDLL(lib_path)
-    lib.auradsp_create.restype = ctypes.c_void_p
-    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
-    h = lib.auradsp_create(48000.0, 4096)
-    check(bool(h), "auradsp_create(48000, 4096) 成功")
-    if not h:
-        return
-    H = ctypes.c_void_p(h)
-    n = lib.auradsp_plugin_scan(H, plug_dir.encode())
-    check(n >= 1, f"scan 找到门禁插件（n={n}；为 0 说明引擎是 "
-                  "stub 构建，口味不对）")
-    if n < 1:
-        return
-    buf = ctypes.create_string_buffer(262144)
-    rc = lib.auradsp_plugin_get_all(H, buf, 262144)
-    items = json.loads(buf.value.decode()) if rc >= 1 else []
-    check(len(items) >= 1, "get_all 返回至少一条")
-    if not items:
-        return
-    it = items[0]
-    check(it.get("name") == "Probe Gain" and it.get("format") == "CLAP",
-          f"元数据 name/format 正确（{it.get('name')}/{it.get('format')}）")
-    check(it.get("vendor") == "AuraDSP Probe",
-          f"元数据 vendor 经工厂信息得到（{it.get('vendor')}）")
-    rc = lib.auradsp_plugin_slot_load(
-        H, 0, it["path"].encode(), it["id"].encode())
-    check(rc == 1, f"slot_load(path, id) 成功（rc={rc}）")
-    if rc != 1:
-        return
-    sbuf = ctypes.create_string_buffer(65536)
-    lib.auradsp_plugin_slot_get_status(H, 0, sbuf, 65536)
-    st = json.loads(sbuf.value.decode())
-    check(st.get("hasActive") is True, "status hasActive=true")
-    rc = lib.auradsp_plugin_slot_set_bypass(H, 0, 0)
-    check(rc == 1, f"set_bypass(0) 成功（rc={rc}）")
-    src = (ctypes.c_float * 2048)()
-    dst = (ctypes.c_float * 2048)()
-    for i in range(2048):
-        src[i] = 0.8
-    lib.auradsp_process(H, src, dst, 1024)
-    peak = max(abs(dst[i]) for i in range(2048))
-    check(abs(peak - 0.4) < 1e-3,
-          f"process 峰值 {peak:.4f} == 0.8×0.5（插件真实生效）")
-    rc = lib.auradsp_plugin_slot_unload(H, 0)
-    check(rc == 1, f"slot_unload 成功（rc={rc}）")
-    lib.auradsp_destroy(H)
+    os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+    run_chain(lib, plug_dir, "inproc")
+
+    host_exe = os.path.join(os.path.dirname(lib_path), "plugin_host_x64")
+    # 引擎口味判定：REMOTE 构建的 .so 内嵌宿主名文字（客户端定位
+    # 用）；INPROC 裁剪构建没有。混合状态（裁剪引擎 + 残留宿主）
+    # 下 remote 半无从成立，按 SKIP 处理而非误红。
+    with open(lib_path, "rb") as f:
+        engine_remote = b"plugin_host_x64" in f.read()
+    if os.path.isfile(host_exe) and engine_remote:
+        os.environ["AURA_PLUGIN_HOST_MODE"] = "process"
+        try:
+            run_chain(lib, plug_dir, "remote")
+        finally:
+            os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+    else:
+        print("  SKIP remote 半：引擎旁无 plugin_host_x64 或引擎为"
+              "进程内裁剪构建（REMOTE=OFF 时预期内）")
 
 
 def main():

@@ -2,6 +2,9 @@
 
 #include <algorithm>
 #include <cstring>
+#if !defined(_WIN32)
+#include <semaphore.h>  // sem_post（F-6 的 POSIX 唤醒）
+#endif
 
 namespace auradsp {
 namespace {
@@ -206,8 +209,13 @@ bool ProcessPluginProxy::submitChunk(uint32_t channels, uint32_t mask) {
     /* F-6: 唤醒宿主音频线程——每接受一个传输块一次。SetEvent 是纯内核
      * 调用（~1μs，无分配无锁，与 WASAPI 事件驱动同款实践），满足音频
      * 路径 RT-safe 契约；句柄为空（宿主未起/事件缺失）时静默跳过，
-     * 宿主靠 2 ms 等待超时兜底。 */
+     * 宿主靠 2 ms 等待超时兜底。POSIX 对应物为命名信号量 sem_post
+     * （同样无分配无锁的内核调用，RT-safe 口径一致）。 */
+#if defined(_WIN32)
     if (m_wakeEvent) SetEvent(m_wakeEvent);
+#else
+    if (m_wakeEvent) sem_post(m_wakeEvent);
+#endif
     return true;
 }
 

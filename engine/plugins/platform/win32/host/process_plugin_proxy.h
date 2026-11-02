@@ -96,7 +96,11 @@ private:
      * SetEvent——不触碰客户端互斥锁，保持 RT-safe。宿主重启后此副本
      * 失效（指向上一代事件，信号无害丢失，宿主 2 ms 超时兜底），下次
      * load() 重新缓存。 */
+#if defined(_WIN32)
     HANDLE m_wakeEvent = nullptr;
+#else
+    sem_t* m_wakeEvent = nullptr;  // POSIX 命名信号量（F-6 对应物）
+#endif
     size_t m_slot = 0;
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlock = 1024;

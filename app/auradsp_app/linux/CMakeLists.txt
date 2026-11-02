@@ -111,6 +111,17 @@ if(EXISTS "${AURADSP_ENGINE_SO}")
     COMPONENT Runtime)
 endif()
 
+# 进程外插件宿主（双宿主架构）：与引擎 .so 同目录分发——引擎侧
+# 客户端以 dladdr 定位 .so 目录后按名找 plugin_host_x64（运行时
+# 经 AURA_PLUGIN_HOST_MODE=process 启用）。有则随包无则跳过，
+# 缺失时引擎自动走进程内路径，不拦构建。
+set(AURADSP_PLUGIN_HOST_X64
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/linux/out/Release/plugin_host_x64")
+if(EXISTS "${AURADSP_PLUGIN_HOST_X64}")
+  install(PROGRAMS "${AURADSP_PLUGIN_HOST_X64}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # 声学资源包（与 Windows 侧同一清单）：安装到 bundle 根 resources/
 # （ResourceLocator 按 exe 旁 resources/ 探测）。
 set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")
