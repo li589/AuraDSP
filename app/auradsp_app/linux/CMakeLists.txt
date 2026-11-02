@@ -122,6 +122,15 @@ if(EXISTS "${AURADSP_PLUGIN_HOST_X64}")
     COMPONENT Runtime)
 endif()
 
+# 32 位桥宿主（双宿主架构阶段五）：需 multilib 构建产物在位才随包；
+# 缺失时 32 位插件按路由回落（与引擎侧口径一致），不拦构建。
+set(AURADSP_PLUGIN_HOST_X86
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/linux/out/Release/plugin_host_x86")
+if(EXISTS "${AURADSP_PLUGIN_HOST_X86}")
+  install(PROGRAMS "${AURADSP_PLUGIN_HOST_X86}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
 # 声学资源包（与 Windows 侧同一清单）：安装到 bundle 根 resources/
 # （ResourceLocator 按 exe 旁 resources/ 探测）。
 set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")

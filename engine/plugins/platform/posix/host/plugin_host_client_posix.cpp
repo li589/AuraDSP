@@ -137,11 +137,12 @@ std::string moduleDirectory() {
     return path.substr(0, slash);
 }
 
-std::string hostExecutablePath() {
+std::string hostExecutablePath(HostArch arch) {
     const std::string dir = moduleDirectory();
     if (dir.empty()) return {};
     // 双宿主架构命名（《插件双宿主架构与跨格式扩展方案》§2.2）：
-    // Linux 64 位宿主为无扩展名 ELF「plugin_host_x64」。
+    // Linux 宿主为无扩展名 ELF，按位数分名。
+    if (arch == HostArch::X86) return dir + "/plugin_host_x86";
     return dir + "/plugin_host_x64";
 }
 
@@ -155,7 +156,7 @@ std::string socketBaseDir() {
 
 } // namespace
 
-PluginHostClient::PluginHostClient() = default;
+PluginHostClient::PluginHostClient(HostArch arch) : m_arch(arch) {}
 
 PluginHostClient::~PluginHostClient() {
     shutdown();
@@ -164,7 +165,7 @@ PluginHostClient::~PluginHostClient() {
 bool PluginHostClient::start() {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
     if (!mode || strcasecmp(mode, "process") != 0) return false;
-    const std::string exe = hostExecutablePath();
+    const std::string exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(exe)) return false;
     m_processMode.store(true, std::memory_order_release);
     return true;
@@ -250,7 +251,7 @@ bool PluginHostClient::launchLocked() {
     closeHostHandlesLocked();
     m_region.reset();
 
-    const std::string exe = hostExecutablePath();
+    const std::string exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(exe)) return false;
 
     const uint32_t serial = s_hostCounter.fetch_add(1, std::memory_order_relaxed);

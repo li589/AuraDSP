@@ -29,6 +29,22 @@ std::string extractVendorFromPath(const std::string& filePath) {
     return parent.filename().string();
 }
 
+int pluginBinaryBitness(const std::wstring& binaryPath) {
+    const std::string path = wideToUtf8(binaryPath);
+    FILE* f = std::fopen(path.c_str(), "rb");
+    if (!f) return 0;
+    unsigned char ident[5] = {0};
+    const size_t n = std::fread(ident, 1, 5, f);
+    std::fclose(f);
+    if (n < 5 || ident[0] != 0x7F || ident[1] != 'E' || ident[2] != 'L' ||
+        ident[3] != 'F') {
+        return 0;
+    }
+    if (ident[4] == 1) return 32;  // ELFCLASS32
+    if (ident[4] == 2) return 64;  // ELFCLASS64
+    return 0;
+}
+
 bool peIs64Bit(const std::wstring& binaryPath) {
     // Linux 对应物：判 ELF class（ELFCLASS64=2）。非 ELF/不可读
     // 返回 false（与 PE 判定失败同口径：不进入加载尝试）。

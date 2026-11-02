@@ -88,6 +88,23 @@ def source_invariants():
     check("if (!PlatformProfile.isLinux)" not in page,
           "插件页扫描目录区不再对 Linux 隐藏")
 
+    # 双宿主路由不变量（阶段五）
+    scanner_cpp = read(os.path.join(ENGINE, "plugins", "driver",
+                                    "plugin_scanner.cpp"))
+    check("remoteClientFor" in scanner_cpp and
+          "pluginBinaryBitness" in scanner_cpp and
+          "HostArch::X86" in scanner_cpp,
+          "manager 双宿主分派在位（位数探测 + x86 客户端）")
+    client_posix = read(os.path.join(ENGINE, "plugins", "platform",
+                                     "posix", "host",
+                                     "plugin_host_client_posix.cpp"))
+    check('"/plugin_host_x86"' in client_posix and
+          '"/plugin_host_x64"' in client_posix,
+          "POSIX 客户端按位数定位双宿主")
+    check("AURADSP_BUILD_HOST_X86" in cmake and
+          "plugin_host_x86" in cmake,
+          "Linux CMake 含 x86 桥宿主目标（multilib 开关）")
+
 
 def run_chain(lib, plug_dir, mode):
     """一条完整的 C ABI 插件链（现行签名）。mode: inproc/remote。
@@ -153,6 +170,80 @@ def run_chain(lib, plug_dir, mode):
     lib.auradsp_destroy(H)
 
 
+
+def run_x86_bridge(lib, lib_path, cc):
+    """32 位桥活体：直调 slot_load（不经扫描——深扫的工厂探测在
+    x64 宿主内无法加载 32 位模块，那是扫描路由的后续议题；本节
+    验证加载路由 + 跨位数 IPC/环传输）。本机不可执行 32 位二进
+    制时自 SKIP（CI 的 ubuntu-latest 可实跑）。"""
+    host86 = os.path.join(os.path.dirname(lib_path), "plugin_host_x86")
+    if not os.path.isfile(host86):
+        print("  SKIP x86 桥半：引擎旁无 plugin_host_x86"
+              "（AURADSP_BUILD_HOST_X86=OFF 时预期内）")
+        return
+    with open(host86, "rb") as f:
+        ident = f.read(5)
+    check(len(ident) == 5 and ident[4] == 1,
+          "[x86] plugin_host_x86 是 ELFCLASS32 二进制")
+    # 32 位可执行性探测：无参运行应以参数校验 rc=1 退出；
+    # 段错误（如 VM 禁用 IA32 仿真）则本节活体半跳过。
+    probe = subprocess.run([host86], capture_output=True)
+    if probe.returncode != 1:
+        print(f"  SKIP x86 桥活体半：本机不可执行 32 位二进制"
+              f"（探测 rc={probe.returncode}；真机/CI 另行验证）")
+        return
+    tmp = tempfile.mkdtemp(prefix="auradsp_plug_gate32_")
+    plug_dir = os.path.join(tmp, "plugins")
+    os.makedirs(plug_dir)
+    out = os.path.join(plug_dir, "ProbeGain32.clap")
+    r = subprocess.run(
+        [cc, "-m32", "-shared", "-fPIC", "-O2",
+         "-I", os.path.join(ROOT, "vendor", "plugin-api"),
+         os.path.join(TEST_DIR, "smoke", "probe_gain.c"), "-o", out],
+        capture_output=True, text=True)
+    if r.returncode != 0:
+        print("  SKIP x86 桥活体半：-m32 编译不可用（缺 multilib）")
+        return
+    lib.auradsp_create.restype = ctypes.c_void_p
+    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+    os.environ["AURA_PLUGIN_HOST_MODE"] = "process"
+    try:
+        h = lib.auradsp_create(48000.0, 4096)
+        check(bool(h), "[x86] auradsp_create 成功")
+        if not h:
+            return
+        H = ctypes.c_void_p(h)
+        rc = lib.auradsp_plugin_slot_load(
+            H, 0, out.encode(), b"com.auradsp.probe.gain")
+        check(rc == 1, f"[x86] 32 位插件 slot_load 成功（rc={rc}）")
+        if rc != 1:
+            return
+        sbuf = ctypes.create_string_buffer(65536)
+        lib.auradsp_plugin_slot_get_status(H, 0, sbuf, 65536)
+        st = json.loads(sbuf.value.decode())
+        check(st.get("remoteMode") is True, "[x86] status remoteMode=true")
+        n86 = subprocess.run(["pgrep", "-c", "-x", "plugin_host_x86"],
+                             capture_output=True, text=True).stdout.strip()
+        check(n86.isdigit() and int(n86) >= 1,
+              f"[x86] plugin_host_x86 进程在位（{n86}，路由命中桥宿主）")
+        assert lib.auradsp_plugin_slot_set_bypass(H, 0, 0) == 1
+        src = (ctypes.c_float * 2048)()
+        dst = (ctypes.c_float * 2048)()
+        for i in range(2048):
+            src[i] = 0.8
+        peak = 0.0
+        for _ in range(6):
+            lib.auradsp_process(H, src, dst, 1024)
+            peak = max(abs(dst[i]) for i in range(2048))
+            time.sleep(0.01)
+        check(abs(peak - 0.4) < 1e-3,
+              f"[x86] 跨位数环传输 process 峰值 {peak:.4f} == 0.4")
+        assert lib.auradsp_plugin_slot_unload(H, 0) == 1
+        lib.auradsp_destroy(H)
+    finally:
+        os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+
+
 def live_chain():
     lib_path = engine_artifact.find_engine_lib()
     if not lib_path or not os.path.isfile(lib_path):
@@ -201,6 +292,7 @@ def live_chain():
     else:
         print("  SKIP remote 半：引擎旁无 plugin_host_x64 或引擎为"
               "进程内裁剪构建（REMOTE=OFF 时预期内）")
+    run_x86_bridge(lib, lib_path, cc)
 
 
 def main():

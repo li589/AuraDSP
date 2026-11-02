@@ -225,7 +225,7 @@ target_link_libraries(auradsp_engine PRIVATE
 # （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议
 # 与引擎协作；产物与引擎 .so 同目录（客户端 dladdr 定位）。
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
-    add_executable(plugin_host_x64
+    set(AURADSP_HOST_SOURCES
         "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
         "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
         "${API}/platform/linux/fs_linux.cpp"
@@ -247,6 +247,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/plugins/formats/vst3/vst3_metadata.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
     )
+    add_executable(plugin_host_x64 ${AURADSP_HOST_SOURCES})
     set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)
     target_compile_definitions(plugin_host_x64 PRIVATE
         AURADSP_HOST_INPROC=1
@@ -270,4 +271,39 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         ${CMAKE_DL_LIBS}
         m
     )
+
+    # 32 位桥宿主 plugin_host_x86（双宿主架构阶段五）：同一份宿主
+    # 源码以 -m32 独立构建，承载 32 位插件（路由见 manager 的
+    # remoteClientFor）。需要 multilib 工具链（gcc-multilib /
+    # g++-multilib），故默认 OFF，由 CI 或本机装齐后开启；缺
+    # 宿主时 32 位插件按路由回落 x64 宿主（加载失败即现状行为）。
+    option(AURADSP_BUILD_HOST_X86 "Build 32-bit bridge host (plugin_host_x86, needs multilib)" OFF)
+    if(AURADSP_BUILD_HOST_X86)
+        add_executable(plugin_host_x86 ${AURADSP_HOST_SOURCES})
+        set_property(TARGET plugin_host_x86 PROPERTY CXX_STANDARD 20)
+        target_compile_definitions(plugin_host_x86 PRIVATE
+            AURADSP_HOST_INPROC=1
+        )
+        target_compile_options(plugin_host_x86 PRIVATE
+            -m32
+            $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
+        )
+        target_link_options(plugin_host_x86 PRIVATE -m32)
+        target_include_directories(plugin_host_x86 PRIVATE
+            "${API}"
+            "${API}/chain"
+            "${API}/plugins/api"
+            "${API}/plugins/driver"
+            "${API}/plugins/platform/win32/host"
+            "${API}/plugins/platform/posix"
+            "${LEGACY}"
+            "${LEGACY}/jdsp"
+            "${PLUGIN_API}"
+        )
+        target_link_libraries(plugin_host_x86 PRIVATE
+            Threads::Threads
+            ${CMAKE_DL_LIBS}
+            m
+        )
+    endif()
 endif()

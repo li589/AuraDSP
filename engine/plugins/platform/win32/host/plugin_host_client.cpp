@@ -84,9 +84,13 @@ std::wstring moduleDirectory() {
     return dir.substr(0, slash);
 }
 
-std::wstring hostExecutablePath() {
+std::wstring hostExecutablePath(HostArch arch) {
     const std::wstring dir = moduleDirectory();
     if (dir.empty()) return {};
+    // X86 桥宿主按双宿主架构新命名；X64 暂保留现行发布名
+    // auradsp_plugin_host.exe（改名为 plugin_host_x64.exe 由
+    // Windows 侧发布流程统一切换，届时此处同步）。
+    if (arch == HostArch::X86) return dir + L"\\plugin_host_x86.exe";
     return dir + L"\\auradsp_plugin_host.exe";
 }
 
@@ -98,7 +102,7 @@ void enableKillOnClose(HANDLE job) {
 
 } // namespace
 
-PluginHostClient::PluginHostClient() = default;
+PluginHostClient::PluginHostClient(HostArch arch) : m_arch(arch) {}
 
 PluginHostClient::~PluginHostClient() {
     shutdown();
@@ -107,7 +111,7 @@ PluginHostClient::~PluginHostClient() {
 bool PluginHostClient::start() {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
     if (!mode || _stricmp(mode, "process") != 0) return false;
-    const std::wstring exe = hostExecutablePath();
+    const std::wstring exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(std::filesystem::path(exe))) return false;
     m_processMode.store(true, std::memory_order_release);
     return true;
@@ -178,7 +182,7 @@ bool PluginHostClient::launchLocked() {
     closeHostHandlesLocked();
     m_region.reset();
 
-    const std::wstring exe = hostExecutablePath();
+    const std::wstring exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(std::filesystem::path(exe))) return false;
 
     const uint32_t serial = s_hostCounter.fetch_add(1, std::memory_order_relaxed);

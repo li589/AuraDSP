@@ -21,10 +21,19 @@
 
 namespace auradsp {
 
+/* 双宿主架构（《插件双宿主架构与跨格式扩展方案》§2）：远程客户端
+ * 按目标位数分工——X64 客户端驱动 64 位宿主（Windows 现名
+ * auradsp_plugin_host.exe，Linux 为 plugin_host_x64），X86 客户端
+ * 驱动 32 位桥宿主 plugin_host_x86[.exe]。manager 按插件二进制
+ * 位数在两个客户端间分派（见 PluginHostManager::remoteClientFor）。 */
+enum class HostArch : uint8_t { X64, X86 };
+
 class PluginHostClient {
 public:
-    PluginHostClient();
+    explicit PluginHostClient(HostArch arch = HostArch::X64);
     ~PluginHostClient();
+
+    HostArch arch() const { return m_arch; }
 
     PluginHostClient(const PluginHostClient&) = delete;
     PluginHostClient& operator=(const PluginHostClient&) = delete;
@@ -99,6 +108,7 @@ private:
     bool simple(ipc::Op op, const std::vector<uint8_t>& payload,
                 int32_t* outStatus, int timeoutMs = 60000);
 
+    const HostArch m_arch;
     std::atomic<bool> m_processMode{false};
     std::atomic<uint32_t> m_hostPid{0};
     std::atomic<uint64_t> m_generation{0};

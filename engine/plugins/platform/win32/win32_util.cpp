@@ -80,6 +80,13 @@ std::string extractVendorFromPath(const std::string& filePath) {
 
 /// 由 PE 头判定是否为 64 位二进制。解析失败时按 64 位处理
 /// （本进程是 x64；历史行为即默认 true，缺失 PE 信息不应把插件误判为不兼容）。
+int pluginBinaryBitness(const std::wstring& binaryPath) {
+    const WORD m = peMachineType(binaryPath);
+    if (m == IMAGE_FILE_MACHINE_I386) return 32;
+    if (m == IMAGE_FILE_MACHINE_AMD64 || m == IMAGE_FILE_MACHINE_ARM64) return 64;
+    return 0;
+}
+
 bool peIs64Bit(const std::wstring& binaryPath) {
     const WORD m = peMachineType(binaryPath);
     if (m == IMAGE_FILE_MACHINE_I386) return false;

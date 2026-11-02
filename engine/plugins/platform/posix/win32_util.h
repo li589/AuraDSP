@@ -86,6 +86,10 @@ inline std::string normalizeModuleKey(const std::wstring& wpath) {
 std::vector<std::string> defaultPluginSearchPaths();
 
 std::string extractVendorFromPath(const std::string& filePath);
+// 二进制位数探测（双宿主路由用）：64 / 32 / 0（未知或不可读）。
+// peIs64Bit 对未知格式回退 true 不适合路由决策，故另设本函数
+// 以 ELF class 给出三态。
+int pluginBinaryBitness(const std::wstring& binaryPath);
 bool peIs64Bit(const std::wstring& binaryPath);
 std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath);
 std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath);

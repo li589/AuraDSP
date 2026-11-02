@@ -101,6 +101,26 @@ cat /proc/asound/cards    # 应出现 Loopback
       attached (ALSA): hw:Loopback`），播放器灌入回环后处理声
       出声、频谱活动；与 PA 路径（.monitor）各验一遍
 
+## 3c. 插件宿主（二期：进程内 + 双宿主隔离）
+
+前置：release bundle 的 lib/ 内含 libauradsp_engine.so 与
+plugin_host_x64（开 multilib 构建时另有 plugin_host_x86）。
+
+- [ ] 插件页可打开（不再是「不支持」占位），扫描目录区可见，
+      预置目录含 ~/.vst3、~/.clap 等
+- [ ] 把任一真实 VST3/CLAP 插件放进扫描目录 → 扫描出现条目 →
+      挂载到插槽出声（进程内路径，出声即通）
+- [ ] 隔离模式：以 `AURA_PLUGIN_HOST_MODE=process ./auradsp_app`
+      启动后重复上项；任务管理器/`pgrep plugin_host_x64` 应见
+      宿主进程；播放中 `kill` 掉宿主，引擎应降级存活（不崩主
+      程序），重载插件可恢复
+- [ ] （装有 32 位插件时）32 位 VST3 插件经 plugin_host_x86
+      桥加载出声（需系统支持 IA32 执行：`gcc -m32` 的 hello
+      world 能跑通即满足；VM 内核禁用 IA32 的环境此项跳过，
+      属环境限制非产品缺陷）
+- [ ] 插件编辑器按钮：Linux 下应明确不可用（能力层 canEdit=false），
+      不假死、不崩溃
+
 ## 4. 桌面集成
 
 - [ ] **托盘**：面板出现 AuraDSP 图标（PNG）；关窗最小化到托盘不退出；
