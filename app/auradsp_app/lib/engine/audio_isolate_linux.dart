@@ -101,13 +101,15 @@ class LinuxModeController {
     bool driverLoaded = false;
     bool virtualPresent = false;
     String? loopbackSource;
+    String? defaultSink;
     try {
       driverLoaded = _service.asoundLoopbackLoaded();
     } catch (_) {}
     try {
-      // sink/source 名单一次会话取齐（probeNames，审查 F3）：原先两次
-      // 独立查询各开一条 pa_context 会话，服务端异常时超时翻倍。
+      // sink/source 名单与默认 sink 一次会话取齐（probeNames，审查 F3）：
+      // 原先多次独立查询各开一条 pa_context 会话，服务端异常时超时翻倍。
       final probe = _service.probeNames();
+      defaultSink = probe.defaultSink;
       virtualPresent =
           probe.sinks.contains(PulseContextService.virtualSinkName);
       for (final n in probe.sources) {
@@ -124,6 +126,9 @@ class LinuxModeController {
       'virtualSink': virtualPresent,
       'driverLoaded': driverLoaded,
       'loopbackSource': loopbackSource,
+      // 设备面板展示用：PulseAudio 默认输出与当前采集源（无采集时为空）。
+      'defaultSink': defaultSink,
+      'captureSource': _capture?.device ?? '',
       'note': ?note,
     };
   }

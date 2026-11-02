@@ -89,6 +89,13 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  /// Linux 设备面板「刷新」：请求 isolate 重新探测 PA 设备并回推
+  /// linuxstatus（不改管线，只刷新状态）。
+  void refreshLinuxStatus() {
+    if (!PlatformProfile.isLinux) return;
+    _toIso?.send({'cmd': 'linuxstatus'});
+  }
+
   /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
   void setModeCategory(String category) {
     if (category != AudioModes.categoryAttachment &&

@@ -1294,6 +1294,40 @@ class AppLocalizationsZh extends AppLocalizations {
       '采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。';
 
   @override
+  String get linuxOutputSink => '输出设备';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio 默认输出';
+
+  @override
+  String get linuxOutputFormat => '输出格式';
+
+  @override
+  String get linuxCaptureSource => '采集源';
+
+  @override
+  String get linuxCaptureNone => '无（当前模式不采集）';
+
+  @override
+  String get linuxVirtualDevice => '虚拟设备';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual 已就绪';
+
+  @override
+  String get linuxVirtualAbsent => '未创建（虚拟声卡模式下自动创建）';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop 已加载';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop 未加载';
+
+  @override
+  String get linuxDeviceHint =>
+      '输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

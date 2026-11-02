@@ -327,15 +327,16 @@ class PulseContextService {
   List<String> sinkNames() => _listNames(sinks: true);
   List<String> sourceNames() => _listNames(sinks: false);
 
-  /// 一次会话内同时取 sink/source 名单（状态查询专用：分开调
-  /// virtualSinkPresent + findLoopbackSource 要各开一条会话，服务端
-  /// 异常时每条都可能耗满超时，审查 F3）。
-  ({List<String> sinks, List<String> sources}) probeNames() {
+  /// 一次会话内同时取 sink/source 名单与默认 sink（状态查询专用：分开调
+  /// virtualSinkPresent + findLoopbackSource + defaultSinkName 要各开一条
+  /// 会话，服务端异常时每条都可能耗满超时，审查 F3）。
+  ({List<String> sinks, List<String> sources, String? defaultSink}) probeNames() {
     final session = _Session(_lib)..open();
     try {
       return (
         sinks: _collectNames(session, sinks: true),
         sources: _collectNames(session, sinks: false),
+        defaultSink: _collectDefaultSink(session),
       );
     } finally {
       session.close();
@@ -344,10 +345,10 @@ class PulseContextService {
 
   bool virtualSinkPresent() => sinkNames().contains(virtualSinkName);
 
-  /// 默认 sink 名（pa_server_info 布局：4 个指针(32B) + pa_sample_spec
-  /// (12B) 后，指针成员按 8B 对齐补齐到偏移 48 处为 default_sink_name）。
-  String? defaultSinkName() {
-    final session = _Session(_lib)..open();
+  /// 在既有会话里读默认 sink 名（pa_server_info 布局：4 个指针(32B) +
+  /// pa_sample_spec (12B) 后，指针成员按 8B 对齐补齐到偏移 48 处为
+  /// default_sink_name）。
+  String? _collectDefaultSink(_Session session) {
     final doneCell = malloc<Int32>()..value = 0;
     String? result;
     final cb = NativeCallable<_ServerInfoCbNative>.isolateLocal(
@@ -358,7 +359,7 @@ class PulseContextService {
           if (p != nullptr) result = p.toDartString();
         }
       } catch (_) {
-        // 结构偏移异常时静默放弃（仅用于防环警告，不值得冒崩溃风险）。
+        // 结构偏移异常时静默放弃（仅用于状态展示/防环提示，不值得冒崩溃风险）。
       }
       doneCell.value = 1;
     });
@@ -369,9 +370,18 @@ class PulseContextService {
     } finally {
       cb.close();
       malloc.free(doneCell);
-      session.close();
     }
     return result;
+  }
+
+  /// 默认 sink 名（单开会话的便捷入口；状态查询用 [probeNames] 复用会话）。
+  String? defaultSinkName() {
+    final session = _Session(_lib)..open();
+    try {
+      return _collectDefaultSink(session);
+    } finally {
+      session.close();
+    }
   }
 
   /// 确保虚拟 sink 存在：缺失则 pa_context_load_module 加载

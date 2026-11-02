@@ -2500,6 +2500,72 @@ abstract class AppLocalizations {
   /// **'采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。'**
   String get linuxCaptureInactiveHint;
 
+  /// No description provided for @linuxOutputSink.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出设备'**
+  String get linuxOutputSink;
+
+  /// No description provided for @linuxOutputSinkDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'PulseAudio 默认输出'**
+  String get linuxOutputSinkDefault;
+
+  /// No description provided for @linuxOutputFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出格式'**
+  String get linuxOutputFormat;
+
+  /// No description provided for @linuxCaptureSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集源'**
+  String get linuxCaptureSource;
+
+  /// No description provided for @linuxCaptureNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无（当前模式不采集）'**
+  String get linuxCaptureNone;
+
+  /// No description provided for @linuxVirtualDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟设备'**
+  String get linuxVirtualDevice;
+
+  /// No description provided for @linuxVirtualPresent.
+  ///
+  /// In zh, this message translates to:
+  /// **'auradsp_virtual 已就绪'**
+  String get linuxVirtualPresent;
+
+  /// No description provided for @linuxVirtualAbsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'未创建（虚拟声卡模式下自动创建）'**
+  String get linuxVirtualAbsent;
+
+  /// No description provided for @linuxDriverPresent.
+  ///
+  /// In zh, this message translates to:
+  /// **'snd-aloop 已加载'**
+  String get linuxDriverPresent;
+
+  /// No description provided for @linuxDriverAbsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'snd-aloop 未加载'**
+  String get linuxDriverAbsent;
+
+  /// No description provided for @linuxDeviceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。'**
+  String get linuxDeviceHint;
+
   /// No description provided for @modeAsio.
   ///
   /// In zh, this message translates to:

@@ -1393,6 +1393,40 @@ class AppLocalizationsEn extends AppLocalizations {
       'Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.';
 
   @override
+  String get linuxOutputSink => 'Output device';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio default output';
+
+  @override
+  String get linuxOutputFormat => 'Output format';
+
+  @override
+  String get linuxCaptureSource => 'Capture source';
+
+  @override
+  String get linuxCaptureNone => 'None (not captured in this mode)';
+
+  @override
+  String get linuxVirtualDevice => 'Virtual device';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual ready';
+
+  @override
+  String get linuxVirtualAbsent => 'Not created (auto-created in virtual mode)';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop loaded';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop not loaded';
+
+  @override
+  String get linuxDeviceHint =>
+      'Output always goes to the PulseAudio default sink. Do not set auradsp_virtual as the system default output, or processed audio will be captured again and create a feedback loop.';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

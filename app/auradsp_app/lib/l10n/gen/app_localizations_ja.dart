@@ -1311,6 +1311,40 @@ class AppLocalizationsJa extends AppLocalizations {
       'キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。';
 
   @override
+  String get linuxOutputSink => '出力デバイス';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio の既定出力';
+
+  @override
+  String get linuxOutputFormat => '出力フォーマット';
+
+  @override
+  String get linuxCaptureSource => 'キャプチャ元';
+
+  @override
+  String get linuxCaptureNone => 'なし（このモードではキャプチャしません）';
+
+  @override
+  String get linuxVirtualDevice => '仮想デバイス';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual 準備完了';
+
+  @override
+  String get linuxVirtualAbsent => '未作成（仮想サウンドモードで自動作成）';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop 読み込み済み';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop 未読み込み';
+
+  @override
+  String get linuxDeviceHint =>
+      '出力は常に PulseAudio の既定シンクへ送られます。auradsp_virtual をシステムの既定出力に設定しないでください。処理後の音声が再キャプチャされ、フィードバックループになります。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override

@@ -90,6 +90,14 @@ class _DynamicAudioPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Linux（ADR-012 D-5/D-6）：设备面只有 PulseAudio sink/source，不存在
+    // Windows 的 APO / VAIO / ASIO 三层管线；必须在此提前返回，否则
+    // categoryForMode('system') 会落到管线分支、把 Windows 专有设备
+    // （WASAPI 端点/VAIO/ASIO）误显示到 Linux 设置页。
+    if (PlatformProfile.isLinux) {
+      return _LinuxDevicePanel(model: model);
+    }
+
     // 1. 附加模式
     if (model.modeCategory == AudioModes.categoryAttachment) {
       if (model.attachmentMode == AudioModes.attachVoicemeeterApi) {
@@ -102,6 +110,78 @@ class _DynamicAudioPanel extends StatelessWidget {
 
     // 2. 管线模式：三层设备显示卡（驱动层、输入层、输出层）
     return _PipelineThreeLayerCard(model: model);
+  }
+}
+
+/* ---- Linux 设备卡（ADR-012 D-5）：PulseAudio 输出/采集状态 ---- */
+
+class _LinuxDevicePanel extends StatelessWidget {
+  final AppModel model;
+  const _LinuxDevicePanel({required this.model});
+
+  @override
+  Widget build(BuildContext context) {
+    final l = l10nOf(context);
+    final p = paletteOf(context);
+    final info = model.info;
+    final sink = model.linuxDefaultSink;
+    final captureOn = model.linuxCaptureActive;
+    final capSource = model.linuxCaptureSource;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('PulseAudio (Linux)',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: p.text,
+                      )),
+                  if (info != null) ...[
+                    const SizedBox(height: 2),
+                    Text('ABI v${info.abi} · ${info.version}',
+                        style: monoOf(p, size: 10, color: p.textDim)),
+                  ],
+                ],
+              ),
+            ),
+            AuraChip(
+              l.setRefreshStatus,
+              icon: Icons.refresh_rounded,
+              onTap: () => model.refreshLinuxStatus(),
+            ),
+          ],
+        ),
+        const SizedBox(height: AuraSpace.xs),
+        _InfoRow(l.linuxOutputSink,
+            sink.isEmpty ? l.linuxOutputSinkDefault : sink),
+        if (info != null)
+          _InfoRow(
+            l.linuxOutputFormat,
+            '${info.deviceRate} Hz · ${info.deviceCh} ch · '
+                '${info.bufferFrames} frames',
+          ),
+        _InfoRow(
+            l.linuxCaptureSource,
+            captureOn
+                ? (capSource.isEmpty ? '—' : capSource)
+                : l.linuxCaptureNone),
+        _InfoRow(l.linuxVirtualDevice,
+            model.linuxVirtualSink ? l.linuxVirtualPresent : l.linuxVirtualAbsent),
+        _InfoRow(l.linuxModeDriver,
+            model.linuxDriverLoaded ? l.linuxDriverPresent : l.linuxDriverAbsent),
+        const SizedBox(height: AuraSpace.xs),
+        Text(l.linuxDeviceHint,
+            style: captionOf(p, color: p.textDim).copyWith(fontSize: 11)),
+      ],
+    );
   }
 }
 

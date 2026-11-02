@@ -32,6 +32,8 @@ extension StateEvents on AppModel {
         linuxVirtualSink = (raw['virtualSink'] as bool?) ?? false;
         linuxDriverLoaded = (raw['driverLoaded'] as bool?) ?? false;
         linuxModeNote = (raw['note'] as String?) ?? '';
+        linuxDefaultSink = (raw['defaultSink'] as String?) ?? '';
+        linuxCaptureSource = (raw['captureSource'] as String?) ?? '';
         _notifyUi();
         break;
       case 'ready':

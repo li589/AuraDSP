@@ -7,10 +7,11 @@
 // 与 WASAPI 实现的契约对齐（audio_out.dart 端口）：
 //   - init 协商采样率：PulseAudio 服务端按流采样率重采样到设备率，
 //     sampleRate 报流采样率（requested ?? 48000），声道固定 2；
-//   - currentPadding 以 pa_simple_get_latency 估算在途帧数（偏保守，
-//     泵循环据此少写不会溢出）；
+//   - currentPadding 以 pa_simple_get_latency 估算在途帧数，并钳制到
+//     半缓冲（服务端把设备侧缓冲计入延迟，真机读数可远超本地
+//     tlength；不钳制会让泵的 avail 恒为负、永不写入 → 无声）；
 //   - write 阻塞至数据被服务端接收 —— 即泵的节流点（与 WASAPI 轮询推
-//     模型等价：padding 估算保守时不会长阻塞）；
+//     模型等价：padding 保守时不会长阻塞）；
 //   - 失败一律抛 StateError（pa_strerror 文案），由 audio_isolate 的
 //     降级通道兜底（引擎照跑、无声不红屏），与 WASAPI 的 _hr 风格一致；
 //   - stop 用 pa_simple_flush 丢弃在途音频（真的静音），失败保持
@@ -152,8 +153,14 @@ class PulseAudioOut implements AudioOut {
       final usec = lib._getLatency(_stream, pErr);
       if (pErr.value < 0) return 0;
       final frames = (usec * _sampleRate) ~/ paUsecPerSec;
-      // 在途量上界钳制到 2 倍缓冲，避免异常延迟值让泵误判写满。
-      return frames > _bufferFrames * 2 ? _bufferFrames * 2 : frames;
+      // 真机实测（Ubuntu 24.04 + PipeWire 兼容层）：实体 sink 的
+      // pa_simple_get_latency 会把设备侧缓冲计入，读数（约 10.4k 帧 @48k）
+      // 远超本流 tlength（targetBufferFrames=2048）——若直接拿它当「客户端
+      // 在途量」做 bufferFrames - padding，avail 恒为负 → 泵永不写 → 无声。
+      // simple API 的 write 本身是阻塞节流点，故把 padding 钳到半缓冲：
+      // 保留队列感知，同时保证每轮至少可写半缓冲，不会被设备延迟饿死。
+      final half = _bufferFrames ~/ 2;
+      return frames > half ? half : frames;
     } finally {
       malloc.free(pErr);
     }
@@ -208,7 +215,7 @@ class PulseAudioOut implements AudioOut {
     }
     // simple API 无 start/stop 语义：流在 new 时即运行，start 只置位。
     started = true;
-    dbgLog('PULSE start');
+    dbgLog('PULSE start latencyFrames=${currentPadding()} buffer=$_bufferFrames');
   }
 
   @override
