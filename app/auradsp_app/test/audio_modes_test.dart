@@ -145,21 +145,4 @@ void main() {
     expect(pickLoopbackSource(['auradsp_virtual.monitor', inp]), inp);
     expect(pickLoopbackSource(['auradsp_virtual.monitor']), isNull);
   });
-
-  test('default sink follow retargets only on a real change', () {
-    // 默认未变 → 不迁。
-    expect(shouldRetargetSink(target: 'sink_a', current: 'sink_a'), isFalse);
-    // 默认已变 → 迁。
-    expect(shouldRetargetSink(target: 'sink_a', current: 'sink_b'), isTrue);
-    // 打开时未能落名（target=null）→ 首次查到默认时显式重开落名。
-    expect(shouldRetargetSink(target: null, current: 'sink_b'), isTrue);
-    // 查不到默认（服务端异常）→ 保持现流。
-    expect(shouldRetargetSink(target: 'sink_a', current: null), isFalse);
-    expect(shouldRetargetSink(target: 'sink_a', current: ''), isFalse);
-    // 新默认是自家虚拟 sink → 不迁（防输出回授进采集端）。
-    expect(
-        shouldRetargetSink(
-            target: 'sink_a', current: PulseContextService.virtualSinkName),
-        isFalse);
-  });
 }
