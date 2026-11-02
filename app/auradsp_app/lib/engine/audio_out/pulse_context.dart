@@ -34,6 +34,23 @@ bool isLoopbackSourceName(String name) {
   return n.contains('loopback') || n.contains('snd_aloop');
 }
 
+/// 从 PA 源名列表里挑 snd-aloop 的采集源（纯逻辑，可单测）。
+///
+/// 2026-11-02 实机实测（Ubuntu 24.04 + PipeWire，snd-aloop 单卡）：
+/// 向 `alsa_output.platform-snd_aloop.0...` 写入正弦后，只有同名 sink 的
+/// `.monitor` 源能采到信号（RMS 0.203），`alsa_input.platform-snd_aloop.0...`
+/// 恒为 0。因此优先选 loopback 的 `.monitor`；仅在没有任何 monitor 时回退
+/// 到其它 loopback 源（兼容原生 PA / 非标准命名）。
+String? pickLoopbackSource(Iterable<String> sources) {
+  String? fallback;
+  for (final n in sources) {
+    if (!isLoopbackSourceName(n)) continue;
+    fallback ??= n;
+    if (n.toLowerCase().endsWith('.monitor')) return n;
+  }
+  return fallback;
+}
+
 /* ---------------- pa_context FFI ---------------- */
 
 // pa_context_state: 0 UNCONNECTED 1 CONNECTING 2 AUTHORIZING
@@ -390,12 +407,9 @@ class PulseContextService {
   }
 
   /// snd-aloop 采集源（PA 侧名字）；不存在返回 null。
-  String? findLoopbackSource() {
-    for (final n in sourceNames()) {
-      if (isLoopbackSourceName(n)) return n;
-    }
-    return null;
-  }
+  /// 优先同名 sink 的 `.monitor`（实测唯一能采到回环信号的源，
+  /// 见 [pickLoopbackSource]）。
+  String? findLoopbackSource() => pickLoopbackSource(sourceNames());
 
   /// snd-aloop 内核模块是否已加载（/proc/asound/cards 本地真值）。
   /// 本文件即 Linux 平台层，直接读 procfs（与 debug_log 读文件同性质）。

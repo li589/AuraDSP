@@ -1,5 +1,6 @@
 import 'package:auradsp_app/core/audio_modes.dart';
 import 'package:auradsp_app/core/config.dart';
+import 'package:auradsp_app/engine/audio_out/pulse_context.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
@@ -130,5 +131,18 @@ void main() {
             pipelineOut: 'vaio',
             os: 'linux'),
         'system');
+  });
+
+  test('loopback source selection prefers sink monitor (snd-aloop)', () {
+    const mon = 'alsa_output.platform-snd_aloop.0.analog-stereo.monitor';
+    const inp = 'alsa_input.platform-snd_aloop.0.analog-stereo';
+    // 2026-11-02 实机：只有同名 sink 的 monitor 能采到回环信号；
+    // 两种服务端枚举顺序下都必须稳定选 monitor。
+    expect(pickLoopbackSource([mon, inp]), mon);
+    expect(pickLoopbackSource([inp, mon]), mon);
+    // 无 monitor 时回退到其它 loopback 源（兼容非标准命名）。
+    expect(pickLoopbackSource([inp]), inp);
+    expect(pickLoopbackSource(['auradsp_virtual.monitor', inp]), inp);
+    expect(pickLoopbackSource(['auradsp_virtual.monitor']), isNull);
   });
 }

@@ -27,7 +27,7 @@ Linux 上保留与 Windows 同构的三种模式语义，**不裁剪、不留空
 |---|---|---|
 | `system` | App 自己持有输出设备 | 设备栈（D-6 选定的 PulseAudio simple API） |
 | `virtual` | 虚拟 sink 设备 | PulseAudio `module-null-sink`（`pactl load-module module-null-sink sink_name=…`） |
-| `driver` | 内核态虚拟声卡 | Linux 主线已有的 **`snd-aloop`** 内核模块（`modprobe snd-aloop index=2 enable=1,1`），AuraDSP 绑定 `hw:Loopback,N` |
+| `driver` | 内核态虚拟声卡 | Linux 主线已有的 **`snd-aloop`** 内核模块（`modprobe snd-aloop index=2 enable=1`；2026-11-02 实机修订：`enable=1,1` 会创建两张回环卡，PA 枚举顺序与 `index=2` 不一致，单卡即可），AuraDSP 绑定 `hw:Loopback,N` |
 
 **理由（owner 认可）**：Linux 用户期望与 Windows 同等的能力矩阵，砍成单一 `system` 会让 Linux 版
 在功能对等上长期落后，且后续补 `virtual` / `driver` 仍要改动 `composeMode` 与设置页的语义骨架。

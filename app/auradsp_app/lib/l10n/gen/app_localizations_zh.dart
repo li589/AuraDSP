@@ -1283,7 +1283,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get linuxDriverMissingHint =>
-      '未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1,1，再重新选择内核驱动模式。';
+      '未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。';
 
   @override
   String get linuxVirtualReadyHint =>

@@ -1300,7 +1300,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get linuxDriverMissingHint =>
-      'snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1,1 を実行してから、カーネルドライバモードを選び直してください。';
+      'snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1 を実行してから、カーネルドライバモードを選び直してください。';
 
   @override
   String get linuxVirtualReadyHint =>

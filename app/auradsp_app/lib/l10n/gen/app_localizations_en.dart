@@ -1382,7 +1382,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get linuxDriverMissingHint =>
-      'The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1,1 in a terminal, then select the kernel driver mode again.';
+      'The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1 in a terminal, then select the kernel driver mode again.';
 
   @override
   String get linuxVirtualReadyHint =>

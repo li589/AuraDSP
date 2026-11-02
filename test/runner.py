@@ -54,6 +54,8 @@ PLATFORM_LINUX = {
     "smoke_linux_pulse_output.py",
     "smoke_linux_bundle_layout.py",
     "smoke_linux_virtual_sink.py",
+    # S5a 真机补强（2026-11-02）：snd-aloop 加载后验证 driver 回环采集链路。
+    "smoke_linux_driver_loopback.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -368,6 +370,9 @@ def run_smoke_tests():
         "smoke_linux_bundle_layout.py",
         # S5a：virtual 模式平台机制（null-sink + monitor 采集链路）。
         "smoke_linux_virtual_sink.py",
+        # S5a 真机补强（2026-11-02）：driver 模式 snd-aloop 回环采集链路；
+        # 模块未加载或无回环设备时自 SKIP。
+        "smoke_linux_driver_loopback.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
         # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。

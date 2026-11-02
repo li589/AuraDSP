@@ -116,6 +116,11 @@ class TrayService implements WindowPort {
       _quitItem = quitItem;
 
       icon.setContextMenu(menu);
+      // Linux 实机（Xubuntu 24.04 / XFCE 4.18，2026-11-02）：systray 插件
+      // 默认 menu-is-primary=true，左键打开的是本菜单而不是 SNI Activate；
+      // 置 false 后该插件也不转发 Activate（ItemIsMenu=false 已正确设置）。
+      // 故 XFCE 上「显示主窗口」是可靠恢复路径；GNOME/KDE 等按
+      // ItemIsMenu=false 走 Activate，仍由下方监听恢复窗口。
       icon.addListener((event) {
         if (event is TrayIconClickedEvent) _showWindow();
       });

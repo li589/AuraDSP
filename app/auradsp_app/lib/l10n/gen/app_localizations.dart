@@ -2485,7 +2485,7 @@ abstract class AppLocalizations {
   /// No description provided for @linuxDriverMissingHint.
   ///
   /// In zh, this message translates to:
-  /// **'未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1,1，再重新选择内核驱动模式。'**
+  /// **'未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。'**
   String get linuxDriverMissingHint;
 
   /// No description provided for @linuxVirtualReadyHint.
