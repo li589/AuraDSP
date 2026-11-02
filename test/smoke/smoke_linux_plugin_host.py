@@ -74,6 +74,23 @@ def source_invariants():
         check(f"PluginHostManager::{m}" not in gui,
               f"{m} 不再留在 win32 GUI 文件")
 
+    # 安全审查（2026-11-02）：IPC 对端认证与边界钳制不变量。
+    host_dir = os.path.join(posix, "host")
+    hm = read(os.path.join(host_dir, "plugin_host_main_posix.cpp"))
+    hc = read(os.path.join(host_dir, "plugin_host_client_posix.cpp"))
+    sr = read(os.path.join(host_dir, "plugin_shared_region_posix.cpp"))
+    check("SO_PEERCRED" in hm and "cred.uid" in hm,
+          "[sec] 宿主 accept 后校验对端 uid")
+    check("chmod(options.pipeName" in hm and "0600" in hm,
+          "[sec] 宿主 socket 文件 chmod 0600")
+    check("SO_PEERCRED" in hc and "cred.uid" in hc,
+          "[sec] 客户端 connect 后校验宿主 uid")
+    check("unpackTransportChannels(in.reserved)," in hm
+          and "kChannels)" in hm,
+          "[sec] 宿主音频线程声道数钳制到 kChannels")
+    check("fstat" in sr and "st_size" in sr,
+          "[sec] SharedRegion::open 映射前校验对象尺寸")
+
     profile = read(os.path.join(APP, "lib", "platform",
                                 "platform_profile.dart"))
     check("Platform.isWindows || Platform.isLinux" in profile,

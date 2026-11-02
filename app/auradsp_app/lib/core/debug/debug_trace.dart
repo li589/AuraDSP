@@ -105,7 +105,7 @@ class DebugTrace {
     enabled = true;
     logPath = path.isNotEmpty
         ? path
-        : '${Directory.systemTemp.path}\\auradsp_debug_trace.jsonl';
+        : '${Directory.systemTemp.path}${Platform.pathSeparator}auradsp_debug_trace.jsonl';
     _session = DateTime.now().toIso8601String();
     try {
       final f = File(logPath);

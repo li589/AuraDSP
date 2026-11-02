@@ -26,9 +26,17 @@ void dbgLog(String msg) {
       // 路径分隔符必须走平台值：硬编码 '\\' 在 Windows 正确，但在
       // Linux 会拼出文件名带反斜杠的怪路径（S3 遗留，S4 由
       // error_sink_test 的端到端用例在 Linux 上抓到并在此修复）。
-      final path =
+      var path =
           '${Platform.environment['TEMP'] ?? Directory.systemTemp.path}'
           '${Platform.pathSeparator}auradsp_debug.log';
+      // 符号链接防护（安全审查 2026-11-02）：路径落在共享临时目录
+      // 且文件名可预测，同机其他用户可预置 symlink 指向属主文件，
+      // 追加打开会顺着链接把日志写进目标文件。发现目标本身是链接
+      // 时改用带 pid 的文件名（正常环境与 CI 仍走固定名）。
+      if (FileSystemEntity.isLinkSync(path)) {
+        path = '$path.$pid.log';
+        if (FileSystemEntity.isLinkSync(path)) return;
+      }
       final f = File(path);
       if (!f.existsSync()) f.createSync(recursive: true);
       _dbgF = f.openSync(mode: FileMode.append);

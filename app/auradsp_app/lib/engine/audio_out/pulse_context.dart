@@ -299,8 +299,17 @@ class PulseContextService {
         return;
       }
       if (info != nullptr) {
-        final namePtr = info.cast<Pointer<Utf8>>().value;
-        if (namePtr != nullptr) names.add(namePtr.toDartString());
+        // try/catch（安全审查 2026-11-02）：设备名来自音频服务器，
+        // 本机任何进程都能注册带任意字节名的 sink/source，非法
+        // UTF-8 会让 toDartString 抛异常——逸出 NativeCallable
+        // 回调即成为音频 isolate 的未捕获错误。坏条目跳过即可
+        // （同 server-info 回调的既有口径）。
+        try {
+          final namePtr = info.cast<Pointer<Utf8>>().value;
+          if (namePtr != nullptr) names.add(namePtr.toDartString());
+        } catch (e, st) {
+          swallow(e, st);
+        }
       }
     });
     try {

@@ -11,6 +11,20 @@ import '../../core/error_sink.dart';
 import '../platform_profile.dart';
 import '../port/autostart.dart';
 
+/// Exec 参数的 desktop-entry 转义（纯函数，边界审查 2026-11-02）：
+/// 可执行路径被双引号包裹时，路径内的反斜杠、双引号、反引号、$
+/// 必须反斜杠转义，否则路径含这些字符会破坏条目、或被登录会话
+/// 的解析器当作变量展开。常规安装路径不含这些字符，此为防御性
+/// 收敛。
+String desktopExecArg(String executablePath) {
+  final escaped = executablePath
+      .replaceAll(r'\', r'\\')
+      .replaceAll('"', r'\"')
+      .replaceAll('`', r'\`')
+      .replaceAll(r'$', r'\$');
+  return '"$escaped"';
+}
+
 final class LinuxAutoStart implements AutoStartPort {
   @override
   bool get available => PlatformProfile.os == 'linux';
@@ -49,7 +63,7 @@ final class LinuxAutoStart implements AutoStartPort {
         '[Desktop Entry]\n'
         'Type=Application\n'
         'Name=AuraDSP\n'
-        'Exec="$exec"\n'
+        'Exec=${desktopExecArg(exec)}\n'
         'Icon=auradsp\n'
         'Terminal=false\n'
         'X-GNOME-Autostart-enabled=true\n',

@@ -334,6 +334,19 @@ bool PluginHostClient::connectPipeLocked() {
                      sizeof(addr.sun_path) - 1);
         if (::connect(fd, reinterpret_cast<sockaddr*>(&addr),
                       sizeof(addr)) == 0) {
+            // 对端凭据校验（安全审查 2026-11-02）：路径回退 /tmp
+            // 时要防同机其他用户抢先在可预测路径上 bind 假宿主、
+            // 向引擎回灌伪造的 IPC 应答。uid 不符即判定路径已被
+            // 占用/劫持，立即失败（不重试同一路径），上层回落
+            // 进程内——与宿主侧 SO_PEERCRED 校验成对。
+            ucred cred{};
+            socklen_t credLen = sizeof(cred);
+            if (::getsockopt(fd, SOL_SOCKET, SO_PEERCRED, &cred,
+                             &credLen) != 0 ||
+                cred.uid != ::getuid()) {
+                ::close(fd);
+                return false;
+            }
             m_pipe = fd;
             return true;
         }

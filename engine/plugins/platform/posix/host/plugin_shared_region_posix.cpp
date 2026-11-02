@@ -79,6 +79,17 @@ std::shared_ptr<SharedRegion> SharedRegion::open(const Name& name) {
     const size_t size = sizeof(ipc::SharedAudio);
     const int fd = shm_open(name.c_str(), O_RDWR, 0600);  // 名称由 create 侧保留
     if (fd < 0) return nullptr;
+    // 尺寸校验（安全审查 2026-11-02）：同名对象若比协议结构小
+    // （残留/异构对象），直接按全尺寸 mmap 后访问会 SIGBUS。
+    // 先 fstat 确认对象至少一整个 SharedAudio 再映射。
+    {
+        struct stat st {};
+        if (::fstat(fd, &st) != 0 ||
+            st.st_size < static_cast<off_t>(size)) {
+            close(fd);
+            return nullptr;
+        }
+    }
     void* view = mmap(nullptr, size, PROT_READ | PROT_WRITE, MAP_SHARED,
                       fd, 0);
     if (view == MAP_FAILED) {
