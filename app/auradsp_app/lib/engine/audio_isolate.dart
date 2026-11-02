@@ -18,7 +18,7 @@ import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
-import 'audio_out/audio_out_audioOut.dart';
+import 'audio_out/audio_out_wasapi.dart';
 import 'audio_out/audio_in_linux.dart';
 import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
@@ -1993,7 +1993,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'latencyMs': lib.getLatencyMs(handle),
     });
     if (audioOutError != null) {
-      send({'evt': 'audioOutError', 'msg': audioOutError});
+      send({'evt': 'wasapiError', 'msg': audioOutError});
     }
     final initialPluginStatus = AuraDspLib.pluginGetStatusJson(lib, handle);
     send({'evt': 'pluginStatus', 'status': initialPluginStatus});
@@ -2302,8 +2302,8 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         }
         if (audioOutErrRounds >= 400) {
           audioOutErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
-          dbgLog('PUMP: device invalidated 2s+, reporting audioOutLost');
-          send({'evt': 'audioOutLost'});
+          dbgLog('PUMP: device invalidated 2s+, reporting wasapiLost');
+          send({'evt': 'wasapiLost'});
         }
       }
     }
