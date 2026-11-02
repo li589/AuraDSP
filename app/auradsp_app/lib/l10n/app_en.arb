@@ -477,6 +477,7 @@
   "linuxBackendPulse": "PulseAudio (default)",
   "linuxBackendAlsa": "ALSA direct (expert)",
   "linuxAlsaOutDevice": "ALSA output device",
+  "linuxAlsaCapDevice": "ALSA capture device",
   "linuxAlsaDeviceEdit": "Edit",
   "linuxAlsaDeviceUnset": "default (unset)",
   "linuxAlsaExpertHint": "Expert mode talks to the ALSA device directly (period 256 frames) for lower latency than PulseAudio. Changing the backend or device restarts the audio engine. On PipeWire systems an hw: device may be held by the session manager and fail to open; the failure is surfaced in the status.",

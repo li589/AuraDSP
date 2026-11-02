@@ -1367,6 +1367,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get linuxAlsaOutDevice => 'ALSA 输出设备';
 
   @override
+  String get linuxAlsaCapDevice => 'ALSA 采集设备';
+
+  @override
   String get linuxAlsaDeviceEdit => '编辑';
 
   @override

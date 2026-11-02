@@ -604,6 +604,7 @@
   "linuxBackendPulse": "PulseAudio（默认）",
   "linuxBackendAlsa": "ALSA 直连（专家模式）",
   "linuxAlsaOutDevice": "ALSA 输出设备",
+  "linuxAlsaCapDevice": "ALSA 采集设备",
   "linuxAlsaDeviceEdit": "编辑",
   "linuxAlsaDeviceUnset": "default（未指定）",
   "linuxAlsaExpertHint": "专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。",

@@ -1385,6 +1385,9 @@ class AppLocalizationsJa extends AppLocalizations {
   String get linuxAlsaOutDevice => 'ALSA 出力デバイス';
 
   @override
+  String get linuxAlsaCapDevice => 'ALSA キャプチャデバイス';
+
+  @override
   String get linuxAlsaDeviceEdit => '編集';
 
   @override

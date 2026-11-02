@@ -33,6 +33,21 @@ void main() {
     expect(back.alsaCaptureDevice, '');
   });
 
+  test('dedupeAlsaNames removes duplicates preserving order', () {
+    expect(dedupeAlsaNames(['a', 'b', 'a', 'c', 'b']), ['a', 'b', 'c']);
+    expect(dedupeAlsaNames(const <String>[]), isEmpty);
+  });
+
+  test('alsaHintMatchesDirection filters by IOID, unlabelled passes', () {
+    expect(alsaHintMatchesDirection('Input', capture: true), isTrue);
+    expect(alsaHintMatchesDirection('Input', capture: false), isFalse);
+    expect(alsaHintMatchesDirection('Output', capture: false), isTrue);
+    expect(alsaHintMatchesDirection('Output', capture: true), isFalse);
+    // null 设备等未标注条目不误伤。
+    expect(alsaHintMatchesDirection(null, capture: true), isTrue);
+    expect(alsaHintMatchesDirection('', capture: false), isTrue);
+  });
+
   test('alsaRateMatches accepts equal rates and unknown pump rate', () {
     expect(alsaRateMatches(negotiated: 48000, pumpRate: 48000), isTrue);
     expect(alsaRateMatches(negotiated: 44100, pumpRate: 44100), isTrue);

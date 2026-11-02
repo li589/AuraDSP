@@ -477,6 +477,7 @@
   "linuxBackendPulse": "PulseAudio（既定）",
   "linuxBackendAlsa": "ALSA 直接接続（エキスパート）",
   "linuxAlsaOutDevice": "ALSA 出力デバイス",
+  "linuxAlsaCapDevice": "ALSA キャプチャデバイス",
   "linuxAlsaDeviceEdit": "編集",
   "linuxAlsaDeviceUnset": "default（未指定）",
   "linuxAlsaExpertHint": "エキスパートモードは ALSA デバイスへ直接接続し（period 256 フレーム）、PulseAudio より低遅延です。バックエンド/デバイス変更後はオーディオエンジンが自動再起動します。PipeWire 環境では hw: デバイスがセッションマネージャに占有され開けない場合があり、失敗理由はステータスに表示されます。",

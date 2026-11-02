@@ -2632,6 +2632,12 @@ abstract class AppLocalizations {
   /// **'ALSA 输出设备'**
   String get linuxAlsaOutDevice;
 
+  /// No description provided for @linuxAlsaCapDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'ALSA 采集设备'**
+  String get linuxAlsaCapDevice;
+
   /// No description provided for @linuxAlsaDeviceEdit.
   ///
   /// In zh, this message translates to:
