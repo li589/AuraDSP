@@ -29,8 +29,8 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
                    "auradsp_engine.dll")
 if not os.path.exists(DLL):
-    DLL = (r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release"
-           r"\auradsp_engine.dll")
+    DLL = os.path.join(ROOT, "core", "desktop", "windows", "out",
+                   "Release", "auradsp_engine.dll")
 
 VST3_DIR = os.path.join(os.environ.get("CommonProgramFiles",
                                        r"C:\Program Files\Common Files"),

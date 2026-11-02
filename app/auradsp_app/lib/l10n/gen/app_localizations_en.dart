@@ -1368,6 +1368,65 @@ class AppLocalizationsEn extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => 'System';
+
+  @override
+  String get linuxModeVirtual => 'Virtual';
+
+  @override
+  String get linuxModeDriver => 'Kernel driver';
+
+  @override
+  String get linuxModeHint =>
+      'System: local output. Virtual: other apps play into the AuraDSP virtual device. Kernel driver: route audio through the snd-aloop loopback card.';
+
+  @override
+  String get linuxDriverMissingHint =>
+      'The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1 in a terminal, then select the kernel driver mode again.';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      'Virtual device auradsp_virtual is ready: pick it as the output device in other apps to route them through AuraDSP.';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      'Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.';
+
+  @override
+  String get linuxOutputSink => 'Output device';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio default output';
+
+  @override
+  String get linuxOutputFormat => 'Output format';
+
+  @override
+  String get linuxCaptureSource => 'Capture source';
+
+  @override
+  String get linuxCaptureNone => 'None (not captured in this mode)';
+
+  @override
+  String get linuxVirtualDevice => 'Virtual device';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual ready';
+
+  @override
+  String get linuxVirtualAbsent => 'Not created (auto-created in virtual mode)';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop loaded';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop not loaded';
+
+  @override
+  String get linuxDeviceHint =>
+      'Output always goes to the PulseAudio default sink. Do not set auradsp_virtual as the system default output, or processed audio will be captured again and create a feedback loop.';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override
@@ -2215,6 +2274,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String memDataDir(String path) {
+    return 'Data directory: $path';
+  }
+
+  @override
   String get memClear => 'Clear Session Memory';
 
   @override
@@ -2804,7 +2868,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter the full folder path containing .eel / .txt script presets:';
 
   @override
-  String get lpAddDirExample => 'E.g.: D:\\AudioScripts\\EelPresets';
+  String get lpAddDirExample => 'E.g.: …/AudioScripts/EelPresets';
 
   @override
   String lpChars(int n) {
@@ -2921,7 +2985,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:';
 
   @override
-  String get plugAddDirExample => 'E.g.: D:\\AudioPlugins\\VST3';
+  String get plugAddDirExample => 'E.g.: …/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => 'Add & Scan';

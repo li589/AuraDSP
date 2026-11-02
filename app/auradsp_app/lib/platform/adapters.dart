@@ -7,8 +7,10 @@
 // 门禁 F11 会拦截 core/ import 本文件。
 import '../core/ports/null_ports.dart';
 import '../core/selection/resource_picker.dart';
+import 'autostart/autostart_linux.dart';
 import 'autostart/autostart_windows.dart';
 import 'dialogs/file_selector_dialog.dart';
+import 'media/media_session_linux.dart';
 import 'media/media_session_windows.dart';
 import 'platform_profile.dart';
 import 'plugins/plugin_dirs_desktop.dart';
@@ -70,7 +72,11 @@ final class PlatformAdapters {
     final registry =
         isWindows ? const WindowsRegistry() : const NullRegistry();
     final dialog = const FileSelectorDialog();
-    final autoStart = isWindows ? WindowsAutoStart() : const NullAutoStart();
+    final autoStart = isWindows
+        ? WindowsAutoStart()
+        : os == 'linux'
+            ? LinuxAutoStart()
+            : const NullAutoStart();
     // 托盘单例同时是 WindowPort；自启端口注入，避免 tray ↔ adapters 循环。
     final window = TrayService.instance..bindAutoStart(autoStart);
 
@@ -87,8 +93,11 @@ final class PlatformAdapters {
       },
       pluginHost:
           isWindows ? const WindowsPluginHost() : const NullPluginHost(),
-      mediaSession:
-          isWindows ? const WindowsMediaSession() : const NullMediaSession(),
+      mediaSession: isWindows
+          ? const WindowsMediaSession()
+          : os == 'linux'
+              ? const LinuxMediaSession()
+              : const NullMediaSession(),
       windowsSystem: isWindows
           ? const WindowsSystemTools()
           : const NullWindowsSystem(),

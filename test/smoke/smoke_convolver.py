@@ -2,7 +2,11 @@
 # M4 卷积/IR + FileGate 引擎级验证
 import ctypes, math, struct, os
 
-DIR = r"D:\temp_desktop\Proj\JamesDSP\.tmp\irtest"
+# S1 迁移（2026-11-01）：路径统一走 test/engine_artifact 解析
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
+DIR = os.path.join(_RR, ".tmp", "irtest")
 os.makedirs(DIR, exist_ok=True)
 
 def write_wav16(path, frames_l, frames_r, rate):
@@ -55,7 +59,7 @@ hdr += b"data" + struct.pack("<I", N * 4)
 with open(os.path.join(DIR, "trunc.wav"), "wb") as f:
     f.write(hdr + data)
 
-dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
+dll = ctypes.CDLL(_elp())
 dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
 dll.auradsp_process.argtypes = [ctypes.c_void_p, ctypes.POINTER(ctypes.c_float), ctypes.POINTER(ctypes.c_float), ctypes.c_int]

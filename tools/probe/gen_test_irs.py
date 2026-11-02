@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
 import math, struct, os, random
 
-DIR = r"D:\temp_desktop\Proj\JamesDSP\.tmp\irtest"
+# S1 迁移（2026-11-01）：路径统一走 test/engine_artifact 解析
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.join(_os.path.dirname(_os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))), "test"))
+from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
+DIR = os.path.join(_RR, ".tmp", "irtest")
 os.makedirs(DIR, exist_ok=True)
 
 def write_wavf32(path, ch_data, rate):

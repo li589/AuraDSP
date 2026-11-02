@@ -2,7 +2,11 @@
 # 低频频段修复验证 v2：相位连续的 60Hz 正弦流（不重用块缓冲）
 import ctypes, math, os, sys
 
-dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
+# S1 迁移（2026-11-01）：路径统一走 test/engine_artifact 解析
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
+dll = ctypes.CDLL(_elp())
 
 
 # --- VizFrame 单一来源（§7-1 ABI 镜像门禁）---

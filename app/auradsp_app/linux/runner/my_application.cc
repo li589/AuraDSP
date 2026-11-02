@@ -58,6 +58,14 @@ static void my_application_activate(GApplication* application) {
   fl_dart_project_set_dart_entrypoint_arguments(
       project, self->dart_entrypoint_arguments);
 
+  // 关闭 Impeller，改用 Skia GL 后端（2026-11-02）。
+  // Linux 上默认后端是 Impeller GLES(SDF)；在无硬件加速的软件 OpenGL 环境下
+  // （VMware SVGA3D/llvmpipe、虚拟机未开 3D 加速），首帧之后的每一次重绘都会
+  // 造成整窗渲染损坏：卡片面板与描边消失、文字被渲染成纯色、控件位置错乱、
+  // 对话框内出现纯红扇形伪影。任何触发新帧的操作（鼠标悬停、窗口 resize）
+  // 都会复现，且 Dart 侧无异常。切到 Skia GL 后该现象消失。
+  fl_dart_project_set_enable_impeller(project, FALSE);
+
   FlView* view = fl_view_new(project);
   GdkRGBA background_color;
   // Background defaults to black, override it here if necessary, e.g. #00000000

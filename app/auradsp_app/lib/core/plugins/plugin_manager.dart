@@ -139,12 +139,12 @@ class PluginManager extends ChangeNotifier {
   static const int kOpenHealthyMs = 15000;
 
   static File _quarantineConfigFile() => File(
-    ConfigManager.path(
+    ConfigManager.dataPath(
       'plugin_data${Platform.pathSeparator}editor_quarantine.json',
     ),
   );
   static File _editorJournalFile() => File(
-    ConfigManager.path(
+    ConfigManager.dataPath(
       'plugin_data${Platform.pathSeparator}editor_journal.json',
     ),
   );

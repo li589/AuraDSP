@@ -27,7 +27,7 @@ if sys.stdout.encoding != 'utf-8':
         pass
 
 SOURCE_IMPULSE_DIR = Path(r"D:\myPrograms\AudioEffect\Impulse")
-PROJECT_ROOT = Path(r"D:\temp_desktop\Proj\JamesDSP")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESOURCE_DIR = PROJECT_ROOT / "assets"
 LIVEPROG_SRC_DIR = PROJECT_ROOT / "source"
 
@@ -397,7 +397,7 @@ def run_pipeline(dry_run: bool = True):
         return
 
     # 5. 正式落盘执行
-    print("\n5. 开始正式向工程盘落盘 (D:\\temp_desktop\\Proj\\JamesDSP\\assets)...")
+    print(f"\n5. 开始正式向工程盘落盘 ({RESOURCE_DIR})...")
     RESOURCE_DIR.mkdir(parents=True, exist_ok=True)
 
     # 5.1 复制脉冲文件并统一命名为 .irs

@@ -13,7 +13,7 @@ extension StateSession on AppModel {
   // 自动创建、恒启用、不可移除。
 
   /// 内置插件目录（未来自带开源/自研插件）。subDir 顺手完成创建。
-  String get bundledPluginDir => ConfigManager.subDir('plugins').path;
+  String get bundledPluginDir => ConfigManager.dataSubDir('plugins').path;
 
   /// 启动时调用一次：保证内置条目存在（保留其勾选态）+ 平台目录首次播种
   /// + 同步扫描集。内置目录只禁止删除，是否参与扫描由用户勾选决定。

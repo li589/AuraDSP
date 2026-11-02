@@ -20,7 +20,9 @@ import os
 import re
 import sys
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+# S1（2026-11-01）：仓库根由 __file__ 推导，替代作者机硬编码
+# 旧写法为作者机绝对路径（见 test/engine_artifact.py 说明）。
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 SRC = os.path.join(ROOT, "app", "auradsp_app", "lib", "engine", "audio_slots.dart")
 
 fails = []

@@ -16,7 +16,7 @@ from PIL import Image
 
 import build_wordmark as W
 
-ROOT = r"D:\temp_desktop\Proj\JamesDSP"
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))))
 OUT = os.path.join(ROOT, r"app\auradsp_app\design\logo")
 ICONS = os.path.join(OUT, "icons")
 EDGE = r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe"

@@ -22,6 +22,7 @@ import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../l10n/gen/app_localizations.dart';
 import '../platform/adapters.dart';
+import '../platform/platform_profile.dart';
 import 'chrome.dart';
 import 'widgets.dart';
 

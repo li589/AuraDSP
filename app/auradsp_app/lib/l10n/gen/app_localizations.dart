@@ -2458,6 +2458,114 @@ abstract class AppLocalizations {
   /// **'System APO'**
   String get modeSysApo;
 
+  /// No description provided for @linuxModeSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get linuxModeSystem;
+
+  /// No description provided for @linuxModeVirtual.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟声卡'**
+  String get linuxModeVirtual;
+
+  /// No description provided for @linuxModeDriver.
+  ///
+  /// In zh, this message translates to:
+  /// **'内核驱动'**
+  String get linuxModeDriver;
+
+  /// No description provided for @linuxModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统：本机输出；虚拟声卡：其他应用把声音播入 AuraDSP 虚拟设备；内核驱动：经 snd-aloop 回环声卡接入。'**
+  String get linuxModeHint;
+
+  /// No description provided for @linuxDriverMissingHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。'**
+  String get linuxDriverMissingHint;
+
+  /// No description provided for @linuxVirtualReadyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。'**
+  String get linuxVirtualReadyHint;
+
+  /// No description provided for @linuxCaptureInactiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。'**
+  String get linuxCaptureInactiveHint;
+
+  /// No description provided for @linuxOutputSink.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出设备'**
+  String get linuxOutputSink;
+
+  /// No description provided for @linuxOutputSinkDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'PulseAudio 默认输出'**
+  String get linuxOutputSinkDefault;
+
+  /// No description provided for @linuxOutputFormat.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出格式'**
+  String get linuxOutputFormat;
+
+  /// No description provided for @linuxCaptureSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集源'**
+  String get linuxCaptureSource;
+
+  /// No description provided for @linuxCaptureNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'无（当前模式不采集）'**
+  String get linuxCaptureNone;
+
+  /// No description provided for @linuxVirtualDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'虚拟设备'**
+  String get linuxVirtualDevice;
+
+  /// No description provided for @linuxVirtualPresent.
+  ///
+  /// In zh, this message translates to:
+  /// **'auradsp_virtual 已就绪'**
+  String get linuxVirtualPresent;
+
+  /// No description provided for @linuxVirtualAbsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'未创建（虚拟声卡模式下自动创建）'**
+  String get linuxVirtualAbsent;
+
+  /// No description provided for @linuxDriverPresent.
+  ///
+  /// In zh, this message translates to:
+  /// **'snd-aloop 已加载'**
+  String get linuxDriverPresent;
+
+  /// No description provided for @linuxDriverAbsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'snd-aloop 未加载'**
+  String get linuxDriverAbsent;
+
+  /// No description provided for @linuxDeviceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。'**
+  String get linuxDeviceHint;
+
   /// No description provided for @modeAsio.
   ///
   /// In zh, this message translates to:
@@ -4024,6 +4132,12 @@ abstract class AppLocalizations {
   /// **'配置存储目录: {path}'**
   String memDir(String path);
 
+  /// No description provided for @memDataDir.
+  ///
+  /// In zh, this message translates to:
+  /// **'数据存储目录: {path}'**
+  String memDataDir(String path);
+
   /// No description provided for @memClear.
   ///
   /// In zh, this message translates to:
@@ -5107,7 +5221,7 @@ abstract class AppLocalizations {
   /// No description provided for @lpAddDirExample.
   ///
   /// In zh, this message translates to:
-  /// **'例：D:\\AudioScripts\\EelPresets'**
+  /// **'例：…/AudioScripts/EelPresets'**
   String get lpAddDirExample;
 
   /// No description provided for @lpChars.
@@ -5299,7 +5413,7 @@ abstract class AppLocalizations {
   /// No description provided for @plugAddDirExample.
   ///
   /// In zh, this message translates to:
-  /// **'例：D:\\AudioPlugins\\VST3'**
+  /// **'例：…/AudioPlugins/VST3'**
   String get plugAddDirExample;
 
   /// No description provided for @plugAddScan.
