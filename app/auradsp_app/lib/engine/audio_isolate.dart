@@ -18,7 +18,7 @@ import 'package:ffi/ffi.dart';
 
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
-import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/audio_out_audioOut.dart';
 import 'audio_out/audio_in_linux.dart';
 import 'audio_out/pulse_context.dart';
 import 'audio_vbridge.dart';
@@ -90,7 +90,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
 
   AuraDspLib? lib;
   Pointer<Void>? handle;
-  AudioOut? wasapi;
+  AudioOut? audioOut;
   Source? source;
   bool bypass = false;
   // 5.1 直通（Phase 2）：file 源 raw 多声道绕开引擎直出（输出 untouched；
@@ -151,7 +151,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
     getSource: () => source,
     setSource: (s) => source = s,
     send: send,
-    deviceRate: () => wasapi?.sampleRate ?? 48000,
+    deviceRate: () => audioOut?.sampleRate ?? 48000,
   );
 
   // P-041（2026-10-28）：本地引擎 load 走 _slotLoadAsync 异步任务，期间
@@ -271,10 +271,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   /// 在首个调用点（stopVbBridge）之前，且名字不能带前导下划线。
   String? resumeWasapi(String tag) {
     try {
-      wasapi?.start();
+      audioOut?.start();
       return null;
     } catch (e) {
-      dbgLog('$tag: wasapi resume failed: $e');
+      dbgLog('$tag: audioOut resume failed: $e');
       return '$e';
     }
   }
@@ -324,7 +324,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
      * （真实双声），而旧的 `catch (_) {}` 让这件事完全无声。失败时把刚起来的
      * VB 拆掉，回到切换前状态（WASAPI 继续出声），并回报原因。 */
     final handover = runHandover(
-      haltOld: () => wasapi?.stop(),
+      haltOld: () => audioOut?.stop(),
       rollbackNew: () {
         try {
           vb?.testStop();
@@ -468,7 +468,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
     /* D4-a：同 vbmode——停不下来就不许起 ASIO，失败回滚刚起的桥。 */
     final handover = runHandover(
-      haltOld: () => wasapi?.stop(),
+      haltOld: () => audioOut?.stop(),
       rollbackNew: () {
         try {
           ab?.testStop();
@@ -574,7 +574,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         params: paramMirror, paramsStr: paramStrMirror, bypass: bypass);
     /* D4-a：同 vbmode——停不下来就不许起 VAIO，失败回滚刚起的桥。 */
     final handover = runHandover(
-      haltOld: () => wasapi?.stop(),
+      haltOld: () => audioOut?.stop(),
       rollbackNew: () {
         try {
           vaio?.testStop();
@@ -1876,7 +1876,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
             // 代价：每次约数十毫秒，故只在用户显式点击时触发，绝不进音频路径。
             final comp = (m['comp'] as String?) ?? '';
             final l = lib;
-            final rate = wasapi?.sampleRate.toDouble() ?? 48000.0;
+            final rate = audioOut?.sampleRate.toDouble() ?? 48000.0;
             if (l == null || comp.isEmpty) {
               send({
                 'evt': 'componentLatency',
@@ -1930,23 +1930,23 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   try {
     lib = AuraDspLib.load();
     dbgLog('engine dll loaded');
-    String? wasapiError;
+    String? audioOutError;
     try {
-      wasapi = createAudioOut()
+      audioOut = createAudioOut()
         ?..init(requestedSampleRate: requestedRate > 0 ? requestedRate : null);
     } catch (e) {
-      wasapi = null;
-      wasapiError = e.toString();
-      dbgLog('WASAPI unavailable, degraded ready: $wasapiError');
+      audioOut = null;
+      audioOutError = e.toString();
+      dbgLog('WASAPI unavailable, degraded ready: $audioOutError');
     }
-    if (wasapi == null && wasapiError == null) {
+    if (audioOut == null && audioOutError == null) {
       // 平台不支持本地设备输出（AudioOut 端口返回空）：同样走降级就绪。
-      wasapiError = 'local audio out unavailable on this platform';
+      audioOutError = 'local audio out unavailable on this platform';
       dbgLog('local audio out unsupported, degraded ready');
     }
     // 无输出设备时按请求速率建引擎（有设备则跟设备协商值）。
-    final engineRate = wasapi != null
-        ? wasapi.sampleRate.toDouble()
+    final engineRate = audioOut != null
+        ? audioOut.sampleRate.toDouble()
         : (requestedRate > 0
             ? requestedRate.toDouble()
             : kFallbackSampleRate.toDouble());
@@ -1966,19 +1966,19 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
           isFloat: false, value: vizFftSize.toDouble());
     }
     /* D4-a：Start 失败既不能静默（用户以为有声），也不能升级成 fatal
-     * （引擎/桥本来还能用）——走既有的 wasapiError 降级通道。 */
+     * （引擎/桥本来还能用）——走既有的 audioOutError 降级通道。 */
     try {
-      wasapi?.start();
+      audioOut?.start();
     } catch (e) {
-      wasapiError ??= 'wasapi-start: $e';
+      audioOutError ??= 'wasapi-start: $e';
       dbgLog('AudioOut start failed, degraded ready: $e');
     }
-    if (wasapi != null && wasapi.started) {
+    if (audioOut != null && audioOut.started) {
       // 后端名取运行时类型（WasapiOut / PulseAudioOut）：旧文案在 Linux
-      // 也写 WASAPI，S5c 改为平台中立（字段名 wasapi 是历史命名，
+      // 也写 WASAPI，S5c 改为平台中立（字段名 audioOut 是历史命名，
       // 类型实为 AudioOut 抽象，不在本阶段改名）。
       dbgLog(
-          'AudioOut started (${wasapi.runtimeType}), latency=${lib.getLatencyMs(handle)}ms');
+          'AudioOut started (${audioOut.runtimeType}), latency=${lib.getLatencyMs(handle)}ms');
     }
     lastSentState = lib.getState(handle);
     lastSentLatency = lib.getLatencyMs(handle);
@@ -1987,13 +1987,13 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       'abi': lib.abi(),
       'version': lib.version().toDartString(),
       // 无输出设备时 deviceRate=0，UI 据此展示降级态而非红屏。
-      'deviceRate': wasapi?.sampleRate ?? 0,
-      'deviceCh': wasapi?.channels ?? 0,
-      'bufferFrames': wasapi?.bufferFrames ?? 0,
+      'deviceRate': audioOut?.sampleRate ?? 0,
+      'deviceCh': audioOut?.channels ?? 0,
+      'bufferFrames': audioOut?.bufferFrames ?? 0,
       'latencyMs': lib.getLatencyMs(handle),
     });
-    if (wasapiError != null) {
-      send({'evt': 'wasapiError', 'msg': wasapiError});
+    if (audioOutError != null) {
+      send({'evt': 'audioOutError', 'msg': audioOutError});
     }
     final initialPluginStatus = AuraDspLib.pluginGetStatusJson(lib, handle);
     send({'evt': 'pluginStatus', 'status': initialPluginStatus});
@@ -2021,7 +2021,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
   // 典型是 VB 以独占/KS 方式开着同一设备。旧 client 在独占释放前永好不了，
   // 必须等对端释放后重建链路）。
   // 连续 ~2s（400 轮）即上报一次（latch，不反复刷）；model 侧重启 isolate。
-  var wasapiErrRounds = 0;
+  var audioOutErrRounds = 0;
   var pumpRounds = 0;
   var procRounds = 0;
   // 桥 viz 断流守卫（三桥共用：同一时刻只有一个后端出声）：桥引擎停产（VB
@@ -2059,7 +2059,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
       final int pumpDelayMs;
       if (bridgeManager.active != null) {
         pumpDelayMs = bridgeGated ? 50 : 10;
-      } else if (wasapi != null && source != null) {
+      } else if (audioOut != null && source != null) {
         pumpDelayMs = 5;
       } else {
         pumpDelayMs = 20;
@@ -2128,10 +2128,10 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         continue;
       }
       try {
-        final w = wasapi;
+        final w = audioOut;
         if (w == null) {
           // 无输出设备（降级就绪）：引擎照跑、viz 照发，只是不渲染；
-          // 界面由 wasapiError 事件展示原因 + 重试。
+          // 界面由 audioOutError 事件展示原因 + 重试。
           noteIdle(DateTime.now().millisecondsSinceEpoch);
           continue;
         }
@@ -2296,14 +2296,14 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         }
         // 端点死亡（只认 0x8889000a，其它错误走上面的常规上报，不触发重启）。
         if (msg.contains('0x8889000a')) {
-          wasapiErrRounds++;
+          audioOutErrRounds++;
         } else {
-          wasapiErrRounds = 0;
+          audioOutErrRounds = 0;
         }
-        if (wasapiErrRounds >= 400) {
-          wasapiErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
-          dbgLog('PUMP: device invalidated 2s+, reporting wasapiLost');
-          send({'evt': 'wasapiLost'});
+        if (audioOutErrRounds >= 400) {
+          audioOutErrRounds = -1000000; // latch：旧 client 已死，不可能自愈
+          dbgLog('PUMP: device invalidated 2s+, reporting audioOutLost');
+          send({'evt': 'audioOutLost'});
         }
       }
     }
@@ -2319,7 +2319,7 @@ void audioIsolateMain(Map<String, dynamic> cfg) {
         } catch (e, st) { swallow(e, st); }
         bridgeManager.clearActive(b);
       }
-      wasapi?.stop();
+      audioOut?.stop();
     } catch (e, st) {
       swallow(e, st);
     } finally {

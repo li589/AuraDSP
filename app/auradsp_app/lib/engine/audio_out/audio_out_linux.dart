@@ -151,7 +151,8 @@ class PulseAudioOut implements AudioOut {
     final pErr = malloc<Int32>();
     try {
       final usec = lib._getLatency(_stream, pErr);
-      if (pErr.value < 0) return 0;
+      // PA 错误码为正（PA_OK=0），失败时读数本身亦为 0——以 != 0 判错。
+      if (pErr.value != 0) return 0;
       final frames = (usec * _sampleRate) ~/ paUsecPerSec;
       // 真机实测（Ubuntu 24.04 + PipeWire 兼容层）：实体 sink 的
       // pa_simple_get_latency 会把设备侧缓冲计入，读数（约 10.4k 帧 @48k）

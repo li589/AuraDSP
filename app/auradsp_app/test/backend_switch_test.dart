@@ -149,8 +149,8 @@ void main() {
       expect(silent.hasMatch(isolate), isFalse);
     });
 
-    test('初始化期 Start 失败走 wasapiError 降级（不静默、不升级 fatal）', () {
-      expect(isolate, contains("wasapiError ??= 'wasapi-start: \$e'"));
+    test('初始化期 Start 失败走 audioOutError 降级（不静默、不升级 fatal）', () {
+      expect(isolate, contains("audioOutError ??= 'wasapi-start: \$e'"));
     });
   });
 }
