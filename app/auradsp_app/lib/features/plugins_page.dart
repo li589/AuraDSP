@@ -288,9 +288,13 @@ class _PluginsPageState extends State<PluginsPage>
                       ),
                     ),
                     const SizedBox(width: AuraSpace.md),
-                    // 格式药丸 Filter —— 窄窗口下允许横向滚动，避免挤压搜索框
-                    // 或撑破整行（2026-10-28 窄宽度回归）。
-                    Flexible(
+                    // 格式药丸 Filter —— 紧凑自适应宽度贴齐右边界，窄窗口下受限并可横向滚动
+                    ConstrainedBox(
+                      constraints: BoxConstraints(
+                        maxWidth: MediaQuery.sizeOf(context).width > 700
+                            ? MediaQuery.sizeOf(context).width * 0.7
+                            : MediaQuery.sizeOf(context).width * 0.6,
+                      ),
                       child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: _FilterPills(

@@ -88,8 +88,10 @@ class _FilterPills extends StatelessWidget {
         pill('clap', 'CLAP', countClap),
         const SizedBox(width: 6),
         pill('vst2', 'VST2', countVst2, comingSoon: true),
-        const SizedBox(width: 6),
-        pill('au', 'AU', countAu, comingSoon: true),
+        if (PlatformProfile.os == 'macos') ...[
+          const SizedBox(width: 6),
+          pill('au', 'AU', countAu, comingSoon: true),
+        ],
         const SizedBox(width: 6),
         pill('lv2', 'LV2', countLv2, comingSoon: true),
       ],
