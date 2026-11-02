@@ -342,25 +342,10 @@ class _VisualizerPageState extends State<VisualizerPage> {
                                   PageHeader(
                                     eyebrow: l.pageVisualizerEyebrow,
                                     title: l.pageVisualizerTitle,
-                                    trailing: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        VisualizerPeakReadout(
-                                          spectrum: widget.model.spectrum,
-                                          label: l.peakLabel,
-                                          active: active,
-                                        ),
-                                        const SizedBox(width: AuraSpace.md),
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.tune_rounded,
-                                            size: 20,
-                                          ),
-                                          color: p.textDim,
-                                          tooltip: l.visualizerSettingsTip,
-                                          onPressed: _openDrawer,
-                                        ),
-                                      ],
+                                    trailing: VisualizerPeakReadout(
+                                      spectrum: widget.model.spectrum,
+                                      label: l.peakLabel,
+                                      active: active,
                                     ),
                                   ),
                                   const SizedBox(height: AuraSpace.xl),

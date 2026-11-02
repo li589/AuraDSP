@@ -16,12 +16,35 @@ G_DEFINE_TYPE(MyApplication, my_application, GTK_TYPE_APPLICATION)
 
 // Called when first Flutter frame received.
 static void first_frame_cb(MyApplication* self, FlView* view) {
-  gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  gboolean start_in_tray = FALSE;
+  if (self->dart_entrypoint_arguments != nullptr) {
+    for (char** arg = self->dart_entrypoint_arguments; *arg != nullptr; ++arg) {
+      if (g_strcmp0(*arg, "--tray") == 0 || g_strcmp0(*arg, "-tray") == 0 ||
+          g_strcmp0(*arg, "--minimized") == 0) {
+        start_in_tray = TRUE;
+        break;
+      }
+    }
+  }
+  if (!start_in_tray) {
+    gtk_widget_show(gtk_widget_get_toplevel(GTK_WIDGET(view)));
+  }
 }
 
 // Implements GApplication::activate.
 static void my_application_activate(GApplication* application) {
   MyApplication* self = MY_APPLICATION(application);
+
+  // 单实例窗口前置：若已有窗口（重复打开应用），恢复并置顶前台，不再新建窗口。
+  GList* windows = gtk_application_get_windows(GTK_APPLICATION(application));
+  if (windows != nullptr) {
+    GtkWindow* window = GTK_WINDOW(windows->data);
+    gtk_widget_show(GTK_WIDGET(window));
+    gtk_window_deiconify(window);
+    gtk_window_present(window);
+    return;
+  }
+
   GtkWindow* window =
       GTK_WINDOW(gtk_application_window_new(GTK_APPLICATION(application)));
 
@@ -101,6 +124,13 @@ static gboolean my_application_local_command_line(GApplication* application,
     return TRUE;
   }
 
+  // 若检测到主实例已在运行，激活主实例窗口并静默退出当前多余进程
+  if (g_application_get_is_remote(application)) {
+    g_application_activate(application);
+    *exit_status = 0;
+    return TRUE;
+  }
+
   g_application_activate(application);
   *exit_status = 0;
 
@@ -152,5 +182,5 @@ MyApplication* my_application_new() {
 
   return MY_APPLICATION(g_object_new(my_application_get_type(),
                                      "application-id", APPLICATION_ID, "flags",
-                                     G_APPLICATION_NON_UNIQUE, nullptr));
+                                     G_APPLICATION_DEFAULT_FLAGS, nullptr));
 }

@@ -77,15 +77,26 @@ class AlsaAudioIn {
     }
     final stage = _stage!;
     var offset = 0;
+    var stalls = 0;
     while (offset < frames) {
       final r = lib.readi(
           _pcm,
           Pointer<Void>.fromAddress(
               stage.address + offset * _bytesPerFrame),
           frames - offset);
-      if (r >= 0) {
+      if (r > 0) {
         offset += r;
+        stalls = 0;
         continue;
+      }
+      if (r == 0 || r == alsaErrPipe) {
+        // 无进展（0 读或溢出恢复）：计数设上限，语义同输出侧
+        // （打磨一期，alsaMaxStalledRetries）。
+        if (++stalls > alsaMaxStalledRetries) {
+          throw StateError('snd_pcm_readi($device) stalled: '
+              'no progress after $alsaMaxStalledRetries recoveries');
+        }
+        if (r == 0) continue;
       }
       if (r == alsaErrPipe) {
         _overrunCount++;

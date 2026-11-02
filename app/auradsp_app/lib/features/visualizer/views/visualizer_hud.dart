@@ -1,3 +1,6 @@
+import 'dart:ui' as ui;
+import '../../../platform/platform_profile.dart';
+
 import 'package:flutter/material.dart';
 
 import '../../../core/design.dart';
@@ -86,154 +89,187 @@ class _VisualizerHudState extends State<VisualizerHud> {
                     ? Padding(
                         key: const ValueKey('visualizer-style-menu'),
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Container(
-                          // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
-                          // 截断；按语言放宽（其他语言 190，ja 205）。
-                          width:
-                              Localizations.localeOf(context).languageCode ==
-                                      'ja'
-                                  ? 205
-                                  : 190,
-                          padding: const EdgeInsets.symmetric(vertical: 4),
-                          decoration: BoxDecoration(
-                            color: p.panel.withValues(alpha: 0.96),
-                            borderRadius: BorderRadius.circular(AuraRadius.md),
-                            border: Border.all(
-                              color: p.hairline.withValues(alpha: 0.85),
-                              width: 1,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.5),
-                                blurRadius: 20,
-                                offset: const Offset(0, 8),
-                              ),
-                            ],
-                          ),
-                          child: ConstrainedBox(
-                            // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
-                            constraints: BoxConstraints(
-                              maxHeight:
-                                  MediaQuery.sizeOf(context).height * 0.45,
-                            ),
-                            child: SingleChildScrollView(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  for (final style in VisualizerStyle.values)
-                                    VisualizerMenuItem(
-                                      style: style,
-                                      isSelected: widget.config.style == style,
-                                      onTap: () {
-                                        widget.onStyleChanged(style);
-                                        _closeMenu();
-                                      },
-                                    ),
+                        child: _GlassSurface(
+                          borderRadius: BorderRadius.circular(AuraRadius.md),
+                            child: Container(
+                              // F-02：ja 的风格名日译较长，固定 175 会被 ellipsis
+                              // 截断；按语言放宽（其他语言 190，ja 205）。
+                              width:
+                                  Localizations.localeOf(context).languageCode ==
+                                          'ja'
+                                      ? 205
+                                      : 190,
+                              padding: const EdgeInsets.symmetric(vertical: 4),
+                              decoration: BoxDecoration(
+                                color: p.panel.withValues(alpha: 0.94),
+                                borderRadius: BorderRadius.circular(AuraRadius.md),
+                                border: Border.all(
+                                  color: p.hairline.withValues(alpha: 0.85),
+                                  width: 1,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withValues(alpha: 0.5),
+                                    blurRadius: 20,
+                                    offset: const Offset(0, 8),
+                                  ),
                                 ],
                               ),
+                              child: ConstrainedBox(
+                                // 小屏（手机横屏/窄窗）时风格列表可滚动，避免溢出裁切
+                                constraints: BoxConstraints(
+                                  maxHeight:
+                                      MediaQuery.sizeOf(context).height * 0.45,
+                                ),
+                                child: SingleChildScrollView(
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      for (final style in VisualizerStyle.values)
+                                        VisualizerMenuItem(
+                                          style: style,
+                                          isSelected: widget.config.style == style,
+                                          onTap: () {
+                                            widget.onStyleChanged(style);
+                                            _closeMenu();
+                                          },
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                              ),
                             ),
                           ),
-                        ),
-                      )
+                        )
                     : const SizedBox.shrink(
                         key: ValueKey('visualizer-style-menu-closed'),
                       ),
               ),
 
-              // 主底栏容器
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 8,
-                ),
-                decoration: BoxDecoration(
-                  color: p.panel.withValues(alpha: 0.88),
-                  borderRadius: BorderRadius.circular(AuraRadius.lg),
-                  border: Border.all(
-                    color: p.hairline.withValues(alpha: 0.6),
-                    width: 1,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.4),
-                      blurRadius: 18,
-                      offset: const Offset(0, 6),
+              // 主底栏容器（毛玻璃悬浮效果）
+              _GlassSurface(
+                borderRadius: BorderRadius.circular(AuraRadius.lg),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
                     ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // 模式下拉激活按钮
-                    VisualizerStyleDropdownButton(
-                      selectedStyle: widget.config.style,
-                      isOpen: _menuOpen,
-                      onTap: _toggleMenu,
+                    decoration: BoxDecoration(
+                      color: p.panel.withValues(alpha: 0.86),
+                      borderRadius: BorderRadius.circular(AuraRadius.lg),
+                      border: Border.all(
+                        color: p.hairline.withValues(alpha: 0.65),
+                        width: 1,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.38),
+                          blurRadius: 18,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
                     ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // 模式下拉激活按钮
+                        VisualizerStyleDropdownButton(
+                          selectedStyle: widget.config.style,
+                          isOpen: _menuOpen,
+                          onTap: _toggleMenu,
+                        ),
 
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      height: 20,
-                      width: 1,
-                      color: p.hairline,
-                    ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          height: 20,
+                          width: 1,
+                          color: p.hairline,
+                        ),
 
-                    // 歌词显示开关
-                    VisualizerActionButton(
-                      icon: Icons.lyrics_rounded,
-                      tooltip: widget.config.showLyrics
-                          ? l.visualizerHideLyricsTip
-                          : l.visualizerShowLyricsTip,
-                      active: widget.config.showLyrics,
-                      onTap: () {
-                        _closeMenu();
-                        widget.onToggleLyrics();
-                      },
-                    ),
-                    const SizedBox(width: 4),
+                        // 歌词显示开关
+                        VisualizerActionButton(
+                          icon: Icons.lyrics_rounded,
+                          tooltip: widget.config.showLyrics
+                              ? l.visualizerHideLyricsTip
+                              : l.visualizerShowLyricsTip,
+                          active: widget.config.showLyrics,
+                          onTap: () {
+                            _closeMenu();
+                            widget.onToggleLyrics();
+                          },
+                        ),
+                        const SizedBox(width: 4),
 
-                    // 复位峰值
-                    VisualizerActionButton(
-                      icon: Icons.refresh_rounded,
-                      tooltip: l.visualizerResetPeakTip,
-                      onTap: () {
-                        _closeMenu();
-                        widget.onResetPeaks();
-                      },
-                    ),
-                    const SizedBox(width: 4),
+                        // 复位峰值
+                        VisualizerActionButton(
+                          icon: Icons.refresh_rounded,
+                          tooltip: l.visualizerResetPeakTip,
+                          onTap: () {
+                            _closeMenu();
+                            widget.onResetPeaks();
+                          },
+                        ),
+                        const SizedBox(width: 4),
 
-                    // 展开参数抽屉
-                    VisualizerActionButton(
-                      icon: Icons.tune_rounded,
-                      tooltip: l.visualizerSettingsTip,
-                      onTap: () {
-                        _closeMenu();
-                        widget.onOpenDrawer();
-                      },
-                    ),
+                        // 展开参数抽屉
+                        VisualizerActionButton(
+                          icon: Icons.tune_rounded,
+                          tooltip: l.visualizerSettingsTip,
+                          onTap: () {
+                            _closeMenu();
+                            widget.onOpenDrawer();
+                          },
+                        ),
 
-                    Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 8),
-                      height: 20,
-                      width: 1,
-                      color: p.hairline,
-                    ),
+                        Container(
+                          margin: const EdgeInsets.symmetric(horizontal: 8),
+                          height: 20,
+                          width: 1,
+                          color: p.hairline,
+                        ),
 
-                    // 三档全屏：还原 / 软件全屏 / 仅视效沉浸
-                    VisualizerDisplayModeSwitcher(
-                      mode: widget.displayMode,
-                      onChanged: (mode) {
-                        _closeMenu();
-                        widget.onDisplayModeChanged(mode);
-                      },
+                        // 三档全屏：还原 / 软件全屏 / 仅视效沉浸
+                        VisualizerDisplayModeSwitcher(
+                          mode: widget.displayMode,
+                          onChanged: (mode) {
+                            _closeMenu();
+                            widget.onDisplayModeChanged(mode);
+                          },
+                        ),
+                      ],
                     ),
-                  ],
                 ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+
+/// 平台自适应磨砂面板容器：
+/// Linux 环境（特别是虚拟机 llvmpipe 软件渲染）BackdropFilter 会引发高 CPU 卷积开销造成严重卡顿；
+/// 降级为高不透明度面板质感（alpha 0.94），免去全屏采样卷积，帧率显著提升。
+class _GlassSurface extends StatelessWidget {
+  final BorderRadius borderRadius;
+  final Widget child;
+  const _GlassSurface({required this.borderRadius, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    if (PlatformProfile.isLinux) {
+      return ClipRRect(
+        borderRadius: borderRadius,
+        child: child,
+      );
+    }
+    return ClipRRect(
+      borderRadius: borderRadius,
+      child: BackdropFilter(
+        filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+        child: child,
       ),
     );
   }

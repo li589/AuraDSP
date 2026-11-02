@@ -36,6 +36,7 @@ void main() {
   group('Bass Shaping 状态恢复与总开关模型', () {
     test('初始为关，总开关与两模块解耦', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       expect(model.bassShapingOn, isFalse);
       expect(model.shelfOn, isFalse);
       expect(model.bassmonoOn, isFalse);
@@ -43,6 +44,7 @@ void main() {
 
     test('总开关开启恢复两模块（默认都开）', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       expect(model.bassShapingOn, isTrue);
       expect(model.shelfOn, isTrue);
@@ -51,6 +53,7 @@ void main() {
 
     test('恢复上次组合：只开 shelf 时关再开只恢复 shelf', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       model.setBassmonoEnabled(false);
       expect(model.shelfOn, isTrue);
@@ -72,6 +75,7 @@ void main() {
 
     test('恢复上次组合：只开 bassmono 时关再开只恢复 bassmono', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       model.setShelfEnabled(false);
       expect(model.shelfOn, isFalse);
@@ -93,6 +97,7 @@ void main() {
 
     test('两个模块都手动关时总开关自动显示 off，打开时恢复两个都开', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       model.setShelfEnabled(false);
       model.setBassmonoEnabled(false);
@@ -109,6 +114,7 @@ void main() {
   group('Bass Shaping 处理节与链路阶段映射', () {
     test('isSectionEnabled 严格映射各模块与 OR 关系', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       expect(model.isSectionEnabled('shelf'), isFalse);
       expect(model.isSectionEnabled('bassmono'), isFalse);
       expect(model.isSectionEnabled('bass_shaping'), isFalse);
@@ -127,6 +133,7 @@ void main() {
 
     test('isStageEnabled 严格分离 shelf 与 bassmono（链页判定）', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       expect(model.isStageEnabled('shelf'), isFalse);
       expect(model.isStageEnabled('bassmono'), isFalse);
       expect(model.isStageEnabled('bass_shaping'), isFalse);
@@ -145,6 +152,7 @@ void main() {
 
     test('toggleStage 分别控制 shelf 与 bassmono', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.toggleStage('shelf');
       expect(model.shelfOn, isTrue);
       expect(model.bassmonoOn, isFalse);
@@ -162,6 +170,7 @@ void main() {
   group('参数范围与 Clamp 校验', () {
     test('低频搁架与单声道化参数 clamp 边界', () {
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
 
       // shelfFreq (40~400Hz)
       model.setShelfFreq(150.0);
@@ -213,6 +222,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
 
       await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
@@ -236,6 +246,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       model.vizChannelCount.value = 8;
       model.channelsMode = 1;
@@ -266,6 +277,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
       model.vizChannelCount.value = 4;
       model.channelsMode = 1;
@@ -293,6 +305,7 @@ void main() {
         tester.view.devicePixelRatio = 1.0;
 
         final model = AppModel(testing: true);
+      addTearDown(model.dispose);
         model.setBassShapingEnabled(true);
         model.vizChannelCount.value = 8;
         model.channelsMode = 1;
@@ -314,6 +327,7 @@ void main() {
 
       for (final themeId in AuraThemeId.values) {
         final model = AppModel(testing: true);
+      addTearDown(model.dispose);
         model.setBassShapingEnabled(true);
         model.vizChannelCount.value = 8;
         model.channelsMode = 1;

@@ -582,6 +582,13 @@
   "linuxDriverMissingHint": "未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。",
   "linuxVirtualReadyHint": "虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。",
   "linuxCaptureInactiveHint": "采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。",
+  "linuxNoteVirtualUnavailable": "虚拟设备创建失败：PulseAudio 拒绝加载虚拟设备模块，请检查音频服务后重新选择虚拟设备模式。",
+  "linuxNoteLoopbackUnavailable": "snd-aloop 已加载，但未找到可用的回环采集源，请刷新状态或重新加载模块后再试。",
+  "linuxNoteAlsaCaptureUnavailable": "ALSA 采集设备打开失败：设备可能被占用，或协商采样率与当前输出不一致，请检查设备设置。",
+  "linuxNotePulseUnavailable": "PulseAudio 服务不可用：请确认系统音频服务正在运行，然后重新选择模式。",
+  "linuxNoteCaptureLost": "采集中断：采集设备或音频服务已断开，当前输出为静音。重新选择一次模式即可恢复。",
+  "linuxFeedbackWarning": "警告：系统默认输出当前就是 auradsp_virtual，会形成反馈环。请在系统声音设置中把默认输出改回真实设备。",
+  "linuxOutputToVirtualHint": "提示：系统默认输出当前是 auradsp_virtual，处理后的声音会被送入虚拟设备、在本机听不到。建议在系统声音设置中改回真实设备。",
   "linuxOutputSink": "输出设备",
   "linuxOutputSinkDefault": "PulseAudio 默认输出",
   "linuxOutputFormat": "输出格式",
@@ -597,6 +604,7 @@
   "linuxBackendPulse": "PulseAudio（默认）",
   "linuxBackendAlsa": "ALSA 直连（专家模式）",
   "linuxAlsaOutDevice": "ALSA 输出设备",
+  "linuxAlsaCapDevice": "ALSA 采集设备",
   "linuxAlsaDeviceEdit": "编辑",
   "linuxAlsaDeviceUnset": "default（未指定）",
   "linuxAlsaExpertHint": "专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。",
@@ -861,7 +869,7 @@
   "presetSaveFail": "保存失败（名称非法或磁盘不可写）",
   "presetDirtyBadge": "自定义（未保存）",
   "presetDeleted": "预设已删除",
-  "presetDeleteFail": "删除失败",
+  "presetDeleteFail": "删除失败（文件可能被占用或已不存在）",
   "presetLoaded": "预设已载入",
   "presetLoadFail": "预设读取失败",
   "navPlugins": "插件",
@@ -926,7 +934,7 @@
       }
     }
   },
-    "memDataDir": "数据存储目录: {path}",
+  "memDataDir": "数据存储目录: {path}",
   "@memDataDir": {
     "placeholders": {
       "path": {
@@ -934,7 +942,7 @@
       }
     }
   },
-"memClear": "清除会话记忆",
+  "memClear": "清除会话记忆",
   "memCleared": "已清除持久化会话记忆，下次启动将使用纯净默认值",
   "memReset": "重置外置配置为默认",
   "memResetDone": "已重置 config.json 为标准配置模板",
@@ -1671,7 +1679,7 @@
   "plugScanDirsSelectAll": "全选",
   "plugScanDirsClear": "清除全部勾选",
   "plugScanDirsEnabledCount": "已启用 {enabled}/{total}",
-  "@plugScanDirsEnabledCount":   {
+  "@plugScanDirsEnabledCount": {
     "placeholders": {
       "enabled": {
         "type": "int"
@@ -1689,7 +1697,6 @@
   "presetDeleteTitle": "删除预设",
   "presetDeleteBody": "确定删除该预设吗？不可撤销。",
   "presetDeleteAction": "删除",
-  "presetDeleteFail": "删除失败（文件可能被占用或已不存在）",
   "presetOverwritten": "已覆盖同名预设「{name}」",
   "@presetOverwritten": {
     "placeholders": {
@@ -1697,5 +1704,7 @@
         "type": "String"
       }
     }
-  }
+  },
+  "plug32BitBadge": "32位",
+  "plug32BitHint": "32 位插件（支持加载）"
 }

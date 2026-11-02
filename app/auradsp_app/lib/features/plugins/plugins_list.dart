@@ -411,14 +411,15 @@ class _PluginListItem extends StatelessWidget {
     // D2：扫描期判定不兼容（当前唯一情形：32 位插件）——整项灰显 +
     // 名称后跟警示角标；点击"载入"由 PluginManager.loadPlugin 拦截并
     // 弹出精确原因（errorMessage），不会走到引擎。
-    final isIncompatible = !plugin.isCompatible;
+    // 平台支持判定：Windows 平台支持 32/64 位插件，其它平台暂仅支持 64 位插件。
+    final isUnsupported = !plugin.isSupported;
     final badgeColor = isVst3 ? const Color(0xFF0072FF) : const Color(0xFFE94057);
     // C3：该槽挂载/卸载进行中——两个操作按钮都要禁用，避免重复下发
     // （引擎侧也会拒绝，但提前禁用让 UI 不闪一下再失败）。
     final isBusy = busy;
 
     return Opacity(
-      opacity: isIncompatible ? 0.55 : 1.0,
+      opacity: isUnsupported ? 0.55 : 1.0,
       child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -469,7 +470,7 @@ class _PluginListItem extends StatelessWidget {
                         color: isLoadedInThisSlot ? p.accent : p.text,
                       ),
                     ),
-                    if (isIncompatible) ...[
+                    if (isUnsupported) ...[
                       const SizedBox(width: 8),
                       Tooltip(
                         message: plugin.errorMessage.isNotEmpty
@@ -497,6 +498,31 @@ class _PluginListItem extends StatelessWidget {
                                 ),
                               ),
                             ],
+                          ),
+                        ),
+                      ),
+                    ] else if (!plugin.is64Bit) ...[
+                      const SizedBox(width: 8),
+                      Tooltip(
+                        message: l10nOf(context).plug32BitHint,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 1),
+                          decoration: BoxDecoration(
+                            color: p.accent.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: p.accent.withValues(alpha: 0.35),
+                              width: 1.0,
+                            ),
+                          ),
+                          child: Text(
+                            l10nOf(context).plug32BitBadge,
+                            style: TextStyle(
+                              fontSize: 10,
+                              color: p.accent,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ),

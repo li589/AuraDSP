@@ -39,6 +39,7 @@
 #include <semaphore.h>
 #include <sys/prctl.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <unistd.h>
@@ -447,11 +448,29 @@ int main(int argc, char** argv) {
         ::close(listenFd);
         return 1;
     }
+    // 安全审查（2026-11-02）：socket 文件收紧到属主-only。路径回退
+    // /tmp 时目录是全员可达的，默认 umask 下的权限不足以排除同机
+    // 其他用户抢先 connect——抢先者能向宿主下达加载任意插件路径
+    // 的命令（以属主身份 dlopen）。配合下方 SO_PEERCRED 校验，
+    // 把控制通道收敛为同 uid 对端。
+    ::chmod(options.pipeName.c_str(), 0600);
     const int connFd = ::accept(listenFd, nullptr, nullptr);
     ::close(listenFd);
     if (connFd < 0) {
         ::unlink(options.pipeName.c_str());
         return 1;
+    }
+    {
+        // 对端凭据校验：只接受同 uid 的连接（客户端引擎进程）。
+        ucred cred{};
+        socklen_t credLen = sizeof(cred);
+        if (::getsockopt(connFd, SOL_SOCKET, SO_PEERCRED, &cred,
+                         &credLen) != 0 ||
+            cred.uid != ::getuid()) {
+            ::close(connFd);
+            ::unlink(options.pipeName.c_str());
+            return 1;
+        }
     }
 
     shared->hostState.store(static_cast<uint32_t>(auradsp::ipc::HostState::Ready),
@@ -474,8 +493,14 @@ int main(int argc, char** argv) {
                 out.seq = in.seq;
                 out.frames = frames;
                 out.reserved = in.reserved;
-                const uint32_t channels =
-                    auradsp::ipc::unpackTransportChannels(in.reserved);
+                // 声道数与 frames 同口径钳制（安全审查 2026-11-02）：
+                // reserved 由对端写入共享内存，越界值会让下方交错
+                // 循环写爆栈上的 interleaved 缓冲；写端是我方代理，
+                // 此处按协议上限防御性收敛（Win32 宿主同形态，另行
+                // 记录待 dev 侧跟进）。
+                const uint32_t channels = (std::min)(
+                    auradsp::ipc::unpackTransportChannels(in.reserved),
+                    auradsp::ipc::kChannels);
                 const uint32_t mask =
                     auradsp::ipc::unpackTransportMask(in.reserved);
                 float interleaved[auradsp::ipc::kChannels *

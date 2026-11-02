@@ -74,6 +74,23 @@ def source_invariants():
         check(f"PluginHostManager::{m}" not in gui,
               f"{m} 不再留在 win32 GUI 文件")
 
+    # 安全审查（2026-11-02）：IPC 对端认证与边界钳制不变量。
+    host_dir = os.path.join(posix, "host")
+    hm = read(os.path.join(host_dir, "plugin_host_main_posix.cpp"))
+    hc = read(os.path.join(host_dir, "plugin_host_client_posix.cpp"))
+    sr = read(os.path.join(host_dir, "plugin_shared_region_posix.cpp"))
+    check("SO_PEERCRED" in hm and "cred.uid" in hm,
+          "[sec] 宿主 accept 后校验对端 uid")
+    check("chmod(options.pipeName" in hm and "0600" in hm,
+          "[sec] 宿主 socket 文件 chmod 0600")
+    check("SO_PEERCRED" in hc and "cred.uid" in hc,
+          "[sec] 客户端 connect 后校验宿主 uid")
+    check("unpackTransportChannels(in.reserved)," in hm
+          and "kChannels)" in hm,
+          "[sec] 宿主音频线程声道数钳制到 kChannels")
+    check("fstat" in sr and "st_size" in sr,
+          "[sec] SharedRegion::open 映射前校验对象尺寸")
+
     profile = read(os.path.join(APP, "lib", "platform",
                                 "platform_profile.dart"))
     check("Platform.isWindows || Platform.isLinux" in profile,
@@ -104,6 +121,25 @@ def source_invariants():
     check("AURADSP_BUILD_HOST_X86" in cmake and
           "plugin_host_x86" in cmake,
           "Linux CMake 含 x86 桥宿主目标（multilib 开关）")
+
+
+def process_peak(lib, H, src, dst, expect=0.4, deadline_s=2.0):
+    """反复喂块直到输出峰值收敛到期望值，或截止时间到。
+
+    远程路径是流水线语义（E15）：处理结果在后续回调才回到输出，
+    宿主音频线程在繁忙的 CI runner 上可能晚于固定窗口苏醒——
+    原固定 6 次 x 10ms 窗口曾在 CI 上等不到首个回块、误报直通
+    值 0.8（run 41449998675 J3；同源码本机不复现）。改为轮询
+    至收敛（上限 2s）：真故障仍会以截止时的峰值如实失败。
+    进程内路径同步生效，首轮即收敛。"""
+    peak = 0.0
+    end = time.monotonic() + deadline_s
+    while True:
+        lib.auradsp_process(H, src, dst, 1024)
+        peak = max(abs(dst[i]) for i in range(2048))
+        if abs(peak - expect) < 1e-3 or time.monotonic() >= end:
+            return peak
+        time.sleep(0.01)
 
 
 def run_chain(lib, plug_dir, mode):
@@ -156,13 +192,7 @@ def run_chain(lib, plug_dir, mode):
     dst = (ctypes.c_float * 2048)()
     for i in range(2048):
         src[i] = 0.8
-    peak = 0.0
-    calls = 1 if mode == "inproc" else 6
-    for _ in range(calls):
-        lib.auradsp_process(H, src, dst, 1024)
-        peak = max(abs(dst[i]) for i in range(2048))
-        if mode == "remote":
-            time.sleep(0.01)
+    peak = process_peak(lib, H, src, dst)
     check(abs(peak - 0.4) < 1e-3,
           f"[{mode}] process 峰值 {peak:.4f} == 0.8×0.5（插件真实生效）")
     rc = lib.auradsp_plugin_slot_unload(H, 0)
@@ -236,11 +266,7 @@ def run_x86_bridge(lib, lib_path, cc):
         dst = (ctypes.c_float * 2048)()
         for i in range(2048):
             src[i] = 0.8
-        peak = 0.0
-        for _ in range(6):
-            lib.auradsp_process(H, src, dst, 1024)
-            peak = max(abs(dst[i]) for i in range(2048))
-            time.sleep(0.01)
+        peak = process_peak(lib, H, src, dst)
         check(abs(peak - 0.4) < 1e-3,
               f"[x86] 跨位数环传输 process 峰值 {peak:.4f} == 0.4")
         assert lib.auradsp_plugin_slot_unload(H, 0) == 1

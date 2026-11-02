@@ -92,7 +92,7 @@ if (-not $SkipEngine) {
         if ($CacheLine -and $CacheLine.Matches[0].Groups[1].Value -eq 'OFF') { $HostRemote = $false }
     }
     $EngineTargets = @("auradsp_engine")
-    if ($HostRemote) { $EngineTargets += "auradsp_plugin_host" }
+    if ($HostRemote) { $EngineTargets += "plugin_host_x64" }
 
     Write-Host "  编译 $BuildType 引擎动态库$(if ($HostRemote) { '与进程外插件宿主' })..."
     cmake --build --preset $BuildPreset --target @EngineTargets
@@ -106,11 +106,10 @@ if (-not $SkipEngine) {
 
     if ($HostRemote) {
         $PluginHostExe = Join-Path $EngineOutDir "$BuildType\plugin_host_x64.exe"
-        $PluginHostLegacy = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
-        if (-not (Test-Path $PluginHostExe) -and -not (Test-Path $PluginHostLegacy)) {
+        if (-not (Test-Path $PluginHostExe)) {
             throw "插件宿主编译完成但未找到产物: $PluginHostExe"
         }
-        Write-Host "  -> 64 位插件宿主就绪: plugin_host_x64.exe (及兼容副本 auradsp_plugin_host.exe)" -ForegroundColor Green
+        Write-Host "  -> 64 位插件宿主就绪: plugin_host_x64.exe" -ForegroundColor Green
 
         # 双宿主架构：编译 32 位位桥宿主 plugin_host_x86.exe
         if (-not $SkipHostX86) {

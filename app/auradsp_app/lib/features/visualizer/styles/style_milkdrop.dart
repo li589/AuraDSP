@@ -33,6 +33,22 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
   final Path _strokePath = Path();
   final Paint _strokePaint = Paint()..style = PaintingStyle.stroke;
 
+  /// 着色器缓存：按尺寸与低音离散量化复用，彻底消灭逐帧创建 SkShader
+  static final Map<String, Shader> _shaderCache = {};
+
+  static Shader _getOrCreateShader(String key, Shader Function() factory) {
+    var s = _shaderCache[key];
+    if (s == null) {
+      if (_shaderCache.length > 32) {
+        _shaderCache.clear();
+      }
+      s = factory();
+      _shaderCache[key] = s;
+    }
+    return s;
+  }
+
+
   MilkdropPainter({
     required this.preset,
     required this.bands,
@@ -80,37 +96,43 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
           .clamp(0.0, 2.0);
     }
 
-    // 1. 背景：径向衰减 + 缓慢旋转的椭圆微光（整屏都在动，不再是一张死底图）
-    final zoomFactor = preset.zoom.clamp(0.8, 1.4) + bass * 0.08;
+    final bassLvl = (bass * 4.0).round().clamp(0, 4);
+    final midLvl = (mid * 4.0).round().clamp(0, 4);
+
+    // 1. 背景：径向衰减 + 缓慢旋转的椭圆微光（Shader 复用，整屏流动且零内存泄漏）
+    final zoomFactor = preset.zoom.clamp(0.8, 1.4) + (bassLvl / 4.0) * 0.08;
     final bgPaint = Paint()
-      ..shader = RadialGradient(
+      ..shader = _getOrCreateShader('milk_bg_x___', () => RadialGradient(
         center: Alignment.center,
         radius: 0.9 * zoomFactor,
         colors: [
           palette.secondary
-              .withValues(alpha: (0.12 * preset.decay + bass * 0.18).clamp(0.0, 0.6)),
+              .withValues(alpha: (0.12 * preset.decay + (bassLvl / 4.0) * 0.18).clamp(0.0, 0.6)),
           palette.primary.withValues(alpha: (0.05 * preset.decay).clamp(0.0, 0.4)),
           const Color(0x00000000),
         ],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), bgPaint);
 
     final rot = _rotation;
+    // 旋转角按 16 档量化以复用旋转微光着色器
+    final rotStep = (rot * 8 / math.pi).round() % 16;
+    final quantRot = rotStep * math.pi / 8;
     final shimmerBegin =
-        Alignment(math.cos(rot) * 0.8, math.sin(rot) * 0.8);
+        Alignment(math.cos(quantRot) * 0.8, math.sin(quantRot) * 0.8);
     final shimmerEnd =
-        Alignment(-math.cos(rot) * 0.8, -math.sin(rot) * 0.8);
+        Alignment(-math.cos(quantRot) * 0.8, -math.sin(quantRot) * 0.8);
     final shimmerPaint = Paint()
-      ..shader = LinearGradient(
+      ..shader = _getOrCreateShader('milk_shim_x___', () => LinearGradient(
         begin: shimmerBegin,
         end: shimmerEnd,
         colors: [
-          palette.primary.withValues(alpha: 0.05 + mid * 0.05),
+          palette.primary.withValues(alpha: 0.05 + (midLvl / 4.0) * 0.05),
           const Color(0x00000000),
-          palette.secondary.withValues(alpha: 0.04 + bass * 0.04),
+          palette.secondary.withValues(alpha: 0.04 + (bassLvl / 4.0) * 0.04),
         ],
         stops: const [0.0, 0.5, 1.0],
-      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height));
+      ).createShader(Rect.fromLTWH(0, 0, size.width, size.height)));
     canvas.drawRect(Rect.fromLTWH(0, 0, size.width, size.height), shimmerPaint);
 
     // 2. 根据 Preset WaveMode 呈现不同 MilkDrop 经典拓扑
@@ -229,16 +251,17 @@ class MilkdropPainter extends CustomPainter implements VisualizerTimeAware {
     const rays = 36;
     final rot = _rotation;
 
-    // 中心柔光
+    final coreBassLvl = (bass * 4.0).round().clamp(0, 4);
+    // 中心柔光（Shader 缓存复用）
     final glow = Paint()
-      ..shader = RadialGradient(
+      ..shader = _getOrCreateShader('milk_glow____', () => RadialGradient(
         colors: [
-          palette.glow.withValues(alpha: 0.14 + bass * 0.12),
+          palette.glow.withValues(alpha: 0.14 + (coreBassLvl / 4.0) * 0.12),
           palette.glow.withValues(alpha: 0.0),
         ],
       ).createShader(
         Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.42),
-      );
+      ));
     canvas.drawCircle(Offset(cx, cy), r * 0.42, glow);
 
     for (var i = 0; i < rays; i++) {

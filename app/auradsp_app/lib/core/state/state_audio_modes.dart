@@ -111,9 +111,9 @@ extension AudioModesState on AppModel {
 
   /// ALSA PCM 设备枚举（设置页设备编辑的下拉数据源）：FFI 直查
   /// libasound 的 device_name_hint；无库/失败返回空表（可手填）。
-  List<String> listAlsaDevices() {
+  List<String> listAlsaDevices({bool capture = false}) {
     if (!PlatformProfile.isLinux) return const [];
-    return alsa_ffi.listAlsaPcmDeviceNames();
+    return alsa_ffi.listAlsaPcmDeviceNames(capture: capture);
   }
 
   /// ALSA 输出设备名（专家模式）：落盘 + 重启 isolate 生效。
@@ -122,6 +122,20 @@ extension AudioModesState on AppModel {
     final v = device.trim();
     if (config.alsaOutputDevice == v) return;
     config.alsaOutputDevice = v;
+    ConfigManager.save(config);
+    if (config.linuxAudioBackend == 'alsa') _restartIsolate();
+    _notifyUi();
+  }
+
+  /// ALSA 采集设备名（专家模式 driver 路径）：落盘 + 重启
+  /// isolate 生效（采集设备在 isolate 构造时定死，同输出侧口径）。
+  /// 打磨三期补齐：此前该字段只有配置与 isolate 消费、无设置入口，
+  /// 非默认回环卡的用户只能手改配置文件。
+  void setAlsaCaptureDevice(String device) {
+    if (!PlatformProfile.isLinux) return;
+    final v = device.trim();
+    if (config.alsaCaptureDevice == v) return;
+    config.alsaCaptureDevice = v;
     ConfigManager.save(config);
     if (config.linuxAudioBackend == 'alsa') _restartIsolate();
     _notifyUi();

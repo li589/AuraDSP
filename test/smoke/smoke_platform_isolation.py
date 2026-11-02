@@ -332,14 +332,14 @@ def cmake_layering():
     on_blocks = _cmake_if_blocks(
         src, r"if\s*\(\s*AURADSP_ENABLE_PLUGINS\s+AND\s+AURADSP_PLUGIN_HOST_REMOTE\b")
     on_body = "\n".join(on_blocks)
-    check("R6 REMOTE=ON 块构建 auradsp_plugin_host",
-          "add_executable" in on_body and "auradsp_plugin_host" in on_body)
+    check("R6 REMOTE=ON 块构建宿主目标",
+          "add_executable" in on_body and ("${HOST_EXE_TARGET_NAME}" in on_body or "plugin_host_x64" in on_body))
     # 宿主目标的 add_executable 必须落在 ON 块内（块外不得再定义同名目标）。
     outside_def = _cmake_call_block(
-        src.replace(on_body, ""), r"add_executable\s*\(\s*auradsp_plugin_host\b")
-    check("R6 auradsp_plugin_host 仅在 REMOTE=ON 块内定义",
+        src.replace(on_body, ""), r"add_executable\s*\(\s*(?:\${HOST_EXE_TARGET_NAME}|plugin_host_x64|auradsp_plugin_host)\b")
+    check("R6 宿主目标仅在 REMOTE=ON 块内定义",
           not outside_def,
-          "ON 块外存在 add_executable(auradsp_plugin_host")
+          "ON 块外存在 add_executable")
 
 
 if __name__ == "__main__":

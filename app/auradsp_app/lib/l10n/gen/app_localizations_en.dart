@@ -1393,6 +1393,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.';
 
   @override
+  String get linuxNoteVirtualUnavailable =>
+      'Could not create the virtual device: PulseAudio refused to load the virtual sink module. Check the audio service, then select the virtual device mode again.';
+
+  @override
+  String get linuxNoteLoopbackUnavailable =>
+      'snd-aloop is loaded, but no usable loopback capture source was found. Refresh the status or reload the module and try again.';
+
+  @override
+  String get linuxNoteAlsaCaptureUnavailable =>
+      'Could not open the ALSA capture device: it may be busy, or its negotiated sample rate differs from the current output. Check the device settings.';
+
+  @override
+  String get linuxNotePulseUnavailable =>
+      'The PulseAudio service is unavailable. Make sure the system audio service is running, then select the mode again.';
+
+  @override
+  String get linuxNoteCaptureLost =>
+      'Capture was interrupted: the capture device or audio service went away, so the output is silent. Select the mode again to recover.';
+
+  @override
+  String get linuxFeedbackWarning =>
+      'Warning: the system default output is auradsp_virtual itself, which creates a feedback loop. Set the default output back to a real device in the system sound settings.';
+
+  @override
+  String get linuxOutputToVirtualHint =>
+      'Note: the system default output is currently auradsp_virtual, so processed audio is routed into the virtual device and cannot be heard locally. Set it back to a real device in the system sound settings.';
+
+  @override
   String get linuxOutputSink => 'Output device';
 
   @override
@@ -1437,6 +1465,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get linuxAlsaOutDevice => 'ALSA output device';
+
+  @override
+  String get linuxAlsaCapDevice => 'ALSA capture device';
 
   @override
   String get linuxAlsaDeviceEdit => 'Edit';
@@ -3808,4 +3839,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String presetOverwritten(String name) {
     return 'Overwrote the existing preset \"$name\"';
   }
+
+  @override
+  String get plug32BitBadge => '32-bit';
+
+  @override
+  String get plug32BitHint => '32-bit plugin (supported)';
 }

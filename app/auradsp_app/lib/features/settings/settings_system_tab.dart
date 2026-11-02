@@ -78,7 +78,7 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
       ),
     ),
 
-    // 3. 系统（托盘常驻 + 开机自启；Windows 系统集成）
+    // 3. 系统（托盘常驻 + 开机自启；Windows/Linux 系统集成）
     SectionCard(
       title: l.sysTitle,
       hint: l.sysHint,
@@ -98,16 +98,22 @@ List<Widget> buildSystemTab(BuildContext context, AppModel model) {
           const SizedBox(height: 4),
           Text(l.sysTrayHint, style: captionOf(p)),
           const SizedBox(height: AuraSpace.md),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(l.sysAutostart, style: labelOf(p, size: 12)),
-              AuraSwitch(
-                value: PlatformAdapters.instance.autoStart.enabled ?? false,
-                onChanged: (v) =>
-                    PlatformAdapters.instance.autoStart.setEnabled(v),
-              ),
-            ],
+          ValueListenableBuilder<bool>(
+            valueListenable:
+                PlatformAdapters.instance.autoStart.enabledListenable,
+            builder: (context, autostartEnabled, _) {
+              return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(l.sysAutostart, style: labelOf(p, size: 12)),
+                  AuraSwitch(
+                    value: autostartEnabled,
+                    onChanged: (v) =>
+                        PlatformAdapters.instance.autoStart.setEnabled(v),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Text(l.sysAutostartHint, style: captionOf(p)),

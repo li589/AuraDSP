@@ -33,6 +33,35 @@ void main() {
     expect(back.alsaCaptureDevice, '');
   });
 
+  test('dedupeAlsaNames removes duplicates preserving order', () {
+    expect(dedupeAlsaNames(['a', 'b', 'a', 'c', 'b']), ['a', 'b', 'c']);
+    expect(dedupeAlsaNames(const <String>[]), isEmpty);
+  });
+
+  test('alsaHintMatchesDirection filters by IOID, unlabelled passes', () {
+    expect(alsaHintMatchesDirection('Input', capture: true), isTrue);
+    expect(alsaHintMatchesDirection('Input', capture: false), isFalse);
+    expect(alsaHintMatchesDirection('Output', capture: false), isTrue);
+    expect(alsaHintMatchesDirection('Output', capture: true), isFalse);
+    // null 设备等未标注条目不误伤。
+    expect(alsaHintMatchesDirection(null, capture: true), isTrue);
+    expect(alsaHintMatchesDirection('', capture: false), isTrue);
+  });
+
+  test('alsaRateMatches accepts equal rates and unknown pump rate', () {
+    expect(alsaRateMatches(negotiated: 48000, pumpRate: 48000), isTrue);
+    expect(alsaRateMatches(negotiated: 44100, pumpRate: 44100), isTrue);
+    // 输出未初始化（pumpRate<=0）无法判断：按可用处理，调用方另有兜底。
+    expect(alsaRateMatches(negotiated: 44100, pumpRate: 0), isTrue);
+  });
+
+  test('alsaRateMatches rejects a mismatched negotiated rate', () {
+    // ALSA 无服务端重采样：协商率被设备改掉（如固定 44.1k）而泵
+    // 按 48k 消费会变速变调，必须拦下（打磨一期）。
+    expect(alsaRateMatches(negotiated: 44100, pumpRate: 48000), isFalse);
+    expect(alsaRateMatches(negotiated: 48000, pumpRate: 44100), isFalse);
+  });
+
   test('resolveAlsaDevice maps blank to default and trims names', () {
     expect(resolveAlsaDevice(''), 'default');
     expect(resolveAlsaDevice('   '), 'default');

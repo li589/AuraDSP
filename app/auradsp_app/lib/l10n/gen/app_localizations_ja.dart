@@ -1311,6 +1311,34 @@ class AppLocalizationsJa extends AppLocalizations {
       'キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。';
 
   @override
+  String get linuxNoteVirtualUnavailable =>
+      '仮想デバイスを作成できませんでした：PulseAudio が仮想シンクモジュールの読み込みを拒否しました。オーディオサービスを確認してから、仮想デバイスモードを選び直してください。';
+
+  @override
+  String get linuxNoteLoopbackUnavailable =>
+      'snd-aloop は読み込まれていますが、利用可能なループバックキャプチャソースが見つかりません。ステータスを更新するか、モジュールを再読み込みしてからお試しください。';
+
+  @override
+  String get linuxNoteAlsaCaptureUnavailable =>
+      'ALSA キャプチャデバイスを開けませんでした：デバイスが使用中の可能性、または交渉されたサンプルレートが現在の出力と異なります。デバイス設定を確認してください。';
+
+  @override
+  String get linuxNotePulseUnavailable =>
+      'PulseAudio サービスを利用できません。システムのオーディオサービスが動作していることを確認してから、モードを選び直してください。';
+
+  @override
+  String get linuxNoteCaptureLost =>
+      'キャプチャが中断されました：キャプチャデバイスまたはオーディオサービスが切断され、出力は無音になっています。モードを選び直すと復旧します。';
+
+  @override
+  String get linuxFeedbackWarning =>
+      '警告：システムのデフォルト出力が auradsp_virtual 自体になっており、フィードバックループが発生します。システムのサウンド設定でデフォルト出力を実デバイスに戻してください。';
+
+  @override
+  String get linuxOutputToVirtualHint =>
+      '注意：システムのデフォルト出力が現在 auradsp_virtual のため、処理後の音声は仮想デバイスへ送られ、本機では聞こえません。システムのサウンド設定で実デバイスに戻すことをおすすめします。';
+
+  @override
   String get linuxOutputSink => '出力デバイス';
 
   @override
@@ -1355,6 +1383,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get linuxAlsaOutDevice => 'ALSA 出力デバイス';
+
+  @override
+  String get linuxAlsaCapDevice => 'ALSA キャプチャデバイス';
 
   @override
   String get linuxAlsaDeviceEdit => '編集';
@@ -3633,4 +3664,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String presetOverwritten(String name) {
     return '同名のプリセット「$name」を上書きしました';
   }
+
+  @override
+  String get plug32BitBadge => '32bit';
+
+  @override
+  String get plug32BitHint => '32ビットプラグイン（対応）';
 }

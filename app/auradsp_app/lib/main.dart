@@ -37,14 +37,15 @@ void main(List<String> args) {
     DebugTrace.instance.log('error', 'PLATFORM: $e');
     return false;
   };
-  runZonedGuarded(() => runApp(const AuraApp()), (e, st) {
+  runZonedGuarded(() => runApp(AuraApp(args: args)), (e, st) {
     dbgLog('ZONE ERROR: $e\n$st');
     DebugTrace.instance.log('error', 'ZONE: $e');
   });
 }
 
 class AuraApp extends StatefulWidget {
-  const AuraApp({super.key});
+  final List<String> args;
+  const AuraApp({super.key, this.args = const []});
 
   @override
   State<AuraApp> createState() => _AuraAppState();
@@ -67,7 +68,9 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      PlatformAdapters.instance.window.setVisible(true);
+      if (PlatformAdapters.instance.window.isVisible) {
+        PlatformAdapters.instance.window.setVisible(true);
+      }
     }
   }
 
@@ -75,7 +78,9 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
     if (_cachedThemeId != m.themeId) {
       _cachedThemeId = m.themeId;
       _cachedTheme = withAuraExtension(
-          buildAuraTheme(m.themeId), m.themeId.palette);
+        buildAuraTheme(m.themeId),
+        m.themeId.palette,
+      );
     }
     return _cachedTheme!;
   }
@@ -87,15 +92,21 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
     await PresetLibrary.preloadFactoryAssets();
     // 托盘/关窗拦截（非核心路径：失败不阻塞启动，仅不提供托盘）
     final adapters = PlatformAdapters.instance;
-    await adapters.window.init();
+    final startInTray =
+        widget.args.contains('--tray') ||
+        widget.args.contains('-tray') ||
+        widget.args.contains('--minimized');
+    await adapters.window.init(startInTray: startInTray);
     if (!mounted) return;
     // 平台端口在组合根注入：core 不 import 具体平台实现（门禁 F11）。
-    setState(() => _model ??= AppModel(
-          window: adapters.window,
-          pluginDirs: adapters.pluginDirs,
-          registry: adapters.registry,
-          windowsSystem: adapters.windowsSystem,
-        ));
+    setState(
+      () => _model ??= AppModel(
+        window: adapters.window,
+        pluginDirs: adapters.pluginDirs,
+        registry: adapters.registry,
+        windowsSystem: adapters.windowsSystem,
+      ),
+    );
   }
 
   @override
@@ -111,9 +122,7 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
     final model = _model;
     if (model == null) {
       return const MaterialApp(
-        home: Scaffold(
-          body: Center(child: CircularProgressIndicator()),
-        ),
+        home: Scaffold(body: Center(child: CircularProgressIndicator())),
       );
     }
     // 只订阅「外观」计数（主题/语言）。此前监听整份 AppModel：任何参数拖动、
@@ -134,8 +143,11 @@ class _AuraAppState extends State<AuraApp> with WidgetsBindingObserver {
           builder: (ctx, child) {
             final l = l10nOf(ctx);
             PlatformAdapters.instance.window.applyLocale(
-                Localizations.localeOf(ctx).toString(),
-                l.trayShow, l.sysAutostart, l.trayQuit);
+              Localizations.localeOf(ctx).toString(),
+              l.trayShow,
+              l.sysAutostart,
+              l.trayQuit,
+            );
             // 避免在根层级包裹 TickerMode(enabled: isVisible)：
             // 根层 TickerMode 曾在最小化还原时因事件滞后或丢包导致全局 Ticker 锁死，
             // 引起 AnimatedSwitcher 页面切换与按钮微交互假死。
@@ -190,10 +202,12 @@ class ShellGate extends StatelessWidget {
             return _FatalPage(msg: model.fatalMsg ?? '');
           case EngineConn.connecting:
           case EngineConn.ready:
-            return Stack(children: [
-              AppShell(model: model),
-              EventBanner(model: model),
-            ]);
+            return Stack(
+              children: [
+                AppShell(model: model),
+                EventBanner(model: model),
+              ],
+            );
         }
       },
     );
@@ -223,14 +237,20 @@ class _FatalPage extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(l.engineFailed,
-                  style: TextStyle(
-                      fontFamily: 'AuraDisplay',
-                      fontSize: 22, fontWeight: FontWeight.w800,
-                      color: p.error)),
+              Text(
+                l.engineFailed,
+                style: TextStyle(
+                  fontFamily: 'AuraDisplay',
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  color: p.error,
+                ),
+              ),
               const SizedBox(height: 12),
-              Text(l.engineFailedBody,
-                  style: TextStyle(fontSize: 13.5, color: p.text, height: 1.6)),
+              Text(
+                l.engineFailedBody,
+                style: TextStyle(fontSize: 13.5, color: p.text, height: 1.6),
+              ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
@@ -239,8 +259,7 @@ class _FatalPage extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AuraRadius.sm),
                   border: Border.all(color: p.hairline),
                 ),
-                child: Text(msg,
-                    style: monoOf(p, size: 11, color: p.textDim)),
+                child: Text(msg, style: monoOf(p, size: 11, color: p.textDim)),
               ),
             ],
           ),

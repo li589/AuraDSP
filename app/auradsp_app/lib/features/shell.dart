@@ -35,6 +35,32 @@ class AppShell extends StatefulWidget {
   State<AppShell> createState() => _AppShellState();
 }
 
+/// 页面级平滑过渡组件：为 IndexedStack 子项赋予淡入淡出与微小位移
+class _PageTransitionChild extends StatelessWidget {
+  final bool active;
+  final Widget child;
+
+  const _PageTransitionChild({
+    required this.active,
+    required this.child,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedSlide(
+      offset: active ? Offset.zero : const Offset(0, 0.012),
+      duration: const Duration(milliseconds: 220),
+      curve: Curves.easeOutCubic,
+      child: AnimatedOpacity(
+        opacity: active ? 1.0 : 0.0,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
+        child: child,
+      ),
+    );
+  }
+}
+
 class _AppShellState extends State<AppShell> {
   int _index = 0;
   bool _railCollapsed = false;
@@ -154,11 +180,14 @@ class _AppShellState extends State<AppShell> {
                       for (var i = 0; i < _pages.length; i++)
                         TickerMode(
                           enabled: i == _index,
-                          // 未访问过的离屏页保持零开销占位；当前页在同一帧
-                          // 内实例化（先 setState 再 build，无闪烁）。
-                          child: i == _index || _pages[i] != null
-                              ? _pageAt(i)
-                              : const SizedBox.shrink(),
+                          // 页面切换过渡动效：保持 IndexedStack 零重建保活优势，
+                          // 叠加 220ms 丝滑渐变与微上浮过渡，彻底消除突变生硬感。
+                          child: _PageTransitionChild(
+                            active: i == _index,
+                            child: i == _index || _pages[i] != null
+                                ? _pageAt(i)
+                                : const SizedBox.shrink(),
+                          ),
                         ),
                     ],
                   ),

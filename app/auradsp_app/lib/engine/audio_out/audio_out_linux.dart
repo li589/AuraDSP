@@ -163,6 +163,11 @@ class PulseAudioOut implements AudioOut {
       // simple API 的 write 本身是阻塞节流点，故把 padding 钳到半缓冲：
       // 保留队列感知，同时保证每轮至少可写半缓冲，不会被设备延迟饿死。
       final half = _bufferFrames ~/ 2;
+      // 负值守卫（边界审查 2026-11-02，与 ALSA 侧对齐）：usec 是
+      // uint64，异常服务器给出 ≥2^63 的读数时经 FFI 落到 Dart 即
+      // 为负，乘采样率亦可溢出回绕为负；负 padding 会让泵按超过
+      // 缓冲的 avail 多写、延迟失控——下限收敛到 0。
+      if (frames < 0) return 0;
       return frames > half ? half : frames;
     } finally {
       malloc.free(pErr);

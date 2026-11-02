@@ -12,7 +12,7 @@ extension PluginManagerSlots on PluginManager {
     // D2：扫描期已判定不兼容的插件（当前唯一情形：32 位）在 Dart 侧
     // 直接拦截，不走 isolate 往返。引擎侧 load() 有同样拒绝（双保险），
     // 两侧文案一致，这里补上插件名前缀便于定位是哪一项。
-    if (!plugin.isCompatible) {
+    if (!plugin.isSupported) {
       _lastError = plugin.errorMessage.isNotEmpty
           ? '${plugin.name}：${plugin.errorMessage}'
           : '${plugin.name} 与当前 AuraDSP 版本不兼容，无法加载。';

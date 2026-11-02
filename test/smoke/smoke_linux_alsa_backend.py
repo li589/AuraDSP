@@ -58,6 +58,13 @@ def source_invariants():
           "spawn cfg 注入 linuxAudioBackend")
     check("_attachAlsaCapture" in linux_iso and "hw:Loopback" in linux_iso,
           "driver 专家路径直采 hw:Loopback")
+    check("alsaMaxStalledRetries" in out and "alsaMaxStalledRetries" in inp,
+          "ALSA 读写循环带无进展上限（防设备异常时泵空转）")
+    check("hw_params_set_channels" in ffi and "SetChannels" in ffi
+          and "rc = lib.hwParamsSetChannels" in ffi,
+          "协商校验 access/声道返回码（防帧布局错位静默过关）")
+    check("alsaRateMatches" in linux_iso,
+          "driver 专家路径校验采集协商率与泵率一致（防变速变调）")
     check("alsa-capture-unavailable" in linux_iso,
           "ALSA 采集失败有专属 note")
 

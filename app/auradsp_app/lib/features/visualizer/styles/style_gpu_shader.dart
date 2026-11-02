@@ -16,6 +16,9 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
 
   /// 整场播放复用同一个 Paint（shader 实例由 GpuShaderService 持有）。
   final Paint _shaderPaint = Paint();
+  Shader? _fallbackShader;
+  Size _fallbackSize = Size.zero;
+  int _fallbackBass = -1;
 
   GpuShaderPainter({
     required this.shaderType,
@@ -82,16 +85,21 @@ class GpuShaderPainter extends CustomPainter implements VisualizerTimeAware {
     final center = Offset(size.width / 2.0, size.height / 2.0);
     final r = math.min(size.width, size.height) * (0.3 + bass * 0.2);
 
-    final bgPaint = Paint()
-      ..shader = RadialGradient(
+    final bassLvl = (bass * 4.0).round().clamp(0, 4);
+    if (_fallbackShader == null || _fallbackSize != size || _fallbackBass != bassLvl) {
+      _fallbackSize = size;
+      _fallbackBass = bassLvl;
+      _fallbackShader = RadialGradient(
         center: Alignment.center,
         radius: 0.85,
         colors: [
-          palette.secondary.withValues(alpha: 0.25 + bass * 0.2),
+          palette.secondary.withValues(alpha: 0.25 + (bassLvl / 4.0) * 0.2),
           palette.primary.withValues(alpha: 0.08),
           const Color(0x00000000),
         ],
       ).createShader(rect);
+    }
+    final bgPaint = Paint()..shader = _fallbackShader;
     canvas.drawRect(rect, bgPaint);
 
     final ringPaint = Paint()

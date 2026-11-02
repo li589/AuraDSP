@@ -455,6 +455,13 @@
   "linuxDriverMissingHint": "snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1 を実行してから、カーネルドライバモードを選び直してください。",
   "linuxVirtualReadyHint": "仮想デバイス auradsp_virtual の準備ができました。他アプリの出力デバイスでこれを選ぶと AuraDSP 経由になります。",
   "linuxCaptureInactiveHint": "キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。",
+  "linuxNoteVirtualUnavailable": "仮想デバイスを作成できませんでした：PulseAudio が仮想シンクモジュールの読み込みを拒否しました。オーディオサービスを確認してから、仮想デバイスモードを選び直してください。",
+  "linuxNoteLoopbackUnavailable": "snd-aloop は読み込まれていますが、利用可能なループバックキャプチャソースが見つかりません。ステータスを更新するか、モジュールを再読み込みしてからお試しください。",
+  "linuxNoteAlsaCaptureUnavailable": "ALSA キャプチャデバイスを開けませんでした：デバイスが使用中の可能性、または交渉されたサンプルレートが現在の出力と異なります。デバイス設定を確認してください。",
+  "linuxNotePulseUnavailable": "PulseAudio サービスを利用できません。システムのオーディオサービスが動作していることを確認してから、モードを選び直してください。",
+  "linuxNoteCaptureLost": "キャプチャが中断されました：キャプチャデバイスまたはオーディオサービスが切断され、出力は無音になっています。モードを選び直すと復旧します。",
+  "linuxFeedbackWarning": "警告：システムのデフォルト出力が auradsp_virtual 自体になっており、フィードバックループが発生します。システムのサウンド設定でデフォルト出力を実デバイスに戻してください。",
+  "linuxOutputToVirtualHint": "注意：システムのデフォルト出力が現在 auradsp_virtual のため、処理後の音声は仮想デバイスへ送られ、本機では聞こえません。システムのサウンド設定で実デバイスに戻すことをおすすめします。",
   "linuxOutputSink": "出力デバイス",
   "linuxOutputSinkDefault": "PulseAudio の既定出力",
   "linuxOutputFormat": "出力フォーマット",
@@ -470,6 +477,7 @@
   "linuxBackendPulse": "PulseAudio（既定）",
   "linuxBackendAlsa": "ALSA 直接接続（エキスパート）",
   "linuxAlsaOutDevice": "ALSA 出力デバイス",
+  "linuxAlsaCapDevice": "ALSA キャプチャデバイス",
   "linuxAlsaDeviceEdit": "編集",
   "linuxAlsaDeviceUnset": "default（未指定）",
   "linuxAlsaExpertHint": "エキスパートモードは ALSA デバイスへ直接接続し（period 256 フレーム）、PulseAudio より低遅延です。バックエンド/デバイス変更後はオーディオエンジンが自動再起動します。PipeWire 環境では hw: デバイスがセッションマネージャに占有され開けない場合があり、失敗理由はステータスに表示されます。",
@@ -734,7 +742,7 @@
   "presetSaveFail": "保存失敗（名式またはディスク）",
   "presetDirtyBadge": "カスタム（未保存）",
   "presetDeleted": "プリセットを削除しました",
-  "presetDeleteFail": "削除失敗",
+  "presetDeleteFail": "削除に失敗しました（ファイルが使用中か、既に存在しません）",
   "presetLoaded": "プリセットを適用しました",
   "presetLoadFail": "プリセット読込失敗",
   "navPlugins": "プラグイン",
@@ -799,7 +807,7 @@
       }
     }
   },
-    "memDataDir": "データディレクトリ：{path}",
+  "memDataDir": "データディレクトリ：{path}",
   "@memDataDir": {
     "placeholders": {
       "path": {
@@ -807,7 +815,7 @@
       }
     }
   },
-"memClear": "セッションメモリをクリア",
+  "memClear": "セッションメモリをクリア",
   "memCleared": "永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します",
   "memReset": "外部設定をデフォルトにリセット",
   "memResetDone": "config.json を標準テンプレートにリセットしました",
@@ -1548,7 +1556,7 @@
   "plugScanDirsSelectAll": "すべて選択",
   "plugScanDirsClear": "すべてのチェックを外す",
   "plugScanDirsEnabledCount": "{enabled}/{total} 件有効",
-  "@plugScanDirsEnabledCount":   {
+  "@plugScanDirsEnabledCount": {
     "placeholders": {
       "enabled": {
         "type": "int"
@@ -1566,6 +1574,7 @@
   "presetDeleteTitle": "プリセットを削除",
   "presetDeleteBody": "このプリセットを削除しますか？元に戻せません。",
   "presetDeleteAction": "削除",
-  "presetDeleteFail": "削除に失敗しました（ファイルが使用中か、既に存在しません）",
-  "presetOverwritten": "同名のプリセット「{name}」を上書きしました"
+  "presetOverwritten": "同名のプリセット「{name}」を上書きしました",
+  "plug32BitBadge": "32bit",
+  "plug32BitHint": "32ビットプラグイン（対応）"
 }

@@ -257,6 +257,7 @@ class AppModel extends ChangeNotifier {
   bool linuxVirtualSink = false;
   bool linuxDriverLoaded = false;
   String linuxModeNote = '';
+  bool linuxDefaultIsVirtual = false;
   // 设备面板（设置页「设备」卡）展示：PulseAudio 默认输出与当前采集源。
   String linuxDefaultSink = '';
   String linuxCaptureSource = '';

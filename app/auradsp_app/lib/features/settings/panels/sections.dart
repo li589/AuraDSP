@@ -129,6 +129,7 @@ class _LinuxDevicePanel extends StatelessWidget {
     final capSource = model.linuxCaptureSource;
     final alsa = model.config.linuxAudioBackend == 'alsa';
     final alsaDevice = model.config.alsaOutputDevice;
+    final capDevice = model.config.alsaCaptureDevice;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -205,6 +206,18 @@ class _LinuxDevicePanel extends StatelessWidget {
               onTap: () => _editAlsaDevice(context),
             ),
           ]),
+        if (alsa)
+          Row(children: [
+            Expanded(
+              child: _InfoRow(l.linuxAlsaCapDevice,
+                  capDevice.isEmpty ? l.linuxAlsaDeviceUnset : capDevice),
+            ),
+            AuraChip(
+              l.linuxAlsaDeviceEdit,
+              icon: Icons.edit_rounded,
+              onTap: () => _editAlsaCaptureDevice(context),
+            ),
+          ]),
         if (info != null)
           _InfoRow(
             l.linuxOutputFormat,
@@ -227,16 +240,43 @@ class _LinuxDevicePanel extends StatelessWidget {
     );
   }
 
-  Future<void> _editAlsaDevice(BuildContext context) async {
+  Future<void> _editAlsaDevice(BuildContext context) => _editAlsaDeviceDialog(
+        context,
+        title: l10nOf(context).linuxAlsaOutDevice,
+        initial: model.config.alsaOutputDevice,
+        capture: false,
+        hintText: 'hw:0,0 / plughw:1,0 / default',
+        onSave: model.setAlsaOutputDevice,
+      );
+
+  Future<void> _editAlsaCaptureDevice(BuildContext context) =>
+      _editAlsaDeviceDialog(
+        context,
+        title: l10nOf(context).linuxAlsaCapDevice,
+        initial: model.config.alsaCaptureDevice,
+        capture: true,
+        hintText: 'hw:Loopback / plughw:2,0 / default',
+        onSave: model.setAlsaCaptureDevice,
+      );
+
+  /// ALSA 设备编辑对话框（输出/采集共用）：枚举下拉（按方向过滤）
+  /// + 手填。controller 在对话框退出动画结束后经 post-frame 释放，
+  /// 避免 await 返回与路由动画重叠期 use-after-dispose（打磨三期）。
+  Future<void> _editAlsaDeviceDialog(
+    BuildContext context, {
+    required String title,
+    required String initial,
+    required bool capture,
+    required String hintText,
+    required ValueChanged<String> onSave,
+  }) async {
     final l = l10nOf(context);
-    final controller =
-        TextEditingController(text: model.config.alsaOutputDevice);
-    final enumerated = model.listAlsaDevices();
+    final controller = TextEditingController(text: initial);
+    final enumerated = model.listAlsaDevices(capture: capture);
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(l.linuxAlsaOutDevice,
-            style: const TextStyle(fontSize: 14)),
+        title: Text(title, style: const TextStyle(fontSize: 14)),
         content: StatefulBuilder(
           builder: (ctx, setLocal) => Column(
             mainAxisSize: MainAxisSize.min,
@@ -267,9 +307,7 @@ class _LinuxDevicePanel extends StatelessWidget {
               TextField(
                 controller: controller,
                 autofocus: true,
-                decoration: const InputDecoration(
-                  hintText: 'hw:0,0 / plughw:1,0 / default',
-                ),
+                decoration: InputDecoration(hintText: hintText),
               ),
             ],
           ),
@@ -286,8 +324,9 @@ class _LinuxDevicePanel extends StatelessWidget {
         ],
       ),
     );
-    controller.dispose();
-    if (result != null) model.setAlsaOutputDevice(result);
+    WidgetsBinding.instance
+        .addPostFrameCallback((_) => controller.dispose());
+    if (result != null) onSave(result);
   }
 }
 

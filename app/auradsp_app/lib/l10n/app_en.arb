@@ -455,6 +455,13 @@
   "linuxDriverMissingHint": "The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1 in a terminal, then select the kernel driver mode again.",
   "linuxVirtualReadyHint": "Virtual device auradsp_virtual is ready: pick it as the output device in other apps to route them through AuraDSP.",
   "linuxCaptureInactiveHint": "Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.",
+  "linuxNoteVirtualUnavailable": "Could not create the virtual device: PulseAudio refused to load the virtual sink module. Check the audio service, then select the virtual device mode again.",
+  "linuxNoteLoopbackUnavailable": "snd-aloop is loaded, but no usable loopback capture source was found. Refresh the status or reload the module and try again.",
+  "linuxNoteAlsaCaptureUnavailable": "Could not open the ALSA capture device: it may be busy, or its negotiated sample rate differs from the current output. Check the device settings.",
+  "linuxNotePulseUnavailable": "The PulseAudio service is unavailable. Make sure the system audio service is running, then select the mode again.",
+  "linuxNoteCaptureLost": "Capture was interrupted: the capture device or audio service went away, so the output is silent. Select the mode again to recover.",
+  "linuxFeedbackWarning": "Warning: the system default output is auradsp_virtual itself, which creates a feedback loop. Set the default output back to a real device in the system sound settings.",
+  "linuxOutputToVirtualHint": "Note: the system default output is currently auradsp_virtual, so processed audio is routed into the virtual device and cannot be heard locally. Set it back to a real device in the system sound settings.",
   "linuxOutputSink": "Output device",
   "linuxOutputSinkDefault": "PulseAudio default output",
   "linuxOutputFormat": "Output format",
@@ -470,6 +477,7 @@
   "linuxBackendPulse": "PulseAudio (default)",
   "linuxBackendAlsa": "ALSA direct (expert)",
   "linuxAlsaOutDevice": "ALSA output device",
+  "linuxAlsaCapDevice": "ALSA capture device",
   "linuxAlsaDeviceEdit": "Edit",
   "linuxAlsaDeviceUnset": "default (unset)",
   "linuxAlsaExpertHint": "Expert mode talks to the ALSA device directly (period 256 frames) for lower latency than PulseAudio. Changing the backend or device restarts the audio engine. On PipeWire systems an hw: device may be held by the session manager and fail to open; the failure is surfaced in the status.",
@@ -734,7 +742,7 @@
   "presetSaveFail": "Save failed (invalid name or disk)",
   "presetDirtyBadge": "Custom (unsaved)",
   "presetDeleted": "Preset deleted",
-  "presetDeleteFail": "Delete failed",
+  "presetDeleteFail": "Delete failed (file may be locked or already gone)",
   "presetLoaded": "Preset loaded",
   "presetLoadFail": "Preset read failed",
   "navPlugins": "Plugins",
@@ -799,7 +807,7 @@
       }
     }
   },
-    "memDataDir": "Data directory: {path}",
+  "memDataDir": "Data directory: {path}",
   "@memDataDir": {
     "placeholders": {
       "path": {
@@ -807,7 +815,7 @@
       }
     }
   },
-"memClear": "Clear Session Memory",
+  "memClear": "Clear Session Memory",
   "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
   "memReset": "Reset External Config to Defaults",
   "memResetDone": "config.json has been reset to the standard template",
@@ -1548,7 +1556,7 @@
   "plugScanDirsSelectAll": "Select all",
   "plugScanDirsClear": "Clear all checks",
   "plugScanDirsEnabledCount": "{enabled}/{total} enabled",
-  "@plugScanDirsEnabledCount":   {
+  "@plugScanDirsEnabledCount": {
     "placeholders": {
       "enabled": {
         "type": "int"
@@ -1566,6 +1574,7 @@
   "presetDeleteTitle": "Delete preset",
   "presetDeleteBody": "Delete this preset? This cannot be undone.",
   "presetDeleteAction": "Delete",
-  "presetDeleteFail": "Delete failed (file may be locked or already gone)",
-  "presetOverwritten": "Overwrote the existing preset \"{name}\""
+  "presetOverwritten": "Overwrote the existing preset \"{name}\"",
+  "plug32BitBadge": "32-bit",
+  "plug32BitHint": "32-bit plugin (supported)"
 }

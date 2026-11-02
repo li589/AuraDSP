@@ -36,6 +36,18 @@ const int alsaStateSuspended = 7;
 /// -EPIPE：写入过慢导致欠载（XRUN），prepare 后可续写。
 const int alsaErrPipe = -32;
 
+/// 读写循环的连续无进展上限：XRUN 恢复（prepare）成功但设备仍
+/// 恒 -EPIPE、或单次 IO 返回 0 时计一次；超过上限即抛错走上层
+/// 降级，杜绝设备异常时泵线程在单次调用内无限空转（打磨一期）。
+const int alsaMaxStalledRetries = 10;
+
+/// 采集协商率与泵运行率是否一致（纯逻辑，可单测）：ALSA 无服务端
+/// 重采样（不像 PulseAudio），采集率与输出率不一致时泵按错率
+/// 消费样本会变速变调，必须在接管线时拦下。pumpRate<=0 表示
+/// 输出尚未初始化、无法判断，按可用处理（调用方另有兜底）。
+bool alsaRateMatches({required int negotiated, required int pumpRate}) =>
+    pumpRate <= 0 || negotiated == pumpRate;
+
 /* ---- 函数原型 ---- */
 typedef AlsaOpenNative = Int32 Function(
     Pointer<Pointer<Void>>, Pointer<Utf8>, Int32, Int32);
@@ -213,7 +225,14 @@ class AlsaLib {
       throw StateError(
           'snd_pcm_hw_params_any($device): ${lib.errorText(rc)}');
     }
-    lib.hwParamsSetAccess(pcm, params.cast(), alsaAccessRwInterleaved);
+    // access/声道是帧布局的前提：谈不拢必须当场失败，不能让
+    // apply 以单声道等形态蒙混过关——上层按交错立体声帧解释
+    // 缓冲，声道数错位即垃圾音频且无声无息（打磨一期）。
+    rc = lib.hwParamsSetAccess(pcm, params.cast(), alsaAccessRwInterleaved);
+    if (rc < 0) {
+      throw StateError(
+          'snd_pcm_hw_params_set_access($device): ${lib.errorText(rc)}');
+    }
     var format = 0;
     for (final f in formatPreference) {
       if (lib.hwParamsSetFormat(pcm, params.cast(), f) >= 0) {
@@ -225,7 +244,12 @@ class AlsaLib {
       throw StateError('snd_pcm_hw_params_set_format($device): '
           'no acceptable format in $formatPreference');
     }
-    lib.hwParamsSetChannels(pcm, params.cast(), 2);
+    rc = lib.hwParamsSetChannels(pcm, params.cast(), 2);
+    if (rc < 0) {
+      throw StateError(
+          'snd_pcm_hw_params_set_channels($device, 2): '
+          '${lib.errorText(rc)}');
+    }
     final rate = malloc<Uint32>()..value = requestedRate;
     final dir = malloc<Int32>()..value = 0;
     final period = malloc<Uint64>()..value = wantPeriod;
@@ -279,11 +303,29 @@ String resolveAlsaDevice(String raw) {
   return t.isEmpty ? 'default' : t;
 }
 
+/// 枚举名去重（纯逻辑，保序）：hint 列表里同一设备可能以不同
+/// 描述/方向条目重复出现，喂给设置页下拉前先收敛（打磨三期）。
+List<String> dedupeAlsaNames(Iterable<String> names) {
+  final seen = <String>{};
+  final out = <String>[];
+  for (final n in names) {
+    if (seen.add(n)) out.add(n);
+  }
+  return out;
+}
+
+/// hint 的 IOID 与目标方向是否匹配（纯逻辑）：IOID 缺失
+/// （null 等未标注条目）按匹配处理，不误伤双向设备。
+bool alsaHintMatchesDirection(String? ioid, {required bool capture}) {
+  if (ioid == null || ioid.isEmpty) return true;
+  return capture ? ioid == 'Input' : ioid == 'Output';
+}
+
 /// 枚举 ALSA PCM 设备名（snd_device_name_hint 的 NAME 项）。
 /// 设置页设备编辑用；失败（无 libasound 等）返回空表，不抛——
 /// 枚举只是便利，设备名始终可手填。注意 free 的指针层级：
 /// free_hint 取枚举返回的数组指针本身（A0 探针实测）。
-List<String> listAlsaPcmDeviceNames() {
+List<String> listAlsaPcmDeviceNames({bool capture = false}) {
   final names = <String>[];
   AlsaLib lib;
   try {
@@ -298,18 +340,27 @@ List<String> listAlsaPcmDeviceNames() {
     final rc = lib.deviceNameHint(-1, iface, hints);
     if (rc < 0 || hints.value == nullptr) return names;
     final key = 'NAME'.toNativeUtf8();
+    final ioKey = 'IOID'.toNativeUtf8();
     try {
       var p = hints.value;
       while (p.value != nullptr) {
         final n = lib.deviceNameGetHint(p.value, key);
         if (n != nullptr) {
           final s = n.toDartString();
-          if (s.isNotEmpty) names.add(s);
+          // 按方向过滤：采集字段只列可采集的设备（IOID=Input），
+          // 输出字段只列可播放的（IOID=Output），未标注不误伤。
+          final io = lib.deviceNameGetHint(p.value, ioKey);
+          final ioid = io == nullptr ? null : io.toDartString();
+          if (s.isNotEmpty &&
+              alsaHintMatchesDirection(ioid, capture: capture)) {
+            names.add(s);
+          }
         }
         p++;
       }
     } finally {
       malloc.free(key);
+      malloc.free(ioKey);
     }
     lib.deviceNameFreeHint(hints.value);
   } catch (e, st) {
@@ -319,5 +370,5 @@ List<String> listAlsaPcmDeviceNames() {
     malloc.free(iface);
     malloc.free(hints);
   }
-  return names;
+  return dedupeAlsaNames(names);
 }

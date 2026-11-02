@@ -60,7 +60,7 @@ dll.auradsp_plugin_slot_task_state.argtypes = [ctypes.c_void_p, ctypes.c_int]
 
 
 def hosts_for_parent(parent_pid):
-    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe', 'auradsp_plugin_host.exe') } | "
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe') } | "
               "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
     # errors="replace": taskkill/PowerShell emit locale-encoded (cp936) text on
     # Chinese Windows; the reader thread must not die on undecodable bytes.
