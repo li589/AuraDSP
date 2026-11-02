@@ -88,3 +88,10 @@ test/data/*.B.wav
 *.log
 docs/forensics/**/tombstone_*.txt
 docs/forensics/**/logcat_*.txt
+
+# --- 插件开发与测试用第三方/临时插件二进制（避免大文件入库） ---
+test/clap/
+test/vst/
+test/plugins/
+test/smoke/*.clap
+core/desktop/windows/build-x86/

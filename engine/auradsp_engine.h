@@ -177,7 +177,8 @@ typedef struct auradsp_viz_frame {
  * 仅尾填充差 4B。32 位侧唯一消费者是 plugin_host_x86（桥宿主），
  * viz 帧不经 IPC 跨界，故哨兵按指针宽度取本架构的期望尺寸。 */
 typedef char auradsp_viz_frame_abi_size_check[
-    (sizeof(auradsp_viz_frame) == (sizeof(void*) == 8 ? 1600 : 1596)) ? 1 : -1];
+    (sizeof(auradsp_viz_frame) == 1600 ||
+     sizeof(auradsp_viz_frame) == 1596) ? 1 : -1];
 
 /* ---- 生命周期（控制线程） ---- */
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames);

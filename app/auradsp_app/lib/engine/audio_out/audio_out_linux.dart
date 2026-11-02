@@ -20,6 +20,7 @@
 // FFI 说明：libpulse-simple 只在 init 时打开（构造零副作用），结构体与
 // 函数原型在 pulse_simple_ffi.dart 单源定义；pa_strerror 在 libpulse
 // 中，单独打开。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -71,7 +72,8 @@ class _PulseLib {
   String errorText(int code) {
     try {
       return _strerror(code).toDartString();
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return 'pa error $code';
     }
   }
@@ -245,8 +247,9 @@ class PulseAudioOut implements AudioOut {
         final pErr = malloc<Int32>();
         _lib!._drain(_stream, pErr);
         malloc.free(pErr);
-      } catch (_) {
-        // 释放路径尽力而为，异常不外抛。
+      } catch (e, st) {
+        // swallow: 释放路径尽力而为，异常不外抛。
+        swallow(e, st);
       }
       _lib!._free(_stream);
       _stream = nullptr;

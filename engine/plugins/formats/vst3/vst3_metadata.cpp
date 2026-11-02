@@ -207,6 +207,20 @@ bool queryVst3Metadata(const std::string& bundlePath,
 
     bool success = false;
     try {
+#if defined(_WIN32)
+        typedef bool (PLUGIN_API *InitDllFunc)();
+        typedef bool (PLUGIN_API *ExitDllFunc)();
+        auto initDll = reinterpret_cast<InitDllFunc>(
+            platform::module_symbol(module, "InitDll"));
+        if (initDll) initDll();
+#elif !defined(__APPLE__)
+        typedef bool (*ModuleEntryFunc)(void*);
+        typedef bool (*ModuleExitFunc)();
+        auto moduleEntry = reinterpret_cast<ModuleEntryFunc>(
+            platform::module_symbol(module, "ModuleEntry"));
+        if (moduleEntry) moduleEntry(module);
+#endif
+
         typedef Steinberg::IPluginFactory* (PLUGIN_API *GetFactoryFunc)();
         auto getFactory = reinterpret_cast<GetFactoryFunc>(
             platform::module_symbol(module, "GetPluginFactory"));
@@ -219,10 +233,11 @@ bool queryVst3Metadata(const std::string& bundlePath,
                 factory->queryInterface(Steinberg::IPluginFactory3::iid, reinterpret_cast<void**>(&factory3));
 
                 Steinberg::int32 classCount = factory->countClasses();
+                const int binBitness = pluginBinaryBitness(wpath);
                 for (Steinberg::int32 i = 0; i < classCount; ++i) {
                     PluginMetadata meta;
                     meta.path = bundlePath;
-                    meta.is64Bit = true;
+                    meta.is64Bit = (binBitness == 64);
                     meta.isCompatible = true;
                     if (applyVstAudioEffectClass(meta, factory, factory2, factory3, i, wpath, bundlePath)) {
                         outPlugins.push_back(meta);
@@ -232,8 +247,18 @@ bool queryVst3Metadata(const std::string& bundlePath,
 
                 if (factory3) factory3->release();
                 if (factory2) factory2->release();
+                factory->release();
             }
         }
+#if defined(_WIN32)
+        auto exitDll = reinterpret_cast<ExitDllFunc>(
+            platform::module_symbol(module, "ExitDll"));
+        if (exitDll) exitDll();
+#elif !defined(__APPLE__)
+        auto moduleExit = reinterpret_cast<ModuleExitFunc>(
+            platform::module_symbol(module, "ModuleExit"));
+        if (moduleExit) moduleExit();
+#endif
     } catch (...) {
         success = false;
     }

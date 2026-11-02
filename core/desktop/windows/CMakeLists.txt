@@ -200,12 +200,18 @@ set_property(TARGET auradsp_engine PROPERTY WINDOWS_EXPORT_ALL_SYMBOLS OFF)
 target_link_libraries(auradsp_engine PRIVATE version)
 
 if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
-    add_executable(auradsp_plugin_host
+    if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(HOST_EXE_TARGET_NAME "plugin_host_x86")
+    else()
+        set(HOST_EXE_TARGET_NAME "plugin_host_x64")
+    endif()
+
+    add_executable(${HOST_EXE_TARGET_NAME}
         "${API}/plugins/platform/win32/host/auradsp_plugin_host_main.cpp"
         "${API}/plugins/platform/win32/host/plugin_shared_region.cpp"
         ${AURADSP_PLUGIN_HOST_SOURCES}
     )
-    target_include_directories(auradsp_plugin_host PRIVATE
+    target_include_directories(${HOST_EXE_TARGET_NAME} PRIVATE
         "${API}"
         "${API}/plugins/api"
         "${API}/plugins/driver"
@@ -213,16 +219,32 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/plugins/platform/win32"
         "${PLUGIN_API}"
     )
-    target_compile_definitions(auradsp_plugin_host PRIVATE
+    target_compile_definitions(${HOST_EXE_TARGET_NAME} PRIVATE
         NDEBUG
         _CRT_SECURE_NO_WARNINGS
         AURADSP_HOST_INPROC=1
     )
-    target_compile_options(auradsp_plugin_host PRIVATE /utf-8 /W1 /EHsc)
-    set_property(TARGET auradsp_plugin_host PROPERTY CXX_STANDARD 20)
-    set_property(TARGET auradsp_plugin_host PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
+    target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHsc)
+    set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY CXX_STANDARD 20)
+    set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     # R1：plugin_scanner.cpp 用 <filesystem> → 必须带 Win7 CreateFile2 回退。
-    target_link_libraries(auradsp_plugin_host PRIVATE auradsp_wincompat version)
+    target_link_libraries(${HOST_EXE_TARGET_NAME} PRIVATE auradsp_wincompat version)
+
+    # 历史目标名兼容与产物别名（双宿主阶段定案）：
+    # 64 位构建产出 plugin_host_x64.exe，并在输出目录保留 auradsp_plugin_host.exe 兼容副本；
+    # 32 位构建产出 plugin_host_x86.exe。
+    # 保留 auradsp_plugin_host 自定义目标，使旧构建脚本中的 --target auradsp_plugin_host 仍有效。
+    if(NOT TARGET auradsp_plugin_host)
+        add_custom_target(auradsp_plugin_host ALL DEPENDS ${HOST_EXE_TARGET_NAME})
+    endif()
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_custom_command(TARGET ${HOST_EXE_TARGET_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:${HOST_EXE_TARGET_NAME}>
+                $<TARGET_FILE_DIR:${HOST_EXE_TARGET_NAME}>/auradsp_plugin_host.exe
+            COMMENT "Creating legacy auradsp_plugin_host.exe compatibility copy"
+        )
+    endif()
 endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 # CP-02：三个插件测试 EXE 直接编译 AURADSP_PLUGIN_HOST_SOURCES，裁剪构建不产出。

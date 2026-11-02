@@ -60,7 +60,7 @@ dll.auradsp_plugin_slot_task_state.argtypes = [ctypes.c_void_p, ctypes.c_int]
 
 
 def hosts_for_parent(parent_pid):
-    script = ("Get-CimInstance Win32_Process -Filter \"Name='auradsp_plugin_host.exe'\" | "
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe', 'auradsp_plugin_host.exe') } | "
               "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
     # errors="replace": taskkill/PowerShell emit locale-encoded (cp936) text on
     # Chinese Windows; the reader thread must not die on undecodable bytes.
@@ -291,7 +291,7 @@ assert_processing(out, src, "[4c] async replacement")
 
 print("=== [5] host process exists as child ===")
 hosts = hosts_for_parent(os.getpid())
-assert hosts, "auradsp_plugin_host.exe child not found"
+assert hosts, "plugin host child not found"
 host_pid = hosts[0]
 print(f"host pid: {host_pid}")
 

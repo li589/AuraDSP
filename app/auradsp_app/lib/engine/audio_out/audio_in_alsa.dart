@@ -13,6 +13,7 @@
 //     （与 PA 采集同口径）；
 //   - 格式按协商结果解释缓冲（float32 直读 / s16 反量化），
 //     这是 A0 探针的明确教训（按错格式读会得到垃圾值）。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -117,8 +118,9 @@ class AlsaAudioIn {
     if (_pcm != nullptr && _lib != null) {
       try {
         _lib!.close(_pcm);
-      } catch (_) {
-        // 释放路径尽力而为。
+      } catch (e, st) {
+        // swallow: 释放路径尽力而为。
+        swallow(e, st);
       }
       _pcm = nullptr;
     }

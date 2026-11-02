@@ -135,8 +135,9 @@ class MprisProvider implements MediaSessionProvider {
             : Duration(microseconds: posUs),
         isPlaying: status == 'Playing',
       );
-    } catch (_) {
-      // 单个播放器读取失败（刚退出等）不拖垮整轮枚举。
+    } catch (e, st) {
+      // swallow: 单个播放器读取失败（刚退出等）不拖垮整轮枚举。
+      swallow(e, st);
       return null;
     }
   }

@@ -11,6 +11,7 @@
 //     取字节数再 malloc，禁止假设结构体布局；
 //   - snd_device_name_free_hint 取的是枚举返回的数组指针本身
 //     （void**），且符号名是 free_hint（不是 hint_free）。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 
 import 'package:ffi/ffi.dart';
@@ -169,7 +170,8 @@ class AlsaLib {
   String errorText(int code) {
     try {
       return strerror(code).toDartString();
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return 'alsa error $code';
     }
   }
@@ -262,7 +264,7 @@ class AlsaLib {
       malloc.free(period);
       malloc.free(buffer);
     }
-  } catch (_) {
+  } catch (e) {
     lib.close(pcm);
     rethrow;
   } finally {
@@ -286,7 +288,8 @@ List<String> listAlsaPcmDeviceNames() {
   AlsaLib lib;
   try {
     lib = AlsaLib.load();
-  } catch (_) {
+  } catch (e, st) {
+    swallow(e, st);
     return names;
   }
   final hints = malloc<Pointer<Pointer<Void>>>();
@@ -309,8 +312,9 @@ List<String> listAlsaPcmDeviceNames() {
       malloc.free(key);
     }
     lib.deviceNameFreeHint(hints.value);
-  } catch (_) {
-    // 枚举中途异常：返回已收集部分（尽力而为的便利功能）。
+  } catch (e, st) {
+    // swallow: 枚举中途异常：返回已收集部分（尽力而为的便利功能）。
+    swallow(e, st);
   } finally {
     malloc.free(iface);
     malloc.free(hints);

@@ -386,8 +386,9 @@ abstract final class ConfigManager {
         } else {
           File(src).renameSync(dst);
         }
-      } catch (_) {
-        // 迁移失败不阻塞启动：该条目从空开始，旧数据仍在配置根。
+      } catch (e, st) {
+        // swallow: 迁移失败不阻塞启动：该条目从空开始，旧数据仍在配置根。
+        swallow(e, st);
       }
     }
   }

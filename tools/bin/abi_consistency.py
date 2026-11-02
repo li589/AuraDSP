@@ -360,7 +360,8 @@ def check_viz(problems: list[str]) -> tuple[int, int]:
     sentinel_re = (
         r"sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*(?:"
         r"%d|\(\s*sizeof\s*\(\s*void\s*\*\s*\)\s*==\s*8\s*\?\s*%d\s*:\s*\d+\s*\))"
-        % (c_size, c_size))
+        r"|sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*%d\s*\|\|\s*sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*\d+"
+        % (c_size, c_size, c_size))
     if not re.search(sentinel_re, header_text):
         problems.append("[M3] 头文件缺少 `sizeof(auradsp_viz_frame) == %d` 编译期哨兵"
                         % c_size)

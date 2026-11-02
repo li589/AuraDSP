@@ -21,6 +21,7 @@
 //   - PipeWire 系统上 hw: 设备可能被会话管理器占用（open 失败
 //     会以 EBUSY 文案明确呈现，不做静默回退——专家模式要的就是
 //     确定性，失败原因必须可见）。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -219,7 +220,10 @@ class AlsaAudioOut implements AudioOut {
     if (_pcm != nullptr && _lib != null) {
       try {
         _lib!.drop(_pcm);
-      } catch (_) {}
+      } catch (e, st) {
+        // swallow: 释放路径尽力而为。
+        swallow(e, st);
+      }
       _lib!.close(_pcm);
       _pcm = nullptr;
     }

@@ -51,6 +51,8 @@ def platform_layout():
         drivers_src = ROOT / "core/desktop/windows-drivers/out/Release"
         sources = [
             (engine_src, "auradsp_engine.dll"),
+            (engine_src, "plugin_host_x64.exe"),
+            (engine_src, "plugin_host_x86.exe"),
             (engine_src, "auradsp_plugin_host.exe"),
             (drivers_src, "auravm_bridge.dll"),
             (drivers_src, "auraasio_bridge.dll"),
@@ -66,7 +68,11 @@ def platform_layout():
         return sources, targets, dedicated, "AuraDSP-Windows-x64"
     if sys.platform.startswith("linux"):
         engine_src = ROOT / "core/desktop/linux/out/Release"
-        sources = [(engine_src, "libauradsp_engine.so")]
+        sources = [
+            (engine_src, "libauradsp_engine.so"),
+            (engine_src, "plugin_host_x64"),
+            (engine_src, "plugin_host_x86"),
+        ]
         targets = [
             ROOT / "test",
             ROOT / "app/auradsp_app/build/linux/x64/release/bundle/lib",

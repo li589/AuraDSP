@@ -61,13 +61,19 @@ public:
             return false;
         }
         std::wstring wpath = utf8ToWide(binaryPath);
-        // D2：is64Bit 由 PE 头判定，不再硬编码 true。32 位在 LoadLibrary 前
-        // 明确拒绝——x64 进程加载 32 位 DLL 必然 ERROR_BAD_EXE_FORMAT(193)，
-        // 旧实现只报 "Failed to load CLAP library: 193"，用户无法判断是架构问题。
-        m_meta.is64Bit = peIs64Bit(wpath);
-        if (!m_meta.is64Bit) {
+        // 位数判定与架构匹配（支持 64 位与 32 位双宿主）：
+        // 本进程按 sizeof(void*) 确定自身架构（64 位或 32 位位桥）。
+        // 目标二进制通过 pluginBinaryBitness 判定（PE/ELF 头解析）。
+        const int hostBitness = (sizeof(void*) == 8) ? 64 : 32;
+        const int binBitness = pluginBinaryBitness(wpath);
+        m_meta.is64Bit = (binBitness == 64);
+        if (binBitness != 0 && binBitness != hostBitness) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+            if (hostBitness == 64) {
+                m_meta.errorMessage = "32 位插件无法在 64 位宿主加载：请使用 32 位位桥宿主";
+            } else {
+                m_meta.errorMessage = "64 位插件无法在 32 位位桥宿主加载";
+            }
             return false;
         }
         m_module = platform::module_open_utf8(binaryPath.c_str());

@@ -87,10 +87,11 @@ std::wstring moduleDirectory() {
 std::wstring hostExecutablePath(HostArch arch) {
     const std::wstring dir = moduleDirectory();
     if (dir.empty()) return {};
-    // X86 桥宿主按双宿主架构新命名；X64 暂保留现行发布名
-    // auradsp_plugin_host.exe（改名为 plugin_host_x64.exe 由
-    // Windows 侧发布流程统一切换，届时此处同步）。
+    // X86 桥宿主按双宿主架构新命名；X64 优先使用新标准名 plugin_host_x64.exe，
+    // 若不存在则回退兼容旧称 auradsp_plugin_host.exe。
     if (arch == HostArch::X86) return dir + L"\\plugin_host_x86.exe";
+    const std::wstring p64 = dir + L"\\plugin_host_x64.exe";
+    if (GetFileAttributesW(p64.c_str()) != INVALID_FILE_ATTRIBUTES) return p64;
     return dir + L"\\auradsp_plugin_host.exe";
 }
 

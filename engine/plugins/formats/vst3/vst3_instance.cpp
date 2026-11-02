@@ -549,12 +549,17 @@ public:
             return false;
         }
         std::wstring wpath = utf8ToWide(binaryPath);
-        // D2：is64Bit 由 PE 头判定（不再硬编码）；32 位明确拒绝并给出可读原因，
-        // 而不是把 ERROR_BAD_EXE_FORMAT(193) 原样抛给用户。
-        m_meta.is64Bit = peIs64Bit(wpath);
-        if (!m_meta.is64Bit) {
+        // 位数判定与架构匹配（支持 64 位与 32 位双宿主）：
+        const int hostBitness = (sizeof(void*) == 8) ? 64 : 32;
+        const int binBitness = pluginBinaryBitness(wpath);
+        m_meta.is64Bit = (binBitness == 64);
+        if (binBitness != 0 && binBitness != hostBitness) {
             m_meta.isCompatible = false;
-            m_meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+            if (hostBitness == 64) {
+                m_meta.errorMessage = "32 位插件无法在 64 位宿主加载：请使用 32 位位桥宿主";
+            } else {
+                m_meta.errorMessage = "64 位插件无法在 32 位位桥宿主加载";
+            }
             return false;
         }
         m_module = platform::module_open_utf8(binaryPath.c_str());
@@ -601,6 +606,23 @@ public:
 
         std::string initErr;
         bool taskRan = m_pump->postTaskAndWait([&]() {
+#if defined(_WIN32)
+            typedef bool (PLUGIN_API *InitDllFunc)();
+            auto initDll = reinterpret_cast<InitDllFunc>(
+                platform::module_symbol(m_module, "InitDll"));
+            if (initDll && !initDll()) {
+                initErr = "InitDll returned false";
+                return;
+            }
+#elif !defined(__APPLE__)
+            typedef bool (*ModuleEntryFunc)(void*);
+            auto moduleEntry = reinterpret_cast<ModuleEntryFunc>(
+                platform::module_symbol(m_module, "ModuleEntry"));
+            if (moduleEntry && !moduleEntry(m_module)) {
+                initErr = "ModuleEntry returned false";
+                return;
+            }
+#endif
             m_factory = getFactory();
             if (!m_factory) {
                 initErr = "GetPluginFactory returned null";
@@ -768,6 +790,21 @@ public:
                 m_threadAbandoned.store(true, std::memory_order_release);
                 return false;
             }
+            if (m_factory) {
+                m_factory->release();
+                m_factory = nullptr;
+            }
+#if defined(_WIN32)
+            typedef bool (PLUGIN_API *ExitDllFunc)();
+            auto exitDll = reinterpret_cast<ExitDllFunc>(
+                platform::module_symbol(m_module, "ExitDll"));
+            if (exitDll) exitDll();
+#elif !defined(__APPLE__)
+            typedef bool (*ModuleExitFunc)();
+            auto moduleExit = reinterpret_cast<ModuleExitFunc>(
+                platform::module_symbol(m_module, "ModuleExit"));
+            if (moduleExit) moduleExit();
+#endif
             // init 正常返回错误：线程健康，先释放共享泵引用再卸载模块。
             m_pump.reset();
             platform::module_close(m_module);
@@ -826,7 +863,21 @@ public:
                     m_component->release();
                     m_component = nullptr;
                 }
-                m_factory = nullptr;
+                if (m_factory) {
+                    m_factory->release();
+                    m_factory = nullptr;
+                }
+#if defined(_WIN32)
+                typedef bool (PLUGIN_API *ExitDllFunc)();
+                auto exitDll = reinterpret_cast<ExitDllFunc>(
+                    platform::module_symbol(m_module, "ExitDll"));
+                if (exitDll) exitDll();
+#elif !defined(__APPLE__)
+                typedef bool (*ModuleExitFunc)();
+                auto moduleExit = reinterpret_cast<ModuleExitFunc>(
+                    platform::module_symbol(m_module, "ModuleExit"));
+                if (moduleExit) moduleExit();
+#endif
             }, 3000);
             if (!destroyed) {
                 AURADSP_WARN("[DBG VST3 unload] WARNING: main thread unresponsive; quarantining instance");

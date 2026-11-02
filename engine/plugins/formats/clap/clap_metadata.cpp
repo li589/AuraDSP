@@ -130,7 +130,8 @@ bool queryClapMetadata(const std::string& bundlePath,
                     if (!d) continue;
                     PluginMetadata meta;
                     meta.path = bundlePath;
-                    meta.is64Bit = true;
+                    const int binBitness = pluginBinaryBitness(wpath);
+                    meta.is64Bit = (binBitness == 64);
                     meta.isCompatible = true;
                     applyClapDescriptor(meta, d, wpath, bundlePath);
                     outPlugins.push_back(meta);

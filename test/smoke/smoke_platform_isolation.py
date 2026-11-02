@@ -303,7 +303,6 @@ def cmake_layering():
           any("AURADSP_NO_PLUGINS" in b for b in no_plug_blocks),
           "OFF 分支未定义 AURADSP_NO_PLUGINS")
     targets_with_host_src = (
-        "auradsp_plugin_host",
         "test_plugin_direct", "test_plugin_chain", "test_host_quarantine",
     )
     for tgt in targets_with_host_src:
@@ -312,6 +311,12 @@ def cmake_layering():
         check(f"R6 {tgt} 编入 AURADSP_PLUGIN_HOST_SOURCES",
               "${AURADSP_PLUGIN_HOST_SOURCES}" in call,
               f"{tgt} 目标定义块未引用插件共享源表")
+
+    host_call = _cmake_call_block(
+        src, r"(?:add_library|add_executable)\s*\(\s*(?:\$\{HOST_EXE_TARGET_NAME\}|auradsp_plugin_host|plugin_host_x64|plugin_host_x86)")
+    check("R6 auradsp_plugin_host 编入 AURADSP_PLUGIN_HOST_SOURCES",
+          bool(host_call) and "${AURADSP_PLUGIN_HOST_SOURCES}" in host_call,
+          "宿主目标定义块未引用插件共享源表")
 
     # 4. REMOTE=OFF 分支自洽：清空 remote 源（源表级）+ 引擎 INPROC 门控，
     #    两处 NOT 分支都要覆盖；ON 块内构建宿主且仅在块内定义。

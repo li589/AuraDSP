@@ -84,6 +84,7 @@ PLATFORM_WINDOWS = {
     "smoke_plugin_channels.py",
     "smoke_plugin_metadata.py",
     "smoke_plugin_arch_detect.py",
+    "smoke_win32_plugin_host.py",
     "smoke_multislot_and_stages.py",
     "smoke_cross_mode_consistency.py",
     "smoke_plugin_prime_no_double_send.py",
@@ -245,6 +246,7 @@ def run_smoke_tests():
         "smoke_plugin_channels.py",
         "smoke_plugin_metadata.py",
         "smoke_plugin_arch_detect.py",
+    "smoke_win32_plugin_host.py",
         "smoke_multislot_and_stages.py",
         # E9 跨模式一致性（进程内 vs 进程外逐位比对）。历史：建门禁时对 HEAD
         # 报红抓出 E12 P0（missStreak 自毁）；E12/E13 修复后转绿，现为常驻

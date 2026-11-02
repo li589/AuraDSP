@@ -177,7 +177,9 @@ class LinuxModeController {
     String? defaultSink;
     try {
       driverLoaded = _service.asoundLoopbackLoaded();
-    } catch (_) {}
+    } catch (e, st) {
+      swallow(e, st);
+    }
     try {
       // sink/source 名单与默认 sink 一次会话取齐（probeNames，审查 F3）：
       // 原先多次独立查询各开一条 pa_context 会话，服务端异常时超时翻倍。
@@ -191,7 +193,9 @@ class LinuxModeController {
           break;
         }
       }
-    } catch (_) {}
+    } catch (e, st) {
+      swallow(e, st);
+    }
     return {
       'evt': 'linuxstatus',
       'mode': _mode,
