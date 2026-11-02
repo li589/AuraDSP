@@ -19,6 +19,7 @@ import 'package:ffi/ffi.dart';
 import 'auradsp_ffi.dart';
 import 'audio_out/audio_out.dart';
 import 'audio_out/audio_out_wasapi.dart';
+import 'audio_out/alsa_ffi.dart';
 import 'audio_out/audio_in_alsa.dart';
 import 'audio_out/audio_in_linux.dart';
 import 'audio_out/pulse_context.dart';

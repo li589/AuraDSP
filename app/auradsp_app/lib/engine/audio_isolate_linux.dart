@@ -164,6 +164,16 @@ class LinuxModeController {
         alsaCaptureDevice.trim().isEmpty ? 'hw:Loopback' : alsaCaptureDevice;
     final input = AlsaAudioIn();
     input.open(device: device, rate: _deviceRate());
+    // ALSA 无服务端重采样：协商率与泵运行率（输出率）不一致时
+    // 按错率消费会变速变调——当场落败（外层给本路径专属 note），
+    // 不让错误静默进管线（打磨一期）。
+    if (!alsaRateMatches(
+        negotiated: input.sampleRate, pumpRate: _deviceRate())) {
+      final got = input.sampleRate;
+      input.close();
+      throw StateError('ALSA capture rate mismatch: $device negotiated '
+          '$got Hz but the pump runs at ${_deviceRate()} Hz');
+    }
     final cap = AlsaCaptureSource(input);
     _capture = cap;
     _setSource(cap);

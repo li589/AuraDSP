@@ -165,6 +165,7 @@ class AlsaAudioOut implements AudioOut {
       }
     }
     var offset = 0;
+    var stalls = 0;
     while (offset < frames) {
       // Pointer 算术：按字节地址偏移重建（dart:ffi 无指针偏移
       // 运算符的通用形式）。
@@ -172,9 +173,19 @@ class AlsaAudioOut implements AudioOut {
           _pcm,
           Pointer<Void>.fromAddress(stage.address + offset * _bytesPerFrame),
           frames - offset);
-      if (w >= 0) {
+      if (w > 0) {
         offset += w;
+        stalls = 0;
         continue;
+      }
+      if (w == 0 || w == alsaErrPipe) {
+        // 无进展（0 写或欠载恢复）：计数设上限，设备异常时不让
+        // 本次 write 无限空转（打磨一期，alsaMaxStalledRetries）。
+        if (++stalls > alsaMaxStalledRetries) {
+          throw StateError('snd_pcm_writei($_device) stalled: '
+              'no progress after $alsaMaxStalledRetries recoveries');
+        }
+        if (w == 0) continue;
       }
       if (w == alsaErrPipe) {
         // 欠载：prepare 后续写本块剩余部分（数据不丢，只补静默缺口
