@@ -60,7 +60,7 @@ SWP_NOACTIVATE = 0x0010
 
 
 def hosts_for_parent(parent_pid):
-    script = ("Get-CimInstance Win32_Process -Filter \"Name='auradsp_plugin_host.exe'\" | "
+    script = ("Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('plugin_host_x64.exe', 'plugin_host_x86.exe', 'auradsp_plugin_host.exe') } | "
               "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
     result = subprocess.run(["powershell", "-NoProfile", "-Command", script],
                             capture_output=True, text=True, timeout=20)
@@ -178,7 +178,7 @@ try:
     assert wait_editor_state(h, True), "editor never reported open"
 
     host_pid = wait_host()
-    assert host_pid, "auradsp_plugin_host.exe child not found"
+    assert host_pid, "plugin host child not found"
     container = find_window_for_pid(CONTAINER_CLASS, host_pid)
     assert container, f"container {CONTAINER_CLASS} not found in host pid {host_pid}"
     assert pid_of(container) == host_pid, "container is not owned by the host process"

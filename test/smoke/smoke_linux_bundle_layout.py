@@ -36,6 +36,17 @@ def main():
 
     check(has("auradsp_app"), "可执行文件 auradsp_app 在位")
     check(has("lib", "libauradsp_engine.so"), "lib/ 内引擎 .so 在位")
+    check(has("lib", "plugin_host_x64"),
+          "lib/ 内进程外插件宿主 plugin_host_x64 在位（双宿主架构）")
+    # x86 桥宿主：引擎产物目录有它时 bundle 必须同梱（构建未开
+    # multilib 开关时缺位合法，不作硬性要求）。
+    engine_out = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(
+            os.path.abspath(__file__)))),
+        "core", "desktop", "linux", "out", "Release", "plugin_host_x86")
+    if os.path.exists(engine_out):
+        check(has("lib", "plugin_host_x86"),
+              "lib/ 内 32 位桥宿主 plugin_host_x86 在位（产物已构建）")
     check(has("lib", "libflutter_linux_gtk.so"), "Flutter 运行时在位")
     check(has("resources", "manifest.json"), "resources/manifest.json 在位")
     check(has("resources", "ddc"), "resources/ddc/ 在位")

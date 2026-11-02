@@ -10,6 +10,7 @@
 //   - 失败抛 StateError（pa_strerror 文案），由上层 PulseCaptureSource
 //     吞掉转静音并标记失效（采集断了不该掀翻整个泵，与输出侧降级同口径）；
 //   - 采样率/声道与输出侧同口径：FLOAT32LE / 2 声道 / 流率协商。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 import 'dart:typed_data';
 
@@ -58,7 +59,8 @@ class PulseAudioIn {
   String _errorText(int code) {
     try {
       return _strerror(code).toDartString();
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return 'pa error $code';
     }
   }
@@ -131,8 +133,9 @@ class PulseAudioIn {
     if (_stream != nullptr) {
       try {
         _free(_stream);
-      } catch (_) {
-        // 释放路径尽力而为。
+      } catch (e, st) {
+        // swallow: 释放路径尽力而为。
+        swallow(e, st);
       }
       _stream = nullptr;
     }

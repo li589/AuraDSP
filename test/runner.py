@@ -56,6 +56,10 @@ PLATFORM_LINUX = {
     "smoke_linux_virtual_sink.py",
     # S5a 真机补强（2026-11-02）：snd-aloop 加载后验证 driver 回环采集链路。
     "smoke_linux_driver_loopback.py",
+    # 二期 A3（2026-11-02）：ALSA 专家模式源码不变量 + libasound 活体契约。
+    "smoke_linux_alsa_backend.py",
+    # 二期插件阶段四（2026-11-02）：插件宿主源码不变量 + CLAP 全链活体。
+    "smoke_linux_plugin_host.py",
 }
 
 PLATFORM_WINDOWS = {
@@ -80,6 +84,7 @@ PLATFORM_WINDOWS = {
     "smoke_plugin_channels.py",
     "smoke_plugin_metadata.py",
     "smoke_plugin_arch_detect.py",
+    "smoke_win32_plugin_host.py",
     "smoke_multislot_and_stages.py",
     "smoke_cross_mode_consistency.py",
     "smoke_plugin_prime_no_double_send.py",
@@ -241,6 +246,7 @@ def run_smoke_tests():
         "smoke_plugin_channels.py",
         "smoke_plugin_metadata.py",
         "smoke_plugin_arch_detect.py",
+    "smoke_win32_plugin_host.py",
         "smoke_multislot_and_stages.py",
         # E9 跨模式一致性（进程内 vs 进程外逐位比对）。历史：建门禁时对 HEAD
         # 报红抓出 E12 P0（missStreak 自毁）；E12/E13 修复后转绿，现为常驻
@@ -373,6 +379,12 @@ def run_smoke_tests():
         # S5a 真机补强（2026-11-02）：driver 模式 snd-aloop 回环采集链路；
         # 模块未加载或无回环设备时自 SKIP。
         "smoke_linux_driver_loopback.py",
+        # 二期 A3（2026-11-02）：ALSA 专家模式——源码不变量 + libasound
+        # 对 null 设备的活体契约（协商/writei/readi/delay/缺设备错误面）。
+        "smoke_linux_alsa_backend.py",
+        # 二期插件阶段四（2026-11-02）：插件宿主——posix 平台层/App 接线
+        # 源码不变量 + 现场编译 CLAP 资产经 C ABI 全链活体断言。
+        "smoke_linux_plugin_host.py",
         "smoke_sync_artifacts_tool.py",
         "smoke_ci_workflow.py",
         # S5b：XDG 配置/数据目录拆分守护（XDG 变量、HOME 回退、迁移清单）。

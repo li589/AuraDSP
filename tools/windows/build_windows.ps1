@@ -27,6 +27,7 @@ param(
     [switch]$SkipEngine = $false,
     [switch]$SkipDrivers = $false,
     [switch]$SkipFlutter = $false,
+    [switch]$SkipHostX86 = $false,
     [switch]$Force = $true
 )
 
@@ -104,11 +105,26 @@ if (-not $SkipEngine) {
     Write-Host "  -> 核心引擎就绪: auradsp_engine.dll ($([math]::Round($EngineSize / 1MB, 2)) MB)" -ForegroundColor Green
 
     if ($HostRemote) {
-        $PluginHostExe = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
-        if (-not (Test-Path $PluginHostExe)) {
+        $PluginHostExe = Join-Path $EngineOutDir "$BuildType\plugin_host_x64.exe"
+        $PluginHostLegacy = Join-Path $EngineOutDir "$BuildType\auradsp_plugin_host.exe"
+        if (-not (Test-Path $PluginHostExe) -and -not (Test-Path $PluginHostLegacy)) {
             throw "插件宿主编译完成但未找到产物: $PluginHostExe"
         }
-        Write-Host "  -> 进程外插件宿主就绪: auradsp_plugin_host.exe" -ForegroundColor Green
+        Write-Host "  -> 64 位插件宿主就绪: plugin_host_x64.exe (及兼容副本 auradsp_plugin_host.exe)" -ForegroundColor Green
+
+        # 双宿主架构：编译 32 位位桥宿主 plugin_host_x86.exe
+        if (-not $SkipHostX86) {
+            Write-Host "  配置与编译 32 位位桥插件宿主 (plugin_host_x86.exe)..."
+            $X86BuildDir = Join-Path $ProjectRoot "core\desktop\windows\build-x86"
+            if (-not (Test-Path $X86BuildDir)) {
+                cmake -S (Join-Path $ProjectRoot "core\desktop\windows") -B $X86BuildDir -G "Visual Studio 18 2026" -A Win32 | Out-Null
+            }
+            cmake --build $X86BuildDir --config $BuildType --target plugin_host_x86
+            $PluginHostX86Exe = Join-Path $EngineOutDir "$BuildType\plugin_host_x86.exe"
+            if (Test-Path $PluginHostX86Exe) {
+                Write-Host "  -> 32 位位桥插件宿主就绪: plugin_host_x86.exe" -ForegroundColor Green
+            }
+        }
     } else {
         Write-Host "  -> AURADSP_PLUGIN_HOST_REMOTE=OFF：跳过进程外插件宿主（引擎走进程内路径）" -ForegroundColor DarkGray
     }

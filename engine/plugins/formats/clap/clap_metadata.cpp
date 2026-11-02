@@ -5,7 +5,9 @@
 #include "win32_util.h"
 
 #include <clap/clap.h>
+#if defined(_WIN32)
 #include <windows.h>
+#endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供（二期阶段一）
 
 #include <algorithm>
 #include <filesystem>
@@ -128,7 +130,8 @@ bool queryClapMetadata(const std::string& bundlePath,
                     if (!d) continue;
                     PluginMetadata meta;
                     meta.path = bundlePath;
-                    meta.is64Bit = true;
+                    const int binBitness = pluginBinaryBitness(wpath);
+                    meta.is64Bit = (binBitness == 64);
                     meta.isCompatible = true;
                     applyClapDescriptor(meta, d, wpath, bundlePath);
                     outPlugins.push_back(meta);

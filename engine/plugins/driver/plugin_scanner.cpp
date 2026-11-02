@@ -279,12 +279,39 @@ PluginHostManager::PluginHostManager() {
     m_remoteClient = std::make_shared<PluginHostClient>();
     if (m_remoteClient->start()) {
         m_remoteMode = true;
+        // 双宿主：x86 桥客户端同门启动（start 只查环境与宿主在位，
+        // 不拉起进程）；缺宿主时保持空指针，路由自动回落 x64。
+        auto x86 = std::make_shared<PluginHostClient>(HostArch::X86);
+        if (x86->start()) {
+            m_remoteClientX86 = std::move(x86);
+        }
     } else {
         m_remoteClient.reset();
         m_remoteMode = false;
     }
 #endif
 }
+
+#ifndef AURADSP_HOST_INPROC
+std::shared_ptr<PluginHostClient> PluginHostManager::remoteClientFor(
+        const std::string& path) {
+    // 双宿主分派：仅当 x86 桥客户端就绪且目标二进制确证为 32 位
+    // 时走桥；位数未知/64 位/桥缺位一律 x64 客户端（单宿主时代
+    // 的原行为）。bundle 路径先经驱动 resolveBinary 落到真实
+    // 二进制再探测（与进程内分支的解析口径一致）。
+    if (m_remoteClientX86) {
+        std::string bin = path;
+        if (auto* driver = PluginDriverRegistry::instance().findForPath(path)) {
+            const std::string resolved = driver->resolveBinary(path);
+            if (!resolved.empty()) bin = resolved;
+        }
+        if (pluginBinaryBitness(utf8ToWide(bin)) == 32) {
+            return m_remoteClientX86;
+        }
+    }
+    return m_remoteClient;
+}
+#endif
 
 PluginHostManager::~PluginHostManager() {
     // 先停止控制线程（避免新任务进入）

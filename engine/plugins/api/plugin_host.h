@@ -356,6 +356,13 @@ public:
     bool m_remoteMode = false;
 #ifndef AURADSP_HOST_INPROC
     std::shared_ptr<PluginHostClient> m_remoteClient;
+    /* 双宿主：32 位桥客户端（plugin_host_x86）。仅当其 start()
+     * 成功（进程模式开启且宿主在位）时非空；remoteClientFor 按
+     * 插件二进制位数在两者间分派，32 位插件优先桥宿主，其余
+     * （含位数未知）一律走 x64 客户端，与单宿主时代行为一致。 */
+    std::shared_ptr<PluginHostClient> m_remoteClientX86;
+    std::shared_ptr<PluginHostClient> remoteClientFor(
+        const std::string& path);
 #endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};

@@ -118,7 +118,7 @@ def main():
     if k32.Process32First(snap, ctypes.byref(pe)):
         while True:
             nm = pe.szExeFile.decode("mbcs", "replace").lower()
-            if "auradsp_plugin_host" in nm:
+            if any(k in nm for k in ("plugin_host_x64", "plugin_host_x86", "auradsp_plugin_host")):
                 pid = pe.th32ProcessID
                 break
             if not k32.Process32Next(snap, ctypes.byref(pe)):

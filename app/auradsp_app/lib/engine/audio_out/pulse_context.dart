@@ -12,6 +12,7 @@
 // 处理里），绝不在实时泵路径上出现。每次调用开一条短命 context，用完即断。
 //
 // 纯函数部分（asound 卡表解析、loopback 源名匹配）无 FFI 依赖，供单测直测。
+import '../../core/error_sink.dart';
 import 'dart:ffi';
 import 'dart:io';
 
@@ -170,7 +171,8 @@ class _PulseMainLib {
   String errorText(int code) {
     try {
       return strerror(code).toDartString();
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return 'pa error $code';
     }
   }
@@ -221,7 +223,7 @@ class _Session {
         }
         lib.mainloopIterate(_mainloop, 1, nullptr);
       }
-    } catch (_) {
+    } catch (e) {
       // 打开失败时调用方拿不到本对象（级联构造），必须自清理已建的
       // 原生资源再外抛，否则每次失败泄漏一条 mainloop/context（审查 F1）。
       close();
@@ -358,8 +360,9 @@ class PulseContextService {
           final p = (info.cast<Uint8>() + 48).cast<Pointer<Utf8>>().value;
           if (p != nullptr) result = p.toDartString();
         }
-      } catch (_) {
-        // 结构偏移异常时静默放弃（仅用于状态展示/防环提示，不值得冒崩溃风险）。
+      } catch (e, st) {
+        // swallow: 结构偏移异常时静默放弃（仅用于状态展示/防环提示，不值得冒崩溃风险）。
+        swallow(e, st);
       }
       doneCell.value = 1;
     });
@@ -426,7 +429,8 @@ class PulseContextService {
   bool asoundLoopbackLoaded() {
     try {
       return asoundCardsHasLoopback(File('/proc/asound/cards').readAsStringSync());
-    } catch (_) {
+    } catch (e, st) {
+      swallow(e, st);
       return false;
     }
   }

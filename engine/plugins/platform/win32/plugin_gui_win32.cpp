@@ -134,29 +134,4 @@ void EnsureVst3WindowClassRegistered() {
     EnsureEditorWindowClassRegistered(L"AuraDSP_VST3_Host_Window");
 }
 
-bool PluginHostManager::showEditorSlot(size_t slot, const std::string& title) {
-    if (slot >= kMaxPluginSlots) return false;
-    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
-        return m_slots[slot].instance->showEditor(title);
-    }
-    return false;
-}
-
-void PluginHostManager::closeEditorSlot(size_t slot) {
-    if (slot >= kMaxPluginSlots) return;
-    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-    if (m_slots[slot].instance) {
-        m_slots[slot].instance->closeEditor();
-    }
-}
-
-bool PluginHostManager::isEditorOpenSlot(size_t slot) const {
-    if (slot >= kMaxPluginSlots) return false;
-    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
-    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
-        return m_slots[slot].instance->isEditorOpen();
-    }
-    return false;
-}
 } // namespace auradsp

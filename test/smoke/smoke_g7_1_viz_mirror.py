@@ -101,6 +101,7 @@ KNOWN_IMPORTERS = [
     "tools/bin/verify_dll_copies.py",
     "tools/probe/probe_viz_cost.py",
     "test/smoke/smoke_e4_stage16_crossmode.py",
+    "test/smoke/smoke_linux_engine_process.py",
 ]
 
 # ---------------------------------------------------------------------------

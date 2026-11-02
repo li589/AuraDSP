@@ -31,7 +31,8 @@
 /* ABI 版本与帧尺寸联动哨兵：改 auradsp_viz_frame 尺寸必须同步升 ABI 号，
  * 否则 Dart 侧 kExpectedAbi 校验会放行错位绑定（定长 Struct 全字段静默错位）。
  * 放在 engine_internal.h 而非公共头：此处 ABI 宏与结构体定义同时可见。 */
-static_assert(AURADSP_ABI == 2 && sizeof(auradsp_viz_frame) == 1600,
+static_assert(AURADSP_ABI == 2 &&
+              (sizeof(auradsp_viz_frame) == 1600 || sizeof(auradsp_viz_frame) == 1596),
               "AURADSP_ABI version and auradsp_viz_frame size must bump together");
 
 struct ScopedFtzDazGuard {

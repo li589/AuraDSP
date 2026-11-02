@@ -16,7 +16,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | 主力形态 | Windows 10 / 11 桌面，全功能；四种音频后端可切 |
 | 处理能力 | 23 个效果处理单元（能力计数）= 自研 11 个效果 TU + vendor 12 级可重排序链；另有插件 4 槽 × 5 级插入（链页按 20 个可见阶段展示） |
 | 插件宿主 | VST3 / CLAP 64 位；默认进程内，`AURA_PLUGIN_HOST_MODE=process` 切进程外硬隔离 |
-| 质量门禁 | analyze 零问题 · Dart 63 个测试文件 / 580+ 用例 · 引擎冒烟 136 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 七 job（Win/Linux 双流水线） |
+| 质量门禁 | analyze 零问题 · Dart 63 个测试文件 / 580+ 用例 · 引擎冒烟 139 项 · ABI / 补丁编号 / 静默异常三道脚本门禁 · GitHub CI 八 job（Win/Linux 双流水线） |
 
 目录：[它是什么](#1-它是什么) · [形态矩阵](#2-形态矩阵) · [音频链路](#3-音频链路) · [近期里程碑](#4-近期里程碑) · [快速开始](#5-快速开始) · [仓库结构](#6-仓库结构) · [质量门禁](#7-质量门禁) · [文档入口](#8-文档入口) · [许可证与致谢](#9-许可证与致谢)
 
@@ -58,7 +58,7 @@ UI 与引擎之间只有一层 **C ABI**（`engine/auradsp_engine.h`），UI 不
 | **Desktop** | Windows 10 / 11 | 进程内 WASAPI 泵 + `auradsp_engine.dll`（DLL 进程内 FFI） | ● 主力，全功能 |
 | **Root** | Android（KSU / Magisk） | AIDL effects HAL 注入，系统级全局 | ● 端到端打通 + 重启持久化 |
 | **Rootless** | Android APK | 会话级 AudioEffect 前台服务 | ○ 蓝本 `source/RootlessJamesDSP` |
-| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ◐ 移植中（`feature/linux`）：引擎与 App 闭环已通、CI 全绿；三模式功能对等已交付（S5a：系统 / 虚拟 sink / snd-aloop 驱动）；桌面体验已补齐（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾已完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化） |
+| **Linux** | Ubuntu（PulseAudio） | 引擎 `libauradsp_engine.so`（与 Windows 同一 C ABI / 同 56 符号）+ PulseAudio simple API 输出 | ✅ 一期已交付（`feature/linux` 已合入 `dev`，PR #21）：引擎与 App 闭环、CI 全绿，Ubuntu 24.04 真机验证通过；三模式功能对等（S5a：系统 / 虚拟 sink / snd-aloop 驱动，真机回环采集走 `.monitor` 源）；桌面体验齐备（S5b：XDG 目录拆分、托盘 PNG、XDG 自启、MPRIS 媒体会话）；治理收尾完成（S5c：插件目录 UI 按 D-7 隐藏、死依赖清理、库加载单点化）；真机轮次另修复输出泵饿死、Impeller 软件 GL 重绘损坏与频谱门三项（详见 `docs/40-回顾/Linux移植收官回顾-2026-11-02.md`，验证步骤见同目录《Linux真机验证清单》）；二期续加 **ALSA 直连专家模式**（D-6 二期：period 256 帧直连输出/采集、driver 模式直采 `hw:Loopback`，设置页可切换，默认仍 PulseAudio） |
 
 **Windows 四种音频后端**（`app/auradsp_app/lib/core/audio_modes.dart`）：
 
@@ -127,6 +127,8 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 | 日期 | 内容 | 提交 |
 |---|---|---|
 | 2026-11-01 | Linux 移植第一期（`feature/linux` 分支）：引擎 Linux 目标（导出集与 `.def` 恒等）、App PulseAudio 输出闭环、CI 七 job 双流水线全绿、Linux 测试套件补强（冒烟 PASS 9 / Dart 57 PASS + 4 平台跳过） | `61bca64` `017b2eb` `b80eaeb` `d94f2ff` |
+| 2026-11-02 | Linux 移植一期收官：三模式功能对等（S5a）、桌面体验（S5b：XDG/托盘/自启/MPRIS）、治理收尾（S5c）与全增量代码审查；Ubuntu 24.04 真机轮次修复输出泵饿死、snd-aloop 回环源、Impeller 重绘损坏三项真机问题；冒烟 PASS 12 / Dart 59 PASS + 4 平台跳过、CI 七 job 全绿，`feature/linux` 合入 `dev` | `c9c0524` `4524e08` `8193b72` `d07650f` `0d79cd3` PR #21 |
+| 2026-11-02 | Linux 二期 ALSA 专家模式（D-6 二期立项交付）：libasound FFI 直连（period 256/buffer 1024）、后端设置切换、driver 直采 hw:Loopback、设备枚举与新门禁（冒烟 PASS 13） | `6f5b5f6` `dd48c1e` `0924c36` |
 | 2026-10-28 | 预设系统 v7：路由/设备端点移出预设（不再被载入预设清空）、`defaults.json` 与出厂预设键集常驻门禁、导入版本闸门与同名改名 | `8486e11` `cbf5990` |
 | 2026-10-28 | 插件扫描目录改版（平台预置、可勾选、异步深扫）+ 深扫挂死防护（进程内 2.5s / 进程外 IPC 超时杀宿主） | `60df848` |
 | 2026-10-28 | 挂载即旁路（治理「UI 显示旁路但实际不旁路」）+ 插件界面在旁路槽不再假装有音频流 | `56c145f` |
@@ -161,7 +163,7 @@ cd core/desktop/windows && bash build_engine.sh
 # 等价（子工程单独配置）：cmake -S . -B out && cmake --build out --config Release
 ```
 
-**Linux 桌面**（`feature/linux` 分支；环境与 CI 同口径，见 `.github/workflows/ci.yml`）
+**Linux 桌面**（一期已合入 `dev`；环境与 CI 同口径，见 `.github/workflows/ci.yml`）
 
 ```bash
 # 依赖：clang/cmake/ninja-build/pkg-config/libgtk-3-dev（Flutter 官方清单）
@@ -184,7 +186,7 @@ python ../../tools/bin/run_dart_tests.py      # T-03：按文件串行 + 失败�
 **测试与工具**
 
 ```powershell
-python test/runner.py --smoke                 # 引擎冒烟（统一入口，136 项登记，按平台自动切换）
+python test/runner.py --smoke                 # 引擎冒烟（统一入口，139 项登记，按平台自动切换）
 python test/runner.py --ui                    # UI 自动化（置顶前置，默认 7 个脚本）
 python tools/bin/abi_consistency.py           # .def / 头文件 / ffi.dart 三处符号一致
 python tools/bin/verify_dll_copies.py --sync  # DLL 多副本哈希同步（禁手拷）
@@ -242,7 +244,7 @@ AuraDSP/
 |---|---|---|
 | Dart 静态分析 | `flutter analyze` | 全量 lib + test，要求零问题 |
 | Dart 单测 | `python tools/bin/run_dart_tests.py` | 61 个测试文件；按文件串行 + 失败单文件重试两次（全量并发不可信）；Windows 范式专属 4 文件在非 Windows 主机显式 SKIP-PLATFORM |
-| 引擎冒烟 | `python test/runner.py --smoke` | 136 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
+| 引擎冒烟 | `python test/runner.py --smoke` | 139 项：DSP 正确性、插件生命周期、桥 ABI、竞态；平台标记（PLATFORM_WINDOWS / PLATFORM_LINUX）按开发平台自动切换 |
 | ABI 一致性 | `python tools/bin/abi_consistency.py` | `.def` ↔ 头文件 ↔ `ffi.dart` ↔ `.map`（Linux version script）四处符号与签名 |
 | CI | `.github/workflows/ci.yml` | 七 job：静态门禁 / Linux 构建+冒烟 / ABI / Windows 构建 / Dart 测试 / 资源守卫，push 与 PR 均触发 |
 | DLL 副本同步 | `python tools/bin/verify_dll_copies.py --sync` | 三处副本哈希一致（禁手拷） |
@@ -251,7 +253,7 @@ AuraDSP/
 | 硬编码中文 | `test/l10n_cjk_guard_test.dart` | 棘轮：`lib/features` + `lib/ui` 基线只降不升 |
 
 最近一轮（2026-10-28）：analyze 零问题、Dart 580+ 用例通过、冒烟 100%。
-Linux 侧（2026-11-02，`feature/linux`）：analyze 零问题、Dart 59 文件通过 + 4 平台跳过、Linux 冒烟 PASS 11 / SKIP 125（Windows 专属）/ FAIL 0、GitHub CI 七 job 全绿（S5a 已确认；S5b 以推送后 CI 为准）。
+Linux 侧（2026-11-02，一期收官）：analyze 零问题、Dart 59 文件通过 + 4 平台跳过、Linux 冒烟 PASS 12 / SKIP 125（Windows 专属）/ FAIL 0、GitHub CI 七 job 全绿；Ubuntu 24.04 真机全量验证通过（三模式出声/回环、托盘、自启、XDG 迁移、MPRIS），`feature/linux` 已合入 `dev`（PR #21）。
 
 ---
 

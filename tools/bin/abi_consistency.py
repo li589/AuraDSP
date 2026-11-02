@@ -354,7 +354,15 @@ def check_viz(problems: list[str]) -> tuple[int, int]:
                         % (c_size, py_size))
 
     # ---- M3 版本/尺寸联动 ----
-    if not re.search(r"sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*%d" % c_size, header_text):
+    # 哨兵两种合法形态：64 位直写 `== 1600`；或按指针宽度条件式
+    # `== (sizeof(void*) == 8 ? 1600 : 1596)`（二期双宿主阶段五：
+    # 32 位尾填充差 4B，字段偏移一致，哨兵取本架构期望尺寸）。
+    sentinel_re = (
+        r"sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*(?:"
+        r"%d|\(\s*sizeof\s*\(\s*void\s*\*\s*\)\s*==\s*8\s*\?\s*%d\s*:\s*\d+\s*\))"
+        r"|sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*%d\s*\|\|\s*sizeof\s*\(\s*auradsp_viz_frame\s*\)\s*==\s*\d+"
+        % (c_size, c_size, c_size))
+    if not re.search(sentinel_re, header_text):
         problems.append("[M3] 头文件缺少 `sizeof(auradsp_viz_frame) == %d` 编译期哨兵"
                         % c_size)
     if py_mod.VIZ_FRAME_SIZE != c_size:

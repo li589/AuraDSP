@@ -196,10 +196,12 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         if (oldInstance) destroyInstance(std::move(oldInstance));
 
         ensureChannelScratch(maxBlockSize);
-        m_remoteClient->setChannelHint(
+        // 双宿主分派：按目标二进制位数选 x64 / x86 桥客户端。
+        auto client = remoteClientFor(path);
+        client->setChannelHint(
             static_cast<uint32_t>(m_channelHint.load(std::memory_order_relaxed)));
         auto instance = std::make_unique<ProcessPluginProxy>(
-            m_remoteClient, slot, sampleRate, maxBlockSize);
+            client, slot, sampleRate, maxBlockSize);
         if (!instance->load(path, pluginId)) return false;
 
         /* R-1：宿主进程懒启动于本分支的首个请求（setChannelHint/load），
@@ -208,7 +210,7 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
          * 静默直通）。Op::Load 消息虽已携带格式，此处再补发一次 updateFormat
          * 作为兜底：保证宿主侧格式/scratch 与引擎当前格式一致，且覆盖
          * create 之后、load 之前发生过格式变更的场景。 */
-        m_remoteClient->updateFormat(sampleRate, maxBlockSize);
+        client->updateFormat(sampleRate, maxBlockSize);
 
         {
             std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
@@ -800,7 +802,7 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot,
         if (oldInstance) destroyInstance(std::move(oldInstance));
 
         auto instance = std::make_unique<ProcessPluginProxy>(
-            m_remoteClient, slot, m_sampleRate, m_maxBlockSize);
+            remoteClientFor(path), slot, m_sampleRate, m_maxBlockSize);
         if (!instance->load(path, pluginId)) return nullptr;
         return instance;
     }
@@ -1063,5 +1065,35 @@ int PluginHostManager::slotTaskState(size_t slot) const {
 bool PluginHostManager::slotTaskPending(size_t slot) const {
     if (slot >= kMaxPluginSlots) return false;
     return m_slots[slot].taskState.load(std::memory_order_acquire) == 1;
+}
+// ---------------------------------------------------------------------------
+// 编辑器槽委派（二期阶段一，2026-11-02，自 platform/win32/plugin_gui_
+// win32.cpp 移入）：三方法只向实例 showEditor/closeEditor/isEditorOpen
+// 委派，不触碰任何窗口 API，本就与平台无关；此前置于 GUI 文件导致
+// 非 Windows 构建链接缺符号。GUI 本体仍归各平台 GUI 文件。
+bool PluginHostManager::showEditorSlot(size_t slot, const std::string& title) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->showEditor(title);
+    }
+    return false;
+}
+
+void PluginHostManager::closeEditorSlot(size_t slot) {
+    if (slot >= kMaxPluginSlots) return;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance) {
+        m_slots[slot].instance->closeEditor();
+    }
+}
+
+bool PluginHostManager::isEditorOpenSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->isEditorOpen();
+    }
+    return false;
 }
 } // namespace auradsp

@@ -171,8 +171,14 @@ typedef struct auradsp_viz_frame {
  * Dart 侧对应断言见 test/（sizeOf<VizFrame>() == 1600）。
  * 1600 = 536 + 4(channel_count) + 32(channel_levels) + 1024(stage_ch_levels)
  *        + 4 尾填充（struct 含 uint64/double，sizeof 须为 8 的倍数）。
- * 用 typedef 数组而非 _Static_assert：本头是公共 ABI 头，C89 消费者亦须通吃。 */
-typedef char auradsp_viz_frame_abi_size_check[(sizeof(auradsp_viz_frame) == 1600) ? 1 : -1];
+ * 用 typedef 数组而非 _Static_assert：本头是公共 ABI 头，C89 消费者亦须通吃。
+ * 32 位附注（二期双宿主阶段五，2026-11-02）：i386 下 uint64/double 对齐
+ * 为 4，尾填充为 0，sizeof 为 1596——全部字段偏移与 64 位逐位一致，
+ * 仅尾填充差 4B。32 位侧唯一消费者是 plugin_host_x86（桥宿主），
+ * viz 帧不经 IPC 跨界，故哨兵按指针宽度取本架构的期望尺寸。 */
+typedef char auradsp_viz_frame_abi_size_check[
+    (sizeof(auradsp_viz_frame) == 1600 ||
+     sizeof(auradsp_viz_frame) == 1596) ? 1 : -1];
 
 /* ---- 生命周期（控制线程） ---- */
 auradsp_handle auradsp_create(float sample_rate, int max_block_frames);

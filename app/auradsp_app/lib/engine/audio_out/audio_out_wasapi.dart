@@ -16,6 +16,7 @@ import '../../core/error_sink.dart';
 import '../../platform/platform_profile.dart';
 import '../debug_log.dart';
 import 'audio_out.dart';
+import 'audio_out_alsa.dart';
 import 'audio_out_linux.dart';
 
 /* ---------------- GUID ---------------- */
@@ -527,8 +528,16 @@ final class WasapiOut implements AudioOut {
 /// M4 只有 WASAPI；S3（ADR-012 D-6）起 Linux 接入 PulseAudio simple API
 /// 实现（Dart 无按 OS 选择的条件导入，由能力位 + 实现文件集中分派，
 /// 避免出现空壳库）。
-AudioOut? createAudioOut() {
+AudioOut? createAudioOut({
+  String linuxBackend = 'pulse',
+  String alsaDevice = '',
+}) {
   if (!PlatformProfile.supportsLocalDevice) return null;
-  if (PlatformProfile.os == 'linux') return PulseAudioOut();
+  if (PlatformProfile.os == 'linux') {
+    // 二期 ALSA 专家模式（D-6 二期）：配置显式选 'alsa' 才走直连，
+    // 其余一律 PulseAudio（默认与回退语义都在这一行）。
+    if (linuxBackend == 'alsa') return AlsaAudioOut(device: alsaDevice);
+    return PulseAudioOut();
+  }
   return WasapiOut();
 }

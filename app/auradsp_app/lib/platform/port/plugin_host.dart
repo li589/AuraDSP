@@ -9,6 +9,11 @@ enum PluginHostRuntime {
 
   /// Windows 独立宿主进程（现有 auradsp_plugin_host.exe）。
   win32Process,
+
+  /// 引擎进程内宿主（Linux 二期阶段一/二，2026-11-02）：插件在
+  /// 引擎进程内加载（AURADSP_HOST_INPROC）；进程外双宿主
+  /// （plugin_host_x64/x86）由后续阶段接入后切换。
+  inProcess,
 }
 
 class PluginHostCapabilities {
@@ -40,6 +45,17 @@ class PluginHostCapabilities {
     canMount: true,
     canEdit: true,
     runtime: PluginHostRuntime.win32Process,
+  );
+
+  /// Linux 进程内宿主：扫描/挂载可用；编辑器 GUI（X11 嵌入）为
+  /// 后续独立阶段，canEdit 如实为 false。
+  static const PluginHostCapabilities linuxInProcess =
+      PluginHostCapabilities(
+    supported: true,
+    canScan: true,
+    canMount: true,
+    canEdit: false,
+    runtime: PluginHostRuntime.inProcess,
   );
 }
 

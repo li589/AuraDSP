@@ -27,6 +27,19 @@ class AppConfig {
   int sampleRate;
   int maxBlockFrames;
   String audioMode;
+
+  /// Linux 音频后端（二期 ALSA 专家模式，ADR-012 D-6 二期）：
+  /// 'pulse'（默认，PulseAudio simple API）| 'alsa'（ALSA 直连）。
+  /// 仅 Linux 生效；Windows 忽略本字段。
+  String linuxAudioBackend;
+
+  /// ALSA 输出 PCM 设备名（'' → 'default'）。仅 backend='alsa' 时用。
+  String alsaOutputDevice;
+
+  /// ALSA 采集 PCM 设备名（'' → 'default'）。driver 模式的 ALSA
+  /// 直连路径不走本字段（固定 hw:Loopback），本字段供 A2 的通用
+  /// 采集选择预留。
+  String alsaCaptureDevice;
   int vizFps;
   int vizFftSize;
   double stereoWidenMax;
@@ -82,6 +95,9 @@ class AppConfig {
     this.sampleRate = 48000,
     this.maxBlockFrames = 1024,
     this.audioMode = 'auto',
+    this.linuxAudioBackend = 'pulse',
+    this.alsaOutputDevice = '',
+    this.alsaCaptureDevice = '',
     this.channelsCountMode = 0,
     this.channelsCount = 2,
     String? modeCategory,
@@ -145,6 +161,9 @@ class AppConfig {
       sampleRate: (audio['sampleRate'] as num?)?.toInt() ?? 48000,
       maxBlockFrames: (audio['maxBlockFrames'] as num?)?.toInt() ?? 1024,
       audioMode: rawMode,
+      linuxAudioBackend: (audio['linuxAudioBackend'] as String?) ?? 'pulse',
+      alsaOutputDevice: (audio['alsaOutputDevice'] as String?) ?? '',
+      alsaCaptureDevice: (audio['alsaCaptureDevice'] as String?) ?? '',
       modeCategory: rawCategory,
       attachmentMode: rawAttach,
       pipelineInput: rawPipeIn,
@@ -218,6 +237,9 @@ class AppConfig {
           'sampleRate': sampleRate,
           'maxBlockFrames': maxBlockFrames,
           'audioMode': audioMode,
+          'linuxAudioBackend': linuxAudioBackend,
+          'alsaOutputDevice': alsaOutputDevice,
+          'alsaCaptureDevice': alsaCaptureDevice,
           'channelsCountMode': channelsCountMode,
           'channelsCount': channelsCount,
           'modeCategory': modeCategory,
@@ -364,8 +386,9 @@ abstract final class ConfigManager {
         } else {
           File(src).renameSync(dst);
         }
-      } catch (_) {
-        // 迁移失败不阻塞启动：该条目从空开始，旧数据仍在配置根。
+      } catch (e, st) {
+        // swallow: 迁移失败不阻塞启动：该条目从空开始，旧数据仍在配置根。
+        swallow(e, st);
       }
     }
   }
