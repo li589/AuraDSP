@@ -27,6 +27,19 @@ APP = os.path.join(ROOT, "app", "auradsp_app")
 TEST_DIR = os.path.join(APP, "test")
 FLUTTER = shutil.which("flutter") or shutil.which("flutter.bat")
 
+# S4（2026-11-01）：Windows 范式专属的 Dart 测试。它们渲染的是
+# ASIO/VAIO 驱动范式与 Windows 插件宿主 UI（ADR-012：Linux 一期
+# supportsBridges=false、范式集合不同），在非 Windows 主机上断言
+# 必然落空 —— 与 Python 侧 test/runner.py 的 PLATFORM_WINDOWS 同
+# 口径：显式标记 + 非 Windows 主机明示 SKIP（不静默、不算失败）。
+# Linux 范式的对应测试随 S5a 三模式落地时补齐。
+WINDOWS_ONLY = {
+    "test/settings_asio_test.dart",
+    "test/settings_vaio_test.dart",
+    "test/settings_paradigms_test.dart",
+    "test/plugins_page_layout_test.dart",
+}
+
 
 def discover():
     files = []
@@ -72,7 +85,13 @@ def main():
     print(f"  AuraDSP Dart tests: {len(files)} files (serial, retry up to 2)")
     print("=" * 56)
 
-    passed, retried, failed = [], [], []
+    passed, retried, failed, skipped_platform = [], [], [], []
+    if sys.platform != "win32":
+        skipped_platform = [f for f in files if f in WINDOWS_ONLY]
+        files = [f for f in files if f not in WINDOWS_ONLY]
+        for f in skipped_platform:
+            print(f"[SKIP-PLATFORM] {f}（Windows 范式专属，非 Windows 主机跳过）")
+
     t_start = time.perf_counter()
     for i, rel in enumerate(files, 1):
         print(f"\n---> [{i}/{len(files)}] {rel}")
@@ -97,7 +116,8 @@ def main():
     total = time.perf_counter() - t_start
     print("\n" + "=" * 56)
     print(f"  PASS {len(passed)} | RETRY-PASS {len(retried)} | "
-          f"FAIL {len(failed)} | {total:.0f}s")
+          f"FAIL {len(failed)} | SKIP-PLATFORM {len(skipped_platform)} | "
+          f"{total:.0f}s")
     if retried:
         print("  首跑失败但单文件复跑通过（并发串扰，非回归）:")
         for f in retried:

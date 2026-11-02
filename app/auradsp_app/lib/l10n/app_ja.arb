@@ -448,6 +448,24 @@
   "modeVaio": "AuraVAIO",
   "modeVb": "Voicemeeter",
   "modeSysApo": "System APO",
+  "linuxModeSystem": "システム",
+  "linuxModeVirtual": "仮想サウンド",
+  "linuxModeDriver": "カーネルドライバ",
+  "linuxModeHint": "システム：ローカル出力。仮想サウンド：他アプリの音声を AuraDSP 仮想デバイスへ入力。カーネルドライバ：snd-aloop ループバック経由で接続。",
+  "linuxDriverMissingHint": "snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1 を実行してから、カーネルドライバモードを選び直してください。",
+  "linuxVirtualReadyHint": "仮想デバイス auradsp_virtual の準備ができました。他アプリの出力デバイスでこれを選ぶと AuraDSP 経由になります。",
+  "linuxCaptureInactiveHint": "キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。",
+  "linuxOutputSink": "出力デバイス",
+  "linuxOutputSinkDefault": "PulseAudio の既定出力",
+  "linuxOutputFormat": "出力フォーマット",
+  "linuxCaptureSource": "キャプチャ元",
+  "linuxCaptureNone": "なし（このモードではキャプチャしません）",
+  "linuxVirtualDevice": "仮想デバイス",
+  "linuxVirtualPresent": "auradsp_virtual 準備完了",
+  "linuxVirtualAbsent": "未作成（仮想サウンドモードで自動作成）",
+  "linuxDriverPresent": "snd-aloop 読み込み済み",
+  "linuxDriverAbsent": "snd-aloop 未読み込み",
+  "linuxDeviceHint": "出力は常に PulseAudio の既定シンクへ送られます。auradsp_virtual をシステムの既定出力に設定しないでください。処理後の音声が再キャプチャされ、フィードバックループになります。",
   "modeAsio": "ASIO",
   "asioDriver": "ASIO ドライバー",
   "asioBufSize": "バッファサイズ",
@@ -774,7 +792,15 @@
       }
     }
   },
-  "memClear": "セッションメモリをクリア",
+    "memDataDir": "データディレクトリ：{path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "セッションメモリをクリア",
   "memCleared": "永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します",
   "memReset": "外部設定をデフォルトにリセット",
   "memResetDone": "config.json を標準テンプレートにリセットしました",
@@ -1013,7 +1039,7 @@
   },
   "lpAddDirTitle": "外部スクリプトプリセットフォルダを追加",
   "lpAddDirPrompt": ".eel / .txt スクリプトプリセットを含むフォルダのフルパスを入力：",
-  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "例：…/AudioScripts/EelPresets",
   "lpChars": "{n}文字",
   "@lpChars": {
     "placeholders": {
@@ -1109,7 +1135,7 @@
   "sliderResetTip": "クリックでデフォルトにリセット",
   "plugAddDirTitle": "プラグイン検索フォルダを追加",
   "plugAddDirPrompt": "64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：",
-  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "例：…/AudioPlugins/VST3",
   "plugAddScan": "追加してスキャン",
   "plugTitle": "プラグインセンター",
   "plugUnsupported": "このプラットフォームではプラグインは利用できません",

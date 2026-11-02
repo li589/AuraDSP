@@ -1286,6 +1286,65 @@ class AppLocalizationsJa extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => 'システム';
+
+  @override
+  String get linuxModeVirtual => '仮想サウンド';
+
+  @override
+  String get linuxModeDriver => 'カーネルドライバ';
+
+  @override
+  String get linuxModeHint =>
+      'システム：ローカル出力。仮想サウンド：他アプリの音声を AuraDSP 仮想デバイスへ入力。カーネルドライバ：snd-aloop ループバック経由で接続。';
+
+  @override
+  String get linuxDriverMissingHint =>
+      'snd-aloop カーネルモジュールが読み込まれていません。ターミナルで sudo modprobe snd-aloop index=2 enable=1 を実行してから、カーネルドライバモードを選び直してください。';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      '仮想デバイス auradsp_virtual の準備ができました。他アプリの出力デバイスでこれを選ぶと AuraDSP 経由になります。';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      'キャプチャパイプラインが確立していません：PulseAudio サーバーが利用できないか、キャプチャソースがありません。';
+
+  @override
+  String get linuxOutputSink => '出力デバイス';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio の既定出力';
+
+  @override
+  String get linuxOutputFormat => '出力フォーマット';
+
+  @override
+  String get linuxCaptureSource => 'キャプチャ元';
+
+  @override
+  String get linuxCaptureNone => 'なし（このモードではキャプチャしません）';
+
+  @override
+  String get linuxVirtualDevice => '仮想デバイス';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual 準備完了';
+
+  @override
+  String get linuxVirtualAbsent => '未作成（仮想サウンドモードで自動作成）';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop 読み込み済み';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop 未読み込み';
+
+  @override
+  String get linuxDeviceHint =>
+      '出力は常に PulseAudio の既定シンクへ送られます。auradsp_virtual をシステムの既定出力に設定しないでください。処理後の音声が再キャプチャされ、フィードバックループになります。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override
@@ -2095,6 +2154,11 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
+  String memDataDir(String path) {
+    return 'データディレクトリ：$path';
+  }
+
+  @override
   String get memClear => 'セッションメモリをクリア';
 
   @override
@@ -2660,7 +2724,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get lpAddDirPrompt => '.eel / .txt スクリプトプリセットを含むフォルダのフルパスを入力：';
 
   @override
-  String get lpAddDirExample => '例：D:\\AudioScripts\\EelPresets';
+  String get lpAddDirExample => '例：…/AudioScripts/EelPresets';
 
   @override
   String lpChars(int n) {
@@ -2770,7 +2834,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get plugAddDirPrompt => '64ビットVST3 / CLAPエフェクトを含むフォルダのフルパスを入力または貼り付け：';
 
   @override
-  String get plugAddDirExample => '例：D:\\AudioPlugins\\VST3';
+  String get plugAddDirExample => '例：…/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => '追加してスキャン';

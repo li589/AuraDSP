@@ -1269,6 +1269,65 @@ class AppLocalizationsZh extends AppLocalizations {
   String get modeSysApo => 'System APO';
 
   @override
+  String get linuxModeSystem => '系统';
+
+  @override
+  String get linuxModeVirtual => '虚拟声卡';
+
+  @override
+  String get linuxModeDriver => '内核驱动';
+
+  @override
+  String get linuxModeHint =>
+      '系统：本机输出；虚拟声卡：其他应用把声音播入 AuraDSP 虚拟设备；内核驱动：经 snd-aloop 回环声卡接入。';
+
+  @override
+  String get linuxDriverMissingHint =>
+      '未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。';
+
+  @override
+  String get linuxVirtualReadyHint =>
+      '虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。';
+
+  @override
+  String get linuxCaptureInactiveHint =>
+      '采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。';
+
+  @override
+  String get linuxOutputSink => '输出设备';
+
+  @override
+  String get linuxOutputSinkDefault => 'PulseAudio 默认输出';
+
+  @override
+  String get linuxOutputFormat => '输出格式';
+
+  @override
+  String get linuxCaptureSource => '采集源';
+
+  @override
+  String get linuxCaptureNone => '无（当前模式不采集）';
+
+  @override
+  String get linuxVirtualDevice => '虚拟设备';
+
+  @override
+  String get linuxVirtualPresent => 'auradsp_virtual 已就绪';
+
+  @override
+  String get linuxVirtualAbsent => '未创建（虚拟声卡模式下自动创建）';
+
+  @override
+  String get linuxDriverPresent => 'snd-aloop 已加载';
+
+  @override
+  String get linuxDriverAbsent => 'snd-aloop 未加载';
+
+  @override
+  String get linuxDeviceHint =>
+      '输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override
@@ -2076,6 +2135,11 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String memDataDir(String path) {
+    return '数据存储目录: $path';
+  }
+
+  @override
   String get memClear => '清除会话记忆';
 
   @override
@@ -2638,7 +2702,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get lpAddDirPrompt => '请输入包含 .eel / .txt 脚本预设的完整文件夹路径：';
 
   @override
-  String get lpAddDirExample => '例：D:\\AudioScripts\\EelPresets';
+  String get lpAddDirExample => '例：…/AudioScripts/EelPresets';
 
   @override
   String lpChars(int n) {
@@ -2748,7 +2812,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get plugAddDirPrompt => '请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：';
 
   @override
-  String get plugAddDirExample => '例：D:\\AudioPlugins\\VST3';
+  String get plugAddDirExample => '例：…/AudioPlugins/VST3';
 
   @override
   String get plugAddScan => '添加并扫描';

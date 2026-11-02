@@ -35,7 +35,8 @@ psapi = ctypes.windll.psapi
 gdi32 = ctypes.windll.gdi32
 EP = ctypes.WINFUNCTYPE(ctypes.c_bool, wt.HWND, wt.LPARAM)
 
-APP_DIR = r"D:\temp_desktop\Proj\JamesDSP\app\auradsp_app\build\windows\x64\runner\Release"
+APP_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "app", "auradsp_app", "build",
+                       "windows", "x64", "runner", "Release")
 APP_EXE = os.path.join(APP_DIR, "auradsp_app.exe")
 
 

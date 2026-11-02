@@ -21,6 +21,7 @@ import '../core/state.dart';
 import '../core/theme.dart';
 import '../core/ui_helpers.dart';
 import '../platform/adapters.dart';
+import '../platform/platform_profile.dart';
 import '../ui/wheel_scroll.dart';
 import 'chrome.dart';
 import 'widgets.dart';
@@ -166,11 +167,15 @@ class _PluginsPageState extends State<PluginsPage>
           ),
 
           // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
-          PluginScanDirsSection(
-            model: widget.model,
-            onAddDir: () => _addCustomDirDialog(context),
-            onRescan: () => manager.scan(deep: _deepScan),
-          ),
+          // ADR-012 D-7：Linux 一期只做插件消费端，插件目录管理 UI
+          // 在 Linux 隐藏（扫描集为空、宿主为 NullPluginHost，展示只会
+          // 误导）；Windows/macOS 保持原样（S5c）。
+          if (!PlatformProfile.isLinux)
+            PluginScanDirsSection(
+              model: widget.model,
+              onAddDir: () => _addCustomDirDialog(context),
+              onRescan: () => manager.scan(deep: _deepScan),
+            ),
 
           // 3. 插件库与扫描控制中心
           SectionCard(

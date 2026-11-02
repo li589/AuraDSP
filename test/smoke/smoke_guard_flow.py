@@ -8,7 +8,11 @@
 #   3) 延迟读数仍如实累加上报（测量量，不是闸门）。
 import ctypes
 
-dll = ctypes.CDLL(r"D:\temp_desktop\Proj\JamesDSP\core\desktop\windows\out\Release\auradsp_engine.dll")
+# S1 迁移（2026-11-01）：路径统一走 test/engine_artifact 解析
+import os as _os, sys as _sys
+_sys.path.insert(0, _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__))))
+from engine_artifact import engine_lib_path as _elp, REPO_ROOT as _RR  # noqa: E402
+dll = ctypes.CDLL(_elp())
 dll.auradsp_create.restype = ctypes.c_void_p
 dll.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
 dll.auradsp_set_param.restype = ctypes.c_int

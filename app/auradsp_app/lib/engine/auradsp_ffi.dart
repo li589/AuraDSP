@@ -13,6 +13,7 @@ import 'dart:math' as math;
 import 'package:ffi/ffi.dart';
 
 import '../platform/platform_profile.dart';
+import 'native_library_loader.dart';
 
 /// 参数 ID 常量（engine_api 参数模型 v1 + v1.1 liveprog 增量）
 abstract final class ParamId {
@@ -924,19 +925,14 @@ late final int Function(int, Pointer<Utf8>, int, double, Pointer<Float>)
         List<String>.of(PlatformProfile.engineLibraryCandidates);
     final envPath = Platform.environment['AURADSP_ENGINE_DLL'];
     if (envPath != null && envPath.isNotEmpty) candidates.add(envPath);
-    Object? lastErr;
-    for (final path in candidates) {
-      try {
-        _cached = AuraDspLib._(DynamicLibrary.open(path));
-        loadedPath = path;
-        return _cached!;
-      } catch (e) {
-        lastErr = e;
-      }
-    }
-    throw StateError(
-        '${candidates.isEmpty ? 'auradsp_engine' : candidates.first} not found '
-        '(tried: ${candidates.join(", ")}) — $lastErr');
+    // 候选循环统一走 NativeLibraryLoader（S5c 抽取）：错误消息仍带
+    // 完整候选清单（UI 提示依赖），loadedPath 经 onOpened 簿记。
+    _cached = AuraDspLib._(NativeLibraryLoader.openFirst(
+      candidates,
+      what: candidates.isEmpty ? 'auradsp_engine' : candidates.first,
+      onOpened: (path) => loadedPath = path,
+    ));
+    return _cached!;
   }
 
   /// 便捷：字符串参数 ID → 原生 buffer

@@ -575,6 +575,24 @@
   "modeVaio": "AuraVAIO",
   "modeVb": "Voicemeeter",
   "modeSysApo": "System APO",
+  "linuxModeSystem": "系统",
+  "linuxModeVirtual": "虚拟声卡",
+  "linuxModeDriver": "内核驱动",
+  "linuxModeHint": "系统：本机输出；虚拟声卡：其他应用把声音播入 AuraDSP 虚拟设备；内核驱动：经 snd-aloop 回环声卡接入。",
+  "linuxDriverMissingHint": "未检测到 snd-aloop 内核模块。请先在终端执行：sudo modprobe snd-aloop index=2 enable=1，再重新选择内核驱动模式。",
+  "linuxVirtualReadyHint": "虚拟设备 auradsp_virtual 已就绪：在其他应用的输出设备中选择它即可接入。",
+  "linuxCaptureInactiveHint": "采集管线未建立：PulseAudio 服务不可用或采集源缺失，请检查系统音频服务。",
+  "linuxOutputSink": "输出设备",
+  "linuxOutputSinkDefault": "PulseAudio 默认输出",
+  "linuxOutputFormat": "输出格式",
+  "linuxCaptureSource": "采集源",
+  "linuxCaptureNone": "无（当前模式不采集）",
+  "linuxVirtualDevice": "虚拟设备",
+  "linuxVirtualPresent": "auradsp_virtual 已就绪",
+  "linuxVirtualAbsent": "未创建（虚拟声卡模式下自动创建）",
+  "linuxDriverPresent": "snd-aloop 已加载",
+  "linuxDriverAbsent": "snd-aloop 未加载",
+  "linuxDeviceHint": "输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。",
   "modeAsio": "ASIO",
   "asioDriver": "ASIO 驱动",
   "asioBufSize": "缓冲档",
@@ -901,7 +919,15 @@
       }
     }
   },
-  "memClear": "清除会话记忆",
+    "memDataDir": "数据存储目录: {path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "清除会话记忆",
   "memCleared": "已清除持久化会话记忆，下次启动将使用纯净默认值",
   "memReset": "重置外置配置为默认",
   "memResetDone": "已重置 config.json 为标准配置模板",
@@ -1140,7 +1166,7 @@
   },
   "lpAddDirTitle": "添加外部脚本预设目录",
   "lpAddDirPrompt": "请输入包含 .eel / .txt 脚本预设的完整文件夹路径：",
-  "lpAddDirExample": "例：D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "例：…/AudioScripts/EelPresets",
   "lpChars": "{n} 字符",
   "@lpChars": {
     "placeholders": {
@@ -1236,7 +1262,7 @@
   "sliderResetTip": "点击重置默认值",
   "plugAddDirTitle": "添加插件检索目录",
   "plugAddDirPrompt": "请输入或粘贴包含 64 位 VST3 / CLAP 效果器的完整文件夹路径：",
-  "plugAddDirExample": "例：D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "例：…/AudioPlugins/VST3",
   "plugAddScan": "添加并扫描",
   "plugTitle": "插件中心",
   "plugUnsupported": "插件功能在当前平台不可用",

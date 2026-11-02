@@ -21,6 +21,20 @@ extension StateEvents on AppModel {
         if (!window.isVisible) {
           send({'cmd': 'setVizSuspended', 'value': true});
         }
+        if (PlatformProfile.isLinux) {
+          // Linux：isolate 就绪即按当前模式组建管线（virtual/driver 的
+          // 采集侧在 isolate 启动时不存在，必须由模式面补建）。
+          send({'cmd': 'linuxmode', 'mode': audioMode});
+        }
+        break;
+      case 'linuxstatus':
+        linuxCaptureActive = (raw['active'] as bool?) ?? false;
+        linuxVirtualSink = (raw['virtualSink'] as bool?) ?? false;
+        linuxDriverLoaded = (raw['driverLoaded'] as bool?) ?? false;
+        linuxModeNote = (raw['note'] as String?) ?? '';
+        linuxDefaultSink = (raw['defaultSink'] as String?) ?? '';
+        linuxCaptureSource = (raw['captureSource'] as String?) ?? '';
+        _notifyUi();
         break;
       case 'ready':
         info = EngineInfo(

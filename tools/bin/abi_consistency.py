@@ -29,6 +29,12 @@
 # 用法：python tools/bin/abi_consistency.py（退出码 0 = 一致）
 #      python tools/bin/abi_consistency.py --viz-only（只跑 §7-1 三项）
 #      python tools/bin/abi_consistency.py --bridges-only（只跑 §7-5 三项）
+#
+# S4（Linux 方案 §5.1，2026-11-01）：补第 4 处清单 —— Linux 的
+# auradsp_engine.map（version script）global 符号集必须与 .def 恒等。
+# .map 由 gen_engine_map.py 从 .def 生成（其 --check 管生成新鲜度），
+# 本检查管符号集语义恒等：.def 改了而 .map 没跟上、或 .map 被手改，
+# Linux .so 的导出集就会与 Windows 漂移，这里直接判 FAIL。
 
 import ctypes
 import re
@@ -37,6 +43,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 DEF_PATH = ROOT / "engine/auradsp_engine.def"
+MAP_PATH = ROOT / "engine/auradsp_engine.map"
 H_PATH = ROOT / "engine/auradsp_engine.h"
 INTERNAL_H = ROOT / "engine/engine_internal.h"
 DART_PATH = ROOT / "app/auradsp_app/lib/engine/auradsp_ffi.dart"
@@ -68,6 +75,30 @@ def parse_def(path: Path) -> set[str]:
         if m:
             exports.add(m.group(1))
     return exports
+
+
+def parse_map(path: Path) -> set[str]:
+    """version script 的 global: 段符号集（每行 `name;`）。
+
+    段外（local: * 等）不收；C 风格注释先剥掉（文件头注释里有
+    `.def` 等字样，不能误收）。"""
+    text = re.sub(r"/\*.*?\*/", "", path.read_text(encoding="utf-8"),
+                  flags=re.S)
+    syms = set()
+    in_global = False
+    for line in text.splitlines():
+        s = line.strip()
+        if s == "global:":
+            in_global = True
+            continue
+        if s.endswith(":"):  # local: 等其它段开始
+            in_global = False
+            continue
+        if in_global:
+            m = re.match(r"^([A-Za-z_]\w*);$", s)
+            if m:
+                syms.add(m.group(1))
+    return syms
 
 
 def parse_header(path: Path) -> dict[str, int]:
@@ -555,6 +586,18 @@ def main() -> int:
                     f"ffi.dart {ffi[name]} 参"
                 )
 
+        # 3b) S4：version script（Linux .map）global 集与 .def 恒等
+        n_map = 0
+        if not MAP_PATH.exists():
+            problems.append(f"version script 缺失：{MAP_PATH}")
+        else:
+            map_syms = parse_map(MAP_PATH)
+            n_map = len(map_syms)
+            for name in sorted(exports - map_syms):
+                problems.append(f".def 导出 {name} 未列入 .map global")
+            for name in sorted(map_syms - exports):
+                problems.append(f".map global {name} 不是 .def 导出（多导出）")
+
     # 4) §7-1 viz 帧布局
     frame_size, n_fields = 0, 0
     if not bridges_only:
@@ -583,6 +626,8 @@ def main() -> int:
         return 0
     print(f"[PASS] ABI 一致：.def/engine.h/ffi.dart 三处 {n_exports} 个符号逐一对应，"
           f"元数全部一致")
+    print(f"[PASS] version script 一致：.map global 符号集与 .def 恒等"
+          f"（{n_exports} 个）")
     print(f"[PASS] viz 帧布局一致：{n_fields} 字段 / {frame_size} 字节，"
           f"C 头 ↔ Python 镜像逐字段对齐，无重复镜像")
     print(f"[PASS] 三座桥 ABI 一致：{n_bridges} 座桥共 {n_bridge_syms} 个导出与头文件"

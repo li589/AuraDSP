@@ -448,6 +448,24 @@
   "modeVaio": "AuraVAIO",
   "modeVb": "Voicemeeter",
   "modeSysApo": "System APO",
+  "linuxModeSystem": "System",
+  "linuxModeVirtual": "Virtual",
+  "linuxModeDriver": "Kernel driver",
+  "linuxModeHint": "System: local output. Virtual: other apps play into the AuraDSP virtual device. Kernel driver: route audio through the snd-aloop loopback card.",
+  "linuxDriverMissingHint": "The snd-aloop kernel module is not loaded. Run: sudo modprobe snd-aloop index=2 enable=1 in a terminal, then select the kernel driver mode again.",
+  "linuxVirtualReadyHint": "Virtual device auradsp_virtual is ready: pick it as the output device in other apps to route them through AuraDSP.",
+  "linuxCaptureInactiveHint": "Capture pipeline is not up: the PulseAudio server is unavailable or the capture source is missing.",
+  "linuxOutputSink": "Output device",
+  "linuxOutputSinkDefault": "PulseAudio default output",
+  "linuxOutputFormat": "Output format",
+  "linuxCaptureSource": "Capture source",
+  "linuxCaptureNone": "None (not captured in this mode)",
+  "linuxVirtualDevice": "Virtual device",
+  "linuxVirtualPresent": "auradsp_virtual ready",
+  "linuxVirtualAbsent": "Not created (auto-created in virtual mode)",
+  "linuxDriverPresent": "snd-aloop loaded",
+  "linuxDriverAbsent": "snd-aloop not loaded",
+  "linuxDeviceHint": "Output always goes to the PulseAudio default sink. Do not set auradsp_virtual as the system default output, or processed audio will be captured again and create a feedback loop.",
   "modeAsio": "ASIO",
   "asioDriver": "ASIO Driver",
   "asioBufSize": "Buffer Size",
@@ -774,7 +792,15 @@
       }
     }
   },
-  "memClear": "Clear Session Memory",
+    "memDataDir": "Data directory: {path}",
+  "@memDataDir": {
+    "placeholders": {
+      "path": {
+        "type": "String"
+      }
+    }
+  },
+"memClear": "Clear Session Memory",
   "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
   "memReset": "Reset External Config to Defaults",
   "memResetDone": "config.json has been reset to the standard template",
@@ -1013,7 +1039,7 @@
   },
   "lpAddDirTitle": "Add External Script Preset Folder",
   "lpAddDirPrompt": "Enter the full folder path containing .eel / .txt script presets:",
-  "lpAddDirExample": "E.g.: D:\\AudioScripts\\EelPresets",
+  "lpAddDirExample": "E.g.: …/AudioScripts/EelPresets",
   "lpChars": "{n} chars",
   "@lpChars": {
     "placeholders": {
@@ -1109,7 +1135,7 @@
   "sliderResetTip": "Click to reset to default",
   "plugAddDirTitle": "Add Plugin Search Folder",
   "plugAddDirPrompt": "Enter or paste the full folder path containing 64-bit VST3 / CLAP effects:",
-  "plugAddDirExample": "E.g.: D:\\AudioPlugins\\VST3",
+  "plugAddDirExample": "E.g.: …/AudioPlugins/VST3",
   "plugAddScan": "Add & Scan",
   "plugTitle": "Plugin Center",
   "plugUnsupported": "Plugins are not available on this platform",

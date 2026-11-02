@@ -1,5 +1,6 @@
 /* P2 split from auradsp_engine.cpp; Phase 3 routes plugin stages through PluginChainComponent. */
 #include "engine_internal.h"
+#include "platform/port/time.h"
 #include "plugins/integration/plugin_chain_adapter.h"
 #include <chrono>
 #include <thread>
@@ -669,13 +670,17 @@ void apply_arbmag(auradsp_handle h) {
 static constexpr double kPoolSlotWaitMs = 500.0;
 static constexpr unsigned int kPoolSlotSpinCount = 60000;
 
+/* S4（2026-11-01）：时间/睡眠统一走 platform/port/time.h（CP-12 端口），
+ * 不再在本文件手抄 std::chrono 实现 —— 与 plugin_host_manager 同口径。
+ * 端口语义对齐：now_ms 为单调毫秒（转 double 供 deadline 运算）、
+ * sleep_ms(0) 即 yield、sleep_ms(ms) 即 sleep_for。调用点都在控制线程
+ * （影子槽重建/等待），不进 RT 音频路径，符合端口的线程契约。 */
 static double pool_now_ms() {
-    using namespace std::chrono;
-    return duration<double, std::milli>(steady_clock::now().time_since_epoch()).count();
+    return static_cast<double>(auradsp::platform::now_ms());
 }
-static void pool_yield() { std::this_thread::yield(); }
+static void pool_yield() { auradsp::platform::sleep_ms(0); }
 static void pool_sleep_ms(unsigned int ms) {
-    std::this_thread::sleep_for(std::chrono::milliseconds(ms));
+    auradsp::platform::sleep_ms(ms);
 }
 
 /* 选影子槽：活动槽的对偶（act ^ 1）。

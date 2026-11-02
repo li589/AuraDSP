@@ -3,7 +3,7 @@
  *
  * 规范：统一 Schema v2，区分出厂预设 (只读) 与用户预设。
  * 覆盖全部 8 大效果卡片完整参数（包含交互式 EQ 曲线、低音谐波、电子管饱和度等）。
- * 存储路径：ConfigManager.baseDir/presets/
+ * 存储路径：ConfigManager.dataDir/presets/（S5b 起用户数据根）
  */
 
 import 'dart:convert';
@@ -69,7 +69,7 @@ class AuraPreset {
 
 abstract final class PresetLibrary {
   static String get baseDir =>
-      '${ConfigManager.baseDir}${Platform.pathSeparator}presets';
+      '${ConfigManager.dataDir}${Platform.pathSeparator}presets';
   static String get factoryDir =>
       '$baseDir${Platform.pathSeparator}factory';
   static String get userDir =>

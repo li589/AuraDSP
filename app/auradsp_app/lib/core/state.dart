@@ -142,7 +142,11 @@ class AppModel extends ChangeNotifier {
   double latencyMs = 0;
   bool playing = false;
   // 频谱门：进程内 playing 或 VB/ASIO/VAIO 桥活着都算 live。
-  bool get liveSpectrum => playing || vbActive || asioActive || vaioActive;
+  // Linux 的 virtual/driver 模式没有「播放音源」，音频来自 PA 采集
+  // （linuxCaptureActive，由 linuxstatus 事件回推）；漏掉这一路会让频谱卡
+  // 与可视化舞台误判空闲，而电平表/峰值仍在跳动（2026-11-02 实测）。
+  bool get liveSpectrum =>
+      playing || vbActive || asioActive || vaioActive || linuxCaptureActive;
   // 四态显示口径（右上徽标/主页 hero 共用）：engineState==0 混了"用户旁路"与
   // "无源空闲"，以前一刀切标"旁路"，导致开关 OFF 却处处显示旁路。拆开：
   // 开关开→旁路；开关没开但引擎报 0→空闲；引擎 1→看有没有活数据。
@@ -246,6 +250,15 @@ class AppModel extends ChangeNotifier {
   String asioDriversNote = ''; // 桥缺失/无驱动时的原因（设置页展示）
   // AuraVAIO 桥状态（01 桥；isolate 回推，与 VB/ASIO 互斥）。
   bool vaioActive = false;
+  // S5a（ADR-012 D-5）：Linux 三模式状态（isolate 的 linuxstatus 事件回推，
+  // 设置页据此渲染可用性与提示，不拿它当错误态）。
+  bool linuxCaptureActive = false;
+  bool linuxVirtualSink = false;
+  bool linuxDriverLoaded = false;
+  String linuxModeNote = '';
+  // 设备面板（设置页「设备」卡）展示：PulseAudio 默认输出与当前采集源。
+  String linuxDefaultSink = '';
+  String linuxCaptureSource = '';
   Map<String, dynamic> vaioInfo = {};
   Map<String, dynamic> vaioDetectInfo = {};
 

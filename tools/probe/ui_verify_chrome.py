@@ -20,7 +20,7 @@ user32.SetWindowPos(h, -1, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010)
 user32.SetForegroundWindow(h); time.sleep(1.2)
 pt = wt.POINT(0, 0); user32.ClientToScreen(h, ctypes.byref(pt)); cl, ct = pt.x, pt.y
 S = 1.5
-OUT = r"D:\temp_desktop\Proj\JamesDSP\docs\ui-redesign"
+OUT = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "docs", "ui-redesign")
 NAMES = ["主页", "效果", "脚本", "插件", "处理链", "可视化"]
 
 def click(xl, yl):

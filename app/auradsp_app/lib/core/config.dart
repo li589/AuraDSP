@@ -300,6 +300,76 @@ abstract final class ConfigManager {
     return d;
   }
 
+  static String? _dataDir;
+
+  /// 用户数据根目录（S5b XDG 拆分）：Linux 为
+  /// `PlatformProfile.dataDir`（$XDG_DATA_HOME/auradsp），其它平台与
+  /// [baseDir] 相同。测试沙箱下与 baseDir 同根，存量断言不受影响。
+  /// Linux 首次解析时把拆分前的存量数据从配置根迁入（见 _migrateLegacyData）。
+  static String get dataDir {
+    if (_dataDir != null) return _dataDir!;
+    if (PlatformProfile.isTestRun) {
+      // 沙箱下不缓存：baseDir 随 baseDirOverride 逐测变化，dataDir 必须
+      // 实时跟随（缓存旧临时根会让插件缓存类测试读写到上一测的目录）。
+      return baseDir;
+    }
+    _dataDir = PlatformProfile.dataDir;
+    _migrateLegacyData();
+    return _dataDir!;
+  }
+
+  /// 仅供单元测试注入数据根目录（语义同 [baseDirOverride]）。
+  @visibleForTesting
+  static set dataDirOverride(String? dir) => _dataDir = dir;
+
+  /// 数据根下的路径拼接 / 子目录（语义同 [path] / [subDir]）。
+  static String dataPath(String relative) =>
+      dataDir + Platform.pathSeparator + relative;
+
+  static Directory dataSubDir(String relative) {
+    final d = Directory(dataPath(relative));
+    if (!d.existsSync()) d.createSync(recursive: true);
+    return d;
+  }
+
+  /// 拆分前混放在配置根下的数据条目（S5b 迁移清单，与消费者切换一一对应）。
+  static const List<String> _legacyDataEntries = [
+    'presets',
+    'session_state.json',
+    'plugin_data',
+    'plugin_presets',
+    'plugins',
+    'liveprog',
+  ];
+
+  /// Linux 一次性迁移：条目在数据根缺失且配置根存在时整体改名迁入。
+  /// 逐条独立 try：单条失败（跨设备等）不阻塞其余条目与启动，旧数据
+  /// 仍留在配置根原处。非 Linux（dataDir == baseDir）直接跳过。
+  static void _migrateLegacyData() {
+    if (_dataDir == null || _dataDir == baseDir) return;
+    final sep = Platform.pathSeparator;
+    for (final name in _legacyDataEntries) {
+      try {
+        final dst = '$_dataDir$sep$name';
+        if (FileSystemEntity.typeSync(dst) !=
+            FileSystemEntityType.notFound) {
+          continue;
+        }
+        final src = '$baseDir$sep$name';
+        final type = FileSystemEntity.typeSync(src);
+        if (type == FileSystemEntityType.notFound) continue;
+        Directory(_dataDir!).createSync(recursive: true);
+        if (type == FileSystemEntityType.directory) {
+          Directory(src).renameSync(dst);
+        } else {
+          File(src).renameSync(dst);
+        }
+      } catch (_) {
+        // 迁移失败不阻塞启动：该条目从空开始，旧数据仍在配置根。
+      }
+    }
+  }
+
   /// 以两空格缩进把 [value] 写成 JSON 文件，自动建父目录。
   ///
   /// 实现已收敛到 `core/io/document_store.dart`（统一落盘治理）；

@@ -19,7 +19,7 @@ extension PluginManagerCache on PluginManager {
   static const int kCacheSchemaVersion = 2;
 
   static File _getCacheFile() => File(
-    ConfigManager.path('plugins${Platform.pathSeparator}plugin_cache.json'),
+    ConfigManager.dataPath('plugins${Platform.pathSeparator}plugin_cache.json'),
   );
 
   /// 剔除磁盘路径已不存在的条目，并按 path+format 去重，返回被剔除的数量。

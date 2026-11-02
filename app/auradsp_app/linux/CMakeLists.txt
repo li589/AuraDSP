@@ -100,6 +100,47 @@ install(FILES "${FLUTTER_ICU_DATA_FILE}" DESTINATION "${INSTALL_BUNDLE_DATA_DIR}
 install(FILES "${FLUTTER_LIBRARY}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
   COMPONENT Runtime)
 
+# AuraDSP 引擎（S3，ADR-012）：随包分发 Linux 引擎 .so 到 bundle lib/
+# （PlatformProfile 的裸名候选经 runner RPATH $ORIGIN/lib 命中）。
+# 有则随包无则跳过，与 Windows 侧 EXISTS 口径一致（缺失不拦构建，
+# App 启动走降级提示）。
+set(AURADSP_ENGINE_SO
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../core/desktop/linux/out/Release/libauradsp_engine.so")
+if(EXISTS "${AURADSP_ENGINE_SO}")
+  install(FILES "${AURADSP_ENGINE_SO}" DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
+    COMPONENT Runtime)
+endif()
+
+# 声学资源包（与 Windows 侧同一清单）：安装到 bundle 根 resources/
+# （ResourceLocator 按 exe 旁 resources/ 探测）。
+set(AURADSP_ASSETS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../../../assets")
+if(EXISTS "${AURADSP_ASSETS_DIR}/manifest.json")
+  install(DIRECTORY "${AURADSP_ASSETS_DIR}/ddc"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  install(DIRECTORY "${AURADSP_ASSETS_DIR}/liveprog"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  install(FILES "${AURADSP_ASSETS_DIR}/manifest.json"
+    DESTINATION "${CMAKE_INSTALL_PREFIX}/resources"
+    COMPONENT Runtime)
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/01_headphone_correction"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/02_spatial_3d"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+  if(EXISTS "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices")
+    install(DIRECTORY "${AURADSP_ASSETS_DIR}/convolver/07_speaker_devices"
+      DESTINATION "${CMAKE_INSTALL_PREFIX}/resources/convolver"
+      COMPONENT Runtime)
+  endif()
+endif()
+
 foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
   install(FILES "${bundled_library}"
     DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
