@@ -469,8 +469,12 @@ int wmain(int argc, wchar_t** argv) {
                 out.seq = in.seq;
                 out.frames = frames;
                 out.reserved = in.reserved;
-                const uint32_t channels =
-                    auradsp::ipc::unpackTransportChannels(in.reserved);
+                // 声道数与 frames 同口径钳制（安全与边界对齐 2026-11-02）：
+                // reserved 由对端写入共享内存，防御性钳制到 kChannels，
+                // 防止越界破坏栈上交错缓冲。
+                const uint32_t channels = (std::min)(
+                    auradsp::ipc::unpackTransportChannels(in.reserved),
+                    auradsp::ipc::kChannels);
                 const uint32_t mask =
                     auradsp::ipc::unpackTransportMask(in.reserved);
                 float interleaved[auradsp::ipc::kChannels *
