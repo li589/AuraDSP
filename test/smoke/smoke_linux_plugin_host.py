@@ -91,6 +91,8 @@ def source_invariants():
           "[sec] 宿主音频线程声道数钳制到 kChannels")
     check("fstat" in sr and "st_size" in sr,
           "[sec] SharedRegion::open 映射前校验对象尺寸")
+    check("S_ISDIR" in hc and "::stat(xdg" in hc,
+          "[sec] socketBaseDir 校验 XDG 目录存在性（死目录回落 /tmp）")
 
     profile = read(os.path.join(APP, "lib", "platform",
                                 "platform_profile.dart"))

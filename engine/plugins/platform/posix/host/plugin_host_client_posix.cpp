@@ -32,6 +32,7 @@
 #include <poll.h>
 #include <semaphore.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -149,7 +150,15 @@ std::string hostExecutablePath(HostArch arch) {
 std::string socketBaseDir() {
     if (const char* xdg = std::getenv("XDG_RUNTIME_DIR");
         xdg && xdg[0] == '/') {
-        return xdg;
+        // 存在性校验（审查修复 2026-11-03）：env 指向已不存在的
+        // 目录时（陈旧会话变量/临时目录被清），宿主 bind 必然失败，
+        // 而远程模式下扫描/加载只会静默归零、无任何回落——实测
+        // 踩到过。目录不在或不可写即回退 /tmp（恒存在）。
+        struct stat st {};
+        if (::stat(xdg, &st) == 0 && S_ISDIR(st.st_mode) &&
+            ::access(xdg, W_OK) == 0) {
+            return xdg;
+        }
     }
     return "/tmp";
 }
