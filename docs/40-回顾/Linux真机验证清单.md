@@ -121,6 +121,19 @@ plugin_host_x64（开 multilib 构建时另有 plugin_host_x86）。
 - [ ] 插件编辑器按钮：Linux 下应明确不可用（能力层 canEdit=false），
       不假死、不崩溃
 
+## 3d. 打磨验收（2026-11-02 打磨三期，设置页 → Linux 设备卡/模式卡）
+
+- [ ] ALSA 后端下设备卡出现「ALSA 采集设备」行：编辑对话框枚举只列可采集
+      设备（IOID=Input），选 hw:Loopback 或手填后保存，driver 模式出声正常
+      （三期 B3/C1：此前该字段只能手改配置文件）
+- [ ] virtual/driver 模式运行中停掉 PipeWire/PulseAudio（或拔掉采集设备）：
+      模式卡出现「音频采集中断」类提示，不再静默无声而状态显示正常
+      （二期 B2 capture-lost 回推）
+- [ ] virtual 模式下把系统默认输出切成 auradsp_virtual：模式卡出现反馈环
+      警告；system 模式下默认输出为虚拟设备时出现软提示（二期 B5）
+- [ ] 故意让采集失败（如 ALSA 后端填不存在的采集设备名切 driver 模式）：
+      模式卡显示具体失败原因文案，而非只有通用提示（二期 B1 note 渲染）
+
 ## 4. 桌面集成
 
 - [ ] **托盘**：面板出现 AuraDSP 图标（PNG）；关窗最小化到托盘不退出；
