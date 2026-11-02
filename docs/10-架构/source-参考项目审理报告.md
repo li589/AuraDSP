@@ -1,14 +1,14 @@
 # source/ 参考项目审理报告
 
-> 版本：**v2.7**（2026-10-25，新增 PeaceTXT-to-EEL-converter 参考仓，扩充 §1 / §2.10 / §3 / §4 / §5）
-> 范围：`source/` 下全部 17 个第三方参考克隆的实测结构、源码完整性、磁盘占用、许可证与算法价值。
+> 版本：**v2.8**（2026-11-02，新增 VST2 双轨参考资产：Xaymar Clean-Room vst2sdk 与 Steinberg 官方归档 vstsdk2.4，扩充 §1 / §2.11 / §3 / §4 / §5）
+> 范围：`source/` 下全部 19 个第三方参考克隆/归档的实测结构、源码完整性、磁盘占用、许可证与算法价值。
 > 定位：只读参考区（.gitignore 排除，不入主库）；本报告为 M1 插件宿主 / Phase 5~8 / 算法对照（M5 细化）提供完整决策依据。
 
 ---
 
 ## 1. 资产总览（实测基线）
 
-截至 2026-10-16，`source/` 下全部 15 个参考项目均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
+截至 2026-11-02，`source/` 下全部 19 个参考项目/归档均已完成嵌套 `.git` 剥除，并在 `source/ORIGIN.md` 登记版本（`source/` 整体 gitignore，仅 `ORIGIN.md` 白名单入库；从参考仓提取进主库的第三方资产登记见 [`vendor/ORIGIN.md`](../../vendor/ORIGIN.md) 与 [`core/android/vendor-src/ORIGIN.md`](../../core/android/vendor-src/ORIGIN.md)）。最新实测占用与价值评估如下：
 
 | # | 目录 | 对应上游仓库 | 平台 / 技术栈 | 许可证 | 实测体积 / 文件数 | 对 AuraDSP 的参考价值与对齐里程碑 |
 |---|---|---|---|---|---|---|
@@ -29,8 +29,10 @@
 | 15 | **virtual-surround-sound** | `nnyj/virtual-surround-sound` (main@b67d037) | Windows / C++ APO 转发器 | GPL-3.0（**含 NIRSOFT SoundVolumeView.exe 专有工具，注意**） | 410 KB (31 文件) | ★★ **Windows APO RT 线程转发范式 + COM 聚合陷阱实录**（VB-Cable 7.1→HeSuVi binaural→WASAPI 物理设备，~10ms 延迟；lock-free SPSC ring + 注册表监听设备切换；docs/apo-forwarder-internals.md 记录 audiodg 聚合/端点 FX slot/LPAC ACE 等踩坑）。**GPL-3.0 但工具目录含第三方专有 exe，仅作阅读参考** |
 | 16 | **LiveprogIDE** | `timschneeb/LiveprogIDE` (master@b2f3924) | 跨平台 / Qt6, C++ (QMake) | **未见 LICENSE（All Rights Reserved，默认保留所有权利）** | 12.0 MB (424 文件) | ★★ **Liveprog（EEL2）脚本 IDE / 编辑器 UX 参考**（Qt6 QCodeEditor 语法高亮 + Qt-Advanced-Docking-System 停靠布局；`src/definitions/demo.eel` 为样例脚本）。对齐引擎 `engine/legacy/` 的 liveprog(EEL2) 可编程级，可为 AuraDSP Liveprog 编辑页提供 UI 范式；**根无 LICENSE → 禁并入 GPL-3.0 主库，仅作阅读参考**。子依赖 `QCodeEditor`(MIT)、`3rdparty/docking-system`(LGPL-2.1) 已各自带许可、内容已展开并去嵌套 `.git` |
 | 17 | **PeaceTXT-to-EEL-converter** | `nanbeimerco/PeaceTXT-to-EEL-converter` (main@5de0462) | 跨平台 / 纯前端 Web (HTML+JS+CSS) | README 声明 **MIT**，但**无 LICENSE 文件**（未确认；MIT 与 GPL-3.0 兼容） | 168 KB (5 文件) | ★★ **Equalizer APO / Peace 预设 → LiveProg EEL2 脚本转换参考**（RBJ Biquad Peaking/Low-Shelf/High-Shelf 系数生成、L/R 独立 EQ、前级/声道交换/极性反转，`app.js` 的 `generateEel` 为代码生成主体）。对齐引擎 `engine/legacy/` liveprog 级与 `assets/liveprog/*.eel`，可为 AuraDSP「导入 EqualizerAPO 预设」功能提供格式与算法蓝本；与既有的 `equalizerAPO64`(#8) 构成预设格式与宿主的闭环。**README 声明 MIT 但缺 LICENSE 文件，并入前须向上游确权** |
+| 18 | **vst2sdk** | `Xaymar/vst2sdk` (root@339d4f3) | 跨平台 / C99, C++20 单头文件 | BSD-3-Clause | 245 KB (10 文件) | ★★★ **Clean-Room 逆向 VST 2.x SDK 头号代码来源**（规避 Steinberg 法律风险，为 plugin_host_x64/x86 宿主提供合法 VST2 C-ABI 结构体与操作码定义） |
+| 19 | **vstsdk2.4** | archive.org vstsdk2_4.zip (v2.4 官方归档) | 跨平台 / C++ 官方 SDK | Steinberg Proprietary（**严禁并入主库**） | 21.18 MB (609 文件) | ★★★ **VST 2.4 原厂金标准对照**（官方 doc 详述结构体内存对齐、MIDI 事件、时钟与 Dispatcher 语义，为排查第三方老插件兼容性问题的权威真相源） |
 
-总计占用：**~780 MB**，约 **14,105** 个源文件与资源。
+总计占用：**~801 MB**，约 **14,724** 个源文件与资源。
 
 ---
 
@@ -201,6 +203,27 @@
 - **许可研判（与 #16 LiveprogIDE 需区别对待）**：README 的「ライセンス」章节**明确声明 "MIT License"**，但**仓库内无 LICENSE 文件** → 按本项目铁律（无 LICENSE ≠ 开源）保守记为「**声明 MIT、未落 LICENSE 文件**」。因 MIT 与 AuraDSP 的 GPL-3.0 **单向兼容**，实际合规风险显著低于 #16（后者无任何许可声明 → All Rights Reserved → 禁并入）。**处置**：阅读参考与算法对照无碍；若未来要并入其转换代码（如 `app.js` 的系数生成与文本解析逻辑），须①先请上游补齐 LICENSE 文件，或②按 RBJ 公式自研重写（公式属公开常识，本仓已有同构实现）。随仓分发的 `jszip.min.js` 为 MIT/GPLv3 双许可，可自由使用。
 - **对 AuraDSP 价值**：本项目已有 `assets/liveprog/`（47 个 `.eel`）与引擎 liveprog(EEL2) 可编程级，且 `equalizerAPO64` 已作为 Phase 7b 蓝本——本仓补齐了「**Equalizer APO 预设格式 → EEL2 脚本**」这一环，是「导入 Peace / EqualizerAPO 预设」功能的现成算法与格式参考（含 L/R 独立 EQ 与通道处理语义）。规模极小（5 文件 / 168 KB），研读成本低。
 
+
+### 2.11 VST2 SDK 双轨资产：Xaymar Clean-Room 逆向 SDK 与 Steinberg 官方 SDK 2.4 归档（2026-11-02 新增）
+
+- **背景**：为响应 2026-11-02 插件双宿主架构方案（`plugin_host_x64` / `plugin_host_x86`）对 Windows 平台 VST2 格式的支持规划，引入两套 VST2 核心资产并存放于 `source/vst2sdk/`：
+  1. `source/vst2sdk/vst2sdk`：来自 `https://github.com/Xaymar/vst2sdk.git`（root@339d4f3），Michael Fabian 'Xaymar' Dirks 主导的净室逆向（Clean-Room Reverse Engineering）VST 2.x SDK；
+  2. `source/vst2sdk/vstsdk2.4`：来自 `https://archive.org/download/VST2SDK/vstsdk2_4.zip`，Steinberg 于 2006-01-18 发布的官方 VST SDK 2.4 完整原厂归档。
+- **技术栈与结构**：
+  1. **Xaymar `vst2sdk`**：C99 / C++20 单头文件结构（`include/vst.h` 97 KB、`include/vst.hpp` 2 KB、`include/cvst` 1.6 KB），无任何第三方运行时或链接库依赖。完整还原了 VST 2.x C-ABI 的核心结构体 `VstPlugin`（对应原厂 `AEffect`）、宿主调度函数指针 `VstHostCallback`、操作码枚举 `VstHostOpcode` / `VstPluginOpcode`，以及音频处理与 GUI 嵌入方法（`effEditOpen` HWND 挂载）。
+  2. **Steinberg `vstsdk2.4`**：包含官方完整头文件集（`pluginterfaces/vst2.x/aeffect.h`, `aeffectx.h`）、C++ 面向对象封装（`public.sdk/source/vst2.x/audioeffect.h`）、VSTGUI 3.0 库（`vstgui.sf/`）、官方预编译监视工具（`bin/`）以及完整的 HTML/PDF 技术规范文档（`doc/` 600+ 文件）。
+- **两套资产定位与核心分工（双轨制）**：
+  - **开发与编译真相源（Xaymar clean-room）**：未来在 `engine/plugins/formats/vst2/` 或宿主进程 `plugin_host_x64` / `plugin_host_x86` 中实现 VST2 插件加载驱动时，**只能且必须以 Xaymar 的 `vst.h` 作为唯一编译依赖**（后续可按规范收编只读副本至 `vendor/plugin-api/vst2/`）。
+  - **排错与行为规范真相源（Steinberg 官方归档）**：原厂 SDK 具备无可替代的技术文档价值。尤其在处理 32 位 vs 64 位结构体字节对齐（`#pragma pack(8)`）、非标 Dispatcher 操作码、老旧音频插件的采样块缓冲协商、以及 Windows HWND 父子窗口嵌入（`effEditOpen`）等边缘怪癖时，官方 `doc/` 与示例代码提供了最具权威性的对照标准。
+- **许可研判与法律边界（铁律）**：
+  - **Steinberg 官方 SDK（红线）**：Steinberg 早在 2018 年 10 月终止了 VST 2.4 协议签署，并禁止未经授权者分发其官方头文件或使用其商标/官方 SDK 分发商业或开源软件。因此，`source/vst2sdk/vstsdk2.4` **绝对禁止并入主库（禁止拷贝至 engine/ 或 vendor/）、绝对禁止随 Git 提交或随 Release 分发**，必须严格隔离在 `source/`（`.gitignore` 保护区），仅作本地只读技术参考。
+  - **Xaymar Clean-Room SDK（绿灯）**：采用标准的净室逆向方法编写，仅为实现程序间互操作性（Interoperability），明确采用 **BSD-3-Clause** 宽松许可证，已被 DISTRHO（DPF）、OBS Studio、StompTuner 等主流开源音频软件广泛采用。其头文件完全符合开源合规要求，未来可合法提取至 `vendor/plugin-api/vst2/`。
+- **对 AuraDSP 价值与落地路线**：
+  - 为近期启动的 Windows VST2 支持计划提供了齐备的基础设施：在实现 `plugin_host_x64`（64位沙箱宿主）与 `plugin_host_x86`（32位位桥宿主）时，直接基于 `vst.h` 实现对 `AEffect` 的调用与 `audioMaster` 回调派发；
+  - 彻底打消了 VST2 支持中的版权合规顾虑，技术路径与《插件双宿主架构与跨格式扩展方案-2026-11-02》完全呼应。
+
+---
+
 ## 3. 算法与系统能力对照矩阵
 
 | 功能 / 算法需求 | AuraDSP 当前状态 | `source/` 中最佳参考仓库 | 具体参考源码路径 / 说明 |
@@ -223,6 +246,7 @@
 | **Windows APO RT 线程转发 + 设备热切换** | 当前为进程内 WASAPI pump | `virtual-surround-sound`（新增 #15） | `apo/src/vss_apo.cpp`（单文件最小 APO DLL）+ `docs/apo-forwarder-internals.md`（audiodg 聚合/端点 FX slot/LPAC ACE 踩坑实录）；lock-free SPSC ring 桥接 DSP 与 WASAPI 渲染线程，注册表监听实时切换 sink |
 | **Liveprog（EEL2）脚本编辑器 / IDE** | app/ Liveprog 编辑页（规划/待强化） | `LiveprogIDE`（新增 #16） | `src/eeleditor.{cpp,h,ui}`（Qt6 EEL2 语法高亮 + 停靠式多文档 IDE）+ `src/definitions/demo.eel`（样例脚本）；对齐引擎 `engine/legacy/` 的 liveprog 可编程级；**根无 LICENSE（ARR），仅阅读参考、禁搬运** |
 | **Equalizer APO / Peace 预设 → EEL2（liveprog）转换** | assets/liveprog 现有 47 个 .eel，无外部预设导入 | `PeaceTXT-to-EEL-converter`（新增 #17） | `app.js` 的 `parseTxt()`（Peace `.txt` 段解析）+ `generateEel()`（RBJ Biquad PK/LSC/HSC 系数 → EEL2 `calc_peak` / `calc_lshelf` / `calc_hshelf`；L/R 独立 EQ、前级、声道交换、极性反转）；为「导入 EqualizerAPO 预设」功能提供蓝本。**README 声明 MIT，缺 LICENSE 文件，并入前确权** |
+| **VST2 插件宿主与 32位位桥** | 规划支持 64 位与 32 位 VST2（双宿主 plugin_host_x64 / plugin_host_x86） | `vst2sdk` (Xaymar) / `vstsdk2.4` (Steinberg)（新增 #18 / #19） | `vst2sdk/include/vst.h`（Clean-Room 逆向头文件，合规编译源）；`vstsdk2.4/doc/`（原厂金标准规范与 Dispatcher 语义对照） |
 
 ---
 
@@ -233,6 +257,7 @@
    - **v2.5 更新（2026-10-16）**：本轮新增的 `tympan-apo/`、`virtual-surround-sound/` 两个克隆在登记前已剥除各自的嵌套 `.git`（原各约 340–430 KB）；剥除后递归复核 `source/` 下 `.git` 数量为 **0**，铁律持续有效。
    - **v2.6 更新（2026-10-24）**：新增 `LiveprogIDE/` 克隆（master@b2f3924）在登记前已剥除嵌套 `.git`（约 9.8 MB）；剥除后递归复核仍为 **0**，铁律持续有效。
    - **v2.7 更新（2026-10-25）**：新增 `PeaceTXT-to-EEL-converter/` 克隆（main@5de0462）在登记前已剥除嵌套 `.git`（约 129 KB）；剥除后递归复核仍为 **0**，铁律持续有效。
+   - **v2.8 更新（2026-11-02）**：新增 `source/vst2sdk/`，内部包含 Xaymar clean-room 逆向库（vst2sdk）与 Steinberg 官方 2.4 归档（vstsdk2.4）。已彻底剥除 `vst2sdk/vst2sdk/.git` 目录（剥除前约 1.6 MB，剥除后净体积仅 245 KB）；递归复核 `source/` 下 `.git` 数量严格维持为 **0**。已确立法律隔离红线：官方 SDK 仅驻留 `source/` 作只读参考，严禁并入主库；净室库准许作为编译依赖。
 2. **构建缓存审计**：
    - `source/RootJamesDSP/` 与 `source/RootlessJamesDSP/` 下存在由构建/导入自动生成的 `.gradle/` 目录。该目录仅为本地临时索引，建议后续可选择性清理或保留在本地。
 3. **大文件与二进制包审计**：
@@ -257,6 +282,7 @@
 | **P-9** | ✅ 已闭环 | 新增两个 Windows APO 参考仓（tympan-apo / virtual-surround-sound） | 2026-10-16 用户克隆至 `source/`；二者嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 分别锁定 `e85f7a4` / `b67d037`，已于 `source/ORIGIN.md` 追加 #14 / #15 登记、本报告升版 v2.5（§1 扩至 15 项、新增 §2.8、§3 补充两行、§4 审计更新）。许可研判：tympan-apo 双许可（`MIT OR Apache-2.0`，可自由借鉴架构、并入须保留声明）；virtual-surround-sound 为 GPL-3.0 但 `tools/` 含 NIRSOFT 专有 `SoundVolumeView.exe`，**该 exe 禁并入/重分发**，源码仅作阅读参考。二者维持只读参考、禁搬运定位。 |
 | **P-10** | ✅ 已闭环 | 新增 LiveprogIDE 参考仓（timschneeb/LiveprogIDE，master@b2f3924） | 2026-10-24 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `b2f3924`，已于 `source/ORIGIN.md` 追加 #16 登记、本报告升版 v2.6（§1 扩至 16 项、新增 §2.9、§3 补充一行、§4 审计更新）。许可研判：根目录**无 LICENSE 文件** → 按 **All Rights Reserved** 处理（timschneeb 作者，与 RootlessJamesDSP 同主；子依赖 QCodeEditor MIT / docking-system LGPL-2.1 各自带许可）。**根无 LICENSE → 代码禁并入 GPL-3.0 主库，仅作 EEL2/Liveprog 脚本编辑器 UX 的阅读参考**（对齐引擎 `engine/legacy/` 的 liveprog 可编程级），维持只读、禁搬运定位。 |
 | **P-11** | ✅ 已闭环 | 新增 PeaceTXT-to-EEL-converter 参考仓（nanbeimerco，main@5de0462） | 2026-10-25 克隆至 `source/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `5de0462`，已于 `source/ORIGIN.md` 追加 #17 登记、本报告升版 v2.7（§1 扩至 17 项、新增 §2.10、§3 补充一行、§4 审计更新）。许可研判：README 的「ライセンス」章节**声明 MIT**，但**仓库无 LICENSE 文件** → 保守记为「声明 MIT、未落文件」；MIT 与 GPL-3.0 单向兼容，**风险显著低于 #16 LiveprogIDE（ARR，禁并入）**。结论：阅读参考与算法对照无碍；并入代码前须请上游补 LICENSE 或按 RBJ 公式自研重写。随仓 `jszip.min.js`（JSZip v3.10.1）为 MIT/GPLv3 双许可，可自由使用。 |
+| **P-12** | ✅ 已闭环 | 新增 VST2 SDK 双轨参考资产（Xaymar clean-room 与 Steinberg 官方归档） | 2026-11-02 用户置入 `source/vst2sdk/`；嵌套 `.git` 已剥除（递归复核 `source/` 下 `.git` 数量 = 0），HEAD 锁定 `root@339d4f3`，已于 `source/ORIGIN.md` 追加登记、本报告升版 v2.8（§1 扩至 19 项、新增 §2.11、§3 补充一行、§4 审计更新）。确立「编译走 Xaymar Clean-Room BSD-3-Clause、排错对照官方归档、官方源码绝不进主库」的双轨合规准则。 |
 
 ---
 
