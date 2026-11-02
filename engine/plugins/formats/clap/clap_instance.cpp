@@ -9,7 +9,9 @@
 #include "win32_util.h"
 
 #include <clap/clap.h>
+#if defined(_WIN32)
 #include <windows.h>
+#endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供（二期阶段一）
 
 #include <algorithm>
 #include <atomic>

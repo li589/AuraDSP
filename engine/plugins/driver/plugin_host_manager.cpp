@@ -1064,4 +1064,34 @@ bool PluginHostManager::slotTaskPending(size_t slot) const {
     if (slot >= kMaxPluginSlots) return false;
     return m_slots[slot].taskState.load(std::memory_order_acquire) == 1;
 }
+// ---------------------------------------------------------------------------
+// 编辑器槽委派（二期阶段一，2026-11-02，自 platform/win32/plugin_gui_
+// win32.cpp 移入）：三方法只向实例 showEditor/closeEditor/isEditorOpen
+// 委派，不触碰任何窗口 API，本就与平台无关；此前置于 GUI 文件导致
+// 非 Windows 构建链接缺符号。GUI 本体仍归各平台 GUI 文件。
+bool PluginHostManager::showEditorSlot(size_t slot, const std::string& title) {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->showEditor(title);
+    }
+    return false;
+}
+
+void PluginHostManager::closeEditorSlot(size_t slot) {
+    if (slot >= kMaxPluginSlots) return;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance) {
+        m_slots[slot].instance->closeEditor();
+    }
+}
+
+bool PluginHostManager::isEditorOpenSlot(size_t slot) const {
+    if (slot >= kMaxPluginSlots) return false;
+    std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
+    if (m_slots[slot].instance && m_slots[slot].hasActive.load()) {
+        return m_slots[slot].instance->isEditorOpen();
+    }
+    return false;
+}
 } // namespace auradsp

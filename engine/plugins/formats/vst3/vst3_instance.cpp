@@ -9,7 +9,9 @@
 #include "win32_util.h"
 
 #include <steinberg/vst3_static.h>
+#if defined(_WIN32)
 #include <windows.h>
+#endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供（二期阶段一）
 
 #include <algorithm>
 #include <atomic>
@@ -717,11 +719,22 @@ public:
                 if (compCP && ctrlCP) {
                     AURADSP_DBG("[DBG VST3] calling safeConnect(compCP, ctrlCP)...");
                     auto safeConnect = [](Steinberg::Vst::IConnectionPoint* a, Steinberg::Vst::IConnectionPoint* b) -> int {
+#if defined(_MSC_VER)
                         __try {
                             return (int)a->connect(b);
                         } __except (EXCEPTION_EXECUTE_HANDLER) {
                             return -999999;
                         }
+#else
+                        // 非 MSVC 无 SEH：C++ 异常兜底（与 POSIX
+                        // module_pump 的 runTaskGuarded 同手法；
+                        // 段错误级隔离由进程外宿主承担）。
+                        try {
+                            return (int)a->connect(b);
+                        } catch (...) {
+                            return -999999;
+                        }
+#endif
                     };
                     int c1 = safeConnect(compCP, ctrlCP);
                     AURADSP_DBG_S("[DBG VST3] safeConnect(compCP, ctrlCP) result=" << c1);
