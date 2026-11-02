@@ -2566,6 +2566,48 @@ abstract class AppLocalizations {
   /// **'输出始终送往 PulseAudio 默认 sink；请勿把 auradsp_virtual 设为系统默认输出，否则处理后的声音会再次被采集，形成自反馈。'**
   String get linuxDeviceHint;
 
+  /// No description provided for @linuxBackendLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'音频后端'**
+  String get linuxBackendLabel;
+
+  /// No description provided for @linuxBackendPulse.
+  ///
+  /// In zh, this message translates to:
+  /// **'PulseAudio（默认）'**
+  String get linuxBackendPulse;
+
+  /// No description provided for @linuxBackendAlsa.
+  ///
+  /// In zh, this message translates to:
+  /// **'ALSA 直连（专家模式）'**
+  String get linuxBackendAlsa;
+
+  /// No description provided for @linuxAlsaOutDevice.
+  ///
+  /// In zh, this message translates to:
+  /// **'ALSA 输出设备'**
+  String get linuxAlsaOutDevice;
+
+  /// No description provided for @linuxAlsaDeviceEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑'**
+  String get linuxAlsaDeviceEdit;
+
+  /// No description provided for @linuxAlsaDeviceUnset.
+  ///
+  /// In zh, this message translates to:
+  /// **'default（未指定）'**
+  String get linuxAlsaDeviceUnset;
+
+  /// No description provided for @linuxAlsaExpertHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'专家模式经 ALSA 直连设备（period 256 帧），延迟低于 PulseAudio；切换后端或设备后音频引擎会自动重启生效。PipeWire 系统上 hw: 设备可能被会话管理器占用而打开失败，失败原因会显示在状态中。'**
+  String get linuxAlsaExpertHint;
+
   /// No description provided for @modeAsio.
   ///
   /// In zh, this message translates to:

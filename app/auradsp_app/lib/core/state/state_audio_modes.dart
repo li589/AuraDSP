@@ -96,6 +96,37 @@ extension AudioModesState on AppModel {
     _toIso?.send({'cmd': 'linuxstatus'});
   }
 
+  /// Linux 音频后端切换（D-6 二期）：'pulse' | 'alsa'。后端在
+  /// isolate 生成时由工厂按配置选定，切换须重启 isolate 生效
+  /// （与「重试」同路径）；落盘 + 重启 + 通知。
+  void setLinuxAudioBackend(String backend) {
+    if (!PlatformProfile.isLinux) return;
+    final v = backend == 'alsa' ? 'alsa' : 'pulse';
+    if (config.linuxAudioBackend == v) return;
+    config.linuxAudioBackend = v;
+    ConfigManager.save(config);
+    _restartIsolate();
+    _notifyUi();
+  }
+
+  /// ALSA PCM 设备枚举（设置页设备编辑的下拉数据源）：FFI 直查
+  /// libasound 的 device_name_hint；无库/失败返回空表（可手填）。
+  List<String> listAlsaDevices() {
+    if (!PlatformProfile.isLinux) return const [];
+    return alsa_ffi.listAlsaPcmDeviceNames();
+  }
+
+  /// ALSA 输出设备名（专家模式）：落盘 + 重启 isolate 生效。
+  void setAlsaOutputDevice(String device) {
+    if (!PlatformProfile.isLinux) return;
+    final v = device.trim();
+    if (config.alsaOutputDevice == v) return;
+    config.alsaOutputDevice = v;
+    ConfigManager.save(config);
+    if (config.linuxAudioBackend == 'alsa') _restartIsolate();
+    _notifyUi();
+  }
+
   /// ADR-009: 切换音频范式（附加模式 vs 普通管线模式）
   void setModeCategory(String category) {
     if (category != AudioModes.categoryAttachment &&

@@ -12,16 +12,26 @@
 //              snd-aloop（方案 S5a 验收口径）。
 part of 'audio_isolate.dart';
 
+/// 采集型 Source 的统一面（PA 与 ALSA 两种实现）：泵只认 Source，
+/// 控制器还要 device/failed/dispose 做状态回推与拆除。
+abstract class LinuxCaptureSource implements Source {
+  String get device;
+  bool get failed;
+  void dispose();
+}
+
 /// 采集型 Source：把 PulseAudioIn 的阻塞读适配到泵的 fill 契约。
 /// 采集失败（源消失/服务端重启）→ 本源失效，后续 fill 恒静音并只记
 /// 一次日志；模式重选会重建本对象。
-class PulseCaptureSource implements Source {
+class PulseCaptureSource implements LinuxCaptureSource {
   PulseCaptureSource(this._input);
 
   final PulseAudioIn _input;
   bool _failed = false;
 
+  @override
   String get device => _input.device;
+  @override
   bool get failed => _failed;
 
   @override
@@ -43,6 +53,45 @@ class PulseCaptureSource implements Source {
     }
   }
 
+  @override
+  void dispose() {
+    _input.close();
+  }
+}
+
+/// ALSA 直连版采集 Source（专家模式 driver 路径）：语义与
+/// PulseCaptureSource 一致（失败置 failed 后恒静音、只记一次）。
+class AlsaCaptureSource implements LinuxCaptureSource {
+  AlsaCaptureSource(this._input);
+
+  final AlsaAudioIn _input;
+  bool _failed = false;
+
+  @override
+  String get device => _input.device;
+  @override
+  bool get failed => _failed;
+
+  @override
+  void fill(Float32List out, int frames, int deviceRate) {
+    if (_failed) {
+      for (var i = 0; i < frames * 2; i++) {
+        out[i] = 0;
+      }
+      return;
+    }
+    try {
+      _input.read(out, frames);
+    } catch (e) {
+      _failed = true;
+      dbgLog('ALSA-IN capture failed (silenced): $e');
+      for (var i = 0; i < frames * 2; i++) {
+        out[i] = 0;
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _input.close();
   }
@@ -58,6 +107,8 @@ class LinuxModeController {
     required this._setSource,
     required this._send,
     required this._deviceRate,
+    this.alsaExpert = false,
+    this.alsaCaptureDevice = '',
   });
 
 
@@ -66,10 +117,16 @@ class LinuxModeController {
   final void Function(Map<String, dynamic>) _send;
   final int Function() _deviceRate;
 
+  /// ALSA 专家模式（二期）：driver 模式的采集改走 ALSA 直连。
+  /// 后端在 isolate 生成时定死（切换后端会重启 isolate），故为
+  /// 普通字段而非回调。
+  final bool alsaExpert;
+  final String alsaCaptureDevice;
+
   final PulseContextService _service = PulseContextService();
 
   String _mode = 'system';
-  PulseCaptureSource? _capture;
+  LinuxCaptureSource? _capture;
   Source? _savedSource;
 
   String get mode => _mode;
@@ -95,6 +152,22 @@ class LinuxModeController {
     _capture = cap;
     _setSource(cap);
     dbgLog('LINUXMODE capture attached: $device');
+  }
+
+  /// ALSA 直连版 attach（driver 专家路径）：设备名是 ALSA PCM 名
+  /// （默认 hw:Loopback，配置 alsaCaptureDevice 非空时覆盖）。
+  void _attachAlsaCapture() {
+    _detachCapture(restoreSaved: false);
+    final current = _getSource();
+    _savedSource = current;
+    final device =
+        alsaCaptureDevice.trim().isEmpty ? 'hw:Loopback' : alsaCaptureDevice;
+    final input = AlsaAudioIn();
+    input.open(device: device, rate: _deviceRate());
+    final cap = AlsaCaptureSource(input);
+    _capture = cap;
+    _setSource(cap);
+    dbgLog('LINUXMODE capture attached (ALSA): $device');
   }
 
   Map<String, dynamic> _statusEvent({String? note, bool? active}) {
@@ -174,6 +247,22 @@ class LinuxModeController {
             _detachCapture(restoreSaved: true);
             _send(_statusEvent(note: 'snd-aloop-not-loaded', active: false));
             return;
+          }
+          if (alsaExpert) {
+            // 专家路径：ALSA 直采 hw:Loopback，绕开 PA 枚举（.monitor
+            // 源选择/卡序等一期坑整类不存在于这条路径）。打开失败
+            // 落到外层 catch 之前先给本路径专属 note，日志带真实原因。
+            try {
+              _attachAlsaCapture();
+            } catch (e) {
+              dbgLog('LINUXMODE driver ALSA attach failed: $e');
+              _detachCapture(restoreSaved: true);
+              _send(_statusEvent(
+                  note: 'alsa-capture-unavailable', active: false));
+              return;
+            }
+            _send(_statusEvent(active: true));
+            break;
           }
           final src = _service.findLoopbackSource();
           if (src == null) {

@@ -1345,6 +1345,28 @@ class AppLocalizationsJa extends AppLocalizations {
       '出力は常に PulseAudio の既定シンクへ送られます。auradsp_virtual をシステムの既定出力に設定しないでください。処理後の音声が再キャプチャされ、フィードバックループになります。';
 
   @override
+  String get linuxBackendLabel => 'オーディオバックエンド';
+
+  @override
+  String get linuxBackendPulse => 'PulseAudio（既定）';
+
+  @override
+  String get linuxBackendAlsa => 'ALSA 直接接続（エキスパート）';
+
+  @override
+  String get linuxAlsaOutDevice => 'ALSA 出力デバイス';
+
+  @override
+  String get linuxAlsaDeviceEdit => '編集';
+
+  @override
+  String get linuxAlsaDeviceUnset => 'default（未指定）';
+
+  @override
+  String get linuxAlsaExpertHint =>
+      'エキスパートモードは ALSA デバイスへ直接接続し（period 256 フレーム）、PulseAudio より低遅延です。バックエンド/デバイス変更後はオーディオエンジンが自動再起動します。PipeWire 環境では hw: デバイスがセッションマネージャに占有され開けない場合があり、失敗理由はステータスに表示されます。';
+
+  @override
   String get modeAsio => 'ASIO';
 
   @override
