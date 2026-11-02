@@ -166,7 +166,12 @@ bool PluginHostClient::start() {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
     if (!mode || strcasecmp(mode, "process") != 0) return false;
     const std::string exe = hostExecutablePath(m_arch);
-    if (exe.empty() || !std::filesystem::exists(exe)) return false;
+    // 须存在「且可执行」：产物经压缩包/工件流转可能丢失 +x，
+    // 此时若仍宣称远程可用，后续每次 spawn 都会 EACCES 失败、
+    // 扫描静默归零（CI 工件往返实测，2026-11-02）。不可执行
+    // 即按宿主缺失处理，manager 回落进程内，与 Windows 的
+    // 「exe 不在位则进程内」口径一致。
+    if (exe.empty() || ::access(exe.c_str(), X_OK) != 0) return false;
     m_processMode.store(true, std::memory_order_release);
     return true;
 }
@@ -252,7 +257,12 @@ bool PluginHostClient::launchLocked() {
     m_region.reset();
 
     const std::string exe = hostExecutablePath(m_arch);
-    if (exe.empty() || !std::filesystem::exists(exe)) return false;
+    // 须存在「且可执行」：产物经压缩包/工件流转可能丢失 +x，
+    // 此时若仍宣称远程可用，后续每次 spawn 都会 EACCES 失败、
+    // 扫描静默归零（CI 工件往返实测，2026-11-02）。不可执行
+    // 即按宿主缺失处理，manager 回落进程内，与 Windows 的
+    // 「exe 不在位则进程内」口径一致。
+    if (exe.empty() || ::access(exe.c_str(), X_OK) != 0) return false;
 
     const uint32_t serial = s_hostCounter.fetch_add(1, std::memory_order_relaxed);
     const uint32_t pid = static_cast<uint32_t>(::getpid());

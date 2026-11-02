@@ -187,7 +187,12 @@ def run_x86_bridge(lib, lib_path, cc):
           "[x86] plugin_host_x86 是 ELFCLASS32 二进制")
     # 32 位可执行性探测：无参运行应以参数校验 rc=1 退出；
     # 段错误（如 VM 禁用 IA32 仿真）则本节活体半跳过。
-    probe = subprocess.run([host86], capture_output=True)
+    try:
+        probe = subprocess.run([host86], capture_output=True)
+    except OSError as e:
+        print(f"  SKIP x86 桥活体半：plugin_host_x86 不可执行（{e}；"
+              f"工件流转丢失 +x 时的预期形态，客户端已按缺失回落）")
+        return
     if probe.returncode != 1:
         print(f"  SKIP x86 桥活体半：本机不可执行 32 位二进制"
               f"（探测 rc={probe.returncode}；真机/CI 另行验证）")

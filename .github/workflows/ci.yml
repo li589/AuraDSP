@@ -77,6 +77,8 @@ jobs:
         with:
           name: libauradsp_engine-linux
           path: core/desktop/linux/out/Release
+      - name: Restore host exec bits (artifact round-trip drops +x)
+        run: chmod +x core/desktop/linux/out/Release/plugin_host_x64 core/desktop/linux/out/Release/plugin_host_x86 2>/dev/null || true
       # 起一个带 null-sink 的 PulseAudio，让 smoke_linux_pulse_output
       # 在流水线里实跑而不是自 SKIP（无服务时该门禁按惯例跳过）。
       - name: Start PulseAudio with null sink
@@ -130,6 +132,8 @@ jobs:
         with:
           name: libauradsp_engine-linux
           path: core/desktop/linux/out/Release
+      - name: Restore host exec bits (artifact round-trip drops +x)
+        run: chmod +x core/desktop/linux/out/Release/plugin_host_x64 core/desktop/linux/out/Release/plugin_host_x86 2>/dev/null || true
       - name: Install Linux build deps
         run: |
           sudo apt-get update
@@ -177,6 +181,8 @@ jobs:
         with:
           name: libauradsp_engine-linux
           path: core/desktop/linux/out/Release
+      - name: Restore host exec bits (artifact round-trip drops +x)
+        run: chmod +x core/desktop/linux/out/Release/plugin_host_x64 core/desktop/linux/out/Release/plugin_host_x86 2>/dev/null || true
       - name: Install Linux build deps
         run: |
           sudo apt-get update
