@@ -19,6 +19,7 @@ abstract final class PlatformProfile {
 
   /// Windows 原生组件（VAIO/ASIO 驱动、APO、桥）可用。
   /// 取代 state_audio_modes.dart 的 9 处 `Platform.isWindows` 守卫。
+  static bool get isWindows => Platform.isWindows;
   static bool get isLinux => Platform.isLinux;
 
   static bool get supportsBridges => Platform.isWindows;

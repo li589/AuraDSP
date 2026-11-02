@@ -6945,6 +6945,18 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已覆盖同名预设「{name}」'**
   String presetOverwritten(String name);
+
+  /// No description provided for @plug32BitBadge.
+  ///
+  /// In zh, this message translates to:
+  /// **'32位'**
+  String get plug32BitBadge;
+
+  /// No description provided for @plug32BitHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'32 位插件（支持加载）'**
+  String get plug32BitHint;
 }
 
 class _AppLocalizationsDelegate

@@ -1,5 +1,5 @@
-import 'package:flutter/foundation.dart';
 import 'dart:ui' as ui;
+import '../../../platform/platform_profile.dart';
 
 import 'package:flutter/material.dart';
 
@@ -259,7 +259,7 @@ class _GlassSurface extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (defaultTargetPlatform == TargetPlatform.linux) {
+    if (PlatformProfile.isLinux) {
       return ClipRRect(
         borderRadius: borderRadius,
         child: child,

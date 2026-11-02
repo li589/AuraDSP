@@ -3664,4 +3664,10 @@ class AppLocalizationsJa extends AppLocalizations {
   String presetOverwritten(String name) {
     return '同名のプリセット「$name」を上書きしました';
   }
+
+  @override
+  String get plug32BitBadge => '32bit';
+
+  @override
+  String get plug32BitHint => '32ビットプラグイン（対応）';
 }

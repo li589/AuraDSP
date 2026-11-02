@@ -742,7 +742,7 @@
   "presetSaveFail": "Save failed (invalid name or disk)",
   "presetDirtyBadge": "Custom (unsaved)",
   "presetDeleted": "Preset deleted",
-  "presetDeleteFail": "Delete failed",
+  "presetDeleteFail": "Delete failed (file may be locked or already gone)",
   "presetLoaded": "Preset loaded",
   "presetLoadFail": "Preset read failed",
   "navPlugins": "Plugins",
@@ -807,7 +807,7 @@
       }
     }
   },
-    "memDataDir": "Data directory: {path}",
+  "memDataDir": "Data directory: {path}",
   "@memDataDir": {
     "placeholders": {
       "path": {
@@ -815,7 +815,7 @@
       }
     }
   },
-"memClear": "Clear Session Memory",
+  "memClear": "Clear Session Memory",
   "memCleared": "Persistent session memory cleared; next launch starts from clean defaults",
   "memReset": "Reset External Config to Defaults",
   "memResetDone": "config.json has been reset to the standard template",
@@ -1556,7 +1556,7 @@
   "plugScanDirsSelectAll": "Select all",
   "plugScanDirsClear": "Clear all checks",
   "plugScanDirsEnabledCount": "{enabled}/{total} enabled",
-  "@plugScanDirsEnabledCount":   {
+  "@plugScanDirsEnabledCount": {
     "placeholders": {
       "enabled": {
         "type": "int"
@@ -1574,6 +1574,7 @@
   "presetDeleteTitle": "Delete preset",
   "presetDeleteBody": "Delete this preset? This cannot be undone.",
   "presetDeleteAction": "Delete",
-  "presetDeleteFail": "Delete failed (file may be locked or already gone)",
-  "presetOverwritten": "Overwrote the existing preset \"{name}\""
+  "presetOverwritten": "Overwrote the existing preset \"{name}\"",
+  "plug32BitBadge": "32-bit",
+  "plug32BitHint": "32-bit plugin (supported)"
 }

@@ -3634,4 +3634,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String presetOverwritten(String name) {
     return '已覆盖同名预设「$name」';
   }
+
+  @override
+  String get plug32BitBadge => '32位';
+
+  @override
+  String get plug32BitHint => '32 位插件（支持加载）';
 }

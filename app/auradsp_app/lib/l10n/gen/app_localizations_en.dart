@@ -3839,4 +3839,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String presetOverwritten(String name) {
     return 'Overwrote the existing preset \"$name\"';
   }
+
+  @override
+  String get plug32BitBadge => '32-bit';
+
+  @override
+  String get plug32BitHint => '32-bit plugin (supported)';
 }

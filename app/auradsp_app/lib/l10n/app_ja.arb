@@ -742,7 +742,7 @@
   "presetSaveFail": "保存失敗（名式またはディスク）",
   "presetDirtyBadge": "カスタム（未保存）",
   "presetDeleted": "プリセットを削除しました",
-  "presetDeleteFail": "削除失敗",
+  "presetDeleteFail": "削除に失敗しました（ファイルが使用中か、既に存在しません）",
   "presetLoaded": "プリセットを適用しました",
   "presetLoadFail": "プリセット読込失敗",
   "navPlugins": "プラグイン",
@@ -807,7 +807,7 @@
       }
     }
   },
-    "memDataDir": "データディレクトリ：{path}",
+  "memDataDir": "データディレクトリ：{path}",
   "@memDataDir": {
     "placeholders": {
       "path": {
@@ -815,7 +815,7 @@
       }
     }
   },
-"memClear": "セッションメモリをクリア",
+  "memClear": "セッションメモリをクリア",
   "memCleared": "永続セッションメモリをクリアしました。次回はクリーンデフォルトで起動します",
   "memReset": "外部設定をデフォルトにリセット",
   "memResetDone": "config.json を標準テンプレートにリセットしました",
@@ -1556,7 +1556,7 @@
   "plugScanDirsSelectAll": "すべて選択",
   "plugScanDirsClear": "すべてのチェックを外す",
   "plugScanDirsEnabledCount": "{enabled}/{total} 件有効",
-  "@plugScanDirsEnabledCount":   {
+  "@plugScanDirsEnabledCount": {
     "placeholders": {
       "enabled": {
         "type": "int"
@@ -1574,6 +1574,7 @@
   "presetDeleteTitle": "プリセットを削除",
   "presetDeleteBody": "このプリセットを削除しますか？元に戻せません。",
   "presetDeleteAction": "削除",
-  "presetDeleteFail": "削除に失敗しました（ファイルが使用中か、既に存在しません）",
-  "presetOverwritten": "同名のプリセット「{name}」を上書きしました"
+  "presetOverwritten": "同名のプリセット「{name}」を上書きしました",
+  "plug32BitBadge": "32bit",
+  "plug32BitHint": "32ビットプラグイン（対応）"
 }

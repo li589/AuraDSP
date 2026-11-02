@@ -3,6 +3,8 @@
 // 纯数据：无 IO、无状态、无 Flutter 依赖，任何层（UI/测试/工具）都可直接引用。
 // 由 plugin_manager.dart re-export，调用方仍可从插件管理器入口取到这些类型。
 
+import '../../platform/platform_profile.dart';
+
 enum PluginFormat {
   vst3,
   clap,
@@ -65,6 +67,7 @@ class PluginMetadata {
   final PluginFormat format;
   final String path;
   final bool isCompatible;
+  final bool is64Bit;
   final String errorMessage;
 
   const PluginMetadata({
@@ -78,6 +81,7 @@ class PluginMetadata {
     required this.format,
     required this.path,
     this.isCompatible = true,
+    this.is64Bit = true,
     this.errorMessage = '',
   });
 
@@ -93,6 +97,8 @@ class PluginMetadata {
       format: PluginFormat.fromString(json['format'] as String? ?? ''),
       path: json['path'] as String? ?? '',
       isCompatible: json['isCompatible'] as bool? ?? true,
+      is64Bit: json['is64Bit'] as bool? ??
+          (json['errorMessage']?.toString().contains('32') == true ? false : true),
       errorMessage: json['errorMessage'] as String? ?? '',
     );
   }
@@ -108,6 +114,7 @@ class PluginMetadata {
     'format': format.label,
     'path': path,
     'isCompatible': isCompatible,
+    'is64Bit': is64Bit,
     'errorMessage': errorMessage,
   };
 
@@ -122,8 +129,19 @@ class PluginMetadata {
   @override
   int get hashCode => path.hashCode ^ id.hashCode;
 
+  /// 当前平台下是否支持加载与运行该插件。
+  /// Windows 平台已具备 32 位进程宿主桥（支持 32 位 VST3/CLAP），
+  /// 其它平台当前仅支持 64 位插件。
+  bool get isSupported =>
+      isCompatible || (PlatformProfile.isWindows && !is64Bit);
+
   /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
-  PluginMetadata copyWith({String? vendor}) => PluginMetadata(
+  PluginMetadata copyWith({
+    String? vendor,
+    bool? isCompatible,
+    bool? is64Bit,
+    String? errorMessage,
+  }) => PluginMetadata(
     id: id,
     name: name,
     vendor: vendor ?? this.vendor,
@@ -133,8 +151,9 @@ class PluginMetadata {
     description: description,
     format: format,
     path: path,
-    isCompatible: isCompatible,
-    errorMessage: errorMessage,
+    isCompatible: isCompatible ?? this.isCompatible,
+    is64Bit: is64Bit ?? this.is64Bit,
+    errorMessage: errorMessage ?? this.errorMessage,
   );
 }
 

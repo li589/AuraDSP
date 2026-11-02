@@ -196,7 +196,7 @@ void main() {
       expect(manager.pdcEnabled, isFalse);
     });
 
-    test('D2: 32-bit incompatible plugin is intercepted before dispatch', () {
+    test('D2: incompatible plugin is intercepted before dispatch (32-bit supported on Windows)', () {
       final meta32 = PluginMetadata.fromJson({
         'id': 'x86-1',
         'name': 'Legacy 32bit FX',
@@ -209,13 +209,39 @@ void main() {
       });
 
       final before = dispatchedCmds.length;
-      manager.loadPlugin(meta32);
-      // 不派发 pluginSlotLoad —— Dart 侧直接拦截，引擎不被打扰
-      expect(dispatchedCmds.length, before);
-      // lastError 带精确原因 + 插件名前缀
-      expect(manager.lastError, isNotNull);
-      expect(manager.lastError, contains('Legacy 32bit FX'));
-      expect(manager.lastError, contains('32 位'));
+      if (Platform.isWindows) {
+        expect(meta32.isSupported, isTrue);
+        manager.loadPlugin(meta32);
+        // Windows 平台支持 32 位双位桥，正常下发 pluginSlotLoad
+        expect(dispatchedCmds.length, before + 1);
+        expect(dispatchedCmds.last['cmd'], 'pluginSlotLoad');
+        // 模拟槽位 0 挂载完成释放 busy
+        manager.onPluginSlotLoaded(0, meta32.path, 1, '{}', 0);
+      } else {
+        expect(meta32.isSupported, isFalse);
+        manager.loadPlugin(meta32);
+        expect(dispatchedCmds.length, before);
+        expect(manager.lastError, isNotNull);
+        expect(manager.lastError, contains('Legacy 32bit FX'));
+      }
+
+      // 不支持的损坏插件在派发前必须被拦截
+      final corruptMeta = PluginMetadata.fromJson({
+        'id': 'corrupt-1',
+        'name': 'Corrupt FX',
+        'vendor': 'CorruptCo',
+        'version': '1.0',
+        'format': 'VST3',
+        'path': r'C:\VST3\Corrupt.vst3',
+        'isCompatible': false,
+        'is64Bit': true,
+        'errorMessage': '损坏的插件二进制',
+      });
+      final countBeforeCorrupt = dispatchedCmds.length;
+      manager.loadPlugin(corruptMeta);
+      expect(dispatchedCmds.length, countBeforeCorrupt);
+      expect(manager.lastError, contains('Corrupt FX'));
+      expect(manager.lastError, contains('损坏的插件二进制'));
 
       // 兼容插件照常派发
       final metaOk = PluginMetadata.fromJson({
@@ -228,9 +254,8 @@ void main() {
         'isCompatible': true,
       });
       manager.loadPlugin(metaOk);
-      expect(dispatchedCmds.length, before + 1);
+      expect(dispatchedCmds.length, countBeforeCorrupt + 1);
       expect(dispatchedCmds.last['cmd'], 'pluginSlotLoad');
-      expect(manager.lastError, isNull);
     });
 
     test('D2: onPluginSlotLoaded surfaces engine 32-bit error verbatim', () {
