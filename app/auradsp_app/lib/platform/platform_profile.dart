@@ -24,7 +24,8 @@ abstract final class PlatformProfile {
   static bool get supportsBridges => Platform.isWindows;
 
   /// VST3/CLAP 插件宿主管线可用（Windows 先行；其它平台后续独立立项）。
-  static bool get supportsPlugins => Platform.isWindows;
+  static bool get supportsPlugins =>
+      Platform.isWindows || Platform.isLinux;
 
   /// 本地设备泵循环（AudioOut）可用。
   /// R4（M6 审查遗留）：与实现保持一致——Windows 走 WASAPI，Linux 走

@@ -10,7 +10,9 @@
 #include <steinberg/vst3/base/IPluginFactory3.h>
 #include <steinberg/vst3/vst/IAudioProcessor.h>
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供（二期阶段一）
 
 #include <cstring>
 #include <filesystem>
@@ -23,6 +25,39 @@ namespace fs = std::filesystem;
 
 namespace auradsp {
 namespace {
+
+#if !defined(_WIN32)
+// Steinberg::wscast 依赖 wchar_t==char16 的 Windows 前提，非 Windows
+// 不存在；classInfoW 的 name/vendor/version 是 char16 串，这里直接
+// char16→UTF-8（含代理对处理）。（二期阶段三，2026-11-02）
+std::string char16ToUtf8(const char16_t* str) {
+    std::string out;
+    if (!str) return out;
+    for (const char16_t* p = str; *p; ++p) {
+        uint32_t cp = *p;
+        if (cp >= 0xD800 && cp <= 0xDBFF && p[1] >= 0xDC00 && p[1] <= 0xDFFF) {
+            cp = 0x10000 + ((cp - 0xD800) << 10) + (p[1] - 0xDC00);
+            ++p;
+        }
+        if (cp < 0x80) out.push_back(static_cast<char>(cp));
+        else if (cp < 0x800) {
+            out.push_back(static_cast<char>(0xC0 | (cp >> 6)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else if (cp < 0x10000) {
+            out.push_back(static_cast<char>(0xE0 | (cp >> 12)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        } else {
+            out.push_back(static_cast<char>(0xF0 | (cp >> 18)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 12) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | ((cp >> 6) & 0x3F)));
+            out.push_back(static_cast<char>(0x80 | (cp & 0x3F)));
+        }
+    }
+    return out;
+}
+#endif
+
 
 std::string cidToHexString(const Steinberg::TUID tuid) {
     std::ostringstream ss;
@@ -90,15 +125,27 @@ bool applyVstAudioEffectClass(PluginMetadata& meta,
         Steinberg::PClassInfoW classInfoW;
         if (factory3->getClassInfoUnicode(index, &classInfoW) == Steinberg::kResultOk) {
             if (classInfoW.name[0] != 0) {
+                #if defined(_WIN32)
                 std::string u = wideToUtf8(Steinberg::wscast(classInfoW.name));
+#else
+                std::string u = char16ToUtf8(classInfoW.name);
+#endif
                 put(meta.name, u);
             }
             if (classInfoW.vendor[0] != 0) {
+                #if defined(_WIN32)
                 std::string u = wideToUtf8(Steinberg::wscast(classInfoW.vendor));
+#else
+                std::string u = char16ToUtf8(classInfoW.vendor);
+#endif
                 put(meta.vendor, u);
             }
             if (classInfoW.version[0] != 0) {
+                #if defined(_WIN32)
                 std::string u = wideToUtf8(Steinberg::wscast(classInfoW.version));
+#else
+                std::string u = char16ToUtf8(classInfoW.version);
+#endif
                 put(meta.version, u);
             }
             if (classInfoW.subCategories[0] != 0) {

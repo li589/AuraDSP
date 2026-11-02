@@ -62,6 +62,19 @@
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
+/* 插件层（二期阶段一，2026-11-02）：driver/formats/integration 用到
+ * 的标准头，同第 2 条理由须赶在 legacy min/max 宏之前包含。 */
+#include <cctype>
+#include <condition_variable>
+#include <deque>
+#include <exception>
+#include <filesystem>
+#include <fstream>
+#include <future>
+#include <iomanip>
+#include <new>
+#include <queue>
+#include <sstream>
 #include <utility>
 #include <vector>
 

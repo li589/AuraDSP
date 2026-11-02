@@ -16,6 +16,7 @@ import 'platform_profile.dart';
 import 'plugins/plugin_dirs_desktop.dart';
 import 'plugins/plugin_dirs_mobile.dart';
 import 'plugins/plugin_dirs_windows.dart';
+import 'plugins/plugin_host_linux.dart';
 import 'plugins/plugin_host_windows.dart';
 import 'port/autostart.dart';
 import 'port/media_session.dart';
@@ -91,8 +92,11 @@ final class PlatformAdapters {
         'macos' || 'linux' => const DesktopPluginDirs(),
         _ => const MobilePluginDirs(),
       },
-      pluginHost:
-          isWindows ? const WindowsPluginHost() : const NullPluginHost(),
+      pluginHost: isWindows
+          ? const WindowsPluginHost()
+          : os == 'linux'
+              ? const LinuxPluginHost()
+              : const NullPluginHost(),
       mediaSession: isWindows
           ? const WindowsMediaSession()
           : os == 'linux'

@@ -13,9 +13,10 @@ project(auradsp_engine_linux LANGUAGES C CXX)
 # 构建中间文件由根工程统一到 build/linux/x64（preset linux-x64）。
 #
 # 与 Windows 目标的刻意差异（全部来自《Linux适配方案-2026-11-01》取证）：
-#   - 插件子系统整体裁剪（D-7）：AURADSP_ENABLE_PLUGINS 在 Linux 恒 OFF，
-#     引擎编入 integration 的两个 stub，C ABI 导出集不变（F2 实测 56 符号
-#     全等）。本文件不提供打开它的路径——Linux 插件宿主属后续独立立项。
+#   - 插件子系统（二期阶段一更新）：一期 D-7 按 CP-24 先行关闭；
+#     《Linux插件宿主实施方案-2026-11-02》立项后已转正，启用路径见
+#     下方 AURADSP_ENABLE_PLUGINS 块。关掉仍编 stub 且 C ABI 导出集
+#     不变（实测 56 符号全等）。
 #   - legacy 源表排除 jamesdsp.c（E4）：其 GCC constructor/destructor 会与
 #     auradsp_engine.cpp 的 global_init()/有意不调 Deallocation 策略双跑；
 #     它只是 Android effects HAL 入口，桌面引擎不需要。
@@ -40,20 +41,29 @@ if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
     set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Build type" FORCE)
 endif()
 
-# D-7：Linux 首期只做插件消费者，宿主整体裁剪（见文件头）。
-option(AURADSP_ENABLE_PLUGINS "Build VST3/CLAP plugin hosting subsystem (Windows only)" OFF)
+# 插件子系统（《Linux插件宿主实施方案-2026-11-02》阶段一）：默认
+# ON，进程内宿主——platform/posix 对应物 + driver/formats/integration
+# 真实源表；OFF 编 stub（裁剪）。产物目录按开关分离（out / out-
+# noplugins，与 Windows 同口径）：core 的 NO_PLUGINS 视图须与链接进
+# 同一 .so 的源一致，独立目录防增量构建混杂。
+option(AURADSP_ENABLE_PLUGINS "Build VST3/CLAP plugin hosting subsystem" ON)
+# 进程外宿主（与 Windows 同名同义）：ON 时引擎编入远程客户端/代理
+# （platform/posix/host），运行时经 AURA_PLUGIN_HOST_MODE=process
+# 启用 plugin_host_x64 隔离宿主，未启用时同进程内直通（manager 的
+# remoteMode 运行时分派，两路俱在）；OFF 时引擎定义 HOST_INPROC
+# 恒进程内（裁剪构建）。宿主可执行体随 ON 一并产出。
+option(AURADSP_PLUGIN_HOST_REMOTE "Build out-of-process plugin host (plugin_host_x64)" ON)
 if(AURADSP_ENABLE_PLUGINS)
-    message(WARNING
-        "Linux 首期不支持插件宿主（ADR-012 D-7），AURADSP_ENABLE_PLUGINS "
-        "已被强制置 OFF；引擎将编入 ABI/链阶段 stub，导出集不变。")
-    set(AURADSP_ENABLE_PLUGINS OFF CACHE BOOL "Build VST3/CLAP plugin hosting subsystem (Windows only)" FORCE)
+    set(AURADSP_OUT_DIR_NAME "out")
+else()
+    set(AURADSP_OUT_DIR_NAME "out-noplugins")
 endif()
 
 # 产物路径：与 Windows 对称的 out/<Config>/，落在子工程目录内（根工程
 # 统一入口构建时亦然，Flutter 同步与历史 smoke 的路径依赖由此保持）。
-set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out/${CMAKE_BUILD_TYPE}")
-set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out/${CMAKE_BUILD_TYPE}")
-set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/out/${CMAKE_BUILD_TYPE}")
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}/${CMAKE_BUILD_TYPE}")
+set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${AURADSP_OUT_DIR_NAME}/${CMAKE_BUILD_TYPE}")
 
 set(PLUGIN_API "${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/plugin-api")
 set(API        "${CMAKE_CURRENT_SOURCE_DIR}/../../../engine")
@@ -123,14 +133,47 @@ endif()
 
 find_package(Threads REQUIRED)
 
-# 引擎 .so：核心 + Linux 平台适配（M1/M2 唯一 OS 落点）+ 插件裁剪 stub。
+# 引擎 .so：核心 + Linux 平台适配（M1/M2 唯一 OS 落点）+ 插件层。
+if(AURADSP_ENABLE_PLUGINS)
+    # 插件层真实源表（与 Windows 工程同集，去平台专属文件）：
+    # driver 全集 + formats 全集 + integration 真实实现；平台层用
+    # platform/posix 对应物（include 路径二选一，源码以裸名取
+    # win32_util.h / module_pump.h）。
+    set(AURADSP_PLUGIN_SOURCES
+        "${API}/plugins/driver/plugin_bundle.cpp"
+        "${API}/plugins/driver/plugin_scanner.cpp"
+        "${API}/plugins/driver/plugin_driver_registry.cpp"
+        "${API}/plugins/driver/plugin_json.cpp"
+        "${API}/plugins/driver/plugin_thread.cpp"
+        "${API}/plugins/driver/plugin_host_manager.cpp"
+        "${API}/plugins/driver/plugin_chain_component.cpp"
+        "${API}/plugins/formats/clap/clap_driver.cpp"
+        "${API}/plugins/formats/clap/clap_instance.cpp"
+        "${API}/plugins/formats/clap/clap_metadata.cpp"
+        "${API}/plugins/formats/vst3/vst3_driver.cpp"
+        "${API}/plugins/formats/vst3/vst3_instance.cpp"
+        "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+        "${API}/plugins/integration/plugin_host.cpp"
+        "${API}/plugins/integration/plugin_engine_state.cpp"
+        "${API}/plugins/integration/plugin_chain_adapter.cpp"
+        "${API}/plugins/integration/plugin_abi.cpp"
+        "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+        # 注：vendor 的 Steinberg SDK 为单头 amalgamation
+        # （<steinberg/vst3_static.h>），无 .cpp 实现单元，与
+        # Windows 工程同口径不列 SDK 源。
+    )
+else()
+    set(AURADSP_PLUGIN_SOURCES
+        "${API}/plugins/integration/plugin_chain_adapter_stub.cpp"
+        "${API}/plugins/integration/plugin_abi_stub.cpp"
+    )
+endif()
 add_library(auradsp_engine SHARED
     "${API}/platform/linux/fs_linux.cpp"
     "${API}/platform/linux/env_linux.cpp"
     "${API}/platform/linux/log_linux.cpp"
     "${API}/platform/linux/module_linux.cpp"
-    "${API}/plugins/integration/plugin_chain_adapter_stub.cpp"
-    "${API}/plugins/integration/plugin_abi_stub.cpp"
+    ${AURADSP_PLUGIN_SOURCES}
 )
 target_compile_options(auradsp_engine PRIVATE
     $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
@@ -140,6 +183,31 @@ target_include_directories(auradsp_engine PRIVATE
     "${API}/chain"
     "${API}/plugins/api"
 )
+if(AURADSP_ENABLE_PLUGINS)
+    # 引擎目标 C++20（atomic::notify_all 等在插件层；探针实测）。
+    set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
+    if(AURADSP_PLUGIN_HOST_REMOTE)
+        # 远程模式：不定义 HOST_INPROC，manager 在运行时按
+        # client.start()（环境变量 + 宿主在位）分派远程/进程内。
+        target_sources(auradsp_engine PRIVATE
+            "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+            "${API}/plugins/platform/posix/host/plugin_host_client_posix.cpp"
+            "${API}/plugins/platform/win32/host/process_plugin_proxy.cpp"
+        )
+    else()
+        target_compile_definitions(auradsp_engine PRIVATE
+            AURADSP_HOST_INPROC=1
+        )
+    endif()
+    target_include_directories(auradsp_engine PRIVATE
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/posix"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+endif()
 # E2：version script 控导出集（由 .def 同源生成，gen_engine_map.py 守卫）。
 target_link_options(auradsp_engine PRIVATE
     "LINKER:--version-script=${API}/auradsp_engine.map"
@@ -151,3 +219,55 @@ target_link_libraries(auradsp_engine PRIVATE
     ${CMAKE_DL_LIBS}
     m
 )
+
+# 进程外宿主 plugin_host_x64（双宿主架构，Linux 无扩展名）：与
+# Windows 的 auradsp_plugin_host 目标对位——宿主自带一份插件层
+# （driver/formats/posix 平台层，HOST_INPROC 语义），经 IPC 协议
+# 与引擎协作；产物与引擎 .so 同目录（客户端 dladdr 定位）。
+if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
+    add_executable(plugin_host_x64
+        "${API}/plugins/platform/posix/host/plugin_host_main_posix.cpp"
+        "${API}/plugins/platform/posix/host/plugin_shared_region_posix.cpp"
+        "${API}/platform/linux/fs_linux.cpp"
+        "${API}/platform/linux/env_linux.cpp"
+        "${API}/platform/linux/log_linux.cpp"
+        "${API}/platform/linux/module_linux.cpp"
+        "${API}/plugins/driver/plugin_bundle.cpp"
+        "${API}/plugins/driver/plugin_scanner.cpp"
+        "${API}/plugins/driver/plugin_driver_registry.cpp"
+        "${API}/plugins/driver/plugin_json.cpp"
+        "${API}/plugins/driver/plugin_thread.cpp"
+        "${API}/plugins/driver/plugin_host_manager.cpp"
+        "${API}/plugins/driver/plugin_chain_component.cpp"
+        "${API}/plugins/formats/clap/clap_driver.cpp"
+        "${API}/plugins/formats/clap/clap_instance.cpp"
+        "${API}/plugins/formats/clap/clap_metadata.cpp"
+        "${API}/plugins/formats/vst3/vst3_driver.cpp"
+        "${API}/plugins/formats/vst3/vst3_instance.cpp"
+        "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+        "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+    )
+    set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)
+    target_compile_definitions(plugin_host_x64 PRIVATE
+        AURADSP_HOST_INPROC=1
+    )
+    target_compile_options(plugin_host_x64 PRIVATE
+        $<$<COMPILE_LANGUAGE:CXX>:-include ${API}/auradsp_gcc_shim.h>
+    )
+    target_include_directories(plugin_host_x64 PRIVATE
+        "${API}"
+        "${API}/chain"
+        "${API}/plugins/api"
+        "${API}/plugins/driver"
+        "${API}/plugins/platform/win32/host"
+        "${API}/plugins/platform/posix"
+        "${LEGACY}"
+        "${LEGACY}/jdsp"
+        "${PLUGIN_API}"
+    )
+    target_link_libraries(plugin_host_x64 PRIVATE
+        Threads::Threads
+        ${CMAKE_DL_LIBS}
+        m
+    )
+endif()

@@ -167,11 +167,10 @@ class _PluginsPageState extends State<PluginsPage>
           ),
 
           // 2. 插件扫描目录管理（2026-10-28：多选列表 + 内置目录）
-          // ADR-012 D-7：Linux 一期只做插件消费端，插件目录管理 UI
-          // 在 Linux 隐藏（扫描集为空、宿主为 NullPluginHost，展示只会
-          // 误导）；Windows/macOS 保持原样（S5c）。
-          if (!PlatformProfile.isLinux)
-            PluginScanDirsSection(
+          // 二期阶段二（2026-11-02）：Linux 宿主已转正（进程内），
+          // 目录管理恢复展示；一期 D-7 的隐藏条件随之解除。页面级
+          // 的不可用占位仍由 PluginHostPort 能力统一把关。
+          PluginScanDirsSection(
               model: widget.model,
               onAddDir: () => _addCustomDirDialog(context),
               onRescan: () => manager.scan(deep: _deepScan),
