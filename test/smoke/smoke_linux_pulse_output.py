@@ -12,10 +12,19 @@ tlength 2048 帧）打开流，写 30 块正弦，断言：
 无音频服务（pa_simple_new 失败）或 libpulse 缺失时自 SKIP 退出 0：
 开发机/CI 无声卡服务不等于产品失败；CI 的 J3 专门起 pulseaudio +
 null-sink 使本门禁在流水线里实跑（见 .github/workflows/ci.yml）。
+
+S5a 复核（2026-11-02）：默认声卡是实体设备时，PipeWire 的 PA 兼容层会把
+设备缓冲计入 `pa_simple_get_latency`（Ubuntu 24.04 + VMware 声卡实测约
+10.5k 帧），且 flush 后延迟读数不立即归零；同一属性在 null-sink 上为
+2040 帧 / flush 后 9 帧。D-6 已接受 PA 默认延迟为「数十 ms～百 ms」，
+故本门禁用私有 null-sink 隔离硬件缓冲差异，只校验 simple API 契约本身
+（与 CI J3 的 null-sink 条件一致），不把宿主声卡缓冲当作产品失败。
 """
 import ctypes
 import math
 import os
+import shutil
+import subprocess
 import sys
 
 FAILS = []
@@ -43,6 +52,33 @@ class BufferAttr(ctypes.Structure):
 PA_SAMPLE_FLOAT32LE = 5
 PA_STREAM_PLAYBACK = 1
 
+# 私有 null-sink：避免把宿主实体声卡的设备缓冲计入延迟断言。
+SINK_NAME = f"auradsp_smoke_{os.getpid()}"
+
+
+def load_null_sink():
+    """加载私有 null-sink，返回 module id；pactl 不可用时返回 None。"""
+    if not shutil.which("pactl"):
+        return None
+    try:
+        r = subprocess.run(
+            ["pactl", "load-module", "module-null-sink",
+             f"sink_name={SINK_NAME}"],
+            capture_output=True, text=True, timeout=15)
+    except Exception:
+        return None
+    if r.returncode != 0 or not r.stdout.strip():
+        return None
+    return r.stdout.strip()
+
+
+def unload_module(module_id):
+    try:
+        subprocess.run(["pactl", "unload-module", module_id],
+                       capture_output=True, text=True, timeout=15)
+    except Exception:
+        pass
+
 
 def main():
     try:
@@ -68,18 +104,25 @@ def main():
     pulse.pa_strerror.restype = ctypes.c_char_p
     pulse.pa_strerror.argtypes = [ctypes.c_int]
 
+    module_id = load_null_sink()
+    if not module_id:
+        print("SKIP: 无法创建私有 null-sink（pactl 不可用或加载失败）")
+        return 0
+
     spec = SampleSpec(PA_SAMPLE_FLOAT32LE, RATE, CHANNELS)
     attr = BufferAttr(0xFFFFFFFF, BUFFER_FRAMES * 4 * CHANNELS,
                       0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF)
     err = ctypes.c_int(0)
     stream = simple.pa_simple_new(
-        None, b"AuraDSP-smoke", PA_STREAM_PLAYBACK, None,
+        None, b"AuraDSP-smoke", PA_STREAM_PLAYBACK, SINK_NAME.encode(),
         b"smoke_linux_pulse_output", ctypes.byref(spec), None,
         ctypes.byref(attr), ctypes.byref(err))
     if not stream:
         msg = pulse.pa_strerror(err.value).decode(errors="replace")
-        print(f"SKIP: 无 PulseAudio 服务（pa_simple_new: {msg}）")
-        return 0
+        unload_module(module_id)
+        check(False, f"pa_simple_new 在私有 null-sink 上失败（{msg}）")
+        print("smoke_linux_pulse_output: FAIL")
+        return 1
     try:
         frames = (ctypes.c_float * (BLOCK * CHANNELS))()
         for n in range(BLOCKS):
@@ -106,6 +149,7 @@ def main():
               f"flush 后 latency 回落至 {lat_frames} 帧（<= {BLOCK}）")
     finally:
         simple.pa_simple_free(stream)
+        unload_module(module_id)
     print("smoke_linux_pulse_output: " + ("FAIL" if FAILS else "PASS"))
     return 1 if FAILS else 0
 
