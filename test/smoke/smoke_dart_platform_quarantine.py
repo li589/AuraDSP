@@ -222,7 +222,9 @@ def m4_structure():
         code = strip_comments(read(wasapi_fp))
         check("WasapiOut 实现 AudioOut 接口", "class WasapiOut implements AudioOut" in code,
               "audio_out_wasapi.dart")
-        check("createAudioOut 工厂按能力位分派", "AudioOut? createAudioOut()" in code
+        # 工厂签名在二期 A1 扩为带命名参数（linuxBackend/alsaDevice），
+        # 断言放宽到函数名 + 能力位分派本体（分派语义未变）。
+        check("createAudioOut 工厂按能力位分派", "AudioOut? createAudioOut(" in code
               and "PlatformProfile.supportsLocalDevice" in code, "audio_out_wasapi.dart")
 
     check("audio_isolate 不再定义 WasapiOut", not CLASS_WASAPI_OUT.search(strip_comments(read(isolate_fp))),

@@ -85,6 +85,22 @@ cat /proc/asound/cards    # 应出现 Loopback
       侧缓冲（实测 ~10.4k 帧），曾使泵的可用帧恒负而永不写入、无声；
       null-sink 环境验不出此问题
 
+## 3b. ALSA 专家模式（二期，设置页 → Linux 设备卡切换后端）
+
+- [ ] 后端切到「ALSA 直连（专家模式）」后引擎自动重启，状态区
+      显示 ALSA 协商结果（目标：period 256 帧、buffer 1024、
+      float32 或 s16 回退）；切回 PulseAudio 同样自动恢复
+- [ ] **真实声卡直开**：设备名填 `hw:<卡>,<设备>`（如 `hw:1,0`）
+      播放出声，与 PA 模式对比主观延迟（专家模式应明显更低）；
+      设备名留空走 `default`
+- [ ] **PipeWire 占用行为**：在 PipeWire 系统上对被 WirePlumber
+      占用的声卡直开 hw:，预期为明确的打开失败（EBUSY 文案出现
+      在状态/日志），不崩溃、不静默回退 PA；释放设备后可正常打开
+- [ ] **driver 直采**：加载 snd-aloop（`enable=1` 单卡）后切
+      driver 模式，采集应走 ALSA 直连（日志 `LINUXMODE capture
+      attached (ALSA): hw:Loopback`），播放器灌入回环后处理声
+      出声、频谱活动；与 PA 路径（.monitor）各验一遍
+
 ## 4. 桌面集成
 
 - [ ] **托盘**：面板出现 AuraDSP 图标（PNG）；关窗最小化到托盘不退出；

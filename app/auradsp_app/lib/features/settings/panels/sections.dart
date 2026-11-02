@@ -231,16 +231,47 @@ class _LinuxDevicePanel extends StatelessWidget {
     final l = l10nOf(context);
     final controller =
         TextEditingController(text: model.config.alsaOutputDevice);
+    final enumerated = model.listAlsaDevices();
     final result = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(l.linuxAlsaOutDevice,
             style: const TextStyle(fontSize: 14)),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'hw:0,0 / plughw:1,0 / default',
+        content: StatefulBuilder(
+          builder: (ctx, setLocal) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (enumerated.isNotEmpty)
+                DropdownButton<String>(
+                  isExpanded: true,
+                  value: enumerated.contains(controller.text)
+                      ? controller.text
+                      : null,
+                  hint: Text(l.linuxAlsaDeviceUnset,
+                      style: const TextStyle(fontSize: 12)),
+                  items: [
+                    for (final n in enumerated)
+                      DropdownMenuItem<String>(
+                        value: n,
+                        child: Text(n, style: const TextStyle(fontSize: 12)),
+                      ),
+                  ],
+                  onChanged: (v) {
+                    if (v != null) {
+                      controller.text = v;
+                      setLocal(() {});
+                    }
+                  },
+                ),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'hw:0,0 / plughw:1,0 / default',
+                ),
+              ),
+            ],
           ),
         ),
         actions: [

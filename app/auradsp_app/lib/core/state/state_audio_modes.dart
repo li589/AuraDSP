@@ -109,6 +109,13 @@ extension AudioModesState on AppModel {
     _notifyUi();
   }
 
+  /// ALSA PCM 设备枚举（设置页设备编辑的下拉数据源）：FFI 直查
+  /// libasound 的 device_name_hint；无库/失败返回空表（可手填）。
+  List<String> listAlsaDevices() {
+    if (!PlatformProfile.isLinux) return const [];
+    return alsa_ffi.listAlsaPcmDeviceNames();
+  }
+
   /// ALSA 输出设备名（专家模式）：落盘 + 重启 isolate 生效。
   void setAlsaOutputDevice(String device) {
     if (!PlatformProfile.isLinux) return;

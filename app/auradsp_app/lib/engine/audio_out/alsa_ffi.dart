@@ -276,3 +276,44 @@ String resolveAlsaDevice(String raw) {
   final t = raw.trim();
   return t.isEmpty ? 'default' : t;
 }
+
+/// 枚举 ALSA PCM 设备名（snd_device_name_hint 的 NAME 项）。
+/// 设置页设备编辑用；失败（无 libasound 等）返回空表，不抛——
+/// 枚举只是便利，设备名始终可手填。注意 free 的指针层级：
+/// free_hint 取枚举返回的数组指针本身（A0 探针实测）。
+List<String> listAlsaPcmDeviceNames() {
+  final names = <String>[];
+  AlsaLib lib;
+  try {
+    lib = AlsaLib.load();
+  } catch (_) {
+    return names;
+  }
+  final hints = malloc<Pointer<Pointer<Void>>>();
+  final iface = 'pcm'.toNativeUtf8();
+  try {
+    final rc = lib.deviceNameHint(-1, iface, hints);
+    if (rc < 0 || hints.value == nullptr) return names;
+    final key = 'NAME'.toNativeUtf8();
+    try {
+      var p = hints.value;
+      while (p.value != nullptr) {
+        final n = lib.deviceNameGetHint(p.value, key);
+        if (n != nullptr) {
+          final s = n.toDartString();
+          if (s.isNotEmpty) names.add(s);
+        }
+        p++;
+      }
+    } finally {
+      malloc.free(key);
+    }
+    lib.deviceNameFreeHint(hints.value);
+  } catch (_) {
+    // 枚举中途异常：返回已收集部分（尽力而为的便利功能）。
+  } finally {
+    malloc.free(iface);
+    malloc.free(hints);
+  }
+  return names;
+}
