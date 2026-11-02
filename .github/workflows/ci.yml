@@ -8,6 +8,8 @@
 #   J5 build-engine-windows Windows 引擎构建（与 Linux 同等对待）
 #   J6 dart-tests         Dart 测试门禁（run_dart_tests.py 串行+重试）
 #   J7 asset-guard        资源守卫（.irs/.vdc 等不得入库）
+#   J8 build-app-linux    App 本体构建（Linux bundle + 无头启动冒烟；
+#                         补 J1–J7 从不编译 runner/CMake 打包面的盲区）
 #
 # 与方案的一处口径扩展：方案把 J4/J5/J6/J7 定为 PR 触发；这里 push
 # 同样触发，让 feature/linux 在提 PR 之前就先全绿一遍（分支策略：
@@ -152,3 +154,58 @@ jobs:
       - uses: actions/checkout@v4
       - name: Untracked asset scan (.irs/.vdc must not be tracked)
         run: python3 tools/bin/assets_untracked_scan.py
+
+  # J8 App 本体构建 ------------------------------------------------------
+  # J1–J7 没有一个 job 真正编译过 Flutter Linux 本体：runner 的 C++
+  # （my_application.cc）、linux/CMakeLists 打包规则只被本地构建覆盖，
+  # 2026-11-02 真机轮次的 Impeller 修复（080beb0）正是改这类文件、
+  # 靠本地兜底。本 job 补齐：全量 release 构建 + 对真实产物跑 bundle
+  # 布局门禁 + 无头启动冒烟（Xvfb + null-sink，从调试日志断言引擎
+  # 加载与 PulseAudio 输出流打开，与 S3 本地验收同口径）。
+  build-app-linux:
+    name: J8 build-app-linux
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: build-engine-linux
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download engine artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: libauradsp_engine-linux
+          path: core/desktop/linux/out/Release
+      - name: Install Linux build deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang cmake ninja-build pkg-config \
+            libgtk-3-dev liblzma-dev libstdc++-14-dev pulseaudio xvfb
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+      - name: Pub get
+        working-directory: app/auradsp_app
+        run: flutter pub get
+      - name: Build Linux bundle
+        working-directory: app/auradsp_app
+        run: flutter build linux --release --no-tree-shake-icons
+      - name: Bundle layout gate
+        run: python3 test/smoke/smoke_linux_bundle_layout.py
+      - name: Headless launch smoke
+        run: |
+          pulseaudio --start --exit-idle-time=-1
+          pactl load-module module-null-sink sink_name=auradsp_ci
+          pactl set-default-sink auradsp_ci
+          Xvfb :99 -screen 0 1280x800x24 &
+          export DISPLAY=:99
+          rm -f /tmp/auradsp_debug.log
+          cd app/auradsp_app/build/linux/x64/release/bundle
+          ./auradsp_app >/dev/null 2>&1 &
+          APP_PID=$!
+          ok=0
+          for i in $(seq 1 30); do
+            if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log 2>/dev/null; then ok=1; break; fi
+            sleep 2
+          done
+          kill $APP_PID 2>/dev/null || true
+          grep -q "PULSE init: stream open" /tmp/auradsp_debug.log
+          test $ok -eq 1

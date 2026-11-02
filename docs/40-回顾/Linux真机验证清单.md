@@ -65,6 +65,12 @@ cat /proc/asound/cards    # 应出现 Loopback
 
 - [ ] **system**：默认模式播放测试音/文件，真实声卡出声；拖动 EQ
       有可闻变化
+- [ ] **默认输出热切换**：播放中在系统设置里切换默认输出设备
+      （如拔插 USB 声卡/耳机），声音应跟随到新设备。机制在服务端：
+      PulseAudio 核心会迁移未被显式钉住的流（VM 已实测，同一条流
+      双向跟随）；PipeWire 侧由 WirePlumber 默认策略迁移——本项即
+      为确认 PipeWire 侧行为与此一致，若不跟随再议客户端方案
+      （pa_simple 无流落点查询能力，不做盲目客户端迁移）
 - [ ] **virtual**：切到 virtual 后 `pactl list short sinks` 出现
       `auradsp_virtual`；用任意播放器把输出指到该设备，处理后的声音
       从真实默认设备出；主页频谱与可视化舞台随外部音频活动
