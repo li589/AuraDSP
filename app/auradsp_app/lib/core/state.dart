@@ -276,6 +276,10 @@ class AppModel extends ChangeNotifier {
   /// 主页氛围背景开关（配置代理；关闭后页面不构造 AmbientSpectrum）。
   bool get ambientOn => config.ambientSpectrum;
 
+  /// 氛围背景开关的页面级订阅源（见构造函数注释）。UI 必须听它，
+  /// 不要依赖 model 的 notifyListeners —— 保活页收不到。
+  late final ValueNotifier<bool> ambientEnabled;
+
   bool get pipelineInputEnabled => config.pipelineInputEnabled;
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];
@@ -945,6 +949,11 @@ class AppModel extends ChangeNotifier {
         windowsSystem = windowsSystem ?? const NullWindowsSystem(),
         window = window ?? NullWindowPort() {
     config = ConfigManager.load();
+    // 氛围背景开关的页面级订阅源：外壳用 IndexedStack 保活、页面实例缓存，
+    // 模型 notifyListeners 不会让保活页重建（Settings 还是模态覆盖层，
+    // visiblePage 也不变）。凡「设置里改、别的页要立刻响应」的开关都必须
+    // 走这样一个 ValueListenable，否则改了配置但画面不动。
+    ambientEnabled = ValueNotifier<bool>(config.ambientSpectrum);
     // 可视化配置：config.json 是跨重启持久化副本，这里建立运行时真相源。
     // 随后 SessionMemory.restoreMemoryImage 会再用会话快照覆盖（若存在）。
     visualizerConfig = ValueNotifier<VisualizerConfig>(config.visualizerConfig);
@@ -1203,6 +1212,7 @@ class AppModel extends ChangeNotifier {
     appearanceTick.dispose();
     connTick.dispose();
     visiblePage.dispose();
+    ambientEnabled.dispose();
     visualizerImmersive.dispose();
     visualizerConfig.dispose();
     _headTracker.stop();

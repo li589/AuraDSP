@@ -537,6 +537,7 @@ extension StateSession on AppModel {
   void setAmbientOn(bool on) {
     if (config.ambientSpectrum == on) return;
     config.ambientSpectrum = on;
+    ambientEnabled.value = on;
     if (!_testing) ConfigManager.save(config);
     _notifyUi();
   }

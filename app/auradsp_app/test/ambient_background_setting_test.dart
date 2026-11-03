@@ -15,6 +15,7 @@ import 'package:auradsp_app/core/design.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/home_page.dart';
+import 'package:auradsp_app/features/shell.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
 import 'package:auradsp_app/ui/chrome.dart';
 import 'package:flutter/material.dart';
@@ -55,6 +56,37 @@ void main() {
       m.setAmbientOn(true);
       expect(notified, 1);
       m.removeListener(onChange);
+    });
+  });
+
+  group('外壳保活下即时生效（回归：用户报「开关没有用」）', () {
+    testWidgets('首页被 IndexedStack 保活、设置是模态覆盖层：关闭必须立刻消失',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+
+      await tester.pumpWidget(MaterialApp(
+        theme: withAuraExtension(
+            buildAuraTheme(model.themeId), model.themeId.palette),
+        locale: model.locale,
+        supportedLocales: AppLocalizations.supportedLocales,
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        home: AppShell(model: model),
+      ));
+      await tester.pump();
+      expect(find.byType(AmbientSpectrum), findsOneWidget);
+
+      // 等价于点设置里的开关：此时既没有切页（设置是模态覆盖层），
+      // 也没有重建外壳（_pages 缓存 HomePage 实例）。
+      // 旧实现只依赖 model.notifyListeners → 首页 build 根本不跑，背景不消失。
+      model.setAmbientOn(false);
+      await tester.pump();
+      expect(find.byType(AmbientSpectrum), findsNothing,
+          reason: '保活页必须收到专门的通知源，不能等切页才生效');
+
+      model.setAmbientOn(true);
+      await tester.pump();
+      expect(find.byType(AmbientSpectrum), findsOneWidget);
     });
   });
 

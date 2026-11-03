@@ -32,17 +32,23 @@ class HomePage extends StatelessWidget {
       valueListenable: model.visiblePage,
       builder: (_, page, _) {
         final active = page == AppPage.home;
-        return PageScaffold(
-          eyebrow: l.pageHomeEyebrow,
-          title: l.pageHomeTitle,
-          // 设置里关掉氛围背景 → 直接不传数据源，整层不构造（零绘制/零订阅）
-          ambient: !model.ambientOn
-              ? null
-              : (active ? model.spectrum : _frozenSpectrum),
-          children: [
-            _SpectrumCard(model: model, active: active), // 可视化置顶：主页的第一视觉（无序号）
-            _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
-          ],
+        // 氛围开关走独立 ValueListenable：本页被外壳 IndexedStack 保活、
+        // 实例缓存，模型 notifyListeners 不会让 build 重跑；设置页又是模态
+        // 覆盖层，visiblePage 也不会变 —— 只听 model 的话开关按了不生效。
+        return ValueListenableBuilder<bool>(
+          valueListenable: model.ambientEnabled,
+          builder: (_, ambientOn, _) => PageScaffold(
+            eyebrow: l.pageHomeEyebrow,
+            title: l.pageHomeTitle,
+            // 关掉氛围背景 → 直接不传数据源，整层不构造（零绘制/零订阅）
+            ambient: !ambientOn
+                ? null
+                : (active ? model.spectrum : _frozenSpectrum),
+            children: [
+              _SpectrumCard(model: model, active: active), // 可视化置顶
+              _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路
+            ],
+          ),
         );
       },
     );
