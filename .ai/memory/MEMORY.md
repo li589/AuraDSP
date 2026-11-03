@@ -495,11 +495,33 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   重载问题，不只 VST2。
 - **`extractVendorFromPath` 必须跳过 `.dll/.so/.vst`**：否则 VST2 快扫在无 PE
   版本资源时会把 DLL 文件名当厂商名（`AuraTestVST2.dll`）。
-- **宿主矩阵（2026-11-03 实机核实）**：默认（`AURA_PLUGIN_HOST_MODE` 未设）= 进程内；
-  `=process` 整轮转 `plugin_host_x64`；x86 位桥只要二进制在位就自动启用（只有
-  `=disabled/off/none` 才关），与模式无关。格式：Windows = VST3 / CLAP / VST2，
-  Linux = VST3 / CLAP（VST2 驱动 `#if defined(_WIN32)` 注册）。32 位插件两平台都只能走
-  `plugin_host_x86`（`remoteClientFor` 按 PE/ELF 头位数分派，与格式无关）。
-  **真实深扫元数据的可得性**：进程内 = 32 位有、64 位 VST2 无（安全策略）；进程外 =
-  64 位 VST2 有（宿主内允许深扫）、32 位无（x64 宿主加载不了 32 位 DLL，只有快扫）。
-  缺的一律由加载路 `status.plugin` 补齐。AU 未规划，LV2 暂缓。
+- **扫描归属（2026-11-04 定论，《插件扫描归属重构与崩溃隔离》）**：
+  - **快扫本地、深扫按位数进宿主**：引擎 `scan*` 全家不再整轮委托（9 处
+    `if (m_remoteMode) return client->...` 已删）；`remoteScanClientFor(binaryPath)`
+    按位数选宿主（32→x86 桥、64→x64、未知→nullptr），VST2 无宿主时退快扫，
+    VST3/CLAP 回退引擎内深扫（`AURA_PLUGIN_DEEP_SCAN=inproc` 强制全回退）。
+  - **`AURA_PLUGIN_HOST_MODE` 只管加载**：x64 客户端 `start(allowScanHost)` 支持
+    「仅扫描」懒启动，`processMode()` 仍如实返回；**`setChannelHint` 的 x64 转发
+    必须 gate 在 `m_remoteMode`**，否则仅扫描客户端会被加载期消息拉起（懒启动失效）。
+  - **协议 v5**：`Op::QueryMetadata` 响应 = `u32 count + count × RemotePluginInfo`
+    （上限 512）。宿主用 `driver->queryMetadata` 直出（VST3 一包多插件完整返回），
+    不再 createInstance；失败一律 status=0，引擎回退快扫。**混版本被 Hello 拦截**
+    ——改协议必须同时重建 `plugin_host_x86`（独立构建树 `build-x86`，
+    `build_engine.sh` 不建它！），否则 32 位全挂（深扫回快扫 + 桥加载 rc=0）。
+  - **errorMessage 只描述「不兼容」，不描述「元数据深浅」**：深扫回退的快扫条目
+    保持空文案——快扫条目本可正常挂载，塞告警会污染数据（UI 只在 isUnsupported
+    时展示，但数据层先错、守卫后到就是定时炸弹）。
+  - **32 位标记按位桥可用性**（`PluginScanner::setArchBridgeAvailable`，manager
+    构造时写入）：桥在位 → `isCompatible=true`；缺 → false + 「需要
+    plugin_host_x86」。Dart `isSupported` 逻辑不变，注释已修正（桥不要求 process 模式）。
+  - **宿主 SEH 兜底**：`queryMetadataGuarded`（POD 局部量 + `__try/__except`）调
+    `__declspec(noinline) queryMetadataImpl`——MSVC 禁止在需对象展开的函数里用
+    `__try`（C2712）；AV 后临时对象/模块句柄按隔离区语义泄漏不 FreeLibrary。
+    POSIX 无 SEH，靠客户端超时杀宿主（`killHostOnTimeout`，10-28 已有）。
+- **宿主矩阵（2026-11-03 核实，2026-11-04 扫描归属重构后更新）**：加载口径——默认
+  （`AURA_PLUGIN_HOST_MODE` 未设）64 位进程内；`=process` 转 `plugin_host_x64`；32 位
+  两平台永远走 `plugin_host_x86` 位桥（在位即启用，`disabled/off/none` 才关）。格式：
+  Windows = VST3 / CLAP / VST2，Linux = VST3 / CLAP（VST2 驱动 `#if defined(_WIN32)` 注册）。
+  扫描口径（11-04 起）——快扫本地、深扫按位数进对应宿主，**进程内/外结果一致**；
+  `AURA_PLUGIN_DEEP_SCAN=inproc` 回退引擎内深扫（此时 VST2 仍只快扫，安全铁律）。
+  AU 未规划，LV2 暂缓。

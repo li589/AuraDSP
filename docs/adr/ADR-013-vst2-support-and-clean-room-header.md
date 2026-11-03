@@ -44,7 +44,7 @@ static intptr_t VST_FUNCTION_INTERFACE hostCallback(
 
 - VST2 无 bundle，`.dll` 需先用 PE 导出表判定（`VSTPluginMain` 或 `main`），不加载非插件 DLL；
 - **64 位 VST2 在引擎进程内只做 PE 快扫**：实测真实插件（Blue Cat PatchWork / FabFilter）在 `VSTPluginMain`/`effOpen` 阶段会直接 `0xC0000005`，扫描期 `LoadLibrary` 未知厂商 VST2 不可接受。真实元数据由加载路补齐；
-- 32 位深扫经 IPC `Op::QueryMetadata` 由 x86 宿主临时加载查询，失败回退快扫元数据；进程外模式（整轮扫描在 `plugin_host_x64` 内）允许 64 位深扫、崩溃只杀宿主，但宿主没有 x86 桥，32 位条目在该模式下退化为快扫元数据（加载/音频/界面/预设不受影响）。
+- **深扫归属（2026-11-04 重构，见《插件扫描归属重构与崩溃隔离》）**：快扫本地、深扫一律交给「能加载该 DLL 的那个宿主」——64 位 → `plugin_host_x64`（默认懒启动，可仅扫描用途），32 位 → `plugin_host_x86` 位桥；`AURA_PLUGIN_DEEP_SCAN=inproc` 回退旧行为。协议 v5：`Op::QueryMetadata` 响应改为 count + N × RemotePluginInfo（VST3 一包多插件也能完整返回），宿主用 `driver->queryMetadata` 直出，不再 createInstance。VST2 在引擎进程内**永不**深扫——无宿主可用时退快扫并明示原因；宿主内查询有 SEH 兜底，AV 只废该候选不杀宿主。
 
 ### D-4 平台范围
 
