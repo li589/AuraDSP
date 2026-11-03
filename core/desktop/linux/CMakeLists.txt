@@ -277,7 +277,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
     # remoteClientFor）。需要 multilib 工具链（gcc-multilib /
     # g++-multilib），故默认 OFF，由 CI 或本机装齐后开启；缺
     # 宿主时 32 位插件按路由回落 x64 宿主（加载失败即现状行为）。
-    option(AURADSP_BUILD_HOST_X86 "Build 32-bit bridge host (plugin_host_x86, needs multilib)" OFF)
+    option(AURADSP_BUILD_HOST_X86 "Build 32-bit bridge host (plugin_host_x86, needs multilib)" ON)
     if(AURADSP_BUILD_HOST_X86)
         add_executable(plugin_host_x86 ${AURADSP_HOST_SOURCES})
         set_property(TARGET plugin_host_x86 PROPERTY CXX_STANDARD 20)

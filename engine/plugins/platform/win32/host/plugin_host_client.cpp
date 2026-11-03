@@ -107,7 +107,14 @@ PluginHostClient::~PluginHostClient() {
 
 bool PluginHostClient::start() {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
-    if (!mode || _stricmp(mode, "process") != 0) return false;
+    if (m_arch == HostArch::X64) {
+        if (!mode || _stricmp(mode, "process") != 0) return false;
+    } else {
+        // x86 位桥是跨架构必需机制，只要二进制在位即自适应启用；仅当显式禁用时才关闭。
+        if (mode && (_stricmp(mode, "disabled") == 0 || _stricmp(mode, "off") == 0 || _stricmp(mode, "none") == 0)) {
+            return false;
+        }
+    }
     const std::wstring exe = hostExecutablePath(m_arch);
     if (exe.empty() || !std::filesystem::exists(std::filesystem::path(exe))) return false;
     m_processMode.store(true, std::memory_order_release);

@@ -185,7 +185,11 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
     if (slot >= kMaxPluginSlots) return false;
 
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
+    auto client = remoteClientFor(path);
+    // 远程宿主加载分支：
+    // ① 全局进程外模式（m_remoteMode 为真且 client 有效）；
+    // ② 或者是 32 位插件命中 x86 位桥客户端（即使 64 位走进程内，32 位也必须且可以走位桥）。
+    if (client && (m_remoteMode || client == m_remoteClientX86)) {
         std::unique_ptr<IPluginInstance> oldInstance;
         {
             std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
@@ -196,8 +200,6 @@ bool PluginHostManager::loadPluginSlot(size_t slot, const std::string& path, con
         if (oldInstance) destroyInstance(std::move(oldInstance));
 
         ensureChannelScratch(maxBlockSize);
-        // 双宿主分派：按目标二进制位数选 x64 / x86 桥客户端。
-        auto client = remoteClientFor(path);
         client->setChannelHint(
             static_cast<uint32_t>(m_channelHint.load(std::memory_order_relaxed)));
         auto instance = std::make_unique<ProcessPluginProxy>(
@@ -303,9 +305,11 @@ uint32_t PluginHostManager::getLatencySlot(size_t slot) const {
     // 块大小自适应（实测 128→+128、256→+256、512→+512、1024→+1024，延迟恒
     // 为 1 个回调）。故这里返回实例的**实时值**而非加载快照：快照是首块前的
     // 128 口径，用它做 PDC 会在 512 帧设备上欠补 384 帧（8ms）。
-    if (m_remoteMode && m_slots[slot].instance) {
+#ifndef AURADSP_HOST_INPROC
+    if ((m_remoteMode || dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) && m_slots[slot].instance) {
         return m_slots[slot].instance->getLatency();
     }
+#endif
     return m_slots[slot].latency.load(std::memory_order_relaxed);
 }
 
@@ -342,7 +346,7 @@ std::string PluginHostManager::getStatusJsonSlot(size_t slot) const {
        << "\"mainOutChannels\":" << bus.mainOutChannels
        << "},";
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode) {
+    if (m_remoteMode || dynamic_cast<ProcessPluginProxy*>(m_slots[slot].instance.get())) {
         bool remoteFailed = false;
         uint32_t transportLatency = 0;
         uint64_t inputOverflows = 0;
@@ -448,8 +452,13 @@ void PluginHostManager::setChannelHint(int channels) {
     if (previous == channels) return;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
+    if (m_remoteClient) {
         m_remoteClient->setChannelHint(static_cast<uint32_t>(channels));
+    }
+    if (m_remoteClientX86) {
+        m_remoteClientX86->setChannelHint(static_cast<uint32_t>(channels));
+    }
+    if (m_remoteMode && m_remoteClient) {
         return;
     }
 #endif
@@ -756,10 +765,16 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
     m_maxBlockSize = maxBlockSize;
     ensureChannelScratch(maxBlockSize);
 #ifndef AURADSP_HOST_INPROC
+    if (m_remoteClient && m_remoteClient->alive()) {
+        m_remoteClient->updateFormat(sampleRate, maxBlockSize);
+        m_remoteClient->setChannelHint(static_cast<uint32_t>(m_channelHint.load()));
+    }
+    if (m_remoteClientX86 && m_remoteClientX86->alive()) {
+        m_remoteClientX86->updateFormat(sampleRate, maxBlockSize);
+        m_remoteClientX86->setChannelHint(static_cast<uint32_t>(m_channelHint.load()));
+    }
     if (m_remoteMode && m_remoteClient) {
         if (m_remoteClient->alive()) {
-            m_remoteClient->updateFormat(sampleRate, maxBlockSize);
-            m_remoteClient->setChannelHint(static_cast<uint32_t>(m_channelHint.load()));
             for (size_t s = 0; s < kMaxPluginSlots; ++s) {
                 if (m_slots[s].instance && m_slots[s].hasActive.load()) {
                     m_slots[s].latency.store(m_slots[s].instance->getLatency(),
@@ -792,7 +807,8 @@ void PluginHostManager::updateFormat(double sampleRate, uint32_t maxBlockSize) {
 
 std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot, const std::string& path, const std::string& pluginId) {
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
+    auto client = remoteClientFor(path);
+    if (client && (m_remoteMode || client == m_remoteClientX86)) {
         if (slot >= kMaxPluginSlots) return nullptr;
         std::unique_ptr<IPluginInstance> oldInstance;
         {
@@ -802,8 +818,9 @@ std::unique_ptr<IPluginInstance> PluginHostManager::prepareInstance(size_t slot,
         if (oldInstance) destroyInstance(std::move(oldInstance));
 
         auto instance = std::make_unique<ProcessPluginProxy>(
-            remoteClientFor(path), slot, m_sampleRate, m_maxBlockSize);
+            client, slot, m_sampleRate, m_maxBlockSize);
         if (!instance->load(path, pluginId)) return nullptr;
+        client->updateFormat(m_sampleRate, m_maxBlockSize);
         return instance;
     }
 #else
@@ -983,7 +1000,7 @@ void PluginHostManager::runControlTask(const ControlTask& t) {
     try {
         if (t.isLoad) {
 #ifndef AURADSP_HOST_INPROC
-            if (m_remoteMode) {
+            if (m_remoteMode || remoteClientFor(t.path) == m_remoteClientX86) {
                 std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
                 m_sampleRate = t.sampleRate;
                 m_maxBlockSize = t.maxBlockSize;
