@@ -35,6 +35,7 @@
 | [ADR-010](adr/ADR-010-limiter-as-final-gate.md) | **限幅器是内置信号链的最后一道门**：post gain / 逐声道 trim / 响度补偿全部排在限幅器之前；例外登记（插件 stage 4、`limiter.channels` 掩码等） | 已接受 |
 | [ADR-011](adr/ADR-011-no-shared-mutable-dsp-state.md) | **控制线程与 RT 线程不得共享可变 DSP 状态**：三选一 —— 影子槽 + 原子发布 / 请求位 + RT 消费 / 同持 `jdsp_lock`；落地 L-01/L-02/L-03（逐声道池双槽化 + 拓扑重置请求位 + arbmag 主卷积加锁） | 已接受 |
 | [ADR-012](adr/ADR-012-linux-platform-rulings-and-branch-policy.md) | **Linux 平台三项产品语义裁定 + 分支策略**：D-5 Linux 音频后端**追求功能对等**（`system`/`virtual`/`driver` 三模式齐备，全部落在 PulseAudio 栈上，不需自研内核模块）、D-6 音频栈**PulseAudio simple API 优先**（ALSA 留二期）、D-7 首期**只做插件消费者 + 隐藏 Linux 插件目录 UI**；分支策略 `feature/linux → dev → main`（单向，`main` 合并由 `dev` 决定） | 已接受 |
+| [ADR-013](adr/ADR-013-vst2-support-and-clean-room-header.md) | **VST2 支持与净室头文件合规**：以 Xaymar BSD-3-Clause 净室 `vst.h` 为唯一编译源、退役仓库内非净室 LSP 头；64 位进程内 / 32 位 `plugin_host_x86`；32 位回调必须用 `intptr_t` 自定义签名；本期仅 Windows | 已接受 |
 
 > ADR-005 为预留号，留给「插件桥进程化」（见 ADR-004 §回退条件）。
 
@@ -56,6 +57,7 @@
 - [外置参数持久化记忆与预设系统v2方案.md](10-架构/外置参数持久化记忆与预设系统v2方案.md) — `config.json` + 会话记忆 + 预设 schema v2（`*.aurapreset.json`）
 - [插件双宿主架构与跨格式扩展方案-2026-11-02.md](10-架构/插件双宿主架构与跨格式扩展方案-2026-11-02.md)
 - [32位VST3与CLAP插件支持实施计划-2026-11-02.md](20-执行/32位VST3与CLAP插件支持实施计划-2026-11-02.md) — 32 位 VST3 与 CLAP 位桥支持开工计划：Windows plugin_host_x86.exe 构建流水线、跨位数 IPC 契约审查、驱动适配与真实测试插件获取指引
+- [VST2插件适配实施计划-2026-11-03.md](20-执行/VST2插件适配实施计划-2026-11-03.md) — Windows VST2 64/32 位适配：Xaymar 净室头收编、PE 导出表扫描判定、64 位进程内 + 32 位位桥、IPC 远程深扫、AUR2/.fxp 预设、自建探针与 9 条冒烟
  — 双宿主体系（plugin_host_x64 沙箱与 plugin_host_x86 位桥）、跨平台可执行文件命名规范、Win 格式策略（支持 VST3/CLAP/VST2，排除 AU，暂缓 LV2）、UI 搜索条自动展长与贴右布局、L-01~03 闭环对账与 L-04 方案
 - [音频资产盘点与资源包构建实施方案-2026-10-11.md](10-架构/音频资产盘点与资源包构建实施方案-2026-10-11.md) — C盘/D盘音效插件与声学资源全景盘点、哈希去重与清洗流水线、按声学功能分类的四级分发资源包建设规划
 

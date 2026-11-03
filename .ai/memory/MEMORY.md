@@ -460,3 +460,38 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
 - **产物分发可能被运行中的 App 锁住**：`sync_artifacts.ps1` 对 `app/.../runner/Release` 的副本会报
   「being used by another process」并跳过（`test/` 与 `dist/` 正常）。本轮仅注释变更故无影响；
   有行为变更时须先关 App 再重建。
+
+### VST2 支持（2026-11-03 定稿 · ADR-013）
+
+- **编译头唯一源**：`vendor/plugin-api/vst2/vst.h`（Xaymar 净室，BSD-3-Clause）。
+  原 `vendor/plugin-api/steinberg/vst2.{h,main.h,_keytable.h}` 已删除——其注释与官方
+  `aeffect.h` 逐字相同，不是净室。Steinberg 官方 2.4 归档只留在
+  `source/vst2sdk/vstsdk2.4/`，严禁入 vendor / Release。
+- **32 位回调 ABI 坑**：Xaymar `vst_host_callback_t` 把 `p_int2` 声明成 `int64_t`；
+  32 位插件的 `VstIntPtr` 是 4 字节，宿主必须自定义 `intptr_t` 签名，否则
+  `p_str` / `p_float` 整体错位 4 字节。
+- **路由**：64 位 VST2 进程内；32 位强制 `plugin_host_x86` 位桥（`remoteClientFor` 已有逻辑）。
+- **扫描安全铁律**：绝不在引擎进程内 `LoadLibrary` 未知厂商 VST2。实测
+  `C:\Program Files\VstPlugins` 的 Blue Cat PatchWork / FabFilter 在
+  `VSTPluginMain` / `effOpen` 直接 0xC0000005。64 位进程内只做 PE 快扫
+  （`peHasVst2Entry` 导出表判定），真实元数据由加载路补齐；32 位深扫走
+  IPC `Op::QueryMetadata`（协议 v4，复用 `RemotePluginInfo`），崩溃隔离在桥宿主；
+  深扫只在进程外宿主内允许。
+- **扫描枚举通用修正**：`enumerate` 对文件候选也必须走 `driver->resolveBinary`，
+  否则 VST2 的 PE 导出表过滤只在目录分支生效，依赖 DLL 会混进列表。
+- **编辑器**：VST2 靠 30ms `WM_TIMER` → `IPluginInstance::onEditorIdle()` →
+  `effEditIdle`；容器窗固定尺寸，不做拉伸。
+- **预设**：写 `AUR2`（20B 头 + chunk/参数数组），读兼容 `.fxp`（`CcnK`，偏移 20 取 chunk）。
+- **探针**：`test/fixtures/vst2_gain/gain_vst2.cpp`（增益 0.5、chunk、editor）+
+  `bad_vst2.cpp`（坏 magic）；CMake target `test_vst2_fixture` /
+  `test_vst2_bad_fixture`，x64 → `test/vst2/x64/`，x86 → `test/vst2/x86/`，
+  坏 magic → `test/vst2/bad/`；
+  门禁 `smoke_plugin_vst2.py`（77 断言）+ `smoke_plugin_vst2_process.py`
+  （同套断言强制进程外）。
+- **进程外重载必须清共享环**（2026-11-03 实测）：同一槽第二次 load 起持续直通，
+  根因是上一会话未被消费的输出块被新代理当成流水基线（`m_outSynced` 建立后
+  seq 全不匹配）。`ProcessPluginProxy::load` 在拿到 ring 后把
+  `inputRead=inputWrite`、`outputRead=outputWrite`。这是**所有格式**的进程外
+  重载问题，不只 VST2。
+- **`extractVendorFromPath` 必须跳过 `.dll/.so/.vst`**：否则 VST2 快扫在无 PE
+  版本资源时会把 DLL 文件名当厂商名（`AuraTestVST2.dll`）。
