@@ -191,6 +191,8 @@ spl0 = spl0;
       await tester.pump(const Duration(milliseconds: 200));
       await tester.pumpAndSettle();
       expect(find.textContaining('Syntax issue on line 1'), findsOneWidget);
+      await tester.pumpWidget(const SizedBox());
+      await tester.pumpAndSettle();
     });
 
     testWidgets('EelManualPanel 80+ 函数浏览、搜索过滤与展开卡片', (tester) async {
@@ -372,6 +374,7 @@ spl0 = spl0;
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       final activeSliders = <int, EelSliderMeta>{
         1: const EelSliderMeta(
           index: 1,
