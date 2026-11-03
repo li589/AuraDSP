@@ -39,6 +39,7 @@ class ParticleTornadoPainter extends CustomPainter
   static double _lastTime = double.nan;
   static double _smoothedBass = 0.0;
   static double _spinAccumulator = 0.0;
+  static double _pulse = 0.0; // 节拍包络：瞬时攻击 + 指数回落，鼓点一来就顶上去
 
   /// 粒子种子：[初始上升相位, 上升速度, 初始角度, 轨道速度, 半径系数, 尺寸, 尾长, 层次]
   static final List<double> _particleSeeds = _buildParticleSeeds();
@@ -66,7 +67,7 @@ class ParticleTornadoPainter extends CustomPainter
   static Shader _getOrCreateShader(String key, Shader Function() factory) {
     var s = _shaderCache[key];
     if (s == null) {
-      if (_shaderCache.length > 48) {
+      if (_shaderCache.length > 128) {
         _shaderCache.clear();
       }
       s = factory();
@@ -148,29 +149,33 @@ class ParticleTornadoPainter extends CustomPainter
         : (t - _lastTime).clamp(0.001, 0.05);
     _lastTime = t;
     _smoothedBass += (bass - _smoothedBass) * (dt * 4.2).clamp(0.0, 1.0);
-    _spinAccumulator += dt * (1.10 + _smoothedBass * 1.70);
+    // 节拍包络：瞬时攻击 + 指数回落，鼓点在画面上有「一下一下」的 punch，
+    // 而不是 6 档量化下那种几乎看不出的整体明暗。
+    _pulse = math.max(bass, _pulse * math.exp(-dt * 5.5));
+    _spinAccumulator += dt * (1.05 + _smoothedBass * 1.2 + _pulse * 1.6);
     final spin = _spinAccumulator;
 
     final cx = w / 2.0;
     final baseY = h * 0.88;
     // 漏斗尺寸随低音平滑呼吸膨胀
-    final maxR = minDim * (0.21 + _smoothedBass * 0.06);
-    final funnelH = h * (0.64 + _smoothedBass * 0.06) * (1.0 + mid * 0.04);
+    final maxR = minDim * (0.20 + _pulse * 0.09);
+    final funnelH = h * (0.62 + _pulse * 0.10) * (1.0 + mid * 0.05);
 
-    // 缓慢优雅的气流摆动中轴
-    final sway = w * 0.015 * math.sin(t * 0.22);
+    // 中轴摆动：根部钉在地面、越往顶摆幅越大（原实现方向是反的——
+    // 底座左右平移、顶被钉死，整根锥体看起来站不直）；摆幅随节拍轻微加大。
+    final sway = w * 0.012 * math.sin(t * 0.20) * (1.0 + _pulse * 0.5);
 
     // 1. 底部风眼吸积盘与同心进动光环
-    _drawEyeAccretionDisk(canvas, cx, baseY, maxR, minDim, _smoothedBass, sway);
+    _drawEyeAccretionDisk(canvas, cx, baseY, maxR, minDim, _smoothedBass);
 
     // 2. 气旋内壁对流光带（后半段：在背景锥光之前绘制，提供纵深包裹）
-    _drawVortexRibbons(canvas, cx, baseY, maxR, funnelH, spin, t, sway, isFront: false);
+    _drawVortexRibbons(canvas, cx, baseY, maxR, funnelH, spin, t, sway, n, isFront: false);
 
     // 3. 柔和气旋体积雾锥体（无生硬线框，纯半透明发光流体）
-    _drawVolumetricCone(canvas, cx, baseY, maxR, funnelH, _smoothedBass, sway);
+    _drawVolumetricCone(canvas, cx, baseY, maxR, funnelH, _smoothedBass, sway, n);
 
     // 4. 地面旋吸微粒群
-    _drawGroundIngestionDust(canvas, cx, baseY, maxR, t, spin, _smoothedBass, treble, sway);
+    _drawGroundIngestionDust(canvas, cx, baseY, maxR, t, spin, _smoothedBass, treble);
 
     // 5. 气旋立体粒子场（带严格前后景深区分与运动拖尾）
     _drawVortexParticles(
@@ -188,39 +193,51 @@ class ParticleTornadoPainter extends CustomPainter
     );
 
     // 6. 气旋前半段对流光带（在粒子前方，增强立体包裹感）
-    _drawVortexRibbons(canvas, cx, baseY, maxR, funnelH, spin, t, sway, isFront: true);
+    _drawVortexRibbons(canvas, cx, baseY, maxR, funnelH, spin, t, sway, n, isFront: true);
 
     // 7. 顶部深邃风眼口外沿呼吸微光
     _drawTopEyeMouthGlow(canvas, cx, baseY, maxR, funnelH, _smoothedBass, sway);
 
     // 8. 全局泛光（Shader 按尺寸与平滑低音 6 档量化缓存，杜绝逐帧分配）
     if (bloom > 0.05) {
-      final bassLvl = (_smoothedBass * 5.0).round().clamp(0, 5);
+      final bl = (_smoothedBass * 7).round().clamp(0, 7);
+      final glowCenterX = _axisX(cx, sway, 0.35);
       final glowRect = Rect.fromCenter(
-        center: Offset(cx, baseY - funnelH * 0.35),
+        center: Offset(glowCenterX, baseY - funnelH * 0.35),
         width: maxR * 3.6,
         height: funnelH * 1.1,
       );
-      _glowPaint.shader = _getOrCreateShader('glow_x__', () => RadialGradient(
+      _glowPaint.shader = _getOrCreateShader('glow_$bl', () => RadialGradient(
         colors: [
-          palette.glow.withValues(alpha: (0.06 + bloom * 0.14 + (bassLvl / 5.0) * 0.08)),
+          palette.glow.withValues(alpha: (0.06 + bloom * 0.14 + (bl / 7.0) * 0.10)),
           palette.glow.withValues(alpha: 0.0),
         ],
       ).createShader(glowRect));
       canvas.drawOval(
         Rect.fromCenter(
-          center: Offset(cx + sway * 0.6, baseY - funnelH * 0.35),
-          width: maxR * 3.6,
-          height: funnelH * 1.1,
+          center: Offset(glowCenterX, baseY - funnelH * 0.35),
+          width: maxR * (3.6 + _pulse * 0.5),
+          height: funnelH * (1.1 + _pulse * 0.12),
         ),
         _glowPaint,
       );
     }
   }
 
-  /// 漏斗中轴：平滑 S 形流动摆动
+  /// 漏斗中轴：根部锚定（u=0 底部不动），越往顶摆幅越大 ——
+  /// 龙卷风的漏斗云本来就是顶上摆、脚下钉。原实现方向相反，
+  /// 底座平移顶被钉死，是「站不直」的直接来源。
   double _axisX(double cx, double sway, double u) =>
-      cx + sway * math.pow(1.0 - u.clamp(0.0, 1.0), 1.6);
+      cx + sway * math.pow(u.clamp(0.0, 1.0), 1.35);
+
+  /// 高度 u（0=底部低频 → 1=顶部高频）对应的频带能量。
+  /// 让锥体/光带的粗细按对应频段「鼓包」，音乐一变形状就变。
+  double _bandAt(double u, int n) {
+    if (n <= 0) return 0.0;
+    final idx = (u.clamp(0.0, 1.0) * (n - 1)).round().clamp(0, n - 1);
+    final e = bands[idx];
+    return e.isFinite ? e.clamp(0.0, 1.0) : 0.0;
+  }
 
   /// 漏斗外廓剖面函数：底部精细风眼，上口广阔舒展
   double _profile(double u) {
@@ -236,18 +253,21 @@ class ParticleTornadoPainter extends CustomPainter
     double maxR,
     double minDim,
     double bass,
-    double sway,
   ) {
-    final center = Offset(cx + sway, baseY);
+    // 底部风眼是「根」，钉在地面，不随中轴摆动（原实现还跟着 sway 平移）。
+    final center = Offset(cx, baseY);
 
-    final bassLvl = (bass * 5.0).round().clamp(0, 5);
+    // 8 档量化：档位进 Shader 缓存 key —— 否则首帧之后 alpha 被冻结，
+    // 音乐再响画面也不变（这正是「变化很少」的主因之一）。
+    final bl = (bass * 7).round().clamp(0, 7);
+    final bq = bl / 7.0;
 
-    // a. 底部广域环境微光沉降池（Shader 复用）
-    final hazeRect = Rect.fromCenter(center: Offset(cx, baseY), width: maxR * 3.8, height: minDim * 0.30);
-    _hazePaint.shader = _getOrCreateShader('haze____', () => RadialGradient(
+    // a. 底部广域环境微光沉降池（Shader 按档位缓存，档位变了才重建）
+    final hazeRect = Rect.fromCenter(center: center, width: maxR * 3.8, height: minDim * 0.30);
+    _hazePaint.shader = _getOrCreateShader('haze_$bl', () => RadialGradient(
       colors: [
-        palette.secondary.withValues(alpha: 0.16 + (bassLvl / 5.0) * 0.18),
-        palette.primary.withValues(alpha: 0.06 + (bassLvl / 5.0) * 0.08),
+        palette.secondary.withValues(alpha: 0.16 + bq * 0.18),
+        palette.primary.withValues(alpha: 0.06 + bq * 0.08),
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
@@ -264,14 +284,14 @@ class ParticleTornadoPainter extends CustomPainter
     // b. 同心进动高能吸积环（三道不同半径的优雅椭圆环，Shader 复用）
     const ringMultipliers = [0.45, 0.85, 1.35];
     for (var ri = 0; ri < ringMultipliers.length; ri++) {
-      final mul = ringMultipliers[ri] * (1.0 + (bassLvl / 5.0) * 0.06);
+      final mul = ringMultipliers[ri] * (1.0 + bq * 0.10);
       final rw = maxR * mul;
       final rh = rw * _pitchSin;
-      final ringAlpha = (0.12 - ri * 0.03 + (bassLvl / 5.0) * 0.10).clamp(0.02, 0.35);
-      final ringRect = Rect.fromCenter(center: Offset(cx, baseY), width: rw, height: rh);
+      final ringAlpha = (0.12 - ri * 0.03 + bq * 0.14).clamp(0.02, 0.35);
+      final ringRect = Rect.fromCenter(center: center, width: rw, height: rh);
 
       _ringPaint
-        ..shader = _getOrCreateShader('ring_____', () => SweepGradient(
+        ..shader = _getOrCreateShader('ring_$bl', () => SweepGradient(
           colors: [
             palette.primary.withValues(alpha: ringAlpha),
             palette.secondary.withValues(alpha: ringAlpha * 1.8),
@@ -288,12 +308,12 @@ class ParticleTornadoPainter extends CustomPainter
     }
 
     // c. 风眼中心深邃极核（中央极度致密的高能焦点，Shader 复用）
-    final coreR = maxR * (0.18 + (bassLvl / 5.0) * 0.05);
-    final coreRect = Rect.fromCenter(center: Offset(cx, baseY), width: coreR * 2, height: coreR * 2 * _pitchSin);
-    _hazePaint.shader = _getOrCreateShader('core____', () => RadialGradient(
+    final coreR = maxR * (0.18 + bq * 0.07);
+    final coreRect = Rect.fromCenter(center: center, width: coreR * 2, height: coreR * 2 * _pitchSin);
+    _hazePaint.shader = _getOrCreateShader('core_$bl', () => RadialGradient(
       colors: [
-        palette.peak.withValues(alpha: 0.30 + (bassLvl / 5.0) * 0.40),
-        palette.primary.withValues(alpha: 0.12 + (bassLvl / 5.0) * 0.15),
+        palette.peak.withValues(alpha: 0.30 + bq * 0.40),
+        palette.primary.withValues(alpha: 0.12 + bq * 0.15),
         palette.primary.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.45, 1.0],
@@ -313,7 +333,8 @@ class ParticleTornadoPainter extends CustomPainter
     double funnelH,
     double spin,
     double t,
-    double sway, {
+    double sway,
+    int n, {
     required bool isFront,
   }) {
     final path = isFront ? _strandPathFront : _strandPathBack;
@@ -338,7 +359,11 @@ class ParticleTornadoPainter extends CustomPainter
         }
 
         final cosA = math.cos(angle);
-        final r = maxR * _profile(u) * (1.0 + 0.025 * math.sin(t * 0.7 + basePhase));
+        // 半径按该高度的频段能量鼓包：低频在根部、高频在顶部，形状跟音乐走
+        final r = maxR *
+            _profile(u) *
+            (1.0 + 0.025 * math.sin(t * 0.7 + basePhase)) *
+            (1.0 + _bandAt(u, n) * 0.22);
         final x = _axisX(cx, sway, u) + cosA * r;
         final y = baseY - u * funnelH + sinA * r * _pitchSin;
 
@@ -379,6 +404,7 @@ class ParticleTornadoPainter extends CustomPainter
     double funnelH,
     double bass,
     double sway,
+    int n,
   ) {
     _conePath.reset();
 
@@ -387,7 +413,7 @@ class ParticleTornadoPainter extends CustomPainter
     for (var s = 0; s <= samples; s++) {
       final u = s / samples;
       final axis = _axisX(cx, sway, u);
-      final rx = maxR * _profile(u);
+      final rx = maxR * _profile(u) * (1.0 + _bandAt(u, n) * 0.16);
       final y = baseY - u * funnelH;
       if (s == 0) {
         _conePath.moveTo(axis - rx, y);
@@ -399,7 +425,7 @@ class ParticleTornadoPainter extends CustomPainter
     for (var s = samples; s >= 0; s--) {
       final u = s / samples;
       final axis = _axisX(cx, sway, u);
-      final rx = maxR * _profile(u);
+      final rx = maxR * _profile(u) * (1.0 + _bandAt(u, n) * 0.16);
       _conePath.lineTo(axis + rx, baseY - u * funnelH);
     }
     _conePath.close();
@@ -411,14 +437,15 @@ class ParticleTornadoPainter extends CustomPainter
       funnelH,
     );
 
-    final coneBassLvl = (bass * 5.0).round().clamp(0, 5);
-    // 核心微光体积填充：底部浓、上部自然淡出，两侧柔和衰减（Shader 复用）
-    _conePaint.shader = _getOrCreateShader('cone____', () => LinearGradient(
+    final bl = (bass * 7).round().clamp(0, 7);
+    final bq = bl / 7.0;
+    // 核心微光体积填充：底部浓、上部自然淡出（key 带档位，否则首帧后冻结）
+    _conePaint.shader = _getOrCreateShader('cone_$bl', () => LinearGradient(
       begin: Alignment.bottomCenter,
       end: Alignment.topCenter,
       colors: [
-        palette.primary.withValues(alpha: 0.09 + (coneBassLvl / 5.0) * 0.07),
-        palette.secondary.withValues(alpha: 0.04 + (coneBassLvl / 5.0) * 0.03),
+        palette.primary.withValues(alpha: 0.09 + bq * 0.09),
+        palette.secondary.withValues(alpha: 0.04 + bq * 0.04),
         palette.glow.withValues(alpha: 0.0),
       ],
       stops: const [0.0, 0.55, 1.0],
@@ -437,9 +464,9 @@ class ParticleTornadoPainter extends CustomPainter
     double spin,
     double bass,
     double treble,
-    double sway,
   ) {
-    final centerX = cx + sway;
+    // 地面尘是「根」的一部分，钉死不摆（与风眼同锚点）
+    final centerX = cx;
     for (var i = 0; i < _groundCount; i++) {
       final o = i * 5;
       final baseRadiusMul = _groundSeeds[o];
@@ -460,7 +487,7 @@ class ParticleTornadoPainter extends CustomPainter
       final depth = (sinA + 1.0) * 0.5; // 前景度
       final twinkle = 0.5 + 0.5 * math.sin(t * 2.2 + twinklePhase);
 
-      final alpha = (0.04 + depth * 0.22 + twinkle * 0.10 + treble * 0.06)
+      final alpha = (0.04 + depth * 0.22 + twinkle * 0.10 + treble * 0.12)
           .clamp(0.0, 1.0);
       final pColor = (i % 3 == 0) ? palette.secondary : palette.primary;
 
@@ -585,12 +612,13 @@ class ParticleTornadoPainter extends CustomPainter
       height: topR * 2.0 * _pitchSin,
     );
 
-    final eyeBassLvl = (bass * 5.0).round().clamp(0, 5);
+    final bl = (bass * 7).round().clamp(0, 7);
+    final bq = bl / 7.0;
     _ringPaint
-      ..shader = _getOrCreateShader('topEye____', () => LinearGradient(
+      ..shader = _getOrCreateShader('topEye_$bl', () => LinearGradient(
         colors: [
-          palette.primary.withValues(alpha: 0.08 + (eyeBassLvl / 5.0) * 0.12),
-          palette.secondary.withValues(alpha: 0.15 + (eyeBassLvl / 5.0) * 0.18),
+          palette.primary.withValues(alpha: 0.08 + bq * 0.12),
+          palette.secondary.withValues(alpha: 0.15 + bq * 0.18),
           palette.glow.withValues(alpha: 0.04),
         ],
       ).createShader(eyeRect))
