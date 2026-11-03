@@ -70,8 +70,8 @@ class _FilterPills extends StatelessWidget {
         ),
       );
       if (!comingSoon) return body;
-      // 预留格式（VST2/AU/LV2）：按钮可见、灰显、不可点——扫描/挂载驱动
-      // 尚未实现（2026-10-28 用户定案先占位），悬停给出明确说明。
+      // 预留格式（AU/LV2）：按钮可见、灰显、不可点——扫描/挂载驱动
+      // 尚未实现，悬停给出明确说明。（VST2 已于 2026-11-03 解禁。）
       return Tooltip(
         message: l10nOf(context).plugFormatSoon,
         child: Opacity(opacity: 0.45, child: IgnorePointer(child: body)),
@@ -87,7 +87,7 @@ class _FilterPills extends StatelessWidget {
         const SizedBox(width: 6),
         pill('clap', 'CLAP', countClap),
         const SizedBox(width: 6),
-        pill('vst2', 'VST2', countVst2, comingSoon: true),
+        pill('vst2', 'VST2', countVst2),
         if (PlatformProfile.os == 'macos') ...[
           const SizedBox(width: 6),
           pill('au', 'AU', countAu, comingSoon: true),

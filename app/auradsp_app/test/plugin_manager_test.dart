@@ -310,13 +310,22 @@ void main() {
           'format': 'CLAP',
           'path': r'C:\CLAP\Element.clap',
         },
+        {
+          'id': '4',
+          'name': 'Valhalla Supermassive',
+          'vendor': 'Valhalla DSP',
+          'version': '1.0',
+          'format': 'VST2',
+          'path': r'C:\VST2\ValhallaSupermassive.dll',
+        },
       ];
 
-      manager.onPluginScanned(3, samplePlugins);
-      expect(manager.countAll, 3);
+      manager.onPluginScanned(4, samplePlugins);
+      expect(manager.countAll, 4);
       expect(manager.countVst3, 2);
       expect(manager.countClap, 1);
-      expect(manager.filteredPlugins.length, 3);
+      expect(manager.countVst2, 1);
+      expect(manager.filteredPlugins.length, 4);
 
       // Filter by VST3
       manager.setFilterFormat('vst3');
@@ -327,6 +336,11 @@ void main() {
       manager.setFilterFormat('clap');
       expect(manager.filteredPlugins.length, 1);
       expect(manager.filteredPlugins.first.name, 'Kushview Element FX');
+
+      // Filter by VST2（2026-11-03 解禁）
+      manager.setFilterFormat('vst2');
+      expect(manager.filteredPlugins.length, 1);
+      expect(manager.filteredPlugins.first.name, 'Valhalla Supermassive');
 
       // Reset format, search query
       manager.setFilterFormat('all');

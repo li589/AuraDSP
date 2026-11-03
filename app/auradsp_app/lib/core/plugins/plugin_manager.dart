@@ -102,7 +102,7 @@ class PluginManager extends ChangeNotifier {
 
   List<String> _scanDirs = [];
   bool _isScanning = false;
-  String _filterFormat = 'all'; // 'all', 'vst3', 'clap'
+  String _filterFormat = 'all'; // 'all', 'vst3', 'clap', 'vst2'
   String _searchQuery = '';
   final Map<int, bool> _slotBusy = {};
 
@@ -286,6 +286,8 @@ class PluginManager extends ChangeNotifier {
       list = list.where((p) => p.format == PluginFormat.vst3).toList();
     } else if (_filterFormat == 'clap') {
       list = list.where((p) => p.format == PluginFormat.clap).toList();
+    } else if (_filterFormat == 'vst2') {
+      list = list.where((p) => p.format == PluginFormat.vst2).toList();
     }
 
     final q = _searchQuery.trim().toLowerCase();
