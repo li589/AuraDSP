@@ -102,6 +102,58 @@ void fillRemoteInfo(const auradsp::PluginMetadata& meta,
     info.mainOutChannels = bus.mainOutChannels > 0 ? static_cast<uint32_t>(bus.mainOutChannels) : 0u;
 }
 
+/* 深扫元数据查询实现（协议 v5，2026-11-04）：格式无关，直接交给驱动自己产出——
+ * VST3 一个包可出多条、CLAP 走描述符、VST2 仍走它自己的「建起来问」。
+ * 与 v4 的区别：不再 createInstance→load→unload，元数据查询不占槽、不进音频路径，
+ * 也不会因为实例激活失败而丢掉元数据。
+ * 只在宿主进程里跑；引擎侧的 VST2 安全铁律（绝不进程内 LoadLibrary）不受影响。 */
+__declspec(noinline) bool queryMetadataImpl(
+        const std::string& path, std::vector<auradsp::ipc::RemotePluginInfo>& out) {
+    auto* driver = auradsp::PluginDriverRegistry::instance().findForPath(path);
+    if (!driver) return false;
+    const std::string binary = driver->resolveBinary(path);
+    if (binary.empty()) return false;
+    std::vector<auradsp::PluginMetadata> metas;
+    if (!driver->queryMetadata(path, binary, metas) || metas.empty()) return false;
+    const auradsp::PluginBusInfo noBus{};
+    out.clear();
+    out.reserve(metas.size());
+    for (const auto& m : metas) {
+        auradsp::ipc::RemotePluginInfo info = {};
+        fillRemoteInfo(m, noBus, info);
+        out.push_back(info);
+    }
+    return true;
+}
+
+#if defined(_MSC_VER)
+int metadataSehFilter(unsigned int code) {
+    (void)code;
+    return EXCEPTION_EXECUTE_HANDLER;
+}
+#endif
+
+/* SEH 兜底（2026-11-04）：插件在 VSTPluginMain/effOpen 阶段 AV 时只废掉本候选，
+ * 不让宿主进程整只死掉（旧行为：宿主一死，该轮扫描进度全丢）。
+ * 本函数刻意只含 POD 局部量——MSVC 不允许在需要对象展开的函数里用 __try（C2712），
+ * 所以危险动作一律沉到 queryMetadataImpl（noinline，独立栈帧）。
+ * 命中异常时 queryMetadataImpl 内的临时对象/模块句柄按「隔离区」语义不释放：
+ * 宁可泄漏，也不在可能已损坏的状态下 FreeLibrary。 */
+bool queryMetadataGuarded(const std::string& path,
+                          std::vector<auradsp::ipc::RemotePluginInfo>& out) {
+#if defined(_MSC_VER)
+    bool ok = false;
+    __try {
+        ok = queryMetadataImpl(path, out);
+    } __except (metadataSehFilter(GetExceptionCode())) {
+        ok = false;
+    }
+    return ok;
+#else
+    return queryMetadataImpl(path, out);
+#endif
+}
+
 bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& running) {
     auradsp::ipc::MsgHeader header = {};
     if (!readAll(pipe, &header, sizeof(header))) return false;
@@ -229,31 +281,19 @@ bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& runni
             break;
         }
         case auradsp::ipc::Op::QueryMetadata: {
-            /* 32 位 VST2 远程深扫（2026-11-03）：桥宿主是 32 位进程，能
-             * 加载 x64 引擎加载不了的 32 位 DLL。临时实例只 load 不 activate，
-             * 读完元数据立即 unload，不占槽位、不进音频路径。 */
+            /* 深扫查询（v5）：payload = path，response = u32 count + count × RemotePluginInfo。
+             * 失败一律 status=0（不带半成品），引擎侧按格式各自的策略回退。 */
             std::string path;
             if (!r.str(path)) break;
-            auradsp::ipc::RemotePluginInfo info = {};
-            auto* driver = auradsp::PluginDriverRegistry::instance().findForPath(path);
-            if (driver) {
-                const std::string binary = driver->resolveBinary(path);
-                if (!binary.empty()) {
-                    auto instance = driver->createInstance();
-                    if (instance && instance->load(path, std::string(), nullptr)) {
-                        fillRemoteInfo(instance->getMetadata(), instance->busInfo(), info);
-                        status = 1;
-                    }
-                    if (instance) instance->unload();
-                }
+            std::vector<auradsp::ipc::RemotePluginInfo> infos;
+            if (queryMetadataGuarded(path, infos) && !infos.empty()) {
+                const uint32_t count = static_cast<uint32_t>(infos.size());
+                const size_t bytes = infos.size() * sizeof(auradsp::ipc::RemotePluginInfo);
+                body.resize(sizeof(count) + bytes);
+                std::memcpy(body.data(), &count, sizeof(count));
+                std::memcpy(body.data() + sizeof(count), infos.data(), bytes);
+                status = 1;
             }
-            if (status != 1) {
-                auradsp::ipc::copyFixed(info.errorMessage, sizeof(info.errorMessage),
-                                        "plugin metadata query failed in host process");
-                info.isCompatible = 0;
-            }
-            body.resize(sizeof(info));
-            std::memcpy(body.data(), &info, sizeof(info));
             break;
         }
         case auradsp::ipc::Op::Unload: {

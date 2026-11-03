@@ -11,9 +11,12 @@ namespace auradsp {
 namespace ipc {
 
 constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
-/* v4（2026-11-03）：新增 Op::QueryMetadata（32 位 VST2 远程深扫）。
- * 引擎与宿主必须同版本；旧宿主进程会被 Hello 版本检查拒掉并重启。 */
-constexpr uint32_t kProtocolVersion = 4u;
+/* v5（2026-11-04）：Op::QueryMetadata 响应改为「u32 count + count × RemotePluginInfo」，
+ * 深扫不再只服务 32 位 VST2 —— 引擎侧把深扫统一按位数分派给宿主，VST3 一包多插件
+ * 也要能一次返回多条。引擎与宿主必须同版本；旧宿主进程会被 Hello 版本检查拒掉并重启。 */
+constexpr uint32_t kProtocolVersion = 5u;
+/* 单次元数据查询允许返回的最大条目数（防御畸形/恶意响应）。 */
+constexpr uint32_t kMaxMetadataBatch = 512u;
 constexpr uint32_t kMaxSlots = 4u;
 constexpr uint32_t kChannels = 8u;
 constexpr uint32_t kTransportFrames = 128u;
@@ -24,6 +27,9 @@ constexpr size_t kMaxControlPayload = 32u * 1024u * 1024u;
 enum class Op : uint32_t {
     Hello = 1,
     Ping = 2,
+    /* Scan*（v5 起降级为诊断用途）：引擎侧扫描已改为「本地 enumerate + 快扫，
+     * 深扫按候选位数调 QueryMetadata」，不再整轮委托宿主（见
+     * docs/20-执行/插件扫描归属重构与崩溃隔离-2026-11-04.md）。宿主仍保留实现。 */
     Scan = 3,
     ScanBegin = 4,
     ScanStep = 5,
@@ -48,8 +54,9 @@ enum class Op : uint32_t {
     UpdateFormat = 24,
     Shutdown = 25,
     SetChannelHint = 26,
-    /* 32 位 VST2 远程深扫（2026-11-03）：payload = path，response = RemotePluginInfo。
-     * 宿主临时 createInstance → load → 读元数据 → unload，不占槽、不激活。 */
+    /* 深扫查询（v4 引入，v5 改多条目）：payload = path，response = u32 count +
+     * count × RemotePluginInfo。宿主用 driver->queryMetadata 直接产出，不建实例、
+     * 不占槽。count 上限 kMaxMetadataBatch。 */
     QueryMetadata = 27,
 };
 

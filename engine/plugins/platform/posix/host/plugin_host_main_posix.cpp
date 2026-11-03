@@ -20,6 +20,7 @@
 #endif
 
 #include "plugin_host.h"
+#include "plugin_format_driver.h"
 #include "plugin_ipc_protocol.h"
 #include "plugin_shared_region.h"
 #include "engine_internal.h"
@@ -200,6 +201,34 @@ bool handleCommand(int fd, auradsp::PluginHostManager& manager, bool& running) {
             const std::string json = manager.getAllScannedJson();
             body.assign(json.begin(), json.end());
             status = 1;
+            break;
+        }
+
+        case auradsp::ipc::Op::QueryMetadata: {
+            /* 深扫查询（v5，2026-11-04）：payload = path，response = u32 count +
+             * count × RemotePluginInfo。与 Win32 宿主同口径：格式无关，交给驱动直出。
+             * POSIX 侧无 SEH（等价物是信号），插件 AV 会直接带走宿主——
+             * 由客户端超时+重启兜底，语义见方案 D-6。 */
+            std::string path;
+            if (!r.str(path)) break;
+            auto* driver = auradsp::PluginDriverRegistry::instance().findForPath(path);
+            if (driver) {
+                const std::string binary = driver->resolveBinary(path);
+                std::vector<auradsp::PluginMetadata> metas;
+                if (!binary.empty() && driver->queryMetadata(path, binary, metas) && !metas.empty()) {
+                    std::vector<auradsp::ipc::RemotePluginInfo> infos(metas.size());
+                    const auradsp::PluginBusInfo noBus{};
+                    for (size_t i = 0; i < metas.size(); ++i) {
+                        fillRemoteInfo(metas[i], noBus, infos[i]);
+                    }
+                    const uint32_t count = static_cast<uint32_t>(infos.size());
+                    const size_t bytes = infos.size() * sizeof(auradsp::ipc::RemotePluginInfo);
+                    body.resize(sizeof(count) + bytes);
+                    std::memcpy(body.data(), &count, sizeof(count));
+                    std::memcpy(body.data() + sizeof(count), infos.data(), bytes);
+                    status = 1;
+                }
+            }
             break;
         }
 

@@ -184,6 +184,13 @@ public:
      * 只探测 x86_64-win，缺失即 return ""，32 位 bundle 被静默丢弃。 */
     static std::string resolveBundleBinary(const std::string& bundlePath, PluginFormat format,
                                            std::string* outArch = nullptr);
+
+    /* 位桥可用性（2026-11-04）：`plugin_host_x86` 是否就绪，由 PluginHostManager
+     * 构造时写入一次。快扫用它决定 32 位条目的 isCompatible 与文案——
+     * 旧实现写死「32 位无法加载，请安装 64 位版本」，在位桥就绪时是与事实相反的
+     * 假信息（见 docs/20-执行/插件扫描归属重构与崩溃隔离-2026-11-04.md D-5）。 */
+    static void setArchBridgeAvailable(bool available);
+    static bool archBridgeAvailable();
 };
 
 class PluginHostManager {
@@ -372,6 +379,11 @@ public:
     std::shared_ptr<PluginHostClient> m_remoteClientX86;
     std::shared_ptr<PluginHostClient> remoteClientFor(
         const std::string& path);
+    /* 深扫分派（2026-11-04）：按候选二进制位数选出「能加载它的那个宿主」。
+     * 32 位 → 桥宿主；64 位 → x64 宿主（含仅扫描用途的实例）；位数未知或宿主
+     * 不可用 → nullptr，调用方按格式各自回退（VST3/CLAP 进程内、VST2 快扫）。 */
+    std::shared_ptr<PluginHostClient> remoteScanClientFor(
+        const std::string& binaryPath);
 #endif
     double m_sampleRate{48000.0};
     uint32_t m_maxBlockSize{1024};

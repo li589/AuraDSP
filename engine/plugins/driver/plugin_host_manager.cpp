@@ -452,7 +452,10 @@ void PluginHostManager::setChannelHint(int channels) {
     if (previous == channels) return;
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 #ifndef AURADSP_HOST_INPROC
-    if (m_remoteClient) {
+    /* 2026-11-04：x64 客户端只在 process（加载）模式下转发——「仅扫描」
+     * 客户端不得因加载期的格式消息被拉起，懒启动语义属于深扫。桥客户端
+     * 不受限：32 位插件可能随时经它挂载。 */
+    if (m_remoteMode && m_remoteClient) {
         m_remoteClient->setChannelHint(static_cast<uint32_t>(channels));
     }
     if (m_remoteClientX86) {

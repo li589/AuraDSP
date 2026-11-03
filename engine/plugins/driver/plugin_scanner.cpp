@@ -10,8 +10,10 @@
 #endif
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <condition_variable>
+#include <cstdlib>
 #include <filesystem>
 #include <memory>
 #include <mutex>
@@ -27,6 +29,10 @@ namespace fs = std::filesystem;
 namespace auradsp {
 namespace {
 
+/* 位桥可用性（2026-11-04）：PluginHostManager 构造时写入一次，供快扫判定
+ * 32 位条目能否被加载。默认 false（保守：没有桥就说清楚缺什么）。 */
+std::atomic<bool> g_archBridgeAvailable{false};
+
 /// 32 位插件的"可发现但不可加载"条目（D2）。
 /// 不 LoadLibrary —— x64 进程加载 32 位 DLL 必然 ERROR_BAD_EXE_FORMAT(193)，
 /// 旧路把 193 当普通"加载失败"抛出，用户无法区分架构问题与文件损坏；
@@ -40,8 +46,16 @@ void fill32BitIncompatible(PluginMetadata& meta, const std::string& filePath,
     // 与 makeQuickMeta / applyClapDescriptor 同一规则：bundleName = 路径 stem。
     meta.bundleName = meta.name;
     meta.is64Bit = false;
-    meta.isCompatible = false;
-    meta.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+    /* 2026-11-04：文案与 isCompatible 按位桥可用性判定。位桥在位时 32 位插件
+     * 完全可加载（加载路 remoteClientFor 会路由到 plugin_host_x86），此时再写
+     * 「请安装 64 位版本」既是假信息，也会在任何人加「不兼容即禁止加载」守卫时
+     * 把 32 位插件全部误杀。 */
+    if (PluginScanner::archBridgeAvailable()) {
+        meta.isCompatible = true;
+    } else {
+        meta.isCompatible = false;
+        meta.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
+    }
 
     // vendor 兜底链与 makeQuickMeta / applyClapDescriptor 完全一致：
     // PE CompanyName -> LegalCopyright -> 上级目录 -> "Unknown"。
@@ -77,11 +91,11 @@ PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, P
     q.bundleName = fs::path(pStr).stem().string();
     q.format = fmt;
     // D2：is64Bit 由 PE 头判定（不再硬编码 true）。32 位条目保留在扫描结果
-    // 中但标记不可加载，加载路 loadPlugin() 会拦截并给出同一文案。
+    // 中；能否加载取决于位桥是否就绪（2026-11-04 起按实际能力判定）。
     q.is64Bit = peIs64Bit(wp);
-    if (!q.is64Bit) {
+    if (!q.is64Bit && !PluginScanner::archBridgeAvailable()) {
         q.isCompatible = false;
-        q.errorMessage = "32 位插件无法加载：AuraDSP 是 64 位进程，请安装 64 位版本";
+        q.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
     }
     q.vendor = vendor;
     q.version = !peVer.empty() ? peVer : "1.0";
@@ -129,11 +143,32 @@ std::vector<PluginMetadata> scanCandidateMeta(const PluginScanner::ScanCandidate
 // LoadLibrary/DllMain 里。每个超时项泄漏一条线程；同一模块的后续
 // LoadLibrary 可能被全局装载锁挡住——这是进程内托管的固有上限，故
 // 宿主设「放弃线程上限」（scanStep 内检查），超过即中止本轮扫描并保留
-// 已扫结果。真正的硬隔离需 AURA_PLUGIN_HOST_MODE=process（进程外托管）。
+// 已扫结果。深扫的崩溃隔离默认由「按候选位数借宿主」承担（2026-11-04 起，
+// 见 deepScanHostEnabled），引擎进程内深扫只是宿主不可用时的回退。
 constexpr int kScanItemTimeoutMs = 2500;
 
 // 放弃线程上限：超过即不再继续深扫（避免无限泄漏把进程拖垮）。
 constexpr int kScanAbandonLimit = 4;
+
+// D-2（2026-11-04）：深扫宿主开关。默认 host——深扫一律借「能加载它的那个
+// 宿主」做隔离（X64 宿主可仅扫描用途懒启动）；AURA_PLUGIN_DEEP_SCAN=inproc
+// 回到旧行为（VST3/CLAP 在引擎内深扫、VST2 只快扫），用于不想多一个常驻
+// 进程的场景与整条链路的回退。
+bool envEqualsNoCase(const char* v, const char* lit) {
+    if (!v) return false;
+    while (*v && *lit) {
+        char a = *v, b = *lit;
+        if (a >= 'A' && a <= 'Z') a = static_cast<char>(a - 'A' + 'a');
+        if (b >= 'A' && b <= 'Z') b = static_cast<char>(b - 'A' + 'a');
+        if (a != b) return false;
+        ++v; ++lit;
+    }
+    return *v == '\0' && *lit == '\0';
+}
+
+bool deepScanHostEnabled() {
+    return !envEqualsNoCase(std::getenv("AURA_PLUGIN_DEEP_SCAN"), "inproc");
+}
 
 struct GuardedMetaState {
     std::mutex m;
@@ -204,6 +239,14 @@ PluginMetadata fromRemoteInfo(const ipc::RemotePluginInfo& r, const std::string&
 #endif
 
 } // namespace
+
+void PluginScanner::setArchBridgeAvailable(bool available) {
+    g_archBridgeAvailable.store(available, std::memory_order_release);
+}
+
+bool PluginScanner::archBridgeAvailable() {
+    return g_archBridgeAvailable.load(std::memory_order_acquire);
+}
 
 std::vector<std::string> PluginScanner::getDefaultSearchPaths() {
     return defaultPluginSearchPaths();
@@ -317,9 +360,12 @@ std::vector<PluginMetadata> PluginScanner::scan(const std::vector<std::string>& 
 //------------------------------------------------------------------------------
 PluginHostManager::PluginHostManager() {
 #ifndef AURADSP_HOST_INPROC
+    /* D-2（2026-11-04）：X64 客户端允许「仅扫描」启动——AURA_PLUGIN_HOST_MODE
+     * 未设 = 加载仍是进程内（m_remoteMode=false），但深扫可以借宿主做隔离。
+     * processMode() 如实区分两种角色，加载分支只认它。 */
     m_remoteClient = std::make_shared<PluginHostClient>();
-    if (m_remoteClient->start()) {
-        m_remoteMode = true;
+    if (m_remoteClient->start(deepScanHostEnabled())) {
+        m_remoteMode = m_remoteClient->processMode();
     } else {
         m_remoteClient.reset();
         m_remoteMode = false;
@@ -330,6 +376,8 @@ PluginHostManager::PluginHostManager() {
     if (x86->start()) {
         m_remoteClientX86 = std::move(x86);
     }
+    // 位桥可用性一次性写入（快扫的 32 位标记依赖它，见 D-5）。
+    PluginScanner::setArchBridgeAvailable(m_remoteClientX86 != nullptr);
 #endif
 }
 
@@ -352,6 +400,23 @@ std::shared_ptr<PluginHostClient> PluginHostManager::remoteClientFor(
     }
     return m_remoteClient;
 }
+
+std::shared_ptr<PluginHostClient> PluginHostManager::remoteScanClientFor(
+        const std::string& binaryPath) {
+    /* D-1（2026-11-04）：深扫分派按「谁能加载这个 DLL」选宿主，与加载的
+     * env 开关解耦。32 位 → 桥（在位即可）；64 位 → x64 宿主（process 模式
+     * 的加载宿主，或 deepScanHostEnabled() 允许的仅扫描实例——构造时已按
+     * 开关决定 m_remoteClient 是否存在，这里不重复读 env）。位数未知 →
+     * nullptr：宁可回退快扫，不做一次注定失败的 LoadLibrary。 */
+    const int bits = pluginBinaryBitness(utf8ToWide(binaryPath));
+    if (bits == 32) {
+        return m_remoteClientX86;
+    }
+    if (bits == 64) {
+        return m_remoteClient;
+    }
+    return nullptr;
+}
 #endif
 
 PluginHostManager::~PluginHostManager() {
@@ -370,11 +435,6 @@ PluginHostManager::~PluginHostManager() {
 }
 
 int PluginHostManager::scanPlugins(const std::string& extraDirsJson, bool deepScan) {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanPlugins(extraDirsJson, deepScan);
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 
     // 一次性扫描直接走分块管线的同一条实现（begin → 排空 → end），于是：
@@ -409,11 +469,6 @@ std::vector<std::string> PluginHostManager::collectSearchPathsLocked(const std::
 }
 
 int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan) {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanBegin(extraDirsJson, deepScan);
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
 
     auto job = std::make_unique<ScanJob>();
@@ -428,11 +483,6 @@ int PluginHostManager::scanBegin(const std::string& extraDirsJson, bool deepScan
 }
 
 int PluginHostManager::scanStep(int maxItems) {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanStep(maxItems);
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return 0;
     if (maxItems <= 0) maxItems = 1;
@@ -463,37 +513,52 @@ int PluginHostManager::scanStep(int maxItems) {
         bool ok = true;
         bool remoteHandled = false;
 #ifndef AURADSP_HOST_INPROC
-        /* 32 位 VST2 远程深扫（2026-11-03）：x64 进程加载不了 32 位 DLL，
-         * 由 x86 位桥宿主代查真实 name/vendor/category。桥缺位或查询失败
-         * 回退快扫元数据，不累计 abandoned（那是进程内挂死计数）。 */
-        if (job.deep && c.format == PluginFormat::VST2 &&
-            pluginBinaryBitness(utf8ToWide(c.binaryPath)) == 32) {
-            if (m_remoteClientX86) {
-                ipc::RemotePluginInfo info = {};
-                if (m_remoteClientX86->queryMetadata(c.path, info, kScanItemTimeoutMs)) {
-                    metas.push_back(fromRemoteInfo(info, c.path));
+        /* D-1（2026-11-04）：深扫按候选位数借宿主做隔离——不再区分「只有
+         * 32 位 VST2 走桥」，也不再在 process 模式下把整轮扫描甩给 x64 宿主。
+         * 规则：优先 remoteScanClientFor（能加载它的那个进程）；宿主不可用时
+         * VST2 绝不回引擎（安全铁律 D-4），VST3/CLAP 保留进程内深扫（旧能力，
+         * 2500ms 超时 + 放弃线程上限）。 */
+        if (job.deep) {
+            if (auto client = remoteScanClientFor(c.binaryPath)) {
+                std::vector<ipc::RemotePluginInfo> infos;
+                if (client->queryMetadata(c.path, infos, kScanItemTimeoutMs)) {
+                    for (const auto& info : infos) {
+                        metas.push_back(fromRemoteInfo(info, c.path));
+                    }
+                }
+                remoteHandled = true;
+                if (metas.empty()) {
+                    /* 深扫未返回（插件拒绝/坏 magic/超时）→ 回退快扫。快扫元数据
+                     * 本身不是「不兼容」，errorMessage 保持为空——旧实现在这里
+                     * 塞告警文案，会污染本可正常挂载的条目（2026-11-04）。 */
+                    metas.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
                 }
             }
-            if (metas.empty()) {
-                PluginMetadata q = makeQuickMeta(c.binaryPath, c.displayName, c.format);
-                q.errorMessage = "32 位插件远程深扫未返回；已回退为快速信息";
-                metas.push_back(std::move(q));
-            }
-            remoteHandled = true;
         }
 #endif
         if (!remoteHandled) {
             if (job.deep) {
-                if (job.abandonedThreads < kScanAbandonLimit) {
-                    ok = queryMetaWithTimeout(c, true, kScanItemTimeoutMs, metas);
-                    if (!ok) {
-                        ++job.timedOut;
-                        ++job.abandonedThreads;
+#ifndef AURADSP_HOST_INPROC
+                if (c.format == PluginFormat::VST2) {
+                    // 安全铁律（D-4）：没有可用宿主时，VST2 绝不在引擎进程内
+                    // LoadLibrary（实测真实插件在 VSTPluginMain/effOpen 直接 AV）。
+                    // 退化为快扫（errorMessage 保持为空：元数据浅不等于不兼容）。
+                    metas.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
+                    remoteHandled = true;
+                }
+#endif
+                if (!remoteHandled) {
+                    if (job.abandonedThreads < kScanAbandonLimit) {
+                        ok = queryMetaWithTimeout(c, true, kScanItemTimeoutMs, metas);
+                        if (!ok) {
+                            ++job.timedOut;
+                            ++job.abandonedThreads;
+                        }
+                    } else {
+                        // 放弃线程已达上限：停止深扫（降级快扫），并让上层把本轮
+                        // 标记为中断（Dart 侧保留上次结果 + 提示）。
+                        ok = false;
                     }
-                } else {
-                    // 放弃线程已达上限：停止深扫（降级快扫），并让上层把本轮
-                    // 标记为中断（Dart 侧保留上次结果 + 提示）。
-                    ok = false;
                 }
             } else {
                 metas = scanCandidateMeta(c, false);
@@ -510,33 +575,18 @@ int PluginHostManager::scanStep(int maxItems) {
 }
 
 int PluginHostManager::scanProcessed() const {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanProcessed();
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return -1;
     return static_cast<int>(m_scanJob->cursor);
 }
 
 int PluginHostManager::scanTotal() const {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanTotal();
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return -1;
     return static_cast<int>(m_scanJob->candidates.size());
 }
 
 int PluginHostManager::scanEnd() {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->scanEnd();
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (!m_scanJob) return static_cast<int>(m_scannedPlugins.size());
     const bool deep = m_scanJob->deep;
@@ -546,12 +596,6 @@ int PluginHostManager::scanEnd() {
 }
 
 void PluginHostManager::scanAbort() {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        m_remoteClient->scanEnd();
-        return;
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     m_scanJob.reset();   // 已扫到的部分保留在 m_scannedPlugins 中
 }
@@ -573,33 +617,17 @@ void PluginHostManager::rebuildScanCacheFromResults(bool deep) {
 }
 
 size_t PluginHostManager::getScannedCount() const {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        const int count = m_remoteClient->getScannedCount();
-        return count > 0 ? static_cast<size_t>(count) : 0;
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     return m_scannedPlugins.size();
 }
 
 std::string PluginHostManager::getScannedItemJson(size_t index) const {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->getScannedItemJson(static_cast<uint32_t>(index));
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     if (index >= m_scannedPlugins.size()) return "{}";
     return m_scannedPlugins[index].toJson();
 }
 
 std::string PluginHostManager::getAllScannedJson() const {
-#ifndef AURADSP_HOST_INPROC
-    if (m_remoteMode && m_remoteClient) {
-        return m_remoteClient->getAllScannedJson();
-    }
-#endif
     std::lock_guard<std::recursive_mutex> lock(m_hostMutex);
     std::ostringstream ss;
     ss << "[";
