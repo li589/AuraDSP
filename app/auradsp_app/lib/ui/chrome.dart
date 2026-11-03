@@ -4,7 +4,7 @@
  * 三件事：
  *   1. 布局：PageScaffold 统一页面留白（8pt 网格 + 内容区最大宽居中），
  *      保证「组件 ↔ 外框」的留白处处一致；PageHeader 统一页面层级入口。
- *   2. 氛围：AmbientSpectrum（频谱即背景光源，低不透明度单色）+ Grain 细噪点，
+ *   2. 氛围：AmbientSpectrum（频谱即背景光源，三层同形渐变叠出弥散光晕）+ Grain 细噪点，
  *      只在负空间可见——卡片是不透明面板，不会被糊掉。
  *   3. 动效：交错入场（一次编排的页面加载）、PulseDot 呼吸、AuraSwitch/
  *      AuraSegmented/AuraChip 的即时按压与滑动反馈。
@@ -533,14 +533,21 @@ class _AmbientPainter extends CustomPainter {
   final AmbientEnvelope _env = AmbientEnvelope();
 
   final Paint _fillPaint = Paint()..style = PaintingStyle.fill;
-  final Paint _haloPaint = Paint()..style = PaintingStyle.fill;
-  final Path _wavePath = Path();
+  final Paint _auraPaint = Paint()..style = PaintingStyle.fill;
+  final Paint _crownPaint = Paint()
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = 1.1
+    ..strokeCap = StrokeCap.round;
+  final Path _bandPath = Path();
+  final Path _auraPath = Path();
+  final Path _crownPath = Path();
 
-  // 着色器尺寸/调色板缓存：整场播放绝不逐帧重新生成 Shader
-  Shader? _waveShader;
-  Size _waveShaderSize = Size.zero;
-  Shader? _haloShader;
-  Size _haloShaderSize = Size.zero;
+  /// 逐柱顶部 y（复用缓冲，避免每帧分配）。
+  final List<double> _ys = List<double>.filled(AmbientEnvelope.bars, 0);
+
+  // 着色器按画布尺寸缓存：整场播放绝不逐帧重建 Shader。
+  Shader? _coreShader;
+  Size _shaderSize = Size.zero;
 
   _AmbientPainter({
     required this.spectrum,
@@ -583,13 +590,16 @@ class _AmbientPainter extends CustomPainter {
 
     final peak = math.max(0.35, _env.maxValue);
     final intensity = palette.isDark ? 1.0 : 0.45;
-    final baseAlpha = (0.18 * intensity * 255).round();
+    final baseAlpha = 0.115 * intensity;
 
     final w = size.width;
     final h = size.height;
     if (w <= 0 || h <= 0) return;
 
-    // 1. 低频毛玻璃弥散光晕（Bass Frosted Bloom）：提取低频能量，在屏幕底部模拟真实光学毛玻璃扩散
+    // 低频能量：驱动光晕呼吸。
+    // 2026-11-03：此前用它吹大一个底部径向椭圆——那个椭圆的上缘横贯下半屏、
+    // 与频谱毫无形状关系，看起来就是一道来路不明的「大弧」。现已移除：
+    // 光晕改为贴频谱轮廓的三层同形渐变，光源语义明确（有信号才亮、越高越亮）。
     var bassSum = 0.0;
     const bassCount = 12;
     for (var i = 0; i < bassCount; i++) {
@@ -597,71 +607,106 @@ class _AmbientPainter extends CustomPainter {
     }
     final bass = (bassSum / bassCount).clamp(0.0, 1.0);
 
-    if (_haloShader == null || _haloShaderSize != size) {
-      _haloShaderSize = size;
-      _haloShader = ui.Gradient.radial(
-        Offset(w * 0.5, h * 0.98),
-        w * 0.75,
-        [
-          palette.accent.withValues(alpha: 0.16 * intensity),
-          palette.accent.withValues(alpha: 0.05 * intensity),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-        const [0.0, 0.45, 1.0],
-      );
-    }
-    _haloPaint.shader = _haloShader;
-    final haloW = w * (0.85 + bass * 0.35);
-    final haloH = h * (0.42 + bass * 0.30);
-    canvas.drawOval(
-      Rect.fromCenter(
-        center: Offset(w * 0.5, h * 0.98),
-        width: haloW,
-        height: haloH,
-      ),
-      _haloPaint,
-    );
-
-    // 2. 平滑波浪极光场：通过贝塞尔样条将 72 根柱体的高度平滑串联
     const bars = AmbientEnvelope.bars;
     final maxWaveH = h * 0.44;
-
-    _wavePath.reset();
-    _wavePath.moveTo(0, h);
-
     final double stepX = w / (bars - 1);
-    double prevX = 0;
-    final firstV = (_env.smooth[0] / peak).clamp(0.0, 1.0);
-    double prevY = h - firstV * maxWaveH * 0.92;
-    _wavePath.lineTo(prevX, prevY);
 
-    for (var i = 1; i < bars; i++) {
+    for (var i = 0; i < bars; i++) {
       final v = (_env.smooth[i] / peak).clamp(0.0, 1.0);
-      final currX = i * stepX;
-      final currY = h - v * maxWaveH * 0.92;
-      final midX = (prevX + currX) / 2.0;
-      final midY = (prevY + currY) / 2.0;
-      _wavePath.quadraticBezierTo(prevX, prevY, midX, midY);
-      prevX = currX;
-      prevY = currY;
+      _ys[i] = h - v * maxWaveH * 0.92;
     }
-    _wavePath.lineTo(w, prevY);
-    _wavePath.lineTo(w, h);
-    _wavePath.close();
 
-    if (_waveShader == null || _waveShaderSize != size) {
-      _waveShaderSize = size;
-      _waveShader = ui.Gradient.linear(
-        Offset(0, h),
-        Offset(0, h - maxWaveH),
-        [
-          palette.accent.withValues(alpha: baseAlpha / 255),
-          palette.accent.withValues(alpha: 0.0),
-        ],
-      );
+    // 光晕：把同一条轮廓逐级上移、以极低不透明度叠 9 层 —— 等价于一次
+    // 廉价模糊。每层边缘只贡献约 1% 不透明度，肉眼看不到台阶；而层数够密，
+    // 轮廓上方就形成连续的扩散带（这正是原大椭圆想表达、却没做到的事）。
+    // 刻意不用 MaskFilter.blur：见 style_spectrum_bars.dart:65 的教训，
+    // 逐帧整屏模糊会把进程内存推到 GB 级并拖慢光栅线程。
+    const auraPasses = 9;
+    final double auraStep = h * (0.0035 + 0.0025 * bass);
+    _auraPaint.shader = null;
+    _auraPaint.color = palette.accent.withValues(alpha: 0.009 * intensity);
+    for (var k = auraPasses; k >= 1; k--) {
+      _buildBand(_auraPath, auraStep * k, w, h, stepX);
+      canvas.drawPath(_auraPath, _auraPaint);
     }
-    _fillPaint.shader = _waveShader;
-    canvas.drawPath(_wavePath, _fillPaint);
+
+    _buildCrown(_crownPath, w, stepX);
+
+    // 横向柔化：沿轮廓补三道极低不透明度的宽描边。只做竖向位移的话，
+    // 峰侧的斜边仍是一条硬线；宽描边给两侧各铺一层「衣领」，
+    // 大部分被随后的主体填充盖住，只在轮廓上方露出柔边。
+    const collarWidths = <double>[10, 22, 40];
+    const collarAlphas = <double>[0.014, 0.009, 0.005];
+    _crownPaint.shader = null;
+    for (var i = 0; i < collarWidths.length; i++) {
+      _crownPaint
+        ..strokeWidth = collarWidths[i]
+        ..color =
+            palette.accent.withValues(alpha: collarAlphas[i] * intensity);
+      canvas.drawPath(_crownPath, _crownPaint);
+    }
+
+    _buildBand(_bandPath, 0, w, h, stepX);
+    _ensureCoreShader(size, maxWaveH, baseAlpha);
+    _fillPaint.shader = _coreShader;
+    canvas.drawPath(_bandPath, _fillPaint);
+
+    // 冠部细高光：给柔化后的轮廓留一条「玻璃边」，避免整片糊成雾。
+    _crownPaint
+      ..strokeWidth = 1.1
+      ..color = palette.accent
+          .withValues(alpha: (0.10 + 0.16 * bass) * intensity);
+    canvas.drawPath(_crownPath, _crownPaint);
+  }
+
+  /// 构造一条「频谱剖面 + 底边」的闭合带，整体上移 [dy]。
+  /// 三层共用同一形状，只差位移，因此叠出来的边界互相平行、不会出现杂边。
+  void _buildBand(Path p, double dy, double w, double h, double stepX) {
+    const bars = AmbientEnvelope.bars;
+    p.reset();
+    p.moveTo(0, h);
+    p.lineTo(0, _ys[0] - dy);
+    for (var i = 1; i < bars; i++) {
+      final prevX = (i - 1) * stepX;
+      final prevY = _ys[i - 1] - dy;
+      final currX = i * stepX;
+      final currY = _ys[i] - dy;
+      p.quadraticBezierTo(
+          prevX, prevY, (prevX + currX) / 2, (prevY + currY) / 2);
+    }
+    p.lineTo(w, _ys[bars - 1] - dy);
+    p.lineTo(w, h);
+    p.close();
+  }
+
+  /// 只描频谱上轮廓（冠部高光用），与带体共用同样的二次贝塞尔构造。
+  void _buildCrown(Path p, double w, double stepX) {
+    const bars = AmbientEnvelope.bars;
+    p.reset();
+    p.moveTo(0, _ys[0]);
+    for (var i = 1; i < bars; i++) {
+      final prevX = (i - 1) * stepX;
+      final prevY = _ys[i - 1];
+      final currX = i * stepX;
+      final currY = _ys[i];
+      p.quadraticBezierTo(
+          prevX, prevY, (prevX + currX) / 2, (prevY + currY) / 2);
+    }
+    p.lineTo(w, _ys[bars - 1]);
+  }
+
+  /// 主体竖向渐变：底部饱和、到波峰高度收敛为 0。
+  /// 跨度只跟画布尺寸走，因此整场播放零 Shader 重建。
+  void _ensureCoreShader(Size size, double maxWaveH, double baseAlpha) {
+    if (_shaderSize == size) return;
+    _shaderSize = size;
+    final h = size.height;
+    final accent = palette.accent;
+    _coreShader = ui.Gradient.linear(
+      Offset(0, h),
+      Offset(0, h - maxWaveH * 0.85),
+      [accent.withValues(alpha: baseAlpha), accent.withValues(alpha: 0.0)],
+    );
   }
 
   @override
@@ -669,6 +714,19 @@ class _AmbientPainter extends CustomPainter {
 
   void dispose() {}
 }
+
+/// 氛围层画笔的只读入口，供视觉预览/回归用例离屏出图。
+///
+/// 存在理由：`_AmbientPainter` 是私有类，而氛围层是纯 CustomPainter——
+/// 用 PictureRecorder 直接渲染比 pump 整个页面稳定得多（不受字体、
+/// 窗口可见性与帧调度影响）。
+@visibleForTesting
+CustomPainter ambientSpectrumPainterForTest({
+  required ValueListenable<List<double>> spectrum,
+  required AuraPalette palette,
+  required ValueListenable<int> clock,
+}) =>
+    _AmbientPainter(spectrum: spectrum, palette: palette, clock: clock);
 
 /// 程序化细噪点：给大面积纯色底加一层"物质感"，非贴图、可复现。
 class GrainOverlay extends StatelessWidget {
