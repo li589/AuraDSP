@@ -225,7 +225,7 @@ void main() {
       addTearDown(model.dispose);
       model.setBassShapingEnabled(true);
 
-      await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
+      await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
 
       expect(find.text('低音塑形'), findsOneWidget);
@@ -253,19 +253,19 @@ void main() {
 
       // 1. pairs = 0 警告
       model.setBassmonoPairs(0);
-      await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
+      await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
       expect(find.text('未选择声道对 · 当前不处理'), findsOneWidget);
 
       // 2. 选中 C/LFE (bit 1) 触发分离减弱警告
       model.setBassmonoPairs(0x03); // FL/FR + C/LFE
-      await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
+      await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
       expect(find.textContaining('C/LFE 取平均会削弱中置与超低音的分离'), findsOneWidget);
 
       // 3. 取消 C/LFE 选中后警告消失
       model.setBassmonoPairs(0x01); // 仅 FL/FR
-      await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
+      await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
       expect(find.textContaining('C/LFE 取平均会削弱中置与超低音的分离'), findsNothing);
     });
@@ -283,7 +283,7 @@ void main() {
       model.channelsMode = 1;
       model.setBassmonoPairs(0x01); // 仅 FL/FR
 
-      await tester.pumpWidget(_wrap(EffectsPage(model: model), model));
+      await tester.pumpWidget(_wrap(BassShapingCard(model: model), model));
       await tester.pumpAndSettle();
 
       // 点击不可用的 C/LFE chip，不改变掩码

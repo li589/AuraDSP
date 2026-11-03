@@ -5,6 +5,7 @@ import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -19,81 +20,83 @@ Widget _app(AppModel model) => MaterialApp(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('ADR-009: Attachment mode renders System APO and Voicemeeter subpanels',
-      (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
+  group('settings_paradigms', () {
+    testWidgets('ADR-009: Attachment mode renders System APO and Voicemeeter subpanels',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
 
-    // 默认或切到附加模式
-    model.setModeCategory(AudioModes.categoryAttachment);
-    model.setAttachmentMode(AudioModes.attachSysApo);
-    await tester.pumpAndSettle();
+      // 默认或切到附加模式
+      model.setModeCategory(AudioModes.categoryAttachment);
+      model.setAttachmentMode(AudioModes.attachSysApo);
+      await tester.pumpAndSettle();
 
-    expect(find.text('附加模式'), findsWidgets);
-    expect(find.text('System APO'), findsWidgets);
-    expect(find.text('Voicemeeter API'), findsWidgets);
-    expect(find.text('附加目标端点'), findsOneWidget);
-    expect(find.text('APO 挂载状态'), findsOneWidget);
-    expect(find.text('一键附加'), findsOneWidget);
-    expect(find.text('一键卸载'), findsOneWidget);
+      expect(find.text('附加模式'), findsWidgets);
+      expect(find.text('System APO'), findsWidgets);
+      expect(find.text('Voicemeeter API'), findsWidgets);
+      expect(find.text('附加目标端点'), findsOneWidget);
+      expect(find.text('APO 挂载状态'), findsOneWidget);
+      expect(find.text('一键附加'), findsOneWidget);
+      expect(find.text('一键卸载'), findsOneWidget);
 
-    // 切到 Voicemeeter API
-    model.setAttachmentMode(AudioModes.attachVoicemeeterApi);
-    await tester.pumpAndSettle();
-    expect(find.text('连接状态'), findsOneWidget);
-  });
+      // 切到 Voicemeeter API
+      model.setAttachmentMode(AudioModes.attachVoicemeeterApi);
+      await tester.pumpAndSettle();
+      expect(find.text('连接状态'), findsOneWidget);
+    });
 
-  testWidgets('ADR-009: Pipeline mode renders input/output selectors and specialized panels',
-      (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
+    testWidgets('ADR-009: Pipeline mode renders input/output selectors and specialized panels',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
 
-    // 切换到普通管线模式
-    model.setModeCategory(AudioModes.categoryPipeline);
-    model.setPipelineInput(AudioModes.inputAsioDriver);
-    model.setPipelineOutput(AudioModes.outputAsioClient);
-    await tester.pumpAndSettle();
+      // 切换到普通管线模式
+      model.setModeCategory(AudioModes.categoryPipeline);
+      model.setPipelineInput(AudioModes.inputAsioDriver);
+      model.setPipelineOutput(AudioModes.outputAsioClient);
+      await tester.pumpAndSettle();
 
-    expect(find.text('普通管线模式'), findsWidgets);
-    expect(find.text('输入端'), findsOneWidget);
-    expect(find.text('输出端'), findsOneWidget);
+      expect(find.text('普通管线模式'), findsWidgets);
+      expect(find.text('输入端'), findsOneWidget);
+      expect(find.text('输出端'), findsOneWidget);
 
-    // Verify 3 layers
-    expect(find.text('驱动信息与控制'), findsOneWidget);
-    expect(find.text('音频输入'), findsOneWidget);
-    expect(find.text('音频输出'), findsOneWidget);
+      // Verify 3 layers
+      expect(find.text('驱动信息与控制'), findsOneWidget);
+      expect(find.text('音频输入'), findsOneWidget);
+      expect(find.text('音频输出'), findsOneWidget);
 
-    // Verify segment names
-    expect(find.text('WASAPI 标准模式'), findsWidgets);
-    expect(find.text('AuraVAIO 虚拟输入'), findsWidgets);
-    expect(find.text('WASAPI 标准输出'), findsWidgets);
-    expect(find.text('AuraVAIO 虚拟输出'), findsWidgets);
-    expect(find.text('AuraDSP ASIO Client'), findsWidgets);
+      // Verify segment names
+      expect(find.text('WASAPI 标准模式'), findsWidgets);
+      expect(find.text('AuraVAIO 虚拟输入'), findsWidgets);
+      expect(find.text('WASAPI 标准输出'), findsWidgets);
+      expect(find.text('AuraVAIO 虚拟输出'), findsWidgets);
+      expect(find.text('AuraDSP ASIO Client'), findsWidgets);
 
-    // Virtual ASIO driver management card visible in driver layer
-    expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
-    expect(find.text('驱动状态'), findsOneWidget);
-    expect(find.text('DAW 状态'), findsOneWidget);
+      // Virtual ASIO driver management card visible in driver layer
+      expect(find.text('AuraDSP 虚拟 ASIO 驱动'), findsOneWidget);
+      expect(find.text('驱动状态'), findsOneWidget);
+      expect(find.text('DAW 状态'), findsOneWidget);
 
-    // External ASIO client controls visible
-    expect(find.text('缓冲档'), findsOneWidget);
-    expect(find.text('输出起始声道对'), findsOneWidget);
+      // External ASIO client controls visible
+      expect(find.text('缓冲档'), findsOneWidget);
+      expect(find.text('输出起始声道对'), findsOneWidget);
 
-    // 切到 AuraVAIO 输出端：出现虚拟声卡提示与耳机监听镜像开关
-    model.setPipelineOutput(AudioModes.outputVaio);
-    await tester.pumpAndSettle();
-    expect(find.text('提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。'),
-        findsOneWidget);
-    expect(find.text('本地耳机监听镜像'), findsOneWidget);
-    expect(find.text('物理输出'), findsOneWidget);
+      // 切到 AuraVAIO 输出端：出现虚拟声卡提示与耳机监听镜像开关
+      model.setPipelineOutput(AudioModes.outputVaio);
+      await tester.pumpAndSettle();
+      expect(find.text('提示：AuraVAIO 为虚拟声卡输出，需在 OBS 或录音软件中选择 AuraVAIO 才能听到声音。'),
+          findsOneWidget);
+      expect(find.text('本地耳机监听镜像'), findsOneWidget);
+      expect(find.text('物理输出'), findsOneWidget);
 
-    // 切到 WASAPI 渲染输出端
-    model.setPipelineOutput(AudioModes.outputWasapi);
-    await tester.pumpAndSettle();
-    expect(find.text('WASAPI 物理渲染 (扬声器/耳机)'), findsWidgets);
-  });
+      // 切到 WASAPI 渲染输出端
+      model.setPipelineOutput(AudioModes.outputWasapi);
+      await tester.pumpAndSettle();
+      expect(find.text('WASAPI 物理渲染 (扬声器/耳机)'), findsWidgets);
+    });
+  }, skip: !PlatformProfile.isWindows ? 'ADR-009 paradigms UI is Windows only' : null);
 }
