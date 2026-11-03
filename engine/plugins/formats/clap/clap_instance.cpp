@@ -49,7 +49,9 @@ public:
         setupPluginDllDirectories(path);
 
         m_meta = PluginMetadata{};
-        if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
+        /* 快扫种子是文件头启发式，不进加载路（压过描述符即假数据）；
+         * 深扫种子维持 B1「种子为准」。 */
+        if (scanSeed && !scanSeed->fromQuickScan) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::CLAP;
 

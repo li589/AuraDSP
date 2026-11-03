@@ -46,6 +46,7 @@ void fill32BitIncompatible(PluginMetadata& meta, const std::string& filePath,
     // 与 makeQuickMeta / applyClapDescriptor 同一规则：bundleName = 路径 stem。
     meta.bundleName = meta.name;
     meta.is64Bit = false;
+    meta.fromQuickScan = true;
     /* 2026-11-04：文案与 isCompatible 按位桥可用性判定。位桥在位时 32 位插件
      * 完全可加载（加载路 remoteClientFor 会路由到 plugin_host_x86），此时再写
      * 「请安装 64 位版本」既是假信息，也会在任何人加「不兼容即禁止加载」守卫时
@@ -100,28 +101,35 @@ PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, P
     q.vendor = vendor;
     q.version = !peVer.empty() ? peVer : "1.0";
     q.category = "AudioEffect";
+    q.fromQuickScan = true;   // 文件头启发式，加载路不得当作真值种子
     return q;
 }
 
-// 单个候选的元数据提取（快扫/深扫共用）。格式策略由驱动决定：
-// CLAP 可轻量查询（不需要实例化）；VST3 深扫才 LoadLibrary。
+// 单个候选的元数据提取。口径（2026-11-04 起全格式统一）：
+//   快扫 = 纯文件头（makeQuickMeta：文件名 / 目录 / PE 版本资源），零代码执行；
+//   深扫 = 载入模块读真值（driver->queryMetadata），由 scanStep 按位数分派宿主，
+//          仅在宿主不可用的回退路径才会在本进程执行（VST2 除外，见下）。
+// 原 CLAP「快扫也载入模块」（supportsQuickMetadata）已退役：快扫执行第三方
+// 代码与「快扫绝对安全」的前提冲突，真实名称一律由深扫/加载路给出。
 std::vector<PluginMetadata> scanCandidateMeta(const PluginScanner::ScanCandidate& c, bool deepScan) {
     std::vector<PluginMetadata> out;
+    if (!deepScan) {
+        out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
+        return out;
+    }
 #if !defined(AURADSP_HOST_INPROC)
-    /* VST2 安全策略（2026-11-03 实测）：64 位 VST2 在 x64 引擎进程内深扫
-     * 需要 LoadLibrary 未知厂商 DLL，实测 Blue Cat / FabFilter 等真实插件
-     * 会在 VSTPluginMain/effOpen 阶段直接 AV 崩溃（整进程 0xC0000005）。
-     * 因此进程内扫描一律只做 PE 快扫；真实元数据由加载路补齐（load 时已
-     * 实例化，崩溃至少发生在用户显式挂载时且仍受异步超时/隔离区保护）。
-     * 32 位 VST2 的深扫由 scanStep 走 x86 位桥远程查询，崩溃隔离在子进程。
-     * 进程外模式（AURADSP_HOST_INPROC=1）的宿主进程内仍允许深扫。 */
+    /* VST2 安全策略（2026-11-03 实测）：引擎进程内深扫 VST2 需要 LoadLibrary
+     * 未知厂商 DLL，实测 Blue Cat / FabFilter 等真实插件会在
+     * VSTPluginMain/effOpen 阶段直接 AV 崩溃（整进程 0xC0000005）。因此引擎
+     * 进程内一律只做 PE 快扫；深扫由 scanStep 按位数分派宿主（崩溃隔离在
+     * 子进程）。宿主进程自身（AURADSP_HOST_INPROC=1）就是隔离区，允许深扫。 */
     if (c.format == PluginFormat::VST2) {
         out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
         return out;
     }
 #endif
     auto* driver = PluginDriverRegistry::instance().find(c.format);
-    if (driver && (driver->supportsQuickMetadata() || deepScan)) {
+    if (driver) {
         std::vector<PluginMetadata> metas;
         if (PluginScanner::queryMetadata(c.binaryPath, c.format, metas) && !metas.empty()) {
             return metas;
@@ -153,7 +161,8 @@ constexpr int kScanAbandonLimit = 4;
 // D-2（2026-11-04）：深扫宿主开关。默认 host——深扫一律借「能加载它的那个
 // 宿主」做隔离（X64 宿主可仅扫描用途懒启动）；AURA_PLUGIN_DEEP_SCAN=inproc
 // 回到旧行为（VST3/CLAP 在引擎内深扫、VST2 只快扫），用于不想多一个常驻
-// 进程的场景与整条链路的回退。
+// 进程的场景与整条链路的回退。注意与 AURA_PLUGIN_HOST_MODE 正交：若宿主
+// 已因 process 模式在跑，深扫仍优先用它（inproc 只是不为扫描额外拉起进程）。
 bool envEqualsNoCase(const char* v, const char* lit) {
     if (!v) return false;
     while (*v && *lit) {

@@ -32,7 +32,11 @@ DLL = os.path.join(ROOT, "core", "desktop", "windows", "out", "Release",
 
 STRICT_FIELDS = ("name", "vendor", "version", "category", "bundleName",
                  "description")
-# 快扫启发式允许差异的字段（值仍不得为空）
+# 快扫允许与加载值不同的字段（2026-11-04 起快扫全格式纯文件头，不载入模块；
+# CLAP 的 supportsQuickMetadata 已退役）。自报名/厂商/版本/分类/描述只能来自
+# 深扫或加载路；bundleName 两条路同规则（注册路径 stem），不在此列。
+QUICK_MAY_DIFFER = ("name", "vendor", "version", "category", "description")
+# 加载路自身不得为空的字段（与快扫无关，两种模式都查）。
 QUICK_HEURISTIC = ("name", "version")
 
 MAX_VST3_TARGETS = 8
@@ -109,8 +113,8 @@ def check_one(lib, handle, scan_entry, deep, failures):
         lv = loaded.get(f) or ""
         if sv == lv:
             continue
-        if not deep and f in QUICK_HEURISTIC:
-            continue  # 快扫启发式：文件名/占位版本允许与加载值不同
+        if not deep and f in QUICK_MAY_DIFFER:
+            continue  # 快扫是文件头启发式，允许与加载真值不同
         bad(f"{f}: scan={sv!r} load={lv!r}")
 
     # 2. 快扫启发式字段不得为空

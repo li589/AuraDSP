@@ -32,8 +32,6 @@ public:
         return resolvePluginBundleBinary(bundlePath, ".vst3", outArch);
     }
 
-    bool supportsQuickMetadata() const override { return false; }
-
     bool queryMetadata(const std::string& bundlePath,
                        const std::string& binaryPath,
                        std::vector<PluginMetadata>& out) override {

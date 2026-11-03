@@ -46,8 +46,6 @@ public:
         return peHasVst2Entry(utf8ToWide(bundlePath)) ? bundlePath : "";
     }
 
-    bool supportsQuickMetadata() const override { return false; }
-
     bool queryMetadata(const std::string& bundlePath,
                        const std::string& binaryPath,
                        std::vector<PluginMetadata>& out) override {

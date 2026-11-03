@@ -514,6 +514,13 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   - **32 位标记按位桥可用性**（`PluginScanner::setArchBridgeAvailable`，manager
     构造时写入）：桥在位 → `isCompatible=true`；缺 → false + 「需要
     plugin_host_x86」。Dart `isSupported` 逻辑不变，注释已修正（桥不要求 process 模式）。
+  - **快扫全格式零执行（11-04 二次修正）**：`supportsQuickMetadata` 接口已删，
+    CLAP 快扫不再载入模块；快扫列表显示文件名（与 VST3/VST2 口径一致）。
+  - **快扫种子不进加载路（D-8）**：`PluginMetadata::fromQuickScan` 由
+    `makeQuickMeta`/`fill32BitIncompatible` 置位；三实例 load 遇快扫种子跳过
+    `seedMetadataFromScan` 走纯描述符路径。否则快扫猜测值（vendor=Unknown）
+    经 `fillMetadataIfEmpty` 只补空语义**压死描述符真值**（实测 KV-Element）。
+    深扫种子维持 B1「种子为准」。
   - **宿主 SEH 兜底**：`queryMetadataGuarded`（POD 局部量 + `__try/__except`）调
     `__declspec(noinline) queryMetadataImpl`——MSVC 禁止在需对象展开的函数里用
     `__try`（C2712）；AV 后临时对象/模块句柄按隔离区语义泄漏不 FreeLibrary。

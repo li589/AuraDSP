@@ -57,6 +57,11 @@ struct PluginMetadata {
     uint32_t latency = 0;
     bool isCompatible = true;
     std::string errorMessage;
+    /* 2026-11-04：该条目元数据是否来自快扫（纯文件头启发式：文件名/目录/PE
+     * 版本资源）。快扫值是猜测值，加载路不得让它压过格式原生真值——
+     * 实例 load 遇到快扫种子时直接跳过 seedMetadataFromScan（走纯描述符
+     * 路径）；深扫种子（driver->queryMetadata 直出）保持 B1「种子为准」。 */
+    bool fromQuickScan = false;
 
     /* 只序列化。反序列化在 Dart 侧（PluginMetadata.fromJson），C++ 侧曾有
      * 一个从未实现的 fromJson 声明，加字段后必然失真，故直接删除而非留死代码。 */

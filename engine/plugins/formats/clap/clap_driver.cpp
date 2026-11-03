@@ -32,8 +32,6 @@ public:
         return resolvePluginBundleBinary(bundlePath, ".clap", outArch);
     }
 
-    bool supportsQuickMetadata() const override { return true; }
-
     bool queryMetadata(const std::string& bundlePath,
                        const std::string& binaryPath,
                        std::vector<PluginMetadata>& out) override {

@@ -123,7 +123,9 @@ public:
         unload();
 
         m_meta = PluginMetadata{};
-        if (scanSeed) seedMetadataFromScan(m_meta, *scanSeed);
+        /* 快扫种子是文件头启发式，不进加载路；深扫种子维持 B1「种子为准」。
+         * （VST2 的 fillMetadataFromEffect 本就直接赋值覆盖，此处一致化。） */
+        if (scanSeed && !scanSeed->fromQuickScan) seedMetadataFromScan(m_meta, *scanSeed);
         m_meta.path = path;
         m_meta.format = PluginFormat::VST2;
         m_meta.bundleName = fs::path(path).stem().string();

@@ -32,10 +32,10 @@ public:
     virtual std::string resolveBinary(const std::string& bundlePath,
                                       std::string* outArch = nullptr) const = 0;
 
-    /* 快扫是否也值得走格式元数据（CLAP 可轻量查询，VST3 需 LoadLibrary）。 */
-    virtual bool supportsQuickMetadata() const = 0;
-
-    /* queryMetadata 的调用方已完成 32 位检测与 binaryPath 解析。 */
+    /* queryMetadata 的调用方已完成 32 位检测与 binaryPath 解析。
+     * 语义（2026-11-04 起统一）：只在深扫路径调用，必然载入模块——
+     * 快扫一律纯文件头（makeQuickMeta），不再有「快扫也载入」的格式
+     * （原 supportsQuickMetadata 随 CLAP 快扫退役而删除）。 */
     virtual bool queryMetadata(const std::string& bundlePath,
                                const std::string& binaryPath,
                                std::vector<PluginMetadata>& out) = 0;
