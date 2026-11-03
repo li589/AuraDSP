@@ -308,6 +308,7 @@ spl1 = gain * (h2.y1 - h1.y1 + h1.x1);
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       const customEditingCode = '''@init
 my_test_var = 42;
 
@@ -345,6 +346,7 @@ spl0 = 0;
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       final activeSliders = <int, EelSliderMeta>{
         1: const EelSliderMeta(
           index: 1,
@@ -454,6 +456,7 @@ spl0 = 0;
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -491,6 +494,7 @@ spl0 = 0;
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       model.lpDraftCode = List.generate(100, (i) => 'val$i = $i;').join('\n');
 
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));

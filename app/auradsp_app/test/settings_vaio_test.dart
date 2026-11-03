@@ -4,6 +4,7 @@ import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -18,35 +19,37 @@ Widget _app(AppModel model) => MaterialApp(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('non-vaio mode does not render the VAIO panel', (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    expect(find.text('物理输出'), findsNothing);
-  });
+  group('settings_vaio', () {
+    testWidgets('non-vaio mode does not render the VAIO panel', (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      expect(find.text('物理输出'), findsNothing);
+    });
 
-  testWidgets('vaio mode renders physical output dropdown and refresh',
-      (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    model.setAudioMode('vaio');
-    await tester.pumpAndSettle();
-    expect(find.text('物理输出'), findsOneWidget);
-    expect(find.text('自动选择（非VAIO扬声器）'), findsOneWidget);
-  });
+    testWidgets('vaio mode renders physical output dropdown and refresh',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setAudioMode('vaio');
+      await tester.pumpAndSettle();
+      expect(find.text('物理输出'), findsOneWidget);
+      expect(find.text('自动选择（非VAIO扬声器）'), findsOneWidget);
+    });
 
-  testWidgets('vaio output selection persists', (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    model.setAudioMode('vaio');
-    await tester.pumpAndSettle();
-    model.setVaioOutputEndpoint('Realtek High Definition Audio');
-    await tester.pumpAndSettle();
-    expect(model.config.vaioOutputEndpoint, 'Realtek High Definition Audio');
-  });
+    testWidgets('vaio output selection persists', (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setAudioMode('vaio');
+      await tester.pumpAndSettle();
+      model.setVaioOutputEndpoint('Realtek High Definition Audio');
+      await tester.pumpAndSettle();
+      expect(model.config.vaioOutputEndpoint, 'Realtek High Definition Audio');
+    });
+  }, skip: !PlatformProfile.isWindows ? 'VAIO settings panel is Windows only' : null);
 }

@@ -32,6 +32,7 @@
 #include <poll.h>
 #include <semaphore.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/wait.h>
@@ -149,7 +150,15 @@ std::string hostExecutablePath(HostArch arch) {
 std::string socketBaseDir() {
     if (const char* xdg = std::getenv("XDG_RUNTIME_DIR");
         xdg && xdg[0] == '/') {
-        return xdg;
+        // 存在性校验（审查修复 2026-11-03）：env 指向已不存在的
+        // 目录时（陈旧会话变量/临时目录被清），宿主 bind 必然失败，
+        // 而远程模式下扫描/加载只会静默归零、无任何回落——实测
+        // 踩到过。目录不在或不可写即回退 /tmp（恒存在）。
+        struct stat st {};
+        if (::stat(xdg, &st) == 0 && S_ISDIR(st.st_mode) &&
+            ::access(xdg, W_OK) == 0) {
+            return xdg;
+        }
     }
     return "/tmp";
 }
@@ -164,7 +173,14 @@ PluginHostClient::~PluginHostClient() {
 
 bool PluginHostClient::start() {
     const char* mode = std::getenv("AURA_PLUGIN_HOST_MODE");
-    if (!mode || strcasecmp(mode, "process") != 0) return false;
+    if (m_arch == HostArch::X64) {
+        if (!mode || strcasecmp(mode, "process") != 0) return false;
+    } else {
+        // x86 位桥是跨架构必需机制，只要二进制在位即自适应启用；仅当显式禁用时才关闭。
+        if (mode && (strcasecmp(mode, "disabled") == 0 || strcasecmp(mode, "off") == 0 || strcasecmp(mode, "none") == 0)) {
+            return false;
+        }
+    }
     const std::string exe = hostExecutablePath(m_arch);
     // 须存在「且可执行」：产物经压缩包/工件流转可能丢失 +x，
     // 此时若仍宣称远程可用，后续每次 spawn 都会 EACCES 失败、

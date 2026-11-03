@@ -9,6 +9,7 @@ import 'package:auradsp_app/core/state.dart';
 import 'package:auradsp_app/core/theme.dart';
 import 'package:auradsp_app/features/settings_page.dart';
 import 'package:auradsp_app/l10n/gen/app_localizations.dart';
+import 'package:auradsp_app/platform/platform_profile.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -24,49 +25,51 @@ Widget _app(AppModel model) => MaterialApp(
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('non-asio mode does not render the ASIO panel', (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    expect(find.text('缓冲档'), findsNothing);
-  });
+  group('settings_asio', () {
+    testWidgets('non-asio mode does not render the ASIO panel', (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      expect(find.text('缓冲档'), findsNothing);
+    });
 
-  testWidgets('asio mode renders driver/buffer/out-pair rows and refresh',
-      (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    // 切 asio（testing 模式无 isolate：asiodetect 无回执，面板照常渲染）。
-    model.setAudioMode('asio');
-    await tester.pumpAndSettle();
-    expect(find.text('缓冲档'), findsOneWidget);
-    expect(find.text('输出起始声道对'), findsOneWidget);
-    expect(find.text('刷新驱动'), findsOneWidget);
-    // 未选驱动（清单空）：占位 '—' 而非崩溃；输出对默认 ch 1/2；缓冲默认自动。
-    expect(find.text('—'), findsOneWidget);
-    expect(find.text('ch 1/2'), findsOneWidget);
-    expect(find.text('自动（驱动首选）'), findsOneWidget);
-  });
+    testWidgets('asio mode renders driver/buffer/out-pair rows and refresh',
+        (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      // 切 asio（testing 模式无 isolate：asiodetect 无回执，面板照常渲染）。
+      model.setAudioMode('asio');
+      await tester.pumpAndSettle();
+      expect(find.text('缓冲档'), findsOneWidget);
+      expect(find.text('输出起始声道对'), findsOneWidget);
+      expect(find.text('刷新驱动'), findsOneWidget);
+      // 未选驱动（清单空）：占位 '—' 而非崩溃；输出对默认 ch 1/2；缓冲默认自动。
+      expect(find.text('—'), findsOneWidget);
+      expect(find.text('ch 1/2'), findsOneWidget);
+      expect(find.text('自动（驱动首选）'), findsOneWidget);
+    });
 
-  testWidgets('driver selection persists and re-render highlights', (tester) async {
-    final model = AppModel(testing: true);
-    addTearDown(model.dispose);
-    await tester.pumpWidget(_app(model));
-    await tester.pumpAndSettle();
-    model.setAudioMode('asio');
-    await tester.pumpAndSettle();
-    // 清单为空时无下拉可点：直接走 setter（桥未跑不触发 restart）。
-    model.setAsioDriver('FL Studio ASIO');
-    model.setAsioBufSize(512);
-    model.setAsioOutPair(1);
-    await tester.pumpAndSettle();
-    expect(model.config.asioDriver, 'FL Studio ASIO');
-    expect(model.config.asioBufSize, 512);
-    expect(model.config.asioOutPair, 1);
-    // 输出对切换后显示 ch 3/4。
-    expect(find.text('ch 3/4'), findsOneWidget);
-    expect(find.text('512 frames'), findsOneWidget);
-  });
+    testWidgets('driver selection persists and re-render highlights', (tester) async {
+      final model = AppModel(testing: true);
+      addTearDown(model.dispose);
+      await tester.pumpWidget(_app(model));
+      await tester.pumpAndSettle();
+      model.setAudioMode('asio');
+      await tester.pumpAndSettle();
+      // 清单为空时无下拉可点：直接走 setter（桥未跑不触发 restart）。
+      model.setAsioDriver('FL Studio ASIO');
+      model.setAsioBufSize(512);
+      model.setAsioOutPair(1);
+      await tester.pumpAndSettle();
+      expect(model.config.asioDriver, 'FL Studio ASIO');
+      expect(model.config.asioBufSize, 512);
+      expect(model.config.asioOutPair, 1);
+      // 输出对切换后显示 ch 3/4。
+      expect(find.text('ch 3/4'), findsOneWidget);
+      expect(find.text('512 frames'), findsOneWidget);
+    });
+  }, skip: !PlatformProfile.isWindows ? 'ASIO settings panel is Windows only' : null);
 }

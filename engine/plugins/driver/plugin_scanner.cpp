@@ -279,15 +279,15 @@ PluginHostManager::PluginHostManager() {
     m_remoteClient = std::make_shared<PluginHostClient>();
     if (m_remoteClient->start()) {
         m_remoteMode = true;
-        // 双宿主：x86 桥客户端同门启动（start 只查环境与宿主在位，
-        // 不拉起进程）；缺宿主时保持空指针，路由自动回落 x64。
-        auto x86 = std::make_shared<PluginHostClient>(HostArch::X86);
-        if (x86->start()) {
-            m_remoteClientX86 = std::move(x86);
-        }
     } else {
         m_remoteClient.reset();
         m_remoteMode = false;
+    }
+    // 独立探测与启动 32 位桥宿主客户端（plugin_host_x86）：
+    // 即使 64 位插件走进程内模式，只要 x86 宿主在位，32 位插件也能透明经位桥运行。
+    auto x86 = std::make_shared<PluginHostClient>(HostArch::X86);
+    if (x86->start()) {
+        m_remoteClientX86 = std::move(x86);
     }
 #endif
 }
@@ -324,6 +324,7 @@ PluginHostManager::~PluginHostManager() {
     }
 #ifndef AURADSP_HOST_INPROC
     if (m_remoteClient) m_remoteClient->shutdown();
+    if (m_remoteClientX86) m_remoteClientX86->shutdown();
 #endif
 }
 

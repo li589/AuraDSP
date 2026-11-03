@@ -50,6 +50,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -82,6 +83,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -114,6 +116,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -145,6 +148,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -170,6 +174,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -200,6 +205,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -230,6 +236,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -270,6 +277,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -349,6 +357,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -394,6 +403,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 
@@ -424,6 +434,7 @@ void main() {
       addTearDown(tester.view.resetDevicePixelRatio);
 
       final model = AppModel(testing: true);
+      addTearDown(model.dispose);
       await tester.pumpWidget(_wrap(LiveprogPage(model: model)));
       await tester.pumpAndSettle();
 

@@ -23,6 +23,7 @@ FAIL 并提示构建口味不对（J2 默认产物为 ON 构建）。
 import ctypes
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -90,6 +91,8 @@ def source_invariants():
           "[sec] 宿主音频线程声道数钳制到 kChannels")
     check("fstat" in sr and "st_size" in sr,
           "[sec] SharedRegion::open 映射前校验对象尺寸")
+    check("S_ISDIR" in hc and "::stat(xdg" in hc,
+          "[sec] socketBaseDir 校验 XDG 目录存在性（死目录回落 /tmp）")
 
     profile = read(os.path.join(APP, "lib", "platform",
                                 "platform_profile.dart"))
@@ -201,6 +204,70 @@ def run_chain(lib, plug_dir, mode):
 
 
 
+def run_bundle_scan(lib, tmp, cc):
+    """VST3 bundle 的 Linux 布局解析（2026-11-03，32 位对等）：
+    plugin_bundle.cpp 此前只有 Windows 架构目录，Linux 下目录型
+    VST3 扫描不可见。用 CLAP 探针二进制拼 Contents/<arch>-linux
+    布局做扫描级断言——验的是 bundle 发现/解析/位数判定/偏好序，
+    不是 VST3 格式本身（内层是 CLAP 二进制，64 位条目走快速元
+    数据兜底、不会真加载）。32 位半需 multilib 编探针，缺失即
+    SKIP 该半。"""
+    def build(args, out):
+        r = subprocess.run(
+            [cc, *args, "-shared", "-fPIC", "-O2",
+             "-I", os.path.join(ROOT, "vendor", "plugin-api"),
+             os.path.join(TEST_DIR, "smoke", "probe_gain.c"), "-o", out],
+            capture_output=True, text=True)
+        return r.returncode == 0
+
+    bdir = os.path.join(tmp, "bundles")
+    p64 = os.path.join(tmp, "probe64.so")
+    if not build([], p64):
+        print("  SKIP bundle 节：64 位探针编译失败")
+        return
+    def bundle(name, arch, src):
+        d = os.path.join(bdir, name + ".vst3", "Contents", arch)
+        os.makedirs(d)
+        shutil.copy(src, os.path.join(d, name + ".so"))
+
+    bundle("BundleA", "x86_64-linux", p64)
+    bundle("BundleC", "x86_64-linux", p64)
+    p32 = os.path.join(tmp, "probe32.so")
+    have32 = build(["-m32"], p32)
+    if have32:
+        bundle("BundleB", "x86-linux", p32)
+        bundle("BundleC", "x86-linux", p32)
+    else:
+        print("  SKIP bundle 32 位半：-m32 编译不可用（缺 multilib）")
+
+    lib.auradsp_create.restype = ctypes.c_void_p
+    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+    h = lib.auradsp_create(48000.0, 4096)
+    check(bool(h), "[bundle] auradsp_create 成功")
+    if not h:
+        return
+    H = ctypes.c_void_p(h)
+    n = lib.auradsp_plugin_scan(H, bdir.encode())
+    buf = ctypes.create_string_buffer(262144)
+    rc = lib.auradsp_plugin_get_all(H, buf, 262144)
+    items = json.loads(buf.value.decode()) if rc >= 1 else []
+    by_name = {it.get("name"): it for it in items}
+    a = by_name.get("BundleA")
+    check(a is not None and a.get("format") == "VST3"
+          and a.get("is64Bit") is True,
+          f"[bundle] x86_64-linux bundle 可见且判 64 位（n={n}）")
+    c = by_name.get("BundleC")
+    check(c is not None and c.get("is64Bit") is True,
+          "[bundle] 双架构 bundle 优先取 64 位二进制")
+    if have32:
+        b = by_name.get("BundleB")
+        check(b is not None and b.get("is64Bit") is False
+              and b.get("isCompatible") is False
+              and "32" in (b.get("errorMessage") or ""),
+              "[bundle] 仅 x86-linux 的 bundle 得 32 位不兼容条目（可发现）")
+    lib.auradsp_destroy(H)
+
+
 def run_x86_bridge(lib, lib_path, cc):
     """32 位桥活体：直调 slot_load（不经扫描——深扫的工厂探测在
     x64 宿主内无法加载 32 位模块，那是扫描路由的后续议题；本节
@@ -307,6 +374,7 @@ def live_chain():
     lib = ctypes.CDLL(lib_path)
     os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
     run_chain(lib, plug_dir, "inproc")
+    run_bundle_scan(lib, tmp, cc)
 
     host_exe = os.path.join(os.path.dirname(lib_path), "plugin_host_x64")
     # 引擎口味判定：REMOTE 构建的 .so 内嵌宿主名文字（客户端定位
