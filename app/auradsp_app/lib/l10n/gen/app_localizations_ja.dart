@@ -3670,4 +3670,13 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get plug32BitHint => '32ビットプラグイン（対応）';
+
+  @override
+  String get ambient => 'アンビエント背景';
+
+  @override
+  String get ambientLabel => 'スペクトルのグロー';
+
+  @override
+  String get ambientHint => 'ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します';
 }

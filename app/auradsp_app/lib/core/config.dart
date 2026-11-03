@@ -71,6 +71,9 @@ class AppConfig {
   String locale;
   String themeId;
   bool autoRestoreSession;
+
+  /// 主页氛围背景（频谱光晕）。关闭后不再构造氛围层，等于零绘制开销。
+  bool ambientSpectrum;
   int autoSaveDebounceMs;
 
   // 安全与资源参数
@@ -123,6 +126,7 @@ class AppConfig {
     this.locale = 'zh',
     this.themeId = 'auraDark',
     this.autoRestoreSession = true,
+    this.ambientSpectrum = true,
     this.autoSaveDebounceMs = 500,
     this.maxIrDurationSeconds = 30.0,
     this.maxFileSizeMb = 64.0,
@@ -189,6 +193,7 @@ class AppConfig {
       locale: (ui['locale'] as String?) ?? 'zh',
       themeId: (ui['themeId'] as String?) ?? 'auraDark',
       autoRestoreSession: (ui['autoRestoreSession'] as bool?) ?? true,
+      ambientSpectrum: (ui['ambientSpectrum'] as bool?) ?? true,
       autoSaveDebounceMs: (ui['autoSaveDebounceMs'] as num?)?.toInt() ?? 500,
       maxIrDurationSeconds: (safety['maxIrDurationSeconds'] as num?)?.toDouble() ?? 30.0,
       maxFileSizeMb: (safety['maxFileSizeMb'] as num?)?.toDouble() ?? 64.0,
@@ -267,6 +272,7 @@ class AppConfig {
           'locale': locale,
           'themeId': themeId,
           'autoRestoreSession': autoRestoreSession,
+          'ambientSpectrum': ambientSpectrum,
           'autoSaveDebounceMs': autoSaveDebounceMs,
         },
         'safety': {

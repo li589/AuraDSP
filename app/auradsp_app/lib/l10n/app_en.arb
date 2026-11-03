@@ -1576,5 +1576,8 @@
   "presetDeleteAction": "Delete",
   "presetOverwritten": "Overwrote the existing preset \"{name}\"",
   "plug32BitBadge": "32-bit",
-  "plug32BitHint": "32-bit plugin (supported)"
+  "plug32BitHint": "32-bit plugin (supported)",
+  "ambient": "Ambient background",
+  "ambientLabel": "Spectrum glow",
+  "ambientHint": "Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU."
 }

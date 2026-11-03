@@ -35,7 +35,10 @@ class HomePage extends StatelessWidget {
         return PageScaffold(
           eyebrow: l.pageHomeEyebrow,
           title: l.pageHomeTitle,
-          ambient: active ? model.spectrum : _frozenSpectrum,
+          // 设置里关掉氛围背景 → 直接不传数据源，整层不构造（零绘制/零订阅）
+          ambient: !model.ambientOn
+              ? null
+              : (active ? model.spectrum : _frozenSpectrum),
           children: [
             _SpectrumCard(model: model, active: active), // 可视化置顶：主页的第一视觉（无序号）
             _Hero(model: model), // 引擎总览：状态 / 延迟 / 旁路

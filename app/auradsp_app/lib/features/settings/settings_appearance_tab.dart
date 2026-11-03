@@ -7,6 +7,7 @@ part of '../settings_page.dart';
 
 List<Widget> buildAppearanceTab(BuildContext context, AppModel model) {
   final l = l10nOf(context);
+  final p = paletteOf(context);
 
   return [
     // 1. 配色
@@ -56,7 +57,31 @@ List<Widget> buildAppearanceTab(BuildContext context, AppModel model) {
       ),
     ),
 
-    // 2. 语言
+    // 2. 氛围背景
+    SectionCard(
+      title: l.ambient,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l.ambientLabel, style: labelOf(p, size: 12)),
+                const SizedBox(height: 2),
+                Text(l.ambientHint, style: captionOf(p, color: p.textDim)),
+              ],
+            ),
+          ),
+          const SizedBox(width: AuraSpace.sm),
+          AuraSwitch(
+            value: model.ambientOn,
+            onChanged: (v) => model.setAmbientOn(v),
+          ),
+        ],
+      ),
+    ),
+
+    // 3. 语言
     SectionCard(
       title: l.language,
       child: AuraSegmented<String>(

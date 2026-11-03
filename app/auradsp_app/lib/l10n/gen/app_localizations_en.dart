@@ -3845,4 +3845,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get plug32BitHint => '32-bit plugin (supported)';
+
+  @override
+  String get ambient => 'Ambient background';
+
+  @override
+  String get ambientLabel => 'Spectrum glow';
+
+  @override
+  String get ambientHint =>
+      'Glow behind the home page that follows the music. Turn it off to stop drawing entirely and save GPU.';
 }

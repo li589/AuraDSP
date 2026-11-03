@@ -532,6 +532,15 @@ extension StateSession on AppModel {
     scheduleAutoSave();
   }
 
+  /// 氛围背景开关。关闭时页面直接不构造氛围层 —— 连 spectrum 订阅、
+  /// 节流拨钟与衰减 Timer 一并消失，是真正的零开销，而不是画成全透明。
+  void setAmbientOn(bool on) {
+    if (config.ambientSpectrum == on) return;
+    config.ambientSpectrum = on;
+    if (!_testing) ConfigManager.save(config);
+    _notifyUi();
+  }
+
   void setAutoRestoreSession(bool enable) {
     config.autoRestoreSession = enable;
     if (_testing) {

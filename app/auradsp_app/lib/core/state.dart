@@ -273,6 +273,9 @@ class AppModel extends ChangeNotifier {
   String get pipelineOutputDevice => config.pipelineOutputDevice;
   String get apoTargetEndpoint => config.apoTargetEndpoint;
   bool get monitorMirroring => config.monitorMirroring;
+  /// 主页氛围背景开关（配置代理；关闭后页面不构造 AmbientSpectrum）。
+  bool get ambientOn => config.ambientSpectrum;
+
   bool get pipelineInputEnabled => config.pipelineInputEnabled;
   bool get pipelineOutputEnabled => config.pipelineOutputEnabled;
   List<AudioDeviceItem> wasapiDevices = [];

@@ -6957,6 +6957,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'32 位插件（支持加载）'**
   String get plug32BitHint;
+
+  /// No description provided for @ambient.
+  ///
+  /// In zh, this message translates to:
+  /// **'氛围背景'**
+  String get ambient;
+
+  /// No description provided for @ambientLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'频谱光晕'**
+  String get ambientLabel;
+
+  /// No description provided for @ambientHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU'**
+  String get ambientHint;
 }
 
 class _AppLocalizationsDelegate

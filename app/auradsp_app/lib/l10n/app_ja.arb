@@ -1576,5 +1576,8 @@
   "presetDeleteAction": "削除",
   "presetOverwritten": "同名のプリセット「{name}」を上書きしました",
   "plug32BitBadge": "32bit",
-  "plug32BitHint": "32ビットプラグイン（対応）"
+  "plug32BitHint": "32ビットプラグイン（対応）",
+  "ambient": "アンビエント背景",
+  "ambientLabel": "スペクトルのグロー",
+  "ambientHint": "ホーム背景で音楽に反応するグロー。オフにすると描画を完全に停止し GPU を節約します"
 }

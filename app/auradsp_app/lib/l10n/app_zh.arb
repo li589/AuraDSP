@@ -1706,5 +1706,8 @@
     }
   },
   "plug32BitBadge": "32位",
-  "plug32BitHint": "32 位插件（支持加载）"
+  "plug32BitHint": "32 位插件（支持加载）",
+  "ambient": "氛围背景",
+  "ambientLabel": "频谱光晕",
+  "ambientHint": "主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU"
 }

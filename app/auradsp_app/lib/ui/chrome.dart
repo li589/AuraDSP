@@ -297,10 +297,10 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
   // 据此摘除 spectrum 订阅与一切 Timer，离屏页不再因 30fps 帧调度占用。
   bool _pageActive = true;
 
-  // spectrum 帧节流：paint 间隔下限。把全屏雾化 blit 从 30fps 降到 20fps，
+  // spectrum 帧节流：paint 间隔下限。把全屏雾化 blit 从 30fps 降到 ~11fps，
   // 视觉几乎无差（氛围层低不透明度 + 柱体攻击/释放本就迟钝），GPU 全屏
   // 纹理上传/合成开销直接砍 1/3。
-  static const _paintIntervalMs = 50; // 20fps
+  static const _paintIntervalMs = 90; // ~11fps：氛围层只需要「缓慢起伏」
   int _lastPaintMs = 0;
 
   // 无信号判定与衰减：帧停滞后 _staleMs 触发一次性 stale，随后 _decayTimer
@@ -459,8 +459,14 @@ class _AmbientSpectrumState extends State<AmbientSpectrum> {
 /// 无信号期快速衰减。独立成类以便单测直接断言「音频停止后归零」。
 class AmbientEnvelope {
   static const int bars = 72;
-  static const double release = 0.82;     // 有信号时的释放系数
-  static const double staleDecay = 0.70;  // 无信号时的快速衰减
+
+  /// 非对称包络（2026-11-03）：氛围层要「呼吸」，不要「跟着节拍抽搐」。
+  /// 原实现是瞬时上冲 + 每帧 ×0.82 回落，柱体在视觉上会一跳一跳；
+  /// 改为上冲也走插值、回落更慢。配合 90ms 的绘制间隔，
+  /// 上升约 0.4s、回落约 1s —— 变化不再抢注意力，只留氛围。
+  static const double attack = 0.22;
+  static const double release = 0.10;
+  static const double staleDecay = 0.86;  // 无信号时的衰减（放慢，收尾不突兀）
   static const double epsilon = 0.005; // 真实静音底噪截断门限（~-46dBFS），保障闲置 0fps 休眠
 
   /// 氛围柱的频率覆盖范围（对数均分到 [focusMinHz, focusMaxHz]）。
@@ -501,12 +507,33 @@ class AmbientEnvelope {
     stale = false;
     if (src.isEmpty) return;
     final last = src.length - 1;
+
+    // 1. 原始目标值（只查预计算表，不做 log）
     for (var i = 0; i < bars; i++) {
       final b = _srcBand[i] < last ? _srcBand[i] : last;
-      final v = src[b].clamp(0.0, 1.0);
-      smooth[i] = math.max(v, smooth[i] * release);
+      _tmp[i] = src[b].clamp(0.0, 1.0);
+    }
+
+    // 2. 横向 3-tap：把 72 根柱连成一条包络线。**只对目标帧做一次**。
+    //    若改成像第一版那样对累积状态反复平滑，等于每帧做一次热扩散，
+    //    持续音下包络会越铺越宽、峰值越来越扁（实测 40 帧后能量溢出 5 根柱）。
+    for (var i = 0; i < bars; i++) {
+      final l = i == 0 ? _tmp[0] : _tmp[i - 1];
+      final r = i == bars - 1 ? _tmp[bars - 1] : _tmp[i + 1];
+      _shaped[i] = 0.25 * l + 0.5 * _tmp[i] + 0.25 * r;
+    }
+
+    // 3. 非对称时间包络：上冲慢、回落更慢
+    for (var i = 0; i < bars; i++) {
+      final cur = smooth[i];
+      final v = _shaped[i];
+      smooth[i] = cur + (v - cur) * (v > cur ? attack : release);
     }
   }
+
+  /// 目标帧与平滑后目标的临时缓冲（复用，避免每帧分配）。
+  final List<double> _tmp = List<double>.filled(bars, 0);
+  final List<double> _shaped = List<double>.filled(bars, 0);
 
   /// 无信号期：只做衰减，不吃陈旧数据。返回是否仍有残留（false=已归零）。
   bool decay() {

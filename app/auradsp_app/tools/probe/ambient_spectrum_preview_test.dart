@@ -54,6 +54,15 @@ Future<void> _render(
     clock: clock,
   );
 
+  // 包络现在是非对称插值（attack 0.22 / release 0.10）：单帧只能走到目标的
+  // 22%，直接出图会得到一张「刚起音」的假象。先空转 30 帧收敛到稳态再画。
+  final warm = ui.PictureRecorder();
+  final warmCanvas = ui.Canvas(warm);
+  for (var i = 0; i < 30; i++) {
+    painter.paint(warmCanvas, size);
+  }
+  warm.endRecording().dispose();
+
   final rec = ui.PictureRecorder();
   final canvas = ui.Canvas(rec);
   canvas.drawRect(

@@ -3640,4 +3640,13 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get plug32BitHint => '32 位插件（支持加载）';
+
+  @override
+  String get ambient => '氛围背景';
+
+  @override
+  String get ambientLabel => '频谱光晕';
+
+  @override
+  String get ambientHint => '主页背景随音乐起伏的光晕；关闭后完全停绘，可省 GPU';
 }
