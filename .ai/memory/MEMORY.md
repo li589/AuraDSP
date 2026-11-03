@@ -393,7 +393,7 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   `app/auradsp_app/lib/core/state/state_events.dart:16`（isolate 事件路由全量 case 分发），
   却在 10-28 记忆中挂在「Windows 引擎/桥」条目组之下（该组其余条目均为 C++ 侧）。
   **立项前先确认 E1 的原始定义**，避免拆错对象。
-- **VST2 / AU / LV2**：引擎侧只有 `engine/plugins/formats/{clap,vst3}`，无驱动；Dart 侧
+- **VST2 / AU / LV2**（**VST2 已于 2026-11-03 落地，见「VST2 支持」节**）：引擎侧只有 `engine/plugins/formats/{clap,vst3}`，无驱动；Dart 侧
   `PluginFormat` 枚举已含三种，但注释明确其定位是「引擎产出这些格式时角标/筛选即刻可用」的预留，
   **不是挂载支持**。补驱动前需先做授权与 ABI 取舍（VST2 需 `fst` 头 / AU 仅 macOS / LV2 与 CLAP 有 ABI 冲突面）。
 - **VB 总线掩码裁剪引擎（内存后续项，~180MB）**：`VmBridge.cpp:605 RebuildEngines(groups, sr)`
@@ -495,3 +495,11 @@ tools/sync_artifacts.ps1 分发 test/ 等三处。
   重载问题，不只 VST2。
 - **`extractVendorFromPath` 必须跳过 `.dll/.so/.vst`**：否则 VST2 快扫在无 PE
   版本资源时会把 DLL 文件名当厂商名（`AuraTestVST2.dll`）。
+- **宿主矩阵（2026-11-03 实机核实）**：默认（`AURA_PLUGIN_HOST_MODE` 未设）= 进程内；
+  `=process` 整轮转 `plugin_host_x64`；x86 位桥只要二进制在位就自动启用（只有
+  `=disabled/off/none` 才关），与模式无关。格式：Windows = VST3 / CLAP / VST2，
+  Linux = VST3 / CLAP（VST2 驱动 `#if defined(_WIN32)` 注册）。32 位插件两平台都只能走
+  `plugin_host_x86`（`remoteClientFor` 按 PE/ELF 头位数分派，与格式无关）。
+  **真实深扫元数据的可得性**：进程内 = 32 位有、64 位 VST2 无（安全策略）；进程外 =
+  64 位 VST2 有（宿主内允许深扫）、32 位无（x64 宿主加载不了 32 位 DLL，只有快扫）。
+  缺的一律由加载路 `status.plugin` 补齐。AU 未规划，LV2 暂缓。
