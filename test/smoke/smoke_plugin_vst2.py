@@ -140,27 +140,22 @@ def test_one(lib, handle, directory, deep, is_x86):
     check(entry.get("format") == "VST2", f"[{tag}] format=VST2（实际 {entry.get('format')}）")
     check(bool(entry.get("is64Bit")) == (not is_x86),
           f"[{tag}] is64Bit={entry.get('is64Bit')}")
-    if deep and is_x86:
-        if PROCESS_MODE:
-            # 进程外模式：扫描由 x64 宿主执行，它没有 x86 客户端，32 位 VST2
-            # 只能拿到快扫元数据；加载仍由引擎路由到 x86 位桥，音频不受影响。
-            check(bool(entry.get("name")), f"[{tag}] 深扫 name 非空（宿主快扫）")
-            check(bool(entry.get("path")), f"[{tag}] 深扫 path 非空")
-            print(f"  [INFO] [{tag}] 进程外模式下 32 位深扫为宿主快扫元数据")
-        else:
-            # 进程内模式：引擎用 Op::QueryMetadata 让 x86 宿主代查真实元数据。
-            check((entry.get("name") or "") == PLUGIN_NAME,
-                  f"[{tag}] 远程深扫 name={entry.get('name')!r}")
-            check((entry.get("vendor") or "") == "AuraDSP",
-                  f"[{tag}] 远程深扫 vendor={entry.get('vendor')!r}")
-            check((entry.get("version") or "").startswith("1.0"),
-                  f"[{tag}] 远程深扫 version={entry.get('version')!r}")
-            check((entry.get("id") or "") == "41757261",
-                  f"[{tag}] 远程深扫 id={entry.get('id')!r}")
-    elif deep:
-        # 64 位：进程内深扫按安全策略只做 PE 快扫（真实元数据由加载路补齐）。
-        check(bool(entry.get("name")), f"[{tag}] 深扫 name 非空（快扫）")
-        check(bool(entry.get("path")), f"[{tag}] 深扫 path 非空")
+    if deep:
+        # 2026-11-04（扫描归属重构）起，深扫按位数借宿主做，进程内/外结果一致：
+        # 64 位 → 懒启动的 plugin_host_x64；32 位 → plugin_host_x86 位桥。
+        # 两种模式都应拿到真实元数据，不再有「进程外 32 位只有快扫」的空洞。
+        check((entry.get("name") or "") == PLUGIN_NAME,
+              f"[{tag}] 深扫 name={entry.get('name')!r}")
+        check((entry.get("vendor") or "") == "AuraDSP",
+              f"[{tag}] 深扫 vendor={entry.get('vendor')!r}")
+        check((entry.get("version") or "").startswith("1.0"),
+              f"[{tag}] 深扫 version={entry.get('version')!r}")
+        check((entry.get("id") or "") == "41757261",
+              f"[{tag}] 深扫 id={entry.get('id')!r}")
+    else:
+        # 快扫：纯读文件头，vendor 来自目录/版本资源推导，不要求真值。
+        check(bool(entry.get("name")), f"[{tag}] 快扫 name 非空")
+        check(bool(entry.get("path")), f"[{tag}] 快扫 path 非空")
 
     print(f"=== [{tag}] 加载 + 音频 ===")
     rc = lib.auradsp_plugin_slot_load(
