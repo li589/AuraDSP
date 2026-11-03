@@ -370,6 +370,32 @@ bool PluginHostClient::load(uint32_t slot, const std::string& path,
     return true;
 }
 
+bool PluginHostClient::queryMetadata(const std::string& path,
+                                     ipc::RemotePluginInfo& outInfo,
+                                     int timeoutMs) {
+    if (path.empty()) return false;
+    ipc::Writer w;
+    w.str(path);
+
+    std::string body;
+    int32_t status = 0;
+    if (!request(ipc::Op::QueryMetadata, w.data(), &body, &status, timeoutMs) || status != 1) {
+        return false;
+    }
+    if (body.size() != sizeof(ipc::RemotePluginInfo)) return false;
+    std::memcpy(&outInfo, body.data(), sizeof(outInfo));
+    outInfo.path[sizeof(outInfo.path) - 1] = '\0';
+    outInfo.id[sizeof(outInfo.id) - 1] = '\0';
+    outInfo.name[sizeof(outInfo.name) - 1] = '\0';
+    outInfo.bundleName[sizeof(outInfo.bundleName) - 1] = '\0';
+    outInfo.vendor[sizeof(outInfo.vendor) - 1] = '\0';
+    outInfo.version[sizeof(outInfo.version) - 1] = '\0';
+    outInfo.category[sizeof(outInfo.category) - 1] = '\0';
+    outInfo.description[sizeof(outInfo.description) - 1] = '\0';
+    outInfo.errorMessage[sizeof(outInfo.errorMessage) - 1] = '\0';
+    return outInfo.isCompatible != 0;
+}
+
 bool PluginHostClient::unload(uint32_t slot) {
     ipc::Writer w;
     w.u32(slot);

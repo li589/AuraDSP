@@ -8,6 +8,7 @@
 #include <shlobj.h>
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <map>
@@ -48,6 +49,8 @@ std::string extractVendorFromPath(const std::string& filePath) {
     try {
         fs::path p(filePath);
         while (p.has_filename() && (extensionEqualsCI(p, ".vst3") || extensionEqualsCI(p, ".clap") ||
+               extensionEqualsCI(p, ".dll") || extensionEqualsCI(p, ".so") ||
+               extensionEqualsCI(p, ".vst") ||
                p.filename() == "Contents" || p.filename() == "x86_64-win" ||
                p.filename() == "x86-win" || p.filename() == "Resources")) {
             p = p.parent_path();
@@ -92,6 +95,107 @@ bool peIs64Bit(const std::wstring& binaryPath) {
     if (m == IMAGE_FILE_MACHINE_I386) return false;
     if (m == IMAGE_FILE_MACHINE_AMD64 || m == IMAGE_FILE_MACHINE_ARM64) return true;
     return true;
+}
+
+namespace {
+
+bool readExactAt(std::ifstream& f, std::uint64_t off, void* buf, std::size_t n) {
+    f.clear();
+    f.seekg(static_cast<std::streamoff>(off));
+    if (!f) return false;
+    f.read(reinterpret_cast<char*>(buf), static_cast<std::streamsize>(n));
+    return static_cast<std::size_t>(f.gcount()) == n;
+}
+
+std::uint64_t peRvaToOffset(const std::vector<IMAGE_SECTION_HEADER>& sections, std::uint32_t rva) {
+    for (const auto& s : sections) {
+        const std::uint32_t start = s.VirtualAddress;
+        const std::uint32_t span = s.Misc.VirtualSize ? s.Misc.VirtualSize : s.SizeOfRawData;
+        if (span == 0) continue;
+        if (rva >= start && rva < start + span) {
+            return static_cast<std::uint64_t>(s.PointerToRawData) + (rva - start);
+        }
+    }
+    return 0;
+}
+
+} // namespace
+
+bool peHasVst2Entry(const std::wstring& binaryPath) {
+    // 2026-11-03：VST2 没有 bundle，扫描目录下每个 .dll 都可能是插件，
+    // 也可能是同目录的依赖库。这里只解析 PE 导出表，不 LoadLibrary，
+    // 既避免普通 DLL 的 DllMain 副作用，也避免为过滤付出加载成本。
+    std::ifstream f(binaryPath, std::ios::binary);
+    if (!f) return false;
+
+    IMAGE_DOS_HEADER dos{};
+    if (!readExactAt(f, 0, &dos, sizeof(dos)) || dos.e_magic != IMAGE_DOS_SIGNATURE ||
+        dos.e_lfanew <= 0) {
+        return false;
+    }
+    DWORD signature = 0;
+    if (!readExactAt(f, static_cast<std::uint64_t>(dos.e_lfanew), &signature, sizeof(signature)) ||
+        signature != IMAGE_NT_SIGNATURE) {
+        return false;
+    }
+    IMAGE_FILE_HEADER fileHeader{};
+    if (!readExactAt(f, static_cast<std::uint64_t>(dos.e_lfanew) + sizeof(DWORD), &fileHeader,
+                     sizeof(fileHeader))) {
+        return false;
+    }
+    if (fileHeader.NumberOfSections == 0 || fileHeader.NumberOfSections > 96) return false;
+
+    const std::uint64_t optOff = static_cast<std::uint64_t>(dos.e_lfanew) + sizeof(DWORD) +
+                                 sizeof(IMAGE_FILE_HEADER);
+    WORD optMagic = 0;
+    if (!readExactAt(f, optOff, &optMagic, sizeof(optMagic))) return false;
+
+    IMAGE_DATA_DIRECTORY exportDir{};
+    if (optMagic == IMAGE_NT_OPTIONAL_HDR64_MAGIC) {
+        IMAGE_OPTIONAL_HEADER64 oh{};
+        if (!readExactAt(f, optOff, &oh, sizeof(oh))) return false;
+        exportDir = oh.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    } else if (optMagic == IMAGE_NT_OPTIONAL_HDR32_MAGIC) {
+        IMAGE_OPTIONAL_HEADER32 oh{};
+        if (!readExactAt(f, optOff, &oh, sizeof(oh))) return false;
+        exportDir = oh.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT];
+    } else {
+        return false;
+    }
+    if (exportDir.VirtualAddress == 0 || exportDir.Size == 0) return false;
+
+    std::vector<IMAGE_SECTION_HEADER> sections(fileHeader.NumberOfSections);
+    const std::uint64_t sectionOff = optOff + fileHeader.SizeOfOptionalHeader;
+    if (!readExactAt(f, sectionOff, sections.data(),
+                     sections.size() * sizeof(IMAGE_SECTION_HEADER))) {
+        return false;
+    }
+
+    const std::uint64_t exportOff = peRvaToOffset(sections, exportDir.VirtualAddress);
+    if (exportOff == 0) return false;
+    IMAGE_EXPORT_DIRECTORY exportTable{};
+    if (!readExactAt(f, exportOff, &exportTable, sizeof(exportTable))) return false;
+    if (exportTable.NumberOfNames == 0 || exportTable.NumberOfNames > 65535) return false;
+
+    const std::uint64_t namesOff = peRvaToOffset(sections, exportTable.AddressOfNames);
+    if (namesOff == 0) return false;
+    for (DWORD i = 0; i < exportTable.NumberOfNames; ++i) {
+        DWORD nameRva = 0;
+        if (!readExactAt(f, namesOff + static_cast<std::uint64_t>(i) * sizeof(DWORD), &nameRva,
+                         sizeof(nameRva)) ||
+            nameRva == 0) {
+            continue;
+        }
+        const std::uint64_t nameOff = peRvaToOffset(sections, nameRva);
+        if (nameOff == 0) continue;
+        char name[64] = {};
+        if (!readExactAt(f, nameOff, name, sizeof(name) - 1)) continue;
+        name[sizeof(name) - 1] = '\0';
+        if (std::strcmp(name, "VSTPluginMain") == 0 || std::strcmp(name, "main") == 0) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath) {

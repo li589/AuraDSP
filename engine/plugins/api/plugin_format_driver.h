@@ -67,6 +67,8 @@ private:
 
 std::unique_ptr<IPluginFormatDriver> createVst3FormatDriver();
 std::unique_ptr<IPluginFormatDriver> createClapFormatDriver();
+/* VST2（2026-11-03）：仅 Windows 注册；实现见 formats/vst2/。 */
+std::unique_ptr<IPluginFormatDriver> createVst2FormatDriver();
 
 } // namespace auradsp
 

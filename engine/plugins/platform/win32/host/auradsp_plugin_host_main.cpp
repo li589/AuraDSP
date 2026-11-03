@@ -3,6 +3,7 @@
 #endif
 
 #include "plugin_host.h"
+#include "plugin_format_driver.h"
 #include "plugin_ipc_protocol.h"
 #include "plugin_shared_region.h"
 #include "engine_internal.h"
@@ -222,6 +223,34 @@ bool handleCommand(HANDLE pipe, auradsp::PluginHostManager& manager, bool& runni
                 auradsp::ipc::copyFixed(info.errorMessage, sizeof(info.errorMessage),
                                         "plugin load failed in host process");
                 status = 0;
+            }
+            body.resize(sizeof(info));
+            std::memcpy(body.data(), &info, sizeof(info));
+            break;
+        }
+        case auradsp::ipc::Op::QueryMetadata: {
+            /* 32 位 VST2 远程深扫（2026-11-03）：桥宿主是 32 位进程，能
+             * 加载 x64 引擎加载不了的 32 位 DLL。临时实例只 load 不 activate，
+             * 读完元数据立即 unload，不占槽位、不进音频路径。 */
+            std::string path;
+            if (!r.str(path)) break;
+            auradsp::ipc::RemotePluginInfo info = {};
+            auto* driver = auradsp::PluginDriverRegistry::instance().findForPath(path);
+            if (driver) {
+                const std::string binary = driver->resolveBinary(path);
+                if (!binary.empty()) {
+                    auto instance = driver->createInstance();
+                    if (instance && instance->load(path, std::string(), nullptr)) {
+                        fillRemoteInfo(instance->getMetadata(), instance->busInfo(), info);
+                        status = 1;
+                    }
+                    if (instance) instance->unload();
+                }
+            }
+            if (status != 1) {
+                auradsp::ipc::copyFixed(info.errorMessage, sizeof(info.errorMessage),
+                                        "plugin metadata query failed in host process");
+                info.isCompatible = 0;
             }
             body.resize(sizeof(info));
             std::memcpy(body.data(), &info, sizeof(info));

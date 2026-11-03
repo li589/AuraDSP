@@ -37,7 +37,10 @@ class PluginHostClient;
 enum class PluginFormat {
     Unknown = 0,
     VST3,
-    CLAP
+    CLAP,
+    /* 2026-11-03：追加在末尾，保持既有数值稳定（IPC RemotePluginInfo
+     * 的 format 字段跨进程传输，不得重排）。 */
+    VST2
 };
 
 struct PluginMetadata {
@@ -142,6 +145,12 @@ public:
      * MAKELPARAM，那在 DPI 感知窗口的缩放通知里可能带 -1）。
      * 默认空实现。线程契约：在 plugin main 线程（泵线程）上被调用。 */
     virtual void onEditorResize() {}
+
+    /* VST2（2026-11-03）：编辑器需要宿主周期调用 `effEditIdle` 才能刷新
+     * 表针/波形（VST2 没有 CLAP 的 timer 扩展）。容器窗口用 30ms WM_TIMER
+     * 驱动本回调。默认空实现——VST3/CLAP 不依赖它。
+     * 线程契约：在 plugin main 线程（泵线程）上被调用。 */
+    virtual void onEditorIdle() {}
 
     int getSettleTicks() const { return m_sizeSettleTicks; }
     void incSettleTicks() { ++m_sizeSettleTicks; }

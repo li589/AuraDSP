@@ -60,6 +60,11 @@ set(AURADSP_PLUGIN_HOST_SOURCES
     "${API}/plugins/formats/vst3/vst3_driver.cpp"
     "${API}/plugins/formats/vst3/vst3_instance.cpp"
     "${API}/plugins/formats/vst3/vst3_metadata.cpp"
+    # VST2（2026-11-03）：驱动/实例/元数据。编译头是 vendor/plugin-api/vst2/vst.h
+    # （Xaymar 净室，BSD-3-Clause）；仅在 Windows 目标编入。
+    "${API}/plugins/formats/vst2/vst2_driver.cpp"
+    "${API}/plugins/formats/vst2/vst2_instance.cpp"
+    "${API}/plugins/formats/vst2/vst2_metadata.cpp"
 )
 set(AURADSP_PLUGIN_INTEGRATION_SOURCES
     "${API}/plugins/integration/plugin_host.cpp"
@@ -235,6 +240,57 @@ endif()  # AURADSP_PLUGIN_HOST_REMOTE
 
 # CP-02：三个插件测试 EXE 直接编译 AURADSP_PLUGIN_HOST_SOURCES，裁剪构建不产出。
 if(AURADSP_ENABLE_PLUGINS)
+# VST2 探针（2026-11-03）：最小增益插件，64 位与 32 位各产一份。
+# 产物落 test/vst2/（x64）或 test/vst2/x86/（Win32），供 smoke_plugin_vst2.py 使用。
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(VST2_FIXTURE_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/x86")
+else()
+    set(VST2_FIXTURE_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/x64")
+endif()
+add_library(test_vst2_fixture SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/fixtures/vst2_gain/gain_vst2.cpp"
+)
+target_include_directories(test_vst2_fixture PRIVATE "${PLUGIN_API}")
+set_target_properties(test_vst2_fixture PROPERTIES
+    OUTPUT_NAME "AuraTestVST2"
+    PREFIX ""
+    SUFFIX ".dll"
+    CXX_STANDARD 20
+    MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+    RUNTIME_OUTPUT_DIRECTORY "${VST2_FIXTURE_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VST2_FIXTURE_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VST2_FIXTURE_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VST2_FIXTURE_OUT}"
+)
+target_compile_options(test_vst2_fixture PRIVATE /utf-8 /W1 /EHsc)
+
+# 坏 magic 探针：导出 VSTPluginMain 但返回非法 AEffect，验证拒绝路径不崩溃。
+if(CMAKE_SIZEOF_VOID_P EQUAL 4)
+    set(VST2_BAD_OUT "${VST2_FIXTURE_OUT}")
+else()
+    set(VST2_BAD_OUT "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/vst2/bad")
+endif()
+add_library(test_vst2_bad_fixture SHARED
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../test/fixtures/vst2_gain/bad_vst2.cpp"
+)
+target_include_directories(test_vst2_bad_fixture PRIVATE "${PLUGIN_API}")
+set_target_properties(test_vst2_bad_fixture PROPERTIES
+    OUTPUT_NAME "AuraTestVST2Bad"
+    PREFIX ""
+    SUFFIX ".dll"
+    CXX_STANDARD 20
+    MSVC_RUNTIME_LIBRARY "MultiThreadedDLL"
+    RUNTIME_OUTPUT_DIRECTORY "${VST2_BAD_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_RELEASE "${VST2_BAD_OUT}"
+    RUNTIME_OUTPUT_DIRECTORY_DEBUG "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_RELEASE "${VST2_BAD_OUT}"
+    LIBRARY_OUTPUT_DIRECTORY_DEBUG "${VST2_BAD_OUT}"
+)
+target_compile_options(test_vst2_bad_fixture PRIVATE /utf-8 /W1 /EHsc)
+
 add_executable(test_plugin_direct
     "${API}/plugins/tests/plugin_host_direct.cpp"
     ${AURADSP_PLUGIN_HOST_SOURCES}

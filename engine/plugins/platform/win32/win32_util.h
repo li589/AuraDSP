@@ -15,6 +15,9 @@ namespace fs = std::filesystem;
 namespace auradsp {
 
 constexpr UINT_PTR kSizeSettleTimerId = 0x4143;  // 避免与 CLAP 插件自己的定时器 ID 冲突
+/* VST2（2026-11-03）：编辑器 idle 心跳定时器。VST2 没有 CLAP 的 timer
+ * 扩展，宿主必须自己按 ~30ms 调 effEditIdle，否则插件表针/波形不刷新。 */
+constexpr UINT_PTR kEditorIdleTimerId = 0x4144;
 
 inline std::wstring utf8ToWide(const std::string& utf8) {
     if (utf8.empty()) return std::wstring();
@@ -51,6 +54,9 @@ std::string extractVendorFromPath(const std::string& filePath);
 // 以 PE Machine 给出三态。
 int pluginBinaryBitness(const std::wstring& binaryPath);
 bool peIs64Bit(const std::wstring& binaryPath);
+/* VST2（2026-11-03）：只看 PE 导出表是否含 VSTPluginMain 或旧式 main，
+ * 不 LoadLibrary。用于扫描阶段把普通依赖 DLL 从 VST2 候选里剔掉。 */
+bool peHasVst2Entry(const std::wstring& binaryPath);
 std::string extractCompanyFromVersionInfo(const std::wstring& binaryPath);
 std::string extractProductVersionFromVersionInfo(const std::wstring& binaryPath);
 std::string extractVendorFromLegalCopyright(const std::wstring& binaryPath);
@@ -76,5 +82,6 @@ void ResizeDirectChildren(HWND hwnd);
 void FlashEditorToFront(HWND hwnd);
 void EnsureClapWindowClassRegistered();
 void EnsureVst3WindowClassRegistered();
+void EnsureVst2WindowClassRegistered();
 
 } // namespace auradsp

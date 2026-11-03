@@ -96,8 +96,20 @@ static LRESULT CALLBACK EditorHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPA
         }
         return 0;
     }
+    if (msg == WM_TIMER && wp == kEditorIdleTimerId) {
+        // VST2（2026-11-03）：30ms idle 心跳。VST2 没有 CLAP timer 扩展，
+        // 插件表针/波形只靠宿主周期调 effEditIdle 刷新。
+        auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (instance) {
+            instance->onEditorIdle();
+        } else {
+            KillTimer(hwnd, kEditorIdleTimerId);
+        }
+        return 0;
+    }
     if (msg == WM_CLOSE) {
         KillTimer(hwnd, kSizeSettleTimerId);
+        KillTimer(hwnd, kEditorIdleTimerId);
         auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
         if (instance) {
             instance->onEditorWmClose();
@@ -132,6 +144,10 @@ void EnsureClapWindowClassRegistered() {
 
 void EnsureVst3WindowClassRegistered() {
     EnsureEditorWindowClassRegistered(L"AuraDSP_VST3_Host_Window");
+}
+
+void EnsureVst2WindowClassRegistered() {
+    EnsureEditorWindowClassRegistered(L"AuraDSP_VST2_Host_Window");
 }
 
 } // namespace auradsp

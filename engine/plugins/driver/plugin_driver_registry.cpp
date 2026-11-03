@@ -17,6 +17,13 @@ PluginDriverRegistry::PluginDriverRegistry() {
     if (auto vst3 = createVst3FormatDriver()) {
         m_drivers.push_back(std::move(vst3));
     }
+#if defined(_WIN32)
+    /* VST2（2026-11-03）：本期仅 Windows 注册。Linux 继续只支持
+     * VST3 / CLAP；VST2 源文件不编入 Linux 目标，避免未定义符号。 */
+    if (auto vst2 = createVst2FormatDriver()) {
+        m_drivers.push_back(std::move(vst2));
+    }
+#endif
 }
 
 IPluginFormatDriver* PluginDriverRegistry::find(PluginFormat format) const {

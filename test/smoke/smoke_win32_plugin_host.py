@@ -154,10 +154,26 @@ def test_32bit_bridge():
         check(plug.get("name") == "Probe Gain", f"plugin.name == 'Probe Gain' (got {plug.get('name')})")
 
         # 3. 验证宿主进程在位且确为 plugin_host_x86.exe
-        import psutil
-        cur_proc = psutil.Process(os.getpid())
-        children = cur_proc.children()
-        host_86 = [c for c in children if c.name().lower() == "plugin_host_x86.exe"]
+        try:
+            import psutil
+            children = psutil.Process(os.getpid()).children()
+            host_86 = [c for c in children if c.name().lower() == "plugin_host_x86.exe"]
+        except ImportError:
+            # 精简 Python 环境可能没有 psutil；用 PowerShell 走同一份
+            # 父 PID 匹配（与 smoke_plugin_host_process.py 同口径）。
+            script = (
+                "Get-CimInstance Win32_Process | "
+                "Where-Object { $_.Name -eq 'plugin_host_x86.exe' } | "
+                "Select-Object ProcessId,ParentProcessId | ConvertTo-Json -Compress")
+            result = subprocess.run(
+                ["powershell", "-NoProfile", "-Command", script],
+                capture_output=True, text=True, encoding="utf-8",
+                errors="replace", timeout=20)
+            data = json.loads(result.stdout or "[]")
+            if isinstance(data, dict):
+                data = [data]
+            host_86 = [x for x in data
+                       if int(x.get("ParentProcessId", 0)) == os.getpid()]
         check(len(host_86) >= 1, f"宿主子进程为 plugin_host_x86.exe (匹配到 {len(host_86)} 个)")
 
         # 4. 音频处理断言（增益 0.5）

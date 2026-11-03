@@ -93,6 +93,19 @@ PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, P
 // CLAP 可轻量查询（不需要实例化）；VST3 深扫才 LoadLibrary。
 std::vector<PluginMetadata> scanCandidateMeta(const PluginScanner::ScanCandidate& c, bool deepScan) {
     std::vector<PluginMetadata> out;
+#if !defined(AURADSP_HOST_INPROC)
+    /* VST2 安全策略（2026-11-03 实测）：64 位 VST2 在 x64 引擎进程内深扫
+     * 需要 LoadLibrary 未知厂商 DLL，实测 Blue Cat / FabFilter 等真实插件
+     * 会在 VSTPluginMain/effOpen 阶段直接 AV 崩溃（整进程 0xC0000005）。
+     * 因此进程内扫描一律只做 PE 快扫；真实元数据由加载路补齐（load 时已
+     * 实例化，崩溃至少发生在用户显式挂载时且仍受异步超时/隔离区保护）。
+     * 32 位 VST2 的深扫由 scanStep 走 x86 位桥远程查询，崩溃隔离在子进程。
+     * 进程外模式（AURADSP_HOST_INPROC=1）的宿主进程内仍允许深扫。 */
+    if (c.format == PluginFormat::VST2) {
+        out.push_back(makeQuickMeta(c.binaryPath, c.displayName, c.format));
+        return out;
+    }
+#endif
     auto* driver = PluginDriverRegistry::instance().find(c.format);
     if (driver && (driver->supportsQuickMetadata() || deepScan)) {
         std::vector<PluginMetadata> metas;
@@ -166,6 +179,30 @@ bool fileStamp(const std::string& path, std::pair<uint64_t, int64_t>& out) {
     return true;
 }
 
+#ifndef AURADSP_HOST_INPROC
+// 32 位 VST2 远程深扫结果 -> 本地元数据（2026-11-03）。桥宿主返回的是
+// 定长 RemotePluginInfo；字段与 PluginMetadata 一一对应，format 数值同源。
+PluginMetadata fromRemoteInfo(const ipc::RemotePluginInfo& r, const std::string& fallbackPath) {
+    PluginMetadata m;
+    m.path = r.path[0] ? r.path : fallbackPath;
+    m.id = r.id;
+    m.name = r.name;
+    m.bundleName = r.bundleName;
+    m.vendor = r.vendor[0] ? r.vendor : "Unknown";
+    m.version = r.version[0] ? r.version : "1.0";
+    m.category = r.category[0] ? r.category : "AudioEffect";
+    m.description = r.description;
+    m.format = static_cast<PluginFormat>(r.format);
+    m.is64Bit = r.is64Bit != 0;
+    m.latency = r.latency;
+    m.isCompatible = r.isCompatible != 0;
+    m.errorMessage = r.errorMessage;
+    if (m.bundleName.empty()) m.bundleName = fs::path(m.path).stem().string();
+    if (m.name.empty()) m.name = m.bundleName;
+    return m;
+}
+#endif
+
 } // namespace
 
 std::vector<std::string> PluginScanner::getDefaultSearchPaths() {
@@ -230,7 +267,11 @@ std::vector<PluginScanner::ScanCandidate> PluginScanner::enumerate(const std::ve
                     c.path = entry.path().string();
                     c.displayName = entry.path().stem().string();
                 } else {
-                    c.binaryPath = entry.path().string();
+                    // VST2 的「是不是插件」判定在驱动 resolveBinary 里（PE 导出表）。
+                    // 旧实现只对目录调用 resolveBinary，文件直接入列，于是同目录
+                    // 的依赖 DLL 会被当成 VST2 候选。统一走驱动解析，空即跳过。
+                    c.binaryPath = driver->resolveBinary(entry.path().string());
+                    if (c.binaryPath.empty()) continue;
                     c.path = c.binaryPath;
                     c.displayName = entry.path().stem().string();
                 }
@@ -420,20 +461,43 @@ int PluginHostManager::scanStep(int maxItems) {
 
         std::vector<PluginMetadata> metas;
         bool ok = true;
-        if (job.deep) {
-            if (job.abandonedThreads < kScanAbandonLimit) {
-                ok = queryMetaWithTimeout(c, true, kScanItemTimeoutMs, metas);
-                if (!ok) {
-                    ++job.timedOut;
-                    ++job.abandonedThreads;
+        bool remoteHandled = false;
+#ifndef AURADSP_HOST_INPROC
+        /* 32 位 VST2 远程深扫（2026-11-03）：x64 进程加载不了 32 位 DLL，
+         * 由 x86 位桥宿主代查真实 name/vendor/category。桥缺位或查询失败
+         * 回退快扫元数据，不累计 abandoned（那是进程内挂死计数）。 */
+        if (job.deep && c.format == PluginFormat::VST2 &&
+            pluginBinaryBitness(utf8ToWide(c.binaryPath)) == 32) {
+            if (m_remoteClientX86) {
+                ipc::RemotePluginInfo info = {};
+                if (m_remoteClientX86->queryMetadata(c.path, info, kScanItemTimeoutMs)) {
+                    metas.push_back(fromRemoteInfo(info, c.path));
+                }
+            }
+            if (metas.empty()) {
+                PluginMetadata q = makeQuickMeta(c.binaryPath, c.displayName, c.format);
+                q.errorMessage = "32 位插件远程深扫未返回；已回退为快速信息";
+                metas.push_back(std::move(q));
+            }
+            remoteHandled = true;
+        }
+#endif
+        if (!remoteHandled) {
+            if (job.deep) {
+                if (job.abandonedThreads < kScanAbandonLimit) {
+                    ok = queryMetaWithTimeout(c, true, kScanItemTimeoutMs, metas);
+                    if (!ok) {
+                        ++job.timedOut;
+                        ++job.abandonedThreads;
+                    }
+                } else {
+                    // 放弃线程已达上限：停止深扫（降级快扫），并让上层把本轮
+                    // 标记为中断（Dart 侧保留上次结果 + 提示）。
+                    ok = false;
                 }
             } else {
-                // 放弃线程已达上限：停止深扫（降级快扫），并让上层把本轮
-                // 标记为中断（Dart 侧保留上次结果 + 提示）。
-                ok = false;
+                metas = scanCandidateMeta(c, false);
             }
-        } else {
-            metas = scanCandidateMeta(c, false);
         }
         if (!ok) {
             PluginMetadata q = makeQuickMeta(c.binaryPath, c.displayName, c.format);

@@ -66,6 +66,10 @@ public:
     bool load(uint32_t slot, const std::string& path, const std::string& pluginId,
               double sampleRate, uint32_t maxBlockSize,
               ipc::RemotePluginInfo& outInfo, std::string& outError);
+    /* 32 位 VST2 远程深扫（2026-11-03）：在桥宿主内临时加载插件取元数据。
+     * timeoutMs 与进程内深扫的 2500ms 同口径；超时返回 false，调用方回退快扫。 */
+    bool queryMetadata(const std::string& path, ipc::RemotePluginInfo& outInfo,
+                       int timeoutMs = 2500);
     bool unload(uint32_t slot);
     bool setBypass(uint32_t slot, bool bypass);
     bool getBypass(uint32_t slot, bool& bypass);

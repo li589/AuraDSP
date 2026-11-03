@@ -56,6 +56,15 @@ bool ProcessPluginProxy::load(const std::string& path, const std::string& plugin
         return false;
     }
     m_ring = &m_region->header()->slots[m_slot];
+    /* 进程外重载（2026-11-03）：上一会话可能还有未被消费的输入/输出块。
+     * 新代理从 seq=0 重新开始，若不清环，pumpOutput 会把旧会话的残留块
+     * 当成新流水基线（m_outSynced 建立后 seq 全不匹配），表现为重载后
+     * 持续直通/静音。load 是控制路径，宿主此刻已将槽置旁路（commit 恒
+     * bypass），清读指针不会与音频线程争用。 */
+    m_ring->inputRead.store(m_ring->inputWrite.load(std::memory_order_acquire),
+                            std::memory_order_release);
+    m_ring->outputRead.store(m_ring->outputWrite.load(std::memory_order_acquire),
+                             std::memory_order_release);
     m_ring->editorOpen.store(0, std::memory_order_release);
     /* F-6: 缓存宿主唤醒事件（借用句柄）。置于控制路径，音频线程后续
      * SetEvent 无需再加锁；load 成功前的失败路径不会走到这里。 */

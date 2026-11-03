@@ -11,7 +11,9 @@ namespace auradsp {
 namespace ipc {
 
 constexpr uint32_t kMagic = 0x41555241u;   // "AURA"
-constexpr uint32_t kProtocolVersion = 3u;
+/* v4（2026-11-03）：新增 Op::QueryMetadata（32 位 VST2 远程深扫）。
+ * 引擎与宿主必须同版本；旧宿主进程会被 Hello 版本检查拒掉并重启。 */
+constexpr uint32_t kProtocolVersion = 4u;
 constexpr uint32_t kMaxSlots = 4u;
 constexpr uint32_t kChannels = 8u;
 constexpr uint32_t kTransportFrames = 128u;
@@ -46,6 +48,9 @@ enum class Op : uint32_t {
     UpdateFormat = 24,
     Shutdown = 25,
     SetChannelHint = 26,
+    /* 32 位 VST2 远程深扫（2026-11-03）：payload = path，response = RemotePluginInfo。
+     * 宿主临时 createInstance → load → 读元数据 → unload，不占槽、不激活。 */
+    QueryMetadata = 27,
 };
 
 enum class HostState : uint32_t {

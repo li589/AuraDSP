@@ -467,6 +467,16 @@ bool PluginHostClient::load(uint32_t slot, const std::string& path,
     return true;
 }
 
+bool PluginHostClient::queryMetadata(const std::string& path,
+                                     ipc::RemotePluginInfo& outInfo,
+                                     int timeoutMs) {
+    // VST2 深扫仅 Windows（ADR-013 D-4）；POSIX 侧不注册 VST2 驱动。
+    (void)path;
+    (void)outInfo;
+    (void)timeoutMs;
+    return false;
+}
+
 bool PluginHostClient::unload(uint32_t slot) {
     ipc::Writer w;
     w.u32(slot);
