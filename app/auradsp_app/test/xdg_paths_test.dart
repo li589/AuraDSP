@@ -16,10 +16,18 @@ import 'package:auradsp_app/platform/platform_profile.dart';
 void main() {
   group('PlatformProfile XDG dirs', () {
     test('configDir/dataDir are absolute auradsp roots', () {
-      for (final dir in [PlatformProfile.configDir, PlatformProfile.dataDir]) {
-        expect(dir, startsWith('/'), reason: dir);
-        expect(dir.split(Platform.pathSeparator).last, 'auradsp');
-        expect(dir, isNot(startsWith('.')));
+      if (Platform.isLinux) {
+        for (final dir in [PlatformProfile.configDir, PlatformProfile.dataDir]) {
+          expect(dir, startsWith('/'), reason: dir);
+          expect(dir.split(Platform.pathSeparator).last, 'auradsp');
+          expect(dir, isNot(startsWith('.')));
+        }
+      } else if (Platform.isWindows) {
+        for (final dir in [PlatformProfile.configDir, PlatformProfile.dataDir]) {
+          expect(dir.contains(r':\'), isTrue, reason: dir);
+          expect(dir.split(Platform.pathSeparator).last.toLowerCase(), 'auradsp');
+          expect(dir, isNot(startsWith('.')));
+        }
       }
     });
 

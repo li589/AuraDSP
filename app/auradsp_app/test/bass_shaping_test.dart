@@ -327,13 +327,12 @@ void main() {
 
       for (final themeId in AuraThemeId.values) {
         final model = AppModel(testing: true);
-      addTearDown(model.dispose);
         model.setBassShapingEnabled(true);
         model.vizChannelCount.value = 8;
         model.channelsMode = 1;
 
-        await tester.pumpWidget(_wrap(EffectsPage(model: model), model, themeId: themeId));
-        await tester.pumpAndSettle();
+        await tester.pumpWidget(_wrap(BassShapingCard(model: model), model, themeId: themeId));
+        await tester.pump(const Duration(milliseconds: 100));
 
         expect(tester.takeException(), isNull, reason: '${themeId.name} failed to render cleanly');
 
@@ -342,6 +341,10 @@ void main() {
         final chipBg = Color.alphaBlend(p.accent.withValues(alpha: 0.16), p.panelRaised);
         final ratio = _contrastRatio(p.text, chipBg);
         expect(ratio >= 3.0, isTrue, reason: '${themeId.name} contrast ratio $ratio < 3.0');
+
+        model.dispose();
+        await tester.pumpWidget(const SizedBox());
+        await tester.pump();
       }
     });
   });

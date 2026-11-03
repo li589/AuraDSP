@@ -33,6 +33,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final model = AppModel(testing: true);
+    addTearDown(model.dispose);
     await tester.pumpWidget(_app(model));
     await tester.pump();
 
@@ -75,6 +76,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
 
     final model = AppModel(testing: true);
+    addTearDown(model.dispose);
     await tester.pumpWidget(MaterialApp(
       localizationsDelegates: AppLocalizations.localizationsDelegates,
       supportedLocales: AppLocalizations.supportedLocales,
