@@ -253,6 +253,22 @@ class _LiveprogPageState extends State<LiveprogPage> {
     } else if (mounted) {
       _updateErrorLines();
     }
+    // 当模型侧代码因滑块/预设调节热更新，且编辑器未处于未编译修改状态时，平滑同步文本
+    final modelCode = widget.model.lpCode;
+    if (mounted && modelCode != null && modelCode.isNotEmpty && modelCode != _lastCompiledCode) {
+      if (!_isCodeDirty) {
+        final oldSel = _code.selection;
+        _code.value = TextEditingValue(
+          text: modelCode,
+          selection: oldSel.isValid && oldSel.end <= modelCode.length
+              ? oldSel
+              : TextSelection.collapsed(offset: modelCode.length),
+        );
+        _lastCompiledCode = modelCode;
+        _isCodeDirty = false;
+        _activeSliders = EelSliderParser.parse(modelCode);
+      }
+    }
   }
 
   /// 光标移动与选择变化时的极速响应

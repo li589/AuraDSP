@@ -736,6 +736,13 @@ class AppModel extends ChangeNotifier {
   /// Liveprog 扩展滑块参数表（支持 1..64 及自定义变量，以 meta.index 为键）
   final Map<int, double> lpSliderValues = {};
 
+  /// Liveprog 扩展滑块元数据表（支持解析后的全部滑块）
+  final Map<int, EelSliderMeta> lpSliderMetas = {};
+
+  /// Liveprog 代码重载节流计时器与最后发送时间戳
+  Timer? _lpCodeReloadTimer;
+  int _lastLpCodeReloadMs = 0;
+
   double getLiveprogSliderVal(int idx, double defaultVal) {
     if (lpSliderValues.containsKey(idx)) {
       return lpSliderValues[idx]!;
@@ -746,7 +753,7 @@ class AppModel extends ChangeNotifier {
     return defaultVal;
   }
 
-  void setLiveprogSliderVal(int idx, double v) {
+  void setLiveprogSliderVal(int idx, double v, {EelSliderMeta? meta}) {
     lpSliderValues[idx] = v;
     if (idx >= 1 && idx <= 8) {
       lpParams[idx - 1] = v;
@@ -756,6 +763,56 @@ class AppModel extends ChangeNotifier {
     }
     _notifyUi();
     scheduleAutoSave();
+
+    final m = meta ?? lpSliderMetas[idx];
+    if (m != null && lpCode != null && lpCode!.isNotEmpty) {
+      var code = lpCode!;
+      var codeChanged = false;
+      for (final varName in EelSliderParser.candidateVarNames(m)) {
+        if (EelSliderParser.hasVariableAssignment(code, varName)) {
+          final newCode = EelSliderParser.replaceVariableValue(code, varName, v, step: m.step);
+          if (newCode != code) {
+            code = newCode;
+            codeChanged = true;
+          }
+        }
+      }
+      if (codeChanged) {
+        final oldCode = lpCode;
+        lpCode = code;
+        if (lpDraftCode == oldCode || lpDraftCode == null) {
+          lpDraftCode = code;
+        }
+        if (m.enumOptions.isNotEmpty || m.step >= 1.0) {
+          _sendLiveprogCodeNow(code);
+        } else {
+          _scheduleLiveprogCodeReload(code);
+        }
+      }
+    }
+  }
+
+  void _sendLiveprogCodeNow(String code) {
+    _lpCodeReloadTimer?.cancel();
+    _lpCodeReloadTimer = null;
+    _lastLpCodeReloadMs = DateTime.now().millisecondsSinceEpoch;
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': code});
+  }
+
+  void _scheduleLiveprogCodeReload(String code) {
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final elapsed = now - _lastLpCodeReloadMs;
+    const throttleMs = 35;
+    if (elapsed >= throttleMs) {
+      _sendLiveprogCodeNow(code);
+    } else {
+      _lpCodeReloadTimer?.cancel();
+      _lpCodeReloadTimer = Timer(Duration(milliseconds: throttleMs - elapsed), () {
+        if (lpCode != null) {
+          _sendLiveprogCodeNow(lpCode!);
+        }
+      });
+    }
   }
   Timer? _debounceSaveTimer;
   bool _isReplayingSession = false;
@@ -1200,6 +1257,7 @@ class AppModel extends ChangeNotifier {
     // 下次启动 restoreMemoryImage 把旧参数全部还原（用户心智：全部归零）。
     // 先取消挂起的防抖保存——否则 500ms 后的 timer 会把文件写回来。
     _debounceSaveTimer?.cancel();
+    _lpCodeReloadTimer?.cancel();
     SessionMemory.clear();
     notifyListeners();
   }
@@ -1221,6 +1279,7 @@ class AppModel extends ChangeNotifier {
     );
     _trayVisibilitySubscribed = false;
     _debounceSaveTimer?.cancel();
+    _lpCodeReloadTimer?.cancel();
     _eqCurveTimer?.cancel();
     _eqResponseTimer?.cancel();
     // 可视化 config 写盘防抖：退出前补一次同步落盘，避免最后一次改动丢失

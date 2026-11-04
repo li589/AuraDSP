@@ -104,7 +104,7 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
                     palette: p,
                     onTap: () {
                       for (final meta in scriptSliders) {
-                        m.setLiveprogSliderVal(meta.index, meta.defaultVal);
+                        m.setLiveprogSliderVal(meta.index, meta.defaultVal, meta: meta);
                       }
                     },
                   ),
@@ -295,7 +295,7 @@ class _LiveprogSlidersPanelState extends State<LiveprogSlidersPanel> {
             model: m,
             meta: meta,
             val: m.getLiveprogSliderVal(meta.index, meta.defaultVal),
-            onChanged: (v) => m.setLiveprogSliderVal(meta.index, v),
+            onChanged: (v) => m.setLiveprogSliderVal(meta.index, v, meta: meta),
           ),
       ],
     );

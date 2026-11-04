@@ -261,16 +261,16 @@ extension StateChain on AppModel {
   void setLiveprogCode(String text) {
     lpError = null;
     final normalized = text.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
-    lpCode = normalized;
-    lpDraftCode = normalized;
-    lpPresetCodeMismatch = false;
     lpCompileMs = -1;
-    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': normalized});
+    lpPresetCodeMismatch = false;
+
     // 单一默认值源（v2 §3.2）：脚本内 sliderN: 声明优先。
     // 引擎 LoadCode 已把滑块清零，这里全量回推对齐；声明签名不变时
     // 保留用户已调值（只做回推），声明变化才采纳新默认值。
-    // 同一 isolate SendPort 保序：code → 默认值 → 调用方后续值。
     final metas = EelSliderParser.parse(normalized);
+    lpSliderMetas.clear();
+    lpSliderMetas.addAll(metas);
+
     final sig = StringBuffer();
     for (final meta in metas.values) {
       sig.write('${meta.index}:${meta.defaultVal}:${meta.minVal}:${meta.maxVal};');
@@ -288,6 +288,15 @@ extension StateChain on AppModel {
         }
       }
     }
+
+    // 将代码中的变量赋值同 lpSliderValues / metas 全量对齐
+    // 杜绝首次编译时代码中旧硬编码值与界面滑块默认值不一致（如 dPreset=18 与 界面预设 0）
+    final alignedCode = EelSliderParser.alignCodeWithSliders(normalized, lpSliderValues, metas);
+    lpCode = alignedCode;
+    lpDraftCode = alignedCode;
+
+    send({'cmd': 'setParamStr', 'id': ParamId.lpCode, 'text': alignedCode});
+
     for (final meta in metas.values) {
       final v = lpSliderValues[meta.index] ?? meta.defaultVal;
       if (meta.index >= 1 && meta.index <= 64) {
