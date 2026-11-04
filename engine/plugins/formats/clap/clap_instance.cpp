@@ -586,14 +586,20 @@ public:
         auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
             m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
         if (!gui) return false;
-        if (!gui->is_api_supported || !gui->is_api_supported(m_plugin, CLAP_WINDOW_API_WIN32, false)) {
+        // 编辑器窗口 API 按平台选：Win32 HWND / POSIX X11（E1）。
+#if defined(_WIN32)
+        constexpr const char* kEditorApi = CLAP_WINDOW_API_WIN32;
+#else
+        constexpr const char* kEditorApi = CLAP_WINDOW_API_X11;
+#endif
+        if (!gui->is_api_supported || !gui->is_api_supported(m_plugin, kEditorApi, false)) {
             return false;
         }
 
         AURADSP_DBG("[DBG CLAP showEditor] main thread: gui->create...");
         bool createRes = false;
         try {
-            createRes = gui->create(m_plugin, CLAP_WINDOW_API_WIN32, false);
+            createRes = gui->create(m_plugin, kEditorApi, false);
         } catch (const std::exception& ex) {
             AURADSP_WARN_S("[DBG CLAP showEditor] gui->create exception: " << ex.what());
         } catch (...) {
@@ -651,8 +657,13 @@ public:
         // [2] set_parent + show 在本线程（== 容器线程 == 泵线程）：
         //     插件子窗口由本线程创建，其 WM_PAINT/输入由本线程泵分发。
         clap_window_t win = {};
+#if defined(_WIN32)
         win.api = CLAP_WINDOW_API_WIN32;
         win.win32 = hwnd;
+#else
+        win.api = CLAP_WINDOW_API_X11;
+        win.x11 = static_cast<clap_xwnd>(reinterpret_cast<uintptr_t>(hwnd));
+#endif
         AURADSP_DBG("[DBG CLAP showEditor] main thread: calling gui->set_parent...");
         bool setParentRes = false;
         try {

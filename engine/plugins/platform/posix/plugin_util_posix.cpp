@@ -245,8 +245,31 @@ size_t pluginDllDirectoryRefs() { return 0; }
 // 编辑器窗口辅助：Linux 编辑器本体为后续阶段（X11 嵌入），
 // 本阶段为空操作；编辑器入口由 instance 的 showEditor 在非
 // Windows 显式返回不可用（阶段三收口），不依赖这里的假成功。
-void ResizeDirectChildren(HWND) {}
-void FlashEditorToFront(HWND) {}
+// 编辑器阶段（2026-11-04）：与 Win32 版同实现——两者都只用窗口
+// 兼容 API（现已是 X11 真实现），逻辑逐行对等。
+void ResizeDirectChildren(HWND hwnd) {
+    RECT rc;
+    if (!GetClientRect(hwnd, &rc)) return;
+    const int cw = rc.right - rc.left;
+    const int ch = rc.bottom - rc.top;
+    HWND child = GetWindow(hwnd, GW_CHILD);
+    while (child) {
+        MoveWindow(child, 0, 0, cw, ch, TRUE);
+        child = GetWindow(child, GW_HWNDNEXT);
+    }
+}
+
+// Z16 对等：先 SetForegroundWindow，再 TOPMOST→NOTOPMOST 组合
+// 抬升（X11 侧 SetWindowPos 的 z 序以 XRaiseWindow 实现，语义
+// 近似——无常驻置顶概念，抬升后由窗口管理器正常管理）。
+void FlashEditorToFront(HWND hwnd) {
+    if (!hwnd || !IsWindow(hwnd)) return;
+    SetForegroundWindow(hwnd);
+    SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+    SetWindowPos(hwnd, HWND_NOTOPMOST, 0, 0, 0, 0,
+                 SWP_NOMOVE | SWP_NOSIZE);
+}
 void EnsureClapWindowClassRegistered() {}
 void EnsureVst3WindowClassRegistered() {}
 void EnsureVst2WindowClassRegistered() {}

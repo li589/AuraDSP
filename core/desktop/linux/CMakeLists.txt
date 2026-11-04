@@ -164,6 +164,7 @@ if(AURADSP_ENABLE_PLUGINS)
         "${API}/plugins/integration/plugin_chain_adapter.cpp"
         "${API}/plugins/integration/plugin_abi.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+        "${API}/plugins/platform/posix/plugin_gui_x11.cpp"
         # 注：vendor 的 Steinberg SDK 为单头 amalgamation
         # （<steinberg/vst3_static.h>），无 .cpp 实现单元，与
         # Windows 工程同口径不列 SDK 源。
@@ -266,6 +267,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         "${API}/plugins/formats/vst2/vst2_instance.cpp"
         "${API}/plugins/formats/vst2/vst2_metadata.cpp"
         "${API}/plugins/platform/posix/plugin_util_posix.cpp"
+        "${API}/plugins/platform/posix/plugin_gui_x11.cpp"
     )
     add_executable(plugin_host_x64 ${AURADSP_HOST_SOURCES})
     set_property(TARGET plugin_host_x64 PROPERTY CXX_STANDARD 20)
