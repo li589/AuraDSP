@@ -31,7 +31,6 @@ import 'plugins/plugin_scan_dirs_section.dart';
 part 'plugins/plugins_slots.dart';
 part 'plugins/plugins_hero.dart';
 part 'plugins/plugins_list.dart';
-part 'plugins/plugins_badges.dart';
 
 class PluginsPage extends StatefulWidget {
   final AppModel model;
@@ -179,7 +178,6 @@ class _PluginsPageState extends State<PluginsPage>
           // 3. 插件库与扫描控制中心
           SectionCard(
             title: l10nOf(context).plugLibTitle,
-            hint: l10nOf(context).plugLibHint,
             trailing: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -374,53 +372,6 @@ class _PluginsPageState extends State<PluginsPage>
                   slot: currentSlot,
                   onLoad: (plugin) => manager.loadPlugin(plugin, slot: currentSlot),
                   onUnload: () => manager.unloadPlugin(slot: currentSlot),
-                ),
-              ],
-            ),
-          ),
-
-          // 4. 宿主架构与规范说明
-          SectionCard(
-            title: l10nOf(context).plugM1Title,
-            hint: l10nOf(context).plugM1Hint,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: AuraSpace.md,
-                  runSpacing: AuraSpace.sm,
-                  children: [
-                    _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatSlots,
-                      color: p.success,
-                    ),
-                    _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatStages,
-                      color: p.success,
-                    ),
-                    _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatGui,
-                      color: p.success,
-                    ),
-                    _FeatureBadge(
-                      icon: Icons.route_rounded,
-                      label: l10nOf(context).plugFeatRoute,
-                      color: p.success,
-                    ),
-                    _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatDirs,
-                      color: p.success,
-                    ),
-                    _FeatureBadge(
-                      icon: Icons.check_circle_rounded,
-                      label: l10nOf(context).plugFeatRt,
-                      color: p.success,
-                    ),
-                  ],
                 ),
               ],
             ),
