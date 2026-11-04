@@ -276,6 +276,137 @@ def run_bundle_scan(lib, tmp, cc):
     lib.auradsp_destroy(H)
 
 
+def run_deep_scan(lib, lib_path, tmp, cc):
+    """深扫断言（2026-11-04，扫描归属重构 996eeef + D-8 的 Linux 验收）：
+    重构后扫描由引擎本地承载、深扫按位数分派宿主代查，此前只有
+    Windows 口径的 arch/metadata 冒烟覆盖该行为（Linux 上 SKIP）。
+    本节按实测契约断言：
+    - 快扫（deep=0）全格式纯文件头：name=文件 stem、id 为空（D-8）；
+    - 深扫 64 位：默认（宿主分派）与 AURA_PLUGIN_DEEP_SCAN=inproc
+      两路都给出工厂真值（name/vendor/id 与 CLAP 探针描述符一致）；
+    - 深扫 32 位：IA32 可执行的平台（CI/真机）经 x86 宿主给工厂
+      真值且 compatible；IA32 不可执行的平台（本 VM）回落浅层条目
+      （name=stem），兼容性仍随位桥在位为 true；
+    - 位桥缺失态：临时移走 plugin_host_x86 后，32 位条目（快扫与
+      深扫）必须 compatible=false 且文案指明缺 plugin_host_x86，
+      64 位真值不受影响（finally 中恢复工件）。"""
+    ddir = os.path.join(tmp, "deepscan")
+    os.makedirs(ddir)
+    src = os.path.join(TEST_DIR, "smoke", "probe_gain.c")
+    inc = os.path.join(ROOT, "vendor", "plugin-api")
+
+    def build(args, out):
+        r = subprocess.run([cc, *args, "-shared", "-fPIC", "-O2",
+                            "-I", inc, src, "-o", out],
+                           capture_output=True, text=True)
+        return r.returncode == 0
+
+    p64 = os.path.join(ddir, "probe64.clap")
+    if not build([], p64):
+        print("  SKIP 深扫节：64 位探针编译失败")
+        return
+    p32 = os.path.join(ddir, "probe32.clap")
+    have32 = build(["-m32"], p32)
+    if not have32:
+        print("  SKIP 深扫 32 位半：-m32 编译不可用（缺 multilib）")
+
+    # IA32 执行能力探测：决定 32 位深扫断言走真值路还是回落路。
+    ia32_exec = False
+    if have32:
+        hello = os.path.join(tmp, "hello32")
+        r = subprocess.run([cc, "-m32", "-xc", "-", "-o", hello],
+                           input="int main(){return 42;}",
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            try:
+                ia32_exec = subprocess.run(
+                    [hello], capture_output=True).returncode == 42
+            except OSError:
+                ia32_exec = False
+
+    lib.auradsp_create.restype = ctypes.c_void_p
+    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+
+    def scan(deep):
+        h = lib.auradsp_create(48000.0, 4096)
+        if not h:
+            return {}
+        H = ctypes.c_void_p(h)
+        n = lib.auradsp_plugin_scan(H, ddir.encode(), deep)
+        buf = ctypes.create_string_buffer(262144)
+        rc = lib.auradsp_plugin_get_all(H, buf, 262144)
+        items = json.loads(buf.value.decode()) if rc >= 1 else []
+        lib.auradsp_destroy(H)
+        return {os.path.basename(it.get("path", "")): it for it in items}
+
+    def factory_ok(it):
+        return (it is not None and it.get("name") == "Probe Gain"
+                and it.get("vendor") == "AuraDSP Probe"
+                and it.get("id") == "com.auradsp.probe.gain")
+
+    saved = {k: os.environ.get(k)
+             for k in ("AURA_PLUGIN_HOST_MODE", "AURA_PLUGIN_DEEP_SCAN")}
+    try:
+        os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+        os.environ.pop("AURA_PLUGIN_DEEP_SCAN", None)
+
+        m = scan(0)
+        q = m.get("probe64.clap")
+        check(q is not None and q.get("name") == "probe64"
+              and q.get("id") == "",
+              "[deep] 快扫纯文件头：name=stem 且 id 空（D-8）")
+        m = scan(1)
+        check(factory_ok(m.get("probe64.clap")),
+              "[deep] 深扫 64 位（默认宿主分派）给出工厂真值")
+        os.environ["AURA_PLUGIN_DEEP_SCAN"] = "inproc"
+        m = scan(1)
+        check(factory_ok(m.get("probe64.clap")),
+              "[deep] 深扫 64 位（inproc 回退）给出工厂真值")
+        os.environ.pop("AURA_PLUGIN_DEEP_SCAN", None)
+
+        if have32:
+            m = scan(1)
+            d32 = m.get("probe32.clap")
+            if ia32_exec:
+                check(factory_ok(d32)
+                      and d32.get("isCompatible") is True,
+                      "[deep] 深扫 32 位经 x86 宿主给出工厂真值")
+            else:
+                check(d32 is not None and d32.get("name") == "probe32"
+                      and d32.get("is64Bit") is False
+                      and d32.get("isCompatible") is True,
+                      "[deep] 深扫 32 位（IA32 不可执行）回落浅层且随位桥兼容")
+
+        # 位桥缺失态：移走 x86 宿主后 32 位必须明确不可兼容。
+        x86_exe = os.path.join(os.path.dirname(lib_path), "plugin_host_x86")
+        hidden = x86_exe + ".gate_hidden"
+        had_exe = os.path.isfile(x86_exe)
+        if had_exe:
+            os.rename(x86_exe, hidden)
+        try:
+            if have32:
+                for deep in (0, 1):
+                    m = scan(deep)
+                    d32 = m.get("probe32.clap")
+                    check(d32 is not None
+                          and d32.get("isCompatible") is False
+                          and "plugin_host_x86" in (
+                              d32.get("errorMessage") or ""),
+                          f"[deep] 位桥缺失时 32 位明确不兼容（deep={deep}）")
+            m = scan(1)
+            check(factory_ok(m.get("probe64.clap")),
+                  "[deep] 位桥缺失不影响 64 位深扫真值")
+        finally:
+            if had_exe:
+                os.rename(hidden, x86_exe)
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 def run_x86_bridge(lib, lib_path, cc):
     """32 位桥活体：直调 slot_load（不经扫描——深扫的工厂探测在
     x64 宿主内无法加载 32 位模块，那是扫描路由的后续议题；本节
@@ -383,6 +514,7 @@ def live_chain():
     os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
     run_chain(lib, plug_dir, "inproc")
     run_bundle_scan(lib, tmp, cc)
+    run_deep_scan(lib, lib_path, tmp, cc)
 
     host_exe = os.path.join(os.path.dirname(lib_path), "plugin_host_x64")
     # 引擎口味判定：REMOTE 构建的 .so 内嵌宿主名文字（客户端定位
