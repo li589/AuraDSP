@@ -124,6 +124,18 @@ def source_invariants():
     check("AURADSP_BUILD_HOST_X86" in cmake and
           "plugin_host_x86" in cmake,
           "Linux CMake 含 x86 桥宿主目标（multilib 开关）")
+    check("formats/vst2/vst2_driver.cpp" in cmake and
+          "formats/vst2/vst2_instance.cpp" in cmake and
+          "formats/vst2/vst2_metadata.cpp" in cmake,
+          "Linux CMake 编入 VST2 驱动三源")
+    registry = read("engine/plugins/driver/plugin_driver_registry.cpp")
+    check("defined(__linux__)" in registry and
+          "createVst2FormatDriver" in registry,
+          "注册表对 Linux 注册 VST2 驱动")
+    util_posix = read(os.path.join(
+        ENGINE, "plugins", "platform", "posix", "plugin_util_posix.cpp"))
+    check("peHasVst2Entry" in util_posix and "DT_GNU_HASH" in util_posix,
+          "POSIX peHasVst2Entry 解析 ELF 动态符号（含 GNU 哈希路线）")
 
 
 def process_peak(lib, H, src, dst, expect=0.4, deadline_s=2.0):
@@ -273,6 +285,156 @@ def run_bundle_scan(lib, tmp, cc):
         check(b is not None and b.get("is64Bit") is False and compat_ok
               and "请安装 64 位版本" not in err,
               "[bundle] 仅 x86-linux 的 bundle 可发现且兼容性随位桥可用性")
+    lib.auradsp_destroy(H)
+
+
+def run_vst2_chain(lib, tmp, cc, cxx):
+    """VST2 活体节（2026-11-04，VST2 的 Linux 跟进验收）：
+    探针复用 dev 侧 fixture test/fixtures/vst2_gain/gain_vst2.cpp
+    （与 Windows smoke_plugin_vst2 同一标的；编译需 -D__cdecl=
+    消解净室头的 MSVC 习语）。文件名与插件真名错开，使快扫 stem
+    与深扫真名可区分：
+    - 诱饵 .so（无 VSTPluginMain）不得入列（ELF 导出判定把关）
+    - 快扫：name=stem、id 空
+    - 深扫（默认宿主分派）：64 位得 dispatcher 真值
+      （AuraTestVST2 / AuraDSP / 41757261）
+    - 深扫（AURA_PLUGIN_DEEP_SCAN=inproc）：VST2 安全政策禁止
+      引擎进程内深扫，必须回退快扫值
+    - 加载（默认进程内）后峰值 0.8×0.5——探针的 process_float
+      内置宿主回调 ABI 绊线（厂商串往返 + 版本 2400），峰值
+      成立同时证明 POSIX 宿主回调签名正确
+    - 32 位：IA32 可执行时（CI）深扫经 x86 宿主得真值；不可
+      执行时（本 VM）回落浅层且兼容性随位桥在位"""
+    vdir = os.path.join(tmp, "vst2chain")
+    os.makedirs(vdir)
+    fixture = os.path.join(ROOT, "test", "fixtures", "vst2_gain",
+                           "gain_vst2.cpp")
+    inc = os.path.join(ROOT, "vendor", "plugin-api")
+
+    def build_vst2(args, out):
+        r = subprocess.run([cxx, *args, "-shared", "-fPIC", "-O2",
+                            "-std=c++17", "-D__cdecl=", "-I", inc,
+                            fixture, "-o", out],
+                           capture_output=True, text=True)
+        return r.returncode == 0 and os.path.isfile(out)
+
+    p64 = os.path.join(vdir, "Vst2Gain64.so")
+    if not build_vst2([], p64):
+        print("  SKIP VST2 活体节：64 位探针编译失败")
+        return
+    r = subprocess.run([cc, "-shared", "-fPIC", "-O2", "-I", inc,
+                        os.path.join(TEST_DIR, "smoke", "probe_gain.c"),
+                        "-o", os.path.join(vdir, "libdecoy.so")],
+                       capture_output=True, text=True)
+    check(r.returncode == 0, "[vst2] 诱饵 .so 编译成功")
+    p32 = os.path.join(vdir, "Vst2Gain32.so")
+    have32 = build_vst2(["-m32"], p32)
+    if not have32:
+        print("  SKIP VST2 32 位半：-m32 编译不可用（缺 multilib）")
+    ia32_exec = False
+    if have32:
+        hello = os.path.join(tmp, "hello32_vst2")
+        r = subprocess.run([cc, "-m32", "-xc", "-", "-o", hello],
+                           input="int main(){return 42;}",
+                           capture_output=True, text=True)
+        if r.returncode == 0:
+            try:
+                ia32_exec = subprocess.run(
+                    [hello], capture_output=True).returncode == 42
+            except OSError:
+                ia32_exec = False
+
+    lib.auradsp_create.restype = ctypes.c_void_p
+    lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+
+    def scan(deep):
+        h = lib.auradsp_create(48000.0, 4096)
+        if not h:
+            return {}
+        H = ctypes.c_void_p(h)
+        lib.auradsp_plugin_scan(H, vdir.encode(), deep)
+        buf = ctypes.create_string_buffer(262144)
+        rc = lib.auradsp_plugin_get_all(H, buf, 262144)
+        items = json.loads(buf.value.decode()) if rc >= 1 else []
+        lib.auradsp_destroy(H)
+        return {os.path.basename(it.get("path", "")): it for it in items}
+
+    def truth(it):
+        return (it is not None and it.get("name") == "AuraTestVST2"
+                and it.get("vendor") == "AuraDSP"
+                and it.get("id") == "41757261"
+                and it.get("format") == "VST2")
+
+    saved = os.environ.get("AURA_PLUGIN_DEEP_SCAN")
+    try:
+        os.environ.pop("AURA_PLUGIN_DEEP_SCAN", None)
+        m = scan(0)
+        check("libdecoy.so" not in m,
+              "[vst2] 无 VSTPluginMain 的 .so 被 ELF 导出判定过滤")
+        q = m.get("Vst2Gain64.so")
+        check(q is not None and q.get("name") == "Vst2Gain64"
+              and q.get("id") == "" and q.get("format") == "VST2",
+              "[vst2] 快扫为文件头值（name=stem、id 空）")
+        m = scan(1)
+        check(truth(m.get("Vst2Gain64.so")),
+              "[vst2] 深扫 64 位（宿主分派）得 dispatcher 真值")
+        if have32:
+            d32 = m.get("Vst2Gain32.so")
+            if ia32_exec:
+                check(truth(d32),
+                      "[vst2] 深扫 32 位经 x86 宿主得 dispatcher 真值")
+            else:
+                check(d32 is not None and d32.get("name") == "Vst2Gain32"
+                      and d32.get("is64Bit") is False
+                      and d32.get("isCompatible") is True,
+                      "[vst2] 深扫 32 位（IA32 不可执行）回落浅层且随位桥兼容")
+        os.environ["AURA_PLUGIN_DEEP_SCAN"] = "inproc"
+        m = scan(1)
+        q = m.get("Vst2Gain64.so")
+        check(q is not None and q.get("name") == "Vst2Gain64"
+              and q.get("id") == "",
+              "[vst2] 深扫 inproc 按安全政策回退快扫值（进程内不深扫 VST2）")
+    finally:
+        if saved is None:
+            os.environ.pop("AURA_PLUGIN_DEEP_SCAN", None)
+        else:
+            os.environ["AURA_PLUGIN_DEEP_SCAN"] = saved
+
+    # 加载 + 出声（默认模式：64 位进程内直挂）
+    h = lib.auradsp_create(48000.0, 4096)
+    check(bool(h), "[vst2] auradsp_create 成功")
+    if not h:
+        return
+    H = ctypes.c_void_p(h)
+    lib.auradsp_plugin_scan(H, vdir.encode(), 1)
+    buf = ctypes.create_string_buffer(262144)
+    lib.auradsp_plugin_get_all(H, buf, 262144)
+    items = json.loads(buf.value.decode())
+    it = next((x for x in items
+               if x.get("format") == "VST2" and x.get("is64Bit")), None)
+    check(it is not None, "[vst2] 深扫结果含 64 位 VST2 条目")
+    if it is None:
+        lib.auradsp_destroy(H)
+        return
+    rc = lib.auradsp_plugin_slot_load(
+        H, 0, it["path"].encode(), it["id"].encode())
+    check(rc == 1, f"[vst2] slot_load 成功（rc={rc}）")
+    if rc != 1:
+        lib.auradsp_destroy(H)
+        return
+    sbuf = ctypes.create_string_buffer(65536)
+    lib.auradsp_plugin_slot_get_status(H, 0, sbuf, 65536)
+    st = json.loads(sbuf.value.decode())
+    check(st.get("hasActive") is True, "[vst2] status hasActive=true")
+    lib.auradsp_plugin_slot_set_bypass(H, 0, 0)
+    src = (ctypes.c_float * 2048)()
+    dst = (ctypes.c_float * 2048)()
+    for i in range(2048):
+        src[i] = 0.8
+    peak = process_peak(lib, H, src, dst)
+    check(abs(peak - 0.4) < 1e-3,
+          f"[vst2] process 峰值 {peak:.4f} == 0.8×0.5"
+          "（含宿主回调 ABI 绊线通过）")
     lib.auradsp_destroy(H)
 
 
@@ -630,8 +792,9 @@ def live_chain():
     run_deep_scan(lib, lib_path, tmp, cc, cxx)
     if cxx:
         run_vst3_chain(lib, tmp, cxx)
+        run_vst2_chain(lib, tmp, cc, cxx)
     else:
-        print("  SKIP VST3 活体节：无 C++ 编译器")
+        print("  SKIP VST3/VST2 活体节：无 C++ 编译器")
 
     host_exe = os.path.join(os.path.dirname(lib_path), "plugin_host_x64")
     # 引擎口味判定：REMOTE 构建的 .so 内嵌宿主名文字（客户端定位
