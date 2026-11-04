@@ -616,8 +616,10 @@ void guiX11Dispatch() {
                 }
             } else if (t.id == kEditorIdleTimerId) {
                 inst->onEditorIdle();
+            } else {
+                // CLAP 插件定时器分发驱动界面重绘
+                inst->onTimer(static_cast<uint32_t>(t.id));
             }
-            // 其余 id（CLAP 插件定时器）：Win32 版同样不分发，仅簿记。
         }
     }
 

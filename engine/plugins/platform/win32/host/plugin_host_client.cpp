@@ -87,8 +87,17 @@ std::wstring moduleDirectory() {
 std::wstring hostExecutablePath(HostArch arch) {
     const std::wstring dir = moduleDirectory();
     if (dir.empty()) return {};
-    if (arch == HostArch::X86) return dir + L"\\plugin_host_x86.exe";
-    return dir + L"\\plugin_host_x64.exe";
+    const std::wstring exeName = (arch == HostArch::X86) ? L"plugin_host_x86.exe" : L"plugin_host_x64.exe";
+    const std::wstring candidates[] = {
+        dir + L"\\" + exeName,
+        dir + L"\\..\\" + exeName,
+        dir + L"\\bin\\" + exeName,
+        dir + L"\\lib\\" + exeName
+    };
+    for (const auto& path : candidates) {
+        if (std::filesystem::exists(std::filesystem::path(path))) return path;
+    }
+    return dir + L"\\" + exeName;
 }
 
 void enableKillOnClose(HANDLE job) {

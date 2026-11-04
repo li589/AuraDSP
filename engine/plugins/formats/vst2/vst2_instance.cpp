@@ -473,40 +473,50 @@ public:
         m_active.store(false, std::memory_order_release);
     }
 
+    static constexpr int kMaxPluginChannels = 64;
+
     void process(float* const* inChannels, float* const* outChannels,
                  uint32_t numFrames) override {
         if (numFrames == 0 || !outChannels || !outChannels[0]) return;
 
-        const int chHint = std::max(1, std::min(8, m_channelHint.load(std::memory_order_relaxed)));
+        const int chHint = std::max(1, std::min(kMaxPluginChannels, m_channelHint.load(std::memory_order_relaxed)));
         if (!m_active.load(std::memory_order_acquire) ||
             m_bypassed.load(std::memory_order_acquire) || !m_effect) {
             copyThrough(inChannels, outChannels, numFrames, chHint);
             return;
         }
 
-        const int inCh = std::max(0, std::min(8, m_busIn.load(std::memory_order_relaxed)));
-        const int pluginOutCh = std::max(0, std::min(8, m_busOut.load(std::memory_order_relaxed)));
-        const int outCh = std::min(pluginOutCh, chHint);
-        if (outCh <= 0 || (!m_effect->process_float && !m_effect->process)) {
+        const int totalIn = std::max(0, std::min(kMaxPluginChannels, static_cast<int>(m_effect->num_inputs)));
+        const int totalOut = std::max(0, std::min(kMaxPluginChannels, static_cast<int>(m_effect->num_outputs)));
+        if (totalOut <= 0 || (!m_effect->process_float && !m_effect->process)) {
             copyThrough(inChannels, outChannels, numFrames, chHint);
             return;
         }
 
-        float* inputs[8] = {};
-        float* outputs[8] = {};
-        for (int i = 0; i < inCh; ++i) {
-            // 引擎是单声道而插件要双输入时，把 ch0 复制给 ch1，避免插件读空指针。
-            const int src = std::min(i, chHint - 1);
-            inputs[i] = (inChannels && inChannels[src]) ? inChannels[src]
-                                                        : (inChannels ? inChannels[0] : nullptr);
-        }
-        for (int i = 0; i < outCh; ++i) {
-            outputs[i] = outChannels[i];
+        float* inputs[kMaxPluginChannels] = {};
+        float* outputs[kMaxPluginChannels] = {};
+        const float* fallbackZero = (m_zeroBuffer.size() >= numFrames) ? m_zeroBuffer.data() : nullptr;
+        float* fallbackDiscard = (m_discardBuffer.size() >= numFrames) ? m_discardBuffer.data() : nullptr;
+
+        for (int i = 0; i < totalIn; ++i) {
+            if (i < chHint && inChannels && inChannels[i]) {
+                inputs[i] = inChannels[i];
+            } else if (inChannels && inChannels[0] && i < 2) {
+                inputs[i] = inChannels[0];
+            } else {
+                inputs[i] = const_cast<float*>(fallbackZero);
+            }
         }
 
-        // 单声道输出：先处理到 scratch，再复制到所有输出声道，避免插件只写
-        // outputs[0] 时右声道保留未处理的原声。
-        const bool monoOut = (outCh == 1);
+        for (int i = 0; i < totalOut; ++i) {
+            if (i < chHint && outChannels && outChannels[i]) {
+                outputs[i] = outChannels[i];
+            } else {
+                outputs[i] = fallbackDiscard;
+            }
+        }
+
+        const bool monoOut = (totalOut == 1);
         float* monoScratch = nullptr;
         if (monoOut) {
             if (m_monoScratch.size() < numFrames) {
@@ -522,9 +532,10 @@ public:
             safeCallProcessFloat(m_effect->process_float, m_effect, inputs, outputs,
                                  static_cast<int32_t>(numFrames));
         } else if (m_effect->process) {
-            // 旧式 process 是累加模式：先清零输出，再调用。
-            for (int i = 0; i < outCh; ++i) {
-                if (outputs[i]) std::memset(outputs[i], 0, numFrames * sizeof(float));
+            for (int i = 0; i < totalOut; ++i) {
+                if (outputs[i] && outputs[i] != fallbackDiscard) {
+                    std::memset(outputs[i], 0, numFrames * sizeof(float));
+                }
             }
             safeCallProcess(m_effect->process, m_effect, inputs, outputs,
                             static_cast<int32_t>(numFrames));
@@ -535,6 +546,22 @@ public:
             for (int c = 0; c < chHint; ++c) {
                 if (outChannels[c]) {
                     std::memcpy(outChannels[c], monoScratch, numFrames * sizeof(float));
+                }
+            }
+        }
+
+        // 清洗 NaN / Inf 并钳位极限值
+        for (int c = 0; c < chHint; ++c) {
+            if (!outChannels[c]) continue;
+            float* dst = outChannels[c];
+            for (uint32_t i = 0; i < numFrames; ++i) {
+                const float v = dst[i];
+                if (!std::isfinite(v)) {
+                    dst[i] = 0.0f;
+                } else if (v > 10.0f) {
+                    dst[i] = 10.0f;
+                } else if (v < -10.0f) {
+                    dst[i] = -10.0f;
                 }
             }
         }
@@ -742,10 +769,6 @@ public:
         return ok;
     }
 
-    void onEditorResize() override {
-        // VST2 编辑器普遍固定尺寸；容器窗口用不可缩放样式，这里不做拉伸，
-        // 避免把插件子窗口强行铺满导致控件错位。
-    }
 
 private:
     bool fail(const std::string& message) {
@@ -788,6 +811,8 @@ private:
     void ensureScratch(uint32_t frames) {
         if (frames == 0) frames = 1;
         if (m_monoScratch.size() < frames) m_monoScratch.resize(frames, 0.0f);
+        if (m_zeroBuffer.size() < frames) m_zeroBuffer.assign(frames, 0.0f);
+        if (m_discardBuffer.size() < frames) m_discardBuffer.assign(frames, 0.0f);
     }
 
     void copyThrough(float* const* inChannels, float* const* outChannels,
@@ -819,6 +844,7 @@ private:
         m_meta.format = PluginFormat::VST2;
         m_meta.isCompatible = true;
         m_meta.errorMessage.clear();
+        m_meta.hasEditor = (m_effect->flags & VST_EFFECT_FLAG_EDITOR) != 0;
 
         std::string name;
         std::string product;
@@ -855,8 +881,8 @@ private:
             m_effect->delay > 0 ? static_cast<uint32_t>(m_effect->delay) : 0u;
         m_latency.store(m_meta.latency, std::memory_order_release);
 
-        const int inCh = std::max(0, std::min(32, static_cast<int>(m_effect->num_inputs)));
-        const int outCh = std::max(0, std::min(32, static_cast<int>(m_effect->num_outputs)));
+        const int inCh = std::max(0, std::min(kMaxPluginChannels, static_cast<int>(m_effect->num_inputs)));
+        const int outCh = std::max(0, std::min(kMaxPluginChannels, static_cast<int>(m_effect->num_outputs)));
         m_busIn.store(inCh, std::memory_order_relaxed);
         m_busOut.store(outCh, std::memory_order_relaxed);
         m_busInfo.inputBuses = inCh > 0 ? 1 : 0;
@@ -885,7 +911,7 @@ private:
         const std::wstring title =
             utf8ToWide(m_editorTitle.empty() ? m_meta.name : m_editorTitle);
         RECT rc = {0, 0, width, height};
-        DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+        DWORD style = WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX | WS_THICKFRAME | WS_MAXIMIZEBOX;
         AdjustWindowRect(&rc, style, FALSE);
 
         HWND hwnd = CreateWindowExW(0, L"AuraDSP_VST2_Host_Window", title.c_str(), style,
@@ -906,6 +932,25 @@ private:
             return false;
         }
 
+        // 打开后二次核验尺寸（DPI 缩放与异步排版修正）
+        vst_rect_t* postRect = nullptr;
+        dispatch(VST_EFFECT_OPCODE_EDITOR_GET_RECT, 0, 0, &postRect);
+        if (postRect) {
+            int postWidth = static_cast<int>(postRect->right - postRect->left);
+            int postHeight = static_cast<int>(postRect->bottom - postRect->top);
+            if (postWidth > 100 && postHeight > 80 && (postWidth != width || postHeight != height)) {
+                width = postWidth;
+                height = postHeight;
+                RECT postRc = {0, 0, width, height};
+                AdjustWindowRect(&postRc, style, FALSE);
+                SetWindowPos(hwnd, NULL, 0, 0, postRc.right - postRc.left, postRc.bottom - postRc.top,
+                             SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+                ResizeDirectChildren(hwnd);
+            }
+        }
+
+        resetSettleTicks();
+        SetTimer(hwnd, kSizeSettleTimerId, 100, nullptr);
         SetTimer(hwnd, kEditorIdleTimerId, 30, nullptr);
         ShowWindow(hwnd, SW_SHOW);
         UpdateWindow(hwnd);
@@ -913,11 +958,44 @@ private:
         return true;
     }
 
+    void onEditorResize() override {
+        if (m_editorHwnd && IsWindow(m_editorHwnd)) {
+            ResizeDirectChildren(m_editorHwnd);
+        }
+    }
+
+    void pollEditorSize() override {
+        if (!m_effect || !m_editorHwnd || !IsWindow(m_editorHwnd)) return;
+        vst_rect_t* rect = nullptr;
+        dispatch(VST_EFFECT_OPCODE_EDITOR_GET_RECT, 0, 0, &rect);
+        if (!rect) return;
+        int rw = static_cast<int>(rect->right - rect->left);
+        int rh = static_cast<int>(rect->bottom - rect->top);
+        if (rw <= 50 || rh <= 50) return;
+        RECT clientRc = {};
+        GetClientRect(m_editorHwnd, &clientRc);
+        int curW = clientRc.right - clientRc.left;
+        int curH = clientRc.bottom - clientRc.top;
+        if (std::abs(curW - rw) > 2 || std::abs(curH - rh) > 2) {
+            DWORD style = static_cast<DWORD>(GetWindowLongPtrW(m_editorHwnd, GWL_STYLE));
+            RECT r = {0, 0, rw, rh};
+            AdjustWindowRect(&r, style, FALSE);
+            SetWindowPos(m_editorHwnd, NULL, 0, 0, r.right - r.left, r.bottom - r.top,
+                         SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+            ResizeDirectChildren(m_editorHwnd);
+        }
+    }
+
     void closeEditorOnPumpThread() {
         HWND hwnd = m_editorHwnd;
         if (hwnd) {
+            KillTimer(hwnd, kSizeSettleTimerId);
             KillTimer(hwnd, kEditorIdleTimerId);
-            if (m_effect) dispatch(VST_EFFECT_OPCODE_EDITOR_CLOSE);
+            if (editorQuarantineMatch(m_meta.name, m_meta.path)) {
+                AURADSP_WARN("[DBG VST2 closeEditor] quarantine: 插件自身 teardown 缺陷，跳过 effEditClose");
+            } else {
+                if (m_effect) dispatch(VST_EFFECT_OPCODE_EDITOR_CLOSE);
+            }
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
             if (m_pump) m_pump->unregisterEditor(hwnd);
             if (IsWindow(hwnd)) DestroyWindow(hwnd);
@@ -971,8 +1049,19 @@ private:
                 }
                 return VST_STATUS_TRUE;
             }
-            case VST_HOST_OPCODE_EDITOR_RESIZE: /* 15 */
+            case VST_HOST_OPCODE_EDITOR_RESIZE: /* 15 */ {
+                int newW = static_cast<int>(index);
+                int newH = static_cast<int>(value);
+                if (newW > 50 && newH > 50 && m_editorHwnd && IsWindow(m_editorHwnd)) {
+                    DWORD style = static_cast<DWORD>(GetWindowLongPtrW(m_editorHwnd, GWL_STYLE));
+                    RECT r = {0, 0, newW, newH};
+                    AdjustWindowRect(&r, style, FALSE);
+                    SetWindowPos(m_editorHwnd, NULL, 0, 0, r.right - r.left, r.bottom - r.top,
+                                 SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+                    ResizeDirectChildren(m_editorHwnd);
+                }
                 return VST_STATUS_TRUE;
+            }
             case VST_HOST_OPCODE_GET_SAMPLE_RATE: /* 16 */
                 return static_cast<intptr_t>(m_sampleRate > 0 ? m_sampleRate : 48000.0);
             case VST_HOST_OPCODE_GET_BLOCK_SIZE: /* 17 */
@@ -1072,6 +1161,8 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
     std::vector<float> m_monoScratch;
+    std::vector<float> m_zeroBuffer;
+    std::vector<float> m_discardBuffer;
     Vst2TimeInfo m_timeInfo{};
 };
 

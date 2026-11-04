@@ -180,6 +180,10 @@ public:
                 m_entry = nullptr;
                 return;
             }
+
+            auto gui = reinterpret_cast<const clap_plugin_gui_t*>(
+                m_plugin->get_extension(m_plugin, CLAP_EXT_GUI));
+            m_meta.hasEditor = (gui != nullptr);
         }, 10000);
         if (!taskRan || !initErr.empty()) {
             m_meta.isCompatible = false;
@@ -751,6 +755,31 @@ public:
         ResizeDirectChildren(m_editorHwnd);
     }
 
+    void onTimer(uint32_t timerId) override {
+        if (!m_plugin) return;
+        clap_id cid = 0;
+        {
+            std::lock_guard<std::mutex> lock(m_timerMutex);
+            auto it = m_timerIdMap.find(static_cast<UINT_PTR>(timerId));
+            if (it != m_timerIdMap.end()) {
+                cid = it->second;
+            } else {
+                auto directIt = m_timers.find(static_cast<clap_id>(timerId));
+                if (directIt != m_timers.end()) {
+                    cid = directIt->first;
+                }
+            }
+        }
+        if (cid == 0) return;
+        auto timerExt = reinterpret_cast<const clap_plugin_timer_support_t*>(
+            m_plugin->get_extension(m_plugin, CLAP_EXT_TIMER_SUPPORT));
+        if (timerExt && timerExt->on_timer) {
+            try {
+                timerExt->on_timer(m_plugin, cid);
+            } catch (...) {}
+        }
+    }
+
     static void safeHideAndDestroyClapGui(const clap_plugin_gui_t* gui, const clap_plugin_t* plugin) {
         if (!gui || !plugin) return;
 #if defined(_MSC_VER)
@@ -781,7 +810,10 @@ public:
         // （JUCE message thread），MessageManagerLock 无竞争（B3-② 重构，
         // 推翻 10-12「hide/destroy 必须在 caller」的结论——那个结论成立的
         // 前提是 create 在 caller 线程）。m_guiCreated 交换守卫防双执行。
-        if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
+        if (editorQuarantineMatch(m_meta.name, m_meta.path)) {
+            AURADSP_WARN("[DBG CLAP closeEditor] quarantine: 插件自身 teardown 缺陷，跳过 gui->destroy");
+            m_guiCreated.store(false, std::memory_order_release);
+        } else if (m_guiCreated.exchange(false, std::memory_order_acq_rel) && gui) {
             safeHideAndDestroyClapGui(gui, m_plugin);
         }
         if (hwnd) {

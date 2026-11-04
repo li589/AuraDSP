@@ -69,6 +69,7 @@ class PluginMetadata {
   final bool isCompatible;
   final bool is64Bit;
   final String errorMessage;
+  final bool hasEditor;
 
   const PluginMetadata({
     required this.id,
@@ -83,6 +84,7 @@ class PluginMetadata {
     this.isCompatible = true,
     this.is64Bit = true,
     this.errorMessage = '',
+    this.hasEditor = true,
   });
 
   factory PluginMetadata.fromJson(Map<String, dynamic> json) {
@@ -100,6 +102,7 @@ class PluginMetadata {
       is64Bit: json['is64Bit'] as bool? ??
           (json['errorMessage']?.toString().contains('32') == true ? false : true),
       errorMessage: json['errorMessage'] as String? ?? '',
+      hasEditor: json['hasEditor'] as bool? ?? true,
     );
   }
 
@@ -116,6 +119,7 @@ class PluginMetadata {
     'isCompatible': isCompatible,
     'is64Bit': is64Bit,
     'errorMessage': errorMessage,
+    'hasEditor': hasEditor,
   };
 
   @override

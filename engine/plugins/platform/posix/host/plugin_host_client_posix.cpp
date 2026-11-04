@@ -141,6 +141,21 @@ std::string moduleDirectory() {
 std::string hostExecutablePath(HostArch arch) {
     const std::string dir = moduleDirectory();
     if (dir.empty()) return {};
+    const std::string exeName = (arch == HostArch::X86) ? "plugin_host_x86" : "plugin_host_x64";
+    const std::string candidates[] = {
+        dir + "/" + exeName,
+        dir + "/../" + exeName,
+        dir + "/bin/" + exeName,
+        dir + "/lib/" + exeName
+    };
+    for (const auto& path : candidates) {
+        if (::access(path.c_str(), X_OK) == 0) return path;
+    }
+    return dir + "/" + exeName;
+}
+
+static std::string unusedLegacyHostPath(HostArch arch) {
+    const std::string dir = moduleDirectory();
     // 双宿主架构命名（《插件双宿主架构与跨格式扩展方案》§2.2）：
     // Linux 宿主为无扩展名 ELF，按位数分名。
     if (arch == HostArch::X86) return dir + "/plugin_host_x86";

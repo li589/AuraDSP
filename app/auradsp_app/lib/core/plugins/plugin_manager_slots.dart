@@ -126,6 +126,11 @@ extension PluginManagerSlots on PluginManager {
   }) {
     final s = slot ?? _selectedSlot;
     final meta = getSlotPlugin(s);
+    if (meta != null && !meta.hasEditor) {
+      _lastNotice = '${meta.name}：纯算法效果器 (Headless)，无原生图形界面。';
+      _notify();
+      return;
+    }
     if (meta != null && isEditorCrashKnown(meta)) {
       _lastNotice =
           '${meta.name}：该插件曾导致 AuraDSP 崩溃。已记录到隔离名单，'

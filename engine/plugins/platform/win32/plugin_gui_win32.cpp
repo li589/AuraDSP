@@ -107,6 +107,14 @@ static LRESULT CALLBACK EditorHostWindowProc(HWND hwnd, UINT msg, WPARAM wp, LPA
         }
         return 0;
     }
+    if (msg == WM_TIMER) {
+        // CLAP / 通用插件定时器分发
+        auto* instance = reinterpret_cast<IPluginInstance*>(GetWindowLongPtrW(hwnd, GWLP_USERDATA));
+        if (instance) {
+            instance->onTimer(static_cast<uint32_t>(wp));
+        }
+        return 0;
+    }
     if (msg == WM_CLOSE) {
         KillTimer(hwnd, kSizeSettleTimerId);
         KillTimer(hwnd, kEditorIdleTimerId);

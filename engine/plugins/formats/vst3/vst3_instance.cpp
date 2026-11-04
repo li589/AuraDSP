@@ -636,56 +636,7 @@ inline Steinberg::tresult PLUGIN_API AuraPlugInterfaceSupportImpl::queryInterfac
     return parent->queryInterface(_iid, obj);
 }
 
-/* 插件编辑器隔离名单——数据驱动，UI/预设层维护，引擎不硬编码任何插件名。
- * g_quarantinePatterns 由 auradsp_plugin_set_editor_quarantine_list 填充
- * （逗号分隔小写子串，匹配插件 name/path）。命中名单的插件关闭编辑器时
- * 跳过 removed()/release()（防插件自身 teardown fail-fast 崩溃），宿主
- * 不因插件缺陷陪葬。设计目标：jBridge / EqualizerAPO 等桥接类插件同样
- * 可按需登记。2026-10-19 从硬编码迁移为运行时数据。 */
-static std::vector<std::string> g_quarantinePatterns;
-static std::mutex g_quarantineMutex;
-
-static void pluginSetEditorQuarantineList(const char* patterns) {
-    std::lock_guard<std::mutex> lk(g_quarantineMutex);
-    g_quarantinePatterns.clear();
-    if (!patterns || !*patterns) return;
-    std::string s = patterns;
-    size_t start = 0;
-    for (;;) {
-        const size_t comma = s.find(',', start);
-        std::string tok = s.substr(
-            start, comma == std::string::npos ? std::string::npos : comma - start);
-        auto notSpace = [](char c) { return !std::isspace((unsigned char)c); };
-        const auto b = std::find_if(tok.begin(), tok.end(), notSpace);
-        const auto e = std::find_if(tok.rbegin(), tok.rend(), notSpace).base();
-        if (b < e) {
-            std::string pat(b, e);
-            for (auto& c : pat) c = (char)std::tolower((unsigned char)c);
-            g_quarantinePatterns.push_back(pat);
-        }
-        if (comma == std::string::npos) break;
-        start = comma + 1;
-    }
-}
-
-static bool editorQuarantineMatch(const std::string& name, const std::string& path) {
-    std::lock_guard<std::mutex> lk(g_quarantineMutex);
-    if (g_quarantinePatterns.empty()) return false;
-    std::string ln = name, lp = path;
-    for (auto& c : ln) c = (char)std::tolower((unsigned char)c);
-    for (auto& c : lp) c = (char)std::tolower((unsigned char)c);
-    for (const auto& p : g_quarantinePatterns) {
-        if (ln.find(p) != std::string::npos) return true;
-        if (lp.find(p) != std::string::npos) return true;
-    }
-    return false;
-}
-
-/* C ABI：设置隔离名单（预设系统数据）。patterns 逗号分隔；NULL/空串清空。 */
-extern "C" int auradsp_plugin_set_editor_quarantine_list(const char* patterns) {
-    pluginSetEditorQuarantineList(patterns);
-    return 1;
-}
+// editorQuarantineMatch 与 auradsp_plugin_set_editor_quarantine_list 已提升至 plugin_host_manager.cpp 跨格式共享
 
 class Vst3PluginInstance : public IPluginInstance {
 public:
@@ -980,6 +931,26 @@ public:
 
         m_isLoaded = true;
         m_meta.isCompatible = true;
+        if (m_controller) {
+            Steinberg::IPlugView* view = m_controller->createView(Steinberg::Vst::ViewType::kEditor);
+            if (view) {
+                m_meta.hasEditor = true;
+                view->release();
+            } else {
+                Steinberg::IPlugView* pv = nullptr;
+                if (m_controller->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
+                    m_meta.hasEditor = true;
+                    pv->release();
+                } else if (m_component && m_component->queryInterface(Steinberg::IPlugView::iid.toTUID(), reinterpret_cast<void**>(&pv)) == Steinberg::kResultOk && pv) {
+                    m_meta.hasEditor = true;
+                    pv->release();
+                } else {
+                    m_meta.hasEditor = false;
+                }
+            }
+        } else {
+            m_meta.hasEditor = false;
+        }
         return true;
     }
 

@@ -23,6 +23,50 @@
 
 namespace auradsp {
 
+static std::vector<std::string> g_quarantinePatterns;
+static std::mutex g_quarantineMutex;
+
+void pluginSetEditorQuarantineList(const char* patterns) {
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    g_quarantinePatterns.clear();
+    if (!patterns || !*patterns) return;
+    std::string s = patterns;
+    size_t start = 0;
+    for (;;) {
+        const size_t comma = s.find(',', start);
+        std::string tok = s.substr(
+            start, comma == std::string::npos ? std::string::npos : comma - start);
+        auto notSpace = [](char c) { return !std::isspace((unsigned char)c); };
+        const auto b = std::find_if(tok.begin(), tok.end(), notSpace);
+        const auto e = std::find_if(tok.rbegin(), tok.rend(), notSpace).base();
+        if (b < e) {
+            std::string pat(b, e);
+            for (auto& c : pat) c = (char)std::tolower((unsigned char)c);
+            g_quarantinePatterns.push_back(pat);
+        }
+        if (comma == std::string::npos) break;
+        start = comma + 1;
+    }
+}
+
+bool editorQuarantineMatch(const std::string& name, const std::string& path) {
+    std::lock_guard<std::mutex> lk(g_quarantineMutex);
+    if (g_quarantinePatterns.empty()) return false;
+    std::string ln = name, lp = path;
+    for (auto& c : ln) c = (char)std::tolower((unsigned char)c);
+    for (auto& c : lp) c = (char)std::tolower((unsigned char)c);
+    for (const auto& p : g_quarantinePatterns) {
+        if (ln.find(p) != std::string::npos) return true;
+        if (lp.find(p) != std::string::npos) return true;
+    }
+    return false;
+}
+
+extern "C" int auradsp_plugin_set_editor_quarantine_list(const char* patterns) {
+    pluginSetEditorQuarantineList(patterns);
+    return 1;
+}
+
 /* F-8a：遥测测量抽取周期（音频块）。8 块 @ 48kHz/256 帧 ≈ 43ms → ~23Hz
  * 刷新，仍高于 UI 轮询与肉眼 meter 需求；块率更高时（低延迟小块）刷新
  * 同步加快，块率更低时（大块/高采样率）最坏 ~43ms 陈旧，meter 不可感知。
@@ -496,9 +540,10 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
     s.inFlight.fetch_add(1, std::memory_order_acq_rel);
     InFlightGuard guard(s.inFlight, s.destroyPending);
 
+    const int chHint = (std::max)(1, (std::min)(64, m_channelHint.load(std::memory_order_relaxed)));
     if (!s.hasActive.load(std::memory_order_acquire) || s.bypassed.load(std::memory_order_acquire)) {
         if (inChannels != outChannels && inChannels && outChannels) {
-            for (int ch = 0; ch < 2; ++ch) {
+            for (int ch = 0; ch < chHint; ++ch) {
                 if (inChannels[ch] && outChannels[ch]) {
                     std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
                 }
@@ -516,6 +561,32 @@ void PluginHostManager::processSlot(size_t slot, float* const* inChannels, float
         // 前的陈旧/脏值。与 setBypassSlot/unloadPluginSlotLocked/
         // setInsertStageSlot/commitInstanceLocked 的重置行为统一。
         resetTelemetryGateSlot(slot);
+        if (inChannels != outChannels && inChannels && outChannels) {
+            for (int ch = 0; ch < chHint; ++ch) {
+                if (inChannels[ch] && outChannels[ch]) {
+                    std::memcpy(outChannels[ch], inChannels[ch], numFrames * sizeof(float));
+                }
+            }
+        }
+        return;
+    }
+
+    // 清洗 NaN / Inf 并钳位极限值，彻底阻止毒化传播到下游 JamesDSP 滤波器
+    if (outChannels) {
+        for (int ch = 0; ch < chHint; ++ch) {
+            if (!outChannels[ch]) continue;
+            float* dst = outChannels[ch];
+            for (uint32_t i = 0; i < numFrames; ++i) {
+                const float v = dst[i];
+                if (!std::isfinite(v)) {
+                    dst[i] = 0.0f;
+                } else if (v > 10.0f) {
+                    dst[i] = 10.0f;
+                } else if (v < -10.0f) {
+                    dst[i] = -10.0f;
+                }
+            }
+        }
     }
 }
 

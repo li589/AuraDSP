@@ -49,7 +49,8 @@ std::string PluginMetadata::toJson() const {
        << "\"is64Bit\":" << (is64Bit ? "true" : "false") << ","
        << "\"latency\":" << latency << ","
        << "\"isCompatible\":" << (isCompatible ? "true" : "false") << ","
-       << "\"errorMessage\":\"" << escapeJsonString(errorMessage) << "\""
+       << "\"errorMessage\":\"" << escapeJsonString(errorMessage) << "\","
+       << "\"hasEditor\":" << (hasEditor ? "true" : "false")
        << "}";
     return ss.str();
 }

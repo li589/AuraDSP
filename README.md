@@ -126,6 +126,7 @@ Voicemeeter 桥（`bridge/vm_bridge` + `02_voicemeeter_client`）按路处理：
 
 | 日期 | 内容 | 提交 |
 |---|---|---|
+| 2026-11-05 | 插件体系健壮性专项治理：① 修复高阶 Ambisonics 64 通道越界写栈崩溃与音频死循环；② 落地非有限值（NaN/Inf）全通道过滤清洗与钳位防护，根除插件异常导致引擎静音；③ VST2 支持自适应动态重设尺寸与边框自由拖动；④ 修复 Linux CLAP 定时器派发消灭黑屏；⑤ 探测无界面插件提示纯算法 Headless；⑥ 修复 Linux 32 位位桥打包路径搜索失败；⑦ 跨格式统一隔离黑名单；双平台 64/32 位门禁全绿 | 见 `docs/40-回顾/插件健壮性治理与多通道拓扑优化-2026-11-05.md` |
 | 2026-11-01 | Linux 移植第一期（`feature/linux` 分支）：引擎 Linux 目标（导出集与 `.def` 恒等）、App PulseAudio 输出闭环、CI 七 job 双流水线全绿、Linux 测试套件补强（冒烟 PASS 9 / Dart 57 PASS + 4 平台跳过） | `61bca64` `017b2eb` `b80eaeb` `d94f2ff` |
 | 2026-11-02 | Linux 移植一期收官：三模式功能对等（S5a）、桌面体验（S5b：XDG/托盘/自启/MPRIS）、治理收尾（S5c）与全增量代码审查；Ubuntu 24.04 真机轮次修复输出泵饿死、snd-aloop 回环源、Impeller 重绘损坏三项真机问题；冒烟 PASS 12 / Dart 59 PASS + 4 平台跳过、CI 七 job 全绿，`feature/linux` 合入 `dev` | `c9c0524` `4524e08` `8193b72` `d07650f` `0d79cd3` PR #21 |
 | 2026-11-02 | Linux 二期 ALSA 专家模式（D-6 二期立项交付）：libasound FFI 直连（period 256/buffer 1024）、后端设置切换、driver 直采 hw:Loopback、设备枚举与新门禁（冒烟 PASS 13） | `6f5b5f6` `dd48c1e` `0924c36` |

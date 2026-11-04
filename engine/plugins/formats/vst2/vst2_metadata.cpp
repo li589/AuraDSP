@@ -200,6 +200,7 @@ bool queryVst2Metadata(const std::string& bundlePath, const std::string& binaryP
     meta.bundleName = fs::path(bundlePath).stem().string();
     meta.is64Bit = pluginBinaryBitness(wpath) != 32;
     meta.isCompatible = true;
+    meta.hasEditor = (effect->flags & VST_EFFECT_FLAG_EDITOR) != 0;
 
     std::string name;
     std::string vendor;

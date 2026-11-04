@@ -57,6 +57,7 @@ struct PluginMetadata {
     uint32_t latency = 0;
     bool isCompatible = true;
     std::string errorMessage;
+    bool hasEditor = true;
     /* 2026-11-04：该条目元数据是否来自快扫（纯文件头启发式：文件名/目录/PE
      * 版本资源）。快扫值是猜测值，加载路不得让它压过格式原生真值——
      * 实例 load 遇到快扫种子时直接跳过 seedMetadataFromScan（走纯描述符
@@ -156,6 +157,7 @@ public:
      * 驱动本回调。默认空实现——VST3/CLAP 不依赖它。
      * 线程契约：在 plugin main 线程（泵线程）上被调用。 */
     virtual void onEditorIdle() {}
+    virtual void onTimer(uint32_t timerId) { (void)timerId; }
 
     int getSettleTicks() const { return m_sizeSettleTicks; }
     void incSettleTicks() { ++m_sizeSettleTicks; }
@@ -422,6 +424,9 @@ public:
     /* 缓存条目是否是深扫产出（用于上面"深度足够"判定）。 */
     std::unordered_map<std::string, bool> m_scanCacheDeep;
 };
+
+bool editorQuarantineMatch(const std::string& name, const std::string& path);
+void pluginSetEditorQuarantineList(const char* patterns);
 
 } // namespace auradsp
 
