@@ -261,10 +261,18 @@ def run_bundle_scan(lib, tmp, cc):
           "[bundle] 双架构 bundle 优先取 64 位二进制")
     if have32:
         b = by_name.get("BundleB")
-        check(b is not None and b.get("is64Bit") is False
-              and b.get("isCompatible") is False
-              and "32" in (b.get("errorMessage") or ""),
-              "[bundle] 仅 x86-linux 的 bundle 得 32 位不兼容条目（可发现）")
+        # 契约（2026-11-04 扫描归属重构起）：32 位条目的兼容性按位桥
+        # 可用性判定——位桥在位 isCompatible=true 且无错误文案；缺失
+        # 则 false 且文案指明缺 plugin_host_x86。旧口径「一律不兼容 +
+        # 请安装 64 位版本」已退役，不得再现。
+        err = (b.get("errorMessage") or "") if b else ""
+        compat_ok = b is not None and (
+            (b.get("isCompatible") is True and err == "")
+            or (b.get("isCompatible") is False
+                and "plugin_host_x86" in err))
+        check(b is not None and b.get("is64Bit") is False and compat_ok
+              and "请安装 64 位版本" not in err,
+              "[bundle] 仅 x86-linux 的 bundle 可发现且兼容性随位桥可用性")
     lib.auradsp_destroy(H)
 
 
