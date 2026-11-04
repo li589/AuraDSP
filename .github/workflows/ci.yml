@@ -203,20 +203,45 @@ jobs:
         run: python3 test/smoke/smoke_linux_bundle_layout.py
       - name: Headless launch smoke
         run: |
+          # 就绪等待与现场保留（2026-11-04 加固）：原脚本拉起 PA/Xvfb 后
+          # 不做就绪确认即启动 App、且把 App 输出丢弃——慢速 runner 上
+          # 显示/音频未就绪时 App 在 GTK 初始化期静默退出或首启耗时
+          # （fontconfig 建缓存、软件渲染着色器编译）挤爆 60 秒窗口，
+          # 表现为「调试日志始终不出现」且无任何证据可查。2026-11-03
+          # 起 J8 连续多轮如此失败，而同期代码（仅测试文件）、runner
+          # 镜像、Flutter 版本均无变化，定性为启动时序竞态 + 诊断缺失。
           pulseaudio --start --exit-idle-time=-1
+          for i in $(seq 1 20); do
+            if pactl info >/dev/null 2>&1; then break; fi
+            sleep 1
+          done
+          pactl info >/dev/null
           pactl load-module module-null-sink sink_name=auradsp_ci
           pactl set-default-sink auradsp_ci
           Xvfb :99 -screen 0 1280x800x24 &
           export DISPLAY=:99
+          for i in $(seq 1 20); do
+            if [ -S /tmp/.X11-unix/X99 ]; then break; fi
+            sleep 1
+          done
+          [ -S /tmp/.X11-unix/X99 ]
+          fc-cache -f >/dev/null 2>&1 || true
           rm -f /tmp/auradsp_debug.log
           cd app/auradsp_app/build/linux/x64/release/bundle
-          ./auradsp_app >/dev/null 2>&1 &
+          ./auradsp_app >/tmp/j8_app_stdout.log 2>&1 &
           APP_PID=$!
           ok=0
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if grep -q "AudioOut started (PulseAudioOut)" /tmp/auradsp_debug.log 2>/dev/null; then ok=1; break; fi
+            if ! kill -0 $APP_PID 2>/dev/null; then echo "app exited before audio start"; break; fi
             sleep 2
           done
           kill $APP_PID 2>/dev/null || true
+          if [ $ok -ne 1 ]; then
+            echo "=== app stdout/stderr ==="
+            cat /tmp/j8_app_stdout.log || true
+            echo "=== auradsp_debug.log ==="
+            cat /tmp/auradsp_debug.log || true
+          fi
           grep -q "PULSE init: stream open" /tmp/auradsp_debug.log
           test $ok -eq 1
