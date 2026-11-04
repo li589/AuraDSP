@@ -136,6 +136,8 @@ def source_invariants():
         ENGINE, "plugins", "platform", "posix", "plugin_util_posix.cpp"))
     check("peHasVst2Entry" in util_posix and "DT_GNU_HASH" in util_posix,
           "POSIX peHasVst2Entry 解析 ELF 动态符号（含 GNU 哈希路线）")
+    check("static_cast<int64_t>(fsize)" in util_posix,
+          "peHasVst2Entry 文件上界走 int64_t（32 位进程 long 溢出防线）")
 
 
 def process_peak(lib, H, src, dst, expect=0.4, deadline_s=2.0):

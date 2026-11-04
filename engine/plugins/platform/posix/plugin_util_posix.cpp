@@ -61,7 +61,10 @@ bool peHasVst2Entry(const std::wstring& binaryPath) {
     std::fseek(f, 0, SEEK_END);
     const long fsize = std::ftell(f);
     std::fseek(f, 0, SEEK_SET);
-    if (fsize < 64 || fsize > (1L << 31)) {
+    // 上界比较必须走 int64_t：32 位进程里 long 只有 32 位，(1L << 31)
+    // 溢出为负数会让一切正常文件都被判超限拒读（x86 宿主首跑实测：
+    // 32 位 VST2 深扫全数回退快扫值，CI J3 抓到）。
+    if (fsize < 64 || static_cast<int64_t>(fsize) > (static_cast<int64_t>(1) << 31)) {
         std::fclose(f);
         return false;
     }
