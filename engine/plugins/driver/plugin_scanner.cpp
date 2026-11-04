@@ -45,17 +45,20 @@ void fill32BitIncompatible(PluginMetadata& meta, const std::string& filePath,
     meta.name = fs::path(filePath).stem().string();
     // 与 makeQuickMeta / applyClapDescriptor 同一规则：bundleName = 路径 stem。
     meta.bundleName = meta.name;
-    meta.is64Bit = false;
+    const int bits = pluginBinaryBitness(wpath);
     meta.fromQuickScan = true;
-    /* 2026-11-04：文案与 isCompatible 按位桥可用性判定。位桥在位时 32 位插件
-     * 完全可加载（加载路 remoteClientFor 会路由到 plugin_host_x86），此时再写
-     * 「请安装 64 位版本」既是假信息，也会在任何人加「不兼容即禁止加载」守卫时
-     * 把 32 位插件全部误杀。 */
-    if (PluginScanner::archBridgeAvailable()) {
-        meta.isCompatible = true;
-    } else {
+    if (bits == 0) {
+        meta.is64Bit = false;
         meta.isCompatible = false;
-        meta.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
+        meta.errorMessage = "非当前系统可执行的二进制格式或文件已损坏";
+    } else {
+        meta.is64Bit = false;
+        if (PluginScanner::archBridgeAvailable()) {
+            meta.isCompatible = true;
+        } else {
+            meta.isCompatible = false;
+            meta.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
+        }
     }
 
     // vendor 兜底链与 makeQuickMeta / applyClapDescriptor 完全一致：
@@ -93,10 +96,19 @@ PluginMetadata makeQuickMeta(const std::string& pStr, const std::string& nStr, P
     q.format = fmt;
     // D2：is64Bit 由 PE 头判定（不再硬编码 true）。32 位条目保留在扫描结果
     // 中；能否加载取决于位桥是否就绪（2026-11-04 起按实际能力判定）。
-    q.is64Bit = peIs64Bit(wp);
-    if (!q.is64Bit && !PluginScanner::archBridgeAvailable()) {
+    const int bits = pluginBinaryBitness(wp);
+    if (bits == 0) {
+        q.is64Bit = false;
         q.isCompatible = false;
-        q.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
+        q.errorMessage = "非当前系统可执行的二进制格式或文件已损坏";
+    } else if (bits == 64) {
+        q.is64Bit = true;
+    } else {
+        q.is64Bit = false;
+        if (!PluginScanner::archBridgeAvailable()) {
+            q.isCompatible = false;
+            q.errorMessage = "32 位插件需要 plugin_host_x86：位桥缺失或被禁用";
+        }
     }
     q.vendor = vendor;
     q.version = !peVer.empty() ? peVer : "1.0";
@@ -280,7 +292,7 @@ bool PluginScanner::queryMetadata(const std::string& filePath, PluginFormat form
     // D2：32 位插件不进入 LoadLibrary —— x64 进程加载 32 位 DLL 必然
     // ERROR_BAD_EXE_FORMAT(193)，旧实现把它当"打开失败"，扫描结果里直接
     // 消失。这里提前识别，产出"可发现但不可加载"条目（isCompatible=false）。
-    if (!peIs64Bit(wpath)) {
+    if (pluginBinaryBitness(wpath) != 64) {
         PluginMetadata meta;
         fill32BitIncompatible(meta, filePath, format, wpath);
         outPlugins.push_back(meta);

@@ -66,6 +66,19 @@ public:
 
     // 提交任务到 plugin main 线程并等待完成（有界超时）。
     // 返回 false = 线程停摆/毒化或超时（调用方走废弃隔离路径）。
+    bool postTask(Task fn) {
+        if (m_stopRequested.load(std::memory_order_acquire) ||
+            m_abandoned.load(std::memory_order_acquire)) {
+            return false;
+        }
+        {
+            std::lock_guard<std::mutex> lock(m_taskMutex);
+            m_tasks.emplace_back(std::move(fn));
+        }
+        m_cv.notify_one();
+        return true;
+    }
+
     bool postTaskAndWait(Task fn, DWORD timeoutMs) {
         if (m_stopRequested.load(std::memory_order_acquire) ||
             m_abandoned.load(std::memory_order_acquire)) {

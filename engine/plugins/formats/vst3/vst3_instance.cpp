@@ -25,6 +25,10 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <thread>
+#if !defined(_WIN32)
+#include <poll.h>
+#endif
 
 namespace fs = std::filesystem;
 
@@ -361,16 +365,136 @@ public:
     }
 };
 
-class AuraPlugFrame : public Steinberg::IPlugFrame {
+class AuraPlugFrame : public Steinberg::IPlugFrame, public Steinberg::Linux::IRunLoop {
 public:
     HWND m_hwnd = nullptr;
-    virtual ~AuraPlugFrame() = default;
+    std::shared_ptr<ModulePumpThread> m_pump;
+
+    struct TimerEntry {
+        Steinberg::Linux::ITimerHandler* handler = nullptr;
+        uint64_t intervalMs = 0;
+        std::chrono::steady_clock::time_point nextDue;
+    };
+    struct FdEntry {
+        Steinberg::Linux::IEventHandler* handler = nullptr;
+        int fd = -1;
+    };
+
+    std::mutex m_loopMutex;
+    std::vector<TimerEntry> m_timers;
+    std::vector<FdEntry> m_fds;
+    std::thread m_loopThread;
+    std::atomic<bool> m_loopRunning{false};
+
+    void stopLoop() {
+        if (!m_loopRunning.exchange(false)) return;
+        if (m_loopThread.joinable()) {
+            m_loopThread.join();
+        }
+        std::lock_guard<std::mutex> lock(m_loopMutex);
+        m_timers.clear();
+        m_fds.clear();
+    }
+
+    void startLoopIfNeededLocked() {
+        if (m_loopRunning) return;
+        if (m_timers.empty() && m_fds.empty()) return;
+        m_loopRunning = true;
+        m_loopThread = std::thread([this]() {
+            while (m_loopRunning) {
+                std::vector<Steinberg::Linux::ITimerHandler*> dueTimers;
+#if !defined(_WIN32)
+                std::vector<pollfd> pfds;
+                std::vector<Steinberg::Linux::IEventHandler*> handlers;
+#endif
+                int waitTimeoutMs = 50;
+
+                {
+                    std::lock_guard<std::mutex> lock(m_loopMutex);
+                    if (m_timers.empty() && m_fds.empty()) {
+                        waitTimeoutMs = 50;
+                    } else {
+                        const auto now = std::chrono::steady_clock::now();
+                        int64_t minWait = 50;
+                        for (auto& t : m_timers) {
+                            if (now >= t.nextDue) {
+                                dueTimers.push_back(t.handler);
+                                t.nextDue = now + std::chrono::milliseconds(t.intervalMs);
+                                minWait = 0;
+                            } else {
+                                int64_t d = std::chrono::duration_cast<std::chrono::milliseconds>(t.nextDue - now).count();
+                                if (d < minWait) minWait = d;
+                            }
+                        }
+                        if (minWait > 50) minWait = 50;
+                        if (minWait < 1 && dueTimers.empty()) minWait = 1;
+                        waitTimeoutMs = static_cast<int>(minWait);
+                    }
+
+#if !defined(_WIN32)
+                    for (const auto& fe : m_fds) {
+                        pollfd pfd{};
+                        pfd.fd = fe.fd;
+                        pfd.events = POLLIN;
+                        pfds.push_back(pfd);
+                        handlers.push_back(fe.handler);
+                    }
+#endif
+                }
+
+                for (auto* th : dueTimers) {
+                    if (m_pump) {
+                        m_pump->postTask([th]() {
+                            try { th->onTimer(); } catch (...) {}
+                        });
+                    } else {
+                        try { th->onTimer(); } catch (...) {}
+                    }
+                }
+
+                if (!m_loopRunning) break;
+
+#if !defined(_WIN32)
+                if (!pfds.empty()) {
+                    int r = ::poll(pfds.data(), static_cast<nfds_t>(pfds.size()), waitTimeoutMs);
+                    if (r > 0 && m_loopRunning) {
+                        for (size_t i = 0; i < pfds.size(); ++i) {
+                            if (pfds[i].revents & (POLLIN | POLLHUP | POLLERR)) {
+                                auto* eh = handlers[i];
+                                int fd = pfds[i].fd;
+                                if (m_pump) {
+                                    m_pump->postTask([eh, fd]() {
+                                        try { eh->onFDIsSet(fd); } catch (...) {}
+                                    });
+                                } else {
+                                    try { eh->onFDIsSet(fd); } catch (...) {}
+                                }
+                            }
+                        }
+                    }
+                } else
+#endif
+                {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(waitTimeoutMs > 0 ? waitTimeoutMs : 1));
+                }
+            }
+        });
+    }
+
+    virtual ~AuraPlugFrame() {
+        stopLoop();
+    }
 
     virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
         if (!obj) return Steinberg::kInvalidArgument;
         if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
             std::memcmp(_iid, Steinberg::IPlugFrame::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
             *obj = static_cast<Steinberg::IPlugFrame*>(this);
+            addRef();
+            return Steinberg::kResultOk;
+        }
+        if (std::memcmp(_iid, Steinberg::Linux::IRunLoop::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            *obj = static_cast<Steinberg::Linux::IRunLoop*>(this);
             addRef();
             return Steinberg::kResultOk;
         }
@@ -391,6 +515,38 @@ public:
         }
         return view->onSize(newSize);
     }
+
+    virtual Steinberg::tresult PLUGIN_API registerEventHandler(Steinberg::Linux::IEventHandler *handler, Steinberg::Linux::FileDescriptor fd) override {
+        if (!handler || fd < 0) return Steinberg::kInvalidArgument;
+        std::lock_guard<std::mutex> lock(m_loopMutex);
+        m_fds.push_back({handler, fd});
+        startLoopIfNeededLocked();
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API unregisterEventHandler(Steinberg::Linux::IEventHandler *handler) override {
+        if (!handler) return Steinberg::kInvalidArgument;
+        std::lock_guard<std::mutex> lock(m_loopMutex);
+        m_fds.erase(std::remove_if(m_fds.begin(), m_fds.end(), [handler](const FdEntry& e) {
+            return e.handler == handler;
+        }), m_fds.end());
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API registerTimer(Steinberg::Linux::ITimerHandler *handler, Steinberg::Linux::TimerInterval milliseconds) override {
+        if (!handler || milliseconds == 0) return Steinberg::kInvalidArgument;
+        std::lock_guard<std::mutex> lock(m_loopMutex);
+        auto due = std::chrono::steady_clock::now() + std::chrono::milliseconds(milliseconds);
+        m_timers.push_back({handler, milliseconds, due});
+        startLoopIfNeededLocked();
+        return Steinberg::kResultOk;
+    }
+    virtual Steinberg::tresult PLUGIN_API unregisterTimer(Steinberg::Linux::ITimerHandler *handler) override {
+        if (!handler) return Steinberg::kInvalidArgument;
+        std::lock_guard<std::mutex> lock(m_loopMutex);
+        m_timers.erase(std::remove_if(m_timers.begin(), m_timers.end(), [handler](const TimerEntry& e) {
+            return e.handler == handler;
+        }), m_timers.end());
+        return Steinberg::kResultOk;
+    }
 };
 
 class AuraHostApplication : public Steinberg::Vst::IHostApplication {
@@ -402,6 +558,8 @@ public:
     virtual ~AuraHostApplication() = default;
 
     // FUnknown
+    Steinberg::Linux::IRunLoop* m_runLoop = nullptr;
+
     virtual Steinberg::tresult PLUGIN_API queryInterface(const Steinberg::TUID _iid, void** obj) override {
         if (!obj) return Steinberg::kInvalidArgument;
         if (std::memcmp(_iid, Steinberg::FUnknown::iid.toTUID(), sizeof(Steinberg::TUID)) == 0 ||
@@ -409,6 +567,13 @@ public:
             *obj = static_cast<Steinberg::Vst::IHostApplication*>(this);
             addRef();
             return Steinberg::kResultOk;
+        }
+        if (std::memcmp(_iid, Steinberg::Linux::IRunLoop::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
+            if (m_runLoop) {
+                *obj = static_cast<Steinberg::Linux::IRunLoop*>(m_runLoop);
+                addRef();
+                return Steinberg::kResultOk;
+            }
         }
         if (std::memcmp(_iid, Steinberg::Vst::IPlugInterfaceSupport::iid.toTUID(), sizeof(Steinberg::TUID)) == 0) {
             *obj = static_cast<Steinberg::Vst::IPlugInterfaceSupport*>(&m_plugSupport);
@@ -1432,6 +1597,8 @@ public:
         // frame 必须存活到编辑器关闭（插件会回调），故为成员而非局部变量。
         m_view = view;
         m_plugFrame.m_hwnd = hwnd;
+        m_plugFrame.m_pump = m_pump;
+        m_hostApp.m_runLoop = &m_plugFrame;
         view->setFrame(&m_plugFrame);
 
         try {
@@ -1588,6 +1755,8 @@ public:
         // C4：卸尺寸稳定化定时器。走本路径（Dart 侧卸载）时不经过 WM_CLOSE，
         // 故必须显式 KillTimer，否则定时器会在窗口销毁后仍反复回调。
         if (hwnd) KillTimer(hwnd, kSizeSettleTimerId);
+        m_plugFrame.stopLoop();
+        m_hostApp.m_runLoop = nullptr;
         if (m_view) {
             detachViewOnPumpThread(m_view);
         }

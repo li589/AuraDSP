@@ -139,7 +139,8 @@ class PluginMetadata {
   bool get isSupported =>
       isCompatible ||
       (!is64Bit &&
-          (PlatformProfile.isWindows || PlatformProfile.isLinux));
+          (PlatformProfile.isWindows || PlatformProfile.isLinux) &&
+          !errorMessage.contains('非当前系统可执行'));
 
   /// 复制并覆盖部分字段（厂商表填充 vendor 用）。
   PluginMetadata copyWith({
