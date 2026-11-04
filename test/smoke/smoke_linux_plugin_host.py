@@ -19,6 +19,10 @@
 
 注意：若引擎是 OFF（stub）构建，scan 返回 0 —— 活体半据此
 FAIL 并提示构建口味不对（J2 默认产物为 ON 构建）。
+
+[editor] 节（E4，2026-11-04）：三格式 GUI 探针经引擎真链开
+编辑器，独立 X 见证工具（x11_tree_check.c）在 X 树上核验容器
+与插件子窗口；无 DISPLAY 时自启 Xvfb，都没有则整节 SKIP。
 """
 import ctypes
 import json
@@ -103,7 +107,21 @@ def source_invariants():
     host = read(os.path.join(APP, "lib", "platform", "port",
                              "plugin_host.dart"))
     check("linuxInProcess" in host and "canEdit: false" in host,
-          "linuxInProcess 能力集在位（canEdit 如实 false）")
+          "linuxInProcess 能力集在位（无显示时 canEdit 如实 false）")
+    # 编辑器阶段（2026-11-04）：X11 窗口层 + canEdit 能力探测。
+    check("linuxInProcessWithEditor" in host and "canEdit: true" in host,
+          "[editor] linuxInProcessWithEditor 能力集在位（canEdit true）")
+    linux_host = read(os.path.join(APP, "lib", "platform", "plugins",
+                                   "plugin_host_linux.dart"))
+    check("DISPLAY" in linux_host and "linuxInProcessWithEditor" in linux_host,
+          "[editor] LinuxPluginHost 按 DISPLAY 探测编辑器能力")
+    check(os.path.isfile(os.path.join(posix, "plugin_gui_x11.cpp")),
+          "[editor] platform/posix/plugin_gui_x11.cpp 在位")
+    check("plugin_gui_x11.cpp" in cmake,
+          "[editor] Linux CMake 编入 X11 窗口层")
+    gui_x11 = read(os.path.join(posix, "plugin_gui_x11.cpp"))
+    check("libX11.so.6" in gui_x11 and "guiX11Dispatch" in gui_x11,
+          "[editor] X11 层运行时 dlopen + 分发入口在位")
     page = read(os.path.join(APP, "lib", "features", "plugins_page.dart"))
     check("if (!PlatformProfile.isLinux)" not in page,
           "插件页扫描目录区不再对 Linux 隐藏")
@@ -289,6 +307,185 @@ def run_bundle_scan(lib, tmp, cc):
               "[bundle] 仅 x86-linux 的 bundle 可发现且兼容性随位桥可用性")
     lib.auradsp_destroy(H)
 
+
+
+def _tree_names(witness, env):
+    try:
+        r = subprocess.run([witness], capture_output=True, text=True,
+                           timeout=10, env=env)
+        if r.returncode != 0:
+            return None
+        return r.stdout.splitlines()
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
+def _wait_names(witness, env, want, timeout=4.0):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        names = _tree_names(witness, env)
+        if names is not None and want in names:
+            return True
+        time.sleep(0.15)
+    return False
+
+
+def run_editor_chain(lib, tmp, cc, cxx):
+    """[editor] 编辑器真链（E4）：三格式 GUI 探针经引擎真实通路
+    （scan→load→show_editor）打开编辑器，以独立 X 见证工具断言
+    容器窗口（show_editor 标题）与插件子窗口（探针固定名）真实
+    出现在 X 树上；关闭后子窗口消失。远程模式再验 CLAP 一例
+    （窗口在宿主进程内）。无 X 显示且无 Xvfb 可自启时整节 SKIP。
+    探针/见证均免 libx11-dev（x11_min.h 自带 ABI 声明，
+    -l:libX11.so.6 直指运行时 SONAME）。"""
+    env = dict(os.environ)
+    xvfb = None
+    if not env.get("DISPLAY"):
+        xvfb_bin = shutil.which("Xvfb")
+        if not xvfb_bin:
+            print("  SKIP [editor] 节：无 DISPLAY 且无 Xvfb 可自启")
+            return
+        for disp in (":97", ":98", ":99"):
+            cand = subprocess.Popen(
+                [xvfb_bin, disp, "-screen", "0", "1280x800x24"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            time.sleep(1.0)
+            if cand.poll() is None:
+                xvfb = cand
+                env["DISPLAY"] = disp
+                break
+            cand = None
+        if xvfb is None:
+            print("  SKIP [editor] 节：Xvfb 自启失败")
+            return
+    os.environ["DISPLAY"] = env["DISPLAY"]
+    try:
+        edir = os.path.join(tmp, "editor_plugins")
+        os.makedirs(edir)
+        builds = [
+            ([cc, "-shared", "-fPIC", "-O2", "-I",
+              os.path.join(ROOT, "vendor", "plugin-api"), "-I", TEST_DIR,
+              os.path.join(TEST_DIR, "smoke", "probe_clap_gui.c"),
+              "-o", os.path.join(edir, "ProbeClapGui.clap"),
+              "-l:libX11.so.6"], "CLAP 探针"),
+            ([cxx, "-std=c++17", "-shared", "-fPIC", "-O2", "-I",
+              os.path.join(ROOT, "vendor", "plugin-api"), "-I", TEST_DIR,
+              os.path.join(TEST_DIR, "smoke", "probe_vst3_gui.cpp"),
+              "-o", os.path.join(edir, "ProbeVst3Gui.vst3"),
+              "-l:libX11.so.6"], "VST3 探针"),
+            ([cxx, "-std=c++17", "-shared", "-fPIC", "-O2", "-D__cdecl=",
+              "-I", os.path.join(ROOT, "vendor", "plugin-api"),
+              "-I", TEST_DIR,
+              os.path.join(TEST_DIR, "smoke", "probe_vst2_gui.cpp"),
+              "-o", os.path.join(edir, "ProbeVst2Gui.so"),
+              "-l:libX11.so.6"], "VST2 探针"),
+        ]
+        for cmd, what in builds:
+            r = subprocess.run(cmd, capture_output=True, text=True)
+            if r.returncode != 0:
+                print(f"  SKIP [editor] 节：{what}编译失败"
+                      f"（{r.stderr.strip()[:120]}）")
+                return
+        witness = os.path.join(tmp, "x11_tree_check")
+        r = subprocess.run(
+            [cc, "-O2", "-I", TEST_DIR,
+             os.path.join(TEST_DIR, "smoke", "x11_tree_check.c"),
+             "-o", witness, "-l:libX11.so.6"],
+            capture_output=True, text=True)
+        if r.returncode != 0 or _tree_names(witness, env) is None:
+            print("  SKIP [editor] 节：见证工具不可用或显示不可达")
+            return
+
+        lib.auradsp_create.restype = ctypes.c_void_p
+        lib.auradsp_create.argtypes = [ctypes.c_float, ctypes.c_int]
+        for fname in ("auradsp_plugin_slot_show_editor",
+                      "auradsp_plugin_slot_close_editor",
+                      "auradsp_plugin_slot_is_editor_open"):
+            f = getattr(lib, fname)
+            f.restype = ctypes.c_int
+        lib.auradsp_plugin_slot_show_editor.argtypes = [
+            ctypes.c_void_p, ctypes.c_int, ctypes.c_char_p]
+        lib.auradsp_plugin_slot_close_editor.argtypes = [
+            ctypes.c_void_p, ctypes.c_int]
+        lib.auradsp_plugin_slot_is_editor_open.argtypes = [
+            ctypes.c_void_p, ctypes.c_int]
+
+        def one_case(tag, plug_dir, title, child_name):
+            h = lib.auradsp_create(48000.0, 4096)
+            if not h:
+                check(False, f"[editor] {tag} auradsp_create")
+                return
+            H = ctypes.c_void_p(h)
+            try:
+                lib.auradsp_plugin_scan(H, plug_dir.encode(), 1)
+                buf = ctypes.create_string_buffer(262144)
+                lib.auradsp_plugin_get_all(H, buf, 262144)
+                entries = json.loads(buf.value.decode())
+                if not entries:
+                    check(False, f"[editor] {tag} 扫描无条目")
+                    return
+                e = entries[0]
+                rc = lib.auradsp_plugin_slot_load(
+                    H, 0, e["path"].encode(),
+                    (e.get("id") or "").encode())
+                check(rc == 1, f"[editor] {tag} slot_load（rc={rc}）")
+                if rc != 1:
+                    return
+                rc = lib.auradsp_plugin_slot_show_editor(
+                    H, 0, title.encode())
+                check(rc == 1, f"[editor] {tag} show_editor（rc={rc}）")
+                if rc != 1:
+                    return
+                ok = _wait_names(witness, env, title)
+                check(ok, f"[editor] {tag} 容器窗口 in X tree")
+                ok = _wait_names(witness, env, child_name)
+                check(ok, f"[editor] {tag} 插件子窗口 in X tree")
+                check(lib.auradsp_plugin_slot_is_editor_open(H, 0) == 1,
+                      f"[editor] {tag} is_editor_open=1")
+                lib.auradsp_plugin_slot_close_editor(H, 0)
+                deadline = time.time() + 4.0
+                gone = False
+                while time.time() < deadline:
+                    names = _tree_names(witness, env)
+                    if names is not None and child_name not in names:
+                        gone = True
+                        break
+                    time.sleep(0.15)
+                check(gone, f"[editor] {tag} 关闭后子窗口消失")
+                check(lib.auradsp_plugin_slot_is_editor_open(H, 0) == 0,
+                      f"[editor] {tag} is_editor_open=0")
+            finally:
+                lib.auradsp_destroy(H)
+
+        cases = [
+            ("clap", "ProbeClapGui.clap", "GateEditorCLAP",
+             "ProbeCLAPEditorChild"),
+            ("vst3", "ProbeVst3Gui.vst3", "GateEditorVST3",
+             "ProbeVST3EditorChild"),
+            ("vst2", "ProbeVst2Gui.so", "GateEditorVST2",
+             "ProbeVST2EditorChild"),
+        ]
+        saved_mode = os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+        try:
+            for tag, fname, title, child in cases:
+                d1 = os.path.join(tmp, f"ed_{tag}")
+                os.makedirs(d1)
+                shutil.copy(os.path.join(edir, fname), d1)
+                one_case(tag, d1, title, child)
+            # 远程（隔离宿主）CLAP 一例：窗口开在宿主进程内。
+            os.environ["AURA_PLUGIN_HOST_MODE"] = "process"
+            d2 = os.path.join(tmp, "ed_clap_remote")
+            os.makedirs(d2)
+            shutil.copy(os.path.join(edir, "ProbeClapGui.clap"), d2)
+            one_case("clap-remote", d2, "GateEditorCLAPRemote",
+                     "ProbeCLAPEditorChild")
+        finally:
+            os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
+            if saved_mode is not None:
+                os.environ["AURA_PLUGIN_HOST_MODE"] = saved_mode
+    finally:
+        if xvfb is not None:
+            xvfb.terminate()
 
 def run_vst2_chain(lib, lib_path, tmp, cc, cxx):
     """VST2 活体节（2026-11-04，VST2 的 Linux 跟进验收）：
@@ -851,6 +1048,7 @@ def live_chain():
     if cxx:
         run_vst3_chain(lib, tmp, cxx)
         run_vst2_chain(lib, lib_path, tmp, cc, cxx)
+        run_editor_chain(lib, tmp, cc, cxx)
     else:
         print("  SKIP VST3/VST2 活体节：无 C++ 编译器")
 
