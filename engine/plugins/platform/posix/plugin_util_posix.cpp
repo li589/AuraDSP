@@ -242,9 +242,7 @@ size_t pluginDllDirectoryCount() { return 0; }
 std::vector<std::string> pluginDllDirectoryList() { return {}; }
 size_t pluginDllDirectoryRefs() { return 0; }
 
-// 编辑器窗口辅助：Linux 编辑器本体为后续阶段（X11 嵌入），
-// 本阶段为空操作；编辑器入口由 instance 的 showEditor 在非
-// Windows 显式返回不可用（阶段三收口），不依赖这里的假成功。
+// 编辑器窗口辅助（ResizeDirectChildren / FlashEditorToFront）：
 // 编辑器阶段（2026-11-04）：与 Win32 版同实现——两者都只用窗口
 // 兼容 API（现已是 X11 真实现），逻辑逐行对等。
 void ResizeDirectChildren(HWND hwnd) {

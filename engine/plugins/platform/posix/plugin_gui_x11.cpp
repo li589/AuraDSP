@@ -23,6 +23,10 @@
 //     的对等范围内单方改变）。
 //   - 实例指针经 GWLP_USERDATA 等价物（本层登记表）取回，与
 //     Win32 版 GetWindowLongPtrW(GWLP_USERDATA) 同语义。
+//   - 全局安装非致命 X 错误处理器：协议错误（销毁竞态的
+//     BadWindow 等）默认会让 libX11 终止整个进程，宿主必须吞掉
+//     （审查 F1，2026-11-04）。IO 错误（X 服务器断开）不接管，
+//     会话本身已在消亡。
 #include "win32_compat.h"
 #include "win32_util.h"
 
@@ -77,6 +81,15 @@ struct XConfigureS {
     int x, y, width, height, border_width;
     XWindow above;
     int override_redirect;
+};
+struct XErrorEventS {
+    int type;
+    XDisplay* display;
+    unsigned long resourceid;
+    unsigned long serial;
+    unsigned char error_code;
+    unsigned char request_code;
+    unsigned char minor_code;
 };
 struct XWindowEventS {  // DestroyNotify / ReparentNotify 的公共前缀段
     int type;
@@ -149,8 +162,15 @@ struct X11Api {
     int (*XPendingFn)(XDisplay*) = nullptr;
     int (*XNextEventFn)(XDisplay*, XEventU*) = nullptr;
     int (*XSendEventFn)(XDisplay*, XWindow, int, long, XEventU*) = nullptr;
+    int (*XSetErrorHandlerFn)(int (*)(XDisplay*, XErrorEventS*)) = nullptr;
     bool ready = false;
 };
+
+// X 协议错误（如与插件/窗口管理器的窗口销毁竞态出的 BadWindow）
+// 绝不能走 libX11 默认处理器——它会直接终止整个进程（应用或宿主）。
+// 宿主的正道是吞掉并继续：出错的那次调用本就多为查询/显隐，窗口
+// 状态由后续事件与登记表收敛。审查 F1（2026-11-04）。
+int onXError(XDisplay*, XErrorEventS*) { return 0; }
 
 X11Api& api() {
     static X11Api a;
@@ -187,10 +207,12 @@ X11Api& api() {
         BIND(XPendingFn, "XPending");
         BIND(XNextEventFn, "XNextEvent");
         BIND(XSendEventFn, "XSendEvent");
+        BIND(XSetErrorHandlerFn, "XSetErrorHandler");
 #undef BIND
         a.ready = a.XOpenDisplayFn && a.XCreateSimpleWindowFn &&
                   a.XNextEventFn && a.XInternAtomFn;
         if (a.ready && a.XInitThreadsFn) a.XInitThreadsFn();
+        if (a.ready && a.XSetErrorHandlerFn) a.XSetErrorHandlerFn(&onXError);
     });
     return a;
 }
@@ -340,21 +362,33 @@ HWND CreateWindowExW(DWORD, LPCWSTR, LPCWSTR title, DWORD style, int x, int y,
 BOOL DestroyWindow(HWND hwnd) {
     if (!hwnd) return FALSE;
     XWindow win = toWin(hwnd);
-    XDisplay* owner = nullptr;
     {
         std::lock_guard<std::recursive_mutex> lock(g_mutex);
         auto it = g_windows.find(win);
         if (it == g_windows.end()) return FALSE;
-        owner = it->second.owner;
         g_windows.erase(it);
         g_embedChildOf.erase(win);
         g_embedNotified.erase(win);
+        // 本窗作为他人嵌入子窗口的登记一并清（审查 F3；与
+        // DestroyNotify 分发路径同口径，防 XID 复用后误抑制
+        // 一次 EMBEDDED_NOTIFY）。
+        for (auto eit = g_embedChildOf.begin(); eit != g_embedChildOf.end();) {
+            if (eit->second == win) {
+                g_embedNotified.erase(eit->second);
+                eit = g_embedChildOf.erase(eit);
+            } else {
+                ++eit;
+            }
+        }
         killTimersLocked(win, 0, true);
         if (g_windows.empty())
             g_anyWindows.store(false, std::memory_order_release);
     }
-    XDisplay* mine = tlsDisplay(false);
-    XDisplay* dpy = mine ? mine : owner;
+    // 只用调用线程自己的连接销毁（窗口是服务端对象，任意连接可
+    // 操作）；绝不借用属主线程的 Display 做跨线程调用——那依赖
+    // XInitThreads 必须先于进程内任何 XOpenDisplay 生效，而插件
+    // 可能抢先开自己的连接（审查 F2）。无连接时为本线程新开。
+    XDisplay* dpy = tlsDisplay(true);
     if (dpy && api().ready) {
         api().XDestroyWindowFn(dpy, win);
         api().XFlushFn(dpy);
@@ -587,8 +621,10 @@ void guiX11Dispatch() {
         }
     }
 
-    // 2) X 事件（本连接队列）。
-    while (a.XPendingFn(dpy) > 0) {
+    // 2) X 事件（本连接队列）。单轮设上限，防病态插件以事件洪流
+    //    饿死本泵的任务处理；余量留给下一 10ms 节拍（审查 F4）。
+    int budget = 256;
+    while (budget-- > 0 && a.XPendingFn(dpy) > 0) {
         XEventU ev{};
         a.XNextEventFn(dpy, &ev);
         if (ev.type == kEvClientMessage) {

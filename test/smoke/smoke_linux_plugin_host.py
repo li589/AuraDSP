@@ -122,6 +122,11 @@ def source_invariants():
     gui_x11 = read(os.path.join(posix, "plugin_gui_x11.cpp"))
     check("libX11.so.6" in gui_x11 and "guiX11Dispatch" in gui_x11,
           "[editor] X11 层运行时 dlopen + 分发入口在位")
+    # 编辑器代码审查（2026-11-04）：鲁棒性不变量。
+    check("XSetErrorHandler" in gui_x11 and "onXError" in gui_x11,
+          "[editor][sec] 非致命 X 错误处理器在位（防 BadWindow 杀进程）")
+    check("budget" in gui_x11 and "XPendingFn" in gui_x11,
+          "[editor] 分发事件循环有单轮上限（防洪流饿死泵任务）")
     page = read(os.path.join(APP, "lib", "features", "plugins_page.dart"))
     check("if (!PlatformProfile.isLinux)" not in page,
           "插件页扫描目录区不再对 Linux 隐藏")
