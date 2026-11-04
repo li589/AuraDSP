@@ -48,25 +48,168 @@ namespace {
 
 namespace fs = std::filesystem;
 
+#pragma pack(push, 8)
+struct Vst2TimeInfo {
+    double samplePos;
+    double sampleRate;
+    double nanoSeconds;
+    double ppqPos;
+    double tempo;
+    double barStartPos;
+    double cycleStartPos;
+    double cycleEndPos;
+    int32_t timeSigNumerator;
+    int32_t timeSigDenominator;
+    int32_t smpteOffset;
+    int32_t smpteFrameRate;
+    int32_t samplesToNextClock;
+    int32_t flags;
+};
+#pragma pack(pop)
+
+enum Vst2TimeInfoFlags {
+    kVstTransportChanged     = 1,
+    kVstTransportPlaying     = 1 << 1,
+    kVstTransportCycleActive = 1 << 2,
+    kVstTransportRecording   = 1 << 3,
+    kVstAutomationWriting    = 1 << 6,
+    kVstAutomationReading    = 1 << 7,
+    kVstNanosValid           = 1 << 8,
+    kVstPpqPosValid          = 1 << 9,
+    kVstTempoValid           = 1 << 10,
+    kVstBarsValid            = 1 << 11,
+    kVstCyclePosValid        = 1 << 12,
+    kVstTimeSigValid         = 1 << 13,
+    kVstSmpteValid           = 1 << 14,
+    kVstClockValid           = 1 << 15
+};
+
 using VstPluginMainProc = vst_effect_t*(VST_FUNCTION_INTERFACE*)(vst_host_callback_t);
 
 class Vst2Instance;
 
 /* VSTPluginMain 构造期间 AEffect 尚不存在，回调里的 effect 可能为空；
- * 此时用 thread_local 指向正在构造的实例。 */
+ * 此时用 thread_local 和全局原子后备指向正在构造的实例，兼顾主线程与后台工作线程。 */
 thread_local Vst2Instance* g_constructing = nullptr;
+static std::atomic<Vst2Instance*> s_latestConstructing{nullptr};
+
+#if defined(_MSC_VER)
+static vst_effect_t* safeCallMainProc(VstPluginMainProc proc, vst_host_callback_t cb) {
+    __try {
+        return proc(cb);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        AURADSP_WARN("[DBG VST2] VSTPluginMain triggered SEH exception!");
+        return nullptr;
+    }
+}
+
+static intptr_t safeCallDispatcher(vst_effect_t* effect, int32_t opcode, int32_t index,
+                                   intptr_t value, void* ptr, float opt) {
+    __try {
+        if (!effect || !effect->control) return 0;
+        return effect->control(effect, opcode, index, value, ptr, opt);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        AURADSP_WARN_S("[DBG VST2] dispatcher triggered SEH exception on opcode " << opcode);
+        return 0;
+    }
+}
+
+static void safeCallProcessFloat(vst_effect_process_float_t proc, vst_effect_t* effect,
+                                 const float* const* inputs, float** outputs, int32_t frames) {
+    __try {
+        proc(effect, inputs, outputs, frames);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        AURADSP_WARN("[DBG VST2] processFloat triggered SEH exception!");
+    }
+}
+
+static void safeCallProcess(vst_effect_process_t proc, vst_effect_t* effect,
+                            const float* const* inputs, float** outputs, int32_t frames) {
+    __try {
+        proc(effect, inputs, outputs, frames);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        AURADSP_WARN("[DBG VST2] process triggered SEH exception!");
+    }
+}
+
+static float safeCallGetParameter(vst_effect_get_parameter_t proc, vst_effect_t* effect,
+                                  uint32_t index) {
+    __try {
+        return proc(effect, index);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {
+        return 0.0f;
+    }
+}
+
+static void safeCallSetParameter(vst_effect_set_parameter_t proc, vst_effect_t* effect,
+                                 uint32_t index, float value) {
+    __try {
+        proc(effect, index, value);
+    } __except (EXCEPTION_EXECUTE_HANDLER) {}
+}
+#else
+static vst_effect_t* safeCallMainProc(VstPluginMainProc proc, vst_host_callback_t cb) {
+    try {
+        return proc(cb);
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+static intptr_t safeCallDispatcher(vst_effect_t* effect, int32_t opcode, int32_t index,
+                                   intptr_t value, void* ptr, float opt) {
+    try {
+        if (!effect || !effect->control) return 0;
+        return effect->control(effect, opcode, index, value, ptr, opt);
+    } catch (...) {
+        return 0;
+    }
+}
+
+static void safeCallProcessFloat(vst_effect_process_float_t proc, vst_effect_t* effect,
+                                 const float* const* inputs, float** outputs, int32_t frames) {
+    try {
+        proc(effect, inputs, outputs, frames);
+    } catch (...) {}
+}
+
+static void safeCallProcess(vst_effect_process_t proc, vst_effect_t* effect,
+                            const float* const* inputs, float** outputs, int32_t frames) {
+    try {
+        proc(effect, inputs, outputs, frames);
+    } catch (...) {}
+}
+
+static float safeCallGetParameter(vst_effect_get_parameter_t proc, vst_effect_t* effect,
+                                  uint32_t index) {
+    try {
+        return proc(effect, index);
+    } catch (...) {
+        return 0.0f;
+    }
+}
+
+static void safeCallSetParameter(vst_effect_set_parameter_t proc, vst_effect_t* effect,
+                                 uint32_t index, float value) {
+    try {
+        proc(effect, index, value);
+    } catch (...) {}
+}
+#endif
 
 void copyHostString(void* dst, intptr_t capHint, const char* src) {
     if (!dst) return;
-    size_t cap = capHint > 0 ? static_cast<size_t>(capHint) : 128;
-    if (cap > 1024) cap = 1024;
-    if (cap == 0) return;
-    if (!src) {
-        static_cast<char*>(dst)[0] = '\0';
+    char* out = static_cast<char*>(dst);
+    if (!src || !*src) {
+        out[0] = '\0';
         return;
     }
-    std::strncpy(static_cast<char*>(dst), src, cap - 1);
-    static_cast<char*>(dst)[cap - 1] = '\0';
+    size_t cap = (capHint > 0) ? static_cast<size_t>(capHint) : 64;
+    if (cap > 256) cap = 256;
+    size_t len = std::strlen(src);
+    if (len >= cap) len = cap - 1;
+    std::memcpy(out, src, len);
+    out[len] = '\0';
 }
 
 std::string trimTrailingZeros(const std::string& s) {
@@ -194,13 +337,11 @@ public:
         const bool ran = m_pump->postTaskAndWait(
             [&]() {
                 g_constructing = this;
-                vst_effect_t* effect = nullptr;
-                try {
-                    effect = mainProc(reinterpret_cast<vst_host_callback_t>(&Vst2Instance::hostCallback));
-                } catch (...) {
-                    effect = nullptr;
-                }
+                s_latestConstructing.store(this, std::memory_order_release);
+                vst_effect_t* effect = safeCallMainProc(
+                    mainProc, reinterpret_cast<vst_host_callback_t>(&Vst2Instance::hostCallback));
                 g_constructing = nullptr;
+                s_latestConstructing.store(nullptr, std::memory_order_release);
 
                 if (!effect || effect->magic_number != static_cast<int32_t>(VST_MAGICNUMBER) ||
                     !effect->control) {
@@ -378,14 +519,15 @@ public:
 
         m_inProcess.store(true, std::memory_order_release);
         if (m_effect->process_float) {
-            m_effect->process_float(m_effect, inputs, outputs,
-                                    static_cast<int32_t>(numFrames));
-        } else {
+            safeCallProcessFloat(m_effect->process_float, m_effect, inputs, outputs,
+                                 static_cast<int32_t>(numFrames));
+        } else if (m_effect->process) {
             // 旧式 process 是累加模式：先清零输出，再调用。
             for (int i = 0; i < outCh; ++i) {
                 if (outputs[i]) std::memset(outputs[i], 0, numFrames * sizeof(float));
             }
-            m_effect->process(m_effect, inputs, outputs, static_cast<int32_t>(numFrames));
+            safeCallProcess(m_effect->process, m_effect, inputs, outputs,
+                            static_cast<int32_t>(numFrames));
         }
         m_inProcess.store(false, std::memory_order_release);
 
@@ -492,8 +634,8 @@ public:
                 std::memcpy(payload.data(), &count, sizeof(count));
                 for (int32_t i = 0; i < count; ++i) {
                     const float v = m_effect->get_parameter
-                                        ? m_effect->get_parameter(m_effect,
-                                                                  static_cast<uint32_t>(i))
+                                        ? safeCallGetParameter(m_effect->get_parameter, m_effect,
+                                                               static_cast<uint32_t>(i))
                                         : 0.0f;
                     std::memcpy(payload.data() + sizeof(uint32_t) + sizeof(float) * i, &v,
                                 sizeof(v));
@@ -587,7 +729,7 @@ public:
                         float v = 0.0f;
                         std::memcpy(&v, payload + sizeof(uint32_t) + sizeof(float) * i,
                                     sizeof(v));
-                        m_effect->set_parameter(m_effect, i, v);
+                        safeCallSetParameter(m_effect->set_parameter, m_effect, i, v);
                     }
                     ok = true;
                 }
@@ -640,7 +782,7 @@ private:
     intptr_t dispatch(int32_t opcode, int32_t index = 0, intptr_t value = 0,
                       void* ptr = nullptr, float opt = 0.0f) {
         if (!m_effect || !m_effect->control) return 0;
-        return m_effect->control(m_effect, opcode, index, value, ptr, opt);
+        return safeCallDispatcher(m_effect, opcode, index, value, ptr, opt);
     }
 
     void ensureScratch(uint32_t frames) {
@@ -757,12 +899,8 @@ private:
         SetWindowLongPtrW(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
         m_pump->registerEditor(hwnd);
 
-        const intptr_t opened =
-            dispatch(VST_EFFECT_OPCODE_EDITOR_OPEN, 0, 0, reinterpret_cast<void*>(hwnd));
-        if (opened == 0) {
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, 0);
-            m_pump->unregisterEditor(hwnd);
-            DestroyWindow(hwnd);
+        dispatch(VST_EFFECT_OPCODE_EDITOR_OPEN, 0, 0, reinterpret_cast<void*>(hwnd));
+        if (!IsWindow(hwnd)) {
             m_editorHwnd = nullptr;
             m_editorOpen.store(false, std::memory_order_release);
             return false;
@@ -788,39 +926,43 @@ private:
         m_editorOpen.store(false, std::memory_order_release);
     }
 
+    void updateTimeInfo() {
+        m_timeInfo.samplePos = 0.0;
+        m_timeInfo.sampleRate = m_sampleRate > 0 ? m_sampleRate : 48000.0;
+        m_timeInfo.nanoSeconds = 0.0;
+        m_timeInfo.ppqPos = 0.0;
+        m_timeInfo.tempo = 120.0;
+        m_timeInfo.barStartPos = 0.0;
+        m_timeInfo.cycleStartPos = 0.0;
+        m_timeInfo.cycleEndPos = 0.0;
+        m_timeInfo.timeSigNumerator = 4;
+        m_timeInfo.timeSigDenominator = 4;
+        m_timeInfo.smpteOffset = 0;
+        m_timeInfo.smpteFrameRate = 1;
+        m_timeInfo.samplesToNextClock = 0;
+        m_timeInfo.flags = kVstTransportPlaying | kVstPpqPosValid | kVstTempoValid |
+                           kVstBarsValid | kVstTimeSigValid;
+    }
+
     intptr_t handleHostCallback(int32_t opcode, int32_t index, intptr_t value, void* ptr,
                                 float opt) {
         (void)index;
         (void)opt;
         switch (opcode) {
-            case VST_HOST_OPCODE_VST_VERSION:
+            case 0: /* audioMasterAutomate */
+                return 0;
+            case VST_HOST_OPCODE_VST_VERSION: /* 1 */
                 return 2400;
-            case VST_HOST_OPCODE_GET_SAMPLE_RATE:
-                return static_cast<intptr_t>(m_sampleRate);
-            case VST_HOST_OPCODE_GET_BLOCK_SIZE:
-                return static_cast<intptr_t>(m_maxBlockSize);
-            case VST_HOST_OPCODE_GET_ACTIVE_THREAD:
-                return m_inProcess.load(std::memory_order_relaxed)
-                           ? VST_HOST_ACTIVE_THREAD_AUDIO
-                           : VST_HOST_ACTIVE_THREAD_INTERFACE;
-            case VST_HOST_OPCODE_VENDOR_NAME:
-                copyHostString(ptr, value, "AuraDSP");
-                return VST_STATUS_TRUE;
-            case VST_HOST_OPCODE_PRODUCT_NAME:
-                copyHostString(ptr, value, "AuraDSP");
-                return VST_STATUS_TRUE;
-            case VST_HOST_OPCODE_VENDOR_VERSION:
-                return 5000;
-            case VST_HOST_OPCODE_LANGUAGE:
+            case 2: /* audioMasterCurrentId */
+                return m_effect ? static_cast<intptr_t>(m_effect->unique_id) : 0;
+            case 3: /* audioMasterIdle */
                 return 1;
-            case VST_HOST_OPCODE_GET_EFFECT_DIRECTORY:
-                // RT-Safe：目录串在 load 期预计算，回调里只做 strncpy，
-                // 绝不在音频线程构造 std::string/fs::path。
-                copyHostString(ptr, value, m_pluginDir.c_str());
-                return VST_STATUS_TRUE;
-            case VST_HOST_OPCODE_SUPPORTS:
-                return VST_STATUS_FALSE;
-            case VST_HOST_OPCODE_IO_MODIFIED: {
+            case 7: /* audioMasterGetTime */
+                updateTimeInfo();
+                return reinterpret_cast<intptr_t>(&m_timeInfo);
+            case VST_HOST_OPCODE_EVENT: /* 9 */
+                return 1;
+            case VST_HOST_OPCODE_IO_MODIFIED: { /* 13 */
                 if (m_effect) {
                     m_latency.store(m_effect->delay > 0
                                         ? static_cast<uint32_t>(m_effect->delay)
@@ -829,8 +971,67 @@ private:
                 }
                 return VST_STATUS_TRUE;
             }
-            case VST_HOST_OPCODE_EDITOR_RESIZE:
+            case VST_HOST_OPCODE_EDITOR_RESIZE: /* 15 */
                 return VST_STATUS_TRUE;
+            case VST_HOST_OPCODE_GET_SAMPLE_RATE: /* 16 */
+                return static_cast<intptr_t>(m_sampleRate > 0 ? m_sampleRate : 48000.0);
+            case VST_HOST_OPCODE_GET_BLOCK_SIZE: /* 17 */
+                return static_cast<intptr_t>(m_maxBlockSize > 0 ? m_maxBlockSize : 1024);
+            case 18: /* audioMasterGetInputLatency */
+                return 0;
+            case 19: /* audioMasterGetOutputLatency */
+                return 0;
+            case VST_HOST_OPCODE_GET_ACTIVE_THREAD: /* 23 */
+                return m_inProcess.load(std::memory_order_relaxed)
+                           ? 2 /* kVstProcessLevelRealtime */
+                           : 1 /* kVstProcessLevelUser */;
+            case 24: /* audioMasterGetAutomationState */
+                return 1; /* kVstAutomationRead */
+            case VST_HOST_OPCODE_VENDOR_NAME: /* 32 */
+                copyHostString(ptr, value, "AuraDSP");
+                return VST_STATUS_TRUE;
+            case VST_HOST_OPCODE_PRODUCT_NAME: /* 33 */
+                copyHostString(ptr, value, "AuraDSP Host");
+                return VST_STATUS_TRUE;
+            case VST_HOST_OPCODE_VENDOR_VERSION: /* 34 */
+                return 2400;
+            case 35: /* audioMasterVendorSpecific */
+                return 0;
+            case VST_HOST_OPCODE_SUPPORTS: { /* 37 */
+                if (!ptr) return VST_STATUS_FALSE;
+                const char* canDo = static_cast<const char*>(ptr);
+                if (std::strcmp(canDo, "sendVstEvents") == 0 ||
+                    std::strcmp(canDo, "sendVstMidiEvent") == 0 ||
+                    std::strcmp(canDo, "receiveVstEvents") == 0 ||
+                    std::strcmp(canDo, "receiveVstMidiEvent") == 0 ||
+                    std::strcmp(canDo, "sizeWindow") == 0 ||
+                    std::strcmp(canDo, "sendVstTimeInfo") == 0 ||
+                    std::strcmp(canDo, "acceptIOChanges") == 0 ||
+                    std::strcmp(canDo, "startStopProcess") == 0 ||
+                    std::strcmp(canDo, "shellCategory") == 0 ||
+                    std::strcmp(canDo, "supplyIdle") == 0) {
+                    return VST_STATUS_TRUE;
+                }
+                return VST_STATUS_FALSE;
+            }
+            case VST_HOST_OPCODE_LANGUAGE: /* 38 */
+                return 1; /* kVstLangEnglish */
+            case VST_HOST_OPCODE_GET_EFFECT_DIRECTORY: /* 41 */
+                // Steinberg 官方规范：返回值是 char* 目录字符串指针！
+                // 传了 buffer 则安全拷贝，返回指向内部目录字符串的指针
+                if (ptr) {
+                    copyHostString(ptr, value, m_pluginDir.c_str());
+                }
+                return reinterpret_cast<intptr_t>(m_pluginDir.c_str());
+            case 42: /* audioMasterUpdateDisplay */
+                return VST_STATUS_TRUE;
+            case 43: /* audioMasterBeginEdit */
+                return VST_STATUS_TRUE;
+            case 44: /* audioMasterEndEdit */
+                return VST_STATUS_TRUE;
+            case 45: /* audioMasterOpenFileSelector */
+            case 46: /* audioMasterCloseFileSelector */
+                return 0;
             default:
                 return 0;
         }
@@ -840,8 +1041,9 @@ private:
                                                         int32_t index, intptr_t value,
                                                         void* ptr, float opt) {
         Vst2Instance* self = nullptr;
-        if (effect) self = static_cast<Vst2Instance*>(effect->_unknown_00);
+        if (effect && effect->_unknown_00) self = static_cast<Vst2Instance*>(effect->_unknown_00);
         if (!self) self = g_constructing;
+        if (!self) self = s_latestConstructing.load(std::memory_order_acquire);
         if (!self) return 0;
         return self->handleHostCallback(opcode, index, value, ptr, opt);
     }
@@ -870,6 +1072,7 @@ private:
     double m_sampleRate = 48000.0;
     uint32_t m_maxBlockSize = 1024;
     std::vector<float> m_monoScratch;
+    Vst2TimeInfo m_timeInfo{};
 };
 
 } // namespace

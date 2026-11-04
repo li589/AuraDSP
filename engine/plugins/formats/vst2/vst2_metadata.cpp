@@ -37,19 +37,22 @@ thread_local std::string g_descriptorDirectory;
 
 void copyCString(void* dst, size_t cap, const char* src) {
     if (!dst || cap == 0) return;
-    if (!src) {
-        static_cast<char*>(dst)[0] = '\0';
+    char* out = static_cast<char*>(dst);
+    if (!src || !*src) {
+        out[0] = '\0';
         return;
     }
-    std::strncpy(static_cast<char*>(dst), src, cap - 1);
-    static_cast<char*>(dst)[cap - 1] = '\0';
+    size_t len = std::strlen(src);
+    if (len >= cap) len = cap - 1;
+    std::memcpy(out, src, len);
+    out[len] = '\0';
 }
 
 void copyHostString(void* dst, intptr_t capHint, const char* src) {
-    // VST2 的字符串回调没有统一容量约定；厂商/产品名按惯例 ≤64 字节，
-    // 这里取 128 作为安全上界，避免越界写。
-    size_t cap = capHint > 0 ? static_cast<size_t>(capHint) : 128;
-    if (cap > 1024) cap = 1024;
+    // VST2 规范标准长度：Vendor/Product 均为 64 字节。capHint<=0 时上限 64，
+    // 绝不使用 strncpy 填充多余 \0 导致栈溢出/踩坏插件局部变量。
+    size_t cap = (capHint > 0) ? static_cast<size_t>(capHint) : 64;
+    if (cap > 256) cap = 256;
     copyCString(dst, cap, src);
 }
 

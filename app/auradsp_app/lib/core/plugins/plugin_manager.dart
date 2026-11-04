@@ -131,6 +131,7 @@ class PluginManager extends ChangeNotifier {
   Map<String, String> _vendorTable = {};
   final List<String> _closeQuarantine = []; // 引擎跳过 removed()/release()（防关闭崩溃）
   final List<String> _openQuarantine = []; // 历史崩溃标记（仅提示，不阻止加载/打开）
+  final List<String> _loadQuarantine = []; // 挂载崩溃隔离名单（挂载崩溃自动登记，阻止重复崩溃）
   bool _tablesLoaded = false;
   Timer? _journalTimer;
 
@@ -146,6 +147,11 @@ class PluginManager extends ChangeNotifier {
   static File _editorJournalFile() => File(
     ConfigManager.dataPath(
       'plugin_data${Platform.pathSeparator}editor_journal.json',
+    ),
+  );
+  static File _loadJournalFile() => File(
+    ConfigManager.dataPath(
+      'plugin_data${Platform.pathSeparator}load_journal.json',
     ),
   );
 

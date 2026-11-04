@@ -122,7 +122,7 @@ target_compile_definitions(auradsp_core PRIVATE
     WINVER=0x0601
     NTDDI_VERSION=0x06010000
 )
-target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHsc)
+target_compile_options(auradsp_core PRIVATE /utf-8 /W1 /EHa)
 # engine/legacy 的 essential.h 仅 include <errno.h>，MSVC 不会像 NDK 那样间接带入
 # <stdint.h>；且 engine/legacy/jamesdsp.c 使用 GCC 扩展 __attribute__((constructor))。
 # 按铁律 §3.3 不改上游，调用侧 /FI 前置 shim 统一处理（见 auradsp_msvc_shim.h 头注释）。
@@ -195,7 +195,7 @@ option(AURADSP_DBG_LOG "Emit host [DBG diagnostics via OutputDebugString (OFF in
 if(AURADSP_DBG_LOG)
     target_compile_definitions(auradsp_engine PRIVATE AURADSP_DBG_LOG)
 endif()
-target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHsc)
+target_compile_options(auradsp_engine PRIVATE /utf-8 /W1 /EHa)
 # 与核心相同的强制 shim，保持历史编译行为（legacy C 已全部移入 auradsp_core）。
 target_compile_options(auradsp_engine PRIVATE /FI"${API}/auradsp_msvc_shim.h")
 set_property(TARGET auradsp_engine PROPERTY CXX_STANDARD 20)
@@ -229,7 +229,7 @@ if(AURADSP_ENABLE_PLUGINS AND AURADSP_PLUGIN_HOST_REMOTE)
         _CRT_SECURE_NO_WARNINGS
         AURADSP_HOST_INPROC=1
     )
-    target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHsc)
+    target_compile_options(${HOST_EXE_TARGET_NAME} PRIVATE /utf-8 /W1 /EHa)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY CXX_STANDARD 20)
     set_property(TARGET ${HOST_EXE_TARGET_NAME} PROPERTY MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
     # R1：plugin_scanner.cpp 用 <filesystem> → 必须带 Win7 CreateFile2 回退。

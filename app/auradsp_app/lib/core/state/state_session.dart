@@ -418,6 +418,10 @@ extension StateSession on AppModel {
       if (savedPluginSlots.isNotEmpty) {
         for (final item in savedPluginSlots) {
           if (item.path.isNotEmpty && File(item.path).existsSync()) {
+            if (pluginManager.isLoadCrashKnownPath(item.path)) {
+              dbgLog('[StateSession] 跳过曾导致挂载崩溃的插件恢复: ${item.path}');
+              continue;
+            }
             send({
               'cmd': 'pluginSlotLoad',
               'slot': item.slot,

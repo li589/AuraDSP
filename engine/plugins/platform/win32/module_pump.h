@@ -7,6 +7,7 @@
 #include "plugin_thread.h"
 
 #include <windows.h>
+#include <ole2.h>
 
 #include <atomic>
 #include <chrono>
@@ -174,6 +175,7 @@ private:
     }
 
     void mainLoop() {
+        OleInitialize(NULL);
         // CLAP host thread-check 回调据此识别 main thread（thread_local 默认
         // 即 Main；此处显式置位，语义不依赖默认值）。
         t_pluginThreadRole = PluginThreadRole::Main;
@@ -202,6 +204,7 @@ private:
             DispatchMessageW(&msg);
         }
         destroyRegisteredEditors();
+        OleUninitialize();
     }
 
     void drainTasks() {
