@@ -2,6 +2,7 @@
 //
 // 最小 VST2 效果器：立体声入/出，process_float 逐样本乘 0.5，一个参数，
 // 支持 chunk 存取。仅用于自动化门禁，不随产品分发。
+// 导出宏按平台分开（Win: dllexport / POSIX: 默认可见性），Linux 门禁亦编本文件。
 
 #include "vst2/vst.h"
 
@@ -101,7 +102,13 @@ vst_effect_t g_effect = {};
 
 } // namespace
 
-extern "C" __declspec(dllexport) vst_effect_t* VST_FUNCTION_INTERFACE
+#if defined(_WIN32)
+#define VST2_FIXTURE_EXPORT __declspec(dllexport)
+#else
+#define VST2_FIXTURE_EXPORT __attribute__((visibility("default")))
+#endif
+
+extern "C" VST2_FIXTURE_EXPORT vst_effect_t* VST_FUNCTION_INTERFACE
 VSTPluginMain(vst_host_callback_t callback) {
     // 真实走一遍 audioMaster：32 位宿主若把 p_int2 声明成 int64_t，
     // 这里 p_str / p_float 会错位（写坏地址或返回垃圾），g_callbackOk=false。

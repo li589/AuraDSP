@@ -1,4 +1,13 @@
 #pragma once
+
+// VST2 净室头（vendor/plugin-api/vst2/vst.h）无条件把
+// VST_FUNCTION_INTERFACE 定义为 __cdecl——MSVC 习语，POSIX 编译器
+// 无此关键字。x86-64 与 i386 的 Linux C 调用约定本就是 cdecl 语义，
+// 空定义即等价。须在任何包含 vst.h 的 TU 之前生效（VST2 的两个
+// 实现文件都先包含 win32_util.h，本头经其引入）。
+#ifndef __cdecl
+#define __cdecl
+#endif
 // win32_compat.h —— POSIX 平台的 Win32 最小兼容层（二期阶段一）。
 //
 // 定位与边界（与实施方案 §2 对齐）：
@@ -62,6 +71,10 @@ typedef struct tagMSG { HWND hwnd; UINT message; WPARAM wParam; LPARAM lParam; }
 #define WM_SIZE 0x0005
 #define WM_QUIT 0x0012
 #define WM_APP 0x8000
+#define WS_OVERLAPPED 0x00000000L
+#define WS_CAPTION 0x00C00000L
+#define WS_SYSMENU 0x00080000L
+#define WS_MINIMIZEBOX 0x00020000L
 #define WS_OVERLAPPEDWINDOW 0x00CF0000L
 #define HWND_TOP ((HWND)0)
 #define HWND_TOPMOST ((HWND)-1)

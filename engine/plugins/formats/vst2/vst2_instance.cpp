@@ -28,7 +28,9 @@
 
 #include "vst2/vst.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#endif  // 非 Windows：Win32 类型/惰性 API 由 platform/posix 兼容层提供
 
 #include <algorithm>
 #include <atomic>

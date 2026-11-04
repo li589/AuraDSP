@@ -1,8 +1,9 @@
 /*
  * vst2_driver.cpp — VST2 格式驱动（2026-11-03）。
  *
- * VST2 没有 bundle：一个 .dll 就是一个候选。扩展名匹配只做 .dll，
- * 真正的「是不是插件」由 resolveBinary 里的 PE 导出表判定（不加载 DLL）。
+ * VST2 没有 bundle：一个 .dll（Linux 为 .so）就是一个候选。扩展名
+ * 匹配只做粗筛，真正的「是不是插件」由 resolveBinary 里的导出表判定
+ * （PE 导出表 / ELF 动态符号表，不加载模块）。
  */
 
 #include "plugin_format_driver.h"
@@ -32,7 +33,13 @@ public:
         std::string ext = path.substr(dot);
         std::transform(ext.begin(), ext.end(), ext.begin(),
                        [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+#if defined(_WIN32)
         return ext == ".dll";
+#else
+        // Linux VST2 以 .so 分发（无 bundle、无固定扩展名生态位）；
+        // 是不是插件仍由 resolveBinary 的 ELF 导出判定把关。
+        return ext == ".dll" || ext == ".so";
+#endif
     }
 
     std::string resolveBinary(const std::string& bundlePath,
