@@ -33,6 +33,7 @@
 #include <cstring>
 #include <dlfcn.h>
 #include <map>
+#include <set>
 #include <mutex>
 #include <vector>
 
@@ -85,16 +86,32 @@ struct XWindowEventS {  // DestroyNotify / ReparentNotify 的公共前缀段
     XWindow event;
     XWindow window;
 };
+struct XReparentS {
+    int type;
+    unsigned long serial;
+    int send_event;
+    XDisplay* display;
+    XWindow event;
+    XWindow window;
+    XWindow parent;
+    int x, y;
+    int override_redirect;
+};
 union XEventU {
     int type;
     XAnyEventS any;
     XClientMessageS client;
     XConfigureS configure;
     XWindowEventS windowEvent;
+    XReparentS reparent;
     long pad[32];
 };
 
+constexpr int kEvFocusIn = 9;
+constexpr int kEvFocusOut = 10;
 constexpr int kEvDestroyNotify = 17;
+constexpr int kEvMapNotify = 19;
+constexpr int kEvReparentNotify = 21;
 constexpr int kEvConfigureNotify = 22;
 constexpr int kEvClientMessage = 33;
 constexpr long kStructureNotifyMask = 1L << 17;
@@ -131,6 +148,7 @@ struct X11Api {
     int (*XFlushFn)(XDisplay*) = nullptr;
     int (*XPendingFn)(XDisplay*) = nullptr;
     int (*XNextEventFn)(XDisplay*, XEventU*) = nullptr;
+    int (*XSendEventFn)(XDisplay*, XWindow, int, long, XEventU*) = nullptr;
     bool ready = false;
 };
 
@@ -168,6 +186,7 @@ X11Api& api() {
         BIND(XFlushFn, "XFlush");
         BIND(XPendingFn, "XPending");
         BIND(XNextEventFn, "XNextEvent");
+        BIND(XSendEventFn, "XSendEvent");
 #undef BIND
         a.ready = a.XOpenDisplayFn && a.XCreateSimpleWindowFn &&
                   a.XNextEventFn && a.XInternAtomFn;
@@ -206,6 +225,37 @@ std::vector<TimerRec> g_timers;
 std::atomic<bool> g_anyWindows{false};
 XAtom g_wmProtocols = 0;
 XAtom g_wmDelete = 0;
+
+// XEmbed 宿主侧最小面（E3）：容器↔插件子窗口的嵌入协商。
+// 子窗口经 Reparent/Map 被发现后，宿主送 EMBEDDED_NOTIFY +
+// WINDOW_ACTIVATE；容器焦点进出转发 FOCUS_IN/OUT。完整键盘
+// 协商（FOCUS_FIRST/LAST 等）留待真机以真实插件验证后补。
+XAtom g_xembed = 0;
+std::map<XWindow, XWindow> g_embedChildOf;  // container -> child
+std::set<XWindow> g_embedNotified;
+constexpr long kXembedEmbeddedNotify = 0;
+constexpr long kXembedWindowActivate = 1;
+constexpr long kXembedFocusIn = 4;
+constexpr long kXembedFocusOut = 5;
+
+void sendXembed(XDisplay* dpy, XWindow child, XWindow container, long msg) {
+    if (!api().ready || !api().XSendEventFn) return;
+    if (!g_xembed) g_xembed = api().XInternAtomFn(dpy, "_XEMBED", 0);
+    if (!g_xembed) return;
+    XEventU ev{};
+    ev.client.type = kEvClientMessage;
+    ev.client.display = dpy;
+    ev.client.window = child;
+    ev.client.message_type = g_xembed;
+    ev.client.format = 32;
+    ev.client.data.l[0] = 0;  // CurrentTime
+    ev.client.data.l[1] = msg;
+    ev.client.data.l[2] = 0;
+    ev.client.data.l[3] = static_cast<long>(container);
+    ev.client.data.l[4] = 0;  // XEmbed protocol version
+    api().XSendEventFn(dpy, child, 0, 0, &ev);
+    api().XFlushFn(dpy);
+}
 
 XWindow toWin(HWND h) {
     return static_cast<XWindow>(reinterpret_cast<uintptr_t>(h));
@@ -297,6 +347,8 @@ BOOL DestroyWindow(HWND hwnd) {
         if (it == g_windows.end()) return FALSE;
         owner = it->second.owner;
         g_windows.erase(it);
+        g_embedChildOf.erase(win);
+        g_embedNotified.erase(win);
         killTimersLocked(win, 0, true);
         if (g_windows.empty())
             g_anyWindows.store(false, std::memory_order_release);
@@ -557,11 +609,48 @@ void guiX11Dispatch() {
                         ->onEditorResize();
                 }
             }
+        } else if (ev.type == kEvReparentNotify) {
+            // 插件子窗口挂入我方容器：记为该容器的嵌入子窗口。
+            XWindow container = ev.reparent.event;
+            XWindow child = ev.reparent.window;
+            if (g_windows.count(container) && child != container &&
+                ev.reparent.parent == container) {
+                g_embedChildOf[container] = child;
+            }
+        } else if (ev.type == kEvMapNotify) {
+            // 子窗口映射：补 XEmbed 嵌入通知（每子窗口一次）。
+            XWindow child = ev.windowEvent.window;
+            for (const auto& [container, c] : g_embedChildOf) {
+                if (c == child && !g_embedNotified.count(child)) {
+                    g_embedNotified.insert(child);
+                    sendXembed(dpy, child, container, kXembedEmbeddedNotify);
+                    sendXembed(dpy, child, container, kXembedWindowActivate);
+                }
+            }
+        } else if (ev.type == kEvFocusIn || ev.type == kEvFocusOut) {
+            XWindow container = ev.any.window;
+            auto cit = g_embedChildOf.find(container);
+            if (cit != g_embedChildOf.end()) {
+                sendXembed(dpy, cit->second, container,
+                           ev.type == kEvFocusIn ? kXembedFocusIn
+                                                 : kXembedFocusOut);
+            }
         } else if (ev.type == kEvDestroyNotify) {
             XWindow win = ev.windowEvent.window;
             auto it = g_windows.find(win);
             if (it != g_windows.end()) {
                 g_windows.erase(it);
+                g_embedChildOf.erase(win);
+                g_embedNotified.erase(win);
+                for (auto eit = g_embedChildOf.begin();
+                     eit != g_embedChildOf.end();) {
+                    if (eit->second == win) {
+                        g_embedNotified.erase(eit->second);
+                        eit = g_embedChildOf.erase(eit);
+                    } else {
+                        ++eit;
+                    }
+                }
                 killTimersLocked(win, 0, true);
                 if (g_windows.empty())
                     g_anyWindows.store(false, std::memory_order_release);
