@@ -1379,8 +1379,14 @@ public:
             }
         }
         if (!view) return false;
-        Steinberg::tresult platSup = view->isPlatformTypeSupported(Steinberg::kPlatformTypeHWND);
-        AURADSP_DBG_S("[DBG VST3 showEditor] isPlatformTypeSupported(HWND) returned: " << platSup);
+        // 编辑器平台类型按平台选：Win32 HWND / POSIX X11Embed（E2）。
+#if defined(_WIN32)
+        const Steinberg::FIDString kEditorPlatformType = Steinberg::kPlatformTypeHWND;
+#else
+        const Steinberg::FIDString kEditorPlatformType = Steinberg::kPlatformTypeX11EmbedWindowID;
+#endif
+        Steinberg::tresult platSup = view->isPlatformTypeSupported(kEditorPlatformType);
+        AURADSP_DBG_S("[DBG VST3 showEditor] isPlatformTypeSupported(editor) returned: " << platSup);
         if (platSup != Steinberg::kResultTrue) {
             view->release();
             return false;
@@ -1429,7 +1435,7 @@ public:
         view->setFrame(&m_plugFrame);
 
         try {
-            Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), Steinberg::kPlatformTypeHWND);
+            Steinberg::tresult attachRes = view->attached(reinterpret_cast<void*>(hwnd), kEditorPlatformType);
             if (attachRes != Steinberg::kResultOk && attachRes != Steinberg::kResultTrue) {
                 AURADSP_WARN_S("[DBG VST3 showEditor] view->attached returned non-ok: " << attachRes);
                 detachViewOnPumpThread(view);
