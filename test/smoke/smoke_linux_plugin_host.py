@@ -290,7 +290,7 @@ def run_bundle_scan(lib, tmp, cc):
     lib.auradsp_destroy(H)
 
 
-def run_vst2_chain(lib, tmp, cc, cxx):
+def run_vst2_chain(lib, lib_path, tmp, cc, cxx):
     """VST2 活体节（2026-11-04，VST2 的 Linux 跟进验收）：
     探针复用 dev 侧 fixture test/fixtures/vst2_gain/gain_vst2.cpp
     （与 Windows smoke_plugin_vst2 同一标的；编译需 -D__cdecl=
@@ -306,7 +306,9 @@ def run_vst2_chain(lib, tmp, cc, cxx):
       内置宿主回调 ABI 绊线（厂商串往返 + 版本 2400），峰值
       成立同时证明 POSIX 宿主回调签名正确
     - 32 位：IA32 可执行时（CI）深扫经 x86 宿主得真值；不可
-      执行时（本 VM）回落浅层且兼容性随位桥在位"""
+      执行时（本 VM）回落浅层且兼容性随位桥在位
+    - 32 位桥加载（文末子节）：进程模式下经 x86 宿主 slot_load
+      + 环传输出声；IA32 不可执行平台 SKIP（CI/真机执行）"""
     vdir = os.path.join(tmp, "vst2chain")
     os.makedirs(vdir)
     fixture = os.path.join(ROOT, "test", "fixtures", "vst2_gain",
@@ -438,6 +440,60 @@ def run_vst2_chain(lib, tmp, cc, cxx):
           f"[vst2] process 峰值 {peak:.4f} == 0.8×0.5"
           "（含宿主回调 ABI 绊线通过）")
     lib.auradsp_destroy(H)
+
+    # 桥加载（进程模式）：32 位 VST2 经 x86 宿主加载出声——补齐
+    # 此前只有深扫口径的位桥覆盖（活体加载 + 跨位数环传输 +
+    # 宿主内 effOpen 回调链）。直调 slot_load（id 为探针 fourcc
+    # 定值，与 [x86] CLAP 桥节同法）。IA32 不可执行的平台整段
+    # SKIP（判定与桥节同法：无参运行宿主应以参数校验 rc=1 退出）。
+    if not have32:
+        return
+    host86 = os.path.join(os.path.dirname(lib_path), "plugin_host_x86")
+    if not os.path.isfile(host86):
+        print("  SKIP [vst2] 桥加载：引擎旁无 plugin_host_x86")
+        return
+    try:
+        probe = subprocess.run([host86], capture_output=True)
+        runnable = probe.returncode == 1
+    except OSError:
+        runnable = False
+    if not runnable:
+        print("  SKIP [vst2] 桥加载活体半：本机不可执行 32 位二进制"
+              "（CI/真机执行）")
+        return
+    os.environ["AURA_PLUGIN_HOST_MODE"] = "process"
+    try:
+        h = lib.auradsp_create(48000.0, 4096)
+        check(bool(h), "[vst2-x86] auradsp_create 成功")
+        if not h:
+            return
+        H = ctypes.c_void_p(h)
+        rc = lib.auradsp_plugin_slot_load(H, 0, p32.encode(), b"41757261")
+        check(rc == 1, f"[vst2-x86] 32 位 VST2 经桥 slot_load 成功（rc={rc}）")
+        if rc != 1:
+            lib.auradsp_destroy(H)
+            return
+        sbuf = ctypes.create_string_buffer(65536)
+        lib.auradsp_plugin_slot_get_status(H, 0, sbuf, 65536)
+        st = json.loads(sbuf.value.decode())
+        check(st.get("remoteMode") is True,
+              "[vst2-x86] status remoteMode=true（确实走了隔离宿主）")
+        n86 = subprocess.run(["pgrep", "-c", "-x", "plugin_host_x86"],
+                             capture_output=True, text=True).stdout.strip()
+        check(n86.isdigit() and int(n86) >= 1,
+              f"[vst2-x86] plugin_host_x86 进程在位（{n86}）")
+        lib.auradsp_plugin_slot_set_bypass(H, 0, 0)
+        src = (ctypes.c_float * 2048)()
+        dst = (ctypes.c_float * 2048)()
+        for i in range(2048):
+            src[i] = 0.8
+        peak = process_peak(lib, H, src, dst)
+        check(abs(peak - 0.4) < 1e-3,
+              f"[vst2-x86] 跨位数环传输 process 峰值 {peak:.4f} == 0.8×0.5")
+        lib.auradsp_plugin_slot_unload(H, 0)
+        lib.auradsp_destroy(H)
+    finally:
+        os.environ.pop("AURA_PLUGIN_HOST_MODE", None)
 
 
 def run_vst3_chain(lib, tmp, cxx):
@@ -794,7 +850,7 @@ def live_chain():
     run_deep_scan(lib, lib_path, tmp, cc, cxx)
     if cxx:
         run_vst3_chain(lib, tmp, cxx)
-        run_vst2_chain(lib, tmp, cc, cxx)
+        run_vst2_chain(lib, lib_path, tmp, cc, cxx)
     else:
         print("  SKIP VST3/VST2 活体节：无 C++ 编译器")
 
