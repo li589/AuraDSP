@@ -24,11 +24,9 @@ class ChannelRoutingSelector extends StatefulWidget {
   /// 4ch: FL(0), FR(1), BL(2), BR(3)
   /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
   /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
-  static List<({int bit, String code})> channelsFor(int ch) =>
-      _ChannelRoutingSelectorState.channelsFor(ch);
+  static List<ChannelSlot> channelsFor(int ch) => channelLayoutFor(ch);
 
-  static int fullMaskFor(int ch) =>
-      _ChannelRoutingSelectorState.fullMaskFor(ch);
+  static int fullMaskFor(int ch) => channelFullMask(ch);
 
   @override
   State<ChannelRoutingSelector> createState() => _ChannelRoutingSelectorState();
@@ -37,57 +35,8 @@ class ChannelRoutingSelector extends StatefulWidget {
 class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
   bool _expanded = false;
 
-  /// 根据声道数返回存在的声道集合（与 engine layout_for(ch) 严格对齐）：
-  /// 2ch: FL(0), FR(1)
-  /// 4ch: FL(0), FR(1), BL(2), BR(3)
-  /// 6ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5)
-  /// 8ch: FL(0), FR(1), C(2), LFE(3), SL(4), SR(5), BL(6), BR(7)
-  static List<({int bit, String code})> channelsFor(int ch) {
-    if (ch == 4) {
-      return const [
-        (bit: 0, code: 'FL'),
-        (bit: 1, code: 'FR'),
-        (bit: 2, code: 'BL'),
-        (bit: 3, code: 'BR'),
-      ];
-    }
-    if (ch == 6) {
-      return const [
-        (bit: 0, code: 'FL'),
-        (bit: 1, code: 'FR'),
-        (bit: 2, code: 'C'),
-        (bit: 3, code: 'LFE'),
-        (bit: 4, code: 'SL'),
-        (bit: 5, code: 'SR'),
-      ];
-    }
-    if (ch >= 8) {
-      return const [
-        (bit: 0, code: 'FL'),
-        (bit: 1, code: 'FR'),
-        (bit: 2, code: 'C'),
-        (bit: 3, code: 'LFE'),
-        (bit: 4, code: 'SL'),
-        (bit: 5, code: 'SR'),
-        (bit: 6, code: 'BL'),
-        (bit: 7, code: 'BR'),
-      ];
-    }
-    return const [
-      (bit: 0, code: 'FL'),
-      (bit: 1, code: 'FR'),
-    ];
-  }
-
-  /// X-6（2026-10-26 已修复）：dyneq/exciter 的 no-LFE 默认掩码由引擎随
-  /// channels.count 按布局平移（4ch→0x0F、6ch→0x37），BR 不再被默认跳过；
-  /// 用户自定义掩码保留（引擎仅当仍为旧布局默认值时才平移）。
-  static int fullMaskFor(int ch) {
-    if (ch == 4) return 0x0F; // 1 + 2 + 4 + 8
-    if (ch == 6) return 0x3F; // 1 + 2 + 4 + 8 + 16 + 32
-    if (ch >= 8) return 0xFF;
-    return 0x03; // 1 + 2
-  }
+  // channelsFor / fullMaskFor 已上移到 ChannelRoutingSelector 静态转发，
+  // 数据源见 core/channel_layout.dart（与 engine layout_for(ch) 对齐）。
 
   int get _mask {
     final v = widget.model.getParamById(widget.paramKey);
@@ -138,7 +87,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
     if (isStereoPath) {
       return l.routingStereoPathSummary;
     }
-    final activeChannels = channelsFor(ch);
+    final activeChannels = channelLayoutFor(ch);
     int selected = 0;
     for (final c in activeChannels) {
       if ((mask & (1 << c.bit)) != 0) selected++;
@@ -157,7 +106,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
         final isStereo = widget.model.isStereoPath;
         final mask = _mask;
         final summary = _getSummaryText(l, mask, ch, isStereo);
-        final activeChannels = channelsFor(ch);
+        final activeChannels = channelLayoutFor(ch);
         int selected = 0;
         for (final c in activeChannels) {
           if ((mask & (1 << c.bit)) != 0) selected++;
@@ -298,7 +247,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               _buildPresetChip(
-                                  p, l.routingPresetAll, fullMaskFor(ch), mask),
+                                  p, l.routingPresetAll, channelFullMask(ch), mask),
                               if (ch == 4) ...[
                                 _buildPresetChip(
                                     p, l.routingPresetFront, 0x03, mask),
@@ -309,7 +258,7 @@ class _ChannelRoutingSelectorState extends State<ChannelRoutingSelector> {
                                     p, l.routingPresetStereo, 0x03, mask),
                                 if (ch >= 6)
                                   _buildPresetChip(p, l.routingPresetNoLfe,
-                                      fullMaskFor(ch) & ~0x08, mask),
+                                      channelFullMask(ch) & ~0x08, mask),
                                 if (ch == 6)
                                   _buildPresetChip(
                                       p, l.routingPresetSurround, 0x30, mask),

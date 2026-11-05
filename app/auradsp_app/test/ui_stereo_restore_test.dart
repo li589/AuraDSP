@@ -1,3 +1,4 @@
+import 'package:auradsp_app/core/effect_registry.dart';
 import 'package:auradsp_app/core/param_schema.dart';
 import 'package:auradsp_app/core/state.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -102,8 +103,7 @@ void main() {
       expect(AppModel.isLatencyProbeSupported('haas'), isTrue);
       expect(AppModel.isLatencyProbeSupported('spatial'), isTrue);
       // 低音塑形走别名真探针：引擎实名 shelf + bassmono（均受支持）
-      expect(AppModel.kLatencyProbeAliases['bass_shaping'],
-          ['shelf', 'bassmono']);
+      expect(kLatencyProbeAliases['bass_shaping'], ['shelf', 'bassmono']);
     });
 
     test('haas/spatial 走真探针档：tick 前进 + 实测真实值（不再冒充标称）', () async {

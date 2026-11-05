@@ -20,6 +20,7 @@ import 'package:flutter/material.dart' show Color, Locale;
 import '../engine/audio_isolate.dart';
 import '../engine/audio_out/alsa_ffi.dart' as alsa_ffi;
 import 'debug/debug_trace.dart';
+import 'effect_registry.dart';
 import 'plugins/plugin_scan_dirs.dart';
 import 'nav.dart';
 import '../engine/auradsp_ffi.dart'
@@ -1182,12 +1183,7 @@ class AppModel extends ChangeNotifier {
   /// 全链路端到端总延迟（ms）：统揽所有启用核心效果器 + 第三方插件槽位延迟
   double get fullChainLatencyMs {
     double totalMs = 0.0;
-    const stageIds = [
-      'gate', 'dyneq', 'filter', 'bassmono', 'bass', 'comp',
-      'stereo', 'spatial', 'exciter', 'tube', 'haas', 'crossfeed',
-      'eq', 'reverb', 'arbmag', 'loudness', 'ddc', 'convolver',
-    ];
-    for (final id in stageIds) {
+    for (final id in kFullChainStageIds) {
       if (isStageEnabled(id)) {
         totalMs += componentLatency(id).ms;
       }
@@ -1255,40 +1251,10 @@ class AppModel extends ChangeNotifier {
   /// param_contract_test Part G 以引擎源文件断言该集合不得越界。
   /// 2026-10-19：haas / spatial 入列——引擎探针改逐声道首非零取最大后
   /// 两者均可如实测量（haas 测当前延迟、spatial 测 0ms 诚实链延迟）。
-  static bool isLatencyProbeSupported(String compId) => const {
-    'bass',
-    'reverb',
-    'eq',
-    'tube',
-    'crossfeed',
-    'limiter',
-    'post',
-    'comp',
-    'exciter',
-    'stereo',
-    'arbmag',
-    'dyneq',
-    'filter',
-    'gate',
-    'loudness',
-    'convolver',
-    'ddc',
-    'haas',
-    'spatial',
-  }.contains(compId);
+  static bool isLatencyProbeSupported(String compId) =>
+      kLatencyProbeIds.contains(compId);
 
-  /// 探针别名：卡片 compId → 引擎 probe_is_supported 实名列表。
-  ///
-  /// 低音塑形是合并卡（shelf + bassmono 两段引擎 stage），Dart 侧没有
-  /// 'bass_shaping' 这个探针名（引擎只认 shelf/bassmono，二者均在
-  /// kSupported）。↻ 实测时对两个实名分别打脉冲，样本延迟求和 =
-  /// 合并卡总算法延迟。param_contract_test Part G 校验别名目标必须
-  /// 全部在引擎支持集内。
-  static const Map<String, List<String>> kLatencyProbeAliases = {
-    'bass_shaping': ['shelf', 'bassmono'],
-  };
-
-  /// 该组件是否显示 ↻ 刷新按钮。
+  /// 该组件是否显示 ↻ 刷新按钮（探针支持集与别名见 effect_registry.dart）。
   /// 2026-10-19：haas/spatial 探针已支持后，全部卡片都是真探针或别名探针
   /// ——三档口径收敛为两档，不再有「只刷新标称」的档位。
   static bool hasLatencyRefresh(String compId) =>

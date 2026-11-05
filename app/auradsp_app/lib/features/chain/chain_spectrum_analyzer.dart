@@ -17,6 +17,7 @@ import '../../core/audio_modes.dart';
 import '../../core/design.dart';
 import '../../core/plugins/plugin_manager.dart';
 import '../../core/io/resource_gate.dart';
+import '../../core/channel_layout.dart';
 import '../../core/state.dart';
 import '../../core/theme.dart';
 import '../../core/ui_helpers.dart';
@@ -586,14 +587,11 @@ class _ChainSpectrumAnalyzerState extends State<ChainSpectrumAnalyzer> {
   bool _isSmoothCurve = true; // 曲线平滑 vs 折线
   Offset? _hoverPos; // 鼠标探针坐标
 
-  /// 获取当前设置中支持的声道代码列表
-  List<String> _getAvailableChannels() {
-    final count = widget.model.effectiveChannelCount;
-    if (count == 4) return const ['FL', 'FR', 'BL', 'BR'];
-    if (count == 6) return const ['FL', 'FR', 'C', 'LFE', 'SL', 'SR'];
-    if (count == 8) return const ['FL', 'FR', 'C', 'LFE', 'SL', 'SR', 'BL', 'BR'];
-    return const ['FL', 'FR'];
-  }
+  /// 获取当前设置中支持的声道代码列表（布局唯一源见 core/channel_layout.dart）
+  List<String> _getAvailableChannels() => [
+        for (final c in channelLayoutFor(widget.model.effectiveChannelCount))
+          c.code,
+      ];
 
   @override
   void initState() {

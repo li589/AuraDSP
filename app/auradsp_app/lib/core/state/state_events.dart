@@ -1152,7 +1152,7 @@ extension StateEvents on AppModel {
     // 2026-10-19：haas / spatial 探针已支持，全部组件均可真实测——「三档
     // 口径」的档位 3（结构性不可测）已不存在，全部走引擎脉冲实测。
     if (!AppModel.isLatencyProbeSupported(compId) &&
-        !AppModel.kLatencyProbeAliases.containsKey(compId)) {
+        !kLatencyProbeAliases.containsKey(compId)) {
       _latencyRefreshTicks[compId] = DateTime.now().millisecondsSinceEpoch;
       _notifyUi();
       return;
@@ -1163,7 +1163,7 @@ extension StateEvents on AppModel {
     _notifyUi();
 
     // 别名探针——合并卡映射到引擎实名，逐段实测求和。
-    final alias = AppModel.kLatencyProbeAliases[compId];
+    final alias = kLatencyProbeAliases[compId];
     final res = latencyProbeResource(compId) ?? '';
     final rate = info?.deviceRate.toDouble() ?? 48000.0;
     final enginePath = AuraDspLib.loadedPath;
@@ -1246,30 +1246,8 @@ extension StateEvents on AppModel {
 
   /// 统一延迟测量主干路径：异步测试所有已启用的效果器组件并反哺刷新全链路总延迟
   Future<void> refreshAllComponentLatencies() async {
-    const allProbeIds = [
-      'bass',
-      'reverb',
-      'eq',
-      'tube',
-      'crossfeed',
-      'limiter',
-      'post',
-      'comp',
-      'exciter',
-      'stereo',
-      'arbmag',
-      'dyneq',
-      'filter',
-      'gate',
-      'loudness',
-      'convolver',
-      'ddc',
-      'haas',
-      'spatial',
-    ];
-
     final activeTargets = <String>[];
-    for (final id in allProbeIds) {
+    for (final id in kLatencyProbeIds) {
       if (isStageEnabled(id) || ((id == 'post' || id == 'limiter') && limiterOn)) {
         activeTargets.add(id);
       }

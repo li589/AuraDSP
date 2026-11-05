@@ -7,6 +7,7 @@
 
 import 'package:flutter/material.dart';
 
+import '../core/effect_registry.dart';
 import '../core/state.dart';
 import '../core/ui_helpers.dart';
 import '../l10n/gen/app_localizations.dart';
@@ -15,30 +16,10 @@ import 'chain/chain_order_card.dart';
 import 'chain/chain_plugin_slots_card.dart';
 import 'chain/chain_spectrum_analyzer.dart';
 
-/// vendor 链序 stage 元数据（与引擎 kAuraStages 对齐）
-/// id 与是否对外暴露是常量；展示名走 l10n（st*），随语言切换。
-const List<({String id, bool exposed})> kStageMeta = [
-  (id: 'gate', exposed: true),
-  (id: 'dyneq', exposed: true),
-  (id: 'filter', exposed: true),
-  (id: 'bassmono', exposed: true),
-  (id: 'tube', exposed: true),
-  (id: 'comp', exposed: true),
-  (id: 'bass', exposed: true),
-  (id: 'eq', exposed: true),
-  (id: 'arbmag', exposed: true),
-  (id: 'convolver', exposed: true),
-  (id: 'ddc', exposed: true),
-  (id: 'liveprog', exposed: true),
-  (id: 'crossfeed', exposed: true),
-  (id: 'stereo', exposed: true),
-  (id: 'haas', exposed: true),
-  (id: 'spatial', exposed: true),
-  (id: 'exciter', exposed: true),
-  (id: 'loudness', exposed: true),
-  (id: 'reverb', exposed: true),
-  (id: 'output', exposed: true),
-];
+// 链序/阶段元数据唯一事实源在 core/effect_registry.dart；此处保留导出，
+// 避免既有调用方（chain_order_card、测试）改动导入路径。
+export '../core/effect_registry.dart'
+    show kStageMeta, kDefaultCoreOrder, kChainGroups;
 
 /// stage id → 展示名（l10n；与效果器卡片名称严格对齐；未知 id 回退原文）。
 String stageLabelOf(AppLocalizations l, String id) => switch (id) {
@@ -66,28 +47,6 @@ String stageLabelOf(AppLocalizations l, String id) => switch (id) {
       'output' => l.postGain,
       _ => id,
     };
-
-const List<String> kDefaultCoreOrder = [
-  'gate',
-  'filter',
-  'dyneq',
-  'bassmono',
-  'tube',
-  'comp',
-  'bass',
-  'eq',
-  'arbmag',
-  'convolver',
-  'ddc',
-  'liveprog',
-  'crossfeed',
-  'stereo',
-  'haas',
-  'spatial',
-  'exciter',
-  'reverb',
-  'loudness',
-];
 
 /// 链组 id → 展示名（l10n）。
 String chainGroupLabelOf(AppLocalizations l, String g) => switch (g) {

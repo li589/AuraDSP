@@ -7,16 +7,7 @@ part of '../state.dart';
 /// _notifyUi()；setGraphOrder 内对留类 static filterVendorOrder 的调用加
 /// AppModel. 限定——extension 作用域不含被扩展类型的 static 成员）。
 
-/// 链组（Phase 2）：按链位置 contiguous 分组；组头可折叠 + 整组旁路。
-/// 唯一定义源：UI（chain_page）与状态层均直接引用本表，禁止再建镜像。
-const Map<String, List<String>> kChainGroups = {
-  'chInput': ['gate', 'filter'],
-  'chTone': ['dyneq', 'bassmono', 'tube', 'comp', 'bass'],
-  'chEq': ['eq', 'arbmag', 'convolver', 'ddc', 'liveprog'],
-  'chSound': ['crossfeed', 'stereo', 'haas'],
-  'chSpatial': ['spatial'],
-  'chOut': ['exciter', 'reverb', 'loudness', 'output'],
-};
+// 链组表已下沉 effect_registry.dart（kChainGroups，由阶段契约派生）。
 
 extension StateChain on AppModel {
 
@@ -136,29 +127,7 @@ extension StateChain on AppModel {
   /// 19: loudness stage out
   /// 20: spatial stage out（Phase 2 接入链页）
   /// 21..31: 预留/扩展插件槽
-  int stageMeterIndex(String id) => switch (id) {
-    'tube' => 0,
-    'comp' => 1,
-    'bass' => 2,
-    'eq' => 3,
-    'arbmag' => 4,
-    'convolver' => 5,
-    'ddc' => 6,
-    'liveprog' => 7,
-    'crossfeed' => 8,
-    'stereo' => 9,
-    'reverb' => 10,
-    'output' => 11,
-    'gate' => 13,
-    'dyneq' => 14,
-    'filter' => 15,
-    'bassmono' => 16,
-    'haas' => 17,
-    'exciter' => 18,
-    'loudness' => 19,
-    'spatial' => 20,
-    _ => -1,
-  };
+  int stageMeterIndex(String id) => kEffectStageById[id]?.meterIndex ?? -1;
 
   /// 整组旁路/启用：把组内成员逐个拨到目标态（复用 toggleStage，含 reverb
   /// 特殊语义）。output（限幅器）常驻，跳过——整组旁路不得静音整机。
